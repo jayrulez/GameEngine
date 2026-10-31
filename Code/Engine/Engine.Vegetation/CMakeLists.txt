@@ -1,9 +1,9 @@
 # Engine::Vegetation - `engine.vegetation`: terrain vegetation in the scene. A VegetationLayerComponent
 # on the terrain entity (or a child of it) describes one layer (grass from the splat, rocks from a
 # layer, ...); its manager scatters per terrain chunk (Foundation::Vegetation) on demand, caches the
-# sets and emits one MultiMeshRenderData per (layer, chunk) in range - the shared MeshRenderer's
-# instanced path draws them (no renderer of its own). The VegetationSubsystem wires the manager into
-# RenderSubsystem as a per-scene render-data provider (the TerrainSubsystem pattern).
+# sets and emits one MultiMeshRenderData per (layer, chunk) in range; the shared MeshRenderer's
+# instanced path draws them, so there is no renderer of its own. The VegetationSubsystem wires the
+# manager into RenderSubsystem as a per-scene render-data provider, as the TerrainSubsystem does.
 util_add_engine_library(Engine.Vegetation ALIAS Engine::Vegetation)
 target_link_libraries(Engine.Vegetation
     PUBLIC

@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Particles - reflection implementation unit (batch 1): the range leaf value types +
-// the flat/range particle module classes, so the module types stop being tooling-invisible.
-// The particle editor page stays bespoke - this reflection is for
-// scriptability/tooling visibility, not a generated inspector.
+// Foundation::Particles - reflection implementation unit: the range, shape and curve value types
+// and every particle module class, so tooling and scripts can see them. The particle editor page
+// is written by hand; this reflection is not a generated inspector.
 //
-// REFLECT_MEMBERS bodies live out of the ParticleModules.cppm interface (GCC module hygiene:
-// property member-pointers make GCC emit a gcm cluster). A module's authored config fields are
-// reflected here; the runtime-set "hidden" fields (emitterPosition/emitterVelocity) are not.
-// Range struct fields are Nested (particle value types are not script-marshalled leaves - they
-// are traversed via reflection); Core math types (Float3) are plain Properties. Modules that use
-// EmissionShape (Position/Velocity) or curves (the OverLifetime behaviors) are a later batch.
+// REFLECT_MEMBERS bodies live out of the ParticleModules.cppm interface: GCC emits a cluster into
+// the module file for property member pointers in an interface. A module's authored config fields are reflected
+// here; the fields the system sets at run time (emitterPosition, emitterVelocity) are not. Range
+// struct fields are Nested (particle value types are traversed through reflection, not marshalled
+// to scripts as leaves); Core math types (Float3) are plain Properties.
 
 module;
 #include "Core/Prelude.h"
@@ -39,7 +37,7 @@ namespace foundation::particles
         builder.Property<&RangeColor::min>("min").PropAttribute("color", true).Property<&RangeColor::max>("max").PropAttribute("color", true);
     }
 
-    // ---- emission shape (flat struct + its type discriminator) -------------------------------
+    // ---- emission shape (flat struct and its type discriminator) -----------------------------
     REFLECT_ENUM(EmissionShapeType, "rtti::particles")
     {
         builder.Value("Point", EmissionShapeType::Point);
@@ -93,7 +91,7 @@ namespace foundation::particles
             .Nested<&VelocityInitializer::shape>("shape");
     }
 
-    // ---- initializers (flat / range) ---------------------------------------------------------
+    // ---- initializers (flat and range) -------------------------------------------------------
     REFLECT_MEMBERS(LifetimeInitializer, "rtti::particles")
     {
         builder.Attribute("displayName", String(u8"Lifetime"))
@@ -121,7 +119,7 @@ namespace foundation::particles
             .Property<&MeshOrientationInitializer::fixedAxis>("fixedAxis");
     }
 
-    // ---- behaviors (flat / vector force fields) ----------------------------------------------
+    // ---- behaviors (flat and vector force fields) --------------------------------------------
     REFLECT_MEMBERS(GravityBehavior, "rtti::particles")
     {
         builder.Attribute("displayName", String(u8"Gravity"))
@@ -153,7 +151,7 @@ namespace foundation::particles
             .Property<&VortexBehavior::axis>("axis");
     }
 
-    // ---- attractor / radial force / collision (flat) -----------------------------------------
+    // ---- attractor, radial force, collision (flat) -------------------------------------------
     REFLECT_MEMBERS(AttractorBehavior, "rtti::particles")
     {
         builder.Attribute("displayName", String(u8"Attractor"))
@@ -202,7 +200,7 @@ namespace foundation::particles
             .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f});
     }
 
-    // ---- curves (count-bound key arrays) + the OverLifetime behaviors ------------------------
+    // ---- curves (count-bound key arrays) and the OverLifetime behaviors ----------------------
     // Their keys and stops are Core's, reflected by RegisterCoreTypes.
     REFLECT_VALUE(ParticleCurveFloat, "rtti::particles")
     {
@@ -247,7 +245,7 @@ namespace foundation::particles
             .Nested<&SpeedOverLifetimeBehavior::curve>("curve");
     }
 
-    // Registers the range + shape + collision + curve leaf value types (the modules' StaticType()
+    // Registers the range, shape, collision and curve leaf value types (the modules' StaticType()
     // self-builds via REFLECT_MEMBERS). Idempotent; call from RegisterParticleModules().
     void RegisterParticleModuleReflection()
     {
@@ -266,8 +264,8 @@ namespace foundation::particles
             RttiRegisterValue_ParticleCurveColor();
             // The module arrays are polymorphic: register Array<RefPtr<Base>> as a polymorphic
             // container so tooling recurses into each module's concrete reflected type. Pass the
-            // standard serialization create-by-type adapter (the factory flows in as function
-            // pointers - reflection never imports serialization).
+            // standard serialization create-by-type adapter (the factory comes in as function
+            // pointers, so reflection never imports serialization).
             RegisterPolymorphicArrayType<ParticleInitializer>(
                 &CreateSerializableElement<ParticleInitializer>,
                 &CanCreateSerializableElement<ParticleInitializer>);

@@ -3,7 +3,7 @@
 
 // Transient texture generation: each transient carries a stable id for its backing physical texture,
 // surfaced via GetTextureGeneration. A bind-group cache over a transient's view keys on this (not the
-// raw pointer) so a reused-address view can't alias a stale, destroyed texture across a resize.
+// raw pointer) so a reused-address view cannot alias a stale, destroyed texture across a resize.
 // Driven on the Null RHI so Execute actually allocates/returns the transient.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -65,8 +65,8 @@ namespace
         }
     };
 
-    // One frame: a transient HDR target written by one pass and read by a backbuffer pass (so it isn't
-    // culled). Captures the transient's generation + view inside the writing pass's execute.
+    // One frame: a transient HDR target written by one pass and read by a backbuffer pass (so it is
+    // not culled). Captures the transient's generation and view inside the writing pass's execute.
     void RunFrame(RenderGraph& graph, Harness& h, i32 frameIndex, u64& outGen,
                   rhi::TextureView*& outView)
     {
@@ -115,7 +115,7 @@ TEST_CASE("rg.transient: generation is non-zero and stable across pool reuse")
 
     CHECK(gen0 != 0); // a freshly allocated transient gets a real id
     CHECK(v0 != nullptr);
-    CHECK(gen1 == gen0); // same desc -> pool reuse -> SAME physical texture -> stable generation
+    CHECK(gen1 == gen0); // same desc, so pool reuse, the same physical texture and a stable generation
     CHECK(v1 == v0);     // the same pooled view comes back (the case the cache optimizes for)
 }
 
@@ -163,7 +163,7 @@ TEST_CASE("rg.transient: distinct transients get distinct generations")
     CHECK(graph.Execute(h.enc).IsOk());
     CHECK(genA != 0);
     CHECK(genB != 0);
-    CHECK(genA != genB); // two distinct physical allocations -> distinct ids
+    CHECK(genA != genB); // two distinct physical allocations, two distinct ids
 }
 
 namespace

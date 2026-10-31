@@ -3,8 +3,8 @@
 
 // Foundation::Shell.Web - `foundation.shell.web:window_manager`.
 //
-// One canvas => one window. The main window is created at construction; additional CreateWindow
-// calls fail (a browser page has a single WebGPU canvas here - multi-canvas is a later concern).
+// One canvas, one window. The main window is created at construction; additional CreateWindow
+// calls fail (a browser page has a single WebGPU canvas here).
 // Pump() re-polls the canvas size each frame and emits a Resized event when it changed, so the
 // runner reconfigures the swapchain (the browser has no OS resize event queue to drain).
 

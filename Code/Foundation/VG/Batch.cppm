@@ -4,9 +4,8 @@
 // Foundation::VG - :batch partition.
 //
 // The batched output an external renderer consumes: VGCommand (a run of indices
-// sharing state), VGBatch (vertices/indices/commands/textures), and the
-// ClipPathManager (stencil-based clip stack that emits into a batch). Ported
-// from Sedulous.VG (VGCommand/VGBatch/ClipPathManager).
+// sharing state), VGBatch (vertices, indices, commands and textures), and the
+// ClipPathManager (stencil-based clip stack that emits into a batch).
 
 module;
 #include "Core/Prelude.h"
@@ -34,12 +33,12 @@ export namespace foundation::vg
         i32 textureIndex = -1; ///< Index into the texture list (-1 for none).
         Rectangle clipRect;    ///< Clip rectangle in screen coordinates.
         VGClipMode clipMode = VGClipMode::None;
-        /// Stencil-clipped AND confined to clipRect (a rectangle clip inside a path clip); empty
+        /// Stencil-clipped and confined to clipRect (a rectangle clip inside a path clip); empty
         /// clipRect hides the draw. Scissor-mode commands are always confined to clipRect.
         bool scissored = false;
         VGBlendMode blendMode = VGBlendMode::Normal;
         i32 stencilRef = 0; ///< Stencil reference value (for stencil clipping).
-        VGDrawMode drawMode = VGDrawMode::Default; ///< Straight sampling vs MSDF decode.
+        VGDrawMode drawMode = VGDrawMode::Default; ///< Straight sampling or MSDF decode.
         VGFillPhase fillPhase = VGFillPhase::Direct; ///< Stencil-then-cover phase (see enum).
         FillRule fillRule = FillRule::NonZero; ///< Winding rule for StencilWrite/Cover phases.
         VGGradientSpread gradientSpread =
@@ -55,7 +54,7 @@ export namespace foundation::vg
     };
 
     /// One offscreen layer (VGContext::PushLayer): drawn into a target of its own and composited
-    /// into its parent once, so a group fades as one (V3 of Specs/vg-and-gui-lab.md).
+    /// into its parent once, so a group fades as one.
     struct VGLayer
     {
         i32 parent = -1;     ///< The enclosing layer, -1 for the target itself.
@@ -73,7 +72,7 @@ export namespace foundation::vg
 
     /// Batched vector-graphics geometry and draw commands. The output of
     /// VGContext that an external renderer consumes. Fields are public for the
-    /// tessellation/clip code that writes into them (matching Sedulous).
+    /// tessellation and clip code that writes into them.
     class VGBatch
     {
     public:
@@ -84,13 +83,13 @@ export namespace foundation::vg
         Array<VGBoxVertex> boxVertices;
         /// Offscreen layers, in the order they were pushed (a child after its parent).
         Array<VGLayer> layers;
-        // Textures referenced by commands (by textureIndex). NOT owned by the
-        // batch - VGContext manages lifetime. By convention index 0 is a 1x1
+        // Textures referenced by commands (by textureIndex). Not owned by the
+        // batch; VGContext manages lifetime. By convention index 0 is a 1x1
         // white texture for solid-color draws.
         Array<const image::ImageData*> textures;
-        // Sources whose renderer-side GPU cache entries must be DROPPED before this
-        // batch's textures are considered (the invalidation half of the renderer's
-        // identity-keyed texture cache - e.g. evicted gradient LUTs). Identity keys
+        // Sources whose renderer-side GPU cache entries must be dropped before this
+        // batch's textures are considered: the invalidation half of the renderer's
+        // identity-keyed texture cache (e.g. evicted gradient LUTs). Identity keys
         // only: the renderer compares pointers, never dereferences them.
         Array<const image::ImageData*> evictedTextures;
         // Distance-field parameters for DistanceField-mode commands: the MSDF spread (texels) and
@@ -122,7 +121,7 @@ export namespace foundation::vg
         [[nodiscard]] usize VertexCount() const { return vertices.Size(); }
         [[nodiscard]] usize IndexCount() const { return indices.Size(); }
 
-        /// Clear all data for reuse. Also clears the texture list - the caller
+        /// Clear all data for reuse. Also clears the texture list; the caller
         /// re-adds required textures (e.g. the white fallback at index 0).
         void Clear()
         {

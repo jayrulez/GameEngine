@@ -1,6 +1,6 @@
 # Foundation::Fonts.HarfBuzz - `foundation.fonts.harfbuzz`: a text shaper over HarfBuzz (ligatures,
-# joined and contextual forms, mark placement), one implementation of the engine's ITextShaper (F3 of
-# Specs/vg-and-gui-lab.md). HarfBuzz stays inside this library: its interface exports an install
+# joined and contextual forms, mark placement), one implementation of the engine's ITextShaper.
+# HarfBuzz stays inside this library: its interface exports an install
 # call and a shaper factory, and no HarfBuzz type or header crosses it. Fonts without their file
 # fall back to the basic shaper (Fonts.TrueType's).
 

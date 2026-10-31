@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/SSSParserTests.bf.
-//
-// The resolution-pipeline tests are driven end-to-end through a real
-// UIContext + RootView + TestView (registering "View"/element selectors explicitly, since
-// UITypeRegistry::RegisterBuiltins is not implemented while controls are unported).
+// SSSParser tests. The resolution-pipeline tests run end to end through a real UIContext,
+// RootView and TestView, and register the element type names their selectors use (EnsureGlobals).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -21,7 +18,7 @@ namespace core = foundation::core;
 namespace image = foundation::image;
 namespace vg = foundation::vg;
 
-// Register the drawable factories + the element types these parser tests reference.
+// Register the drawable factories and the element types these parser tests reference.
 static void EnsureGlobals()
 {
     StyleSheetLoader::InitializeGlobals();
@@ -33,7 +30,7 @@ static void EnsureGlobals()
     UITypeRegistry::Register(u8"CheckBox", &CheckBox::StaticType());
 }
 
-// A UIContext + RootView with a stylesheet applied; the test adds views under `root`.
+// A UIContext and RootView with a stylesheet applied; the test adds views under `root`.
 struct Fixture
 {
     UIContext ctx{DefaultAllocator()};
@@ -62,14 +59,14 @@ static core::RefPtr<StyleSheet> LoadSSS(StringView src)
 
 namespace
 {
-    // Byte Color(r,g,b,a) -> float Color helper (mirrors the Beef Color(r,g,b,255) ctor).
+    // Builds a float Color from byte channels (0 to 255).
     Color Rgb(core::u8 r, core::u8 g, core::u8 b, core::u8 a = 255)
     {
         return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
-    // Port of Sedulous.UI.Tests MockResourceProvider: an in-memory IResourceProvider for @import /
-    // @icon / @image. Owned image data is kept alive as a member so the LoadImage() pointer stays valid.
+    // An in-memory IResourceProvider for @import, @icon and @image. Owned image data is kept alive
+    // as a member so the LoadImage() pointer stays valid.
     class MockResourceProvider : public IResourceProvider
     {
     public:
@@ -147,7 +144,7 @@ TEST_CASE("sss: Palette_Derivation")
     CHECK(light.r > 100 / 255.0f);
 }
 
-// === Basic rule parsing (parse + inspect) ===
+// === Basic rule parsing (parse and inspect) ===
 
 TEST_CASE("sss: CompoundStateRule")
 {
@@ -564,7 +561,7 @@ TEST_CASE("sss: FontFamily_QuotedString")
     CHECK(s.Value() == StringView(u8"Lilita One"));
 }
 
-// === Cascade + inheritance ===
+// === Cascade and inheritance ===
 
 TEST_CASE("sss: Cascade_ClassBeatsType")
 {
@@ -589,7 +586,7 @@ TEST_CASE("sss: Inheritance_TextColor")
     f.root->AddView(group.Get());
     core::RefPtr<TestView> child = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 30.0f);
     group->AddView(child.Get());
-    // Child inherits text-color from the View rule + inheritance walk.
+    // The child inherits text-color from the View rule through the inheritance walk.
     CHECK(child->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(0xaa / 255.0f));
 }
 
@@ -601,7 +598,7 @@ TEST_CASE("sss: MultipleRules_SameType")
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == 1.0f);
 }
 
-// === Subtype matching + control-typed drawable factories ===
+// === Subtype matching and control-typed drawable factories ===
 
 TEST_CASE("sss: SubtypeMatching_ButtonMatchesButtonBase")
 {
@@ -644,9 +641,9 @@ TEST_CASE("sss: DrawableFactory_StateRounded")
     CHECK(core::Cast<StateListDrawable>(bg) != nullptr);
 }
 
-// Inline style="..." with a drawable function (regression: ApplyInlineStyle must register the drawable
-// factory builtins - rounded-rect/gradient/state-* - itself, or the value falls back to a plain white
-// color; StyleSheetLoader did this for .sss files but the inline path did not).
+// Inline style="..." with a drawable function. ApplyInlineStyle registers the built-in drawable
+// factories (rounded-rect, gradient, state-*) itself, as StyleSheetLoader does for .sss files;
+// otherwise the value would fall back to a plain white color.
 TEST_CASE("sss: InlineStyle_RoundedRectFunction")
 {
     EnsureGlobals();
@@ -667,10 +664,10 @@ TEST_CASE("sss: InlineStyle_RoundedRectFunction")
     CHECK(rr->BorderColor.r == doctest::Approx(80 / 255.0f));
 }
 
-// UITypeRegistry::RegisterBuiltins registers the built-in control type names, so .sss element selectors
-// resolve to a concrete type. Regression: without it, unresolved type names (e.g. ComboBox) matched
-// nothing correctly and a pseudo-element rule like `ComboBox::arrow` leaked its drawable onto other
-// controls' backgrounds (dropdown arrows appeared on buttons + text fields in the Breeze theme).
+// UITypeRegistry::RegisterBuiltins registers the built-in control type names, so .sss element
+// selectors resolve to a concrete type. Without it, an unresolved type name (such as ComboBox)
+// matches incorrectly, and a pseudo-element rule like `ComboBox::arrow` puts its drawable on other
+// controls' backgrounds.
 TEST_CASE("sss: RegisterBuiltins_ResolvesTypes")
 {
     UITypeRegistry::RegisterBuiltins();
@@ -682,9 +679,9 @@ TEST_CASE("sss: RegisterBuiltins_ResolvesTypes")
 
 TEST_CASE("sss: RegisterBuiltins is safe to call from many threads at once (the theme cook does)")
 {
-    // The UI theme cook reaches this through StyleSheetLoader on job workers; a plain flag let
-    // two builds rehash the type map under each other. Hammer it, then the map is intact and
-    // holds exactly what one registration holds.
+    // The UI theme cook reaches this through StyleSheetLoader on job workers, so two builds can
+    // register at once and must not rehash the type map under each other. Run it concurrently
+    // many times, then check that the map is intact and holds what one registration holds.
     UITypeRegistry::RegisterBuiltins();
     const usize expected = UITypeRegistry::Count();
     core::JobSystem jobs(core::DefaultAllocator(), 4);
@@ -698,7 +695,7 @@ TEST_CASE("sss: TypeSelectors_DoNotLeakAcrossControls")
 {
     EnsureGlobals();
     UITypeRegistry::RegisterBuiltins();
-    // A ButtonBase background + a ComboBox arrow pseudo-element (the shape breeze.sss uses).
+    // A ButtonBase background and a ComboBox arrow pseudo-element (the shape breeze.sss uses).
     Fixture f(
         LoadSSS(u8"ButtonBase { background: rounded-rect(rgb(10,20,30), radius=2); }"
                 u8" ComboBox::arrow { background: rounded-rect(rgb(200,100,50), radius=2); }"));
@@ -709,18 +706,18 @@ TEST_CASE("sss: TypeSelectors_DoNotLeakAcrossControls")
     REQUIRE(bg != nullptr);
     auto* rr = core::Cast<RoundedRectDrawable>(bg);
     REQUIRE(rr != nullptr);
-    // The button resolves the ButtonBase background, NOT the ComboBox::arrow drawable.
+    // The button resolves the ButtonBase background, not the ComboBox::arrow drawable.
     CHECK(rr->FillColor.r == doctest::Approx(10 / 255.0f));
     CHECK(rr->FillColor.g == doctest::Approx(20 / 255.0f));
 }
 
-// === Ported from Sedulous.UI.Tests ===
+// === Color functions, specificity and palettes ===
 
 TEST_CASE("sss: ColorFunction_Darken")
 {
     Fixture f(LoadSSS(u8"View { text-color: darken(#ffffff, 50%); }"));
     core::RefPtr<TestView> view = f.AddView();
-    // darken white by 50% -> ~(128, 128, 128)
+    // darkening white by 50% gives about (128, 128, 128)
     const f32 r = view->ResolveStyleColor(StyleProperty::TextColor).r;
     CHECK((r < 200 / 255.0f && r > 100 / 255.0f));
 }
@@ -787,7 +784,7 @@ TEST_CASE("sss: TypePlusClassRule")
     auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
     btn->AddClass(u8"primary");
     f.root->AddView(btn.Get());
-    // Type+class (specificity 11) beats type-only (specificity 1)
+    // Type and class (specificity 11) beats type only (specificity 1)
     CHECK(btn->ResolveStyleFloat(StyleProperty::FontSize) == 24.0f);
 }
 
@@ -802,7 +799,7 @@ TEST_CASE("sss: PaletteExtends")
     )");
     Fixture f(Move(sheet));
     core::RefPtr<TestView> view = f.AddView();
-    // base-color came from loader pre-set
+    // base-color came from the loader's preset
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(100 / 255.0f));
     // accent came from the @palette block
     const Color accent = view->ResolveStyleColor(StyleProperty::AccentColor);
@@ -822,13 +819,13 @@ TEST_CASE("sss: PaletteExtends_InheritsLoaderValues")
     )");
     Fixture f(Move(sheet));
     core::RefPtr<TestView> view = f.AddView();
-    // base-text came from loader
+    // base-text came from the loader
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).r == doctest::Approx(220 / 255.0f));
     // accent came from the @palette block
     const Color accent = view->ResolveStyleColor(StyleProperty::AccentColor);
     CHECK(accent.r == 1.0f);
     CHECK(accent.g == doctest::Approx(0x88 / 255.0f));
-    // base-bg came from loader, used in a drawable
+    // base-bg came from the loader, used in a drawable
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
     ColorDrawable* cd = core::Cast<ColorDrawable>(bg);
@@ -849,7 +846,7 @@ TEST_CASE("sss: Import_LoadsFromProvider")
         View { font-size: 14; }
         @import "buttons.sss";
     )");
-    // Should have 2 rules: View from main, ButtonBase from import
+    // 2 rules: View from the main sheet, ButtonBase from the import
     CHECK(sheet->RuleCount() == 2);
     Fixture f(Move(sheet));
     auto btn = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
@@ -862,7 +859,7 @@ TEST_CASE("sss: Import_LoadsFromProvider")
 TEST_CASE("sss: Import_NoProvider_Graceful")
 {
     EnsureGlobals();
-    // No resource provider -> @import should be silently skipped
+    // With no resource provider, @import is silently skipped
     core::RefPtr<StyleSheet> sheet = LoadSSS(u8R"(
         @import "nonexistent.sss";
         View { font-size: 14; }
@@ -912,17 +909,17 @@ TEST_CASE("sss: Icon_PreRegisteredBeatsFile")
 TEST_CASE("sss: Icon_NoProvider_SvgReturnsNull")
 {
     EnsureGlobals();
-    // No resource provider, no pre-registered SVG -> svg() returns null gracefully (no crash).
+    // With no resource provider and no pre-registered SVG, svg() returns null (no crash).
     Fixture f(LoadSSS(u8"CheckBox::checkmark { background: svg(missing); }"));
     auto cb = core::MakeRef<CheckBox>(core::DefaultAllocator(), StringView(u8"Test"));
     f.root->AddView(cb.Get());
     Drawable* icon =
         cb->ResolvePartDrawable(u8"checkmark", StyleProperty::Background, ControlState::Normal);
-    (void)icon; // may be null or a fallback -- either way, no crash
+    (void)icon; // may be null or a fallback; either way, no crash
     CHECK(true);
 }
 
-// === @image directive + image/nine-slice factories ===
+// === @image directive and the image and nine-slice factories ===
 
 TEST_CASE("sss: Image_LoadsFromProvider")
 {
@@ -1039,8 +1036,8 @@ TEST_CASE("sss: Image_WithTint")
 
 TEST_CASE("sss: svg builtin glyph resolves via ThemeIconSet WITHOUT any registration")
 {
-    // Cooked/runtime themes must not get a silent null here: without this, only
-    // hosts that pre-registered names could resolve svg(close).
+    // Cooked and runtime themes get the built-in glyph here, not a silent null, so svg(close)
+    // resolves even in hosts that pre-registered no names.
     Fixture f(LoadSSS(u8"View { background: svg(close); }"));
     core::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
@@ -1055,7 +1052,7 @@ TEST_CASE("sss: svg builtin glyph shares the BAKED instance when ThemeIconSet is
     core::RefPtr<TestView> view = f.AddView();
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     REQUIRE(bg != nullptr);
-    // The SHARED instance - not a fresh parse (identity proves the crispness path).
+    // The shared instance, not a fresh parse (the identity shows it takes the baked-icon path).
     RefPtr<Drawable> shared = ThemeIconSet::Acquire(ThemeIcon::Close);
     CHECK(bg == shared.Get());
     ThemeIconSet::Get().Shutdown(); // test hygiene
@@ -1089,8 +1086,9 @@ TEST_CASE("sss: background-color stores Background as a raw COLOR, not a drawabl
 
 TEST_CASE("sss: state color functions match Palette derivations")
 {
-    // disabled()'s luminance desaturation is the one lighten/darken cannot express - the
-    // sheet-declared color must equal the C++ themes' Palette math exactly (migration parity).
+    // disabled() desaturates by luminance, which lighten and darken cannot express. The
+    // sheet-declared color equals the C++ themes' Palette math exactly, so both kinds of theme
+    // agree.
     Fixture f(LoadSSS(u8"View { text-color: disabled(#6496c8); }"));
     core::RefPtr<TestView> view = f.AddView();
     const Color expected =

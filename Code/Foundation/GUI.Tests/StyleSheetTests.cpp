@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - StyleRule / StyleSheet cascade tests: property blocks and specificity-
-// ordered resolution against a UIWidget.
+// GUI - StyleRule / StyleSheet cascade tests: property blocks and specificity-ordered
+// resolution against a UIWidget.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -124,8 +124,8 @@ TEST_CASE("stylesheet: non-matching rules contribute nothing")
 
 TEST_CASE("stylesheet: rules found through different keys still tie by source order")
 {
-    // The index keys .a and .b apart; the element lists b first, so .b's rule is found first, yet
-    // .a came first in the sheet and the later .b wins.
+    // The index keys .a and .b separately, and the element lists b first, so .b's rule is found
+    // first. Yet .a came first in the sheet, and the later .b still wins.
     auto w = Widget(u8"button");
     w->AddClass(SV(u8"b"));
     w->AddClass(SV(u8"a"));
@@ -153,12 +153,12 @@ TEST_CASE("stylesheet: each key kind finds its rules, and a rule added after a r
     };
     add(u8"#ok", u8"padding-left");
     add(u8"panel .primary", u8"padding-top");   // keyed by its subject's class, not the ancestor's
-    add(u8"button:hover", u8"padding-right");   // keyed by tag; the state turns it away
+    add(u8"button:hover", u8"padding-right");   // keyed by tag; the state check rejects it
     add(u8"*", u8"padding-bottom");
-    add(u8"[id=ok]", u8"margin-left");          // no id, class or tag: tried everywhere
+    add(u8"[id=ok]", u8"margin-left");          // no id, class or tag, so tried everywhere
     add(u8"#other", u8"margin-top");
     add(u8"label", u8"margin-right");
-    add(u8"button:no-such-state", u8"margin-bottom"); // never matches: in no list
+    add(u8"button:no-such-state", u8"margin-bottom"); // never matches, so it is in no list
 
     const ResolvedStyle first = sheet.Resolve(*w.Get());
     CHECK(first.Has(SV(u8"padding-left")));

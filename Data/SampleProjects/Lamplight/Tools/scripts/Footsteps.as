@@ -1,7 +1,8 @@
-// Footsteps - the thief's steps: one each stride (the clips' strides, blender/thief.py), the sound
-// of what the foot lands on (the physical material under it, RayCastHit.material) and a Noise for
-// whoever listens (the guards, P2): a Float4 of where it was and how loud, 0 to 1. Sneaking is
-// silent; a run is louder than a walk, and gravel louder than boards, grass softer.
+// Footsteps: the thief's steps. A step falls once per stride, with stride lengths matching the
+// animation clips (blender/thief.py). Each step plays the sound of the surface underfoot (the
+// physical material from RayCastHit.material) and emits a Noise for the guards to hear: a Float4
+// of the position and the loudness, 0 to 1. Sneaking is silent and a run is louder than a walk;
+// gravel is louder than boards, and grass is softer.
 class Footsteps
 {
     private Entity@ self;
@@ -20,7 +21,7 @@ class Footsteps
 
     private float m_travel = 0.0f;
     private int m_take = 0;
-    private string m_surface = ""; // the last step's, and how many: what a playtest reads
+    private string m_surface = ""; // surface of the last step, and the step count, for playtests
     private int m_steps = 0;
     private int m_heard = 0; // steps whose sound started
 
@@ -32,7 +33,7 @@ class Footsteps
         float speed = Math::Sqrt(v.x * v.x + v.z * v.z);
         if (speed < 0.2f)
         {
-            m_travel = 0.0f; // stood still: the next step is a whole stride away
+            m_travel = 0.0f; // standing still, so the next step is a whole stride away
             return;
         }
         bool sneaking = Input::isDown("Sneak");

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUISandbox - what the editor mock's inspectors show (X0 of Specs/editor-gui.md): an entity with
-// three components and a scene's settings, reflected as the engine's are, standing in for them.
+// GUISandbox - what the editor mock's inspectors show: an entity with three components and a
+// scene's settings, reflected as the engine's are, standing in for them.
 // Plain data: nothing here runs.
 
 module;

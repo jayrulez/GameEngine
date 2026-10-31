@@ -3,11 +3,11 @@
 
 // Core - :curve partition
 // A general scalar keyframe curve: an ordered set of {time, value, tangents, interpolation} keys
-// sampled at an arbitrary time. EvaluateCurve is the engine's ONE cubic Hermite over keys: Curve
+// sampled at an arbitrary time. EvaluateCurve is the engine's one cubic Hermite over keys: Curve
 // samples with it, the particles' fixed curves do, and an editor draws with it, so what is edited is
 // what plays. A key's tangent mode says how its tangents are kept (ApplyTangentModes sets them), so
 // an editor and an importer agree. Float3/Color tracks hold one Curve per component; Quat tracks
-// slerp quaternion keys directly and do NOT use this (never per-component euler curves).
+// slerp quaternion keys directly and do not use this (never per-component Euler curves).
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +21,7 @@ import :span;
 
 export namespace foundation::core
 {
-    // How the segment LEAVING a key is interpolated toward the next key.
+    // How the segment leaving a key is interpolated toward the next key.
     enum class CurveKeyInterpolation : u8
     {
         Constant, // hold this key's value until the next key (step)
@@ -60,7 +60,7 @@ export namespace foundation::core
     }
 
     // Samples keys sorted by time at `time`. None -> 0; one -> its value; outside the keys -> the
-    // nearest end value (clamped). Between two keys, the LEFT key's interpolation drives the segment;
+    // nearest end value (clamped). Between two keys, the left key's interpolation drives the segment;
     // coincident keys jump to the later value.
     [[nodiscard]] inline f32 EvaluateCurve(Span<const CurveKey> keys, f32 time) noexcept
     {
@@ -124,8 +124,8 @@ export namespace foundation::core
     }
 
     // An ordered scalar curve. Keys are kept sorted by time (AddKey inserts in order); Evaluate
-    // clamps to the end values outside [firstTime, lastTime] (loop/pingpong wrapping is the CLIP's
-    // job, not the curve's). Cheap value type - copyable, no hidden state.
+    // clamps to the end values outside [firstTime, lastTime] (loop and ping-pong wrapping is the
+    // clip's job, not the curve's). Cheap value type: copyable, no hidden state.
     class Curve
     {
     public:

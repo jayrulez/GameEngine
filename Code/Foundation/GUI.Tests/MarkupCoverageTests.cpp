@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - markup coverage (E6): every control is a markup element. The data views take their data
+// GUI - markup coverage: every control is a markup element. The data views take their data
 // from markup (a tree's nested items, a table's columns and rows), a scroll bar is a range like
 // the slider, and a message box waits in its page until a script shows it.
 #include <doctest/doctest.h>
@@ -86,7 +86,7 @@ TEST_CASE("markup: a table view's columns and rows become a model behind a sorti
     CHECK(table->IsEditable());
     CHECK(model->IsEditable(MakeModelIndex(0, 0)));
 
-    // Its header sorts by value (100 after 42, not before).
+    // Its header sorts by value, so 100 comes after 42, not before.
     root->GetEventDispatcher()->InjectMouseDown(core::Float2{180.0f, 13.0f}, MouseButton::Left);
     root->GetEventDispatcher()->InjectMouseUp(core::Float2{180.0f, 13.0f}, MouseButton::Left);
     CHECK(table->GetSortColumn() == 1);
@@ -130,7 +130,7 @@ TEST_CASE("markup: a message box waits unseen in its page, is shown modal, and g
     CHECK_FALSE(box->IsOpen());
     CHECK(box->GetResultName() == SV(u8"cancel"));
     CHECK(changes == 1);
-    // Back in its place, unseen, ready to be shown again.
+    // It is back in its place, not displayed, ready to be shown again.
     CHECK(box->GetParent() == page.Get());
     CHECK(page->GetChildIndex(box) == 1);
     CHECK_FALSE(box->IsDisplayed());

@@ -30,7 +30,7 @@ TEST_CASE("label: text properties")
     CHECK(label->GetText() == SV(u8"Hello"));
     label->SetTextColor(core::Color::Red);
     CHECK(label->GetTextColor().r == doctest::Approx(1.0f));
-    CHECK(label->MeasureText().x == 0.0f); // no font yet -> zero measure
+    CHECK(label->MeasureText().x == 0.0f); // no font yet: zero measure
 }
 
 TEST_CASE("label: draws its box (text is a no-op without a font)")
@@ -72,7 +72,7 @@ TEST_CASE("button: click callback fires on press+release")
     d->InjectMouseUp(core::Float2{50.0f, 50.0f}, MouseButton::Left);
     CHECK(clicks == 1);
 
-    // Press on the button, release elsewhere -> not a click.
+    // A press on the button released elsewhere is not a click.
     d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{300.0f, 300.0f}, MouseButton::Left);
     CHECK(clicks == 1);
@@ -109,6 +109,6 @@ TEST_CASE("button: styled by CSS through the default tag")
     CHECK(btn->GetAlpha() == doctest::Approx(1.0f));
 
     d->InjectMouseMove(core::Float2{50.0f, 50.0f}); // hover
-    mgr.ApplyTree(*root.Get());                     // re-resolve -> :hover applies
+    mgr.ApplyTree(*root.Get());                     // re-resolve: :hover applies
     CHECK(btn->GetAlpha() == doctest::Approx(0.3f));
 }

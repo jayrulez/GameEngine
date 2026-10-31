@@ -5,17 +5,17 @@
 //
 // A theme is a stylesheet at the user-agent origin: built-in CSS that styles the standard widget
 // tags and their parts (slider::fill, window::title, scrollbar::thumb, checkbox::mark, ...). The
-// built-in one is written in tokens (E13 of Specs/gui-lab-evolution-2.md), custom properties on
-// :root that every widget inherits, in three layers:
+// built-in theme is written in tokens, which are custom properties on :root that every widget
+// inherits. The tokens come in three layers:
 //   1. Base tokens: the palette (surfaces, controls, the accent and the text on it, text, borders,
 //      the focus ring, selection, danger, success, warning) and the metrics (radii, a spacing
-//      scale, font sizes, border and focus widths, motion's durations and easing). A theme that
+//      scale, font sizes, border and focus widths, motion durations and easing). A theme that
 //      sets only these restyles everything consistently.
 //   2. Derived states (hover, pressed, disabled), mixed from the base with color-mix() unless a
 //      theme sets its own.
-//   3. Widget tokens: each part reads a token of its own, falling back to a base one
+//   3. Widget tokens: each part reads a token of its own and falls back to a base one
 //      (`button { background-color: var(--button-background, var(--accent)) }`), so a theme can
-//      change one control alone, its art too (a border-image or an SVG).
+//      change one control alone, including its art (a border-image or an SVG).
 // Light and high contrast are @media (prefers-color-scheme) and (prefers-contrast) blocks of the
 // same sheet, chosen by the host's flags (GUIContext::SetColorScheme). A game ships its own theme
 // as a sheet (overriding tokens, or importing this one), set with SetUserAgentSheet.

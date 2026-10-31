@@ -1,7 +1,7 @@
 # Pipeline::Script.Luau - `script.luau.pipeline` (the Luau cook service).
-# The Luau-specific cook (compile-check + construct-and-walk property harvest + starters) that
-# the neutral ScriptClassAssetBuilder resolves by language. Cook-only (UI-free) so Tools.Cook /
-# Tools.Export can link it; the editor-UI half rides the neutral ScriptPage.
+# The Luau-specific cook (the compile check, the construct-and-walk property harvest, starters)
+# that the neutral ScriptClassAssetBuilder resolves by language. Cook-only (UI-free) so Tools.Cook
+# and Tools.Export can link it; the editor's side is the backend-neutral script page.
 util_add_engine_library(Script.Luau.Pipeline ALIAS Pipeline::Script.Luau)
 target_link_libraries(Script.Luau.Pipeline PUBLIC
     Foundation::Core Pipeline::Core Foundation::Content

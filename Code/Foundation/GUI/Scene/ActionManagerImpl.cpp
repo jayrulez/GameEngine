@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - module implementation unit: ActionManager's tick, which reads its targets (a Node, which
-// its partition only names).
+// GUI - module implementation unit: ActionManager's tick, which needs the full Node type that the
+// partition only names.
 
 module;
 #include "Core/Prelude.h"
@@ -25,8 +25,8 @@ namespace foundation::gui
                 continue;
             }
             const f32 scale = (scaleOf && target != nullptr) ? scaleOf(*target) : 1.0f;
-            // Out of view, an action that cannot bring its target into view changes nothing
-            // that shows: what it writes marks the target alone (E8b), asking for no frame.
+            // While its target is out of view, an action that cannot bring it into view changes
+            // nothing visible, so its writes mark only the target and do not ask for a frame.
             const bool quiet = target != nullptr && target->WasOutOfView() && !m_actions[i]->CanMoveTarget();
             if (quiet)
                 target->BeginQuietInvalidation();

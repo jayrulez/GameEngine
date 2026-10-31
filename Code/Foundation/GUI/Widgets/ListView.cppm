@@ -3,9 +3,9 @@
 
 // GUI - :list_view partition
 //
-// ListView: a virtualised list over a model (eepp's UIListView in role). Everything but its
-// default row lives in ItemView; its default row is one label (`listcell`) showing the item's
-// display text. A row factory (native or a markup template) replaces it.
+// ListView: a virtualised list over a model. Everything except the default row lives in
+// ItemView. The default row is one label (`listcell`) showing the item's display text; a row
+// factory (native code or a markup template) replaces it.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +33,7 @@ export namespace foundation::gui
         ListView()
         {
             SetTag(core::StringView(u8"listview"));
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
 
@@ -42,11 +42,11 @@ export namespace foundation::gui
         [[nodiscard]] core::RefPtr<Node> CreateContent(u32) override
         {
             auto label = core::MakeRef<Label>(MemoryAllocator());
-            label->SetTag(core::StringView(u8"listcell")); // a row's, not a sheet's generic label
+            label->SetTag(core::StringView(u8"listcell")); // tagged so sheets style row labels apart from generic labels
             StyleWriteScope defaults(*label);
             label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             label->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
-            label->SetHitTestVisible(false); // a press on it is the row's
+            label->SetHitTestVisible(false); // presses go through to the row
             return label;
         }
         void BindContent(Node& content, i32, const ModelIndex& index) override

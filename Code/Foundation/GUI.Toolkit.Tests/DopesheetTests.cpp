@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the dopesheet (T5 of Specs/gui-lab-evolution-3.md): a timeline source's channels as rows
-// folded by their paths' segments, a parent row showing the keys under it; keys selected by a click
-// (a parent's selecting all under it at that time) or a box, moved in time through the source (on
-// frames, kept in the clip, the selection following where the source put them, Escape giving it
-// up), deleted, inserted by a double click; a CurveSet feeding a dopesheet and a curve view at once.
+// GUI.Toolkit - the dopesheet. A timeline source's channels show as rows folded by the segments of
+// their paths, and a parent row shows the keys under it. Keys are selected by a click (on a parent,
+// selecting every key under it at that time) or a box. They move in time through the source,
+// snapping to frames and staying in the clip; the selection follows where the source put them, and
+// Escape cancels. Keys are deleted, and inserted by a double click. One CurveSet feeds a dopesheet
+// and a curve view at once.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -27,8 +28,8 @@ namespace
         return core::CurveKey{time, value, 0.0f, 0.0f, core::CurveKeyInterpolation::Linear, core::CurveTangentMode::Broken};
     }
 
-    // A 660 by 200 dopesheet, names 160 wide, over 0 to 2 s at 250 px a second: time t on row r at
-    // (160 + 250 t, 10 + 20 r). Its rows: Lamp, color, r, g, intensity, Camera, fov.
+    // A 660 by 200 dopesheet with names 160 wide, over 0 to 2 s at 250 px per second. Time t on row r
+    // is at (160 + 250 t, 10 + 20 r). The rows are Lamp, color, r, g, intensity, Camera, fov.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -172,13 +173,13 @@ TEST_CASE("Dopesheet: a drag moves the selected keys in time as one change, on f
     bed.Pause();
     bed.Drag(Bed::At(0, 0.2f), Bed::At(0, 1.2f) + core::Float2{0.0f, 15.0f}); // past r's second
     REQUIRE(bed.commits.Size() == 1);
-    CHECK(bed.Time(0, 0) == doctest::Approx(1.0f)); // r: the moved key passed its second, now 1.0 then 1.2
+    CHECK(bed.Time(0, 0) == doctest::Approx(1.0f)); // r: the moved key passed r's second key, so r is now 1.0 then 1.2
     CHECK(bed.Time(0, 1) == doctest::Approx(1.2f));
     CHECK(bed.Time(1, 0) == doctest::Approx(1.2f)); // g: 1.2 then 1.4
-    CHECK(bed.sheet->IsSelected(TimelineKeyRef{0, 1})); // r's moved key, now second
+    CHECK(bed.sheet->IsSelected(TimelineKeyRef{0, 1})); // r's moved key, which is now its second
     CHECK(bed.sheet->IsSelected(TimelineKeyRef{1, 0}));
 
-    // On frames, and never past the clip's end.
+    // Moves snap to frames and never pass the clip's end.
     bed.axis->SetFrameRate(10.0f);
     bed.Pause();
     bed.Drag(Bed::At(3, 1.2f), Bed::At(3, 1.33f));
@@ -209,7 +210,7 @@ TEST_CASE("Dopesheet: Escape gives a move up; Delete removes; a double click on 
 
     bed.Pause();
     bed.Click(Bed::At(2, 0.6f));
-    bed.Click(Bed::At(2, 0.6f)); // r at 0.6: on the line from 1 to 0
+    bed.Click(Bed::At(2, 0.6f)); // r at 0.6, on the line from 1 to 0
     REQUIRE(bed.clip.GetKeys(0).Size() == 3);
     CHECK(bed.clip.GetKeys(0)[1].time == doctest::Approx(0.6f));
     CHECK(bed.clip.GetKeys(0)[1].value == doctest::Approx(0.5f));
@@ -227,7 +228,7 @@ TEST_CASE("Dopesheet: the wheel over the names scrolls the rows, over the keys z
     Bed bed;
     for (int i = 0; i < 10; ++i)
         bed.Add(u8"Extra.value", {Key(0.5f, 0.0f)});
-    // Ten more channels, renamed apart: a row each under Extra.
+    // Ten more channels with distinct names, each a row under Extra.
     bed.clip.Info(4).Name = core::String(u8"Extra.a");
     for (usize c = 5; c < 14; ++c)
         bed.clip.Info(c).Name = core::Format(u8"Extra.v{}", c);
@@ -243,7 +244,7 @@ TEST_CASE("Dopesheet: the wheel over the names scrolls the rows, over the keys z
     CHECK(bed.axis->PixelsPerSecond() == doctest::Approx(300.0f));
     CHECK(bed.sheet->TimeAtX(410.0f) == doctest::Approx(1.0f));
 
-    // A curve view over the same clip: a move in the dopesheet is a move it shows.
+    // A curve view over the same clip shows a move made in the dopesheet.
     auto view = core::MakeRef<CurveView>(core::DefaultAllocator());
     view->SetTimeAxis(bed.axis);
     view->SetSource(&bed.clip);

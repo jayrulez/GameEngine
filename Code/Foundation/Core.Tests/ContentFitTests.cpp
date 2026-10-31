@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Core tests - ContentFit: placing content in a region by a FitMode, and turning it as it is
-// presented (Specs/present-transform.md): a landscape game fitted into a portrait screen turned a
-// quarter, the point maps through the turn round-tripping, deltas turned with it, and the unturned
-// fit as it always was.
+// Core tests: ContentFit, placing content in a region by a FitMode and turning it as it is
+// presented. Covers a landscape game fitted into a portrait screen turned a quarter, points that
+// round-trip through the turn, deltas turned with it, and the unturned fit.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

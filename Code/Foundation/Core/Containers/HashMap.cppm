@@ -126,7 +126,7 @@ export namespace foundation::core
             return m_entries[target].value;
         }
 
-        // Move-value overload: inserts/overwrites with a moved value, so MOVE-ONLY values
+        // Move-value overload: inserts or overwrites with a moved value, so move-only values
         // (Function, UniquePtr, ...) can live in a HashMap.
         V& InsertOrAssign(const K& key, V&& value)
         {
@@ -297,7 +297,7 @@ export namespace foundation::core
             n |= n >> 8;
             n |= n >> 16;
             n |= (n >> 16) >> 16; // the 64-bit fold; two legal shifts so 32-bit usize
-                                  // (wasm32) neither overflows nor warns - it's a no-op
+                                  // (wasm32) neither overflows nor warns; there it is a no-op
             return n + 1;
         }
 

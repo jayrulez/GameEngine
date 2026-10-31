@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - the Game tab's resolution choices (Sedulous c5100e94): the project's first,
-// then the export presets that draw at their own size, then the user's preview resolutions,
-// then the panel's own size; a saved key finds its entry, and a gone one falls back to the
-// project's.
+// Editor::Play - the Game tab's resolution choices: the project's first, then the export presets
+// that draw at their own size, then the user's preview resolutions, then the panel's own size. A
+// saved key finds its entry, and one whose entry is gone falls back to the project's.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -18,7 +17,7 @@ using namespace editor;
 
 TEST_CASE("game-resolution: the project's first, then the presets, the previews, the panel")
 {
-    // Nothing at all: the project's entry (the panel's size) and the panel's.
+    // With no sources at all: the project's entry (at the panel's size) and the panel's.
     {
         const Array<GameResolutionChoice> bare = CollectGameResolutions(nullptr, nullptr, nullptr);
         REQUIRE(bare.Size() == 2u);
@@ -32,7 +31,7 @@ TEST_CASE("game-resolution: the project's first, then the presets, the previews,
     settings.renderWidth = 640;
     settings.renderHeight = 360;
     ExportPresetSet presets;
-    ExportPreset desktop; // draws at the project's size: not offered
+    ExportPreset desktop; // draws at the project's size, so it is not offered
     desktop.name = String(u8"Desktop");
     ExportPreset handheld;
     handheld.name = String(u8"Handheld");
@@ -59,8 +58,8 @@ TEST_CASE("game-resolution: the project's first, then the presets, the previews,
     const Span<const GameResolutionChoice> view(choices.Data(), choices.Size());
     CHECK(FindGameResolution(view, u8"preset:QHD") == 2u);
 
-    // A preset held its own way (a phone-facing Web preset): offered at the project's size, named
-    // with its orientation, which the tab previews it with.
+    // A preset held its own way (a phone-facing Web preset) is offered at the project's size and
+    // named with its orientation, which the tab previews it with.
     ExportPreset web;
     web.name = String(u8"Web");
     web.overridesOrientation = true;
@@ -73,11 +72,11 @@ TEST_CASE("game-resolution: the project's first, then the presets, the previews,
     CHECK(held[2].width == 640u);
     CHECK(held[2].overridesOrientation);
     CHECK(held[2].orientation == ScreenOrientation::Landscape);
-    CHECK_FALSE(held[1].overridesOrientation); // the handheld keeps the project's
+    CHECK_FALSE(held[1].overridesOrientation); // the handheld keeps the project's orientation
     // The signature follows an orientation too.
     CHECK(GameResolutionSignature(Span<const GameResolutionChoice>(held.Data(), held.Size()), FitMode::Letterbox) !=
           GameResolutionSignature(view, FitMode::Letterbox));
-    CHECK(FindGameResolution(view, u8"preset:Gone") == 0u); // the project's comes back
+    CHECK(FindGameResolution(view, u8"preset:Gone") == 0u); // falls back to the project's entry
 
     // The signature follows the sizes and the fit, so a change rebuilds the dropdown.
     const String before = GameResolutionSignature(view, FitMode::Letterbox);
@@ -85,13 +84,13 @@ TEST_CASE("game-resolution: the project's first, then the presets, the previews,
     CHECK(GameResolutionSignature(view, FitMode::Crop) != before);
 }
 
-// Present transform P4: the Game tab puts the game on its target as the player puts it in a
-// window, so the phone preview (a portrait 720x1560 screen) turns a landscape game as a phone does.
+// The Game tab puts the game on its target as the player puts it in a window, so the phone
+// preview (a portrait 720x1560 screen) turns a landscape game as a phone does.
 TEST_CASE("game-resolution: the game on a previewed phone is turned as a phone turns it")
 {
     CHECK(kPhonePreviewHeight * 9u == kPhonePreviewWidth * 19u + kPhonePreviewWidth / 2u); // 9 by 19.5
 
-    // A landscape game with no resolution of its own: the phone's pixels, turned.
+    // A landscape game with no resolution of its own is drawn at the phone's pixels, turned.
     const ContentFit turned = GameFitOn(kPhonePreviewWidth, kPhonePreviewHeight, 0, 0, FitMode::Letterbox,
                                         ScreenOrientation::Landscape);
     CHECK(turned.rotation == ContentRotation::ThreeQuarter);
@@ -99,7 +98,7 @@ TEST_CASE("game-resolution: the game on a previewed phone is turned as a phone t
     CHECK(turned.contentSize.y == doctest::Approx(720.0f));
     CHECK(turned.mode == FitMode::Stretch);
 
-    // With one: that resolution, by its fit, turned.
+    // With a resolution, it is drawn at that resolution by its fit, turned.
     const ContentFit sized = GameFitOn(kPhonePreviewWidth, kPhonePreviewHeight, 1280, 720, FitMode::Letterbox,
                                        ScreenOrientation::Landscape);
     CHECK(sized.rotation == ContentRotation::ThreeQuarter);

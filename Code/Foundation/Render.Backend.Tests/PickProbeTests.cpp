@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GPU picking proven at the texel on real Vulkan and WebGPU devices, through the FULL RenderFrame
-// chain (the PickSystem's cropped id pass + graph copy + ring-retired readback):
+// GPU picking proven at the texel on real Vulkan and WebGPU devices, through the full RenderFrame
+// chain (the PickSystem's cropped id pass, graph copy and ring-retired readback):
 //  - a near cube over a far cube at the centre: the near one answers (its own depth test), by
-//    entity index AND generation;
-//  - three identical cubes side by side (one instanced run): each column answers its own id -
+//    entity index and generation;
+//  - three identical cubes side by side (one instanced run): each column answers its own id, since
 //    the instance-stepped ids are per instance, not per run;
 //  - a MultiMesh set of two cubes: both answer the set's one entity (its InstanceSet's id, the
 //    set's pick stream carrying ids 0);
@@ -118,7 +118,7 @@ namespace
             RendererRegistry registry;
             registry.Register(&meshRenderer);
 
-            // Declared BEFORE the frame: destroyed after it (readback buffers outlive the graph).
+            // Declared before the frame, so destroyed after it (readback buffers outlive the graph).
             PickSystem pick(DefaultAllocator(), device, /*framesInFlight*/ 2);
 
             RenderFrame frame(DefaultAllocator(), device, registry, /*framesInFlight*/ 2);
@@ -246,7 +246,7 @@ namespace
     void ProbeBackend(rhi::Device& device, const char* name)
     {
         // Near red cube (entity 7 gen 3) over a far big cube (entity 200 gen 1) at the centre;
-        // three identical grey cubes (one instanced run: same mesh + material) in a row below.
+        // three identical grey cubes (one instanced run: same mesh and material) in a row below.
         RefPtr<materials::Material> red = materials::CreatePBR(u8"pick.red", Float4{1, 0, 0, 1}, 0, 0.9f);
         RefPtr<materials::Material> blue = materials::CreatePBR(u8"pick.blue", Float4{0, 0, 1, 1}, 0, 0.9f);
         RefPtr<materials::Material> grey = materials::CreatePBR(u8"pick.grey", Float4{0.5f, 0.5f, 0.5f, 1}, 0, 0.9f);
@@ -312,7 +312,7 @@ namespace
             CHECK(probes[i].result.rendered);
         }
         INFO(doctest::String(name));
-        CHECK(HitIs(probes[0].result, 7, 3));    // the NEAR cube, with its generation
+        CHECK(HitIs(probes[0].result, 7, 3));    // the near cube, with its generation
         CHECK(HitIs(probes[1].result, 200, 1));  // the far cube shows around the near one
         CHECK(HitIs(probes[2].result, 30, 2));   // each instance of the run answers itself
         CHECK(HitIs(probes[3].result, 31, 2));

@@ -142,8 +142,8 @@ KICKER_RUN = KICKER_CURVE - KICKER_CURVE * math.sqrt(KICKER_BURY / (KICKER_HEIGH
 KICKER_LIP_ANGLE = math.degrees(math.atan(2.0 * (KICKER_HEIGHT + KICKER_BURY) / KICKER_CURVE))
 KICKER_FOOT = 3.0   # the run over which the kicker is tilted to the slope at its foot (m)
 KICKER_SINK = 0.003 # how far its foot sits in the snow: a hair, as its ramp starts level with it.
-                    # Sunk deeper, the ramp came out of the snow already steep: a kink that threw
-                    # the rider off before the lip
+                    # Sunk deeper, the ramp would come out of the snow already steep: a kink that
+                    # throws the rider off before the lip
 GEM_ROW = 3           # gems in a row
 GEM_GAP = 4.0         # metres down the course between a row's gems
 SHORTCUT_GEMS = 5     # gems down a shortcut's middle
@@ -500,11 +500,11 @@ def build():
     heading = math.degrees(math.atan2(nxt[0] - top[0], nxt[2] - top[2]))
     # The capsule's centre 0.9 m up (half height 0.55 + radius 0.35): on the snow, not above it. A
     # rider placed higher drops onto the slope as the run starts, and the board turns the drop into
-    # speed down it, which a restarted run (put back on the snow) never had.
+    # speed down it, which a restarted run (put back on the snow) would not have.
     rider = d.entity("Rider", (top[0], top[1] + 0.9, top[2]), yaw(heading))
     # A short step down: the controller snaps the rider onto snow up to this far below, which keeps
-    # it on the terrain's small dips, but at the default 0.5 m it held the rider down over a kicker's
-    # lip and rode it down the back instead of into the air (as often as not, by the frame timing).
+    # it on the terrain's small dips. At the default 0.5 m it holds the rider down over a kicker's
+    # lip, riding down the back instead of into the air (as often as not, by the frame timing).
     d.add(rider, "physics.Character", radius=0.35, halfHeight=0.55, maxSlopeDegrees=60.0, stepDown=0.1)
     d.script(rider, (BOARD, {"course": ("entity", course), "autopilot": AUTOPILOT, "autopilotSpin": AUTOPILOT_SPIN,
                              "autopilotGrab": AUTOPILOT_GRAB,

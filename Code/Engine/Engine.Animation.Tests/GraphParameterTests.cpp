@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // SceneAnimation's graph parameter ops reach the entity's graph player by name: a Float, an Int,
-// a Bool and a Trigger, each set from a script's side and read back from the player. Int had no
-// script op, so a graph whose conditions compared an Int could not be driven from gameplay.
+// a Bool and a Trigger, each set from a script's side and read back from the player, so a graph
+// whose conditions compare any of them can be driven from gameplay.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

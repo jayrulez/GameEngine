@@ -4,11 +4,9 @@
 // UI - :svg_drawable partition
 //
 // Renders SVG content via VGContext path operations (resolution-independent; ideal for icons).
-// Thin wrapper around SVGRenderer. Ported from Sedulous.UI/src/Drawing/SVGDrawable.bf.
-//
-// Divergence (language): Our SVGLoader::Load returns Result<SVGDocument> (by value), so the
-// document is held BY VALUE (m_document), not a heap pointer + ~delete. FromString returns a
-// RefPtr<SVGDrawable> (empty on parse failure) instead of a raw pointer/null.
+// Thin wrapper around SVGRenderer. SVGLoader::Load returns Result<SVGDocument> by value, so the
+// document is held by value (m_document). FromString returns a RefPtr<SVGDrawable>, empty on parse
+// failure.
 
 module;
 #include "Core/Prelude.h"
@@ -77,7 +75,7 @@ export namespace foundation::ui
             vg::svg::SVGRenderer::Render(ctx.VG(), m_document, bounds, TintColor);
         }
 
-        /// The parsed document (the icon BAKER renders it into an atlas offline).
+        /// The parsed document (the icon baker renders it into an atlas offline).
         [[nodiscard]] const vg::svg::SVGDocument& Document() const { return m_document; }
 
     private:
@@ -86,13 +84,13 @@ export namespace foundation::ui
 
     RTTI_DEFINE_OBJECT(SVGDrawable, "rtti::ui")
 
-    /// SVGDrawable that PREFERS pre-baked bitmap variants: the Godot-verified crispness
-    /// recipe (raster once at integer size with the AA baked into texels, draw as a
-    /// pixel-snapped textured quad - every instance samples identical texels, no per-
-    /// instance subpixel shimmer). Falls back to the live vector render until a baker
+    /// SVGDrawable that prefers pre-baked bitmap variants for crisp icons: each is rasterized
+    /// once at an integer size with the antialiasing baked into texels and drawn as a
+    /// pixel-snapped textured quad, so every instance samples identical texels and none
+    /// shimmers at subpixel offsets. Falls back to the live vector render until a baker
     /// supplies variants (headless/tests, or before the first bake), and again after
-    /// ClearBakedVariants on a DPI change until the re-bake lands. Variants BORROW their
-    /// atlas image - the baker owns it and must outlive the drawables' use.
+    /// ClearBakedVariants on a DPI change until the re-bake lands. Variants borrow their
+    /// atlas image: the baker owns it and must outlive the drawables' use.
     class BakedSVGDrawable : public SVGDrawable
     {
         RTTI_OBJECT(BakedSVGDrawable, SVGDrawable)
@@ -128,9 +126,9 @@ export namespace foundation::ui
                 SVGDrawable::Draw(ctx, bounds); // live vector fallback
                 return;
             }
-            // Nearest baked size to the DEVICE-pixel extent (bounds are logical; the VG
+            // Nearest baked size to the device-pixel extent (bounds are logical; the VG
             // transform carries any DPI scale, and bake sizes are device pixels). Ties
-            // prefer the LARGER bake (downscale softens, upscale blurs).
+            // prefer the larger bake (downscaling softens, upscaling blurs).
             const Float4x4& m = ctx.VG().GetTransform();
             const f32 sx = Length(Float2{m(0, 0), m(0, 1)});
             const f32 sy = Length(Float2{m(1, 0), m(1, 1)});

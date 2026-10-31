@@ -3,18 +3,16 @@
 
 // Foundation::Input - :input_kind partition.
 //
-// The kind of input the player is using now: the pointer, the keyboard or a pad (K2a of
-// Specs/gui-lab-evolution-3.md). A game shows a button prompt for the device in hand, hides the
+// The kind of input the player is using now: the pointer, the keyboard or a pad. A game shows a button prompt for the device in hand, hides the
 // cursor on a pad and the focus ring under a mouse; none of that needs a GUI (a prompt in the 3D
 // world), so the tracker lives here, beside the actions, and a GUI's host passes its kind on.
 //
 // It follows deliberate input only, so a resting stick or a nudged desk does not flip it: a key
 // pressed, a mouse button pressed, the mouse moved past a few pixels or its wheel turned, a finger
 // put down, a pad button pressed, a stick or trigger pushed past the press point from inside it
-// (a fresh push: one held there does not count again, as Godot counts a stick only on its press).
-// When a frame has several, a press outranks motion, and a pad outranks the keyboard, the keyboard
-// the mouse. No reference engine tracks this; Godot shows the focus ring on navigation and hides
-// it on a pointer press, which is the rule a GUI builds on it.
+// (a fresh push: one held there does not count again). When a frame has several, a press
+// outranks motion, and a pad outranks the keyboard, the keyboard the mouse. A GUI builds its
+// focus-ring rule on this: show the ring on navigation, hide it on a pointer press.
 
 module;
 #include "Core/Prelude.h"

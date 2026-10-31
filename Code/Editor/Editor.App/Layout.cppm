@@ -3,20 +3,18 @@
 
 // Editor::App - :layout partition.
 //
-// PER-PROJECT editor-state persistence, UNIFIED on the structured settings store
-// (foundation.settings): ONE file - <project>/Editor/editor.project.settings.xml - holding
-// typed, versioned sections instead of the former bespoke trio (layout.xml + favorites.bin +
-// pages.bin; those are deleted on the first save, no legacy read):
+// Per-project editor state, kept in the structured settings store (foundation.settings): one
+// file, <project>/Editor/editor.project.settings.xml, holding typed, versioned sections:
 //
-//   EditorDockLayoutSettings  - the dock's layout (GUI.Docking's DockLayoutDocument), panels
-//                               by their ids; a panel the layout names that is not registered
-//                               keeps its place until it is (version 2; version 1 held the old
-//                               dock's binary tree, read once into the new layout: its splits,
-//                               shares, tab groups and chosen tabs)
-//   EditorFavoritesSettings   - pinned asset guids (EditorContext favorites)
-//   EditorOpenPagesSettings   - open page instance guids + the active one
+//   EditorDockLayoutSettings: the dock's layout (GUI.Docking's DockLayoutDocument), panels by
+//                             their ids; a panel the layout names that is not registered keeps
+//                             its place until it is. Version 2; version 1 held an older binary
+//                             dock tree, which still reads into the new layout (its splits,
+//                             shares, tab groups and chosen tabs).
+//   EditorFavoritesSettings:  pinned asset guids (EditorContext favorites)
+//   EditorOpenPagesSettings:  open page instance guids and the active one
 //
-// Other modules add their own sections to the SAME store (e.g. the material page's preview
+// Other modules add their own sections to the same store (e.g. the material page's preview
 // prefs) through EditorContext::ProjectEditorSettings(); their types must be registered
 // before the app loads the store (registerEditors runs first, so per-subsystem registration
 // belongs in each RegisterXxxEditor).
@@ -48,8 +46,8 @@ export namespace editor::app
 
     namespace detail
     {
-        // Version 1's dock tree (the old dock's): a node is a split of two children, the first's
-        // share `ratio` (left or top), across (`direction` 0) or down (1), or a tab group of panels.
+        // Version 1's dock tree: a node is either a split of two children, with the first's share
+        // `ratio` (left or top), across (`direction` 0) or down (1), or a tab group of panels.
         struct LegacyDockNode
         {
             u32 direction = 0;
@@ -64,7 +62,7 @@ export namespace editor::app
         inline void ReadLegacyDockNode(ISerializer& ar, LegacyDockNode& node)
         {
             ar.BeginObject();
-            u32 type = 0; // the node is told by its children, not this
+            u32 type = 0; // the node's kind is inferred from its children, not from this
             foundation::core::Serialize(ar, "type", type);
             foundation::core::Serialize(ar, "direction", node.direction);
             foundation::core::Serialize(ar, "ratio", node.ratio);
@@ -128,7 +126,7 @@ export namespace editor::app
             const f32 share = Clamp(1.0f - node.ratio, 0.05f, 0.95f);
             if (!layout.InsertBeside(secondPanel->AsView(), stack, side, share).Ok())
             {
-                PlaceLegacyNode(layout, *node.first, stack); // a panel named twice: the first half alone
+                PlaceLegacyNode(layout, *node.first, stack); // a panel named twice: place the first half alone
                 return;
             }
             const gui::DockNodeId beside = layout.StackOf(secondPanel->AsView());
@@ -137,7 +135,7 @@ export namespace editor::app
         }
     }
 
-    /// The old dock's tree as the GUI dock's layout: its first panel's group in the central stack,
+    /// Converts a version 1 dock tree to the GUI dock's layout: its first panel's group in the central stack,
     /// each split's halves beside one another with the same shares, each group's tabs in order with
     /// its chosen one. A panel named twice keeps its first place.
     [[nodiscard]] inline gui::DockLayout LayoutFromLegacy(const detail::LegacyDockNode& root)
@@ -159,7 +157,8 @@ export namespace editor::app
         {
             if (ar.Mode() == SerializeMode::Read && ar.Version() == 1)
             {
-                // The old dock's tree, taken into the GUI dock's layout (saved as version 2 after).
+                // A version 1 dock tree, converted into the GUI dock's layout (saved as version 2
+                // afterwards).
                 bool hasRoot = false;
                 foundation::core::Serialize(ar, "hasRoot", hasRoot);
                 captured = false;
@@ -211,20 +210,20 @@ export namespace editor::app
         }
     };
 
-    // The asset browser's view mode (list vs grid): persisted so a project reopens in the last-used
-    // view. Per-project, alongside the other editor-state sections (a view toggle is UI state, not a
-    // project setting - it lives here with layout / open pages, not in the project's data).
+    // The asset browser's view mode (list or grid), persisted so a project reopens in the last-used
+    // view. A view toggle is per-project UI state, not a project setting, so it lives here with the
+    // layout and open pages rather than in the project's data.
     class EditorAssetBrowserSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorAssetBrowserSettings, ISerializable)
     public:
         bool gridMode = false;       // false = list, true = grid
-        bool pickerGridMode = false; // the asset picker's own list / grid choice (AssetPickerWindow)
+        bool pickerGridMode = false; // the asset picker's own list or grid choice (AssetPickerWindow)
 
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "gridMode", gridMode);
-            foundation::core::SerializeAppended(ar, "pickerGridMode", pickerGridMode); // added 2026-10-10
+            foundation::core::SerializeAppended(ar, "pickerGridMode", pickerGridMode);
         }
     };
 
@@ -234,8 +233,8 @@ export namespace editor::app
         GlobalTypeRegistry().Register(EditorDockLayoutSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorDockLayoutSettings>();
-        // Version 1 (the old dock's tree) still reads, into the new layout: a legacy reader one
-        // version back, removed once projects have saved past it (Process/CONVENTIONS.md).
+        // Version 1 (the older dock tree) still reads into the new layout through a legacy reader
+        // one version back, to be removed once projects have saved past it.
         KeepLegacyReader(const_cast<TypeInfo&>(EditorDockLayoutSettings::StaticType()), 1);
         GlobalTypeRegistry().Register(EditorFavoritesSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
@@ -250,7 +249,7 @@ export namespace editor::app
 
     // ---- store <-> live state ------------------------------------------------------------
 
-    // The dock's layout into the store.
+    // Captures the dock's layout into the store.
     inline void CaptureDockLayout(const gui::DockController& dock, settings::Settings& store)
     {
         EditorDockLayoutSettings& section = store.Section<EditorDockLayoutSettings>();
@@ -259,9 +258,9 @@ export namespace editor::app
         store.MarkChanged<EditorDockLayoutSettings>();
     }
 
-    // The store's layout into `dock` (its registered panels placed where it says, the rest at
-    // their defaults). NotFound when none was captured (the caller keeps its default layout);
-    // a refusal (a layout that breaks the dock's rules) said in the log, the dock as it was.
+    // Applies the store's layout to `dock` (its registered panels placed where it says, the rest at
+    // their defaults). NotFound when none was captured (the caller keeps its default layout); a
+    // refusal (a layout that breaks the dock's rules) is logged and leaves the dock as it was.
     [[nodiscard]] inline Status ApplyDockLayout(gui::DockController& dock, settings::Settings& store)
     {
         const EditorDockLayoutSettings* section = store.Find<EditorDockLayoutSettings>();
@@ -276,10 +275,9 @@ export namespace editor::app
         return Status{};
     }
 
-    // The panels a restored layout names that nothing provides once the project's pages have
-    // reopened (a Game tab, which no project reopens; a page whose asset is gone) let go, docked or
-    // closed, so the dock shows no placeholder for them: as the old dock did, which skipped a saved
-    // panel it had none for.
+    // Forgets the panels a restored layout names that nothing provides once the project's pages
+    // have reopened (a Game tab, which no project reopens; a page whose asset is gone), whether
+    // docked or closed, so the dock shows no placeholder for them.
     inline void ForgetUnprovidedPanels(gui::DockController& dock)
     {
         gui::DockLayout layout = dock.GetLayout();
@@ -336,7 +334,7 @@ export namespace editor::app
         store.MarkChanged<EditorOpenPagesSettings>();
     }
 
-    // NotFound when no page set was ever saved (first launch: caller opens the default doc).
+    // NotFound when no page set was ever saved (first launch: the caller opens the default scene).
     [[nodiscard]] inline Status ApplyOpenPages(settings::Settings& store, Array<Guid>& outPages,
                                                Guid& outActivePage)
     {
@@ -352,9 +350,9 @@ export namespace editor::app
 
     // ---- file I/O ------------------------------------------------------------------------
 
-    // Load the per-project store from <directory>/editor.project.settings.xml. NotFound when
-    // absent (fresh project / first run with the unified store) - the store stays empty and
-    // every section reads as defaults. Section types must be registered first.
+    // Loads the per-project store from <directory>/editor.project.settings.xml. NotFound when
+    // absent (a fresh project, or a first run): the store stays empty and every section reads
+    // as defaults. Section types must be registered first.
     [[nodiscard]] inline Status LoadProjectEditorSettings(settings::Settings& store,
                                                           StringView directory)
     {
@@ -367,8 +365,8 @@ export namespace editor::app
         return store.Load(*stream, foundation::xml::XmlSerializerFactory());
     }
 
-    // Persist the per-project store; on success, delete the pre-unification bespoke files
-    // (layout.xml / favorites.bin / pages.bin) so stale state can't shadow the store.
+    // Persists the per-project store; on success, deletes the older per-file state (layout.xml,
+    // favorites.bin, pages.bin) so stale state cannot shadow the store.
     [[nodiscard]] inline Status SaveProjectEditorSettings(const settings::Settings& store,
                                                           StringView directory)
     {

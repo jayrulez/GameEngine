@@ -3,10 +3,10 @@
 
 // GUI - :list_model partition
 //
-// ListModel: a list of texts a script makes and fills (E16 of Specs/gui-lab-evolution-2.md), for
-// a list, table or tree view to show through setModel. A reference-counted object over a
-// StringListModel, so a script holds it and a view keeps it alive while it shows it; its edits
-// reach the views as the model's do (a row inserted, removed or changed, not a reset).
+// ListModel: a list of texts that a script makes and fills, and that a list, table or tree view
+// shows through setModel. It is a reference-counted object over a StringListModel, so a script
+// can hold it and a view keeps it alive while showing it. Its edits reach the views the same way
+// StringListModel's do: as a row inserted, removed or changed, not as a reset.
 
 module;
 #include "Core/Prelude.h"
@@ -52,5 +52,6 @@ export namespace foundation::gui
     private:
         StringListModel m_model;
     };
-    // StaticType: REFLECT_MEMBERS(ListModel) in Scene/GUIReflectionImpl.cpp (the script surface).
+    // StaticType: REFLECT_MEMBERS(ListModel), which defines the script surface, is in
+    // Scene/GUIReflectionImpl.cpp.
 }

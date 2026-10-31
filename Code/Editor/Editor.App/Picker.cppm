@@ -3,17 +3,17 @@
 
 // Editor App - :picker partition
 //
-// The picker (Documentation/Specs/editor-gui.md, 5.2, layer 5; catalog 2.4): one for paths, groups
-// and components (an asset slot's is the asset picker, AssetPickerWindow), as the kit draws it (Data/Editor/Picker.xml). A search over the rows, which sit under
-// their sections in the order the owner gives them, favourites first in a section of their own; a
-// row shows its glyph (its category's tint), its name, what it is, a star when a favourite, and a
-// check on the current value. The current value is lit when it opens; Up and Down move the light
-// past the section headings while the search keeps the keys, and Enter, a double click or Enter on
-// the list picks. The foot says so ("Esc keeps" the current value), and a close at the search's end
-// keeps it too: no button sets nothing, so a pick never clears a value by a slip. With nothing to
-// pick it says what is missing and offers the owner's next step;
-// with nothing matching, it says so and offers to clear the search. It opens as a modal popup in
-// the window's middle.
+// The picker: one for paths, groups and components (an asset slot uses the asset picker,
+// AssetPickerWindow), as the kit draws it (Data/Editor/Picker.xml). A search sits over the rows,
+// which appear under their sections in the order the owner gives them, with favourites first in a
+// section of their own. A row shows its glyph (tinted by category), its name, its kind, a star when
+// it is a favourite, and a check on the current value. The current value is highlighted when the
+// picker opens. Up and Down move the highlight past the section headings while the search keeps
+// keyboard focus, and Enter, a double click or Enter on the list picks. The footer says that Esc
+// keeps the current value, and closing at the end of the search keeps it too: no button sets
+// nothing, so a pick never clears a value by a slip. With nothing to pick it says what is missing
+// and offers the owner's next step; with nothing matching, it says so and offers to clear the
+// search. It opens as a modal popup in the middle of the window.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -34,23 +34,23 @@ export namespace editor::app
     {
         String Key;        ///< what a pick answers (a guid's text, a path); unique in a request
         String Name;
-        String Detail;     ///< what it is, dim after the name (a type, a folder): a few words
-        String Description; ///< a sentence about it, the foot's while its row is lit (a component's)
+        String Detail;     ///< what it is, dimmed after the name (a type, a folder): a few words
+        String Description; ///< a sentence about it, shown in the footer while its row is highlighted (a component's)
         String Section;    ///< the heading it is listed under
         String Glyph;      ///< its icon's source
         String GlyphClass; ///< the class tinting it (a category's)
         bool Favourite = false;
-        u32 Depth = 0;     ///< its level in a tree request, under the item before it one level up
+        u32 Depth = 0;     ///< its level in a tree request, under the nearest earlier item one level up
     };
 
     /// What a picker is opened with.
     struct PickerRequest
     {
-        String Placeholder;      ///< the search's ("Search materials")
-        Array<PickerItem> Items; ///< in their order; each section where its first item is
-        String Current;          ///< the current value's key: checked, and lit when it opens
-        bool Tree = false;       ///< the items a tree (by Depth, in their order): a search keeps where each match is
-        String EmptyTitle;       ///< with nothing to pick ("No materials yet")
+        String Placeholder;      ///< the search's placeholder ("Search materials")
+        Array<PickerItem> Items; ///< in their order; each section appears where its first item is
+        String Current;          ///< the current value's key: checked, and highlighted when it opens
+        bool Tree = false;       ///< the items form a tree (by Depth, in their order); a search keeps each match's place in it
+        String EmptyTitle;       ///< the title with nothing to pick ("No materials yet")
         String EmptyText;
         String EmptyVerb;        ///< the next step it offers then ("Import..."), run after it closes
         Function<void()> OnEmptyVerb;
@@ -102,7 +102,7 @@ export namespace editor::app
         [[nodiscard]] StringView Name() const { return m_name->GetText(); }
         [[nodiscard]] bool ShowsCheck() const { return m_check->IsDisplayed(); }
         [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed(); }
-        /// How deep it is indented, in levels; whether it is shown only as where a match is.
+        /// How deep it is indented, in levels; IsContext says whether it is shown only to place a match.
         [[nodiscard]] u32 Indent() const { return m_indentLevels; }
         [[nodiscard]] bool IsContext() const { return HasClass(u8"context"); }
 
@@ -139,8 +139,8 @@ export namespace editor::app
         static constexpr const char8_t* kPath = kPickerPath;
         static constexpr StringView kFavourites = u8"Favourites";
 
-        /// The picker in `content` (the markup's: `picker-search`, `picker-list`, `picker-state` and
-        /// its parts, `picker-hint`, `picker-close`, by id).
+        /// Builds the picker in `content`, binding the markup's `picker-search`, `picker-list`,
+        /// `picker-state` and its parts, `picker-hint` and `picker-close` by id.
         Picker(IAllocator& allocator, RefPtr<gui::Node> content) : m_allocator(allocator), m_content(Move(content)), m_rows(allocator), m_model(*this)
         {
             if (!m_content)
@@ -168,7 +168,7 @@ export namespace editor::app
                 close->SetOnClick([self]() { self->Close(); });
             if (auto* verb = Find<gui::Button>(u8"picker-state-verb"))
                 verb->SetOnClick([self]() { self->StateVerb(); });
-            // Up, Down and Enter before the search takes them.
+            // Handle Up, Down and Enter before the search field takes them.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
                                                   const auto& key = static_cast<const gui::KeyEvent&>(e);
@@ -197,9 +197,9 @@ export namespace editor::app
                 m_list->SetModel(nullptr);
         }
 
-        /// Opens it over `root` for `request`, in the window's middle whatever asked (every picker
-        /// the same: the user, 2026-10-25); the search empty and focused, the current value lit.
-        /// False with no frame, a root in no GUI, or one open already.
+        /// Opens the picker over `root` for `request`, in the middle of the window whatever asked
+        /// (every picker opens there), with the search empty and focused and the current value
+        /// highlighted. False with no frame, a root in no GUI, or when one is already open.
         bool Open(gui::SceneRoot& root, PickerRequest request)
         {
             gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
@@ -241,7 +241,7 @@ export namespace editor::app
                 m_search->SetText(text);
             Filter(text);
         }
-        /// The rows shown, headings included, and what each says.
+        /// The rows shown, headings included, and the text of each.
         [[nodiscard]] usize RowCount() const noexcept { return m_rows.Size(); }
         [[nodiscard]] bool IsHeader(i32 row) const { return row >= 0 && static_cast<usize>(row) < m_rows.Size() && m_rows[static_cast<usize>(row)].Header; }
         [[nodiscard]] StringView RowText(i32 row) const
@@ -251,16 +251,16 @@ export namespace editor::app
             const Row& r = m_rows[static_cast<usize>(row)];
             return r.Header ? r.Section.AsView() : m_request.Items[r.Item].Name.AsView();
         }
-        /// A tree's row: how deep it is, and whether it is shown only as where a match is.
+        /// A tree row's depth (0 for a heading), and whether it is shown only to place a match.
         [[nodiscard]] u32 RowDepth(i32 row) const { return IsItemRow(row) ? m_request.Items[m_rows[static_cast<usize>(row)].Item].Depth : 0u; }
         [[nodiscard]] bool IsContext(i32 row) const { return IsItemRow(row) && m_rows[static_cast<usize>(row)].Context; }
-        /// The lit item's key (Enter's); empty with none.
+        /// The highlighted item's key (which Enter picks); empty with none.
         [[nodiscard]] StringView LitKey() const
         {
             const i32 row = m_list != nullptr ? m_list->GetSelectedItem() : -1;
             return IsItemRow(row) ? m_request.Items[m_rows[static_cast<usize>(row)].Item].Key.AsView() : StringView{};
         }
-        /// Moves the light `by` items, past the headings; it stays at the ends.
+        /// Moves the highlight `by` items, skipping the headings; it stops at the ends.
         void Step(i32 by)
         {
             if (m_list == nullptr || m_rows.IsEmpty())
@@ -281,7 +281,7 @@ export namespace editor::app
             }
             Light(row);
         }
-        /// Picks the lit item; with none lit, nothing.
+        /// Picks the highlighted item; does nothing when none is highlighted.
         void PickLit() { PickRow(m_list != nullptr ? m_list->GetSelectedItem() : -1); }
         [[nodiscard]] StringView Hint() const { return m_hint != nullptr ? m_hint->GetText() : StringView{}; }
         /// Whether it shows its state (nothing to pick, nothing matching) instead of rows, and what
@@ -304,12 +304,13 @@ export namespace editor::app
         struct Row
         {
             bool Header = false;
-            usize Item = 0;  // an item's, in the request
+            usize Item = 0;  // the item's index in the request
             String Section;  // its section (a heading's text)
-            bool Context = false; // a tree's item shown only as where a match is
+            bool Context = false; // a tree item shown only to place a match
         };
 
-        // The shown rows as the list's model: a heading cannot be selected; an id follows the row.
+        // The shown rows as the list's model: a heading cannot be selected, and an item id stays
+        // with its row.
         class Model final : public gui::IModel
         {
         public:
@@ -349,12 +350,13 @@ export namespace editor::app
             if (m_list != nullptr && IsItemRow(row))
             {
                 m_list->SetSelectedItem(row);
-                ShowHint(); // lit from code: the list's own callback does not hear it
+                ShowHint(); // highlighted from code, so the list's own callback does not fire
             }
         }
 
-        // The rows for `query` (case folded; a name that starts with it before one that holds it,
-        // or whose detail does), favourites first, then each section in the order it first came.
+        // Builds the rows for `query` (case folded; a name that starts with it before one that
+        // contains it or whose detail does), favourites first, then each section in the order it
+        // first appeared.
         void Filter(StringView query)
         {
             m_rows.Clear();
@@ -399,9 +401,10 @@ export namespace editor::app
                 addSection(section.AsView(), false);
             Shown(query);
         }
-        // A tree's rows for `query`: its items in their order, those matching by name and the
-        // groups above each, so a match reads where it is (two of one name under different
-        // parents apart). No sections, no favourites: the tree is the order.
+        // Builds a tree's rows for `query`: its items in their order, those matching by name plus
+        // the groups above each, so a match shows where it is and two with the same name under
+        // different parents can be told apart. No sections and no favourites: the tree gives the
+        // order.
         void FilterTree(StringView query)
         {
             const usize count = m_request.Items.Size();
@@ -427,8 +430,8 @@ export namespace editor::app
                     m_rows.PushBack(Row{false, i, String{}, !query.IsEmpty() && !matched[i]});
             Shown(query);
         }
-        // After filtering: the list told, the state shown, the current value lit, else the first
-        // match.
+        // After filtering: notify the list, show the state, and highlight the current value, else
+        // the first match.
         void Shown(StringView query)
         {
             m_model.Reset();
@@ -477,8 +480,8 @@ export namespace editor::app
                 ShowHint();
             }
         }
-        // The foot: the lit item's description where it has one (read as the arrows move), else
-        // what the keys do.
+        // The footer: the highlighted item's description where it has one (read as the arrows
+        // move), else what the keys do.
         void ShowHint()
         {
             if (m_hint == nullptr)
@@ -515,7 +518,7 @@ export namespace editor::app
             if (IsItemRow(row))
                 Pick(m_request.Items[m_rows[static_cast<usize>(row)].Item].Key);
         }
-        // It closes first: what is picked may open something of its own.
+        // Closes first, because what is picked may open something of its own.
         void Pick(const String& key)
         {
             Function<void(StringView)> picked = Move(m_request.OnPicked);
@@ -573,7 +576,7 @@ export namespace editor::app
         gui::ListView* m_list = nullptr;
         gui::UIWidget* m_state = nullptr;
         gui::Label* m_hint = nullptr;
-        String m_keysHint; // what the keys do, the foot's when the lit item says nothing
+        String m_keysHint; // what the keys do; the footer shows it when the highlighted item has no description
         gui::SceneRoot* m_root = nullptr; // what it opened over
         PickerRequest m_request;
         Array<Row> m_rows;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The device's counts to the profiler once a frame (Specs/profiler.md, P2), on the Null device
+// The device's counts to the profiler once a frame, on the Null device
 // (which counts what it is asked to do): a frame's counters are what that frame recorded (the
 // differences of the device's totals), memory is what is held now, and a device without a
 // driver budget publishes none.

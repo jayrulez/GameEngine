@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VegetationScatterTool tests (headless): a scripted stroke places a deterministic count of props
+// Headless VegetationScatterTool tests. A scripted stroke places a deterministic number of props
 // inside its footprint into the selected prop layer (the same instances every run), none on a
-// rejected slope and none where the collision query says a body is; erase removes the props under
-// the brush; one command per stroke undoes and redoes; unavailable without a prop layer and
-// refusing edits under Simulate; the panel provider builds for the tool id.
+// rejected slope and none where the collision query reports a body. Erase removes the props under
+// the brush. One command per stroke undoes and redoes. The tool is unavailable without a prop
+// layer and refuses edits under Simulate. The panel provider builds for the tool id.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -197,7 +197,7 @@ TEST_CASE("vegetation scatter: a scripted stroke places a deterministic count in
     CHECK(SameInstances(fx.Rocks(), placed));
     Stroke(tool, 60.0f, -60.0f, 60.0f, -60.0f, 1); // erasing empty ground
     CHECK(SameInstances(fx.Rocks(), placed));
-    commands.Undo(); // still the stroke before: the no-op stroke pushed nothing
+    commands.Undo(); // undoes the earlier stroke, since the no-op stroke pushed nothing
     CHECK(fx.Rocks().IsEmpty());
 }
 
@@ -213,7 +213,7 @@ TEST_CASE("vegetation scatter: the layer's slope rule and the collision query re
     tool.SetDensity(1.0f);
     Stroke(tool, -10.0f, 0.0f, 10.0f, 0.0f);
     CHECK(steep.Rocks().IsEmpty());
-    CHECK(!commands.CanUndo()); // nothing changed: no command
+    CHECK(!commands.CanUndo()); // nothing changed, so no command
 
     // The collision query (the physics world's overlap in the editor): nothing right of x = 0.
     Fixture flat;
@@ -231,7 +231,8 @@ TEST_CASE("vegetation scatter: the layer's slope rule and the collision query re
         CHECK(m.m[3][0] <= 0.0f);
     }
 
-    // Spacing: with a 1 m cube (radius ~0.87) and spacing 2, no two props sit within ~1.7 m.
+    // Spacing: with a 1 m cube (radius about 0.87) and spacing 2, no two props sit within about
+    // 1.7 m.
     Fixture spaced;
     editor::EditorCommandStack commands3;
     editor::VegetationScatterTool sparse(spaced.scene, commands3);
@@ -260,11 +261,11 @@ TEST_CASE("vegetation scatter: unavailable without a prop layer; refuses a missi
     editor::EditorCommandStack commands;
     editor::VegetationScatterTool none(bare.scene, commands);
     CHECK(!none.IsAvailable());
-    CHECK(none.UnavailableReason().Size() > 0); // the toolbar's refusal notice names the lack
+    CHECK(none.UnavailableReason().Size() > 0); // the toolbar's refusal notice says what is missing
 
     Fixture fx;
     editor::VegetationScatterTool tool(fx.scene, commands);
-    tool.SetLayer(5); // no such prop layer: not paintable
+    tool.SetLayer(5); // no such prop layer, so nothing can be painted
     Stroke(tool, 0.0f, 0.0f, 5.0f, 0.0f, 2);
     CHECK(!commands.CanUndo());
     tool.SetLayer(0);
@@ -301,7 +302,7 @@ TEST_CASE("vegetation scatter panel: the provider registers for the brush id and
     RefPtr<foundation::gui::Node> node = provider->CreatePanel(tool, ctx);
     auto* panel = Cast<editor::app::ToolPanelBody>(node.Get());
     REQUIRE(panel != nullptr);
-    // The layers by name, the chosen one checked; a wheel resize shows after a Sync.
+    // The layers by name, with the chosen one checked; a wheel resize shows after a Sync.
     REQUIRE(panel->ChoiceCount(0) >= 1u);
     CHECK(panel->ChoiceAt(0, 0)->IsChecked());
     tool.SetRadius(9.0f);
@@ -339,7 +340,7 @@ TEST_CASE("vegetation scatter: a layer whose mesh does not resolve is named in t
 TEST_CASE("vegetation scatter: the eraser reaches the props left standing over a cut (the brush picks through the hole)")
 {
     // Cut a hole under placed props: they stay in the layer (hidden by the manager) until the
-    // eraser removes them, which needs the brush to pick the plane INSIDE the cut - QueryRay
+    // eraser removes them. That needs the brush to pick the plane inside the cut, since QueryRay
     // alone passes through and the brush would never activate there.
     Fixture fx;
     editor::EditorCommandStack commands;
@@ -367,7 +368,7 @@ TEST_CASE("vegetation scatter: the eraser reaches the props left standing over a
 
     tool.SetEraser(true);
     Stroke(tool, 0.0f, 10.0f, 0.0f, 10.0f, 1); // a press inside the hole
-    CHECK(fx.Rocks().Size() + underCut == placed.Size()); // exactly those, no other
+    CHECK(fx.Rocks().Size() + underCut == placed.Size()); // exactly those, and no others
     for (const Float4x4& m : fx.Rocks())
     {
         const f32 dx = m.m[3][0];
@@ -387,7 +388,7 @@ TEST_CASE("vegetation scatter: the wheel resizes the brush only with Shift (the 
     editor::ViewportToolInput wheel = RayAt(0.0f, 0.0f);
     wheel.wheelDelta = 1.0f;
     (void)tool.Update(wheel);
-    CHECK(tool.Radius() == before); // the camera's scroll
+    CHECK(tool.Radius() == before); // the wheel alone scrolls the camera
     wheel.shift = true;
     (void)tool.Update(wheel);
     CHECK(tool.Radius() > before);

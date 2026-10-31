@@ -62,8 +62,8 @@ namespace editor
             return out;
         }
 
-        /// The Game tab entity_inspect's `pie` names (empty: the primary), as the PIE tools resolve
-        /// one; the reason, for the agent to read, when none is open.
+        /// The Game tab that entity_inspect's `pie` names (empty: the primary), resolved as the PIE
+        /// tools resolve one; the reason, for the agent to read, when none is open.
         Result<IGameScenePage*, String> ResolveGameScene(const EditorContext& context, const JsonValue& args)
         {
             const String asked = args.Get(u8"pie").AsString();
@@ -286,9 +286,9 @@ namespace editor
                                                               const PropertyInfo& list, const JsonValue& value,
                                                               StringView name);
 
-        /// component_set on a LIST: every element's shape checked first (a reference's asset guid or
-        /// null, an entity reference's guid or null, a leaf's shape, a structure's fields), then one
-        /// write replacing the whole list through MutateComponent (one undo step).
+        /// component_set on a list: every element's shape is checked first (a reference's asset
+        /// guid or null, an entity reference's guid or null, a leaf's shape, a structure's fields),
+        /// then one write replaces the whole list through MutateComponent (one undo step).
         Result<Function<void()>, String> ShapeListWrite(SceneEditContext& edit, const Guid& entity,
                                                        const TypeInfo& componentType,
                                                        const PropertyInfo& list, const JsonValue& value,
@@ -392,10 +392,10 @@ namespace editor
         bool EnumValueOf(const TypeInfo& type, const JsonValue& value, i64& out);
         String EnumeratorNames(const TypeInfo& type);
 
-        /// A list of structures (a vegetation layer, an IK leg): each element an object naming the
-        /// fields it sets, the rest at the element's defaults. A field is a leaf, an enumerator (by
-        /// name or number), an entity reference or an asset reference (a guid or null); a list or
-        /// structure inside an element is refused (scene_write edits the source).
+        /// A list of structures (a vegetation layer, an IK leg): each element is an object naming
+        /// the fields it sets, with the rest at the element's defaults. A field is a leaf, an
+        /// enumerator (by name or number), an entity reference or an asset reference (a guid or
+        /// null). A list or structure inside an element is refused (scene_write edits the source).
         Result<Function<void()>, String> ShapeStructListWrite(SceneEditContext& edit, const Guid& entity,
                                                               const TypeInfo& componentType,
                                                               const PropertyInfo& list, const JsonValue& value,
@@ -579,7 +579,8 @@ namespace editor
             return out;
         }
 
-        /// A page title as a file stem: letters, digits, '-' and '_' kept, the rest '_'.
+        /// A page title as a file stem: letters, digits, '-' and '_' are kept, anything else
+        /// becomes '_'.
         String FileStemOf(StringView title)
         {
             String stem;
@@ -1100,8 +1101,8 @@ namespace editor
                 }
                 const TypeInfo& propType = *prop->type;
 
-                // Shape the value first, so a refusal touches nothing; then ONE command in a
-                // locked group labelled mcp - one undo step per call that neither the user's
+                // Shape the value first, so a refusal touches nothing; then run one command in a
+                // locked group labelled mcp, so each call is one undo step that neither the user's
                 // scrub of the same property nor the next call merges into.
                 Function<void()> write;
                 if (IsReferenceType(propType))
@@ -1467,7 +1468,7 @@ namespace editor
                 return foundation::mcp::ToolOutcome::NotFinished();
             });
 
-        SchemaBuilder entry; // a timeline entry, as pie_run's (the pads' read by nothing in a scene view)
+        SchemaBuilder entry; // a timeline entry, as pie_run's (nothing in a scene view reads the pads)
         entry.Number(u8"at", u8"seconds since the run starts", true)
             .Str(u8"key", u8"a KeyCode case name")
             .Str(u8"mouseButton", u8"a MouseButton case name")

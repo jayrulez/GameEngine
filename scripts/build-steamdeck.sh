@@ -3,7 +3,7 @@
 # Copyright (c) 2026-Present Robert Campbell
 
 #
-# build-steamdeck.sh - build Steam Deck-compatible Linux binaries (editor + player + all tools).
+# build-steamdeck.sh - build Steam Deck-compatible Linux binaries (editor, player and all tools).
 #
 # The dev box (Ubuntu 26.04, glibc 2.43) and even CI (24.04, glibc 2.39) produce binaries whose
 # glibc floor is too high for the Steam Deck host (~2.37). This builds inside a portable container
@@ -11,8 +11,8 @@
 # links libstdc++/libgcc statically, so the output runs on the Deck. See scripts/steamdeck/.
 #
 # Requires podman or docker:  sudo apt-get install -y podman
-# Output: dist/SteamDeck/{Editor,Player} + a glibc-floor report (fails if anything is too new),
-# and the Deck player as an export TEMPLATE beside the desktop Linux one (its own id, so a preset
+# Output: dist/SteamDeck/{Editor,Player} and a glibc-floor report (fails if anything is too new),
+# and the Deck player as an export template beside the desktop Linux one (its own id, so a preset
 # can pick it; installed into the templates root unless TEMPLATE=0).
 #
 #   Usage:  scripts/build-steamdeck.sh
@@ -46,10 +46,10 @@ echo "== building image $IMAGE (first run installs Clang 21 + GCC 14; SDL3 is ve
 
 # Run the build inside the container with the repo bind-mounted at /work.
 # :Z relabels for SELinux hosts (Fedora/RHEL); harmless elsewhere. Rootless podman maps the
-# current user automatically; DOCKER does not, and would leave build/steamdeck, dist/ and Bin/
-# root-owned in the host tree (the next host cmake then fails with EACCES) - so pass the host
+# current user automatically; Docker does not, and would leave build/steamdeck, dist/ and Bin/
+# root-owned in the host tree (the next host cmake then fails with EACCES), so pass the host
 # uid:gid explicitly there.
-# The shader pack, cooked on the HOST: DXC needs glibc 2.38, which the 22.04 container lacks. The
+# The shader pack, cooked on the host: DXC needs glibc 2.38, which the 22.04 container lacks. The
 # pack is platform-independent SPIR-V; the container stages this copy.
 SHADERPACK="${SHADERPACK:-}"
 if [[ -z "$SHADERPACK" ]]; then

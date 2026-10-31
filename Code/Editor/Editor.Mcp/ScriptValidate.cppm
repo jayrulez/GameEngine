@@ -3,15 +3,16 @@
 
 // Editor::Mcp - :script_validate partition
 //
-// script_validate (the COMPILE-CHECK version): compile a script source against a chosen backend WITHOUT saving anything, through
-// the same per-language cook service the asset pipeline uses (ScriptLanguageCookRegistry) -
-// so what validates here is exactly what would cook. Returns the compile errors with
-// file/line, and on success the harvested metadata (class name, declared handlers, editor
-// properties, coroutine use) so the agent sees what the engine RECOGNIZED, not just "ok".
+// script_validate: compile a script source against a chosen backend without saving anything,
+// through the same per-language cook service the asset pipeline uses (ScriptLanguageCookRegistry),
+// so what validates here is what would cook. It returns the compile errors with file and line,
+// and on success the harvested metadata (class name, declared handlers, editor properties,
+// coroutine use), so the agent sees what the engine recognized, not just "ok".
 //
-// Honesty: this is a compile check. A misspelled engine method is a compile error only where
-// the language sees the call (AngelScript compiles against the bound API; Luau resolves a member
-// at run time) - the typed check needs the Luau analyzer toolchain. The description says so.
+// This is only a compile check. A misspelled engine method is a compile error only where the
+// language sees the call (AngelScript compiles against the bound API; Luau resolves a member at
+// run time); a typed check would need the Luau analyzer toolchain. The tool's description says
+// so.
 
 module;
 #include "Core/Prelude.h"
@@ -40,8 +41,8 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // Registers script_validate. Project-independent (compiles in-memory source); the host's
-    // language cooks must be registered first (Pipeline::Registration does).
+    // Registers script_validate. It is project-independent (it compiles in-memory source); the
+    // host's language cooks must be registered first (Pipeline::Registration does it).
     inline void RegisterScriptValidateTool(foundation::mcp::McpServer& server)
     {
         using foundation::mcp::SchemaBuilder;
@@ -119,7 +120,7 @@ export namespace editor::mcp
                     out.Set(u8"usesCoroutines",
                             JsonValue::MakeBool(harvested.usesCoroutines));
                 }
-                // Honesty marker mirroring scene_validate: what this validation covers today.
+                // Tells the caller what this validation covers, as scene_validate does.
                 out.Set(u8"checkLevel", JsonValue::MakeString(u8"compile"));
                 return out;
             });

@@ -4,14 +4,12 @@
 // Editor::App - the `editor.app` module.
 //
 // The editor's shell: its window, frame, menus and shortcuts from the actions, the dock and its
-// layout, the MCP host and its tools, the project home. On the GUI in parts
-// (Documentation/Specs/editor-gui.md, 5.1). Per-subsystem editor plugins register into the
-// context from the executable.
+// layout, the MCP host and its tools, the project home. Per-subsystem editor plugins register into
+// the context from the executable.
 
 export module editor.app;
 
-// The shell's files on the GUI so far (Documentation/Specs/editor-gui.md, 5.1); the rest return
-// with their ports.
+// The shell's partitions.
 export import :ui_page;
 export import :page_action_bar;
 export import :property_sections;

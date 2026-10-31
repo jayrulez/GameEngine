@@ -3,20 +3,18 @@
 
 // Foundation::Runtime.Client - `:app` partition.
 //
-// The application contract. There is exactly ONE application per host (not a list
-// of modules): the application IS the game/tool. It owns subsystem registration,
+// The application contract. There is exactly one application per host (not a list
+// of modules): the application is the game or tool. It owns subsystem registration,
 // so the subsystem set is declared once by the app and is identical whether the
-// app runs standalone or embedded in the editor - subsystems are truly pluggable.
-// (This is the lesson from Sedulous, where the HOST - EngineApplication/Editor
-// Application - forced in its own default subsystems, so neither standalone nor
-// editor honored the game's actual subsystem set.)
+// app runs standalone or embedded in the editor. A host never forces in subsystems
+// of its own.
 //
-//   IApplicationHost - what the app sees of its host (SubsystemManager, services, windows).
-//   IApplication     - the app/game: registers subsystems + lifecycle hooks.
+//   IApplicationHost: what the app sees of its host (SubsystemManager, services, windows).
+//   IApplication:     the app or game; registers subsystems and lifecycle hooks.
 //
 // DefaultApplication (the opinionated base that registers engine default
-// subsystems) lives in a SEPARATE library (engine.defaultapp) so this base
-// client never pulls in the engine subsystem libraries - only apps that opt into
+// subsystems) lives in a separate library (engine.defaultapp) so this base
+// client never pulls in the engine subsystem libraries; only apps that opt into
 // the defaults link it.
 
 module;
@@ -31,29 +29,29 @@ import foundation.shell;
 import foundation.graphics;
 
 namespace core = foundation::core;
-using namespace foundation::shell; // IShell + input/window types (moved from foundation::runtime)
-using namespace foundation::graphics; // GraphicsDevice/RenderWindow/FrameContext (moved from foundation::runtime)
+using namespace foundation::shell; // IShell and the input/window types
+using namespace foundation::graphics; // GraphicsDevice/RenderWindow/FrameContext
 
 export namespace foundation::runtime
 {
-    // App/loop-level settings (frame pacing). Graphics/window config for the main window lives in its
-    // RenderWindowDesc (see IApplication::MainRenderWindow) - the same descriptor runtime windows use.
+    // App and loop settings (frame pacing). Graphics and window config for the main window lives in
+    // its RenderWindowDesc (see IApplication::MainRenderWindow), the same descriptor runtime windows use.
     struct ApplicationSettings
     {
         core::f32 fixedTimeStep = 1.0f / 60.0f; // seconds per fixed update
         core::f32 maxFrameTime = 0.25f;         // clamp per frame (avoids the spiral of death)
-        core::u32 maxFixedStepsPerFrame = 4;    // catch-up cap at the ACCUMULATOR:
-                                                // excess time is DROPPED, so a hitch (debugger
-                                                // pause) never cascades into a step storm -
+        core::u32 maxFixedStepsPerFrame = 4;    // catch-up cap at the accumulator:
+                                                // excess time is dropped, so a hitch (debugger
+                                                // pause) never cascades into a step storm;
                                                 // independent of the runner's maxFrameTime clamp
     };
 
-    // The fixed-update accumulator: pure step math, host-owned, unit-tested.
+    // The fixed-update accumulator: pure step math, host-owned.
     // Advance() returns how many fixed steps this frame runs (clamped; excess time dropped);
-    // Alpha() is the leftover fraction of a step in [0,1) - the interpolation weight render
-    // consumers (physics pose smoothing) blend prev->current poses with.
-    // The fixed-timestep accumulator lives in foundation.core (scenes own one each
-    // for per-scene time); re-exposed here for the host's app-level lane.
+    // Alpha() is the leftover fraction of a step in [0,1), the weight render consumers
+    // (physics pose smoothing) use to blend the previous and current poses.
+    // It lives in foundation.core (scenes own one each for per-scene time) and is
+    // re-exposed here for the host's app-level fixed hook.
     using FixedStepper = core::FixedStepper;
 
     // The host as seen by the application: register subsystems via Subsystems(), reach the
@@ -69,8 +67,8 @@ export namespace foundation::runtime
         [[nodiscard]] virtual GraphicsDevice* Graphics() noexcept = 0;
 
         // The main window's RenderWindow (windows[0]), created by the host before OnStartup. Null when
-        // running headless (no shell/graphics). Apps attach their root UI / main viewport to it - the
-        // counterpart to the RenderWindow* returned by OpenWindow for secondary windows.
+        // running headless (no shell/graphics). Apps attach their root UI or main viewport to it; it is
+        // the counterpart to the RenderWindow* returned by OpenWindow for secondary windows.
         [[nodiscard]] virtual RenderWindow* MainRenderWindow() noexcept = 0;
 
         // Open/close OS windows at runtime (each backed by a RenderWindow). The
@@ -83,8 +81,8 @@ export namespace foundation::runtime
         virtual void RequestExit(int code = 0) = 0;
     };
 
-    // The application/game. Exactly one per host. Configure() registers the app's
-    // subsystems (the ONLY place subsystems are registered - pluggable). OnLaunch/
+    // The application or game. Exactly one per host. Configure() registers the app's
+    // subsystems (the only place subsystems are registered). OnLaunch/
     // OnExit bracket "play": for a standalone host they fire once around the loop;
     // an editor fires them on Play/Stop, so the same app runs embedded or standalone.
     class IApplication
@@ -95,10 +93,10 @@ export namespace foundation::runtime
         // Read once by the host before Configure() (frame pacing).
         [[nodiscard]] virtual ApplicationSettings Settings() const { return {}; }
 
-        // The main window's render config (present mode / swapchain format / buffer count) - the SAME
+        // The main window's render config (present mode, swapchain format, buffer count): the same
         // descriptor runtime windows take via OpenWindow, so the main and runtime windows configure
-        // through one path. Read once by the host when it wraps the shell's main window. Default =
-        // Fifo (vsync), sRGB, double-buffered. Override to uncap the frame rate (Immediate/Mailbox), etc.
+        // through one path. Read once by the host when it wraps the shell's main window. The default
+        // is Fifo (vsync), sRGB, double-buffered. Override to uncap the frame rate (Immediate/Mailbox).
         [[nodiscard]] virtual RenderWindowDesc MainRenderWindow() const { return {}; }
 
         /// The process's command line, before Configure: the entry (APP_MAIN or a hand-written

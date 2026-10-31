@@ -1,4 +1,4 @@
-# Foundation::Materials.PipelineCache unit tests (doctest; real DXC + Null RHI).
+# Foundation::Materials.PipelineCache unit tests (doctest; real DXC and the Null RHI).
 
 add_executable(Materials.PipelineCache.Tests
     TestsMain.cpp

@@ -3,9 +3,9 @@
 
 // Foundation::Fonts.TrueType - foundation.fonts.truetype:text_shaper partition
 //
-// Basic left-to-right text shaper + UI helpers (hit testing, cursor/selection
-// geometry, word wrapping) over any IFont. Ported faithfully from
-// Sedulous.Fonts.TTF/TrueTypeTextShaper.bf.
+// The basic text shaper over any IFont: one glyph per character, kerning and
+// word wrapping. Its UI helpers (hit testing, cursor and selection geometry)
+// come from ClusterTextShaper.
 
 module;
 #include "Core/Prelude.h"
@@ -110,7 +110,7 @@ export namespace foundation::fonts
                 {
                     if (lastSpaceIdx >= lineStartIdx && lastSpaceIdx >= 0)
                     {
-                        // Wrap at the last space - reflow glyphs after it.
+                        // Wrap at the last space: reflow the glyphs after it.
                         y += lineHeight;
                         f32 reflowX = 0;
                         i32 lastReflowedCodepoint = 0;
@@ -131,7 +131,7 @@ export namespace foundation::fonts
                     }
                     else
                     {
-                        // No break opportunity - hard wrap.
+                        // No break opportunity: hard wrap.
                         y += lineHeight;
                         x = 0;
                         kern = 0;

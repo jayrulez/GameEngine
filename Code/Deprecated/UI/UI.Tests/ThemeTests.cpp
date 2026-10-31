@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ThemeTests.bf (faithful). Beef static props ThemePalette.Dark/Light
-// -> ThemePalette::Dark()/Light(); `let sheet = DarkTheme.Create(); ctx.StyleSheet = sheet; sheet.ReleaseRef();`
-// -> `ctx.SetStyleSheet(DarkTheme::Create(DefaultAllocator()))` (RefPtr ownership; Create returns refcount-1); Color byte
-// fields R/G/B -> r/g/b; TestThemeExtension/CountingThemeExtension implement IThemeExtension via *out ptrs.
+// Theme tests: palettes, the dark and light themes, theme switching, the ThemeRegistry and the
+// ThemeIconSet. DarkTheme::Create returns a RefPtr with one reference, which SetStyleSheet takes.
+// TestThemeExtension and CountingThemeExtension implement IThemeExtension and report through
+// pointers to the test's locals.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -112,7 +112,7 @@ TEST_CASE("theme: DarkTheme_ResolvesTextColor")
     root->AddView(view.Get());
 
     const Color color = view->ResolveStyleColor(StyleProperty::TextColor);
-    // Dark theme text should be light
+    // Dark theme text is light
     CHECK(color.r > 200 / 255.0f);
 }
 
@@ -140,15 +140,15 @@ TEST_CASE("theme: DarkTheme_ButtonStyleClass")
     auto view = core::MakeRef<Button>(core::DefaultAllocator(), StringView(u8"Test"));
     root->AddView(view.Get());
 
-    // Button should have a background drawable (matched by type)
+    // The button has a background drawable (matched by type)
     Drawable* bg = view->ResolveStyleDrawable(StyleProperty::Background);
     CHECK(bg != nullptr);
 
-    // Button should have padding
+    // The button has padding
     const Thickness pad = view->ResolveStyleThickness(StyleProperty::Padding);
     CHECK(pad.Left > 0);
 
-    // Button corner radius (flat themes use 0)
+    // The button's corner radius (flat themes use 0)
     const f32 radius = view->ResolveStyleFloat(StyleProperty::CornerRadius);
     CHECK(radius == 0.0f);
 }
@@ -173,7 +173,7 @@ TEST_CASE("theme: LightTheme_ResolvesTextColor")
     root->AddView(view.Get());
 
     const Color color = view->ResolveStyleColor(StyleProperty::TextColor);
-    // Light theme text should be dark
+    // Light theme text is dark
     CHECK(color.r < 50 / 255.0f);
 }
 
@@ -196,7 +196,7 @@ TEST_CASE("theme: ThemeSwitching_ChangesResolvedValues")
     ctx.SetStyleSheet(LightTheme::Create(DefaultAllocator()));
     const Color lightText = view->ResolveStyleColor(StyleProperty::TextColor);
 
-    // Colors should be different
+    // The colors differ
     CHECK(darkText.r != lightText.r);
     // Dark text is light, light text is dark
     CHECK(darkText.r > 200 / 255.0f);
@@ -258,7 +258,7 @@ TEST_CASE("theme-icon-set: initialized set shares ONE instance per glyph; tints 
 
     RefPtr<Drawable> a = ThemeIconSet::Acquire(ThemeIcon::Close);
     RefPtr<Drawable> b = ThemeIconSet::Acquire(ThemeIcon::Close);
-    CHECK(a.Get() == b.Get()); // shared - the host bakes ONE instance, every theme gets it
+    CHECK(a.Get() == b.Get()); // shared: the host bakes one instance, and every theme gets it
 
     const Color tint{0.2f, 0.3f, 0.4f, 1.0f};
     RefPtr<Drawable> t1 = ThemeIconSet::Acquire(ThemeIcon::Close, tint);
@@ -268,9 +268,9 @@ TEST_CASE("theme-icon-set: initialized set shares ONE instance per glyph; tints 
 
     Array<BakedSVGDrawable*> bakeable;
     set.CollectBakeable(bakeable);
-    CHECK(bakeable.Size() == ThemeIconSet::kGlyphCount + 1); // 10 base + 1 tinted
+    CHECK(bakeable.Size() == ThemeIconSet::kGlyphCount + 1); // the base glyphs and one tinted variant
 
-    set.Shutdown(); // test hygiene - later tests see the uninitialized (fallback) behavior
+    set.Shutdown(); // so later tests see the uninitialized (fallback) behavior
 }
 
 TEST_CASE("theme-icon-set: uninitialized set hands out fresh unbaked fallbacks")
@@ -281,5 +281,5 @@ TEST_CASE("theme-icon-set: uninitialized set hands out fresh unbaked fallbacks")
     RefPtr<Drawable> a = ThemeIconSet::Acquire(ThemeIcon::Close);
     RefPtr<Drawable> b = ThemeIconSet::Acquire(ThemeIcon::Close);
     REQUIRE(a.Get() != nullptr);
-    CHECK(a.Get() != b.Get()); // distinct instances - the old (headless/tests) behavior
+    CHECK(a.Get() != b.Get()); // distinct instances, as in headless runs and tests
 }

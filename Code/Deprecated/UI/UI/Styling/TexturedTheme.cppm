@@ -4,12 +4,9 @@
 // UI - :textured_theme partition
 //
 // Creates a fully image-skinned StyleSheet from a ThemeImageSet. All provided images are packed into a
-// single atlas for optimal GPU batching (zero texture switches during UI rendering). Ported from
-// Sedulous.UI/src/Styling/TexturedTheme.bf. Starts from a palette's colors (text/padding/sizes only) as a
-// base, then overlays atlas-backed drawables. Language divergences: Beef `new ThemeAtlas()` + manual
-// delete / OwnResource(atlas) -> RefPtr<ThemeAtlas> held by the sheet via OwnResource(RefPtr<Object>) (so
-// ThemeAtlas derives Object); the key-parsing IndexOf uses local helpers (StringView has none); Beef
-// `Type` -> const TypeInfo*; `StyleProperty?`/`ControlState?` -> Optional<...>.
+// single atlas, so UI rendering needs no texture switches. It starts from a palette's colors (text,
+// padding and sizes only) as a base, then overlays atlas-backed drawables. The sheet holds the
+// ThemeAtlas through OwnResource, which is why ThemeAtlas derives Object.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +14,7 @@ module;
 export module foundation.ui:textured_theme;
 
 import foundation.core;
-import foundation.image; // ImageData, NineSlice
+import foundation.image;
 import :style_sheet;
 import :style_rule;
 import :style_property;
@@ -149,14 +146,13 @@ export namespace foundation::ui
             sheet.ForType(&GridView::StaticType())
                 .Set(StyleProperty::SelectionColor, C(60, 120, 200, 80));
 
-            // Register icons with appropriate tint for the palette.
             RegisterIcons(allocator, sheet, p);
 
             ThemeRegistry::ApplyExtensions(sheet, p);
 
             RefPtr<ThemeAtlas> atlas = MakeRef<ThemeAtlas>(allocator);
 
-            // Add all images to atlas.
+            // Add all images to the atlas.
             for (const auto& kv : images.GetImages())
                 atlas->AddImage(kv.key.AsView(), kv.value.Image);
 
@@ -235,7 +231,7 @@ export namespace foundation::ui
                 }
             }
 
-            // Theme owns the atlas so it lives as long as the drawables that reference it.
+            // The theme owns the atlas so it lives as long as the drawables that reference it.
             sheet.OwnResource(atlas);
 
             return sheetRef;
@@ -247,7 +243,7 @@ export namespace foundation::ui
             return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
-        /// Find the first index of a substring (-1 if not present). Local helper (StringView has no IndexOf).
+        /// Find the first index of a substring (-1 if not present). StringView has no IndexOf.
         [[nodiscard]] static i64 IndexOf(StringView s, StringView needle)
         {
             if (needle.Size() == 0 || needle.Size() > s.Size())
@@ -288,8 +284,8 @@ export namespace foundation::ui
         }
 
         /// Map a string key to a StyleSheet rule.
-        /// Supports:  "typeName::pseudo"  /  "typeName::pseudo:state"  (pseudo-element)
-        ///     and    "typeName:propertyName"  (legacy element-level).
+        /// Supports "typeName::pseudo" and "typeName::pseudo:state" (pseudo-element), and
+        /// "typeName:propertyName" (the older element-level form).
         static void SetDrawableByKey(StyleSheet& sheet, StringView key, RefPtr<Drawable> drawable)
         {
             // Check for "::" pseudo-element separator first.
@@ -325,7 +321,7 @@ export namespace foundation::ui
                 return;
             }
 
-            // Legacy format: "typeName:propertyName".
+            // Element-level format: "typeName:propertyName".
             const i64 colonIdx = IndexOf(key, static_cast<char8_t>(':'));
             if (colonIdx < 0)
             {
@@ -473,7 +469,7 @@ export namespace foundation::ui
         /// Register SVG icons with an appropriate tint for the palette.
         static void RegisterIcons(IAllocator& allocator, StyleSheet& sheet, ThemePalette p)
         {
-            // Use dark tint for light palettes, no tint for dark.
+            // A dark tint for light palettes, no tint for dark ones.
             const bool isLight = p.Background.r > 0.5f;
             Optional<Color> tint;
             if (isLight)

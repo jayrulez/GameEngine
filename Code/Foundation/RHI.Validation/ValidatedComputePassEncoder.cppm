@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for ComputePassEncoder.
-/// Ported from Sedulous.RHI.Validation/ValidatedComputePassEncoder.bf.
 
 module;
 #include "Core/Prelude.h"

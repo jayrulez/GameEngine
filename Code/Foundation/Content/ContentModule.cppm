@@ -5,14 +5,14 @@
 //
 // A content database: a hierarchical store of serializable objects, addressed by
 // Guid (stable) or by path. A Group is a folder; an Instance is one stored unit
-// (a Guid + a primary ISerializable object + named data streams for heavy
+// (a Guid, a primary ISerializable object and named data streams for heavy
 // blobs). Backed by a VFS mount (Group = directory, Instance = a file with a
 // configurable extension, data streams = sidecar files). Identity is decoupled
-// from byte access: the database owns the Guid<->location structure; the VFS
+// from byte access: the database owns the mapping of Guids to locations; the VFS
 // owns the bytes.
 //
 // The serialization format is pluggable: the database receives a
-// SerializerFactory that creates a Serializer for a given stream + mode. The
+// SerializerFactory that creates a Serializer for a given stream and mode. The
 // factory hides format-specific construction (binary vs XML vs anything else).
 // The database never imports a concrete serializer module.
 
@@ -46,7 +46,7 @@ export namespace foundation::content
     };
 
     // =======================================================================
-    // Instance - one stored unit: identity + a primary object + data streams.
+    // Instance: one stored unit, with identity, a primary object and data streams.
     // =======================================================================
     class Instance
     {
@@ -70,28 +70,28 @@ export namespace foundation::content
         // Deserializes the primary object (constructing the concrete type from
         // its stored type name). Null if the type isn't registered or on I/O error.
         [[nodiscard]] RefPtr<ISerializable> ReadObject() const;
-        // Reads an envelope an AUTHOR supplied (an agent's edit of the stored text) the way
-        // ReadObject reads the stored one, so what it accepts is exactly what a load accepts:
-        // its header must name THIS instance, its guid and its type, and its payload must read
-        // under this build's version. The reason when it does not.
+        // Reads an envelope an author supplied (an agent's edit of the stored text) the way
+        // ReadObject reads the stored one, so it accepts exactly what a load accepts: its
+        // header must name this instance, its guid and its type, and its payload must read
+        // under this build's version. The error says why when it does not.
         [[nodiscard]] Result<RefPtr<ISerializable>, String> ReadObjectFrom(IStream& stream) const;
 
         // Opens a named data stream for reading, or null if absent. Probes the text
         // sidecar (".data") first, then the binary/legacy one (".bin").
         [[nodiscard]] UniquePtr<IStream> ReadData(StringView streamName) const;
-        // The raw on-disk envelope (identity header + primary object + stream directory) -
-        // the cook driver hashes it as the asset's settings/content fingerprint.
+        // The raw on-disk envelope (identity header, primary object, stream directory); the
+        // cook driver hashes it as the asset's settings and content fingerprint.
         [[nodiscard]] UniquePtr<IStream> OpenEnvelope() const;
 
         // --- tooling / write ---
         [[nodiscard]] Status WriteObject(ISerializable& object);
         // Writes the stream's sidecar under the encoding's suffix and removes the
-        // other-suffix sibling, so a stream never exists under both at once (this is
-        // also the migration path for pre-".data" text sidecars).
+        // other-suffix sibling, so a stream never exists under both at once (which also
+        // moves an older text sidecar stored as ".bin" to ".data").
         [[nodiscard]] Status WriteData(StringView streamName, Span<const byte> data,
                                        StreamEncoding encoding = StreamEncoding::Binary);
         // Remove a named data stream's sidecar if present (idempotent: NotFound is not an error).
-        // Cooks call this for an ON-DEMAND stream that a re-cook no longer produces, so a stale
+        // Cooks call this for an on-demand stream that a re-cook no longer produces, so a stale
         // sidecar from an earlier cook does not keep loading (e.g. a removed per-layer terrain map).
         [[nodiscard]] Status DeleteData(StringView streamName);
 
@@ -113,7 +113,7 @@ export namespace foundation::content
     };
 
     // =======================================================================
-    // Group - a folder in the tree: child groups + instances.
+    // Group: a folder in the tree, with child groups and instances.
     // =======================================================================
     class Group
     {
@@ -144,9 +144,9 @@ export namespace foundation::content
         Group* CreateGroup(StringView name);
         // Creates a new instance of `primaryType` with a fresh Guid. The on-disk
         // file appears once WriteObject() is called.
-        // NOTE: a taken name returns the EXISTING instance (reimport/cook idempotency) -
-        // a New-Asset creator that then WriteObject()s a starter would OVERWRITE it. Such
-        // creators must pass UniqueInstanceName(base) instead of a fixed name.
+        // A taken name returns the existing instance (for reimport and cook idempotency), so
+        // a New-Asset creator that then writes a starter with WriteObject() would overwrite
+        // it. Such creators must pass UniqueInstanceName(base) instead of a fixed name.
         Instance* CreateInstance(StringView name, const TypeInfo& primaryType);
 
         // First free name from `base`: `base`, then `base.2`, `base.3`, ... The one
@@ -160,9 +160,9 @@ export namespace foundation::content
                                        const TypeInfo& primaryType);
 
         // --- internal (used by the database scanner) ---
-        // Children stay NAME-SORTED (case-insensitive): the mount scan hands entries in
-        // arbitrary readdir order and imports append, so without an invariant every browser,
-        // tree, and picker showed a different order per session.
+        // Children stay sorted by name (case-insensitive): the mount scan returns entries in
+        // arbitrary readdir order and imports append, so without this every browser, tree and
+        // picker would show a different order each session.
         Group* AddChildGroup(StringView name);
         Instance* AddInstance(const Guid& id, StringView name, StringView typeNs,
                               StringView typeName);
@@ -180,7 +180,7 @@ export namespace foundation::content
     };
 
     // =======================================================================
-    // IContentDatabase - the database surface (backends implement it).
+    // IContentDatabase: the database surface (backends implement it).
     // =======================================================================
     class IContentDatabase
     {
@@ -194,7 +194,7 @@ export namespace foundation::content
     };
 
     // =======================================================================
-    // ContentDatabase - VFS-backed. Scans the mount on construction; reads and
+    // ContentDatabase: VFS-backed. Scans the mount on construction; reads and
     // writes through the mount's enumerable/writable capabilities. The
     // serialization format is determined by the SerializerFactory provided by
     // the caller.
@@ -202,8 +202,8 @@ export namespace foundation::content
     class ContentDatabase final : public IContentDatabase
     {
     public:
-        // `mount` must outlive the database and support enumerate + write. The
-        // allocator (required - the owner decides) backs every group/instance node.
+        // `mount` must outlive the database and support enumerate and write. The
+        // allocator (required; the owner decides) backs every group and instance node.
         ContentDatabase(IAllocator& allocator, IFileSystem& mount, SerializerFactory factory,
                                  StringView fileExtension,
                                  SerializableRegistry& serializables = GlobalSerializableRegistry(),
@@ -226,10 +226,10 @@ export namespace foundation::content
 
         [[nodiscard]] Group* RootGroup() override { return m_root; }
 
-        /// What the open-time header scan actually cost (the I4b instrumentation): envelope
-        /// count + BYTES the serializer had to consume to reach the three header fields. For
-        /// the XML factory that is the WHOLE file (DOM parse before first read) - these
-        /// numbers are the evidence for/against a true partial header parse.
+        /// What the open-time header scan cost: the envelope count and the bytes the serializer
+        /// had to consume to reach the three header fields. For the XML factory that is the
+        /// whole file (a DOM parse before the first read), so these numbers show whether a true
+        /// partial header parse would pay.
         struct ScanStats
         {
             usize envelopes = 0;
@@ -238,28 +238,29 @@ export namespace foundation::content
 
         [[nodiscard]] const ScanStats& LastScanStats() const noexcept { return m_scanStats; }
 
-        // Delete an instance: its envelope + every data-stream sidecar are removed from the
-        // mount, and it is unregistered from the group tree and the GUID index. (Cook orphan
-        // sweep + browser Delete.) NotFound when the id is unknown.
+        // Delete an instance: its envelope and every data-stream sidecar are removed from the
+        // mount, and it is unregistered from the group tree and the GUID index (the cook's
+        // orphan sweep and the browser's Delete use it). NotFound when the id is unknown.
         Status DeleteInstance(const Guid& id);
 
-        // Clone an instance under `newName` in the SAME group, with a fresh Guid: the primary
+        // Clone an instance under `newName` in the same group, with a fresh Guid: the primary
         // object round-trips through its registered type (so the copy is deep and re-keyed) and
         // every data-stream sidecar is byte-copied. Null when the id is unknown, the name is
-        // taken, or the primary type isn't registered. (Browser Duplicate.)
+        // taken, or the primary type isn't registered. (The browser's Duplicate.)
         Instance* CloneInstance(const Guid& id, StringView newName);
 
-        // Copy-forward: fill an EXISTING instance `dest` (in this DB) with the primary object + every
-        // data-stream sidecar of the instance `srcId` in `src`, byte-for-byte. `dest` and the source
-        // are expected to share a guid (the variant cook keeps product-guid == source-guid in both
-        // DBs), so the re-serialized object is identical. Used to carry platform-INVARIANT cooked
-        // products from the host DB into a per-target DB without re-cooking (asset variants).
+        // Copy-forward: fill an existing instance `dest` (in this DB) with the primary object and
+        // every data-stream sidecar of the instance `srcId` in `src`, byte for byte. `dest` and
+        // the source are expected to share a guid (the variant cook keeps product guid == source
+        // guid in both DBs), so the re-serialized object is identical. Used to carry
+        // platform-invariant cooked products from the host DB into a per-target DB without
+        // re-cooking (asset variants).
         // NotFound when `srcId` is unknown in `src`; other failures propagate from write.
         Status CopyContentForward(Instance& dest, ContentDatabase& src, const Guid& srcId);
 
-        // Rename an instance IN PLACE (same group, same guid): moves the envelope and every
-        // data-stream sidecar on disk (the name IS the filename - envelopes don't store it).
-        // Guid-based references (scene refs, cook records) are untouched by design.
+        // Rename an instance in place (same group, same guid): moves the envelope and every
+        // data-stream sidecar on disk (the name is the filename; envelopes don't store it).
+        // Guid-based references (scene refs, cook records) are untouched.
         // AlreadyExists when the name is taken; NotSupported on read-only mounts.
         Status RenameInstance(const Guid& id, StringView newName);
 
@@ -273,9 +274,9 @@ export namespace foundation::content
         // need no fixup). NotSupported for the root or read-only mounts.
         Status RenameGroup(Group& group, StringView newName);
 
-        // Delete a group and EVERYTHING under it: every instance (envelope + sidecars, via
-        // DeleteInstance) and every child group, bottom-up, then the now-empty directories -
-        // a rescan must not resurrect ghost groups. The Group object is destroyed; the caller's
+        // Delete a group and everything under it: every instance (envelope and sidecars, via
+        // DeleteInstance) and every child group, bottom-up, then the now-empty directories, so
+        // a rescan cannot resurrect ghost groups. The Group object is destroyed; the caller's
         // pointer is dangling after success. NotSupported for the root or read-only mounts.
         Status DeleteGroup(Group& group);
 
@@ -287,7 +288,7 @@ export namespace foundation::content
 
         [[nodiscard]] Instance* GetInstance(StringView path) override
         {
-            // Split "group/sub/name" -> walk groups, then the instance by name.
+            // Split "group/sub/name": walk the groups, then find the instance by name.
             Group* group = m_root;
             usize start = 0;
             for (usize i = 0; i <= path.Size(); ++i)

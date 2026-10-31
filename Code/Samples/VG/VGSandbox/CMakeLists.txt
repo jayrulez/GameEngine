@@ -1,4 +1,4 @@
-# VG Sandbox - end-to-end VG stack demo (window + VGRenderer).
+# VG Sandbox - end-to-end VG stack demo (a window and VGRenderer).
 add_executable(VGSandbox Main.cpp)
 target_link_libraries(VGSandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::Shaders Foundation::Shaders.System

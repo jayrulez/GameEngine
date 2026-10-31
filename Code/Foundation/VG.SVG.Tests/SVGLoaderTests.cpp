@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Extra coverage (not from Sedulous.VG.Tests): exercise SVGLoader + SVGRenderer
-// end-to-end on a small document.
+// Exercise SVGLoader and SVGRenderer end to end on small documents.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -120,7 +119,7 @@ TEST_CASE("svg.loader: parses defs gradients (attrs, style stops, spreadMethod, 
     REQUIRE(lin != nullptr);
     CHECK(!lin->radial);
     CHECK(!lin->userSpace);
-    CHECK(lin->x2 == doctest::Approx(1.0f)); // "100%" -> 1.0
+    CHECK(lin->x2 == doctest::Approx(1.0f)); // "100%" is 1.0
     CHECK(lin->spread == foundation::vg::VGGradientSpread::Reflect);
     REQUIRE(lin->stops.Size() == 2u);
     CHECK(lin->stops[0].color.r == doctest::Approx(1.0f));
@@ -164,14 +163,14 @@ TEST_CASE("svg.renderer: a gradient fill bakes a LUT and spreads ride the comman
     REQUIRE(rb.HasValue());
     VGContext ctx2;
     SVGRenderer::Render(ctx2, rb.Value(), Rectangle{0, 0, 10, 10});
-    CHECK(ctx2.GetBatch().textures.Size() == 1u); // white only - solid fallback
+    CHECK(ctx2.GetBatch().textures.Size() == 1u); // white only: solid fallback
     CHECK(ctx2.GetBatch().VertexCount() > 0u);
 }
 
 TEST_CASE("svg.loader: an unrecognised container is skipped WHOLE - the siblings after it survive")
 {
     // Editor exports lead with <metadata>, <desc>, <style> and comments. Skipping only the
-    // opening tag parsed the container's children at the current level and let its closing
+    // opening tag would parse the container's children at the current level and let its closing
     // tag end that level, dropping every shape after it. Nested unknowns, a comment holding
     // '>' and a style block with a CSS child combinator must all be stepped over as units.
     const StringView svg =
@@ -188,7 +187,7 @@ TEST_CASE("svg.loader: an unrecognised container is skipped WHOLE - the siblings
     const Result<SVGDocument> loaded = SVGLoader::Load(svg);
     REQUIRE(loaded.HasValue());
     const SVGDocument& doc = loaded.Value();
-    // rect, circle, g (with its own rect) - and nothing from the skipped containers.
+    // rect, circle, g (with its own rect), and nothing from the skipped containers.
     REQUIRE(doc.elements.Size() == 3u);
     CHECK(doc.elements[0].type == SVGElementType::Rectangle);
     CHECK(doc.elements[1].type == SVGElementType::Circle);

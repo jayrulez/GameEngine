@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SplatmapAsset cook (top-K model): the two-stream ("pixels" weights + "indices") round-trip
-// through SplatmapAssetBuilder -> SplatWeightsFactory with PRODUCT guid == SOURCE guid (the
-// ref-id parity the terrain resolution rests on), the LEGACY single-raster migration
-// (renormalized - ruling R2), the no-sidecar cook (all-zero = pure base, no seeding), the PNG
-// import (fixed-layer raster -> top-K), and the cook-stamp ProductType contract.
+// SplatmapAsset cook (top-K model): the two-stream ("pixels" weights and "indices") round-trip
+// through SplatmapAssetBuilder and SplatWeightsFactory with the product guid equal to the source
+// guid (the ref-id parity the terrain resolution rests on), the refused weights-only source, the
+// no-sidecar cook (all zero is pure base, no seeding), the PNG import (a fixed-layer raster
+// converted to top-K), and the cook-stamp ProductType contract.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -56,8 +56,8 @@ TEST_CASE("terrain.pipeline: SplatmapAsset cooks BOTH rasters and restores them 
         foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), outMount,
                                                 foundation::core::BinarySerializerFactory(),
                                                 u8".rasset");
-        // Cook in place into ONE instance (product guid == source guid): the source sidecars feed
-        // the builder, which writes the cooked SplatWeightsSource + BOTH streams back.
+        // Cook in place into one instance (product guid equals source guid): the source sidecars
+        // feed the builder, which writes the cooked SplatWeightsSource and both streams back.
         auto* inst = db.RootGroup()->CreateInstance(u8"splat", SplatWeightsSource::StaticType());
         splatId = inst->Id();
         REQUIRE(inst->WriteData(kSplatStream, SplatWeightsSource::WeightBlob(*authored)).IsOk());
@@ -83,7 +83,7 @@ TEST_CASE("terrain.pipeline: SplatmapAsset cooks BOTH rasters and restores them 
     ResourceManager manager(DefaultAllocator(), db);
     manager.AddFactory(&factory);
 
-    Proxy<SplatWeights> loaded = manager.Bind<SplatWeights>(splatId); // bind by the SOURCE guid
+    Proxy<SplatWeights> loaded = manager.Bind<SplatWeights>(splatId); // bind by the source guid
     REQUIRE(loaded);
     CHECK(loaded->Width() == 16);
     CHECK(loaded->Height() == 16);
@@ -107,7 +107,7 @@ TEST_CASE("terrain.pipeline: no sidecars cook an all-zero raster (pure base - no
                                                 foundation::core::BinarySerializerFactory(),
                                                 u8".rasset");
         auto* inst = db.RootGroup()->CreateInstance(u8"splat", SplatWeightsSource::StaticType());
-        splatId = inst->Id(); // NO sidecars written
+        splatId = inst->Id(); // no sidecars written
         SplatmapAsset sa;
         sa.width = 8;
         sa.height = 8;
@@ -185,7 +185,7 @@ TEST_CASE("terrain.pipeline: PNG import decodes as a fixed-layer raster (R = bas
     REQUIRE(CreateDirectory(u8"scratch_splatimg"));
 
     // Imported PNGs are fixed-layer rasters (R = the base share, G/B/A = palette 0..2): a
-    // solid (128, 127, 0, 0) image = half base + half palette-0 after conversion.
+    // solid (128, 127, 0, 0) image is half base and half palette-0 after conversion.
     image::Image authored(4, 2, image::PixelFormat::RGBA8);
     Span<u8> ap = authored.PixelDataMut();
     for (usize t = 0; t < 8; ++t)
@@ -225,9 +225,9 @@ TEST_CASE("terrain.pipeline: PNG import decodes as a fixed-layer raster (R = bas
     manager.AddFactory(&factory);
     Proxy<SplatWeights> loaded = manager.Bind<SplatWeights>(splatId);
     REQUIRE(loaded);
-    CHECK(loaded->Width() == 4); // the PNG's NATIVE size (no resampling)
+    CHECK(loaded->Width() == 4); // the PNG's native size (no resampling)
     CHECK(loaded->Height() == 2);
-    // 128/255 base + 127/255 palette-0 within quantum.
+    // 128/255 base and 127/255 palette-0, within quantum.
     CHECK(loaded->WeightOfLayer(1, 1, 0) >= 126);
     CHECK(loaded->WeightOfLayer(1, 1, 0) <= 128);
     CHECK(loaded->BaseWeight(1, 1) >= 126);
@@ -244,20 +244,20 @@ TEST_CASE("terrain.pipeline: PNG import decodes as a fixed-layer raster (R = bas
 TEST_CASE("terrain.pipeline: builder ProductType is the SERIALIZED cooked form (the cook-stamp contract)")
 {
     // The cook driver stamps the cooked instance with builder->ProductType() and the runtime
-    // ReadObject reconstructs it, so ProductType MUST be the serialized form (...Source), not the
-    // runtime product. Returning the product makes ReadObject build the wrong type -> the
-    // factory's Cast<...Source> fails -> the resource never binds. Pins the contract the
-    // round-trips above rely on.
+    // ReadObject reconstructs it, so ProductType must be the serialized form (...Source), not the
+    // runtime product. Returning the product makes ReadObject build the wrong type, the factory's
+    // Cast<...Source> fails, and the resource never binds. Pins the contract the round-trips above
+    // rely on.
     CHECK(TerrainAssetBuilder{}.ProductType() == &TerrainSource::StaticType());
     CHECK(SplatmapAssetBuilder{}.ProductType() == &SplatWeightsSource::StaticType());
 }
 
 TEST_CASE("terrain.pipeline: the palette cook decodes albedos through the SOURCE db (two-DB shape)")
 {
-    // The PRODUCTION cook shape: ctx.db = the COOKED db (whose texture instances hold cooked
-    // PRODUCTS, not TextureAsset envelopes) and ctx.sourceDb = the SOURCE db. The palette cook
-    // must decode through the SOURCE db - resolving the albedo against the cooked db casts to
-    // the wrong type and silently whites out every slice (the ImportTest white-paint bug).
+    // The production cook shape: ctx.db is the cooked db (whose texture instances hold cooked
+    // products, not TextureAsset envelopes) and ctx.sourceDb is the source db. The palette cook
+    // must decode through the source db: resolving the albedo against the cooked db casts to
+    // the wrong type and silently whites out every slice.
     pipeline::RegisterTerrainAsset();
     pipeline::RegisterTextureAsset();
     RegisterTerrainResourceTypes();
@@ -271,7 +271,7 @@ TEST_CASE("terrain.pipeline: the palette cook decodes albedos through the SOURCE
     RemoveDirectory(u8"scratch_palette_cookdb");
     REQUIRE(CreateDirectory(u8"scratch_palette_src"));
 
-    // A solid ORANGE source image the slice must carry (white = the failure fallback).
+    // A solid orange source image the slice must carry (white is the failure fallback).
     image::Image authored(8, 8, image::PixelFormat::RGBA8);
     Span<u8> ap = authored.PixelDataMut();
     for (usize t = 0; t < 64; ++t)
@@ -291,14 +291,14 @@ TEST_CASE("terrain.pipeline: the palette cook decodes albedos through the SOURCE
     {
         foundation::content::ContentDatabase sourceDb(foundation::core::DefaultAllocator(), 
             srcDbMount, foundation::core::BinarySerializerFactory(), u8".rasset");
-        // The albedo SOURCE envelope (fileName -> the png above).
+        // The albedo source envelope (its fileName names the png above).
         auto* albedoInst =
             sourceDb.RootGroup()->CreateInstance(u8"albedo", pipeline::TextureAsset::StaticType());
         pipeline::TextureAsset texSrc;
         texSrc.fileName = foundation::vfs::SourcePath(u8"albedo.png");
         REQUIRE(albedoInst->WriteObject(texSrc).IsOk());
 
-        // The COOKED db carries no TextureAsset for that guid (production truth).
+        // The cooked db carries no TextureAsset for that guid, as in production.
         foundation::content::ContentDatabase cookedDb(foundation::core::DefaultAllocator(), 
             cookDbMount, foundation::core::BinarySerializerFactory(), u8".rasset");
         auto* product =
@@ -315,12 +315,12 @@ TEST_CASE("terrain.pipeline: the palette cook decodes albedos through the SOURCE
         pipeline::AssetBuildContext ctx{DefaultAllocator()};
         ctx.sources = &srcMount;
         ctx.output = product;
-        ctx.db = &cookedDb;      // cooked-products view: has NO TextureAsset
-        ctx.sourceDb = &sourceDb; // where the albedo envelope + png actually live
+        ctx.db = &cookedDb;      // cooked-products view: has no TextureAsset
+        ctx.sourceDb = &sourceDb; // where the albedo envelope and png actually live
         REQUIRE(builder.Build(ta, ctx).IsOk());
     }
 
-    // The cooked palette sidecar's slice must carry the ORANGE, at every sampled mip.
+    // The cooked palette sidecar's slice must carry the orange, at every sampled mip.
     {
         foundation::content::ContentDatabase cookedDb(foundation::core::DefaultAllocator(), 
             cookDbMount, foundation::core::BinarySerializerFactory(), u8".rasset");
@@ -335,7 +335,7 @@ TEST_CASE("terrain.pipeline: the palette cook decodes albedos through the SOURCE
         const usize bytes = TerrainPaletteData::SliceBytes(header[0], header[1]);
         texels.Resize(bytes);
         REQUIRE(stream->Read(texels.Data(), bytes) == bytes);
-        CHECK(texels[0] == 200); // mip 0 texel 0 = the authored orange, NOT the white fallback
+        CHECK(texels[0] == 200); // mip 0 texel 0 is the authored orange, not the white fallback
         CHECK(texels[1] == 120);
         CHECK(texels[2] == 30);
         const usize lastTexel = bytes - 4; // the 1x1 tail mip
@@ -379,20 +379,20 @@ TEST_CASE("terrain.pipeline: the palette-array cook helpers resize and mip a sli
     const u32 halfDim = BoxHalveRgba8(Span<const u8>{resized.Data(), resized.Size()}, 4,
                                       Span<u8>{mip.Data(), mip.Size()});
     CHECK(halfDim == 2u);
-    CHECK(mip[0] == 200); // the box filter of a solid = the solid
+    CHECK(mip[0] == 200); // the box filter of a solid is the solid
     CHECK(mip[3] == 255);
 
-    // The chain 4x4 + 2x2 + 1x1 at 4 bytes per texel.
+    // The chain 4x4, 2x2 and 1x1 at 4 bytes per texel.
     CHECK(TerrainPaletteData::SliceBytes(4, 3) == (16u + 4u + 1u) * 4u);
 }
 
 TEST_CASE("terrain.pipeline: the sRGB-aware halve averages in LINEAR space (albedo mips, R3)")
 {
-    // A 2x2 black/white checker: averaging the sRGB BYTES gives 128 (too dark); averaging in
-    // linear then re-encoding gives sRGB ~188 (the texture cook's rule). The albedo palette
+    // A 2x2 black/white checker: averaging the sRGB bytes gives 128 (too dark); averaging in
+    // linear then re-encoding gives sRGB ~188 (as the texture cook does). The albedo palette
     // array uploads as RGBA8UnormSrgb, so its mips must use the sRGB-aware halve.
     u8 checker[2 * 2 * 4] = {};
-    const u32 whiteTexels[2] = {0u, 3u}; // (0,0) + (1,1) white, the others black
+    const u32 whiteTexels[2] = {0u, 3u}; // (0,0) and (1,1) white, the others black
     for (u32 t : whiteTexels)
     {
         checker[t * 4 + 0] = 255;
@@ -414,5 +414,5 @@ TEST_CASE("terrain.pipeline: the sRGB-aware halve averages in LINEAR space (albe
     u8 plainMip[4] = {};
     CHECK(BoxHalveRgba8(Span<const u8>{checker, sizeof(checker)}, 2,
                         Span<u8>{plainMip, sizeof(plainMip)}) == 1u);
-    CHECK(plainMip[0] == 128); // the plain box filter (correct for LINEAR normal/ORM data)
+    CHECK(plainMip[0] == 128); // the plain box filter (correct for linear normal/ORM data)
 }

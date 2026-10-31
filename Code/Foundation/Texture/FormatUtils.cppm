@@ -4,7 +4,7 @@
 // Foundation::Texture - :format_utils partition
 //
 // Maps an image PixelFormat to the RHI TextureFormat, honoring the source
-// data's color space. Ported from Sedulous.Textures/TextureFormatUtils.bf.
+// data's color space.
 
 module;
 #include "Core/Prelude.h"
@@ -25,15 +25,15 @@ export namespace foundation::texture
     class TextureFormatUtils
     {
     public:
-        // Image PixelFormat -> RHI TextureFormat. When the data is sRGB and the
-        // format has an sRGB variant (8-bit RGB/RGBA/BGR/BGRA), the sRGB GPU
-        // format is returned so hardware decodes sRGB->linear on sample. Float
-        // and 1/2-channel formats pass through. 3-channel maps to RGBA (GPUs
-        // don't support 3-channel). R16 (heightmap loads) has no unorm GPU format
-        // on our backends (WebGPU core lacks it): it maps to the R16Uint INTEGER
-        // container, the same one the terrain height upload uses - shaders read
-        // it as uint, not through a float sampler. The switch is exhaustive: a
-        // new PixelFormat is a compile error here, never a silent RGBA8 guess.
+        // Image PixelFormat to RHI TextureFormat. When the data is sRGB and the
+        // format has an sRGB variant (8-bit RGB, RGBA, BGR, BGRA), the sRGB GPU
+        // format is returned so the hardware decodes sRGB to linear on sample. Float
+        // and one- and two-channel formats pass through. Three-channel maps to RGBA
+        // (GPUs don't support three-channel). R16 (heightmap loads) has no unorm GPU
+        // format on our backends (WebGPU core lacks it), so it maps to the R16Uint
+        // integer container, the same one the terrain height upload uses; shaders read
+        // it as uint, not through a float sampler. The switch is exhaustive: a new
+        // PixelFormat is a compile error here, never a silent RGBA8 guess.
         [[nodiscard]] static rhi::TextureFormat Convert(image::PixelFormat format,
                                                         image::ImageColorSpace colorSpace)
         {

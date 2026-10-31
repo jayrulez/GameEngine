@@ -4,10 +4,9 @@
 // UI Toolkit - :dock_split partition
 //
 // Binary split node for the dock tree: two children separated by a draggable divider. Direct ViewGroup,
-// no SplitView wrapper. Ported from Sedulous.UI.Toolkit/src/Docking/DockSplit.bf. Uses only
-// View/ViewGroup/Orientation/Rectangle, so it is a clean leaf with no docking-type deps. Beef
-// `Vector2` -> Float2; `RectangleF` -> Rectangle (fields lowercase x/y/width/height); the `Orientation()`
-// getter hides the `Orientation` enum inside the class, so type positions are fully qualified.
+// no SplitView wrapper. It uses only View, ViewGroup, Orientation and Rectangle, so it depends on no
+// other docking type. The `Orientation()` getter hides the `Orientation` enum inside the class, so
+// the type is spelled fully qualified there.
 
 module;
 #include "Core/Prelude.h"

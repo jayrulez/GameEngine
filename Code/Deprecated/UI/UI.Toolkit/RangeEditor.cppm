@@ -3,13 +3,9 @@
 
 // UI Toolkit - :range_editor partition
 //
-// Range/slider property editor - a Slider + NumericField side by side (both synced). Ported from
-// Sedulous.UI.Toolkit/src/PropertyGrid/RangeEditor.bf. Beef `float` -> f32; `delegate void(float) Setter`
-// -> Function<void(f32)>; Slider Min/Max/Step/Value `.Value =` -> `.SetValue(...)`; `new
-// FlexLayout.LayoutParams()` -> LayoutStyle; `.Fixed(.Px(w))` -> SizeSpec::Fixed(Unit::Dp(w));
-// `Math.Log10` -> std::log10. The private inner `RangeNumericField : NumericField` becomes a PUBLIC nested
-// class (own RTTI_OBJECT identity) whose focus overrides are defined out-of-line after RangeEditor is
-// complete.
+// Range (slider) property editor: a Slider and a NumericField side by side, kept in sync.
+// RangeNumericField is a public nested class (with its own RTTI_OBJECT identity) whose focus overrides
+// are defined out of line after RangeEditor is complete.
 
 module;
 #include <cmath>
@@ -28,7 +24,7 @@ namespace core = foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Range/slider property editor - Slider + NumericField side by side. Both synced.
+    /// Range (slider) property editor: a Slider and a NumericField side by side, kept in sync.
     class RangeEditor : public PropertyEditor
     {
         RTTI_OBJECT(RangeEditor, PropertyEditor)
@@ -166,13 +162,14 @@ export namespace foundation::ui::toolkit
         }
 
     private:
-        /// Worst-case rendered width for the numeric readout. Picks the longer of |Min| and Max, computes
-        /// integer digits + dot + decimals, adds a sign slot if the range can go negative, plus padding.
+        /// Worst-case rendered width for the numeric readout. Picks the longer of |Min| and Max, counts
+        /// its integer digits, a dot and the decimals, adds a sign slot if the range can go negative,
+        /// then adds padding.
         [[nodiscard]] f32 ComputeNumericFieldWidth() const
         {
             const f32 absMax = core::Max(Abs(m_min), Abs(m_max));
             i32 intDigits = (absMax >= 1) ? static_cast<i32>(std::log10(absMax)) + 1 : 1;
-            i32 chars = intDigits + 1 + 2; // int + dot + 2 decimals
+            i32 chars = intDigits + 1 + 2; // integer digits, dot, 2 decimals
             if (m_min < 0)
             {
                 chars++;

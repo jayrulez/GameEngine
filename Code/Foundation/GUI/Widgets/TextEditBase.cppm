@@ -3,23 +3,24 @@
 
 // GUI - :text_edit_base partition
 //
-// TextEditBase: what the text field and the text area share (E4 of Specs/gui-lab-evolution.md).
-// It holds the editing model: typed text goes to it, and every editing key reaches it as a command
-// through the keymap, the widget declaring the "textinput" key context and handling the editing
-// commands' names (BindTextEditingKeys binds the keys), so a screen rebinds them and a menu shows
-// and runs them like any command. A mouse press places the caret, a drag selects, a double press
-// selects a word and a triple everything.
+// TextEditBase: the base that the text field and the text area share. It holds the editing model.
+// Typed text goes to the model, and every editing key reaches it as a command through the keymap:
+// the widget declares the "textinput" key context and handles the editing commands by name
+// (BindTextEditingKeys binds the keys). A screen can therefore rebind them, and a menu can show
+// and run them like any other command. A mouse press places the caret, a drag selects, a double
+// press selects a word and a triple press selects everything.
 //
-// It reports each edit as `input` (SetOnTextChanging), and a committed value as `change`
-// (SetOnTextChanged) when focus leaves with a value other than the last committed one, or when the
-// widget submits (`submit`, SetOnSubmit), as the web's inputs do; code's value reports nothing. An
-// IME's composition shows in place, underlined over the selection it will replace, until it
-// commits as typed text, and the widget tells the host where it types, for the IME's candidates.
-// The caret blinks while it is focused. A context menu (a right release, a long press, Shift+F10)
-// offers cut, copy, paste and select all, each lit only where it would do something (E5).
+// Each edit sends `input` (SetOnTextChanging). A committed value sends `change`
+// (SetOnTextChanged) when focus leaves with a value different from the last committed one, or
+// when the widget submits (`submit`, SetOnSubmit), as web inputs do. A value set from code sends
+// nothing. An IME composition shows in place, underlined over the selection it will replace, until
+// it commits as typed text; the widget tells the host where it is typing, so the IME can place its
+// candidates. The caret blinks while the widget is focused. A context menu (opened by a right
+// release, a long press or Shift+F10) offers cut, copy, paste and select all, each enabled only
+// when it would do something.
 //
-// A widget built on it gives the geometry: the layout it edits in (one line, or wrapped), where
-// that layout sits (scrolled), and how it scrolls to keep the caret in view.
+// A widget built on this base supplies the geometry: the layout it edits in (one line, or
+// wrapped), where that layout sits (scrolled), and how it scrolls to keep the caret in view.
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +30,7 @@ export module foundation.gui:text_edit_base;
 
 import foundation.core;  // String, StringView, Color, Function, Move, Min, Max
 import foundation.fonts; // CachedFont
-import :reactive;        // Observable (what bindings follow)
+import :reactive;        // Observable, which bindings follow
 import :rect;
 import :draw_context;
 import :text;
@@ -37,14 +38,14 @@ import :event;
 import :clipboard;
 import :event_dispatcher;
 import :ui_widget;
-import :actions;  // TickAction (the caret's blink)
+import :actions;  // TickAction, for the caret's blink
 import :commands; // CommandEvent
 import :text_segmentation;
 import :input_filter;
 import :text_edit_model;
 import :text_editing_keys; // kTextSubmitCommand
-import :menu; // the context menu (E5)
-import :scene_root; // GUIContext: its keymap, for the menu's shortcut text
+import :menu; // the context menu
+import :scene_root; // GUIContext, whose keymap gives the menu's shortcut text
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -57,26 +58,26 @@ export namespace foundation::gui
         RTTI_OBJECT(TextEditBase, UIWidget)
     public:
         // === Value ===
-        /// Replaces the text from code: the caret goes to its end and the history goes; it is the
-        /// committed value now, and reports no edit (as the web's value does).
+        /// Replaces the text from code. The caret moves to the end, the undo history is cleared, and
+        /// the text becomes the committed value. No edit is reported, as with a web input's value.
         void SetText(core::StringView text)
         {
             if (text == m_model.GetText())
-                return; // a binding writing back what was typed keeps the caret where it is
+                return; // when a binding writes back what was typed, the caret stays where it is
             m_model.SetText(text);
             m_committed = core::String(text);
             Synced();
             m_textChanged.Notify();
         }
-        /// The text (a read a binding records).
+        /// Returns the text. A binding that reads it follows later changes.
         [[nodiscard]] core::StringView GetText() const
         {
             m_textChanged.Track();
             return m_model.GetText();
         }
-        /// The editing model under it (its history, its rules).
+        /// Returns the underlying editing model, which holds the history and the input rules.
         [[nodiscard]] TextEditModel& GetModel() noexcept { return m_model; }
-        /// Its context menu (built on first use).
+        /// Returns the context menu, or null until it is first used.
         [[nodiscard]] Menu* GetContextMenu() const noexcept { return m_contextMenu.Get(); }
 
         // Byte offset of the caret (always on a grapheme boundary).
@@ -87,11 +88,12 @@ export namespace foundation::gui
             CaretMoved();
         }
 
-        /// Each edit, with the text after it (the `input` event).
+        /// Sets the callback for each edit, given the text after it (the `input` event).
         void SetOnTextChanging(core::Function<void(core::StringView)> callback) { m_onChanging = core::Move(callback); }
-        /// A committed value: a submit, or focus leaving with a new one (the `change` event).
+        /// Sets the callback for a committed value: on submit, or when focus leaves with a new value
+        /// (the `change` event).
         void SetOnTextChanged(core::Function<void(core::StringView)> callback) { m_onChanged = core::Move(callback); }
-        /// A submit (the `submit` event), after the value commits.
+        /// Sets the callback for a submit (the `submit` event), run after the value commits.
         void SetOnSubmit(core::Function<void(core::StringView)> callback) { m_onSubmit = core::Move(callback); }
 
         // === Selection ===
@@ -127,8 +129,8 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        /// A read-only one shows, selects and copies its value but takes no edits (CSS's
-        /// :read-only; an editable one is :read-write).
+        /// Sets whether the widget is read-only. A read-only widget shows, selects and copies its
+        /// value but accepts no edits; it matches CSS's :read-only, and an editable one :read-write.
         void SetReadOnly(bool readOnly)
         {
             if (readOnly == m_model.IsReadOnly())
@@ -144,12 +146,13 @@ export namespace foundation::gui
                    (m_placeholderShown ? WidgetStatePlaceholderShown : WidgetStateNone);
         }
 
-        /// The most graphemes it holds (0: no limit); what does not fit is cut.
+        /// Sets the most graphemes the text may hold (0 means no limit); text that does not fit is cut.
         void SetMaxLength(usize graphemes) noexcept { m_model.SetMaxLength(graphemes); }
         [[nodiscard]] usize GetMaxLength() const noexcept { return m_model.GetMaxLength(); }
-        /// What it lets in, typed or pasted.
+        /// Sets the filter for what may be typed or pasted.
         void SetInputFilter(InputFilter filter) { m_model.SetFilter(core::Move(filter)); }
-        /// The filter by name, as markup and sheets give it: "none", "digits" or "hex-digits".
+        /// Sets the filter by name, as markup and style sheets give it: "none", "digits" or
+        /// "hex-digits".
         void SetInputFilterName(const core::String& name)
         {
             const core::StringView n = Trim(name.AsView());
@@ -170,15 +173,15 @@ export namespace foundation::gui
             }
         }
 
-        // An enabled one wants platform text input while focused (the bridge enables the window's
-        // IME accordingly).
+        // An enabled widget wants platform text input while focused; the bridge enables the
+        // window's IME to match.
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled(); }
-        /// A masked field (a password): the platform's IME composes nothing in it.
+        /// Returns true for a masked field (a password), in which the platform's IME composes nothing.
         [[nodiscard]] bool IsTextInputSecret() const override { return IsMasked(); }
 
         // === Appearance ===
-        // Theming: the text colour drives the caret too (so it shows on any background); a
-        // `::caret` / `::selection` part can override either.
+        // Styling: the text colour also colours the caret, so the caret shows on any background. A
+        // `::caret` or `::selection` part can override either.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"caret"));
@@ -195,10 +198,11 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        /// Whether the caret shows now (focused, and in the visible half of its blink).
+        /// Returns whether the caret shows now: focused, and in the visible half of its blink.
         [[nodiscard]] bool IsCaretShown() const noexcept { return IsFocused() && m_caretVisible; }
-        // Advances the caret's blink and the model's clock. A focused one in a GUI drives it
-        // itself, on its root's clock; one in no GUI shows a steady caret unless its owner calls it.
+        // Advances the caret's blink and the model's clock. A focused widget in a GUI calls this
+        // itself on its root's clock; a widget in no GUI shows a steady caret unless its owner
+        // calls it.
         void Update(f64 deltaSeconds)
         {
             m_clock += deltaSeconds;
@@ -214,7 +218,8 @@ export namespace foundation::gui
             }
         }
 
-        /// Where it types (its line, from where a composition starts), for the IME's candidates.
+        /// Returns where typing happens (the current line, from where a composition starts), so the
+        /// IME can place its candidates.
         [[nodiscard]] bool GetTextInputArea(Rect& area, f32& caretX) const override
         {
             const TextLayout& layout = EditLayout();
@@ -234,15 +239,15 @@ export namespace foundation::gui
         {
             SetTabFocusable(true);
             SetKeyContext(core::StringView(u8"textinput"));
-            m_model.SetCaretPlaces(&m_places); // Left and Right across what it shows (E9c)
+            m_model.SetCaretPlaces(&m_places); // Left and Right move across the displayed text
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Top);
             m_hintText.SetAlignment(TextHAlign::Start, TextVAlign::Top);
             {
-                StyleWriteScope defaults(*this); // `text-align` from the start, which a sheet changes
+                StyleWriteScope defaults(*this); // `text-align` defaults to start; a style sheet may change it
                 SetTextAlignment(TextHAlign::Start, TextVAlign::Top);
             }
             m_hintText.SetColor(m_placeholderColor);
-            // Each editing command, by the name the keymap binds, runs on its model.
+            // Register each editing command under the name the keymap binds, running it on the model.
             for (usize i = 0; i < static_cast<usize>(TextEditCommand::Count); ++i)
             {
                 const TextEditCommand command = static_cast<TextEditCommand>(i);
@@ -250,34 +255,38 @@ export namespace foundation::gui
             }
         }
 
-        // === What a widget built on it gives ===
-        /// The layout it edits in (of the shown text).
+        // === Supplied by a widget built on this base ===
+        /// Returns the layout of the displayed text that editing works in.
         [[nodiscard]] virtual const TextLayout& EditLayout() const = 0;
-        /// Where that layout's origin is in the widget (scrolled), for `content`.
+        /// Returns where that layout's origin is in the widget, scrolled, for the content box
+        /// `content`.
         [[nodiscard]] virtual core::Float2 TextOrigin(const Rect& content) const = 0;
-        /// Scrolls by the least that shows the caret.
+        /// Scrolls the least amount that shows the caret.
         virtual void KeepCaretInView() = 0;
-        /// Where its placeholder draws in `content`.
+        /// Returns where the placeholder is drawn within `content`.
         [[nodiscard]] virtual Rect PlaceholderBounds(const Rect& content) const { return content; }
-        /// Where its text goes: its content box, less any part of its own beside the text (a
-        /// number field's arrows).
+        /// Returns where the text goes: the content box, less any part of the widget beside the text
+        /// (such as a number field's arrows).
         [[nodiscard]] virtual Rect EditBounds() const { return GetContentBounds(); }
-        /// Whether it masks its text (a password: a bullet for each character).
+        /// Returns whether the widget masks its text, as a password field does with a bullet per
+        /// character.
         [[nodiscard]] virtual bool IsMasked() const { return false; }
-        /// The text is about to commit (Return, focus leaving): a field that reads it as something
-        /// (a number field's expression) settles it here, SetText making its own the committed value.
+        /// Called when the text is about to commit (on Return, or when focus leaves). A field that
+        /// interprets its text (a number field's expression) settles it here; calling SetText makes
+        /// its own text the committed value.
         virtual void OnCommitting() {}
 
         // === For a widget built on it ===
         [[nodiscard]] const Text& ShownText() const noexcept { return m_text; }
         Text& ShownText() noexcept { return m_text; }
         Text& HintText() noexcept { return m_hintText; }
-        /// The line holding display offset `offset`.
+        /// Returns the line that holds display offset `offset`.
         [[nodiscard]] static LaidOutLine LineAt(const TextLayout& layout, usize offset)
         {
             return layout.Lines.IsEmpty() ? LaidOutLine{} : layout.Lines[layout.LineOf(offset)];
         }
-        /// Where the caret shows: in a composition, at its cursor (in characters).
+        /// Returns the display offset where the caret shows. During a composition it is at the
+        /// composition's cursor, which counts characters.
         [[nodiscard]] usize DisplayCaret() const
         {
             if (!Composing())
@@ -288,8 +297,9 @@ export namespace foundation::gui
                 at = core::Utf8NextBoundary(composition, at);
             return SelectionStart() + at;
         }
-        // The shown text's bytes for a value's offset, and back: a mask a grapheme, or a composition
-        // in place of the selection.
+        // Converts a value offset to a byte offset in the displayed text (and ModelOffset converts
+        // back). With a mask, each grapheme shows as one mask string; during a composition, the
+        // composition replaces the selection.
         [[nodiscard]] usize DisplayOffset(usize offset) const
         {
             if (IsMasked())
@@ -323,7 +333,7 @@ export namespace foundation::gui
             return display - m_composition.Size() + (cut.End - cut.Start);
         }
         [[nodiscard]] bool Composing() const noexcept { return m_composition.Size() != 0 && !IsMasked(); }
-        /// What the model's text shows as, after it changed or its mask did.
+        /// Rebuilds the displayed text from the model's text after the text or the mask changed.
         void Synced()
         {
             if (Composing())
@@ -351,7 +361,7 @@ export namespace foundation::gui
             ShowCaret();
             Invalidate();
         }
-        /// The value commits, and submits (the `submit` event).
+        /// Commits the value, then submits it (the `submit` event).
         void Submit()
         {
             if (!IsTreeEnabled())
@@ -361,8 +371,9 @@ export namespace foundation::gui
                 m_onSubmit(m_model.GetText());
             SendEvent(Event(EventType::Submit, this));
         }
-        // Its own scroll keeps the caret in view, then each scroller round it does (a text area as
-        // tall as its text in a scrolling box), as a browser's do while it is typed in.
+        // Keeps the caret in view: first with the widget's own scroll, then with each scroll
+        // container around it (a text area as tall as its text inside a scrolling box), as browsers
+        // do while typing.
         void ShowCaret()
         {
             KeepCaretInView();
@@ -373,7 +384,8 @@ export namespace foundation::gui
                 if (up->IsScrollContainer())
                     up->ScrollIntoView(*this, at, ScrollAlign::Nearest, ScrollBehavior::Instant);
         }
-        // Its caret, which a scroller round it keeps in view as its content grows.
+        // Returns the caret's area, which a surrounding scroll container keeps in view as the
+        // content grows.
         [[nodiscard]] bool GetFocusArea(Rect& out) const override
         {
             const TextLayout& layout = EditLayout();
@@ -391,7 +403,7 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Its value and placeholder draw in its font, its value and caret in its colour.
+        // The value and the placeholder use the widget's font; the value and the caret use its colour.
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
@@ -400,7 +412,7 @@ export namespace foundation::gui
             m_hintText.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_text.SetDirection(TextDirectionFor());
             m_hintText.SetDirection(TextDirectionFor());
-            // Across, as its `text-align` says; down, as the editor places its lines.
+            // Horizontally, as `text-align` says; vertically, as the editor places its lines.
             m_text.SetAlignment(GetTextAlignH(), m_text.GetVAlign());
             m_hintText.SetAlignment(GetTextAlignH(), m_hintText.GetVAlign());
             m_text.SetColor(GetTextColor());
@@ -409,7 +421,7 @@ export namespace foundation::gui
             m_text.SetLineHeight(GetTextStyle().LineHeightPixels());
             m_hintText.SetLineHeight(GetTextStyle().LineHeightPixels());
             m_caretColor = GetTextColor();
-            // A password's mark: a bullet, or a middle dot where the font has no bullet.
+            // The password mark is a bullet, or a middle dot when the font has no bullet.
             m_mask = core::String(core::StringView(FontDraws(GetFont(), core::StringView(kBullet)) ? kBullet : kMiddleDot));
             if (IsMasked())
                 Synced();
@@ -422,13 +434,14 @@ export namespace foundation::gui
             if (!IsTreeEnabled() || event.Text.Size() == 0)
                 return;
             event.Handled = true;
-            m_composition.Clear(); // a composition commits as this text
+            m_composition.Clear(); // the composition commits as this text
             if (m_model.Insert(event.Text))
                 Edited();
             else
                 Synced();
         }
-        // An IME's composition so far: shown in place of the selection, the caret within it.
+        // Handles the IME's composition so far: it shows in place of the selection, with the caret
+        // inside it.
         void OnComposition(const CompositionEvent& event) override
         {
             if (!IsTreeEnabled() || IsReadOnly() || IsMasked())
@@ -440,8 +453,8 @@ export namespace foundation::gui
             ResetBlink();
         }
 
-        // The editing keys reach it as commands, through the keymap; a key that types (a letter, a
-        // digit, the space bar) is its own, so it neither activates nor moves focus.
+        // The editing keys arrive as commands through the keymap. A key that types (a letter, a
+        // digit, the space bar) is handled here, so it neither activates anything nor moves focus.
         void OnKeyDown(const KeyEvent& event) override
         {
             if (!IsTreeEnabled() || event.Target != this)
@@ -451,7 +464,8 @@ export namespace foundation::gui
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
             if (key == KeyCode::Space || (key >= KeyCode::A && key <= KeyCode::Num9))
                 event.Handled = true;
-            // Capturing Tab (E12), it types a tab (no platform sends Tab as text).
+            // When the widget captures Tab, Tab types a tab character, since no platform sends Tab
+            // as text.
             if (key == KeyCode::Tab && event.Modifiers == 0 && GetTabCaptures() && !IsReadOnly())
             {
                 event.Handled = true;
@@ -461,7 +475,8 @@ export namespace foundation::gui
             }
         }
 
-        // Cut, copy, paste and select all, at the event's place, lit where they would do something.
+        // Opens the context menu at the event's position with cut, copy, paste and select all, each
+        // enabled only when it would do something.
         void OnContextMenu(const MouseEvent& event) override
         {
             event.Handled = true;
@@ -470,7 +485,8 @@ export namespace foundation::gui
                 m_contextMenu = core::MakeRef<Menu>(MemoryAllocator());
                 m_contextMenu->SetAutoWidth(true);
                 TextEditBase* self = this;
-                // Each label translated (gui.cut, ...) where the GUI's tables have it, else English.
+                // Each label is translated (gui.cut, ...) where the GUI's tables have the key,
+                // otherwise English.
                 const auto add = [&](const char8_t* label, const char8_t* key, TextEditCommand command)
                 {
                     MenuItem* item = m_contextMenu->AddItem(core::StringView(label), [self, command] { self->RunEdit(command); });
@@ -489,12 +505,13 @@ export namespace foundation::gui
             m_contextItems[1]->SetEnabled(selected);
             m_contextItems[2]->SetEnabled(!IsReadOnly() && clipboard != nullptr && clipboard->HasText());
             m_contextItems[3]->SetEnabled(m_model.GetText().Size() != 0);
-            // Each shows the keys the GUI binds to its command ("Ctrl+X").
+            // Each item shows the keys the GUI binds to its command ("Ctrl+X").
             static constexpr TextEditCommand kCommands[] = {TextEditCommand::Cut, TextEditCommand::Copy, TextEditCommand::Paste,
                                                             TextEditCommand::SelectAll};
             if (SceneRoot* scene = GetSceneRoot())
             {
-                // The keys bound in the field's own contexts ("textinput"): the ones that work here.
+                // Use the keys bound in the field's own contexts ("textinput"), which are the ones
+                // that work here.
                 const Array<KeyContextLayer> contexts = scene->KeyContextsAt(this);
                 for (usize i = 0; i < m_contextItems.Size(); ++i)
                     m_contextItems[i]->SetShortcut(
@@ -504,33 +521,34 @@ export namespace foundation::gui
             m_contextMenu->Open(*this, root != nullptr ? root->ConvertToNodeSpace(event.Position) : event.Position);
         }
 
-        // A press selects text (E7): a drag from what holds it is not offered.
+        // A press selects text, so a drag is never offered to the nodes that hold the widget.
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
         void OnMouseDown(const MouseEvent& event) override
         {
             RequestFocus();
             event.Handled = true;
-            // Only the primary button places the caret: a right press keeps the selection a context
-            // menu would act on.
+            // Only the primary button places the caret. A right press keeps the selection, which a
+            // context menu would act on.
             if (event.Button != MouseButton::Left)
                 return;
             const bool shift = (event.Modifiers & static_cast<u32>(KeyModShift)) != 0;
             bool upstream = false;
             const usize pos = OffsetAtPoint(ConvertToNodeSpace(event.Position), &upstream);
 
-            // A double press selects the word, a triple everything (the dispatcher counts them).
+            // A double press selects the word and a triple press everything; the dispatcher counts
+            // the presses.
             if (event.ClickCount >= 2 && !shift)
             {
                 if (event.ClickCount == 2 && !IsMasked())
                     m_model.SelectWordAt(pos);
                 else
-                    m_model.SelectAll(); // a password is one word
+                    m_model.SelectAll(); // a password counts as one word
                 m_selecting = false;
                 CaretMoved();
                 return;
             }
             m_model.SetCaret(pos, shift, upstream); // Shift extends from the anchor
-            m_selecting = true;           // begin a drag-select (pointer is captured)
+            m_selecting = true;           // begin a drag-select (the pointer is captured)
             CaretMoved();
         }
 
@@ -556,8 +574,8 @@ export namespace foundation::gui
             ResetBlink();
             if (!m_blinking && GetActionManager() != nullptr)
             {
-                // Blinks while focused: the tick ends itself when focus goes (and goes with the
-                // widget if the widget does).
+                // Blink while focused. The tick ends itself when focus leaves, and is destroyed with
+                // the widget if the widget goes.
                 m_blinking = true;
                 RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [this](core::Duration elapsed)
                 {
@@ -577,11 +595,11 @@ export namespace foundation::gui
             m_selecting = false;
             if (m_composition.Size() != 0)
             {
-                m_composition.Clear(); // an unfinished composition goes with the focus
+                m_composition.Clear(); // an unfinished composition is dropped when focus leaves
                 Synced();
             }
             Commit();
-            KeepCaretInView(); // unfocused: back to the start of its line
+            KeepCaretInView(); // unfocused, the view returns to the start of the line
             Invalidate();
         }
 
@@ -589,8 +607,8 @@ export namespace foundation::gui
         {
             (void)localBounds;
             const Rect content = EditBounds();
-            // What it shows stays inside its padding (the caret's width past the right, so a caret
-            // there shows).
+            // Clip the drawing to the padding box, widened by the caret's width on the right so a
+            // caret at the end still shows.
             ctx.PushClip(Rect{content.x, content.y, content.width + kCaretWidth, content.height});
 
             if (m_model.GetText().Size() == 0 && m_placeholder.Size() > 0 && !Composing())
@@ -601,13 +619,13 @@ export namespace foundation::gui
             {
                 const TextLayout& layout = EditLayout();
                 const core::Float2 origin = TextOrigin(content);
-                // The selection sits behind the text (a composition replaces it).
+                // Draw the selection behind the text, unless a composition replaces it.
                 if (IsFocused() && HasSelection() && !Composing())
                     DrawRange(ctx, layout, origin, DisplayOffset(SelectionStart()), DisplayOffset(SelectionEnd()), false);
                 m_text.DrawLayout(ctx, layout, origin);
                 if (Composing())
                 {
-                    // The composition underlined, as IMEs show text not yet committed.
+                    // Underline the composition, as IMEs show text that is not yet committed.
                     const usize start = DisplayOffset(SelectionStart());
                     DrawRange(ctx, layout, origin, start, start + m_composition.Size(), true);
                 }
@@ -629,8 +647,8 @@ export namespace foundation::gui
         static constexpr f32 kCaretWidth = 1.5f;
 
     private:
-        // A range of the shown text, line by line: the selection behind it, or a composition's
-        // underline.
+        // Draws a range of the displayed text line by line, either as the selection behind the
+        // text or as a composition's underline.
         void DrawRange(DrawContext& ctx, const TextLayout& layout, core::Float2 origin, usize start, usize end, bool underline) const
         {
             for (usize i = 0; i < layout.Lines.Size(); ++i)
@@ -638,12 +656,13 @@ export namespace foundation::gui
                 const LaidOutLine& line = layout.Lines[i];
                 const usize a = core::Max(start, line.Start);
                 const usize b = core::Min(end, line.End);
-                // A range running on past a line that ends at a break takes the break in.
+                // A range that continues past a line ending at a break includes the break.
                 const bool wraps = i + 1 < layout.Lines.Size() && layout.Lines[i + 1].Start == line.End;
                 const bool takesBreak = !wraps && end > line.End && i + 1 < layout.Lines.Size();
                 if (a > b || (a == b && !takesBreak))
                     continue;
-                // In pieces where directions mix (E9c); a break taken in shows past the line's end.
+                // Draw in pieces where text directions mix; an included break shows past the line's
+                // end.
                 layout.RangeOnLine(a, b, i, m_rangeBoxes);
                 if (takesBreak && !underline)
                 {
@@ -661,11 +680,12 @@ export namespace foundation::gui
                 }
             }
         }
-        // Where the caret shows: after the text before it (the model's affinity) unless composing.
+        // Returns whether the caret attaches to the text before it (the model's affinity); never
+        // while composing.
         [[nodiscard]] bool CaretUpstream() const { return !Composing() && m_model.IsCaretUpstream(); }
 
-        // Where carets stand in what it shows: the layout's, offsets mapped through the mask or
-        // the composition.
+        // Caret positions in the displayed text. They come from the layout, with offsets mapped
+        // through the mask or the composition.
         class ShownCaretPlaces : public ITextCaretPlaces
         {
         public:
@@ -675,7 +695,7 @@ export namespace foundation::gui
                 const TextLayout& layout = m_edit.EditLayout();
                 if (layout.GlyphRuns.IsEmpty())
                 {
-                    // Nothing shaped (no font yet): by a grapheme, as the bytes go.
+                    // Nothing is shaped yet (no font), so move one grapheme in byte order.
                     const core::StringView text = m_edit.m_model.GetText();
                     outOffset = step < 0 ? PrevGrapheme(text, offset) : NextGrapheme(text, offset);
                     outUpstream = false;
@@ -709,7 +729,7 @@ export namespace foundation::gui
             else
                 CaretMoved();
         }
-        // An edit the user made: shown, followed, reported.
+        // Handles an edit the user made: updates the display, notifies bindings and sends `input`.
         void Edited()
         {
             Synced();
@@ -719,7 +739,7 @@ export namespace foundation::gui
                 m_onChanging(m_model.GetText());
             SendEvent(Event(EventType::Input, this));
         }
-        // The value commits: reported once for each new value.
+        // Commits the value, reporting `change` once for each new value.
         void Commit()
         {
             OnCommitting();
@@ -731,7 +751,7 @@ export namespace foundation::gui
             SendEvent(Event(EventType::Changed, this));
         }
 
-        // :placeholder-shown follows whether the value is empty under a placeholder.
+        // Keeps :placeholder-shown in step with whether the value is empty and a placeholder is set.
         void SyncPlaceholderShown()
         {
             const bool shown = m_model.GetText().Size() == 0 && m_placeholder.Size() != 0;
@@ -747,7 +767,7 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // The dispatcher's clipboard adapter (may be null: no clipboard configured).
+        // Returns the dispatcher's clipboard adapter, or null when no clipboard is configured.
         [[nodiscard]] IClipboard* Clipboard()
         {
             EventDispatcher* dispatcher = GetEventDispatcher();
@@ -760,14 +780,14 @@ export namespace foundation::gui
             return ModelOffset(EditLayout().OffsetAt(core::Float2{local.x - origin.x, local.y - origin.y}, upstream));
         }
 
-        core::RefPtr<Menu> m_contextMenu;  // cut, copy, paste, select all (its child while open)
-        Array<MenuItem*> m_contextItems;   // non-owning: the menu's
+        core::RefPtr<Menu> m_contextMenu;  // cut, copy, paste, select all; a child of the widget while open
+        Array<MenuItem*> m_contextItems;   // non-owning; the menu owns the items
         TextEditModel m_model;
         core::String m_committed;    // the value last reported as changed
         core::String m_composition;  // an IME's text not yet committed
-        i32 m_compositionCursor = 0; // its caret, in characters
-        Text m_text;                 // what it shows: its value, or its mask
-        Observable m_textChanged; // what bindings reading the text follow
+        i32 m_compositionCursor = 0; // the composition's caret, in characters
+        Text m_text;                 // the displayed text: the value, or its mask
+        Observable m_textChanged; // notifies bindings that read the text
 
         core::String m_placeholder;
         Text m_hintText; // placeholder renderer (shares the widget's font)
@@ -781,7 +801,7 @@ export namespace foundation::gui
 
         bool m_selecting = false; // drag-select in progress (pointer is captured)
         ShownCaretPlaces m_places{*this};
-        mutable Array<core::Float2> m_rangeBoxes; // a line's share of a range, reused each draw
+        mutable Array<core::Float2> m_rangeBoxes; // the boxes of a range on one line, reused each draw
 
         // Blink state (advances via Update()), and the model's clock.
         bool m_caretVisible = true;

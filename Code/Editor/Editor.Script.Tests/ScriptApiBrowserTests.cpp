@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// BuildScriptApiTree: the API browser's tree model over a bound-API surface - alphabetical
-// type + member order, signature-or-name labels, member-name insert text, and the
-// case-insensitive filter (type match keeps the whole type; member match keeps its type row).
+// BuildScriptApiTree: the API browser's tree model over a bound-API surface. It checks the
+// alphabetical type and member order, labels from the signature or else the name, member names
+// as insert text, and the case-insensitive filter (a type match keeps the whole type; a member
+// match keeps its type row).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -50,7 +51,7 @@ TEST_CASE("editor-script: API browser tree - order, labels, insert text")
     const Array<script::ScriptApiType> surface = MakeSurface();
     const ScriptApiTree tree = BuildScriptApiTree(surface, StringView(u8""));
 
-    // Types alphabetical: Math before Zeta.
+    // Types in alphabetical order: Math before Zeta.
     REQUIRE(tree.roots.Size() == 2);
     const ScriptApiTreeNode& math = tree.nodes[static_cast<usize>(tree.roots[0])];
     const ScriptApiTreeNode& zeta = tree.nodes[static_cast<usize>(tree.roots[1])];
@@ -59,7 +60,8 @@ TEST_CASE("editor-script: API browser tree - order, labels, insert text")
     CHECK(math.depth == 0);
     CHECK(math.insertText == u8"Math");
 
-    // Members alphabetical under each type; label = signature, falling back to the name.
+    // Members in alphabetical order under each type; the label is the signature, or the name
+    // when there is none.
     REQUIRE(math.children.Size() == 2);
     CHECK(tree.nodes[static_cast<usize>(math.children[0])].label == u8"Cross(_,_)");
     CHECK(tree.nodes[static_cast<usize>(math.children[1])].label == u8"Dot(_,_)");
@@ -67,7 +69,7 @@ TEST_CASE("editor-script: API browser tree - order, labels, insert text")
     CHECK(tree.nodes[static_cast<usize>(zeta.children[0])].label == u8"alpha"); // no signature
     CHECK(tree.nodes[static_cast<usize>(zeta.children[1])].label == u8"beta(_)");
 
-    // A member row inserts its bare NAME (what a script types), never the signature.
+    // A member row inserts its bare name (what a script types), never the signature.
     const ScriptApiTreeNode& dot = tree.nodes[static_cast<usize>(math.children[1])];
     CHECK(dot.insertText == u8"Dot");
     CHECK(dot.depth == 1);
@@ -77,7 +79,7 @@ TEST_CASE("editor-script: API browser tree - case-insensitive filter")
 {
     const Array<script::ScriptApiType> surface = MakeSurface();
 
-    // A member match keeps its type row with ONLY the matching members.
+    // A member match keeps its type row with only the matching members.
     {
         const ScriptApiTree tree = BuildScriptApiTree(surface, StringView(u8"dot"));
         REQUIRE(tree.roots.Size() == 1);
@@ -87,14 +89,14 @@ TEST_CASE("editor-script: API browser tree - case-insensitive filter")
         CHECK(tree.nodes[static_cast<usize>(math.children[0])].label == u8"Dot(_,_)");
     }
 
-    // A TYPE match keeps the whole type, members untouched.
+    // A type match keeps the whole type with all its members.
     {
         const ScriptApiTree tree = BuildScriptApiTree(surface, StringView(u8"zeta"));
         REQUIRE(tree.roots.Size() == 1);
         CHECK(tree.nodes[static_cast<usize>(tree.roots[0])].children.Size() == 2);
     }
 
-    // No match: empty tree.
+    // No match gives an empty tree.
     {
         const ScriptApiTree tree = BuildScriptApiTree(surface, StringView(u8"nothing"));
         CHECK(tree.roots.Size() == 0);
@@ -104,8 +106,8 @@ TEST_CASE("editor-script: API browser tree - case-insensitive filter")
 
 TEST_CASE("editor-script: API browser tree - editor-only bindings are marked")
 {
-    // A type registered under the "Editor" domain (as every */Editor/* asset module now
-    // does) gets the " [editor]" row marker; insert text stays the bare name.
+    // A type registered under the "Editor" domain (as the editor's asset modules register theirs)
+    // gets the " [editor]" row marker; its insert text stays the bare name.
     struct EditorOnlyThing
     {
     };
@@ -119,7 +121,7 @@ TEST_CASE("editor-script: API browser tree - editor-only bindings are marked")
     marked.typeId = editorType.id;
     surface.PushBack(Move(marked));
     script::ScriptApiType plain;
-    plain.scriptName = String(u8"RuntimeThing"); // typeId 0: no registry identity, no marker
+    plain.scriptName = String(u8"RuntimeThing"); // typeId 0: no registry identity, so no marker
     surface.PushBack(Move(plain));
 
     const ScriptApiTree tree = BuildScriptApiTree(surface, StringView(u8""));

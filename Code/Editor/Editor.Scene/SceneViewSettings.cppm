@@ -3,14 +3,15 @@
 
 // Editor::Scene - :view_settings partition.
 //
-// PER-SCENE view state (not scene DATA): the scene page is the unit of editing context in the
-// multi-scene model, so everything a page toggles is per-page - and its persistence is per-scene
-// too. Kept in the per-project editor settings store (EditorContext::ProjectEditorSettings()) keyed
-// by the scene's guid, mirroring the mesh/material preview prefs. Carries the grid on/off toggle;
-// additional page-scoped viewport toggles (gizmo visibility, snap, ...) are more fields on SceneViewPref.
+// Per-scene view state (not scene data). The scene page is the unit of editing context when several
+// scenes are open, so everything a page toggles is per page, and it persists per scene. It is kept
+// in the per-project editor settings store (EditorContext::ProjectEditorSettings()), keyed by the
+// scene's guid, like the mesh and material preview prefs. It carries the grid and the other
+// overlays, the camera, the selection, the splits and the tool panel's place; more page-scoped
+// viewport toggles become more fields on SceneViewPref.
 //
-// Lives in its own light partition (not the heavy ScenePage.cppm interface) so the RTTI body stays
-// out of that interface's gcm and the section is nameable from tests.
+// It lives in its own light partition, not the heavy ScenePage.cppm interface, so the RTTI body
+// stays out of that interface's compiled module and the section can be named from tests.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +32,8 @@ export namespace editor
     // (grid on, LOD-overlay off) so an absent pref reads as the fresh-page look.
     struct SceneViewPref
     {
-        // The toggles by position (every caller's shape); the v4 camera / selection fields are
-        // set by name, so a partial brace init never trips -Wmissing-field-initializers.
+        // The toggles by position (the shape every caller uses); the version 4 camera and selection
+        // fields are set by name, so a partial brace init never trips -Wmissing-field-initializers.
         SceneViewPref() = default;
         explicit SceneViewPref(Guid sceneId, bool grid = true, bool lod = false,
                                bool colliders = false, bool markers = false, bool fps = false)
@@ -45,8 +46,8 @@ export namespace editor
         bool showGrid = true;
         bool showLodOverlay = false;
         bool showColliders = false; // edit-time physics collider wireframes (v3)
-        bool showMarkers = false;   // the origin cross on every entity (off by default: clutter;
-                                    // the selected entity keeps its own)
+        bool showMarkers = false;   // the origin cross on every entity (off by default to avoid
+                                    // clutter; the selected entity keeps its own)
         bool showFps = false;       // the frame-rate readout in the viewport's top-right corner
         // The editor camera as the page last had it (v4): restored on reopen so a scene comes
         // back where it was left. hasCamera = false until a page has saved one.
@@ -55,28 +56,27 @@ export namespace editor
         f32 cameraYaw = 0.0f;
         f32 cameraPitch = 0.0f;
         f32 cameraFocusDistance = 12.0f;
-        bool cameraOrthographic = false; // added 2026-10-12 (Specs/orthographic-views.md)
+        bool cameraOrthographic = false; // an orthographic projection
         // The entity selection at close (persistent ids; ids no longer in the scene are dropped).
         Array<Guid> selection;
-        // The page's split positions as it last had them (added 2026-10-10): hierarchy | rest,
-        // viewport column | inspector, viewport / bottom dock. hasSplits = false until a page has
-        // saved them, and the page's own defaults stand.
+        // The page's split positions as it last had them: hierarchy against the rest, viewport
+        // column against inspector, and viewport against the bottom dock. hasSplits is false until
+        // a page has saved them, and the page's own defaults stand meanwhile.
         bool hasSplits = false;
         f32 hierarchySplit = 0.2f;
         f32 inspectorSplit = 0.72f;
         f32 bottomDockSplit = 0.72f;
-        // The grid (added 2026-10-10): the plane it lies on (GridPlane: 0 XZ, 1 XY, 2 YZ), and
+        // The grid: the plane it lies on (GridPlane: 0 XZ, 1 XY, 2 YZ), and
         // whether it is drawn as debug lines instead of the shader grid (kept to compare them).
         u8 gridPlane = 0;
         bool gridLines = false;
-        // Where the tool panel was moved to in the viewport (added 2026-10-25, ruling 23): its top
-        // start corner, in pixels from the viewport's; hasToolPanelPlace = false while it sits in
-        // its zone under the chips.
+        // Where the tool panel was moved to in the viewport: its top start corner, in pixels from
+        // the viewport's; hasToolPanelPlace is false while it sits in its zone under the chips.
         bool hasToolPanelPlace = false;
         Float2 toolPanelPlace{};
 
-        // The section's data version gates the keys added after v3 (a keyed reader FAILS the
-        // whole section on a missing key, so a v3 file must not be asked for them).
+        // The section's data version gates the keys added after version 3 (a keyed reader fails the
+        // whole section on a missing key, so a version 3 file must not be asked for them).
         static constexpr u32 kVersionWithOverlaysAndCamera = 4;
 
         void Serialize(ISerializer& ar)
@@ -130,8 +130,8 @@ export namespace editor
         ar.EndObject();
     }
 
-    // The settings section: a flat list of per-scene prefs (linear scan - a project has a handful of
-    // scenes, not thousands).
+    // The settings section: a flat list of per-scene prefs (a linear scan, since a project has a
+    // handful of scenes, not thousands).
     class SceneViewSettings final : public ISerializable
     {
         RTTI_OBJECT(SceneViewSettings, ISerializable)
@@ -146,16 +146,17 @@ export namespace editor
     // Register the section type (call before the app loads the per-project store).
     inline void RegisterSceneViewSettingsType()
     {
-        // v4 (markers / FPS / camera / selection) keeps a v3 legacy reader: a project's saved
-        // prefs from before 2026-09-24 load without the new keys and re-save as v4.
+        // Version 4 (markers, FPS, camera, selection) keeps a version 3 legacy reader, so prefs
+        // saved before those keys load without them and are saved again as version 4.
         KeepLegacyReader(const_cast<TypeInfo&>(SceneViewSettings::StaticType()), 3);
         GlobalTypeRegistry().Register(SceneViewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<SceneViewSettings>();
     }
 
-    // Read a scene's saved view pref; returns `fallback` when the store/scene has no saved pref (a
-    // nil guid = an unsaved scene = edit-live-only). Never mutates the store. The WHOLE pref is
-    // loaded/saved together so toggling one field never resurrects another's default.
+    // Reads a scene's saved view pref; returns `fallback` when the store or the scene has no saved
+    // pref (a nil guid means an unsaved scene, edited live only). Never mutates the store. The
+    // whole pref is loaded and saved together, so toggling one field never brings back another's
+    // default.
     [[nodiscard]] inline SceneViewPref LoadSceneViewPref(settings::Settings* store, const Guid& scene,
                                                          const SceneViewPref& fallback)
     {
@@ -176,9 +177,9 @@ export namespace editor
         return fallback;
     }
 
-    // Upsert a scene's view pref into the store (marks the section changed). Returns false without
-    // touching the store when there is nothing to key by (no store / unsaved scene = nil guid) - the
-    // caller then skips its RequestProjectEditorSettingsSave.
+    // Inserts or updates a scene's view pref in the store (marking the section changed). Returns
+    // false without touching the store when there is nothing to key by (no store, or an unsaved
+    // scene with a nil guid); the caller then skips its RequestProjectEditorSettingsSave.
     inline bool SaveSceneViewPref(settings::Settings* store, const SceneViewPref& pref)
     {
         if (store == nullptr || pref.scene.IsNil())

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Profiler.GUI - the frame strip and the counters' plots on one frame axis (X7 of
-// Specs/editor-gui.md): the axis fitting the source and following it until a zoom or a pan; a
-// column a frame, or the frames sharing a pixel as one showing the longest; the budget's scale;
-// a click choosing a frame, a drag a range, a double click fitting again; the name chosen drawn
-// as its share of each frame; a counter's value each frame.
+// Profiler.GUI - the frame strip and the counter plots on one frame axis. Covers the axis fitting
+// the source and following it until a zoom or a pan; one column per frame, or frames that share a
+// pixel shown as one column with the longest; the budget's scale; a click choosing a frame, a drag
+// choosing a range and a double click fitting again; the chosen name drawn as its share of each
+// frame; and a counter's value in each frame.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -25,8 +25,9 @@ namespace fgui = foundation::gui;
 
 namespace
 {
-    // A strip 528 by 64 and a counter plot under it, both a 128 gutter and a 400 plot, over 40
-    // frames of 10 ms (frame 7 of 30, frame 20 of 50): frame n's column at 128 + 10 n.
+    // A strip 528 by 64 with a counter plot under it, each with a 128 gutter and a 400 plot, over
+    // 40 frames of 10 ms, except frame 7 (30 ms) and frame 20 (50 ms). Frame n's column is at
+    // 128 + 10 n.
     struct Bed
     {
         KnownSource source;
@@ -88,22 +89,22 @@ TEST_CASE("FrameAxis: it fits the source and follows it, until a zoom or a pan; 
     for (int i = 0; i < 10; ++i)
         bed.source.AddFrame(10);
     bed.focus->SourceGrew();
-    CHECK(bed.axis->Count() == 50.0); // fitting: it follows
+    CHECK(bed.axis->Count() == 50.0); // while fitting, the axis follows new frames
 
     bed.axis->ZoomAbout(25.0, 2.0);
     CHECK_FALSE(bed.axis->Fits());
     CHECK(bed.axis->Count() == 25.0);
-    CHECK(bed.axis->First() == doctest::Approx(12.5)); // frame 25 stays halfway
+    CHECK(bed.axis->First() == doctest::Approx(12.5)); // frame 25 stays at the middle
     bed.source.AddFrame(10);
     bed.focus->SourceGrew();
-    CHECK(bed.axis->Count() == 25.0); // not fitting: it stays
+    CHECK(bed.axis->Count() == 25.0); // no longer fitting, so the axis stays put
 
     bed.axis->ZoomAbout(25.0, 1000.0);
     CHECK(bed.axis->Count() == kFrameAxisMinFrames);
     bed.axis->ZoomAbout(25.0, 0.0001);
     CHECK(bed.axis->Count() == 51.0); // never more than every frame
     bed.axis->PanBy(-100.0);
-    CHECK(bed.axis->First() == 0.0); // kept over the frames
+    CHECK(bed.axis->First() == 0.0); // clamped to the frames
 }
 
 TEST_CASE("FrameStrip: a column a frame, or the frames sharing a pixel as one showing the longest")
@@ -116,7 +117,7 @@ TEST_CASE("FrameStrip: a column a frame, or the frames sharing a pixel as one sh
     CHECK(columns[7].x == doctest::Approx(70.0f));
     CHECK(columns[7].width == doctest::Approx(10.0f));
 
-    // Two thousand frames over 400 pixels: five a column; the hitch shows in its column.
+    // Two thousand frames over 400 pixels gives five frames per column; the hitch shows in its column.
     KnownSource many;
     for (u32 n = 0; n < 2000; ++n)
         many.AddFrame(n == 1003 ? 40 : 10);
@@ -138,7 +139,7 @@ TEST_CASE("FrameStrip: the scale is twice the budget, or without one the longest
     bed.strip->GetColumns(columns);
     Array<FrameColumnTimes> times;
     bed.strip->GetColumnTimes(columns.AsSpan(), times);
-    CHECK(bed.strip->ScaleMs(times.AsSpan()) == doctest::Approx(50.0f)); // the 50 ms frame, already round
+    CHECK(bed.strip->ScaleMs(times.AsSpan()) == doctest::Approx(50.0f)); // the 50 ms frame, which is already a round value
     bed.strip->SetBudgetMs(16.0f);
     CHECK(bed.strip->ScaleMs(times.AsSpan()) == doctest::Approx(32.0f));
     bed.strip->SetBudgetMs(0.0f);
@@ -164,7 +165,7 @@ TEST_CASE("FrameStrip: a click chooses a frame, a drag a range, a double click f
     CHECK(bed.focus->Frames().first == 9u);
     CHECK(bed.focus->Frames().last == 12u);
 
-    // The chosen frames' columns say so.
+    // The chosen frames' columns are marked as chosen.
     Array<FrameColumn> columns;
     bed.strip->GetColumns(columns);
     Array<FrameColumnTimes> times;
@@ -172,7 +173,7 @@ TEST_CASE("FrameStrip: a click chooses a frame, a drag a range, a double click f
     CHECK(times[10].chosen);
     CHECK_FALSE(times[13].chosen);
 
-    // The wheel zooms (and stops fitting); a double click fits again.
+    // The wheel zooms and stops the axis fitting; a double click fits again.
     bed.Pause();
     bed.D().InjectMouseWheel(Bed::At(20), Float2{0.0f, 1.0f});
     CHECK_FALSE(bed.axis->Fits());
@@ -214,18 +215,18 @@ TEST_CASE("CounterPlot: a counter's value each frame, the most of a column's; th
     f64 value = 0.0;
     REQUIRE(bed.plot->ColumnValue(column, value));
     CHECK(value == 106.0);
-    bed.plot->SetCounter(5); // no such counter: nothing set
+    bed.plot->SetCounter(5); // there is no such counter, so no frame sets it
     CHECK_FALSE(bed.plot->ColumnValue(column, value));
 
     bed.plot->SetCounter(bed.draws);
     const Float2 over{Bed::At(3).x, 64.0f + 13.0f};
     bed.D().InjectMouseMove(over);
     CHECK(bed.plot->GetTooltipText() == StringView(u8"Draw calls at frame 3: 103"));
-    // A click on the plot chooses as the strip's does.
+    // A click on the plot chooses frames, as a click on the strip does.
     bed.Click(over);
     CHECK(bed.focus->Frames().first == 3u);
 
-    // The mean over the frames chosen, printed after the range.
+    // The mean over the chosen frames is printed after the range.
     FrameRange chosen;
     chosen.first = 3;
     chosen.last = 6;
@@ -249,7 +250,7 @@ TEST_CASE("Profiler.GUI's sheet reaches the parts every view names, a name's hue
     bed.root->AddChild(table.Get());
     bed.root->AddChild(detail.Get());
     fgui::StyleManager styles;
-    const String theme = Format(u8"{}\n{}", fgui::DefaultThemeCSS(), ProfilerSheetCSS()); // its tokens under it, as in the editor
+    const String theme = Format(u8"{}\n{}", fgui::DefaultThemeCSS(), ProfilerSheetCSS()); // the theme's tokens under the profiler sheet, as in the editor
     styles.SetUserAgentSheet(fgui::CSSParser::Parse(theme.AsView()));
     styles.ApplyTree(*bed.root.Get());
     CHECK(bed.strip->GetPartStyle(u8"on-time").HasBackground);
@@ -259,7 +260,7 @@ TEST_CASE("Profiler.GUI's sheet reaches the parts every view names, a name's hue
     CHECK(timeline->GetPartStyle(u8"hatch").HasBackground);
     CHECK(table->GetPartStyle(u8"heading").HasBackground);
     CHECK(detail->GetPartStyle(u8"lit").HasBackground);
-    // A name's hue: each of the eight, on every view.
+    // The name hues: each of the eight is styled on every view.
     for (const char8_t* hue : {u8"hue-0", u8"hue-3", u8"hue-7"})
     {
         CHECK(timeline->GetPartStyle(StringView(hue)).HasBackground);

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Animation.Pipeline - the animation domain's New Asset creators
-// (agent-playtesting-and-asset-creation.md P1): what File > New and asset_create make, with no
-// editor (the source database and the sources folder are all a creation needs).
+// Animation.Pipeline - the animation domain's New Asset creators: what File > New and
+// asset_create make, with no editor (the source database and the sources folder are all a
+// creation needs).
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +34,7 @@ namespace pipeline
         layer.name = String(u8"Base");
         animation::GraphStateData idle;
         idle.name = String(u8"Idle");
-        idle.node.kind = 0; // clip (unassigned - pick in the inspector)
+        idle.node.kind = 0; // clip (unassigned; picked in the inspector)
         layer.states.PushBack(Move(idle));
         layer.defaultState = 0;
         source.layers.PushBack(Move(layer));

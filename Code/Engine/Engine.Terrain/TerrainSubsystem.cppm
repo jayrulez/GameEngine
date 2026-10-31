@@ -3,11 +3,12 @@
 
 // engine.terrain:subsystem - the application-level TerrainSubsystem.
 //
-// Mirrors ParticleSubsystem: owns the dedicated TerrainRenderer and wires it into RenderSubsystem via
-// the generic seam - registers the renderer (-> dispatch id), and per scene registers the
-// TerrainComponentManager as the IRenderDataProvider + hands it the device + id. So NO terrain code
-// lives in RenderSubsystem, and attaching a TerrainComponent is all an app needs. The manager itself
-// is injected into every scene by scene composition (AddTerrainSceneManagers), not here.
+// Shaped like ParticleSubsystem: owns the dedicated TerrainRenderer and wires it into
+// RenderSubsystem through the generic hooks. It registers the renderer (getting a dispatch id) and,
+// per scene, registers the TerrainComponentManager as the IRenderDataProvider and hands it the
+// device and id. So RenderSubsystem holds no terrain code, and attaching a TerrainComponent is all
+// an app needs. The manager itself is injected into every scene by scene composition
+// (AddTerrainSceneManagers), not here.
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +22,7 @@ import foundation.runtime; // Subsystem, Context
 import foundation.scene;   // Scene, ISceneObserver
 import engine.scene;       // SceneSubsystem
 import foundation.render;  // ExtractedScene
-import engine.render;      // RenderSubsystem + the register-renderer/provider seam
+import engine.render;      // RenderSubsystem and its register-renderer/provider hooks
 import :renderer;
 import :components;
 
@@ -47,13 +48,13 @@ export namespace engine::terrain
             }
             mgr->SetRenderContext(m_render->Device(), m_rendererId, m_render->RetireQueue());
             m_render->RegisterProvider(scene, *mgr);
-            m_managers.PushBack(mgr); // tracked for GPU teardown (scene destroy + shutdown)
+            m_managers.PushBack(mgr); // tracked for GPU teardown (scene destroy and shutdown)
         }
 
         void OnDestroying(scene::Scene& scene) override
         {
-            // The scene dies while the device is still alive - free its manager's GPU state
-            // NOW (the manager's own destructor may run after the device is gone).
+            // The scene dies while the device is still alive: free its manager's GPU state now
+            // (the manager's own destructor may run after the device is gone).
             TerrainComponentManager* mgr = scene.GetSystem<TerrainComponentManager>();
             if (mgr == nullptr)
             {
@@ -95,11 +96,11 @@ export namespace engine::terrain
     private:
         void OnPrepareShutdown() override
         {
-            // Scenes still alive at shutdown clear their GPU state HERE, in the prepare phase:
+            // Scenes still alive at shutdown clear their GPU state here, in the prepare phase:
             // every subsystem's PrepareShutdown runs before any Shutdown, so the caches' retired
-            // textures land in the render subsystem's queue before it flushes. (Shutdown runs in
-            // reverse UPDATE order - render, at 1000, shuts down first - so a clear in OnShutdown
-            // retired into an already-flushed queue: the playground's three leaked images.)
+            // textures land in the render subsystem's queue before it flushes. Shutdown runs in
+            // reverse update order (render, at 1000, shuts down first), so a clear in OnShutdown
+            // would retire into an already-flushed queue and leak.
             for (TerrainComponentManager* mgr : m_managers)
             {
                 mgr->ClearGpu();

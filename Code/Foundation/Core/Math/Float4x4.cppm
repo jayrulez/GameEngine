@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Core - :float4x4 partition
-// Float4x4: 4x4 row-major matrix - transforms, projections (Perspective/Ortho/
+// Float4x4: 4x4 row-major matrix: transforms, projections (Perspective/Ortho/
 // LookAt RH), multiply, Transpose/Determinant/Inverse, point/direction xform.
 //
 // Conventions: row-major storage m[row][col];
@@ -99,8 +99,8 @@ export namespace foundation::core
                              {0.0f, 0.0f, 0.0f, 1.0f}}};
         }
 
-        // Right-handed perspective, REVERSE-Z: NDC z in [0, 1] with the NEAR plane at 1 and the
-        // FAR plane at 0 (the engine's one depth convention, see projection:: below). With a
+        // Right-handed perspective, reverse Z: NDC z in [0, 1] with the near plane at 1 and the
+        // far plane at 0 (the engine's one depth convention, see projection:: below). With a
         // float depth buffer this spends the float's precision where a perspective divide
         // starves it (far away): the resolvable depth step grows ~linearly with distance
         // instead of quadratically. Derivation, row-vector, view z negative forward (ze = -d):
@@ -117,7 +117,7 @@ export namespace foundation::core
                              {0.0f, 0.0f, zFar * zRange, 0.0f}}};
         }
 
-        // Right-handed orthographic, REVERSE-Z (near -> 1, far -> 0), same convention as the
+        // Right-handed orthographic, reverse Z (near -> 1, far -> 0), same convention as the
         // perspective builder so shadow cascades, thumbnails and the camera share one depth
         // reading: ndc = (f - d) / (f - n)  ->  z' = ze / (f - n) + f / (f - n).
         [[nodiscard]] static Float4x4 OrthographicRH(f32 width, f32 height, f32 zNear,
@@ -143,11 +143,11 @@ export namespace foundation::core
     };
 
     // ---- The depth convention -------------------------------------------------------------------
-    // ONE convention for every projection the engine builds and every depth it reads: REVERSE-Z.
+    // One convention for every projection the engine builds and every depth it reads: reverse Z.
     // The near plane maps to NDC depth 1, the far plane to 0, a cleared (background) depth is 0,
-    // and "nearer" is the LARGER value. Everything that would otherwise hard-code 0/1 or a
+    // and "nearer" is the larger value. Everything that would otherwise hard-code 0/1 or a
     // compare direction names these instead (rhi::depth:: maps them to compare functions and
-    // rasterizer bias signs; Data/Engine/Shaders/depth.hlsli is the shader-side twin - keep the three
+    // rasterizer bias signs; Data/Engine/Shaders/depth.hlsli is the shader-side twin; keep the three
     // in step). A consumer that reconstructs position through an inverse projection matrix is
     // convention-free and needs none of this.
     namespace projection

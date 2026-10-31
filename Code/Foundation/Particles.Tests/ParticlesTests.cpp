@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.particles - CPU runtime coverage: value types (ranges/curves/emission shapes), the
-// SoA stream container (lazy alloc / typed access / swap-remove / compaction), the modules
-// (initializers + behaviors), and the effect/system Update loop (spawn, integrate, age, die),
-// plus sub-emitters, LOD, and determinism. No GPU/renderer.
+// foundation.particles - CPU runtime coverage: value types (ranges, curves, emission shapes), the
+// SoA stream container (lazy allocation, typed access, swap-remove, compaction), the modules
+// (initializers and behaviors), and the effect and system Update loop (spawn, integrate, age, die),
+// plus sub-emitters, LOD and determinism. No GPU or renderer.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -86,7 +86,7 @@ TEST_CASE("ParticleStreamContainer: core streams present, others lazy, typed acc
                          particles::StreamElementType::Float3);
     CHECK(streams.GetStream(particles::ParticleStreamId::Velocity) == before);
 
-    // Wrong element type -> null (checked cast).
+    // Wrong element type: null (checked cast).
     CHECK(streams.GetCPUStream<f32>(particles::ParticleStreamId::Velocity) == nullptr);
 }
 
@@ -170,7 +170,7 @@ TEST_CASE("ParticleSystem: continuous emission spawns, integrates, and ages out"
     particles::ParticleSystem sys(10000);
     BuildFountain(sys, 100.0f);
 
-    // 0.1s at 100/s -> ~10 particles.
+    // 0.1s at 100/s: about 10 particles.
     sys.Update(0.1f);
     CHECK(sys.AliveCount() >= 9);
     CHECK(sys.AliveCount() <= 11);
@@ -179,7 +179,7 @@ TEST_CASE("ParticleSystem: continuous emission spawns, integrates, and ages out"
     const particles::CPUStream<Float3>* pos = sys.Streams().Positions();
     CHECK((*pos)[0].y > 0.0f);
 
-    // Run well past the 2s lifetime with emission off -> everything dies.
+    // Run well past the 2s lifetime with emission off: everything dies.
     sys.emitter.isEmitting = false;
     for (int i = 0; i < 300; ++i)
     {
@@ -353,7 +353,7 @@ TEST_CASE("Trails: ring buffer fills, caps at maxPoints, and records the current
 {
     particles::ParticleSystem sys(100);
     BuildTrailSystem(sys, /*burst*/ 3, /*maxPoints*/ 4);
-    CHECK_FALSE(sys.trail.IsActive() == false); // enabled + maxPoints>=2
+    CHECK_FALSE(sys.trail.IsActive() == false); // enabled, and maxPoints >= 2
 
     sys.Update(0.1f);
     REQUIRE(sys.AliveCount() == 3);
@@ -390,7 +390,7 @@ TEST_CASE("Trails: recordInterval gates how often points are added")
         slow.Update(0.1f);
     } // 1.0s total
     REQUIRE(slow.AliveCount() == 1);
-    // ~1 initial + ~2 interval points (at 0.5s, 1.0s) -> a handful, not 10.
+    // About 1 initial and 2 interval points (at 0.5s, 1.0s): a handful, not 10.
     CHECK(slow.TrailStates()[0].count <= 4);
     CHECK(slow.TrailStates()[0].count >= 2);
 }
@@ -434,7 +434,7 @@ TEST_CASE("Sub-emitter: parent death spawns into the child system")
 {
     particles::ParticleEffect fx(u8"fireworks");
 
-    // System 0: short-lived rockets (die quickly -> emit OnDeath events).
+    // System 0: short-lived rockets (they die quickly and emit OnDeath events).
     particles::ParticleSystem& rockets = fx.AddSystem(100);
     rockets.AddInitializer<particles::LifetimeInitializer>().lifetime =
         particles::RangeFloat(0.05f, 0.05f);
@@ -460,12 +460,12 @@ TEST_CASE("Sub-emitter: parent death spawns into the child system")
     CHECK(rockets.AliveCount() == 4);
     CHECK(sparks.AliveCount() == 0);
 
-    inst.Update(0.1f); // rockets age out -> death events -> 4 * 10 sparks
+    inst.Update(0.1f); // rockets age out: death events, so 4 * 10 sparks
     CHECK(rockets.AliveCount() == 0);
     CHECK(sparks.AliveCount() == 40);
 }
 
-// ---- new parity+ features ----------------------------------------------------------------------
+// ---- shapes, flipbooks, local space, emission windows, prewarm, collision ----------------------
 
 TEST_CASE("EmissionShape: Circle is a flat XZ disc, Edge is a line on X")
 {
@@ -592,7 +592,7 @@ TEST_CASE("CollisionBehavior: a particle bounces off the ground plane")
     particles::ParticleEffectInstance inst(fx);
     inst.Update(0.016f);
     REQUIRE(sys.AliveCount() == 1);
-    // Drive it below the plane moving downward, then step: expect a push-out + upward bounce.
+    // Drive it below the plane moving downward, then step: expect a push-out and an upward bounce.
     (*sys.Streams().Positions())[0] = Float3{0.0f, -1.0f, 0.0f};
     (*sys.Streams().Velocities())[0] = Float3{0.0f, -2.0f, 0.0f};
     inst.Update(0.016f);
@@ -673,10 +673,10 @@ TEST_CASE("CollisionBehavior: sphere + box obstacles push out and reflect")
     inst.Update(0.016f);
     REQUIRE(sys.AliveCount() == 2);
 
-    // Particle 0: inside the sphere moving toward its centre -> pushed to the surface, velocity reversed.
+    // Particle 0: inside the sphere moving toward its centre: pushed to the surface, velocity reversed.
     (*sys.Streams().Positions())[0] = Float3{0.5f, 0.0f, 0.0f};
     (*sys.Streams().Velocities())[0] = Float3{-1.0f, 0.0f, 0.0f}; // heading inward (toward -x)
-    // Particle 1: just inside the box's top face, falling -> popped up to the top, velocity reversed to +y.
+    // Particle 1: just inside the box's top face, falling: popped up to the top, velocity reversed to +y.
     (*sys.Streams().Positions())[1] =
         Float3{5.0f, 0.5f, 0.0f}; // box y-span [-1,1]; 0.5 nearest the +y face
     (*sys.Streams().Velocities())[1] = Float3{0.0f, -1.0f, 0.0f};
@@ -704,7 +704,7 @@ TEST_CASE("AlphaOverLifetime sets the envelope (no per-frame accumulation)")
 
     a.Update(streams, ctx);
     const f32 first = (*streams.Colors())[0].w;
-    a.Update(streams, ctx); // same t across frames must NOT keep multiplying (the old *= bug -> 0)
+    a.Update(streams, ctx); // the same t across frames must not keep multiplying (a `*=` would collapse it to 0)
     a.Update(streams, ctx);
     CHECK(first == doctest::Approx(0.5f));
     CHECK((*streams.Colors())[0].w == doctest::Approx(first)); // stable, not 0.5^3
@@ -713,9 +713,9 @@ TEST_CASE("AlphaOverLifetime sets the envelope (no per-frame accumulation)")
 TEST_CASE("particle reflection (batch 1): flat/range module types reflect their config")
 {
     using namespace foundation::particles;
-    RegisterParticleModules(); // registers module types + the range value types
+    RegisterParticleModules(); // registers module types and the range value types
 
-    // A flat behavior: scalar + Float3 properties.
+    // A flat behavior: scalar and Float3 properties.
     const TypeInfo& gravity = GravityBehavior::StaticType();
     CHECK(PropertyCount(gravity) == 2u);
     const PropertyInfo* mult = FindProperty(gravity, "multiplier");
@@ -755,7 +755,7 @@ TEST_CASE("particle reflection (batch 2): emission-shape initializers reflect")
     CHECK(Enumerators(*typeProp->type).Size() == 8u);
     CHECK(PropertyCount(TypeOf<EmissionShape>()) == 6u); // type/radius/extents/angle/arc/emitFromShell
 
-    // PositionInitializer exposes its shape as a Nested EmissionShape + a localSpace flag.
+    // PositionInitializer exposes its shape as a Nested EmissionShape and a localSpace flag.
     const TypeInfo& pos = PositionInitializer::StaticType();
     const PropertyInfo* shapeProp = FindProperty(pos, "shape");
     REQUIRE(shapeProp != nullptr);
@@ -786,11 +786,11 @@ TEST_CASE("particle reflection (batch 3): force + collision modules reflect thei
     Instance ai = Instance::From(&a);
     CHECK(GetProperty(*FindProperty(attractor, "strength"), ai).Get<f32>() == doctest::Approx(4.0f));
 
-    // CollisionBehavior: 3 BoundedArray shape lists (their sizes the counts) + 4 response scalars.
+    // CollisionBehavior: 3 BoundedArray shape lists (their sizes the counts) and 4 response scalars.
     const TypeInfo& collision = CollisionBehavior::StaticType();
     CHECK(PropertyCount(collision) == 7u);
     CHECK(FindProperty(collision, "bounce") != nullptr);
-    CHECK(FindProperty(collision, "planes") != nullptr); // now a BoundedArray container
+    CHECK(FindProperty(collision, "planes") != nullptr); // a BoundedArray container
 
     // The collision shape element types reflect as flat value types.
     CHECK(PropertyCount(TypeOf<CollisionPlane>()) == 2u);  // normal/distance
@@ -843,7 +843,7 @@ TEST_CASE("particle reflection (batch 5): a polymorphic module array resolves ea
     RegisterParticleModules();
 
     // A heterogeneous behavior list (the shape ParticleSystem holds): two different concrete
-    // module types must resolve to their OWN reflected property sets via the polymorphic container.
+    // module types must resolve to their own reflected property sets through the polymorphic container.
     Array<RefPtr<ParticleBehavior>> behaviors;
     RefPtr<GravityBehavior> gravity = MakeRef<GravityBehavior>(DefaultAllocator());
     gravity->multiplier = 3.0f;
@@ -883,7 +883,7 @@ TEST_CASE("particle reflection (batch 6): polymorphic add/remove/move + Enumerat
     Instance inst = Instance::From(&behaviors);
 
     // createElement (via the registrant's serialization factory) builds a live element whose
-    // dynamic type reflects + is editable in place.
+    // dynamic type reflects and is editable in place.
     CHECK(ContainerCanCreateElement(c, GravityBehavior::StaticType())); // eligible
     Instance e = ContainerCreateElement(c, inst, 0, GravityBehavior::StaticType());
     REQUIRE(e.Pointer() != nullptr);
@@ -892,7 +892,7 @@ TEST_CASE("particle reflection (batch 6): polymorphic add/remove/move + Enumerat
     CHECK(SetProperty(*FindProperty(*e.Type(), "multiplier"), e, Variant::From(2.0f)).IsOk());
     CHECK(GetProperty(*FindProperty(*e.Type(), "multiplier"), e).Get<f32>() == doctest::Approx(2.0f));
 
-    // The abstract base is not creatable -> not eligible, and create fails cleanly (no insert).
+    // The abstract base is not creatable: not eligible, and create fails cleanly (no insert).
     CHECK_FALSE(ContainerCanCreateElement(c, ParticleBehavior::StaticType()));
     CHECK(ContainerCreateElement(c, inst, 0, ParticleBehavior::StaticType()).Pointer() == nullptr);
     CHECK(behaviors.Size() == 1u);
@@ -918,15 +918,15 @@ TEST_CASE("particle reflection (batch 6): polymorphic add/remove/move + Enumerat
 TEST_CASE("particle reflection (batch 7): a whole effect traverses effect -> system -> module -> value")
 {
     using namespace foundation::particles;
-    RegisterParticleModules(); // also registers the effect/system/emitter value types + systems container
+    RegisterParticleModules(); // also registers the effect, system and emitter value types and the systems container
 
-    // The effect-graph value types are published to the global registry (so the script harvest / the
+    // The effect-graph value types are published to the global registry (so the script harvest and the
     // reachability closure can reach them once a facade returns an effect handle).
     CHECK(GlobalTypeRegistry().FindById(TypeOf<ParticleEffect>().id) != nullptr);
     CHECK(GlobalTypeRegistry().FindById(TypeOf<ParticleSystem>().id) != nullptr);
     CHECK(GlobalTypeRegistry().FindById(TypeOf<ParticleEmitter>().id) != nullptr);
 
-    // Author a live effect: one system, an emitter config, one initializer + one behavior.
+    // Author a live effect: one system, an emitter config, one initializer and one behavior.
     ParticleEffect effect(u8"Sparks");
     ParticleSystem& sys = effect.AddSystem(256);
     sys.name = String(u8"main");
@@ -949,14 +949,14 @@ TEST_CASE("particle reflection (batch 7): a whole effect traverses effect -> sys
     const Instance systemsInst(systemsProp->address(effectInst), systemsProp->type);
     REQUIRE(ContainerSize(sysC, systemsInst) == 1u);
 
-    // Descend into the system by ADDRESS (a UniquePtr element yields no Variant).
+    // Descend into the system by address (a UniquePtr element yields no Variant).
     CHECK(ContainerGetAt(sysC, systemsInst, 0).IsEmpty());
     Instance sys0 = ContainerAddressAt(sysC, systemsInst, 0);
     REQUIRE(sys0.Pointer() != nullptr);
     CHECK(sys0.Type() == &TypeOf<ParticleSystem>());
     CHECK(GetProperty(*FindProperty(*sys0.Type(), "name"), sys0).Get<String>() == String(u8"main"));
 
-    // system.emitter (Nested value) -> spawnRate.
+    // system.emitter (Nested value), then spawnRate.
     const PropertyInfo* emitterProp = FindProperty(*sys0.Type(), "emitter");
     REQUIRE(emitterProp != nullptr);
     CHECK(IsNested(*emitterProp));
@@ -964,7 +964,7 @@ TEST_CASE("particle reflection (batch 7): a whole effect traverses effect -> sys
     CHECK(GetProperty(*FindProperty(*emitterProp->type, "spawnRate"), emitterInst).Get<f32>() ==
           doctest::Approx(42.0f));
 
-    // system.behaviors (polymorphic container) -> concrete GravityBehavior -> multiplier value. The
+    // system.behaviors (polymorphic container), then the concrete GravityBehavior, then its multiplier. The
     // uniform address path descends both the outer UniquePtr container and this RefPtr<Object> one.
     const PropertyInfo* behProp = FindProperty(*sys0.Type(), "behaviors");
     REQUIRE(behProp != nullptr);
@@ -985,9 +985,9 @@ TEST_CASE("particle reflection (batch 7): a whole effect traverses effect -> sys
     CHECK(ContainerAddressAt(*initProp->type->container, initInst, 0).Type() ==
           &PositionInitializer::StaticType());
 
-    // ParticleSystem has no default ctor, so the systems container cannot default-emplace (it needs a
-    // capacity) - the flavor reports that cleanly rather than fabricating a broken system. Reorder /
-    // remove still work.
+    // ParticleSystem has no default constructor, so the systems container cannot default-emplace (it
+    // needs a capacity); the container reports that cleanly rather than fabricating a broken system.
+    // Reorder and remove still work.
     CHECK(ContainerEmplaceDefault(sysC, systemsInst, 1).Pointer() == nullptr);
     CHECK(ContainerSize(sysC, systemsInst) == 1u);
     CHECK(ContainerRemoveAt(sysC, systemsInst, 0).IsOk());
@@ -1111,7 +1111,7 @@ TEST_CASE("ParticleEffectInstance: a sub-emitter spawns from its own system's de
 }
 
 // A world-space system with nothing to place its particles bears them at the emitter, not at the
-// origin or where a dead particle last was (Sedulous bf6a6712).
+// origin or where a dead particle last was.
 TEST_CASE("ParticleSystem: with no position initializer, particles are born at the emitter")
 {
     particles::ParticleEffect effect(u8"unplaced");
@@ -1130,7 +1130,7 @@ TEST_CASE("ParticleSystem: with no position initializer, particles are born at t
     }
 
     // Reset clears the particles, not their slots: the next burst is born where the emitter is
-    // NOW, not where the old ones were.
+    // now, not where the old ones were.
     instance.Reset();
     instance.position = Float3{-50.0f, 0.0f, 3.0f};
     instance.Update(0.016f);

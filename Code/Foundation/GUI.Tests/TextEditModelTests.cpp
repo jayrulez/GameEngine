@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The editing model (E4 of Specs/gui-lab-evolution.md): graphemes and words over UTF-8, each
-// command on multi-byte and combining text, undo folding, the filter and the length limit, read-only
-// and password rules, and the editing keys bound in the text contexts.
+// The editing model: graphemes and words over UTF-8, each command on multi-byte and combining text,
+// undo folding, the filter and the length limit, read-only and password rules, and the editing keys
+// bound in the text contexts.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -132,7 +132,7 @@ TEST_CASE("text edit model: typing replaces the selection; the filter and the li
     CHECK(GraphemeCount(limited.GetText()) == 3u);
     CHECK_FALSE(limited.Insert(u8"x")); // full
     limited.SelectAll();
-    CHECK(limited.Insert(u8"ok")); // a selection's room counts
+    CHECK(limited.Insert(u8"ok")); // the room a selection frees counts
     CHECK(limited.GetText() == SV(u8"ok"));
 }
 
@@ -175,7 +175,7 @@ TEST_CASE("text edit model: read-only takes moves and copies, not edits; a passw
     m.SelectAll();
     CHECK_FALSE(m.Insert(u8"x"));
     CHECK_FALSE(m.Run(TextEditCommand::DeleteBackward));
-    CHECK(m.Run(TextEditCommand::Cut, &clipboard)); // a copy
+    CHECK(m.Run(TextEditCommand::Cut, &clipboard)); // it copies
     CHECK(clipboard.GetText() == SV(u8"fixed"));
     CHECK(m.GetText() == SV(u8"fixed"));
     CHECK(m.Run(TextEditCommand::MoveLeft));
@@ -235,8 +235,8 @@ TEST_CASE("text edit model: up and down keep their column across the text's line
     m.Run(TextEditCommand::MoveUp);
     CHECK(m.GetCaret() == 7u);
     m.Run(TextEditCommand::MoveUp);
-    CHECK(m.GetCaret() == 0u); // past the first line
-    m.Run(TextEditCommand::SelectDown); // the column kept from before
+    CHECK(m.GetCaret() == 0u); // moving up past the first line goes to the start
+    m.Run(TextEditCommand::SelectDown); // keeps the column from before
     CHECK(m.SelectedText() == SV(u8"long line\nab"));
     m.SetCaret(14);
     m.Run(TextEditCommand::MoveLineStart);
@@ -277,7 +277,7 @@ TEST_CASE("text editing keys: bound in the text contexts, multiline keys only in
     CHECK(command == SV(kTextSubmitCommand));
     CHECK(match(SV(u8"enter"), area, command) == KeymapMatch::Matched);
     CHECK(command == TextEditCommandName(TextEditCommand::InsertNewline));
-    CHECK(match(SV(u8"up"), field, command) == KeymapMatch::None); // a field's up is navigation's
+    CHECK(match(SV(u8"up"), field, command) == KeymapMatch::None); // a field leaves Up to navigation
     CHECK(match(SV(u8"up"), area, command) == KeymapMatch::Matched);
     KeyContextLayer elsewhere;
     elsewhere.Declare(SV(u8"menu"));
@@ -290,10 +290,10 @@ TEST_CASE("edit model: typing the filter refuses whole leaves the selection as i
     digits.SetFilter(InputFilter::Digits());
     digits.SetText(core::StringView(u8"12345"));
     digits.Select(TextRange{1, 3});
-    CHECK_FALSE(digits.Insert(core::StringView(u8"ab"))); // letters: none let in
+    CHECK_FALSE(digits.Insert(core::StringView(u8"ab"))); // letters, so none are let in
     CHECK(digits.GetText() == core::StringView(u8"12345"));
     CHECK(digits.GetSelection().Start == 1u);
     CHECK(digits.GetSelection().End == 3u);
-    CHECK(digits.Insert(core::StringView(u8"a9"))); // some let in: they replace it
+    CHECK(digits.Insert(core::StringView(u8"a9"))); // some are let in, and they replace the selection
     CHECK(digits.GetText() == core::StringView(u8"1945"));
 }

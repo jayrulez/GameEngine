@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Gamekit - its elements' reflection: a screen's covering, blocking, pausing and back, which
-// markup and a sheet set, the stack's script surface (push, pop, replace, clear, back, top), and a
-// prompt's action, set and the binding it shows.
+// GUI.Gamekit - reflection for its elements: a screen's covering, blocking, pausing and back
+// properties, which markup and a sheet set; the stack's script surface (push, pop, replace, clear,
+// back, top); and a prompt's action, set and the binding it shows.
 
 module;
 #include "Core/Prelude.h"
@@ -62,7 +62,7 @@ namespace foundation::gui
     {
         builder.AccessorProperty<&Prompt::GetAction, &Prompt::SetAction>("action").PropAttribute("css", core::String(u8"action"));
         builder.AccessorProperty<&Prompt::GetSet, &Prompt::SetSet>("set").PropAttribute("css", core::String(u8"set"));
-        // What a sheet's [binding=...] and [kind=...] read (glyphs are the sheet's).
+        // What a sheet's [binding=...] and [kind=...] read (the glyphs belong to the sheet).
         builder.ComputedProperty<&Prompt::GetBinding>("binding").PropAttribute("css", core::String(u8"binding"));
         builder.ComputedProperty<&Prompt::GetBindingKind>("kind").PropAttribute("css", core::String(u8"kind"));
         builder.Method<&GamekitElementOf<Prompt>, Prompt, Node>("of");

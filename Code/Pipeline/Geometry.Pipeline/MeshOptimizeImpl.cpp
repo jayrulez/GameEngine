@@ -3,15 +3,15 @@
 
 // Pipeline::Geometry - implementation unit for the mesh optimization pass.
 //
-// meshoptimizer is included HERE only - the interface stays clean of the vendored
-// header (the module-interface hygiene rule). The pass:
-//   1. per TRIANGLE submesh: meshopt_optimizeVertexCache then meshopt_optimizeOverdraw
+// meshoptimizer is included here only, so the module interface stays clean of the vendored
+// header. The pass:
+//   1. per triangle submesh: meshopt_optimizeVertexCache then meshopt_optimizeOverdraw
 //      (in place on that submesh's index range; ranges themselves never move);
-//   2. whole mesh: meshopt_optimizeVertexFetchRemap -> remap the vertex blob (compacting
-//      vertices no index references) + rewrite EVERY index (non-triangle ranges too, so
+//   2. whole mesh: meshopt_optimizeVertexFetchRemap, then remap the vertex blob (compacting
+//      vertices no index references) and rewrite every index (non-triangle ranges too, so
 //      shared vertices stay coherent).
-// Everything is a pure reorder: triangle set, winding, submesh ranges, and vertex values
-// are unchanged - rendering output is identical, fetch/cache behavior is better.
+// Everything is a pure reorder: triangle set, winding, submesh ranges and vertex values are
+// unchanged, so rendering output is identical and fetch and cache behaviour is better.
 
 module;
 #include "Core/Prelude.h"
@@ -32,8 +32,8 @@ namespace pipeline
 {
     namespace
     {
-        // GPU-cache ACMR over every triangle range (the number the cook log + tests
-        // watch; 16-entry FIFO is meshoptimizer's recommended modern-GPU model).
+        // GPU-cache ACMR over every triangle range (the number the cook log and tests
+        // watch; a 16-entry FIFO is meshoptimizer's recommended modern-GPU model).
         [[nodiscard]] f32 TriangleAcmr(const StaticMeshSource& source, usize vertexCount)
         {
             f32 weighted = 0.0f;
@@ -61,7 +61,7 @@ namespace pipeline
         constexpr usize kStride = sizeof(StaticMeshVertex);
         const usize vertexCount = source.vertexBlob.Size() / kStride;
         if (vertexCount == 0 || source.indexData.IsEmpty() || source.subStart.IsEmpty() ||
-            source.lodCount > 1) // authored chains win - never regenerate over one
+            source.lodCount > 1) // authored chains win; never regenerate over one
         {
             return 0;
         }
@@ -85,13 +85,13 @@ namespace pipeline
         }
 
         const auto* positions = reinterpret_cast<const float*>(source.vertexBlob.Data());
-        constexpr u32 kMaxGeneratedLevels = 3; // the spec ladder {0.5, 0.25, 0.125} = 3 halvings
+        constexpr u32 kMaxGeneratedLevels = 3; // the ladder {0.5, 0.25, 0.125}: 3 halvings
         const usize submeshCount = source.subStart.Size();
         u32 levelsAdded = 0;
-        // Each level simplifies from the PREVIOUS level's indices (progressive chains -
+        // Each level simplifies from the previous level's indices (a progressive chain is
         // cheaper and more coherent than always re-simplifying LOD 0). Per submesh, border
         // locked so cross-submesh seams cannot crack apart.
-        Array<Array<u32>> previous; // per submesh: the level we simplify FROM
+        Array<Array<u32>> previous; // per submesh: the level we simplify from
         previous.Resize(submeshCount);
         for (usize s = 0; s < submeshCount; ++s)
         {
@@ -109,7 +109,7 @@ namespace pipeline
         for (u32 levelIndex = 0; levelIndex < kMaxGeneratedLevels; ++levelIndex)
         {
             // Simplify every triangle submesh for this level first; commit the level only if
-            // EVERY submesh got acceptably close to its target (a chain is per-mesh, so a
+            // every submesh got acceptably close to its target (a chain is per-mesh, so a
             // level either exists for all submeshes or not at all).
             Array<Array<u32>> level;
             level.Resize(submeshCount);
@@ -135,7 +135,7 @@ namespace pipeline
                     kStride, target, settings.targetError, meshopt_SimplifyLockBorder,
                     &resultError);
                 level[s].Resize(written);
-                // Accept when the simplifier got NEAR the halving target within the error
+                // Accept when the simplifier got near the halving target within the error
                 // bound; stalling (barely below the source count) means quality is exhausted.
                 if (written == 0 || written > (sourceCount * 3) / 4)
                 {
@@ -146,7 +146,7 @@ namespace pipeline
             }
             if (!acceptable || levelTriangles < settings.minTriangles)
             {
-                break; // the chain is as long as quality allows - never padded
+                break; // the chain is as long as quality allows, never padded
             }
             // Commit: append each submesh's range (non-triangle submeshes repeat their
             // LOD-0 range so every level keeps the full submesh table).
@@ -200,7 +200,7 @@ namespace pipeline
             return;
         }
         // Malformed ranges never reach the optimizer: validate every submesh window and
-        // every index BEFORE touching anything (a bad asset cooks as-is, loudly).
+        // every index before touching anything (a bad asset cooks as-is, with a warning).
         for (usize i = 0; i < source.subStart.Size(); ++i)
         {
             const i64 start = source.subStart[i];
@@ -250,7 +250,7 @@ namespace pipeline
         }
 
         // A skinned source whose parallel stream does not match the vertex count is
-        // malformed - refusing beats permuting one stream and not the other.
+        // malformed; refusing beats permuting one stream and not the other.
         if (const auto* skinnedCheck = Cast<SkinnedMeshSource>(&source))
         {
             if (skinnedCheck->skinningBlob.Size() != vertexCount * sizeof(VertexSkinning))
@@ -268,8 +268,8 @@ namespace pipeline
 
         stats.acmrBefore = TriangleAcmr(source, vertexCount);
 
-        // 1+2. Per-triangle-submesh reorder. Positions sit at offset 0 of the 52-byte
-        // vertex; 1.05 = meshoptimizer's recommended overdraw/cache balance.
+        // Steps 1 and 2: per-triangle-submesh reorder. Positions sit at offset 0 of the
+        // 52-byte vertex; 1.05 is meshoptimizer's recommended overdraw and cache balance.
         const auto* positions = reinterpret_cast<const float*>(source.vertexBlob.Data());
         for (usize i = 0; i < source.subStart.Size(); ++i)
         {
@@ -286,7 +286,7 @@ namespace pipeline
                                      vertexCount, kStride, 1.05f);
             ++stats.triangleSubmeshes;
         }
-        // LOD ranges (v3 chains) get the same reorder - each level is its own triangle
+        // LOD ranges get the same reorder: each level is its own triangle
         // range whose primitive type mirrors its LOD-0 submesh.
         const usize submeshCount = source.subStart.Size();
         for (usize i = 0; i < source.lodStart.Size(); ++i)
@@ -306,9 +306,9 @@ namespace pipeline
         }
 
         // 3. Whole-mesh vertex-fetch remap: blob reordered to index order, unused
-        // vertices compacted away, every index rewritten through the remap. A SKINNED
-        // source's parallel skinning stream is per-vertex data and gets the IDENTICAL
-        // permutation - the streams can never diverge.
+        // vertices compacted away, every index rewritten through the remap. A skinned
+        // source's parallel skinning stream is per-vertex data and gets the identical
+        // permutation, so the streams cannot diverge.
         Array<u32> remap;
         remap.Resize(vertexCount);
         const usize uniqueCount = meshopt_optimizeVertexFetchRemap(

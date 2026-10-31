@@ -3,9 +3,9 @@
 
 /// foundation.rhi.webgpu:device - Device over WGPUDevice.
 ///
-/// Handles device/queue lifecycle (creation, loss latch, WaitIdle, fences,
-/// destruction). A resource/pipeline/command factory that WebGPU does not support
-/// returns an HONEST NotSupported - callers get failures, never silent fakes.
+/// Handles device and queue lifecycle (creation, loss latch, WaitIdle, fences,
+/// destruction). A resource, pipeline or command factory that WebGPU does not support
+/// returns NotSupported: callers get failures, never silent fakes.
 
 module;
 #include "Core/Prelude.h"
@@ -49,7 +49,7 @@ export namespace foundation::rhi::webgpu
         {
             type = DeviceType::WebGPU;
             const WGPUQueue queue = m_api->wgpuDeviceGetQueue(m_device);
-            // ONE WebGPU queue, three RHI-typed views of it (see :queue).
+            // One WebGPU queue, three RHI-typed views of it (see :queue).
             m_graphicsQueue.Initialize(api, instance, device, queue, allocator,
                                        QueueType::Graphics, m_bufferRegistry);
             m_computeQueue.Initialize(api, instance, device, queue, allocator,
@@ -60,10 +60,11 @@ export namespace foundation::rhi::webgpu
             m_computeQueue.counters = &m_counters;
             m_transferQueue.counters = &m_counters;
             m_blitHelper.Initialize(api, device);
-            // DEBUG: force the FULL browser shader path on desktop wgpu-native (see
-            // PreferredShaderFormat) - WGSL text AND push-constant emulation. The WGSL cook always
-            // emulates push constants (browsers reject var<push_constant>), so the layout must emulate
-            // too or the emulated @group(N) @binding(0) block mismatches a native-immediate layout.
+            // Debug: force the full browser shader path on desktop wgpu-native (see
+            // PreferredShaderFormat), both WGSL text and push-constant emulation. The WGSL cook
+            // always emulates push constants (browsers reject var<push_constant>), so the layout
+            // must emulate too or the emulated @group(N) @binding(0) block mismatches a
+            // native-immediate layout.
             m_forceWgsl = GetEnvironmentVariable(u8"ENV_WEBGPU_WGSL").HasValue();
             if (m_forceWgsl)
             {
@@ -77,9 +78,9 @@ export namespace foundation::rhi::webgpu
         void MarkLost() { m_lost = true; }
 
         /// Take ownership of the adapter's heap-allocated lost-callback route (the userdata the
-        /// wgpu device-lost callback dereferences on a REAL loss). Freed in Destroy AFTER the
-        /// wgpu device is released and pending callbacks are flushed - see the ordering note
-        /// there. Trivially-destructible blob: freed with the raw allocator, no destructor.
+        /// wgpu device-lost callback dereferences on a real loss). Freed in Destroy after the
+        /// wgpu device is released and pending callbacks are flushed; see the ordering note
+        /// there. A trivially-destructible blob: freed with the raw allocator, no destructor.
         void AdoptLostRoute(void* route) noexcept { m_lostRoute = route; }
 
         /// Set by the adapter: whether the device carries the Immediates feature
@@ -88,7 +89,7 @@ export namespace foundation::rhi::webgpu
 
         /// Force the uniform-buffer push-constant fallback even where immediates exist.
         /// Web always emulates (no immediates in Dawn); this lets desktop tests exercise the
-        /// same path against a real GPU. See WebGpuPipelineLayout / the pass encoders.
+        /// same path against a real GPU. See WebGpuPipelineLayout and the pass encoders.
         void SetForceUniformPushConstants(bool force) { m_forceUniformPushConstants = force; }
 
         /// Whether push constants are emulated as a bound uniform buffer on this device
@@ -102,11 +103,11 @@ export namespace foundation::rhi::webgpu
         [[nodiscard]] WGPUInstance Instance() const { return m_instance; }
         [[nodiscard]] const WebGpuApi& Api() const { return *m_api; }
 
-        // SPIR-V ingestion is a native wgpu-native feature (ShaderSourceSPIRV instance feature); a
-        // browser never exposes it, so there the cook must feed WGSL text instead.
-        // DEBUG override: ENV_WEBGPU_WGSL forces the WGSL path on desktop wgpu-native, so the
-        // desktop --webgpu run exercises the EXACT browser shaders (WGSL/naga-frontend) instead of
-        // SPIR-V ingestion - a faithful, fast repro for web-render bugs. Requires a WGSL shaders.dpak.
+        // SPIR-V ingestion is a native wgpu-native feature (the ShaderSourceSPIRV instance
+        // feature); a browser never exposes it, so there the cook must feed WGSL text instead.
+        // Debug override: ENV_WEBGPU_WGSL forces the WGSL path on desktop wgpu-native, so the
+        // desktop --webgpu run exercises the browser's shaders (WGSL, naga frontend) instead of
+        // SPIR-V ingestion: a fast repro for web-render bugs. Requires a WGSL shaders.dpak.
         [[nodiscard]] ShaderFormat PreferredShaderFormat() const noexcept override
         {
             if (m_forceWgsl)
@@ -116,8 +117,8 @@ export namespace foundation::rhi::webgpu
             return m_api->spirvIngestion ? ShaderFormat::SpirV : ShaderFormat::WGSL;
         }
 
-        // False: WebGPU raster orientation matches Vulkan's for BOTH shader paths, probe-proven in
-        // Render.Backend.Tests. wgpu's runtime SPIR-V frontend applies no clip-space
+        // False: WebGPU raster orientation matches Vulkan's for both shader paths, as the probes in
+        // Render.Backend.Tests show. wgpu's runtime SPIR-V frontend applies no clip-space
         // adjustment, and the WGSL cook passes naga --keep-coordinate-space so the cooked WGSL
         // carries the same convention. No renderer pass needs a Y compensation on this backend.
         [[nodiscard]] bool NeedsClipSpaceYFlip() const noexcept override { return false; }
@@ -166,16 +167,17 @@ export namespace foundation::rhi::webgpu
 
         bool SupportsSampleCount(u32 count) const noexcept override
         {
-            // WebGPU guarantees ONLY {1, 4} for the renderer's color + depth formats. 2x is NOT
-            // guaranteed (it needs TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES, which we do not enable), so
-            // creating a 2-sample texture/pipeline aborts the device - callers must snap 2x to 1x here.
+            // WebGPU guarantees only {1, 4} for the renderer's color and depth formats. 2x is not
+            // guaranteed (it needs TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES, which we do not
+            // enable), so creating a 2-sample texture or pipeline aborts the device; callers must
+            // snap 2x to 1x here.
             return count == 1 || count == 4;
         }
 
         FormatSupport GetFormatSupport(TextureFormat format) override
         {
-            // WebGPU's per-format capabilities are SPEC tables, not driver queries -
-            // encode the classes the renderer asks about.
+            // WebGPU's per-format capabilities are spec tables, not driver queries, so this
+            // encodes the classes the renderer asks about.
             switch (format)
             {
             case TextureFormat::Undefined:
@@ -227,7 +229,7 @@ export namespace foundation::rhi::webgpu
             case TextureFormat::RGBA16Snorm:
                 return FormatSupport::Unsupported;
 
-            // 32-bit float family: renderable + storage, NOT filterable (core).
+            // 32-bit float family: renderable and storage, not filterable (core).
             case TextureFormat::R32Float:
             case TextureFormat::RG32Float:
             case TextureFormat::RGBA32Float:
@@ -256,9 +258,9 @@ export namespace foundation::rhi::webgpu
             case TextureFormat::RGB10A2Uint:
                 return FormatSupport::Texture | FormatSupport::ColorAttachment;
 
-            // Snorm + shared-exponent + packed-float oddballs: sampled/filterable;
-            // RG11B10 additionally renderable via the RG11B10UfloatRenderable
-            // feature on some runtimes - conservatively sampled-only here.
+            // Snorm, shared-exponent and packed-float formats: sampled and filterable.
+            // RG11B10 is also renderable via the RG11B10UfloatRenderable feature on
+            // some runtimes; it is conservatively sampled-only here.
             case TextureFormat::R8Snorm:
             case TextureFormat::RG8Snorm:
             case TextureFormat::RGBA8Snorm:
@@ -274,7 +276,7 @@ export namespace foundation::rhi::webgpu
             }
         }
 
-        // ---- Resource creation (encoders/pipelines still staged - see class comment) ----
+        // ---- Resource creation ----
         Status CreateBuffer(const BufferDesc& bufferDesc, Buffer*& out) override
         {
             const Status status = CreateResource<WebGpuBuffer>(
@@ -347,7 +349,7 @@ export namespace foundation::rhi::webgpu
         }
         Status CreatePipelineCache(const PipelineCacheDesc&, PipelineCache*& out) override
         {
-            // No cache object in WebGPU; a benign empty stand-in keeps callers happy.
+            // No cache object in WebGPU; an empty stand-in serves callers.
             out = m_allocator.New<WebGpuPipelineCache>();
             return ErrorCode::Ok;
         }
@@ -367,7 +369,7 @@ export namespace foundation::rhi::webgpu
         }
         Status CreateCommandPool(QueueType, CommandPool*& out) override
         {
-            // All queue types funnel into the ONE WebGPU queue; pools are bookkeeping.
+            // All queue types funnel into the one WebGPU queue; pools are bookkeeping.
             auto* pool = m_allocator.New<WebGpuCommandPool>();
             pool->Initialize(*m_api, m_device, m_allocator, m_blitHelper);
             pool->counters = &m_counters;
@@ -489,11 +491,11 @@ export namespace foundation::rhi::webgpu
             m_blitHelper.Release();
             m_api->wgpuQueueRelease(m_graphicsQueue.Handle());
             m_api->wgpuDeviceRelease(m_device);
-            // Free the lost-callback route ONLY after the device is released and its pending
+            // Free the lost-callback route only after the device is released and its pending
             // callbacks are delivered: an orderly release fires the lost callback with reason
-            // Destroyed (which never dereferences the route), and a REAL loss queued before this
-            // point is flushed by the pump below - after which no callback can target this
-            // device, so the route cannot be read again.
+            // Destroyed (which never dereferences the route), and a real loss queued before this
+            // point is flushed by the pump below. After that no callback can target this device, so
+            // the route cannot be read again.
             if (m_lostRoute != nullptr)
             {
                 m_api->wgpuInstanceProcessEvents(m_instance);
@@ -506,7 +508,7 @@ export namespace foundation::rhi::webgpu
         }
 
     private:
-        /// Allocate, run the init closure, roll back on failure - the one Create shape.
+        /// Allocate, run the init closure, roll back on failure; every Create* goes through it.
         template <typename TResource, typename TBase, typename TInit>
         Status CreateResource(TBase*& out, TInit&& initialize)
         {

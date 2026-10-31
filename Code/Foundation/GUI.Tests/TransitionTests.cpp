@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - motion (G3 of Specs/vg-and-gui-lab.md): the `transition` and `animation` lists parse; a
-// changed property with a transition moves from what showed toward its new value on the GUI's
-// clock, eased, for any property the sheet sets (opacity, lengths, colours, box shadows,
-// transforms, gradients); without one, or unchanged, nothing moves; a transition retargets from
-// where it is.
+// GUI - motion. The `transition` and `animation` lists parse. A changed property with a transition
+// moves from what showed toward its new value on the GUI's clock, eased, for any property the sheet
+// sets (opacity, lengths, colours, box shadows, transforms, gradients). Without a transition, or
+// without a change, nothing moves. A transition retargets from where it is.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -82,8 +81,8 @@ TEST_CASE("transition: opacity moves on the GUI's clock, linearly when asked")
 
 TEST_CASE("transition: a property set by no rule before moves from its initial value, and back to it when no rule sets it any more")
 {
-    // Only the class sets them: put on, opacity moves from 1 (its initial value) to 0, as CSS's
-    // does; taken off, it goes back to 1 and the transform to none.
+    // Only the class sets them. When the class is added, opacity moves from 1 (its initial value)
+    // to 0, as in CSS; when it is removed, opacity goes back to 1 and the transform to none.
     Bed bed(u8"box { transition: opacity 0.5s linear, transform 0.5s linear; } box.entering { opacity: 0; transform: translate(0, 8px); }");
     bed.Toggle(u8"entering");
     CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f)); // from its initial value, not snapping
@@ -149,7 +148,7 @@ TEST_CASE("transition: a delay holds the old value; a change mid-way retargets f
     CHECK(bed.widget->GetSize().x == doctest::Approx(100.0f)); // still in the delay
     bed.Advance(0.75);                                          // 0.5 s into the move
     CHECK(bed.widget->GetSize().x == doctest::Approx(200.0f));
-    bed.Toggle(u8"wide"); // back, from 200, after its own delay
+    bed.Toggle(u8"wide"); // back, from 200, after the delay of its own rule
     bed.Advance(0.5);
     CHECK(bed.widget->GetSize().x == doctest::Approx(200.0f));
     bed.Advance(0.5);
@@ -182,7 +181,7 @@ TEST_CASE("transition: a widget destroyed mid-move ends its animation, which nev
     REQUIRE(bed.root->GetActionManager()->Count() == 1);
     bed.styles.Forget(bed.widget.Get());
     bed.root->RemoveChild(bed.widget.Get());
-    bed.widget = core::RefPtr<UIWidget>{}; // destroyed: the animation held it weakly
+    bed.widget = core::RefPtr<UIWidget>{}; // destroyed; the animation held it weakly
     bed.Advance(0.25);
     CHECK(bed.root->GetActionManager()->IsEmpty());
 }
@@ -197,7 +196,7 @@ TEST_CASE("transition: transform lists of different functions move through their
     b.Transforms = rotate;
     StyleInterpolationContext ctx;
     ctx.BoxSize = core::Float2{100.0f, 50.0f};
-    // Halfway: half the translation, half the turn, as one matrix.
+    // Halfway gives half the translation and half the turn, as one matrix.
     const StyleValue half = InterpolateStyleValue(a, b, 0.5f, &ctx);
     REQUIRE(half.Transforms.Size() == 1u);
     CHECK(half.Transforms[0].Kind == TransformKind::Matrix);
@@ -217,7 +216,7 @@ TEST_CASE("transition: transform lists of different functions move through their
     CHECK(turned.a == doctest::Approx(-1.0f)); // 180deg
     CHECK(turned.b == doctest::Approx(0.0f).epsilon(1e-4));
 
-    // A skew and a scale survive the decomposition (a matrix's own ends are reproduced).
+    // A skew and a scale survive the decomposition, so a matrix's own ends are reproduced.
     a.Transforms = ParseTransforms(SV(u8"skewX(30deg) scale(2, 3)")).Value();
     b.Transforms = ParseTransforms(SV(u8"rotate(10deg)")).Value();
     const Transform2D start = ComposeTransforms(InterpolateStyleValue(a, b, 0.0f, &ctx).Transforms, ctx.BoxSize);
@@ -246,7 +245,7 @@ TEST_CASE("transition: lengths in different units move in pixels; a percentage a
 
 TEST_CASE("transition: the longhands cascade on their own, shorter lists repeating")
 {
-    // The shorthand sets all four; a later longhand overrides one; a one-item list repeats.
+    // The shorthand sets all four; a later longhand overrides one, and a one-item list repeats.
     Bed bed(u8"box { opacity: 1; width: 100; transition: opacity 4s ease; } "
             u8"box.fast { transition-property: opacity, width; transition-duration: 1s; transition-timing-function: linear; } "
             u8"box.fast.on { opacity: 0; width: 200; }");
@@ -283,7 +282,8 @@ TEST_CASE("style cache: destroyed widgets' entries do not pile up, nor pass to a
     StyleManager styles;
     styles.SetStyleSheet(CSSParser::Parse(SV(u8"box { opacity: 0.3; } box.glow { animation: glow 1s linear; } "
                                                  u8"@keyframes glow { from { opacity: 0; } to { opacity: 1; } }")));
-    // Churn: rows made, styled and destroyed, as a list rebuilding them does, nobody calling Forget.
+    // Churn: rows are made, styled and destroyed, as a list rebuilding them does, with nobody
+    // calling Forget.
     for (int i = 0; i < 2000; ++i)
     {
         core::RefPtr<UIWidget> row = core::MakeRef<UIWidget>(core::DefaultAllocator());
@@ -293,9 +293,10 @@ TEST_CASE("style cache: destroyed widgets' entries do not pile up, nor pass to a
         root->RemoveChild(row.Get());
     }
     styles.ApplyTree(*root);
-    CHECK(styles.CachedWidgetCount() < 600u); // swept as they grew, not one per row ever made
+    CHECK(styles.CachedWidgetCount() < 600u); // swept as the cache grew, not one entry per row ever made
 
-    // A widget at a destroyed one's address: its own style, and its own animation from the start.
+    // A widget made at a destroyed widget's address gets its own style, and its own animation
+    // from the start.
     const void* address = nullptr;
     {
         core::RefPtr<UIWidget> first = core::MakeRef<UIWidget>(core::DefaultAllocator());
@@ -319,7 +320,7 @@ TEST_CASE("style cache: destroyed widgets' entries do not pile up, nor pass to a
         root->AddChild(next.Get());
         styles.ApplyTree(*root);
         root->GetContext().Update(core::Duration::FromSeconds(0.5));
-        CHECK(next->GetAlpha() == doctest::Approx(0.5f)); // half way through its own run (not the 0.3 at rest)
+        CHECK(next->GetAlpha() == doctest::Approx(0.5f)); // half way through its own run, not the 0.3 at rest
         root->RemoveChild(next.Get());
     }
     if (!reused)

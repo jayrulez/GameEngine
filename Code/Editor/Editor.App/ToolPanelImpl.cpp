@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - implementation unit for the `editor.app:tool_panel` partition (panel registry +
-// the active-tool -> panel mount controller).
+// Editor::App - implementation unit for the `editor.app:tool_panel` partition (the panel registry
+// and the controller that mounts the active tool's panel).
 
 module;
 #include "Core/Prelude.h"

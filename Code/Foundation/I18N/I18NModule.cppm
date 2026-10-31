@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.i18n - text in several languages (Documentation/Specs/i18n.md).
+// foundation.i18n - text in several languages.
 
 module;
 #include "Core/Prelude.h"

@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// A mesh within a model containing vertex and index data.
-/// Ported from Sedulous.Models/ModelMesh.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -169,7 +168,7 @@ export namespace foundation::model
 
         /// Converts a non-skinned mesh into a skinned one by adding uniform bone weighting.
         /// All vertices are assigned to a single joint with weight 1.0.
-        /// Expands vertex buffer by 24 bytes/vertex (UShort4 joints + Float4 weights).
+        /// Expands the vertex buffer by 24 bytes per vertex (UShort4 joints and Float4 weights).
         void addUniformSkinning(i32 jointIndex)
         {
             // Skip if mesh already has joint data.

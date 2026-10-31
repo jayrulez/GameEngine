@@ -34,8 +34,8 @@ namespace editor
             return static_cast<TerrainVegetationComponentManager*>(base);
         }
 
-        // The heightfield under a vegetation component: its entity's terrain, else the nearest
-        // ancestor's (the manager's rule).
+        // The heightfield under a vegetation component: its entity's terrain, or else the nearest
+        // ancestor's, the same rule the manager uses.
         [[nodiscard]] hf::Heightfield* HeightfieldFor(scene::Scene& scene, scene::EntityHandle owner,
                                                       scene::EntityHandle& terrainEntity)
         {

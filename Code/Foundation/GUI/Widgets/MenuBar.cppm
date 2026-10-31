@@ -3,20 +3,20 @@
 
 // GUI - :menu_bar partition
 //
-// MenuBar: a horizontal strip of buttons, each opening a Menu below it - the classic
-// application menu bar. Modeled on eepp's UIMenuBar (role only). Clicking a button opens its menu,
-// a popup of the button (E5); a press on the button again, outside the menu, closes it without
-// reopening, as the popup stack consumes it. While a menu is open, hovering a different button
-// switches to it: opening that menu closes the other (it does not hold the new one's button), and
-// the closed menu's notice clears the bar's state.
+// MenuBar: the classic application menu bar, a horizontal strip of buttons that each open a Menu
+// below them. Clicking a button opens its menu as a popup of the button. Pressing the button
+// again, which is outside the menu, closes the menu without reopening it, because the popup stack
+// consumes that press. While a menu is open, hovering another button switches to its menu.
+// Opening the new menu closes the old one (the old menu does not contain the new button), and the
+// old menu's close notice clears the bar's open-menu state.
 //
-// The keyboard and the pad (E5): F10 (the `menu.enter-bar` command) focuses the bar's first
-// button; Down, Return, Space or a pad's South on a button opens its menu with its first item lit;
-// Left and Right move between the buttons, and between the menus while one is open (a submenu's
-// item takes Right first, and a submenu Left); Escape closes the menu, focus going back to its
-// button.
+// Keyboard and gamepad: F10 (the `menu.enter-bar` command) focuses the first button. Down,
+// Return, Space or the pad's South button on a button opens its menu with the first item lit.
+// Left and Right move between the buttons, or between the menus while one is open; a submenu item
+// handles Right first, and a submenu handles Left first. Escape closes the menu and focus returns
+// to its button.
 //
-// In markup its children are its menus, each `<Menu text="File">` a button.
+// In markup the bar's children are its menus, and each `<Menu text="File">` gets a button.
 
 module;
 #include "Core/Prelude.h"
@@ -46,9 +46,9 @@ export namespace foundation::gui
         MenuBar()
         {
             SetTag(core::StringView(u8"menubar"));
-            SetBox(FilledBox(m_barColor)); // its own face, which a sheet's (a theme's) replaces
-            // Its keys are bindings in the menu key context (E12): Left and Right from a button or
-            // an open menu (which passes them on here) move along the bar, Down opens a button's.
+            SetBox(FilledBox(m_barColor)); // the default face; a style sheet's box replaces it
+            // The bar's keys are bindings in the menu key context. Left and Right, from a button or
+            // from an open menu that passes them on, move along the bar; Down opens a button's menu.
             SetKeyContext(core::StringView(kMenuKeyContext));
             MenuBar* self = this;
             (void)OnCommand(core::StringView(kMenuLeftCommand), [self](CommandEvent&) { self->Along(false); });
@@ -60,7 +60,7 @@ export namespace foundation::gui
                             });
         }
 
-        /// F10: its first button takes focus.
+        /// Handles F10 by focusing the first button.
         bool EnterFromKeyboard() override
         {
             if (m_entries.IsEmpty() || !IsTreeVisible() || !IsTreeEnabled())
@@ -69,8 +69,9 @@ export namespace foundation::gui
             return true;
         }
 
-        /// Its height and each button's padding either side of its text: a sheet sets them as
-        /// `bar-height` and `item-padding` (an editor's compact bar, a game's large one).
+        /// The bar's height, and each button's padding on either side of its text. A style sheet
+        /// sets them as `bar-height` and `item-padding`, for example for an editor's compact bar
+        /// or a game's large one.
         [[nodiscard]] f32 GetBarHeight() const noexcept { return m_barHeight; }
         [[nodiscard]] f32 GetItemPadding() const noexcept { return m_hpad; }
         void SetBarHeight(f32 height)
@@ -84,16 +85,16 @@ export namespace foundation::gui
             Relayout();
         }
 
-        // Add a top-level menu with its button label; returns the (empty) Menu to populate.
+        // Adds a top-level menu under a button labelled `text`, and returns the empty Menu to fill.
         Menu* AddMenu(core::StringView text) { return AdoptMenu(core::MakeRef<Menu>(MemoryAllocator()), text); }
-        /// Takes `menu` (made elsewhere: markup's) under a new button titled `text`.
+        /// Adds `menu`, made elsewhere (by markup, say), under a new button titled `text`.
         Menu* AdoptMenu(core::RefPtr<Menu> menu, core::StringView text)
         {
             auto button = core::MakeRef<Button>(MemoryAllocator());
             button->SetText(text);
             ShareTextStyle(*button, false);
             button->AddClass(
-                core::StringView(u8"menubutton")); // flat bar styling (class beats the button tag)
+                core::StringView(u8"menubutton")); // flat bar styling; the class rule outranks the button tag's
             ShareTextStyle(*menu, false);
 
             Button* rawButton = button.Get();
@@ -111,7 +112,8 @@ export namespace foundation::gui
             return rawMenu;
         }
 
-        /// Markup's children are its menus (each taken as it arrives).
+        /// Returns the host for markup's children. They are the bar's menus, and each is adopted as
+        /// it arrives.
         [[nodiscard]] Node* GetChildHost() override
         {
             if (!m_markupHost)
@@ -131,8 +133,8 @@ export namespace foundation::gui
             return m_markupHost.Get();
         }
 
-        /// Its menus, none (an owner that builds the bar from a registry builds it again): an open
-        /// one closes first.
+        /// Removes all menus, closing an open one first. An owner that builds the bar from a
+        /// registry calls this before building it again.
         void ClearMenus()
         {
             if (m_current != nullptr)
@@ -157,7 +159,7 @@ export namespace foundation::gui
         }
 
     protected:
-        // Its buttons sit where Relayout puts them, left to right; right to left, mirrored (E9b).
+        // The buttons sit where Relayout puts them, left to right, mirrored in right-to-left layouts.
         void OnLayout() override
         {
             LayoutChildren();
@@ -167,7 +169,7 @@ export namespace foundation::gui
                 e.button->SetPosition(core::Float2{GetSize().x - e.button->GetPosition().x - e.button->GetSize().x, e.button->GetPosition().y});
         }
 
-        // Its buttons and their menus take its font.
+        // The buttons and their menus use the bar's font.
         void OnTextStyleChange() override
         {
             for (BarEntry& e : m_entries)
@@ -185,13 +187,13 @@ export namespace foundation::gui
         void ToggleMenu(Button* button, Menu* menu)
         {
             if (m_current == menu)
-                menu->Close(); // Close -> OnMenuClosed clears the bar state
+                menu->Close(); // OnMenuClosed clears the bar's state
             else
                 OpenMenu(button, menu);
         }
         void HoverMenu(Button* button, Menu* menu)
         {
-            // Only switch when a menu is already open (a bare hover must not drop a menu).
+            // Switch only when a menu is already open; a hover alone must not open a menu.
             if (m_current != nullptr && m_current != menu)
                 OpenMenu(button, menu);
         }
@@ -202,14 +204,14 @@ export namespace foundation::gui
             menu->OpenBelow(*button, *button);
             if (fromKeys)
                 menu->FocusFirstItem();
-            // Opening closed any previous menu (its OnMenuClosed cleared m_current + deselected
+            // Opening closed any previous menu (its OnMenuClosed cleared m_current and deselected
             // its button); now record the new one.
             m_current = menu;
             m_currentButton = button;
             button->AddClass(core::StringView(u8"selected"));
         }
-        // Left or Right along the bar as it runs (right to left, Left goes on to the next menu,
-        // E9b): an open menu moves to the next, a focused button to the next button.
+        // Moves along the bar in its reading direction (in right to left, Left goes to the next
+        // menu). With a menu open, the next menu opens; otherwise the next button takes focus.
         void Along(bool right)
         {
             const i32 at = FocusedEntry();
@@ -221,13 +223,13 @@ export namespace foundation::gui
             BarEntry& e = m_entries[static_cast<usize>(next)];
             if (m_current != nullptr)
             {
-                OpenMenu(e.button, e.menu.Get()); // the open one closes: it does not hold this button
+                OpenMenu(e.button, e.menu.Get()); // closes the open menu, which does not contain this button
                 e.menu->FocusFirstItem();
             }
             else
                 e.button->RequestFocus();
         }
-        // Down on a focused button with no menu open opens its menu and goes in.
+        // Down on a focused button with no menu open opens its menu and focuses the first item.
         bool OpenFromButton()
         {
             const i32 at = FocusedEntry();
@@ -238,7 +240,7 @@ export namespace foundation::gui
             e.menu->FocusFirstItem();
             return true;
         }
-        // The entry whose button holds the focus (its open menu too), or -1.
+        // Returns the entry whose button has focus within it (including its open menu), or -1.
         [[nodiscard]] i32 FocusedEntry() const
         {
             for (usize i = 0; i < m_entries.Size(); ++i)
@@ -267,24 +269,24 @@ export namespace foundation::gui
                 e.button->SetSize(core::Float2{w, m_barHeight});
                 x += w;
             }
-            // Within a device pixel of its size it is that size: the layout snaps its box to the
-            // device grid, and sizing it back to the fraction asked for a layout again, every frame.
+            // Treat a size within a device pixel as unchanged. The layout snaps the box to the
+            // device pixel grid, so setting it back to the fractional size would request another
+            // layout every frame.
             const f32 pixel = 1.0f / core::Max(GetPixelScale(), 0.01f);
             if (core::Abs(GetSize().x - x) >= pixel || core::Abs(GetSize().y - m_barHeight) >= pixel)
                 SetSize(core::Float2{x, m_barHeight});
         }
 
-        // Top-left of `node` in root-local space (sum of positions up to, but excluding, the
-        // root). Assumes identity scale/rotation on the path, matching the menu popup model.
+        // A button on the bar and the menu it opens.
         struct BarEntry
         {
             Button* button;
             core::RefPtr<Menu> menu;
         };
         Array<BarEntry> m_entries;
-        core::RefPtr<Node> m_markupHost; // where markup's menus land, then taken in
+        core::RefPtr<Node> m_markupHost; // receives markup's menus before they are adopted
         Menu* m_current = nullptr;         // the open menu (non-owning)
-        Button* m_currentButton = nullptr; // its button (non-owning)
+        Button* m_currentButton = nullptr; // the open menu's button (non-owning)
         f32 m_barHeight = 28.0f;
         f32 m_hpad = 12.0f;
         Color m_barColor{0.13f, 0.15f, 0.18f, 1.0f};

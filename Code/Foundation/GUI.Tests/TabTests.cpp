@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - tabs (E6): a TabBar of real tab elements and a TabView pairing it with pages. Selection by
-// the press, the keys and Ctrl+Tab; closing as a request with a display policy; reordering by a
-// drag across a neighbour's midpoint; an overflowing strip that scrolls and lists every tab (or
-// always lists them), and a part that closes them all; pages kept alive, or built on first show;
-// markup's pages.
+// GUI - tabs: a TabBar of real tab elements, and a TabView that pairs it with pages. Covers
+// selection by the press, the keys and Ctrl+Tab; closing as a request, with a policy for when the
+// close part shows; reordering by a drag across a neighbour's midpoint; an overflowing strip that
+// scrolls and lists every tab (or always lists them), and a part that closes them all; pages kept
+// alive or built on first show; and pages from markup.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -29,7 +29,7 @@ namespace
         return root;
     }
 
-    // Tabs of a known width (the tests have no font to size their text).
+    // Adds a tab of a known width, since the tests have no font to size its text.
     Tab* AddSizedTab(TabBar& bar, const char8_t* text, float width = 80.0f)
     {
         Tab* tab = bar.AddTab(core::StringView(text));
@@ -86,8 +86,8 @@ TEST_CASE("tabs: the first tab is selected; a press selects, reporting change, w
 
     bar->SetSelectedIndex(2);
     CHECK(bar->GetSelectedIndex() == 2);
-    CHECK(changes == 1); // code's selection: no change event
-    CHECK(anyChange == 2); // but what shows a page follows both
+    CHECK(changes == 1); // a selection from code fires no change event
+    CHECK(anyChange == 2); // but what shows the page follows both
 }
 
 TEST_CASE("tabs: the arrows, Home and End move along the strip; Ctrl+Tab and Ctrl+Shift+Tab cycle round it")
@@ -109,13 +109,13 @@ TEST_CASE("tabs: the arrows, Home and End move along the strip; Ctrl+Tab and Ctr
     CHECK(bar->GetSelectedIndex() == 3);
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Home));
     CHECK(bar->GetSelectedIndex() == 0);
-    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Left)); // at the start the arrow is navigation's
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Left)); // at the start, the arrow is left to navigation
     CHECK(bar->GetSelectedIndex() == 0);
 
-    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl | KeyModShift); // back, round to the last
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl | KeyModShift); // backwards, round to the last
     CHECK(bar->GetSelectedIndex() == 3);
     CHECK(bar->GetTab(3)->IsFocused());
-    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl); // on, round to the first
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl); // forwards, round to the first
     CHECK(bar->GetSelectedIndex() == 0);
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown), KeyModCtrl);
     CHECK(bar->GetSelectedIndex() == 1);
@@ -130,7 +130,7 @@ TEST_CASE("tabs: the close display policy shows the close part on never, the sel
     Tab* b = AddSizedTab(*bar, u8"B");
     (void)root->UpdateLayout();
 
-    CHECK_FALSE(a->GetClosePart()->IsDisplayed()); // never, by default: no room for it either
+    CHECK_FALSE(a->GetClosePart()->IsDisplayed()); // never shown by default, and no room is kept for it
     bar->SetCloseDisplay(TabCloseDisplay::Selected);
     CHECK(a->GetClosePart()->IsDisplayed());
     CHECK(a->GetClosePart()->IsVisible());
@@ -176,7 +176,7 @@ TEST_CASE("tabs: closing is a request: tabclose is reported, and the tab goes un
         ++requests;
         asked = static_cast<const TabEvent&>(e).Index;
         if (keep)
-            e.Handled = true; // taken: the tab stays (an unsaved document asks first)
+            e.Handled = true; // handled, so the tab stays (as an unsaved document asks first)
     });
     core::i32 removed = 0;
     bar->SetOnTabRemoved([&](Tab&) { ++removed; });
@@ -193,11 +193,11 @@ TEST_CASE("tabs: closing is a request: tabclose is reported, and the tab goes un
     CHECK(requests == 2);
     CHECK(bar->GetTabCount() == 2);
     CHECK(removed == 1);
-    // The selected tab went: the one after it takes its place.
+    // The selected tab closed, so the one after it takes its place.
     CHECK(bar->GetSelectedIndex() == 1);
     CHECK(bar->GetSelectedTab()->GetText() == core::StringView(u8"C"));
 
-    // A middle click closes too; a tab not closable ignores both.
+    // A middle click closes a tab too; a tab that is not closable ignores both.
     Tab* a = bar->GetTab(0);
     a->SetClosable(false);
     (void)root->UpdateLayout();
@@ -227,7 +227,7 @@ TEST_CASE("tabs: reorderable, a tab dragged across a neighbour's midpoint change
     EventDispatcher& d = *root->GetEventDispatcher();
     const core::Float2 start = CentreOf(*a);
 
-    // Not reorderable: a drag moves nothing.
+    // When not reorderable, a drag moves nothing.
     d.InjectMouseDown(start, MouseButton::Left);
     d.InjectMouseMove(core::Float2{start.x + 100.0f, start.y});
     d.InjectMouseUp(core::Float2{start.x + 100.0f, start.y}, MouseButton::Left);
@@ -246,7 +246,7 @@ TEST_CASE("tabs: reorderable, a tab dragged across a neighbour's midpoint change
     d.InjectMouseMove(core::Float2{start.x + 180.0f, start.y}); // past C's
     CHECK(bar->IndexOf(a) == 2);
     (void)root->UpdateLayout();
-    d.InjectMouseMove(core::Float2{start.x + 60.0f, start.y}); // back past C's again (now before it)
+    d.InjectMouseMove(core::Float2{start.x + 60.0f, start.y}); // back past C's midpoint again, so now before C
     CHECK(bar->IndexOf(a) == 1);
     d.InjectMouseUp(core::Float2{start.x + 60.0f, start.y}, MouseButton::Left);
     CHECK_FALSE(a->HasClass(core::StringView(u8"dragging")));
@@ -276,7 +276,7 @@ TEST_CASE("tabs: tabs past the strip's end scroll it, a selected one is scrolled
     const Rect last = bar->GetTab(5)->GetScreenBounds();
     CHECK(last.x + last.width <= strip.x + strip.width + 0.5f);
 
-    // The wheel turns the strip across (it scrolls on one axis only).
+    // The wheel scrolls the strip across, since it scrolls on one axis only.
     bar->SetSelectedIndex(0);
     bar->GetStrip()->SetScrollOffset(core::Float2{0.0f, 0.0f});
     (void)root->UpdateLayout();
@@ -284,7 +284,7 @@ TEST_CASE("tabs: tabs past the strip's end scroll it, a selected one is scrolled
     d.InjectMouseWheel(CentreOf(*bar->GetTab(0)), core::Float2{0.0f, -1.0f});
     CHECK(bar->GetStrip()->GetScrollOffset().x > 0.0f);
 
-    // The list: every tab, the selected one checked; picking one selects it.
+    // The list shows every tab, with the selected one checked; picking one selects it.
     Press(d, CentreOf(*bar->GetListButton()));
     Menu* menu = bar->GetTabListMenu();
     REQUIRE(menu != nullptr);
@@ -314,7 +314,7 @@ TEST_CASE("tabs: the list button shows always when asked; close-all asks to clos
     (void)root->UpdateLayout();
     CHECK(bar->GetListButton()->IsDisplayed());
     REQUIRE(bar->GetCloseAllPart()->IsDisplayed());
-    // Past the list button, both past the strip.
+    // The close-all part sits past the list button, and both sit past the strip.
     const Rect list = bar->GetListButton()->GetScreenBounds();
     const Rect all = bar->GetCloseAllPart()->GetScreenBounds();
     CHECK(all.x >= list.x + list.width - 0.5f);
@@ -332,11 +332,12 @@ TEST_CASE("tabs: the list button shows always when asked; close-all asks to clos
     CHECK(asked[1] == core::StringView(u8"A"));
     REQUIRE(bar->GetTabCount() == 1);
     CHECK(bar->GetTab(0) == fixed);
-    CHECK_FALSE(bar->GetCloseAllPart()->IsDisplayed()); // none closable is left
+    CHECK_FALSE(bar->GetCloseAllPart()->IsDisplayed()); // no closable tab is left
     fixed->SetClosable(true);
     CHECK(bar->GetCloseAllPart()->IsDisplayed());
 
-    // An owner that makes its tabs again after each close (docking does): every one still closes.
+    // An owner that makes its tabs again after each close, as docking does: every tab still
+    // closes.
     auto owned = Make<TabBar>();
     root->AddChild(owned.Get());
     const char8_t* const names[] = {u8"P", u8"Q", u8"R"};
@@ -371,7 +372,7 @@ TEST_CASE("tabview: close-all closes every closable page through the view's own 
     {
         ++requests;
         if (static_cast<const TabEvent&>(e).Index == 0)
-            e.Handled = true; // the first is kept (an unsaved document asks first)
+            e.Handled = true; // the first is kept, as an unsaved document asks first
     });
     view->GetBar()->CloseAll();
     CHECK(requests == 3);
@@ -404,7 +405,7 @@ TEST_CASE("tabview: pages pair with tabs; only the selected one shows; hidden on
     CHECK_FALSE(second->IsDisplayed());
     CHECK(first->GetSize().y > 100.0f); // a page fills what the bar leaves
 
-    second->SetTitle(core::StringView(u8"Renamed")); // its tab follows it
+    second->SetTitle(core::StringView(u8"Renamed")); // its tab follows the title
     CHECK(view->GetBar()->GetTab(1)->GetText() == core::StringView(u8"Renamed"));
 
     int changes = 0;
@@ -417,7 +418,7 @@ TEST_CASE("tabview: pages pair with tabs; only the selected one shows; hidden on
     CHECK(second->IsDisplayed());
     CHECK(first->GetParent() != nullptr); // kept alive
 
-    // Ctrl+Tab with the focus in a page.
+    // Ctrl+Tab while the focus is in a page.
     field->RequestFocus();
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl);
     CHECK(view->GetSelectedIndex() == 0);
@@ -437,7 +438,7 @@ TEST_CASE("tabview: a page's classes for its tab reach the tab, set before it ha
     REQUIRE(tab != nullptr);
     CHECK(tab->HasClass(core::StringView(u8"dirty")));
     CHECK(tab->HasClass(core::StringView(u8"pinned")));
-    CHECK_FALSE(early->HasClass(core::StringView(u8"dirty"))); // the tab's, not the page's
+    CHECK_FALSE(early->HasClass(core::StringView(u8"dirty"))); // the class is on the tab, not the page
 
     early->SetTabClasses(core::StringView(u8"pinned"));
     CHECK_FALSE(tab->HasClass(core::StringView(u8"dirty")));
@@ -513,7 +514,7 @@ TEST_CASE("tabview: a close request reaches the view, and unless taken, the page
     Press(d, CentreOf(*view->GetBar()->GetTab(1)->GetClosePart()));
     CHECK(view->GetPageCount() == 2);
 
-    // A drag of A past C: the pages keep the tabs' order.
+    // Dragging A past C: the pages follow the tabs' order.
     (void)root->UpdateLayout();
     const core::Float2 start = CentreOf(*view->GetBar()->GetTab(0));
     d.InjectMouseDown(start, MouseButton::Left);
@@ -523,7 +524,7 @@ TEST_CASE("tabview: a close request reaches the view, and unless taken, the page
     CHECK(view->GetChildHost()->GetChildAt(1) == pageA);
     CHECK(view->GetSelectedPage() == pageA);
 
-    // Code removing a page takes its tab.
+    // Removing a page from code removes its tab.
     view->RemovePage(0);
     CHECK(view->GetPageCount() == 1);
     CHECK(view->GetBar()->GetTabCount() == 1);
@@ -574,7 +575,7 @@ TEST_CASE("tabview: markup's pages are its children, with title, icon and closab
     CHECK(view->GetBar()->GetListDisplay() == TabListDisplay::Always);
     CHECK(view->HasCloseAll());
 
-    // A bar alone: markup's children are its tabs.
+    // A bar on its own: the markup children are its tabs.
     auto barTree = loader.LoadFromString(core::StringView(u8R"(<TabBar><Tab text="One"/><Tab text="Two" icon="a.png"/></TabBar>)"));
     auto* bar = core::Cast<TabBar>(barTree.Get());
     REQUIRE(bar != nullptr);
@@ -620,15 +621,15 @@ TEST_CASE("tabs: in a group's strip a tab moved past the threshold, any way, is 
     d.InjectMouseDown(start, MouseButton::Left);
     d.InjectMouseMove(core::Float2{start.x + 3.0f, start.y}); // within the threshold (6)
     CHECK_FALSE(d.IsDragging());
-    d.InjectMouseMove(core::Float2{start.x + 8.0f, start.y}); // along the strip: a drag at once
+    d.InjectMouseMove(core::Float2{start.x + 8.0f, start.y}); // along the strip, so a drag starts at once
     REQUIRE(d.IsDragging());
     CHECK(d.GetDragPayload().Type == core::StringView(u8"gui/tab"));
     CHECK(d.GetDragPayload().Label == core::StringView(u8"B"));
 
-    // Over the other group's strip: nothing takes it.
+    // Over the other group's strip, nothing takes it.
     d.InjectMouseMove(CentreOf(*other->GetTab(0)));
     CHECK(d.GetDropTarget() == nullptr);
-    // Over the bottom strip, left of Y's middle: between X and Y.
+    // Over the bottom strip, left of Y's middle, the drop goes between X and Y.
     const Rect y = bottom->GetTab(1)->GetScreenBounds();
     d.InjectMouseMove(core::Float2{y.x + 10.0f, y.y + 10.0f});
     CHECK(d.GetDropTarget() == bottom.Get());
@@ -651,7 +652,8 @@ TEST_CASE("tabs: in a group's strip a tab dropped back into it reorders it; not 
     (void)root->UpdateLayout();
     EventDispatcher& d = *root->GetEventDispatcher();
 
-    // A along the strip past C's middle: no slide on the way, then last at the drop.
+    // A dragged along the strip past C's middle: nothing slides on the way, and A is last after
+    // the drop.
     const core::Float2 start = CentreOf(*a);
     d.InjectMouseDown(start, MouseButton::Left);
     const Rect cr = c->GetScreenBounds();
@@ -670,7 +672,7 @@ TEST_CASE("tabs: in a group's strip a tab dropped back into it reorders it; not 
     const core::Float2 again = CentreOf(*a);
     d.InjectMouseDown(again, MouseButton::Left);
     d.InjectMouseMove(core::Float2{again.x - 10.0f, again.y});
-    REQUIRE(d.IsDragging()); // its group still takes it elsewhere
+    REQUIRE(d.IsDragging()); // its group can still take it elsewhere
     d.InjectMouseMove(CentreOf(*top->GetTab(0)));
     CHECK(d.GetDropTarget() != top.Get());
     d.InjectMouseUp(CentreOf(*top->GetTab(0)), MouseButton::Left);
@@ -716,7 +718,7 @@ TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its r
     CHECK(offered == a);
     CHECK(d.GetDropTarget() == nullptr);
     CHECK(d.GetDropReason() == core::StringView(u8"no room"));
-    CHECK(bottom->GetDropIndex() == -1); // no mark where it may not go
+    CHECK(bottom->GetDropIndex() == -1); // no drop mark where the tab may not go
     refuse = false;
     d.InjectMouseMove(core::Float2{at.x + 1.0f, at.y});
     CHECK(d.GetDropTarget() == bottom.Get());
@@ -729,7 +731,8 @@ TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its r
     CHECK(bottom->GetTabCount() == 2);
     CHECK(bottom->GetDropIndex() == -1);
 
-    // Passed on (its effect set back to none): no mark, and what holds the strip is asked.
+    // When the strip passes the drag on (its effect set back to none), there is no mark and the
+    // strip's container is asked.
     bool askedAbove = false;
     bottom->SetOnTabOffered([](DropQuery& query, Tab&, core::i32) { query.Effect = DropEffect::None; });
     root->SetOnDragQuery([&askedAbove](DropQuery& query)
@@ -776,11 +779,11 @@ TEST_CASE("tabs: a torn tab's ghost is the tab, held where it was grabbed; its b
     CHECK(ghost->GetSize().x == doctest::Approx(from.width));
     CHECK(ghost->GetSize().y == doctest::Approx(from.height));
     const Rect held = ghost->GetScreenBounds();
-    CHECK(held.x == doctest::Approx(out.x - 7.0f)); // the press's place on it, under the pointer
+    CHECK(held.x == doctest::Approx(out.x - 7.0f)); // the point pressed on the tab stays under the pointer
     CHECK(held.y == doctest::Approx(out.y - 5.0f));
 
-    // Hidden (as an owner may while it is torn): counted, but no place of its own. Left of C's
-    // middle is before C (2), past the hidden B.
+    // A hidden tab (as an owner may hide it while it is torn off) is counted but has no place of
+    // its own. Left of C's middle is before C (2), past the hidden B.
     b->SetDisplayed(false);
     (void)root->UpdateLayout();
     const Rect cr = c->GetScreenBounds();
@@ -844,12 +847,12 @@ TEST_CASE("tabs: a tab of a group is picked up from the keyboard and dropped on 
     (void)root->UpdateLayout();
     EventDispatcher& d = *root->GetEventDispatcher();
     t->RequestFocus();
-    CHECK_FALSE(d.PickDrag()); // a strip of no group: nowhere for it to go
+    CHECK_FALSE(d.PickDrag()); // a strip in no group has nowhere for the tab to go
     a->RequestFocus();
     REQUIRE(d.PickDrag());
     CHECK(d.IsKeyboardDrag());
     CHECK(d.GetDragPayload().Type == core::StringView(u8"gui/tab"));
-    y->RequestFocus(); // the focus moves as ever; the strip asked is the focused tab's
+    y->RequestFocus(); // the focus moves as usual, and the strip asked is the focused tab's
     CHECK(d.GetDropTarget() == bottom.Get());
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
     CHECK_FALSE(d.IsDragging());
@@ -909,7 +912,7 @@ TEST_CASE("tabs: a tab torn out of one tab view and dropped on another of its gr
     d.InjectMouseUp(core::Float2{three.x + three.width - 5.0f, three.y + 10.0f}, MouseButton::Left);
     CHECK(left->GetPageCount() == 1);
     REQUIRE(right->GetPageCount() == 2);
-    CHECK(right->GetPage(1) == two); // the page itself, what it holds with it
+    CHECK(right->GetPage(1) == two); // the page itself, with what it holds
     CHECK(two->ChildCount() == 1);
     CHECK(right->GetSelectedPage() == two);
     CHECK(right->GetBar()->GetTab(1)->GetText() == core::StringView(u8"Two"));
@@ -975,13 +978,13 @@ TEST_CASE("tabview: a page asked for before it is there waits; the first is not 
     auto first = Make<TabPage>();
     first->SetContentFactory([&built](TabPage&) { ++built; });
     view->AddPage(*first);
-    CHECK(view->GetSelectedIndex() == -1); // waiting, the first not selected meanwhile
+    CHECK(view->GetSelectedIndex() == -1); // waiting, and the first page is not selected meanwhile
     CHECK(built == 0);
     auto second = Make<TabPage>();
     second->SetContentFactory([&built](TabPage&) { built += 10; });
     view->AddPage(*second);
     CHECK(view->GetSelectedIndex() == 1);
-    CHECK(built == 10); // the second alone shown, and built
+    CHECK(built == 10); // only the second is shown, and built
 
     core::i32 movedTo = -1;
     view->SetOnPageMoved([&movedTo](core::i32 to) { movedTo = to; });

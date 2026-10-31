@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit ColorPicker: constructs, round-trips a color through HSV, sets an original.
+// Smoke test for the toolkit ColorPicker: construction, a color round trip through HSV, and setting an original.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -16,14 +16,14 @@ namespace core = foundation::core;
 TEST_CASE("toolkit-colorpicker: ConstructAndRoundTrip")
 {
     auto picker = core::MakeRef<ColorPicker>(core::DefaultAllocator());
-    // 9 children: SV square, hue strip, alpha strip, 2 previews, hex, R/G/B.
+    // 9 children: the SV square, hue strip, alpha strip, 2 previews, hex, and R, G and B.
     CHECK(picker->ChildCount() == 9u);
 
-    // Default color is white (H=0,S=1,V=1 -> not white; the ctor seeds S=1,V=1,H=0 = red).
+    // The constructor seeds H=0, S=1, V=1 (red); only the opaque alpha is checked here.
     const Color initial = picker->CurrentColor();
     CHECK(initial.a == doctest::Approx(1.0f));
 
-    // Round-trip a known color through set/get.
+    // Round-trip a known color through set and get.
     const Color target{0.25f, 0.5f, 0.75f, 1.0f};
     picker->SetColor(target);
     const Color got = picker->CurrentColor();

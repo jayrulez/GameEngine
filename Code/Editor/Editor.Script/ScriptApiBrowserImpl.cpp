@@ -3,8 +3,8 @@
 
 // Editor::Script - the `editor.script` module.
 //
-// BuildScriptApiTree: the API browser's tree of the language's bound API (namespace/class >
-// members) from the page's shared ScriptApiSurface, filtered by its search.
+// BuildScriptApiTree: the API browser's tree of the language's bound API (namespaces and classes,
+// with their members under them) from the page's shared ScriptApiSurface, filtered by its search.
 
 module;
 #include "Core/Prelude.h"
@@ -40,7 +40,7 @@ namespace editor
     ScriptApiTree BuildScriptApiTree(const Array<script::ScriptApiType>& types,
                                      StringView filter)
     {
-        // Alphabetical type order (index sort - the surface stays untouched).
+        // Alphabetical type order, sorted by index so the surface stays untouched.
         Array<usize> typeOrder;
         for (usize i = 0; i < types.Size(); ++i)
         {

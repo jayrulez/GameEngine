@@ -1,7 +1,6 @@
 # Editor::Play - `editor.play`: play in editor (the Game tab, its resolutions, the PIE tools and
 # the game-audio settings). Builds on Editor.Scene. Editor exe only.
-# On the GUI (Documentation/Specs/editor-gui.md, 5.3, layer 7): the Game tab from its markup
-# (Data/Editor/Game.xml) on GUI.Viewport.
+# The Game tab is built from its markup (Data/Editor/Game.xml) on GUI.Viewport.
 util_add_engine_library(Editor.Play ALIAS Editor::Play)
 target_link_libraries(Editor.Play PUBLIC
     Foundation::Core Foundation::Content Foundation::Resource Foundation::Settings Foundation::VFS

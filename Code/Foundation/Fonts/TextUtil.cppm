@@ -3,10 +3,8 @@
 
 // Foundation::Fonts - :text_util partition
 //
-// Codepoint iteration over a UTF-8 StringView. Mirrors how Sedulous walked text
-// with Beef's `StringView.DecodedChars` (Beef strings are UTF-8); Our
-// String is UTF-8 too, so font measuring/shaping decodes UTF-8 sequences here.
-// Shared by the baked font and the TTF text shaper.
+// Codepoint iteration over a UTF-8 StringView: font measuring and shaping decode
+// UTF-8 sequences here. Shared by the baked font and the TTF text shaper.
 
 module;
 #include "Core/Prelude.h"
@@ -88,7 +86,7 @@ export namespace foundation::fonts
         }
         const f32 ellipsisW = font.MeasureString(ellipsis);
         // If the text is already no wider than the ellipsis, replacing it with "..." can't make it
-        // narrower (and usually makes it WIDER - e.g. a "+" / "x" button) - leave it unchanged.
+        // narrower (and usually makes it wider, as for a "+" or "x" button), so leave it unchanged.
         if (textW <= ellipsisW)
         {
             return String(text);
@@ -97,7 +95,7 @@ export namespace foundation::fonts
 
         usize fitBytes = 0;
         usize i = 0;
-        while (availW > 0.0f && i < text.Size()) // ellipsis alone doesn't fit -> just draw "..."
+        while (availW > 0.0f && i < text.Size()) // ellipsis alone doesn't fit: just draw "..."
         {
             usize probe = i;
             (void)DecodeCodepoint(text,

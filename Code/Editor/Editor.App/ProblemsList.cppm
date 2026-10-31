@@ -3,13 +3,12 @@
 
 // Editor::App - :problems_list partition.
 //
-// ProblemsList: what a code page's check found, under its code (Documentation/Specs/editor-gui.md,
-// 5.4, layer 6, part 2): a line saying how many errors and warnings there are ("No problems" when
-// none), then a row each, its severity's icon, its place ("12:4", the file before it when the
-// problem is in another, a shader's include) and its message, errors first. Choosing a row, by a
-// click or the arrow keys, tells the page, which takes its code there. It replaces the old pages'
-// error boxes, inert text, and the GUI page's one-line status. The editor's, as a part of its kit,
-// until something outside the editor needs it. It fills a panel of the page's markup.
+// ProblemsList: what a code page's check found, shown under its code: a line saying how many
+// errors and warnings there are ("No problems" when none), then a row for each problem with its
+// severity's icon, its place ("12:4", with the file before it when the problem is in another file,
+// such as a shader's include) and its message, errors first. Choosing a row, by a click or the
+// arrow keys, tells the page, which moves the cursor there. It fills a panel of the page's markup,
+// and lives in the editor until something outside the editor needs it.
 
 module;
 #include "Core/Prelude.h"
@@ -34,10 +33,10 @@ export namespace editor::app
         String file; ///< empty: the page's own code; else the file it is in (an include)
         u32 line = 0;   ///< from 0
         u32 column = 0; ///< from 0
-        bool atColumn = true; ///< false: the check named the line alone (the whole of it is marked)
+        bool atColumn = true; ///< false: the check named only the line (the whole line is marked)
     };
 
-    /// The problems a code editor's diagnostics are (its own code's).
+    /// Converts a code editor's diagnostics (in its own code) into problems.
     [[nodiscard]] inline Array<CodeProblem> ProblemsOf(Span<const gui::CodeDiagnostic> diagnostics)
     {
         Array<CodeProblem> out;
@@ -65,7 +64,8 @@ export namespace editor::app
             rows.Bind = [self](gui::Node& row, const gui::ModelIndex& index) { self->BindRow(row, index); };
             m_list->SetRowFactory(Move(rows));
             m_list->SetModel(&m_model);
-            // A row chosen by the keys or a click goes there; a click on the chosen one again too.
+            // A row chosen by the keys or a click is navigated to; so is a second click on the
+            // chosen row.
             m_list->SetOnSelectionChanged([self](gui::ModelIndex index) { self->Choose(index); });
             m_list->SetOnActivated([self](gui::ModelIndex index) { self->Choose(index); });
             (void)m_list->AddEventListener(gui::EventType::MouseClick, [self](const gui::Event&)
@@ -77,7 +77,7 @@ export namespace editor::app
         ProblemsList(const ProblemsList&) = delete;
         ProblemsList& operator=(const ProblemsList&) = delete;
 
-        /// Shows `problems`, errors first, each kind in its place's order.
+        /// Shows `problems`, errors first, each severity sorted by place.
         void Show(Span<const CodeProblem> problems)
         {
             m_problems.Clear();
@@ -94,13 +94,13 @@ export namespace editor::app
             m_summary->SetText(Summary().AsView());
             m_model.Reset();
         }
-        /// Told of the problem chosen, to take its code there.
+        /// Called with the chosen problem, so the page can move the cursor to it.
         void SetOnChoose(Function<void(const CodeProblem&)> onChoose) { m_onChoose = Move(onChoose); }
 
-        /// What the summary says with no problems (empty: "No problems"): what a page's check
-        /// found good (the class a script compiles). Said at the next Show.
+        /// What the summary says with no problems (empty: "No problems"), naming what the page's
+        /// check confirmed (the class a script compiles). Takes effect at the next Show.
         void SetClean(String text) { m_clean = Move(text); }
-        /// "No problems" (or what SetClean said), "1 error", "2 errors, 1 warning".
+        /// The summary: "No problems" (or the SetClean text), "1 error", "2 errors, 1 warning".
         [[nodiscard]] String Summary() const
         {
             usize errors = 0, warnings = 0, others = 0;
@@ -126,7 +126,7 @@ export namespace editor::app
         // === For tests ===
         [[nodiscard]] Span<const CodeProblem> Problems() const noexcept { return Span<const CodeProblem>(m_problems.Data(), m_problems.Size()); }
         [[nodiscard]] gui::ListView& List() noexcept { return *m_list; }
-        /// What row `row` says where it is ("12:4", "Common.hlsli 3:1").
+        /// The place a row shows for a problem ("12:4", "Common.hlsli 3:1").
         [[nodiscard]] static String PlaceOf(const CodeProblem& p)
         {
             const String at = p.atColumn ? Format(u8"{}:{}", p.line + 1, p.column + 1) : Format(u8"{}", p.line + 1);
@@ -205,7 +205,7 @@ export namespace editor::app
             if (auto* message = Cast<gui::Label>(row->GetChildAt(2)))
             {
                 message->SetText(p.message.AsView());
-                message->SetTooltip(p.message.AsView()); // a long one is cut where the row ends
+                message->SetTooltip(p.message.AsView()); // a long message is cut where the row ends
             }
             static constexpr StringView kSeverities[] = {u8"error", u8"warning", u8"info", u8"hint"};
             for (StringView s : kSeverities)
@@ -215,7 +215,7 @@ export namespace editor::app
 
         IAllocator& m_allocator;
         Array<CodeProblem> m_problems;
-        String m_clean; // SetClean's
+        String m_clean; // the text set by SetClean
         Model m_model;
         RefPtr<gui::Label> m_summary;
         RefPtr<gui::ListView> m_list;

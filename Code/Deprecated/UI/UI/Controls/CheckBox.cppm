@@ -3,9 +3,8 @@
 
 // UI - :checkbox partition
 //
-// Toggle checkbox with a text label. Ported from Sedulous.UI/src/Controls/CheckBox.bf (a View, not a
-// ToggleButton). Box chrome (part drawable or fallback rounded rect + checkmark) and the text label are
-// LIVE now that the Fonts service + VG are wired. Toggle/state/event logic is faithful.
+// Toggle checkbox with a text label. It is a View, not a ToggleButton. The box chrome is the part
+// drawable, or a fallback rounded rect with a checkmark.
 
 module;
 #include "Core/Prelude.h"

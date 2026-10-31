@@ -3,11 +3,11 @@
 
 /// Foundation::Animation - the `:graph` partition.
 ///
-/// The animation graph stack, ported faithfully from Sedulous.Animation: state nodes (clip + 1D/2D
-/// blend trees), per-bone masks, parameters + conditions + transitions, states, layers, the graph
-/// definition, and the per-instance AnimationGraphPlayer (state machine + layer blending). Resource
-/// refs (editor/serialization) are dropped - this is the runtime foundation. Polymorphic node
-/// dispatch uses a NodeType tag + static_cast (the engine builds with -fno-rtti, so no dynamic_cast).
+/// The animation graph: state nodes (a clip, or a 1D or 2D blend tree), per-bone masks,
+/// parameters, conditions and transitions, states, layers, the graph definition, and the
+/// per-instance AnimationGraphPlayer (state machine and layer blending). This is the runtime side
+/// only; resource references are resolved in foundation.animation.resource. Polymorphic node
+/// dispatch uses a NodeType tag and static_cast, since the engine builds with -fno-rtti.
 
 module;
 #include "Core/Prelude.h"
@@ -36,9 +36,9 @@ export namespace foundation::animation
         BlendTree2D
     };
 
-    // Wrap-aware clip-event firing shared by the clip node and the blend trees (which fire
-    // their DOMINANT clip's events - firing every blended clip would double-fire an event
-    // both entries carry, like a footstep both walk clips share).
+    // Wrap-aware clip-event firing shared by the clip node and the blend trees. A blend tree fires
+    // only its dominant clip's events: firing every blended clip would fire twice an event both
+    // entries carry, like a footstep both walk clips share.
     inline void FireClipEvents(const AnimationClip& clip, f32 prevNorm, f32 currentNorm,
                                bool looping, const AnimationEventHandler& handler)
     {
@@ -72,7 +72,7 @@ export namespace foundation::animation
         }
     }
 
-    // A node that produces an animation pose. Implemented by ClipStateNode + the blend trees.
+    // A node that produces an animation pose. Implemented by ClipStateNode and the blend trees.
     class IAnimationStateNode
     {
     public:
@@ -84,8 +84,8 @@ export namespace foundation::animation
         [[nodiscard]] virtual f32 Duration() const noexcept = 0;
         virtual void FireEvents(f32 prevNormalizedTime, f32 currentNormalizedTime, bool looping,
                                 const AnimationEventHandler& handler) const = 0;
-        /// The root motion the node carries from `from` to `to`, normalized and UNWRAPPED (past 1
-        /// is a later loop), blended as the node blends its poses (root-motion.md P1).
+        /// The root motion the node carries from `from` to `to`, normalized and unwrapped (a time
+        /// past 1 is a later loop), blended as the node blends its poses.
         [[nodiscard]] virtual RootMotionDelta RootMotion(f32 from, f32 to, bool looping) const
         {
             (void)from;
@@ -319,8 +319,8 @@ export namespace foundation::animation
         void FireEvents(f32 prevNorm, f32 currentNorm, bool looping,
                         const AnimationEventHandler& handler) const override
         {
-            // The DOMINANT clip's events (nearest threshold - the same pick Duration makes,
-            // so timing and events stay in agreement).
+            // Only the dominant clip's events: the nearest threshold, the same pick Duration makes,
+            // so timing and events agree.
             if (const AnimationClip* clip = DominantClip())
             {
                 FireClipEvents(*clip, prevNorm, currentNorm, looping, handler);
@@ -517,7 +517,8 @@ export namespace foundation::animation
         void FireEvents(f32 prevNorm, f32 currentNorm, bool looping,
                         const AnimationEventHandler& handler) const override
         {
-            // The DOMINANT clip's events: the max inverse-distance weight = the nearest entry.
+            // Only the dominant clip's events: the largest inverse-distance weight, which is
+            // the nearest entry.
             const Float2 paramPos{parameterX, parameterY};
             f32 bestDist = 3.4e38f;
             const AnimationClip* best = nullptr;
@@ -540,7 +541,8 @@ export namespace foundation::animation
             }
         }
 
-        /// Every entry by its inverse-distance weight, as the pose (on an entry: that one alone).
+        /// Every entry by its inverse-distance weight, as the pose blends them (on an entry,
+        /// that entry alone).
         [[nodiscard]] RootMotionDelta RootMotion(f32 from, f32 to, bool looping) const override
         {
             const Float2 paramPos{parameterX, parameterY};
@@ -584,7 +586,7 @@ export namespace foundation::animation
         Array<BlendTree2DEntry> m_entries;
     };
 
-    // ---- parameters + conditions + transitions -------------------------------------------------
+    // ---- parameters, conditions, transitions ---------------------------------------------------
 
     enum class AnimationParameterType
     {
@@ -693,7 +695,8 @@ export namespace foundation::animation
         }
     };
 
-    // A transition between states; fires when all conditions hold (+ optional exit-time gate).
+    // A transition between states; fires when all conditions hold (and the optional exit-time
+    // gate passes).
     class AnimationGraphTransition
     {
     public:
@@ -725,7 +728,7 @@ export namespace foundation::animation
                 AnimationGraphCondition{parameterIndex, op, static_cast<f32>(threshold)});
         }
 
-        // All conditions must hold against the parameter set. Empty -> unconditional (true).
+        // All conditions must hold against the parameter set. With none, it is unconditional.
         [[nodiscard]] bool EvaluateConditions(Span<const AnimationGraphParameter> parameters) const
         {
             for (const AnimationGraphCondition& c : m_conditions)
@@ -747,10 +750,10 @@ export namespace foundation::animation
         Array<AnimationGraphCondition> m_conditions;
     };
 
-    // ---- states + layers + graph ---------------------------------------------------------------
+    // ---- states, layers, graph -----------------------------------------------------------------
 
-    // A state wraps a node (clip or blend tree) + playback settings. Owns the node when constructed with
-    // a UniquePtr; borrows it (no delete) when constructed with a raw pointer.
+    // A state wraps a node (clip or blend tree) and playback settings. Owns the node when
+    // constructed with a UniquePtr; borrows it (no delete) when constructed with a raw pointer.
     class AnimationGraphState
     {
     public:
@@ -787,7 +790,8 @@ export namespace foundation::animation
         Additive
     };
 
-    // A layer: states + transitions + an optional bone mask. Layer 0 is the base; others blend on top.
+    // A layer: states, transitions and an optional bone mask. Layer 0 is the base; others blend
+    // on top.
     class AnimationLayer
     {
     public:
@@ -844,7 +848,7 @@ export namespace foundation::animation
         UniquePtr<BoneMask> m_mask;
     };
 
-    // Shared graph definition: parameters + layers. Multiple players can reference one graph.
+    // Shared graph definition: parameters and layers. Multiple players can reference one graph.
     // A resource product (Object) so a cooked AnimationGraphSource can build into it.
     class AnimationGraph : public Object
     {
@@ -894,7 +898,7 @@ export namespace foundation::animation
 
     // ---- graph player --------------------------------------------------------------------------
 
-    // Per-layer runtime state (current/previous state + cross-fade + scratch poses).
+    // Per-layer runtime state (current and previous state, cross-fade, scratch poses).
     struct AnimationGraphLayerRuntime
     {
         i32 currentStateIndex = -1;
@@ -924,7 +928,7 @@ export namespace foundation::animation
         }
     };
 
-    // Evaluates an AnimationGraph for one skeleton instance (state machine + layer blending).
+    // Evaluates an AnimationGraph for one skeleton instance (state machine and layer blending).
     class AnimationGraphPlayer
     {
     public:
@@ -958,7 +962,7 @@ export namespace foundation::animation
                 m_layerRuntimes.PushBack(static_cast<AnimationGraphLayerRuntime&&>(rt));
             }
 
-            // Auto-link blend trees from their stored parameter indices (NodeType tag - no RTTI).
+            // Auto-link blend trees from their stored parameter indices (by NodeType tag; no RTTI).
             for (auto& layer : graph.Layers())
             {
                 for (auto& state : layer->States())
@@ -1072,9 +1076,9 @@ export namespace foundation::animation
         /// The pose modifiers run after the layers combine and before the palette, borrowed.
         [[nodiscard]] PoseModifierStack& Modifiers() noexcept { return m_modifiers; }
 
-        /// The root motion the base layer carried since the last call (root-motion.md P1): its
-        /// state's, or during a crossfade both states' blended by the fade, composed over every
-        /// Update between. Reading it resets it.
+        /// The root motion the base layer carried since the last call: its state's, or during a
+        /// crossfade both states' blended by the fade, composed over every Update between.
+        /// Reading it resets it.
         [[nodiscard]] RootMotionDelta ConsumeRootMotion() noexcept
         {
             const RootMotionDelta delta = m_rootMotion;

@@ -3,10 +3,10 @@
 
 // Pipeline::Physics - reflection implementation unit: physics asset reflected surface.
 //
-// Kept OUT of the PhysicsAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). The classes declare identity via RTTI_OBJECT in
-// the interface; this unit defines their StaticType() WITH properties + tooling attributes, plus
-// the CollisionCookKind enum reflection.
+// Kept out of the PhysicsAsset.cppm interface, because REFLECT_MEMBERS bodies there make GCC emit
+// a gcm cluster. The classes declare identity with RTTI_OBJECT in the interface; this unit defines
+// their StaticType() with properties and tooling attributes, and the CollisionCookKind enum
+// reflection.
 
 module;
 #include "Core/Prelude.h"

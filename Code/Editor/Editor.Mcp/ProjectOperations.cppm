@@ -2,19 +2,18 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Mcp - :operations partition
 //
-// IProjectOperations: how a HOST runs the work behind asset_cook / asset_import / asset_create /
-// project_export.
-// The tools themselves are shared - their arguments, refusals and result shapes are the same on
-// every host - but WHERE the work runs is the host's: the stdio host runs it inline on the
-// calling thread (every step answers at once), the editor on its own background services (the
-// cook service, the job service) with the tool re-entered each pump until they finish, so the
-// editor never blocks on an agent's call. A step that is not finished is an EMPTY Optional; a
-// refusal or failure is the error text the agent reads.
+// IProjectOperations: how a host runs the work behind asset_cook, asset_import, asset_create and
+// project_export. The tools themselves are shared (their arguments, refusals and result shapes
+// are the same on every host), but the host decides where the work runs. The stdio host runs it
+// inline on the calling thread, so every step answers at once. The editor runs it on its own
+// background services (the cook service, the job service) and re-enters the tool each pump until
+// they finish, so the editor never blocks on an agent's call. A step that is not finished is an
+// empty Optional; a refusal or failure is the error text the agent reads.
 //
-// Every operation is IDEMPOTENT ACROSS RE-ENTRIES: a not-finished tool is called again with
-// the same arguments on the host's next pump, so the first call with a request starts the
-// work and later calls with the same request poll it. An implementation keeps that state
-// itself, and one operation of each kind is in flight at a time (the tool is one call).
+// Every operation is idempotent across re-entries: a tool that has not finished is called again
+// with the same arguments on the host's next pump, so the first call with a request starts the
+// work and later calls with the same request poll it. An implementation keeps that state itself,
+// and one operation of each kind is in flight at a time (the tool is one call).
 module;
 #include "Core/Prelude.h"
 
@@ -31,7 +30,7 @@ using namespace foundation::core;
 
 export namespace editor::mcp
 {
-    /// A step of an operation: finished with T, not finished yet (empty), or failed/refused
+    /// A step of an operation: finished with T, not finished yet (empty), or failed or refused
     /// with the text the agent reads.
     template <typename T>
     using OperationStep = Result<Optional<T>, String>;
@@ -48,7 +47,7 @@ export namespace editor::mcp
     };
 
     /// asset_import's resolved request: the importer is routed by the tool (by extension), the
-    /// group path is the agent's (slash-joined; empty = the root).
+    /// group path is the agent's (slash-joined; empty for the root).
     struct ImportRequest
     {
         String source;
@@ -58,7 +57,7 @@ export namespace editor::mcp
         /// importer has none.
         RefPtr<pipeline::ImportOptions> options;
         /// What the import does when another file's asset of its type holds the name
-        /// (pipeline::ImportConflictChoice): refused unless the call says.
+        /// (pipeline::ImportConflictChoice): refused unless the call says otherwise.
         pipeline::ImportConflictChoice onConflict = pipeline::ImportConflictChoice::Refuse;
     };
 
@@ -86,7 +85,7 @@ export namespace editor::mcp
         bool rebuild = false;
     };
 
-    /// What project_export reports: the one export entry point's result.
+    /// What project_export reports: the export entry point's result.
     struct ExportOutcome
     {
         editor::ExportResult result;
@@ -118,13 +117,13 @@ export namespace editor::mcp
     {
     public:
         virtual ~IProjectOperations() = default;
-        /// The incremental cook over the open project (`force` = rebuild all).
+        /// The incremental cook over the open project (`force` rebuilds everything).
         [[nodiscard]] virtual OperationStep<CookOutcome> Cook(foundation::mcp::ToolCall& call,
                                                               bool force) = 0;
         /// One OS file into the open project's source database (does not cook).
         [[nodiscard]] virtual OperationStep<ImportOutcome> Import(foundation::mcp::ToolCall& call,
                                                                   const ImportRequest& request) = 0;
-        /// A shippable dist of the open project through the one export entry point.
+        /// A shippable dist of the open project through the single export entry point.
         [[nodiscard]] virtual OperationStep<ExportOutcome> Export(foundation::mcp::ToolCall& call,
                                                                   const ExportRequest& request) = 0;
         /// One new asset from a creator (RunAssetCreation), and whatever the host does after a
@@ -138,9 +137,9 @@ export namespace editor::mcp
         [[nodiscard]] virtual OperationStep<bool> Delete(foundation::mcp::ToolCall& call, const Guid& id) = 0;
     };
 
-    /// asset_create's work, the same on every host: the group resolved (made when missing), a
-    /// taken name refused (an agent that names an asset means that name), the creator run.
-    /// Main thread: it writes the source database.
+    /// asset_create's work, the same on every host: resolve the group (made when missing), refuse
+    /// a taken name (an agent that names an asset means that name), and run the creator. Main
+    /// thread only: it writes the source database.
     [[nodiscard]] inline Result<foundation::content::Instance*, String>
     RunAssetCreation(editor::EditorProject& project, const CreateRequest& request)
     {

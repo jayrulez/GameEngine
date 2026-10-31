@@ -3,10 +3,9 @@
 
 // GUI - :progress_bar partition
 //
-// ProgressBar: a display-only fill bar over a range (E6 of Specs/gui-lab-evolution.md): a
-// RangeWidget (min, max, step and value; no page), its fill the value's share of the range. An
-// indeterminate one (work of unknown length) sweeps a segment along the track on the GUI's clock
-// instead. Modeled on eepp's UIProgressBar (role only).
+// ProgressBar: a display-only fill bar over a range. It is a RangeWidget (min, max, step and value;
+// no page), and the fill covers the value's fraction of the range. An indeterminate bar, for work
+// of unknown length, instead sweeps a segment along the track on the GUI's clock.
 
 module;
 #include "Core/Prelude.h"
@@ -19,7 +18,7 @@ import foundation.vg;   // CornerRadii
 import :rect;
 import :draw_context;
 import :ui_widget;
-import :actions; // TickAction (the indeterminate sweep)
+import :actions; // TickAction, for the indeterminate sweep
 import :range_widget;
 
 using namespace foundation::core;
@@ -34,7 +33,7 @@ export namespace foundation::gui
     public:
         ProgressBar() { SetTag(core::StringView(u8"progressbar")); }
 
-        /// Work of unknown length: a segment sweeps along the track.
+        /// Marks the work as of unknown length, so a segment sweeps along the track.
         void SetIndeterminate(bool indeterminate)
         {
             if (indeterminate == m_indeterminate)
@@ -44,7 +43,7 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] bool IsIndeterminate() const noexcept { return m_indeterminate; }
-        /// Where the sweep is, 0 to 1 (a test reads it).
+        /// Returns the sweep's position from 0 to 1; tests read it.
         [[nodiscard]] f32 GetSweepPhase() const noexcept { return m_phase; }
 
         void SetTrackColor(Color color)
@@ -58,14 +57,14 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Theming parts: progressbar::track / ::fill.
+        // Style parts: progressbar::track and ::fill.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"track"));
             out.PushBack(core::StringView(u8"fill"));
         }
 
-        /// A bar's length and thickness when nothing sizes it (E2).
+        /// Returns the bar's length and thickness when nothing else sizes it.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{160.0f, 10.0f}; }
 
     protected:
@@ -73,13 +72,14 @@ export namespace foundation::gui
         {
             (void)localBounds;
             const Rect b = GetContentBounds();
-            const bool rtl = IsRightToLeft(); // it fills from the inline start
+            const bool rtl = IsRightToLeft(); // the bar fills from the inline start
             const f32 radius = b.height * 0.5f;
             GetPartStyle(u8"track").Draw(ctx, b, FilledBox(m_trackColor, vg::CornerRadii(radius)));
             if (m_indeterminate)
             {
                 Sweep();
-                // A third of the track, entering at the inline start and leaving at the end, clipped to it.
+                // A segment a third of the track long enters at the inline start and leaves at the
+                // end, clipped to the track.
                 const f32 segment = b.width / 3.0f;
                 const f32 x = b.x - segment + (b.width + segment) * m_phase;
                 const f32 left = core::Max(b.x, x);
@@ -96,7 +96,7 @@ export namespace foundation::gui
         }
 
     private:
-        // The sweep runs on the GUI's clock while it is indeterminate and shown.
+        // Runs the sweep on the GUI's clock while the bar is indeterminate and shown.
         void Sweep()
         {
             if (m_sweeping || GetActionManager() == nullptr)

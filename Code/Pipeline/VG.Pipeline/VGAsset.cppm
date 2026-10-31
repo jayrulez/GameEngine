@@ -4,10 +4,10 @@
 // Pipeline::VG - the `vg.pipeline` module (tooling).
 //
 // Vector images, source side:
-//   * VectorImageAsset: a LINKED `.svg` in the project's Sources/ tree (Asset::fileName), like a
+//   * VectorImageAsset: a linked `.svg` in the project's Sources/ tree (Asset::fileName), like a
 //     UI document or a script; an asset with no linked file fails the cook.
-//   * VectorImageAssetBuilder VALIDATES at cook: the document must load as the renderer reads it
-//     (VG.SVG's loader) or the cook FAILS; then the text goes through to the cooked record
+//   * VectorImageAssetBuilder validates at cook: the document must load as the renderer reads it
+//     (VG.SVG's loader) or the cook fails; then the text goes through to the cooked record
 //     (foundation.vg.resource's VectorImageSource).
 //   * VectorImageFileImporter: a dropped `.svg` is staged into Sources/ and linked.
 //   * ReadVectorImage: what another cook embeds (a UI theme's `@icon`).
@@ -33,7 +33,7 @@ using namespace foundation::vg;
 
 export namespace pipeline
 {
-    /// A vector image: a LINKED `.svg` in Sources/.
+    /// A vector image: a linked `.svg` in Sources/.
     class VectorImageAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(VectorImageAsset, pipeline::Asset)
@@ -113,8 +113,8 @@ export namespace pipeline
         return Status{ErrorCode::NotFound};
     }
 
-    /// Drag-drop importer for `.svg` files: the file is STAGED into the project's Sources/ tree
-    /// and the asset LINKS it through fileName; the cook reads it back through the sources mount.
+    /// Drag-drop importer for `.svg` files: the file is staged into the project's Sources/ tree
+    /// and the asset links it through fileName; the cook reads it back through the sources mount.
     class VectorImageFileImporter final : public pipeline::IFileImporter
     {
     public:
@@ -166,5 +166,5 @@ export namespace pipeline
         RegisterSerializable<VectorImageAsset>();
     }
 
-    // VectorImageAsset's StaticType() is defined WITH its reflected attributes in VGAssetImpl.cpp.
+    // VectorImageAsset's StaticType() is defined with its reflected attributes in VGAssetImpl.cpp.
 }

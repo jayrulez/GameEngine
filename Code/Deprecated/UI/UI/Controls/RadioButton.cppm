@@ -3,9 +3,8 @@
 
 // UI - :radio_button partition
 //
-// Radio button (cannot be unchecked by click; use RadioGroup for mutual exclusion). Ported from
-// Sedulous.UI/src/Controls/RadioButton.bf (a View). Circle chrome (part drawable or fallback) + text
-// label are LIVE now that the Fonts service + VG are wired; toggle/state/event faithful.
+// Radio button (a click cannot uncheck it; use RadioGroup for mutual exclusion). Draws a circle
+// (the part drawable, or a fallback) and a text label.
 
 module;
 #include "Core/Prelude.h"

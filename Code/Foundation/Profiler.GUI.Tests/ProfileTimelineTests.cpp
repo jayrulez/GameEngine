@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Profiler.GUI - the timeline (X7 of Specs/editor-gui.md): the frames chosen as lanes (each thread,
-// then the GPU) with their scopes by depth, fitted when the frames change; scopes too narrow to
-// draw gathered into one block with their count; a click choosing a scope's name (on nothing,
-// none), the hover naming it; a double click zooming to a scope or fitting again; the wheel
-// zooming about the pointer, Shift and the wheel scrolling the lanes, a drag panning; a drag on
-// the ruler marking a span, a click there letting it go; a lane folded to one row.
+// Profiler.GUI - the timeline. Covers the chosen frames shown as lanes (each thread, then the GPU)
+// with their scopes by depth, fitted when the frames change; scopes too narrow to draw gathered
+// into one block with their count; a click choosing a scope's name, or clearing it on empty
+// space; the hover naming the scope; a double click zooming to a scope or fitting again; the wheel
+// zooming about the pointer, Shift with the wheel scrolling the lanes, and a drag panning; a drag
+// on the ruler marking a span and a click there clearing it; and a lane folded to one row.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -25,9 +25,9 @@ namespace fgui = foundation::gui;
 
 namespace
 {
-    // A timeline 728 by 300 (names 128, the plot 600), frame 1 chosen: ticks 1010 to 1020 shown as
-    // 1009.9 to 1020.1, a tick 600 / 10.2 pixels. Lanes: Main at 42 (two rows), Worker at 84,
-    // GPU at 108.
+    // A timeline 728 by 300 (a 128 names column and a 600 plot) with frame 1 chosen. Ticks 1010 to
+    // 1020 show as 1009.9 to 1020.1, so one tick is 600 / 10.2 pixels. The lanes are Main at 42
+    // (two rows), Worker at 84 and GPU at 108.
     struct Bed
     {
         KnownSource source;
@@ -55,7 +55,8 @@ namespace
             KnownSource::AddScopeOn(f1, worker, job, 0, 2, 7);
             KnownSource::AddPass(f1, shadows, 3, 5);
             KnownSource::AddPass(f1, lighting, 5, 9);
-            // Frame 2, a second long: thirty scopes of a tick under one, too narrow to draw apart.
+            // Frame 2 is a second long and holds thirty one-tick scopes under one scope, too narrow
+            // to draw apart.
             FrameRecord& f2 = source.AddFrame(1000);
             for (u64 i = 0; i < 30; ++i)
                 KnownSource::AddScope(f2, tiny, 1, 100 + i, 101 + i);
@@ -73,7 +74,7 @@ namespace
             focus->SetSource(&source);
             focus->SetFrame(1);
             (void)root->UpdateLayout();
-            timeline->FitView(); // laid out now: the frames fill the plot
+            timeline->FitView(); // now that it is laid out, the frames fill the plot
         }
         fgui::EventDispatcher& D() { return *root->GetEventDispatcher(); }
         static f32 X(f64 tick) { return 128.0f + static_cast<f32>((tick - 1009.9) / 10.2 * 600.0); }
@@ -132,7 +133,7 @@ TEST_CASE("ProfileTimeline: a lane per thread, then the GPU's, the scopes by dep
     const ProfileTimeline::Bar* shadows = bed.BarOf(bed.shadows, true);
     REQUIRE(shadows != nullptr);
     CHECK(shadows->lane == 2);
-    CHECK(bed.BarOf(bed.tiny) == nullptr); // frame 2's: not chosen
+    CHECK(bed.BarOf(bed.tiny) == nullptr); // frame 2's scope, and frame 2 is not chosen
 }
 
 TEST_CASE("ProfileTimeline: scopes too narrow to draw gather into one block with their count")
@@ -148,7 +149,7 @@ TEST_CASE("ProfileTimeline: scopes too narrow to draw gather into one block with
             found = true;
         }
     CHECK(found);
-    // Zoomed in, they are scopes of their own again.
+    // Zoomed in, the narrow scopes are drawn as scopes of their own again.
     const ProfileTimeline::Bar* update = bed.BarOf(bed.update);
     REQUIRE(update != nullptr);
     bed.timeline->ZoomTo(1020.0 + 100.0, 1020.0 + 130.0); // frame 2 starts at 1020
@@ -170,7 +171,7 @@ TEST_CASE("ProfileTimeline: a click chooses a scope's name, on nothing none; the
     bed.Click(Float2{Bed::X(1014.0), 117.0f}); // the GPU's Shadows
     CHECK(bed.focus->Name().Is(bed.shadows, true));
     bed.Pause();
-    bed.Click(Float2{400.0f, 250.0f}); // under the lanes
+    bed.Click(Float2{400.0f, 250.0f}); // below the lanes
     CHECK_FALSE(bed.focus->Name().any);
 
     bed.D().InjectMouseMove(Float2{Bed::X(1015.0), 51.0f});
@@ -200,14 +201,14 @@ TEST_CASE("ProfileTimeline: the wheel zooms about the pointer, Shift and the whe
     const f32 x = Bed::X(1015.0);
     bed.D().InjectMouseWheel(Float2{x, 51.0f}, Float2{0.0f, 1.0f});
     CHECK(bed.timeline->ViewEnd() - bed.timeline->ViewBegin() == doctest::Approx(10.2 / 1.25));
-    CHECK(bed.timeline->TickAt(x) == doctest::Approx(1015.0)); // the time under the pointer stays
+    CHECK(bed.timeline->TickAt(x) == doctest::Approx(1015.0)); // the time under the pointer stays in place
 
     const f64 before = bed.timeline->ViewBegin();
-    bed.Drag(Float2{400.0f, 51.0f}, Float2{460.0f, 51.0f}); // right: earlier time
+    bed.Drag(Float2{400.0f, 51.0f}, Float2{460.0f, 51.0f}); // dragging right shows earlier time
     CHECK(bed.timeline->ViewBegin() < before);
     CHECK_FALSE(bed.focus->Name().any); // a drag chooses nothing
 
-    // Not enough lanes to scroll in 300 pixels: the scroll stays at the top.
+    // The lanes fit in 300 pixels, so there is nothing to scroll and the scroll stays at the top.
     bed.D().InjectMouseWheel(Float2{x, 51.0f}, Float2{0.0f, -1.0f}, fgui::KeyModShift);
     CHECK(bed.timeline->LaneScroll() == 0.0f);
 }

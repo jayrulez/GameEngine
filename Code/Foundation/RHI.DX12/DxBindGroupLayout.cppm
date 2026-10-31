@@ -3,7 +3,6 @@
 
 /// DX12 implementation of BindGroupLayout.
 /// Tracks descriptor range definitions and heap offset info.
-/// Ported from Sedulous.RHI.DX12/DX12BindGroupLayout.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Script.AngelScript tests: the reflected-type EMISSION
-// suite in AngelScript syntax (the battery certifies the context contract;
-// emission is certified per backend), the shared conformance battery, and the
-// backend-registry integration (both languages resolving side by side).
+// Foundation::Script.AngelScript tests: the reflected-type emission suite in
+// AngelScript syntax (the battery certifies the context contract; emission is
+// certified per backend), the shared conformance battery, and the backend-registry
+// integration (both languages resolving side by side).
 //
 // AngelScript has no top-level statements, so scripts follow the backend's load
-// convention: module globals + a `void main()` that Load runs after Build.
+// convention: module globals and a `void main()` that Load runs after Build.
 
 #include <doctest/doctest.h>
 
@@ -56,10 +56,10 @@ REFLECT_MEMBERS(Widget, "rtti::script::test")
     builder.Constructor();
 }
 
-// Exercises natural-typed numeric facades: a 64-bit integer argument + return must round-trip
-// EXACTLY, not funnel through double (which would corrupt values above 2^53). 9007199254740993
-// is 2^53 + 1 - the smallest integer a double cannot represent, so it discriminates the fixed
-// integer-exact marshalling from the old double currency.
+// Exercises natural-typed numeric facades: a 64-bit integer argument and return must round-trip
+// exactly, not funnel through double (which would corrupt values above 2^53). 9007199254740993
+// is 2^53 + 1, the smallest integer a double cannot represent, so it tells integer-exact
+// marshalling apart from marshalling through double.
 namespace
 {
     class NumProbe : public Object
@@ -73,15 +73,15 @@ namespace
         bool argWasExact() const { return lastI64 == 9007199254740993LL; } // 2^53 + 1
         i32 echoI32() const { return lastI32; }
         i64 bigConst() const { return 9007199254740993LL; } // 2^53 + 1
-        // A 9-arg method: exceeds the old 8-arg marshalling cap (kMaxArgs). The trailing args must
-        // NOT be truncated - matches facades like DebugDraw.line (6 coords + 3 color = 9 args).
+        // A 9-arg method, more than 8 marshalled args. The trailing args must not be truncated;
+        // facades like DebugDraw.line take 9 (6 coordinates and 3 color components).
         f32 lastSum9 = 0.0f;
         void take9(f32 a, f32 b, f32 c, f32 d, f32 e, f32 f, f32 g, f32 h, f32 i)
         {
             lastSum9 = a + b + c + d + e + f + g + h + i;
         }
         [[nodiscard]] f32 sum9() const { return lastSum9; }
-        // A 16-arg method: the TOP of the raised marshalling cap (kMaxArgs = 16). The last arg is
+        // A 16-arg method: the top of the marshalling cap (kMaxArgs = 16). The last arg is
         // the one a cap-boundary off-by-one would drop.
         f32 lastSum16 = 0.0f;
         void take16(f32 a, f32 b, f32 c, f32 d, f32 e, f32 f, f32 g, f32 h, f32 i, f32 j, f32 k,
@@ -109,9 +109,9 @@ REFLECT_MEMBERS(NumProbe, "rtti::script::test")
     builder.Constructor();
 }
 
-// The ScriptName alias mechanism: a type declares a "scriptName" class attribute and binds to scripts
-// under THAT, not its C++ class name. AliasProbe binds as `aka`; AliasClash also claims `aka` (to
-// exercise the collision guard). The native TYPE name + registry lookup stay on the C++ name.
+// The scriptName alias: a type declares a "scriptName" class attribute and binds to scripts under
+// that name, not its C++ class name. AliasProbe binds as `aka`; AliasClash also claims `aka` (to
+// exercise the collision guard). The native type name and registry lookup stay on the C++ name.
 namespace
 {
     class AliasProbe : public Object
@@ -135,7 +135,7 @@ REFLECT_MEMBERS(AliasProbe, "rtti::script::test")
 }
 REFLECT_MEMBERS(AliasClash, "rtti::script::test")
 {
-    builder.Attribute("scriptName", "aka"); // deliberately the SAME script name as AliasProbe
+    builder.Attribute("scriptName", "aka"); // the same script name as AliasProbe, to collide
     builder.Constructor();
 }
 
@@ -143,16 +143,16 @@ TEST_CASE("script: ScriptTypeName resolves the alias; FindScriptTypeNameCollisio
 {
     // ScriptTypeName: the "scriptName" alias when set, else the C++ name.
     CHECK(std::strcmp(ScriptTypeName(AliasProbe::StaticType()), "aka") == 0);
-    CHECK(std::strcmp(ScriptTypeName(Widget::StaticType()), "Widget") == 0); // no alias -> C++ name
+    CHECK(std::strcmp(ScriptTypeName(Widget::StaticType()), "Widget") == 0); // no alias: the C++ name
 
-    // NATIVE identity is untouched: the C++ type name (serialization + registry FindByName) is unaliased.
+    // Native identity is untouched: the C++ type name (serialization, registry FindByName) is unaliased.
     CHECK(std::strcmp(AliasProbe::StaticType().name, "AliasProbe") == 0);
 
-    // A clean set: distinct script names -> no collision.
+    // A clean set: distinct script names, no collision.
     const TypeInfo* clean[] = {&AliasProbe::StaticType(), &Widget::StaticType()};
     CHECK(FindScriptTypeNameCollision(Span<const TypeInfo* const>{clean, 2}) == nullptr);
 
-    // A colliding set: two types bind to the same script name `aka` -> reported (FinalizeTypes traps).
+    // A colliding set: two types bind to the same script name `aka`, reported (FinalizeTypes traps).
     const TypeInfo* clash[] = {&AliasProbe::StaticType(), &AliasClash::StaticType()};
     const char* hit = FindScriptTypeNameCollision(Span<const TypeInfo* const>{clash, 2});
     REQUIRE(hit != nullptr);
@@ -167,21 +167,21 @@ TEST_CASE("angelscript: a scriptName alias binds the class under the alias, not 
 
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     const Status ok = scriptContext->Load(u8"double Got = 0;\n"
-                                u8"void main() { Got = double(aka::answer()); }\n", // the ALIAS
+                                u8"void main() { Got = double(aka::answer()); }\n", // the alias
                                 u8"m");
     REQUIRE(ok.IsOk());
     CHECK(scriptContext->GetGlobal(u8"Got").Get<f64>() == 42.0);
 
-    // The C++ name is NOT a script type (the alias replaces it on the surface): referencing it fails.
+    // The C++ name is not a script type (the alias replaces it on the surface): referencing it fails.
     RefPtr<IScriptContext> ctx2 = manager->CreateContext();
     const Status bad =
-        ctx2->Load(u8"void main() { AliasProbe::answer(); }\n", u8"m2"); // C++ name -> undeclared
+        ctx2->Load(u8"void main() { AliasProbe::answer(); }\n", u8"m2"); // the C++ name is undeclared
     CHECK_FALSE(bad.IsOk());
 }
 
-// A reflected Object with a property but NO reflected constructor, plus a factory that returns one:
-// AngelScript declares + binds a type's properties independent of any factory, so a constructor-less
-// handle handed back from a facade method is fully usable (the collections-lift precondition).
+// A reflected Object with a property but no reflected constructor, plus a factory that returns one:
+// AngelScript declares and binds a type's properties independent of any factory, so a
+// constructor-less handle handed back from a facade method is fully usable.
 namespace
 {
     class Leaf : public Object
@@ -201,7 +201,7 @@ namespace
 
 REFLECT_MEMBERS(Leaf, "rtti::script::test")
 {
-    builder.Property<&Leaf::value>("value"); // deliberately no Constructor()
+    builder.Property<&Leaf::value>("value"); // no Constructor(), on purpose
 }
 REFLECT_MEMBERS(LeafFactory, "rtti::script::test")
 {
@@ -209,8 +209,8 @@ REFLECT_MEMBERS(LeafFactory, "rtti::script::test")
     builder.Constructor();
 }
 
-// A polymorphic-container owner (Zoo holds Array<RefPtr<Animal>>); Dog/Cat are the concrete
-// elements. Exercises container-member binding (count / at / add-by-name / removeAt) in AngelScript,
+// A polymorphic-container owner (Zoo holds Array<RefPtr<Animal>>); Dog and Cat are the concrete
+// elements. Exercises container-member binding (count, at, add-by-name, removeAt) in AngelScript,
 // where at/add return the element base handle (Animal@) and the concrete object is boxed inside.
 namespace
 {
@@ -294,8 +294,8 @@ namespace
     }
 }
 
-// Non-Object VALUE type reached only by address: House has a nested-value member, Shelf a homogeneous
-// Array<UniquePtr<Room>>. Both need borrow-mode handles (unit 2b).
+// A non-Object value type reached only by address: House has a nested-value member, Shelf a
+// homogeneous Array<UniquePtr<Room>>. Both need borrow-mode handles.
 namespace
 {
     struct Room
@@ -381,7 +381,7 @@ namespace
             out.PushBack(String(u8"cde"));
             return out;
         }
-        // Lists handed IN by a script (array parameters).
+        // Lists handed in by a script (array parameters).
         f32 sum(Array<f32> values) const
         {
             f32 total = 0.0f;
@@ -517,7 +517,7 @@ TEST_CASE("angelscript: a UniquePtr (non-Object) container element is a borrow h
     const Status status = scriptContext->Load(u8"double C; double Z;\n"
                                     u8"void main() {\n"
                                     u8"  Shelf s;\n"
-                                    u8"  Room@ room = s.rooms_add();\n" // default-constructs + borrows
+                                    u8"  Room@ room = s.rooms_add();\n" // default-constructs and borrows
                                     u8"  room.size = 42;\n"
                                     u8"  C = s.rooms_count();\n"
                                     u8"  Z = s.rooms_at(0).size;\n"
@@ -559,7 +559,7 @@ TEST_CASE("angelscript: a polymorphic container member binds as script ops (coun
 TEST_CASE("angelscript: a constructor-less reflected type is usable as a returned handle")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
-    manager->RegisterType(Leaf::StaticType());        // no ctor - declared + props bound anyway
+    manager->RegisterType(Leaf::StaticType());        // no ctor; declared and props bound anyway
     manager->RegisterType(LeafFactory::StaticType()); // hands a Leaf@ back
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
@@ -578,7 +578,7 @@ TEST_CASE("angelscript: a constructor-less reflected type is usable as a returne
 TEST_CASE("angelscript: reflected value types support value assignment (Float3 p = expr)")
 {
     // All reflected types register as asOBJ_REF boxes; without a registered opAssign, `Float3 p = q;`
-    // failed with "no appropriate opAssign". The generic opAssign copies the boxed value.
+    // fails with "no appropriate opAssign". The generic opAssign copies the boxed value.
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
@@ -591,7 +591,7 @@ TEST_CASE("angelscript: reflected value types support value assignment (Float3 p
                   u8"  Float3 a = Float3(1, 2, 3);\n" // copy-init from a factory return (opAssign)
                   u8"  Float3 b = a;\n"               // value assignment from another local
                   u8"  X = b.x;\n"
-                  u8"  b = Float3(7, 8, 9);\n" // re-assign; must NOT alias a
+                  u8"  b = Float3(7, 8, 9);\n" // re-assign; must not alias a
                   u8"  Y = b.y;\n"
                   u8"  Z = a.x;\n" // a stays 1 (value copy, not a shared handle)
                   u8"}\n",
@@ -603,7 +603,7 @@ TEST_CASE("angelscript: reflected value types support value assignment (Float3 p
           1.0); // value semantics: a not mutated by b's reassign
 }
 
-// Sedulous 22a73e31: the math values' operators, bound from what reflection marks: a + b, v * 2,
+// The math values' operators, bound from what reflection marks: a + b, v * 2,
 // -v, a == b, the compound p += v, and a quaternion product composing in the engine's order.
 TEST_CASE("angelscript: reflected operators - a + b, v * 2.0f, -v, a == b, p += v, q * r")
 {
@@ -676,7 +676,7 @@ TEST_CASE("angelscript: Guids compare with == and !=")
 }
 
 // A reflected-type field reads back whether it is a plain member (the object itself) or a handle,
-// and so does a plain global: a playtest's probe of a game script's Guid field read null.
+// and so does a plain global, so a playtest can probe a game script's Guid field.
 TEST_CASE("angelscript: plain reflected-type members and globals read back as their values")
 {
     RegisterCoreTypes();
@@ -726,7 +726,7 @@ TEST_CASE("angelscript: 64-bit integer facade args/returns round-trip exactly (n
     RefPtr<IScriptContext> scriptContext = manager->CreateContext(); // defensively finalizes
     REQUIRE(static_cast<bool>(scriptContext));
 
-    // ArgOk: script passes 2^53+1 into an int64 facade param -> C++ must see it exactly.
+    // ArgOk: script passes 2^53+1 into an int64 facade param, and C++ must see it exactly.
     // ReturnOk: an int64 facade return equals the same literal, compared in-script (int64==int64).
     // I32Ok: a 32-bit natural-typed param also survives.
     const Status status = scriptContext->Load(u8"bool ArgOk; bool ReturnOk; bool I32Ok;\n"
@@ -754,9 +754,8 @@ TEST_CASE("angelscript: a reflected method marshals 9 args without truncating th
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     REQUIRE(static_cast<bool>(scriptContext));
 
-    // 9 args exceed the old 8-arg marshalling cap (kMaxArgs). Powers of two so any dropped or garbled
+    // 9 args, more than 8 (DebugDraw.line takes 9). Powers of two so any dropped or garbled
     // argument changes the sum: 1+2+4+8+16+32+64+128+256 = 511. Truncation would lose the 256.
-    // (This is the bug that made DebugDraw.line - 6 coords + 3 color = 9 args - a silent no-op.)
     const Status status =
         scriptContext->Load(u8"float S;\n"
                   u8"void main() {\n"
@@ -777,7 +776,7 @@ TEST_CASE("angelscript: a reflected method marshals 16 args - the top of the rai
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     REQUIRE(static_cast<bool>(scriptContext));
 
-    // 16 args = kMaxArgs exactly (raised from 8). Powers of two so any dropped or garbled argument
+    // 16 args, kMaxArgs exactly. Powers of two so any dropped or garbled argument
     // changes the sum: 1+2+...+32768 = 65535. A boundary off-by-one would lose the trailing 32768.
     const Status status =
         scriptContext->Load(u8"float S;\n"
@@ -819,7 +818,7 @@ TEST_CASE("angelscript: string concatenates numbers (opAdd from RegisterStdStrin
     RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
     REQUIRE(static_cast<bool>(scriptContext));
 
-    // Documents that a HUD can build "Score: 1200" without RegisterStdStringUtils: the primitive
+    // A HUD can build "Score: 1200" without RegisterStdStringUtils: the primitive
     // opAdd(int64/double) operators ship with RegisterStdString (int widens to int64).
     const Status status = scriptContext->Load(u8"string C;\n"
                                     u8"void main() {\n"
@@ -865,7 +864,7 @@ TEST_CASE("angelscript: errors are surfaced to a handler")
     CapturingErrors errors;
     scriptContext->SetErrorHandler(&errors);
 
-    // Compile error: kind + non-empty message + a source line.
+    // Compile error: kind, a non-empty message and a source line.
     CHECK_FALSE(scriptContext->Load(u8"int = = =", u8"main").IsOk());
     CHECK(errors.count >= 1);
     CHECK(errors.lastKind == ScriptErrorKind::Compile);
@@ -880,7 +879,7 @@ TEST_CASE("angelscript: errors are surfaced to a handler")
     CHECK(errors.lastKind == ScriptErrorKind::Runtime);
     CHECK(!errors.lastMessage.IsEmpty());
 
-    // Clearing the handler restores default (console) reporting - no more captures.
+    // Clearing the handler restores default (console) reporting, so nothing more is captured.
     scriptContext->SetErrorHandler(nullptr);
     const int afterRuntime = errors.count;
     CHECK_FALSE(scriptContext->Load(u8"more @#$ garbage", u8"main").IsOk());
@@ -999,13 +998,12 @@ TEST_CASE("angelscript: read module globals as Variant")
     CHECK(scriptContext->GetGlobal(u8"Flag").Get<bool>() == true);
     CHECK(scriptContext->GetGlobal(u8"Pi").Get<f64>() == 3.5);
 
-    CHECK(scriptContext->GetGlobal(u8"Missing").IsEmpty()); // absent -> empty Variant
+    CHECK(scriptContext->GetGlobal(u8"Missing").IsEmpty()); // absent: empty Variant
 }
 
 TEST_CASE("angelscript: SetGlobal writes typed module globals")
 {
-    // AngelScript globals are
-    // directly writable - the contract's SetGlobal is real here.
+    // AngelScript globals are directly writable, so SetGlobal takes effect here.
     RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
     REQUIRE(scriptContext->Load(u8"double Speed = 1;\n"
                       u8"string Tag = \"none\";\n"
@@ -1041,7 +1039,7 @@ TEST_CASE("angelscript: reflected value types are usable from script (construct 
 {
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
-    RegisterReflectedTypes(*manager); // collect + FinalizeTypes (two-phase)
+    RegisterReflectedTypes(*manager); // collect, then FinalizeTypes (two-phase)
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // Construct a reflected Float3, read and write its properties.
@@ -1058,7 +1056,7 @@ TEST_CASE("angelscript: reflected value types are usable from script (construct 
                                     u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(scriptContext->GetGlobal(u8"X").Get<f64>() == 1.0); // construct + getter
+    CHECK(scriptContext->GetGlobal(u8"X").Get<f64>() == 1.0); // construct and getter
     CHECK(scriptContext->GetGlobal(u8"Z").Get<f64>() == 3.0);
     CHECK(scriptContext->GetGlobal(u8"X2").Get<f64>() == 9.0); // setter took effect
 }
@@ -1079,7 +1077,7 @@ TEST_CASE("angelscript: call reflected methods (static, instance, struct return,
                 .IsOk());
     CHECK(scriptContext->GetGlobal(u8"D").Get<f64>() == 32.0);
 
-    // Instance method returning a struct (Float4.XYZ() -> Float3), then read it.
+    // Instance method returning a struct (Float4.XYZ() returns a Float3), then read it.
     REQUIRE(scriptContext->Load(u8"Float4@ v4 = Float4(7, 8, 9, 10);\n"
                       u8"double XX = 0;\n"
                       u8"double ZZ = 0;\n"
@@ -1111,7 +1109,7 @@ TEST_CASE("angelscript: same-arity type overloads carry distinct script names (o
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    // Same-arity type overloads carry distinct script names (the overloadedName contract): Mul
+    // Same-arity type overloads carry distinct script names (overloadedName): Mul
     // (Float3, Float3) componentwise and MulScalar (Float3, float) scale, both bound.
     REQUIRE(scriptContext->Load(u8"Float3@ p = Float3(2, 3, 4);\n"
                       u8"double CX = 0;\n"
@@ -1191,8 +1189,8 @@ TEST_CASE("angelscript: bound-api signatures carry reflected parameter names")
         return nullptr;
     };
 
-    // The signature now spells parameter names, not just types (API-browser affordance): it ends
-    // with the last parameter's name before the closing paren.
+    // The signature spells parameter names, not just types, for the API browser: it ends with the
+    // last parameter's name before the closing paren.
     const ScriptApiType* float3 = findType(u8"Float3");
     REQUIRE(float3 != nullptr);
     const ScriptApiMember* cross = findMember(*float3, u8"Cross");
@@ -1242,9 +1240,9 @@ TEST_CASE("angelscript: Object-derived type as a script-visible class")
                       u8"  Widget@ w2 = Widget();\n"
                       u8"  w2.id = 5;\n"
                       u8"  I = w.id;\n"
-                      u8"  D = w.doubled();\n" // instance method -> 42
-                      u8"  O = w.idOf(w2);\n"  // object argument -> 5
-                      u8"  H = w.idOfAny(@w2);\n" // an explicit handle into a Variant sink -> 5
+                      u8"  D = w.doubled();\n" // instance method: 42
+                      u8"  O = w.idOf(w2);\n"  // object argument: 5
+                      u8"  H = w.idOfAny(@w2);\n" // an explicit handle into a Variant sink: 5
                       u8"}\n",
                       u8"main")
                 .IsOk());
@@ -1296,7 +1294,7 @@ TEST_CASE("angelscript: call a script function with marshalled args")
     CHECK(scriptContext->Call(u8"greet", Span<Variant>{greetArgs, 1}).Value().Get<String>() ==
           u8"hi engine");
 
-    // missing callable -> NotFound.
+    // A missing callable is NotFound.
     CHECK(scriptContext->Call(u8"nope", Span<Variant>{}).Error() == ErrorCode::NotFound);
 }
 
@@ -1355,7 +1353,7 @@ TEST_CASE("angelscript: a script object outlives the local context reference")
     CHECK(obj->Invoke(u8"ping", Span<Variant>{}).Value().Get<f64>() == 42.0);
 }
 
-#ifdef OPTION_HAS_LUAU // proves AngelScript + a second backend resolve side by side
+#ifdef OPTION_HAS_LUAU // AngelScript and a second backend resolve side by side
 TEST_CASE("angelscript: registry - both backends resolve side by side")
 {
     angelscript::RegisterAngelScriptBackend();
@@ -1369,7 +1367,7 @@ TEST_CASE("angelscript: registry - both backends resolve side by side")
     CHECK(as->fileExtensions[0] == u8"as");
     CHECK(registry.FindByExtension(u8"as") == as);
 
-    // Extension dispatch creates the RIGHT manager: prove it by feeding each one
+    // Extension dispatch creates the right manager: prove it by feeding each one
     // its own language's source.
     RefPtr<IScriptManager> asManager = CreateScriptManagerForFile(u8"Scripts/game.as", DefaultAllocator());
     REQUIRE(asManager.Get() != nullptr);
@@ -1381,14 +1379,14 @@ TEST_CASE("angelscript: registry - both backends resolve side by side")
     REQUIRE(luauManager.Get() != nullptr);
     RefPtr<IScriptContext> luauCtx = luauManager->CreateContext();
     CHECK(luauCtx->Load(u8"local A = 1\n", u8"main").IsOk());
-    CHECK_FALSE(luauCtx->Load(u8"double f() { return 1; }", u8"main").IsOk()); // AS source rejected
+    CHECK_FALSE(luauCtx->Load(u8"double f() { return 1; }", u8"main").IsOk()); // AngelScript source rejected
 }
 #endif // OPTION_HAS_LUAU
 
-// Regression: the behaviors module is loaded with each class in its OWN script section
-// named by its sourceName (not one flat "behaviors#N"). This is what makes editor gutter
-// breakpoints - keyed on the source file - line up with what GetLineNumber reports. Proves a
-// breakpoint set on ("Mover.as", line) stops AND CaptureStackFrames()[0].file == "Mover.as".
+// The behaviors module is loaded with each class in its own script section named by its
+// sourceName (not one flat "behaviors#N"), so editor gutter breakpoints, keyed on the source
+// file, line up with what GetLineNumber reports. A breakpoint set on ("Mover.as", line) stops,
+// and CaptureStackFrames()[0].file is "Mover.as".
 TEST_CASE("angelscript: LoadBehaviorModule reports each class's sourceName as its section")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
@@ -1419,8 +1417,8 @@ TEST_CASE("angelscript: LoadBehaviorModule reports each class's sourceName as it
     } sink;
     debugger->SetListener(&sink);
 
-    // The breakpoint is keyed on the SOURCE FILE, exactly as an editor gutter would set it -
-    // NOT on the "behaviors#1" module name.
+    // The breakpoint is keyed on the source file, as an editor gutter would set it, not on the
+    // "behaviors#1" module name.
     debugger->SetBreakpoint(u8"Mover.as", 5);
 
     RefPtr<ScriptObject> mover = scriptContext->CreateInstance(u8"Mover", Span<Variant>{});
@@ -1431,7 +1429,7 @@ TEST_CASE("angelscript: LoadBehaviorModule reports each class's sourceName as it
     Array<ScriptStackFrame> frames = debugger->CaptureStackFrames();
     REQUIRE_FALSE(frames.IsEmpty());
     CHECK(frames[0].line == 5);
-    CHECK(StringView(frames[0].file) == u8"Mover.as"); // the section IS the source file
+    CHECK(StringView(frames[0].file) == u8"Mover.as"); // the section is the source file
 
     debugger->Continue();
     CHECK(sink.last == ScriptDebuggerState::Terminated);
@@ -1459,8 +1457,9 @@ TEST_CASE("angelscript: CERTIFIED - the backend conformance battery")
     dialect.delegateModule = u8"double dbl(double x) { return x * 2; }\n"
                              u8"DelegateSignal@ signal = DelegateSignal();\n"
                              u8"void main() { signal.Connect(ScriptDelegate(dbl)); }\n";
-    // Overload contract: arity family (ping / ping(x), AS overloads natively) + distinct-name
-    // overload (combineText). Set the globals in main() (run at load, like the delegate module).
+    // Overload contract: an arity family (ping and ping(x); AngelScript overloads natively) and a
+    // distinct-name overload (combineText). Set the globals in main() (run at load, like the
+    // delegate module).
     dialect.overloadModule = u8"Overloads@ over = Overloads();\n"
                              u8"double OP0 = 0; double OP1 = 0; double OC = 0; double OCT = 0;\n"
                              u8"void main() {\n"
@@ -1496,8 +1495,8 @@ TEST_CASE("angelscript: CERTIFIED - the backend conformance battery")
         u8"}\n";
     // AngelScript's natural coroutine surface: a delegate to a method (`this.RunWait`)
     // wrapped in the ScriptCoroutine funcdef, started with startCoroutine; `wait` is a
-    // host function, `waitUntil` a script helper (injected per module). The shared
-    // coroutine CONCEPT, spelled in each backend's own syntax - and that is the point.
+    // host function, `waitUntil` a script helper (injected per module): the shared
+    // coroutine concept, spelled in this backend's own syntax.
     dialect.coroutineClass =
         u8"class Coro {\n"
         u8"  double p;\n"
@@ -1538,7 +1537,7 @@ TEST_CASE("angelscript: declares Coroutines + Delegates + Debugger + Bytecode; p
     CHECK(HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Debugger));
     CHECK(HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Bytecode));
     CHECK_FALSE(HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Profiler));
-    CHECK(manager->CreateDebugger().Get() != nullptr); // Debugger declared -> real factory
+    CHECK(manager->CreateDebugger().Get() != nullptr); // Debugger declared, so a real factory
     CHECK(manager->CreateProfiler().Get() == nullptr);
 }
 
@@ -1546,14 +1545,14 @@ TEST_CASE("angelscript: bytecode capability - compile to blob, serialize, load i
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
 
-    // COOK side: compile source (module-level functions) to an opaque bytecode blob.
+    // Cook side: compile source (module-level functions) to an opaque bytecode blob.
     constexpr StringView kSource = u8"double add(double a, double b) { return a + b; }\n"
                                    u8"double answer() { return 42.0; }\n";
     Result<RefPtr<IScriptBlob>> compiled = manager->CompileToBlob(kSource, u8"as.blob");
     REQUIRE(compiled.HasValue());
     REQUIRE(compiled.Value().Get() != nullptr);
 
-    // STORE + reconstruct: the blob serializes to bytes; a fresh blob deserializes them.
+    // Store and reconstruct: the blob serializes to bytes; a fresh blob deserializes them.
     MemoryStream stream;
     {
         BinarySerializer writer(stream, SerializeMode::Write);
@@ -1567,7 +1566,7 @@ TEST_CASE("angelscript: bytecode capability - compile to blob, serialize, load i
         reloaded->Serialize(reader);
     }
 
-    // PLAYER side: LoadByteCode into a context (no Build) and call the restored functions.
+    // Player side: LoadByteCode into a context (no Build) and call the restored functions.
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     REQUIRE(scriptContext->LoadBlob(*reloaded).IsOk());
     Variant args[] = {Variant::From<f64>(2.0), Variant::From<f64>(3.0)};
@@ -1599,14 +1598,14 @@ TEST_CASE("angelscript: a script function is a native callback via IScriptDelega
     conformance::DelegateSignal* signal = signalVar.AsObject<conformance::DelegateSignal>();
     REQUIRE(signal != nullptr);
 
-    CHECK(signal->Emit(10.0) == doctest::Approx(15.0));   // native fires -> function runs
+    CHECK(signal->Emit(10.0) == doctest::Approx(15.0));   // native fires, the function runs
     CHECK(signal->Emit(100.0) == doctest::Approx(105.0)); // reusable across firings
 }
 
-// A reflected static that resolves a PER-CONTEXT service through CurrentScriptContext() - the
-// exact shape a facade uses to reach an engine singleton without a process global. If a delegate
+// A reflected static that resolves a per-context service through CurrentScriptContext(), the
+// shape a facade uses to reach an engine singleton without a process global. If a delegate
 // callback does not scope its owning context, CurrentScriptContext() is null during the call and
-// this silently no-ops (the bug); with the context scoped it resolves and writes the flag.
+// this silently does nothing; with the context scoped it resolves and writes the flag.
 namespace
 {
     class ContextProbe : public Object
@@ -1662,7 +1661,7 @@ TEST_CASE("angelscript: a delegate callback scopes its owning context (facades r
 
     CHECK(flag == 0);   // not fired yet
     signal->Emit(1.0);  // native fires the delegate; Invoke scopes the owning context
-    CHECK(flag == 42);  // the handler's facade resolved THIS context's service
+    CHECK(flag == 42);  // the handler's facade resolved this context's service
 }
 
 TEST_CASE("angelscript: a facade's delegate shape is a type scripts use without declaring it")
@@ -1693,11 +1692,11 @@ TEST_CASE("angelscript: a facade's delegate shape is a type scripts use without 
 
 TEST_CASE("angelscript: a METHOD delegate is a native callback via IScriptDelegate")
 {
-    // The first real use of a delegate-to-method (`ScriptDelegate(h.bump)`, an asFUNC_DELEGATE
-    // that binds an object + its method) through the IScriptDelegate seam. A global-function
-    // delegate already works above; this covers the bound-method form: it must reach
-    // ValueFromArg -> MakeAngelScriptDelegateVariant and survive AddRef, then invoke on the
-    // captured object so the object's field is mutated.
+    // A delegate to a method (`ScriptDelegate(h.bump)`, an asFUNC_DELEGATE that binds an object
+    // and its method) through IScriptDelegate. A global-function delegate is covered above; this
+    // covers the bound-method form: it must reach MakeAngelScriptDelegateVariant through
+    // ValueFromArg and survive AddRef, then invoke on the captured object so the object's field
+    // is mutated.
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(conformance::DelegateSignal::StaticType());
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
@@ -1720,15 +1719,15 @@ TEST_CASE("angelscript: a METHOD delegate is a native callback via IScriptDelega
     conformance::DelegateSignal* signal = signalVar.AsObject<conformance::DelegateSignal>();
     REQUIRE(signal != nullptr);
 
-    CHECK(signal->Emit(10.0) == doctest::Approx(10.0));  // native fires -> h.bump ran (v: 0 -> 10)
+    CHECK(signal->Emit(10.0) == doctest::Approx(10.0));  // native fires, h.bump ran (v: 0 -> 10)
     CHECK(signal->Emit(5.0) == doctest::Approx(15.0));   // same bound object accumulates (v -> 15)
 }
 
 TEST_CASE("angelscript: many engine lifecycles in one process (the cook pattern)")
 {
-    // The cook builds one engine per script; interleaved create/destroy used to unbalance
+    // The cook builds one engine per script; interleaved create and destroy could unbalance
     // the process-global thread manager and assert at teardown. The constructor's
-    // process-lifetime pin makes any sequence safe - this exercises the multi-engine path.
+    // process-lifetime pin makes any sequence safe; this exercises the multi-engine path.
     for (int i = 0; i < 8; ++i)
     {
         RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());

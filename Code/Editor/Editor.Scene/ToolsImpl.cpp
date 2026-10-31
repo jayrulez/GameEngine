@@ -29,8 +29,8 @@ namespace editor
         gizmoInput.fovY = input.fovY;
         gizmoInput.orthoHeight = input.orthoHeight;
         // editingLocked (Simulate) maps to the controller's pointer-less update: the gizmo pose
-        // keeps tracking what physics/animation move, but no hover, no drags, no mode hotkeys -
-        // exactly the pre-framework Simulate branch.
+        // keeps tracking what physics and animation move, but there is no hover, no drag and no
+        // mode hotkey.
         gizmoInput.pointerValid = input.pointerValid && !input.editingLocked;
         gizmoInput.leftPressed = input.leftPressed;
         gizmoInput.leftDown = input.leftDown;
@@ -48,10 +48,10 @@ namespace editor
         }
         const bool consumed = m_gizmos.Update(gizmoInput);
 
-        PollPick(); // a GPU answer from an earlier click / marquee lands here
+        PollPick(); // a GPU answer from an earlier click or marquee lands here
         if (!consumed && input.pointerOver && input.leftPressed)
         {
-            // Arm the marquee BEFORE the click picks: if this press drags past the threshold it
+            // Arm the marquee before the click picks: if this press drags past the threshold it
             // becomes a rect select and the click is undone back to this snapshot.
             m_marquee.armed = input.pointerValid && input.viewportWidth > 0 &&
                               input.viewportHeight > 0;
@@ -166,7 +166,7 @@ namespace editor
             return;
         }
         // The view's basis from the camera forward and up (a view straight down keeps its turn),
-        // and how far a pixel reaches: the frustum tangents from fovY + the viewport aspect in
+        // and how far a pixel reaches: the frustum tangents from fovY and the viewport aspect in
         // perspective, half the view's height and width under orthographic. Enough to project an
         // origin to a pixel.
         const Float3 forward = Normalized(input.cameraForward);
@@ -232,7 +232,7 @@ namespace editor
 
     void SelectTransformTool::OnDeactivate()
     {
-        // Gesture-end guarantee: a pointer-less update finishes/aborts any in-flight drag so no
+        // Gesture-end guarantee: a pointer-less update finishes or aborts any drag in flight, so no
         // half-applied command group survives a tool switch.
         GizmoFrameInput gizmoInput;
         gizmoInput.pointerValid = false;

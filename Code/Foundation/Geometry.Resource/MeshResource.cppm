@@ -3,13 +3,13 @@
 
 /// Foundation::Geometry.Resource - the `foundation.geometry.resource` module.
 ///
-/// Meshes as resources: a StaticMeshSource / SkinnedMeshSource (cooked content - the
-/// raw vertex stream, indices, submeshes, and for skinned the parallel skinning
-/// stream + skeleton ref) is built by a factory into the runtime StaticMesh /
-/// SkinnedMesh. Two source/factory pairs, mirroring the mesh hierarchy: SkinnedMeshSource
-/// IS-A StaticMeshSource, so the static serialization + fill logic is shared (the skinned
-/// side only adds the skinning stream). Bounds are recomputed on build (derivable from
-/// the vertices), so they aren't stored.
+/// Meshes as resources: a StaticMeshSource or SkinnedMeshSource (cooked content: the raw
+/// vertex stream, indices, submeshes and, for a skinned mesh, the parallel skinning stream
+/// and skeleton reference) is built by a factory into the runtime StaticMesh or
+/// SkinnedMesh. There are two source and factory pairs, following the mesh hierarchy:
+/// SkinnedMeshSource derives from StaticMeshSource, so the static serialization and fill
+/// logic is shared (the skinned side only adds the skinning stream). Bounds are recomputed
+/// on build (they derive from the vertices), so they are not stored.
 
 module;
 #include "Core/Prelude.h"
@@ -28,25 +28,25 @@ using namespace foundation::resource;
 export namespace foundation::geometry
 {
 
-    // Cooked static mesh: raw static-stream bytes + 32-bit indices + submeshes (parallel
+    // Cooked static mesh: raw static-stream bytes, 32-bit indices and submeshes (parallel
     // arrays, so they serialize via the primitive Array<T> path).
     class StaticMeshSource : public ISerializable
     {
         RTTI_OBJECT(StaticMeshSource, ISerializable)
     public:
         String name;
-        Array<u8> vertexBlob; // raw StaticMeshVertex bytes (48B each)
+        Array<u8> vertexBlob; // raw StaticMeshVertex bytes (52 each)
         Array<u32> indexData; // 32-bit indices
         Array<i32> subStart;
         Array<i32> subCount;
         Array<i32> subMaterial;
         Array<u8> subPrim; // PrimitiveType
 
-        // LOD chain (v3): levels 1..lodCount-1 as flattened per-submesh
-        // index ranges ((lod-1) * submeshCount + submesh) into the SAME indexData, over
-        // the SAME vertexBlob; lodCoverage carries lodCount switch thresholds. Legacy
-        // (v<3) payloads load as 1-LOD chains (fields default). Materials/primitive
-        // types per level mirror the LOD-0 submesh (a coarser level never resorts).
+        // The LOD chain: levels 1..lodCount-1 as flattened per-submesh index ranges
+        // ((lod-1) * submeshCount + submesh) into the same indexData, over the same
+        // vertexBlob; lodCoverage carries lodCount switch thresholds. The fields default to a
+        // 1-LOD chain. Materials and primitive types per level follow the LOD-0 submesh (a
+        // coarser level never resorts).
         u32 lodCount = 1;
         Array<i32> lodStart;
         Array<i32> lodIndexCount;
@@ -116,8 +116,8 @@ export namespace foundation::geometry
                             static_cast<PrimitiveType>(i < subPrim.Size() ? subPrim[i] : 0)});
             }
             // The LOD chain, validated: a malformed table (wrong slice length, a range
-            // outside the index buffer) collapses to 1 LOD - bad data renders at LOD 0
-            // rather than crashing selection. Levels mirror LOD 0's material/primitive.
+            // outside the index buffer) collapses to 1 LOD, so bad data renders at LOD 0
+            // rather than crashing selection. Levels take LOD 0's material and primitive.
             mesh.lodCount = 1;
             mesh.lodSubMeshes.Clear();
             mesh.lodCoverage.Clear();
@@ -169,7 +169,7 @@ export namespace foundation::geometry
         }
     };
 
-    // Cooked skinned mesh: the static cooked data + the parallel skinning stream + skeleton.
+    // Cooked skinned mesh: the static cooked data, the parallel skinning stream and the skeleton.
     class SkinnedMeshSource final : public StaticMeshSource
     {
         RTTI_OBJECT(SkinnedMeshSource, StaticMeshSource)
@@ -184,7 +184,7 @@ export namespace foundation::geometry
             foundation::core::Serialize(ar, "skeletonIndex", skeletonIndex);
             // Binary reads are positional, so a misaligned payload can hand the skinning fields
             // above someone else's bytes with ar.IsOk() still true. The parallel-stream invariant
-            // (one 24B VertexSkinning per vertex) catches exactly that - fail LOUDLY so the asset
+            // (one 24-byte VertexSkinning per vertex) catches that; the read fails so the asset
             // re-imports instead of animating garbage.
             if (ar.Mode() == SerializeMode::Read && ar.IsPayloadOk())
             {
@@ -210,7 +210,7 @@ export namespace foundation::geometry
 
         void FillSkinned(SkinnedMesh& mesh) const
         {
-            FillStatic(mesh); // base static stream + indices + submeshes + bounds
+            FillStatic(mesh); // base static stream, indices, submeshes and bounds
             const u32 scount = static_cast<u32>(skinningBlob.Size() / sizeof(VertexSkinning));
             mesh.skinning.Clear();
             mesh.skinning.Resize(scount);
@@ -224,16 +224,17 @@ export namespace foundation::geometry
 
     // Builds a StaticMeshSource into a runtime StaticMesh.
     //
-    // The runtime StaticMesh/SkinnedMesh is a PURE-CPU product (vertex/index arrays + submeshes;
-    // the renderer uploads to GPU buffers separately), so the async path (task #123) does the
-    // whole build - including the heavy vertex/index blob copy - on a JobSystem worker and finalize
-    // is a no-op. Safe: content-DB reads open independent streams and the mesh source + product
-    // types are registered on the main thread at startup (RegisterModelResource / AddFactory).
+    // The runtime StaticMesh/SkinnedMesh is a pure CPU product (vertex and index arrays and
+    // submeshes; the renderer uploads to GPU buffers separately), so the async path does the whole
+    // build, including the heavy vertex and index blob copy, on a JobSystem worker, and finalize
+    // is a no-op. That is safe because content-DB reads open independent streams and the mesh
+    // source and product types are registered on the main thread at startup
+    // (RegisterModelResource, AddFactory).
     class StaticMeshFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates. It is required, and the
+        // application that registers the factory chooses it.
         explicit StaticMeshFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] const TypeInfo* ProductType() const override
@@ -263,9 +264,10 @@ export namespace foundation::geometry
         [[nodiscard]] RefPtr<Object> BuildMesh(foundation::content::Instance& instance) const
         {
             RefPtr<ISerializable> object = instance.ReadObject();
-            // A SkinnedMeshSource IS-A StaticMeshSource, so a Ref<StaticMesh> can legitimately bind
-            // a skinned product (the picker offers both). Build the REAL SkinnedMesh then - FillStatic
-            // would silently drop the skin stream and the mesh could never animate.
+            // A SkinnedMeshSource is a StaticMeshSource, so a Ref<StaticMesh> can legitimately
+            // bind a skinned product (the picker offers both). In that case build the real
+            // SkinnedMesh, because FillStatic would silently drop the skinning stream and the mesh
+            // could never animate.
             if (SkinnedMeshSource* skinned = Cast<SkinnedMeshSource>(object.Get()))
             {
                 RefPtr<SkinnedMesh> mesh = MakeRef<SkinnedMesh>((*m_allocator));
@@ -286,12 +288,12 @@ export namespace foundation::geometry
         IAllocator* m_allocator;
     };
 
-    // Builds a SkinnedMeshSource into a runtime SkinnedMesh. Pure-CPU (see StaticMeshFactory).
+    // Builds a SkinnedMeshSource into a runtime SkinnedMesh. Pure CPU (see StaticMeshFactory).
     class SkinnedMeshFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates. It is required, and the
+        // application that registers the factory chooses it.
         explicit SkinnedMeshFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] const TypeInfo* ProductType() const override
@@ -335,9 +337,10 @@ export namespace foundation::geometry
         IAllocator* m_allocator;
     };
 
-    // The authority for the COOKED stream (WriteObject(source)); the source .xasset side keys off
-    // the mesh-ASSET version (MeshAsset.cppm), bumped in lockstep, so both paths stamp the same
-    // layout. 5 = Float4 tangent + LOD chain, geometry never inline.
+    // This version governs the cooked stream (WriteObject(source)). The source .xasset side keys
+    // off the mesh asset's version (MeshAsset.cppm), and the two are bumped together so both paths
+    // stamp the same layout. Version 5 carries the Float4 tangent and the LOD chain, and never
+    // stores geometry inline.
     RTTI_DEFINE_OBJECT_VERSIONED(StaticMeshSource, "rtti::geometry", 5)
     RTTI_DEFINE_OBJECT_VERSIONED(SkinnedMeshSource, "rtti::geometry", 4)
 
@@ -345,7 +348,7 @@ export namespace foundation::geometry
 
 export namespace foundation::geometry
 {
-    /// Registers the cooked records + products (content-DB construction by type name). Idempotent.
+    /// Registers the cooked records and products (content-DB construction by type name). Idempotent.
     inline void RegisterGeometryResourceTypes()
     {
         GlobalTypeRegistry().Register(StaticMeshSource::StaticType());
@@ -356,8 +359,8 @@ export namespace foundation::geometry
         GlobalTypeRegistry().Register(SkinnedMesh::StaticType());
     }
 
-    /// The geometry resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The geometry resource module: the descriptions the engine composition builds this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kGeometryResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<StaticMesh, StaticMeshSource, StaticMeshFactory>(),
         foundation::resource::FactoryWithAllocator<SkinnedMesh, SkinnedMeshSource, SkinnedMeshFactory>(),

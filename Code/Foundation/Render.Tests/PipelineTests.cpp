@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The mesh draw path through the new architecture: register a MeshRenderer with a
-// RendererRegistry, drive a RenderFrame (Begin / AddView / End) over an ExtractedScene with
-// a cube + camera, into a color target. Run on the Null RHI + real DXC: exercises the whole
-// path (extraction snapshot, view draw-list sort, mesh upload, per-object UBO, PSO build,
-// render pass, DrawIndexed) and verifies a pipeline was produced.
+// The mesh draw path: register a MeshRenderer with a RendererRegistry, drive a RenderFrame
+// (Begin / AddView / End) over an ExtractedScene with a cube and a camera, into a color target.
+// Run on the Null RHI with real DXC, it exercises the whole path (extraction snapshot, view
+// draw-list sort, mesh upload, per-object UBO, PSO build, render pass, DrawIndexed) and verifies
+// a pipeline was produced.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -55,7 +55,7 @@ namespace
         ss.SetIncludeResolver(&EngineShaderProvider());
     }
 
-    // A small fixture holding the GPU-side systems + a color target + an encoder.
+    // A small fixture holding the GPU-side systems, a color target and an encoder.
     struct RenderHarness
     {
         shaders::Compiler* compiler = nullptr;
@@ -163,7 +163,7 @@ TEST_CASE("RenderFrame draws a one-cube view (extract -> sort -> mesh upload -> 
 
     CHECK(psoCache.Size() >= 1); // a pipeline was built for the cube's material
 
-    // a second frame reuses the cached PSO + mesh buffers (no growth)
+    // a second frame reuses the cached PSO and mesh buffers (no growth)
     frame.Begin(*h.encoder, 1);
     frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256);
     frame.End();
@@ -206,7 +206,7 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
     RefPtr<materials::Material> material =
         materials::MaterialBuilder(u8"lit").Shader(u8"forward").Build();
 
-    // Distinct casters dedupe by their bone-matrix POINTER, so each gets its own palette.
+    // Distinct casters dedupe by their bone-matrix pointer, so each gets its own palette.
     constexpr u32 kBones = 64;
     constexpr u32 kCasters = 40; // 40 x 64 x 2 (current + previous slab) = 5120 > 4096
     Array<Array<Float4x4>> palettes;
@@ -231,8 +231,8 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
     // Nothing is reserved before the first frame (PrepareFrame sizes the rings).
     CHECK(meshRenderer.BonePoolSlotsPerFrame() == 0u);
 
-    // The first frame with 5120 matrices grows the pool to the next power of two - in the
-    // same frame, so nothing renders unskinned - and the next frame keeps it.
+    // The first frame with 5120 matrices grows the pool to the next power of two in that same
+    // frame, so nothing renders unskinned, and the next frame keeps it.
     frame.Begin(*h.encoder, 0);
     frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256);
     frame.End();
@@ -262,8 +262,8 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
     CHECK(small.BonePoolSlotsPerFrame() == MeshRenderer::InitialBonePoolSlots());
 
     // Two scenes in one frame (editor pages side by side): both skinned, not only the last drawn.
-    // Uploaded one scene at a time, each upload lost the one before it, and every page but the last
-    // drew its creatures in their bind pose.
+    // Uploading one scene at a time would lose each upload to the next, and every page but the last
+    // would draw its creatures in their bind pose.
     Array<Float4x4> otherPalette; // a skeleton of its own, in neither of the scenes above
     otherPalette.Resize(kBones, Float4x4::Identity());
     ExtractedScene other{DefaultAllocator()};
@@ -300,7 +300,7 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
 
 namespace
 {
-    // An external renderer's Opaque data: base fields + a payload that is NOT a MeshRenderData.
+    // An external renderer's Opaque data: base fields and a payload that is not a MeshRenderData.
     // Every byte past the base is 0xFF, so a blind MeshRenderData downcast would read a non-null
     // boneMatrices with a huge boneCount and file it as an animated caster.
     struct JunkRenderData : RenderData
@@ -349,9 +349,9 @@ TEST_CASE("RenderData::kind says what an item is; the caster list never downcast
     REQUIRE(materialSystem.Initialize(h.device).IsOk());
     MeshRenderer meshRenderer(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem, 2);
     REQUIRE(meshRenderer.Initialize().IsOk());
-    // The external renderer registers FIRST, so it - not the mesh renderer - holds id 0. That is
-    // the terrain probe's shape (it registers terrain alone) and any embedding that adds its own
-    // renderer before the built-in one.
+    // The external renderer registers first, so it, not the mesh renderer, holds id 0. That is
+    // the terrain probe's shape (it registers terrain alone) and that of any embedding that adds
+    // its own renderer before the built-in one.
     InertOpaqueRenderer external;
     RendererRegistry registry;
     registry.Register(&external);
@@ -362,7 +362,7 @@ TEST_CASE("RenderData::kind says what an item is; the caster list never downcast
     REQUIRE(shadows.Initialize().IsOk());
     RenderFrame frame(DefaultAllocator(), h.device, registry, 2, nullptr, nullptr, &shadows);
 
-    // Two junk casters from the external renderer (id 0) + one skinned mesh caster (id 1).
+    // Two junk casters from the external renderer (id 0) and one skinned mesh caster (id 1).
     RefPtr<geometry::SkinnedMesh> skinned = MakeRef<geometry::SkinnedMesh>(DefaultAllocator());
     for (u32 i = 0; i < 3; ++i)
     {
@@ -412,8 +412,8 @@ TEST_CASE("RenderData::kind says what an item is; the caster list never downcast
     frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 128, 128);
     frame.End();
 
-    // All three are casters (base fields only); exactly the skinned MESH is an animated caster.
-    // The id gate read 2 animated casters here (the junk bytes) and missed the real one.
+    // All three are casters (base fields only); only the skinned mesh is an animated caster.
+    // Gating on the renderer id would count the two junk casters as animated and miss the real one.
     CHECK(frame.ShadowCasterCount(&scene) == 3u);
     CHECK(frame.MovingShadowCasterCount(&scene) == 1u);
 }
@@ -500,7 +500,7 @@ TEST_CASE("RenderFrame batches same-mesh-same-material draws into an instanced d
     RefPtr<materials::Material> material =
         materials::MaterialBuilder(u8"lit").Shader(u8"forward").Build();
 
-    // Eight cubes, one shared mesh + material, distinct world + color -> one instanced batch.
+    // Eight cubes, one shared mesh and material, distinct world and color: one instanced batch.
     ExtractedScene scene{DefaultAllocator()};
     for (int n = 0; n < 8; ++n)
     {
@@ -547,7 +547,7 @@ TEST_CASE("RenderFrame parallel emit: many distinct draws fan out across the job
         registry.Register(&meshRenderer);
         RenderFrame frame(DefaultAllocator(), h.device, registry, /*framesInFlight*/ 2);
 
-        // 300 distinct materials (one shared mesh) -> 300 singleton draws (no batching) -> over
+        // 300 distinct materials (one shared mesh) make 300 singleton draws (no batching), over
         // the parallel-emit threshold, so emission fans out across the job system's worker pools.
         RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
         Array<RefPtr<materials::Material>> mats; // keep the materials alive for the frame
@@ -576,7 +576,7 @@ TEST_CASE("RenderFrame parallel emit: many distinct draws fan out across the job
             frame.Begin(*h.encoder, f);
             frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256,
                           256);
-            frame.End(); // parallel emit - must not crash or deadlock
+            frame.End(); // parallel emit: must not crash or deadlock
         }
         CHECK(psoCache.Size() >= 1);
     }
@@ -615,9 +615,10 @@ TEST_CASE("RenderFrame with an empty view still clears (no crash, no PSOs)")
 
 TEST_CASE("RenderFrame multi-scene shadows: each view sources its OWN scene (no bleed)")
 {
-    // The editor renders DIFFERENT scenes side-by-side in one Begin/End bracket (the Sandbox's
-    // multi-view-of-one-scene shape never hit this). Regression for the primary-scene sourcing
-    // bug: scene A's casters shadowed scene B's views, and B's own casters never rendered.
+    // The editor renders different scenes side by side in one Begin/End bracket (the Sandbox shows
+    // one scene in several views instead). Each scene's casters shadow its own views: sourcing
+    // shadows from one primary scene would let scene A's casters shadow scene B's views and leave
+    // B's own casters unrendered.
     RenderHarness h;
     if (!h.Init(128, 128))
     {
@@ -661,7 +662,7 @@ TEST_CASE("RenderFrame multi-scene shadows: each view sources its OWN scene (no 
         scene.AddLocalShadowCaster(c);
     };
 
-    // Scene A: spot caster only. Scene B: directional caster + spot caster.
+    // Scene A: spot caster only. Scene B: directional caster and spot caster.
     ExtractedScene sceneA{DefaultAllocator()};
     addCube(sceneA);
     addSpotCaster(sceneA, Float3{0, 5, 0});
@@ -685,21 +686,21 @@ TEST_CASE("RenderFrame multi-scene shadows: each view sources its OWN scene (no 
     frame.AddView(sceneB, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 128, 128);
     frame.End();
 
-    // Directional: ONLY the scene-B view has one (before the fix: keyed off scene A = none at all;
-    // with A/B swapped, both views would sample A's).
+    // Directional: only the scene-B view has one (keyed off scene A there would be none at all;
+    // with A and B swapped, both views would sample A's).
     const Span<const RenderFrame::ViewShadowDebug> info = frame.ViewShadowInfo();
     REQUIRE(info.Size() == 2u);
     CHECK_FALSE(info[0].directional);
     CHECK(info[1].directional);
-    // BOTH views must bind + declare the cascade map when it exists: the caster-less view's
-    // set-0 group holds the real map (frame-global) and its shader samples it statically -
-    // an undeclared read executes against ATTACHMENT-layout layers (the validation error a
-    // caster-less material-preview page next to a lit scene produced).
+    // Both views must bind and declare the cascade map when it exists: the caster-less view's
+    // set-0 group holds the real map (frame-global) and its shader samples it statically, so an
+    // undeclared read would execute against layers still in attachment layout (a validation
+    // error, as from a caster-less material-preview page beside a lit scene).
     CHECK(info[0].mapBound);
     CHECK(info[1].mapBound);
 
-    // Local shadows: BOTH scenes' spot casters got entries (before the fix: only scene A's), the
-    // entry buffer is the concatenation, and each view offsets by its scene's base.
+    // Local shadows: both scenes' spot casters get entries, the entry buffer is the concatenation,
+    // and each view offsets by its scene's base.
     const Span<const GpuLocalShadow> entries = frame.LocalShadowEntries();
     REQUIRE(entries.Size() == 2u);
     CHECK(info[0].localEntryBase == 0u);
@@ -725,9 +726,9 @@ TEST_CASE("RenderFrame multi-scene shadows: each view sources its OWN scene (no 
 
 TEST_CASE("ReflectionProbeSystem accumulates per-scene ranges (multi-scene frames)")
 {
-    // Frames can render several scenes; each scene's probes Assign() into ONE record buffer as
-    // a contiguous range, and views read their scene's range. Assign must not RESET
-    // per call, or only the last extracted scene's probes would be visible.
+    // Frames can render several scenes; each scene's probes Assign() into one record buffer as
+    // a contiguous range, and views read their scene's range. Assign must not reset per call, or
+    // only the last extracted scene's probes would be visible.
     RenderHarness h;
     if (!h.Init(64, 64))
     {
@@ -787,7 +788,7 @@ TEST_CASE("ReflectionProbeSystem accumulates per-scene ranges (multi-scene frame
     CHECK(record.mipCount > 0.0f);
     CHECK(record.slice != probes.CpuProbes()[1].slice); // each probe its own cube
 
-    // Every capture task carries its probe's OWNING scene (captures must render that scene's
+    // Every capture task carries its probe's owning scene (captures must render that scene's
     // geometry, never another's).
     REQUIRE(probes.Captures().Size() == 3u);
     for (const ReflectionProbeSystem::CaptureTask& t : probes.Captures())
@@ -795,9 +796,9 @@ TEST_CASE("ReflectionProbeSystem accumulates per-scene ranges (multi-scene frame
         CHECK(t.scene == ((t.slot == 0u) ? &sceneA : &sceneB));
     }
 
-    // Captured static probes stop producing tasks once the startup warmup window has
-    // drained (the first frames deliberately re-capture so a dropped web startup submit
-    // cannot silently lose the one-shot bake - mirrors the IBL env-bake warmup).
+    // Captured static probes stop producing tasks once the startup warmup window has drained.
+    // The first frames re-capture so a dropped web startup submit cannot silently lose the
+    // one-shot bake, as the IBL env-bake warmup does.
     u32 warmupFrames = 0;
     for (; warmupFrames < 64; ++warmupFrames)
     {
@@ -814,12 +815,12 @@ TEST_CASE("ReflectionProbeSystem accumulates per-scene ranges (multi-scene frame
         }
     }
     CHECK(warmupFrames > 0u);  // the warmup window re-captured at least once
-    CHECK(warmupFrames < 64u); // and it DRAINS - static probes go quiet
+    CHECK(warmupFrames < 64u); // and it drains: static probes go quiet
     CHECK(probes.Captures().Size() == 0u);
     CHECK(probes.RangeFor(&sceneB).base == 1u); // ranges rebuilt identically
 
     // A capture request (a Manual probe's capture()) recaptures that probe once, then it is
-    // quiet again: Manual captured only at the start, with no way to ask again.
+    // quiet again.
     pa.update = ProbeUpdateMode::Manual;
     ++pa.captureRequest;
     listA[0] = pa;
@@ -870,7 +871,7 @@ TEST_CASE("IBLSystem: per-scene contexts; env rebuilds when a scene's sky-textur
     hdr.textureUid = 101;
     hdr.textureIsCube = false;
 
-    // Two scenes with DIFFERENT skies get their own contexts and products.
+    // Two scenes with different skies get their own contexts and products.
     IBLSystem::Context *ctxA = nullptr, *ctxB = nullptr;
     {
         foundation::rendergraph::RenderGraph graph(DefaultAllocator(), &h.device);
@@ -888,7 +889,7 @@ TEST_CASE("IBLSystem: per-scene contexts; env rebuilds when a scene's sky-textur
     CHECK(ctxA->HasSunDisc());
     CHECK_FALSE(ctxB->HasSunDisc()); // textured env carries its own sun
 
-    // Steady state: same scenes re-Prepare into the SAME contexts with no rebuild.
+    // Steady state: the same scenes re-Prepare into the same contexts with no rebuild.
     const u64 genA = ctxA->Generation(), genB = ctxB->Generation();
     {
         foundation::rendergraph::RenderGraph graph(DefaultAllocator(), &h.device);
@@ -899,7 +900,7 @@ TEST_CASE("IBLSystem: per-scene contexts; env rebuilds when a scene's sky-textur
     CHECK(ctxA->Generation() == genA);
     CHECK(ctxB->Generation() == genB);
 
-    // Scene B's sky-texture PRODUCT changes (pick/hot-reload; uid-keyed, never the pointer):
+    // Scene B's sky-texture product changes (pick or hot-reload; keyed by uid, never the pointer):
     // only B rebuilds.
     hdr.textureUid = 102;
     {
@@ -958,15 +959,15 @@ TEST_CASE("RenderFrame draws an UNLIT material (unlit shader compiles + PSO buil
     frame.Begin(*h.encoder, 0);
     frame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 128, 128);
     frame.End();
-    CHECK(psoCache.Size() >= 1); // the unlit permutation compiled + built
+    CHECK(psoCache.Size() >= 1); // the unlit permutation compiled and built
 }
 
 namespace
 {
-    // Captures the RenderRecordContext fields per pass kind - the regression net for the
-    // prepass-LOD bug: the depth prepass MUST carry the same camera view matrix as the color
-    // pass, or per-view LOD selection (terrain chunk coverage, mesh LOD chains) picks DIFFERENT
-    // levels in the two passes and their depths z-fight (far-chunk row banding).
+    // Captures the RenderRecordContext fields per pass kind. The depth prepass must carry the same
+    // camera view matrix as the color pass, or per-view LOD selection (terrain chunk coverage, mesh
+    // LOD chains) picks different levels in the two passes and their depths z-fight (far-chunk row
+    // banding).
     class CtxCaptureRenderer final : public Renderer
     {
     public:
@@ -1041,7 +1042,7 @@ TEST_CASE("depth prepass context carries the camera view matrix (per-view LOD pa
 
     REQUIRE(capture.colorSeen);
     REQUIRE(capture.prepassSeen);
-    // BOTH passes saw the REAL camera view (not identity), and the SAME one - the invariant that
+    // Both passes saw the real camera view (not identity), and the same one: the invariant that
     // keeps per-view LOD selection identical between the prepass and the color pass.
     CHECK_FALSE(SameMatrix(capture.prepassViewMatrix, Float4x4::Identity()));
     CHECK(SameMatrix(capture.prepassViewMatrix, camera.view));
@@ -1102,7 +1103,7 @@ TEST_CASE("debug view: a named graph texture appends the blit pass; the inventor
     };
 
     // A valid selection: the per-view depth is always declared, so the blit pass appears
-    // (declared as a real reader - the lifetime extension is the graph's own dependency).
+    // (declared as a real reader; the lifetime extension is the graph's own dependency).
     {
         ViewSettings settings;
         settings.debug.resource = String(u8"forward.depth");
@@ -1125,9 +1126,9 @@ TEST_CASE("debug view: a named graph texture appends the blit pass; the inventor
                 CHECK(row.width == 256);
                 CHECK(row.height == 256);
             }
-            // Transients only: the view's IMPORTED target must never list (selecting it
-            // reads the blit's own write target - the forward.color layout-desync bug),
-            // and undimensioned persistents (ibl.prefilter et al) can't be sampled.
+            // Transients only: the view's imported target must never list (selecting it would
+            // read the blit's own write target and desync forward.color's layout), and
+            // undimensioned persistents (ibl.prefilter and the like) cannot be sampled.
             CHECK(row.name != u8"forward.color");
             CHECK(row.width > 0);
             CHECK(row.height > 0);
@@ -1135,7 +1136,7 @@ TEST_CASE("debug view: a named graph texture appends the blit pass; the inventor
         CHECK(foundDepth);
     }
 
-    // An unknown name: no blit pass, no crash - the viewport just shows the final image.
+    // An unknown name: no blit pass and no crash; the viewport just shows the final image.
     {
         ViewSettings settings;
         settings.debug.resource = String(u8"no.such.texture");
@@ -1236,7 +1237,7 @@ TEST_CASE("debug view: semantic modes blit the raw scene HDR on the tonemap path
     }
 
     // No-tonemap path: the forward writes the LDR target directly, so the semantic values
-    // are already raw on screen - no blit is (or should be) added.
+    // are already raw on screen, and no blit is (or should be) added.
     {
         RenderFrame frame(DefaultAllocator(), h.device, registry, /*framesInFlight*/ 2,
                           /*clusters*/ nullptr, /*tonemap*/ nullptr, /*shadows*/ nullptr,
@@ -1254,12 +1255,11 @@ TEST_CASE("debug view: semantic modes blit the raw scene HDR on the tonemap path
 
 TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive frames, and a new scene snaps")
 {
-    // The exposure state PING-PONGS its prev-frame view, so a per-view-only slot
-    // mismatched every frame and freed a descriptor set the previous frame's in-flight
-    // command buffer still referenced (VUID-vkFreeDescriptorSets-00309 spam in the
-    // editor with auto-exposure on). The slot now folds frameIndex in - this drives
-    // the wired path across alternating frames; the validation-layer editor repro is
-    // the on-device proof.
+    // The exposure state ping-pongs its previous-frame view, so a slot keyed per view alone would
+    // mismatch every frame and free a descriptor set the previous frame's in-flight command buffer
+    // still references (VUID-vkFreeDescriptorSets-00309 in the editor with auto exposure on). The
+    // slot folds frameIndex in; this drives the wired path across alternating frames, and the
+    // validation layers in the editor are the on-device check.
     RenderHarness h;
     if (!h.Init(128, 128))
     {
@@ -1315,8 +1315,7 @@ TEST_CASE("auto-exposure: per-(view,frame) bind-group slots survive consecutive 
         return false;
     };
 
-    // Three frames = the ping-pong wraps and slot 0 gets REWRITTEN (frame 2 reuses
-    // frame 0's slot); with the old per-view slot this rewrote every frame instead.
+    // Three frames: the ping-pong wraps and slot 0 is rewritten (frame 2 reuses frame 0's slot).
     // The first frame snaps to the measured value; the rest ease from the last frame.
     scene.SetSceneSerial(1);
     for (u32 f = 0; f < 3; ++f)
@@ -1400,7 +1399,7 @@ TEST_CASE("ssgi: enabling the per-view flag declares trace + resolve; the chain 
     };
 
     // Enabled: both SSGI passes declare, and the graph textures land in the debug-view
-    // inventory automatically (the layer-1 dividend).
+    // inventory automatically.
     {
         ViewSettings settings;
         settings.post.ssgiEnabled = true;
@@ -1458,8 +1457,8 @@ TEST_CASE("ssgi: enabling the per-view flag declares trace + resolve; the chain 
 TEST_CASE("mesh renderer: the per-frame rings hold the shadow casters, not only the camera's draws")
 {
     // A town block seen down one street: the camera draws 150 meshes, the shadow cascades draw
-    // all 330 casters (the camera does not cull them). Sized by the camera's draws, the shadows
-    // filled the rings and the camera's own prepass and forward lost their meshes.
+    // all 330 casters (the camera does not cull them). Rings sized by the camera's draws alone
+    // would fill with the shadows' and the camera's own prepass and forward would lose their meshes.
     const u32 cascades = 4;
     const u32 slots = MeshRenderer::InstanceSlotsPerFrame(150, 330, cascades, 0);
     CHECK(slots >= 150u * 2u + 330u * cascades);
@@ -1469,8 +1468,8 @@ TEST_CASE("mesh renderer: the per-frame rings hold the shadow casters, not only 
     CHECK(MeshRenderer::InstanceSlotsPerFrame(0, 0, cascades, 0) == 0u);
 }
 
-// A blended material authored as data (blend mode set, depth left at ReadWrite) drew in the
-// transparent pass with a depth-writing pipeline, which WebGPU refuses there; the pass reads depth only.
+// A blended material authored as data (blend mode set, depth left at ReadWrite) draws in the
+// transparent pass, where WebGPU refuses a depth-writing pipeline; the pass reads depth only.
 TEST_CASE("render: a pipeline for the transparent pass never writes depth")
 {
     using foundation::materials::DepthMode;
@@ -1480,9 +1479,9 @@ TEST_CASE("render: a pipeline for the transparent pass never writes depth")
     CHECK(MeshRenderer::TransparentPassDepth(DepthMode::Disabled) == DepthMode::Disabled);
 }
 
-// Far faded vegetation drew as flat grey silhouettes: the depth prepass left the camera position at
-// the origin, so a set dissolved by its distance from there in depth but from the camera in colour.
 // Every camera pass builds its context through CameraRecordContext, which carries the camera whole.
+// A depth prepass that left the camera position at the origin would dissolve a faded set by its
+// distance from there in depth but from the camera in colour: far vegetation as grey silhouettes.
 TEST_CASE("render: a camera pass's context carries the camera's position, matrix and scene clock")
 {
     ExtractedScene scene{DefaultAllocator()};
@@ -1508,9 +1507,9 @@ TEST_CASE("render: a camera pass's context carries the camera's position, matrix
     CHECK(ctx.prevTimeSeconds == 9.5f);
 }
 
-// A view's between-frame state follows its history key, not its place in the frame's list:
-// PaperKid's minimap, a render texture drawn on alternate frames before the main view, moved the
-// main view between places 0 and 1 every frame, so it read the minimap's camera and TAA history.
+// A view's between-frame state follows its history key, not its place in the frame's list: a
+// render texture drawn on alternate frames before the main view (a minimap) moves the main view
+// between places 0 and 1, and by place it would read the minimap's camera and TAA history.
 TEST_CASE("render: a view keeps its history slot by its key, wherever it falls in the frame")
 {
     RenderHarness h;

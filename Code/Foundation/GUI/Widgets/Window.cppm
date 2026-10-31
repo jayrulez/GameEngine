@@ -3,16 +3,18 @@
 
 // GUI - :window partition
 //
-// Window: a movable panel with a title bar and a content area. Modeled on eepp's UIWindow (role
-// only). Dragging the title bar moves the window (or, handed over, starts a drag source's drag);
-// with `resizable`, dragging the bottom-right grip resizes it (clamped to a minimum); either
-// reported once the press lets go; with `closable`, a close button in the title bar
-// closes it. Pressing anywhere on the title raises the window to the front. It arranges its
-// parts itself (title bar, content, grip), its look the theme's (window::title, ::grip,
-// `window titlebar > close`). Movement uses incremental world-space cursor deltas via an internal DragHandle
-// that follows the Slider/ScrollBar capture discipline (own m_dragging flag, so a drag that
-// leaves the handle keeps tracking). Nested parent transforms are not accounted for (deltas
-// are treated as parent-local) - fine for top-level windows under an untransformed root.
+// Window: a movable panel with a title bar and a content area. Dragging the title bar moves the
+// window, or, when the press is handed over, starts a drag source's drag. With `resizable`,
+// dragging the bottom-right grip resizes the window, clamped to a minimum size. A move or resize
+// is reported once the press is released. With `closable`, a close button in the title bar
+// closes the window. Pressing anywhere on the title raises the window to the front. The window
+// arranges its parts (title bar, content, grip) itself, and the theme styles them
+// (window::title, ::grip, `window titlebar > close`).
+//
+// Movement uses incremental world-space cursor deltas from an internal DragHandle, which captures
+// the pointer as Slider and ScrollBar do, with its own m_dragging flag, so a drag that leaves the
+// handle keeps tracking. Nested parent transforms are not accounted for: deltas are treated as
+// parent-local, which is fine for top-level windows under an untransformed root.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +36,7 @@ import :draw_context;
 import :layout_style;
 import :commands; // CommandEvent
 import :keymap;   // kBackCommand
-import foundation.vg; // PathBuilder, StrokeStyle (the close cross, the grip's lines)
+import foundation.vg; // PathBuilder, StrokeStyle, for the close cross and the grip's lines
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -43,30 +45,31 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    // A widget that reports incremental world-space cursor deltas while dragged. Internal to
-    // Window (title bar + resize grip), but generally reusable.
+    // A widget that reports incremental world-space cursor deltas while dragged. Window uses it for
+    // the title bar and the resize grip, but it is generally reusable.
     class DragHandle : public UIWidget
     {
         RTTI_OBJECT(DragHandle, UIWidget)
     public:
         core::Function<void(core::Float2)> OnDrag; // incremental cursor delta
         core::Function<void()> OnPressed;
-        core::Function<void()> OnReleased; // the press that dragged it let go (after OnDrag moved something)
-        /// Whether its press drags it (the default); off, its press is a drag source's (its own,
-        /// SetDragSource, or an ancestor's): what a floating dock window's title bar does (D5).
+        core::Function<void()> OnReleased; // the press that dragged it was released, after OnDrag moved something
+        /// Sets whether a press drags the handle (the default). When off, the press goes to a drag
+        /// source instead (the handle's own, set with SetDragSource, or an ancestor's), as a
+        /// floating dock window's title bar does.
         void SetDragsItself(bool drags) noexcept { m_dragsItself = drags; }
         [[nodiscard]] bool DragsItself() const noexcept { return m_dragsItself; }
 
     protected:
-        // A press moves or resizes the window (E7): a drag from what holds it is not offered.
+        // A press moves or resizes the window, so no drag is offered to the nodes that hold the handle.
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return m_dragsItself; }
         void OnMouseDown(const MouseEvent& event) override
         {
             event.Handled = true;
             if (OnPressed)
-                OnPressed(); // raise on any button
+                OnPressed(); // any button raises the window
             if (event.Button != MouseButton::Left || !m_dragsItself)
-                return; // but only the left button drags
+                return; // only the left button drags
             m_dragging = true;
             m_moved = false;
             m_last = event.Position;
@@ -103,7 +106,7 @@ export namespace foundation::gui
         core::Float2 m_last{0.0f, 0.0f};
     };
 
-    // A window's close button (`window titlebar > close`): a cross in its text colour.
+    // A window's close button (`window titlebar > close`): a cross drawn in the button's text colour.
     class WindowCloseButton : public ButtonBase
     {
         RTTI_OBJECT(WindowCloseButton, ButtonBase)
@@ -111,7 +114,7 @@ export namespace foundation::gui
         WindowCloseButton()
         {
             SetTag(core::StringView(u8"close"));
-            SetTabFocusable(false); // Escape closes from the keys
+            SetTabFocusable(false); // from the keyboard, Escape closes the window instead
         }
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{10.0f, 10.0f}; }
 
@@ -130,7 +133,7 @@ export namespace foundation::gui
             cross.LineTo(cx - r, cy + r);
             ctx.VG().StrokePath(cross.ToPath(), GetTextColor(), vg::StrokeStyle(1.5f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
         }
-        // Its press is its own: the title bar under it does not start a move.
+        // The button handles its own press, so the title bar underneath does not start a move.
         void OnMouseDown(const MouseEvent& event) override
         {
             if (event.Button == MouseButton::Left)
@@ -138,7 +141,7 @@ export namespace foundation::gui
         }
     };
 
-    // A window's resize grip: diagonal lines in the corner, in window::grip's colour.
+    // A window's resize grip: diagonal lines in the corner, in the window::grip part's colour.
     class WindowGrip : public DragHandle
     {
         RTTI_OBJECT(WindowGrip, DragHandle)
@@ -154,7 +157,7 @@ export namespace foundation::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             DragHandle::OnDraw(ctx, localBounds);
-            // Its lines in the corner it sits in: bottom right, bottom left in right to left.
+            // Draw the lines in the grip's corner: bottom right, or bottom left in right to left.
             const Rect b = GetLocalBounds();
             const bool rtl = IsRightToLeft();
             vg::PathBuilder lines;
@@ -178,7 +181,7 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"window"));
             SetClipChildren(true);
-            SetBox(FilledBox(m_bodyColor)); // its own box, which a sheet's (rounded, bordered, shadowed) replaces
+            SetBox(FilledBox(m_bodyColor)); // the default box; a style sheet's (rounded, bordered, shadowed) replaces it
 
             m_titleBar = core::MakeRef<DragHandle>(MemoryAllocator());
             m_titleBar->SetTag(core::StringView(u8"titlebar"));
@@ -190,7 +193,7 @@ export namespace foundation::gui
                     st.AlignItems = Align::Center;
                     st.ColumnGap = 6.0f;
                 });
-                // The same at both ends: right to left, the bar is the mirror of left to right.
+                // The padding is the same at both ends, so in right to left the bar mirrors itself.
                 m_titleBar->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             }
             Window* self = this;
@@ -204,7 +207,7 @@ export namespace foundation::gui
             AddChild(m_titleBar.Get());
 
             m_title = core::MakeRef<Label>(MemoryAllocator());
-            StyleWriteScope defaults(*m_title); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*m_title); // defaults: a style sheet overrides them and falls back to them
             m_title->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             m_title->SetHitTestVisible(false); // clicks fall through to the draggable title bar
             m_title->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
@@ -228,30 +231,31 @@ export namespace foundation::gui
 
         // The area for window content (add your widgets here).
         [[nodiscard]] Node* GetContent() const noexcept { return m_contentHost.Get(); }
-        [[nodiscard]] Node* GetChildHost() override { return m_contentHost.Get(); } // markup's children are its content
+        [[nodiscard]] Node* GetChildHost() override { return m_contentHost.Get(); } // markup's children become the content
 
         void SetTitle(core::StringView text) { m_title->SetText(text); }
         [[nodiscard]] core::StringView GetTitle() const { return m_title->GetText(); }
         void SetMinSize(core::Float2 size) { m_minSize = size; }
-        /// Its close button shows (a click on it, like Escape on a dialog, closes it).
+        /// Sets whether the close button shows. Clicking it closes the window, as Escape does on a
+        /// dialog.
         void SetClosable(bool closable)
         {
             m_closable = closable;
             m_closeButton->SetDisplayed(closable);
         }
         [[nodiscard]] bool IsClosable() const noexcept { return m_closable; }
-        /// Its grip shows and resizes it.
+        /// Sets whether the resize grip shows and resizes the window.
         void SetResizable(bool resizable)
         {
             m_resizable = resizable;
             m_resizeGrip->SetDisplayed(resizable);
         }
         [[nodiscard]] bool IsResizable() const noexcept { return m_resizable; }
-        /// Asked to close (its close button, or `back` while it is open modal): a window closes; a
-        /// dialog answers as its cancel does.
+        /// Called when the window is asked to close, by its close button or by `back` while open as a
+        /// modal. A plain window closes; a dialog answers as its cancel button does.
         virtual void RequestClose() { Close(); }
-        /// Whether `back` (Escape, the pad's East) asks it to close while it is open modal (K1):
-        /// when it may be closed.
+        /// Returns whether `back` (Escape, the pad's East button) asks the window to close while it
+        /// is open as a modal. By default that is when the window is closable.
         [[nodiscard]] virtual bool AnswersBack() const { return m_closable; }
         [[nodiscard]] f32 GetTitleBarHeight() const noexcept { return m_titleBarHeight; }
         void SetTitleBarHeight(f32 height)
@@ -274,25 +278,27 @@ export namespace foundation::gui
 
         // Fired when the window is closed via Close().
         void SetOnClose(core::Function<void()> callback) { m_onClose = core::Move(callback); }
-        /// The user moved it by its title bar or resized it by its grip: called once the press lets
-        /// go (not each move), with its place and size as they are then.
+        /// Sets the callback for the user moving the window by its title bar or resizing it by its
+        /// grip. It runs once when the press is released, not on each move, and the window's
+        /// position and size are final by then.
         void SetOnUserArranged(core::Function<void()> callback) { m_onUserArranged = core::Move(callback); }
-        /// Its title bar (what dragging it moves the window; DragHandle::SetDragsItself hands the
-        /// press to a drag source instead).
+        /// Returns the title bar, which moves the window when dragged. DragHandle::SetDragsItself
+        /// hands the press to a drag source instead.
         [[nodiscard]] DragHandle* GetTitleBar() const noexcept { return m_titleBar.Get(); }
 
-        // Show centered in `owner` as a MODAL window (E5): a manual, modal popup of `owner`, so
-        // everything below it is inert (pointer, keys, bindings) until Close(), its `::backdrop`
-        // part dims the root behind it, Tab stays within, focus moves to its first focusable child
-        // and comes back when it closes. Popups opened inside it (a combo box's list) stack above it.
+        // Shows the window centred in `owner` as a modal window: a manual, modal popup of `owner`.
+        // Everything below it is inert (pointer, keys, bindings) until Close(), its `::backdrop`
+        // part dims the root behind it, and Tab stays within it. Focus moves to its first focusable
+        // child and returns when it closes. Popups opened inside it (a combo box's list) stack
+        // above it.
         void OpenModal(Node& owner) { OpenInternal(owner, /*modal*/ true); }
 
-        // Show centered in `root` as a normal (non-blocking) top-level window.
+        // Shows the window centred in `root` as a normal, non-blocking top-level window.
         void Open(Node& root) { OpenInternal(root, /*modal*/ false); }
 
-        // Remove the window (a modal one through the popup stack, which gives focus back), and fire
-        // the close callback. A window placed in a tree as a child, never opened, closes the same
-        // way: its close button works however it came to be shown.
+        // Removes the window and calls the close callback. A modal window is closed through the popup
+        // stack, which gives focus back. A window placed in a tree as a child without being opened
+        // closes the same way, so its close button works however it came to be shown.
         void Close()
         {
             if (!m_open && GetParent() == nullptr)
@@ -300,10 +306,10 @@ export namespace foundation::gui
             EventDispatcher* dispatcher = GetEventDispatcher();
             if (m_modal && dispatcher != nullptr && dispatcher->IsPopupOpen(*this))
             {
-                (void)dispatcher->ClosePopup(*this); // its OnClosed finishes
+                (void)dispatcher->ClosePopup(*this); // the popup's OnClosed finishes the close
                 return;
             }
-            const core::RefPtr<Node> keep(this); // the tree may hold its only reference (a script's window)
+            const core::RefPtr<Node> keep(this); // the tree may hold the only reference (as for a script's window)
             RemoveFromParent();
             Closed();
             OnWindowGone();
@@ -311,18 +317,19 @@ export namespace foundation::gui
 
         [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
 
-        // === The script surface (E16; reflected in GUIReflectionImpl.cpp) ===
-        /// Opens it where it is, over what holds it (a window a script added to a page); false in none.
+        // === The script surface (reflected in GUIReflectionImpl.cpp) ===
+        /// Opens the window where it is, over its parent (for a window a script added to a page).
+        /// Returns false when it has no parent.
         bool OpenInPlace()
         {
             Node* parent = GetParent();
             if (parent == nullptr)
                 return false;
-            SetDisplayed(true); // one kept out of the layout until opened
+            SetDisplayed(true); // a window placed in a page stays out of the layout until opened
             Open(*parent);
             return true;
         }
-        /// Opens it as a modal window over the GUI it is in; false in none.
+        /// Opens the window as a modal over the GUI it is in. Returns false when it is in no GUI.
         bool OpenModalOver()
         {
             Node* root = GetRootNode();
@@ -333,14 +340,14 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsModal() const noexcept { return m_modal; }
 
-        // Theming parts: window::title (header bar) / ::grip (resize handle).
+        // Style parts: window::title (the header bar) and ::grip (the resize handle).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"title"));
             out.PushBack(core::StringView(u8"grip"));
         }
-        // Its title bar and grip are nodes of their own: window::title and ::grip give them
-        // their boxes, over their own colours.
+        // The title bar and the grip are separate nodes, so the window::title and ::grip parts give
+        // them their boxes, over their default colours.
         void OnPartStyleChange(core::StringView part) override
         {
             if (part == core::StringView(u8"title") || part == core::StringView(u8"grip"))
@@ -348,34 +355,37 @@ export namespace foundation::gui
         }
 
     protected:
-        /// It closed: IsOpen is false, though a modal one may still be playing its exit.
+        /// Called when the window has closed. IsOpen is false, though a modal window may still be
+        /// playing its exit.
         virtual void OnWindowClosed() {}
-        /// It was to open modal and its dispatcher refused it (SetModalInterceptor): it answers as
-        /// closing it would, without having shown. A dialog answers as its cancel.
+        /// Called when the window was about to open as a modal and its dispatcher refused
+        /// (SetModalInterceptor). It answers as closing would, without having been shown; a dialog
+        /// answers as its cancel button does.
         virtual void OnModalRefused()
         {
             if (m_onClose)
                 m_onClose();
             SendEvent(Event(EventType::Close, this));
         }
-        /// It has gone: out of the top layer, after its exit (a dialog written in a page goes back
-        /// there now). Not when it opens again before its exit ends.
+        /// Called when the window has gone from the top layer after its exit; a dialog written in a
+        /// page goes back there at this point. It is not called when the window opens again before
+        /// its exit ends.
         virtual void OnWindowGone() {}
         void OnSizeChange() override { Relayout(); }
-        // Its parts at their places: the title bar across the top, the content under it, the
-        // grip in the corner.
+        // Places the parts: the title bar across the top, the content below it, the grip in the corner.
         void OnLayout() override { Relayout(); }
-        // Its title takes its font (a sheet's inheritance gives the same).
+        // The title uses the window's font; with a sheet, inheritance gives the same.
         void OnTextStyleChange() override { ShareTextStyle(*m_title, false); }
 
     private:
-        // The title bar's and the grip's boxes: their colours with window::title's and ::grip's over them.
+        // Updates the title bar's and the grip's boxes: their default colours, with the window::title
+        // and ::grip part styles over them.
         void RefreshPartNodes()
         {
             const PartStyle& title = GetPartStyle(u8"title");
             const PartStyle& grip = GetPartStyle(u8"grip");
             m_titleBar->SetBox(title.Over(FilledBox(m_titleColor)), false);
-            m_resizeGrip->SetLineColor(grip.HasBackground ? grip.Box.BackgroundColor : m_gripColor); // drawn as lines
+            m_resizeGrip->SetLineColor(grip.HasBackground ? grip.Box.BackgroundColor : m_gripColor); // the grip is drawn as lines
             StyleWriteScope titleWrite(*m_titleBar);
             m_titleBar->SetAlpha(title.Opacity);
             StyleWriteScope gripWrite(*m_resizeGrip);
@@ -383,7 +393,7 @@ export namespace foundation::gui
         }
         void OpenInternal(Node& owner, bool modal)
         {
-            // Not inside itself or what it holds: the tree would loop.
+            // Never open inside itself or its own descendants, which would make the tree loop.
             for (const Node* n = &owner; n != nullptr; n = n->GetParent())
                 if (n == this)
                     return;
@@ -394,22 +404,23 @@ export namespace foundation::gui
             {
                 if (!dispatcher->AllowsModal(*this))
                 {
-                    OnModalRefused(); // never shown: answered as its cancel would answer
+                    OnModalRefused(); // never shown, so answer as cancel would
                     return;
                 }
                 m_modal = true;
                 m_open = true;
-                CenterIn(owner.GetRootNode() != nullptr ? *owner.GetRootNode() : owner); // in the root's space
+                CenterIn(owner.GetRootNode() != nullptr ? *owner.GetRootNode() : owner); // centre in the root's space
                 PopupOptions options;
                 options.Kind = PopupKind::Manual;
                 options.Modal = true;
                 options.TakesFocus = true;
                 Window* self = this;
                 options.OnClosed = [self](PopupCloseReason) { self->Closed(); };
-                // Closed, it plays the sheet's exit (a dialog fades out) before it goes.
+                // On close, play the sheet's exit (a dialog fades out) before the window goes.
                 options.LeavesOnClose = true;
                 options.OnGone = [self]() { self->OnWindowGone(); };
-                // Back asks it to close, while it is open (under it is inert, so nothing else would hear it).
+                // While open, `back` asks the window to close. Everything under it is inert, so nothing
+                // else would receive `back`.
                 if (AnswersBack())
                     m_backHandler = OnCommand(core::StringView(kBackCommand), [self](CommandEvent&) { self->RequestClose(); });
                 dispatcher->OpenPopup(owner, *this, core::Move(options));
@@ -436,7 +447,7 @@ export namespace foundation::gui
             OnWindowClosed();
             if (m_onClose)
                 m_onClose();
-            SendEvent(Event(EventType::Close, this)); // a script's on("close")
+            SendEvent(Event(EventType::Close, this)); // for a script's on("close")
         }
 
         void CenterIn(Node& root)
@@ -446,8 +457,8 @@ export namespace foundation::gui
             SetPosition(core::Float2{(r.x - s.x) * 0.5f, (r.y - s.y) * 0.5f});
         }
 
-        // From its grip's corner: in right to left the grip is at its bottom left, so the left edge
-        // follows the pointer and the right stays.
+        // Resizes from the grip's corner. In right to left the grip is at the bottom left, so the
+        // left edge follows the pointer and the right edge stays put.
         void ResizeBy(core::Float2 delta)
         {
             const core::Float2 s = GetSize();
@@ -466,10 +477,10 @@ export namespace foundation::gui
             const bool rtl = IsRightToLeft();
             m_resizeGrip->Arrange(MirroredIn(Rect{s.x - m_gripSize, s.y - m_gripSize, m_gripSize, m_gripSize},
                                              Rect{0.0f, 0.0f, s.x, s.y}, rtl));
-            // Its cursor the way its corner resizes: bottom right, or bottom left right to left.
+            // The grip's cursor matches its corner: bottom right, or bottom left in right to left.
             m_resizeGrip->SetCursor(rtl ? Cursor::NeswResize : Cursor::NwseResize);
             if (GetChildIndex(m_resizeGrip.Get()) + 1 != ChildCount())
-                m_resizeGrip->ToFront(); // over the content
+                m_resizeGrip->ToFront(); // keep it above the content
         }
 
         RefPtr<DragHandle> m_titleBar;
@@ -483,7 +494,7 @@ export namespace foundation::gui
         core::Function<void()> m_onUserArranged;
         bool m_open = false;
         bool m_modal = false;
-        u32 m_backHandler = 0; // its `back` handler while open modal
+        u32 m_backHandler = 0; // the `back` command handler while open as a modal
         core::Float2 m_minSize{120.0f, 60.0f};
         f32 m_titleBarHeight = 28.0f;
         f32 m_gripSize = 14.0f;

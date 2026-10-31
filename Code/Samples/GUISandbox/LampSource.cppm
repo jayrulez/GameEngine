@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUISandbox - the Toolkit page's property source (T1 and T2 of Specs/gui-lab-evolution-3.md): three
-// lamps, an application's own objects, behind a selection of one or all of them, with the undo an
-// application keeps (every lamp as it was before and after each change, one entry whatever the
-// gesture previewed). Its paths:
+// GUISandbox - the Toolkit page's property source: three lamps, standing in for an application's
+// own objects, behind a selection of one or all of them. It keeps undo history as an application
+// would: each entry holds every lamp as it was before and after a change, and a gesture is one
+// entry however much it previewed. Its paths:
 //   - name, a read-only id, enabled, type (an enum), intensity, range, shadows (flags), bounces;
-//   - position, a Float3; rotation, a Float3 of Euler degrees over a stored Quaternion, the source
-//     converting as the editor's Transform row does; cone, a Float2 shown only on spots (changing
-//     the type tells the grid its properties changed);
-//   - tags, a list of text of at most four; effects, a list of two types (Flicker, Pulse), each a
+//   - position, a Float3; rotation, a Float3 of Euler degrees over a stored Quaternion, converted
+//     as the editor's Transform row converts it; cone, a Float2 shown only on spots (changing the
+//     type tells the grid its properties changed);
+//   - tags, a list of at most four strings; effects, a list of two types (Flicker, Pulse), each a
 //     group of its own values;
-//   - flicker, a curve of Core's keys (T5): its row a preview, its editor the toolkit's curve view;
-//   - falloff, hinted "falloff", which no editor takes.
-// Each lamp's defaults are how it started; a revert puts them back. Copying writes a path and what
-// is under it with the engine's XmlSerializer, a shape first, so a paste refuses another shape.
-// The page's clip writes sampled values into the lamps (SetAnimatedValue) as it is scrubbed, with no
-// history: the grid follows.
+//   - flicker, a curve of Core's keys, shown as a preview in its row and edited in the toolkit's
+//     curve view;
+//   - falloff, hinted "falloff", a hint no editor takes.
+// Each lamp's defaults are its starting values, and a revert puts them back. Copying writes a path
+// and what is under it with the engine's XmlSerializer, shape first, so a paste refuses a different
+// shape. The page's clip writes sampled values into the lamps (SetAnimatedValue) as it is scrubbed,
+// without history, and the grid follows.
 
 module;
 #include "Core/Prelude.h"
@@ -72,7 +73,7 @@ export namespace sandbox
             m_lamps[1].Effects.PushBack(Pulse());
             m_lamps[2].Enabled = false;
             for (usize i = 0; i < kLamps; ++i)
-                m_defaults[i] = m_lamps[i]; // how each started is its default
+                m_defaults[i] = m_lamps[i]; // each lamp's starting state is its default
             SetSelection(0);
         }
 
@@ -90,7 +91,7 @@ export namespace sandbox
         [[nodiscard]] bool CanRedo() const noexcept { return !m_redo.IsEmpty(); }
         void Undo() { Step(m_undo, m_redo, true); }
         void Redo() { Step(m_redo, m_undo, false); }
-        /// A value the page's clip plays into lamp `lamp` at `path`: shown, kept in no history.
+        /// A value the page's clip plays into lamp `lamp` at `path`: shown, but kept out of the history.
         void SetAnimatedValue(usize lamp, StringView path, f64 value)
         {
             if (lamp >= kLamps)
@@ -239,7 +240,7 @@ export namespace sandbox
         {
             if (const Original* original = FindOriginal(path))
                 for (usize i = 0; i < m_selection.Size() && i < original->Values.Size(); ++i)
-                    Write(m_lamps[m_selection[i]], path, original->Values[i]); // the originals back first
+                    Write(m_lamps[m_selection[i]], path, original->Values[i]); // restore the originals first
             DropOriginal(path);
             Change(Format(u8"Set {}", path).AsView(), path, [&](Lamp& lamp)
             { Write(lamp, path, gui::ApplyPropertyWrite(Read(lamp, path), write)); });
@@ -291,7 +292,7 @@ export namespace sandbox
             const String words = edit.Kind == gui::ListEdit::Op::Insert   ? Format(u8"Added to {}", path)
                                  : edit.Kind == gui::ListEdit::Op::Remove ? Format(u8"Removed from {}", path)
                                                                           : Format(u8"Moved in {}", path);
-            Change(words.AsView(), StringView(u8"type"), [&](Lamp& lamp) // the rows change: read again
+            Change(words.AsView(), StringView(u8"type"), [&](Lamp& lamp) // the rows change, so the grid reads them again
             {
                 if (tags)
                     apply(lamp.Tags, String(u8"new"), kMostTags);
@@ -305,7 +306,7 @@ export namespace sandbox
 
         [[nodiscard]] gui::Variant GetDefault(StringView path, usize object) const override
         {
-            if (object >= m_selection.Size() || path == StringView(u8"id")) // the scene's id is no default
+            if (object >= m_selection.Size() || path == StringView(u8"id")) // the id has no default
                 return gui::Variant{};
             return ValueOf(m_defaults[m_selection[object]], path);
         }
@@ -324,8 +325,9 @@ export namespace sandbox
         }
         [[nodiscard]] String GetRevertText(StringView) const override { return String(u8"Revert to how it started"); }
 
-        // `path` and what is under it, the first lamp's, written with the engine's XmlSerializer: its
-        // shape, a list's count and its effects' types, then each value under its path from here.
+        // Writes `path` and what is under it, from the first lamp, with the engine's XmlSerializer:
+        // first its shape (a list's count and its effects' types), then each value under its path
+        // relative to `path`.
         [[nodiscard]] String CopyValue(StringView path) const override
         {
             if (m_selection.IsEmpty() || path == StringView(u8"falloff"))
@@ -349,7 +351,7 @@ export namespace sandbox
             LeavesOf(lamp, path, leaves);
             if (shape.AsView() == StringView(u8"Float2") || shape.AsView() == StringView(u8"Float3"))
             {
-                Lamp written = lamp; // writing reads it alone
+                Lamp written = lamp; // the serializer takes a mutable lamp; writing only reads it
                 SerializeFloats(ar, written, leaves, shape.AsView() == StringView(u8"Float3"));
             }
             else
@@ -491,7 +493,7 @@ export namespace sandbox
                     return false;
             return !m_selection.IsEmpty();
         }
-        // The fewest tags (or effects) any selected lamp has: the elements shown.
+        // The fewest tags (or effects) any selected lamp has, which is how many elements are shown.
         [[nodiscard]] usize Fewest(bool tags) const
         {
             usize count = ~usize{0};
@@ -527,7 +529,7 @@ export namespace sandbox
             return true;
         }
 
-        // A value as the grid reads it: a list's is its count.
+        // A value as the grid reads it; a list reads as its count.
         [[nodiscard]] static gui::Variant ValueOf(const Lamp& lamp, StringView path)
         {
             if (path == StringView(u8"tags"))
@@ -624,7 +626,7 @@ export namespace sandbox
                 lamp.Position[2] = value.AsFloat();
             else if (path == StringView(u8"rotation.pitch") || path == StringView(u8"rotation.yaw") || path == StringView(u8"rotation.roll"))
             {
-                // One angle set, the other two kept as they read now, as the editor's Transform row does.
+                // Set one angle and keep the other two as they read now, as the editor's Transform row does.
                 Float3 euler = EulerDegrees(lamp.Rotation);
                 const f32 degrees = static_cast<f32>(value.AsFloat());
                 if (path == StringView(u8"rotation.pitch"))
@@ -698,7 +700,7 @@ export namespace sandbox
             for (const gui::PropertyInfo& child : children)
                 LeavesOf(lamp, gui::JoinPropertyPath(path, child.Name.AsView()).AsView(), out);
         }
-        // `from`'s values put into `lamp` at `path` and under it; a list whole.
+        // Puts `from`'s values into `lamp` at `path` and under it; a list is copied whole.
         void PutUnder(Lamp& lamp, const Lamp& from, StringView path) const
         {
             if (path == StringView(u8"tags"))
@@ -781,9 +783,9 @@ export namespace sandbox
             key.Add('\0'); // read as a C string (items)
             return key;
         }
-        // A Float2 or a Float3 either way as Core's own value (its x, y, z), its parts taken in
-        // order, so one pastes onto another whatever its parts are called (a position onto a
-        // rotation's Euler degrees).
+        // Serializes a Float2 or Float3, in either direction, as Core's own value (its x, y, z). The
+        // parts are taken in order, so one pastes onto another whatever its parts are called (a
+        // position onto a rotation's Euler degrees).
         static void SerializeFloats(ISerializer& ar, Lamp& lamp, const Array<String>& leaves, bool three)
         {
             const auto part = [&](usize i) { return i < leaves.Size() ? static_cast<f32>(Read(lamp, leaves[i].AsView()).AsFloat()) : 0.0f; };
@@ -814,7 +816,7 @@ export namespace sandbox
                 }
             }
         }
-        // One value either way, in the type it has (a read keeps the value's type).
+        // Serializes one value, in either direction, in its own type (a read keeps the value's type).
         static void SerializeVariant(ISerializer& ar, const char* key, gui::Variant& value)
         {
             switch (value.GetType())
@@ -849,7 +851,7 @@ export namespace sandbox
             }
             case gui::Variant::Type::Curve:
             {
-                // Its count, then each key's fields, under the key's own object.
+                // The key count, then each key's fields under the key's own object.
                 Array<CurveKey> keys;
                 for (const CurveKey& k : value.AsCurve())
                     keys.PushBack(k);
@@ -887,7 +889,7 @@ export namespace sandbox
             }
         }
 
-        // The selected lamps changed by `change`, kept as one entry of the history.
+        // Applies `change` to the selected lamps and records it as one history entry.
         template <typename F>
         void Change(StringView words, StringView path, F&& change)
         {
@@ -904,7 +906,7 @@ export namespace sandbox
             if (m_onHistory)
                 m_onHistory(words);
         }
-        // The last entry changed nothing: it goes.
+        // Drops the last entry, which changed nothing.
         void DropLast()
         {
             if (!m_undo.IsEmpty())
@@ -912,8 +914,8 @@ export namespace sandbox
             if (m_onHistory)
                 m_onHistory(StringView(u8"Nothing changed"));
         }
-        // A type's change shows or hides the cone, and a list's change its rows: the properties
-        // changed, not only values.
+        // Changing the type shows or hides the cone, and changing a list adds or removes its rows, so
+        // the grid is told the properties changed, not only their values.
         void Changed(StringView path)
         {
             if (path == StringView(u8"type"))

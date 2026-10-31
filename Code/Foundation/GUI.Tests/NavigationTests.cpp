@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - directional navigation (G7 of Specs/vg-and-gui-lab.md): the geometric picker over grids
-// and irregular layouts, focus scopes (pass, wrap, contain, focus memory, default focus), widgets
-// that use the arrows and give them back at their ends, and activation by Return.
+// GUI - directional navigation: the geometric picker over grids and irregular layouts, focus scopes
+// (pass, wrap, contain, focus memory, default focus), widgets that use the arrows and give them
+// back at their ends, and activation by Return.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -56,7 +56,7 @@ TEST_CASE("navigation: a grid moves by rows and columns, and stops at its edges"
     for (int i = 0; i < 6; ++i)
         cells[i] = Cell(*bed.root.Get(), ids[i], 10.0f + 60.0f * static_cast<float>(i % 3), 10.0f + 40.0f * static_cast<float>(i / 3));
 
-    bed.Key(KeyCode::Down); // nothing focused: the first
+    bed.Key(KeyCode::Down); // with nothing focused, the first
     CHECK(bed.Focused() == SV(u8"a"));
     bed.Key(KeyCode::Right);
     CHECK(bed.Focused() == SV(u8"b"));
@@ -64,7 +64,7 @@ TEST_CASE("navigation: a grid moves by rows and columns, and stops at its edges"
     CHECK(bed.Focused() == SV(u8"e"));
     bed.Key(KeyCode::Right);
     CHECK(bed.Focused() == SV(u8"f"));
-    bed.Key(KeyCode::Right); // the edge
+    bed.Key(KeyCode::Right); // at the edge, so it stays
     CHECK(bed.Focused() == SV(u8"f"));
     bed.Key(KeyCode::Up);
     CHECK(bed.Focused() == SV(u8"c"));
@@ -80,7 +80,7 @@ TEST_CASE("navigation: an overlapping neighbour beats a diagonally nearer one")
     bed.Key(KeyCode::Right);
     CHECK(bed.Focused() == SV(u8"row"));
 
-    // Irregular: with nothing on the row, the nearest beyond wins.
+    // An irregular layout: with nothing on the row, the nearest widget beyond wins.
     row->SetVisible(false);
     bed.d.SetFocusNode(from.Get());
     bed.Key(KeyCode::Right);
@@ -125,16 +125,17 @@ TEST_CASE("navigation: scopes pass, wrap and contain; coming back returns to the
     bed.Key(KeyCode::Up); // and back round
     CHECK(bed.Focused() == SV(u8"three"));
 
-    // A pass scope hands an edge on: Right finds nothing inside the menu, so the widget beside it.
+    // A pass scope hands an edge on: Right finds nothing inside the menu, so it goes to the
+    // widget beside it.
     menu->SetNavScope(NavScope::Pass);
     bed.d.SetFocusNode(two.Get());
     bed.Key(KeyCode::Right);
     CHECK(bed.Focused() == SV(u8"side"));
-    bed.Key(KeyCode::Left); // back into the menu: the remembered widget, not the nearest
+    bed.Key(KeyCode::Left); // back into the menu, to the remembered widget, not the nearest
     CHECK(bed.Focused() == SV(u8"two"));
 
     menu->SetNavScope(NavScope::Contain);
-    bed.Key(KeyCode::Right); // a dialog's edge
+    bed.Key(KeyCode::Right); // a dialog's edge, so it stays
     CHECK(bed.Focused() == SV(u8"two"));
 }
 
@@ -168,7 +169,7 @@ TEST_CASE("navigation: a modal confines it")
     modal.Kind = PopupKind::Manual;
     modal.Modal = true;
     bed.d.OpenPopup(*bed.root, *dialog, core::Move(modal));
-    CHECK(bed.Focused() == SV(u8"yes")); // focus moves in: the modal's first
+    CHECK(bed.Focused() == SV(u8"yes")); // focus moves in, to the modal's first widget
     bed.Key(KeyCode::Right);
     CHECK(bed.Focused() == SV(u8"no"));
     bed.Key(KeyCode::Up); // the widget behind is out of reach
@@ -188,7 +189,7 @@ TEST_CASE("navigation: a slider keeps its arrows at its ends; a list gives them 
     bed.Key(KeyCode::Right);
     CHECK(slider->GetValue() == doctest::Approx(0.95f));
     bed.Key(KeyCode::Right);
-    bed.Key(KeyCode::Right); // at 1: still the slider's (holding to the end must not leave it)
+    bed.Key(KeyCode::Right); // at 1 the key still belongs to the slider, so holding it to the end keeps the focus
     CHECK(slider->GetValue() == doctest::Approx(1.0f));
     CHECK(bed.d.GetFocusNode() == slider.Get());
 
@@ -204,7 +205,7 @@ TEST_CASE("navigation: a slider keeps its arrows at its ends; a list gives them 
     bed.Key(KeyCode::Down);
     CHECK(list->GetSelectedIndex() == 1);
     CHECK(bed.d.GetFocusNode() == list.Get());
-    bed.Key(KeyCode::Down); // at the end: given back
+    bed.Key(KeyCode::Down); // at the end, the slider gives the key back
     CHECK(bed.Focused() == SV(u8"below"));
 }
 
@@ -233,7 +234,7 @@ TEST_CASE("navigation: overrides from a sheet, markup and native code come first
     auto a = Cell(*bed.root.Get(), u8"a", 10.0f, 10.0f);
     auto b = Cell(*bed.root.Get(), u8"b", 10.0f, 40.0f);
     auto c = Cell(*bed.root.Get(), u8"c", 300.0f, 300.0f);
-    // A sheet: down from a goes to c (geometry would say b); right from b stops.
+    // From a sheet: down from a goes to c (geometry would pick b), and right from b stops.
     StyleManager styles(CSSParser::Parse(SV(u8"#a { nav-down: c; } #b { nav-right: none; nav-next: a; }")));
     styles.ApplyTree(*bed.root.Get());
     CHECK(a->GetNavDown() == SV(u8"c"));
@@ -246,7 +247,7 @@ TEST_CASE("navigation: overrides from a sheet, markup and native code come first
     bed.Key(KeyCode::Tab); // nav-next
     CHECK(bed.Focused() == SV(u8"a"));
 
-    // An id that is not there, or auto: the picker as usual.
+    // An id that does not exist, or auto, leaves it to the picker as usual.
     a->SetNavDown(SV(u8"nowhere"));
     bed.d.SetFocusNode(a.Get());
     bed.Key(KeyCode::Down);
@@ -280,12 +281,12 @@ TEST_CASE("navigation: a held direction repeats after a delay, faster the longer
     };
     bed.d.PressDirection(NavDirection::Down); // at once
     CHECK(index() == 1);
-    CHECK(bed.root->NeedsFrame()); // held: frames keep coming
-    bed.root->GetContext().Update(core::Duration::FromSeconds(0.39)); // not yet the delay
+    CHECK(bed.root->NeedsFrame()); // held, so frames keep coming
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.39)); // the delay has not passed yet
     CHECK(index() == 1);
-    bed.root->GetContext().Update(core::Duration::FromSeconds(0.02)); // past it: the first repeat
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.02)); // past the delay: the first repeat
     CHECK(index() == 2);
-    // Over the first half second of repeats, slower; over a later half second, faster.
+    // Repeats are slower over the first half second and faster over a later half second.
     bed.root->GetContext().Update(core::Duration::FromSeconds(0.5));
     const int early = index() - 2;
     for (int i = 0; i < 20; ++i)
@@ -319,7 +320,7 @@ TEST_CASE("navigation: the focus ring shows for the keyboard and a gamepad, not 
     styles.ApplyTree(*bed.root.Get());
     CHECK(b->GetAlpha() == doctest::Approx(0.5f));
 
-    bed.d.InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left); // the pointer again
+    bed.d.InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left); // the pointer is used again
     CHECK_FALSE(b->IsFocusVisible());
 }
 
@@ -363,7 +364,7 @@ TEST_CASE("navigation: focusing a page lands on its entry, and Tab stays in a di
     auto elsewhere = Cell(*bed.root.Get(), u8"elsewhere", 200.0f, 10.0f);
     bed.d.SetFocusNode(elsewhere.Get());
     CHECK(page->FocusElement());
-    CHECK(bed.Focused() == SV(u8"first")); // what was last focused there
+    CHECK(bed.Focused() == SV(u8"first")); // the widget last focused there
 
     page->SetNavScope(NavScope::Contain);
     bed.d.SetFocusNode(second.Get());
@@ -375,7 +376,7 @@ TEST_CASE("navigation: focusing a page lands on its entry, and Tab stays in a di
 
 TEST_CASE("navigation: a held d-pad direction reaches the focused widget before navigation")
 {
-    // The showcase's slider: the d-pad must change its value, not move focus away from it.
+    // Like the showcase's slider: the d-pad must change its value, not move focus away from it.
     Bed bed;
     auto slider = Make<Slider>();
     slider->SetPosition(core::Float2{10.0f, 10.0f});
@@ -390,20 +391,21 @@ TEST_CASE("navigation: a held d-pad direction reaches the focused widget before 
     bed.root->GetContext().Update(core::Duration::FromSeconds(0.45)); // a repeat steps it again
     CHECK(slider->GetValue() == doctest::Approx(0.6f));
     bed.d.ReleaseDirection(NavDirection::Right);
-    // Down is not the slider's: focus moves.
+    // Down does not belong to the slider, so focus moves.
     bed.d.PressDirection(NavDirection::Down);
     bed.d.ReleaseDirection(NavDirection::Down);
-    CHECK(bed.d.GetFocusNode() == slider.Get()); // nothing below it: stays
+    CHECK(bed.d.GetFocusNode() == slider.Get()); // nothing is below it, so it stays
     slider->SetValue(1.0f);
-    bed.d.PressDirection(NavDirection::Right); // at its end: still the slider's
+    bed.d.PressDirection(NavDirection::Right); // at its end, the key still belongs to the slider
     CHECK(bed.d.GetFocusNode() == slider.Get());
     bed.d.ReleaseDirection(NavDirection::Right);
 }
 
 TEST_CASE("navigation: after a click on the backdrop, an arrow starts from the GUI's entry")
 {
-    // The showcase at launch: Play focused, a click on the backdrop, then Down. Down from the
-    // full-window backdrop found nothing below it (and Up found Quit); it must enter again.
+    // Like the showcase at launch: Play is focused, the backdrop is clicked, then Down is pressed.
+    // Down from the full-window backdrop finds nothing below it (and Up would find Quit), so focus
+    // must enter the page again.
     Bed bed;
     auto backdrop = Make<UIWidget>();
     backdrop->SetSize(core::Float2{400.0f, 400.0f});
@@ -418,7 +420,7 @@ TEST_CASE("navigation: after a click on the backdrop, an arrow starts from the G
     bed.Key(KeyCode::Down);
     CHECK(bed.Focused() == SV(u8"play"));
 
-    // Focus left on something that does not take focus (a program's doing) also enters.
+    // Focus left on something that does not take focus, by the program, also enters.
     bed.d.SetFocusNode(backdrop.Get());
     bed.Key(KeyCode::Down);
     CHECK(bed.Focused() == SV(u8"play"));
@@ -426,8 +428,8 @@ TEST_CASE("navigation: after a click on the backdrop, an arrow starts from the G
 
 TEST_CASE("navigation: a wide widget across the row above is not to the right")
 {
-    // The showcase's settings: a text field (120..380) above a centred Back (200..300). Right from
-    // Back has nothing to its right, so focus stays.
+    // Like the showcase's settings: a text field (120..380) above a centred Back (200..300). Back
+    // has nothing to its right, so Right leaves the focus where it is.
     Bed bed;
     auto field = Cell(*bed.root.Get(), u8"field", 120.0f, 100.0f, 260.0f, 30.0f);
     auto back = Cell(*bed.root.Get(), u8"back", 200.0f, 160.0f, 100.0f, 40.0f);
@@ -436,7 +438,7 @@ TEST_CASE("navigation: a wide widget across the row above is not to the right")
     CHECK(bed.Focused() == SV(u8"back"));
     bed.Key(KeyCode::Up); // up is where the field is
     CHECK(bed.Focused() == SV(u8"field"));
-    // Neighbours overlapping a little still count.
+    // Neighbours that overlap a little still count.
     auto beside = Cell(*bed.root.Get(), u8"beside", 290.0f, 160.0f, 60.0f, 40.0f); // overlaps back by 10
     bed.d.SetFocusNode(back.Get());
     bed.Key(KeyCode::Right);

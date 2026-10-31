@@ -3,10 +3,10 @@
 
 /// Foundation::Materials - the `:material` partition.
 ///
-/// Material: the shared, immutable template - a shader name + variant flags, a list
-/// of declared properties, a PipelineConfig, and default values. It is *data*: the
+/// Material: the shared, immutable template. It holds a shader name and variant flags, a list
+/// of declared properties, a PipelineConfig, and default values. It is data: the
 /// MaterialSystem reads the property list to infer the GPU bind-group layout, so a
-/// custom material/shader needs no renderer changes. Per-use overrides live in a
+/// custom material or shader needs no renderer changes. Per-use overrides live in a
 /// MaterialInstance. Material is an Object so it can be a resource-system product.
 
 module;
@@ -51,8 +51,8 @@ export namespace foundation::materials
         return MaterialPropertyType::Float;
     }
 
-    // One effect's parameters on a material (Specs/wind-for-every-shader.md): a group of its own,
-    // apart from the shader's properties and never in the shader's buffer. A material whose shader
+    // One effect's parameters on a material: a group of its own, apart from the shader's
+    // properties and never in the shader's buffer. A material whose shader
     // declares an effect's variant flag carries the effect's group: its parameters' names, types
     // and offsets in the effect's own buffer (the effect block's table), and their values. The
     // effect is active while its gate is above zero, and an active effect turns its flag on; what
@@ -130,8 +130,8 @@ export namespace foundation::materials
     {
         RTTI_OBJECT(Material, Object)
     public:
-        // Unique per-OBJECT id: renderer caches key by THIS, never by pointer (a reloaded
-        // material can reallocate at the freed address - the bind-group versioning rule).
+        // Unique per-object id. Renderer caches key by this, never by pointer: a reloaded
+        // material can reallocate at the freed address.
         const u64 uid = NextUid();
 
         // Sampler address modes for the material's texture slots (the importer wires them from
@@ -197,7 +197,7 @@ export namespace foundation::materials
                 if (end > m_uniformDataSize)
                 {
                     // Round to cbuffer alignment: the shader-side struct is 16-byte
-                    // padded on every API, and WebGPU VALIDATES the bound range
+                    // padded on every API, and WebGPU validates the bound range
                     // against the struct size (a 60-byte range under a 64-byte
                     // cbuffer fails). Buffer and binding both use this size.
                     m_uniformDataSize = (end + 15u) & ~15u;
@@ -275,7 +275,7 @@ export namespace foundation::materials
             return (p != nullptr) ? *p : nullptr;
         }
 
-        // --- effect groups (Specs/wind-for-every-shader.md) ---
+        // --- effect groups ---
 
         [[nodiscard]] usize EffectGroupCount() const noexcept { return m_effectGroups.Size(); }
         [[nodiscard]] const MaterialEffectGroup& GetEffectGroup(usize index) const noexcept
@@ -324,8 +324,8 @@ export namespace foundation::materials
 
         // Adds an effect's group (replacing one of the same name): its parameters' names, types
         // and offsets in the effect's buffer, the gate's index and the buffer's size, and the
-        // values (`uniformSize` bytes; shorter is zero-filled). What a material from an asset
-        // restores from its source.
+        // values (`uniformSize` bytes; shorter is zero-filled). A material loaded from an asset
+        // restores its groups through this.
         void SetEffectGroup(StringView effectName, shaders::ShaderFlags flag, u32 gateIndex,
                             u32 uniformSize, Span<const MaterialPropertyDef> properties,
                             Span<const u8> values)
@@ -364,7 +364,7 @@ export namespace foundation::materials
         }
 
         // Adds an effect's group from the effect's table (the shader system's, from the effect
-        // block), at the effect's defaults: what a material built in code takes from whoever
+        // block), at the effect's defaults. A material built in code gets the table from whoever
         // holds the shader system. An effect takes uniforms only, so every parameter is one.
         void AddEffectGroup(const shaders::ShaderEffect& effect)
         {
@@ -500,9 +500,9 @@ export namespace foundation::materials
 
     // The uniform bytes a shader receives: the authored bytes as they are, except each colour
     // property, which is authored sRGB and decoded to linear here (a ColorHdr's rgb also scaled by
-    // its intensity, its w set to 1). The one place a material's colours meet the GPU, like the
-    // hardware decode of an sRGB texture. `gpu` holds at least `authored.Size()` bytes.
-    // Over any declared set: the material's properties, or one of its effect groups'.
+    // its intensity, its w set to 1). This is the one place a material's colours meet the GPU,
+    // like the hardware decode of an sRGB texture. `gpu` holds at least `authored.Size()` bytes.
+    // Works over any declared set: the material's properties, or one of its effect groups'.
     inline void EncodeUniformsForGpu(Span<const MaterialPropertyDef> properties, Span<const u8> authored, u8* gpu)
     {
         if (authored.Size() > 0)

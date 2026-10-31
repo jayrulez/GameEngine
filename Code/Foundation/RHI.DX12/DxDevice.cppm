@@ -3,8 +3,7 @@
 
 /// DX12 implementation of Device.
 /// Creates ID3D12Device, manages descriptor heaps, queues, command signatures,
-/// and an internal blit pipeline for texture copy / mipmap generation.
-/// Ported from Sedulous.RHI.DX12/DX12Device.bf.
+/// and an internal blit pipeline for texture copies and mipmap generation.
 
 module;
 #include "Core/Prelude.h"
@@ -99,9 +98,9 @@ export namespace foundation::rhi::dx12
 
             // --- GPU-visible descriptor heaps (shader-visible) ---
             // SRV heap sized to the Tier-1 guarantee (1M): per-pool descriptor staging blocks
-            // (framesInFlight x jobSlots pools x 1024+) exhausted a 64K heap under multi-view
-            // loads - allocate() then fails, SetBindGroup goes stale, and draws sample garbage.
-            // The sampler heap is capped at 2048 by D3D12; staging spends it frugally instead.
+            // (framesInFlight x jobSlots pools x 1024+) can exhaust a 64K heap under multi-view
+            // loads, and then allocate() fails, SetBindGroup goes stale, and draws sample garbage.
+            // The sampler heap is capped at 2048 by D3D12, so samplers are never staged.
             m_gpuSrvHeap.init(m_device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1000000,
                               true);
             m_gpuSamplerHeap.init(m_device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 2048, true);
@@ -152,7 +151,7 @@ export namespace foundation::rhi::dx12
             // --- Internal blit pipeline ---
             createBlitPipeline();
 
-            // --- Detect mesh shader & ray tracing support ---
+            // --- Detect mesh shader and ray tracing support ---
             detectExtensionSupport();
 
             // --- Populate features ---
@@ -171,7 +170,7 @@ export namespace foundation::rhi::dx12
         }
 
         // ==================================================================
-        // Device interface -- Queues
+        // Device interface: queues
         // ==================================================================
 
         [[nodiscard]] ShaderFormat PreferredShaderFormat() const noexcept override
@@ -179,9 +178,10 @@ export namespace foundation::rhi::dx12
             return ShaderFormat::DXIL;
         }
 
-        // DX12 is the engine's reference coordinate system (VkRenderPassEncoder flips Y to "match DX12"),
-        // so reconstruction passes need no compensation. NB: DX12 uses a POSITIVE viewport, so if the sky/
-        // shadows ever render flipped on DX12 (untested on the reconstruction path), this becomes true.
+        // DX12 is the engine's reference coordinate system (VkRenderPassEncoder flips Y to match DX12),
+        // so reconstruction passes need no compensation. DX12 uses a positive viewport; the
+        // reconstruction path is untested here, so if the sky or shadows render flipped on DX12, this
+        // should return true.
         [[nodiscard]] bool NeedsClipSpaceYFlip() const noexcept override { return false; }
 
         // A statistics query resolves to D3D12's own eleven-counter record.
@@ -239,12 +239,12 @@ export namespace foundation::rhi::dx12
         // DX12 has no format-agnostic "framebuffer sample counts" limit the way Vulkan does; the
         // only query is per-format via CheckFeatureSupport(MULTISAMPLE_QUALITY_LEVELS), where
         // NumQualityLevels == 0 means the count is unsupported. The engine's MSAA scene pass
-        // binds a whole MRT set at ONE count, so a count only counts as supported when
-        // every attachment format the pass uses supports it - the same "colour AND depth agree"
-        // rule VkDevice applies to its two bitmasks.
+        // binds a whole MRT set at one count, so a count is supported only when every
+        // attachment format the pass uses supports it: the same "colour and depth agree" rule
+        // VkDevice applies to its two bitmasks.
         //
-        // The base Device returns 1 / count<=1 (no MSAA); these overrides are what let DX12
-        // offer MSAA at parity with Vulkan and WebGPU.
+        // The base Device reports no MSAA (1, and count <= 1); these overrides let DX12 offer
+        // MSAA as Vulkan and WebGPU do.
         [[nodiscard]] bool sampleCountSupported(u32 count) const noexcept
         {
             if (count <= 1)
@@ -282,7 +282,7 @@ export namespace foundation::rhi::dx12
         u32 MaxColorDepthSampleCount() const noexcept override
         {
             if (sampleCountSupported(4))
-                return 4; // engine ceiling; 8x is out of scope
+                return 4; // engine ceiling; 8x is not supported
             if (sampleCountSupported(2))
                 return 2;
             return 1;
@@ -295,11 +295,10 @@ export namespace foundation::rhi::dx12
 
         FormatSupport GetFormatSupport(TextureFormat format) override
         {
-            // Query the driver per `format`. Claiming the same broad capability set for
-            // everything is not merely imprecise - it reports support for formats D3D12
-            // cannot represent at all. ASTC is the concrete case: it has no DXGI equivalent, so
-            // callers told "supported" would upload and sample garbage, where Vulkan and
-            // WebGPU correctly skip.
+            // Query the driver per `format`. Claiming one broad capability set for every
+            // format would report support for formats D3D12 cannot represent at all. ASTC is
+            // the concrete case: it has no DXGI equivalent, so callers told "supported" would
+            // upload and sample garbage, where Vulkan and WebGPU correctly skip.
             const DXGI_FORMAT dxgi = toDxgiFormat(format);
             if (dxgi == DXGI_FORMAT_UNKNOWN)
                 return FormatSupport::Unsupported; // no DXGI spelling (ASTC, ETC, ...)
@@ -342,7 +341,7 @@ export namespace foundation::rhi::dx12
         }
 
         // ==================================================================
-        // Device interface -- Resource creation
+        // Device interface: resource creation
         // ==================================================================
 
         Status CreateBuffer(const BufferDesc& d, Buffer*& out) override
@@ -370,7 +369,7 @@ export namespace foundation::rhi::dx12
                 return ErrorCode::Unknown;
             }
             setDebugName(t->handle(), d.label);
-            // The description's size (the driver may pad: GetResourceAllocationInfo would say).
+            // The description's size (the driver may pad; GetResourceAllocationInfo would say).
             m_counters.TextureMade(EstimateTextureBytes(d), CountsAsRenderTarget(d));
             out = t;
             return ErrorCode::Ok;
@@ -425,7 +424,7 @@ export namespace foundation::rhi::dx12
         }
 
         // ==================================================================
-        // Binding & Pipelines
+        // Binding and pipelines
         // ==================================================================
 
         Status CreateBindGroupLayout(const BindGroupLayoutDesc& d, BindGroupLayout*& out) override
@@ -890,8 +889,8 @@ export namespace foundation::rhi::dx12
 
         bool IsLost() override
         {
-            // The D3D12 device is the authority: SUCCEEDED means alive, any
-            // failure (DXGI_ERROR_DEVICE_HUNG/REMOVED/RESET) means lost.
+            // The D3D12 device is the authority: SUCCEEDED means alive, and any
+            // failure (DXGI_ERROR_DEVICE_HUNG, REMOVED or RESET) means lost.
             return m_device && FAILED(m_device->GetDeviceRemovedReason());
         }
 
@@ -1150,7 +1149,7 @@ export namespace foundation::rhi::dx12
 
         void detectExtensionSupport()
         {
-            // Mesh shaders -- requires D3D12_OPTIONS7.
+            // Mesh shaders require D3D12_OPTIONS7.
             D3D12_FEATURE_DATA_D3D12_OPTIONS7 options7{};
             HRESULT hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS7, &options7,
                                                        sizeof(options7));
@@ -1170,7 +1169,7 @@ export namespace foundation::rhi::dx12
                                                  IID_PPV_ARGS(&m_dispatchMeshSignature));
             }
 
-            // Ray tracing -- requires D3D12_OPTIONS5.
+            // Ray tracing requires D3D12_OPTIONS5.
             D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5{};
             hr = m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5,
                                                sizeof(options5));
@@ -1181,16 +1180,13 @@ export namespace foundation::rhi::dx12
         }
 
         // ------------------------------------------------------------------
-        // Internal blit pipeline (fullscreen triangle VS + texture sample PS)
+        // Internal blit pipeline (fullscreen triangle VS and texture sample PS)
         // ------------------------------------------------------------------
 
         void createBlitPipeline()
         {
-            // TODO: Blit pipeline requires D3DCompile from d3dcompiler.lib.
-            // Add d3dcompiler to target_link_libraries and uncomment the code below
-            // once d3dcompiler linkage is available in this project.
-            //
-            // The blit pipeline is used for Blit and GenerateMipmaps operations.
+            // The blit pipeline is used for Blit and GenerateMipmaps operations. Its shaders are
+            // compiled at device creation with D3DCompile (d3dcompiler).
             const char vsSource[] = R"(
             struct VSOutput {
                 float4 Position : SV_Position;
@@ -1242,7 +1238,7 @@ export namespace foundation::rhi::dx12
             m_blitVsBytecode = {m_blitVsBlob->GetBufferPointer(), m_blitVsBlob->GetBufferSize()};
             m_blitPsBytecode = {m_blitPsBlob->GetBufferPointer(), m_blitPsBlob->GetBufferSize()};
 
-            // Root signature: 1 SRV descriptor table (t0) + 1 static linear sampler (s0).
+            // Root signature: one SRV descriptor table (t0) and one static linear sampler (s0).
             D3D12_DESCRIPTOR_RANGE srvRange{};
             srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
             srvRange.NumDescriptors = 1;
@@ -1431,7 +1427,7 @@ export namespace foundation::rhi::dx12
         m_device->rtvHeap()->free(rtvHandle);
     }
 
-    // ---- CommandPool out-of-line methods (need DxCommandEncoderImpl + context structs) ----
+    // ---- CommandPool out-of-line methods (they need DxCommandEncoderImpl and the context structs) ----
 
     Status DxCommandPoolImpl::CreateEncoder(CommandEncoder*& out)
     {
@@ -1486,7 +1482,7 @@ export namespace foundation::rhi::dx12
     {
         (void)desc; // DX12 bundles carry no creation-time attachment state
 
-        // A bundle records into its own BUNDLE-type allocator + list; the pool's
+        // A bundle records into its own BUNDLE-type allocator and list; the pool's
         // primary allocator is untouched, so bundles need no open command encoder.
         ComPtr<ID3D12CommandAllocator> alloc;
         if (FAILED(m_d3dDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_BUNDLE,

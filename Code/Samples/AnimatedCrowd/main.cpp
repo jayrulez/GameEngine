@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// AnimatedCrowd - a skinned crowd drawn as one instanced set: ONE InstancedMeshComponent (the
-// character at a grid of transforms) and ONE InstancedSkinningComponent (M shared pose palettes),
-// so the whole crowd is one draw per pass animated by M palette computes, not N. The HUD picks how
+// AnimatedCrowd - a skinned crowd drawn as instanced sets: per clip group, an InstancedMeshComponent
+// (the character at a grid of transforms) and an InstancedSkinningComponent (M shared pose palettes),
+// so the crowd costs a draw per group per pass and M palette computes per group, not N. The HUD picks how
 // each character takes its pose from the palettes (random, wave, columns, clusters). [Space] adds a
 // batch, [Backspace] removes one, [P] the profiler.
 
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (isolate animation-drive cost)
-#include "imgui.h"             // Dear ImGui (HUD) - used directly; integration is extensions.imgui
+#include "imgui.h"             // Dear ImGui (HUD), used directly; extensions.imgui does the integration
 
 import foundation.core;
 import foundation.profiler;
@@ -21,26 +21,26 @@ import foundation.runtime.desktop;
 import foundation.shell.desktop;
 import foundation.graphics;
 import foundation.graphics.gpu;
-import engine.defaultapp; // DefaultApplication (scene + render subsystems)
+import engine.defaultapp; // DefaultApplication (scene and render subsystems)
 import engine.composition; // FullComposition: the factory set every host composes from
 import foundation.scene;
 import engine.scene;
-import engine.render; // MeshComponent / CameraComponent + their managers
+import engine.render; // MeshComponent / CameraComponent and their managers
 import foundation.render;           // ViewCamera / ViewportRect (split-screen overrides)
 import extensions.imgui;            // ImguiSubsystem (HUD)
 import foundation.geometry;
-import foundation.geometry.resource; // StaticMeshFactory + StaticMesh product
+import foundation.geometry.resource; // StaticMeshFactory and the StaticMesh product
 import foundation.materials;
 import foundation.materials.resource;  // MaterialFactory (cooked materials)
 import foundation.texture.resource;    // TextureFactory (cooked textures)
 import foundation.animation.resource;  // Skeleton/AnimationClip factories
 import foundation.vfs;                 // NativeFileSystem mount for the content DB
 import foundation.content;             // ContentDatabase (cooked-resource output)
-import foundation.resource;            // ResourceManager + Proxy
+import foundation.resource;            // ResourceManager and Proxy
 import foundation.model;               // ModelLoadResult
-import modelimporter;       // LoadAndCook + ImportedModel manifest
+import modelimporter;       // LoadAndCook and the ImportedModel manifest
 import foundation.animation;           // AnimationClip / Skeleton
-import engine.animation; // SkeletalAnimationComponent(Manager) - engine-driven skinning
+import engine.animation; // SkeletalAnimationComponent(Manager): engine-driven skinning
 
 #include "../Common/FlyCamera.h" // shared free-fly camera (uses the imported runtime/core types)
 
@@ -66,7 +66,7 @@ namespace animation = foundation::animation;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -78,7 +78,7 @@ namespace
 
 namespace
 {
-    // How many characters each +/- press adds or removes (and the initial spawn).
+    // How many characters each [Space] or [Backspace] press adds or removes (and the initial spawn).
     static constexpr core::u32 kBatchSize = 500;
     static constexpr core::f32 kCharacterSpacing = 8.0f; // grid spacing (world units)
     static constexpr core::f32 kCharacterSize = 6.0f; // auto-fit target height (matches CookModel)
@@ -102,7 +102,7 @@ namespace
         };
 
         // Run uncapped (vsync off) so the frame time reflects real CPU+GPU skinning work, not the
-        // display refresh - same as RenderStressTest. The image tears; fine for a benchmark.
+        // display refresh, as RenderStressTest does. The image tears, which is fine for a benchmark.
         graphics::RenderWindowDesc MainRenderWindow() const override
         {
             graphics::RenderWindowDesc d;
@@ -132,17 +132,16 @@ namespace
             // CreateScene triggers the RenderSubsystem to inject the render managers.
             m_scene = PrimaryScenes().CreateScene(u8"sandbox");
 
-            // Per-scene environment ambient (a dim cool indirect term; IBL replaces it later).
+            // Per-scene environment ambient: a dim, cool indirect term.
             if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
             {
                 env->Environment().ambientColor = core::Color{0.12f, 0.16f, 0.28f, 1.0f};
                 env->Environment().ambientIntensity = 0.35f;
             }
 
-            // camera, pulled back along +Z looking at the origin (down -Z by default)
-            // Raised + pitched down so the horizontal floor (lights above it) is clearly in view,
-            // with the cube grids standing on it. Pitch ~28 deg below horizontal (looks toward the
-            // scene center). Default camera looks down -Z; rotating about +X by -pitch tilts it down.
+            // The camera, pulled back along +Z, raised and pitched about 28 degrees down toward the scene
+            // center so the floor and the grid standing on it are in view. The default camera looks down
+            // -Z; rotating about +X by -pitch tilts it down.
             m_camera = m_scene->CreateEntity(u8"camera");
             m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 14.0f, 30.0f});
             core::Transform camT = m_scene->GetLocalTransform(m_camera);
@@ -155,8 +154,8 @@ namespace
                     core::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
             }
 
-            // A large horizontal floor (Plane normal = +Y) under the scene - the animated models stand
-            // on it and the lights cast their shadows onto it.
+            // A large horizontal floor (Plane normal = +Y) under the scene. The animated models stand on
+            // it and the lights cast their shadows onto it.
             if (auto* meshes = m_scene->GetSystem<engine::render::MeshComponentManager>())
             {
                 m_floor = m_scene->CreateEntity(u8"floor");
@@ -167,8 +166,8 @@ namespace
                                                      0.0f, 0.65f));
             }
 
-            // One directional shadow-casting key light - the whole scene (skinning benchmark, kept light
-            // to isolate skinning/animation cost, à la Flax's "5,000 basic characters" reference scene).
+            // One directional shadow-casting key light is the only light: the benchmark scene stays
+            // simple to isolate the skinning and animation cost.
             if (auto* lights = m_scene->GetSystem<engine::render::LightComponentManager>())
             {
                 m_keyLight = m_scene->CreateEntity(u8"keyLight");
@@ -184,9 +183,9 @@ namespace
                 kl.castsShadows = true; // directional CSM (K toggles)
             }
 
-            LoadImportedModel(host); // cook the character + spawn the initial grid
+            LoadImportedModel(host); // cook the character and spawn the initial grid
 
-            // Lower default exposure: the procedural-sky IBL + sun are bright, so AgX washes out at 1.0.
+            // Lower default exposure: the procedural-sky IBL and sun are bright, so AgX washes out at 1.0.
             if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 render->SetExposure(0.5f);
@@ -196,11 +195,10 @@ namespace
                                u8"profiler  [Esc] exit\n");
         }
 
-        // The model-import seam: open the cooked-resource output DB, register the geometry factory,
-        // load+cook a glTF file through the importer, then spawn its node hierarchy as entities whose
-        // MeshComponents reference the cooked StaticMesh resources. This is the clean runtime cook seam
-        // the design calls for - an editor would cook offline and the runtime would only Bind, but the
-        // wiring (factory -> Bind -> render) is identical.
+        // Model import at runtime: open the cooked-resource output DB, register the factories, load and
+        // cook a glTF file through the importer, then spawn entities whose MeshComponents reference the
+        // cooked StaticMesh resources. An editor would cook offline and the runtime would only Bind, but
+        // the wiring (factory, then Bind, then render) is the same.
         void LoadImportedModel(runtime::IApplicationHost& host)
         {
             const core::String outputDirStorage =
@@ -214,7 +212,7 @@ namespace
                 return;
             }
 
-            // Output DB (cooked resources) + resource manager + the factories. ModelFactory builds the
+            // Output DB (cooked resources), resource manager and factories. ModelFactory builds the
             // manifest into a ModelResource, resolving its meshes/materials/textures (dependency edges).
             m_contentFs =
                 core::MakeUnique<vfs::NativeFileSystem>(AppRoot(), outputDir, AppRoot());
@@ -249,11 +247,9 @@ namespace
             }
         }
 
-        // Cook + bind + spawn one model, placed at `position` and auto-fit to a target size. Each model
-        // spawns its node hierarchy (local TRS + parent links) under a scaled model-root entity; mesh
-        // nodes get a MeshComponent referencing the cooked StaticMesh + material.
-        // Cook + bind the model ONCE. Every spawned instance shares these resources (mesh/skeleton/
-        // clips/materials); only the per-entity transform + AnimationPlayer differ. Returns true on success.
+        // Cook and bind the model once and compute its auto-fit scale. Every spawned instance shares
+        // these resources (mesh, skeleton, clips, materials); only the per-entity transform and
+        // AnimationPlayer differ. Returns true on success.
         bool CookModel(core::StringView prefix, core::StringView path)
         {
             if (m_contentDb.Get() == nullptr)
@@ -289,7 +285,7 @@ namespace
                 m_modelMats.PushBack(core::RefPtr<materials::Material>(mp.Get()));
             }
 
-            // Clips available for the crowd (the shared pose pool plays one).
+            // Clips available for the crowd (each shared pose pool plays one).
             for (auto& clip : m_model->animations)
             {
                 if (clip)
@@ -298,8 +294,8 @@ namespace
                 }
             }
 
-            // Every SKINNED mesh + its material - the crowd renders one instanced set per part (a Quaternius
-            // character is several skinned meshes sharing the one skeleton).
+            // Every skinned mesh and its material. The crowd renders one instanced set per part; a
+            // Quaternius character is several skinned meshes sharing one skeleton.
             for (core::usize i = 0; i < m_model->meshes.Size(); ++i)
             {
                 geometry::StaticMesh* mesh = m_model->meshes[i].Get();
@@ -315,7 +311,7 @@ namespace
                         : (m_modelMats.IsEmpty() ? core::RefPtr<materials::Material>{}
                                                  : m_modelMats[0]);
                 Part part{core::RefPtr<geometry::StaticMesh>(mesh), mat, matIdx, {}};
-                m_model->MeshMaterialIndices(i, part.slots); // what its submeshes index
+                m_model->MeshMaterialIndices(i, part.slots); // the slots its submeshes index
                 m_skinnedParts.PushBack(core::Move(part));
             }
             if (m_skinnedParts.IsEmpty())
@@ -326,10 +322,11 @@ namespace
             return true;
         }
 
-        // Merge the character's skinned mesh parts into ONE SkinnedMesh (one submesh per original part, so
-        // materials survive). Skinned parts share the skeleton + render in skeleton-root space, so it's a
-        // straight concat: append vertices + the parallel skinning stream, append indices offset by the
-        // running vertex base. Lets the crowd draw the whole character as one set instead of N.
+        // Merge the character's skinned mesh parts into one SkinnedMesh (one submesh per original part, so
+        // materials survive). Skinned parts share the skeleton and render in skeleton-root space, so this
+        // is a straight concatenation: append the vertices and the parallel skinning stream, and append
+        // the indices offset by the running vertex base. The crowd then draws the whole character as one
+        // set instead of N.
         [[nodiscard]] core::RefPtr<geometry::StaticMesh> MergeSkinnedParts()
         {
             core::RefPtr<geometry::SkinnedMesh> merged =
@@ -343,11 +340,11 @@ namespace
             merged->vertices.Reserve(totalV);
             merged->skinning.Reserve(totalV);
             merged->indices.Resize(
-                totalI); // sets logical count + rewinds cursor: IndexBuffer::Add only fills up to m_count
+                totalI); // sets the logical count and rewinds the cursor; IndexBuffer::Add fills up to m_count
 
-            // Running write cursor into the merged index buffer. NOT merged->indices.Count() - Resize()
-            // sets the logical count to totalI up front, so Count() reports the full size immediately;
-            // the actual fill position is how many Add()s have happened (Add advances an internal cursor).
+            // Running write cursor into the merged index buffer. It is not merged->indices.Count():
+            // Resize() sets the logical count to totalI up front, so Count() reports the full size at
+            // once, while the fill position is the number of Add() calls (Add advances an internal cursor).
             core::u32 iwrite = 0;
             for (const Part& p : m_skinnedParts)
             {
@@ -367,7 +364,7 @@ namespace
                     merged->skinning.PushBack(geometry::VertexSkinning{});
                 }
 
-                // Emit a submesh per original submesh (preserving its material), offsetting index VALUES by
+                // Emit a submesh per original submesh (preserving its material), offsetting index values by
                 // vbase; a part with no submeshes becomes one submesh with the part's material.
                 if (sm->subMeshes.IsEmpty())
                 {
@@ -416,9 +413,10 @@ namespace
             return core::RefPtr<geometry::StaticMesh>(merged.Get());
         }
 
-        // Rebuild the crowd to `count` instances: ONE InstancedMeshComponent (the skinned mesh at a grid of
-        // auto-fit-scaled transforms) + ONE InstancedSkinningComponent companion (M shared pose palettes). No per-
-        // entity characters - the whole crowd is one draw per pass, animated by M palette computes, not N.
+        // Rebuild the crowd to `count` instances. Each clip group gets an InstancedMeshComponent per draw
+        // mesh (the skinned mesh at a grid of auto-fit-scaled transforms) and one InstancedSkinningComponent
+        // (M shared pose palettes). There are no per-character entities, so the cost depends on the groups
+        // and M, not on N.
         void RebuildToCount(core::u32 count)
         {
             auto* imm = m_scene->GetSystem<engine::render::InstancedMeshComponentManager>();
@@ -440,12 +438,13 @@ namespace
                     : static_cast<core::u32>(core::Ceil(core::Sqrt(static_cast<core::f32>(count))));
             const core::f32 half = (static_cast<core::f32>(side) - 1.0f) * 0.5f;
 
-            // Bucket the crowd across the model's clips (round-robin), so it's a MIXED herd (walk/idle/run/...)
-            // rather than one clip. Each clip is its own group: its subset of instances + per-instance tints +
-            // its own InstancedSkinningComponent pose pool. Cost stays O(clips x M) palettes/frame, independent of count.
-            // Single-clip collapses the herd to ONE clip/pose-pool so the spatial pose policies read cleanly
-            // (with the mixed 6-clip herd, a column/wave spans different animations and looks muddled - the
-            // phase pattern is there, but overlaid on 6 different clips). Off = the mixed-herd benchmark.
+            // Bucket the crowd across the model's clips (round-robin), so it is a mixed herd (walk, idle,
+            // run, ...) rather than one clip. Each clip is its own group, with its subset of instances,
+            // per-instance tints and its own InstancedSkinningComponent pose pool. The cost stays at
+            // O(clips x M) palettes per frame, independent of the count.
+            // m_singleClip collapses the herd to one clip and pose pool so the spatial pose policies read
+            // cleanly; across six mixed clips a column or wave spans different animations and looks muddled.
+            // With it off, this is the mixed-herd benchmark.
             const core::u32 numClips =
                 m_singleClip ? 1u
                              : core::Min(static_cast<core::u32>(m_clips.Size()), kMaxClipGroups);
@@ -473,11 +472,11 @@ namespace
                 t.position = core::Float3{px, kFloorY, pz};
                 t.scale = core::Float3{m_fit, m_fit, m_fit};
                 const core::u32 g =
-                    i % numClips; // round-robin -> clips spread evenly across the grid
+                    i % numClips; // round-robin spreads the clips evenly across the grid
                 clipXf[g].PushBack(t.ToMatrix());
                 clipTint[g].PushBack(m_tintEnabled
                                          ? ClipTint(g)
-                                         : core::Color{1.0f, 1.0f, 1.0f, 1.0f}); // white == no tint
+                                         : core::Color{1.0f, 1.0f, 1.0f, 1.0f}); // white means no tint
                 // For the layout-aware policies the renderer can't compute from the flat index, precompute
                 // this instance's pose index here (we have its grid col/row) and hand it over as Explicit.
                 if (assign == render::PoseAssignment::Explicit)
@@ -518,8 +517,9 @@ namespace
                 }
             }
 
-            // One group per clip: an InstancedMeshComponent per draw-mesh (its subset of transforms +
-            // per-instance tints) + one InstancedSkinningComponent driving them all with that clip's shared pose pool.
+            // One group per clip: an InstancedMeshComponent per draw mesh (its subset of transforms and
+            // per-instance tints), and one InstancedSkinningComponent driving them all with that clip's
+            // shared pose pool.
             for (core::u32 g = 0; g < numClips; ++g)
             {
                 if (clipXf[g].IsEmpty())
@@ -545,7 +545,7 @@ namespace
                         }
                     }
                     c.tints =
-                        clipTint[g]; // set BEFORE SetInstances (the version bump uploads them)
+                        clipTint[g]; // set before SetInstances, whose version bump uploads them
                     c.poseAssignment =
                         assign; // how each instance picks its pose (read each frame, not uploaded)
                     if (assign == render::PoseAssignment::Explicit)
@@ -599,20 +599,21 @@ namespace
             return core::Color{base.x * v, base.y * v, base.z * v, 1.0f};
         }
 
-        // Map the HUD pose policy to a renderer PoseAssignment. Random is a function of the flat index the
-        // renderer computes itself (Hashed, no array). Wave/Columns/Clusters are all layout-aware (derived
-        // from the character's grid position, which the renderer can't see) -> Explicit + a per-instance
-        // array. (Wave is Explicit, NOT the renderer's Sequential: Sequential uses the per-set LOCAL index,
-        // and each clip set here holds every-Nth character, so it would be spatially scrambled, not a wave.)
+        // Map the HUD pose policy to a renderer PoseAssignment. Random is a function of the flat index,
+        // which the renderer computes itself (Hashed, no array). Wave, Columns and Clusters derive from
+        // the character's grid position, which the renderer cannot see, so they map to Explicit with a
+        // per-instance array. Wave is not the renderer's Sequential: Sequential uses the per-set local
+        // index, and each clip set here holds every Nth character, so the result would be scrambled.
         [[nodiscard]] static render::PoseAssignment PoseAssignmentFor(PosePolicy p)
         {
             return (p == PosePolicy::Random) ? render::PoseAssignment::Hashed
                                              : render::PoseAssignment::Explicit;
         }
 
-        // Pose index for the layout-aware policies, from a character's grid column/row (pure render helpers,
-        // unit-tested). Wave = diagonal phase gradient; Columns = whole column shares a phase (formation);
-        // Clusters = 4×4-character cells share a phase, hashed so neighbours differ. Only called for Explicit.
+        // Pose index for the layout-aware policies, from a character's grid column and row (pure, unit-
+        // tested render helpers). Wave is a diagonal phase gradient; Columns gives a whole column one phase
+        // (a formation); Clusters gives each 4x4-character cell one phase, hashed so neighbours differ.
+        // Called only for Explicit.
         [[nodiscard]] core::u32 PoseIndexFor(core::u32 col, core::u32 row, core::u32 side) const
         {
             switch (m_posePolicy)
@@ -625,8 +626,8 @@ namespace
                 return render::ClusterPose(col, row, 4, kPoseCount);
             case PosePolicy::Custom:
             {
-                // A bespoke index scheme authored right here in the sample - NO render helper - to show
-                // the Explicit contract accepts ANY per-instance index the caller computes itself.
+                // An index scheme written in the sample, with no render helper, to show that Explicit
+                // accepts any per-instance index the caller computes.
                 // Concentric rings: quantise each character's distance from the grid centre into a pose
                 // bucket, so the animation phase ripples outward in rings.
                 const core::f32 c = static_cast<core::f32>(side) * 0.5f;
@@ -639,20 +640,20 @@ namespace
             }
         }
 
-        // Position the fly camera so the whole side×side grid is in frame + grow the floor under it (called
-        // on every batch change).
+        // Position the fly camera so the whole side x side grid is in frame, and grow the floor under it.
+        // Called on every batch change.
         void AutoFrame(core::u32 side)
         {
             const core::f32 extent =
                 (static_cast<core::f32>(side) - 1.0f) * kCharacterSpacing * 0.5f + kCharacterSize;
-            // Floor: scale the base plane so it covers the whole grid + margin (uniform XZ; Y stays flat).
+            // Floor: scale the base plane so it covers the whole grid and a margin (uniform XZ; Y stays flat).
             const core::f32 fscale = core::Max(1.0f, (extent * 2.0f + 40.0f) / kFloorBaseSize);
             core::Transform ft = m_scene->GetLocalTransform(m_floor);
             ft.scale = core::Float3{fscale, 1.0f, fscale};
             m_scene->SetLocalTransform(m_floor, ft);
             const core::Float3 target{0.0f, kFloorY + kCharacterSize * 0.5f, 0.0f}; // grid center
             const core::f32 dist = extent / core::Tan(0.5236f) +
-                                   kCharacterSize * 2.0f; // fit 60° FOV horizontally + margin
+                                   kCharacterSize * 2.0f; // fit the 60° FOV horizontally, plus a margin
             const core::f32 camY = extent * 0.55f + kCharacterSize;
             m_fly.position = core::Float3{target.x, target.y + camY, target.z + dist};
             m_fly.yaw = 0.0f;
@@ -676,8 +677,8 @@ namespace
             RebuildToCount(n > kBatchSize ? n - kBatchSize : 0u);
         }
 
-        // Flip the directional light's CSM on/off (K, or the HUD checkbox) - isolate skinning throughput
-        // from the shadow-cascade GPU cost.
+        // Flip the directional light's CSM on or off (K or the HUD checkbox), to isolate skinning
+        // throughput from the shadow-cascade GPU cost.
         void ToggleShadows()
         {
             if (m_scene == nullptr)
@@ -711,21 +712,21 @@ namespace
                     }
                 }
             }
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
 
             // HUD over the scene (backbuffer is RenderTarget after the default render path).
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
         void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
         {
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime); // keep the P-key profiling dump
 
-            // ImGui HUD: open the frame + build the stats window (drawn in OnRenderWindow).
+            // ImGui HUD: open the frame and build the stats window (drawn in OnRenderWindow).
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
@@ -755,7 +756,7 @@ namespace
                         ToggleShadows();
                     }
                     if (kb->IsKeyPressed(shell::KeyCode::I))
-                    { // toggle prepass->forward instance-data sharing (A/B)
+                    { // toggle sharing instance data between prepass and forward (A/B)
                         if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                         {
                             const bool on = !render->InstanceSharing();
@@ -784,15 +785,14 @@ namespace
                 return;
             }
 
-            // Animation is now driven by the engine's AnimationSubsystem (it ticks each entity's
-            // SkeletalAnimationComponent in the scene's PostUpdate phase and feeds the bone matrices);
-            // the sample no longer drives players by hand.
+            // The engine's AnimationSubsystem drives animation: it ticks each entity's
+            // SkeletalAnimationComponent in the scene's PostUpdate phase and feeds the bone matrices.
 
-            // Smoothed FPS/frame-ms (vsync off -> real frame cost); shown in the ImGui HUD.
+            // Smoothed FPS and frame time (vsync is off, so this is the real frame cost), shown in the HUD.
             m_frameTimeMs = m_frameTimeMs * 0.9f + (deltaTime * 1000.0f) * 0.1f;
 
-            // TEMP headless auto-profile: hold a fixed count, warm up, then dump CPU + GPU profiler
-            // reports (same as the P key) and exit - for capturing the baseline frame breakdown.
+            // Headless auto-profile: hold a fixed count, warm up, then dump the CPU and GPU profiler
+            // reports (as the P key does) and exit, to capture the baseline frame breakdown.
             if (kAutoProfile)
             {
                 m_profileElapsed += deltaTime;
@@ -810,8 +810,9 @@ namespace
                 }
             }
 
-            // TEMP headless auto-ramp: grow the count until FPS settles at/below 50, then report + exit.
-            // Coarse (+25%) while well above 50, fine (+kBatchSize) near the knee, for a precise threshold.
+            // Headless auto-ramp: grow the count until FPS settles at or below 50, then report and exit.
+            // Steps are coarse (+25%) well above 50 and fine (+kBatchSize) near the knee, for a precise
+            // threshold.
             if (kAutoRamp)
             {
                 m_rampSettle += deltaTime;
@@ -836,7 +837,7 @@ namespace
             }
         }
 
-        // ImGui HUD: character count + frame stats + exposure/bloom controls (H toggles it).
+        // ImGui HUD: character count, frame stats and exposure/bloom controls (H toggles it).
         void BuildHud(engine::render::RenderSubsystem* render)
         {
             if (!m_showHud)
@@ -931,7 +932,7 @@ namespace
                 {
                     ImGui::TextDisabled("(shadows off - isolates skinning throughput)");
                 }
-                // The sun's shadow reach is the scene's (its environment settings).
+                // The sun's shadow reach lives in the scene's environment settings.
                 if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
                 {
                     ImGui::SliderFloat("Distance", &env->Environment().shadowDistance, 50.0f, 1000.0f, "%.0f");
@@ -970,12 +971,12 @@ namespace
         scene::EntityHandle m_floor{};
         samples::FlyCamera m_fly{.position = core::Float3{0.0f, 10.0f, 26.0f}, .pitch = -0.25f};
 
-        // Model-import pipeline state (must outlive the spawned entities - the resource manager owns
-        // the cooked products' handles; the content DB + its filesystem mount back the manager).
+        // Model-import pipeline state. It must outlive the spawned entities: the resource manager owns
+        // the cooked products' handles, and the content DB and its filesystem mount back the manager.
         core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
         core::UniquePtr<content::ContentDatabase> m_contentDb;
         core::UniquePtr<resource::ResourceManager> m_resources;
-        resource::ResourceFactorySet m_factories; // the engine composition's set, this host's services
+        resource::ResourceFactorySet m_factories; // the engine composition's factories, built with this host's services
         resource::Proxy<model::ModelResource>
             m_model; // the one cooked model, shared by every instance
         core::Array<core::RefPtr<materials::Material>>
@@ -983,9 +984,8 @@ namespace
         core::Array<animation::AnimationClip*> m_clips; // clips for random per-instance selection
         core::f32 m_fit = 1.0f;                         // auto-fit scale
 
-        // The crowd: ONE entity carrying an InstancedMeshComponent (the skinned mesh at N transforms) + an
-        // InstancedSkinningComponent companion (M shared pose palettes). m_crowdCount tracks the instance count.
-        // A skinned mesh part of the character + its material (+ global material index, for merged submeshes).
+        // A skinned mesh part of the character, its material and its global material index (for merged
+        // submeshes).
         struct Part
         {
             core::RefPtr<geometry::StaticMesh> mesh;
@@ -997,7 +997,7 @@ namespace
         core::Array<Part>
             m_skinnedParts; // every skinned mesh of the model (shared across the crowd)
         core::Array<scene::EntityHandle>
-            m_crowdParts; // all per-clip-group set + anim entities, torn down together
+            m_crowdParts; // every clip group's set and animation entities, torn down together
         core::u32 m_crowdCount = 0;
         core::u32 m_clipGroups = 1;
         bool m_tintEnabled = true; // per-instance/per-clip tint (HUD toggle)
@@ -1005,7 +1005,7 @@ namespace
             false; // merge the character's skinned parts into one mesh (HUD toggle)
         PosePolicy m_posePolicy =
             PosePolicy::Random;    // how each character picks its shared pose (HUD)
-        bool m_singleClip = false; // collapse to 1 clip/pool so pose modes read cleanly (HUD)
+        bool m_singleClip = false; // collapse to one clip and pool so pose modes read cleanly (HUD)
         core::RefPtr<geometry::StaticMesh>
             m_mergedMesh; // cached merged mesh (one submesh per original part)
         core::Random m_rng{0x9e3779b97f4a7c15ull};
@@ -1016,11 +1016,11 @@ namespace
         bool m_showHud = true; // HUD visibility (H)
 
         // Measurement aid (off by default): auto-ramp the character count until FPS <= 50, then
-        // report + exit. Flip to true for a headless throughput baseline; normal use is interactive.
+        // report and exit. Flip to true for a headless throughput baseline; normal use is interactive.
         static constexpr bool kAutoRamp = false;
         core::f32 m_rampSettle = 0.0f;
-        // Measurement aid (off by default): hold a fixed count, then dump the CPU+GPU profiler
-        // breakdown and exit. Flip true to re-capture the baseline frame breakdown headless.
+        // Measurement aid (off by default): hold a fixed count, then dump the CPU and GPU profiler
+        // breakdown and exit. Set it to true to capture the baseline frame breakdown headless.
         static constexpr bool kAutoProfile = false;
         static constexpr core::u32 kProfileCount = 1000;
         core::f32 m_profileElapsed = 0.0f;

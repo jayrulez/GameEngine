@@ -3,37 +3,38 @@
 
 // GUI.Code - :code_editor partition
 //
-// The code editor's view (C1 of Specs/gui-lab-evolution-3.md) over a CodeDocument (its own, or one
-// its host shares). Each line in view is shaped with the GUI's text and kept until its text changes
-// (foundation.ui's editor drew every token each frame, fixed pitch, so tabs and wide characters
-// misaligned); tabs go to tab stops in what is shown, and the caret and the mouse go by the shaped
-// places, so any font serves. Code runs left to right in every language, a string's Arabic still
-// shaped. Only the rows in view are drawn; the editor is a scroll container over its lines, the
-// core's bars and wheel scrolling it.
+// The code editor's view over a CodeDocument, either its own or one its host shares. Each line in
+// view is shaped with the GUI's text and kept until its text changes. Tabs advance to tab stops in
+// the shown text, and the caret and the mouse follow the shaped glyph positions, so any font works,
+// not only a fixed-pitch one. Code runs left to right in every language, though Arabic inside a
+// string is still shaped. Only the rows in view are drawn. The editor is a scroll container over its
+// lines, scrolled by the core's scroll bars and the wheel.
 //
-// Several selections from the start, sorted and apart (zed's): a click places one caret, Shift
-// extends it, Alt adds one; a double click selects a word, a triple a line, a drag extends by what
-// the press selected. The keys are the keymap's text commands (the arrows, Home and End, the word
-// and page moves, deleting, undo, the clipboard), bound in its own "codeeditor" context by
-// BindCodeEditorKeys, each run at every caret; typing goes in at each, one undo step that puts every
-// caret back; Return keeps the line's indent; Tab indents; Escape leaves one caret. The gutter
-// numbers the lines.
+// There may be several selections, kept sorted and apart. A click places one caret, Shift+click
+// extends it, and Alt+click adds another. A double click selects a word, a triple click a line, and
+// a drag extends the selection by the unit the press selected. The keys are the keymap's text
+// commands (the arrows, Home and End, the word and page moves, deleting, undo, the clipboard).
+// BindCodeEditorKeys binds them in the editor's own "codeeditor" context, and each command runs at
+// every caret. Typing goes in at each caret as one undo step, and undoing it puts every caret back.
+// Return keeps the line's indent, Tab indents, and Escape leaves one caret. The gutter numbers the
+// lines.
 //
-// Given a language (C2), each line's tokens are kept with the state it began in and its hash, and a
-// line is tokenized again only where it changed or the line before now ends otherwise; tokenizing
-// runs to the last line in view. Each token draws in its part's colour (`codeeditor::keyword {
-// color: ... }`), so a theme restyles code.
+// With a language set, each line's tokens are kept together with the tokenizer state the line began
+// in and the line's hash. A line is tokenized again only when it changed or when the line before it
+// now ends in a different state, and tokenizing runs only to the last line in view. Each token draws
+// in its part's colour (`codeeditor::keyword { color: ... }`), so a theme can restyle code.
 //
-// Given its host's language service (C6), a name typed (or a trigger, or Ctrl+Space) opens the
-// completion list below the word, a popup that leaves it the focus; while it shows, the editor
-// declares "completing" beside "codeeditor", so the list's keys win; the service's word under the
-// pointer joins the tooltip after the diagnostics.
+// With the host's language service set, typing a name (or a trigger character, or Ctrl+Space)
+// opens the completion list below the word. The list is a popup that leaves the focus in the
+// editor. While it shows, the editor declares the "completing" key context beside "codeeditor", so
+// the list's keys win. The service's text for the word under the pointer is added to the tooltip
+// after the diagnostics.
 //
-// Folding (C7): ranges from the language's brackets, its indentation or its regions, or the host's;
-// a folded range's lines hide. Soft wrap breaks long lines at the view's width. One map from lines
-// to rows serves the carets, the pointer, the scroll and the drawing, so a fold is one row and a
-// wrapped line several. Whitespace is drawn by VS Code's choices (none, boundary, selection,
-// trailing, all).
+// Fold ranges come from the language's brackets, its indentation or its regions, or from the host.
+// The lines inside a folded range are hidden. Soft wrap breaks long lines at the view's width. One
+// map from lines to rows serves the carets, the pointer, the scroll and the drawing, so a fold
+// takes one row and a wrapped line takes several. The whitespace drawing options follow VS Code's
+// (none, boundary, selection, trailing, all).
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +44,7 @@ export module foundation.gui.code:code_editor;
 
 import foundation.core;
 import foundation.fonts;
-import foundation.vg; // PathBuilder (a diagnostic's wave, a marker's shapes)
+import foundation.vg; // PathBuilder, for a diagnostic's wave and a marker's shapes
 import foundation.gui;
 import :code_document;
 import :code_language;
@@ -57,7 +58,7 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    // The code editor's own commands (C3), bound in its "codeeditor" key context.
+    // The code editor's own commands, bound in its "codeeditor" key context.
     inline constexpr const char8_t* kCodeToggleComment = u8"code.toggle-comment";
     inline constexpr const char8_t* kCodeIndentLines = u8"code.indent-lines";
     inline constexpr const char8_t* kCodeOutdentLines = u8"code.outdent-lines";
@@ -89,10 +90,11 @@ export namespace foundation::gui
     inline constexpr const char8_t* kCodeCompletionAccept = u8"code.completion-accept";
     inline constexpr const char8_t* kCodeCompletionClose = u8"code.completion-close";
 
-    /// Binds the code editor's keys (VS Code's, ruling 5), rebindable as any: a host calls it once
-    /// for a GUI's keymap, after the GUI's own bindings (which then win a tie). The text editing
-    /// keys and its own commands where the editor has the focus (not a field inside it); finding
-    /// from its find bar's fields too.
+    /// Binds the code editor's keys (VS Code's bindings), which can be rebound like any others. A
+    /// host calls it once for a GUI's keymap, after the GUI's own bindings, so the GUI's bindings
+    /// win a tie. The text editing keys and the editor's own commands apply where the editor itself
+    /// has the focus (not a field inside it); the find commands also apply from the find bar's
+    /// fields.
     inline void BindCodeEditorKeys(Keymap& keymap)
     {
         constexpr core::StringView kItself = core::StringView(u8"codeeditor && !textinput");
@@ -135,8 +137,9 @@ export namespace foundation::gui
                                  command == core::StringView(kCodeFindPrevious);
             (void)keymap.Bind(core::StringView(b.Keys), command, finding ? core::StringView(u8"codeeditor") : kItself);
         }
-        // The completion list's keys, in the context the editor declares while it shows; bound after
-        // the editing keys, at the same depth they win. Tab accepts too (the editor's own key).
+        // The completion list's keys, in the context the editor declares while the list shows. They
+        // are bound after the editing keys, so at the same depth they win. Tab accepts as well, even
+        // though Tab is otherwise the editor's own key.
         static constexpr Binding kListBindings[] = {
             {u8"down", kCodeCompletionNext},
             {u8"up", kCodeCompletionPrevious},
@@ -149,18 +152,18 @@ export namespace foundation::gui
             (void)keymap.Bind(core::StringView(b.Keys), core::StringView(b.Command), core::StringView(u8"codeeditor && completing && !textinput"));
     }
 
-    /// How bad a diagnostic is: each draws in its part's colour (`codeeditor::error`).
-    /// Which whitespace is drawn (C7, VS Code's choices): a dot for a space, an arrow for a tab.
+    /// Which whitespace is drawn. A space is drawn as a dot and a tab as an arrow.
     enum class CodeWhitespace : u8
     {
         None,
-        Boundary,  ///< all but a single space between words
-        Selection, ///< what the selections hold
-        Trailing,  ///< what ends a line
+        Boundary,  ///< all except a single space between words
+        Selection, ///< the whitespace inside the selections
+        Trailing,  ///< the whitespace at the end of a line
         All,
     };
 
-    /// A fold (C7): its first line stays in view; folded, the lines after it to its last hide.
+    /// A fold. Its first line stays in view; when it is folded, the lines after it, through its
+    /// last line, are hidden.
     struct CodeFoldRange
     {
         u32 First = 0;
@@ -168,6 +171,7 @@ export namespace foundation::gui
         [[nodiscard]] constexpr bool operator==(const CodeFoldRange&) const noexcept = default;
     };
 
+    /// How severe a diagnostic is. Each severity draws in its part's colour (`codeeditor::error`).
     enum class CodeSeverity : u8
     {
         Hint,
@@ -187,7 +191,7 @@ export namespace foundation::gui
         }
     }
 
-    /// What a host says of a run of the code: a compiler's error, a warning.
+    /// A host's message about a span of the code, such as a compiler's error or warning.
     struct CodeDiagnostic
     {
         CodeRange Range;
@@ -200,18 +204,19 @@ export namespace foundation::gui
         RTTI_OBJECT(CodeEditor, UIWidget)
     public:
         static constexpr f32 kBlinkSeconds = 0.5f;
-        static constexpr u32 kLongestLaidOut = 4096; ///< a longer line is cut where it is laid out
+        static constexpr u32 kLongestLaidOut = 4096; ///< a longer line is cut off when laid out
 
         CodeEditor() : m_own(MemoryAllocator()), m_selections(MemoryAllocator()), m_goals(MemoryAllocator()), m_views(MemoryAllocator())
         {
             SetTag(core::StringView(u8"codeeditor"));
             SetTabFocusable(true);
             SetTabCaptures(true); // Tab indents
-            // Its own context, not "textinput": a field inside it (the find bar's) is a text input
-            // alone, its Return its own; BindCodeEditorKeys binds the editing keys here.
+            // The editor has its own key context rather than "textinput", so a field inside it (the
+            // find bar's) is the only text input there and keeps its own Return. BindCodeEditorKeys
+            // binds the editing keys in this context.
             SetKeyContext(core::StringView(u8"codeeditor"));
             SetClipChildren(true);
-            SetScrollsByKeys(false); // the arrows and pages move its carets, through the keymap
+            SetScrollsByKeys(false); // the arrows and page keys move the carets, through the keymap
             {
                 StyleWriteScope defaults(*this);
                 EditLayoutStyle([](LayoutStyle& s)
@@ -294,7 +299,8 @@ export namespace foundation::gui
         ~CodeEditor() override { Detach(); }
 
         // === The document ===
-        /// Edits `document` (shared with its host, which outlives it here); null: its own.
+        /// Edits `document`, shared with the host, which must outlive the editor's use of it. Null
+        /// switches back to the editor's own document.
         void SetDocument(CodeDocument* document)
         {
             Detach();
@@ -302,7 +308,7 @@ export namespace foundation::gui
             SetSelections(core::Span<const CodeSelection>{});
         }
         [[nodiscard]] CodeDocument& GetDocument() const noexcept { return *m_doc; }
-        /// Replaces the text (undo starts again), one caret at the start.
+        /// Replaces the text, clears the undo history, and leaves one caret at the start.
         void SetText(core::StringView text)
         {
             m_doc->SetText(text);
@@ -310,7 +316,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetText() const { return m_doc->GetText(); }
 
-        /// The language its code is in (its owner keeps it, Prepared); null: plain text.
+        /// Sets the language of the code. The caller keeps the language alive and has prepared it
+        /// (Prepared). Null means plain text.
         void SetLanguage(const CodeLanguage* language)
         {
             m_foldRangesVersion = ~u64(0);
@@ -322,7 +329,7 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] const CodeLanguage* GetLanguage() const noexcept { return m_language; }
-        /// Line `line`'s tokens (tokenizing up to it).
+        /// Returns line `line`'s tokens, tokenizing up to that line first.
         [[nodiscard]] core::Span<const CodeSpan> TokensOf(u32 line) const
         {
             if (m_language == nullptr || line >= m_doc->LineCount())
@@ -330,13 +337,14 @@ export namespace foundation::gui
             EnsureLexed(line);
             return m_lex[line].Spans.AsSpan();
         }
-        /// How many lines have been tokenized since it began (each time a line was), for a test.
+        /// Counts every line tokenization since the editor was made (repeats included), for tests.
         [[nodiscard]] u64 TokenizedCount() const noexcept { return m_tokenized; }
 
-        /// Whether it edits (or only shows, selects and copies).
+        /// Sets whether the editor is read-only, so it only shows, selects and copies.
         void SetReadOnly(bool readOnly) noexcept { m_readOnly = readOnly; }
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
-        /// Columns between tab stops (4), and whether Tab puts spaces (true) or a tab.
+        /// The columns between tab stops (4 by default), and whether Tab inserts spaces (true) or a
+        /// tab character.
         void SetTabSize(u32 columns)
         {
             m_tabSize = core::Max(1u, columns);
@@ -346,8 +354,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] u32 GetTabSize() const noexcept { return m_tabSize; }
         void SetInsertSpaces(bool spaces) noexcept { m_insertSpaces = spaces; }
-        /// Long lines wrap at the view's width (C7), a word too long for a row broken where it
-        /// runs out; a wrapped line's rows are rows of the map, so Up and Down go by them.
+        /// Turns soft wrap on or off. Long lines wrap at the view's width, and a word too long for a
+        /// row is broken where the row runs out. A wrapped line's rows are rows of the line map, so
+        /// Up and Down move by them.
         void SetSoftWrap(bool wrap)
         {
             if (wrap == m_wrap)
@@ -360,14 +369,14 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] bool GetSoftWrap() const noexcept { return m_wrap; }
-        /// Which whitespace it draws (none by default); its colour the `whitespace` part's.
+        /// Sets which whitespace is drawn (none by default), in the `whitespace` part's colour.
         void SetShowWhitespace(CodeWhitespace show)
         {
             m_whitespace = show;
             Invalidate();
         }
         [[nodiscard]] CodeWhitespace GetShowWhitespace() const noexcept { return m_whitespace; }
-        /// Whether the space or tab at `at` is drawn, by the choice.
+        /// Returns whether the space or tab at `at` is drawn under the current setting.
         [[nodiscard]] bool ShowsWhitespaceAt(CodePosition at) const
         {
             if (m_whitespace == CodeWhitespace::None || at.Line >= m_doc->LineCount())
@@ -389,8 +398,8 @@ export namespace foundation::gui
             }
             case CodeWhitespace::Boundary:
             {
-                // A lone space with text either side is not drawn; a tab, a run, an indent or the
-                // end's are.
+                // A lone space with text on either side is not drawn. A tab, a run of spaces, an
+                // indent or trailing whitespace is.
                 if (text[at.Column] == u8'\t')
                     return true;
                 const bool before = at.Column > 0 && !blank(text[at.Column - 1]);
@@ -411,11 +420,12 @@ export namespace foundation::gui
         }
 
         // === Selections ===
-        /// The selections, in the document's order, none overlapping.
+        /// Returns the selections in document order; none overlap.
         [[nodiscard]] core::Span<const CodeSelection> GetSelections() const noexcept { return m_selections.AsSpan(); }
-        /// The one the keys and the view follow (the last added).
+        /// Returns the primary selection, which the keys and the view follow (the last one added).
         [[nodiscard]] const CodeSelection& GetPrimary() const noexcept { return m_selections[m_primary]; }
-        /// Sets them (clamped, sorted, those that touch merged); none: one caret at the start.
+        /// Sets the selections, clamping and sorting them and merging those that touch. An empty span
+        /// leaves one caret at the start.
         void SetSelections(core::Span<const CodeSelection> selections, usize primary = ~usize(0))
         {
             m_selections.Clear();
@@ -433,7 +443,7 @@ export namespace foundation::gui
             const CodeSelection one{at, at};
             SetSelections(core::Span<const CodeSelection>(&one, 1));
         }
-        /// Adds a caret (Alt+click's); it becomes the primary.
+        /// Adds a caret, as Alt+click does; it becomes the primary.
         void AddCaret(CodePosition at)
         {
             at = m_doc->Clamp(at);
@@ -445,36 +455,41 @@ export namespace foundation::gui
         }
 
         // === Commands ===
-        /// Runs a text command at every caret (what its keys do); false when it did nothing.
+        /// Runs a text command at every caret, as its keys do. Returns false when it did nothing.
         bool Run(TextEditCommand command);
-        /// Types `text` at every caret, replacing what each selects (one undo step while typing goes on).
-        /// One character in a language: auto-closed brackets and quotes (typing a close over the one
-        /// put skips it), a selection surrounded, a closing word or mark first on its line outdenting it.
+        /// Types `text` at every caret, replacing what each selects. Continued typing forms one undo
+        /// step. When a language is set and `text` is one character, the language's rules apply:
+        /// brackets and quotes close automatically (typing the closing one over the inserted one
+        /// steps over it), a selection is surrounded, and a closing word or mark typed first on its
+        /// line outdents the line.
         void Type(core::StringView text);
 
-        // === C3's commands (each a command by name too, its keys in BindCodeEditorKeys) ===
-        /// Comments the lines the selections cover, or uncomments them when all are (a block comment
-        /// round each selection where the language has no line comment).
+        // === Editing commands (each is also a named command, with its keys in BindCodeEditorKeys) ===
+        /// Comments out the lines the selections cover, or uncomments them when all are already
+        /// commented. Where the language has no line comment, a block comment goes around each
+        /// selection instead.
         void ToggleComment();
         /// Indents (or outdents) the lines the selections cover by a tab stop.
         void IndentLines(bool outdent);
         /// Moves the lines the selections cover up or down past their neighbour.
         void MoveLines(bool up);
-        /// Copies the lines the selections cover below (or above) them, the selections going with the copy.
+        /// Copies the lines the selections cover below (or above) them. With `up` false the selections
+        /// move to the copy.
         void DuplicateLines(bool up);
         void DeleteLines();
-        /// Selects the primary caret's word, or adds a selection at the next match of the primary's
-        /// text (Ctrl+D); false when there is none further.
+        /// Selects the word at the primary caret, or adds a selection at the next match of the
+        /// primary selection's text (Ctrl+D). Returns false when there is no further match.
         bool AddNextOccurrence();
         /// Selects every match of the primary selection's text (Ctrl+Shift+L).
         void SelectAllOccurrences();
-        /// Adds a caret a line above (or below) the primary, at its goal across.
+        /// Adds a caret a line above (or below) the primary, at the primary's horizontal goal.
         void AddCursorVertically(bool up);
-        /// The bracket at or before `at` (not in a string or comment) and the one matching it.
+        /// Finds the bracket at or before `at` (not in a string or comment) and the one matching it.
         bool FindMatchingBracket(CodePosition at, CodeRange& bracket, CodeRange& match) const;
 
-        // === C4: find, replace, go to line ===
-        /// Shows the bar to find (or replace), holding the primary selection's text when it is on one line.
+        // === Find, replace, go to line ===
+        /// Shows the find (or replace) bar. When the primary selection is on one line, the bar starts
+        /// with its text.
         void OpenFind(bool replace)
         {
             const CodeRange r = GetPrimary().Range();
@@ -488,16 +503,19 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] CodeFindBar& GetFindBar() const noexcept { return *m_findBar; }
-        /// Selects the next match of the bar's text after the primary selection (the previous before
-        /// it), round the document; false when there is none.
+        /// Selects the next match of the bar's text after the primary selection (or, with
+        /// `backwards`, the previous one before it), wrapping around the document. Returns false
+        /// when there is no match.
         bool FindNext(bool backwards);
-        /// Replaces the match the primary selection is on and finds the next; finds one first if it is on none.
+        /// Replaces the match the primary selection is on and finds the next. When the selection is
+        /// on no match, it finds one first.
         void ReplaceCurrent();
-        /// Replaces every match, one undo step.
+        /// Replaces every match as one undo step.
         void ReplaceAll();
         /// Puts the caret at `line` or `line:column` (from 1), and closes the bar.
         void GoToLine(core::StringView text);
-        /// The matches of the bar's text now, in order, and which the primary selection is on (from 1; 0: none).
+        /// Returns the current matches of the bar's text, in order. CurrentMatch returns which one the
+        /// primary selection is on, counting from 1, or 0 for none.
         [[nodiscard]] core::Span<const CodeRange> GetMatches() const
         {
             RefreshMatches();
@@ -512,9 +530,10 @@ export namespace foundation::gui
             return 0;
         }
 
-        // === C5: the gutter's markers, diagnostics ===
-        /// Marks `line` as `kind` ("breakpoint", "execution", "bookmark", or a host's own, drawn by
-        /// the `marker` part); the mark stays with its line through edits. An id for RemoveMarker.
+        // === The gutter's markers, diagnostics ===
+        /// Marks `line` as `kind` ("breakpoint", "execution", "bookmark", or the host's own kind,
+        /// drawn by the `marker` part). The mark stays with its line through edits. Returns an id
+        /// for RemoveMarker.
         u32 AddMarker(u32 line, core::StringView kind)
         {
             const CodeAnchorId anchor = m_doc->AddAnchor(CodePosition{line, 0}, CodeBias::Right);
@@ -533,7 +552,7 @@ export namespace foundation::gui
                     return;
                 }
         }
-        /// Takes away every mark of `kind` (empty: every mark).
+        /// Removes every mark of `kind`, or every mark when `kind` is empty.
         void ClearMarkers(core::StringView kind = {})
         {
             for (usize i = m_markers.Size(); i-- > 0;)
@@ -544,7 +563,7 @@ export namespace foundation::gui
                 }
             Invalidate();
         }
-        /// The line a mark is on now.
+        /// Returns the line a mark is on now.
         [[nodiscard]] u32 MarkerLine(u32 id) const
         {
             for (const Marker& marker : m_markers)
@@ -559,11 +578,12 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        /// Told a click in the gutter's marker column, with its line (a host toggles a breakpoint there).
+        /// Sets the callback for a click in the gutter's marker column, given the line (a host toggles
+        /// a breakpoint there).
         void SetOnGutterClick(core::Function<void(u32 line)> callback) { m_onGutterClick = core::Move(callback); }
 
-        /// Sets the diagnostics (a host's whole set, each time it has one); they keep their places
-        /// through edits until the next set.
+        /// Sets the diagnostics, replacing all of them; a host passes its whole set each time it has
+        /// one. They keep their places through edits until the next set.
         void SetDiagnostics(core::Span<const CodeDiagnostic> diagnostics)
         {
             ClearDiagnosticAnchors();
@@ -575,7 +595,7 @@ export namespace foundation::gui
             }
             Invalidate();
         }
-        /// The diagnostics where they are now.
+        /// Returns the diagnostics at their current places.
         [[nodiscard]] core::Array<CodeDiagnostic> GetDiagnostics() const
         {
             core::Array<CodeDiagnostic> out(const_cast<CodeEditor*>(this)->MemoryAllocator());
@@ -583,7 +603,7 @@ export namespace foundation::gui
                 out.PushBack(CodeDiagnostic{CodeRange{m_doc->GetAnchor(d.Start), m_doc->GetAnchor(d.End)}, d.Severity, d.Message});
             return out;
         }
-        /// The worst severity on `line`; false when it has none.
+        /// Gives the worst severity on `line`. Returns false when the line has no diagnostic.
         [[nodiscard]] bool WorstOn(u32 line, CodeSeverity& out) const
         {
             bool any = false;
@@ -598,7 +618,8 @@ export namespace foundation::gui
             }
             return any;
         }
-        /// The messages of the diagnostics over `at` (an empty one's word counting), a line each.
+        /// Returns the messages of the diagnostics over `at`, one per line. An empty diagnostic covers
+        /// the word at its position.
         [[nodiscard]] core::String DiagnosticsAt(CodePosition at) const
         {
             core::String out;
@@ -614,7 +635,7 @@ export namespace foundation::gui
             }
             return out;
         }
-        /// On hover: the diagnostics under the pointer, else its own tooltip.
+        /// The hover tooltip: the diagnostics under the pointer, or else the widget's own tooltip.
         [[nodiscard]] core::StringView GetTooltipText() const override
         {
             if (!m_hoverTip.IsEmpty())
@@ -622,17 +643,18 @@ export namespace foundation::gui
             return UIWidget::GetTooltipText();
         }
 
-        // === Geometry (its own space) ===
-        // === Folding (C7) ===
-        /// The ranges that fold, by first line (one per line, the widest): the host's when it set
-        /// them, else from the language: its brackets (outside strings and comments), or by
-        /// indentation (a language that folds so, or none), and its regions.
+        // === Folding ===
+        /// Returns the ranges that can fold, ordered by first line, with only the widest kept for
+        /// each line. They are the host's when it set them. Otherwise they come from the language:
+        /// its brackets (outside strings and comments), or indentation (for a language that folds
+        /// by indent, or for no language), plus its regions.
         [[nodiscard]] core::Span<const CodeFoldRange> GetFoldRanges() const
         {
             EnsureFoldRanges();
             return m_foldRanges.AsSpan();
         }
-        /// The host's ranges in place of the language's (carried through edits until set again).
+        /// Uses the host's ranges in place of the language's. They are carried through edits until set
+        /// again.
         void SetFoldRanges(core::Span<const CodeFoldRange> ranges)
         {
             m_hostFolds = true;
@@ -642,7 +664,7 @@ export namespace foundation::gui
             m_foldRangesVersion = ~u64(0);
             FoldsChanged();
         }
-        /// Back to the language's ranges.
+        /// Goes back to the language's ranges.
         void UseLanguageFolds()
         {
             m_hostFolds = false;
@@ -650,32 +672,32 @@ export namespace foundation::gui
             m_foldRangesVersion = ~u64(0);
             FoldsChanged();
         }
-        /// Folds the innermost open range at `line` (starting on it, or holding it), its carets moved
-        /// out to its first line. False when none is open there.
+        /// Folds the innermost open range at `line` (one starting on it or containing it), moving any
+        /// carets inside out to its first line. Returns false when no range is open there.
         bool Fold(u32 line);
         /// Unfolds every folded range holding `line` (or starting on it).
         bool Unfold(u32 line);
-        /// Folds or unfolds the range starting on `line` (the gutter's click).
+        /// Folds or unfolds the range starting on `line`, as a click in the gutter does.
         bool ToggleFold(u32 line);
         void FoldAll();
         void UnfoldAll();
         [[nodiscard]] bool IsFolded(u32 firstLine) const;
-        /// Inside a folded range, out of view.
+        /// Returns whether `line` is inside a folded range, and so out of view.
         [[nodiscard]] bool IsLineHidden(u32 line) const
         {
             EnsureRows();
             return line < m_doc->LineCount() && m_rowStart[line + 1] == m_rowStart[line];
         }
-        /// The rows shown (each line in view one, with none hidden).
+        /// Returns the number of rows shown (one per line when nothing is folded or wrapped).
         [[nodiscard]] u32 RowCount() const
         {
             EnsureRows();
             return m_rowStart.Back();
         }
 
-        // === The language service (C6) ===
-        /// Asks `service` (its host's, which outlives it here; null: none) for completions and for
-        /// what to say of the word under the pointer.
+        // === The language service ===
+        /// Sets the service to ask for completions and for hover text about the word under the
+        /// pointer. The host owns it and must keep it alive while it is set; null means none.
         void SetLanguageService(ICodeLanguageService* service)
         {
             CloseCompletion();
@@ -684,14 +706,15 @@ export namespace foundation::gui
         }
         [[nodiscard]] ICodeLanguageService* GetLanguageService() const noexcept { return m_service; }
         /// Opens the completion list at the primary caret with the service's completions, filtered
-        /// by the word before it: `invoked` (Ctrl+Space) anywhere, else as typed, not in a comment
-        /// or a string, and only on a word begun or after a `trigger` character. False when none
-        /// matched (or there is no service, or the caret selects).
+        /// by the word before the caret. When `invoked` (Ctrl+Space) it opens anywhere. Otherwise it
+        /// opens while typing, outside comments and strings, and only once a word has begun or
+        /// after a `trigger` character. Returns false when nothing matched, when there is no
+        /// service, or when the primary selection is not empty.
         bool TriggerCompletion(bool invoked, char8_t trigger = 0);
         [[nodiscard]] bool IsCompleting() const noexcept { return m_completing; }
         [[nodiscard]] CodeCompletionList& GetCompletionList() const noexcept { return *m_completion; }
-        /// Puts the selected completion in place of the word typed, at each caret where the same
-        /// word is (else at the caret), as one undo step, and closes the list.
+        /// Replaces the typed word with the selected completion, at every caret where the same word
+        /// is typed (or else at the primary caret), as one undo step, and closes the list.
         bool AcceptCompletion();
         void CloseCompletion()
         {
@@ -699,15 +722,17 @@ export namespace foundation::gui
                 (void)dispatcher->ClosePopup(*m_completion);
             CompletionClosed();
         }
-        /// What the service says of the word at `at` (empty off a word), asked once per word.
+        /// Returns the service's text for the word at `at` (empty when `at` is not on a word). The
+        /// service is asked once per word.
         [[nodiscard]] core::StringView HoverAt(CodePosition at);
 
+        // === Geometry (in the editor's own space) ===
         [[nodiscard]] f32 LineHeight() const
         {
             const f32 height = m_measure.GetLineHeight();
             return height > 0.0f ? height : 16.0f;
         }
-        /// Where the text starts across: past the gutter and its gap.
+        /// Returns the x where the text starts, past the gutter and its gap.
         [[nodiscard]] f32 TextLeft() const { return GetContentBounds().x + GutterWidth(); }
         [[nodiscard]] f32 GutterWidth() const
         {
@@ -716,16 +741,16 @@ export namespace foundation::gui
                 ++digits;
             return kMarkerColumn + static_cast<f32>(core::Max(digits, 3u)) * DigitWidth() + 2.0f * kGutterPad + kFoldColumn + kTextGap;
         }
-        /// The position nearest a point.
+        /// Returns the position nearest a point.
         [[nodiscard]] CodePosition PositionAt(core::Float2 local) const;
-        /// A position's caret: its left, top and the line's height.
+        /// Returns the caret rectangle for a position: its left, its top and the line's height.
         [[nodiscard]] Rect CaretRect(CodePosition at) const;
-        /// Scrolls by the least that shows the primary caret.
+        /// Scrolls by the least amount that shows the primary caret.
         void ScrollToCaret();
-        /// The lines in view now, first to last (inclusive).
+        /// Gives the lines in view now, first to last (inclusive).
         void VisibleLines(u32& first, u32& last) const;
 
-        // Platform text input while focused, at the primary caret.
+        // Asks for platform text input while focused, placed at the primary caret.
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled() && !m_readOnly; }
         [[nodiscard]] bool GetTextInputArea(Rect& area, f32& caretX) const override
         {
@@ -734,7 +759,7 @@ export namespace foundation::gui
             caretX = caret.x;
             return true;
         }
-        /// The current line, to a screen reader.
+        /// Returns the current line, for a screen reader.
         [[nodiscard]] core::String GetAccessValue() const { return core::String(m_doc->LineText(GetPrimary().Head.Line)); }
 
         void CollectStyleParts(core::Array<core::StringView>& out) const override
@@ -780,7 +805,7 @@ export namespace foundation::gui
             RequestLayout();
             Invalidate();
         }
-        // A token's colour changed: its lines are coloured again.
+        // A token's colour changed, so the lines are coloured again.
         void OnPartStyleChange(core::StringView part) override
         {
             UIWidget::OnPartStyleChange(part);
@@ -789,10 +814,11 @@ export namespace foundation::gui
         }
         void OnLayout() override
         {
-            // Not the base's: it places its one child (the find bar) itself, and its children's
-            // extent is not what it scrolls over (laying them out would clamp the scroll to it).
-            // What it scrolls over: every line down; across, the widest line laid out yet, else each
-            // line's length at the width of a digit (an estimate a wider line laid out corrects).
+            // Overrides the base layout. The editor places its one child (the find bar) itself, and
+            // its children's extent is not what it scrolls over; laying them out would clamp the
+            // scroll to them. It scrolls down over every line, and across over the widest line laid
+            // out so far, or else each line's length at the width of a digit. That estimate is
+            // corrected when a wider line is laid out.
             const f32 digit = DigitWidth();
             if (m_widestVersion != m_doc->GetVersion())
             {
@@ -802,7 +828,8 @@ export namespace foundation::gui
                     m_estimated = core::Max(m_estimated, static_cast<f32>(core::Min<usize>(m_doc->LineText(line).Size(), kLongestLaidOut)) * digit);
             }
             const Rect content = GetContentBounds();
-            // Wrapping: at the text's width (a digit short of the edge), nothing to scroll across.
+            // While wrapping, lines wrap at the text's width (a digit short of the edge), and there is
+            // nothing to scroll across.
             if (m_wrap)
             {
                 const f32 wrap = core::Max(digit * 8.0f, content.width - GutterWidth() - digit);
@@ -815,7 +842,7 @@ export namespace foundation::gui
             const f32 width = m_wrap ? content.width : GutterWidth() + core::Max(m_estimated, m_widest) + digit * 2.0f;
             const f32 height = static_cast<f32>(RowCount()) * LineHeight() + core::Max(0.0f, content.height - LineHeight());
             SetScrollExtent(core::Float2{width, height});
-            // The find bar over the top end corner, still as the code scrolls under it.
+            // The find bar sits over the top end corner and stays put as the code scrolls under it.
             if (m_findBar->IsDisplayed())
             {
                 LayoutConstraints constraints;
@@ -826,7 +853,7 @@ export namespace foundation::gui
                 m_findBar->Arrange(Rect{x + shift.x, content.y + 2.0f + shift.y, size.x, size.y});
             }
         }
-        // Focus going into its find bar scrolls nothing: the bar is always in view.
+        // Focus moving into the find bar scrolls nothing, because the bar is always in view.
         void OnDescendantFocused(Node& focused) override
         {
             for (Node* n = &focused; n != nullptr && n != this; n = n->GetParent())
@@ -840,7 +867,7 @@ export namespace foundation::gui
             if (m_findBar->IsDisplayed())
                 RequestLayout(); // the bar keeps its place in view
             if (m_completing)
-                PlaceCompletion(); // the list stays at its word
+                PlaceCompletion(); // keeps the list at its word
         }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
         void OnFocusGained() override
@@ -892,9 +919,9 @@ export namespace foundation::gui
 
     private:
         static constexpr f32 kGutterPad = 6.0f;
-        static constexpr f32 kMarkerColumn = 16.0f; // the gutter's start: markers and diagnostics' icons
+        static constexpr f32 kMarkerColumn = 16.0f; // at the gutter's start: markers and diagnostic icons
         static constexpr f32 kTextGap = 8.0f;
-        static constexpr f32 kFoldColumn = 14.0f; // the gutter's end: a fold's chevron
+        static constexpr f32 kFoldColumn = 14.0f; // at the gutter's end: fold chevrons
 
         struct LineLex
         {
@@ -902,7 +929,7 @@ export namespace foundation::gui
             CodeLexState Entry;
             CodeLexState Exit;
             core::Array<CodeSpan> Spans;
-            u64 Stamp = 0; // raised each time it is tokenized
+            u64 Stamp = 0; // increased each time the line is tokenized
             bool Valid = false;
         };
         struct LineView
@@ -911,8 +938,8 @@ export namespace foundation::gui
             u32 TabSize = 0;
             u64 LexStamp = ~u64(0);
             bool Laid = false;
-            core::String Shown;      // the line with its tabs to their stops (cut when very long)
-            core::Array<u32> ShownAt; // a byte column's place in Shown (empty: the same)
+            core::String Shown;      // the line with its tabs expanded to their stops (cut when very long)
+            core::Array<u32> ShownAt; // maps a byte column to its place in Shown (empty when they are the same)
             Text Glyphs;
             Text Number;
             u32 NumberOf = ~0u;
@@ -934,7 +961,7 @@ export namespace foundation::gui
             if (m_doc != nullptr)
             {
                 m_doc->RemoveChangeListener(m_listener);
-                ClearDiagnosticAnchors(); // its marks are the document's places: they go with it
+                ClearDiagnosticAnchors(); // the marks are anchors in the old document, so they go with it
                 for (const Marker& marker : m_markers)
                     m_doc->RemoveAnchor(marker.Anchor);
                 m_markers.Clear();
@@ -945,8 +972,9 @@ export namespace foundation::gui
         }
         void DocumentChanged(const CodeChange& change)
         {
-            // The tokens of the lines below move with them; the changed lines' go; what follows a
-            // change is checked again from there (its state may differ now).
+            // The tokens of the lines below the change move with those lines, and the changed lines'
+            // tokens are dropped. Lines after a change are checked again from there, because their
+            // entry state may differ now.
             const usize lexFirst = core::Min<usize>(change.FirstLine, m_lex.Size());
             const usize lexRemoved = core::Min<usize>(change.RemovedLines, m_lex.Size() - lexFirst);
             for (usize i = 0; i < lexRemoved; ++i)
@@ -954,7 +982,7 @@ export namespace foundation::gui
             for (u32 i = 0; i < change.InsertedLines && lexFirst <= m_lex.Size(); ++i)
                 m_lex.Insert(lexFirst, LineLex{});
             m_cleanTo = core::Min<u32>(m_cleanTo, change.FirstLine);
-            // The host's fold ranges go with their lines.
+            // The host's fold ranges move with their lines.
             for (usize i = m_hostRanges.Size(); i-- > 0;)
             {
                 CodeFoldRange& r = m_hostRanges[i];
@@ -963,11 +991,13 @@ export namespace foundation::gui
                 if (r.Last <= r.First)
                     m_hostRanges.RemoveAt(i);
             }
-            // Its selections go through the edit (one another view made; its own edits set them after).
+            // Move the selections through the edit. This matters for an edit another view made; the
+            // editor's own edits set the selections afterwards.
             for (CodeSelection& sel : m_selections)
                 sel = CodeSelection{CodeDocument::Moved(sel.Anchor, CodeBias::Right, change.Replaced, change.End),
                                     CodeDocument::Moved(sel.Head, CodeBias::Right, change.Replaced, change.End)};
-            // The views below the change move with their lines; the changed ones go.
+            // The views of lines below the change move with their lines, and the changed lines' views
+            // are dropped.
             const usize first = core::Min<usize>(change.FirstLine, m_views.Size());
             const usize removed = core::Min<usize>(change.RemovedLines, m_views.Size() - first);
             for (usize i = 0; i < removed; ++i)
@@ -977,7 +1007,7 @@ export namespace foundation::gui
             RequestLayout();
             Invalidate();
         }
-        // A line's view, laid out (made, or remade when its text changed).
+        // Returns a line's laid-out view, making it, or remaking it when its text has changed.
         LineView& View(u32 line) const;
         [[nodiscard]] f32 DigitWidth() const
         {
@@ -994,7 +1024,7 @@ export namespace foundation::gui
         {
             if (view.ShownAt.IsEmpty())
                 return shown;
-            // The column whose place is nearest (inside a tab's spaces: the nearer side).
+            // Find the column whose place is nearest; inside a tab's spaces, take the nearer side.
             u32 column = 0;
             while (column + 1 < view.ShownAt.Size() && view.ShownAt[column + 1] <= shown)
                 ++column;
@@ -1002,19 +1032,19 @@ export namespace foundation::gui
                 ++column;
             return column;
         }
-        // A line laid out: at the wrap width while wrapping, else unbounded.
+        // Returns a line's layout: at the wrap width while wrapping, otherwise unbounded.
         [[nodiscard]] const TextLayout& LayoutOf(const LineView& view) const
         {
             return view.Glyphs.LayoutFor(Rect{0.0f, 0.0f, m_wrap ? m_wrapWidth : 0.0f, 0.0f});
         }
-        // How many rows a line shown takes: one, or its wrapped lines.
+        // Returns how many rows a shown line takes: one, or one per wrapped line.
         [[nodiscard]] u32 RowsOf(u32 line) const
         {
             if (!m_wrap)
                 return 1;
             return core::Max<u32>(1, static_cast<u32>(LayoutOf(View(line)).Lines.Size()));
         }
-        // Where a position is: across (the text's own space) and its row.
+        // Where a position is: its x (in the text's own space) and its row.
         struct Place
         {
             f32 X = 0.0f;
@@ -1031,7 +1061,7 @@ export namespace foundation::gui
             return Place{layout.CaretXOnLine(shown, sub), RowOfLine(at.Line) + (IsLineHidden(at.Line) ? 0u : static_cast<u32>(sub))};
         }
         [[nodiscard]] f32 XOf(CodePosition at) const { return PlaceOf(at).X; }
-        // The column nearest `x` across on row `sub` of `line`.
+        // Returns the column nearest `x` on row `sub` of `line`.
         [[nodiscard]] u32 ColumnAt(u32 line, u32 sub, f32 x) const
         {
             const LineView& view = View(line);
@@ -1042,9 +1072,10 @@ export namespace foundation::gui
             return m_doc->Clamp(CodePosition{line, ByteColumn(view, static_cast<u32>(shown))}).Column;
         }
         [[nodiscard]] u32 ColumnAtX(u32 line, f32 x) const { return ColumnAt(line, 0, x); }
-        // Each row a run of `line` covers, from byte column `from` to `to`: across from x0 to x1, on
-        // its row. A run going on past a row's end to the next fills to the row's end; `toEnd`
-        // (a selection going on to the next line) carries the last on a little past the text.
+        // Calls `fn` for each row that a run of `line` covers, from byte column `from` to `to`, with
+        // the row and the span from x0 to x1 on it. A run that continues past a row's end onto the
+        // next row fills to the end of the row. With `toEnd` (a selection that continues onto the
+        // next line), the last row's span extends a little past the text.
         template <typename Fn>
         void ForEachRun(u32 line, u32 from, u32 to, bool toEnd, Fn&& fn) const
         {
@@ -1064,14 +1095,14 @@ export namespace foundation::gui
                 if (b < l.Start || a > l.End)
                     continue; // wholly on another row
                 if (!last && a == l.End && b > a && layout.Lines[i + 1].Start == l.End)
-                    continue; // starts where a word broke: on the next row
+                    continue; // starts where a word broke, so it belongs to the next row
                 if (i > 0 && b == l.Start && a < l.Start && !(last && toEnd))
                     continue; // ends where this row starts
                 const usize s = core::Max(a, l.Start), e = core::Min(b, l.End);
                 f32 x0 = layout.CaretXOnLine(s, i);
                 f32 x1 = layout.CaretXOnLine(core::Max(s, e), i);
                 if (b > l.End && !last)
-                    x1 = core::Max(x1, l.Left + l.Width); // on to the next row
+                    x1 = core::Max(x1, l.Left + l.Width); // continues onto the next row
                 if (last && toEnd)
                     x1 += DigitWidth() * 0.5f;
                 fn(x0, x1, row + static_cast<u32>(i));
@@ -1082,11 +1113,12 @@ export namespace foundation::gui
             return m_composition.IsEmpty() ? 0.0f : m_compositionText.LayoutFor(Rect{}).Width;
         }
 
-        // Sorted by start; those that overlap (or start at one place: two carets) as one, the primary kept.
+        // Sorts the selections by start and merges those that overlap or start at the same place (two
+        // carets), keeping track of the primary.
         void Normalize()
         {
             const CodeSelection primary = m_selections[m_primary];
-            for (usize i = 1; i < m_selections.Size(); ++i) // insertion sort: few, and nearly sorted
+            for (usize i = 1; i < m_selections.Size(); ++i) // insertion sort: there are few, and they are nearly sorted
                 for (usize j = i; j > 0 && m_selections[j].Range().Start < m_selections[j - 1].Range().Start; --j)
                     core::Swap(m_selections[j], m_selections[j - 1]);
             core::Array<CodeSelection> merged(MemoryAllocator());
@@ -1096,7 +1128,7 @@ export namespace foundation::gui
                 {
                     CodeSelection& last = merged.Back();
                     const CodeRange a = last.Range(), b = s.Range();
-                    if (b.Start < a.End || b.Start == a.Start) // overlapping, or starting at one place
+                    if (b.Start < a.End || b.Start == a.Start) // overlapping, or starting at the same place
                     {
                         const CodePosition end = a.End < b.End ? b.End : a.End;
                         const bool forward = !(s.Head < s.Anchor);
@@ -1131,7 +1163,7 @@ export namespace foundation::gui
                 UpdateCompletion();
         }
         // === Folding ===
-        // The fold ranges, computed again when the text changed.
+        // Computes the fold ranges again when the text has changed.
         void EnsureFoldRanges() const
         {
             if (m_foldRangesVersion == m_doc->GetVersion())
@@ -1151,7 +1183,7 @@ export namespace foundation::gui
                 IndentFolds();
             if (m_language != nullptr && !m_language->RegionStart.IsEmpty() && !m_language->RegionEnd.IsEmpty())
             {
-                // A region from its start's line through its end's.
+                // A region runs from the line of its start marker through the line of its end marker.
                 core::Array<u32> open(const_cast<CodeEditor*>(this)->MemoryAllocator());
                 for (u32 line = 0; line < count; ++line)
                 {
@@ -1167,7 +1199,7 @@ export namespace foundation::gui
                     }
                 }
             }
-            // By first line, the widest of those starting on one line.
+            // Sort by first line, keeping the widest of the ranges that start on the same line.
             m_foldRanges.Sort([](const CodeFoldRange& a, const CodeFoldRange& b)
             {
                 return a.First != b.First ? a.First < b.First : a.Last > b.Last;
@@ -1176,8 +1208,9 @@ export namespace foundation::gui
                 if (m_foldRanges[i].First == m_foldRanges[i - 1].First)
                     m_foldRanges.RemoveAt(i);
         }
-        // From each bracket's line to the line before its close's (its close's own when something
-        // comes before it there), past strings and comments.
+        // Each bracket pair folds from the open bracket's line to the line before the close's line,
+        // or to the close's own line when something comes before the close on it. Brackets inside
+        // strings and comments are skipped.
         void BracketFolds() const
         {
             const u32 count = m_doc->LineCount();
@@ -1206,7 +1239,7 @@ export namespace foundation::gui
                             else if (text[i] == pair.Close[0])
                             {
                                 while (!stack.IsEmpty() && stack.Back().Close != text[i])
-                                    stack.PopBack(); // an unclosed one inside: dropped
+                                    stack.PopBack(); // drop an unclosed bracket inside
                                 if (stack.IsEmpty())
                                     break;
                                 const u32 first = stack.Back().Line;
@@ -1219,8 +1252,8 @@ export namespace foundation::gui
                 }
             }
         }
-        // From a line to the last after it indented further (blank lines between kept, those after
-        // the last left out).
+        // Each line folds through the last following line that is indented further. Blank lines in
+        // between are included; blank lines after that last line are left out.
         void IndentFolds() const
         {
             struct Open
@@ -1253,7 +1286,8 @@ export namespace foundation::gui
             }
             close(0);
         }
-        // Each line's first row, a line in a folded range none (its next line's); the total last.
+        // Computes each line's first row. A line inside a folded range takes no row of its own (it
+        // gets the next line's), and the last entry is the total.
         void EnsureRows() const
         {
             const f32 wrap = m_wrap ? m_wrapWidth : 0.0f;
@@ -1269,7 +1303,7 @@ export namespace foundation::gui
             if (!m_folded.IsEmpty())
             {
                 EnsureFoldRanges();
-                // A fold whose range is gone (its bracket deleted) is forgotten.
+                // A fold whose range has gone (its bracket was deleted) is forgotten.
                 for (usize i = m_folded.Size(); i-- > 0;)
                 {
                     const CodeFoldRange* r = RangeStarting(m_doc->GetAnchor(m_folded[i]).Line);
@@ -1306,7 +1340,7 @@ export namespace foundation::gui
                     return &r;
             return nullptr;
         }
-        // A line's first row; a hidden line's, its fold's.
+        // Returns a line's first row; for a hidden line, the row of its fold.
         [[nodiscard]] u32 RowOfLine(u32 line) const
         {
             EnsureRows();
@@ -1314,13 +1348,13 @@ export namespace foundation::gui
             const u32 row = m_rowStart[line];
             if (m_rowStart[line + 1] != row || row == 0)
                 return row;
-            u32 shown = line; // hidden: its fold's first row (the line it folds onto may wrap)
+            u32 shown = line; // a hidden line uses its fold's first row (the line it folds into may wrap)
             while (shown > 0 && m_rowStart[shown + 1] == m_rowStart[shown])
                 --shown;
             return m_rowStart[shown];
         }
-        // The line shown on `row` (the last line starting at or before it: a hidden one starts
-        // where the line after its fold does, so this is that line).
+        // Returns the line shown on `row`: the last line starting at or before it. A hidden line
+        // starts on the same row as the line after its fold, so the search lands on that line.
         [[nodiscard]] u32 LineOfRow(u32 row, u32* sub = nullptr) const
         {
             EnsureRows();
@@ -1335,7 +1369,7 @@ export namespace foundation::gui
             }
             u32 line = static_cast<u32>(low == 0 ? 0 : low - 1);
             while (line > 0 && m_rowStart[line + 1] == m_rowStart[line])
-                --line; // past the end, in a fold: its first line
+                --line; // past the end, inside a fold: use the fold's first line
             if (sub != nullptr)
                 *sub = row >= m_rowStart[line] ? core::Min(row - m_rowStart[line], m_rowStart[line + 1] - m_rowStart[line] - 1) : 0;
             return line;
@@ -1346,7 +1380,8 @@ export namespace foundation::gui
             RequestLayout();
             Invalidate();
         }
-        // A line's whitespace as the choice says: a dot mid-space, an arrow across a tab.
+        // Draws a line's whitespace as the setting says: a dot in the middle of a space, an arrow
+        // across a tab.
         void DrawWhitespace(DrawContext& ctx, u32 line, const LineView& view, const TextLayout& layout, f32 textX, f32 top, Color color) const
         {
             if (layout.Lines.IsEmpty())
@@ -1377,21 +1412,22 @@ export namespace foundation::gui
                 }
             }
         }
-        // A folded line's placeholder, after its text (local space).
+        // Returns a folded line's placeholder rectangle, after its text (in local space).
         [[nodiscard]] Rect PlaceholderRect(u32 line) const
         {
             const Rect end = CaretRect(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())});
             const f32 width = m_foldText.LayoutFor(Rect{}).Width + 8.0f;
             return Rect{end.x + DigitWidth() * 0.5f, end.y + 1.0f, width, end.height - 2.0f};
         }
-        // Folds `range` (not folded yet), its carets out to the line it stays on.
+        // Folds `range`, which is not folded yet, and moves its carets out to the line that stays
+        // visible.
         void FoldRange(const CodeFoldRange& range)
         {
             m_folded.PushBack(m_doc->AddAnchor(CodePosition{range.First, 0}, CodeBias::Right));
             FoldsChanged();
             CaretsOutOfFolds();
         }
-        // Each caret in a folded range to the end of the line its fold stays on.
+        // Moves each caret inside a folded range to the end of the fold's visible line.
         void CaretsOutOfFolds()
         {
             bool moved = false;
@@ -1409,7 +1445,8 @@ export namespace foundation::gui
             ResetGoals();
             SelectionsChanged();
         }
-        // A caret in a folded range unfolds it (a match found, a line gone to, a step into it).
+        // Unfolds any folded range that holds a caret (after a match is found, a line is gone to, or
+        // the caret steps into it).
         void RevealCarets()
         {
             if (m_folded.IsEmpty())
@@ -1421,7 +1458,7 @@ export namespace foundation::gui
         }
 
         // === Completion ===
-        // An event from the open list, on its way up through its owner.
+        // Whether an event comes from the open list, on its way up through its owner.
         [[nodiscard]] bool FromCompletion(const Event& event) const
         {
             for (const Node* n = event.Target; n != nullptr && n != this; n = n->GetParent())
@@ -1433,7 +1470,7 @@ export namespace foundation::gui
         {
             return IsNameByte(c) || (c == u8'-' && m_language != nullptr && m_language->IdentifierDashes);
         }
-        // Where the word ending at `at` begins (at itself when none does).
+        // Returns where the word ending at `at` begins, or `at` itself when no word ends there.
         [[nodiscard]] CodePosition WordStartBefore(CodePosition at) const
         {
             const core::StringView text = m_doc->LineText(at.Line);
@@ -1442,7 +1479,7 @@ export namespace foundation::gui
                 --column;
             return CodePosition{at.Line, column};
         }
-        // The word typed since the list opened; false when the caret has left it.
+        // Gives the word typed since the list opened. Returns false when the caret has left it.
         [[nodiscard]] bool TypedWord(core::StringView& word) const
         {
             const CodeSelection& primary = GetPrimary();
@@ -1453,14 +1490,14 @@ export namespace foundation::gui
                 return false;
             word = text.SubStr(m_wordStart.Column, primary.Head.Column - m_wordStart.Column);
             if (word.Size() == 0 && !m_completedEmpty)
-                return false; // back to the start of a word it opened on
+                return false; // the caret went back past the start of the word the list opened on
             for (usize i = 0; i < word.Size(); ++i)
                 if (!IsWordByte(word[i]))
                     return false;
             return true;
         }
-        // The caret moved or the text changed under the open list: filtered again by the word, else
-        // closed when the caret left it or nothing matches.
+        // Called when the caret moved or the text changed under the open list. Filters the list
+        // again by the word, or closes it when the caret has left the word or nothing matches.
         void UpdateCompletion()
         {
             core::StringView word;
@@ -1471,7 +1508,8 @@ export namespace foundation::gui
             }
             PlaceCompletion();
         }
-        // The word's start, in the root's space, its label lined up with the word.
+        // Returns the anchor rectangle at the word's start, in the root's space, placed so the list's
+        // labels line up with the word.
         [[nodiscard]] Rect CompletionAnchor() const
         {
             const Rect caret = CaretRect(m_wordStart);
@@ -1489,7 +1527,8 @@ export namespace foundation::gui
                 (void)dispatcher->SetPopupAnchorRect(*m_completion, CompletionAnchor());
                 return;
             }
-            // Manual: a press elsewhere is the editor's to close it with, not a press swallowed.
+            // Manual close: a press elsewhere reaches the editor, which closes the list, rather than being
+            // swallowed.
             PopupOptions options;
             options.Kind = PopupKind::Manual;
             options.HasAnchorRect = true;
@@ -1507,7 +1546,8 @@ export namespace foundation::gui
             m_completing = false;
             SetKeyContext(core::StringView(u8"codeeditor"));
         }
-        // After a character typed: a trigger opens the list afresh; a word's letter opens it.
+        // Runs after a character is typed. A trigger character opens the list afresh; a letter of a
+        // word opens it.
         void CompleteAfterTyping(core::StringView text)
         {
             if (m_service == nullptr || text.Size() != 1)
@@ -1555,8 +1595,9 @@ export namespace foundation::gui
                                                 }));
         }
 
-        // Each selection's edit, from the last to the first (an edit moves only what follows it),
-        // as one undo step; the carets after them where `edit` says, moved by the later edits.
+        // Applies each selection's edit, from the last to the first (an edit moves only what follows
+        // it), as one undo step. Each caret ends where `edit` says, then is moved by the edits after
+        // it.
         template <typename Fn>
         void EditEach(CodeEditKind kind, Fn&& edit)
         {
@@ -1571,7 +1612,7 @@ export namespace foundation::gui
             {
                 CodeRange replaced;
                 core::String text;
-                u32 back = 0; // the caret this many bytes before the end of what it put
+                u32 back = 0; // the caret goes this many bytes before the end of the inserted text
                 if constexpr (requires { edit(m_selections[i], replaced, text, back); })
                 {
                     if (!edit(m_selections[i], replaced, text, back))
@@ -1580,7 +1621,8 @@ export namespace foundation::gui
                 else if (!edit(m_selections[i], replaced, text))
                     continue;
                 const CodeRange put = m_doc->Replace(replaced, text.AsView(), kind);
-                // `back` bytes before the end of what it put (across its line breaks too).
+                // Place the caret `back` bytes before the end of the inserted text, counting across line
+                // breaks.
                 CodePosition caret = put.Start;
                 const usize upTo = text.Size() >= back ? text.Size() - back : 0;
                 for (usize k = 0; k < upTo; ++k)
@@ -1600,7 +1642,8 @@ export namespace foundation::gui
             ResetGoals();
             SelectionsChanged();
         }
-        // Each selection's head moved (`extend`: its anchor kept, else collapsed onto it).
+        // Moves each selection's head. With `extend` the anchor stays; otherwise the selection
+        // collapses onto the head.
         template <typename Fn>
         void MoveEach(bool extend, Fn&& move)
         {
@@ -1619,9 +1662,10 @@ export namespace foundation::gui
                 m_goals = goals;
             SelectionsChanged();
         }
-        // Edits planned against the text as it is (each a range and its new text, none overlapping),
-        // applied from the last as one undo step, every selection carried through each: a range's
-        // start keeps left, its end and a caret go right.
+        // Edits planned against the current text: each is a range and its new text, and none overlap.
+        // ApplyPlanned applies them from the last as one undo step and carries every selection
+        // through each edit. A selection's start is biased left; its end and a caret are biased
+        // right.
         struct Planned
         {
             CodeRange Range;
@@ -1655,8 +1699,8 @@ export namespace foundation::gui
             ResetGoals();
             SelectionsChanged();
         }
-        // The lines the selections cover, as runs [first, last], in order (a selection ending at a
-        // line's start leaves that line out).
+        // Gives the lines the selections cover, as runs [first, last] in order. A selection that ends
+        // at a line's start does not include that line.
         void LineBlocks(core::Array<u32>& firsts, core::Array<u32>& lasts) const
         {
             for (const CodeSelection& sel : m_selections)
@@ -1683,7 +1727,7 @@ export namespace foundation::gui
                 out.Append(core::StringView(u8" "));
             return out;
         }
-        // A line's indent in columns (its tabs to their stops).
+        // Returns a line's indent in columns, with tabs expanded to their stops.
         [[nodiscard]] u32 IndentColumns(core::StringView text) const
         {
             u32 columns = 0;
@@ -1691,8 +1735,8 @@ export namespace foundation::gui
                 columns = text[i] == u8'\t' ? (columns / m_tabSize + 1) * m_tabSize : columns + 1;
             return columns;
         }
-        // Whether `text` (a line's text before the caret) ends with one of `list`'s (space-separated)
-        // words or marks: a word only where a name does not run on before it.
+        // Whether `text` (a line's text before the caret) ends with one of the space-separated words
+        // or marks in `list`. A word counts only when no name character comes right before it.
         [[nodiscard]] static bool EndsWithAny(core::StringView text, core::StringView list)
         {
             usize end = text.Size();
@@ -1739,7 +1783,7 @@ export namespace foundation::gui
             return (c >= u8'a' && c <= u8'z') || (c >= u8'A' && c <= u8'Z') || (c >= u8'0' && c <= u8'9') || c == u8'_' ||
                    static_cast<u8>(c) >= 0x80u;
         }
-        // The token of the character before `at` on its line (what a caret is "in").
+        // Returns the token of the character before `at` on its line, which is what a caret is "in".
         [[nodiscard]] CodeToken TokenBefore(CodePosition at) const
         {
             if (m_language == nullptr || at.Column == 0)
@@ -1759,8 +1803,8 @@ export namespace foundation::gui
             return CodeToken::Text;
         }
         void TypeCharacter(core::StringView text);
-        // Backspace between a pair it would have put (both go), or in an indent of spaces (back to
-        // the stop before).
+        // Special Backspace cases: between an auto-closed pair, both characters go; in an indent of
+        // spaces, it deletes back to the previous tab stop.
         bool DeleteBackwardSpecial(CodePosition at, CodeRange& replaced) const
         {
             const core::StringView line = m_doc->LineText(at.Line);
@@ -1803,7 +1847,8 @@ export namespace foundation::gui
                 return m_doc->NextCharacter(at);
             return CodePosition{at.Line, static_cast<u32>(NextWordBoundary(text, at.Column))};
         }
-        // Smart Home: the line's first character past its indent, or its start when there already.
+        // Smart Home: the line's first character past its indent, or the line's start when the caret
+        // is already there.
         [[nodiscard]] CodePosition LineHome(CodePosition at) const
         {
             const u32 indent = IndentOf(m_doc->LineText(at.Line));
@@ -1816,13 +1861,13 @@ export namespace foundation::gui
                 ++n;
             return n;
         }
-        // A line up or down (`lines` of them), at the goal across (set from the caret when unset).
+        // Moves `lines` rows up or down, at the horizontal goal (taken from the caret when unset).
         [[nodiscard]] CodePosition Vertical(CodePosition at, i32 lines, f32& goal) const
         {
             const Place place = PlaceOf(at);
             if (goal < 0.0f)
                 goal = place.X;
-            const i64 target = static_cast<i64>(place.Row) + lines; // by rows: a fold is one, a wrapped line several
+            const i64 target = static_cast<i64>(place.Row) + lines; // by rows: a fold is one row, a wrapped line several
             if (target < 0)
                 return CodePosition{0, 0};
             if (target >= static_cast<i64>(RowCount()))
@@ -1842,8 +1887,9 @@ export namespace foundation::gui
         void Newline();
         void Indent();
 
-        // Tokenizes from the first line not known to agree with the one before, up to `line`: a line is
-        // tokenized again where its text changed or its entry state did; the rest keep their tokens.
+        // Tokenizes up to `line`, starting from the first line not known to agree with the line
+        // before it. A line is tokenized again when its text or its entry state changed; the rest
+        // keep their tokens.
         void EnsureLexed(u32 line) const
         {
             if (m_language == nullptr)
@@ -1868,7 +1914,7 @@ export namespace foundation::gui
             }
             m_cleanTo = core::Max(m_cleanTo, core::Min(line + 1, m_doc->LineCount()));
         }
-        // A token's colour: its part's, else the text's.
+        // Returns a token's colour: its part's colour, or else the text colour.
         [[nodiscard]] Color TokenColor(CodeToken token) const
         {
             if (token == CodeToken::Text)
@@ -1888,7 +1934,7 @@ export namespace foundation::gui
             RefreshMatches();
             m_findBar->SetCount(CurrentMatch(), m_matches.Size());
         }
-        // The matches, found again when the text, the bar's text or its toggles changed.
+        // Finds the matches again when the text, the bar's text or the bar's toggles have changed.
         void RefreshMatches() const
         {
             const core::StringView query = m_findBar->GetQuery();
@@ -1934,7 +1980,8 @@ export namespace foundation::gui
             }
             m_diagnostics.Clear();
         }
-        // A diagnostic's run as marked: an empty one marks the word at it (or a character).
+        // Returns the range a diagnostic marks. An empty diagnostic marks the word at its position,
+        // or one character.
         [[nodiscard]] CodeRange MarkedRange(const Diagnostic& d) const
         {
             CodeRange r{m_doc->GetAnchor(d.Start), m_doc->GetAnchor(d.End)};
@@ -1954,13 +2001,13 @@ export namespace foundation::gui
         u32 m_lastMarker = 0;
         core::Array<Diagnostic> m_diagnostics;
         core::Function<void(u32)> m_onGutterClick;
-        core::String m_hoverTip; // the diagnostics under the pointer, and what the service says there
+        core::String m_hoverTip; // the diagnostics under the pointer, then the service's hover text
         ICodeLanguageService* m_service = nullptr;
-        core::RefPtr<CodeCompletionList> m_completion; // its child while open (a popup)
+        core::RefPtr<CodeCompletionList> m_completion; // a child popup while the list is open
         bool m_completing = false;
         CodePosition m_wordStart;  // where the word the list completes begins
-        // Folding: the ranges (the host's or computed), the folded (anchors on their first lines),
-        // and each line's first row.
+        // Folding state: the ranges (the host's or computed ones), the folded ranges (anchored on
+        // their first lines), and each line's first row.
         mutable core::Array<CodeFoldRange> m_foldRanges;
         mutable u64 m_foldRangesVersion = ~u64(0);
         bool m_hostFolds = false;
@@ -1977,27 +2024,27 @@ export namespace foundation::gui
         f32 m_wrapWidth = 0.0f; // the text's width, while wrapping
         bool m_gutterHover = false;
         Text m_foldText; // a folded line's placeholder
-        bool m_completedEmpty = false; // it opened on no word (a trigger): an empty word keeps it
-        CodeRange m_hoverWord;     // the word the service last spoke of
+        bool m_completedEmpty = false; // opened on no word (a trigger), so an empty word keeps it open
+        CodeRange m_hoverWord;     // the word the service last gave hover text for
         u64 m_hoverVersion = ~u64(0);
         core::String m_hoverInfo;
-        u32 m_listener = 0; // its change listener's token on m_doc
+        u32 m_listener = 0; // the token of the editor's change listener on m_doc
         core::RefPtr<CodeFindBar> m_findBar;
         mutable core::Array<CodeRange> m_matches;
         mutable core::String m_matchesQuery;
         mutable u64 m_matchesVersion = ~u64(0);
         const CodeLanguage* m_language = nullptr;
-        mutable core::Array<LineLex> m_lex; // by line, tokenized up to the last line asked for
-        mutable u32 m_cleanTo = 0;          // lines before it agree with the lines before them
+        mutable core::Array<LineLex> m_lex; // per line, tokenized up to the last line asked for
+        mutable u32 m_cleanTo = 0;          // lines before this one are known to agree with the lines before them
         mutable u64 m_tokenized = 0;
         core::Array<CodeSelection> m_selections;
-        core::Array<f32> m_goals; // each selection's goal across, for Up and Down (below 0: none)
+        core::Array<f32> m_goals; // each selection's horizontal goal for Up and Down (below 0 when unset)
         usize m_primary = 0;
-        mutable core::Array<core::UniquePtr<LineView>> m_views; // by line, made as lines come into view
+        mutable core::Array<core::UniquePtr<LineView>> m_views; // per line, made as lines come into view
         mutable f32 m_widest = 0.0f; // the widest line laid out
         f32 m_estimated = 0.0f;
         u64 m_widestVersion = ~u64(0);
-        Text m_measure; // ten digits: the gutter's width
+        Text m_measure; // ten digits, measuring the gutter's width
         core::Function<void(Text&)> m_styleText;
         core::String m_composition;
         Text m_compositionText;
@@ -2007,12 +2054,12 @@ export namespace foundation::gui
         bool m_caretShown = true;
         f32 m_blink = 0.0f;
         bool m_ticking = false;
-        // A press's drag: what it began on and by what (1 a character, 2 a word, 3 a line).
+        // A press's drag: where it began and by what unit (1 a character, 2 a word, 3 a line).
         bool m_dragging = false;
         u32 m_dragUnit = 1;
         CodeRange m_dragOrigin;
         bool m_dragAdds = false;
-        f32 m_columnX = 0.0f;                      // where across it began (the text's own space)
+        f32 m_columnX = 0.0f;                      // the x where it began (in the text's own space)
         u32 m_columnLine = 0;
     };
 
@@ -2048,7 +2095,7 @@ export namespace foundation::gui
             view.Shown = core::String(text.SubStr(0, cut));
         else
         {
-            u32 visual = 0; // characters before, for the tab stops
+            u32 visual = 0; // characters so far, for the tab stops
             for (usize i = 0; i < cut; ++i)
             {
                 view.ShownAt.PushBack(static_cast<u32>(view.Shown.Size()));
@@ -2079,7 +2126,8 @@ export namespace foundation::gui
             view.Glyphs.SetString(view.Shown.AsView());
         else
         {
-            // Its tokens as the core's rich text: each run in its token's colour ("[[" a "[").
+            // The line's tokens as the core's rich text, each run in its token's colour. A literal "["
+            // is written "[[".
             core::String markup;
             const core::StringView shown = view.Shown.AsView();
             const auto append = [&markup](core::StringView piece)
@@ -2335,7 +2383,7 @@ export namespace foundation::gui
 
     inline void CodeEditor::Type(core::StringView text)
     {
-        // One character, in a language that pairs or outdents: its own rules.
+        // A single character, in a language that pairs or outdents, follows that language's rules.
         if (m_language != nullptr && text.Size() >= 1 && text.Size() <= 4 && NextGrapheme(text, 0) == text.Size() && text[0] != u8'\n')
             TypeCharacter(text);
         else
@@ -2356,8 +2404,8 @@ export namespace foundation::gui
         const CodePosition start = WordStartBefore(at);
         if (!invoked)
         {
-            // Typed: in code (not a comment or a string), on a word that is a name (not a number),
-            // or just after a trigger.
+            // Open the list while typing in code (not in a comment or a string), on a word that is a
+            // name (not a number), or just after a trigger.
             const CodeToken token = TokenBefore(at);
             if (token == CodeToken::Comment || token == CodeToken::String)
                 return false;
@@ -2540,7 +2588,7 @@ export namespace foundation::gui
             const core::StringView after = line.SubStr(afterAt, line.Size() - afterAt);
             const CodeToken in = TokenBefore(at);
             const bool inText = in == CodeToken::String || in == CodeToken::Comment || in == CodeToken::Escape;
-            // Typing the close the pair put: over it.
+            // Typing the closing character that the pair inserted steps over it.
             if (s.IsEmpty() && closes != nullptr && after.Size() >= text.Size() && after.SubStr(0, text.Size()) == text &&
                 !(opens != nullptr && opens->Open == opens->Close && inText && in != CodeToken::String))
             {
@@ -2548,7 +2596,7 @@ export namespace foundation::gui
                 put = core::String(text);
                 return true;
             }
-            // A selection and an open: round it.
+            // An opening character typed over a selection surrounds the selection.
             if (!s.IsEmpty() && opens != nullptr)
             {
                 put = core::String(opens->Open);
@@ -2557,8 +2605,9 @@ export namespace foundation::gui
                 back = static_cast<u32>(opens->Close.Size());
                 return true;
             }
-            // An open where its close may follow: the pair, the caret between. Not in a string or a
-            // comment; a quote not after a name (it's'), nor before one.
+            // An opening character where its close may follow inserts the pair with the caret
+            // between. This does not happen in a string or a comment, nor for a quote right after a
+            // name (it's) or right before one.
             if (s.IsEmpty() && opens != nullptr && !inText)
             {
                 const bool quote = opens->Open == opens->Close;
@@ -2573,7 +2622,7 @@ export namespace foundation::gui
                     return true;
                 }
             }
-            // A closing word or mark first on its line: the line outdented to its block's opener.
+            // A closing word or mark typed first on its line outdents the line to its block's opener.
             core::String before(line.SubStr(0, at.Column));
             before.Append(text);
             const u32 indent = IndentOf(before.AsView());
@@ -2581,7 +2630,8 @@ export namespace foundation::gui
             if (s.IsEmpty() && !lang.OutdentFirst.IsEmpty() && IsListed(first, lang.OutdentFirst.AsView()) &&
                 (after.Size() == 0 || !IsNameByte(after[0])))
             {
-                // The nearest line above with text: its indent, less a stop unless it opens the block.
+                // Take the indent of the nearest line above with text, less one stop unless that line opens
+                // the block.
                 u32 target = IndentColumns(before.AsView());
                 for (u32 up = at.Line; up-- > 0;)
                 {
@@ -2607,8 +2657,8 @@ export namespace foundation::gui
 
     inline void CodeEditor::Newline()
     {
-        // Each new line as indented as the one it breaks, a stop more after what opens a block; between
-        // a bracket pair, the close on a line of its own below.
+        // Each new line is indented as much as the line it breaks, or one stop more after something
+        // that opens a block. Between a bracket pair, the close goes on a line of its own below.
         EditEach(CodeEditKind::Other, [&](const CodeSelection& s, CodeRange& replaced, core::String& put, u32& back)
         {
             replaced = s.Range();
@@ -2645,7 +2695,8 @@ export namespace foundation::gui
 
     inline void CodeEditor::Indent()
     {
-        // A selection across lines indents them; else to the next tab stop at each caret.
+        // A selection across lines indents those lines; otherwise each caret indents to the next tab
+        // stop.
         bool lines = false;
         for (const CodeSelection& sel : m_selections)
             lines = lines || sel.Range().Start.Line != sel.Range().End.Line;
@@ -2687,7 +2738,7 @@ export namespace foundation::gui
                         edits.PushBack(Planned{CodeRange{CodePosition{line, 0}, CodePosition{line, 0}}, IndentText(m_tabSize)});
                     continue;
                 }
-                // Up to a stop's worth of what indents it.
+                // Remove up to one stop's worth of the line's indent.
                 u32 columns = 0, bytes = 0;
                 while (bytes < indent && columns < m_tabSize)
                 {
@@ -2708,8 +2759,8 @@ export namespace foundation::gui
         core::Array<Planned> edits(MemoryAllocator());
         if (lang.LineComment.IsEmpty())
         {
-            // Only block comments (markup's): round each selection, or its caret's line; off again
-            // where a selection is one already.
+            // The language has only block comments (as markup does). Wrap each selection, or its
+            // caret's line, in one; remove it again where a selection already is a block comment.
             const core::StringView open = lang.BlockComment.Open.AsView(), close = lang.BlockComment.Close.AsView();
             if (open.Size() == 0)
                 return;
@@ -2746,7 +2797,7 @@ export namespace foundation::gui
         const core::StringView mark = lang.LineComment.AsView();
         core::Array<u32> firsts(MemoryAllocator()), lasts(MemoryAllocator());
         LineBlocks(firsts, lasts);
-        // Off when every line with text is commented; else on, at the least indent.
+        // Uncomment when every line with text is commented; otherwise comment, at the smallest indent.
         bool all = true;
         u32 least = ~u32(0);
         for (usize b = 0; b < firsts.Size(); ++b)
@@ -2791,7 +2842,8 @@ export namespace foundation::gui
         LineBlocks(firsts, lasts);
         if (firsts.IsEmpty() || (up && firsts[0] == 0) || (!up && lasts.Back() + 1 >= m_doc->LineCount()))
             return;
-        // Each block and the line it passes, swapped as one edit; the selections a line along.
+        // Swap each block with the line it moves past, as one edit, and move the selections by a
+        // line.
         const core::Array<CodeSelection> before = m_selections;
         core::Array<CodeSelection> after = m_selections;
         m_doc->Begin(before.AsSpan());
@@ -2831,7 +2883,8 @@ export namespace foundation::gui
             const u32 first = firsts[k], last = lasts[k];
             const u32 count = last - first + 1;
             core::String block = m_doc->TextIn(CodeRange{CodePosition{first, 0}, CodePosition{last, static_cast<u32>(m_doc->LineText(last).Size())}});
-            // The copy after the block's end: the selections go to it (down) or stay on the first (up).
+            // Put the copy after the block's end. Going down, the selections move to the copy; going up,
+            // they stay on the original.
             core::String put(core::StringView(u8"\n"));
             put.Append(block.AsView());
             (void)m_doc->Insert(CodePosition{last, static_cast<u32>(m_doc->LineText(last).Size())}, put.AsView());
@@ -2873,7 +2926,7 @@ export namespace foundation::gui
         CodeSelection primary = GetPrimary();
         if (primary.IsEmpty())
         {
-            // First, the word at the caret.
+            // First, select the word at the caret.
             const TextRange word = WordRangeAt(m_doc->LineText(primary.Head.Line), primary.Head.Column);
             if (word.Start == word.End)
                 return false;
@@ -2884,7 +2937,8 @@ export namespace foundation::gui
             return true;
         }
         const core::String needle = m_doc->TextIn(primary.Range());
-        // From the last selection's end, round to the start; one already selected is skipped.
+        // Search from the last selection's end, wrapping to the start, and skip matches already
+        // selected.
         CodePosition from = m_selections.Back().Range().End;
         for (usize tries = 0; tries <= m_selections.Size(); ++tries)
         {
@@ -2954,7 +3008,7 @@ export namespace foundation::gui
         usize pick = 0;
         if (!backwards)
         {
-            pick = 0; // round to the first when none follows
+            pick = 0; // wrap to the first when none follows
             for (usize i = 0; i < m_matches.Size(); ++i)
                 if (from.End <= m_matches[i].Start && !(m_matches[i] == from))
                 {
@@ -2964,7 +3018,7 @@ export namespace foundation::gui
         }
         else
         {
-            pick = m_matches.Size() - 1; // round to the last when none comes before
+            pick = m_matches.Size() - 1; // wrap to the last when none comes before
             for (usize i = m_matches.Size(); i-- > 0;)
                 if (m_matches[i].End <= from.Start && !(m_matches[i] == from))
                 {
@@ -3005,7 +3059,7 @@ export namespace foundation::gui
 
     inline void CodeEditor::GoToLine(core::StringView text)
     {
-        // `line` or `line:column`, from 1.
+        // Parse `line` or `line:column`, counting from 1.
         u32 line = 0, column = 0;
         usize at = 0;
         while (at < text.Size() && text[at] >= u8'0' && text[at] <= u8'9')
@@ -3026,7 +3080,7 @@ export namespace foundation::gui
             return false;
         at = m_doc->Clamp(at);
         const auto skip = [](CodeToken t) { return t == CodeToken::String || t == CodeToken::Comment || t == CodeToken::Escape; };
-        // The bracket after the caret, else the one before it.
+        // Try the bracket after the caret, then the one before it.
         for (int side = 0; side < 2; ++side)
         {
             const core::StringView line = m_doc->LineText(at.Line);
@@ -3041,7 +3095,8 @@ export namespace foundation::gui
                         skip(TokenAtColumn(at.Line, column)))
                         continue;
                     bracket = CodeRange{CodePosition{at.Line, column}, CodePosition{at.Line, column + static_cast<u32>(mark.Size())}};
-                    // Out from it, its kind counted, past strings and comments, a few thousand lines at most.
+                    // Scan outward from it, counting brackets of its kind and skipping strings and comments, for
+                    // a few thousand lines at most.
                     const core::StringView open = pair.Open.AsView(), close = pair.Close.AsView();
                     const bool forward = which == 0;
                     i32 depth = 0;
@@ -3094,7 +3149,7 @@ export namespace foundation::gui
                 text.Append(core::StringView(u8"\n"));
             if (any)
                 text.Append(m_doc->TextIn(s.Range()).AsView());
-            else // no selection: the caret's whole line, with its line feed (VS Code's)
+            else // no selection: the caret's whole line, with its line feed
             {
                 text.Append(m_doc->LineText(s.Head.Line));
                 text.Append(core::StringView(u8"\n"));
@@ -3122,7 +3177,8 @@ export namespace foundation::gui
         if (clipboard == nullptr || !clipboard->HasText() || m_readOnly)
             return;
         const core::String text = clipboard->GetText();
-        // As many lines as carets: one to each, in order (several copied, as many pasted).
+        // When the clipboard has as many lines as there are carets, paste one line at each caret, in
+        // order (copying from several carets and pasting into as many).
         core::Array<core::String> parts(MemoryAllocator());
         {
             usize start = 0;
@@ -3137,7 +3193,7 @@ export namespace foundation::gui
         usize index = m_selections.Size();
         EditEach(CodeEditKind::Other, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
         {
-            --index; // EditEach goes from the last
+            --index; // EditEach goes from the last selection
             replaced = s.Range();
             put = spread ? parts[index] : text;
             return true;
@@ -3152,7 +3208,7 @@ export namespace foundation::gui
         const u32 mods = event.Modifiers & (KeyModCtrl | KeyModAlt | KeyModSuper | KeyModShift);
         if (m_completing && key == KeyCode::Tab && mods == 0)
         {
-            (void)AcceptCompletion(); // the list's, as Return (a captured Tab never reaches the keymap)
+            (void)AcceptCompletion(); // Tab accepts as Return does; a captured Tab never reaches the keymap
             event.Handled = true;
             return;
         }
@@ -3172,7 +3228,7 @@ export namespace foundation::gui
             event.Handled = true;
             return;
         }
-        // A key that types is its own (it neither activates nor moves focus).
+        // The editor keeps a key that types text; it neither activates anything nor moves focus.
         if ((mods & (KeyModCtrl | KeyModAlt | KeyModSuper)) == 0 && (key == KeyCode::Space || (key >= KeyCode::A && key <= KeyCode::Num9)))
             event.Handled = true;
     }
@@ -3186,7 +3242,7 @@ export namespace foundation::gui
         RequestFocus();
         const core::Float2 local = ConvertToNodeSpace(event.Position);
         const CodePosition at = PositionAt(local);
-        // The marker column: the host's (a breakpoint toggled), the caret staying.
+        // A click in the marker column goes to the host (to toggle a breakpoint), and the caret stays.
         const Rect content = GetContentBounds();
         if (local.x >= content.x && local.x < content.x + kMarkerColumn)
         {
@@ -3194,14 +3250,14 @@ export namespace foundation::gui
                 m_onGutterClick(at.Line);
             return;
         }
-        // The fold column: a fold's chevron folds or unfolds it.
+        // In the fold column, a chevron folds or unfolds its range.
         const f32 foldX = content.x + GutterWidth() - kTextGap - kFoldColumn;
         if (local.x >= foldX && local.x < foldX + kFoldColumn)
         {
             (void)ToggleFold(at.Line);
             return;
         }
-        // A folded line's placeholder unfolds it.
+        // Clicking a folded line's placeholder unfolds it.
         if (IsFolded(at.Line) && PlaceholderRect(at.Line).Contains(local))
         {
             (void)Unfold(at.Line);
@@ -3255,13 +3311,13 @@ export namespace foundation::gui
             return;
         if (!m_dragging)
         {
-            // Hovering: the diagnostics under the pointer, or on its line in the gutter, for the
-            // tooltip; over a word, what the service says of it after them.
+            // Hovering builds the tooltip: the diagnostics under the pointer (or on its line, in the
+            // gutter), then, over a word, the service's text for it.
             const core::Float2 hover = ConvertToNodeSpace(event.Position);
             const CodePosition over = PositionAt(hover);
             if (const bool gutter = hover.x < TextLeft(); gutter != m_gutterHover)
             {
-                m_gutterHover = gutter; // the folds' chevrons show
+                m_gutterHover = gutter; // shows the folds' chevrons
                 Invalidate();
             }
             core::String tip;
@@ -3278,7 +3334,7 @@ export namespace foundation::gui
             else
             {
                 tip = DiagnosticsAt(over);
-                // Over the word itself, not the space past a line's end.
+                // Only over the word itself, not the space past a line's end.
                 const f32 x = hover.x - TextLeft() + ScrollShift().x;
                 if (m_service != nullptr && over.Line < m_doc->LineCount() && x <= XOf(m_doc->Clamp(CodePosition{over.Line, ~0u})))
                 {
@@ -3298,8 +3354,8 @@ export namespace foundation::gui
         const CodePosition at = PositionAt(local);
         if (m_dragAdds && m_dragUnit == 1 && at.Line != m_columnLine)
         {
-            // Alt+drag across lines: a column, a selection on each line between, at the two places
-            // across, in place of the others (VS Code's box selection).
+            // Alt+drag across lines makes a box selection: it replaces the other selections with
+            // one selection on each line between, spanning the same two x positions.
             const f32 x = local.x - TextLeft() + ScrollShift().x;
             core::Array<CodeSelection> next(MemoryAllocator());
             const u32 from = core::Min(m_columnLine, at.Line), to = core::Max(m_columnLine, at.Line);
@@ -3313,7 +3369,7 @@ export namespace foundation::gui
             SelectionsChanged();
             return;
         }
-        // From what the press selected to what the pointer is on, by the press's unit.
+        // Extend from what the press selected to what the pointer is on, by the press's unit.
         CodeRange unit{at, at};
         if (m_dragUnit == 2)
         {
@@ -3361,7 +3417,7 @@ export namespace foundation::gui
         };
         const Color numberColor = textColor(u8"line-number", Color{0.5f, 0.53f, 0.6f, 1.0f});
         const Color currentNumber = textColor(u8"current-line-number", GetTextColor());
-        const Color currentLine = partColor(u8"current-line", Color{0.0f, 0.0f, 0.0f, 0.0f}); // the sheet's (none by default)
+        const Color currentLine = partColor(u8"current-line", Color{0.0f, 0.0f, 0.0f, 0.0f}); // from the sheet (none by default)
         const Color selectionColor = partColor(u8"selection", Color{0.25f, 0.45f, 0.8f, 0.45f});
         const Color caretColor = partColor(u8"caret", GetTextColor());
 
@@ -3374,10 +3430,10 @@ export namespace foundation::gui
         const f32 textX = textArea.x - shift.x;
 
         ctx.PushClip(content);
-        // The primary caret's line, across the whole view.
+        // Highlight the primary caret's line across the whole view.
         if (GetPrimary().IsEmpty() && primary.Line >= first && primary.Line <= last && currentLine.a > 0.0f)
             ctx.VG().FillRect(Rectangle{content.x, rowTop(primary.Line), content.width, lh * static_cast<f32>(RowsOf(primary.Line))}, currentLine);
-        // The line the debugger stands on, across the view.
+        // Highlight the line the debugger is stopped on, across the view.
         for (const Marker& marker : m_markers)
             if (marker.Kind.AsView() == core::StringView(u8"execution"))
             {
@@ -3387,7 +3443,7 @@ export namespace foundation::gui
                                       partColor(u8"execution-line", Color{0.9f, 0.75f, 0.2f, 0.15f}));
             }
         ctx.PushClip(textArea);
-        // The find bar's matches in view, the current one stronger.
+        // The find bar's matches in view, with the current one drawn stronger.
         if (m_findBar->IsDisplayed() && m_findBar->GetMode() != CodeFindBar::Mode::GoToLine)
         {
             RefreshMatches();
@@ -3412,7 +3468,7 @@ export namespace foundation::gui
                 }
             }
         }
-        // The selections, then the text over them.
+        // Draw the selections, then the text over them.
         for (const CodeSelection& s : m_selections)
         {
             if (s.IsEmpty())
@@ -3429,7 +3485,7 @@ export namespace foundation::gui
                            });
             }
         }
-        // The bracket by the primary caret and its match, marked.
+        // Mark the bracket by the primary caret and its match.
         {
             CodeRange bracket, match;
             if (GetPrimary().IsEmpty() && FindMatchingBracket(primary, bracket, match))
@@ -3452,10 +3508,11 @@ export namespace foundation::gui
             const TextLayout& layout = LayoutOf(view);
             if (m_whitespace != CodeWhitespace::None)
                 DrawWhitespace(ctx, line, view, layout, textX, rowTop(line), textColor(u8"whitespace", numberColor));
-            // Its rows from its first (each a line height: the layout's own, the same font's).
+            // Draw the line's rows from its first; each row is a line height, which matches the layout's
+            // own because it uses the same font.
             const f32 lead = layout.Lines.IsEmpty() ? 0.0f : (lh - layout.Lines[0].Height) * 0.5f;
             view.Glyphs.DrawLayout(ctx, layout, core::Float2{textX, rowTop(line) + lead});
-            // A folded line's placeholder after its text.
+            // Draw a folded line's placeholder after its text.
             if (IsFolded(line))
             {
                 const Rect box = PlaceholderRect(line);
@@ -3466,7 +3523,7 @@ export namespace foundation::gui
                 m_foldText.DrawLayout(ctx, dots, core::Float2{box.x + (box.width - dots.Width) * 0.5f, box.y + (box.height - dots.Height) * 0.5f});
             }
         }
-        // The diagnostics: a wave under each run, the worse over the lesser.
+        // The diagnostics: a wave under each run, with more severe ones drawn over less severe ones.
         for (u32 pass = 0; pass < 4; ++pass)
             for (const Diagnostic& d : m_diagnostics)
             {
@@ -3515,10 +3572,11 @@ export namespace foundation::gui
                 ctx.VG().FillRect(Rectangle{textX + place.X + (at == primary ? ComposedWidth() : 0.0f), topOfRow(place.Row), 1.5f, lh}, caretColor);
             }
         ctx.PopClip();
-        // The gutter: still across, the numbers right aligned.
+        // The gutter does not scroll across, and its numbers are right aligned.
         if (gutterColor.a > 0.0f)
             ctx.VG().FillRect(Rectangle{content.x, content.y, gutter, content.height}, gutterColor);
-        // The marker column: a line's worst diagnostic, then its marks over it (an execution arrow last).
+        // The marker column: a line's worst diagnostic, then its marks over it, with an execution
+        // arrow last.
         for (u32 line = first; line <= last; ++line)
         {
             if (IsLineHidden(line))
@@ -3554,8 +3612,8 @@ export namespace foundation::gui
                         ctx.VG().FillRect(Rectangle{cx - radius * 0.7f, cy - radius * 0.7f, radius * 1.4f, radius * 1.4f}, partColor(u8"marker", Color{0.6f, 0.65f, 0.75f, 1.0f}));
                 }
         }
-        // The fold column: a folded range's chevron always, an open one's while the pointer is over
-        // the gutter (VS Code's), worked out only then.
+        // The fold column always shows a folded range's chevron. An open range's chevron shows only
+        // while the pointer is over the gutter, and is worked out only then.
         const bool chevrons = m_gutterHover || !m_folded.IsEmpty();
         const Color foldColor = textColor(u8"fold", numberColor);
         for (u32 line = first; line <= last && chevrons; ++line)

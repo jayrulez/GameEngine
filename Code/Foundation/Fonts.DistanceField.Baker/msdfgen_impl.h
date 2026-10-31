@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// msdfgen wrapper - plain C++ header (no modules). Called from the baker module
+// msdfgen wrapper: a plain C++ header (no modules). Called from the baker module
 // partition through the global module fragment.
 #pragma once
 

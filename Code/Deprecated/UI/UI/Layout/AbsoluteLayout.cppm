@@ -3,7 +3,7 @@
 
 // UI - :absolute_layout partition
 //
-// Positions children at explicit X/Y coordinates. Ported from Sedulous.UI/src/Layout/AbsoluteLayout.bf.
+// Positions children at explicit X/Y coordinates.
 // The offset comes from the child's LayoutStyle::Left/Top.
 
 module;
@@ -43,8 +43,8 @@ export namespace foundation::ui
                     continue;
                 }
 
-                // Fixed + margin are base-handled here. Wrap children measure unbounded (absolute
-                // placement has no natural box), Match fills the content area.
+                // The base class handles Fixed sizes and margins. Wrap children measure unbounded
+                // (absolute placement has no natural box), Match fills the content area.
                 const f32 availW = Max(0.0f, constraints.MaxWidth - chrome.TotalHorizontal());
                 const f32 availH = Max(0.0f, constraints.MaxHeight - chrome.TotalVertical());
                 const LayoutStyle& ls = child->Layout();
@@ -83,7 +83,7 @@ export namespace foundation::ui
                 const f32 x = chrome.Left + ax;
                 const f32 y = chrome.Top + ay;
 
-                // Margin-box rects (base insets by margin).
+                // Margin-box rects (the base class insets them by the margin).
                 const Float2 mb = child->MarginBoxSize();
                 f32 w = mb.x;
                 f32 h = mb.y;

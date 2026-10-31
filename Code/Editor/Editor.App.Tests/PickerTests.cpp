@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The picker over its markup (Data/Editor/Picker.xml): rows under their sections, favourites first;
-// the current value checked and lit, the foot saying Esc keeps it; Up and Down past the headings
-// from the search, Enter picking and closing; a search narrowing (a name that starts with it
-// first) or saying nothing matches, with a way back; nothing to pick saying what is missing and
-// running the owner's next step; None picking nothing. The path picker: the files under a folder
-// with the extensions asked, ignoring case, sorted, under their folders. A tree request: rows
-// indented in its order, a search keeping the groups above each match.
+// The picker over its markup (Data/Editor/Picker.xml). Rows sit under their sections, favourites
+// first. The current value is checked and lit, and the footer says Esc keeps it. Up and Down from the
+// search skip the headings, and Enter picks and closes. A search narrows the rows (names that start
+// with it first) or says nothing matches, with a way back. With nothing to pick, the picker says what
+// is missing and offers the owner's next step. None picks nothing. The path picker lists the files
+// under a folder with the requested extensions, ignoring case, sorted and grouped under their
+// folders. A tree request indents rows in its order, and a search keeps the groups above each match.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -119,9 +119,9 @@ TEST_CASE("picker: a search narrows, a name starting with it first; nothing matc
     Bed bed;
     bed.Open(bed.Materials());
     bed.picker.SetQuery(u8"wood");
-    CHECK(bed.Rows() == String(u8"#Favourites Wood_Dark #Props Wood #Town Wood_Dark Redwood")); // Redwood holds it: after
+    CHECK(bed.Rows() == String(u8"#Favourites Wood_Dark #Props Wood #Town Wood_Dark Redwood")); // Redwood only contains it, so it comes after
     bed.picker.SetQuery(u8"WOOL");
-    CHECK(bed.Rows() == String(u8"#Props Wool")); // case folded; a section with nothing left goes
+    CHECK(bed.Rows() == String(u8"#Props Wool")); // case folded; a section with nothing left is dropped
     bed.picker.SetQuery(u8"crate4");
     CHECK(bed.picker.RowCount() == 0u);
     CHECK(bed.picker.ShowsState());
@@ -130,7 +130,7 @@ TEST_CASE("picker: a search narrows, a name starting with it first; nothing matc
     CHECK_FALSE(bed.picker.ShowsState());
     CHECK(bed.picker.RowCount() == 8u);
 
-    // The close keeps the value: nothing picked, no None to slip onto.
+    // Closing keeps the value: nothing is picked, not even None.
     CHECK(bed.picker.CloseButton()->HandleActivate());
     CHECK(bed.picked.IsEmpty());
     CHECK_FALSE(bed.picker.IsOpen());
@@ -167,11 +167,11 @@ TEST_CASE("picker: a tree's rows indented in its order; a search keeps the group
     CHECK(bed.picker.IsContext(0));
     CHECK(bed.picker.IsContext(1));
     CHECK_FALSE(bed.picker.IsContext(2));
-    CHECK(bed.picker.LitKey() == StringView(u8"c/u/t")); // still the current
+    CHECK(bed.picker.LitKey() == StringView(u8"c/u/t")); // still the current value
 
     bed.picker.SetQuery(u8"sound");
     CHECK(bed.Rows() == String(u8"Content Sounds"));
-    CHECK(bed.picker.LitKey() == StringView(u8"c/s")); // the match lit, not what holds it
+    CHECK(bed.picker.LitKey() == StringView(u8"c/s")); // the match is lit, not the group holding it
 }
 
 TEST_CASE("picker: nothing to pick says what is missing and runs the owner's next step after it closes")
@@ -256,7 +256,7 @@ TEST_CASE("picker: it opens in the window's middle; a lit item's description is 
     const gui::Rect frame = bed.picker.Content()->GetScreenBounds();
     CHECK(frame.x + frame.width * 0.5f == doctest::Approx(400.0f).epsilon(0.01));
     CHECK(frame.y + frame.height * 0.5f == doctest::Approx(300.0f).epsilon(0.01));
-    CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc keeps Wood")); // Wood lit: it says nothing
+    CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc keeps Wood")); // Wood is lit and has no description
     bed.Key(gui::KeyCode::Down);                                              // Wool
     CHECK(bed.picker.LitKey() == StringView(u8"wool"));
     CHECK(bed.picker.Hint() == StringView(u8"Warm and soft."));

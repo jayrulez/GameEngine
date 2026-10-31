@@ -3,14 +3,13 @@
 
 // Foundation::Core - :schema_recorder partition.
 //
-// SchemaRecorder: an ISerializer backend in WRITE mode that stores nothing and records what a
-// Serialize body DID - each Key with the scalar kind and the value that followed it, the
+// SchemaRecorder: an ISerializer backend in write mode that stores nothing and records what a
+// Serialize body did: each Key with the scalar kind and the value that followed it, the
 // nesting of objects and arrays, text, guid and blob fields, and the data-version chain a
 // versioned payload pushed. Driven through the real write path over a default-constructed
-// instance, the recording IS the wire format: the order, keys, kinds and defaults the reader
+// instance, the recording is the wire format: the order, keys, kinds and defaults the reader
 // will expect, taken from the code that writes real files rather than from reflection (which
-// differs from the wire in field set, order, encoding and defaults). The scene format
-// reference (Documentation/Specs/scene-format-reference.md, D1) is built from it.
+// differs from the wire in field set, order, encoding and defaults).
 module;
 #include "Core/Prelude.h"
 
@@ -80,7 +79,7 @@ export namespace foundation::core
 
         /// The recording: an implicit root object holding what the body wrote at its top level.
         [[nodiscard]] const SchemaNode& Root() const noexcept { return *m_root; }
-        /// The data-version chain of the OUTERMOST versioned payload recorded (concrete type
+        /// The data-version chain of the outermost versioned payload recorded (concrete type
         /// first, then every versioned base), as BeginVersionedPayload pushed it; empty when
         /// the body was not versioned.
         [[nodiscard]] Span<const SerializedDataVersion> VersionChain() const noexcept

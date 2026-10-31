@@ -4,7 +4,7 @@
 // UI - :modal_backdrop partition
 //
 // Semi-transparent backdrop drawn behind modal popups; blocks input to underlying content by consuming
-// all mouse events. Ported from Sedulous.UI/src/Overlay/ModalBackdrop.bf.
+// all mouse events.
 
 module;
 #include "Core/Prelude.h"
@@ -22,7 +22,8 @@ using namespace foundation::core;
 
 export namespace foundation::ui
 {
-    // Alias so the faithful `Color` field name can still name the core Color type (field shadows type).
+    // Alias so the core Color type can still be named inside the class, where the `Color` field
+    // shadows it.
     using ColorValue = foundation::core::Color;
 
     class ModalBackdrop : public View
@@ -33,7 +34,7 @@ export namespace foundation::ui
 
         void OnDraw(UIDrawContext& ctx) override
         {
-            // Themeable scrim: background-color rule wins over the field default.
+            // Themeable scrim: a background-color rule wins over the field default.
             ctx.VG().FillRect(Rectangle{0, 0, Width(), Height()},
                               ResolveStyleColor(StyleProperty::Background, Color));
         }

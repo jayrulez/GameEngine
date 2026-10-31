@@ -76,7 +76,7 @@ namespace foundation::ui::toolkit
             LineCache& cache = m_lines[static_cast<usize>(line)];
             if (cache.valid && cache.entry == entry)
             {
-                // Chain is consistent here - skip ahead to the next explicitly invalidated
+                // The chain is consistent here, so skip ahead to the next explicitly invalidated
                 // line (if any) and continue from there.
                 i32 next = line + 1;
                 while (next < count && m_lines[static_cast<usize>(next)].valid)

@@ -3,9 +3,9 @@
 
 #pragma once
 // Shared free-fly camera for the dev samples: WASD/QE move, hold RMB (or Tab to capture) to look,
-// Shift to move fast. Provides position + orientation; the sample consumes it as it likes (set a
+// Shift to move fast. Provides position and orientation; the sample consumes it as it likes (set a
 // camera-entity transform, or build a ViewCamera). The including translation unit must have
-// imported foundation.core + foundation.shell + foundation.runtime.client (this header uses their
+// imported foundation.core, foundation.shell and foundation.runtime.client (this header uses their
 // types via fully-qualified names).
 
 namespace samples
@@ -17,7 +17,7 @@ namespace samples
     struct FlyCamera
     {
         foundation::core::Float3 position{0.0f, 14.0f, 30.0f};
-        foundation::core::f32 yaw = 0.0f;    // 0 => looking down -Z
+        foundation::core::f32 yaw = 0.0f;    // 0 looks down -Z
         foundation::core::f32 pitch = -0.3f; // tilt down a touch
         bool mouseCaptured = false;
         foundation::core::f32 moveSpeed = 50.0f, fastSpeed = 200.0f, lookSensitivity = 0.003f;
@@ -59,9 +59,10 @@ namespace samples
             Update(kb, mouse, dt);
         }
 
-        // Apply this frame's input from explicit devices - pass an InputSurface's gated Keyboard()/Mouse()
-        // to confine the camera to one viewport. Mouse: RMB (or Tab-capture) = free look; Alt+LMB = turntable
-        // orbit about the focus point (Maya-style); MMB = pan; wheel = dolly/zoom. Plus WASD/QE move + Shift.
+        // Apply this frame's input from explicit devices. Pass an InputSurface's gated Keyboard()/Mouse()
+        // to confine the camera to one viewport. RMB (or Tab capture) looks around freely; Alt+LMB orbits
+        // the focus point like a turntable (Maya-style); MMB pans; the wheel dollies. WASD/QE move, and
+        // Shift moves fast.
         void Update(foundation::shell::IKeyboard* kb, foundation::shell::IMouse* mouse,
                     foundation::core::f32 dt)
         {
@@ -108,8 +109,8 @@ namespace samples
                         position - Right() * (mouse->DeltaX() * s) + Up() * (mouse->DeltaY() * s);
                 }
 
-                // Wheel dollies along the view forward (zoom) - scroll up = move in, down = move out - and
-                // shrinks the orbit pivot distance so the turntable pivot tracks the zoom.
+                // The wheel dollies along the view's forward axis (scrolling up moves in, down moves out)
+                // and shrinks the orbit pivot distance so the turntable pivot tracks the zoom.
                 const foundation::core::f32 scroll = mouse->ScrollY();
                 if (scroll != 0.0f)
                 {

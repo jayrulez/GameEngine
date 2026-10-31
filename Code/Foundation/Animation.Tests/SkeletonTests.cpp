@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Skeleton hierarchy: name lookup, root/child/order building, world-pose accumulation, and
-// skinning-matrix correctness (identity at bind pose). No Sedulous test existed; this covers the
-// ported math directly.
+// Skeleton hierarchy: name lookup, root, child and order building, world-pose accumulation, and
+// skinning-matrix correctness (identity at the bind pose).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -13,7 +12,8 @@ import foundation.animation;
 using namespace foundation::core;
 using namespace foundation::animation;
 
-// A 3-bone chain root(0) -> child(1) -> grandchild(2), each translated +Y from its parent.
+// A three-bone chain: root(0), child(1) under it and grandchild(2) under that, each translated +Y
+// from its parent.
 static void BuildChain(Skeleton& s)
 {
     Array<Bone>& bones = s.Bones();
@@ -83,7 +83,7 @@ TEST_CASE("skeleton: skinning matrices are identity at the bind pose")
 
 TEST_CASE("skeleton: hierarchical order lists parents before children")
 {
-    // A child declared BEFORE its parent in the array must still evaluate after it.
+    // A child declared before its parent in the array must still evaluate after it.
     Skeleton s{2};
     Array<Bone>& bones = s.Bones();
     bones[0].index = 0;

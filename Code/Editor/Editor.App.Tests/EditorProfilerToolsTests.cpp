@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - profiler_capture over a test's own profiler and recorder: the call re-entered
-// while the capture runs, then answered with the summary read back from the written file (frame
-// times, the scopes that took longest, counter averages), and the failures it names (a capture
-// already running, a capture that could not be written).
+// Editor::App tests: profiler_capture over a profiler and recorder of the test's own. The call is
+// re-entered while the capture runs, then answers with the summary read back from the written file
+// (frame times, the longest scopes, counter averages). It names its failures: a capture already
+// running, or a capture that could not be written.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -64,7 +64,7 @@ namespace
         return seams;
     }
 
-    // One frame of the host: a scope, a counter, the frame's end and the recorder advanced.
+    // One host frame: a scope, a counter, the end of the frame, and the recorder advanced.
     void RunFrame(Profiler& profiler, CaptureRecorder& recorder, u32 counter, f64 value)
     {
         profiler.BeginFrame();
@@ -143,7 +143,7 @@ TEST_CASE("profiler_capture: names a capture already running and one that could 
     }
     app::RegisterProfilerTools(server, SeamsFor(profiler, recorder, u8"scratch_profiler_tool_blocker/inside"));
 
-    // The key (or a player's flag) got there first.
+    // A capture already started by the key (or a player's flag).
     REQUIRE(recorder.Start(profiler, 0.0, StringView(u8"scratch_profiler_tool")));
     const Answer busy = AnswerOf(Pump(server, u8"{}"));
     CHECK_FALSE(busy.ok);

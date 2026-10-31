@@ -5,7 +5,7 @@
 //
 // IStream is the read/write/seek abstraction; FileStream wraps the System file
 // primitives, MemoryStream is an in-memory growable buffer. The serialization
-// contract (ISerializer) builds on these next.
+// contract (ISerializer) builds on these.
 
 module;
 #include "Core/Prelude.h"
@@ -298,7 +298,7 @@ export namespace foundation::core
             return base;
         }
 
-        // Note: ignores unflushed pending writes that may extend the file.
+        // Ignores unflushed pending writes that may extend the file.
         [[nodiscard]] i64 Size() const override { return m_stream->Size(); }
 
     private:

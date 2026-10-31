@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/InlineStyleTests.bf - the ResolveStyleFontFamily / FontService
-// subset (the tests that exercise the font-service wiring: View::ResolveStyleFontFamily() falling back
-// to UIContext's IFontService default, the .FontFamily cascade winning over it, and per-instance
-// overrides). Faithful to Sedulous: a StubFontService returns null CachedFonts but a known default
-// family (Sedulous unit tests never use a real font - real glyph rendering is a sample concern).
-// Beef `sheet.ForType(typeof(TestView))` -> ForType(&TestView::StaticType()); `ctx.FontService = x`
-// -> ctx.SetFontService(&x).
+// Font-service wiring: View::ResolveStyleFontFamily() falling back to the default of UIContext's
+// IFontService, the FontFamily cascade winning over it, and per-instance overrides. A
+// StubFontService returns null CachedFonts but a known default family; these unit tests never use
+// a real font.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -26,8 +23,8 @@ namespace fonts = foundation::fonts;
 
 namespace
 {
-    /// Minimal stub returning a known default family name (Sedulous StubFontService). Confirms
-    /// ResolveStyleFontFamily() floor-falls-back through the active IFontService.
+    /// Minimal stub returning a known default family name, so the tests can confirm that
+    /// ResolveStyleFontFamily() falls back to the active IFontService when nothing else applies.
     class StubFontService final : public fonts::IFontService
     {
     public:
@@ -48,7 +45,7 @@ namespace
 
     core::RefPtr<RootView> MakeRoot() { return core::MakeRef<RootView>(core::DefaultAllocator()); }
 
-    // Give ctx a fresh empty stylesheet (Sedulous SetupSheet). Returns a borrowed pointer.
+    // Give ctx a fresh empty stylesheet. Returns a borrowed pointer.
     StyleSheet* SetupSheet(UIContext& ctx)
     {
         core::RefPtr<StyleSheet> sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
@@ -60,7 +57,7 @@ namespace
 
 TEST_CASE("font-family: ResolveStyleFontFamily_Fallback_UsesFontServiceDefault")
 {
-    // No cascade rule + no inline override -> falls through to the font service's DefaultFontFamily.
+    // With no cascade rule and no inline override, it falls through to the font service's DefaultFontFamily.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
     Init(ctx, root.Get());
@@ -107,7 +104,7 @@ TEST_CASE("font-family: ResolveStyleFontFamily_InstanceOverride_Wins")
 
 TEST_CASE("font-family: ResolveStyleFontFamily_EmptyOverride_DefersToCascade")
 {
-    // Beef's null override -> our empty StringView: an empty per-instance override defers to the cascade.
+    // An empty per-instance override defers to the cascade.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
     Init(ctx, root.Get());
@@ -140,12 +137,11 @@ TEST_CASE("font-family: Resolution_InlineFontFamilyBeatsContextSheet")
 
 TEST_CASE("font-service: DrawRootView pushes the context's CURRENT service into the VG")
 {
-    // The 2026-08-12 dist incident, pinned: the VG resolves CachedFont atlases through ITS OWN
-    // service pointer (set at construction), and the game swaps the UI context's service AFTER
-    // the VG exists (SetDefaultFont binding the cooked font once the project loads). If
-    // DrawRootView does not re-assert the context's service, the VG asks the STALE service for
-    // atlases of CachedFonts it never created - null, silent skip, invisible text in the
-    // built game (masked in the source tree, where the stale service is the working one).
+    // The VG resolves CachedFont atlases through its own service pointer (set at construction),
+    // and a game swaps the UI context's service after the VG exists (SetDefaultFont binds the
+    // cooked font once the project loads). DrawRootView re-asserts the context's service on the
+    // VG; otherwise the VG would ask the stale service for atlases of CachedFonts it never
+    // created, get null, and silently draw no text.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
     Init(ctx, root.Get());
@@ -157,5 +153,5 @@ TEST_CASE("font-service: DrawRootView pushes the context's CURRENT service into 
 
     ctx.DrawRootView(root.Get(), vgContext);
 
-    CHECK(vgContext.FontService() == &swappedService); // the draw re-asserted the truth
+    CHECK(vgContext.FontService() == &swappedService); // the draw re-asserted the context's service
 }

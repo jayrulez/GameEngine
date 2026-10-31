@@ -3,10 +3,10 @@
 
 // UI - :content_button partition
 //
-// Button with arbitrary View content - icons, icon+text combos, or any custom content layout. Ported
-// from Sedulous.UI/src/Controls/ContentButton.bf. Content is RefPtr-owned (Beef raw owned + manual
-// delete); it is drawn manually in OnDraw (not a logical/visual child), and attached to the context in
-// OnMeasure so it can resolve fonts - same content pattern as ToggleButton.
+// Button with arbitrary View content: icons, icon and text combinations, or any custom content layout.
+// The button owns its content through a RefPtr. The content is drawn manually in OnDraw (it is not a
+// logical or visual child) and attached to the context in OnMeasure so it can resolve fonts, the same
+// content pattern as ToggleButton.
 
 module;
 #include "Core/Prelude.h"
@@ -52,7 +52,7 @@ export namespace foundation::ui
     protected:
         [[nodiscard]] Thickness DefaultStylePadding() const override { return Thickness{12, 8}; }
 
-        // Content-only measure - chrome is base-handled.
+        // Content-only measure; the base handles chrome.
         [[nodiscard]] Float2 OnMeasureContent(BoxConstraints contentConstraints) override
         {
             f32 contentW = 0, contentH = 0;
@@ -78,7 +78,7 @@ export namespace foundation::ui
             {
                 return;
             }
-            const Thickness pad = ResolveBoxMetrics().Chrome(); // same chrome measure used
+            const Thickness pad = ResolveBoxMetrics().Chrome(); // the same chrome measure used
             const f32 contentW = width - pad.TotalHorizontal();
             const f32 contentH = height - pad.TotalVertical();
             const f32 cw = m_content->MeasuredSize.x;

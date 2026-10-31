@@ -4,18 +4,15 @@
 // UI - :theme_registry partition
 //
 // Central registry for theme extensions, applied to every theme StyleSheet created by the
-// theme factories. Ported from Sedulous.UI/src/Styling/ThemeRegistry.bf.
-//
-// Divergence (language): Beef's static list OWNED the extensions (deleted on shutdown). Here the
-// registry holds NON-owning pointers - the app owns each extension's lifetime (avoids C++ static
-// destruction-order pitfalls). The list lives in a function-local static.
+// theme factories. The registry holds non-owning pointers: the app owns each extension's lifetime,
+// which avoids static destruction-order problems.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:theme_registry;
 
-import foundation.core; // Array
+import foundation.core;
 import :style_sheet;
 import :theme_palette;
 import :theme_extension;
@@ -24,7 +21,8 @@ using namespace foundation::core;
 
 namespace foundation::ui::detail
 {
-    // NON-inline (UiRegistryStateImpl.cpp): shared-libraries.md rendezvous rule.
+    // Defined out of line in UiRegistryStateImpl.cpp: an inline function-local static would give
+    // each shared library its own list.
     [[nodiscard]] Array<IThemeExtension*>& ThemeExtensionList();
 }
 

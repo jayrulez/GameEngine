@@ -3,16 +3,17 @@
 
 // Foundation::Messaging - the `foundation.messaging` module.
 //
-// A native, name-keyed event bus in its own leaf module. It is a RUN-SCOPE facility (a scene's,
-// or a whole run's), with NO scripting and
-// NO scene dependency: C++ systems Publish/Subscribe directly with native callbacks, so a C++-only game
-// is a first-class participant. Script reaches it through a BRIDGE (the ScriptPhysicsContactBridge
-// pattern), never the reverse - the bus never delivers "to script".
+// A native, name-keyed event bus in its own leaf module. It is a run-scope facility (a scene's,
+// or a whole run's), with no scripting and no scene dependency: C++ systems Publish and Subscribe
+// directly with native callbacks, so a C++-only game is a first-class participant. Script reaches
+// it through a bridge (as ScriptPhysicsContactBridge does), never the reverse: the bus never
+// delivers to script itself.
 //
-// Delivery is DEFERRED: Publish enqueues; Drain (called at the scope tick's top level, no VM call
-// active) delivers every queued event to its subscribers IN SUBSCRIPTION ORDER. A handler may Publish
-// again - those cascade in the SAME Drain, bounded to kMaxDrainPasses to break a runaway loop. Payload
-// is a Variant - the one currency that also crosses C++<->script and between backends.
+// Delivery is deferred: Publish enqueues, and Drain (called at the scope tick's top level, with no
+// VM call active) delivers every queued event to its subscribers in subscription order. A handler
+// may Publish again; those events cascade in the same Drain, bounded to kMaxDrainPasses to break a
+// runaway loop. The payload is a Variant, which also crosses between C++ and script and between
+// backends.
 
 module;
 #include "Core/Prelude.h"
@@ -51,9 +52,9 @@ export namespace foundation::messaging
             return handle;
         }
 
-        // Remove a subscription by its handle. Safe if already gone. (Not for use from inside a
-        // handler mid-Drain - do subscription churn outside delivery, or via the script bridge's
-        // owner-teardown sweep.)
+        // Remove a subscription by its handle. Safe if already gone. Not for use from inside a
+        // handler mid-Drain: change subscriptions outside delivery, or through the script bridge's
+        // owner-teardown sweep.
         void Unsubscribe(u32 handle)
         {
             for (usize i = 0; i < m_subscribers.Size(); ++i)
@@ -100,7 +101,7 @@ export namespace foundation::messaging
             }
         }
 
-        // Drop all subscribers + pending events (scope teardown).
+        // Drop all subscribers and pending events (scope teardown).
         void Clear()
         {
             m_subscribers.Clear();

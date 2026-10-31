@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.gui.testing - helpers for tests of GUIs built with the GUI (E8f of
-// Specs/gui-lab-evolution.md).
+// foundation.gui.testing - helpers for tests of GUIs built with the GUI.
 //
-// A Finder names nodes: by CSS selector (the GUI's own engine, eepp's querySelector) or by their
-// text (a widget's reflected `text`, the outermost of a widget and its parts), within another
-// finder's match, shown ones only unless asked. A Tester drives one root on a fixed clock: every
-// action is followed by a frame (update, style, layout), so a test reads what a user would see.
-// Its actions are the user's: click, right click, double click, hover, drag, type, a key chord, a
-// held direction, a pad button, files dropped. Each aims at the middle of what it found, and fails
-// when something else lies there. A finder that expects one node and finds none or several fails,
-// listing what it found and the tree around where it looked; failures go to a handler (a test's
-// FAIL_CHECK) and are kept. CompareImages is the image tests' match (E8g): every channel within a
-// tolerance on all but a small share of the pixels, with a picture of where they differ.
+// A Finder picks out nodes by CSS selector (with the GUI's own selector engine) or by their text
+// (a widget's reflected `text`; of a widget and its parts, the outermost is found). It can search
+// within another finder's match, and finds only shown nodes unless asked. A Tester drives one root
+// on a fixed clock: every action is followed by a frame (update, style, layout), so a test reads
+// what a user would see. Its actions are a user's: click, right click, double click, hover, drag,
+// type, a key chord, a held direction, a pad button, files dropped. Each aims at the middle of
+// what it found, and fails when something else lies there. A finder that expects one node and
+// finds none or several fails, listing what it found and the tree around where it looked.
+// Failures go to a handler (a test's FAIL_CHECK) and are kept. CompareImages is the comparison
+// the image tests use: two pictures match when every channel is within a tolerance on all but a
+// small share of the pixels, and it can draw a picture of where they differ.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui::testing
 {
-    /// The text a node shows: its reflected `text` (a label's, a button's, a field's), or empty.
+    /// Returns the text a node shows: its reflected `text` (on a label, a button or a field), or
+    /// empty.
     [[nodiscard]] inline core::String TextOf(const Node& node)
     {
         for (const core::TypeInfo* t = node.GetType(); t != nullptr; t = t->base)
@@ -48,14 +49,15 @@ export namespace foundation::gui::testing
         return {};
     }
 
-    /// The middle of `node` in `root`'s world (device pixels: where the dispatcher takes a pointer),
-    /// and whether a pointer there reaches it: the node, or a part of it (a button's label), lies
-    /// there; else `over` is what does (null: nothing). What a user's click on it would hit.
+    /// Sets `at` to the middle of `node` in `root`'s world, in device pixels as the dispatcher
+    /// takes a pointer, and `over` to what a click there would hit (null for nothing). Returns
+    /// whether that is the node or a part of it (a button's label).
     [[nodiscard]] inline bool AimAt(SceneRoot& root, Node& node, core::Float2& at, Node*& over)
     {
         const Rect box = node.GetScreenBounds();
         at = core::Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
-        // As input finds it: an open popup's first (a menu item, a dialog over a panel), then the root's.
+        // Hit-test as input does: an open popup first (a menu item, a dialog over a panel), then
+        // the root.
         EventDispatcher* dispatcher = root.GetEventDispatcher();
         Node* hit = dispatcher != nullptr ? dispatcher->NodeAt(at) : root.OverFind(at);
         over = hit;
@@ -68,19 +70,21 @@ export namespace foundation::gui::testing
         return false;
     }
 
-    /// Which nodes a test means: by selector or text, within another finder's match, shown only
-    /// unless IncludingHidden. A finder is its steps, outermost first: each looks under the first
-    /// node the step before it found.
+    /// Describes which nodes a test means: by selector or text, optionally within another
+    /// finder's match, and only shown nodes unless IncludingHidden is used. A finder is a list of
+    /// steps, outermost first; each step looks under the first node the step before it found.
     class Finder
     {
     public:
-        /// The widgets a CSS selector matches ("#ok", "button.primary", "panel > label").
+        /// Finds the widgets a CSS selector matches ("#ok", "button.primary", "panel > label").
         [[nodiscard]] static Finder Selector(core::StringView selector) { return Finder(Kind::Selector, selector); }
-        /// The nodes showing exactly `text` (the outermost of a widget and the parts that show it).
+        /// Finds the nodes showing exactly `text`. Of a widget and the parts that show the text,
+        /// only the outermost is found.
         [[nodiscard]] static Finder Text(core::StringView text) { return Finder(Kind::Text, text); }
-        /// The nodes whose text holds `text`.
+        /// Finds the nodes whose text contains `text`.
         [[nodiscard]] static Finder TextContaining(core::StringView text) { return Finder(Kind::TextContaining, text); }
-        /// "text=Show" or "text~=Sho" is by text, anything else a selector (the sandbox's --keys).
+        /// Parses a finder: "text=Show" or "text~=Sho" finds by text, and anything else is a
+        /// selector. The sandbox's --keys option uses this.
         [[nodiscard]] static Finder Parse(core::StringView spec)
         {
             const core::StringView exact(u8"text=");
@@ -92,7 +96,7 @@ export namespace foundation::gui::testing
             return Selector(spec);
         }
 
-        /// Only under what `scope` finds (the first of it, when it finds several).
+        /// Limits the search to the node `scope` finds (the first one, when it finds several).
         [[nodiscard]] Finder Within(const Finder& scope) const
         {
             Finder f = scope;
@@ -100,7 +104,8 @@ export namespace foundation::gui::testing
                 f.m_steps.PushBack(step);
             return f;
         }
-        /// Hidden nodes too (not shown, or under a node not shown or out of the layout).
+        /// Also finds hidden nodes: those not shown, or under a node that is not shown or is out of
+        /// the layout.
         [[nodiscard]] Finder IncludingHidden() const
         {
             Finder f = *this;
@@ -108,7 +113,7 @@ export namespace foundation::gui::testing
             return f;
         }
 
-        /// What it finds under `root`, in document order.
+        /// Returns what the finder finds under `root`, in document order.
         [[nodiscard]] Array<Node*> All(Node& root) const
         {
             Node* scope = &root;
@@ -126,7 +131,7 @@ export namespace foundation::gui::testing
             return found;
         }
 
-        /// How a failure names it ("selector #ok within text=Settings").
+        /// Describes the finder for a failure message ("selector #ok within text=Settings").
         [[nodiscard]] core::String Describe() const
         {
             core::String out;
@@ -199,22 +204,25 @@ export namespace foundation::gui::testing
     class Tester
     {
     public:
-        /// `styles` styles it each frame (null: the root is styled elsewhere, or not at all).
+        /// `styles` styles the root each frame; pass null when the root is styled elsewhere or not
+        /// at all.
         explicit Tester(SceneRoot& root, StyleManager* styles = nullptr, core::Duration frame = core::Duration::FromSeconds(1.0 / 60.0))
             : m_root(root), m_styles(styles), m_frame(frame)
         {
             Frame();
         }
 
-        /// Where failures go as well as into Failures (a test passes doctest's FAIL_CHECK).
+        /// Sets a handler that gets each failure as well as Failures; a test passes doctest's
+        /// FAIL_CHECK.
         void SetFailureHandler(core::Function<void(core::StringView)> handler) { m_onFailure = core::Move(handler); }
-        /// What saves the screen at a failure, given a name for it (`failure-1`, ...): a host with a
-        /// device (the sandbox's image tests) writes the frame there; none, nothing is saved.
+        /// Sets what saves the screen when a failure happens, given a name for the picture
+        /// (`failure-1`, ...). A host with a device (the sandbox's image tests) writes the frame;
+        /// without a capture nothing is saved.
         void SetFailureCapture(core::Function<void(core::StringView)> capture) { m_capture = core::Move(capture); }
         [[nodiscard]] const Array<core::String>& Failures() const noexcept { return m_failures; }
 
         // === Time ===
-        /// One frame: the clock moves by the frame's length, then style and layout.
+        /// Runs one frame: the clock moves by the frame's length, then style and layout run.
         void Frame()
         {
             m_root.GetContext().Update(m_frame);
@@ -222,7 +230,7 @@ export namespace foundation::gui::testing
                 m_styles->ApplyTree(m_root);
             m_root.UpdateLayout();
         }
-        /// Frames until `time` has passed (an animation runs, a held key repeats).
+        /// Runs frames until `time` has passed, so an animation runs or a held key repeats.
         void Advance(core::Duration time)
         {
             const f64 frames = time.AsSecondsF() / m_frame.AsSecondsF();
@@ -233,7 +241,8 @@ export namespace foundation::gui::testing
         // === Finding ===
         [[nodiscard]] Array<Node*> All(const Finder& finder) { return finder.All(m_root); }
         [[nodiscard]] bool Exists(const Finder& finder) { return !finder.All(m_root).IsEmpty(); }
-        /// The one node `finder` finds; a failure (and null) when it finds none or several.
+        /// Returns the one node `finder` finds. Records a failure and returns null when it finds
+        /// none or several.
         Node* One(const Finder& finder)
         {
             const Array<Node*> found = finder.All(m_root);
@@ -255,7 +264,7 @@ export namespace foundation::gui::testing
         bool Click(const Finder& target) { return Press(target, MouseButton::Left, 1); }
         bool RightClick(const Finder& target) { return Press(target, MouseButton::Right, 1); }
         bool DoubleClick(const Finder& target) { return Press(target, MouseButton::Left, 2); }
-        /// The pointer moves over the middle of what `target` finds.
+        /// Moves the pointer over the middle of what `target` finds.
         bool Hover(const Finder& target)
         {
             core::Float2 at;
@@ -265,14 +274,14 @@ export namespace foundation::gui::testing
             Frame();
             return true;
         }
-        /// The pointer leaves the root (what it hovered is left).
+        /// Moves the pointer out of the root, so the node it hovered is left.
         void Leave()
         {
             (void)Dispatcher().InjectMouseMove(core::Float2{-1.0f, -1.0f});
             Frame();
         }
-        /// The wheel turned over the middle of what `target` finds, by `delta` in notches, as the
-        /// platform reports them (a negative y scrolls down, the wheel turned toward the user).
+        /// Turns the wheel over the middle of what `target` finds by `delta` notches, as the
+        /// platform reports them. A negative y scrolls down (the wheel turned toward the user).
         bool Scroll(const Finder& target, core::Float2 delta, u32 modifiers = 0)
         {
             core::Float2 at;
@@ -283,7 +292,7 @@ export namespace foundation::gui::testing
             Frame();
             return true;
         }
-        /// A finger down and up on the middle of what `target` finds.
+        /// Puts a finger down and lifts it on the middle of what `target` finds.
         bool Tap(const Finder& target)
         {
             core::Float2 at;
@@ -296,8 +305,8 @@ export namespace foundation::gui::testing
             Frame();
             return true;
         }
-        /// A finger down on `from`'s middle, moved in steps by `by`, lifted there: a swipe that pans
-        /// what it is over (as fast as the steps make it, which flings).
+        /// Puts a finger down on `from`'s middle, moves it by `by` in steps and lifts it there. The
+        /// swipe pans what it is over, and the steps are fast enough to fling it.
         bool Swipe(const Finder& from, core::Float2 by)
         {
             core::Float2 start;
@@ -317,14 +326,14 @@ export namespace foundation::gui::testing
             Frame();
             return true;
         }
-        /// Two fingers on `target`'s middle, `span` apart across, pinched to `toSpan` apart in steps,
-        /// lifted there (E17c: a gesture where the target's touch-action takes one).
+        /// Puts two fingers `span` apart across `target`'s middle, pinches them to `toSpan` apart in
+        /// steps and lifts them. It is a gesture where the target's touch-action accepts one.
         bool Pinch(const Finder& target, f32 span, f32 toSpan) { return TwoFingers(target, span, toSpan, 0.0f, core::Float2{0.0f, 0.0f}); }
-        /// Two fingers on `target`'s middle turned `radians` about it, clockwise, in steps.
+        /// Turns two fingers on `target`'s middle by `radians` about it, clockwise, in steps.
         bool Rotate(const Finder& target, f32 radians, f32 span = 100.0f) { return TwoFingers(target, span, span, radians, core::Float2{0.0f, 0.0f}); }
-        /// Two fingers on `target`'s middle moved together by `by` (device pixels), in steps.
+        /// Moves two fingers on `target`'s middle together by `by` (device pixels), in steps.
         bool TwoFingerPan(const Finder& target, core::Float2 by, f32 span = 100.0f) { return TwoFingers(target, span, span, 0.0f, by); }
-        /// Pressed on `from`, moved in steps to `to`'s middle, released there.
+        /// Presses on `from`, moves in steps to `to`'s middle and releases there.
         bool DragTo(const Finder& from, const Finder& to)
         {
             core::Float2 end;
@@ -335,7 +344,7 @@ export namespace foundation::gui::testing
             end = core::Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
             return DragTo(from, end);
         }
-        /// Pressed on `from`, moved in steps to `to` (the root's world), released there.
+        /// Presses on `from`, moves in steps to `to` (in the root's world) and releases there.
         bool DragTo(const Finder& from, core::Float2 to)
         {
             core::Float2 start;
@@ -356,13 +365,14 @@ export namespace foundation::gui::testing
             Frame();
             return true;
         }
-        /// Text typed into what has the focus.
+        /// Types `text` into the focused node.
         void Type(core::StringView text)
         {
             (void)Dispatcher().InjectText(text);
             Frame();
         }
-        /// A key chord ("return", "ctrl-a", "shift-tab", "pad-south"); false for one it does not know.
+        /// Presses a key chord ("return", "ctrl-a", "shift-tab", "pad-south"). Returns false for
+        /// a chord it does not know.
         bool Press(core::StringView chord)
         {
             const Optional<Keystroke> stroke = ParseKeystroke(chord);
@@ -381,7 +391,8 @@ export namespace foundation::gui::testing
             Frame();
             return true;
         }
-        /// An arrow, the d-pad or the stick held one way for `time` (it repeats as it does for a user).
+        /// Holds an arrow, the d-pad or the stick one way for `time`; it repeats as it does for a
+        /// user.
         void HoldDirection(NavDirection direction, core::Duration time)
         {
             Dispatcher().PressDirection(direction);
@@ -390,13 +401,13 @@ export namespace foundation::gui::testing
             Dispatcher().ReleaseDirection(direction);
             Frame();
         }
-        /// A pad button pressed.
+        /// Presses a pad button.
         void PadPress(PadButton button)
         {
             Dispatcher().InjectPadButton(button);
             Frame();
         }
-        /// Files the OS drops on the middle of what `target` finds.
+        /// Drops files, as the OS does, on the middle of what `target` finds.
         bool DropFiles(const Finder& target, const Array<core::String>& paths)
         {
             core::Float2 at;
@@ -407,7 +418,8 @@ export namespace foundation::gui::testing
             return true;
         }
 
-        /// The tree under `around` (the root when null), one node a line, indented by depth.
+        /// Returns the tree under `around` (the root when null), one node a line, indented by
+        /// depth.
         [[nodiscard]] core::String Dump(Node* around = nullptr)
         {
             core::String out;
@@ -439,8 +451,8 @@ export namespace foundation::gui::testing
             if (m_capture)
                 m_capture(core::Format(u8"failure-{}", m_failures.Size()).AsView());
         }
-        // The middle of the one node `target` finds, if a pointer there reaches it (not something
-        // over it).
+        // Finds the middle of the one node `target` finds. Fails when a pointer there would hit
+        // something covering the node instead.
         bool Aim(const Finder& target, core::Float2& at)
         {
             Node* node = One(target);
@@ -477,8 +489,9 @@ export namespace foundation::gui::testing
         Array<core::String> m_failures;
         static constexpr u64 kFinger = 1; // the tester's one finger
         static constexpr u64 kSecondFinger = 2;
-        // Two fingers about `target`'s middle, from `span` apart across to `toSpan`, the line between
-        // them turning `turn` and their middle moving `by`, eight steps a frame each.
+        // Moves two fingers about `target`'s middle from `span` apart to `toSpan` apart, while the
+        // line between them turns by `turn` and their midpoint moves by `by`. It takes eight
+        // steps, with a frame after each.
         bool TwoFingers(const Finder& target, f32 span, f32 toSpan, f32 turn, core::Float2 by)
         {
             core::Float2 middle;
@@ -509,7 +522,7 @@ export namespace foundation::gui::testing
         }
     };
 
-    /// How a picture compares with its reference (E8g).
+    /// How a picture compares with its reference.
     struct ImageComparison
     {
         bool SameSize = false;
@@ -520,9 +533,9 @@ export namespace foundation::gui::testing
     };
 
     /// Compares `picture` with `reference` (both RGBA8): they match when they are the same size
-    /// and every channel is within `tolerance` on all but `allowedShare` of the pixels (eepp's
-    /// budget, zed's share). `diff`, when given, gets a picture of the difference: the reference
-    /// faded to grey, the differing pixels red.
+    /// and every channel is within `tolerance` on all but `allowedShare` of the pixels. `diff`,
+    /// when given, gets a picture of the difference: the reference faded to grey, the differing
+    /// pixels red.
     [[nodiscard]] inline ImageComparison CompareImages(const foundation::image::Image& picture, const foundation::image::Image& reference,
                                                        u32 tolerance = 8, f64 allowedShare = 0.001,
                                                        foundation::image::Image* diff = nullptr)

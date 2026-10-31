@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The import window over its markup (Data/Editor/Import.xml) and an import of the test's own: what a
-// file would create shown by kind, each kept or not and named; Import open with what it will do,
-// and waiting, saying why, while a file is being read or nothing is kept; the files listed when
-// there are several; Import making what is kept and closing. Keeps the 2026-09-21 regression: Import
-// opens once inline files are described (it once stayed shut, "click Import, nothing happens").
+// The import window over its markup (Data/Editor/Import.xml) and an import of the test's own. What a
+// file would create is shown by kind, each entry kept or not and named. Import is enabled and says
+// what it will do, or stays disabled with the reason while a file is being read or nothing is kept.
+// The files are listed when there are several, and Import makes what is kept and closes. Import is
+// enabled as soon as inline files are described.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -137,11 +137,12 @@ TEST_CASE("import window: a file's plan by kind, each kept and named; Import ope
     Bed bed;
     const String box[] = {String(u8"/somewhere/crate.box")};
     RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(box, 1u));
-    // Two kinds' boxes, three entries' boxes and names (no option toggles here).
+    // Check boxes for the two kinds and for the three entries, with the entries' names (there are
+    // no option toggles here).
     gui::Node& detail = *bed.window->Detail();
     CHECK(Count<gui::CheckBox>(detail) == 5u);
     CHECK(Count<gui::TextField>(detail) == 3u);
-    CHECK(bed.window->ImportButton()->IsEnabled()); // the regression: open once described
+    CHECK(bed.window->ImportButton()->IsEnabled()); // enabled once the files are described
     CHECK(bed.window->Why() == StringView(u8"Into Content."));
 
     session->files[0].plan.entries[2].enabled = false; // Rust left out
@@ -150,7 +151,7 @@ TEST_CASE("import window: a file's plan by kind, each kept and named; Import ope
     CHECK(bed.top->GetInstance(u8"Box") != nullptr);
     CHECK(bed.top->GetInstance(u8"Wood") != nullptr);
     CHECK(bed.top->GetInstance(u8"Rust") == nullptr);
-    CHECK(session->closed); // the window let go of it
+    CHECK(session->closed); // the window released the session
 }
 
 TEST_CASE("import window: Import waits while a file is read, saying so, and opens when it is ready; several files are listed, none kept waits")
@@ -161,12 +162,12 @@ TEST_CASE("import window: Import waits while a file is read, saying so, and open
     CHECK(bed.window->ImportButton()->IsEnabled());
     CHECK(bed.window->Why() == StringView(u8"2 of 2 files into Content."));
 
-    // As a heavy importer's file while the worker reads it, then told it is ready.
+    // Mark a file as a heavy importer's while the worker reads it, then report it ready.
     session->files[1].state = AssetImport::File::State::Reading;
     session->onChanged(1);
     CHECK_FALSE(bed.window->ImportButton()->IsEnabled());
     CHECK(bed.window->Why() == StringView(u8"Reading b.box..."));
-    CHECK_FALSE(bed.window->Import()); // it stays
+    CHECK_FALSE(bed.window->Import()); // the window stays open
     CHECK(bed.window->IsOpen());
     session->files[1].state = AssetImport::File::State::Ready;
     session->onChanged(1);

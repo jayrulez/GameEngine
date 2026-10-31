@@ -3,12 +3,12 @@
 
 // GUI - :reactive partition
 //
-// Values that update what depends on them (G5 of Specs/vg-and-gui-lab.md, after AUI's property
-// system: dependency tracking, no manual subscriptions). A Property holds a value and records who
-// reads it; a Computed is a value derived from others, re-evaluated lazily when one of them
-// changes; an Effect runs a function and runs it again when something it read changes. Nothing
-// subscribes by hand: what an evaluation reads is what it depends on, found again on every run, so
-// a branch that stops reading a value stops depending on it.
+// Values that update what depends on them, through dependency tracking rather than manual
+// subscriptions. A Property holds a value and records who reads it; a Computed is a value derived
+// from others, re-evaluated lazily when one of them changes; an Effect runs a function and runs it
+// again when something it read changes. Nothing subscribes by hand: what an evaluation reads is
+// what it depends on, found again on every run, so a branch that stops reading a value stops
+// depending on it.
 //
 // Changes push invalidation and pull values: a Property's change marks Computeds stale (they
 // recompute when next read) and queues Effects on their scheduler, which a SceneRoot flushes once a
@@ -23,7 +23,7 @@ module;
 
 export module foundation.gui:reactive;
 
-import foundation.core; // Array, Function, Move
+import foundation.core;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -47,7 +47,8 @@ export namespace foundation::gui
 
         /// Records a read by the evaluating observer, if any (once per evaluation).
         void Track() const;
-        /// Everything that read this is told it changed (Computeds go stale, Effects queue).
+        /// Tells every observer that read this that it changed: Computeds go stale and Effects are
+        /// queued.
         void Notify();
 
         [[nodiscard]] usize ObserverCount() const noexcept { return m_observers.Size(); }
@@ -68,7 +69,7 @@ export namespace foundation::gui
         Observer& operator=(const Observer&) = delete;
         virtual ~Observer() { ClearSources(); }
 
-        /// A source changed.
+        /// Called when one of this observer's sources changes.
         virtual void Invalidate() = 0;
 
         [[nodiscard]] usize SourceCount() const noexcept { return m_sources.Size(); }
@@ -111,8 +112,8 @@ export namespace foundation::gui
         };
     };
 
-    /// Runs `fn` with no observer: what it reads is not recorded (an effect's writes that read a
-    /// value first, a native handler called from inside an evaluation).
+    /// Runs `fn` with no current observer, so its reads are not recorded. Use it for an effect's
+    /// writes that read a value first, or for a native handler called from inside an evaluation.
     template <typename F>
     decltype(auto) Untracked(F&& fn)
     {
@@ -144,7 +145,8 @@ export namespace foundation::gui
     {
         if (m_observers.IsEmpty())
             return;
-        // A copy: an observer told may re-evaluate at once (no scheduler) and relink.
+        // Iterate a copy: an observer without a scheduler re-evaluates at once when told, and
+        // relinking its sources changes m_observers.
         const Array<Observer*> observers = m_observers;
         for (Observer* observer : observers)
             observer->Invalidate();
@@ -182,7 +184,7 @@ export namespace foundation::gui
         /// The value without recording the read.
         [[nodiscard]] const T& Peek() const noexcept { return m_value; }
 
-        /// Whether the value changed (and its readers were told).
+        /// Sets the value. Returns true when it changed, in which case its readers were told.
         bool Set(T value)
         {
             if (m_value == value)
@@ -222,7 +224,7 @@ export namespace foundation::gui
         void Invalidate() override
         {
             if (m_stale)
-                return; // its readers were told already
+                return; // already stale, so its readers were told already
             m_stale = true;
             m_changed.Notify();
         }
@@ -248,15 +250,15 @@ export namespace foundation::gui
 
         void Queue(Effect& effect);
         void Forget(Effect& effect);
-        /// Runs the queued effects, and those their runs queue, at most a few rounds (an effect that
-        /// changes what it reads would never settle). How many ran.
+        /// Runs the queued effects, then the effects those runs queue, for a few rounds at most,
+        /// because an effect that changes what it reads would never settle. Returns how many ran.
         u32 Flush();
 
         [[nodiscard]] bool HasPending() const noexcept { return !m_queue.IsEmpty(); }
 
     private:
         Array<Effect*> m_queue;
-        Array<Effect*> m_batch; // the round being run (an effect destroyed meanwhile is nulled here)
+        Array<Effect*> m_batch; // the round being run; an effect destroyed during it is nulled here
     };
 
     /// A function run once at creation and again whenever something it read changed: on its
@@ -266,8 +268,8 @@ export namespace foundation::gui
     public:
         using SchedulerSource = core::Function<EffectScheduler*()>;
 
-        /// `scheduler` names where it waits; asked at each change, so an effect owned by a node finds
-        /// the scheduler of the scene the node is in now.
+        /// `scheduler` supplies the scheduler the effect waits on. It is asked again at each change,
+        /// so an effect owned by a node finds the scheduler of the scene the node is in at the time.
         explicit Effect(core::Function<void()> body, SchedulerSource scheduler = {})
             : m_body(Move(body)), m_scheduler(Move(scheduler))
         {
@@ -279,9 +281,10 @@ export namespace foundation::gui
                 m_queuedOn->Forget(*this);
         }
 
-        /// Runs the body. An effect told to run again while it runs (its body changed what it read,
-        /// with no scheduler to wait on) runs again after it finishes, not inside itself, a few times
-        /// at most: one that never settles is cut off rather than recursing without end.
+        /// Runs the body. When the body changes what it read and there is no scheduler to wait on,
+        /// the effect is told to run again while it is still running. It then runs again after the
+        /// current run finishes rather than inside it, a few times at most, so an effect that never
+        /// settles is cut off rather than recursing without end.
         void Run()
         {
             m_queuedOn = nullptr;
@@ -330,7 +333,7 @@ export namespace foundation::gui
         EffectScheduler* m_queuedOn = nullptr;
         u32 m_runs = 0;
         bool m_running = false; // inside the body
-        bool m_rerun = false;   // told to run again meanwhile
+        bool m_rerun = false;   // told to run again during the current run
     };
 
     inline EffectScheduler::~EffectScheduler()
@@ -368,7 +371,7 @@ export namespace foundation::gui
             {
                 Effect* effect = m_batch[i];
                 if (effect == nullptr || effect->m_queuedOn != this)
-                    continue; // destroyed, or run since
+                    continue; // destroyed, or already run since it was queued
                 effect->Run();
                 ++ran;
             }

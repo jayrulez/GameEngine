@@ -5,7 +5,7 @@
 
 properties
 {
-    Color BaseColor     = (0.55, 0.06, 0.12, 1); // the fabric's colour (each costume's, from its model)
+    Color BaseColor     = (0.55, 0.06, 0.12, 1); // the fabric's colour (set per costume from its model)
     Color SheenColor    = (1.0, 0.92, 0.85, 1);  // the sheen's tint, a warm white under candles
     float Sheen         = 0.6 [0, 2];            // how bright the grazing sheen is
     float SheenPower    = 3.0 [1, 8];            // how near the edge it gathers

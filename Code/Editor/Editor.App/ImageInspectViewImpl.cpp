@@ -35,7 +35,7 @@ namespace editor::app
     void ImageInspectView::SetImage(image::Image pixels)
     {
         const bool resized = pixels.Width() != m_pixels->Width() || pixels.Height() != m_pixels->Height();
-        m_pixels = MakeUnique<image::Image>(MemoryAllocator(), foundation::core::Move(pixels)); // a new identity (a widget's own Move would move it)
+        m_pixels = MakeUnique<image::Image>(MemoryAllocator(), foundation::core::Move(pixels)); // a new identity (qualified: an unqualified Move would find the widget's own Move)
         m_channelStale = true;
         if (resized)
             m_fitting = true;
@@ -158,7 +158,7 @@ namespace editor::app
         const Float2 size{GetWidth(), GetHeight()};
         if (size.x != m_size.x || size.y != m_size.y)
         {
-            // Resized: a fitted picture fits again; else it keeps its middle where it was.
+            // Resized: a fitted picture fits again; otherwise it keeps its middle where it was.
             const Float2 shift{0.5f * (size.x - m_size.x), 0.5f * (size.y - m_size.y)};
             m_size = size;
             if (m_fitting)

@@ -22,10 +22,11 @@ export namespace foundation::rhi
 
     /// The draw-recording commands common to a render pass and a render bundle. A `Renderer` that
     /// takes a `RenderCommandEncoder*` records identically whether it targets a live pass (inline)
-    /// or an off-thread `RenderBundleEncoder` - which is what makes parallel command recording
-    /// fall out (split a draw list into N bundles recorded on N threads, then ExecuteBundles).
-    /// This is exactly the subset valid inside a WebGPU render bundle: no pass-level dynamic state
-    /// (viewport / scissor / blend constant / stencil ref are inherited from the pass), no queries.
+    /// or an off-thread `RenderBundleEncoder`, which is what allows parallel command recording
+    /// (split a draw list into N bundles recorded on N threads, then ExecuteBundles).
+    /// This is the subset valid inside a WebGPU render bundle: no pass-level dynamic state
+    /// (viewport, scissor, blend constant and stencil reference are inherited from the pass), and
+    /// no queries.
     class RenderCommandEncoder
     {
     public:
@@ -61,7 +62,7 @@ export namespace foundation::rhi
 
     // ---- Render Pass Encoder ----
 
-    /// Records draw commands within a render pass: the shared recording surface plus the pass-level
+    /// Records draw commands within a render pass: the shared recording surface and the pass-level
     /// dynamic state, queries, bundle execution, and pass control.
     class RenderPassEncoder : public RenderCommandEncoder
     {
@@ -107,7 +108,7 @@ export namespace foundation::rhi
         virtual ~RenderBundle() = default;
     };
 
-    /// Records draws into a render bundle (the shared recording surface only - no pass-level state).
+    /// Records draws into a render bundle (the shared recording surface only, no pass-level state).
     class RenderBundleEncoder : public RenderCommandEncoder
     {
     public:
@@ -143,7 +144,7 @@ export namespace foundation::rhi
 
     // ---- Command Encoder ----
 
-    /// Records GPU commands: render/compute passes, barriers, copies, queries.
+    /// Records GPU commands: render and compute passes, barriers, copies, queries.
     class CommandEncoder
     {
     public:
@@ -242,8 +243,8 @@ export namespace foundation::rhi
     public:
         virtual ~CommandPool() = default;
 
-        /// Create a new command encoder for recording. Every encoder MUST call
-        /// Finish() before this pool's next Reset() - DX12 cannot reset a
+        /// Create a new command encoder for recording. Every encoder must call
+        /// Finish() before this pool's next Reset(): DX12 cannot reset a
         /// command allocator while one of its command lists is still recording.
         virtual Status CreateEncoder(CommandEncoder*& out) = 0;
         /// Destroy a command encoder.
@@ -253,9 +254,9 @@ export namespace foundation::rhi
         /// finished the pool's last submission (fence-guarded).
         virtual void Reset() = 0;
 
-        /// Begin recording a render bundle from this pool - no open command
-        /// encoder required, so per-thread bundle pools need only a pool.
-        /// The returned encoder and its Finish()ed bundle are OWNED BY THE POOL
+        /// Begin recording a render bundle from this pool. No open command
+        /// encoder is required, so per-thread bundle pools need only a pool.
+        /// The returned encoder and its Finish()ed bundle are owned by the pool
         /// and stay valid until the pool's next Reset(). Returns null if the
         /// backend does not support bundles.
         [[nodiscard]] virtual RenderBundleEncoder*
@@ -264,7 +265,7 @@ export namespace foundation::rhi
 
     // ---- Transfer Batch ----
 
-    /// Batches staging upload operations (CPU→GPU buffer/texture writes).
+    /// Batches staging upload operations (CPU to GPU buffer and texture writes).
     class TransferBatch
     {
     public:

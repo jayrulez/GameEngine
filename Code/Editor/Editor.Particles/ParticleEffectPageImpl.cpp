@@ -4,7 +4,7 @@
 // Editor::Particles - the `:page` partition (implementation; see ParticleEffectPage.cppm).
 //
 // The heavy engine imports (the particle component, the lights, the scene, the resources) live
-// here, out of the interface (GCC module hygiene).
+// here, out of the interface, so importers of the page do not pay for them.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +41,7 @@ namespace editor
 
     namespace
     {
-        // The tree's model: a system's row renamed in place (F2, or Rename on its menu).
+        // The tree's model, which lets a system's row be renamed in place (F2, or Rename on its menu).
         class ParticleTreeModel final : public gui::TreeModel
         {
         public:
@@ -61,7 +61,7 @@ namespace editor
             Function<bool(i32, StringView)> m_rename;
         };
 
-        // A module as the tree names it: its type's display name.
+        // A module's name in the tree, which is its type's display name.
         [[nodiscard]] StringView ModuleName(const ISerializable* module)
         {
             if (module == nullptr || module->GetType() == nullptr)
@@ -81,7 +81,7 @@ namespace editor
             return true;
         }
 
-        // The folder a list's row is in (an initializer's Initializers).
+        // The folder a list's row sits in (Initializers for an initializer).
         [[nodiscard]] ParticleRowKind FolderOf(ParticleRowKind kind)
         {
             switch (kind)
@@ -112,7 +112,7 @@ namespace editor
                           child != nullptr ? SystemName(*child, static_cast<usize>(link.childSystemIndex)).AsView() : StringView(u8"nothing"));
         }
 
-        // The grid's place a tree row names in its system (empty: the system's top).
+        // The place in the grid that a tree row names within its system (empty for the system itself).
         [[nodiscard]] String PlaceOf(const ParticleTreeRow& row)
         {
             switch (row.kind)
@@ -141,8 +141,8 @@ namespace editor
     ParticleEffectEditorPage::ParticleEffectEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::ParticleEffectAsset::StaticType(), kPath), m_format(context.Allocator())
     {
-        particles::RegisterParticleModules(); // the modules' and the systems' reflection
-        HideAssetRows(); // the effect's rows are the chosen system's, beside the tree
+        particles::RegisterParticleModules(); // reflection for the modules and the systems
+        HideAssetRows(); // the grid shows the chosen system's rows beside the tree, not the effect's
         Provide<IPlaybackPage>(*this);
         ParticleEffectEditorPage* self = this;
 
@@ -168,7 +168,7 @@ namespace editor
                                               if (node < self->m_rows.Size())
                                                   self->Choose(self->m_rows[node]);
                                           });
-            // A row's menu (the old page's): what adds, moves, renames or removes there.
+            // A row's context menu: what can be added, moved, renamed or removed there.
             (void)m_tree->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
                                            {
                                                const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
@@ -181,15 +181,16 @@ namespace editor
                                            });
         }
 
-        // The chosen system's rows: reflection's, its curves and gradients the toolkit's, each edit
-        // one undo step.
+        // The chosen system's rows come from reflection, with the toolkit's editors for its curves
+        // and gradients. Each edit is one undo step.
         m_values = MakeUnique<gui::ReflectedPropertySource>(Allocator(), Allocator());
         m_values->SetTextFormat(&m_format);
         m_values->RegisterCurveType(u8"ParticleCurveFloat", gui::ReflectedCurveParts{String(u8"keys")});
         m_values->RegisterGradientType(u8"ParticleCurveColor", gui::ReflectedGradientParts{String(u8"colors"), String(u8"alphas"), String(u8"interpolation")});
         m_values->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
                                 {
-                                    // A mesh's materials by its slots, the first doubling as the whole mesh's.
+                                    // A mesh's materials are named by slot; the first one also serves the
+                                    // whole mesh.
                                     constexpr StringView kMaterials = u8"materialRefs.";
                                     if (path.StartsWith(kMaterials))
                                     {
@@ -198,8 +199,9 @@ namespace editor
                                             info.DisplayName = slot.Value() == 0 ? String(u8"Slot 1 (whole mesh)") : Format(u8"Slot {}", slot.Value() + 1);
                                         return;
                                     }
-                                    // A sub-emitter named by what sets it off and where it spawns; where, a
-                                    // choice of the other systems by name (its index alone says nothing).
+                                    // A sub-emitter is named by what sets it off and where it spawns. Its
+                                    // target is a choice among the other systems by name, since the index
+                                    // alone tells the user nothing.
                                     constexpr StringView kLinks = u8"subEmitters.";
                                     particles::ParticleEffect* effect = self->Effect();
                                     particles::ParticleSystem* system = effect != nullptr ? effect->GetSystem(self->m_system) : nullptr;
@@ -302,7 +304,8 @@ namespace editor
             m_values->SetObjects(Span<const Instance>{});
             return;
         }
-        // Its address read again each time: an undo of a whole edit makes the systems anew.
+        // The system's address is read again each time, because undoing a whole-asset edit makes the
+        // systems anew.
         const Instance target(system, &TypeOf<particles::ParticleSystem>());
         m_values->SetObjects(Span<const Instance>(&target, 1u));
     }
@@ -313,7 +316,8 @@ namespace editor
         m_system = effect != nullptr && row.system >= 0 && row.system < effect->SystemCount() ? row.system : -1;
         m_chosen = m_system >= 0 ? row : ParticleTreeRow{};
         BindSystem();
-        // The place it names opened in place (a list's row: its list, then it) and brought into view.
+        // Open the place the row names (for a list's row, its list and then the row) and scroll it
+        // into view.
         const String place = PlaceOf(m_chosen);
         if (gui::PropertyGrid* grid = Grid(); grid != nullptr && !place.IsEmpty())
         {
@@ -374,8 +378,8 @@ namespace editor
         if (effect == nullptr)
             return;
         m_showing = true;
-        // What the user folded stays folded through the rebuild (a choice, an edit); a row new to
-        // the tree opens.
+        // Rows the user folded stay folded when the tree is rebuilt after a choice or an edit; a row
+        // new to the tree opens.
         Array<ParticleTreeRow> folded(Allocator());
         if (m_tree != nullptr)
             for (usize node = 0; node < m_rows.Size(); ++node)
@@ -445,8 +449,8 @@ namespace editor
 
     void ParticleEffectEditorPage::Changed()
     {
-        // A name, a module added or taken away, a render mode, a link: the tree, the facts, the
-        // links' names, the preview.
+        // A rename, a module added or removed, a render mode or a link changed: refresh the tree, the
+        // facts, the link names and the preview.
         m_values->Refresh();
         const particles::ParticleEffect* effect = Effect();
         if (effect != nullptr && m_chosen.module >= 0)
@@ -466,9 +470,10 @@ namespace editor
 
     void ParticleEffectEditorPage::OnObjectChanged()
     {
-        // A whole edit, or its undo: the system may be gone, and its address moved; the asset read
-        // again (written outside the page): the effect itself is another. The system's rows are
-        // bound first: binding the effect's has the grid list every section, the system's too.
+        // After a whole-asset edit or its undo, the chosen system may be gone or its address moved.
+        // After the asset is read again (written outside the page), the effect itself is a new
+        // object. The system's rows are bound first, because binding the effect's rows makes the grid
+        // list every section, the system's included.
         particles::ParticleEffect* effect = Effect();
         const i32 count = effect != nullptr ? effect->SystemCount() : 0;
         if (m_system >= count)
@@ -495,7 +500,8 @@ namespace editor
         const ParticleTreeRow row = m_chosen;
         if (row.module >= 0)
         {
-            // Through the rows, as the grid's own remove: one step, the list's undo its own.
+            // Remove through the rows, as the grid's own remove does, so the list records its own
+            // undo step.
             gui::ListEdit edit;
             edit.Kind = gui::ListEdit::Op::Remove;
             edit.Index = static_cast<usize>(row.module);
@@ -503,7 +509,7 @@ namespace editor
             return m_values->EditList(PlaceOf(ParticleTreeRow{FolderOf(row.kind), row.system, -1}).AsView(), edit);
         }
         if (row.kind != ParticleRowKind::System || effect->SystemCount() < 2)
-            return false; // an effect keeps a system; the emitter and the lists are the system's rows'
+            return false; // an effect keeps at least one system; the emitter and lists are not removed here
         const i32 index = row.system;
         EditWhole(u8"edit_particle", [index](ISerializable& object) { static_cast<pipeline::ParticleEffectAsset&>(object).Effect().RemoveSystem(index); });
         Choose(ParticleTreeRow{ParticleRowKind::System, Min(index, Effect()->SystemCount() - 1), -1});
@@ -517,7 +523,7 @@ namespace editor
             return false;
         Choose(ParticleTreeRow{ParticleRowKind::System, system, -1});
         m_values->BeginEdit(u8"name");
-        m_values->CommitEdit(u8"name", gui::PropertyWrite{gui::Variant(name)}); // one step, as the grid's Name row
+        m_values->CommitEdit(u8"name", gui::PropertyWrite{gui::Variant(name)}); // one undo step, like the Name row
         return true;
     }
 
@@ -564,7 +570,7 @@ namespace editor
         const ParticleTreeRow made{kind, folder.system, static_cast<i32>(edit.Index)};
         if (!m_values->EditList(PlaceOf(folder).AsView(), edit))
             return false;
-        Choose(made); // the new module opened
+        Choose(made); // open the new module
         return true;
     }
 
@@ -588,7 +594,7 @@ namespace editor
         edit.To = static_cast<usize>(to);
         if (!m_values->EditList(PlaceOf(ParticleTreeRow{FolderOf(row.kind), row.system, -1}).AsView(), edit))
             return false;
-        Choose(ParticleTreeRow{row.kind, row.system, to}); // it stays chosen where it went
+        Choose(ParticleTreeRow{row.kind, row.system, to}); // it stays chosen at its new place
         return true;
     }
 
@@ -609,7 +615,7 @@ namespace editor
                                    self->Choose(row);
                                    (void)self->RemoveChosen();
                                })
-                ->SetEnabled(systems > 1); // an effect keeps a system
+                ->SetEnabled(systems > 1); // an effect keeps at least one system
             break;
         case ParticleRowKind::Initializers:
         case ParticleRowKind::Behaviors:
@@ -632,7 +638,7 @@ namespace editor
         }
         case ParticleRowKind::Emitter:
         case ParticleRowKind::SubEmitters:
-            return; // the emitter is the system's own; a link is added in the grid, where its child is chosen
+            return; // the emitter is not removable; links are added in the grid
         }
         m_rowMenu->Open(owner, at);
     }
@@ -645,10 +651,10 @@ namespace editor
         scene::Scene* scenePtr = preview != nullptr ? preview->Scene() : nullptr;
         if (scenePtr == nullptr || Effect() == nullptr)
             return;
-        preview->SetSimulationEnabled(true); // particles simulate to show at all
+        preview->SetSimulationEnabled(true); // particles show only while simulating
         m_emitter = scenePtr->CreateEntity(u8"Emitter");
         if (auto* effects = scenePtr->GetSystem<engine::particles::ParticleEffectComponentManager>())
-            (void)effects->Add(m_emitter); // given the effect by FollowEffect
+            (void)effects->Add(m_emitter); // FollowEffect gives it the effect
         const scene::EntityHandle sun = scenePtr->CreateEntity(u8"Sun");
         Transform t;
         t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.35f) * Quaternion::FromAxisAngle(Float3{1, 0, 0}, -1.05f);
@@ -688,12 +694,12 @@ namespace editor
                 shape.PushBack(system->GetInitializer(i));
             for (i32 b = 0; b < system->BehaviorCount(); ++b)
                 shape.PushBack(system->GetBehavior(b));
-            shape.PushBack(nullptr); // a system's end
+            shape.PushBack(nullptr); // marks a system's end
             bindings.PushBack(system->textureRef);
             bindings.PushBack(system->meshRef);
             for (const Guid& material : system->materialRefs)
                 bindings.PushBack(material);
-            bindings.PushBack(Guid{0u, static_cast<u64>(system->materialRefs.Size())}); // a system's end
+            bindings.PushBack(Guid{0u, static_cast<u64>(system->materialRefs.Size())}); // marks a system's end
         }
         const bool reshaped = !Same(shape, m_shape);
         const bool rebound = reshaped || !Same(bindings, m_bindings);
@@ -709,8 +715,9 @@ namespace editor
             ++m_restarts;
             if (component != nullptr)
             {
-                // Over the authored effect itself (a value edited shows at once); a new instance,
-                // its systems' modules being new. It keeps the transport's state.
+                // Run over the authored effect itself, so an edited value shows at once. The
+                // instance is new because the systems' modules are new; it keeps the transport's
+                // state.
                 component->SetEffect(*effect);
                 if (component->instance)
                     component->instance->isActive = IsPlaying();
@@ -735,8 +742,8 @@ namespace editor
             m_previewResources = nullptr;
             return;
         }
-        // The effect's references bound as the cook's factory binds them, for drawing alone: the
-        // simulation keeps the authored effect.
+        // Bind the effect's references as the cook's factory binds them, but only for drawing; the
+        // simulation keeps running the authored effect.
         auto bound = MakeRef<particles::ParticleEffectResource>(Allocator());
         particles::CloneEffect(*Effect(), bound->Effect());
         particles::ResolveParticleEffectResources(*bound, *resources);
@@ -811,8 +818,8 @@ namespace editor
             most += effect->GetSystem(s)->MaxParticles();
         }
         const StringView state = m_stopped ? StringView(u8"stopped") : (m_paused ? StringView(u8"paused") : StringView(u8"playing"));
-        // Its width fixed by the sheet; paused says so by its colour, as the Play button does by its
-        // icon (a running count beside a word grew and shrank, moving what follows it).
+        // The stylesheet fixes its width. Paused is shown by colour, as the Play button shows it by its
+        // icon, because a running count beside a word would grow and shrink and move what follows it.
         const String text = m_stopped ? String(u8"Stopped") : Format(u8"{} of {}", alive, most);
         if (m_count->GetText() != text.AsView())
             m_count->SetText(text.AsView());
@@ -824,7 +831,7 @@ namespace editor
                 m_count->RemoveClass(name);
     }
 
-    // === The transport: the preview's alone, never the effect's ===
+    // === The transport: it drives the preview only and never changes the effect ===
 
     bool ParticleEffectEditorPage::CanPlay() const
     {

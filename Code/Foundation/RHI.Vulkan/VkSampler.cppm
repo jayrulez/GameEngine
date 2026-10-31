@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of Sampler.
-/// Ported from Sedulous.RHI.Vulkan/VulkanSampler.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The calling thread's name. Defined in Core's implementation unit - NON-inline - so a thread has
-// one name per process, whichever shared library asks (shared-libraries.md rendezvous rule).
+// The calling thread's name. Defined in Core's implementation unit, not inline, so a thread has
+// one name per process, whichever shared library asks.
 
 module;
 #include "Core/Prelude.h"

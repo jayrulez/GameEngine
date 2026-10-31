@@ -6,7 +6,7 @@
 // Holds the View-touching bodies of DragDropManager (it reaches across the whole View cluster: UIContext,
 // RootView, PopupLayer, DragAdorner, IDragSource, IDropTarget). Like InputImpl.cpp / TooltipImpl.cpp it
 // lives in an implementation unit outside the interface-partition dependency graph, so :drag_drop_manager
-// only forward-declares the view types. Ported from Sedulous.UI/src/DragDrop/DragDropManager.bf.
+// only forward-declares the view types.
 
 module;
 #include "Core/Prelude.h"
@@ -19,7 +19,7 @@ namespace foundation::ui
 {
     DragDropManager::~DragDropManager()
     {
-        // Don't call CancelDrag/CompleteDrag during destruction - other managers may already be gone.
+        // Don't call CancelDrag/CompleteDrag during destruction: other managers may already be gone.
         // Just clean up owned data (RefPtr drop).
         m_dragData = nullptr;
         m_state = DragState::Idle;
@@ -66,9 +66,9 @@ namespace foundation::ui
             if (dist < DragThreshold)
             {
                 return false;
-            } // Not yet - let normal mouse processing continue.
+            } // Not yet: let normal mouse processing continue.
 
-            // Threshold exceeded - activate drag.
+            // Threshold exceeded: activate the drag.
             if (!ActivateDrag())
             {
                 m_state = DragState::Idle;
@@ -78,7 +78,7 @@ namespace foundation::ui
             }
         }
 
-        // Active drag - update adorner and drop target.
+        // Active drag: update the adorner and the drop target.
         UpdateAdornerPosition(screenX, screenY);
         UpdateDropTarget(screenX, screenY);
         return true;
@@ -96,17 +96,17 @@ namespace foundation::ui
 
         if (m_state == DragState::Potential)
         {
-            // Never reached threshold - cancel silently.
+            // Never reached the threshold: cancel silently.
             m_state = DragState::Idle;
             m_sourceView = nullptr;
             m_dragSource = nullptr;
             return false;
         }
 
-        // Active drag - attempt drop.
+        // Active drag: attempt the drop.
         UpdateDropTarget(screenX, screenY);
 
-        // Close adorner BEFORE OnDrop. OnDrop may destroy views (and their PopupLayer) as part of re-docking.
+        // Close the adorner before OnDrop. OnDrop may destroy views (and their PopupLayer) as part of re-docking.
         if (m_adorner != nullptr)
         {
             if (m_adornerPopupLayer != nullptr)
@@ -276,7 +276,7 @@ namespace foundation::ui
         }
         else if (m_currentDropTarget != nullptr)
         {
-            // Same target - fire over.
+            // Same target: fire OnDragOver.
             const Float2 local = m_currentDropTargetView->ScreenToLocal(Float2{screenX, screenY});
             m_currentDropTarget->OnDragOver(m_dragData.Get(), local.x, local.y);
             m_currentEffect =

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the code languages: each of the shared definitions (Data/Editor/Code) read by
-// its id the first time it is asked for and kept, one with no file none (and not read again).
+// Editor::App tests: the code languages. Each shared definition (Data/Editor/Code) is read by its id
+// the first time it is asked for and then kept; an id with no file finds none and is not read again.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -40,7 +40,7 @@ TEST_CASE("code languages: each shared definition read by its id once, an unknow
         const gui::CodeLanguage* language = languages.Find(id);
         REQUIRE(language != nullptr);
         CHECK_FALSE(language->Contexts.IsEmpty());
-        CHECK(languages.Find(id) == language); // kept: the same, not read again
+        CHECK(languages.Find(id) == language); // kept: the same object, not read again
     }
     CHECK(reads == 5u);
     CHECK(languages.Find(u8"cobol") == nullptr);

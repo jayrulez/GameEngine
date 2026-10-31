@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The shared-libraries rendezvous tripwire (shared-libraries.md): process-wide state
-// must NOT live in module INTERFACE units as vague-linkage definitions - each shared
-// library would get its own copy (registry registered in one, empty in another; a
-// thread_local handshake crossing wires at a boundary). Patterns caught in .cppm files:
+// The shared-libraries rendezvous tripwire: process-wide state must not live in module
+// interface units as vague-linkage definitions, because each shared library would get its
+// own copy (a registry registered in one and empty in another, or a thread_local handshake
+// crossing wires at a boundary). Patterns caught in .cppm files:
 //   1. `inline thread_local` / `inline static thread_local` variables
 //   2. `static inline` data members holding state
-//   3. Meyers-style accessors (declare a function-local static, return it) - inline
+//   3. Meyers-style accessors (declare a function-local static, return it), inline
 //      or in-class (implicitly inline), both duplicate per library
 // The fix is the GlobalLogger/DefaultAllocator shape: declare in the interface,
-// define in the library's .cpp implementation unit. Genuinely-safe cases (e.g.
+// define in the library's .cpp implementation unit. Genuinely safe cases (such as
 // module-linkage definitions in a non-exported namespace block, or single-library
-// state) go on the pinned allowlist - which also fails when entries go stale.
+// state) go on the pinned allowlist, which also fails when entries go stale.
 
 #include <doctest/doctest.h>
 

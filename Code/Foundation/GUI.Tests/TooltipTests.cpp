@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - tooltips, context menus and long presses (E5 of Specs/gui-lab-evolution.md): the GUI shows
-// the nearest tooltip text up the parent chain from the hovered node after a delay on its own
-// clock, by the pointer, as a hint popup; just after one hid the next shows at once; a press hides
-// it until the pointer moves on. A right release, Shift+F10 or a long press asks for a context menu
-// (a `contextmenu` event); a long press nobody takes shows the tooltip. A text field's context menu
-// offers cut, copy, paste and select all.
+// GUI - tooltips, context menus and long presses. The GUI shows the nearest tooltip text up the
+// parent chain from the hovered node, after a delay on its own clock, by the pointer, as a hint
+// popup. Just after one hides, the next shows at once. A press hides it until the pointer moves on.
+// A right release, Shift+F10 or a long press asks for a context menu (a `contextmenu` event), and a
+// long press nobody takes shows the tooltip. A text field's context menu offers cut, copy, paste
+// and select all.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -37,7 +37,7 @@ namespace
             panel->SetTooltip(SV(u8"The panel"));
             root->AddChild(panel.Get());
             child->SetSize(core::Float2{40.0f, 40.0f});
-            panel->AddChild(child.Get()); // no text of its own: the panel's shows
+            panel->AddChild(child.Get()); // no text of its own, so the panel's shows
             other->SetPosition(core::Float2{150.0f, 0.0f});
             other->SetSize(core::Float2{100.0f, 100.0f});
             other->SetTooltip(SV(u8"Another"));
@@ -83,7 +83,7 @@ TEST_CASE("tooltip: moving to another hides it, and the next shows at once while
     bed.d().InjectMouseMove(core::Float2{280.0f, 280.0f}); // nothing with a tooltip
     bed.Frames(1);
     CHECK(bed.d().GetShownTooltip() == nullptr);
-    bed.Frames(10); // cold again
+    bed.Frames(10); // long enough for the next tooltip to wait the full delay
     bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
     bed.Frames(1);
     CHECK(bed.d().GetShownTooltip() == nullptr); // the full delay again
@@ -95,7 +95,7 @@ TEST_CASE("tooltip: its provider's text changing under the pointer shows the new
     bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
     bed.Frames(6);
     REQUIRE(bed.Shown() == SV(u8"The panel"));
-    bed.panel->SetTooltip(SV(u8"The panel, elsewhere")); // as a code editor's word under the pointer
+    bed.panel->SetTooltip(SV(u8"The panel, elsewhere")); // as for a code editor's word under the pointer
     bed.d().InjectMouseMove(core::Float2{30.0f, 22.0f});
     bed.Frames(1);
     CHECK(bed.Shown() == SV(u8"The panel, elsewhere"));
@@ -146,13 +146,13 @@ TEST_CASE("tooltip: the keys moving the focus show the focused control's, below 
     Bed bed;
     bed.panel->SetTabFocusable(true);
     bed.other->SetTabFocusable(true);
-    bed.panel->RequestFocus(); // focused from code at the start: no tooltip of its own accord
+    bed.panel->RequestFocus(); // focused from code at the start, which shows no tooltip
     bed.Frames(10);
     CHECK(bed.d().GetShownTooltip() == nullptr);
 
     bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab)); // to the other
     bed.Frames(4);
-    CHECK(bed.d().GetShownTooltip() == nullptr); // the delay
+    CHECK(bed.d().GetShownTooltip() == nullptr); // still within the delay
     bed.Frames(2);
     REQUIRE(bed.d().GetShownTooltip() != nullptr);
     CHECK(bed.Shown() == SV(u8"Another"));
@@ -160,11 +160,11 @@ TEST_CASE("tooltip: the keys moving the focus show the focused control's, below 
     CHECK(tip->GetPosition().x == doctest::Approx(150.0f)); // below the control, at its start
     CHECK(tip->GetPosition().y == doctest::Approx(104.0f));
 
-    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab)); // on to the panel: its own, after the delay
+    bed.d().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab)); // on to the panel, which has its own tooltip
     bed.Frames(1);
-    CHECK(bed.Shown() == SV(u8"The panel")); // warm: at once
+    CHECK(bed.Shown() == SV(u8"The panel")); // one was just shown, so this one shows at once
 
-    // The pointer in use: the focus's tooltip waits for the keys again.
+    // Once the pointer is in use, the focus's tooltip waits for the keys again.
     bed.d().InjectMouseDown(core::Float2{280.0f, 280.0f}, MouseButton::Left);
     bed.d().InjectMouseUp(core::Float2{280.0f, 280.0f}, MouseButton::Left);
     bed.Frames(10);
@@ -186,7 +186,7 @@ TEST_CASE("tooltip: an interactive one holds while the pointer crosses into it, 
     (void)bed.root->UpdateLayout();
     const core::Float2 inside = tip->ConvertToWorldSpace(core::Float2{tip->GetSize().x * 0.5f, tip->GetSize().y * 0.5f});
 
-    // Off the control, toward the tooltip: it holds a moment.
+    // Moving off the control toward the tooltip, the tooltip holds for a moment.
     bed.d().InjectMouseMove(core::Float2{160.0f, 120.0f}); // below the control, before the tooltip
     bed.Frames(1);
     CHECK(bed.d().GetShownTooltip() == tip);
@@ -197,7 +197,7 @@ TEST_CASE("tooltip: an interactive one holds while the pointer crosses into it, 
     bed.d().InjectMouseUp(inside, MouseButton::Left);
     CHECK(bed.d().GetShownTooltip() == tip);
 
-    // Off both: gone after the grace.
+    // Off both, it goes after the grace period.
     bed.d().InjectMouseMove(core::Float2{20.0f, 280.0f});
     bed.Frames(2); // 0.2 s
     CHECK(bed.d().GetShownTooltip() == tip);
@@ -242,7 +242,7 @@ TEST_CASE("context menu: a long press asks for one; untaken, it shows the toolti
     bed.Frames(3); // 0.3 s
     CHECK(bed.d().GetShownTooltip() == nullptr);
     bed.Frames(3);
-    REQUIRE(bed.d().GetShownTooltip() != nullptr); // nobody opened a menu: the tooltip
+    REQUIRE(bed.d().GetShownTooltip() != nullptr); // nobody opened a menu, so the tooltip shows
     CHECK(bed.Shown() == SV(u8"The panel"));
     bed.d().InjectTouchUp(1, core::Float2{10.0f, 10.0f});
     CHECK(clicks == 0);
@@ -270,7 +270,7 @@ TEST_CASE("context menu: a text field offers cut, copy, paste and select all, li
     CHECK(menu->IsOpen());
     CHECK(menu->GetParent() == field.Get());
     REQUIRE(menu->ItemCount() == 4u);
-    // Nothing selected, no clipboard: only select all is lit.
+    // With nothing selected and no clipboard, only select all is enabled.
     menu->Close();
     field->SelectAll();
     bed.d().InjectMouseDown(core::Float2{20.0f, 160.0f}, MouseButton::Right);

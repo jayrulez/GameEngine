@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/TreeViewTests.bf (faithful). SimpleTreeAdapter test double from
-// TestHelpers.h; the borrowed adapter is declared before the TreeView so it outlives it. Beef property
-// passthroughs -> methods (tv->FlatAdapter()/Selection()); HierarchicalState.CaptureState/ApplyState take
-// a TreeView&. Logic only, no font.
+// TreeView tests, logic only (no font). They use the SimpleTreeAdapter test double from
+// TestHelpers.h; the borrowed adapter is declared before the TreeView so it outlives it.
+// HierarchicalState::CaptureState and ApplyState take a TreeView&.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -48,7 +47,7 @@ TEST_CASE("tree-view: ToggleExpand_ChangesCount")
 
     CHECK(tv->FlatAdapter()->ItemCount() == 3);
     tv->ToggleExpand(0);                        // expand root 0
-    CHECK(tv->FlatAdapter()->ItemCount() == 5); // 3 + 2 children
+    CHECK(tv->FlatAdapter()->ItemCount() == 5); // 3 roots and 2 children
     tv->ToggleExpand(0);                        // collapse
     CHECK(tv->FlatAdapter()->ItemCount() == 3);
 }
@@ -98,11 +97,11 @@ TEST_CASE("tree-view: collapse ABOVE the selection keeps the same NODE selected 
     tv->ToggleExpand(0); // expand root 0: flat = [root0, c, c, root1, root2]
     REQUIRE(tv->FlatAdapter()->ItemCount() == 5);
     const i32 root1Node = tv->FlatAdapter()->GetNodeId(3);
-    tv->Selection().Select(3); // select root 1 by its CURRENT flat position
+    tv->Selection().Select(3); // select root 1 by its current flat position
 
-    tv->ToggleExpand(0); // collapse root 0 - every flat index above shifts by 2
+    tv->ToggleExpand(0); // collapse root 0: every later flat index shifts by 2
 
-    // The same NODE stays selected at its new position; the highlight must not jump to
+    // The same node stays selected at its new position; the highlight does not jump to
     // whichever row inherited flat index 3.
     REQUIRE(tv->FlatAdapter()->ItemCount() == 3);
     const i32 newPosition = tv->FlatAdapter()->PositionOfNode(root1Node);
@@ -119,7 +118,7 @@ TEST_CASE("tree-view: collapsing the selected node's parent DROPS the hidden sel
 
     tv->ToggleExpand(0); // expand root 0
     REQUIRE(tv->FlatAdapter()->ItemCount() == 5);
-    tv->Selection().Select(1); // a CHILD of root 0
+    tv->Selection().Select(1); // a child of root 0
 
     tv->ToggleExpand(0); // collapse hides the selected node
 
@@ -151,9 +150,9 @@ TEST_CASE("tree-view: HierarchicalState_CaptureRestore")
     CHECK(tv->Selection().IsSelected(2));
 }
 
-// Regression: calling SetAdapter again (rebuild - e.g. an editor hierarchy refreshing over a
-// changed scene) must not UAF the previous FlattenedTreeAdapter: the internal list detaches
-// from the old flat adapter before the reassignment destroys it.
+// Calling SetAdapter again (a rebuild, such as an editor hierarchy refreshing over a changed
+// scene) is safe: the internal list detaches from the old FlattenedTreeAdapter before the
+// reassignment destroys it.
 TEST_CASE("tree-view: SetAdapter_Twice_RebuildsSafely")
 {
     SimpleTreeAdapter adapter;
@@ -170,9 +169,8 @@ TEST_CASE("tree-view: SetAdapter_Twice_RebuildsSafely")
     REQUIRE(tv->FlatAdapter() != nullptr);
 }
 
-// Regression (editor shutdown segfault): SetAdapter(nullptr) must DETACH - it must not build a
-// FlattenedTreeAdapter over the null source and dereference it. Owners call it from their
-// destructors so a view can't outlive an adapter it doesn't own.
+// SetAdapter(nullptr) detaches; it does not build a FlattenedTreeAdapter over the null source.
+// Owners call it from their destructors so a view cannot outlive an adapter it does not own.
 TEST_CASE("tree-view: SetAdapter_Null_Detaches")
 {
     SimpleTreeAdapter adapter;
@@ -189,9 +187,9 @@ TEST_CASE("tree-view: SetAdapter_Null_Detaches")
     CHECK(tv->FlatAdapter()->ItemCount() > 0);
 }
 
-// The editor F2/Delete path end-to-end: click focuses the INTERNAL ListView (click-to-focus),
-// an unhandled key bubbles ListView -> TreeView, whose OnKeyDown maps the flat selection to a
-// nodeId and fires OnItemKeyDown.
+// The editor's F2 and Delete path end to end: a click focuses the internal ListView, an unhandled
+// key bubbles from the ListView to the TreeView, and the TreeView's OnKeyDown maps the flat
+// selection to a nodeId and fires OnItemKeyDown.
 TEST_CASE("tree-view: FocusedInternalList_KeyBubbles_To_OnItemKeyDown")
 {
     UIContext ctx{DefaultAllocator()};

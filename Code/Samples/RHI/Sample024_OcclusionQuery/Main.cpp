@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample024 - Occlusion Queries & Debug Labels. Ported from Sedulous Sample024_OcclusionQuery.
+/// Sample024 - Occlusion Queries & Debug Labels.
 /// Demonstrates occlusion queries and debug labels.
 /// Renders an occluder quad, then two test quads behind it with occlusion queries.
 /// Prints pixel counts to console. Uses debug labels to mark render sections.
@@ -62,12 +62,12 @@ private:
     )";
 
     // Geometry: 3 quads
-    // Reverse-Z (rhi::depth): nearer = LARGER depth, the clear is the far plane (0).
+    // Reverse-Z (rhi::depth): nearer means larger depth, and the clear is the far plane (0).
     // Quad 0: Occluder (opaque gray, z=0.7 = nearest, center)
     // Quad 1: Test A (red, z=0.3, partially behind occluder)
     // Quad 2: Test B (blue, z=0.3, fully behind occluder)
     static constexpr float kVerts[] = {
-        // Quad 0: Occluder - center, near
+        // Quad 0: occluder, center, near
         -0.3f,
         -0.4f,
         0.7f,
@@ -97,7 +97,7 @@ private:
         0.5f,
         1.0f,
 
-        // Quad 1: Test A - partially occluded (left side visible)
+        // Quad 1: test A, partially occluded (left side visible)
         -0.7f,
         -0.3f,
         0.3f,
@@ -127,7 +127,7 @@ private:
         0.5f,
         1.0f,
 
-        // Quad 2: Test B - fully occluded (behind occluder)
+        // Quad 2: test B, fully occluded (behind occluder)
         -0.15f,
         -0.2f,
         0.3f,

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/PathTests.bf.
+// Path queries: bounds, containment and sub-paths.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

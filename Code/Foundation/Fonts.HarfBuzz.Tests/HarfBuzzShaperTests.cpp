@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The HarfBuzz shaper (F3 of Specs/vg-and-gui-lab.md) through ITextShaper: an fi ligature is one
+// The HarfBuzz shaper through ITextShaper: an fi ligature is one
 // glyph over a shared cluster of two characters and hit tests to the right offsets; Arabic joins
 // into fewer glyphs than characters; wrapping keeps a ligature whole; a font with no file falls
 // back to the basic shaper; and installing it changes what a font service hands out.

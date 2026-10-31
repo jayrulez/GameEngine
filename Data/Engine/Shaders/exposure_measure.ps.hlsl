@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Auto-exposure measurement + adaptation, one 1x1 pass per view. Samples a fixed grid over the
-// view's HDR sub-rect, averages LOG luminance (geometric mean - a bright sun texel cannot drown
-// the frame), converts back to linear, then eases the PREVIOUS adapted value toward it
-// (exponential eye adaptation; DtSpeed = dt * speed, HistoryValid = 0 on the first frame so the
-// value snaps instead of fading in from black).
+// Auto-exposure measurement and adaptation, one 1x1 pass per view. Samples a fixed grid over the
+// view's HDR sub-rect, averages log luminance (a geometric mean, so a bright sun texel cannot
+// drown the frame), converts back to linear, then eases the previous adapted value toward it
+// (exponential eye adaptation; DtSpeed = dt * speed, and HistoryValid = 0 on the first frame so
+// the value snaps instead of fading in from black).
 
 #include "push_constant.hlsli"
 Texture2D<float4> Hdr      : register(t0, space0);

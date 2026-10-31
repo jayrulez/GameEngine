@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Vulkan implementation of CommandEncoder + RayTracingEncoderExt.
-/// Ported from Sedulous.RHI.Vulkan/VulkanCommandEncoder.bf.
+/// Vulkan implementation of CommandEncoder and RayTracingEncoderExt.
 
 module;
 #include "Core/Prelude.h"
@@ -64,7 +63,7 @@ export namespace foundation::rhi::vk
                 info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
                 info.imageView = view ? view->handle() : VK_NULL_HANDLE;
                 info.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                // Update texture layout tracking - dynamic rendering implicitly
+                // Update texture layout tracking: dynamic rendering implicitly
                 // transitions attachments to the specified layout.
                 if (view)
                 {
@@ -158,8 +157,8 @@ export namespace foundation::rhi::vk
 
         RenderBundleEncoder* CreateRenderBundleEncoder(const RenderBundleDesc& desc) override
         {
-            // Bundles are pool-scoped (secondary buffers owned by the pool, recycled on
-            // its Reset) - creation needs no open primary encoder, so delegate.
+            // Bundles are pool-scoped (secondary buffers owned by the pool, recycled on its
+            // Reset), so creation needs no open primary encoder; delegate to the pool.
             return m_pool->CreateRenderBundleEncoder(desc);
         }
 
@@ -293,8 +292,8 @@ export namespace foundation::rhi::vk
                 return;
             VkBufferImageCopy c{};
             c.bufferOffset = region.bufferOffset;
-            // Vulkan bufferRowLength/bufferImageHeight are in TEXELS. Compressed data (bpp==0) is
-            // uploaded tightly packed per-level, so 0/0 = "tightly packed" is both simplest and
+            // Vulkan bufferRowLength/bufferImageHeight are in texels. Compressed data (bpp==0) is
+            // uploaded tightly packed per level, so 0/0 ("tightly packed") is both simplest and
             // correct; the block-row pitch from the layout would otherwise need texel conversion.
             u32 bpp2 = BytesPerPixel(d->desc.format);
             c.bufferRowLength =
@@ -448,7 +447,7 @@ export namespace foundation::rhi::vk
             ldep.pImageMemoryBarriers = &lb;
             vkCmdPipelineBarrier2(m_cmdBuf, &ldep);
 
-            // Update tracked layout - all mips now in TRANSFER_SRC.
+            // Update tracked layout: all mips are now in TRANSFER_SRC.
             vkTex->currentLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         }
 
@@ -971,9 +970,9 @@ export namespace foundation::rhi::vk
         bi.pInheritanceInfo = &ii;
         vkBeginCommandBuffer(sec, &bi);
 
-        // Bundles carry no pass-level dynamic state + Vulkan secondaries don't inherit it, so record
-        // the bundle's viewport + scissor up front (Y-flipped, like the pass encoder). The viewport
-        // is the desc's sub-rect (split-screen), not necessarily the full target.
+        // Bundles carry no pass-level dynamic state and Vulkan secondaries don't inherit it, so
+        // record the bundle's viewport and scissor up front (Y-flipped, like the pass encoder). The
+        // viewport is the desc's sub-rect (split-screen), not necessarily the full target.
         if (desc.width > 0 && desc.height > 0)
         {
             VkViewport vp{};

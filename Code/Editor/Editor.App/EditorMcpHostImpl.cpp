@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - EditorMcpHost implementation: the tool composition, host_info's editor state,
-// and Start (bind + the token file).
+// and Start (binding the port and writing the token file).
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -39,12 +39,12 @@ namespace editor::app
                                          operations);
         context.ApplyMcpToolContributions(m_server); // the domains' live tools
         // An agent's write over a source asset is a change made outside its page, like an
-        // apply-to-prefab: the open pages editing it are told and refresh by their own rule (a
+        // apply-to-prefab: the open pages editing it are notified and refresh by their own rule (a
         // clean page reloads, a dirty one warns and keeps its edits).
         editor::EditorContext* ctx = &context;
         m_session->onAssetWritten = [ctx](const Guid& assetId)
         { (void)ctx->NotifyAssetExternallyModified(assetId); };
-        // An agent's settings change re-applies what depends on them, as the dialog's Save does.
+        // An agent's settings change reapplies what depends on the settings, as the dialog's Save does.
         m_session->onSettingsChanged = [ctx]() { ctx->NotifyProjectSettingsChanged(); };
         foundation::mcp::RegisterHostInfoTool(
             m_server, Move(buildStamp),

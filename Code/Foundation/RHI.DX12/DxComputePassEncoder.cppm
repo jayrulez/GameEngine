@@ -3,7 +3,6 @@
 
 /// DX12 implementation of ComputePassEncoder.
 /// Records compute dispatch commands into the parent command encoder's command list.
-/// Ported from Sedulous.RHI.DX12/DX12ComputePassEncoder.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -77,7 +76,7 @@ export namespace foundation::rhi::dx12
             auto* cmdList = m_ctx.cmdList;
             auto* dxLayout = static_cast<DxBindGroupLayoutImpl*>(dxGroup->Layout());
 
-            // Copy-on-bind: copy into encoder's staging region, bind from staging offset.
+            // Copy-on-bind: copy into the encoder's staging region and bind from the staging offset.
             if (dxGroup->cbvSrvUavOffset() >= 0 && dxLayout && dxLayout->cbvSrvUavCount() > 0)
             {
                 i32 rootIdx = layout->getCbvSrvUavRootIndex(index);
@@ -95,7 +94,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Sampler table is baked at bind-group creation - bind it directly (no staging).
+            // The sampler table is baked at bind-group creation, so bind it directly (no staging).
             if (dxGroup->gpuSamplerOffset() >= 0 && dxLayout && dxLayout->samplerCount() > 0)
             {
                 i32 rootIdx = layout->getSamplerRootIndex(index);
@@ -107,7 +106,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Bind dynamic offset root descriptors (not staged -- uses GPU virtual addresses).
+            // Bind dynamic offset root descriptors (not staged; they use GPU virtual addresses).
             auto dynAddrs = dxGroup->dynamicGpuAddresses();
             usize dynOffsetIdx = 0;
             for (usize i = 0; i < layout->dynamicRootEntries().Size(); ++i)

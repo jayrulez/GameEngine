@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net:transport - the loopback/sim transport (deterministic latency/loss/reorder/dup).
+// foundation.net:transport - the loopback simulated transport (deterministic latency, loss,
+// reordering and duplication).
 #include <doctest/doctest.h>
 #include <initializer_list>
 #include "Core/Prelude.h"
@@ -109,7 +110,7 @@ TEST_CASE("transport: unreliable channel drops packets under loss (deterministic
     CHECK(delivered > 0u);
     CHECK(delivered < 100u); // ~half dropped
 
-    // Same seed => same outcome (determinism, the whole point of the sim).
+    // The same seed gives the same outcome: the simulator is deterministic.
     net::LoopbackLink link2(sim);
     (void)Drain(link2.A());
     (void)Drain(link2.B());

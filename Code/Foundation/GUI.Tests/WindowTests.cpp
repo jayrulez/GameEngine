@@ -3,8 +3,8 @@
 
 // GUI - Window tests: title-bar drag moves the window, the grip resizes it (clamped
 // to the minimum), title clicks fall through to the draggable bar, and a press raises the
-// window to the front; a move or resize reported when the press lets go, and a title bar handed to a
-// drag source.
+// window to the front. A move or resize is reported when the press is released, and the title
+// bar can be handed to a drag source.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -82,7 +82,7 @@ TEST_CASE("window: dragging the grip resizes, clamped to the minimum")
     CHECK(win->GetSize().x == doctest::Approx(250.0f));
     CHECK(win->GetSize().y == doctest::Approx(200.0f));
 
-    // Shrink far past the minimum -> clamps.
+    // Shrink far past the minimum: it clamps.
     d->InjectMouseMove(core::Float2{0.0f, 0.0f});
     CHECK(win->GetSize().x == doctest::Approx(120.0f));
     CHECK(win->GetSize().y == doctest::Approx(80.0f));
@@ -119,7 +119,7 @@ TEST_CASE("window: right to left, its title bar is the mirror of left to right, 
         CHECK(bar->GetChildAt(i)->GetPosition().x == doctest::Approx(width - at[i].x - size[i].x));
         CHECK(bar->GetChildAt(i)->GetSize().x == doctest::Approx(size[i].x));
     }
-    // The grip at its bottom left, its cursor the way that corner resizes.
+    // The grip sits at its bottom left, with the cursor for the way that corner resizes.
     CHECK(grip->GetPosition().x == doctest::Approx(0.0f));
     CHECK(grip->GetCursor() == Cursor::NeswResize);
 }
@@ -187,7 +187,7 @@ TEST_CASE("window: the close button closes a window placed in a tree, which open
     win->SetTitleBarHeight(28.0f);
     int closed = 0;
     win->SetOnClose([&closed]() { ++closed; });
-    root->AddChild(win.Get()); // placed, as a page's markup or a host does, never opened
+    root->AddChild(win.Get()); // placed in the tree, as a page's markup or a host does, but never opened
     (void)root->UpdateLayout();
 
     Node* close = nullptr;
@@ -204,7 +204,7 @@ TEST_CASE("window: the close button closes a window placed in a tree, which open
     CHECK(win->GetParent() == nullptr);
     CHECK(closed == 1);
 
-    win->Open(*root.Get()); // and opens again where it was asked to
+    win->Open(*root.Get()); // and it opens again where it was asked to
     CHECK(win->GetParent() == root.Get());
     CHECK(win->IsOpen());
     (void)root->UpdateLayout();
@@ -225,7 +225,7 @@ TEST_CASE("window: one held by its tree alone closes and calls back, not freed b
         win->SetOnClose([&closed]() { ++closed; });
         root->AddChild(win.Get());
         win->Open(*root.Get());
-    } // the tree holds it alone now, as a script's window
+    } // only the tree holds it now, as with a script's window
     REQUIRE(root->ChildCount() == 1u);
     Window* win = core::Cast<Window>(root->GetChildAt(0));
     REQUIRE(win != nullptr);
@@ -249,7 +249,7 @@ TEST_CASE("window: a move or resize the user made is reported once the press let
     d->InjectMouseDown(core::Float2{120.0f, 60.0f}, MouseButton::Left);
     d->InjectMouseMove(core::Float2{140.0f, 70.0f});
     d->InjectMouseMove(core::Float2{160.0f, 80.0f});
-    CHECK(arranged == 0); // not each move
+    CHECK(arranged == 0); // not reported on each move
     d->InjectMouseUp(core::Float2{160.0f, 80.0f}, MouseButton::Left);
     CHECK(arranged == 1);
     d->InjectMouseDown(core::Float2{160.0f, 80.0f}, MouseButton::Left); // a press that moves nothing
@@ -262,7 +262,8 @@ TEST_CASE("window: a move or resize the user made is reported once the press let
     CHECK(arranged == 2);
     CHECK(win->GetSize().x == doctest::Approx(230.0f));
 
-    // Handed over: the title bar moves nothing itself; its drag source's drag starts past the threshold.
+    // Once handed over, the title bar moves nothing itself, and its drag source's drag starts
+    // past the threshold.
     DragHandle* bar = win->GetTitleBar();
     REQUIRE(bar != nullptr);
     bar->SetDragsItself(false);

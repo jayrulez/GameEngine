@@ -3,10 +3,10 @@
 
 // GUI - :debug_overlay partition
 //
-// DebugOverlay: what a root draws over its tree to show its workings (E8c of
-// Specs/gui-lab-evolution.md). The layout's (each node's border box, padding, margin and
-// baseline) and the input's: the focus path, the tab order, the last directional move's
-// candidates, the node under the pointer, and a flash on the nodes that asked for a redraw.
+// DebugOverlay: what a root draws over its tree to show how it works. For layout, it can show each
+// node's border box, padding, margin and baseline. For input, it can show the focus path, the tab
+// order, the candidates of the last directional move, the node under the pointer, and a flash on
+// the nodes that asked for a redraw.
 
 module;
 #include "Core/Prelude.h"
@@ -19,16 +19,16 @@ export namespace foundation::gui
     /// What a root's debug overlay shows (nothing by default).
     struct DebugOverlay
     {
-        // The layout's, for working on a layout.
+        // Layout options, for working on a layout.
         bool Bounds = false;    ///< each node's border box (red)
-        bool Padding = false;   ///< its padding (green)
-        bool Margin = false;    ///< its margin (orange)
-        bool Baselines = false; ///< a baseline of its own (magenta)
-        // The input's.
-        bool FocusPath = false;   ///< the focused node and each node holding it, named
+        bool Padding = false;   ///< each node's padding (green)
+        bool Margin = false;    ///< each node's margin (orange)
+        bool Baselines = false; ///< the baseline of each node that has its own (magenta)
+        // Input options.
+        bool FocusPath = false;   ///< the focused node and each ancestor holding it, with their names
         bool TabOrder = false;    ///< the tab stops in order, numbered and joined
-        bool Navigation = false;  ///< the last directional move: each candidate, its score or why not, the one chosen
-        bool Pointer = false;     ///< the node under the pointer, named, with its size
+        bool Navigation = false;  ///< the last directional move: each candidate with its score or why it was rejected, and the one chosen
+        bool Pointer = false;     ///< the node under the pointer, with its name and size
         bool RedrawFlash = false; ///< the nodes that invalidated themselves, fading after the frame
 
         [[nodiscard]] static constexpr DebugOverlay Layout() noexcept { return {true, true, true, true}; }

@@ -3,12 +3,12 @@
 
 // GUI.Toolkit - :status_bar partition
 //
-// The status bar (T0 of Specs/gui-lab-evolution-3.md): items registered by id in a start zone and
-// an end zone (zed and Zero register theirs; the start zone takes what is left, so the end zone's
-// items keep their place), ordered within their zone, and a message at the start of the start
-// zone, held until replaced or for so many seconds on the GUI's clock. An item with a title can be
-// hidden: the bar's context menu lists them as checked rows, and an application hears each change
-// (to keep it with its settings).
+// The status bar holds items registered by id in a start zone and an end zone, ordered within
+// their zone. The start zone takes the space that is left, so the end zone's items keep their
+// place. A message sits at the start of the start zone and stays until it is replaced, or for a
+// given number of seconds on the GUI's clock. An item with a title can be hidden: the bar's context
+// menu lists such items as checked rows, and the application is told of each change so it can keep
+// it with its settings.
 
 module;
 #include "Core/Prelude.h"
@@ -27,11 +27,11 @@ export namespace foundation::gui
     /// Where on the bar an item goes.
     enum class StatusZone : u8
     {
-        Start, ///< after the message, taking what is left
+        Start, ///< after the message, taking the space that is left
         End,   ///< at the bar's end
     };
 
-    /// One item of a status bar: what it shows is its children.
+    /// One item of a status bar. Its children are what it shows.
     class StatusItem : public UIWidget
     {
         RTTI_OBJECT(StatusItem, UIWidget)
@@ -49,7 +49,7 @@ export namespace foundation::gui
             });
         }
 
-        /// Its zone (`zone`: start or end).
+        /// Sets its zone, start or end (the `zone` attribute).
         void SetZone(StatusZone zone)
         {
             m_zone = zone;
@@ -61,13 +61,15 @@ export namespace foundation::gui
         {
             return core::String(m_zone == StatusZone::End ? core::StringView(u8"end") : core::StringView(u8"start"));
         }
-        /// Its place in its zone: lower first, ties in the order they came (the layout's `order`).
+        /// Sets its place in its zone (the layout's `order`): lower values come first, and ties keep
+        /// the order the items were added in.
         void SetOrder(i32 order)
         {
             EditLayoutStyle([order](LayoutStyle& s) { s.Order = order; });
         }
         [[nodiscard]] i32 GetOrder() const noexcept { return GetLayoutStyle().Order; }
-        /// What the bar's menu calls it (`title`); with none it cannot be hidden from there.
+        /// Sets the name the bar's menu shows for it (`title`). Without a title it cannot be hidden
+        /// from the menu.
         void SetTitle(core::StringView title) { m_title = core::String(title); }
         [[nodiscard]] core::StringView GetTitle() const noexcept { return m_title.AsView(); }
         void SetTitleString(const core::String& title) { m_title = title; }
@@ -120,13 +122,13 @@ export namespace foundation::gui
             m_start->AddChild(m_message.Get());
         }
 
-        /// Adds `item` to its zone, in its order. Its id (`SetId`) is what the bar knows it by.
+        /// Adds `item` to its zone, in its order. The bar identifies it by its id (`SetId`).
         void AddItem(StatusItem& item)
         {
             item.m_bar = this;
             Place(item);
         }
-        /// Takes the item `id` off the bar; false when there is none.
+        /// Removes the item `id` from the bar. Returns false when there is none.
         bool RemoveItem(core::StringView id)
         {
             StatusItem* item = FindItem(id);
@@ -136,7 +138,7 @@ export namespace foundation::gui
             item->RemoveFromParent();
             return true;
         }
-        /// The item `id`, or null.
+        /// Returns the item `id`, or null.
         [[nodiscard]] StatusItem* FindItem(core::StringView id) const
         {
             Node* const zones[] = {m_start.Get(), m_end.Get()};
@@ -146,7 +148,7 @@ export namespace foundation::gui
                         return item;
             return nullptr;
         }
-        /// The items of `zone`, in order.
+        /// Returns the items of `zone`, in order.
         [[nodiscard]] core::Array<StatusItem*> GetItems(StatusZone zone) const
         {
             core::Array<StatusItem*> out(MemoryAllocator());
@@ -162,7 +164,7 @@ export namespace foundation::gui
             return out;
         }
 
-        /// Shows or hides the item `id` (what the bar's menu does); false when there is none.
+        /// Shows or hides the item `id`, as the bar's menu does. Returns false when there is none.
         bool SetItemShown(core::StringView id, bool shown)
         {
             StatusItem* item = FindItem(id);
@@ -180,11 +182,12 @@ export namespace foundation::gui
             const StatusItem* item = FindItem(id);
             return item != nullptr && item->IsDisplayed();
         }
-        /// Told when the user (or SetItemShown) shows or hides an item, to keep it with the settings.
+        /// Called when the user (or SetItemShown) shows or hides an item, so the application can keep
+        /// it with its settings.
         void SetOnItemShownChanged(core::Function<void(core::StringView id, bool shown)> changed) { m_onShownChanged = core::Move(changed); }
 
-        /// Shows `text` at the start: until another replaces it or it is cleared (`seconds` 0), or
-        /// for `seconds` on the GUI's clock.
+        /// Shows `text` at the start of the bar. With `seconds` 0 it stays until another message
+        /// replaces it or it is cleared; otherwise it shows for `seconds` on the GUI's clock.
         void ShowMessage(core::StringView text, f32 seconds = 0.0f)
         {
             ++m_messageId;
@@ -198,7 +201,7 @@ export namespace foundation::gui
             RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self, shown, left](core::Duration elapsed) mutable
                                                 {
                                                     if (self->m_messageId != shown)
-                                                        return false; // replaced: its own time counts now
+                                                        return false; // a newer message replaced it, and that message's own time counts now
                                                     left -= static_cast<f32>(elapsed.AsSeconds());
                                                     if (left > 0.0f)
                                                         return true;
@@ -207,14 +210,14 @@ export namespace foundation::gui
                                                 }));
         }
         void ClearMessage() { ShowMessage(core::StringView{}); }
-        /// The message shown now (empty: none).
+        /// Returns the message shown now, or empty when there is none.
         [[nodiscard]] core::StringView GetMessage() const { return m_message->IsDisplayed() ? m_message->GetText() : core::StringView{}; }
         [[nodiscard]] Label* GetMessagePart() const noexcept { return m_message.Get(); }
 
-        /// The menu of the items that can be hidden, while it is open.
+        /// Returns the menu of the items that can be hidden while it is open, else null.
         [[nodiscard]] Menu* GetItemsMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
-        /// Lists the items with a title, checked while they show; picking one shows or hides it.
-        /// Opens at `position` (in this GUI's root); false when no item can be hidden.
+        /// Opens, at `position` (in this GUI's root), a menu of the items with a title, checked while
+        /// they show; picking one shows or hides it. Returns false when no item can be hidden.
         bool OpenItemsMenu(core::Float2 position)
         {
             m_menu = core::MakeRef<Menu>(MemoryAllocator());
@@ -238,7 +241,7 @@ export namespace foundation::gui
             return true;
         }
 
-        /// Markup's children are its items (StatusItem), each placed as it arrives.
+        /// In markup, the bar's children are its items (StatusItem), each placed as it arrives.
         [[nodiscard]] Node* GetChildHost() override
         {
             if (!m_markupHost)
@@ -283,7 +286,7 @@ export namespace foundation::gui
             AddChild(zone.Get());
             return zone;
         }
-        // Into its zone, last (its order places it among the others there).
+        // Adds the item at the end of its zone; its order then places it among the others there.
         void Place(StatusItem& item)
         {
             core::RefPtr<StatusItem> held(&item);

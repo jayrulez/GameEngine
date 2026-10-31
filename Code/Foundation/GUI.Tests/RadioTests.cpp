@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - RadioButton tests: the button core as a toggle a click never unchecks, alone or grouped
-// (the groups themselves are ButtonTests'), and its ring and dot.
+// GUI - RadioButton tests: the button core as a toggle that a click never unchecks, alone or
+// grouped (ButtonTests covers the groups themselves), and its ring and dot.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

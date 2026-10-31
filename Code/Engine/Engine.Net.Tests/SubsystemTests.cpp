@@ -26,8 +26,8 @@ TEST_CASE("net-subsystem: the scene module injects the NetworkComponentManager")
 
     foundation::net::AddNetworkSceneManagers(scene); // the composition's net module install
 
-    // Now an authored/assigned NetworkComponent (identity) + NetworkedTransform (replicated movement)
-    // both have a home in this scene.
+    // Now an authored or assigned NetworkComponent (identity) and a NetworkedTransform (replicated
+    // movement) both have a home in this scene.
     CHECK(scene.FindManagerBySerializationId(u8"net.Network") != nullptr);
     CHECK(scene.FindManagerBySerializationId(u8"net.Transform") != nullptr);
 }

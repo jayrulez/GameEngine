@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - the FULL agent-shaped sequence: one
-// golden that walks the whole workflow THROUGH THE TOOLS, in the order the skill teaches:
-// create -> open -> import a real script source -> cook -> author a scene -> validate ->
-// health -> host state. Every step is a tools/call; nothing touches the project behind the
-// server's back except the initial on-disk script file (the OS artifact an import consumes).
+// Integration.Mcp: the full sequence an agent runs. One golden test walks the whole workflow
+// through the tools in the order the skill teaches: create, open, import a real script source,
+// cook, author a scene, validate, check health and read the host state. Every step is a
+// tools/call. Nothing touches the project behind the server's back except the initial script
+// file on disk, which the import consumes.
 #include <doctest/doctest.h>
 #include <initializer_list>
 #include <filesystem>
 #include <fstream>
-#include <cstdlib> // setenv (the scratch templates root)
+#include <cstdlib> // setenv, to point at the scratch templates root
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.json;
 import foundation.content;
-import foundation.vfs; // FindDataRoot (the Duck sample model)
+import foundation.vfs; // FindDataRoot, to find the Duck sample model
 import foundation.scene;
 import foundation.scene.resource;
 import foundation.mcp;
@@ -80,7 +80,7 @@ namespace
         return o;
     }
 
-    // Every occurrence of `from` in `text` replaced with `to` (byte-wise; test-local helper).
+    // Every occurrence of `from` in `text` replaced with `to`, byte by byte.
     String ReplaceAll(StringView text, StringView from, StringView to)
     {
         StringBuilder out;
@@ -114,8 +114,8 @@ TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, 
     engine::RegisterAllSceneComponentReflection();
 
     McpServer server;
-    // The flow runs over the SHARED engine surface (what every host serves) plus the stdio
-    // host's project_create / project_open.
+    // The flow runs over the shared engine surface that every host serves, plus the stdio host's
+    // project_create and project_open.
     editor::EditorLogBuffer logBuffer{DefaultAllocator()};
     editor::mcp::ProjectSession session;
     editor::mcp::ProjectOwner owner;
@@ -126,14 +126,14 @@ TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, 
                                      editor::mcp::EngineToolPaths{}, operations);
     editor::mcp::RegisterProjectOpenTools(server, session, owner);
 
-    // 1. Create + open.
+    // 1. Create and open.
     (void)FfCall(server, u8"project_create",
                  FfStr(FfStr(JsonValue::MakeObject(), u8"directory", u8"mcp_full_project"),
                        u8"name", u8"Full"));
     (void)FfCall(server, u8"project_open",
                  FfStr(JsonValue::MakeObject(), u8"directory", u8"mcp_full_project"));
 
-    // 2. Import a REAL script source (the Luau starter - it compiles) from disk.
+    // 2. Import a real script source from disk: the Luau starter, which compiles.
     {
         pipeline::IScriptLanguageCook* cook =
             pipeline::ScriptLanguageCookRegistry::Get().FindByLanguage(u8"luau");
@@ -147,12 +147,12 @@ TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, 
         FfCall(server, u8"asset_import", FfStr(JsonValue::MakeObject(), u8"source", u8"Mover.luau"));
     CHECK(imported.Get(u8"type").AsString() == StringView(u8"ScriptClassAsset"));
 
-    // 3. Cook - the imported script compiles into the cooked database.
+    // 3. Cook: the imported script compiles into the cooked database.
     JsonValue cooked = FfCall(server, u8"asset_cook", JsonValue::MakeObject());
     CHECK(cooked.Get(u8"cooked").AsNumber() >= 1.0);
     CHECK(cooked.Get(u8"failed").AsNumber() == doctest::Approx(0.0));
 
-    // 4. Author a scene through the tools (seed text from a real SaveScene).
+    // 4. Author a scene through the tools, seeded with text from a real SaveScene.
     String seedXml;
     {
         scene::Scene authored(DefaultAllocator(), u8"arena");
@@ -178,8 +178,8 @@ TEST_CASE("integration.mcp: the full agent flow - create, import, cook, author, 
     CHECK(valid.Get(u8"valid").AsBool() == true);
     CHECK(valid.Get(u8"componentValidation").AsString() == StringView(u8"full"));
 
-    // 6. Health: nothing broken. (The freshly written scenes stage rather than cook, so
-    //    only the script counted as buildable - and it is cooked.)
+    // 6. Health: nothing broken. The freshly written scenes stage rather than cook, so only the
+    //    script counts as buildable, and it is cooked.
     JsonValue health = FfCall(server, u8"project_health", JsonValue::MakeObject());
     CHECK(health.Get(u8"sound").AsBool() == true);
     CHECK(health.Get(u8"dirty").AsNumber() == doctest::Approx(0.0));
@@ -222,7 +222,7 @@ TEST_CASE("integration.mcp: RegisterEngineTools registers exactly kEngineToolCou
         }
         return false;
     };
-    // Spot checks across the families the root gathers ...
+    // Spot checks across the tool families the root gathers, then the host's own tools.
     CHECK(has(u8"type_list"));
     CHECK(has(u8"script_api"));
     CHECK(has(u8"project_info"));
@@ -231,7 +231,7 @@ TEST_CASE("integration.mcp: RegisterEngineTools registers exactly kEngineToolCou
     CHECK(has(u8"project_export"));
     CHECK(has(u8"known_issues"));
     CHECK(has(u8"component_schema"));
-    // ... and what a HOST adds itself: never part of the shared surface.
+    // Tools a host adds itself are never part of the shared surface.
     CHECK_FALSE(has(u8"project_open"));
     CHECK_FALSE(has(u8"project_create"));
     CHECK_FALSE(has(u8"host_info"));
@@ -258,8 +258,8 @@ TEST_CASE("integration.mcp: LocateShippingDocs walks up to the checkout layout, 
         CHECK(paths.shippingDocsDir == u8"mcp_docs_checkout/Documentation/Shipping");
         CHECK(paths.knownIssues == u8"mcp_docs_checkout/Documentation/Shipping/KnownIssues.md");
     }
-    // The served docs list by NAME, whatever order the filesystem hands them back in (a third
-    // file written last would otherwise come last on some filesystems and first on others).
+    // The served docs are listed by name, whatever order the filesystem returns them in. Without
+    // the sort, a third file written last would come last on some filesystems and first on others.
     {
         std::ofstream("mcp_docs_checkout/Documentation/Shipping/Assets.md") << "# assets";
         McpServer server;
@@ -307,8 +307,8 @@ TEST_CASE("integration.mcp: LocateShippingDocs walks up to the checkout layout, 
 namespace
 {
     // A host whose operations take several pumps: every step answers "not yet" until the
-    // configured entry, then the outcome - the shape of the editor's background services,
-    // minus the services.
+    // configured entry, then gives the outcome. This has the shape of the editor's background
+    // services, without the services themselves.
     class SlowOperations final : public editor::mcp::IProjectOperations
     {
     public:
@@ -419,7 +419,7 @@ TEST_CASE("integration.mcp: the write tools ride a host's operations - not finis
     (void)FfCall(server, u8"project_open",
                  FfStr(JsonValue::MakeObject(), u8"directory", u8"mcp_slow_project"));
 
-    // asset_cook: two "not yet" re-entries with the SAME line, then the counts.
+    // asset_cook: two "not yet" re-entries with the same line, then the counts.
     const String cook = ToolCallLine(u8"asset_cook", u8"{\"force\":true}").ToString();
     CHECK(server.HandleLine(cook.AsView()).state == LineState::NotFinished);
     CHECK(server.HandleLine(cook.AsView()).state == LineState::NotFinished);
@@ -450,8 +450,8 @@ TEST_CASE("integration.mcp: the write tools ride a host's operations - not finis
               .Get(u8"name")
               .AsString() == StringView(u8"Mover"));
 
-    // The importer's options, the import dialog's toggles by label (Sedulous a9c83eef): the
-    // host's importer gets them, unnamed ones at their defaults, and the result lists them all.
+    // The importer's options, given as the import dialog's toggles by label. The host's importer
+    // receives them, the ones not named at their defaults, and the result lists them all.
     {
         slow.importEntries = 0;
         const String model = ToolCallLine(u8"asset_import",
@@ -531,9 +531,9 @@ TEST_CASE("integration.mcp: the write tools ride a host's operations - not finis
 }
 
 
-// agent-playtesting-and-asset-creation.md P2 (Sedulous 14d6d524): asset_creators lists what
-// File > New offers, and asset_create makes one by label or by type, under a group or the
-// creator's own, with an exact name refused when taken.
+// asset_creators lists what File > New offers, and asset_create makes one by label or by type,
+// under a given group or the creator's default one. An exact name that is already taken is
+// refused.
 TEST_CASE("integration.mcp: asset_creators and asset_create make what File > New makes")
 {
     pipeline::RegisterPipelineTypes();
@@ -611,8 +611,8 @@ TEST_CASE("integration.mcp: asset_creators and asset_create make what File > New
               .AsView()
               .ContainsIgnoreCase(u8"no creator labelled"));
 
-    // Sedulous a700e581: every code an input map stores as a number names its cases in
-    // type_info, so an agent editing bindings reads them.
+    // Every code an input map stores as a number names its cases in type_info, so an agent
+    // editing bindings can read them.
     for (StringView code : {StringView(u8"KeyCode"), StringView(u8"MouseButton"),
                             StringView(u8"GamepadButton"), StringView(u8"GamepadAxis"),
                             StringView(u8"MouseAxisCode"), StringView(u8"StickCode")})
@@ -627,8 +627,8 @@ TEST_CASE("integration.mcp: asset_creators and asset_create make what File > New
     (void)RemoveDirectoryRecursive(u8"mcp_create_project");
 }
 
-// Sedulous 3dae9ac8: asset_data_read hands out an asset's envelope; asset_data_write takes an
-// edited one back only when it loads, as the engine's own reader reads it.
+// asset_data_read hands out an asset's envelope. asset_data_write takes an edited envelope back
+// only when it loads the way the engine's own reader reads it.
 TEST_CASE("integration.mcp: an agent edits a data asset through its envelope")
 {
     pipeline::RegisterPipelineTypes();
@@ -688,12 +688,12 @@ TEST_CASE("integration.mcp: an agent edits a data asset through its envelope")
         CHECK(text.AsView().ContainsIgnoreCase(reason));
     };
 
-    // Refusals: each leaves the stored envelope exactly as it was, and announces nothing.
+    // Refusals: each leaves the stored envelope as it was, and announces nothing.
     refusedWith(ReplaceAll(edited.AsView(), guid.AsView(), u8"00000000-0000-0000-0000-000000000001").AsView(),
                 u8"is not this asset's");
     refusedWith(ReplaceAll(edited.AsView(), u8"name=\"priority\"", u8"name=\"prio\"").AsView(),
                 u8"the payload did not read");
-    // And says which key, where (Sedulous ac705dee).
+    // A refusal says which key is wrong and where.
     refusedWith(ReplaceAll(edited.AsView(), u8"name=\"priority\"", u8"name=\"prio\"").AsView(),
                 u8"'priority' at payload/");
     refusedWith(ReplaceAll(edited.AsView(), u8">InputMapAsset<", u8">SoundCueAsset<").AsView(),
@@ -717,9 +717,9 @@ TEST_CASE("integration.mcp: an agent edits a data asset through its envelope")
     (void)RemoveDirectoryRecursive(u8"mcp_asset_data");
 }
 
-// Sedulous 3de51786: project_settings_set sets what the Project Settings dialog edits, typed by
-// the settings' reflection, checked in full first, saved to the manifest, and read back by
-// project_info.
+// project_settings_set sets what the Project Settings dialog edits. Values are typed by the
+// settings' reflection and checked in full before any is applied; they are saved to the manifest
+// and read back by project_info.
 TEST_CASE("integration.mcp: an agent sets the project's settings")
 {
     pipeline::RegisterPipelineTypes();
@@ -771,7 +771,8 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
         return result.Get(u8"content").At(0).Get(u8"text").AsString();
     };
 
-    // A scene where an input map goes is refused, and the scene given beside it with it.
+    // A scene given where an input map goes is refused, and so is the valid scene setting sent
+    // alongside it.
     const String wrongType = refused(FfStr(FfStr(JsonValue::MakeObject(), u8"defaultInputMapId",
                                                  sceneId.AsView()),
                                            u8"defaultSceneId", sceneId.AsView()));
@@ -815,9 +816,9 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
     CHECK(cleared.Get(u8"defaultInputMapId").IsNull());
     CHECK(cleared.Get(u8"defaultSceneId").Get(u8"guid").AsString() == sceneId.AsView());
 
-    // A list setting (Sedulous 39147576): uiFontIds takes the whole list, each a FontAsset, once.
+    // A list setting: uiFontIds takes the whole list, each entry a FontAsset, each listed once.
     CHECK(FfCall(server, u8"project_info", JsonValue::MakeObject()).Get(u8"settings").Get(u8"uiFontIds").Count() == 0);
-    // The engine GUI's sheets: a list setting of its own, empty until set (gui-lab-evolution-3.md E9b).
+    // The engine GUI's style sheets are a list setting too, empty until set.
     CHECK(FfCall(server, u8"project_info", JsonValue::MakeObject()).Get(u8"settings").Get(u8"guiStyleSheetIds").Count() == 0);
     (void)FfCall(server, u8"asset_import",
                  FfStr(JsonValue::MakeObject(), u8"source",
@@ -873,7 +874,7 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
     CHECK(uses.Get(u8"projectSettingsUses").At(0).AsString() == StringView(u8"uiFontIds"));
     CHECK(FfCall(server, u8"project_settings_set", fonts({})).Get(u8"settings").Get(u8"uiFontIds").Count() == 0);
 
-    // The display (Sedulous 7d6e4460): counts within their range, choices by name, flags.
+    // The display settings: counts within their range, choices by name, and flags.
     {
         JsonValue info = FfCall(server, u8"project_info", JsonValue::MakeObject()).Get(u8"settings");
         CHECK(info.Get(u8"renderWidth").AsNumber() == doctest::Approx(0.0));
@@ -903,9 +904,9 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
     (void)RemoveDirectoryRecursive(u8"mcp_settings");
 }
 
-// Sedulous 6b33743b: a model imported through the headless host gets its prefab, as in the
-// editor: the host runs pipeline::AfterImport after every import. With the prefab option off it
-// gets none, and the scene option adds a scene.
+// A model imported through the headless host gets its prefab, as in the editor, because the
+// host runs pipeline::AfterImport after every import. With the prefab option off it gets none,
+// and the scene option adds a scene.
 TEST_CASE("integration.mcp: a headless model import generates its prefab")
 {
     const String dataRoot = foundation::vfs::FindDataRoot();
@@ -971,9 +972,9 @@ TEST_CASE("integration.mcp: a headless model import generates its prefab")
     (void)RemoveDirectoryRecursive(u8"mcp_model_prefab");
 }
 
-// Sedulous 4f483f5e: the project's export presets over MCP, read and set through ExportPreset's
-// reflection, against the templates this machine has (a scratch templates root holding one
-// Release template for the host, so the test does not depend on what is installed here).
+// The project's export presets over MCP, read and set through ExportPreset's reflection and
+// checked against the templates on this machine. A scratch templates root holds one Release
+// template for the host, so the test does not depend on what is installed here.
 TEST_CASE("integration.mcp: export_presets and export_preset_set")
 {
     const String templatesRoot = String(u8"mcp_presets_templates");
@@ -1044,8 +1045,8 @@ TEST_CASE("integration.mcp: export_presets and export_preset_set")
     }
     CHECK(sawRelease);
 
-    // A new preset with a template not on this machine, its own window and an extra file: kept,
-    // the template unresolved here; the host preset stays.
+    // A new preset with a template not on this machine, its own window and an extra file is
+    // kept, with its template unresolved here. The host preset stays.
     {
         JsonValue arguments = FfStr(FfStr(JsonValue::MakeObject(), u8"name", u8"Deck"), u8"templateId", u8"elsewhere");
         arguments.Set(u8"overridesWindow", JsonValue::MakeBool(true));
@@ -1152,7 +1153,8 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
     pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
     (void)pipeline::RegisterAllCreators(creators);
-    // The engine's shader library: where the effects' tables (wind.hlsli's Wind) are read from.
+    // The engine's shader library, where the effects' tables (such as Wind in wind.hlsli) are
+    // read from.
     editor::mcp::EngineToolPaths paths;
     paths.shaderLibrary = foundation::vfs::DataPath(foundation::vfs::FindDataRoot().AsView(), u8"Engine/Shaders");
     editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer, paths, operations);
@@ -1167,7 +1169,7 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     const JsonValue lava = FfCall(server, u8"asset_create",
                                   FfStr(FfStr(JsonValue::MakeObject(), u8"creator", u8"Lit Surface Shader"),
                                         u8"name", u8"Lava"));
-    // A low-level shader whose vertex stage does not declare WIND (the starter's, WIND struck).
+    // A low-level shader whose vertex stage does not declare WIND: the starter with WIND removed.
     const JsonValue still = FfCall(server, u8"asset_create",
                                    FfStr(FfStr(JsonValue::MakeObject(), u8"creator", u8"Low-Level Shader"),
                                          u8"name", u8"Still"));
@@ -1213,7 +1215,7 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     // A surface shader declares WIND: the material gains the Wind group (a new material had none).
     REQUIRE(onLava.Get(u8"effects").Count() == 1);
     CHECK(onLava.Get(u8"effects").At(0).Get(u8"name").AsString() == StringView(u8"Wind"));
-    // Saved: the material's own asset holds the shader's layout, none of PBR's.
+    // Saved: the material's asset holds the shader's layout and none of PBR's properties.
     const String xml = FfCall(server, u8"asset_data_read",
                               FfStr(JsonValue::MakeObject(), u8"guid", materialId.AsView()))
                            .Get(u8"xml")
@@ -1221,14 +1223,14 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     CHECK(Contains(xml.AsView(), u8"<string>CrackColor</string>"));
     CHECK_FALSE(Contains(xml.AsView(), u8"<string>BaseColor</string>"));
 
-    // Back on the built-in PBR: PBR's thirteen properties again (its wind is the Wind effect's
-    // group, not three of them; Specs/wind-for-every-shader.md).
+    // Back on the built-in PBR: its thirteen properties again. Its wind settings are the Wind
+    // effect's group, not three of the thirteen.
     const JsonValue onPbr = FfCall(
         server, u8"material_set_shader",
         FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"pbr"));
     CHECK(onPbr.Get(u8"properties").Count() == 13);
     CHECK(onPbr.Get(u8"shaderName").AsString() == StringView(u8"forward"));
-    // Its Wind group: the effect's three parameters, its gate at zero (still).
+    // Its Wind group holds the effect's three parameters, with Strength at zero (no wind).
     REQUIRE(onPbr.Get(u8"effects").Count() == 1);
     const JsonValue& wind = onPbr.Get(u8"effects").At(0);
     CHECK(wind.Get(u8"name").AsString() == StringView(u8"Wind"));
@@ -1251,7 +1253,7 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
                              .AsView(),
                          u8"<string>Wind</string>"));
 
-    // On the built-in Phong: its eleven (six values, four maps, the sampler).
+    // On the built-in Phong: eleven properties (six values, four maps and the sampler).
     const JsonValue onPhong = FfCall(
         server, u8"material_set_shader",
         FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"phong"));

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.vegetation:scatter implementation - see Scatter.cppm for the contract.
+// foundation.vegetation:scatter implementation; Scatter.cppm states the contract.
 
 module;
 #include "Core/Prelude.h"
@@ -53,7 +53,7 @@ namespace foundation::vegetation
             return mask.ShareAt(plane, u, v);
         }
 
-        // A right-handed frame whose Y axis is `up` (row-vector convention: rows = axes).
+        // A right-handed frame whose Y axis is `up` (row-vector convention: the rows are the axes).
         Float4x4 FrameFromUp(Float3 up, f32 yaw) noexcept
         {
             // Yaw first (about the terrain-local Y), then tilt the whole frame onto the normal.
@@ -137,12 +137,12 @@ namespace foundation::vegetation
             return;
         }
 
-        // Candidates: the layer's OWN density x the chunk area (a CPU ceiling, never a scale).
-        // The cap (maxInstancesPerChunk) bounds what the chunk HOLDS: the loop stops when it is
+        // Candidates: the layer's own density x the chunk area (a CPU ceiling, never a scale).
+        // The cap (maxInstancesPerChunk) bounds what the chunk holds: the loop stops when it is
         // reached, so a mask patch covering a slice of the chunk still grows at the layer's
-        // density - a candidate outside the patch costs no cap - and only a chunk that fills up
-        // is clamped (the manager warns once). Before 2026-09-23 the cap scaled the density
-        // over the whole chunk area first, so a small painted patch never reached it.
+        // density (a candidate outside the patch costs no cap), and only a chunk that fills up
+        // is clamped (the manager warns once). Scaling the density down to the cap over the
+        // whole chunk area first would starve a small painted patch.
         const f32 wanted = Min(layer.density * area, static_cast<f32>(kMaxCandidatesPerChunk));
         const u32 candidates = static_cast<u32>(wanted + 0.5f);
         const u32 cap = layer.maxInstancesPerChunk;
@@ -170,7 +170,7 @@ namespace foundation::vegetation
                 out.candidateCount = i;
                 break;
             }
-            // Draw every random number a candidate CAN consume up front, so a rejection never
+            // Draw every random number a candidate can consume up front, so a rejection never
             // shifts the stream of the ones after it (the accepted set stays a stable prefix
             // thinning of the candidate set as parameters move).
             const f32 x = minX + rng.NextFloat() * sizeX;
@@ -271,7 +271,7 @@ namespace foundation::vegetation
         Random rng(seed);
         for (u32 i = 0; i < candidates; ++i)
         {
-            // Every random number a candidate CAN use is drawn up front (a rejection never
+            // Every random number a candidate can use is drawn up front (a rejection never
             // shifts the ones after it).
             const f32 angle = rng.NextFloat() * kTwoPi;
             const f32 r = radius * Sqrt(rng.NextFloat()); // uniform over the disc
@@ -350,7 +350,7 @@ namespace foundation::vegetation
             return;
         }
         const i32 last = chunksPerSide - 1;
-        // A boundary sample (gx = k * 64) belongs to chunk k-1's far edge AND chunk k's near edge.
+        // A boundary sample (gx = k * 64) belongs to chunk k-1's far edge and chunk k's near edge.
         const i32 cx0 = Clamp((region.minX - 1) / terrain::kChunkQuads, 0, last);
         const i32 cx1 = Clamp(region.maxX / terrain::kChunkQuads, 0, last);
         const i32 cz0 = Clamp((region.minZ - 1) / terrain::kChunkQuads, 0, last);

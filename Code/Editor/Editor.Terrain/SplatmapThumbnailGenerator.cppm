@@ -3,11 +3,11 @@
 
 // Editor Terrain - :splatmap_thumbnail partition
 //
-// The splatmap thumbnail generator: a false-color view of the slot weights. A splat raster is
-// weights, not color - channel k's MEANING depends on the per-texel palette indices - so the
-// tile maps the four slots to fixed distinct hues and blends by weight: the painted regions'
-// SHAPE is the recognizable identity, not the layer colors. Prepare reads the imported source
-// PNG (a fixed-layer raster) or the painted "pixels" sidecar; Generate colorizes and
+// The splatmap thumbnail generator: a false-color view of the slot weights. A splat raster holds
+// weights, not color, and what channel k means depends on the per-texel palette indices. So the
+// tile maps the four slots to fixed distinct hues and blends them by weight; the shape of the
+// painted regions is what makes it recognizable, not the layer colors. Prepare reads the imported
+// source PNG (a fixed-layer raster) or the painted "pixels" sidecar; Generate colorizes and
 // box-downscales.
 
 module;
@@ -191,7 +191,7 @@ export namespace editor
         }
     };
 
-    /// Registered by RegisterTerrainEditor (the domain's one composition entry point).
+    /// Registered by RegisterTerrainEditor, the domain's single composition entry point.
     inline void RegisterSplatmapThumbnailGenerator(editor::ThumbnailService& service)
     {
         service.RegisterGenerator(MakeUnique<SplatmapThumbnailGenerator>(editor::EditorRootAllocator()));

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.physics tests: the scene integration headless - component-driven
-// body building (incl. hierarchy compounding), the fixed-step sync, render-frame
-// interpolation between fixed poses, kinematic scene-follow, and play-cycle teardown.
+// engine.physics tests: the scene integration, headless. Component-driven body building
+// (including hierarchy compounding), the fixed-step sync, render-frame interpolation between
+// fixed poses, kinematic scene-follow, and play-cycle teardown.
 
 #include <doctest/doctest.h>
 
@@ -114,8 +114,8 @@ TEST_CASE("physics.scene: interpolation blends between the last two fixed poses"
     const f32 currY = body->currPosition.y;
     REQUIRE(prevY > currY); // falling
 
-    // Production order: interpolation (physics subsystem, -600) THEN Scene::Update's
-    // UpdateTransforms - mirrored explicitly here.
+    // The production order, done by hand here: interpolation (physics subsystem, -600), then
+    // Scene::Update's UpdateTransforms.
     play.physics->ApplyInterpolation(0.0f);
     play.scene.UpdateTransforms();
     CHECK(play.scene.GetWorldPosition(box).y == doctest::Approx(prevY).epsilon(0.001));
@@ -156,8 +156,8 @@ TEST_CASE("physics.scene: descendant colliders compound into the ancestor body")
 {
     PlayScene play;
     (void)play.AddFloor();
-    // An L-piece: the body box at origin + a child collider offset +x. Its compound
-    // should topple/rest unlike a lone cube - assert the child shape EXISTS by ray.
+    // An L-piece: the body box at the origin and a child collider offset along +x. A ray
+    // proves the child shape is part of the compound.
     const scene::EntityHandle body = play.AddBox(0.5f, MotionKind::Static);
     scene::EntityHandle arm = play.scene.CreateEntity(u8"arm");
     play.scene.SetParent(arm, body);
@@ -306,7 +306,7 @@ TEST_CASE("physics.scene: a real Jolt collision reaches a registered listener wi
 TEST_CASE("physics.scene: cooked collision shape drives a body via the component ref")
 {
     // Cook a unit-cube hull, wrap it in a CollisionShape product, and hand it to the
-    // component DIRECTLY (Ref procedural override) - no content db in this harness.
+    // component directly (a procedural Ref override): this harness has no content db.
     Array<byte> blob;
     Array<Float3> corners;
     const f32 ends[2] = {-0.5f, 0.5f};
@@ -344,8 +344,7 @@ TEST_CASE("physics.scene: cooked collision shape drives a body via the component
 TEST_CASE("physics.scene: a heightfield collider drives a body via the component ref (no terrain)")
 {
     // A flat 65x65 heightfield whose surface sits at world Y = 2, handed to the component directly
-    // (no content db, no TerrainComponent) - proves a heightfield collision surface without a
-    // renderer, the payoff of the asset split.
+    // (no content db, no TerrainComponent): a heightfield collision surface needs no renderer.
     RefPtr<foundation::heightfield::Heightfield> hf = MakeRef<foundation::heightfield::Heightfield>(
         DefaultAllocator(), 65, Float2{64.0f, 64.0f}, 0.0f, 4.0f);
     const foundation::heightfield::Height flat = hf->WorldYToSample(2.0f);
@@ -371,7 +370,7 @@ TEST_CASE("physics.scene: a heightfield collider drives a body via the component
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
 
-    // Rests on the surface (2) + half extent (0.5).
+    // Rests on the surface (2) plus its half extent (0.5).
     CHECK(play.scene.GetWorldPosition(box).y == doctest::Approx(2.5f).epsilon(0.1));
 }
 
@@ -406,7 +405,7 @@ TEST_CASE("physics.scene: a heightfield RigidBody survives a scene serialize rou
     REQUIRE(loaded.IsAssigned());
     RigidBodyComponent* body = b2.GetSystem<RigidBodyComponentManager>()->Get(loaded);
     REQUIRE(body != nullptr);
-    CHECK(body->shape == ShapeKind::Heightfield); // the new ShapeKind round-trips
+    CHECK(body->shape == ShapeKind::Heightfield); // the Heightfield ShapeKind round-trips
 }
 
 TEST_CASE("physics.scene: a referenced PhysicalMaterial overrides inline surface fields")
@@ -426,7 +425,7 @@ TEST_CASE("physics.scene: a referenced PhysicalMaterial overrides inline surface
     }
     play.Start();
 
-    // Track the maximum height AFTER the first impact; a dead drop stays ~at rest.
+    // Track the maximum height after the first impact; a dead drop stays about at rest.
     bool impacted = false;
     f32 apex = 0.0f;
     for (int i = 0; i < 600; ++i)
@@ -470,8 +469,8 @@ TEST_CASE("physics.scene: a tilted plane entity makes boxes slide downhill")
     play.Step(240);
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
-    // Frictionless on a plane tilted around +Z: the box slides toward -x downhill... the
-    // tilt raises +x, so it slides to NEGATIVE x and keeps contact (no tunnel-through).
+    // Frictionless on a plane tilted around +Z: the tilt raises +x, so the box slides downhill
+    // toward negative x and keeps contact (no tunnelling through).
     const Float3 position = play.scene.GetWorldPosition(box);
     CHECK(position.x < -1.0f);
     CHECK(position.y > -30.0f);
@@ -497,7 +496,7 @@ TEST_CASE("physics.scene: ScenePhysics.rayCast returns an EXPLICIT RayCastHit (n
     CHECK(physics.bodyCount() == doctest::Approx(2.0f));
     CHECK(hit.entity().Handle() == box); // resolves the hit body's entity
 
-    // impulse acts on THIS hit's body - it actually moves the box (~1000kg).
+    // impulse acts on this hit's body: it moves the box (about 1000 kg).
     hit.impulse(8000, 0, 0);
     play.Step(30);
     play.physics->ApplyInterpolation(1.0f);
@@ -544,8 +543,8 @@ TEST_CASE("physics.scene: ScenePhysics.sphereCast sweeps a sphere (hits earlier 
     play.Step(10);
 
     ScenePhysics physics{&play.scene};
-    // A downward sphere (r=0.5) touches the box top (y=1.0) when its centre reaches y=1.5 -> distance
-    // 3.5 from y=5 (a point ray needs y=1.0 -> distance 4.0), so the volume hits EARLIER.
+    // A downward sphere (r=0.5) touches the box top (y=1.0) when its centre reaches y=1.5, a
+    // distance of 3.5 from y=5. A point ray reaches y=1.0 at 4.0, so the volume hits earlier.
     const RayCastHit swept = physics.sphereCast(0, 5, 0, 0, -1, 0, 20, 0.5f);
     CHECK(swept.hit);
     CHECK(swept.entity().Handle() == box);
@@ -579,16 +578,16 @@ TEST_CASE("physics.scene: ScenePhysics.nearestOverlap picks the nearest overlapp
     play.Step(1);
 
     ScenePhysics physics{&play.scene};
-    // A big sphere at the origin overlaps BOTH; the nearest body origin (x=2) wins.
+    // A big sphere at the origin overlaps both; the nearest body origin (x=2) wins.
     const RayCastHit h = physics.nearestOverlap(0, 0, 0, 8.0f, ~0);
     CHECK(h.hit);
     CHECK(h.entity().Handle() == nearBox);
     CHECK(h.position.x == doctest::Approx(2.0f).epsilon(0.01));
     CHECK(h.distance == doctest::Approx(2.0f).epsilon(0.02));
 
-    // Group mask that excludes group 3 -> nothing (both boxes are group 3).
+    // A group mask that excludes group 3 finds nothing (both boxes are group 3).
     CHECK_FALSE(physics.nearestOverlap(0, 0, 0, 8.0f, ~(1 << 3)).hit);
-    // A small sphere reaching neither -> miss; null scene safe.
+    // A small sphere reaching neither misses; a null scene is safe.
     CHECK_FALSE(physics.nearestOverlap(0, 0, 0, 1.0f, ~0).hit);
     CHECK_FALSE(ScenePhysics{nullptr}.nearestOverlap(0, 0, 0, 8.0f, ~0).hit);
 }
@@ -624,7 +623,7 @@ TEST_CASE("physics.scene: ScenePhysics.overlapSphere returns the FULL set as Arr
     CHECK(all[0].isValid());
     CHECK(all[1].isValid());
 
-    // Group mask excluding group 3 -> empty; a null scene is safe.
+    // A group mask excluding group 3 gives an empty result; a null scene is safe.
     CHECK(physics.overlapSphere(0.0f, 0.0f, 0.0f, 8.0f, ~(1 << 3)).Size() == 0);
     CHECK(ScenePhysics{nullptr}.overlapSphere(0.0f, 0.0f, 0.0f, 8.0f, ~0).Size() == 0);
 }
@@ -633,16 +632,16 @@ TEST_CASE("physics.scene: applyImpulse before the body exists is queued + flushe
 {
     PlayScene play;
     (void)play.AddFloor();
-    play.Start(); // world + floor body exist (the running-game state)
-    // A body added AFTER start builds on the next assembly (Step) - like a prefab spawned mid-play.
+    play.Start(); // the world and floor body exist (the running-game state)
+    // A body added after Start builds on the next assembly (Step), like a prefab spawned mid-play.
     const scene::EntityHandle box = play.AddBox(5.0f);
     play.scene.UpdateTransforms();
-    // Launch it +Z now: the world exists but this body is NOT built yet, so the impulse queues on the
-    // component (PaperKid's spawn-a-paper-and-throw-it-the-same-frame case). Without the queue the
-    // impulse was silently dropped and the object just fell.
+    // Launch it along +Z now: the world exists but this body is not built yet, so the impulse
+    // queues on the component (spawning an object and throwing it in the same frame). Without the
+    // queue the impulse would be dropped and the object would just fall.
     ScenePhysics physics{&play.scene};
     physics.applyImpulse(foundation::script::WrapEntity(&play.scene, box), 0.0f, 0.0f, 5000.0f);
-    play.Step(1); // assembly builds the body + flushes the queued impulse
+    play.Step(1); // assembly builds the body and flushes the queued impulse
     auto* bodies = play.scene.GetSystem<RigidBodyComponentManager>();
     REQUIRE(bodies->Get(box) != nullptr);
     REQUIRE(bodies->Get(box)->body.IsValid());
@@ -651,9 +650,9 @@ TEST_CASE("physics.scene: applyImpulse before the body exists is queued + flushe
 
 TEST_CASE("physics.scene: the impulse queue is RUN-scoped and cannot accumulate unbounded")
 {
-    // The queue must not survive Stop->Play (an unexplained kick at the next Play), must not
-    // survive deactivation (re-enable would launch the accumulated sum), and must not grow
-    // forever on a body whose build fails. All three clear.
+    // The queue must not survive Stop then Play (an unexplained kick at the next Play), must not
+    // survive deactivation (re-enabling would launch the accumulated sum), and must not grow
+    // forever on a body whose build fails. All three clear it.
     PlayScene play;
     (void)play.AddFloor();
     const scene::EntityHandle box = play.AddBox(5.0f);
@@ -675,7 +674,7 @@ TEST_CASE("physics.scene: the impulse queue is RUN-scoped and cannot accumulate 
     const scene::EntityHandle box2 = play2.AddBox(2.0f);
     play2.Start();
     play2.scene.SetActive(box2, false);
-    play2.Step(1); // body destroyed (+ queue cleared at the destroy site)
+    play2.Step(1); // body destroyed, and the queue cleared where it is destroyed
     ScenePhysics physics2{&play2.scene};
     for (int i = 0; i < 60; ++i) // a script spamming applyImpulse on a disabled entity
     {
@@ -689,7 +688,7 @@ TEST_CASE("physics.scene: the impulse queue is RUN-scoped and cannot accumulate 
     play2.Step(1); // activation edge: body builds; no accumulated launch
     REQUIRE(bodies2->Get(box2)->body.IsValid());
     CHECK(play2.physics->World()->LinearVelocity(bodies2->Get(box2)->body).z <
-          1.0f); // NOT the 60x5000 launch
+          1.0f); // not the 60x5000 launch
 }
 
 TEST_CASE("physics.scene: setVelocity sets a body moving now, or as soon as it is built")
@@ -749,8 +748,8 @@ TEST_CASE("physics.scene: setForce holds a force on the body every step until re
 
 TEST_CASE("physics.scene: shape queries reject non-positive sizes as a clean miss")
 {
-    // Query dimensions come straight off the script surface; radius <= 0 (or NaN)
-    // must be a no-hit, not a Jolt debug assert / a garbage broadphase AABB.
+    // Query dimensions come straight off the script surface; a radius <= 0 (or NaN) must be a
+    // no-hit, not a Jolt debug assert or a garbage broadphase AABB.
     PlayScene play;
     play.AddFloor();
     play.AddBox(0.5f);
@@ -772,14 +771,14 @@ TEST_CASE("physics.scene: shape queries reject non-positive sizes as a clean mis
     const usize first = out.Size();
     CHECK(first > 0u);
     play.physics->World()->ShapeOverlap(shape, Float3{500, 500, 500}, Quaternion::Identity, out);
-    CHECK(out.Size() == 0u); // FILLED (cleared), not appended onto the first query's hits
+    CHECK(out.Size() == 0u); // filled (cleared), not appended onto the first query's hits
 }
 
 TEST_CASE("physics.scene: ScenePhysics is in the BEHAVIOR-prelude facade-name list (not just main)")
 {
-    RegisterPhysicsScriptFacade(); // registers the type AND its behavior-prelude facade name
+    RegisterPhysicsScriptFacade(); // registers the type and its behavior-prelude facade name
 
-    // A behavior/Level prelude binds the built-ins + ExtraFacadeNames, so the scene-physics handle
+    // A behavior or Level prelude binds the built-ins and ExtraFacadeNames, so the scene-physics handle
     // is reachable from a component behavior (or a Level) only if its name is in that list.
     bool inPrelude = false;
     for (const StringView facade : foundation::script::ExtraFacadeNames())
@@ -792,9 +791,9 @@ TEST_CASE("physics.scene: ScenePhysics is in the BEHAVIOR-prelude facade-name li
 TEST_CASE(
     "physics.scene: bodies build from authored positions even without a prior UpdateTransforms")
 {
-    // Regression: Scene::Start does NOT refresh world matrices; if the system builds from
-    // never-updated (Identity) matrices, every body spawns at the origin interpenetrating
-    // and depenetration blasts the stack apart (the PhysicsPlayground startup bug).
+    // Scene::Start does not refresh world matrices. If the system built from never-updated
+    // (identity) matrices, every body would spawn interpenetrating at the origin and
+    // depenetration would blast the stack apart.
     PlayScene play;
     play.AddFloor();
     scene::EntityHandle left = play.AddBox(0.5f);
@@ -802,7 +801,7 @@ TEST_CASE(
     play.scene.SetLocalPosition(left, Float3{-3.0f, 0.5f, 0.0f});
     play.scene.SetLocalPosition(right, Float3{3.0f, 0.5f, 0.0f});
 
-    // Deliberately NO UpdateTransforms before Start - the system must self-refresh.
+    // No UpdateTransforms before Start: the system must refresh them itself.
     play.scene.Start();
     play.scene.SetSimulationEnabled(true);
     play.Step(60);
@@ -823,7 +822,7 @@ TEST_CASE("physics.scene: a motorized hinge joint spins a door to the world")
         RigidBodyComponent& body = play.scene.GetSystem<RigidBodyComponentManager>()->Add(door);
         body.halfExtents = Float3{1.0f, 1.0f, 0.05f};
         JointComponent& joint = play.scene.GetSystem<JointComponentManager>()->Add(door);
-        joint.kind = JointKind::Hinge; // no ancestor body -> world attachment
+        joint.kind = JointKind::Hinge; // no ancestor body: a world attachment
         joint.localAxis = Float3{0.0f, 1.0f, 0.0f};
         joint.motorEnabled = true;
         joint.motorTargetVelocity = 3.0f;
@@ -840,10 +839,9 @@ TEST_CASE("physics.scene: a motorized hinge joint spins a door to the world")
     CHECK((rotation.w > 0 ? rotation.w : -rotation.w) < 0.99f);
 }
 
-// Investigation for smoketest-fixes #6 ("editor joints didn't work"): the engine path spins fine
-// (test above). This pins the SETUP TRAP - enabling the motor WITHOUT a target velocity holds the
-// hinge at 0 rad/s (a motor actively holding still), which reads as "the joint does nothing". The
-// exact working recipe for scenario (a) is: kind=Hinge, motorEnabled=true, AND motorTargetVelocity>0.
+// A setup trap: enabling the motor without a target velocity holds the hinge at 0 rad/s (a motor
+// actively holding still), which reads as "the joint does nothing". A spinning hinge needs
+// kind=Hinge, motorEnabled=true and motorTargetVelocity > 0.
 TEST_CASE("physics.scene: a hinge motor with motorTargetVelocity 0 holds still (the #6 setup trap)")
 {
     PlayScene play;
@@ -853,24 +851,24 @@ TEST_CASE("physics.scene: a hinge motor with motorTargetVelocity 0 holds still (
     RigidBodyComponent& body = play.scene.GetSystem<RigidBodyComponentManager>()->Add(door);
     body.halfExtents = Float3{1.0f, 1.0f, 0.05f};
     JointComponent& joint = play.scene.GetSystem<JointComponentManager>()->Add(door);
-    joint.kind = JointKind::Hinge; // no ancestor -> world attachment
+    joint.kind = JointKind::Hinge; // no ancestor: a world attachment
     joint.motorEnabled = true;     // ...but motorTargetVelocity stays at its 0 default
     play.Start();
     play.Step(120);
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
 
-    // Enabled-but-zero motor -> essentially no rotation (contrast the spinning test above).
+    // An enabled motor with zero target velocity gives essentially no rotation.
     const Quaternion rotation = play.scene.GetLocalTransform(door).rotation;
     CHECK((rotation.w > 0 ? rotation.w : -rotation.w) > 0.999f); // still ~identity
 
-    // Set a target velocity and it spins (the fix is a non-zero motorTargetVelocity).
+    // With a non-zero target velocity it spins.
     joint.motorTargetVelocity = 3.0f;
     play.Step(120);
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
     const Quaternion spun = play.scene.GetLocalTransform(door).rotation;
-    CHECK((spun.w > 0 ? spun.w : -spun.w) < 0.99f); // now meaningfully rotated
+    CHECK((spun.w > 0 ? spun.w : -spun.w) < 0.99f); // meaningfully rotated
 }
 
 TEST_CASE("physics.scene: nil-target joints attach to the nearest ancestor body; guid targets bind "
@@ -880,7 +878,7 @@ TEST_CASE("physics.scene: nil-target joints attach to the nearest ancestor body;
     play.scene.AddSystem<JointComponentManager>();
     play.AddFloor();
 
-    // anchor (static, elevated) > bob (dynamic child on a distance rope, nil target).
+    // anchor (static, elevated), with bob as its child (dynamic, on a distance rope, nil target).
     scene::EntityHandle anchor = play.scene.CreateEntity(u8"anchor");
     play.scene.SetLocalPosition(anchor, Float3{0.0f, 6.0f, 0.0f});
     {
@@ -897,7 +895,7 @@ TEST_CASE("physics.scene: nil-target joints attach to the nearest ancestor body;
         body.shape = ShapeKind::Sphere;
         body.radius = 0.25f;
         JointComponent& joint = play.scene.GetSystem<JointComponentManager>()->Add(bob);
-        joint.kind = JointKind::Distance; // nil target -> ancestor body
+        joint.kind = JointKind::Distance; // nil target: the ancestor body
         joint.maxDistance = 2.0f;
         joint.minDistance = 0.0f;
     }
@@ -918,17 +916,17 @@ TEST_CASE("physics.scene: nil-target joints attach to the nearest ancestor body;
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
 
-    // The bob hangs on the rope 2 below the anchor - it did NOT fall to the floor.
+    // The bob hangs on the rope 2 below the anchor; it did not fall to the floor.
     CHECK(play.scene.GetWorldPosition(bob).y == doctest::Approx(4.0f).epsilon(0.05));
 
-    // The fixed pair stays welded: push LEFT, RIGHT follows at the same offset.
+    // The fixed pair stays welded: push left, and right follows at the same offset.
     RigidBodyComponent* leftBody = play.scene.GetSystem<RigidBodyComponentManager>()->Get(left);
     play.physics->World()->AddImpulse(leftBody->body, Float3{0.0f, 0.0f, 4000.0f});
     play.Step(60);
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
-    // The welded pair may rotate as one rigid unit from the off-center push - the
-    // invariant is the CENTER DISTANCE, not per-axis offsets.
+    // The welded pair may rotate as one rigid unit from the off-center push, so the
+    // invariant is the center distance, not per-axis offsets.
     const Float3 a = play.scene.GetWorldPosition(left);
     const Float3 b = play.scene.GetWorldPosition(right);
     const f32 distance = Length(Float3{b.x - a.x, b.y - a.y, b.z - a.z});
@@ -974,8 +972,8 @@ TEST_CASE("physics.scene: the character component walks, jumps, and lands (inter
     CHECK(play.scene.GetWorldPosition(hero).y == doctest::Approx(0.9f).epsilon(0.03));
 }
 
-// Sedulous 86b1dd31: a launch sets the vertical speed in the air, where a jump waits for the
-// ground: a falling character launched mid-air goes back up, then lands as usual.
+// A launch sets the vertical speed in the air, where a jump waits for the ground: a falling
+// character launched mid-air goes back up, then lands as usual.
 TEST_CASE("physics.scene: a launch works in the air, where a jump waits for the ground")
 {
     PlayScene play;
@@ -1115,14 +1113,14 @@ TEST_CASE("physics.scene: CharacterComponent.setPosition teleports the character
     character.moveVelocity = Float3{3.0f, 0.0f, 0.0f};
     play.Step(5);
     character.setPosition(8.0f, 3.0f, -4.0f);
-    play.Step(1); // the fixed step consumes the request: snap + zero velocity + skip integration
+    play.Step(1); // the fixed step consumes the request: snap, zero velocity, skip integration
     CHECK(character.teleportPending == false);
     CHECK(character.moveVelocity.x == doctest::Approx(0.0f));
     CHECK(character.currPosition.x == doctest::Approx(8.0f).epsilon(0.001));
     CHECK(character.currPosition.z == doctest::Approx(-4.0f).epsilon(0.001));
     CHECK(character.prevPosition.x == doctest::Approx(8.0f).epsilon(0.001)); // snap: prev == curr
 
-    // From y=3 it falls and settles at the teleported x/z (no horizontal drift - momentum dropped).
+    // From y=3 it falls and settles at the teleported x/z (no horizontal drift: momentum dropped).
     play.Step(90);
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
@@ -1160,9 +1158,8 @@ TEST_CASE("physics.scene: a strong character shoves a dynamic crate (maxStrength
 
 // A CharacterComponent walking into a trigger raises TriggerEnter, and walking out TriggerExit.
 // A CharacterVirtual is a swept capsule, not a body in the solver, so the world's contact listener
-// never saw it; the world now tests the capsule against triggers after each sweep and raises the
-// events itself (Lamplight's checkpoints are triggers the thief walks into). This test pinned the
-// gap until then.
+// never sees it; the world tests the capsule against triggers after each sweep and raises the
+// events itself (a checkpoint a player walks into is such a trigger).
 TEST_CASE("physics.scene: a CharacterComponent walking into a trigger raises TriggerEnter, and out of it TriggerExit")
 {
     PlayScene play;
@@ -1213,9 +1210,9 @@ TEST_CASE("physics.scene: a CharacterComponent walking into a trigger raises Tri
     CHECK(enteredAt < 2.3f);
 }
 
-// ---- the editor Simulate cycle (regression: stop hung + OOMed the editor) ----
-// Capture -> Start -> frames -> Stop -> Restore -> frames, twice, on the real
-// subsystem stack (SceneSubsystem drives per-scene fixed stepping like the editor).
+// ---- the editor Simulate cycle (Stop must not hang or exhaust memory) ----
+// Capture, Start, frames, Stop, Restore, frames, twice, on the real subsystem stack
+// (SceneSubsystem drives per-scene fixed stepping as the editor does).
 
 import foundation.runtime;
 import engine.scene;
@@ -1291,19 +1288,19 @@ TEST_CASE("physics.active: an entity saved/started INACTIVE never gets a body; a
     PlayScene play;
     (void)play.AddFloor();
     const scene::EntityHandle box = play.AddBox(5.0f);
-    play.scene.SetActive(box, false); // inactive BEFORE Start = the scene-starts-inactive case
+    play.scene.SetActive(box, false); // inactive before Start: the scene-starts-inactive case
     play.Start();
 
     REQUIRE(play.physics->World() != nullptr);
     CHECK(play.physics->World()->BodyCount() == 1u); // floor only
     CHECK_FALSE(play.scene.GetSystem<RigidBodyComponentManager>()->Get(box)->body.IsValid());
 
-    play.Step(60); // it does not fall - there is nothing in the world to fall
+    play.Step(60); // it does not fall: there is nothing in the world to fall
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
     CHECK(play.scene.GetWorldPosition(box).y == doctest::Approx(5.0f));
 
-    play.scene.SetActive(box, true); // activation edge -> the reconcile builds the body
+    play.scene.SetActive(box, true); // the activation edge: the reconcile builds the body
     play.Step(240);
     CHECK(play.physics->World()->BodyCount() == 2u);
     play.physics->ApplyInterpolation(1.0f);
@@ -1327,14 +1324,14 @@ TEST_CASE("physics.active: runtime toggle - deactivate freezes + leaves the worl
 
     play.scene.SetActive(box, false);
     play.Step(60);
-    CHECK(play.physics->World()->BodyCount() == 1u); // the body LEFT the world (Jolt steps
-    CHECK_FALSE(                                     // everything it holds - skipping the
+    CHECK(play.physics->World()->BodyCount() == 1u); // the body left the world (Jolt steps
+    CHECK_FALSE(                                     // everything it holds, so skipping the
         play.scene.GetSystem<RigidBodyComponentManager>()->Get(box)->body.IsValid()); // sync is not enough)
     play.physics->ApplyInterpolation(1.0f);
     play.scene.UpdateTransforms();
     CHECK(play.scene.GetWorldPosition(box).y == doctest::Approx(midFall).epsilon(0.01)); // frozen
 
-    play.scene.SetActive(box, true); // re-created at the CURRENT pose, momentum cleared (v1)
+    play.scene.SetActive(box, true); // re-created at the current pose, momentum cleared
     play.Step(240);
     CHECK(play.physics->World()->BodyCount() == 2u);
     play.physics->ApplyInterpolation(1.0f);
@@ -1359,15 +1356,15 @@ TEST_CASE("physics.active: a joint drops when its explicit target deactivates an
     play.Step(1);
     REQUIRE(play.scene.GetSystem<JointComponentManager>()->Get(right)->joint.IsValid());
 
-    play.scene.SetActive(left, false); // the TARGET deactivates; `right` stays active
+    play.scene.SetActive(left, false); // the target deactivates; `right` stays active
     play.Step(1);
     CHECK_FALSE(play.scene.GetSystem<JointComponentManager>()->Get(right)->joint.IsValid());
     CHECK(play.scene.GetSystem<RigidBodyComponentManager>()->Get(right)->body.IsValid());
 
-    play.scene.SetActive(left, true); // target returns -> the joint rebuilds
-    // TWO steps: joints reconcile BEFORE bodies (teardown dependency order), so the
-    // reactivation tick recreates the BODY and the following tick rebuilds the joint
-    // (the documented one-tick silent-retry).
+    play.scene.SetActive(left, true); // the target returns, so the joint rebuilds
+    // Two steps: joints reconcile before bodies (teardown dependency order), so the
+    // reactivation tick recreates the body and the following tick rebuilds the joint
+    // (a one-tick silent retry).
     play.Step(2);
     CHECK(play.scene.GetSystem<JointComponentManager>()->Get(right)->joint.IsValid());
 }
@@ -1423,7 +1420,7 @@ TEST_CASE("physics.scene: static geometry is the static, solid bodies, compounds
 
 TEST_CASE("physics.scene: the scene ray query finds solid ground and passes through a trigger")
 {
-    // What foot IK asks (inverse-kinematics.md P3): the ground under a foot. A checkpoint trigger
+    // What foot IK asks: the ground under a foot. A checkpoint trigger
     // standing on the floor is not a floor.
     PlayScene play;
     (void)play.AddFloor(); // top at y = 0
@@ -1454,7 +1451,7 @@ TEST_CASE("physics.scene: the scene ray query finds solid ground and passes thro
     CHECK(raw.position.y == doctest::Approx(1.0f).epsilon(1e-3));
 }
 
-// ---- static capsules from a source (Specs/vegetation-colliders.md) ----
+// ---- static capsules from a source ----
 
 namespace
 {

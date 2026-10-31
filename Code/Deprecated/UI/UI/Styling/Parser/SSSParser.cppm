@@ -3,23 +3,17 @@
 
 // UI - :sss_parser partition
 //
-// Parses .sss stylesheet text into a StyleSheet (used internally by StyleSheetLoader). Ported from
-// Sedulous.UI/src/Styling/Parser/SSSParser.bf, with DrawableFactoryRegistry
-// (Sedulous.UI/src/Styling/Parser/DrawableFactoryRegistry.bf) MERGED into this partition: the
-// factories intimately use SSSParser and SSSParser::ParseDrawableValue calls the registry, a mutual
-// dependency C++ module partitions cannot express as two files.
+// Parses .sss stylesheet text into a StyleSheet (used internally by StyleSheetLoader).
+// DrawableFactoryRegistry shares this partition: the factories use SSSParser and
+// SSSParser::ParseDrawableValue calls the registry, a mutual dependency that two module partitions
+// cannot express.
 //
-// Divergences (language):
-//  - Beef delegate `FactoryFn` -> a plain function pointer (the built-in factories capture nothing);
-//    the static Dictionary -> a function-local static HashMap.
-//  - Manual Beef refcounting (AddRef before adding a drawable to a container) disappears: drawables
-//    are RefPtr, so sharing between the sheet's owned list and a container is automatic.
-//  - The @import merge (Beef [Friend] mRules/mOwnedDrawables move) -> StyleSheet::MergeFrom.
-//  - ParseProperty hoists the drawable/string cases out of ParseStyleValue (our StyleValue cannot
-//    hand back an owning RefPtr<Drawable>); behavior is identical to Sedulous.
-//  - ApplyInlineStyle (for `style="..."` markup attributes) is declared here and defined in the impl
-//    unit Styling/Parser/SSSParserImpl.cpp (its body touches the View cluster). ParseDeclarations parses
-//    a bare declaration body into an existing rule.
+// Factories are plain function pointers, since the built-in ones capture nothing. Drawables are
+// RefPtr, so the sheet's owned list and a container share them without manual reference counting. An
+// @import merges into the sheet through StyleSheet::MergeFrom. ParseProperty handles drawable and
+// string values itself, because a StyleValue cannot hand back an owning RefPtr<Drawable>.
+// ApplyInlineStyle (for `style="..."` markup attributes) is defined in the implementation unit
+// Styling/Parser/SSSParserImpl.cpp, since its body touches the View cluster.
 
 module;
 #include "Core/Prelude.h"
@@ -65,7 +59,7 @@ export namespace foundation::ui
     class View; // for SSSParser::ApplyInlineStyle (body in Styling/Parser/SSSParserImpl.cpp)
 
     /// Registry of drawable factory functions invocable from .sss stylesheets. User-extensible via
-    /// Register(). Factories are non-capturing, so a plain function pointer replaces Beef's delegate.
+    /// Register(). Factories capture nothing, so each is a plain function pointer.
     struct DrawableFactoryRegistry
     {
         using FactoryFn = RefPtr<Drawable> (*)(SSSParser&, StyleSheet&);
@@ -123,8 +117,8 @@ export namespace foundation::ui
 
         /// Parse a `style="..."` markup attribute and apply its declared properties to `view`'s inline
         /// StyleSheet. Drawable values are owned by the inline sheet (released when the view dies). Theme
-        /// variables ($name) and @-rules are not supported - inline-style values must be literal. Body in
-        /// the impl unit (touches the View cluster).
+        /// variables ($name) and @-rules are not supported: inline-style values must be literal. The body
+        /// is in the implementation unit, since it touches the View cluster.
         static void ApplyInlineStyle(View* view, StringView body);
 
         // === Value parsing (public for DrawableFactoryRegistry) ===
@@ -240,7 +234,7 @@ export namespace foundation::ui
             return 0.0f;
         }
 
-        /// Parse a drawable value: factory call or color literal -> ColorDrawable.
+        /// Parse a drawable value: a factory call, or a color literal that becomes a ColorDrawable.
         RefPtr<Drawable> ParseDrawableValue(StyleSheet& sheet)
         {
             if (Peek().Kind == TokenKind::Ident)
@@ -471,7 +465,7 @@ export namespace foundation::ui
         void ParsePaletteDirective()
         {
             // @palette name { ... }  /  @palette name extends parent { ... }
-            ConsumeIdent(); // palette name (for future multi-palette support)
+            ConsumeIdent(); // palette name (read but unused: there is one palette)
 
             if (Peek().Kind == TokenKind::Extends)
             {
@@ -493,7 +487,7 @@ export namespace foundation::ui
 
         void ParseIconDirective()
         {
-            // @icon name "path"; - registers SVG by loading from file via resource provider.
+            // @icon name "path"; registers an SVG loaded from a file through the resource provider.
             const StringView name = ConsumeIdent();
             const StringView path = ConsumeString();
             MatchSemicolon();
@@ -586,7 +580,7 @@ export namespace foundation::ui
         }
 
         /// One compound of a selector chain: `[Type][#id][.class]*[:pseudo-class]*`. The
-        /// pseudo-element (`::part[:state]*`) is only read for the SUBJECT (`allowPseudoElement`).
+        /// pseudo-element (`::part[:state]*`) is only read for the subject (`allowPseudoElement`).
         void ParseCompound(SelectorCompound& compound, Optional<String>* pseudoElement,
                            ControlState& pseudoElementState, bool& hasPseudoElementState)
         {
@@ -606,7 +600,7 @@ export namespace foundation::ui
             bool hasState = false;
             for (;;)
             {
-                // A part joins this compound when it TOUCHES the previous token (no
+                // A part joins this compound when it touches the previous token (no
                 // whitespace) or starts the compound; whitespace before it is the descendant
                 // combinator, handled by the caller.
                 const bool joins = !consumedAny || TouchesPrevious();
@@ -662,7 +656,7 @@ export namespace foundation::ui
             RefPtr<StyleRule> rule = MakeRef<StyleRule>((*m_allocator));
 
             Array<SelectorCompound> compounds;
-            Array<bool> childCombinator; // [i] = compound i is the DIRECT parent of i+1
+            Array<bool> childCombinator; // [i]: compound i is the direct parent of i+1
             Optional<String> pseudoElement;
             ControlState partState = ControlState::Normal;
             bool hasPartState = false;
@@ -725,7 +719,7 @@ export namespace foundation::ui
             const StringView propName = ConsumeIdent();
             Expect(TokenKind::Colon);
 
-            // `--name: value` - a custom property, typed by its literal.
+            // `--name: value`: a custom property, typed by its literal.
             if (propName.Size() > 2 && propName[0] == u8'-' && propName[1] == u8'-')
             {
                 rule.SetCustom(propName, ParseCustomValue());
@@ -733,8 +727,8 @@ export namespace foundation::ui
                 return;
             }
 
-            // `background-color` stores Background as a raw COLOR (CSS-style), for controls that
-            // resolve it via ResolveStyleColor (ToastCard) - `background:` always builds a drawable.
+            // `background-color` stores Background as a raw color (as CSS does), for controls that
+            // resolve it through ResolveStyleColor (ToastCard); `background:` always builds a drawable.
             if (propName == StringView(u8"background-color"))
             {
                 rule.Set(StyleProperty::Background, ParseColorValue());
@@ -745,13 +739,13 @@ export namespace foundation::ui
             const Optional<StyleProperty> prop = ResolvePropertyName(propName);
             if (!prop.HasValue())
             {
-                // Unknown property - skip to semicolon
+                // Unknown property: skip to the semicolon
                 SkipUntilSemicolonOrBrace();
                 return;
             }
             const StyleProperty p = prop.Value();
 
-            // The cascade keywords and variable references apply to EVERY property.
+            // The cascade keywords and variable references apply to every property.
             if (Peek().Kind == TokenKind::Ident)
             {
                 const StringView word = Peek().Text;
@@ -787,7 +781,8 @@ export namespace foundation::ui
                 return;
             }
 
-            // Drawable properties own a RefPtr directly (hoisted out of ParseStyleValue).
+            // Drawable properties own a RefPtr directly, so they are handled here rather than in
+            // ParseStyleValue.
             if (IsDrawableProperty(p))
             {
                 RefPtr<Drawable> d = ParseDrawableValue(*m_sheet);
@@ -896,7 +891,7 @@ export namespace foundation::ui
         }
 
         /// One length term: a number with an optional unit suffix (px/dp/pt/em) or a trailing
-        /// `%`. A bare/px/dp/pt number is an ABSOLUTE length; em and % are relative.
+        /// `%`. A bare, px, dp or pt number is an absolute length; em and % are relative.
         Unit ParseLengthTerm()
         {
             if (Peek().Kind != TokenKind::Number)
@@ -910,8 +905,8 @@ export namespace foundation::ui
             return StyleValueParser::ParseUnit(tok.NumericValue, tok.UnitSuffix);
         }
 
-        /// A number stays a Float (dp; px/pt convert at resolve as before) unless it needs a
-        /// reference - em, %, or a calc() - in which case it becomes a Length.
+        /// A number stays a Float (dp; px and pt convert at resolve time) unless it needs a
+        /// reference (em, %, or a calc()), in which case it becomes a Length.
         StyleValue ParseLengthOrFloat()
         {
             if (Peek().Kind == TokenKind::Ident && Peek().Text == StringView(u8"calc"))
@@ -991,14 +986,14 @@ export namespace foundation::ui
                     return StyleValue::BoolVal(Consume().Text == StringView(u8"true"));
                 return StyleValue::None();
             }
-            // Default: a number (Float) or a relative length (%, em, calc -> Length).
+            // Default: a number (Float), or a relative length (%, em or calc, which become a Length).
             return ParseLengthOrFloat();
         }
 
         /// `transition: none | <entry> {, <entry>}` with `<entry> = <property> | all,
         /// <duration> [<easing>] [<delay>]`. Times take `ms` or `s` (a bare number is ms);
         /// easings: linear, ease, ease-in, ease-out, ease-in-out. An unknown property name
-        /// drops its entry; `none` yields an EMPTY list (which still overrides a UA `all`).
+        /// drops its entry; `none` yields an empty list, which still overrides a UA `all`.
         StyleValue ParseTransitionValue()
         {
             RefPtr<TransitionList> list = MakeRef<TransitionList>(*m_allocator);
@@ -1491,9 +1486,9 @@ export namespace foundation::ui
                 MatchComma();
                 result = ColorFunctions::Mix(a, b, ParseFloatValue());
             }
-            // State derivations: the SAME Palette::Compute* math
-            // the C++ themes use, so sheets keep identical state colors - including
-            // disabled()'s luminance desaturation, which lighten/darken cannot express.
+            // State derivations use the same Palette::Compute* math as the C++ themes, so sheets
+            // keep identical state colors, including disabled()'s luminance desaturation, which
+            // lighten and darken cannot express.
             else if (name == StringView(u8"hover"))
             {
                 result = Palette::ComputeHover(ParseColorValue());
@@ -1518,7 +1513,7 @@ export namespace foundation::ui
         }
 
 
-        // === Property name resolution (all ~48 properties) ===
+        // === Property name resolution ===
 
         [[nodiscard]] static Optional<StyleProperty> ResolvePropertyName(StringView name)
         {
@@ -1582,7 +1577,7 @@ export namespace foundation::ui
             if (name == StringView(u8"word-wrap"))
                 return StyleProperty::WordWrap;
 
-            // P2 box model
+            // Box model
             if (name == StringView(u8"box-shadow"))
                 return StyleProperty::BoxShadow;
             if (name == StringView(u8"min-width"))
@@ -1614,11 +1609,11 @@ export namespace foundation::ui
             if (name == StringView(u8"align-self"))
                 return StyleProperty::AlignSelf;
 
-            // P3 transitions
+            // Transitions
             if (name == StringView(u8"transition"))
                 return StyleProperty::Transition;
 
-            // P4 wrap / gap / ellipsis
+            // Wrap, gap and ellipsis
             if (name == StringView(u8"flex-basis"))
                 return StyleProperty::FlexBasis;
             if (name == StringView(u8"text-overflow"))
@@ -1823,13 +1818,14 @@ export namespace foundation::ui
 
     namespace detail
     {
-        // NON-inline (UiRegistryStateImpl.cpp): shared-libraries.md rendezvous rule.
+        // Defined out of line in UiRegistryStateImpl.cpp: an inline function-local static would
+        // give each shared library its own map.
         [[nodiscard]] HashMap<String, DrawableFactoryRegistry::FactoryFn>& FactoryMap();
 
-        // The RegisterBuiltins run-once flag - same rule: an inline function-local flag
-        // would let one library's registration satisfy only its own guard. And its lock: the
-        // UI document cook registers per build on job workers, and two of them past a plain
-        // flag rehashed the factory map under each other (an orphaned bucket array under ASAN).
+        // The RegisterBuiltins run-once flag, out of line for the same reason: an inline
+        // function-local flag would let one library's registration satisfy only its own guard.
+        // The lock guards it because the UI document cook registers on job workers, and two
+        // workers past an unguarded flag would rehash the factory map under each other.
         [[nodiscard]] bool& DrawableBuiltinsRegisteredFlag();
         [[nodiscard]] Mutex& DrawableRegistrationLock();
 
@@ -1886,9 +1882,9 @@ export namespace foundation::ui
 
     inline void DrawableFactoryRegistry::RegisterBuiltins()
     {
-        // Idempotent AND thread-safe: the factory map is a global static, so register once even if
+        // Idempotent and thread-safe: the factory map is a global static, so register once even if
         // called from several entry points (StyleSheetLoader::Load and SSSParser::ApplyInlineStyle
-        // both ensure this) or several cook workers at once - a second caller waits for the first
+        // both call this) or from several cook workers at once. A second caller waits for the first
         // registration to complete rather than reading a half-built map.
         ScopedLock lock(detail::DrawableRegistrationLock());
         bool& registered = detail::DrawableBuiltinsRegisteredFlag();
@@ -1898,7 +1894,7 @@ export namespace foundation::ui
         }
         registered = true;
 
-        // color($color) -> ColorDrawable
+        // color($color) makes a ColorDrawable
         Register(u8"color",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -1910,7 +1906,7 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // rounded-rect($color, radius=6, border=$color, border-width=1) -> RoundedRectDrawable.
+        // rounded-rect($color, radius=6, border=$color, border-width=1) makes a RoundedRectDrawable.
         // border-width takes 1, 2 or 4 values in CSS's order (top, right, bottom, left), and
         // border-top=, border-right=, border-bottom= and border-left= colour one side over border=.
         Register(u8"rounded-rect",
@@ -1931,7 +1927,7 @@ export namespace foundation::ui
                          if (kw == StringView(u8"radius"))
                          {
                              parser.ConsumeKeywordArg();
-                             radii = parser.ParseCornerRadiiValue(); // 1 or 4 values (P0b)
+                             radii = parser.ParseCornerRadiiValue(); // 1 or 4 values
                          }
                          else if (kw == StringView(u8"border-width"))
                          {
@@ -1974,7 +1970,7 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // gradient(direction, color1, color2[, radius=r]) -> GradientDrawable
+        // gradient(direction, color1, color2[, radius=r]) makes a GradientDrawable
         Register(u8"gradient",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2019,7 +2015,7 @@ export namespace foundation::ui
                  });
 
         // linear-gradient([<angle> | to <side> [<side>],] <color> [<offset>%], ...[, radius=r]),
-        // as CSS writes it (180deg, down, when no direction is given) -> GradientDrawable
+        // as CSS writes it (180deg, down, when no direction is given), makes a GradientDrawable
         Register(u8"linear-gradient",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2064,7 +2060,7 @@ export namespace foundation::ui
                  });
 
         // radial-gradient(<color> [<offset>%], ...[, radius=r]): from the centre out to the farthest
-        // corner, a circle -> GradientDrawable
+        // corner, a circle, makes a GradientDrawable
         Register(u8"radial-gradient",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2076,7 +2072,7 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // state-list(normal=d, hover=d, pressed=d, ...) -> StateListDrawable
+        // state-list(normal=d, hover=d, pressed=d, ...) makes a StateListDrawable
         Register(u8"state-list",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2101,7 +2097,7 @@ export namespace foundation::ui
                      return sl;
                  });
 
-        // state-colors($base) -> StateListDrawable via Palette.CreateStateColors
+        // state-colors($base) makes a StateListDrawable through Palette::CreateStateColors
         Register(u8"state-colors",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2111,7 +2107,7 @@ export namespace foundation::ui
                      return sl;
                  });
 
-        // state-rounded($base, radius=6) -> StateListDrawable via Palette.CreateStateRounded
+        // state-rounded($base, radius=6) makes a StateListDrawable through Palette::CreateStateRounded
         Register(u8"state-rounded",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2123,7 +2119,7 @@ export namespace foundation::ui
                          if (kw == StringView(u8"radius"))
                          {
                              parser.ConsumeKeywordArg();
-                             radii = parser.ParseCornerRadiiValue(); // 1 or 4 values (P0b)
+                             radii = parser.ParseCornerRadiiValue(); // 1 or 4 values
                          }
                          else
                              radii = parser.ParseCornerRadiiValue();
@@ -2134,7 +2130,7 @@ export namespace foundation::ui
                      return sl;
                  });
 
-        // layer(d1, d2, ...) -> LayerDrawable
+        // layer(d1, d2, ...) makes a LayerDrawable
         Register(u8"layer",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2153,7 +2149,7 @@ export namespace foundation::ui
                      return ld;
                  });
 
-        // inset(drawable, top, right, bottom, left) -> InsetDrawable
+        // inset(drawable, top, right, bottom, left) makes an InsetDrawable
         Register(u8"inset",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2174,7 +2170,7 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // svg(name, tint=$color) -> SVGDrawable
+        // svg(name, tint=$color) makes an SVGDrawable
         Register(u8"svg",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2195,11 +2191,11 @@ export namespace foundation::ui
                      const Optional<StringView> svgText = parser.ResolveSvg(name);
                      if (!svgText.HasValue())
                      {
-                         // Builtin fallback: the 10 chrome glyph
-                         // names resolve through ThemeIconSet - so cooked/runtime themes work
-                         // WITHOUT a host-side name registration (which would otherwise null
-                         // here), and sheets share the pixel-snapped BAKED instances instead
-                         // of fresh live-vector parses.
+                         // Built-in fallback: the chrome glyph names resolve through
+                         // ThemeIconSet, so cooked and runtime themes work without the host
+                         // registering the names (the lookup would otherwise yield null here),
+                         // and sheets share the pixel-snapped baked instances instead of
+                         // parsing the vectors again.
                          if (Optional<ThemeIcon> builtin = ThemeIconFromName(name);
                              builtin.HasValue())
                          {
@@ -2225,8 +2221,8 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // image(name, tint=$color, radius=6) -> ImageDrawable (radius: 1 or 4 values, rounding
-        // the image's corners)
+        // image(name, tint=$color, radius=6) makes an ImageDrawable (radius takes 1 or 4 values
+        // and rounds the image's corners)
         Register(u8"image",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {
@@ -2261,7 +2257,7 @@ export namespace foundation::ui
                      return d;
                  });
 
-        // nine-slice(name, slices, tint=$color) -> NineSliceDrawable
+        // nine-slice(name, slices, tint=$color) makes a NineSliceDrawable
         Register(u8"nine-slice",
                  [](SSSParser& parser, StyleSheet& sheet) -> RefPtr<Drawable>
                  {

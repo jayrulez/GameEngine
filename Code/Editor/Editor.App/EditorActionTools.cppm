@@ -2,14 +2,13 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :mcp_action_tools partition.
 //
-// The MCP bridge over the editor's ACTIONS (Documentation/Specs/editor-gui.md, 5.1, layer 15) -
-// one generic surface for everything a user can do by command: action_list (every declaration
-// with its state over the active page), action_state (one) and action_execute (through the
-// registry, the one funnel). An agent never waits for a human: action_execute runs UNATTENDED -
-// every modal window the action would open is refused by the GUI's dispatcher and answered as
-// cancelled (the accident-preventing answer), and the result names what was suppressed, with the
-// note that the action then most likely did nothing and a dedicated tool or the user is the way
-// forward (ezEngine's contract).
+// The MCP bridge over the editor's actions: one generic surface for everything a user can do by
+// command. action_list lists every declaration with its state over the active page, action_state
+// reports one, and action_execute runs one through the registry. An agent never waits for a
+// human, so action_execute runs unattended: every modal window the action would open is refused by
+// the GUI's dispatcher and answered as cancelled, the answer least likely to cause an accident. The
+// result names what was suppressed and notes that the action then most likely did nothing, so a
+// dedicated tool or the user is the way forward.
 module;
 #include "Core/Prelude.h"
 
@@ -26,8 +25,8 @@ using namespace foundation::core;
 export namespace editor::app
 {
     /// The live editor the action tools see: the registry through the context, and the GUI's
-    /// dispatcher whose modal windows an unattended call refuses (null = nothing to refuse, a
-    /// headless test).
+    /// dispatcher whose modal windows an unattended call refuses (null in a headless test, where
+    /// there is nothing to refuse).
     struct ActionToolSeams
     {
         editor::EditorContext* context = nullptr;
@@ -72,7 +71,7 @@ export namespace editor::app
         Array<String> m_suppressed;
     };
 
-    /// The number of tools RegisterActionTools registers (action_list / action_state /
+    /// The number of tools RegisterActionTools registers (action_list, action_state and
     /// action_execute); a tripwire like kPageToolCount.
     inline constexpr usize kActionToolCount = 3;
 

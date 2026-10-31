@@ -3,15 +3,14 @@
 
 // Engine::Physics - the `engine.physics` module.
 //
-// Scene integration: a PhysicsSceneSystem per scene owns its
-// PhysicsWorld; bodies build from RigidBodyComponents (+ descendant ColliderComponents
-// compounding) at OnSceneStarted and tear down at OnSceneStopped. Per fixed step:
-// kinematic bodies <- scene transforms (MoveKinematic, velocity-correct), the coalesced
-// world step, contact drain, dynamic poses -> the component pose double-buffer. Every
-// RENDER frame the subsystem writes scene transforms as lerp(prev, curr, FixedAlpha()) -
-// the interpolation none of the surveyed engines had. Transform ownership: dynamic =
-// physics owns pos/rot (scene edits ignored mid-sim); kinematic = scene owns; static =
-// immutable while simulating.
+// Scene integration: a PhysicsSceneSystem per scene owns its PhysicsWorld; bodies build from
+// RigidBodyComponents (with descendant ColliderComponents compounding) at OnSceneStarted and tear
+// down at OnSceneStopped. Per fixed step: kinematic bodies follow the scene transforms
+// (MoveKinematic, velocity-correct), then the coalesced world step, the contact drain, and dynamic
+// poses into the component pose double-buffer. Every render frame the subsystem writes scene
+// transforms as lerp(prev, curr, FixedAlpha()). Transform ownership: for a dynamic body physics
+// owns position and rotation (scene edits are ignored mid-simulation); for a kinematic one the
+// scene owns them; a static one is immutable while simulating.
 
 module;
 #include "Core/Prelude.h"
@@ -34,9 +33,9 @@ import foundation.script;
 import foundation.script.facades; // foundation::script::Entity (the raycast/contact hit entity)
 import foundation.physics;
 import foundation.heightfield;
-// NOTE: no render imports HERE - the debug-draw path lives in SubsystemImpl.cpp (a module
-// implementation unit). Keeping heavyweight imports out of the interface matters for
-// GCC's module loader (-fno-module-lazy consumers force-load the whole import graph).
+// No render imports here: the debug-draw path lives in PhysicsSubsystemImpl.cpp (a module
+// implementation unit). Keeping heavyweight imports out of the interface matters for GCC's module
+// loader (-fno-module-lazy consumers force-load the whole import graph).
 
 using namespace foundation::core;
 using namespace foundation::physics;
@@ -48,12 +47,12 @@ export namespace engine::physics
     // Foundation aliases (sibling engine::* namespaces would otherwise shadow these).
     namespace scene = foundation::scene;
 
-    // The body user word carries the owning entity handle. EntityHandle is {u32 index,
-    // u32 generation} = exactly 64 bits and unique BY CONSTRUCTION (the generation rejects
-    // a reused slot), so it packs losslessly - unlike the entity guid's low 64 bits, which
-    // is a lossy projection of the 128-bit guid that two distinct entities can share. This
-    // subsystem is the ONLY place that packs and unpacks the word (the World-level u64 stays
-    // an opaque handle), so the helpers live here.
+    // The body user word carries the owning entity handle. EntityHandle is {u32 index, u32
+    // generation}, exactly 64 bits and unique by construction (the generation rejects a reused
+    // slot), so it packs losslessly, unlike the entity guid's low 64 bits, a lossy projection of
+    // the 128-bit guid that two distinct entities can share. This subsystem is the only place that
+    // packs and unpacks the word (the World-level u64 stays an opaque handle), so the helpers live
+    // here.
     [[nodiscard]] inline u64 PackEntity(scene::EntityHandle handle) noexcept
     {
         return (static_cast<u64>(handle.index) << 32) | static_cast<u64>(handle.generation);
@@ -85,10 +84,10 @@ export namespace engine::physics
     [[nodiscard]] bool DescribeBody(scene::Scene& scene, RigidBodyComponent& c, scene::EntityHandle entity,
                                     BodyDesc& out, Array<Array<f32>>& heightBuffers);
 
-    /// A contact whose bodies have been resolved back to scene entities (invalid handles for
-    /// a side whose body no longer maps to a live entity - e.g. an End event after a body was
-    /// destroyed). Delivered by the physics subsystem to every registered IContactListener at
-    /// the physics tick (a safe top level - never nested inside a script call).
+    /// A contact whose bodies have been resolved back to scene entities (invalid handles for a side
+    /// whose body no longer maps to a live entity, such as an End event after a body was
+    /// destroyed). Delivered by the physics subsystem to every registered IContactListener at the
+    /// physics tick (a safe top level, never nested inside a script call).
     struct EntityContact
     {
         ContactKind kind = ContactKind::Begin;
@@ -100,9 +99,9 @@ export namespace engine::physics
         f32 speed = 0.0f;
     };
 
-    /// A consumer of resolved contacts (the script subsystem implements this to route contacts
-    /// into behavior handlers). Called at the physics tick, once per drained contact per
-    /// registered listener; implementations MUST only enqueue (no re-entrant script calls).
+    /// A consumer of resolved contacts (the script subsystem implements this to route contacts into
+    /// behavior handlers). Called at the physics tick, once per drained contact per registered
+    /// listener; implementations must only enqueue (no re-entrant script calls).
     class IContactListener
     {
     public:
@@ -135,7 +134,7 @@ export namespace engine::physics
 
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
 
-        // Scene-settings seam (edited in the scene inspector, persisted with the scene).
+        // Scene settings (edited in the scene inspector, persisted with the scene).
         [[nodiscard]] const TypeInfo* SettingsType() const noexcept override
         {
             return &TypeOf<PhysicsSceneSettings>();
@@ -155,9 +154,9 @@ export namespace engine::physics
         }
 
 
-        /// The subsystem points this at its listener list (stable address); each drained
-        /// contact batch is resolved to entities and pushed to every listener. Null = no
-        /// dispatch (a bare scene-system harness with no subsystem driving it).
+        /// The subsystem points this at its listener list (stable address); each drained contact
+        /// batch is resolved to entities and pushed to every listener. Null means no dispatch (a
+        /// bare scene-system harness with no subsystem driving it).
         void SetContactListeners(const Array<IContactListener*>* listeners) noexcept
         {
             m_listeners = listeners;
@@ -167,8 +166,8 @@ export namespace engine::physics
 
         void OnSceneStarted() override
         {
-            // Scene::Start guarantees world matrices are current before this fires - bodies
-            // build from the authored layout (never from pre-first-update Identity matrices).
+            // Scene::Start guarantees world matrices are current before this fires, so bodies build
+            // from the authored layout, never from identity matrices before the first update.
             PhysicsWorldSettings settings;
             settings.gravity = m_settings.gravity;
             for (usize i = 0; i < m_settings.groupCollides.Size() && i < kCollisionGroupCount; ++i)
@@ -192,7 +191,7 @@ export namespace engine::physics
                     {
                         c.body = BodyId{};
                         c.simActive = false;
-                        // The queue is RUN-scoped: an impulse queued in the last frame before Stop
+                        // The queue is run-scoped: an impulse queued in the last frame before Stop
                         // must not fire as an unexplained kick at the next Play.
                         c.pendingImpulse = Float3{0, 0, 0};
                         c.hasPendingVelocity = false;
@@ -240,9 +239,9 @@ export namespace engine::physics
 
             RetryStaticCapsules(fixedDeltaTime); // a source still resolving at start, solid once ready
 
-            ReconcileActiveState(); // active edges settle BEFORE this step simulates
+            ReconcileActiveState(); // active edges settle before this step simulates
 
-            // Kinematics follow the SCENE (velocity-correct move toward this step's target).
+            // Kinematics follow the scene (a velocity-correct move toward this step's target).
             bodies->ForEach(
                 [&](RigidBodyComponent& c, scene::EntityHandle e)
                 {
@@ -271,7 +270,7 @@ export namespace engine::physics
                     }
                 });
 
-            // Motor sync: component fields are LIVE (inspector/gameplay edits apply next step).
+            // Motor sync: component fields are live (inspector and gameplay edits apply next step).
             if (auto* joints = scene.GetSystem<JointComponentManager>())
             {
                 joints->ForEach(
@@ -289,14 +288,14 @@ export namespace engine::physics
 
             m_events.Clear();
             m_world->DrainContacts(m_events);
-            // PUSH each drained batch at the physics tick: m_events is cleared every substep,
-            // so a frame with multiple substeps would lose all but the last if listeners only
-            // pulled Events() once per frame. Dispatch here (a safe top level - not nested in
-            // any script call); listeners only enqueue.
+            // Push each drained batch at the physics tick: m_events is cleared every substep, so a
+            // frame with several substeps would lose all but the last if listeners only pulled
+            // Events() once per frame. Dispatch here (a safe top level, not nested in any script
+            // call); listeners only enqueue.
             DispatchContacts();
 
-            // Characters: the standard velocity recipe (grounded = planar move + one-shot
-            // jump; airborne = keep gravity-integrated fall, steer planar), then sweep.
+            // Characters: the standard velocity recipe (grounded: planar move and a one-shot jump;
+            // airborne: keep the gravity-integrated fall, steer planar), then sweep.
             if (auto* characters = scene.GetSystem<CharacterComponentManager>())
             {
                 const Float3 gravity = m_world->Gravity();
@@ -307,9 +306,10 @@ export namespace engine::physics
                         {
                             return;
                         }
-                        // Teleport/respawn (setPosition): snap the CharacterVirtual, drop momentum,
-                        // and skip this step's integration so the snap is exact (interpolation snaps
-                        // too - prev == curr). Ground re-evaluates on the next step.
+                        // Teleport or respawn (setPosition): snap the CharacterVirtual, drop
+                        // momentum, and skip this step's integration so the snap is exact
+                        // (interpolation snaps too: prev == curr). Ground re-evaluates on the next
+                        // step.
                         if (c.teleportPending)
                         {
                             m_world->SetCharacterPosition(c.character, c.teleportTo);
@@ -381,9 +381,9 @@ export namespace engine::physics
                 });
         }
 
-        /// Render-frame interpolation (driven by the subsystem with the engine's fixed
-        /// alpha): dynamic entities' scene transforms = lerp(prev, curr, alpha). Writes
-        /// WORLD poses converted to local against the current parent.
+        /// Render-frame interpolation (driven by the subsystem with the engine's fixed alpha):
+        /// dynamic entities' scene transforms become lerp(prev, curr, alpha). Writes world poses
+        /// converted to local against the current parent.
         void ApplyInterpolation(f32 alpha)
         {
             if (m_world.Get() == nullptr || m_scene == nullptr || !m_scene->SimulationEnabled())
@@ -495,10 +495,10 @@ export namespace engine::physics
                 });
         }
 
-        // One entity's joint build (scene start + reconcile). `logFailures` only on the
-        // scene-start path: the reconcile retries silently (a missing/invalid endpoint there
-        // usually means "target currently inactive", which is a state, not a mistake). A
-        // joint re-created on reactivation anchors at the entity's CURRENT pose (v1).
+        // One entity's joint build (scene start and reconcile). `logFailures` is set only on the
+        // scene-start path: the reconcile retries silently, since a missing or invalid endpoint
+        // there usually means the target is inactive for now, which is a state, not a mistake. A
+        // joint re-created on reactivation anchors at the entity's current pose.
         void CreateJointForEntity(JointComponent& c, scene::EntityHandle e, bool logFailures)
         {
             scene::Scene& scene = *m_scene;
@@ -522,7 +522,7 @@ export namespace engine::physics
                     }
                     if (!own->body.IsValid())
                     {
-                        return; // body pending (inactive at start / failed) - reconcile retries
+                        return; // body pending (inactive at start, or failed); the reconcile retries
                     }
                     BodyId target; // invalid = world attachment
                     if (!c.targetEntity.IsNil())
@@ -542,7 +542,7 @@ export namespace engine::physics
                         }
                         if (!targetBody->body.IsValid())
                         {
-                            return; // target inactive right now - rebuilt when it returns
+                            return; // target inactive right now; rebuilt when it returns
                         }
                         target = targetBody->body;
                     }
@@ -588,14 +588,13 @@ export namespace engine::physics
             }
         }
 
-        // Explicit-target readiness: nil target = world/ancestor attachment (always ready);
-        // otherwise the target entity must resolve, be EFFECTIVELY ACTIVE, and have a live
-        // body. The effective-active term matters because joints reconcile BEFORE bodies:
-        // on the tick a target deactivates its body is still alive during the joint pass -
-        // gating on body validity alone would keep the joint one tick past its dying body
-        // (a Jolt constraint referencing a removed body). Activation is symmetric: the
-        // rebuilt body appears a pass later, so the joint returns on the following tick
-        // (the silent-retry path, as designed).
+        // Explicit-target readiness: a nil target (world or ancestor attachment) is always ready;
+        // otherwise the target entity must resolve, be effectively active, and have a live body.
+        // The effective-active term matters because joints reconcile before bodies: on the tick a
+        // target deactivates, its body is still alive during the joint pass, so gating on body
+        // validity alone would keep the joint one tick past its dying body (a Jolt constraint
+        // referencing a removed body). Activation is symmetric: the rebuilt body appears a pass
+        // later, so the joint returns on the following tick through the silent-retry path.
         [[nodiscard]] bool JointTargetReady(JointComponent& c)
         {
             if (c.targetEntity.IsNil())
@@ -612,25 +611,24 @@ export namespace engine::physics
             return tb != nullptr && tb->body.IsValid();
         }
 
-        // Reconcile the Jolt world against effective-active
-        // EDGES (per-component latch - order-independent, self-healing, immune to the
-        // load-before-components trap). Deactivation destroys the body/character/joint
-        // (Jolt steps everything in its world - merely skipping the sync would NOT stop
-        // it); activation rebuilds from the CURRENT pose with cleared momentum (v1).
+        // Reconcile the Jolt world against effective-active edges (a per-component latch:
+        // independent of order, self-correcting, and unaffected by entities loading before their
+        // components). Deactivation destroys the body, character or joint (Jolt steps everything in
+        // its world, so merely skipping the sync would not stop it); activation rebuilds from the
+        // current pose with cleared momentum.
         void ReconcileActiveState()
         {
             scene::Scene& scene = *m_scene;
-            // JOINTS FIRST (teardown dependency order - the reverse of scene-start's
-            // bodies-then-joints build): a joint referencing an entity whose body dies THIS
-            // reconcile must be destroyed while both bodies are still alive, so the
-            // surviving side gets its release-wake. (The foundation DestroyJoint is also
-            // ID-safe against any ordering since the 2026-08-19 ASAN fix; this order keeps
-            // the semantics right, that fix keeps any order memory-safe.)
+            // Joints first (teardown in dependency order, the reverse of scene start's
+            // bodies-then-joints build): a joint referencing an entity whose body dies in this
+            // reconcile must be destroyed while both bodies are still alive, so the surviving side
+            // gets its release wake. The foundation DestroyJoint is safe by id in any order; this
+            // order keeps the semantics right.
             if (auto* joints = scene.GetSystem<JointComponentManager>())
             {
-                // Joints reconcile on the full want/have compare (not just the own-entity
-                // edge): an ACTIVE entity's joint must also drop when its explicit target
-                // deactivates (that body is gone) and return when the target does.
+                // Joints reconcile on the full want/have compare, not just their own entity's edge:
+                // an active entity's joint must also drop when its explicit target deactivates
+                // (that body is gone) and return when the target does.
                 joints->ForEach(
                     [&](JointComponent& c, scene::EntityHandle e)
                     {
@@ -662,8 +660,8 @@ export namespace engine::physics
                         if (eff == c.simActive)
                         {
                             // A queued impulse lives only until the assembly right after it was
-                            // queued (spawn-then-launch). If the body STILL is not valid here (build
-                            // failed, or the entity is inactive), drop the queue - otherwise a
+                            // queued (spawn, then launch). If the body is still not valid here (the
+                            // build failed, or the entity is inactive), drop the queue; otherwise a
                             // script calling applyImpulse every frame accumulates an unbounded
                             // launch that fires whenever the body finally appears.
                             if (!c.body.IsValid())
@@ -740,8 +738,8 @@ export namespace engine::physics
                 });
         }
 
-        // One entity's CharacterVirtual build (scene start + activation edge; re-creation
-        // starts at the CURRENT pose with cleared momentum - v1 toggle semantics).
+        // One entity's CharacterVirtual build (scene start and the activation edge; a re-created
+        // character starts at the current pose with cleared momentum).
         void CreateCharacterForEntity(CharacterComponent& c, scene::EntityHandle e)
         {
             scene::Scene& scene = *m_scene;
@@ -776,7 +774,7 @@ export namespace engine::physics
 
         // Static content without an entity per piece (a forest's trunks): every system that is an
         // IStaticColliderSource gives its capsules, one static body each in its group, owned by no
-        // entity (Specs/vegetation-colliders.md). A source not ready yet is asked again each step.
+        // entity. A source not ready yet is asked again each step.
         void BuildStaticCapsules()
         {
             m_scene->ForEachSystem(
@@ -864,9 +862,9 @@ export namespace engine::physics
             bodies->ForEach(
                 [&](RigidBodyComponent& c, scene::EntityHandle e)
                 {
-                    // Effectively-inactive entities enter the world with NO body: the
-                    // reconcile pass creates it on the activation edge (a scene that
-                    // STARTS with the entity inactive never simulates it).
+                    // Effectively inactive entities enter the world with no body: the reconcile
+                    // pass creates it on the activation edge (a scene that starts with the entity
+                    // inactive never simulates it).
                     if (!scene.IsEffectivelyActive(e))
                     {
                         c.simActive = false;
@@ -877,9 +875,9 @@ export namespace engine::physics
                 });
         }
 
-        // One entity's body build (shared by scene start + the activation edge). Reads the
-        // entity's CURRENT world transform - a body re-created on reactivation starts from
-        // where the entity is NOW, with zero velocity (documented v1 toggle semantics).
+        // One entity's body build (shared by scene start and the activation edge). Reads the
+        // entity's current world transform: a body re-created on reactivation starts from where the
+        // entity is now, with zero velocity.
         void CreateBodyForEntity(RigidBodyComponent& c, scene::EntityHandle e)
         {
             scene::Scene& scene = *m_scene;
@@ -898,8 +896,9 @@ export namespace engine::physics
                     c.body = m_world->CreateBody(desc);
                     c.prevPosition = c.currPosition = position;
                     c.prevRotation = c.currRotation = rotation;
-                    // Flush an impulse queued before the body existed (spawn-then-launch, e.g. a
-                    // thrown paper): applyImpulse accumulated it on the component; apply it now once.
+                    // Flush an impulse queued before the body existed (spawn, then launch, such as
+                    // a thrown paper): applyImpulse accumulated it on the component; apply it once
+                    // now.
                     if (c.body.IsValid() &&
                         (c.pendingImpulse.x != 0.0f || c.pendingImpulse.y != 0.0f ||
                          c.pendingImpulse.z != 0.0f))
@@ -921,10 +920,9 @@ export namespace engine::physics
             }
         }
 
-        // Resolve every drained contact's packed user words back to live entities and push
-        // the result to each registered listener. A side that doesn't resolve (destroyed
-        // body / stale slot) is delivered as an invalid handle; a contact with neither side
-        // live is dropped.
+        // Resolve every drained contact's packed user words back to live entities and push the
+        // result to each registered listener. A side that does not resolve (destroyed body, stale
+        // slot) is delivered as an invalid handle; a contact with neither side live is dropped.
         void DispatchContacts()
         {
             if (m_listeners == nullptr || m_listeners->IsEmpty() || m_scene == nullptr)
@@ -967,9 +965,7 @@ export namespace engine::physics
         const Array<IContactListener*>* m_listeners = nullptr; // owned by the subsystem
     };
 
-    // The runtime subsystem: contributes the managers + system to the scene composition
-    // and drives render-frame interpolation + debug draw with the engine's fixed alpha.
-    // THE physics manager set for a scene - injected by the subsystem at runtime AND by headless
+    // The physics manager set for a scene, injected by the subsystem at runtime and by headless
     // scene consumers (Engine.Composition). Runtime wiring (contact listeners) stays with the
     // subsystem. A manager added here reaches the composition (Engine.Composition) automatically.
     inline void AddPhysicsSceneManagers(scene::Scene& scene)
@@ -981,6 +977,8 @@ export namespace engine::physics
         scene.AddSystem<PhysicsSceneSystem>(); // carries the per-scene settings block
     }
 
+    // The runtime subsystem: contributes the managers and system to the scene composition and
+    // drives render-frame interpolation and debug draw with the engine's fixed alpha.
     class PhysicsSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
     {
     public:
@@ -1013,9 +1011,9 @@ export namespace engine::physics
             }
         }
 
-        // BEFORE the scene subsystem (-500): the interpolation's local-transform writes
-        // must land before Scene::Update recomputes world matrices, or rendering (which
-        // extracts world matrices) would lag the physics poses by a frame.
+        // Before the scene subsystem (-500): the interpolation's local-transform writes must land
+        // before Scene::Update recomputes world matrices, or rendering (which extracts world
+        // matrices) would lag the physics poses by a frame.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -600; }
 
         void OnSystemsReady(scene::Scene& scene) override
@@ -1036,8 +1034,8 @@ export namespace engine::physics
             }
         }
 
-        // Defined in SubsystemImpl.cpp: interpolation + debug wireframes (render dep)
-        // + retargeting the script binding at the first live world.
+        // Defined in PhysicsSubsystemImpl.cpp: interpolation and debug wireframes (the render
+        // dependency).
         void Update(f32 deltaTime) override;
 
     protected:
@@ -1079,15 +1077,9 @@ export namespace engine::physics
         Array<IContactListener*> m_contactListeners; // consumers of resolved contacts
     };
 
-    // Scene-bound physics handle - the reflected, per-scene answer to the static `Physics` facade.
-    // OPTION 1 factory shape (mirrors RigidBody.of(entity)): `ScenePhysics.of(
-    // scene)` returns a handle whose ops act on THAT scene's world (its PhysicsSceneSystem), not the
-    // first started scene. A plain value carrying the scene pointer (returned by value - concrete
-    // type, cross-backend, no hook slot); a null scene / a scene with no physics system is a safe
-    // no-op. The static facade has no hit-point accessors (they would need per-scene state).
-    // An EXPLICIT ray-hit result: the result travels BY VALUE from
-    // the rayCast that produced it, like every other bound value handle. Carries the scene so
-    // entity()/impulse() resolve live state at CALL time (never cached pointers).
+    // An explicit ray-hit result: it travels by value from the rayCast that produced it, like every
+    // other bound value handle. It carries the scene so entity()/impulse() resolve live state at
+    // call time (never cached pointers).
     struct RayCastHit
     {
         scene::Scene* scene = nullptr;
@@ -1099,8 +1091,8 @@ export namespace engine::physics
         Float3 normal{0.0f, 0.0f, 0.0f};
         i32 surface = 0; // material slot of the hit face (cooked triangle meshes; 0 otherwise)
 
-        // The ENTITY the ray hit (unpacked from the body user word), or invalid on a miss /
-        // a body whose entity is no longer live.
+        // The entity the ray hit (unpacked from the body user word), or invalid on a miss or for a
+        // body whose entity is no longer live.
         [[nodiscard]] foundation::script::Entity entity() const
         {
             if (!hit || scene == nullptr)
@@ -1136,8 +1128,8 @@ export namespace engine::physics
             return rigid != nullptr ? rigid->material.id : Guid{};
         }
 
-        // Impulse on the hit body (no-op on a miss / dead world). Resolves the world at call
-        // time through the carried scene - the hit stores no world pointer.
+        // Impulse on the hit body (no-op on a miss or a dead world). Resolves the world at call
+        // time through the carried scene; the hit stores no world pointer.
         void impulse(f32 x, f32 y, f32 z) const
         {
             if (!hit || scene == nullptr)
@@ -1153,6 +1145,11 @@ export namespace engine::physics
         }
     };
 
+    // Scene-bound physics handle, the reflected per-scene physics API. Shaped like
+    // RigidBody.of(entity): `ScenePhysics.of(scene)` returns a handle whose operations act on that
+    // scene's world (its PhysicsSceneSystem), not the first started scene. A plain value carrying
+    // the scene pointer (returned by value: a concrete type, cross-backend, no hook slot); a null
+    // scene, or a scene with no physics system, is a safe no-op.
     struct ScenePhysics
     {
         scene::Scene* scene = nullptr;
@@ -1182,9 +1179,9 @@ export namespace engine::physics
         }
         [[nodiscard]] f32 gravityY() const { return gravity().y; }
 
-        // Ray against THIS scene's world -> an EXPLICIT RayCastHit (hit/distance/position/
-        // normal/surface + entity() + impulse()); RayCastHit.hit == false on a miss. No
-        // stored last-hit state exists anymore. `groupMask`: bit g = consider collision group g.
+        // Ray against this scene's world, returning a RayCastHit
+        // (hit/distance/position/normal/surface, entity() and impulse()); RayCastHit.hit is false
+        // on a miss. `groupMask`: bit g considers collision group g.
         [[nodiscard]] RayCastHit rayCast(Float3 from, Float3 direction, f32 maxDistance,
                                          u32 groupMask) const
         {
@@ -1219,10 +1216,10 @@ export namespace engine::physics
                            0xFFFFFFFFu);
         }
 
-        // A swept SPHERE (radius) from `from` along `direction` up to maxDistance -> the CLOSEST hit,
-        // as a RayCastHit (hit == false on a miss). Like rayCast but with a volume - the ray that would
-        // slip through a gap a fat projectile cannot. `direction` must be UNIT length, like rayCast:
-        // `distance` scales by its length otherwise.
+        // A swept sphere (radius) from `from` along `direction` up to maxDistance, returning the
+        // closest hit as a RayCastHit (hit is false on a miss). Like rayCast but with a volume: it
+        // catches what a ray would slip past through a gap a fat projectile cannot pass.
+        // `direction` must be unit length, as for rayCast, or `distance` scales by its length.
         [[nodiscard]] RayCastHit sphereCast(Float3 from, Float3 direction, f32 maxDistance,
                                             f32 radius, u32 groupMask) const
         {
@@ -1262,11 +1259,12 @@ export namespace engine::physics
                               radius, 0xFFFFFFFFu);
         }
 
-        // The body NEAREST to `center` whose shape overlaps a SPHERE (radius) there, filtered to
-        // `groupMask` (bit g = include collision group g; ~0 = all) -> a RayCastHit (hit == false if
-        // none). The script surface returns one handle rather than a list, so this gives the nearest -
-        // exactly what "aim at / act on the closest thing in range" needs; the group mask does the
-        // category filtering (e.g. only delivery-zone triggers). `result.position` is the body origin.
+        // The body nearest to `center` whose shape overlaps a sphere (radius) there, filtered to
+        // `groupMask` (bit g includes collision group g; ~0 is all), as a RayCastHit (hit is false
+        // if none). The script surface returns one handle rather than a list, so this gives the
+        // nearest, which is what "aim at or act on the closest thing in range" needs; the group
+        // mask does the category filtering (for example, only delivery-zone triggers).
+        // `result.position` is the body origin.
         [[nodiscard]] RayCastHit nearestOverlap(Float3 center, f32 radius, u32 groupMask) const
         {
             RayCastHit result;
@@ -1281,7 +1279,7 @@ export namespace engine::physics
             shape.radius = radius;
             Array<foundation::physics::BodyId> bodies;
             world->ShapeOverlap(shape, center, Quaternion::Identity, bodies, groupMask);
-            f32 bestSq = kFloatMax; // best body-ORIGIN distance (see the semantics note above)
+            f32 bestSq = kFloatMax; // best body-origin distance (see the note above)
             for (const foundation::physics::BodyId& b : bodies)
             {
                 Float3 pos;
@@ -1315,12 +1313,12 @@ export namespace engine::physics
             return nearestOverlap(Float3{x, y, z}, radius, static_cast<u32>(groupMask));
         }
 
-        // ALL entities overlapping a SPHERE (radius) at `center`, filtered to `groupMask` (bit g =
-        // include collision group g; ~0 = all) -> a native array the script walks with `.length`/`[]`
-        // (AngelScript) or `#`/`ipairs` (Luau). This is the full set (nearestOverlap is the convenience
-        // for "just the closest"). RESOLVED Entities, not packed u64 words: a Lua table element is an
-        // f64 and a packed handle exceeds 2^53. Since-destroyed bodies are
-        // skipped, so every element is a live entity.
+        // All entities overlapping a sphere (radius) at `center`, filtered to `groupMask` (bit g
+        // includes collision group g; ~0 is all), as a native array the script walks with
+        // `.length`/`[]` (AngelScript) or `#`/`ipairs` (Luau). This is the full set (nearestOverlap
+        // is the convenience for just the closest). It returns resolved Entities, not packed u64
+        // words: a Lua table element is an f64 and a packed handle exceeds 2^53. Bodies destroyed
+        // since are skipped, so every element is a live entity.
         [[nodiscard]] Array<foundation::script::Entity> overlapSphere(Float3 center, f32 radius,
                                                                      u32 groupMask) const
         {
@@ -1366,12 +1364,12 @@ export namespace engine::physics
             return world != nullptr ? static_cast<f32>(world->BodyCount()) : 0.0f;
         }
 
-        // Apply an impulse to `entity`'s rigid body in THIS scene (the scriptable-impulse gameplay
-        // op - a genuine WORLD operation, so it lives on scene.physics keyed by the entity, not on
-        // the component data which cannot reach the world). If the body is not yet created (a prefab
-        // spawned + launched THIS frame), the impulse is queued on the component and applied at the
-        // next assembly; a queue that survives an assembly without gaining a body is dropped (the
-        // reconcile pass clears it), and Stop clears it too - it never outlives the run.
+        // Apply an impulse to `entity`'s rigid body in this scene. It is a world operation, so it
+        // lives on scene.physics keyed by the entity, not on the component data, which cannot reach
+        // the world. If the body is not yet created (a prefab spawned and launched this frame), the
+        // impulse is queued on the component and applied at the next assembly; a queue that
+        // survives an assembly without gaining a body is dropped (the reconcile pass clears it),
+        // and Stop clears it too, so it never outlives the run.
         void applyImpulse(foundation::script::Entity entity, f32 x, f32 y, f32 z)
         {
             applyImpulse(entity, Float3{x, y, z});
@@ -1397,8 +1395,9 @@ export namespace engine::physics
             }
             else
             {
-                // Body not created yet (a prefab spawned + launched THIS frame): queue the impulse on
-                // the component; CreateBodyForEntity applies it when the Jolt body is made next assembly.
+                // Body not created yet (a prefab spawned and launched this frame): queue the
+                // impulse on the component; CreateBodyForEntity applies it when the Jolt body is
+                // made at the next assembly.
                 body->pendingImpulse += impulse;
             }
         }
@@ -1452,8 +1451,8 @@ export namespace engine::physics
             }
         }
 
-        // ---- the entity's character, as Sedulous's PhysicsFacade has it (the same ops as
-        // CharacterComponent.of(entity); no-ops for an entity without a character) ----
+        // ---- the entity's character (the same operations as CharacterComponent.of(entity); no-ops
+        // for an entity without a character) ----
         void moveCharacter(foundation::script::Entity entity, f32 velocityX, f32 velocityZ) const
         {
             if (CharacterComponent* character = Character(entity))
@@ -1506,22 +1505,22 @@ export namespace engine::physics
             return bodies != nullptr ? bodies->Get(entity.Handle()) : nullptr;
         }
 
-        // The OPTION 1 factory: ScenePhysics.of(scene). Argument is the bound Scene facade.
+        // The factory: ScenePhysics.of(scene). The argument is the bound Scene facade.
         [[nodiscard]] static ScenePhysics of(foundation::script::Scene sceneHandle)
         {
             return ScenePhysics{sceneHandle.scene};
         }
     };
 
-    /// Registers the physics script surface (ScenePhysics.of + the reflected components) into the
-    /// global registry + the behavior prelude. (Kept the historical name; there is no static facade.)
+    /// Registers the physics script surface (ScenePhysics.of and the reflected components) into the
+    /// global registry and the behavior prelude. Despite the name, there is no static facade.
     void RegisterPhysicsScriptFacade();
 }
 
 export namespace engine::physics
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection and to the script
+    /// surface, and which resource modules come with it. Defined in the implementation unit (one
+    /// instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& PhysicsDomain() noexcept;
 }

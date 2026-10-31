@@ -90,7 +90,7 @@ namespace foundation::ui::toolkit
                         break;
                     }
                     // Plain text content: one Default-kind run up to the next '<' (the
-                    // renderer draws ONLY tokens, so text must be covered by one).
+                    // renderer draws only tokens, so text must be covered by one).
                     beginRun();
                     while (!cursor.AtEnd() && cursor.Peek() != u8'<')
                     {

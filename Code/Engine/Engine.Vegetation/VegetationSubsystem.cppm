@@ -3,10 +3,11 @@
 
 // engine.vegetation:subsystem - the application-level VegetationSubsystem.
 //
-// The TerrainSubsystem pattern without a renderer of its own: per scene it registers the
+// Like TerrainSubsystem, without a renderer of its own: per scene it registers the
 // TerrainVegetationComponentManager (injected by scene composition) as an IRenderDataProvider on
-// RenderSubsystem, so its instanced sets ride the shared MeshRenderer. No GPU state lives in the
-// manager (the renderer owns the instance buffers and evicts them), so nothing tears down here.
+// RenderSubsystem, so its instanced sets draw through the shared MeshRenderer. No GPU state lives
+// in the manager (the renderer owns the instance buffers and evicts them), so nothing tears down
+// here.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +18,7 @@ import foundation.core;
 import foundation.runtime; // Subsystem, Context
 import foundation.scene;   // Scene, ISceneObserver
 import engine.scene;       // SceneSubsystem
-import engine.render;      // RenderSubsystem + the register-provider seam
+import engine.render;      // RenderSubsystem and its register-provider hook
 import :components;
 
 using namespace foundation::core;

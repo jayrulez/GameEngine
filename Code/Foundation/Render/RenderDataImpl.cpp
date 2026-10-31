@@ -3,19 +3,19 @@
 
 /// Foundation::Render - the `:data` partition.
 ///
-/// The render-data contract - and the boundary that keeps the renderer scene-agnostic.
+/// The render-data contract, and the boundary that keeps the renderer scene-agnostic.
 /// Render data is *extracted and pushed to* the renderer; the renderer never reaches back
 /// into a scene (one-way: the scene-integration layer in engine.render depends
 /// on this, not the reverse).
 ///
 /// A `RenderData` is a unit of renderable work: a `RenderCategory` tag plus the data a
-/// draw needs (e.g. `MeshRenderData` = world matrix + mesh + material). It is allocated
-/// from a per-frame `FrameArena` (bump allocator), is trivially destructible, and is valid
-/// for exactly one frame. An `ExtractedScene` is the per-scene, once-per-frame, immutable
+/// draw needs (`MeshRenderData`, for example, is a world matrix, a mesh and a material). It is
+/// allocated from a per-frame `FrameArena` (bump allocator), is trivially destructible, and is
+/// valid for one frame. An `ExtractedScene` is the per-scene, once-per-frame, immutable
 /// snapshot of all a scene's render data; every view of that scene shares it read-only.
 ///
 /// A `RenderData` carries no view-dependent state: the sort key (which depends on the
-/// camera) lives on a per-view `DrawItem`, computed during the view's cull+sort against the
+/// camera) lives on a per-view `DrawItem`, computed during the view's cull and sort against the
 /// shared snapshot.
 
 module;
@@ -86,7 +86,7 @@ namespace foundation::render
                     m_offset = aligned + size;
                     return c.data + aligned;
                 }
-                // doesn't fit this chunk - advance to the next
+                // doesn't fit this chunk: advance to the next
                 ++m_current;
                 m_offset = 0;
                 continue;

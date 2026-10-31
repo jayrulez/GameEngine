@@ -3,11 +3,9 @@
 
 // Pipeline.Registration.Tests - the drift tripwire.
 //
-// The composition root is the single source of truth ONLY if it stays complete. These tests
-// register into FRESH local registries and assert the counts against the interface's explicit
-// constants: a new builder/importer bumps the constant deliberately, a lost or double
-// registration fails loudly. This is the check that "the three inline copies stay in sync" never
-// had - now the one copy is machine-verified.
+// The composition root is only useful if it stays complete. These tests register into fresh
+// local registries and assert the counts against the interface's explicit constants: a new
+// builder or importer bumps its constant on purpose, and a lost or doubled registration fails.
 
 #include <doctest/doctest.h>
 
@@ -41,8 +39,8 @@ TEST_CASE("pipeline.registration: RegisterAllImporters populates exactly kImport
 TEST_CASE("pipeline.registration: RegisterPipelineTypes runs the whole set without faulting")
 {
     // Smoke: every registrar the headless cook needs fires once, in order, on a real process.
-    // (No count to assert - this guards that the composition root's type/backend/cook
-    // registrations all resolve and none abort.)
+    // There is no count to assert; this checks that the type, backend and cook registrations all
+    // resolve and none abort.
     pipeline::RegisterPipelineTypes();
 
     // Routing still works after registration: a fresh builder set resolves by asset type name.
@@ -74,8 +72,8 @@ namespace
 TEST_CASE("pipeline.registration: Pipeline-collection types carry the Pipeline domain, never Editor")
 {
     // Asset/importer/cook types live in the Pipeline collection. Tagging their registrations
-    // TypeDomain("Editor") is false twice over (the headless CLI/MCP hosts have them WITHOUT the
-    // editor; the player has them not at all). Every rtti::pipeline authoring type must be
+    // TypeDomain("Editor") is wrong: the headless CLI and MCP hosts have them without the editor,
+    // and the player does not have them at all. Every rtti::pipeline authoring type must be
     // Pipeline, never Editor and never defaulted to Runtime.
     pipeline::RegisterPipelineTypes();
     const TypeRegistry& reg = GlobalTypeRegistry();
@@ -95,7 +93,7 @@ TEST_CASE("pipeline.registration: Pipeline-collection types carry the Pipeline d
             ++pipelineDomained;
         }
     }
-    // The asset types (one-plus per pipeline collection) carry the Pipeline domain - proving they
+    // The asset types (at least one per pipeline collection) carry the Pipeline domain, so they
     // are not silently defaulted to Runtime.
     CHECK(pipelineDomained >= 14);
 }
@@ -103,10 +101,9 @@ TEST_CASE("pipeline.registration: Pipeline-collection types carry the Pipeline d
 TEST_CASE("pipeline.registration: every builder's ProductType is a registered serializable")
 {
     // Tripwire: the cook driver stamps builder->ProductType() into the product envelope
-    // and the factory reconstructs it via ReadObject - so the product type MUST be a registered
-    // serializable (the cooked SERIALIZED form). A builder returning its RUNTIME product type
-    // instead (the Terrain/Heightfield/SplatWeights class of bug) breaks this; the test audits
-    // all builders, including builder N+1.
+    // and the factory reconstructs it via ReadObject, so the product type must be a registered
+    // serializable (the cooked serialized form). A builder returning its runtime product type
+    // instead breaks this; the test audits every registered builder.
     pipeline::RegisterPipelineTypes();
     pipeline::BuilderRegistry registry{DefaultAllocator()};
     pipeline::RegisterAllBuilders(registry, foundation::vfs::FindDataRoot());
@@ -123,9 +120,8 @@ TEST_CASE("pipeline.registration: every builder's ProductType is a registered se
         });
 }
 
-// agent-playtesting-and-asset-creation.md P1 (Sedulous 4b6207d2): every creator runs against a
-// plain source database with no editor - the source database and a sources folder are all a
-// creation needs, so a headless host creates through the same creators.
+// Every creator runs against a plain source database with no editor: the source database and a
+// sources folder are all a creation needs, so a headless host creates through the same creators.
 TEST_CASE("pipeline.registration: every creator makes its asset with no editor")
 {
     pipeline::RegisterPipelineTypes(); // the script creators need the cooks
@@ -180,7 +176,7 @@ TEST_CASE("pipeline.registration: every creator makes its asset with no editor")
 // Tripwire: every type a project can hold declares its display name, the kind the editor names it
 // by (an asset page's bar, the picker); a type without one shows a blank there. What a project holds
 // is every asset type, and what a builder cooks or a creator makes (the scene and prefab documents
-// derive no Asset). Type N+1 is caught the day it is registered.
+// derive no Asset). A new type is caught as soon as it is registered.
 TEST_CASE("pipeline.registration: every type a project holds declares a display name")
 {
     pipeline::RegisterPipelineTypes();

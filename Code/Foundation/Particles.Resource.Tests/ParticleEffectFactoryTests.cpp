@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Proves the authoring pipeline end to end (no editor UI): build a ParticleEffect in code, cook it
-// into a content-DB ParticleEffectResource, then load it back through the ResourceManager + factory
-// and verify the reconstructed effect matches - modules polymorphically rebuilt via reflection - and
-// that it still simulates. Mirrors TextureFactoryTests.
+// into a content-database ParticleEffectResource, then load it back through the ResourceManager and
+// factory and verify the reconstructed effect matches (modules rebuilt polymorphically through
+// reflection) and that it still simulates. Shaped like TextureFactoryTests.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -28,7 +28,7 @@ namespace
         RemoveDirectory(u8"scratch_pfx_db");
     }
 
-    // A representative two-system effect: a billboard fountain + a mesh burst with a sub-emitter link.
+    // A representative two-system effect: a billboard fountain and a mesh burst with a sub-emitter link.
     void BuildEffect(ParticleEffect& fx)
     {
         ParticleSystem& fountain = fx.AddSystem(5000, 0xABCDEF01ull);
@@ -83,7 +83,7 @@ TEST_CASE("particles.pipeline: code effect -> cook -> Bind reconstructs an equiv
         REQUIRE(inst->WriteObject(res).IsOk());
     }
 
-    // Load: bind the cooked resource back through the manager + factory.
+    // Load: bind the cooked resource back through the manager and factory.
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     ParticleEffectFactory factory;
@@ -110,7 +110,7 @@ TEST_CASE("particles.pipeline: code effect -> cook -> Bind reconstructs an equiv
     CHECK(fountain->emitter.spawnRate == doctest::Approx(250.0f));
     CHECK(fountain->InitializerCount() == 4);
     CHECK(fountain->BehaviorCount() == 2);
-    // A polymorphic module reconstructed with the right concrete type + params.
+    // A polymorphic module reconstructed with the right concrete type and params.
     CHECK(fountain->GetInitializer(0)->GetType() == &PositionInitializer::StaticType());
 
     ParticleSystem* sparks = fx.GetSystem(1);
@@ -138,11 +138,11 @@ TEST_CASE("particles.resource: meshRef + meshScale + materialRefs survive the co
     s.renderMode = ParticleRenderMode::Mesh;
     s.meshRef = meshId;
     s.meshScale = 2.5f;
-    // Two per-submesh material slots (slot 0 = whole-mesh material) - order + values must survive.
+    // Two per-submesh material slots (slot 0 = whole-mesh material): order and values must survive.
     s.materialRefs.PushBack(materialId0);
     s.materialRefs.PushBack(materialId1);
 
-    // CloneEffect is exactly what the builder uses to bake the authored effect into the cooked resource.
+    // CloneEffect is what the builder uses to bake the authored effect into the cooked resource.
     ParticleEffect dst;
     CloneEffect(src, dst);
     ParticleSystem* d = dst.GetSystem(0);

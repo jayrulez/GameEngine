@@ -3,14 +3,14 @@
 
 /// Foundation::Materials - the `:pipeline` partition.
 ///
-/// PipelineConfig: the full render-state description for a material (shader name +
-/// variant flags, vertex layout, primitive/blend/depth state, render-target
-/// formats). It is the *key* a PSO cache hashes on - orthogonal to ShaderFlags:
-/// flags drive the shader permutation (compile-time #defines), PipelineConfig
-/// drives the fixed-function state. All value types so it hashes by content.
+/// PipelineConfig: the full render-state description for a material (shader name and
+/// variant flags, vertex layout, primitive, blend and depth state, render-target
+/// formats). It is the key a PSO cache hashes on, and independent of ShaderFlags:
+/// the flags drive the shader permutation (compile-time #defines), PipelineConfig
+/// drives the fixed-function state. It holds only value types so it hashes by content.
 ///
 /// VertexLayoutHelper maps the predefined VertexLayoutType presets to concrete RHI
-/// vertex attributes / strides (mirrors Sedulous's common formats).
+/// vertex attributes and strides.
 
 module;
 #include "Core/Prelude.h"
@@ -132,7 +132,7 @@ export namespace foundation::materials
             return true;
         }
 
-        // ---- presets (subset of Sedulous's) ----
+        // ---- presets ----
         [[nodiscard]] static PipelineConfig
         ForOpaqueMesh(StringView shader, shaders::ShaderFlags flags = shaders::ShaderFlags::None)
         {
@@ -187,7 +187,7 @@ export namespace foundation::materials
         }
     };
 
-    // Maps VertexLayoutType -> concrete RHI vertex attributes + stride.
+    // Maps VertexLayoutType to concrete RHI vertex attributes and a stride.
     class VertexLayoutHelper
     {
     public:
@@ -205,8 +205,8 @@ export namespace foundation::materials
                 return 32;
             case VertexLayoutType::Mesh:
                 return 52;
-            // A skinned mesh's buffer 0 IS the static stream (52B) - the skinning data
-            // is a SEPARATE buffer (see SkinningStream*), matching foundation.geometry's
+            // A skinned mesh's buffer 0 is the static stream (52 bytes); the skinning data
+            // is a separate buffer (see SkinningStream*), matching foundation.geometry's
             // SkinnedMesh : StaticMesh layout. So a skinned draw binds two vertex buffers.
             case VertexLayoutType::SkinnedMesh:
                 return 52;
@@ -259,11 +259,11 @@ export namespace foundation::materials
             return l;
         }
 
-        // The skinning vertex buffer a skinned draw binds: joints (location 6) + weights (location 7),
-        // stride 24 - matches foundation.geometry::VertexSkinning. Skinned draws are ALWAYS instanced now, so
-        // the instance-stepped offsets take location 5 and DXC (which assigns input locations
-        // sequentially by declaration order, drawOffsets/pickOffsets declared before joints/weights) lands
-        // these at 6/7.
+        // The skinning vertex buffer a skinned draw binds: joints (location 6) and weights (location
+        // 7), stride 24, matching foundation.geometry::VertexSkinning. Skinned draws are always
+        // instanced, so the instance-stepped offsets take location 5. DXC assigns input locations in
+        // declaration order, and the shaders declare drawOffsets or pickOffsets before joints and
+        // weights, which lands these at 6 and 7.
         [[nodiscard]] static u32 SkinningStreamStride() noexcept { return 24; }
         [[nodiscard]] static Span<const rhi::VertexAttribute> SkinningStreamAttributes() noexcept
         {
@@ -291,7 +291,7 @@ export namespace foundation::materials
                                         {VF::Float32x2, 24, 2},
                                         {VF::Unorm8x4, 32, 3},
                                         {VF::Float32x4, 36, 4}}; // tangent.w = handedness
-        // Skinning stream: joints (uint16x4 packed as uint32x2) + weights, at locations 6/7 (the offsets
+        // Skinning stream: joints (uint16x4 packed as uint32x2) and weights, at locations 6/7 (the offsets
         // take 5; skinned draws are always instanced).
         static constexpr VA kSkinningStream[2] = {{VF::Uint32x2, 0, 6}, {VF::Float32x4, 8, 7}};
         // Instance offsets stream: a uint4 at location 5 (drawOffsets, or pickOffsets in the pick pass).

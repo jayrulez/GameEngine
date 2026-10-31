@@ -4,10 +4,9 @@
 // UI - :tooltip_view partition
 //
 // Tooltip container with a themed background. Content is any View (defaults to a simple text label set
-// by TooltipManager). Ported from Sedulous.UI/src/Overlay/TooltipView.bf. Ownership: Beef raw mContent
-// owned by the ViewGroup tree -> the content is held only by the AddView RefPtr; SetContent/ClearContent
-// go through RemoveView (our RemoveView drops the tree's ref). m_content is a borrowed raw pointer valid
-// while attached.
+// by TooltipManager). The content is held only by the reference AddView takes; SetContent and
+// ClearContent go through RemoveView, which drops it. m_content is a borrowed pointer, valid while the
+// content is attached.
 
 module;
 #include "Core/Prelude.h"
@@ -62,7 +61,6 @@ export namespace foundation::ui
         {
             const Rectangle bounds{0, 0, Width(), Height()};
 
-            // Background from theme.
             Drawable* bg = ResolveStyleDrawable(StyleProperty::Background);
             if (bg != nullptr)
             {
@@ -78,7 +76,6 @@ export namespace foundation::ui
                     1.0f);
             }
 
-            // Draw content.
             ViewGroup::OnDraw(ctx);
         }
 

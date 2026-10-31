@@ -3,15 +3,14 @@
 
 // Foundation::Fonts - foundation.fonts:scaled_views partition.
 //
-// SIZE VIEWS over a base font/atlas: everything screen-space (metrics, advances, kerning,
+// Size views over a base font or atlas: everything screen-space (metrics, advances, kerning,
 // glyph-quad geometry) scales by requestedPx / bakedPx while the atlas texels and UVs stay
-// untouched. This is what makes ONE MSDF bake serve every UI size: the distance field
-// resamples cleanly at any scale (the DF fragment shader anti-aliases in screen space), so
-// a font service answers GetFont(family, 12) from a single 48px bake by handing out a
-// scaled view instead of the raw 48px tables (which would draw 48px-geometry glyphs - the
-// documented per-size-scaled-views gap that kept the UI off MSDF).
+// untouched. This lets one MSDF bake serve every UI size: the distance field resamples
+// cleanly at any scale (the DF fragment shader anti-aliases in screen space), so a font
+// service answers GetFont(family, 12) from a single 48px bake by handing out a scaled view
+// instead of the raw 48px tables, which would draw glyphs at 48px geometry.
 //
-// Views BORROW the base objects (the service owns the base entries and guarantees they
+// Views borrow the base objects (the service owns the base entries and guarantees they
 // outlive the views); a CachedFont may own the view wrappers themselves.
 
 module;
@@ -79,7 +78,7 @@ export namespace foundation::fonts
         [[nodiscard]] f32 MeasureString(StringView text,
                                         Array<GlyphPosition>& outPositions) const override
         {
-            // Positions come out in the VIEW's space: advance/kerning walk with scaled infos.
+            // Positions come out in the view's space: advance and kerning walk with scaled infos.
             outPositions.Clear();
             f32 x = 0.0f;
             i32 previousCodepoint = 0;
@@ -113,7 +112,7 @@ export namespace foundation::fonts
     public:
         ScaledFontAtlasView(const IFontAtlas& base, f32 scale) : m_base(&base), m_scale(scale) {}
 
-        // Texel-space facts pass through untouched (the texture IS the base atlas).
+        // Texel-space facts pass through untouched (the texture is the base atlas).
         [[nodiscard]] u32 Width() const override { return m_base->Width(); }
         [[nodiscard]] u32 Height() const override { return m_base->Height(); }
         [[nodiscard]] Span<const u8> PixelData() const override { return m_base->PixelData(); }

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.particles:types - the particle value primitives, ported from Sedulous.Particles
-// (ParticleTypes.bf, RangeValue.bf, ParticleCurve.bf, EmissionShape.bf, ParticleEvent.bf,
-// ParticleBehavior.bf's update context). Pure value types over Core math. Fields adapt to
-// our camelCase convention; methods stay PascalCase.
+// foundation.particles:types - the particle value primitives: pure value types over Core math.
+// Fields are camelCase; methods are PascalCase.
 
 module;
 #include "Core/Prelude.h"
@@ -18,10 +16,10 @@ namespace core = foundation::core;
 
 export namespace foundation::particles
 {
-    // ---- Simulation / space / render mode enums (ParticleTypes.bf) ----------------------------
+    // ---- Simulation, space and render mode enums ---------------------------------------------
 
-    // Where a system's particle update runs. GPU is a stub; Auto resolves
-    // to GPU only when every behavior supports it and the system is large.
+    // Where a system's particle update runs. There is no GPU simulator, so all systems run on the
+    // CPU; Auto resolves to GPU only when every behavior supports it and the system is large.
     enum class SimulationMode : u8
     {
         CPU,
@@ -29,7 +27,7 @@ export namespace foundation::particles
         Auto
     };
 
-    // Whether a behavior can run on CPU, GPU, or either. Drives Auto/GPU resolution.
+    // Whether a behavior can run on CPU, GPU, or either. Drives Auto and GPU resolution.
     enum class BehaviorSupport : u8
     {
         CPUOnly,
@@ -54,9 +52,9 @@ export namespace foundation::particles
         Multiply
     };
 
-    // How a system's particles are rendered. Not a polymorphic module (à la Sedulous) - a tag
-    // the render extractor branches on. Light (an ez-style extension beyond Sedulous) contributes a
-    // point light per particle to the clustered-forward light list, and also draws the billboard glow.
+    // How a system's particles are rendered: a tag the render extractor branches on, not a
+    // polymorphic module. Light contributes a point light per particle to the clustered-forward
+    // light list, and also draws the billboard glow.
     enum class ParticleRenderMode : u8
     {
         Billboard,
@@ -68,9 +66,9 @@ export namespace foundation::particles
         Light
     };
 
-    // ---- Range values (RangeValue.bf) --------------------------------------------------------
-    // A min/max pair sampled by a single shared t in [0,1) (Min<->Max is a diagonal lerp, NOT
-    // per-component independent - matches Sedulous's Evaluate((float)rng.NextDouble())).
+    // ---- Range values ----------------------------------------------------------------------
+    // A min/max pair sampled by a single shared t in [0,1): a diagonal lerp from Min to Max, not an
+    // independent sample per component.
 
     struct RangeFloat
     {
@@ -124,11 +122,10 @@ export namespace foundation::particles
 
     // ---- Curves --------------------------------------------------------------------------------
     // Fixed 8-key curves sampled by normalized lifetime, of Core's types and evaluated by Core's
-    // functions (Specs/gui-lab-evolution-3.md ruling 2), so an editor drawing with the same
-    // functions shows what plays. A float curve's keys are CurveKeys (constant, linear or cubic,
+    // functions, so an editor drawing with the same functions shows what plays. A float curve's keys are CurveKeys (constant, linear or cubic,
     // a tangent mode each); a colour curve is a gradient, its colour stops authored sRGB (decoded to
     // linear only when the particle is drawn) and its alpha stops apart. IsActive() gates the
-    // *OverLifetime behaviors (an empty curve is a no-op). Values, not containers: reflected as
+    // OverLifetime behaviors (an empty curve is a no-op). Values, not containers: reflected as
     // count-bound arrays.
 
     inline constexpr i32 kMaxCurveKeys = 8;
@@ -145,7 +142,7 @@ export namespace foundation::particles
             return EvaluateCurve(Span<const CurveKey>(keys, static_cast<usize>(Clamp(keyCount, 0, kMaxCurveKeys))), t);
         }
 
-        // Sorted insert (false once full: the fixed 8-key cap).
+        // Sorted insert (false once full at the fixed 8-key cap).
         bool AddKey(const CurveKey& key) noexcept
         {
             if (keyCount >= kMaxCurveKeys)
@@ -162,8 +159,8 @@ export namespace foundation::particles
             ++keyCount;
             return true;
         }
-        // A key as the particles' curves always made one: cubic, its tangents as given (flat by
-        // default, so a run of them eases from key to key); another interpolation when asked.
+        // A cubic key by default, its tangents as given (flat by default, so a run of them eases from
+        // key to key); another interpolation when asked.
         bool AddKey(f32 time, f32 value, f32 tangentIn = 0.0f, f32 tangentOut = 0.0f,
                     CurveKeyInterpolation interpolation = CurveKeyInterpolation::Cubic,
                     CurveTangentMode mode = CurveTangentMode::Broken) noexcept
@@ -303,9 +300,8 @@ export namespace foundation::particles
         }
     };
 
-    // ---- Emission shape (EmissionShape.bf) ---------------------------------------------------
+    // ---- Emission shape --------------------------------------------------------------------
     // A tagged spawn volume: Sample() returns a spawn-local position and an outward direction.
-    // (Faithful subset; Sedulous's exact per-shape fields to be reconciled as shapes are added.)
 
     enum class EmissionShapeType : u8
     {
@@ -322,11 +318,11 @@ export namespace foundation::particles
     struct EmissionShape
     {
         EmissionShapeType type = EmissionShapeType::Point;
-        f32 radius = 1.0f; // Sphere/Hemisphere/Cone/Ring/Circle; Edge: half-length along X
+        f32 radius = 1.0f; // Sphere, Hemisphere, Cone, Ring, Circle; Edge: half-length along X
         Float3 extents{1.0f, 1.0f, 1.0f}; // Box half-extents
         f32 angle = 0.7853982f;           // Cone half-angle (radians)
-        f32 arc = 1.0f;             // fraction [0,1] of the full azimuth (Sphere/Cone/Ring/Circle)
-        bool emitFromShell = false; // Sphere/Ring/Circle: surface vs volume
+        f32 arc = 1.0f;             // fraction [0,1] of the full azimuth (Sphere, Cone, Ring, Circle)
+        bool emitFromShell = false; // Sphere, Ring, Circle: surface or volume
 
         // Returns a position (spawn-local, before the emitter offset) and a normalized direction.
         void Sample(Random& rng, Float3& outPosition, Float3& outDirection) const noexcept
@@ -447,15 +443,14 @@ export namespace foundation::particles
         }
     };
 
-    // ---- Flipbook / texture-sheet animation --------------------------------------------------
-    // Animates a particle's UV rect across a grid of sub-images in its texture atlas. Beyond Sedulous
-    // (which had the vertex UV fields but never populated them). Per-system.
+    // ---- Flipbook (texture-sheet animation) ------------------------------------------------
+    // Animates a particle's UV rect across a grid of sub-images in its texture atlas. Per system.
     struct FlipbookSettings
     {
         bool enabled = false;
         i32 columns = 1;
         i32 rows = 1;
-        f32 fps = 0.0f;           // frames/sec when overLifetime is false (time-based looping)
+        f32 fps = 0.0f;           // frames per second when overLifetime is false (time-based looping)
         bool overLifetime = true; // true: sweep the whole sheet once across the particle's lifetime
         i32 startFrame = 0;
 
@@ -465,7 +460,7 @@ export namespace foundation::particles
             return enabled && FrameCount() > 1;
         }
 
-        // The UV sub-rect (min.xy, size.zw) for a particle at the given life ratio / age.
+        // The UV sub-rect (min.xy, size.zw) for a particle at the given life ratio or age.
         [[nodiscard]] Float4 FrameUV(f32 lifeRatio, f32 age) const noexcept
         {
             const i32 count = FrameCount();
@@ -481,7 +476,7 @@ export namespace foundation::particles
         }
     };
 
-    // ---- Trails / ribbons (TrailTypes.bf) ----------------------------------------------------
+    // ---- Trails and ribbons ------------------------------------------------------------------
     // A Trail-render-mode system records each particle's position history into a ring buffer; the
     // render extractor expands those points into a camera-facing ribbon. Settings are per-system.
 
@@ -526,7 +521,7 @@ export namespace foundation::particles
         }
     };
 
-    // ---- Sub-emitter events (ParticleEvent.bf) -----------------------------------------------
+    // ---- Sub-emitter events ------------------------------------------------------------------
 
     enum class ParticleEventType : u8
     {
@@ -555,7 +550,7 @@ export namespace foundation::particles
         [[nodiscard]] static SubEmitterLink Default() noexcept { return SubEmitterLink{}; }
     };
 
-    // ---- Per-frame update context (ParticleBehavior.bf) --------------------------------------
+    // ---- Per-frame update context ------------------------------------------------------------
     // Passed by reference to every behavior each frame. Rng is borrowed (owned by the system).
 
     struct ParticleUpdateContext
@@ -568,8 +563,8 @@ export namespace foundation::particles
 
     // ---- Serialization (foundation.core :serialize) --------------------------------------------
     // Bidirectional Serialize(ISerializer&, T&) overloads for the authoring value types. Found by ADL
-    // from core's Serialize(ar, "key", value). Fields decomposed (not blobbed) - readable in the XML
-    // asset, portable in the binary cook. Curves write keyCount then the active keys only.
+    // from core's Serialize(ar, "key", value). Fields are written one by one, not as a blob, so they
+    // read in the XML asset and stay portable in the binary cook. Curves write keyCount then the active keys only.
     using foundation::core::ISerializer;
     inline void Serialize(ISerializer& ar, RangeFloat& v)
     {

@@ -2,9 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The process-global JobSystem pointer and the per-thread worker slot. Defined in
-// Core's implementation unit - NON-inline - so exactly one of each exists per
-// process; inline definitions in the interface would duplicate per shared library
-// (shared-libraries.md rendezvous rule).
+// Core's implementation unit, not inline, so exactly one of each exists per
+// process; inline definitions in the interface would be duplicated per shared library.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +33,7 @@ namespace foundation::core
         if (g_globalJobs == nullptr)
         {
             // Process-root decision: the engine-wide pool lives on the system allocator
-            // (this accessor pair IS a composition root, like DefaultAllocator itself).
+            // (this accessor pair is a composition root, like DefaultAllocator itself).
             g_globalJobs = DefaultAllocator().New<JobSystem>(DefaultAllocator(), workerCount);
         }
     }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// BoxMetrics / border-box coverage: the three padding
-// channels max-merge in View::ResolveBoxMetrics, borders are layout-participating chrome
-// (RoundedRectDrawable reports its border via DrawablePadding), and Panel's content box honors
-// all of it - including stylesheet `padding:` on a CONTAINER, which must not silently no-op.
+// BoxMetrics and border-box tests. The three padding channels merge by maximum in
+// View::ResolveBoxMetrics, borders are chrome that takes part in layout (RoundedRectDrawable
+// reports its border via DrawablePadding), and Panel's content box honors all of it, including a
+// stylesheet `padding:` on a container.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -39,8 +39,8 @@ TEST_CASE("box-metrics: the three padding channels max-merge, border resolves se
     auto group = core::MakeRef<ViewGroup>(core::DefaultAllocator());
     root->AddView(group.Get());
 
-    group->Padding = Thickness{10, 1, 1, 1};                       // field channel: wide LEFT
-    group->SetStyle(StyleProperty::Padding, Thickness{2, 8, 2, 2}); // style channel: wide TOP
+    group->Padding = Thickness{10, 1, 1, 1};                       // field channel: wide left
+    group->SetStyle(StyleProperty::Padding, Thickness{2, 8, 2, 2}); // style channel: wide top
     auto bg = core::MakeRef<RoundedRectDrawable>(core::DefaultAllocator(), Color{1, 1, 1, 1},
                                                  0.0f, Color{0, 0, 0, 1}, 3.0f); // drawable channel: 3 everywhere
     group->SetStyle(StyleProperty::Background, RefPtr<Drawable>(bg.Get()));
@@ -68,10 +68,10 @@ TEST_CASE("box-metrics: stylesheet padding on a CONTAINER takes effect (Panel co
 
     auto child = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 20.0f);
     panel->AddView(child.Get());
-    // Measure with LOOSE constraints (the root would stretch it tight and mask the chrome).
+    // Measure with loose constraints (the root would stretch it tight and hide the chrome).
     panel->Measure(BoxConstraints::Loose(400, 300));
 
-    // Panel measures content + chrome; the style-declared padding must be part of it now.
+    // Panel measures content plus chrome, and the style-declared padding is part of it.
     CHECK(panel->MeasuredSize.x == 50.0f + 14.0f);
     CHECK(panel->MeasuredSize.y == 20.0f + 14.0f);
 }
@@ -93,17 +93,17 @@ TEST_CASE("box-metrics: a bordered background reserves content space in a Panel 
     plain->AddView(childA.Get());
     auto childB = core::MakeRef<TestView>(core::DefaultAllocator(), 50.0f, 20.0f);
     bordered->AddView(childB.Get());
-    // Loose constraints - tight root constraints would stretch both and mask the chrome.
+    // Loose constraints: tight root constraints would stretch both and hide the chrome.
     plain->Measure(BoxConstraints::Loose(400, 300));
     bordered->Measure(BoxConstraints::Loose(400, 300));
 
-    // The bordered panel is larger by its border chrome on each axis - content no longer sits
+    // The bordered panel is larger by its border chrome on each axis, so content does not sit
     // on the border line.
     CHECK(bordered->MeasuredSize.x == plain->MeasuredSize.x + 4.0f);
     CHECK(bordered->MeasuredSize.y == plain->MeasuredSize.y + 4.0f);
 }
 
-// === Acceptance: Fixed + margin work in EVERY container ===
+// === Fixed sizes and margins work in every container ===
 
 TEST_CASE("box-model: Fixed(100) child is 100 in Dock, Flow, Grid, and Panel (was Frame-only)")
 {
@@ -164,7 +164,7 @@ TEST_CASE("box-model: margins are honored in FlowLayout (rows advance by the mar
     flow->AddView(b.Get());
     LayoutPass(ctx, root.Get());
 
-    // a's border box is inset by its margin; b starts after a's MARGIN box (no overlap).
+    // a's border box is inset by its margin; b starts after a's margin box (no overlap).
     CHECK(a->Bounds.x == 5.0f);
     CHECK(a->Bounds.y == 5.0f);
     CHECK(b->Bounds.x >= 60.0f); // 5 + 50 + 5 (+ spacing)
@@ -181,7 +181,7 @@ TEST_CASE("box-model: a fill-style leaf in a GridLayout cell does not explode to
     grid->AddView(sep.Get());
     LayoutPass(ctx, root.Get());
 
-    // Grid children get BOUNDED loose constraints now (was Expand()).
+    // Grid children get bounded loose constraints.
     CHECK(sep->MeasuredSize.x <= 400.0f);
     CHECK(grid->MeasuredSize.x <= 400.0f);
 }

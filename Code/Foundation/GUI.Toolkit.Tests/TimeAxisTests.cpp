@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - one time axis (T5 of Specs/gui-lab-evolution-3.md): the scale, the scroll, a frame rate
-// and the playhead held once and told to every view on it; the ruler's ticks at a step whose labels
-// never collide, in seconds or frames; a drag on it scrubbing, the wheel zooming about the pointer
-// and a middle drag panning; a marker source's markers chosen, moved and named on it.
+// GUI.Toolkit - one time axis. It holds the scale, the scroll, a frame rate and the playhead once,
+// and tells every view on it when they change. The ruler places ticks at a step whose labels never
+// collide, in seconds or frames. A drag on the ruler scrubs, the wheel zooms about the pointer, and
+// a middle drag pans. A marker source's markers are chosen, moved and named on it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -24,7 +24,7 @@ namespace
         void OnTimeAxisChanged() override { ++changes; }
     };
 
-    // Markers in memory: a move's changes counted, a cancel putting the marker back.
+    // Markers in memory. Changes from a move are counted, and a cancel puts the marker back.
     struct Markers : ITimeMarkerSource
     {
         core::Array<TimeMarker> markers;
@@ -119,7 +119,7 @@ TEST_CASE("TimeAxis: every view on it is told of a change, and one that leaves i
     axis->SetScroll(1.0f);
     CHECK(a.changes == 2);
     CHECK(b.changes == 3);
-    axis->SetScroll(1.0f); // no change, no word
+    axis->SetScroll(1.0f); // no change, so the views are not told
     CHECK(b.changes == 3);
 
     float played = -1.0f;
@@ -132,7 +132,7 @@ TEST_CASE("TimeAxis: the tick step is 1, 2 or 5 times a power of ten, of seconds
 {
     auto axis = core::MakeRef<TimeAxis>(core::DefaultAllocator());
     axis->SetPixelsPerSecond(100.0f);
-    CHECK(axis->TickStep(60.0f) == doctest::Approx(1.0f)); // 0.6 s at least
+    CHECK(axis->TickStep(60.0f) == doctest::Approx(1.0f)); // the step must be at least 0.6 s
     CHECK(axis->TickStep(100.0f) == doctest::Approx(1.0f));
     CHECK(axis->TickStep(150.0f) == doctest::Approx(2.0f));
     axis->SetPixelsPerSecond(1000.0f);
@@ -142,10 +142,10 @@ TEST_CASE("TimeAxis: the tick step is 1, 2 or 5 times a power of ten, of seconds
     CHECK(axis->FormatTime(0.3f, 0.1f) == core::StringView(u8"0.3"));
     CHECK(axis->FormatTime(4.0f, 2.0f) == core::StringView(u8"4"));
 
-    // Frames: never less than one, and labels are frame numbers.
+    // With frames, the step is never less than one frame, and labels are frame numbers.
     axis->SetFrameRate(30.0f);
-    CHECK(axis->TickStep(60.0f) * 30.0f == doctest::Approx(2.0f)); // 1.8 frames at least
-    axis->SetPixelsPerSecond(100000.0f); // clamped, but a frame is still the least
+    CHECK(axis->TickStep(60.0f) * 30.0f == doctest::Approx(2.0f)); // the step must be at least 1.8 frames
+    axis->SetPixelsPerSecond(100000.0f); // clamped, and one frame is still the smallest step
     CHECK(axis->TickStep(1.0f) * 30.0f == doctest::Approx(1.0f));
     CHECK(axis->FormatTime(0.5f, 1.0f / 30.0f) == core::StringView(u8"15"));
 }
@@ -172,7 +172,7 @@ TEST_CASE("TimeRuler: its labelled ticks are at least the spacing apart and cove
         lastMajor = tick.Offset;
         ++majors;
     }
-    CHECK(majors == 6); // 0 to 5 at 100 px a second over 500 px
+    CHECK(majors == 6); // 0 to 5 at 100 px per second over 500 px
     CHECK(ticks.Size() == 26); // fifths of a second between them
 
     // Scrolled to 2.5 s, the first tick is the first minor one in view.
@@ -193,7 +193,7 @@ TEST_CASE("TimeRuler: a drag scrubs the playhead, on frames with a frame rate")
     CHECK(bed.axis->Playhead() == doctest::Approx(1.2f));
     bed.D().InjectMouseMove(core::Float2{257.0f, 10.0f});
     CHECK(bed.axis->Playhead() == doctest::Approx(2.6f));
-    bed.D().InjectMouseMove(core::Float2{580.0f, 40.0f}); // past its end: held, kept in the clip
+    bed.D().InjectMouseMove(core::Float2{580.0f, 40.0f}); // past its end, the playhead stays in the clip
     CHECK(bed.axis->Playhead() == doctest::Approx(4.0f));
     bed.D().InjectMouseUp(core::Float2{580.0f, 40.0f}, MouseButton::Left);
     bed.D().InjectMouseMove(core::Float2{50.0f, 10.0f});
@@ -234,7 +234,7 @@ TEST_CASE("TimeRuler: a ruler that goes leaves its axis")
         ruler->SetTimeAxis(axis);
     }
     CHECK(axis->ClientCount() == 0);
-    axis->SetScroll(1.0f); // nothing left to tell
+    axis->SetScroll(1.0f); // no view is left to tell
 }
 
 TEST_CASE("TimeRuler: a click chooses a marker, a drag moves it as one change, Escape gives the move up")
@@ -250,9 +250,9 @@ TEST_CASE("TimeRuler: a click chooses a marker, a drag moves it as one change, E
     core::i32 told = -2;
     bed.ruler->OnMarkerChosen = [&told](core::i32 marker) { told = marker; };
 
-    // Pressed near it: chosen, the playhead left where it was.
+    // A press near a marker chooses it, and the playhead stays where it was.
     bed.D().InjectMouseMove(core::Float2{303.0f, 10.0f});
-    CHECK(bed.ruler->GetTooltipText() == core::StringView(u8"Land at 30")); // in frames, as the ruler labels
+    CHECK(bed.ruler->GetTooltipText() == core::StringView(u8"Land at 30")); // in frames, matching the ruler's labels
     bed.D().InjectMouseDown(core::Float2{303.0f, 10.0f}, MouseButton::Left);
     CHECK(bed.ruler->GetChosenMarker() == 1);
     CHECK(told == 1);
@@ -260,7 +260,7 @@ TEST_CASE("TimeRuler: a click chooses a marker, a drag moves it as one change, E
     CHECK(bed.axis->Playhead() == 0.0f);
     CHECK(markers.commits == 0); // a click moves nothing
 
-    // Dragged: on frames, one change.
+    // A drag snaps the marker to frames and makes one change.
     bed.D().InjectMouseDown(core::Float2{100.0f, 10.0f}, MouseButton::Left);
     CHECK(bed.ruler->GetChosenMarker() == 0);
     bed.D().InjectMouseMove(core::Float2{152.0f, 10.0f});
@@ -271,7 +271,7 @@ TEST_CASE("TimeRuler: a click chooses a marker, a drag moves it as one change, E
     CHECK(markers.commits == 1);
     CHECK(bed.axis->Playhead() == 0.0f);
 
-    // Escape: back where it was, nothing committed.
+    // Escape puts it back where it was and commits nothing.
     bed.D().InjectMouseDown(core::Float2{180.0f, 10.0f}, MouseButton::Left);
     bed.D().InjectMouseMove(core::Float2{260.0f, 10.0f});
     CHECK(markers.markers[0].Time == doctest::Approx(2.6f));
@@ -287,7 +287,7 @@ TEST_CASE("TimeRuler: a click chooses a marker, a drag moves it as one change, E
     bed.D().InjectMouseUp(core::Float2{50.0f, 10.0f}, MouseButton::Left);
     CHECK(bed.ruler->GetChosenMarker() == 0); // a scrub keeps the choice
 
-    // The chosen marker gone: none chosen, told.
+    // When the chosen marker is removed, none is chosen, and the views are told.
     markers.markers.RemoveAt(0);
     markers.markers.RemoveAt(0);
     markers.Changed();

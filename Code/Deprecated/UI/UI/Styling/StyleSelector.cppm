@@ -3,21 +3,19 @@
 
 // UI - :style_selector partition
 //
-// Matches views by type, style class(es), id, control state, structural position and an
-// optional pseudo-element name - as a CHAIN of compounds joined by the descendant (` `) and
-// child (`>`) combinators. Ported from Sedulous.UI/src/Styling/StyleSelector.bf and grown for
-// the style model v2 (ui-layout-and-style-model.md, P1).
+// Matches views by type, style classes, id, control state, structural position and an
+// optional pseudo-element name, as a chain of compounds joined by the descendant (` `) and
+// child (`>`) combinators.
 //
-// Specificity is CSS's: id = 100, class / pseudo-class (each state flag, each structural
-// test) = 10, type / pseudo-element = 1, summed over every compound of the chain.
-// Beef `Type` -> const core::TypeInfo* (our RTTI); nullable String -> Optional<String>.
+// Specificity is CSS's: an id counts 100, a class or pseudo-class (each state flag, each
+// structural test) 10, and a type or pseudo-element 1, summed over every compound of the chain.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:style_selector;
 
-import foundation.core; // TypeInfo, IsDerivedFrom, Array, String, StringView, Optional, i32
+import foundation.core;
 import :control_state;
 
 using namespace foundation::core;
@@ -25,7 +23,7 @@ using namespace foundation::core;
 export namespace foundation::ui
 {
     class
-        View; // defined in :view; Matches() body lives there (breaks the View<->styling module cycle)
+        View; // defined in :view, where Matches() is defined (breaks the View and styling cycle)
 
     /// Structural pseudo-classes (position among siblings, emptiness). Flags.
     enum class StructuralMatch : u8
@@ -44,12 +42,12 @@ export namespace foundation::ui
         return (static_cast<u8>(value) & static_cast<u8>(flag)) != 0;
     }
 
-    /// One compound: every constraint here must hold on ONE view.
+    /// One compound: every constraint here must hold on a single view.
     struct SelectorCompound
     {
         /// View type to match (null = any type). `UnknownType` marks a type name the sheet
-        /// used that no registry knows: the compound then matches NOTHING (loud in tests,
-        /// harmless at runtime) instead of silently matching everything.
+        /// used that no registry knows: the compound then matches nothing (which tests notice
+        /// and is harmless at runtime) instead of silently matching everything.
         const TypeInfo* ViewType = nullptr;
         bool UnknownType = false;
         /// Style classes to match. All must be present on the view. Empty = any.
@@ -97,7 +95,7 @@ export namespace foundation::ui
     };
 
     /// An ancestor step: the compound an ancestor must match, and whether it must be the
-    /// DIRECT parent (`>`) of the view matched by the step before it.
+    /// direct parent (`>`) of the view matched by the step before it.
     struct SelectorAncestor
     {
         SelectorCompound Compound;
@@ -107,8 +105,8 @@ export namespace foundation::ui
     class StyleSelector
     {
     public:
-        // The SUBJECT compound (the rightmost one: the view the rule applies to). Kept as flat
-        // fields so the fluent sheet builders and every existing reader keep their shape.
+        // The subject compound (the rightmost one: the view the rule applies to), stored as flat
+        // fields that the fluent sheet builders and readers use directly.
         /// View type to match (null = any type).
         const TypeInfo* ViewType = nullptr;
         /// Style classes to match. All must be present on the view. Empty = any.
@@ -122,8 +120,8 @@ export namespace foundation::ui
         bool UnknownType = false;
         /// Pseudo-element name to match (empty = targets the element itself).
         Optional<String> PseudoElement;
-        /// Ancestor steps, NEAREST FIRST: [0] is matched against the subject's parent (or an
-        /// ancestor, per DirectParent), [1] against that view's parent/ancestor, and so on.
+        /// Ancestor steps, nearest first: [0] is matched against the subject's parent (or an
+        /// ancestor, per DirectParent), [1] against that view's parent or ancestor, and so on.
         Array<SelectorAncestor> Ancestors;
 
         StyleSelector() = default;
@@ -144,7 +142,7 @@ export namespace foundation::ui
         }
 
         /// Whether this selector matches the given view, state, and optional pseudo-element name.
-        /// Body defined in the :view partition (needs View complete).
+        /// Defined in the :view partition, which has View complete.
         [[nodiscard]] bool Matches(const View& view, ControlState state,
                                    StringView pseudoElement = {}) const;
 
@@ -173,7 +171,7 @@ export namespace foundation::ui
             return c;
         }
 
-        /// True if this selector has no constraints (matches every view/state, no pseudo).
+        /// True if this selector has no constraints (matches every view and state, no pseudo-element).
         [[nodiscard]] bool IsEmpty() const noexcept
         {
             return ViewType == nullptr && !UnknownType && StyleClasses.Size() == 0 &&

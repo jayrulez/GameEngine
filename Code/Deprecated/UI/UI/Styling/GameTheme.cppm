@@ -3,10 +3,10 @@
 
 // UI - :game_theme partition.
 //
-// GameTheme: the DEFAULT stylesheet for GAME UI (the UISubsystem's context ships with it;
-// games override per-context, per-canvas via cooked UITheme assets, or per-control - all
-// existing mechanics). A code theme in the DarkTheme shape: today a teal-accented dark
-// palette tuned for over-scene legibility; it diverges further as game controls demand.
+// GameTheme: the default stylesheet for game UI, which the UISubsystem's context starts with.
+// Games override it per context, per canvas through cooked UITheme assets, or per control. It is
+// a code theme in the DarkTheme shape, with a teal-accented dark palette tuned for legibility over
+// the scene.
 
 module;
 #include "Core/Prelude.h"
@@ -39,10 +39,10 @@ export namespace foundation::ui
         }
     };
 
-    // The built-in LIGHT variant: the LightTheme shape
-    // with the same teal game accent - for games whose UI sits on bright scenes/menus.
-    // Swap per context (UISubsystem's Context().SetStyleSheet(GameLightTheme::Create()))
-    // or ship a cooked UITheme asset for full control.
+    // The built-in light variant: the LightTheme shape with the same teal game accent, for
+    // games whose UI sits on bright scenes or menus. Swap it in per context
+    // (UISubsystem's Context().SetStyleSheet(GameLightTheme::Create())) or ship a cooked
+    // UITheme asset for full control.
     struct GameLightTheme
     {
         [[nodiscard]] static ThemePalette Palette() noexcept

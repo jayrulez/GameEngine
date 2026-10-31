@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - named events (K4 of Specs/gui-lab-evolution-3.md): an event a library names for itself (a
-// gamekit screen's `screenenter`), sent to a node with a detail, heard by name and by no other.
+// GUI - named events: an event a library names for itself (a gamekit screen's `screenenter`), sent
+// to a node with a detail, heard by name and by no other.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

@@ -1,4 +1,4 @@
-# Foundation::Animation.Resource unit tests (doctest; content DB round-trip - no GPU).
+# Foundation::Animation.Resource unit tests (doctest; content DB round-trip, no GPU).
 
 add_executable(Animation.Resource.Tests
     TestsMain.cpp

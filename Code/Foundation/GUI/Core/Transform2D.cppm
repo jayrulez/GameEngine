@@ -3,27 +3,27 @@
 
 // GUI - :transform2d partition
 //
-// Transform2D: a 2D affine transform, the primitive Transformable (Phase 1) composes
-// and hands to the VG-backed DrawContext. Stored as 6 floats in column-vector affine
-// form (eepp/SFML style):
+// Transform2D: a 2D affine transform, the primitive Transformable composes and hands to the
+// VG-backed DrawContext. Stored as 6 floats in column-vector affine form (as eepp and SFML store
+// it):
 //
 //     | a  c  tx |          x' = a*x + c*y + tx
 //     | b  d  ty |          y' = b*x + d*y + ty
 //     | 0  0  1  |
 //
-// ToMatrix() lays those into a core::Float4x4 in the exact convention VG's
+// ToMatrix() lays those into a core::Float4x4 in the convention VG's
 // TransformPoint2D reads (row-vector, translation in row 3), so a subtree transform
 // feeds DrawContext losslessly and rotation matches Float4x4::RotationZ.
 //
-// Derived from eepp include/eepp/math/transform.hpp; angles are RADIANS (VG
-// convention, not eepp's degrees); camelCase -> PascalCase.
+// Derived from eepp include/eepp/math/transform.hpp. Angles are in radians (VG's
+// convention, where eepp uses degrees).
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:transform2d;
 
-import foundation.core; // Float2, Float4x4, Cos/Sin, NearlyEqual
+import foundation.core;
 
 import :rect;
 

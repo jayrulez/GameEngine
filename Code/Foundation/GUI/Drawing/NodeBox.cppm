@@ -3,12 +3,12 @@
 
 // GUI - :node_box partition
 //
-// NodeBox: a node's box as values, resolved to pixels (G2 of Specs/vg-and-gui-lab.md): background
-// colour and layers (gradients, images), a border width and colour per side, corner radii, and box
-// shadows, and the effects drawn with them (G4): a blur of the node with its subtree, a blur of
-// what lies behind the box, and how the node blends into what is under it. A sheet's box properties write it and native code may set it directly; the node draws it
-// through VG (analytic boxes, box shadows, gradient fills) with nothing allocated per draw or per
-// restyle, and G3's transitions interpolate its fields.
+// NodeBox: a node's box as values resolved to pixels. It holds the background colour and layers
+// (gradients, images), a border width and colour per side, corner radii and box shadows, plus the
+// effects drawn with them: a blur of the node with its subtree, a blur of what lies behind the box,
+// and how the node blends into what is under it. A sheet's box properties write it, and native code
+// may set it directly. The node draws it through VG (analytic boxes, box shadows, gradient fills)
+// without allocating per draw or per restyle, and transitions interpolate its fields.
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +21,7 @@ import foundation.vg;
 import foundation.vg.svg; // SVGDocument, SVGRenderer (an SVG layer)
 import :rect;
 import :draw_context;
-import :picture_baker; // an SVG skin's bake
+import :picture_baker; // baking an SVG skin
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -41,14 +41,13 @@ export namespace foundation::gui
     struct BoxGradient
     {
         BoxGradientKind Kind = BoxGradientKind::Linear;
-        f32 Angle = 3.14159265358979f; ///< Linear: CSS's angle (0 up, clockwise). Conic: its start.
+        f32 Angle = 3.14159265358979f; ///< Linear: CSS's angle (0 up, clockwise). Conic: the start angle.
         bool Repeating = false;
         Array<vg::GradientStop> Stops;
     };
 
-    /// One background layer over the background colour: a gradient or an image.
-    /// A layer's size or position along one axis (E13 of Specs/gui-lab-evolution-2.md): pixels and a
-    /// percentage of a base the drawing knows, or auto.
+    /// A layer's size or position along one axis: pixels plus a percentage of a base known when
+    /// drawing, or auto.
     struct LayerLength
     {
         f32 Px = 0.0f;
@@ -56,33 +55,34 @@ export namespace foundation::gui
         bool Auto = false;
         [[nodiscard]] f32 Resolve(f32 base) const noexcept { return Px + Percent * base * 0.01f; }
     };
-    /// How an image layer is sized in its box (CSS's background-size; Fill when none is given, the
-    /// GUI's own default: the box filled, as before there was a background-size).
+    /// How an image layer is sized in its box (CSS's background-size). Fill, which fills the box, is
+    /// used when none is given.
     enum class LayerSize : u8
     {
         Fill,
-        Auto,    ///< its own size
-        Cover,   ///< as small as covers the box, its aspect kept
-        Contain, ///< as large as fits in the box, its aspect kept
-        Lengths, ///< Width and Height (either auto: from the other by the aspect)
+        Auto,    ///< the image's own size
+        Cover,   ///< the smallest size that covers the box, keeping the aspect ratio
+        Contain, ///< the largest size that fits in the box, keeping the aspect ratio
+        Lengths, ///< Width and Height; one that is auto follows from the other by the aspect ratio
     };
 
+    /// One background layer over the background colour: a gradient or an image.
     struct BoxLayer
     {
         bool IsImage = false;
         BoxGradient Gradient;
         const image::ImageData* Image = nullptr; ///< Not owned (the resource provider's).
-        /// An SVG picture instead of Image (E13): drawn as paths at the size it lands, crisp at any
+        /// An SVG picture instead of Image: drawn as paths at the size it lands, crisp at any
         /// scale. Not owned (the resource provider's).
         const foundation::vg::svg::SVGDocument* Svg = nullptr;
-        /// The region of Image it draws (a sprite of an atlas, `url(atlas.png#xywh=x,y,w,h)`, E13);
-        /// empty: all of it.
+        /// The region of Image to draw (a sprite of an atlas, `url(atlas.png#xywh=x,y,w,h)`); empty
+        /// draws the whole image.
         Rectangle Source{};
         LayerSize Size = LayerSize::Fill;
         LayerLength Width{0.0f, 0.0f, true};
         LayerLength Height{0.0f, 0.0f, true};
         /// background-position: from the box's left and top, a percentage of the room left over
-        /// (the box less the image: 50% centres it, 100% puts it at the far edge).
+        /// (the box minus the image: 50% centres it, 100% puts it at the far edge).
         LayerLength X{};
         LayerLength Y{};
     };
@@ -91,38 +91,38 @@ export namespace foundation::gui
     enum class BorderLine : u8
     {
         Solid,
-        Dashed, ///< dashes three times its width, gaps twice it
-        Dotted, ///< round dots as wide as it, as far apart
+        Dashed, ///< dashes three times the border width, with gaps twice the width
+        Dotted, ///< round dots as wide as the border, spaced as far apart
     };
 
     /// How a border image fills an edge (CSS's border-image-repeat).
     enum class BorderImageRepeat : u8
     {
-        Stretch, ///< one piece stretched along
-        Repeat,  ///< tiles from the middle out, cut at the ends
-        Round,   ///< whole tiles, stretched to fit a whole number
+        Stretch, ///< one piece stretched along the edge
+        Repeat,  ///< tiles from the middle outward, cut at the ends
+        Round,   ///< whole tiles, stretched so a whole number of them fits
     };
-    /// A nine-slice skin over the box (CSS's border-image, E13 of Specs/gui-lab-evolution-2.md):
-    /// the image cut by Slice into corners, edges and a middle, drawn into Width from the box's
-    /// edges, in place of the border; the middle too when Fill. The image is a raster or an SVG,
-    /// whose pieces are drawn as paths at the size they land.
+    /// A nine-slice skin over the box (CSS's border-image). Slice cuts the image into corners, edges
+    /// and a middle, which are drawn into Width from the box's edges in place of the border; the
+    /// middle is drawn too when Fill is set. The image is a raster or an SVG; an SVG's pieces are
+    /// drawn as paths at the size they land.
     struct BorderImage
     {
         const image::ImageData* Image = nullptr; ///< Not owned (the resource provider's).
         const foundation::vg::svg::SVGDocument* Svg = nullptr; ///< instead of Image; not owned (the resource provider's)
-        Rectangle Source{};                      ///< its region of Image (a sprite); empty: all of it
+        Rectangle Source{};                      ///< the region of Image to use (a sprite); empty uses all of it
         f32 Slice[4]{};                          ///< top, right, bottom, left, in the image's pixels (an SVG's units)
-        f32 Width[4]{-1.0f, -1.0f, -1.0f, -1.0f}; ///< top, right, bottom, left, in pixels; below 0: the border's width
+        f32 Width[4]{-1.0f, -1.0f, -1.0f, -1.0f}; ///< top, right, bottom, left, in pixels; below 0 uses the border's width
         bool Fill = false;
-        BorderImageRepeat RepeatX = BorderImageRepeat::Stretch; ///< top, bottom and middle across
-        BorderImageRepeat RepeatY = BorderImageRepeat::Stretch; ///< left, right and middle down
+        BorderImageRepeat RepeatX = BorderImageRepeat::Stretch; ///< for the top, bottom and middle, horizontally
+        BorderImageRepeat RepeatY = BorderImageRepeat::Stretch; ///< for the left, right and middle, vertically
 
         [[nodiscard]] bool HasPicture() const noexcept { return Image != nullptr || Svg != nullptr; }
     };
 
-    /// Where an image of `iw` by `ih` pixels lands for `layer` in `box`: its size by the layer's
-    /// background-size, placed by its background-position (it may reach past the box; drawing
-    /// cuts it there). Empty for an image or a box of no size.
+    /// Returns where an image of `iw` by `ih` pixels lands for `layer` in `box`: sized by the
+    /// layer's background-size and placed by its background-position. It may reach past the box,
+    /// where drawing cuts it off. Returns an empty rect for an image or a box of no size.
     [[nodiscard]] inline Rectangle PlaceImageLayer(const BoxLayer& layer, const Rectangle& box, f32 iw, f32 ih) noexcept
     {
         if (iw <= 0.0f || ih <= 0.0f || box.width <= 0.0f || box.height <= 0.0f)
@@ -179,23 +179,24 @@ export namespace foundation::gui
     {
         Color BackgroundColor{0.0f, 0.0f, 0.0f, 0.0f};
         Array<BoxLayer> Layers; ///< First on top, as CSS lists them.
-        BorderImage Skin;       ///< border-image: drawn in place of the border when it has an image (E13)
-        BorderLine BorderLines[4]{}; ///< top, right, bottom, left (E13: dashed and dotted)
+        BorderImage Skin;       ///< border-image: drawn in place of the border when it has an image
+        BorderLine BorderLines[4]{}; ///< top, right, bottom, left (dashed and dotted)
         vg::BorderWidths BorderWidths{};
         vg::BorderColors BorderColors{};
         vg::CornerRadii Radii{};
         Array<BoxShadow> Shadows;
         f32 FilterBlur = 0.0f;   ///< filter: blur(): the node and its subtree blur as one (a sigma, logical units)
-        f32 BackdropBlur = 0.0f; ///< backdrop-filter: blur(): what this canvas drew behind the box blurs
-        vg::VGBlendMode BlendMode = vg::VGBlendMode::Normal; ///< mix-blend-mode: the node's composite
-        /// text-shadow, text-outline, text-glow: drawn under this node's text and its children's
-        /// (inherited, as CSS's text-shadow is, through the VG's state); each the node sets
+        f32 BackdropBlur = 0.0f; ///< backdrop-filter: blur(): blurs what this canvas drew behind the box
+        vg::VGBlendMode BlendMode = vg::VGBlendMode::Normal; ///< mix-blend-mode: how the node composites
+        /// text-shadow, text-outline, text-glow: drawn under the text of this node and its children,
+        /// inherited through the VG state as CSS's text-shadow is. Each effect the node sets
         /// (TextEffectsSet's bits, kTextShadow and the rest) replaces its parent's.
         vg::TextEffects TextEffects{};
         u8 TextEffectsSet = 0;
         static constexpr u8 kTextShadow = 1, kTextOutline = 2, kTextGlow = 4;
 
-        /// The text effects this node draws under: `inherited` with what it sets replaced.
+        /// Returns the text effects this node draws under: `inherited`, with the effects this node
+        /// sets replaced.
         [[nodiscard]] vg::TextEffects MergeTextEffects(vg::TextEffects inherited) const noexcept
         {
             if ((TextEffectsSet & kTextShadow) != 0)
@@ -229,8 +230,8 @@ export namespace foundation::gui
             return FilterBlur > 0.0f || BlendMode != vg::VGBlendMode::Normal;
         }
 
-        /// What goes under the content: outer shadows, the backdrop blur, the background colour, the
-        /// layers (the last first), inset shadows, then the border.
+        /// Draws what goes under the content: outer shadows, the backdrop blur, the background
+        /// colour, the layers (the last first), inset shadows, then the border.
         void DrawUnder(DrawContext& ctx, const Rect& box, bool withBackdrop = true) const
         {
             if (IsEmpty() || box.width <= 0.0f || box.height <= 0.0f)
@@ -241,10 +242,10 @@ export namespace foundation::gui
             {
                 if (shadow.Inset)
                     continue;
-                // A sharp ring round the box (a focus ring: spread, no blur, no offset) is only
-                // the band outside the box, as CSS clips an outer shadow to it: a box with no
-                // background (a field inside a frame) shows what is behind it, not the ring's
-                // colour. Stroked along the band's middle, so nothing is painted inside.
+                // A sharp ring round the box (a focus ring: spread, no blur, no offset) covers only
+                // the band outside the box, as CSS clips an outer shadow to the outside. So a box with
+                // no background (a field inside a frame) shows what is behind it, not the ring's
+                // colour. The ring is stroked along the band's middle, so nothing is painted inside.
                 if (shadow.Blur <= 0.0f && shadow.Offset.x == 0.0f && shadow.Offset.y == 0.0f && shadow.Spread > 0.0f)
                 {
                     const f32 half = shadow.Spread * 0.5f;
@@ -262,9 +263,10 @@ export namespace foundation::gui
             // The backdrop blurs inside the box's shape, under its (translucent) background.
             if (withBackdrop)
                 DrawBackdrop(ctx, box);
-            // A background straight under a solid border is one box with it: drawn apart, both are
-            // smoothed along the same outer curve, and the background shows outside the border at a
-            // rounded corner. One box takes fill and border from one edge.
+            // A background directly under a solid border is drawn as one box with the border. Drawn
+            // separately, both would be smoothed along the same outer curve, and the background
+            // would show outside the border at a rounded corner. One box takes its fill and border
+            // from one edge.
             const bool bordered = !Skin.HasPicture() && !BorderWidths.IsZero() && !BorderColors.IsTransparent();
             const bool solid = BorderLines[0] == BorderLine::Solid && BorderLines[1] == BorderLine::Solid &&
                                BorderLines[2] == BorderLine::Solid && BorderLines[3] == BorderLine::Solid;
@@ -299,7 +301,8 @@ export namespace foundation::gui
             }
         }
 
-        /// The backdrop blur alone (a node drawing through a layer draws it first, behind the layer).
+        /// Draws only the backdrop blur. A node drawing through a layer draws this first, behind the
+        /// layer.
         void DrawBackdrop(DrawContext& ctx, const Rect& box) const
         {
             if (BackdropBlur > 0.0f && box.width > 0.0f && box.height > 0.0f)
@@ -313,8 +316,8 @@ export namespace foundation::gui
             return vg::CornerRadii(grow(r.topLeft), grow(r.topRight), grow(r.bottomRight), grow(r.bottomLeft));
         }
 
-        // An image layer sized and placed in the box (E13), the part outside it cut off (its
-        // source cropped to match, so nothing spills past the box or its corners).
+        // Draws an image layer sized and placed in the box, cutting off the part outside it. The
+        // source is cropped to match, so nothing spills past the box or its corners.
         void DrawImageLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect) const
         {
             const bool region = layer.Source.width > 0.0f && layer.Source.height > 0.0f; // a sprite
@@ -336,12 +339,13 @@ export namespace foundation::gui
                 canvas.DrawImage(layer.Image, shown, source, Color::White);
         }
 
-        // A border with dashed or dotted sides (E13), drawn as browsers draw one. Each side is a
-        // path down the middle of its band: from the half-way point of its first corner's arc,
-        // along its edge, to the half-way point of the next (a square corner: the corner itself).
-        // Its dashes or dots are fitted to that length, so it starts and ends on one; dots are as
-        // long as the border is wide with gaps as long (round from 3 wide). Each side is kept to
-        // its trapezoid, so sides of different styles or colours meet on the corner's diagonal.
+        // Draws a border with dashed or dotted sides, as browsers draw one. Each side is a path down
+        // the middle of its band: from the half-way point of its first corner's arc, along its
+        // edge, to the half-way point of the next corner's arc (at a square corner, the corner
+        // itself). The dashes or dots are fitted to that length, so the side starts and ends on
+        // one. Dots are as long as the border is wide, with gaps as long, and are round once the
+        // border is 3 wide. Each side is clipped to its trapezoid, so sides of different styles or
+        // colours meet on the corner's diagonal.
         void DrawLinedBorder(vg::VGContext& canvas, const Rectangle& rect) const
         {
             const f32 widths[4] = {BorderWidths.top, BorderWidths.right, BorderWidths.bottom, BorderWidths.left};
@@ -349,8 +353,9 @@ export namespace foundation::gui
             const f32 l = rect.x, t = rect.y, r = rect.x + rect.width, b = rect.y + rect.height;
             // The corners clockwise from the top left, and each side between corners i and i + 1.
             const f32 radii[4] = {Radii.topLeft, Radii.topRight, Radii.bottomRight, Radii.bottomLeft};
-            // Each side's own region: its outer edge, and the corners' diagonals (outer corner
-            // through inner corner) carried far enough in to hold the corner arcs' halves.
+            // Each side's own region: its outer edge, and the corners' diagonals (from the outer
+            // corner through the inner corner), carried in far enough to hold half of each corner
+            // arc.
             f32 deepest = 0.0f, thinnest = 1e9f;
             for (usize k = 0; k < 4; ++k)
             {
@@ -367,19 +372,20 @@ export namespace foundation::gui
                 {{l, b}, {l, t}, {il, it}, {il, ib}},
             };
             const core::Float2 corners[4] = {{l, t}, {r, t}, {r, b}, {l, b}};
-            const core::Float2 inward[4] = {{1.0f, 1.0f}, {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, -1.0f}}; // a corner's centre is inside it
+            const core::Float2 inward[4] = {{1.0f, 1.0f}, {-1.0f, 1.0f}, {-1.0f, -1.0f}, {1.0f, -1.0f}}; // the inward direction at each corner, where its arc's centre lies
             for (usize i = 0; i < 4; ++i)
             {
                 if (widths[i] <= 0.0f || colors[i].a <= 0.0f)
                     continue;
                 const f32 w = widths[i];
                 const usize c0 = i, c1 = (i + 1) % 4;
-                // The side's path, with its length.
+                // Build the side's path and measure its length.
                 vg::PathBuilder path;
                 f32 length = 0.0f;
                 const auto along = [&](usize corner, bool start) -> core::Float2
                 {
-                    // Where the side's middle meets corner `corner`'s straight run (a square corner: the corner).
+                    // Where the side's middle line meets the straight run at `corner` (at a square
+                    // corner, the corner itself).
                     const f32 R = radii[corner];
                     const core::Float2 c = corners[corner];
                     const core::Float2 in = inward[corner];
@@ -398,7 +404,7 @@ export namespace foundation::gui
                     const core::Float2 centre{c.x + in.x * R, c.y + in.y * R};
                     return core::Float2{centre.x - in.x * rc * 0.70710678f, centre.y - in.y * rc * 0.70710678f};
                 };
-                constexpr f32 kEighth = 0.78539816f; // a quarter circle's half, in radians
+                constexpr f32 kEighth = 0.78539816f; // half a quarter circle, in radians
                 const f32 rc0 = radii[c0] - w * 0.5f, rc1 = radii[c1] - w * 0.5f;
                 const core::Float2 runStart = along(c0, true), runEnd = along(c1, false);
                 if (rc0 > 0.0f)
@@ -416,7 +422,7 @@ export namespace foundation::gui
                     path.ArcTo(rc1, rc1, 0.0f, false, true, halfway(c1));
                     length += rc1 * kEighth;
                 }
-                // Its pattern, fitted.
+                // Fit the dash pattern to the side's length.
                 vg::StrokeStyle style(w);
                 f32 dash[2] = {0.0f, 0.0f};
                 usize dashes = 0;
@@ -446,10 +452,11 @@ export namespace foundation::gui
             }
         }
 
-        // The border image: nine pieces of the image (its region) into the box, corners as they
-        // are cut, edges and the middle stretched, repeated or rounded along. An SVG's pieces come
-        // from the picture baked at the size its corners land, when the host bakes (a textured
-        // quad each); until then, and without a baker, each is the document drawn as paths.
+        // Draws the border image: nine pieces of the image (or of its region) into the box. Corners
+        // are drawn as they are cut, and the edges and the middle are stretched, repeated or rounded
+        // along. When the host bakes, an SVG's pieces come from the picture baked at the size its
+        // corners land, each drawn as a textured quad. Until then, and without a baker, each piece
+        // is the document drawn as paths.
         void DrawSkin(DrawContext& ctx, const Rectangle& rect) const
         {
             vg::VGContext& canvas = ctx.VG();
@@ -472,7 +479,7 @@ export namespace foundation::gui
             const image::ImageData* baked = Skin.Svg != nullptr ? BakedSkin(ctx, w, s) : nullptr;
             if (baked != nullptr)
             {
-                // The baked picture's pixels stand in for the document's units.
+                // Measure the slices in the baked picture's pixels instead of the document's units.
                 const f32 px = static_cast<f32>(baked->Width()) / Skin.Svg->width;
                 const f32 py = static_cast<f32>(baked->Height()) / Skin.Svg->height;
                 src = Rectangle{0.0f, 0.0f, static_cast<f32>(baked->Width()), static_cast<f32>(baked->Height())};
@@ -481,7 +488,7 @@ export namespace foundation::gui
                 s[1] *= px;
                 s[3] *= px;
             }
-            // Columns and rows, of the box and of the image.
+            // The column and row edges, in the box and in the image.
             const f32 dx[4] = {rect.x, rect.x + w[3], rect.x + rect.width - w[1], rect.x + rect.width};
             const f32 dy[4] = {rect.y, rect.y + w[0], rect.y + rect.height - w[2], rect.y + rect.height};
             const f32 sx[4] = {src.x, src.x + s[3], src.x + src.width - s[1], src.x + src.width};
@@ -495,7 +502,8 @@ export namespace foundation::gui
                     const Rectangle piece{sx[col], sy[row], sx[col + 1] - sx[col], sy[row + 1] - sy[row]};
                     if (d.width <= 0.0f || d.height <= 0.0f || piece.width <= 0.0f || piece.height <= 0.0f)
                         continue;
-                    // An edge's tile is as tall (or wide) as the edge, its length scaled alike.
+                    // An edge's tile is as tall (or wide) as the edge, with its length scaled by the
+                    // same factor.
                     const BorderImageRepeat along = col == 1 ? Skin.RepeatX : BorderImageRepeat::Stretch;
                     const BorderImageRepeat down = row == 1 ? Skin.RepeatY : BorderImageRepeat::Stretch;
                     const f32 tileW = col == 1 ? piece.width * (row == 1 ? (w[0] > 0.0f ? w[0] / Max(s[0], 1.0f) : 1.0f) : d.height / piece.height) : d.width;
@@ -503,9 +511,10 @@ export namespace foundation::gui
                     DrawTiled(canvas, d, piece, along, down, tileW, tileH, baked);
                 }
         }
-        // The SVG skin baked at its corners' scale (each border width over its slice; the largest,
-        // so no corner is magnified) in device pixels; null when there is no baker, it is not baked
-        // yet (asking queues it), or it would be larger than a bake is allowed.
+        // Returns the SVG skin baked at its corners' scale, in device pixels. The scale is the
+        // largest ratio of border width to slice, so no corner is magnified. Returns null when there
+        // is no baker, when the skin is not baked yet (asking queues the bake), or when it would be
+        // larger than a bake is allowed.
         const image::ImageData* BakedSkin(DrawContext& ctx, const f32 (&w)[4], const f32 (&s)[4]) const
         {
             static constexpr f32 kLargestBake = 2048.0f;
@@ -522,8 +531,9 @@ export namespace foundation::gui
                 return nullptr;
             return baker->Baked(*Skin.Svg, static_cast<u32>(width), static_cast<u32>(height));
         }
-        // `piece` of the skin's image over `d`: stretched, or tiled at `tileW` by `tileH` (repeat:
-        // centred, cut at the ends; round: a whole number, stretched to fit).
+        // Draws `piece` of the skin's image over `d`, stretched or tiled at `tileW` by `tileH`.
+        // Repeat centres the tiles and cuts them at the ends; round fits a whole number of tiles,
+        // stretched.
         void DrawTiled(vg::VGContext& canvas, const Rectangle& d, const Rectangle& piece, BorderImageRepeat along,
                        BorderImageRepeat down, f32 tileW, f32 tileH, const image::ImageData* baked) const
         {
@@ -544,7 +554,7 @@ export namespace foundation::gui
                     return;
                 }
                 size = tile;
-                count = static_cast<usize>(length / tile) + 2; // centred: a part tile at each end
+                count = static_cast<usize>(length / tile) + 2; // centred, with a partial tile at each end
                 start = (length - tile * static_cast<f32>(count)) * 0.5f;
             };
             f32 tw, th, x0, y0;
@@ -568,8 +578,8 @@ export namespace foundation::gui
                         DrawSvgPart(canvas, shown, part);
                 }
         }
-        // `part` of the skin's SVG (in its units) into `shown`: the whole document scaled and
-        // placed so that part lands there, clipped to it.
+        // Draws `part` of the skin's SVG (in the SVG's units) into `shown`: the whole document is
+        // scaled and placed so that part lands there, and clipped to it.
         void DrawSvgPart(vg::VGContext& canvas, const Rectangle& shown, const Rectangle& part) const
         {
             const f32 sx = shown.width / part.width, sy = shown.height / part.height;
@@ -579,8 +589,8 @@ export namespace foundation::gui
             canvas.PopClip();
         }
 
-        // An SVG layer: sized and placed as an image of its own size is, drawn as paths, the part
-        // past the box clipped off.
+        // Draws an SVG layer as paths, sized and placed as an image of the SVG's own size would be,
+        // with the part past the box clipped off.
         static void DrawSvgLayer(vg::VGContext& canvas, const BoxLayer& layer, const Rectangle& rect)
         {
             const f32 w = layer.Svg->width > 0.0f ? layer.Svg->width : rect.width;
@@ -613,9 +623,9 @@ export namespace foundation::gui
             vg::PathBuilder shape;
             vg::ShapeBuilder::BuildRoundedRect(rect, Radii, shape);
             const core::Float2 center{rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f};
-            // A repeating gradient repeats the span of its stops (CSS), and VG repeats its whole
-            // line: the line is cut to the stops' span (linear: its ends; radial: its radius, from
-            // the centre) and the stops spread over it.
+            // A repeating gradient repeats the span of its stops (as in CSS), while VG repeats its
+            // whole line. So the line is cut to the stops' span (for linear, its ends; for radial,
+            // its radius from the centre) and the stops are spread over it.
             const f32 first = g.Repeating ? g.Stops[0].offset : 0.0f;
             const f32 last = g.Repeating ? g.Stops[g.Stops.Size() - 1].offset : 1.0f;
             const bool repeating = g.Repeating && last - first > 1e-4f;
@@ -657,9 +667,10 @@ export namespace foundation::gui
         }
     };
 
-    /// How a sheet styles one of a widget's parts (`slider::thumb`, `checkbox::box`; E3): a box
-    /// and an opacity, each aspect only where the sheet gives it. A widget draws a part from its
-    /// own look (a NodeBox: its colour, radii, outline, glow) with the sheet's aspects over it.
+    /// How a sheet styles one of a widget's parts (`slider::thumb`, `checkbox::box`): a box and an
+    /// opacity, with each aspect applied only where the sheet sets it. A widget draws a part from its
+    /// own look (a NodeBox with its colour, radii, outline and glow) and lays the sheet's aspects
+    /// over it.
     struct PartStyle
     {
         NodeBox Box;
@@ -669,17 +680,18 @@ export namespace foundation::gui
         bool HasBorderColor = false;
         bool HasRadii = false;
         bool HasShadows = false;
-        /// Its `color`: what a part that is text draws in (a code editor's keyword, CSS's ::selection).
+        /// The part's `color`: the colour a text part draws in (a code editor's keyword, CSS's
+        /// ::selection).
         Color TextColor{};
         bool HasColor = false;
-        /// Its `width` and `height` in pixels, where the sheet gives them: a part the widget sizes
-        /// itself (a slider's track thickness, its thumb) takes them over its own.
+        /// The part's `width` and `height` in pixels, where the sheet sets them. A part the widget
+        /// sizes itself (a slider's track thickness, its thumb) uses them instead of its own.
         f32 Width = 0.0f;
         f32 Height = 0.0f;
         bool HasWidth = false;
         bool HasHeight = false;
 
-        /// `own` with the sheet's aspects over it.
+        /// Returns `own` with the sheet's aspects laid over it.
         [[nodiscard]] NodeBox Over(NodeBox own) const
         {
             if (HasBackground)
@@ -700,7 +712,8 @@ export namespace foundation::gui
                 own.Shadows = Box.Shadows;
             return own;
         }
-        /// Draws the part over `rect`: its own look with the sheet's over it, at the sheet's opacity.
+        /// Draws the part over `rect`: its own look with the sheet's aspects over it, at the sheet's
+        /// opacity.
         void Draw(DrawContext& ctx, const Rect& rect, const NodeBox& own) const
         {
             if (Opacity <= 0.0f)
@@ -713,7 +726,7 @@ export namespace foundation::gui
         }
     };
 
-    /// A part's own look: a fill, with radii.
+    /// Makes a part's own look: a fill with corner radii.
     [[nodiscard]] inline NodeBox FilledBox(Color color, vg::CornerRadii radii = {})
     {
         NodeBox box;
@@ -721,7 +734,7 @@ export namespace foundation::gui
         box.Radii = radii;
         return box;
     }
-    /// A part's own look: an outline of `width`, with radii.
+    /// Makes a part's own look: an outline of `width` with corner radii.
     [[nodiscard]] inline NodeBox OutlinedBox(Color color, f32 width, vg::CornerRadii radii = {})
     {
         NodeBox box;

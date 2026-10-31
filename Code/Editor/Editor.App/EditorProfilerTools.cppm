@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :mcp_profiler_tools partition.
 //
-// profiler_capture (Specs/profiler.md, P3): a capture of the next few seconds of the running
-// editor (its pages and any Play-in-editor game, one process), written as files and answered as a
-// summary an agent can act on. Only the editor host serves it: a capture needs frames to run, and
-// the headless host runs none while a call waits.
+// profiler_capture: captures the next few seconds of the running editor (its pages and any
+// Play-in-editor game, in one process), writes the capture as files and answers with a summary an
+// agent can act on. Only the editor host serves it: a capture needs frames to run, and the
+// headless host runs none while a call waits.
 module;
 #include "Core/Prelude.h"
 

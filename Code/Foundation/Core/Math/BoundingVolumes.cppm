@@ -3,13 +3,11 @@
 
 // Core - :bounds partition
 //
-// Bounding-volume suite ported from SedulousEngine (Sedulous.Core.Mathematics): ContainmentType,
-// PlaneIntersectionType, Ray, BoundingSphere, BoundingFrustum, plus BoundingBox helpers over the
-// existing AABB. The types are mutually recursive (ray↔sphere↔frustum↔box), so they live in ONE
-// partition; cross-type Contains/Intersects are FREE FUNCTIONS defined after the structs (avoids
-// C++ incomplete-type issues with Sedulous's member overloads). Sedulous's nullable
-// `float?` ray results become `bool Intersects(..., f32& outT)` (false = no hit). Approximate
-// comparisons use Sedulous's exact 1E-7 epsilon.
+// Bounding volumes: ContainmentType, PlaneIntersectionType, Ray, BoundingSphere, BoundingFrustum,
+// and bounding-box helpers over AABB. The types refer to one another, so they live in one
+// partition, and the cross-type Contains/Intersects are free functions defined after the structs,
+// where every type is complete. Ray tests return `bool Intersects(..., f32& outT)` (false means no
+// hit). Approximate comparisons use a 1e-7 epsilon.
 
 module;
 #include "Core/Prelude.h"
@@ -41,10 +39,10 @@ export namespace foundation::core
 
     namespace bounds_detail
     {
-        inline constexpr f32 kApprox = 1.0e-7f; // matches Sedulous MathUtil (float)
+        inline constexpr f32 kApprox = 1.0e-7f;
         [[nodiscard]] inline bool ApproxZero(f32 v) noexcept { return Abs(v) < kApprox; }
         [[nodiscard]] inline bool ApproxNonZero(f32 v) noexcept { return Abs(v) >= kApprox; }
-        // Sedulous IsApproximatelyGreaterThan: equal counts as true; else needs a real gap AND >.
+        // Equal counts as greater; otherwise a needs to exceed b by more than kApprox.
         [[nodiscard]] inline bool ApproxGreater(f32 a, f32 b) noexcept
         {
             return a == b || (Abs(a - b) >= kApprox && a > b);
@@ -82,7 +80,7 @@ export namespace foundation::core
             return BoundingSphere{c, r};
         }
 
-        // Merge two spheres into the smallest enclosing sphere (Sedulous CreateMerged).
+        // Merge two spheres into the smallest enclosing sphere.
         [[nodiscard]] static BoundingSphere Merge(const BoundingSphere& a,
                                                   const BoundingSphere& b) noexcept
         {
@@ -105,8 +103,7 @@ export namespace foundation::core
             return BoundingSphere{a.center + n * (mx + mn), mx};
         }
 
-        // Ritter-style enclosing sphere of a point set (Sedulous CreateFromPoints). NOTE: Sedulous's
-        // X-axis branch has a copy-paste bug (Lerp(minX,minY)); ported CORRECTLY here (Lerp(minX,maxX)).
+        // Ritter-style enclosing sphere of a point set.
         [[nodiscard]] static BoundingSphere FromPoints(Span<const Float3> points) noexcept
         {
             if (points.IsEmpty())
@@ -236,7 +233,7 @@ export namespace foundation::core
         [[nodiscard]] const Plane& Bottom() const noexcept { return planes[5]; }
 
         // Gribb-Hartmann plane extraction for a row-vector row-major view-proj, NDC z in [0,1], planes
-        // pointing OUTWARD. REVERSE-Z (projection::kReverseZ): the near plane is where z' = w'
+        // pointing outward. With reverse Z (projection::kReverseZ) the near plane is where z' = w'
         // (depth 1) and the far plane where z' = 0, so the two column combinations are the swap
         // of the standard-Z extraction; Left/Right/Top/Bottom are unaffected.
         void SetMatrix(const Float4x4& m) noexcept
@@ -351,13 +348,13 @@ export namespace foundation::core
         return Contains(f, s) != ContainmentType::Disjoint;
     }
 
-    // ---- BoundingBox (AABB) helpers matching Sedulous BoundingBox ----
+    // ---- BoundingBox (AABB) helpers ----
     [[nodiscard]] inline AABB BoundingBoxFromSphere(const BoundingSphere& s) noexcept
     {
         const Float3 c{s.radius, s.radius, s.radius};
         return AABB{s.center - c, s.center + c};
     }
-    // Sedulous corner order (index 0 = (Min.x,Max.y,Max.z) ... 7 = (Min.x,Min.y,Min.z)).
+    // Corner order: index 0 = (Min.x,Max.y,Max.z) ... 7 = (Min.x,Min.y,Min.z).
     inline void GetCorners(const AABB& b, Float3 out[8]) noexcept
     {
         out[0] = Float3{b.min.x, b.max.y, b.max.z};
@@ -407,7 +404,7 @@ export namespace foundation::core
         return AABB{nc - ne, nc + ne};
     }
 
-    // Frustum ∩ box (needs the AABB↔Plane test above).
+    // Frustum against box (uses the AABB-plane test above).
     [[nodiscard]] inline ContainmentType Contains(const BoundingFrustum& f, const AABB& b) noexcept
     {
         bool intersects = false;
@@ -431,7 +428,7 @@ export namespace foundation::core
         return Contains(f, b) != ContainmentType::Disjoint;
     }
 
-    // AABB Contains sphere/frustum (ContainmentType), matching Sedulous BoundingBox.
+    // AABB contains sphere or frustum (ContainmentType).
     [[nodiscard]] inline ContainmentType ContainsCT(const AABB& b, const BoundingSphere& s) noexcept
     {
         const Float3 clamped = bounds_detail::ClampVec(s.center, b.min, b.max);
@@ -486,7 +483,7 @@ export namespace foundation::core
             Span<const Float3>{f.corners, BoundingFrustum::kCornerCount});
     }
 
-    // Ray intersections (bool + out distance; false = no hit). Faithful to Sedulous's float? results.
+    // Ray intersections (bool and an out distance; false means no hit).
     [[nodiscard]] inline bool Intersects(const Ray& ray, const Plane& plane, f32& outT) noexcept
     {
         const f32 nDotDir = Dot(plane.normal, ray.direction);
@@ -684,7 +681,7 @@ export namespace foundation::core
         return Intersects(f, ray, outT);
     }
 
-    // ---- remaining Contains/Intersects overloads (complete the suite vs Sedulous) ----
+    // ---- remaining Contains/Intersects overloads ----
     // sphere contains sphere
     [[nodiscard]] inline ContainmentType Contains(const BoundingSphere& a,
                                                   const BoundingSphere& b) noexcept

@@ -1,6 +1,6 @@
-# Pipeline::Navigation - `navigation.pipeline` (tooling: navmesh-zone asset + builder).
+# Pipeline::Navigation - `navigation.pipeline` (tooling: navmesh-zone asset and builder).
 # The zone is authored in-scene and baked by the editor; this asset carries the baked navmesh
-# (as a sidecar stream - bulk-data-sidecar rule) and cooks it through to NavigationZoneSource.
+# (as a sidecar stream, as bulk data is kept) and cooks it through to NavigationZoneSource.
 # No OS-file importer. Never linked by the runtime.
 util_add_engine_library(Navigation.Pipeline ALIAS Pipeline::Navigation)
 target_link_libraries(Navigation.Pipeline PUBLIC

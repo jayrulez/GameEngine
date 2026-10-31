@@ -3,7 +3,7 @@
 
 // Core - :float4 partition
 //
-// Float4: 4D f32 vector - arithmetic, Dot/Length/Normalized, XYZ(), component
+// Float4: 4D f32 vector with arithmetic, Dot/Length/Normalized, XYZ(), component
 // constants. Converts from Float3.
 
 module;

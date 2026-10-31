@@ -2,11 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Tests for the FileShaderSourceProvider (a Shaders folder in a borrowed filesystem) and the
-// ShaderSystem provider seam: manifest scan + stem/stage mapping, lazy fetch, pull-on-miss
-// through GetVariant with .hlsli include resolution THROUGH THE MOUNT (the provider is the
+// ShaderSystem's provider: the manifest scan and stem/stage mapping, lazy fetch, pull-on-miss
+// through GetVariant with .hlsli includes resolved through the mount (the provider is the
 // compiler's include resolver), explicit-registration precedence, and PumpReloads hot reload
-// (including the .hlsli -> reload-everything fallback). File shaders compile real SPIR-V via
-// DXC on the Null RHI backend, same as ShaderSystemTests.
+// (including a .hlsli edit reloading everything). File shaders compile real SPIR-V through
+// DXC on the Null RHI backend, as in ShaderSystemTests.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -51,7 +51,7 @@ namespace
         return c;
     }
 
-    // Spins PumpReloads past the provider's sweep throttle (2 windows: the file edit can
+    // Spins PumpReloads past the provider's sweep throttle (two windows: the file edit can
     // land right after a sweep). Returns the total number of reloaded shaders.
     usize SpinReloads(ShaderSystem& ss)
     {
@@ -103,7 +103,7 @@ TEST_CASE("file provider: manifest scan, stem/stage mapping, lazy fetch")
     CHECK_FALSE(provider.FetchSource(u8"tonemap", ShaderStage::Compute, source, entryPoint));
     CHECK_FALSE(provider.FetchSource(u8"nope", ShaderStage::Fragment, source, entryPoint));
 
-    // A folder the mount does not have -> NotFound (callers fall back to registered strings).
+    // A folder the mount does not have is NotFound (callers fall back to registered strings).
     FileShaderSourceProvider missing{DefaultAllocator()};
     CHECK(missing.Initialize(fs, u8"does_not_exist") == ErrorCode::NotFound);
     CHECK(missing.ShaderFileCount() == 0);
@@ -133,7 +133,7 @@ TEST_CASE("file provider: a Shaders subfolder - mount-relative paths and folder-
 
     // The include resolver half: a bare first-level include resolves inside the folder; a
     // nested include arrives with the folder prefix already (DXC forms it from the includer's
-    // directory); a file outside the folder is NOT reachable bare; an absent one fails.
+    // directory); a file outside the folder is not reachable bare; an absent one fails.
     String inc;
     CHECK(provider.LoadInclude(u8"common.hlsli", inc));
     CHECK(inc.AsView() == u8"// common\n");
@@ -173,7 +173,7 @@ TEST_CASE("shader system: pulls source from the provider; includes resolve; "
         ss.SetSourceProvider(&provider);
         ss.SetIncludeResolver(&provider); // includes come through the mount, not the disk
 
-        // Never registered - the source comes from the provider, the #include from the mount.
+        // Never registered: the source comes from the provider, the #include from the mount.
         rhi::ShaderModule* m = ss.GetVariant(u8"prov", ShaderStage::Fragment, ShaderFlags::None);
         CHECK(m != nullptr);
 
@@ -223,7 +223,7 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
                           kCorpusEntryPoint);
         CHECK(ss.GetVariant(u8"user", ShaderStage::Fragment, ShaderFlags::None) == nullptr);
 
-        // No edits -> a full throttle window of pumps reloads nothing.
+        // With no edits, a full throttle window of pumps reloads nothing.
         CHECK(SpinReloads(ss) == 0);
 
         // Edit the shader body: exactly that shader reloads, its version bumps, and the
@@ -238,7 +238,7 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
         CHECK(provider.FetchSource(u8"hot", ShaderStage::Fragment, fetched, entryPoint));
         CHECK(fetched.AsView() == StringView(reinterpret_cast<const char8_t*>(kGreenPS)));
 
-        // Edit a .hlsli: includers are unknown, so EVERY served shader reloads.
+        // Edit a .hlsli: includers are unknown, so every served shader reloads.
         WriteFile(root / "reload_common.hlsli",
                   "// v2 - bigger than before\n#define COMMON_RED 1\n");
         CHECK(SpinReloads(ss) == 2);
@@ -251,7 +251,7 @@ TEST_CASE("shader system: PumpReloads picks up file edits and .hlsli edits")
     compiler->Destroy();
 }
 
-// Same reload flow with an ABSOLUTE mount root and a Shaders subfolder - mirrors the
+// The same reload flow with an absolute mount root and a Shaders subfolder, as in the
 // application's data mount (an absolute discovered data root).
 TEST_CASE("file provider: reload detection with an absolute root and a subfolder")
 {

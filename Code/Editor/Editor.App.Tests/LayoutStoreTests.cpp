@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - the per-project store: the dock's layout through the file and back into a dock
-// with the same panels in the same places; with none captured the dock keeps its default; the old
-// dock's tree (section version 1) reads into the new layout: its splits, shares, groups and chosen
-// tabs.
+// Editor::App: the per-project store. The dock's layout goes through the file and back into a dock
+// with the same panels in the same places; with nothing captured the dock keeps its default. The
+// old dock's tree (section version 1) reads into the new layout with its splits, shares, groups and
+// chosen tabs.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <filesystem> // remove_all
@@ -111,7 +111,7 @@ TEST_CASE("layout store: the old dock's tree (version 1) reads into the new layo
     REQUIRE(WriteFile(path.AsView(), Span<const byte>(reinterpret_cast<const byte*>(kLegacy.Data()), kLegacy.Size())).IsOk());
 
     foundation::settings::Settings loaded(DefaultAllocator());
-    REQUIRE(editor::app::LoadProjectEditorSettings(loaded, kDir).IsOk()); // the store reads whole
+    REQUIRE(editor::app::LoadProjectEditorSettings(loaded, kDir).IsOk()); // the store reads back in full
     gui::DockController dock(DefaultAllocator());
     Register(dock, u8"welcome");
     Register(dock, u8"assets");
@@ -121,10 +121,10 @@ TEST_CASE("layout store: the old dock's tree (version 1) reads into the new layo
     CHECK(layout.StackOf(u8"welcome") == layout.CentralStack()); // the first group, top
     const gui::DockNodeId pane = layout.StackOf(u8"assets");
     CHECK(pane != layout.CentralStack());
-    CHECK(layout.StackOf(u8"console") == pane); // one group, tabbed, its second tab chosen
+    CHECK(layout.StackOf(u8"console") == pane); // one group of tabs, with its second tab chosen
     REQUIRE(layout.FindNode(pane) != nullptr);
     CHECK(layout.FindNode(pane)->Active == 1u);
-    // Saved again, the section is the new one.
+    // Saved again, the section is written in the new format.
     editor::app::CaptureDockLayout(dock, loaded);
     REQUIRE(editor::app::SaveProjectEditorSettings(loaded, kDir).IsOk());
     const String saved = ReadText(path.AsView());
@@ -151,7 +151,8 @@ TEST_CASE("layout store: the old tree's nested splits each split their own regio
         node->second = Move(second);
         return node;
     };
-    // Down: the documents (70%), then across: assets (65%) beside console and profiler.
+    // A vertical split with the documents (70%) on top, then a horizontal one with assets (65%)
+    // beside console and profiler.
     UniquePtr<LegacyDockNode> root =
         split(1, 0.7f, group({u8"welcome", u8"page-a"}), split(0, 0.65f, group({u8"assets"}), group({u8"console", u8"profiler"})));
     gui::DockLayout layout = editor::app::LayoutFromLegacy(*root);
@@ -165,7 +166,7 @@ TEST_CASE("layout store: the old tree's nested splits each split their own regio
     CHECK(console != assets);
     CHECK(layout.StackOf(u8"profiler") == console);
 
-    // The documents over the pane, the pane's two side by side: each stack's parent split.
+    // The documents above the pane, and the pane's two stacks side by side: each stack's parent split.
     const auto parentOf = [&layout](gui::DockNodeId id) -> const gui::DockNode*
     {
         for (const gui::DockNode& node : layout.Nodes())
@@ -204,7 +205,7 @@ TEST_CASE("layout store: what a restored layout names and nothing provides (a Ga
     gui::DockController restored(DefaultAllocator());
     Register(restored, u8"assets");
     REQUIRE(restored.Adopt(saved).Ok());
-    CHECK(restored.GetLayout().StackOf(u8"game-page") != gui::kNoDock); // a placeholder until let go
+    CHECK(restored.GetLayout().StackOf(u8"game-page") != gui::kNoDock); // a placeholder until it is forgotten
     editor::app::ForgetUnprovidedPanels(restored);
     const gui::DockLayout& kept = restored.GetLayout();
     CHECK(kept.StackOf(u8"assets") != gui::kNoDock);

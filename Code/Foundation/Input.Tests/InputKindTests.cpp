@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.input tests: the input kind in use (K2a of Specs/gui-lab-evolution-3.md): the
-// pointer, the keyboard or a pad, from deliberate input only, with a change told to listeners.
+// foundation.input tests: the input kind in use (the pointer, the keyboard or a pad), from
+// deliberate input only, with a change told to listeners.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

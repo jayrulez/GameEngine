@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Primary module for foundation.rhi.dx12. Re-exports all partitions.
-/// DX12 backend - Windows only.
+/// DX12 backend, Windows only.
 
 module;
 #include "Core/Prelude.h"

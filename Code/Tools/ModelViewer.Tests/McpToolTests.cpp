@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The model viewer's MCP surface (Documentation/Specs/model-viewer.md, P7), through the MCP
-// server in process as a client sees it: the tool list is the command list (names, schemas,
-// annotations), the guide names every tool, and a call changes the library as the command does,
-// a refused one coming back as a tool error with the command's message.
+// The model viewer's MCP tools, through the in-process MCP server as a client sees them: the tool
+// list matches the command list (names, schemas, annotations), the guide names every tool, a call
+// changes the library as the command does, and a refused call comes back as a tool error with the
+// command's message.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -33,7 +33,7 @@ namespace
         return JsonValue::Parse(line.response);
     }
 
-    // A tool call's result: the command's JSON (in the text content), and whether it was an error.
+    // A tool call's result: the command's JSON (from the text content) and whether it was an error.
     struct Call
     {
         bool error = false;
@@ -122,7 +122,7 @@ TEST_CASE("model viewer mcp: the guide names every tool")
         INFO(reinterpret_cast<const char*>(named.CStr()));
         CHECK(text.ContainsIgnoreCase(named.AsView()));
     }
-    // And it is served as the guide's resource.
+    // The guide is also served as a resource.
     modelviewer::RegisterGuideResource(host.server, guide.AsView());
     const JsonValue read = Response(host.server.HandleLine(
         u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/read\",\"params\":{\"uri\":\"docs://ModelViewerGuide.md\"}}"));
@@ -143,21 +143,21 @@ TEST_CASE("model viewer mcp: a call changes the library as the command does; a r
     REQUIRE(tree.value.Count() == 1);
     CHECK(tree.value.At(0).Get(String(u8"id")).AsString() == id);
 
-    // A refused change: the command's message, as a tool error.
+    // A refused change returns the command's message as a tool error.
     JsonValue blank = JsonValue::MakeObject();
     blank.Set(String(u8"name"), JsonValue::MakeString(String(u8"")));
     const Call refused = CallTool(host.server, u8"collection_create", blank);
     CHECK(refused.error);
     CHECK(refused.text.AsView().ContainsIgnoreCase(u8"needs a name"));
 
-    // viewer_info: the host's say, with the library's folder and writability.
+    // viewer_info: the host's own info, with the library's folder and whether it is writable.
     const Call info = CallTool(host.server, u8"viewer_info", JsonValue::MakeObject());
     REQUIRE_FALSE(info.error);
     CHECK(info.value.Get(String(u8"mode")).AsString() == u8"test");
     CHECK(info.value.Get(String(u8"writable")).AsBool());
     CHECK(info.value.Get(String(u8"library")).AsString() == folder);
 
-    // An undo through MCP steps back over the tool's change.
+    // An undo through MCP reverts the tool's change.
     CHECK_FALSE(CallTool(host.server, u8"history_undo", JsonValue::MakeObject()).error);
     CHECK(host.session.Commands().Execute(u8"collection.tree").value.Count() == 0);
 }
@@ -174,7 +174,7 @@ TEST_CASE("model viewer mcp: without a window, each window command says there is
         CHECK_FALSE(result.ok);
         CHECK(result.error.AsView().ContainsIgnoreCase(u8"there is no window"));
     }
-    // Through MCP, as an agent on --headless meets it.
+    // Through MCP, as an agent sees it under --headless.
     const Call call = CallTool(host.server, u8"tabs_list", JsonValue::MakeObject());
     CHECK(call.error);
     CHECK(call.text.AsView().ContainsIgnoreCase(u8"--headless"));

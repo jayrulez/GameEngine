@@ -3,8 +3,8 @@
 
 // Runtime - engine.defaultapp implementation unit.
 //
-// Out-of-line definitions for DefaultApplication's member functions (sec 3.2 / sec 10.6).
-// The class declaration + trivial inline accessors stay in DefaultApplication.cppm.
+// Out-of-line definitions for DefaultApplication's member functions. The class declaration and
+// trivial inline accessors stay in DefaultApplication.cppm.
 
 module;
 #include "Core/Prelude.h"
@@ -17,41 +17,41 @@ import foundation.core;
 import foundation.rhi;
 import foundation.shaders.system;      // ShaderSystem: the service the shader factory asks for
 import foundation.runtime.client;       // IApplication, IApplicationHost
-import engine.gameinstance; // GameInstance - this app's running game (scene + script bracket)
+import engine.gameinstance; // GameInstance: this app's running game (scene and script bracket)
 import foundation.shell;                // IShell, IKeyboard, KeyCode (the profile-dump hotkey)
 import foundation.graphics;             // GraphicsDevice, FrameContext
-import foundation.vfs;                  // ResolveDataRoot + NativeFileSystem (the data mount)
+import foundation.vfs;                  // ResolveDataRoot and NativeFileSystem (the data mount)
 import foundation.scene;                // Scene
 import engine.scene;      // SceneSubsystem (the standard scene driver)
-import engine.composition; // FullSceneComposition (the single source of truth for scene assembly)
+import engine.composition; // FullSceneComposition (the one source of scene assembly)
 import engine.render;     // RenderSubsystem (the standard renderer)
 import engine.animation; // AnimationSubsystem (drives skeletal animation from the scene)
 import engine.particles; // ParticleSubsystem (scene-driven CPU sim)
 import engine.terrain;   // TerrainSubsystem (chunked geo-mipmap terrain renderer)
 import engine.vegetation; // VegetationSubsystem (per-chunk instanced grass/props over the terrain)
 import foundation.physics;             // ContactKind/EntityContact (the contact bridge)
-import engine.physics;   // PhysicsSubsystem (Jolt worlds + interpolation)
-import engine.navigation; // NavigationSubsystem + script facade
+import engine.physics;   // PhysicsSubsystem (Jolt worlds and interpolation)
+import engine.navigation; // NavigationSubsystem and its script facade
 import foundation.input;               // the action model/runtime
-import engine.input;     // InputSubsystem + the Input facade
+import engine.input;     // InputSubsystem and the Input facade
 import foundation.script;              // IScriptManager/Context (the game script)
 #ifdef OPTION_HAS_ANGELSCRIPT
-import foundation.script.angelscript; // the AngelScript backend (second backend; OPTION_ENABLE_ANGELSCRIPT)
+import foundation.script.angelscript; // the AngelScript backend (OPTION_ENABLE_ANGELSCRIPT)
 #endif
 #ifdef OPTION_HAS_LUAU
 import foundation.script.luau;         // the Luau backend (OPTION_ENABLE_LUAU)
 #endif
-import engine.script;    // ScriptSubsystem (behaviors + the run's shared context)
-import foundation.resource;            // ResourceManager (owned or borrowed - see the preset seam)
+import engine.script;    // ScriptSubsystem (behaviors and the run's shared context)
+import foundation.resource;            // ResourceManager (owned or borrowed: see the infrastructure preset)
 import foundation.content;             // IContentDatabase (preset by the entry point)
 import foundation.scene.resource;      // SceneDocument (product-type registration)
 import foundation.image;               // Image (the screenshot the capture hands back)
 import engine.gui;
 import foundation.audio;               // AudioEngine (owned by the audio subsystem)
-import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)
+import engine.audio;     // AudioSubsystem (voices, buses, one-shots and scene sync)
 import foundation.net;                 // UdpSocket / DatagramEndpoint (the transport)
-import foundation.net.replication;     // NetworkId / StateReplication (the spawn-handler seam)
-import foundation.net.manager;   // NetworkManager + NetworkStartup/StartNetworking + the Net facade
+import foundation.net.replication;     // NetworkId / StateReplication (the spawn handler)
+import foundation.net.manager;   // NetworkManager, NetworkStartup/StartNetworking and the Net facade
 import foundation.run;           // RunRegistry: the live runs, for every subsystem
 import engine.net; // NetworkSubsystem (injects the NetworkComponentManager into scenes)
 import foundation.profiler;      // the CPU scope profiler (P-key dump)
@@ -70,7 +70,7 @@ namespace engine::runtime
     void DefaultApplication::OnUpdate(IApplicationHost& host, core::f32 deltaTime)
     {
         // A screenshot recorded last frame: the GPU has run that frame by now for any slot the
-        // host reuses, but not necessarily this one - a screenshot is a one-off, so wait for
+        // host reuses, but not necessarily this one. A screenshot is a one-off, so wait for
         // everything, then map, write, and honour --screenshot-exit.
         if (m_screenshot.Recorded())
         {
@@ -88,24 +88,24 @@ namespace engine::runtime
         m_runSeconds += deltaTime;
         if (m_render != nullptr)
         {
-            m_render->SetTime(m_runSeconds); // the WIND sway clock
+            m_render->SetTime(m_runSeconds); // the wind sway clock
         }
         if (m_exitAfterSeconds > 0.0f && m_runSeconds >= m_exitAfterSeconds)
         {
             host.RequestExit(0);
         }
-        // Finalize any async resource loads first, so this frame's spawns/ticks see ready
-        // resources (task #123). Pump ONLY the manager this app OWNS: when this DefaultApplication
-        // is embedded in the editor it BORROWS the editor's manager (m_ownedResources stays null),
-        // and the editor pumps that manager itself - pumping it here too would double-pump.
-        // Inert until a factory migrates to the async path.
+        // Finalize any async resource loads first, so this frame's spawns and ticks see ready
+        // resources. Pump only the manager this app owns: when this DefaultApplication is embedded
+        // in the editor it borrows the editor's manager (m_ownedResources stays null), and the
+        // editor pumps that manager itself, so pumping it here too would double-pump.
         if (m_ownedResources)
         {
             m_ownedResources->Pump();
         }
 
-        // Drive + tick EVERY instance (primary + any extras - multi-instance PIE / headless server).
-        // Input FIRST (so the game script sees this frame's keys), then the run host clock, then tick.
+        // Drive and tick every instance (the primary and any extras: multi-instance play in editor,
+        // a headless server). Input first (so the game script sees this frame's keys), then the run
+        // host clock, then the tick.
         const core::f32 contextScale = host.Subsystems().TimeScale();
         ForEachInstance(
             [&](GameInstance& gi)
@@ -121,7 +121,7 @@ namespace engine::runtime
         IKeyboard* kb = (input != nullptr) ? input->Keyboard() : nullptr;
         if (kb != nullptr && kb->IsKeyPressed(KeyCode::F11))
         {
-            // F11: a timestamped PNG in the working directory (the legacy sandbox binding).
+            // F11: a timestamped PNG in the working directory.
             core::String path;
             core::AppendFormat(path, u8"screenshot_{}.png", core::Clock::Now().Ticks());
             CaptureScreenshot(path.AsView());
@@ -179,10 +179,11 @@ namespace engine::runtime
         m_runs->Add(m_instance);
         host.Subsystems().SetRunManager(m_runs.Get());
 
-        // THE data root, resolved once: the explicit override (validated) or the discovery walk.
-        // Every consumer below reads through the mount - none knows the location. Missing = the
-        // run ends with an error naming what was searched; the mount still points at the place a
-        // dist would need (Data/ beside the executable) so every miss on the way out is explicit.
+        // The data root, resolved once: the explicit override (validated) or the discovery walk.
+        // Every consumer below reads through the mount, and none knows the location. If it is
+        // missing, the run ends with an error naming what was searched; the mount still points at
+        // the place a dist would need (Data/ beside the executable), so every miss on the way out
+        // is explicit.
         m_dataRoot = foundation::vfs::ResolveDataRoot(m_dataRootOverride.AsView());
         if (m_dataRoot.IsEmpty())
         {
@@ -201,24 +202,24 @@ namespace engine::runtime
                 host.Subsystems().Allocator(), m_dataRoot.AsView(), host.Subsystems().Allocator());
         }
         m_scenes = host.Subsystems().AddSubsystem<engine::scene::SceneSubsystem>();
-        // The scene-assembly blueprint: every registered manager's CreateScene
-        // assembles from the full composition (the single source of truth).
+        // The scene-assembly blueprint: every registered manager's CreateScene assembles from the
+        // full composition.
         m_scenes->SetComposition(engine::FullSceneComposition());
-        // The run's scene group lives on the GameInstance: register it so it
-        // ticks on the Context lane. WireInstance centralizes this so extra instances wire the same way.
+        // The run's scene group lives on the GameInstance: register it so it ticks on the Context
+        // lane. Extra instances are registered the same way in CreateInstance.
         m_scenes->RegisterManager(&m_instance.Scenes());
         // A script's scene.spawn reaches content through the scene's spawn system, which only the
-        // app can point at the database and the manager - at every scene's SystemsReady.
+        // app can point at the database and the manager, at every scene's SystemsReady.
         m_scenes->RegisterObserver(this, foundation::scene::SceneLifecycleStage::SystemsReady);
         if (GraphicsDevice* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
         {
             m_render = host.Subsystems().AddSubsystem<engine::render::RenderSubsystem>(
                 host.Subsystems().Allocator(), *gfx->Raw(), gfx->FramesInFlight(), *m_dataFileSystem);
-            // Drives skeletal animation from the scene tick (injects the SkeletalAnimation manager,
+            // Drives skeletal animation from the scene tick (injects the animation managers,
             // ticks players, feeds bone matrices to mesh components). Needs the render managers.
             host.Subsystems().AddSubsystem<engine::animation::AnimationSubsystem>();
             host.Subsystems().AddSubsystem<engine::particles::ParticleSubsystem>();
-            // The chunked geo-mipmap terrain renderer: registers itself on Opaque + wires the
+            // The chunked geo-mipmap terrain renderer: registers itself on Opaque and wires the
             // TerrainComponentManager (already injected by scene composition) as the render provider.
             host.Subsystems().AddSubsystem<engine::terrain::TerrainSubsystem>();
             // Terrain vegetation: wires the VegetationLayerComponentManager (scene composition)
@@ -228,9 +229,9 @@ namespace engine::runtime
         m_physics = host.Subsystems().AddSubsystem<engine::physics::PhysicsSubsystem>();
         host.Subsystems().AddSubsystem<engine::navigation::NavigationSubsystem>();
         // Networking scene integration: injects the NetworkComponentManager into every scene so
-        // authored NetworkComponents work (the per-instance endpoint replicates over it). The subsystem
-        // also OWNS the per-frame transport pump, over the runs' endpoints (it finds the runs on the
-        // subsystem manager).
+        // authored NetworkComponents work (the per-instance endpoint replicates over it). The
+        // subsystem also owns the per-frame transport pump over the runs' endpoints (it finds the
+        // runs on the subsystem manager).
         (void)host.Subsystems().AddSubsystem<engine::net::NetworkSubsystem>();
         m_audio = host.Subsystems().AddSubsystem<engine::audio::AudioSubsystem>(m_audioEngineSettings);
         m_input = host.Subsystems().AddSubsystem<engine::input::InputSubsystem>(
@@ -240,42 +241,40 @@ namespace engine::runtime
         m_instance.SetInputSource(&m_input->ShellSource());
         // Every run's action runtime reaches the GUI's consumption and touch guide through the runs.
         // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
-        // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
         m_gui = host.Subsystems().AddSubsystem<engine::gui::GuiSubsystem>(host.Subsystems().Allocator(), *m_dataFileSystem);
         // Its prompts name the game's bindings: the primary instance's runtime, which the game runs on.
         m_gui->SetPromptRuntime(&m_instance.InputRuntime());
 
-        // Entity behaviors. Facade/backend registration is
-        // batteries-included here (idempotent - entry points may register more);
-        // the run context itself is created lazily by the subsystem and SHARED
-        // with the game script (one gameplay context per run, the locked rule).
+        // Entity behaviors. Facade and backend registration is batteries-included here
+        // (idempotent; entry points may register more). The subsystem creates the run context
+        // lazily and shares it with the game script: one gameplay context per run.
         m_scripts = host.Subsystems().AddSubsystem<engine::script::ScriptSubsystem>();
-        // The instance owns its run host; wire it with the app's facades
-        // + Scene.spawn + entity.send routing so its context has them when the game script starts.
-        // (The subsystem's own default host - for editor scenes - is wired in its OnReady.)
+        // The instance owns its run host; wire it with the app's facades, Scene.spawn and
+        // entity.send routing so its context has them when the game script starts. (The
+        // subsystem's own default host, for editor scenes, is wired in its OnReady.)
         m_scripts->ConfigureRunHost(m_instance.RunHost());
         InstallInstanceLoadFacade(m_instance, host); // run.* level-load facade for the primary instance
-        // The COMPLETE facade surface via the composition root - never a hand-picked subset. A
-        // hand-rolled list here once drifted past RegisterRunScriptFacade, so the exported player
-        // compiled game scripts against a prelude with no `run` (week-2026-08-22). The root keeps
-        // every host - editor, cook, MCP, exported player - on the same registered surface and
-        // under the same kSubsystemFacadeNameCount tripwire.
+        // The complete facade surface via the composition root, never a hand-picked subset. A
+        // hand-kept list here drifts, and a missing facade shows only in an exported player, whose
+        // game scripts then compile against a prelude without it. The root keeps every host
+        // (editor, cook, MCP, exported player) on the same registered surface and under the same
+        // kSubsystemFacadeNameCount tripwire.
         engine::RegisterAllScriptFacades();
         // Every built backend registers (batteries-included); a run resolves by the game script's
-        // LANGUAGE - one gameplay context per run stays the locked rule. Each backend is independently
-        // toggleable (OPTION_ENABLE_ANGELSCRIPT / _LUAU); all build on every platform, web included.
+        // language, with one gameplay context per run. Each backend is independently toggleable
+        // (OPTION_ENABLE_ANGELSCRIPT / _LUAU); all build on every platform, web included.
 #ifdef OPTION_HAS_ANGELSCRIPT
         foundation::script::angelscript::RegisterAngelScriptBackend();
 #endif
 #ifdef OPTION_HAS_LUAU
         foundation::script::RegisterLuauScriptBackend();
 #endif
-        // Networking: the Net facade type is registered by the surface root above; each
-        // GameInstance owns its OWN endpoint and goes online at RUNTIME via the facade
-        // (Net.startServer/connect from the game's menu) - no app-owned socket. The primary
-        // instance carries the online hook (the prefab net-spawn resolver) + the optional startup
-        // preset below; extras get the hook in CreateInstance. The per-instance net binding is
-        // installed by GameInstance itself.
+        // Networking: the Net facade type is registered by the surface root above. Each
+        // GameInstance owns its own endpoint and goes online at runtime via the facade
+        // (Net.startServer/connect from the game's menu); there is no app-owned socket. The primary
+        // instance carries the online hook (the prefab net-spawn resolver) and the optional startup
+        // preset below; extras get the hook in CreateInstance. GameInstance installs the
+        // per-instance net binding itself.
         m_instance.Network().SetSpawnResolverFactory([this] { return MakeSpawnResolver(); });
         ApplyNetworkStartup(
             m_instance); // enter a preset server/client role at startup (None = offline)
@@ -295,24 +294,24 @@ namespace engine::runtime
                 }
                 if (self->m_render != nullptr)
                 {
-                    self->m_render->ExposeToScript(scriptContext); // `DebugDraw.of(scene)` -> DebugScene
+                    self->m_render->ExposeToScript(scriptContext); // `DebugDraw.of(scene)` reaches the DebugScene
                 }
-                // `gui` -> the engine GUI's screen tier.
+                // `gui` is the engine GUI's screen tier.
                 if (self->m_gui != nullptr)
                 {
                     self->m_gui->ExposeToScript(scriptContext);
                 }
             }});
 
-        // Track A resource swaps (SceneRender.setMesh, ...): give the run a GETTER for the app's
-        // resource manager (created later, in OnStartup), so a behavior can bind a resource id onto
-        // a component's Ref. Borrowed - the app owns it.
+        // Resource swaps (SceneRender.setMesh, ...): give the run a getter for the app's resource
+        // manager (created later, in OnStartup), so a behavior can bind a resource id onto a
+        // component's Ref. Borrowed: the app owns it.
         m_scripts->SetResourceManager(core::Function<foundation::resource::ResourceManager*()>{
             [self]() -> foundation::resource::ResourceManager* { return self->Resources(); }});
 
-        // Composition-root bridge: forward physics contacts to the script subsystem's
-        // neutral ingress. Keeps the two subsystems independent - neither depends on the
-        // other for scripting; the wiring lives here, where integration belongs.
+        // Composition-root bridge: forward physics contacts to the script subsystem's neutral
+        // ingress. Neither subsystem depends on the other for scripting; the wiring lives here,
+        // where integration belongs.
         if (m_physics != nullptr && m_scripts != nullptr)
         {
             m_contactBridge.Install(*m_physics, *m_scripts);
@@ -458,14 +457,15 @@ namespace engine::runtime
         DefaultApplication* self = this;
         GameInstance* instance = &gi;
 
-        // The render/sim policy PumpScriptLoads runs when a tracked load finishes (SetScene already
-        // done by then). Virtual, so the player seeds a camera; the base just starts + simulates.
+        // The render and simulation policy PumpScriptLoads runs when a tracked load finishes
+        // (SetScene is already done by then). Virtual, so the player seeds a camera; the base
+        // starts the scene and enables simulation.
         gi.SetSceneActivationPolicy(core::Function<void(foundation::scene::Scene*)>{
             [self](foundation::scene::Scene* scene) { self->ApplyLoadedSceneActivation(scene); }});
 
-        // run.loadSceneAsync(id) -> resolve the cooked scene instance, kick an async load into THIS
-        // instance, register it under a ticket. 0 = could not start (bad id / no DB). The prefab
-        // provider reads a nested-prefab payload by guid - the same source the sync path uses.
+        // run.loadSceneAsync(id): resolve the cooked scene instance, kick an async load into this
+        // instance, and register it under a ticket. 0 means it could not start (bad id, no DB). The
+        // prefab provider reads a nested-prefab payload by guid, the same source the sync path uses.
         gi.RunBinding().loadSceneAsync =
             core::Function<core::i32(const core::Guid&)>{[self, instance](const core::Guid& sceneId) -> core::i32
             {
@@ -499,8 +499,8 @@ namespace engine::runtime
         gi.RunBinding().loadFailed = core::Function<bool(core::i32)>{
             [instance](core::i32 ticket) -> bool { return instance->ScriptLoadFailed(ticket); }};
 
-        // run.loadScene(id): synchronous convenience for tiny scenes - load, make current, apply the
-        // same activation policy, all before the call returns. false on a resolve/load failure.
+        // run.loadScene(id): synchronous convenience for tiny scenes. Load, make current and apply
+        // the same activation policy, all before the call returns. false on a resolve or load failure.
         gi.RunBinding().loadScene =
             core::Function<bool(const core::Guid&)>{[self, instance](const core::Guid& sceneId) -> bool
             {
@@ -538,17 +538,17 @@ namespace engine::runtime
         gi.RunBinding().currentScene = core::Function<scene::Scene*()>{
             [instance]() -> scene::Scene* { return instance->GetScene(); }};
 
-        // run.requestExit(code): end the run through the app host. Standalone (ApplicationHost) stops
-        // the loop; the editor's EmbeddedApplicationHost routes to the exit handler the editor set,
-        // which stops the Game tab's play session. The host outlives the binding (app/session lifetime),
-        // so a borrowed pointer is safe.
+        // run.requestExit(code): end the run through the app host. Standalone (ApplicationHost)
+        // stops the loop; the editor's EmbeddedApplicationHost routes to the exit handler the editor
+        // set, which stops the Game tab's play session. The host outlives the binding (app or
+        // session lifetime), so a borrowed pointer is safe.
         gi.RunBinding().requestExit = core::Function<void(core::i32)>{
             [hostPtr = &host](core::i32 code) { hostPtr->RequestExit(code); }};
 
-        // run.setTimeScale(scale): scale the run's GAMEPLAY time by setting the instance's scene-GROUP
-        // time scale (SceneManager). 0 pauses the scene (behaviors + physics freeze); the Game script
-        // tier keeps ticking so it can resume. Scoped to the run's scenes - the context/editor is
-        // unaffected. Clamped to >= 0 (SceneManager also clamps).
+        // run.setTimeScale(scale): scale the run's gameplay time by setting the instance's scene
+        // group time scale (SceneManager). 0 pauses the scene (behaviors and physics freeze); the
+        // Game script tier keeps ticking so it can resume. Scoped to the run's scenes; the context
+        // and editor are unaffected. Clamped to >= 0 (SceneManager also clamps).
         gi.RunBinding().setTimeScale = core::Function<void(core::f32)>{
             [instance](core::f32 scale) { instance->Scenes().SetTimeScale(scale < 0.0f ? 0.0f : scale); }};
         gi.RunBinding().timeScale =
@@ -624,8 +624,8 @@ namespace engine::runtime
 
     void DefaultApplication::OnStartup(IApplicationHost& host)
     {
-        // Product/runtime types: factories construct cooked products BY TYPE NAME - every domain's,
-        // from the composition (the scene and prefab documents included).
+        // Product and runtime types: factories construct cooked products by type name, every
+        // domain's, from the composition (the scene and prefab documents included).
         engine::RegisterAllResourceTypes();
         if (GraphicsDevice* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr && m_gui != nullptr)
         {
@@ -634,8 +634,8 @@ namespace engine::runtime
 
         if (m_borrowedResources == nullptr && m_contentDatabase != nullptr)
         {
-            // Share the global JobSystem so migrated factories can decode off the main thread
-            // (async resource loading, task #123); null when there is no pool = synchronous loads.
+            // Share the global JobSystem so factories that support async loading can decode off the
+            // main thread; null when there is no pool, which means synchronous loads.
             m_ownedResources = core::MakeUnique<foundation::resource::ResourceManager>(
                 core::DefaultAllocator(), core::DefaultAllocator(), *m_contentDatabase,
                 core::HasGlobalJobSystem() ? &core::GlobalJobs() : nullptr);
@@ -703,7 +703,7 @@ namespace engine::runtime
         m_scenes->UnregisterObserver(this); // the observer is this app; scenes may still compose below
         // Destroy the run's scenes while the aware subsystems are still alive (they get
         // OnSceneDestroyed). The editor's GamePage already cleared them per Stop; this covers the
-        // player + any leftover. Do it FIRST, before subsystem teardown, for EVERY instance.
+        // player and any leftover. Do it first, before subsystem teardown, for every instance.
         ForEachInstance(
             [](GameInstance& gi)
             {
@@ -780,16 +780,15 @@ namespace engine::runtime
         }
 
         const rhi::TextureFormat colorFormat = frame.window->Swap()->Format();
-        // RenderTexture canvases draw BEFORE the scene so materials sampling them
-        // see this frame's UI (the RenderCanvasTextures host seam).
+        // RenderTexture canvases draw before the scene so materials sampling them see this
+        // frame's UI.
         if (m_gui != nullptr)
         {
             m_gui->RenderTextures(*frame.encoder, frame.frameIndex); // its canvases' and panels' textures, its bakes
         }
         render->BeginRendering(*frame.encoder, frame.frameIndex);
-        // Render every NON-headless instance's scenes (a headless dedicated
-        // server simulates but isn't drawn) + the default group's loose scenes. Clear comes from
-        // the scene's camera.
+        // Render every non-headless instance's scenes (a headless dedicated server simulates but
+        // is not drawn) and the default group's loose scenes. Clear comes from the scene's camera.
         ForEachInstance(
             [&](GameInstance& gi)
             {
@@ -834,10 +833,10 @@ namespace engine::runtime
             });
         render->EndRendering(); // scene-tier overlays (HUD/billboards) draw inside the compose
 
-        // Window-space overlays (screen-tier UI, diagnostics, ...) composite over the
-        // finished frame through the generic registry - the host names no source.
-        // Through the backbuffer's UNORM view when the window has one: the screen UI blends encoded
-        // values, as browsers do (VG's Encoded blend space).
+        // Window-space overlays (screen-tier UI, diagnostics, ...) composite over the finished
+        // frame through the generic registry; the host names no source. They draw through the
+        // backbuffer's UNORM view when the window has one: the screen UI blends encoded values,
+        // as browsers do (VG's Encoded blend space).
         render->RenderOverlays(*frame.encoder, frame.backbufferView, colorFormat, frame.width,
                                frame.height, frame.frameIndex, frame.backbufferAlternateView);
     }
@@ -890,9 +889,9 @@ namespace engine::runtime
     net::StateReplication::SpawnHandler DefaultApplication::MakeSpawnResolver()
     {
         DefaultApplication* self = this;
-        // The resolver (content DB -> a live prefab); the NetworkController applies it to each
-        // endpoint. The database and resources are read WHEN INVOKED, not when wired - the entry
-        // point hands the content database over after construction.
+        // The resolver (content DB to a live prefab); the NetworkController applies it to each
+        // endpoint. The database and resources are read when invoked, not when wired, since the
+        // entry point hands the content database over after construction.
         return net::StateReplication::SpawnHandler{
             [self](foundation::scene::Scene& scene, const core::Guid& prefabId,
                    net::NetworkId) -> foundation::scene::EntityHandle

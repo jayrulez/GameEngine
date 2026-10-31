@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Phase 2 - the transform hierarchy: parent/child/sibling links, world-matrix
-// composition, the dirty-flag cascade + two-pass UpdateTransforms, motion-vector
-// previous-matrix snapshotting, recursive destroy, and the reparent cycle guard.
-// Encodes the transform-hierarchy behaviors pinned from the Sedulous test suite.
+// The transform hierarchy: parent/child/sibling links, world-matrix composition,
+// the dirty-flag cascade and two-pass UpdateTransforms, motion-vector previous-matrix
+// snapshotting, recursive destroy, and the reparent cycle guard.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -72,11 +71,11 @@ TEST_CASE("dirty cascade: moving a parent recomputes its descendants; nothing el
     scene.SetParent(child, parent);
     scene.UpdateTransforms(); // settle everything
 
-    // a frame where nothing moved -> no recomputes
+    // a frame where nothing moved: no recomputes
     scene.UpdateTransforms();
     CHECK(scene.TransformsUpdatedThisFrame().Size() == 0);
 
-    // move the parent: parent + child recompute, `other` does not
+    // move the parent: parent and child recompute, `other` does not
     scene.SetLocalPosition(parent, Float3{0, 7, 0});
     scene.UpdateTransforms();
     CHECK(scene.IsTransformUpdatedThisFrame(parent));
@@ -86,7 +85,7 @@ TEST_CASE("dirty cascade: moving a parent recomputes its descendants; nothing el
 }
 
 // Read mid-update (a script after physics moved the entity, before UpdateTransforms), the world
-// pose is this frame's: the cached matrix had answered last frame's.
+// pose is this frame's, not the cached matrix's last-frame answer.
 TEST_CASE("world matrix is current before UpdateTransforms: a moved parent's child, the previous kept")
 {
     Scene scene{DefaultAllocator()};
@@ -157,7 +156,7 @@ TEST_CASE("reparent cycle guard: cannot parent an entity under its own descendan
     scene.SetParent(b, a); // a > b
     scene.SetParent(c, b); // a > b > c
 
-    scene.SetParent(a, c);                                // would form a cycle a>b>c>a -> rejected
+    scene.SetParent(a, c);                                // would form a cycle a>b>c>a: rejected
     CHECK(scene.GetParent(a) == EntityHandle::Invalid()); // a stays a root
     CHECK(scene.GetParent(c) == b);                       // tree intact
 
@@ -207,7 +206,7 @@ TEST_CASE("keep-world reparent: the entity stays put in the world")
 
     const Float4x4 before = scene.ComposeWorldMatrix(child);
 
-    // keep-world reparent A -> B: world matrix unchanged (local recomputed).
+    // keep-world reparent from A to B: world matrix unchanged (local recomputed).
     scene.SetParent(child, parentB, /*keepWorldTransform*/ true);
     CHECK(scene.GetParent(child) == parentB);
     const Float4x4 after = scene.ComposeWorldMatrix(child);
@@ -215,7 +214,7 @@ TEST_CASE("keep-world reparent: the entity stays put in the world")
         for (i32 c = 0; c < 4; ++c)
             CHECK(after.m[r][c] == doctest::Approx(before.m[r][c]).epsilon(0.001f));
 
-    // ...and the LOCAL transform did change (relative to a different parent now).
+    // ...and the local transform did change (relative to a different parent now).
     CHECK(scene.GetLocalTransform(child).position.x != doctest::Approx(1.0f).epsilon(0.0001f));
 
     // keep-world to root: world unchanged, local == world.
@@ -230,18 +229,18 @@ TEST_CASE("keep-world reparent: the entity stays put in the world")
     CHECK(scene.GetParent(parentB) == EntityHandle::Invalid());
 }
 
-// Regression (user-reported): a child REPARENTED under a clean (non-dirty) parent kept its
-// stale world matrix until something moved the parent - pasted/duplicated child entities
-// rendered at the origin until the scene reloaded. UpdateTransforms must recurse from every
-// dirty-subtree TOP (dirty node with a clean parent), not only from dirty roots.
+// A child reparented under a clean (non-dirty) parent must get its world matrix recomputed;
+// otherwise pasted or duplicated child entities render at the origin until something moves
+// the parent. UpdateTransforms must recurse from every dirty-subtree top (a dirty node with a
+// clean parent), not only from dirty roots.
 TEST_CASE("transforms: reparent under a clean parent recomputes the child's world matrix")
 {
     Scene scene{DefaultAllocator()};
     EntityHandle parent = scene.CreateEntity(u8"parent");
     scene.SetLocalPosition(parent, Float3{10, 0, 0});
-    scene.UpdateTransforms(); // parent world settled + CLEAN
+    scene.UpdateTransforms(); // parent world settled and clean
 
-    // The paste/duplicate sequence: create at root, set the authored LOCAL, then parent.
+    // The paste/duplicate sequence: create at root, set the authored local, then parent.
     EntityHandle child = scene.CreateEntity(u8"child");
     scene.SetLocalPosition(child, Float3{0, 5, 0});
     scene.SetParent(child, parent);

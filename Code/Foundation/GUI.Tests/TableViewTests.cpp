@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - TableModel + TableView tests: multi-column data, virtualized rows with a
-// header, single selection (mouse + keyboard), and header-click reporting (for sorting).
+// GUI - TableModel and TableView tests: multi-column data, virtualized rows with a header, single
+// selection (mouse and keyboard), and header-click reporting (for sorting).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -81,7 +81,7 @@ TEST_CASE("table-view: virtualizes rows over the body viewport")
 TEST_CASE("table-view: clicking a row selects it")
 {
     TableModel model;
-    FillPeople(model, 5); // fits (no scrollbar), body width = 300, 2 cols of 150
+    FillPeople(model, 5); // fits with no scrollbar: body width 300, 2 columns of 150
     core::RefPtr<SceneRoot> root;
     auto table = MountTable(root, &model);
     EventDispatcher* d = root->GetEventDispatcher();
@@ -89,7 +89,7 @@ TEST_CASE("table-view: clicking a row selects it")
     int selected = -1;
     table->SetOnSelectionChanged([&](ModelIndex i) { selected = i.Row; });
 
-    // Row 1 spans y in [26 + 24, 26 + 48) = [50, 74); cells are hit-transparent -> row gets it.
+    // Row 1 spans y in [26 + 24, 26 + 48) = [50, 74); cells are hit-transparent, so the row gets it.
     d->InjectMouseDown(core::Float2{60.0f, 60.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{60.0f, 60.0f}, MouseButton::Left);
     CHECK(table->GetSelectedItem() == 1);
@@ -125,7 +125,7 @@ TEST_CASE("table-view: clicking a column header reports its index")
     table->SetOnColumnHeaderClicked([&](core::usize col)
                                     { clickedColumn = static_cast<int>(col); });
 
-    // Header spans y in [0, 26). Two columns of 150 -> column 1 header at x in [150, 300).
+    // Header spans y in [0, 26). Two columns of 150: column 1's header at x in [150, 300).
     d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
     CHECK(clickedColumn == 1);
@@ -141,7 +141,7 @@ TEST_CASE("table-view: reacts to model updates and rebuilds the header")
     table->SetSelectedItem(3);
     CHECK(table->GetSelectedItem() == 3);
 
-    model.Clear(); // notifies -> selection cleared, no rows
+    model.Clear(); // notifies the view: the selection is cleared and there are no rows
     (void)root->UpdateLayout();
     CHECK(table->GetSelectedItem() == -1);
     CHECK(table->VisibleRowCount() == 0);
@@ -149,9 +149,8 @@ TEST_CASE("table-view: reacts to model updates and rebuilds the header")
 
 TEST_CASE("table-view: sorting from a header click survives the header it rebuilds")
 {
-    // The sandbox's table (where it crashed): a header click sorts through a proxy, the proxy's
-    // update rebuilds the header, and neither the click nor the next mouse move may reach the
-    // freed header cell.
+    // Like the sandbox's table: a header click sorts through a proxy, the proxy's update rebuilds
+    // the header, and neither the click nor the next mouse move may reach the freed header cell.
     TableModel model;
     FillPeople(model, 5);
     SortingProxyModel proxy(&model);
@@ -165,8 +164,8 @@ TEST_CASE("table-view: sorting from a header click survives the header it rebuil
         d->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
         d->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
         root->GetContext().Update(core::Duration::FromSeconds(0.016));
-        // The rebuild freed the hovered header cell: the dispatcher let go of it (what it still
-        // holds is in the tree), so moving on leaves nothing freed.
+        // The rebuild frees the hovered header cell. The dispatcher lets go of it, and what it
+        // still holds is in the tree, so the next move reaches nothing freed.
         REQUIRE(d->GetOverNode() != nullptr);
         CHECK(d->GetOverNode()->GetRootNode() == root.Get());
     }
@@ -188,7 +187,7 @@ TEST_CASE("table-view: columns are pixels, percentages or auto shares, none unde
     auto table = MountTable(root, &model);
     table->SetColumnWidthsText(core::String(SV(u8"60px 20% auto")));
     (void)root->UpdateLayout();
-    // 300 wide: A 60, B 60 (20%), C and D share the 180 left.
+    // 300 wide: A is 60, B is 60 (20%), and C and D share the 180 left.
     CHECK(table->GetColumnWidth(0) == doctest::Approx(60.0f));
     CHECK(table->GetColumnWidth(1) == doctest::Approx(60.0f));
     CHECK(table->GetColumnWidth(2) == doctest::Approx(90.0f));
@@ -196,7 +195,7 @@ TEST_CASE("table-view: columns are pixels, percentages or auto shares, none unde
     CHECK(table->GetColumnWidthsText() == SV(u8"60px 20% auto"));
     CHECK(table->GetScrollRange().x == doctest::Approx(0.0f));
 
-    // Too many pixels: the autos keep the minimum, and the table scrolls across.
+    // With too many pixels, the auto columns keep their minimum and the table scrolls across.
     table->SetColumnWidth(0, LayoutLength::Px(250.0f));
     (void)root->UpdateLayout();
     CHECK(table->GetColumnWidth(2) == doctest::Approx(table->GetMinColumnWidth()));
@@ -227,8 +226,8 @@ TEST_CASE("table-view: dragging a header cell's right edge resizes its column, w
     d->InjectMouseUp(core::Float2{188.0f, 13.0f}, MouseButton::Left);
     (void)root->UpdateLayout();
     CHECK(table->GetColumnWidth(0) == doctest::Approx(190.0f));
-    CHECK(table->GetColumnWidth(1) == doctest::Approx(110.0f)); // the auto one takes what is left
-    CHECK(proxy.GetSortColumn() == -1);                          // a resize is no click
+    CHECK(table->GetColumnWidth(1) == doctest::Approx(110.0f)); // the auto column takes what is left
+    CHECK(proxy.GetSortColumn() == -1);                          // a resize is not a click
     // Dragged past the minimum, it stops there.
     d->InjectMouseDown(core::Float2{188.0f, 13.0f}, MouseButton::Left);
     d->InjectMouseMove(core::Float2{0.0f, 13.0f});
@@ -256,7 +255,7 @@ TEST_CASE("table-view: a header click sorts where the model can, and the cell sh
     CHECK(proxy.GetSortOrder() == SortOrder::Descending);
     CHECK(proxy.Data(MakeModelIndex(0, 1)).AsInt() == 22);
 
-    // A table alone cannot sort: no indicator.
+    // A table on its own cannot sort, so it shows no indicator.
     TableModel plain;
     FillPeople(plain, 2);
     core::RefPtr<SceneRoot> root2;
@@ -300,7 +299,7 @@ TEST_CASE("table-view: a row added before its cells are set (a script's add, the
     auto table = core::MakeRef<TableView>(core::DefaultAllocator());
     table->SetColumnsText(core::String(u8"Name|Score"));
     auto item = core::MakeRef<TableItem>(core::DefaultAllocator());
-    table->GetChildHost()->AddChild(item.Get()); // taken in at once, with no cells yet
+    table->GetChildHost()->AddChild(item.Get()); // added at once, with no cells yet
     TableItem* raw = item.Get();
     item.Reset(); // the caller keeps only a weak handle, as a script does
     raw->SetCells(core::String(u8"Ada|9"));
@@ -324,7 +323,8 @@ TEST_CASE("table-view: in right to left its columns run from the right, wider on
     const Rect box = table->GetContentBounds();
     const core::f32 right = table->ConvertToRootSpace(core::Float2{box.x + box.width, 0.0f}).x;
 
-    // At its start: offset 0, the first column against the right edge, the rest past the left.
+    // At its start the offset is 0, the first column is against the right edge, and the rest lie
+    // past the left.
     CHECK(table->GetScrollOffset().x == doctest::Approx(0.0f));
     CHECK(table->GetScrollMin().x < -100.0f);
     ItemRow* row = table->RowForItem(0);
@@ -339,14 +339,15 @@ TEST_CASE("table-view: in right to left its columns run from the right, wider on
     const Rect heading = table->GetHeader()->GetChildAt(0)->GetScreenBounds();
     CHECK(heading.x == doctest::Approx(name.x).epsilon(0.01));
 
-    // Scrolled to its end, the left: the last column shows.
+    // Scrolled to its end, which is the left, the last column shows.
     table->SetScrollOffset(core::Float2{-1000.0f, 0.0f});
     (void)root->UpdateLayout();
     CHECK(table->GetScrollOffset().x == doctest::Approx(table->GetScrollMin().x));
     const Rect ageThen = content->CellAt(1)->GetScreenBounds();
     CHECK(ageThen.x == doctest::Approx(table->ConvertToRootSpace(core::Float2{box.x, 0.0f}).x).epsilon(0.01));
 
-    // A column's grip is at its inline end, the left: pulled further left, it widens.
+    // A column's grip is at its inline end, which is the left; pulled further left, the column
+    // widens.
     table->SetScrollOffset(core::Float2{0.0f, 0.0f});
     (void)root->UpdateLayout();
     const Rect cell = table->GetHeader()->GetChildAt(0)->GetScreenBounds();

@@ -130,60 +130,53 @@
 #define COMPILER_ATTR_FORCEINLINE inline __attribute__((always_inline))
 #define COMPILER_ATTR_NOINLINE __attribute__((noinline))
 #define COMPILER_ATTR_RESTRICT __restrict__
-// COMPILER_ATTR_HIDDEN - makes a template (and its function-local statics) PER IMAGE
-// on ELF, the way PE already is. ELF's default visibility unifies vague-linkage
-// symbols across .so boundaries at load time, which silently gives one copy per
-// process and hides exactly the class of bug Windows surfaces (shared-libraries.md
-// P5/W1: TypeOf<T>()'s slot). Applied to the templates whose per-image duplication is
-// BY DESIGN because the process-wide state behind them lives in an impl unit; the
-// Linux shared lane then proves the rendezvous instead of papering over it.
+// COMPILER_ATTR_HIDDEN makes a template (and its function-local statics) per image on
+// ELF, the way PE already is. ELF's default visibility unifies vague-linkage symbols
+// across .so boundaries at load time, which silently gives one copy per process and hides
+// the class of bug Windows surfaces (TypeOf<T>()'s slot, for one). It goes on templates
+// whose per-image duplication is intended because the process-wide state behind them
+// lives in an implementation unit, so the Linux shared build exercises the same
+// rendezvous Windows needs.
 #define COMPILER_ATTR_HIDDEN __attribute__((visibility("hidden")))
 #endif
 
-// ENGINE_EXPORT_DATA - for STATIC DATA MEMBERS of types that cross a shared-library
-// boundary (Float3::Zero, Color::Red, Guid::Nil...). NOT the classic FOO_API dance and NOT
-// needed on functions.
+// ENGINE_EXPORT_DATA marks static data members of types that cross a shared-library
+// boundary (Float3::Zero, Color::Red, Guid::Nil...). Functions do not need it: on MSVC the
+// shared build generates a .def exporting every module-attached function symbol
+// (cmake/GenerateModuleDef.cmake). Data cannot go that route, because a .def DATA export
+// still leaves the consumer emitting a direct reference the import library cannot satisfy;
+// reading imported data needs the declaration itself to say so.
 //
-// Functions do not need it: on MSVC the shared build generates a .def exporting every
-// module-attached function symbol (cmake/GenerateModuleDef.cmake), so the ~2200 functions
-// of a library like Core export with no source annotation at all. DATA cannot go that
-// route - a .def DATA export still leaves the consumer emitting a direct reference that
-// the import library cannot satisfy (verified), because reading imported data needs the
-// declaration itself to say so.
+// One spelling serves producer and consumer. A classic export/import macro pair cannot work
+// with modules: one BMI is read by the defining library and by every importer, so the macro
+// cannot mean two things. It does not need to, since MSVC records the dllexport in the BMI and
+// gives consumers the import side automatically.
 //
-// One spelling for producer AND consumer, deliberately. The classic export/import macro
-// pair cannot work here: there is ONE BMI, read by the library that defines the entity and
-// by everyone that imports it, so the macro cannot mean two things. It does not need to -
-// MSVC records the dllexport in the BMI and gives consumers the import side automatically
-// (verified end to end: consumers link with no dllimport anywhere and read correct values).
-//
-// WHERE TO PUT IT (learned in W2, from link failures across UI/VG/Net/Pipeline/Editor):
-//   - Put it on the MEMBER for anything non-trivial:
+// Where to put it:
+//   - On the member for anything non-trivial:
 //         static constexpr ENGINE_EXPORT_DATA StringView kDefaultName = u8"cook.db";
-//     Putting it on the CLASS makes MSVC emit every implicit member, so a class holding
-//     move-only state (UniquePtr, etc.) fails on its deleted copy constructor (C2280), and
-//     every non-exported member type warns C4251 - an error under warnings-as-errors.
-//     Class-level is fine ONLY for trivially copyable value types with no non-static data
-//     members (Float3, Color, Guid, ViewId...).
-//   - const-INTEGRAL members are NOT exempt. `static constexpr u32 kSize = 128;` still needs
+//     On the class, MSVC emits every implicit member, so a class holding move-only state
+//     (UniquePtr, etc.) fails on its deleted copy constructor (C2280), and every non-exported
+//     member type warns C4251, an error under warnings-as-errors. Class-level is fine only for
+//     trivially copyable value types with no non-static data members (Float3, Color, Guid...).
+//   - Const integral members are not exempt. `static constexpr u32 kSize = 128;` still needs
 //     it once another library odr-uses it (binds it to a const& parameter, takes its
 //     address): the definition lives only in the owning library's TU.
-// See Documentation/Specs/shared-libraries.md section 5 (P5).
-// COMPILER_MSVC, not PLATFORM_WINDOWS - the two compilers need OPPOSITE things here, and
-// this was measured (a full-tree clang shared build, 12 targets failing, W2/W3 notes):
 //
-//   cl   emits a module-attached inline variable ONLY in its owning module's TU (the same
-//        one-definition behaviour that makes GlobalTypeRegistry show up UNDEF in consumers),
-//        so a consumer REFERENCES Core's copy and the export is what makes that resolve.
+// The test is COMPILER_MSVC, not PLATFORM_WINDOWS, because the two compilers need opposite
+// things:
+//
+//   cl   emits a module-attached inline variable only in its owning module's TU, so a
+//        consumer references Core's copy and the export is what makes that resolve.
 //   clang emits its own COMDAT copy of the inline variable in every TU that uses it, so a
-//        consumer needs no export at all - and worse, it takes the dllexport literally in
-//        each of those TUs and plants /EXPORT:<sym>,DATA in the consumer's object. The
-//        consumer then asks the linker to export a symbol only Core.dll defines:
+//        consumer needs no export. Worse, it takes the dllexport literally in each of those
+//        TUs and plants /EXPORT:<sym>,DATA in the consumer's object, asking the linker to
+//        export a symbol only Core.dll defines:
 //        "lld-link: error: <root>: undefined symbol: ...Float3::Zero".
 //
-// Everything this macro is applied to is an inline CONSTANT, so clang's per-image copies are
-// value-identical and harmless (the W1 identity rule is about mutable patched metadata, not
-// constants). Elsewhere (ELF/Mach-O) default visibility already exports, so this is empty.
+// Everything this macro is applied to is an inline constant, so clang's per-image copies are
+// value-identical and harmless. Elsewhere (ELF/Mach-O) default visibility already exports, so
+// this is empty.
 #if COMPILER_MSVC && defined(BUILDSYSTEM_SHARED_LIBS) && BUILDSYSTEM_SHARED_LIBS
 #define ENGINE_EXPORT_DATA __declspec(dllexport)
 #else

@@ -3,20 +3,19 @@
 
 // GUI.Toolkit - :tool_bar partition
 //
-// The tool bar (T0 of Specs/gui-lab-evolution-3.md). Its buttons name commands (the core's
-// command model, as menus and shortcuts do): a command's label, icon, checked state and
-// availability reach them, so one command greys its button, its menu item and its keys at once
-// (ezEngine, Lumix and Zero feed all three from one registry). A tool button shows its icon (its
-// text too when asked, or when it has no icon); its tooltip is its label, the keys that run it
-// here, and, while its command is disabled, why.
+// The tool bar. Its buttons name commands from the core GUI's command model, as menus and shortcuts
+// do. A command's label, icon, checked state and availability reach its buttons, so disabling one
+// command greys its button, its menu item and its keys at once. A tool button shows its icon, and
+// also its text when asked or when it has no icon. Its tooltip is its label, the keys that run it
+// here, and, while its command is disabled, the reason.
 //
-// The bar lays its items out in a row (or a column) itself, so it knows what each wants whether
-// or not it shows: what does not fit goes into an overflow menu at the end, the items of lowest
-// overflow priority first, then from the end (zed shrinks its bars and clips their start, which
-// the survey counts against it). An item that cannot be a menu row (a field, a combo) never goes;
-// a separator shows only between items that show. A spacer (any item that grows) takes what is
-// left. The bar is one focus group: Tab enters it once, the arrows move along it. It shows and hides
-// its items itself (visibility); an application takes one out with SetDisplayed(false).
+// The bar lays out its items in a row (or a column) itself, so it knows what each needs whether or
+// not it shows. What does not fit goes into an overflow menu at the end: the items with the lowest
+// overflow priority go first, then items from the end. An item that cannot be a menu row (a field,
+// a combo) never overflows, and a separator shows only between items that show. A spacer (any item
+// that grows) takes the space that is left. The bar is one focus group: Tab enters it once, and the
+// arrow keys move along it. The bar shows and hides its items itself through their visibility; an
+// application removes one with SetDisplayed(false).
 
 module;
 #include "Core/Prelude.h"
@@ -34,21 +33,23 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// A tool button: an icon (and its text where asked) for a command or a click.
+    /// A tool button: an icon, and its text when asked, for a command or a click.
     class ToolButton : public Button
     {
         RTTI_OBJECT(ToolButton, Button)
     public:
         ToolButton() { SetTag(core::StringView(u8"toolbutton")); }
 
-        /// Whether its text shows beside its icon (`shows-text`); without an icon it always does.
+        /// Sets whether its text shows beside its icon (`shows-text`); without an icon the text always
+        /// shows.
         void SetShowsText(bool shows)
         {
             m_showsText = shows;
             UpdateParts();
         }
         [[nodiscard]] bool ShowsText() const noexcept { return m_showsText; }
-        /// Which items leave a full bar first (`overflow-priority`): the lowest, then the last.
+        /// Sets its overflow priority (`overflow-priority`). When the bar is full, the lowest priority
+        /// overflows first, then the last item.
         void SetOverflowPriority(i32 priority)
         {
             m_priority = priority;
@@ -57,21 +58,21 @@ export namespace foundation::gui
         }
         [[nodiscard]] i32 GetOverflowPriority() const noexcept { return m_priority; }
 
-        /// What it is called: its text, else its command's label (its tooltip's first line, and
-        /// its row in the overflow menu).
+        /// Returns its name: its text, else its command's label. This is the tooltip's first line and
+        /// its row's text in the overflow menu.
         [[nodiscard]] core::StringView GetLabel() const { return GetText(); }
-        /// The keys that run its command where it is ("Ctrl+S"); empty with none.
+        /// Returns the keys that run its command where it is ("Ctrl+S"), or empty when there are none.
         [[nodiscard]] core::StringView GetShortcut() const noexcept { return m_shortcut.AsView(); }
-        /// Why its command is disabled, while it is; empty otherwise.
+        /// Returns why its command is disabled while it is, and empty otherwise.
         [[nodiscard]] core::StringView GetDisabledReason() const noexcept { return m_reason.AsView(); }
 
-        /// Its own tooltip where it has one; else its label, its keys and why it is disabled.
+        /// Returns its own tooltip when it has one; else its label, its keys and why it is disabled.
         [[nodiscard]] core::StringView GetTooltipText() const override
         {
             const core::StringView own = Button::GetTooltipText();
             if (own.Size() != 0)
                 return own;
-            m_tip = BuildTip(); // its label as it is now
+            m_tip = BuildTip(); // built from its label as it is now
             return m_tip.AsView();
         }
 
@@ -79,7 +80,7 @@ export namespace foundation::gui
         {
             Button::OnBoundCommandText(label, icon, shortcut);
             m_shortcut = core::String(shortcut);
-            // Its command's icon where it has none of its own.
+            // Use the command's icon when the button has none of its own.
             if (icon.Size() != 0 && (GetIconPart() == nullptr || m_iconFromCommand))
             {
                 SetIconSource(core::String(icon));
@@ -94,7 +95,7 @@ export namespace foundation::gui
         }
 
     protected:
-        // A part came or went (its icon, its text): whether its text shows follows.
+        // A part (its icon or its text) was added or removed, so update whether its text shows.
         void OnChildrenChanged() override
         {
             Button::OnChildrenChanged();
@@ -132,7 +133,8 @@ export namespace foundation::gui
         bool m_iconFromCommand = false;
     };
 
-    /// The arrow a menu button draws at its end: a part (`arrow`), hit as its button.
+    /// The arrow a menu button draws at its end: a part (`arrow`) that is hit-tested as part of its
+    /// button.
     class ToolMenuArrow : public UIWidget
     {
         RTTI_OBJECT(ToolMenuArrow, UIWidget)
@@ -144,7 +146,8 @@ export namespace foundation::gui
             StyleWriteScope defaults(*this);
             EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
         }
-        /// Whether a line sets it apart (a split button's: the arrow is a button of its own).
+        /// Sets whether a line divides it from the button, as on a split button, where the arrow acts
+        /// as a button of its own.
         void SetDivided(bool divided)
         {
             m_divided = divided;
@@ -177,8 +180,9 @@ export namespace foundation::gui
         bool m_divided = false;
     };
 
-    /// A tool button with a menu: a drop-down (a click opens its menu) or, split, a button whose
-    /// arrow opens its menu while the rest runs its command. Markup's children are its menu's.
+    /// A tool button with a menu: a drop-down (a click opens its menu), or a split button whose
+    /// arrow opens its menu while the rest runs its command. In markup, its children become its
+    /// menu's items.
     class ToolMenuButton : public ToolButton
     {
         RTTI_OBJECT(ToolMenuButton, ToolButton)
@@ -190,14 +194,15 @@ export namespace foundation::gui
             AddChild(m_arrow.Get());
         }
 
-        /// Split (`split`): the arrow opens the menu and the rest runs the button's command or click.
+        /// Makes it a split button (`split`): the arrow opens the menu, and the rest runs the button's
+        /// command or click.
         void SetSplit(bool split)
         {
             m_split = split;
             m_arrow->SetDivided(split);
         }
         [[nodiscard]] bool IsSplit() const noexcept { return m_split; }
-        /// Its menu (made when first asked for).
+        /// Returns its menu, making it on first use.
         [[nodiscard]] Menu& GetMenu()
         {
             if (!m_menu)
@@ -209,7 +214,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] Menu* GetOpenMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
         [[nodiscard]] Node* GetArrowPart() const noexcept { return m_arrow.Get(); }
-        /// Opens its menu below `anchor` (itself, or the overflow button it went into).
+        /// Opens its menu below `anchor` (the button itself, or the overflow button it went into).
         void OpenMenu(Node& anchor)
         {
             Menu& menu = GetMenu();
@@ -230,7 +235,8 @@ export namespace foundation::gui
             }
             ToolButton::OnMouseClick(event);
         }
-        // Return, Space, South: a drop-down opens; a split button runs, and Down opens it.
+        // On Return, Space or South, a drop-down opens its menu and a split button runs; Down opens a
+        // split button's menu.
         bool OnActivate() override
         {
             if (!m_split)
@@ -256,7 +262,7 @@ export namespace foundation::gui
         {
             const core::Float2 p = m_arrow->ConvertToNodeSpace(world);
             const core::Float2 size = m_arrow->GetSize();
-            // The arrow's whole end of the button, padding and all.
+            // The arrow covers the whole end of the button, padding included.
             const f32 slack = 4.0f;
             return p.x >= -slack && p.x <= size.x + slack;
         }
@@ -266,7 +272,7 @@ export namespace foundation::gui
         bool m_split = false;
     };
 
-    /// The button at a full bar's end listing what did not fit (`overflow`).
+    /// The button at the end of a full bar that lists what did not fit (`overflow`).
     class ToolBarOverflow : public Button
     {
         RTTI_OBJECT(ToolBarOverflow, Button)
@@ -279,7 +285,7 @@ export namespace foundation::gui
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{12.0f, 12.0f}; }
 
     protected:
-        // Two chevrons toward the bar's end (down in a column).
+        // Draws two chevrons pointing toward the bar's end (down in a column).
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             Button::OnDraw(ctx, localBounds);
@@ -327,12 +333,12 @@ export namespace foundation::gui
                 StyleWriteScope defaults(*this);
                 EditLayoutStyle([](LayoutStyle& s)
                 {
-                    s.Direction = FlexDirection::Row; // its separators stand up
+                    s.Direction = FlexDirection::Row; // in a row, separators stand upright
                     s.ColumnGap = 2.0f;
                     s.RowGap = 2.0f;
                     s.AlignItems = Align::Center;
-                    // Never held at its items' length: what does not fit overflows (across, its
-                    // content's minimum holds).
+                    // The items' length never sets the bar's minimum, because what does not fit
+                    // overflows. Across the bar, its content's minimum still applies.
                     s.MinWidth = LayoutLength::Px(0.0f);
                 });
                 SetPadding(Thickness{4.0f, 2.0f, 4.0f, 2.0f});
@@ -344,7 +350,7 @@ export namespace foundation::gui
             AddChild(m_overflow.Get());
         }
 
-        /// Its items run down (`orientation: vertical`) rather than along.
+        /// Sets whether its items run down (`orientation: vertical`) rather than across.
         void SetVertical(bool vertical)
         {
             m_vertical = vertical;
@@ -359,15 +365,16 @@ export namespace foundation::gui
             return core::String(IsVertical() ? core::StringView(u8"vertical") : core::StringView(u8"horizontal"));
         }
 
-        /// The items that did not fit, in bar order (what the overflow menu lists).
+        /// Returns the items that did not fit, in bar order, which the overflow menu lists.
         [[nodiscard]] const core::Array<Node*>& GetOverflowed() const noexcept { return m_hidden; }
         [[nodiscard]] Node* GetOverflowButton() const noexcept { return m_overflow.Get(); }
-        /// The overflow menu, while it is open.
+        /// Returns the overflow menu while it is open, else null.
         [[nodiscard]] Menu* GetOverflowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
 
-        /// Lists what did not fit in a menu below the overflow button: a command's item for a
-        /// button bound to one (its checked state too), a click's for one with a click, a menu
-        /// button's opening its menu there; separators between the groups.
+        /// Opens a menu below the overflow button listing what did not fit. A button bound to a
+        /// command gets that command's item (with its checked state), a button with a click gets an
+        /// item that clicks it, and a menu button gets an item that opens its menu there. Separators
+        /// go between the groups.
         void OpenOverflow()
         {
             m_menu = core::MakeRef<Menu>(MemoryAllocator());
@@ -393,7 +400,8 @@ export namespace foundation::gui
 
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
-            // Along: every item that shows now (what it asks while it fits); across: the tallest.
+            // Along the bar, ask for every item that shows now (what the bar needs while all fit);
+            // across it, the tallest.
             const bool column = IsVertical();
             const f32 gap = column ? GetLayoutStyle().RowGap : GetLayoutStyle().ColumnGap;
             f32 along = 0.0f;
@@ -404,8 +412,8 @@ export namespace foundation::gui
                 Node* child = GetChildAt(i);
                 if (!IsItem(*child))
                     continue;
-                // Each as it would be with nothing in its way: a bar is never narrower across than
-                // its widest item, whatever its container offers (a flex row's minimum asks).
+                // Measure each at its natural size. Across, a bar is never narrower than its widest
+                // item, whatever its container offers (a flex row asks for this minimum).
                 const core::Float2 size = Natural(*child, core::Float2{kUnbounded, kUnbounded});
                 along += column ? size.y : size.x;
                 across = core::Max(across, column ? size.x : size.y);
@@ -417,7 +425,7 @@ export namespace foundation::gui
         }
 
     protected:
-        // Its items, laid out by itself: what fits shows, the rest goes to the overflow menu.
+        // The bar lays out its items itself: what fits shows, and the rest goes to the overflow menu.
         void OnLayout() override
         {
             KeepDirection();
@@ -442,7 +450,7 @@ export namespace foundation::gui
                 items.PushBack(Item{child, Natural(*child, avail), true});
             }
             const auto along = [column](core::Float2 s) { return column ? s.y : s.x; };
-            // What the shown items take, separators only between shown items.
+            // The room the shown items take, counting separators only between shown items.
             const auto used = [&](bool withOverflow)
             {
                 f32 total = 0.0f;
@@ -461,8 +469,9 @@ export namespace foundation::gui
                 return count > 1 ? total + gap * static_cast<f32>(count - 1) : total;
             };
             // An item that may shrink (flex-shrink with a minimum of its own, as a label that
-            // ellipsizes: CSS's automatic minimum keeps the rest at their content) gives up its room
-            // first, down to that minimum, so a long text never pushes the tools out of the bar.
+            // ellipsizes) gives up its room first, down to that minimum, so a long text never pushes
+            // the tools out of the bar. CSS's automatic minimum keeps the other items at their
+            // content size.
             {
                 const f32 over = used(false) - room;
                 f32 weight = 0.0f;
@@ -475,7 +484,8 @@ export namespace foundation::gui
                     }
                 if (over > 0.0f && weight > 0.0f)
                 {
-                    // Each by its share of the shrink (CSS: flex-shrink times its size), held at its minimum.
+                    // Each item shrinks by its share (as in CSS, flex-shrink times its size), and
+                    // stops at its minimum.
                     f32 left = core::Min(over, give);
                     for (i32 round = 0; round < 4 && left > 0.01f; ++round)
                     {
@@ -498,7 +508,8 @@ export namespace foundation::gui
                     }
                 }
             }
-            // Hide the lowest priority first, the last of a priority first, until what shows fits.
+            // Hide the lowest priority first, and within a priority the last item first, until what
+            // shows fits.
             bool hiding = used(false) > room + 0.5f;
             while (hiding && used(true) > room + 0.5f)
             {
@@ -511,12 +522,12 @@ export namespace foundation::gui
                         pick = static_cast<i32>(i);
                 }
                 if (pick < 0)
-                    break; // what is left cannot go
+                    break; // what is left cannot overflow
                 items[static_cast<usize>(pick)].shown = false;
             }
 
-            // A separator shows only between shown items; one left out is a break between groups
-            // in the overflow menu.
+            // A separator shows only between shown items. A separator that does not show becomes a
+            // break between groups in the overflow menu.
             core::Array<bool> shows(MemoryAllocator());
             for (usize i = 0; i < items.Size(); ++i)
                 shows.PushBack(items[i].shown && (!IsSeparator(*items[i].node) || SeparatorShows(items, i)));
@@ -538,9 +549,10 @@ export namespace foundation::gui
 
             const bool reverse = !column && IsRightToLeft();
             f32 at = 0.0f;
-            // An item's slot takes its margins (its natural size has them); its box sits inside them.
-            // Across, it stretches only when it has no size of its own there (a separator a sheet
-            // makes shorter than the bar), and is centred otherwise.
+            // An item's slot includes its margins (its natural size has them), and its box sits
+            // inside them. Across the bar, an item stretches only when it has no size of its own in
+            // that direction, and is centred otherwise (so a sheet can make a separator shorter
+            // than the bar).
             const auto place = [&](Node& node, core::Float2 size, f32 extent)
             {
                 const LayoutStyle& s = node.GetLayoutStyle();
@@ -578,7 +590,7 @@ export namespace foundation::gui
             m_overflow->SetVisible(overflowing);
             if (overflowing)
             {
-                // At the bar's end, whatever is left before it.
+                // The overflow button sits at the bar's end, whatever room is left before it.
                 const core::Float2 size = Natural(*m_overflow, avail);
                 at = room - along(size);
                 place(*m_overflow, size, along(size));
@@ -588,8 +600,8 @@ export namespace foundation::gui
         }
 
     private:
-        // How much of `extent` an item may give up along the bar: down to its own minimum when it
-        // shrinks and sets one; none for an automatic minimum (its content).
+        // Returns how much of `extent` an item may give up along the bar: down to its own minimum
+        // when it shrinks and sets one, and nothing for an automatic minimum (its content).
         [[nodiscard]] static f32 ShrinkRoom(const Node& node, f32 extent, bool column)
         {
             const LayoutStyle& s = node.GetLayoutStyle();
@@ -605,14 +617,15 @@ export namespace foundation::gui
         template <typename Items>
         [[nodiscard]] bool SeparatorShows(const Items& items, usize at) const
         {
-            // Only between two shown items that are not separators, and not after another shown one.
+            // A separator shows only between two shown items that are not separators, and not right
+            // after another shown separator.
             bool before = false;
             for (usize i = at; i-- > 0;)
             {
                 if (!items[i].shown)
                     continue;
                 if (IsSeparator(*items[i].node))
-                    return false; // the one before shows (or is itself left out): one break is enough
+                    return false; // the shown item before is a separator, and one break is enough
                 before = true;
                 break;
             }
@@ -623,9 +636,9 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        // One of its items: displayed and in its flow. Not its overflow button, nor a popup it
-        // opened (the overflow menu is its child while open, in the top layer), nor what stands out
-        // of the flow.
+        // Returns whether `node` is one of the bar's items: displayed and in its flow. The overflow
+        // button is not, nor is a popup it opened (the overflow menu is its child while open, in the
+        // top layer), nor anything out of the flow.
         [[nodiscard]] bool IsItem(const Node& node) const
         {
             return &node != m_overflow.Get() && node.IsDisplayed() && !node.IsInTopLayer() &&
@@ -639,7 +652,8 @@ export namespace foundation::gui
             return false;
         }
         [[nodiscard]] static bool IsSeparator(const Node& node) { return Cast<Separator>(const_cast<Node*>(&node)) != nullptr; }
-        // A row of a menu can stand for it: a tool button (a menu button among them) or a separator.
+        // Returns whether a menu row can stand for `node`: a tool button (including a menu button)
+        // or a separator.
         [[nodiscard]] static bool CanOverflow(const Node& node)
         {
             return Cast<ToolButton>(const_cast<Node*>(&node)) != nullptr || IsSeparator(node);
@@ -649,7 +663,7 @@ export namespace foundation::gui
             const ToolButton* button = Cast<ToolButton>(const_cast<Node*>(&node));
             return button != nullptr ? button->GetOverflowPriority() : 0;
         }
-        // Its border box with its margins, as it would be with nothing in its way.
+        // Returns the node's natural border box with its margins.
         [[nodiscard]] static core::Float2 Natural(Node& node, core::Float2 available)
         {
             LayoutConstraints constraints;
@@ -666,7 +680,7 @@ export namespace foundation::gui
                 return;
             if (ToolMenuButton* menuButton = Cast<ToolMenuButton>(button); menuButton != nullptr && !menuButton->IsSplit())
             {
-                // Its menu opens where it went: below the overflow button.
+                // Its menu opens where it went, below the overflow button.
                 ToolBar* self = this;
                 core::RefPtr<ToolMenuButton> held(menuButton);
                 MenuItem* row = m_menu->AddItem(button->GetLabel(), [self, held]() { held->OpenMenu(*self->m_overflow); });
@@ -677,7 +691,7 @@ export namespace foundation::gui
             {
                 auto row = core::MakeRef<MenuItem>(MemoryAllocator());
                 row->SetCheckable(button->IsToggle());
-                row->SetCommand(button->GetCommand()); // its label, keys, state: the command's
+                row->SetCommand(button->GetCommand()); // the row takes the command's label, keys and state
                 if (core::StringView own = button->GetText(); own.Size() != 0)
                     row->SetText(own);
                 m_menu->AdoptItem(*row);
@@ -688,9 +702,10 @@ export namespace foundation::gui
             row->SetEnabled(button->IsTreeEnabled());
         }
 
-        // Its flex direction follows its orientation, pinned as code's: its separators read it to
-        // stand up or lie across. Its orientation is the truth, since a restyle (its `orientation`
-        // set from markup under the sheet's hand) returns an unpinned direction to its default.
+        // Keeps the flex direction in line with the orientation, setting it as a pinned code value;
+        // separators read it to stand upright or lie across. The orientation is the source of
+        // truth, because a restyle (with `orientation` set from markup under the sheet) returns a
+        // direction that is not pinned to its default.
         void KeepDirection()
         {
             const FlexDirection wanted = m_vertical ? FlexDirection::Column : FlexDirection::Row;
@@ -698,13 +713,14 @@ export namespace foundation::gui
                 return;
             LayoutStyle style = GetLayoutStyle();
             style.Direction = wanted;
-            // Along, it gives way (what does not fit overflows); across, its content's minimum holds.
+            // Along the bar it gives way, since what does not fit overflows; across, its content's
+            // minimum applies.
             style.MinWidth = m_vertical ? LayoutLength{} : LayoutLength::Px(0.0f);
             style.MinHeight = m_vertical ? LayoutLength::Px(0.0f) : LayoutLength{};
             SetLayoutStyle(style);
             for (usize i = 0; i < ChildCount(); ++i)
                 if (IsSeparator(*GetChildAt(i)))
-                    GetChildAt(i)->RequestLayout(); // its thickness lies along the other axis now
+                    GetChildAt(i)->RequestLayout(); // a separator's thickness now lies along the other axis
         }
 
         core::RefPtr<ToolBarOverflow> m_overflow;

@@ -1,4 +1,4 @@
-# Foundation::GUI.Gamekit's tests: a game's screens (K4 of Specs/gui-lab-evolution-3.md), from
+# Foundation::GUI.Gamekit's tests: a game's screens, from
 # code and markup. Backend-neutral: its script surface is tested in Integration.ScriptFacades.
 add_executable(GUI.Gamekit.Tests
     ScreenStackTests.cpp

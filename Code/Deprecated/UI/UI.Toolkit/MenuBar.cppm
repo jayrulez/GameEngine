@@ -3,11 +3,8 @@
 
 // UI Toolkit - :menu_bar partition
 //
-// Horizontal menu bar with dropdown ContextMenus. Ported from Sedulous.UI.Toolkit/src/MenuBar.bf.
-// Beef `List<MenuEntry{String Title; ContextMenu Menu}>` with manual delete -> Array<MenuEntry> holding
-// String + RefPtr<ContextMenu> (the bar owns the menus; PopupLayer shows them ownsView:false). The bar
-// implements IPopupOwner so PopupLayer routes close-notifications back. `Root.PopupLayer` -> Root()->
-// GetPopupLayer(); `Context.InputManager`/measurement via Root()->ViewportSize.
+// Horizontal menu bar with dropdown ContextMenus. The bar owns its menus, and PopupLayer shows them
+// with ownsView false. The bar implements IPopupOwner so PopupLayer routes close notifications back.
 
 module;
 #include "Core/Prelude.h"
@@ -289,7 +286,7 @@ export namespace foundation::ui::toolkit
                                        ? m_itemRects[static_cast<usize>(index)]
                                        : Rectangle{0, 0, 0, 0};
 
-            // Screen position just below this menu item (+2px so the dropdown clears the bar's
+            // Screen position just below this menu item (2px lower so the dropdown clears the bar's
             // bottom border instead of sitting on it).
             const Float2 screenPos = LocalToScreen(Float2{rect.x, m_itemHeight + 2.0f});
 
@@ -299,9 +296,9 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Show via PopupLayer directly - MenuBar owns the ContextMenu (ownsView:false) - so
-            // what ContextMenu::Show would do first happens here: the menu prepares to open
-            // (hover reset, OnOpening rebuilds live items) BEFORE it measures.
+            // Show via PopupLayer directly, since MenuBar owns the ContextMenu (ownsView false). So
+            // what ContextMenu::Show would do first happens here: the menu prepares to open (hover
+            // reset, OnOpening rebuilds live items) before it measures.
             entry.Menu->PrepareToOpen();
             entry.Menu->Measure(BoxConstraints::Loose(root->ViewportSize.x, root->ViewportSize.y));
             root->GetPopupLayer()->ShowPopup(entry.Menu.Get(), this, screenPos.x, screenPos.y,
@@ -315,7 +312,7 @@ export namespace foundation::ui::toolkit
                 Context != nullptr)
             {
                 ContextMenu* menu = m_menus[static_cast<usize>(m_activeIndex)].Menu.Get();
-                // The menu is shown via PopupLayer - closing it triggers OnPopupClosed.
+                // The menu is shown via PopupLayer; closing it triggers OnPopupClosed.
                 if (menu->Context != nullptr)
                 {
                     if (RootView* root = Root())

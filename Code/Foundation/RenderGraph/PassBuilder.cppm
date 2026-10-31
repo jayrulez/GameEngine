@@ -4,8 +4,8 @@
 // Foundation::RenderGraph - :pass_builder partition
 //
 // Fluent builder handed to a pass's setup callback to declare reads/writes,
-// attachments, dependencies, flags, and the execute callback. Ported from
-// Sedulous.RenderGraph (PassBuilder.bf). Methods return *this for chaining.
+// attachments, dependencies, flags, and the execute callback. Methods return
+// *this for chaining.
 
 module;
 #include "Core/Prelude.h"
@@ -38,9 +38,10 @@ export namespace foundation::rendergraph
             return *this;
         }
 
-        // Sample a DEPTH texture in this pass's shader (e.g. a shadow map). Like ReadTexture - a read
-        // dependency + barrier, NOT a depth attachment (unlike ReadDepth) - but transitions to
-        // DepthStencilRead (DEPTH_STENCIL_READ_ONLY_OPTIMAL), the layout a depth sampler expects.
+        // Sample a depth texture in this pass's shader (e.g. a shadow map). Like ReadTexture, this
+        // is a read dependency and barrier, not a depth attachment (unlike ReadDepth), but it
+        // transitions to DepthStencilRead (DEPTH_STENCIL_READ_ONLY_OPTIMAL), the layout a depth
+        // sampler expects.
         PassBuilder& SampleDepth(RGHandle handle, RGSubresourceRange subresource = {})
         {
             m_pass->accesses.PushBack(
@@ -103,9 +104,9 @@ export namespace foundation::rendergraph
 
         // MSAA hardware resolve for a color slot: the slot's multisampled target resolves into
         // `resolveHandle` (single-sample) at pass end, and the MSAA target's storeOp becomes
-        // DontCare (its samples are not needed once resolved). Must be called AFTER SetColorTarget
-        // for the same slot. The resolve target is registered as a write so the graph allocates +
-        // transitions it. No-op for the single-sample path (callers only call this when MSAA).
+        // DontCare (its samples are not needed once resolved). Call it after SetColorTarget for
+        // the same slot. The resolve target is registered as a write so the graph allocates and
+        // transitions it. No-op for the single-sample path (callers only call this under MSAA).
         PassBuilder& SetResolveTarget(i32 slot, RGHandle resolveHandle,
                                       RGSubresourceRange subresource = {})
         {
@@ -148,8 +149,8 @@ export namespace foundation::rendergraph
             }
             else
             {
-                // ANY non-read-only depth attachment is a write access, INCLUDING
-                // StoreOp::DontCare (a scratch depth/stencil used only within the pass -
+                // Any non-read-only depth attachment is a write access, including
+                // StoreOp::DontCare (a scratch depth/stencil used only within the pass, such as
                 // the overlay stencil). The access is what keeps the transient referenced
                 // (allocated) and drives its layout transition; without it the resource
                 // ref-counts to zero, never allocates, and ExecuteRenderPass silently
@@ -208,7 +209,7 @@ export namespace foundation::rendergraph
             m_pass->dependencies.PushBack(pass);
             return *this;
         }
-        // Override the pass's viewport + scissor (a sub-rect of the attachment, e.g. split-screen).
+        // Override the pass's viewport and scissor (a sub-rect of the attachment, e.g. split-screen).
         // Without it the pass covers the full attachment.
         PassBuilder& SetViewport(i32 x, i32 y, u32 w, u32 h)
         {
@@ -242,7 +243,7 @@ export namespace foundation::rendergraph
             return *this;
         }
         // A render pass whose body is supplied by render bundles (parallel command recording).
-        // The graph begins the pass with secondary-command-buffer contents + ExecuteBundles them.
+        // The graph begins the pass with secondary-command-buffer contents and ExecuteBundles them.
         PassBuilder& SetBundleExecute(RenderBundlePassCallback callback)
         {
             m_pass->bundleCallback = Move(callback);

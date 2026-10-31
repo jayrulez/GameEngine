@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.particles:streams - the SoA particle stream container, ported from
-// Sedulous.Particles (ParticleStream.bf, CPUStream.bf, ParticleStreamContainer.bf).
+// foundation.particles:streams - the SoA particle stream container.
 //
 // Particle state is Structure-of-Arrays: one typed stream per attribute, held in a fixed
 // 64-slot array indexed by ParticleStreamId, allocated lazily by whichever module declares
-// it. AliveCount is shared across every stream; death is O(1) swap-remove (order not
-// preserved). This is the CPU representation; the GPU-compute path (Phase 6) mirrors it with
-// one SSBO per attribute behind the same ids.
+// it. AliveCount is shared across every stream; death is an O(1) swap-remove (order not
+// preserved). This is the CPU representation; a GPU compute path would mirror it with one
+// storage buffer per attribute behind the same ids.
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +20,7 @@ using namespace foundation::core;
 
 export namespace foundation::particles
 {
-    // Attribute channels. Core three (Position/Age/Lifetime) are always allocated; the rest are
+    // Attribute channels. The core three (Position, Age, Lifetime) are always allocated; the rest are
     // added on demand by the modules that need them. Custom..MaxStreams is user-reserved space.
     enum class ParticleStreamId : u8
     {
@@ -77,7 +76,7 @@ export namespace foundation::particles
         static constexpr StreamElementType value = StreamElementType::Int32;
     };
 
-    // Abstract stream: identity + element type + capacity, plus a type-erased swap-remove so the
+    // Abstract stream: identity, element type and capacity, plus a type-erased swap-remove so the
     // container can compact without knowing T.
     class ParticleStream
     {
@@ -146,8 +145,8 @@ export namespace foundation::particles
         Array<T> m_data;
     };
 
-    // The SoA container: a fixed 64-slot array of streams + a shared AliveCount. Owns its streams
-    // (raw pointers freed in the destructor, mirroring Sedulous's manual lifetime).
+    // The SoA container: a fixed 64-slot array of streams and a shared AliveCount. Owns its streams
+    // (raw pointers freed in the destructor).
     class ParticleStreamContainer
     {
     public:
@@ -176,7 +175,7 @@ export namespace foundation::particles
         ParticleStreamContainer& operator=(const ParticleStreamContainer&) = delete;
 
         // Move: transfer stream ownership (used by ParticleSystem::SetMaxParticles to swap in a
-        // fresh, larger/smaller container). The source is left empty so its dtor frees nothing.
+        // fresh container of another size). The source is left empty so its destructor frees nothing.
         ParticleStreamContainer(ParticleStreamContainer&& other) noexcept
             : aliveCount(other.aliveCount), m_capacity(other.m_capacity)
         {
@@ -221,7 +220,7 @@ export namespace foundation::particles
             return m_streams[static_cast<usize>(id)];
         }
 
-        // Typed access - returns null if the stream isn't allocated or the element type mismatches.
+        // Typed access: returns null if the stream is not allocated or the element type mismatches.
         template <typename T>
         [[nodiscard]] CPUStream<T>* GetCPUStream(ParticleStreamId id) const noexcept
         {
@@ -304,7 +303,7 @@ export namespace foundation::particles
             return GetCPUStream<Float3>(ParticleStreamId::Axis);
         }
 
-        // Normalized life [0,1] of a particle (age/lifetime), 1 when lifetime is non-positive.
+        // Normalized life [0,1] of a particle (age / lifetime), 1 when lifetime is non-positive.
         [[nodiscard]] f32 GetLifeRatio(i32 index) const noexcept
         {
             const CPUStream<f32>* ages = Ages();

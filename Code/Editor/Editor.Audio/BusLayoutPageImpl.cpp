@@ -29,8 +29,8 @@ namespace editor
     {
         using Bus = pipeline::AudioBusLayoutAsset::Bus;
 
-        // A bus's setting as a row: its path, its name, its group in the grid, its range (a float's),
-        // and where it is in a Bus.
+        // A bus setting as a row: its path, its name, its group in the grid, its range (for a
+        // float), and where it lives in a Bus.
         struct EffectRow
         {
             const char8_t* path;
@@ -68,7 +68,7 @@ namespace editor
     AudioBusLayoutEditorPage::AudioBusLayoutEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::AudioBusLayoutAsset::StaticType(), kPath)
     {
-        HideAssetRows(); // the layout reflects nothing of its own: its rows are the chosen bus's
+        HideAssetRows(); // the layout's own properties are hidden: the rows show the chosen bus
         m_model = MakeUnique<gui::TreeModel>(Allocator());
         m_tree = Find<gui::TreeView>(u8"bus-tree");
         m_remove = Find<gui::ButtonBase>(u8"bus-remove");
@@ -177,7 +177,7 @@ namespace editor
         for (const BusRow& row : m_rows)
             found = found || row.bus == m_selected;
         if (!found)
-            m_selected = BusRef{0, -1}; // gone (removed, an undo): Master
+            m_selected = BusRef{0, -1}; // the bus is gone (removed, or undone): choose Master
         m_showing = true;
         m_model->Clear();
         Array<i32> parents; // the last node at each depth
@@ -218,7 +218,7 @@ namespace editor
         const Bus* bus = BusSettings(*layout, m_selected);
         if (bus == nullptr)
             return;
-        // A custom bus's name and parent; a fixed one has neither to change.
+        // A custom bus has a name and parent to edit; a fixed bus has neither.
         const bool custom = !m_selected.IsFixed();
         gui::PropertyInfo* name = m_busRows->FindInfo(u8"name");
         gui::PropertyInfo* parent = m_busRows->FindInfo(u8"parent");
@@ -291,7 +291,7 @@ namespace editor
 
     void AudioBusLayoutEditorPage::EditRow(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
     {
-        rows.SetValue(path, 0, value); // as the grid's commit leaves it
+        rows.SetValue(path, 0, value); // as the grid's commit would leave it
         Committed(rows, path, value);
     }
 
@@ -308,7 +308,7 @@ namespace editor
             if (path == u8"name")
             {
                 const String name(Trim(value.AsString()));
-                // Refused (empty, a fixed bus's, another's): the row shows the name it has.
+                // Refused (empty, a fixed bus's name or another bus's): the row shows the current name.
                 if (name.IsEmpty() || IsFixedBusName(name.AsView()) || (FindBusSlot(*layout, name.AsView()) >= 0 && FindBusSlot(*layout, name.AsView()) != bus.slot))
                 {
                     Context().SetStatus(Format(u8"\"{}\" cannot name this bus: a name is a bus's own, and not a fixed bus's.", name).AsView());

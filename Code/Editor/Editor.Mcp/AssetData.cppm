@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Mcp - :asset_data partition (Sedulous 3dae9ac8)
+// Editor::Mcp - :asset_data partition
 //
 // asset_data_read / asset_data_write: any asset's stored object as the text its envelope holds,
 // for the data assets no other tool edits (an input map's actions and bindings, a material's
 // parameters, a physics material, a sound cue, a bus layout). The write reads the agent's text
-// the way a load reads the stored envelope (Instance::ReadObjectFrom), so what it accepts is
-// exactly what the engine can load; then it stores the object and announces the write, as
-// scene_write does.
+// the way a load reads the stored envelope (Instance::ReadObjectFrom), so it accepts exactly what
+// the engine can load; then it stores the object and announces the write, as scene_write does.
 
 module;
 #include "Core/Prelude.h"

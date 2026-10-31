@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// CustomShader - a LOW-LEVEL custom shader end to end: a toon (cel) shader, one file with VSMain
+// CustomShader - a low-level custom shader end to end: a toon (cel) shader, one file with VSMain
 // and PSMain (Data/Samples/Shaders/toon/toon.hlsl), registered with the render subsystem's shader
 // system under the name "toon", and a material built in code whose properties lay out the
 // shader's set-2 block. Nothing in the renderer knows about it: the material's property list
@@ -40,7 +40,7 @@ import engine.scene;
 import engine.render;
 import engine.composition;  // FullComposition: the factory set every host composes from
 import foundation.content;  // ContentDatabase (the cooked Fox)
-import foundation.resource; // ResourceManager + Proxy
+import foundation.resource; // ResourceManager and Proxy
 import foundation.model;    // ModelResource
 import foundation.animation;
 import engine.animation;    // SkeletalAnimationComponent: the SKINNED vertex variant
@@ -66,7 +66,7 @@ using core::f32;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] core::IAllocator& AppRoot() noexcept
     {
         return core::DefaultAllocator();
@@ -176,9 +176,10 @@ namespace
         // The shader, one file with both stages (VSMain and PSMain), read from the data root. Its
         // properties block becomes the generated set-2 declarations (as a shader asset's cook does
         // it), and each stage is registered by name with its entry point and the variants it
-        // declares. A registered source wins over the cooked pack and compiles on first use (DXC,
-        // so a dev or editor build: a compiler-free dist cannot compile it). Every module made from
-        // it records its entry, so the renderer's pipelines run VSMain and PSMain unbidden.
+        // declares. A registered source wins over the cooked pack and compiles on first use through
+        // DXC, so this needs a dev or editor build; a dist without the compiler cannot compile it.
+        // Every module made from it records its entry point, so the renderer's pipelines run VSMain
+        // and PSMain without being told.
         bool RegisterToonShader(shaders::ShaderSystem& shaderSystem)
         {
             const core::String path =
@@ -240,7 +241,7 @@ namespace
             const core::RefPtr<geometry::StaticMesh> plane =
                 geometry::Primitives::Plane(a, 30.0f, 30.0f);
 
-            // The floor: toon, so it RECEIVES the shadows the toon shader samples itself.
+            // The floor is toon too, so it receives the shadows the toon shader samples itself.
             (void)AddMesh(u8"floor", plane,
                           CreateToon(u8"ToonFloor", core::Float4{0.75f, 0.75f, 0.72f, 1.0f},
                                      core::Float4{0.35f, 0.38f, 0.5f, 1.0f}, 2.0f),
@@ -267,7 +268,7 @@ namespace
                               core::Float3{-5.0f + 2.5f * static_cast<f32>(i), 0.8f, 0.0f});
             }
 
-            // A ring of twelve cubes sharing ONE material and mesh: drawn as an instanced batch,
+            // A ring of twelve cubes sharing one material and mesh: drawn as an instanced batch,
             // the INSTANCED vertex variant of the toon shader.
             m_ring = m_scene->CreateEntity(u8"ring");
             m_scene->SetLocalPosition(m_ring, core::Float3{0.0f, 0.5f, -5.0f});
@@ -462,7 +463,7 @@ namespace
         scene::EntityHandle m_ring;
         scene::EntityHandle m_torus;
         f32 m_time = 0.0f;
-        // The cooked Fox's pipeline state, outliving its entities.
+        // The cooked Fox's pipeline state, which outlives its entities.
         core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
         core::UniquePtr<content::ContentDatabase> m_contentDb;
         core::UniquePtr<resource::ResourceManager> m_resources;

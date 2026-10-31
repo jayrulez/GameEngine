@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the menu bar generated from the action registry: menus in first-appearance
-// order or the declared one, items by order band with separators and their chords, nested paths as
-// submenus, leading list-driven items, enabled and checked as the registry answers when a menu
-// opens, a click executing through the registry, the bar built again on a registration, and a bar
-// that dies leaving nothing behind.
+// Editor::App tests: the menu bar generated from the action registry. Menus appear in
+// first-appearance order or in a declared order. Items are grouped by order band, with separators
+// between bands, and show their chords. Nested paths become submenus, and list-driven items come
+// first. Enabled and checked states come from the registry when a menu opens, a click executes
+// through the registry, a registration rebuilds the bar, and a destroyed bar leaves nothing behind.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -29,7 +29,8 @@ namespace
         d.execute = [](EditorPage*) {};
         return d;
     }
-    // A menu's rows: an item's text (">" after a submenu's), "-" a separator.
+    // The rows of a menu as text: each item's label (a submenu's followed by ">"), and "-" for a
+    // separator.
     String Labels(const gui::Menu& menu)
     {
         String out;
@@ -49,7 +50,7 @@ namespace
             else if (auto* item = Cast<gui::MenuItem>(row))
                 text = item->GetText();
             else
-                continue; // its scroll arrows
+                continue; // the menu's scroll arrows
             if (!first)
                 out += u8"|";
             first = false;
@@ -120,14 +121,14 @@ TEST_CASE("action-menus: the bar is generated from the registry - menus in first
     CHECK(Labels(*bed.bar->MenuAt(0)) == String(u8"Save|Save As...|-|Exit"));
     CHECK(Labels(*bed.bar->MenuAt(1)) == String(u8"Undo"));
     CHECK(ItemNamed(*bed.bar->MenuAt(0), u8"Save")->GetShortcut() == FormatShortcut(EditorShortcut::Of(u8"ctrl-s")).AsView());
-    // Scene/Simulate/* nests: one submenu holding Start then Stop by order.
+    // The Scene/Simulate/* items nest in one submenu, Start before Stop by order.
     CHECK(Labels(*bed.bar->MenuAt(2)) == String(u8"Simulate>|-|Grid"));
     gui::Menu* simulate = SubMenuNamed(*bed.bar->MenuAt(2), u8"Simulate");
     REQUIRE(simulate != nullptr);
     CHECK(Labels(*simulate) == String(u8"Start|Stop"));
 
-    // Enabled and checked are the registry's answer as the menu opens, opened the way a click on
-    // the bar opens it.
+    // Enabled and checked states come from the registry when the menu opens. Open it the way a
+    // click on the bar does.
     gui::MenuItem* saveItem = ItemNamed(*bed.bar->MenuAt(0), u8"Save");
     CHECK_FALSE(saveItem->IsEnabled());
     dirty = true;
@@ -168,8 +169,8 @@ TEST_CASE("action-menus: the bar is generated from the registry - menus in first
     REQUIRE(bed.bar->MenuCount() == 5u);
     CHECK(Labels(*bed.bar->MenuAt(4)) == String(u8"yesterday.scene"));
 
-    // A declared order: the named menus in their places, the rest at "*", in the order they first
-    // appear; a domain's menu registered after Help still lands before it.
+    // With a declared order, the named menus take their places and the rest go at "*" in the order
+    // they first appear. A domain's menu registered after Help still lands before Help.
     const StringView order[] = {u8"File", u8"Edit", u8"*", u8"Help", u8"Nowhere"};
     menus.SetMenuOrder(Span<const StringView>(order, 5));
     REQUIRE(bed.bar->MenuCount() == 5u); // "Nowhere" has nothing in it: no menu
@@ -180,7 +181,7 @@ TEST_CASE("action-menus: the bar is generated from the registry - menus in first
     CHECK(bed.Title(4) == String(u8"Help"));
     REQUIRE(actions.Register(Declare(u8"tools.bake", u8"Bake", u8"Tools/Bake", 100))); // late
     REQUIRE(bed.bar->MenuCount() == 6u);
-    CHECK(bed.Title(3) == String(u8"Tools")); // with the action menus, before the leading-only Recent
+    CHECK(bed.Title(3) == String(u8"Tools")); // among the action menus, before Recent, which has only leading items
     CHECK(bed.Title(4) == String(u8"Recent"));
     CHECK(bed.Title(5) == String(u8"Help"));
     CHECK(Labels(*bed.bar->MenuAt(0)) == String(u8"New Scene|New Material|-|Save|Save As...|-|Exit")); // items unchanged
@@ -196,7 +197,7 @@ TEST_CASE("action-menus: a generated bar that dies leaves it empty, and the regi
         CHECK(bed.bar->MenuCount() == 1u);
     }
     CHECK(bed.bar->MenuCount() == 0u);
-    // A registration after it is gone reaches nobody.
+    // A registration after the bar is destroyed reaches nothing.
     REQUIRE(actions.Register(Declare(u8"file.exit", u8"Exit", u8"File/Exit", 300)));
     CHECK(bed.bar->MenuCount() == 0u);
 }

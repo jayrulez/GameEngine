@@ -162,9 +162,9 @@ TEST_CASE("containers: Array resize and clear")
     CHECK(a.IsEmpty());
     CHECK(a.Capacity() == capBefore); // clear keeps capacity
 
-    // A first Resize from empty is exact; a growing Resize reserves geometrically (a mip
-    // chain built level by level reallocated 85 MB per level before 2026-09-23), and the
-    // relocation keeps every trivially copyable element.
+    // A first Resize from empty is exact; a growing Resize reserves geometrically, so a buffer
+    // grown step by step (a mip chain built level by level) does not reallocate at every step,
+    // and the relocation keeps every trivially copyable element.
     Array<u8> bytes;
     bytes.Resize(1000);
     CHECK(bytes.Capacity() == 1000u);
@@ -249,7 +249,7 @@ TEST_CASE("hash: integers and strings hash deterministically")
 }
 
 // The published FNV-1a 64 test vectors: the basis is the standard one, and HashBytes, HashText and
-// the type ids built on them are the same function. The basis was a digit short until 2026-10-01.
+// the type ids built on them are the same function.
 TEST_CASE("hash: HashBytes and HashText are the published FNV-1a 64")
 {
     CHECK(kFnv1a64OffsetBasis == 14695981039346656037ull);

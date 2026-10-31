@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Vegetation - :paint implementation (VegetationPaintTool + the viewport-tool provider).
+// Editor::Vegetation - :paint implementation (VegetationPaintTool and the viewport-tool provider).
 //
-// The heavy engine/resource imports the interface partition keeps out (GCC hygiene) live here:
-// the vegetation + terrain component managers (to find the mask and the heightfield the pick
-// needs) and the mask source + asset (to serialize the painted planes back on save).
+// The heavy engine and resource imports that the interface partition keeps out (for GCC module
+// hygiene) live here: the vegetation and terrain component managers (to find the mask and the
+// heightfield the pick needs) and the mask source and asset (to serialize the painted planes
+// back on save).
 
 module;
 #include "Core/Prelude.h"
@@ -16,11 +17,11 @@ import foundation.core;
 import foundation.scene;
 import foundation.render;              // debug::DebugDraw
 import foundation.shell;               // IKeyboard (plane hotkeys)
-import foundation.content;             // ContentDatabase, Instance (the persist closure)
+import foundation.content;             // ContentDatabase, Instance (the save closure)
 import foundation.resource;            // Ref<>
-import foundation.vegetation.resource; // VegetationMask + PaintMask/EraseMask/SmoothMask + source
-import vegetation.pipeline;            // VegetationMaskAsset (the SOURCE envelope the persist rewrites)
-import engine.vegetation;              // TerrainVegetationComponent(Manager): the mask + regrow notices
+import foundation.vegetation.resource; // VegetationMask, PaintMask, EraseMask, SmoothMask, the source
+import vegetation.pipeline;            // VegetationMaskAsset (the source envelope the save rewrites)
+import engine.vegetation;              // TerrainVegetationComponent and its manager: the mask, regrow notices
 import editor.core;
 import editor.viewporttools;
 
@@ -53,9 +54,9 @@ namespace editor
                                          static_cast<f32>(region.maxY + 1) / h, gridSize);
         }
 
-        // The region-delta stroke command over ONE plane: replays the touched rectangle between
-        // its before / after blocks, bumps the mask version and tells the manager the rect changed.
-        // One per stroke; never merges. Keeps the raster alive.
+        // The region-delta stroke command over one plane. It replays the touched rectangle between
+        // its before and after blocks, bumps the mask version and tells the manager the rect
+        // changed. One per stroke; it never merges and keeps the raster alive.
         class VegetationStrokeCommand final : public IEditorCommand
         {
         public:
@@ -68,7 +69,7 @@ namespace editor
             }
             [[nodiscard]] bool Execute() override
             {
-                Write(m_after); // the live plane is already AFTER on push; replays on redo
+                Write(m_after); // the live plane is already in the after state on push; replays on redo
                 return !m_region.IsEmpty();
             }
             void Undo() override { Write(m_before); }
@@ -135,7 +136,7 @@ namespace editor
             return out;
         }
 
-        constexpr i32 kMaxStampsPerFrame = 1024; // teleport guard (alt-tab warps, huge drags)
+        constexpr i32 kMaxStampsPerFrame = 1024; // guards against pointer jumps (alt-tab warps, huge drags)
         constexpr f32 kAirbrushPeriod = 0.05f;   // seconds per time-cadence stamp (20/s)
     }
 
@@ -170,8 +171,9 @@ namespace editor
     bool VegetationPaintTool::Update(const ViewportToolInput& input)
     {
         m_hasHover = false;
-        // Plane hotkeys 1..9 -> planes 0..8; 0 = the ERASER; minus = SMOOTH (the splat brush's
-        // keys, one convention for every terrain-footprint brush).
+        // Plane hotkeys: 1 to 9 select planes 0 to 8, 0 selects the eraser and minus selects
+        // smooth. These are the splat brush's keys, one convention for every terrain-footprint
+        // brush.
         if (foundation::shell::IKeyboard* kb = input.keyboard; kb != nullptr && input.pointerValid)
         {
             using foundation::shell::KeyCode;
@@ -187,7 +189,7 @@ namespace editor
             if (kb->IsKeyPressed(KeyCode::Num0)) SetEraser(true);
             if (kb->IsKeyPressed(KeyCode::Minus)) SetSmooth(true);
         }
-        // Shift + wheel resizes the brush; the bare wheel stays the camera's dolly (2026-09-23).
+        // Shift and the wheel resize the brush; the wheel alone stays the camera's dolly.
         if (input.pointerOver && input.shift && input.wheelDelta != 0.0f)
         {
             SetRadius(m_radius * (1.0f + 0.12f * input.wheelDelta));
@@ -200,7 +202,7 @@ namespace editor
             m_hoverNormal = pick.worldNormal;
         }
         bool consumed = m_stroking;
-        if (!input.editingLocked) // Simulate: the mask feeds the live scatter - no edits
+        if (!input.editingLocked) // no edits while simulating, since the mask feeds the live scatter
         {
             if (!m_stroking && pick.valid && input.pointerOver && input.leftPressed)
             {
@@ -240,14 +242,14 @@ namespace editor
         }
         m_region = veg::MaskRegion{};
         m_airbrushClock = 0.0f;
-        // The press deposits ONE full stamp and anchors the spacing walker there.
+        // The press deposits one full stamp, and the spacing walk starts there.
         ApplyStamp(pick.uvX, pick.uvY, pick, m_strength);
         m_lastStampU = pick.uvX;
         m_lastStampV = pick.uvY;
     }
 
-    // Distance-spaced stamps along the drag (+ time-cadence stamps when airbrush is on): the
-    // splat brush's model - frame-rate and drag-speed independent.
+    // Distance-spaced stamps along the drag, plus time-cadence stamps when airbrush is on. This is
+    // the splat brush's model, independent of frame rate and drag speed.
     void VegetationPaintTool::AdvanceStroke(const Pick& pick, f32 deltaSeconds)
     {
         if (m_strokeMask.Get() == nullptr)
@@ -286,8 +288,8 @@ namespace editor
         {
             return;
         }
-        // Per-axis UV radii keep the brush a CIRCLE in world space on a non-square footprint;
-        // the flat core scales with the stamp amount (soft at blending strengths, hard at 1).
+        // Per-axis UV radii keep the brush a circle in world space on a non-square footprint.
+        // The flat core scales with the stamp amount: soft at blending strengths, hard at 1.
         const f32 uvRadiusX = m_radius / pick.worldSizeX;
         const f32 uvRadiusY = m_radius / pick.worldSizeY;
         const f32 t = Clamp(amount, 0.0f, 1.0f);
@@ -300,7 +302,8 @@ namespace editor
         {
             m_region.Add(r.minX, r.minY);
             m_region.Add(r.maxX, r.maxY);
-            // The live regrow: only the chunks under this stamp (the brush op bumped the version).
+            // Regrow live, only the chunks under this stamp (the brush operation bumped the
+            // version).
             NotifyRegion(static_cast<TerrainVegetationComponentManager*>(m_strokeManager),
                          *m_strokeMask, r, m_strokeGridSize);
         }
@@ -321,9 +324,9 @@ namespace editor
                     static_cast<TerrainVegetationComponentManager*>(m_strokeManager),
                     m_strokeGridSize),
                 editor::EditorRootAllocator()));
-            // The write-back-to-source persist closure (drained on Save): rewrites the SOURCE
-            // VegetationMaskAsset envelope (dims + planes synced, fileName cleared - an imported
-            // mask converts to embedded) then writes the planes sidecar.
+            // The closure that writes back to the source (drained on Save). It rewrites the source
+            // VegetationMaskAsset envelope, syncing the dimensions and planes and clearing
+            // fileName so an imported mask becomes embedded, then writes the planes sidecar.
             if (m_assetEdits != nullptr && !m_strokeMaskId.IsNil())
             {
                 RefPtr<veg::VegetationMask> mask = m_strokeMask;
@@ -379,7 +382,7 @@ namespace editor
         {
             return;
         }
-        // A green ring per plane (hue steps per plane), white for the eraser, grey-blue for smooth.
+        // A green ring whose hue steps per plane; white for the eraser and grey-blue for smooth.
         Color ring{0.95f, 0.95f, 0.95f, 1.0f};
         if (m_smooth)
         {
@@ -400,7 +403,7 @@ namespace editor
         const i32 radius = static_cast<i32>(m_radius + 0.5f);
         const StringView mode = m_smooth ? StringView(u8"SMOOTH") : m_erase ? StringView(u8"ERASE") : StringView(u8"paint");
         m_status = Format(u8"Paint Vegetation [{} plane {}]  radius {}  (1-9 plane, 0 erase, - smooth, Shift+wheel size)",
-                          mode, static_cast<i32>(m_plane) + 1, radius); // from 1, as its key and the panel
+                          mode, static_cast<i32>(m_plane) + 1, radius); // counted from 1, like its key and the panel
     }
 
     void VegetationViewportToolProvider::CreateTools(ViewportToolManager& manager,

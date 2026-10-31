@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit Float2Editor: two-field row + value round-trip; a field drives the setter.
+// Smoke test for the toolkit Float2Editor: a two-field row, a value round trip, and a field driving the setter.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // foundation.particles.resource - the cooked ParticleEffectResource (runtime input), its serializer,
-// and its resource factory. A ParticleEffectResource IS a reflected ISerializable that holds a
-// runtime ParticleEffect; the cook (foundation.particles.editor) writes one into the content DB, the
-// factory reconstructs it at Bind. Polymorphic modules round-trip via the reflection/serializable
-// registry (Serializables().Create by type-id) - the same machinery TextureResource uses.
+// and its resource factory. A ParticleEffectResource is a reflected ISerializable that holds a
+// runtime ParticleEffect; the cook (foundation.particles.editor) writes one into the content
+// database and the factory reconstructs it at Bind. Polymorphic modules round-trip through the
+// serializable registry (Serializables().Create by type id), the same machinery TextureResource uses.
 
 module;
 #include "Core/Prelude.h"
@@ -35,9 +35,9 @@ namespace materials = foundation::materials;
 
 export namespace foundation::particles
 {
-    // ---- Effect serializer (bidirectional; ported from Sedulous ParticleEffectSerializer) --------
+    // ---- Effect serializer (bidirectional) ----------------------------------------------------
 
-    // A polymorphic module: write its reflected type-id (u64) + params; on read, reconstruct via the
+    // A polymorphic module: write its reflected type id (u64) and params; on read, reconstruct via the
     // serializable registry, read its params, and add it to the system (which declares its streams).
     inline void SerializeInitializers(ISerializer& ar, ParticleSystem& sys)
     {
@@ -58,7 +58,7 @@ export namespace foundation::particles
                 created = obj ? RefPtr<ParticleInitializer>{Cast<ParticleInitializer>(obj.Get())} : RefPtr<ParticleInitializer>{};
                 if (!created)
                 {
-                    // A module this build cannot construct is NOT skippable: its parameters stay
+                    // A module this build cannot construct is not skippable: its parameters stay
                     // in the positional stream and everything after shifts (a garbage particle
                     // budget, a runaway allocation). Refuse the payload, like a stale data
                     // version; the factory binds nothing.
@@ -96,7 +96,7 @@ export namespace foundation::particles
                 created = obj ? RefPtr<ParticleBehavior>{Cast<ParticleBehavior>(obj.Get())} : RefPtr<ParticleBehavior>{};
                 if (!created)
                 {
-                    // A module this build cannot construct is NOT skippable: its parameters stay
+                    // A module this build cannot construct is not skippable: its parameters stay
                     // in the positional stream and everything after shifts (a garbage particle
                     // budget, a runaway allocation). Refuse the payload, like a stale data
                     // version; the factory binds nothing.
@@ -242,9 +242,9 @@ export namespace foundation::particles
         ar.EndArray();
     }
 
-    // Deep-copy an effect via a serialize round-trip (reuses the one serializer; truly independent -
-    // no shared module RefPtrs). This is the core of the bake: the editor clones the authored asset's
-    // effect into a fresh cooked resource (later: resolving refs / baking LUTs during the copy).
+    // Deep-copy an effect through a serialize round trip (reusing the one serializer; the copy shares
+    // no module RefPtrs). This is the core of the bake: the editor clones the authored asset's effect
+    // into a fresh cooked resource.
     inline void CloneEffect(const ParticleEffect& src, ParticleEffect& dst)
     {
         MemoryStream buffer(DefaultAllocator());
@@ -263,7 +263,7 @@ export namespace foundation::particles
 export namespace foundation::particles
 {
     // ---- Cooked resource ---------------------------------------------------------------------
-    // Both the cooked record AND the runtime product (no GPU transform needed): holds a template
+    // Both the cooked record and the runtime product (no GPU transform needed): holds a template
     // ParticleEffect. A component instantiates its own ParticleEffectInstance over this effect.
     class ParticleEffectResource final : public ISerializable
     {
@@ -288,7 +288,7 @@ export namespace foundation::particles
         }
 
         // Per-system resolved mesh handles (parallel to the systems), bound by the factory from each
-        // system's meshRef GUID - the mesh drawn per particle in Mesh render mode. Null = no effect mesh.
+        // system's meshRef GUID: the mesh drawn per particle in Mesh render mode. Null = no effect mesh.
         [[nodiscard]] resource::Proxy<geometry::StaticMesh> SystemMesh(i32 systemIndex) const
         {
             return (systemIndex >= 0 && systemIndex < static_cast<i32>(m_systemMeshes.Size()))
@@ -323,11 +323,11 @@ export namespace foundation::particles
         Array<Array<resource::Proxy<materials::Material>>> m_systemMaterials;
     };
 
-    // Resolve a resource's per-system texture/mesh/material GUID refs (read off its effect's systems)
-    // into Proxy<T> handles via `manager` (Bind records the dependency edges, so re-cooking a referenced
-    // asset transitively reloads this effect and the Proxy follows it). Shared by the cooked FACTORY and
-    // by the editor's LIVE PREVIEW, which resolves an in-memory resource built from the authored effect -
-    // so a preview renders every mesh system's mesh + materials exactly like a cooked dist.
+    // Resolve a resource's per-system texture, mesh and material GUIDs (read off its effect's systems)
+    // into Proxy<T> handles through `manager`. Bind records the dependency edges, so re-cooking a
+    // referenced asset reloads this effect and the Proxy follows it. Shared by the cooked factory and
+    // by the editor's live preview, which resolves an in-memory resource built from the authored
+    // effect, so a preview renders every mesh system's mesh and materials as a cooked build does.
     inline void ResolveParticleEffectResources(ParticleEffectResource& res,
                                                resource::ResourceManager& manager)
     {
@@ -374,8 +374,8 @@ export namespace foundation::particles
     }
 
     // ---- Factory -----------------------------------------------------------------------------
-    // Data factory (model B): deserialize the record; no GPU upload. Referenced cooked resources
-    // (textures/meshes/materials) are resolved to Proxies via ResolveParticleEffectResources.
+    // Data factory: deserialize the record; no GPU upload. Referenced cooked resources (textures,
+    // meshes, materials) are resolved to Proxies through ResolveParticleEffectResources.
     class ParticleEffectFactory final : public resource::IResourceFactory
     {
     public:
@@ -399,7 +399,7 @@ export namespace foundation::particles
         }
     };
 
-    // Register the cooked resource type + all module types. Call once at startup (tooling and runtime).
+    // Register the cooked resource type and all module types. Call once at startup (tooling and runtime).
     inline void RegisterParticleEffectResource()
     {
         RegisterParticleModules();
@@ -407,16 +407,15 @@ export namespace foundation::particles
         RegisterSerializable<ParticleEffectResource>();
     }
 
-    // v1 (2026-10-21): curves of Core's keys and gradients, size as `size`/`separateAxes`/`sizeY`
-    // (cooked again: the builder's version moved). v2 (2026-10-27): each system its sub-emitters,
-    // no effect-level links (cooked again).
+    // v1: curves of Core's keys and gradients, size as `size`, `separateAxes` and `sizeY`. v2: each
+    // system owns its sub-emitters; there are no effect-level links. Each bump cooks effects again.
     RTTI_DEFINE_OBJECT_VERSIONED(ParticleEffectResource, "rtti::particles", 2)
 }
 
 export namespace foundation::particles
 {
-    /// The particles resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The particles resource module: what the engine composition builds this library's
+    /// factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kParticlesResourceFactories[] = {
         foundation::resource::FactoryByDefault<ParticleEffectResource, ParticleEffectResource, ParticleEffectFactory>(),
     };

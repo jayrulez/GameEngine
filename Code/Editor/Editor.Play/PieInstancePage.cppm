@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Play - :pie_page_interface partition (agent-playtesting-and-asset-creation.md P3).
+// Editor::Play - :pie_page_interface partition.
 //
-// IPieInstancePage: what one play-in-editor instance, a Game tab, lets the PIE tools act through:
-// beyond what the scene tools read (IGameScenePage: its id, whether it runs and its scene), its
-// run's start and stop, the state of the run, a capture of what it renders, the scene
-// and game script it runs, a scripted input timeline in place of the viewport's (P4), and the
+// IPieInstancePage is what one play-in-editor instance, a Game tab, offers the PIE tools. Beyond
+// what the scene tools read through IGameScenePage (its id, whether it runs, and its scene), it
+// covers starting and stopping the run, the run's state, a capture of what it renders, the scene
+// and game script it runs, a scripted input timeline in place of the viewport's, and the
 // resolution it draws at. The Game page publishes it (EditorPage::Service<IPieInstancePage>).
 module;
 #include "Core/Prelude.h"
@@ -40,13 +40,13 @@ export namespace editor
         /// Stops the run; the tab stays open.
         virtual void Stop() = 0;
 
-        /// Play was asked for and the run waits on the cook.
+        /// Whether Play was asked for and the run is waiting on the cook.
         [[nodiscard]] virtual bool IsStarting() const noexcept = 0;
         /// The scene the run is in, empty when it has none (a script that owns boot, between
         /// levels).
         [[nodiscard]] virtual StringView SceneName() const noexcept = 0;
-        /// Seconds of frames since the run started, unscaled: it keeps going while the game has
-        /// its scene paused at time scale 0 (behind a menu, which still works); it stands still
+        /// Seconds of frames since the run started, unscaled. It keeps counting while the game
+        /// pauses its scene at time scale 0 (behind a menu, which still works) and stands still
         /// while the debugger holds the run. Scripted input is timed by it.
         [[nodiscard]] virtual f64 RunTime() const noexcept = 0;
         /// Frames rendered since the run started.
@@ -65,27 +65,27 @@ export namespace editor
         /// such property.
         [[nodiscard]] virtual Result<Variant> GetScriptProperty(StringView name) const = 0;
 
-        /// Plays `source` into this instance in place of the viewport's input, its time zero
-        /// now: the page advances it each frame by the run's time. A script already playing is
+        /// Plays `source` into this instance in place of the viewport's input, with its time zero
+        /// now; the page advances it each frame by the run's time. A script already playing is
         /// dropped.
         virtual void BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) = 0;
-        /// Ends the script: one frame letting go of everything it holds, then the viewport's
-        /// input returns. A stop ends it at once.
+        /// Ends the script: one frame releases everything it holds, then the viewport's input
+        /// returns. Stopping the run ends it at once.
         virtual void EndScriptedInput() = 0;
-        /// A script is installed (until the viewport's input is back).
+        /// Whether a script is installed (until the viewport's input is back).
         [[nodiscard]] virtual bool IsScripted() const noexcept = 0;
 
-        /// The resolutions the tab's dropdown offers, in its order, fresh (an export preset or a
-        /// preview resolution added since shows).
+        /// The resolutions the tab's dropdown offers, in its order and up to date (an export
+        /// preset or preview resolution added since is included).
         [[nodiscard]] virtual Span<const GameResolutionChoice> ResolutionChoices() = 0;
-        /// The chosen one's key.
+        /// The chosen entry's key.
         [[nodiscard]] virtual StringView ResolutionKey() const noexcept = 0;
-        /// Chooses the entry with this key as the dropdown does: shown there, kept for the
-        /// project, applied at once. False when no entry has it.
+        /// Chooses the entry with this key as the dropdown does: it is shown there, kept for the
+        /// project and applied at once. False when no entry has the key.
         virtual bool SelectResolution(StringView key) = 0;
-        /// The tab previews a phone held upright (its Phone toggle).
+        /// Whether the tab previews a phone held upright (its Phone toggle).
         [[nodiscard]] virtual bool PhonePreview() const noexcept = 0;
-        /// Sets the Phone toggle as a click does: shown, kept for the project, applied at once.
+        /// Sets the Phone toggle as a click does: it is shown, kept for the project and applied at once.
         virtual void SelectPhonePreview(bool on) = 0;
 
     protected:

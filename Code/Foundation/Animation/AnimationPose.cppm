@@ -3,9 +3,8 @@
 
 /// Foundation::Animation - the `:pose` partition.
 ///
-/// AnimationPose: a non-owning view over per-bone local transforms (+ optional morph weights)
-/// representing one evaluated pose. The backing arrays must outlive the view. Ported faithfully from
-/// Sedulous.Animation.AnimationPose.
+/// AnimationPose: a non-owning view over per-bone local transforms (and optional morph weights)
+/// representing one evaluated pose. The backing arrays must outlive the view.
 
 module;
 #include "Core/Prelude.h"

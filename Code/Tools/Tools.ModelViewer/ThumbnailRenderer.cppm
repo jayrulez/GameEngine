@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tools.ModelViewer - `modelviewer.thumbnails`: the browse grid's pictures (Documentation/Specs/
-// model-viewer.md, P3). Models queue up; one at a time, each is opened (cooked, or bound from the
-// cache), put into a private scene of the renderer's in its rest pose under the viewer's light,
-// framed from the front and a little above, rendered into a target of its own, and read back to a
-// PNG in the thumbnail cache (modelviewer::ThumbnailPathFor), which is what the grid shows. A
-// model drawn before is not drawn again while its file is unchanged. A model's file is read on a
-// worker of the renderer's own (FileLoads, P10), so a folder of large models never stalls the
-// window; a new queue drops a read under way, and nothing is written for it.
+// Tools.ModelViewer - `modelviewer.thumbnails`: the thumbnails in the browse grid. Models are
+// queued and drawn one at a time. Each is opened (cooked, or bound from the cache), placed in its
+// rest pose in the renderer's private scene under the viewer's lighting, framed from the front and
+// a little above, rendered into its own target, and read back to a PNG in the thumbnail cache
+// (modelviewer::ThumbnailPathFor), which the grid shows. A model is not drawn again while its file
+// is unchanged. The renderer reads model files on its own worker (FileLoads), so a folder of large
+// models never stalls the window. A new queue drops any read under way, and nothing is written for
+// it.
 //
 // The render is declared in one frame and runs at its end (after the frame encoder's own
 // commands), so the copy back is recorded on the frame after, and the PNG written once the GPU has
@@ -46,7 +46,7 @@ export namespace modelviewer
     class ThumbnailRenderer
     {
     public:
-        /// `size`: the pixels of a thumbnail's side (the settings' 96, 128 or 192).
+        /// `size` is a thumbnail's side in pixels (96, 128 or 192 in the settings).
         ThumbnailRenderer(IAllocator& allocator, foundation::runtime::IApplicationHost& host, StringView cacheRoot, StringView thumbRoot, u32 size = 128)
             : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot), m_size(size),
               m_loads(allocator)
@@ -58,16 +58,16 @@ export namespace modelviewer
         }
         ~ThumbnailRenderer() { Shutdown(); }
 
-        /// Called with each model's path and its thumbnail's file once it is there (drawn now, or
-        /// before); with an empty file when the model did not open.
+        /// Called with each model's path and its thumbnail file once the file exists (drawn now or
+        /// earlier), or with an empty file when the model did not open.
         void SetOnDone(Function<void(StringView model, StringView png)> done) { m_onDone = foundation::core::Move(done); }
 
-        /// The models to draw, in order, in place of what was queued.
+        /// Replaces the queue with `models`, drawn in order.
         void SetQueue(Span<const String> models)
         {
             if (m_state == State::Reading)
             {
-                // The model being read is not wanted now: dropped, nothing written for it.
+                // The model being read is no longer wanted: drop it and write nothing for it.
                 m_loads.Cancel();
                 DropModel();
                 m_state = State::Idle;
@@ -77,10 +77,10 @@ export namespace modelviewer
                 m_queue.PushBack(model);
             m_next = 0;
         }
-        /// Whether models open with loose textures (OpenModel::SetLooseTextures), as the viewer's tabs do.
+        /// Whether models open with loose textures (OpenModel::SetLooseTextures), matching the viewer's tabs.
         void SetLooseTextures(bool on) noexcept { m_looseTextures = on; }
 
-        /// One model drawn next, ahead of the queue (an agent asking for its thumbnail).
+        /// Draws `model` next, ahead of the queue (for an agent asking for its thumbnail).
         void Prepend(StringView model)
         {
             for (usize i = m_next; i < m_queue.Size(); ++i)
@@ -93,11 +93,11 @@ export namespace modelviewer
         }
 
         [[nodiscard]] usize Remaining() const noexcept { return m_queue.Size() - m_next + (m_state != State::Idle ? 1u : 0u); }
-        /// The queue's length, and how many of it are done, for the progress line.
+        /// The queue's length and how many of it are done, for the progress line.
         [[nodiscard]] usize Queued() const noexcept { return m_queue.Size(); }
-        [[nodiscard]] usize Done() const noexcept { return Remaining() > m_queue.Size() ? 0 : m_queue.Size() - Remaining(); } // one finishing from a queue replaced counts none
+        [[nodiscard]] usize Done() const noexcept { return Remaining() > m_queue.Size() ? 0 : m_queue.Size() - Remaining(); } // a model finishing from a replaced queue does not count
 
-        /// Each frame, before rendering: hands over drawn files, starts the next model.
+        /// Called each frame before rendering: hands over drawn files and starts the next model.
         void Update()
         {
             if (m_state == State::Copied && m_capture.Recorded() && m_device != nullptr)
@@ -123,13 +123,13 @@ export namespace modelviewer
                     }
             }
             if (m_state == State::Staged && ++m_settleFrames >= 2)
-                m_state = State::RenderPending; // the pose fed and the transforms composed
+                m_state = State::RenderPending; // the pose is applied and the transforms composed
             while (m_state == State::Idle && m_next < m_queue.Size())
                 Start(m_queue[m_next++].AsView());
         }
 
-        /// Inside the frame's rendering: declares the staged model's view, or records the copy of
-        /// the one declared last frame.
+        /// Called during the frame's rendering: declares the staged model's view, or records the
+        /// copy-back of the view declared last frame.
         void Render(rhi::CommandEncoder& encoder)
         {
             if (m_state == State::CopyPending && m_target != nullptr)
@@ -143,8 +143,8 @@ export namespace modelviewer
             }
             if (m_state != State::RenderPending || m_render == nullptr || !m_render->IsReady() || !EnsureTarget())
                 return;
-            // From the front quarter (a long model shows its length) and a little above, as near
-            // as the bounding sphere fits the square.
+            // Look from a front quarter angle (so a long model shows its length) and a little above,
+            // as close as the bounding sphere still fits the square.
             editor::EditorCamera camera;
             camera.yaw = -0.8f;
             camera.pitch = -0.3f;
@@ -162,7 +162,7 @@ export namespace modelviewer
             render::TargetState target;
             target.texture = m_target;
             target.currentState = m_targetState;
-            target.finalState = rhi::ResourceState::CopySrc; // only ever copied out, never sampled
+            target.finalState = rhi::ResourceState::CopySrc; // only copied out, never sampled
             m_render->RenderScene(*m_scene, m_targetView, rhi::TextureFormat::RGBA16Float, m_size, m_size,
                                   render::ViewportRect{0, 0, m_size, m_size}, &cameraOverride, target);
             m_targetState = rhi::ResourceState::CopySrc;
@@ -194,10 +194,10 @@ export namespace modelviewer
         enum class State : u8
         {
             Idle,
-            Reading,       // its file read on the worker
-            Staged,        // in the scene; the pose and transforms settle over a frame or two
+            Reading,       // the file is being read on the worker
+            Staged,        // placed in the scene; the pose and transforms settle over a frame or two
             RenderPending, // the next Render declares its view
-            CopyPending,   // declared; the next Render records the copy back
+            CopyPending,   // declared; the next Render records the copy-back
             Copied,        // the copy recorded; the next Update writes the PNG
         };
 
@@ -212,7 +212,7 @@ export namespace modelviewer
             }
             if (FileExists(m_png.AsView()))
             {
-                Finish(m_png.AsView()); // drawn before, the file unchanged
+                Finish(m_png.AsView()); // drawn before and the file is unchanged
                 return;
             }
             if (!EnsureScene())
@@ -239,7 +239,7 @@ export namespace modelviewer
             Stage();
         }
 
-        // The opened model put into the scene in its rest pose, to settle and be drawn.
+        // Places the opened model in the scene in its rest pose, to settle and then be drawn.
         void Stage()
         {
             engine::model::InstantiateOptions options;
@@ -287,7 +287,7 @@ export namespace modelviewer
             m_radius = Max(Length(box.max - box.min) * 0.5f, 0.01f);
         }
 
-        // The renderer's own scene, lit as the viewer's view is: the procedural sky and a sun.
+        // Creates the renderer's own scene, lit like the viewer's view with the procedural sky and a sun.
         bool EnsureScene()
         {
             if (m_scene != nullptr)
@@ -296,7 +296,7 @@ export namespace modelviewer
                 return false;
             m_scenes->RegisterManager(&m_sceneManager);
             m_scene = m_sceneManager.CreateScene(u8"model.thumbnails");
-            m_scene->SetSimulationEnabled(false); // the animators hold the rest pose
+            m_scene->SetSimulationEnabled(false); // so the animators hold the rest pose
             if (auto* environment = m_scene->GetSystem<engine::render::EnvironmentSystem>())
             {
                 environment->Environment().skyMode = render::SkyMode::Procedural;
@@ -369,6 +369,6 @@ export namespace modelviewer
         f32 m_radius = 1.0f;
         u32 m_settleFrames = 0;
         bool m_looseTextures = true;
-        FileLoads m_loads; // last: its worker stops before the rest goes
+        FileLoads m_loads; // declared last so it is destroyed first, stopping its worker before the other members go
     };
 }

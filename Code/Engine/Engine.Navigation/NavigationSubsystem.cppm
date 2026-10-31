@@ -4,10 +4,10 @@
 // Engine::Navigation - :subsystem partition.
 //
 // NavigationSceneSystem: the per-scene navigation runtime. At OnSceneStarted it loads every
-// NavMeshZoneComponent's cooked navmesh into a live zone (one dtCrowd + query each) and registers
+// NavMeshZoneComponent's cooked navmesh into a live zone (one dtCrowd and query each) and registers
 // each NavAgentComponent with the zone whose AABB contains it. Each Update it applies pending
 // navigate/stop requests, steps every crowd, and (for MoveEntity agents) writes the steered
-// position back to the entity transform. Zones bake in ZONE-LOCAL space, so agent positions and
+// position back to the entity transform. Zones bake in zone-local space, so agent positions and
 // targets transform through the zone entity's world matrix on the way in and out.
 //
 // Simulation-only: it does nothing in edit mode (IsSimulationOnly()).
@@ -39,10 +39,10 @@ export namespace engine::navigation
     {
     public:
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
-        // Gameplay/AI phase: crowds step before animation + render extraction consume transforms.
+        // Gameplay/AI phase: crowds step before animation and render extraction consume transforms.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -100; }
 
-        // Per-scene settings block (debug-draw flags). Reflected + serialized like physics.
+        // Per-scene settings block (debug-draw flags), reflected and serialized like physics.
         [[nodiscard]] const TypeInfo* SettingsType() const noexcept override
         {
             return &TypeOf<NavigationSceneSettings>();
@@ -55,9 +55,9 @@ export namespace engine::navigation
         }
         [[nodiscard]] NavigationSceneSettings& Settings() noexcept { return m_settings; }
 
-        // The last bake's stage capture (zone-LOCAL space + the zone entity to place it by).
-        // The EDITOR bake deposits it here; the debug overlay draws it when the settings
-        // flag is on. Transient - never serialized.
+        // The last bake's stage capture (zone-local space, and the zone entity to place it by). The
+        // editor bake deposits it here; the debug overlay draws it when the settings flag is on.
+        // Transient, never serialized.
         struct BakeStageCache
         {
             scene::EntityHandle zoneEntity{};
@@ -88,7 +88,7 @@ export namespace engine::navigation
             {
                 return;
             }
-            PROFILE_SCOPE("Navigation.Build"); // zone load + crowd/query construction (one-time)
+            PROFILE_SCOPE("Navigation.Build"); // zone load and crowd/query construction (one-time)
             BuildZones();
             RegisterAgents();
         }
@@ -163,9 +163,9 @@ export namespace engine::navigation
                         return;
                     }
                     RuntimeZone& rz = m_zones[static_cast<usize>(a.zoneIndex)];
-                    // Live steering-profile changes (setSpeed / navigateAt / an inspector
-                    // edit) push into the crowd - value-compared, so unchanged agents are
-                    // one float compare each.
+                    // Live steering-profile changes (setSpeed, navigateAt, an inspector edit) push
+                    // into the crowd. They are value-compared, so an unchanged agent costs one
+                    // float compare.
                     if (a.maxSpeed != a.appliedSpeed || a.maxAcceleration != a.appliedAcceleration ||
                         a.avoidOthers != a.appliedAvoidOthers)
                     {
@@ -207,7 +207,7 @@ export namespace engine::navigation
                 }
             }
 
-            // 3. Read back: world position + velocity, transform writeback, status.
+            // 3. Read back: world position and velocity, transform writeback, status.
             agents->ForEach(
                 [this](NavAgentComponent& a, scene::EntityHandle entity)
                 {
@@ -221,8 +221,8 @@ export namespace engine::navigation
                     const Float3 worldPos = TransformPoint(localPos, rz.world);
                     a.desiredVelocity = TransformDirection(localVel, rz.world);
 
-                    // Introspection cache: the crowd's internals, readable from scripts and
-                    // drawn by the debug overlay (WHY is this agent not moving?).
+                    // Introspection cache: the crowd's internals, readable from scripts and drawn
+                    // by the debug overlay (why is this agent not moving).
                     const nav::NavigationAgentState st = rz.crowd->AgentState(a.agentId);
                     a.crowdState = static_cast<u8>(st.state);
                     a.crowdTargetState = static_cast<u8>(st.targetState);
@@ -231,8 +231,8 @@ export namespace engine::navigation
 
                     if (a.moveEntity && (a.hasTarget || a.steering))
                     {
-                        // NOTE: assumes an unparented agent (local transform == world). A
-                        // parented agent would need a world->parent-local conversion.
+                        // Assumes an unparented agent (local transform == world). A parented agent
+                        // would need a world-to-parent-local conversion.
                         Transform t = m_scene->GetLocalTransform(entity);
                         t.position = worldPos;
                         m_scene->SetLocalTransform(entity, t);
@@ -245,9 +245,9 @@ export namespace engine::navigation
                         a.remainingDistance = Sqrt(dx * dx + dz * dz);
                         const bool wasFinished = a.finished;
                         a.finished = a.remainingDistance < (a.radius + 0.1f + a.stopDistance);
-                        // Arrival radius: on reaching the ring, STOP steering - otherwise the
-                        // crowd keeps pushing the agent onto the exact point the radius was
-                        // meant to keep it away from. navigate() re-arms.
+                        // Arrival radius: on reaching the ring, stop steering; otherwise the crowd
+                        // keeps pushing the agent onto the exact point the radius was meant to keep
+                        // it away from. navigate() re-arms.
                         if (!wasFinished && a.finished && a.stopDistance > 0.0f)
                         {
                             rz.crowd->ClearTarget(a.agentId);
@@ -451,7 +451,8 @@ export namespace engine::navigation
             }
         }
 
-        // First zone whose (world-space, axis-aligned from center+extents) box contains `worldPos`.
+        // First zone whose (world-space, axis-aligned from center and extents) box contains
+        // `worldPos`.
         [[nodiscard]] i32 FindZoneContaining(Float3 worldPos) const
         {
             for (usize i = 0; i < m_zones.Size(); ++i)
@@ -474,7 +475,7 @@ export namespace engine::navigation
         BakeStageCache m_bakeStages;
     };
 
-    // Per-scene manager set (the same call the composition + the runtime injection use).
+    // Per-scene manager set (the same call the composition and the runtime injection use).
     inline void AddNavigationSceneManagers(scene::Scene& scene)
     {
         scene.AddSystem<NavMeshZoneComponentManager>();
@@ -482,9 +483,9 @@ export namespace engine::navigation
         scene.AddSystem<NavigationSceneSystem>();
     }
 
-    // Runtime subsystem: the DefaultApp-registered broker that injects the per-scene navigation
-    // managers into every scene (via the composition) and registers the component reflection once.
-    // The per-scene tick lives in NavigationSceneSystem; this type owns no cross-scene state.
+    // Runtime subsystem: the app-registered broker that injects the per-scene navigation managers
+    // into every scene (through the composition) and registers the component reflection once. The
+    // per-scene tick lives in NavigationSceneSystem; this type owns no cross-scene state.
     class NavigationSubsystem final : public foundation::runtime::Subsystem,
                                       public scene::ISceneObserver
     {
@@ -506,9 +507,9 @@ export namespace engine::navigation
             }
         }
 
-        // Persistent debug draw (physics precedent): when a scene's NavigationSceneSettings.debugDraw
-        // is on, draw its loaded navmesh (+ agent paths) into the render debug scene each frame.
-        // Defined in the implementation unit (the render dependency stays out of this interface).
+        // Persistent debug draw, as physics does: when a scene's NavigationSceneSettings.debugDraw
+        // is on, draw its loaded navmesh (and agent paths) into the render debug scene each frame.
+        // Defined in the implementation unit, so the render dependency stays out of this interface.
         void Update(f32 deltaTime) override;
 
     protected:
@@ -552,8 +553,8 @@ export namespace engine::navigation
 
 export namespace engine::navigation
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection and to the script
+    /// surface, and which resource modules come with it. Defined in the implementation unit (one
+    /// instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& NavigationDomain() noexcept;
 }

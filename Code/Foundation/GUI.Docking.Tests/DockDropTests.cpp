@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - drag to dock within one window (D4 of Specs/gui-lab-evolution-3.md): a tab torn
-// from a stack's strip carries its panel; over a strip it goes in at a tab's place, over a stack's
-// middle into it, over its edge band beside it, over the surface's band along the whole edge. Each
-// drop is the layout's move, tried on a copy first: the preview is where the panel would be, and a
-// move the layout refuses shows its reason and does nothing. Meanwhile the torn tab dims (or its
-// strip closes up, as the theme says), shown again as the layout has it when the drag ends. A
-// stack's grip (its strip's list button) carries the whole stack the same ways, and lists its tabs
-// when clicked; the cross past it closes every closable panel of the stack.
+// GUI.Docking - drag to dock within one window. A tab torn from a stack's strip carries its panel.
+// Dropped over a strip it goes in at a tab position, over a stack's middle it goes into the stack,
+// over a stack's edge band it goes beside it, and over the surface's band it goes along the whole
+// edge. Each drop is a layout move, tried on a copy first: the preview shows where the panel would
+// be, and a move the layout refuses shows its reason and does nothing. During the drag the torn tab
+// dims (or its strip closes up, as the theme says), and when the drag ends it is shown as the
+// layout has it. A stack's grip (the list button on its strip) carries the whole stack the same
+// ways and lists its tabs when clicked; the cross past it closes every closable panel of the
+// stack.
 #include "DockingTestBed.h"
 
 using namespace foundation::gui;
@@ -66,7 +67,7 @@ TEST_CASE("dock drop: over the surface's band the panel goes along the whole edg
     bed.Over(core::Float2{6.0f, 300.0f});
     CHECK(bed.D().GetDropTarget() == bed.space.Get());
     bed.Over(top);
-    CHECK(bed.D().GetDropTarget() != nullptr); // the strip under it, which leaves the band its due
+    CHECK(bed.D().GetDropTarget() != nullptr); // the strip under it, which leaves the surface's band to the space
     Rect preview;
     REQUIRE(bed.Preview(preview));
     CHECK(preview.y == doctest::Approx(0.0f));
@@ -83,7 +84,7 @@ TEST_CASE("dock drop: over the surface's band the panel goes along the whole edg
 TEST_CASE("dock drop: over a strip the panel goes in at a tab's place, counted as the tabs are")
 {
     Bed bed;
-    // Into the console's strip, before the console.
+    // Drop into the console's strip, before the console.
     bed.Tear(u8"scene");
     const Rect consoleTab = Bed::Bounds(*bed.TabOf(u8"console"));
     const core::Float2 before{consoleTab.x + 10.0f, consoleTab.y + 10.0f};
@@ -95,7 +96,7 @@ TEST_CASE("dock drop: over a strip the panel goes in at a tab's place, counted a
     CHECK(stack->Panels[0] == SV(u8"scene"));
     CHECK(stack->Panels[1] == SV(u8"console"));
     bed.Lay();
-    // Within its own strip, torn and dropped after the console: last.
+    // Torn and dropped after the console within its own strip, it goes last.
     bed.Tear(u8"scene");
     const Rect after = Bed::Bounds(*bed.TabOf(u8"console"));
     const core::Float2 end{after.x + after.width - 5.0f, after.y + 10.0f};
@@ -154,14 +155,15 @@ TEST_CASE("dock drop: a torn tab closes up its strip, a neighbour shown, and Esc
     bed.Lay();
     bed.Tear(u8"inspector");
     CHECK_FALSE(inspector->IsDisplayed());
-    CHECK(central->GetSelectedPage() == bed.space->PageOf(SV(u8"scene"))); // the view's, not the layout's
+    CHECK(central->GetSelectedPage() == bed.space->PageOf(SV(u8"scene"))); // the view's selection, not the layout's
     const DockNode* stack = bed.controller.GetLayout().FindNode(bed.StackOf(u8"inspector"));
     CHECK(stack->Panels[stack->Active] == SV(u8"inspector"));
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK(inspector->IsDisplayed());
     CHECK(central->GetSelectedPage() == bed.space->PageOf(SV(u8"inspector")));
 
-    // Dropped into another stack: it is there, shown, and its old stack shows what the layout has.
+    // Dropped into another stack, the panel is shown there, and its old stack shows what the layout
+    // has.
     bed.Tear(u8"inspector");
     const core::Float2 middle = Bed::Centre(Bed::Bounds(*bed.space->WidgetOf(bed.StackOf(u8"console"))));
     bed.Over(middle);
@@ -225,7 +227,7 @@ TEST_CASE("dock drop: a tab moved a few pixels along its strip is a drag at once
 
 namespace
 {
-    // A drag of `panel`'s stack by its strip's grip, past the threshold.
+    // Drags `panel`'s stack by the grip on its strip, past the drag threshold.
     void GrabStack(Bed& bed, const char8_t* panel)
     {
         Node* grip = bed.ViewOf(panel)->GetBar()->GetListButton();
@@ -265,7 +267,7 @@ TEST_CASE("dock drop: a stack's grip, dragged, carries the whole stack: into a s
         Bed bed;
         const DockNodeId console = bed.StackOf(u8"console");
         GrabStack(bed, u8"console");
-        // Into the hierarchy's bottom edge band: the stack beside it, below.
+        // Dropped in the hierarchy's bottom edge band, the stack goes below the hierarchy.
         const Rect h = Bed::Bounds(*bed.space->WidgetOf(bed.StackOf(u8"hierarchy")));
         const core::Float2 low{h.x + h.width * 0.5f, h.y + h.height - 40.0f}; // past the surface's own band
         bed.Over(low);
@@ -279,7 +281,8 @@ TEST_CASE("dock drop: a stack's grip, dragged, carries the whole stack: into a s
         CHECK_FALSE(bed.space->WidgetOf(console)->HasClass(SV(u8"dock-torn"))); // shown again, not dimmed
     }
     {
-        // Along the whole area's bottom edge (the surface's own band): moved there, not dimmed.
+        // Dropped in the surface's own band at the bottom, the stack moves along the whole bottom
+        // edge and is no longer dimmed.
         Bed bed;
         const DockNodeId console = bed.StackOf(u8"console");
         GrabStack(bed, u8"console");

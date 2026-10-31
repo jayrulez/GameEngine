@@ -4,7 +4,7 @@
 // The effect serializer refuses a module type this build cannot construct. A module's
 // parameters sit in the positional binary stream behind its type id; "skipping" an unknown
 // module would leave them there and shift everything after it (the next system's particle
-// budget read as garbage - a runaway allocation). Strict, like a stale data version.
+// budget read as garbage, a runaway allocation). Strict, like a stale data version.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"

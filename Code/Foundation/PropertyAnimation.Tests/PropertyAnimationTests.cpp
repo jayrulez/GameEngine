@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // foundation.propertyanimation - evaluation (track Sample into Variants, quat slerp, durations) and
-// the reflection binding resolver (nested paths, missing/invalid targets, write-through re-walk).
+// the reflection binding resolver (nested paths, missing or invalid targets, the re-walk on write).
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -24,7 +24,7 @@ namespace
         Color tint{0.0f, 0.0f, 0.0f, 1.0f};
     };
 
-    // A component-like reflected object with animatable leaf + nested properties.
+    // A component-like reflected object with animatable leaf and nested properties.
     class AnimComp : public Object
     {
         RTTI_OBJECT(AnimComp, Object)
@@ -196,7 +196,7 @@ TEST_CASE("propanim: ReadBinding is the symmetric inverse of WriteBinding (snaps
     comp.light.tint = Color{0.2f, 0.3f, 0.4f, 1.0f};
     const Instance inst = Instance::From(&comp);
 
-    // Read the pre-write leaf + nested values (the preview snapshot).
+    // Read the pre-write leaf and nested values (the preview snapshot).
     const PropertyBinding pos = ResolveBinding(AnimComp::StaticType(), u8"position");
     const PropertyBinding tint = ResolveBinding(AnimComp::StaticType(), u8"light.tint");
     const Variant posSnapshot = ReadBinding(pos, inst);
@@ -204,7 +204,7 @@ TEST_CASE("propanim: ReadBinding is the symmetric inverse of WriteBinding (snaps
     CHECK(posSnapshot.Get<Float3>().x == doctest::Approx(7.0f));
     CHECK(tintSnapshot.Get<Color>().g == doctest::Approx(0.3f));
 
-    // Transient write (a preview), then restore FROM the snapshot -> back to the originals.
+    // A transient write (a preview), then a restore from the snapshot back to the originals.
     REQUIRE(WriteBinding(pos, inst, Variant::From(Float3{-1.0f, -1.0f, -1.0f})).IsOk());
     CHECK(comp.position.x == doctest::Approx(-1.0f));
     REQUIRE(WriteBinding(pos, inst, posSnapshot).IsOk());
@@ -230,7 +230,7 @@ TEST_CASE("propanim: SampleMerged keeps the current value for empty channels (no
     CHECK(v.y == doctest::Approx(6.0f));
     CHECK(v.z == doctest::Approx(7.0f));
 
-    // A track with ALL channels empty returns `current` unchanged (a no-op write - no teleport).
+    // A track with all channels empty returns `current` unchanged (a no-op write, no teleport).
     PropertyTrack empty;
     empty.kind = TrackValueKind::Float3;
     const Float3 same =

@@ -1,4 +1,4 @@
-# Foundation::Terrain.Resource unit tests (doctest; content DB - no GPU).
+# Foundation::Terrain.Resource unit tests (doctest; content DB, no GPU).
 
 add_executable(Terrain.Resource.Tests
     TestsMain.cpp

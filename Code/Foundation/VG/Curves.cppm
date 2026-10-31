@@ -4,8 +4,7 @@
 // Foundation::VG - :curves partition.
 //
 // Bezier curve math: point/tangent evaluation, arc-length approximation,
-// adaptive flattening to polylines, and SVG endpoint-arc -> cubic conversion.
-// Ported from Sedulous.VG/CurveUtils.bf.
+// adaptive flattening to polylines, and SVG endpoint-arc to cubic conversion.
 
 module;
 #include "Core/Prelude.h"
@@ -133,13 +132,13 @@ export namespace foundation::vg
             const f32 sinPhi = Sin(xAxisRotation);
             const f32 cosPhi = Cos(xAxisRotation);
 
-            // Step 1: Compute (x1', y1') - transform to unit circle space.
+            // Step 1: compute (x1', y1'), the transform to unit circle space.
             const f32 dx = (from.x - to.x) * 0.5f;
             const f32 dy = (from.y - to.y) * 0.5f;
             const f32 x1p = cosPhi * dx + sinPhi * dy;
             const f32 y1p = -sinPhi * dx + cosPhi * dy;
 
-            // Step 2: Compute (cx', cy') - center in transformed space.
+            // Step 2: compute (cx', cy'), the center in transformed space.
             const f32 x1p2 = x1p * x1p;
             const f32 y1p2 = y1p * y1p;
             f32 rx2 = rx * rx;

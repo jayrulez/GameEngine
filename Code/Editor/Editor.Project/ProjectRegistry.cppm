@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The per-user project registry - the headless core of the built-in project manager,
-// the RecentProjects section.
+// The per-user project registry, the headless core of the built-in project manager: the
+// RecentProjects section.
 //
-// The registry is a Settings SECTION in the user-level editor settings store
-// (<user-data>/editor.settings.xml), deliberately OUTSIDE any engine install or project
-// directory: every editor version on the machine lists the same projects, and a
-// separate launcher/hub can read the same file. Ordering IS recency (most recent first) -
-// no timestamps to go stale. Display data (name, engine version) is a cached snapshot,
-// refreshed every time the project is touched; ProbeProject reads the live manifest when
-// the list needs truth (missing dir, out-of-date stamp).
+// The registry is a Settings section in the user-level editor settings store
+// (<user-data>/editor.settings.xml), outside any engine install or project directory, so every
+// editor version on the machine lists the same projects and a separate launcher can read the same
+// file. The order is the recency (most recent first), so there are no timestamps to go stale.
+// Display data (name, engine version) is a cached snapshot, refreshed every time the project is
+// touched; ProbeProject reads the live manifest when the list needs the current state (a missing
+// directory, an out-of-date stamp).
 //
 // Also here: the engine-version relation used by the open-time upgrade prompt, and the
 // manifest backup that prompt offers ("back up Project.xml, then open with this engine").
@@ -35,8 +35,8 @@ export namespace editor
     namespace settings = foundation::settings;
     namespace project = engine::project;
 
-    // One known project. `path` is the project DIRECTORY as the user opened it (the identity
-    // key - compared verbatim); name/engineVersion are the last-seen manifest snapshot.
+    // One known project. `path` is the project directory as the user opened it (the identity key,
+    // compared exactly); name and engineVersion are the last-seen manifest snapshot.
     struct RecentProjectEntry
     {
         String path;
@@ -62,12 +62,12 @@ export namespace editor
     /// static constexpr member from a shared library).
     inline constexpr ENGINE_EXPORT_DATA usize kRecentProjectsSettingsMaxEntries = 20;
 
-    // The registry section (user-level settings store). Most recent FIRST.
+    // The registry section (user-level settings store), most recent first.
     class RecentProjectsSettings final : public ISerializable
     {
         RTTI_OBJECT(RecentProjectsSettings, ISerializable)
     public:
-        // ENGINE_EXPORT_DATA: odr-used from another library (shared-libraries.md P5/W1).
+        // ENGINE_EXPORT_DATA: odr-used from another library.
         static constexpr ENGINE_EXPORT_DATA usize kMaxEntries = kRecentProjectsSettingsMaxEntries;
 
         Array<RecentProjectEntry> entries;
@@ -77,7 +77,7 @@ export namespace editor
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "entries", entries);
-            SerializeAppended(ar, "gridView", gridView); // after the rest: older stores lack it
+            SerializeAppended(ar, "gridView", gridView); // after the rest, since older stores lack it
         }
 
         [[nodiscard]] const RecentProjectEntry* Find(StringView path) const
@@ -93,7 +93,7 @@ export namespace editor
         }
     };
 
-    // Register the registry section type so a Settings store can instantiate it on Load. Call
+    // Registers the registry section type so a Settings store can instantiate it on Load. Call
     // once at editor startup alongside RegisterEditorSettingsTypes.
     inline void RegisterProjectRegistryTypes()
     {
@@ -101,9 +101,9 @@ export namespace editor
         RegisterSerializable<RecentProjectsSettings>();
     }
 
-    // Record `path` as the most recently opened project (insert or move-to-front), refreshing
-    // its display snapshot. Caps the list at kMaxEntries. Marks the section changed; the caller
-    // persists the store (SaveEditorSettingsToUserData).
+    // Records `path` as the most recently opened project (inserting it or moving it to the front)
+    // and refreshes its display snapshot. Caps the list at kMaxEntries. Marks the section changed;
+    // the caller saves the store (SaveEditorSettingsToUserData).
     inline void TouchRecentProject(settings::Settings& store, StringView path, StringView name,
                                    StringView engineVersion)
     {
@@ -128,7 +128,7 @@ export namespace editor
         store.MarkChanged<RecentProjectsSettings>();
     }
 
-    // Remove `path` from the registry (a dead/unwanted row in the manager). True if removed.
+    // Removes `path` from the registry (a dead or unwanted row in the manager). True if removed.
     inline bool RemoveRecentProject(settings::Settings& store, StringView path)
     {
         RecentProjectsSettings& reg = store.Section<RecentProjectsSettings>();
@@ -144,8 +144,9 @@ export namespace editor
         return false;
     }
 
-    // Read a project's manifest WITHOUT opening the project (no content DBs, no dir scaffolding).
-    // NotFound: no manifest at `directory` (not a project / moved / deleted).
+    // Reads a project's manifest without opening the project (no content DBs, no directory
+    // scaffolding). NotFound when there is no manifest at `directory` (not a project, moved or
+    // deleted).
     [[nodiscard]] inline Status ProbeProject(StringView directory, engine::project::ProjectSettings& out)
     {
         if (!DirectoryExists(directory))
@@ -156,9 +157,9 @@ export namespace editor
         return project::LoadProjectSettings(fs, out);
     }
 
-    // How a project's stamped engine version relates to THIS engine. Drives the manager's
-    // open-time prompt: Same/Unstamped open silently; ProjectOlder offers backup-then-upgrade;
-    // ProjectNewer warns hard (this editor may not read newer data).
+    // How a project's stamped engine version relates to this engine. It drives the manager's
+    // open-time prompt: Same opens silently; ProjectOlder and Unstamped offer a backup, then the
+    // upgrade; ProjectNewer warns strongly (this editor may not read newer data).
     enum class EngineVersionRelation
     {
         Same,
@@ -174,7 +175,7 @@ export namespace editor
         {
             return EngineVersionRelation::Unstamped;
         }
-        // Parse "major.minor.patch" (all three numeric, dot-separated).
+        // Parses "major.minor.patch" (all three numeric, separated by dots).
         u32 parts[3] = {0, 0, 0};
         usize part = 0;
         bool anyDigit = false;
@@ -216,11 +217,11 @@ export namespace editor
         return EngineVersionRelation::Same;
     }
 
-    // Back up the manifest before an engine upgrade rewrites it: copies Project.xml to
-    // "Project.xml.<stampedVersion>.bak" ("unstamped" when the manifest predates the stamp)
-    // beside it, overwriting an older backup for the SAME version. Returns the backup path.
-    // Content assets are NOT copied - they migrate through their own versioned serializers,
-    // and whole-tree safety is version control's job (the prompt says so).
+    // Backs up the manifest before an engine upgrade rewrites it: copies Project.xml to
+    // "Project.xml.<stampedVersion>.bak" beside it ("unstamped" when the manifest has no stamp),
+    // overwriting an older backup for the same version. Returns the backup path. Content assets
+    // are not copied: they migrate through their own versioned serializers, and the safety of the
+    // whole tree is version control's job (the prompt says so).
     [[nodiscard]] inline Result<String> BackupProjectManifest(StringView directory)
     {
         engine::project::ProjectSettings probed;

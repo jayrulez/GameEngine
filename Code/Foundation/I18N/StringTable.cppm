@@ -3,11 +3,10 @@
 
 // foundation.i18n - :string_table partition
 //
-// StringTable: the authored unit, one resource holding everything about its languages
-// (Documentation/Specs/i18n.md). Locales, each with its plural rule and its direction (either may
-// be unset, for a table that only adds texts to a locale another table describes); keys, each
-// plain or plural in all its locales, a cell per locale missing, a text, or a plural entry (a text
-// per category, `other` among them). Mutable, so an editor's grid and an import change it in
+// StringTable: the authored unit, one resource holding everything about its languages. Locales,
+// each with its plural rule and its direction (either may be unset, for a table that only adds
+// texts to a locale another table describes); keys, each plain or plural in all its locales, a
+// cell per locale missing, a text, or a plural entry (a text per category, `other` among them). Mutable, so an editor's grid and an import change it in
 // place; serializable as a versioned payload, the same body an asset's source and its cooked
 // product. Other formats are converted to it in the pipeline layer.
 

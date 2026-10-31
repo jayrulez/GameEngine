@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full GPU-texture asset pipeline: author a TextureAsset (image file + sampler
-// intent) -> cook with TextureAssetBuilder into an output content DB -> load the
+// Full GPU-texture asset pipeline: author a TextureAsset (image file and sampler
+// intent), cook it with TextureAssetBuilder into an output content DB, then load the
 // cooked TextureResource and build a live GPU Texture via the device-backed
 // factory (Null RHI backend). Also exercises the TextureImporter authoring helper.
 #include <doctest/doctest.h>
@@ -71,7 +71,7 @@ TEST_CASE("texture.pipeline: TextureAsset -> cook -> GPU Texture")
     NativeFileSystem outMount(u8"scratch_texpipe_out_db", DefaultAllocator());
     Guid id;
 
-    // --- cook (tooling): TextureAsset -> TextureResource in the output DB ---
+    // --- cook (tooling): TextureAsset to TextureResource in the output DB ---
     {
         foundation::content::ContentDatabase outDb(foundation::core::DefaultAllocator(), 
             outMount, foundation::core::BinarySerializerFactory(), u8".rasset");
@@ -92,7 +92,7 @@ TEST_CASE("texture.pipeline: TextureAsset -> cook -> GPU Texture")
         REQUIRE(builder.Build(asset, ctx).IsOk());
     }
 
-    // --- runtime load: cooked TextureResource -> live GPU Texture (model A) ---
+    // --- runtime load: cooked TextureResource to a live GPU Texture ---
     rhi::null::NullDevice device{DefaultAllocator()};
     foundation::content::ContentDatabase outDb(foundation::core::DefaultAllocator(), outMount, foundation::core::BinarySerializerFactory(),
                                              u8".rasset");
@@ -170,7 +170,7 @@ TEST_CASE("texture-import: drag-dropped file becomes a Sources copy + TextureAss
     UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
 
-    // A loose "PNG" (the importer copies bytes + creates the asset; decoding happens at cook).
+    // A loose "PNG" (the importer copies bytes and creates the asset; decoding happens at cook).
     const byte fakePng[6] = {byte{'P'}, byte{'N'}, byte{'G'}, byte{1}, byte{2}, byte{3}};
     REQUIRE(WriteFile(u8"brick.png", Span<const byte>(fakePng, 6)).IsOk());
 
@@ -194,7 +194,7 @@ TEST_CASE("texture-import: drag-dropped file becomes a Sources copy + TextureAss
     REQUIRE(asset != nullptr);
     CHECK(asset->fileName == StringView(u8"brick.png"));
     CHECK(asset->generateMipmaps); // the 3D preset
-    CHECK(asset->usage == texcomp::TextureUsage::Color); // plain name = Color default
+    CHECK(asset->usage == texcomp::TextureUsage::Color); // plain name: Color default
 
     FileDelete(u8"brick.png");
     cleanTree();
@@ -292,7 +292,7 @@ TEST_CASE("texture.pipeline: cubemap - 6 faces cook into one cube product (end t
         asset.fileName = foundation::vfs::SourcePath(faceNames[0]); // the +X face
         asset.SetupForCubemapSkybox();
 
-        // The recipe must chain ALL faces (editing -nz alone must re-cook the cube).
+        // The recipe must chain all faces (editing -nz alone must re-cook the cube).
         TextureAssetBuilder builder;
         pipeline::AssetBuildContext scanCtx{DefaultAllocator()};
         pipeline::AssetDependencies deps;
@@ -327,13 +327,12 @@ TEST_CASE("texture.pipeline: cubemap - 6 faces cook into one cube product (end t
 
 TEST_CASE("texture.pipeline: mip chain cook - counts, sizes, and sRGB-correct averaging")
 {
-    // The missing middle found 2026-08-12: generateMipmaps/mipLevels/per-level upload all
-    // existed, nothing BUILT a chain, everything rendered at mip 0 (Sponza's shimmer). Pins:
+    // The cook builds the mip chain. Pins:
     // (1) chain shape: a 4x4 cooks 3 levels, payload = (16+4+1)*4 bytes;
-    // (2) sRGB correctness: a black/white checker's mip must average in LINEAR space -
-    //     sRGB ~188 - not the naive byte average 127;
+    // (2) sRGB correctness: a black/white checker's mip must average in linear space
+    //     (sRGB ~188), not the naive byte average 127;
     // (3) Linear images average bytes directly (a data map's mip stays 127/128);
-    // (4) odd dims clamp (5x3 -> 2x1 -> 1x1).
+    // (4) odd dims clamp (5x3, then 2x1, then 1x1).
     RegisterTextureResource();
     RegisterTextureAsset();
 
@@ -387,7 +386,7 @@ TEST_CASE("texture.pipeline: mip chain cook - counts, sizes, and sRGB-correct av
         (void)RemoveDirectoryRecursive(dbDir);
     };
 
-    // (1)+(2): 4x4 sRGB checkerboard (0 / 255 alternating).
+    // (1) and (2): 4x4 sRGB checkerboard (0 / 255 alternating).
     {
         u32 mipLevels = 0;
         Array<u8> payload;
@@ -399,7 +398,7 @@ TEST_CASE("texture.pipeline: mip chain cook - counts, sizes, and sRGB-correct av
                      u8"scratch_texpipe_mips_srgb", mipLevels, payload);
         CHECK(mipLevels == 3u);
         CHECK(payload.Size() == (16u + 4u + 1u) * 4u);
-        // mip1 first texel: 2x2 checker averages to linear 0.5 -> sRGB ~188 (NOT 127).
+        // mip1 first texel: 2x2 checker averages to linear 0.5, sRGB ~188 (not 127).
         const u8 mip1 = payload[16u * 4u];
         CHECK(mip1 >= 186);
         CHECK(mip1 <= 190);
@@ -407,7 +406,7 @@ TEST_CASE("texture.pipeline: mip chain cook - counts, sizes, and sRGB-correct av
         CHECK(payload[16u * 4u + 3u] == 255);
     }
 
-    // (3): the SAME checker as a Linear data map keeps the straight byte average.
+    // (3): the same checker as a Linear data map keeps the straight byte average.
     {
         u32 mipLevels = 0;
         Array<u8> payload;
@@ -423,7 +422,7 @@ TEST_CASE("texture.pipeline: mip chain cook - counts, sizes, and sRGB-correct av
         CHECK(mip1 <= 128);
     }
 
-    // (4): odd dims clamp down the chain: 5x3 -> 2x1 -> 1x1.
+    // (4): odd dims clamp down the chain: 5x3, 2x1, 1x1.
     {
         u32 mipLevels = 0;
         Array<u8> payload;
@@ -438,14 +437,14 @@ TEST_CASE("texture.pipeline: mip chain cook - counts, sizes, and sRGB-correct av
 TEST_CASE("texture.pipeline: block compression cook - format policy + exact cooked-DB size drop")
 {
     // The cook block-compresses the RGBA8 mip chain when the asset's authored
-    // usage/compression + the desktop (BC) profile select a BC format. Pins:
-    // (1) usage/compression -> the cooked resource.format; (2) the "data" payload is EXACTLY the sum
-    // of per-level block bytes; (3) the size drop vs uncompressed is real (BC1 ~8x, BC7 ~4x).
+    // usage/compression and the desktop (BC) profile select a BC format. Pins:
+    // (1) usage/compression picks the cooked resource.format; (2) the "data" payload is exactly the
+    // sum of per-level block bytes; (3) the size drop against uncompressed is real (BC1 ~8x, BC7 ~4x).
     RegisterTextureResource();
     RegisterTextureAsset();
 
     // Cook a 128x128 embedded image (>64px so it clears the small-texture escape hatch) with the
-    // given authoring, returning the cooked format + "data" payload size.
+    // given authoring, returning the cooked format and "data" payload size.
     const auto cook = [](texcomp::TextureUsage usage, texcomp::CompressionChoice choice,
                          image::ImageColorSpace cs, bool alpha, StringView dbDir,
                          rhi::TextureFormat& outFormat, u32& outMips, usize& outPayload,
@@ -515,7 +514,7 @@ TEST_CASE("texture.pipeline: block compression cook - format policy + exact cook
     u32 mips = 0;
     usize payload = 0;
 
-    // (1) Color, opaque, sRGB, Default -> BC1 sRGB; payload = exact BC1 block bytes.
+    // (1) Color, opaque, sRGB, Default: BC1 sRGB; the payload is the exact BC1 block bytes.
     cook(texcomp::TextureUsage::Color, texcomp::CompressionChoice::Default,
          image::ImageColorSpace::Srgb, /*alpha*/ false, u8"scratch_texpipe_bc1", fmt, mips, payload);
     CHECK(fmt == rhi::TextureFormat::BC1RGBAUnormSrgb);
@@ -526,10 +525,10 @@ TEST_CASE("texture.pipeline: block compression cook - format policy + exact cook
     cook(texcomp::TextureUsage::Color, texcomp::CompressionChoice::None, image::ImageColorSpace::Srgb,
          false, u8"scratch_texpipe_raw", fmt, mips, rawPayload);
     CHECK(fmt == rhi::TextureFormat::RGBA8UnormSrgb);
-    // BC1 is 4 bits/texel vs 32 -> the cooked payload is ~8x smaller. Guard a real, large drop.
+    // BC1 is 4 bits/texel against 32, so the cooked payload is ~8x smaller. Guard a real, large drop.
     CHECK(payload * 6u < rawPayload);
 
-    // (2) Color, alpha -> BC7; Quality on an opaque image also forces BC7.
+    // (2) Color with alpha: BC7; Quality on an opaque image also forces BC7.
     cook(texcomp::TextureUsage::Color, texcomp::CompressionChoice::Default,
          image::ImageColorSpace::Srgb, /*alpha*/ true, u8"scratch_texpipe_bc7a", fmt, mips, payload);
     CHECK(fmt == rhi::TextureFormat::BC7RGBAUnormSrgb);
@@ -539,20 +538,20 @@ TEST_CASE("texture.pipeline: block compression cook - format policy + exact cook
          image::ImageColorSpace::Linear, false, u8"scratch_texpipe_bc7q", fmt, mips, payload);
     CHECK(fmt == rhi::TextureFormat::BC7RGBAUnorm);
 
-    // (3) Normal -> BC7-LINEAR (never BC5: the shaders decode rgb * 2 - 1 and BC5's
-    // missing B collapses tangent z to -1 - the chess-set white-normals bug).
+    // (3) Normal: BC7-linear (never BC5: the shaders decode rgb * 2 - 1 and BC5's
+    // missing B collapses tangent z to -1, shading the normals white).
     cook(texcomp::TextureUsage::Normal, texcomp::CompressionChoice::Default,
          image::ImageColorSpace::Linear, false, u8"scratch_texpipe_bc7n", fmt, mips, payload);
     CHECK(fmt == rhi::TextureFormat::BC7RGBAUnorm);
     CHECK(payload == expectedCompressed(rhi::TextureFormat::BC7RGBAUnorm, mips));
 
-    // Mask with DISTINCT channel content (this fixture's gradient = a packed ORM shape):
-    // the channel sniff routes it to BC7-linear - BC4 would silently drop G/B.
+    // Mask with distinct channel content (this fixture's gradient has a packed ORM shape):
+    // the channel sniff routes it to BC7-linear, since BC4 would silently drop G/B.
     cook(texcomp::TextureUsage::Mask, texcomp::CompressionChoice::Default,
          image::ImageColorSpace::Linear, false, u8"scratch_texpipe_maskorm", fmt, mips, payload);
     CHECK(fmt == rhi::TextureFormat::BC7RGBAUnorm);
 
-    // A TRUE single-channel mask (gray: R=G=B) keeps BC4.
+    // A true single-channel mask (gray: R=G=B) keeps BC4.
     cook(texcomp::TextureUsage::Mask, texcomp::CompressionChoice::Default,
          image::ImageColorSpace::Linear, false, u8"scratch_texpipe_bc4", fmt, mips, payload,
          /*gray*/ true);
@@ -562,21 +561,20 @@ TEST_CASE("texture.pipeline: block compression cook - format policy + exact cook
 
 TEST_CASE("texture.asset: pre-variants payloads (no usage/compression keys) still deserialize")
 {
-    // The XML serializer is STRICT - a missing key fails the whole payload - and the
-    // asset-variants fields were briefly read unconditionally, breaking ReadObject for EVERY
-    // pre-variants texture envelope (pages + thumbnails alike). The fields are v2-gated now:
-    // a v0 payload (exactly the old files' shape for these fields) must parse and keep the
-    // defaults; a CURRENT versioned round-trip must keep authored values.
+    // The XML serializer is strict (a missing key fails the whole payload), so the usage and
+    // compression fields are v2-gated: read unconditionally, they would break ReadObject for every
+    // older texture envelope. A v0 payload (the old files' shape for these fields) must parse and
+    // keep the defaults; a current versioned round-trip must keep authored values.
     using foundation::xml::XmlSerializerFactory;
 
-    // Old-shape payload: serialize WITHOUT a version scope (Version() == 0 skips the v2
-    // fields on write - producing the pre-variants key set).
+    // Old-shape payload: serialize without a version scope (Version() == 0 skips the v2
+    // fields on write, producing the older key set).
     foundation::core::MemoryStream oldBytes;
     {
         auto ctx = XmlSerializerFactory()(oldBytes, foundation::core::SerializeMode::Write);
         REQUIRE(ctx.Get() != nullptr);
         pipeline::TextureAsset asset;
-        asset.generateMipmaps = true; // a non-default pre-variants field must survive
+        asset.generateMipmaps = true; // a non-default v0 field must survive
         asset.Serialize(*ctx->serializer);
         REQUIRE(ctx->serializer->IsOk());
         ctx->Flush(oldBytes);
@@ -586,16 +584,16 @@ TEST_CASE("texture.asset: pre-variants payloads (no usage/compression keys) stil
         auto ctx = XmlSerializerFactory()(oldBytes, foundation::core::SerializeMode::Read);
         REQUIRE(ctx.Get() != nullptr);
         pipeline::TextureAsset asset;
-        asset.usage = texcomp::TextureUsage::Normal; // must RESET to... no: v0 read skips the
-        asset.usage = texcomp::TextureUsage::Color;  // fields entirely - defaults stay put
+        asset.usage = texcomp::TextureUsage::Normal; // a v0 read skips these fields entirely,
+        asset.usage = texcomp::TextureUsage::Color;  // so the defaults stay put
         asset.Serialize(*ctx->serializer);
-        CHECK(ctx->serializer->IsOk()); // the regression: this failed with NotFound pre-fix
+        CHECK(ctx->serializer->IsOk()); // an ungated read fails here with NotFound
         CHECK(asset.generateMipmaps == true);
         CHECK(asset.usage == texcomp::TextureUsage::Color);
         CHECK(asset.compression == texcomp::CompressionChoice::Default);
     }
 
-    // Current-format round-trip: the v2 scope writes AND reads the new fields.
+    // Current-format round-trip: the v2 scope writes and reads the new fields.
     foundation::core::MemoryStream newBytes;
     {
         auto ctx = XmlSerializerFactory()(newBytes, foundation::core::SerializeMode::Write);
@@ -635,10 +633,10 @@ TEST_CASE("texture import: usage inference from texture-pack name tokens")
     CHECK(InferTextureUsage(u8"ground_rough_1k") == texcomp::TextureUsage::Mask);
     CHECK(InferTextureUsage(u8"kit_orm") == texcomp::TextureUsage::Mask);
     CHECK(InferTextureUsage(u8"trim_AO_2k") == texcomp::TextureUsage::Mask);
-    // Everything else keeps the Color default - including boundary-rule near-misses.
+    // Everything else keeps the Color default, including boundary-rule near-misses.
     CHECK(InferTextureUsage(u8"grass_diff") == texcomp::TextureUsage::Color);
-    CHECK(InferTextureUsage(u8"my_armor") == texcomp::TextureUsage::Color);   // "_arm" + letter
-    CHECK(InferTextureUsage(u8"town_north") == texcomp::TextureUsage::Color); // "_nor" + letter
+    CHECK(InferTextureUsage(u8"my_armor") == texcomp::TextureUsage::Color);   // "_arm" then a letter
+    CHECK(InferTextureUsage(u8"town_north") == texcomp::TextureUsage::Color); // "_nor" then a letter
 }
 
 TEST_CASE("texture profiles configure usage + color space with the sampler")
@@ -700,7 +698,7 @@ TEST_CASE("texture-import: DescribeImport lists one asset; a selection rename re
     CHECK(plan.entries[0].sourceName == u8"wall");
     CHECK(plan.entries[0].targetName == u8"wall");
 
-    // The review dialog's rename travels on the BASE options (option-less importer).
+    // The review dialog's rename travels on the base options (option-less importer).
     auto options = MakeRef<pipeline::ImportOptions>(DefaultAllocator());
     plan.entries[0].targetName = String(u8"wall_albedo");
     options->selection = Move(plan);
@@ -710,12 +708,12 @@ TEST_CASE("texture-import: DescribeImport lists one asset; a selection rename re
     REQUIRE(imported.HasValue());
     CHECK(imported.Value()->Name() == StringView(u8"wall_albedo"));
     CHECK(project->SourceDb().RootGroup()->GetInstance(u8"wall") == nullptr);
-    // The SOURCE keeps its file identity - only the asset instance is renamed.
+    // The source keeps its file identity; only the asset instance is renamed.
     CHECK(FileExists(PathJoin(dir, u8"Sources/wall.png").AsView()));
 
-    // RE-IMPORT MEMORY: the renamed asset is found again through its typed fileName
+    // Re-import memory: the renamed asset is found again through its typed fileName
     // back-reference; merging pre-seeds the fresh plan with the rename, and committing
-    // with it UPDATES the renamed instance instead of minting a duplicate "wall".
+    // with it updates the renamed instance instead of minting a duplicate "wall".
     pipeline::ImportPlan stored =
         importer.StoredSelection(*project->SourceDb().RootGroup(), u8"wall.png");
     REQUIRE(stored.entries.Size() == 1u);
@@ -738,7 +736,7 @@ TEST_CASE("texture-import: DescribeImport lists one asset; a selection rename re
 
 namespace
 {
-    // A flat (non-RLE) Radiance .hdr: header + one RGBE quad per pixel. stb_image reads the flat
+    // A flat (non-RLE) Radiance .hdr: a header and one RGBE quad per pixel. stb_image reads the flat
     // layout whenever the first pixel is not the RLE marker (2, 2, hi, lo), which a real radiance
     // value never is.
     void WriteFlatRadianceHdr(const char* path, u32 w, u32 h, f32 r, f32 g, f32 b)
@@ -837,7 +835,7 @@ TEST_CASE("texture.pipeline: an HDR source cooks to BC6H on the desktop (BC) tar
 }
 
 // ===================================================================================
-// DDS sources (2026-09-22): GPU-ready levels pass through untouched when they fit the
+// DDS sources: GPU-ready levels pass through untouched when they fit the
 // asset + target; otherwise level 0 decodes and cooks like any image.
 // ===================================================================================
 namespace
@@ -896,7 +894,7 @@ namespace
         REQUIRE(WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(file.Data()), file.Size())).IsOk());
     }
 
-    // What a cook produced: the record's facts (the record itself is not copyable) + the "data" payload.
+    // What a cook produced: the record's facts (the record itself is not copyable) and the "data" payload.
     struct Cooked
     {
         rhi::TextureFormat format = rhi::TextureFormat::RGBA8Unorm;
@@ -904,7 +902,7 @@ namespace
         u32 mipLevels = 0;
     };
 
-    // Cook a file-backed asset against `target` (null = the desktop host).
+    // Cook a file-backed asset against `target` (null for the desktop host).
     Status CookFile(const TextureAsset& asset, const pipeline::CookTarget* target, StringView dbDir,
                     Cooked& outResource, Array<u8>& outPayload)
     {
@@ -1022,7 +1020,7 @@ TEST_CASE("texture.pipeline: a BC5 normal-map DDS decodes and re-encodes by the 
     Array<u8> payload;
     REQUIRE(CookFile(asset, nullptr, u8"scratch_texpipe_dds_db", res, payload).IsOk());
     CHECK(res.format == rhi::TextureFormat::BC7RGBAUnorm); // never BC5 (the shaders read rgb)
-    CHECK(res.mipLevels == 8u);                             // 128 -> 1
+    CHECK(res.mipLevels == 8u);                             // 128 down to 1
     usize expected = 0;
     for (u32 level = 0, w = 128; level < 8; ++level, w = w > 1 ? w / 2 : 1)
     {
@@ -1086,7 +1084,7 @@ TEST_CASE("texture-import: a DDS imports with the facts its header names")
         return imported.Value()->ReadObject();
     };
 
-    // BC5 = a normal map, whatever the name says.
+    // BC5 is a normal map, whatever the name says.
     WriteDdsFile(EncodedDds(4, 1, rhi::TextureFormat::BC5RGUnorm, dds::DdsFormat::BC5), u8"thing.dds");
     {
         RefPtr<ISerializable> object = importOne(u8"thing.dds");
@@ -1097,7 +1095,7 @@ TEST_CASE("texture-import: a DDS imports with the facts its header names")
         CHECK(asset->fileName == StringView(u8"thing.dds"));
         CHECK(FileExists(PathJoin(dir, u8"Sources/thing.dds").AsView()));
     }
-    // BC4 = a data mask.
+    // BC4 is a data mask.
     WriteDdsFile(EncodedDds(4, 1, rhi::TextureFormat::BC4RUnorm, dds::DdsFormat::BC4), u8"stuff.dds");
     {
         RefPtr<ISerializable> object = importOne(u8"stuff.dds");

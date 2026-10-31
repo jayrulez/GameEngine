@@ -3,15 +3,15 @@
 
 // Editor App - :asset_picker_window partition
 //
-// An asset slot's pick, shaped as the assets browser (Documentation/Specs/editor-gui.md, ruling 24;
-// the mock's asset-picker.xml): the project's groups a tree at its side (Favourites and All first),
-// what the chosen group holds of the slot's types beside it as tiles or a list (the last one chosen
-// kept with the project), the current value lit, the search over every group while it has text (by
-// name or a guid's start, as the browser's; each match saying where it lives). Enter or a double
-// click picks; Esc or its close keeps the value (a slot's own clear sets nothing, so a pick can
-// never clear it by a slip). A row's menu pins it as a favourite, or unpins it; a whole guid of an
-// asset the slot does not take says so. Its
-// cells are the browser's (AssetCell); it opens in the window's middle, as every picker does.
+// An asset slot's picker, laid out like the assets browser: the project's groups as a tree at the
+// side (Favourites and All first) and, beside it, the chosen group's assets of the slot's types as
+// tiles or a list (the last choice is kept with the project). The current value is highlighted.
+// While the search has text it looks in every group (by name or the start of a guid, as the
+// browser does), and each match says where it lives. Enter or a double click picks; Esc or closing
+// keeps the value. Only the slot's own clear button clears it, so a slip in the picker cannot. A
+// row's menu pins the asset as a favourite or unpins it; a whole guid of an asset the slot does not
+// accept is reported as such. Its cells are the browser's (AssetCell), and it opens in the middle
+// of the window, as every picker does.
 module;
 #include "Core/Prelude.h"
 
@@ -37,9 +37,9 @@ export namespace editor::app
     /// What an asset slot asks the picker for.
     struct AssetPickRequest
     {
-        Array<String> types;                // the asset types it takes, by name; empty: any
+        Array<String> types;                // the asset types it accepts, by name; empty: any
         Guid current;                       // its value now (nil: none)
-        Function<void(const Guid&)> chosen; // a pick (nil: None)
+        Function<void(const Guid&)> chosen; // called on a pick (nil: None)
     };
 
     /// AssetPickerWindow::kPath, at namespace scope for another library to read (MSVC exports no class's
@@ -49,21 +49,22 @@ export namespace editor::app
     class AssetPickerWindow
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kAssetPickerWindowPath;
 
-        /// What it works over.
+        /// The services it works with.
         struct Services
         {
             editor::EditorContext* context = nullptr; // the project, favourites, the project's editor store
             editor::EditorIcons* icons = nullptr;     // a type's glyph; null: generic ones
-            /// An asset's picture (the thumbnails'), null while there is none; unset: glyphs only.
+            /// An asset's thumbnail, null while there is none; unset: glyphs only.
             Function<RefPtr<gui::Drawable>(const Guid&)> picture;
         };
 
-        /// The picker in `content` (the markup's `asset-picker-search`, `asset-picker-tiles`,
-        /// `asset-picker-list`, `asset-picker-groups`, `asset-picker-where`, `asset-picker-items`,
-        /// `asset-picker-state`, `asset-picker-hint` and `asset-picker-close`, by id).
+        /// Builds the picker in `content`, binding the markup's `asset-picker-search`,
+        /// `asset-picker-tiles`, `asset-picker-list`, `asset-picker-groups`, `asset-picker-where`,
+        /// `asset-picker-items`, `asset-picker-state`, `asset-picker-hint` and `asset-picker-close`
+        /// by id.
         AssetPickerWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_services(Move(services)), m_content(Move(content)), m_sources(allocator), m_rows(allocator), m_model(*this)
         {
@@ -111,7 +112,8 @@ export namespace editor::app
                 list->SetOnClick([self]() { self->SetTiles(false); });
             if (auto* close = Find<gui::Button>(u8"asset-picker-close"))
                 close->SetOnClick([self]() { self->Close(); });
-            // The arrows and Enter before the search takes them; in tiles Up and Down cross a row.
+            // Handle the arrows and Enter before the search field takes them; in tiles, Up and Down
+            // move by a whole row.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
                                                   const auto& key = static_cast<const gui::KeyEvent&>(e);
@@ -156,9 +158,10 @@ export namespace editor::app
                 m_tree->SetModel(nullptr);
         }
 
-        /// Opens it over `root` for `request`, in the window's middle: the current value's group
-        /// chosen (else All) and its row lit, the search empty and focused, tiles or a list as it
-        /// was left. False with no frame, no project, a root in no GUI, or one open already.
+        /// Opens the picker over `root` for `request`, in the middle of the window, with the current
+        /// value's group selected (else All) and its row highlighted, the search empty and focused,
+        /// and tiles or a list as last left. False with no frame, no project, a root in no GUI, or
+        /// when one is already open.
         bool Open(gui::SceneRoot& root, AssetPickRequest request)
         {
             gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
@@ -207,7 +210,7 @@ export namespace editor::app
             return m_root != nullptr && m_content && m_root->GetEventDispatcher() != nullptr && m_root->GetEventDispatcher()->IsPopupOpen(*m_content);
         }
 
-        /// Tiles or a list, kept with the project for the next pick.
+        /// Switches between tiles and a list; the choice is kept with the project for the next pick.
         void SetTiles(bool tiles)
         {
             m_tiles = tiles;
@@ -219,7 +222,7 @@ export namespace editor::app
             }
             ShowLayout();
         }
-        /// Searches every group for `text` (as typing it); empty: the chosen group again.
+        /// Searches every group for `text`, as typing it would; empty shows the chosen group again.
         void Search(StringView text)
         {
             if (m_query.AsView() == text)
@@ -242,8 +245,8 @@ export namespace editor::app
                 }
             return false;
         }
-        /// A row's menu at `at` (the list's space): Pin as Favourite, or Unpin Favourite. No row, or
-        /// no context: none.
+        /// Opens a row's menu at `at` (in the list's space): Pin as Favourite, or Unpin Favourite.
+        /// Nothing opens without a row or a context.
         void ShowRowMenu(i32 row, Float2 at)
         {
             if (m_list == nullptr || m_services.context == nullptr || row < 0 || static_cast<usize>(row) >= m_rows.Size())
@@ -255,15 +258,15 @@ export namespace editor::app
                                   {
                                       self->m_services.context->ToggleFavorite(id);
                                       if (self->m_source == kFavourites && self->m_query.IsEmpty())
-                                          self->BuildRows(); // it joins or leaves the rows
+                                          self->BuildRows(); // the asset joins or leaves the rows
                                       else
-                                          self->m_model.Changed(); // its star
+                                          self->m_model.Changed(); // redraw its star
                                   });
             m_menu->Open(*m_list, at);
         }
         /// The row menu, while it is open.
         [[nodiscard]] gui::Menu* RowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
-        /// Picks the lit row; with none lit, nothing.
+        /// Picks the highlighted row; does nothing when no row is highlighted.
         void PickLit() { PickRow(m_list != nullptr ? m_list->GetSelectedItem() : -1); }
         void Step(i32 by)
         {
@@ -304,7 +307,7 @@ export namespace editor::app
         }
         [[nodiscard]] StringView Where() const { return m_where != nullptr ? m_where->GetText() : StringView{}; }
         [[nodiscard]] StringView Hint() const { return m_hint != nullptr ? m_hint->GetText() : StringView{}; }
-        /// What it says with no rows to show; empty while it shows rows.
+        /// What it says when there are no rows to show; empty while it shows rows.
         [[nodiscard]] StringView State() const { return m_state != nullptr && m_state->IsDisplayed() ? m_state->GetText() : StringView{}; }
         [[nodiscard]] StringView LitName() const
         {
@@ -318,14 +321,14 @@ export namespace editor::app
         static constexpr f32 kTileWidth = 96.0f;
         static constexpr f32 kTileHeight = 92.0f;
 
-        // A row of the tree, by its node: Favourites, All, or a group.
+        // What a tree row stands for: Favourites, All, or a group.
         struct Source
         {
             String name;
             content::Group* group = nullptr; // null: Favourites or All
         };
 
-        // The rows as the list's model, an asset's id its guid's.
+        // The rows as the list's model; an item's id comes from its asset's guid.
         class Model final : public gui::IModel
         {
         public:
@@ -404,8 +407,8 @@ export namespace editor::app
             return false;
         }
 
-        // What the slot takes, plural, by its type's display name ("Materials", "Meshes"); more
-        // than one type, or any, "Assets".
+        // The plural display name of what the slot accepts ("Materials", "Meshes"); "Assets" for
+        // more than one type, or any.
         [[nodiscard]] String Noun() const
         {
             if (m_request.types.Size() != 1)
@@ -433,7 +436,8 @@ export namespace editor::app
             return group.Parent() == nullptr ? String(AssetsView::kTopGroup) : Format(u8"{}/{}", AssetsView::kTopGroup, group.Path());
         }
 
-        // Favourites, All, then the project's groups (the top one Content), every one open.
+        // Builds the tree: Favourites, All, then the project's groups (the top one shown as
+        // Content), every one expanded.
         void BuildTree()
         {
             if (m_tree == nullptr)
@@ -470,15 +474,15 @@ export namespace editor::app
             if (m_tree == nullptr)
                 return;
             const bool building = m_building;
-            m_building = true; // a selection from code is no choice
+            m_building = true; // a selection made from code is not the user's choice
             for (i32 item = 0; item < static_cast<i32>(m_tree->GetItemCount()); ++item)
                 if (m_tree->GetItemIndex(item).InternalId == static_cast<i64>(source))
                     m_tree->SetSelectedItem(item); // every group is open: each is an item
             m_building = building;
         }
 
-        // What the chosen source holds of the slot's types, in the groups' order; a search's
-        // matches from every group; then the count and the state.
+        // Builds the rows: the chosen source's assets of the slot's types in the groups' order, or
+        // a search's matches from every group; then the count and the state.
         void BuildRows()
         {
             m_rows.Clear();
@@ -496,7 +500,7 @@ export namespace editor::app
                     Collect(*m_sources[m_source].group, false);
             }
             m_model.Reset();
-            // The current value lit when it is shown, else the first row.
+            // Highlight the current value when it is shown, else the first row.
             i32 lit = m_rows.IsEmpty() ? -1 : 0;
             for (usize i = 0; i < m_rows.Size(); ++i)
                 if (m_rows[i]->Id() == m_request.current)
@@ -524,7 +528,7 @@ export namespace editor::app
                     m_state->SetText(Format(u8"No {} here.", Lowered(Noun())).AsView());
             }
         }
-        // The asset a search's whole guid names when the slot does not take its type; else null.
+        // The asset a search's whole guid names when the slot does not accept its type; else null.
         [[nodiscard]] const content::Instance* WrongTypeNamed() const
         {
             Guid id;
@@ -543,7 +547,7 @@ export namespace editor::app
                 for (content::Group* child : group.Groups())
                     Collect(*child, true);
         }
-        // Rows from more than one group say where each lives.
+        // Rows drawn from more than one group say where each asset lives.
         [[nodiscard]] bool RowsSayWhere() const { return !m_query.IsEmpty() || m_source == kAll || m_source == kFavourites; }
 
         void BindCell(gui::Node& node, i32 index)
@@ -567,16 +571,16 @@ export namespace editor::app
             }
             if (shown.Glyph.IsEmpty())
                 shown.Glyph = String(u8"Editor/Icons/file.svg");
-            shown.StateColumns = false; // a pick asks neither its cook nor its export
+            shown.StateColumns = false; // a pick needs neither the cook state nor the export state
             shown.Favourite = m_services.context != nullptr && m_services.context->IsFavorite(instance.Id());
             if (m_services.picture)
-                shown.Picture = m_services.picture(instance.Id()); // a tile's, and a row's small
+                shown.Picture = m_services.picture(instance.Id()); // a tile shows it large, a row small
             cell->Show(shown);
-            // Hovered, the whole of where it lives (a row's is cut to fit) and what it is.
+            // On hover, the full location (a row's is cut to fit) and the asset's kind.
             cell->SetTooltip(Format(u8"{}/{} ({})", ShownPath(instance.OwningGroup()), instance.Name(), AssetsView::KindOf(instance.TypeName())).AsView());
         }
 
-        // Tiles or a list, the toggles saying which.
+        // Shows tiles or a list, with the toggles showing which.
         void ShowLayout()
         {
             if (m_list != nullptr)
@@ -594,7 +598,7 @@ export namespace editor::app
                     m_list->RemoveClass(u8"asset-tiles");
                     m_list->AddClass(u8"asset-list");
                 }
-                m_model.Reset(); // the rows' kind follows
+                m_model.Reset(); // the rows' kind changes with the layout
             }
             ShowChecked(u8"asset-picker-tiles", m_tiles);
             ShowChecked(u8"asset-picker-list", !m_tiles);
@@ -641,10 +645,10 @@ export namespace editor::app
         gui::Label* m_state = nullptr;
         gui::Label* m_hint = nullptr;
         gui::TreeModel m_groups;
-        Array<Source> m_sources; // by the tree's node
+        Array<Source> m_sources; // indexed by tree node
         Array<content::Instance*> m_rows;
         Model m_model;
-        RefPtr<gui::Menu> m_menu; // a row's
+        RefPtr<gui::Menu> m_menu; // a row's context menu
         AssetPickRequest m_request;
         String m_query;
         usize m_source = kAll;

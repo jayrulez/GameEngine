@@ -1,5 +1,5 @@
 # Foundation::Model.FBX unit tests (doctest). ufbx also reads OBJ, so the documents are
-# written as OBJ (+ .mtl) into the test scratch dir; no binary fixtures are needed.
+# written as OBJ (with .mtl) into the test scratch dir; no binary fixtures are needed.
 
 add_executable(Model.FBX.Tests TestsMain.cpp FbxLoaderTests.cpp)
 target_link_libraries(Model.FBX.Tests PRIVATE Foundation::Model.FBX Foundation::Model doctest::doctest)

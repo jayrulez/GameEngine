@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:sprite_renderer` partition.
 ///
-/// A Renderer that draws textured billboard quads (sprites). Ported from SedulousEngine's
-/// SpriteRenderer/sprite.hlsl: a 6-vertex quad is generated in the vertex shader from SV_VertexID and
-/// hardware-instanced, with per-sprite data (position/size/uv-rect/tint/orientation) fed as instance-
-/// stepped vertex attributes. Sprites register for the Transparent category and interleave with
-/// transparent meshes by depth (per-item renderer dispatch), sharing the blended forward pass:
-/// alpha/additive blend, depth-test LessEqual against the scene depth, no depth write, cull none.
+/// A Renderer that draws textured billboard quads (sprites). A 6-vertex quad is generated in the
+/// vertex shader from SV_VertexID and hardware-instanced, with per-sprite data (position, size, uv
+/// rect, tint, orientation) fed as instance-stepped vertex attributes. Sprites register for the
+/// Transparent category and interleave with transparent meshes by depth (per-item renderer
+/// dispatch), sharing the blended forward pass: alpha or additive blend, depth-test LessEqual against
+/// the scene depth, no depth write, cull none.
 ///
 /// Batching: within a resolved run, consecutive sprites sharing (texture, blend mode) fuse into one
 /// instanced draw. Non-indexed geometry isn't expressible through ResolvedDraw/EmitDraw (it always
@@ -100,7 +100,7 @@ export namespace foundation::render
 
         void FinishFrame() override;
 
-        /// Wire the frames-in-flight retire queue (web-safe ring grows). Null = drain.
+        /// Wire the frames-in-flight retire queue (web-safe ring grows). Null means drain.
         void SetRetireQueue(GpuRetireQueue* retire) noexcept
         {
             m_instanceRing.SetRetireQueue(retire);
@@ -111,8 +111,8 @@ export namespace foundation::render
         static constexpr u32 kMaxViews = 8;
         static constexpr u64 kViewSlotSize = 256; // GpuSpriteView padded to the dynamic-uniform alignment
 
-        // One bind group over the whole view ring (per-draw dynamic offset selects the slot). Rebuilt ONLY
-        // when the ring reallocates (generation bump) - which drains the GPU first (Reserve's WaitIdle) - so
+        // One bind group over the whole view ring (a per-draw dynamic offset selects the slot). Rebuilt only
+        // when the ring reallocates (generation bump), which drains the GPU first (Reserve's WaitIdle), so
         // we never free a descriptor set an in-flight frame still references.
         rhi::BindGroup* EnsureViewBindGroup();
 
@@ -123,9 +123,9 @@ export namespace foundation::render
         void Shutdown();
 
         // One cached pipeline per (target format, blend mode): in-scene sprites render into
-        // the HDR pass while post-tonemap sprites render into the LDR target IN THE SAME
-        // frame - a single slot per blend mode thrashed destroy/create mid-recording
-        // (destroying a pipeline the frame's command buffer already bound).
+        // the HDR pass while post-tonemap sprites render into the LDR target in the same
+        // frame, and a single slot per blend mode would destroy and recreate mid-recording a
+        // pipeline the frame's command buffer already bound.
         struct Pipelines
         {
             rhi::RenderPipeline* pso = nullptr;
@@ -147,8 +147,8 @@ export namespace foundation::render
         u32 m_viewBgGen = 0xFFFFFFFFu; // generation the view bind group was built for
         Array<Pipelines> m_pipelines; // one entry per (format, additive) seen
         rhi::TextureFormat m_depthFormat = rhi::TextureFormat::Depth32Float;
-        // Cached per-texture bind groups. Keyed by view POINTER for lookup speed, but every hit
-        // validates the view's uniqueId - dynamic textures (UI render targets) are destroyed and
+        // Cached per-texture bind groups. Keyed by view pointer for lookup speed, but every hit
+        // validates the view's uniqueId: dynamic textures (UI render targets) are destroyed and
         // their address reused, and a stale descriptor samples a dead image view (device lost).
         struct TexBindGroup
         {

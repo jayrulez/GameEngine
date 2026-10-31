@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorWindow's look: the sheet a look makes from the editor's files, the
-// density's sheet after the editor's so its sizes win, the user's accent as an input after both,
-// the user's theme overrides last and again as they change; a notice's toast, staying with its button when it has an action.
+// Editor::App: EditorWindow's look. A look builds its sheet from the editor's files: the density's
+// sheet after the editor's so its sizes win, the user's accent as an input after both, and the
+// user's theme overrides last, applied again as they change. Also covers a notice's toast, which
+// stays up with its button when it has an action.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -80,7 +81,7 @@ TEST_CASE("editor window: the user's theme overrides come last, so they win, and
                                        ++applied;
                                    });
     CHECK(applied == 1);
-    CHECK(Find(sheet.AsView(), u8"--surface: #000000") == sheet.Size()); // no file: nothing of the user's
+    CHECK(Find(sheet.AsView(), u8"--surface: #000000") == sheet.Size()); // no overrides file: nothing from the user
 
     Write(overrides.AsView(), u8":root { --surface: #000000; --accent-input: #ff0000; }");
     REQUIRE(theme.Poll());
@@ -100,7 +101,7 @@ TEST_CASE("editor window: the user's theme overrides come last, so they win, and
     REQUIRE(FileDelete(PathJoin(kRoot, overrides.AsView()).AsView()));
     REQUIRE(theme.Poll());
     CHECK(applied == 4);
-    CHECK(Find(sheet.AsView(), u8"--surface: #101010") == sheet.Size()); // removed: the editor's own look again
+    CHECK(Find(sheet.AsView(), u8"--surface: #101010") == sheet.Size()); // overrides removed: the editor's default look again
 }
 
 TEST_CASE("editor window: the look from the user's settings, the defaults for what is unset or named wrongly, and back")

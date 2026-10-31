@@ -4,7 +4,7 @@
 // Editor::Materials - the `editor.materials` module.
 //
 // The materials domain's editor page: MaterialEditorPage, its factory and RegisterMaterialEditor,
-// which the editor EXECUTABLE calls.
+// which the editor executable calls.
 
 export module editor.materials;
 

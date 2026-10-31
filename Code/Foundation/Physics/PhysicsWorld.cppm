@@ -3,18 +3,16 @@
 
 // Foundation::Physics - :world partition.
 //
-// PhysicsWorld: the Jolt-backed rigid-body world. Jolt is the
-// COMMITTED backend - no abstraction layer - but JPH types never appear here AT ALL:
-// this interface unit is Jolt-free (all Jolt contact lives in WorldImpl.cpp, a module
-// IMPLEMENTATION unit) both for API hygiene and because GCC's C++20-modules serializer
-// chokes on Jolt's header mass inside an interface unit's global fragment. Bodies are
-// BodyId handles; shapes/queries/events speak engine types; the per-body u64 user data
-// carries the scene-entity reverse map. One world per SCENE; stepping is driven from the
-// engine's fixed-update lane.
+// PhysicsWorld: the Jolt-backed rigid-body world. Jolt is the only backend and there is no
+// abstraction layer, but JPH types never appear here: this interface unit is Jolt-free (all Jolt
+// code lives in WorldImpl.cpp, a module implementation unit), both to keep the API clean and
+// because GCC's C++20 module serializer chokes on Jolt's headers in an interface unit's global
+// fragment. Bodies are BodyId handles; shapes, queries and events use engine types; the per-body
+// u64 user data carries the scene-entity reverse map. One world per scene; stepping is driven
+// from the engine's fixed-update lane.
 //
-// Layers: a FIXED semantic table - Static / Dynamic / Kinematic / Trigger - with
-// a hard-coded collision matrix (ez-style named matrix; triggers are Jolt sensors:
-// overlap events, no response).
+// Layers: a fixed semantic table (Static, Dynamic, Kinematic, Trigger) with a hard-coded
+// collision matrix. Triggers are Jolt sensors: overlap events, no response.
 
 module;
 #include "Core/Prelude.h"
@@ -59,41 +57,41 @@ export namespace foundation::physics
     /// static constexpr member from a shared library).
     inline constexpr f32 kShapeDescNoCollisionHeight = 3.402823466e38f;
 
-    // One shape (a body carries one or more; >1 = compound).
+    // One shape (a body carries one or more; more than one makes a compound).
     struct ShapeDesc
     {
         ShapeKind kind = ShapeKind::Box;
         Float3 halfExtents{0.5f, 0.5f, 0.5f};   // Box
-        f32 radius = 0.5f;                      // Sphere / Capsule
+        f32 radius = 0.5f;                      // Sphere, Capsule
         f32 halfHeight = 0.5f;                  // Capsule (cylinder half-length)
         /// Placement within the body: honoured for a lone shape too (a lone shape with an
         /// offset or a rotation is built as a one-child compound).
         Float3 localPosition{0.0f, 0.0f, 0.0f};
         Quaternion localRotation = Quaternion::Identity;
         /// ShapeKind::Cooked: a blob from CookConvexHull/CookTriangleMesh (self-describing;
-        /// convex hulls may be dynamic, triangle meshes MUST be static/kinematic). The span
-        /// is only read during CreateBody - the caller keeps ownership (resource memory).
+        /// convex hulls may be dynamic, triangle meshes must be static or kinematic). The span
+        /// is only read during CreateBody; the caller keeps ownership (resource memory).
         Span<const byte> cooked;
-        /// Non-uniform shape scale (cooked level/prop geometry authored at unit scale);
-        /// {1,1,1} = none. Triangle meshes accept any scale, convex hulls uniform-ish only.
+        /// Non-uniform shape scale (cooked level and prop geometry authored at unit scale);
+        /// {1,1,1} = none. Triangle meshes accept any scale, convex hulls only near-uniform ones.
         Float3 scale{1.0f, 1.0f, 1.0f};
-        /// ShapeKind::Plane: dot(planeNormal, p) + planeDistance = 0, the NEGATIVE half
+        /// ShapeKind::Plane: dot(planeNormal, p) + planeDistance = 0, the negative half
         /// space solid; infinite in principle but only collidable within +-planeHalfExtent
-        /// of the shape origin (keep as tight as the scene allows - broad-phase cost).
-        /// Planes must be static/kinematic, never dynamic.
+        /// of the shape origin (keep it as tight as the scene allows: it costs broad phase).
+        /// Planes must be static or kinematic, never dynamic.
         Float3 planeNormal{0.0f, 1.0f, 0.0f};
         f32 planeDistance = 0.0f;
         f32 planeHalfExtent = 1000.0f;
-        /// ShapeKind::Heightfield: a SQUARE grid of world-Y height floats (row-major,
+        /// ShapeKind::Heightfield: a square grid of world-Y height floats (row-major,
         /// heightSampleCount^2), spanning heightWorldSize over XZ centred on the shape origin.
         /// Jolt builds a HeightFieldShape and self-pads the sample count to its block size with
         /// no-collision values (the footprint stays exactly heightWorldSize). Like `cooked`, the
-        /// span is only read during CreateBody - the caller keeps ownership. Static/kinematic only.
+        /// span is only read during CreateBody; the caller keeps ownership. Static or kinematic only.
         Span<const f32> heightSamples;
         u32 heightSampleCount = 0;
         Float2 heightWorldSize{0.0f, 0.0f};
-        /// A height sample with NO surface (Jolt's cNoCollisionValue, FLT_MAX): every triangle
-        /// touching it is not collidable - the terrain holes rule (Specs/terrain-holes.md).
+        /// A height sample with no surface (Jolt's cNoCollisionValue, FLT_MAX): no triangle
+        /// touching it is collidable, which is how terrain holes are cut.
         static constexpr f32 kNoCollisionHeight = kShapeDescNoCollisionHeight;
     };
 
@@ -110,15 +108,15 @@ export namespace foundation::physics
         f32 linearDamping = 0.05f;
         f32 angularDamping = 0.05f;
         bool isTrigger = false; // sensor (forces layer Trigger)
-        /// Continuous collision (Jolt LinearCast): fast small DYNAMIC bodies stop tunneling
-        /// through thin geometry. Opt-in - it costs an extra cast per fast body per step.
+        /// Continuous collision (Jolt LinearCast): fast small dynamic bodies stop tunneling
+        /// through thin geometry. Opt-in: it costs an extra cast per fast body per step.
         bool continuousCollision = false;
-        /// Explicit mass in kg for DYNAMIC bodies (feel: a light-looking prop that shoves
-        /// hard). <= 0 = derive from density as today; > 0 overrides the scalar mass while
-        /// inertia stays density-derived.
+        /// Explicit mass in kg for dynamic bodies (for feel: a light-looking prop that shoves
+        /// hard). <= 0 derives it from density; > 0 overrides the scalar mass while inertia
+        /// stays density-derived.
         f32 massOverride = 0.0f;
         /// Designer collision group [0, 32): pairs collide only when the world matrix
-        /// allows BOTH directions' bits (PhysicsWorldSettings::groupCollides). The
+        /// allows both directions' bits (PhysicsWorldSettings::groupCollides). The
         /// semantic layer rules (static-static never, trigger sensing) still apply.
         u8 group = 0;
         u64 userData = 0; // scene-entity reverse map (guid low bits)
@@ -140,17 +138,17 @@ export namespace foundation::physics
         Float3 position{0, 0, 0};
         Float3 normal{0, 0, 0};
         f32 fraction = 1.0f;
-        /// Material-slot index of the hit face for cooked TRIANGLE-MESH shapes (whatever
-        /// the cooker stored per triangle - the source mesh's material slot); 0 otherwise.
+        /// Material-slot index of the hit face for cooked triangle-mesh shapes (whatever
+        /// the cooker stored per triangle: the source mesh's material slot); 0 otherwise.
         u32 surface = 0;
     };
 
-    /// A PRIMITIVE query volume for ShapeCast / ShapeOverlap (sphere / box / capsule only - cooked /
-    /// plane / heightfield are body shapes, not query shapes). Convex, so no mass/density needed.
+    /// A primitive query volume for ShapeCast and ShapeOverlap (sphere, box or capsule; cooked,
+    /// plane and heightfield are body shapes, not query shapes). Convex, so no mass or density.
     struct QueryShape
     {
         ShapeKind kind = ShapeKind::Sphere;
-        f32 radius = 0.5f;                    // Sphere / Capsule
+        f32 radius = 0.5f;                    // Sphere, Capsule
         Float3 halfExtents{0.5f, 0.5f, 0.5f}; // Box
         f32 halfHeight = 0.5f;                // Capsule (cylinder half-length)
     };
@@ -170,13 +168,13 @@ export namespace foundation::physics
         BodyId bodyB;
         u64 userA = 0;
         u64 userB = 0;
-        /// Contact geometry (Begin/TriggerEnter only; zero for End/TriggerExit which have
-        /// no manifold). `point`/`normal` are world-space (normal points from body B toward
-        /// body A). `speed` is the impact APPROACH SPEED: the magnitude of the two bodies'
-        /// relative velocity projected onto the contact normal - "how hard did they hit".
-        /// It is deliberately NOT a solver impulse: Jolt does not surface the true impulse
-        /// cleanly in OnContactAdded, so approach speed is the honest, physically-meaningful
-        /// value (see WorldImpl.cpp OnContactAdded).
+        /// Contact geometry (Begin and TriggerEnter only; zero for End and TriggerExit, which
+        /// have no manifold). `point` and `normal` are world-space (normal points from body B
+        /// toward body A). `speed` is the impact approach speed: the magnitude of the two
+        /// bodies' relative velocity projected onto the contact normal, or how hard they hit.
+        /// It is not a solver impulse: Jolt does not surface the true impulse cleanly in
+        /// OnContactAdded, so approach speed is the physically meaningful value available
+        /// (see OnContactAdded in WorldImpl.cpp).
         Float3 point{0, 0, 0};
         Float3 normal{0, 0, 0};
         f32 speed = 0.0f;
@@ -197,8 +195,8 @@ export namespace foundation::physics
     {
         JointKind kind = JointKind::Fixed;
         BodyId bodyA;                    // required
-        BodyId bodyB;                    // invalid = anchored to the WORLD
-        Float3 anchor{0.0f, 0.0f, 0.0f}; // world-space pivot (hinge/point/slider origin)
+        BodyId bodyB;                    // invalid = anchored to the world
+        Float3 anchor{0.0f, 0.0f, 0.0f}; // world-space pivot (hinge, point or slider origin)
         Float3 axis{0.0f, 1.0f, 0.0f};   // world-space hinge rotation / slider travel axis
         /// Hinge: radians (min in [-pi,0], max in [0,pi]); Slider: meters around the rest
         /// point. min > max = unlimited.
@@ -207,7 +205,7 @@ export namespace foundation::physics
         /// Distance joints: negative = keep the starting distance.
         f32 minDistance = -1.0f;
         f32 maxDistance = -1.0f;
-        /// Velocity motor (hinge: rad/s + torque limit; slider: m/s + force limit).
+        /// Velocity motor (hinge: rad/s and a torque limit; slider: m/s and a force limit).
         bool motorEnabled = false;
         f32 motorTargetVelocity = 0.0f;
         f32 motorLimit = 3.4e38f;
@@ -221,10 +219,10 @@ export namespace foundation::physics
     };
 
     // ---- character controller: Jolt CharacterVirtual ----
-    // Not a rigid body: a kinematic capsule swept by UpdateCharacter with slope/step
+    // Not a rigid body: a kinematic capsule swept by UpdateCharacter with slope and step
     // handling; pushes dynamic bodies up to maxStrength. The caller owns the velocity
-    // policy (gravity/jump folded into SetCharacterVelocity each step - the component
-    // layer implements the standard recipe).
+    // policy (gravity and jump folded into SetCharacterVelocity each step; the component
+    // layer implements the usual approach).
 
     struct CharacterDesc
     {
@@ -260,8 +258,8 @@ export namespace foundation::physics
         u32 maxBodies = 4096;
         u32 maxBodyPairs = 4096;
         u32 maxContactConstraints = 2048;
-        /// Group matrix: bit j of entry i = "group i collides with group j" (kept
-        /// symmetric by writers; the filter tests i->j only). Default: everything
+        /// Group matrix: bit j of entry i means "group i collides with group j" (kept
+        /// symmetric by writers; the filter tests only i against j). Default: everything
         /// collides with everything.
         u32 groupCollides[kCollisionGroupCount] = {
             0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
@@ -272,9 +270,9 @@ export namespace foundation::physics
             0xFFFFFFFFu, 0xFFFFFFFFu};
     };
 
-    // ---- offline shape cooking (builder/editor side; blobs feed ShapeKind::Cooked) ----
-    // The blob format is Jolt's binary shape state: self-describing (convex vs mesh),
-    // versioned by Jolt - cooked products must recook on a Jolt upgrade, which the
+    // ---- offline shape cooking (builder and editor side; blobs feed ShapeKind::Cooked) ----
+    // The blob format is Jolt's binary shape state: self-describing (convex or mesh) and
+    // versioned by Jolt, so cooked products must recook on a Jolt upgrade, which the
     // asset pipeline's builder-version bump handles.
 
     /// Convex hull from a point cloud. `hullTolerance` trades vertex count for fidelity
@@ -285,13 +283,13 @@ export namespace foundation::physics
 
     /// Static triangle mesh. `triangleMaterialSlots` (optional: empty = all 0) carries one
     /// material-slot index per triangle, surfaced on ray hits as RayHit::surface.
-    /// `indices` size must be a multiple of 3. False on empty/malformed input.
+    /// `indices` size must be a multiple of 3. False on empty or malformed input.
     [[nodiscard]] bool CookTriangleMesh(Span<const Float3> positions, Span<const u32> indices,
                                         Span<const u32> triangleMaterialSlots,
                                         Array<byte>& outBlob);
 
-    /// Triangles of a cooked blob (debug/gizmo outline geometry: 3 positions per triangle).
-    /// False if the blob doesn't restore.
+    /// Triangles of a cooked blob (debug and gizmo outline geometry: 3 positions per triangle).
+    /// False if the blob does not restore.
     [[nodiscard]] bool ExtractShapeTriangles(Span<const byte> blob, Array<Float3>& outTriangles);
 
     /// The world-space triangles of bodies' collision shapes that touch `bounds`, appended to
@@ -307,7 +305,7 @@ export namespace foundation::physics
     class PhysicsWorld
     {
     public:
-        // The allocator (required - the owner decides) backs the Jolt system,
+        // The allocator (required; the owner chooses it) backs the Jolt system,
         // temp allocator, and job system boxes.
         explicit PhysicsWorld(core::IAllocator& allocator,
                               const PhysicsWorldSettings& settings = {});
@@ -328,7 +326,7 @@ export namespace foundation::physics
         /// DrainContacts() afterwards.
         void Step(f32 deltaTime, i32 collisionSteps = 1);
 
-        // ---- transforms & motion ----
+        // ---- transforms and motion ----
         void GetBodyTransform(BodyId id, Float3& outPosition, Quaternion& outRotation) const;
         /// Teleport: snaps the body (velocities untouched). Dynamic bodies mid-sim should
         /// use this, never per-frame scene writes (transform ownership).
@@ -336,7 +334,7 @@ export namespace foundation::physics
         /// Velocity-correct kinematic move over `deltaTime` (the fixed step).
         void MoveKinematic(BodyId id, Float3 position, Quaternion rotation, f32 deltaTime);
         void SetLinearVelocity(BodyId id, Float3 velocity);
-        /// The body's actual mass in kg (0 for static/kinematic/invalid bodies) - the
+        /// The body's actual mass in kg (0 for static, kinematic or invalid bodies): the
         /// density-derived value, or the massOverride when one was set.
         [[nodiscard]] f32 BodyMass(BodyId id) const;
         [[nodiscard]] Float3 LinearVelocity(BodyId id) const;
@@ -350,16 +348,16 @@ export namespace foundation::physics
         /// unless `skipTriggers` (a probe for ground wants solid surfaces only).
         [[nodiscard]] bool RayCast(Float3 from, Float3 direction, f32 maxDistance, RayHit& out,
                                    u32 groupMask = 0xFFFFFFFFu, bool skipTriggers = false) const;
-        /// Bodies whose shapes contain `point` (triggers included). `out` is FILLED (cleared
+        /// Bodies whose shapes contain `point` (triggers included). `out` is filled (cleared
         /// first), like ShapeOverlap, so a reused array never mixes results across queries.
         void QueryPoint(Float3 point, Array<BodyId>& out, u32 groupMask = 0xFFFFFFFFu) const;
         /// Sweep `shape` (at `rotation`) from `from` along `direction` up to `maxDistance`; reports the
-        /// CLOSEST hit (like RayCast, but with a volume). `out.fraction` is the sweep fraction.
+        /// closest hit (like RayCast, but with a volume). `out.fraction` is the sweep fraction.
         [[nodiscard]] bool ShapeCast(const QueryShape& shape, Float3 from, Quaternion rotation,
                                      Float3 direction, f32 maxDistance, RayHit& out,
                                      u32 groupMask = 0xFFFFFFFFu) const;
         /// Bodies overlapping `shape` placed at (`position`, `rotation`), triggers included. Each body
-        /// appears once (sub-shape hits are de-duplicated). `out` is FILLED (cleared first), so a
+        /// appears once (sub-shape hits are de-duplicated). `out` is filled (cleared first), so a
         /// reused array never mixes results across queries.
         void ShapeOverlap(const QueryShape& shape, Float3 position, Quaternion rotation,
                           Array<BodyId>& out, u32 groupMask = 0xFFFFFFFFu) const;
@@ -367,20 +365,20 @@ export namespace foundation::physics
         // ---- joints ----
         [[nodiscard]] JointId CreateJoint(const JointDesc& desc);
         void DestroyJoint(JointId id);
-        /// Velocity-motor control on hinge/slider joints (no-op on other kinds). The
+        /// Velocity-motor control on hinge and slider joints (no-op on other kinds). The
         /// target is rad/s (hinge) or m/s (slider); `enabled` false turns the motor off.
         void SetJointMotor(JointId id, bool enabled, f32 targetVelocity);
 
         // ---- character controllers ----
         [[nodiscard]] CharacterId CreateCharacter(const CharacterDesc& desc);
         void DestroyCharacter(CharacterId id);
-        /// The FULL velocity for the coming update (the caller folds gravity/jump in).
+        /// The full velocity for the coming update (the caller folds gravity and jump in).
         void SetCharacterVelocity(CharacterId id, Float3 velocity);
         [[nodiscard]] Float3 CharacterVelocity(CharacterId id) const;
         /// Max push force (N) the character exerts on dynamic bodies. Set live from the component
-        /// each step so authored/inspector/runtime changes take effect (create seeds it too).
+        /// each step so authored, inspector and runtime changes take effect (creation seeds it too).
         void SetCharacterStrength(CharacterId id, f32 strength);
-        /// Sweeps the character (slide + stairs + stick-to-floor) against the world, then raises
+        /// Sweeps the character (slide, stairs, stick-to-floor) against the world, then raises
         /// TriggerEnter / TriggerExit for the triggers it walked into or out of (a character is
         /// not a body in the solver, so no contact reports them otherwise). Call once per fixed
         /// step, after Step(); its trigger events are drained with the next step's contacts.
@@ -400,7 +398,7 @@ export namespace foundation::physics
 
     private:
         // After a character's sweep: the triggers it now stands inside against those of the last
-        // sweep, as TriggerEnter/TriggerExit events in the contact stream (the trigger on side A,
+        // sweep, as TriggerEnter and TriggerExit events in the contact stream (the trigger on side A,
         // the character's user word on side B).
         void SenseTriggers(CharacterId id);
 

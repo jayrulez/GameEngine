@@ -1,6 +1,6 @@
-# Foundation::Net - `foundation.net` (real-time game networking: wire format + INetTransport with
-# swappable backends - reliable-UDP (ours), loopback/sim, later websocket/webrtc - + session,
-# reliability, RPC, replication). Over Core (+ Core/System sockets, later).
+# Foundation::Net - `foundation.net` (real-time game networking: the wire format, INetTransport
+# with swappable backends such as our reliable UDP and the loopback simulator, sessions,
+# reliability, RPC, replication). Over Core and its system sockets.
 
 util_add_engine_library(Net ALIAS Foundation::Net)
 target_link_libraries(Net PUBLIC Foundation::Core Foundation::Policy)

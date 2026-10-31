@@ -18,7 +18,7 @@ using namespace foundation::resource;
 namespace
 {
     // Source: serializable, lives in the content database. Carries editor-only
-    // data (editorNote) that the runtime product must NOT inherit.
+    // data (editorNote) that the runtime product must not inherit.
     class MaterialResource final : public ISerializable
     {
         RTTI_OBJECT(MaterialResource, ISerializable)
@@ -76,7 +76,7 @@ namespace
             RefPtr<Material> material = MakeRef<Material>(DefaultAllocator());
             material->specular = static_cast<f32>(res->shininess) / 128.0f;
             material->shader = res->shader;
-            // editorNote is intentionally dropped - the product is runtime-only.
+            // editorNote is dropped on purpose: the product is runtime-only.
             return material;
         }
     };
@@ -126,7 +126,7 @@ TEST_CASE("resource: bind builds a product from a source, with caching")
     ResourceManager manager(DefaultAllocator(), db);
     manager.AddFactory(&factory);
 
-    // Bind: source -> product. Product is derived/lean (no editorNote field).
+    // Bind: source to product. The product is derived and lean (no editorNote field).
     Proxy<Material> p = manager.Bind<Material>(id);
     REQUIRE(p);
     CHECK(p->shader == u8"pbr");
@@ -136,7 +136,7 @@ TEST_CASE("resource: bind builds a product from a source, with caching")
     Proxy<Material> p2 = manager.Bind<Material>(id);
     CHECK(p2.Handle() == p.Handle());
 
-    // Unknown id -> invalid proxy.
+    // Unknown id: an invalid proxy.
     Proxy<Material> none = manager.Bind<Material>(Guid{1, 2});
     CHECK_FALSE(none);
 
@@ -157,7 +157,7 @@ TEST_CASE("resource: unresolved binds are enumerable, and heal off the list")
     GlobalTypeRegistry().Register(MaterialResource::StaticType());
     RegisterSerializable<MaterialResource>();
 
-    // This case adds late.rasset, which the shared RemoveTree doesn't know about - a
+    // This case adds late.rasset, which the shared RemoveTree does not know about; a
     // leftover from a previous run would make the "missing" id resolve immediately.
     FileDelete(u8"scratch_resource_test_db/late.rasset");
     RemoveTree();
@@ -174,7 +174,7 @@ TEST_CASE("resource: unresolved binds are enumerable, and heal off the list")
     REQUIRE(good);
 
     // A bind against an id with no backing instance stays cached with a null product
-    // (an editor page referencing a not-yet-cooked asset) - it must be reported.
+    // (an editor page referencing a not-yet-cooked asset), and it must be reported.
     const Guid missing{7, 7};
     Proxy<Material> pending = manager.Bind<Material>(missing);
     CHECK_FALSE(pending);
@@ -184,8 +184,8 @@ TEST_CASE("resource: unresolved binds are enumerable, and heal off the list")
     REQUIRE(unresolved.Size() == 1);
     CHECK(unresolved[0] == missing);
 
-    // The missing instance appears (a cook landed) - after the reload the id resolves
-    // and drops off the unresolved list; the ORIGINAL proxy heals through the handle.
+    // The missing instance appears (a cook landed): after the reload the id resolves
+    // and drops off the unresolved list, and the original proxy heals through the handle.
     auto* late =
         db.RootGroup()->CreateInstanceWithId(missing, u8"late", MaterialResource::StaticType());
     REQUIRE(late != nullptr);
@@ -254,7 +254,7 @@ namespace
         RemoveDirectory(u8"scratch_resource_dep_db");
     }
 
-    // Create an instance + write a MaterialResource source; returns its id.
+    // Create an instance and write a MaterialResource source; returns its id.
     Guid MakeInstance(foundation::content::ContentDatabase& db, StringView name, i32 shininess)
     {
         auto* inst = db.RootGroup()->CreateInstance(name, MaterialResource::StaticType());
@@ -380,16 +380,16 @@ TEST_CASE("resource: a rebuild drops stale dependency edges")
 
 TEST_CASE("resource: deserializing a ref drops the stale binding when the id changes")
 {
-    // A directly-bound ref (procedural or picker-assigned) reads a DIFFERENT id from a blob
-    // (component paste / prefab revert): the old binding must not keep rendering. Reading
-    // the SAME id keeps the binding (steady-state reload of an unchanged component).
+    // A directly-bound ref (procedural or picker-assigned) reads a different id from a blob
+    // (component paste, prefab revert): the old binding must not keep rendering. Reading
+    // the same id keeps the binding (steady-state reload of an unchanged component).
     RefPtr<Material> live = MakeRef<Material>(DefaultAllocator());
     Ref<Material> ref;
     ref.SetDirect(RefPtr<Material>(live.Get()));
     ref.id = Guid{0x1, 0x1};
     REQUIRE(ref.Get() == live.Get());
 
-    // Write a ref whose id is NIL ("no resource"), then read it over the live one.
+    // Write a ref whose id is nil ("no resource"), then read it over the live one.
     MemoryStream buffer;
     {
         Ref<Material> cleared;
@@ -418,8 +418,8 @@ TEST_CASE("resource: deserializing a ref drops the stale binding when the id cha
 
 namespace
 {
-    // A product whose DESTRUCTOR re-enters the manager (drops a proxy + triggers a reload
-    // that pushes a fresh grave) - the graveyard-collection re-entrancy scenario.
+    // A product whose destructor re-enters the manager (drops a proxy and triggers a reload
+    // that pushes a fresh grave): the graveyard-collection re-entrancy scenario.
     class Reentrant final : public Object
     {
         RTTI_OBJECT(Reentrant, Object)
@@ -433,7 +433,7 @@ namespace
             child = Proxy<Material>{}; // handle bookkeeping re-entry
             if (reenterOnDestroy && manager != nullptr && !other.IsNil())
             {
-                (void)manager->Reload(other); // pushes a NEW grave mid-collect
+                (void)manager->Reload(other); // pushes a new grave mid-collect
             }
         }
     };
@@ -503,8 +503,8 @@ TEST_CASE("resource: garbage collection survives destructor re-entry into the ma
     REQUIRE(pa.Get() != nullptr);
     REQUIRE(pb.Get() != nullptr);
 
-    // Reload BOTH: two graves. Age them out together - dropping A's old product re-enters
-    // the manager (reloads B again -> pushes ANOTHER grave) while collection is walking.
+    // Reload both: two graves. Age them out together; dropping A's old product re-enters the
+    // manager (it reloads B again and pushes another grave) while collection is walking.
     Reentrant::reenterOnDestroy = true;
     REQUIRE(resources.Reload(a->Id()));
     REQUIRE(resources.Reload(b->Id()));
@@ -520,7 +520,7 @@ TEST_CASE("resource: garbage collection survives destructor re-entry into the ma
 
 namespace
 {
-    // A factory whose SECOND build binds a burst of fresh children - forcing the handle map
+    // A factory whose second build binds a burst of fresh children, forcing the handle map
     // to grow (rehash) in the middle of a Reload cascade.
     class Burst final : public Object
     {
@@ -572,10 +572,10 @@ RTTI_DEFINE_OBJECT(Burst, "test")
 
 TEST_CASE("resource: reload survives the handle map rehashing mid-cascade")
 {
-    // Regression for the Sponza post-cook crash: Reload held a raw pointer into the handle
-    // map across the recursive rebuild; the rebuild's child Binds grew the map, a rehash
-    // moved the slots, and the dangling pointer read freed memory. Bind's cached branch had
-    // the same hazard (returning *cached after BuildInto).
+    // Reload must not hold a raw pointer into the handle map across the recursive rebuild: the
+    // rebuild's child Binds grow the map, a rehash moves the slots, and the dangling pointer would
+    // read freed memory. Bind's cached branch has the same hazard (returning *cached after
+    // BuildInto).
     GlobalTypeRegistry().Register(BurstSource::StaticType());
     RegisterSerializable<BurstSource>();
     GlobalTypeRegistry().Register(Burst::StaticType());
@@ -607,7 +607,7 @@ TEST_CASE("resource: reload survives the handle map rehashing mid-cascade")
     resources.AddFactory(&factory);
 
     // First bind: tiny map (just the parent). Reload: the rebuild binds 64 fresh children,
-    // guaranteeing growth + rehash while the cascade is in flight.
+    // guaranteeing growth and a rehash while the cascade is in flight.
     Proxy<Burst> proxy = resources.Bind<Burst>(parent->Id());
     REQUIRE(proxy.Get() != nullptr);
     CHECK(proxy->generation == 1);
@@ -649,11 +649,10 @@ TEST_CASE("resource: the live-product report counts by type and flags cache-only
         manager.ReportLiveProducts(rows);
         REQUIRE(rows.Size() == 1);
         CHECK(rows[0].live == 1);
-        // An outside Proxy holds the handle: NOT cache-only.
+        // An outside Proxy holds the handle: not cache-only.
         CHECK(rows[0].unreferenced == 0);
     }
-    // Proxy dropped: the cache is the only owner - the purge-candidate signal the
-    // I4 eviction work keys on.
+    // Proxy dropped: the cache is the only owner, the signal that marks a purge candidate.
     manager.ReportLiveProducts(rows);
     REQUIRE(rows.Size() == 1);
     CHECK(rows[0].live == 1);

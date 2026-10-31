@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Phase 5 (editor + resource) - full content-DB round-trip: SaveScene captures a live
-// scene into a content-DB instance (SceneDocument primary + "scene" data stream), and
+// Full content-DB round-trip: SaveScene captures a live scene into a content-DB
+// instance (SceneDocument primary and "scene" data stream), and
 // LoadScene reads it back into a fresh scene whose managers were injected beforehand.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -119,8 +119,8 @@ TEST_CASE("LoadScene reports the reader's verdict: a stale component payload is 
         REQUIRE(SaveScene(scene, *inst).IsOk());
     }
 
-    // Re-stamp the Tag record's data version in the TEXT stream (Tag is unreflected: version 0)
-    // to one this build never wrote - what a source saved by a later build looks like.
+    // Re-stamp the Tag record's data version in the text stream (Tag is unreflected: version 0)
+    // to one this build never wrote, which is what a source saved by a later build looks like.
     {
         UniquePtr<IStream> stream = inst->ReadData(u8"scene");
         REQUIRE(stream.Get() != nullptr);

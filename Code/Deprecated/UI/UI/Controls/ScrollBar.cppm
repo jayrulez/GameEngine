@@ -3,10 +3,8 @@
 
 // UI - :scroll_bar partition
 //
-// Standalone scrollbar (used by ScrollView internally). Ported from Sedulous.UI/src/Controls/ScrollBar.bf.
-// Beef get/set properties (Value/MaxValue/ViewportSize/IsHorizontal) -> methods; Math.Clamp/Max ->
-// core::Clamp/core::Max (qualified where a getter would shadow); Context.InputManager.MouseX/Y ->
-// Context->GetInputManager()->MouseX()/MouseY(); RectangleF -> core::Rectangle.
+// Standalone scrollbar (used by ScrollView internally). core::Clamp and core::Max are called
+// qualified where a member getter would shadow them.
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +41,7 @@ export namespace foundation::ui
         explicit ScrollBar(bool horizontal = false)
         {
             m_isHorizontal = horizontal;
-            // Always the arrow pointer - a bar inside a text control must not inherit the
+            // Always the arrow pointer: a bar inside a text control should not inherit the
             // parent's IBeam through the EffectiveCursor parent walk.
             Cursor = CursorType::Arrow;
         }
@@ -51,7 +49,7 @@ export namespace foundation::ui
         /// A press on the bar drags its thumb or pages: never a drag of a source above it.
         [[nodiscard]] bool OwnsPressDrag() const override { return true; }
 
-        // === Properties (Beef get/set -> methods) ===
+        // === Properties ===
         [[nodiscard]] f32 Value() const noexcept { return m_value; }
         void SetValue(f32 value)
         {
@@ -72,7 +70,7 @@ export namespace foundation::ui
         }
         [[nodiscard]] f32 ViewportSize() const noexcept { return m_viewportSize; }
         // Invalidate on a change only: a scroll view sets its bars' viewport from its own Layout,
-        // and an unconditional invalidate there asked for another layout every frame, forever.
+        // and an unconditional invalidate there would request another layout every frame, forever.
         void SetViewportSize(f32 value)
         {
             const f32 size = core::Max(1.0f, value);
@@ -117,7 +115,7 @@ export namespace foundation::ui
                 return;
             }
 
-            // e.X/e.Y may be in another view's space (bubbling) - use screen coords via the input manager.
+            // e.X/e.Y may be in another view's space (bubbling); use screen coords from the input manager.
             const f32 screenX =
                 Context && Context->GetInputManager() ? Context->GetInputManager()->MouseX() : 0.0f;
             const f32 screenY =
@@ -190,7 +188,7 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Bounded fill (P2c): default length under an unbounded parent.
+            // Bounded fill: a default length under an unbounded parent.
             if (m_isHorizontal)
                 MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(100.0f)),
                                       constraints.ConstrainHeight(BarThickness)};

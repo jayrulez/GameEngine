@@ -2,12 +2,13 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The animation graph page over its markup (Data/Editor/AnimationGraphPage.xml) and a scratch
-// project, without a host (no preview): the layers and parameters as lists, the chosen layer on the
-// graph view, the grid showing what is chosen (a layer, a parameter, a state, a transition) with
-// each row where what it is uses it, each edit one undo step; a parameter added by its type and
-// removed, a layer added and removed; the preview's parameters a section of the page's own, never
-// the graph's. And the graph's data as the page writes it: the new graph's seed, and the asset's
-// round trip through the serializer its undo snapshots ride.
+// project, without a host, so there is no preview. Covers: the layers and parameters as lists; the
+// chosen layer on the graph view; the grid showing what is chosen (a layer, a parameter, a state, a
+// transition), each row shown only where it applies; each edit one undo step; adding a parameter
+// by its type and removing it; adding and removing a layer; the preview's parameters as a section
+// that belongs to the page and never changes the graph. Also the graph's data as the page writes
+// it: the new graph's seed, and the asset's round trip through the serializer its undo snapshots
+// use.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -109,7 +110,7 @@ TEST_CASE("graph data: the asset round-trips its source and its layout (the undo
     CHECK(layer.transitions[0].conditions[0].op == 2);
     CHECK(layer.transitions[0].conditions[0].threshold == doctest::Approx(0.1f));
 
-    // The canvas layout came through - editor-only, but part of the ASSET stream.
+    // The canvas layout came through: editor-only, but part of the asset stream.
     REQUIRE(b.layerStatePositions.Size() == 1u);
     REQUIRE(b.layerStatePositions[0].Size() == 2u);
     CHECK(b.layerStatePositions[0][1].x == doctest::Approx(420.0f));
@@ -235,7 +236,7 @@ TEST_CASE("graph page: a state's rows shown where what it plays uses them; its e
     REQUIRE(bed.page->StateRows().EditList(u8"entries", ListEditOf(gui::ListEdit::Op::Insert, 1)));
     const anim::GraphNodeData& node = bed.Source().layers[0].states[1].node;
     REQUIRE(node.entryClips.Size() == 2u);
-    CHECK(node.entryThresholds[1] == doctest::Approx(1.0f)); // a step past the last
+    CHECK(node.entryThresholds[1] == doctest::Approx(1.0f)); // one past the last threshold
     Bed::Edit(bed.page->StateRows(), u8"entries.1.threshold", gui::Variant(4.0));
     CHECK(bed.Source().layers[0].states[1].node.entryThresholds[1] == doctest::Approx(4.0f));
     CHECK(Bed::Info(bed.page->StateRows(), u8"entries.0", u8"threshold")->Visible);
@@ -281,7 +282,7 @@ TEST_CASE("graph page: a transition made on the view is one step; its conditions
     CHECK(bed.Source().layers[0].transitions[0].conditions.IsEmpty());
     bed.page->Commands().Undo(); // the transition itself
     CHECK(bed.Source().layers[0].transitions.IsEmpty());
-    CHECK(bed.page->Chosen().kind == GraphChoiceKind::Layer); // what was chosen went with it
+    CHECK(bed.page->Chosen().kind == GraphChoiceKind::Layer); // the chosen transition was removed with it
 }
 
 TEST_CASE("graph page: parameters added by type and removed, layers added and removed; the preview's parameters its own")
@@ -296,7 +297,7 @@ TEST_CASE("graph page: parameters added by type and removed, layers added and re
     REQUIRE(fire.HasValue());
     CHECK(fire->DisplayName == String(u8"Fire Trigger"));
 
-    // The preview's values are never the graph's.
+    // Setting the preview's values never changes the graph.
     const usize steps = bed.page->Commands().UndoIndex() + 1;
     bed.page->SetLive(0, 0.75);
     Bed::Edit(bed.page->LiveRows(), u8"p0", gui::Variant(0.5));
@@ -306,14 +307,14 @@ TEST_CASE("graph page: parameters added by type and removed, layers added and re
     bed.page->Choose(GraphChoice{GraphChoiceKind::Parameter, 0});
     CHECK(bed.page->RemoveParameter());
     CHECK(bed.page->ParameterList() == String(u8"Trigger  Trigger"));
-    CHECK_FALSE(Bed::Info(bed.page->LiveRows(), StringView{}, u8"p1").HasValue()); // made again for one parameter
+    CHECK_FALSE(Bed::Info(bed.page->LiveRows(), StringView{}, u8"p1").HasValue()); // rebuilt for the one remaining parameter
 
     bed.page->AddLayer();
     CHECK(bed.page->LayerList() == String(u8"Base\nLayer"));
     CHECK(bed.page->Layer() == 1);
     CHECK(bed.page->RemoveLayer());
     CHECK(bed.page->LayerList() == String(u8"Base"));
-    CHECK_FALSE(bed.page->RemoveLayer()); // the last stays
+    CHECK_FALSE(bed.page->RemoveLayer()); // the last layer cannot be removed
 }
 
 TEST_CASE("graph page: a layer's or a parameter's row menu deletes it; the preview's Bones and Mesh hide either, the pick kept")
@@ -374,6 +375,6 @@ TEST_CASE("graph page: a layer's or a parameter's row menu deletes it; the previ
     rig->SetMesh(mesh);
     CHECK(rig->MeshButton()->HandleActivate());
     CHECK_FALSE(rig->MeshShown());
-    CHECK(rig->MeshId() == mesh); // hidden, its pick kept
+    CHECK(rig->MeshId() == mesh); // hidden, but the pick is kept
     root->RemoveChild(bed.page->Content().Get());
 }

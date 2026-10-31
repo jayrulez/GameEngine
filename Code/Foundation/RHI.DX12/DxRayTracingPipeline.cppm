@@ -3,7 +3,6 @@
 
 /// DX12 implementation of RayTracingPipeline.
 /// Wraps a D3D12 state object created via ID3D12Device5::CreateStateObject.
-/// Ported from Sedulous.RHI.DX12/DX12RayTracingPipeline.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -50,10 +49,8 @@ export namespace foundation::rhi::dx12
 
             // Collect entry point names and per-stage export descriptors.
             // Export names are UTF-8 StringView; DX12 wants LPCWSTR, so widen them through
-            // WidenExportName - the SAME conversion getShaderIdentifier uses, so a registered
-            // name and a looked-up name can never disagree. (A reinterpret_cast of the UTF-8
-            // bytes as wchar_t here registered garbage names, so no identifier ever resolved -
-            // found by the Beef port.)
+            // WidenExportName, the same conversion getShaderIdentifier uses, so a registered
+            // name and a looked-up name can never disagree.
             std::vector<std::wstring> entryWide;
             Array<D3D12_EXPORT_DESC> exports;
 
@@ -101,7 +98,8 @@ export namespace foundation::rhi::dx12
                     ++numHitGroups;
             }
 
-            // Total subobjects: libraries + hit groups + shader config + pipeline config + global root sig.
+            // Total subobjects: the libraries, the hit groups, then the shader config, the pipeline
+            // config and the global root signature.
             usize subobjectCount = libraries.Size() + numHitGroups + 3;
             Array<D3D12_STATE_SUBOBJECT> subobjects(subobjectCount);
             usize soIdx = 0;
@@ -241,8 +239,8 @@ export namespace foundation::rhi::dx12
             return m_properties->GetShaderIdentifier(wide.c_str());
         }
 
-        // UTF-8 -> wide, one code unit per byte (shader export names are ASCII). The one
-        // conversion for registration AND lookup.
+        // UTF-8 to wide, one code unit per byte (shader export names are ASCII). The one
+        // conversion for both registration and lookup.
         static std::wstring WidenExportName(StringView exportName)
         {
             std::wstring wide;

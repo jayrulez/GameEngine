@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit CurveCanvas: set channels, set keys, read them back, check defaults.
-// No font/VG rendering, no input simulation (events fire only from mouse handlers).
+// Tests for the toolkit CurveCanvas: channels, keys read back, defaults, key selection events,
+// dragging past the framed range, zoom and pan. No font or VG rendering; input goes straight to the
+// mouse handlers.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -73,7 +74,7 @@ TEST_CASE("toolkit-curvecanvas: SetKeysRoundTrip")
     CHECK(k1.TangentOut == doctest::Approx(-0.25f));
     CHECK(k1.Mode == TangentMode::Free);
 
-    // Out-of-range channel index is a no-op (does not crash / mutate).
+    // An out-of-range channel index does nothing (no crash, no change).
     cv->SetKeys(5, Span<const CurveCanvas::Key>(keys, 3));
     CHECK(cv->GetKeyCount(0) == 3);
 }
@@ -84,7 +85,7 @@ TEST_CASE("toolkit-curvecanvas: ValueRangeDefaults")
     CHECK(cv->ValueMin == doctest::Approx(0.0f));
     CHECK(cv->ValueMax == doctest::Approx(1.0f));
 
-    // Explicit value range is honored when auto-fit is disabled.
+    // An explicit value range is honored when auto-fit is disabled.
     cv->AutoFitValueRange = false;
     cv->ValueMin = -2.0f;
     cv->ValueMax = 3.0f;
@@ -94,15 +95,14 @@ TEST_CASE("toolkit-curvecanvas: ValueRangeDefaults")
 
 TEST_CASE("toolkit-curvecanvas: clicking ANY key fires OnSelectionChanged with its indices")
 {
-    // The regression: only the value readout driven by scrub-time samples LOOKED selection-
-    // driven; there was no selection event at all. Every key pick must now report itself.
+    // Every key pick reports itself through OnSelectionChanged, not only the first.
     auto cv = core::MakeRef<CurveCanvas>(core::DefaultAllocator());
     ChannelDescriptor d;
     d.Name = String(u8"X");
     cv->SetChannels(Span<const ChannelDescriptor>(&d, 1));
     cv->TimeSpan = 4.0f;
-    // Pin the value range: hit-testing auto-fits (with a margin) BEFORE testing, so computing
-    // click positions from the pre-fit defaults would miss and click-ADD instead.
+    // Pin the value range: hit-testing auto-fits (with a margin) before testing, so click
+    // positions computed from the defaults before the fit would miss and add a key instead.
     cv->AutoFitValueRange = false;
     cv->ValueMin = 0.0f;
     cv->ValueMax = 1.0f;
@@ -123,8 +123,8 @@ TEST_CASE("toolkit-curvecanvas: clicking ANY key fires OnSelectionChanged with i
             ++fires;
         });
 
-    // TimeSpan 4 over 400 px -> t=2 s sits at x=200. Click each key in turn; every one
-    // (not just the first) must report selection.
+    // TimeSpan 4 over 400 px puts t=2 s at x=200. Click each key in turn; every one (not just
+    // the first) reports its selection.
     const f32 keyXs[3] = {0.0f, 200.0f, 400.0f};
     for (i32 i = 0; i < 3; ++i)
     {
@@ -146,8 +146,8 @@ TEST_CASE("toolkit-curvecanvas: clicking ANY key fires OnSelectionChanged with i
 TEST_CASE("toolkit-curvecanvas: value axis is a viewport - drags extrapolate, wheel zooms, "
           "middle-drag pans")
 {
-    // The 'range trap' regression: click/drag mapped through a CLAMPED YToValue, so a value
-    // outside the framed range was unreachable by direct manipulation.
+    // Clicks and drags map through an unclamped YToValue, so a value outside the framed range is
+    // reachable by direct manipulation.
     auto cv = core::MakeRef<CurveCanvas>(core::DefaultAllocator());
     ChannelDescriptor d;
     d.Name = String(u8"X");
@@ -161,7 +161,7 @@ TEST_CASE("toolkit-curvecanvas: value axis is a viewport - drags extrapolate, wh
     cv->Measure(BoxConstraints::Tight(200.0f, 100.0f));
     cv->Layout(0.0f, 0.0f, 200.0f, 100.0f);
 
-    // Drag the key at t=2 (x=200, value 1.0 -> y=0) far ABOVE the canvas: the value
+    // Drag the key at t=2 (x=200, value 1.0 at y=0) far above the canvas: the value
     // extrapolates past the framed max instead of pinning at 1.0.
     foundation::ui::MouseEventArgs down;
     down.Button = foundation::ui::MouseButton::Left;
@@ -176,9 +176,9 @@ TEST_CASE("toolkit-curvecanvas: value axis is a viewport - drags extrapolate, wh
     CHECK(cv->GetKey(0, 1).Value == doctest::Approx(2.0f));
 
     // Wheel zoom-in shrinks the framed range about the cursor's value and pins the frame
-    // (auto-fit off stays off - it already is here).
+    // (auto-fit stays off, as it already is here).
     foundation::ui::MouseWheelEventArgs zoom;
-    zoom.Y = 50.0f; // mid-height -> anchor at the middle of the range
+    zoom.Y = 50.0f; // mid-height, so the anchor is the middle of the range
     zoom.DeltaY = 1.0f;
     const f32 spanBefore = cv->ValueMax - cv->ValueMin;
     cv->OnMouseWheel(zoom);
@@ -195,7 +195,7 @@ TEST_CASE("toolkit-curvecanvas: value axis is a viewport - drags extrapolate, wh
     cv->OnMouseDown(panDown);
     CHECK(panDown.Handled);
     foundation::ui::MouseEventArgs panMove = panDown;
-    panMove.Y = 30.0f; // drag up -> the frame shifts
+    panMove.Y = 30.0f; // dragging up shifts the frame
     cv->OnMouseMove(panMove);
     foundation::ui::MouseEventArgs panUp = panMove;
     cv->OnMouseUp(panUp);

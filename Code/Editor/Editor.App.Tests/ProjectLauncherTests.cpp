@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the project manager over its markup (Data/Editor/ProjectManager.xml): the
-// recent projects as a list or a grid (remembered), each by its picture (the thumbnail in its
-// editor folder, an image chosen for it, or its initial), a missing one with no Open, each
-// project's menu and what it runs, and New Project's dialog.
+// Editor::App tests: the project manager over its markup (Data/Editor/ProjectManager.xml). The
+// recent projects show as a list or a grid (the choice is remembered), each with its picture (the
+// thumbnail in its editor folder, an image chosen for it, or its initial). A missing project has no
+// Open. Also covers each project's menu and what it runs, and the New Project dialog.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -68,7 +68,7 @@ namespace
         Array<String> opened;
         Array<String> created;
 
-        /// `more` older projects after the three, there (`real`) or no longer there.
+        /// Adds `more` older projects after the three, which exist on disk when `real` is set.
         explicit Launcher(int more = 0, bool real = false)
         {
             RegisterProjectRegistryTypes();
@@ -104,7 +104,7 @@ namespace
             view.Reset();
             (void)RemoveDirectoryRecursive(root.AsView());
         }
-        /// The GUI's next drain: what a click asked to happen later happens.
+        /// Runs the GUI's next update, so work a click deferred now happens.
         void Drain() { scene->GetContext().Update(Duration::FromSeconds(1.0 / 60.0)); }
 
         /// A small RGBA picture written as `name` under the scratch root.
@@ -127,7 +127,7 @@ TEST_CASE("launcher: the projects as a list or a grid, the choice remembered; a 
     gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
     REQUIRE(list != nullptr);
     REQUIRE(list->ChildCount() == 3u);
-    // First, then Second, then Gone (most recent first); Gone missing: no Open.
+    // First, then Second, then Gone (most recent first); Gone is missing, so it has no Open.
     CHECK(ButtonText(*list->GetChildAt(0), u8"Open") != nullptr);
     CHECK(ButtonText(*list->GetChildAt(2), u8"Open") == nullptr);
     CHECK(Cast<gui::UIWidget>(list->GetChildAt(2))->HasClass(u8"missing"));
@@ -184,7 +184,7 @@ TEST_CASE("launcher: each project's menu holds what applies to it; Remove from L
     items = app::ProjectManagerView::MenuItemsFor(l.first.AsView());
     CHECK(items[4] == StringView(u8"Clear Thumbnail"));
 
-    // A missing project: only what still makes sense.
+    // A missing project offers only the items that still apply.
     items = app::ProjectManagerView::MenuItemsFor(l.gone.AsView());
     REQUIRE(items.Size() == 3u);
     CHECK(items[0] == StringView(u8"Show in Folder"));
@@ -227,11 +227,12 @@ TEST_CASE("launcher: New Project waits for a name and a folder, then makes it in
 
 namespace
 {
-    // Over the first card, held still, frames passing between the notches (a tooltip's time): each
-    // notch scrolls the grid on, over whatever card comes under the pointer.
+    // With the pointer held still over the first card and frames passing between notches (long
+    // enough for a tooltip), each notch keeps scrolling the grid, whatever card comes under the
+    // pointer.
     void WheelOverCards(Launcher& l)
     {
-        // The editor's own sheet, as the window has it: the grid wraps and scrolls as it shows.
+        // The editor's sheet, as the window has it, so the grid wraps and scrolls as it does there.
         String sheet;
         for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
         {

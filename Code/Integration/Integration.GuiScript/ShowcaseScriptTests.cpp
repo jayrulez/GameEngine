@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The GUI's game menu (the sandbox's showcase, K7 of Specs/gui-lab-evolution-3.md) played
-// end to end from its real files: Data/Samples/UI/showcase's frame, sheet and screen documents, and
-// its AngelScript, on the gamekit's stack. A player's keys and pad drive it: pages and Back, the
-// quit question, loading into the game, the HUD's prompt following the device, the score counting
-// up in whole numbers, pause from Escape and Start stopping the game, back to the menu, and leaving.
-// The sandbox's sweeps click through it; this checks what each step does.
+// The GUI's game menu, the sandbox's showcase, played end to end from its real files: the frame,
+// sheet and screen documents in Data/Samples/UI/showcase and its AngelScript, on the gamekit's
+// stack. A player's keys and pad drive it through the pages and Back, the quit question, loading
+// into the game, the HUD's prompt following the input device, the score counting up in whole
+// numbers, pausing with Escape and Start, returning to the menu, and leaving. The sandbox's sweeps
+// click through the menu; this test checks what each step does.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -97,7 +97,7 @@ namespace
             root->GetContext().GetData().Set(SV(u8"name"), core::Variant::From(core::String(u8"Ada")));
             root->GetContext().GetData().Set(SV(u8"volume"), core::Variant::From<core::f64>(0.7));
             root->GetContext().GetData().Set(SV(u8"music"), core::Variant::From<bool>(true));
-            // The menu's one action, which its HUD's prompt shows.
+            // The menu's one action, which the HUD's prompt shows.
             input::InputMap map;
             input::ActionSet game;
             game.name = core::String(u8"Game");
@@ -225,17 +225,17 @@ TEST_CASE("showcase: the menu's pages push and pop, Back goes back, and the titl
     REQUIRE(menu.errors.count == 0);
     CHECK(menu.stack->Count() == 1u);
     CHECK(menu.Focused() == SV(u8"play"));
-    menu.Key(gui::KeyCode::Escape); // the title keeps its back
+    menu.Key(gui::KeyCode::Escape); // the title screen ignores Back
     CHECK(menu.stack->Count() == 1u);
 
     menu.Choose(u8"settings-btn");
     CHECK(menu.stack->Count() == 2u);
     CHECK(menu.stack->Top()->GetCovers());
     CHECK(menu.D().GetFocusNode() != nullptr); // the page took the focus
-    menu.Frames(0.5); // its entrance; then Back
+    menu.Frames(0.5); // let the page's entrance play, then Back
     menu.Key(gui::KeyCode::Escape);
     CHECK(menu.stack->Count() == 1u);
-    CHECK(menu.Focused() == SV(u8"settings-btn")); // where the player left from
+    CHECK(menu.Focused() == SV(u8"settings-btn")); // focus returns to the button the player left from
 
     menu.Choose(u8"controls-btn");
     CHECK(menu.stack->Count() == 2u);

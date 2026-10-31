@@ -3,10 +3,10 @@
 
 // GUI - :button partition
 //
-// Button: the button core (ButtonBase, E6 of Specs/gui-lab-evolution.md) with its content
-// centred: a text, an icon and the text, or whatever markup puts inside it. What were separate
-// kinds elsewhere are its attributes: an icon button has an icon, a toggle button `toggle`, a
-// repeat button `repeat`.
+// Button: the button core (ButtonBase) with its content centred, whether a text, an icon and a
+// text, or whatever markup puts inside it. What other toolkits make separate kinds of button are
+// attributes here: an icon button has an icon, a toggle button has `toggle`, and a repeat button
+// has `repeat`.
 
 module;
 #include "Core/Prelude.h"

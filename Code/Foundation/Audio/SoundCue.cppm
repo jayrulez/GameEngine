@@ -3,12 +3,12 @@
 
 // Foundation::Audio - the `:cue` partition.
 //
-// SoundCue: the container primitive - ONE trigger, one of N clip variants,
-// weighted, with cue-level pitch/volume randomization (Godot's AudioStreamRandomizer
-// shape; Traktor's grain banks stay the long-term north star). The cue itself is pure
-// DATA + a pure resolution function: the caller owns the play state (last pick /
-// sequential cursor) and the RNG, so resolution is deterministic under test and the
-// engine stays clip-based - a resolved pick plays through the ordinary voice path.
+// SoundCue: the container primitive. One trigger plays one of N weighted clip variants,
+// with cue-level pitch and volume randomization (the shape of Godot's
+// AudioStreamRandomizer). The cue is pure data and a pure resolution function: the caller
+// owns the play state (the last pick, the sequential cursor) and the RNG, so resolution is
+// deterministic under test, and the engine stays clip-based: a resolved pick plays through
+// the ordinary voice path.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +25,7 @@ export namespace foundation::audio
 {
     enum class SoundCueMode : u8
     {
-        RandomNoRepeat = 0, // weighted random, never the SAME variant twice in a row
+        RandomNoRepeat = 0, // weighted random, never the same variant twice in a row
         Random,             // weighted random, repeats allowed
         Sequential,         // round-robin in slot order
     };
@@ -51,7 +51,7 @@ export namespace foundation::audio
     };
 
     /// One resolved trigger: which variant, and this trigger's jittered pitch/volume
-    /// MULTIPLIERS (fold them onto the caller's base params).
+    /// multipliers (fold them onto the caller's base params).
     struct SoundCuePick
     {
         i32 variantIndex = -1; // -1 = no playable variant
@@ -117,7 +117,7 @@ export namespace foundation::audio
                 {
                     continue;
                 }
-                pick.variantIndex = index; // numeric-drift fallback = last VALID candidate
+                pick.variantIndex = index; // numeric drift falls back to the last valid candidate
                 const f32 weight = cue.variants[static_cast<usize>(index)].weight;
                 if (roll < weight)
                 {

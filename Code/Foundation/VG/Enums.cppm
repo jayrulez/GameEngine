@@ -3,8 +3,7 @@
 
 // Foundation::VG - :enums partition.
 //
-// Small enumerations for vector-graphics draw state. Ported from
-// Sedulous.VG (FillRule/VGBlendMode/VGClipMode/VGLineCap/VGLineJoin).
+// Small enumerations for vector-graphics draw state.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +32,7 @@ export namespace foundation::vg
         Screen,   ///< Screen blending.
     };
 
-    /// The values a target's blending works on (V1 of Specs/vg-and-gui-lab.md).
+    /// The values a target's blending works on.
     enum class VGBlendSpace
     {
         /// Linear light: authored colours are decoded and the target encodes on write, so half
@@ -94,14 +93,14 @@ export namespace foundation::vg
 
     /// Stencil-then-cover fill phases. Direct commands draw color immediately (the
     /// tessellated path). A complex fill (holes, self-intersection, even-odd) instead emits
-    /// a StencilWrite command (contour fans, COLOR MASKED, stencil accumulates winding via
+    /// a StencilWrite command (contour fans, color-masked; the stencil accumulates winding by
     /// incr/decr-wrap for NonZero or invert for EvenOdd) followed by a StencilCover command
-    /// (a bounding quad that draws color where the stencil is non-zero/odd and zeroes the
-    /// stencil behind itself). Requires a host-provided stencil attachment - see
-    /// VGContext::SetStencilFills / VGRenderer target config.
-    /// Stencil bit-plane contract (fills + path clipping share ONE 8-bit stencil):
-    /// bit 7 (0x80) is the CLIP mask, bits 0..6 accumulate fill winding. Fill covers
-    /// zero only the winding bits; clipped covers RESTORE the clip bit via Replace.
+    /// (a bounding quad that draws color where the stencil is non-zero or odd and zeroes the
+    /// stencil behind itself). Requires a host-provided stencil attachment; see
+    /// VGContext::SetStencilFills and the VGRenderer target config.
+    /// Stencil bit planes (fills and path clipping share one 8-bit stencil):
+    /// bit 7 (0x80) is the clip mask, bits 0..6 accumulate fill winding. Fill covers
+    /// zero only the winding bits; clipped covers restore the clip bit with Replace.
     enum class VGFillPhase : u8
     {
         Direct,       ///< Ordinary draw (no stencil interaction).
@@ -111,9 +110,9 @@ export namespace foundation::vg
         ClipClear,    ///< Zero the clip mask over the clip bounds (color-masked).
     };
 
-    /// How a gradient maps parameters outside [0,1] (the SVG/CSS spread methods).
-    /// Rendered via the LUT sampler's address mode: Pad = clamp (default), Repeat =
-    /// wrap, Reflect = mirror. Conic gradients wrap inherently and ignore this.
+    /// How a gradient maps parameters outside [0,1] (the SVG and CSS spread methods).
+    /// Rendered through the LUT sampler's address mode: Pad clamps (the default), Repeat
+    /// wraps, Reflect mirrors. Conic gradients wrap inherently and ignore this.
     enum class VGGradientSpread : u8
     {
         Pad,
@@ -122,11 +121,11 @@ export namespace foundation::vg
     };
 
     /// How a gradient fill emits per-vertex data during tessellation (paired with the draw mode).
-    /// Linear is exact as an affine per-vertex parameter; radial/conic need per-pixel coordinates
+    /// Linear is exact as an affine per-vertex parameter; radial and conic need per-pixel coordinates
     /// so a dedicated shader can compute the (non-affine) parameter without Gouraud approximation.
     enum class VGGradientTess
     {
-        Gouraud,     ///< Legacy: per-vertex fill.GetColorAt color, interpolated across triangles.
+        Gouraud,     ///< Per-vertex fill.GetColorAt color, interpolated across triangles.
         LinearLut,   ///< texcoord = LUT u from the affine linear parameter; ramp sampled per pixel.
         RadialCoord, ///< texcoord = fill.GradientCoord (radial); the shader derives t per pixel.
         ConicCoord,  ///< texcoord = fill.GradientCoord (conic); the shader derives t per pixel.

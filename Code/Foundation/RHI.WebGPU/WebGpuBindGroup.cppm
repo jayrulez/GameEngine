@@ -3,8 +3,8 @@
 
 /// foundation.rhi.webgpu:bind_group - BindGroup over WGPUBindGroup.
 ///
-/// Desc entries are POSITIONAL against the layout's entries (the RHI contract all
-/// backends share); each resolves to the layout entry's SHIFTED binding number.
+/// Desc entries are positional against the layout's entries (the RHI contract all
+/// backends share); each resolves to the layout entry's shifted binding number.
 
 module;
 #include "Core/Prelude.h"
@@ -86,7 +86,7 @@ export namespace foundation::rhi::webgpu
 
         void UpdateBindless(Span<const BindlessUpdateEntry>) override
         {
-            // Bindless never reaches WebGPU (its layouts fail creation) - nothing to do.
+            // Bindless never reaches WebGPU (its layouts fail creation), so there is nothing to do.
         }
 
         void Release()

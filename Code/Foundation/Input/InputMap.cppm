@@ -3,12 +3,11 @@
 
 // Foundation::Input - :model partition.
 //
-// The action-mapping DATA MODEL: one InputMap = a whole game's
-// bindings - ActionSets (contexts with priority) of Actions (declared kinds, never inferred)
-// of Bindings (a tagged flat record covering every physical source; flat = trivially
-// serializable and editor-grid friendly). Per-action processors carry the Flax-style key-axis
-// smoothing and ez's response-curve/time-scale properties. Pure data + serialization - the
-// evaluation lives in :runtime.
+// The action-mapping data model: one InputMap holds a whole game's bindings. ActionSets
+// (contexts with priority) hold Actions (declared kinds, never inferred), which hold Bindings
+// (a tagged flat record covering every physical source; flat is trivially serializable and
+// suits an editor grid). Per-action processors carry key-axis smoothing, a response curve and
+// a time-scale flag. Pure data and serialization; the evaluation lives in :runtime.
 
 module;
 #include "Core/Prelude.h"
@@ -22,8 +21,8 @@ using namespace foundation::core;
 
 export namespace foundation::input
 {
-    // Declared, never inferred (Sedulous's collapsed {X,Y} was lossy): querying a Button as a
-    // vector is a caller error surfaced by the editor's validation, not a silent 0.
+    // Declared, never inferred: querying a Button as a vector is a caller error surfaced by the
+    // editor's validation, not a silent 0.
     enum class ActionKind : u8
     {
         Button,
@@ -35,15 +34,15 @@ export namespace foundation::input
     {
         Key,           // code = shell::KeyCode; optional modifier mask
         MouseButton,   // code = shell::MouseButton
-        MouseAxis,     // Axis1D rate: code = MouseAxisCode; NEVER time-scaled (ez rule)
+        MouseAxis,     // Axis1D rate: code = MouseAxisCode; never time-scaled
         MouseDelta,    // Axis2D rate: (dx, dy)
         GamepadButton, // code = shell::GamepadButton; device -1 = any
         GamepadAxis,   // Axis1D: code = shell::GamepadAxis; deadZone/invert/scale
         GamepadStick,  // Axis2D: code = StickCode; circular dead zone
         Composite2D,   // Axis2D from four digital keys (WASD); normalize flag
         TouchButton,   // Button: any touch inside the normalized screen region
-        TouchStick,    // Axis2D: a floating virtual stick - the touch that STARTS inside
-                       // the region anchors there; deflection/stickRadius = the value
+        TouchStick,    // Axis2D: a floating virtual stick; a touch inside the region anchors
+                       // where it is captured; deflection/stickRadius = the value
     };
 
     enum class MouseAxisCode : u32
@@ -58,7 +57,7 @@ export namespace foundation::input
         Right = 1
     };
 
-    // One physical binding, flat + tagged: only the fields the source uses are meaningful,
+    // One physical binding, flat and tagged: only the fields the source uses are meaningful,
     // the rest stay at defaults (they serialize compactly and the editor grid hides them).
     struct Binding
     {
@@ -76,7 +75,7 @@ export namespace foundation::input
         u32 posX = 0;
         u32 negY = 0;
         u32 posY = 0;
-        // Touch sources: the activation region in NORMALIZED window coordinates (SDL
+        // Touch sources: the activation region in normalized window coordinates (SDL
         // finger coords are [0,1]); sticks deflect over stickRadius (also normalized).
         f32 regionX = 0.0f;
         f32 regionY = 0.0f;
@@ -85,10 +84,10 @@ export namespace foundation::input
         f32 stickRadius = 0.15f;
     };
 
-    // Button-action trigger shaping (a small per-action state machine, the UE-style trio).
+    // Button-action trigger shaping (a small per-action state machine).
     // None = plain press/release edges.
-    //   Hold:      the pressed edge fires only once the press has been HELD `seconds`.
-    //   Tap:       a one-frame pulse at RELEASE, only if the press lasted <= `seconds`.
+    //   Hold:      the pressed edge fires only once the press has been held `seconds`.
+    //   Tap:       a one-frame pulse at release, only if the press lasted <= `seconds`.
     //   DoubleTap: a one-frame pulse on the second press within `seconds` of the first.
     enum class InteractionKind : u8
     {
@@ -108,12 +107,11 @@ export namespace foundation::input
     struct ActionProcessors
     {
         f32 sensitivity =
-            0.0f;           // >0: key-driven axes RAMP toward the target at this rate/sec (Flax)
+            0.0f;           // >0: key-driven axes ramp toward the target at this rate/sec
         f32 gravity = 0.0f; // >0: recenter rate/sec when the target is 0 (else sensitivity)
-        bool snap = false;  // zero first on direction flip (Flax)
-        f32 responseExponent = 1.0f; // analog curve: sign(v)*|v|^e (ez)
-        bool timeScale = false;      // value multiplies by a global time scale when one exists (ez;
-        // stored now, applied when the engine grows a time-scale system)
+        bool snap = false;  // zero first on direction flip
+        f32 responseExponent = 1.0f; // analog curve: sign(v)*|v|^e
+        bool timeScale = false;      // value multiplies by the runtime's time scale (SetTimeScale)
     };
 
     struct Action
@@ -125,7 +123,7 @@ export namespace foundation::input
         Interaction interaction; // Button actions only (validated)
     };
 
-    // A context: "Gameplay" / "Menu" / "Vehicle". Priority orders QUERY resolution when the
+    // A context: "Gameplay", "Menu", "Vehicle". Priority orders query resolution when the
     // same action name exists in several sets (higher wins among enabled sets).
     struct ActionSet
     {
@@ -139,14 +137,14 @@ export namespace foundation::input
         Array<ActionSet> sets;
     };
 
-    /// Reflects the input-map LEAF value types (Binding/Interaction/ActionProcessors) + their
-    /// enums (BindingSource/ActionKind/InteractionKind) so they are visible to tooling/scripting.
+    /// Reflects the input-map leaf value types (Binding, Interaction, ActionProcessors) and their
+    /// enums (BindingSource, ActionKind, InteractionKind) so tooling and scripting can see them.
     /// Idempotent; defined in InputReflectionImpl.cpp. Call from a startup registrar.
     void RegisterInputTypeReflection();
 
     // ---- serialization (shared by the source asset and the cooked resource) ----
 
-    inline constexpr u32 kInputMapVersion = 2; // the ONE supported map layout (readers refuse others)
+    inline constexpr u32 kInputMapVersion = 2; // the one supported map layout (readers refuse others)
 
     inline void SerializeBinding(ISerializer& ar, Binding& b)
     {
@@ -178,7 +176,7 @@ export namespace foundation::input
         foundation::core::Serialize(ar, "version", version);
         if (!writing && version != kInputMapVersion)
         {
-            // ONE layout: the field list differs between versions, so reading on would decode
+            // One layout: the field list differs between versions, so reading on would decode
             // the wrong fields into plausible-looking bindings. Refuse; re-save the map.
             ar.FailPayload(ErrorCode::NotSupported);
             return;
@@ -240,9 +238,9 @@ export namespace foundation::input
     }
 
     // ---- user rebind overlay ----
-    // NOT part of the asset: a settings SECTION persisted in the user file. Per-action
-    // REPLACEMENT binding lists apply over a pristine asset copy at load and after each
-    // rebind; reset-to-default = remove the override (the asset never mutates).
+    // Not part of the asset: a settings section persisted in the user file. Per-action
+    // replacement binding lists apply over a pristine asset copy at load and after each
+    // rebind; reset-to-default removes the override (the asset never mutates).
     struct InputBindingOverride
     {
         String setName;
@@ -321,8 +319,8 @@ export namespace foundation::input
         }
     };
 
-    /// Applies the overlay onto `map` (a COPY of the asset - the caller owns keeping the
-    /// asset pristine; SetMap copies anyway, so load -> Apply -> SetMap is the flow).
+    /// Applies the overlay onto `map` (a copy of the asset: the caller keeps the asset
+    /// pristine; SetMap copies anyway, so the flow is load, Apply, then SetMap).
     /// Overrides naming unknown sets/actions are ignored (a map edit invalidated them).
     inline void ApplyBindingOverrides(InputMap& map, const InputBindingOverrides& overlay)
     {
@@ -345,8 +343,8 @@ export namespace foundation::input
         }
     }
 
-    // ---- validation (asset save + cook share it) ----
-    // Kind mismatches are DATA errors: surfaced here, not silently zeroed at runtime.
+    // ---- validation (asset save and cook share it) ----
+    // Kind mismatches are data errors: surfaced here, not silently zeroed at runtime.
     [[nodiscard]] inline bool ValidateInputMap(const InputMap& map, String* firstError = nullptr)
     {
         auto fail = [&](StringView message)

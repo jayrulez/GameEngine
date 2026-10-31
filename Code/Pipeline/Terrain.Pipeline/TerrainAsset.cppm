@@ -3,14 +3,14 @@
 
 // Pipeline::Terrain - the `terrain.pipeline` module.
 //
-// Tooling: the source TerrainAsset (references a heightfield asset + the splat weights + an
-// explicit BASE layer + an unbounded paint PALETTE of albedo textures + tiling + cast-shadows)
-// and the builder that cooks it into the Terrain resource. It does NOT import a heightmap - that
-// is Heightfield.Pipeline; a terrain REFERENCES an existing heightfield asset. The cook is a
-// reference pass-through (asset ids == cooked product ids). Never linked by the runtime.
+// Tooling: the source TerrainAsset (a heightfield asset reference, the splat weights, an
+// explicit base layer, an unbounded paint palette of albedo textures, tiling and cast-shadows)
+// and the builder that cooks it into the Terrain resource. It does not import a heightmap (that
+// is Heightfield.Pipeline); a terrain references an existing heightfield asset. The cook is a
+// reference pass-through (asset ids equal cooked product ids). Never linked by the runtime.
 //
-// Splat model = top-K: SplatmapAsset carries TWO sidecars - "pixels"
-// (the 4 x u8 slot weights) + "indices" (the 4 x u8 palette indices); both or neither.
+// The splat model is top-K: SplatmapAsset carries two sidecars, "pixels" (the 4 x u8 slot
+// weights) and "indices" (the 4 x u8 palette indices); both or neither.
 
 module;
 #include "Core/Prelude.h"
@@ -36,19 +36,19 @@ export namespace pipeline
     using foundation::terrain::TerrainResource;
     using foundation::terrain::TerrainSource;
 
-    // Source asset: references a heightfield + the splat weights + the BASE layer + the paint
-    // palette (by asset guid, which equal their cooked product guids) + tiling + cast-shadows.
-    // The top-K model (base + palette + weightsId), one layout per data version.
+    // Source asset: references a heightfield, the splat weights, the base layer and the paint
+    // palette (by asset guid, which equal their cooked product guids), plus tiling and
+    // cast-shadows. The top-K model (base, palette and weightsId), one layout per data version.
     class TerrainAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(TerrainAsset, pipeline::Asset)
     public:
         Guid heightfieldId;           // the referenced heightfield asset (shared with physics/nav)
         Guid weightsId;               // the SplatmapAsset (top-K weights); nil = none (pure base)
-        Guid baseAlbedoId;            // the BASE layer albedo (nil = white dummy)
-        Guid baseNormalId;            // the BASE normal map (nil = flat); DataVersion 3
-        Guid baseOrmId;               // the BASE ORM (nil = 1,1,0 default); DataVersion 3
-        Guid baseHeightId;            // the BASE height/displacement map (nil = dummy); DataVersion 4
+        Guid baseAlbedoId;            // the base layer albedo (nil = white dummy)
+        Guid baseNormalId;            // the base normal map (nil = flat); DataVersion 3
+        Guid baseOrmId;               // the base ORM (nil = 1,1,0 default); DataVersion 3
+        Guid baseHeightId;            // the base height/displacement map (nil = dummy); DataVersion 4
         f32 baseTileScale = 1.0f;
         Array<Guid> paletteAlbedoIds; // paint layers, unbounded (parallel to paletteTileScales)
         Array<Guid> paletteNormalIds; // per-palette-layer normal map (nil allowed); DataVersion 3
@@ -84,7 +84,7 @@ export namespace pipeline
 
     // --- palette-array cook helpers (RGBA8, CPU; exported for tests) ---------------------------
 
-    /// Bilinear-resize an RGBA8 image onto dstW x dstH (the heightfield-resample precedent).
+    /// Bilinear-resize an RGBA8 image onto dstW x dstH (as the heightfield resample does).
     inline void ResizeRgba8Bilinear(Span<const u8> src, u32 srcW, u32 srcH, Span<u8> dst, u32 dstW,
                                     u32 dstH)
     {
@@ -149,11 +149,11 @@ export namespace pipeline
         return half;
     }
 
-    /// Box-halve an sRGB-ENCODED RGBA8 level averaging the colour channels in LINEAR space
-    /// (decode -> average -> re-encode; alpha is linear and averages as-is). Averaging sRGB bytes
-    /// directly darkens mips - a 50% black/white checker must average to sRGB ~188, not 128 (the
-    /// texture cook's rule). Used for the ALBEDO palette array, which
-    /// uploads as RGBA8UnormSrgb; the linear normal/ORM arrays keep the plain box filter.
+    /// Box-halve an sRGB-encoded RGBA8 level, averaging the colour channels in linear space
+    /// (decode, average, re-encode; alpha is linear and averages as-is). Averaging sRGB bytes
+    /// directly darkens mips: a 50% black/white checker must average to sRGB ~188, not 128 (as in
+    /// the texture cook). Used for the albedo palette array, which uploads as RGBA8UnormSrgb; the
+    /// linear normal/ORM arrays keep the plain box filter.
     inline u32 BoxHalveRgba8SrgbAware(Span<const u8> src, u32 dim, Span<u8> dst)
     {
         // 256-entry sRGB -> linear decode table (built once).
@@ -203,10 +203,10 @@ export namespace pipeline
         return half;
     }
 
-    // Cooks a TerrainAsset -> Terrain resource (a reference pass-through for the guids, PLUS the
-    // paint-palette Texture2DArray texels: every palette albedo's source pixels decoded, resized
+    // Cooks a TerrainAsset to a Terrain resource: a reference pass-through for the guids, plus the
+    // paint-palette Texture2DArray texels. Every palette albedo's source pixels are decoded, resized
     // to the common slice size, mip-chained, and packed into the terrain's own cooked instance as
-    // the `kPaletteStream` sidecar - hash-chained via `reads`, so editing an albedo re-cooks).
+    // the `kPaletteStream` sidecar, hash-chained via `reads` so editing an albedo re-cooks.
     class TerrainAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -214,24 +214,24 @@ export namespace pipeline
         {
             return &TerrainAsset::StaticType();
         }
-        // Cooked instance type = the SERIALIZED form the cook stamps + ReadObject reconstructs
-        // (TerrainSource), NOT the runtime TerrainResource. TerrainFactory.ProductType() is the
-        // runtime TerrainResource that Bind matches (the two differ - Texture convention).
+        // The cooked instance type is the serialized form the cook stamps and ReadObject
+        // reconstructs (TerrainSource), not the runtime TerrainResource. TerrainFactory.ProductType()
+        // is the runtime TerrainResource that Bind matches (the two differ, as for textures).
         [[nodiscard]] const TypeInfo* ProductType() const override
         {
             return &TerrainSource::StaticType();
         }
-        // 3: the cooked payload moved to the top-K model (TerrainSource v2) - force a re-cook.
-        // 4: palette albedos decode through ctx.sourceDb (v3 cooked every slice WHITE) - re-cook.
-        // 5: per-layer normal + ORM arrays - re-cook.
-        // 6: albedo-array mips average in linear space (v5 averaged sRGB bytes) - re-cook.
-        // 7: per-layer height array + heightBlendContrast - re-cook.
-        // 8: per-layer coverage/opacity mask array - re-cook.
-        // 9: on-demand sidecars are DELETED when their map is removed (was: stale sidecar persisted
-        //    and kept loading) - force a re-cook so existing terrains shed any stale arrays.
+        // 3: the cooked payload uses the top-K model (TerrainSource v2).
+        // 4: palette albedos decode through ctx.sourceDb.
+        // 5: per-layer normal and ORM arrays.
+        // 6: albedo-array mips average in linear space.
+        // 7: per-layer height array and heightBlendContrast.
+        // 8: per-layer coverage/opacity mask array.
+        // 9: on-demand sidecars are deleted when their map is removed, so existing terrains shed
+        //    any stale arrays.
         [[nodiscard]] u32 Version() const override { return 9; }
 
-        // The palette pack READS every palette albedo/normal/ORM/height/mask content (hash-chained:
+        // The palette pack reads every palette albedo/normal/ORM/height/mask content (hash-chained:
         // editing any re-cooks the terrain's arrays); base/heightfield/weights are runtime refs only.
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
@@ -287,11 +287,11 @@ export namespace pipeline
         }
 
     private:
-        // Decode one layer texture's SOURCE pixels as RGBA8: a TextureAsset's file (image decoder)
-        // or its embedded "pixels" sidecar. Missing/undecodable -> leaves outPixels EMPTY (the caller
-        // fills a per-map default 1x1 slice: white albedo / flat normal / default ORM). Reads the
-        // SOURCE db: at cook time ctx.db holds cooked texture PRODUCTS (possibly compressed), whose
-        // ReadObject is not a TextureAsset - resolving there fails to decode.
+        // Decode one layer texture's source pixels as RGBA8: a TextureAsset's file (image decoder)
+        // or its embedded "pixels" sidecar. A missing or undecodable texture leaves outPixels empty
+        // (the caller fills a per-map default 1x1 slice: white albedo, flat normal, default ORM).
+        // Reads the source db: at cook time ctx.db holds cooked texture products (possibly
+        // compressed), whose ReadObject is not a TextureAsset, so resolving there fails to decode.
         static void DecodeTextureRgba8(pipeline::AssetBuildContext& ctx, const Guid& id,
                                        Array<u8>& outPixels, u32& outW, u32& outH)
         {
@@ -354,7 +354,7 @@ export namespace pipeline
             }
         }
 
-        // True iff at least one id is non-nil (a map array is built only on demand, R4).
+        // True iff at least one id is non-nil (a map array is built only on demand).
         [[nodiscard]] static bool AnyNonNil(const Array<Guid>& ids)
         {
             for (usize i = 0; i < ids.Size(); ++i)
@@ -368,10 +368,10 @@ export namespace pipeline
         }
 
         // Build one slice-major mip-chained RGBA8 array (header + texels) for `sliceCount` layers.
-        // `ids[i]` (nil / out-of-range / undecodable) -> a slice filled with `defaultRGBA`. Mips:
-        // the ALBEDO array (`srgb`) averages in LINEAR space (it uploads as RGBA8UnormSrgb -
-        // averaging the encoded bytes darkens mips), the linear
-        // normal/ORM arrays use the plain box filter.
+        // An `ids[i]` that is nil, out of range or undecodable gives a slice filled with
+        // `defaultRGBA`. Mips: the albedo array (`srgb`) averages in linear space (it uploads as
+        // RGBA8UnormSrgb, and averaging the encoded bytes darkens mips); the linear normal/ORM
+        // arrays use the plain box filter.
         static void CookArray(pipeline::AssetBuildContext& ctx, const Array<Guid>& ids, u32 sliceCount,
                               u32 sliceSize, u32 mipCount, usize sliceBytes, const u8 defaultRGBA[4],
                               bool srgb, Array<u8>& blob)
@@ -388,7 +388,7 @@ export namespace pipeline
                 u32 w = 0, h = 0;
                 const Guid id = (slice < ids.Size()) ? ids[slice] : Guid{};
                 DecodeTextureRgba8(ctx, id, decoded, w, h);
-                if (decoded.IsEmpty()) // nil / undecodable -> a 1x1 default slice
+                if (decoded.IsEmpty()) // nil or undecodable: a 1x1 default slice
                 {
                     w = 1;
                     h = 1;
@@ -432,7 +432,7 @@ export namespace pipeline
         {
             if (ta.paletteAlbedoIds.IsEmpty())
             {
-                // No palette (pure-base terrain): clear EVERY palette sidecar so a terrain whose
+                // No palette (pure-base terrain): clear every palette sidecar so a terrain whose
                 // layers were all removed does not keep loading stale cooked arrays. Status
                 // propagates like writeOrClear's delete path (a non-writable mount fails the cook
                 // consistently, not just on the map-removal shape); a missing sidecar is Ok.
@@ -469,8 +469,8 @@ export namespace pipeline
                 foundation::terrain::TerrainPaletteData::SliceBytes(sliceSize, mipCount);
             const u32 sliceCount = static_cast<u32>(ta.paletteAlbedoIds.Size());
 
-            // Per-map default slices: white albedo,
-            // flat normal, default ORM, mid height (0.5 = neutral in the height-blend competition).
+            // Per-map default slices: white albedo, flat normal, default ORM, mid height (0.5 is
+            // neutral in the height-blend competition).
             static const u8 kWhite[4] = {255, 255, 255, 255};
             static const u8 kFlatNormal[4] = {128, 128, 255, 255};       // tangent-space +Z
             static const u8 kDefaultOrm[4] = {255, 255, 0, 255};         // AO 1, roughness 1, metallic 0
@@ -486,8 +486,8 @@ export namespace pipeline
                     stream, Span<const byte>{reinterpret_cast<const byte*>(blob.Data()), blob.Size()});
             };
 
-            // An optional map array is written when ANY layer supplies it, and OTHERWISE its sidecar
-            // is DELETED - a re-cook that drops a map (the user cleared the picker) must not leave the
+            // An optional map array is written when any layer supplies it, and otherwise its sidecar
+            // is deleted: a re-cook that drops a map (the user cleared the picker) must not leave the
             // stale sidecar behind, or the factory keeps loading it (HasX() stays true). Idempotent.
             auto writeOrClear = [&](StringView stream, const Array<Guid>& ids, const u8 def[4],
                                     bool srgb) -> Status
@@ -499,7 +499,7 @@ export namespace pipeline
                 return ctx.output->DeleteData(stream);
             };
 
-            // Albedo is always present when the palette is non-empty; the rest are on demand (R4).
+            // Albedo is always present when the palette is non-empty; the rest are on demand.
             if (Status s = writeArray(foundation::terrain::kPaletteStream, ta.paletteAlbedoIds, kWhite,
                                       /*srgb*/ true);
                 !s.IsOk())
@@ -534,8 +534,8 @@ export namespace pipeline
         }
     };
 
-    // Registers TerrainAsset for content-DB construction + deserialization (reflection body in
-    // TerrainAssetImpl.cpp per GCC module hygiene).
+    // Registers TerrainAsset for content-DB construction and deserialization (the reflection body
+    // is in TerrainAssetImpl.cpp, out of the module interface).
     inline void RegisterTerrainAsset()
     {
         GlobalTypeRegistry().Register(TerrainAsset::StaticType(), TypeDomain(u8"Pipeline"));
@@ -545,12 +545,12 @@ export namespace pipeline
     using foundation::terrain::SplatWeights;
     using foundation::terrain::SplatWeightsSource;
 
-    // Source asset: the editable top-K splat weights of a given size. Authoring is CREATE + PAINT
-    // (the TerrainPage seeds one, the Splat Paint tool writes it): the two rasters live in the
-    // source instance's "pixels" (weights) + "indices" sidecars - the editable-source convention
-    // (fileName empty = the sidecars are truth; both must exist once painted). fileName set = an
-    // IMPORTED image, decoded as a fixed-layer raster (R = base share, G/B/A = palette 0..2) -
-    // re-import explicitly resets any painted sidecars.
+    // Source asset: the editable top-K splat weights of a given size. It is created and then
+    // painted (the TerrainPage seeds one, the Splat Paint tool writes it): the two rasters live in
+    // the source instance's "pixels" (weights) and "indices" sidecars, the editable-source
+    // convention (with fileName empty the sidecars are the truth; both must exist once painted).
+    // With fileName set it is an imported image, decoded as a fixed-layer raster (R = base share,
+    // G/B/A = palette 0..2), and a re-import resets any painted sidecars.
     class SplatmapAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(SplatmapAsset, pipeline::Asset)
@@ -566,7 +566,7 @@ export namespace pipeline
         }
     };
 
-    // Cooks a SplatmapAsset -> SplatWeights resource (metadata object + the two streams).
+    // Cooks a SplatmapAsset to a SplatWeights resource (a metadata object and the two streams).
     class SplatmapAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -574,17 +574,17 @@ export namespace pipeline
         {
             return &SplatmapAsset::StaticType();
         }
-        // Cooked instance type = the SERIALIZED SplatWeightsSource the cook stamps + ReadObject
-        // rebuilds (SplatWeightsFactory.ProductType() is the runtime SplatWeights for Bind).
+        // The cooked instance type is the serialized SplatWeightsSource the cook stamps and
+        // ReadObject rebuilds (SplatWeightsFactory.ProductType() is the runtime SplatWeights for Bind).
         [[nodiscard]] const TypeInfo* ProductType() const override
         {
             return &SplatWeightsSource::StaticType();
         }
-        [[nodiscard]] u32 Version() const override { return 3; } // re-cook: top-K two-raster model
+        [[nodiscard]] u32 Version() const override { return 3; } // 3: the top-K two-raster model
 
-        // An EMBEDDED (create + paint) asset reads BOTH source streams - declare them so the
-        // recipe hash chains their bytes (the envelope hash does not cover sidecars; a paint save
-        // must re-cook). An IMPORTED one (fileName set) chains the file, which the base builder
+        // An embedded (created and painted) asset reads both source streams; declare them so the
+        // recipe hash chains their bytes (the envelope hash does not cover sidecars, and a paint save
+        // must re-cook). An imported one (fileName set) chains the file, which the base builder
         // already tracks.
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
@@ -609,8 +609,8 @@ export namespace pipeline
             RefPtr<SplatWeights> sw;
             if (!sa.fileName.View().IsEmpty())
             {
-                // IMPORTED: decode the image as RGBA8 at native size and convert it as a
-                // fixed-layer raster (R = the base share, G/B/A = palette 0..2) - the only
+                // Imported: decode the image as RGBA8 at native size and convert it as a
+                // fixed-layer raster (R = the base share, G/B/A = palette 0..2), the only
                 // meaningful interpretation of a flat image in the top-K model.
                 Result<Array<byte>> bytes = ReadSourceBytes(ctx, sa.fileName.View());
                 if (!bytes.HasValue())
@@ -628,7 +628,7 @@ export namespace pipeline
                 }
                 if (img.Format() != foundation::image::PixelFormat::RGBA8)
                 {
-                    return Status{ErrorCode::NotSupported}; // HDR/other - weights are RGBA8
+                    return Status{ErrorCode::NotSupported}; // HDR or other: weights are RGBA8
                 }
                 sw = foundation::terrain::SplatWeightsFromFixedLayerRaster(
                     img.PixelData(), static_cast<i32>(img.Width()),
@@ -636,9 +636,9 @@ export namespace pipeline
             }
             else
             {
-                // EMBEDDED (create + paint): the rasters ride the source sidecars. Both present =
-                // the top-K pair; neither = never painted (all-zero = pure base by construction,
-                // no seeding). One without the other is a broken source - the cook fails.
+                // Embedded (created and painted): the rasters are the source sidecars. Both present
+                // is the top-K pair; neither means never painted (all zero, so pure base, with no
+                // seeding). One without the other is a broken source, and the cook fails.
                 const i32 w = sa.width > 0 ? sa.width : 1;
                 const i32 h = sa.height > 0 ? sa.height : 1;
                 const usize expected = static_cast<usize>(w) * static_cast<usize>(h) *
@@ -709,7 +709,7 @@ export namespace pipeline
     };
 
     // OS-file importer (editor drag-drop): imports a PNG (or any stb-decodable image) as a
-    // SplatmapAsset with fileName set - the builder decodes it as a fixed-layer raster (R = base
+    // SplatmapAsset with fileName set; the builder decodes it as a fixed-layer raster (R = base
     // share, G/B/A = palette 0..2) into the top-K model.
     class SplatmapFileImporter final : public pipeline::IFileImporter
     {
@@ -759,8 +759,8 @@ export namespace pipeline
         }
     };
 
-    // Registers SplatmapAsset for content-DB construction + deserialization (reflection body in
-    // TerrainAssetImpl.cpp per GCC module hygiene).
+    // Registers SplatmapAsset for content-DB construction and deserialization (the reflection body
+    // is in TerrainAssetImpl.cpp, out of the module interface).
     inline void RegisterSplatmapAsset()
     {
         GlobalTypeRegistry().Register(SplatmapAsset::StaticType(), TypeDomain(u8"Pipeline"));

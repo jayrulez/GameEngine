@@ -24,7 +24,7 @@ export namespace foundation::core
         return c == utf8char('/') || c == utf8char('\\');
     }
 
-    // Absolute = rooted on THIS host's filesystem. On Windows that also covers a
+    // Absolute means rooted on this host's filesystem. On Windows that also covers a
     // drive-qualified root ("D:\x", "D:/x") and UNC ("\\server\share"); a leading
     // separator alone ("\x") is drive-relative, but treating it as absolute keeps
     // the POSIX contract and matches how the engine builds paths. PathJoin depends
@@ -40,7 +40,7 @@ export namespace foundation::core
             return true; // POSIX root, and UNC "\\..." on Windows
         }
 #if PLATFORM_WINDOWS
-        // "X:\..." / "X:/..." - a drive-qualified root.
+        // "X:\..." or "X:/...": a drive-qualified root.
         if (path.Size() >= 3 && path[1] == utf8char(':') && PathIsSeparator(path[2]))
         {
             const utf8char c = path[0];

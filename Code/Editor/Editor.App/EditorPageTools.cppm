@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :mcp_page_tools partition.
 //
-// The MCP tools over the editor's open PAGES - what only the editor host can serve: page_list,
+// The MCP tools over the editor's open pages, which only the editor host can serve: page_list,
 // page_open, page_reload and page_close, over the context's page list and the two actions the
 // application owns (opening a source asset's page, closing a page with its panel). Reload and
 // close are refused while the page has unsaved changes unless the agent says so explicitly
@@ -26,14 +26,14 @@ export namespace editor::app
     struct PageToolSeams
     {
         editor::EditorContext* context = nullptr;
-        /// Open (or focus) the page for a source asset. Null = no such asset, or no page for
+        /// Opens (or focuses) the page for a source asset. Null = no such asset, or no page for
         /// its type; the reason is in the log.
         Function<editor::EditorPage*(const Guid&)> openPage;
-        /// Close a page for good, panel and all.
+        /// Closes a page for good, panel and all.
         Function<void(editor::EditorPage*)> closePage;
     };
 
-    /// The number of tools RegisterPageTools registers (page_list / page_open / page_reload /
+    /// The number of tools RegisterPageTools registers (page_list, page_open, page_reload and
     /// page_close); a tripwire like kEngineToolCount.
     inline constexpr usize kPageToolCount = 4;
 

@@ -3,13 +3,14 @@
 
 // Foundation::Shell.Web - `foundation.shell.web:input`.
 //
-// The web shell's input devices, wired to the browser via Emscripten's HTML5 API. Keyboard (window),
-// mouse move/button/wheel (canvas) and touch start/move/end (canvas) are EVENT-DRIVEN: the callbacks
-// fire ASYNCHRONOUSLY between animation frames, so they ENQUEUE raw events; WebInputManager::Update()
-// (called once per frame from the shell's ProcessEvents) drains the queue AFTER snapshotting the
-// previous frame's state - which keeps IsKeyPressed/Released ("went down/up THIS frame") correct,
-// the same model the SDL3 desktop shell uses (BeginFrame, then apply the frame's events). Gamepads
-// are POLL-based (the browser Gamepad API): Update() samples every connected pad each frame.
+// The web shell's input devices, wired to the browser through Emscripten's HTML5 API. Keyboard
+// (window), mouse move, button and wheel (canvas) and touch start, move and end (canvas) are
+// event-driven: the callbacks fire asynchronously between animation frames, so they enqueue raw
+// events. WebInputManager::Update() (called once per frame from the shell's ProcessEvents) drains
+// the queue after snapshotting the previous frame's state, which keeps IsKeyPressed/Released
+// ("went down/up this frame") correct, the same model the SDL3 desktop shell uses (BeginFrame,
+// then apply the frame's events). Gamepads are poll-based (the browser Gamepad API): Update()
+// samples every connected pad each frame.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +25,7 @@ namespace core = foundation::core;
 
 export namespace foundation::shell
 {
-    // Map a DOM KeyboardEvent.code (the physical key, layout-independent - "KeyW", "ArrowUp",
+    // Map a DOM KeyboardEvent.code (the physical key, layout-independent: "KeyW", "ArrowUp",
     // "Space", "ShiftLeft", ...) to a native KeyCode.
     [[nodiscard]] inline KeyCode KeyCodeFromDom(const char* code) noexcept
     {
@@ -178,7 +179,7 @@ export namespace foundation::shell
             return !m_current[Index(b)] && m_previous[Index(b)];
         }
         [[nodiscard]] bool RelativeMode() const override { return m_relative; }
-        void SetRelativeMode(bool enabled) override { m_relative = enabled; } // pointer-lock: later
+        void SetRelativeMode(bool enabled) override { m_relative = enabled; } // no pointer lock: only recorded
         [[nodiscard]] bool CursorVisible() const override { return m_cursorVisible; }
         void SetCursorVisible(bool v) override { m_cursorVisible = v; }
         void SetCursor(CursorType) override {}
@@ -345,7 +346,7 @@ export namespace foundation::shell
     private:
         static constexpr core::i32 kMaxButtons = 20; // W3C standard-mapping button count
         static constexpr core::i32 kMaxAxes = 8;
-        // Native button -> browser standard-mapping index (-1 = unmapped).
+        // Native button -> browser standard-mapping index (-1 is unmapped).
         static core::i32 BrowserButton(GamepadButton b) noexcept
         {
             switch (b)
@@ -424,7 +425,7 @@ export namespace foundation::shell
         }
 
         // Per frame (shell ProcessEvents): snapshot the previous frame, then apply the events that
-        // arrived since the last Update - keeping pressed/released and per-frame deltas correct.
+        // arrived since the last Update, keeping pressed/released and per-frame deltas correct.
         void Update() override
         {
             RefreshPointerScale();
@@ -440,10 +441,10 @@ export namespace foundation::shell
         }
 
     private:
-        // CSS-pixel -> backing-pixel scale for pointer coordinates. HTML5 mouse/touch
-        // events report CSS pixels, but the window reports the canvas BACKING size (the
-        // shell sizes the backing store at min(devicePixelRatio, 2) x the CSS size), so
-        // at dpr > 1 unscaled clicks land offset/half-scale for every hit-test consumer.
+        // CSS-pixel to backing-pixel scale for pointer coordinates. HTML5 mouse and touch
+        // events report CSS pixels, but the window reports the canvas backing size (the
+        // shell sizes the backing store at min(devicePixelRatio, 2) times the CSS size), so
+        // at dpr > 1 unscaled clicks land offset and half-scale for every hit-test consumer.
         // Derived from the two live sizes (not devicePixelRatio) so the shell's cap and
         // any CSS-vs-backing policy are honored automatically.
         void RefreshPointerScale()
@@ -492,7 +493,7 @@ export namespace foundation::shell
             bool down = false;
             core::f32 x = 0, y = 0, dx = 0, dy = 0, sx = 0, sy = 0;
             core::u64 touchId = 0;
-            core::u8 touchPhase = 0; // 0 = start, 1 = move, 2 = end/cancel
+            core::u8 touchPhase = 0; // 0 start, 1 move, 2 end or cancel
         };
 
         void Apply(const RawEvent& r)
@@ -555,8 +556,7 @@ export namespace foundation::shell
             case RawEvent::Type::Touch:
             {
                 // Backing pixels, where the mouse reports; normalized over the canvas for the
-                // touch bindings (the touch contract; they were pixels here, so no touch region
-                // ever matched in a browser).
+                // touch bindings, whose regions are in normalized space.
                 const core::f32 px = r.x * m_pointerScaleX;
                 const core::f32 py = r.y * m_pointerScaleY;
                 const core::f32 x = m_backingWidth > 0.0f ? px / m_backingWidth : 0.0f;
@@ -607,8 +607,8 @@ export namespace foundation::shell
                 m_slots[i].BeginFrame(); // snapshot previous buttons before ingesting this frame
                 m_slots[i].Ingest(ev);
                 m_connectedPads.PushBack(&m_slots[i]);
-                // Events carry the COMPACT index (what GetGamepad() takes) - stamping the
-                // browser SLOT would dangle after an earlier pad disconnects.
+                // Events carry the compact index (what GetGamepad() takes); stamping the
+                // browser slot would dangle after an earlier pad disconnects.
                 EmitGamepadEvents(m_slots[i],
                                   static_cast<core::i32>(m_connectedPads.Size()) - 1);
             }
@@ -658,8 +658,8 @@ export namespace foundation::shell
             r.down = (eventType == EMSCRIPTEN_EVENT_KEYDOWN);
             r.mods = ModsFrom(e);
             self->m_queue.PushBack(r);
-            // Consume plain keys so the page doesn't scroll on space/arrows - but let the
-            // BROWSER keep its own chords and function keys (F5 refresh, F12 devtools,
+            // Consume plain keys so the page doesn't scroll on space and arrows, but let the
+            // browser keep its own chords and function keys (F5 refresh, F12 devtools,
             // Ctrl/Cmd+C/V/R/W...); eating those turns the tab into a trap.
             const bool browserChord = (e->ctrlKey != 0) || (e->metaKey != 0);
             const bool functionKey = e->code[0] == 'F' && e->code[1] >= '0' && e->code[1] <= '9';
@@ -695,9 +695,9 @@ export namespace foundation::shell
             auto* self = static_cast<WebInputManager*>(userData);
             RawEvent r;
             r.type = RawEvent::Type::Wheel;
-            // Normalize to "notches", honoring deltaMode: pixels (Chrome, ~100/notch),
-            // lines (Firefox, ~3/notch), or pages. Ignoring the mode made Firefox scroll
-            // ~30x too slow. Sign matches scroll-up = +.
+            // Normalize to "notches", honoring deltaMode: pixels (Chrome, about 100 a notch),
+            // lines (Firefox, about 3 a notch), or pages. Ignoring the mode would make Firefox
+            // scroll about 30x too slow. Scrolling up is positive.
             const core::f32 perNotch = (e->deltaMode == DOM_DELTA_LINE)   ? 3.0f
                                        : (e->deltaMode == DOM_DELTA_PAGE) ? 1.0f
                                                                           : 100.0f;
@@ -712,7 +712,7 @@ export namespace foundation::shell
             auto* self = static_cast<WebInputManager*>(userData);
             const core::u8 phase = (eventType == EMSCRIPTEN_EVENT_TOUCHSTART)  ? 0
                                    : (eventType == EMSCRIPTEN_EVENT_TOUCHMOVE) ? 1
-                                                                               : 2; // end / cancel
+                                                                               : 2; // end or cancel
             for (int i = 0; i < e->numTouches; ++i)
             {
                 const EmscriptenTouchPoint& t = e->touches[i];
@@ -738,7 +738,7 @@ export namespace foundation::shell
         WebTouch m_touch;
         WebGamepad m_slots[kMaxGamepads];            // one per browser gamepad index (stable state)
         core::Array<WebGamepad*> m_connectedPads;    // compact list of currently-connected pads
-        core::f32 m_pointerScaleX = 1.0f; // CSS -> backing pixels (see RefreshPointerScale)
+        core::f32 m_pointerScaleX = 1.0f; // CSS to backing pixels (see RefreshPointerScale)
         core::f32 m_pointerScaleY = 1.0f;
         core::f32 m_backingWidth = 0.0f; // the canvas's backing size: touches normalize over it
         core::f32 m_backingHeight = 0.0f;

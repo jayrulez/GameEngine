@@ -3,18 +3,18 @@
 
 // Core - :string implementation unit
 //
-// Holds the ONE place Core turns a floating-point value into ASCII. It lives here rather
+// Holds the one place Core turns a floating-point value into ASCII. It lives here rather
 // than in the :string / :format interfaces because std::to_chars' floating-point path
-// instantiates STL lookup tables whose static DATA members cannot cross a shared-library
+// instantiates STL lookup tables whose static data members cannot cross a shared-library
 // boundary: once that instantiation is reachable through a module interface, a consumer
 // references std::_General_precision_tables_2<double>::_Max_P (and siblings) and expects
-// the producing DLL to provide them, but exported DATA is only readable through a
-// declaration that says dllimport - which the single-BMI model cannot express. Every
-// consumer of a shared Core then fails to link on exactly those symbols.
+// the producing DLL to provide them, but exported data is only readable through a
+// declaration that says dllimport, which the single-BMI model cannot express. Every
+// consumer of a shared Core would then fail to link on those symbols.
 //
 // Keeping the instantiation in this unit means Core owns them privately and no consumer
 // needs them at all. Integral to_chars has no such tables and stays inline in the
-// interface. Documentation/Specs/shared-libraries.md section 5 (P5) records the finding.
+// interface.
 
 module;
 #include "Core/Prelude.h"

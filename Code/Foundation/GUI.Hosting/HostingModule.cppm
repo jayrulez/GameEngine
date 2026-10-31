@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - `foundation.gui.hosting`: the host on foundation.graphics (GuiHost): one GUI, a root per
-// window, each window's VG context, renderer, pass targets and input; the frame; the picture baker
-// (GpuPictureBaker) serving every window; the VG shaders they draw with (VgShaderLibrary); a root
-// drawn into a pass its caller owns (GuiPassRenderer, an engine's overlays).
-// foundation.ui's counterpart: UI.Runtime. Round three of the GUI's evolution
-// (Specs/gui-lab-evolution-3.md), H1 to H3.
+// GUI - `foundation.gui.hosting`: the GUI host on foundation.graphics (GuiHost), with one GUI, a
+// root per window, and each window's VG context, renderer, pass targets and input; the frame; the
+// picture baker (GpuPictureBaker) that serves every window; the VG shaders they draw with
+// (VgShaderLibrary); and drawing a root into a pass its caller owns (GuiPassRenderer, for an
+// engine's overlays).
 
 module;
 #include "Core/Prelude.h"

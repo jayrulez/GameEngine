@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - CSS !important + custom-property (variable) tests, end-to-end via the
-// parser -> cascade -> resolve (+ typed application for the var-driven background).
+// GUI - CSS !important and custom-property (variable) tests, end to end through the parser, the
+// cascade and resolution (and typed application for the var-driven background).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -46,14 +46,14 @@ TEST_CASE("css-important: important beats important by specificity")
     StyleSheet sheet = CSSParser::Parse(
         SV(u8"button { color: red !important; } .primary { color: green !important; }"));
     ResolvedStyle rs = sheet.Resolve(*w.Get());
-    CHECK(rs.Get(SV(u8"color")) == SV(u8"green")); // .primary (higher spec) important wins
+    CHECK(rs.Get(SV(u8"color")) == SV(u8"green")); // .primary has higher specificity, so its !important wins
 }
 
 TEST_CASE("css-important: normal declaration cannot override an important one")
 {
     auto w = Widget(u8"button");
     w->AddClass(SV(u8"primary"));
-    // button:!important applied first (low spec), then .primary normal (higher spec) - must NOT win.
+    // button's !important comes first (lower specificity), then .primary's normal one, which must not win.
     StyleSheet sheet =
         CSSParser::Parse(SV(u8"button { color: red !important; } .primary { color: green; }"));
     ResolvedStyle rs = sheet.Resolve(*w.Get());
@@ -96,7 +96,7 @@ TEST_CASE("css-vars: end-to-end through the applier")
         CSSParser::Parse(SV(u8"button { --bg: #0000ff; background-color: var(--bg); }"));
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
 
-    CHECK(w->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // var(--bg) -> #0000ff -> blue
+    CHECK(w->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // var(--bg) resolves to #0000ff, blue
 }
 
 TEST_CASE("css-vars: a child with no variables of its own shares its parent's, and a write copies them")
@@ -106,7 +106,8 @@ TEST_CASE("css-vars: a child with no variables of its own shares its parent's, a
     parent.Set(SV(u8"--space"), SV(u8"4px"));
     parent.Set(SV(u8"opacity"), SV(u8"0.5"));
 
-    // Nothing of its own: the same set, not a copy (a theme's hundreds of tokens per node).
+    // A child with no custom properties of its own shares the parent's set rather than copying
+    // it, which matters for a theme's hundreds of tokens per node.
     ResolvedStyle child;
     child.Set(SV(u8"opacity"), SV(u8"1"));
     child.InheritCustomProperties(parent);
@@ -115,7 +116,7 @@ TEST_CASE("css-vars: a child with no variables of its own shares its parent's, a
     CHECK(child.Get(SV(u8"--accent")) == SV(u8"red"));
     CHECK(ResolvedStyle::SameCustomProperties(child, parent));
 
-    // A write of its own copies first: the parent keeps its value.
+    // A write by the child copies the set first, so the parent keeps its value.
     child.Set(SV(u8"--accent"), SV(u8"blue"));
     CHECK(child.Customs() != parent.Customs());
     CHECK(child.Get(SV(u8"--accent")) == SV(u8"blue"));
@@ -123,7 +124,8 @@ TEST_CASE("css-vars: a child with no variables of its own shares its parent's, a
     CHECK(parent.Get(SV(u8"--accent")) == SV(u8"red"));
     CHECK_FALSE(ResolvedStyle::SameCustomProperties(child, parent));
 
-    // A child with variables of its own takes the parent's it lacks, its own winning.
+    // A child with variables of its own takes the ones it lacks from the parent, and its own
+    // values win.
     ResolvedStyle own;
     own.Set(SV(u8"--accent"), SV(u8"green"));
     own.InheritCustomProperties(parent);

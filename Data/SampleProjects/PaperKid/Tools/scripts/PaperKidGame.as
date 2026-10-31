@@ -1,16 +1,16 @@
-// PaperKidGame - the run's orchestrator (the reserved class Game): the screens, the levels, the
-// score and the lives.
+// PaperKidGame: the run's orchestrator (the reserved class Game). It runs the screens, the levels,
+// the score and the lives.
 //
 // The Level script owns a block's rules and tells this class how it ended ("QuotaMet" with the
 // whole seconds left, or "LevelFailed" with 0 for time, 1 for papers); every delivery
-// ("Delivered", from a Subscriber) scores here. In a run the scene bus IS the run bus, so all of
-// them reach this class.
+// ("Delivered", from a Subscriber) scores here. In a run the scene's event bus is also the run's,
+// so all of them reach this class.
 //
 // A run is the blocks in order. A cleared block banks its score (deliveries plus a time bonus); a
-// failed one spends a life and replays from the banked score; no lives left, or the last block
-// cleared, is the Game over screen. Pause (the Pause action) freezes the block under a menu;
-// Settings, from the title or the pause menu, sets the audio buses' volumes, which the player saves
-// when it exits, and goes back to whichever opened it (Documentation/Specs/paperkid.md).
+// failed one costs a life and replays from the banked score. Running out of lives, or clearing the
+// last block, leads to the Game over screen. Pause (the Pause action) freezes the block under a
+// menu. Settings, opened from the title or the pause menu, sets the audio bus volumes, which the
+// player saves on exit, and returns to whichever screen opened it.
 //
 // A cleared block is celebrated before its screen: the clock stops, a banner drops in, the world
 // eases into slow motion under a fanfare while the music fades, and only then does the Block
@@ -19,9 +19,10 @@
 // The sound: the title's music on the menus, a track per block, a fanfare when a block is cleared
 // and a jingle when one is failed, and the fanfare and a voice over the final screen before the
 // ending's music. Buttons click, and a delivery's points rise from under the score and fade. The
-// pad cheers a cleared block and slumps on a failed one (the bike and porches rumble their own).
+// pad rumbles a cheer for a cleared block and a slump for a failed one (the bike and porches have
+// rumbles of their own).
 
-// The screens, on the engine GUI's screen stack: their documents by asset id.
+// The screens, shown on the engine GUI's screen stack, by the asset ids of their documents.
 const string kTitleDoc = "{{{Title}}}";
 const string kHudDoc = "{{{Hud}}}";
 const string kClearedDoc = "{{{Cleared}}}";
@@ -55,15 +56,15 @@ Guid kStart = Guid("{{Start}}");
 funcdef bool EventHandler(GuiEvent e);
 
 ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
-// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
-// with the same ids, and would be found first.
+// Searches the top screen first. A screen just cleared or popped stays in the tree while its exit
+// animation plays, with the same ids, and would otherwise be found first.
 Node@ find(string id)
 {
     Screen@ top = screens().top();
     Node@ n = top !is null ? top.find(id) : null;
     return n !is null ? n : gui::root().find(id);
 }
-void wire(string id, string event, EventHandler@ handler) { find(id).on(event, handler); } // `on*` names are the engine's handlers
+void wire(string id, string event, EventHandler@ handler) { find(id).on(event, handler); } // handlers are named on*, like the engine's event handlers
 void setText(string id, string text)
 {
     Node@ n = find(id);
@@ -97,9 +98,9 @@ class Game
     private int m_delivered = 0;
     private Phase m_settingsFrom = Phase::Title; // where Settings goes back to
     private array<Guid> m_blockMusic;
-    private float m_endingIn = -1.0f; // seconds until the ending's music, after the final screen's voice
+    private float m_endingIn = -1.0f; // seconds until the ending's music starts, after the final screen's voice
     private float m_celebrated = 0.0f; // seconds into a cleared block's celebration
-    private int m_secondsLeft = 0;     // the clock when the block was cleared (its time bonus)
+    private int m_secondsLeft = 0;     // the clock when the block was cleared, used for the time bonus
 
     void launch()
     {
@@ -111,7 +112,8 @@ class Game
         m_blockMusic.insertLast(Guid("{{MusicBlockA}}"));
         m_blockMusic.insertLast(Guid("{{MusicBlockB}}"));
         m_blockMusic.insertLast(Guid("{{MusicBlockC}}"));
-        // The default scene is the title's backdrop: the street goes about its day behind the menu.
+        // The default scene is the title's backdrop, where the street goes about its day behind
+        // the menu.
         run::setTimeScale(1.0f);
         showTitle();
     }
@@ -162,7 +164,8 @@ class Game
         m_delivered += 1;
         m_score += points;
         setText("hud-score", "" + m_score);
-        // The points: up 36 px from under the score over the pop's time, fading out late.
+        // The points rise 36 px from under the score over the pop's duration, fading out near the
+        // end.
         Node@ pop = find("hud-pop");
         if (pop !is null)
         {
@@ -191,7 +194,8 @@ class Game
         banner.tween("transform", "translateY(0px)", kBannerDrop, "ease-out").from("translateY(-60px)");
     }
 
-    // The block winds down under the banner, then its screen comes up and it freezes.
+    // The block winds down under the banner, then the Block cleared screen comes up and the block
+    // freezes.
     private void tickCelebration(float dt)
     {
         m_celebrated += dt;
@@ -343,7 +347,7 @@ class Game
     {
         click();
         run::loadScene(kStart);
-        run::setTimeScale(1.0f); // the title's street moves (an ended block stopped the clock)
+        run::setTimeScale(1.0f); // let the title's street move again, since an ended block stopped time
         showTitle();
     }
 
@@ -355,7 +359,8 @@ class Game
 
     // ---- screens ----
 
-    // The current block from its start: the score goes back to what was banked before it.
+    // Starts the current block from the beginning, resetting the score to what was banked before
+    // it.
     private void startLevel()
     {
         m_score = m_banked;
@@ -387,13 +392,13 @@ class Game
         Audio::playOneShot(kClickSound, AudioBus::Effects, 0.7f);
     }
 
-    // A volume row: its slider at the bus's level, its readout, and the handler.
+    // Sets up a volume row: its slider at the bus's level, its readout, and the handler.
     private void bindVolume(string row, AudioBus bus, EventHandler@ handler)
     {
         Slider@ slider = Slider::of(find(row + "-slider"));
         slider.value = Audio::busVolume(bus);
         showVolume(row, float(slider.value));
-        wire(row + "-slider", "input", handler); // each step as the slider moves
+        wire(row + "-slider", "input", handler); // fires on each step as the slider moves
     }
 
     private void volumeChanged(string row, AudioBus bus)
@@ -422,7 +427,7 @@ class Game
         {
             Audio::playOneShot(kGameOverVoice, AudioBus::Effects);
         }
-        m_endingIn = won ? 4.2f : 2.0f; // the ending's music once the fanfare or the voice is done
+        m_endingIn = won ? 4.2f : 2.0f; // start the ending's music once the fanfare or the voice is done
         screens().push(kGameOverDoc);
         setText("over-title", won ? "Route complete!" : "Game over");
         setText("over-score", "Score " + m_score);

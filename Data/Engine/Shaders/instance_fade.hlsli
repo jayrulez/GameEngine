@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// INSTANCE FADE: a per-instance distance dissolve for instanced sets (vegetation), applied in the
+// Instance fade: a per-instance distance dissolve for instanced sets (vegetation), applied in the
 // forward, shadow-depth and pick vertex shaders under INSTANCED. The draw's InstanceSet block
-// (below; render::GpuInstanceSet) carries the set's window (start, end in metres; end <= 0 = no
-// fade) and its instance count; each instance's RANK is its position in the set's random order,
-// (index + 0.5) / count. An instance whose rank is above the density at ITS OWN distance collapses to its
-// origin (zero area, nothing rasterised) after shrinking over the last eighth of its window, so
-// a set dissolves instance by instance with no seam between chunks. The CPU draw-count prefix
-// (the chunk's nearest distance) is exactly the ranks a per-instance test could still keep, so
-// the two agree. The density curve is Foundation's DensityAtDistance: 1 inside start, a
-// smoothstep to 0 at end.
+// (below; render::GpuInstanceSet) carries the set's window (start and end in metres; end <= 0
+// means no fade) and its instance count. Each instance's rank is its position in the set's random
+// order, (index + 0.5) / count. An instance whose rank is above the density at its own distance
+// shrinks over the last eighth of its window and then collapses to its origin (zero area, nothing
+// rasterised), so a set dissolves instance by instance with no visible break between chunks. The
+// CPU draw-count prefix (taken at the chunk's nearest distance) covers the ranks a per-instance
+// test could still keep, so the two agree. The density curve is Foundation's DensityAtDistance: 1
+// inside start, a smoothstep to 0 at end.
 cbuffer InstanceSet : register(b1, space1) {
     float FadeStart;          // metres from the camera where the set starts to thin
     float FadeEnd;            // where none is left; <= 0: the set does not fade

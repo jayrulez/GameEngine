@@ -1,8 +1,8 @@
-# Foundation::Graphics - `foundation.graphics` (GraphicsDevice + RenderWindow
-# + FrameContext: the shared RHI render host). Backend-agnostic - imports only the
-# base RHI, so it builds everywhere (incl. headless, no Vulkan). Backend factories
-# (Null / Vulkan) are sibling modules so heavy backend modules never enter this
-# interface (GCC's module reader rejects that).
+# Foundation::Graphics - `foundation.graphics` (GraphicsDevice, RenderWindow and
+# FrameContext: the shared RHI render host). Backend-agnostic: it imports only the
+# base RHI, so it builds everywhere (headless too, without Vulkan). The backend factories
+# (Graphics.Null, Graphics.Gpu) are sibling modules so heavy backend modules never enter
+# this interface (GCC's module reader rejects that).
 util_add_engine_library(Graphics ALIAS Foundation::Graphics)
 target_link_libraries(Graphics
     PUBLIC
@@ -34,7 +34,7 @@ target_sources(Graphics.Null
             GraphicsNull.cppm)
 
 # Foundation::Graphics.Gpu - `foundation.graphics.gpu` (the GPU backend factory). Built when at least
-# one GPU RHI backend is available - Vulkan/DX12 on desktop, WebGPU on web - and links + flags each
+# one GPU RHI backend is available (Vulkan/DX12 on desktop, WebGPU on web), and links and flags each
 # present backend (OPTION_HAS_*). The backend imports live in the implementation unit, off every
 # consumer's module closure.
 if(TARGET Foundation::RHI.Vulkan OR TARGET Foundation::RHI.DX12 OR TARGET Foundation::RHI.WebGPU)

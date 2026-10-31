@@ -6,8 +6,8 @@
 // width a frame, so each frame is the last one shifted a pixel. With exact motion vectors the
 // resolved image moves with the scene and stays as steady as under a still camera; with wrong
 // ones the history lands in the wrong place, the clip throws it away, and the jittered frame shows
-// through (PaperKid's chase camera: steady titles, jittery levels). And with a second view drawn
-// before it on alternate frames (PaperKid's minimap, a render texture every other frame), the main
+// through. And with a second view drawn
+// before it on alternate frames (a minimap, a render texture every other frame), the main
 // view keeps its own history by its key, not by its place in the frame's list. And with the camera
 // still and the bars one skinned mesh slid a pixel a frame by its bone, its motion vectors come from
 // last frame's pose, so it resolves as steadily, drawn alone (the single path) or batched.
@@ -66,7 +66,7 @@ namespace
         return item;
     }
 
-    // A second view drawn on alternate frames BEFORE the main one, into a target of its own
+    // A second view drawn on alternate frames before the main one, into a target of its own
     // (TAA off, as a render texture's camera); `keyed` gives both views a history key, as the render
     // subsystem does, else they are known by their place in the list.
     struct SideView
@@ -75,7 +75,7 @@ namespace
         bool keyed = false;
     };
 
-    // The bars as ONE skinned mesh, every vertex on bone 0: moving the bone moves them all.
+    // The bars as one skinned mesh, every vertex on bone 0: moving the bone moves them all.
     RefPtr<geometry::SkinnedMesh> SkinnedBars()
     {
         RefPtr<geometry::SkinnedMesh> bars = MakeRef<geometry::SkinnedMesh>(DefaultAllocator());
@@ -326,8 +326,7 @@ namespace
                                          << ", no TAA moving " << raw);
         // Under a camera moving one pixel a frame, the resolved image moves with the scene nearly as
         // steadily as under a still camera (resampling the history at sub-pixel positions costs a
-        // little). Dropping history by motion measured in UV made it five times worse (7.7 to 1.5):
-        // the jitter showed through.
+        // little). Dropping history by motion measured in UV would let the jitter show through.
         CHECK(moving < still * 2.5f);
     }
 
@@ -340,8 +339,8 @@ namespace
         MESSAGE(doctest::String(backend) << ": skinned bars' stray, still " << still << ", sliding a pixel a frame alone "
                                          << alone << ", batched with a twin " << batched);
         // As steady as the camera slide by either path: the motion vectors carry last frame's pose.
-        // With this frame's pose for last frame's (the single path's old bone base) the bars' motion
-        // read as none and the history smeared (105 against 2.9).
+        // Taking this frame's pose for last frame's would read the bars' motion as none and smear
+        // the history.
         CHECK(alone < still * 2.5f);
         CHECK(batched < still * 2.5f);
     }

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// AudioPlayground - the audio consumer proof: an ambient chord loop on the Music bus
-// plus four looping 3D emitters around the origin (distinct pitches of the same clip -
-// REAL pitch resampling), all authored as AudioSource COMPONENTS with autoplay on a
-// scene, the LISTENER driven by an AudioListenerComponent on the fly-camera entity, and
-// click-to-fire positional one-shots (random pitch + position) through the engine-global
-// PlayOneShot3D. Fly around (WASD/RMB-look) to hear attenuation + pan + doppler as you
-// strafe past emitters; the ImGui panel has Master/Effects/Music bus sliders and live
-// voice counts. Emitters draw as debug wire spheres. Runs fine without an audio device
-// (Null mode - a warning logs and everything else still works, just silently).
+// AudioPlayground - an audio consumer: an ambient chord loop on the Music bus plus four looping 3D
+// emitters around the origin (distinct pitches of the same clip, through real pitch resampling),
+// all authored as AudioSource components with autoplay on a scene. The listener is an
+// AudioListenerComponent on the fly-camera entity, and clicks fire positional one-shots (random
+// pitch and position) through the engine-global PlayOneShot3D. Fly around (WASD, RMB look) to hear
+// attenuation, pan and doppler as you strafe past emitters; the ImGui panel has Master, Effects and
+// Music bus sliders and live voice counts. Emitters draw as debug wire spheres. It runs without an
+// audio device too (Null mode: a warning logs and everything else works, silently).
 
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -104,7 +103,7 @@ namespace
             m_beepLow = LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"beep_low.wav"), true);
             m_click = LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"click.wav"));
 
-            // Camera entity = the LISTENER (AudioListenerComponent drives the engine).
+            // The camera entity is the listener (its AudioListenerComponent drives the engine).
             m_camera = m_scene->CreateEntity(u8"camera");
             if (auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>())
             {
@@ -115,7 +114,7 @@ namespace
             m_fly.moveSpeed = 8.0f;
             m_fly.fastSpeed = 25.0f;
 
-            // Ambient pad: a looping streamless clip on the MUSIC bus (autoplay, 2D).
+            // Ambient pad: a looping streamless clip on the Music bus (autoplay, 2D).
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"ambient");
                 engine::audio::AudioSourceComponent& c =
@@ -125,13 +124,13 @@ namespace
                 c.spatial = false;
                 c.loop = true;
                 c.autoPlay = true;
-                // Quiet bed: positional sources must read OVER it (masking lesson -
-                // the pad shares the beeps' spectrum, so level is the separator).
+                // A quiet bed, so positional sources read over it: the pad shares the beeps'
+                // spectrum, so level is what separates them.
                 c.volume = 0.35f;
             }
 
-            // Four 3D emitters around the origin: the SAME low-beep clip at four pitches
-            // (real resampling), looping, positioned - fly past to hear pan/attenuation
+            // Four 3D emitters around the origin: the same low-beep clip at four pitches
+            // (real resampling), looping and positioned. Fly past to hear pan and attenuation,
             // and strafe quickly for doppler.
             // Pitches keep every emitter >= ~250 Hz (laptop-speaker floor) and distinct.
             const f32 pitches[4] = {0.75f, 1.0f, 1.5f, 2.0f};
@@ -155,7 +154,7 @@ namespace
                 m_emitters.PushBack(e);
             }
 
-            // Reverb zone: stand near the origin to hear the 'cave' - the tail
+            // Reverb zone: stand near the origin to hear the 'cave'. The tail
             // fades in across the zone's edge band and dries out as you fly away.
             {
                 scene::EntityHandle zone = m_scene->CreateEntity(u8"cave-zone");
@@ -168,8 +167,8 @@ namespace
                 reverb.wetLevel = 0.6f;
             }
 
-            // LMB one-shots fire through a CUE: three weighted variants with
-            // pitch jitter - no two consecutive shots pick the same clip.
+            // LMB one-shots fire through a SoundCue: three weighted variants with
+            // pitch jitter, and no two consecutive shots pick the same clip.
             m_shotCue = core::MakeRef<audio::SoundCue>(foundation::core::DefaultAllocator());
             m_shotCue->variants.PushBack(audio::SoundCueVariant{m_beepHigh, 3.0f});
             m_shotCue->variants.PushBack(audio::SoundCueVariant{m_click, 2.0f});
@@ -206,8 +205,8 @@ namespace
                 host.RequestExit(0);
             }
 
-            // LMB: a positional one-shot ahead of the camera with random pitch/offset -
-            // engine-global PlayOneShot3D on the Effects bus.
+            // LMB: a positional one-shot ahead of the camera with random pitch and offset,
+            // through the engine-global PlayOneShot3D on the Effects bus.
             if (input->Mouse()->IsButtonPressed(shell::MouseButton::Left) && Audio() != nullptr)
             {
                 const core::Float3 forward = m_fly.Forward();
@@ -230,7 +229,7 @@ namespace
                 (void)Audio()->PlayOneShot(m_click, audio::AudioBus::UI);
             }
 
-            // P: scene-simulation pause - the per-scene voice group fades and halts.
+            // T: scene-simulation pause; the per-scene voice group fades and halts.
             if (input->Keyboard()->IsKeyPressed(shell::KeyCode::T))
             {
                 m_scene->SetSimulationEnabled(!m_scene->SimulationEnabled());
@@ -257,12 +256,12 @@ namespace
                     }
                 }
             }
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
             if (auto* gui = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 gui->Render(frame);
             }
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
     private:

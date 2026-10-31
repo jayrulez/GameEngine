@@ -74,8 +74,8 @@ TEST_CASE("toolkit-propertyeditor: TooltipAndRowVisibility")
 
 namespace
 {
-    // Depth-first search for the category Expander PropertyGrid built for `header` (the grid's
-    // internal tree is ScrollView -> FlexLayout -> Expander per category).
+    // Depth-first search for the category Expander that PropertyGrid built for `header` (the grid's
+    // internal tree is a ScrollView holding a FlexLayout holding an Expander per category).
     Expander* FindCategoryExpander(View* view, StringView header)
     {
         if (auto* expander = Cast<Expander>(view))
@@ -121,7 +121,7 @@ TEST_CASE("toolkit-propertygrid: user expansion survives rebuilds of a default-c
     grid->AddProperty(InCategory(u8"B", u8"Bulk"));
     grid->Measure(BoxConstraints::Tight(400, 600));
 
-    // The rebuilt expander is a NEW view; the remembered state wins over the default.
+    // The rebuilt expander is a new view; the remembered state wins over the default.
     expander = FindCategoryExpander(grid.Get(), StringView(u8"Bulk"));
     REQUIRE(expander != nullptr);
     CHECK(expander->IsExpanded());
@@ -144,13 +144,13 @@ TEST_CASE("toolkit-propertygrid: user collapse survives rebuilds of a normal cat
 
     expander = FindCategoryExpander(grid.Get(), StringView(u8"Main"));
     REQUIRE(expander != nullptr);
-    CHECK_FALSE(expander->IsExpanded()); // stays collapsed - not reopened by the rebuild
+    CHECK_FALSE(expander->IsExpanded()); // stays collapsed; the rebuild does not reopen it
 }
 
 TEST_CASE("toolkit-propertyeditor: display-name changes reach the bound label sink")
 {
     // PropertyGrid binds each row's label view through BindDisplayNameSink so a later
-    // SetDisplayName (e.g. the inspector's prefab-override dot) updates the LIVE label
+    // SetDisplayName (such as the inspector's prefab-override dot) updates the live label
     // instead of a string nobody re-reads.
     auto editor = core::MakeRef<ButtonEditor>(
         core::DefaultAllocator(), StringView(u8"Revert to Prefab"), core::Function<void()>{});
@@ -198,7 +198,7 @@ namespace
 
 // A category can sit inside another's body (a component's behaviours inside the component); a
 // parent that is not there, or a loop, leaves it at the top level, and a nested section keeps
-// whether it was open across a rebuild (Sedulous 593d0a36).
+// whether it was open across a rebuild.
 TEST_CASE("toolkit-propertygrid: a category nests inside its parent's body")
 {
     auto grid = core::MakeRef<PropertyGrid>(core::DefaultAllocator());

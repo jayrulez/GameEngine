@@ -3,7 +3,7 @@
 
 // UI - :color_drawable partition
 //
-// Fills bounds with a solid color. Ported from Sedulous.UI/src/Drawing/ColorDrawable.bf.
+// Fills bounds with a solid color.
 
 module;
 #include "Core/Prelude.h"

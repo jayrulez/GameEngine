@@ -3,15 +3,14 @@
 
 // Editor::App - :editor_window partition.
 //
-// EditorWindow: the editor's GUI on its main window (Documentation/Specs/editor-gui.md, 5.1,
-// layer 3). It owns the GUI host (the window's input, frames, renderer and picture baker), the
-// fonts the editor's sheet names, the editor's own files (EditorResources) and the frame read
-// from Data/Editor/Shell.xml, with the toast host over it. Its look is the editor's sheet
-// (Editor/editor.css over its tokens), the chosen density's sheet after it and a `:root` block of
-// the user's inputs (the accent), then the user's theme overrides (5.7, layer 1: a file in their
-// data folder, so any token or rule is theirs to set), the scheme and less motion through the
-// GUI's media; a change to those files on disk (the editor's development loop, or the user's
-// overrides) applies at once.
+// EditorWindow: the editor's GUI on its main window. It owns the GUI host (the window's input,
+// frames, renderer and picture baker), the fonts the editor's sheet names, the editor's own files
+// (EditorResources) and the frame read from Data/Editor/Shell.xml, with the toast host over it.
+// Its look is the editor's sheet (Editor/editor.css over its tokens), then the chosen density's
+// sheet and a `:root` block of the user's inputs (the accent), then the user's theme overrides (a
+// file in their data folder, so any token or rule is theirs to set), with the scheme and reduced
+// motion applied through the GUI's media. A change to those files on disk (the editor's
+// development loop, or the user's overrides) applies at once.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -46,7 +45,7 @@ export namespace editor::app
     namespace fonts = foundation::fonts;
 
     /// The user's appearance inputs (Preferences): the scheme, the accent, the density, less
-    /// motion and the UI scale. The defaults are the editor's (rulings 6, 7, 13).
+    /// motion and the UI scale. The defaults are the editor's.
     struct EditorLook
     {
         bool dark = true;
@@ -58,8 +57,8 @@ export namespace editor::app
 
     /// The densities the editor's sheets give (Editor/density-<name>.css), in their order.
     inline constexpr StringView kEditorDensities[] = {u8"compact", u8"default", u8"comfortable"};
-    /// The accents Preferences offers, each a fill white text reads on (ruling 7; azure is the
-    /// editor's, ruling 13). Any other #rrggbb is taken too.
+    /// The accents Preferences offers, each a fill that white text is legible on; azure is the
+    /// editor's default. Any other #rrggbb is accepted too.
     struct EditorAccent
     {
         StringView name;
@@ -86,8 +85,8 @@ export namespace editor::app
         return true;
     }
 
-    /// The look the user's settings ask for; what they leave unset or name wrongly (a density
-    /// with no sheet, an accent that is no colour) is the editor's default.
+    /// The look the user's settings ask for. Anything they leave unset or name wrongly (a density
+    /// with no sheet, an accent that is not a colour) gets the editor's default.
     [[nodiscard]] inline EditorLook LookFrom(const editor::EditorUiSettings* ui)
     {
         EditorLook look;
@@ -103,7 +102,7 @@ export namespace editor::app
         look.uiScale = Clamp(ui->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
         return look;
     }
-    /// `look` into the user's settings (the section's other fields kept).
+    /// Stores `look` into the user's settings, keeping the section's other fields.
     inline void StoreLook(editor::EditorUiSettings& ui, const EditorLook& look)
     {
         ui.scheme = String(look.dark ? StringView(u8"dark") : StringView(u8"light"));
@@ -113,9 +112,10 @@ export namespace editor::app
         ui.uiScale = look.uiScale;
     }
 
-    /// How every editor window presents: vsync, with a third swapchain image, so a compositor late
-    /// in giving one back (two images held the frame for whole refreshes, the user's spikes) costs
-    /// nothing; the frame of latency it adds is no matter in an editor. A game keeps the default.
+    /// How every editor window presents: vsync with a third swapchain image, so a compositor that
+    /// is late returning an image costs nothing (with two images, such a delay holds the frame for
+    /// whole refreshes). The frame of latency this adds does not matter in an editor. A game keeps
+    /// the default.
     [[nodiscard]] inline foundation::graphics::RenderWindowDesc EditorRenderWindowDesc() noexcept
     {
         foundation::graphics::RenderWindowDesc desc;
@@ -167,8 +167,8 @@ export namespace editor::app
             gui::RegisterToolkitElements();
             gui::RegisterCodeElements();
             foundation::profiler::gui::RegisterProfilerElements();
-            // Shaped by HarfBuzz and reordered by the bidirectional algorithm, installed before a
-            // font loads so its atlas takes what shaping reaches.
+            // Text is shaped by HarfBuzz and reordered by the bidirectional algorithm. Both are
+            // installed before a font loads, so its atlas includes the glyphs shaping reaches.
             fonts::HarfBuzzShaping::Install();
             fonts::BidiAlgorithm::Install();
             m_fonts = MakeUnique<fonts::TrueTypeFontService>(m_allocator, m_allocator);
@@ -182,7 +182,7 @@ export namespace editor::app
             m_host = MakeUnique<gui::GuiHost>(m_allocator, m_allocator, *host.Graphics(), *host.Shell(), m_fonts.Get(), m_shaders->Set());
             {
                 foundation::runtime::IApplicationHost* runtimeHost = &host;
-                gui::GuiHost::WindowOpener opener; // a float in an OS window of its own
+                gui::GuiHost::WindowOpener opener; // opens a floating panel in an OS window of its own
                 opener.Open = [runtimeHost](const foundation::shell::WindowSettings& settings)
                 { return runtimeHost->OpenWindow(settings, EditorRenderWindowDesc()); };
                 opener.Close = [runtimeHost](foundation::graphics::RenderWindow& window) { runtimeHost->CloseWindow(&window); };
@@ -194,7 +194,7 @@ export namespace editor::app
             EditorWindow* self = this;
             styles.SetFontFaceLoader([self](StringView face, StringView source) { return self->LoadFontFace(face, source); });
             const String theme = Format(u8"{}\n{}\n{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS(),
-                                        gui::CodeSheetCSS(), foundation::profiler::gui::ProfilerSheetCSS()); // the satellites' over the widgets'
+                                        gui::CodeSheetCSS(), foundation::profiler::gui::ProfilerSheetCSS()); // the satellite libraries' sheets over the widgets' sheet
             styles.SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
 
             m_root = MakeRef<gui::SceneRoot>(m_allocator, m_host->ContextRef());
@@ -211,7 +211,7 @@ export namespace editor::app
             gui::Node* dock = FindById(u8"frame-dock");
             (dock != nullptr ? *dock : *m_frame).AddChild(m_toasts.Get());
             SetLook(look);
-            // The editor's own files or the user's overrides changed on disk: the sheet applies again.
+            // When the editor's own files or the user's overrides change on disk, apply the sheet again.
             m_reload = MakeUnique<gui::Effect>(m_allocator, [self]()
                                                {
                                                    self->m_resources->TrackChanges();
@@ -224,8 +224,8 @@ export namespace editor::app
             return true;
         }
 
-        /// The look: the sheets for the density, the accent as an input, the scheme and motion
-        /// through the media, the UI scale through the host.
+        /// Applies the look: the sheets for the density, the accent as an input, the scheme and
+        /// motion through the media, the UI scale through the host.
         void SetLook(const EditorLook& look)
         {
             m_look = look;
@@ -238,10 +238,10 @@ export namespace editor::app
         }
         [[nodiscard]] const EditorLook& Look() const noexcept { return m_look; }
 
-        /// A file's text by its path under the data root (a code language's); false when it is not there.
+        /// Reads a file's text by its path under the data root (a code language's); false when it is not there.
         [[nodiscard]] bool LoadText(StringView path, String& out) const { return m_resources && m_resources->LoadText(path, out); }
-        /// A page's or a panel's markup by its path under the data root (Editor/...): a node, or
-        /// null (logged) when it does not load.
+        /// Loads a page's or a panel's markup by its path under the data root (Editor/...): a node,
+        /// or null (logged) when it fails to load.
         [[nodiscard]] RefPtr<gui::Node> LoadMarkup(StringView path)
         {
             String text;
@@ -256,9 +256,9 @@ export namespace editor::app
             return loader.LoadFromString(text.AsView());
         }
 
-        /// A toast over the dock, its severity the notice's; the same message again counts on the
-        /// one shown. An error stays until it is dismissed, and so does one with an action (Open
-        /// Folder on an export), its button running `action`.
+        /// Shows a toast over the dock with the notice's severity; the same message again adds to
+        /// the count on the one shown. An error stays until it is dismissed, as does a toast with
+        /// an action (Open Folder on an export), whose button runs `action`.
         void ShowToast(editor::NoticeKind kind, StringView message, StringView actionText = {}, Function<void()> action = {})
         {
             if (!m_toasts)
@@ -271,8 +271,8 @@ export namespace editor::app
             }
             (void)m_toasts->Post(Move(request), [runAction = Move(action)](const gui::ToastAction&) { runAction(); });
         }
-        /// The toast a notice shows: its severity, the message as its title and its key; with an
-        /// action's text, a button and no time out.
+        /// Builds the toast for a notice: its severity, and the message as its title and key. With
+        /// an action's text it gets a button and no timeout.
         [[nodiscard]] static gui::ToastRequest MakeToast(editor::NoticeKind kind, StringView message, StringView actionText = {})
         {
             gui::ToastRequest request;
@@ -285,21 +285,21 @@ export namespace editor::app
             if (!actionText.IsEmpty())
             {
                 request.AddAction(String(u8"action"), String(actionText), String{});
-                request.Duration = 0.0f; // until closed: its button is there to be used
+                request.Duration = 0.0f; // stays until closed, since its button is there to be used
             }
             return request;
         }
-        /// The status bar's message.
+        /// Sets the status bar's message.
         void SetStatus(StringView message)
         {
             if (m_status)
                 m_status->SetMessage(message);
         }
-        /// The status bar: its message, the job running, the agent; null with no interface.
+        /// The status bar (its message, the running job, the agent); null with no interface.
         [[nodiscard]] EditorStatusBar* StatusBar() const noexcept { return m_status.Get(); }
 
-        /// A screen over the whole window in place of the frame (the project manager); null puts
-        /// the frame back.
+        /// Shows a screen over the whole window in place of the frame (the project manager); null
+        /// restores the frame.
         void ShowScreen(RefPtr<gui::Node> screen)
         {
             if (!m_root || !m_frame)
@@ -313,10 +313,11 @@ export namespace editor::app
         }
         [[nodiscard]] bool ShowsScreen() const noexcept { return m_screen.Get() != nullptr; }
 
-        /// A frame's node by its id (the dock's host, the status bar's items).
+        /// Finds a frame's node by its id (the dock's host, the status bar's items).
         [[nodiscard]] gui::Node* FindById(StringView id) const { return m_frame ? FindIn(*m_frame, id) : nullptr; }
 
-        /// One frame: the editor's files swept for changes (about once a second), then the GUI.
+        /// Runs one frame: sweeps the editor's files for changes (about once a second), then
+        /// updates the GUI.
         void Update(f32 deltaTime)
         {
             if (!m_host)
@@ -331,14 +332,14 @@ export namespace editor::app
             }
             m_host->Update(deltaTime);
         }
-        /// Draws the GUI into `frame`'s window (the main window and any float's).
+        /// Draws the GUI into `frame`'s window (the main window or a floating panel's).
         void Render(foundation::graphics::FrameContext& frame)
         {
             if (m_host)
                 m_host->RenderWindow(frame);
         }
 
-        /// Takes the GUI down (before the device goes).
+        /// Takes the GUI down (before the device goes away).
         void Close()
         {
             m_reload.Reset();
@@ -373,9 +374,9 @@ export namespace editor::app
         }
 
     public:
-        /// The sheet `look` makes from the editor's files: the editor's sheet, the density's after
-        /// it (its sizes win), then a `:root` block of the inputs (the accent), then the user's
-        /// overrides from `theme` (null: none), last so what they set wins.
+        /// Builds the sheet for `look` from the editor's files: the editor's sheet, then the
+        /// density's (its sizes win), then a `:root` block of the inputs (the accent), then the
+        /// user's overrides from `theme` (null: none), last so what they set wins.
         [[nodiscard]] static String SheetFor(gui::IResourceProvider& resources, const EditorLook& look, gui::IResourceProvider* theme)
         {
             String sheet;
@@ -398,7 +399,7 @@ export namespace editor::app
 
     private:
 
-        // A face a sheet's @font-face names, from its file under the data root.
+        // Loads a face a sheet's @font-face names, from its file under the data root.
         bool LoadFontFace(StringView face, StringView source)
         {
             fonts::FontLoadOptions options = fonts::FontLoadOptions::ExtendedLatin();
@@ -435,7 +436,7 @@ export namespace editor::app
         RefPtr<gui::ToastHost> m_toasts;
         RefPtr<gui::Node> m_screen; // over the window in place of the frame, while shown
         UniquePtr<EditorStatusBar> m_status;
-        UniquePtr<gui::Effect> m_reload; // the sheet again when the editor's files or the overrides change
+        UniquePtr<gui::Effect> m_reload; // applies the sheet again when the editor's files or the overrides change
         f32 m_sinceSweep = 0.0f;
     };
 }

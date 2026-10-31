@@ -3,26 +3,26 @@
 
 // Pipeline::Scene - :model_prefab partition.
 //
-// Model->prefab generation: a model import's manifest (node hierarchy + cooked
+// Model-to-prefab generation: a model import's manifest (node hierarchy and cooked
 // leaf guids) becomes a spawnable PrefabDocument named "Prefab" inside the model's group. The
-// wiring mirrors the runtime model spawn (Sandbox): one entity per node, MeshComponents with
-// mesh/material refs by guid (per-submesh refs for multi-material models), and - when the model
-// brought a skeleton - ONE SkeletalAnimationComponent on the root whose meshEntities (EntityRefs,
+// wiring matches the runtime model spawn: one entity per node, MeshComponents with
+// mesh/material refs by guid (per-submesh refs for multi-material models), and, when the model
+// brought a skeleton, one SkeletalAnimationComponent on the root whose meshEntities (EntityRefs,
 // prefab-remapped per spawn) feed every skinned mesh node: its resting clip when the model has
 // clips, else none, the rig's rest pose (a skinned mesh fed nothing draws its raw vertices). An
 // unskinned mesh under a bone (a weapon in a hand) gets a bone attachment on the nearest bone node
 // above it (foundation::model::RigidMeshBone), so it moves with the animation.
 //
-// RE-IMPORT REGENERATES: the "Prefab" instance is found by name and reused (same guid), so
+// Re-import regenerates: the "Prefab" instance is found by name and reused (same guid), so
 // placed instances rebuild through the standard prefab machinery. This lives in the scene
-// domain's pipeline library - not the importer - because it needs scene + component machinery
-// the importer library (linked by the headless cooker) deliberately never links. Every host runs
+// domain's pipeline library, not the importer, because it needs scene and component machinery
+// that the importer library (linked by the headless cooker) does not link. Every host runs
 // it once an import has landed (GenerateForImport): the editor through its import listener,
 // which adds its own effects, the stdio MCP host through pipeline::AfterImport.
 //
-// GenerateModelScene is the twin: the SAME BuildModelScene hierarchy saved as a standalone
-// SceneDocument named "Scene" (a bare scene - model nodes only, no default camera/light) when
-// the import's "Generate scene" toggle is on. Prefab + scene are independent toggles.
+// GenerateModelScene saves the same BuildModelScene hierarchy as a standalone SceneDocument
+// named "Scene" (a bare scene: model nodes only, no default camera or light) when the import's
+// "Generate scene" toggle is on. The prefab and scene toggles are independent.
 
 module;
 #include "Core/Prelude.h"
@@ -133,8 +133,8 @@ export namespace pipeline
     }
 
     /// Build the model's node hierarchy into `scene` (one entity per node with mesh/material/
-    /// collider/skeletal-anim components, plus a STATIC compound RigidBody on the root when the
-    /// model carries collision), returning its root. Shared by the prefab + scene generators.
+    /// collider/skeletal-anim components, plus a static compound RigidBody on the root when the
+    /// model carries collision), returning its root. Shared by the prefab and scene generators.
     [[nodiscard]] inline bool BuildModelScene(foundation::content::Instance& manifestInstance,
                                               scene::Scene& scene, scene::EntityHandle& outRoot)
     {
@@ -188,7 +188,7 @@ export namespace pipeline
             const usize meshIndex = static_cast<usize>(node.meshIndex);
             if (manifest.meshGuids[meshIndex].IsNil())
             {
-                // A held slot: the mesh folded into a LOD chain or was deselected at import -
+                // A held slot: the mesh folded into a LOD chain or was deselected at import, and
                 // an empty MeshComponent would only be noise.
                 continue;
             }
@@ -209,7 +209,7 @@ export namespace pipeline
             }
 
             // Generated collision: each mesh node gets a cooked-shape collider that folds
-            // into the STATIC RigidBody on the prefab root (hierarchy compounding).
+            // into the static RigidBody on the prefab root (hierarchy compounding).
             if (colliders != nullptr && meshIndex < manifest.collisionGuids.Size() &&
                 !manifest.collisionGuids[meshIndex].IsNil())
             {
@@ -260,9 +260,9 @@ export namespace pipeline
             }
         }
 
-        // ONE animator on the root drives every skinned mesh node via EntityRef (prefab
-        // instancing remaps the guids per spawn). One player, one pose evaluation per frame -
-        // per-part animators sampled the same clip once per part.
+        // One animator on the root drives every skinned mesh node via EntityRef (prefab
+        // instancing remaps the guids per spawn): one player and one pose evaluation per frame,
+        // where per-part animators would sample the same clip once per part.
         if (!skinnedEntities.IsEmpty())
         {
             engine::animation::SkeletalAnimationComponent& ac = anims->Add(root);
@@ -289,7 +289,7 @@ export namespace pipeline
                 engine::physics::RigidBodyComponent& body = rigidBodies->Add(root);
                 body.motion = foundation::physics::MotionKind::Static;
                 body.layer = foundation::physics::PhysicsLayer::Static;
-                // The root body's OWN shape stays a degenerate box; the real geometry
+                // The root body's own shape stays a degenerate box; the real geometry
                 // comes from the descendant cooked colliders compounding in.
                 body.halfExtents = Float3{0.01f, 0.01f, 0.01f};
             }
@@ -300,7 +300,7 @@ export namespace pipeline
     }
 
     /// Generate (or refresh) the hierarchy prefab for a model manifest instance. Pure
-    /// content-DB work - the caller handles editor-side follow-ups (instance rebuild,
+    /// content-DB work; the caller handles editor-side follow-ups (instance rebuild,
     /// open-page refresh, notices).
     [[nodiscard]] inline ModelPrefabResult
     GenerateModelPrefab(IAllocator& allocator, foundation::content::Instance& manifestInstance)
@@ -321,7 +321,7 @@ export namespace pipeline
             return result;
         }
 
-        // "Prefab" beside the manifest; an existing one is REUSED so its guid (and every
+        // "Prefab" beside the manifest; an existing one is reused so its guid (and every
         // placed instance) survives re-import. A non-prefab squatting on the name loses to
         // a suffixed fallback rather than being clobbered.
         foundation::content::Group& group = manifestInstance.OwningGroup();
@@ -363,9 +363,9 @@ export namespace pipeline
         return result;
     }
 
-    /// Generate (or refresh) a SCENE of the model's node hierarchy - the SAME contents the prefab
+    /// Generate (or refresh) a scene of the model's node hierarchy: the same contents the prefab
     /// carries, saved as a standalone SceneDocument named "Scene" beside the manifest (a bare scene:
-    /// model nodes only, no default camera/light). Re-import REUSES the instance by name (same guid)
+    /// model nodes only, no default camera/light). Re-import reuses the instance by name (same guid)
     /// so placed scene references survive.
     [[nodiscard]] inline ModelPrefabResult
     GenerateModelScene(IAllocator& allocator, foundation::content::Instance& manifestInstance)
@@ -379,7 +379,7 @@ export namespace pipeline
         }
         (void)root; // SaveScene captures the whole scene; the root is just its top entity
 
-        // "Scene" beside the manifest; an existing one is REUSED so its guid (and every placed
+        // "Scene" beside the manifest; an existing one is reused so its guid (and every placed
         // reference) survives re-import. A non-scene squatting on the name loses to a suffixed
         // fallback rather than being clobbered.
         foundation::content::Group& group = manifestInstance.OwningGroup();

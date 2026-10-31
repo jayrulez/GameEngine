@@ -2,9 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The spline tool over a headless scene: availability, picking, a point drag as one undo step,
-// a Ctrl-click insert, and the provider. Ported back from the Beef port's Editor.Spline.Tests
-// (2026-09-20); the tool is driven through the framework interface and read through the
-// exported state probe.
+// a Ctrl-click insert, and the provider. The tool is driven through the framework interface and
+// read through the exported state probe.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -80,7 +79,7 @@ TEST_CASE("spline tool: available only while a selected entity carries a spline"
     REQUIRE(tool);
     CHECK(tool->Id() == StringView(u8"spline.edit"));
     CHECK_FALSE(tool->IsAvailable());
-    CHECK(tool->UnavailableReason().Size() > 0); // the toolbar's refusal notice names the lack
+    CHECK(tool->UnavailableReason().Size() > 0); // the toolbar's refusal notice says what is missing
     (void)Rig(scene, selection);
     CHECK(tool->IsAvailable());
     selection.Clear();
@@ -116,7 +115,7 @@ TEST_CASE("spline tool: dragging a point moves it as one undo step, and a lock r
     commands.Redo();
     CHECK(Near(component.curve.points[1].position.y, 2.0f));
 
-    // A drag cut by an editing lock reverts without a command.
+    // A drag interrupted by an editing lock reverts without a command.
     const usize before = commands.Size();
     (void)tool->Update(Frame(Float3{}, false, false, false));
     CHECK(tool->Update(Frame(Float3{-2.0f, 0.0f, 0.0f}, true, true, false)));
@@ -155,7 +154,7 @@ TEST_CASE("spline tool: an empty spline takes its first points from Ctrl-clicks,
     scene::Scene scene(DefaultAllocator(), u8"t");
     editor::EditorCommandStack commands;
     editor::Selection<Guid> selection;
-    // A component added bare, before its Initialize phase seeded it: no points at all.
+    // A component added empty, before its Initialize phase seeded it, has no points at all.
     auto* splines = scene.AddSystem<engine::spline::SplineComponentManager>();
     const scene::EntityHandle entity = scene.CreateEntity(u8"Path");
     engine::spline::SplineComponent& component = splines->Add(entity);
@@ -171,7 +170,8 @@ TEST_CASE("spline tool: an empty spline takes its first points from Ctrl-clicks,
     CHECK(editor::SplineEditToolStateOf(*tool).placePreview);
     CHECK_FALSE(editor::SplineEditToolStateOf(*tool).insertPreview);
 
-    // Two Ctrl-clicks: a two-point curve, each click one undo step, the last point selected.
+    // Two Ctrl-clicks make a two-point curve, each click one undo step, with the last point
+    // selected.
     CHECK(tool->Update(Frame(Float3{-1.0f, 0.0f, 0.0f}, true, true, false, true)));
     REQUIRE(component.curve.points.Size() == 1u);
     CHECK(Near(component.curve.points[0].position.x, -1.0f));

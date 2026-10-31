@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A tiny MCP client for Raptor's two hosts.
+"""A tiny MCP client for the engine's two hosts.
 
   mcp.py http <tool> [json-args]           one call to the editor (port $MCP_PORT, 7405)
   mcp.py http --list                       tools/list, names and first line
@@ -9,7 +9,7 @@ Prints each result's text (JSON pretty printed when it parses); exit 1 on an err
 import json, os, subprocess, sys, urllib.request
 
 # The engine checkout (for Tools.Mcp in stdio mode): $GAMEENGINE_ROOT, else the one this project
-# sits in (Data/SampleProjects/PaperKid/Tools).
+# sits in (Data/SampleProjects/PlatformerGame/Tools).
 ENGINE = os.environ.get("GAMEENGINE_ROOT",
                         os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../..")))
 TOOLS_MCP = ENGINE + "/Bin/Debug/Linux64-Clang/Tools.Mcp"

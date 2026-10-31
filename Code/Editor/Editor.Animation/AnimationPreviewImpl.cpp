@@ -18,7 +18,7 @@ import foundation.resource;
 import foundation.render;
 import engine.render;
 import foundation.gui;
-import foundation.gui.toolkit; // ToolButton (Bones, Mesh)
+import foundation.gui.toolkit; // ToolButton, for the Bones and Mesh buttons
 import geometry.pipeline;
 import editor.core;
 import editor.app;
@@ -62,7 +62,7 @@ namespace editor
         if (curve.IsEmpty())
             return;
         const Color path{1.0f, 0.75f, 0.2f, 1.0f};
-        // From where it starts: along the ground where it extracts travel, up where it extracts height.
+        // From the start: along the ground where the clip extracts travel, up where it extracts height.
         const Float3 start = curve.positions[0];
         const auto onGround = [&](Float3 p)
         {
@@ -112,7 +112,8 @@ namespace editor
     AnimationPreviewRig::AnimationPreviewRig(EditorContext& context, const app::AssetPageServices& services, app::PreviewPane& pane)
         : m_context(&context), m_services(&services), m_pane(&pane)
     {
-        // The slots: what makes a skeleton, asked of the builders; a skinned mesh's asset, asked of its type.
+        // The picker slots: the asset types that build a skeleton come from the resource services; a
+        // skinned mesh slot takes the skinned mesh asset type.
         const app::ResourceRefServices* refs = services.refs;
         Array<String> skeletons = refs != nullptr && refs->AcceptedTypes ? refs->AcceptedTypes(animation::Skeleton::StaticType()) : Array<String>{};
         Array<String> meshes;
@@ -129,7 +130,8 @@ namespace editor
         };
         labelled(u8"Skeleton", *m_skeletonSlot);
         labelled(u8"Mesh", *m_meshSlot);
-        // What shows of it: the bones, the mesh (hidden, its pick kept), each this page's alone.
+        // Whether the bones and the mesh show (a hidden mesh keeps its pick); both are preview settings
+        // that belong to the page.
         AnimationPreviewRig* self = this;
         const auto toggle = [&](StringView id, StringView text, StringView tooltip, Function<void(bool)> set) -> RefPtr<gui::ToolButton>
         {
@@ -150,8 +152,8 @@ namespace editor
         scene::Scene* scenePtr = pane.Viewport() != nullptr ? pane.Viewport()->Scene() : nullptr;
         if (scenePtr == nullptr)
             return;
-        // A sun so a skinned mesh is lit (the bones need none), and the mesh's entity, drawing
-        // nothing until one is picked.
+        // A sun lights a skinned mesh (the bones need none). The mesh's entity draws nothing until a
+        // mesh is picked.
         const scene::EntityHandle sun = scenePtr->CreateEntity(u8"Sun");
         Transform t;
         t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.35f) * Quaternion::FromAxisAngle(Float3{1, 0, 0}, -1.05f);
@@ -225,7 +227,7 @@ namespace editor
         m_meshId = id;
         m_mesh = m_context->Resources() != nullptr && !id.IsNil() ? m_context->Resources()->Bind<foundation::geometry::StaticMesh>(id)
                                                                      : foundation::resource::Proxy<foundation::geometry::StaticMesh>{};
-        PointMeshAt(nullptr); // pointed at the product once it resolves (Show)
+        PointMeshAt(nullptr); // Show points it at the cooked mesh once that resolves
         ShowSlot(m_meshSlot.Get(), id);
     }
 
@@ -263,7 +265,7 @@ namespace editor
         auto& draw = preview->SceneDebugDraw();
         draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
 
-        // The mesh follows its product (a cook or a reload makes a new one).
+        // Follow the cooked mesh, since a cook or a reload replaces it.
         foundation::geometry::StaticMesh* mesh = m_mesh ? m_mesh.Get() : nullptr;
         if (mesh != m_shownMesh)
             PointMeshAt(mesh);
@@ -279,7 +281,8 @@ namespace editor
                 m_bind[b] = skeleton->Bones()[b].localBindPose;
             pose = m_bind.AsSpan();
         }
-        // Hidden bones are still placed (the framing and the mesh read them), drawn where nothing shows.
+        // Hidden bones are still placed, since the framing and the mesh read them, but they are drawn
+        // into a list that is never shown.
         if (m_bonesShown)
             DrawSkeletonBones(draw, *skeleton, pose, m_world, base, chosen);
         else
@@ -300,7 +303,8 @@ namespace editor
         if (component == nullptr || mesh == nullptr)
             return;
         component->visible = m_meshShown;
-        // Skinned with the pose, placed where the bones are (borrowed for this frame's drawing).
+        // Skin the mesh with the pose and place it where the bones are. The component borrows
+        // m_skinning's matrices for this frame's drawing.
         m_skinning.Resize(boneCount);
         skeleton->ComputeSkinningMatrices(pose, Span<Float4x4>{m_skinning.Data(), boneCount});
         component->boneMatrices = m_skinning.Data();

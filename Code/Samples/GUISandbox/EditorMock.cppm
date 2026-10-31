@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUISandbox - the editor mock (X0 of Specs/editor-gui.md): the editor's frame and scene page,
-// static, in the editor's sheet (Data/Editor/editor.css over its tokens), for judging the design
-// before any editor code moves. `GUISandbox --editor-mock` shows it instead of the sandbox. The
-// markup is Data/Editor/Mock's; what is here is what markup cannot say: the dock, the commands
-// with their keys, the inspector's grid, and the Look menu, which stands in for Preferences'
-// appearance inputs (the scheme, the density, the accent, less motion) the way the editor will
-// set them: a `:root` block of inputs after the editor's sheet.
+// GUISandbox - the editor mock: the editor's frame and scene page, static, in the editor's sheet
+// (Data/Editor/editor.css over its tokens), for judging the editor's design. `GUISandbox
+// --editor-mock` shows it instead of the sandbox. The markup is in Data/Editor/Mock; this file
+// holds what markup cannot say: the dock, the commands with their keys, the inspector's grid, and
+// the Look menu. The Look menu stands in for the appearance inputs in Preferences (the scheme, the
+// density, the accent, less motion), set the way the editor sets them: a `:root` block of inputs
+// after the editor's sheet.
 
 module;
 #include "Core/Prelude.h"
@@ -107,7 +107,7 @@ export namespace sandbox
             const char8_t* Label;
             const char8_t* Fill;
         };
-        // The candidates for the editor's new accent (ruling 7), each a fill white text reads on.
+        // The candidate accents for the editor, each a fill that white text reads on.
         static constexpr Accent kAccents[] = {
             {u8"look.azure", u8"Azure", u8"#2f6fdf"},
             {u8"look.violet", u8"Violet", u8"#6d5bd8"},
@@ -157,7 +157,7 @@ export namespace sandbox
             Define(u8"mock.stop", u8"Stop", u8"shift-f5", u8"Editor/Icons/stop.svg");
             Define(u8"mock.frame", u8"Frame Selection", u8"f", u8"Editor/Icons/frame-selection.svg");
             Define(u8"mock.grid", u8"Grid", {}, u8"Editor/Icons/grid.svg");
-            // The bar's editing controls (layer 5, part 1), each with its key.
+            // The bar's editing controls, each with its key.
             Define(u8"mock.tool-select", u8"Select", u8"q", u8"Editor/Icons/select.svg");
             Define(u8"mock.tool-move", u8"Move", u8"w", u8"Editor/Icons/move.svg");
             Define(u8"mock.tool-rotate", u8"Rotate", u8"e", u8"Editor/Icons/rotate.svg");
@@ -195,8 +195,8 @@ export namespace sandbox
 
             // The Look menu: Preferences' appearance inputs, here to compare.
             EditorMock* self = this;
-            // What moves (3.3), to judge with less motion on and off: a toast of each severity in
-            // turn, and a dialog.
+            // What animates, to judge with less motion on and off: a toast of each severity in turn,
+            // and a dialog.
             (void)m_root.OnCommand(u8"mock.toast", [self](gui::CommandEvent&) { self->ShowToast(); });
             (void)m_root.OnCommand(u8"mock.dialog", [self](gui::CommandEvent&) { self->ShowDialog(); });
             (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowPicker(self->m_textures, u8"Editor/Mock/textures.xml"); });
@@ -246,8 +246,8 @@ export namespace sandbox
             (void)m_toasts->Post(Move(request));
         }
 
-        // A picker as the editor's opens: modal, under the window's top (the render textures
-        // picker of ruling 21; the asset picker with its groups beside it).
+        // Opens a picker as the editor does: modal, under the window's top edge (the render textures
+        // picker, or the asset picker with its groups beside it).
         void ShowPicker(RefPtr<gui::Node>& picker, StringView path)
         {
             if (!picker)
@@ -261,7 +261,7 @@ export namespace sandbox
                 if (picker)
                     if (auto* tree = Cast<gui::TreeView>(FindById(*picker, u8"entity-picker-tree")))
                         tree->SetSelectedItem(4);
-                // Its two views, the buttons switching them (the editor keeps the last one).
+                // Its two views and the buttons that switch them (the editor remembers the last one).
                 if (picker)
                 {
                     gui::Node* rows = FindById(*picker, u8"asset-picker-rows");
@@ -312,7 +312,7 @@ export namespace sandbox
                 m_dialog = MakeRef<gui::MessageBox>(m_allocator);
             m_dialog->Configure(u8"Delete 3 assets?", u8"These go to the project's trash. 2 scenes still use Wood.",
                                 gui::MessageBox::Buttons::Ok);
-            // A confirmation names its verb (catalog 2.4): Cancel, and Delete styled as destroying.
+            // A confirmation names its verb: Cancel, and Delete styled as destructive.
             m_dialog->ClearButtons();
             (void)m_dialog->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
             (void)m_dialog->AddButton(u8"Delete", u8"delete", gui::DialogRole::Destructive);
@@ -330,7 +330,7 @@ export namespace sandbox
             sheet += StringView(u8"\n");
             sheet += m_host.Read(u8"Editor/Mock/kit.css").AsView(); // the kit page's own layout
             sheet += StringView(u8"\n");
-            sheet += m_host.Read(u8"Editor/Mock/profiler.css").AsView(); // the profiler page's, and its bars
+            sheet += m_host.Read(u8"Editor/Mock/profiler.css").AsView(); // the profiler page's layout and its bars
             sheet += inputs.AsView();
             m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"Editor/editor.css")));
             m_context.SetColorScheme(m_dark);
@@ -357,12 +357,12 @@ export namespace sandbox
             Register(u8"scene", u8"Level 1", u8"Editor/Mock/scene.xml");
             Register(u8"scene-2", u8"Level 2", u8"Editor/Mock/scene.xml");
             Register(u8"kit", u8"Kit", u8"Editor/Mock/kit.xml");
-            // The input map page's two designs, to compare (the user, 2026-10-26).
+            // The input map page's two designs, to compare.
             Register(u8"input-outline", u8"Input A: Outline", u8"Editor/Mock/input-outline.xml");
             Register(u8"input-split", u8"Input B: Tree and Grid", u8"Editor/Mock/input-split.xml");
             Register(u8"input-split-set", u8"Input B: Set Chosen", u8"Editor/Mock/input-split-set.xml");
             Register(u8"input-split-set-open", u8"Input B: Set, Actions Open", u8"Editor/Mock/input-split-set-open.xml");
-            // The profiler page (X7), a tab in the page area (the user, 2026-10-27).
+            // The profiler page, a tab in the page area.
             Register(u8"profiler", u8"Profiler", u8"Editor/Mock/profiler.xml");
             Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.xml");
             Register(u8"console", u8"Console", u8"Editor/Mock/console.xml");
@@ -373,7 +373,7 @@ export namespace sandbox
             m_dockArea->Show(*m_dock);
         }
 
-        // A layout step the dock refused, said (the default arrangement is the mock's own: a refusal is a bug).
+        // Reports a layout step the dock refused. The mock owns its default arrangement, so a refusal is a bug.
         static void Said(const gui::DockOutcome& outcome)
         {
             if (!outcome.Ok())
@@ -516,7 +516,7 @@ export namespace sandbox
         Array<RefPtr<Object>> m_shown; // what each page's inspector shows
         Array<UniquePtr<gui::ReflectedPropertySource>> m_sources;
         bool m_dark = true;
-        usize m_density = 0; // compact, the editor's default (ruling)
+        usize m_density = 0; // compact, the editor's default
         usize m_accent = 0;
         bool m_reduceMotion = false;
         bool m_sideBySide = false;

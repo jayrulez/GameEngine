@@ -1,12 +1,12 @@
-# TerrainPlayground - the terrain showcase (TerrainPlaygroundApp.h), built for BOTH targets like
+# TerrainPlayground - the terrain showcase (TerrainPlaygroundApp.h), built for both targets like
 # WebScene:
-#   - desktop (Main.cpp): `TerrainPlayground --vulkan` vs `--webgpu` runs the same terrain per
+#   - desktop (Main.cpp): `TerrainPlayground --vulkan` or `--webgpu` runs the same terrain per
 #     backend; OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 runs the browser's WGSL shader path on
-#     wgpu-native - the fast local repro for web-render bugs.
-#   - web (WebMain.cpp): the same app on WebShell + the rAF runner, bundling a cooked WGSL
+#     wgpu-native, the fast local repro for web-render bugs.
+#   - web (WebMain.cpp): the same app on WebShell and the rAF runner, bundling a cooked WGSL
 #     shaders.dpak (no compiler in the browser). ASYNCIFY for the synchronous GPU waits.
 # No pipeline: the terrain is an in-memory heightfield (Ref<> direct products), so this needs only
-# the runtime host set + engine.terrain. The ImGui HUD is mandatory (gated in Samples/CMakeLists).
+# the runtime host set and engine.terrain. The ImGui HUD is mandatory (gated in Samples/CMakeLists).
 
 set(_terrain_common_libs
     Foundation::Core
@@ -38,7 +38,7 @@ if(EMSCRIPTEN)
         Foundation::Shell.Web
         Foundation::Runtime.Web)
 
-    # Cook the WGSL shader pack with the NATIVE tool (the browser has no compiler) and bundle it
+    # Cook the WGSL shader pack with the native tool (the browser has no compiler) and bundle it
     # into the virtual FS at /Data/Engine/Shaders/shaders.dpak, where the shader host finds it. Tools.ShaderPack must
     # be built first by any desktop preset (a native authoring tool, never built for wasm).
     set(_web_shader_pack "${CMAKE_CURRENT_BINARY_DIR}/shaders.dpak")
@@ -62,8 +62,8 @@ if(EMSCRIPTEN)
 
     target_link_options(TerrainPlayground PRIVATE
         "--shell-file=${_web_shell}"
-        "-sASYNCIFY"              # synchronous device init + per-frame GPU fence waits yield to the browser
-        # ASYNCIFY unwinds the WHOLE C++ stack into this buffer on every emscripten_sleep. The
+        "-sASYNCIFY"              # synchronous device init and per-frame GPU fence waits yield to the browser
+        # ASYNCIFY unwinds the whole C++ stack into this buffer on every emscripten_sleep. The
         # render frame's GPU-completion pump yields from deep inside the render path, which overflows
         # the 4 KB default and traps as "unreachable". 1 MB comfortably fits the deepest render path.
         "-sASYNCIFY_STACK_SIZE=1048576"

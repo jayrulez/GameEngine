@@ -1,9 +1,9 @@
-// CameraRig - the camera above and behind the player, turned a quarter at a time (TurnLeft and
-// TurnRight), swinging round to the new quarter rather than cutting to it, and following the player
-// with a little lag so a step does not jolt the view. (Lamplight's, which follows its thief.)
-// Behind the title it sweeps slowly to and fro before the ball's dais instead (each map's dais
-// stands against a wall, so a full circle would leave the hall), on the time the game script hands
-// it: the scene holds still at time scale 0 there.
+// CameraRig: the camera above and behind the player. TurnLeft and TurnRight turn it a quarter at a
+// time, and it swings round to the new quarter rather than cutting to it. It follows the player
+// with a little lag so that a single step does not jolt the view. Behind the title screen it
+// instead sweeps slowly to and fro in front of the ball's dais. Each map's dais stands against a
+// wall, so a full circle would leave the hall. The scene is held at time scale 0 on the title, so
+// the sweep runs on the time the game script passes in.
 const float kPi = 3.14159265f;
 
 class CameraRig
@@ -23,14 +23,15 @@ class CameraRig
     [0.12, "Behind the title: how fast it sweeps (radians of its cycle a second)"] float titleTurn;
 
     private int m_quarter = 0;    // 0 = looking north (-Z), then quarters clockwise
-    private float m_yaw = 0.0f;   // the swing's current angle (radians)
+    private float m_yaw = 0.0f;   // current angle of the swing (radians)
     private Float3 m_focus = Float3(0.0f, 0.0f, 0.0f);
     private bool m_title = false;   // circling the dais behind the title
-    private float m_phase = 0.0f;   // where in its sweep it is (radians of the cycle)
+    private float m_phase = 0.0f;   // position in the sweep (radians of the cycle)
 
     CameraRig(Entity@ entity) { @self = entity; }
 
-    // Follow another entity from now on (a client's own hunter, which appears after the scene).
+    // Follows another entity from now on (a client's own hunter, which appears after the scene
+    // loads).
     void onFollow(Entity@ who)
     {
         @target = who;
@@ -49,8 +50,8 @@ class CameraRig
         place();
     }
 
-    // The title's frame (Masquerade.as): its real time while the title is up, below zero once a
-    // round begins, when the rig is back behind the player at once.
+    // A frame of the title view, sent by Masquerade.as. `dt` is the real frame time while the title
+    // is up; a value below zero means a round has begun, and the rig jumps back behind the player.
     void onTitleView(float dt)
     {
         if (dt < 0.0f)
@@ -107,7 +108,8 @@ class CameraRig
         place();
     }
 
-    // Behind the focus for the current angle: yaw 0 sits south of it (+Z) looking north.
+    // Places the camera behind the focus for the current angle: at yaw 0 it sits south of the
+    // focus (+Z), looking north.
     private void place()
     {
         Float3 seat = Float3(m_focus.x - Math::Sin(m_yaw) * distance, m_focus.y + height,
@@ -115,7 +117,7 @@ class CameraRig
         look(seat, Float3(m_focus.x, m_focus.y + lookHeight, m_focus.z));
     }
 
-    // Sit at `seat` looking at `at`.
+    // Places the camera at `seat`, looking at `at`.
     private void look(Float3 seat, Float3 at)
     {
         self.setPosition(seat);

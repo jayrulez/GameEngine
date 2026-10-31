@@ -3,13 +3,13 @@
 
 // Editor::App - :project_home partition.
 //
-// ProjectHomeView: the Project panel with a project open (Documentation/Specs/editor-gui.md, 5.1,
-// layer 13). Its frame is markup (Data/Editor/ProjectHome.xml); it fills the project's picture,
-// name, engine and folder; a Start column (open the default scene, the Game menu's actions, every
-// scene in the project); and a Project column (every setting the project's settings reflect, by
-// category, each asset a link that opens it, then the Project menu's actions). Nothing here is a
-// list of its own: the settings are ProjectSettings' reflection, the actions the registry's Game
-// and Project menus, the scenes the assets of the default-scene setting's type.
+// ProjectHomeView: the Project panel with a project open. Its frame is markup
+// (Data/Editor/ProjectHome.xml); it fills in the project's picture, name, engine and folder; a
+// Start column (open the default scene, the Game menu's actions, every scene in the project); and
+// a Project column (every setting the project's settings reflect, by category, each asset a link
+// that opens it, then the Project menu's actions). Nothing here keeps a list of its own: the
+// settings come from ProjectSettings' reflection, the actions from the registry's Game and Project
+// menus, and the scenes are the assets of the default-scene setting's type.
 //
 // Refresh (each frame) fills it again when the settings changed (MarkChanged, from the settings'
 // save), the cook revision moved (assets added, renamed or removed) or the thumbnail changed.
@@ -42,11 +42,11 @@ export namespace editor::app
     class ProjectHomeView
     {
     public:
-        /// Its frame under the data root.
+        /// Its frame's markup path, under the data root.
         static constexpr const char8_t* kPath = kProjectHomeViewPath;
 
-        /// Over `context`'s project, its frame `content` (the markup's); `cook` (nullable) says
-        /// when the project's assets changed.
+        /// Builds the view over `context`'s project in the frame `content` (from the markup);
+        /// `cook` (nullable) tells it when the project's assets changed.
         ProjectHomeView(IAllocator& allocator, editor::EditorContext& context, editor::EditorCookService* cook, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_context(&context), m_cook(cook), m_content(Move(content)), m_pictures(allocator), m_scenes(allocator),
               m_rows(allocator), m_actions(allocator)
@@ -59,10 +59,10 @@ export namespace editor::app
 
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
-        /// The settings changed: filled again at the next Refresh.
+        /// Marks the settings as changed, so the view is filled again at the next Refresh.
         void MarkChanged() noexcept { m_changed = true; }
 
-        /// Fills it again when something it shows changed (see the header).
+        /// Fills the view again when something it shows changed (see the file header).
         void Refresh()
         {
             const u64 revision = m_cook != nullptr ? m_cook->Revision() : 0;
@@ -131,7 +131,7 @@ export namespace editor::app
                 label->AddClasses(classes);
             return label;
         }
-        // A link: a flat button of its text, at its own width.
+        // Makes a link: a flat button with the text, at its own width.
         [[nodiscard]] RefPtr<gui::Button> Link(StringView text, StringView tooltip, Function<void()> onClick)
         {
             RefPtr<gui::Button> link = MakeRef<gui::Button>(m_allocator);
@@ -158,7 +158,7 @@ export namespace editor::app
             return RefPtr<gui::Node>(Link(instance->Name(), instance->Path(), [self, id]() { self->OpenAsset(id); }));
         }
 
-        // The picture, the name, the engine and the folder.
+        // Fills the header: the picture, the name, the engine and the folder.
         void Header(const editor::EditorProject& project)
         {
             const engine::project::ProjectSettings& settings = project.Settings();
@@ -179,7 +179,7 @@ export namespace editor::app
             }
         }
 
-        // The actions under `menu` ("Game/"), by their menu order, as buttons in `into`.
+        // Adds the actions under `menu` ("Game/") to `into` as buttons, in menu order.
         void MenuActions(StringView menu, gui::Node& into)
         {
             Clear(into);
@@ -202,7 +202,7 @@ export namespace editor::app
             }
         }
 
-        // Open the default scene, play, and every scene in the project.
+        // Fills the Start column: open the default scene, play, and every scene in the project.
         void StartColumn(editor::EditorProject& project)
         {
             const engine::project::ProjectSettings& settings = project.Settings();
@@ -281,7 +281,7 @@ export namespace editor::app
             return {};
         }
 
-        // Every reflected setting by category, then the Project menu's actions.
+        // Fills the Project column: every reflected setting by category, then the Project menu's actions.
         void ProjectColumn(editor::EditorProject& project)
         {
             namespace proj = engine::project;

@@ -3,8 +3,8 @@
 
 // GUI - :text_runs partition
 //
-// Rich text as runs: styled spans of text and inline icons, and the small markup that writes them,
-// the same from markup and from script:
+// Rich text as runs: styled spans of text and inline icons, and the small markup that writes them.
+// Markup and script use the same syntax:
 //
 //   Your mark wears [color=#d04060][b]a rose gown[/b][/color] [icon=Icons/rose.png] [link=hint]?[/link]
 //
@@ -16,8 +16,7 @@
 // that is malformed or unknown, or a close that matches nothing, is kept as text and reported in
 // the diagnostics, never dropped.
 //
-// Copied from foundation.ui's :text_runs (E4 of Specs/gui-lab-evolution.md), and the GUI's own from
-// then on: its names follow the GUI's, and colours parse as the GUI's sheets parse them.
+// The markup's names follow the GUI's naming, and its colours parse as the GUI's sheets parse them.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +33,7 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// The parts of TextEffects a run may set apart from each other.
+    /// The parts of TextEffects a run may set independently of each other.
     enum TextEffectPart : u8
     {
         TextEffectOutline = 1,
@@ -43,7 +42,7 @@ export namespace foundation::gui
     };
 
     /// One styled span of a rich text, or an inline icon. A style field left unset takes the
-    /// label's (its font family, size and text colour).
+    /// label's value (its font family, size or text colour).
     struct TextRun
     {
         core::String Text;
@@ -55,19 +54,20 @@ export namespace foundation::gui
         bool Italic = false;
         bool Underline = false;
         core::String Link; ///< A link id the label reports when the run is clicked; empty for none.
-        /// The effects the markup set, those parts named in EffectParts (TextEffectPart); the parts
-        /// left out take the label's.
+        /// The effects the markup set. Only the parts named in EffectParts (TextEffectPart) apply;
+        /// the other parts take the label's effects.
         vg::TextEffects Effects;
         u8 EffectParts = 0;
 
         [[nodiscard]] bool IsIcon() const noexcept { return Icon.Size() != 0; }
-        /// Whether it sets nothing of its own: it draws in the label's font and colour.
+        /// Returns whether the run sets no style of its own, so it draws in the label's font and
+        /// colour.
         [[nodiscard]] bool IsPlain() const noexcept
         {
             return !Family.HasValue() && !Size.HasValue() && !TextColor.HasValue() && !Bold && !Italic && !Underline &&
                    Link.Size() == 0 && EffectParts == 0 && !IsIcon();
         }
-        /// Same style (and link), so two runs may merge.
+        /// Returns whether the two runs have the same style and link, so they may merge.
         [[nodiscard]] bool SameStyle(const TextRun& other) const
         {
             return !IsIcon() && !other.IsIcon() && Family == other.Family && Size == other.Size &&
@@ -75,7 +75,8 @@ export namespace foundation::gui
                    Underline == other.Underline && Link == other.Link && EffectParts == other.EffectParts &&
                    Effects == other.Effects;
         }
-        /// `inherited` (the label's effects) with the parts this run sets in their place.
+        /// Returns `inherited` (the label's effects) with the parts this run sets replaced by the
+        /// run's own.
         [[nodiscard]] vg::TextEffects EffectsOver(const vg::TextEffects& inherited) const
         {
             vg::TextEffects out = inherited;
@@ -99,20 +100,20 @@ export namespace foundation::gui
         }
     };
 
-    /// A markup problem: where, in bytes, and what. The offending text stays in the runs.
+    /// A markup problem: its byte offset and a message. The offending text stays in the runs.
     struct TextMarkupDiagnostic
     {
         usize Offset = 0;
         core::String Message;
     };
 
-    /// A rich text: its runs in order, and what parsing its markup reported.
+    /// A rich text: its runs in order, and the diagnostics from parsing its markup.
     struct TextDocument
     {
         Array<TextRun> Runs;
         Array<TextMarkupDiagnostic> Diagnostics;
 
-        /// One run of plain text (what a label without markup holds).
+        /// Returns a document of one plain-text run, which is what a label without markup holds.
         [[nodiscard]] static TextDocument Plain(core::StringView text)
         {
             TextDocument document;
@@ -125,7 +126,8 @@ export namespace foundation::gui
             return document;
         }
 
-        /// The text with the markup taken out (an icon is U+FFFC, the object replacement character).
+        /// Returns the text with the markup taken out. An icon becomes U+FFFC, the object
+        /// replacement character.
         [[nodiscard]] core::String PlainText() const
         {
             core::String out;
@@ -140,8 +142,8 @@ export namespace foundation::gui
         }
     };
 
-    /// Resolves a colour name in markup ([color=gold]) beyond what a sheet's colours parse, as a
-    /// palette would; null leaves only what ParseColor takes.
+    /// Resolves a colour name in markup ([color=gold]) that a sheet's colour syntax does not cover,
+    /// as a palette would. With no resolver, only what ParseColor accepts is understood.
     using TextMarkupColorResolver = core::Function<Optional<Color>(core::StringView)>;
 
     namespace detail
@@ -198,7 +200,8 @@ export namespace foundation::gui
             }
 
         private:
-            // Apply one tag's body (between the brackets); false when it is not a tag we take.
+            // Applies one tag's body (the text between the brackets). Returns false when it is not a
+            // tag the markup knows.
             bool Apply(core::StringView body, usize at)
             {
                 if (body.Size() != 0 && body[0] == u8'/')
@@ -289,8 +292,8 @@ export namespace foundation::gui
                 return true;
             }
 
-            // [/name] closes back to the innermost frame of that name (inner ones with it); [/]
-            // closes the innermost.
+            // [/name] closes the innermost frame of that name and every frame inside it; [/] closes
+            // the innermost frame.
             bool Close(core::StringView name, usize at)
             {
                 if (m_stack.IsEmpty())
@@ -328,7 +331,8 @@ export namespace foundation::gui
 
             [[nodiscard]] TextRun Current() const { return m_stack.IsEmpty() ? TextRun{} : m_stack.Back().Style; }
 
-            // The text so far becomes a run in the current style (merged into the last when alike).
+            // Turns the text so far into a run in the current style, merged into the last run when
+            // their styles match.
             void Flush()
             {
                 if (m_text.Size() == 0)
@@ -346,7 +350,7 @@ export namespace foundation::gui
                 m_text = core::String();
             }
 
-            // An effect tag's value: numbers then an optional colour, space separated
+            // Parses an effect tag's value: numbers, then an optional colour, separated by spaces
             // ([outline=2 #000], [shadow=2 2 3 black], [glow=6 yellow]).
             bool ApplyEffect(core::StringView name, core::StringView value, TextRun& style) const
             {
@@ -406,7 +410,8 @@ export namespace foundation::gui
                 return true;
             }
 
-            // The resolver first for a bare name (a palette's "$gold" too), then what a sheet takes.
+            // Tries the resolver first for a bare name (also a palette's "$gold"), then the sheet's
+            // colour syntax.
             [[nodiscard]] Optional<Color> ParseMarkupColor(core::StringView value) const
             {
                 if (value.Size() == 0)
@@ -428,7 +433,7 @@ export namespace foundation::gui
         };
     }
 
-    /// Parse markup into runs.
+    /// Parses `markup` into runs.
     [[nodiscard]] inline TextDocument ParseTextMarkup(core::StringView markup, const TextMarkupColorResolver* resolver = nullptr)
     {
         return detail::TextMarkupParser(markup, resolver).Parse();

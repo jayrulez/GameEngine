@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/PopupLayerTests.bf (faithful). Beef property `root.PopupLayer` ->
-// root->GetPopupLayer() (our PopupLayer is created lazily on first access rather than in the ctor - a
-// module-cycle divergence - so the "is last child" tests capture it into a local first, mirroring Beef's
-// eager ctor creation). Popups are MakeRef'd and passed by .Get(); `new`+`delete` -> RefPtr (RAII).
+// PopupLayer tests. root->GetPopupLayer() creates the layer on first access (not in the RootView
+// constructor, which would make a module cycle), so the "is last child" tests fetch it into a local
+// first. Popups are created with MakeRef and passed by .Get().
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -38,7 +37,7 @@ namespace
             *Notified = true;
             *ClosedPopup = popup;
         }
-        // Not a View - cascade-close treats null as "outside any popup" (unused by these tests).
+        // Not a View: cascade-close treats null as "outside any popup" (unused by these tests).
         [[nodiscard]] View* OwnerView() override { return nullptr; }
     };
 }
@@ -107,7 +106,7 @@ TEST_CASE("popup-layer: ShowPopup_OwnedView_UnregisteredOnClose")
     const ViewId popupId = popup->Id;
     root->GetPopupLayer()->ShowPopup(popup.Get(), nullptr, 10, 10, true, false, true);
     root->GetPopupLayer()->ClosePopup(popup.Get());
-    // Detached -> no longer in the registry (Beef also deletes it; RefPtr keeps the test's local alive).
+    // Once detached it is out of the registry (the test's RefPtr keeps the popup itself alive).
     CHECK(ctx.GetViewById(popupId) == nullptr);
 }
 
@@ -121,7 +120,7 @@ TEST_CASE("popup-layer: ShowPopup_NotOwned_NotDeletedOnClose")
     auto popup = MakeView(100, 50);
     root->GetPopupLayer()->ShowPopup(popup.Get(), nullptr, 10, 10, true, false, false);
     root->GetPopupLayer()->ClosePopup(popup.Get());
-    CHECK(popup->Id.IsValid()); // still alive (test's RefPtr owns it)
+    CHECK(popup->Id.IsValid()); // still alive (the test's RefPtr owns it)
 }
 
 TEST_CASE("popup-layer: ShowPopup_NotifiesOwner")
@@ -246,17 +245,17 @@ TEST_CASE("popup-layer: focus scope - Tab is TRAPPED inside an open focus-taking
     LayoutPass(ctx, root.Get());
 
     auto* fm = ctx.GetFocusManager();
-    fm->FocusNext(); // Tab with a focus-taking popup open: lands INSIDE the popup...
+    fm->FocusNext(); // Tab with a focus-taking popup open lands inside the popup...
     View* first = fm->FocusedView();
     CHECK((first == inner1.Get() || first == inner2.Get()));
     fm->FocusNext();
-    fm->FocusNext(); // ...and CYCLES within it - never onto the background view.
+    fm->FocusNext(); // ...and cycles within it, never onto the background view.
     View* cycled = fm->FocusedView();
     CHECK((cycled == inner1.Get() || cycled == inner2.Get()));
     CHECK(fm->FocusedView() != background.Get());
 
     root->GetPopupLayer()->ClosePopup(popup.Get());
-    fm->FocusNext(); // scope is gone - background is reachable again
+    fm->FocusNext(); // the scope is gone, so the background is reachable again
     CHECK(fm->FocusedView() == background.Get());
 }
 
@@ -277,10 +276,10 @@ TEST_CASE("popup-layer: out-of-LIFO-order close never cross-restores another pop
     auto popupB = MakeView(100, 50);
     root->GetPopupLayer()->ShowPopup(popupB.Get(), nullptr, 30, 30, true, false, true);
 
-    // Close A FIRST (out of order): A restores what IT saved (baseView) - B's entry is untouched.
+    // Close A first (out of order): A restores what it saved (baseView), and B's entry is untouched.
     root->GetPopupLayer()->ClosePopup(popupA.Get());
     CHECK(fm->FocusedView() == baseView.Get());
-    // Closing B restores what B saved (nothing was focused when B opened) - not A's entry twice.
+    // Closing B restores what B saved (nothing was focused when B opened), not A's entry again.
     root->GetPopupLayer()->ClosePopup(popupB.Get());
     CHECK(fm->FocusedView() == baseView.Get());
     CHECK(fm->FocusStackDepth() == 0u);

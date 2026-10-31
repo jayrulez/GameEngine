@@ -2,8 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Rich text runs and their markup: what each tag sets, how runs merge and nest, and that nothing
-// malformed is ever dropped. Copied with the runs from foundation.ui (E4 of
-// Specs/gui-lab-evolution.md).
+// malformed is ever dropped.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -115,18 +114,18 @@ TEST_CASE("text runs: outline, shadow and glow tags set their part of a run's ef
         u8"[outline=2 #102030]Hunt[shadow=1 2 3 red] the[/shadow][/outline] [glow=6]mask[/glow] [shadow=4 5]free[/]");
     REQUIRE(doc.Diagnostics.IsEmpty());
     REQUIRE(doc.Runs.Size() == 6u);
-    // An outline alone, its colour as written.
+    // An outline on its own, with its colour as written.
     CHECK(doc.Runs[0].EffectParts == TextEffectOutline);
     CHECK(doc.Runs[0].Effects.outlineWidth == doctest::Approx(2.0f));
     CHECK(doc.Runs[0].Effects.outlineColor.g == doctest::Approx(0x20 / 255.0f));
-    // A shadow inside it: both parts.
+    // A shadow inside it gives both parts.
     CHECK(doc.Runs[1].EffectParts == (TextEffectOutline | TextEffectShadow));
     CHECK(doc.Runs[1].Effects.shadowOffset.x == doctest::Approx(1.0f));
     CHECK(doc.Runs[1].Effects.shadowOffset.y == doctest::Approx(2.0f));
     CHECK(doc.Runs[1].Effects.shadowBlur == doctest::Approx(3.0f));
     CHECK(doc.Runs[1].Effects.shadowColor.r == doctest::Approx(1.0f));
-    CHECK(doc.Runs[2].EffectParts == 0); // the space after both closed
-    // A glow takes white without a colour, a shadow half black and no blur.
+    CHECK(doc.Runs[2].EffectParts == 0); // the space after both have closed
+    // Without a colour a glow takes white, and a shadow takes half black with no blur.
     CHECK(doc.Runs[3].EffectParts == TextEffectGlow);
     CHECK(doc.Runs[3].Effects.glowRadius == doctest::Approx(6.0f));
     CHECK(doc.Runs[3].Effects.glowColor.r == doctest::Approx(1.0f));
@@ -146,7 +145,7 @@ TEST_CASE("text runs: a run's effects take the control's for the parts it leaves
     const foundation::vg::TextEffects plain = doc.Runs[0].EffectsOver(control);
     CHECK_FALSE(plain.HasOutline());
     CHECK(plain.HasShadow());
-    // An unmarked run is the control's.
+    // An unmarked run uses the control's effects.
     CHECK(doc.Runs[1].EffectsOver(control) == control);
     const foundation::vg::TextEffects bright = doc.Runs[2].EffectsOver(control);
     CHECK(bright.HasOutline());

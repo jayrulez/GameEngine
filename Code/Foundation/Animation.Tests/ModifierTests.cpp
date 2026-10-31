@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The pose modifier stage (inverse-kinematics.md P0b): a modifier changes the pose between the
+// The pose modifier stage: a modifier changes the pose between the
 // sample and the palette, every evaluation, so its change survives the next sample and the
 // sampled pose stays as sampled; modifiers run in their order over one model-space build; a
 // partial rebuild matches a full one; and no modifier changes nothing.
@@ -16,7 +16,8 @@ using namespace foundation::animation;
 
 namespace
 {
-    // root(0) -> child(1) -> grandchild(2), each +Y from its parent, plus a branch(3) off the root.
+    // root(0), child(1) under it and grandchild(2) under that, each +Y from its parent, plus a
+    // branch(3) off the root.
     void BuildTree(Skeleton& s)
     {
         Array<Bone>& bones = s.Bones();
@@ -73,7 +74,7 @@ TEST_CASE("pose modifiers: a change survives the next sample, the sampled pose s
 {
     Skeleton skel{4};
     BuildTree(skel);
-    // The clip moves the child: its y climbs 5 -> 6 over the second.
+    // The clip moves the child: its y climbs from 5 to 6 over the second.
     AnimationClip clip{u8"Climb", 1.0f, true};
     clip.GetOrCreatePositionTrack(1)->AddKeyframe(0.0f, Float3{0, 5, 0});
     clip.GetOrCreatePositionTrack(1)->AddKeyframe(1.0f, Float3{0, 6, 0});

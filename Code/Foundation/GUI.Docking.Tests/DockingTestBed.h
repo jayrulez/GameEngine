@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - the bed the drop and keyboard tests share: a DockSpace in a root, five panels
-// registered, four docked (scene and inspector tabbed in the central stack, the hierarchy beside it
-// on the left, the console under it), and the moves a user makes on it.
+// GUI.Docking - the test bed the drop and keyboard tests share: a DockSpace in a root with five
+// panels registered and four docked (scene and inspector as tabs in the central stack, the hierarchy
+// beside it on the left, the console under it), and helpers for the moves a user makes on it.
 #pragma once
 
 #include <doctest/doctest.h>
@@ -21,8 +21,8 @@ namespace dockbed
 
     inline core::StringView SV(const char8_t* s) { return core::StringView(s); }
 
-    // Scene and inspector tabbed in the central stack, the hierarchy beside it on the left (a
-    // quarter), the console under the central stack.
+    // Scene and inspector are tabs in the central stack, the hierarchy is beside it on the left (a
+    // quarter of the width), and the console is under the central stack.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -56,7 +56,7 @@ namespace dockbed
         void Lay()
         {
             root->UpdateLayout();
-            // The tabs a size of their own: with no font their text measures nothing.
+            // Give the tabs a size of their own: with no font, their text measures nothing.
             const char8_t* const ids[] = {u8"scene", u8"inspector", u8"hierarchy", u8"console"};
             for (const char8_t* id : ids)
                 if (Tab* tab = TabOf(id))
@@ -82,7 +82,7 @@ namespace dockbed
         }
         static core::Float2 Centre(const Rect& r) { return core::Float2{r.x + r.width * 0.5f, r.y + r.height * 0.5f}; }
         static Rect Bounds(const Node& n) { return n.GetScreenBounds(); }
-        // A tab torn out of its strip (pulled down into its stack).
+        // Tears a tab out of its strip by pulling it down into its stack.
         void Tear(const char8_t* panel)
         {
             Tab* tab = TabOf(panel);

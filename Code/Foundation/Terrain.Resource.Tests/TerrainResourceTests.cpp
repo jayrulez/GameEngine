@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The cooked terrain resource: TerrainSource v2 (top-K: base + palette + weightsId) serialize
-// round-trip, the v1 (fixed-4-layer) UPGRADE gate, and a full content-DB build through the
-// manager that RESOLVES the referenced heightfield (proving the shared Ref) while the texture
-// refs stay unbound (no GPU factory headless).
+// The cooked terrain resource: a TerrainSource (top-K: base, palette and weightsId) serialize
+// round-trip, and a full content-DB build through the manager that resolves the referenced
+// heightfield (proving the shared Ref) while the texture refs stay unbound (no GPU factory
+// headless).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -50,7 +50,7 @@ TEST_CASE("terrain resource: TerrainSource v2 round-trips base + palette + weigh
     MemoryStream stream;
     {
         BinarySerializer ar(stream, SerializeMode::Write);
-        BeginVersionedPayload(ar, TerrainSource::StaticType()); // write at the CURRENT version
+        BeginVersionedPayload(ar, TerrainSource::StaticType()); // write at the current version
         a.Serialize(ar);
         REQUIRE(ar.IsOk());
     }
@@ -96,7 +96,7 @@ TEST_CASE("terrain resource: builds through the manager and resolves the shared 
             hfInst->WriteData(hf::kHeightStream, hf::HeightfieldSource::HeightBlob(*grid)).IsOk());
         REQUIRE(hfInst->WriteData(hf::kHoleStream, hf::HeightfieldSource::HoleBlob(*grid)).IsOk()); // the cooked form's second stream
 
-        // A terrain referencing that heightfield + a base + two (texture-less) palette layers.
+        // A terrain referencing that heightfield, a base and two (texture-less) palette layers.
         auto* tInst = db.RootGroup()->CreateInstance(u8"terrain", TerrainSource::StaticType());
         terrainId = tInst->Id();
         TerrainSource tSrc;

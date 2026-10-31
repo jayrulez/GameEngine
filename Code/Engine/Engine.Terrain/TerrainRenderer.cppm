@@ -3,13 +3,14 @@
 
 // engine.terrain:renderer - the chunked geo-mipmap terrain Renderer.
 //
-// Rides the Opaque category via the RegisterRenderer seam (no terrain code in Engine.Render, the
-// sprites/particles precedent). ONE 65x65 grid VB + one index buffer PER LOD are uploaded once; every
-// chunk draws that shared grid, placed + height-displaced in the VS from a per-chunk uniform and the
-// R16Uint height texture. Resolve is where the per-view work lives (Resolve alone has the camera): it
-// folds each terrain's world transform into a per-terrain ViewProj, replays foundation.terrain's
-// ExtractVisibleChunkDraws (quadtree cull + shared-coverage LOD - the same tested CPU path), and emits
-// one indexed draw per visible chunk at its LOD. Bind sets: 0 view, 1 per-chunk, 2 height texture.
+// Rides the Opaque category through RegisterRenderer, so Engine.Render holds no terrain code (as
+// with sprites and particles). One 65x65 grid vertex buffer and one index buffer per LOD are
+// uploaded once; every chunk draws that shared grid, placed and height-displaced in the VS from a
+// per-chunk uniform and the R16Uint height texture. Resolve is where the per-view work lives (only
+// Resolve has the camera): it folds each terrain's world transform into a per-terrain ViewProj,
+// replays foundation.terrain's ExtractVisibleChunkDraws (quadtree cull and shared-coverage LOD, the
+// same tested CPU path), and emits one indexed draw per visible chunk at its LOD. Bind sets: 0
+// view, 1 per-chunk, 2 height texture, 3 splat material.
 
 module;
 #include "Core/Prelude.h"
@@ -134,7 +135,7 @@ export namespace engine::terrain
 
         core::Status Initialize()
         {
-            // set 0: per-terrain view UBO (b0, dynamic) + the CSM cascade array (t1) + a comparison
+            // set 0: per-terrain view UBO (b0, dynamic), the CSM cascade array (t1) and a comparison
             // sampler (s0). The depth caster pass ignores t1/s0 (it only reads b0), but sharing one
             // layout keeps a single pipeline layout for both passes.
             rhi::BindGroupLayoutEntry viewEntry = rhi::BindGroupLayoutEntry::UniformBuffer(
@@ -166,7 +167,7 @@ export namespace engine::terrain
                 return core::Status{core::ErrorCode::Unknown};
             }
 
-            // set 2: the R16Uint height texture, read via Load in the VS (and PS for the normal).
+            // set 2: the R16Uint height texture, read with Load in the VS (and the PS for the normal).
             rhi::BindGroupLayoutEntry heightEntry = rhi::BindGroupLayoutEntry::SampledTexture(
                 0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment);
             heightEntry.textureSampleType = rhi::TextureSampleType::Uint; // WebGPU: integer data texture
@@ -189,11 +190,11 @@ export namespace engine::terrain
                 return core::Status{core::ErrorCode::Unknown};
             }
 
-            // set 3: the top-K splat material - integer index map (t0, Load-only: filtering palette
-            // indices is garbage) + weight map (t1) + base albedo (t2) + palette albedo array (t3) + the
-            // per-layer tileScale storage buffer (t4) + base normal (t5) + normal array (t6) + base ORM
-            // (t7) + ORM array (t8) + base height (t9) + height array (t10) + coverage mask array
-            // (t11) + the repeat/trilinear albedo sampler (s0, all arrays).
+            // set 3: the top-K splat material. The integer index map (t0, load-only: filtering
+            // palette indices gives garbage), weight map (t1), base albedo (t2), palette albedo array
+            // (t3), the per-layer tileScale storage buffer (t4), base normal (t5), normal array (t6),
+            // base ORM (t7), ORM array (t8), base height (t9), height array (t10), coverage mask array
+            // (t11), and the repeat/trilinear albedo sampler (s0, all arrays).
             rhi::BindGroupLayoutEntry idxEntry =
                 rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment);
             idxEntry.textureSampleType = rhi::TextureSampleType::Uint; // integer data texture
@@ -247,7 +248,7 @@ export namespace engine::terrain
             {
                 return core::Status{core::ErrorCode::Unknown};
             }
-            // The HOLES twins: set 2 = height + hole mask + sampler.
+            // The HOLES twins: set 2 is the height, the hole mask and a sampler.
             rhi::BindGroupLayout* holeColorLayouts[] = {m_viewLayout, m_chunkLayout, m_heightHoleLayout,
                                                         m_materialLayout};
             rhi::PipelineLayoutDesc hpld{};
@@ -264,8 +265,8 @@ export namespace engine::terrain
                 return core::Status{core::ErrorCode::Unknown};
             }
 
-            // The shared grid vertex buffer (surface + skirt copies, each vertex = u,v,skirtFlag) -
-            // uploaded once, drawn for every chunk.
+            // The shared grid vertex buffer (surface and skirt copies, each vertex = u,v,skirtFlag),
+            // uploaded once and drawn for every chunk.
             Array<Float3> verts;
             tmodel::BuildChunkGridVertices(verts);
             m_gridVertexCount = static_cast<u32>(verts.Size());
@@ -312,9 +313,9 @@ export namespace engine::terrain
                 }
             }
 
-            // Shadow receive: a comparison sampler + a 1x1 dummy Texture2DArray depth map bound when no
-            // caster exists this frame (so set 0 stays complete). The real CSM array arrives via
-            // SetShadowMap. Mirrors MeshRenderer::CreateShadowResources.
+            // Shadow receive: a comparison sampler and a 1x1 dummy Texture2DArray depth map bound when
+            // no caster exists this frame (so set 0 stays complete). The real CSM array arrives
+            // through SetShadowMap. As MeshRenderer::CreateShadowResources does.
             rhi::SamplerDesc ssd{};
             ssd.minFilter = rhi::FilterMode::Linear;
             ssd.magFilter = rhi::FilterMode::Linear;
@@ -363,9 +364,9 @@ export namespace engine::terrain
             }
             m_activeShadowView = m_dummyShadowView;
 
-            // The albedo sampler (repeat + trilinear; base + palette slices carry mips). The
-            // splat rasters are Load-only - no splat sampler exists in the top-K model. 1x1
-            // dummies fill absent material slots (zero weights/indices = pure base; white base).
+            // The albedo sampler (repeat, trilinear; base and palette slices carry mips). The splat
+            // rasters are load-only, so the top-K model has no splat sampler. 1x1 dummies fill absent
+            // material slots (zero weights and indices = pure base; white base).
             rhi::SamplerDesc apd{};
             apd.minFilter = rhi::FilterMode::Linear;
             apd.magFilter = rhi::FilterMode::Linear;
@@ -395,9 +396,9 @@ export namespace engine::terrain
             {
                 return core::Status{core::ErrorCode::Unknown};
             }
-            // Absent-slot dummies for the top-K material: ZERO weights (= pure base) + zero
-            // indices (RGBA8Uint) + a 1-slice white palette array + a single-entry tileScale
-            // buffer - so an un-splatted terrain still satisfies the set-3 layout on WebGPU.
+            // Absent-slot dummies for the top-K material: zero weights (pure base), zero indices
+            // (RGBA8Uint), a 1-slice white palette array and a single-entry tileScale buffer, so an
+            // unsplatted terrain still satisfies the set-3 layout on WebGPU.
             rhi::TextureDesc ztd{};
             ztd.format = rhi::TextureFormat::RGBA8Unorm;
             ztd.width = 1;
@@ -451,9 +452,8 @@ export namespace engine::terrain
             {
                 return core::Status{core::ErrorCode::Unknown};
             }
-            // PBR dummies: flat-normal / default-ORM
-            // / mid-height, as a 2D texture (base) and a 1-slice array (palette), bound when a terrain
-            // supplies no normal / ORM / height map.
+            // PBR dummies: flat normal, default ORM and mid height, each as a 2D texture (base) and a
+            // 1-slice array (palette), bound when a terrain supplies no normal, ORM or height map.
             struct DummyDesc
             {
                 StringView label;
@@ -561,9 +561,9 @@ export namespace engine::terrain
         void PrepareFrame(u32 maxDraws, u32 frameIndex) override
         {
             const u32 chunk = 4096u;
-            // Each terrain allocates a view slot per PASS in a frame: 1 color + 1 depth prepass +
-            // kCascadeCount shadow cascades (+ extra views). The chunk ring holds every pass's chunk
-            // allocations (self-sized from the observed peak, both passes).
+            // Each terrain allocates a view slot per pass in a frame: 1 colour, 1 depth prepass and
+            // kCascadeCount shadow cascades (plus extra views). The chunk ring holds every pass's
+            // chunk allocations (sized from the observed peak, both passes).
             const u32 wantViews =
                 Max(kMaxTerrains * (2u + kCascadeCount), maxDraws == 0 ? 1u : maxDraws);
             m_viewRing.Reserve(wantViews);
@@ -597,9 +597,9 @@ export namespace engine::terrain
 
             const Float4x4 proj =
                 (ctx.view != nullptr) ? ctx.view->Camera().projection : Float4x4::Identity();
-            // The scene's sun: the first directional light (GpuLight::type 0), as a direction TO the
-            // light. Falls back to a fixed key light when the scene has no directional (so terrain is
-            // never unlit). Point/spot lights are ignored here - terrain takes only the sun (Phase E).
+            // The scene's sun: the first directional light (GpuLight::type 0), as a direction to the
+            // light. Falls back to a fixed key light when the scene has no directional light, so
+            // terrain is never unlit. Point and spot lights are ignored: terrain takes only the sun.
             Float3 sun = Normalized(Float3{0.35f, 0.82f, 0.45f});
             for (usize li = 0; li < ctx.lights.Size(); ++li)
             {
@@ -609,7 +609,7 @@ export namespace engine::terrain
                     const f32 len = Length(light.directionWS);
                     if (len > 1.0e-4f)
                     {
-                        sun = light.directionWS * (-1.0f / len); // travel dir -> dir TO light
+                        sun = light.directionWS * (-1.0f / len); // travel direction -> direction to the light
                     }
                     break;
                 }
@@ -629,10 +629,10 @@ export namespace engine::terrain
                     continue;
                 }
 
-                // Per-terrain view UBO. The VS works in WORLD space (ChunkToWorld applied there, NOT
+                // Per-terrain view UBO. The VS works in world space (ChunkToWorld applied there, not
                 // folded into ViewProj) so the PS can shadow-sample worldPos against the world-space
-                // cascade matrices. Cascade fields are filled from ctx.cascades (Stage B) - here they
-                // stay zero => cascadeCount 0 => SampleCSM returns fully lit.
+                // cascade matrices. The cascade fields stay zero (cascadeCount 0, so SampleCSM
+                // returns fully lit) unless the CSM fill below sets them.
                 const render::DynamicUniformRing::Range vr = m_viewRing.Allocate();
                 if (!vr.ok)
                 {
@@ -649,9 +649,9 @@ export namespace engine::terrain
                 ubo.prevJitter = ctx.prevJitter;
                 const f32 uvYSign = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
                 ubo.shadowUvYSign = uvYSign;
-                // CSM receive: copy this view's cascade matrices/splits (world-space - the VS emits
-                // worldPos). Count 0 (no directional caster) leaves the PS fully lit. Mirrors
-                // MeshRenderer's view-UBO shadow fill.
+                // CSM receive: copy this view's cascade matrices and splits (world space, since the
+                // VS emits worldPos). A count of 0 (no directional caster) leaves the PS fully lit.
+                // As MeshRenderer's view-UBO shadow fill does.
                 if (ctx.cascades.valid)
                 {
                     for (u32 c = 0; c < kCascadeCount; ++c)
@@ -677,13 +677,13 @@ export namespace engine::terrain
                 ubo.weightsBound = hasWeights ? 1u : 0u;
                 ubo.baseTileScale = data->baseTileScale;
                 ubo.baseBound = data->baseAlbedoView != nullptr ? 1u : 0u;
-                // Height-blend: on when any base OR palette height map is present, with the
-                // soft-skirt contrast. Off => the PS keeps the linear weighting, byte-identical.
+                // Height blend: on when any base or palette height map is present, with the
+                // soft-skirt contrast. Off, the PS keeps the linear weighting, byte-identical.
                 const bool heightBound =
                     data->baseHeightView != nullptr || data->heightArrayView != nullptr;
                 ubo.heightBlendContrast = data->heightBlendContrast;
                 ubo.heightMapsBound = heightBound ? 1u : 0u;
-                // Coverage mask: on when a palette mask array is present. Off => the PS skips the
+                // Coverage mask: on when a palette mask array is present. Off, the PS skips the
                 // coverage multiply, byte-identical.
                 const bool maskBound = data->maskArrayView != nullptr;
                 ubo.maskMapsBound = maskBound ? 1u : 0u;
@@ -702,11 +702,10 @@ export namespace engine::terrain
                 {
                     continue;
                 }
-                // Camera-independent pass (local-shadow tiles: ctx.view == null): the mesh
-                // rule's terrain equivalent - every visible chunk casts at the COARSEST
-                // level; shadows never render finer than any view shows. Cascades carry the
-                // owning camera view (RecordShadowCasters), so their coverage LODs match the
-                // main view's chunks exactly.
+                // Camera-independent pass (local-shadow tiles: ctx.view == null): as with meshes,
+                // every visible chunk casts at the coarsest level, since shadows never render
+                // finer than any view shows. Cascades carry the owning camera view
+                // (RecordShadowCasters), so their coverage LODs match the main view's chunks.
                 if (ctx.view == nullptr)
                 {
                     for (usize d = 0; d < m_draws.Size(); ++d)
@@ -717,7 +716,7 @@ export namespace engine::terrain
 
                 rhi::BindGroup* heightBg = EnsureHeightBindGroup(data->heightView);
                 rhi::BindGroup* materialBg = EnsureMaterialBindGroup(*data);
-                // A terrain with holes: the HOLES twin + the mask bind group for its holed chunks.
+                // A terrain with holes: the HOLES twin and the mask bind group for its holed chunks.
                 rhi::RenderPipeline* holePso =
                     data->holeView != nullptr ? EnsurePipeline(ctx.colorFormat, /*holes*/ true) : nullptr;
                 rhi::BindGroup* holeBg = data->holeView != nullptr
@@ -733,7 +732,7 @@ export namespace engine::terrain
                     const tmodel::ChunkDraw& cd = m_draws[d];
                     const u32 lod = Min(cd.lod, tmodel::kMaxChunkLod);
                     const tmodel::TerrainChunk& c = data->chunks[static_cast<usize>(cd.chunkIndex)];
-                    // The shared grid, or a holed chunk's own buffers (Specs/terrain-holes.md).
+                    // The shared grid, or a holed chunk's own buffers.
                     LodMesh lm = m_lodMeshes[lod];
                     if (!SelectChunkMesh(*data, c, static_cast<u32>(cd.chunkIndex), lod, lm))
                     {
@@ -763,12 +762,12 @@ export namespace engine::terrain
                     draw.drawSet = chunkBg;
                     draw.drawDynamic = true;
                     draw.drawOffset = cr.byteOffset;
-                    draw.materialSet = holed ? holeBg : heightBg; // set 2: height (+ hole mask)
-                    draw.clusterSet = materialBg;  // set 3: splat material (splatmap + albedos)
+                    draw.materialSet = holed ? holeBg : heightBg; // set 2: height (and hole mask)
+                    draw.clusterSet = materialBg;  // set 3: splat material
                     draw.vertexBuffer0 = m_gridVertexBuffer;
                     draw.indexBuffer = lm.indexBuffer;
                     draw.indexFormat = rhi::IndexFormat::UInt32;
-                    // Skirtless pass draws only the surface prefix (crack-plug diagnostics/tests).
+                    // A skirtless pass draws only the surface prefix (crack-plug diagnostics and tests).
                     draw.indexCount = m_skirtsEnabled ? lm.indexCount : lm.surfaceIndexCount;
                     draw.instanceCount = 1;
                     out.PushBack(draw);
@@ -776,9 +775,10 @@ export namespace engine::terrain
             }
         }
 
-        // Depth-only caster: the camera depth prepass (ctx.depthPrepass) AND each CSM cascade (ctx.viewProj
-        // = the cascade's world->light-clip). Same chunk cull/LOD as Resolve, but a vertex-only depth PSO
-        // and SURFACE indices only (skirts are a shading crack-hack, not shadow casters).
+        // Depth-only caster: the camera depth prepass (ctx.depthPrepass) and each CSM cascade
+        // (ctx.viewProj = the cascade's world-to-light-clip). Same chunk cull and LOD as Resolve, but
+        // a vertex-only depth PSO and surface indices only (skirts plug shading cracks; they do not
+        // cast shadows).
         void ResolveDepthOnly(const render::RenderRecordContext& ctx, Span<const render::DrawItem> items,
                               Array<render::ResolvedDraw>& out) override
         {
@@ -788,7 +788,7 @@ export namespace engine::terrain
         // GPU pick: the depth path's chunk cull/LOD with the `terrain_pick` PSO, whose fragment
         // writes the terrain entity's id (from the PickView layout in the view slot) into the
         // RG32Uint target (ctx.colorFormat). ctx.viewProj is the cropped camera VP, so the chunk
-        // frustum cull is the crop's - a click culls to the chunks under the pointer.
+        // frustum cull is the crop's: a click culls to the chunks under the pointer.
         void ResolvePickIds(const render::RenderRecordContext& ctx, Span<const render::DrawItem> items,
                             Array<render::ResolvedDraw>& out) override
         {
@@ -806,8 +806,8 @@ export namespace engine::terrain
             rhi::RenderPipeline* pso =
                 pick ? EnsurePickPipeline(ctx.colorFormat, ctx.depthFormat)
                      : EnsureDepthPipeline(ctx.depthFormat, /*biased*/ !ctx.depthPrepass);
-            // The DEPTH-pass group binds the dummy shadow view (not the live cascade being written) -
-            // a cascade-cast pass would otherwise sample its own render attachment (WebGPU hazard).
+            // The depth-pass group binds the dummy shadow view, not the live cascade being written:
+            // a cascade-cast pass would otherwise sample its own render attachment (a WebGPU hazard).
             rhi::BindGroup* viewBg = EnsureDepthViewBindGroup();
             rhi::BindGroup* chunkBg = EnsureChunkBindGroup();
             if (pso == nullptr || viewBg == nullptr || chunkBg == nullptr)
@@ -819,9 +819,9 @@ export namespace engine::terrain
 
             for (usize it = 0; it < items.Size(); ++it)
             {
-                // Ours only: the downcast below is valid ONLY for terrain items. Dispatchers
-                // group runs by rendererId, but a foreign item slipping through is silent UB
-                // (the PIE-start crash: a mesh item cast to TerrainRenderData) - gate hard.
+                // Ours only: the downcast below is valid only for terrain items. Dispatchers group
+                // runs by rendererId, but a foreign item slipping through would be silently cast to
+                // TerrainRenderData (undefined behaviour), so gate on the id.
                 if (items[it].data->rendererId != RendererId())
                 {
                     continue;
@@ -849,7 +849,7 @@ export namespace engine::terrain
                 }
                 else
                 {
-                    // The depth VS reads only ChunkToWorld + ViewProj; the rest of the slot is unused.
+                    // The depth VS reads only ChunkToWorld and ViewProj; the rest of the slot is unused.
                     GpuTerrainView ubo{};
                     ubo.chunkToWorld = data->chunkToWorld;
                     ubo.viewProj = ctx.viewProj; // camera VP (prepass) or cascade light VP (shadow)
@@ -868,11 +868,10 @@ export namespace engine::terrain
                 {
                     continue;
                 }
-                // Camera-independent pass (local-shadow tiles: ctx.view == null): the mesh
-                // rule's terrain equivalent - every visible chunk casts at the COARSEST
-                // level; shadows never render finer than any view shows. Cascades carry the
-                // owning camera view (RecordShadowCasters), so their coverage LODs match the
-                // main view's chunks exactly.
+                // Camera-independent pass (local-shadow tiles: ctx.view == null): as with meshes,
+                // every visible chunk casts at the coarsest level, since shadows never render
+                // finer than any view shows. Cascades carry the owning camera view
+                // (RecordShadowCasters), so their coverage LODs match the main view's chunks.
                 if (ctx.view == nullptr)
                 {
                     for (usize d = 0; d < m_draws.Size(); ++d)
@@ -927,11 +926,11 @@ export namespace engine::terrain
                     draw.drawSet = chunkBg;
                     draw.drawDynamic = true;
                     draw.drawOffset = cr.byteOffset;
-                    draw.materialSet = holed ? holeBg : heightBg; // set 2: height (+ hole mask)
+                    draw.materialSet = holed ? holeBg : heightBg; // set 2: height (and hole mask)
                     draw.vertexBuffer0 = m_gridVertexBuffer;
                     draw.indexBuffer = lm.indexBuffer;
                     draw.indexFormat = rhi::IndexFormat::UInt32;
-                    draw.indexCount = lm.surfaceIndexCount; // surface only - no skirt casters
+                    draw.indexCount = lm.surfaceIndexCount; // surface only: skirts cast nothing
                     draw.instanceCount = 1;
                     out.PushBack(draw);
                 }
@@ -953,21 +952,21 @@ export namespace engine::terrain
             m_chunkRing.SetRetireQueue(retire);
         }
 
-        // The frame's CSM cascade array (null = no caster this frame -> the dummy map, samples fully lit).
-        // Fanned out to every registered renderer by RenderFrame each frame (before PrepareFrame).
+        // The frame's CSM cascade array (null = no caster this frame: the dummy map, sampled as fully lit).
+        // RenderFrame hands it to every registered renderer each frame, before PrepareFrame.
         void SetShadowMap(rhi::TextureView* view, u64 generation) override
         {
             m_activeShadowView = (view != nullptr) ? view : m_dummyShadowView;
             m_activeShadowGen = (view != nullptr) ? generation : 0;
         }
-        // Terrain samples only the directional CSM, not the local (spot/point) atlas - leave the base
-        // SetShadowAtlas no-op.
+        // Terrain samples only the directional CSM, not the local (spot/point) atlas, so the base
+        // SetShadowAtlas no-op stays.
 
         // One-time: transition the out-of-graph 1x1 dummy shadow depth into the layout its descriptor
-        // expects (DepthStencilRead), so a caster-less frame never SAMPLES it while still UNDEFINED
+        // expects (DepthStencilRead), so a caster-less frame never samples it while still Undefined
         // (VUID-vkCmdDraw-None-09600). Terrain has no skinning; it uses this per-frame encoder hook
-        // (the only Renderer callback holding the OUTER command encoder, before any render pass) purely
-        // for that transition. Mirrors MeshRenderer::UploadSkinning.
+        // (the only Renderer callback holding the outer command encoder, before any render pass)
+        // only for that transition, as MeshRenderer::UploadSkinning does.
         void UploadSkinning(Span<const render::ExtractedScene* const>, rhi::CommandEncoder& encoder) override
         {
             if (!m_dummyDepthInit && m_dummyShadowTex != nullptr)
@@ -978,12 +977,12 @@ export namespace engine::terrain
             }
         }
 
-        /// Peak per-frame chunk-draw count seen so far (diagnostics + headless verification): > 0 only
-        /// once a frame emitted terrain draws, which requires the PSO (hence the shaders) to have built.
+        /// Peak per-frame chunk-draw count seen so far (diagnostics and headless verification): > 0
+        /// only once a frame emitted terrain draws, which requires the PSO (so the shaders) to build.
         [[nodiscard]] u32 MaxChunksDrawn() const noexcept { return m_maxChunksSeen; }
 
-        /// Draw the LOD-seam skirts (default on). Off draws only the surface - used to prove the skirts
-        /// actually plug cracks (a skirtless mixed-LOD frame leaks background through the seams).
+        /// Draws the LOD-seam skirts (default on). Off draws only the surface, which shows whether
+        /// the skirts plug cracks (a skirtless mixed-LOD frame leaks background through the seams).
         void SetSkirtsEnabled(bool enabled) noexcept { m_skirtsEnabled = enabled; }
 
     private:
@@ -998,13 +997,13 @@ export namespace engine::terrain
         struct LodMesh
         {
             rhi::Buffer* indexBuffer = nullptr;
-            u32 indexCount = 0;        // surface + skirt walls
+            u32 indexCount = 0;        // surface and skirt walls
             u32 surfaceIndexCount = 0; // the surface prefix (skirtless draw range)
         };
 
-        // A chunk with holes draws its OWN buffers (the render data carries them per chunk); a
-        // chunk cut everywhere draws nothing; every other chunk draws the shared grid `lm` holds
-        // on entry. False = nothing to draw for this chunk at this LOD.
+        // A chunk with holes draws its own buffers (the render data carries them per chunk); a chunk
+        // cut everywhere draws nothing; every other chunk draws the shared grid `lm` holds on
+        // entry. False = nothing to draw for this chunk at this LOD.
         [[nodiscard]] static bool SelectChunkMesh(const TerrainRenderData& data,
                                                   const tmodel::TerrainChunk& chunk, u32 chunkIndex,
                                                   u32 lod, LodMesh& lm)
@@ -1059,7 +1058,8 @@ export namespace engine::terrain
         {
             // Skirt depth: how far the skirt ring drops below the surface to plug an LOD seam. Bounded
             // by the chunk's own relief (a seam can't mismatch by more), with a floor for near-flat
-            // terrain. Only visible AT a crack, so being generous is free (unused in the depth pass).
+            // terrain. Only visible at a crack, so being generous costs nothing (unused in the depth
+            // pass).
             const f32 skirtDepth = Max(1.0f, 0.5f * (c.bounds.max.y - c.bounds.min.y));
             return GpuTerrainChunk{
                 Float2{c.bounds.min.x, c.bounds.min.z},
@@ -1072,7 +1072,7 @@ export namespace engine::terrain
                 0.0f};
         }
 
-        // The forward/resolve pass view bind group: t1 = the LIVE CSM cascade array (or the dummy
+        // The forward/resolve pass view bind group: t1 = the live CSM cascade array (or the dummy
         // when there is no caster this frame), which the terrain PS samples for shadow receive.
         rhi::BindGroup* EnsureViewBindGroup()
         {
@@ -1080,10 +1080,10 @@ export namespace engine::terrain
                                       m_viewBgShadow, m_viewBgShadowGen);
         }
 
-        // The depth-only pass (camera prepass + each CSM cascade cast) view bind group: t1 = the
-        // DUMMY shadow view, NEVER the live cascade. The depth VS/PS never samples t1, and during a
-        // cascade cast the live cascade IS the render attachment - binding it here too is a WebGPU
-        // read+write hazard ("usage (TextureBinding|RenderAttachment) ... same synchronization
+        // The depth-only pass (camera prepass and each CSM cascade cast) view bind group: t1 = the
+        // dummy shadow view, never the live cascade. The depth VS/PS never samples t1, and during a
+        // cascade cast the live cascade is the render attachment, so binding it here too is a WebGPU
+        // read and write hazard ("usage (TextureBinding|RenderAttachment) ... same synchronization
         // scope"). The dummy is a standalone depth texture, never an attachment, so it is always safe.
         rhi::BindGroup* EnsureDepthViewBindGroup()
         {
@@ -1096,7 +1096,7 @@ export namespace engine::terrain
                                            rhi::TextureView*& bgShadow, u64& bgShadowGen)
         {
             const u32 gen = m_viewRing.Generation();
-            // Rebuild on a ring roll-over OR a change of the bound shadow map (pointer or generation -
+            // Rebuild on a ring roll-over or a change of the bound shadow map (pointer or generation:
             // a freed view's address can be reused, so the generation guards address aliasing).
             if (bg != nullptr && bgGen == gen && bgShadow == shadowT1 && bgShadowGen == shadowGen)
             {
@@ -1104,7 +1104,7 @@ export namespace engine::terrain
             }
             if (bg != nullptr)
             {
-                // May sit in a submitted frame's descriptor set - retire (frame-aged) when possible.
+                // May sit in a submitted frame's descriptor set: retire (frame-aged) when possible.
                 if (m_retire != nullptr)
                 {
                     m_retire->Retire(bg);
@@ -1183,9 +1183,9 @@ export namespace engine::terrain
                 }
                 if (found->bindGroup != nullptr)
                 {
-                    // The old group may sit in a submitted frame's descriptor bindings -
-                    // retire (frame-aged) rather than destroy in place; direct destroy only
-                    // when no queue is wired (Null-device tests).
+                    // The old group may sit in a submitted frame's descriptor bindings, so retire
+                    // it (frame-aged) rather than destroy it in place; destroy directly only when
+                    // no queue is wired (Null-device tests).
                     if (m_retire != nullptr)
                     {
                         m_retire->Retire(found->bindGroup);
@@ -1210,8 +1210,8 @@ export namespace engine::terrain
             return bg;
         }
 
-        // Set 2 for a holed chunk: height + hole mask + sampler, cached per hole view and
-        // validated by both views' uniqueIds (never raw pointers - the bind-group-cache rule).
+        // Set 2 for a holed chunk: height, hole mask and sampler, cached per hole view and
+        // validated by both views' uniqueIds (never raw pointers).
         rhi::BindGroup* EnsureHeightHoleBindGroup(rhi::TextureView* height, rhi::TextureView* hole)
         {
             if (height == nullptr || hole == nullptr || m_holeSampler == nullptr)
@@ -1254,9 +1254,10 @@ export namespace engine::terrain
             return bg;
         }
 
-        // Set 3 (splat material): splatmap + 4 albedos (white dummy for absent slots) + the two
-        // samplers. Cached per splatmap view, validated by the uniqueId of ALL five views (never raw
-        // pointers - address reuse); a hot-swap retires the stale group through the frame-retire queue.
+        // Set 3 (splat material): the eleven views, the tileScale buffer and the albedo sampler,
+        // with dummies for absent slots. Cached per weight view and validated by the uniqueId of
+        // every view (never raw pointers: addresses are reused); a hot swap retires the stale group
+        // through the frame-retire queue.
         rhi::BindGroup* EnsureMaterialBindGroup(const TerrainRenderData& data)
         {
             // Absent slots bind the dummies: zero weights/indices = pure base; white base/array.
@@ -1289,8 +1290,8 @@ export namespace engine::terrain
             rhi::TextureView* maskArr =
                 (data.maskArrayView != nullptr) ? data.maskArrayView : m_opaqueMaskArrayView;
 
-            // Keyed by the WEIGHT view pointer, VALIDATED by every view's uniqueId + the buffer
-            // generation (bind-group-cache-versioning: pointers alias across reloads; ids don't).
+            // Keyed by the weight view pointer, validated by every view's uniqueId and the buffer
+            // generation (pointers alias across reloads; ids don't).
             if (MaterialBindGroup* found = m_materialBindGroups.Find(wgt))
             {
                 const bool match =
@@ -1385,9 +1386,9 @@ export namespace engine::terrain
             vbl.stepMode = rhi::VertexStepMode::Vertex;
             vbl.attributes = Span<const rhi::VertexAttribute>{attrs, 1};
 
-            // Opaque terrain writes the forward GBUFFER: target 0 = shaded colour, 1 = view-space
+            // Opaque terrain writes the forward GBuffer: target 0 = shaded colour, 1 = view-space
             // normal, 2 = motion vector, 3 = material (roughness/metallic), 4 = diffuse albedo. The
-            // forward pass binds all five, so the PSO must declare them (WebGPU rejects a target-count
+            // forward pass binds all five, so the PSO declares them (WebGPU rejects a target-count
             // mismatch). No blend.
             rhi::ColorTargetState targets[5]{};
             targets[0].format = colorFormat;
@@ -1429,31 +1430,28 @@ export namespace engine::terrain
             return pso;
         }
 
-        // Depth-only PSO (vertex-only, 0 color targets). `biased` adds the shadow-pass
-        // slope-scaled depth bias (the camera prepass must match the forward depth exactly, so no
-        // bias). INVARIANCE HARDENING: the CAMERA prepass (unbiased) uses the MAIN "terrain" VS
-        // module - the same bytecode the color pass rasterizes with - so both passes get
-        // bit-identical clip positions on every driver we ship on (D3D12 guarantees same-bytecode
-        // position identity; Vulkan does not formally without the Invariant decoration, but
-        // same-module reuse holds in practice) and the color pass's LessEqual never loses
-        // fragments to ULP divergence (a separately compiled twin VS, though source-identical,
-        // may reassociate the position transform; at distance the per-pixel depth gradient
-        // shrinks below ULPs and fragments drop in row bands). The prepass-vs-color LOD parity
-        // itself is owned by the pipeline (ctx.viewMatrix on the prepass context - the actual
-        // zoomed-out banding bug). The extra interpolants are discarded (no fragment stage) and
-        // the VS touches sets 0-2 only, so the 3-set depth layout still fits. Shadow passes keep
-        // the cheap terrain_depth VS - cascade depth never depth-tests against the color pass.
-        // `holes` = the HOLES twin: the "terrain" VS module for BOTH the prepass and the cascades
-        // (terrain_depth.ps's input is terrain.vs's VSOut; a holed chunk is rare, so the cascade's
-        // extra interpolants cost nothing that matters) plus terrain_depth's fragment stage
-        // discarding by the hole mask, so the prepass depth and the cascades open with the colour
-        // pass, whose draws share the same HOLES "terrain" VS module.
+        // Depth-only PSO (vertex-only, 0 colour targets). `biased` adds the shadow pass's
+        // slope-scaled depth bias (the camera prepass must match the forward depth exactly, so it
+        // has no bias). The unbiased camera prepass uses the main "terrain" VS module, the same
+        // bytecode the colour pass rasterizes with, so both passes get bit-identical clip positions
+        // (D3D12 guarantees this for the same bytecode; Vulkan does not formally without the
+        // Invariant decoration, but same-module reuse holds in practice) and the colour pass's
+        // LessEqual never loses fragments to ULP divergence. A separately compiled twin VS may
+        // reassociate the position transform, and at distance the per-pixel depth gradient shrinks
+        // below ULPs and fragments drop in row bands. The extra interpolants are discarded (no
+        // fragment stage) and the VS touches sets 0-2 only, so the 3-set depth layout still fits.
+        // Shadow passes keep the cheaper terrain_depth VS: cascade depth never depth-tests against
+        // the colour pass.
+        // `holes` selects the HOLES twin: the "terrain" VS module for both the prepass and the
+        // cascades (terrain_depth.ps's input is terrain.vs's VSOut; holed chunks are rare, so the
+        // cascade's extra interpolants cost little) with terrain_depth's fragment stage discarding
+        // by the hole mask, so the prepass depth and the cascades open with the colour pass.
         rhi::RenderPipeline* EnsureDepthPipeline(rhi::TextureFormat depthFormat, bool biased,
                                                  bool holes = false)
         {
             // The HOLES twin always takes the "terrain" VS module: terrain_depth.ps declares
             // terrain.vs's full VSOut (the stage interface is matched by location), and a holed
-            // chunk's prepass + cascades then share the colour pass's vertex bytecode.
+            // chunk's prepass and cascades then share the colour pass's vertex bytecode.
             const StringView shaderName = (biased && !holes) ? u8"terrain_depth" : u8"terrain";
             DepthPso& p = (holes ? m_holeDepthPso : m_depthPso)[biased ? 1u : 0u];
             const u64 shaderVersion = m_shaders->Version(shaderName);
@@ -1497,8 +1495,8 @@ export namespace engine::terrain
             pd.layout = holes ? m_holeDepthPipelineLayout : m_depthPipelineLayout; // 3 sets (no material)
             pd.vertex.shader = rhi::StageOf(vs, rhi::ShaderStage::Vertex);
             pd.vertex.buffers = Span<const rhi::VertexBufferLayout>{&vbl, 1};
-            // No fragment stage (Optional left empty) + no color targets = depth-only; the HOLES
-            // twin adds the discarding fragment stage, still with no colour target.
+            // No fragment stage (Optional left empty) and no colour targets make it depth-only; the
+            // HOLES twin adds the discarding fragment stage, still with no colour target.
             rhi::FragmentState holeFrag{};
             if (holes)
             {
@@ -1520,7 +1518,7 @@ export namespace engine::terrain
             return pso;
         }
 
-        // The pick PSO: the depth layout (3 sets) + the terrain_pick fragment writing the id target.
+        // The pick PSO: the depth layout (3 sets) and the terrain_pick fragment writing the id target.
         rhi::RenderPipeline* EnsurePickPipeline(rhi::TextureFormat colorFormat,
                                                 rhi::TextureFormat depthFormat, bool holes = false)
         {
@@ -1823,8 +1821,8 @@ export namespace engine::terrain
         struct MaterialBindGroup
         {
             rhi::BindGroup* bindGroup = nullptr;
-            // index/weight/base/palette + baseNormal/normalArray/baseOrm/ormArray +
-            // baseHeight/heightArray + maskArray view uniqueIds.
+            // index/weight/base/palette, baseNormal/normalArray/baseOrm/ormArray,
+            // baseHeight/heightArray and maskArray view uniqueIds.
             u64 ids[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
             u64 tileGen = 0;
         };
@@ -1836,7 +1834,7 @@ export namespace engine::terrain
         rhi::BindGroupLayout* m_viewLayout = nullptr;
         rhi::BindGroupLayout* m_chunkLayout = nullptr;
         rhi::BindGroupLayout* m_heightLayout = nullptr;
-        rhi::BindGroupLayout* m_heightHoleLayout = nullptr; // set 2 for holed chunks: + mask + sampler
+        rhi::BindGroupLayout* m_heightHoleLayout = nullptr; // set 2 for holed chunks: adds the mask and sampler
         rhi::BindGroupLayout* m_materialLayout = nullptr; // set 3: splat material
         rhi::PipelineLayout* m_pipelineLayout = nullptr;      // color: 4 sets
         rhi::PipelineLayout* m_depthPipelineLayout = nullptr; // depth: 3 sets (no material)
@@ -1850,7 +1848,7 @@ export namespace engine::terrain
         rhi::BindGroup* m_viewBg = nullptr;
         u32 m_viewBgGen = 0;
         // The depth/shadow-cast pass's own view group (t1 = dummy shadow view, never the live
-        // cascade being rendered - a WebGPU read+write hazard otherwise).
+        // cascade being rendered, which would be a WebGPU read and write hazard).
         rhi::BindGroup* m_depthViewBg = nullptr;
         u32 m_depthViewBgGen = 0;
         rhi::TextureView* m_depthViewBgShadow = nullptr;
@@ -1858,7 +1856,7 @@ export namespace engine::terrain
         rhi::BindGroup* m_chunkBg = nullptr;
         u32 m_chunkBgGen = 0;
         HashMap<rhi::TextureView*, HeightBindGroup> m_heightBindGroups;
-        // Top-K splat material (set 3): absent-slot dummies + the per-weights bind cache.
+        // Top-K splat material (set 3): absent-slot dummies and the per-weights bind cache.
         rhi::Sampler* m_albedoSampler = nullptr;
         rhi::Texture* m_whiteTex = nullptr; // 1x1 white (absent base albedo)
         rhi::TextureView* m_whiteView = nullptr;
@@ -1884,8 +1882,8 @@ export namespace engine::terrain
         rhi::TextureView* m_opaqueMaskArrayView = nullptr;
         rhi::Buffer* m_dummyTileBuffer = nullptr; // one f32 = 1.0
         HashMap<rhi::TextureView*, MaterialBindGroup> m_materialBindGroups;
-        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns + ticks)
-        // Shadow receive (set 0: t1 CSM array + s0 comparison sampler).
+        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns and ticks it)
+        // Shadow receive (set 0: t1 CSM array, s0 comparison sampler).
         rhi::Sampler* m_shadowSampler = nullptr;
         rhi::Texture* m_dummyShadowTex = nullptr;      // 1x1 Texture2DArray depth (no-caster fallback)
         rhi::TextureView* m_dummyShadowView = nullptr;
@@ -1904,7 +1902,7 @@ export namespace engine::terrain
         Array<tmodel::ChunkDraw> m_draws; // scratch, reused each terrain (Resolve is single-threaded)
         u32 m_frameChunks = 0;      // color-pass visible chunks (the MaxChunksDrawn diagnostic)
         u32 m_maxChunksSeen = 0;
-        u32 m_frameChunkAllocs = 0; // chunk-ring allocs this frame across ALL passes (sizes the ring)
+        u32 m_frameChunkAllocs = 0; // chunk-ring allocs this frame across all passes (sizes the ring)
         u32 m_maxChunkAllocs = 0;
         bool m_skirtsEnabled = true;
     };

@@ -2,14 +2,13 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :action_shortcuts partition.
 //
-// ActionShortcuts: the editor's keys GENERATED from the action registry (Documentation/Specs/
-// editor-gui.md, 5.1, layer 8). Every action with an effective chord (the user's override or the
-// declaration's default) and every alternate chord is bound in the GUI's keymap to a command named
-// by the action's id, and the window's root handles each such command by the registry's Execute: the one
-// funnel, so a chord and a menu click are the same thing. The keymap runs a binding of a focused
-// widget's own context before one with none, so a focused text field keeps Ctrl+Z for its own
-// undo. Bound again on every registry change (a registration, a rebind), the bindings and
-// handlers before taken away first.
+// ActionShortcuts: the editor's keys generated from the action registry. Every action with an
+// effective chord (the user's override or the declaration's default) and every alternate chord is
+// bound in the GUI's keymap to a command named by the action's id, and the window's root handles
+// each such command with the registry's Execute, so a chord and a menu click do the same thing.
+// The keymap runs a binding of a focused widget's own context before one with none, so a focused
+// text field keeps Ctrl+Z for its own undo. On every registry change (a registration, a rebind)
+// the old bindings and handlers are removed and everything is bound again.
 module;
 #include "Core/Prelude.h"
 
@@ -41,15 +40,15 @@ export namespace editor::app
         }
         ActionShortcuts(const ActionShortcuts&) = delete;
         ActionShortcuts& operator=(const ActionShortcuts&) = delete;
-        /// The commands run through this object, so its bindings and handlers go with it, and the
-        /// registry no longer reaches it.
+        /// The commands run through this object, so destroying it removes its bindings and
+        /// handlers and stops the registry calling it.
         ~ActionShortcuts()
         {
             m_changed.Reset();
             Unbind();
         }
 
-        /// The bindings as the registry answers now.
+        /// Binds every key again from the registry's current state.
         void Rebind()
         {
             Unbind();
@@ -99,6 +98,6 @@ export namespace editor::app
         EditorActionRegistry* m_actions;
         Array<String> m_bound;   // a command per key bound
         Array<u32> m_handlers;   // the handler's command tokens
-        UniquePtr<gui::Effect> m_changed; // bound again when the registry changes
+        UniquePtr<gui::Effect> m_changed; // rebinds when the registry changes
     };
 }

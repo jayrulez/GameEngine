@@ -5,10 +5,9 @@
 //
 // A run's save: the values a game keeps between runs (a best time, an unlocked level, its own
 // options), the file they live in, and whether they changed since the last write. The host names
-// the file (the player in the user data directory, play in editor in the project's Editor/
-// folder); the run's script contexts reach it through the `Save` facade. The file is an ordinary
-// settings file holding one SaveValues section, written whole and atomically. See
-// Documentation/Specs/save-data.md.
+// the file (the player in the user data directory, play in editor in the project's Editor/ folder);
+// the run's script contexts reach it through the `Save` facade. The file is an ordinary settings
+// file holding one SaveValues section, written whole and atomically.
 
 module;
 #include "Core/Prelude.h"

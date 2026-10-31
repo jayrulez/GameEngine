@@ -3,10 +3,10 @@
 
 /// Foundation::Render - the `:cluster_system` partition.
 ///
-/// Clustered light culling. Bins lights into a 3D froxel grid (screen tiles ×
+/// Clustered light culling. Bins lights into a 3D froxel grid (screen tiles by
 /// logarithmic depth slices) once per frame via a compute pass, so the forward shader evaluates
 /// only the lights touching each fragment's cluster instead of all lights. This partition owns the
-/// build compute pipeline + the per-frame cluster buffers, and declares the build pass into the
+/// build compute pipeline and the per-frame cluster buffers, and declares the build pass into the
 /// frame graph (ordered before the forward pass, which reads the buffers it writes). The kernel,
 /// cluster_build.cs.hlsl, builds each froxel's view-space AABB and assigns it every directional
 /// light and each point or spot light whose range sphere meets the box.
@@ -48,15 +48,15 @@ export namespace foundation::render
     };
     static_assert(sizeof(GpuClusterBuildParams) == 176, "cbuffer ClusterBuildParams layout drift");
 
-    // What a built cluster grid exposes to the forward pass (the buffers + the grid params the
-    // fragment shader needs to map a pixel+depth to its cluster). Filled by DeclareBuild.
+    // What a built cluster grid exposes to the forward pass: the buffers, and the grid parameters the
+    // fragment shader needs to map a pixel and depth to its cluster. Filled by DeclareBuild.
     struct ClusterBinding
     {
         rhi::Buffer* offsets = nullptr;      // uint2 per cluster: (indexStart, count)
         rhi::Buffer* lightIndices = nullptr; // flat uint light-index list
         // Bumped every time this slot's buffers are reallocated (resize). Consumers must invalidate any
-        // cached bind group on a version change - a freed rhi::Buffer* address can be REUSED by the new
-        // allocation, so pointer-equality is NOT a reliable "unchanged" test (use-after-free otherwise).
+        // cached bind group on a version change: a freed rhi::Buffer* address can be reused by the new
+        // allocation, so pointer equality is not a reliable "unchanged" test.
         u32 version = 0;
         rendergraph::RGHandle offsetsHandle =
             {}; // graph handles so the forward pass can ReadBuffer them
@@ -91,19 +91,19 @@ export namespace foundation::render
         ClusterSystem(const ClusterSystem&) = delete;
         ClusterSystem& operator=(const ClusterSystem&) = delete;
 
-        // Build the compute pipeline + its layout. Returns non-Ok if the shader/pipeline fails.
+        // Build the compute pipeline and its layout. Returns non-Ok if the shader or pipeline fails.
         Status Initialize();
 
-        // Size the params ring for this frame + select its region. Call once per frame before any view.
+        // Size the params ring for this frame and select its region. Call once per frame before any view.
         void PrepareFrame(u32 frameIndex);
 
         // Declare this view's cluster build compute pass into the graph (ordered before the forward
         // pass that reads the cluster buffers). Returns the binding the forward pass consumes, or an
-        // empty binding if unavailable. The cluster grid is derived from the view's resolution + camera.
+        // empty binding if unavailable. The cluster grid is derived from the view's resolution and camera.
         ClusterBinding DeclareBuild(rendergraph::RenderGraph& graph, const RenderView& view,
                                     u32 frameIndex, u32 viewIndex);
 
-        /// Wire the frames-in-flight retire queue (web-safe buffer grows). Null = drain.
+        /// Wire the frames-in-flight retire queue (web-safe buffer grows). Null means drain.
         void SetRetireQueue(GpuRetireQueue* retire) noexcept
         {
             m_retire = retire;
@@ -112,7 +112,7 @@ export namespace foundation::render
         }
 
     private:
-        GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
+        GpuRetireQueue* m_retire = nullptr; // borrowed; null means WaitIdle on grow
         static constexpr u32 kTileSize = 16;
         static constexpr u32 kSliceCount = 24;
         static constexpr u32 kMaxPerCluster =
@@ -122,13 +122,13 @@ export namespace foundation::render
             256; // dynamic UBO offset alignment (>= sizeof(GpuClusterBuildParams))
         static constexpr u32 kMaxViewsPerFrame = 8;
 
-        // (Re)create one (view,frame) slot's cluster buffers when its cluster count grows. Lazy: only
+        // (Re)create one (view, frame) slot's cluster buffers when its cluster count grows. Lazy: only
         // the slots actually used by rendered views are allocated.
         bool EnsureBuffers(u32 bufferSlot, u32 totalClusters);
 
-        // (Re)build the bind group for a (view,frame) slot. One bind group PER slot (each over its own
-        // buffers) so a slot's group is stable across frames - never freed while the previous frame's
-        // command buffer that referenced it is still in flight.
+        // (Re)build the bind group for a (view, frame) slot. There is one bind group per slot, each over
+        // its own buffers, so a slot's group is stable across frames and is never freed while the previous
+        // frame's command buffer that referenced it is still in flight.
         bool EnsureBindGroup(u32 bufferSlot, rhi::Buffer* offsets, rhi::Buffer* indices);
 
         void Shutdown();
@@ -143,20 +143,20 @@ export namespace foundation::render
         u64 m_pipelineShaderVersion = 0; // ShaderSystem::Version at build (hot reload)
 
         static constexpr u32 kMaxFramesInFlight = 8;
-        // Cluster buffers are owned per (view, frame-in-flight) slot - two views in one frame must not
-        // share a buffer (the Sedulous "two pipelines stomp the same frameIndex%2 slot" bug). Slots are
-        // allocated LAZILY (the indices buffer is large), so unused view slots cost only a null pointer.
+        // Cluster buffers are owned per (view, frame-in-flight) slot: two views in one frame must not
+        // share a buffer, or the second view's build overwrites the first's. Slots are allocated lazily
+        // (the indices buffer is large), so unused view slots cost only a null pointer.
         static constexpr u32 kMaxBufferSlots = kMaxViewsPerFrame * kMaxFramesInFlight;
 
         DynamicUniformRing m_paramsRing;
         DynamicUniformRing
-            m_lightRing; // ClusterSystem's own light copy (built before the forward uploads its)
+            m_lightRing; // ClusterSystem's own light copy (built before the forward pass uploads its own)
         rhi::Buffer* m_offsets[kMaxBufferSlots] = {}; // per-(view,frame) cluster (offset,count)
         rhi::Buffer* m_indices[kMaxBufferSlots] = {}; // per-(view,frame) flat light-index list
         u64 m_offsetsBytes[kMaxBufferSlots] = {}; // size of each slot's buffers (views can differ)
         u64 m_indicesBytes[kMaxBufferSlots] = {};
         u32 m_bufferVersion[kMaxBufferSlots] =
-            {}; // ++ on realloc; consumers invalidate cached bind groups
+            {}; // incremented on realloc; consumers invalidate cached bind groups
 
         // One bind group per (view, frame) slot (each over its own buffers), so a slot's group is never
         // freed while still referenced by an in-flight frame.

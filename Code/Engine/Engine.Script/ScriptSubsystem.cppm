@@ -3,25 +3,22 @@
 
 // Engine::Script - the `engine.script` module.
 //
-// Entity behaviors: a ScriptSceneSystem per scene
-// instantiates each behavior's cooked ScriptClass in the run's ONE gameplay script
-// context, applies harvested defaults + hash-keyed overrides, and dispatches the
-// declared lifecycle handlers (onStart via deferred start, onUpdate(dt), onEnable/
-// onDisable, onDestroy) - gated to simulation (IsSimulationOnly: the editor's Simulate
-// toggle and PIE both count). A faulting BEHAVIOR is disabled and logged; scripting
-// keeps running.
+// Entity behaviors: a ScriptSceneSystem per scene instantiates each behavior's cooked
+// ScriptClass in the run's one gameplay script context, applies harvested defaults and
+// hash-keyed overrides, and dispatches the declared lifecycle handlers (onStart through a
+// deferred start, onUpdate(dt), onEnable and onDisable, onDestroy), gated to simulation
+// (IsSimulationOnly: the editor's Simulate toggle and play-in-editor both count). A faulting
+// behavior is disabled and logged; scripting keeps running.
 //
-// Context ownership (the locked PIE rule): the subsystem's ScriptRunHost owns the run's
-// single IScriptContext - created lazily at first use (first behavior instantiate, or
-// the game script's StartGameScript, which SHARES it), torn down when the run ends
-// (game script released + no live instances + nothing simulating). The backend is
-// resolved through the ScriptBackendRegistry by LANGUAGE (B3) - no backend type is
-// ever named here.
+// Context ownership: the subsystem's ScriptRunHost owns the run's single IScriptContext,
+// created lazily at first use (the first behavior instantiate, or the game script's
+// StartGameScript, which shares it) and torn down when the run ends (game script released,
+// no live instances, nothing simulating). The backend is resolved through the
+// ScriptBackendRegistry by language; no backend type is ever named here.
 //
 // Hot reload: the cook swaps the product inside the resource handle; the dispatch loop
 // notices the behavior's bound product pointer changed, re-instantiates, and re-applies
-// the hash-keyed overrides (editor-set values survive; transient script state resets -
-// the documented v1 contract).
+// the hash-keyed overrides (editor-set values survive; transient script state resets).
 
 module;
 #include "Core/Prelude.h"
@@ -32,7 +29,7 @@ module;
 export module engine.script;
 
 export import :components;
-export import foundation.script.facades; // Entity/Log/Time/Random + the run-service binding
+export import foundation.script.facades; // Entity, Log, Time, Random and the run-service binding
 
 import foundation.core;
 import engine.domain;
@@ -58,12 +55,12 @@ export namespace engine::script
 
     namespace scene = foundation::scene;
 
-    // ---- the script event bridge (Track B): scene bus events -> on<Event> handlers ----
+    // ---- the script event bridge: scene bus events reach on<Event> handlers ----
 
-    /// The on<X> handlers that are NOT user bus events: the fixed lifecycle set + the reserved
+    /// The on<X> handlers that are not user bus events: the fixed lifecycle set and the reserved
     /// physics-contact handlers (those are delivered by the contact path, not the bus). Every
-    /// OTHER on<Upper> handler names a bus event, so declaring `onOrbCollected(x)` auto-subscribes
-    /// to the "OrbCollected" event - no separate `events` list to keep in sync.
+    /// other on<Upper> handler names a bus event, so declaring `onOrbCollected(x)` subscribes
+    /// to the "OrbCollected" event, with no separate `events` list to keep in sync.
     [[nodiscard]] inline bool IsReservedHandler(StringView handler) noexcept
     {
         static const StringView kReserved[] = {
@@ -80,7 +77,7 @@ export namespace engine::script
         return false;
     }
 
-    /// The bus event name a handler subscribes to: "onOrbCollected" -> "OrbCollected" (verbatim
+    /// The bus event name a handler subscribes to: "onOrbCollected" gives "OrbCollected" (verbatim
     /// after "on"). A behavior emits with that exact name (`scene.events.emit("OrbCollected", ...)`).
     /// Empty for anything that is not an `on<Upper>` handler.
     [[nodiscard]] inline StringView EventNameForHandler(StringView handler) noexcept
@@ -92,7 +89,7 @@ export namespace engine::script
         const utf8char third = handler[2];
         if (third < u8'A' || third > u8'Z')
         {
-            return StringView{}; // on + UpperCase only (matches the handler-scan convention)
+            return StringView{}; // "on" and an upper-case letter only (the handler-scan convention)
         }
         return handler.SubStr(2, handler.Size() - 2);
     }
@@ -101,12 +98,13 @@ export namespace engine::script
     /// bind, EnsureFor() subscribes (once per event name) to each non-reserved on<Event> handler
     /// they declare, routing every fired event to a supplied sink at bus-drain time. The bus drains
     /// at the scene tick's top level (no VM call active), so the sink may dispatch script handlers
-    /// DIRECTLY - the emit->publish->drain-later path already provides the deferral that entity.send
-    /// needs its message queue for. Owns its bus handles; Clear() drops them on scene stop.
+    /// directly: emitting publishes and the bus drains later, which already provides the deferral
+    /// that entity.send needs its message queue for. Owns its bus handles; Clear() drops them on
+    /// scene stop.
     class ScriptEventSubscriptions
     {
     public:
-        /// Wire the target bus + the sink (called with (eventName, payload) per fired event). The bus is
+        /// Wire the target bus and the sink (called with (eventName, payload) per fired event). The bus is
         /// tier-agnostic: a scene passes &scene.Events(), the run tier passes &instance.Events().
         void Bind(messaging::EventBus* bus, Function<void(StringView, const Variant&)> sink)
         {
@@ -120,7 +118,7 @@ export namespace engine::script
             EnsureFor(Span<const String>(scriptClass.handlers.Data(), scriptClass.handlers.Size()));
         }
 
-        /// Subscribe (deduped) to every non-reserved on<Event> among `handlers` - the tier that has no
+        /// Subscribe (deduped) to every non-reserved on<Event> among `handlers`: the tier that has no
         /// ScriptClass resource (the Game tier, whose handlers are threaded in) uses this directly.
         void EnsureFor(Span<const String> handlers)
         {
@@ -193,10 +191,10 @@ export namespace engine::script
         Array<u32> m_handles;     // bus handles to unsubscribe on Clear
     };
 
-    // ---- the run's script host (ONE gameplay context per run) ----
+    // ---- the run's script host (one gameplay context per run) ----
 
     // Logs behavior errors (Script category) and forwards to an optional external sink
-    // (the editor's console/notice path).
+    // (the editor's console and notice path).
     class RunScriptErrorSink final : public IScriptErrorHandler
     {
     public:
@@ -248,29 +246,29 @@ export namespace engine::script
         bool m_paused = false;
     };
 
-    /// Owns the run's manager + context and the behaviors MODULE loaded into it. Class
+    /// Owns the run's manager and context and the behaviors module loaded into it. Class
     /// sources are concatenated into one generation-versioned module ("behaviors#N"):
-    /// the contract's CreateInstance resolves against the LAST loaded module, and a
+    /// the contract's CreateInstance resolves against the last loaded module, and a
     /// fresh module name per generation gives hot reload clean semantics (live
     /// instances of old generations keep running).
     /// Plain class (no runtime deps) so headless tests drive it directly.
     class ScriptRunHost
     {
     public:
-        // The allocator (required - the owner decides) becomes the run's script
-        // manager tree root: every context/object/blob inherits it via
+        // The allocator (required: the owner decides) becomes the run's script
+        // manager tree root: every context, object and blob inherits it through
         // MemoryAllocator().
         explicit ScriptRunHost(foundation::core::IAllocator& allocator) noexcept
             : m_allocator(&allocator)
         {
         }
 
-        /// Extra per-context wiring (the host app exposes Input/Audio/Physics services).
+        /// Extra per-context wiring (the host app exposes Input, Audio and Physics services).
         void SetContextConfigurator(Function<void(IScriptContext&)> configurator)
         {
             m_configurator = Move(configurator);
         }
-        /// The host's OWNER's services (a game instance: its run.*, its input runtime, its save),
+        /// The host's owner's services (a game instance: its run.*, its input runtime, its save),
         /// applied after the app's configurator to every context this host makes, so its behaviors
         /// read the run's services whether or not a game script ever starts. A context that
         /// already exists takes them at once.
@@ -287,16 +285,16 @@ export namespace engine::script
             m_errorSink.external = sink;
         }
 
-        // The game-script hold: true while a game script is loaded into THIS
+        // The game-script hold: true while a game script is loaded into this
         // host, so teardown accounting keeps the context alive. Per-host.
         void SetGameScriptHold(bool held) noexcept { m_gameScriptHold = held; }
         [[nodiscard]] bool HasGameScriptHold() const noexcept { return m_gameScriptHold; }
 
-        // ---- step debugging (the PIE debugger + the future remote transport) ----
+        // ---- step debugging (the play-in-editor debugger, or any other transport) ----
 
         /// Ask that this run be debuggable: a debugger is created on the run's manager
         /// (lazily, when the context exists) and `configurator` is called once with it so the
-        /// caller can apply breakpoints + capture the pointer. The internal pause tracker is
+        /// caller can apply breakpoints and capture the pointer. The internal pause tracker is
         /// always the debugger's listener; a caller forwards through SetExternalDebugListener.
         void RequestDebugger(Function<void(IScriptDebugger&)> configurator)
         {
@@ -304,7 +302,7 @@ export namespace engine::script
             m_debuggerRequested = true;
             EnsureDebugger();
         }
-        /// The run's debugger, or null (not requested / backend lacks the capability / no
+        /// The run's debugger, or null (not requested, the backend lacks the capability, or no
         /// context yet). Contract-typed so a caller never depends on a backend.
         [[nodiscard]] IScriptDebugger* Debugger() const noexcept { return m_debugger.Get(); }
         /// Forward debugger state changes to an external listener (the editor's panels), on
@@ -313,7 +311,7 @@ export namespace engine::script
         {
             m_debugTracker.external = listener;
         }
-        /// The game-pause flag: true while suspended at a breakpoint/step. The scene tick
+        /// The game-pause flag: true while suspended at a breakpoint or step. The scene tick
         /// checks this to hold the world still; InvokeHandler checks it to tell a
         /// debug-suspended handler apart from a fault.
         [[nodiscard]] bool IsDebugPaused() const noexcept { return m_debugTracker.Paused(); }
@@ -326,9 +324,9 @@ export namespace engine::script
         [[nodiscard]] StringView Language() const noexcept { return m_language.AsView(); }
         [[nodiscard]] ScriptRuntimeBinding& Binding() noexcept { return m_binding; }
 
-        /// The run context for `languageId`, created through the backend REGISTRY on
-        /// first use (B3). A second language during the same run is refused (one
-        /// gameplay context per run - the locked rule) and logged once.
+        /// The run context for `languageId`, created through the backend registry on
+        /// first use. A second language during the same run is refused (one gameplay
+        /// context per run) and logged once.
         [[nodiscard]] IScriptContext* EnsureContext(StringView languageId)
         {
             if (m_scriptContext.Get() != nullptr)
@@ -340,7 +338,7 @@ export namespace engine::script
                 WarnLanguageMismatchOnce(languageId);
                 return nullptr;
             }
-            // The full curated surface: core math + the behavior facades, so a backend's
+            // The full curated surface: core math and the behavior facades, so a backend's
             // behavior-module framing and any explicit engine-type imports a script writes
             // resolve identically at cook and at runtime. Both idempotent.
             RegisterCoreTypes();
@@ -378,7 +376,7 @@ export namespace engine::script
             return m_scriptContext.Get();
         }
 
-        /// The run context resolved by a script FILE's extension (the game-script path).
+        /// The run context resolved by a script file's extension (the game-script path).
         [[nodiscard]] IScriptContext* EnsureContextForFile(StringView path)
         {
             StringView extension;
@@ -409,11 +407,11 @@ export namespace engine::script
             return EnsureContext(backend->languageId.AsView());
         }
 
-        /// The GAME SCRIPT (or any external caller) loaded its own module: the behaviors
+        /// The game script (or any external caller) loaded its own module: the behaviors
         /// module is no longer the context's instantiation target.
         void NoteExternalLoad() noexcept { m_moduleCurrent = false; }
 
-        /// Instantiate a behavior class instance (loads/reloads the behaviors module as
+        /// Instantiate a behavior class instance (loads or reloads the behaviors module as
         /// needed). Null on failure (logged).
         [[nodiscard]] RefPtr<ScriptObject> Instantiate(ScriptClass& scriptClass, Span<Variant> args)
         {
@@ -471,19 +469,19 @@ export namespace engine::script
                 return true;
             }
 
-            // Rebuild: fresh generation module, each class carrying its OWN section identity
+            // Rebuild: a fresh generation module, each class carrying its own section identity
             // (sourceName). The structured LoadBehaviorModule preserves per-class sections so a
             // debug-capable backend reports (sourceFile, sourceLine) from GetLineNumber and
-            // editor breakpoints line up. The LANGUAGE framing (any
-            // prelude/base a backend needs) stays the backend's job - the run host only supplies
-            // the ordered {sourceName, source} pairs, no language syntax here.
+            // editor breakpoints line up. The language framing (any prelude or base a backend
+            // needs) stays the backend's job: the run host only supplies the ordered
+            // {sourceName, source} pairs, with no language syntax here.
             m_classSourceScratch.Clear();
             m_classSourceScratch.Reserve(m_loadedClasses.Size());
             for (const RefPtr<ScriptClass>& loaded : m_loadedClasses)
             {
                 // Carry the cooked bytecode too: a backend with a stable per-class bytecode (Luau)
                 // loads it instead of compiling the source (the player path, no compiler). Empty
-                // for source-only classes and backends without bytecode - they compile.
+                // for source-only classes and backends without bytecode: they compile.
                 m_classSourceScratch.PushBack(BehaviorModuleClass{
                     loaded->sourceName.AsView(), loaded->source.AsView(),
                     Span<const byte>{loaded->bytecode.Data(), loaded->bytecode.Size()}});
@@ -508,7 +506,7 @@ export namespace engine::script
 
         /// Total run teardown (the Stop bracket): drops the context, the manager, and
         /// every loaded class reference. Live ScriptObjects held elsewhere keep the
-        /// context alive until released - callers destroy instances FIRST.
+        /// context alive until released, so callers destroy instances first.
         void Teardown()
         {
             if (m_scriptContext.Get() == nullptr && m_manager.Get() == nullptr)
@@ -519,10 +517,10 @@ export namespace engine::script
             {
                 m_scriptContext->SetErrorHandler(nullptr);
             }
-            // The debugger holds engine contexts (a paused one) - release it BEFORE the
-            // manager/engine it borrows. Clear the REQUEST + configurator too: they capture the
-            // caller (an editor GamePage) that may be destroyed before this host is reused, so a
-            // stale configurator must never fire on a later EnsureDebugger (dangling-capture UAF).
+            // The debugger holds engine contexts (a paused one), so release it before the
+            // manager and engine it borrows. Clear the request and configurator too: they capture
+            // the caller (an editor GamePage) that may be destroyed before this host is reused, so a
+            // stale configurator must never fire on a later EnsureDebugger (a use after free).
             m_debugger = nullptr;
             m_debugTracker.Reset();
             m_debuggerRequested = false;
@@ -541,7 +539,7 @@ export namespace engine::script
     private:
         // Create the debugger once the manager exists and it was requested (idempotent). The
         // internal tracker is always the listener; the caller's configurator applies the
-        // initial breakpoints + grabs the pointer for live changes.
+        // initial breakpoints and grabs the pointer for live changes.
         void EnsureDebugger()
         {
             if (m_debugger || !m_debuggerRequested || m_manager.Get() == nullptr)
@@ -589,7 +587,7 @@ export namespace engine::script
         Array<BehaviorModuleClass>
             m_classSourceScratch;              // reused per-rebuild {sourceName, source} list
         UniquePtr<IScriptDebugger> m_debugger; // the run's step debugger (opt-in)
-        DebugPauseTracker m_debugTracker;      // the game-pause flag + external forward
+        DebugPauseTracker m_debugTracker;      // the game-pause flag and external forward
         Function<void(IScriptDebugger&)> m_debuggerConfigurator;
         u32 m_generation = 0;
         bool m_moduleCurrent = false;
@@ -598,10 +596,10 @@ export namespace engine::script
         bool m_gameScriptHold = false; // a game script is loaded into this host (teardown pin)
     };
 
-    // ---- shared property application (behavior tier + scene-script/Level tier) ----
+    // ---- shared property application (the behavior tier and the scene-script Level tier) ----
 
-    /// Marshal one harvested property value into a Variant for the generated setter. Entity/Asset
-    /// values resolve against `scene` (nullptr -> a null Variant, same as an unresolved reference).
+    /// Marshal one harvested property value into a Variant for the generated setter. Entity and Asset
+    /// values resolve against `scene` (nullptr gives a null Variant, as an unresolved reference does).
     /// Shared so the behavior tier and the Level tier apply properties identically.
     [[nodiscard]] inline Variant ScriptPropertyValueToVariant(const ScriptPropertyValue& value,
                                                               ScriptPropertyType declaredType,
@@ -684,8 +682,8 @@ export namespace engine::script
     /// Where the entity behaviors run in Update: before the systems that act on what a script
     /// writes (the navigation crowd at -100, audio at -100, animation at -2 and -1), so a
     /// destination, a sound or a graph parameter set in onUpdate takes effect that frame; a script
-    /// reads the positions those systems left the frame before. As Sedulous orders it (user
-    /// 2026-10-10). The scene's Level script runs just before the behaviors.
+    /// reads the positions those systems left the frame before. The scene's Level script runs
+    /// just before the behaviors.
     inline constexpr i32 kScriptUpdateOrder = -110;
 
     class ScriptSceneSystem final : public scene::SceneSystem
@@ -710,7 +708,7 @@ export namespace engine::script
         [[nodiscard]] bool Started() const noexcept { return m_started; }
         [[nodiscard]] scene::Scene* ScenePtr() const noexcept { return m_scene; }
 
-        // Behaviors tick ONLY under simulation (Simulate toggle and PIE both count).
+        // Behaviors tick only under simulation (the Simulate toggle and play-in-editor both count).
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
 
         void OnSceneStarted() override { m_started = true; }
@@ -736,9 +734,9 @@ export namespace engine::script
             {
                 return;
             }
-            // Frozen at a breakpoint: the world holds still (behaviors + coroutines stop
+            // Frozen at a breakpoint: the world holds still (behaviors and coroutines stop
             // advancing) while the debugger owns a suspended handler. The editor loop keeps
-            // running; step/continue drive the held context directly, not this tick.
+            // running; step and continue drive the held context directly, not this tick.
             if (m_host->IsDebugPaused())
             {
                 return;
@@ -747,10 +745,10 @@ export namespace engine::script
             m_deltaTime = deltaTime;
             m_elapsed += static_cast<f64>(deltaTime);
             TickBehaviors(deltaTime);
-            DrainMessages(); // deferred entity.send delivery - same frame, never nested
+            DrainMessages(); // deferred entity.send delivery: same frame, never nested
             AddPendingBehaviors(); // SceneScripts.addBehavior: started on the next tick
-            // Resume due coroutines ONCE per simulated frame, at the tick's top level (no
-            // VM call active - the backend's resume is safe here). Gated to a backend that
+            // Resume due coroutines once per simulated frame, at the tick's top level (no
+            // VM call active, so the backend's resume is safe here). Gated to a backend that
             // actually has the scheduler; a non-supporting one no-ops anyway.
             if (IScriptManager* manager = m_host->Manager();
                 manager != nullptr &&
@@ -762,13 +760,13 @@ export namespace engine::script
         }
 
         /// The scene's last delivered frame time and its simulated seconds since it started
-        /// (SceneScripts.deltaTime / elapsed): scaled time, so both stand still at time scale 0.
+        /// (SceneScripts.deltaTime and elapsed): scaled time, so both stand still at time scale 0.
         [[nodiscard]] f32 DeltaTime() const noexcept { return m_deltaTime; }
         [[nodiscard]] f64 Elapsed() const noexcept { return m_elapsed; }
 
         /// A behaviour of the script class `scriptClass` (an asset id) for `entity`, added after
-        /// this tick's behaviours ran and started on the next (Sedulous's AddBehavior): the
-        /// component is made when the entity has none. Deferred because a behaviour asking for
+        /// this tick's behaviours ran and started on the next: the component is made when the
+        /// entity has none. Deferred because a behaviour asking for
         /// it is running inside the very array it would grow. False for a stale entity or a nil
         /// id; an id naming no class leaves a behaviour that never starts, as an authored one.
         bool QueueBehavior(scene::EntityHandle entity, const Guid& scriptClass)
@@ -805,7 +803,7 @@ export namespace engine::script
             return count;
         }
 
-        /// onDestroy + release for one component's behaviors (entity/component removal).
+        /// onDestroy and release for one component's behaviors (entity or component removal).
         void ReleaseComponentInstances(ScriptComponent& component, scene::EntityHandle entity)
         {
             for (ScriptBehavior& behavior : component.behaviors)
@@ -814,11 +812,11 @@ export namespace engine::script
             }
         }
 
-        /// Behavior messaging: QUEUE `on<Message>(args)` for EVERY enabled
-        /// behavior of `target` that declares the handler. Reached from the `Entity::send`
-        /// facade via the run binding's route. Delivery is DEFERRED (drained at the tick's
-        /// top level) because a send happens INSIDE a running script call and re-entrant
-        /// VM calls are unsafe - so messages arrive later the same frame, never nested.
+        /// Behavior messaging: queue `on<Message>(args)` for every enabled behavior of
+        /// `target` that declares the handler. Reached from the `Entity::send` facade through
+        /// the run binding's route. Delivery is deferred (drained at the tick's top level)
+        /// because a send happens inside a running script call and re-entrant VM calls are
+        /// unsafe, so messages arrive later the same frame, never nested.
         void EnqueueMessage(scene::EntityHandle target, StringView message,
                             Span<const Variant> args)
         {
@@ -837,9 +835,9 @@ export namespace engine::script
             m_messages.PushBack(Move(pending));
         }
 
-        /// Physics contacts: QUEUE a contact handler call (the handler name
-        /// is already the final `on<Event>` - e.g. "onContactBegin" - not a message to convert)
-        /// with pre-marshalled args. Reuses the SAME deferred queue as entity.send so it drains
+        /// Physics contacts: queue a contact handler call (the handler name is already the
+        /// final `on<Event>`, e.g. "onContactBegin", not a message to convert) with
+        /// pre-marshalled args. Reuses the same deferred queue as entity.send so it drains
         /// at the tick's top level: the physics tick pushes contacts (never nested in a script
         /// call), and delivery is gated by HasHandler in InvokeHandler exactly like messages.
         void EnqueueContact(scene::EntityHandle target, StringView handler, Array<Variant> args)
@@ -856,7 +854,7 @@ export namespace engine::script
         }
 
         /// Drains queued messages at the tick's top level (no VM call is active here, so
-        /// InvokeHandler's VM call is safe). A handler may send again - those are drained
+        /// InvokeHandler's VM call is safe). A handler may send again; those are drained
         /// in the same pass, capped to break runaway send loops.
         void DrainMessages()
         {
@@ -887,7 +885,7 @@ export namespace engine::script
                 }
                 if (m_scene != nullptr && !m_scene->IsEffectivelyActive(target))
                 {
-                    continue; // inactive entities receive nothing (messages + contacts)
+                    continue; // inactive entities receive nothing (messages and contacts)
                 }
                 const Span<Variant> argSpan{args.Data(), args.Size()};
                 for (usize i = 0;; ++i)
@@ -907,7 +905,7 @@ export namespace engine::script
                                         argSpan);
                 }
                 // A message handler that hit a breakpoint pauses the game: stop draining (the
-                // rest of this pass is dropped - a rare edge, message-handler breakpoints).
+                // rest of this pass is dropped, a rare edge case of message-handler breakpoints).
                 if (m_host != nullptr && m_host->IsDebugPaused())
                 {
                     break;
@@ -916,13 +914,14 @@ export namespace engine::script
             m_messages.Clear();
         }
 
-        /// The bus sink for entity behaviors (Track B): dispatch `on<Event>(payload)` to EVERY
-        /// enabled behavior of THIS scene that declares it. Called at bus-drain time (the scene
-        /// tick's top level, no VM call active), so it invokes DIRECTLY - the emit->publish->drain
-        /// path already provides the deferral entity.send needs its message queue for. Owners are
-        /// snapshotted first because a handler may spawn/destroy entities (swap-remove moves slots).
-        /// Arg count follows the payload: a no-payload emit() delivers `on<Event>()`, a valued one
-        /// delivers `on<Event>(payload)` - so handler arity matches the emit site.
+        /// The bus sink for entity behaviors: dispatch `on<Event>(payload)` to every enabled
+        /// behavior of this scene that declares it. Called at bus-drain time (the scene tick's top
+        /// level, no VM call active), so it invokes directly: emitting publishes and the bus drains
+        /// later, which already provides the deferral entity.send needs its message queue for.
+        /// Owners are snapshotted first because a handler may spawn or destroy entities
+        /// (swap-remove moves slots). The arg count follows the payload: a no-payload emit()
+        /// delivers `on<Event>()`, a valued one `on<Event>(payload)`, so handler arity matches
+        /// the emit site.
         void BroadcastEvent(StringView eventName, const Variant& payload)
         {
             if (!m_started || m_scene == nullptr || m_host == nullptr || m_host->IsDebugPaused())
@@ -935,7 +934,7 @@ export namespace engine::script
                 return;
             }
             String handler(u8"on");
-            handler += eventName; // "on" + "OrbCollected" reconstructs the exact declared handler
+            handler += eventName; // "on" and "OrbCollected" reconstruct the exact declared handler
             Variant arg = payload;
             const bool hasArg = !payload.IsEmpty();
             const Span<Variant> args = hasArg ? Span<Variant>{&arg, 1} : Span<Variant>{};
@@ -972,7 +971,7 @@ export namespace engine::script
 
     private:
         // The result of one handler dispatch: Ok (ran), Faulted (disabled), or Suspended
-        // (hit a breakpoint - the game is paused, the debugger owns the mid-flight handler).
+        // (hit a breakpoint: the game is paused, the debugger owns the mid-flight handler).
         enum class HandlerOutcome
         {
             Ok,
@@ -986,7 +985,7 @@ export namespace engine::script
         static constexpr StringView kOnDisable = u8"onDisable";
         static constexpr StringView kOnDestroy = u8"onDestroy";
 
-        // "heal" -> "onHeal": the send() message convention. First char uppercased.
+        // "heal" becomes "onHeal": the send() message convention. First char uppercased.
         [[nodiscard]] static String BuildMessageHandlerName(StringView message)
         {
             String name(u8"on");
@@ -1011,7 +1010,7 @@ export namespace engine::script
             }
 
             // Snapshot the owner list: scripts may destroy entities (swap-remove moves
-            // pool slots) or spawn new ones (picked up next tick - the deferred start).
+            // pool slots) or spawn new ones (picked up next tick: the deferred start).
             m_tickOwners.Clear();
             for (scene::EntityHandle owner : components->Owners())
             {
@@ -1041,11 +1040,10 @@ export namespace engine::script
 
         void TickBehavior(ScriptBehavior& behavior, scene::EntityHandle entity, f32 deltaTime)
         {
-            // An effectively-inactive entity's behaviors FREEZE -
-            // no lifecycle events fire, onStart waits for the first ACTIVE tick (so an entity
-            // that loads inactive behaves like spawn-disabled), and updates stop. Pending
-            // coroutines are cancelled once on the edge - the existing disabled-behavior
-            // semantic (there is no per-behavior pause in the scheduler).
+            // An effectively-inactive entity's behaviors freeze: no lifecycle events fire,
+            // onStart waits for the first active tick (so an entity that loads inactive behaves
+            // like one spawned disabled), and updates stop. Pending coroutines are cancelled once
+            // on the edge, as for a disabled behavior (the scheduler has no per-behavior pause).
             if (m_scene != nullptr && !m_scene->IsEffectivelyActive(entity))
             {
                 if (!behavior.entitySuspended)
@@ -1067,8 +1065,8 @@ export namespace engine::script
                 return;
             }
 
-            // Hot reload: the resource handle swapped its product - re-instantiate and
-            // re-apply overrides below (transient script state resets; documented v1).
+            // Hot reload: the resource handle swapped its product, so re-instantiate and
+            // re-apply overrides below (transient script state resets).
             if (behavior.instance.Get() != nullptr && behavior.boundClass != scriptClass)
             {
                 StopBehavior(behavior, entity, false);
@@ -1080,7 +1078,7 @@ export namespace engine::script
                 if (behavior.instance.Get() != nullptr && behavior.active)
                 {
                     behavior.active =
-                        false; // set before dispatch (no re-dispatch on suspend/fault)
+                        false; // set before dispatch (no re-dispatch on suspend or fault)
                     (void)InvokeHandler(behavior, *behavior.boundClass, entity, kOnDisable, {});
                     CancelCoroutines(behavior); // a disabled behavior's coroutines stop too
                 }
@@ -1100,7 +1098,7 @@ export namespace engine::script
                 }
             }
 
-            // Lifecycle flags are set BEFORE the dispatch: whether it faults OR debug-suspends
+            // Lifecycle flags are set before the dispatch: whether it faults or debug-suspends
             // (mid-handler, game paused), it must not re-dispatch onEnable/onStart. A
             // debug-suspended handler runs to completion later via the debugger's Continue.
             if (!behavior.active)
@@ -1121,8 +1119,8 @@ export namespace engine::script
                     return;
                 }
             }
-            // updateInterval throttling: 0 = every tick with the raw dt; otherwise
-            // bank time and deliver once the interval elapses, passing the ACCUMULATED dt
+            // updateInterval throttling: 0 means every tick with the raw dt; otherwise
+            // bank time and deliver once the interval elapses, passing the accumulated dt
             // (so movement integrates correctly at a lower call rate).
             if (behavior.updateInterval > 0.0f)
             {
@@ -1174,7 +1172,7 @@ export namespace engine::script
             }
             ApplyProperties(behavior, scriptClass, entity);
             // Subscribe this scene's bus to the on<Event> handlers this class declares (deduped),
-            // so a fired event reaches every declaring behavior via BroadcastEvent.
+            // so a fired event reaches every declaring behavior through BroadcastEvent.
             m_eventSubs.EnsureFor(scriptClass);
         }
 
@@ -1190,7 +1188,7 @@ export namespace engine::script
 
         // One handler dispatch: declared-handler gate (no method-missing probing), the
         // per-behavior profile scope, and the fault-disables-this-behavior rule. A handler
-        // that DEBUG-SUSPENDED (hit a breakpoint) is reported as Suspended, NOT a fault: the
+        // that debug-suspended (hit a breakpoint) is reported as Suspended, not a fault: the
         // game is now paused and the debugger owns the mid-flight handler; on Continue it runs
         // to completion and normal flow resumes.
         [[nodiscard]] HandlerOutcome InvokeHandler(ScriptBehavior& behavior,
@@ -1220,9 +1218,9 @@ export namespace engine::script
             return HandlerOutcome::Faulted;
         }
 
-        // Stop every coroutine the behavior's instance started (disable / destroy /
-        // reload). Gated to a coroutine-capable backend AND a class that opted in
-        // (usesCoroutines) - a backend/class without coroutines pays nothing.
+        // Stop every coroutine the behavior's instance started (disable, destroy,
+        // reload). Gated to a coroutine-capable backend and a class that opted in
+        // (usesCoroutines): a backend or class without coroutines pays nothing.
         void CancelCoroutines(ScriptBehavior& behavior)
         {
             if (behavior.instance.Get() == nullptr || behavior.boundClass == nullptr ||
@@ -1322,14 +1320,14 @@ export namespace engine::script
         Array<scene::EntityHandle> m_tickOwners; // per-tick snapshot (reused)
         Array<PendingMessage> m_messages;        // deferred entity.send queue
         Array<PendingBehavior> m_pendingBehaviors; // SceneScripts.addBehavior, after the tick
-        ScriptEventSubscriptions m_eventSubs;    // this scene's bus subscriptions -> BroadcastEvent
+        ScriptEventSubscriptions m_eventSubs;    // this scene's bus subscriptions, sunk into BroadcastEvent
         f32 m_deltaTime = 0.0f;
         f64 m_elapsed = 0.0;
         bool m_started = false;
     };
 
-    /// The scene's scripting (Sedulous's `scene.Scripts`), in our SceneX.of shape:
-    /// `SceneScripts.of(scene)`. The scene's script time (scaled: it stands still at time scale
+    /// The scene's scripting, in the SceneX.of shape: `SceneScripts.of(scene)`. The scene's
+    /// script time (scaled: it stands still at time scale
     /// 0), the messages between behaviours (`send`, as `entity.send` on the target), the events
     /// on the scene's bus (`emit`, as `scene.events.emit`), and a behaviour added at runtime by
     /// its class's asset id. A value type; a null scene makes every call a safe no-op.
@@ -1400,16 +1398,16 @@ export namespace engine::script
 
     // ---- scene-level scripting (the third tier): one `Level` script object per scene ----
 
-    /// The one-per-scene authored block: the `Level` script + an enable flag. Serialized with the
-    /// scene (the SceneSystem settings seam), resolved on the async level-load path
-    /// (ResolveResources rides ResolveSceneResources' AsyncBindScope), and rendered in the scene-
-    /// settings inspector (reflected). Editor-visible via a script-asset Ref picker.
+    /// The one-per-scene authored block: the `Level` script and an enable flag. Serialized with
+    /// the scene (as SceneSystem settings), resolved on the async level-load path
+    /// (ResolveResources rides ResolveSceneResources' AsyncBindScope), and rendered in the
+    /// scene-settings inspector (reflected) with a script-asset Ref picker.
     struct SceneScriptSettings
     {
-        resource::Ref<ScriptClass> script; // the Level class (a cooked script asset); nil = none
+        resource::Ref<ScriptClass> script; // the Level class (a cooked script asset); nil means none
         bool enabled = true;
         // Hash-keyed property overrides (values differing from the Level class's harvested
-        // defaults) - same default-diff model as a behavior's overrides, one set per scene.
+        // defaults): the same default-diff model as a behavior's overrides, one set per scene.
         Array<ScriptPropertyOverride> overrides;
 
         [[nodiscard]] const ScriptPropertyOverride* FindOverride(u64 nameHash) const
@@ -1452,22 +1450,22 @@ export namespace engine::script
     {
         foundation::core::Serialize(ar, "script", s.script);
         foundation::core::Serialize(ar, "enabled", s.enabled);
-        // Level property overrides (empty -> class defaults apply).
+        // Level property overrides (when empty, the class defaults apply).
         foundation::core::Serialize(ar, "overrides", s.overrides); // count-prefixed array scope
     }
 
-    /// The scene-root script tier (Unreal Level Blueprint / Godot scene script). One `Level` object
-    /// per scene, constructed with the scene's BOUND Scene handle (`construct new(scene)`), sim-gated
-    /// like behaviors, dispatched BEFORE the entity behaviors of its scene (UpdateOrder). `onStart`/
-    /// `onUpdate(dt)`/`onFixedUpdate(dt)`/`onStop` are all optional (dispatch by presence). A faulting
-    /// handler disables THIS scene's level only.
+    /// The scene-root script tier. One `Level` object per scene, constructed with the scene's bound
+    /// Scene handle (`construct new(scene)`), gated to simulation like behaviors, and dispatched
+    /// before the entity behaviors of its scene (UpdateOrder). `onStart`, `onUpdate(dt)`,
+    /// `onFixedUpdate(dt)` and `onStop` are all optional (dispatch by presence). A faulting handler
+    /// disables this scene's level only.
     class SceneScriptSystem final : public scene::SceneSystem
     {
     public:
         void OnSceneCreate(scene::Scene& scene) override
         {
             m_scene = &scene;
-            // The Level's named inbox (P-B1): route this scene's bus events to the Level's
+            // The Level's named inbox: route this scene's bus events to the Level's
             // on<Event> handler, so a behavior's scene.events.emit reaches an onPlayerFell here.
             m_eventSubs.Bind(scene.Events(), Function<void(StringView, const Variant&)>{
                                                   [this](StringView eventName, const Variant& payload)
@@ -1561,7 +1559,7 @@ export namespace engine::script
             ScriptClass* scriptClass = m_settings.script.Get();
             if (scriptClass == nullptr)
             {
-                return; // no Level bound (or still pending on an async load) - the system is inert
+                return; // no Level bound (or still pending on an async load): the system is inert
             }
             Scene handle; // the bound Scene ctor arg (foundation::script::Scene, this scene)
             handle.scene = m_scene;
@@ -1575,25 +1573,25 @@ export namespace engine::script
                           m_scene->Name(), scriptClass->className);
                 return;
             }
-            // Apply harvested defaults + hash-keyed overrides BEFORE onStart (same as behaviors),
+            // Apply harvested defaults and hash-keyed overrides before onStart (as for behaviors),
             // so a Level's [metadata] properties are real inspector-authored values, not runtime
             // fallbacks. The scene name labels the no-setter warning.
             ApplyScriptProperties(*m_level, *scriptClass,
                                   Span<const ScriptPropertyOverride>{m_settings.overrides.Data(),
                                                                      m_settings.overrides.Size()},
                                   m_scene, m_scene->Name());
-            // Subscribe this scene's bus to the Level's on<Event> handlers (P-B1 named inbox).
+            // Subscribe this scene's bus to the Level's on<Event> handlers (its named inbox).
             m_eventSubs.EnsureFor(*scriptClass);
         }
 
-        /// The bus sink for the Level (P-B1): dispatch `on<Event>(payload)` to the Level object.
-        /// Called at bus-drain time (no VM active), so it dispatches directly - and reuses Dispatch,
+        /// The bus sink for the Level: dispatch `on<Event>(payload)` to the Level object.
+        /// Called at bus-drain time (no VM active), so it dispatches directly, and reuses Dispatch,
         /// so a faulting event handler disables the Level exactly like a faulting lifecycle handler.
         /// Arg count follows the payload (a no-payload emit() delivers `on<Event>()`).
         void DispatchEvent(StringView eventName, const Variant& payload)
         {
             String handler(u8"on");
-            handler += eventName; // "on" + "PlayerFell" reconstructs the declared handler
+            handler += eventName; // "on" and "PlayerFell" reconstruct the declared handler
             Variant arg = payload;
             const bool hasArg = !payload.IsEmpty();
             const Span<Variant> args = hasArg ? Span<Variant>{&arg, 1} : Span<Variant>{};
@@ -1651,7 +1649,7 @@ export namespace engine::script
         SceneScriptSettings m_settings;
         RefPtr<ScriptObject> m_level;
         ScriptClass* m_boundClass = nullptr;
-        ScriptEventSubscriptions m_eventSubs; // this scene's bus subscriptions -> DispatchEvent
+        ScriptEventSubscriptions m_eventSubs; // this scene's bus subscriptions, sunk into DispatchEvent
         bool m_started = false;
         bool m_faulted = false;
     };
@@ -1659,7 +1657,7 @@ export namespace engine::script
     // ---- the runtime subsystem ----
 
     /// The neutral contact vocabulary the script layer speaks. A producer (physics, via a
-    /// composition-root bridge) maps its own kind onto this - the script subsystem never
+    /// composition-root bridge) maps its own kind onto this; the script subsystem never
     /// names a physics type, so it does not depend on the physics library.
     enum class ScriptContactKind : u8
     {
@@ -1669,11 +1667,10 @@ export namespace engine::script
         TriggerExit
     };
 
-    // THE script manager set for a scene - injected by the subsystem at runtime AND by headless
-    // scene consumers (Engine.Composition). The manager<->system cross-link is in-scene wiring
-    // and belongs here; run-host binding is runtime-only and stays with the subsystem (the
-    // systems are inert without a host). A manager added here reaches the composition (Engine.Composition)
-    // automatically.
+    // The script manager set for a scene, injected by the subsystem at runtime and by headless
+    // scene consumers (Engine.Composition), so a manager added here reaches both. The cross-link
+    // between manager and system is in-scene wiring and belongs here; run-host binding is
+    // runtime-only and stays with the subsystem (the systems are inert without a host).
     inline void AddScriptSceneManagers(scene::Scene& scene)
     {
         auto* components = scene.AddSystem<ScriptComponentManager>();
@@ -1685,16 +1682,16 @@ export namespace engine::script
     class ScriptSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
     {
     public:
-        /// The DEFAULT run host - the one for the editor's editing/loose scenes.
-        /// A GameInstance owns its OWN run host for its game scenes + game script; this is not
+        /// The default run host: the one for the editor's editing and loose scenes.
+        /// A GameInstance owns its own run host for its game scenes and game script; this is not
         /// that. Editing-scene Simulate runs its behaviors on this host.
         [[nodiscard]] ScriptRunHost& RunHost() noexcept { return m_ownedRunHost; }
 
-        /// Wire a run host (this default OR a GameInstance's) with the app services + routing so its
-        /// context, once created, has the facades, the Scene.spawn spawner, and entity.send routing
-        /// The wrappers read the stored configurator/spawner + m_systems
-        /// LIVE, so one call per host suffices and the same message route serves every host. Call
-        /// once per run host before its first context is created.
+        /// Wire a run host (this default or a GameInstance's) with the app services and routing so
+        /// its context, once created, has the facades, the Scene.spawn spawner, and entity.send
+        /// routing. The wrappers read the stored configurator, spawner and m_systems live, so one
+        /// call per host suffices and the same message route serves every host. Call once per run
+        /// host before its first context is created.
         void ConfigureRunHost(ScriptRunHost& host)
         {
             ScriptSubsystem* self = this;
@@ -1706,8 +1703,8 @@ export namespace engine::script
                                                         self->m_configurator(scriptContext);
                                                     }
                                                 }});
-            // Resource-swap seam: forward to the app's getter at call time, so a manager
-            // created AFTER this host was configured is still seen.
+            // Resource swaps: forward to the app's getter at call time, so a manager
+            // created after this host was configured is still seen.
             host.Binding().resolveResources = Function<resource::ResourceManager*()>{
                 [self]() -> resource::ResourceManager*
                 { return self->m_resourcesGetter ? self->m_resourcesGetter() : nullptr; }};
@@ -1727,7 +1724,7 @@ export namespace engine::script
                     }};
         }
 
-        /// Tear down `host` if nothing pins it: no game-script hold, no scene BOUND TO IT simulating,
+        /// Tear down `host` if nothing pins it: no game-script hold, no scene bound to it simulating,
         /// no live behavior instances in those scenes. Per-host, so an
         /// instance's host and the editor's host tear down independently. Called by the scene-stop
         /// observer, OnSceneDestroyed, and a GameInstance on its own host.
@@ -1746,7 +1743,7 @@ export namespace engine::script
                 if (entry.system->Host() != &host)
                 {
                     continue;
-                } // only scenes bound to THIS host
+                } // only scenes bound to this host
                 if (entry.system->Started() && entry.scene->SimulationEnabled())
                 {
                     return;
@@ -1761,10 +1758,10 @@ export namespace engine::script
 
         // ---- contact events (neutral ingress) ----
 
-        /// Deliver a resolved contact to BOTH entities' declared handlers (each sees the
-        /// OTHER as an Entity). Collision kinds get (other, point, normal, speed); trigger
+        /// Deliver a resolved contact to both entities' declared handlers (each sees the
+        /// other as an Entity). Collision kinds get (other, point, normal, speed); trigger
         /// kinds get (other). Physics-agnostic: the host bridges physics contacts to this.
-        /// Only ENQUEUES onto the owning scene's deferred queue - drained at the scene
+        /// Only enqueues onto the owning scene's deferred queue, drained at the scene
         /// tick's top level, so no re-entrancy even though physics stepped this frame.
         void DeliverContact(scene::Scene* scene, scene::EntityHandle a, scene::EntityHandle b,
                             ScriptContactKind kind, const Float3& point, const Float3& normal,
@@ -1798,31 +1795,32 @@ export namespace engine::script
             DeliverContactSide(*system, scene, b, a, handler, point, normal, speed, trigger);
         }
 
-        /// Host-app wiring: exposes engine services (Input/Audio/Physics facades) on every run context
-        /// (via ConfigureRunHost's live wrapper - applies to the default host AND every instance host).
+        /// Host-app wiring: exposes engine services (Input, Audio and Physics facades) on every run
+        /// context (through ConfigureRunHost's live wrapper: the default host and every instance host).
         void SetContextConfigurator(Function<void(IScriptContext&)> configurator)
         {
             m_configurator = Move(configurator);
         }
-        /// Host-app wiring: a GETTER for the run's resource manager, behind the resource-swap
-        /// ops (SceneRender.setMesh, ...). A getter (not a ptr) because the app's manager is created
-        /// AFTER Configure runs - resolveResources reads it per call, so it sees the manager once the
-        /// app has one, whatever the wiring order. The app owns the manager; this borrows it.
+        /// Host-app wiring: a getter for the run's resource manager, behind the resource-swap
+        /// operations (SceneRender.setMesh, ...). A getter, not a pointer, because the app's manager
+        /// is created after Configure runs: resolveResources reads it per call, so it sees the
+        /// manager once the app has one, whatever the wiring order. The app owns the manager; this
+        /// borrows it.
         void SetResourceManager(Function<resource::ResourceManager*()> getter)
         {
             m_resourcesGetter = Move(getter);
         }
         // The game-script run context is not acquired here: a
         // GameInstance owns its run host and drives its own game script through it. This subsystem is
-        // machinery (routing + ISceneObserver + reflection + Configure/MaybeTeardownRunHost).
+        // machinery (routing, ISceneObserver, reflection, ConfigureRunHost and MaybeTeardownRunHost).
 
         // ---- scene integration ----
 
         void OnSystemsReady(scene::Scene& scene) override
         {
             ScriptSceneSystem* system = scene.GetSystem<ScriptSceneSystem>();
-            // Bind to the DEFAULT run host; a GameInstance re-binds ITS scenes to its own host on adopt.
-            // The teardown observer checks the system's CURRENT host.
+            // Bind to the default run host; a GameInstance re-binds its scenes to its own host on adopt.
+            // The teardown observer checks the system's current host.
             system->SetRunHost(&m_ownedRunHost);
             ScriptSubsystem* self = this;
             system->SetRunObserver(Function<void()>{[self, system]()
@@ -1835,7 +1833,7 @@ export namespace engine::script
                                                     }});
             m_systems.PushBack(SceneEntry{&scene, system});
 
-            // Scene-root script (the Level tier) shares the same run host + re-bind path.
+            // Scene-root script (the Level tier) shares the same run host and re-bind path.
             scene.GetSystem<SceneScriptSystem>()->SetRunHost(&m_ownedRunHost);
         }
         void OnDestroying(scene::Scene& scene) override
@@ -1859,7 +1857,7 @@ export namespace engine::script
             }
         }
 
-        // Drives the DEFAULT run host (editor scenes). A GameInstance drives its own host.
+        // Drives the default run host (editor scenes). A GameInstance drives its own host.
         void Update(f32 deltaTime) override
         {
             ScriptRuntimeBinding& binding = m_ownedRunHost.Binding();
@@ -1900,7 +1898,7 @@ export namespace engine::script
             }
             for (const SceneEntry& entry : m_systems)
             {
-                // Instances hold the context alive - release them before the host.
+                // Instances hold the context alive, so release them before the host.
                 if (entry.system != nullptr && entry.scene != nullptr)
                 {
                     entry.system->OnSceneStopped();
@@ -1956,20 +1954,19 @@ export namespace engine::script
         }
 
         ScriptRunHost m_ownedRunHost{
-            foundation::core::DefaultAllocator()}; // the DEFAULT run host (editor/editing scenes;
-                                                   // process root until the subsystem phase
-                                                   // threads the subsystem manager's)
+            foundation::core::DefaultAllocator()}; // the default run host (editor and editing
+                                                   // scenes), on the process root allocator
         Array<SceneEntry> m_systems;
         Function<void(IScriptContext&)>
             m_configurator; // app services, applied to every host via ConfigureRunHost
         Function<resource::ResourceManager*()>
-            m_resourcesGetter; // resource swaps (late-bound; app owns the manager)
+            m_resourcesGetter; // resource swaps (late-bound; the app owns the manager)
     };
 }
 
 export namespace engine::script
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
+    /// This domain's declaration: what it brings to a scene, to
     /// reflection, to the script surface and which resource modules come with it. Defined in the
     /// implementation unit (one instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& ScriptDomain() noexcept;

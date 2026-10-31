@@ -3,15 +3,14 @@
 
 /// Pipeline::ModelImporter:cook - cook a loaded Model into a content database.
 ///
-/// Cooks a model's textures, materials, and meshes through the editor stack (Asset ->
-/// builder -> content Instance) into the output DB, then writes a manifest
-/// (ModelManifestSource: resource Guids + node hierarchy + cross-refs) and returns its
-/// Guid. The runtime binds the manifest as a ModelResource (a composite pulling in the
-/// meshes + materials via dependency edges) and spawns from it.
+/// Cooks a model's textures, materials, meshes, skeleton and clips through the editor stack
+/// (each Asset through its builder into a content Instance) into the output DB, then writes a
+/// manifest (ModelManifestSource: resource Guids, node hierarchy and cross-references) and
+/// returns its Guid. The runtime binds the manifest as a ModelResource (a composite pulling in
+/// the meshes and materials through dependency edges) and spawns from it.
 ///
-/// v1 cooks every mesh as STATIC (skinned meshes render in bind pose) and binds the
-/// albedo texture per material (other PBR maps + skinning land next). Materials use the
-/// renderer's builtin "forward" shader by name (no cooked ShaderResource needed yet).
+/// Materials are made on the built-in shader their shading model names (BuildModelMaterial),
+/// with every texture they read wired in.
 
 module;
 #include "Core/Prelude.h"
@@ -51,15 +50,15 @@ namespace content = foundation::content;
 
 export namespace pipeline
 {
-    // The cooked-model runtime types now live in foundation::model (foundation.model.resource).
+    // The cooked-model runtime types live in foundation::model (foundation.model.resource).
     using foundation::model::ModelManifestSource;
     using foundation::model::ModelNode;
     using foundation::model::ModelResource;
 
 
-    // Cook the model's textures into outDb. The model loaders DECODE every texture into raw
-    // RGBA8 pixels (storeImageData) for external files, data-URIs, AND embedded GLB buffer-views
-    // alike, so we cook directly from ModelTexture's pixel bytes - no file re-read, and embedded
+    // Cook the model's textures into outDb. The model loaders decode every texture into raw
+    // RGBA8 pixels (storeImageData) for external files, data URIs and embedded GLB buffer views
+    // alike, so we cook directly from ModelTexture's pixel bytes: no file re-read, and embedded
     // textures work. Returns one Guid per model texture (nil if it has no usable RGBA8 data).
     inline void CookTextures(const model::Model& model, content::Group* root,
                              StringView namePrefix, Array<Guid>& outGuids)
@@ -106,11 +105,11 @@ export namespace pipeline
             texture::TextureResource res;
             res.width = width;
             res.height = height;
-            // Color space follows USAGE: data maps (normal/MR/AO) stay linear (sRGB-decoding
-            // corrupts them); color maps (albedo/emissive) are sRGB-encoded.
+            // Color space follows usage: data maps (normal, metal-rough, AO) stay linear
+            // (sRGB-decoding corrupts them); color maps (albedo, emissive) are sRGB-encoded.
             res.format = (i < linear.Size() && linear[i]) ? rhi::TextureFormat::RGBA8Unorm
                                                           : rhi::TextureFormat::RGBA8UnormSrgb;
-            res.mipLevels = 1; // factory uploads mip 0 (no mip gen yet)
+            res.mipLevels = 1; // this direct path cooks mip 0 only
             res.generateMipmaps = false;
 
             String texName = ImportedTextureName(t, i);
@@ -135,8 +134,8 @@ export namespace pipeline
         }
     }
 
-    // A model's material as a material asset on the built-in its shading model names
-    // (Specs/phong-material.md), as its file authored it: PBR its factors and its five maps (FBX's
+    // A model's material as a material asset on the built-in its shading model names,
+    // as its file authored it: PBR its factors and its five maps (FBX's
     // separate metal and rough maps baked into one packed map by `packedMetallicRoughness`, the
     // caller's, as each cook makes textures its own way); Phong its diffuse and highlight, Lambert
     // its diffuse alone, each with its normal and emissive maps; Unlit its colour and map. Then
@@ -210,8 +209,8 @@ export namespace pipeline
                 }
             }
         }
-        // Authored pipeline state: alpha mode -> blend (Mask = alpha-tested cutout with holey
-        // shadows; Blend = the transparent pass) and double-sided -> no culling.
+        // Authored pipeline state: the alpha mode picks the blend (Mask is an alpha-tested cutout
+        // with holey shadows; Blend is the transparent pass), and double-sided turns culling off.
         if (m.alphaMode == model::AlphaMode::Mask)
             asset.source.blendMode = materials::BlendMode::Masked;
         else if (m.alphaMode == model::AlphaMode::Blend)
@@ -222,7 +221,7 @@ export namespace pipeline
     }
 
     // Cook the model's materials into outDb (each on its built-in, BuildModelMaterial, then the
-    // editor cook). Records, per material, its cooked Guid + the albedo texture Guid (resolved
+    // editor cook). Records, per material, its cooked Guid and the albedo texture Guid (resolved
     // from textureGuids).
     inline void CookMaterials(IAllocator& allocator, const model::Model& model,
                               content::Group* root, StringView namePrefix,
@@ -293,7 +292,7 @@ export namespace pipeline
         }
     }
 
-    // Cook a model into outDb (textures + materials + static meshes + manifest). `namePrefix`
+    // Cook a model into outDb (textures, materials, skeleton, clips, meshes, manifest). `namePrefix`
     // namespaces the created instances. On success `outModelGuid` is the manifest
     // (ModelResource) Guid to Bind at runtime.
     [[nodiscard]] inline Status CookModel(const model::Model& model,
@@ -316,8 +315,8 @@ export namespace pipeline
         CookMaterials(outDb.Allocator(), model, root, namePrefix, textureGuids, manifest.materialGuids,
                       manifest.materialAlbedo);
 
-        // Skeleton + animations (skin 0 only). The skeleton's bones: the skin's joints in order, then the bones it hangs from;
-        // animation channels + bone parents are remapped from model bone indices into joint indices.
+        // Skeleton and animations (skin 0 only). The skeleton's bones: the skin's joints in order, then the bones it hangs from;
+        // animation channels and bone parents are remapped from model bone indices into joint indices.
         HashMap<i32, i32> boneToJoint;
         const bool hasSkin = model.skins().Size() > 0;
         if (hasSkin)

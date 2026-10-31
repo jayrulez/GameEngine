@@ -4,18 +4,18 @@
 // UI Toolkit - :toast_host partition
 //
 // Transient notification overlay ("toasts"): a full-viewport pass-through layer that stacks
-// notification cards in its bottom-right corner, newest nearest the corner. Not a Sedulous port
-// (upstream has no toast control) - designed for the editor but app-agnostic.
+// notification cards in its bottom-right corner, newest nearest the corner. Designed for the editor
+// but app-agnostic.
 //
 // Behavior contract:
-//  - Show() adds a card; durationSeconds > 0 auto-expires it, <= 0 is STICKY (stays until the
-//    user closes it or the app calls Dismiss). Errors and action-bearing toasts should be sticky.
+//  - Show() adds a card; durationSeconds > 0 auto-expires it, and <= 0 makes it sticky (it stays
+//    until the user closes it or the app calls Dismiss). Errors and action-bearing toasts should be sticky.
 //  - The host itself is input-transparent (IsHitTestVisible = false leaves only the cards
 //    hittable), so it can overlay the whole window root.
-//  - Card buttons only MARK a toast closing; the view is removed on the next Update() - never
-//    mid-event-dispatch (the UI mutation-queue rule, without needing the queue).
-//  - The owning app calls Update(dt) once per frame (same idiom as the editor inspector's
-//    Refresh) - there is no self-ticking.
+//  - Card buttons only mark a toast closing; the view is removed on the next Update(), never
+//    during event dispatch (the UI mutation-queue rule, without needing the queue).
+//  - The owning app calls Update(dt) once per frame (as the editor inspector calls Refresh);
+//    the host does not tick itself.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +41,7 @@ export namespace foundation::ui::toolkit
         Error
     };
 
-    /// One notification. `durationSeconds <= 0` = sticky (until closed/dismissed).
+    /// One notification. `durationSeconds <= 0` makes it sticky (until closed or dismissed).
     struct ToastRequest
     {
         String message;
@@ -51,7 +51,7 @@ export namespace foundation::ui::toolkit
         Function<void()> onAction; // fired on action click (the toast then closes)
     };
 
-    /// A single toast card: severity accent bar + message + optional action + close button.
+    /// A single toast card: a severity accent bar, the message, an optional action and a close button.
     class ToastCard : public FlexLayout
     {
         RTTI_OBJECT(ToastCard, FlexLayout)
@@ -74,8 +74,8 @@ export namespace foundation::ui::toolkit
             if (r > 0.0f)
             {
                 ctx.VG().FillRoundedRect(bounds, r, bg);
-                // Accent trim drawn OVER the card's left edge. Its width equals the corner radius so its
-                // rounded left corners coincide exactly with the card's - a thinner bar can't match a
+                // Accent trim drawn over the card's left edge. Its width equals the corner radius so its
+                // rounded left corners coincide exactly with the card's; a thinner bar cannot match a
                 // larger radius and reads as a separate rounded box floating inside the card.
                 ctx.VG().FillRoundedRect(Rectangle{0, 0, r, Height()},
                                          foundation::vg::CornerRadii{r, 0.0f, 0.0f, r}, Accent);

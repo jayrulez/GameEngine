@@ -27,7 +27,7 @@ MASK = (1 << 64) - 1
 OLD = ("rtti::pipeline::ui", "UIVectorImageAsset")
 NEW = ("rtti::pipeline::vg", "VectorImageAsset")
 
-#: A project's folders that are NOT its own stored data.
+#: A project's folders that are not its own stored data.
 SKIPPED_DIRECTORIES = {"Cooked", "Sources", ".git"}
 
 

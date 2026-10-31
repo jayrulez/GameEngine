@@ -3,9 +3,9 @@
 
 // Editor::Core - :selection partition.
 //
-// Generic editor selection set: ordered, deduplicated, with a primary element (Items()[0] - the
-// gizmo pivot / transform anchor, per Lumix) and a change event that panels (inspector, hierarchy,
-// gizmos) subscribe to. Selection is deliberately NOT undoable (Lumix/Traktor agree).
+// Generic editor selection set: ordered and deduplicated, with a primary element (Items()[0], the
+// gizmo pivot and transform anchor) and a change event that panels (inspector, hierarchy, gizmos)
+// subscribe to. Selection changes are not undoable.
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +36,7 @@ export namespace editor
         [[nodiscard]] bool IsEmpty() const noexcept { return m_items.IsEmpty(); }
         [[nodiscard]] usize Size() const noexcept { return m_items.Size(); }
 
-        /// The primary element (pivot) - the first item, or null when empty.
+        /// The primary element (the pivot): the first item, or null when empty.
         [[nodiscard]] const T* Primary() const noexcept
         {
             return m_items.IsEmpty() ? nullptr : &m_items[0];
@@ -61,7 +61,7 @@ export namespace editor
             Notify();
         }
 
-        /// Replace the selection; duplicates removed, first occurrence stays primary.
+        /// Replace the selection; duplicates are removed and the first occurrence stays primary.
         void Set(Span<const T> items)
         {
             m_items.Clear();

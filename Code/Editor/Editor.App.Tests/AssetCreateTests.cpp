@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The group picker, the rule a new asset's name keeps, and Create Asset over its markup
-// (Data/Editor/AssetCreate.xml): the groups in the tree's order, each by name and what holds it,
-// a key finding its group again; a name refused when empty, holding what a file cannot, spaced at
-// an end or taken, saying why; Create waiting while refused, the line under the name saying why
-// or what it makes, the group field picking another group, and Create answering the group and
-// the name, then closing.
+// The group picker, the naming rule for a new asset, and the Create Asset dialog over its markup
+// (Data/Editor/AssetCreate.xml). Groups are listed in tree order with their names and parents, and
+// a key finds its group again. A name is refused, with the reason, when it is empty, holds a
+// character a file name cannot, has a space at either end, or is taken. Create stays disabled while
+// the name is refused, the line under the name gives the reason or what will be made, the group
+// field picks another group, and Create returns the group and the name and then closes.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -163,13 +163,13 @@ TEST_CASE("create asset: the groups a tree in it, a click choosing one; Create w
         if (tree->IsItemSelected(item))
             chosen = item;
     }
-    REQUIRE(town >= 0); // every group shown, open
+    REQUIRE(town >= 0); // every group is shown, expanded
     CHECK(tree->GetItemText(chosen) == String(u8"Content")); // the group it starts in
-    CHECK_FALSE(create->IsEnabled()); // the suggestion is taken here
+    CHECK_FALSE(create->IsEnabled()); // the suggested name is taken in this group
     CHECK(why->GetText() == StringView(u8"Crate is already in Content."));
     CHECK(why->HasClass(u8"refused"));
 
-    // Another group, clicked in its tree: the same name is free there.
+    // Click another group in the tree: the same name is free there.
     {
         (void)root->UpdateLayout();
         gui::ItemRow* row = tree->RowForItem(town);
@@ -183,7 +183,7 @@ TEST_CASE("create asset: the groups a tree in it, a click choosing one; Create w
     CHECK(why->GetText() == StringView(u8"Makes Crate in Models/Town."));
     CHECK_FALSE(why->HasClass(u8"refused"));
 
-    const auto type = [&root, name](StringView text) // as the user types: over what is there
+    const auto type = [&root, name](StringView text) // types as the user would, replacing the field's text
     {
         name->RequestFocus();
         name->SelectAll();

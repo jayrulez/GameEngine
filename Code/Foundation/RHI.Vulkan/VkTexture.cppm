@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of Texture.
-/// Ported from Sedulous.RHI.Vulkan/VulkanTexture.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -22,8 +21,8 @@ using namespace foundation::core;
 namespace foundation::rhi::vk
 {
     // Live VkDeviceMemory objects backing textures. One vkAllocateMemory per texture (no
-    // sub-allocation), so this both trends toward the driver's maxMemoryAllocationCount and sums the
-    // texture VRAM footprint - handy context in the allocation-failure warning below. Same TU as
+    // sub-allocation), so this both trends toward the driver's maxMemoryAllocationCount and sums
+    // the texture VRAM footprint; the allocation-failure warning below reports it. Same TU as
     // init()/cleanup(), so a plain static suffices.
     static i32 g_liveTexAllocs = 0;
 }
@@ -55,8 +54,9 @@ export namespace foundation::rhi::vk
             if (d.arrayLayerCount >= 6 && d.dimension == TextureDimension::Texture2D)
                 ci.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
-            // A view may also take the format's sRGB or UNORM twin: mutable, listing exactly the
-            // two so the driver keeps its compression for them (Vulkan 1.2 core format list).
+            // A view may also take the format's sRGB or UNORM twin: the image is mutable and lists
+            // just the two, so the driver keeps its compression for them (Vulkan 1.2 core format
+            // list).
             VkFormat viewFormats[2] = {ci.format, VK_FORMAT_UNDEFINED};
             VkImageFormatListCreateInfo formatList{};
             if (d.alternateViewFormat != TextureFormat::Undefined)
@@ -93,10 +93,11 @@ export namespace foundation::rhi::vk
             m_allocationSize = memRes == VK_SUCCESS ? memReqs.size : 0;
             if (memRes != VK_SUCCESS)
             {
-                // GPU texture allocation failed. Log it (throttled so a failure storm can't flood): the
-                // VkResult distinguishes capacity (VK_ERROR_OUT_OF_DEVICE_MEMORY = -2) from the allocation
-                // -count ceiling (VK_ERROR_TOO_MANY_OBJECTS = -10), and liveTexAllocs shows how many texture
-                // allocations were live when it tipped over. The first failure always logs.
+                // GPU texture allocation failed. Log it, throttled so a failure storm can't flood.
+                // The VkResult distinguishes capacity (VK_ERROR_OUT_OF_DEVICE_MEMORY = -2) from the
+                // allocation-count ceiling (VK_ERROR_TOO_MANY_OBJECTS = -10), and liveTexAllocs
+                // shows how many texture allocations were live when it tipped over. The first
+                // failure always logs.
                 static u32 s_failN = 0;
                 if ((s_failN++ % 90u) == 0u)
                 {

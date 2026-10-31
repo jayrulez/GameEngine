@@ -1,4 +1,4 @@
-# Editor::Render tests: the settings profile page's rows, edits and preview, and its kept preview scene.
+# Editor::Render tests: the settings profile page's rows, edits and preview, and the preview scene it keeps.
 add_executable(Editor.Render.Tests TestsMain.cpp SettingsProfilePageTests.cpp)
 target_link_libraries(Editor.Render.Tests PRIVATE
     Editor::Render Editor::App Editor::Core Foundation::Content Foundation::Settings Foundation::Scene Engine::Render Pipeline::Render

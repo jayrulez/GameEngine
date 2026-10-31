@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - SortingProxyModel tests: reorder a source model's rows by a column (numeric by
-// value, strings lexically), toggle asc/desc, map proxy rows to source, and re-sort + notify on
-// source changes. Also the TableView header-click -> ToggleSort wiring.
+// GUI - SortingProxyModel tests: reorder a source model's rows by a column (numeric by value,
+// strings lexically), toggle ascending and descending, map proxy rows to source, and sort again and
+// notify on source changes. Also the TableView's header click wired to ToggleSort.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -103,7 +103,7 @@ TEST_CASE("sorting-proxy: a source change re-sorts and notifies the proxy's clie
     CountingClient client;
     proxy.AddClient(&client);
 
-    core::Array<Variant> row; // value 0 -> should sort to the front
+    core::Array<Variant> row; // value 0: sorts to the front
     row.PushBack(Variant(SV(u8"z")));
     row.PushBack(Variant(static_cast<core::i64>(0)));
     source.AddRow(core::Move(row));

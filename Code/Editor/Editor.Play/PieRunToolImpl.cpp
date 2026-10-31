@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Play - pie_run, the playtest primitive (agent-playtesting-and-asset-creation.md P4).
+// Editor::Play - pie_run, the playtest primitive.
 //
 // One call plays a device-level input timeline into one running PIE instance for a stretch of
 // run time, and answers what happened: probe samples (entity fields and game script properties)
 // at the asked times, screenshots at the asked times, and whether an `until` condition ended it
-// early. The call is re-entered every pump until the run ends. One run per instance at a time:
-// the run is found again by its instance, so instances run side by side, a host and a client
-// scripted over the same seconds.
+// early. The call is re-entered every pump until the run ends. Each instance takes one run at a
+// time, and a run is found again by its instance, so instances can run side by side, such as a
+// host and a client scripted over the same seconds.
 module;
 #include "Core/Prelude.h"
 
@@ -50,8 +50,8 @@ namespace editor
 
         struct Runs;
 
-        /// One pie_run in flight, its call's state: destroyed when the call answers or its caller
-        /// leaves, and then the tab's input goes back to the user.
+        /// The state of one pie_run call in flight. It is destroyed when the call answers or its
+        /// caller leaves, and then the tab's input goes back to the user.
         struct Run final : foundation::mcp::ToolCallState
         {
             ~Run() override;
@@ -75,7 +75,7 @@ namespace editor
             usize nextShot = 0;
             bool shotInFlight = false;
             f64 shotAt = 0.0;
-            String shotPath; // where the shot in flight writes: a pie_screenshot can replace it
+            String shotPath; // where the shot in flight writes; a pie_screenshot can replace it
             String shotDirectory;
             u32 serial = 0;
             JsonValue samples = JsonValue::MakeArray();
@@ -85,7 +85,7 @@ namespace editor
             Stopwatch clock;
         };
 
-        /// The runs in flight, one per instance; each run is its call's.
+        /// The runs in flight, one per instance; each run belongs to its call.
         struct Runs
         {
             Array<Run*> active;
@@ -355,7 +355,7 @@ namespace editor
             for (const Probe& probe : run.probes)
             {
                 Result<JsonValue, String> value = ProbeValue(pie, probe);
-                // An entity gone by now reads null; the run goes on.
+                // An entity that is gone by now reads as null, and the run goes on.
                 values.Set(probe.label, value.HasValue() ? Move(value.Value())
                                                          : JsonValue::MakeNull());
             }
@@ -384,7 +384,7 @@ namespace editor
             out.Set(u8"screenshots", Move(run.shots));
             out.Set(u8"until", Move(run.untilHit));
             out.Set(u8"state", PieStateJson(pie));
-            return out; // the run goes with the call
+            return out; // the run ends with the call
         }
 
         ToolOutcome Step(EditorContext& context, Run& run)
@@ -428,7 +428,7 @@ namespace editor
                 }
             }
 
-            // Every sample time passed since the last pump is one row, read now.
+            // Each sample time passed since the last pump becomes one row, read now.
             if (run.nextSample < run.sampleTimes.Size() && run.sampleTimes[run.nextSample] <= t)
             {
                 while (run.nextSample < run.sampleTimes.Size() &&
@@ -510,8 +510,8 @@ namespace editor
             }
             run.inputCount = source->Count();
 
-            // Probes, checked against the scene the game is in now: a typo fails here, not as a
-            // column of nulls.
+            // Probes are checked against the scene the game is in now, so a typo fails here rather
+            // than as a column of nulls.
             String error;
             if (args.Has(u8"probes"))
             {
@@ -608,7 +608,7 @@ namespace editor
         {
             if (Run* run = call.State<Run>())
             {
-                // Re-entered: this run, one pump later.
+                // Re-entered: the same run, one pump later.
                 if (!IsOpenPage(context, run->page))
                 {
                     return Err(String(u8"the Game tab closed during the run"));

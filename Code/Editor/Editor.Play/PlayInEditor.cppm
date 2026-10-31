@@ -3,9 +3,9 @@
 
 // Editor::Play - :registration partition.
 //
-// RegisterPlayInEditor: the module's entry point, which the editor EXECUTABLE calls beside
-// RegisterSceneEditor. It gives the context its Game tab factory (Play and Play New Instance
-// open one, each on the editor's GUI from its markup), the game-audio preference, and
+// RegisterPlayInEditor is the module's entry point, which the editor executable calls beside
+// RegisterSceneEditor. It gives the context its Game tab factory (Play and Play New Instance each
+// open a tab, built on the editor's GUI from its markup) and the game-audio preference, and
 // contributes the PIE tools to the editor's MCP host.
 
 module;
@@ -17,7 +17,7 @@ import foundation.core;
 import foundation.runtime;
 import foundation.mcp;
 import engine.defaultapp;
-import engine.gameinstance; // GameInstance (the Game tab's run; multi-instance factory)
+import engine.gameinstance; // GameInstance (the Game tab's run; the factory makes extra instances)
 import editor.core;
 import editor.app; // EditorApplication (its window: the GUI host, the markup)
 import :game_page;
@@ -34,7 +34,7 @@ export namespace editor
         app::EditorApplication* editor = &application;
         RegisterGameAudioEditorSettings(context);
 
-        // The Game tab (player behaviour in-process): the primary, or another instance's.
+        // The Game tab (the player's behaviour, in-process), for the primary instance or another one.
         context.GamePageFactory = [editorContext, appHost, editor](bool newInstance, StringView pieId) -> UniquePtr<EditorPage>
         {
             engine::runtime::DefaultApplication* embedded = editor->EmbeddedApplication();

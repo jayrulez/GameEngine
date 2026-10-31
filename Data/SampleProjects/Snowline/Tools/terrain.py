@@ -21,8 +21,7 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# P0 (Documentation/Specs/snowline.md): a 513 x 513 heightfield at 1 m, heights 0 to 120 m, a
-# 400 m course from the top gate to the finish.
+# Every course is a 513 x 513 heightfield at 1 m, heights 0 to 120 m.
 # Each course: its size and drop, its bends, how wide the groomed course is (course_groom: the
 # packed snow fades out between these distances from the line, in metres), where the forest may
 # start (forest_from), how many forest patches and how big. A shortcut, if any, is a narrow groomed

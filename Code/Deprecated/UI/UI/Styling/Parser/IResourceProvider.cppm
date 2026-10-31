@@ -5,20 +5,16 @@
 //
 // Interface for loading external resources referenced by .sss stylesheets. The runtime layer
 // provides an implementation that bridges to VFS. If no provider is given, @import and
-// resource-loading factories (image, nine-slice, svg from file) fail gracefully. Ported from
-// Sedulous.UI/src/Styling/Parser/IResourceProvider.bf.
-//
-// Divergence (language): pattern-B injected abstract base (no As*() query). Beef Result<void> ->
-// bool (true = loaded); Result<IImageData> -> a borrowed const ImageData* (null = not found). The
-// provider owns the returned image's lifetime.
+// resource-loading factories (image, nine-slice, svg from file) fail gracefully. The provider
+// owns the lifetime of every image it returns.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:iresource_provider;
 
-import foundation.core;  // StringView, String
-import foundation.image; // ImageData
+import foundation.core;
+import foundation.image;
 
 using namespace foundation::core;
 namespace image = foundation::image;

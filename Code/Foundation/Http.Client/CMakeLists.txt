@@ -1,4 +1,4 @@
-# Foundation::Http.Client - `foundation.http.client`: the game-facing HTTP client seam
+# Foundation::Http.Client - `foundation.http.client`: the game-facing HTTP client interface
 # (IHttpClient), URL parsing, and the native client (HTTP/1.1 on a worker thread, over a
 # PlainStream for http:// and a TlsStream for https://, the TLS backend handed in).
 

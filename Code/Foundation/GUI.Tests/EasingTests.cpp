@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - easing functions (G3 of Specs/vg-and-gui-lab.md): curves sampled against their formulas.
-// A cubic Bezier is checked on its own parametric points (x(s), y(s)); steps() against CSS's
-// definitions of each jump position; the names against their CSS curves.
+// GUI - easing functions: curves sampled against their formulas. A cubic Bezier is checked at its
+// own parametric points (x(s), y(s)), steps() against the CSS definition of each jump position,
+// and the named easings against their CSS curves.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -42,7 +42,7 @@ TEST_CASE("easing: cubic-bezier follows its curve, overshoot included")
     REQUIRE(custom.HasValue());
     CheckBezier(custom.Value(), 0.1f, 0.7f, 1.0f, 0.1f);
 
-    // y may leave [0, 1] (a back-out bounce); x may not.
+    // y may leave [0, 1] (a back-out bounce), but x may not.
     const core::Optional<Easing> back = ParseEasing(SV(u8"cubic-bezier(0.34, 1.56, 0.64, 1)"));
     REQUIRE(back.HasValue());
     CheckBezier(back.Value(), 0.34f, 1.56f, 0.64f, 1.0f);
@@ -130,11 +130,11 @@ TEST_CASE("easing: the named curves past CSS's: ten families, eased in, out and 
     CHECK(ParseEasing(SV(u8"ease-in-back")).Value().Evaluate(0.2f) < 0.0f);  // pulls back first
     CHECK(ParseEasing(SV(u8"ease-out-back")).Value().Evaluate(0.8f) > 1.0f); // overshoots
     CHECK(ParseEasing(SV(u8"ease-out-bounce")).Value().Evaluate(0.5f) > 0.5f);
-    // Not curves: an unknown family, a missing one, CSS's own names still beziers.
+    // Not curves: an unknown family or a missing one. The CSS names are still beziers.
     CHECK_FALSE(ParseEasing(SV(u8"ease-out-wobble")).HasValue());
     CHECK_FALSE(ParseEasing(SV(u8"ease-out-")).HasValue());
     CHECK(ParseEasing(SV(u8"ease-out")).Value().Kind == EasingKind::CubicBezier);
-    // A sheet's transition takes them too.
+    // A sheet's transition accepts them too.
     const core::Array<TransitionSpec> list = ParseTransitionList(SV(u8"opacity 0.3s ease-out-elastic"));
     REQUIRE(list.Size() == 1u);
     CHECK(list[0].Timing.Kind == EasingKind::Named);

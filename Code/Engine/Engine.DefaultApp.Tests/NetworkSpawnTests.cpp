@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The replicated-spawn resolver's BODY: a prefab id -> a live prefab spawned from the content
+// The replicated-spawn resolver's body: a prefab id becomes a live prefab spawned from the content
 // database. GameInstanceTests pins the wiring (the controller applies the resolver to every
-// endpoint) and ReplicationTests the handler contract with a stand-in; neither reached the body
-// (it lived inside a lambda). Mirrors the Beef port's five cases.
+// endpoint) and ReplicationTests the handler contract with a stand-in; neither reaches the body.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include "Core/Prelude.h"
@@ -26,8 +25,8 @@ namespace
         std::filesystem::path dir = "scratch_defaultapp_netspawn";
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<content::ContentDatabase> db;
-        Guid turret;   // a two-entity prefab: Turret -> Barrel
-        Guid emptyDoc; // an instance with NO scene stream
+        Guid turret;   // a two-entity prefab: Turret, with Barrel under it
+        Guid emptyDoc; // an instance with no scene stream
 
         PrefabFixture()
         {
@@ -38,7 +37,7 @@ namespace
                 DefaultAllocator(), u8"scratch_defaultapp_netspawn", DefaultAllocator());
             db = MakeUnique<content::ContentDatabase>(DefaultAllocator(), DefaultAllocator(), *mount,
                                                       BinarySerializerFactory(), u8".rasset");
-            // Author the prefab: root + child, captured the way SavePrefab captures.
+            // Author the prefab: root and child, captured the way SavePrefab captures.
             scene::Scene author(DefaultAllocator(), u8"author");
             const scene::EntityHandle root = author.CreateEntity(u8"Turret");
             const scene::EntityHandle barrel = author.CreateEntity(u8"Barrel");

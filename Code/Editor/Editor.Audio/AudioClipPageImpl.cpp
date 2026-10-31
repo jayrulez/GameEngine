@@ -42,7 +42,7 @@ namespace editor
         m_waveform = MakeRef<WaveformView>(Allocator());
         if (m_stage != nullptr)
             m_stage->AddChild(m_waveform.Get());
-        // The kit's transport: the playback actions over this page, as every page's transport is.
+        // The kit's transport runs the playback actions for this page, as on every page.
         BindAction(Find<gui::ButtonBase>(u8"audio-restart"), u8"playback.restart");
         BindAction(Find<gui::ButtonBase>(u8"audio-play"), u8"playback.play");
         BindAction(Find<gui::ButtonBase>(u8"audio-stop"), u8"playback.stop");
@@ -129,9 +129,9 @@ namespace editor
     {
         const auto* asset = ObjectAs<pipeline::AudioClipAsset>();
         if (asset != nullptr && asset->fileName.View() != m_loadedFile.AsView())
-            LoadClip(); // another source: read again
+            LoadClip(); // a different source: read it again
         else
-            ApplyOptions(); // the next play takes them
+            ApplyOptions(); // the next play uses the new options
     }
 
     void AudioClipEditorPage::Audition()
@@ -170,7 +170,7 @@ namespace editor
 
     void AudioClipEditorPage::SetAuditionVolume(f32 volume)
     {
-        m_voice->SetVolume(volume); // heard as it moves
+        m_voice->SetVolume(volume); // heard at once, as the slider moves
         if (m_volume != nullptr && m_volume->GetValue() != static_cast<f64>(m_voice->Volume()))
             m_volume->SetValue(m_voice->Volume());
     }
@@ -186,13 +186,13 @@ namespace editor
 
     void AudioClipEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
     {
-        app::AssetObjectPage::OnUpdate(host, dt); // the bar, the transport with it, each frame
+        app::AssetObjectPage::OnUpdate(host, dt); // updates the bar, and the transport with it, each frame
         if (!m_voice->IsActive())
             return;
         f32 cursor = 0.0f;
         if (!m_voice->Poll(cursor))
         {
-            StopAudition(); // finished, or its voice taken
+            StopAudition(); // finished, or the engine took its voice
             return;
         }
         const f32 duration = m_clip.Get() != nullptr ? m_clip->durationSeconds : 0.0f;

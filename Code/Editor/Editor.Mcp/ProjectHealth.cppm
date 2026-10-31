@@ -3,18 +3,18 @@
 
 // Editor::Mcp - :project_health partition
 //
-// project_health: one call = "is this project sound".
-// Sweeps the whole source database with the SAME live machinery the other tools trust:
-//   - dangling references: every forward edge (builders' ScanDependencies reads/references;
-//     scene/prefab component Refs + prefab instances via the full-manager scan; the
-//     ProjectSettings guid fields) whose target no longer exists in the source database -
-//     the reflection-through-managers walk neither surveyed engine can do;
+// project_health: one call that answers "is this project sound". It sweeps the whole source
+// database with the same live machinery the other tools use:
+//   - dangling references: every forward edge (the builders' ScanDependencies reads and
+//     references; scene and prefab component Refs and prefab instances through the
+//     full-manager scan; the ProjectSettings guid fields) whose target no longer exists in the
+//     source database;
 //   - broken sources: buildable assets whose envelope no longer deserializes (a stale data
-//     version / unknown type) and scenes/prefabs whose stored stream does not load;
-//   - cook state: the incremental plan's dirty/up-to-date split, orphaned products, sources
-//     with no registered builder, and cook records whose last build FAILED.
-// `sound` is the verdict: true only when nothing is broken (dirty is normal workflow state and
-// never makes a project unsound - cook it with asset_cook).
+//     version or an unknown type) and scenes or prefabs whose stored stream does not load;
+//   - cook state: the incremental plan's dirty and up-to-date split, orphaned products, sources
+//     with no registered builder, and cook records whose last build failed.
+// `sound` is the verdict: true only when nothing is broken (dirty is a normal workflow state and
+// never makes a project unsound; cook it with asset_cook).
 
 module;
 #include "Core/Prelude.h"
@@ -54,8 +54,8 @@ namespace editor::mcp::detail
         Array<DanglingRef> dangling;
         Array<content::Instance*> undeserializable; // buildable, but ReadObject fails
         Array<content::Instance*> unreadableScenes; // scene/prefab stream does not load
-        Array<content::Instance*> emptyCues; // SoundCueAsset with no clip in any slot (WARNING)
-        usize unbuildable = 0; // no registered builder (scenes/prefabs excluded - they stage)
+        Array<content::Instance*> emptyCues; // SoundCueAsset with no clip in any slot (a warning)
+        usize unbuildable = 0; // no registered builder (scenes and prefabs excluded: they are staged)
     };
 
     inline void AppendDangling(content::Instance* from, const Array<Guid>& targets,
@@ -70,7 +70,7 @@ namespace editor::mcp::detail
         }
     }
 
-    // Depth-first sweep of every source instance's forward edges + deserializability.
+    // Depth-first sweep of every source instance's forward edges and deserializability.
     inline void SweepHealth(content::Group* group, content::ContentDatabase& db,
                             pipeline::BuilderRegistry& builders, vfs::IFileSystem& sourcesMount,
                             HealthSweep& out)
@@ -109,8 +109,8 @@ namespace editor::mcp::detail
                 out.undeserializable.PushBack(inst);
                 continue;
             }
-            // Empty-cue audit (WARNING, not a break): a cue with no clip in any slot cooks to a
-            // valid silent product, but is almost always a forgot-to-assign mistake.
+            // Empty-cue audit (a warning, not a break): a cue with no clip in any slot cooks to a
+            // valid silent product, but is almost always a clip someone forgot to assign.
             if (const auto* cue = Cast<pipeline::SoundCueAsset>(asset))
             {
                 bool anyClip = false;
@@ -186,7 +186,7 @@ export namespace editor::mcp
                 }
                 content::ContentDatabase& db = s->project->SourceDb();
                 vfs::NativeFileSystem sourcesMount(s->project->SourcesRoot().AsView(), editor::EditorRootAllocator());
-                // The reference + deserializability sweep.
+                // The reference and deserializability sweep.
                 detail::HealthSweep sweep;
                 detail::SweepHealth(db.RootGroup(), db, *bld, sourcesMount, sweep);
 
@@ -198,7 +198,7 @@ export namespace editor::mcp
                     s->project->Settings(),
                     [&](const PropertyInfo& property, const Guid& named)
                     {
-                        if (db.GetInstance(named) == nullptr && &property != last) // a list once
+                        if (db.GetInstance(named) == nullptr && &property != last) // a list is named once
                         {
                             settingsDangling.Add(JsonValue::MakeString(
                                 String(StringView(reinterpret_cast<const utf8char*>(property.name)))));
@@ -206,7 +206,7 @@ export namespace editor::mcp
                         }
                     });
 
-                // Cook state: plan only (no build) + the persisted records' failure flags.
+                // Cook state: plan only (no build), and the persisted records' failure flags.
                 const String sourcesRoot = s->project->SourcesRoot();
                 const String cacheRoot = s->project->CacheRoot();
                 vfs::NativeFileSystem planSources(sourcesRoot.AsView(), editor::EditorRootAllocator());
@@ -244,7 +244,7 @@ export namespace editor::mcp
                 {
                     unreadableScenes.Add(detail::InstanceToJson(inst));
                 }
-                // Warnings do NOT flip `sound` (an empty cue is a valid, buildable draft).
+                // Warnings do not flip `sound` (an empty cue is a valid, buildable draft).
                 JsonValue emptyCues = JsonValue::MakeArray();
                 for (content::Instance* inst : sweep.emptyCues)
                 {

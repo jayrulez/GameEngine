@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The scene page on the GUI (Documentation/Specs/editor-gui.md, 5.3, layer 2), headless: a scratch
-// project, a runtime context with a scene subsystem and no renderer, the page's own markup. It
-// opens its scene into a scene of its own with the viewport in its pane; its bar's Save follows its
-// own page; a scene that did not load says so on the page and is not saved over; a prefab is marked
-// and refused a second root; Simulate locks the edits and gives the scene back; where the scene was
-// left (the camera, the selection, the panes) comes back when it opens again; the animation panel
-// under the viewport (shown and hidden, an animator's clip opened in it, its clip asked about apart
-// from the scene, the scene saved as it is, not as the panel posed it). And the parts: the
-// panes' weights against the prefs' nested ratios, and a prefab's own instance refused.
+// The scene page on the GUI, headless: a scratch project, a runtime context with a scene
+// subsystem and no renderer, and the page's own markup. The page opens its scene into a scene of
+// its own with the viewport in its pane, and its bar's Save follows that page. A scene that did not
+// load says so on the page and is not saved over. A prefab is marked as one and refused a second
+// root. Simulate locks the edits and restores the scene afterwards. The camera, selection and panes
+// come back when the scene opens again. The animation panel under the viewport can be shown and
+// hidden, opens an animator's clip, reports the clip's unsaved work separately from the scene, and
+// the scene saves as it is rather than as the panel posed it. Smaller parts: the pane weights
+// against the preferences' nested ratios, and a prefab refusing an instance of itself.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -60,8 +60,8 @@ namespace
     public:
         SceneHost()
         {
-            // The engine's full composition, so a scene's entities take its components.
-            engine::RegisterAllSceneComponentReflection(); // every component named, as the editor has them
+            // The engine's full composition, so a scene's entities can take its components.
+            engine::RegisterAllSceneComponentReflection(); // every component named, as in the editor
             m_context.AddSubsystem<engine::scene::SceneSubsystem>()->SetComposition(engine::FullSceneComposition());
             m_context.Startup();
         }
@@ -104,8 +104,8 @@ namespace
         return nullptr;
     }
 
-    // A project with a scene ("Level", a Crate in it), a prefab ("Barrel") and a scene whose source
-    // is not a scene ("Broken").
+    // A project with a scene ("Level", with a Crate in it), a prefab ("Barrel") and an asset
+    // ("Broken") whose source is not a valid scene.
     struct Bed
     {
         String dir = String(u8"scratch_scene_page_project");
@@ -158,7 +158,7 @@ namespace
             project.Reset();
             (void)RemoveDirectoryRecursive(dir.AsView());
         }
-        app::PickerRequest picked; // what the page last asked its picker to show
+        app::PickerRequest picked; // the last request the page sent to its picker
         UniquePtr<SceneEditorPage> Open(foundation::content::Instance& instance)
         {
             SceneEditorPage::Services services;
@@ -186,7 +186,7 @@ TEST_CASE("scene page: its scene opened into a scene of its own, the viewport in
     CHECK_FALSE(FindId<gui::Node>(*content, u8"scene-state")->IsDisplayed());
     CHECK_FALSE(FindId<gui::Node>(*content, u8"scene-kind")->IsDisplayed());
 
-    // Clean: Save is off; an edit makes it dirty and the bar follows on its next frame.
+    // A clean page has Save off; an edit makes it dirty, and the bar follows on its next frame.
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     auto* save = FindId<gui::ToolButton>(*content, u8"scene-save");
     REQUIRE(save != nullptr);
@@ -212,20 +212,20 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
     REQUIRE(panel != nullptr);
     gui::Splitter* center = FindId<gui::Splitter>(*page->Content(), u8"scene-center");
     REQUIRE(center != nullptr);
-    CHECK(center->GetPaneCount() == 1u); // hidden: the viewport takes it all
+    CHECK(center->GetPaneCount() == 1u); // panel hidden: the viewport takes all the space
     CHECK_FALSE(page->AnimationPanelShown());
     page->SetAnimationPanelShown(true);
     CHECK(center->GetPaneCount() == 2u);
     page->SetAnimationPanelShown(false);
     CHECK(center->GetPaneCount() == 1u);
 
-    // An animator's Edit Clip: shown, the clip opened, the entity bound.
+    // An animator's Edit Clip shows the panel, opens the clip and binds the entity.
     page->EditAnimationClip(clip->Id(), bed.crate);
     CHECK(page->AnimationPanelShown());
     CHECK(panel->Document().ClipId() == clip->Id());
     CHECK(panel->BoundEntity() == bed.crate);
 
-    // A track posing the crate at x 5: the clip unsaved, never the scene.
+    // A track poses the crate at x 5. The clip has unsaved work; the scene never does.
     AnimatablePropertyInfo position;
     for (const AnimatablePropertyInfo& seed : panel->OfferedTracks())
         if (seed.propertyPath == String(u8"position"))
@@ -243,7 +243,7 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
     CHECK(besides[0] == String(u8"The clip 'Bounce'"));
     CHECK(page->HasUnsavedWork());
 
-    // Saved: the scene as it is (x 0), the crate posed again after.
+    // Saving writes the scene as it is (x 0), and the crate is posed again afterwards.
     (void)page->EditContext().CreateEntity(u8"Barrel");
     REQUIRE(page->Save().IsOk());
     CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(5.0f));
@@ -257,14 +257,14 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
     page->ListUnsavedBesides(besides);
     CHECK(besides.IsEmpty());
 
-    // Hidden from its own Close: what it posed goes back.
+    // Hiding the panel with its own Close puts back what it posed.
     REQUIRE(panel->RequestClose);
     panel->RequestClose();
     CHECK_FALSE(page->AnimationPanelShown());
     CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(0.0f));
 
-    // New on an entity whose animator has no clip: the clip made in Animations and given to it,
-    // one step of the scene's; an animator playing a clip keeps it.
+    // New on an entity whose animator has no clip makes the clip in Animations and assigns it, as
+    // one undo step of the scene. An animator that already has a clip keeps it.
     page->EditContext().AddComponent(bed.crate, &TypeOf<engine::animation::PropertyAnimatorComponent>());
     REQUIRE(panel->RequestNewClip);
     panel->RequestNewClip();
@@ -277,7 +277,7 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
     page->Commands().Undo();
     CHECK(animators->Get(crate)->clip.id.IsNil());
     page->Commands().Redo();
-    panel->RequestNewClip(); // another: the animator keeps the first
+    panel->RequestNewClip(); // a second clip: the animator keeps the first
     CHECK(animators->Get(crate)->clip.id == made);
     CHECK(panel->Document().ClipId() != made);
     page->OnClose();
@@ -292,7 +292,7 @@ TEST_CASE("scene page: a scene that did not load says so on the page and is not 
     CHECK(FindId<gui::Node>(*content, u8"scene-state")->IsDisplayed());
     (void)page->EditContext().CreateEntity(u8"Lost");
     CHECK(page->Save().Code() == ErrorCode::NotSupported);
-    // The source is as it was.
+    // The source is unchanged.
     UniquePtr<IStream> stream = bed.broken->ReadData(u8"scene");
     REQUIRE(stream.Get() != nullptr);
     CHECK(stream->Size() == static_cast<u64>(sizeof(u8"this is not a scene") - 1));
@@ -320,7 +320,7 @@ TEST_CASE("scene page: Simulate locks the edits and gives the scene back as it w
     const usize before = page->ScenePtr()->EntityCount();
     page->StartSimulation();
     CHECK(page->IsSimulating());
-    CHECK(page->EditContext().CreateEntity(u8"Refused").IsNil()); // the stack is locked
+    CHECK(page->EditContext().CreateEntity(u8"Refused").IsNil()); // the command stack is locked
     (void)page->ScenePtr()->CreateEntity(u8"Spawned by the run");
     page->PauseSimulation(true);
     CHECK(page->IsPaused());
@@ -417,8 +417,8 @@ TEST_CASE("prefab flows: a prefab's page refuses an instance of itself, saying s
 
 namespace
 {
-    // The page laid out in a GUI of its own under the editor's sheet, for its hierarchy's rows to be
-    // pressed where they show.
+    // The page laid out in its own GUI under the editor's sheet, so a test can press the
+    // hierarchy's rows where they show.
     struct Shown
     {
         RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
@@ -470,31 +470,32 @@ TEST_CASE("hierarchy: the scene its top row, its entities under it as they nest;
     REQUIRE(tree != nullptr);
     const Guid lid = page->EditContext().CreateEntity(u8"Lid", bed.crate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
-    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid")); // Crate gained a child: it opens
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid")); // Crate gained a child, so it expands
     const Guid knob = page->EditContext().CreateEntity(u8"Knob", lid);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid |       Knob"));
-    tree->Tree()->CollapseItem(tree->ItemOf(lid)); // closed by the user: it stays closed
+    tree->Tree()->CollapseItem(tree->ItemOf(lid)); // collapsed by the user, so it stays collapsed
     (void)page->EditContext().CreateEntity(u8"Spring", lid);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid"));
     (void)knob;
 
-    // The page's selection (a viewport pick) shows in the tree; a click on a row is the page's.
+    // The page's selection (a viewport pick) shows in the tree, and a click on a row sets the
+    // page's selection.
     page->EditContext().EntitySelection().Set(bed.crate);
     CHECK(tree->Tree()->IsItemSelected(tree->ItemOf(bed.crate)));
     Shown shown(*page);
     shown.Click(*tree->Tree(), tree->ItemOf(lid));
     CHECK(page->EditContext().EntitySelection().Contains(lid));
     CHECK_FALSE(page->EditContext().EntitySelection().Contains(bed.crate));
-    shown.Click(*tree->Tree(), tree->ItemOf(bed.crate), gui::KeyModCtrl); // several
+    shown.Click(*tree->Tree(), tree->ItemOf(bed.crate), gui::KeyModCtrl); // multiple selection
     CHECK(page->EditContext().EntitySelection().Items().Size() == 2u);
-    shown.Click(*tree->Tree(), 0); // the scene's row: no entity
+    shown.Click(*tree->Tree(), 0); // the scene's row has no entity
     CHECK(tree->Tree()->GetSelectionCount() == 1u);
     CHECK(tree->Tree()->IsItemSelected(0));
     CHECK(page->EditContext().EntitySelection().IsEmpty());
 
-    // An entity that is not active dims; the model says so for its row.
+    // An inactive entity is dimmed; the model reports it through its row class.
     page->EditContext().SetEntityActive(lid, false);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     const gui::Variant classes = tree->Tree()->GetModel()->Data(tree->IndexOf(lid), gui::ModelRole::RowClass);
@@ -558,9 +559,9 @@ TEST_CASE("hierarchy: a row dropped onto another goes under it, between two move
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(tree->Rows() == String(u8"Level |   Crate |     Barrel |   Lid"));
     CHECK_FALSE(tree->CanTake(drop(bed.crate, barrel, gui::DropPlace::On))); // inside itself
-    CHECK_FALSE(tree->CanTake(drop(Guid{}, barrel, gui::DropPlace::On)));    // the scene stays
+    CHECK_FALSE(tree->CanTake(drop(Guid{}, barrel, gui::DropPlace::On)));    // the scene row cannot move
 
-    // A drag carries its entities, for an entity slot.
+    // A drag carries its entities, so an entity slot can take them.
     const gui::DragPayload payload = tree->DragOf(Span<const Guid>(&lid, 1u));
     Array<Guid> carried;
     CHECK(EntityDrag::Read(payload, carried));
@@ -573,7 +574,7 @@ TEST_CASE("hierarchy: a prefab dropped in is spawned under the row; the menus an
 {
     Bed bed;
     {
-        // The prefab needs content: one root.
+        // The prefab needs content: a single root.
         scene::Scene authored(DefaultAllocator(), u8"barrel");
         (void)authored.CreateEntity(u8"Barrel");
         REQUIRE(scene::SavePrefab(authored, *bed.barrel).IsOk());
@@ -594,11 +595,11 @@ TEST_CASE("hierarchy: a prefab dropped in is spawned under the row; the menus an
     drop.Payload = &level;
     CHECK_FALSE(tree->CanTake(drop)); // only a prefab goes in
 
-    // A row's menu: its actions over the page.
+    // A row's menu holds the page's actions.
     Shown shown(*page);
     tree->ShowMenu(tree->ItemOf(bed.crate), Float2{10.0f, 10.0f});
     REQUIRE(tree->OpenMenu() != nullptr);
-    CHECK(page->EditContext().EntitySelection().Contains(bed.crate)); // the row it was asked over
+    CHECK(page->EditContext().EntitySelection().Contains(bed.crate)); // the row the menu opened over
     bool hasDelete = false;
     for (usize i = 0; i < tree->OpenMenu()->ChildCount(); ++i)
         if (auto* item = Cast<gui::MenuItem>(tree->OpenMenu()->GetChildAt(i)))
@@ -693,7 +694,7 @@ TEST_CASE("inspector: a transform edit and a component edit are each one undo st
     const auto lightOf = [&]() { return static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(bed.crate)).Pointer()); };
     CHECK(lightOf()->intensity == doctest::Approx(9.0f));
     page->Commands().Undo();
-    CHECK(lightOf()->intensity == doctest::Approx(7.0f)); // the second edit alone
+    CHECK(lightOf()->intensity == doctest::Approx(7.0f)); // only the second edit was undone
     page->Commands().Undo();
     CHECK(lightOf()->intensity != doctest::Approx(7.0f));
     page->Commands().Redo();
@@ -727,7 +728,7 @@ TEST_CASE("inspector: several entities edited at once; a component's header has 
     CHECK(static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(lamp)).Pointer())->intensity == doctest::Approx(3.0f));
     CHECK(static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(bed.crate)).Pointer())->intensity == doctest::Approx(3.0f));
 
-    // The header's verbs: Remove Component takes it from both, one undo brings it back.
+    // The header's commands: Remove Component removes it from both, and one undo brings it back.
     Shown shown(*page);
     REQUIRE(inspector->OpenHeaderMenu(u8"#Light"));
     REQUIRE(inspector->Grid()->GetRowMenu() != nullptr);
@@ -743,7 +744,7 @@ TEST_CASE("inspector: several entities edited at once; a component's header has 
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(inspector->SectionTitles() == String(u8"Entity | Transform | Light"));
 
-    // Simulating: read only, and said.
+    // While simulating, the inspector is read-only and shows a note saying so.
     page->StartSimulation();
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(inspector->Sections().IsReadOnly());
@@ -775,17 +776,18 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     REQUIRE(slot != nullptr); // the entity slot, not the asset one
     CHECK(slot->Slot()->ShownName() == StringView(u8"Not set"));
 
-    // The pick: the entity picker, the scene as the hierarchy shows it; a search keeps a match.
+    // Picking opens the entity picker, which shows the scene as the hierarchy does; a search
+    // keeps the matches.
     const i64 before = page->Commands().UndoIndex();
     REQUIRE(page->PickEntity(slot->Request()));
     EntityPickerWindow* picker = page->EntityPicker();
     REQUIRE(picker != nullptr);
     CHECK(picker->IsOpen());
-    CHECK(picker->Rows() == page->Hierarchy()->Rows()); // the same tree
+    CHECK(picker->Rows() == page->Hierarchy()->Rows()); // the same tree as the hierarchy
     CHECK(picker->Rows() == String(u8"Level |   Crate |   Lamp"));
-    CHECK(picker->LitName().IsEmpty()); // nothing current
+    CHECK(picker->LitName().IsEmpty()); // nothing is current yet
     CHECK(picker->Hint() == StringView(u8"Enter picks, Esc closes"));
-    picker->Step(-1); // the scene's row: no pick
+    picker->Step(-1); // the scene's row cannot be picked
     picker->PickLit();
     CHECK(picker->IsOpen());
     picker->Search(u8"la");
@@ -808,8 +810,9 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     slot = Cast<EntityRefEditor>(inspector->Grid()->FindEditor(path.AsView()));
     REQUIRE(slot != nullptr);
     CHECK(slot->Slot()->ShownName() == StringView(u8"Lamp"));
-    // Again: the current entity lit, the foot saying Esc keeps it; its close writes nothing (no
-    // None to slip onto: the slot's own clear sets nothing).
+    // Opened again, the picker highlights the current entity and its hint says Esc keeps it.
+    // Closing it writes nothing; it has no None row, since the slot's own clear button sets
+    // nothing.
     REQUIRE(page->PickEntity(slot->Request()));
     CHECK(picker->LitName() == String(u8"Lamp"));
     CHECK(picker->Hint() == StringView(u8"Enter picks, Esc keeps Lamp"));
@@ -839,7 +842,8 @@ TEST_CASE("scene page: the animation panel binds an entity picked from the scene
     const Guid door = page->EditContext().CreateEntity(u8"Door");
     page->OnUpdate(bed.host, 1.0f / 60.0f);
 
-    // Off screen, a clip's open is not the page's: it opens as an asset would.
+    // While the page is off screen it does not intercept opening a clip, which opens as any
+    // asset would.
     CHECK_FALSE(page->IsOnScreen());
     CHECK_FALSE(bed.context.TryInterceptOpenAsset(*clip));
 
@@ -849,10 +853,10 @@ TEST_CASE("scene page: the animation panel binds an entity picked from the scene
     CHECK(bed.context.TryInterceptOpenAsset(*clip));
     CHECK(page->AnimationPanelShown());
     CHECK(panel->Document().ClipId() == clip->Id());
-    CHECK(panel->BoundEntity() == bed.crate); // the selection, as Edit Clip binds it
+    CHECK(panel->BoundEntity() == bed.crate); // the selection, bound as Edit Clip binds it
     CHECK_FALSE(bed.context.TryInterceptOpenAsset(*bed.barrel)); // a prefab is not a clip
 
-    // Pick: the entity picker, the bound entity lit; a pick binds, None keeps it.
+    // Pick opens the entity picker with the bound entity highlighted; picking binds the entity.
     panel->PickEntity();
     EntityPickerWindow* picker = page->EntityPicker();
     REQUIRE(picker != nullptr);
@@ -862,7 +866,7 @@ TEST_CASE("scene page: the animation panel binds an entity picked from the scene
     picker->PickLit();
     CHECK(panel->BoundEntity() == door);
     page->OnClose();
-    CHECK_FALSE(bed.context.TryInterceptOpenAsset(*clip)); // closed: it let go
+    CHECK_FALSE(bed.context.TryInterceptOpenAsset(*clip)); // a closed page no longer intercepts
 }
 
 TEST_CASE("inspector: a bone name picks from the skeleton of the animator above, a name it lacks said so; with none, text")
@@ -921,7 +925,7 @@ TEST_CASE("inspector: a bone name picks from the skeleton of the animator above,
     CHECK(mid->GetComboBox()->GetItemsText().AsView().EndsWith(u8"|Knee (not in the skeleton)"));
     CHECK(mid->GetComboBox()->GetSelectedIndex() == 4);
 
-    // With no animator above, the text field.
+    // With no animator above, the editor is a plain text field.
     const Guid stray = edit.CreateEntity(u8"Stray");
     legs->Add(scene.FindEntity(stray));
     edit.EntitySelection().Set(stray);
@@ -951,7 +955,7 @@ TEST_CASE("inspector: Paste Component puts the copied component on the selection
     REQUIRE_FALSE(blob.IsEmpty());
     bed.context.CopyToEditorClipboard(u8"component", Move(blob), u8"component");
 
-    // Onto an entity without one: pasted at once, one step.
+    // Onto an entity without the component: pasted at once, as one step.
     edit.EntitySelection().Set(lamp);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(inspector->CanPasteComponent());
@@ -965,7 +969,7 @@ TEST_CASE("inspector: Paste Component puts the copied component on the selection
     page->Commands().Undo(); // one step
     CHECK_FALSE(manager->HasComponent(scene.FindEntity(lamp)));
 
-    // Onto one that has it: asked; Cancel leaves it, Overwrite pastes.
+    // Onto an entity that has it: the inspector asks first. Cancel leaves it; Overwrite pastes.
     edit.EntitySelection().Set(bed.crate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     const i64 asked = page->Commands().UndoIndex();
@@ -1000,9 +1004,10 @@ TEST_CASE("inspector: a component's extras under its header: a rigid body's noti
     REQUIRE(inspector->AddComponent(u8"RigidBodyComponent"));
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     const String title = String(TypeAttrString(TypeOf<engine::physics::RigidBodyComponent>(), "displayName", u8"Rigid Body"));
-    CHECK(inspector->ExtraText(title.AsView(), u8"Collision").IsEmpty()); // a box: it has its collider
+    CHECK(inspector->ExtraText(title.AsView(), u8"Collision").IsEmpty()); // a box has its collider
 
-    // Cooked with no shape: said, and gone again once it is a box (a value edit, not a rebuild).
+    // A cooked shape with no collider shows a note, which goes once the shape is a box again (a
+    // value edit, not a rebuild).
     auto* bodies = page->ScenePtr()->GetSystem<engine::physics::RigidBodyComponentManager>();
     REQUIRE(bodies != nullptr);
     bodies->Get(page->ScenePtr()->FindEntity(bed.crate))->shape = foundation::physics::ShapeKind::Cooked;
@@ -1012,7 +1017,7 @@ TEST_CASE("inspector: a component's extras under its header: a rigid body's noti
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(inspector->ExtraText(title.AsView(), u8"Collision").IsEmpty());
 
-    // A zone's Bake: its button, and with no asset assigned it says what to do.
+    // A zone has a Bake button; with no asset assigned, pressing it says what to do.
     REQUIRE(inspector->AddComponent(u8"NavMeshZoneComponent"));
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     const String zone = String(TypeAttrString(TypeOf<engine::navigation::NavMeshZoneComponent>(), "displayName", u8"Nav Mesh Zone"));
@@ -1050,11 +1055,11 @@ TEST_CASE("script behaviors: a list of behaviours, each its script, Enabled and 
     CHECK(elements[0].DisplayName == String(u8"Behavior 1"));
     Array<gui::PropertyInfo> rows;
     source.GetProperties(u8"behaviors.0", rows);
-    REQUIRE(rows.Size() == 3u); // no script yet: its own rows only
+    REQUIRE(rows.Size() == 3u); // no script yet, so only the behaviour's own rows
     CHECK(rows[0].Kind == gui::PropertyKind::Reference);
     REQUIRE(rows[0].ReferenceType == &foundation::script::ScriptClass::StaticType());
-    // Its registered type, by its name: what the asset picker asks the builders for (an
-    // unregistered TypeOf named it "<value>", and the picker offered "<value>s").
+    // The reference type is the registered one, with its real name: the asset picker asks the
+    // builders for it by name, and an unregistered TypeOf would be named "<value>".
     CHECK(StringView(reinterpret_cast<const utf8char*>(rows[0].ReferenceType->name)) == StringView(u8"ScriptClass"));
 
     gui::PropertyWrite off;
@@ -1065,7 +1070,7 @@ TEST_CASE("script behaviors: a list of behaviours, each its script, Enabled and 
     every.Value = gui::Variant(0.5);
     source.CommitEdit(u8"behaviors.0.interval", every);
     CHECK(component()->behaviors[0].updateInterval == doctest::Approx(0.5f));
-    page->Commands().Undo(); // the interval alone
+    page->Commands().Undo(); // undoes only the interval
     CHECK(component()->behaviors[0].updateInterval == doctest::Approx(0.0f));
     CHECK_FALSE(component()->behaviors[0].enabled);
     CHECK(source.Revert(u8"behaviors.0.enabled"));
@@ -1114,7 +1119,7 @@ TEST_CASE("inspector: the scene selected shows its settings, a block a section; 
         CHECK_FALSE(inspector->ShowsProfileAction(u8"Environment", u8"Open Profile"));
     }
 
-    // An entity selected again: its inspector, not the scene's.
+    // With an entity selected again, the inspector shows the entity, not the scene.
     page->EditContext().EntitySelection().Set(bed.crate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(inspector->Kind() == StringView(u8"Entity"));
@@ -1136,12 +1141,12 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     const auto settings = [&]()
     { return static_cast<PhysicsSceneSettings*>(page->EditContext().FindSystemBySettingsType(&TypeOf<PhysicsSceneSettings>())->SettingsInstance()); };
 
-    // None stored: one, Default.
+    // With none stored there is one group, Default.
     CHECK(groups->GetValue(u8"groups", 0).AsInt() == 1);
     CHECK(groups->GetValue(u8"groups.0.name", 0).AsString() == StringView(u8"Default"));
     gui::ListEdit add;
     add.Kind = gui::ListEdit::Op::Insert;
-    add.Index = 0; // at the end whatever the place
+    add.Index = 0; // added at the end whatever the index
     CHECK(groups->EditList(u8"groups", add));
     REQUIRE(settings()->groupNames.Size() == 2u);
     CHECK(settings()->groupNames[0] == String(u8"Default"));
@@ -1149,7 +1154,7 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     CHECK(groups->GetValue(u8"groups.1.collides", 0).AsInt() == 3);
     Array<gui::PropertyInfo> rows;
     groups->GetProperties(u8"groups.1", rows);
-    REQUIRE(rows.Size() == 1u); // its name; which pairs collide is the matrix's
+    REQUIRE(rows.Size() == 1u); // only its name; the matrix edits which pairs collide
     CHECK(rows[0].Name == String(u8"name"));
     rows.Clear();
     groups->GetProperties(StringView{}, rows);
@@ -1157,12 +1162,13 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     CHECK(rows[1].Hint == String(u8"CollisionMatrix"));
     CHECK(groups->GetValue(u8"matrix", 0).AsInt() == 2);
 
-    // The grid: a row and a column a group, a box at each pair; a click is the pair's write.
+    // The matrix has a row and a column per group and a box for each pair; a click writes that
+    // pair.
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     const String matrixPath = inspector->PathOf(u8"Physics", u8"matrix");
     REQUIRE_FALSE(matrixPath.IsEmpty());
     REQUIRE(inspector->Grid()->FindRow(matrixPath.AsView()) >= 0);
-    inspector->Grid()->ScrollToItem(inspector->Grid()->FindRow(matrixPath.AsView())); // under the fold
+    inspector->Grid()->ScrollToItem(inspector->Grid()->FindRow(matrixPath.AsView())); // below the fold
     (void)shown.root->UpdateLayout();
     auto* matrix = Cast<CollisionMatrixEditor>(inspector->Grid()->FindEditor(matrixPath.AsView()));
     REQUIRE(matrix != nullptr);
@@ -1170,13 +1176,13 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     REQUIRE(matrix->Box(1, 0) != nullptr);
     CHECK(matrix->Box(0, 1) == nullptr); // above the diagonal: the same pair as (1, 0)
     CHECK(matrix->Box(1, 0)->IsChecked());
-    CHECK(matrix->Box(1, 0)->HandleActivate()); // off: both ways
+    CHECK(matrix->Box(1, 0)->HandleActivate()); // switched off in both directions
     CHECK((settings()->groupCollides[1] & 1u) == 0u);
     CHECK((settings()->groupCollides[0] & 2u) == 0u);
     page->Commands().Undo();
     CHECK((settings()->groupCollides[1] & 1u) != 0u);
 
-    // Group 1 no longer collides with Default: both rows say so.
+    // When Group 1 stops colliding with Default, both groups' rows show it.
     gui::PropertyWrite off;
     off.Value = gui::Variant(i64{2});
     off.Mask = 1u;
@@ -1188,11 +1194,11 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     rename.Value = gui::Variant(StringView(u8"Players"));
     groups->CommitEdit(u8"groups.1.name", rename);
     CHECK(settings()->groupNames[1] == String(u8"Players"));
-    page->Commands().Undo(); // the rename alone
+    page->Commands().Undo(); // undoes only the rename
     CHECK(settings()->groupNames[1] == String(u8"Group 1"));
     CHECK((settings()->groupCollides[0] & 2u) == 0u);
 
-    // Only the last: the others keep their bodies' indices.
+    // Only the last group can be removed, so the others keep the indices their bodies use.
     gui::ListEdit remove;
     remove.Kind = gui::ListEdit::Op::Remove;
     remove.Index = 0;
@@ -1205,7 +1211,7 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     page->Commands().Undo(); // the remove
     CHECK(groups->GetValue(u8"groups", 0).AsInt() == 2);
 
-    // The physics world's cap: the list says its most, and an add past it is refused.
+    // The physics world's cap: the list reports its maximum, and an add past it is refused.
     rows.Clear();
     groups->GetProperties(StringView{}, rows);
     CHECK(rows[0].MaxCount == foundation::physics::kCollisionGroupCount);
@@ -1227,7 +1233,7 @@ TEST_CASE("level script: the Level class's properties as rows; an edit an overri
     LevelScriptSource source(edit, &bed.context);
     Array<gui::PropertyInfo> none;
     source.GetProperties(StringView{}, none);
-    CHECK(none.IsEmpty()); // no Level class: nothing to author
+    CHECK(none.IsEmpty()); // no Level class, so nothing to author
 
     RefPtr<foundation::script::ScriptClass> level = MakeRef<foundation::script::ScriptClass>(DefaultAllocator());
     level->className = String(u8"Level");
@@ -1268,7 +1274,7 @@ TEST_CASE("level script: the Level class's properties as rows; an edit an overri
     source.CommitEdit(u8"p42.y", y);
     REQUIRE(settings()->FindOverride(42) != nullptr);
     CHECK(settings()->FindOverride(42)->value.vector.y == doctest::Approx(3.0f));
-    page->Commands().Undo(); // the part alone
+    page->Commands().Undo(); // undoes only the vector component edit
     CHECK(settings()->FindOverride(42) == nullptr);
     CHECK(settings()->FindOverride(41) != nullptr);
     CHECK(source.Revert(u8"p41"));
@@ -1291,7 +1297,7 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     REQUIRE(gizmos != nullptr);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
 
-    // The animation panel's toggle: shows it, checked while it shows.
+    // The animation panel's toggle shows the panel and is checked while it shows.
     auto* animation = FindId<gui::ButtonBase>(*page->Content(), u8"scene-animation-panel");
     REQUIRE(animation != nullptr);
     CHECK_FALSE(animation->IsChecked());
@@ -1320,7 +1326,7 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     CHECK(gizmos->HandlesShown());
     CHECK(gizmos->Mode() == GizmoMode::Translate);
 
-    // The space's icon is the space it is in.
+    // The space button's icon shows the current space.
     auto* space = FindId<gui::ButtonBase>(*page->Content(), u8"scene-space");
     REQUIRE(space != nullptr);
     CHECK(space->GetIconSource() == String(u8"Editor/Icons/world.svg"));
@@ -1329,7 +1335,7 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     CHECK(gizmos->Space() == GizmoSpace::Local);
     CHECK(space->GetIconSource() == String(u8"Editor/Icons/local.svg"));
 
-    // Snap, and its increments: a fixed step, then the grid's cell where the camera is.
+    // Snap and its increments: a fixed step, then the grid cell size at the camera's position.
     auto* snap = FindId<gui::ToolMenuButton>(*page->Content(), u8"scene-snap");
     REQUIRE(snap != nullptr);
     CHECK_FALSE(gizmos->SnapMode());
@@ -1342,7 +1348,7 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     bar->PickIncrement(SceneBar::SnapKind::Move, 1);
     CHECK(gizmos->Gizmo().translateSnap == doctest::Approx(0.25f));
     CHECK_FALSE(gizmos->MoveSnapsToGrid());
-    bar->PickIncrement(SceneBar::SnapKind::Move, 5); // the grid's cell
+    bar->PickIncrement(SceneBar::SnapKind::Move, 5); // the grid cell size
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(gizmos->MoveSnapsToGrid());
     CHECK(gizmos->Gizmo().translateSnap > 0.0f);
@@ -1359,7 +1365,8 @@ TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the vie
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     EditorCamera& camera = *page->ViewportCamera();
 
-    // Projection: the chip names it, an axis view by its name, in the accent off perspective.
+    // Projection: the chip names the projection, or the axis view by its name, and is drawn in
+    // the accent colour when not in perspective.
     CHECK(hud->ChipText(u8"chip-projection") == StringView(u8"Perspective"));
     CHECK_FALSE(hud->ChipOn(u8"chip-projection"));
     hud->SetProjection(SceneHud::Projection::Orthographic);
@@ -1371,7 +1378,8 @@ TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the vie
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(hud->ChipText(u8"chip-projection") == StringView(u8"Top"));
 
-    // Shading: Unlit is the albedo term; a texture names itself; Lit is the default, not marked.
+    // Shading: Unlit shows the albedo term, a debug texture shows its own name, and Lit is the
+    // default and is not highlighted.
     CHECK(hud->ChipText(u8"chip-shading") == StringView(u8"Lit"));
     hud->SetShading(foundation::render::ViewDebugSemantic::Albedo);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
@@ -1385,7 +1393,7 @@ TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the vie
     CHECK(hud->ChipText(u8"chip-shading") == StringView(u8"Lit"));
     CHECK_FALSE(hud->ChipOn(u8"chip-shading"));
 
-    // The menus are built, their checks following the state.
+    // The menus are built, and their checks follow the state.
     gui::Menu* overlays = hud->ChipMenu(u8"chip-overlays");
     REQUIRE(overlays != nullptr);
     CHECK_FALSE(hud->StatsShown());
@@ -1422,7 +1430,7 @@ TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the vie
         page->OnUpdate(bed.host, 1.0f);
     CHECK_FALSE(hud->ZoomShown());
 
-    // The select tool's status in parts: its mode, space, snap and what is selected.
+    // The select tool's status, in parts: its mode, space, snap and the selection.
     page->EditContext().EntitySelection().Set(bed.crate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(hud->StatusText() == String(u8"Move | World | Crate"));
@@ -1438,7 +1446,8 @@ TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the vie
 
 namespace
 {
-    // Two brushes of one category, one with a panel; the second available only when told.
+    // Two brushes in one category, one with a panel; the second is available only when the test
+    // sets g_paintAvailable.
     struct FakeBrush final : IViewportTool
     {
         FakeBrush(StringView id, StringView name, bool* available) : m_id(id), m_name(name), m_available(available) {}
@@ -1489,7 +1498,7 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
     REQUIRE(tools != nullptr);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
 
-    // The actions: Paint disabled, saying why.
+    // The actions: Paint is disabled, with the reason.
     EditorActionRegistry& actions = bed.context.Actions();
     const String sculpt = SceneTools::ActionOf(u8"test.sculpt");
     const String paint = SceneTools::ActionOf(u8"test.paint");
@@ -1499,13 +1508,13 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
     CHECK_FALSE(actions.IsEnabled(paint.AsView(), page.Get()));
     CHECK(actions.DisabledReason(paint.AsView(), page.Get()) == String(u8"Paint needs something to paint."));
 
-    // On the bar: the category one menu, its items as the actions are.
+    // On the bar, the category is one menu whose items follow the actions.
     gui::ToolMenuButton* category = tools->CategoryButton(u8"Brushes");
     REQUIRE(category != nullptr);
     CHECK(category->GetIconSource() == String(u8"Editor/Icons/cube.svg"));
     CHECK_FALSE(category->IsChecked());
 
-    // Sculpt on: the category lit, its panel under the chips in the tool's chrome.
+    // With Sculpt on, the category is checked and the tool's panel shows under the chips.
     CHECK(actions.Execute(sculpt.AsView(), page.Get()).IsOk());
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(category->IsChecked());
@@ -1514,8 +1523,9 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
     CHECK(tools->PanelTitle() == StringView(u8"Sculpt"));
     CHECK(tools->Place() == nullptr);
 
-    // Under the chips until moved; dragged by its head anywhere in the view, kept inside it.
-    shown.styles.ApplyTree(*shown.root); // the panel came after the sheet was applied
+    // The panel sits under the chips until moved. It drags by its head anywhere in the view and
+    // is kept inside it.
+    shown.styles.ApplyTree(*shown.root); // the panel was created after the sheet was applied
     (void)shown.root->UpdateLayout();
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     (void)shown.root->UpdateLayout();
@@ -1536,7 +1546,7 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
     CHECK(place.x == doctest::Approx(under.x + 120.0f));
     CHECK(place.y == doctest::Approx(under.y + 80.0f));
     d.InjectMouseDown(grab + Float2{120.0f, 80.0f}, gui::MouseButton::Left);
-    d.InjectMouseMove(grab + Float2{-5000.0f, 9000.0f}); // far outside: kept inside the view
+    d.InjectMouseMove(grab + Float2{-5000.0f, 9000.0f}); // far outside, but kept inside the view
     d.InjectMouseUp(grab + Float2{-5000.0f, 9000.0f}, gui::MouseButton::Left);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     (void)shown.root->UpdateLayout();
@@ -1545,19 +1555,20 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
     const Float2 pane = FindId<gui::Node>(*page->Content(), u8"scene-viewport")->GetSize();
     CHECK(tools->Place()->y <= pane.y - tools->Panel()->GetSize().y + 0.5f);
 
-    // Folded to its head, and back.
+    // Folds to its head, and unfolds.
     tools->SetFolded(true);
     CHECK(tools->Folded());
     tools->SetFolded(false);
 
-    // Put back under the chips: no place.
+    // Clearing the place puts it back under the chips.
     tools->SetPlace(nullptr);
     CHECK(tools->Place() == nullptr);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     (void)shown.root->UpdateLayout();
     CHECK(tools->Panel()->GetScreenBounds().x - viewport.x == doctest::Approx(under.x));
 
-    // Sculpt again: back to Select, no panel. Paint refused while unavailable, then taken.
+    // Sculpt again returns to Select with no panel. Paint is refused while unavailable, then
+    // taken once it is available.
     CHECK(actions.Execute(sculpt.AsView(), page.Get()).IsOk());
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(tools->Panel() == nullptr);
@@ -1573,7 +1584,7 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
 
 namespace
 {
-    // A mesh for any instance: what the inspector's mesh slot binds to.
+    // A factory that makes a mesh for any instance, for the inspector's mesh slot to bind.
     struct AnyMesh final : foundation::resource::IResourceFactory
     {
         [[nodiscard]] const TypeInfo* ProductType() const override { return &foundation::geometry::StaticMesh::StaticType(); }
@@ -1614,10 +1625,10 @@ TEST_CASE("inspector: a reference set in the grid binds at once (a mesh shows wi
         inspector->Sections().BeginEdit(path.AsView());
         inspector->Sections().CommitEdit(path.AsView(), write);
         CHECK(mesh()->mesh.id == rock->Id());
-        CHECK(mesh()->mesh.Get() != nullptr); // bound now: it draws without a reopen
+        CHECK(mesh()->mesh.Get() != nullptr); // bound at once, so it draws without a reopen
         page->Commands().Undo();
         CHECK(mesh()->mesh.id.IsNil());
-        CHECK(mesh()->mesh.Get() == nullptr); // and let go on undo
+        CHECK(mesh()->mesh.Get() == nullptr); // and released on undo
         page->OnClose();
     }
     bed.context.SetResources(nullptr);
@@ -1638,9 +1649,9 @@ TEST_CASE("inspector: Add Component's picker lists each component by its display
     REQUIRE(light != nullptr);
     CHECK(light->Name == String(u8"Light"));         // its displayName, not its type's name
     CHECK(light->Section == String(u8"Rendering"));  // its category
-    CHECK_FALSE(light->Description.IsEmpty());        // its description, for the foot while lit
-    CHECK(light->Detail.IsEmpty());                   // not on its row, where a sentence overran the name
-    // Each category's rows together, so a section shows once.
+    CHECK_FALSE(light->Description.IsEmpty());        // its description, for the footer when highlighted
+    CHECK(light->Detail.IsEmpty());                   // not on its row, where a sentence would crowd the name
+    // Each category's rows are together, so a section heading shows once.
     for (usize i = 2; i < bed.picked.Items.Size(); ++i)
         if (bed.picked.Items[i].Section != bed.picked.Items[i - 1].Section)
             for (usize j = 0; j + 1 < i; ++j)
@@ -1689,7 +1700,7 @@ TEST_CASE("inspector: a value typed into the grid, or scrubbed, stays (frames on
     gui::NumberField* field = FirstOf<gui::NumberField>(*row);
     REQUIRE(field != nullptr);
 
-    // Typed: click into it, select all, type, Return; then frames go by.
+    // Type a value: click into the field, select all, type, press Return; then let frames pass.
     gui::EventDispatcher& d = *shown.root->GetEventDispatcher();
     const gui::Rect box = field->GetScreenBounds();
     const Float2 at{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
@@ -1718,7 +1729,7 @@ TEST_CASE("camera preview: the selected camera's view titled with its name at it
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK_FALSE(preview->IsShown()); // no camera selected
 
-    // A camera selected: shown, titled with it, at its aspect.
+    // With a camera selected the preview shows, titled with its name, at its aspect.
     const Guid eye = page->EditContext().CreateEntity(u8"Eye");
     page->EditContext().EntitySelection().Set(eye);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
@@ -1736,7 +1747,7 @@ TEST_CASE("camera preview: the selected camera's view titled with its name at it
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(preview->PictureSize().y == doctest::Approx(kSceneCameraPreviewPictureWidth)); // square
 
-    // Another entity selected: hidden, unless the camera is pinned.
+    // With another entity selected the preview hides, unless the camera is pinned.
     page->EditContext().EntitySelection().Set(bed.crate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK_FALSE(preview->IsShown());
@@ -1749,7 +1760,7 @@ TEST_CASE("camera preview: the selected camera's view titled with its name at it
     CHECK(preview->IsShown());
     CHECK(preview->Target() == eye);
 
-    // The pinned camera deleted: the pin clears and the preview goes.
+    // Deleting the pinned camera clears the pin and hides the preview.
     page->EditContext().DestroyEntity(eye);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(preview->Pinned().IsNil());
@@ -1776,8 +1787,8 @@ TEST_CASE("scene bar: Simulate, Pause and Stop are the page's actions, its state
     CHECK_FALSE(pause->IsEnabled());
     CHECK_FALSE(stop->IsEnabled());
     CHECK(bar->State().IsEmpty());
-    // The buttons are centred beside the state: it keeps its place and one width whatever it says,
-    // so they never move as the scene starts, pauses or stops.
+    // The buttons are centred beside the state label, which keeps its place and width whatever it
+    // says, so the buttons never move as the scene starts, pauses or stops.
     const auto pauseAt = [&]()
     {
         (void)shown.root->UpdateLayout();
@@ -1825,12 +1836,13 @@ TEST_CASE("scene viewport: Shift is read with the pointer, so a brush's Shift + 
     HeldKeys device;
     device.held = foundation::shell::KeyCode::LeftShift;
     HeldKeys focusedUp; // the view focused, Shift not held
-    // The view focused: its own keyboard says.
+    // When the view has focus, its own keyboard decides.
     CHECK(editor::ShiftHeldOver(&device, &device, false));
     CHECK_FALSE(editor::ShiftHeldOver(&focusedUp, &device, true));
-    // Not focused (the brush's panel has the keys): the device's Shift while the pointer is over it.
+    // When the view is not focused (the brush's panel has the keys), the device's Shift counts
+    // while the pointer is over the view.
     CHECK(editor::ShiftHeldOver(nullptr, &device, true));
-    CHECK_FALSE(editor::ShiftHeldOver(nullptr, &device, false)); // the pointer elsewhere
+    CHECK_FALSE(editor::ShiftHeldOver(nullptr, &device, false)); // the pointer is elsewhere
     device.held = foundation::shell::KeyCode::RightShift;
     CHECK(editor::ShiftHeldOver(nullptr, &device, true));
     CHECK_FALSE(editor::ShiftHeldOver(nullptr, nullptr, true));

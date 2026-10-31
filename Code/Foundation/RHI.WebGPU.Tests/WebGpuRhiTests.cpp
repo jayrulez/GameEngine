@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WebGPU backend bring-up tests. ENVIRONMENT-DEPENDENT by nature (they need the
-// wgpu-native sidecar AND a GPU the runtime can drive) - when the backend cannot
-// initialize, the suite reports that once and passes vacuously rather than failing
-// a GPU-less machine, mirroring how Vulkan/DX12 stay sample-verified.
+// WebGPU backend tests. They depend on the environment (the wgpu-native sidecar and a
+// GPU the runtime can drive): when the backend cannot initialize, the suite reports
+// that once and passes vacuously rather than failing a GPU-less machine.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -44,7 +43,7 @@ TEST_CASE("rhi.webgpu: sidecar backend enumerates adapters and creates a live de
     }
     CHECK(backend->isInitialized);
 
-    // Adapter info is real hardware data - shape checks only.
+    // Adapter info is real hardware data: shape checks only.
     auto adapters = backend->EnumerateAdapters();
     const AdapterInfo info = adapters[0]->Info();
     CHECK(!info.name.IsEmpty());
@@ -102,13 +101,13 @@ TEST_CASE("rhi.webgpu: unimplemented stages fail honestly, extensions unsupporte
     Device* device = nullptr;
     REQUIRE(backend->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
 
-    // Buffers are implemented now - an EMPTY desc must fail validation, not
-    // hand back wgpu's "invalid object".
+    // An empty buffer desc must fail validation, not hand back wgpu's "invalid
+    // object".
     Buffer* buffer = nullptr;
     CHECK(device->CreateBuffer(BufferDesc{}, buffer).Code() == ErrorCode::InvalidArgument);
     CHECK(buffer == nullptr);
 
-    // Pipeline statistics have no WebGPU shape - honest NotSupported.
+    // Pipeline statistics have no WebGPU shape: NotSupported.
     QuerySetDesc statisticsDesc;
     statisticsDesc.type = QueryType::PipelineStatistics;
     statisticsDesc.count = 1;
@@ -157,7 +156,7 @@ TEST_CASE("rhi.webgpu: a missing sidecar fails with NotFound, not a crash")
 TEST_CASE("rhi.webgpu: blit-capable = WebGPU-renderable color formats only (no ASTC/BC/snorm)")
 {
     // No device needed: the predicate decides whether texture creation widens usage to
-    // RenderAttachment for a mip chain. Every block-compressed format (BC AND ASTC), every
+    // RenderAttachment for a mip chain. Every block-compressed format (BC and ASTC), every
     // depth/stencil format and the 8-bit snorm trio must say no, or creation fails.
     for (u32 raw = static_cast<u32>(TextureFormat::Undefined);
          raw <= static_cast<u32>(TextureFormat::ASTC8x8UnormSrgb); ++raw)
@@ -170,7 +169,7 @@ TEST_CASE("rhi.webgpu: blit-capable = WebGPU-renderable color formats only (no A
             CHECK_MESSAGE(!capable, "format ", raw, " must not be blit-capable");
         }
     }
-    // ASTC was the fall-through the exclusion list missed; BC was always excluded.
+    // ASTC is block-compressed and never renderable, like BC.
     CHECK_FALSE(webgpu::IsBlitCapableFormat(TextureFormat::ASTC4x4Unorm));
     CHECK_FALSE(webgpu::IsBlitCapableFormat(TextureFormat::ASTC8x8UnormSrgb));
     CHECK_FALSE(webgpu::IsBlitCapableFormat(TextureFormat::BC7RGBAUnormSrgb));
@@ -190,7 +189,7 @@ TEST_CASE("rhi.webgpu: blit-capable = WebGPU-renderable color formats only (no A
     CHECK(webgpu::IsBlitCapableFormat(TextureFormat::RGB10A2Unorm));
 
     // On a live device: a mip-chained texture in a non-blit-capable format must still be
-    // CREATABLE (usage not widened) and GenerateMipmaps must be a clean no-op on it.
+    // creatable (usage not widened) and GenerateMipmaps must be a clean no-op on it.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
     {
@@ -241,12 +240,12 @@ TEST_CASE("rhi.webgpu: surface format negotiation - requested, then the channel-
 
     // Offered as asked: the request stands (both channel orders, the Windows shape).
     CHECK(NegotiateSurfaceFormat(F::RGBA8UnormSrgb, Span<const F>(both, 4)) == F::RGBA8UnormSrgb);
-    // The X11 shape: only BGRA offered, the engine default RGBA8UnormSrgb -> its sRGB sibling.
+    // The X11 shape: only BGRA offered, so the default RGBA8UnormSrgb becomes its sRGB sibling.
     CHECK(NegotiateSurfaceFormat(F::RGBA8UnormSrgb, Span<const F>(bgraOnly, 2)) == F::BGRA8UnormSrgb);
     CHECK(NegotiateSurfaceFormat(F::RGBA8Unorm, Span<const F>(bgraOnly, 2)) == F::BGRA8Unorm);
     // No sRGB target at all: the surface's first choice (the caller logs the non-sRGB warning).
     CHECK(NegotiateSurfaceFormat(F::RGBA8UnormSrgb, Span<const F>(unormOnly, 1)) == F::BGRA8Unorm);
-    // The first ADOPTABLE choice, skipping what the swap chain cannot use.
+    // The first adoptable choice, skipping what the swap chain cannot use.
     CHECK(NegotiateSurfaceFormat(F::RGBA8UnormSrgb, Span<const F>(exoticThenReal, 2)) == F::RGBA8Unorm);
     // Nothing adoptable, or nothing at all: the request is left alone (configure decides).
     CHECK(NegotiateSurfaceFormat(F::RGBA8UnormSrgb, Span<const F>(exotic, 2)) == F::RGBA8UnormSrgb);
@@ -302,7 +301,7 @@ TEST_CASE("rhi.webgpu: resources - buffer map emulation, texture + view, sampler
     REQUIRE(device->CreateTextureView(texture, viewDesc, view).IsOk());
     CHECK(view->texture == texture);
 
-    // A format WebGPU does not have fails honestly.
+    // A format WebGPU does not have fails cleanly.
     Texture* unsupported = nullptr;
     CHECK(device
               ->CreateTexture(TextureDesc::RenderTarget(TextureFormat::RGBA16Unorm, 4, 4),
@@ -312,11 +311,11 @@ TEST_CASE("rhi.webgpu: resources - buffer map emulation, texture + view, sampler
     // Sampler, including the anisotropy-requires-linear clamp.
     SamplerDesc samplerDesc;
     samplerDesc.minFilter = FilterMode::Nearest;
-    samplerDesc.maxAnisotropy = 8; // invalid with nearest - backend clamps to 1
+    samplerDesc.maxAnisotropy = 8; // invalid with nearest; the backend clamps to 1
     Sampler* sampler = nullptr;
     REQUIRE(device->CreateSampler(samplerDesc, sampler).IsOk());
 
-    // WGSL shader module (the non-SPIR-V ingestion branch; SPIR-V rides the samples).
+    // WGSL shader module (the non-SPIR-V ingestion branch; the samples exercise SPIR-V).
     const char8_t* wgsl =
         u8"@vertex fn main() -> @builtin(position) vec4f { return vec4f(0.0); }";
     ShaderModuleDesc moduleDesc;
@@ -347,7 +346,7 @@ TEST_CASE("rhi.webgpu: bind groups + pipelines - the DXC shift scheme end-to-end
     Device* device = nullptr;
     REQUIRE(backend->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, device).IsOk());
 
-    // Layout with all three shift classes: CBV (0), SRV (+1000), sampler (+3000).
+    // Layout with all three shift classes: CBV (0), SRV (+100), sampler (+300).
     const BindGroupLayoutEntry entries[] = {
         BindGroupLayoutEntry::UniformBuffer(0, ShaderStage::Vertex | ShaderStage::Fragment),
         BindGroupLayoutEntry::SampledTexture(0, ShaderStage::Fragment),
@@ -389,9 +388,9 @@ TEST_CASE("rhi.webgpu: bind groups + pipelines - the DXC shift scheme end-to-end
     REQUIRE(device->CreateBindGroup(groupDesc, group).IsOk());
     CHECK(group->Layout() == layout);
 
-    // Pipeline layout + a render pipeline whose WGSL uses the SHIFTED binding
-    // numbers (the compact WebGPU profile: SRV +100, sampler +300) - if the shift
-    // scheme mismatched the layout, creation would fail.
+    // Pipeline layout and a render pipeline whose WGSL uses the shifted binding numbers
+    // (the compact WebGPU profile: SRV +100, sampler +300); if the shift scheme
+    // mismatched the layout, creation would fail.
     PipelineLayoutDesc plDesc;
     BindGroupLayout* layouts[] = {layout};
     plDesc.bindGroupLayouts = Span<BindGroupLayout* const>(layouts, 1);
@@ -426,7 +425,7 @@ TEST_CASE("rhi.webgpu: bind groups + pipelines - the DXC shift scheme end-to-end
     RenderPipeline* renderPipeline = nullptr;
     REQUIRE(device->CreateRenderPipeline(rpDesc, renderPipeline).IsOk());
 
-    // Wireframe has no WebGPU shape - honest NotSupported.
+    // Wireframe has no WebGPU shape: NotSupported.
     RenderPipelineDesc wireframeDesc = rpDesc;
     wireframeDesc.primitive.fillMode = FillMode::Wireframe;
     RenderPipeline* wireframe = nullptr;
@@ -670,12 +669,9 @@ namespace
     }
 }
 
-// Snowline's first web run: a block-compressed texture's mip tail (its 2x2 and 1x1 levels) was
-// written at its size in texels, which WebGPU refuses ("copySize.width (2) is not a multiple of
-// compressed texture format block width (4)"); every level must go up in whole blocks.
-// Snowline's course pictures, 480 x 270 in BC1: WebGPU refused to make the texture ("not a multiple
-// of the block width (4) and height (4)"). A compressed texture whose size is not whole blocks is
-// made, and its whole mip chain uploads, with no error.
+// A block-compressed texture whose size is not whole blocks: WebGPU refuses to make one ("not a
+// multiple of the block width (4) and height (4)"), as with a 480 x 270 BC1 picture. Such a texture
+// is made, and its whole mip chain uploads, with no error.
 TEST_CASE("rhi.webgpu: a compressed texture whose size is not whole blocks is made and uploads")
 {
     Backend* backend = TryCreateBackend();
@@ -728,6 +724,9 @@ TEST_CASE("rhi.webgpu: a compressed texture whose size is not whole blocks is ma
     backend->Destroy();
 }
 
+// A block-compressed texture's mip tail (its 2x2 and 1x1 levels) written at its size in texels
+// is refused ("copySize.width (2) is not a multiple of compressed texture format block width
+// (4)"); every level must go up in whole blocks.
 TEST_CASE("rhi.webgpu: a compressed texture's whole mip chain uploads, the tail in whole blocks")
 {
     Backend* backend = TryCreateBackend();
@@ -953,8 +952,8 @@ TEST_CASE("rhi.webgpu: GenerateMipmaps + scaling Blit verify through readback")
 
 TEST_CASE("rhi.webgpu: persistent mapping - writes without Unmap reach the GPU")
 {
-    // Vulkan's Map contract: map once, hold the pointer, write per frame, never
-    // Unmap. The shadow emulation flushes OPEN mappings before every submit.
+    // Vulkan's Map contract: map once, hold the pointer, write per frame, never Unmap.
+    // The shadow emulation flushes open mappings before every submit.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
     {
@@ -977,7 +976,7 @@ TEST_CASE("rhi.webgpu: persistent mapping - writes without Unmap reach the GPU")
     Buffer* readback = nullptr;
     REQUIRE(device->CreateBuffer(readbackDesc, readback).IsOk());
 
-    u8* persistent = static_cast<u8*>(ubo->Map()); // NEVER unmapped
+    u8* persistent = static_cast<u8*>(ubo->Map()); // never unmapped
     REQUIRE(persistent != nullptr);
 
     CommandPool* pool = nullptr;
@@ -1014,10 +1013,10 @@ TEST_CASE("rhi.webgpu: persistent mapping - writes without Unmap reach the GPU")
 
 TEST_CASE("rhi.webgpu: persistent shadow flush skips byte-identical re-uploads")
 {
-    // The persistent-map coherence flush skips re-upload when the shadow is byte-identical
-    // to the last upload. On web each wgpuQueueWriteBuffer crosses the wasm->JS boundary, so
-    // re-uploading every open shadow on EVERY submit would dominate the frame. Assert the
-    // upload count only advances on real changes, and that the GPU still holds correct data
+    // The persistent-map coherence flush skips re-upload when the shadow is byte-identical to
+    // the last upload. On web each wgpuQueueWriteBuffer crosses the wasm-to-JS boundary, so
+    // re-uploading every open shadow on every submit would dominate the frame. Assert the
+    // upload count advances only on real changes, and that the GPU still holds correct data
     // across the skipped flushes.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
@@ -1064,7 +1063,7 @@ TEST_CASE("rhi.webgpu: persistent shadow flush skips byte-identical re-uploads")
         pool->DestroyEncoder(encoder);
     };
 
-    // Frame 1: first write reaches the GPU - exactly one upload.
+    // Frame 1: the first write reaches the GPU in exactly one upload.
     MemSet(persistent, 0x11, 64);
     submitCopy(1);
     CHECK(webgpuUbo->UploadCount() == 1u);
@@ -1144,8 +1143,8 @@ TEST_CASE("rhi.webgpu: FlushRange uploads only the written window; Unmap then ad
         pool->DestroyEncoder(encoder);
     };
 
-    // Frame 1: map, write the window, flush the window, unmap - exactly ONE upload, and the
-    // Unmap after a ranged flush must not add a whole-buffer one.
+    // Frame 1: map, write the window, flush the window, unmap: one upload, and the Unmap after
+    // a ranged flush must not add a whole-buffer one.
     u8* mapped = static_cast<u8*>(ring->Map());
     REQUIRE(mapped != nullptr);
     MemSet(mapped + 512, 0x5A, 64);
@@ -1206,8 +1205,8 @@ TEST_CASE("rhi.webgpu: FlushRange uploads only the written window; Unmap then ad
 
 TEST_CASE("rhi.webgpu: cube faces render + cube view samples correctly")
 {
-    // The IBL/sky shape: render INTO per-face 2D views of a cube, then a pipeline
-    // samples the CUBE view and the readback proves the right face was fetched.
+    // The IBL/sky shape: render into per-face 2D views of a cube, then a pipeline
+    // samples the cube view and the readback proves the right face was fetched.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
     {
@@ -1392,12 +1391,12 @@ TEST_CASE("rhi.webgpu: sky-shaped draw - z=1.0 vs cleared depth, read-only pass,
 
     // Depth target cleared to 1.0 by a first pass (the prepass stand-in).
     TextureDesc depthDesc = TextureDesc::DepthBuffer(TextureFormat::Depth32Float, 4, 4);
-    // Sampled on top of DepthStencil is REQUIRED for the read-only depth pass below, not
-    // decoration: wgpu treats a depthReadOnly attachment as a readable resource and validates
-    // the texture for TEXTURE_BINDING. Without it the pass is rejected, but the diagnostic
-    // arrives much later and misattributed - "Parent device is lost" out of
-    // wgpuCommandEncoderFinish, then a wgpu panic in submit. Backend-independent (d3d12 and
-    // vulkan both). A real prepass-depth reader declares Sampled anyway.
+    // Sampled on top of DepthStencil is required for the read-only depth pass below: wgpu
+    // treats a depthReadOnly attachment as a readable resource and validates the texture for
+    // TEXTURE_BINDING. Without it the pass is rejected, but the diagnostic arrives much later
+    // and misattributed ("Parent device is lost" out of wgpuCommandEncoderFinish, then a wgpu
+    // panic in submit), on both d3d12 and vulkan. A real prepass-depth reader declares Sampled
+    // anyway.
     depthDesc.usage = TextureUsage::DepthStencil | TextureUsage::Sampled;
     Texture* depthTexture = nullptr;
     REQUIRE(device->CreateTexture(depthDesc, depthTexture).IsOk());
@@ -1487,7 +1486,7 @@ TEST_CASE("rhi.webgpu: sky-shaped draw - z=1.0 vs cleared depth, read-only pass,
         pass.depthStencilAttachment = depth;
         encoder->BeginRenderPass(pass)->End();
     }
-    // Pass 2: the sky shape - load color, READ-ONLY depth, fullscreen at the far plane.
+    // Pass 2: the sky shape: load color, read-only depth, fullscreen at the far plane.
     {
         RenderPassDesc pass;
         ColorAttachment color;
@@ -1529,7 +1528,7 @@ TEST_CASE("rhi.webgpu: sky-shaped draw - z=1.0 vs cleared depth, read-only pass,
 
     const u8* pixel = static_cast<const u8*>(readback->Map());
     REQUIRE(pixel != nullptr);
-    CHECK(pixel[2] == 255); // the sky-blue fragment SURVIVED the far-plane depth test
+    CHECK(pixel[2] == 255); // the sky-blue fragment survived the far-plane depth test
     readback->Unmap();
 
     device->DestroyFence(fence);
@@ -1551,9 +1550,9 @@ TEST_CASE("rhi.webgpu: sky-shaped draw - z=1.0 vs cleared depth, read-only pass,
 TEST_CASE("rhi.webgpu: push-constant UNIFORM FALLBACK - forced on desktop, verified on GPU")
 {
     // Browsers (Dawn/emdawnwebgpu) have no immediates, so push constants there are emulated as
-    // a uniform buffer bound at @group(space) @binding(0). That path is unreachable on web
-    // today (no runtime), so we FORCE it on the wgpu-native device and prove, against a real
-    // GPU, that a SetPushConstants value actually reaches the shader through the emulation.
+    // a uniform buffer bound at @group(space) @binding(0). The web build runs no tests, so this
+    // forces the emulation on the wgpu-native device and proves, against a real GPU, that a
+    // SetPushConstants value reaches the shader through it.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
     {
@@ -1604,7 +1603,7 @@ TEST_CASE("rhi.webgpu: push-constant UNIFORM FALLBACK - forced on desktop, verif
     BindGroup* bindGroup = nullptr;
     REQUIRE(device->CreateBindGroup(groupDesc, bindGroup).IsOk());
 
-    // Pipeline layout declares a push-constant range targeting @group(1) - the layout must
+    // Pipeline layout declares a push-constant range targeting @group(1): the layout must
     // synthesize the emulated uniform bind-group layout there rather than declaring immediates.
     PushConstantRange pushRange;
     pushRange.stages = ShaderStage::Compute;
@@ -1679,11 +1678,11 @@ TEST_CASE("rhi.webgpu: push-constant UNIFORM FALLBACK - forced on desktop, verif
 
 TEST_CASE("rhi.webgpu: RENDER-pass push emulation - group 0, no bind groups, two draws")
 {
-    // The debug_geom shape: a pipeline with NO bind groups and its push block at group 0
-    // (PushConstantRange.bindGroupIndex = 0, not the default 1) - the emulation must
-    // synthesize the uniform at @group(0). Two draws with different push values into two
-    // pixels also prove the fresh-buffer-per-draw design: the second SetPushConstants
-    // must not clobber the first draw's data.
+    // The debug_geom shape: a pipeline with no bind groups and its push block at group 0
+    // (PushConstantRange.bindGroupIndex = 0, not the default 1); the emulation must synthesize
+    // the uniform at @group(0). Two draws with different push values into two pixels also prove
+    // the fresh-buffer-per-draw design: the second SetPushConstants must not clobber the first
+    // draw's data.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
     {
@@ -1711,7 +1710,7 @@ TEST_CASE("rhi.webgpu: RENDER-pass push emulation - group 0, no bind groups, two
     pushRange.stages = ShaderStage::Fragment;
     pushRange.offset = 0;
     pushRange.size = 16;
-    pushRange.bindGroupIndex = 0; // no bind groups -> the push block lives at group 0
+    pushRange.bindGroupIndex = 0; // no bind groups, so the push block lives at group 0
     PipelineLayoutDesc plDesc;
     plDesc.pushConstantRanges = Span<const PushConstantRange>(&pushRange, 1);
     PipelineLayout* pipelineLayout = nullptr;
@@ -1809,10 +1808,9 @@ TEST_CASE("rhi.webgpu: RENDER-pass push emulation - group 0, no bind groups, two
 
 TEST_CASE("rhi.webgpu: destroying a fence with a pending work-done callback is safe")
 {
-    // The fb7d7e8d regression shape: a queued OnSubmittedWorkDone callback may be
-    // delivered AFTER the fence it signals is destroyed. The detach/orphan handshake
-    // must keep that delivery writing into live memory, and teardown must not crash
-    // with signals still queued.
+    // A queued OnSubmittedWorkDone callback may be delivered after the fence it signals
+    // is destroyed. The detach/orphan handshake must keep that delivery writing into
+    // live memory, and teardown must not crash with signals still queued.
     Backend* backend = TryCreateBackend();
     if (backend == nullptr)
     {
@@ -1835,7 +1833,7 @@ TEST_CASE("rhi.webgpu: destroying a fence with a pending work-done callback is s
     Fence* abandoned = nullptr;
     REQUIRE(device->CreateFence(0, abandoned).IsOk());
     queue->Submit(Span<CommandBuffer* const>{}, abandoned, 1);
-    device->DestroyFence(abandoned); // no Wait - the signal may still be queued
+    device->DestroyFence(abandoned); // no Wait: the signal may still be queued
     queue->Submit(Span<CommandBuffer* const>{}, nullptr, 0);
     queue->WaitIdle();
 
@@ -1843,11 +1841,10 @@ TEST_CASE("rhi.webgpu: destroying a fence with a pending work-done callback is s
     backend->Destroy();
 }
 
-// Lamplight in the browser went black now and then: the world-space UI over a guard half off
-// screen set a scissor past the target's right edge ("Scissor rect (x: 1933, ...) is not contained
-// in the render area"), WebGPU refused the whole command encoder, and the frame never drew. A
-// scissor reaching past the target, before it, or wholly outside it is clipped to the render area:
-// no error.
+// A scissor past the target's right edge (world-space UI over something half off screen sets one)
+// makes WebGPU refuse the whole command encoder ("Scissor rect (x: 1933, ...) is not contained in
+// the render area"), and the frame never draws. A scissor reaching past the target, before it, or
+// wholly outside it is clipped to the render area: no error.
 TEST_CASE("rhi.webgpu: a scissor reaching outside the render area is clipped to it, without an error")
 {
     Backend* backend = TryCreateBackend();

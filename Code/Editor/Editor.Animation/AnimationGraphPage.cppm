@@ -4,22 +4,22 @@
 // Editor::Animation - the `:graph_page` partition.
 //
 // AnimationGraphEditorPage: an animation graph on the GUI from its markup
-// (Data/Editor/AnimationGraphPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 5).
-// The graph's layers and parameters are lists, each with its bar (a parameter added by its type);
-// the chosen layer is on the graph view (:graph_states: its states the nodes, Any State one more,
-// its transitions arrows; a state added from the view's menu, a transition dragged from a state's
-// edge); under it the preview plays the graph on the rig the clip page has (a skeleton and a
-// skinned mesh, kept per graph; never shown before, the skeleton its first clip's import names),
-// with the kit's transport, the state it plays lit on the graph and named beside the transport.
+// (Data/Editor/AnimationGraphPage.xml). The graph's layers and parameters are lists, each with its
+// bar (a parameter is added by its type). The chosen layer is on the graph view (see :graph_states):
+// its states are the nodes, Any State is one more, and its transitions are arrows; a state is added
+// from the view's menu and a transition dragged from a state's edge. Under the view the preview
+// plays the graph on the same rig as the clip page (a skeleton and a skinned mesh, kept per graph;
+// a graph never previewed starts on the skeleton its first clip's import names), with the kit's
+// transport. The state playing is lit on the graph and named beside the transport.
 //
 // The grid shows what is chosen: a layer (its name, blend, weight and the state it starts in), a
 // parameter (its name, type and default), a state (its name, speed, looping and what it plays: a
-// clip, or a blend by one or two parameters of entries, each a clip at a threshold or a place) or a
-// transition (where it goes, its blend time, its exit time, its priority and its conditions, each a
-// parameter compared with a value). The asset keeps its kinds as numbers and its lists in parallel
-// arrays, so the rows are the page's own. Each edit is one undo step of the whole asset. Under them,
-// the preview's parameters: what the graph plays on, set here to try it (a trigger fired), the
-// page's alone and never the graph's.
+// clip, or a blend of entries by one or two parameters, each entry a clip at a threshold or a
+// position) or a transition (its target, blend time, exit time, priority and conditions, each
+// condition a parameter compared with a value). The asset keeps its kinds as numbers and its lists
+// in parallel arrays, so the page builds its own rows. Each edit is one undo step holding the whole
+// asset. Below them are the preview's parameters: values the graph plays with, set here to try it
+// out (a trigger can be fired). They belong to the page and never change the graph.
 
 module;
 #include "Core/Prelude.h"
@@ -57,7 +57,7 @@ export namespace editor
     struct GraphChoice
     {
         GraphChoiceKind kind = GraphChoiceKind::Layer;
-        i32 index = 0; // the parameter's, the state's or the transition's (in the layer shown)
+        i32 index = 0; // index of the parameter, state or transition (within the layer shown)
         [[nodiscard]] bool operator==(const GraphChoice&) const = default;
     };
 
@@ -73,7 +73,7 @@ export namespace editor
         void OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
-        // === IPlaybackPage: the preview's, never the graph's ===
+        // === IPlaybackPage: drives the preview; playing never changes the graph ===
         [[nodiscard]] bool CanPlay() const override { return m_player.Get() != nullptr; }
         [[nodiscard]] bool IsPlaying() const override { return m_playing; }
         void Play() override { m_playing = true; }
@@ -81,23 +81,24 @@ export namespace editor
         void Stop() override;
         void Restart() override;
 
-        /// The layer on the graph view.
+        /// Shows `layer` on the graph view.
         void ChooseLayer(i32 layer);
         [[nodiscard]] i32 Layer() const noexcept { return m_layer; }
-        /// What the grid shows; the lists and the view follow.
+        /// Chooses what the grid shows; the lists and the view follow the choice.
         void Choose(const GraphChoice& choice);
         [[nodiscard]] const GraphChoice& Chosen() const noexcept { return m_chosen; }
         void AddLayer();
         bool RemoveLayer();
         void AddParameter(foundation::animation::AnimationParameterType type);
         bool RemoveParameter();
-        /// A layer's (`layers`) or a parameter's row menu at `at` over `owner` (its list): the row
-        /// chosen, then Delete.
+        /// Opens the row menu of layer or parameter `index` (a layer when `layers`) at `at` over
+        /// `owner`, its list. The row is chosen first, and the menu offers Delete.
         void ShowListMenu(bool layers, i32 index, foundation::gui::Node& owner, Float2 at);
-        /// That menu, while it is open.
+        /// The row menu while it is open, else null.
         [[nodiscard]] foundation::gui::Menu* ListMenu() const noexcept { return m_listMenu && m_listMenu->IsOpen() ? m_listMenu.Get() : nullptr; }
 
-        /// A preview parameter's value, by the parameter's index (a trigger fires): the page's alone.
+        /// Sets the preview's value of parameter `parameter` (a trigger fires). Only the preview
+        /// changes, never the graph.
         void SetLive(i32 parameter, f64 value);
 
         // === For tests ===
@@ -108,7 +109,7 @@ export namespace editor
         [[nodiscard]] foundation::gui::PropertyBag& StateRows() noexcept { return *m_stateRows; }
         [[nodiscard]] foundation::gui::PropertyBag& TransitionRows() noexcept { return *m_transitionRows; }
         [[nodiscard]] foundation::gui::PropertyBag& LiveRows() noexcept { return *m_liveRows; }
-        /// The lists' rows ("Base" / "Speed  Float"), one a line.
+        /// The lists' rows, one per line ("Base"; "Speed  Float").
         [[nodiscard]] String LayerList() const;
         [[nodiscard]] String ParameterList() const;
         [[nodiscard]] AnimationPreviewRig* Rig() const noexcept { return m_rig.Get(); }
@@ -140,18 +141,18 @@ export namespace editor
         UniquePtr<AnimationGraphStates> m_states;
         i32 m_layer = 0;
         GraphChoice m_chosen;
-        bool m_showing = false; // choosing from code: not the user's
+        bool m_showing = false; // the code is making the choice, not the user
 
         UniquePtr<foundation::gui::PropertyBag> m_layerRows;
         UniquePtr<foundation::gui::PropertyBag> m_parameterRows;
         UniquePtr<foundation::gui::PropertyBag> m_stateRows;
         UniquePtr<foundation::gui::PropertyBag> m_transitionRows;
-        UniquePtr<foundation::gui::PropertyBag> m_liveRows; // made again as the parameters change
-        usize m_liveCount = static_cast<usize>(-1);         // the parameters it was made for
+        UniquePtr<foundation::gui::PropertyBag> m_liveRows; // rebuilt whenever the parameters change
+        usize m_liveCount = static_cast<usize>(-1);         // the parameter count the rows were built for
 
         foundation::gui::GraphView* m_view = nullptr;
         foundation::gui::TreeView* m_layerTree = nullptr;
-        RefPtr<foundation::gui::Menu> m_listMenu; // a list row's
+        RefPtr<foundation::gui::Menu> m_listMenu; // a list row's context menu
         foundation::gui::TreeView* m_parameterTree = nullptr;
         UniquePtr<foundation::gui::TreeModel> m_layerModel;
         UniquePtr<foundation::gui::TreeModel> m_parameterModel;
@@ -162,14 +163,14 @@ export namespace editor
         UniquePtr<AnimationPreviewRig> m_rig;
         RefPtr<foundation::animation::AnimationGraph> m_graph;          // the player borrows it
         UniquePtr<foundation::animation::AnimationGraphPlayer> m_player;
-        foundation::animation::Skeleton* m_playerSkeleton = nullptr;    // what the player was made for
-        bool m_rebuild = true;                                           // the graph changed: a new player
+        foundation::animation::Skeleton* m_playerSkeleton = nullptr;    // the skeleton the player was built for
+        bool m_rebuild = true;                                           // the graph changed, so build a new player
         Array<f64> m_live;                                               // the preview's parameter values
         bool m_playing = true;
         bool m_travel = false;
         Float3 m_travelPosition{};
         f32 m_travelYaw = 0.0f;
-        foundation::gui::GraphId m_lit = 0; // the node lit as the state played
+        foundation::gui::GraphId m_lit = 0; // the node lit for the playing state
         bool m_graphFramed = false;         // the view framed to the layer's states, once it has a size
     };
 
@@ -184,7 +185,8 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The graph page (asking for its services when it is made) and its preview prefs' section. A
-    /// new graph comes from Create Asset (Animation.Pipeline's creator).
+    /// Registers the graph page (which asks for its services when it is made) and the settings
+    /// section that keeps its preview choices. New graphs come from Create Asset, through
+    /// Animation.Pipeline's creator.
     void RegisterAnimationGraphEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

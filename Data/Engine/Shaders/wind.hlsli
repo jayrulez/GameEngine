@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 //
-// WIND: a vertex-shader sway for vegetation cards and tufts, included by the forward, shadow-depth
+// Wind: a vertex-shader sway for vegetation cards and tufts, included by the forward, shadow-depth
 // and pick vertex stages under the WIND variant (each stage declares WIND in its variants line).
 // The sway is a world-space offset, sin(time * Speed + hash(world XZ)) * Strength scaled by the
 // vertex's height mask (local y over Height, squared: roots stay put, tips move). The parameters
-// are the effect's own (Specs/wind-for-every-shader.md): the block below becomes
+// belong to the effect, not the material: the block below becomes
 // `ConstantBuffer<WindEffect> Wind : register(b1, space2)`, read as `Wind.Strength`, and a material
 // whose shader declares WIND carries them as its Wind group, which the material system binds at
 // that binding whatever the material's own layout is. The renderer selects this variant only for
-// a material whose gate (Strength) is above zero, so every other material is byte-identical to
-// before. The same offset is applied to the previous-frame position at the previous time, so
-// motion vectors follow the sway.
+// a material whose gate (Strength) is above zero, so no other material pays for it. The same
+// offset is applied to the previous-frame position at the previous time, so motion vectors follow
+// the sway.
 
 effect Wind : WIND
 {

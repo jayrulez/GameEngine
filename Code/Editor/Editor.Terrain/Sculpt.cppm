@@ -3,15 +3,16 @@
 
 // Editor::Terrain - :sculpt partition.
 //
-// TerrainSculptTool: the scene-viewport terrain brush (editor.viewporttools). A MODAL tool - the
-// select tool stays the default; sculpt is one of the palette modes. It ray-picks the terrain under
-// the cursor (through the entity transform, into heightfield-local space), edits the SHARED runtime
-// Heightfield in place with the cosine-falloff brushes (foundation.heightfield), and records ONE
-// region-delta undo command per stroke. On save the tool's registered closure writes the runtime
-// heightfield back to its SOURCE asset (HeightfieldSource + "heights" sidecar) via the drain path.
+// TerrainSculptTool: the scene-viewport terrain brush (editor.viewporttools). It is a modal tool:
+// the select tool stays the default, and sculpt is one of the palette modes. It ray-picks the
+// terrain under the cursor (through the entity transform, into heightfield-local space), edits the
+// shared runtime Heightfield in place with the cosine-falloff brushes (foundation.heightfield),
+// and records one region-delta undo command per stroke. On save the tool's registered closure
+// writes the runtime heightfield back to its source asset (HeightfieldSource and the "heights"
+// sidecar) through the drain path.
 //
-// GCC module hygiene: the heavy engine.terrain / foundation.terrain.resource / heightfield.resource
-// imports live in SculptImpl.cpp; this interface stays on the light modules only.
+// For GCC module hygiene, the heavy engine.terrain, foundation.terrain.resource and
+// heightfield.resource imports live in SculptImpl.cpp; this interface imports only light modules.
 
 module;
 #include "Core/Prelude.h"
@@ -53,7 +54,7 @@ export namespace editor
         [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/TerrainComponent.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Terrain"; }
 
-        /// Relevant only when the scene actually has a terrain whose heightfield resolves.
+        /// Available only when the scene has a terrain whose heightfield resolves.
         [[nodiscard]] bool IsAvailable() const override;
         [[nodiscard]] StringView UnavailableReason() const override
         {
@@ -65,7 +66,7 @@ export namespace editor
         void OnDeactivate() override;
         [[nodiscard]] StringView StatusText() const override { return m_status.AsView(); }
 
-        // ---- brush parameters (the tool panel drives these; hotkeys + the wheel mirror them) ----
+        // ---- brush parameters (the tool panel drives these; hotkeys and the wheel also set them) ----
         void SetMode(Mode mode) noexcept { m_mode = mode; }
         [[nodiscard]] Mode GetMode() const noexcept { return m_mode; }
         void SetRadius(f32 r)
@@ -81,11 +82,11 @@ export namespace editor
         static constexpr f32 kMaxRadius = 128.0f;
         static constexpr f32 kMaxStrength = 50.0f;
 
-        // The terrain the cursor is over this frame (resolved every Update), plus the pick.
+        // The terrain the cursor is over this frame (resolved every Update), and the pick on it.
         struct Pick
         {
             foundation::heightfield::Heightfield* hf = nullptr;
-            Guid heightfieldId;   // TerrainResource.heightfield.id (the SOURCE asset guid; may be nil)
+            Guid heightfieldId;   // TerrainResource.heightfield.id (the source asset guid; may be nil)
             f32 localX = 0.0f;    // hit point in heightfield-local XZ
             f32 localZ = 0.0f;
             f32 localY = 0.0f;    // local surface Y at the hit (Ctrl+click flatten target)
@@ -100,9 +101,9 @@ export namespace editor
         void EndStroke();
         void UpdateStatus();
 
-        foundation::scene::Scene* m_scene;      // borrowed (page owns it)
+        foundation::scene::Scene* m_scene;      // borrowed (the page owns it)
         EditorCommandStack* m_commands;         // borrowed
-        IAssetEditSink* m_assetEdits = nullptr; // borrowed; null = no persistence (tests)
+        IAssetEditSink* m_assetEdits = nullptr; // borrowed; null means nothing is saved (tests)
 
         Mode m_mode = Mode::Raise;
         f32 m_radius = 6.0f;      // world units
@@ -110,14 +111,14 @@ export namespace editor
         f32 m_flattenTarget = 0.0f;
         bool m_hasFlattenTarget = false;
 
-        // Hover (for the cursor overlay) - refreshed every frame; cleared when off any terrain.
+        // Hover state for the cursor overlay: refreshed every frame, cleared when off any terrain.
         bool m_hasHover = false;
         Float3 m_hoverWorld{};
         Float3 m_hoverNormal{0.0f, 1.0f, 0.0f};
 
-        // Stroke state (one command per press..release). m_strokeHf keeps the grid alive for the
-        // whole stroke; m_before is a full snapshot taken at press (the union region is unknown
-        // until release, so the command slices before/after out of it then).
+        // Stroke state (one command from press to release). m_strokeHf keeps the grid alive for
+        // the whole stroke. m_before is a full snapshot taken at press, because the union region
+        // is unknown until release, when the command slices its before and after blocks out of it.
         bool m_stroking = false;
         RefPtr<foundation::heightfield::Heightfield> m_strokeHf;
         Guid m_strokeHeightfieldId;
@@ -127,8 +128,8 @@ export namespace editor
         String m_status;
     };
 
-    /// The provider that contributes the sculpt tool to every scene viewport (house rule: explicit
-    /// registration from Editor.Terrain's registrar, never discovery).
+    /// The provider that adds the sculpt tool to every scene viewport. Editor.Terrain's registrar
+    /// registers it explicitly; it is not discovered.
     class TerrainViewportToolProvider final : public IViewportToolProvider
     {
     public:

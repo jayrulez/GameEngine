@@ -4,9 +4,9 @@
 // Shared cook harness for the neutral-builder pipeline tests. The ScriptClassAssetBuilder is
 // backend-neutral: it resolves a per-language cook through the registry, so an
 // AngelScript-source test (AngelScriptPipelineTests.cpp) and a Luau-source test
-// (LuauPipelineTests.cpp) drive the SAME source->builder->factory path, each in its own file (no
-// if-deffery). This bed registers every enabled backend's cook so a test of either language cooks;
-// the builder picks the cook by the asset's declared language.
+// (LuauPipelineTests.cpp) drive the same path from source through builder to factory, each in its
+// own file with no #ifdefs. This bed registers every enabled backend's cook so a test of either
+// language cooks; the builder picks the cook by the asset's declared language.
 #pragma once
 
 #include <doctest/doctest.h>
@@ -118,7 +118,7 @@ namespace scriptpipe
             return builder.Build(asset, ctx);
         }
 
-        // A scratch dir holds only test-written sources + cooked .rasset artifacts, whose names vary
+        // A scratch dir holds only test-written sources and cooked .rasset artifacts, whose names vary
         // per language (.as / .luau); a recursive remove keeps the harness backend-agnostic.
         static void RemoveTree(StringView dir)
         {

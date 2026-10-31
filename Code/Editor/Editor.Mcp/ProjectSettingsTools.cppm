@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Mcp - :project_settings partition (Sedulous 3de51786)
+// Editor::Mcp - :project_settings partition
 //
 // The open project's settings over MCP: what project_info reports and project_settings_set
 // changes. Play reads its default scene, startup script and input map from them, so an agent's
 // game binds its input map here. Both read the settings from ProjectSettings' reflection, the
 // description the Project Settings dialog builds its rows from, through :reflected_fields. MSAA
-// is the one setting with a rule of its own: a level of the render subsystem's table.
+// is the only setting with a rule of its own: it must be a level in the render subsystem's table.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +30,7 @@ namespace content = foundation::content;
 
 export namespace editor::mcp::detail
 {
-    /// The settings that are settings: ProjectSettings' reflected fields.
+    /// The settings themselves: ProjectSettings' reflected fields.
     inline Array<const PropertyInfo*> ProjectSettingProperties()
     {
         return ReflectedFieldsOf(engine::project::ProjectSettings::StaticType());
@@ -120,7 +120,7 @@ export namespace editor::mcp
                 // A misspelled setting never gets here: the schema declares every setting, and the
                 // server refuses an argument it does not declare.
                 // Everything is checked before anything changes: a refusal leaves the settings as
-                // they were. MSAA takes a level of the render subsystem's table besides.
+                // they were. MSAA must also be a level in the render subsystem's table.
                 Result<Array<detail::FieldChange>, String> checked = detail::CheckFields(args, fields, project);
                 if (!checked.HasValue())
                 {

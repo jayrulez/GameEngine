@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Vulkan implementation of RenderPassEncoder + MeshShaderPassExt.
-/// Ported from Sedulous.RHI.Vulkan/VulkanRenderPassEncoder.bf.
+/// Vulkan implementation of RenderPassEncoder and MeshShaderPassExt.
 
 module;
 #include "Core/Prelude.h"

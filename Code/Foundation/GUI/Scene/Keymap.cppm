@@ -3,15 +3,15 @@
 
 // GUI - :keymap partition
 //
-// Bindings from keys and gamepad buttons to commands (G7 of Specs/vg-and-gui-lab.md), after GPUI's
-// keymap (`zed/crates/gpui/src/keymap.rs`, `keymap/context.rs`). A binding names a keystroke or a
+// Bindings from keys and gamepad buttons to commands, after GPUI's keymap
+// (`zed/crates/gpui/src/keymap.rs`, `keymap/context.rs`). A binding names a keystroke or a
 // chord ("ctrl-s", "ctrl-k ctrl-c", "escape", "pad-east"), a command (empty: the keystroke is
 // unbound there) and, optionally, the contexts it applies in as a small predicate over the key
 // contexts the focus path declares ("menu", "editor && mode == insert", "!modal"). Each node on the
-// focus path may declare a context (Node::SetKeyContext: "editor mode=insert"); a binding matches at
-// the deepest depth whose contexts, root to there, satisfy it. Of the bindings for a keystroke, the
-// deepest match wins, then the later binding, so a screen's binding beats the GUI's and a later one
-// overrides an earlier.
+// focus path may declare a context (Node::SetKeyContext: "editor mode=insert"). A binding matches at
+// the deepest depth whose contexts, from the root down to there, satisfy it. Among the bindings for
+// a keystroke the deepest match wins, and at equal depth the later binding wins, so a screen's
+// binding beats the GUI's and a later binding overrides an earlier one.
 
 module;
 #include "Core/Prelude.h"
@@ -21,14 +21,15 @@ export module foundation.gui:keymap;
 import foundation.core; // String, Array, Optional, Span
 import :event;          // KeyCode, KeyModifier
 import :style_value;    // SplitTopLevel
-import :reactive;       // Observable (who shows a shortcut follows its bindings)
+import :reactive;       // Observable (a control showing a shortcut follows its bindings)
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// A gamepad's buttons as keystrokes take them (the d-pad moves focus, not through bindings).
+    /// A gamepad's buttons as keystrokes use them (the d-pad moves focus directly, not through
+    /// bindings).
     enum class PadButton : u32
     {
         South, // A / Cross: activates when unbound
@@ -41,11 +42,10 @@ export namespace foundation::gui
         RightShoulder,
     };
 
-    /// One key with its modifiers, or one gamepad button.
-    /// The key context menus and menu bars declare, and the commands their keys run there (E12
-    /// of Specs/gui-lab-evolution-2.md): the arrows by default, which a game rebinds like any key.
-    /// Each widget gives a direction its meaning (Left closes a submenu, moves along a bar, and
-    /// right to left the bar runs the other way).
+    /// The key context that menus and menu bars declare, and the commands their keys run there
+    /// (the arrow keys by default, which a game can rebind like any key). Each widget decides what
+    /// a direction means: Left closes a submenu or moves along a bar, and in right-to-left text the
+    /// bar runs the other way.
     inline constexpr const char8_t* kMenuKeyContext = u8"menu";
     inline constexpr const char8_t* kMenuUpCommand = u8"menu.up";
     inline constexpr const char8_t* kMenuDownCommand = u8"menu.down";
@@ -53,11 +53,12 @@ export namespace foundation::gui
     inline constexpr const char8_t* kMenuRightCommand = u8"menu.right";
     /// Runs the focused item of an open menu (Return and Space by default).
     inline constexpr const char8_t* kMenuActivateCommand = u8"menu.activate";
-    /// Back out of where one is (K1 of Specs/gui-lab-evolution-3.md): Escape and the pad's East by
-    /// default. The topmost auto popup answers it by closing, a modal dialog as its close button
-    /// does, then whatever handles it on the focus path (a game's screen).
+    /// The command that backs out of the current place (Escape and the pad's East by default). The topmost auto
+    /// popup handles it first by closing, then a modal dialog as its close button would, then
+    /// whatever handles it on the focus path (a game's screen).
     inline constexpr const char8_t* kBackCommand = u8"back";
 
+    /// One key with its modifiers, or one gamepad button.
     struct Keystroke
     {
         u32 Code = 0; ///< a KeyCode, or a PadButton when Pad
@@ -74,8 +75,9 @@ export namespace foundation::gui
             const char8_t* Name;
             u32 Code;
         };
-        /// Every key with a name of its own: what a binding writes ("pageup", "numpad5") and what a
-        /// menu shows ("PgUp", "Numpad 5"). Letters, digits and F1 to F24 are named by rule.
+        /// Every key with a name of its own: the name a binding uses ("pageup", "numpad5") and the
+        /// text a menu shows ("PgUp", "Numpad 5"). Letters, digits and F1 to F24 are named by rule
+        /// instead.
         struct NamedKey
         {
             KeyCode Code;
@@ -141,7 +143,7 @@ export namespace foundation::gui
             {KeyCode::RightAlt, u8"rightalt", u8"Right Alt"},
             {KeyCode::RightSuper, u8"rightsuper", u8"Right Super"},
         };
-        /// F1 to F24's place: 1 to 24, or 0 for a key that is none of them.
+        /// Returns the number of a function key (1 to 24 for F1 to F24), or 0 for any other key.
         [[nodiscard]] constexpr u32 FunctionKeyNumber(KeyCode key) noexcept
         {
             if (key >= KeyCode::F1 && key <= KeyCode::F12)
@@ -163,8 +165,8 @@ export namespace foundation::gui
         };
     }
 
-    /// "ctrl-shift-s", "escape", "pad-east": modifiers (ctrl, shift, alt, super) then a key, joined
-    /// by '-'; "pad-" names a gamepad button. Empty on an unknown name.
+    /// Parses "ctrl-shift-s", "escape", "pad-east": modifiers (ctrl, shift, alt, super) then a
+    /// key, joined by '-'; "pad-" names a gamepad button. Returns empty for an unknown name.
     [[nodiscard]] inline Optional<Keystroke> ParseKeystroke(core::StringView text)
     {
         Keystroke stroke;
@@ -236,8 +238,9 @@ export namespace foundation::gui
         return {};
     }
 
-    /// A keystroke as a binding writes it ("ctrl-shift-s", "numpad5", "pad-north"): what ParseKeystroke
-    /// reads back (E12: a rebinding screen saves what it captured). Empty for a code with no name.
+    /// Writes a keystroke as a binding names it ("ctrl-shift-s", "numpad5", "pad-north"), in a form
+    /// ParseKeystroke reads back (a rebinding screen saves what it captured). Returns empty for a
+    /// code with no name.
     [[nodiscard]] inline core::String KeystrokeName(const Keystroke& stroke)
     {
         core::String out;
@@ -287,7 +290,7 @@ export namespace foundation::gui
         return out;
     }
 
-    /// A keystroke as a menu shows it: "Ctrl+Shift+S", "F10", "Enter", "Pad East".
+    /// Writes a keystroke as a menu shows it: "Ctrl+Shift+S", "F10", "Enter", "Pad East".
     [[nodiscard]] inline core::String KeystrokeText(const Keystroke& stroke)
     {
         core::String out;
@@ -333,8 +336,9 @@ export namespace foundation::gui
     }
 
     /// What one node's key context declares: identifiers ("menu") and key=value pairs
-    /// ("mode=insert"), separated by spaces. A layer of the stack the focus path builds holds the
-    /// declarations of every node from the root to there, a deeper value replacing an outer one.
+    /// ("mode=insert"), separated by spaces. The focus path builds a stack of layers; each layer
+    /// holds the declarations of every node from the root down to that node, with a deeper value
+    /// replacing an outer one.
     struct KeyContextLayer
     {
         Array<core::String> Keys;
@@ -376,13 +380,13 @@ export namespace foundation::gui
     };
 
     /// A context predicate: identifiers, `a == b`, `a != b`, `!p`, `p && q`, `p || q`, parentheses,
-    /// and `p > q` (lowest precedence, after GPUI's): q holds here, inside a context where p held
-    /// that q did not (a text input inside a menu: "menu > textinput").
+    /// and `p > q` (lowest precedence, as in GPUI). `p > q` means q holds here, and some outer
+    /// layer has p without q (a text input inside a menu: "menu > textinput").
     class ContextPredicate
     {
     public:
-        /// Parses `text`; false (and matching nothing) when it does not parse. Empty text matches
-        /// everywhere.
+        /// Parses `text`. Returns false when it does not parse, and the predicate then matches
+        /// nothing. Empty text matches everywhere.
         bool Parse(core::StringView text)
         {
             m_nodes.Clear();
@@ -409,7 +413,7 @@ export namespace foundation::gui
                 return true;
             return m_root >= 0 && depth < stack.Size() && EvalNode(m_root, stack, depth);
         }
-        /// Whether it holds in one layer alone (nothing around it).
+        /// Whether it holds in a single layer with no outer layers.
         [[nodiscard]] bool Eval(const KeyContextLayer& layer) const { return Eval(Span<const KeyContextLayer>(&layer, 1), 0); }
 
     private:
@@ -426,7 +430,7 @@ export namespace foundation::gui
         struct PNode
         {
             Op Kind;
-            core::String A, B; // an identifier; or the key and value of a comparison
+            core::String A, B; // an identifier, or the key and value of a comparison
             i32 Left = -1, Right = -1;
         };
         Array<PNode> m_nodes;
@@ -567,7 +571,8 @@ export namespace foundation::gui
             case Op::And: return EvalNode(n.Left, stack, depth) && EvalNode(n.Right, stack, depth);
             case Op::Or: return EvalNode(n.Left, stack, depth) || EvalNode(n.Right, stack, depth);
             case Op::Inside:
-                // The inner holds here, and an outer layer has the outer context without the inner.
+                // The inner context holds here, and some outer layer has the outer context without
+                // the inner one.
                 if (!EvalNode(n.Right, stack, depth))
                     return false;
                 for (usize outer = depth; outer-- > 0;)
@@ -581,17 +586,17 @@ export namespace foundation::gui
 
     enum class KeymapMatch : u8
     {
-        None,    ///< no binding: the keystroke goes on (to navigation)
+        None,    ///< no binding: the keystroke goes on to navigation
         Pending, ///< the start of a chord: wait for the next keystroke
-        Matched, ///< a command to run (or an unbinding: an empty command)
+        Matched, ///< a command to run (an empty command for an unbinding)
     };
 
     class Keymap
     {
     public:
-        /// Binds `keys` (a keystroke, or a chord of them separated by spaces) to `command` where
-        /// `context` holds (empty: everywhere); an empty command unbinds the keys there. False when
-        /// the keys or the context do not parse.
+        /// Binds `keys` (a keystroke, or a chord of keystrokes separated by spaces) to `command`
+        /// where `context` holds (empty means everywhere). An empty command unbinds the keys there.
+        /// Returns false when the keys or the context do not parse.
         bool Bind(core::StringView keys, core::StringView command, core::StringView context = {})
         {
             KeyBinding binding;
@@ -610,10 +615,10 @@ export namespace foundation::gui
             m_changed.Notify();
             return true;
         }
-        /// Binds `keys` to `command` where `context` holds in place of the keys bound to it there
-        /// before (by a Bind or Rebind with the same context): those keys no longer run it, as a
-        /// user's shortcut setting does (a Bind adds, the old key still working). False when the
-        /// keys or the context do not parse; nothing changes then.
+        /// Binds `keys` to `command` where `context` holds, replacing the keys bound to it there
+        /// before by a Bind or Rebind with the same context. The old keys no longer run it, as with
+        /// a user's shortcut setting; Bind, by contrast, adds a binding and the old key keeps
+        /// working. Returns false, changing nothing, when the keys or the context do not parse.
         bool Rebind(core::StringView keys, core::StringView command, core::StringView context = {})
         {
             ContextPredicate check;
@@ -625,8 +630,8 @@ export namespace foundation::gui
             (void)UnbindCommand(command, context);
             return Bind(keys, command, context);
         }
-        /// Takes away the keys bound to `command` where `context` holds (by a Bind with the same
-        /// context): how many bindings went. Other commands on those keys keep them.
+        /// Removes the keys bound to `command` by a Bind with the same `context`, and returns how
+        /// many bindings were removed. Other commands bound to those keys keep them.
         usize UnbindCommand(core::StringView command, core::StringView context = {})
         {
             const core::StringView where = core::Trim(context);
@@ -641,8 +646,8 @@ export namespace foundation::gui
                 m_changed.Notify();
             return removed;
         }
-        /// Binds one keystroke (made, not parsed: from an input map) to `command` where `context`
-        /// holds; false when the context does not parse.
+        /// Binds one keystroke, built rather than parsed (from an input map), to `command` where
+        /// `context` holds. Returns false when the context does not parse.
         bool Bind(const Keystroke& stroke, core::StringView command, core::StringView context = {})
         {
             KeyBinding binding;
@@ -657,16 +662,16 @@ export namespace foundation::gui
         }
         [[nodiscard]] usize BindingCount() const noexcept { return m_bindings.Size(); }
 
-        /// The keys bound to `command` as a menu shows them ("Ctrl+S", a chord's strokes spaced),
-        /// from the latest binding to it (the one that wins a tie); empty when none. A read a
-        /// binding follows: a rebinding changes it.
+        /// Returns the keys bound to `command` as a menu shows them ("Ctrl+S", with a chord's
+        /// strokes separated by spaces), from the latest binding to it (the one that wins a tie), or
+        /// empty text when there is none. A binding that reads it follows rebinding.
         [[nodiscard]] core::String ShortcutText(core::StringView command) const
         {
             return ShortcutText(command, Span<const KeyContextLayer>{});
         }
-        /// The keys that run `command` where the context `stack` holds (root first; a menu item's
-        /// own): the binding a keystroke there would match, so a shortcut shown is one that works
-        /// there. With an empty stack, any binding, the last first.
+        /// Returns the keys that run `command` in the context `stack` (root first, such as a menu
+        /// item's own stack): the binding a keystroke there would match, so the shortcut shown is
+        /// one that works there. With an empty stack, it uses any binding, the latest first.
         [[nodiscard]] core::String ShortcutText(core::StringView command, Span<const KeyContextLayer> stack) const
         {
             m_changed.Track();
@@ -678,7 +683,7 @@ export namespace foundation::gui
                 if (b.Command.AsView() != command)
                     continue;
                 const i32 depth = stack.Size() == 0 ? -1 : MatchDepth(b, stack);
-                if (depth > bestDepth) // deeper wins; at a tie, the later binding (met first here)
+                if (depth > bestDepth) // deeper wins; at a tie, the later binding (found first in this loop)
                 {
                     bestDepth = depth;
                     chosen = &b;
@@ -698,8 +703,9 @@ export namespace foundation::gui
             }
             return {};
         }
-        /// The binding `typed` is whole for in `stack` (none longer considered): what a chord cut
-        /// short (timed out, or broken off by a key that continues no binding) runs. False when none.
+        /// Finds the binding whose whole sequence is exactly `typed` in `stack`, ignoring longer
+        /// bindings. This is what a chord cut short runs (timed out, or broken off by a key that
+        /// continues no binding). Returns false when there is none.
         [[nodiscard]] bool MatchWhole(Span<const Keystroke> typed, Span<const KeyContextLayer> stack, core::String& command) const
         {
             i32 bestDepth = -2;
@@ -727,7 +733,8 @@ export namespace foundation::gui
         }
 
         /// Matches what was typed (a chord so far) against the bindings in the context `stack`
-        /// (root first). On Matched, `command` is the winner's (empty for an unbinding).
+        /// (root first). On Matched, `command` is the winning binding's command (empty for an
+        /// unbinding).
         [[nodiscard]] KeymapMatch Match(Span<const Keystroke> typed, Span<const KeyContextLayer> stack,
                                         core::String& command) const
         {
@@ -749,7 +756,7 @@ export namespace foundation::gui
                     continue;
                 const i32 depth = MatchDepth(binding, stack);
                 if (depth < -1)
-                    continue; // its context does not hold at the focus
+                    continue; // the binding's context does not hold at the focus
                 if (binding.Sequence.Size() > typed.Size())
                 {
                     pending = true;
@@ -762,7 +769,7 @@ export namespace foundation::gui
                 }
             }
             if (pending && (best == nullptr || bestDepth < 0))
-                return KeymapMatch::Pending; // a chord may follow (a contextual full match still wins)
+                return KeymapMatch::Pending; // a longer chord may follow (a contextual full match still wins)
             if (best == nullptr)
                 return KeymapMatch::None;
             command = best->Command;
@@ -775,17 +782,17 @@ export namespace foundation::gui
             Array<Keystroke> Sequence;
             core::String Command;
             ContextPredicate Context;
-            core::String ContextText; // as written, so a Rebind finds the bindings it replaces
+            core::String ContextText; // kept as written, so a Rebind finds the bindings it replaces
         };
         Array<KeyBinding> m_bindings;
-        Observable m_changed; // a binding added: shortcut text follows
+        Observable m_changed; // notified when bindings change, so shortcut text follows
 
-        // How deep the binding's context sits: it must hold at the focus (the deepest layer, which
-        // carries every context declared above it), and its depth is the shallowest layer from
-        // which it holds all the way down. A layer repeats its ancestors' contexts, so "game" set
-        // on the screen holds at the menu's layer too, yet it sits at the screen's depth and the
-        // menu's own bindings outrank it. -1 for a binding with no context (the least specific);
-        // -2 when its context does not hold at the focus.
+        // How deep the binding's context sits. The context must hold at the focus (the deepest
+        // layer, which carries every context declared above it), and its depth is the shallowest
+        // layer from which it holds all the way down. A layer repeats its ancestors' contexts, so
+        // "game" set on the screen also holds at a menu's layer, but its depth is the screen's, and
+        // the menu's own bindings outrank it. Returns -1 for a binding with no context (the least
+        // specific) and -2 when its context does not hold at the focus.
         [[nodiscard]] static i32 MatchDepth(const KeyBinding& binding, Span<const KeyContextLayer> stack)
         {
             if (binding.Context.IsEmpty())

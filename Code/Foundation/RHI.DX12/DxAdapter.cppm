@@ -3,7 +3,6 @@
 
 /// DX12 implementation of Adapter.
 /// Wraps IDXGIAdapter1, queries device features, creates DxDevice.
-/// Ported from Sedulous.RHI.DX12/DX12Adapter.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -46,7 +45,7 @@ export namespace foundation::rhi::dx12
 
         void GetInfo(AdapterInfo& out) override
         {
-            // DXGI Description is a WCHAR[] (UTF-16) - transcode to the UTF-8 String.
+            // DXGI's Description is a WCHAR[] (UTF-16); transcode it to the UTF-8 String.
             out.name =
                 ToUTF8(WideStringView(reinterpret_cast<const widechar*>(m_desc.Description)));
             out.vendorId = m_desc.VendorId;

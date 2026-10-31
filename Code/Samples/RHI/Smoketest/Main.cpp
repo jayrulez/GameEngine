@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-// RHI Smoketest - low-level API tour exercising the VK backend directly.
-// No framework dependency; useful for debugging the RHI itself.
+// RHI Smoketest - a low-level API tour exercising the backends directly (Vulkan, plus the Null,
+// DX12 and WebGPU backends where built). No framework dependency; useful for debugging the RHI.
 
 #include <cstdio>
 #include <cstdint>
@@ -113,7 +113,7 @@ int main(int /*argc*/, char** /*argv*/)
         return 1;
     }
 
-    // ---- Surface + swap chain ----
+    // ---- Surface and swap chain ----
     Surface* surface = nullptr;
     if (backend->CreateSurface(native, display, surface) != foundation::core::ErrorCode::Ok)
     {
@@ -247,7 +247,7 @@ int main(int /*argc*/, char** /*argv*/)
     device->DestroySampler(samp);
     device->DestroyBuffer(ub);
 
-    // ---- Command pool + fence ----
+    // ---- Command pool and fence ----
     CommandPool* pool = nullptr;
     if (device->CreateCommandPool(QueueType::Graphics, pool) != foundation::core::ErrorCode::Ok)
     {
@@ -284,7 +284,7 @@ int main(int /*argc*/, char** /*argv*/)
                     qs->count);
     }
 
-    // ---- Show window + acquire/present 3 frames ----
+    // ---- Show window, acquire and present 3 frames ----
 
     Queue* gfx = device->GetQueue(QueueType::Graphics);
     u64 fenceValue = 0;
@@ -336,7 +336,6 @@ int main(int /*argc*/, char** /*argv*/)
         std::printf("ray tracing: not available\n");
     }
 
-    // ---- Cleanup ----
     // ---- DXC shader compilation test ----
 #ifdef OPTION_HAS_SHADERS
     {
@@ -553,7 +552,7 @@ int main(int /*argc*/, char** /*argv*/)
                     std::printf("WebGPU device created (type=%d)\n",
                                 static_cast<int>(wgpuDevice->type));
 
-                    // Buffer: the Map emulation (CPU shadow -> WriteBuffer on Unmap).
+                    // Buffer: the Map emulation (a CPU shadow, written with WriteBuffer on Unmap).
                     Buffer* wgpuBuf = nullptr;
                     BufferDesc bd{};
                     bd.size = 256;
@@ -572,7 +571,7 @@ int main(int /*argc*/, char** /*argv*/)
                         wgpuDevice->DestroyBuffer(wgpuBuf);
                     }
 
-                    // Texture + view + sampler.
+                    // Texture, view and sampler.
                     Texture* wgpuTex = nullptr;
                     wgpuDevice->CreateTexture(
                         TextureDesc::RenderTarget(TextureFormat::RGBA8Unorm, 64, 64), wgpuTex);
@@ -589,7 +588,7 @@ int main(int /*argc*/, char** /*argv*/)
                                 wgpuTex ? "OK" : "FAIL", wgpuView ? "OK" : "FAIL",
                                 wgpuSampler ? "OK" : "FAIL");
 
-                    // WGSL shader module (SPIR-V rides the triangle sample later).
+                    // WGSL shader module.
                     const char* wgsl =
                         "@vertex fn main() -> @builtin(position) vec4f { return vec4f(0.0); }";
                     ShaderModuleDesc smd{};

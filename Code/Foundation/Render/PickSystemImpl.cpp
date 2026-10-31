@@ -49,7 +49,7 @@ namespace foundation::render
         }
         const f32 fullW = static_cast<f32>(viewportWidth);
         const f32 fullH = static_cast<f32>(viewportHeight);
-        // Rect centre in pixels, then in NDC (x right, y UP: pixel row 0 is the top of the view).
+        // Rect centre in pixels, then in NDC (x right, y up: pixel row 0 is the top of the view).
         const f32 cx = static_cast<f32>(rect.x) + static_cast<f32>(rect.width) * 0.5f;
         const f32 cy = static_cast<f32>(rect.y) + static_cast<f32>(rect.height) * 0.5f;
         const f32 ndcCx = 2.0f * cx / fullW - 1.0f;
@@ -57,7 +57,7 @@ namespace foundation::render
         const f32 sx = fullW / static_cast<f32>(rect.width);
         const f32 sy = fullH / static_cast<f32>(rect.height);
         // clip' = clip * crop: x' = sx * x - sx * ndcCx * w, y' likewise; z and w untouched.
-        // Scaling x/y and adding multiples of w commutes with the perspective divide, so the
+        // Scaling x and y and adding multiples of w commutes with the perspective divide, so the
         // divided result is exactly the NDC remap (ndc - centre) * scale.
         Float4x4 crop = Float4x4::Identity();
         crop(0, 0) = sx;
@@ -315,7 +315,7 @@ namespace foundation::render
             {
             case Slot::State::AwaitReadback:
             {
-                // Retire when the device ring has LEFT and RETURNED to the submission's slot:
+                // Retire when the device ring has left and returned to the submission's slot:
                 // the submission (and its copy) has provably completed, so the map cannot stall.
                 if (frameIndex != slot.submittedIndex)
                 {
@@ -420,7 +420,7 @@ namespace foundation::render
                 u8"pick.ids",
                 [ids, depth, rect, viewProj, record, context, viewContext](rendergraph::PassBuilder& b)
                 {
-                    // Uint target: the clear's float zeros are the integer zero (= no entity).
+                    // Uint target: the clear's float zeros are the integer zero (no entity).
                     b.SetColorTarget(0, ids, rhi::LoadOp::Clear, rhi::StoreOp::Store,
                                      rhi::ClearColor{0.0f, 0.0f, 0.0f, 0.0f});
                     b.SetDepthTarget(depth, rhi::LoadOp::Clear, rhi::StoreOp::DontCare);

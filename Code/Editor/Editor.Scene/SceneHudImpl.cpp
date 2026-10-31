@@ -50,7 +50,7 @@ namespace editor
             {render::ViewDebugSemantic::ClusterHeat, u8"Light Clusters"},
             {render::ViewDebugSemantic::Overbright, u8"Overbright"},
         };
-        // The effects as what is on: checked while the override leaves it.
+        // The effects that are on: each is checked while the override leaves it on.
         struct Effect
         {
             bool render::ViewPostOverride::* off;
@@ -63,7 +63,7 @@ namespace editor
             {&render::ViewPostOverride::disableSsgi, u8"Global Illumination (SSGI)"},
             {&render::ViewPostOverride::disableAa, u8"Anti-aliasing"},
         };
-        // The axis views, each the axis it looks along from.
+        // The axis views, each with the axis it looks along.
         struct AxisView
         {
             Float3 axis;
@@ -81,7 +81,8 @@ namespace editor
                     return String(name.SubStr(0, i));
             return String(u8"other");
         }
-        // A step as the snap menu writes it: to two decimals, none it does not need ("0.25", "1").
+        // A step as the snap menu writes it: up to two decimals, without trailing zeros ("0.25",
+        // "1").
         String StepText(f32 value)
         {
             const i64 hundredths = static_cast<i64>(value * 100.0f + 0.5f);
@@ -435,8 +436,8 @@ namespace editor
         request.EmptyText = String(u8"The renderer lists a frame's textures once it has drawn one.");
         if (m_services.debugView != nullptr)
             request.Current = m_services.debugView->resource;
-        // By their pass, in the order the frame made them; a multisampled one is shown by its
-        // resolved twin (a blit cannot read it).
+        // By their pass, in the order the frame made them; a multisampled texture is shown by its
+        // resolved copy (a blit cannot read it).
         Array<String> passes(m_allocator);
         for (const render::DebugResourceInfo& row : rows)
         {
@@ -618,7 +619,7 @@ namespace editor
             }
         }
         else if (active != nullptr)
-            parts[0] = active->StatusText(); // a tool's own words, until each says it in parts (part 3)
+            parts[0] = active->StatusText(); // the tool's own status text
         if (m_statusIcon != nullptr)
         {
             m_statusIcon->SetDisplayed(!icon.IsEmpty());

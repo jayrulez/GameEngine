@@ -3,10 +3,10 @@
 
 // Foundation::Navigation - implementation unit.
 //
-// ALL Recast/Detour contact lives here: the interface stays rc*/dt*-free (API hygiene + GCC's
-// module serializer cannot digest the third-party headers inside an interface unit's global
-// fragment). The bake is the canonical Recast "solo mesh" pipeline; the runtime wrappers hold
-// Detour objects behind PIMPL.
+// All Recast and Detour use lives here. The interface stays free of rc* and dt* types, both to
+// keep the API clean and because GCC's module serializer cannot digest the third-party headers
+// inside an interface unit's global fragment. Each tile is baked with Recast's standard pipeline;
+// the runtime wrappers hold Detour objects behind PIMPL.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +33,7 @@ namespace foundation::navigation
 {
     namespace
     {
-        // Serialized-blob header. The tiled info block + tile records follow immediately after.
+        // Serialized-blob header. The tiled info block and tile records follow immediately after.
         constexpr u32 kBlobMagic = 0x564E4144u; // 'DANV' little-endian
 
         struct BlobHeader
@@ -49,8 +49,8 @@ namespace foundation::navigation
         // filter (include 0xffff) accepts it.
         constexpr unsigned short kPolyFlagWalk = 0x01;
 
-        // The blob format: TILED (version 2 - the retired single-tile v1 is refused). The
-        // header's navDataSize covers this info block + the tile records.
+        // The blob format: tiled (version 2; a single-tile version 1 blob is refused). The
+        // header's navDataSize covers this info block and the tile records.
         constexpr u32 kBlobVersionTiled = 2u;
         struct TiledBlobInfo
         {
@@ -67,8 +67,8 @@ namespace foundation::navigation
             u32 dataSize;
         };
 
-        // The tile grid BuildTiled/BuildTileAt derive from the geometry bounds - shared so
-        // the per-tile primitive regenerates EXACTLY the tile the full bake would.
+        // The tile grid BuildTiled and BuildTileAt derive from the geometry bounds, shared so
+        // the per-tile primitive regenerates exactly the tile the full bake would.
         struct TileGrid
         {
             f32 bmin[3];
@@ -131,15 +131,15 @@ namespace foundation::navigation
     Status NavigationMeshBuilder::Build(Span<const Float3> vertices, Span<const u32> indices,
                                         const NavigationBakeParams& params, Array<byte>& outData)
     {
-        return BuildTiled(vertices, indices, params, outData, nullptr); // ONE blob format: tiled
+        return BuildTiled(vertices, indices, params, outData, nullptr); // one blob format: tiled
     }
 
     namespace
     {
-        // The Recast pipeline for ONE tile of the grid (borders overlap neighbours so edge
-        // polys stitch; the border region never emits polygons). Raw Detour tile data out -
-        // NotFound (empty outNavData) when the tile has no walkable surface, which is a
-        // NORMAL result for tiles off the geometry.
+        // The Recast pipeline for one tile of the grid (borders overlap neighbours so edge
+        // polys stitch; the border region never emits polygons). Produces raw Detour tile
+        // data, or NotFound (empty outNavData) when the tile has no walkable surface, which
+        // is a normal result for tiles off the geometry.
         [[nodiscard]] Status BuildOneTile(Span<const Float3> vertices, Span<const u32> indices,
                                           const NavigationBakeParams& params,
                                           const TileGrid& grid, i32 tileX, i32 tileY,
@@ -171,7 +171,7 @@ namespace foundation::navigation
             cfg.ch = params.cellHeight;
             cfg.walkableSlopeAngle = params.agentMaxSlopeDegrees;
             // In cells, a setting that is a whole number of them counting as exactly that many:
-            // 0.45 / 0.15 is 2.9999998 in floats, and a bare floor made a 0.45 m climb 0.3 m.
+            // 0.45 / 0.15 is 2.9999998 in floats, and a bare floor would make a 0.45 m climb 0.3 m.
             constexpr float kWhole = 1e-4f;
             cfg.walkableHeight = static_cast<int>(std::ceil(params.agentHeight / cfg.ch - kWhole));
             cfg.walkableClimb = static_cast<int>(std::floor(params.agentMaxClimb / cfg.ch + kWhole));
@@ -268,8 +268,8 @@ namespace foundation::navigation
                 }
                 if (outStages != nullptr)
                 {
-                    // Stage 1: walkable span tops (strided, capped) - where geometry
-                    // actually rasterized before any erosion killed it.
+                    // Stage 1: walkable span tops (strided, capped), where geometry
+                    // rasterized before any erosion removed it.
                     constexpr usize kMaxSamples = 60000;
                     constexpr int kStride = 2;
                     for (int y = 0; y < solid->height; y += kStride)
@@ -294,7 +294,7 @@ namespace foundation::navigation
                             }
                         }
                     }
-                    // Stage 2: simplified contours - the region outlines polygons come from.
+                    // Stage 2: simplified contours, the region outlines polygons come from.
                     for (int c = 0; c < cset->nconts; ++c)
                     {
                         const rcContour& contour = cset->conts[c];
@@ -316,7 +316,7 @@ namespace foundation::navigation
                 }
                 if (pmesh->npolys == 0)
                 {
-                    return Status{ErrorCode::NotFound}; // an empty tile - normal off-geometry
+                    return Status{ErrorCode::NotFound}; // an empty tile, normal off the geometry
                 }
                 for (int i = 0; i < pmesh->npolys; ++i)
                 {
@@ -409,8 +409,8 @@ namespace foundation::navigation
         {
             return Status{ErrorCode::InvalidArgument};
         }
-        // XZ anchoring comes from the RECORDED grid; the vertical range from the CURRENT
-        // geometry (a rebake may add taller/lower content without invalidating the grid).
+        // XZ anchoring comes from the recorded grid, the vertical range from the current
+        // geometry (a rebake may add taller or lower content without invalidating the grid).
         TileGrid grid;
         grid.bmin[0] = gridDesc.origin.x;
         grid.bmin[2] = gridDesc.origin.z;
@@ -467,8 +467,8 @@ namespace foundation::navigation
         TiledBlobInfo info;
         std::memcpy(&info, blob.Data() + sizeof(BlobHeader), sizeof(TiledBlobInfo));
 
-        // Walk the records, copying every OTHER tile verbatim; the target tile's record is
-        // replaced (or omitted for empty tileData); a previously-absent tile INSERTS in
+        // Walk the records, copying every other tile verbatim; the target tile's record is
+        // replaced (or omitted for empty tileData); a previously absent tile is inserted in
         // row-major position so a patched blob stays byte-identical to a full rebake.
         Array<byte> out;
         out.Reserve(blob.Size() + tileData.Size());
@@ -584,7 +584,7 @@ namespace foundation::navigation
             return Status{ErrorCode::InvalidArgument};
         }
 
-        // Tiles are independent, so they may bake across workers; ASSEMBLY stays row-major,
+        // Tiles are independent, so they may bake across workers; assembly stays row-major,
         // so the blob is byte-identical parallel or serial (the toggle trades latency only).
         // Stages capture per-tile and concatenate in the same order for the same reason.
         const u32 tileTotal = static_cast<u32>(grid.countX) * static_cast<u32>(grid.countY);
@@ -624,8 +624,8 @@ namespace foundation::navigation
         for (u32 index = 0; index < tileTotal; ++index) // row-major: the deterministic order
         {
             const Status tileStatus = tileStatuses[index];
-            // Stages append for OK and NotFound alike - an empty tile still rasterized spans
-            // (that emptiness is exactly what the overlay is for debugging).
+            // Stages append for Ok and NotFound alike: an empty tile still rasterized spans,
+            // and that emptiness is what the overlay is for debugging.
             if (outStages != nullptr &&
                 (tileStatus.IsOk() || tileStatus.Code() == ErrorCode::NotFound))
             {
@@ -1151,7 +1151,7 @@ namespace foundation::navigation
             out.targetState = NavAgentTargetState::Velocity;
             break;
         case DT_CROWDAGENT_TARGET_FAILED: out.targetState = NavAgentTargetState::Failed; break;
-        default: // REQUESTING / WAITING_FOR_QUEUE / WAITING_FOR_PATH - all "in flight"
+        default: // REQUESTING, WAITING_FOR_QUEUE, WAITING_FOR_PATH: all "in flight"
             out.targetState = NavAgentTargetState::Requesting;
             break;
         }
@@ -1171,7 +1171,7 @@ namespace foundation::navigation
         {
             return;
         }
-        dtCrowdAgentParams ap = agent->params; // keep the flags/avoidance the add configured
+        dtCrowdAgentParams ap = agent->params; // keep the flags and avoidance the add configured
         ap.radius = params.radius;
         ap.height = params.height;
         ap.maxSpeed = params.maxSpeed;

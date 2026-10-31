@@ -1,13 +1,15 @@
-// Gate - a slalom gate: two poles (each with its flag on a hinge) the rider passes between. When
-// the rider crosses the gate's line down the course it reports "GatePassed" (between the poles) or
-// "GateMissed" (round the outside: Snowline.as adds the penalty), with the gate's index. Placed by
-// Tools/course.py, which gives each gate its index and the course's heading at it.
+// Gate: a slalom gate, two poles (each with its flag on a hinge) that the rider passes between.
+// When the rider crosses the gate's line going down the course, it reports "GatePassed" (between
+// the poles) or "GateMissed" (round the outside, for which Snowline.as adds the penalty), with the
+// gate's index. Tools/course.py places the gates and gives each its index and the course's heading
+// at it.
 //
-// The flags do not collide with the rider (a flag at its hinge's limit would stop it dead; see
-// Tools/gates.py), so the gate swings one the rider brushes past: a push along the rider's motion,
-// once each time the rider comes within reach of it. Each flag springs back to hang straight (its
-// hinge has no spring, and on an upright hinge gravity does not swing it back, so a flag once
-// brushed stayed turned, into the next run): the gate pushes it toward its rest angle, damped.
+// The flags do not collide with the rider, because a flag at its hinge's limit would stop the
+// rider dead (see Tools/gates.py). Instead the gate swings a flag the rider brushes past, with a
+// push along the rider's motion, once each time the rider comes within reach. The hinge has no
+// spring, and gravity does not swing a flag back on an upright hinge, so the gate itself pushes
+// each flag back toward its rest angle as a damped spring; otherwise a brushed flag would stay
+// turned into the next run.
 
 class Gate
 {
@@ -32,7 +34,8 @@ class Gate
     private Entity@ m_flagRight;
     private bool m_brushingLeft = false;
     private bool m_brushingRight = false;
-    // Each flag at rest, in its gate's frame: the way its panel points out, and its angle last frame.
+    // Each flag at rest, in the gate's frame: the direction its panel points, and its angle last
+    // frame.
     private Float3 m_restLeft = Float3(0.0f, 0.0f, 0.0f);
     private Float3 m_restRight = Float3(0.0f, 0.0f, 0.0f);
     private float m_angleLeft = 0.0f;
@@ -60,8 +63,9 @@ class Gate
         {
             return;
         }
-        // The rider in the gate's frame: along the course, and across it (+ toward the right pole).
-        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        // The rider in the gate's frame: along the course, and across it (positive toward the right
+        // pole). The rider is a root entity, so position() holds this frame's pose; worldPosition()
+        // still holds last frame's.
         Float3 d = m_rider.position() - self.worldPosition();
         float fx = Math::Sin(heading);
         float fz = Math::Cos(heading);
@@ -89,8 +93,9 @@ class Gate
         m_seen = true;
     }
 
-    // Swings `flag` as the rider comes within its reach (`outward`: the rider's distance across
-    // the gate toward the flag's side): once per pass, along the rider's motion. Whether in reach.
+    // Swings `flag` along the rider's motion as the rider comes within its reach, once per pass.
+    // `outward` is the rider's distance across the gate toward the flag's side. Returns whether the
+    // rider is in reach.
     private bool brush(Entity@ flag, bool wasInReach, float along, float outward)
     {
         float fromPole = outward - halfWidth;
@@ -103,7 +108,8 @@ class Gate
         return inReach;
     }
 
-    // The way a flag's panel points out from its hinge, flat, in its gate's frame (its local +X).
+    // The direction a flag's panel points out from its hinge (its local +X), flattened, in the
+    // gate's frame.
     private Float3 outward(Entity@ flag)
     {
         if (flag is null || !flag.isValid())
@@ -115,9 +121,9 @@ class Gate
         return (flat > 0.001f) ? Float3(o.x / flat, 0.0f, o.z / flat) : Float3(1.0f, 0.0f, 0.0f);
     }
 
-    // Pushes a flag back toward its rest angle about its upright hinge, as a damped spring: a push at
-    // its centre along its swing, of (spring x angle + damping x its turn rate) over its reach.
-    // Returns the angle now (for the next frame's turn rate).
+    // Pushes a flag back toward its rest angle about its upright hinge, as a damped spring: a push
+    // at its centre along its swing of (spring * angle + damping * turn rate) / reach. Returns the
+    // current angle, for the next frame's turn rate.
     private float springBack(Entity@ flag, Float3 rest, float lastAngle, float dt)
     {
         if (flag is null || !flag.isValid())
@@ -125,11 +131,12 @@ class Gate
             return 0.0f;
         }
         Float3 now = outward(flag);
-        // The angle from rest about up (+ turns +X toward -Z, as a turn about +Y does).
+        // The angle from rest about up (positive turns +X toward -Z, as a turn about +Y does).
         float angle = Math::Atan2(rest.z * now.x - rest.x * now.z, rest.x * now.x + rest.z * now.z);
         float rate = (angle - lastAngle) / dt;
         float torque = -(flagSpring * angle + flagDamping * rate);
-        // Along the swing: up x outward, the way the angle grows; into the world by the gate's turn.
+        // The swing direction is up x outward, the way the angle grows, rotated into the world by
+        // the gate's rotation.
         Float3 swing = Quaternion::RotateVector(self.rotation(), Float3(-now.z, 0.0f, now.x) * -1.0f);
         float push = torque * dt / flagReach;
         ScenePhysics::of(self.scene).applyImpulse(flag, Float3(swing.x * push, 0.0f, swing.z * push));

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/TriangulatorTests.bf.
+// Triangulator: ear clipping, signed area, holes and the fan fallback.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -73,7 +73,7 @@ TEST_CASE("triangulator: pentagon -> correct triangles")
 namespace
 {
     // The signed area the emitted triangles cover. Equal to the polygon's own area only when
-    // the triangles neither overlap nor leave gaps - a triangle COUNT never shows either.
+    // the triangles neither overlap nor leave gaps; a triangle count never shows either.
     f32 TriangleArea(Span<const Float2> points, const Array<u32>& indices)
     {
         f32 area = 0.0f;
@@ -113,7 +113,7 @@ TEST_CASE("triangulator: the emitted triangles cover exactly the polygon's area 
 TEST_CASE("triangulator: a self-intersecting bowtie falls back to a bounded fan (no hang, no drop)")
 {
     // No valid ear decomposition exists; after a full pass finds no ear the fan fallback
-    // must fire - every index in range, the shape not dropped, and the call returns.
+    // fires: every index in range, the shape not dropped, and the call returns.
     Float2 bowtie[4] = {{0, 0}, {10, 10}, {10, 0}, {0, 10}};
     Array<u32> indices;
     Triangulator::Triangulate(Span<const Float2>(bowtie, 4), FillRule::EvenOdd, indices);

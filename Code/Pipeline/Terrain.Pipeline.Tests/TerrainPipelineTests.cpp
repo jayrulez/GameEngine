@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full terrain asset pipeline: author a TerrainAsset (referencing a cooked heightfield + layers) ->
-// cook with TerrainAssetBuilder into an output content DB -> load the Terrain through the manager and
-// confirm it resolves the SHARED heightfield + carries the layers/flags (a reference pass-through).
+// Full terrain asset pipeline: author a TerrainAsset (referencing a cooked heightfield and layers),
+// cook it with TerrainAssetBuilder into an output content DB, then load the Terrain through the
+// manager and confirm it resolves the shared heightfield and carries the layers and flags (a
+// reference pass-through).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -71,7 +72,7 @@ TEST_CASE("terrain.pipeline: TerrainAsset cooks to a Terrain that resolves the s
         TerrainAsset asset;
         asset.heightfieldId = heightfieldId;
         asset.weightsId = Guid{123, 456};                // the top-K weights (id pass-through)
-        asset.baseAlbedoId = Guid{111, 222};             // the BASE layer albedo
+        asset.baseAlbedoId = Guid{111, 222};             // the base layer albedo
         asset.baseTileScale = 16.0f;
         asset.paletteAlbedoIds.PushBack(Guid{321, 654}); // non-nil so the albedo ref binds
         asset.paletteAlbedoIds.PushBack(Guid{});
@@ -104,13 +105,13 @@ TEST_CASE("terrain.pipeline: TerrainAsset cooks to a Terrain that resolves the s
     CHECK(terrain->palette[1].tileScale == doctest::Approx(8.0f));
     REQUIRE(terrain->heightfield);
     CHECK(terrain->heightfield->Size() == 65);
-    // Splat ids round-trip through cook -> source -> factory -> a BOUND ref (a non-nil id binds a
-    // proxy even with no texture factory; GPU resolution + blending is the backend probe's job).
+    // Splat ids round-trip through the cook, the source and the factory to a bound ref (a non-nil id
+    // binds a proxy even with no texture factory; GPU resolution and blending are tested elsewhere).
     CHECK(terrain->weights.IsBound());            // weightsId carried
     CHECK(terrain->base.albedo.IsBound());        // base albedo carried
     CHECK(terrain->palette[0].albedo.IsBound());  // non-nil palette albedo carried
     CHECK_FALSE(terrain->palette[1].albedo.IsBound()); // nil id stays unbound
-    // The factory stamps each ref's source id (product guid == source guid) - the editor resolves
+    // The factory stamps each ref's source id (product guid equals source guid); the editor resolves
     // the heightfield asset from this ref chain (no reverse lookup).
     CHECK(terrain->heightfield.id == heightfieldId);
     CHECK(terrain->weights.id == Guid{123, 456});
@@ -150,15 +151,15 @@ TEST_CASE("terrain.pipeline: per-layer normal + ORM ids round-trip; arrays built
         TerrainAsset asset;
         asset.heightfieldId = hfInst->Id();
         asset.baseAlbedoId = Guid{111, 222};
-        asset.baseNormalId = Guid{11, 22}; // base normal + ORM ids (unresolvable -> flat/default)
+        asset.baseNormalId = Guid{11, 22}; // base normal and ORM ids (unresolvable: flat/default)
         asset.baseOrmId = Guid{33, 44};
         asset.baseTileScale = 16.0f;
         asset.paletteTextureSize = 64; // keep the cook small/fast
         asset.paletteAlbedoIds.PushBack(Guid{321, 654});
         asset.paletteAlbedoIds.PushBack(Guid{});
-        asset.paletteNormalIds.PushBack(Guid{55, 66}); // layer 0 HAS a normal -> array built
-        asset.paletteNormalIds.PushBack(Guid{});       // layer 1 nil -> default flat slice
-        // NO ORM ids on any palette layer -> the ORM array must NOT be written.
+        asset.paletteNormalIds.PushBack(Guid{55, 66}); // layer 0 has a normal: array built
+        asset.paletteNormalIds.PushBack(Guid{});       // layer 1 nil: default flat slice
+        // No ORM ids on any palette layer, so the ORM array must not be written.
         asset.paletteTileScales.PushBack(4.0f);
         asset.paletteTileScales.PushBack(8.0f);
 
@@ -169,7 +170,7 @@ TEST_CASE("terrain.pipeline: per-layer normal + ORM ids round-trip; arrays built
         ctx.output = tInst;
         REQUIRE(builder.Build(asset, ctx).IsOk());
 
-        // The normal stream exists (a layer used it); the ORM stream is absent (R4).
+        // The normal stream exists (a layer used it); the ORM stream is absent.
         UniquePtr<IStream> nrm = tInst->ReadData(kPaletteNormalStream);
         REQUIRE(nrm);
         cookedNormal.Resize(static_cast<usize>(nrm->Size()));
@@ -178,9 +179,9 @@ TEST_CASE("terrain.pipeline: per-layer normal + ORM ids round-trip; arrays built
         ormStreamPresent = static_cast<bool>(tInst->ReadData(kPaletteOrmStream));
     }
 
-    CHECK_FALSE(ormStreamPresent); // no ORM on any layer -> no array (on demand, R4)
+    CHECK_FALSE(ormStreamPresent); // no ORM on any layer, so no array (built on demand)
 
-    // The nil palette layer's normal slice defaulted to flat (128,128,255,255) - R4 default fill.
+    // The nil palette layer's normal slice defaulted to flat (128,128,255,255).
     REQUIRE(cookedNormal.Size() > sizeof(u32) * 3);
     MemCopy(&sliceSize, cookedNormal.Data(), sizeof(u32));
     MemCopy(&mipCount, cookedNormal.Data() + sizeof(u32), sizeof(u32));
@@ -191,7 +192,7 @@ TEST_CASE("terrain.pipeline: per-layer normal + ORM ids round-trip; arrays built
     CHECK(cookedNormal[slice1 + 2] == 255);
     CHECK(cookedNormal[slice1 + 3] == 255);
 
-    // Load: refs bound + ids round-trip; paletteData has the normal array but NOT the ORM array.
+    // Load: refs bound and ids round-trip; paletteData has the normal array but not the ORM array.
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), outMount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     hf::HeightfieldFactory heightfieldFactory(DefaultAllocator());
@@ -307,14 +308,14 @@ TEST_CASE("terrain.pipeline: per-layer height ids + contrast round-trip; array b
         TerrainAsset asset;
         asset.heightfieldId = hfInst->Id();
         asset.baseAlbedoId = Guid{111, 222};
-        asset.baseHeightId = Guid{77, 88};       // base height id (unresolvable -> dummy at bind)
+        asset.baseHeightId = Guid{77, 88};       // base height id (unresolvable: dummy at bind)
         asset.heightBlendContrast = 0.4f;        // authored contrast must survive the cook
         asset.baseTileScale = 16.0f;
         asset.paletteTextureSize = 64;
         asset.paletteAlbedoIds.PushBack(Guid{321, 654});
         asset.paletteAlbedoIds.PushBack(Guid{});
-        asset.paletteHeightIds.PushBack(Guid{55, 66}); // layer 0 HAS a height -> array built
-        asset.paletteHeightIds.PushBack(Guid{});       // layer 1 nil -> default mid-height slice
+        asset.paletteHeightIds.PushBack(Guid{55, 66}); // layer 0 has a height: array built
+        asset.paletteHeightIds.PushBack(Guid{});       // layer 1 nil: default mid-height slice
         asset.paletteTileScales.PushBack(4.0f);
         asset.paletteTileScales.PushBack(8.0f);
 
@@ -330,7 +331,7 @@ TEST_CASE("terrain.pipeline: per-layer height ids + contrast round-trip; array b
         cookedHeight.Resize(static_cast<usize>(h->Size()));
         REQUIRE(h->Read(cookedHeight.Data(), static_cast<u64>(cookedHeight.Size())) ==
                 cookedHeight.Size());
-        // No normal/ORM authored -> those arrays stay absent.
+        // No normal/ORM authored, so those arrays stay absent.
         CHECK_FALSE(static_cast<bool>(tInst->ReadData(kPaletteNormalStream)));
         CHECK_FALSE(static_cast<bool>(tInst->ReadData(kPaletteOrmStream)));
     }
@@ -361,7 +362,7 @@ TEST_CASE("terrain.pipeline: per-layer height ids + contrast round-trip; array b
     CHECK(terrain->palette[0].height.IsBound());
     CHECK(terrain->palette[0].height.id == Guid{55, 66});
     CHECK_FALSE(terrain->palette[1].height.IsBound()); // nil id stays unbound
-    CHECK(terrain->heightBlendContrast == doctest::Approx(0.4f)); // contrast survived cook -> resource
+    CHECK(terrain->heightBlendContrast == doctest::Approx(0.4f)); // contrast survived the cook to the resource
     REQUIRE(terrain->paletteData);
     CHECK(terrain->paletteData->HasHeight());     // height array present (a layer used it)
     CHECK_FALSE(terrain->paletteData->HasNormal());
@@ -402,8 +403,8 @@ TEST_CASE("terrain.pipeline: per-layer mask ids round-trip; array built on deman
         asset.paletteTextureSize = 64;
         asset.paletteAlbedoIds.PushBack(Guid{321, 654});
         asset.paletteAlbedoIds.PushBack(Guid{});
-        asset.paletteMaskIds.PushBack(Guid{91, 92}); // layer 0 HAS a mask -> array built
-        asset.paletteMaskIds.PushBack(Guid{});       // layer 1 nil -> default OPAQUE slice
+        asset.paletteMaskIds.PushBack(Guid{91, 92}); // layer 0 has a mask: array built
+        asset.paletteMaskIds.PushBack(Guid{});       // layer 1 nil: default opaque slice
         asset.paletteTileScales.PushBack(4.0f);
         asset.paletteTileScales.PushBack(8.0f);
 
@@ -418,13 +419,13 @@ TEST_CASE("terrain.pipeline: per-layer mask ids round-trip; array built on deman
         REQUIRE(m);
         cookedMask.Resize(static_cast<usize>(m->Size()));
         REQUIRE(m->Read(cookedMask.Data(), static_cast<u64>(cookedMask.Size())) == cookedMask.Size());
-        // No normal/ORM/height authored -> those arrays stay absent.
+        // No normal/ORM/height authored, so those arrays stay absent.
         CHECK_FALSE(static_cast<bool>(tInst->ReadData(kPaletteNormalStream)));
         CHECK_FALSE(static_cast<bool>(tInst->ReadData(kPaletteHeightStream)));
     }
 
-    // The nil palette layer's mask slice defaulted to OPAQUE (255,255,255,255) - the critical
-    // inversion of height's mid default (a maskless layer must contribute at full weight).
+    // The nil palette layer's mask slice defaulted to opaque (255,255,255,255), unlike height's
+    // mid default: a maskless layer must contribute at full weight.
     REQUIRE(cookedMask.Size() > sizeof(u32) * 3);
     MemCopy(&sliceSize, cookedMask.Data(), sizeof(u32));
     MemCopy(&mipCount, cookedMask.Data() + sizeof(u32), sizeof(u32));
@@ -485,7 +486,7 @@ TEST_CASE("terrain.pipeline: re-cooking WITHOUT a removed map DELETES its stale 
         withMask.baseAlbedoId = Guid{111, 222};
         withMask.paletteTextureSize = 64;
         withMask.paletteAlbedoIds.PushBack(Guid{321, 654});
-        withMask.paletteMaskIds.PushBack(Guid{91, 92}); // a mask -> sidecar written
+        withMask.paletteMaskIds.PushBack(Guid{91, 92}); // a mask: sidecar written
         withMask.paletteTileScales.PushBack(4.0f);
 
         TerrainAssetBuilder builder;
@@ -496,7 +497,7 @@ TEST_CASE("terrain.pipeline: re-cooking WITHOUT a removed map DELETES its stale 
         REQUIRE(builder.Build(withMask, ctx).IsOk());
         REQUIRE(static_cast<bool>(tInst->ReadData(kPaletteMaskStream))); // sidecar present
 
-        // Re-cook the SAME instance with the mask REMOVED - the stale sidecar must be deleted.
+        // Re-cook the same instance with the mask removed: the stale sidecar must be deleted.
         TerrainAsset noMask;
         noMask.heightfieldId = hfInst->Id();
         noMask.baseAlbedoId = Guid{111, 222};
@@ -504,10 +505,10 @@ TEST_CASE("terrain.pipeline: re-cooking WITHOUT a removed map DELETES its stale 
         noMask.paletteAlbedoIds.PushBack(Guid{321, 654});
         noMask.paletteTileScales.PushBack(4.0f);
         REQUIRE(builder.Build(noMask, ctx).IsOk());
-        CHECK_FALSE(static_cast<bool>(tInst->ReadData(kPaletteMaskStream))); // sidecar GONE
+        CHECK_FALSE(static_cast<bool>(tInst->ReadData(kPaletteMaskStream))); // sidecar gone
     }
 
-    // The reloaded product must NOT report a mask (no stale array leaks into the runtime).
+    // The reloaded product must not report a mask (no stale array leaks into the runtime).
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), outMount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     hf::HeightfieldFactory heightfieldFactory(DefaultAllocator());
@@ -520,7 +521,7 @@ TEST_CASE("terrain.pipeline: re-cooking WITHOUT a removed map DELETES its stale 
     REQUIRE(terrain);
     REQUIRE(terrain->paletteData);
     CHECK(terrain->paletteData->IsValid());       // albedo still there
-    CHECK_FALSE(terrain->paletteData->HasMask()); // but the removed mask does NOT leak
+    CHECK_FALSE(terrain->paletteData->HasMask()); // but the removed mask does not leak
 
     RemoveTree();
 }

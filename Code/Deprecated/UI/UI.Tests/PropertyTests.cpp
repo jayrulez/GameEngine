@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/PropertyTests.bf (faithful; Beef `Value` property -> Value()/
-// SetValue(), Beef delegate -> core::Function, scope Property -> stack Property).
+// Property tests: values, change notification and bindings.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -71,7 +70,7 @@ TEST_CASE("property: BindTo_OneWay")
     source.SetValue(50.0f);
     CHECK(target.Value() == 50.0f);
 
-    // Reverse should not propagate back.
+    // The reverse direction does not propagate back.
     target.SetValue(99.0f);
     CHECK(source.Value() == 50.0f);
 }
@@ -95,7 +94,7 @@ TEST_CASE("property: BindTwoWay_LoopGuard")
     Property<i32> b{0};
     a.BindTwoWay(b);
 
-    a.SetValue(42); // must not infinite loop
+    a.SetValue(42); // does not loop forever
     CHECK(a.Value() == 42);
     CHECK(b.Value() == 42);
 }

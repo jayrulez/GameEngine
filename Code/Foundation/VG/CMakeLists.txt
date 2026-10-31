@@ -1,6 +1,6 @@
 # Foundation::VG - `foundation.vg` (2D vector-graphics core: paths, tessellation, context).
-# Ported from Sedulous.VG. Pure CPU - emits a VGBatch of vertices/commands that
-# foundation.vg.renderer uploads to the GPU. Deps: Core (math/containers) + Image.
+# Pure CPU: emits a VGBatch of vertices and commands that foundation.vg.renderer uploads
+# to the GPU. Depends on Core (math, containers) and Image.
 
 util_add_engine_library(VG ALIAS Foundation::VG)
 target_link_libraries(VG PUBLIC Foundation::Core Foundation::Image Foundation::Fonts Foundation::Policy)

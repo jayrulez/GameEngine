@@ -1,4 +1,4 @@
-# Foundation::Shaders.System unit tests (doctest; real DXC + Null RHI).
+# Foundation::Shaders.System unit tests (doctest; real DXC and the Null RHI).
 
 add_executable(Shaders.System.Tests
     TestsMain.cpp

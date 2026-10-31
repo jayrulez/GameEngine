@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Terrain pixel-level ground truth on a REAL Vulkan device. Renders terrain through the full
-// RenderFrame chain, reads pixels back, and asserts real render outcomes the Null test can't:
-//   1. a lit dome COVERS the view + SHADES (normals + lit path work, not a flat fill);
-//   2. the scene's directional sun DRIVES the shading (flipping it inverts the asymmetry);
-//   3. LOD-seam SKIRTS plug see-through cracks (a skirtless mixed-LOD frame leaks the background).
-// Compilation is proven by the Null test; THIS proves correct pixels. Skips with no Vulkan GPU.
+// Terrain pixel-level ground truth on a real Vulkan device. Renders terrain through the full
+// RenderFrame chain, reads pixels back, and asserts render outcomes the Null test can't:
+//   1. a lit dome covers the view and shades (normals and the lit path work, not a flat fill);
+//   2. the scene's directional sun drives the shading (flipping it inverts the asymmetry);
+//   3. LOD-seam skirts plug see-through cracks (a skirtless mixed-LOD frame leaks the background).
+// The Null test covers compilation; this covers correct pixels. Skips with no Vulkan GPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -25,7 +25,7 @@ import foundation.render;
 import foundation.heightfield;
 import foundation.terrain;
 import foundation.texture.resource; // texture::Texture (Adopt) for in-memory albedo fixtures
-import foundation.terrain.resource; // SplatWeights + PaintTopK + TerrainPaletteData (top-K model)
+import foundation.terrain.resource; // SplatWeights, PaintTopK, TerrainPaletteData (top-K model)
 import engine.terrain;
 
 using namespace foundation::core;
@@ -71,16 +71,16 @@ namespace
         f32 fov = 1.0f;
         rhi::ClearColor clear = rhi::ClearColor::Black();
         bool skirts = true;
-        bool holeMask = true;               // P2: bind the R8 hole mask (false = geometry rule only)
-        const Float3* toLight = nullptr;    // dir TO the light; null = renderer fallback sun
+        bool holeMask = true;               // bind the R8 hole mask (false = geometry rule only)
+        const Float3* toLight = nullptr;    // direction to the light; null = renderer fallback sun
         const f32* thresholds = nullptr;    // LOD coverage thresholds override (null = default set)
         u32 thresholdCount = 0;
-        // Top-K splat material (all null / 0 = no material -> height-lit fallback).
+        // Top-K splat material (all null / 0 = no material, the height-lit fallback).
         rhi::TextureView* weightView = nullptr;     // RGBA8Unorm slot weights
         rhi::TextureView* indexView = nullptr;      // RGBA8Uint palette indices
-        rhi::TextureView* baseAlbedoView = nullptr; // the BASE layer (erase reveals)
-        rhi::TextureView* baseNormalView = nullptr; // BASE tangent-space normal map (terrain PBR)
-        rhi::TextureView* baseOrmView = nullptr;    // BASE ORM (R=AO G=rough B=metal)
+        rhi::TextureView* baseAlbedoView = nullptr; // the base layer (erase reveals)
+        rhi::TextureView* baseNormalView = nullptr; // base tangent-space normal map (terrain PBR)
+        rhi::TextureView* baseOrmView = nullptr;    // base ORM (R=AO G=rough B=metal)
         f32 baseTileScale = 1.0f;
         rhi::TextureView* paletteArrayView = nullptr; // Texture2DArray, one slice per layer
         rhi::TextureView* normalArrayView = nullptr;  // per-layer normal array (terrain PBR)
@@ -88,7 +88,7 @@ namespace
         rhi::TextureView* heightArrayView = nullptr;  // per-layer height array (height-blend)
         rhi::TextureView* maskArrayView = nullptr;    // per-layer coverage mask array (coverage-mask)
         f32 heightBlendContrast = 0.25f;              // soft-skirt width (only when a height map binds)
-        Float4x4 chunkToWorld = Float4x4::Identity(); // R2: the tangent frame follows THIS
+        Float4x4 chunkToWorld = Float4x4::Identity(); // the tangent frame follows this
         rhi::Buffer* tileScaleBuffer = nullptr;       // f32[paletteCount]
         u64 tileScaleGeneration = 0;
         u32 paletteCount = 0;
@@ -105,7 +105,7 @@ namespace
         f64 leftR = 0, leftB = 0, rightR = 0, rightB = 0; // per-channel halves (colour checks)
         f64 leftG = 0, rightG = 0;                        // green halves (mask-reveal A/B checks)
         // Band-centre channel means (x split into kBands, centre half of each band, centre half
-        // in y - clear of band boundaries and the terrain rim) for the >4-layer stripe fixture.
+        // in y, clear of band boundaries and the terrain rim) for the >4-layer stripe fixture.
         f64 bandR[kBands] = {};
         f64 bandG[kBands] = {};
         f64 bandB[kBands] = {};
@@ -137,7 +137,7 @@ namespace
             engine::terrain::TerrainHeightTextureCache heightCache;
             rhi::TextureView* heightView = heightCache.GetOrCreate(device, terrain, 1);
             REQUIRE(heightView != nullptr);
-            // Holed chunks' own index buffers (none for a solid field): Specs/terrain-holes.md.
+            // Holed chunks' own index buffers (none for a solid field).
             engine::terrain::TerrainHoledMeshCache holedCache;
             const Span<const engine::terrain::HoledChunkMesh> holed = holedCache.GetOrBuild(
                 device, terrain, Span<const tmodel::TerrainChunk>{chunks.Data(), chunks.Size()}, 1);
@@ -271,7 +271,7 @@ namespace
                     if (x < kSize / 2) { probe.leftR += p[0]; probe.leftG += p[1]; probe.leftB += p[2]; }
                     else { probe.rightR += p[0]; probe.rightG += p[1]; probe.rightB += p[2]; }
                     // Band-centre sums (the stripe fixture): centre half in y, centre half of
-                    // each band in x - clear of stripe-boundary bilinear blends + the rim.
+                    // each band in x, clear of stripe-boundary bilinear blends and the rim.
                     if (y >= kSize / 4 && y < kSize * 3 / 4)
                     {
                         constexpr u32 bandWidth = kSize / kBands;
@@ -308,8 +308,8 @@ namespace
         return backendOut != nullptr ? testsupport::MakeTestDevice(backendOut) : nullptr;
     }
 
-    // Render the dome on a backend and return its probe; {valid=false} if no device (skip). Owns the
-    // device (created + destroyed here); the caller owns the backend.
+    // Renders the dome on a backend and returns its probe; {valid=false} if no device (skip). Owns
+    // the device (created and destroyed here); the caller owns the backend.
     Probe DomeProbeOn(rhi::Backend* backend)
     {
         rhi::Device* device = backend != nullptr ? testsupport::MakeTestDevice(backend) : nullptr;
@@ -337,9 +337,9 @@ namespace
         CHECK(p.bottomLuma == doctest::Approx(ref.bottomLuma).epsilon(0.05));
     }
 
-    // Flat ground + a tall thin N-S ridge at the center X. A low +X sun makes the ridge cast a long
-    // shadow across the flat -X ground - a clean caster/receiver: the flat ground has a uniform normal,
-    // so any left/right darkening there is PURELY the cast shadow, not n.l shading.
+    // Flat ground and a tall thin N-S ridge at the center X. A low +X sun makes the ridge cast a long
+    // shadow across the flat -X ground, a clean caster and receiver: the flat ground has a uniform
+    // normal, so any left/right darkening there is purely the cast shadow, not n.l shading.
     RefPtr<hf::Heightfield> MakeRidge()
     {
         constexpr i32 n = 257;
@@ -357,7 +357,7 @@ namespace
         return h;
     }
 
-    // A flat terrain (constant mid height) - a clean canvas for the splat colour check.
+    // A flat terrain (constant mid height): a clean canvas for the splat colour check.
     RefPtr<hf::Heightfield> MakeFlat()
     {
         constexpr i32 n = 129;
@@ -373,8 +373,8 @@ namespace
         return h;
     }
 
-    // Wrap an RGBA8 texture (uploaded from `pixels`, w*h*4 bytes) as an in-memory texture::Texture
-    // (Adopt owns + frees the GPU objects on the returned RefPtr's destruction).
+    // Wraps an RGBA8 texture (uploaded from `pixels`, w*h*4 bytes) as an in-memory texture::Texture
+    // (Adopt owns and frees the GPU objects when the returned RefPtr is destroyed).
     RefPtr<texture::Texture> MakeRGBA(rhi::Device& device, u32 w, u32 h, const u8* pixels)
     {
         rhi::TextureDesc td{};
@@ -416,8 +416,7 @@ namespace
     }
 
     // A CPU weights raster of `bands` full-strength vertical stripes: stripe i is one-hot on
-    // PALETTE layer i. With bands > 4 this is a raster the retired fixed-4-layer model could not
-    // represent at all - the R5 fixture.
+    // palette layer i. With bands > 4 this needs more layers than four fixed splat slots allow.
     RefPtr<tmodel::SplatWeights> MakeStripeWeights(u32 bands)
     {
         constexpr i32 n = 32;
@@ -439,9 +438,9 @@ namespace
         return sw;
     }
 
-    // A weights raster with TWO active slots everywhere: slot 0 -> palette layer 0 at weight w0/255,
-    // slot 1 -> palette layer 1 at weight w1/255 (the base owns 1 - their sum). For the height-blend
-    // fixture: equal w0/w1 -> a 50/50 tie the height maps break.
+    // A weights raster with two active slots everywhere: slot 0 is palette layer 0 at weight w0/255,
+    // slot 1 is palette layer 1 at weight w1/255 (the base owns 1 minus their sum). For the
+    // height-blend fixture: equal w0/w1 make a 50/50 tie the height maps break.
     RefPtr<tmodel::SplatWeights> MakeTwoLayerWeights(u8 w0, u8 w1)
     {
         constexpr i32 n = 32;
@@ -492,8 +491,8 @@ namespace
         f64 leftGround = 0, rightGround = 0, total = 0; // luma over the flat ground bands
     };
 
-    // Render the ridge top-down under a low +X sun, optionally with a CSM ShadowSystem, and measure the
-    // luma of the flat ground on each side of the ridge (excluding the bright ridge stripe itself).
+    // Renders the ridge top-down under a low +X sun, optionally with a CSM ShadowSystem, and measures
+    // the luma of the flat ground on each side of the ridge (excluding the bright ridge stripe).
     ShadowProbe RenderShadowProbe(rhi::Device& device, bool shadowsEnabled)
     {
         ShadowProbe probe;
@@ -528,7 +527,7 @@ namespace
             rhi::TextureView* heightView = heightCache.GetOrCreate(device, *ridge, 1);
             REQUIRE(heightView != nullptr);
 
-            // Sun low from +X: direction TO light, then travel = -that.
+            // Sun low from +X: the direction to the light; the travel direction is its negation.
             const Float3 toLight = Normalized(Float3{0.9f, 0.42f, 0.0f});
             const Float3 travel = toLight * -1.0f;
 
@@ -675,7 +674,7 @@ TEST_CASE("terrain probe: a lit dome renders + shades on Vulkan")
     std::printf("[terrain-probe] filled=%u/%.0f left=%.0f right=%.0f top=%.0f bottom=%.0f\n",
                 p.filled, pixels, p.leftLuma, p.rightLuma, p.topLuma, p.bottomLuma);
 
-    CHECK(static_cast<f64>(p.filled) > pixels * 0.5); // it rendered + covers the view
+    CHECK(static_cast<f64>(p.filled) > pixels * 0.5); // it rendered and covers the view
     const f64 axisAsymmetry = Abs(p.leftLuma - p.rightLuma) + Abs(p.topLuma - p.bottomLuma);
     CHECK(axisAsymmetry > p.total * 0.02); // directional shading, not a flat fill
 
@@ -721,11 +720,11 @@ TEST_CASE("terrain probe: the scene's directional sun drives the shading (flip i
 
 TEST_CASE("terrain probe: every backend matches Vulkan (cross-backend shader-cook parity)")
 {
-    // Vulkan is the reference; every other backend we support must render the SAME dome pixel-for-
+    // Vulkan is the reference; every other backend we support must render the same dome pixel for
     // pixel (within driver rounding). This is where a shader-cook divergence surfaces: the integer
-    // Load on the R16Uint height texture (the load-bearing WebGPU/WGSL portability bet), the GBuffer
-    // MRT layout, or the normal/lit path differing between the SPIR-V, WGSL (WebGPU, desktop + web),
-    // and DXIL (DX12) frontends. GPUs are checked at runtime; each backend skips cleanly if absent.
+    // Load on the R16Uint height texture (which WebGPU/WGSL portability depends on), the GBuffer MRT
+    // layout, or the normal and lit path differing between the SPIR-V, WGSL (WebGPU, desktop and
+    // web) and DXIL (DX12) frontends. GPUs are checked at runtime; each backend skips if absent.
     rhi::Backend* vulkan = nullptr;
     (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
     rhi::Backend* webgpu = nullptr;
@@ -780,9 +779,9 @@ TEST_CASE("terrain probe: the ridge casts a CSM shadow onto the flat ground (cas
         return;
     }
 
-    // Same scene, shadows off then on. The flat ground has ONE normal, so without shadows both bands
-    // are equally lit; with the CSM the ridge darkens one side (its cast shadow). Terrain must both
-    // CAST (into the cascade) and RECEIVE (sample it) for this to appear.
+    // Same scene, shadows off then on. The flat ground has one normal, so without shadows both bands
+    // are equally lit; with the CSM the ridge darkens one side (its cast shadow). Terrain has to both
+    // cast (into the cascade) and receive (sample it) for this to appear.
     const ShadowProbe off = RenderShadowProbe(*device, /*shadowsEnabled*/ false);
     const ShadowProbe on = RenderShadowProbe(*device, /*shadowsEnabled*/ true);
     REQUIRE(off.valid);
@@ -802,10 +801,10 @@ TEST_CASE("terrain probe: the ridge casts a CSM shadow onto the flat ground (cas
     device->Destroy();
     vulkan->Destroy();
 
-    // WebGPU leg: the cascade-cast pass is where the live-CSM-bound-while-attached hazard lives
-    // (02b19cfc) - Vulkan tolerates the read+write bind, WebGPU rejects the pass. Running the SAME
-    // shadowed scene here is the regression net: with the bug, WebGPU drops the cast/receive work
-    // and the asymmetry vanishes.
+    // WebGPU leg: the cascade-cast pass is where binding the live CSM while it is attached would be
+    // a hazard. Vulkan tolerates the read and write bind; WebGPU rejects the pass. Running the same
+    // shadowed scene here catches it: with that bind, WebGPU drops the cast and receive work and the
+    // asymmetry vanishes.
     rhi::Backend* webgpuBackend = nullptr;
     (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpuBackend, DefaultAllocator());
     rhi::Device* webgpuDevice =
@@ -830,10 +829,9 @@ TEST_CASE("terrain probe: the ridge casts a CSM shadow onto the flat ground (cas
 TEST_CASE("terrain probe: SIX palette layers render distinct stripes (R5 - the 4-layer cap is gone)")
 {
     // Flat terrain, a 6-stripe one-hot weights raster (stripe i = palette layer i) and a 6-colour
-    // palette array. Six DISTINCT layers on one terrain is exactly what the retired fixed-4 model
-    // could not draw; every stripe must show its own palette colour, matching across Vulkan and
-    // WebGPU (the ruling-R5 pixel-parity requirement). GPU objects come through the PRODUCTION
-    // caches (splat pair + palette array + tileScale buffer).
+    // palette array: six distinct layers on one terrain. Every stripe shows its own palette colour,
+    // matching across Vulkan and WebGPU. GPU objects come through the production caches (splat
+    // pair, palette array, tileScale buffer).
     static const Float3 kColors[kBands] = {
         Float3{0.86f, 0.12f, 0.12f}, // red
         Float3{0.12f, 0.86f, 0.12f}, // green
@@ -905,8 +903,8 @@ TEST_CASE("terrain probe: SIX palette layers render distinct stripes (R5 - the 4
                     v.bandG[b], v.bandB[b]);
     }
 
-    // Classify each screen band by which channels are "on" (> 60% of the band max) and demand the
-    // palette order - forward or mirrored (flip-agnostic like the old half test).
+    // Classify each screen band by which channels are "on" (> 60% of the band max) and require the
+    // palette order, forward or mirrored (flip-agnostic).
     const auto bandClass = [](const Probe& p, u32 b) -> u32
     {
         const f64 mx = Max(p.bandR[b], Max(p.bandG[b], p.bandB[b]));
@@ -924,7 +922,7 @@ TEST_CASE("terrain probe: SIX palette layers render distinct stripes (R5 - the 4
         forward = forward && (bandClass(v, b) == expected[b]);
         mirrored = mirrored && (bandClass(v, b) == expected[kBands - 1 - b]);
     }
-    CHECK((forward || mirrored)); // all six DISTINCT layers appear, in palette order
+    CHECK((forward || mirrored)); // all six distinct layers appear, in palette order
 
     const Probe w = run(webgpu);
     if (w.valid)
@@ -947,11 +945,11 @@ TEST_CASE("terrain probe: SIX palette layers render distinct stripes (R5 - the 4
 
 TEST_CASE("terrain probe: painting the CPU weights re-uploads and changes the blended pixel")
 {
-    // The editor Splat Paint loop end-to-end: CPU SplatWeights -> the version-keyed GPU splat pair
-    // -> the top-K blend. All-zero weights over a red BASE renders red; PaintTopK raises palette 0
-    // (blue) and bumps the version, the cache re-uploads a NEW pair, and the SAME terrain now
-    // renders blue - proving the paint (and the erase-reveals-base direction in reverse) reached
-    // the GPU. Vulkan AND WebGPU (validate-on-WebGPU rule).
+    // The editor's Splat Paint loop end to end: CPU SplatWeights, then the version-keyed GPU splat
+    // pair, then the top-K blend. All-zero weights over a red base render red; PaintTopK raises
+    // palette 0 (blue) and bumps the version, the cache re-uploads a new pair, and the same terrain
+    // now renders blue, so the paint (and, in reverse, erase revealing the base) reached the GPU.
+    // Runs on Vulkan and WebGPU.
     auto run = [](rhi::Backend* backend, Probe& before, Probe& after)
     {
         rhi::Device* dev = (backend != nullptr) ? testsupport::MakeTestDevice(backend) : nullptr;
@@ -965,7 +963,7 @@ TEST_CASE("terrain probe: painting the CPU weights re-uploads and changes the bl
             RefPtr<tmodel::SplatWeights> sw =
                 MakeRef<tmodel::SplatWeights>(DefaultAllocator(), 8, 8); // all-zero = pure base
 
-            RefPtr<texture::Texture> red = MakeSolid(*dev, 220, 30, 30); // the BASE albedo
+            RefPtr<texture::Texture> red = MakeSolid(*dev, 220, 30, 30); // the base albedo
             const Float3 blue{0.12f, 0.12f, 0.86f};                      // palette 0
             RefPtr<tmodel::TerrainPaletteData> palette =
                 MakePaletteData(Span<const Float3>{&blue, 1});
@@ -983,15 +981,15 @@ TEST_CASE("terrain probe: painting the CPU weights re-uploads and changes the bl
             cfg.tileScaleGeneration = gpu.generation;
             cfg.paletteCount = 1;
 
-            // BEFORE: all-zero weights -> the BASE (red) across the terrain.
+            // Before: all-zero weights show the base (red) across the terrain.
             engine::terrain::SplatTextureViews views =
                 cache.GetOrCreate(*dev, *sw, sw->Version());
             cfg.weightView = views.weightView;
             cfg.indexView = views.indexView;
             before = RenderTerrainProbe(*dev, cfg);
 
-            // PAINT palette 0 over the whole footprint (a few dabs to converge one-hot), then
-            // re-fetch: the version bump makes the cache rebuild + re-upload a new pair.
+            // Paint palette 0 over the whole footprint (a few dabs to converge one-hot), then
+            // re-fetch: the version bump makes the cache rebuild and re-upload a new pair.
             for (i32 i = 0; i < 24; ++i)
             {
                 (void)tmodel::PaintTopK(*sw, 0.5f, 0.5f, 2.0f, 2.0f, 0u, 1.0f);
@@ -1024,7 +1022,7 @@ TEST_CASE("terrain probe: painting the CPU weights re-uploads and changes the bl
     std::printf("[terrain-splat-repaint] vk before(R=%.0f B=%.0f) after(R=%.0f B=%.0f)\n",
                 vBefore.leftR, vBefore.leftB, vAfter.leftR, vAfter.leftB);
 
-    // Seeded -> red-dominant; after painting layer 1 -> blue-dominant. The blend changed = the paint
+    // Seeded: red-dominant; after painting layer 1: blue-dominant. The blend changed, so the paint
     // re-uploaded to the GPU.
     CHECK(vBefore.leftR > vBefore.leftB * 1.5);
     CHECK(vBefore.rightR > vBefore.rightB * 1.5);
@@ -1051,11 +1049,11 @@ TEST_CASE("terrain probe: painting the CPU weights re-uploads and changes the bl
 
 TEST_CASE("terrain probe: a base normal map perturbs the flat-ground shading (R5 - Vk + WebGPU)")
 {
-    // A FLAT terrain has ONE geometric normal, so a directional sun shades it uniformly. A base
-    // normal map tilted toward world +X must make the ground respond to sun direction: a +X sun
-    // brightens it (vs the flat-normal control) and a -X sun darkens it. Proves the analytic tangent
-    // frame + the blend perturb the normal in the correct direction, and
-    // that the SampleGrad-on-array normal tap matches across Vulkan and WebGPU.
+    // A flat terrain has one geometric normal, so a directional sun shades it uniformly. A base
+    // normal map tilted toward world +X makes the ground respond to sun direction: a +X sun
+    // brightens it (compared with the flat-normal control) and a -X sun darkens it. Checks that the
+    // analytic tangent frame and the blend perturb the normal in the correct direction, and that the
+    // SampleGrad-on-array normal tap matches across Vulkan and WebGPU.
     auto run = [](rhi::Backend* backend, const Float3& toLight, bool withNormal) -> Probe
     {
         rhi::Device* dev = (backend != nullptr) ? testsupport::MakeTestDevice(backend) : nullptr;
@@ -1092,7 +1090,7 @@ TEST_CASE("terrain probe: a base normal map perturbs the flat-ground shading (R5
     rhi::Backend* webgpu = nullptr;
     (void)rhi::webgpu::CreateBackend(rhi::webgpu::WebGpuBackendDesc{}, webgpu, DefaultAllocator());
 
-    const Probe aPlus = run(vulkan, plusX, true); // normal + aligned sun
+    const Probe aPlus = run(vulkan, plusX, true); // normal, aligned sun
     if (!aPlus.valid)
     {
         MESSAGE("Vulkan unavailable - terrain normal-map probe skipped");
@@ -1100,7 +1098,7 @@ TEST_CASE("terrain probe: a base normal map perturbs the flat-ground shading (R5
         if (webgpu != nullptr) { webgpu->Destroy(); }
         return;
     }
-    const Probe aMinus = run(vulkan, minusX, true);  // normal + opposed sun
+    const Probe aMinus = run(vulkan, minusX, true);  // normal, opposed sun
     const Probe cPlus = run(vulkan, plusX, false);   // flat control, +X
     const Probe cMinus = run(vulkan, minusX, false); // flat control, -X
 
@@ -1130,14 +1128,14 @@ TEST_CASE("terrain probe: a base normal map perturbs the flat-ground shading (R5
 
 TEST_CASE("terrain probe: ARRAY normal + ORM blend through top-K, and the R2 rotation pin")
 {
-    // The per-LAYER (Texture2DArray) PBR path - which the base-normal probe does not touch, and
-    // exactly where the WGSL cook can diverge (SampleGrad on the second/third array):
-    //   1. a one-hot painted layer whose ARRAY normal tilts toward local +X shades directionally
+    // The per-layer (Texture2DArray) PBR path, which the base-normal probe does not touch, and
+    // where the WGSL cook can diverge (SampleGrad on the second and third array):
+    //   1. a one-hot painted layer whose array normal tilts toward local +X shades directionally
     //      (aligned sun brighter than opposed);
-    //   2. an ORM array with AO=0 kills the ambient term (darker than AO=1);
-    //   3. R2: on a 90-degree-ROTATED terrain the perturbation FOLLOWS the chunk frame - the
-    //      world-X sun pair becomes symmetric and the world-Z pair carries the asymmetry
-    //      (a world-axis tangent frame would keep it on X and shear);
+    //   2. an ORM array with AO=0 removes the ambient term (darker than AO=1);
+    //   3. on a 90-degree-rotated terrain the perturbation follows the chunk frame: the world-X
+    //      sun pair becomes symmetric and the world-Z pair carries the asymmetry (a world-axis
+    //      tangent frame would keep it on X and shear);
     //   4. WebGPU parity on the aligned case.
     auto run = [](rhi::Backend* backend, const Float3& toLight, u8 ao,
                   const Float4x4& chunkToWorld) -> Probe
@@ -1155,8 +1153,8 @@ TEST_CASE("terrain probe: ARRAY normal + ORM blend through top-K, and the R2 rot
             const Float3 gray{0.66f, 0.66f, 0.66f};
             RefPtr<tmodel::TerrainPaletteData> palette =
                 MakePaletteData(Span<const Float3>{&gray, 1});
-            // ARRAY normal: tangent-space (0.6, 0, 0.8) -> encoded (204, 128, 229); tilts the
-            // shading normal toward the map's U axis (= local +X rotated by chunkToWorld).
+            // Array normal: tangent-space (0.6, 0, 0.8), encoded (204, 128, 229); tilts the shading
+            // normal toward the map's U axis (local +X rotated by chunkToWorld).
             const usize sliceBytes = tmodel::TerrainPaletteData::SliceBytes(4, 1);
             palette->normalTexels.Resize(sliceBytes);
             palette->ormTexels.Resize(sliceBytes);
@@ -1225,24 +1223,24 @@ TEST_CASE("terrain probe: ARRAY normal + ORM blend through top-K, and the R2 rot
     const Probe aoDark = run(vulkan, plusX, 0, identity);
     std::printf("[terrain-arraypbr] +X=%.0f -X=%.0f ao0=%.0f\n", nPlus.total, nMinus.total,
                 aoDark.total);
-    // 1. The ARRAY normal makes flat ground directional (aligned sun brighter than opposed).
+    // 1. The array normal makes flat ground directional (aligned sun brighter than opposed).
     CHECK(nPlus.total > nMinus.total * 1.10);
-    // 2. AO=0 kills the ambient term (strictly darker with a real margin).
+    // 2. AO=0 removes the ambient term (strictly darker, with a margin).
     CHECK(aoDark.total < nPlus.total * 0.95);
 
-    // 3. R2 pin: rotate the terrain 90 degrees about Y - the perturbation follows the CHUNK frame,
-    // so the X-sun pair evens out and the Z-sun pair carries the asymmetry.
+    // 3. Rotate the terrain 90 degrees about Y: the perturbation follows the chunk frame, so the
+    // X-sun pair evens out and the Z-sun pair carries the asymmetry.
     const Probe rotPX = run(vulkan, plusX, 255, rotated);
     const Probe rotMX = run(vulkan, minusX, 255, rotated);
     const Probe rotPZ = run(vulkan, plusZ, 255, rotated);
     const Probe rotMZ = run(vulkan, minusZ, 255, rotated);
     std::printf("[terrain-arraypbr] rot +X=%.0f -X=%.0f +Z=%.0f -Z=%.0f\n", rotPX.total,
                 rotMX.total, rotPZ.total, rotMZ.total);
-    CHECK(rotPX.total == doctest::Approx(rotMX.total).epsilon(0.05)); // asymmetry LEFT world X
+    CHECK(rotPX.total == doctest::Approx(rotMX.total).epsilon(0.05)); // the asymmetry left world X
     const f64 zAsym = Abs(rotPZ.total - rotMZ.total);
-    CHECK(zAsym > 0.10 * rotPZ.total); // ... and moved to world Z (flip-agnostic magnitude)
+    CHECK(zAsym > 0.10 * rotPZ.total); // and moved to world Z (flip-agnostic magnitude)
 
-    // 4. WebGPU parity on the aligned array-normal case (naga divergence surface).
+    // 4. WebGPU parity on the aligned array-normal case (where naga can diverge).
     const Probe wPlus = run(webgpu, plusX, 255, identity);
     if (wPlus.valid)
     {
@@ -1259,12 +1257,12 @@ TEST_CASE("terrain probe: ARRAY normal + ORM blend through top-K, and the R2 rot
 
 TEST_CASE("terrain probe: height-blend biases the top-K toward the tallest layer (Vk + WebGPU)")
 {
-    // A flat 2-layer terrain, painted 50/50 (a tie the linear blend renders as an equal red/blue mix).
-    // Layer 0 = red, layer 1 = blue; each carries a CONSTANT height slice. With height-blend ON the
-    // tie breaks toward whichever layer is taller; swapping the tall slice flips the winner. The R6
-    // pin: with EQUAL heights the greater WEIGHT must win (the crossover sits at the weight tie, so an
-    // implementation that dropped the weight term from the score fails here). OFF (no height array)
-    // holds the linear 50/50 mix - anchoring that the height binding is what tips the result.
+    // A flat 2-layer terrain, painted 50/50 (a tie the linear blend renders as an equal red/blue
+    // mix). Layer 0 is red, layer 1 blue; each carries a constant height slice. With height blend on,
+    // the tie breaks toward whichever layer is taller; swapping the tall slice flips the winner. With
+    // equal heights the greater weight wins (the crossover sits at the weight tie, so an
+    // implementation that dropped the weight term from the score fails here). Off (no height array)
+    // holds the linear 50/50 mix, showing the height binding is what tips the result.
     auto run = [](rhi::Backend* backend, u8 h0, u8 h1, u8 w0, u8 w1, bool bindHeight,
                   f32 contrast) -> Probe
     {
@@ -1304,7 +1302,7 @@ TEST_CASE("terrain probe: height-blend biases the top-K toward the tallest layer
             REQUIRE(gpu.arrayView != nullptr);
             if (bindHeight)
             {
-                REQUIRE(gpu.heightArrayView != nullptr); // HasHeight() -> the cache built the array
+                REQUIRE(gpu.heightArrayView != nullptr); // HasHeight(): the cache built the array
             }
             cfg.weightView = views.weightView;
             cfg.indexView = views.indexView;
@@ -1341,7 +1339,7 @@ TEST_CASE("terrain probe: height-blend biases the top-K toward the tallest layer
     }
     const Probe blueTall = run(vulkan, 0, 255, 128, 128, true, 0.15f);
     const Probe off = run(vulkan, 255, 0, 128, 128, false, 0.15f);      // linear 50/50 control
-    const Probe weightWins = run(vulkan, 128, 128, 180, 60, true, 0.15f); // R6: equal height
+    const Probe weightWins = run(vulkan, 128, 128, 180, 60, true, 0.15f); // equal height
 
     std::printf("[terrain-heightblend] redTall(R=%.0f B=%.0f) blueTall(R=%.0f B=%.0f) "
                 "off(R=%.0f B=%.0f) weightWins(R=%.0f B=%.0f)\n",
@@ -1351,14 +1349,14 @@ TEST_CASE("terrain probe: height-blend biases the top-K toward the tallest layer
     // Taller layer wins the 50/50 tie; swapping the tall slice flips the winner.
     CHECK(R(redTall) > B(redTall) * 1.5);
     CHECK(B(blueTall) > R(blueTall) * 1.5);
-    // OFF control: the same 50/50 weights render an ~equal red/blue mix (no height steering)...
+    // Off control: the same 50/50 weights render an about equal red/blue mix (no height steering),
     CHECK(R(off) == doctest::Approx(B(off)).epsilon(0.15));
-    // ... and turning height-blend ON is what pushed red up (binding the array changed the result).
+    // and turning height blend on is what pushed red up (binding the array changed the result).
     CHECK(R(redTall) > R(off) * 1.2);
-    // R6: equal heights -> the greater WEIGHT wins (score keeps the weight term).
+    // Equal heights: the greater weight wins (the score keeps the weight term).
     CHECK(R(weightWins) > B(weightWins) * 1.5);
 
-    // WebGPU parity on the red-tall case (SampleGrad on the height array is a naga divergence surface).
+    // WebGPU parity on the red-tall case (SampleGrad on the height array is where naga can diverge).
     const Probe wRedTall = run(webgpu, 255, 0, 128, 128, true, 0.15f);
     if (wRedTall.valid)
     {
@@ -1376,13 +1374,13 @@ TEST_CASE("terrain probe: height-blend biases the top-K toward the tallest layer
 
 TEST_CASE("terrain probe: a coverage mask cuts a layer to reveal the base (Vk + WebGPU)")
 {
-    // A flat terrain, ONE palette layer (BLUE) painted one-hot over a distinct BASE (RED). A coverage
-    // mask with the layer's tileScale = the terrain world size (exactly one repeat spans the footprint,
-    // ruling R3) splits the footprint: the OPAQUE half renders the layer (blue), the ZERO half reveals
-    // the base (red). Flipping the mask swaps the halves; a uniform ZERO mask reveals base everywhere;
-    // no mask (OFF) renders the layer everywhere.
+    // A flat terrain, one palette layer (blue) painted one-hot over a distinct base (red). A coverage
+    // mask with the layer's tileScale equal to the terrain world size (exactly one repeat spans the
+    // footprint) splits the footprint: the opaque half renders the layer (blue), the zero half
+    // reveals the base (red). Flipping the mask swaps the halves; a uniform zero mask reveals base
+    // everywhere; no mask (off) renders the layer everywhere.
     enum Pattern { Off = 0, SplitA = 1, SplitB = 2, Cut = 3 };
-    constexpr f32 kWorld = 130.0f; // MakeFlat's world size -> one mask repeat spans the footprint
+    constexpr f32 kWorld = 130.0f; // MakeFlat's world size: one mask repeat spans the footprint
 
     auto run = [](rhi::Backend* backend, int pattern) -> Probe
     {
@@ -1417,8 +1415,8 @@ TEST_CASE("terrain probe: a coverage mask cuts a layer to reveal the base (Vk + 
                     }
                 }
             }
-            RefPtr<texture::Texture> red = MakeSolid(*dev, 230, 30, 30); // BASE albedo (revealed)
-            f32 scales[1] = {kWorld}; // one mask repeat across the footprint (R3)
+            RefPtr<texture::Texture> red = MakeSolid(*dev, 230, 30, 30); // base albedo (revealed)
+            f32 scales[1] = {kWorld}; // one mask repeat across the footprint
 
             ProbeCfg cfg;
             cfg.terrain = MakeFlat();
@@ -1430,7 +1428,7 @@ TEST_CASE("terrain probe: a coverage mask cuts a layer to reveal the base (Vk + 
             REQUIRE(gpu.arrayView != nullptr);
             if (pattern != Off)
             {
-                REQUIRE(gpu.maskArrayView != nullptr); // HasMask() -> the cache built the array
+                REQUIRE(gpu.maskArrayView != nullptr); // HasMask(): the cache built the array
             }
             cfg.weightView = views.weightView;
             cfg.indexView = views.indexView;
@@ -1474,19 +1472,19 @@ TEST_CASE("terrain probe: a coverage mask cuts a layer to reveal the base (Vk + 
                 R(off), B(off), R(cut), B(cut), splitA.leftB, splitA.leftR, splitA.rightB,
                 splitA.rightR, splitB.leftB, splitB.leftR, splitB.rightB, splitB.rightR);
 
-    // OFF: no mask -> the layer (blue) shows everywhere.
+    // Off: with no mask the layer (blue) shows everywhere.
     CHECK(B(off) > R(off) * 1.5);
-    // CUT: an all-zero mask reveals the BASE (red) everywhere - coverage falls to base.
+    // Cut: an all-zero mask reveals the base (red) everywhere; coverage falls to base.
     CHECK(R(cut) > B(cut) * 1.5);
-    // SPLIT: the two screen halves DIFFER - one shows the layer (blue), the other the base (red).
+    // Split: the two screen halves differ; one shows the layer (blue), the other the base (red).
     const bool aLeftBlue = splitA.leftB > splitA.leftR;
     const bool aRightBlue = splitA.rightB > splitA.rightR;
     CHECK(aLeftBlue != aRightBlue); // a real spatial split is present on screen
-    // FLIP: swapping the mask swaps which half shows the layer.
+    // Flip: swapping the mask swaps which half shows the layer.
     const bool bLeftBlue = splitB.leftB > splitB.leftR;
     CHECK(bLeftBlue != aLeftBlue);
 
-    // WebGPU parity on the split fixture (mask SampleGrad on the array is a naga divergence surface).
+    // WebGPU parity on the split fixture (mask SampleGrad on the array is where naga can diverge).
     const Probe wA = run(webgpu, SplitA);
     if (wA.valid)
     {
@@ -1505,11 +1503,11 @@ TEST_CASE("terrain probe: a coverage mask cuts a layer to reveal the base (Vk + 
 
 TEST_CASE("terrain probe: a +green base normal leans -Z (R5 - pins GL green-up, no author flip)")
 {
-    // Ruling R5: the terrain tangent frame's B = cross(n, T) points toward -Z, which under the
-    // top-left UV origin IS glTF/GL green-up - so Poly Haven `_nor_gl_` maps import AS-IS. Layer-pbr's
-    // probe pinned only the U axis (its test normal had green = 0); this pins the GREEN sign. A base
-    // normal tilted toward +green (128, 204, 229) must brighten under a -Z sun and darken under +Z.
-    // If this fails, fix B's sign in the SHADER - never ask authors to flip their maps.
+    // The terrain tangent frame's B = cross(n, T) points toward -Z, which under the top-left UV
+    // origin is glTF/GL green-up, so Poly Haven `_nor_gl_` maps import as they are. The layer PBR
+    // probe pins only the U axis (its test normal has green = 0); this pins the green sign. A base
+    // normal tilted toward +green (128, 204, 229) brightens under a -Z sun and darkens under +Z.
+    // If this fails, fix B's sign in the shader rather than asking authors to flip their maps.
     auto run = [](rhi::Backend* backend, const Float3& toLight, bool useNormal) -> Probe
     {
         rhi::Device* dev = (backend != nullptr) ? testsupport::MakeTestDevice(backend) : nullptr;
@@ -1568,9 +1566,9 @@ TEST_CASE("terrain probe: a +green base normal leans -Z (R5 - pins GL green-up, 
 
 TEST_CASE("terrain probe: no base albedo -> the RAMP is the implicit base (never white)")
 {
-    // A terrain with paint layers bound but NO base albedo and NOTHING painted must keep its
-    // fresh-terrain look: the height/slope ramp (greenish), not the white dummy - adding a paint
-    // layer may not flip the unpainted terrain to white (the setup-confusion fix).
+    // A terrain with paint layers bound but no base albedo and nothing painted keeps its
+    // fresh-terrain look: the height/slope ramp (greenish), not the white dummy. Adding a paint
+    // layer does not turn the unpainted terrain white.
     rhi::Backend* vulkan = nullptr;
     rhi::Device* device = MakeVulkan(vulkan);
     if (device == nullptr)
@@ -1599,7 +1597,7 @@ TEST_CASE("terrain probe: no base albedo -> the RAMP is the implicit base (never
         cfg.paletteArrayView = gpu.arrayView;
         cfg.tileScaleBuffer = gpu.tileScaleBuffer;
         cfg.tileScaleGeneration = gpu.generation;
-        cfg.paletteCount = 1; // hasWeights TRUE, hasBase FALSE - the confusing case
+        cfg.paletteCount = 1; // hasWeights true, hasBase false: the confusing case
         p = RenderTerrainProbe(*device, cfg);
         splatCache.Clear(*device);
         paletteCache.Clear(*device);
@@ -1607,20 +1605,20 @@ TEST_CASE("terrain probe: no base albedo -> the RAMP is the implicit base (never
     REQUIRE(p.valid);
     const f64 half = static_cast<f64>(kSize) * kSize / 2.0;
     std::printf("[terrain-rampbase] left R=%.1f B=%.1f per px\n", p.leftR / half, p.leftB / half);
-    CHECK(p.leftR / half < 150.0);     // NOT the white dummy (white lit reads near-saturated)
-    CHECK(p.leftR > p.leftB);          // the ramp is warm-green (R > B at low heightT)...
-    CHECK(p.filled > 30000u);          // ...and the terrain still rendered
+    CHECK(p.leftR / half < 150.0);     // not the white dummy (white lit reads near-saturated)
+    CHECK(p.leftR > p.leftB);          // the ramp is warm-green (R > B at low heightT)
+    CHECK(p.filled > 30000u);          // and the terrain still rendered
     device->Destroy();
     vulkan->Destroy();
 }
 
 TEST_CASE("terrain probe: a masked layer reveals the PAINTED layer beneath, not base (Vk + WebGPU)")
 {
-    // TWO painted palette layers - GROUND (red, layer 0) + GRASS (green, layer 1), each at ~0.5
-    // weight - over a distinct BASE (blue). GRASS carries a fully-ZERO coverage mask; GROUND has none
-    // (opaque). The freed grass coverage must flow to the painted GROUND (red), NOT the base canvas
-    // (blue): reveal what you painted. If the old dump-to-base behavior regressed, the base (blue)
-    // would dominate and this flips.
+    // Two painted palette layers, ground (red, layer 0) and grass (green, layer 1), each at about
+    // 0.5 weight, over a distinct base (blue). Grass carries a fully zero coverage mask; ground has
+    // none (opaque). The freed grass coverage flows to the painted ground (red), not the base canvas
+    // (blue): what you painted is revealed. If coverage went to the base instead, blue would
+    // dominate and this flips.
     auto run = [](rhi::Backend* backend, bool maskGrass) -> Probe
     {
         rhi::Device* dev = (backend != nullptr) ? testsupport::MakeTestDevice(backend) : nullptr;
@@ -1632,15 +1630,15 @@ TEST_CASE("terrain probe: a masked layer reveals the PAINTED layer beneath, not 
         {
             engine::terrain::TerrainSplatTextureCache splatCache;
             engine::terrain::TerrainPaletteTextureCache paletteCache;
-            RefPtr<tmodel::SplatWeights> sw = MakeTwoLayerWeights(128, 128); // ground + grass ~0.5 each
-            const Float3 colors[2] = {Float3{0.9f, 0.05f, 0.05f},  // layer 0 GROUND = red
-                                      Float3{0.05f, 0.9f, 0.05f}}; // layer 1 GRASS = green
+            RefPtr<tmodel::SplatWeights> sw = MakeTwoLayerWeights(128, 128); // ground and grass about 0.5 each
+            const Float3 colors[2] = {Float3{0.9f, 0.05f, 0.05f},  // layer 0 ground = red
+                                      Float3{0.05f, 0.9f, 0.05f}}; // layer 1 grass = green
             RefPtr<tmodel::TerrainPaletteData> palette = MakePaletteData(Span<const Float3>{colors, 2});
             const usize sliceBytes =
                 tmodel::TerrainPaletteData::SliceBytes(palette->sliceSize, palette->mipCount);
             if (maskGrass)
             {
-                // slice 0 (ground) OPAQUE, slice 1 (grass) fully ZERO -> grass coverage is freed.
+                // slice 0 (ground) opaque, slice 1 (grass) fully zero, so grass coverage is freed.
                 palette->maskTexels.Resize(sliceBytes * 2);
                 for (usize t = 0; t < sliceBytes; t += 4)
                 {
@@ -1650,7 +1648,7 @@ TEST_CASE("terrain probe: a masked layer reveals the PAINTED layer beneath, not 
                     r[0] = 0; r[1] = 0; r[2] = 0; r[3] = 255;
                 }
             }
-            RefPtr<texture::Texture> blue = MakeSolid(*dev, 30, 30, 230); // BASE (must NOT win)
+            RefPtr<texture::Texture> blue = MakeSolid(*dev, 30, 30, 230); // base (must not win)
             f32 scales[2] = {1000.0f, 1000.0f};
 
             ProbeCfg cfg;
@@ -1697,12 +1695,11 @@ TEST_CASE("terrain probe: a masked layer reveals the PAINTED layer beneath, not 
 
     std::printf("[terrain-reveal] masked-grass R(ground)=%.0f B(base)=%.0f\n", R(masked), B(masked));
 
-    // The freed grass coverage went to the painted GROUND (red), not the base (blue).
+    // The freed grass coverage went to the painted ground (red), not the base (blue).
     CHECK(R(masked) > B(masked) * 1.5);
 
-    // Unmasked A/B baseline: without the mask the same scene splits ground/grass evenly and the
-    // masked run's red total clearly exceeds it (proving the redistribution happened, not just
-    // "red exists").
+    // Unmasked A/B baseline: without the mask the same scene splits ground and grass evenly, and the
+    // masked run's red total clearly exceeds it (the redistribution happened, not just "red exists").
     const Probe unmasked = run(vulkan, false);
     REQUIRE(unmasked.valid);
     const auto G = [](const Probe& p) { return p.leftG + p.rightG; };
@@ -1710,7 +1707,7 @@ TEST_CASE("terrain probe: a masked layer reveals the PAINTED layer beneath, not 
                 B(unmasked));
     CHECK(G(unmasked) > B(unmasked));          // grass visible before masking
     CHECK(R(masked) > R(unmasked) * 1.3);      // masking grass boosted ground coverage
-    CHECK(G(masked) < G(unmasked) * 0.3);      // ...and actually removed the grass
+    CHECK(G(masked) < G(unmasked) * 0.3);      // and actually removed the grass
 
     const Probe wMasked = run(webgpu, true);
     if (wMasked.valid)
@@ -1727,7 +1724,7 @@ TEST_CASE("terrain probe: a masked layer reveals the PAINTED layer beneath, not 
     if (webgpu != nullptr) { webgpu->Destroy(); }
 }
 
-// Terrain holes (Specs/terrain-holes.md): a block of cut samples at the dome's centre draws
+// Terrain holes: a block of cut samples at the dome's centre draws
 // nothing there, so the clear colour shows through where the reference dome is lit.
 TEST_CASE("terrain holes probe: a cut at the dome's centre shows the clear colour - Vulkan + WebGPU")
 {
@@ -1755,9 +1752,9 @@ TEST_CASE("terrain holes probe: a cut at the dome's centre shows the clear colou
         CHECK(cut.centerLuma == 0.0);  // the hole: nothing drawn, black clear
         CHECK(cut.filled < ref.filled);
         CHECK(cut.filled > ref.filled / 2u); // the rest of the dome is still there
-        // P2, the alpha-tested rim: the same cut with the mask unbound draws the geometry rule
-        // alone (a quad stays while one corner is solid), so the ring the pixel shader discards
-        // - half a cell around the cut - comes back as filled pixels.
+        // The alpha-tested rim: the same cut with the mask unbound draws the geometry rule alone
+        // (a quad stays while one corner is solid), so the ring the pixel shader discards (half a
+        // cell around the cut) comes back as filled pixels.
         holed.holeMask = false;
         const Probe geometryOnly = RenderTerrainProbe(device, holed);
         REQUIRE(geometryOnly.valid);
@@ -1766,9 +1763,9 @@ TEST_CASE("terrain holes probe: a cut at the dome's centre shows the clear colou
         CHECK(geometryOnly.centerLuma == 0.0); // the centre block is inside the dropped quads
         CHECK(geometryOnly.filled > cut.filled + 64u); // the rim ring only the mask can remove
     };
-    // Vulkan runs WITH validation here: the HOLES depth PSO pairs the "terrain" VS with
-    // terrain_depth.ps, and a stage-interface mismatch between them is a validation ERROR the
-    // driver otherwise tolerates (the prepass then discards by garbage). Zero errors, or fail.
+    // Vulkan runs with validation here: the HOLES depth PSO pairs the "terrain" VS with
+    // terrain_depth.ps, and a stage-interface mismatch between them is a validation error the
+    // driver otherwise tolerates (the prepass then discards by garbage). Any error fails the test.
     rhi::Backend* vulkan = nullptr;
     (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{.enableValidation = true}, vulkan);
     if (rhi::Device* device = vulkan != nullptr ? testsupport::MakeTestDevice(vulkan) : nullptr)

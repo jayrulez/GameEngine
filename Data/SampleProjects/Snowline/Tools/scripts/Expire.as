@@ -1,5 +1,6 @@
-// Expire - removes its entity once it has lived `life` seconds: on a one-shot effect's prefab
-// (Prefabs/GemSparkle, gems.py), so a spawned burst does not stay in the scene after it is spent.
+// Expire: removes its entity once it has lived `life` seconds. It sits on a one-shot effect's
+// prefab (Prefabs/GemSparkle, from gems.py), so a spawned burst does not stay in the scene after it
+// is spent.
 class Expire
 {
     private Entity@ self;

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The script-backend CONFORMANCE BATTERY: every registered backend
-// must pass this against its own language dialect - a backend is DONE when this is
-// green, never "hopefully it works". Include from a doctest TU and call
-// RunScriptBackendConformance inside a TEST_CASE.
+// The script-backend conformance battery: every registered backend must pass it against
+// its own language dialect. Include from a doctest TU and call RunScriptBackendConformance
+// inside a TEST_CASE.
 //
-// The battery certifies the CONTEXT contract: manager/context lifecycle, the two-phase
-// type registration flow, load/compile/runtime error reporting through the handler,
-// Variant marshalling both ways, script-class instantiation + method dispatch, context
-// isolation, services, and GC hooks. Reflected-type EMISSION (foreign classes for
-// engine types) is certified separately per backend by porting the reflected-type
-// suite - class syntax differs too much per language to share source.
+// The battery certifies the context contract: manager and context lifecycle, the two-phase
+// type registration flow, load, compile and runtime error reporting through the handler,
+// Variant marshalling both ways, script-class instantiation and method dispatch, context
+// isolation, services, and GC hooks. Reflected-type emission (foreign classes for engine
+// types) is certified separately per backend by its own reflected-type suite, since class
+// syntax differs too much per language to share source.
 #pragma once
 
 #include <doctest/doctest.h>
@@ -25,8 +24,8 @@ namespace foundation::script::conformance
 {
     using namespace foundation::core;
 
-    // A real native API that takes a script function as a typed callback (the delegate
-    // seam's "user"): an event a behavior subscribes to, that native code later fires.
+    // A real native API that takes a script function as a typed callback: an event a
+    // behavior subscribes to, that native code later fires.
     // Certified below on every backend that declares ScriptCapabilities::Delegates.
     class DelegateSignal : public Object
     {
@@ -52,18 +51,18 @@ namespace foundation::script::conformance
             return (returned != nullptr) ? *returned : 0.0;
         }
 
-        // The stored delegate (so a test can invoke it directly from C++). Not reflected -
-        // returning a delegate to script is not part of the seam.
+        // The stored delegate (so a test can invoke it directly from C++). Not reflected:
+        // returning a delegate to script is not supported.
         [[nodiscard]] RefPtr<IScriptDelegate> Handler() const { return m_handler; }
 
     private:
         RefPtr<IScriptDelegate> m_handler;
     };
 
-    // Overloaded methods for the overloadedName contract. `ping` is an ARITY FAMILY (0-arg and
-    // 1-arg share the script name, dispatched by argument count); `combine` is a same-arity TYPE
-    // overload split by a distinct overloadedName (`combine` + `combineText`). Registered on demand
-    // (never a global-registry type), like DelegateSignal.
+    // Overloaded methods for the overloadedName contract. `ping` is an arity family (0-arg and
+    // 1-arg share the script name, dispatched by argument count); `combine` is a same-arity type
+    // overload split by a distinct overloadedName (`combine` and `combineText`). Registered on
+    // demand (never a global-registry type), like DelegateSignal.
     class Overloads : public Object
     {
         RTTI_OBJECT(Overloads, Object)
@@ -87,8 +86,8 @@ namespace foundation::script::conformance
     }
 
     // Violates the contract: two methods on the same (name, arity, static) with no distinct
-    // overloadedName. Only the pure collision check runs on it - never registered with a manager
-    // (that would trap FinalizeTypes, which is exactly the contract).
+    // overloadedName. Only the pure collision check runs on it; it is never registered with a
+    // manager, because FinalizeTypes would trap on it.
     class Colliding : public Object
     {
         RTTI_OBJECT(Colliding, Object)
@@ -105,8 +104,8 @@ namespace foundation::script::conformance
     }
 
     // Container-member contract fixtures: a reflected Array member binds as
-    // owner ops (`items_count/_at/_add/_removeAt/_move`) with ZERO-based indices and
-    // WRITE-THROUGH element handles on every backend - one contract, no per-backend container
+    // owner ops (`items_count/_at/_add/_removeAt/_move`) with zero-based indices and
+    // write-through element handles on every backend: one contract, no per-backend container
     // semantics. Registered on demand, like DelegateSignal.
     struct CrateItem
     {
@@ -155,7 +154,7 @@ namespace foundation::script::conformance
         builder.Property<&Square::edge>("edge");
     }
 
-    // Gone-handle contract fixtures: a script holds a Lamp by a RESOLVE-mode handle (a slot and a
+    // Gone-handle contract fixtures: a script holds a Lamp by a resolve-mode handle (a slot and a
     // generation into a native table, as an element or a component is held), so the native side
     // can take the lamp away while the script still holds it. Registered on demand.
     class Lamp : public Object
@@ -210,15 +209,15 @@ namespace foundation::script::conformance
         builder.Method<&Lamp::Take, Lamp>("take");
     }
 
-    /// The language-specific sources. Every snippet implements a FIXED contract:
+    /// The language-specific sources. Every snippet implements a fixed contract:
     ///  - functionsModule: function `add(a, b)` returning a + b, function `greeting()`
     ///    returning the string "hi", a module global `answer` readable as 42.
     ///  - counterClass: class `Counter`, constructed with one number, method
     ///    `increment()` adding 1, zero-arg method `value()` returning the count.
-    ///  - compileBroken: source that CANNOT compile.
+    ///  - compileBroken: source that cannot compile.
     ///  - runtimeFault: source that compiles but faults at load/run time.
     ///  - coroutineClass (optional; certified only when the backend declares the
-    ///    Coroutines capability): a class `Coro`, constructed with NO args, with methods
+    ///    Coroutines capability): a class `Coro`, constructed with no args, with methods
     ///    `begin()` starting a coroutine that waits ~1.0s then sets progress to 1,
     ///    `beginUntil()` starting a coroutine that waitUntil-s a predicate then sets
     ///    progress to 1, `flip()` making that predicate true, and `progress()` returning
@@ -230,23 +229,23 @@ namespace foundation::script::conformance
         StringView counterClass;
         StringView compileBroken;
         StringView runtimeFault;
-        StringView coroutineClass; // optional - see the Coroutines section below
+        StringView coroutineClass; // optional; see the Coroutines section below
         // Optional (certified only when the backend declares the Delegates capability):
         // source that creates a global `signal` of the native DelegateSignal type and
-        // subscribes a function computing value * 2 (via the backend's own callable syntax -
-        // e.g. an AngelScript funcdef handle).
+        // subscribes a function computing value * 2 (via the backend's own callable syntax,
+        // such as an AngelScript funcdef handle).
         StringView delegateModule;
         // Optional overload-contract module: constructs a global `over` of the native Overloads
-        // type and computes module globals `OP0 = over.ping()` (-> 1), `OP1 = over.ping(5)` (-> 105,
-        // the arity family), `OC = over.combine(2, 3)` (-> 5), `OCT = over.combineText("x", 7)`
-        // (-> 7, the distinct-name overload). Via the backend's own construct + method-call syntax.
+        // type and computes module globals `OP0 = over.ping()` (1), `OP1 = over.ping(5)` (105,
+        // the arity family), `OC = over.combine(2, 3)` (5), `OCT = over.combineText("x", 7)`
+        // (7, the distinct-name overload), in the backend's own construct and method-call syntax.
         StringView overloadModule;
         // Optional container-member module: constructs a global `crate` of the native Crate type,
-        // adds two items via `items_add` setting sizes 5 and 9 THROUGH THE RETURNED HANDLES, then
-        // computes module globals: KN = items_count() (-> 2), KZ = items_at(0).size (-> 5,
-        // zero-based), then items_move(1, 0), KM = items_at(0).size (-> 9), then items_removeAt(0),
-        // KR = items_count() (-> 1), KL = items_at(0).size (-> 5). KZ/KM/KL only pass when
-        // mutations through returned handles WROTE THROUGH into the container.
+        // adds two items via `items_add` setting sizes 5 and 9 through the returned handles, then
+        // computes module globals: KN = items_count() (2), KZ = items_at(0).size (5,
+        // zero-based), then items_move(1, 0), KM = items_at(0).size (9), then items_removeAt(0),
+        // KR = items_count() (1), KL = items_at(0).size (5). KZ, KM and KL only pass when
+        // mutations through returned handles wrote through into the container.
         StringView containerModule;
         // Optional gone-handle module: a global `lamp` from `Lamp.take(0)` (the backend's static
         // call syntax) and four zero-arg functions: `valid()` returning 1 when `lamp:isValid()`
@@ -255,14 +254,14 @@ namespace foundation::script::conformance
         // the script's error, in every backend.
         StringView goneModule;
         // Optional inheritance module: constructs a global `square` of the native Square type and
-        // computes module globals IA = square.sides (-> 4, the base's property), IB = square.twice()
-        // (-> 8, the base's method) and IC = square.edge (-> 3, its own).
+        // computes module globals IA = square.sides (4, the base's property), IB = square.twice()
+        // (8, the base's method) and IC = square.edge (3, its own).
         StringView inheritModule;
         // Optional (certified only when the backend declares the Debugger capability): a module
         // with a zero-arg entry function `debugFunction`. Execution reaching `debugBreakLine`
         // (1-based, in the section named `debugSection`) must have a local named `debugLocalName`
         // in scope whose captured display text equals `debugLocalValue`. The line above the break
-        // must NOT be the last line (Step lands on a further line, then Continue completes).
+        // must not be the last line (Step lands on a further line, then Continue completes).
         StringView debugModule;
         StringView debugSection;
         StringView debugFunction;
@@ -271,9 +270,9 @@ namespace foundation::script::conformance
         i32 debugBreakLine = 0;
     };
 
-    // Reflected so a script can construct/subscribe it; StaticType() lives in this header
+    // Reflected so a script can construct and subscribe it; StaticType() lives in this header
     // (single TU per test executable). It is registered with the manager on demand, never a
-    // global-registry type - so the introspection diff never demands a backend bind it.
+    // global-registry type, so the introspection diff never demands a backend bind it.
     REFLECT_MEMBERS(DelegateSignal, "rtti::script::conformance")
     {
         builder.Constructor();
@@ -312,19 +311,19 @@ namespace foundation::script::conformance
     inline void RunScriptBackendConformance(const Function<RefPtr<IScriptManager>()>& factory,
                                             const Dialect& dialect)
     {
-        // --- manager + two-phase type registration (collect, then finalize) ---
+        // --- manager and two-phase type registration (collect, then finalize) ---
         RegisterCoreTypes(); // self-contained: the introspection diff below
                              // needs the global registry populated (idempotent)
         RefPtr<IScriptManager> manager = factory();
         REQUIRE(manager.Get() != nullptr);
-        RegisterReflectedTypes(*manager); // walks the registry + FinalizeTypes()
+        RegisterReflectedTypes(*manager); // walks the registry, then FinalizeTypes()
 
-        // --- context + valid load ---
+        // --- context and a valid load ---
         RefPtr<IScriptContext> scriptContext = manager->CreateContext();
         REQUIRE(scriptContext.Get() != nullptr);
         CHECK(scriptContext->Load(dialect.functionsModule, u8"conformance.functions").IsOk());
 
-        // --- Variant marshalling: numbers in/out, strings out, missing = NotFound ---
+        // --- Variant marshalling: numbers in and out, strings out, missing is NotFound ---
         {
             Variant args[] = {Variant::From(2), Variant::From(3)};
             auto sum = scriptContext->Call(u8"add", Span<Variant>{args, 2});
@@ -342,8 +341,8 @@ namespace foundation::script::conformance
         CHECK(scriptContext->GetGlobal(u8"answer").Get<f64>() == doctest::Approx(42.0));
 
         // --- script classes: construct with args, invoke methods, state persists.
-        // NOTE the contract does NOT promise a later Load preserves an earlier load's
-        // globals (some backends replace the module) - only that live ScriptObjects survive. ---
+        // The contract does not promise a later Load preserves an earlier load's globals
+        // (some backends replace the module), only that live ScriptObjects survive. ---
         CHECK(scriptContext->Load(dialect.counterClass, u8"conformance.counter").IsOk());
         RefPtr<ScriptObject> counter;
         {
@@ -356,7 +355,7 @@ namespace foundation::script::conformance
             CHECK(value.Value().Get<f64>() == doctest::Approx(11.0));
         }
 
-        // --- error reporting: compile + runtime kinds through the handler ---
+        // --- error reporting: compile and runtime kinds through the handler ---
         {
             RefPtr<IScriptContext> errorContext = manager->CreateContext();
             CapturedErrors errors;
@@ -378,7 +377,7 @@ namespace foundation::script::conformance
             CHECK_FALSE(other->HasFunction(u8"add"));
         }
 
-        // --- per-context services: pointer round-trip, unknown = null ---
+        // --- per-context services: pointer round-trip, unknown is null ---
         {
             int payload = 7;
             scriptContext->SetService(u8"conformance.service", &payload);
@@ -396,7 +395,7 @@ namespace foundation::script::conformance
             CHECK(value.Value().Get<f64>() == doctest::Approx(11.0));
         }
 
-        // --- Coroutines (certified ONLY when the backend advertises the capability;
+        // --- Coroutines (certified only when the backend advertises the capability;
         // the flag advertises, this section certifies the behavior) ---
         if (HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Coroutines) &&
             !dialect.coroutineClass.IsEmpty())
@@ -408,7 +407,7 @@ namespace foundation::script::conformance
                 return p.Value().Get<f64>();
             };
 
-            // (1) a timed wait: does NOT complete before ~1s of accumulated advance, DOES after.
+            // (1) a timed wait: does not complete before ~1s of accumulated advance, does after.
             {
                 RefPtr<IScriptContext> coroutineContext = manager->CreateContext();
                 REQUIRE(coroutineContext.Get() != nullptr);
@@ -425,7 +424,7 @@ namespace foundation::script::conformance
                 {
                     manager->AdvanceCoroutines(0.1);
                 } // +1.2s past 1.0
-                CHECK(progressOf(coro) == doctest::Approx(1.0)); // resumed + ran
+                CHECK(progressOf(coro) == doctest::Approx(1.0)); // resumed and ran
             }
 
             // (2) waitUntil resumes when the predicate flips (not before).
@@ -439,13 +438,13 @@ namespace foundation::script::conformance
                 {
                     manager->AdvanceCoroutines(0.1);
                 }
-                CHECK(progressOf(coro) == doctest::Approx(0.0)); // predicate false -> pending
+                CHECK(progressOf(coro) == doctest::Approx(0.0)); // predicate false: pending
                 REQUIRE(coro->Invoke(u8"flip", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 3; ++i)
                 {
                     manager->AdvanceCoroutines(0.1);
                 }
-                CHECK(progressOf(coro) == doctest::Approx(1.0)); // predicate flipped -> resumed
+                CHECK(progressOf(coro) == doctest::Approx(1.0)); // predicate flipped: resumed
             }
 
             // (3) CancelCoroutinesFor stops a pending coroutine (it never completes after).
@@ -465,15 +464,15 @@ namespace foundation::script::conformance
                 {
                     manager->AdvanceCoroutines(0.1);
                 } // 2s must not run
-                CHECK(progressOf(coro) == doctest::Approx(0.0)); // cancelled -> never completes
+                CHECK(progressOf(coro) == doctest::Approx(0.0)); // cancelled: never completes
             }
         }
 
         // --- Backend API introspection: the reflection-vs-backend diff ---
         // Every reflected engine type the manager bound must appear in the surface it
-        // reports; a type present in the registry but ABSENT from the surface is a backend
+        // reports; a type present in the registry but absent from the surface is a backend
         // that silently failed to bind it. Restrict to types both backends actually bind
-        // (constructible, valid identifier, not a primitive / enum / container).
+        // (constructible, a valid identifier, not a primitive, enum or container).
         {
             const Array<ScriptApiType> surface = manager->DescribeBoundApi();
             CHECK_FALSE(surface.IsEmpty()); // a backend that registered types bound something
@@ -532,10 +531,10 @@ namespace foundation::script::conformance
             DelegateSignal* signal = signalVar.AsObject<DelegateSignal>();
             REQUIRE(signal != nullptr);
 
-            // (1) native code fires the event -> the subscribed script function runs.
+            // (1) native code fires the event, and the subscribed script function runs.
             CHECK(signal->Emit(21.0) == doctest::Approx(42.0));
 
-            // (2) invoke the stored delegate DIRECTLY from C++ and check the returned Variant.
+            // (2) invoke the stored delegate directly from C++ and check the returned Variant.
             RefPtr<IScriptDelegate> handler = signal->Handler();
             REQUIRE(handler.Get() != nullptr);
             {
@@ -551,11 +550,11 @@ namespace foundation::script::conformance
         }
 
         // --- Overloaded methods (the overloadedName contract): arity families dispatch by
-        // argument COUNT, and same-arity type overloads carry distinct script names. Certified on
-        // EVERY backend - one script surface, no per-backend overload resolution. ---
+        // argument count, and same-arity type overloads carry distinct script names. Certified on
+        // every backend: one script surface, no per-backend overload resolution. ---
         if (!dialect.overloadModule.IsEmpty())
         {
-            // The validator: a clean type (arity family + distinct name) has no collision; a
+            // The validator: a clean type (arity family and distinct name) has no collision; a
             // same-(name, arity, static) pair without distinct names does. Backend-independent, but
             // asserted here so every backend's suite exercises the contract.
             CHECK(FindScriptMethodNameCollision(Overloads::StaticType()) == nullptr);
@@ -566,8 +565,8 @@ namespace foundation::script::conformance
             REQUIRE(octx.Get() != nullptr);
             REQUIRE(octx->Load(dialect.overloadModule, u8"main").IsOk());
 
-            CHECK(octx->GetGlobal(u8"OP0").Get<f64>() == doctest::Approx(1.0));   // ping()  - arity 0
-            CHECK(octx->GetGlobal(u8"OP1").Get<f64>() == doctest::Approx(105.0)); // ping(5) - arity 1
+            CHECK(octx->GetGlobal(u8"OP0").Get<f64>() == doctest::Approx(1.0));   // ping(), arity 0
+            CHECK(octx->GetGlobal(u8"OP1").Get<f64>() == doctest::Approx(105.0)); // ping(5), arity 1
             CHECK(octx->GetGlobal(u8"OC").Get<f64>() == doctest::Approx(5.0));    // combine
             CHECK(octx->GetGlobal(u8"OCT").Get<f64>() == doctest::Approx(7.0));   // combineText
         }
@@ -647,18 +646,18 @@ namespace foundation::script::conformance
             gctx->SetErrorHandler(nullptr);
         }
 
-        // --- Committed seams (skipped when the capability is absent - the default). Turning
-        // one on later immediately has a certification target here. ---
+        // --- Optional capabilities: Debugger, Profiler, Bytecode (each certified when declared,
+        // otherwise its factory must return null or NotSupported). ---
         if (HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Debugger))
         {
             UniquePtr<IScriptDebugger> debugger = manager->CreateDebugger();
             REQUIRE(debugger.Get() != nullptr); // a real debugger when declared
 
-            // LIVE certification: set a breakpoint, drive execution, assert it stops at the
-            // line (state=Breakpoint), capture the call stack + a known local, step to the
-            // next line (state=Stepped), continue to completion (state=Terminated). Headless -
-            // the context is driven directly, no editor. (Backends without a debug dialect
-            // certify only the factory above.)
+            // Live certification: set a breakpoint, drive execution, assert it stops at the
+            // line (state Breakpoint), capture the call stack and a known local, step to the
+            // next line (state Stepped), continue to completion (state Terminated). Headless:
+            // the context is driven directly, with no editor. Backends without a debug dialect
+            // certify only the factory above.
             if (!dialect.debugModule.IsEmpty())
             {
                 struct StateSink final : IScriptDebuggerListener
@@ -678,7 +677,7 @@ namespace foundation::script::conformance
                 REQUIRE(debugCtx->Load(dialect.debugModule, dialect.debugSection).IsOk());
                 debugger->SetBreakpoint(dialect.debugSection, dialect.debugBreakLine);
 
-                // The call SUSPENDS at the breakpoint (it does NOT run to completion): the
+                // The call suspends at the breakpoint (it does not run to completion): the
                 // debugger now owns the context, and the listener has seen Breakpoint.
                 (void)debugCtx->Call(dialect.debugFunction, Span<Variant>{});
                 CHECK(sink.last == ScriptDebuggerState::Breakpoint);
@@ -711,7 +710,7 @@ namespace foundation::script::conformance
         }
         else
         {
-            CHECK(manager->CreateDebugger().Get() == nullptr); // absent seam: null factory
+            CHECK(manager->CreateDebugger().Get() == nullptr); // capability absent: null factory
         }
 
         if (HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Profiler))
@@ -731,7 +730,7 @@ namespace foundation::script::conformance
         else
         {
             auto blob = manager->CompileToBlob(u8"", u8"conformance.blob");
-            CHECK(blob.Error() == ErrorCode::NotSupported); // absent seam: unsupported
+            CHECK(blob.Error() == ErrorCode::NotSupported); // capability absent: unsupported
         }
     }
 }

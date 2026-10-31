@@ -5,7 +5,7 @@
 // through MaterialAssetBuilder into an output content DB, and verify the cooked MaterialSource.
 // On a built-in shader the authored layout is the product's; on a custom shader the shader's
 // cooked property table lays the product out and the authored material supplies the values. No
-// GPU/DXC - pure authoring data.
+// GPU or DXC: pure authoring data.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -87,7 +87,7 @@ TEST_CASE("material editor: cooks a MaterialAsset on a built-in shader -> Materi
         CHECK(cooked->propertyNames[1] == u8"metallic");
         CHECK(cooked->propertyNames[2] == u8"albedoMap");
         CHECK(cooked->propertyTypes[2] == static_cast<u8>(MaterialPropertyType::Texture2D));
-        REQUIRE(cooked->uniformDefaults.Size() == 32); // float4 + float, 16-byte rounded
+        REQUIRE(cooked->uniformDefaults.Size() == 32); // float4 and float, 16-byte rounded
         CHECK(*reinterpret_cast<const f32*>(cooked->uniformDefaults.Data() + 16) ==
               doctest::Approx(0.7f));
     }
@@ -183,7 +183,7 @@ TEST_CASE("material editor: a material on a custom shader is laid out by the sha
     CHECK(at(16) == doctest::Approx(1.0f)); // RimColor: new, the shader's default
     CHECK(at(32) == doctest::Approx(5.0f)); // Bands: the authored value at its new offset
     CHECK(at(36) == doctest::Approx(0.25f)); // Tint: retyped, the shader's default
-    // Steps: retyped float -> int at the same size, so the shader's default, written as an int.
+    // Steps: retyped from float to int at the same size, so the shader's default, written as an int.
     CHECK(*reinterpret_cast<const i32*>(cooked->uniformDefaults.Data() + 40) == 7);
     REQUIRE(cooked->textureSlots.Size() == 1u);
     CHECK(cooked->textureSlots[0] == u8"AlbedoMap");
@@ -197,8 +197,8 @@ TEST_CASE("material editor: a material on a custom shader is laid out by the sha
 TEST_CASE("material editor: MaterialAsset exposes MaterialSource as a NESTED property (recurse)")
 {
     // MaterialSource derives Object (non-copyable), so MaterialAsset wraps it as a Nested
-    // property - the reflection-track "living proof". Tooling reaches it via address and
-    // recurses into the source's own reflected scalars rather than reading it by value.
+    // property. Tooling reaches it through its address and recurses into the source's own
+    // reflected scalars rather than reading it by value.
     const PropertyInfo* srcProp = FindProperty(MaterialAsset::StaticType(), "source");
     REQUIRE(srcProp != nullptr);
     CHECK(IsNested(*srcProp));
@@ -213,7 +213,7 @@ TEST_CASE("material editor: MaterialAsset exposes MaterialSource as a NESTED pro
     // A nested member is never read by value: get is empty.
     CHECK(GetProperty(*srcProp, assetInst).IsEmpty());
 
-    // Recurse: address -> the live MaterialSource in place -> read its reflected scalars.
+    // Recurse: through the address to the live MaterialSource in place, then read its reflected scalars.
     void* srcAddr = srcProp->address(assetInst);
     REQUIRE(srcAddr != nullptr);
     const Instance srcInst(srcAddr, srcProp->type);
@@ -238,7 +238,7 @@ TEST_CASE("material editor: retyped render-state fields reflect as NAMED enums (
     const PropertyInfo* cullProp = FindProperty(MaterialSource::StaticType(), "cullMode");
     REQUIRE(cullProp != nullptr);
     CHECK(IsEnum(*cullProp->type));
-    CHECK(Enumerators(*cullProp->type).Size() == 3u); // None/Back/Front
+    CHECK(Enumerators(*cullProp->type).Size() == 3u); // None, Back, Front
 }
 
 // The layout the cook applies, called directly (the editor previews a shader's material and
@@ -369,7 +369,7 @@ TEST_CASE("material editor: a PBR material put on the built-in Phong keeps its c
     CHECK(pbr.source.textureIds[1] == normal);
 }
 
-// The effect groups follow the shader's vertex variants (Specs/wind-for-every-shader.md): a
+// The effect groups follow the shader's vertex variants: a
 // material moved between two shaders that declare WIND keeps its Wind group, values and all; one
 // moved to a shader that does not, loses it.
 namespace

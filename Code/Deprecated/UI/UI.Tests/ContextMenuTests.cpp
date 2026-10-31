@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ContextMenuTests.bf (faithful). Beef `delegate void()` -> Function<
-// void()>; Beef nullable String -> empty String check; MenuItem.CreateSeparator returns UniquePtr; menu
-// item/submenu structure only (no popup, no font).
+// ContextMenu tests: menu item and submenu structure, scrolling and keyboard navigation (no
+// font). MenuItem.CreateSeparator returns a UniquePtr.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -76,9 +75,9 @@ TEST_CASE("context-menu: IsFocusable")
 
 TEST_CASE("context-menu: Show resets the stale hover highlight")
 {
-    // Menus are retained views (a menu bar reuses its instances): hover from the previous
-    // open must NOT survive into the next Show - the regression was "Close Project" still
-    // highlighted when reopening the File menu after a project close/reopen.
+    // Menus are retained views (a menu bar reuses its instances), so hover from the previous
+    // opening must not survive into the next Show: an item would still be highlighted when the
+    // menu reopens.
     auto menu = MakeMenu();
     menu->AddItem(u8"Open", {});
     menu->AddItem(u8"Close Project", {});
@@ -89,7 +88,7 @@ TEST_CASE("context-menu: Show resets the stale hover highlight")
     menu->OnMouseMove(move);
     REQUIRE(menu->HoveredIndex() >= 0);
 
-    UIContext ctx{DefaultAllocator()}; // no active root: Show early-outs, but AFTER clearing the hover
+    UIContext ctx{DefaultAllocator()}; // no active root: Show returns early, but after clearing the hover
     menu->Show(&ctx, 0.0f, 0.0f);
     CHECK(menu->HoveredIndex() == -1);
 }
@@ -121,8 +120,8 @@ TEST_CASE("context-menu: taller-than-constraint menus clamp and wheel-scroll")
     menu->OnMouseMove(top);
     CHECK(menu->HoveredIndex() > 0);
 
-    // Scrolling far past the end clamps - the LAST item is reachable at the bottom band
-    // (the regression: overflow items simply could not be clicked).
+    // Scrolling far past the end clamps, and the last item is reachable at the bottom band, so
+    // overflowing items can be clicked.
     for (core::i32 i = 0; i < 100; ++i)
     {
         MouseWheelEventArgs w;
@@ -168,8 +167,8 @@ TEST_CASE("context-menu: keyboard navigation scrolls the hovered item into view"
     menu->Measure(BoxConstraints::Loose(400, 300));
     menu->Layout(0, 0, menu->MeasuredSize.x, menu->MeasuredSize.y);
 
-    // Walk down past the visible band; each step must keep the hovered row inside the
-    // frame, so by the last item the menu has scrolled to its end.
+    // Walk down past the visible band. Each step keeps the hovered row inside the frame, so by
+    // the last item the menu has scrolled to its end.
     for (core::i32 i = 0; i < 30; ++i)
     {
         KeyEventArgs down;
@@ -181,7 +180,7 @@ TEST_CASE("context-menu: keyboard navigation scrolls the hovered item into view"
     bottom.X = 10.0f;
     bottom.Y = 290.0f;
     menu->OnMouseMove(bottom);
-    CHECK(menu->HoveredIndex() == 29); // the row under the cursor IS the scrolled-to row
+    CHECK(menu->HoveredIndex() == 29); // the row under the cursor is the scrolled-to row
 }
 
 TEST_CASE("context-menu: ItemAt, ClearItems, and OnOpening rebuilding the items at Show")
@@ -198,8 +197,8 @@ TEST_CASE("context-menu: ItemAt, ClearItems, and OnOpening rebuilding the items 
     CHECK(menu->ItemAt(-1) == nullptr);
     menu->ClearItems();
     CHECK(menu->ItemCount() == 0);
-    // The opening hook is the menu's to call at Show; a menu built from live state fills
-    // itself there. Called directly here (no popup layer in a unit test).
+    // The menu calls its opening hook at Show, where a menu built from live state fills itself.
+    // It is called directly here (there is no popup layer in a unit test).
     int opened = 0;
     menu->OnOpening = [&opened](ContextMenu& opening)
     {

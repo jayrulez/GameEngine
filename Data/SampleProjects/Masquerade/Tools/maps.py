@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""maps.py [Map ...]: writes a map's scene through the editor's MCP (the Palace for now).
+"""maps.py [Map ...]: writes a map's scene through the editor's MCP (Palace, Canal, Gardens; all
+three with no names).
 
-A map is a ball: the ground, the walls and what stands on it from the palace kit
-(blender/palace.py), each with its own unscaled collider placed from the same sizes; the lights;
+A map is a ball: the ground, the walls and what stands on it from the kits (blender/palace.py,
+canal.py, gardens.py), each with its own unscaled collider placed from the same sizes; the lights;
 the places guests wander to; the orchestra; some 150 guests; the player and the
 camera; the navigation zone over it all, baked after writing.
 
@@ -409,7 +410,7 @@ def palace():
 def spline_points(points):
     """A path's points with Catmull-Rom handles (a sixth of the chord between neighbours, in and out
     mirrored), wrapping round for a closed loop; an array of structs written flat, each element's
-    fields one after another, as the engine writes it (Snowline's course.py)."""
+    fields one after another, as the engine writes it (as Snowline's course.py does)."""
     items = []
     n = len(points)
     for i, p in enumerate(points):
@@ -662,5 +663,5 @@ if __name__ == "__main__":
         g = write(n)
         first = first or g
     if names and names[0] == "Palace":
-        mcp("project_settings_set", {"defaultSceneId": first})  # the game boots into the first map for now
+        mcp("project_settings_set", {"defaultSceneId": first})  # the game boots into the Palace
     mcp("asset_cook", {})

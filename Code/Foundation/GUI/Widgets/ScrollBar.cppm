@@ -3,12 +3,11 @@
 
 // GUI - :scroll_bar partition
 //
-// ScrollBar: a draggable scroll position over a range (E6 of Specs/gui-lab-evolution.md): a
-// RangeWidget whose value is the offset and whose page is the visible part, so the value goes no
-// further than the maximum less the page and the thumb's length is the page's share of the range.
-// Modeled on eepp's UIScrollBar (role, not a line-for-line port). Horizontal or vertical. A drag of
-// the thumb keeps its grab point under the pointer and reports `input` as it goes and `change` on
-// release; a press on the track pages toward it.
+// ScrollBar: a draggable scroll position over a range, horizontal or vertical. It is a RangeWidget
+// whose value is the offset and whose page is the visible part, so the value goes no further than
+// the maximum less the page, and the thumb's length is the page's fraction of the range. Dragging
+// the thumb keeps the grab point under the pointer, sending `input` as it goes and `change` on
+// release. A press on the track pages toward the press.
 
 module;
 #include "Core/Prelude.h"
@@ -39,9 +38,9 @@ export namespace foundation::gui
         ScrollBar()
         {
             SetTag(core::StringView(u8"scrollbar"));
-            SetPageShown(true); // its page is the visible part
+            SetPageShown(true); // the page is the visible part
             // The track is the node background so the theme's background-color styles it.
-            SetBox(FilledBox(m_trackColor)); // its own track, which a sheet's (a theme's) replaces
+            SetBox(FilledBox(m_trackColor)); // the default track; a style sheet's box replaces it
         }
 
         void SetOrientation(Orientation orientation)
@@ -50,7 +49,7 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] Orientation GetOrientation() const noexcept { return m_orientation; }
-        /// "horizontal" or "vertical" (markup's `orientation`).
+        /// Sets the orientation from "horizontal" or "vertical" (markup's `orientation`).
         void SetOrientationName(const core::String& name)
         {
             SetOrientation(core::Trim(name.AsView()) == core::StringView(u8"vertical") ? Orientation::Vertical : Orientation::Horizontal);
@@ -60,10 +59,11 @@ export namespace foundation::gui
             return core::String(m_orientation == Orientation::Vertical ? core::StringView(u8"vertical") : core::StringView(u8"horizontal"));
         }
 
-        /// The visible part: the thumb's share of the range, and a track press's step.
+        /// Returns the visible part, which sets the thumb's fraction of the range and the step of a
+        /// track press.
         [[nodiscard]] f64 GetPage() const noexcept { return GetPageSize(); }
         void SetPage(f64 page) { SetPageSize(page); }
-        /// The thumb's share of the track: the page over the range.
+        /// Returns the thumb's fraction of the track: the page divided by the range.
         [[nodiscard]] f32 GetThumbProportion() const
         {
             const f64 span = GetRange().Max - GetRange().Min;
@@ -81,28 +81,29 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Theming: track = background-color (node background); thumb = scrollbar::thumb part.
+        // Styling: background-color (the node background) paints the track, and the
+        // scrollbar::thumb part paints the thumb.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"thumb"));
         }
 
-        /// A bar's thickness and length when nothing sizes it (E2).
+        /// Returns the bar's thickness and length when nothing else sizes it.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
             return m_orientation == Orientation::Vertical ? core::Float2{12.0f, 120.0f} : core::Float2{120.0f, 12.0f};
         }
 
     protected:
-        // Press on the thumb starts a grab-drag (the thumb keeps its offset under the cursor,
-        // so it doesn't jump); press on the track above/below the thumb pages toward the click
-        // by one visible proportion (eepp-style), no drag.
-        // Its press is its own (E7): a drag from what holds it is not offered.
+        // A press on the thumb starts a drag that keeps the grab offset under the cursor, so the
+        // thumb does not jump. A press on the track before or after the thumb pages one visible
+        // part toward the click, with no drag.
+        // The bar keeps its presses: a drag is never offered to the nodes that hold it.
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
         void OnMouseDown(const MouseEvent& event) override
         {
             if (event.Button != MouseButton::Left)
-                return; // only the left button drags/pages
+                return; // only the left button drags or pages
             event.Handled = true;
             const Rect b = GetContentBounds();
             const f32 track = TrackLength(b);
@@ -157,9 +158,9 @@ export namespace foundation::gui
             const f32 travel = core::Max(0.0f, track - thumbLen);
             const f32 pos = travel * static_cast<f32>(GetRatio());
 
-            // The track is painted by the node background (themable via background-color); we
-            // draw only the thumb here.
-            // Across, its start is the inline start: the right in right to left.
+            // The node background paints the track (styled with background-color), so only the
+            // thumb is drawn here. On a horizontal bar the start is the inline start, which is the
+            // right in right to left.
             const Rect thumb = (m_orientation == Orientation::Vertical)
                                    ? Rect{b.x, b.y + pos, b.width, thumbLen}
                                    : MirroredIn(Rect{b.x + pos, b.y, thumbLen, b.height}, b, IsRightToLeft());
@@ -180,7 +181,8 @@ export namespace foundation::gui
             return vg::CornerRadii(core::Min(r.width, r.height) * 0.5f);
         }
 
-        // Cursor position along the bar's axis, relative to the track start (the inline start across).
+        // Returns the cursor's position along the bar's axis, relative to the track start (the
+        // inline start on a horizontal bar).
         [[nodiscard]] f32 AlongAxis(const MouseEvent& event, const Rect& b) const
         {
             const core::Float2 local = ConvertToNodeSpace(event.Position);

@@ -435,7 +435,7 @@ TEST_CASE("memory: RefCounted::MemoryAllocator returns the creating allocator")
 
 namespace
 {
-    // The inheritance idiom inside a CONSTRUCTOR: the parent builds its child from its
+    // The inheritance idiom inside a constructor: the parent builds its child from its
     // own allocator while the parent itself is still being constructed (the pending-
     // control handoff makes MemoryAllocator() valid in ctor bodies).
     struct NestedParent : RefCounted
@@ -460,5 +460,5 @@ TEST_CASE("memory: MemoryAllocator works inside constructors (nested MakeRef inh
         CHECK(&parent->child->MemoryAllocator() == &tracker); // child inherited the tree root
         CHECK(parent->child->value == 42);
     }
-    CHECK_FALSE(tracker.HasLeaks()); // parent + nested child both returned to the tracker
+    CHECK_FALSE(tracker.HasLeaks()); // parent and nested child both returned to the tracker
 }

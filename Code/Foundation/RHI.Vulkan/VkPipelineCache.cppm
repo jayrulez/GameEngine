@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of PipelineCache.
-/// Ported from Sedulous.RHI.Vulkan/VulkanPipelineCache.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -2,11 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Tools.ShaderPack - a headless CLI that cooks the engine shader corpus into a CookedShaderPack
-// (shaders.dpak). This is the standalone shader half of what the exporter does: enumerate a shader
-// directory (Data/Engine/Shaders), compile every stage x variant to the requested backend blobs, and write
-// the pack. It needs DXC (SPIR-V/DXIL) and, for WGSL, the vendored naga + tint (baked paths in
-// foundation.shaders), so it is a desktop authoring tool - the WGSL pack it produces is what the WEB
-// build ships and loads at runtime (no compiler in the browser).
+// (shaders.dpak). This is the shader part of what the exporter does, standing alone: enumerate a
+// shader directory (Data/Engine/Shaders), compile every stage and variant to the requested backend
+// blobs, and write the pack. It needs DXC (SPIR-V, DXIL) and, for WGSL, the vendored naga and tint
+// (paths baked into foundation.shaders), so it is a desktop authoring tool. The web build ships the
+// WGSL pack it produces and loads it at runtime, since there is no compiler in the browser.
 //
 //   Tools.ShaderPack <shaderDir> <output.dpak> [wgsl] [spirv] [dxil]
 //
@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     }
 
     const StringView scratchDir = u8".shaderpackcook-scratch";
-    CreateDirectories(scratchDir); // WgslTranslator intermediates (must exist)
+    CreateDirectories(scratchDir); // WgslTranslator's intermediates; the folder must exist
 
     shaders::ShaderCookOptions opts;
     opts.shaderDir = shaderDir;

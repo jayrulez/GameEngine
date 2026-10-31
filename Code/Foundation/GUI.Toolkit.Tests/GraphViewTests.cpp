@@ -1,20 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the graph view (T6 of Specs/gui-lab-evolution-3.md): a source's nodes as widgets made
-// while in view and reused as it moves (a node never seen made once to learn its size); a click or a
-// box selecting, Shift or Ctrl adding or taking away; a drag moving the selected nodes as one gesture
-// through the source, on the grid where it snaps, Escape cancelling it; read only moving nothing; a
-// double click the application's; the wheel zooming about the pointer within limits and a middle
-// drag panning; framing every node. Links: dragged from a pin, the source asked of each pin (lit,
-// dimmed, the one under the pointer its target, a refusal and what would be replaced known); an
-// input's link end rewired or let go; a node link from just outside a node's edge, the two ways
-// apart, to itself after leaving it; a click selecting a link; highlights. Menus and keys: the
-// picker of node kinds (by category, with a search), opened from the menu over nothing or by a link
-// dropped on nothing (only the kinds it reaches, the node linked); Delete, Escape, Ctrl+C and Ctrl+V;
-// a node's menu duplicating and beginning a node link that follows the pointer; a link's deleting.
-// Frames: behind the nodes, moved by their title with what lies inside, resized from their edges,
-// renamed in place, made around the selection from the menu, deleted.
+// GUI.Toolkit - the graph view.
+// Nodes: a source's nodes are widgets made while in view and reused as the view moves; a node never
+// seen is made once to learn its size. A click or a box selects, and Shift or Ctrl adds or takes
+// away. A drag moves the selected nodes as one gesture through the source, snapping to the grid
+// when snapping is on, and Escape cancels it. A read-only view moves nothing. A double click is
+// reported to the application. The wheel zooms about the pointer within limits, a middle drag
+// pans, and the view can frame every node.
+// Links: a drag from a pin asks the source about each pin, which is highlighted, dimmed, or marked
+// as the target under the pointer; a refusal and the link that would be replaced are known. An
+// input's link end can be rewired or dropped to remove the link. A node link starts from just
+// outside a node's edge; its two directions are drawn apart, and it links a node to itself after
+// the pointer leaves and comes back. A click selects a link. Highlights.
+// Menus and keys: the picker of node kinds (by category, with a search) opens from the menu over
+// empty canvas, or when a link is dropped on empty canvas (offering only the kinds the link can
+// reach, and linking the new node). Delete, Escape, Ctrl+C and Ctrl+V. A node's menu duplicates and
+// begins a node link that follows the pointer; a link's menu deletes it.
+// Frames: they sit behind the nodes, move by their title with what lies inside, resize from their
+// edges, are renamed in place, are made around the selection from the menu, and are deleted.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -42,7 +46,7 @@ namespace
         return GraphNodeType{core::String(type), core::String(name), core::String(category)};
     }
 
-    // Core's binary serializer, its bytes held as the text.
+    // Core's binary serializer, with its bytes held as the text.
     class BlobFormat : public IPropertyTextFormat
     {
     public:
@@ -99,8 +103,8 @@ namespace
         return node;
     }
 
-    // A 600 by 400 view at the root's top-left, the graph's origin at its top-left at the zoom of 1:
-    // A at (0, 0) and B at (300, 0) in view, C at (1200, 800) out of it.
+    // A 600 by 400 view at the root's top-left, with the graph's origin at its top-left at a zoom of
+    // 1. A at (0, 0) and B at (300, 0) are in view; C at (1200, 800) is out of it.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -116,8 +120,9 @@ namespace
             a = graph.AddNode(Node(u8"A", core::Float2{0.0f, 0.0f}));
             b = graph.AddNode(Node(u8"B", core::Float2{300.0f, 0.0f}));
             c = graph.AddNode(Node(u8"C", core::Float2{1200.0f, 800.0f}));
-            // Its kinds of node: a Number (Values; out "value": float), a Mix and a Tint (Maths; in "a"
-            // and "b": float, out "result"; in "color": color, out "color").
+            // The graph's kinds of node: a Number (category Values; out "value": float), a Mix
+            // (category Maths; in "a" and "b": float, out "result") and a Tint (category Maths; in
+            // "color": color, out "color").
             GraphNodeInfo number;
             number.Title = core::String(u8"Number");
             number.Pins.PushBack(Pin(u8"value", GraphPinDirection::Output, u8"float"));
@@ -184,7 +189,7 @@ namespace
             Press(at, modifiers);
             D().InjectMouseUp(at, MouseButton::Left, modifiers);
         }
-        void Pause() // a later press is not the second of a double
+        void Pause() // so the next press does not count as the second click of a double click
         {
             D().InjectMouseMove(core::Float2{790.0f, 590.0f});
             D().InjectMouseDown(core::Float2{790.0f, 590.0f}, MouseButton::Left);
@@ -237,7 +242,7 @@ TEST_CASE("GraphView: nodes are widgets made while in view, reused as it pans, a
     CHECK(bed.view->NodeSize(bed.c).x == doctest::Approx(bed.view->NodeSize(bed.a).x));
     CHECK(bed.view->NodeSize(bed.c).y == doctest::Approx(bed.view->NodeSize(bed.a).y));
 
-    // Panned to C: its widget is one reused, and A's and B's go back to the pool.
+    // Panned to C: C's widget is a reused one, and A's and B's go back to the pool.
     bed.view->SetPan(core::Float2{1100.0f, 700.0f});
     (void)bed.root->UpdateLayout();
     CHECK(bed.view->MadeNodeCount() == 1);
@@ -249,7 +254,7 @@ TEST_CASE("GraphView: nodes are widgets made while in view, reused as it pans, a
     CHECK(atC.x == doctest::Approx(100.0f));
     CHECK(atC.y == doctest::Approx(100.0f));
 
-    // Zoomed out, a widget is drawn at the zoom, its rect following.
+    // Zoomed out, a widget is drawn at the zoom, and its rectangle follows.
     bed.view->SetPan(core::Float2{0.0f, 0.0f});
     bed.view->SetZoom(0.5f);
     (void)bed.root->UpdateLayout();
@@ -273,13 +278,14 @@ TEST_CASE("GraphView: right to left, the canvas still runs left to right, inputs
     bed.root->SetLayoutDirection(foundation::gui::Node::LayoutDirection::RightToLeft);
     (void)bed.root->UpdateLayout();
     REQUIRE(bed.view->IsRightToLeft());
-    CHECK(bed.view->GetPlacesChildren()); // its nodes at their canvas points, which right to left leaves
+    CHECK(bed.view->GetPlacesChildren()); // nodes stay at their canvas points in right to left
     GraphNodeWidget& node = *bed.view->GetNodeWidget(bed.a);
     GraphPinRow& in = node.PinRowAt(0);
     GraphPinRow& out = node.PinRowAt(1);
     REQUIRE(in.GetDirection() == GraphPinDirection::Input);
     CHECK_FALSE(in.IsRightToLeft());
-    // The input's row at the node's left, the output's at its right, their pins on those edges.
+    // The input's row is at the node's left and the output's at its right, with their pins on those
+    // edges.
     const Rect nodeAt = node.GetScreenBounds();
     CHECK(in.GetScreenBounds().x == doctest::Approx(nodeAt.x).epsilon(0.01));
     CHECK(out.GetScreenBounds().Right() == doctest::Approx(nodeAt.Right()).epsilon(0.01));
@@ -316,7 +322,7 @@ TEST_CASE("GraphView: a click or a box selects; Shift or Ctrl adds or takes away
     CHECK(told == 1);
     bed.Pause();
     bed.Click(core::Float2{500.0f, 350.0f});
-    CHECK(bed.Selected() == 0); // a click on nothing selects nothing
+    CHECK(bed.Selected() == 0); // a click on empty canvas selects nothing
     bed.Pause();
     bed.Click(bed.Middle(bed.a));
     bed.Pause();
@@ -324,7 +330,7 @@ TEST_CASE("GraphView: a click or a box selects; Shift or Ctrl adds or takes away
     CHECK(bed.Selected() == 2);
     bed.Pause();
     bed.Click(bed.Middle(bed.a), KeyModShift);
-    bed.Click(bed.Middle(bed.a), KeyModCtrl); // a second press soon after: still a toggle
+    bed.Click(bed.Middle(bed.a), KeyModCtrl); // a second press soon after is still a toggle
     CHECK(bed.Selected() == 2);
     bed.Pause();
     bed.Click(bed.Middle(bed.b), KeyModCtrl);
@@ -332,7 +338,7 @@ TEST_CASE("GraphView: a click or a box selects; Shift or Ctrl adds or takes away
     CHECK(bed.view->IsNodeSelected(bed.a));
     CHECK_FALSE(bed.view->GetNodeWidget(bed.b)->HasClass(core::StringView(u8"selected")));
 
-    // A box from nothing over both; with Shift it adds to what is selected.
+    // A box from empty canvas over both; with Shift it adds to the selection.
     bed.Pause();
     bed.Drag(core::Float2{590.0f, 390.0f}, core::Float2{10.0f, 10.0f});
     CHECK(bed.Selected() == 2);
@@ -343,7 +349,7 @@ TEST_CASE("GraphView: a click or a box selects; Shift or Ctrl adds or takes away
     bed.Drag(core::Float2{atA.Right() + 20.0f, 390.0f}, core::Float2{atA.x + 10.0f, atA.y + 10.0f}, KeyModShift);
     CHECK(bed.Selected() == 2);
 
-    // A node the source takes away (an undo) leaves the selection.
+    // A node the source removes (by an undo) leaves the selection.
     REQUIRE(bed.graph.DeleteNodes(core::Span<const GraphId>(&bed.a, 1)));
     REQUIRE(bed.Selected() == 1);
     CHECK(bed.view->IsNodeSelected(bed.b));
@@ -356,7 +362,8 @@ TEST_CASE("GraphView: a drag moves the selected nodes as one gesture, on the gri
     bed.Pause();
     bed.Click(bed.Middle(bed.b), KeyModShift);
     bed.Pause();
-    // 37 by 21 on a grid of 16: the pressed node lands at (32, 16), the other keeps its place to it.
+    // A move of 37 by 21 on a grid of 16: the pressed node snaps to (32, 16), and the other keeps its
+    // offset from it.
     const core::Float2 from = bed.Middle(bed.a);
     bed.Drag(from, core::Float2{from.x + 37.0f, from.y + 21.0f});
     CHECK(bed.Where(bed.a).x == doctest::Approx(32.0f));
@@ -368,7 +375,7 @@ TEST_CASE("GraphView: a drag moves the selected nodes as one gesture, on the gri
     bed.graph.Apply(bed.changes[0], true);
     CHECK(bed.Where(bed.a).x == doctest::Approx(0.0f));
 
-    // Not snapping, it moves as the pointer did (over the zoom).
+    // Without snapping, it moves as far as the pointer did, divided by the zoom.
     bed.Pause();
     bed.view->SetSnapToGrid(false);
     bed.view->SetZoom(0.5f);
@@ -382,7 +389,7 @@ TEST_CASE("GraphView: a drag moves the selected nodes as one gesture, on the gri
     CHECK(bed.Where(bed.b).x == doctest::Approx(300.0f)); // not selected
     REQUIRE(bed.changes.Size() == 2);
 
-    // Escape mid-drag puts it back, and nothing is told.
+    // Escape mid-drag puts it back, and nothing is reported.
     bed.Pause();
     const core::Float2 again = bed.Middle(bed.a);
     bed.Press(again);
@@ -394,7 +401,7 @@ TEST_CASE("GraphView: a drag moves the selected nodes as one gesture, on the gri
     CHECK(bed.Where(bed.a).x == doctest::Approx(20.0f));
     CHECK(bed.changes.Size() == 2);
 
-    // Read only, a drag selects and moves nothing.
+    // In a read-only view, a drag selects but moves nothing.
     bed.Pause();
     bed.view->SetReadOnly(true);
     const core::Float2 still = bed.Middle(bed.a);
@@ -449,7 +456,7 @@ TEST_CASE("GraphView: a double click on a node is the application's; framing fit
         CHECK(box.Contains(bed.view->NodeRect(node)));
     CHECK(bed.view->MadeNodeCount() == 3);
 
-    // Asked before it has a size, it frames them once it is laid out.
+    // When asked before it has a size, the view frames the nodes once it is laid out.
     core::RefPtr<GraphView> later = core::MakeRef<GraphView>(core::DefaultAllocator());
     later->EditLayoutStyle([](LayoutStyle& s)
     {
@@ -464,7 +471,7 @@ TEST_CASE("GraphView: a double click on a node is the application's; framing fit
     REQUIRE(small.width > 0.0f);
     for (const GraphId node : all)
         CHECK(small.Contains(later->NodeRect(node)));
-    // It goes on fitting them as its nodes change size, until the canvas is moved.
+    // It keeps fitting them as its nodes change size, until the canvas is moved.
     CHECK(later->IsFitting());
     later->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(420.0f); });
     (void)bed.root->UpdateLayout();
@@ -474,7 +481,7 @@ TEST_CASE("GraphView: a double click on a node is the application's; framing fit
     CHECK_FALSE(later->IsFitting());
     later->SetSource(nullptr);
 
-    // The selection alone, at no more than the zoom of 1.
+    // Frame the selection alone, at a zoom of 1 at most.
     bed.view->SetSelectedNodes(core::Span<const GraphId>(&bed.c, 1));
     bed.view->FrameSelection();
     CHECK(bed.view->GetZoom() == doctest::Approx(1.0f));
@@ -493,7 +500,7 @@ TEST_CASE("GraphView: a drag from an output to an input that fits links them, th
     REQUIRE(bed.view->IsLinking());
     CHECK(Has(bed.Row(bed.b, bIn), u8"fits"));
     CHECK(Has(bed.Row(bed.a, aIn), u8"refused")); // a node does not feed itself
-    CHECK(Has(bed.Row(bed.b, bOut), u8"refused")); // an output to an output
+    CHECK(Has(bed.Row(bed.b, bOut), u8"refused")); // an output cannot link to an output
     bed.D().InjectMouseMove(bed.PinAt(bIn));
     CHECK(Has(bed.Row(bed.b, bIn), u8"target"));
     CHECK(bed.view->GetLinkCheck().Allowed);
@@ -507,7 +514,7 @@ TEST_CASE("GraphView: a drag from an output to an input that fits links them, th
     CHECK_FALSE(Has(bed.Row(bed.b, bIn), u8"target"));
     CHECK_FALSE(Has(bed.Row(bed.a, aIn), u8"refused"));
 
-    // Onto a pin it may not reach: refused, and why; nothing made.
+    // Onto a pin it may not reach: refused with a reason, and nothing is made.
     bed.Pause();
     bed.Press(bed.PinAt(aOut));
     bed.D().InjectMouseMove(core::Float2{from.x + 40.0f, from.y + 150.0f});
@@ -517,7 +524,8 @@ TEST_CASE("GraphView: a drag from an output to an input that fits links them, th
     bed.D().InjectMouseUp(bed.PinAt(aIn), MouseButton::Left);
     CHECK(bed.LinkCount() == 1);
 
-    // Another output onto B's input: the link it would replace is known, and goes when it is made.
+    // Another output onto B's input: the link it would replace is known, and is removed when the
+    // new one is made.
     bed.Pause();
     const GraphId d = bed.Add(u8"D", core::Float2{0.0f, 200.0f});
     const GraphId dOut = bed.PinOf(d, u8"out");
@@ -530,7 +538,7 @@ TEST_CASE("GraphView: a drag from an output to an input that fits links them, th
     REQUIRE(bed.LinkCount() == 1);
     CHECK(bed.graph.State().Links[0].FromPin == dOut);
 
-    // Dropped on nothing, a new link is not made; Escape mid-drag ends it too.
+    // Dropped on empty canvas, a new link is not made; Escape mid-drag ends it too.
     bed.Pause();
     bed.Drag(bed.PinAt(bOut), core::Float2{560.0f, 380.0f});
     CHECK(bed.LinkCount() == 1);
@@ -558,13 +566,13 @@ TEST_CASE("GraphView: an input's link end is dragged off to rewire it or let it 
 
     bed.Drag(bed.PinAt(bIn), bed.PinAt(dIn));
     REQUIRE(bed.LinkCount() == 1);
-    CHECK(bed.graph.State().Links[0].Id == link); // the same link, its end moved
+    CHECK(bed.graph.State().Links[0].Id == link); // the same link, with its end moved
     CHECK(bed.graph.State().Links[0].ToNode == d);
     CHECK(bed.graph.State().Links[0].ToPin == dIn);
     REQUIRE(bed.changes.Size() == 1);
     CHECK(bed.changes[0].Words == core::String(u8"Relinked"));
 
-    // Off and back where it came from: nothing changes.
+    // Dragged off and back where it came from, nothing changes.
     bed.Pause();
     bed.Press(bed.PinAt(dIn));
     bed.D().InjectMouseMove(core::Float2{560.0f, 380.0f});
@@ -574,21 +582,21 @@ TEST_CASE("GraphView: an input's link end is dragged off to rewire it or let it 
     CHECK(bed.changes.Size() == 1);
     CHECK(bed.graph.State().Links[0].ToPin == dIn);
 
-    // Dropped on nothing, it goes.
+    // Dropped on empty canvas, the link is removed.
     bed.Pause();
     bed.Drag(bed.PinAt(dIn), core::Float2{560.0f, 380.0f});
     CHECK(bed.LinkCount() == 0);
     REQUIRE(bed.changes.Size() == 2);
     CHECK(bed.changes[1].Words == core::String(u8"Unlinked"));
 
-    // From the input, now with none, to an output: a link from that output.
+    // A drag from the input, which now has no link, to an output makes a link from that output.
     bed.Pause();
     bed.Drag(bed.PinAt(dIn), bed.PinAt(aOut));
     REQUIRE(bed.LinkCount() == 1);
     CHECK(bed.graph.State().Links[0].FromPin == aOut);
     CHECK(bed.graph.State().Links[0].ToPin == dIn);
 
-    // Read only, a drag from a pin makes nothing.
+    // In a read-only view, a drag from a pin makes nothing.
     bed.Pause();
     bed.view->SetReadOnly(true);
     bed.Drag(bed.PinAt(bed.PinOf(bed.b, u8"out")), bed.PinAt(dIn));
@@ -616,7 +624,7 @@ TEST_CASE("GraphView: a click selects a link, Shift or Ctrl adding or taking it 
     bed.Click(middle);
     REQUIRE(bed.view->GetSelectedLinks().Size() == 1);
     CHECK(bed.view->IsLinkSelected(link));
-    CHECK(bed.Selected() == 0); // a click on a link alone selects it alone
+    CHECK(bed.Selected() == 0); // a plain click on a link selects only that link
     bed.Pause();
     bed.Click(middle, KeyModCtrl);
     CHECK(bed.view->GetSelectedLinks().IsEmpty());
@@ -627,7 +635,7 @@ TEST_CASE("GraphView: a click selects a link, Shift or Ctrl adding or taking it 
     CHECK(bed.view->GetSelectedLinks().IsEmpty());
     CHECK(bed.changes.IsEmpty());
 
-    // An undo taking the link away takes it from the selection.
+    // An undo that removes the link also removes it from the selection.
     bed.Pause();
     bed.Click(middle);
     const GraphId gone[] = {link};
@@ -649,7 +657,7 @@ TEST_CASE("GraphView: node links from just outside a node's edge, where the sour
     const Rect atB = bed.view->NodeRect(bed.b);
     const core::Float2 edgeA{atA.Right() + 3.0f, atA.y + 4.0f};
     const core::Float2 edgeB{atB.x - 3.0f, atB.y + 4.0f};
-    // A graph of pins: the edge begins nothing.
+    // In a graph of pin links only, a drag from the edge begins nothing.
     bed.Drag(edgeA, bed.Middle(bed.b));
     CHECK(bed.LinkCount() == 0);
 
@@ -666,7 +674,7 @@ TEST_CASE("GraphView: node links from just outside a node's edge, where the sour
     REQUIRE(bed.LinkCount() == 2);
     const GraphLinkInfo back = bed.graph.State().Links[1];
     CHECK(back.FromNode == bed.b);
-    // The two ways drawn apart, each with its own line to click.
+    // The two directions are drawn apart, each with its own line to click.
     core::Array<core::Float2> one(core::DefaultAllocator()), other(core::DefaultAllocator());
     REQUIRE(bed.view->LinkPoints(there, one));
     REQUIRE(bed.view->LinkPoints(back, other));
@@ -676,7 +684,7 @@ TEST_CASE("GraphView: node links from just outside a node's edge, where the sour
     CHECK(bed.view->HitLink(m1) == there.Id);
     CHECK(bed.view->HitLink(m2) == back.Id);
 
-    // Straight back onto its own node: nothing; out and back: a link to itself.
+    // Straight back onto its own node makes nothing; out and back makes a link to itself.
     bed.Pause();
     bed.Drag(edgeA, bed.Middle(bed.a));
     CHECK(bed.LinkCount() == 2);
@@ -718,10 +726,10 @@ TEST_CASE("GraphView: the menu over nothing adds a node through the picker, by c
     REQUIRE(bed.Selected() == 1);
     const GraphNodeInfo* made = bed.graph.GetNode(bed.view->GetSelectedNodes()[0]);
     REQUIRE(made != nullptr);
-    CHECK(made->Position.x == doctest::Approx(448.0f)); // where the menu was, on the grid
+    CHECK(made->Position.x == doctest::Approx(448.0f)); // where the menu was, snapped to the grid
     CHECK(made->Position.y == doctest::Approx(304.0f));
 
-    // By the keys: Down to the second kind, Enter.
+    // By the keys: Down to the second kind, then Enter.
     REQUIRE(bed.view->OpenNodePicker(core::Float2{100.0f, 300.0f}));
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
     CHECK(picker.GetCurrent() == 1);
@@ -738,7 +746,7 @@ TEST_CASE("GraphView: a link dropped on nothing opens the picker of the kinds it
     bed.Drag(bed.PinAt(aOut), core::Float2{450.0f, 300.0f});
     REQUIRE(bed.view->IsNodePickerOpen());
     GraphNodePicker& picker = *bed.view->GetNodePicker();
-    REQUIRE(picker.ShownCount() == 2); // those with an input: Mix and Tint
+    REQUIRE(picker.ShownCount() == 2); // the kinds with an input: Mix and Tint
     CHECK(picker.ShownAt(0).Name == core::String(u8"Mix"));
     CHECK(picker.ShownAt(1).Name == core::String(u8"Tint"));
     REQUIRE(picker.Choose(0));
@@ -768,7 +776,7 @@ TEST_CASE("GraphView: Delete, Escape, Ctrl+C and Ctrl+V as the property grid's; 
     CHECK_FALSE(bed.view->IsNodeSelected(bed.a));
     const GraphNodeInfo* first = bed.graph.GetNode(bed.view->GetSelectedNodes()[0]);
     REQUIRE(first != nullptr);
-    CHECK(first->Position.y == doctest::Approx(300.0f)); // their top-left at the pointer
+    CHECK(first->Position.y == doctest::Approx(300.0f)); // their top-left is at the pointer
 
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
     CHECK(bed.NodeCount() == 3);
@@ -781,7 +789,7 @@ TEST_CASE("GraphView: Delete, Escape, Ctrl+C and Ctrl+V as the property grid's; 
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK(bed.Selected() == 0);
 
-    // A selected link goes with Delete.
+    // Delete removes a selected link.
     GraphLinkInfo made;
     made.FromNode = bed.a;
     made.FromPin = bed.PinOf(bed.a, u8"out");
@@ -795,7 +803,7 @@ TEST_CASE("GraphView: Delete, Escape, Ctrl+C and Ctrl+V as the property grid's; 
     CHECK(bed.LinkCount() == 0);
     CHECK(bed.changes.Back().Words == core::String(u8"Unlinked"));
 
-    // Duplicate beside it, from its menu (the clipboard kept).
+    // Duplicate beside it from its menu; the clipboard is left unchanged.
     bed.clipboard.SetText(core::StringView(u8"kept"));
     bed.RightClick(bed.Middle(bed.a));
     REQUIRE(bed.view->GetMenu() != nullptr);
@@ -809,7 +817,7 @@ TEST_CASE("GraphView: Delete, Escape, Ctrl+C and Ctrl+V as the property grid's; 
     CHECK(copy->Position.y == doctest::Approx(32.0f));
     CHECK(bed.clipboard.GetText() == core::String(u8"kept"));
 
-    // Read only: no Duplicate or Delete, and Delete deletes nothing.
+    // Read only: the menu has no Duplicate or Delete, and the Delete key deletes nothing.
     bed.view->SetReadOnly(true);
     bed.Pause();
     bed.RightClick(bed.Middle(bed.a));
@@ -827,7 +835,7 @@ TEST_CASE("GraphView: a node's menu begins a node link that follows the pointer 
     Bed bed;
     bed.RightClick(bed.Middle(bed.a));
     REQUIRE(bed.view->GetMenu() != nullptr);
-    CHECK(Item(*bed.view->GetMenu(), u8"Add transition") == nullptr); // a graph of pins
+    CHECK(Item(*bed.view->GetMenu(), u8"Add transition") == nullptr); // not in a graph of pin links only
     bed.D().CloseAllPopups();
 
     bed.graph.SetNodeLinks(true);
@@ -846,7 +854,7 @@ TEST_CASE("GraphView: a node's menu begins a node link that follows the pointer 
     CHECK(link.FromNode == bed.a);
     CHECK(link.ToNode == bed.b);
 
-    // Escape ends one unmade.
+    // Escape ends a link begun from the menu without making it.
     bed.Pause();
     bed.RightClick(bed.Middle(bed.b));
     Activate(*bed.view->GetMenu(), u8"Add transition");
@@ -867,8 +875,8 @@ TEST_CASE("GraphView: a node's menu begins a node link that follows the pointer 
 
 namespace
 {
-    // The bed panned so the graph's (-100, -100) is at the view's top-left, not snapping, with a frame
-    // round A and B: from (-20, -40), 480 by 200.
+    // Pans the bed so the graph's (-100, -100) is at the view's top-left, turns snapping off, and adds
+    // a frame round A and B from (-20, -40), 480 by 200.
     GraphId Framed(Bed& bed)
     {
         bed.view->SetSnapToGrid(false);
@@ -889,7 +897,7 @@ namespace
                 return at;
         return GraphFrameInfo{};
     }
-    // A mock font: 6px a byte, 12px a line.
+    // A mock font: 6px per byte, 12px per line.
     class SixFont : public foundation::fonts::IFont
     {
     public:
@@ -967,7 +975,7 @@ TEST_CASE("GraphView: a frame stands behind the nodes; dragged by its title it m
 
     // A box over the whole of it selects it, and the nodes it touches.
     bed.Pause();
-    bed.Drag(core::Float2{599.0f, 395.0f}, core::Float2{60.0f, 50.0f}); // it reaches 597 now
+    bed.Drag(core::Float2{599.0f, 395.0f}, core::Float2{60.0f, 50.0f}); // the frame now reaches 597
     CHECK(bed.view->IsFrameSelected(frame));
     CHECK(bed.Selected() == 2);
 }
@@ -993,7 +1001,7 @@ TEST_CASE("GraphView: a frame's edges resize it, previewed and one change on rel
     REQUIRE(bed.changes.Size() == 1);
     CHECK(bed.changes[0].Words == core::String(u8"Edited a frame"));
 
-    // From its bottom start corner: wider to the start, taller.
+    // Dragging its bottom start corner makes it wider toward the start, and taller.
     bed.Pause();
     r = bed.view->FrameRect(frame);
     const core::Float2 corner{r.x + 2.0f, r.Bottom() - 2.0f};
@@ -1003,7 +1011,7 @@ TEST_CASE("GraphView: a frame's edges resize it, previewed and one change on rel
     CHECK(FrameOf(bed, frame).Size.x == doctest::Approx(570.0f));
     CHECK(FrameOf(bed, frame).Size.y == doctest::Approx(240.0f));
 
-    // No smaller than its least.
+    // It cannot be made smaller than its minimum.
     bed.Pause();
     r = bed.view->FrameRect(frame);
     const core::Float2 left{r.x + 2.0f, r.y + r.height * 0.5f};
@@ -1024,7 +1032,7 @@ TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a fr
     REQUIRE(bed.changes.Size() == 1);
     CHECK(bed.changes[0].Words == core::String(u8"Edited a frame"));
 
-    // While its body is edited, the keys are the field's: Delete deletes no node.
+    // While its body is edited, the field takes the keys, so Delete deletes no node.
     bed.Click(bed.Middle(bed.a));
     widget.EditBody();
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
@@ -1043,7 +1051,7 @@ TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a fr
     CHECK(widget.GetTitleLabel().IsEditing());
     REQUIRE(widget.GetTitleLabel().EndEdit(false));
 
-    // Round the selected nodes, from the menu over nothing.
+    // A frame round the selected nodes, from the menu over empty canvas.
     bed.Pause();
     bed.Click(bed.Middle(bed.a));
     bed.Pause();
@@ -1059,7 +1067,7 @@ TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a fr
     CHECK(inside.Contains(Rect{300.0f, 0.0f, bed.view->NodeSize(bed.b).x, bed.view->NodeSize(bed.b).y}));
     CHECK(bed.view->IsFrameSelected(round.Id));
 
-    // A comment where the menu was, nothing selected: a frame with a body.
+    // With nothing selected, a comment (a frame with a body) goes where the menu was.
     bed.Pause();
     bed.Click(core::Float2{300.0f, 380.0f});
     bed.RightClick(core::Float2{300.0f, 380.0f});
@@ -1091,7 +1099,7 @@ TEST_CASE("GraphView: a comment longer than its frame scrolls in its box, to the
     TextArea* area = core::Cast<TextArea>(widget.GetBodyLabel().GetEditor());
     REQUIRE(area != nullptr);
     REQUIRE(area->IsFocused());
-    // Thirty lines of 12 in a frame 200 tall.
+    // Thirty lines of 12 px in a frame 200 tall.
     for (int i = 0; i < 30; ++i)
     {
         bed.D().InjectText(core::StringView(u8"line"));
@@ -1102,17 +1110,18 @@ TEST_CASE("GraphView: a comment longer than its frame scrolls in its box, to the
     EditableLabel& label = widget.GetBodyLabel();
     const Rect frameAt = widget.GetScreenBounds();
     CHECK(box.GetScreenBounds().Bottom() <= frameAt.Bottom() - 7.5f); // the frame's padding below it
-    // As tall as its text, the box scrolled to its end, where the caret is.
+    // The label is as tall as its text, and the box is scrolled to its end, where the caret is.
     CHECK(label.GetSize().y == doctest::Approx(31.0f * 12.0f));
     REQUIRE(box.IsScrollContainer());
     CHECK(box.GetScrollOffset().y == doctest::Approx(label.GetSize().y - box.GetContentBounds().height));
     CHECK(area->GetScrollY() == doctest::Approx(0.0f));
     CHECK(widget.ClipsChildren());
-    // Back to the top (Ctrl+Home), the box follows the caret there.
+    // Back to the top (Ctrl+Home), and the box follows the caret there.
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Home), static_cast<core::u32>(KeyModCtrl));
     CHECK(box.GetScrollOffset().y == doctest::Approx(0.0f));
 
-    // Committed, it is as tall as its text, the box scrolling it; it reads from its top.
+    // Once committed, the label is as tall as its text, the box scrolls it, and it shows from its
+    // top.
     REQUIRE(label.EndEdit(true));
     (void)bed.root->UpdateLayout();
     CHECK(label.GetSize().y == doctest::Approx(31.0f * 12.0f));
@@ -1124,8 +1133,8 @@ TEST_CASE("GraphView: a comment longer than its frame scrolls in its box, to the
     bed.D().InjectMouseMove(over);
     (void)bed.D().InjectMouseWheel(over, core::Float2{0.0f, -1.0f});
     CHECK(box.GetScrollTarget().y > 0.0f);
-    CHECK(bed.view->GetZoom() == doctest::Approx(zoom)); // the box took it
-    // At its top, the wheel up is the view's zoom again.
+    CHECK(bed.view->GetZoom() == doctest::Approx(zoom)); // the box took the wheel
+    // At the box's top, wheeling up zooms the view again.
     box.SetScrollOffset(core::Float2{0.0f, 0.0f});
     (void)bed.D().InjectMouseWheel(over, core::Float2{0.0f, 1.0f});
     CHECK(bed.view->GetZoom() > zoom);

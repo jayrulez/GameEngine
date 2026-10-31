@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - module implementation unit: the accessibility tree (E9d of Specs/gui-lab-evolution.md),
-// built from the widgets, which its partition only names. A widget's role is its type's
-// `accessRole` attribute (a base's when its own has none) or markup's `role`; its name, value,
-// range, description and expanded state are the reflected properties its type marks `access`; its
-// other states are the ones its selectors read. A node with no role is no node of its own (what it
-// holds belongs to the nearest ancestor that has one), and a leaf role's parts are none either. An
-// item view's items are nodes with no widget of their own (E17b): the items it says have nodes,
-// in item order, each saying where it stands among them all, under ids that follow the item.
+// GUI - module implementation unit: builds the accessibility tree from the widgets, which the
+// partition only names. A widget's role comes from markup's `role`, or else from its type's
+// `accessRole` attribute (or a base type's when its own has none). Its name, value, range,
+// description and expanded state come from the reflected properties its type marks `access`; its
+// other states are the ones its selectors read. A widget with no role gets no node of its own, and
+// its contents belong to the nearest ancestor that has one; the parts of a leaf role get no nodes
+// either. An item view's items become nodes without widgets: the view lists which items have
+// nodes, in item order, and each node gives its position among all the items. Their ids follow
+// the item rather than the row that shows it.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +31,7 @@ namespace foundation::gui
             return ref.table != nullptr ? (static_cast<u64>(ref.generation) << 32) | ref.slot : 0;
         }
 
-        // The property of the node's type (or a base's) that its type marks `access` as `what`.
+        // The property that the node's type, or one of its bases, marks `access` as `what`.
         [[nodiscard]] const PropertyInfo* AccessProperty(const Node& node, core::StringView what)
         {
             for (const TypeInfo* type = node.GetType(); type != nullptr; type = type->base)
@@ -72,7 +73,7 @@ namespace foundation::gui
         {
             return (static_cast<u32>(property.flags) & static_cast<u32>(PropertyFlags::ReadOnly)) == 0 && property.set != nullptr;
         }
-        // A property's number, when it holds one (a slider's value, not a text field's).
+        // Whether a property holds a number (a slider's value, unlike a text field's).
         [[nodiscard]] bool IsNumeric(const PropertyInfo& property) noexcept
         {
             return property.type == &TypeOf<f64>() || property.type == &TypeOf<f32>() || property.type == &TypeOf<i32>() ||
@@ -95,7 +96,8 @@ namespace foundation::gui
                     (void)AccessRoleNamed(name->AsView(), role);
             return role;
         }
-        // Not read at all, with what it holds: not displayed, hidden, or aria-hidden.
+        // Whether a node and its contents are left out of the tree: not displayed, hidden, or
+        // aria-hidden.
         [[nodiscard]] bool Excluded(const Node& node)
         {
             if (!node.IsDisplayed() || !node.IsVisible())
@@ -130,7 +132,8 @@ namespace foundation::gui
             return nullptr;
         }
 
-        // An item's node id: the view's key among the GUI's item views, and the item's in its view.
+        // An item's node id, made from the view's key among the GUI's item views and the item's key
+        // within the view.
         [[nodiscard]] u64 ItemAccessId(Node& top, ItemView& view, i32 item)
         {
             GUIContext* gui = top.GetGUIContext();
@@ -150,9 +153,10 @@ namespace foundation::gui
         {
             Node& top; // the root the ids in aria lists resolve under
 
-            // An item view's item, a node with no widget of its own: where it stands among all the
-            // items (a tree item among its siblings, at its level), its bounds (estimated, off
-            // screen, while it has no row), and what a screen reader may do with it.
+            // Describes an item of an item view, which is a node without a widget: its position
+            // among all the items (for a tree item, among its siblings at its level), its bounds
+            // (estimated and offscreen while no row shows it), and what a screen reader may do
+            // with it.
             void DescribeItem(ItemView& view, i32 item, AccessNode& out)
             {
                 out.Id = ItemAccessId(top, view, item);
@@ -201,8 +205,8 @@ namespace foundation::gui
                     out.RowIndex = item + 1;
             }
 
-            // The included nodes under `node`: each child with a role, or what a child without
-            // one holds, in order.
+            // The included nodes under `node`, in order: each child that has a role, and for a
+            // child without one, its own included children.
             void Children(Node& node, Array<u64>& out)
             {
                 for (usize i = 0; i < node.ChildCount(); ++i)
@@ -216,8 +220,8 @@ namespace foundation::gui
                         Children(*child, out);
                 }
             }
-            // Its name: the widgets that label it, else its aria-label, else what its type names it
-            // by, else its tooltip.
+            // The widget's name: the names of the widgets that label it, else its aria-label, else
+            // the property its type marks as its name, else its tooltip.
             core::String NameOf(UIWidget& widget, u32 depth = 0)
             {
                 if (depth < 2 && widget.GetAccessLabelledBy().Size() != 0)
@@ -283,7 +287,8 @@ namespace foundation::gui
                     Ids(widget->GetAccessLabelledBy().AsView(), out.LabelledBy);
                     Ids(widget->GetAccessDescribedBy().AsView(), out.DescribedBy);
                     Ids(widget->GetAccessControls().AsView(), out.Controls);
-                    // Its description: the names of the widgets that describe it, else its type's.
+                    // The description: the names of the widgets that describe it, else the property
+                    // its type marks as its description.
                     EachId(widget->GetAccessDescribedBy().AsView(), [&](core::StringView id)
                     {
                         if (UIWidget* by = FindById(top, id))
@@ -305,7 +310,7 @@ namespace foundation::gui
                     const core::Variant v = Read(node, *value);
                     const PropertyInfo* secret = AccessProperty(node, u8"secret");
                     const bool hidden = secret != nullptr && AsNumber(Read(node, *secret)).ValueOr(0.0) != 0.0;
-                    out.Value = hidden ? core::String{} : AsText(v); // a password's is not read out
+                    out.Value = hidden ? core::String{} : AsText(v); // a password's value is not read out
                     if (IsNumeric(*value))
                     {
                         out.HasNumber = true;
@@ -334,7 +339,8 @@ namespace foundation::gui
                 }
                 if (ItemView* view = core::Cast<ItemView>(&node))
                 {
-                    // Its items, not the rows it happens to have made (which recycle).
+                    // The children are the view's items, not the rows it has made, since rows are
+                    // recycled.
                     Array<i32> items;
                     view->GetAccessItems(items);
                     for (const i32 item : items)
@@ -349,7 +355,7 @@ namespace foundation::gui
                 if (!IsLeafRole(role))
                     Children(node, out.Children);
             }
-            // An item view's items' nodes.
+            // Describes the nodes of an item view's items.
             void Items(ItemView& view, Array<AccessNode>& out)
             {
                 Array<i32> items;
@@ -387,7 +393,7 @@ namespace foundation::gui
             }
         };
 
-        // What a node says, as one number: sent again only when it changes.
+        // A hash of everything a node describes. A node is sent again only when its hash changes.
         [[nodiscard]] u64 HashOf(const AccessNode& n)
         {
             u64 h = HashBytes(&n.Role, sizeof(n.Role));
@@ -434,8 +440,8 @@ namespace foundation::gui
                     ClearMarks(*child);
         }
 
-        // The nodes marked since the last update: each one marked, and the included node above it
-        // (its children may have changed), each once.
+        // Collects the nodes marked since the last update: each marked node and the included node
+        // above it (whose children may have changed), each sent once.
         struct Changes
         {
             Builder& builder;
@@ -453,7 +459,7 @@ namespace foundation::gui
                 builder.Describe(node, RoleOf(node), described);
                 const u64 hash = HashOf(described);
                 if (hash == node.GetAccessSent())
-                    return; // marked, yet it reads as it did (a fade's frames): nothing to send
+                    return; // marked but unchanged (a fade's frames), so there is nothing to send
                 node.SetAccessSent(hash);
                 out.PushBack(Move(described));
             }
@@ -481,7 +487,7 @@ namespace foundation::gui
                 {
                     ClearMarks(node);
                     if (marked && owner != nullptr)
-                        Send(*owner); // it left its owner's children
+                        Send(*owner); // it is no longer among its owner's children
                     return;
                 }
                 node.ClearAccessDirty();
@@ -490,7 +496,8 @@ namespace foundation::gui
                     Send(*owner);
                 if (ItemView* view = core::Cast<ItemView>(&node); view != nullptr && role != AccessRole::None)
                 {
-                    // Its rows' changes are its items': the view and each item whose node changed.
+                    // A change to the view's rows is a change to its items: send the view and each
+                    // item whose node changed.
                     Send(node);
                     SendItems(*view);
                     for (usize i = 0; i < node.ChildCount(); ++i)
@@ -502,7 +509,7 @@ namespace foundation::gui
                 if (IsLeafRole(role))
                 {
                     if (marked || below)
-                        Send(node); // a part's change is the leaf's (its name from its label)
+                        Send(node); // a change to a part changes the leaf (its name comes from its label)
                     for (usize i = 0; i < node.ChildCount(); ++i)
                         if (Node* child = node.GetChildAt(i))
                             ClearMarks(*child);
@@ -519,11 +526,11 @@ namespace foundation::gui
         [[nodiscard]] u64 FocusOf(SceneRoot& root)
         {
             Node* focus = root.GetEventDispatcher()->GetFocusNode();
-            // An item view's focus is its current item's (E17b): what the keys move is the item.
+            // In an item view the focus is on its current item, since the keys move the item.
             if (ItemView* view = core::Cast<ItemView>(focus); view != nullptr && view->GetCurrentItem() >= 0 && !Excluded(*view) &&
                                                               RoleOf(*view) != AccessRole::None)
                 return ItemAccessId(root, *view, view->GetCurrentItem());
-            // The focus as a screen reader sees it: the nearest included node holding it.
+            // The focus as a screen reader sees it: the nearest included node that contains it.
             for (Node* n = focus; n != nullptr; n = n->GetParent())
                 if (RoleOf(*n) != AccessRole::None && !Excluded(*n))
                 {
@@ -559,7 +566,7 @@ namespace foundation::gui
             if (Excluded(*n) && core::Cast<SceneRoot>(n) == nullptr)
                 return false;
             if (n != &node && IsLeafRole(RoleOf(*n)))
-                return false; // a leaf's part
+                return false; // a part of a leaf
         }
         const AccessRole role = RoleOf(node);
         if (role == AccessRole::None)
@@ -590,7 +597,7 @@ namespace foundation::gui
                 update = BuildAccessTree(*root);
                 ClearMarks(*root);
                 root->m_accessSent = true;
-                for (const AccessNode& n : update.Nodes) // what each said, so a mark alone sends nothing
+                for (const AccessNode& n : update.Nodes) // record each hash, so a mark alone sends nothing
                 {
                     if (IsAccessItemId(n.Id))
                     {
@@ -645,7 +652,8 @@ namespace foundation::gui
             return false;
         if (IsAccessItemId(request.Target))
         {
-            // An item's, run through its view, by its key: the item may have moved since.
+            // An item's action runs through its view, looked up by the item's key, since the item
+            // may have moved.
             ItemView* view = core::Cast<ItemView>(node);
             SceneRoot* root = node->GetSceneRoot();
             if (view == nullptr || root == nullptr || Excluded(*view))
@@ -680,7 +688,8 @@ namespace foundation::gui
         SceneRoot* root = node->GetSceneRoot();
         if (root == nullptr || Excluded(*node))
             return false;
-        // Only what it advertises: the same description a screen reader was sent.
+        // Run only an action the node advertises, using the same description a screen reader
+        // was sent.
         Builder builder{*root};
         AccessNode described;
         builder.Describe(*node, RoleOf(*node), described);

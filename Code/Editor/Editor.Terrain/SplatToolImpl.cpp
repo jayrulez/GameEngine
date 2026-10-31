@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Terrain - :splat implementation (TerrainSplatTool). Also extends the terrain viewport-tool
-// provider (SculptImpl.cpp) to contribute this second tool.
+// Editor::Terrain - :splat implementation (TerrainSplatTool). It also extends the terrain
+// viewport-tool provider (SculptImpl.cpp) to add this second tool.
 //
-// The heavy engine/resource imports the interface partition keeps out (GCC hygiene) live here: the
-// terrain component + manager (to find the terrain + its shared splatmap) and the splatmap source
-// (to serialize the painted RGBA8 back on save).
+// The heavy engine and resource imports that the interface partition keeps out (for GCC module
+// hygiene) live here: the terrain component and manager (to find the terrain and its shared
+// splatmap) and the splatmap source (to serialize the painted RGBA8 back on save).
 
 module;
 #include "Core/Prelude.h"
@@ -17,12 +17,12 @@ import foundation.core;
 import foundation.scene;
 import foundation.render;            // debug::DebugDraw
 import foundation.shell;            // IKeyboard (layer hotkeys)
-import foundation.content;          // ContentDatabase, Instance (the persist closure)
+import foundation.content;          // ContentDatabase, Instance (the save closure)
 import foundation.resource;         // Ref<>
 import foundation.heightfield;      // Heightfield (ray-pick for the UV mapping)
 import foundation.terrain.resource; // SplatWeights, PaintTopK/EraseTopK, SplatWeightsSource
-import terrain.pipeline;            // SplatmapAsset (the SOURCE envelope the persist rewrites)
-import engine.terrain;              // TerrainComponent + TerrainComponentManager
+import terrain.pipeline;            // SplatmapAsset (the source envelope the save rewrites)
+import engine.terrain;              // TerrainComponent, TerrainComponentManager
 import editor.core;
 import editor.viewporttools;
 
@@ -45,9 +45,9 @@ namespace editor
             return static_cast<engine::terrain::TerrainComponentManager*>(base);
         }
 
-        // The region-delta stroke command over BOTH top-K rasters (indices + weights): replays
-        // the touched pixel RECTANGLE between its before / after blocks. One per stroke; never
-        // merges. Keeps the rasters alive.
+        // The region-delta stroke command over both top-K rasters (indices and weights). It
+        // replays the touched pixel rectangle between its before and after blocks, is pushed once
+        // per stroke, never merges, and keeps the rasters alive.
         class SplatStrokeCommand final : public IEditorCommand
         {
         public:
@@ -61,7 +61,7 @@ namespace editor
 
             [[nodiscard]] bool Execute() override
             {
-                Write(m_afterW, m_afterI); // live rasters are already AFTER on push; replays on redo
+                Write(m_afterW, m_afterI); // the live rasters are already in the after state on push; replays on redo
                 return !m_region.IsEmpty();
             }
             void Undo() override { Write(m_beforeW, m_beforeI); }
@@ -203,8 +203,8 @@ namespace editor
                 {
                     return;
                 }
-                // Map the local XZ hit to the 0..1 footprint UV the splatmap covers (the same
-                // mapping the shader's splatUV uses: centred on the local origin).
+                // Map the local XZ hit to the 0..1 footprint UV the splatmap covers, with the same
+                // mapping as the shader's splatUV (centred on the local origin).
                 const Float2 ws = grid->WorldSize();
                 const f32 uvX = localHit.x / (ws.x != 0.0f ? ws.x : 1.0f) + 0.5f;
                 const f32 uvY = localHit.z / (ws.y != 0.0f ? ws.y : 1.0f) + 0.5f;
@@ -226,9 +226,9 @@ namespace editor
     {
         m_hasHover = false;
 
-        // Palette hotkeys 1..9 -> palette layers 0..8; 0 = the ERASER (reveals the base);
-        // minus = SMOOTH (blur toward the neighborhood average). The panel mirrors the
-        // selection and offers the full (unbounded) palette.
+        // Palette hotkeys: 1 to 9 select palette layers 0 to 8, 0 selects the eraser (which
+        // reveals the base), and minus selects smooth (a blur toward the neighborhood average).
+        // The panel follows the selection and offers the full, unbounded palette.
         if (foundation::shell::IKeyboard* kb = input.keyboard; kb != nullptr && input.pointerValid)
         {
             using foundation::shell::KeyCode;
@@ -245,7 +245,7 @@ namespace editor
             if (kb->IsKeyPressed(KeyCode::Minus)) SetSmooth(true);
         }
 
-        // Shift + wheel resizes the brush; the bare wheel stays the camera's dolly (2026-09-23).
+        // Shift and the wheel resize the brush; the wheel alone stays the camera's dolly.
         if (input.pointerOver && input.shift && input.wheelDelta != 0.0f)
         {
             SetRadius(m_radius * (1.0f + 0.12f * input.wheelDelta));
@@ -261,7 +261,7 @@ namespace editor
 
         bool consumed = m_stroking;
 
-        if (!input.editingLocked) // Simulate: the splatmap feeds the live material - no edits
+        if (!input.editingLocked) // no edits while simulating, since the splatmap feeds the live material
         {
             if (!m_stroking && pick.valid && input.pointerOver && input.leftPressed)
             {
@@ -305,18 +305,19 @@ namespace editor
         }
         m_region = terrain::SplatRegion{};
         m_airbrushClock = 0.0f;
-        // The press deposits ONE full stamp and anchors the spacing walker there.
+        // The press deposits one full stamp, and the spacing walk starts there.
         ApplyStamp(pick.uvX, pick.uvY, pick, m_strength);
         m_lastStampU = pick.uvX;
         m_lastStampV = pick.uvY;
     }
 
-    // Distance-spaced stamping (the standard paint-brush model): a stamp lands every m_spacing of
-    // the brush radius of world-space pointer travel, WALKING the segment from the last stamp so a
-    // fast drag leaves no gaps. Frame-rate and drag-speed independent; holding still deposits
-    // nothing beyond the press stamp (scrub to build up at sub-1 strengths) - unless AIRBRUSH is
-    // on, which ALSO stamps at the cursor on a fixed time cadence (build-up by hovering).
-    constexpr i32 kMaxStampsPerFrame = 1024;  // teleport guard (alt-tab warps, huge drags)
+    // Distance-spaced stamping, the standard paint-brush model: a stamp lands every m_spacing of
+    // the brush radius of world-space pointer travel, walking the segment from the last stamp so a
+    // fast drag leaves no gaps. It is independent of frame rate and drag speed. Holding still
+    // deposits nothing beyond the press stamp (scrub to build up at strengths below 1), unless
+    // airbrush is on, which also stamps at the cursor on a fixed time cadence (building up by
+    // hovering).
+    constexpr i32 kMaxStampsPerFrame = 1024;  // guards against pointer jumps (alt-tab warps, huge drags)
     constexpr f32 kAirbrushPeriod = 0.05f;    // seconds per time-cadence stamp (20/s)
 
     void TerrainSplatTool::AdvanceStroke(const Pick& pick, f32 deltaSeconds)
@@ -333,7 +334,7 @@ namespace editor
             const f32 dist = Sqrt(dxWorld * dxWorld + dyWorld * dyWorld);
             if (dist < spacing)
             {
-                break; // remainder carries to the next frame (no partial stamps)
+                break; // the remainder carries to the next frame (no partial stamps)
             }
             const f32 f = spacing / dist;
             m_lastStampU += (pick.uvX - m_lastStampU) * f;
@@ -346,9 +347,10 @@ namespace editor
             for (i32 i = 0; m_airbrushClock >= kAirbrushPeriod && i < kMaxStampsPerFrame; ++i)
             {
                 m_airbrushClock -= kAirbrushPeriod;
-                // Airbrush stamps deposit strength x period: strength reads as COVERAGE PER
-                // SECOND of hover (a gentle flow you steer with time), not per stamp - 20
-                // per-stamp-strength deposits a second saturated instantly at any setting.
+                // Airbrush stamps deposit strength times the period, so strength means coverage
+                // per second of hover (a gentle flow steered by time) rather than per stamp. At 20
+                // stamps a second, depositing the full strength per stamp would saturate at once
+                // at any setting.
                 ApplyStamp(pick.uvX, pick.uvY, pick, m_strength * kAirbrushPeriod);
             }
         }
@@ -360,14 +362,15 @@ namespace editor
         {
             return;
         }
-        // Per-axis UV radii keep the brush a CIRCLE in world space on a non-square footprint.
+        // Per-axis UV radii keep the brush a circle in world space on a non-square footprint.
         const f32 uvRadiusX = m_radius / pick.worldSizeX;
         const f32 uvRadiusY = m_radius / pick.worldSizeY;
-        // `amount` is the per-stamp coverage fraction (movement/press stamps pass strength;
-        // airbrush passes strength x period = coverage/second). The brush's flat CORE scales
-        // with it: a 1.0 stamp keeps the decisive half-radius core (one-hot paint, hard erase),
-        // a low-amount blending stamp is nearly pure cosine - a SOFT brush, so edge blends
-        // grade across the whole radius instead of converging a flat core against a thin skirt.
+        // `amount` is the per-stamp coverage fraction: movement and press stamps pass the
+        // strength, and airbrush passes strength times the period (coverage per second). The
+        // brush's flat core scales with it. A 1.0 stamp keeps the full half-radius core (one-hot
+        // paint, hard erase), while a low-amount blending stamp is nearly pure cosine, a soft
+        // brush whose blends grade across the whole radius instead of a flat core meeting a thin
+        // fringe.
         const f32 t = Clamp(amount, 0.0f, 1.0f);
         const f32 core = 0.5f * t;
         const terrain::SplatRegion r =
@@ -403,9 +406,9 @@ namespace editor
                                                            Move(beforeI), Move(afterI)),
                 editor::EditorRootAllocator()));
 
-            // Register the write-back-to-source persist closure (drained on Save). It rewrites the
-            // SOURCE SplatmapAsset envelope (dims synced, fileName cleared - an imported asset
-            // converts to embedded, the editable-source convention) then writes BOTH sidecars.
+            // Register the closure that writes back to the source (drained on Save). It rewrites
+            // the source SplatmapAsset envelope, syncing the dimensions and clearing fileName so
+            // an imported asset becomes embedded and editable, then writes both sidecars.
             if (m_assetEdits != nullptr && !m_strokeWeightsId.IsNil())
             {
                 RefPtr<terrain::SplatWeights> weights = m_strokeWeights;
@@ -457,7 +460,7 @@ namespace editor
     {
         if (m_stroking)
         {
-            EndStroke(); // gesture-end guarantee: never leave a half-open stroke on a tool switch
+            EndStroke(); // a tool switch never leaves a stroke half open
         }
         m_hasHover = false;
     }
@@ -500,7 +503,7 @@ namespace editor
                 ? Format(u8"Paint Layers [ERASER]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
                          static_cast<i32>(m_radius + 0.5f))
                 : Format(u8"Paint Layers [layer {}]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
-                         static_cast<i32>(m_paletteIndex) + 1, // from 1, as its key and the panel
+                         static_cast<i32>(m_paletteIndex) + 1, // counted from 1, like its key and the panel
                          static_cast<i32>(m_radius + 0.5f));
     }
 }

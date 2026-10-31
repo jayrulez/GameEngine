@@ -3,9 +3,9 @@
 
 // Foundation::Texture - reflection implementation unit: enum reflection bodies.
 //
-// Kept OUT of the :types interface partition (REFLECT_* bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). Types.cppm declares RegisterTextureReflection();
-// this unit defines it + the RttiRegisterEnum_* bodies.
+// Kept out of the :types interface partition because REFLECT_* bodies make GCC emit a gcm
+// cluster. Types.cppm declares RegisterTextureReflection(); this unit defines it and the
+// RttiRegisterEnum_* bodies.
 
 module;
 #include "Core/Prelude.h"

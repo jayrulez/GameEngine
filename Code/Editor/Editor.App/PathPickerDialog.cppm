@@ -3,11 +3,11 @@
 
 // Editor App - :path_picker_dialog partition
 //
-// The path picker (Documentation/Specs/editor-gui.md, 5.2, layer 5): the picker over the files
-// under a folder whose extension is one of those asked (ignoring case; none asked: every file),
-// so a field that names a file can only name one that is there (a font's source, a profiler
-// capture). Each file is a row by its name, under its folder (root-relative), sorted by path; its
-// key is its root-relative path. With none there it says so, naming the extensions and the folder.
+// The path picker: the picker over the files under a folder whose extension is one of those
+// requested (ignoring case; with none requested, every file), so a field that names a file can only
+// name one that exists (a font's source, a profiler capture). Each file is a row with its name,
+// under its folder (root-relative), sorted by path; its key is its root-relative path. With no
+// files it says so, naming the extensions and the folder.
 module;
 #include "Core/Prelude.h"
 
@@ -26,7 +26,7 @@ export namespace editor::app
     struct PathPicker
     {
         /// The picker's request over the files under `root` with one of `extensions` (".ttf");
-        /// `current` the root-relative path the field names now.
+        /// `current` is the root-relative path the field names now.
         [[nodiscard]] static PickerRequest Request(IAllocator& allocator, StringView root, Span<const String> extensions, StringView current = {})
         {
             Array<String> files = Files(allocator, root, extensions);
@@ -90,7 +90,7 @@ export namespace editor::app
             return files;
         }
 
-        /// Whether `name` ends with one of `extensions`, ignoring case; none: any.
+        /// Whether `name` ends with one of `extensions`, ignoring case; with none, any name matches.
         [[nodiscard]] static bool Takes(StringView name, Span<const String> extensions)
         {
             if (extensions.IsEmpty())

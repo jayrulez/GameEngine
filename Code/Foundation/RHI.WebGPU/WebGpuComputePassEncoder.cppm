@@ -54,7 +54,7 @@ export namespace foundation::rhi::webgpu
         void SetPushConstants(ShaderStage, u32 offset, u32 size, const void* data) override
         {
             // Emulating pipeline: fold into the shadow (bound before the next dispatch).
-            // Otherwise the pipeline declared native immediates - issue them directly.
+            // Otherwise the pipeline declared native immediates; issue them directly.
             if (!m_pushConstants.Write(offset, size, data) &&
                 m_api->wgpuComputePassEncoderSetImmediates != nullptr)
             {
@@ -81,8 +81,8 @@ export namespace foundation::rhi::webgpu
 
         void ComputeBarrier() override
         {
-            // WebGPU tracks hazards automatically - dispatch ordering within a pass is
-            // already dependency-correct.
+            // WebGPU tracks hazards automatically; dispatch ordering within a pass is already
+            // dependency-correct.
         }
 
         void WriteTimestamp(QuerySet*, u32) override
@@ -93,16 +93,16 @@ export namespace foundation::rhi::webgpu
         void End() override
         {
             m_api->wgpuComputePassEncoderEnd(m_encoder);
-            // AFTER End: the pass commands hold their references now, so the emulated
-            // uniform buffers/bind groups can be freed.
+            // After End: the pass commands hold their references now, so the emulated uniform
+            // buffers and bind groups can be freed.
             m_pushConstants.Release();
             m_api->wgpuComputePassEncoderRelease(m_encoder);
             m_encoder = nullptr;
         }
 
     private:
-        /// Upload + bind any pending emulated push-constant block before a dispatch. No-op for
-        /// pipelines that use native immediates.
+        /// Upload and bind any pending emulated push-constant block before a dispatch. No-op
+        /// for pipelines that use native immediates.
         void FlushPushConstants()
         {
             i32 group = -1;

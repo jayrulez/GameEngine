@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// editor.core - native-code scaffolding implementation (game-native-code.md N4).
+// editor.project - native-code scaffolding implementation.
 //
-// Generates the NativeSample reference shape into an existing project: the Native/
-// directory with the canonical CMakeLists (util_add_engine_library; dev .so lands in
-// Native/ itself, exactly where the manifest points) and a plugin skeleton whose
-// OnLoad is the one registration entry. Kept in an impl unit; the templates are
-// string-built here so the wizard and the committed fixture stay one shape.
+// Generates the NativeSample shape into an existing project: the Native/ directory with the
+// standard CMakeLists (util_add_engine_library; the development .so lands in Native/ itself,
+// exactly where the manifest points) and a plugin skeleton whose OnLoad is the one registration
+// entry. The templates are built as strings in this implementation unit.
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +37,7 @@ namespace editor
     {
         if (!project.Settings().nativeModule.IsEmpty())
         {
-            return Status{ErrorCode::AlreadyExists}; // declared already - nothing to scaffold
+            return Status{ErrorCode::AlreadyExists}; // already declared, so nothing to scaffold
         }
         const String nativeDir = PathJoin(project.Directory(), u8"Native");
         if (DirectoryExists(nativeDir.AsView()))
@@ -52,8 +51,8 @@ namespace editor
 
         const String target = NativeTargetNameFromProjectName(project.Settings().name.AsView());
 
-        // Templates with an @T@ token (the house Format has no indexed placeholders,
-        // and brace-heavy C++ text reads better untouched).
+        // Templates use an @T@ token, because Format has no indexed placeholders and C++ text
+        // full of braces reads better left as it is.
         auto instantiate = [&](StringView text)
         {
             String out;
@@ -155,11 +154,11 @@ namespace editor
             return Status{ErrorCode::Internal};
         }
 
-        // Platform-shaped, because the manifest path is what the editor/player actually
-        // dlopens: MSVC names a DLL "<Target>.dll" with no "lib" prefix, ELF names it
-        // "lib<Target>.so". NativeTargetFromModulePath parses both back, so a manifest
-        // authored on one platform still yields the right SHIP target name on the other -
-        // only the dev-load path is platform-specific.
+        // Shaped per platform, because the manifest path is what the editor or player actually
+        // dlopens: MSVC names a DLL "<Target>.dll" with no "lib" prefix, and ELF names it
+        // "lib<Target>.so". NativeTargetFromModulePath parses both back, so a manifest authored on
+        // one platform still yields the right ship target name on the other; only the dev-load
+        // path is platform-specific.
 #if PLATFORM_WINDOWS
         project.Settings().nativeModule = Format(u8"Native/{}.dll", target);
 #else

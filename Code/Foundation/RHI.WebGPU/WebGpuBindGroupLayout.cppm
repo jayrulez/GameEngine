@@ -3,11 +3,11 @@
 
 /// foundation.rhi.webgpu:bind_group_layout - BindGroupLayout over WGPUBindGroupLayout.
 ///
-/// Bindings are declared SHIFTED (ShiftedBinding - the compact WebGPU profile,
-/// matching what the compile side bakes into SPIR-V for WebGPU devices). Bindless
-/// and acceleration-structure entry types have no WebGPU shape - honest
-/// NotSupported, as are binding arrays (count > 1). Texture sample types come from
-/// the entry's EXPLICIT textureSampleType (WebGPU validates it against the shader).
+/// Bindings are declared shifted (ShiftedBinding, the compact WebGPU profile, matching
+/// what the compile side bakes into SPIR-V for WebGPU devices). Bindless and
+/// acceleration-structure entry types have no WebGPU shape and fail with NotSupported,
+/// as do binding arrays (count > 1). Texture sample types come from the entry's
+/// explicit textureSampleType (WebGPU validates it against the shader).
 
 module;
 #include "Core/Prelude.h"
@@ -32,8 +32,8 @@ export namespace foundation::rhi::webgpu
         {
             m_api = &api;
 
-            // Own a copy: Entries() serves it, and bind-group creation replays it to
-            // shift bindings by the SAME rule the layout used.
+            // Own a copy: Entries() serves it, and bind-group creation replays it to shift
+            // bindings by the same rule the layout used.
             for (const BindGroupLayoutEntry& entry : layoutDesc.entries)
             {
                 m_entries.PushBack(entry);

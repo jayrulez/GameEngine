@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Texture.Pipeline - the texture domain's New Asset creators
-// (agent-playtesting-and-asset-creation.md P1): what File > New and asset_create make, with no
-// editor. A texture from a file is an import; a render texture has no file, so it is made here.
+// Texture.Pipeline - the texture domain's New Asset creators: what File > New and asset_create
+// make, with no editor. A texture from a file is an import; a render texture has no file, so it
+// is made here.
 
 module;
 #include "Core/Prelude.h"

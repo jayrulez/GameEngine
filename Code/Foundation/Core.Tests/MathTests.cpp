@@ -343,7 +343,7 @@ TEST_CASE("math: Transform composes scale, rotation, translation")
 
     const Float4x4 m = xform.ToMatrix();
 
-    // (1,0,0) -> scale*2 -> (2,0,0) -> rot90Z -> (0,2,0) -> +translate -> (5,2,0)
+    // (1,0,0) scaled by 2 is (2,0,0), rotated 90 about Z is (0,2,0), translated is (5,2,0).
     const Float3 p = TransformPoint(Float3::UnitX, m);
     CHECK(NearlyEqual(p, Float3{5.0f, 2.0f, 0.0f}));
 
@@ -560,7 +560,7 @@ TEST_CASE("color: an authored (sRGB) colour decodes to linear for the renderer")
     CHECK(ToLinear(Color{2.0f, 0.0f, 0.0f, 1.0f}).r > 1.0f);
 }
 
-// --- Math: easing functions (ported from Sedulous.Core.Mathematics.Easings) ---
+// --- Math: easing functions ---
 
 TEST_CASE("math: easing endpoints + known values")
 {
@@ -588,13 +588,13 @@ TEST_CASE("math: easing endpoints + known values")
     CHECK(NearlyEqual(EaseInCubic(0.5f), 0.125f));
     CHECK(NearlyEqual(EaseInOutCubic(0.5f), 0.5f));
     CHECK(NearlyEqual(EaseInOutSin(0.5f), 0.5f));
-    // Symmetric in/out-out: in/out midpoints land on 0.5 for odd-symmetric families.
+    // The in-out midpoints land on 0.5 for the odd-symmetric families.
     CHECK(NearlyEqual(EaseInOutQuartic(0.5f), 0.5f));
     CHECK(NearlyEqual(EaseInOutQuintic(0.5f), 0.5f));
     CHECK(NearlyEqual(EaseInOutCircular(0.5f), 0.5f));
 }
 
-// --- Math: Transform Lerp (BoneTransform.Lerp equivalent) ---
+// --- Math: Transform Lerp ---
 
 TEST_CASE("math: Transform Lerp + identity")
 {
@@ -614,8 +614,8 @@ TEST_CASE("math: Transform Lerp + identity")
     CHECK(NearlyEqual(at1.position, b.position));
 }
 
-// Ported from Sedulous per-need (Matrix.Decompose + Quaternion.CreateFromRotationMatrix): TRS
-// compose -> decompose round-trip, the world-preserving-reparent substrate.
+// TRS compose then decompose round-trips; reparenting that preserves the world transform builds
+// on it.
 TEST_CASE("math: TRS decompose round-trips compose")
 {
     Transform t;
@@ -678,7 +678,7 @@ TEST_CASE("math: yaw/pitch/roll round-trips through quaternion")
 
 TEST_CASE("math: RigidPart strips scale, keeps translation + rotation")
 {
-    // The nav-zone placement frame: a matrix must PLACE world-unit-sized data without warping it.
+    // The nav-zone placement frame: a matrix must place world-unit-sized data without warping it.
     Transform t;
     t.position = Float3{3.0f, -2.0f, 7.5f};
     t.rotation = Quaternion::FromAxisAngle(Normalized(Float3{0.3f, 1.0f, 0.2f}), 0.9f);
@@ -711,8 +711,8 @@ TEST_CASE("math: RigidPart strips scale, keeps translation + rotation")
         }
     }
 
-    // DOCUMENTED failure behaviour: a degenerate frame (a zero scale axis) cannot decompose;
-    // RigidPart falls back to translation + IDENTITY rotation (never garbage).
+    // A degenerate frame (a zero scale axis) cannot decompose; RigidPart then falls back to the
+    // translation and the identity rotation, never garbage.
     Transform degenerate = t;
     degenerate.scale.y = 0.0f;
     const Float4x4 fallback = RigidPart(degenerate.ToMatrix());

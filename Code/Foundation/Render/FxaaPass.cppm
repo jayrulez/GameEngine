@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:fxaa` partition.
 ///
-/// FXAA (Fast Approximate Anti-Aliasing), the TAA-OFF fallback AA. A single fullscreen LDR pass after
-/// tonemap: perceptual-luma edge detect + directional edge search + sub-pixel blend (ported from the
-/// SedulousEngine fxaa.frag quality variant). Only run when TAA is off - the two are never stacked
-/// (locked decision) since TAA already resolves aliasing and FXAA on top would double-blur. Reads the
-/// tonemapped LDR (a transient), writes the final target - both mapped to the view's sub-rect (so
-/// split-screen views FXAA their own region), exactly like the tonemap.
+/// FXAA (Fast Approximate Anti-Aliasing), the fallback AA when TAA is off. A single fullscreen LDR
+/// pass after tonemap: perceptual-luma edge detection, a directional edge search and a sub-pixel
+/// blend (the FXAA quality variant). It runs only when TAA is off; the two are never stacked, since
+/// TAA already resolves aliasing and FXAA on top would blur twice. Reads the tonemapped LDR (a
+/// transient) and writes the final target, both mapped to the view's sub-rect as in the tonemap, so
+/// split-screen views anti-alias their own region.
 
 module;
 #include "Core/Prelude.h"
@@ -34,17 +34,17 @@ export namespace foundation::render
     struct GpuFxaaPush
     {
         Float2 texelSize{};         // 1 / the full target size
-        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv -> the view's sub-rect
+        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv to the view's sub-rect
         Float2 uvOffset{0.0f, 0.0f};
         f32 subpixelQuality = 0.75f;
         f32 edgeThreshold = 0.166f;
         f32 edgeThresholdMin = 0.0312f; // skip dark, flat areas
-        f32 linearInput = 0.0f; // 1 = the source holds linear values (an sRGB or float target)
+        f32 linearInput = 0.0f; // 1: the source holds linear values (an sRGB or float target)
     };
     static_assert(sizeof(GpuFxaaPush) == 40, "push FxaaPush layout drift");
 
-    // Anti-aliases a tonemapped LDR transient into the final LDR target. Owns the fullscreen pipeline +
-    // per-(view,frame) bind groups over the (transient) source view. Declared after tonemap, when TAA is off.
+    // Anti-aliases a tonemapped LDR transient into the final LDR target. Owns the fullscreen pipeline and
+    // per-(view, frame) bind groups over the transient source view. Declared after tonemap, when TAA is off.
     class FxaaPass
     {
     public:
@@ -160,7 +160,7 @@ export namespace foundation::render
 
         // Per-format entries: a frame can hold views with different target formats, and a
         // destroy-on-mismatch single slot would destroy a pipeline the same encoder's earlier
-        // view still references (the tonemap pass shipped that crash first).
+        // view still references.
         static constexpr usize kMaxPipelineFormats = 4;
         struct PipelineEntry
         {

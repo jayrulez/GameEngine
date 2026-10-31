@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Play - :game_resolution partition (Sedulous c5100e94).
+// Editor::Play - :game_resolution partition.
 //
 // The resolutions the Game tab offers to draw at. The project's own render resolution comes
 // first and is the default; then each export preset that draws at its own size, as that
@@ -33,20 +33,20 @@ export namespace editor
         String label; // what the dropdown shows
         u32 width = 0; // nought for the panel's own size
         u32 height = 0;
-        // An export preset held its own way (a phone-facing Web preset says Landscape): the Game
-        // tab previews it so; otherwise the project's orientation applies.
+        // An export preset held its own way (a phone-facing Web preset says Landscape) is previewed
+        // that way in the Game tab; otherwise the project's orientation applies.
         bool overridesOrientation = false;
         ScreenOrientation orientation = ScreenOrientation::Any;
     };
 
-    /// The Game tab's phone preview (Specs/present-transform.md): a phone held upright, 9 by 19.5.
+    /// The Game tab's phone preview: a phone held upright, 9 by 19.5.
     inline constexpr u32 kPhonePreviewWidth = 720;
     inline constexpr u32 kPhonePreviewHeight = 1560;
 
-    /// The game on a `width` x `height` target (the panel, or the previewed phone's screen), as the
-    /// player puts it in its window: its render resolution (0 x 0: none) fitted by `fit`, turned a
-    /// quarter when `orientation` is not the target's shape, and then at the target's pixels turned
-    /// when it has no resolution of its own.
+    /// How the game sits on a `width` x `height` target (the panel, or the previewed phone's
+    /// screen), as the player puts it in its window: its render resolution (0 x 0 for none) fitted
+    /// by `fit`, and turned a quarter when `orientation` does not match the target's shape. With no
+    /// resolution of its own, it is drawn turned at the target's pixels.
     [[nodiscard]] inline ContentFit GameFitOn(u32 width, u32 height, u32 renderWidth, u32 renderHeight, FitMode fit,
                                               ScreenOrientation orientation) noexcept
     {
@@ -104,8 +104,8 @@ export namespace editor
             const u32 projectHeight = out[0].height;
             for (const ExportPreset& preset : presets->presets)
             {
-                // A preset that draws at its own size, or is held its own way; one that changes
-                // neither looks as the project does.
+                // A preset that draws at its own size or is held its own way. One that changes
+                // neither looks the same as the project entry.
                 const bool ownSize = preset.overridesRender && preset.renderWidth > 0 && preset.renderHeight > 0;
                 const StringView held = preset.overridesOrientation ? OrientationLabel(preset.orientation) : StringView();
                 if (!ownSize && held.IsEmpty())
@@ -145,7 +145,7 @@ export namespace editor
         return out;
     }
 
-    /// The entry a saved key names; the project's (the first) when it names none any more.
+    /// The entry a saved key names, or the project's entry (the first) when the key names none.
     [[nodiscard]] inline usize FindGameResolution(Span<const GameResolutionChoice> choices, StringView key)
     {
         for (usize i = 0; i < choices.Size(); ++i)

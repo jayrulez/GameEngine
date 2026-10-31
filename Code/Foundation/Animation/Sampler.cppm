@@ -3,8 +3,8 @@
 
 /// Foundation::Animation - the `:sampler` partition.
 ///
-/// Stateless sampling of clips/tracks into bone poses + pose blending (lerp + additive). Ported
-/// faithfully from Sedulous.Animation.AnimationSampler.
+/// Stateless sampling of clips and tracks into bone poses, and pose blending (linear and
+/// additive).
 
 module;
 #include "Core/Prelude.h"
@@ -40,7 +40,7 @@ export namespace foundation::animation
                                                     const Keyframe<Quaternion>& next, f32 t,
                                                     f32 /*duration*/)
     {
-        // Simplified Hermite + normalize (squad would be more accurate), matching Sedulous.
+        // Simplified Hermite, then normalize (squad would be more accurate).
         const f32 t2 = t * t, t3 = t2 * t;
         const f32 h00 = 2.0f * t3 - 3.0f * t2 + 1.0f;
         const f32 h01 = -2.0f * t3 + 3.0f * t2;

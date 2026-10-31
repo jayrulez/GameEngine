@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/FillTessellatorTests.bf.
+// FillTessellator: fill meshes with and without antialiasing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

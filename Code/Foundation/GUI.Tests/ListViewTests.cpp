@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - ListView tests: virtualization (only visible rows realized), single selection
-// via mouse + keyboard, wheel/scroll-into-view, and reacting to model updates.
+// GUI - ListView tests: virtualization (only visible rows realized), single selection by mouse and
+// keyboard, wheel and scroll-into-view, and reacting to model updates.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -158,7 +158,7 @@ TEST_CASE("listview: reacts to model updates and clamps a stale selection")
     list->SetSelectedItem(4);
     CHECK(list->GetSelectedItem() == 4);
 
-    model.SetItems(MakeItems(2)); // notifies the view -> selection 4 is now out of range
+    model.SetItems(MakeItems(2)); // notifies the view; selection 4 is out of range
     CHECK(list->GetSelectedItem() == -1);
 
     model.AddItem(SV(u8"more"));
@@ -277,16 +277,16 @@ TEST_CASE("listview: an item its model says may not be selected (a section heade
 
     list->RequestFocus();
     const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
-    d->InjectKeyDown(key(KeyCode::Down)); // nothing selected: the first that may be, past the header
+    d->InjectKeyDown(key(KeyCode::Down)); // with nothing selected, the first selectable row, past the header
     CHECK(list->GetSelectedItem() == 1);
     list->SetSelectedItem(4);
-    d->InjectKeyDown(key(KeyCode::Down)); // over the header at 5
+    d->InjectKeyDown(key(KeyCode::Down)); // skips the header at 5
     CHECK(list->GetSelectedItem() == 6);
     d->InjectKeyDown(key(KeyCode::Up));
     CHECK(list->GetSelectedItem() == 4);
-    d->InjectKeyDown(key(KeyCode::Home)); // the first that may be
+    d->InjectKeyDown(key(KeyCode::Home)); // the first selectable row
     CHECK(list->GetSelectedItem() == 1);
-    d->InjectKeyDown(key(KeyCode::Up)); // nothing before it: it stays
+    d->InjectKeyDown(key(KeyCode::Up)); // nothing selectable before it, so it stays
     CHECK(list->GetSelectedItem() == 1);
 
     list->SetSelectionModeName(core::String(u8"multi"));

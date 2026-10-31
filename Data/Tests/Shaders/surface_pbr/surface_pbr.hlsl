@@ -4,10 +4,10 @@
 // The engine's built-in PBR (`forward`) written as a lit surface shader: the reference that a
 // surface shader renders as the engine's own does (Code/Integration/Integration.Shaders compares
 // them on the GPU). Its properties are forward's, in forward's order, so a PBR material's values
-// mean the same on it, at the same offsets (forward's buffer keeps its old wind lanes as padding;
+// mean the same on it, at the same offsets (forward's buffer pads offsets 24 and 28 explicitly;
 // a float4 aligns to its row here, so EmissiveColor lands at 32 all the same). It sways as forward
 // does: its programs declare WIND, and the engine's vertex stage sways it by its material's Wind
-// group (Specs/wind-for-every-shader.md).
+// group.
 // surface: lit
 
 properties

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.RenderGraph.Tests/PassBuilderTests.bf
+// PassBuilder: the accesses and attachments each declaration records.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -95,10 +95,10 @@ TEST_CASE("rg.builder: SetDepthTarget carries explicit stencil ops + clear")
 
 TEST_CASE("rg.builder: write-only depth (StoreOp::DontCare) still records the access")
 {
-    // The overlay-stencil regression: a scratch DS used only within the pass (Clear +
-    // DontCare) must still count as a WRITE access - the access keeps the transient
-    // referenced (allocated) and drives its layout transition. Without it the resource
-    // ref-counts to zero and ExecuteRenderPass silently drops the whole pass.
+    // A scratch DS used only within the pass (Clear and DontCare), as the overlay stencil is, must
+    // still count as a write access: the access keeps the transient referenced (allocated) and
+    // drives its layout transition. Without it the resource ref-counts to zero and
+    // ExecuteRenderPass silently drops the whole pass.
     RenderGraphPass pass(u8"Test", RGPassType::Render);
     PassBuilder builder(pass);
     builder.SetDepthTarget(RGHandle{0, 1}, rhi::LoadOp::Clear, rhi::StoreOp::DontCare, 1.0f, {},
@@ -126,7 +126,7 @@ TEST_CASE("rg.builder: SampleDepth reads without an attachment")
     PassBuilder builder(pass);
     builder.SampleDepth(RGHandle{0, 1});
 
-    // Unlike ReadDepth, sampling a depth texture in a shader is NOT a depth attachment:
+    // Unlike ReadDepth, sampling a depth texture in a shader is not a depth attachment:
     // it adds a read access only, leaving depthTarget unset.
     CHECK_FALSE(pass.depthTarget.HasValue());
     REQUIRE(pass.accesses.Size() == 1u);
@@ -204,7 +204,7 @@ TEST_CASE("rg.builder: fluent chaining")
         .SetDepthTarget(RGHandle{1, 1}, rhi::LoadOp::Load, rhi::StoreOp::Store)
         .NeverCull();
 
-    CHECK(pass.accesses.Size() == 3u); // read + write-color + readwrite-depth (Load+Store)
+    CHECK(pass.accesses.Size() == 3u); // read, write-color and readwrite-depth (Load and Store)
     CHECK(pass.colorTargets.Size() == 1u);
     CHECK(pass.depthTarget.HasValue());
     CHECK(pass.neverCull);

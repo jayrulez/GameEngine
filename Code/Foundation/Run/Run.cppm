@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Foundation::Run - the `foundation.run` module (Documentation/Specs/run-context.md).
+/// Foundation::Run - the `foundation.run` module.
 ///
 /// A run is one running game: a player's game, each editor Game tab's game, an in-editor
 /// dedicated server. `IRun` is how anything reaches one (its id, name, state, event bus and the

@@ -5,9 +5,8 @@
 //
 // Tracks ResourceState per subresource (mip x layer) with a uniform fast path:
 // while all subresources share a state, only one value is stored; a per-
-// subresource array is materialized lazily when states diverge, and collapsed
-// back when they reconverge. Ported from Sedulous.RenderGraph
-// (SubresourceStateTracker.bf); Beef's null-means-uniform becomes an empty Array.
+// subresource array is materialized lazily when states diverge (empty means
+// uniform), and collapsed back when they reconverge.
 
 module;
 #include "Core/Prelude.h"
@@ -120,7 +119,7 @@ export namespace foundation::rendergraph
             return copy;
         }
 
-        // Restore from a per-subresource snapshot (empty/mismatched => uniform fallback).
+        // Restore from a per-subresource snapshot (empty or mismatched falls back to uniform).
         void InitFromStates(const Array<rhi::ResourceState>& states,
                             rhi::ResourceState uniformFallback)
         {

@@ -3,8 +3,8 @@
 
 // Core - System backend, Win32 implementation.
 //
-// NOTE: written against SystemBackend.h for Windows/MSVC; not compiled in the
-// Linux dev environment. Validate on Windows.
+// Written against SystemBackend.h for Windows/MSVC. The Linux dev environment does
+// not compile it; the Windows CI job does.
 
 #include "Core/System/SystemBackend.h"
 
@@ -114,7 +114,7 @@ namespace foundation::core::sys
         {
             return false;
         }
-        // Launch Explorer on the folder via CreateProcess (kernel32) - NOT ShellExecute / a file://
+        // Launch Explorer on the folder via CreateProcess (kernel32), not ShellExecute or a file://
         // URL, both of which can synchronously block or pop a protocol chooser and hang the UI thread.
         // CreateProcess returns as soon as the child starts (we don't wait), so this can never block.
         // Quotes let the path contain spaces; explorer parses its own command line. Core needs no
@@ -178,7 +178,7 @@ namespace foundation::core::sys
         }
 
         // Build the command line: exe arg0 arg1 ... CreateProcess re-parses this, so each token is
-        // quoted ONLY WHEN IT NEEDS IT (empty, or containing whitespace/quotes). Quoting
+        // quoted only when it needs it (empty, or containing whitespace/quotes). Quoting
         // unconditionally breaks callees that parse their own command line rather than using
         // CommandLineToArgvW - notably cmd.exe, which does not recognise a quoted "/c" switch.
         // Spaces in the vendored-tool path and file arguments still get quoted.
@@ -207,7 +207,7 @@ namespace foundation::core::sys
             {
                 if (*p == '\\')
                 {
-                    // A backslash run is literal UNLESS it precedes the closing quote, where
+                    // A backslash run is literal unless it precedes the closing quote, where
                     // each one must be doubled so it isn't read as escaping that quote.
                     std::size_t slashes = 0;
                     while (p[slashes] == '\\')
@@ -353,13 +353,12 @@ namespace foundation::core::sys
             break;
         }
 
-        // Share EVERYTHING, to match the POSIX semantics the rest of the engine is written
+        // Share everything, to match the POSIX semantics the rest of the engine is written
         // against: there, an open reader never prevents rewriting, replacing or unlinking a
-        // file. With the previous FILE_SHARE_READ, any outstanding read stream made a later
-        // write open fail - so e.g. regenerating a model prefab while its own payload stream
-        // was still open failed on Windows and passed on Linux. Callers that need exclusive
-        // access must take a real lock; the share mode was never providing one (it only
-        // blocked writers, and only while a handle happened to be open).
+        // file. With FILE_SHARE_READ alone, any outstanding read stream would make a later
+        // write open fail (e.g. regenerating a model prefab while its own payload stream is
+        // still open). Callers that need exclusive access must take a real lock; a share mode
+        // does not provide one (it only blocks writers, and only while a handle is open).
         constexpr DWORD kShareAll = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
         HANDLE handle = CreateFileA(path, access, kShareAll, nullptr, creation,
                                     FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -382,7 +381,7 @@ namespace foundation::core::sys
         }
     }
 
-    // NOTE: single calls are capped at DWORD (4 GB); sufficient for buffered IO.
+    // Single calls are capped at DWORD (4 GB); sufficient for buffered IO.
     std::int64_t FileRead(FileHandle handle, void* buffer, std::uint64_t bytes) noexcept
     {
         DWORD read = 0;
@@ -608,7 +607,7 @@ namespace foundation::core::sys
         {
             return nullptr;
         }
-        // memcpy avoids the function-pointer <-> void* cast warning (MSVC C4054 under /W4 /WX).
+        // memcpy avoids the function-pointer to void* cast warning (MSVC C4054 under /W4 /WX).
         FARPROC proc = GetProcAddress(reinterpret_cast<HMODULE>(handle), name);
         void* result = nullptr;
         std::memcpy(&result, &proc, sizeof(result));
@@ -623,7 +622,7 @@ namespace foundation::core::sys
         }
     }
 
-    // --- UDP sockets (Winsock2; validate on Windows) -----------------------
+    // --- UDP sockets (Winsock2) ---------------------------------------------
 
     namespace
     {
@@ -795,7 +794,7 @@ namespace foundation::core::sys
         return static_cast<std::int64_t>(n);
     }
 
-    // --- TCP sockets (Winsock2; validate on Windows) -----------------------
+    // --- TCP sockets (Winsock2) ---------------------------------------------
 
     static void SetNonBlocking(SOCKET s) noexcept
     {
@@ -856,7 +855,7 @@ namespace foundation::core::sys
         if (fd == INVALID_SOCKET)
         {
             return kInvalidSocket;
-        } // WSAEWOULDBLOCK => none pending
+        } // WSAEWOULDBLOCK: none pending
         SetNonBlocking(fd);
         if (fromIp != nullptr)
         {

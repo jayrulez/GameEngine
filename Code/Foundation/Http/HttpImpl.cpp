@@ -179,12 +179,10 @@ namespace foundation::http
                 {
                     ++secondSpace;
                 }
-                // Both separators must be PRESENT with something after them: "GET /path"
-                // (no version) stops the second scan exactly at the end, which a
-                // `secondSpace > Size` check let through - the version read below then
-                // started one past the line (the Beef port's garbage test caught it).
-                // A response may omit the reason phrase ("HTTP/1.1 200"): only the request
-                // form needs the third part.
+                // Both separators must be present with something after them: "GET /path"
+                // (no version) stops the second scan exactly at the end of the line, and the
+                // version read below would then start one past it. A response may omit the
+                // reason phrase ("HTTP/1.1 200"): only the request form needs the third part.
                 if (firstSpace >= line.Size() ||
                     (m_mode == Mode::Request && secondSpace >= line.Size()))
                 {
@@ -540,7 +538,7 @@ namespace foundation::http
             AppendText(out, eventName);
             AppendText(out, u8"\n");
         }
-        // Multi-line data -> one `data:` field per line (the SSE framing rule).
+        // Multi-line data becomes one `data:` field per line (the SSE framing rule).
         usize lineStart = 0;
         for (usize i = 0; i <= data.Size(); ++i)
         {
@@ -593,7 +591,7 @@ namespace foundation::http
             }
             if (n < 0)
             {
-                m_socket.Close(); // closed or errored - the stream is dead
+                m_socket.Close(); // closed or errored: the stream is dead
                 return false;
             }
             // n > 0: an SSE client should not send; discard and keep probing.
@@ -700,7 +698,7 @@ namespace foundation::http
                             HttpResponse::Text(404, u8"text/plain", u8"no handler registered"));
         if (!answer.HasValue())
         {
-            return false; // not yet - the handler sees the same request next Pump
+            return false; // not yet: the handler sees the same request next Pump
         }
         connection.pending = false;
         const HttpResponse& response = answer.Value();
@@ -768,7 +766,7 @@ namespace foundation::http
             }
             if (m_connections.Size() >= m_config.maxConnections)
             {
-                continue; // socket closes on scope exit = refused
+                continue; // the socket closes on scope exit: refused
             }
             m_connections.PushBack(MakeUnique<Connection>(*m_allocator, Move(accepted),
                                                           m_config.maxBodyBytes));
@@ -788,7 +786,7 @@ namespace foundation::http
                 if (connection.socket.Receive(Span<byte>(buffer, sizeof(buffer))) < 0)
                 {
                     NotifyAbandoned(connection);
-                    done = true; // the peer left while waiting - nobody to answer
+                    done = true; // the peer left while waiting: nobody to answer
                 }
                 else if (Dispatch(connection))
                 {
@@ -849,8 +847,8 @@ namespace foundation::http
             }
         }
 
-        // Sweep dead event streams (liveness-POLLED: a write into a freshly closed peer can
-        // still succeed, so IsOpen alone lags). The consumer's ref stays valid - writes no-op.
+        // Sweep dead event streams, polled for liveness: a write into a freshly closed peer can
+        // still succeed, so IsOpen alone lags. The consumer's ref stays valid; its writes no-op.
         for (usize i = 0; i < m_streams.Size();)
         {
             if (!m_streams[i]->PollLive())

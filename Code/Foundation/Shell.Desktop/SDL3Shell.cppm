@@ -3,17 +3,16 @@
 
 // Foundation::Shell.Desktop - the `foundation.shell.desktop` module.
 //
-// The desktop shell target (Windows/Linux/macOS), implemented on SDL3:
+// The desktop shell target (Windows, Linux, macOS), implemented on SDL3:
 // SDL3Shell covers Wayland, X11, Win32, and Cocoa in one backend, plus input,
 // clipboard, and Vulkan-surface creation for RHI. SDL is linked dynamically
-// (system/prebuilt) and bundled for distribution. We own the entry point
+// (system or prebuilt) and bundled for distribution. We own the entry point
 // (SDL_MAIN_HANDLED), so SDL does not hijack main; SDL_SetMainReady() is called
 // before SDL_Init.
 //
-// Other SDL-based targets (Emscripten, Android) get their own modules/folders:
-// they share this SDL3 IShell shape but differ in run loop (callback vs
-// blocking), entry point, and build flags. If the impl ends up duplicated it can
-// be extracted into a shared module then.
+// Other SDL-based targets (Emscripten, Android) get their own modules and folders:
+// they share this SDL3 IShell shape but differ in run loop (callback or
+// blocking), entry point, and build flags.
 //
 // If SDL video init or window creation fails (e.g. no display), the shell
 // degrades: MainWindow() is null and IsRunning() is false, so a runner exits
@@ -146,7 +145,7 @@ export namespace foundation::shell
 
     private:
         // True only for windows this manager owns (present in m_live). Rejects nullptr too, so
-        // DestroyWindow() is a no-op for null/unknown windows. Checked by pointer identity, NOT id:
+        // DestroyWindow() is a no-op for null or unknown windows. Checked by pointer identity, not id:
         // a window from another manager can share an id, and acting on it would corrupt bookkeeping.
         [[nodiscard]] bool Owns(IWindow* window) const noexcept;
         core::IAllocator* m_allocator;
@@ -156,11 +155,11 @@ export namespace foundation::shell
         core::Array<core::u32> m_pendingDestroy;
         core::Array<WindowEvent> m_events;
         core::Array<Screen> m_screens;
-        core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
+        core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 is none
     };
 
     // -----------------------------------------------------------------------
-    // Input devices - state fed by the SDL3 event pump. Pressed and released are the edges the
+    // Input devices: state fed by the SDL3 event pump. Pressed and released are the edges the
     // frame's events brought, latched until the next frame: a press and its release arriving in
     // one frame (a quick click while a frame takes long) read as both, never as neither, as the
     // state at the frame's ends alone would.
@@ -335,7 +334,7 @@ export namespace foundation::shell
         void SetWindow(SDL_Window* window) { m_mouse.SetWindow(window); }
 
         // Emit an input event onto this frame's stream (also apply it to the snapshot at the
-        // call site - the snapshot is a fold over these events).
+        // call site; the snapshot is a fold over these events).
         void EmitEvent(const InputEvent& e) { m_events.PushBack(e); }
         void SetHoverWindow(core::u32 id) noexcept { m_hoverWindow = id; }
         void SetFocusWindow(core::u32 id) noexcept { m_focusWindow = id; }
@@ -357,10 +356,10 @@ export namespace foundation::shell
         core::u32 m_focusWindow = 0;      // keyboard-focused window
     };
 
-    // Native file/folder dialogs over SDL3 (SDL_Show{Open,Save}FileDialog / SDL_ShowOpenFolderDialog).
-    // Async: each Show* returns immediately; SDL fires Trampoline later (during SDL event processing,
-    // i.e. the shell's ProcessEvents pump), which hands the callback OWNED path copies and frees the
-    // heap context. Modeled on Sedulous's SDL3DialogService, with typed filters + owned result paths.
+    // Native file and folder dialogs over SDL3 (SDL_ShowOpenFileDialog, SDL_ShowSaveFileDialog,
+    // SDL_ShowOpenFolderDialog). Async: each Show* returns immediately; SDL fires Trampoline later
+    // (during SDL event processing, that is the shell's ProcessEvents pump), which hands the callback
+    // owned path copies and frees the heap context.
     class SDL3DialogService final : public IDialogService
     {
     public:
@@ -393,11 +392,11 @@ export namespace foundation::shell
     class SDL3Shell final : public IShell
     {
     public:
-        // Note on the Wayland Vulkan-window quirk: SDL only attaches libdecor
+        // The Wayland Vulkan-window quirk: SDL only attaches libdecor
         // client-side decorations to a window backed by a GPU surface, so a plain
         // window comes up bare on GNOME/Mutter. Sdl3WindowFlags() flags every
         // window as Vulkan on Linux (skipped under the "dummy" driver) to fix it.
-        // The allocator (required - the entry point decides) backs windows,
+        // The allocator (required; the entry point decides) backs windows,
         // gamepads, and dialog contexts.
         SDL3Shell(core::IAllocator& allocator, const WindowSettings& settings = {}) noexcept;
         ~SDL3Shell() override;
@@ -430,10 +429,10 @@ export namespace foundation::shell
         // SDL mouse button number (1-based) minus 1 -> MouseButton (Left/Middle/Right/X1/X2).
         static MouseButton MapMouseButton(core::u32 idx) noexcept;
 
-        core::IAllocator* m_allocator = nullptr; // FIRST: managers below init from it
+        core::IAllocator* m_allocator = nullptr; // first: the managers below init from it
         SDL3WindowManager m_windows;
         SDL3InputManager m_input;
-        SDL3DialogService m_dialogs; // ctor takes m_windows (declared above -> init order OK)
+        SDL3DialogService m_dialogs; // ctor takes m_windows (declared above, so init order is fine)
         bool m_initialized = false;
         bool m_running = true;
         core::Array<DroppedFile> m_droppedFiles; // queued during ProcessEvents, drained per frame

@@ -19,7 +19,7 @@ def arr(name, kind, values):
 
 
 def clip_xml(guid, duration, tracks):
-    """tracks: [(component, path, [channel keys: [(time, value)...]] x3)] - Float3 tracks only."""
+    """tracks: [(component, path, [channel keys: [(time, value)...]] x3)]; Float3 tracks only."""
     comp, path, kinds, starts, counts = [], [], [], [], []
     times, values, tin, tout, interp = [], [], [], [], []
     for component, prop, channels in tracks:
@@ -70,8 +70,8 @@ write("MatPulse", 1.0, [("Transform", "scale", [swing(2.4, 2.9, 1.0), hold(0.04,
 
 def glow_material(name, brightness):
     """An unlit material whose base colour is `brightness` (sRGB like every colour; above 1 it
-    decodes past white and the bloom picks it up), tinted
-    per piece by its mesh colour: the aim's dots and the target ring glow without lighting."""
+    decodes past white and the bloom picks it up), tinted per piece by its mesh colour: the aim's
+    dots and the target ring glow without lighting."""
     import struct
     assets = {a["name"]: a["guid"] for a in mcp("asset_list", {})["assets"]}
     guid = assets.get(name) or mcp("asset_create", {"creator": "Unlit Material", "type": "MaterialAsset",

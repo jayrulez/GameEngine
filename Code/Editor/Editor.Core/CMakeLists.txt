@@ -1,13 +1,13 @@
 # Editor::Core - `editor.core` (the editor-facing half of the editor domain: context,
 # pages, command stack, selection, actions, thumbnails, per-user settings) over
-# Editor::Project, which it re-exports. Tooling only - the runtime never links this.
+# Editor::Project, which it re-exports. Tooling only; the runtime never links this.
 
 util_add_engine_library(Editor.Core ALIAS Editor::Core)
 target_link_libraries(Editor.Core
     PUBLIC Editor::Project
            Foundation::Mcp # domain-contributed MCP tools (EditorContext::RegisterMcpToolContribution)
            Foundation::Image Foundation::Image.IO
-           Foundation::GUI Foundation::VG.SVG) # the editor's UI types: keystrokes, menus, the clipboard, drawables, its resources (editor-gui X2)
+           Foundation::GUI Foundation::VG.SVG) # the editor's UI types: keystrokes, menus, the clipboard, drawables, its resources
 
 target_sources(Editor.Core
     PRIVATE

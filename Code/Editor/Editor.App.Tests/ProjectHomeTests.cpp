@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the Project page over its markup (Data/Editor/ProjectHome.xml): the project's
-// name, the scenes (the assets of the default-scene setting's type) as links that open them, every
-// reflected setting with its value (an asset by its name), the Game and Project menus' actions as
-// buttons, and a rebuild when the settings change.
+// Editor::App tests: the Project page over its markup (Data/Editor/ProjectHome.xml). Covers the
+// project's name, the scenes (assets of the default scene setting's type) as links that open them,
+// every reflected setting with its value (an asset shown by its name), the actions of the Game and
+// Project menus as buttons, and a rebuild when the settings change.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -106,7 +106,7 @@ TEST_CASE("project page: the scenes, the settings and the project's actions")
     CHECK(openDefault->HandleActivate());
     REQUIRE(opened.Size() == 1u);
     CHECK(opened[0] == docks->Id());
-    // Each scene a link that opens it.
+    // Each scene is a link that opens it.
     foundation::gui::Node* scenes = FindId<foundation::gui::Node>(*content, u8"home-scenes");
     REQUIRE(scenes != nullptr);
     REQUIRE(scenes->ChildCount() == 2u);
@@ -127,7 +127,7 @@ TEST_CASE("project page: the scenes, the settings and the project's actions")
     CHECK(home.Scenes()[0] == arrival->Id());
     CHECK(home.Scenes()[1] == docks->Id());
 
-    // Every labelled setting, an asset by its name, an unset one by its empty text.
+    // Every labelled setting: an asset shows its name, and an unset one shows empty text.
     CHECK(Has(home.SettingRows(), u8"Name: Harbour"));
     CHECK(Has(home.SettingRows(), u8"Default scene: Docks"));
     CHECK(Has(home.SettingRows(), u8"Default bus layout: (built-in)"));

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:mcp`: the viewer's commands served to an agent
-// (Documentation/Specs/model-viewer.md, P7). Each command is an MCP tool named after it (dots to
-// underscores: `collection.create` is `collection_create`), with the command's schema and the
-// annotations its kind gives, its result the command's JSON; a command that fails is a tool error
-// carrying the command's message. The tool list is the command list: nothing an agent can do that
-// the window cannot, nor the other way. The agent's manual is `docs://ModelViewerGuide.md`.
+// ModelViewer - `modelviewer:mcp`: the viewer's commands served to an agent. Each command becomes
+// an MCP tool named after it with dots as underscores (`collection.create` is `collection_create`),
+// with the command's schema, annotations from its kind, and the command's JSON as its result. A
+// failed command is a tool error carrying the command's message. The tool list is the command
+// list, so an agent and the window can do exactly the same things. The agent's manual is served
+// as `docs://ModelViewerGuide.md`.
 
 module;
 #include "Core/Prelude.h"
@@ -35,7 +35,7 @@ export namespace modelviewer
         return name;
     }
 
-    /// The MCP annotations a command's kind gives.
+    /// The MCP annotations for a command kind.
     [[nodiscard]] inline foundation::mcp::ToolAnnotations AnnotationsOf(CommandKind kind)
     {
         using foundation::mcp::ToolAnnotations;
@@ -50,7 +50,8 @@ export namespace modelviewer
         return ToolAnnotations::Overwrites();
     }
 
-    /// Every command in `commands` as a tool on `server`. `commands` outlives the server's use.
+    /// Registers every command in `commands` as a tool on `server`. `commands` must outlive the
+    /// server's use of it.
     inline void RegisterCommandTools(foundation::mcp::McpServer& server, CommandSet& commands)
     {
         for (const Command& command : commands.All())
@@ -68,10 +69,10 @@ export namespace modelviewer
         }
     }
 
-    /// The agent's manual: staged beside the executable (a distribution), else
+    /// Finds the agent's manual: staged beside the executable in a distribution, else under
     /// Documentation/Shipping in the checkout, walking up from each start in turn (the
-    /// executable's folder, then the working folder), as the engine's hosts find theirs. Empty
-    /// when it is in neither.
+    /// executable's folder, then the working folder), the way the engine's hosts find theirs.
+    /// Empty when it is in neither place.
     [[nodiscard]] inline String LocateGuide(Span<const String> starts)
     {
         for (const String& start : starts)
@@ -89,7 +90,8 @@ export namespace modelviewer
         return {};
     }
 
-    /// The guide at `path` as the `docs://ModelViewerGuide.md` resource (none when `path` is empty).
+    /// Serves the guide at `path` as the `docs://ModelViewerGuide.md` resource; nothing is
+    /// registered when `path` is empty.
     inline void RegisterGuideResource(foundation::mcp::McpServer& server, StringView path)
     {
         if (path.IsEmpty())

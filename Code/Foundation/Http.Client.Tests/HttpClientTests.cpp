@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The native HTTP client (Documentation/Specs/tls-http-wss.md, P2) against real loopback servers:
-// the engine's HttpServer for GET, POST, redirects (followed, a POST turned GET by 303, a loop
-// stopped), a timeout, a cancel and the size cap; a raw server for a chunked response, and for
+// The native HTTP client against real loopback servers: the engine's HttpServer for GET, POST,
+// redirects (followed, a POST turned GET by 303, a loop stopped), a timeout, a cancel and the size cap; a raw server for a chunked response, and for
 // https through the Mbed TLS backend with a self-signed certificate (trusted, and an https
 // request redirected to http refused). Also URL parsing and redirect resolution alone, the only
 // part a wasm build compiles (its client is the browser's: Http.Client.WebCheck checks it by hand).

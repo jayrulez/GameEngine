@@ -3,7 +3,7 @@
 
 // Source-side mesh cook: capture a primitive into a StaticMeshAsset, cook it through
 // the builder into an output DB, and verify the cooked StaticMeshSource carries the
-// vertex/index data. Plus the skinned path.
+// vertex and index data. Also the skinned path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -124,10 +124,10 @@ TEST_CASE("mesh editor: cooks a SkinnedMeshAsset -> SkinnedMeshSource")
 
 TEST_CASE("mesh editor: sidecar round-trip - tiny XML envelope, binary geometry stream")
 {
-    // The Sponza incident (2026-08-11): inline mesh geometry produced a 170 MB XML envelope
-    // that every project open DOM-parsed for three header fields. v3 splits: envelope =
-    // metadata + flag, geometry = a BinarySerializer sidecar stream. This pins BOTH halves:
-    // the envelope stays tiny, and the sidecar loads back byte-faithful.
+    // Inline mesh geometry makes a large XML envelope that every project open DOM-parses for a
+    // few header fields, so the envelope holds metadata and the geometry is a BinarySerializer
+    // sidecar stream. This pins both halves: the envelope stays tiny, and the sidecar loads
+    // back byte-faithful.
     GlobalTypeRegistry().Register(StaticMeshSource::StaticType());
     RegisterSerializable<StaticMeshSource>();
     RegisterMeshAssets();
@@ -152,12 +152,12 @@ TEST_CASE("mesh editor: sidecar round-trip - tiny XML envelope, binary geometry 
         REQUIRE(WriteMeshAsset(*inst, asset).IsOk());
     }
 
-    // The whole point, asserted: the envelope no longer scales with geometry.
+    // The envelope does not scale with geometry.
     {
         UniquePtr<IStream> envelope =
             mount.Open(u8"sphere.xasset", FileMode::Read);
         REQUIRE(envelope);
-        CHECK(envelope->Size() < 4 * 1024); // a 32x32 sphere inline was ~500 KB
+        CHECK(envelope->Size() < 4 * 1024); // a 32x32 sphere inline is about 500 KB
     }
 
     {
@@ -168,7 +168,7 @@ TEST_CASE("mesh editor: sidecar round-trip - tiny XML envelope, binary geometry 
         RefPtr<ISerializable> object = inst->ReadObject();
         auto* asset = Cast<StaticMeshAsset>(object.Get());
         REQUIRE(asset != nullptr);
-        CHECK(asset->source.vertexBlob.IsEmpty()); // envelope carries NO bulk
+        CHECK(asset->source.vertexBlob.IsEmpty()); // the envelope carries no bulk
         REQUIRE(EnsureMeshSourceLoaded(*inst, *asset).IsOk());
         CHECK(asset->source.vertexBlob.Size() == originalVertexCount);
 
@@ -179,7 +179,7 @@ TEST_CASE("mesh editor: sidecar round-trip - tiny XML envelope, binary geometry 
         pipeline::AssetBuildContext ctx{DefaultAllocator()};
         ctx.source = inst;
         ctx.output = out;
-        RefPtr<ISerializable> fresh = inst->ReadObject(); // unloaded copy - Build must load
+        RefPtr<ISerializable> fresh = inst->ReadObject(); // unloaded copy; Build must load it
         auto* freshAsset = Cast<StaticMeshAsset>(fresh.Get());
         REQUIRE(freshAsset != nullptr);
         REQUIRE(builder.Build(*freshAsset, ctx).IsOk());

@@ -2,7 +2,7 @@
 # Bridges the model loaders (foundation.model IR) to the engine's cooked resources: it
 # converts a loaded Model into the geometry/material/texture/animation *Source types
 # and cooks them through the editor stack into a content database. This is the only
-# library that depends on BOTH foundation.model (the loader IR) and the engine resource
+# library that depends on both foundation.model (the loader IR) and the engine resource
 # stack, keeping that dependency out of the lower libraries.
 util_add_engine_library(ModelImporter ALIAS Pipeline::ModelImporter)
 target_link_libraries(ModelImporter

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Slider tests: value clamping + change callback, drag-to-set, pointer capture (a drag
-// keeps tracking after the cursor leaves the slider), Escape putting a drag back, the wheel's switch.
+// GUI - Slider tests: value clamping and the change callback, drag-to-set, pointer capture (a drag
+// keeps tracking after the cursor leaves the slider), Escape putting a drag back, and the switch
+// that stops the slider stepping on the wheel.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -69,7 +70,7 @@ TEST_CASE("slider: drag keeps tracking after the cursor leaves it (pointer captu
     d->InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left); // value 0
     CHECK(s->GetValue() == doctest::Approx(0.0f));
 
-    // Move the cursor well past the right edge of the slider - still captured, value saturates at 1.
+    // Move the cursor well past the right edge of the slider: still captured, the value saturates at 1.
     d->InjectMouseMove(core::Float2{250.0f, 10.0f});
     CHECK(s->GetValue() == doctest::Approx(1.0f));
 
@@ -85,9 +86,8 @@ TEST_CASE("slider: drag keeps tracking after the cursor leaves it (pointer captu
 
 TEST_CASE("slider: hover then press then drag off still tracks (leave clears m_pressed)")
 {
-    // Regression: hovering the slider first (so a MouseLeave fires when the cursor drags off)
-    // used to cancel the drag - UINode::OnMouseLeave clears m_pressed and OnMouseMove gated on
-    // IsPressed(). The slider's own m_dragging flag survives the leave.
+    // Hovering the slider first makes a MouseLeave fire when the cursor drags off. The drag keeps
+    // tracking because the slider's own m_dragging flag survives the leave.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{300.0f, 200.0f});
     auto s = Make<Slider>();
@@ -95,14 +95,14 @@ TEST_CASE("slider: hover then press then drag off still tracks (leave clears m_p
     root->AddChild(s.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Hover the slider first (this is what the capture-only test skipped).
+    // Hover the slider first, which the capture-only test does not do.
     d->InjectMouseMove(core::Float2{50.0f, 10.0f});
     CHECK(s->IsHovered());
 
-    // Press, then drag off the right edge - the MouseLeave must not cancel the drag.
+    // Press, then drag off the right edge. The MouseLeave must not cancel the drag.
     d->InjectMouseDown(core::Float2{50.0f, 10.0f}, MouseButton::Left);
     CHECK(s->GetValue() == doctest::Approx(0.5f));
-    d->InjectMouseMove(core::Float2{250.0f, 10.0f}); // off to the right -> leave fires, then move
+    d->InjectMouseMove(core::Float2{250.0f, 10.0f}); // off to the right: the leave fires, then the move arrives
     CHECK_FALSE(s->IsHovered());                     // the leave did happen
     CHECK(s->GetValue() == doctest::Approx(1.0f));   // ...but the drag kept tracking
 
@@ -144,7 +144,7 @@ TEST_CASE("slider: visible focus marks the thumb, in the colour of its focus par
     };
     CHECK(draw() == 0u);
     s->HandleFocusGained();
-    CHECK(draw() == 0u); // focused after a click: no mark
+    CHECK(draw() == 0u); // focused by a click, so no focus mark
     s->SetFocusVisible(true);
     CHECK(draw() > 0u); // the ring and halo round the thumb
 }
@@ -160,7 +160,7 @@ TEST_CASE("slider: right button does not drag the value")
 
     d->InjectMouseDown(core::Float2{50.0f, 10.0f}, MouseButton::Right); // right press
     d->InjectMouseMove(core::Float2{90.0f, 10.0f});
-    CHECK(s->GetValue() == doctest::Approx(0.0f)); // unchanged - only the left button drags
+    CHECK(s->GetValue() == doctest::Approx(0.0f)); // unchanged, since only the left button drags
 }
 
 TEST_CASE("slider: a drag reports input as it goes and one change on release; keys and the wheel step")
@@ -199,12 +199,12 @@ TEST_CASE("slider: a drag reports input as it goes and one change on release; ke
     CHECK(s->GetValue() == doctest::Approx(100.0));
     CHECK(changes == 5);
 
-    // The wheel over it steps it; at its end it is left to what holds the slider.
+    // The wheel over the slider steps it; at its end the wheel is left to what holds the slider.
     int wheelsAbove = 0;
     (void)root->AddEventListener(EventType::MouseWheel, [&](const Event&) { ++wheelsAbove; });
     (void)d->InjectMouseWheel(core::Float2{50.0f, 10.0f}, core::Float2{0.0f, 1.0f});
     CHECK(s->GetValue() == doctest::Approx(100.0));
-    CHECK(wheelsAbove == 1); // it could not move: the wheel went on up
+    CHECK(wheelsAbove == 1); // it could not move, so the wheel went on up
     (void)d->InjectMouseWheel(core::Float2{50.0f, 10.0f}, core::Float2{0.0f, -2.0f});
     CHECK(s->GetValue() == doctest::Approx(98.0));
     CHECK(wheelsAbove == 1);
@@ -230,14 +230,15 @@ TEST_CASE("slider: Escape during a drag puts the value back and reports it cance
     CHECK(s->GetValue() == doctest::Approx(75.0));
     d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK_FALSE(s->IsDragging());
-    CHECK(s->GetValue() == doctest::Approx(40.0)); // as before the drag
+    CHECK(s->GetValue() == doctest::Approx(40.0)); // back to the value before the drag
     CHECK(cancels == 1);
     d->InjectMouseMove(core::Float2{30.0f, 10.0f});
     d->InjectMouseUp(core::Float2{30.0f, 10.0f}, MouseButton::Left);
     CHECK(s->GetValue() == doctest::Approx(40.0)); // the release after it changes nothing
     CHECK(changes == 0);
 
-    // Told not to step on the wheel (in a scrolling list), the wheel goes on to what holds it.
+    // When told not to step on the wheel (as in a scrolling list), the slider passes the wheel on
+    // to what holds it.
     s->SetStepsOnWheel(false);
     int wheelsAbove = 0;
     (void)root->AddEventListener(EventType::MouseWheel, [&](const Event&) { ++wheelsAbove; });
@@ -279,7 +280,7 @@ TEST_CASE("range value: a step read from a float shows its own decimals and leav
     RangeValue range;
     range.Min = 0.0;
     range.Max = 1000.0;
-    range.Step = static_cast<double>(0.1f); // 0.100000001: a reflected range's step
+    range.Step = static_cast<double>(0.1f); // 0.100000001, as a reflected range's step is
     CHECK(range.Decimals() == 1);
     CHECK(range.Constrain(12.0) == 12.0); // not 12.0000001788
     CHECK(range.Constrain(0.6) == doctest::Approx(0.6).epsilon(1e-12));

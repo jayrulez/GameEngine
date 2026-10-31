@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The editor's Profiler page (X7 of Documentation/Specs/editor-gui.md) over its markup
-// (Data/Editor/Profiler.xml), on a test's own store: Record arms it and copies settled frames into
-// the page's recording, following the newest until a frame is chosen, Live following again; Stop
-// lets the store go and keeps the frames; another viewer's arm and the store's history are left
-// alone; Stop on spike ends the recording at the first frame over its time; a plot per counter;
-// Longest and Median; Save writes a capture that Open shows, and Live goes back; Clear drops the
-// frames, a recording going on.
+// The editor's Profiler page over its markup (Data/Editor/Profiler.xml), on a store of the test's
+// own. Record arms the store and copies settled frames into the page's recording, following the
+// newest until a frame is chosen; Live follows again. Stop releases the store and keeps the frames,
+// leaving another viewer's arm and the store's history alone. Stop on spike ends the recording at
+// the first frame over its time. Also covers a plot per counter, Longest and Median, Save writing a
+// capture that Open shows (and Live returning), and Clear dropping the frames while recording
+// continues.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -119,7 +119,7 @@ TEST_CASE("profiler page: its views on one focus, from its markup")
     CHECK(strip->BudgetMs() == doctest::Approx(1000.0f / 60.0f)); // the markup's 60 fps
     bed.panel->SetBudgetChoice(3);
     CHECK(strip->BudgetMs() == 0.0f);
-    CHECK(bed.panel->StatusText().ContainsIgnoreCase(u8"Play-in-editor")); // it says what it shows: the whole process
+    CHECK(bed.panel->StatusText().ContainsIgnoreCase(u8"Play-in-editor")); // it says what it shows, which is the whole process
 }
 
 TEST_CASE("profiler page: Record copies settled frames and follows the newest; Stop keeps them")
@@ -157,13 +157,13 @@ TEST_CASE("profiler page: Record copies settled frames and follows the newest; S
     bed.panel->Stop();
     CHECK_FALSE(bed.panel->IsRecording());
     CHECK_FALSE(bed.Find<gui::ToolButton>(u8"profiler-record")->IsChecked());
-    CHECK(bed.panel->Recording().NewestFrame() == 15u); // the rest taken as they were
+    CHECK(bed.panel->Recording().NewestFrame() == 15u); // the remaining frames were taken as they were
     CHECK(bed.store.Armed());                           // the other viewer's arm is still held
     bed.store.Disarm();
     CHECK_FALSE(bed.store.Armed());
     CHECK(bed.store.OldestKeptFrame() == 0u); // the store's history untouched
     RunFrames(bed.store, 2);
-    bed.panel->Update(); // stopped: nothing more
+    bed.panel->Update(); // stopped: no more frames are taken
     CHECK(bed.panel->Recording().NewestFrame() == 15u);
 }
 
@@ -220,7 +220,7 @@ TEST_CASE("profiler page: Save writes a capture; Open shows it; Live goes back")
     REQUIRE_FALSE(path.IsEmpty());
     CHECK(path.AsView().EndsWith(u8".aeprofile"));
     CHECK(path.AsView().ContainsIgnoreCase(u8"scratch_profiler_panel/Editor-"));
-    // Told once, with the folder to open; the bar's label still says what is shown.
+    // One notice, with the folder to open; the bar's label still says what is shown.
     REQUIRE(bed.notices.Size() == 2u);
     CHECK(bed.notices[1].kind == editor::NoticeKind::Success);
     CHECK(bed.notices[1].message == StringView(u8"Saved 8 frames"));
@@ -243,7 +243,7 @@ TEST_CASE("profiler page: Save writes a capture; Open shows it; Live goes back")
 
     CHECK_FALSE(bed.panel->OpenCapture(u8"scratch_profiler_panel/not-there.aeprofile"));
     REQUIRE_FALSE(bed.notices.IsEmpty());
-    CHECK(bed.notices.Back().kind == editor::NoticeKind::Error); // said once, as an error
+    CHECK(bed.notices.Back().kind == editor::NoticeKind::Error); // reported once, as an error
     CHECK(bed.notices.Back().message.AsView().StartsWith(u8"Could not read"));
     CHECK_FALSE(bed.panel->ViewingCapture());
 }
@@ -278,7 +278,7 @@ TEST_CASE("profiler page: Clear drops the frames recorded; a recording goes on f
     RunFrames(bed.store, 8);
     bed.panel->Update();
     REQUIRE(bed.panel->Recording().HasFrames());
-    CHECK(bed.panel->Recording().OldestFrame() == 6u); // none it had: the next to settle on
+    CHECK(bed.panel->Recording().OldestFrame() == 6u); // it had none of these frames: it waits for the next to settle
     CHECK(bed.panel->IsFollowing());
     bed.panel->Stop();
     bed.panel->Clear();

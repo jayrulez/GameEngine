@@ -3,12 +3,12 @@
 
 /// Foundation::Net.Manager - the `foundation.net.manager` module.
 ///
-/// A NETWORKED ENDPOINT, owned per running game (a GameInstance): NetworkManager owns a live
-/// NetSession + RpcTable over an IDatagramSocket (real UDP or the sim), is driven each fixed step,
-/// and installs a script service so the `Net` facade can query the session and fire RPCs from
-/// AngelScript / Luau. NOT a subsystem - there is no once-per-context networking state, so an
-/// endpoint lives with the instance that runs it (N instances = N independent endpoints). The Net
-/// facade resolves the CURRENT script context's endpoint, so each instance's script sees its own.
+/// A networked endpoint for one running game (a GameInstance). NetworkManager owns a live
+/// NetSession and RpcTable over an IDatagramSocket (real UDP or the simulator), is driven each
+/// fixed step, and installs a script service through which the `Net` facade queries the session
+/// and fires RPCs. It is not a subsystem: networking keeps no process-wide state, so each
+/// endpoint lives with the instance that runs it, and the facade resolves the current script
+/// context's endpoint so each instance's scripts see their own.
 
 module;
 #include "Core/Prelude.h"
@@ -20,11 +20,11 @@ export module foundation.net.manager;
 import foundation.core;
 import foundation.profiler;
 import foundation.net;
-import foundation.net.replication; // StateReplication / InterpolationBuffer (same foundation::net namespace)
-import foundation.net.websocket;   // WebSocketHybridSocket (UDP natives + WS browser clients)
+import foundation.net.replication; // StateReplication, InterpolationBuffer (same foundation::net namespace)
+import foundation.net.websocket;   // WebSocketHybridSocket (UDP natives and WebSocket browser clients)
 import foundation.net.tls;         // the backend and trust a wss join checks the host with
 import foundation.scene;           // Scene (the replicated world)
-import foundation.script;          // Object / IScriptContext / CurrentScriptContext / SetService
+import foundation.script;          // Object, IScriptContext, CurrentScriptContext, SetService
 import foundation.script.facades;  // the Scene and Entity handles Net.spawn spawns through and returns
 
 using namespace foundation::core;
@@ -41,12 +41,12 @@ export namespace foundation::net
     // Reserved channel for StateReplication deltas (alongside kControlChannel=255, kRpcChannel=254).
     inline constexpr u8 kReplicationChannel = 253;
 
-    class NetworkManager; // defined below; the facade + binding reference it
+    class NetworkManager; // defined below; the facade and binding reference it
 
-    // The owner of a running game's networking (a GameInstance): the Net facade drives roles (start
-    // server / connect / disconnect) and reaches the live endpoint THROUGH it. Behind an interface so
-    // foundation.net.manager never depends on the runtime layer - the dependency points DOWN (runtime
-    // implements this). The controller outlives every endpoint it creates, so the binding never dangles.
+    // The owner of a running game's networking (a GameInstance). The Net facade drives roles (start
+    // server, connect, disconnect) and reaches the live endpoint through it. It is an interface so
+    // foundation.net.manager does not depend on the runtime layer; the runtime implements it. The
+    // controller outlives every endpoint it creates, so the binding never dangles.
     class INetworkController
     {
     public:
@@ -58,10 +58,9 @@ export namespace foundation::net
         [[nodiscard]] virtual NetworkManager* NetEndpoint() const = 0;
     };
 
-    // Installed as a per-context script service; the Net facade resolves it. Holds the CONTROLLER (the
-    // GameInstance) - stable for the instance's life. The endpoint it points at may come and go, but
-    // the binding itself never dangles (approach A - the dangling-service bug made structurally
-    // impossible rather than merely avoided). Install/clear with the free helpers below.
+    // Installed as a per-context script service that the Net facade resolves. It holds the controller
+    // (the GameInstance), which is stable for the instance's life: the endpoint may come and go, but
+    // the binding itself cannot dangle. Install and clear it with the free helpers below.
     struct NetScriptBinding
     {
         INetworkController* controller = nullptr;
@@ -89,8 +88,8 @@ export namespace foundation::net
         Text = 2,
     };
 
-    // A networked endpoint: owns the session + RPC table, driven each fixed step. Owned per running
-    // game (a GameInstance), NOT app-wide - N instances hold N independent endpoints (module header).
+    // A networked endpoint: owns the session and RPC table, driven each fixed step. Owned per running
+    // game (a GameInstance), not app-wide, so each instance holds an independent endpoint.
     class NetworkManager
     {
     public:
@@ -100,16 +99,17 @@ export namespace foundation::net
         // and a borrowed one outlives the manager.
         ~NetworkManager() { m_session.Transport().DisconnectAll(); }
 
-        // Sim/test: BORROW an external socket (SimDatagramNetwork or a shared UDP socket). The session
-        // is live immediately; the manager does not own the socket, so it must outlive the manager.
+        // Simulator and tests: borrow an external socket (SimDatagramNetwork or a shared UDP socket).
+        // The session is live immediately; the manager does not own the socket, so it must outlive
+        // the manager.
         explicit NetworkManager(IDatagramSocket& socket, const ReliableConfig& config = {})
             : m_session(socket, config)
         {
         }
 
-        // Runtime: OWN an already-opened UDP socket (m_ownedSocket destructs after m_session, which
-        // borrows it - declaration order below guarantees it). Used by the HostServer/JoinServer
-        // factories; a bare game never constructs this directly.
+        // Runtime: own an already-opened UDP socket. m_ownedSocket destructs after m_session, which
+        // borrows it; the declaration order below guarantees that. Used by the HostServer and
+        // JoinServer factories; a game never constructs this directly.
         explicit NetworkManager(core::UniquePtr<UdpSocket> ownedSocket,
                                 const ReliableConfig& config = {})
             : m_ownedSocket(static_cast<core::UniquePtr<UdpSocket>&&>(ownedSocket)),
@@ -118,7 +118,7 @@ export namespace foundation::net
             m_boundPort = static_cast<UdpSocket*>(m_ownedSocket.Get())->BoundPort();
         }
 
-        // Runtime host with a WEB GATEWAY: owns the hybrid UDP+WS socket, so browser clients
+        // Runtime host with a web gateway: owns the hybrid UDP and WebSocket socket, so browser clients
         // join the same session native peers do (HostServer with webSocketPort).
         explicit NetworkManager(core::UniquePtr<WebSocketHybridSocket> hybrid,
                                 const ReliableConfig& config = {})
@@ -138,13 +138,13 @@ export namespace foundation::net
         }
 
         // Runtime endpoint construction: open a real UDP socket and enter a role in one step. Returns
-        // null if the socket fails to open (the caller logs + runs offline). HostServer binds `port`
-        // (0 = OS-assigned; read BoundPort() after); JoinServer binds ephemeral and connects to
+        // null if the socket fails to open (the caller logs and runs offline). HostServer binds `port`
+        // (0 = OS-assigned; read BoundPort() after); JoinServer binds an ephemeral port and connects to
         // host:port. These are how a running game goes online (the Net facade calls them).
         [[nodiscard]] static core::UniquePtr<NetworkManager>
         HostServer(core::IAllocator& allocator, u16 port, bool dedicated = false,
                    const ReliableConfig& config = {},
-                   u16 webSocketPort = 0, // != 0: ALSO accept browser clients over ws://
+                   u16 webSocketPort = 0, // != 0: also accept browser clients over ws://
                    const WebSocketTls* webSocketTls = nullptr); // and with it over wss:// instead
         // JoinServer's `host` may be an address with a scheme: "ws://host[:port][/path]" or
         // "wss://..." joins the host's WebSocket gateway (`port` when the address names none),
@@ -156,8 +156,8 @@ export namespace foundation::net
                    const ReliableConfig& config = {}, ITlsBackend* tls = nullptr,
                    TlsTrust trust = TlsTrust::System());
 
-        /// Whether THIS build can host a session at all. Browsers cannot listen on any
-        /// socket - the web build's Host paths reject cleanly instead of hanging.
+        /// Whether this build can host a session at all. Browsers cannot listen on any socket, so
+        /// the web build's Host paths reject cleanly instead of hanging.
         [[nodiscard]] static constexpr bool CanHost() noexcept
         {
 #if PLATFORM_WEB
@@ -167,21 +167,21 @@ export namespace foundation::net
 #endif
         }
 
-        // The port this endpoint's owned UDP socket is bound to (0 when borrowing a sim/shared socket).
+        // The port this endpoint's owned UDP socket is bound to (0 when borrowing a socket).
         // A HostServer opened with port 0 reports its OS-assigned port here so a client can reach it.
         [[nodiscard]] u16 BoundPort() const noexcept { return m_boundPort; }
-        // The WS gateway's bound port (0 = this endpoint accepts no browser clients).
+        // The WebSocket gateway's bound port (0 = this endpoint accepts no browser clients).
         [[nodiscard]] u16 WebSocketBoundPort() const noexcept { return m_webSocketPort; }
 
         // Roles (see NetSession).
         void StartServer(bool dedicated = false) { m_session.StartServer(dedicated); }
         PeerId ConnectTo(const DatagramEndpoint& server) { return m_session.Connect(server); }
 
-        // Transport HALF (per-frame): drive the session + route received
-        // messages by reserved channel: RPCs (254) to the table, replication deltas (253) buffered into
-        // the scene's interpolation state, everything else to `onEvent` (e.g. Connected). No state
-        // capture/send here - that is the replication half, on the scene fixed lane. Pumps regardless of
-        // scene time (connections stay alive while a scene is paused).
+        // Transport half, run per frame: drive the session and route received messages by reserved
+        // channel. RPCs (254) go to the table, replication deltas (253) are buffered into the scene's
+        // interpolation state, and everything else goes to `onEvent` (e.g. Connected). State capture
+        // and sending belong to the replication half, on the scene fixed lane. This pumps regardless
+        // of scene time, so connections stay alive while a scene is paused.
         void UpdateTransport(f32 deltaMs, const Function<void(const NetEvent&)>& onEvent = {})
         {
             PROFILE_SCOPE("Net.Transport");
@@ -204,7 +204,7 @@ export namespace foundation::net
                 {
                     if (m_scene != nullptr)
                     {
-                        // Packet = server capture time (for interpolation) + the delta.
+                        // Packet: the server capture time (for interpolation), then the delta.
                         BitReader reader(ev.payload.AsSpan());
                         const u64 bits = reader.ReadU64();
                         f64 serverTimeMs = 0.0;
@@ -266,17 +266,17 @@ export namespace foundation::net
         /// once the server welcomed it), or the host left (0).
         void SetPlayerEvents(Function<void(bool joined, u32 player)> handler) { m_playerEvents = Move(handler); }
 
-        // Replication HALF (per-scene FIXED lane): server captures the
-        // scene's networked state + pushes a per-peer delta; client samples buffered interpolation into
-        // the scene. Gated on the scene's fixed lane, so a paused/slow-mo scene replicates at its scaled
-        // rate (a paused sim produces no deltas). Does not touch the socket - transport keeps that.
+        // Replication half, run on the scene's fixed lane: the server captures the scene's networked
+        // state and pushes a per-peer delta; the client samples buffered interpolation into the scene.
+        // A paused or slowed scene replicates at its scaled rate (a paused one produces no deltas).
+        // This does not touch the socket; the transport half owns it.
         void UpdateReplication()
         {
             PROFILE_SCOPE("Net.Replication");
             if (m_session.IsServer() && m_scene != nullptr)
             {
-                // Pull each networked entity's authoritative LOCAL transform into its NetworkedTransform
-                // component, so the capture below sends the current pose (the reflected-component pipe).
+                // Pull each networked entity's authoritative local transform into its NetworkedTransform
+                // component, so the capture below sends the current pose.
                 CaptureEntityTransforms(*m_scene);
                 const f64 now = m_session.NetworkTimeMs();
                 u64 bits = 0;
@@ -306,9 +306,9 @@ export namespace foundation::net
             }
         }
 
-        // Convenience for callers that drive both halves together (tests + any single-lane consumer):
-        // transport then replication, the same order the pre-split Update ran. Production drives the two
-        // halves on their own lanes (transport per-frame, replication on the scene fixed lane).
+        // Convenience for callers that drive both halves together (tests and single-lane consumers):
+        // transport, then replication. Production drives the two halves on their own lanes (transport
+        // per frame, replication on the scene fixed lane).
         void Update(f32 deltaMs, const Function<void(const NetEvent&)>& onEvent = {})
         {
             UpdateTransport(deltaMs, onEvent);
@@ -316,9 +316,9 @@ export namespace foundation::net
         }
 
         // The scene this manager replicates (server captures from it, client applies into it). Null =
-        // no replication (session + RPC still run). The host sets the gameplay scene here. On a SERVER,
-        // authored-networked entities in the scene are assigned NetworkIds now (so a designer marks an
-        // entity networked and it "just replicates" on host); the client receives ids over the wire.
+        // no replication (session and RPC still run). The host sets the gameplay scene here. On a
+        // server, entities authored as networked are assigned NetworkIds here, so marking an entity
+        // networked is enough for it to replicate; the client receives ids over the wire.
         void SetReplicatedScene(scene::Scene* scene)
         {
             m_scene = scene;
@@ -328,7 +328,7 @@ export namespace foundation::net
             }
             if (m_session.IsServer())
             {
-                m_replication.AssignSceneNetworkIds(*scene); // mint + register authored entities
+                m_replication.AssignSceneNetworkIds(*scene); // mint and register authored entities
             }
             else
             {
@@ -339,8 +339,8 @@ export namespace foundation::net
         [[nodiscard]] StateReplication& Replication() noexcept { return m_replication; }
         /// The replicated world (null = no replication).
         [[nodiscard]] scene::Scene* ReplicatedScene() const noexcept { return m_scene; }
-        // How far behind synced network time the client renders (interpolation delay). ~2x the server
-        // send interval hides one lost/late update. Default 100 ms.
+        // How far behind synced network time the client renders (interpolation delay). About twice
+        // the server send interval hides one lost or late update. Default 100 ms.
         void SetInterpolationDelayMs(f64 ms) noexcept { m_interpDelayMs = ms; }
 
         [[nodiscard]] NetSession& Session() noexcept { return m_session; }
@@ -349,12 +349,11 @@ export namespace foundation::net
     private:
         u16 m_boundPort = 0;
         u16 m_webSocketPort = 0;
-        // Declared FIRST (before m_session) so it constructs before (and destructs after)
-        // m_session, which borrows it. Null when the manager borrows an external socket (the
-        // sim/test ctor); a UdpSocket or WebSocketHybridSocket from the factories otherwise.
+        // Declared before m_session so it constructs before and destructs after m_session, which
+        // borrows it. Null when the manager borrows an external socket (the simulator and test
+        // constructor); a UdpSocket or WebSocketHybridSocket from the factories otherwise.
         core::UniquePtr<IDatagramSocket> m_ownedSocket;
         NetSession m_session;
-        // The player a session event is about, to SetPlayerEvents' handler (see there).
         // A held client said it is ready: its baseline goes, so its first delta is everything.
         void ReleasePeer(PeerId peer)
         {
@@ -362,6 +361,7 @@ export namespace foundation::net
             m_replication.ForgetPeer(peer);
         }
 
+        // The player a session event is about, to SetPlayerEvents' handler (see there).
         void ReportPlayer(const NetEvent& ev)
         {
             if (!m_playerEvents)
@@ -393,7 +393,7 @@ export namespace foundation::net
         f64 m_interpDelayMs = 100.0;
     };
 
-    // Point / clear a script context's Net facade at a binding. The binding (a GameInstance member)
+    // Point or clear a script context's Net facade at a binding. The binding (a GameInstance member)
     // must outlive the context; the owner clears it before teardown. The facade reads binding.controller.
     inline void InstallNetScriptService(IScriptContext& scriptContext, NetScriptBinding& binding)
     {
@@ -405,9 +405,9 @@ export namespace foundation::net
     }
 
     // Script facade: read the live session, drive roles (server/connect/disconnect), and fire RPCs.
-    // Static methods resolve the per-context NetScriptBinding -> its controller -> the live endpoint
-    // (null-safe when offline). Ports are natural i32 (the corrected numerics basis). Both backends
-    // bind it via reflection. Defined after NetworkManager so the read paths see the full type.
+    // Static methods resolve the per-context NetScriptBinding, then its controller, then the live
+    // endpoint (null-safe when offline). Ports are i32 in script. Both script backends bind it
+    // through reflection. Defined after NetworkManager so the read paths see the full type.
     class Net final : public Object
     {
         RTTI_OBJECT(Net, Object)
@@ -457,8 +457,8 @@ export namespace foundation::net
         /// when it can, rather than failing once it is chosen.
         [[nodiscard]] static bool canHost() { return NetworkManager::CanHost(); }
 
-        // Runtime role control - a game's menu calls these. Port is a natural i32 (0..65535). Return
-        // false when offline-support is absent or the socket fails to open (the game shows an error).
+        // Runtime role control, called from a game's menu. Port is an i32 (0..65535). These return
+        // false when there is no controller or the socket fails to open (the game shows an error).
         static bool startServer(i32 port)
         {
             INetworkController* c = Controller();
@@ -495,9 +495,10 @@ export namespace foundation::net
             }
         }
 
-        // Fire an RPC (no args). Client -> the server; server -> broadcast to all clients.
+        // Fire an RPC with no arguments. A client sends it to the server; the server broadcasts it to
+        // all clients.
         static void rpc(String name) { CallRpc(name.AsView(), WriteNothing()); }
-        // Fire an RPC with one number / one text argument (the common turn-based-order shapes).
+        // Fire an RPC with one number or one text argument.
         static void rpcNumber(String name, f64 value) { CallRpc(name.AsView(), WriteNumber(value)); }
         static void rpcText(String name, String text) { CallRpc(name.AsView(), WriteText(Move(text))); }
 
@@ -758,7 +759,7 @@ export namespace foundation::net
         }
     };
 
-    // ---- runtime startup: how a host (DefaultApplication) enters a networked role from config ----
+    // ---- runtime startup: how a host application enters a networked role from config ----
 
     // The role a networked run starts in. None = single-player (no socket opened, no facade service).
     enum class NetworkRole
@@ -768,8 +769,8 @@ export namespace foundation::net
         Client
     };
 
-    // Declarative startup config an app presets before it configures its subsystems (mirrors the
-    // audio-engine-settings preset). IPv4 for v1: serverHost is a dotted-quad or a DNS name.
+    // Declarative startup config an app presets before it configures its subsystems. IPv4 only:
+    // serverHost is a dotted quad or a DNS name.
     struct NetworkStartup
     {
         NetworkRole role = NetworkRole::None;
@@ -778,13 +779,13 @@ export namespace foundation::net
             core::String(u8"127.0.0.1"); // client: server address to connect to
         u16 serverPort = 0;              // client: the server's port
         bool dedicated = false;          // server: dedicated (no local player) vs listen-server
-        ReliableConfig reliable = {};    // protocol tuning (keepalive/timeout/resend)
+        ReliableConfig reliable = {};    // protocol tuning (keepalive, timeout, resend)
     };
 
-    // A started net home: the socket the manager borrows + the manager itself. Both must outlive the
-    // run; the manager holds a reference to the socket, so keep/destroy the manager FIRST. socket/
-    // manager are null when role==None; a non-null socket that failed to open reports !IsOpen() (the
-    // caller logs). Bundled so the socket-open + role-entry logic stays in this lib.
+    // A started network runtime: the socket the manager borrows, and the manager itself. Both must
+    // outlive the run; the manager holds a reference to the socket, so destroy the manager first.
+    // Both are null when role is None; a socket that failed to open reports !IsOpen() (the caller
+    // logs). They are bundled so the socket opening and role entry stay in this library.
     struct NetworkRuntime
     {
         core::UniquePtr<UdpSocket> socket;

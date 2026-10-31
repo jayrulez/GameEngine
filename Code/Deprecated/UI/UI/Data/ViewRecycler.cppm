@@ -4,9 +4,8 @@
 // UI - :view_recycler partition
 //
 // Pool of views keyed by view type: recycles views that scroll out of the viewport so ListView doesn't
-// allocate per scroll. Ported from Sedulous.UI/src/Data/ViewRecycler.bf. Beef Dictionary<int32,
-// List<View>> + manual delete -> HashMap<i32, Array<RefPtr<View>>> (RAII); Acquire moves a ref OUT of
-// the pool, Recycle moves one IN (ownership transfers via RefPtr, no manual delete).
+// allocate per scroll. The pools are a HashMap<i32, Array<RefPtr<View>>>: Acquire moves a ref out of
+// the pool and Recycle moves one in, so ownership transfers through RefPtr.
 
 module;
 #include "Core/Prelude.h"

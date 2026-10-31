@@ -5,9 +5,10 @@
 //
 // Drawable: image content drawn into a destination Rect via DrawContext (an Image widget's
 // picture, a menu item's or a button's icon); a node's look is its box, not a drawable.
-// Derived from eepp's Drawable (include/eepp/graphics/drawable.hpp): keeps the color/alpha
-// tint state, but replaces eepp's global-draw with the DrawContext seam. Object-derived (our RTTI everywhere; -fno-rtti) so concrete
-// drawables get Cast<T> for downcasts; not reflection-registered/scripted.
+// Derived from eepp's Drawable (include/eepp/graphics/drawable.hpp): keeps its colour and alpha
+// tint state, but draws through DrawContext rather than a global renderer. It derives from Object
+// (the engine builds with -fno-rtti) so concrete drawables can be downcast with Cast<T>. It is not
+// reflection-registered or scripted.
 
 module;
 #include "Core/Prelude.h"
@@ -15,7 +16,7 @@ module;
 
 export module foundation.gui:drawable;
 
-import foundation.core; // Object, Optional, Float2, Color
+import foundation.core;
 import :rect;
 import :draw_context;
 
@@ -29,7 +30,8 @@ export namespace foundation::gui
     public:
         // Draws into a destination rect.
         virtual void Draw(DrawContext& ctx, const Rect& dest) = 0;
-        /// Draws it multiplied by `tint` (an Image's image-color); one that cannot tint draws as it is.
+        /// Draws the drawable multiplied by `tint` (an Image's image-color). A drawable that cannot
+        /// tint draws unchanged.
         virtual void DrawTinted(DrawContext& ctx, const Rect& dest, Color tint)
         {
             (void)tint;
@@ -39,7 +41,7 @@ export namespace foundation::gui
         // Natural size (icons/images); empty = no intrinsic size.
         [[nodiscard]] virtual Optional<Float2> IntrinsicSize() const { return {}; }
 
-        // Tint / opacity (eepp Drawable color state).
+        // Tint and opacity.
         [[nodiscard]] Color GetColor() const noexcept { return m_color; }
         void SetColor(Color color) noexcept { m_color = color; }
         [[nodiscard]] f32 GetAlpha() const noexcept { return m_color.a; }

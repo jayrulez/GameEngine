@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - @media query tests: condition evaluation against a MediaContext, and
-// end-to-end parsing + media-gated resolution; a resize restyling only what reads the viewport.
+// GUI - @media query tests: condition evaluation against a MediaContext, end-to-end parsing and
+// media-gated resolution, and a resize that restyles only what reads the viewport.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -91,7 +91,7 @@ TEST_CASE("media-query: a feature it does not know matches nothing, rather than 
 {
     const MediaContext wide{800.0f, 600.0f, 96.0f};
     CHECK_FALSE(MediaQuery(SV(u8"(aspect-ratio: 16/9)")).Evaluate(wide));
-    CHECK_FALSE(MediaQuery(SV(u8"(prefers-reduced-motion)")).Evaluate(wide)); // known now: the context does not ask for it
+    CHECK_FALSE(MediaQuery(SV(u8"(prefers-reduced-motion)")).Evaluate(wide)); // a known feature, which the context does not ask for
     CHECK_FALSE(MediaQuery(SV(u8"(min-width: 600px) and (hover: hover)")).Evaluate(wide));
     CHECK(MediaQuery(SV(u8"(min-width: 600px)")).Evaluate(wide));
     StyleSheet sheet = CSSParser::Parse(SV(u8"button { color: black; } @media (pointer: coarse) { button { color: red; } }"));
@@ -110,8 +110,8 @@ TEST_CASE("media-query: orientation, not, comma lists and media types (E13)")
     CHECK(MediaQuery(SV(u8"screen and (max-width: 500px), (orientation: portrait)")).Evaluate(tall)); // the second
     CHECK_FALSE(MediaQuery(SV(u8"screen and (max-width: 500px), (orientation: portrait)")).Evaluate(wide));
     CHECK_FALSE(MediaQuery(SV(u8"print")).Evaluate(wide));
-    CHECK_FALSE(MediaQuery(SV(u8"not (hover: hover)")).Evaluate(wide)); // a feature it cannot test: not either
-    CHECK(MediaQuery(SV(u8"(hover: hover), (min-width: 1px)")).Evaluate(wide)); // another in the list still can
+    CHECK_FALSE(MediaQuery(SV(u8"not (hover: hover)")).Evaluate(wide)); // a feature it cannot test, so the negation fails too
+    CHECK(MediaQuery(SV(u8"(hover: hover), (min-width: 1px)")).Evaluate(wide)); // another query in the list can still match
 }
 
 TEST_CASE("media-query: the host's preferences: colour scheme, contrast, reduced motion")
@@ -140,7 +140,7 @@ TEST_CASE("media-query: the host's preferences: colour scheme, contrast, reduced
     CHECK(w->GetAlpha() == doctest::Approx(1.0f));
     gui->SetColorScheme(false);
     gui->SetContrastPreference(ContrastPreference::More);
-    styles.SetMediaContext(root->GetMediaContext()); // the host passes it each frame: a change restyles
+    styles.SetMediaContext(root->GetMediaContext()); // the host passes it each frame, and a change restyles
     styles.ApplyTree(*root.Get());
     CHECK(w->GetAlpha() == doctest::Approx(0.5f));
 }
@@ -173,5 +173,5 @@ TEST_CASE("media: a resize restyles only what reads the viewport: a sheet's vw o
     CHECK(restyled(u8"button { opacity: 0.5; } @media (min-width: 810px) { button { opacity: 1; } }", false) >= 4u); // flips
     CHECK(restyled(u8"button { width: 50vw; }", false) >= 4u);
     CHECK(restyled(u8":root { --side: calc(100vh - 20px); } button { opacity: 0.5; }", false) >= 4u);
-    CHECK(restyled(u8"button { opacity: 0.5; }", true) == 1u); // its own inline vw
+    CHECK(restyled(u8"button { opacity: 0.5; }", true) == 1u); // only the node with its own inline vw
 }

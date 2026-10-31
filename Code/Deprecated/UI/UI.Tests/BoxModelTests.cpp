@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Style model v2, P2 (ui-layout-and-style-model.md section 2): the box model on every view.
-// Draw order and hit order by z-index, Position::Absolute children in any container (insets,
-// far-edge anchoring, both-edges pinning), box-shadow through the VG DF shadow mode, opacity
-// composing down the tree, sheet-driven LayoutStyle fields (width/height/margin/min/max/
-// position/z-index/overflow) with the inline-wins rule, and the markup attribute vocabulary.
+// The box model on every view: draw order and hit order by z-index, Position::Absolute children
+// in any container (insets, far-edge anchoring, pinning to both edges), box-shadow through the VG
+// distance-field shadow mode, opacity composing down the tree, sheet-driven LayoutStyle fields
+// (width, height, margin, min, max, position, z-index, overflow) where inline values win, and the
+// markup attribute vocabulary.
 
 #include <doctest/doctest.h>
 
@@ -140,7 +140,7 @@ TEST_CASE("box-model: hit testing walks the z order front to back")
     auto above = TV(100, 100);
     LayoutStyle front;
     front.ZIndex = 5;
-    frame->AddView(above.Get(), front); // FIRST child but drawn on top
+    frame->AddView(above.Get(), front); // first child, but drawn on top
     frame->AddView(below.Get());
     root->AddView(frame.Get());
     LayoutPass(ctx, root.Get());
@@ -303,7 +303,7 @@ TEST_CASE("box-model: box-shadow emits the DF shadow quad under the child with t
         CHECK(minY == doctest::Approx(14 - 12));
         CHECK(maxY == doctest::Approx(14 + 54 + 12));
 
-        // The shadow is drawn BEFORE the child's own content (it sits underneath).
+        // The shadow is drawn before the child's own content (it sits underneath).
         bool shadowFirst = false;
         for (usize i = 0; i < batch.CommandCount(); ++i)
         {
@@ -321,9 +321,9 @@ TEST_CASE("box-model: box-shadow emits the DF shadow quad under the child with t
 
 TEST_CASE("box-model: a box-shadow follows the corners its background rounds")
 {
-    // Sky Hopper's cards round their background (rounded-rect(..., radius=24)) and set no
-    // corner-radius; their shadows were square. The shadow's corners, in sigma units, ride every
-    // shadow vertex's coverage: blur 8 is sigma 4.
+    // A card that rounds its background (rounded-rect(..., radius=24)) and sets no corner-radius
+    // gets a shadow with the same rounded corners. The shadow's corner radius, in sigma units, is
+    // carried in every shadow vertex's coverage: blur 8 is sigma 4.
     const auto shadowCoverage = [](StringView sheetText) -> f32
     {
         UIContext ctx{DefaultAllocator()};
@@ -427,12 +427,12 @@ TEST_CASE("box-model: box-shadow takes a list, each drawn, the first on top")
     core::RefPtr<StyleSheet> sheet =
         LoadSSS(u8"RecordingView { box-shadow: 0 2 4 rgba(255, 0, 0, 0.5), inset 1 1 2 #0000FF80, 0 8 16 #00FF0080; }");
     REQUIRE(sheet);
-    // Held: GetValue returns a copy, and the span reads into it.
+    // Keep the value in a local: GetValue returns a copy, and the span points into it.
     const Optional<StyleValue> value = sheet->GetRule(0).GetValue(StyleProperty::BoxShadow);
     REQUIRE(value.HasValue());
     const Span<const BoxShadow> shadows = value.Value().AsShadows();
     REQUIRE(shadows.Size() == 3u);
-    CHECK(shadows[0].Color.r == doctest::Approx(1.0f)); // the rgba()'s commas are its own
+    CHECK(shadows[0].Color.r == doctest::Approx(1.0f)); // the commas inside rgba() do not split the list
     CHECK(shadows[1].Inset);
     CHECK(shadows[2].Blur == doctest::Approx(16));
 
@@ -530,7 +530,7 @@ TEST_CASE("box-model: a sheet's transform moves, scales and turns a view as draw
     ctx.SetStyleSheet(sheet);
     auto child = RV(100, 50, 1);
     child->AddClass(u8"lift");
-    child->Transform.Translation = Float2{0.0f, 4.0f}; // the code's own transform stays under it
+    child->Transform.Translation = Float2{0.0f, 4.0f}; // the transform set in code still applies beneath the sheet's
     auto frame = New<FrameLayout>();
     frame->Padding = Thickness{150, 100, 0, 0};
     frame->AddView(child.Get());
@@ -641,7 +641,7 @@ TEST_CASE("box-model: with layers, a faded view with children fades as one group
     vgContext.SetLayers(true);
     ctx.DrawRootView(root.Get(), vgContext);
     const vg::VGBatch& batch = vgContext.GetBatch();
-    REQUIRE(batch.layers.Size() == 1u); // the frame's; the leaf fades its own fill
+    REQUIRE(batch.layers.Size() == 1u); // the frame's layer; the leaf fades its own fill without one
     CHECK(batch.layers[0].opacity == doctest::Approx(0.5f));
     bool sawFill = false;
     bool sawComposite = false;
@@ -658,7 +658,7 @@ TEST_CASE("box-model: with layers, a faded view with children fades as one group
         {
             sawFill = true;
             CHECK(cmd.layer == 0);
-            CHECK(alpha == doctest::Approx(0.5f)); // the leaf's own, inside the layer
+            CHECK(alpha == doctest::Approx(0.5f)); // the leaf's own opacity, inside the layer
         }
     }
     CHECK(sawFill);
@@ -911,7 +911,7 @@ TEST_CASE("box-model: the cascade fills undeclared LayoutStyle fields; inline wi
     CHECK(fill->Bounds.width == doctest::Approx(400));
     CHECK(half->Bounds.width == doctest::Approx(200));
 
-    // An inline value equal to the DEFAULT still wins over the sheet (declared != default).
+    // An inline value equal to the default still wins over the sheet (declared is not default).
     LayoutStyle wrap;
     wrap.Width = SizeSpec::Wrap();
     fill->SetLayout(wrap);
@@ -997,7 +997,7 @@ TEST_CASE("box-model: position, z-index, insets and overflow come from the sheet
     CHECK_FALSE(clip->ClipsContent);
     CHECK_FALSE(a->EffectiveClipsContent());
 
-    // Removing the class un-styles the field on the next pass (nothing sticks).
+    // Removing the class clears the styled field on the next pass (nothing sticks).
     clip->RemoveClass(u8"clip");
     badge->RemoveClass(u8"badge");
     LayoutPass(ctx, root.Get());
@@ -1031,7 +1031,7 @@ TEST_CASE("box-model: the markup layout attributes cover the P2 fields")
     CHECK(ls.MaxHeight->dp == doctest::Approx(-20));
     CHECK_FALSE(ls.Left.IsDeclared());
 
-    // Every P2 name is in the one table the loader and the completion share.
+    // Every layout attribute name is in the one table the loader and the completion share.
     const Span<const StringView> names = MarkupRegistry::LayoutAttributeNames();
     const StringView expected[] = {u8"position",  u8"right",     u8"bottom",    u8"z-index",
                                    u8"min-width", u8"min-height", u8"max-width", u8"max-height"};
@@ -1051,7 +1051,7 @@ TEST_CASE("box-model: Declared fields distinguish set-to-default from unset")
     LayoutStyle a;
     LayoutStyle b;
     CHECK(a == b);
-    b.Width = SizeSpec::Wrap(); // the default VALUE, but declared
+    b.Width = SizeSpec::Wrap(); // the default value, but declared
     CHECK_FALSE(a == b);
     CHECK(b.Width.IsDeclared());
     CHECK(b.Width == SizeSpec::Wrap());
@@ -1059,7 +1059,7 @@ TEST_CASE("box-model: Declared fields distinguish set-to-default from unset")
     CHECK(a == b);
 }
 
-// === consumer migration ===
+// === Length values through the float accessors ===
 
 TEST_CASE("box-model: ResolveStyleFloat resolves a Length value (theme em reaches every control)")
 {

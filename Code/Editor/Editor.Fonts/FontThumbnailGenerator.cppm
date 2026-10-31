@@ -4,9 +4,9 @@
 // Editor Fonts - :thumbnail_generator partition
 //
 // The font-domain thumbnail generator: a rasterized "Ag" sample. Prepare (main thread) reads
-// the source TTF/OTF bytes from the Sources/ mount; Generate (light worker) raster-bakes just
-// the needed codepoints at a large pixel size (always coverage - the distance-field mode is a
-// runtime concern, a sample glyph reads the same either way), lays the pair on a shared
+// the source TTF/OTF bytes from the Sources/ mount; Generate (light worker) raster-bakes only
+// the needed codepoints at a large pixel size (always coverage: the distance-field mode is a
+// runtime concern, and a sample glyph reads the same either way), lays the pair on a shared
 // baseline, and composites light ink over the stage's dark tile ground.
 
 module;

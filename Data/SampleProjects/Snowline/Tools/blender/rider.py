@@ -158,8 +158,8 @@ def build_armature(pose):
         bone("ik_hand_" + s, REST_HAND(end), REST_HAND(end) + up, "root", False)
         bone("pole_knee_" + s, HIP(end) + P(-0.9, end * 0.3, -0.2), HIP(end) + P(-0.9, end * 0.3, -0.2) + up,
              "hips", False)
-        # The elbows hang down and back, as relaxed arms do; reaching out along the board too, the
-        # pole had them wing out sideways.
+        # The elbows hang down and back, as relaxed arms do; a pole reaching out along the board too
+        # would make them wing out sideways.
         bone("pole_elbow_" + s, SHOULDER(end) + P(0.5, end * 0.1, -0.8),
              SHOULDER(end) + P(0.5, end * 0.1, -0.8) + up, "spine", False)
         bone("upperarm_" + s, pose["shoulder" + s], pose["elbow" + s], "spine")
@@ -174,8 +174,8 @@ def build_armature(pose):
         ik = pb["shin_" + s].constraints.new("IK")
         ik.target, ik.subtarget = rig, "ik_foot_" + s
         ik.pole_target, ik.pole_subtarget = rig, "pole_knee_" + s
-        # +90: the knee toward its pole, over the toes. At -90 the solve turned the chain half round
-        # and every knee bent back toward the heels.
+        # +90: the knee toward its pole, over the toes. At -90 the solve turns the chain half round
+        # and every knee bends back toward the heels.
         ik.pole_angle = math.radians(90)
         ik.chain_count = 2
         cr = pb["foot_" + s].constraints.new("COPY_ROTATION")
@@ -186,7 +186,7 @@ def build_armature(pose):
         ik.pole_target, ik.pole_subtarget = rig, "pole_elbow_" + s
         # The arms reach opposite ways along the board, so the pole angle that lays the front
         # elbow out toward the nose is the opposite one for the back elbow: one angle for both
-        # folded the back arm's elbow in against the ribs, its forearm sticking out to the tail.
+        # would fold the back arm's elbow in against the ribs, its forearm sticking out to the tail.
         ik.pole_angle = math.radians(90 if end == FRONT else -90)
         ik.chain_count = 2
     for b in pb:

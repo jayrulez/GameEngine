@@ -3,10 +3,10 @@
 
 // Editor::Audio - :waveform_view partition.
 //
-// WaveformView: a clip's peak waveform, a widget of the editor's on the GUI (Documentation/Specs/
-// editor-gui.md, 5.4, layer 5): symmetric bars per bucket about the middle line, and a playhead at
-// a fraction of the clip while it plays. Its colours are the sheet's (`waveform` the tag, its
-// background its own box, its parts `wave` and `playhead`), so it follows the theme.
+// WaveformView: a clip's peak waveform, an editor widget on the GUI. It draws symmetric bars per
+// bucket about the middle line, and a playhead at a fraction of the clip while it plays. Its colours
+// come from the style sheet (tag `waveform`, its own box for the background, and parts `wave` and
+// `playhead`), so it follows the theme.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +33,7 @@ export namespace editor
             AddClass(u8"waveform");
         }
 
-        /// Each bucket's peak, 0 to 1, left to right; none draws only the background.
+        /// Each bucket's peak, 0 to 1, left to right; with no peaks, only the background draws.
         void SetPeaks(Array<f32> peaks)
         {
             m_peaks = foundation::core::Move(peaks); // not the widget's own Move
@@ -65,7 +65,7 @@ export namespace editor
             const f32 mid = bounds.y + bounds.height * 0.5f;
             const f32 bar = bounds.width / static_cast<f32>(m_peaks.Size());
             const gui::PartStyle& wave = GetPartStyle(u8"wave");
-            const Color waveColor{0.25f, 0.78f, 0.75f, 0.9f}; // without a sheet
+            const Color waveColor{0.25f, 0.78f, 0.75f, 0.9f}; // used when no sheet sets the colour
             for (usize i = 0; i < m_peaks.Size(); ++i)
             {
                 const f32 half = Max(1.0f, m_peaks[i] * (bounds.height * 0.5f - 2.0f));

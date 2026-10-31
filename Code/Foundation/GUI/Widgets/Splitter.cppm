@@ -3,22 +3,23 @@
 
 // GUI - :splitter partition
 //
-// Splitter: panes side by side (or one above another) with a handle between each two that resizes
-// them (D0 of Specs/gui-lab-evolution-3.md). The one splitter (round three's ruling 6): docking's
-// splits and every other split are this widget.
+// Splitter: panes side by side (or one above another) with a handle between each pair that
+// resizes them. Docking's splits, and every other split, use this widget.
 //
-// Its children are its panes, laid out along its axis by their weights. Each pane gets at least
-// its minimum along the axis: its sheet's min-width (or min-height), else none. Not its content's:
-// the user alone moves a handle, so a pane whose content grows (a tab shown with longer text) wraps
-// or clips it where it stands rather than pushing its neighbours. When even the minimums do not
-// fit, it gives them and clips what passes its end.
+// The splitter's children are its panes, laid out along its axis by their weights. Each pane gets
+// at least its minimum along the axis: its sheet's min-width (or min-height), else zero. The
+// content's size does not count, because only the user moves a handle: a pane whose content grows
+// (a tab shown with longer text) wraps or clips it in place rather than pushing its neighbours.
+// When even the minimums do not fit, every pane gets its minimum and whatever passes the end is
+// clipped.
 //
-// A SplitterHandle sits between each two panes, kept in step as panes come and go (a pane added in
-// markup or by a script gets its handle). A handle is a widget of its own: focusable, read as a
-// separator whose value is where it stands, dragged by the pointer, moved by the arrow keys along
-// the axis (Shift for longer steps; Home and End to its limits), and a double click gives the panes
-// back the shares they were given. A resize moves the two panes either side of the handle alone; a
-// pane that goes gives its share to its neighbours, the other panes keeping theirs.
+// A SplitterHandle sits between each pair of panes and is kept in step as panes come and go, so a
+// pane added in markup or by a script gets its handle. A handle is a widget of its own. It is
+// focusable, and screen readers read it as a separator whose value is its position. The pointer
+// drags it, the arrow keys along the axis move it (Shift for longer steps, Home and End to its
+// limits), and a double click restores the weights the panes were given. A resize changes only the
+// two panes on either side of the handle. When a pane is removed, its share goes to its
+// neighbours and the other panes keep theirs.
 
 module;
 #include "Core/Prelude.h"
@@ -40,10 +41,10 @@ export namespace foundation::gui
 {
     class Splitter;
 
-    /// Which way a Splitter's panes go.
+    /// The direction in which a Splitter's panes are laid out.
     enum class SplitterAxis : u8
     {
-        Horizontal, ///< side by side, from the inline start
+        Horizontal, ///< side by side, starting at the inline start
         Vertical,   ///< one above another
     };
 
@@ -52,7 +53,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(SplitterHandle, UIWidget)
     public:
-        /// How far an arrow key moves it, and with Shift.
+        /// How far an arrow key moves the handle, and (kLongStep) how far with Shift.
         static constexpr f32 kStep = 8.0f;
         static constexpr f32 kLongStep = 48.0f;
 
@@ -60,17 +61,17 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"splitter-handle"));
             SetTabFocusable(true);
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
         }
 
-        /// Where it stands, as a screen reader reads a separator: the share of the panes' room
-        /// before it, 0 to 100.
+        /// Returns the handle's position as a screen reader reads a separator's value: the
+        /// percentage (0 to 100) of the panes' room that lies before it.
         [[nodiscard]] f64 GetValue() const;
         void SetValue(f64 value);
         [[nodiscard]] f64 GetMin() const noexcept { return 0.0; }
         [[nodiscard]] f64 GetMax() const noexcept { return 100.0; }
-        /// How thick it is along its splitter's axis, when its sheet does not size it.
+        /// Sets the handle's thickness along the splitter's axis, used when its sheet does not size it.
         void SetThickness(f32 thickness)
         {
             m_thickness = Max(0.0f, thickness);
@@ -79,7 +80,7 @@ export namespace foundation::gui
         [[nodiscard]] f32 GetThickness() const noexcept { return m_thickness; }
 
         [[nodiscard]] Splitter* GetSplitter() const;
-        /// Its place among its splitter's handles.
+        /// Returns the handle's index among its splitter's handles.
         [[nodiscard]] usize GetIndex() const;
 
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override;
@@ -95,7 +96,7 @@ export namespace foundation::gui
     private:
         [[nodiscard]] bool Horizontal() const;
         f32 m_thickness = 6.0f;
-        f32 m_grab = 0.0f; // where along it the press took it, in its own space
+        f32 m_grab = 0.0f; // where along the handle the press grabbed it, in the handle's space
         bool m_dragging = false;
     };
 
@@ -109,7 +110,7 @@ export namespace foundation::gui
             StyleWriteScope defaults(*this);
             EditLayoutStyle([](LayoutStyle& s)
             {
-                s.OverflowX = Overflow::Hidden; // what passes its end when the minimums do not fit
+                s.OverflowX = Overflow::Hidden; // clip what passes the end when the minimums do not fit
                 s.OverflowY = Overflow::Hidden;
             });
         }
@@ -123,11 +124,11 @@ export namespace foundation::gui
             for (const RefPtr<SplitterHandle>& handle : m_handles)
             {
                 MarkAxis(*handle);
-                handle->RequestLayout(); // its thickness lies along the other axis now
+                handle->RequestLayout(); // the handle's thickness now lies along the other axis
             }
             RequestLayout();
         }
-        /// Markup's and a sheet's `axis`: horizontal or vertical.
+        /// The `axis` property of markup and style sheets: horizontal or vertical.
         [[nodiscard]] core::String GetAxisName() const
         {
             return core::String(m_axis == SplitterAxis::Vertical ? u8"vertical" : u8"horizontal");
@@ -141,8 +142,9 @@ export namespace foundation::gui
         [[nodiscard]] Node* GetPane(usize index) const noexcept { return index < m_panes.Size() ? m_panes[index].Pane : nullptr; }
         [[nodiscard]] SplitterHandle* GetHandle(usize index) const noexcept { return index < m_handles.Size() ? m_handles[index].Get() : nullptr; }
 
-        /// The panes' shares, in order (any scale: 1 2 1 gives the middle pane half). They are what
-        /// a double click on a handle gives back; panes past them take an even share.
+        /// Sets the panes' weights, in order. Any scale works: 1 2 1 gives the middle pane half. A
+        /// double click on a handle restores these weights, and panes beyond the list take an even
+        /// share.
         void SetWeights(Span<const f32> weights)
         {
             m_given.Clear();
@@ -150,12 +152,12 @@ export namespace foundation::gui
                 m_given.PushBack(weight);
             ResetWeights();
         }
-        /// Markup's and a sheet's `weights`: the shares, separated by spaces.
+        /// The `weights` property of markup and style sheets: the weights, separated by spaces.
         [[nodiscard]] core::String GetWeightsText() const;
         void SetWeightsText(const core::String& text);
-        /// Each pane's share now, adding up to 1.
+        /// Returns each pane's current share; the shares add up to 1.
         [[nodiscard]] Array<f32> GetWeights() const;
-        /// The given shares back (an even share where none was given).
+        /// Restores the weights given to SetWeights, with an even share for panes that were given none.
         void ResetWeights()
         {
             for (usize i = 0; i < m_panes.Size(); ++i)
@@ -164,13 +166,15 @@ export namespace foundation::gui
             Changed();
         }
 
-        /// Moves handle `index` so it starts `position` along the axis in this splitter's content
-        /// box (physical: from the left, or the top), as far as the two panes' minimums let it.
+        /// Moves handle `index` so it starts at `position` along the axis of this splitter's content
+        /// box, measured physically from the left or the top, as far as the minimums of the two
+        /// panes allow.
         void MoveHandleTo(usize index, f32 position);
-        /// The panes' sizes along the axis as last laid out, in order.
+        /// Returns the panes' sizes along the axis as last laid out, in order.
         [[nodiscard]] const Array<f32>& GetPaneSizes() const noexcept { return m_sizes; }
 
-        /// After a handle moved or the shares were reset (what a dock layout writes back).
+        /// Sets the callback run after a handle moved or the weights were reset; a dock layout
+        /// uses it to write the sizes back.
         void SetOnResized(Function<void()> callback) { m_onResized = core::Move(callback); }
 
         [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override;
@@ -183,7 +187,7 @@ export namespace foundation::gui
         friend class SplitterHandle;
         struct PaneState
         {
-            Node* Pane = nullptr; // one of its children
+            Node* Pane = nullptr; // one of the splitter's children
             f32 Weight = 1.0f;
         };
 
@@ -195,10 +199,10 @@ export namespace foundation::gui
             handle.AddClass(core::StringView(Horizontal() ? u8"horizontal" : u8"vertical"));
             handle.SetCursor(Horizontal() ? Cursor::EwResize : Cursor::NsResize);
         }
-        // A pane's least size along the axis: its sheet's minimum, else none.
+        // Returns a pane's minimum size along the axis: its sheet's minimum, else zero.
         [[nodiscard]] f32 MinimumOf(const Node& pane) const;
-        // The panes found among the children again, a handle between each two, the children in
-        // that order; a pane gone gives its share to its neighbours.
+        // Finds the panes among the children again, puts a handle between each pair, and orders
+        // the children that way. A removed pane's share goes to its neighbours.
         void SyncPanes();
         void Changed()
         {
@@ -211,8 +215,8 @@ export namespace foundation::gui
         Array<RefPtr<SplitterHandle>> m_handles;
         Array<f32> m_given;
         Array<f32> m_sizes;      // each pane's size along the axis, as last laid out
-        Array<f32> m_minimums;   // and its minimum
-        Array<f32> m_thickness;  // each handle's
+        Array<f32> m_minimums;   // each pane's minimum along the axis
+        Array<f32> m_thickness;  // each handle's thickness
         bool m_syncing = false;
         Function<void()> m_onResized;
     };
@@ -263,7 +267,7 @@ export namespace foundation::gui
         for (usize i = 0; i < GetIndex() && i < splitter->m_thickness.Size(); ++i)
             position += splitter->m_thickness[i];
         if (splitter->IsRightToLeft() && Horizontal())
-            position = splitter->GetContentBounds().width - position - GetSize().x; // its value runs from the inline start
+            position = splitter->GetContentBounds().width - position - GetSize().x; // the handle's value runs from the inline start
         splitter->MoveHandleTo(GetIndex(), position);
     }
     inline void SplitterHandle::OnMouseDown(const MouseEvent& event)
@@ -278,7 +282,7 @@ export namespace foundation::gui
             return;
         }
         m_dragging = true;
-        const core::Float2 local = ConvertToNodeSpace(event.Position); // events come in screen space
+        const core::Float2 local = ConvertToNodeSpace(event.Position); // events arrive in screen space
         m_grab = Horizontal() ? local.x : local.y;
     }
     inline void SplitterHandle::OnMouseMove(const MouseEvent& event)
@@ -286,7 +290,7 @@ export namespace foundation::gui
         Splitter* splitter = GetSplitter();
         if (!m_dragging || splitter == nullptr)
             return;
-        // The pointer in the splitter's content box, less where along the handle it was taken.
+        // The pointer's position in the splitter's content box, less the grab offset along the handle.
         const Rect box = splitter->GetContentBounds();
         const core::Float2 local = splitter->ConvertToNodeSpace(event.Position);
         const f32 at = Horizontal() ? local.x - box.x : local.y - box.y;
@@ -367,14 +371,14 @@ export namespace foundation::gui
         if (m_syncing)
             return;
         m_syncing = true;
-        // The panes, in the children's order.
+        // Collect the panes, in the children's order.
         Array<Node*> found;
         for (usize i = 0; i < ChildCount(); ++i)
             if (Node* child = GetChildAt(i); core::Cast<SplitterHandle>(child) == nullptr)
                 found.PushBack(child);
-        // Shares: a pane that stays keeps its own; one that went gives its share to its
-        // neighbours that stay, in proportion to theirs; a new one takes its given share, or the
-        // average of the others'.
+        // Shares: a pane that stays keeps its own. A removed pane's share goes to its remaining
+        // neighbours, in proportion to their shares. A new pane takes the weight it was given, or
+        // the average of the others.
         Array<PaneState> before = core::Move(m_panes);
         const auto stays = [&found](const Node* pane)
         {
@@ -430,7 +434,7 @@ export namespace foundation::gui
                 state.Weight = i < m_given.Size() && m_given[i] > 0.0f ? m_given[i] : (keptCount > 0 ? kept / static_cast<f32>(keptCount) : 1.0f);
             m_panes.PushBack(state);
         }
-        // A handle between each two panes.
+        // One handle between each pair of panes.
         const usize wanted = m_panes.Size() > 0 ? m_panes.Size() - 1 : 0;
         while (m_handles.Size() > wanted)
         {
@@ -443,7 +447,8 @@ export namespace foundation::gui
             MarkAxis(*handle);
             m_handles.PushBack(handle);
         }
-        // The children in order: a pane, a handle, a pane, ... (focus and a screen reader go so).
+        // Order the children as pane, handle, pane, and so on, which is the order focus and screen
+        // readers follow.
         usize at = 0;
         for (usize i = 0; i < m_panes.Size(); ++i)
         {
@@ -454,7 +459,7 @@ export namespace foundation::gui
                     continue;
                 if (GetChildAt(at) != node)
                 {
-                    RefPtr<Node> keep(node); // held while it moves
+                    RefPtr<Node> keep(node); // keeps the node alive while it moves
                     if (node->GetParent() == this)
                         node->RemoveFromParent();
                     (void)AddChildAt(node, at);
@@ -510,9 +515,10 @@ export namespace foundation::gui
             m_minimums.PushBack(least);
             minimums += least;
         }
-        // Each pane's share of the room, then those below their minimums held at them and the rest
-        // shared again among the others, until none is below; when the minimums alone pass the
-        // room, each has its minimum and what passes the end is clipped.
+        // Give each pane its share of the room. Panes that fall below their minimum are held at it,
+        // and the rest of the room is shared again among the others, until no pane is below its
+        // minimum. When the minimums alone exceed the room, each pane gets its minimum and what
+        // passes the end is clipped.
         m_sizes.Resize(count);
         if (minimums >= room)
         {
@@ -554,7 +560,8 @@ export namespace foundation::gui
                     break;
             }
         }
-        // In order from the inline start (a horizontal splitter right to left runs from the right).
+        // Place the panes in order from the inline start; a horizontal splitter in right to left
+        // runs from the right.
         const bool mirrored = Horizontal() && IsRightToLeft();
         f32 along = 0.0f;
         const auto place = [&](Node& node, f32 size)
@@ -577,14 +584,15 @@ export namespace foundation::gui
                 place(*m_handles[i], m_thickness[i]);
         }
         for (const RefPtr<SplitterHandle>& handle : m_handles)
-            handle->MarkAccessDirty(); // its value moved
+            handle->MarkAccessDirty(); // the handle's value changed
     }
 
     inline void Splitter::MoveHandleTo(usize index, f32 position)
     {
         if (index + 1 >= m_panes.Size() || index + 1 >= m_sizes.Size() || m_minimums.Size() != m_sizes.Size())
             return;
-        // Where it starts now, from the inline start; the position taken there too.
+        // Where the handle starts now, from the inline start; `position` is converted to the same
+        // origin.
         f32 start = 0.0f;
         for (usize i = 0; i <= index; ++i)
             start += m_sizes[i] + (i < index ? m_thickness[i] : 0.0f);
@@ -593,11 +601,11 @@ export namespace foundation::gui
         const f32 a = m_sizes[index], b = m_sizes[index + 1];
         const f32 lowest = m_minimums[index], highest = a + b - m_minimums[index + 1];
         if (highest < lowest)
-            return; // the two have no room to give each other
+            return; // the two panes have no room to give each other
         const f32 to = Clamp(a + position - start, lowest, highest);
         if (to == a)
             return;
-        // The two panes alone change, their shares keeping their sum.
+        // Only the two adjacent panes change, and their weights keep the same sum.
         const f32 both = m_panes[index].Weight + m_panes[index + 1].Weight;
         m_panes[index].Weight = both * to / (a + b);
         m_panes[index + 1].Weight = both - m_panes[index].Weight;

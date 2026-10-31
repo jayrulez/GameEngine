@@ -34,9 +34,9 @@ export namespace foundation::rhi
         virtual void Unmap() = 0;
 
         /// Make [offset, offset+size) of a mapped CpuToGpu buffer visible to the GPU. A real
-        /// coherent mapping needs nothing (this default); a backend that EMULATES mapping with
+        /// coherent mapping needs nothing (this default); a backend that emulates mapping with
         /// a CPU shadow (WebGPU) uploads exactly that range instead of comparing and re-sending
-        /// the whole shadow on Unmap. Contract: a caller that uses FlushRange flushes EVERY
+        /// the whole shadow on Unmap. Contract: a caller that uses FlushRange flushes every
         /// range it wrote during the mapping; Unmap then only closes the mapping. Writers that
         /// touch a small window of a large buffer (the per-frame rings) want this.
         virtual void FlushRange(u64 offset, u64 size)
@@ -46,7 +46,7 @@ export namespace foundation::rhi
         }
     };
 
-    /// GPU texture (1D/2D/3D, with mip levels and array layers).
+    /// GPU texture (1D, 2D or 3D, with mip levels and array layers).
     class Texture
     {
     public:
@@ -57,8 +57,8 @@ export namespace foundation::rhi
     };
 
     /// Next monotonic TextureView::uniqueId (thread-safe; ids never repeat). Defined in
-    /// ResourcesImpl.cpp - the <atomic> it needs must stay OUT of this interface unit
-    /// (GCC gcm-cluster hygiene).
+    /// ResourcesImpl.cpp so the <atomic> it needs stays out of this interface unit, where it
+    /// would make GCC emit an unreadable gcm cluster for consumers.
     [[nodiscard]] u64 NextTextureViewUniqueId() noexcept;
 
     /// A view into a subset of a texture's mip levels and array layers.
@@ -69,10 +69,10 @@ export namespace foundation::rhi
 
         TextureViewDesc desc{};
         Texture* texture = nullptr;
-        // Monotonic creation stamp. A destroyed view's ADDRESS can be reused by the very next
-        // allocation, so any cache keyed by TextureView* MUST validate this id on a hit.
-        // (Bind-group caches that trusted the raw pointer handed out descriptors of a
-        // destroyed UI render target -> sampled a dead image view -> VK_ERROR_DEVICE_LOST.)
+        // Monotonic creation stamp. A destroyed view's address can be reused by the very next
+        // allocation, so any cache keyed by TextureView* must validate this id on a hit;
+        // trusting the raw pointer can hand out descriptors of a destroyed view, and sampling a
+        // dead image view loses the device.
         u64 uniqueId = NextTextureViewUniqueId();
     };
 
@@ -171,7 +171,7 @@ export namespace foundation::rhi
     };
 
     /// Describes the resource binding layout for a pipeline (bind group
-    /// layouts + push constant ranges).
+    /// layouts and push constant ranges).
     class PipelineLayout
     {
     public:

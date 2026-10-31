@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The profiler's stream (Specs/profiler.md, P3): frames written with the tables they lean on and
-// read back as a capture, a source like the live store. A capture file is this stream saved; in
-// 0.2 a socket carries the same bytes.
+// The profiler's stream: frames written with the tables they lean on and read back as a capture,
+// a source like the live store. A capture file is this stream saved.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

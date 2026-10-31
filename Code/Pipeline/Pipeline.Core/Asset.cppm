@@ -3,22 +3,22 @@
 
 // Pipeline::Core - the `editor.core` module.
 //
-// The tooling/authoring base for the asset pipeline: an `Asset`
-// is the editor/source object (references an external source file + import settings) and an
-// `IAssetBuilder` cooks it into a runtime *resource* written to the output content database.
-// The runtime never links this module - it loads only cooked resources. (Asset = source/editor;
-// Resource = runtime/cooked.)
+// The tooling and authoring base for the asset pipeline: an `Asset` is the editor's source object
+// (it references an external source file and import settings), and an `IAssetBuilder` cooks it
+// into a runtime resource written to the output content database. The runtime never links this
+// module; it loads only cooked resources. (Asset is source and editor; Resource is runtime and
+// cooked.)
 //
 // Builder API:
 //   - source files are read through the VFS (`AssetBuildContext::sources` mount), never raw
-//     paths - builders use ReadSourceBytes/ReadSourceText;
+//     paths; builders use ReadSourceBytes and ReadSourceText;
 //   - `Version()`: bump when cook logic changes so exactly this builder's products re-cook
-//     (folded into the recipe hash; forgetting the bump is the known
-//     failure mode, Build > Rebuild All is the big hammer);
-//   - `ScanDependencies()`: declares what a build consumes beyond the implicit Asset::fileName -
-//     extra FILES, content READS of other instances (hash-chained: editing them re-cooks this),
-//     and runtime REFERENCES (existence-only: never re-cook on content change);
-//   - `BuilderRegistry`: asset type -> builder routing for the cook driver.
+//     (it is folded into the recipe hash; a forgotten bump leaves stale products, and
+//     Build > Rebuild All re-cooks everything);
+//   - `ScanDependencies()`: declares what a build consumes beyond the implicit Asset::fileName:
+//     extra files, content reads of other instances (hash-chained: editing them re-cooks this),
+//     and runtime references (existence only: never re-cook on content change);
+//   - `BuilderRegistry`: routes each asset type to its builder for the cook driver.
 
 module;
 #include "Core/Prelude.h"
@@ -35,12 +35,12 @@ using namespace foundation::core;
 
 export namespace pipeline
 {
-    // The availability domain for the Pipeline collection's authoring types (asset classes +
-    // import settings). Answers "which processes have this type": the player has them NOT (it
+    // The availability domain for the Pipeline collection's authoring types (asset classes and
+    // import settings), answering which processes have the type. The player does not have them (it
     // loads cooked products, never authoring assets), so Runtime would be wrong; the headless
-    // cook/CLI/MCP hosts DO have them without the editor, so Editor is wrong too. The truth table:
-    // player = Runtime only; pipeline/CLI/MCP = Runtime + Pipeline; editor = all three. Adding a
-    // domain is free - the set is open (foundation.core owns only the default Runtime domain).
+    // cook, CLI and MCP hosts do have them without the editor, so Editor is wrong too. The player
+    // has Runtime only; the pipeline, CLI and MCP have Runtime and Pipeline; the editor has all
+    // three. The set of domains is open (foundation.core owns only the default Runtime domain).
     inline constexpr TypeDomain kPipelineTypeDomain{StringView(u8"Pipeline")};
 
     // Source/authoring asset: a serializable that references an external source
@@ -51,7 +51,7 @@ export namespace pipeline
         RTTI_OBJECT(Asset, ISerializable)
     public:
         // Source file, relative to the sources mount (empty = embedded data). Typed:
-        // normalization guarantees forward-slash relative form in cooked data - a
+        // normalization guarantees forward-slash relative form in cooked data, so a
         // Windows-authored backslash path heals on load instead of breaking the VFS.
         foundation::vfs::SourcePath fileName;
 
@@ -61,16 +61,16 @@ export namespace pipeline
         }
     };
 
-    // The export target a cook is producing for. `id` names the target - it is
-    // BOTH the per-target cooked-DB directory name AND the recipe platform salt (so a variant
-    // product recooks when the target changes). The capability booleans describe the compressed-
-    // texture families the target's devices support; a variant builder maps them to its encoder
-    // profile (never keys on the id/platform directly - the capability-not-platform rule). The
-    // HostTarget() is the always-warm desktop view the editor cooks against.
+    // The export target a cook is producing for. `id` names the target: it is both the
+    // per-target cooked-DB directory name and the recipe platform salt (so a variant product
+    // recooks when the target changes). The capability booleans describe the compressed-texture
+    // families the target's devices support; a variant builder maps them to its encoder profile
+    // and never keys on the id or platform directly. HostTarget() is the always-warm desktop view
+    // the editor cooks against.
     struct CookTarget
     {
-        String id;         // "host", "web-bc", "web-astc", ... (DB dir + recipe salt)
-        bool bc = true;    // BC1-BC7 (desktop + desktop browsers)
+        String id;         // "host", "web-bc", "web-astc", ... (DB dir and recipe salt)
+        bool bc = true;    // BC1-BC7 (desktop and desktop browsers)
         bool astc = false; // ASTC (mobile browsers)
         bool etc2 = false; // ETC2 (not supported)
     };
@@ -83,7 +83,7 @@ export namespace pipeline
 
     // Resolve a target id to its capability profile. The web export splits into
     // two variant targets: "web-bc" (desktop browsers) and "web-astc" (mobile browsers). Everything
-    // else - "host", desktop platforms, unknown ids - is BC-capable desktop. New targets
+    // else ("host", desktop platforms, unknown ids) is BC-capable desktop. New targets
     // (consoles, ETC2 budget mobiles) extend this; the resolver keys on capability, never on platform.
     [[nodiscard]] inline CookTarget CookTargetFor(StringView id)
     {
@@ -99,26 +99,26 @@ export namespace pipeline
     // resolve cross-asset references during the bake).
     struct AssetBuildContext
     {
-        // The cook's allocator (required - the driver / editor cook service decides):
+        // The cook's allocator (required; the driver or the editor cook service decides):
         // everything a Build() allocates for its products comes from here.
         explicit AssetBuildContext(IAllocator& alloc) noexcept : allocator(&alloc) {}
 
         IAllocator* allocator;
         foundation::vfs::IFileSystem* sources = nullptr; // mount for Asset::fileName + extra files
         foundation::content::Instance* source =
-            nullptr; // the SOURCE instance being cooked (embedded data streams)
+            nullptr; // the source instance being cooked (embedded data streams)
         foundation::content::Instance* output = nullptr;     // cooked resource is written here
         foundation::content::IContentDatabase* db = nullptr; // for resolving referenced assets
-        // The SOURCE database (asset envelopes + raw sidecars). At cook time `db` is the
-        // COOKED-products view, so a builder that needs another asset's SOURCE form (its
-        // envelope's fileName, embedded pixels, ...) must read through THIS - Cast'ing a cooked
-        // product to its Asset envelope fails (the terrain palette-cook lesson).
+        // The source database (asset envelopes and raw sidecars). At cook time `db` is the
+        // cooked-products view, so a builder that needs another asset's source form (its
+        // envelope's fileName, embedded pixels, ...) must read through this one; casting a cooked
+        // product to its Asset envelope fails.
         foundation::content::IContentDatabase* sourceDb = nullptr;
         // The export target being produced. Null = the host target (a variant
-        // builder falls back to the desktop/BC profile).
+        // builder falls back to the desktop BC profile).
         const CookTarget* target = nullptr;
-        // The cook's job system for data-parallel work INSIDE one build (a texture's block
-        // rows, 2026-09-23: a 4k texture's BC7 encode took 84 s on one core). Null = inline.
+        // The cook's job system for data-parallel work inside one build (a texture's block rows:
+        // a 4k texture's BC7 encode is slow on one core). Null runs inline.
         JobSystem* jobs = nullptr;
     };
 
@@ -128,26 +128,25 @@ export namespace pipeline
     {
         Array<foundation::vfs::SourcePath> files; // extra source files read (mount-relative)
         Array<String> sourceStreams; // the source instance's data streams the build reads
-                                     // (embedded payloads live in SIDECAR files the envelope
-                                     // hash doesn't cover - declaring them chains their bytes)
-        Array<Guid> reads;           // instances whose CONTENT this build consumes (hash-chained)
+                                     // (embedded payloads live in sidecar files the envelope
+                                     // hash doesn't cover; declaring them chains their bytes)
+        Array<Guid> reads;           // instances whose content this build consumes (hash-chained)
         Array<Guid> references;      // instances the product refers to at runtime (existence only)
     };
 
-    // Whether a builder's output can differ per export target (asset-variants Decision 3). The cook
-    // treats INVARIANT products as platform-agnostic: they are cooked ONCE into the host DB and
-    // copied forward into every target DB (never recooked), and their recipe carries no platform
-    // salt. VARIANT builders (textures: BC vs ASTC) cook per target and their recipe is salted by the
-    // target, so the same source produces a distinct product per target. Default INVARIANT so every
-    // existing builder keeps today's behavior.
+    // Whether a builder's output can differ per export target. The cook treats invariant products
+    // as platform-agnostic: they are cooked once into the host DB and copied forward into every
+    // target DB (never recooked), and their recipe carries no platform salt. Variant builders
+    // (textures: BC or ASTC) cook per target and their recipe is salted by the target, so the same
+    // source produces a distinct product per target. Invariant is the default.
     enum class BuildVariance : u8
     {
         PlatformInvariant,
         PlatformVariant,
     };
 
-    // Cooks one source asset type into a runtime resource (source -> product).
-    // Runs in tooling only; writes to ctx.output (WriteObject + WriteData).
+    // Cooks one source asset type into a runtime resource (source to product).
+    // Runs in tooling only; writes to ctx.output (WriteObject and WriteData).
     class IAssetBuilder
     {
     public:
@@ -160,10 +159,10 @@ export namespace pipeline
         // instances with it).
         [[nodiscard]] virtual const TypeInfo* ProductType() const = 0;
 
-        // Cook-logic version: BUMP whenever Build()'s output changes for the same inputs.
+        // Cook-logic version: bump whenever Build()'s output changes for the same inputs.
         [[nodiscard]] virtual u32 Version() const { return 1; }
 
-        // Does this builder's product vary per export target? Default INVARIANT (see BuildVariance).
+        // Whether this builder's product varies per export target. Default invariant (see BuildVariance).
         [[nodiscard]] virtual BuildVariance Variance() const { return BuildVariance::PlatformInvariant; }
 
         // Declare extra dependencies (Asset::fileName is implicit). Default: none.
@@ -227,12 +226,12 @@ export namespace pipeline
         }
     };
 
-    // Asset type -> builder routing for the cook driver. Modules register their builders here
-    // (the executable assembles the set, mirroring the page-factory/creator registries).
+    // Routes each asset type to its builder for the cook driver. Modules register their builders
+    // here (the executable assembles the set, as with the page-factory and creator registries).
     class BuilderRegistry
     {
     public:
-        // The allocator (required - the owner decides) backs registered builders.
+        // The allocator (required; the owner decides) backs registered builders.
         explicit BuilderRegistry(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
@@ -273,8 +272,8 @@ export namespace pipeline
 
         [[nodiscard]] usize Count() const noexcept { return m_builders.Size(); }
 
-        /// Visit every registered builder (the registration tripwires audit the whole set -
-        /// e.g. "every ProductType() is a registered serializable").
+        /// Visit every registered builder (the registration tripwires audit the whole set, such
+        /// as "every ProductType() is a registered serializable").
         template <typename F> void ForEach(F&& fn) const
         {
             for (const UniquePtr<IAssetBuilder>& b : m_builders)
@@ -288,9 +287,9 @@ export namespace pipeline
         Array<UniquePtr<IAssetBuilder>> m_builders;
     };
 
-    // Reflects the Asset base (its fileName property) + SourcePath, so EVERY concrete asset
+    // Reflects the Asset base (its fileName property) and SourcePath, so every concrete asset
     // surfaces its source file through the base chain (FindProperty walks bases). Idempotent.
-    // Asset::StaticType() itself is defined WITH the fileName property in AssetImpl.cpp.
+    // Asset::StaticType() itself is defined with the fileName property in AssetImpl.cpp.
     void RegisterAssetReflection();
 
     /// A file-backed creation: `starter` written to "<name><extension>" in the context's

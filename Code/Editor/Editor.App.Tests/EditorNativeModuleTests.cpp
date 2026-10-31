@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorNativeModule: a project's native code is staged as a numbered copy under the
-// project's cache (the declared path, else this platform's spelling of the same target), and a
-// reload with no module declared says so and touches nothing.
+// Editor::App: EditorNativeModule. A project's native code is staged as a numbered copy under the
+// project's cache (from the declared path, or else this platform's spelling of the same target),
+// and a reload with no module declared says so and touches nothing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <filesystem> // remove_all (the scratch project)

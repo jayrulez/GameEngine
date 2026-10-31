@@ -3,8 +3,7 @@
 
 // Foundation::RenderGraph - :debug partition
 //
-// Debug visualization/reporting: Graphviz DOT export and a text summary. Ported
-// from Sedulous.RenderGraph (GraphDebug.bf).
+// Debug visualization/reporting: Graphviz DOT export and a text summary.
 
 module;
 #include "Core/Prelude.h"
@@ -98,8 +97,8 @@ export namespace foundation::rendergraph
     class GraphDebug
     {
     public:
-        // Graphviz DOT: pass nodes (boxes) + resource nodes (ellipse/diamond) +
-        // access edges. Culled passes/edges are dashed/gray.
+        // Graphviz DOT: pass nodes (boxes), resource nodes (ellipse/diamond) and access edges.
+        // Culled passes and edges are dashed and gray.
         static void ExportDOT(RenderGraph& graph, String& out)
         {
             const Array<RenderGraphPass*>& passes = graph.Passes();
@@ -184,7 +183,7 @@ export namespace foundation::rendergraph
             out.Append(u8"}\n");
         }
 
-        // Human-readable text summary (counts + execution order).
+        // Human-readable text summary (counts and execution order).
         static void ExportSummary(RenderGraph& graph, String& out)
         {
             const Array<RenderGraphPass*>& passes = graph.Passes();

@@ -3,21 +3,22 @@
 
 // GUI.Toolkit - :dopesheet partition
 //
-// The dopesheet (T5 of Specs/gui-lab-evolution-3.md): a timeline source's channels as rows folded by
-// their paths' segments (component, property, channel), a parent row showing the keys of every
-// channel under it, on a shared TimeAxis (a curve view stands under it on the same axis). Mouse
-// first:
-//   - a click on a key selects it (a parent's selects every key under it at that time; Shift or Ctrl
-//     adds or takes away), a drag from nothing selects by a box;
-//   - a drag moves the selected keys in time (the pressed key on a frame with a frame rate, all kept
-//     in the clip), previewed through the source and committed once, Escape giving it up; the
-//     source's answer says where the keys went, so the selection follows them;
-//   - Delete removes them; a double click on a channel's row inserts a key there (its value the
-//     source's);
-//   - a click on a row's name folds or opens it; the wheel over the names scrolls the rows, over
-//     the keys zooms about the pointer; a middle drag pans.
-// Its names are at the inline start (the right, right to left); time runs left to right in either
-// direction, as the ruler's does, so a ruler and a curve view beside it start at its keys.
+// The dopesheet shows a timeline source's channels as rows, folded by the segments of their paths
+// (component, property, channel). A parent row shows the keys of every channel under it. Time runs
+// on a shared TimeAxis, and a curve view can stand under the dopesheet on the same axis. It is
+// driven mostly by the mouse:
+//   - A click on a key selects it; a click on a parent's key selects every key under it at that
+//     time. Shift or Ctrl adds or takes away. A drag from empty space selects with a box.
+//   - A drag moves the selected keys in time. The pressed key snaps to a frame when there is a
+//     frame rate, and all keys stay in the clip. The move is previewed through the source and
+//     committed once; Escape cancels it. The source reports where the keys went, so the selection
+//     follows them.
+//   - Delete removes the selected keys. A double click on a channel's row inserts a key there,
+//     with the value the source gives.
+//   - A click on a row's name folds or opens it. The wheel scrolls the rows over the names and
+//     zooms about the pointer over the keys; a middle drag pans.
+// The names sit at the inline start (the right in right to left). Time runs left to right in either
+// direction, as the ruler's does, so a ruler and a curve view beside it line up with its keys.
 
 module;
 #include "Core/Prelude.h"
@@ -40,10 +41,10 @@ export namespace foundation::gui
     /// A row of a dopesheet: a segment of the channels' paths.
     struct DopesheetRow
     {
-        core::String Path;      ///< the path to it ("Lamp.color")
+        core::String Path;      ///< the full path of the row ("Lamp.color")
         core::String Name;      ///< its last segment ("color")
-        u32 Depth = 0;          ///< its segments less one
-        i32 Channel = -1;       ///< the channel it is; -1: only a parent
+        u32 Depth = 0;          ///< the number of segments in its path, less one
+        i32 Channel = -1;       ///< the channel it shows; -1 for a parent row only
         bool HasChildren = false;
         bool Folded = false;
     };
@@ -52,7 +53,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(Dopesheet, UIWidget)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"labels"));
@@ -92,7 +93,8 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] TimeAxis* GetTimeAxis() const noexcept { return m_axis.Get(); }
-        /// The channels it shows (not owned: the source outlives the view or is set to null first).
+        /// Sets the channels it shows. The source is not owned: it must outlive the view, or be set
+        /// to null first.
         void SetSource(ITimelineSource* source)
         {
             if (m_source)
@@ -105,7 +107,8 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] ITimelineSource* GetSource() const noexcept { return m_source; }
-        /// The names' column (pixels): a ruler above it starts this far in to line up.
+        /// Returns the width of the names' column in pixels. A ruler above the dopesheet starts this
+        /// far in so that it lines up.
         [[nodiscard]] f32 GetLabelWidth() const noexcept { return m_labelWidth; }
         void SetLabelWidth(f32 width)
         {
@@ -114,7 +117,7 @@ export namespace foundation::gui
         }
 
         // === Rows ===
-        /// The rows shown, folded ones' children left out.
+        /// Returns the rows shown, leaving out the children of folded rows.
         [[nodiscard]] const core::Array<DopesheetRow>& GetRows() const
         {
             Rebuild();
@@ -151,16 +154,17 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        /// The keys a row shows at each of its times: its channel's and every channel's under it.
+        /// Fills the keys a row shows at each of its times: its own channel's keys and those of every
+        /// channel under it.
         void GetRowKeys(usize row, core::Array<f32>& times, core::Array<core::Array<TimelineKeyRef>>& keys) const;
-        /// Where a row's key at `time` is drawn (its own space).
+        /// Returns where a row's key at `time` is drawn, in the dopesheet's space.
         [[nodiscard]] core::Float2 KeyPoint(usize row, f32 time) const
         {
             const Rect box = GetContentBounds();
             return core::Float2{KeysLeft() + (m_axis ? m_axis->TimeToOffset(time) : 0.0f),
                                 box.y + (static_cast<f32>(row) + 0.5f) * kRowHeight - m_rowScroll};
         }
-        /// The names' column and the keys' area (its own space).
+        /// The names' column and the keys' area, in the dopesheet's space.
         [[nodiscard]] Rect NamesBounds() const
         {
             const Rect box = GetContentBounds();
@@ -200,7 +204,7 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        /// Deletes the selected keys, one change; false when none were.
+        /// Deletes the selected keys as one change. Returns false when none were selected.
         bool DeleteSelected()
         {
             if (!m_source || m_selection.IsEmpty())
@@ -262,8 +266,8 @@ export namespace foundation::gui
             core::Array<usize> Children; // indexes into m_nodes
         };
 
-        // The rows again from the channels' paths: a tree by segments, in the order they first
-        // appear, then the shown rows in order (a folded row's children left out).
+        // Rebuilds the rows from the channels' paths: first a tree by segments, in the order they
+        // first appear, then the shown rows in order, leaving out the children of folded rows.
         void Rebuild() const
         {
             if (!m_dirty)
@@ -362,7 +366,7 @@ export namespace foundation::gui
                     return false;
             return !keys.IsEmpty();
         }
-        // The keys under a point of the key area: a row's marker within reach.
+        // Finds the keys under a point of the key area: those of a row's marker within reach.
         bool KeysAt(core::Float2 local, core::Array<TimelineKeyRef>& out, f32& time) const;
         void MoveTo(f32 x);
         void EndDrag(bool commit);
@@ -386,10 +390,10 @@ export namespace foundation::gui
         bool m_additive = false;
         f32 m_anchorTime = 0.0f;                    // the pressed key's time at the press
         core::Array<TimelineKeyRef> m_pressed;      // the keys under the press
-        core::Array<TimelineKeyRef> m_moving;       // the selection as it was when the move began
-        f32 m_movingLow = 0.0f, m_movingHigh = 0.0f; // their earliest and latest times then
+        core::Array<TimelineKeyRef> m_moving;       // the selection when the move began
+        f32 m_movingLow = 0.0f, m_movingHigh = 0.0f; // their earliest and latest times at that point
         f32 m_panScroll = 0.0f;
-        mutable Text m_text; // each name in turn
+        mutable Text m_text; // reused for each name in turn
     };
 
     inline void Dopesheet::GetRowKeys(usize row, core::Array<f32>& times, core::Array<core::Array<TimelineKeyRef>>& keys) const
@@ -472,7 +476,7 @@ export namespace foundation::gui
         RequestFocus();
         if (NamesBounds().Contains(local))
         {
-            // The names: a click folds or opens a row that has children.
+            // On the names, a click folds or opens a row that has children.
             const i32 row = RowAtY(local.y);
             if (row >= 0 && GetRows()[static_cast<usize>(row)].HasChildren)
                 SetFolded(GetRows()[static_cast<usize>(row)].Path.AsView(), !GetRows()[static_cast<usize>(row)].Folded);
@@ -569,8 +573,8 @@ export namespace foundation::gui
     inline void Dopesheet::MoveTo(f32 x)
     {
         f32 delta = TimeAtX(x) - TimeAtX(m_pressAt.x);
-        delta = m_axis->Snap(m_anchorTime + delta) - m_anchorTime; // the pressed key on a frame, the rest kept apart
-        delta = core::Clamp(delta, -m_movingLow, m_axis->Duration() - m_movingHigh); // all kept in the clip
+        delta = m_axis->Snap(m_anchorTime + delta) - m_anchorTime; // the pressed key snaps; the rest keep their spacing
+        delta = core::Clamp(delta, -m_movingLow, m_axis->Duration() - m_movingHigh); // keep every key in the clip
         core::Array<TimelineKeyRef> moved;
         m_source->PreviewKeysMove(m_moving.AsSpan(), delta, moved);
         m_selection = core::Move(moved);
@@ -610,7 +614,7 @@ export namespace foundation::gui
         }
         if (m_drag == Drag::Pending && !m_additive)
         {
-            m_selection.Clear(); // a click on a key of several selected selects it alone
+            m_selection.Clear(); // a click on one of several selected keys selects it alone
             for (const TimelineKeyRef& key : m_pressed)
                 m_selection.PushBack(key);
             Invalidate();
@@ -656,7 +660,7 @@ export namespace foundation::gui
         const Rect box = GetContentBounds();
         if (NamesBounds().Contains(local))
         {
-            // Over the names: the rows scroll, kept in what they fill.
+            // Over the names the rows scroll, clamped to the height they fill.
             const f32 most = core::Max(0.0f, static_cast<f32>(GetRows().Size()) * kRowHeight - box.height);
             m_rowScroll = core::Clamp(m_rowScroll - steps * kRowHeight * 3.0f, 0.0f, most);
             Invalidate();
@@ -699,13 +703,13 @@ export namespace foundation::gui
             if (top > box.Bottom() || top + kRowHeight < box.y)
                 continue;
             ctx.VG().FillRect(Rectangle{box.x, top + kRowHeight - 1.0f, box.width, 1.0f}, separator);
-            // From the names' inline start: a chevron, then the name.
+            // From the names' inline start, draw a chevron, then the name.
             const f32 indent = 4.0f + static_cast<f32>(row.Depth) * kIndent;
             const f32 side = rtl ? -1.0f : 1.0f;
             const f32 start = rtl ? names.Right() - indent : names.x + indent;
             if (row.HasChildren)
             {
-                // A chevron: toward the inline end when folded, down when open.
+                // The chevron points toward the inline end when folded, and down when open.
                 vg::PathBuilder chevron;
                 const f32 cx = start + side * 4.0f, cy = top + kRowHeight * 0.5f;
                 if (row.Folded)

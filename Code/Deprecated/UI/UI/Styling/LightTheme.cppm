@@ -3,9 +3,9 @@
 
 // UI - :light_theme partition
 //
-// Factory building a light theme as a StyleSheet (flat ColorDrawable regions + tinted SVG icons). Ported
-// from Sedulous.UI/src/Styling/LightTheme.bf - structurally identical to DarkTheme.cppm with different
-// literal colours and dark-tinted icons; see that file's header for the conventions.
+// Factory building a light theme as a StyleSheet (flat ColorDrawable regions and tinted SVG icons). It
+// has the same structure as DarkTheme.cppm, with different literal colours and dark-tinted icons; see
+// that file's header for the conventions.
 
 module;
 #include "Core/Prelude.h"
@@ -69,13 +69,13 @@ export namespace foundation::ui
             RefPtr<StyleSheet> sheet = loader.Load(EmbeddedThemes::Light());
             if (!sheet)
             {
-                return CreateLegacyForParity(allocator, palette); // never ship unstyled (build defect)
+                return CreateLegacyForParity(allocator, palette); // a build defect; do not ship unstyled
             }
             ThemeRegistry::ApplyExtensions(*sheet, palette);
             return sheet;
         }
 
-        /// The former C++ rule builder - parity-test oracle ONLY.
+        /// The C++ rule builder, kept as the parity tests' reference.
         [[nodiscard]] static RefPtr<StyleSheet> CreateLegacyForParity(IAllocator& allocator, ThemePalette palette)
         {
             return BuildTheme(allocator, palette);

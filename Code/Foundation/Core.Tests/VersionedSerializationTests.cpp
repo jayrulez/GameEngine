@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Data-version scopes: payloads carry the writing type's data-version chain. The reader
-// REQUIRES the stored chain to equal the type's current one - there is no migration, so a
+// requires the stored chain to equal the type's current one. There is no migration, so a
 // Serialize body reads exactly one layout and a stale payload fails instead of misparsing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -148,8 +148,8 @@ TEST_CASE("versioning: a chain of a different SHAPE (extra or foreign entries) i
 TEST_CASE("versioning: a type with a legacy reader accepts an older concrete version down to its floor, and reports it")
 {
     // TypeInfo::minReadDataVersion (TypeBuilder::ReadsDataVersionsFrom): the one allowance in
-    // the strict reader (Process/CONVENTIONS.md, user 2026-09-23). Versions below the floor and
-    // above the current one are still refused; a base entry must still match exactly.
+    // the strict reader. Versions below the floor and above the current one are still refused;
+    // a base entry must still match exactly.
     TypeInfo aware = MakeTypeInfo<Soldier>("SoldierLegacyAware", "rtti::test", nullptr, 3);
     KeepLegacyReader(aware, 2);
     Soldier value;
@@ -172,7 +172,7 @@ TEST_CASE("versioning: a type with a legacy reader accepts an older concrete ver
     u32 reported = 0;
     CHECK(readWith(3, reported)); // current
     CHECK(reported == 3u);
-    CHECK(readWith(2, reported)); // the floor: accepted, and the body sees the STORED version
+    CHECK(readWith(2, reported)); // the floor: accepted, and the body sees the stored version
     CHECK(reported == 2u);
     CHECK_FALSE(readWith(1, reported)); // below the floor
     CHECK_FALSE(readWith(4, reported)); // a newer build's data

@@ -3,26 +3,25 @@
 
 // GUI - :text_edit_model partition
 //
-// The editing model (E4 of Specs/gui-lab-evolution.md): a text with a caret and an anchor, edited by
-// named commands. Offsets are bytes kept on grapheme boundaries, so a caret never splits "é" written
-// as e + U+0301 or an emoji's parts; words come from :text_segmentation. Keys reach the model through
-// the keymap: a field declares the "textinput" key context, the GUI binds the editing keys to the
-// commands' names there (BindTextEditingKeys), and the field handles each name by running it here,
-// so the keys are rebindable and a menu can show and run them like any other command (eepp's text
-// input over a document and a command map). What each command does follows foundation.ui's editor.
+// The editing model: a text with a caret and an anchor, edited by named commands. Offsets are bytes
+// kept on grapheme boundaries, so a caret never splits "é" written as e plus U+0301, or an emoji's
+// parts; words come from :text_segmentation. Keys reach the model through the keymap: a field
+// declares the "textinput" key context, the GUI binds the editing keys to the commands' names there
+// (BindTextEditingKeys), and the field handles each name by running it here, so the keys are
+// rebindable and a menu can show and run them like any other command.
 //
-// Vertical movement and a visual line's ends ask a view's lines (ITextLines: a wrapped text area
-// knows them); with none, lines are the text's own, between line breaks. Undo keeps whole
-// snapshots and folds a run of typing, or of deleting one way, into one step while it goes on
-// within a second (the host advances the model's clock); moving the caret, or any other edit, ends
-// the run.
+// Vertical movement and the ends of a visual line come from a view's lines (ITextLines, which a
+// wrapped text area knows); with no view, lines are the text's own, between line breaks. Undo
+// keeps whole snapshots. A run of typing, or of deleting in one direction, folds into one undo step
+// while each edit comes within a second of the last (the host advances the model's clock). Moving
+// the caret, or any other edit, ends the run.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:text_edit_model;
 
-import foundation.core; // String, StringView, Function, Min, Max, DecodeUtf8, AppendUtf8
+import foundation.core;
 import :clipboard;
 import :text_segmentation;
 import :undo_stack;
@@ -99,32 +98,33 @@ export namespace foundation::gui
         return core::StringView(detail::kTextEditCommandNames[static_cast<usize>(command)]);
     }
 
-    /// What a view knows of the lines it shows the text in (wrapped, they are not the text's own).
+    /// What a view knows about the lines it shows the text in; when wrapped, they are not the
+    /// text's own lines.
     class ITextLines
     {
     public:
         virtual ~ITextLines() = default;
-        /// The line holding the caret at `offset` (its ends are where Home and End go).
+        /// Returns the line holding the caret at `offset`; its ends are where Home and End go.
         [[nodiscard]] virtual TextRange LineAt(usize offset) const = 0;
-        /// The offset `lines` lines above (negative) or below `offset`, nearest `goalX` across; the
-        /// text's start or end past the first or last line. `goalX` below 0: from `offset`'s own x,
-        /// which it sets.
+        /// Returns the offset `lines` lines above (negative) or below `offset`, nearest `goalX`
+        /// horizontally, or the text's start or end when that is past the first or last line. With
+        /// `goalX` below 0, it starts from `offset`'s own x and sets `goalX` to it.
         [[nodiscard]] virtual usize OffsetByLines(usize offset, i32 lines, f32& goalX) const = 0;
-        /// How many lines a page moves.
+        /// Returns how many lines a page moves.
         [[nodiscard]] virtual i32 LinesPerPage() const = 0;
     };
 
-    /// What a view knows of where carets stand (E9c): Left and Right move across what it shows,
+    /// What a view knows about where carets stand. Left and Right move across what the view shows,
     /// which in mixed-direction text is not the order of the bytes.
     class ITextCaretPlaces
     {
     public:
         virtual ~ITextCaretPlaces() = default;
-        /// The caret one place left (`step` below 0) or right of (`offset`, `upstream`); false when
-        /// there is none that way (it stays).
+        /// Gets the caret one place left (`step` below 0) or right of (`offset`, `upstream`).
+        /// Returns false when there is no place in that direction, and the caret stays.
         [[nodiscard]] virtual bool OffsetVisually(usize offset, bool upstream, i32 step, usize& outOffset, bool& outUpstream) const = 0;
-        /// Whether the paragraph holding `offset` runs right to left: there a word to the left is
-        /// the next one, and a selection's left end its logical end (E11).
+        /// Whether the paragraph holding `offset` runs right to left. There, the word to the left is
+        /// the next one, and a selection's left end is its logical end.
         [[nodiscard]] virtual bool IsRightToLeftAt(usize offset) const = 0;
     };
 
@@ -136,7 +136,8 @@ export namespace foundation::gui
 
         // === Text ===
         [[nodiscard]] core::StringView GetText() const noexcept { return m_text.AsView(); }
-        /// Replaces the text from outside an edit: the caret goes to its end, and the history goes.
+        /// Replaces the text from outside an edit. The caret moves to the end and the undo history
+        /// is cleared.
         void SetText(core::StringView text)
         {
             m_text = core::String(text);
@@ -153,7 +154,7 @@ export namespace foundation::gui
         // === Caret and selection ===
         [[nodiscard]] usize GetCaret() const noexcept { return m_caret; }
         /// Whether the caret stands after the text before it rather than before the text after it
-        /// (where the two differ, at a direction's boundary, E9c).
+        /// (where the two differ, at a direction's boundary).
         [[nodiscard]] bool IsCaretUpstream() const noexcept { return m_upstream; }
         [[nodiscard]] usize GetAnchor() const noexcept { return m_anchor; }
         [[nodiscard]] bool HasSelection() const noexcept { return m_caret != m_anchor; }
@@ -194,7 +195,8 @@ export namespace foundation::gui
         [[nodiscard]] bool IsMultiline() const noexcept { return m_multiline; }
         void SetReadOnly(bool readOnly) noexcept { m_readOnly = readOnly; }
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
-        /// The most graphemes the text may hold (0: no limit); what does not fit is cut.
+        /// Sets the most graphemes the text may hold (0 for no limit); text that does not fit is cut
+        /// off.
         void SetMaxLength(usize graphemes) noexcept { m_maxLength = graphemes; }
         [[nodiscard]] usize GetMaxLength() const noexcept { return m_maxLength; }
         void SetFilter(InputFilter filter) { m_filter = core::Move(filter); }
@@ -202,30 +204,33 @@ export namespace foundation::gui
         /// Whether the text may leave through copy and cut (a password's may not).
         void SetCopyAllowed(bool allowed) noexcept { m_copyAllowed = allowed; }
         [[nodiscard]] bool IsCopyAllowed() const noexcept { return m_copyAllowed; }
-        /// The lines vertical movement and Home and End follow (null: the text's own).
+        /// Sets the lines that vertical movement and Home and End follow (null uses the text's own).
         void SetLines(const ITextLines* lines) noexcept { m_lines = lines; }
-        /// Where carets stand in the view (null: Left and Right move by graphemes, as the bytes go).
+        /// Sets where carets stand in the view (with null, Left and Right move by graphemes in byte
+        /// order).
         void SetCaretPlaces(const ITextCaretPlaces* places) noexcept { m_places = places; }
         [[nodiscard]] UndoStack& GetUndoStack() noexcept { return m_undo; }
 
-        /// The model's clock, in seconds, which undo folding reads.
+        /// Sets the model's clock, in seconds, which undo folding reads.
         void SetTime(f64 seconds) noexcept { m_now = seconds; }
         [[nodiscard]] f64 GetTime() const noexcept { return m_now; }
 
         // === Editing ===
-        /// Types `text` at the caret, over the selection: what the filter lets in, line breaks only
-        /// in a multiline text, as much as the length limit leaves room for. True when it changed.
+        /// Types `text` at the caret, replacing the selection. Only what the filter lets in is typed,
+        /// line breaks only in a multiline text, and only as much as the length limit leaves room
+        /// for. Returns true when the text changed.
         bool Insert(core::StringView text) { return InsertText(text, RunKind::Typing); }
 
-        /// Runs `command`; `clipboard` serves cut, copy and paste (null: they do nothing). True when
-        /// it applies to this text (a read-only text takes moves and copies, not edits).
+        /// Runs `command`; `clipboard` serves cut, copy and paste (with null they do nothing).
+        /// Returns true when the command applies to this text; a read-only text takes moves and
+        /// copies, not edits.
         bool Run(TextEditCommand command, IClipboard* clipboard = nullptr)
         {
             using C = TextEditCommand;
             const core::StringView text = m_text.AsView();
             switch (command)
             {
-            // Across what the view shows (E9c); a selection collapses to its end on that side (in a
+            // Move across what the view shows. A selection collapses to its end on that side (in a
             // right-to-left paragraph, Left goes to its logical end).
             case C::MoveLeft:
                 return HasSelection() ? MoveCaret(RightToLeftHere() ? GetSelection().End : GetSelection().Start, false)
@@ -235,8 +240,8 @@ export namespace foundation::gui
                                       : MoveAcross(1, false);
             case C::SelectLeft: return MoveAcross(-1, true);
             case C::SelectRight: return MoveAcross(1, true);
-            // A word on that side, by the text's order in the caret's paragraph (E11): to the left
-            // of a right-to-left one is the next word.
+            // Move a word to that side, in the text's order within the caret's paragraph: in a
+            // right-to-left paragraph, the word to the left is the next word.
             case C::MoveWordLeft:
             case C::SelectWordLeft:
                 return MoveCaret(RightToLeftHere() ? NextWordBoundary(text, m_caret) : PrevWordBoundary(text, m_caret),
@@ -284,7 +289,7 @@ export namespace foundation::gui
                 return true;
             case C::Cut:
                 if (!m_copyAllowed)
-                    return true; // nothing leaves a password, and nothing goes
+                    return true; // a password's text may not leave, so nothing is copied or deleted
                 if (clipboard != nullptr && HasSelection())
                     clipboard->SetText(SelectedText());
                 if (m_readOnly)
@@ -301,7 +306,8 @@ export namespace foundation::gui
             return false;
         }
 
-        /// The command a name names (as the keymap binds it); false for a name not the model's.
+        /// Finds the command a name stands for (as the keymap binds it). Returns false for a name
+        /// that is not one of the model's.
         [[nodiscard]] static bool FindCommand(core::StringView name, TextEditCommand& out)
         {
             for (usize i = 0; i < static_cast<usize>(TextEditCommand::Count); ++i)
@@ -334,11 +340,12 @@ export namespace foundation::gui
             return offset;
         }
 
-        // Whether the caret's paragraph runs right to left (the view says; none: left to right).
+        // Whether the caret's paragraph runs right to left (the view says; with no view, left to
+        // right).
         [[nodiscard]] bool RightToLeftHere() const { return m_places != nullptr && m_places->IsRightToLeftAt(m_caret); }
 
-        // One place left or right: across the view where it says where carets stand, else by a
-        // grapheme as the bytes go.
+        // Moves one place left or right: across the view when the view says where carets stand,
+        // else by one grapheme in byte order.
         bool MoveAcross(i32 step, bool extend)
         {
             const core::StringView text = m_text.AsView();
@@ -390,7 +397,8 @@ export namespace foundation::gui
             EndRun();
             return true;
         }
-        // The text's own lines, the column counted in graphemes (the goal kept in m_goalX).
+        // Moves by the text's own lines, counting the column in graphemes (the goal is kept in
+        // m_goalX).
         [[nodiscard]] usize OffsetByTextLines(i32 lines)
         {
             const core::StringView text = m_text.AsView();
@@ -461,7 +469,7 @@ export namespace foundation::gui
                     continue;
                 core::AppendUtf8(accepted, c);
             }
-            // As many graphemes as the limit leaves room for.
+            // Take as many graphemes as the limit leaves room for.
             const TextRange selection = GetSelection();
             if (m_maxLength > 0)
             {
@@ -473,8 +481,8 @@ export namespace foundation::gui
                     end = NextGrapheme(accepted.AsView(), end);
                 accepted = core::String(accepted.AsView().SubStr(0, end));
             }
-            // Nothing of what was typed is let in: nothing changes (the selection it would have
-            // replaced stays, rather than being deleted for nothing).
+            // When the filter lets in nothing that was typed, nothing changes: the selection it would
+            // have replaced stays, rather than being deleted for nothing.
             if (accepted.Size() == 0 && (selection.IsEmpty() || text.Size() != 0))
                 return false;
             Remember(selection.IsEmpty() ? kind : RunKind::Other);
@@ -487,7 +495,8 @@ export namespace foundation::gui
             return true;
         }
 
-        // Before an edit: a new undo step, unless it goes on the run before it.
+        // Called before an edit: starts a new undo step, unless the edit continues the run before
+        // it.
         void Remember(RunKind kind)
         {
             const bool folds = kind != RunKind::Other && kind == m_run && m_now - m_runTime <= kCoalesceSeconds;
@@ -526,9 +535,9 @@ export namespace foundation::gui
         InputFilter m_filter;
         const ITextLines* m_lines = nullptr;
         const ITextCaretPlaces* m_places = nullptr;
-        bool m_upstream = false; // the caret's affinity (E9c)
+        bool m_upstream = false; // the caret's affinity
         usize m_maxLength = 0;
-        f32 m_goalX = -1.0f; // where vertical movement aims across (-1: from the caret)
+        f32 m_goalX = -1.0f; // the x vertical movement aims for (-1: the caret's own)
         f64 m_now = 0.0;
         f64 m_runTime = 0.0;
         RunKind m_run = RunKind::None;

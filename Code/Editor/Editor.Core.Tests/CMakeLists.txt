@@ -1,5 +1,5 @@
-# ExportTests is mostly backend-neutral (templates/presets/manifests) and ALWAYS builds so that
-# coverage is never gated on a script backend. Its two export-driver tests cook a startup SCRIPT
+# ExportTests is mostly backend-neutral (templates/presets/manifests) and always builds so that
+# coverage is never gated on a script backend. Its two export-driver tests cook a startup script
 # asset, so the file links each enabled backend's cook (guarded) and the script tests themselves are
 # #ifdef'd per backend (OPTION_HAS_ANGELSCRIPT / OPTION_HAS_LUAU).
 set(_editor_core_script_libs Pipeline::Script Foundation::Script Foundation::Script.Resource)

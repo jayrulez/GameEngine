@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor debug-view blit: visualize ANY render-graph texture in the viewport. The source
-// binds UnfilterableFloat and is read via Load (no sampler), so every format works - HDR,
-// AO's R8, velocity RG16F, and depth (bound through its depth-only view; value lands in .r).
-// Channel select + range remap + optional depth linearization happen here; the pass draws
-// the view's sub-rect and overlays/gizmos still draw on top.
+// Editor debug-view blit: shows any render-graph texture in the viewport. The source binds as
+// UnfilterableFloat and is read with Load (no sampler), so every format works: HDR, AO's R8,
+// velocity RG16F, and depth (bound through its depth-only view, with the value in .r). Channel
+// selection, range remapping and optional depth linearization happen here; the pass draws the
+// view's sub-rect, and overlays and gizmos still draw on top.
 
 #include "push_constant.hlsli"
 #include "depth.hlsli"

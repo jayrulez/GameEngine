@@ -21,9 +21,10 @@ namespace editor
 {
     namespace
     {
-        constexpr f32 kSameTime = 1e-4f; // keys this close are at one time
+        constexpr f32 kSameTime = 1e-4f; // keys this close count as the same time
 
-        // A channel's part of its track's path: a Float3's x, y, z, a Color's r, g, b, a.
+        // The part of a track's path that names a channel: x, y, z for a Float3; r, g, b, a for a
+        // Color.
         [[nodiscard]] StringView PartName(propanim::TrackValueKind kind, i32 curve)
         {
             static constexpr StringView kXyz[] = {u8"x", u8"y", u8"z"};
@@ -44,7 +45,7 @@ namespace editor
             return curve >= 0 && curve < 4 ? kColors[curve] : Color{0.9f, 0.9f, 0.9f, 1.0f};
         }
 
-        // A scalar channel's value in the application's value of its whole track.
+        // A scalar channel's value, taken from the application's value for the whole track.
         [[nodiscard]] f32 PartOf(const Variant& value, propanim::TrackValueKind kind, i32 curve)
         {
             if (kind == propanim::TrackValueKind::Float && value.Is<f32>())
@@ -64,7 +65,7 @@ namespace editor
             return 0.0f;
         }
 
-        // Keys sorted again by time after some were moved, and where each moved one went.
+        // Sorts keys by time again after some were moved, and records where each moved key went.
         template <typename Key>
         void MoveKeys(Array<Key>& keys, Span<const usize> movedIndices, f32 delta, Array<usize>& newIndices, f32 Key::* time)
         {
@@ -145,7 +146,7 @@ namespace editor
             for (u32 c = 0; c < propanim::ChannelCount(track.kind); ++c)
                 m_channels.PushBack(Channel{t, static_cast<i32>(c)});
         }
-        // The shown tracks that are still there; their scalar channels the curves.
+        // Keep the shown tracks that still exist; their scalar channels become the curves.
         for (usize i = m_shown.Size(); i > 0; --i)
             if (m_shown[i - 1] >= clip.tracks.Size())
                 m_shown.RemoveAt(i - 1);
@@ -202,8 +203,8 @@ namespace editor
         if (!m_document->InGesture())
             return;
         propanim::PropertyAnimationClip& clip = m_document->GestureClip();
-        clip = m_moveFrom; // each preview from where the keys were
-        // Channel by channel: its moved keys shifted, the channel sorted again.
+        clip = m_moveFrom; // each preview starts from where the keys were
+        // Channel by channel: shift the moved keys, then sort the channel again.
         Array<usize> done;
         for (const gui::TimelineKeyRef& first : keys)
         {
@@ -245,7 +246,7 @@ namespace editor
 
     bool ClipSource::DeleteKeys(Span<const gui::TimelineKeyRef> keys)
     {
-        // Only keys that are there; none, nothing changes.
+        // Only keys that exist; with none, nothing changes.
         Array<gui::TimelineKeyRef> there;
         Array<f32> times;
         for (const gui::TimelineKeyRef& key : keys)
@@ -261,7 +262,7 @@ namespace editor
         const Array<Channel> channels = m_channels;
         m_document->Edit(u8"propanim-delete-keys", [&there, &channels](propanim::PropertyAnimationClip& clip)
                          {
-                             // Last first, so each index still names its key.
+                             // Remove the last first, so each index still names its key.
                              for (usize i = 1; i < there.Size(); ++i)
                              {
                                  const gui::TimelineKeyRef key = there[i];
@@ -296,7 +297,7 @@ namespace editor
         time = Max(0.0f, time);
         const Channel at = m_channels[channel];
         const propanim::PropertyTrack& track = m_document->Clip().tracks[at.Track];
-        // A key already at that time is the one made.
+        // A key already at that time is the one returned.
         Array<f32> times;
         GetKeyTimes(channel, times);
         for (usize i = 0; i < times.Size(); ++i)

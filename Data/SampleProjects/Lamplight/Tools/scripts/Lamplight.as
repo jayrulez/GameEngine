@@ -1,23 +1,23 @@
-// Lamplight - the game's orchestrator (the reserved class Game): the title and its levels, and in
-// a level the clock, the HUD's target and loot, the pause menu, and the results.
+// Lamplight: the game's orchestrator (the reserved class Game). It runs the title screen and the
+// levels, and within a level the clock, the HUD's target and loot, the pause menu and the results.
 //
-// The title lists the levels with the best taken on each (from the save); a level opens once the
-// one before it is done. Picking one loads its scene afresh under the HUD. In a level the scene's
-// pieces report what happens: loot taken ("Loot", its value), the target taken ("Taken"), a guard
-// giving chase ("Spotted"), the thief caught ("Caught": he is back at his checkpoint, the level
-// goes on), and the thief at the exit ("Escaped"): with the target, the level is done; without
-// it, the HUD says what he is there for. Pause (Escape or Start) holds the level still under the
-// pause menu.
+// The title lists the levels with the best result on each, read from the save. A level opens once
+// the one before it is done. Picking one loads its scene afresh under the HUD. During a level the
+// scene's pieces report events: loot taken ("Loot", with its value), the target taken ("Taken"), a
+// guard giving chase ("Spotted"), the thief caught ("Caught": he is back at his checkpoint and the
+// level goes on), and the thief at the exit ("Escaped"). Escaping with the target finishes the
+// level; without it, the HUD reminds him what he came for. Pause (Escape or Start) freezes the
+// level under the pause menu.
 //
-// The results: the time, the loot, how often seen and caught, and the ghost medal for a level done
-// without a guard ever giving chase. The save keeps, per level, that it is done, the best time,
-// the most loot and whether it was ghosted ("done.<level>", "best.<level>", "loot.<level>",
-// "ghost.<level>").
+// The results show the time, the loot, how often he was seen and caught, and the ghost medal for a
+// level done without any guard giving chase. For each level the save keeps whether it is done, the
+// best time, the most loot and whether it was ghosted ("done.<level>", "best.<level>",
+// "loot.<level>", "ghost.<level>").
 
 const int kLevelCount = 5;
 const float kControlsShown = 6.0f; // how long the controls show as a level starts (s)
-// The screens, on the engine GUI's screen stack: their documents by asset id (importscripts.py fills
-// these in).
+// The screens, shown on the engine GUI's screen stack, by the asset ids of their documents
+// (importscripts.py fills these in).
 const string kTitleDoc = "{{{GUI:Title}}}";
 const string kHudDoc = "{{{GUI:Hud}}}";
 const string kPauseDoc = "{{{GUI:Pause}}}";
@@ -27,16 +27,16 @@ const string kResultsDoc = "{{{GUI:Results}}}";
 funcdef bool EventHandler(GuiEvent e);
 
 ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
-// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
-// with the same ids, and would be found first.
+// Searches the top screen first. A screen just cleared or popped stays in the tree while its exit
+// animation plays, with the same ids, and would otherwise be found first.
 Node@ find(string id)
 {
     Screen@ top = screens().top();
     Node@ n = top !is null ? top.find(id) : null;
     return n !is null ? n : gui::root().find(id);
 }
-void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // `on*` names are the engine's handlers
-// Skips a node the screens up now do not have (a level's pieces report while the title is up).
+void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // handlers are named on*, like the engine's event handlers
+// Skips a node the current screens do not have (a level's pieces can report while the title is up).
 void setText(string id, string text)
 {
     Node@ n = find(id);
@@ -56,8 +56,8 @@ class Game
     private bool m_haveTarget = false;
     private int m_seen = 0;
     private int m_caught = 0;
-    private float m_note = 0.0f; // how long the HUD's word shows yet
-    private float m_controlsShow = 0.0f; // how long the controls panel shows yet
+    private float m_note = 0.0f; // how much longer the HUD's message shows
+    private float m_controlsShow = 0.0f; // how much longer the controls panel shows
 
     void launch()
     {
@@ -89,7 +89,8 @@ class Game
                                 : (i == 2 ? "the butler's keys" : (i == 3 ? "the steward's letter" : "the family jewels")));
     }
 
-    // A level opens once the one before it is done; the first is always open, one not built yet never.
+    // A level opens once the one before it is done. The first is always open; a level with no
+    // scene never is.
     private bool unlocked(int i)
     {
         if (levelScene(i).IsNil())
@@ -162,8 +163,8 @@ class Game
         screens().push(kHudDoc);
         find("hud-prompt-panel").visible = false; // until a lamp or a door is in reach
         showHud();
-        // The controls, keyboard and pad, for the first seconds of the level (the pause menu has
-        // them too): faded in from the sheet's 0.
+        // Show the keyboard and pad controls for the first seconds of the level (the pause menu
+        // lists them too), fading in from the opacity 0 the style sheet gives them.
         find("hud-controls").tween("opacity", "1", 0.3f, "ease");
         m_controlsShow = kControlsShown;
         run::setTimeScale(1.0f);

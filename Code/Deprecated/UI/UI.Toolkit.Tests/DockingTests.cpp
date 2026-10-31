@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Faithful port of Sedulous.UI.Tests/src/DockingTests.bf (12 cases). Beef `scope`/`new` view trees
-// become RefPtr-owned views; `===` ref-equality becomes pointer `==` (with .Get()); `Test.Assert` -> CHECK.
+// Docking tests: DockTabGroup, DockSplit and DockableWindow on their own, the DockManager, drop
+// zones, panel activation, close vetoes, and OS-chromed float windows. View trees are RefPtr-owned.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -12,7 +12,7 @@ using namespace foundation::ui;
 using namespace foundation::ui::toolkit;
 using namespace foundation::core;
 
-// new Label("Content") -> a RefPtr<Label>; pass .Get() to AddPanel (the panel/tree adopts a ref).
+// Makes a RefPtr<Label>; pass .Get() to AddPanel (the panel or tree adopts a ref).
 static RefPtr<Label> MakeLabel(StringView text) { return MakeRef<Label>(DefaultAllocator(), text); }
 
 TEST_CASE("docking: DockablePanel_Title")
@@ -94,7 +94,7 @@ TEST_CASE("docking: DockTabGroup_AddRemovePanel")
 
     group->RemovePanel(p1.Get());
     CHECK(group->PanelCount() == 1);
-    // Beef `delete p1` dropped: the local RefPtr frees p1 at scope end.
+    // The local RefPtr frees p1 at scope end.
 }
 
 TEST_CASE("docking: DockTabGroup_SelectedIndex")
@@ -138,7 +138,7 @@ TEST_CASE("docking: DockableWindow_DetachPanel")
     DockablePanel* detached = dw->DetachPanel();
     CHECK(detached == panel.Get());
     CHECK(dw->Panel() == nullptr);
-    // Beef `delete panel` dropped: the local RefPtr frees panel at scope end.
+    // The local RefPtr frees panel at scope end.
 }
 
 // === DockManager (with context) ===
@@ -161,7 +161,7 @@ TEST_CASE("docking: DockManager_AddPanel")
     CHECK(panel->Title() == StringView(u8"Test"));
     CHECK(panel->DockHost == dm.Get());
 
-    // Dock the panel so it's in the view tree and gets cleaned up.
+    // Dock the panel so it is in the view tree and gets cleaned up.
     dm->DockPanel(panel, DockPosition::Center);
 }
 
@@ -206,9 +206,8 @@ TEST_CASE("docking: DockManager_DockPanel_Split")
     CHECK(Cast<DockSplit>(dm->RootNode()) != nullptr);
 }
 
-// DELIBERATE DEVIATION from the Sedulous port (user-approved 2026-07-11): docking a panel into a
-// tab group makes it the ACTIVE tab (mainstream-IDE behavior). Upstream keeps the existing
-// selection and its editor calls ActivatePanel by hand.
+// Docking a panel into a tab group makes it the active tab, as IDEs commonly do, so callers need
+// not call ActivatePanel by hand.
 TEST_CASE("docking: DockPanel_Center_ActivatesDockedTab")
 {
     UIContext ctx{DefaultAllocator()};
@@ -224,7 +223,7 @@ TEST_CASE("docking: DockPanel_Center_ActivatesDockedTab")
     DockablePanel* p3 = dm->AddPanel(StringView(u8"P3"), MakeLabel(u8"Content 3").Get());
 
     dm->DockPanel(p1, DockPosition::Center);
-    dm->DockPanel(p2, DockPosition::Center); // tabs with p1 - and becomes the active tab
+    dm->DockPanel(p2, DockPosition::Center); // tabs with p1, and becomes the active tab
 
     auto* group = Cast<DockTabGroup>(p2->Parent);
     REQUIRE(group != nullptr);
@@ -240,9 +239,9 @@ TEST_CASE("docking: DockPanel_Center_ActivatesDockedTab")
     CHECK(group->SelectedPanel() == p1);
 }
 
-// DraggableTreeView drop-zones: the middle band of a row is a drop-INTO target (CanDropInto/
-// DropInto, added for the editor hierarchy's reparenting), the edge bands keep the original
-// between-rows reorder semantics; each falls back to the other when unsupported.
+// DraggableTreeView drop zones: the middle band of a row is a drop-into target (CanDropInto and
+// DropInto, used for reparenting in the editor hierarchy), and the edge bands reorder between
+// rows; each falls back to the other when unsupported.
 TEST_CASE("docking: DraggableTreeView_DropIntoZones")
 {
     // A 3-root flat tree adapter recording what happened.
@@ -285,23 +284,23 @@ TEST_CASE("docking: DraggableTreeView_DropIntoZones")
     tree->SetAdapter(&adapter);
     auto drag = MakeRef<TreeDragData>(DefaultAllocator(), 0);
 
-    // Middle of row 2 (y = 50) = drop-INTO zone.
+    // The middle of row 2 (y = 50) is the drop-into zone.
     CHECK(tree->CanAcceptDrop(drag.Get(), 0, 50.0f) == DragDropEffects::Move);
     CHECK(tree->OnDrop(drag.Get(), 0, 50.0f) == DragDropEffects::Move);
     CHECK(adapter.intoFrom == 0);
     CHECK(adapter.intoTo == 2);
     CHECK(adapter.movedFrom == -1); // reorder path untouched
 
-    // Top edge of row 2 (y = 41) = reorder boundary BEFORE row 2.
+    // The top edge of row 2 (y = 41) is the reorder boundary before row 2.
     CHECK(tree->OnDrop(drag.Get(), 0, 41.0f) == DragDropEffects::Move);
     CHECK(adapter.movedFrom == 0);
     CHECK(adapter.movedTo == 2);
 
-    // Bottom edge of row 1 (y = 38, frac 0.9) = boundary AFTER row 1 (= before row 2).
+    // The bottom edge of row 1 (y = 38, fraction 0.9) is the boundary after row 1 (before row 2).
     CHECK(tree->OnDrop(drag.Get(), 0, 38.0f) == DragDropEffects::Move);
     CHECK(adapter.movedTo == 2);
 
-    // Below the last row (y = 100, 3 rows x 20px) = end-of-list boundary (count).
+    // Below the last row (y = 100, 3 rows of 20px) is the end-of-list boundary (count).
     CHECK(tree->OnDrop(drag.Get(), 0, 100.0f) == DragDropEffects::Move);
     CHECK(adapter.movedTo == 3);
 
@@ -317,10 +316,10 @@ TEST_CASE("docking: DraggableTreeView_DropIntoZones")
     CHECK(tree->OnDrop(drag.Get(), 0, 50.0f) == DragDropEffects::None);
 }
 
-// A press ANYWHERE inside a panel's subtree announces it through OnPanelActivated (capture
-// phase - runs before the target handles the click, never consumes it). This is what keeps the
-// app's ACTIVE page in sync when side-by-side tab groups make a panel visible without tab
-// clicks (its group's SetSelectedIndex early-outs, so tab selection can't re-announce it).
+// A press anywhere inside a panel's subtree announces it through OnPanelActivated, in the capture
+// phase, so it runs before the target handles the click and never consumes it. This keeps the
+// app's active page in sync when side-by-side tab groups show a panel without a tab click (its
+// group's SetSelectedIndex returns early, so tab selection cannot announce it again).
 TEST_CASE("docking: press inside panel content activates the panel")
 {
     UIContext ctx{DefaultAllocator()};
@@ -334,8 +333,8 @@ TEST_CASE("docking: press inside panel content activates the panel")
     auto contentB = MakeLabel(u8"B");
     DockablePanel* a = dock->AddPanel(u8"A", contentA.Get());
     DockablePanel* b = dock->AddPanel(u8"B", contentB.Get());
-    // AddPanel only REGISTERS; dock A center, then B RIGHT of A's group - both visible
-    // side-by-side, each its own tab group (the shell's idiom).
+    // AddPanel only registers. Dock A in the center, then B to the right of A's group: both
+    // are visible side by side, each in its own tab group, as the shell arranges them.
     dock->DockPanel(a, DockPosition::Center);
     dock->DockPanelRelativeTo(b, DockPosition::Right, a->Parent);
 
@@ -349,7 +348,7 @@ TEST_CASE("docking: press inside panel content activates the panel")
     dock->OnPanelActivated.Add(
         Event<void(DockablePanel*)>::Handler{[&activated](DockablePanel* p) { activated = p; }});
 
-    // Press in the middle of each panel's CONTENT area (not the tab strip).
+    // Press in the middle of each panel's content area (not the tab strip).
     auto pressInside = [&](DockablePanel* panel)
     {
         const Float2 screen =
@@ -367,7 +366,7 @@ TEST_CASE("docking: press inside panel content activates the panel")
 }
 
 // The close-gesture veto: RequestClose consults the interceptor (the editor prompts on dirty
-// pages); OnCloseRequested.Invoke stays the un-vetoed programmatic path (the prompt's own
+// pages); OnCloseRequested.Invoke stays the programmatic path that is never vetoed (the prompt's own
 // Save/Discard buttons use it).
 TEST_CASE("docking: close interceptor vetoes gestures but not direct closes")
 {
@@ -398,7 +397,7 @@ TEST_CASE("docking: close interceptor vetoes gestures but not direct closes")
     CHECK(closed == 2);
 }
 
-// === docking-v2: OS-chromed float windows + drop previews ===
+// === OS-chromed float windows and drop previews ===
 
 namespace
 {
@@ -439,9 +438,10 @@ namespace
     };
 }
 
-// The host's chrome policy propagates to the float window and flips the panel/adorner behavior:
-// chromed = OS owns close/resize, the panel hides its X, and a re-dock drag shows the tab-chip
-// adorner (the window stays put); borderless = the window itself follows the drag, no adorner.
+// The host's chrome policy propagates to the float window and decides the panel and adorner
+// behavior. Chromed, the OS owns close and resize, the panel hides its X, and a re-dock drag shows
+// the tab-chip adorner while the window stays put. Borderless, the window itself follows the drag
+// and there is no adorner.
 TEST_CASE("docking: float window inherits host chrome policy")
 {
     const bool chromeModes[] = {true, false};
@@ -468,12 +468,12 @@ TEST_CASE("docking: float window inherits host chrome policy")
         CHECK(fw->HasOSChrome == chrome);
         CHECK(panel->InChromedOSWindow() == chrome);
 
-        // Chromed: adorner rides the cursor (window stays put). Borderless: window follows,
-        // adorner suppressed.
+        // Chromed: the adorner follows the cursor and the window stays put. Borderless: the
+        // window follows, and there is no adorner.
         RefPtr<View> visual = panel->CreateDragVisual(nullptr);
         CHECK((visual.Get() != nullptr) == chrome);
 
-        // Chromed: inner resize edges are the OS's job - edge hit-tests fall through to content.
+        // Chromed: the OS handles resize edges, so edge hit-tests fall through to the content.
         fw->Measure(BoxConstraints::Tight(300, 250));
         fw->Layout(0, 0, 300, 250);
         View* edgeHit = fw->HitTest(Float2{2, 125});
@@ -489,7 +489,7 @@ TEST_CASE("docking: float window inherits host chrome policy")
 }
 
 // The OS close button (host onCloseRequested) routes through the panel's RequestClose, so the
-// close interceptor (dirty-page veto) applies to chromed windows exactly like the drawn X.
+// close interceptor (the dirty-page veto) applies to chromed windows just as to the drawn X.
 TEST_CASE("docking: OS close request respects the panel close interceptor")
 {
     UIContext ctx{DefaultAllocator()};
@@ -516,7 +516,7 @@ TEST_CASE("docking: OS close request respects the panel close interceptor")
     dm->FloatPanel(panel, 10, 10);
     REQUIRE(host.LastOnClose);
 
-    host.LastOnClose(host.Created[0].Get()); // vetoed: float survives
+    host.LastOnClose(host.Created[0].Get()); // vetoed: the float survives
     CHECK(asked == 1);
     CHECK(host.Destroyed == 0);
     CHECK(dm->FindPanelById(StringView(u8"doc")) == panel);
@@ -525,8 +525,8 @@ TEST_CASE("docking: OS close request respects the panel close interceptor")
     host.LastOnClose(host.Created[0].Get()); // allowed: the window is torn down...
     CHECK(asked == 2);
     CHECK(host.Destroyed == 1);
-    // ...and the panel, a TOOL panel (it has a persistence id), hides: registered, out of the
-    // tree, alive for a Reset Layout or a layout restore (2026-09-23).
+    // ...and the panel, a tool panel (it has a persistence id), hides: registered, out of the
+    // tree, and alive for a Reset Layout or a layout restore.
     CHECK(dm->FindPanelById(StringView(u8"doc")) == panel);
     CHECK(panel->Parent == nullptr);
     CHECK(!panel->IsPendingDeletion);
@@ -546,15 +546,15 @@ TEST_CASE("docking: zone indicator carries drop preview rect")
     CHECK(left.PreviewRect.width == 400);
     CHECK(left.PreviewRect.height == 600);
 
-    indicator->UpdateHover(760, 200); // legacy AddTarget: zero-area preview (no overlay)
+    indicator->UpdateHover(760, 200); // plain AddTarget: zero-area preview (no overlay)
     REQUIRE(indicator->HoveredTarget().HasValue());
     CHECK(indicator->HoveredTarget().Value().PreviewRect.width == 0);
 }
 
-// The editor's Reset Layout crash (RTHomes1, 2026-09-23): the shell borrows raw pointers to its
-// tool panels, the user closed Assets, ClosePanel destroyed it, and DockDefaults then read the
-// dead panel's Parent. A tool panel (persistence id) now hides on close and stays registered, so
-// the default arrangement can be rebuilt over it; a page panel (no id) is still destroyed.
+// The editor shell keeps raw pointers to its tool panels and its DockDefaults reads their Parent,
+// so a closed tool panel must stay alive. A tool panel (one with a persistence id) hides on close
+// and stays registered, so the default arrangement can be rebuilt over it; a page panel (no id) is
+// destroyed.
 TEST_CASE("docking: closing a tool panel hides it and keeps it registered; the default layout rebuilds over it; a page panel is destroyed")
 {
     UIContext ctx{DefaultAllocator()};
@@ -585,16 +585,16 @@ TEST_CASE("docking: closing a tool panel hides it and keeps it registered; the d
     REQUIRE(Cast<DockTabGroup>(assets->Parent) != nullptr);
     CHECK(dm->RegisteredPanelCount() == 3);
 
-    // The user closes Assets (the close gesture's un-vetoed path): undocked, registered, alive.
+    // The user closes Assets (the close gesture's path without a veto): undocked, registered, alive.
     assets->OnCloseRequested.Invoke(assets);
-    ctx.BeginFrame(0.016f); // the deferred deletes run here: the panel must not be among them
+    ctx.BeginFrame(0.016f); // the deferred deletes run here, and the panel is not among them
     ctx.BeginFrame(0.016f);
     CHECK(assets->Parent == nullptr);
     CHECK(dm->RegisteredPanelCount() == 3);
     CHECK(dm->FindPanelById(u8"assets") == assets);
     CHECK(!assets->IsPendingDeletion);
 
-    // View > Reset Layout: the same three pointers, the same sequence - and Assets is back.
+    // View > Reset Layout: the same three pointers, the same sequence, and Assets is back.
     dockDefaults();
     ctx.BeginFrame(0.016f);
     CHECK(Cast<DockTabGroup>(assets->Parent) != nullptr);
@@ -605,7 +605,7 @@ TEST_CASE("docking: closing a tool panel hides it and keeps it registered; the d
     CHECK(dm->RegisteredPanelCount() == 3);
     CHECK(Cast<DockTabGroup>(assets->Parent) != nullptr);
 
-    // A page panel (no persistence id) still dies on close: dropped from the registry.
+    // A page panel (no persistence id) dies on close and is dropped from the registry.
     DockablePanel* page = dm->AddPanel(StringView(u8"Scene"), MakeLabel(u8"s").Get());
     dm->DockPanelRelativeTo(page, DockPosition::Center, welcome->Parent);
     ctx.BeginFrame(0.016f);
@@ -649,7 +649,7 @@ TEST_CASE("docking: the owner's ActiveMark on a panel makes its group the active
     right->ActiveMark = true;
     CHECK(rightGroup->IsActiveGroup());
     CHECK_FALSE(leftGroup->IsActiveGroup());
-    // A click into the tool panel activates it for the DOCK (OnPanelActivated, ActivePanel)
+    // A click into the tool panel activates it for the dock (OnPanelActivated, ActivePanel)
     // but moves no mark: the ring stays on the page.
     DockablePanel* activated = nullptr;
     dm->OnPanelActivated.Add(Event<void(DockablePanel*)>::Handler{
@@ -668,7 +668,7 @@ TEST_CASE("docking: the owner's ActiveMark on a panel makes its group the active
     dm->ClosePanel(extra);
     CHECK(dm->ActivePanel() == right); // the group re-selected its remaining tab
     rightGroup->SetSelectedIndex(0);
-    // A click on the tab that is ALREADY selected (the other group's one page) activates it
+    // A click on the tab that is already selected (the other group's one page) activates it
     // too: the selection does not change, the activation still moves.
     activated = nullptr;
     leftGroup->ActivateSelected(); // its tab is already selected: only the click activates
@@ -681,7 +681,7 @@ TEST_CASE("docking: the owner's ActiveMark on a panel makes its group the active
     left->ActiveMark = true;
     CHECK(leftGroup->IsActiveGroup());
     CHECK_FALSE(rightGroup->IsActiveGroup());
-    // A second tab in the marked group, selected: the mark is the panel's, so the group is
+    // A second tab in the marked group, selected. The mark belongs to the panel, so the group is
     // active only while the marked panel is the selected one.
     DockablePanel* second = dm->AddPanel(StringView(u8"Scene C"), MakeLabel(u8"C").Get());
     leftGroup->AddPanel(second);
@@ -692,7 +692,7 @@ TEST_CASE("docking: the owner's ActiveMark on a panel makes its group the active
 }
 
 // With no root and no window host (a layout restored headless), nothing but the manager holds a
-// floated panel's window: it must live until the panel docks again, then go.
+// floated panel's window, so the manager keeps it alive until the panel docks again, then frees it.
 TEST_CASE("docking: with no root or host, a floated panel's window lives until the panel docks again")
 {
     auto dm = MakeRef<DockManager>(DefaultAllocator());

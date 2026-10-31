@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The passes' bind group cache keeps a group only while every view it binds is the same view of
-// the same texture. TAA once checked only its jittered colour: on the player's first frame the
-// motion texture differed from every later frame's while the colour did not, so the group built
-// for one of its two history textures kept frame 0's motion vectors, and every other frame's
-// edges flickered (2026-10-02). These replay that sequence on stand-in pointers; no device.
+// the same texture. Checking only TAA's jittered colour is not enough: on the player's first frame
+// the motion texture differs from every later frame's while the colour does not, so the group
+// built for one of its two history textures would keep frame 0's motion vectors and every other
+// frame's edges would flicker. These replay that sequence on stand-in pointers; no device.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

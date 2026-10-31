@@ -4,8 +4,8 @@
 /// Foundation::Render - the `:tonemap` partition.
 ///
 /// The HDR resolve: the forward pass renders linear HDR into a transient (RGBA16F); this fullscreen
-/// pass reads it, applies exposure + a tonemap operator + the display OETF, and writes the LDR
-/// target. Keeps the renderer in a strict linear working space that the IBL/post stack is
+/// pass reads it, applies exposure, a tonemap operator and the display OETF, and writes the LDR
+/// target. Keeps the renderer in a strict linear working space that the IBL and post stack are
 /// designed against. The operator is selectable: a trivial clamp or AgX.
 
 module;
@@ -28,8 +28,8 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
-    /// Auto-exposure inputs for the tonemap: the exposure pass's adapted 1x1 (imported handle
-    /// + raw view + generation) and the key/clamp window. A null view (or enabled=false)
+    /// Auto-exposure inputs for the tonemap: the exposure pass's adapted 1x1 (imported handle,
+    /// raw view and generation) and the key and clamp window. A null view (or enabled=false)
     /// disables.
     struct TonemapAutoExposure
     {
@@ -59,7 +59,7 @@ export namespace foundation::render
     {
         f32 exposure = 1.0f;
         f32 bloomIntensity = 0.0f;
-        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv -> the view's sub-rect
+        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv to the view's sub-rect
         Float2 uvOffset{0.0f, 0.0f};
         f32 aoStrength = 0.0f;
         f32 debugShowAo = 0.0f;
@@ -71,15 +71,15 @@ export namespace foundation::render
         f32 autoMax = 0.0f;
         f32 gradeIntensity = 0.0f;
         f32 lutSize = 0.0f;
-        f32 encodeOutput = 0.0f; // 1 = the target stores the display encoding as written (plain UNORM)
+        f32 encodeOutput = 0.0f; // 1: the target stores the display encoding as written (plain UNORM)
         f32 rotation = 0.0f;     // the ContentRotation, as a float
         f32 _pad0 = 0.0f;
         f32 _pad1 = 0.0f;
     };
     static_assert(sizeof(GpuTonemapPush) == 80, "push TonemapPush layout drift");
 
-    // Tonemaps an HDR transient into an LDR target. Owns the fullscreen pipeline + per-(view,frame)
-    // bind groups over the (transient) HDR view. Declared once per view, after that view's forward pass.
+    // Tonemaps an HDR transient into an LDR target. Owns the fullscreen pipeline and per-(view, frame)
+    // bind groups over the transient HDR view. Declared once per view, after that view's forward pass.
     class TonemapPass
     {
     public:
@@ -98,8 +98,8 @@ export namespace foundation::render
 
         [[nodiscard]] rhi::TextureFormat HdrFormat() const noexcept { return kHdrFormat; }
 
-        // Declare the tonemap pass: read `hdr`, write `ldr` (clearColor decides clear vs load), into the
-        // view's viewport sub-rect. The execute builds/binds the HDR bind group (the view is a transient,
+        // Declare the tonemap pass: read `hdr`, write `ldr` (clearColor picks clear or load), into the
+        // view's viewport sub-rect. The execute builds and binds the HDR bind group (the view is a transient,
         // resolved at execute time) and draws a fullscreen triangle.
         void DeclareTonemap(rendergraph::RenderGraph& graph, rendergraph::RGHandle hdr,
                             rendergraph::RGHandle bloom, rendergraph::RGHandle ao,
@@ -121,15 +121,15 @@ export namespace foundation::render
         // Two uses per view a frame: the scene's tone map, and a scaled view's present copy.
         static constexpr u32 kMaxSlots = kMaxViews * kMaxFramesInFlight * 2;
 
-        // Build the fullscreen pipeline for `fmt` (rebuilt if the LDR target format changes - usually one).
+        // Build the fullscreen pipeline for `fmt` (rebuilt if the LDR target format changes; usually one).
         rhi::RenderPipeline* EnsurePipeline(rhi::TextureFormat fmt);
 
-        // One bind group per (view, frame) slot, kept while EVERY input is the same view of the
+        // One bind group per (view, frame) slot, kept while every input is the same view of the
         // same texture (BindGroupInputs: the HDR, bloom and AO transients, the adapted exposure,
-        // the grading LUT, each with its generation). A combined generation alone collided: the
-        // exposure's two ping-pong textures folded into one number with the transients' could
-        // land on last frame's value, and the group kept the other exposure texture, so every
-        // other frame showed a stale exposure (PaperKid's Block 1 flickered, 2026-10-29).
+        // the grading LUT, each with its generation). A combined generation alone can collide: the
+        // exposure's two ping-pong textures folded into one number with the transients' can land
+        // on last frame's value, and the group would keep the other exposure texture, showing a
+        // stale exposure every other frame.
         using BindInputs = BindGroupInputs<5>;
         rhi::BindGroup* EnsureBindGroup(u32 slot, const BindInputs& inputs);
 
@@ -141,11 +141,10 @@ export namespace foundation::render
 
         rhi::BindGroupLayout* m_layout = nullptr;
         rhi::PipelineLayout* m_pipelineLayout = nullptr;
-        // Per-FORMAT pipeline cache: one frame can hold views with different target formats
-        // (the HDR viewports + the thumbnail stage's readback target), and a destroy-on-format-
-        // mismatch single slot destroyed a pipeline the same encoder's earlier view still
-        // referenced (a validation error, then a crash). Small fixed set; entries rebuild only
-        // on shader hot reload.
+        // Per-format pipeline cache: one frame can hold views with different target formats
+        // (the HDR viewports and the thumbnail stage's readback target), and a single slot that
+        // is destroyed on a format mismatch would destroy a pipeline the same encoder's earlier
+        // view still references. A small fixed set; entries rebuild only on shader hot reload.
         static constexpr usize kMaxPipelineFormats = 4;
         struct PipelineEntry
         {

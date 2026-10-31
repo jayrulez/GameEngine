@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:debug_draw` partition (Debug layer).
 ///
-/// Instance-based immediate-mode debug drawing, ported from SedulousEngine's Sedulous.Renderer.Debug
-/// DebugDraw. Game code accumulates world-space lines/triangles/wireframes + screen/3D text over a
-/// frame; the debug passes flush them. Each `DebugDraw` is one accumulator - the RenderSubsystem owns a
-/// GLOBAL one (drawn in every view) + one per SCENE (drawn only when that scene renders), which is what
-/// keeps side-by-side scenes from bleeding. Every 3D method takes `overlay`: false = depth-tested,
-/// true = always-on-top. Immediate-mode: Clear() once per frame.
+/// Instance-based immediate-mode debug drawing. Game code accumulates world-space lines, triangles
+/// and wireframes, and screen or 3D text, over a frame; the debug passes flush them. Each
+/// `DebugDraw` is one accumulator. The RenderSubsystem owns a global one (drawn in every view) and
+/// one per scene (drawn only when that scene renders), which keeps side-by-side scenes from bleeding
+/// into each other. Every 3D method takes `overlay`: false is depth-tested, true is always on top.
+/// Call Clear() once per frame.
 
 module;
 #include "Core/Prelude.h"
@@ -64,14 +64,14 @@ export namespace foundation::render::debug
     }
 
 
-    // World-space geometry vertex (16B): position + packed RGBA8 color (byte0=R -> matches Unorm8x4).
+    // World-space geometry vertex (16B): position and packed RGBA8 color (byte 0 is R, matching Unorm8x4).
     struct DebugVertex
     {
         Float3 position;
         u32 color = 0xFFFFFFFFu;
     };
 
-    // Screen/text vertex (24B): pixel-or-world position + font-atlas uv + packed color.
+    // Screen or text vertex (24B): pixel or world position, font-atlas uv and packed color.
     struct DebugTextVertex
     {
         Float3 position;
@@ -83,7 +83,7 @@ export namespace foundation::render::debug
     {
         Text,
         Rectangle,
-        Line // position = start, size = end, scale = thickness (pixels)
+        Line // position is the start, size the end, scale the thickness (pixels)
     };
 
     // One 2D overlay command (pixel-space text or filled rect). Text glyphs live in the list's char store.
@@ -91,7 +91,7 @@ export namespace foundation::render::debug
     {
         Debug2DKind kind = Debug2DKind::Text;
         Float2
-            position{}; // pixels, top-left origin (negative x = right-aligned, see DrawScreenTextRight)
+            position{}; // pixels, top-left origin (negative x means right-aligned, see DrawScreenTextRight)
         Float2 size{}; // pixels (rects)
         Color color{};
         i32 textStart = 0;
@@ -108,7 +108,7 @@ export namespace foundation::render::debug
         i32 textLength = 0;
     };
 
-    // Pack a float Color to RGBA8 with R in the low byte (so an Unorm8x4 vertex attribute reads R,G,B,A).
+    // Pack a float Color to RGBA8 with R in the low byte (so an Unorm8x4 vertex attribute reads R, G, B, A).
     [[nodiscard]] inline u32 PackColor(const Color& c) noexcept
     {
         const auto b8 = [](f32 x) -> u32
@@ -129,7 +129,7 @@ export namespace foundation::render::debug
 
     /// A grid drawn on a plane by a shader (the editor's ground grid): a square `extent` metres
     /// across each way from `origin`, on the plane spanned by the unit axes `axisU` and `axisV`.
-    /// Lines fall at whole multiples of `spacing` along each axis in WORLD coordinates (so the
+    /// Lines fall at whole multiples of `spacing` along each axis in world coordinates (so the
     /// square can follow the camera without the lines swimming), every tenth one heavier;
     /// `blend` (0..1) fades the finest lines out and the next decade's in as the camera climbs.
     /// It fades out toward `fadeDistance` from `cameraPosition`, and is depth-tested against the
@@ -149,7 +149,7 @@ export namespace foundation::render::debug
     class DebugDraw
     {
     public:
-        // --- read-only accessors for the passes ---
+        // Read-only accessors for the passes.
         [[nodiscard]] const Array<DebugVertex>& LineVertices() const noexcept { return m_lines; }
         [[nodiscard]] const Array<DebugVertex>& OverlayLineVertices() const noexcept;
         [[nodiscard]] const Array<DebugVertex>& TriVertices() const noexcept { return m_tris; }
@@ -199,10 +199,10 @@ export namespace foundation::render::debug
         void DrawWireSphereOverlay(Float3 center, f32 radius, Color color, i32 segments = 24);
         void DrawCircleOverlay(Float3 center, Float3 u, Float3 v, f32 radius, Color color,
                                i32 segments = 32);
-        // Wireframe capsule (cylinder body + two hemisphere caps).
+        // Wireframe capsule (cylinder body and two hemisphere caps).
         void DrawCapsule(Float3 center, f32 radius, f32 height, Color color, i32 segments = 16,
                          bool overlay = false);
-        // World basis axes of a transform (red=X, green=Y, blue=Z). Rows are the basis (row-vector convention).
+        // World basis axes of a transform (red X, green Y, blue Z). Rows are the basis (row-vector convention).
         void DrawAxis(const Float4x4& transform, f32 size = 1.0f, bool overlay = false);
         void DrawCross(Float3 center, f32 size, Color color, bool overlay = false);
         void DrawArrow(Float3 start, Float3 end, Color color, f32 headSize = 0.1f,
@@ -218,11 +218,11 @@ export namespace foundation::render::debug
         // Camera frustum edges from an inverse view-projection (NDC z in [0,1]).
         void DrawFrustum(const Float4x4& invViewProj, Color color, bool overlay = false);
 
-        // ==================== Text + 2D ====================
+        // ==================== Text and 2D ====================
         void DrawText3D(Float3 worldPos, StringView text, Color color);
         void DrawScreenText(f32 x, f32 y, StringView text, Color color, f32 scale = 1.0f);
         // Right-aligned: the text's right edge sits `rightMargin` pixels in from the viewport's
-        // right edge (resolved at draw time - the list does not know the viewport width).
+        // right edge (resolved at draw time, since the list does not know the viewport width).
         void DrawScreenTextRight(f32 rightMargin, f32 y, StringView text, Color color,
                                  f32 scale = 1.0f);
         void DrawScreenRect(f32 x, f32 y, f32 width, f32 height, Color color);

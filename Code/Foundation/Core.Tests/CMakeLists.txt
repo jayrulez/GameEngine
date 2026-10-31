@@ -1,7 +1,7 @@
 # Foundation::Core unit tests (doctest).
 #
 # doctest is configured for -fno-exceptions (DOCTEST_CONFIG_NO_EXCEPTIONS_*),
-# matching the engine-wide policy propagated via Foundation::Core -> Foundation::Policy.
+# matching the engine-wide policy that Foundation::Core propagates from Foundation::Policy.
 
 # doctest (the test framework) is vendored in ThirdParty/ as doctest::doctest.
 
@@ -53,7 +53,7 @@ target_compile_definitions(Core.Tests PRIVATE
     TEST_PLUGIN_PATH="$<TARGET_FILE:TestPlugin>")
 
 # doctest 2.4.11 includes <ciso646>, which emits a deprecation #warning under
-# C++23. It's third-party noise - de-promote just that warning for this target;
+# C++23. It is third-party noise, so only that warning stops being an error for this target;
 # our own code keeps -Werror.
 target_compile_options(Core.Tests PRIVATE
     "$<$<CXX_COMPILER_ID:Clang>:-Wno-error=#warnings;-Wno-error=c2y-extensions>"

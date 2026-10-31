@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - the language service (C6 of Specs/gui-lab-evolution-3.md), with a service of the
-// test's own over the shared AngelScript: the fuzzy match and its order; a name typed opens the
-// list, more letters filter it, Up and Down go round it, Return and Tab put the pick in place of the
-// word at each caret as one undo step, Escape or the caret leaving the word closes it; a trigger
-// opens it on no word; not by typing in a comment, though Ctrl+Space opens it there; a click picks
-// a row, the focus kept in the editor; the list sits below the word, its label lined up with it;
-// the service's word under the pointer joins the tooltip.
+// GUI.Code - language service tests, using the test's own service over the shared AngelScript
+// definition. They cover the fuzzy match and its ordering. Typing a name opens the list, more
+// letters filter it, and Up and Down wrap around it. Return and Tab replace the word at each caret
+// with the selected item as one undo step. Escape, or the caret leaving the word, closes the list.
+// A trigger character opens it with no word. Typing in a comment does not open it, though
+// Ctrl+Space does. A click picks a row while the focus stays in the editor. The list sits below the
+// word with its labels lined up with it. The service's text for the word under the pointer is
+// added to the tooltip.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <fstream>
@@ -86,7 +87,7 @@ namespace
         return reader.IsOk() && !out.Contexts.IsEmpty();
     }
 
-    // An editor 400 by 240 in a GUI whose keymap has the code editor's keys, focused, in `language`.
+    // A focused 400 by 240 editor in `language`, in a GUI whose keymap has the code editor's keys.
     struct Bed
     {
         fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
@@ -131,7 +132,7 @@ namespace
         [[nodiscard]] CodePosition Caret() const { return editor->GetPrimary().Head; }
     };
 
-    // A script's few names; what it was last asked.
+    // A service offering a script's few names, and recording what it was last asked.
     class Service : public ICodeLanguageService
     {
     public:
@@ -190,7 +191,7 @@ TEST_CASE("code completion: the fuzzy match takes the letters in order, from a w
     CHECK(at[1] == 3u); // the P of Position, a word's start
     CHECK(at[3] == 5u);
     CHECK(CodeFuzzyMatch(SV(u8"xyz"), SV(u8"GetPosition")) < 0);
-    CHECK(CodeFuzzyMatch(SV(u8"et"), SV(u8"GetPosition")) < 0); // its first letter inside a word
+    CHECK(CodeFuzzyMatch(SV(u8"et"), SV(u8"GetPosition")) < 0); // the first letter matches inside a word, which is not allowed
     CHECK(CodeFuzzyMatch(SV(u8"pos"), SV(u8"get_position")) >= 0); // after an underscore
     CHECK(CodeFuzzyMatch(SV(u8"pos"), SV(u8"position")) > CodeFuzzyMatch(SV(u8"pos"), SV(u8"getPosition")));
     CHECK(CodeFuzzyMatch(SV(u8"pos"), SV(u8"position")) > CodeFuzzyMatch(SV(u8"pos"), SV(u8"pOrderSet")));
@@ -206,29 +207,29 @@ TEST_CASE("code completion: a name typed opens the list; more letters filter it;
     CHECK(bed.service.Asked == 1);
     CHECK(bed.service.Last.WordStart == At(0, 0));
     CHECK_FALSE(bed.service.Last.Invoked);
-    CHECK(bed.List().ShownCount() == 4u); // Player's P too, case aside
+    CHECK(bed.List().ShownCount() == 4u); // Player's P matches too, ignoring case
     bed.Type(u8"o");
     CHECK(bed.service.Asked == 1); // filtered, not asked again
     REQUIRE(bed.List().ShownCount() == 2u);
-    CHECK(bed.Shown(0) == SV(u8"pow")); // as good a match, and shorter
+    CHECK(bed.Shown(0) == SV(u8"pow")); // an equally good match, and shorter
     CHECK(bed.Shown(1) == SV(u8"position"));
     CHECK(bed.Selected() == SV(u8"pow"));
     bed.Key(KeyCode::Down);
     CHECK(bed.Selected() == SV(u8"position"));
     CHECK(bed.Caret() == At(0, 2)); // the caret stays
     bed.Key(KeyCode::Down);
-    CHECK(bed.Selected() == SV(u8"pow")); // round
+    CHECK(bed.Selected() == SV(u8"pow")); // wrapped around
     bed.Key(KeyCode::Up);
     CHECK(bed.Selected() == SV(u8"position"));
     bed.Key(KeyCode::Return);
     CHECK_TEXT(*bed.editor, u8"position");
     CHECK(bed.Caret() == At(0, 8));
     CHECK_FALSE(bed.editor->IsCompleting());
-    bed.Key(KeyCode::Return); // the editor's own again
+    bed.Key(KeyCode::Return); // Return belongs to the editor again
     CHECK_TEXT(*bed.editor, u8"position\n");
     bed.Key(KeyCode::Z, KeyModCtrl);
     bed.Key(KeyCode::Z, KeyModCtrl);
-    CHECK_TEXT(*bed.editor, u8"po"); // the pick, one step
+    CHECK_TEXT(*bed.editor, u8"po"); // the selected item, as one undo step
 }
 
 TEST_CASE("code completion: Escape, the caret leaving the word, or no match closes it; a number never opens it")
@@ -243,9 +244,9 @@ TEST_CASE("code completion: Escape, the caret leaving the word, or no match clos
     bed.editor->SetCaret(At(0, 6));
     CHECK(bed.editor->TriggerCompletion(true));
     bed.Key(KeyCode::Left);
-    CHECK(bed.editor->IsCompleting()); // still in the word: "p"
+    CHECK(bed.editor->IsCompleting()); // the caret is still in the word "p"
     bed.Key(KeyCode::Left);
-    CHECK_FALSE(bed.editor->IsCompleting()); // before it
+    CHECK_FALSE(bed.editor->IsCompleting()); // the caret moved before the word
     bed.editor->SetCaret(At(0, 6));
     bed.Type(u8"i");
     REQUIRE(bed.editor->IsCompleting());
@@ -310,7 +311,7 @@ TEST_CASE("code completion: the list sits below the word, its label lined up; a 
     CHECK_TEXT(*bed.editor, u8"  print");
     CHECK_FALSE(bed.editor->IsCompleting());
     CHECK(bed.editor->IsFocused());
-    // A press in the code closes it, and places the caret as ever.
+    // A press in the code closes the list and places the caret as usual.
     bed.Type(u8"\np");
     REQUIRE(bed.editor->IsCompleting());
     bed.D().InjectMouseDown(bed.editor->ConvertToRootSpace(core::Float2{bed.editor->TextLeft() + 1.0f, bed.editor->CaretRect(At(0, 0)).y + 2.0f}), MouseButton::Left);
@@ -331,7 +332,7 @@ TEST_CASE("code completion: what the service says of the word under the pointer 
     over(4);
     CHECK(bed.editor->GetTooltipText() == SV(u8"Float3 position"));
     CHECK(bed.service.Hovered == 1); // the same word
-    over(12); // the semicolon: no word
+    over(12); // over the semicolon, which is not a word
     CHECK(bed.editor->GetTooltipText().Size() == 0u);
     const Rect end = bed.editor->CaretRect(At(0, 13));
     bed.D().InjectMouseMove(bed.editor->ConvertToRootSpace(core::Float2{end.x + 60.0f, end.y + 4.0f}));

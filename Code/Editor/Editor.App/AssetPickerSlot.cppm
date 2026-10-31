@@ -3,13 +3,12 @@
 
 // Editor App - :asset_picker_slot partition
 //
-// The asset slot (Documentation/Specs/editor-gui.md, 5.2, layer 3), as the kit draws it: the
-// referenced asset's thumbnail, or its type glyph (its category's tint) until it has one, its
-// name, and its verbs: pick (the target;
-// a click on the name picks too), open, reveal (in the assets browser), clear. An empty slot says
-// "None" and keeps only pick. A verb shows only when its owner wired it; open, reveal and clear
-// need something referenced. It is a drop target for an asset of a type it takes, naming why not
-// over one it does not: a drop and a pick are the same assignment.
+// The asset slot as the kit draws it: the referenced asset's thumbnail (or its type glyph, tinted
+// by category, until it has one), its name, and its verbs: pick (the target button; a click on the
+// name also picks), open, reveal (in the assets browser) and clear. An empty slot says "None" and
+// keeps only pick. A verb shows only when its owner wired it; open, reveal and clear also need
+// something referenced. The slot is a drop target for assets of the types it accepts, and gives
+// the reason when it refuses one. A drop and a pick make the same assignment.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -39,7 +38,7 @@ export namespace editor::app
             m_glyph->SetHitTestVisible(false);
             m_name = MakeRef<gui::Label>(MemoryAllocator());
             m_name->AddClass(u8"slot-name");
-            m_name->SetHitTestVisible(false); // a click on it is the slot's: pick
+            m_name->SetHitTestVisible(false); // a click on it goes to the slot, which picks
             AddChild(m_glyph.Get());
             AddChild(m_name.Get());
             AssetPickerSlot* self = this;
@@ -62,19 +61,20 @@ export namespace editor::app
             SetValue({});
         }
 
-        // The verbs, each shown once wired.
+        // The verbs; each shows once it is wired.
         void SetOnPick(Function<void()> pick) { m_onPick = foundation::core::Move(pick); Show(); }
         void SetOnOpen(Function<void()> open) { m_onOpen = foundation::core::Move(open); Show(); }
         void SetOnReveal(Function<void()> reveal) { m_onReveal = foundation::core::Move(reveal); Show(); }
         void SetOnClear(Function<void()> clear) { m_onClear = foundation::core::Move(clear); Show(); }
-        /// An asset of a type it takes was dropped on it: assign it (the pick's write).
+        /// Called when an asset of an accepted type is dropped on the slot: assign it, as a pick
+        /// would.
         void SetOnDropped(Function<void(const Guid&)> dropped) { m_onDropped = foundation::core::Move(dropped); }
 
-        /// The asset types it takes, by name; empty: any.
+        /// The asset types it accepts, by name; empty accepts any.
         void SetAcceptedTypes(Array<String> types) { m_types = foundation::core::Move(types); }
         [[nodiscard]] Span<const String> AcceptedTypes() const noexcept { return m_types.AsSpan(); }
 
-        /// What it references: the asset's name, or nothing (`name` empty).
+        /// What it references: the asset's name, or nothing when `name` is empty.
         void SetValue(StringView name)
         {
             m_hasValue = !name.IsEmpty();
@@ -83,7 +83,7 @@ export namespace editor::app
         }
         [[nodiscard]] bool HasValue() const noexcept { return m_hasValue; }
         [[nodiscard]] StringView ShownName() const { return m_name->GetText(); }
-        /// The referenced asset type's glyph, and its category's class (a tint); empty: none.
+        /// The referenced asset type's glyph and its category's class (a tint); empty for none.
         void SetGlyph(StringView path, StringView categoryClass = {})
         {
             if (!m_glyphClass.IsEmpty())
@@ -97,7 +97,7 @@ export namespace editor::app
             m_hasGlyph = !path.IsEmpty();
             Show();
         }
-        /// The referenced asset's thumbnail, drawn in the glyph's place; null: the glyph.
+        /// The referenced asset's thumbnail, drawn in the glyph's place; null shows the glyph.
         void SetPicture(RefPtr<gui::Drawable> picture)
         {
             if (picture.Get() == m_picture.Get())
@@ -148,7 +148,7 @@ export namespace editor::app
                 query.Accept(gui::DropEffect::Link);
                 query.Reason = Format(u8"Use {}", dragged.Name);
             }
-            else if (dragged.Id != Guid{}) // an asset, not one it takes; another payload is not ours to refuse
+            else if (dragged.Id != Guid{}) // an asset of a type it does not accept; another kind of payload is not ours to refuse
                 query.Refuse(why.AsView());
         }
         void OnDrop(const gui::DragEvent& event) override
@@ -170,7 +170,7 @@ export namespace editor::app
             AddChild(button.Get());
             return button;
         }
-        // The verbs it has, the empty look.
+        // Shows the wired verbs, and the empty look when nothing is referenced.
         void Show()
         {
             if (m_hasValue)

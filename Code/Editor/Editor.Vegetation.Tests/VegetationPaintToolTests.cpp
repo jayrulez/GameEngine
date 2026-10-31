@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VegetationPaintTool tests (headless): a paint gesture scripted through ViewportToolInput over an
+// Headless VegetationPaintTool tests: a paint gesture scripted through ViewportToolInput over an
 // in-memory terrain with a vegetation component and a two-plane mask. The selected plane rises
-// along the drag, ONE command undoes/redoes the stroke, the eraser fades, the brush is unavailable
-// without a mask and refuses edits under Simulate, a stroke regrows ONLY the chunks it touched,
-// the persist closure converts the source to embedded so the paint survives a re-cook, and the
-// panel provider builds for the tool id.
+// along the drag, one command undoes and redoes the stroke, the eraser fades, the brush is
+// unavailable without a mask and refuses edits under Simulate, a stroke regrows only the chunks it
+// touched, the save closure converts the source to embedded so the paint survives a re-cook, and
+// the panel provider builds for the tool id.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -105,7 +105,7 @@ namespace
             {
                 mask = MakeRef<veg::VegetationMask>(DefaultAllocator(), 32, 32, 2);
                 c.mask = mask.Get();
-                c.mask.SetId(Guid{7, 77}); // the source asset guid the tool persists back to
+                c.mask.SetId(Guid{7, 77}); // the source asset guid the tool saves back to
             }
             scene.Start();
         }
@@ -159,7 +159,7 @@ TEST_CASE("vegetation paint: a stroke raises the selected plane along the drag; 
     CHECK(commands.CanUndo());
     CHECK(tool.StatusText().Size() > 0);
 
-    commands.Undo(); // ONE undo clears the whole stroke
+    commands.Undo(); // one undo clears the whole stroke
     CHECK(fx.mask->DensityAt(1, 16, 16) == 0);
     CHECK(fx.mask->DensityAt(1, 11, 16) == 0);
     CHECK(!commands.CanUndo());
@@ -202,11 +202,11 @@ TEST_CASE("vegetation paint: unavailable with no mask, and refuses edits while e
     editor::EditorCommandStack commands;
     editor::VegetationPaintTool none(bare.scene, commands, nullptr);
     CHECK(!none.IsAvailable());
-    CHECK(none.UnavailableReason().Size() > 0); // the toolbar's refusal notice names the lack
+    CHECK(none.UnavailableReason().Size() > 0); // the toolbar's refusal notice says what is missing
     editor::ViewportToolInput press = RayAt(0.0f, 0.0f);
     press.leftPressed = true;
     press.leftDown = true;
-    CHECK(!none.Update(press)); // no pick: nothing consumed
+    CHECK(!none.Update(press)); // no pick, so nothing is consumed
     CHECK(!commands.CanUndo());
 
     Fixture fx;
@@ -235,7 +235,7 @@ TEST_CASE("vegetation paint: a stroke regrows only the chunks it touched")
     editor::VegetationPaintTool tool(fx.scene, commands, nullptr);
     tool.SetPlane(0);
     tool.SetRadius(4.0f);
-    // Warm: every chunk scattered once (all empty - the mask is blank).
+    // Warm up: every chunk scatters once (all empty, since the mask is blank).
     CHECK(fx.Extract() == 0u);
     CHECK(fx.vegetation->BuildCount() == 4u);
 
@@ -263,7 +263,7 @@ TEST_CASE("vegetation paint: a save converts an imported mask to embedded and su
     RemoveDirectory(dbDir);
     NativeFileSystem mount(dbDir, DefaultAllocator());
 
-    // The SOURCE asset: imported-style (fileName set) with stale dims and planes.
+    // The source asset looks imported (fileName set) and has stale dimensions and planes.
     Guid id;
     {
         content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
@@ -292,8 +292,9 @@ TEST_CASE("vegetation paint: a save converts an imported mask to embedded and su
     CHECK(sink.lastId == id);
     REQUIRE(fx.mask->DensityAt(1, 16, 16) == 255);
 
-    // Drain: the envelope converts to embedded with the raster's true shape, then re-cook into a
-    // separate cooked DB under the SAME guid; the paint survives the round trip.
+    // Drain: the envelope converts to embedded with the raster's true shape, then the test
+    // re-cooks into a separate cooked database under the same guid; the paint survives the round
+    // trip.
     const StringView cookedDir = u8"scratch_vegpaint_cooked";
     FileDelete(u8"scratch_vegpaint_cooked/mask.rasset");
     FileDelete(u8"scratch_vegpaint_cooked/mask.densities.bin");
@@ -307,7 +308,7 @@ TEST_CASE("vegetation paint: a save converts an imported mask to embedded and su
         RefPtr<ISerializable> object = inst->ReadObject();
         auto* asset = Cast<pipeline::VegetationMaskAsset>(object.Get());
         REQUIRE(asset != nullptr);
-        CHECK(asset->fileName.View().IsEmpty()); // embedded now (the sidecar is the truth)
+        CHECK(asset->fileName.View().IsEmpty()); // embedded now (the sidecar is authoritative)
         CHECK(asset->width == 32);
         CHECK(asset->height == 32);
         CHECK(asset->planeCount == 2u);
@@ -347,7 +348,7 @@ TEST_CASE("vegetation paint: a save converts an imported mask to embedded and su
 
 TEST_CASE("vegetation tool panel: the provider registers for the brush id and builds its panel")
 {
-    editor::RegisterVegetationToolPanels(); // idempotent (first-wins per tool id)
+    editor::RegisterVegetationToolPanels(); // idempotent (the first registration per tool id wins)
     editor::RegisterVegetationViewportTools();
     editor::ViewportToolPanelRegistry& reg = editor::ViewportToolPanelRegistry::Get();
     editor::IViewportToolPanelProvider* provider = reg.FindByToolId(u8"vegetation.paint");
@@ -363,14 +364,14 @@ TEST_CASE("vegetation tool panel: the provider registers for the brush id and bu
     RefPtr<foundation::gui::Node> node = provider->CreatePanel(tool, ctx);
     auto* panel = Cast<editor::app::ToolPanelBody>(node.Get());
     REQUIRE(panel != nullptr);
-    // The planes from 1, the chosen one checked; a wheel resize shows after a Sync.
+    // The planes numbered from 1, with the chosen one checked; a wheel resize shows after a Sync.
     REQUIRE(panel->ChoiceCount(0) >= 2u);
     CHECK(panel->ChoiceAt(0, 0)->GetText() == StringView(u8"1"));
     CHECK(panel->ChoiceAt(0, 1)->IsChecked());
     tool.SetRadius(12.0f);
     panel->Sync();
     CHECK(panel->NumberAt(0)->GetValue() == doctest::Approx(12.0));
-    // The mode: Erase, then Smooth, each one at a time.
+    // The mode: Erase, then Smooth, one at a time.
     REQUIRE(panel->ChoiceCount(1) == 3u);
     panel->ChoiceAt(1, 1)->HandleActivate();
     CHECK(tool.IsEraser());
@@ -388,7 +389,7 @@ TEST_CASE("vegetation paint: the wheel resizes the brush only with Shift (the ba
     editor::ViewportToolInput wheel = RayAt(0.0f, 0.0f);
     wheel.wheelDelta = 1.0f;
     (void)tool.Update(wheel);
-    CHECK(tool.Radius() == before); // the camera's scroll
+    CHECK(tool.Radius() == before); // the wheel alone scrolls the camera
     wheel.shift = true;
     (void)tool.Update(wheel);
     CHECK(tool.Radius() > before);

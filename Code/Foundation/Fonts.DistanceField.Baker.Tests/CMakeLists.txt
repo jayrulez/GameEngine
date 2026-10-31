@@ -1,4 +1,4 @@
-# Foundation::Fonts.DistanceField.Baker tests (doctest) - bakes real glyphs and inspects MSDF cell placement.
+# Foundation::Fonts.DistanceField.Baker tests (doctest): bakes real glyphs and inspects MSDF cell placement.
 
 add_executable(Fonts.DistanceField.Baker.Tests TestsMain.cpp DistanceFieldBakerTests.cpp)
 target_link_libraries(Fonts.DistanceField.Baker.Tests PRIVATE Foundation::VFS

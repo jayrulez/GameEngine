@@ -5,10 +5,7 @@
 //
 // IClipboard: clipboard operations, defined in the UI layer to avoid a shell dependency
 // (the core stays platform-agnostic). The app / ui.shell bridge supplies an adapter that
-// bridges the platform clipboard. Ported from Sedulous.UI/src/Core/IClipboard.bf.
-//
-// Injected/held-by-reference (pattern B). Beef Result<void> -> core::Status; Beef HasText
-// property -> HasText() method.
+// bridges the platform clipboard. Injected and held by reference.
 
 module;
 #include "Core/Prelude.h"

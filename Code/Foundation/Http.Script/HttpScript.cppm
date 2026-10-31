@@ -3,18 +3,17 @@
 
 /// Foundation::Http.Script - the `foundation.http.script` module.
 ///
-/// The `Http` facade (Documentation/Specs/tls-http-wss.md, P5): a game's scripts send requests and
-/// hear the answers by callback on the game's thread, through the run's IHttpClient (native, or the
-/// browser's in a web build). The run owns an HttpScriptBinding and installs it on its script
-/// contexts; the client is made on the first request, so a game that never asks opens nothing, and
-/// requests leave only when the game asks. A game in the editor's play mode is a game like any
-/// other.
+/// The `Http` facade: a game's scripts send requests and hear the answers by callback on the
+/// game's thread, through the run's IHttpClient (native, or the browser's in a web build). The
+/// run owns an HttpScriptBinding and installs it on its script contexts; the client is made on the
+/// first request, so a game that never asks opens nothing, and requests leave only when the game
+/// asks. A game in the editor's play mode is a game like any other.
 ///
 ///     Http.get("https://example.com/scores", function (status, body, error) ... end)
 ///
 /// A handler hears (status, body, error): the status and body text of the response (a 404 is a
 /// response), or status 0 and why in `error` when none came (no network, a timeout, a refused
-/// certificate). Bodies are text both ways in v1.
+/// certificate). Bodies are text both ways.
 
 module;
 #include "Core/Prelude.h"

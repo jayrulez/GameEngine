@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tests for foundation.gui.vfs::VfsResourceProvider - loads + decodes background-image assets from
-// a VFS. A mock in-memory IFileSystem exercises the plumbing; a real BMP round-trip (SaveImage ->
-// NativeFileSystem -> LoadImage) exercises the decode path.
+// Tests for foundation.gui.vfs::VfsResourceProvider: loading and decoding background-image assets
+// from a VFS. A mock in-memory IFileSystem exercises the plumbing; a real BMP round trip (SaveImage,
+// then LoadImage through a NativeFileSystem) exercises the decode path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -66,7 +66,7 @@ TEST_CASE("gui-vfs: undecodable bytes return null")
 
 TEST_CASE("gui-vfs: loads and decodes a real image (BMP round-trip)")
 {
-    // Write a 3x2 RGBA image to disk, then load it back through a NativeFileSystem + the provider.
+    // Write a 3x2 RGBA image to disk, then load it back through a NativeFileSystem and the provider.
     static const u8 pixels[3 * 2 * 4] = {
         255, 0,   0, 255, 0, 255, 0,   255, 0,   0, 255, 255,
         255, 255, 0, 255, 0, 255, 255, 255, 255, 0, 255, 255,
@@ -83,7 +83,8 @@ TEST_CASE("gui-vfs: loads and decodes a real image (BMP round-trip)")
     CHECK(loaded->Width() == 3);
     CHECK(loaded->Height() == 2);
 
-    // The provider owns the image, one per path: a second load (a restyle asking again) is the same.
+    // The provider owns one image per path, so a second load (a restyle asking again) returns the
+    // same one.
     const image::ImageData* again = provider.LoadImage(file);
     REQUIRE(again != nullptr);
     CHECK(again == loaded);

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Chrome trace export (Specs/profiler.md, P3): a source's frames as the JSON chrome://tracing
-// and Perfetto open, a lane per thread plus the frames and the GPU, counters as counter tracks.
+// The Chrome trace export: a source's frames as the JSON chrome://tracing and Perfetto open, a
+// lane per thread as well as the frames and the GPU, and counters as counter tracks.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

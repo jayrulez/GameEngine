@@ -4,11 +4,11 @@
 // UI - :drawable partition
 //
 // Drawable: base class for composable visual primitives. Stateless; render into a bounds
-// via UIDrawContext. Ported from Sedulous.UI/src/Drawing/Drawable.bf.
+// via UIDrawContext.
 //
-// Port note: Beef `RefCounted` -> our `Object` (which IS RefCounted) so concrete
-// drawables get Cast<T> for the `as RoundedRectDrawable`-style downcasts (our RTTI
-// everywhere; -fno-rtti). Drawables are not reflection-registered/scripted.
+// Drawable derives `Object` (which is reference counted) so concrete drawables can be
+// downcast with Cast<T> (the engine's RTTI; built with -fno-rtti). Drawables are not
+// reflection-registered or scripted.
 
 module;
 #include "Core/Prelude.h"
@@ -33,10 +33,10 @@ export namespace foundation::ui
         /// State-unaware draw.
         virtual void Draw(UIDrawContext& ctx, const Rectangle& bounds) = 0;
 
-        /// State-aware draw: the ONE entry every control uses. Applies the draw context's
+        /// State-aware draw: the one entry every control uses. Applies the draw context's
         /// transition blend (a background drawable swap cross-fades old under new; a control
         /// state change draws the old state under the new one at the eased opacity), then
-        /// dispatches to DrawState. The blend is consumed here - nested drawables (layers,
+        /// dispatches to DrawState. The blend is consumed here, so nested drawables (layers,
         /// insets) draw plainly.
         void Draw(UIDrawContext& ctx, const Rectangle& bounds, ControlState state)
         {
@@ -92,7 +92,7 @@ export namespace foundation::ui
         }
 
     protected:
-        /// State-aware draw body - the default delegates to the state-unaware overload.
+        /// State-aware draw body; the default delegates to the state-unaware overload.
         /// Override this (not Draw) in drawables that pick by state.
         virtual void DrawState(UIDrawContext& ctx, const Rectangle& bounds, ControlState state)
         {

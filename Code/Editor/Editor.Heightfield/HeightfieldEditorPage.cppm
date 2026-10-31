@@ -3,15 +3,14 @@
 
 // Editor::Heightfield - the `editor.heightfield` module.
 //
-// HeightfieldEditorPage: the inspect + author surface over a HeightfieldAsset. A heightfield IS an
-// image of heights, so the preview is a 2D grayscale height image (permanent, by asset identity -
-// the texture/image page precedent, NOT a placeholder awaiting 3D; the 3D preview belongs to the
-// terrain asset page). On the GUI from the image pages' markup (Data/Editor/ImagePage.xml;
-// Documentation/Specs/editor-gui.md, 5.4, layer 2): the source's heights from its lowest to its
-// highest as black to white (so low relief shows, as its thumbnail does), the pointer's height read
-// in metres, beside the authored fields (grid size, world footprint, Y range) and the source's
+// HeightfieldEditorPage: the page that inspects and authors a HeightfieldAsset. A heightfield is
+// an image of heights, so the preview is a 2D grayscale height image, as on the texture and image
+// pages; the 3D preview belongs to the terrain asset page. It is built from the image pages' markup
+// (Data/Editor/ImagePage.xml). The source's heights show from its lowest to its highest as black to
+// white (so low relief shows, as in its thumbnail), and the height under the pointer reads in
+// metres. Beside it are the authored fields (grid size, world footprint, Y range) and the source's
 // facts, read only. Sculpt brushes live in the scene viewport, not here. Save writes the object
-// back and requests a re-cook so bound heightfield products (colliders, later terrain) hot-swap.
+// back and requests a re-cook so bound heightfield products (such as colliders) hot-swap.
 
 module;
 #include "Core/Prelude.h"
@@ -58,7 +57,7 @@ export namespace editor
         void ShowFacts();
 
         UniquePtr<app::ImagePreview> m_preview;
-        Array<u16> m_samples; // the source's, row by row
+        Array<u16> m_samples; // the source's samples, row by row
         u32 m_width = 0;
         u32 m_height = 0;
         u16 m_low = 0;
@@ -76,7 +75,8 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The page (asking for its services when it is made) and the heightfield thumbnails.
+    /// Registers the page (which asks for its services when it is made) and the heightfield
+    /// thumbnails.
     inline void RegisterHeightfieldEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

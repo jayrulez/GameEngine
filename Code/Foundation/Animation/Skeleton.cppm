@@ -3,12 +3,12 @@
 
 /// Foundation::Animation - the `:skeleton` partition.
 ///
-/// The skeletal hierarchy (ported faithfully from Sedulous.Animation.Skeleton/Bone). A `Bone` is a
-/// node with a local bind pose + inverse bind matrix; the `Skeleton` owns the bones and computes
-/// world-space + skinning matrices from a set of local poses, evaluated parents-before-children.
+/// The skeletal hierarchy. A `Bone` is a node with a local bind pose and an inverse bind matrix;
+/// the `Skeleton` owns the bones and computes world-space and skinning matrices from a set of
+/// local poses, evaluating parents before children.
 ///
-/// `BoneTransform` reuses `core::Transform` (position/rotation/scale, S*R*T) - byte-for-byte the
-/// Sedulous BoneTransform, with Lerp/ToMatrix already in core math.
+/// `BoneTransform` is `core::Transform` (position, rotation, scale; S*R*T), whose Lerp and
+/// ToMatrix are already in core math.
 
 module;
 #include "Core/Prelude.h"
@@ -27,8 +27,8 @@ export namespace foundation::animation
     // A compact per-bone transform for animation (pos/rot/scale). Reuses the core math type.
     using BoneTransform = core::Transform;
 
-    // One bone in a skeleton hierarchy. Value type owned by the Skeleton's bone array (no per-bone heap
-    // allocation, unlike the Beef original's Bone[] of references).
+    // One bone in a skeleton hierarchy. A value type owned by the Skeleton's bone array (no
+    // per-bone heap allocation).
     struct Bone
     {
         String name;
@@ -104,7 +104,7 @@ export namespace foundation::animation
             return InBounds(index) ? &m_bones[static_cast<usize>(index)] : nullptr;
         }
 
-        // Build the name->index lookup. Call after all bones + names are set.
+        // Build the name-to-index lookup. Call after all bones and names are set.
         void BuildNameMap()
         {
             m_nameMap.Clear();
@@ -130,8 +130,8 @@ export namespace foundation::animation
             }
         }
 
-        // Build each bone's child-index list + the parents-before-children evaluation order. Call after
-        // parents are set (and after FindRootBones for a correct hierarchical order).
+        // Build each bone's child-index list and the parents-before-children evaluation order.
+        // Call after parents are set (and after FindRootBones for a correct hierarchical order).
         void BuildChildIndices()
         {
             const usize n = m_bones.Size();
@@ -164,7 +164,8 @@ export namespace foundation::animation
             BuildHierarchicalOrder();
         }
 
-        // World bind pose -> inverse bind matrix for each bone. Call after local bind poses + parents set.
+        // Each bone's inverse bind matrix from its world bind pose. Call after the local bind
+        // poses and parents are set.
         void ComputeInverseBindPoses()
         {
             const usize n = m_bones.Size();
@@ -177,7 +178,8 @@ export namespace foundation::animation
             }
         }
 
-        // World-space matrices from local transforms (empty `localPoses` => bind pose), parents first.
+        // World-space matrices from local transforms, parents first (an empty `localPoses`
+        // means the bind pose).
         void ComputeWorldPoses(Span<const BoneTransform> localPoses, Span<Float4x4> outWorldPoses)
         {
             if (!m_hierarchicalOrder.IsEmpty())

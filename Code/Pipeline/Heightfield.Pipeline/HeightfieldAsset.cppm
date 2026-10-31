@@ -3,10 +3,10 @@
 
 // Pipeline::Heightfield - the `heightfield.pipeline` module.
 //
-// Tooling: the source HeightfieldAsset (a target square size + world footprint + Y range, optionally
-// backed by a 16-bit heightmap image) and the builder that cooks it into a runtime Heightfield
-// (metadata object + the "heights" sample stream). This is where heightmap import lives - NOT in
-// Terrain.Pipeline. Never linked by the runtime.
+// Tooling: the source HeightfieldAsset (a target square size, world footprint and Y range,
+// optionally backed by a 16-bit heightmap image) and the builder that cooks it into a runtime
+// Heightfield (a metadata object and the "heights" sample stream). Heightmap import lives here,
+// not in Terrain.Pipeline. Never linked by the runtime.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +17,7 @@ export module heightfield.pipeline;
 import foundation.core;
 import foundation.vfs; // SourcePath
 import pipeline.core;
-import pipeline.importer; // IFileImporter + ImportContext + CopyIntoSources
+import pipeline.importer; // IFileImporter, ImportContext, CopyIntoSources
 import foundation.image;
 import foundation.image.io;
 import foundation.heightfield;
@@ -56,7 +56,7 @@ export namespace pipeline
     };
 
     // Bilinear-resample a single-channel 16-bit source (srcW x srcH, row-major u16) onto the grid.
-    // The source u16 values ARE the height samples (both quantize onto the asset's [minY, maxY]).
+    // The source u16 values are the height samples (both quantize onto the asset's [minY, maxY]).
     inline void ResampleHeightmapR16(const Height* src, u32 srcW, u32 srcH, Heightfield& dst)
     {
         if (src == nullptr || srcW == 0 || srcH == 0 || dst.IsEmpty())
@@ -91,7 +91,7 @@ export namespace pipeline
         }
     }
 
-    // Cooks a HeightfieldAsset -> Heightfield resource (metadata object + "heights" stream).
+    // Cooks a HeightfieldAsset into a Heightfield resource (metadata object and "heights" stream).
     class HeightfieldAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -100,21 +100,21 @@ export namespace pipeline
             return &HeightfieldAsset::StaticType();
         }
         // The cook stamps this as the cooked instance's type, and the runtime ReadObject reconstructs
-        // it - so it must be the SERIALIZED cooked form (HeightfieldSource), NOT the runtime product
+        // it, so it must be the serialized cooked form (HeightfieldSource), not the runtime product
         // (Heightfield). HeightfieldFactory.ProductType() is the runtime Heightfield that Bind matches;
-        // the two deliberately differ (the TextureAssetBuilder/TextureFactory convention).
+        // the two differ, as TextureAssetBuilder's and TextureFactory's do.
         [[nodiscard]] const TypeInfo* ProductType() const override
         {
             return &HeightfieldSource::StaticType();
         }
-        // v2: Heightfield -> HeightfieldSource. v3 (2026-09-23): the "holes" stream beside the
-        // heights (HeightfieldSource 2) - every heightfield re-cooks.
+        // v2: the product type is HeightfieldSource. v3: the "holes" stream beside the heights
+        // (HeightfieldSource 2); every heightfield re-cooks.
         [[nodiscard]] u32 Version() const override { return 3; }
 
-        // An EMBEDDED heightfield (fileName empty - page-created, or converted by a sculpt save)
-        // reads the authored "heights" source stream - declare it so the recipe hash chains its
-        // bytes (the envelope hash does not cover sidecars; a sculpt save must re-cook). An
-        // IMPORTED one (fileName set) chains the heightmap file, which the base builder tracks.
+        // An embedded heightfield (fileName empty: page-created, or converted by a sculpt save)
+        // reads the authored "heights" source stream, so declare it and the recipe hash chains its
+        // bytes (the envelope hash does not cover sidecars, and a sculpt save must re-cook). An
+        // imported one (fileName set) chains the heightmap file, which the base builder tracks.
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
         {
@@ -135,7 +135,7 @@ export namespace pipeline
                 return Status{ErrorCode::InvalidArgument};
             }
             // The asset fields should already be valid; snap defensively so a malformed asset
-            // still cooks a LEGAL grid rather than failing the runtime's contracts: size onto
+            // still cooks a legal grid rather than failing the runtime's contracts: size onto
             // 64k+1, the XZ footprint away from zero (a zero span NaNs world<->grid math and
             // hands Jolt a zero scale), and the Y range open (maxY > minY, or every sample
             // quantizes to one height and WorldYToSample divides by zero).
@@ -171,9 +171,9 @@ export namespace pipeline
             }
             else if (ctx.source != nullptr)
             {
-                // EMBEDDED: the authored "heights" sidecar is the truth (a sculpt save writes it;
-                // fileName empty marks the sidecar authoritative - the editable-source convention
-                // splat uses). A missing/mismatched blob leaves the grid flat (a page-created,
+                // Embedded: the authored "heights" sidecar is the truth (a sculpt save writes it;
+                // fileName empty marks the sidecar authoritative, the editable-source convention
+                // splat uses). A missing or mismatched blob leaves the grid flat (a page-created,
                 // never-sculpted heightfield).
                 if (UniquePtr<IStream> stream =
                         ctx.source->ReadData(foundation::heightfield::kHeightStream))
@@ -192,8 +192,8 @@ export namespace pipeline
                         }
                     }
                 }
-                // The authored "holes" sidecar (the hole brush's persist). Absent - a heightfield
-                // painted before holes existed - or mismatched leaves the plane solid.
+                // The authored "holes" sidecar, which the hole brush writes. An absent or
+                // mismatched one leaves the plane solid.
                 if (UniquePtr<IStream> stream =
                         ctx.source->ReadData(foundation::heightfield::kHoleStream))
                 {
@@ -230,7 +230,7 @@ export namespace pipeline
     };
 
     // OS-file importer (editor drag-drop): imports a 16-bit heightmap as a HeightfieldAsset. Claims
-    // .png (offered alongside Image/Texture in the importer chooser) plus the raw .r16 extension.
+    // .png (offered alongside Image and Texture in the importer chooser) and the raw .r16 extension.
     class HeightfieldFileImporter final : public pipeline::IFileImporter
     {
     public:
@@ -280,8 +280,8 @@ export namespace pipeline
         }
     };
 
-    // Registers HeightfieldAsset for content-DB construction + deserialization (reflection body in
-    // HeightfieldAssetImpl.cpp per GCC module hygiene).
+    // Registers HeightfieldAsset for content-DB construction and deserialization (the reflection
+    // body is in HeightfieldAssetImpl.cpp, out of the interface).
     inline void RegisterHeightfieldAsset()
     {
         GlobalTypeRegistry().Register(HeightfieldAsset::StaticType(), TypeDomain(u8"Pipeline"));

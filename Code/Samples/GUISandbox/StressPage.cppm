@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUISandbox - the Stress page (E8a of Specs/gui-lab-evolution.md): the worst case the GUI's
-// performance work is measured on. Its markup (pages/stress.xml) holds the controls; this builds
-// the sections into #stress-root at a load from 1 to 20: a long column of rows, text in several
-// faces and sizes, every box effect at once, running animations, a list and a table of 100,000
-// rows, deep nesting, and many generated rules (Rules) for the cascade to match against.
+// GUISandbox - the Stress page: the worst case the GUI's performance is measured on. Its markup
+// (pages/stress.xml) holds the controls; this builds the sections into #stress-root at a load from
+// 1 to 20: a long column of rows, text in several faces and sizes, every box effect at once,
+// running animations, a list and a table of 100,000 rows, deep nesting, and many generated rules
+// (Rules) for the cascade to match against.
 
 module;
 #include "Core/Prelude.h"
@@ -34,8 +34,8 @@ export namespace sandbox
 
         StressPage(IAllocator& allocator, fonts::CachedFont* font) : m_allocator(allocator), m_font(font) {}
 
-        /// Rules for the page's sheet: `count` per load, most matching nothing, as a large
-        /// stylesheet's do, the rest matching rows through descendant and child selectors.
+        /// Rules for the page's sheet: `count` per load. Most match nothing, as most of a large
+        /// stylesheet's rules do; the rest match rows through descendant and child selectors.
         [[nodiscard]] static String Rules(i32 count)
         {
             String css;
@@ -300,8 +300,8 @@ export namespace sandbox
         bool m_built = false;
         bool m_alt = false;
         bool m_animating = true;
-        // The views' models: the sandbox keeps this page alive longer than its GUI, so the views
-        // (their clients) go first.
+        // The views' models. The sandbox keeps this page alive longer than its GUI, so the views
+        // (their clients) are destroyed first.
         UniquePtr<gui::StringListModel> m_listModel;
         UniquePtr<gui::TableModel> m_tableModel;
     };

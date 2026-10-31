@@ -157,7 +157,7 @@ TEST_CASE("core-reflection: overloaded free functions reflect (disambiguated by 
 {
     EnsureRegistered();
 
-    // Dot/Length were overloaded free functions; reflected as static methods.
+    // Dot and Length are free functions, reflected as static methods.
     const MethodInfo* dot = FindMethod(TypeOf<Float3>(), "Dot");
     REQUIRE(dot != nullptr);
     CHECK(dot->isStatic);
@@ -236,8 +236,8 @@ TEST_CASE("core-reflection: Float3 vector ops reflect (Cross/Add/Sub/Lerp/Distan
     CHECK(NearlyEqual(invoke("LengthSquared", Span<Variant>{lenSqArgs, 1}).Get<f32>(), 9.0f));
 }
 
-// Sedulous 22a73e31: the math values' operators are marked, each a static whose first parameter
-// is the left operand, so a script surface spells them as operators.
+// The math values' operators are marked, each a static whose first parameter is the left
+// operand, so a script surface spells them as operators.
 TEST_CASE("core-reflection: the math values mark the operators they define")
 {
     EnsureRegistered();
@@ -393,7 +393,7 @@ TEST_CASE("core-reflection: matrix elements via container + ops as methods")
 
     CHECK(ContainerSize(*TypeOf<Float3x3>().container, Instance::From(&m)) == 9u);
 
-    // Static factory + free ops reflected as methods.
+    // Static factory and free operators reflected as methods.
     Float4x4 id =
         InvokeStatic(*FindMethod(mat4, "Identity"), Span<Variant>{}).Value().Get<Float4x4>();
     CHECK(NearlyEqual(id, Float4x4::Identity()));
@@ -425,9 +425,9 @@ TEST_CASE("core-reflection: count / by-index accessors (binding-generator style)
     REQUIRE(MethodCount(vec3) == Methods(vec3).Size());
     CHECK(MethodCount(vec3) >= 5u); // Dot, Length, Normalized, Mul x2
 
-    // Iterate methods by index and read each signature via ParamCount/ParamAt
-    // - exactly how a binding generator would walk the type. Two 2-arg methods
-    // start with (Float3, f32) / (Float3, Float3): the Mul overloads.
+    // Iterate methods by index and read each signature via ParamCount/ParamAt, the way a
+    // binding generator walks the type. Two 2-arg methods start with (Float3, f32) and
+    // (Float3, Float3): the Mul overloads.
     usize vec3FirstParam = 0;
     for (usize i = 0; i < MethodCount(vec3); ++i)
     {
@@ -459,7 +459,7 @@ TEST_CASE("core-reflection: construct value types via reflection")
     // Default constructor (overload picked by arity).
     CHECK(Construct(vec3, Span<Variant>{}).Value().Get<Float3>() == Float3::Zero);
 
-    // No matching overload -> InvalidArgument.
+    // No matching overload gives InvalidArgument.
     Variant bad[] = {Variant::From(1.0f)};
     CHECK(Construct(vec3, Span<Variant>{bad, 1}).Error() == ErrorCode::InvalidArgument);
 
@@ -618,10 +618,9 @@ TEST_CASE("core-reflection: per-property attributes via PropAttribute")
 
 TEST_CASE("reflection: RegisterCoreTypes is safe to call concurrently (the cook workers do)")
 {
-    // The script cooks call RegisterCoreTypes per build on job-system workers. Before the
-    // once-guard, two concurrent calls rebuilt the global enum tables at the same time and
-    // double-freed them (an ASAN-visible abort in Tools.Cook). Hammer it from many workers and
-    // then read the tables: intact, and registered exactly once.
+    // The script cooks call RegisterCoreTypes per build on job-system workers, so concurrent
+    // calls must not rebuild the global enum tables at the same time (which double-frees them).
+    // Hammer it from many workers and then read the tables: intact, and registered exactly once.
     JobSystem jobs(DefaultAllocator(), 4);
     jobs.ParallelFor(64, [](u32) { RegisterCoreTypes(); }, 1);
     CHECK(EnumeratorCount(TypeOf<SeekOrigin>()) == 3u);
@@ -634,9 +633,9 @@ TEST_CASE("reflection: RegisterCoreTypes is safe to call concurrently (the cook 
 
 TEST_CASE("reflection: TypeRegistry::Register is safe under concurrent first-time registrations")
 {
-    // Cook workers register their product types as they go; two first-time registrations at
-    // once rehashed the id map under each other. Sixty-four distinct types from four workers
-    // into a private registry: every one lands exactly once and stays findable.
+    // Cook workers register their product types as they go, so two first-time registrations at
+    // once must not rehash the id map under each other. Sixty-four distinct types from four
+    // workers into a private registry: every one lands exactly once and stays findable.
     static TypeInfo infos[64] = {};
     for (u32 i = 0; i < 64; ++i)
     {

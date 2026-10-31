@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.terrain (Phase A): the TerrainComponent's reflected surface + a scene serialize round-trip
-// (the terrain reference + flags survive save/load through the component manager).
+// engine.terrain: the TerrainComponent's reflected surface and a scene serialize round trip (the
+// terrain reference and flags survive save/load through the component manager).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -82,22 +82,22 @@ TEST_CASE("engine.terrain: the GPU height-texture cache keys by heightfield + ve
 
     TerrainHeightTextureCache cache;
 
-    // First request creates + caches.
+    // The first request creates and caches.
     foundation::rhi::TextureView* v1 = cache.GetOrCreate(device, *grid, 1);
     REQUIRE(v1 != nullptr);
     CHECK(cache.Size() == 1u);
 
-    // Same heightfield + version -> cache hit, same view, no new entry.
+    // Same heightfield and version: cache hit, same view, no new entry.
     foundation::rhi::TextureView* v1again = cache.GetOrCreate(device, *grid, 1);
     CHECK(v1again == v1);
     CHECK(cache.Size() == 1u);
 
-    // Same heightfield, bumped version (a sculpt/regen re-upload) -> rebuilt in place (one entry).
+    // Same heightfield, bumped version (a sculpt/regen re-upload): rebuilt in place (one entry).
     foundation::rhi::TextureView* v2 = cache.GetOrCreate(device, *grid, 2);
     REQUIRE(v2 != nullptr);
     CHECK(cache.Size() == 1u);
 
-    // A DIFFERENT heightfield -> a second cached texture (keyed by the heightfield itself, so two
+    // A different heightfield: a second cached texture (keyed by the heightfield itself, so two
     // terrains sharing one heightfield share one texture).
     foundation::rhi::TextureView* vb = cache.GetOrCreate(device, *other, 1);
     REQUIRE(vb != nullptr);
@@ -113,8 +113,8 @@ TEST_CASE("engine.terrain: the GPU height-texture cache keys by heightfield + ve
 
 TEST_CASE("engine.terrain: the cache keys by UID, never pointer (address-reuse aliasing)")
 {
-    // The bind-group-cache rule's failure mode: heightfield A dies, a FRESH grid B lands on
-    // (potentially) the same address at the same version - the cache must never serve A's
+    // The failure mode uid keying prevents: heightfield A dies, a fresh grid B lands on
+    // (potentially) the same address at the same version, and the cache must never serve A's
     // texture for B. Pointer keying cannot pass this test reliably; uid keying always does.
     foundation::rhi::null::NullDevice device{DefaultAllocator()};
     TerrainHeightTextureCache cache;
@@ -128,11 +128,11 @@ TEST_CASE("engine.terrain: the cache keys by UID, never pointer (address-reuse a
         CHECK(cache.Size() == 1u);
     } // A dies; its cache entry remains keyed by A's uid
 
-    // Fresh grids get fresh uids (the identity that survives address reuse)...
+    // Fresh grids get fresh uids (the identity that survives address reuse),
     RefPtr<hf::Heightfield> b =
         MakeRef<hf::Heightfield>(DefaultAllocator(), 65, Float2{64.0f, 64.0f}, 0.0f, 10.0f);
     CHECK(b->uid != uidA);
-    // ...so B at the SAME version gets its OWN texture entry, never A's stale one.
+    // so B at the same version gets its own texture entry, never A's stale one.
     foundation::rhi::TextureView* vb = cache.GetOrCreate(device, *b, b->Version());
     REQUIRE(vb != nullptr);
     CHECK(cache.Size() == 2u);
@@ -142,9 +142,9 @@ TEST_CASE("engine.terrain: the cache keys by UID, never pointer (address-reuse a
 
 TEST_CASE("engine.terrain: a version-bump rebuild RETIRES the old texture (in-flight safety)")
 {
-    // The playground repro (regenerate / type-toggle -> BumpVersion): the old view sits in a
-    // submitted frame's descriptor set, so the rebuild must route it through the frame-aged
-    // retire queue - never vkDestroyImageView in place (VUID 01026).
+    // A regenerate or type toggle bumps the version: the old view sits in a submitted frame's
+    // descriptor set, so the rebuild routes it through the frame-aged retire queue, never
+    // vkDestroyImageView in place (VUID 01026).
     foundation::rhi::null::NullDevice device{DefaultAllocator()};
     foundation::render::GpuRetireQueue retire;
     retire.Initialize(&device, /*framesInFlight*/ 2);
@@ -161,7 +161,7 @@ TEST_CASE("engine.terrain: a version-bump rebuild RETIRES the old texture (in-fl
     grid->BumpVersion(); // the regen path
     foundation::rhi::TextureView* v2 = cache.GetOrCreate(device, *grid, grid->Version());
     REQUIRE(v2 != nullptr);
-    CHECK(retire.PendingCount() == 2u); // old view + old texture aged, NOT destroyed in place
+    CHECK(retire.PendingCount() == 2u); // old view and old texture aged, not destroyed in place
     CHECK(cache.Size() == 1u);          // rebuilt in place
 
     // They free only once every in-flight frame has cycled (framesInFlight + 1 ticks).
@@ -177,11 +177,10 @@ TEST_CASE("engine.terrain: a version-bump rebuild RETIRES the old texture (in-fl
 
 TEST_CASE("engine.terrain: Clear RETIRES live entries when a queue is wired (scene destroy mid frame)")
 {
-    // Stopping play-in-editor destroys the run's scenes from a toolbar click, mid frame loop:
-    // the terrain's height texture is still bound by a submitted frame's descriptor set, and
-    // ClearGpu destroyed it in place - the Vulkan validation error on every PIE stop
-    // (VUID-vkDestroyImageView-imageView-01026, 2026-09-21). Clear now routes through the
-    // frame-aged queue like the version-bump rebuild; without a queue it stays direct.
+    // Stopping play-in-editor destroys the run's scenes from a toolbar click, mid frame loop, while
+    // the terrain's height texture is still bound by a submitted frame's descriptor set
+    // (VUID-vkDestroyImageView-imageView-01026 if destroyed in place). Clear routes through the
+    // frame-aged queue like the version-bump rebuild; without a queue it destroys directly.
     foundation::rhi::null::NullDevice device{DefaultAllocator()};
     foundation::render::GpuRetireQueue retire;
     retire.Initialize(&device, /*framesInFlight*/ 2);
@@ -194,7 +193,7 @@ TEST_CASE("engine.terrain: Clear RETIRES live entries when a queue is wired (sce
         CHECK(retire.PendingCount() == 0u);
         cache.Clear(device);
         CHECK(cache.Size() == 0u);
-        CHECK(retire.PendingCount() == 2u); // the view + the texture aged, NOT destroyed in place
+        CHECK(retire.PendingCount() == 2u); // the view and the texture aged, not destroyed in place
         retire.Tick();
         retire.Tick();
         CHECK(retire.PendingCount() == 2u);
@@ -212,9 +211,9 @@ TEST_CASE("engine.terrain: Clear RETIRES live entries when a queue is wired (sce
 
 TEST_CASE("engine.terrain: ClearGpu frees the height textures while the device is alive")
 {
-    // The playground shutdown leak: the per-scene manager's cache held the live height
-    // texture across device destruction. The subsystem now calls ClearGpu on scene destroy
-    // and at shutdown - this pins the manager-level contract headless.
+    // The per-scene manager's cache holds the live height texture, which has to be freed before the
+    // device is destroyed. The subsystem calls ClearGpu on scene destroy and at shutdown; this pins
+    // the manager-level contract headless.
     foundation::rhi::null::NullDevice device{DefaultAllocator()};
 
     scene::Scene sceneObj{DefaultAllocator()};
@@ -223,7 +222,7 @@ TEST_CASE("engine.terrain: ClearGpu frees the height textures while the device i
     REQUIRE(mgr != nullptr);
     mgr->SetRenderContext(&device, 7, nullptr);
 
-    // An in-memory terrain (the playground path): resource + heightfield assigned directly.
+    // An in-memory terrain: resource and heightfield assigned directly.
     RefPtr<hf::Heightfield> grid =
         MakeRef<hf::Heightfield>(DefaultAllocator(), 65, Float2{64.0f, 64.0f}, 0.0f, 10.0f);
     auto res = MakeRef<foundation::terrain::TerrainResource>(DefaultAllocator());
@@ -235,12 +234,12 @@ TEST_CASE("engine.terrain: ClearGpu frees the height textures while the device i
 
     foundation::render::ExtractedScene snapshot{DefaultAllocator()};
     mgr->ExtractRenderData(snapshot);
-    CHECK(mgr->HeightTextureCount() == 1u); // the extract built + cached the GPU texture
+    CHECK(mgr->HeightTextureCount() == 1u); // the extract built and cached the GPU texture
 
     mgr->ClearGpu();
     CHECK(mgr->HeightTextureCount() == 0u); // freed through the live device
 
-    // Idempotent + later extracts no-op safely (device nulled).
+    // Idempotent, and later extracts no-op safely (device nulled).
     mgr->ClearGpu();
     mgr->ExtractRenderData(snapshot);
     CHECK(mgr->HeightTextureCount() == 0u);
@@ -300,10 +299,9 @@ TEST_CASE("engine.terrain: a cut heightfield extracts its holed chunks' meshes; 
     CHECK(mgr->HoleTextureCount() == 0u);
 }
 
-// The PIE-start crash regression: the extracted snapshot must be SELF-CONTAINED - readable at
-// record time even after the scene, its manager, and every cache the extract read from are GONE
-// (a mid-frame scene mutation freed the previously-borrowed quadtree pointer; under ASAN a
-// borrow here is a hard use-after-free).
+// The extracted snapshot is self-contained: readable at record time even after the scene, its
+// manager and every cache the extract read from are gone (a mid-frame scene mutation can free
+// anything borrowed; under ASAN a borrow here is a hard use-after-free).
 TEST_CASE("engine.terrain: the extracted snapshot outlives the scene it came from")
 {
     foundation::render::ExtractedScene snapshot{DefaultAllocator()};
@@ -326,7 +324,7 @@ TEST_CASE("engine.terrain: the extracted snapshot outlives the scene it came fro
 
         mgr->ExtractRenderData(snapshot);
         mgr->ClearGpu();
-    } // scene + manager + chunk caches + heightfield refs all destroyed here
+    } // scene, manager, chunk caches and heightfield refs all destroyed here
 
     REQUIRE(snapshot.Size() == 1u);
     const auto* rd =
@@ -335,7 +333,7 @@ TEST_CASE("engine.terrain: the extracted snapshot outlives the scene it came fro
     REQUIRE(rd->nodes != nullptr);
     REQUIRE(rd->nodeCount > 0u);
 
-    // Cull + LOD straight off the snapshot: the whole grid is visible from above.
+    // Cull and LOD straight off the snapshot: the whole grid is visible from above.
     const Float4x4 view =
         Float4x4::LookAtRH(Float3{32.0f, 100.0f, 32.0f}, Float3{32.0f, 0.0f, 32.1f},
                            Float3{0.0f, 0.0f, 1.0f});

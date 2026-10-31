@@ -1,12 +1,12 @@
-// Gap - judges a jump over a crevasse. On an entity at the crevasse's lip, facing down the course
-// (Tools/course.py; a kicker launches the rider off the edge, Kicker.as).
+// Gap: judges a jump over a crevasse. The script sits on an entity at the crevasse's lip, facing
+// down the course (placed by Tools/course.py); a kicker launches the rider off the edge (Kicker.as).
 //
-// Once the rider passes the lip within `reach` of it, its first touch of the snow is judged: short
-// of `short` metres past the lip (in the crevasse, before its ramp up) is "GapShort", which the
-// board takes as a crash; at or past it is "GapCleared" (the distance flown, in centimetres, at
-// the touch), which the game scores. A rider who rolls in without leaving the snow is short as
-// well, once it is past the crevasse's wall. A rider flying over is judged where it touches down,
-// so the distance is the one flown.
+// Once the rider passes the lip within `reach` of it, their first touch of the snow is judged.
+// Landing less than `short` metres past the lip (in the crevasse, before its ramp up) is
+// "GapShort", which the board takes as a crash. Landing at or beyond it is "GapCleared", with the
+// distance flown in centimetres, which the game scores. A rider who rolls in without leaving the
+// snow is also short, once past the crevasse's wall. A rider flying over is judged where they
+// touch down, so the distance is the one actually flown.
 
 class Gap
 {
@@ -18,7 +18,7 @@ class Gap
 
     private Entity@ m_rider;
     private float m_lastAlong = -1000.0f;
-    private bool m_armed = false; // past the lip this pass, not judged yet
+    private bool m_armed = false; // past the lip on this pass and not judged yet
     private bool m_flew = false;  // off the snow since the lip
 
     Gap(Entity@ entity) { @self = entity; }
@@ -34,7 +34,8 @@ class Gap
         {
             return;
         }
-        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        // The rider is a root entity, so position() holds this frame's pose; worldPosition() still
+        // holds last frame's.
         Float3 d = m_rider.position() - self.worldPosition();
         float along = d.x * Math::Sin(heading) + d.z * Math::Cos(heading);
         float across = d.x * Math::Cos(heading) - d.z * Math::Sin(heading);
@@ -55,7 +56,7 @@ class Gap
         }
         if (grounded && (m_flew || along > 2.0f))
         {
-            judge(along); // past the crevasse by now if it flew over it
+            judge(along); // if the rider flew over, they are past the crevasse by now
         }
     }
 

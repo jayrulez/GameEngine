@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.particles:modules - the initializer/behavior module taxonomy + the concrete
-// modules + the CPU simulator + the runtime type-id registry. Ported from Sedulous.Particles
-// (ParticleInitializer.bf, ParticleBehavior.bf, ParticleSimulator.bf, CPUSimulator.bf,
-// Initializers/*, Behaviors/*, ParticleTypeRegistry.bf).
+// foundation.particles:modules - the initializer and behavior module base classes, the concrete
+// modules, the CPU simulator and the runtime type-id registry.
 //
-// An INITIALIZER runs once per spawned particle; a BEHAVIOR runs every frame over all live
-// particles. Each declares the streams it needs (lazy allocation). Velocity integration + aging
-// are a hardcoded final step on ParticleSystem (not a module). Render "type" is an enum, not a
-// module. A GPU simulator would sit behind the same interfaces + BehaviorSupport.
+// An initializer runs once per spawned particle; a behavior runs every frame over all live
+// particles. Each declares the streams it needs (allocated lazily). Velocity integration and aging
+// are a fixed final step on ParticleSystem, not a module, and the render type is an enum, not a
+// module. A GPU simulator would sit behind the same interfaces and BehaviorSupport.
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Reflection/Reflect.h" // RTTI_OBJECT / RTTI_DEFINE_OBJECT
+#include "Core/Reflection/Reflect.h" // RTTI_OBJECT, RTTI_DEFINE_OBJECT
 
 export module foundation.particles:modules;
 
@@ -29,8 +27,8 @@ export namespace foundation::particles
     // ---- Base classes ------------------------------------------------------------------------
 
     // Modules are reflected ISerializable objects: reflection gives the type-id, polymorphic
-    // reconstruction (Serializables().Create), and the Serialize(ISerializer&) hook - the same
-    // machinery cooked resources use. The cook writes each module's reflected type tag + Serialize.
+    // reconstruction (Serializables().Create), and the Serialize(ISerializer&) hook, the same
+    // machinery cooked resources use. The cook writes each module's reflected type tag, then Serialize.
     class ParticleInitializer : public ISerializable
     {
         RTTI_OBJECT(ParticleInitializer, ISerializable)
@@ -39,7 +37,7 @@ export namespace foundation::particles
         virtual void DeclareStreams(ParticleStreamContainer& streams) = 0;
         virtual void Initialize(ParticleStreamContainer& streams, i32 index, Random& rng) = 0;
         // Hook: the system pushes its transform state before a spawn burst so emitter-aware
-        // initializers (Position/Velocity) can offset/inherit. Default no-op (avoids an RTTI cast).
+        // initializers (Position, Velocity) can offset or inherit. Default no-op (avoids an RTTI cast).
         virtual void SetEmitterState(Float3 position, Float3 velocity) noexcept
         {
             (void)position;
@@ -159,7 +157,7 @@ export namespace foundation::particles
         {
             return BehaviorSupport::Both;
         }
-        void DeclareStreams(ParticleStreamContainer&) override {} // Age/Lifetime are core
+        void DeclareStreams(ParticleStreamContainer&) override {} // Age and Lifetime are core
         void Initialize(ParticleStreamContainer& streams, i32 index, Random& rng) override
         {
             (*streams.Lifetimes())[index] = Max(lifetime.Evaluate(rng.NextFloat()), 0.01f);
@@ -548,7 +546,7 @@ export namespace foundation::particles
         f32 radius = 1.0f;
     };
 
-    // A world-space axis-aligned collision box (center + half-extents).
+    // A world-space axis-aligned collision box (center and half-extents).
     struct CollisionBox
     {
         Float3 center{0.0f, 0.0f, 0.0f};
@@ -571,9 +569,9 @@ export namespace foundation::particles
         core::Serialize(ar, "halfExtents", b.halfExtents);
     }
 
-    // Bounces particles off a small set of world planes + spheres (ground, walls, obstacles). Beyond
-    // Sedulous, which had no collision at all. On a hit: push to the surface, reflect the normal velocity
-    // by `bounce`, damp the tangential velocity by `friction`, and optionally age the particle by
+    // Bounces particles off a small set of world planes and spheres (ground, walls, obstacles). On a
+    // hit: push to the surface, reflect the normal velocity by `bounce`, damp the tangential velocity
+    // by `friction`, and optionally age the particle by
     // `lifetimeLoss` of its remaining life. Runs as a behavior (before integrate), so it corrects last
     // frame's penetration.
     class CollisionBehavior final : public ParticleBehavior
@@ -783,10 +781,10 @@ export namespace foundation::particles
             {
                 return;
             }
-            // SET the alpha to the curve's opacity envelope (like ColorOverLifetime sets colour). This runs
-            // every frame, so it must NOT accumulate: `w *= curve` would multiply w by a sub-1 value each
-            // frame and collapse alpha to ~0 in a fraction of a second (only masked when the curve holds at
-            // 1.0 early, e.g. FadeOut) - which made fade-IN curves like smoke's render as nothing.
+            // Set the alpha to the curve's opacity envelope (as ColorOverLifetime sets colour). This runs
+            // every frame, so it must not accumulate: `w *= curve` would multiply w by a value below 1 each
+            // frame and collapse alpha to about 0 within a fraction of a second, so a fade-in curve would
+            // render nothing.
             for (i32 i = 0; i < streams.aliveCount; ++i)
             {
                 (*col)[i].w = curve.Evaluate(streams.GetLifeRatio(i));
@@ -937,28 +935,28 @@ export namespace foundation::particles
 
     // ---- Reflection registration -------------------------------------------------------------
     // Modules are reflected ISerializable types. The cooked resource writes each module's reflected
-    // type tag and reconstructs it via Serializables().Create(typeId) + ISerializable::Serialize -
-    // the same machinery cooked resources (e.g. TextureResource) use; no hand-rolled string registry.
+    // type tag and reconstructs it through Serializables().Create(typeId) and ISerializable::Serialize,
+    // the same machinery other cooked resources (TextureResource, say) use.
 
     RTTI_DEFINE_OBJECT(ParticleInitializer, "rtti::particles")
     RTTI_DEFINE_OBJECT(ParticleBehavior, "rtti::particles")
-    // Every concrete module's StaticType() is defined WITH its reflected properties in
-    // ParticleModulesImpl.cpp (GCC module hygiene: REFLECT_MEMBERS out of interfaces). The
-    // curve-driven OverLifetime behaviors reflect their curves via the BoundedArray container
-    // primitive (count-bound key arrays). All 20 concrete module types are reflected.
+    // Every concrete module's StaticType() is defined with its reflected properties in
+    // ParticleModulesImpl.cpp (REFLECT_MEMBERS bodies stay out of module interfaces). The
+    // curve-driven OverLifetime behaviors reflect their curves through the BoundedArray container
+    // primitive (count-bound key arrays).
 
     // Registers the reflected range leaf value types (module reflection bodies self-build via
     // REFLECT_MEMBERS). Defined in ParticleModulesImpl.cpp; idempotent.
     void RegisterParticleModuleReflection();
 
-    // Reflects the effect graph value types (ParticleEmitter / ParticleSystem / ParticleEffect + the
-    // EmissionMode enum + the Array<UniquePtr<ParticleSystem>> container), so tooling/scripting can
-    // traverse a whole effect: effect -> systems -> modules -> ranges/curves. Defined in
+    // Reflects the effect graph value types (ParticleEmitter, ParticleSystem, ParticleEffect, the
+    // EmissionMode enum and the Array<UniquePtr<ParticleSystem>> container), so tooling and scripts can
+    // traverse a whole effect: its systems, their modules, and their ranges and curves. Defined in
     // ParticleEffectReflectionImpl.cpp (the :effect types are not visible from :modules, so this is a
     // forward declaration resolved at link time within foundation.particles); idempotent.
     void RegisterParticleEffectReflection();
 
-    // Register every module type (hierarchy) + a construct-by-type-id entry for the concrete ones.
+    // Register every module type (the hierarchy) and a construct-by-type-id entry for the concrete ones.
     // Call once at startup before loading cooked particle resources.
     void RegisterParticleModules()
     {
@@ -992,6 +990,6 @@ export namespace foundation::particles
         PARTICLE_REG(RotationOverLifetimeBehavior);
         PARTICLE_REG(SpeedOverLifetimeBehavior);
 #undef PARTICLE_REG
-        RegisterParticleEffectReflection(); // effect/system/emitter value types + systems container
+        RegisterParticleEffectReflection(); // effect, system and emitter value types and the systems container
     }
 }

@@ -3,19 +3,18 @@
 
 // Editor App - :asset_page partition
 //
-// What every asset page shares (Documentation/Specs/editor-gui.md, 5.4, layer 1), so each of the
-// twenty libraries does not write its own:
-//   - AssetPageServices: what a page asks of the editor when it is made (its markup, the asset
-//     slots' table, the type icons, what a preview renders through), filled by the application.
-//   - FindById: an element of a page's markup by its id, which is how code binds to markup.
-//   - XmlPropertyTextFormat: the engine's XmlSerializer as a reflected source's text format, what
-//     an edit's before and after are written in and an undo reads back (the scene's inspector's
-//     until now).
+// What every asset page shares, so each page library does not write its own:
+//   - AssetPageServices: what a page gets from the editor when it is made (its markup, the asset
+//     slots' table, the type icons, what a preview renders through), filled in by the application.
+//   - FindById: finds an element of a page's markup by its id, which is how code binds to markup.
+//   - XmlPropertyTextFormat: the engine's XmlSerializer as a reflected source's text format. An
+//     edit's before and after states are written in it, and an undo reads them back.
 //   - ReflectedEditCommand: one reflected source's change, undone and redone by its text on the
-//     object it landed in, found again each time (the object may have been read anew since).
-//   - SnapshotObject and RestoreObject: an object's whole serialized state, under its type's
-//     current data versions, for an edit made by code that moves many values at once (a preset)
-//     and is still one undo step.
+//     object it was applied to. The object is looked up again each time, since it may have been
+//     read again in between.
+//   - SnapshotObject and RestoreObject: an object's whole serialized state under its type's
+//     current data versions, so an edit made by code that changes many values at once (a preset)
+//     is still one undo step.
 
 module;
 #include "Core/Prelude.h"
@@ -42,33 +41,34 @@ export namespace editor::app
 
     struct AssetPageServices
     {
-        /// A page's markup by its path under Data/ (null: it could not be read).
+        /// Loads a page's markup by its path under Data/ (null when it could not be read).
         Function<RefPtr<gui::Node>(StringView path)> loadMarkup;
-        const ResourceRefServices* refs = nullptr; // the asset slots' (null: none)
+        const ResourceRefServices* refs = nullptr; // the asset slots' table (null: none)
         editor::EditorIcons* icons = nullptr;
-        /// What a page's preview renders through and its window's GUI, which hosts the
-        /// preview's viewport (null: none, a test; the preview then draws nothing).
+        /// What a page's preview renders through, and its window's GUI, which hosts the preview's
+        /// viewport (null in a test; the preview then draws nothing).
         foundation::runtime::IApplicationHost* host = nullptr;
         gui::GuiHost* gui = nullptr;
-        /// The code editors' languages by id (null: none, a test; code shows uncoloured).
+        /// The code editors' languages by id (null in a test; code then shows uncoloured).
         CodeLanguages* languages = nullptr;
-        /// Opens the editor's picker for `request` (a source file's Browse); unset: none.
+        /// Opens the editor's picker for `request` (a source file's Browse); unset: no picker.
         Function<void(PickerRequest request)> pick;
     };
 
-    /// Where every page factory gets the services a page is made with: one, owned by the editor's
-    /// assembly (or a test) and outliving the factories, each of which keeps a reference and asks it
-    /// when it makes a page (the window, the host and the GUI exist by then). One source shared by
-    /// reference, where each factory once held a copy of the making Function, which is move-only.
+    /// Where every page factory gets the services a page is made with. There is one, owned by the
+    /// editor's assembly (or a test), and it outlives the factories. Each factory keeps a reference
+    /// and asks it when it makes a page, by which time the window, the host and the GUI exist.
+    /// Sharing one source by reference means no factory needs a copy of the making Function,
+    /// which is move-only.
     class AssetPageServicesSource
     {
     public:
-        AssetPageServicesSource() {} // none: a page made with no services (a test's registration); user-provided, so a const one needs no initializer
+        AssetPageServicesSource() {} // makes pages with no services (a test's registration); user-provided, so a const instance needs no initializer
         explicit AssetPageServicesSource(Function<AssetPageServices()> make) : m_make(Move(make)) {}
         AssetPageServicesSource(const AssetPageServicesSource&) = delete;
         AssetPageServicesSource& operator=(const AssetPageServicesSource&) = delete;
 
-        /// The services a page is made with now.
+        /// The services to make a page with, as they are now.
         [[nodiscard]] AssetPageServices Make() const { return m_make ? m_make() : AssetPageServices{}; }
 
     private:
@@ -94,9 +94,10 @@ export namespace editor::app
         return nullptr;
     }
 
-    /// Pushes `type`'s CURRENT data-version chain (it and its versioned bases) on `ar` without a
-    /// header, for a scan, a snapshot or a replay of a live object, which is at the current
-    /// version by definition: what a saved envelope's version scope carries. Pop it after.
+    /// Pushes `type`'s current data-version chain (the type and its versioned bases) on `ar`
+    /// without a header. It is for a scan, a snapshot or a replay of a live object, which is at the
+    /// current version by definition, and matches what a saved envelope's version scope carries.
+    /// Pop it afterwards.
     inline void PushCurrentDataVersions(ISerializer& ar, const TypeInfo& type)
     {
         SerializedDataVersion chain[16];
@@ -108,7 +109,7 @@ export namespace editor::app
         ar.PushVersionScope(chain, count);
     }
 
-    /// `object`'s whole state as bytes.
+    /// Serializes `object`'s whole state to bytes.
     [[nodiscard]] inline Array<byte> SnapshotObject(ISerializable& object)
     {
         MemoryStream stream;
@@ -137,8 +138,8 @@ export namespace editor::app
         return ar.IsOk();
     }
 
-    /// An edit made by code over a whole object: its state before and after, put back by undo and
-    /// redo on the object, found again each time; `applied` runs after each.
+    /// An edit made by code over a whole object: its state before and after, restored by undo and
+    /// redo on the object, which is looked up again each time. `applied` runs after each restore.
     class ObjectSnapshotCommand final : public editor::IEditorCommand
     {
     public:
@@ -200,9 +201,9 @@ export namespace editor::app
     class ReflectedEditCommand final : public editor::IEditorCommand
     {
     public:
-        /// `target` finds the object of `type` the change landed in (null: gone, and the step does
-        /// nothing); `applied`, when given, runs after each restore (a reference bound again, a
-        /// preview told). `format` outlives the command.
+        /// `target` finds the object of `type` the change was applied to (null when it is gone; the
+        /// step then does nothing). `applied`, when given, runs after each restore, for example to
+        /// bind a reference again or notify a preview. `format` outlives the command.
         ReflectedEditCommand(const TypeInfo& type, Function<void*()> target, gui::ReflectedChange change, gui::IPropertyTextFormat& format,
                              StringView typeId, Function<void()> applied = {})
             : m_type(&type), m_target(Move(target)), m_change(Move(change)), m_format(&format), m_typeId(typeId), m_applied(Move(applied))

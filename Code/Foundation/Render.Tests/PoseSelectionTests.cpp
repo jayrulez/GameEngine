@@ -3,8 +3,8 @@
 
 // Skinned-crowd pose selection: the renderer's per-instance pose pick (SelectPose) and the crowd-
 // authoring helpers that build an Explicit per-instance index array from a grid position (ColumnPose /
-// WavePose / ClusterPose). Pure integer math, no GPU - this is where the "does the pose mode do what it
-// says" question is settled (the visual muddle in the sample is clip bucketing, not this math).
+// WavePose / ClusterPose). Pure integer math, no GPU: these settle whether each pose mode does what
+// it says.
 #include <doctest/doctest.h>
 #include <initializer_list>
 #include "Core/Prelude.h"
@@ -39,14 +39,14 @@ TEST_CASE("SelectPose: Hashed is deterministic, in range, and NOT the identity/l
     constexpr u32 M = 32;
     bool bucketHit[M] = {};
     u32 matchesModulo =
-        0; // how often Hash(i)%M coincides with i%M (a linear map would be ALL of them)
+        0; // how often Hash(i)%M coincides with i%M (a linear map would match every time)
     for (u32 i = 0; i < 4096; ++i)
     {
         const u32 p = SelectPose(PoseAssignment::Hashed, i, M, nullptr);
         CHECK(p < M); // in range
         CHECK(p == SelectPose(PoseAssignment::Hashed, i, M,
-                              nullptr)); // deterministic (stable per i -> motion blur safe)
-        CHECK(p == static_cast<u32>(HashInteger(i) % M)); // it IS the splitmix finalizer
+                              nullptr)); // deterministic (stable per i, so safe for motion blur)
+        CHECK(p == static_cast<u32>(HashInteger(i) % M)); // it is the splitmix finalizer
         bucketHit[p] = true;
         if (p == i % M)
         {

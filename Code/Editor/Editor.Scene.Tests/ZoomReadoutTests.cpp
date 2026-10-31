@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the zoom readout's pure parts: the scale bar's round length and its pixels
-// at the focus, the words for a length, and when the readout shows (held, then fading).
+// Editor::Scene tests: the pure parts of the zoom readout. They cover the scale bar's round
+// length and its pixel span at the focus, the text for a length, and when the readout shows
+// (held, then fading).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -12,7 +13,7 @@ using namespace foundation::core;
 
 TEST_CASE("zoom readout: the scale bar is the longest round length within its target pixels")
 {
-    // At 60 degrees the view is 2 tan(30) d tall: at 10 m over 1000 px, 1.1547 cm a pixel.
+    // At 60 degrees the view is 2 tan(30) d tall: at 10 m over 1000 px, 1.1547 cm per pixel.
     const f32 fovY = 1.0471976f;
     const f32 metresPerPixel = 2.0f * 10.0f * Tan(0.5f * fovY) / 1000.0f;
     const editor::ScaleBar bar = editor::ScaleBarAt(10.0f, fovY, 1000.0f, 120.0f);
@@ -69,7 +70,7 @@ TEST_CASE("zoom readout: shown whole after a zoom, fading once the zoom stops, t
     readout.Advance(editor::kZoomReadoutHoldSeconds * 0.9f);
     CHECK(readout.Opacity() == 1.0f);
 
-    // Half way through the fade, half there.
+    // Half way through the fade, the readout is half visible.
     readout.Advance(editor::kZoomReadoutHoldSeconds * 0.1f + editor::kZoomReadoutFadeSeconds * 0.5f);
     CHECK(readout.Opacity() == doctest::Approx(0.5f).epsilon(0.01));
 

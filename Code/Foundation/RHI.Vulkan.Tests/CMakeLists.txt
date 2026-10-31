@@ -2,7 +2,7 @@
 # cases spin up a real Vulkan device and skip when no adapter is present (CI runners).
 
 add_executable(RHI.Vulkan.Tests TestsMain.cpp VulkanQueueTests.cpp VulkanQueryTests.cpp)
-# Vulkan::Vulkan: the SAME vulkan.h the module was built against (GCC checks module ODR).
+# Vulkan::Vulkan: the same vulkan.h the module was built against (GCC checks module ODR).
 target_link_libraries(RHI.Vulkan.Tests PRIVATE Foundation::RHI.Vulkan Foundation::RHI Vulkan::Vulkan doctest::doctest)
 target_compile_definitions(RHI.Vulkan.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 target_compile_options(RHI.Vulkan.Tests PRIVATE

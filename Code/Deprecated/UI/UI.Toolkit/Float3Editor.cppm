@@ -3,13 +3,10 @@
 
 // UI Toolkit - :float3_editor partition
 //
-// Property editor for Float3 values - three NumericFields (X, Y, Z) side by side with colored axis labels.
-// Ported from Sedulous.UI.Toolkit/src/PropertyGrid/Vector3Editor.bf. Beef `Vector3` -> core Float3
-// (.x/.y/.z); `delegate void(Vector3) Setter` -> Function<void(Float3)>. The Beef private inner `AxisLabel`
-// is identical to the already-ported toolkit::AxisLabel (and its axis colors to AxisColors), so this
-// partition reuses those from :vector_fields instead of duplicating them. The private inner
-// `VectorNumericField : NumericField` becomes a PUBLIC nested class (own RTTI_OBJECT identity) whose
-// focus overrides are defined out-of-line after Float3Editor is complete.
+// Property editor for Float3 values: three NumericFields (X, Y, Z) side by side with colored axis labels.
+// It reuses AxisLabel and AxisColors from :vector_fields. VectorNumericField is a public nested class
+// (with its own RTTI_OBJECT identity) whose focus overrides are defined out of line after
+// Float3Editor is complete.
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +18,7 @@ import foundation.core;
 import foundation.vg;
 import foundation.ui;
 import :property_editor;
-import :vector_fields; // reuse AxisLabel + AxisColors
+import :vector_fields; // reuse AxisLabel and AxisColors
 
 using namespace foundation::core;
 
@@ -75,7 +72,7 @@ export namespace foundation::ui::toolkit
 
         private:
             Float3Editor* m_editor;
-            [[maybe_unused]] i32 m_axis; // axis index (kept for parity with the Beef inner field)
+            [[maybe_unused]] i32 m_axis; // axis index (unused)
         };
 
     protected:

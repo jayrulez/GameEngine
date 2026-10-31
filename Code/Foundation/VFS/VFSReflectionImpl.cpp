@@ -3,10 +3,9 @@
 
 // Foundation::VFS - reflection implementation unit: SourcePath's reflected surface.
 //
-// Kept OUT of the :source_path interface partition (REFLECT_* bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). SourcePath's value is private, so it reflects as
-// read accessors + a StringView constructor (the accessor-gated-state convention) rather than
-// member properties.
+// Kept out of the :source_path interface partition because REFLECT_* bodies make GCC emit a gcm
+// cluster. SourcePath's value is private, so it reflects as read accessors and a StringView
+// constructor rather than member properties.
 
 module;
 #include "Core/Prelude.h"

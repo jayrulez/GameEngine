@@ -3,12 +3,12 @@
 
 /// foundation.rhi.webgpu:command_encoder - CommandEncoder over WGPUCommandEncoder.
 ///
-/// WebGPU encoders are ONE-SHOT; the wrapper is reusable - after Finish, the next
-/// Begin* / copy call lazily opens a fresh WGPUCommandEncoder, which is exactly the
-/// RenderWindow frame loop's Reset-and-reencode shape. Barriers are no-ops (WebGPU
-/// tracks hazards itself; the RHI's explicit transitions carry no information here).
+/// WebGPU encoders are one-shot; the wrapper is reusable. After Finish, the next Begin*
+/// or copy call lazily opens a fresh WGPUCommandEncoder, which is the RenderWindow
+/// frame loop's reset-and-reencode shape. Barriers are no-ops (WebGPU tracks hazards
+/// itself; the RHI's explicit transitions carry no information here).
 ///
-/// Blit and GenerateMipmaps ride the internal fullscreen blit pass (:blit_helper) -
+/// Blit and GenerateMipmaps use the internal fullscreen blit pass (:blit_helper);
 /// same-extent same-format blits stay plain copies. ResolveTexture is a resolve-only
 /// render pass (load the MSAA attachment, discard it, resolve out).
 
@@ -86,12 +86,12 @@ export namespace foundation::rhi::webgpu
                 const DepthStencilAttachment& attachment =
                     passDesc.depthStencilAttachment.Value();
                 depth.view = static_cast<WebGpuTextureView*>(attachment.view)->Handle();
-                // depthClearValue must be a FINITE value even on a read-only / Load-op plane. The
-                // wgpu INIT sentinel is WGPU_DEPTH_CLEAR_VALUE_UNDEFINED (== NaN); native wgpu
-                // ignores it when not clearing, but the browser's WebGPU validation rejects a
-                // non-finite depthClearValue unconditionally. Always pass the attachment's value
-                // (finite 1.0 by default) so read-only depth passes (e.g. the forward pass reading
-                // the prepass depth) validate in a browser.
+                // depthClearValue must be finite even on a read-only or Load-op plane. The wgpu
+                // INIT sentinel is WGPU_DEPTH_CLEAR_VALUE_UNDEFINED (== NaN); native wgpu ignores
+                // it when not clearing, but the browser's WebGPU validation rejects a non-finite
+                // depthClearValue unconditionally. Always pass the attachment's value (finite 1.0
+                // by default) so read-only depth passes (e.g. the forward pass reading the prepass
+                // depth) validate in a browser.
                 depth.depthClearValue = attachment.depthClearValue;
                 if (attachment.depthReadOnly)
                 {
@@ -102,8 +102,8 @@ export namespace foundation::rhi::webgpu
                     depth.depthLoadOp = ToWgpuLoadOp(attachment.depthLoadOp);
                     depth.depthStoreOp = ToWgpuStoreOp(attachment.depthStoreOp);
                 }
-                // A view created with a default desc INHERITS the texture's format (the
-                // desc keeps Undefined) - resolve through the owner, or a stencil-capable
+                // A view created with a default desc inherits the texture's format (the
+                // desc keeps Undefined), so resolve through the owner, or a stencil-capable
                 // attachment is misjudged as depth-only and the browser rejects the pass
                 // ("Both stencilLoadOp and stencilStoreOp must be set...").
                 TextureFormat dsFormat = attachment.view->desc.format;
@@ -242,8 +242,8 @@ export namespace foundation::rhi::webgpu
 
         void Blit(Texture* source, Texture* destination) override
         {
-            // Same-extent same-format = a plain copy; anything else goes through the
-            // internal fullscreen blit pass (linear-sampled scale + convert).
+            // Same extent and same format is a plain copy; anything else goes through
+            // the internal fullscreen blit pass (linear-sampled scale and convert).
             if (source->desc.width == destination->desc.width &&
                 source->desc.height == destination->desc.height &&
                 source->desc.format == destination->desc.format)
@@ -294,8 +294,8 @@ export namespace foundation::rhi::webgpu
 
         void ResolveTexture(Texture* source, Texture* destination) override
         {
-            // WebGPU resolves via a pass resolveTarget - a standalone resolve is a
-            // pass that loads the MSAA attachment, discards it, and resolves out.
+            // WebGPU resolves via a pass resolveTarget; a standalone resolve is a pass
+            // that loads the MSAA attachment, discards it, and resolves out.
             EnsureOpen();
             const WGPUTextureView sourceView =
                 MipView(source, 0, 0, WGPUTextureAspect_All, false);
@@ -327,8 +327,8 @@ export namespace foundation::rhi::webgpu
             EnsureOpen();
 #if PLATFORM_WEB
             // Encoder-level timestamps are a wgpu-native extension; the browser (emdawnwebgpu) has
-            // no timestamp-query feature and ABORTS on wgpuCommandEncoderWriteTimestamp. The GPU
-            // profiler's timings are simply unavailable on web (a no-op, not a crash).
+            // no timestamp-query feature and aborts on wgpuCommandEncoderWriteTimestamp. The GPU
+            // profiler's timings are unavailable on web (a no-op, not a crash).
             (void)querySet;
             (void)index;
 #else
@@ -346,7 +346,7 @@ export namespace foundation::rhi::webgpu
                              Buffer* destination, u64 destinationOffset) override
         {
             EnsureOpen();
-            // WebGPU requires QUERY_RESOLVE usage on the resolve destination - which a
+            // WebGPU requires QUERY_RESOLVE usage on the resolve destination, which a
             // mappable readback buffer can never carry (MapRead combines only with
             // CopyDst). Resolve into an internal scratch buffer and copy over; the RHI
             // contract (Vulkan-shaped: resolve into any CopyDst buffer) is preserved.

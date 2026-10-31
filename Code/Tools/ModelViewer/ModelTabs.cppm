@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:tabs`: the models open in the viewer, one tab each
-// (Documentation/Specs/model-viewer.md, P1). A file opened again goes to its tab rather than a
-// second one; closing a tab hands the front to its neighbour, as the editor's tabs do. Each tab
-// keeps its model bound and what the window puts in the scene for it (its instance, its bounds,
-// the camera it was left with), so switching back finds it as it was. The side panel's rows come
-// from a tab's numbers (StatRows). P10: a tab can be added before its model is ready (Begin), its
-// file read on a worker and the open finished when it comes (Finish), so the window shows the
-// tab at once.
+// ModelViewer - `modelviewer:tabs`: the models open in the viewer, one tab each. Opening a file
+// again switches to its existing tab. Closing the front tab brings a neighbour to the front, as the
+// editor's tabs do. Each tab keeps its model bound along with what the window placed in the scene
+// for it (its instance, its bounds, its last camera), so switching back finds it unchanged. The
+// side panel's rows come from a tab's stats (StatRows). A tab can be added before its model is
+// ready (Begin), with the file read on a worker and the open completed when the read arrives
+// (Finish), so the window shows the tab at once.
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +25,7 @@ using namespace foundation::core;
 
 export namespace modelviewer
 {
-    /// Where the camera was left on a tab (the editor camera's pose, kept without the editor).
+    /// The camera pose last used on a tab: the editor camera's state, stored without the editor.
     struct TabCamera
     {
         bool saved = false;
@@ -42,12 +41,12 @@ export namespace modelviewer
         String path;
         String title; // the file's name
         UniquePtr<OpenModel> open;
-        bool ready = false;                    // its model bound (false while its file is read)
-        engine::model::ModelInstance instance; // what the window put in the scene for it
-        UniquePtr<ClipPlayback> playback;      // its animation bar's state, over that instance
-        Float3 center{};                       // its bounds as placed, measured by the window
+        bool ready = false;                    // its model is bound (false while its file is read)
+        engine::model::ModelInstance instance; // what the window placed in the scene for it
+        UniquePtr<ClipPlayback> playback;      // the animation bar's state for that instance
+        Float3 center{};                       // the bounds as placed, measured by the window
         f32 radius = 1.0f;
-        Float3 size{};                         // their extent (the panel's Size: upright, scaled)
+        Float3 size{};                         // the bounds' extent, upright and scaled (the panel's Size row)
         TabCamera camera;
     };
 
@@ -58,14 +57,15 @@ export namespace modelviewer
 
         struct Opened
         {
-            i32 index = -1;     // the tab it is in, -1 when it did not open
-            bool added = false; // a new tab (false: it was open already)
-            bool needsFile = false; // added before its model is ready: read the file, then Finish
+            i32 index = -1;     // the model's tab, -1 when it did not open
+            bool added = false; // a new tab was added (false: it was open already)
+            bool needsFile = false; // the tab was added before its model is ready: read the file, then call Finish
             OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
         };
 
-        /// As Open, without reading the file: a model cooked before is bound and its tab ready; one
-        /// whose file must be read gets its tab now (`needsFile`), to Finish once it is read.
+        /// Like Open, but without reading the file. A model cooked before is bound and its tab is
+        /// ready; a model whose file must be read gets its tab now with `needsFile` set, and the
+        /// caller calls Finish once the file is read.
         Opened Begin(StringView path, StringView cacheRoot, foundation::rhi::Device* device, bool looseTextures = true)
         {
             Opened result;
@@ -94,9 +94,9 @@ export namespace modelviewer
             return result;
         }
 
-        /// The open of a tab Begin left waiting, with its file as read (`read`, from FileLoads or
-        /// OpenModel::LoadFile). Opened and the tab ready; else the outcome, the tab left for the
-        /// caller to close.
+        /// Completes the open of a tab that Begin left waiting, using `read` (from FileLoads or
+        /// OpenModel::LoadFile). On Opened the tab is ready; on any other outcome the tab is left
+        /// for the caller to close.
         OpenModel::Outcome Finish(i32 index, FileRead& read)
         {
             if (!Valid(index))
@@ -109,9 +109,9 @@ export namespace modelviewer
             return outcome;
         }
 
-        /// Opens `path` into a new tab at the end and brings it to the front; a file open already
-        /// is brought to the front instead. A file that does not open adds no tab.
-        /// `looseTextures` as OpenModel::SetLooseTextures.
+        /// Opens `path` into a new tab at the end and brings it to the front; a file that is already
+        /// open has its tab brought to the front instead. A file that fails to open adds no tab.
+        /// `looseTextures` is passed to OpenModel::SetLooseTextures.
         Opened Open(StringView path, StringView cacheRoot, foundation::rhi::Device* device, bool looseTextures = true)
         {
             const i32 before = m_active;
@@ -125,15 +125,15 @@ export namespace modelviewer
             if (result.outcome != OpenModel::Outcome::Opened)
             {
                 (void)Close(result.index);
-                m_active = Valid(before) ? before : m_active; // a file that does not open adds no tab
+                m_active = Valid(before) ? before : m_active; // a file that fails to open adds no tab
                 result.index = -1;
                 result.added = false;
             }
             return result;
         }
 
-        /// Closes a tab; the one after it comes to the front (else the one before), or none.
-        /// Returns the tab in front after it.
+        /// Closes a tab. When it was in front, the tab after it comes to the front (else the one
+        /// before); otherwise the front tab stays. Returns the front tab's index, -1 when none is left.
         i32 Close(i32 index)
         {
             if (!Valid(index))
@@ -146,7 +146,7 @@ export namespace modelviewer
             return m_active;
         }
 
-        /// A tab dragged from one place to another; the one in front stays in front.
+        /// Moves a tab from one position to another; the front tab stays in front.
         bool Move(i32 from, i32 to)
         {
             if (!Valid(from) || !Valid(to) || from == to)
@@ -174,7 +174,7 @@ export namespace modelviewer
         [[nodiscard]] ModelTab& At(i32 index) { return m_tabs[static_cast<usize>(index)]; }
         [[nodiscard]] bool Valid(i32 index) const noexcept { return index >= 0 && index < static_cast<i32>(m_tabs.Size()); }
 
-        /// The tab a file is open in, -1 when none.
+        /// The tab a file is open in, or -1.
         [[nodiscard]] i32 Find(StringView path) const
         {
             for (usize i = 0; i < m_tabs.Size(); ++i)
@@ -217,7 +217,7 @@ export namespace modelviewer
         return grouped;
     }
 
-    /// The side panel's numbers for a model, in the order it shows them.
+    /// The side panel's rows for a model's stats, in display order.
     [[nodiscard]] inline Array<StatRow> StatRows(const ModelStats& stats)
     {
         Array<StatRow> rows;

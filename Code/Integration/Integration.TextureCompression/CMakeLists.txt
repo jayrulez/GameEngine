@@ -1,11 +1,11 @@
-# Integration.TextureCompression - the block-compression path exercised end to end on REAL GPU
-# backends: encode with the cook's encoder (Pipeline::Texture.Compression) then upload + sample the
-# BC texture through the Foundation render chain (Vulkan + WebGPU). Cross-collection flow (Pipeline
-# encoder x Foundation render), so it lives in Code/Integration, not a Foundation-tier test. Skips
-# cleanly when no GPU backend is available.
-# With ZERO GPU backends configured the probe would compile into a vacuously-PASSING test
-# (every #ifdef block empty, one MESSAGE, ctest green with zero assertions - mistaken for
-# coverage). Skip the target entirely instead, like Samples::Framework does.
+# Integration.TextureCompression - the block-compression path exercised end to end on real GPU
+# backends: encode with the cook's encoder (Pipeline::Texture.Compression), then upload and sample
+# the BC texture through the Foundation render chain (Vulkan and WebGPU). The flow crosses
+# collections (the Pipeline encoder and the Foundation render), so it lives in Code/Integration,
+# not in a Foundation test. Skips cleanly when no GPU backend is available.
+# With no GPU backend configured the probe would compile into a test that passes vacuously
+# (every #ifdef block empty, one MESSAGE, ctest green with zero assertions), which reads as
+# coverage. Skip the target entirely instead, as Samples::Framework does.
 if(NOT TARGET Foundation::RHI.Vulkan AND NOT TARGET Foundation::RHI.WebGPU
    AND NOT TARGET Foundation::RHI.DX12)
     message(STATUS "Integration.TextureCompression: no GPU backend configured - skipped")
@@ -19,8 +19,8 @@ target_link_libraries(Integration.TextureCompression PRIVATE
     Pipeline::Texture.Compression doctest::doctest)
 
 # Link each GPU backend that is present and flag it (OPTION_HAS_*); the probe iterates whichever
-# are compiled in. None is hardcoded, so this builds on any platform (Vulkan+WebGPU on Linux,
-# DX12+WebGPU on Windows).
+# are compiled in. None is hardcoded, so this builds on any platform (Vulkan and WebGPU on Linux,
+# DX12 and WebGPU on Windows).
 if(TARGET Foundation::RHI.Vulkan)
     target_link_libraries(Integration.TextureCompression PRIVATE Foundation::RHI.Vulkan)
     target_compile_definitions(Integration.TextureCompression PRIVATE OPTION_HAS_VULKAN)

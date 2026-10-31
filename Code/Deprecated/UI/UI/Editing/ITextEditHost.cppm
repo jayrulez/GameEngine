@@ -4,14 +4,13 @@
 // UI - :itext_edit_host partition
 //
 // Interface that TextEditingBehavior uses to talk to its host control (EditText). The host owns
-// the text, handles font/shaping, and fires events. Ported from Sedulous.UI/src/Editing/ITextEditHost.bf.
+// the text, handles font/shaping, and fires events.
 //
-// Pattern-B interface (held-by-known-reference / injected), so it is a plain abstract base with pure
-// virtuals (no As*() tree query). Beef read-only properties become getter methods. NAMING DIVERGENCE:
-// two accessors are `Get`-prefixed - GetMaxLength()/GetIsReadOnly() - because EditText exposes
-// identically-named `Property<>` fields (MaxLength, IsReadOnly) and a C++ class cannot have a data
-// member and a member function of the same name (same precedent as UIContext::GetStyleSheet). The
-// non-colliding accessors keep their faithful names.
+// The host is injected and held by reference, so this is a plain abstract base with pure virtuals
+// (no As*() tree query). Two accessors are `Get`-prefixed, GetMaxLength() and GetIsReadOnly(),
+// because EditText exposes `Property<>` fields with those names (MaxLength, IsReadOnly) and a C++
+// class cannot have a data member and a member function of the same name (as with
+// UIContext::GetStyleSheet).
 
 module;
 #include "Core/Prelude.h"

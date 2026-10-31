@@ -19,9 +19,10 @@ export namespace foundation::rhi
         Null,
         WebGPU
     };
-    // The shader bytecode/text format a device's CreateShaderModule ingests. Vulkan/Null = SPIR-V,
-    // DX12 = DXIL, browser WebGPU = WGSL text; native wgpu-native WebGPU takes SPIR-V. The shader
-    // cook/system pick the cooked-blob format from Device::PreferredShaderFormat().
+    // The shader bytecode or text format a device's CreateShaderModule takes: SPIR-V for Vulkan
+    // and Null, DXIL for DX12, WGSL text for browser WebGPU; native wgpu-native WebGPU takes
+    // SPIR-V. The shader cook and the shader system pick the cooked-blob format from
+    // Device::PreferredShaderFormat().
     enum class ShaderFormat : u32
     {
         SpirV,
@@ -134,9 +135,9 @@ export namespace foundation::rhi
         Texture3D
     };
 
-    /// How a shader reads a sampled texture - WebGPU validates the layout's declared
+    /// How a shader reads a sampled texture. WebGPU validates the layout's declared
     /// type against the shader (HLSL SampleCmp lowers to Depth; integer formats read
-    /// as Uint/Sint). Vulkan/DX12 need no declaration and ignore it.
+    /// as Uint or Sint). Vulkan and DX12 need no declaration and ignore it.
     enum class TextureSampleType : u32
     {
         Float,
@@ -307,8 +308,8 @@ export namespace foundation::rhi
 
     // How a render pass's draw commands are supplied. `Inline` records draws directly into the
     // pass (the default). `SecondaryCommandBuffers` means the pass body is supplied by executed
-    // render bundles only (no inline draws) - Vulkan begins the rendering scope with the secondary-
-    // command-buffer contents flag; DX12 / WebGPU ignore it (they allow bundles in any pass).
+    // render bundles only (no inline draws). Vulkan begins the rendering scope with the secondary-
+    // command-buffer contents flag; DX12 and WebGPU ignore it (they allow bundles in any pass).
     enum class RenderPassContents : u32
     {
         Inline,
@@ -417,7 +418,7 @@ export namespace foundation::rhi
         PipelineStatistics
     };
 
-    // Ray tracing enums.
+    // Ray tracing.
     enum class AccelStructType : u32
     {
         TopLevel,

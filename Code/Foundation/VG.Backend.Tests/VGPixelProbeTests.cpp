@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::VG pixel probes - the VG "golden" tests. Deterministic VG scenes rendered on
-// REAL devices (Vulkan + WebGPU), single-sampled with a stencil attachment, pixels read
-// back and asserted STRUCTURALLY: fill-rule correctness, stencil path clipping, the
-// solid-vs-gradient color-pipeline agreement, gradient spreads, and blend modes. Semantic
-// probes instead of stored image diffs - no cross-driver golden drift, and each assertion
-// names the property it guards. Skips cleanly when a backend/GPU is unavailable.
+// Foundation::VG pixel probes, the VG "golden" tests. Deterministic VG scenes rendered on
+// real devices (Vulkan and WebGPU), single-sampled with a stencil attachment, pixels read
+// back and asserted structurally: fill-rule correctness, stencil path clipping, agreement
+// between the solid and gradient color pipelines, gradient spreads, and blend modes. Semantic
+// probes instead of stored image diffs: no cross-driver golden drift, and each assertion
+// names the property it guards. Skips cleanly when a backend or GPU is unavailable.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -31,11 +31,11 @@ namespace
     constexpr u32 kSize = 128; // bytesPerRow 512 (256-aligned)
 
     // The readback image is the shared CapturedImage (valid + At/Luma/CountWhere) from
-    // Foundation::RHI.TestSupport - same probe surface, no per-test copy of the readback plumbing.
+    // Foundation::RHI.TestSupport: the same probe surface, no per-test copy of the readback code.
     using Pixels = testsupport::CapturedImage;
 
     // Render one VG scene (recorded by `record`) and read the target back. sampleCount > 1
-    // renders into an MSAA target resolved into the readback texture - the same
+    // renders into an MSAA target resolved into the readback texture, the same
     // arrangement the UI canvas-RTT and window hosts use.
     // An Encoded scene draws into the sRGB target through its UNORM view, as a host does for an
     // Encoded canvas; the readback is the target's bytes either way.
@@ -188,7 +188,7 @@ namespace
             REQUIRE(fence->Wait(1, ~0ull));
             pool->DestroyEncoder(encoder);
 
-            // Target is left in CopySrc; the shared substrate owns the copy + map + unpack.
+            // Target is left in CopySrc; the shared helper does the copy, map and unpack.
             out = testsupport::Readback(device, target, kSize, kSize);
 
             device.WaitIdle();
@@ -220,7 +220,7 @@ namespace
     {
         INFO("backend: ", backendName);
 
-        // --- 1) Fill-rule correctness + stencil path clip -------------------------
+        // --- 1) Fill-rule correctness and stencil path clip -----------------------
         {
             const Pixels px = RenderScene(
                 device,
@@ -256,7 +256,7 @@ namespace
             REQUIRE(px.valid);
             const u8* ring = px.At(32 + 20, 64); // inside the ring band
             CHECK(ring[0] > 200);                // orange
-            const u8* core = px.At(32, 64); // EvenOdd core: OPEN (background)
+            const u8* core = px.At(32, 64); // EvenOdd core: open (background)
             CHECK(core[0] < 40);
             const u8* clipCenter = px.At(96, 64); // inside the star: stripe color
             CHECK(clipCenter[0] > 180);
@@ -264,13 +264,13 @@ namespace
             CHECK(clipOutside[0] < 40);
         }
 
-        // --- 2) Color-pipeline agreement + repeat spread --------------------------
+        // --- 2) Color-pipeline agreement and repeat spread ------------------------
         {
             const Pixels px = RenderScene(
                 device,
                 [](vg::VGContext& ctx)
                 {
-                    // Left: solid vs same-color two-stop gradient, butted at x=32.
+                    // Left: solid beside a same-color two-stop gradient, butted at x=32.
                     vg::PathBuilder solid;
                     solid.MoveTo(0, 0);
                     solid.LineTo(32, 0);
@@ -290,7 +290,7 @@ namespace
                     grad.Close();
                     ctx.FillPath(grad.ToPath(), flat, vg::FillRule::NonZero, false);
 
-                    // Bottom: red->blue over 1/3 of the rect, REPEAT: x=8 red-ish,
+                    // Bottom: red to blue over 1/3 of the rect, repeating: x=8 red-ish,
                     // x=40 (start of period 2) red-ish again, x=30 (end of period 1) blue.
                     vg::VGLinearGradientFill rep(Float2{0.0f, 0.0f}, Float2{32.0f, 0.0f});
                     rep.AddStop(0.0f, ByteColor(220, 40, 40));
@@ -311,7 +311,7 @@ namespace
             CHECK(Abs(static_cast<i32>(solid[0]) - static_cast<i32>(grad[0])) <= 2);
             CHECK(Abs(static_cast<i32>(solid[1]) - static_cast<i32>(grad[1])) <= 2);
             CHECK(Abs(static_cast<i32>(solid[2]) - static_cast<i32>(grad[2])) <= 2);
-            CHECK(Abs(static_cast<i32>(solid[0]) - 180) <= 2); // AND both are the authored color
+            CHECK(Abs(static_cast<i32>(solid[0]) - 180) <= 2); // and both are the authored color
             const u8* p1 = px.At(4, 100);   // period 1 start: red dominates
             const u8* p1e = px.At(30, 100); // period 1 end: blue dominates
             const u8* p2 = px.At(36, 100);  // period 2 start: red again (the repeat)
@@ -360,8 +360,8 @@ namespace
 
         // --- 4) MSAA: 4x resolve produces fractional edge coverage ----------------
         {
-            // Stencil-then-cover fills have HARD edges (no analytic fringes) - edge AA
-            // comes exclusively from MSAA + resolve, the arrangement the canvas-RTT and
+            // Stencil-then-cover fills have hard edges (no analytic fringes): edge AA
+            // comes only from MSAA and the resolve, the arrangement the canvas-RTT and
             // window hosts use. A diagonal edge must alias at 1x (every pixel either
             // background or fill) and antialias at 4x (some pixels in between).
             auto diagonal = [](vg::VGContext& ctx)
@@ -449,7 +449,7 @@ TEST_CASE("vg.pixels: fills, clip, colors, spreads and blends on real backends")
 }
 
 // ============================================================================================
-// Analytic boxes (V4 of Specs/vg-and-gui-lab.md): a rounded fill, a one-pixel border with no halo,
+// Analytic boxes: a rounded fill, a one-pixel border with no halo,
 // and per-side borders, drawn by the box shader.
 // ============================================================================================
 
@@ -471,7 +471,7 @@ namespace
                 ctx.DrawBox(Rectangle{16, 80, 48, 32}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
                             vg::BorderWidths(2.0f, 0.0f, 2.0f, 6.0f), ByteColor(40, 200, 40));
                 // A canvas scaled to 0.48 (a game UI at a reference resolution): a 2 px border,
-                // snapped to one whole device pixel (V5).
+                // snapped to one whole device pixel.
                 ctx.PushState();
                 ctx.Scale(0.48f, 0.48f);
                 ctx.DrawBox(Rectangle{180, 152, 40, 16}, vg::CornerRadii(), Color{0.0f, 0.0f, 0.0f, 0.0f},
@@ -610,7 +610,7 @@ TEST_CASE("vg.pixels: analytic boxes fill, border without a halo, and take a wid
 }
 
 // ============================================================================================
-// Nested clips (V2 of Specs/vg-and-gui-lab.md): two rounded clips, the inner overlapping the outer's
+// Nested clips: two rounded clips, the inner overlapping the outer's
 // top-left corner, then a clip rect inside the outer. Red fills the canvas under both clips: only
 // their intersection shows, the outer's rounded corner included. Popping the inner, blue fills
 // the outer alone; inside it, a clip rect confines green to its left part.
@@ -710,7 +710,7 @@ TEST_CASE("vg.pixels: clip paths nest as intersections, with a clip rect inside 
 }
 
 // ============================================================================================
-// Blend space (V1 of Specs/vg-and-gui-lab.md): the same scenes in a Linear and an Encoded canvas.
+// Blend space: the same scenes in a Linear and an Encoded canvas.
 // Linear blends linear light (half black over white is 73% grey, byte 188); Encoded blends the
 // encoded values as browsers do (50% grey, byte 128). A gradient's ramp is baked from the authored
 // stops, so it runs as authored in both (its middle is byte 128), and a solid colour reads as
@@ -817,13 +817,12 @@ TEST_CASE("vg.pixels: an encoded canvas blends encoded values, a linear one line
 }
 
 // ============================================================================================
-// Baked-font consistency probe (fonts triad regression net, added during the 2026-08-12
-// jumbled-text incident): the SAME text at the SAME size through the TTF service (rasterize-
-// on-demand - the dev path) and through the BAKED wrappers (BakedFont + BakedFontAtlas, the
-// exact objects the cooked FontResource loads into) must produce near-identical pixels - the
-// bake IS a snapshot of the same rasterizer. Divergence = the baked draw path lies (wrong
-// regions/UVs/metrics), which manifests as jumbled game-UI text. PNGs of both strips are
-// written to the test scratch dir for eyes-on diagnosis on failure.
+// Baked-font consistency probe: the same text at the same size through the TTF service
+// (rasterize on demand, the dev path) and through the baked wrappers (BakedFont and
+// BakedFontAtlas, the objects a cooked FontResource loads into) must produce near-identical
+// pixels, since the bake is a snapshot of the same rasterizer. A divergence means the baked
+// draw path has wrong regions, UVs or metrics, which shows as jumbled game-UI text. PNGs of
+// both strips are written to the test scratch dir for diagnosis on failure.
 // ============================================================================================
 
 import foundation.fonts;
@@ -853,9 +852,9 @@ namespace
         (void)image::io::SaveImage(img, StringView(name), image::io::ImageFileFormat::PNG);
     }
 
-    // Fraction of pixels with no acceptable match within a 1px neighborhood - tolerant of the
+    // Fraction of pixels with no acceptable match within a 1px neighborhood: tolerant of the
     // sub-pixel placement difference between stb's float-precision packed quads (TTF path) and
-    // the baked integer regions, while still catching the jumble class (overlaps / scaled
+    // the baked integer regions, while still catching jumbled text (overlapping or scaled
     // glyphs mismatch regardless of a 1px shift).
     f64 MismatchFraction(const Pixels& a, const Pixels& b)
     {
@@ -946,14 +945,14 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
     const Array<byte>& ttf = ttfFile.Value();
     REQUIRE(!ttf.IsEmpty());
 
-    // Path A: the TTF service (rasterize-on-demand; the dev-tree path - ground truth).
+    // Path A: the TTF service (rasterize on demand; the dev-tree path and the ground truth).
     fonts::TrueTypeFontService ttfService(DefaultAllocator());
     REQUIRE(ttfService.LoadFont(u8"Roboto",
                                 testsupport::DataPath(u8"Engine/Fonts/roboto/Roboto-Regular.ttf")
                                     .AsView()) == fonts::FontLoadResult::Success);
     fonts::CachedFont* ttfFont = ttfService.GetFont(u8"Roboto", kProbeSize);
     REQUIRE(ttfFont != nullptr);
-    // The TTF service serves its CLOSEST loaded size, not necessarily the request - bake strip
+    // The TTF service serves its closest loaded size, not necessarily the request: bake strip
     // B at the size strip A actually renders, or the probe compares two different sizes.
     const f32 servedSize = ttfFont->font->PixelHeight();
 
@@ -966,8 +965,8 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
                                                     Color{1.0f, 1.0f, 1.0f, 1.0f});
                                    });
 
-    // Path B: the BAKED wrappers - the exact objects a cooked FontResource loads into
-    // (FontBaker::Bake is the same bake the cook runs; the wrap mirrors FontFactory).
+    // Path B: the baked wrappers, the objects a cooked FontResource loads into
+    // (FontBaker::Bake is the bake the cook runs; the wrapping matches FontFactory's).
     fonts::FontLoadOptions options = fonts::FontLoadOptions::Default();
     options.pixelHeight = servedSize;
     auto bakedResult = fonts::FontBaker::Bake(
@@ -979,9 +978,9 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
     bakedResult.Value()->TakeOwnership(bakedFont, bakedAtlas);
     DefaultAllocator().Delete(bakedResult.Value());
 
-    // Heap + refcounted like a real resource product: ResourceFontService takes a STRONG ref
-    // on registered fonts (the mid-session re-cook UAF guard), so a stack Font would die at
-    // the service's release.
+    // Heap-allocated and refcounted like a real resource product: ResourceFontService takes a
+    // strong ref on registered fonts (so a mid-session re-cook cannot free one in use), so a
+    // stack Font would die at the service's release.
     RefPtr<fonts::Font> product = MakeRef<fonts::Font>(DefaultAllocator());
     product->SetFamily(u8"Roboto");
     {
@@ -1043,7 +1042,7 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
 
     SaveProbePng(ttfPixels, u8"font-probe-ttf.png");
     SaveProbePng(bakedPixels, u8"font-probe-baked.png");
-    // Diff visualization for failures: red = TTF-only ink, green = baked-only ink.
+    // Diff visualization for failures: red is TTF-only ink, green baked-only ink.
     if (ttfPixels.valid && bakedPixels.valid)
     {
         Pixels diff = ttfPixels;
@@ -1063,13 +1062,13 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
         SaveProbePng(diff, u8"font-probe-diff.png");
     }
 
-    // Both strips drew SOMETHING...
+    // Both strips drew something...
     REQUIRE(ttfPixels.valid);
     REQUIRE(bakedPixels.valid);
     CHECK(InkedPixels(ttfPixels) > 100);
     CHECK(InkedPixels(bakedPixels) > 100);
     // ...and the same something: the bake is a snapshot of the same rasterizer, so beyond
-    // AA noise the images must agree. Jumbled = regions/UVs/metrics lie in the baked path.
+    // AA noise the images must agree. Jumbled text means wrong baked regions, UVs or metrics.
     CHECK(MismatchFraction(ttfPixels, bakedPixels) < 0.02);
 
     device->Destroy();
@@ -1077,7 +1076,7 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
 }
 
 // ============================================================================================
-// Layers (V3 of Specs/vg-and-gui-lab.md): a group drawn offscreen and composited once, so it fades
+// Layers: a group drawn offscreen and composited once, so it fades
 // as one. Half of opaque red over black is byte 188 linear, 128 encoded, where the overlap of two
 // half-red shapes would be 225 and 191; a quarter of white (a half layer in a half layer) is 137
 // and 64. A clip path and a clip rect inside a layer clip there, at the right place.
@@ -1293,7 +1292,7 @@ TEST_CASE("vg.pixels: a layer fades a group as one, nests, clips inside, blurs, 
 }
 
 // ============================================================================================
-// Text effects (F4 of Specs/vg-and-gui-lab.md): a distance-field 'I' (one rectangle) baked at
+// Text effects: a distance-field 'I' (one rectangle) baked at
 // 48 px and drawn at that size, so a pixel of the text is a texel of the bake. In an Encoded
 // canvas a byte is coverage, so a row's coverage sums to the widths it crosses: an outline adds
 // its width each side of the stem and leaves the stem as it was; a hard shadow lands its offset

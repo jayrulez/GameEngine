@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Node draw tests: the tree renders through the DrawContext/VG seam.
-// GPU-free (VGContext tessellates into a CPU vertex batch), so we assert geometry is
-// produced and that visibility/alpha gate drawing.
+// GUI - Node draw tests: the tree renders through the DrawContext and VG. GPU-free (VGContext
+// tessellates into a CPU vertex batch), so we assert geometry is produced and that visibility and
+// alpha gate drawing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

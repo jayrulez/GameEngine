@@ -3,11 +3,11 @@
 
 // Editor App - :asset_drag_data partition
 //
-// What assets carry when they are dragged (Documentation/Specs/editor-gui.md, 5.2, layers 2 and 7):
-// a GUI drag payload of type `asset/instance` holding, for each asset, its guid, its type's name
-// (what a target takes it by) and its name (for the preview, and for a refusal's reason). A slot,
-// a hierarchy or a page asks whether it takes one before the drop (Takes), naming why not when it
-// does not; a group takes them all (ReadAll).
+// What assets carry when they are dragged: a GUI drag payload of type `asset/instance` holding,
+// for each asset, its guid, its type's name (which a target accepts it by) and its name (for the
+// preview, and for the reason a target refuses it). A slot, a hierarchy or a page asks before the
+// drop whether it accepts the payload (Takes), which gives the reason when it does not; a group
+// accepts them all (ReadAll).
 module;
 #include "Core/Prelude.h"
 
@@ -33,14 +33,14 @@ export namespace editor::app
         String TypeName;
         String Name;
 
-        /// The payload dragging `asset` carries.
+        /// The payload for dragging one asset.
         [[nodiscard]] static foundation::gui::DragPayload Payload(const Guid& id, StringView typeName, StringView name)
         {
             AssetDrag one{id, String(typeName), String(name)};
             return Payload(Span<const AssetDrag>(&one, 1u));
         }
-        /// The payload dragging `assets` carries (a browser's selection), labelled by the one or
-        /// by how many.
+        /// The payload for dragging `assets` (a browser's selection), labelled with the asset's
+        /// name, or with the count when there are several.
         [[nodiscard]] static foundation::gui::DragPayload Payload(Span<const AssetDrag> assets)
         {
             Array<Variant> parts;
@@ -96,8 +96,8 @@ export namespace editor::app
             return true;
         }
 
-        /// Whether a target that takes `types` (asset type names; empty: any) takes what `payload`
-        /// carries; when not, `why` says so.
+        /// Whether a target that accepts `types` (asset type names; empty accepts any) accepts
+        /// what `payload` carries; when not, `why` gives the reason.
         [[nodiscard]] static bool Takes(const foundation::gui::DragPayload& payload, Span<const String> types, AssetDrag& out, String& why)
         {
             Array<AssetDrag> all;

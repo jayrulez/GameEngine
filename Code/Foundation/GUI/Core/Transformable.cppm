@@ -3,17 +3,17 @@
 
 // GUI - :transformable partition
 //
-// Transformable: 2D position / rotation / scale with a lazily-recomputed combined
-// Transform2D (+ its inverse). The math base of Node. Ported from eepp's
-// Math::Transformable (include/eepp/math/transformable.hpp); rotation is RADIANS (eepp
-// used degrees), and the setters are virtual so Node can hook invalidation.
+// Transformable: 2D position, rotation and scale with a lazily recomputed combined Transform2D
+// (and its inverse). The math base of Node. Adapted from eepp's Math::Transformable
+// (include/eepp/math/transformable.hpp); rotation is in radians where eepp uses degrees, and the
+// setters are virtual so Node can hook invalidation.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:transformable;
 
-import foundation.core; // Float2
+import foundation.core;
 import :transform2d;
 
 using namespace foundation::core;
@@ -79,7 +79,7 @@ export namespace foundation::gui
         {
             if (m_transformDirty)
             {
-                // Post-multiply order (eepp): T(pos) * [scale about origin] * [rotate about origin].
+                // Post-multiply order: T(pos) * [scale about origin] * [rotate about origin].
                 Transform2D t;
                 t.Translate(m_position);
                 if (!(m_scale.x == 1.0f && m_scale.y == 1.0f))

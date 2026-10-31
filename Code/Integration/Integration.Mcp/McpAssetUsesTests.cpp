@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - asset_uses: the reverse dependency query an
-// agent must read before any destructive change. Exercises three edge families against a real
-// project: an asset->asset edge (MaterialAsset -> texture via the builder's ScanDependencies), a
-// scene->asset edge (a MeshComponent Ref, collected through the full-manager LoadScene + factory-
-// less ResourceManager recipe), and a project-settings edge (defaultSceneId). Plus the refusals.
+// Integration.Mcp: asset_uses, the reverse dependency query an agent reads before any
+// destructive change. It exercises three kinds of edge against a real project: an asset to asset
+// edge (a MaterialAsset naming a texture, found by the builder's ScanDependencies), a scene to
+// asset edge (a MeshComponent Ref, collected by loading the scene through a full manager with a
+// ResourceManager that has no factories), and a project settings edge (defaultSceneId). It also
+// checks the refusals.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
-import foundation.vfs; // FindDataRoot: the shader cook's engine library
+import foundation.vfs; // FindDataRoot, to find the engine library the shader cook reads
 import foundation.json;
 import foundation.content;
 import foundation.resource;
@@ -21,7 +22,7 @@ import pipeline.core;
 import pipeline.registration;
 import materials.pipeline;
 import texture.pipeline;
-import audio.pipeline; // SoundCueAsset (empty-cue health warning)
+import audio.pipeline; // SoundCueAsset, for the empty-cue health warning
 import engine.render;
 import engine.composition;
 import editor.project;
@@ -140,8 +141,8 @@ TEST_CASE("integration.mcp: asset_uses - reverse dependencies across all edge ki
     }
     const String texGuid = GuidText(tex->Id());
 
-    // User 1 (asset->asset): a material whose builder declares the texture as a runtime
-    // reference (ScanDependencies -> deps.references).
+    // The first user, an asset to asset edge: a material whose builder declares the texture as a
+    // runtime reference (ScanDependencies adds it to deps.references).
     auto* mat = root->CreateInstance(u8"wall", pipeline::MaterialAsset::StaticType());
     REQUIRE(mat != nullptr);
     {
@@ -152,8 +153,9 @@ TEST_CASE("integration.mcp: asset_uses - reverse dependencies across all edge ki
     }
     const String matGuid = GuidText(mat->Id());
 
-    // User 2 (scene->asset): a scene whose MeshComponent Ref carries the texture's guid (the
-    // collector reports bound ids - the referenced TYPE is irrelevant to the edge).
+    // The second user, a scene to asset edge: a scene whose MeshComponent Ref carries the
+    // texture's guid. The collector reports bound ids, so the referenced type does not matter to
+    // the edge.
     String sceneGuid;
     {
         scene::Scene authored(DefaultAllocator(), u8"level");
@@ -252,7 +254,7 @@ TEST_CASE("integration.mcp: project_health - the soundness sweep finds what brok
     CHECK(intact.Get(u8"dirty").AsNumber() >= 2.0);
     CHECK(intact.Get(u8"danglingRefs").Count() == 0);
 
-    // An empty sound cue is a WARNING (reported in emptyCues), not breakage - it is a valid,
+    // An empty sound cue is a warning, reported in emptyCues, and not breakage: it is a valid,
     // buildable draft, so `sound` stays true. A cue with a clip assigned is not flagged.
     auto* emptyCue = root->CreateInstance(u8"silence", pipeline::SoundCueAsset::StaticType());
     {
@@ -262,7 +264,7 @@ TEST_CASE("integration.mcp: project_health - the soundness sweep finds what brok
     auto* filledCue = root->CreateInstance(u8"footstep", pipeline::SoundCueAsset::StaticType());
     {
         pipeline::SoundCueAsset asset;
-        asset.clipIds[0] = tex->Id(); // any non-nil guid = "a clip is assigned"
+        asset.clipIds[0] = tex->Id(); // any non-nil guid means a clip is assigned
         REQUIRE(filledCue->WriteObject(asset).IsOk());
     }
     JsonValue withCues = UsesCallOk(server, u8"project_health", UsesObj());
@@ -336,8 +338,9 @@ TEST_CASE("integration.mcp: project_health - the soundness sweep finds what brok
     CHECK(healed.Get(u8"danglingRefs").Count() == 0);
 }
 
-// Sedulous ac63071d: asset_delete, the Assets browser's Delete for an agent. Refused while
-// anything uses the asset (by asset_uses' own scan, the refusal naming the users), unless forced.
+// asset_delete, the Assets browser's Delete for an agent. It is refused while anything uses the
+// asset, found by the same scan asset_uses runs, and the refusal names the users; forcing it
+// deletes anyway.
 TEST_CASE("integration.mcp: asset_delete - refused while used, unless forced")
 {
     std::error_code ec;

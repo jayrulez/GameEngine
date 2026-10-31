@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A surface shader renders as the engine's own does: the built-in PBR written as a lit surface
-// shader (Data/Tests/Shaders/surface_pbr), cooked by the shader pipeline into its forward, depth
-// and pick programs, draws a lit, windy sphere casting its shadow on a ground the same as
-// `forward` draws them, on REAL GPU backends. Measured identical on Vulkan and WebGPU (2026-10-12);
-// the test allows a rounding step, since the two programs compute the same lighting in a different
-// order (the surface samples every texture before the cut-out test) and another driver may round
-// the last bit differently, nothing more.
+// A surface shader renders as the engine's own shaders do. The built-in PBR written as a lit
+// surface shader (Data/Tests/Shaders/surface_pbr), cooked by the shader pipeline into its forward,
+// depth and pick programs, draws a lit, windy sphere casting its shadow on a ground the same as
+// `forward` draws them, on real GPU backends. The test allows a rounding step and nothing more:
+// the two programs compute the same lighting in a different order (the surface samples every
+// texture before the cut-out test), and a driver may round the last bit differently.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -46,17 +45,18 @@ namespace
     constexpr u32 kSize = 160;
     constexpr StringView kSurfaceName = u8"surface_pbr";
 
-    // The surface PBR's programs, cooked once (every variant, as the shader cook proves them).
+    // The surface PBR's programs, cooked once with every variant, as the shader cook checks them.
     struct SurfacePrograms
     {
         bool ok = false;
         Array<pipeline::ShaderCheckProgram> programs;
-        Array<shaders::ShaderProperty> properties; // its properties block's table: its materials' layout
+        Array<shaders::ShaderProperty> properties; // the properties block's table, which is its materials' layout
     };
 
-    // `timedAlpha`: the cut-out also reads Time() (the depth and pick views' clock), through a
-    // factor that is always 1 but that the compiler cannot fold, as a dissolve does; otherwise the
-    // depth pixel stage reads nothing of the view's buffer and its layout goes untested.
+    // `timedAlpha` makes the cut-out also read Time(), the clock of the depth and pick views,
+    // through a factor that is always 1 but that the compiler cannot fold, as a dissolve does.
+    // Otherwise the depth pixel stage reads nothing from the view's buffer and its layout goes
+    // untested.
     SurfacePrograms CookSurfacePbr(bool timedAlpha = false)
     {
         SurfacePrograms out;
@@ -99,7 +99,7 @@ namespace
         }
         REQUIRE(check.IsOk());
         // The engine's vertex stages sway every surface shader by its material's Wind group, so its
-        // programs declare WIND (Specs/wind-for-every-shader.md, rule 4).
+        // programs declare WIND.
         REQUIRE_FALSE(check.programs.IsEmpty());
         CHECK(shaders::HasFlag(check.programs[0].vertexMask, shaders::ShaderFlags::Wind));
         out.properties = check.block.properties;
@@ -108,9 +108,9 @@ namespace
         return out;
     }
 
-    // The forward PBR material the scene uses and the same values on the surface PBR, laid out by
-    // its properties block (forward's, at forward's offsets); both sway by the same Wind group,
-    // through the engine's vertex stages, which both programs' WIND variants run.
+    // The forward PBR material the scene uses, or the same values on the surface PBR laid out by
+    // its properties block (the same properties at forward's offsets). Both sway by the same Wind
+    // group through the engine's vertex stages, which both programs' WIND variants run.
     RefPtr<materials::Material> PbrMaterial(StringView name, Float4 color, f32 metallic,
                                             f32 roughness, bool surface, const SurfacePrograms& cooked,
                                             const shaders::ShaderEffect& wind, f32 windStrength)
@@ -159,7 +159,7 @@ namespace
         m->SetDefaultFloat(u8"Wind.Strength", windStrength);
         m->SetDefaultFloat(u8"Wind.Speed", 1.0f);
         m->SetDefaultFloat(u8"Wind.Height", 0.5f);
-        // Laid out as forward's: the values mean the same on both.
+        // Laid out as forward lays it out, so the values mean the same on both.
         REQUIRE(m->FindProperty(u8"EmissiveColor") != nullptr);
         CHECK(m->FindProperty(u8"EmissiveColor")->offset == 32u);
         CHECK(m->FindProperty(u8"AlphaCutoff")->offset == 56u);
@@ -204,7 +204,7 @@ namespace
                                               shaders::ShaderFlags::None) != nullptr);
                 if (cutOut)
                 {
-                    // The cut-out's own depth pixel stage: what the shadow and the prepass run.
+                    // The cut-out's own depth pixel stage, which the shadow and the prepass run.
                     CHECK(shaderSystem.GetVariant(u8"surface_pbr.depth", shaders::ShaderStage::Fragment,
                                                   shaders::ShaderFlags::AlphaTest) != nullptr);
                 }
@@ -447,9 +447,10 @@ TEST_CASE("surface shader: the built-in PBR as a surface renders as forward does
 }
 
 // A masked surface's depth and pick pixel stages run its Surface() at the view's camera and time,
-// read from the shadow view's buffer: the layout must give that buffer to the pixel stage too.
-// Vulkan with validation on, as the gallery's dissolve found it (a validation error, tolerated by
-// the driver; WebGPU refuses such a pipeline). The cut ball is gone, and so is its shadow.
+// read from the shadow view's buffer, so the layout must give that buffer to the pixel stage too.
+// The test runs Vulkan with validation on: a missing binding is a validation error that the
+// driver tolerates, while WebGPU refuses such a pipeline. The cut ball is gone, and so is its
+// shadow.
 TEST_CASE("surface shader: a masked surface's shadow runs its cut-out, under validation")
 {
 #ifdef OPTION_HAS_VULKAN

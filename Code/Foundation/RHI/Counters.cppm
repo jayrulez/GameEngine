@@ -4,7 +4,7 @@
 // RHI - :counters partition
 //
 // What a device has recorded since it was made and the GPU memory it holds now
-// (Device::Counters), for the profiler's counters (Specs/profiler.md, P2). Each backend keeps a
+// (Device::Counters), for the profiler's counters. Each backend keeps a
 // DeviceCounterBlock and bumps it where it records and allocates; the block is plain atomics, so
 // encoders on any recording thread (bundles are built on workers) may bump it. Relaxed: they
 // are tallies, nothing is published through them.

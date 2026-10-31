@@ -81,7 +81,7 @@ TEST_CASE("shell.desktop: SDL3 shell creates a window and reports state")
     CHECK(native.system == WindowSystem::Unknown);
 #endif
 
-    shell.ProcessEvents(); // pump (no pending events) - must not change state
+    shell.ProcessEvents(); // pump (no pending events): must not change state
     CHECK(shell.IsRunning());
 }
 
@@ -107,7 +107,7 @@ TEST_CASE("shell.desktop: a window-close event stops the shell")
 }
 
 // On Wayland a window's new state takes effect only with the app's next frame; an app that skips
-// idle frames hears that one is wanted (a sandbox left idle took no pointer until resized).
+// idle frames hears that one is wanted (otherwise a window left idle takes no pointer until resized).
 TEST_CASE("shell.desktop: an exposed window asks for a frame")
 {
     SDL3Shell shell(DefaultAllocator());
@@ -209,7 +209,7 @@ TEST_CASE("shell.desktop: keyboard events drive double-buffered key state")
         SDL_PushEvent(&e);
     };
 
-    // Frame 1: key goes down -> Down and Pressed this frame.
+    // Frame 1: the key goes down, so Down and Pressed this frame.
     pushKey(true);
     shell.ProcessEvents();
     CHECK(kb->IsKeyDown(KeyCode::A));
@@ -221,7 +221,7 @@ TEST_CASE("shell.desktop: keyboard events drive double-buffered key state")
     CHECK(kb->IsKeyDown(KeyCode::A));
     CHECK_FALSE(kb->IsKeyPressed(KeyCode::A));
 
-    // Frame 3: key goes up -> Released this frame, no longer down.
+    // Frame 3: the key goes up, so Released this frame and no longer down.
     pushKey(false);
     shell.ProcessEvents();
     CHECK_FALSE(kb->IsKeyDown(KeyCode::A));
@@ -412,13 +412,13 @@ TEST_CASE("shell.desktop: window geometry accessors + global mouse are callable"
     IWindow* w = shell.MainWindow();
 
     // Under the dummy driver the manager may not honor an exact OS position, so we don't assert
-    // coordinates - only that the accessors are safe and content scale is positive (our impl floors
+    // coordinates, only that the accessors are safe and content scale is positive (our impl floors
     // SDL's pre-show 0 to 1.0).
     (void)w->X();
     (void)w->Y();
     CHECK(w->ContentScale() > 0.0f);
 
-    // Atomic move / resize must not crash; SetSize updates the locally-cached reported size.
+    // Atomic move and resize must not crash; SetSize updates the locally-cached reported size.
     w->SetPosition(100, 120);
     w->SetSize(320u, 240u);
     CHECK(w->Width() == 320u);

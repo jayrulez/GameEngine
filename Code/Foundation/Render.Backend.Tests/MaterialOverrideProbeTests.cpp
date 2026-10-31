@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// MATERIAL OVERRIDE probe on REAL devices: three cards share one grey material and the middle one
+// Material override probe on real devices: three cards share one grey material and the middle one
 // overrides its BaseColor (MeshRenderData::overrides, a mesh's own material properties). The middle
 // card turns red while its neighbours stay grey (the override is its own, not the material's);
 // changing the override's value (its version) turns it green; clearing it brings it back to grey,
 // like its neighbours. Over frames on one renderer, so the instance it keeps per mesh and slot is
-// re-applied, not rebuilt. Vulkan + WebGPU.
+// re-applied, not rebuilt. Vulkan and WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

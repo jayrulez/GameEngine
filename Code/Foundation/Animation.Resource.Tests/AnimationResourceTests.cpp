@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Skeleton + clip resources: cook (capture -> source -> content DB), then build back through the
-// ResourceManager via the factory and verify the runtime types round-trip. Mirrors the mesh
-// resource test (full content-DB round-trip).
+// Skeleton and clip resources: cook (capture into a source, then into the content DB), then build
+// back through the ResourceManager via the factory and check the runtime types round-trip, a full
+// content-DB round trip like the mesh resource test's.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -29,7 +29,7 @@ namespace
         RemoveDirectory(u8"scratch_anim_res_db");
     }
 
-    // A 2-bone chain root(0) -> child(1), child translated +Y.
+    // A two-bone chain: root(0) and child(1) under it, the child translated +Y.
     void BuildChain(Skeleton& s)
     {
         s.Bones()[0].index = 0;
@@ -154,8 +154,8 @@ TEST_CASE("animation clip resource: a run past the keyframe pool refuses to buil
     RegisterSerializable<AnimationClipSource>();
     GlobalTypeRegistry().Register(AnimationClip::StaticType());
 
-    // A record whose track table claims more keys than the pool holds must fail closed
-    // (it used to index the pool unbounded).
+    // A record whose track table claims more keys than the pool holds must fail closed rather
+    // than index past the pool.
     AnimationClipSource overrun;
     overrun.trackBone.PushBack(0);
     overrun.trackKind.PushBack(0);
@@ -184,7 +184,7 @@ TEST_CASE("animation clip resource: a run past the keyframe pool refuses to buil
     CHECK(clip.PositionTracks().Size() == 1);
     CHECK(clip.PositionTracks()[0]->Keyframes().Size() == 2);
 
-    // And through the manager the malformed record binds NOTHING rather than a corrupt clip.
+    // And through the manager the malformed record binds nothing rather than a corrupt clip.
     RemoveTree();
     NativeFileSystem mount(u8"scratch_anim_res_db", DefaultAllocator());
     Guid id;

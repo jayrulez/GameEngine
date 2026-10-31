@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - a dock layout saved and restored (D2 of Specs/gui-lab-evolution-3.md): through the
-// engine's text serializer and back whole; another version refused; a broken layout refused and
-// the current one left as it was; panels not registered kept as placeholders, registered ones not
-// named put at their default place; a floating window off every screen brought back onto one.
+// GUI.Docking - saving and restoring a dock layout. A layout goes through the engine's text
+// serializer and comes back whole. A payload of another version is refused. A broken layout is
+// refused and the current one is left as it was. Panels that are not registered are kept as
+// placeholders, and registered panels the layout does not name go to their default place. A
+// floating window off every screen is brought back onto one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -30,7 +31,7 @@ namespace
         writer.GetOutput(text);
         return text;
     }
-    // The text read into `out`; whether it read.
+    // Reads `text` into `out`; returns whether it read.
     bool Load(core::StringView text, DockLayoutDocument& out)
     {
         xml::XmlDocument doc(core::DefaultAllocator());
@@ -40,7 +41,7 @@ namespace
         out.Serialize(reader);
         return reader.IsOk();
     }
-    // `text` with each `from` made `to`; `count` says how many there were.
+    // Returns `text` with each `from` replaced by `to`; `count` receives how many there were.
     core::String Replaced(core::StringView text, core::StringView from, core::StringView to, core::usize* count = nullptr)
     {
         core::String out;
@@ -89,7 +90,7 @@ TEST_CASE("dock document: a layout through text and back, whole")
     CHECK(l.FindHidden(SV(u8"inspector")) != nullptr);
     CHECK(l.FindSurface(l.SurfaceOf(l.StackOf(SV(u8"profiler"))))->Bounds.x == doctest::Approx(1500.0f));
     CHECK(Save(loaded) == text); // nothing lost or changed on the way
-    // Operations go on from where it was: new ids do not collide.
+    // Operations continue from where the saved layout was: new ids do not collide.
     DockLayout again = l;
     CHECK(again.InsertTab(SV(u8"assets"), again.StackOf(SV(u8"hierarchy"))).Ok());
     CHECK(again.CheckInvariants(&why));
@@ -116,7 +117,7 @@ TEST_CASE("dock document: a broken layout is refused, and the current one stays"
     // A panel docked in two stacks in the text.
     core::usize found = 0;
     const core::String broken = Replaced(was.AsView(), SV(u8"<string>hierarchy</string>"), SV(u8"<string>scene</string>"), &found);
-    REQUIRE(found >= 1u); // its stack's, and a closed panel's neighbour
+    REQUIRE(found >= 1u); // in its stack, and as a closed panel's neighbour
     DockLayoutDocument read;
     REQUIRE(Load(broken.AsView(), read)); // it reads, but does not hold together
     const DockOutcome adopted = current.Adopt(read.Layout, {});
@@ -124,7 +125,8 @@ TEST_CASE("dock document: a broken layout is refused, and the current one stays"
     CHECK(adopted.Refused == core::String(u8"a panel docked twice"));
     saved.Layout = current;
     CHECK(Save(saved) == was); // unchanged
-    // Ids past the next one made (a file edited by hand): a new node would collide.
+    // Ids past the next one to be made (a file edited by hand) are refused: a new node would
+    // collide.
     const core::String behind = Replaced(was.AsView(), SV(u8"<u32 name=\"nextNode\">8</u32>"), SV(u8"<u32 name=\"nextNode\">3</u32>"), &found);
     REQUIRE(found == 1u);
     REQUIRE(Load(behind.AsView(), read));
@@ -145,13 +147,13 @@ TEST_CASE("dock document: placeholders kept, registered panels it does not name 
     };
     const core::Rectangle screens[] = {core::Rectangle{0.0f, 0.0f, 1280.0f, 720.0f}};
     REQUIRE(layout.Adopt(read.Layout, core::Span<const DockDefault>(known, 3), core::Span<const core::Rectangle>(screens, 1)).Ok());
-    CHECK(layout.StackOf(SV(u8"hierarchy")) != kNoDock); // not registered: kept, a placeholder
+    CHECK(layout.StackOf(SV(u8"hierarchy")) != kNoDock); // not registered: kept as a placeholder
     CHECK(layout.StackOf(SV(u8"documents")) == layout.CentralStack());
     const DockNodeId assets = layout.StackOf(SV(u8"assets"));
     REQUIRE(assets != kNoDock);
     CHECK(layout.FindNode(layout.FindSurface(layout.MainSurface())->Root)->Children.Back() == assets); // along the bottom
     CHECK(layout.FindHidden(SV(u8"inspector")) != nullptr); // closed stays closed
-    // The profiler floated at 1500 across, off the one screen: back on it.
+    // The profiler floated at x 1500, off the only screen, so it comes back onto it.
     const DockSurface* floating = layout.FindSurface(layout.SurfaceOf(layout.StackOf(SV(u8"profiler"))));
     REQUIRE(floating != nullptr);
     CHECK(floating->Bounds.x + floating->Bounds.width <= 1280.0f);

@@ -3,22 +3,22 @@
 
 // Pipeline::Cook - the `editor.cook` module.
 //
-// The incremental cook driver. One rule decides
-// everything: an asset's RECIPE HASH = H(source envelope bytes, each source file's content,
-// builder version, recipe of each content-READ dependency), folded ORDERED into a single u64 -
-// dirty <=> product missing or hash mismatch. Deterministic across machines/checkouts (content
-// hashes decide; stat (size,mtime) is only a memo to skip re-hashing untouched files, persisted
-// in the pipeline DB at .cache/cook.db).
+// The incremental cook driver. One rule decides everything: an asset's recipe hash is
+// H(source envelope bytes, each source file's content, builder version, recipe of each
+// content-read dependency), folded in order into a single u64, and an asset is dirty when its
+// product is missing or the hash does not match. Deterministic across machines and checkouts:
+// content hashes decide, and stat (size, mtime) is only a memo to skip re-hashing untouched
+// files, persisted in the pipeline DB at .cache/cook.db.
 //
-// Plan(): walk the source DB -> route instances to builders -> compute recipes (memoized file
-// hashes, read-dep chaining with cycle guard) -> dirty set in dependency order + orphan sweep
-// (records whose source is gone -> their products are deleted; Traktor's missing piece).
-// Execute(): cook dirty items - parallel within dependency levels on the JobSystem - writing
-// products into the cooked DB with PRODUCT GUID = SOURCE GUID (user-confirmed), then persist
-// the pipeline DB. A failed build keeps the last good product and marks the record failed.
+// Plan() walks the source DB, routes instances to builders, and computes recipes (memoized file
+// hashes, read-dependency chaining with a cycle guard), giving the dirty set in dependency order
+// and an orphan sweep (records whose source is gone have their products deleted).
+// Execute() cooks the dirty items, in parallel within dependency levels on the JobSystem,
+// writing products into the cooked DB with the product guid equal to the source guid, then
+// persists the pipeline DB. A failed build keeps the last good product and marks the record failed.
 //
 // The pipeline DB is one binary file, written whole through the cache mount; corruption or a
-// version mismatch degrades to a full re-plan - never wrong output, only wasted work.
+// version mismatch degrades to a full re-plan: never wrong output, only wasted work.
 
 module;
 #include "Core/Prelude.h"
@@ -113,7 +113,7 @@ namespace pipeline
         {
             m_records.Clear();
             m_storage.Clear();
-        } // corrupt -> full re-plan
+        } // corrupt: full re-plan
     }
 
     Status CookDb::Save(vfs::IFileSystem& cache, StringView name) const
@@ -208,7 +208,7 @@ namespace pipeline
             }
         }
         SortByLevel(plan.dirty);
-        plan.reachable = Move(visited); // the full closure (roots + transitive deps)
+        plan.reachable = Move(visited); // the full closure (roots and transitive deps)
         return plan;
     }
 
@@ -262,10 +262,9 @@ namespace pipeline
         item.asset = instance->ReadObject();
         if (item.asset.Get() == nullptr)
         {
-            // Deserialization failed - an unknown type identity or a source written under
+            // Deserialization failed: an unknown type identity, or a source written under
             // another data version (the engine supports only the current one). Print the
-            // STORED identity + guid so the failure is debuggable from the log alone (user ask
-            // 2026-08-12).
+            // stored identity and guid so the failure is debuggable from the log alone.
             LOG_WARNING(u8"Cook",
                                  u8"'{}' failed to deserialize - stored type '{}'::'{}', guid {} "
                                  u8"(unknown type name or a stale data version; delete + re-import "
@@ -347,9 +346,9 @@ namespace pipeline
         {
             return false; // variant products (textures) must cook per target
         }
-        // The host must hold a current, non-failed product with the SAME recipe. Because invariant
-        // builders are unsalted, matching recipes mean identical inputs - so the host bytes are
-        // exactly what we would cook. (An invariant product that READS variant content gets a
+        // The host must hold a current, non-failed product with the same recipe. Because invariant
+        // builders are unsalted, matching recipes mean identical inputs, so the host bytes are
+        // exactly what we would cook. (An invariant product that reads variant content gets a
         // salted read-dep recipe, so its hashes differ here and it correctly recooks.)
         const CookRecord* hostRec = (m_hostRecords != nullptr) ? m_hostRecords->Find(item.source)
                                                                : nullptr;
@@ -392,7 +391,7 @@ namespace pipeline
                 ++end;
             }
 
-            // Copy-forward items were already filled in PrepareProducts (main thread) - they skip
+            // Copy-forward items were already filled in PrepareProducts (main thread); they skip
             // the worker build entirely and count as succeeded.
             if (m_jobs != nullptr && end - begin > 1)
             {
@@ -523,7 +522,7 @@ namespace pipeline
 
         u64 h = HashBytes(nullptr, 0);
 
-        // 1. The source envelope (import settings + identity + embedded stream directory).
+        // 1. The source envelope (import settings, identity, embedded stream directory).
         {
             UniquePtr<IStream> envelope = instance.OpenEnvelope();
             const u64 envelopeHash =
@@ -531,7 +530,7 @@ namespace pipeline
             h = detail::FoldHash(h, 'E', envelopeHash);
         }
 
-        // 2. Source files: the implicit fileName + declared extras, in declaration order.
+        // 2. Source files: the implicit fileName and declared extras, in declaration order.
         const CookRecord* previous = m_db.Find(instance.Id());
         Array<CookFileMemo> memos;
         if (!asset.fileName.IsEmpty())
@@ -555,8 +554,8 @@ namespace pipeline
         // 3. Builder version.
         h = detail::FoldHash(h, 'V', builder.Version());
 
-        // 3b. Platform salt: ONLY variant builders are salted by the target, so
-        // the SAME source produces a distinct product per target (BC vs ASTC) while invariant
+        // 3b. Platform salt: only variant builders are salted by the target, so
+        // the same source produces a distinct product per target (BC or ASTC) while invariant
         // products keep a target-independent recipe and copy forward unchanged.
         if (builder.Variance() == BuildVariance::PlatformVariant)
         {
@@ -686,9 +685,9 @@ namespace pipeline
 
         if (content::Instance* existing = m_cookedDb->GetInstance(item.source))
         {
-            // Identity guard: a guid collision across generations (e.g. a replayed guid
-            // sequence) can leave this guid on a DIFFERENT product type. Writing this
-            // item's product into it would cross-type the envelope - readers then
+            // Identity guard: a guid collision across generations (a replayed guid
+            // sequence, say) can leave this guid on a different product type. Writing this
+            // item's product into it would cross-type the envelope, and readers would then
             // deserialize garbage. Recreate it with the right type instead.
             if (existing->TypeName() == typeName)
             {
@@ -703,10 +702,10 @@ namespace pipeline
         }
         content::Group* group = MirrorGroup(source->OwningGroup());
 
-        // Same guard for a NAME collision: CreateInstanceWithId returns an existing
-        // same-named instance REGARDLESS of its id - a stale product from a previous
+        // Same guard for a name collision: CreateInstanceWithId returns an existing
+        // same-named instance regardless of its id, so a stale product from a previous
         // source generation (not yet swept) would silently keep its old guid, breaking
-        // the product-guid == source-guid invariant. Remove it first.
+        // the invariant that a product's guid is its source's. Remove it first.
         if (content::Instance* stale = group->GetInstance(source->Name()))
         {
             if (stale->Id() != item.source)
@@ -732,7 +731,7 @@ namespace pipeline
         ctx.source = source;
         ctx.output = product;
         ctx.db = m_cookedDb;      // cross-refs resolve against already-cooked products
-        ctx.sourceDb = m_sourceDb; // cross-asset SOURCE reads (envelopes + raw sidecars)
+        ctx.sourceDb = m_sourceDb; // cross-asset source reads (envelopes and raw sidecars)
         ctx.target = &m_target;   // the export target being produced
         ctx.jobs = m_jobs;        // data-parallel work inside the build (null = inline)
         const Stopwatch buildClock = Stopwatch::StartNew();
@@ -740,7 +739,7 @@ namespace pipeline
         LOG_INFO(u8"Cook", u8"'{}' built in {} ms", item.path,
                  static_cast<i64>(buildClock.Elapsed().AsMilliseconds()));
 
-        // Record: recipe + memoized file hashes + deps; failures keep the last good
+        // Record the recipe, memoized file hashes and deps; failures keep the last good
         // product but stay dirty (failed record never satisfies a clean check).
         ScopedLock lock(m_recordMutex);
         CookRecord& record = m_db.Upsert(item.source);
@@ -756,9 +755,9 @@ namespace pipeline
         {
             LOG_ERROR(u8"Cook", u8"'{}' failed to cook", item.path);
         }
-        // Release the deserialized source NOW: keeping every item's object (full mesh vertex
-        // blobs, texture tables) alive until the whole cook finished runs large scenes
-        // (Sponza) out of memory.
+        // Release the deserialized source now: keeping every item's object (full mesh vertex
+        // blobs, texture tables) alive until the whole cook finishes runs large scenes
+        // out of memory.
         item.asset = RefPtr<ISerializable>{};
         return built.IsOk();
     }

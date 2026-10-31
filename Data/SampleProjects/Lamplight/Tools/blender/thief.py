@@ -13,7 +13,7 @@ The clips, each a loop whose stride matches the speed Thief.as moves at, so the 
 - Run (0.6 s): leaning in, two steps of 1.35 m, 4.5 m/s.
 - Crouch (2 s): crouched still, breathing.
 
-The figure, its rig and the gait machinery are figure.py's, shared with the guards. The arms are
+The figure, its rig and the gait machinery come from figure.py, shared with the guards. The arms are
 upper arm, forearm and hand: the chain the two-bone IK puts on a lock (the hand's head reaches the
 target).
 """

@@ -4,29 +4,30 @@
 // GUI - `foundation.gui.viewport`: Viewport, a widget that shows content drawn into a colour
 // target (and depth) of its own: a 3D scene, a game in an editor's panel.
 //
-// The application fills OnRender, which records into the targets on the frame's encoder (the
-// barriers around it are the widget's). The widget is hosted content (GUI.Hosting's IHostedContent):
-// handed to the host once (HostIn), it is bound to the renderer of the window its node is in and
-// bound again when the node moves to another window, its targets follow the node's size in that
-// window's device pixels (or a fixed resolution), its drawing is recorded on that window's frame
-// before the GUI samples the colour target, and its input surface is placed over the node, so the
-// content's keyboard and mouse (Mouse(), Keyboard(), Touch()) are gated to it: a camera reads them
-// while the node is hovered or focused (IsActive), and a drag begun in it keeps them past its edge.
+// The application fills OnRender, which records into the targets on the frame's encoder; the
+// widget places the barriers around it. The widget is hosted content (GUI.Hosting's
+// IHostedContent). Once handed to the host (HostIn), it binds to the renderer of the window its
+// node is in, and binds again when the node moves to another window. Its targets follow the node's
+// size in that window's device pixels, or use a fixed resolution. Its drawing is recorded on that
+// window's frame before the GUI samples the colour target. Its input surface is placed over the
+// node, so the content's keyboard and mouse (Mouse(), Keyboard(), Touch()) are gated to it: a
+// camera reads them while the node is hovered or focused (IsActive), and a drag begun in it keeps
+// them past its edge.
 //
-// Content can also be drawn outside OnRender, by a renderer with a frame of its own that runs
-// before the GUI's (an editor's scene renderer, one bracket for every page): it imports the colour
-// target in ColorState(), leaves it ready to sample and says so with SetColorState(ShaderRead);
-// the widget then keeps what it drew.
+// Content can also be drawn outside OnRender, by a renderer with a frame of its own that runs before
+// the GUI's (an editor's scene renderer, one bracket for every page). That renderer imports the
+// colour target in ColorState(), leaves it ready to sample, and reports this with
+// SetColorState(ShaderRead); the widget then keeps what it drew.
 //
-// From foundation.ui's ViewportView (UI.Viewport): its fit (core::ContentFit, for the picture and
-// the pointer alike), its formats (RGBA16Float and Depth32Float by default), a fixed resolution, a
-// clear while there is nothing defined to show, the colour target's state for a renderer that owns
-// its transitions. A game in a panel takes every key while focused through the
-// node's SetCapturesAllKeys (its release chord, Shift+F1 by default, frees it). For a game in a
-// panel (the editor's Game tab) it also carries: the colour target's sRGB or UNORM twin view (the
-// game's screen UI blends encoded values through it), the resolution the content draws at inside
-// the targets (the pointer maps into that), hosted text input (the game's own text field asks for
-// the window's text input through the focused node), and a clear once content drawn outside stops.
+// The widget has a fit (core::ContentFit, used for the picture and the pointer alike), its formats
+// (RGBA16Float and Depth32Float by default), an optional fixed resolution, a clear while there is
+// nothing defined to show, and the colour target's state for a renderer that owns its transitions.
+// A game in a panel takes every key while focused, through the node's SetCapturesAllKeys; its
+// release chord (Shift+F1 by default) frees the keys. For a game in a panel (the editor's Game tab)
+// the widget also provides: the colour target's sRGB or UNORM twin view, through which the game's
+// screen UI blends encoded values; the resolution the content draws at inside the targets, which
+// the pointer maps into; hosted text input, where the game's own text field asks for the window's
+// text input through the focused node; and a clear once content drawn from outside stops.
 
 module;
 #include "Core/Prelude.h"
@@ -56,19 +57,19 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(Viewport, UIWidget)
     public:
-        /// Records the content into the targets (a pass on ColorView() and DepthView(), cleared to
-        /// LinearClearColor()); the targets are in their render states while it runs.
+        /// Records the content into the targets, as a pass on ColorView() and DepthView() cleared to
+        /// LinearClearColor(). The targets are in their render states while it runs.
         using RenderHandler = Function<void(Viewport& viewport, rhi::CommandEncoder& encoder, i32 frameIndex)>;
         RenderHandler OnRender;
-        /// The targets were made again, at this size (a camera's aspect follows it).
+        /// Called when the targets are made again, with their new size (a camera's aspect follows it).
         Function<void(u32 width, u32 height)> OnResized;
-        /// What shows where the content draws nothing, as authored (sRGB).
+        /// The colour shown where the content draws nothing, as authored (sRGB).
         Color ClearColor{0.347f, 0.347f, 0.377f, 1.0f};
 
         Viewport()
         {
             SetTag(core::StringView(u8"viewport"));
-            SetTabFocusable(true); // a click focuses it: the content then has the keyboard
+            SetTabFocusable(true); // a click focuses it, and the content then has the keyboard
         }
         ~Viewport() override
         {
@@ -79,7 +80,8 @@ export namespace foundation::gui
         Viewport(const Viewport&) = delete;
         Viewport& operator=(const Viewport&) = delete;
 
-        /// Hosted by `host` from now on: bound, placed and drawn each frame while it is in a window.
+        /// Hands the widget to `host`, which from now on binds, places and draws it each frame while
+        /// it is in a window.
         void HostIn(GuiHost& host)
         {
             if (m_host == &host)
@@ -94,14 +96,15 @@ export namespace foundation::gui
         {
             return rhi::ClearColor{SrgbToLinear(ClearColor.r), SrgbToLinear(ClearColor.g), SrgbToLinear(ClearColor.b), ClearColor.a};
         }
-        /// How the targets' picture fits the node (and the pointer maps back into it).
+        /// Returns how the targets' picture fits the node, which also decides how the pointer maps
+        /// back into it.
         [[nodiscard]] FitMode GetFitMode() const noexcept { return m_fit; }
         void SetFitMode(FitMode mode)
         {
             m_fit = mode;
             Invalidate();
         }
-        /// The targets' formats, which the content's pipelines are built for.
+        /// Returns the targets' formats, which the content's pipelines are built for.
         [[nodiscard]] rhi::TextureFormat ColorFormat() const noexcept { return m_colorFormat; }
         [[nodiscard]] rhi::TextureFormat DepthFormat() const noexcept { return m_depthFormat; }
         void SetFormats(rhi::TextureFormat color, rhi::TextureFormat depth)
@@ -113,7 +116,7 @@ export namespace foundation::gui
             if (m_width > 0 && m_height > 0)
                 Resize(m_width, m_height);
         }
-        /// A resolution of its own, whatever the node's size (0 by 0: the node's device pixels).
+        /// Sets a fixed resolution, whatever the node's size; 0 by 0 uses the node's device pixels.
         void SetFixedResolution(u32 width, u32 height)
         {
             m_fixedWidth = width;
@@ -122,10 +125,10 @@ export namespace foundation::gui
                 Resize(width, height);
         }
 
-        /// The resolution the content draws at INSIDE the targets, fitted by `fit` (and turned by
-        /// `rotation`), when it draws its own fitted picture (a game at its render resolution,
-        /// letterboxed in a target the node's size): the pointer then maps into that resolution.
-        /// 0 by 0: the targets' own.
+        /// Sets the resolution the content draws at inside the targets, fitted by `fit` and turned by
+        /// `rotation`, for content that draws its own fitted picture (a game at its render
+        /// resolution, letterboxed in a target of the node's size). The pointer then maps into that
+        /// resolution. 0 by 0 uses the targets' own.
         void SetContentResolution(u32 width, u32 height, FitMode fit, ContentRotation rotation = ContentRotation::None) noexcept
         {
             m_contentWidth = width;
@@ -133,38 +136,41 @@ export namespace foundation::gui
             m_contentFit = fit;
             m_contentRotation = rotation;
         }
-        /// Whether the content it hosts has a text field taking text (a game's UI): the window's
-        /// text input then follows, this node being the GUI's focused one. Set each frame by the
-        /// content's owner.
+        /// Sets whether the hosted content has a text field taking text (a game's UI). While it does,
+        /// the window's text input follows it, since this node is the GUI's focused one. The
+        /// content's owner sets this each frame.
         void SetHostedTextInputWanted(bool wanted) noexcept { m_hostedTextInput = wanted; }
         [[nodiscard]] bool WantsTextInput() const override { return m_hostedTextInput; }
-        /// Content drawn outside stopped (a game ended): the picture is cleared to ClearColor on the
-        /// next frame rather than keeping its last one.
+        /// Reports that content drawn from outside has stopped (a game ended). The picture is cleared
+        /// to ClearColor on the next frame rather than keeping its last one.
         void ClearPicture() noexcept { m_clearPending = true; }
 
         [[nodiscard]] bool IsReady() const noexcept { return m_colorView != nullptr && m_depthView != nullptr; }
-        /// The colour target in its sRGB or UNORM twin format (null: its format has none): what
-        /// draws encoded values into an sRGB target without the hardware encoding them again.
+        /// Returns the colour target viewed in its sRGB or UNORM twin format, or null when its format
+        /// has none. Drawing through it writes encoded values into an sRGB target without the
+        /// hardware encoding them again.
         [[nodiscard]] rhi::TextureView* ColorAlternateView() const noexcept { return m_colorAlternateView; }
         [[nodiscard]] rhi::TextureView* ColorView() const noexcept { return m_colorView; }
         [[nodiscard]] rhi::TextureView* DepthView() const noexcept { return m_depthView; }
         [[nodiscard]] rhi::Texture* ColorTexture() const noexcept { return m_colorTexture; }
-        /// The colour target's state: what a renderer drawing it outside OnRender imports it from
-        /// (Undefined once it is made again), and tells the widget it left it in.
+        /// Returns the colour target's state. A renderer drawing it outside OnRender imports it from
+        /// this state (Undefined once it is made again), and reports the state it left it in with
+        /// SetColorState.
         [[nodiscard]] rhi::ResourceState ColorState() const noexcept { return m_colorState; }
         void SetColorState(rhi::ResourceState state) noexcept { m_colorState = state; }
-        /// How many frames it cleared for want of anything to show.
+        /// Returns how many frames it cleared because it had nothing to show.
         [[nodiscard]] u32 ClearCount() const noexcept { return m_clears; }
         [[nodiscard]] u32 RenderWidth() const noexcept { return m_width; }
         [[nodiscard]] u32 RenderHeight() const noexcept { return m_height; }
-        /// The window it is bound to (0: none).
+        /// Returns the window it is bound to, or 0 for none.
         [[nodiscard]] u32 WindowId() const noexcept { return m_windowId; }
 
-        /// The content's input, gated to the node: read it while IsActive().
+        /// The content's input, gated to the node; read it while IsActive().
         [[nodiscard]] shell::IMouse* Mouse() const noexcept { return m_surface ? m_surface->Mouse() : nullptr; }
         [[nodiscard]] shell::IKeyboard* Keyboard() const noexcept { return m_surface ? m_surface->Keyboard() : nullptr; }
         [[nodiscard]] shell::ITouch* Touch() const noexcept { return m_surface ? m_surface->Touch() : nullptr; }
-        /// Whether the content should take input now: the node is hovered or focused.
+        /// Returns whether the content should take input now, which it should while the node is
+        /// hovered or focused.
         [[nodiscard]] bool IsActive() const noexcept { return IsHovered() || IsFocused(); }
 
         // === IHostedContent ===
@@ -176,7 +182,7 @@ export namespace foundation::gui
             {
                 if (m_registered && m_renderer != nullptr)
                 {
-                    m_device->WaitIdle(); // frames in flight sample it through the old one
+                    m_device->WaitIdle(); // wait, because frames in flight sample it through the old renderer's registration
                     m_renderer->UnregisterExternalTexture(m_key.Get());
                     m_registered = false;
                 }
@@ -197,7 +203,7 @@ export namespace foundation::gui
         }
         void Place(Rectangle windowPixels, Rectangle windowUnits, Float2 windowSize) override
         {
-            // The targets follow the node in device pixels, unless the content has a size of its own.
+            // The targets follow the node in device pixels, unless a fixed resolution is set.
             const u32 width = m_fixedWidth > 0 ? m_fixedWidth : static_cast<u32>(Max(1.0f, windowPixels.width + 0.5f));
             const u32 height = m_fixedHeight > 0 ? m_fixedHeight : static_cast<u32>(Max(1.0f, windowPixels.height + 0.5f));
             if (width != m_width || height != m_height || (!IsReady() && m_device != nullptr))
@@ -211,15 +217,16 @@ export namespace foundation::gui
         {
             if (!IsReady())
                 return;
-            // No content of its own: drawn outside (or cleared before), it is ready to sample, unless
-            // that content stopped and asked for a clear.
+            // With no OnRender, a target drawn from outside (or cleared before) is ready to sample,
+            // unless that content stopped and asked for a clear.
             if (!OnRender && m_colorState == rhi::ResourceState::ShaderRead && !m_clearPending)
                 return;
             m_clearPending = false;
             encoder.TransitionTexture(m_colorTexture, m_colorState, rhi::ResourceState::RenderTarget);
             if (!OnRender)
             {
-                // Nothing to draw: the colour target still holds something defined to sample.
+                // With nothing to draw, clear so the colour target still holds something defined to
+                // sample.
                 ++m_clears;
                 rhi::RenderPassDesc pass;
                 rhi::ColorAttachment color;
@@ -246,7 +253,7 @@ export namespace foundation::gui
         shell::InputSurface* HostedSurface() override { return m_surface.Get(); }
 
     protected:
-        /// 256 by 256 when nothing sizes it.
+        /// Asks for 256 by 256 when nothing sizes it.
         [[nodiscard]] Float2 MeasureContent(Float2 available) override
         {
             (void)available;
@@ -261,7 +268,8 @@ export namespace foundation::gui
                 ctx.VG().FillRect(box.ToRectangle(), Color{0.098f, 0.098f, 0.118f, 1.0f}); // not bound yet
                 return;
             }
-            // Live content changes outside the GUI's knowledge: a shown viewport asks for every frame.
+            // Live content changes without the GUI knowing, so a shown viewport asks to be drawn every
+            // frame.
             Invalidate();
             const ContentFit fit{box.ToRectangle(), Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}, m_fit};
             const Rectangle at = fit.DstRect();
@@ -271,9 +279,10 @@ export namespace foundation::gui
         }
 
     private:
-        // The surface over the node, the pointer mapped into the targets, or into the content's own
-        // resolution through its fit; with a fixed resolution too (a phone's screen), in two steps:
-        // the targets fitted into the node, the content into the targets.
+        // Places the input surface over the node, mapping the pointer into the targets, or into the
+        // content's own resolution through its fit. With a fixed resolution too (a phone's screen)
+        // this takes two steps: the targets are fitted into the node, then the content into the
+        // targets.
         void PlaceSurface(Rectangle region)
         {
             m_surface->SetRegion(region);
@@ -294,7 +303,7 @@ export namespace foundation::gui
             const Rectangle drawn = ContentFit{region, targets, m_fit}.DstRect();
             if (m_contentFit == FitMode::Crop)
             {
-                m_surface->SetRegion(drawn); // no bars, a slice: the fit scales evenly
+                m_surface->SetRegion(drawn); // a crop has no bars and shows a slice, so the fit scales evenly
                 return;
             }
             const Rectangle inside = ContentFit{Rectangle{0.0f, 0.0f, targets.x, targets.y}, content, m_contentFit, m_contentRotation}.DstRect();
@@ -313,7 +322,7 @@ export namespace foundation::gui
                 return;
             }
             if (m_colorTexture != nullptr || m_depthTexture != nullptr)
-                m_device->WaitIdle(); // frames in flight sample the old ones
+                m_device->WaitIdle(); // wait, because frames in flight sample the old targets
             if (m_registered && m_renderer != nullptr)
             {
                 m_renderer->UnregisterExternalTexture(m_key.Get());
@@ -324,7 +333,7 @@ export namespace foundation::gui
             m_height = height;
             m_colorState = rhi::ResourceState::Undefined;
             m_depthState = rhi::ResourceState::Undefined;
-            m_key = MakeUnique<image::ImageDataRef>(MemoryAllocator(), width, height); // what the renderer knows it by
+            m_key = MakeUnique<image::ImageDataRef>(MemoryAllocator(), width, height); // the key the renderer knows it by
             rhi::TextureDesc colorDesc = rhi::TextureDesc::RenderTarget(m_colorFormat, width, height, 1, u8"ViewportColor");
             colorDesc.usage = colorDesc.usage | rhi::TextureUsage::CopySrc; // a capture copies it out
             colorDesc.alternateViewFormat = rhi::SrgbTwin(m_colorFormat);
@@ -339,7 +348,7 @@ export namespace foundation::gui
                 rhi::TextureViewDesc alternate{};
                 alternate.format = colorDesc.alternateViewFormat;
                 if (!m_device->CreateTextureView(m_colorTexture, alternate, m_colorAlternateView).IsOk())
-                    m_colorAlternateView = nullptr; // what draws through it draws linear light instead
+                    m_colorAlternateView = nullptr; // without the twin view, content meant for it draws linear light instead
             }
             rhi::TextureDesc depthDesc = rhi::TextureDesc::DepthBuffer(m_depthFormat, width, height, 1, u8"ViewportDepth");
             if (!m_device->CreateTexture(depthDesc, m_depthTexture).IsOk() ||
@@ -389,11 +398,11 @@ export namespace foundation::gui
 
         GuiHost* m_host = nullptr;
         rhi::Device* m_device = nullptr;
-        vg::renderer::VGRenderer* m_renderer = nullptr; // its window's
+        vg::renderer::VGRenderer* m_renderer = nullptr; // the renderer of its window
         UniquePtr<image::ImageDataRef> m_key;
         rhi::Texture* m_colorTexture = nullptr;
         rhi::TextureView* m_colorView = nullptr;
-        rhi::TextureView* m_colorAlternateView = nullptr; // in its sRGB or UNORM twin, if it has one
+        rhi::TextureView* m_colorAlternateView = nullptr; // the colour target in its sRGB or UNORM twin, if it has one
         rhi::Texture* m_depthTexture = nullptr;
         rhi::TextureView* m_depthView = nullptr;
         rhi::ResourceState m_colorState = rhi::ResourceState::Undefined;
@@ -408,7 +417,7 @@ export namespace foundation::gui
         u32 m_fixedHeight = 0;
         u32 m_windowId = 0;
         u32 m_clears = 0;
-        u32 m_contentWidth = 0; // the content's own resolution inside the targets (0: theirs)
+        u32 m_contentWidth = 0; // the content's own resolution inside the targets (0 uses theirs)
         u32 m_contentHeight = 0;
         FitMode m_contentFit = FitMode::Stretch;
         ContentRotation m_contentRotation = ContentRotation::None;

@@ -4,7 +4,6 @@
 /// DX12 implementation of MeshPipeline.
 /// Uses pipeline state stream (ID3D12Device2::CreatePipelineState) since
 /// mesh shader pipelines cannot use the traditional D3D12_GRAPHICS_PIPELINE_STATE_DESC.
-/// Ported from Sedulous.RHI.DX12/DX12MeshPipeline.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -57,7 +56,7 @@ export namespace foundation::rhi::dx12
             alignas(8) u8 streamBuffer[2048]{};
             usize offset = 0;
 
-            // Root signature (manual - pointer type cannot use writeSubobject<T>).
+            // Root signature, written by hand: a pointer type cannot use writeSubobject<T>.
             {
                 offset = (offset + 7) & ~usize(7);
                 std::memcpy(
@@ -84,7 +83,7 @@ export namespace foundation::rhi::dx12
                 writeSubobject(streamBuffer, offset, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_MS, msBC);
             }
 
-            // Task/amplification shader (optional).
+            // Task (amplification) shader, optional.
             if (desc.task.HasValue())
             {
                 if (auto* asMod = static_cast<DxShaderModuleImpl*>(desc.task->module))
@@ -96,7 +95,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Fragment/pixel shader (optional).
+            // Fragment (pixel) shader, optional.
             if (desc.fragment.HasValue())
             {
                 if (auto* psMod = static_cast<DxShaderModuleImpl*>(desc.fragment->shader.module))

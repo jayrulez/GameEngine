@@ -4,9 +4,9 @@
 // UI Toolkit - CLikeLexer implementation (declared in :code_lexer).
 //
 // One configurable scanner covers the C-family languages the editor hosts; language identity
-// lives entirely in the CLikeLexerSpec its OWNER supplies (keyword/type tables + quirk flags:
-// nested block comments, triple-quoted strings, '#' preprocessor lines, char literals).
-// Toolkit ships no language tables - see the layering note in CodeLexer.cppm.
+// lives entirely in the CLikeLexerSpec its owner supplies: keyword and type tables, plus flags for
+// nested block comments, triple-quoted strings, '#' preprocessor lines and char literals.
+// The toolkit ships no language tables (see the layering note in CodeLexer.cppm).
 
 module;
 #include "Core/Prelude.h"

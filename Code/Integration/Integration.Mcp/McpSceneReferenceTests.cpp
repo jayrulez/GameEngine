@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Integration.Mcp - the scene format reference (Documentation/Specs/scene-format-reference.md,
-// P1): the generated schema's joins, the example's round trip through the real reader, the
-// determinism contract, and the live surface every host serves.
+// Integration.Mcp: the scene format reference. Covers the generated schema's links from fields to
+// asset types, the example's round trip through the real reader, the guarantee that generation
+// is deterministic, and the live surface every host serves.
 
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -16,12 +16,12 @@ import foundation.scene.resource;
 import foundation.script.resource;
 import foundation.mcp;
 import pipeline.core;
-import pipeline.importer; // the import framework (a consumer imports it itself)
+import pipeline.importer; // the import framework, which a consumer imports itself
 import pipeline.registration;
 import engine.composition;
 import editor.project;
 import editor.mcp;
-import engine.render;             // the render profiles (a reference's product)
+import engine.render;             // the render profiles, a product the reference names
 import foundation.texture.resource; // texture::Texture (a product made from two cooked forms)
 import foundation.geometry.resource; // geometry::StaticMeshSource (a cooked form a reference names)
 
@@ -42,7 +42,7 @@ namespace
         std::filesystem::remove_all(kDbDir, ec);
     }
 
-    // The builders (cooked form -> asset type) and a content database for the round trip; the
+    // The builders (cooked form -> asset type) and a content database for the round trip. The
     // factory descriptions come from the engine composition, so nothing else is composed here.
     struct Fixture
     {
@@ -143,7 +143,7 @@ TEST_CASE("integration.mcp: scene reference - the physics settings block lists g
     CHECK(groupNames.Get(u8"kind").AsString() == StringView(u8"array"));
     CHECK(groupNames.Get(u8"count").AsNumber() == doctest::Approx(0.0)); // empty at default
     CHECK(Lists(physics.Get(u8"unreflected"), u8"groupNames"));
-    // Nested math values are not "unreflected": Color/Float3 have no reflected fields to miss.
+    // Nested math values are not "unreflected": Color and Float3 have no reflected fields to miss.
     CHECK_FALSE(Lists(physics.Get(u8"unreflected"), u8"x"));
     // The lookup folds case and also answers to the settings type's name.
     CHECK(editor::mcp::FindSchemaEntry(reference.schema, u8"PHYSICS").IsObject());
@@ -157,8 +157,8 @@ TEST_CASE("integration.mcp: scene reference - an EntityRef field is `ref: entity
     Fixture f;
     const editor::mcp::SceneReference reference = f.Generate();
 
-    // mesh.mesh: Ref<StaticMesh> -> the geometry module's description -> StaticMeshSource -> the
-    // builder -> its asset.
+    // mesh.mesh is a Ref<StaticMesh>. The geometry module's description gives StaticMeshSource as
+    // its cooked form, and the builder for that form gives the asset type.
     const JsonValue mesh = editor::mcp::FindSchemaEntry(reference.schema, u8"mesh");
     REQUIRE(mesh.IsObject());
     const JsonValue meshField = Field(mesh.Get(u8"fields"), u8"mesh");
@@ -169,8 +169,8 @@ TEST_CASE("integration.mcp: scene reference - an EntityRef field is `ref: entity
     CHECK_FALSE(Lists(mesh.Get(u8"unreflected"), u8"mesh"));
     CHECK_FALSE(meshField.Get(u8"ref").Has(u8"assets")); // one cooked form, one asset type
 
-    // camera.target: Ref<Texture>, whose factory reads two cooked forms - a texture's and a
-    // render texture's - so the field lists both asset types (a camera draws into the second).
+    // camera.target is a Ref<Texture>, whose factory reads two cooked forms (a texture and a
+    // render texture), so the field lists both asset types. A camera draws into the second.
     const JsonValue camera = editor::mcp::FindSchemaEntry(reference.schema, u8"camera");
     REQUIRE(camera.IsObject());
     const JsonValue target = Field(camera.Get(u8"fields"), u8"target");
@@ -186,8 +186,8 @@ TEST_CASE("integration.mcp: scene reference - an EntityRef field is `ref: entity
     REQUIRE(projection.Get(u8"enum").Count() == 2u);
     CHECK(projection.Get(u8"enum").At(1).Get(u8"name").AsString() == StringView(u8"Orthographic"));
 
-    // Entity references are `ref: entity`: a single one is a guid field, a list of them an array
-    // annotated through its element type (the animator's mesh targets).
+    // Entity references are `ref: entity`. A single reference is a guid field; a list of them is
+    // an array annotated through its element type, as the animator's mesh targets are.
     bool sawEntityRef = false;
     bool sawEntityRefList = false;
     for (const JsonValue& component : reference.schema.Get(u8"components").Items())
@@ -206,7 +206,7 @@ TEST_CASE("integration.mcp: scene reference - an EntityRef field is `ref: entity
     CHECK(sawEntityRef);
     CHECK(sawEntityRefList);
 
-    // Enum names ride along: the light's type field names its values.
+    // Enums carry their names: the light's type field names its values.
     const JsonValue light = editor::mcp::FindSchemaEntry(reference.schema, u8"light");
     REQUIRE(light.IsObject());
     const JsonValue lightType = Field(light.Get(u8"fields"), u8"type");
@@ -221,8 +221,8 @@ TEST_CASE("integration.mcp: scene reference - an EntityRef field is `ref: entity
     CHECK_FALSE(Lists(light.Get(u8"unreflected"), u8"r"));
 
     // Every resource reference in every component resolves: the composition describes a factory
-    // for each runtime type a component references, and a builder produces each cooked form (the
-    // tripwires of engine-composition.md D8 hold that), so no host serves a resource name alone.
+    // for each runtime type a component references, and a builder produces each cooked form, so
+    // no host serves a resource name without its asset types.
     for (const JsonValue& component : reference.schema.Get(u8"components").Items())
     {
         for (const JsonValue& field : component.Get(u8"fields").Items())
@@ -247,8 +247,8 @@ TEST_CASE("integration.mcp: scene reference - the script override section's work
     CHECK_FALSE(name.IsEmpty());
     CHECK(example.Get(u8"nameHash").AsString() ==
           Format(u8"{}", foundation::script::ScriptPropertyNameHash(name.AsView())).AsView());
-    // And from the DOCUMENTED numbers alone, as an agent reading the reference computes it: the
-    // reference once stated the standard basis while the code used another.
+    // The hash also matches when computed from the documented numbers alone, as an agent reading
+    // the reference would compute it, so the documented basis and prime are the ones the code uses.
     {
         u64 basis = 0;
         u64 prime = 0;
@@ -287,8 +287,8 @@ TEST_CASE("integration.mcp: scene reference - the script override section's work
     CHECK(payloadKey(u8"vec3") == StringView(u8"vector"));
     CHECK(payloadKey(u8"entity") == StringView(u8"guid"));
     CHECK(payloadKey(u8"asset") == StringView(u8"guid"));
-    // The record framing as the wire has it: the hash, then the value's tag inline (a struct
-    // field writes its fields under the parent), then the payload key the tag selects.
+    // The record framing as written to the stream: the hash, then the value's tag inline (a
+    // struct field writes its fields under the parent), then the payload key the tag selects.
     const JsonValue record = overrides.Get(u8"record");
     REQUIRE(record.Count() == 2);
     CHECK(record.At(0).Get(u8"key").AsString() == StringView(u8"nameHash"));
@@ -347,8 +347,9 @@ TEST_CASE("integration.mcp: scene reference - the example loads through LoadScen
 
 TEST_CASE("integration.mcp: a reference's product joins to the source asset types that make it")
 {
-    // What a settings field's picker filters by (the editor wires SourceAssetTypesOf to this):
-    // the product's factory description gives its cooked forms, the builders their asset types.
+    // What a settings field's picker filters by; the editor wires SourceAssetTypesOf to this. The
+    // product's factory description gives its cooked forms, and the builders give their asset
+    // types.
     Fixture f;
     const auto names = [&](const TypeInfo& product)
     {
@@ -367,8 +368,8 @@ TEST_CASE("integration.mcp: a reference's product joins to the source asset type
     CHECK(post[0] == u8"PostProcessProfileAsset");
     // A product made from two cooked forms has two asset types.
     CHECK(names(foundation::texture::Texture::StaticType()).Size() == 2u);
-    // A cooked form itself (a collision shape's mesh) takes each asset that cooks to one, or to
-    // one derived from it: a skinned mesh's source is a static mesh's.
+    // A cooked form itself, such as a collision shape's mesh, accepts each asset that cooks to that
+    // form or to one derived from it: a skinned mesh source derives from a static mesh source.
     const Array<String> meshes = names(foundation::geometry::StaticMeshSource::StaticType());
     REQUIRE(meshes.Size() == 2u);
     CHECK(((meshes[0] == u8"StaticMeshAsset" && meshes[1] == u8"SkinnedMeshAsset") || (meshes[0] == u8"SkinnedMeshAsset" && meshes[1] == u8"StaticMeshAsset")));
@@ -403,7 +404,7 @@ TEST_CASE("integration.mcp: scene reference - RegisterEngineTools serves both ge
     pipeline::RegisterAllBuilders(builders, foundation::vfs::FindDataRoot());
     pipeline::ImporterRegistry importers{DefaultAllocator()};
     editor::EditorLogBuffer logBuffer{DefaultAllocator()};
-    editor::mcp::ProjectSession session; // the stdio host's shape: no project open
+    editor::mcp::ProjectSession session; // as in the stdio host: no project open
 
     McpServer server;
     editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
@@ -432,13 +433,13 @@ TEST_CASE("integration.mcp: scene reference - RegisterEngineTools serves both ge
     CHECK(exampleMime == StringView(u8"application/xml"));
     CHECK(schemaMime == StringView(u8"application/json"));
 
-    // The served bytes are the generator's for this composition (deterministic, so a fresh
-    // generation over the same registrations reproduces them).
+    // The served bytes are what the generator produces for this composition. Generation is
+    // deterministic, so a fresh run over the same registrations reproduces them.
     const editor::mcp::SceneReference expected =
         editor::mcp::GenerateSceneReference(DefaultAllocator(), builders);
     CHECK(ReadResource(server, editor::mcp::kSceneExampleUri) == expected.exampleXml);
     CHECK(ReadResource(server, editor::mcp::kSceneSchemaUri) == expected.schemaJson);
-    // And that host resolves asset types like any other: the join reads the composition.
+    // That host resolves asset types like any other, since the lookup reads the composition.
     const JsonValue served = json::Parse(ReadResource(server, editor::mcp::kSceneSchemaUri).AsView()).value;
     CHECK(Field(editor::mcp::FindSchemaEntry(served, u8"mesh").Get(u8"fields"), u8"mesh")
               .Get(u8"ref")
@@ -459,7 +460,7 @@ TEST_CASE("integration.mcp: scene reference - RegisterEngineTools serves both ge
     CHECK(refused.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString().AsView().ContainsIgnoreCase(u8"light"));
 }
 
-// Sedulous ae7a128a: the documented prefab instance record is the writer's - a scene holding one
+// The documented prefab instance record matches what the writer produces: a scene holding one
 // parked instance writes exactly the documented keys, in the documented order.
 TEST_CASE("integration.mcp: scene reference - the prefab instance record is the keys a save writes")
 {

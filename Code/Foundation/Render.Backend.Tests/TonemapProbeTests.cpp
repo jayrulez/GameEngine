@@ -3,11 +3,10 @@
 
 // The tone map's bind groups on a real device: a group is kept only while every input is the same
 // view of the same texture. Auto exposure hands the tone map one of two ping-pong textures each
-// frame; the group was once kept on the transients' views and one generation number folded from
-// all the inputs, so two exposure textures whose numbers folded alike shared a group, and every
-// other frame showed the other texture's exposure (PaperKid's Block 1 flickered, 2026-10-29).
-// Here two exposure textures carry the SAME generation and different levels: the second frame
-// must show its own.
+// frame. A group kept on the transients' views and one generation number folded from all the
+// inputs would let two exposure textures whose numbers fold alike share a group, and every other
+// frame would show the other texture's exposure. Here two exposure textures carry the same
+// generation and different levels: the second frame must show its own.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// PlayerApplication - the generic game runner's IApplication, shared by the desktop and web
-// entry points (Main.cpp / WebMain.cpp). Runs a project with ZERO native game code: engine
-// subsystems + the project's content + the default scene, and the project's game SCRIPT (a
-// scripted IApplication counterpart - resolved by the script's LANGUAGE, so AngelScript or Luau
-// both work). See Main.cpp's header comment for the two layouts (PROJECT vs DIST).
+// PlayerApplication: the generic game runner's IApplication, shared by the desktop and web
+// entry points (PlayerMain.cpp and WebMain.cpp). Runs a project with no native game code: engine
+// subsystems, the project's content and default scene, and the project's game script (a scripted
+// IApplication counterpart, resolved by the script's language, so AngelScript and Luau both
+// work). PlayerMain.cpp's header comment describes the two layouts (project and dist).
 //
-// Classic header (the APP_MAIN pattern): it carries no `import` of its own and uses names
-// the INCLUDING TU must bring in first. Include it AFTER these imports:
+// A classic header (the APP_MAIN pattern): it carries no `import` of its own and uses names
+// the including TU must bring in first. Include it after these imports:
 //   foundation.core, foundation.vfs, foundation.vfs.pak, foundation.content, foundation.resource,
 //   foundation.runtime, foundation.runtime.client, engine.defaultapp,
 //   foundation.scene, engine.scene, foundation.scene.resource,
 //   foundation.render, foundation.script, foundation.script.resource,
 //   foundation.input, foundation.audio, foundation.audio.resource, foundation.gui.resources,
 //   engine.gui, foundation.settings, foundation.project, foundation.xml.serialization
-// The two entry points add only the PLATFORM trio (shell + runner + graphics) on top.
+// The two entry points add only the platform trio (shell, runner and graphics) on top.
 
 #ifndef ENGINE_PLAYER_PLAYERAPPLICATION_H
 #define ENGINE_PLAYER_PLAYERAPPLICATION_H
@@ -25,7 +25,7 @@
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: its one ambient-allocator decision.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -43,11 +43,11 @@ namespace engine::player
     struct PlayerOptions
     {
         String projectDir;
-        String sceneOverride; // source-DB path; empty = the manifest's defaultScene
+        String sceneOverride; // source-DB path; empty means the manifest's defaultScene
         f32 exitAfterSeconds = 0.0f;
-        // The project's statically-linked native game plugin (SHIP stubs pass it through
+        // The project's statically-linked native game plugin (ship stubs pass it through
         // PlayerMain; dev builds leave it null and load any native module dynamically).
-        // Consumed at the host seam in N2 (game-native-code.md); borrowed, ship-stub-owned.
+        // Borrowed: the ship stub owns it.
         foundation::runtime::IRuntimePlugin* nativeGame = nullptr;
     };
 
@@ -82,7 +82,7 @@ namespace engine::player
                 m_contentDb = MakeUnique<foundation::content::ContentDatabase>(
                     AppRoot(), AppRoot(), *m_pak, BinarySerializerFactory(),
                     project::kCookedAssetExtension);
-                m_sceneDb = m_contentDb.Get(); // scenes live IN the pak, binary like products
+                m_sceneDb = m_contentDb.Get(); // scenes live in the pak, binary like products
                 LOG_INFO(u8"Player", u8"dist mode ({} pak entries)", m_pak->EntryCount());
             }
             else if (m_root->Exists(project::kProjectManifestFile))
@@ -120,8 +120,8 @@ namespace engine::player
                 return;
             }
 
-            // The app builds the resource manager + standard factories over this DB
-            // (product types registered there too - the infra preset).
+            // The app builds the resource manager and standard factories over this DB
+            // (product types are registered there too: the infra preset).
             SetContentDatabase(m_contentDb.Get());
             engine::runtime::DefaultApplication::OnStartup(host);
 
@@ -133,16 +133,16 @@ namespace engine::player
                 GUI()->SetTextInputTarget(host.Shell()->MainWindow());
             }
 
-            // Native game plugin (game-native-code.md N2). Placed AFTER the base startup so
-            // OnLoad can resolve engine subsystems from Subsystems(), and BEFORE the initial scene
-            // resolves so plugin-registered types deserialize. Two convergent paths:
-            // a SHIP stub hands the statically-linked plugin through PlayerOptions; a dev
-            // build loads the manifest's nativeModule (a project-relative path to the
-            // built module - shared-engine builds only, the ruled plugin model). A missing
-            // or unloadable module is reported and the run continues (scripts still work).
+            // The native game plugin. Loaded after the base startup so OnLoad can resolve engine
+            // subsystems from Subsystems(), and before the initial scene resolves so
+            // plugin-registered types deserialize. Two paths converge here: a ship stub hands the
+            // statically-linked plugin through PlayerOptions; a dev build loads the manifest's
+            // nativeModule (a project-relative path to the built module; shared-engine builds
+            // only). A missing or unloadable module is reported and the run continues (scripts
+            // still work).
             m_plugins = MakeUnique<runtime::PluginHost>(AppRoot(), host.Subsystems());
-            // Record the managers/systems the game contributes to scenes so unload reverses
-            // them (game-native-code.md S1).
+            // Record the managers and systems the game contributes to scenes so unload reverses
+            // them.
             m_plugins->AddRecorder(&engine::scene::GlobalSceneContributionRecorder());
             if (m_options.nativeGame != nullptr)
             {
@@ -184,8 +184,8 @@ namespace engine::player
                 return;
             }
 
-            // Resolution order: --scene path override, the manifest's guid (authoritative,
-            // rename-proof), then the path mirror (v2 manifests).
+            // Resolution order: the --scene path override, the manifest's guid (authoritative,
+            // rename-proof), then the path mirror when the guid does not resolve.
             foundation::content::Instance* instance = nullptr;
             if (!m_options.sceneOverride.IsEmpty())
             {
@@ -202,9 +202,9 @@ namespace engine::player
                     instance = m_sceneDb->GetInstance(m_settings.defaultScene.AsView());
                 }
             }
-            // defaultSceneId presence is the boot switch now (task #123 boot reorder): a resolved
-            // startup scene loads AFTER the game script launches (below); none = the script owns boot
-            // entirely. EXCEPTION: an EXPLICIT --scene that did not resolve is still a user error.
+            // defaultSceneId is the boot switch: a resolved startup scene loads after the game
+            // script launches (below); without one the script owns boot entirely. An explicit
+            // --scene that did not resolve is still a user error.
             if (instance == nullptr && !m_options.sceneOverride.IsEmpty())
             {
                 LOG_ERROR(u8"Player", u8"--scene '{}' did not resolve",
@@ -213,8 +213,9 @@ namespace engine::player
                 return;
             }
 
-            // The project's default input map: cooked resource -> the PRIMARY instance's ActionRuntime
-            // (per-instance input; the game reads its own runtime). Nil/unresolved = no actions bound.
+            // The project's default input map, a cooked resource, goes to the primary instance's
+            // ActionRuntime (input is per instance; the game reads its own runtime). Nil or
+            // unresolved: no actions bound.
             if (Input() != nullptr && !m_settings.defaultInputMapId.IsNil())
             {
                 auto mapProxy = Resources()->Bind<foundation::input::InputMapResource>(
@@ -231,10 +232,10 @@ namespace engine::player
                 }
             }
 
-            // The project's scene-pass MSAA sample count: drive the render subsystem's
-            // global path. The subsystem capability-clamps per view (an unsupported count degrades,
-            // e.g. 2x -> 1x on WebGPU), so we pass the authored value straight through. Only when > 1
-            // (1 = off = the default, which also avoids forcing the global-post path on).
+            // The project's scene-pass MSAA sample count drives the render subsystem's global
+            // path. The subsystem clamps per view to what the device supports (an unsupported count
+            // degrades, for example 2x to 1x on WebGPU), so the authored value passes straight
+            // through. Only when > 1: 1 is off, the default, and leaves the global-post path alone.
             if (m_settings.renderMsaaSamples > 1)
             {
                 if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
@@ -245,8 +246,8 @@ namespace engine::player
                 }
             }
 
-            // The project's default audio bus layout: cooked mixer data -> the engine.
-            // Nil/unresolved = the built-in neutral four-bus layout.
+            // The project's default audio bus layout: cooked mixer data, handed to the engine.
+            // Nil or unresolved: the built-in neutral four-bus layout.
             if (Audio() != nullptr && Audio()->Engine() != nullptr &&
                 !m_settings.defaultBusLayoutId.IsNil())
             {
@@ -263,10 +264,10 @@ namespace engine::player
                 }
             }
 
-            // Per-user audio volumes: <userdata>/<project>.user.settings.xml, applied
-            // ON TOP of the layout (the user's slider is absolute - options-menu law).
-            // Absent on first run; captured back at shutdown so script-driven changes
-            // (Audio.setBusVolume) persist for free.
+            // Per-user audio volumes: <userdata>/<project>.user.settings.xml, applied on top of
+            // the layout (the user's slider is absolute, as an options menu expects). Absent on
+            // first run; captured back at shutdown so script-driven changes (Audio.setBusVolume)
+            // persist too.
             if (Audio() != nullptr && Audio()->Engine() != nullptr)
             {
                 engine::audio::RegisterAudioSettingsTypes();
@@ -290,8 +291,8 @@ namespace engine::player
             }
 
             // The engine GUI: the project's fonts and its sheets, in order. The default font is a
-            // cooked font product (nil or unresolved: the built-in one, which is not in a dist - a
-            // distributed game NEEDS this binding for any text at all).
+            // cooked font product (nil or unresolved: the built-in one, which is not in a dist, so a
+            // distributed game needs this binding for any text at all).
             if (GUI() != nullptr && Resources() != nullptr)
             {
                 const foundation::fonts::Font* defaultFont = nullptr;
@@ -334,17 +335,17 @@ namespace engine::player
             SetRenderResolution(m_settings.renderWidth, m_settings.renderHeight, m_settings.renderFit);
             SetOrientation(m_settings.orientation); // presented turned on a window of the other shape
 
-            // Game script launches FIRST (task #123 boot reorder): the orchestrator's launch()/
-            // update(dt) run from frame 1, scene or none, with the engine-service bindings above
-            // already in place. A game whose launch() needs a scene waits `while (!Game.sceneReady())`.
+            // The game script launches first: its launch() and update(dt) run from frame 1, scene or
+            // none, with the engine-service bindings above already in place. A game whose launch()
+            // needs a scene waits `while (!Game.sceneReady())`.
             // The player's one run plays one session, from here to OnExit.
             Instance().Start();
             LoadAndStartGameScript();
 
-            // Then, if a startup scene resolved, load it ASYNC behind a boot splash (task #123
-            // step 4): push the splash overlay first (sync - a small resident document / the engine's
-            // default), kick the async load, and let OnUpdate drive the splash + activate the
-            // scene on completion. A NAMED-but-broken scene is still fatal.
+            // Then, if a startup scene resolved, load it asynchronously behind a boot splash: push
+            // the splash overlay first (synchronously: a small resident document or the engine's
+            // default), start the async load, and let OnUpdate drive the splash and activate the
+            // scene on completion. A named but broken scene is still fatal.
             if (instance != nullptr)
             {
                 m_bootScenePath = String(instance->Path());
@@ -387,10 +388,10 @@ namespace engine::player
         void OnUpdate(runtime::IApplicationHost& host, f32 deltaTime) override
         {
             engine::runtime::DefaultApplication::OnUpdate(host,
-                                                  deltaTime); // pumps resources + ticks the game script
+                                                  deltaTime); // pumps resources and ticks the game script
             if (m_booting)
             {
-                DriveBoot(host); // advance the splash + activate the scene when the load completes
+                DriveBoot(host); // advance the splash; activate the scene when the load completes
             }
             if (m_options.exitAfterSeconds > 0.0f)
             {
@@ -415,8 +416,8 @@ namespace engine::player
 
         void OnShutdown(runtime::IApplicationHost& host) override
         {
-            // Native game teardown FIRST: OnUnload deregisters the plugin's subsystems
-            // while Subsystems() and the engine are still alive (game-native-code.md N2).
+            // Native game teardown first: OnUnload deregisters the plugin's subsystems
+            // while Subsystems() and the engine are still alive.
             if (m_plugins.Get() != nullptr)
             {
                 m_plugins->UnloadAll();
@@ -445,7 +446,7 @@ namespace engine::player
 
     private:
         // A renderable scene needs a primary camera; authored game scenes should carry one, but
-        // a bare editor scene shouldn't ship a black screen - frame the origin like the editor does.
+        // a bare editor scene shouldn't ship a black screen, so frame the origin as the editor does.
         void EnsureCamera() { EnsureCameraOn(m_scene); }
 
         // Seed a default camera on `scene` if it has none, so a level renders. Scene-agnostic (the
@@ -492,7 +493,7 @@ namespace engine::player
             m_scene = scene;
         }
 
-        // Resolves the startup-script SOURCE (project file / pak entry); the lifecycle
+        // Resolves the startup script's source (project file or pak entry); the lifecycle
         // (facades, services, launch/update/exit) lives in DefaultApplication.
         void LoadAndStartGameScript()
         {
@@ -516,10 +517,10 @@ namespace engine::player
             (void)StartGameScript(*proxy); // with its handlers: the game's on<Event> inbox
         }
 
-        // ---- boot splash (task #123 step 4): the GUI's overlay shown while the default scene streams
-        // async. guiLoadingDocumentId names a cooked GUI document, its progress the GUI's data value
-        // `bootProgress`; nil = the engine's own (engine::gui::BuildDefaultLoadingScreen: its logo,
-        // a bar, "Loading"). ----
+        // ---- boot splash: the GUI's overlay shown while the default scene streams in.
+        // guiLoadingDocumentId names a cooked GUI document, its progress the GUI's data value
+        // `bootProgress`; nil means the engine's own (engine::gui::BuildDefaultLoadingScreen: its
+        // logo, a bar, "Loading"). ----
 
         void DriveBoot(runtime::IApplicationHost& host)
         {
@@ -619,9 +620,9 @@ namespace engine::player
         foundation::content::ContentDatabase* m_sceneDb = nullptr;   // where scenes come from
         scene::Scene* m_scene = nullptr;                           // owned by the SceneSubsystem
 
-        // Boot splash + async default-scene load (task #123 step 4).
+        // Boot splash and async default-scene load.
         engine::runtime::SceneLoadHandle m_bootLoad;     // the in-flight async boot load
-        RefPtr<foundation::gui::Node> m_guiSplash;            // the splash on the GUI's overlay layer (null = none)
+        RefPtr<foundation::gui::Node> m_guiSplash;            // the splash on the GUI's overlay layer (null: none)
         foundation::gui::ProgressBar* m_splashProgress = nullptr; // the engine's own splash's bar (in m_guiSplash)
         String m_bootScenePath;
         bool m_booting = false;

@@ -3,9 +3,9 @@
 
 // GUI - :css_values partition
 //
-// CSS value parsers: turn declaration value strings into typed values (color / length /
-// bool / thickness). Ported from eepp's css value parsing (common subset). Number parsing
-// is a small local scanner (core has no general string->float). Colors: named, #hex
+// CSS value parsers: turn declaration value strings into typed values (color, length, bool,
+// thickness). Ported from eepp's css value parsing (common subset). Number parsing is a small
+// local scanner (core has no general string-to-float parser). Colors: named, #hex
 // (#rgb/#rrggbb/#rrggbbaa), and rgb()/rgba().
 
 module;
@@ -25,7 +25,7 @@ export namespace foundation::gui
 {
     [[nodiscard]] inline Optional<Color> ParseNamedColor(core::StringView s); // defined below
 
-    // Parse a decimal number (ignores a trailing unit like "px"/"%"). Empty if none.
+    // Parses a decimal number (ignores a trailing unit like "px"/"%"). Empty if none.
     [[nodiscard]] inline Optional<f32> ParseLength(core::StringView value)
     {
         const core::StringView s = Trim(value);
@@ -75,7 +75,7 @@ export namespace foundation::gui
         Vw,
         Vh,
         Percent,
-        Calc, ///< calc() (E13 of Specs/gui-lab-evolution-2.md): a sum of the units above, in Terms
+        Calc, ///< calc(): a sum of the units above, in Terms
     };
     inline constexpr usize kLengthUnitCount = 6; ///< the units a calc() sums (all but Calc)
 
@@ -83,11 +83,11 @@ export namespace foundation::gui
     {
         f32 Value = 0.0f;
         LengthUnit Unit = LengthUnit::Px;
-        /// A calc()'s amount of each unit (Px to Percent): calc(100% - 2em + 4px) is 100 of
-        /// Percent, -2 of Em and 4 of Px. Unused for a plain length.
+        /// A calc()'s amount of each unit (Px to Percent): calc(100% - 2em + 4px) has 100 Percent,
+        /// -2 Em and 4 Px. Unused for a plain length.
         f32 Terms[kLengthUnitCount]{};
 
-        /// Any length as its terms (a plain one: its value in its unit).
+        /// Writes any length as terms (a plain length becomes its value in its unit).
         constexpr void ToTerms(f32 (&out)[kLengthUnitCount]) const noexcept
         {
             for (usize i = 0; i < kLengthUnitCount; ++i)
@@ -95,7 +95,7 @@ export namespace foundation::gui
             if (Unit != LengthUnit::Calc)
                 out[static_cast<usize>(Unit)] = Value;
         }
-        /// Its percentage part (a plain percentage's value; a calc()'s percent term).
+        /// Returns the percentage part: a plain percentage's value, or a calc()'s percent term.
         [[nodiscard]] constexpr f32 PercentPart() const noexcept
         {
             return Unit == LengthUnit::Calc ? Terms[static_cast<usize>(LengthUnit::Percent)] : Unit == LengthUnit::Percent ? Value : 0.0f;
@@ -103,7 +103,7 @@ export namespace foundation::gui
         [[nodiscard]] static constexpr LengthValue FromTerms(const f32 (&terms)[kLengthUnitCount]) noexcept
         {
             LengthValue v;
-            v.Value = 1.0f; // never "a zero", which converts to any unit
+            v.Value = 1.0f; // nonzero, since a zero would convert to any unit
             v.Unit = LengthUnit::Calc;
             for (usize i = 0; i < kLengthUnitCount; ++i)
                 v.Terms[i] = terms[i];
@@ -135,9 +135,9 @@ export namespace foundation::gui
     // "80vh", "50%". Unitless is treated as px. An unrecognized unit yields nothing.
     namespace detail
     {
-        // calc()'s grammar over a linear sum of units (E13): + and - between terms, * and / by a
-        // plain number, parentheses and nested calc(). Each value is its terms and whether it is a
-        // plain number (what * and / need on one side).
+        // calc()'s grammar over a linear sum of units: + and - between terms, * and / by a plain
+        // number, parentheses and nested calc(). Each value holds its terms and whether it is a
+        // plain number (* and / need one on one side).
         struct CalcValue
         {
             f32 Terms[kLengthUnitCount]{};
@@ -174,7 +174,7 @@ export namespace foundation::gui
                     const bool minus = m_text[m_at++] == u8'-';
                     CalcValue rhs;
                     if (!Product(rhs) || rhs.IsNumber != out.IsNumber)
-                        return false; // a number and a length do not add
+                        return false; // a number and a length cannot be added
                     const f32 sign = minus ? -1.0f : 1.0f;
                     out.Number += sign * rhs.Number;
                     for (usize i = 0; i < kLengthUnitCount; ++i)
@@ -209,7 +209,7 @@ export namespace foundation::gui
                         Scale(out, by);
                     }
                     else
-                        return false; // a length times a length
+                        return false; // a length times a length is not a length
                 }
             }
             static void Scale(CalcValue& v, f32 by)
@@ -273,15 +273,15 @@ export namespace foundation::gui
         };
     }
 
-    /// A calc() expression's length (E13): `calc(100% - 2 * 8px)`. Empty when it does not parse or
-    /// comes to a plain number (a length is wanted).
+    /// Parses a calc() expression as a length: `calc(100% - 2 * 8px)`. Returns empty when it does
+    /// not parse or comes to a plain number, since a length is required.
     [[nodiscard]] inline Optional<LengthValue> ParseCalcLength(core::StringView value)
     {
         const core::StringView s = Trim(value);
         if (s.Size() < 6 || s.SubStr(0, 5) != core::StringView(u8"calc(") || s[s.Size() - 1] != u8')')
             return {};
         detail::CalcValue calc;
-        detail::CalcParser parser(s.SubStr(4, s.Size() - 4)); // "(...)": the group
+        detail::CalcParser parser(s.SubStr(4, s.Size() - 4)); // parse the "(...)" group
         if (!parser.Parse(calc))
             return {};
         if (calc.IsNumber)
@@ -331,7 +331,7 @@ export namespace foundation::gui
         return LengthValue{num.Value(), unit};
     }
 
-    // Resolve a length to pixels. `percentBase` is the value 100% maps to (the caller supplies
+    // Resolves a length to pixels. `percentBase` is the value 100% maps to (the caller supplies
     // the relevant containing dimension); 0 if unknown.
     [[nodiscard]] inline f32 ResolveLengthValue(LengthValue lv, const LengthContext& ctx,
                                                 f32 percentBase = 0.0f)
@@ -367,7 +367,7 @@ export namespace foundation::gui
         return lv.Value;
     }
 
-    // Parse + resolve a length string to pixels.
+    // Parses and resolves a length string to pixels.
     [[nodiscard]] inline Optional<f32>
     ResolveLength(core::StringView value, const LengthContext& ctx, f32 percentBase = 0.0f)
     {
@@ -391,8 +391,8 @@ export namespace foundation::gui
 
     namespace detail
     {
-        // The arguments of a colour function, split at commas or, failing that, spaces (a `/`
-        // before an alpha read as a separator).
+        // Splits the arguments of a colour function at commas or, if there are none, at spaces (a
+        // `/` before an alpha counts as a separator).
         inline usize ColorArguments(core::StringView inside, core::StringView (&out)[4])
         {
             bool comma = false;
@@ -412,7 +412,8 @@ export namespace foundation::gui
             }
             return n;
         }
-        // A number, or a percentage as its fraction of `full` (an alpha: of 1; a saturation: of 100).
+        // Parses a number, or a percentage as its fraction of `full` (1 for an alpha, 100 for a
+        // saturation).
         inline Optional<f32> NumberOrPercent(core::StringView t, f32 full)
         {
             if (t.Size() > 1 && t[t.Size() - 1] == u8'%')
@@ -453,7 +454,7 @@ export namespace foundation::gui
             return true;
         };
         core::StringView inside;
-        // hsl() / hsla() (E13 of Specs/gui-lab-evolution-2.md): hue in degrees (deg or none),
+        // hsl() and hsla(): hue in degrees (deg or none),
         // saturation and lightness as percentages, alpha a number or a percentage.
         if (function(u8"hsl", inside) || function(u8"hsla", inside))
         {
@@ -473,8 +474,9 @@ export namespace foundation::gui
             return detail::HslToRgb(h.Value(), Clamp(sat.Value() / 100.0f, 0.0f, 1.0f), Clamp(light.Value() / 100.0f, 0.0f, 1.0f),
                                     Clamp(alpha.Value(), 0.0f, 1.0f));
         }
-        // color-mix(in srgb, A [p%], B [q%]) (E13): premultiplied by alpha, the percentages made to
-        // sum to 100 (one left out is the rest; a sum under 100 scales the alpha).
+        // color-mix(in srgb, A [p%], B [q%]), mixed premultiplied by alpha. The percentages are
+        // normalized to sum to 100: a missing one is the remainder, and a sum under 100 scales the
+        // alpha.
         if (function(u8"color-mix", inside))
         {
             core::StringView parts[3];
@@ -596,7 +598,7 @@ export namespace foundation::gui
         return ParseNamedColor(s);
     }
 
-    // 1-4 whitespace-separated lengths in CSS shorthand order (top / right / bottom / left).
+    // 1-4 whitespace-separated lengths in CSS shorthand order (top, right, bottom, left).
     [[nodiscard]] inline Optional<Thickness> ParseThickness(core::StringView value)
     {
         f32 parts[4];
@@ -701,9 +703,9 @@ export namespace foundation::gui
         return vg::CornerRadii{tl, tr, br, bl};
     }
 
-    // The `border` shorthand: any order of a width (a length), a style keyword (ignored - only
-    // solid is drawn), and a color. Missing width defaults to 1; missing color to black. A
-    // leading "none"/"0" yields width 0. Returns width + color.
+    // The `border` shorthand: a width (a length), a style keyword (ignored, since only solid is
+    // drawn) and a color, in any order. Missing width defaults to 1; missing color to black. A
+    // leading "none" or "0" yields width 0. Returns the width and the color.
     struct BorderShorthand
     {
         f32 Width = 1.0f;
@@ -752,8 +754,8 @@ export namespace foundation::gui
         return out;
     }
 
-    // Like ParseThickness, but each component is unit-resolved against `ctx` (no % support -
-    // padding/margin percentages are a follow-up needing the containing block).
+    // Like ParseThickness, but each component is unit-resolved against `ctx`. Percentages are
+    // not supported: padding and margin percentages would need the containing block.
     [[nodiscard]] inline Optional<Thickness> ResolveThickness(core::StringView value,
                                                               const LengthContext& ctx)
     {

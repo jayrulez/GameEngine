@@ -1,17 +1,18 @@
-// Guard - walks a round with a lantern, and sees and hears the thief. On the guard's entity, which
-// carries a navigation agent and the model (its graph: Speed, Searching); the lantern's spot light
-// is a child, and what it lights is what he sees.
+// Guard: walks a round with a lantern, and sees and hears the thief. The script sits on the guard's
+// entity, which carries a navigation agent and the model, whose animation graph takes Speed and
+// Searching. The lantern's spot light is a child, and what it lights is what he sees.
 //
-// - Patrol: the route's points (the children of `route`) in turn, round and round.
-// - Seeing: the thief inside the lantern's cone and range, nothing between his eye and the thief's
-//   chest (a ray that ignores the guards' own group), fills `awareness` by how lit the thief is
-//   (SceneRender.lightAt, his own lantern included) and faster the nearer; unseen, it drains.
-// - Within `touch` he notices the thief whatever the light (bumped into).
-// - A shut door in his way he opens (Knock; he has the keys).
-// - Suspicious at half: he stops and turns to look. Chase when full: he runs at the thief and
-//   catches him within `catchDistance` (a Caught event: the thief to his checkpoint, the guards to
-//   their rounds). Lose him, or hear a Noise within its reach: Search, go there and look round,
-//   then back to the round.
+// - Patrol: he walks to the route's points (the children of `route`) in turn, round and round.
+// - Seeing: while the thief is inside the lantern's cone and range, with nothing between the
+//   guard's eye and the thief's chest (a ray that ignores the guards' own group), `awareness` fills.
+//   It fills faster the more lit the thief is (SceneRender.lightAt, the guard's own lantern
+//   included) and the nearer he is. When the thief is out of sight it drains.
+// - Within `touch` he notices the thief whatever the light, as if bumped into.
+// - He opens a shut door in his way (the Knock event; he has the keys).
+// - At half awareness he is suspicious: he stops and turns to look. When it is full he gives chase,
+//   running at the thief, and catches him within `catchDistance`. The Caught event sends the thief
+//   to his checkpoint and the guards back to their rounds. If he loses the thief, or hears a Noise
+//   within its reach, he searches: he goes to the spot, looks round, then returns to his round.
 
 const int kPatrol = 0;
 const int kSuspicious = 1;
@@ -47,9 +48,9 @@ class Guard
     private Float3 m_home = Float3(0.0f, 0.0f, 0.0f);
     private float m_yaw = 0.0f;
     private Entity@ m_figure;
-    private float m_calm = 0.0f; // after a catch: not looking for the thief yet
+    private float m_calm = 0.0f; // time after a catch before he looks for the thief again
     private Float3 m_heard = Float3(0.0f, 0.0f, 0.0f); // the last noise he went to look at
-    private float m_knockIn = 0.0f; // until the next look for a door in his way
+    private float m_knockIn = 0.0f; // time until he next checks for a door in his way
 
     Guard(Entity@ entity) { @self = entity; }
 
@@ -99,13 +100,14 @@ class Guard
             agent.navigateAt(t.x, t.y, t.z, runSpeed, 0.5f);
             if (flatDistance(self.worldPosition(), t) <= catchDistance)
             {
-                // Caught: once (stand down now; the event reaches everyone next frame).
+                // Caught. Stand down now so the catch fires once; the event reaches everyone
+                // next frame.
                 self.scene.events.emit("Caught", self.worldPosition());
                 standDown();
             }
             else if (awareness < 0.5f)
             {
-                search(m_spot); // lost him: where he was last seen
+                search(m_spot); // lost him, so search where he was last seen
             }
         }
         else if (m_state == kSearch)
@@ -129,9 +131,10 @@ class Guard
         knock(d);
     }
 
-    // A shut door in his way (a guard has the keys): what is just ahead of him at the waist, told
-    // to open (Door.as answers on its hinge, the collider's parent). The navigation runs through
-    // doorways whether their doors are open or not, so without this he would walk into one and stop.
+    // Opens a shut door in his way (a guard has the keys). A ray finds what is just ahead of him at
+    // waist height, and its parent (the hinge, where Door.as listens) is told to open. Navigation
+    // runs through doorways whether their doors are open or not, so without this he would walk into
+    // a shut door and stop.
     private void knock(float d)
     {
         m_knockIn -= d;
@@ -156,8 +159,8 @@ class Guard
         }
     }
 
-    // The meter over his head: hidden while he has seen nothing, then the bar fills with his
-    // awareness under a "?", and a "!" once he is after the thief.
+    // The meter over his head. It is hidden while he has seen nothing; then a bar fills with his
+    // awareness under a "?", which becomes a "!" once he is chasing the thief.
     private void show()
     {
         if (meter is null || !meter.isValid())
@@ -180,7 +183,7 @@ class Guard
         Label::of(panel.find("mark")).text = m_state == kChase ? "!" : "?";
     }
 
-    // A noise: heard within its reach, it is searched (unless he is already after the thief).
+    // A noise within its reach sends him to search there, unless he is already chasing the thief.
     void onNoise(Float4 n)
     {
         if (m_state == kChase || m_state == kSuspicious)
@@ -194,7 +197,7 @@ class Guard
         }
     }
 
-    // The thief caught (by any guard): back to the round, forgetting him for a while.
+    // The thief was caught by some guard: return to the round and ignore him for a while.
     void onCaught(Float3 at)
     {
         standDown();
@@ -208,7 +211,7 @@ class Guard
         patrol();
     }
 
-    // How much of the thief this guard sees this frame, into awareness.
+    // Adds to awareness by how much of the thief this guard sees this frame.
     private void see(float d)
     {
         float rate = -forget;
@@ -294,12 +297,13 @@ class Guard
         NavAgentComponent::of(self).navigateAt(at.x, at.y, at.z, walkSpeed, 0.6f);
     }
 
-    // The body faces where it goes, or (suspicious) the thief; the graph follows the speed.
+    // Turns the body toward where he walks, or toward the thief while suspicious, and feeds the
+    // speed to the animation graph.
     private void animate(float d)
     {
-        // The crowd's own velocity for him, not his positions differenced: scripts update before the
-        // crowd, so a position here is last frame's, and dividing its change by this frame's time
-        // swings the speed (and the graph's blend) with every uneven frame.
+        // Use the velocity the crowd computed for him, not the change in his position. Scripts
+        // update before the crowd, so the position here is from last frame, and dividing its change
+        // by this frame's time makes the speed (and the graph's blend) jump on every uneven frame.
         Float3 p = self.worldPosition();
         NavAgentComponent@ agent = NavAgentComponent::of(self);
         float vx = agent.velocityX();
@@ -337,7 +341,8 @@ class Guard
         return Math::Sqrt(dx * dx + dz * dz);
     }
 
-    // The model's skinned mesh, which carries the graph: Guard (the instance) / GuardRig / Guard.
+    // The model's skinned mesh, which carries the graph, at the path Guard (the instance) /
+    // GuardRig / Guard.
     private Entity@ figure()
     {
         if (m_figure is null || !m_figure.isValid())

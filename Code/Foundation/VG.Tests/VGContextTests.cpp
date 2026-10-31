@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VGContext: batch production, transform/opacity, immediate-mode, images, commands.
+// VGContext: batch production, transform and opacity, immediate mode, images, commands.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -32,7 +32,7 @@ TEST_CASE("vg.context: FillRect produces geometry + a solid command")
     CHECK(batch.VertexCount() > 0u);
     CHECK(batch.IndexCount() > 0u);
     REQUIRE(batch.CommandCount() == 1u);
-    CHECK(batch.GetCommand(0).textureIndex == 0); // solid -> white texture
+    CHECK(batch.GetCommand(0).textureIndex == 0); // solid uses the white texture
 }
 
 TEST_CASE("vg.context: transform is baked into emitted vertices")
@@ -123,7 +123,7 @@ TEST_CASE("vg.context: per-pixel radial gradient emits the radial draw mode + gr
         if (batch.commands[i].drawMode == VGDrawMode::GradientRadial)
             sawRadialCmd = true;
     CHECK(sawRadialCmd);
-    // Vertices carry the gradient-space coordinate (pos-center)/radius, not a [0,1] LUT u; the
+    // Vertices carry the gradient-space coordinate (pos - center) / radius, not a [0,1] LUT u; the
     // (0,0) corner maps to (-1,-1), so at least one texcoord is negative.
     bool sawNegativeCoord = false;
     for (usize i = 0; i < batch.VertexCount(); ++i)
@@ -225,10 +225,10 @@ TEST_CASE("vg.context: clear resets and re-seeds the white texture")
 
 TEST_CASE("vg.context: identical gradients share ONE cached LUT, stable across frames")
 {
-    // The LUT cache is content-keyed and PERSISTENT: N fills of the same gradient bake one
-    // LUT (not one per FillPath), and the same gradient next frame reuses the same
-    // ImageData identity - the stability the renderer's identity-keyed GPU texture cache
-    // depends on (a per-frame pool made freed/recycled LUTs cache-hit stale GPU ramps).
+    // The LUT cache is content-keyed and persists across frames: N fills of the same gradient
+    // bake one LUT (not one per FillPath), and the same gradient next frame reuses the same
+    // ImageData identity. The renderer's GPU texture cache is keyed by that identity, so a
+    // recycled LUT would hit a stale GPU ramp.
     VGContext ctx;
     VGLinearGradientFill grad(Float2{0.0f, 0.0f}, Float2{10.0f, 0.0f});
     grad.AddStop(0.0f, Color::Red);
@@ -245,7 +245,7 @@ TEST_CASE("vg.context: identical gradients share ONE cached LUT, stable across f
     ctx.FillPath(path, grad, FillRule::NonZero, false);
     ctx.FillPath(path, grad, FillRule::NonZero, false);
     VGBatch& batch = ctx.GetBatch();
-    CHECK(batch.textures.Size() == 2u); // white + ONE shared LUT, not one per fill
+    CHECK(batch.textures.Size() == 2u); // white and one shared LUT, not one per fill
     const foundation::image::ImageData* firstFrameLut = batch.textures[1];
 
     ctx.Clear();
@@ -255,7 +255,7 @@ TEST_CASE("vg.context: identical gradients share ONE cached LUT, stable across f
     REQUIRE(second.textures.Size() == 2u);
     CHECK(second.textures[1] == firstFrameLut); // same identity across frames
 
-    // A DIFFERENT ramp gets its own LUT.
+    // A different ramp gets its own LUT.
     VGLinearGradientFill other(Float2{0.0f, 0.0f}, Float2{10.0f, 0.0f});
     other.AddStop(0.0f, Color::Green);
     other.AddStop(1.0f, Color::Black);
@@ -282,7 +282,7 @@ TEST_CASE("vg.fills: ApplyGradientSpread pad/repeat/reflect mapping")
 
 TEST_CASE("vg.context: gradient spread rides the command and cuts the batch")
 {
-    // Two fills of the SAME ramp with different spreads share one LUT but may not share
+    // Two fills of the same ramp with different spreads share one LUT but may not share
     // one command: the spread picks the LUT sampler, which lives in the bind group.
     VGContext ctx;
     PathBuilder pb;
@@ -302,7 +302,7 @@ TEST_CASE("vg.context: gradient spread rides the command and cuts the batch")
     ctx.FillPath(path, pad, FillRule::NonZero, false);
     ctx.FillPath(path, repeat, FillRule::NonZero, false);
     VGBatch& batch = ctx.GetBatch(); // flushes the open command
-    CHECK(batch.textures.Size() == 2u); // white + ONE shared LUT
+    CHECK(batch.textures.Size() == 2u); // white and one shared LUT
     REQUIRE(batch.commands.Size() >= 2u);
     const VGCommand& first = batch.commands[batch.commands.Size() - 2];
     const VGCommand& second = batch.commands[batch.commands.Size() - 1];
@@ -313,9 +313,9 @@ TEST_CASE("vg.context: gradient spread rides the command and cuts the batch")
 
 TEST_CASE("vg.tessellation: non-pad linear gradients emit the RAW parameter")
 {
-    // Pad compresses to LUT texel centers (clamp sampler); repeat/reflect must emit raw
-    // t so the sampler's wrap/mirror applies per pixel - a per-vertex clamp would kill
-    // the tiling. A gradient line spanning HALF the shape puts t=2 at the far edge.
+    // Pad compresses to LUT texel centers (clamp sampler); repeat and reflect emit raw t so
+    // the sampler's wrap or mirror applies per pixel, since a per-vertex clamp would kill the
+    // tiling. A gradient line spanning half the shape puts t=2 at the far edge.
     VGLinearGradientFill repeat(Float2{0.0f, 0.0f}, Float2{5.0f, 0.0f});
     repeat.AddStop(0.0f, Color::Red);
     repeat.AddStop(1.0f, Color::Blue);
@@ -323,7 +323,7 @@ TEST_CASE("vg.tessellation: non-pad linear gradients emit the RAW parameter")
     const Rectangle bounds{0.0f, 0.0f, 10.0f, 10.0f};
     const Float2 rawFar = FillTessellator::GradientTexCoord(
         foundation::vg::VGGradientTess::LinearLut, repeat, Float2{10.0f, 0.0f}, bounds);
-    CHECK(rawFar.x == doctest::Approx(2.0f)); // raw, NOT clamped/compressed
+    CHECK(rawFar.x == doctest::Approx(2.0f)); // raw, not clamped or compressed
 
     VGLinearGradientFill pad = repeat;
     pad.spread = foundation::vg::VGGradientSpread::Pad;
@@ -378,7 +378,7 @@ TEST_CASE("vg.context: PushClipPath emits write+apply, marks draws, PopClipPath 
     ctx.FillPath(pb.ToPath(), Color::Blue, FillRule::NonZero, false);
 
     VGBatch& batch = ctx.GetBatch();
-    // Expected command stream: StencilWrite (clip winding), ClipApply, the CLIPPED
+    // Expected command stream: StencilWrite (clip winding), ClipApply, the clipped
     // fill, ClipClear, the unclipped fill.
     REQUIRE(batch.commands.Size() == 5u);
     CHECK(batch.commands[0].fillPhase == foundation::vg::VGFillPhase::StencilWrite);
@@ -394,7 +394,7 @@ TEST_CASE("vg.context: a COMPLEX fill inside a clip keeps both stencil roles")
 {
     // A self-intersecting star inside a path clip: the fill's write/cover commands must
     // carry clipMode Stencil (the renderer picks the clip-aware pipelines that confine
-    // winding to the mask and RESTORE the clip bit on cover).
+    // winding to the mask and restore the clip bit on cover).
     VGContext ctx;
     ctx.SetStencilFills(true);
     PathBuilder clip;
@@ -426,7 +426,7 @@ TEST_CASE("vg.context: a COMPLEX fill inside a clip keeps both stencil roles")
 
 TEST_CASE("vg.context: PushClipPath without stencil support degrades to bounds scissor")
 {
-    VGContext ctx; // stencil fills OFF (default)
+    VGContext ctx; // stencil fills off (default)
     ctx.Translate(10.0f, 0.0f);
     PathBuilder clip;
     clip.MoveTo(0, 0);
@@ -447,7 +447,7 @@ TEST_CASE("vg.context: PushClipPath without stencil support degrades to bounds s
     REQUIRE(!batch.commands.IsEmpty());
     const VGCommand& cmd = batch.commands[batch.commands.Size() - 1];
     CHECK(cmd.clipMode == foundation::vg::VGClipMode::Scissor);
-    CHECK(cmd.clipRect.x == doctest::Approx(10.0f)); // TRANSFORMED bounds
+    CHECK(cmd.clipRect.x == doctest::Approx(10.0f)); // transformed bounds
     CHECK(cmd.clipRect.width == doctest::Approx(20.0f));
 }
 
@@ -494,8 +494,8 @@ TEST_CASE("vg.context: a clip path inside another intersects it, and popping it 
     ctx.FillPath(Square(0, 0, 30, 30), Color::Green, FillRule::NonZero, false);
 
     const VGBatch& batch = ctx.GetBatch();
-    // outer write + apply; inner write (CLIPPED: only inside the outer mask) + apply over the
-    // OUTER's bounds; the red fill; the pop: clear, outer write + apply again; blue; clear; green.
+    // Outer write and apply; inner write (clipped to the outer mask) and apply over the outer's
+    // bounds; the red fill; the pop: clear, outer write and apply again; blue; clear; green.
     REQUIRE(batch.commands.Size() == 11u);
     CHECK(batch.commands[0].fillPhase == VGFillPhase::StencilWrite);
     CHECK(batch.commands[0].clipMode == VGClipMode::None);
@@ -921,7 +921,7 @@ TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the b
     pb.Close();
     const Path path = pb.ToPath();
 
-    // Exceed the cache budget with DISTINCT ramps (the animated-gradient shape).
+    // Exceed the cache budget with distinct ramps (the animated-gradient shape).
     const usize distinct = VGContext::kMaxGradientLutCacheEntries + 1;
     for (usize i = 0; i < distinct; ++i)
     {
@@ -933,12 +933,12 @@ TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the b
         ctx.FillPath(path, grad, FillRule::NonZero, false);
     }
 
-    // The NEXT frame's batch carries the eviction notice for every dropped LUT, and the
+    // The next frame's batch carries the eviction notice for every dropped LUT, and the
     // cache restarts (a fresh gradient bakes again and the batch stays consistent).
     ctx.Clear();
     VGBatch& batch = ctx.GetBatch();
     CHECK(batch.evictedTextures.Size() == distinct);
-    // The evicted ramps SURVIVE their announcing frame: the images are held one more frame so
+    // The evicted ramps survive their announcing frame: the images are held one more frame so
     // the keys the renderer releases are not dangling while its frame is in flight.
     for (const image::ImageData* evicted : batch.evictedTextures)
     {
@@ -963,8 +963,8 @@ TEST_CASE("vg.context: over-budget LUT cache eviction is announced through the b
 
 namespace
 {
-    // A donut: outer CCW square, inner CW square - the canonical hole case the direct
-    // tessellator fills SOLID (contours triangulated independently, no subtraction).
+    // A donut: outer CCW square, inner CW square. The direct tessellator fills this hole case
+    // solid (contours triangulated independently, no subtraction).
     Path MakeDonut()
     {
         PathBuilder pb;
@@ -1005,7 +1005,7 @@ TEST_CASE("vg.context: a hole emits stencil write + cover commands")
 
     CHECK(write.fillPhase == VGFillPhase::StencilWrite);
     CHECK(write.fillRule == FillRule::NonZero);
-    // Two quads fan into 2 triangles each = 12 indices of winding geometry.
+    // Two quads fan into 2 triangles each: 12 indices of winding geometry.
     CHECK(write.indexCount == 12);
 
     CHECK(cover.fillPhase == VGFillPhase::StencilCover);
@@ -1041,9 +1041,9 @@ TEST_CASE("vg.context: convex single contours keep the direct fast path with ste
 
 TEST_CASE("vg.context: a self-intersecting star goes through the stencil (both rules)")
 {
-    // Five-point star drawn edge-to-edge: self-intersecting, turns two revolutions -
-    // NonZero fills the core, EvenOdd leaves it open; the direct tessellator gets
-    // BOTH wrong, so each must route through the stencil.
+    // Five-point star drawn edge to edge: self-intersecting, it turns two revolutions.
+    // NonZero fills the core and EvenOdd leaves it open; the direct tessellator gets both
+    // wrong, so each routes through the stencil.
     PathBuilder pb;
     pb.MoveTo(50, 0);
     pb.LineTo(79, 90);
@@ -1095,8 +1095,8 @@ TEST_CASE("vg.context: DrawImageSnapped lands on the device pixel grid")
     VGContext ctx;
     image::ImageDataRef tex(16, 16);
 
-    // Fractional translation (the tab-strip case): the emitted quad must sit on
-    // INTEGER device coordinates, not at the fractional offset.
+    // Fractional translation (the tab-strip case): the emitted quad sits on integer device
+    // coordinates, not at the fractional offset.
     ctx.PushState();
     ctx.Translate(10.4f, 20.6f);
     ctx.DrawImageSnapped(&tex, Rectangle{0, 0, 16, 16}, Rectangle{0, 0, 16, 16});
@@ -1122,8 +1122,8 @@ TEST_CASE("vg.context: DrawImageSnapped lands on the device pixel grid")
 
 TEST_CASE("vg.context: a plain draw after a gradient is back on the white passthrough + default mode")
 {
-    // A gradient binds its ramp LUT and (per-pixel) a gradient draw mode; the NEXT plain draw
-    // must not stay on either - it is back on texture 0 (the white passthrough) and Default.
+    // A gradient binds its ramp LUT and (per-pixel) a gradient draw mode; the next plain draw
+    // stays on neither, and is back on texture 0 (the white passthrough) and Default.
     VGContext ctx;
     ctx.SetPerPixelGradients(true);
     PathBuilder pb;
@@ -1172,7 +1172,7 @@ namespace
 TEST_CASE("vg.context: FillBoxShadow emits four quadrant quads over the blurred extent in sigma units")
 {
     VGContext ctx;
-    // blur 12 -> sigma 6 -> the shadow reaches 18 past the box on every side.
+    // Blur 12 gives sigma 6, so the shadow reaches 18 past the box on every side.
     ctx.FillBoxShadow(Rectangle{10, 20, 100, 50}, CornerRadii(8.0f), 12.0f, Color{0, 0, 0, 0.5f});
     const VGBatch& batch = ctx.GetBatch();
 

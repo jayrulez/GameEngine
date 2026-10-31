@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Vegetation pixel-level ground truth on REAL devices: a scene with a flat terrain, a splat painted
-// on one half and a grass layer following it (on the terrain's vegetation component) goes through the manager (scatter + cache + snapshot)
-// and the shared MeshRenderer's instanced path; the pixels prove grass draws on the painted half
-// and not on the other, and that a far view origin thins it (the fade prefix). Vulkan is the
-// reference, WebGPU must match; skips with no GPU.
+// Vegetation pixel-level ground truth on real devices: a scene with a flat terrain, a splat
+// painted on one half and a grass layer following it (on the terrain's vegetation component) goes
+// through the manager (scatter, cache, snapshot) and the shared MeshRenderer's instanced path. The
+// pixels show grass draws on the painted half and not on the other, and that a far view origin
+// thins it (the fade prefix). Vulkan is the reference, WebGPU must match; skips with no GPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -113,12 +113,12 @@ namespace
     {
         bool valid = false;
         u32 paintedGreen = 0;   // green texels in a window around the painted half's centre
-        u32 unpaintedGreen = 0; // ... around the unpainted half's centre
+        u32 unpaintedGreen = 0; // the same around the unpainted half's centre
         u32 totalGreen = 0;
         u32 setsEmitted = 0;
     };
 
-    // Render the grass layer with the manager's fade evaluated from `viewOrigin`.
+    // Renders the grass layer with the manager's fade evaluated from `viewOrigin`.
     Probe RenderGrass(rhi::Device& device, Float3 viewOrigin, f32 fadeStart, f32 fadeEnd)
     {
         Probe probe;
@@ -280,8 +280,8 @@ namespace
         CHECK(near.unpaintedGreen == 0u); // none on the other
         CHECK(near.totalGreen > 2000u);
 
-        // Far: the origin is ~250 m from the chunks, inside the fade (100..400): the prefix
-        // thins the sets, so fewer green texels - but not none.
+        // Far: the origin is about 250 m from the chunks, inside the fade (100..400): the prefix
+        // thins the sets, so there are fewer green texels, but not none.
         const Probe far = RenderGrass(device, Float3{0.0f, 300.0f, 0.0f}, 100.0f, 400.0f);
         REQUIRE(far.valid);
         CHECK(far.setsEmitted == 2u);

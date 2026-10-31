@@ -32,7 +32,7 @@ export namespace foundation::geometry
         Points,
     };
 
-    // A contiguous index range with its own material + topology.
+    // A contiguous index range with its own material and topology.
     struct SubMesh
     {
         i32 startIndex = 0;
@@ -41,9 +41,9 @@ export namespace foundation::geometry
         PrimitiveType primitiveType = PrimitiveType::Triangles;
     };
 
-    // The static vertex stream - 52 bytes, matching VertexLayoutType::Mesh (locations
+    // The static vertex stream: 52 bytes, matching VertexLayoutType::Mesh (locations
     // 0..4). Trivially copyable so the array uploads straight to a GPU vertex buffer.
-    // tangent.w = the TBN HANDEDNESS sign (+-1, glTF convention): the shader's bitangent is
+    // tangent.w is the TBN handedness sign (+-1, glTF convention): the shader's bitangent is
     // cross(N, T.xyz) * T.w, so normal maps on mirrored-UV geometry light correctly.
     struct StaticMeshVertex
     {
@@ -67,7 +67,7 @@ export namespace foundation::geometry
         }
     };
 
-    // The parallel skinning stream - 24 bytes (locations 6/7). One per static vertex; a
+    // The parallel skinning stream: 24 bytes (locations 6 and 7). One per static vertex; a
     // skinned mesh stores this alongside the inherited static stream rather than
     // interleaving, so the static stream stays substitutable for a static mesh.
     struct VertexSkinning
@@ -77,8 +77,9 @@ export namespace foundation::geometry
         // total: 24
     };
 
-    // Size + alignment are a hard GPU-layout contract: these use the PACKED Float* math types (tight,
-    // 4-byte aligned). A stray SIMD Vector* (16-byte aligned) would change both and trip these.
+    // Size and alignment are a hard GPU-layout contract: these use the packed Float* math types
+    // (tight, 4-byte aligned). A stray SIMD Vector* (16-byte aligned) would change both and trip
+    // these.
     static_assert(sizeof(StaticMeshVertex) == 52,
                   "static vertex must stay 52 bytes (VertexLayoutType::Mesh)");
     static_assert(alignof(StaticMeshVertex) == 4,

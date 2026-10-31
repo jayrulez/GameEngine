@@ -3,19 +3,19 @@
 
 // Pipeline::Audio - the `foundation.audio.editor` module (tooling).
 //
-// Source-side audio authoring + cook:
-//   * AudioClipAsset (pipeline::Asset): references the copied source file + import
-//     settings (stream / force-mono / loop+points / trim / normalize / gain).
-//   * AudioClipAssetBuilder: transcode-free write-through v1 - validate + probe via the
-//     foundation.audio codec helpers, and write the ORIGINAL container bytes as the "data"
-//     stream. When a destructive option is on (force mono / trim trailing silence /
-//     normalize) the source is decoded, processed, and re-encoded as WAV (the one
-//     container we write); untouched sources cook byte-identical.
-//   * AudioFileImporter (wav/ogg/mp3/flac) with AudioImportOptions: `Stream` auto-computes
-//     at import (> 10 s or > 2 MB pre-checks the asset; the dialog toggle FORCES it),
+// Source-side audio authoring and cook:
+//   * AudioClipAsset (pipeline::Asset): references the copied source file and its import
+//     settings (stream, force mono, loop and loop points, trim, normalize, gain).
+//   * AudioClipAssetBuilder: validates and probes through the foundation.audio codec helpers,
+//     and writes the original container bytes as the "data" stream without transcoding. When
+//     a destructive option is on (force mono, trim trailing silence, normalize) the source is
+//     decoded, processed and re-encoded as WAV (the one container we write); untouched sources
+//     cook byte-identical.
+//   * AudioFileImporter (wav, ogg, mp3, flac) with AudioImportOptions: `Stream` is computed
+//     at import (over 10 s or 2 MB pre-checks the asset; the dialog toggle forces it), and
 //     WAV `smpl` loop points are detected and enable looping.
 //
-// Never linked by the runtime. miniaudio itself never appears here - the codec seam in
+// Never linked by the runtime. miniaudio does not appear here: the codec interface in
 // foundation.audio keeps this module decoder-free.
 
 module;
@@ -39,7 +39,7 @@ using namespace foundation::audio;
 export namespace pipeline{
     namespace content = foundation::content;
 
-    // Source asset: the audio file + how it should cook.
+    // Source asset: the audio file and how it should cook.
     class AudioClipAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(AudioClipAsset, pipeline::Asset)
@@ -50,7 +50,7 @@ export namespace pipeline{
         bool loop = false;
         u64 loopStartFrame = 0; // loopEndFrame 0 = clip end
         u64 loopEndFrame = 0;
-        bool trimTrailingSilence = false; // Traktor trick: drop the silent tail
+        bool trimTrailingSilence = false; // drop the silent tail
         bool normalize = false;           // peak-normalize to -1 dBFS
         f32 gain = 1.0f;                  // authored gain (runtime fold, not baked)
 
@@ -69,7 +69,7 @@ export namespace pipeline{
         }
     };
 
-    // ---- pure import helpers (unit-testable without a project) ----
+    // ---- import helpers (pure, unit-testable without a project) ----
 
     /// The Stream auto-default: long or large sources stream, small SFX stay
     /// in-memory. Computed at import; the asset field stays editable afterwards.
@@ -79,7 +79,7 @@ export namespace pipeline{
     }
 
     /// Scans a RIFF/WAVE container for the first `smpl` sampler loop. True when found,
-    /// with the loop's start/end sample frames. Pure byte walk - no decoder involved.
+    /// with the loop's start and end sample frames. A byte walk; no decoder is involved.
     [[nodiscard]] inline bool ParseWavSampleLoop(Span<const byte> wavBytes, u64& outLoopStartFrame,
                                                  u64& outLoopEndFrame)
     {
@@ -124,7 +124,7 @@ export namespace pipeline{
         return false;
     }
 
-    // Cooks an AudioClipAsset -> AudioClipSource (+ "data" container-byte stream).
+    // Cooks an AudioClipAsset into an AudioClipSource and a "data" stream of container bytes.
     class AudioClipAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -166,7 +166,7 @@ export namespace pipeline{
 
             String extension = pipeline::FileExtensionLower(audioAsset.fileName.View());
 
-            // Destructive options re-encode (decode -> process -> WAV). Everything else
+            // Destructive options re-encode (decode, process, write WAV). Everything else
             // writes the original container bytes through untouched.
             const bool transform =
                 audioAsset.forceMono || audioAsset.trimTrailingSilence || audioAsset.normalize;
@@ -217,7 +217,7 @@ export namespace pipeline{
 
             if (asset.trimTrailingSilence)
             {
-                // Drop the tail below ~-60 dBFS, keeping a 10 ms pad (Traktor trick).
+                // Drop the tail below about -60 dBFS, keeping a 10 ms pad.
                 constexpr i16 kSilenceThreshold = 33;
                 usize lastAudibleFrame = 0;
                 const usize frameCount = samples.Size() / decoded.channels;
@@ -297,8 +297,8 @@ export namespace pipeline{
         }
     };
 
-    // Import-dialog options (all toggles; the Stream auto-default is computed from the
-    // probed file at import, so the checkbox here is a FORCE, not the whole story).
+    // Import-dialog options, all toggles. The Stream default is computed from the probed
+    // file at import, so the checkbox here only forces streaming on.
     class AudioImportOptions final : public pipeline::ImportOptions
     {
         RTTI_OBJECT(AudioImportOptions, pipeline::ImportOptions)
@@ -437,13 +437,12 @@ export namespace pipeline{
     };
 
     // ---- bus layout asset: the mixer edited in the inspector ----
-    // FLAT per-bus fields so the reflection inspector edits it without an array
-    // editor: per bus - volume, mute, and three effect slots (0 disables each). The
-    // builder folds the flat fields into the generic wire chain (lowpass -> highpass ->
-    // delay, in that order, when enabled). Asset data v2 adds a FIXED bank of custom-bus
-    // slots (the SoundCueAsset precedent: fixed slots keep the existing editing path
-    // working without an array editor): each slot = name + parent + the same flat bus
-    // fields; an empty name disables the slot.
+    // Flat per-bus fields, so the reflection inspector edits it without an array editor:
+    // per bus, volume, mute and the effect slots (0 disables each). The builder folds the
+    // flat fields into the generic wire chain (lowpass, highpass, delay, reverb, in that
+    // order, when enabled). A fixed bank of custom-bus slots works the same way as
+    // SoundCueAsset's fixed slots: each slot holds a name, a parent and the same flat bus
+    // fields, and an empty name disables the slot.
 
     inline constexpr usize kAudioCustomBusSlotCount = 8;
 
@@ -465,7 +464,7 @@ export namespace pipeline{
         };
         // A named custom bus: parent = one of the four fixed bus names (case-
         // insensitive) or another slot's name; empty parent = Master. Cycles among
-        // slots FAIL the cook.
+        // slots fail the cook.
         struct CustomBusSlot
         {
             String name; // empty = slot unused
@@ -542,9 +541,9 @@ export namespace pipeline{
                 FoldBusSettings(*buses[i], asset.fileName.View(), source.layout.buses[i]);
             }
 
-            // Custom-bus slots: fold used slots; validate parents. A parent CYCLE is a
-            // broken mixer - reject the cook (unknown parents only warn: they fall back
-            // to Master at apply).
+            // Custom-bus slots: fold the used slots and validate parents. A parent cycle is
+            // a broken mixer and fails the cook; unknown parents only warn, since they fall
+            // back to Master at apply.
             for (usize i = 0; i < kAudioCustomBusSlotCount; ++i)
             {
                 const AudioBusLayoutAsset::CustomBusSlot& slot = layoutAsset.custom[i];
@@ -627,8 +626,8 @@ export namespace pipeline{
         }
 
     private:
-        // The flat editor fields -> the generic wire chain (lowpass -> highpass ->
-        // delay -> reverb, when enabled). Shared by the fixed buses and custom slots.
+        // Folds the flat editor fields into the generic wire chain (lowpass, highpass,
+        // delay, reverb, when enabled). Shared by the fixed buses and custom slots.
         static void FoldBusSettings(const AudioBusLayoutAsset::Bus& bus, StringView assetName,
                                     AudioBusSettings& out)
         {
@@ -754,11 +753,11 @@ export namespace pipeline{
                 variant.weight = cueAsset.weights[i];
                 source.variants.PushBack(variant);
             }
-            // A cue with no playable variant cooks to a valid ZERO-VARIANT product (not a failure):
-            // a freshly-created / draft cue must never poison Cook All / export, and the runtime is
-            // built for it (ResolveSoundCue answers variantIndex = -1, every consumer guards it -> a
-            // silent no-op). The draft state is surfaced in the editor (SoundCuePage status) and
-            // audited by project_health, NOT by failing the cook.
+            // A cue with no playable variant cooks to a valid zero-variant product, not a failure,
+            // so a new or draft cue cannot break Cook All or export. The runtime handles it:
+            // ResolveSoundCue answers variantIndex = -1 and every consumer treats that as a silent
+            // no-op. The draft state is surfaced in the editor (SoundCuePage status) and audited
+            // by project_health rather than by failing the cook.
             source.mode = cueAsset.mode;
             source.pitchMin = Min(cueAsset.pitchMin, cueAsset.pitchMax);
             source.pitchMax = Max(cueAsset.pitchMin, cueAsset.pitchMax);
@@ -768,7 +767,7 @@ export namespace pipeline{
         }
     };
 
-    // Registers the asset type for content-DB construction + deserialization.
+    // Registers the asset types for content-DB construction and deserialization.
     inline void RegisterAudioAssets()
     {
         GlobalTypeRegistry().Register(AudioClipAsset::StaticType(), TypeDomain(u8"Pipeline"));
@@ -779,11 +778,9 @@ export namespace pipeline{
         RegisterSerializable<SoundCueAsset>();
     }
 
-    // AudioClipAsset's StaticType() is defined WITH reflected properties in AudioAssetImpl.cpp.
-    // The remaining audio assets stay identity-only (bus layout / sound cue carry nested
-    // structure that a flat property pass doesn't cover).
+    // The asset classes' StaticType() bodies are defined in AudioAssetImpl.cpp; the import
+    // options stay identity-only.
     RTTI_DEFINE_OBJECT(AudioImportOptions, "rtti::pipeline::audio")
-    // 2: the custom-bus slot bank (see Serialize).
 
     /// File > New's audio creators (pipeline.registration composes every domain's).
     void RegisterAudioCreators(AssetCreatorRegistry& registry);

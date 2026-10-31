@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Fuzz - the fuzz targets in ctest (E10 of Specs/gui-lab-evolution-2.md): each target takes
-// every seed, then a seeded run of mutations of each, and must neither crash nor hang. A crash a
-// long libFuzzer run finds goes in as a seed here, so every lane runs it from then on. The count
-// of mutations per seed is GUI_FUZZ_RUNS (default 40), so a long local run is one variable away.
+// GUI.Fuzz - the fuzz targets in ctest: each target takes every seed, then a seeded run of
+// mutations of each, and must neither crash nor hang. A crash a long libFuzzer run finds goes in as
+// a seed here, so every lane runs it from then on. The count of mutations per seed is GUI_FUZZ_RUNS
+// (default 40), so a long local run is one variable away.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <algorithm>
@@ -38,7 +38,7 @@ namespace
         return 40;
     }
 
-    // Every seed, then Runs() mutations of each, through `target`; the seed of a mutation is its
+    // Runs every seed, then Runs() mutations of each, through `target`. A mutation's seed is its
     // index, so a failure names what to replay.
     template <typename Target>
     void Run(const std::vector<std::string>& seeds, const char* const* tokens, usize tokenCount, Target target)
@@ -95,7 +95,7 @@ TEST_CASE("fuzz: the keymap takes any bindings")
     Run(seeds, kKeymapTokens, Count(kKeymapTokens), [](const std::string& text) { (void)FuzzKeymap(text); });
 }
 
-// The seeds reach past the parsers: a target fed only what they refuse fuzzes nothing behind them.
+// The seeds must get past the parsers: a target fed only input they refuse fuzzes nothing behind them.
 TEST_CASE("fuzz: the seeds are what the parsers take: the CSS target's tree and every sandbox page load, the keymap seed binds")
 {
     gui::RegisterGuiElements();
@@ -121,7 +121,7 @@ TEST_CASE("fuzz: the string table reader takes any XML")
                               "Samples/UI/sandbox/i18n/sandbox.strings.xml"));
     REQUIRE_FALSE(seeds[0].empty());
     for (std::string& found : FoundSeeds("strings"))
-        seeds.push_back(std::move(found)); // cells-not-one-a-locale: an entry short of the locales' cells
+        seeds.push_back(std::move(found)); // cells-not-one-a-locale.xml: an entry short of the locales' cells
     seeds.push_back("<?xml version=\"1.0\"?><a><b/></a>");
     Run(seeds, kXmlTokens, Count(kXmlTokens), [](const std::string& text) { FuzzStringTable(text); });
 }

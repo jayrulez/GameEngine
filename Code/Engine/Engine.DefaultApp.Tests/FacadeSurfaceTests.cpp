@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The RUNTIME-path facade-surface tripwire (sibling of StandardFactoriesTests, same incident
-// class). Incident 2026-08-22: RegisterAllScriptFacades existed and was tested, but the runtime
-// app kept a hand-rolled per-subsystem registration list that drifted past RegisterRunScriptFacade
-// - game scripts compiled against a prelude with no `run`, masked in editor/PIE (the editor calls
-// the root) and only visible in an exported game. Configure now calls the root; these tests pin
-// that the RUNTIME path yields the complete surface, with `run` as the specific regression pin.
+// The runtime-path facade-surface tripwire (a sibling of StandardFactoriesTests). The editor calls
+// RegisterAllScriptFacades itself, so a facade the runtime app's Configure fails to register shows
+// only in an exported game, whose scripts then compile against a prelude without it. These tests
+// pin that the runtime path yields the complete surface, with `run` checked by name.
 
 #include <doctest/doctest.h>
 
@@ -31,7 +29,7 @@ namespace runtime = foundation::runtime;
 
 namespace
 {
-    // Headless host stub (the StandardFactoriesTests shape): no shell, no graphics, no windows.
+    // Headless host stub (shaped like StandardFactoriesTests'): no shell, no graphics, no windows.
     // Configure guards on null Graphics()/Shell(), so the full subsystem set wires headless.
     class StubHost final : public runtime::IApplicationHost
     {
@@ -75,15 +73,15 @@ TEST_CASE("defaultapp: Configure registers the COMPLETE facade surface (the run 
     engine::runtime::DefaultApplication app;
     app.Configure(host);
 
-    // The count tripwire, now measured on the RUNTIME path: Configure must yield exactly the
-    // surface root's set (a facade registered anywhere else without the root would diverge here).
+    // The count tripwire, measured on the runtime path: Configure must yield exactly the surface
+    // root's set (a facade registered anywhere else without the root would diverge here).
     CHECK(foundation::script::ExtraFacadeNames().Size() == engine::kSubsystemFacadeNameCount);
 
-    // The specific regression pin: the exported game's `run::loadScene` gap.
+    // `run` by name: the facade an exported game's run.loadScene needs.
     CHECK(SurfaceHasName(u8"run"));
 }
 
-// Sedulous f9b1feb7: a render resolution fits the game into the window: its instances read the
+// A render resolution fits the game into the window: its instances read the
 // pointer through a fitted source (render pixels), and the screen UI lays out at that size.
 // Nought goes back to the window's own size and the shell's devices.
 TEST_CASE("defaultapp: a render resolution fits the game's pointer and its screen UI")
@@ -118,7 +116,7 @@ TEST_CASE("defaultapp: a render resolution fits the game's pointer and its scree
     app.ReleaseInstance(extra);
 }
 
-// The runs (Documentation/Specs/run-context.md, P2): the app's instances are its runs, listed by
+// The runs: the app's instances are its runs, listed by
 // its run manager, which every subsystem finds on the subsystem manager; an instance released is
 // announced gone and leaves; the focused one, when it goes, takes the focus with it.
 TEST_CASE("defaultapp: its instances are the runs, on the subsystem manager for every subsystem")

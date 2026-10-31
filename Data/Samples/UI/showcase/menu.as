@@ -1,12 +1,12 @@
-// The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): the menu's behaviour, in
-// AngelScript, through the lab's reflection alone, on the gamekit (K7 of gui-lab-evolution-3.md).
-// The markup holds the widgets (menu.xml the frame, screens/ a document per screen) and the sheet
-// (menu.css) their looks, entrances and exits. This script pushes and pops the screens on the
-// gamekit's stack, wires each screen's buttons as it is pushed (fresh each time), runs the loading
-// bar and, once loading is done, a stand-in game under the HUD (E10 of gui-lab-evolution-2.md):
-// the score counting up, health draining and healing, the run's clock, and a pause screen on
-// Escape, a pad's East or Start. Back (Escape, East) is the stack's: it pops the top screen, and
-// the title keeps it. The host calls update(dt) while it returns true.
+// The GUI showcase: a game menu's behaviour, written in AngelScript using only the GUI's
+// reflection, on top of the gamekit. The markup holds the widgets (menu.xml for the frame,
+// screens/ for one document per screen), and the style sheet (menu.css) holds their looks,
+// entrances and exits. This script pushes and pops the screens on the gamekit's stack, wires each
+// screen's buttons every time it is pushed, and runs the loading bar. Once loading is done it runs
+// a stand-in game under the HUD: the score counting up, health draining and healing, the run's
+// clock, and a pause screen on Escape or a pad's East or Start. Back (Escape, East) is handled by
+// the stack, which pops the top screen; the title screen stays. The host calls update(dt) for as
+// long as it returns true.
 
 funcdef string TextExpression();
 funcdef bool CommandHandler();
@@ -19,7 +19,7 @@ Node@ stage;        // the title over the menu's pages
 Screen@ hud;        // the game's HUD while a game runs (null otherwise)
 bool loadingNow = false;
 double loadTime = 0;
-double untilGame = -1; // seconds from "Ready" to the HUD (-1: not waiting)
+double untilGame = -1; // seconds from "Ready" to the HUD (-1 when not waiting)
 double gameTime = 0;
 double nextPoint = 0;
 int score = 0;
@@ -52,13 +52,13 @@ void onSettings()
     page.find("music-text").bind("text", TextExpression(musicText));
 }
 
-// === Controls (E12 of gui-lab-evolution-2.md) ===
-// Each action's key, bound to its command in the game's key context. Choosing one listens for the
-// next key or pad button (gui::captureKey, before the keymap and navigation see it); a key another
-// action had swaps over to it; Escape cancels.
+// === Controls ===
+// Each action's key, bound to its command in the game's key context. Choosing an action listens
+// for the next key or pad button (gui::captureKey, which sees it before the keymap and navigation
+// do). If another action already had that key, the two swap; Escape cancels.
 array<string> actions = {"jump", "dash", "interact", "map"};
 array<string> keys = {"space", "leftshift", "e", "m"};
-int listening = -1; // the action waiting for its key (-1: none)
+int listening = -1; // the action waiting for its key (-1 for none)
 Screen@ controls;
 
 void onControls()
@@ -101,10 +101,10 @@ void onCapturedKey(const string &in pressed)
         for (uint i = 0; i < actions.length(); i++)
             if (int(i) != action && keys[i] == pressed)
             {
-                keys[i] = keys[action]; // taken: the two swap
+                keys[i] = keys[action]; // the key was taken, so the two swap
                 gui::set("controls-hint", gui::tr("controls.swapped") + gui::tr("controls." + actions[i]));
             }
-        gui::bindKey(keys[action], "", "game"); // the old key unbound there
+        gui::bindKey(keys[action], "", "game"); // unbind the old key in that context
         keys[action] = pressed;
     }
     showKeys();
@@ -136,8 +136,8 @@ bool onLoadingLeave(GuiEvent e)
 }
 
 // === Quit ===
-// The question opens over the menu, which stays where it is behind the dimmed glass; Stay and Back
-// pop it, the focus back on Quit.
+// The question opens over the menu, which stays in place behind the dimmed glass. Stay and Back pop
+// it, returning focus to Quit.
 void onQuit()
 {
     Screen@ question = push("quit");
@@ -173,7 +173,7 @@ void startGame()
 bool onPauseCommand()
 {
     if (hud is null)
-        return true; // not in a game: someone else's
+        return true; // not in a game, so the command belongs to someone else
     if (stack.isPaused())
         stack.pop();
     else
@@ -186,8 +186,8 @@ bool onPauseCommand()
 }
 void onToMenu() { enter(); }
 
-// A second of the stand-in game: a point now and then (the number counts up and pops), health
-// draining and, low, warning, then healed by a point.
+// Advances the stand-in game: a point now and then (the number counts up and pops), and health
+// draining, warning when low, until the next point heals it.
 void play(double dt)
 {
     gameTime += dt;
@@ -199,7 +199,7 @@ void play(double dt)
     {
         nextPoint = 1.4;
         score += 10;
-        gui::tween("score", score, 0.35, "ease-out").whole(true); // the data counts up in whole numbers: no widget drives it
+        gui::tween("score", score, 0.35, "ease-out").whole(true); // the data itself counts up in whole numbers; no widget drives it
         UIWidget@ number = UIWidget::of(hud.find("hud-score"));
         number.removeClass(popTurn ? "pop-a" : "pop-b");
         number.addClass(popTurn ? "pop-b" : "pop-a");
@@ -222,15 +222,15 @@ void main()
     Node@ root = gui::root();
     @stack = ScreenStack::of(root.find("screens"));
     @stage = root.find("stage");
-    // Start pauses in the game. The handler is the menu's own: it is a modal layer of the
-    // sandbox's root, and a command from inside it stops at its edge.
+    // Start pauses in the game. The handler sits on the menu itself because the menu is a modal
+    // layer of the sandbox's root, and a command from inside it stops at its edge.
     root.find("showcase").onCommand("pause", CommandHandler(onPauseCommand));
     gui::bindKey("pad-start", "pause", "");
     enter();
 }
 
-// The menu as it opens (the host calls this each time it shows the menu): the title screen alone,
-// nothing left over from the last visit.
+// Resets the menu as it opens (the host calls this each time it shows the menu): only the title
+// screen, with nothing left over from the last visit.
 void enter()
 {
     loadingNow = false;
@@ -241,8 +241,8 @@ void enter()
     showTitle();
 }
 
-// The loading bar fills over two and a half seconds, then the game runs while it is not paused;
-// true while there is more to do.
+// The loading bar fills over two and a half seconds, then the game runs while it is not paused.
+// Returns true while there is more to do.
 bool update(double dt)
 {
     if (untilGame >= 0)

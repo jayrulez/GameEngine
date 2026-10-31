@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The tracked sample projects (Data/SampleProjects: PaperKid, Sky Hopper, Snowline, Shader
-// Gallery) must stay readable at the CURRENT data versions. A wire-version bump or a key rename
-// that forgets to upgrade their sources leaves them refused by the strict readers - the cook
-// logged 13 refusals (font, six meshes, six UI documents) on PaperKid before the 2026-09-18
-// upgrade. This registers the whole pipeline the way Tools.Cook does, opens a scratch copy (so
-// opening never writes into the tracked tree), and reads every instance back.
+// The tracked sample projects in Data/SampleProjects (PaperKid, Sky Hopper, Snowline, Shader
+// Gallery and Masquerade) must stay readable at the current data versions. A wire version bump or
+// a key rename that does not upgrade their sources leaves them refused by the strict readers.
+// This registers the whole pipeline the way Tools.Cook does, opens a scratch copy so that opening
+// never writes into the tracked tree, and reads every instance back.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <string>
@@ -53,11 +52,11 @@ namespace
             .value;
     }
 
-    // Every instance under a group (recursively) reads back; fails the case on a refusal. A
-    // scene or prefab is its STREAM, not its document: the entities, components and system
-    // settings carry their own data versions, so the stream loads into a scratch scene of the
-    // full composition the way a page opens it (a stale RigidBody payload sat behind a valid
-    // SceneDocument for a month).
+    // Every instance under a group, recursively, reads back; a refusal fails the case. A scene or
+    // prefab is checked through its stream, not only its document: the entities, components and
+    // system settings carry their own data versions, so the stream loads into a scratch scene of
+    // the full composition the way a page opens it. A valid SceneDocument can still hold a stale
+    // component payload.
     usize ReadAllInstances(foundation::content::Group& group)
     {
         usize read = 0;
@@ -87,9 +86,9 @@ namespace
 
 namespace
 {
-    // The script overrides checked under `group`: each must name a property its behaviour's
-    // COOKED class declares. The key is the property name's hash, so a hash change that forgets
-    // to rehash the sources leaves overrides that silently apply to nothing.
+    // Checks the script overrides under `group`: each must name a property that its behaviour's
+    // cooked class declares. The key is the property name's hash, so a hash change that does not
+    // rehash the sources leaves overrides that silently apply to nothing.
     usize CheckOverrides(editor::EditorProject& project, foundation::content::Group& group)
     {
         usize count = 0;
@@ -108,8 +107,8 @@ namespace
             {
                 continue; // the read test above reports a refused stream
             }
-            // One check for both places an override lives: a behaviour's, and the scene's Level
-            // script's (the sceneScript settings block).
+            // One check for both places an override lives: on a behaviour, and on the scene's
+            // Level script (the sceneScript settings block).
             const auto check = [&](const Guid& scriptId,
                                    Span<const engine::script::ScriptPropertyOverride> overrides)
             {
@@ -171,10 +170,11 @@ namespace
     // cooked class declares. On a scratch copy, so opening never writes into the tracked tree.
     void CheckSampleProject(StringView sample, StringView scratchDir, const SampleExpectations& expect)
     {
-        pipeline::RegisterPipelineTypes(); // every asset/product/resource type (idempotent)
+        pipeline::RegisterPipelineTypes(); // every asset, product and resource type (idempotent)
         engine::RegisterAllSceneComponentReflection();
-        engine::RegisterAllScriptFacades(); // idempotent; a case must not lean on another's
-        // The readers log WHY they refuse; put that on the console so a red run names the record.
+        engine::RegisterAllScriptFacades(); // idempotent; a case must not rely on another case's registration
+        // The readers log why they refuse; send that to the console so a failing run names the
+        // record.
         ConsoleSink console;
         GlobalLogger().AddSink(&console);
 
@@ -198,9 +198,9 @@ namespace
             CHECK(read >= expect.read);
         }
 
-        // And it COOKS, through the same tools an agent uses: the driver builds items in parallel
-        // on job workers, which is where the per-build registrations (core types, markup, script
-        // facades) used to race - a double free that aborted Tools.Cook on PaperKid.
+        // The sample also cooks, through the same tools an agent uses. The driver builds items in
+        // parallel on job workers, so this also exercises the per-build registrations (core types,
+        // markup, script facades) under concurrency.
         {
             pipeline::BuilderRegistry builders{DefaultAllocator()};
             pipeline::RegisterAllBuilders(builders, foundation::vfs::FindDataRoot());
@@ -224,8 +224,7 @@ namespace
             CHECK(cooked.Get(u8"failed").AsNumber() == doctest::Approx(0.0));
         }
 
-        // Every script override a scene stores names a property its cooked class declares (taken
-        // from Sedulous 80272182: it fails on the old FNV basis, naming the follow camera's target).
+        // Every script override a scene stores names a property its cooked class declares.
         {
             UniquePtr<editor::EditorProject> project =
                 editor::EditorProject::Open(DefaultAllocator(), scratchDir);
@@ -249,7 +248,7 @@ TEST_CASE("sample project: every PaperKid source reads at the CURRENT data versi
 
 TEST_CASE("sample project: Sky Hopper (PlatformerGame) reads, cooks and its overrides match")
 {
-    // 13 models with their parts, 12 clips of audio, 2 fonts, 5 effects + prefabs, 3 levels,
+    // 13 models with their parts, 12 clips of audio, 2 fonts, 5 effects and prefabs, 3 levels,
     // 8 scripts, 9 screens and a theme, the input map
     CheckSampleProject(u8"PlatformerGame", u8"scratch_platformer_versions", {150u, 100.0, 20u});
 }

@@ -3,19 +3,19 @@
 
 /// Foundation::Shaders.System - the `:file_provider` partition.
 ///
-/// The DEV IShaderSourceProvider: engine built-in shaders as real files in a `Shaders`
-/// folder of a filesystem the owner hands in (the application's data mount - the provider
-/// never knows where on disk that is). Naming convention: the shader NAME is the file
-/// stem, the stage is the double extension - `tonemap.ps.hlsl` serves
-/// GetVariant("tonemap", Fragment, ...). Shared code lives in `.hlsli` next to them, served
-/// to the compiler through the IShaderIncludeResolver half (so includes come from the
-/// same mount - the compiler never touches the native filesystem).
+/// The dev IShaderSourceProvider: engine built-in shaders as real files in a shader
+/// folder of a filesystem the owner hands in (the application's data mount; the provider
+/// never knows where on disk that is). Naming convention: the shader name is the file
+/// stem and the stage is the double extension, so `tonemap.ps.hlsl` serves
+/// GetVariant("tonemap", Fragment, ...). Shared code lives in `.hlsli` files next to them,
+/// served to the compiler through the IShaderIncludeResolver half, so includes come from the
+/// same mount and the compiler never touches the native filesystem.
 ///
-/// The manifest is scanned EAGERLY (built-ins are enumerable - tooling wants the
+/// The manifest is scanned eagerly (built-ins are enumerable because tooling wants the
 /// list) but sources are read lazily. Hot reload goes through the mount's change
-/// source when it has one: the folder is tracked once (the sweep is recursive), so
-/// `.hlsli` edits are seen too - includers are unknown, so a `.hlsli` change reports
-/// EVERY shader name (a full recompile is the correct dev answer). The stat sweep is
+/// source when it has one. The folder is tracked once and the sweep is recursive, so
+/// `.hlsli` edits are seen too; includers are unknown, so a `.hlsli` change reports
+/// every shader name (a full recompile is the right answer in dev). The stat sweep is
 /// O(files) per Poll, so polls are throttled here, not in callers.
 
 module;
@@ -37,18 +37,18 @@ export namespace foundation::shaders
                                            public IShaderIncludeResolver
     {
     public:
-        // The allocator (required - the owner decides) backs the manifest and read buffers.
+        // The allocator (required; the owner decides) backs the manifest and read buffers.
         explicit FileShaderSourceProvider(core::IAllocator& allocator) noexcept
             : m_allocator(&allocator), m_entries(allocator)
         {
         }
 
         /// PollChanges is called once per frame; only every Nth call actually stat-sweeps
-        /// (the sweep is O(files)). ~1 second at 60 fps - dev hot reload, not a race.
+        /// (the sweep is O(files)). About one second at 60 fps, which is enough for dev hot reload.
         static constexpr core::u32 PollEveryNCalls = 60;
 
         /// Scans the manifest of `folder` inside `fileSystem` (both borrowed for the provider's
-        /// lifetime; "" = the mount root). NotFound when the folder does not exist (callers fall
+        /// lifetime; "" is the mount root). NotFound when the folder does not exist (callers fall
         /// back to registered strings, loudly); Unsupported when the mount cannot enumerate.
         core::Status Initialize(vfs::IFileSystem& fileSystem, core::StringView folder)
         {
@@ -94,12 +94,12 @@ export namespace foundation::shaders
             if (vfs::IWatchableFileSystem* watchable = fileSystem.AsWatchable())
             {
                 m_changes = watchable->ChangeSource();
-                m_changes->Track(folder); // whole folder, recursive - catches .hlsli too
+                m_changes->Track(folder); // whole folder, recursive, so .hlsli edits are seen too
             }
             return core::ErrorCode::Ok;
         }
 
-        /// The folder the manifest was scanned from (mount-relative; "" = the mount root).
+        /// The folder the manifest was scanned from (mount-relative; "" is the mount root).
         [[nodiscard]] core::StringView Folder() const noexcept { return m_folder.AsView(); }
         [[nodiscard]] core::usize ShaderFileCount() const noexcept { return m_entries.Size(); }
         /// True when the mount supports change polling (dev hot reload is live).
@@ -339,7 +339,7 @@ export namespace foundation::shaders
         core::IAllocator* m_allocator;
         vfs::IFileSystem* m_fileSystem = nullptr; // borrowed (the application's data mount)
         core::String m_folder;                    // mount-relative folder ("Shaders")
-        vfs::IChangeSource* m_changes = nullptr;  // owned by the mount; null = no reload
+        vfs::IChangeSource* m_changes = nullptr;  // owned by the mount; null when there is no reload
         core::Array<Entry> m_entries;
         core::u32 m_callsSinceSweep = 0;
     };

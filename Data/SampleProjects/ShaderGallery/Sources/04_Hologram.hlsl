@@ -3,7 +3,7 @@
 // Builds on lesson 3. New here: input.viewDir, the direction from the point to the camera, which
 // makes a fresnel rim (bright where the surface turns edge-on); input.screenPos, the pixel being
 // drawn, which makes scanlines that stay still on the screen however the object turns; and alpha,
-// how much of the surface shows. Alpha only blends when the MATERIAL is blended: this lesson's
+// how much of the surface shows. Alpha only blends when the material is blended: this lesson's
 // material is set to Alpha Blend on the material page (Blend Mode).
 // surface: unlit
 

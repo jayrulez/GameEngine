@@ -3,14 +3,15 @@
 
 // Editor::Terrain - :splat partition.
 //
-// TerrainSplatTool: the scene-viewport terrain layer-weight brush (editor.viewporttools), the second
-// terrain tool after Sculpt. It ray-picks the terrain heightfield under the cursor, maps the hit to
-// the splatmap's 0..1 footprint UV, and paints the SELECTED layer channel into the SHARED runtime
-// Splatmap (lerp-to-one-hot - painting another layer erases this one), records ONE region-delta undo
-// command per stroke, and on Save writes the painted RGBA8 back to its SOURCE asset's pixel sidecar.
+// TerrainSplatTool: the scene-viewport terrain layer-weight brush (editor.viewporttools), the
+// second terrain tool after Sculpt. It ray-picks the terrain heightfield under the cursor, maps the
+// hit to the splatmap's 0..1 footprint UV, and paints the selected layer channel into the shared
+// runtime Splatmap. Painting lerps toward one-hot, so painting another layer erases this one. It
+// records one region-delta undo command per stroke, and on Save writes the painted RGBA8 back to
+// its source asset's pixel sidecar.
 //
-// GCC module hygiene: the heavy engine.terrain / resource imports live in SplatToolImpl.cpp; this
-// interface stays on the light modules only.
+// For GCC module hygiene, the heavy engine.terrain and resource imports live in SplatToolImpl.cpp;
+// this interface imports only light modules.
 
 module;
 #include "Core/Prelude.h"
@@ -44,8 +45,8 @@ export namespace editor
         [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/texture.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Terrain"; }
 
-        /// Relevant only when the scene has a terrain whose splatmap (and heightfield, for the pick)
-        /// resolves.
+        /// Available only when the scene has a terrain whose splatmap (and heightfield, for the
+        /// pick) resolves.
         [[nodiscard]] bool IsAvailable() const override;
         [[nodiscard]] StringView UnavailableReason() const override
         {
@@ -57,8 +58,8 @@ export namespace editor
         void OnDeactivate() override;
         [[nodiscard]] StringView StatusText() const override { return m_status.AsView(); }
 
-        // ---- brush parameters (the tool panel + the page's palette list drive these) ----
-        /// Select a PALETTE layer to paint (0..255; the palette is unbounded).
+        // ---- brush parameters (the tool panel and the page's palette list drive these) ----
+        /// Selects the palette layer to paint (0..255; the palette is unbounded).
         void SetPaletteIndex(u32 index) noexcept
         {
             m_paletteIndex = Min(index, 255u);
@@ -66,7 +67,7 @@ export namespace editor
             m_smooth = false;
         }
         [[nodiscard]] u32 PaletteIndex() const noexcept { return m_paletteIndex; }
-        /// Eraser mode: fades all painted weights toward 0, revealing the BASE layer.
+        /// Eraser mode: fades all painted weights toward 0, revealing the base layer.
         void SetEraser(bool erase) noexcept
         {
             m_erase = erase;
@@ -94,28 +95,28 @@ export namespace editor
         [[nodiscard]] f32 Radius() const noexcept { return m_radius; }
         void SetStrength(f32 s) noexcept { m_strength = Clamp(s, 0.0f, 1.0f); }
         [[nodiscard]] f32 Strength() const noexcept { return m_strength; }
-        /// Stamp spacing as a fraction of the brush radius. Low spacing + low strength = dense,
-        /// smooth blending along the stroke; high spacing = discrete dabs.
+        /// Stamp spacing as a fraction of the brush radius. Low spacing with low strength gives
+        /// dense, smooth blending along the stroke; high spacing gives discrete dabs.
         void SetSpacing(f32 s) noexcept { m_spacing = Clamp(s, kMinSpacing, 1.0f); }
         [[nodiscard]] f32 Spacing() const noexcept { return m_spacing; }
-        /// Airbrush mode: while the button is held, ALSO deposit stamps on a time cadence at the
-        /// cursor. Airbrush deposits strength x period per stamp, so strength reads as coverage
-        /// PER SECOND of hover (the soft-blend workflow); off = movement-only stamps.
+        /// Airbrush mode: while the button is held, also deposit stamps at the cursor on a time
+        /// cadence. Each airbrush stamp deposits strength times the period, so strength means
+        /// coverage per second of hover, for soft blending. When off, only movement stamps.
         void SetAirbrush(bool on) noexcept { m_airbrush = on; }
         [[nodiscard]] bool IsAirbrush() const noexcept { return m_airbrush; }
 
     private:
         static constexpr f32 kMinRadius = 0.5f;
         static constexpr f32 kMaxRadius = 128.0f;
-        static constexpr f32 kMinSpacing = 0.05f; // of the radius (spacing 0 would stamp forever)
+        static constexpr f32 kMinSpacing = 0.05f; // fraction of the radius (spacing 0 would stamp forever)
 
         struct Pick
         {
             foundation::terrain::SplatWeights* weights = nullptr;
-            Guid weightsId;       // TerrainResource.weights.id (the SOURCE asset guid; may be nil)
+            Guid weightsId;       // TerrainResource.weights.id (the source asset guid; may be nil)
             f32 uvX = 0.0f;       // hit in the splatmap's 0..1 footprint UV
             f32 uvY = 0.0f;
-            f32 worldSizeX = 1.0f; // footprint X (world radius -> per-axis uv radius)
+            f32 worldSizeX = 1.0f; // footprint X (turns the world radius into a per-axis UV radius)
             f32 worldSizeY = 1.0f; // footprint Z (keeps the brush a world circle on non-square terrain)
             Float3 worldHit{};
             Float3 worldNormal{0.0f, 1.0f, 0.0f};
@@ -124,40 +125,41 @@ export namespace editor
         [[nodiscard]] Pick ResolvePick(const ViewportToolInput& input) const;
 
         void BeginStroke(const Pick& pick);
-        // Distance-spaced stamps along the drag (+ time-cadence stamps when airbrush is on).
+        // Distance-spaced stamps along the drag, plus time-cadence stamps when airbrush is on.
         void AdvanceStroke(const Pick& pick, f32 deltaSeconds);
         void ApplyStamp(f32 uvX, f32 uvY, const Pick& pick, f32 amount);
         void EndStroke();
         void UpdateStatus();
 
-        foundation::scene::Scene* m_scene;      // borrowed (page owns it)
+        foundation::scene::Scene* m_scene;      // borrowed (the page owns it)
         EditorCommandStack* m_commands;         // borrowed
-        IAssetEditSink* m_assetEdits = nullptr; // borrowed; null = no persistence (tests)
+        IAssetEditSink* m_assetEdits = nullptr; // borrowed; null means nothing is saved (tests)
 
-        u32 m_paletteIndex = 0; // which PALETTE layer the brush paints (0..255)
+        u32 m_paletteIndex = 0; // which palette layer the brush paints (0..255)
         bool m_erase = false;   // eraser mode (reveals the base)
         bool m_smooth = false;  // smooth mode (blurs weights toward the neighborhood average)
         f32 m_radius = 6.0f;   // world units
-        // Per-STAMP coverage fraction at the brush centre (0..1; 1 = one-hot in one stamp, and a
-        // hard eraser). Stamps are spaced along the stroke's world-space travel (m_spacing of the
-        // radius) - Unity/Unreal-style: frame-rate AND drag-speed independent; holding still
-        // deposits nothing beyond the press stamp unless AIRBRUSH is on (time-cadence stamps at
-        // the cursor); sub-1 strengths otherwise build up by scrubbing.
+        // Per-stamp coverage fraction at the brush centre (0..1; 1 reaches one-hot in one stamp,
+        // and erases hard). Stamps are spaced along the stroke's world-space travel (m_spacing of
+        // the radius), so painting is independent of frame rate and drag speed. Holding still
+        // deposits nothing beyond the press stamp unless airbrush is on (time-cadence stamps at
+        // the cursor); otherwise strengths below 1 build up by scrubbing.
         f32 m_strength = 1.0f;
-        f32 m_spacing = 0.25f;  // stamp spacing, fraction of the radius
+        f32 m_spacing = 0.25f;  // stamp spacing, as a fraction of the radius
         bool m_airbrush = false;
         f32 m_airbrushClock = 0.0f; // accrued hold time toward the next time-cadence stamp
 
-        // Hover (cursor overlay).
+        // Hover state for the cursor overlay.
         bool m_hasHover = false;
         Float3 m_hoverWorld{};
         Float3 m_hoverNormal{0.0f, 1.0f, 0.0f};
 
-        // Stroke state (one command per press..release). m_strokeWeights keeps the rasters alive
-        // for the whole stroke; the full-raster snapshots cover BOTH rasters (the union region is
-        // unknown until release, when the command slices before/after out of them).
+        // Stroke state (one command from press to release). m_strokeWeights keeps the rasters
+        // alive for the whole stroke. The full-raster snapshots cover both rasters, because the
+        // union region is unknown until release, when the command slices its before and after
+        // blocks out of them.
         bool m_stroking = false;
-        f32 m_lastStampU = 0.0f; // UV of the last deposited stamp (the spacing walker's anchor)
+        f32 m_lastStampU = 0.0f; // UV of the last deposited stamp, where the spacing walk starts
         f32 m_lastStampV = 0.0f;
         RefPtr<foundation::terrain::SplatWeights> m_strokeWeights;
         Guid m_strokeWeightsId;

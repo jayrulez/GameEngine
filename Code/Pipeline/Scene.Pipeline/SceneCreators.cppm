@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Pipeline::Scene - the `scene.pipeline` module: the scene domain's New Asset creators
-// (agent-playtesting-and-asset-creation.md P1). A scene is seeded with a directional sun under
+// Pipeline::Scene - the `scene.pipeline` module: the scene domain's New Asset creators. A scene
+// is seeded with a directional sun under
 // Scenes/, a prefab with a single root entity under Prefabs/, unless a group was picked.
 
 module;

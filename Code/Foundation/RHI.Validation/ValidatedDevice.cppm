@@ -3,7 +3,6 @@
 
 /// Validation wrapper for Device. Tracks all live resources for leak
 /// detection, validates create/destroy parameters.
-/// Ported from Sedulous.RHI.Validation/ValidatedDevice.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -86,7 +85,7 @@ export namespace foundation::rhi::validation
             return m_inner->DecodePipelineStatistics(result);
         }
 
-        // ---- Create methods (with validation + tracking) ----
+        // ---- Create methods (with validation and tracking) ----
 
         Status CreateBuffer(const BufferDesc& d, Buffer*& out) override
         {
@@ -362,7 +361,7 @@ export namespace foundation::rhi::validation
             return ErrorCode::Ok;
         }
 
-        // ---- Mesh/RT (forwarded, validated for destroyed state) ----
+        // ---- Mesh and RT (forwarded, validated for destroyed state) ----
         Status CreateMeshPipeline(const MeshPipelineDesc& d, MeshPipeline*& out) override
         {
             if (m_destroyed)
@@ -433,7 +432,7 @@ export namespace foundation::rhi::validation
             return m_inner->GetShaderGroupHandles(p, first, count, out);
         }
 
-        // ---- Destroy methods (with tracking removal + not-tracked warning) ----
+        // ---- Destroy methods (with tracking removal and a not-tracked warning) ----
 #define V_DESTROY(Type, method, list)                                                              \
     void method(Type*& x) override                                                                 \
     {                                                                                              \

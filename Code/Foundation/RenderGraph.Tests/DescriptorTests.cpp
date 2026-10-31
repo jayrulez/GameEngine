@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.RenderGraph.Tests/DescriptorTests.bf
+// Transient descriptors' size resolution and the pass target defaults.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -48,8 +48,8 @@ TEST_CASE("rg.descriptor: custom is not resolved")
 
 TEST_CASE("rg.descriptor: custom size clamps to at least one")
 {
-    // A degenerate viewport size (0) must not produce a zero-extent transient - that reaches
-    // CreateTexture / vkCmdBeginRendering and trips the resize-corruption cascade.
+    // A degenerate viewport size (0) must not produce a zero-extent transient: that reaches
+    // CreateTexture / vkCmdBeginRendering and corrupts the frame on resize.
     RGTextureDesc desc(rhi::TextureFormat::RGBA8Unorm, 0, 0);
     desc.Resolve(1920, 1080);
     CHECK(desc.width >= 1u);

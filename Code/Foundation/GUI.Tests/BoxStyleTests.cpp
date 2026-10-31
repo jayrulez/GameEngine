@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the box properties from sheets (G2 of Specs/vg-and-gui-lab.md), per property: several box
-// shadows, transform functions about an origin, gradients with angles and stops, and a border per
-// side; each parsed, applied to the node, and drawn.
+// GUI - the box properties from sheets, one property at a time: several box shadows, transform
+// functions about an origin, gradients with angles and stops, and a border per side. Each is parsed,
+// applied to the node and drawn.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -47,7 +47,8 @@ TEST_CASE("box-style: several box shadows, outer and inset, with spread")
     CHECK(box.Shadows[1].Inset);
     CHECK(box.Shadows[1].ShadowColor.r == doctest::Approx(1.0f));
 
-    // Drawn: one box-shadow draw per shadow (the outer under the box, the inset over its fill).
+    // Drawing makes one box-shadow draw per shadow: the outer one under the box, the inset one
+    // over its fill.
     vg::VGContext canvas;
     DrawContext dc{canvas};
     w->Draw(dc);
@@ -236,7 +237,8 @@ TEST_CASE("box-style: a sharp outer ring paints only outside the box, so a box w
 
 TEST_CASE("box-style: a background under a solid border is one box with it, so no background shows past a rounded corner")
 {
-    // Two shapes smoothed along one outer curve leave the background's colour outside the border.
+    // Two shapes anti-aliased along the same outer curve would let the background's colour show
+    // outside the border, so the background and the border are drawn as one box.
     auto w = Styled(u8"box { background-color: #ff0000; border: 3px solid #000000; border-radius: 6px; }");
     vg::VGContext canvas;
     canvas.SetAnalyticBoxes(true);
@@ -247,7 +249,7 @@ TEST_CASE("box-style: a background under a solid border is one box with it, so n
     CHECK(batch.boxVertices[0].fill.r == doctest::Approx(1.0f));
     CHECK(batch.boxVertices[0].borderTop.a == doctest::Approx(1.0f));
 
-    // A dashed border is drawn apart, over the background.
+    // A dashed border is drawn separately, over the background.
     auto dashed = Styled(u8"box { background-color: #ff0000; border: 3px dashed #000000; border-radius: 6px; }");
     vg::VGContext other;
     other.SetAnalyticBoxes(true);

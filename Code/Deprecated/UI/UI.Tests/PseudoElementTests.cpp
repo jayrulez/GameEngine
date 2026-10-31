@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/PseudoElementTests.bf (faithful, full file, 17 cases). Covers
-// pseudo-element ("part") styling end-to-end: StyleSelector matching + specificity with a pseudo,
-// StyleSheet part resolution over the UIContext/RootView/TestView tree (ForTypePseudo/ForTypePseudoState,
-// class selectors, cascade, subtype matching, no-inheritance), and the .sss `Type::part` parser syntax.
-// Beef idioms: `scope StyleSelector()` -> stack value; `sel.Matches(view, .Normal, "thumb")` ->
-// Matches(view, ControlState::Normal, u8"thumb"); `SetupSheet(ctx)` -> SetupSheet helper (copied from
-// StyleSheetTests.cpp); byte Color(r,g,b,a) -> Rgb() float helper; `===` -> pointer ==; `x as T` ->
-// core::Cast<T>; `bg is T` -> core::Cast<T>(bg) != nullptr; `.[Friend]mRules[i]` -> sheet->GetRule(i);
-// `rule.Selector.PseudoElement != null` -> .HasValue(); `State.Value.HasFlag(.Hover)` -> HasFlag(...).
+// Pseudo-element ("part") styling end to end: StyleSelector matching and specificity with a
+// pseudo-element, StyleSheet part resolution over a UIContext, RootView and TestView tree
+// (ForTypePseudo, ForTypePseudoState, class selectors, cascade, subtype matching, no
+// inheritance), and the .sss `Type::part` parser syntax.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -33,14 +28,14 @@ namespace
         return raw;
     }
 
-    // Byte Color(r,g,b,a) -> float Color (mirrors the Beef Color(r,g,b,255) ctor).
+    // Builds a float Color from byte channels (0 to 255).
     [[nodiscard]] Color Rgb(f32 r, f32 g, f32 b, f32 a = 255.0f)
     {
         return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
     // Register the element type names the .sss parser tests reference (StyleSheetLoader::InitializeGlobals
-    // registers the drawable factories; the type registry maps "View" etc. to the RTTI).
+    // registers the drawable factories; the type registry maps names such as "View" to their RTTI).
     void EnsureGlobals()
     {
         StyleSheetLoader::InitializeGlobals();
@@ -67,7 +62,7 @@ TEST_CASE("pseudo-element: Selector_PseudoElement_Matches")
     TestView view;
     CHECK(sel.Matches(view, ControlState::Normal, u8"thumb"));
     CHECK_FALSE(sel.Matches(view, ControlState::Normal, u8"track"));
-    CHECK_FALSE(sel.Matches(view, ControlState::Normal)); // no pseudo = no match
+    CHECK_FALSE(sel.Matches(view, ControlState::Normal)); // no pseudo-element, no match
 }
 
 TEST_CASE("pseudo-element: Selector_NoPseudo_RejectsQuery")
@@ -98,7 +93,7 @@ TEST_CASE("pseudo-element: Specificity_WithPseudoElement")
     StyleSelector sel;
     sel.ViewType = &TestView::StaticType();
     sel.SetPseudoElement(u8"thumb");
-    CHECK(sel.Specificity() == 2); // type=1 + pseudo=1
+    CHECK(sel.Specificity() == 2); // type 1, pseudo-element 1
 }
 
 TEST_CASE("pseudo-element: Specificity_Full")
@@ -108,7 +103,7 @@ TEST_CASE("pseudo-element: Specificity_Full")
     sel.AddClass(u8"primary");
     sel.State = ControlState::Hover;
     sel.SetPseudoElement(u8"thumb");
-    CHECK(sel.Specificity() == 22); // CSS: type=1 + class=10 + pseudo-class(:hover)=10 + pseudo-element=1
+    CHECK(sel.Specificity() == 22); // as in CSS: type 1, class 10, pseudo-class (:hover) 10, pseudo-element 1
 }
 
 // === StyleSheet pseudo-element resolution ===
@@ -135,7 +130,7 @@ TEST_CASE("pseudo-element: ResolvePart_Basic")
         view->ResolvePartFloat(u8"track", StyleProperty::Height, ControlState::Normal);
     CHECK(trackH == doctest::Approx(4.0f));
 
-    // Element-level Width should not be set
+    // The element-level Width is not set
     const f32 viewW = view->ResolveStyleFloat(StyleProperty::Width);
     CHECK(viewW == 0);
 }
@@ -166,7 +161,7 @@ TEST_CASE("pseudo-element: ResolvePart_WithState")
         view->ResolvePartDrawable(u8"thumb", StyleProperty::Background, ControlState::Normal);
     CHECK(bg1 == normalBg.Get());
 
-    // Hover state - higher specificity
+    // Hover state, with higher specificity
     Drawable* bg2 =
         view->ResolvePartDrawable(u8"thumb", StyleProperty::Background, ControlState::Hover);
     CHECK(bg2 == hoverBg.Get());
@@ -186,7 +181,7 @@ TEST_CASE("pseudo-element: ResolvePart_DoesNotInherit")
     auto child = core::MakeRef<TestView>(core::DefaultAllocator());
     group->AddView(child.Get());
 
-    // Pseudo-element rules should NOT inherit through the parent chain
+    // Pseudo-element rules do not inherit through the parent chain
     Drawable* bg =
         child->ResolvePartDrawable(u8"thumb", StyleProperty::Background, ControlState::Normal);
     CHECK(bg == nullptr);
@@ -240,9 +235,9 @@ TEST_CASE("pseudo-element: ResolvePart_Cascade")
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* sheet = SetupSheet(ctx);
-    // Type-only pseudo: specificity 2 (type=1 + pseudo=1)
+    // Type-only pseudo-element: specificity 2 (type 1, pseudo-element 1)
     sheet->ForTypePseudo(&TestView::StaticType(), u8"thumb").Set(StyleProperty::Width, 12.0f);
-    // Type+state pseudo: specificity 3 (type=1 + state=1 + pseudo=1)
+    // Type and state pseudo-element: specificity 3 (type 1, state 1, pseudo-element 1)
     sheet->ForTypePseudoState(&TestView::StaticType(), u8"thumb", ControlState::Hover)
         .Set(StyleProperty::Width, 16.0f);
 
@@ -251,7 +246,7 @@ TEST_CASE("pseudo-element: ResolvePart_Cascade")
 
     // Normal: type-only wins
     CHECK(view->ResolvePartFloat(u8"thumb", StyleProperty::Width, ControlState::Normal) == 12.0f);
-    // Hover: type+state wins (higher specificity)
+    // Hover: type and state wins (higher specificity)
     CHECK(view->ResolvePartFloat(u8"thumb", StyleProperty::Width, ControlState::Hover) == 16.0f);
 }
 
@@ -303,7 +298,7 @@ TEST_CASE("pseudo-element: SSS_PseudoElement_WithState")
 
     CHECK(sheet->RuleCount() == 2);
 
-    // Verify the second rule has both pseudo-element and state
+    // The second rule has both a pseudo-element and a state
     const StyleRule& rule = sheet->GetRule(1);
     CHECK(rule.Selector.PseudoElement.HasValue());
     CHECK(rule.Selector.PseudoElement.Value().AsView() == StringView{u8"thumb"});
@@ -397,7 +392,7 @@ TEST_CASE("pseudo-element: ElementRule_DoesNotMatchPseudoQuery")
     // Element-level Background is set
     CHECK(view->ResolveStyleDrawable(StyleProperty::Background) != nullptr);
 
-    // But pseudo-element query should NOT match element-level rule
+    // but a pseudo-element query does not match the element-level rule
     Drawable* partBg =
         view->ResolvePartDrawable(u8"thumb", StyleProperty::Background, ControlState::Normal);
     CHECK(partBg == nullptr);

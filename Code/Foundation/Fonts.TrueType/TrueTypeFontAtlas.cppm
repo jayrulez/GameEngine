@@ -5,8 +5,7 @@
 //
 // IFontAtlas produced by stb_truetype's packer, keyed by glyph index: the glyphs a codepoint range
 // maps to (and any further glyphs asked for, such as what a shaper's substitutions reach), packed
-// through EngineStbPackGlyphs, with the range's codepoint -> glyph map for unshaped text. Ported
-// from Sedulous.Fonts.TTF/TrueTypeFontAtlas.bf (which packed codepoints).
+// through EngineStbPackGlyphs, with the range's codepoint -> glyph map for unshaped text.
 
 module;
 #include "Core/Prelude.h"
@@ -78,7 +77,7 @@ export namespace foundation::fonts
             }
             stbtt_PackEnd(&packContext);
 
-            // Solid white 2x2 cell near the bottom-right for drawing lines/rects.
+            // Solid white 2x2 cell near the bottom-right for drawing lines and rects.
             const u32 whiteX = m_width - 2;
             const u32 whiteY = m_height - 2;
             m_pixelData[whiteY * m_width + whiteX] = 255;

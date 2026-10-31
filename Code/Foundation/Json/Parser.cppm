@@ -209,7 +209,7 @@ namespace foundation::json::detail
             {
                 ++pos;
             }
-            // RFC 8259: an integer part is `0` or a non-zero digit followed by digits - `01`
+            // RFC 8259: an integer part is `0` or a non-zero digit followed by digits; `01`
             // is not a number (it would parse as 1 and hide a typo or a smuggled octal).
             if (pos + 1 < n && d[pos] == u8'0' && d[pos + 1] >= u8'0' && d[pos + 1] <= u8'9')
             {

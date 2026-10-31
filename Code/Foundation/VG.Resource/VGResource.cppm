@@ -3,8 +3,8 @@
 
 // Foundation::VG.Resource - the `foundation.vg.resource` module.
 //
-// Cooked vector images. The payload is VALIDATED TEXT: the cook (VG.Pipeline) loads the `.svg`
-// as the renderer reads it and FAILS on one it cannot, then ships the source text; whatever draws
+// Cooked vector images. The payload is validated text: the cook (VG.Pipeline) loads the `.svg`
+// as the renderer reads it and fails on one it cannot, then ships the source text; whatever draws
 // it parses it again. Nothing here is a UI's: a theme's icon, a game's HUD art or an editor's
 // glyph is the same record, so it is free of the renderer and of either UI framework, and a
 // headless tool reads it without them.
@@ -86,11 +86,11 @@ export namespace foundation::vg
 
 export namespace foundation::vg
 {
-    /// The vector graphics resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kVGResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<VectorImage, VectorImageSource, VectorImageFactory>(),
     };
+    /// The vector graphics resource module: what the engine composition composes this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceModule kVGResourceModule{
         u8"vg", &RegisterVGResource, kVGResourceFactories,
         sizeof(kVGResourceFactories) / sizeof(kVGResourceFactories[0])};

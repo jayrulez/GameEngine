@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SampleApp - abstract base for RHI samples (adapted from a sample
-// framework to this engine.s shell). Brings up a window (foundation.shell),
-// a Vulkan backend (validation-wrapped), device, queue, and swap chain; pumps
+// SampleApp - abstract base for RHI samples, adapted from a sample
+// framework to this engine's shell. Brings up a window (foundation.shell),
+// a backend (validation-wrapped by default), device, queue, and swap chain; pumps
 // events, tracks timing, and calls OnRender(). Resize is detected by polling the
 // window size; the loop skips rendering while minimized.
 
@@ -28,8 +28,8 @@ import foundation.rhi.webgpu;
 import foundation.rhi.validation;
 import foundation.shell;
 import foundation.shell.desktop;
-import foundation.vfs; // ResolveDataRoot + the NativeFileSystem mounted over the data root
-import foundation.rhi.capture; // ScreenshotCapture + the --screenshot flags
+import foundation.vfs; // ResolveDataRoot and the NativeFileSystem mounted over the data root
+import foundation.rhi.capture; // ScreenshotCapture and the --screenshot flags
 import foundation.image;       // Image (the written screenshot)
 
 using namespace foundation::core;
@@ -48,8 +48,8 @@ export namespace samples::framework
         WebGPU
     };
 
-    // The default backend is whichever is compiled in - Vulkan on Linux, DX12 on Windows, WebGPU as
-    // a fallback - so a sample run with no --backend flag works on any platform.
+    // The default backend is whichever is compiled in (Vulkan on Linux, DX12 on Windows, WebGPU as
+    // a fallback), so a sample run with no --backend flag works on any platform.
 #if defined(OPTION_HAS_VULKAN)
     inline constexpr BackendType kDefaultBackend = BackendType::Vulkan;
 #elif defined(OPTION_HAS_DX12)
@@ -73,8 +73,8 @@ export namespace samples::framework
         int Run(int argc = 0, char** argv = nullptr);
 
     protected:
-        // THE data root (resolved in Run: --data-root, else the Data/.dataroot walk from the
-        // executable) and the mount over it - samples read engine data (shaders, fonts, models)
+        // The data root (resolved in Run from --data-root, else by the Data/.dataroot walk from the
+        // executable) and the mount over it. Samples read engine data (shaders, fonts, models)
         // through these, never from a compiled-in path.
         [[nodiscard]] StringView DataRoot() const noexcept { return m_dataRoot.AsView(); }
         [[nodiscard]] vfs::IFileSystem& DataFileSystem() noexcept { return *m_dataFileSystem; }
@@ -163,7 +163,7 @@ export namespace samples::framework
 
     inline int SampleApp::Run(int argc, char** argv)
     {
-        // A crash prints its backtrace (as the runtime's hosts do): without it a sample died silently.
+        // A crash prints its backtrace (as the runtime's hosts do); without it a sample dies silently.
         InstallCrashBacktrace();
         for (int i = 1; i < argc; ++i)
         {
@@ -230,7 +230,7 @@ export namespace samples::framework
             return ErrorCode::Unknown;
 
         const shell::NativeWindow nw = m_window->Native();
-        // Pass the shell's WSI so the RHI builds the matching surface (avoids the X11-handles-to-Wayland-WSI crash).
+        // Pass the shell's WSI so the RHI builds the matching surface; X11 handles on a Wayland WSI crash.
         rhi::SurfacePlatform plat = rhi::SurfacePlatform::Unknown;
         switch (nw.system)
         {
@@ -276,8 +276,7 @@ export namespace samples::framework
         rhi::DeviceDesc dd{};
         // Ask for a dedicated compute queue: the device clamps the request to what the adapter
         // has (0 on hardware without a compute-only family), so samples that check
-        // GetQueueCount(Compute) - MultiQueue - see the real answer instead of the framework's
-        // silence. Found by the Beef port: the desc never asked, so Sample017 always fell back.
+        // GetQueueCount(Compute) (MultiQueue) see the real answer.
         dd.computeQueueCount = 1;
         dd.graphicsQueueCount = 1;
         dd.requiredFeatures = RequiredFeatures();
@@ -499,7 +498,7 @@ export namespace samples::framework
             m_backend->Destroy();
             m_backend = nullptr;
         }
-        m_shellOwner.Reset(); // destroys the window + shell
+        m_shellOwner.Reset(); // destroys the window and shell
     }
 
 } // namespace samples::framework

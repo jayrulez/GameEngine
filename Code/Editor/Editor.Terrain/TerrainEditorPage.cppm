@@ -3,22 +3,25 @@
 
 // Editor::Terrain - the `:page` partition.
 //
-// TerrainEditorPage: a terrain on the GUI from the preview pages' markup (Data/Editor/PreviewPage.xml;
-// Documentation/Specs/editor-gui.md, 5.4, layer 7). The cooked terrain on a preview lit by a sun
-// (its self-shadowing shown), beside its rows. The asset keeps its layers in parallel arrays, so
-// the rows are the page's own, not its reflection's: under Terrain the heightfield and the splat
-// weights it is painted with, whether it casts shadows, how soft the height blend is and the size
-// every layer's textures are packed at; under Base layer what shows wherever no paint covers (its
-// albedo, normal, ORM and height maps and its tiling); under Paint layers a list, each layer a
-// group of its maps (albedo, normal, ORM, height, coverage mask) and its tiling. A layer's place in
-// the list is its channel in the splat weights, so the list adds and removes but does not reorder;
-// a layer removed frees its weights and moves those above it down. A terrain with no splat weights
-// gets new ones from the bar's New Splat Weights (the paint tool only edits weights that exist).
-// What the cooked terrain is (its grid, world size, chunks) are read-only rows under Source.
+// TerrainEditorPage: a terrain on the GUI, built from the preview pages' markup
+// (Data/Editor/PreviewPage.xml). It shows the cooked terrain in a preview lit by a sun (so its
+// self-shadowing shows), beside its rows. The asset keeps its layers in parallel arrays, so the
+// page builds its own rows instead of using reflection:
+// - Terrain: the heightfield and the splat weights it is painted with, whether it casts shadows,
+//   how soft the height blend is and the size every layer's textures are packed at.
+// - Base layer: what shows wherever no paint covers (its albedo, normal, ORM and height maps and
+//   its tiling).
+// - Paint layers: a list, each layer a group of its maps (albedo, normal, ORM, height, coverage
+//   mask) and its tiling.
+// - Source: read-only facts about the cooked terrain (its grid, world size, chunks).
+// A layer's position in the list is its channel in the splat weights, so the list can add and
+// remove but not reorder; removing a layer frees its weights and moves the layers above it down.
+// A terrain with no splat weights gets new ones from the bar's New Splat Weights, since the paint
+// tool only edits weights that exist.
 //
-// Each edit is one undo step (the whole asset before and after: it is small). Save writes it and
-// asks for a cook, after which the preview follows the new product. Brushes never live here:
-// sculpting and painting are the scene view's tools.
+// Each edit is one undo step holding the whole asset before and after, since it is small. Save
+// writes it and asks for a cook, after which the preview follows the new product. There are no
+// brushes here: sculpting and painting are tools of the scene view.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +37,7 @@ import foundation.resource;
 import foundation.scene;
 import foundation.gui;
 import foundation.gui.toolkit;
-import foundation.terrain.resource; // TerrainResource (the preview's product, the facts)
+import foundation.terrain.resource; // TerrainResource (the preview's product and the facts)
 import terrain.pipeline;            // TerrainAsset
 import editor.core;
 import editor.app;
@@ -45,14 +48,14 @@ export namespace editor
 {
     namespace terrain = foundation::terrain;
 
-    /// What a cooked terrain is, as the page's read-only rows say it: each a name and its value.
+    /// One fact about a cooked terrain, as a read-only row shows it: a name and its value.
     struct TerrainFact
     {
         String name;
         String value;
     };
-    /// The facts of `product` (its grid, world size, chunks, layers, shadows). Pure, so tested
-    /// without a host.
+    /// The facts of `product` (its grid, world size, chunks, layers, shadows). Pure, so it can be
+    /// tested without a host.
     [[nodiscard]] Array<TerrainFact> TerrainFacts(const terrain::TerrainResource& product);
 
     class TerrainEditorPage final : public app::AssetObjectPage
@@ -69,16 +72,17 @@ export namespace editor
         void OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
-        /// The rows' sections: the terrain's, its base layer's, its paint layers'.
+        /// The row sections: the terrain, its base layer and its paint layers.
         [[nodiscard]] foundation::gui::PropertyBag& TerrainRows() noexcept { return *m_terrainRows; }
         [[nodiscard]] foundation::gui::PropertyBag& BaseRows() noexcept { return *m_baseRows; }
         [[nodiscard]] foundation::gui::PropertyBag& LayerRows() noexcept { return *m_layerRows; }
         /// Writes `value` to row `path` of `rows` as the grid commits an edit (one undo step).
         void EditRow(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
-        /// A list edit of the paint layers as the grid makes one (an add, a remove).
+        /// Applies a list edit of the paint layers as the grid makes one (an add or a remove).
         void EditLayers(const foundation::gui::ListEdit& edit);
-        /// New splat weights of `size` texels a side, made beside the terrain and given to it (one
-        /// undo step for the terrain; the new asset stays). False when it has some already.
+        /// Creates splat weights of `size` texels a side beside the terrain and assigns them to it
+        /// (one undo step for the terrain; the new asset is kept on undo). Returns false when the
+        /// terrain already has splat weights.
         bool CreateSplatWeights(i32 size);
 
         // === For tests ===
@@ -107,7 +111,7 @@ export namespace editor
         UniquePtr<app::PreviewPane> m_pane;
         foundation::scene::EntityHandle m_entity;
         foundation::resource::Proxy<terrain::TerrainResource> m_product; // the cooked terrain (follows reloads)
-        const void* m_shownProduct = nullptr;                            // what the preview and facts show
+        const void* m_shownProduct = nullptr;                            // the product the preview and facts show
     };
 
     class TerrainEditorPageFactory final : public IEditorPageFactory
@@ -121,6 +125,6 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The terrain page (asking for its services when it is made).
+    /// Registers the terrain page, which asks for its services when it is created.
     void RegisterTerrainEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

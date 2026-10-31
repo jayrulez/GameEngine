@@ -6,14 +6,14 @@
 // CodeEditView: the purpose-built code editor widget over the
 // :code_document core. Virtualized monospace rendering (only visible lines are drawn; column
 // geometry is column * advance), a line-number gutter with clickable markers (breakpoints,
-// diagnostics, execution line), full keyboard/mouse editing over CodeDocument's delta undo, and
-// the completion seam: composable ICompletionProviders feed a CompletionModel whose popup is
-// SELF-DRAWN inside this widget - deliberately NOT PopupLayer::ShowPopup, which pushes/clears
-// focus; the editor must keep focus (and IME routing) while the popup routes its keys.
+// diagnostics, execution line), full keyboard and mouse editing over CodeDocument's delta undo, and
+// completion: composable ICompletionProviders feed a CompletionModel whose popup the widget draws
+// itself. It does not use PopupLayer::ShowPopup, which pushes and clears focus, because the editor
+// must keep focus (and IME routing) while the popup routes its keys.
 //
 // The widget consumes keys it acts on and leaves everything else unhandled so application
 // shortcuts (save, palette) keep working while the editor is focused. Tab requires the core
-// WantsTabKey opt-in (dispatch-first, traversal fallback - see InputManager::ProcessKeyDown).
+// WantsTabKey opt-in (dispatch first, traversal as the fallback; see InputManager::ProcessKeyDown).
 
 module;
 #include <cstdio>
@@ -73,16 +73,16 @@ export namespace foundation::ui::toolkit
         }
     };
 
-    // ---- completion seam ---------------------------------------------------------------------
+    // ---- completion --------------------------------------------------------------------------
 
     struct CompletionCandidate
     {
         String label;      // shown in the popup, matched against the typed prefix
-        String insertText; // replaces the prefix on accept (usually == label)
+        String insertText; // replaces the prefix on accept (usually the label)
         u8 priority = 0;   // sort tier: lower ranks first (context providers 0, words 100)
     };
 
-    /// A completion source. Providers are COMPOSABLE: the view queries every registered provider
+    /// A completion source. Providers compose: the view queries every registered provider
     /// and merges (dedupe by label, sorted). `prefix` is the identifier fragment left of the
     /// cursor at `cursor` (may be empty for explicit Ctrl+Space invocation).
     class ICompletionProvider
@@ -104,8 +104,8 @@ export namespace foundation::ui::toolkit
             const Span<const String> words = document.Words();
             for (usize i = 0; i < words.Size(); ++i)
             {
-                // The fragment being typed is itself a harvested word - suggesting it back
-                // verbatim is noise; longer words that extend it still match.
+                // The fragment being typed is itself a harvested word; suggesting it back
+                // verbatim is noise, while longer words that extend it still match.
                 if (words[i].AsView() == prefix)
                 {
                     continue;
@@ -113,24 +113,24 @@ export namespace foundation::ui::toolkit
                 CompletionCandidate candidate;
                 candidate.label = String(words[i].AsView());
                 candidate.insertText = String(words[i].AsView());
-                candidate.priority = 100; // words rank BELOW context-provider results
+                candidate.priority = 100; // words rank below context-provider results
                 out.PushBack(Move(candidate));
             }
         }
     };
 
-    // ---- the popup model (headless: filter + key routing, no UI) -----------------------------
+    // ---- the popup model (headless: filtering and key routing, no UI)--------------------------
 
     enum class CompletionKeyResult : u8
     {
-        Ignored,   // not a popup key - the editor handles it normally
+        Ignored,   // not a popup key; the editor handles it normally
         Consumed,  // popup navigation consumed the key
         Accepted,  // commit the selected candidate
-        Dismissed, // popup closed; the editor should NOT process the key further
+        Dismissed, // popup closed; the editor should not process the key further
     };
 
-    /// State + key routing for the completion popup. The view feeds keys here FIRST while open
-    /// (this is why completion shapes the input design); rendering stays in the view.
+    /// State and key routing for the completion popup. While the popup is open the view feeds
+    /// keys here before handling them itself; rendering stays in the view.
     class CompletionModel
     {
     public:
@@ -155,7 +155,7 @@ export namespace foundation::ui::toolkit
 
         /// Re-filters against the (re)typed prefix: case-insensitive prefix match, exact-case
         /// matches ranked first (stable within each group). Closes when nothing matches, or when
-        /// the only match IS the prefix (nothing left to complete).
+        /// the only match is the prefix (nothing left to complete).
         void Filter(StringView prefix)
         {
             if (!m_open)
@@ -269,7 +269,7 @@ export namespace foundation::ui::toolkit
         RTTI_OBJECT(CodeEditView, ViewGroup)
 
     public:
-        // Appearance/behavior knobs (plain fields, read each frame like other toolkit widgets).
+        // Appearance and behavior settings (plain fields, read each frame like other toolkit widgets).
         f32 FontSize = 13.0f;
         String FontFamily = String(u8"Mono"); // falls back to the default family when absent
         i32 TabWidth = 4;                     // spaces per indent step (tabs insert spaces)
@@ -280,7 +280,7 @@ export namespace foundation::ui::toolkit
         bool DocumentWordCompletion = true;  // built-in identifier provider
         i32 AutoCompleteMinPrefix = 2;       // identifier chars typed before the popup auto-opens
         bool IndentAfterOpenBrace = true;    // Enter after '{' adds one extra indent step
-        // Typing any of these (ASCII) opens completion immediately with an empty prefix -
+        // Typing any of these (ASCII) opens completion immediately with an empty prefix;
         // providers read the document left of the cursor for context (member access on '.').
         String CompletionTriggerCharacters = String(u8".");
 
@@ -289,7 +289,7 @@ export namespace foundation::ui::toolkit
 
         /// Hover-value lookup (debugger integration): given the identifier under the mouse,
         /// return its display text, or empty for none. When it yields text, the hover
-        /// tooltip shows the VALUE (diagnostics remain the fallback for marked lines).
+        /// tooltip shows the value (diagnostics remain the fallback for marked lines).
         Function<String(StringView)> HoverValueProvider;
 
         CodeEditView()
@@ -403,9 +403,9 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
-        /// Types `text` at the cursor (replacing any selection) as one discrete undo unit -
-        /// the seam for external inserters (API browser, snippet tooling). Paste-kind so it
-        /// never coalesces with surrounding keystrokes.
+        /// Types `text` at the cursor (replacing any selection) as one discrete undo unit,
+        /// for external inserters such as an API browser or snippet tooling. It is a paste-kind
+        /// edit, so it never coalesces with surrounding keystrokes.
         void InsertAtCursor(StringView text)
         {
             if (text.IsEmpty())
@@ -498,7 +498,7 @@ export namespace foundation::ui::toolkit
             {
                 m_findField->SetText(m_doc.TextInSpan(selection).AsView());
             }
-            RunSearch(); // SetText is a SILENT programmatic setter - search explicitly
+            RunSearch(); // SetText is a silent programmatic setter, so search explicitly
             if (Context != nullptr)
             {
                 Context->GetFocusManager()->SetFocus(m_findField.Get());
@@ -589,7 +589,7 @@ export namespace foundation::ui::toolkit
             }
         }
 
-        /// Replaces every match as ONE undo entry.
+        /// Replaces every match as one undo entry.
         void ReplaceAll()
         {
             if (ReadOnly || m_matches.IsEmpty())
@@ -613,7 +613,7 @@ export namespace foundation::ui::toolkit
             AfterEdit();
         }
 
-        /// Toggle the language's line comment on the cursor line / every selected line
+        /// Toggle the language's line comment on the cursor line or every selected line
         /// (Ctrl+/). Uses the lexer's LineCommentPrefix; a language without one (XML) is a
         /// no-op. One undo entry.
         void ToggleLineComment();
@@ -659,7 +659,7 @@ export namespace foundation::ui::toolkit
         // ---- input ----
 
         /// Capture-phase interplay while a find-bar field is focused: the fields consume most
-        /// keys themselves, so Escape/F3/Enter are claimed here BEFORE they reach the field.
+        /// keys themselves, so Escape, F3 and Enter are claimed here before they reach the field.
         void OnKeyDownCapture(KeyEventArgs& e) override
         {
             if (m_findBarMode == FindBarMode::Closed || Context == nullptr)
@@ -725,7 +725,7 @@ export namespace foundation::ui::toolkit
                 }
             }
 
-            // The popup routes its keys FIRST while open - without stealing focus.
+            // While open, the popup routes its keys first, without stealing focus.
             const CompletionKeyResult routed = m_completion.HandleKey(e.Key);
             if (routed == CompletionKeyResult::Accepted)
             {
@@ -756,7 +756,7 @@ export namespace foundation::ui::toolkit
             AppendUtf8(text, static_cast<u32>(e.Character));
             InsertText(text.AsView(), CodeEditKind::Typing);
 
-            // Trigger characters ('.') reopen completion with an empty prefix - providers see
+            // Trigger characters ('.') reopen completion with an empty prefix; providers see
             // the receiver word left of the cursor (member completion).
             if (e.Character < 128)
             {
@@ -773,7 +773,7 @@ export namespace foundation::ui::toolkit
             }
 
             // Completion: refilter while open; auto-open once the identifier fragment is long
-            // enough (word chars only - punctuation closes below via the empty prefix).
+            // enough (word characters only; punctuation closes it below via the empty prefix).
             const StringView prefix = PrefixView();
             if (m_completion.IsOpen())
             {
@@ -947,10 +947,10 @@ export namespace foundation::ui::toolkit
 
             m_vBar->Visibility = needV ? VisibilityValue::Visible : VisibilityValue::Gone;
             m_hBar->Visibility = needH ? VisibilityValue::Visible : VisibilityValue::Gone;
-            // Max BEFORE value: SetValue clamps against the bar's current max AND fires
-            // OnValueChanged on a clamp - with a stale (smaller) max it would snap m_scrollY
-            // back a line right after EnsureCursorVisible advanced it (the half-hidden
-            // caret-line bug from the first smoke run).
+            // Set the max before the value: SetValue clamps against the bar's current max and
+            // fires OnValueChanged on a clamp, so with a stale (smaller) max it would snap
+            // m_scrollY back a line right after EnsureCursorVisible advanced it, leaving the
+            // caret line half hidden.
             if (needV)
             {
                 m_vBar->SetMaxValue(MaxScrollY());
@@ -1028,8 +1028,8 @@ export namespace foundation::ui::toolkit
             const Color cursorColor =
                 ResolveStyleColor(StyleProperty::CursorColor, Rgb(220, 225, 235));
             const Color accent = ResolveStyleColor(StyleProperty::AccentColor, Rgb(230, 140, 60));
-            // Semantic severity colors (gutter markers, error-line tint) - themed since the
-            // consistency pass; the old literals stay as unthemed fallbacks.
+            // Semantic severity colors (gutter markers, error-line tint) come from the theme; the
+            // literals are fallbacks for an unthemed view.
             const Color errorColor =
                 ResolveStyleColor(StyleProperty::ErrorColor, Rgb(214, 80, 80));
             const Color warningColor =
@@ -1047,9 +1047,8 @@ export namespace foundation::ui::toolkit
                 m_highlighter.EnsureLexed(m_doc, lastLine);
             }
 
-            // Text region, CLIPPED to the right of the gutter: horizontally scrolled text
-            // must never bleed under the gutter (first smoke-run finding). The gutter itself
-            // is painted afterwards, on top.
+            // Text region, clipped to the right of the gutter so horizontally scrolled text
+            // never bleeds under it. The gutter itself is painted afterwards, on top.
             ctx.PushClip(Rectangle{gutterW, 0, width - gutterW, height});
             for (i32 line = firstLine; line <= lastLine; ++line)
             {
@@ -1173,7 +1172,7 @@ export namespace foundation::ui::toolkit
             }
             ctx.PopClip();
 
-            // The gutter: painted AFTER (over) the text region so nothing bleeds into it.
+            // The gutter is painted after (over) the text region so nothing bleeds into it.
             if (ShowGutter)
             {
                 ctx.VG().FillRect(Rectangle{0, 0, gutterW, height},
@@ -1237,7 +1236,7 @@ export namespace foundation::ui::toolkit
                 ctx.VG().Stroke(WithAlpha(textColor, 0.25f), 1.0f);
             }
 
-            DrawChildren(ctx); // scrollbars + find bar
+            DrawChildren(ctx); // scrollbars and find bar
 
             if (m_completion.IsOpen())
             {
@@ -1496,9 +1495,9 @@ export namespace foundation::ui::toolkit
 
         static void DedupeAndSort(Array<CompletionCandidate>& items)
         {
-            // Insertion sort by (priority, label) - context providers rank above document
-            // words so member/attribute results are never buried below the fold. Dedupe by
-            // label keeps the FIRST (highest-ranked) occurrence.
+            // Insertion sort by (priority, label): context providers rank above document
+            // words so member and attribute results are never buried below the fold. Dedupe
+            // by label keeps the first (highest-ranked) occurrence.
             const auto ranksBefore = [](const CompletionCandidate& a, const CompletionCandidate& b)
             {
                 if (a.priority != b.priority)
@@ -1518,8 +1517,8 @@ export namespace foundation::ui::toolkit
                 }
                 items[j] = Move(value);
             }
-            // Priority-first ordering scatters equal labels, so dedupe scans all KEPT items
-            // (lists are small; the first = highest-ranked occurrence wins).
+            // Priority-first ordering scatters equal labels, so dedupe scans all kept items
+            // (lists are small; the first, highest-ranked occurrence wins).
             usize write = 0;
             for (usize i = 0; i < items.Size(); ++i)
             {
@@ -1654,7 +1653,7 @@ export namespace foundation::ui::toolkit
                         return false;
                     }
                     {
-                        // Newline + copy the current line's leading whitespace; one extra
+                        // Newline, then a copy of the current line's leading whitespace; one extra
                         // indent step after an open brace (the language hook).
                         String insert;
                         insert.PushBack(u8'\n');
@@ -1878,7 +1877,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Indent/dedent every touched line as ONE undoable replacement.
+            // Indent or dedent every touched line as one undoable replacement.
             const i32 firstLine = selection.begin.line;
             i32 lastLine = selection.end.line;
             if (multiLine && selection.end.column == 0)
@@ -2053,8 +2052,8 @@ export namespace foundation::ui::toolkit
             }
 
             // Overflow indicator: a slim proportional thumb on the right edge, so a list
-            // longer than the visible window is evident (the popup is keyboard-driven; the
-            // strip is informational, tracking the selection window as arrows scroll it).
+            // longer than the visible window is evident. The popup is keyboard-driven, so the
+            // strip only informs, tracking the selection window as the arrows scroll it.
             const i32 total = m_completion.ItemCount();
             if (total > count)
             {
@@ -2083,7 +2082,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
             CodeEditView* self = this;
-            // A vertical stack of two horizontal rows: [find | count | < > aa w | x] over
+            // A vertical stack of two horizontal rows, [find | count | < > aa w | x] over
             // [replace | Replace | All] (the second row shows only in Replace mode).
             m_findBar = MakeRef<FlexLayout>(MemoryAllocator());
             m_findBar->Direction = Orientation::Vertical;
@@ -2231,8 +2230,9 @@ export namespace foundation::ui::toolkit
             }
         }
 
-        /// Recomputes matches + the current index (first match at/after the cursor). Does not
-        /// move the editor selection - callers decide (typing selects, edits keep position).
+        /// Recomputes the matches and the current index (the first match at or after the cursor).
+        /// It does not move the editor selection; callers decide (typing selects, edits keep
+        /// position).
         void RunSearch()
         {
             m_matches.Clear();
@@ -2380,7 +2380,7 @@ export namespace foundation::ui::toolkit
         UniquePtr<ICodeLexer> m_lexer;
         CodeHighlighter m_highlighter;
 
-        // Find bar (built lazily; logical child so hit-testing + DrawChildren apply).
+        // Find bar (built lazily; a logical child so hit-testing and DrawChildren apply).
         FindBarMode m_findBarMode = FindBarMode::Closed;
         RefPtr<FlexLayout> m_findBar;
         RefPtr<FlexLayout> m_findRow;
@@ -2433,7 +2433,7 @@ export namespace foundation::ui::toolkit
             --lastLine; // a selection ending at column 0 does not touch that line
         }
 
-        // Uncomment only when EVERY non-blank line already carries the prefix.
+        // Uncomment only when every non-blank line already carries the prefix.
         bool allCommented = true;
         bool anyContent = false;
         for (i32 line = firstLine; line <= lastLine; ++line)
@@ -2446,7 +2446,7 @@ export namespace foundation::ui::toolkit
             }
             if (i >= text.Size())
             {
-                continue; // blank line - ignored by the toggle decision
+                continue; // blank lines do not count toward the toggle decision
             }
             anyContent = true;
             if (!text.SubStr(i, text.Size() - i).StartsWith(prefix))
@@ -2488,14 +2488,14 @@ export namespace foundation::ui::toolkit
                 }
                 else
                 {
-                    replacement.Append(text); // blank line - untouched
+                    replacement.Append(text); // blank line, untouched
                 }
             }
             else
             {
                 if (indent >= text.Size())
                 {
-                    replacement.Append(text); // blank line - untouched
+                    replacement.Append(text); // blank line, untouched
                 }
                 else
                 {

@@ -3,8 +3,8 @@
 
 // Pipeline::Image - reflection implementation unit: ImageAsset's reflected surface.
 //
-// Kept OUT of the ImageAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster;
-// see gcc-module-interface-hygiene). ImageAsset::StaticType() gains its colorSpace property here;
+// Kept out of the ImageAsset.cppm interface, because REFLECT_MEMBERS bodies there make GCC emit a
+// gcm cluster. ImageAsset::StaticType() gains its colorSpace property here;
 // the ImageColorSpace enum reflection lives in foundation.image (RegisterImageReflection).
 
 module;

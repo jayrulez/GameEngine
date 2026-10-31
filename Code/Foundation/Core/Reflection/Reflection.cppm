@@ -24,11 +24,11 @@ import :instance;
 import :object;
 import :ref_counted;
 import :unique_ptr;    // Array<UniquePtr<T>> homogeneous container flavor (RegisterUniquePtrArrayType)
-import :type_registry; // GlobalTypeRegistry().All() - the derived-type query (RTTI layer)
+import :type_registry; // GlobalTypeRegistry().All(): the derived-type query (RTTI layer)
 import :string;        // String attribute values (category/displayName) for the sort
-// NB: reflection imports RTTI/base partitions ONLY. Capability like create-by-type
-// flows IN through registration-time function pointers (createElement/canCreateElement), never a
-// serialization import - that would half-close a partition cycle (serialization consumes reflection).
+// Reflection imports only the RTTI and base partitions. Capabilities like create-by-type come in
+// through registration-time function pointers (createElement/canCreateElement), never through a
+// serialization import, which would close a partition cycle (serialization consumes reflection).
 
 // ---------------------------------------------------------------------------
 // Properties
@@ -57,9 +57,9 @@ namespace foundation::core::detail
         T* object = static_cast<T*>(instance.Pointer());
         if constexpr (std::is_enum_v<M>)
         {
-            // An enum property crosses from script as its underlying INT (script backends have no
-            // native enum type; AngelScript enums are int-backed), so accept an i64/f64 and cast - as well as a
-            // properly-typed enum Variant. M is known here, so the cast is well-defined.
+            // An enum property crosses from script as its underlying int (script backends have no
+            // native enum type; AngelScript enums are int-backed), so accept an i64/f64 and cast, as
+            // well as a properly-typed enum Variant. M is known here, so the cast is well-defined.
             if (const M* typed = value.TryGet<M>())
             {
                 object->*Member = *typed;
@@ -96,11 +96,6 @@ namespace foundation::core::detail
         return &(object->*Member);
     }
 
-    // A COMPUTED (getter-backed) property: the value is derived by calling a const
-    // zero-arg getter that returns by value, not read from a stored field. get marshals
-    // the returned value through a Variant; set is not supported (read-only); there is no
-    // field address. Emits as a parens-less getter in the script backends, exactly like a
-    // stored property, but the value is computed on each read.
     // How a reflected value crosses a Variant: a StringView (a view into its owner's text, the
     // native API's spelling) crosses as an owned String, so a native accessor or method taking or
     // returning one reflects as it is, with no script twin.
@@ -128,6 +123,11 @@ namespace foundation::core::detail
         }
     }
 
+    // A computed (getter-backed) property: the value is derived by calling a const
+    // zero-arg getter that returns by value, not read from a stored field. get marshals
+    // the returned value through a Variant; set is not supported (read-only); there is no
+    // field address. Emits as a parens-less getter in the script backends, like a stored
+    // property, but the value is computed on each read.
     template <typename Getter>
     struct GetterTraits;
     template <typename C, typename R>
@@ -199,13 +199,13 @@ namespace foundation::core::detail
         return Status{ErrorCode::InvalidArgument};
     }
 
-    // A NESTED (structure) property: the member is itself a reflected type the tooling should
-    // recurse INTO, not a leaf value. This is the escape hatch for members that cannot marshal
-    // through a Variant - e.g. non-copyable Object members (RefCounted deletes its copy ctor).
-    // get returns an EMPTY Variant and set is unsupported (the value is never passed by copy);
-    // `type` + `address` are populated so a consumer reaches the nested instance in place and
-    // recurses into its properties. A POINTER member resolves `address` to the POINTEE (null when
-    // the member is null - consumers must null-check before recursing).
+    // A nested (structure) property: the member is itself a reflected type the tooling should
+    // recurse into, not a leaf value. This is the escape hatch for members that cannot marshal
+    // through a Variant, e.g. non-copyable Object members (RefCounted deletes its copy ctor).
+    // get returns an empty Variant and set is unsupported (the value is never passed by copy);
+    // `type` and `address` are populated so a consumer reaches the nested instance in place and
+    // recurses into its properties. A pointer member resolves `address` to the pointee (null when
+    // the member is null, so consumers must null-check before recursing).
     template <typename M>
     struct NestedPointee
     {
@@ -221,7 +221,7 @@ namespace foundation::core::detail
 
     // The canonical reflected TypeInfo for a nested type: an intrusive Object exposes it as
     // StaticType() (the patched, property-carrying one); a value type (REFLECT_VALUE)
-    // has no StaticType() and uses TypeOf<P>(). TypeOf<Object-type>() is a DIFFERENT, unpatched
+    // has no StaticType() and uses TypeOf<P>(). TypeOf<Object-type>() is a different, unpatched
     // TypeInfo, so the nested member's `type` must resolve through here.
     template <typename P>
     [[nodiscard]] const TypeInfo* NestedTypeInfo() noexcept
@@ -238,7 +238,7 @@ namespace foundation::core::detail
 
     inline Variant NestedPropertyGet(const Instance&)
     {
-        return Variant{}; // a nested structure is not read by value - recurse via address
+        return Variant{}; // a nested structure is not read by value; recurse via address
     }
     inline Status NestedPropertySet(const Instance&, const Variant&)
     {
@@ -289,11 +289,11 @@ export namespace foundation::core
         Status (*set)(const Instance&, const Variant&);
         // Raw address of the underlying field (null for computed properties). The type-erased
         // escape hatch for generic tooling: a Variant of an arbitrary reflected type (e.g. an
-        // enum known only by TypeInfo) cannot be CONSTRUCTED at runtime, so editors/binding
+        // enum known only by TypeInfo) cannot be constructed at runtime, so editors/binding
         // generators read and write such fields in place through this instead.
         void* (*address)(const Instance&) = nullptr;
-        // Per-PROPERTY attributes (tooling metadata: value ranges, conditional visibility, ...)
-        // - attached fluently via TypeBuilder::PropAttribute after Property().
+        // Per-property attributes (tooling metadata: value ranges, conditional visibility, ...),
+        // attached fluently via TypeBuilder::PropAttribute after Property().
         const Attribute* attributes = nullptr;
         u32 attributeCount = 0;
     };
@@ -303,9 +303,9 @@ export namespace foundation::core
         return property.get(instance);
     }
 
-    /// Write a property. A read-only one refuses (NotSupported) whoever asks - a script
-    /// backend, an editor, an agent's tool - so the flag is a contract, not a hint each
-    /// consumer re-checks; the raw address stays the deliberate way around it.
+    /// Write a property. A read-only one refuses (NotSupported) whoever asks (a script
+    /// backend, an editor, an agent's tool), so the flag is a contract, not a hint each
+    /// consumer re-checks; the raw address stays the intended way around it.
     [[nodiscard]] inline Status SetProperty(const PropertyInfo& property, const Instance& instance,
                                             const Variant& value)
     {
@@ -317,7 +317,7 @@ export namespace foundation::core
     }
 
     // A nested structure property: recurse into `property.type`'s own properties using a
-    // sub-Instance built from `property.address(instance)` (null-check it first - a null pointer
+    // sub-Instance built from `property.address(instance)` (null-check it first: a null pointer
     // member yields a null address), rather than reading it as a leaf value. See TypeBuilder::Nested.
     [[nodiscard]] inline bool IsNested(const PropertyInfo& property) noexcept
     {
@@ -394,10 +394,10 @@ export namespace foundation::core
         bool isStatic;
         bool isConst;
         Result<Variant> (*invoke)(const Instance&, Span<Variant>);
-        // An OPTIONAL distinct name for a member of an overload set. C++ overloading (same name,
+        // An optional distinct name for a member of an overload set. C++ overloading (same name,
         // different signatures) cannot be disambiguated by a consumer that binds one entry per name
         // (the scripting backends), so an overload set gives each member a distinct name here.
-        // Opaque authored metadata - Core stores it and does not interpret it (like param names);
+        // Opaque authored metadata: Core stores it and does not interpret it (like param names);
         // the scripting layer decides how it is spelled and enforces uniqueness. Empty/null = none.
         const char* overloadedName = nullptr;
         // The operator this method implements (MethodOperator), None for a plain method.
@@ -490,15 +490,15 @@ export namespace foundation::core
         if (value.IsResolving())
         {
             // Resolve mode: recompute the live address every time (the owning layer's resolver does
-            // the O(1) lookup). A dead entity / removed component resolves to null -> empty Instance,
-            // so the caller (a script get/set/call) fails cleanly - never a stale/dangling address.
+            // the O(1) lookup). A dead entity or removed component resolves to null, giving an empty
+            // Instance, so the caller (a script get/set/call) fails cleanly instead of using a stale address.
             void* address = value.Resolve();
             return (address != nullptr) ? Instance(address, value.Type()) : Instance{};
         }
         if (value.IsBorrow())
         {
             // A borrow points into a parent's storage; a structural mutation since capture may have
-            // freed/moved it. Revalidate against the mutation generation - stale => empty Instance, so
+            // freed/moved it. Revalidate against the mutation generation; a stale one gives an empty Instance, so
             // the caller (a script get/set) fails cleanly instead of dereferencing a dangling address.
             return value.BorrowValid() ? Instance(value.BorrowAddress(), value.Type()) : Instance{};
         }
@@ -685,8 +685,8 @@ export namespace foundation::core
     {
         None = 0,
         // Elements are polymorphic (Array<RefPtr<Base>>): getAt returns an object-mode Variant
-        // whose Type() is the ELEMENT's dynamic type; elementType is the static Base. Consumers
-        // recurse into the concrete type. setAt is unsupported (mutation is a separate design).
+        // whose Type() is the element's dynamic type; elementType is the static Base. Consumers
+        // recurse into the concrete type. setAt is unsupported; use the mutation ops below.
         PolymorphicElements = 1u << 0,
     };
 
@@ -697,15 +697,15 @@ export namespace foundation::core
         Variant (*getAt)(const Instance&, usize index);
         Status (*setAt)(const Instance&, usize index, const Variant& value);
         ContainerFlags flags = ContainerFlags::None;
-        // Mutation ops (Variant-free - RefPtr elements are non-copyable, so everything is by
-        // Instance/address). Null when the flavor does not support the op; callers null-check.
-        // - createElement: POLYMORPHIC only - create `concrete` at `index` via the registrant's
-        //   factory (reflection defines + calls this slot but never imports the factory), return the
-        //   new element's Instance (dynamic type) for editing; empty on failure / read-only container.
-        // - canCreateElement: whether `concrete` is creatable here - backs the add-dropdown eligibility
-        //   filter so the derived-type query (EnumerateDerived) stays pure RTTI.
-        // - emplaceDefault: HOMOGENEOUS Array<T>/BoundedArray - default-construct at `index`.
-        // - removeAt / moveElement: both flavors (module arrays are order-sensitive, so move matters).
+        // Mutation ops, free of Variant: RefPtr elements are non-copyable, so everything goes by
+        // Instance or address. Null when the flavor does not support the op; callers null-check.
+        // - createElement (polymorphic only): create `concrete` at `index` through the registrant's
+        //   factory (reflection defines and calls this slot but never imports the factory) and return
+        //   the new element's Instance (dynamic type) for editing; empty on failure or when read-only.
+        // - canCreateElement: whether `concrete` is creatable here. It backs the add dropdown's
+        //   eligibility filter, so the derived-type query (EnumerateDerived) stays pure RTTI.
+        // - emplaceDefault (homogeneous Array<T>/BoundedArray): default-construct at `index`.
+        // - removeAt, moveElement: both flavors (module arrays are order-sensitive, so move matters).
         Instance (*createElement)(const Instance&, usize index, const TypeInfo& concrete) = nullptr;
         bool (*canCreateElement)(const TypeInfo& concrete) = nullptr;
         Instance (*emplaceDefault)(const Instance&, usize index) = nullptr;
@@ -713,7 +713,7 @@ export namespace foundation::core
         Status (*moveElement)(const Instance&, usize from, usize to) = nullptr;
         // Address-based element access (mirrors the Nested mechanism): returns a borrowed Instance
         // { pointee, elementType } so a consumer can descend into a non-copyable / non-Object element
-        // (e.g. Array<UniquePtr<T>> of a plain reflected value) the way getAt cannot - getAt yields a
+        // (e.g. Array<UniquePtr<T>> of a plain reflected value) the way getAt cannot: getAt yields a
         // Variant, which only carries copyable values or RefPtr<Object>. Object containers may fill it
         // too (dynamic type), giving both flavors one uniform descent path. Null = no address access.
         Instance (*addressAt)(const Instance&, usize index) = nullptr;
@@ -824,7 +824,7 @@ export namespace foundation::core
     }
 
     // The registered types that derive from `base` (excluding `base` itself), sorted by category
-    // then displayName for a stable UI order. PURE RTTI - it does not judge creatability; a consumer
+    // then displayName for a stable UI order. Pure RTTI: it does not judge creatability; a consumer
     // (the add-module dropdown) filters eligibility through the container's canCreateElement, which
     // keeps this query free of any serialization/factory dependency.
     inline void EnumerateDerived(const TypeInfo& base, Array<const TypeInfo*>& out)
@@ -844,7 +844,7 @@ export namespace foundation::core
                 }
             }
         }
-        // Insertion sort by (category, displayName) - stable, N is small.
+        // Insertion sort by (category, displayName): stable, and N is small.
         auto cmp = [](StringView a, StringView b) noexcept -> int
         {
             const usize n = a.Size() < b.Size() ? a.Size() : b.Size();
@@ -924,7 +924,7 @@ export namespace foundation::core
                 return Status{};
             },
             .flags = ContainerFlags::None,
-            .createElement = nullptr, // homogeneous: the element type is fixed - use emplaceDefault
+            .createElement = nullptr, // homogeneous: the element type is fixed; use emplaceDefault
             .canCreateElement = nullptr,
             .emplaceDefault =
                 [](const Instance& i, usize index) -> Instance
@@ -980,12 +980,12 @@ export namespace foundation::core
         static inline bool (*canCreate)(const TypeInfo&) = nullptr;
     };
 
-    // Registers Array<RefPtr<Base>> as a POLYMORPHIC reflected container: getAt derefs the RefPtr
-    // and returns an object-mode Variant whose Type() is the ELEMENT's dynamic type (so a consumer
+    // Registers Array<RefPtr<Base>> as a polymorphic reflected container: getAt derefs the RefPtr
+    // and returns an object-mode Variant whose Type() is the element's dynamic type (so a consumer
     // recurses into the concrete derived type's properties). elementType stays the static Base; a
     // null element yields an empty Variant (consumers null-check). setAt is unsupported (elements
-    // are non-copyable). The create-by-type FACTORY is passed IN (createElement/canCreate) - reflection
-    // never imports it; omit both for a cleanly read-only container. The particles impl unit passes
+    // are non-copyable). The create-by-type factory is passed in (createElement/canCreate), since
+    // reflection never imports it; omit both for a read-only container. The particles impl unit passes
     // the standard serialization adapter.
     template <typename Base>
     void RegisterPolymorphicArrayType(RefPtr<Base> (*create)(const TypeInfo&) = nullptr,
@@ -1031,7 +1031,7 @@ export namespace foundation::core
             },
             .canCreateElement = [](const TypeInfo& concrete) -> bool
             { return Factory::canCreate != nullptr && Factory::canCreate(concrete); },
-            .emplaceDefault = nullptr, // polymorphic: no default concrete type - use createElement
+            .emplaceDefault = nullptr, // polymorphic: no default concrete type; use createElement
             .removeAt =
                 [](const Instance& i, usize index) -> Status
             {
@@ -1067,9 +1067,9 @@ export namespace foundation::core
         const_cast<TypeInfo&>(TypeOf<Arr>()).container = &info;
     }
 
-    // Registers Array<UniquePtr<T>> as a HOMOGENEOUS reflected container of a plain (non-Object,
-    // possibly non-copyable) reflected value `T`. getAt yields an empty Variant - like Nested, the
-    // element is reached by ADDRESS (addressAt returns a borrowed Instance{ pointee, TypeOf<T> }) so a
+    // Registers Array<UniquePtr<T>> as a homogeneous reflected container of a plain (non-Object,
+    // possibly non-copyable) reflected value `T`. getAt yields an empty Variant: like Nested, the
+    // element is reached by address (addressAt returns a borrowed Instance{ pointee, TypeOf<T> }) so a
     // consumer recurses into T's properties without copying. setAt is unsupported (owned, non-copyable);
     // emplaceDefault default-constructs a T when T is default-constructible; remove/move reorder.
     template <typename T>
@@ -1144,8 +1144,8 @@ namespace foundation::core::detail
 {
     // ---- bounded-array (count-bound inline vector) container support --------------------------
     // A `T member[N]` C-array paired with a live `count` member (the logical length) is reflected
-    // as a container whose SIZE is the count clamped to [0, N] - so garbage slots beyond the count
-    // never surface. The container operates on the OWNER instance (it needs both the array and the
+    // as a container whose size is the count clamped to [0, N], so garbage slots beyond the count
+    // never surface. The container operates on the owner instance (it needs both the array and the
     // count), so the BoundedArray property's `address` returns the owner identity.
     template <typename M>
     struct CArrayTraits;
@@ -1189,7 +1189,7 @@ namespace foundation::core::detail
     }
     inline void* BoundedArrayAddress(const Instance& inst)
     {
-        return inst.Pointer(); // the owner - the container reads array + count off it
+        return inst.Pointer(); // the owner; the container reads array and count off it
     }
 
     template <typename Owner, typename Elem, usize N, auto ArrayMember, auto CountMember>
@@ -1322,7 +1322,7 @@ namespace foundation::core::detail
         if constexpr (std::is_same_v<Bare, Variant>)
         {
             (void)v;
-            return true; // a Variant parameter is the generic sink: it accepts ANY argument as-is
+            return true; // a Variant parameter is the generic sink: it accepts any argument as-is
         }
         else if constexpr (std::is_same_v<Bare, StringView>)
         {
@@ -1366,8 +1366,8 @@ namespace foundation::core::detail
         }
         else if constexpr (std::is_enum_v<Bare>)
         {
-            // An enum arg is its underlying int (i64/f64) or a properly-typed enum Variant - see
-            // ConvertArg. Accept all three so an overload check does not reject a script enum.
+            // An enum arg is its underlying int (i64/f64) or a properly-typed enum Variant (see
+            // ConvertArg). Accept all three so an overload check does not reject a script enum.
             return v.TryGet<Bare>() != nullptr || v.TryGet<i64>() != nullptr ||
                    v.TryGet<f64>() != nullptr;
         }
@@ -1410,7 +1410,7 @@ namespace foundation::core::detail
         }
         else if constexpr (ArgArray<Bare>::value)
         {
-            // BY VALUE (a fresh Array<E> from a script's list, or a copy of a native one), so
+            // by value (a fresh Array<E> from a script's list, or a copy of a native one), so
             // decltype(auto) stays consistent across this branch. AcceptArg checked every element.
             if (const Bare* typed = v.template TryGet<Bare>())
             {
@@ -1429,10 +1429,10 @@ namespace foundation::core::detail
         }
         else if constexpr (std::is_enum_v<Bare>)
         {
-            // An enum argument crosses from script as its underlying INT (no native enum type in
-            // script backends; AngelScript enums are int-backed), so accept an i64/f64 and cast - as
+            // An enum argument crosses from script as its underlying int (no native enum type in
+            // script backends; AngelScript enums are int-backed), so accept an i64/f64 and cast, as
             // well as a properly-typed enum Variant. Bare is known here, so the cast is well-
-            // defined. Mirrors the property-setter coercion (PropertySet). Returns BY VALUE, so
+            // defined. Matches the property-setter coercion (PropertySet). Returns by value, so
             // decltype(auto) stays consistent across this branch.
             if (const i64* i = v.template TryGet<i64>())
             {
@@ -1670,16 +1670,16 @@ namespace foundation::core::detail
         }
     };
 
-    // Dispatch for a method reflected with an OVERRIDDEN declared return type (Method<Member,
-    // ReturnAs>): run the normal invoke, then VALIDATE the returned Variant's runtime type matches
-    // `ReturnAs`. A mismatch resolves to empty - never surface a type-confused handle to a backend
-    // that trusts the declared return type. For factories returning a RESOLVE-mode handle of a
+    // Dispatch for a method reflected with an overridden declared return type (Method<Member,
+    // ReturnAs>): run the normal invoke, then check that the returned Variant's runtime type matches
+    // `ReturnAs`. A mismatch resolves to empty, so a backend that trusts the declared return type
+    // never sees a type-confused handle. For factories returning a resolve-mode handle of a
     // specific type (RigidBody.of(entity)); composes with Variant::From<Variant> passthrough.
     template <auto Member, typename ReturnAs>
     [[nodiscard]] Result<Variant> InvokeReturningAs(const Instance& instance, Span<Variant> args)
     {
         Result<Variant> result = MethodReflect<Member>::Invoke(instance, args);
-        // Validate against the SAME TypeInfo the declared return uses (ReturnTypeInfo is
+        // Validate against the same TypeInfo the declared return uses (ReturnTypeInfo is
         // object-aware: StaticType for objects), so a legitimate return is not spuriously rejected.
         if (result.HasValue() && result.Value().Type() != ReturnTypeInfo<ReturnAs>())
         {
@@ -1728,7 +1728,7 @@ export namespace foundation::core
 
         /// Keep a legacy reader: a payload stored under any version from `oldest` up to the
         /// current one is accepted, and the Serialize body branches on ar.Version() for the old
-        /// layouts. One version back, removed once the data has moved.
+        /// layouts.
         TypeBuilder& ReadsDataVersionsFrom(u32 oldest)
         {
             m_minReadDataVersion = oldest;
@@ -1746,7 +1746,7 @@ export namespace foundation::core
             return *this;
         }
 
-        /// A COMPUTED read-only property backed by a const zero-arg getter (returns by value).
+        /// A computed read-only property backed by a const zero-arg getter (returns by value).
         /// Emits as a parens-less getter in the script backends and reflects as a property to
         /// tooling, but the value is derived rather than a stored field: `address` is null (no
         /// in-place editing) and set returns NotSupported. Use for facade accessors that should
@@ -1763,7 +1763,7 @@ export namespace foundation::core
             return *this;
         }
 
-        /// A WRITABLE computed property: a const zero-arg getter and a one-argument setter over
+        /// A writable computed property: a const zero-arg getter and a one-argument setter over
         /// state the type keeps behind an invariant (a flag inside a nested value whose caches
         /// must rebuild when it changes). Reflects as an ordinary editable property to tooling
         /// and script, with `address` null (no in-place editing: every write goes through the
@@ -1782,11 +1782,11 @@ export namespace foundation::core
             return *this;
         }
 
-        /// A NESTED structure property: `member` is itself a reflected type the tooling recurses
+        /// A nested structure property: `member` is itself a reflected type the tooling recurses
         /// into (a `MaterialSource source;` value member, or a `MeshSource* source;` pointer
         /// member). Unlike Property<>, it never copies the member through a Variant, so it works
         /// for non-copyable Object members. `get` is empty, `set` returns NotSupported, `type` is
-        /// the nested type, and `address` yields the member (the POINTEE for a pointer member, null
+        /// the nested type, and `address` yields the member (the pointee for a pointer member, null
         /// when unset). Consumers check IsNested(), then recurse via address; script harvest skips it.
         template <auto Member>
         TypeBuilder& Nested(const char* name)
@@ -1801,11 +1801,11 @@ export namespace foundation::core
             return *this;
         }
 
-        /// A BOUNDED-ARRAY property: a fixed-capacity C-array member (`T member[N]`) paired with a
+        /// A bounded-array property: a fixed-capacity C-array member (`T member[N]`) paired with a
         /// live count member (the logical length). Reflects as a container whose size is the count
-        /// clamped to [0, N] - iterating never surfaces garbage beyond the count - reusing the whole
-        /// IsContainer/ContainerGetAt/ContainerSetAt consumer path. Flagged Nested (address = the
-        /// owner; the container reads the array + count off it); harvest skips it like any Nested.
+        /// clamped to [0, N], so iterating never surfaces garbage beyond the count, and reuses the
+        /// whole IsContainer/ContainerGetAt/ContainerSetAt consumer path. Flagged Nested (address is
+        /// the owner; the container reads the array and count off it); harvest skips it like any Nested.
         template <auto ArrayMember, auto CountMember>
         TypeBuilder& BoundedArray(const char* name)
         {
@@ -1850,10 +1850,10 @@ export namespace foundation::core
             return *this;
         }
 
-        /// Give the LAST-added method a distinct alternate name for consumers that bind one entry
+        /// Give the last-added method a distinct alternate name for consumers that bind one entry
         /// per name (scripting). Call fluently after Method():
         /// `.Method<&T::SetPositionXyz>("setPosition").OverloadedName("setPositionXyz")`.
-        /// The contract is DISTINCTNESS, not annotate-everything: an N-member overload set needs
+        /// The contract is distinctness, not annotate-everything: an N-member overload set needs
         /// only enough names that no two collide, so the primary overload keeps the clean name
         /// (`setPosition` + `setPositionXyz`). A non-overloaded method never needs it.
         TypeBuilder& OverloadedName(const char* scriptName)
@@ -1865,7 +1865,7 @@ export namespace foundation::core
             return *this;
         }
 
-        /// Mark the LAST-added method as implementing `op` (MethodOperator): a static whose first
+        /// Mark the last-added method as implementing `op` (MethodOperator): a static whose first
         /// parameter is the left operand. Call fluently after Method():
         /// `.Method<static_cast<Float3 (*)(Float3, Float3)>(&operator+)>("Add").Operator(Add)`.
         TypeBuilder& Operator(MethodOperator op)
@@ -1877,9 +1877,9 @@ export namespace foundation::core
             return *this;
         }
 
-        /// Reflect a method WITH explicit parameter names. C++ cannot recover parameter names, so
+        /// Reflect a method with explicit parameter names. C++ cannot recover parameter names, so
         /// pass them here to give bindings/tooling real names instead of arg0..N. The list length
-        /// is checked against the method's arity AT COMPILE TIME - name all parameters or none.
+        /// is checked against the method's arity at compile time: name all parameters or none.
         template <auto Member, usize N>
         TypeBuilder& Method(const char* name, const char* const (&paramNames)[N])
         {
@@ -1893,12 +1893,11 @@ export namespace foundation::core
             return *this;
         }
 
-        /// Reflect a method whose C++ body returns a Variant but whose DECLARED reflected return type
-        /// is `ReturnAs` - a factory that hands back a runtime-typed handle (e.g. `RigidBody.of(entity)`
-        /// returning a RESOLVE-mode ref whose dynamic type is the component). The declared return
-        /// drives AngelScript's static boxing. The dispatch
-        /// validates the returned Variant's runtime type equals `ReturnAs` (mismatch -> empty, never a
-        /// type-confused handle). Composes with Variant::From<Variant> passthrough.
+        /// Reflect a method whose C++ body returns a Variant but whose declared reflected return type
+        /// is `ReturnAs`: a factory that hands back a runtime-typed handle (e.g. `RigidBody.of(entity)`
+        /// returning a resolve-mode ref whose dynamic type is the component). The declared return
+        /// drives AngelScript's static boxing. The dispatch checks that the returned Variant's
+        /// runtime type equals `ReturnAs`; a mismatch gives empty, never a type-confused handle. Composes with Variant::From<Variant> passthrough.
         template <auto Member, typename ReturnAs>
         TypeBuilder& Method(const char* name)
         {
@@ -1911,7 +1910,7 @@ export namespace foundation::core
             return *this;
         }
 
-        /// As above, and every Variant parameter is DECLARED as `ParamAs`: a method taking any handle
+        /// As above, and every Variant parameter is declared as `ParamAs`: a method taking any handle
         /// as a Variant (a narrowing `Label.of(node)`) tells the bindings what it takes, so a typed
         /// language spells it `Node@` and a script passes a handle held in a variable as it is (a
         /// bare Variant parameter is a `?&in` sink there, which copies a variable's object). The C++
@@ -1941,7 +1940,7 @@ export namespace foundation::core
             return *this;
         }
 
-        /// Attach an attribute to the MOST RECENTLY added property (fluent - call right
+        /// Attach an attribute to the most recently added property (fluent: call right
         /// after Property()). Tooling metadata: "range" (Float4 min/max/step), "visibleWhen"
         /// (String "prop" truthy or "prop=1,2" value list), etc.
         template <typename V>
@@ -1979,7 +1978,7 @@ export namespace foundation::core
             return *this;
         }
 
-        // Reflects a constructor T(Args...) WITH explicit parameter names (arity-checked at
+        // Reflects a constructor T(Args...) with explicit parameter names (arity-checked at
         // compile time; name all parameters or none).
         template <typename... Args, usize N>
         TypeBuilder& Constructor(const char* const (&paramNames)[N])
@@ -2013,7 +2012,7 @@ export namespace foundation::core
             m_data.info.minReadDataVersion = m_minReadDataVersion;
             m_data.info.readsLegacyData = m_readsLegacyData;
             // Wire per-property attribute spans (the inner Array buffers survive TypeData's
-            // move - only the outer array's control block moves).
+            // move; only the outer array's control block moves).
             while (m_data.propertyAttributes.Size() < m_data.properties.Size())
             {
                 m_data.propertyAttributes.PushBack(Array<foundation::core::Attribute>{});
@@ -2039,7 +2038,7 @@ export namespace foundation::core
 
     private:
         // Copy `base`'s type-getters but substitute the authored names, into stable TypeData
-        // storage. The returned pointer stays valid across TypeData's move + later namedParams
+        // storage. The returned pointer stays valid across TypeData's move and later namedParams
         // growth (Array move steals the inner buffer). Called only for N >= 1 (named overloads).
         template <usize N>
         const ParamInfo* StoreNamedParams(Span<const ParamInfo> base,

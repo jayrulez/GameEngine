@@ -3,11 +3,10 @@
 
 // UI - :grid_view partition
 //
-// Virtualized flowing grid with fixed cell size: items flow left-to-right, wrapping to new rows; only
-// creates/binds views for visible rows. Ported from Sedulous.UI/src/Controls/GridView.bf. Same ownership
-// model as ListView: mActiveViews = HashMap<i32, RefPtr<View>> (views cycle to/from the ViewRecycler);
-// the vertical ScrollBar is a VISUAL child RefPtr member; the adapter is BORROWED (pattern-B). Beef
-// get/set props -> methods; the (_, dy) momentum tuple -> Float2.
+// Virtualized flowing grid with a fixed cell size: items flow left to right, wrapping to new rows,
+// and views are created and bound only for visible rows. Ownership matches ListView: m_activeViews
+// maps positions to RefPtr<View> and views cycle to and from the ViewRecycler, the vertical
+// ScrollBar is a visual child held in a RefPtr member, and the adapter is borrowed.
 
 module;
 #include "Core/Prelude.h"
@@ -54,8 +53,8 @@ export namespace foundation::ui
         Event<void(i32, f32, f32)> OnItemRightClicked;
         /// Right-click on empty space below/between cells (context menus on the container).
         Event<void(f32, f32)> OnBackgroundRightClicked;
-        /// Key pressed while an item is selected (position, args) - dispatched before the
-        /// grid's own navigation keys, same contract as ListView::OnItemKeyDown.
+        /// Key pressed while an item is selected (position, args), dispatched before the
+        /// grid's own navigation keys, as ListView::OnItemKeyDown is.
         Event<void(i32, KeyEventArgs&)> OnItemKeyDown;
 
         GridView()
@@ -393,8 +392,8 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Bounded fill (P2c): defaults under an unbounded parent (it scrolls its own
-            // content - it never needs infinity).
+            // Bounded fill: default sizes under an unbounded parent. The grid scrolls its own
+            // content, so it never needs an infinite size.
             MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(300.0f)),
                                   constraints.ConstrainHeight(constraints.BoundedMaxHeight(300.0f))};
         }
@@ -452,9 +451,9 @@ export namespace foundation::ui
                     }
                     m_activeViews.InsertOrAssign(pos, Move(view));
                 }
-                // Already-active cells are NOT rebound here (the ListView rule): GetOrCreate bound
-                // them on acquire and every data-change path rebinds. A per-pass rebind was pure
-                // cost and clobbered whatever state a bound cell held.
+                // Already-active cells are not rebound here, as in ListView: GetOrCreate binds
+                // them on acquire and every data-change path rebinds. Rebinding on every pass
+                // would cost time and clobber whatever state a bound cell holds.
 
                 const i32 row = pos / m_columnsCount;
                 const i32 col = pos % m_columnsCount;

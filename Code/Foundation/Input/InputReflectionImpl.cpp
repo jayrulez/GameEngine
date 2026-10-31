@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Input - reflection implementation unit: the input-map LEAF value types + enums.
+// Foundation::Input - reflection implementation unit: the input-map leaf value types and enums.
 //
 // Reflected in their owning module (foundation.input) so the input types are visible to
-// tooling. This unit covers the FLAT-SCALAR leaves - Binding,
-// Interaction, ActionProcessors - and the enums (BindingSource/ActionKind/InteractionKind).
-// The CONTAINER structs above them (Action/ActionSet/InputMap, nested Array<> lists) reach these
-// leaves via container reflection + a Nested member on the asset. REFLECT_* bodies live
-// out of the interface (GCC module hygiene). RegisterInputTypeReflection() is idempotent.
+// tooling. This unit covers the flat-scalar leaves (Binding, Interaction, ActionProcessors)
+// and the enums (BindingSource, ActionKind, InteractionKind). The container structs above
+// them (Action, ActionSet, InputMap, nested Array<> lists) reach these leaves via container
+// reflection and a Nested member on the asset. REFLECT_* bodies live out of the interface,
+// which GCC's modules need. RegisterInputTypeReflection() is idempotent.
 
 module;
 #include "Core/Prelude.h"
@@ -37,7 +37,7 @@ namespace foundation::input
         builder.Value("TouchStick", BindingSource::TouchStick);
     }
 
-    // The input map's own codes beside the shell's (Sedulous a700e581): what a binding's `code`
+    // The input map's own codes beside the shell's: what a binding's `code`
     // means for a MouseAxis and a GamepadStick binding.
     REFLECT_ENUM(MouseAxisCode, "rtti::input")
     {
@@ -112,10 +112,10 @@ namespace foundation::input
             .Property<&ActionProcessors::timeScale>("timeScale");
     }
 
-    // The CONTAINER structs above the leaves. Their Array<> and value-struct members are Nested
-    // (address-based: the tree is TRAVERSED in place via container reflection, not marshalled by
-    // value), so the whole InputMap is reflection-visible for scripting/tooling. The input editor
-    // page stays bespoke - this is for scriptability, not a reflection-driven inspector.
+    // The container structs above the leaves. Their Array<> and value-struct members are Nested
+    // (address-based: the tree is traversed in place via container reflection, not marshalled by
+    // value), so the whole InputMap is reflection-visible for scripting and tooling. The input
+    // editor page stays bespoke; this is for scriptability, not a reflection-driven inspector.
     REFLECT_VALUE(Action, "rtti::input")
     {
         builder.Property<&Action::name>("name")

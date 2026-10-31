@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - a DockArea's floats in OS windows on foundation.gui's host (D6 of
-// Specs/gui-lab-evolution-3.md), on the Null RHI backend and the null shell: a float opens a window
-// of its own at its bounds, titled, its content a root of the host's GUI; retitled and placed as the
-// layout has it; the user's moves come back to the layout and the window's close closes its panels;
-// where the shell's windows hold no place, a window opens where the system puts it.
+// GUI.Docking - a DockArea's floats in OS windows on foundation.gui's host, on the Null RHI backend
+// and the null shell. A float opens a titled window of its own at its bounds, with its content in a
+// root of the host's GUI. The window is retitled and placed as the layout has it. The user's moves
+// come back to the layout, and the window's close closes its panels. Where the shell does not keep
+// windows at the places they are given, a window opens where the system puts it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -39,8 +39,8 @@ namespace
         return m;
     }
 
-    // A host on the null device and shell, its main window's root holding a DockArea of the profiler
-    // and the memory panels; the application's opener makes null windows.
+    // A host on the null device and shell. Its main window's root holds a DockArea with the
+    // profiler and memory panels, and the application's opener makes null windows.
     struct Bed
     {
         shell::NullShell shell;
@@ -134,16 +134,17 @@ TEST_CASE("dock host windows: a float opens a window of its own at its bounds, t
         graphics::RenderWindow* window = bed.host->WindowFor(root);
         REQUIRE(window != nullptr);
         auto& os = static_cast<shell::NullWindow&>(window->Window());
-        // The main window is at the screen's origin: the area's 100,80 is the screen's.
+        // The main window is at the screen's origin, so the area's 100,80 is also the screen's.
         CHECK(os.X() == 100);
         CHECK(os.Y() == 80);
         CHECK(os.Width() == 300u);
         CHECK(os.Title() == SV(u8"Profiler"));
         CHECK(bed.area->WindowSpaceOf(floating)->GetRootNode() == root);
-        CHECK(made == root); // told, to style it
+        CHECK(made == root); // the handler was told, so it can style the root
         bed.Frame();
 
-        // Another panel in it: retitled. The layout moving it: placed there.
+        // Adding another panel retitles the window, and moving the surface in the layout places the
+        // window there.
         REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.StackOf(SV(u8"profiler"))); }).Ok());
         CHECK(os.Title() == SV(u8"Memory +1"));
         bed.controller.NoteSurfaceBounds(floating, Rectangle{400.0f, 300.0f, 320.0f, 240.0f});
@@ -151,14 +152,14 @@ TEST_CASE("dock host windows: a float opens a window of its own at its bounds, t
         CHECK(os.X() == 400);
         CHECK(os.Height() == 240u);
 
-        // Moved by the user (the system moves it): the layout hears where it is.
+        // When the user moves the window (the system moves it), the layout hears where it is.
         os.SetPosition(500, 350);
         bed.Windows().PostEvent(shell::WindowEvent{shell::WindowEventType::Moved, os.Id(), 0, 0, 500, 350});
         bed.Frame();
         bed.Windows().ClearEvents();
         CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.x == doctest::Approx(500.0f));
 
-        // Its close button: its panels close, and the window with its surface.
+        // Its close button closes its panels, and the window goes with its surface.
         bed.Windows().PostEvent(shell::WindowEvent{shell::WindowEventType::CloseRequested, os.Id()});
         bed.Frame();
         bed.Windows().ClearEvents();
@@ -184,7 +185,7 @@ TEST_CASE("dock host windows: where the shell's windows hold no place, a float's
     const shell::IWindow& os = bed.host->WindowFor(root)->Window();
     CHECK(os.X() == 0); // not positioned: where the system puts it (the null shell's origin)
     CHECK(os.Width() == 300u);
-    // Its place is not known: the layout keeps its size alone.
+    // Its position is not known, so the layout keeps only its size.
     CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.x == doctest::Approx(0.0f));
     CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.width == doctest::Approx(300.0f));
     bed.area->SetWindows(nullptr);

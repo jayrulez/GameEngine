@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.physics core tests: headless Jolt world - "determinism-enough" simulation
-// (spawn/step/assert poses), the layer matrix, compound building, queries, kinematic
-// motion, and contact/trigger buffering.
+// foundation.physics core tests: a headless Jolt world with simulation deterministic enough to
+// test (spawn, step, assert poses), the layer matrix, compound building, queries, kinematic
+// motion, and contact and trigger buffering.
 
 #include <doctest/doctest.h>
 
@@ -100,8 +100,8 @@ TEST_CASE("physics: a heightfield collider - a sphere rests on it, off-footprint
     const BodyId ball = world.CreateBody(drop);
     REQUIRE(ball.IsValid());
 
-    // A sphere far OUTSIDE the footprint (x = 100) meets no ground and falls through - pins Jolt's
-    // no-collision padding: collision never widens past the authored extent.
+    // A sphere far outside the footprint (x = 100) meets no ground and falls through. This pins
+    // Jolt's no-collision padding: collision never widens past the authored extent.
     BodyDesc off;
     ShapeDesc sphere2;
     sphere2.kind = ShapeKind::Sphere;
@@ -128,8 +128,8 @@ TEST_CASE("physics: a heightfield collider - a sphere rests on it, off-footprint
 
 TEST_CASE("physics: a heightfield hole - a sphere over the cut falls through, one beside it rests")
 {
-    // The terrain holes rule (Specs/terrain-holes.md): a sample at kNoCollisionHeight removes
-    // every triangle touching it, exactly as the renderer removes them.
+    // Terrain holes: a sample at kNoCollisionHeight removes every triangle touching it, as the
+    // renderer removes them.
     PhysicsWorld world(DefaultAllocator());
     const u32 n = 65;
     Array<f32> samples;
@@ -182,7 +182,7 @@ TEST_CASE("physics: static-static never pairs; dynamic collides with static")
 {
     PhysicsWorld world(DefaultAllocator());
     (void)world.CreateBody(FloorDesc());
-    // A static box INSIDE the floor: no contact events from the overlapping statics.
+    // A static box inside the floor: no contact events from the overlapping statics.
     BodyDesc buried = BoxAt(0.0f, MotionKind::Static);
     (void)world.CreateBody(buried);
     world.Step(1.0f / 60.0f);
@@ -216,14 +216,14 @@ TEST_CASE("physics: triggers sense without colliding")
     (void)world.CreateBody(FloorDesc());
 
     BodyDesc sensor;
-    sensor.motion = MotionKind::Static; // static sensors don't pair with statics...
+    sensor.motion = MotionKind::Static; // static sensors do not pair with statics...
     sensor.isTrigger = true;
     ShapeDesc volume;
     volume.halfExtents = Float3{1.0f, 1.0f, 1.0f};
     sensor.shapes.PushBack(volume);
     sensor.position = Float3{0.0f, 2.0f, 0.0f};
     sensor.userData = 7;
-    // ...so make it kinematic (a trigger VOLUME that can also move).
+    // ...so make it kinematic (a trigger volume that can also move).
     sensor.motion = MotionKind::Kinematic;
     const BodyId trigger = world.CreateBody(sensor);
     REQUIRE(trigger.IsValid());
@@ -250,7 +250,7 @@ TEST_CASE("physics: triggers sense without colliding")
         }
     }
     CHECK(entered);
-    // The sensor produced no collision RESPONSE: the box fell straight through to the floor.
+    // The sensor produced no collision response: the box fell straight through to the floor.
     world.GetBodyTransform(box, position, rotation);
     CHECK(position.y == doctest::Approx(0.5f).epsilon(0.05));
 }
@@ -260,8 +260,8 @@ TEST_CASE("physics: compound bodies build and simulate")
     PhysicsWorld world(DefaultAllocator());
     (void)world.CreateBody(FloorDesc());
 
-    // A dumbbell: two spheres offset on x - lands and rests HIGHER than a bare sphere
-    // would if it were a point, proving the compound extent matters.
+    // A dumbbell: two spheres offset on x. It lands and rests higher than a bare sphere
+    // would if it were a point, showing the compound extent matters.
     BodyDesc dumbbell;
     ShapeDesc left;
     left.kind = ShapeKind::Sphere;
@@ -335,7 +335,7 @@ TEST_CASE("physics: point query finds containing bodies")
     world.QueryPoint(Float3{0.0f, 0.0f, 0.0f}, hits);
     REQUIRE(hits.Size() == 1);
     CHECK(hits[0] == body);
-    // FILL semantics: the reused array is cleared by the query, never appended to.
+    // Fill semantics: the reused array is cleared by the query, never appended to.
     world.QueryPoint(Float3{10.0f, 0.0f, 0.0f}, hits);
     CHECK(hits.IsEmpty());
     world.QueryPoint(Float3{0.0f, 0.0f, 0.0f}, hits);
@@ -347,8 +347,8 @@ TEST_CASE("physics: a lone shape keeps its local rotation (built as a one-child 
 {
     PhysicsWorld world(DefaultAllocator());
 
-    // A 2x0.2x0.2 STATIC bar stood on end by a 90-degree local rotation about Z. A ray from
-    // above must meet its LONG half extent (top at y = 1.0); dropping the rotation would lay
+    // A 2x0.2x0.2 static bar stood on end by a 90-degree local rotation about Z. A ray from
+    // above must meet its long half extent (top at y = 1.0); dropping the rotation would lay
     // it flat and the ray would land on y = 0.1.
     BodyDesc bar;
     bar.motion = MotionKind::Static;
@@ -392,12 +392,12 @@ TEST_CASE("physics: sphere overlap finds intersecting bodies (deduped) + honors 
     REQUIRE(hits.Size() == 1);
     CHECK(hits[0] == bodyB);
 
-    // The gap between them -> nothing.
+    // The gap between them: nothing.
     hits.Clear();
     world.ShapeOverlap(sphere, Float3{2.5f, 0.0f, 0.0f}, Quaternion::Identity, hits);
     CHECK(hits.IsEmpty());
 
-    // A big sphere spanning both -> both, EACH ONCE (de-dup across sub-shape hits).
+    // A big sphere spanning both: both, each once (de-duplicated across sub-shape hits).
     QueryShape big;
     big.kind = ShapeKind::Sphere;
     big.radius = 3.0f;
@@ -405,7 +405,7 @@ TEST_CASE("physics: sphere overlap finds intersecting bodies (deduped) + honors 
     world.ShapeOverlap(big, Float3{2.5f, 0.0f, 0.0f}, Quaternion::Identity, hits);
     CHECK(hits.Size() == 2);
 
-    // Group mask excluding group 1 -> only A, even with the big sphere.
+    // Group mask excluding group 1: only A, even with the big sphere.
     hits.Clear();
     world.ShapeOverlap(big, Float3{2.5f, 0.0f, 0.0f}, Quaternion::Identity, hits, ~(1u << 1));
     REQUIRE(hits.Size() == 1);
@@ -414,7 +414,7 @@ TEST_CASE("physics: sphere overlap finds intersecting bodies (deduped) + honors 
 
 // A box thinner than Jolt's default convex radius (0.05) builds with a smaller radius instead of
 // tripping Jolt's assert: an imported model's prefab gives its body a 0.01 placeholder box beside
-// the real collider, so a level of such models used to stop a debug build at play.
+// the real collider, and a level of such models must not stop a debug build at play.
 TEST_CASE("physics: a box thinner than the convex radius builds, alone and in a compound")
 {
     PhysicsWorld world(DefaultAllocator());
@@ -485,11 +485,11 @@ TEST_CASE("physics: shape cast sweeps a sphere onto the nearest body (earlier th
     REQUIRE(world.ShapeCast(sphere, Float3{0.0f, 10.0f, 0.0f}, Quaternion::Identity,
                             Float3{0.0f, -1.0f, 0.0f}, 100.0f, hit));
     CHECK(hit.userData == 42u); // the box, not the floor below it
-    // Sphere (r=0.5) touches the box top (y=1.0) when its centre reaches y=1.5 -> travelled 8.5/100.
+    // Sphere (r=0.5) touches the box top (y=1.0) when its centre reaches y=1.5: travelled 8.5/100.
     CHECK(hit.fraction == doctest::Approx(0.085f).epsilon(0.05));
     CHECK(hit.position.y == doctest::Approx(1.0f).epsilon(0.05)); // contact on the box top
 
-    // The VOLUME makes it hit EARLIER than a point ray (which needs y=1.0 -> 9.0/100).
+    // The volume makes it hit earlier than a point ray (which needs y=1.0, so 9.0/100).
     RayHit rayHit;
     REQUIRE(world.RayCast(Float3{0.0f, 10.0f, 0.0f}, Float3{0.0f, -1.0f, 0.0f}, 100.0f, rayHit));
     CHECK(hit.fraction < rayHit.fraction);
@@ -500,7 +500,7 @@ TEST_CASE("physics: shape cast sweeps a sphere onto the nearest body (earlier th
                                 Float3{0.0f, 1.0f, 0.0f}, 10.0f, miss));
 }
 
-// ---- cooked shapes (builder-cooked convex hulls + triangle meshes) ----
+// ---- cooked shapes (builder-cooked convex hulls and triangle meshes) ----
 
 namespace
 {
@@ -578,7 +578,7 @@ TEST_CASE("physics: cooked triangle mesh carries per-face material slots to ray 
     REQUIRE(world.RayCast(Float3{1.5f, 1.0f, 1.5f}, Float3{0.0f, -1.0f, 0.0f}, 5.0f, hit));
     CHECK(hit.surface == 3);
 
-    // A dynamic box rests ON the mesh (mesh collides, not just queries).
+    // A dynamic box rests on the mesh (the mesh collides, not just queries).
     BodyDesc drop = BoxAt(3.0f);
     const BodyId box = world.CreateBody(drop);
     for (int i = 0; i < 300; ++i)
@@ -617,7 +617,7 @@ TEST_CASE("physics: cooked shapes scale; garbage blobs fail gracefully")
     world.GetBodyTransform(body, position, rotation);
     CHECK(position.y == doctest::Approx(1.0f).epsilon(0.05)); // doubled half extent
 
-    // Garbage blob -> invalid body, no crash.
+    // Garbage blob: invalid body, no crash.
     const byte garbage[] = {byte{0xde}, byte{0xad}, byte{0xbe}, byte{0xef}};
     BodyDesc bad;
     ShapeDesc badShape;
@@ -739,9 +739,9 @@ TEST_CASE("physics: a motorized hinge spins its body at the target velocity")
 
 TEST_CASE("physics: a live motor sync survives its connected body being destroyed first")
 {
-    // The subsystem calls SetJointMotor EVERY fixed step for every joint component; a body
+    // The subsystem calls SetJointMotor every fixed step for every joint component; a body
     // destroyed ahead of its joint (entity-active reconcile) must not be dereferenced through
-    // the constraint's stale Body pointers (heap-use-after-free under ASAN).
+    // the constraint's stale Body pointers (a heap use-after-free under ASAN).
     PhysicsWorld world(DefaultAllocator());
     world.SetGravity(Float3{0.0f, 0.0f, 0.0f});
     const BodyId a = world.CreateBody(BoxAt(2.0f));
@@ -842,8 +842,8 @@ TEST_CASE("physics: the character walks, climbs steps, and pushes light bodies")
     ledge.position = Float3{6.0f, 0.15f, 0.0f};
     REQUIRE(world.CreateBody(ledge).IsValid());
 
-    // A light crate ON the ledge: its face is 0.5 above the ledge - too tall to stair
-    // over (stepUp 0.4), so the walking character must PUSH it.
+    // A light crate on the ledge: its face is 0.5 above the ledge, too tall to step
+    // over (stepUp 0.4), so the walking character must push it.
     BodyDesc crate = BoxAt(0.8f);
     crate.shapes[0].halfExtents = Float3{0.25f, 0.25f, 0.25f};
     crate.position = Float3{5.2f, 0.56f, 0.0f};
@@ -851,7 +851,7 @@ TEST_CASE("physics: the character walks, climbs steps, and pushes light bodies")
     const BodyId box = world.CreateBody(crate);
 
     CharacterDesc desc;
-    desc.position = Float3{0.0f, 0.9f, 0.0f}; // capsule CENTER (feet at 0)
+    desc.position = Float3{0.0f, 0.9f, 0.0f}; // capsule center (feet at 0)
     desc.maxStrength = 800.0f;                // default 100N barely beats crate friction
     const CharacterId character = world.CreateCharacter(desc);
     REQUIRE(character.IsValid());
@@ -875,10 +875,10 @@ TEST_CASE("physics: the character walks, climbs steps, and pushes light bodies")
     }
     Float3 position = world.CharacterPosition(character);
     CHECK(position.x == doctest::Approx(3.6f).epsilon(0.15));
-    CHECK(position.y == doctest::Approx(1.2f).epsilon(0.03)); // ON the ledge
+    CHECK(position.y == doctest::Approx(1.2f).epsilon(0.03)); // on the ledge
     CHECK(world.GetCharacterGround(character) == CharacterGround::OnGround);
 
-    // Keep walking into the crate: it gets SHOVED forward, not climbed.
+    // Keep walking into the crate: it gets shoved forward, not climbed.
     for (int i = 0; i < 90; ++i)
     {
         world.SetCharacterVelocity(character, Float3{3.0f, 0.0f, 0.0f});
@@ -940,7 +940,7 @@ TEST_CASE("physics: a character reads the normal of the slope it stands on, and 
 
 TEST_CASE("physics: continuous collision stops a fast body a discrete body tunnels through")
 {
-    // A thin static wall + a small fast sphere fired straight at it: with discrete stepping
+    // A thin static wall and a small fast sphere fired straight at it: with discrete stepping
     // the sphere jumps clean across the wall in one step; LinearCast sweeps and stops.
     const auto fire = [](bool continuous) -> f32
     {
@@ -985,7 +985,7 @@ TEST_CASE("physics: continuous collision stops a fast body a discrete body tunne
 TEST_CASE("physics: an explicit mass override wins over the density-derived mass")
 {
     PhysicsWorld world(DefaultAllocator());
-    // Density path: a unit-ish box at 1000 kg/m^3 has a known mass (volume * density).
+    // Density path: a unit box at 1000 kg/m^3 has a known mass (volume * density).
     BodyDesc byDensity = BoxAt(1.0f);
     const BodyId dense = world.CreateBody(byDensity);
     const f32 derived = world.BodyMass(dense);
@@ -1008,8 +1008,8 @@ TEST_CASE("physics: a DYNAMIC body over a mesh/plane shape simulates as static, 
 {
     // Jolt: triangle meshes, planes and heightfields derive no mass ("Invalid mass" assert at
     // creation) and have no collision path against each other ("Unsupported shape pair" at the
-    // first contact). The editor's Simulate crashed on a dynamic body with a cooked mesh shape
-    // (2026-09-21). The world demotes such a body to static with an error, and it still exists.
+    // first contact), so a dynamic body with a cooked mesh shape would crash. The world demotes
+    // such a body to static with an error, and it still exists.
     PhysicsWorld world(DefaultAllocator());
     (void)world.CreateBody(FloorDesc());
 
@@ -1058,8 +1058,8 @@ TEST_CASE("physics: a DYNAMIC body over a mesh/plane shape simulates as static, 
     REQUIRE(compoundId.IsValid());
     CHECK(world.BodyMass(compoundId) == 0.0f);
 
-    // A KINEMATIC mesh: Jolt sets mass properties for every non-static body, so it is the same
-    // assert - demoted the same way.
+    // A kinematic mesh: Jolt sets mass properties for every non-static body, so it is the same
+    // assert, demoted the same way.
     BodyDesc kinematic = meshBody;
     kinematic.motion = MotionKind::Kinematic;
     kinematic.position = Float3{0.0f, 5.0f, 20.0f};
@@ -1067,7 +1067,7 @@ TEST_CASE("physics: a DYNAMIC body over a mesh/plane shape simulates as static, 
     REQUIRE(kinematicId.IsValid());
     CHECK(world.BodyMass(kinematicId) == 0.0f);
 
-    // A dynamic BOX still falls through the same world, and the static-demoted bodies stay put.
+    // A dynamic box still falls through the same world, and the static-demoted bodies stay put.
     BodyDesc drop;
     drop.motion = MotionKind::Dynamic;
     drop.position = Float3{0.0f, 8.0f, 0.0f};
@@ -1174,10 +1174,10 @@ TEST_CASE("physics: a dynamic body over a FLAT convex hull gets a solid-box mass
     CHECK(position.y < 4.9f); // it falls: a dynamic body, mass invented, collision real
 }
 
-// Jolt's process-wide bring-up is shared by every world and every cook. The cook driver cooks
+// Jolt's process-wide start-up is shared by every world and every cook. The cook driver cooks
 // collision shapes on parallel job workers with no world alive: each cook acquires Jolt, and
-// none may use it before the first has finished registering it (a shared build lost that race
-// and cooked with a null allocator - Sky Hopper's platforms, in Integration.Mcp).
+// none may use it before the first has finished registering it (losing that race cooks with a
+// null allocator).
 TEST_CASE("physics: triangle meshes cook in parallel with no world keeping Jolt up")
 {
     const Float3 positions[] = {
@@ -1195,7 +1195,7 @@ TEST_CASE("physics: triangle meshes cook in parallel with no world keeping Jolt 
         threads.emplace_back(
             [&]()
             {
-                while (!go.load()) // all at once: the bring-up is where they collide
+                while (!go.load()) // all at once: the start-up is where they collide
                 {
                 }
                 for (int i = 0; i < 25; ++i)

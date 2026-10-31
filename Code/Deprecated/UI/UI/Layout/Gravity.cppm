@@ -3,8 +3,8 @@
 
 // UI - :gravity partition
 //
-// Alignment flags for positioning a view within its parent's available space (combine H + V with |).
-// Ported from Sedulous.UI/src/Layout/Gravity.bf (Beef flags enum -> enum class + bitwise operators).
+// Alignment flags for positioning a view within its parent's available space (combine H and V with
+// |). An enum class with bitwise operators.
 
 module;
 #include "Core/Prelude.h"

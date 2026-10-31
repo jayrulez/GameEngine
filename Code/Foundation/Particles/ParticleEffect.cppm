@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.particles:effect - the particle object model, ported from Sedulous.Particles
-// (ParticleEmitter.bf, ParticleSystem.bf, ParticleEffect.bf, ParticleEffectInstance.bf).
+// foundation.particles:effect - the particle object model.
 //
 //   ParticleEffect        - asset definition: a list of systems (each its sub-emitter links).
-//   ParticleSystem        - the workhorse: emitter + initializers + behaviors + streams +
-//                           simulator; runs the per-frame Update loop, spawn, LOD, events.
-//   ParticleEmitter       - spawn timing only (continuous rate / bursts); returns a count.
-//   ParticleEffectInstance- a runtime instance over a shared effect; drives Update + routes
-//                           sub-emitter birth/death events between systems.
+//   ParticleSystem        - emitter, initializers, behaviors, streams and simulator; runs the
+//                           per-frame Update loop, spawning, LOD and events.
+//   ParticleEmitter       - spawn timing only (continuous rate or bursts); returns a count.
+//   ParticleEffectInstance- a runtime instance over a shared effect; drives Update and routes
+//                           sub-emitter birth and death events between systems.
 //
-// Trails, mesh/texture/material refs, and serialization are later layers; this is the CPU
-// simulation core driven by an effect built in code (or, later, by the cooked resource).
+// This is the CPU simulation core. An effect is built in code or by the cooked resource's
+// factory; textures, meshes and materials are referenced by id and bound by that factory.
 
 module;
 #include "Core/Prelude.h"
-#include <utility> // std::move / std::forward (module-local; core Move/Forward also exist)
+#include <utility> // std::move, std::forward (module-local; core Move/Forward also exist)
 
 export module foundation.particles:effect;
 
@@ -42,7 +41,7 @@ export namespace foundation::particles
     {
     public:
         EmissionMode mode = EmissionMode::Continuous;
-        f32 spawnRate = 10.0f;    // particles/second (continuous)
+        f32 spawnRate = 10.0f;    // particles per second (continuous)
         i32 burstCount = 0;       // particles per burst
         f32 burstInterval = 0.0f; // seconds between bursts (<=0 = single burst on first frame)
         i32 burstCycles = 0;      // 0 = infinite bursts
@@ -50,15 +49,16 @@ export namespace foundation::particles
         f32 duration = 0.0f; // active emission window in seconds (0 = emit forever)
         bool looping = true; // when duration>0: restart the window (else emit once then stop)
 
-        // Returns how many particles to spawn this frame (does not spawn). Accumulator model for
-        // continuous; timer/cycles for bursts. Gated by the duration/looping window.
+        // Returns how many particles to spawn this frame (does not spawn). An accumulator for
+        // continuous emission; a timer and cycle count for bursts. Gated by the duration and
+        // looping window.
         [[nodiscard]] i32 CalculateSpawnCount(f32 deltaTime) noexcept
         {
             if (!isEmitting)
             {
                 return 0;
             }
-            // Duration window: outside it, stop (one-shot) or wrap + re-arm bursts (looping).
+            // Duration window: outside it, stop (one-shot) or wrap and re-arm bursts (looping).
             if (duration > 0.0f)
             {
                 m_cycleTime += deltaTime;
@@ -72,7 +72,7 @@ export namespace foundation::particles
                     {
                         m_cycleTime -= duration;
                     }
-                    m_singleBurstDone = false; // re-arm single/looping bursts for the new cycle
+                    m_singleBurstDone = false; // re-arm single or looping bursts for the new cycle
                     m_burstCyclesCompleted = 0;
                 }
             }
@@ -134,7 +134,7 @@ export namespace foundation::particles
     {
     public:
         // Reflection hook (defined in ParticleEffectReflectionImpl.cpp): a member function so it can
-        // reach the private module lists (m_initializers / m_behaviors) without exposing them.
+        // reach the private module lists (m_initializers, m_behaviors) without exposing them.
         static void BuildReflection(foundation::core::TypeBuilder<ParticleSystem>& builder);
 
         // Config
@@ -143,9 +143,9 @@ export namespace foundation::particles
         ParticleSpace simulationSpace = ParticleSpace::World;
         ParticleBlendMode blendMode = ParticleBlendMode::Alpha;
         ParticleRenderMode renderMode = ParticleRenderMode::Billboard;
-        // Billboard atlas / flipbook sheet, as an OPAQUE cooked-resource GUID (the runtime lib doesn't
-        // resolve it - the resource factory binds it to a Proxy<Texture>, the editor cook fills it from an
-        // asset path). Null = untextured (renderer's soft-dot default). Sedulous-style ref-on-the-system.
+        // Billboard atlas or flipbook sheet, as an opaque cooked-resource GUID. The runtime library does
+        // not resolve it: the resource factory binds it to a Proxy<Texture>, and the editor cook fills it
+        // from an asset path. Null = untextured (the renderer's soft-dot default).
         Guid textureRef{};
         // Mesh-mode systems (renderMode==Mesh) draw this mesh per particle. Opaque cooked-resource GUID
         // (like textureRef): the editor fills it from a mesh asset, the resource factory binds it to a
@@ -154,9 +154,9 @@ export namespace foundation::particles
         f32 meshScale = 1.0f;
         // Mesh-mode systems draw their mesh with these materials (renderMode==Mesh). Opaque cooked-resource
         // GUIDs (like meshRef): the editor fills them from material assets, the resource factory binds each
-        // to a Proxy<Material>. Per-submesh, indexed by SubMesh::materialIndex - slot 0 doubles as the
-        // whole-mesh material (a single-material mesh needs one entry), mirroring MeshComponent's unified
-        // material list. Empty = no effect material (the runtime component's material is the fallback).
+        // to a Proxy<Material>. Per submesh, indexed by SubMesh::materialIndex; slot 0 doubles as the
+        // whole-mesh material (a single-material mesh needs one entry), as in MeshComponent's material
+        // list. Empty = no effect material (the runtime component's material is the fallback).
         Array<Guid> materialRefs;
         bool sortParticles = false;
         // Soft particles: fade billboard alpha where it nears the opaque surface behind it (needs the
@@ -169,7 +169,7 @@ export namespace foundation::particles
         TrailSettings trail = TrailSettings::Default();
         // Flipbook: animate the billboard UV rect across a texture-sheet grid (see FlipbookSettings).
         FlipbookSettings flipbook{};
-        // Prewarm: on the first Update, simulate this many seconds so the effect starts already-running.
+        // Prewarm: on the first Update, simulate this many seconds so the effect starts already running.
         f32 prewarmTime = 0.0f;
         // LOD (0 disables)
         f32 lodStartDistance = 0.0f;
@@ -194,8 +194,8 @@ export namespace foundation::particles
         ParticleSystem(const ParticleSystem&) = delete;
         ParticleSystem& operator=(const ParticleSystem&) = delete;
 
-        // Reseed the RNG for deterministic playback. Reset() re-applies this seed, so the same seed +
-        // same inputs reproduce an identical particle sequence.
+        // Reseed the RNG for deterministic playback. Reset() re-applies this seed, so the same seed and
+        // the same inputs reproduce an identical particle sequence.
         void SetSeed(u64 seed) noexcept
         {
             m_seed = seed;
@@ -228,8 +228,8 @@ export namespace foundation::particles
         }
         [[nodiscard]] SimulationMode ResolvedMode() const noexcept { return m_resolvedMode; }
 
-        // Build helpers: construct+configure a module in place, declare its streams, own it. Modules are
-        // reflected ISerializable (RefCounted) objects, so storage + reconstruction use RefPtr.
+        // Build helpers: construct and configure a module in place, declare its streams, own it. Modules
+        // are reflected ISerializable (RefCounted) objects, so storage and reconstruction use RefPtr.
         template <typename T, typename... Args>
         T& AddInitializer(Args&&... args)
         {
@@ -267,7 +267,7 @@ export namespace foundation::particles
         }
 
         // Remove a module by index (editor authoring). Already-declared streams stay allocated,
-        // which is harmless - a module never removes a stream another module needs.
+        // which is harmless: a module never removes a stream another module needs.
         void RemoveInitializer(i32 index)
         {
             if (index >= 0 && index < InitializerCount())
@@ -283,9 +283,9 @@ export namespace foundation::particles
             }
         }
 
-        // Reorder a module within its list (editor authoring; beyond Sedulous, whose module order was
-        // fixed at add-time). Order matters: initializers run top-to-bottom at spawn, behaviors
-        // top-to-bottom each step, so e.g. a ColorInitializer must precede a ColorOverLifetime tint.
+        // Reorder a module within its list (editor authoring). Order matters: initializers run top to
+        // bottom at spawn and behaviors top to bottom each step, so a ColorInitializer, for example,
+        // must precede a ColorOverLifetime tint.
         void MoveInitializer(i32 from, i32 to) { MoveInList(m_initializers, from, to); }
         void MoveBehavior(i32 from, i32 to) { MoveInList(m_behaviors, from, to); }
 
@@ -315,7 +315,7 @@ export namespace foundation::particles
             m_trailCapacityPoints = 0;
         }
 
-        // Module access for the resource serializer (writes each module's reflected tag + Serialize).
+        // Module access for the resource serializer (writes each module's reflected tag, then Serialize).
         [[nodiscard]] i32 InitializerCount() const noexcept
         {
             return static_cast<i32>(m_initializers.Size());
@@ -335,8 +335,8 @@ export namespace foundation::particles
                                                    : nullptr;
         }
 
-        // Resolve CPU/GPU/Auto against behavior support. GPU is stubbed (Phase 6) - Auto/GPU still
-        // fall back to CPU here, but the decision is recorded for when the GPU simulator lands.
+        // Resolve CPU, GPU or Auto against behavior support. There is no GPU simulator, so every
+        // system simulates on the CPU; the resolved mode is only recorded.
         void ResolveSimulationMode() noexcept
         {
             switch (desiredMode)
@@ -373,11 +373,10 @@ export namespace foundation::particles
                 break;
             }
             }
-            // Until the GPU simulator exists, everything simulates on CPU.
         }
 
         // Per-frame entry point: runs a one-time prewarm (simulate `prewarmTime` seconds so the effect
-        // appears already-running on its first visible frame), then the normal step.
+        // appears already running on its first visible frame), then the normal step.
         void Update(f32 deltaTime, Float3 cameraPos = Float3::Zero)
         {
             if (!m_prewarmed)
@@ -397,7 +396,7 @@ export namespace foundation::particles
             Step(deltaTime, cameraPos);
         }
 
-        // The per-frame step - exact Sedulous order.
+        // The per-frame step, in the numbered order below.
         void Step(f32 deltaTime, Float3 cameraPos = Float3::Zero)
         {
             m_totalTime += deltaTime; // 1
@@ -432,10 +431,9 @@ export namespace foundation::particles
         void SpawnParticles(i32 count) { SpawnInternal(count, false, Float3::Zero); }
         // Spawn immediately, bypassing emitter timing (sub-emitter birth without inheritance).
         void SpawnImmediate(i32 count) { SpawnInternal(count, false, Float3::Zero); }
-        // Spawn at a specific position (sub-emitter). inheritedVelocity is ADDED to each new particle's
-        // initialized velocity; inheritedColor MODULATES its color - both no-ops at their defaults
-        // (zero / white), so callers pass the already-factored parent velocity/color. (Beyond Sedulous,
-        // whose SpawnAt dropped these.)
+        // Spawn at a specific position (sub-emitter). inheritedVelocity is added to each new particle's
+        // initialized velocity and inheritedColor modulates its color; both do nothing at their
+        // defaults (zero, white), so callers pass the already-scaled parent velocity and color.
         void SpawnAt(i32 count, Float3 spawnPos, Float3 inheritedVelocity = Float3::Zero,
                      Float4 inheritedColor = Float4{1.0f, 1.0f, 1.0f, 1.0f})
         {
@@ -461,8 +459,8 @@ export namespace foundation::particles
         }
 
     private:
-        // Reposition list[from] so it lands at final index `to` (order-preserving), via
-        // remove-then-insert with the post-removal index shift.
+        // Reposition list[from] so it lands at final index `to` (order-preserving), by removing and
+        // then inserting with the post-removal index shift.
         template <typename T>
         static void MoveInList(Array<T>& list, i32 from, i32 to)
         {
@@ -471,8 +469,8 @@ export namespace foundation::particles
             {
                 return;
             }
-            // `to` is the desired FINAL index. After removing `from`, the list has n-1 elements and
-            // Insert(to) lands the item exactly at final index `to` (valid since to <= n-1).
+            // `to` is the desired final index. After removing `from`, the list has n-1 elements and
+            // Insert(to) lands the item at final index `to` (valid since to <= n-1).
             T item = std::move(list[static_cast<usize>(from)]);
             list.RemoveAt(static_cast<usize>(from));
             list.Insert(static_cast<usize>(to), std::move(item));
@@ -487,14 +485,14 @@ export namespace foundation::particles
                 return;
             }
             // Local space: particles are stored relative to the emitter (origin) and re-based to world at
-            // extract, so spawn positions/velocities are emitter-relative (i.e. zero emitter state).
+            // extract, so spawn positions and velocities are emitter-relative (zero emitter state).
             const bool local = (simulationSpace == ParticleSpace::Local);
             const Float3 emState = local ? Float3::Zero : position;
             const Float3 emitterVel =
                 local
                     ? Float3::Zero
                     : (position - prevPosition) /
-                          Max(m_totalTime, 0.001f); // Sedulous divides by TotalTime (kept faithful)
+                          Max(m_totalTime, 0.001f); // divided by the total running time, not deltaTime
             for (usize k = 0; k < m_initializers.Size(); ++k)
             {
                 m_initializers[k]->SetEmitterState(emState, emitterVel);
@@ -557,7 +555,7 @@ export namespace foundation::particles
             }
         }
 
-        // Size the trail ring buffers to the current capacity/maxPoints (clears existing trails on resize).
+        // Size the trail ring buffers to the current capacity and maxPoints (clears existing trails on resize).
         void EnsureTrailStorage()
         {
             if (m_trailCapacityPoints == trail.maxPoints &&
@@ -575,8 +573,8 @@ export namespace foundation::particles
             }
         }
 
-        // Record each live particle's current position into its ring, when enough time has passed OR it
-        // moved far enough (or it's the first point). Newest point is at `head`; iterate backward to tail.
+        // Record each live particle's current position into its ring when enough time has passed or it
+        // moved far enough (or it is the first point). Newest point is at `head`; iterate backward to tail.
         void RecordTrailPoints()
         {
             EnsureTrailStorage();
@@ -618,7 +616,7 @@ export namespace foundation::particles
             }
         }
 
-        // Compaction that keeps each particle's trail state/points aligned with its (swap-removed) slot.
+        // Compaction that keeps each particle's trail state and points aligned with its (swap-removed) slot.
         void CompactDeadWithTrails()
         {
             CPUStream<f32>* ages = m_streams.Ages();
@@ -648,7 +646,7 @@ export namespace foundation::particles
                     }
                 }
                 m_trailStates[last].Clear();
-                m_streams.SwapRemove(i); // swaps the SoA streams + decrements aliveCount
+                m_streams.SwapRemove(i); // swaps the SoA streams and decrements aliveCount
             }
         }
 
@@ -767,7 +765,7 @@ export namespace foundation::particles
         {
         }
 
-        // Create + own a new system, returning a reference to configure it.
+        // Create and own a new system, returning a reference to configure it.
         ParticleSystem& AddSystem(i32 maxParticles, u64 seed = 0x9E3779B97F4A7C15ull)
         {
             UniquePtr<ParticleSystem> sys =
@@ -777,7 +775,7 @@ export namespace foundation::particles
             return ref;
         }
 
-        // Remove a system by index / drop everything (editor authoring + blob-restore rebuilds).
+        // Remove a system by index, or drop everything (editor authoring and blob-restore rebuilds).
         // The systems' sub-emitters follow: one into the removed system does nothing (-1), one into
         // a system after it names that system's new place.
         void RemoveSystem(i32 index)
@@ -882,8 +880,8 @@ export namespace foundation::particles
             }
         }
 
-        // Resume/begin emission on every system (the counterpart to Stop). Also un-pauses the
-        // instance (isActive). A fresh instance already emits - this restarts a Stop()ed one.
+        // Resume or begin emission on every system (the counterpart to Stop). Also un-pauses the
+        // instance (isActive). A fresh instance already emits; this restarts a stopped one.
         void Play() noexcept
         {
             isActive = true;
@@ -932,7 +930,7 @@ export namespace foundation::particles
                         const ParticleEvent& evt = events[e];
                         if (link.probability < 1.0f)
                         {
-                            // Deterministic spatial-hash gate (matches Sedulous - stable per position).
+                            // Deterministic spatial-hash gate, stable per position.
                             const u32 hash = static_cast<u32>(evt.position.x * 73856093.0f) ^
                                              static_cast<u32>(evt.position.y * 19349663.0f);
                             if (static_cast<f32>(hash % 1000u) / 1000.0f > link.probability)

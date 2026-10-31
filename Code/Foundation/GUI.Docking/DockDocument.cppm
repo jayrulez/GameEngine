@@ -2,14 +2,14 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI.Docking - :document partition: DockLayoutDocument, a dock layout as the engine's serializer
-// reads and writes it (D2 of Specs/gui-lab-evolution-3.md).
+// reads and writes it.
 //
 // The layout itself stays a value (a drop's preview runs an operation on a copy); the document
-// holds one and is what an application saves and restores. Docking reads and writes no files:
-// where a layout is kept, when it is saved and where named presets live are the application's;
-// hosting knows nothing of it. The payload is versioned: one written under another version is
-// refused until a migration reads it. A restore reads into a document of its own and is adopted
-// with DockLayout::Adopt, which checks it first, so a bad file leaves the current layout as it is.
+// holds one and is what an application saves and restores. Docking reads and writes no files: the
+// application decides where a layout is kept, when it is saved and where named presets live, and
+// hosting knows nothing of it. The payload is versioned: a payload written under another version is
+// refused until a migration reads it. A restore reads into a separate document, which is adopted
+// with DockLayout::Adopt; Adopt checks it first, so a bad file leaves the current layout as it is.
 
 module;
 #include "Core/Prelude.h"

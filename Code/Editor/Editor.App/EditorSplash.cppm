@@ -9,7 +9,7 @@
 // splash is drawn on the CPU into a software window (shell WindowSettings::softwareSurface,
 // IWindow::PresentPixels), opened before there is a graphics device: the AssiduousEngine logo, a
 // line saying what startup is doing, a progress bar and the version. Each Step redraws it and
-// pumps the window events so the window stays responsive. Close when the main window is shown.
+// pumps the window events so the window stays responsive. It is closed when the main window shows.
 // It draws at the display's scale (a 175% display gets a splash 1.75 times the size, its text
 // rasterized at that size and its logo from a picture big enough), so it is sharp and not small.
 //
@@ -52,10 +52,10 @@ export namespace editor::app
         EditorSplash(shell::IShell* shellRef, shell::IWindow* window, Span<const u8> logoRgba, u32 logoWidth,
                      u32 logoHeight, Array<u8> fontData, StringView version, f32 scale);
 
-        /// Say what startup is doing, `progress` in 0..1, and show it.
+        /// Says what startup is doing, with `progress` in 0..1, and shows it.
         void Step(StringView status, f32 progress);
 
-        /// Close the window (the main window is up): the shell destroys it at its next flush.
+        /// Closes the window once the main window is up; the shell destroys it at its next flush.
         void Close();
 
         /// The drawn image, Width() x Height() RGBA.
@@ -67,7 +67,7 @@ export namespace editor::app
         [[nodiscard]] StringView Status() const noexcept { return m_status.AsView(); }
         [[nodiscard]] f32 Progress() const noexcept { return m_progress; }
 
-        /// Draw the current state into Pixels (Step does, then shows it).
+        /// Draws the current state into Pixels (Step does this, then shows it).
         void Render();
 
     private:
@@ -94,7 +94,7 @@ export namespace editor::app
         Array<u8> m_pixels;
     };
 
-    /// Open the splash over a new software window of `shell` (after the main window: the shell's
+    /// Opens the splash over a new software window of `shell` (after the main window: the shell's
     /// first window is its main one), with the logo from <dataRoot>/Branding and the text
     /// in the font at `fontPath`, else `embeddedFont` (the face built into the editor). Null when
     /// the window cannot open: the editor then starts without one.

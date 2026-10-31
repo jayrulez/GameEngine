@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Hosting - GuiHost on the Null RHI backend and the null shell: a window's root gets the
-// window's size and its own renderer; a root is drawn when it needs a frame and its last batch
-// encoded again when not; the baker serves every window's renderer and a detached window's forgets
-// its bakes; a window opened for a root through the application's opener, its events told by root,
-// the root under a screen point, and closed again (D6). (The null shell injects no input: routing is
-// checked by the sandbox on the host.)
+// GUI.Hosting - GuiHost on the Null RHI backend and the null shell. A window's root gets the
+// window's size and its own renderer. A root is drawn when it needs a frame, and its last batch is
+// encoded again when not. The baker serves every window's renderer, and a detached window's
+// renderer forgets its bakes. A window is opened for a root through the application's opener, its
+// events are told by root, the root under a screen point is found, and the window is closed again.
+// The null shell injects no input, so the sandbox checks routing on the host.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -65,7 +65,8 @@ namespace
             device->Raw()->DestroyShaderModule(vs);
         }
         RefPtr<SceneRoot> MakeRoot() { return MakeRef<SceneRoot>(DefaultAllocator(), host->ContextRef()); }
-        // One frame of the windows: the host's update, then each rendered, then the device's turn.
+        // Runs one frame of the windows: the host's update, then each window rendered, then the
+        // device's turn.
         void Frame(graphics::RenderWindow* first, graphics::RenderWindow* second = nullptr)
         {
             host->Update(1.0f / 60.0f);
@@ -95,7 +96,7 @@ TEST_CASE("gui.hosting: a window's root takes the window's size and a renderer o
     const shell::IWindow& window = *bed.shell.MainWindow();
     CHECK(root->GetViewportSize().x == doctest::Approx(static_cast<f32>(window.Width())));
     CHECK(root->GetViewportSize().y == doctest::Approx(static_cast<f32>(window.Height())));
-    CHECK(bed.host->Context().GetPictureBaker() == bed.host->Baker()); // its skins bake
+    CHECK(bed.host->Context().GetPictureBaker() == bed.host->Baker()); // so its skins bake
     // A resized window resizes its root.
     static_cast<shell::NullWindow*>(bed.shell.MainWindow())->Resize(640, 360);
     bed.Frame(bed.main.Get());
@@ -115,8 +116,8 @@ TEST_CASE("gui.hosting: a window's multisampled targets follow the backbuffer ea
     const u32 height = bed.main->Swap()->Height();
     CHECK(targets->Matches(width, height));
 
-    // Resized, the swapchain not yet (a live resize: the backbuffer lags the window). The frame
-    // draws at the backbuffer's size, the targets with it.
+    // The window is resized but the swapchain is not yet (a live resize, where the backbuffer lags
+    // the window). The frame draws at the backbuffer's size, and the targets match it.
     static_cast<shell::NullWindow*>(bed.shell.MainWindow())->Resize(640, 360);
     bed.Frame(bed.main.Get());
     CHECK(bed.main->Swap()->Width() == width);
@@ -124,8 +125,8 @@ TEST_CASE("gui.hosting: a window's multisampled targets follow the backbuffer ea
 
     CHECK(bed.host->RetiredTargetsFor(bed.main.Get()) == 0u); // nothing replaced
 
-    // The swapchain catches up: new targets at its size, made without waiting for the GPU; the old
-    // kept while the frames in flight (two) may still draw into them.
+    // When the swapchain catches up, new targets are made at its size without waiting for the GPU,
+    // and the old ones are kept while the frames in flight (two) may still draw into them.
     REQUIRE(bed.main->SyncSize());
     bed.Frame(bed.main.Get());
     targets = bed.host->PassTargetsFor(bed.main.Get());
@@ -146,7 +147,7 @@ TEST_CASE("gui.hosting: SizePanes gives the roots a resized window's size before
     bed.Frame(bed.main.Get());
     static_cast<shell::NullWindow*>(bed.shell.MainWindow())->Resize(700, 420);
     bed.host->SetPaneRegion(*root, Rectangle{0.0f, 0.0f, 500.0f, 420.0f}); // an application's layout of its panes
-    bed.host->SizePanes(); // what it lays out from is this frame's, not the last's
+    bed.host->SizePanes(); // the size it lays out from is this frame's, not the last frame's
     CHECK(root->GetViewportSize().x == doctest::Approx(500.0f));
     CHECK(root->GetViewportSize().y == doctest::Approx(420.0f));
     const u64 drawn = bed.host->FramesDrawn();
@@ -196,10 +197,10 @@ TEST_CASE("gui.hosting: the baker serves every window, and a detached window's r
     foundation::vg::renderer::VGRenderer* gone = bed.host->RendererFor(other.Get());
     const u32 held = otherRoot->RefCount();
     bed.host->DetachWindow(*other);
-    CHECK(otherRoot->RefCount() == held - 1); // the root let go at once, not when the window goes
+    CHECK(otherRoot->RefCount() == held - 1); // the root is released at once, not when the window is destroyed
     CHECK(bed.host->WindowCount() == 1u);
     CHECK(bed.host->WindowFor(otherRoot.Get()) == nullptr);
-    CHECK_FALSE(gone->IsExternalTextureRegistered(key)); // the payload lives until its window goes
+    CHECK_FALSE(gone->IsExternalTextureRegistered(key)); // the payload lives until its window is destroyed
     CHECK(bed.host->RendererFor(bed.main.Get())->IsExternalTextureRegistered(key));
     bed.Frame(bed.main.Get());
     other.Reset();
@@ -224,8 +225,8 @@ TEST_CASE("gui.hosting: an offscreen target draws a root at its own size, timed,
     CHECK(picture.Height() == 200u);
     CHECK(times.Draw >= 0.0);
     CHECK(times.Gpu >= 0.0);
-    CHECK(root->GetLastFrameStats().FramesDrawn == 1u); // a frame of the root's, counted as a window's are
-    CHECK(offscreen.Draw(*root)); // again, nothing read back or written
+    CHECK(root->GetLastFrameStats().FramesDrawn == 1u); // the root's frame is counted, as a window's frames are
+    CHECK(offscreen.Draw(*root)); // draws again, with nothing read back or written
 }
 
 TEST_CASE("gui.hosting: a pane is another root over a region of a window, laid out at its size")
@@ -315,14 +316,14 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     REQUIRE(bed.host->ToScreen(*second, Float2{5.0f, 6.0f}, screen));
     CHECK(screen.x == doctest::Approx(1505.0f));
     CHECK(screen.y == doctest::Approx(106.0f));
-    // The same, as its GUI's drags ask it.
+    // The same, asked the way the GUI's drags ask it.
     IRootPlaces* places = bed.host->Context().GetRootPlaces();
     REQUIRE(places != nullptr);
     CHECK(places->DispatcherAt(Float2{1550.0f, 150.0f}, local) == second->GetEventDispatcher());
     REQUIRE(places->ToScreen(*second->GetEventDispatcher(), Float2{5.0f, 6.0f}, screen));
     CHECK(screen.x == doctest::Approx(1505.0f));
 
-    // Overlapping, the window focused last is on top.
+    // Where windows overlap, the window focused last is on top.
     window->Window().SetPosition(5, 5);
     windows.PostEvent(shell::WindowEvent{shell::WindowEventType::FocusGained, window->Window().Id()});
     bed.Frame(bed.main.Get(), window);
@@ -333,7 +334,7 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     windows.ClearEvents();
     CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == mainRoot.Get());
 
-    // Its events, told by its root; a close asked for closes nothing by itself.
+    // Its events are told by its root; a requested close closes nothing by itself.
     Array<shell::WindowEvent> told;
     const SceneRoot* toldRoot = nullptr;
     int alsoTold = 0;
@@ -360,9 +361,10 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     bed.Frame(bed.main.Get(), window);
     windows.ClearEvents();
     CHECK(told.Size() == 3u);
-    CHECK(alsoTold == 2); // removed: told no more
+    CHECK(alsoTold == 2); // once removed, it is told no more
 
-    // Where the shell's windows hold no place (Wayland), nothing is said of where roots are.
+    // Where the shell does not keep windows at the places given (Wayland), the host says nothing
+    // about where roots are.
     windows.SetCapabilities(shell::WindowCapabilities{true, false});
     CHECK_FALSE(bed.host->PlacesWindows());
     CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == nullptr);
@@ -491,7 +493,7 @@ TEST_CASE("gui.hosting: a press's release reaches its window though the pointer 
         frame(mainId, 50.0f, 50.0f, true, true);   // pressed on it
         CHECK(downs == 1);
         frame(0, 900.0f, 50.0f, true, false);      // dragged off every window
-        frame(0, 900.0f, 50.0f, false, true);      // let go there
+        frame(0, 900.0f, 50.0f, false, true);      // released there
         CHECK(ups == 1);
         host->DetachWindow(*other);
         host->DetachWindow(*main);
@@ -534,7 +536,7 @@ TEST_CASE("gui.hosting: on a scaled display the GUI fills the window's pixels, a
         int downs = 0;
         panel->AddEventListener(EventType::MouseDown, [&](const Event&) { ++downs; });
         host->AttachWindow(*main, root);
-        CHECK(root->GetViewportSize().x == doctest::Approx(1400.0f)); // all of it, not the 800 units' corner
+        CHECK(root->GetViewportSize().x == doctest::Approx(1400.0f)); // all of it, not an 800-unit corner
         CHECK(root->GetViewportSize().y == doctest::Approx(1050.0f));
         DrivenMouse& mouse = shellDriven.input.mouse;
         const u32 id = main->Window().Id();
@@ -554,8 +556,8 @@ TEST_CASE("gui.hosting: on a scaled display the GUI fills the window's pixels, a
         frame(700.0f, 525.0f, true, true);
         CHECK(downs == 1);
         frame(700.0f, 525.0f, false, true);
-        // At (500, 400) units it is (875, 700) pixels: above and left of it, though in units the
-        // panel's own numbers would have held it.
+        // At (500, 400) units it is (875, 700) pixels: above and left of the panel, although in units
+        // the panel's own numbers would have contained it.
         frame(500.0f, 400.0f, false, false);
         frame(500.0f, 400.0f, true, true);
         CHECK(downs == 1);
@@ -568,8 +570,8 @@ TEST_CASE("gui.hosting: on a scaled display the GUI fills the window's pixels, a
 
 namespace
 {
-    // Hosted content that changes as it is placed (a viewport made again at a new size): it
-    // invalidates its node from Place, after the frame's verdict was taken.
+    // Hosted content that changes as it is placed (a viewport made again at a new size). It
+    // invalidates its node from Place, after the frame has already decided whether to draw.
     class ResizingContent final : public IHostedContent
     {
     public:
@@ -595,7 +597,7 @@ namespace
 
 TEST_CASE("gui.hosting: content that invalidates its node as it is placed has its window draw, not reuse its last batch")
 {
-    // The last batch would name the image the content let go (Sedulous found the use after free).
+    // Encoding the last batch again would draw the image the content released: a use after free.
     Bed bed;
     RefPtr<SceneRoot> root = bed.MakeRoot();
     RefPtr<Panel> panel = MakeRef<Panel>(DefaultAllocator());
@@ -604,7 +606,7 @@ TEST_CASE("gui.hosting: content that invalidates its node as it is placed has it
     bed.host->AttachWindow(*bed.main, root);
     bed.host->AddContent(content);
     bed.Frame(bed.main.Get());
-    bed.Frame(bed.main.Get()); // nothing changed: reused
+    bed.Frame(bed.main.Get()); // nothing changed, so the batch is reused
     const u64 drawn = bed.host->FramesDrawn();
     const u64 reused = bed.host->FramesReused();
     content.resizeNext = true;
@@ -640,8 +642,8 @@ namespace
 
 TEST_CASE("gui.hosting: content whose node is not shown (a page behind another tab) leaves the input router until it is")
 {
-    // Two pages' viewports in one place: the one behind kept that place, and the router's last
-    // match gave it the pointer meant for the one in front.
+    // Two pages' viewports in one place. The one behind keeps that place, so if it stayed in the
+    // router, the router's last match would give it the pointer meant for the one in front.
     Bed bed;
     RefPtr<SceneRoot> root = bed.MakeRoot();
     RefPtr<Panel> front = MakeRef<Panel>(DefaultAllocator());

@@ -5,16 +5,13 @@
 //
 // Built-in color manipulation functions for .sss stylesheets:
 // lighten($color, 10%), darken($color, 10%), alpha($color, 0.5), mix($a, $b, 0.5).
-// Ported from Sedulous.UI/src/Styling/Parser/ColorFunctions.bf.
-//
-// Divergence (language): Math.Clamp -> Max(lo, Min(v, hi)); Color fields R/G/B/A -> r/g/b/a.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:color_functions;
 
-import foundation.core; // Color, Min, Max
+import foundation.core;
 import :palette;
 
 using namespace foundation::core;

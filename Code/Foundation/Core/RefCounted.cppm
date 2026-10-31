@@ -42,14 +42,14 @@ namespace foundation::core::detail
     };
 
     // MakeRef parks the (fully initialized) control here just before constructing the
-    // object; RefCounted's ctor adopts it. This makes MemoryAllocator() valid INSIDE
-    // constructors - a view can create its children from its own tree's allocator while
+    // object; RefCounted's ctor adopts it. This makes MemoryAllocator() valid inside
+    // constructors, so a view can create its children from its own tree's allocator while
     // it is still being built. Thread-local: concurrent MakeRefs never cross wires, and
     // nested MakeRef calls consume their own slot before the outer ctor body continues.
-    // NON-INLINE accessor defined in RefCountedImpl.cpp: MakeRef<T> instantiates in the
-    // CALLING library while the ctor may live in another - a vague-linkage thread_local
-    // would duplicate per shared library and the handshake would cross wires at the
-    // boundary (shared-libraries.md rendezvous rule; the single worst hazard in the tree).
+    // The accessor is not inline (defined in RefCountedImpl.cpp): MakeRef<T> instantiates
+    // in the calling library while the ctor may live in another, and a vague-linkage
+    // thread_local would be duplicated per shared library, so the handshake would miss at
+    // the boundary.
     [[nodiscard]] RefControl*& PendingRefControl() noexcept;
 
     inline void ReleaseWeak(RefControl* control) noexcept
@@ -100,7 +100,7 @@ export namespace foundation::core
             if (control->strong.fetch_sub(1, std::memory_order_acq_rel) == 1)
             {
                 // Last strong owner: destroy the object (this runs ~T, which
-                // also ends this RefCounted subobject's lifetime - but `control`
+                // also ends this RefCounted subobject's lifetime, but `control`
                 // lives independently), then drop the "alive" weak ref.
                 control->destroyObject(control->object);
                 detail::ReleaseWeak(control);
@@ -113,10 +113,10 @@ export namespace foundation::core
             return m_control->strong.load(std::memory_order_relaxed);
         }
 
-        /// The allocator THIS object was created from (recorded by MakeRef). The allocator
-        /// inheritance idiom: code inside a ref-counted object allocates its children from
-        /// its own allocator - `MakeRef<Child>(MemoryAllocator())` - so the decision made at
-        /// the tree's root threads through the whole tree with no parameter plumbing.
+        /// The allocator this object was created from (recorded by MakeRef). Code inside a
+        /// ref-counted object allocates its children from its own allocator
+        /// (`MakeRef<Child>(MemoryAllocator())`), so the choice made at the tree's root
+        /// threads through the whole tree with no parameter plumbing.
         [[nodiscard]] IAllocator& MemoryAllocator() const noexcept
         {
             DIAGNOSTIC_ASSERT(m_control != nullptr && m_control->allocator != nullptr);
@@ -269,7 +269,7 @@ export namespace foundation::core
         }
 
         auto* control = Construct<detail::RefControl>(base);
-        // Initialize the control BEFORE constructing the object and park it in the
+        // Initialize the control before constructing the object and park it in the
         // thread-local slot: the RefCounted base ctor adopts it, so the object's own
         // constructor can already use MemoryAllocator() to build its children.
         control->strong.store(1, std::memory_order_relaxed);
@@ -279,7 +279,7 @@ export namespace foundation::core
 
         detail::PendingRefControl() = control;
         T* object = Construct<T>(static_cast<byte*>(base) + objectOffset, Forward<Args>(args)...);
-        detail::PendingRefControl() = nullptr; // belt-and-braces (the base ctor consumed it)
+        detail::PendingRefControl() = nullptr; // the base ctor consumed it; clear it regardless
 
         control->object = object;
         control->destroyObject = [](void* p) noexcept { Destruct(static_cast<T*>(p)); };

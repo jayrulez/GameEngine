@@ -3,12 +3,12 @@
 
 // Editor::Terrain - :tool_panels partition.
 //
-// The terrain brushes' panels (Documentation/Specs/editor-gui.md, 5.3, layer 5, part 3), made of
-// the editor's tool panel kit so they read as one: Sculpt's mode (Raise, Lower, Smooth, Flatten),
-// Paint Layers' layer (each its albedo's picture, numbered from 1 as the keys are) and its mode
-// (Paint, Erase, Smooth; they were letters on the layer row), Cut Holes' mode (Cut, Fill), each
-// with its radius and what else it has, and a line of help for its keys. And the terrain's one
-// composition entry point for the scene view.
+// The terrain brushes' panels, made from the editor's tool panel kit so they look consistent.
+// Sculpt has its mode (Raise, Lower, Smooth, Flatten); Paint Layers has its layer (each shown by
+// its albedo's picture, numbered from 1 like the keys) and its mode (Paint, Erase, Smooth); Cut
+// Holes has its mode (Cut, Fill). Each also has its radius and other settings, and a line of help
+// for its keys. This partition also holds the terrain's single composition entry point for the
+// scene view.
 
 module;
 #include "Core/Prelude.h"
@@ -22,10 +22,11 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// The terrain brushes' panels into the viewport-tool-panel registry (editor.app:tool_panel).
+    /// Registers the terrain brushes' panels in the viewport-tool-panel registry
+    /// (editor.app:tool_panel).
     void RegisterTerrainToolPanels();
 
-    /// The terrain's part of the scene view: its brushes, their panels and the splatmap
-    /// thumbnails. Call once at editor start.
+    /// Registers the terrain's part of the scene view: its brushes, their panels and the
+    /// splatmap thumbnails. Call once at editor start.
     void RegisterTerrainSceneTools(EditorContext& context);
 }

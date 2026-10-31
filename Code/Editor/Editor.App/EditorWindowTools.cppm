@@ -3,9 +3,9 @@
 // Editor::App - :mcp_window_tools partition.
 //
 // editor_screenshot: the whole editor window as the user sees it, over MCP, while the editor
-// runs - the panels, the pages, the dialogs, the toasts, where viewport_screenshot and
+// runs: the panels, the pages, the dialogs, the toasts, where viewport_screenshot and
 // pie_screenshot show one viewport. Only the editor host can serve it (the windows are the
-// application's), so the application hands it seams over its EditorWindowCapture.
+// application's), so the application provides hooks into its EditorWindowCapture.
 module;
 #include "Core/Prelude.h"
 
@@ -25,7 +25,7 @@ export namespace editor::app
         /// The ids of the editor's windows that can draw a frame now (open, not minimised), the
         /// main window first. Empty = nothing to capture.
         Function<Array<u32>()> windows;
-        /// Arm a capture of each.
+        /// Arms a capture of each.
         Function<void(Span<const WindowShotRequest>)> request;
         /// Where the latest request's captures stand.
         Function<Array<WindowShot>()> shots;

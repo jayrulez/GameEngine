@@ -147,11 +147,11 @@ TEST_CASE("shell.null: destroying the main window does not promote another windo
 
     // Close and destroy the main window while the secondary stays open.
     main->Close();
-    CHECK_FALSE(shell.IsRunning()); // main window closed -> shell stops
+    CHECK_FALSE(shell.IsRunning()); // main window closed, so the shell stops
     wm->DestroyWindow(main);
     wm->FlushDestroyed();
 
-    // The secondary is still live and open, but must NOT be promoted to main,
+    // The secondary is still live and open, but must not be promoted to main,
     // and IsRunning() must not flip back to true.
     CHECK(wm->GetWindow(secondary->Id()) == secondary);
     CHECK(secondary->IsOpen());
@@ -207,7 +207,7 @@ TEST_CASE("shell.null: window geometry + content scale round-trip")
     CHECK(w->Y() == 80);
     CHECK(w->ContentScale() == doctest::Approx(1.0f)); // headless default
 
-    // Atomic move / resize round-trip (per-axis setters intentionally do not exist).
+    // Atomic move and resize round-trip (there are no per-axis setters).
     w->SetPosition(-5, 42);
     CHECK(w->X() == -5);
     CHECK(w->Y() == 42);
@@ -240,7 +240,7 @@ TEST_CASE("shell.null: dialog service cancels immediately (empty result, one cal
     IDialogService* dialogs = shell.Dialogs();
     REQUIRE(dialogs != nullptr);
 
-    // Each Show* must invoke the callback exactly once with an empty result (== cancel), so callers
+    // Each Show* must invoke the callback exactly once with an empty result (a cancel), so callers
     // can drive the dialog path uniformly on a headless backend.
     int calls = 0;
     usize lastCount = 999;

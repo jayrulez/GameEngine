@@ -36,7 +36,7 @@ namespace editor
 
     }
 
-    // What either reflected source tells reaches this one's client.
+    // Forwards whatever either reflected source reports to this source's client.
     class SceneSettingsSource::Forwarder final : public gui::IPropertySourceClient
     {
     public:
@@ -114,7 +114,7 @@ namespace editor
 
     void SceneSettingsSource::Changed(const Guid& profile, const gui::ReflectedChange& change)
     {
-        // The source wrote it already; the command keeps it and puts it back on undo.
+        // The source has already written the value; the command keeps it and puts it back on undo.
         SceneEditContext* edit = m_edit;
         const TypeInfo* type = m_type;
         (void)m_edit->Commands().Execute(UniquePtr<IEditorCommand>(
@@ -122,7 +122,7 @@ namespace editor
                 *m_type, [edit, type, profile]() { return edit->SettingsEditTarget(type, profile); }, change, *m_format, u8"inspector_settings",
                 [edit, type, profile]()
                 {
-                    edit->ResolveSettingsResources(type);           // a reference's id written: bound to what it names
+                    edit->ResolveSettingsResources(type);           // bind a newly written reference id
                     edit->NoteSettingsProfileEdited(type, profile); // nil: nothing to note
                 }),
             EditorRootAllocator()));
@@ -130,7 +130,8 @@ namespace editor
 
     void SceneSettingsSource::GetProperties(StringView parent, Array<gui::PropertyInfo>& out) const
     {
-        // Both stand for the same type, so the rows are the block's; their values each one's.
+        // Both stand for the same type, so the rows are the block's; the values come from each
+        // source.
         if (gui::ReflectedPropertySource* source = SourceOf(parent.IsEmpty() ? StringView(u8"") : parent))
             source->GetProperties(parent, out);
     }

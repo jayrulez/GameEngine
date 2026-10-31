@@ -3,11 +3,11 @@
 
 /// Foundation::Render - the `:gpu_mesh` partition.
 ///
-/// GpuMeshCache: uploads a StaticMesh's vertex + index streams to the GPU on first use and
-/// caches them by mesh pointer (so repeated draws reuse the buffers). The streams are
-/// sub-allocated from shared vertex/index pools (no per-mesh buffers); a mesh records
-/// the pool buffer + its byte offset, and draws bind with that offset. Part of the
-/// scene-agnostic renderer - it consumes geometry, not a scene.
+/// GpuMeshCache: uploads a StaticMesh's vertex and index streams to the GPU on first use and
+/// caches them by the mesh's uid (so repeated draws reuse the buffers). The streams are
+/// sub-allocated from shared vertex and index pools (no per-mesh buffers); a mesh records
+/// the pool buffer and its byte offset, and draws bind with that offset. Part of the
+/// scene-agnostic renderer: it consumes geometry, not a scene.
 
 module;
 #include "Core/Prelude.h"
@@ -26,9 +26,9 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
-    // GPU location of one mesh, ready to bind + draw: the (pooled) vertex + index buffers and the
+    // GPU location of one mesh, ready to bind and draw: the pooled vertex and index buffers and the
     // byte offsets of this mesh's streams within them. Skinned meshes also carry a parallel skinning
-    // stream (joints+weights) in a second vertex buffer (bound at slot 1 by the SKINNED pipeline).
+    // stream (joints and weights) in a second vertex buffer, bound at slot 1 by the skinned pipeline.
     struct GpuMesh
     {
         rhi::Buffer* vertexBuffer = nullptr;
@@ -37,7 +37,7 @@ export namespace foundation::render
         u64 indexOffset = 0;
         u32 indexCount = 0;
         rhi::IndexFormat indexFormat = rhi::IndexFormat::UInt32;
-        rhi::Buffer* skinBuffer = nullptr; // skinning stream (null = static mesh)
+        rhi::Buffer* skinBuffer = nullptr; // skinning stream (null for a static mesh)
         u64 skinOffset = 0;
     };
 
@@ -67,12 +67,11 @@ export namespace foundation::render
             if (mesh == nullptr)
             {
                 return nullptr;
-            } // no mesh assigned - a normal state, stay silent
-            // A non-null mesh with an empty vertex OR index stream can't be drawn: the draw path is
-            // indexed-only (DrawIndexed), so 0 indices = nothing rendered. That's almost always a
-            // construction bug in whatever produced the mesh (as a merged-mesh index cursor bug once
-            // was). Don't fail silently - warn, but rate-limit to the first few so a broken mesh
-            // re-submitted every frame can't flood the console; then go quiet.
+            } // no mesh assigned: a normal state, stay silent
+            // A non-null mesh with an empty vertex or index stream can't be drawn: the draw path is
+            // indexed-only (DrawIndexed), so 0 indices means nothing is rendered. That is almost always
+            // a construction bug in whatever produced the mesh, so warn rather than fail silently, but
+            // only for the first few, so a broken mesh resubmitted every frame can't flood the console.
             if (mesh->VertexCount() == 0 || mesh->IndexCount() == 0)
             {
                 static u32 s_warned = 0;
@@ -105,7 +104,7 @@ export namespace foundation::render
                 return nullptr;
             }
 
-            // Skinned meshes carry a parallel skin stream (joints+weights), uploaded to a second pool.
+            // Skinned meshes carry a parallel skin stream (joints and weights), uploaded to a second pool.
             const Span<const geometry::VertexSkinning> skin = mesh->SkinningStream();
             GpuBufferPool::Alloc sk{};
             const bool hasSkin = mesh->IsSkinned() && !skin.IsEmpty();
@@ -160,7 +159,7 @@ export namespace foundation::render
             return m_cache.Find(mesh->uid);
         }
 
-        // Frees all pooled GPU memory + the cache.
+        // Frees all pooled GPU memory and the cache.
         void Clear()
         {
             m_vertexPool.Clear();
@@ -175,14 +174,14 @@ export namespace foundation::render
         static constexpr u64 kVertexChunk = 4ull * 1024 * 1024; // 4 MB vertex chunks
         static constexpr u64 kIndexChunk = 1ull * 1024 * 1024;  // 1 MB index chunks
         static constexpr u64 kVertexAlign = 16; // safe vertex-stream offset alignment
-        static constexpr u64 kIndexAlign = 4;   // covers u16 + u32 index offsets
+        static constexpr u64 kIndexAlign = 4;   // covers u16 and u32 index offsets
 
         rhi::Queue* m_queue;
         GpuBufferPool m_vertexPool;
         GpuBufferPool m_indexPool;
-        GpuBufferPool m_skinPool; // skinning streams (joints+weights) for skinned meshes
-        // Keyed by StaticMesh::uid, NEVER the pointer (freed addresses reuse - a new mesh
-        // landing on a dead mesh's address must not inherit its GPU geometry). Entries of dead
+        GpuBufferPool m_skinPool; // skinning streams (joints and weights) for skinned meshes
+        // Keyed by StaticMesh::uid, not the pointer: freed addresses are reused, and a new mesh
+        // landing on a dead mesh's address must not inherit its GPU geometry. Entries of dead
         // meshes idle in the pools until Clear(); reloads re-upload under the new object's uid.
         HashMap<u64, GpuMesh> m_cache;
     };

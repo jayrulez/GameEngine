@@ -3,13 +3,10 @@
 
 // UI Toolkit - :toolbar partition
 //
-// Horizontal toolbar container + its item family (ToolbarItem / ToolbarSeparator / ToolbarButton /
-// ToolbarToggle). Ported from Sedulous.UI.Toolkit/src/Toolbar.bf. All five classes live in one partition
-// because ToolbarButton/ToolbarToggle draw by resolving styles off their parent Toolbar (a mutual
-// reference the module-partition DAG cannot split). Beef `String mText` -> String m_text (empty == null);
-// `delegate void(UIDrawContext, RectangleF) mIconDraw` -> Function<void(UIDrawContext&, Rectangle)>;
-// `Event<delegate void(ToolbarButton)>` -> Event<void(ToolbarButton*)>; `x as Toolbar` -> Cast<Toolbar>(x).
-// ToolbarButton/ToolbarToggle OnDraw are defined out-of-line (need the complete Toolbar type).
+// Horizontal toolbar container and its item family (ToolbarItem, ToolbarSeparator, ToolbarButton,
+// ToolbarToggle, ToolbarMenuButton). They share one partition because the buttons draw by resolving
+// styles off their parent Toolbar, a mutual reference the module-partition graph cannot split. The
+// buttons' OnDraw bodies are defined out of line, since they need the complete Toolbar type.
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +35,7 @@ namespace foundation::ui::toolkit
 export namespace foundation::ui::toolkit
 {
     class
-        Toolbar; // forward - items resolve styles off their parent Toolbar (OnDraw defined out-of-line)
+        Toolbar; // forward: items resolve styles off their parent Toolbar (OnDraw defined out of line)
 
     /// Base class for items in a Toolbar. Any View can be a toolbar item.
     class ToolbarItem : public View
@@ -46,7 +43,7 @@ export namespace foundation::ui::toolkit
         RTTI_OBJECT(ToolbarItem, View)
     };
 
-    /// Toolbar separator - vertical divider line.
+    /// Toolbar separator: a vertical divider line.
     class ToolbarSeparator : public ToolbarItem
     {
         RTTI_OBJECT(ToolbarSeparator, ToolbarItem)
@@ -68,7 +65,7 @@ export namespace foundation::ui::toolkit
         }
     };
 
-    /// Toolbar button - supports text, icon (via custom draw delegate), or both.
+    /// Toolbar button: text, an icon (via a custom draw delegate), or both.
     class ToolbarButton : public ToolbarItem
     {
         RTTI_OBJECT(ToolbarButton, ToolbarItem)
@@ -81,8 +78,8 @@ export namespace foundation::ui::toolkit
             Cursor = CursorType::Hand;
         }
 
-        /// Invalidates on a change only: a page syncs its toolbar every frame, and an unconditional
-        /// invalidate re-laid-out the whole editor each frame.
+        /// Invalidates only on a change: a page syncs its toolbar every frame, and an unconditional
+        /// invalidate would re-lay-out the whole editor each frame.
         void SetText(StringView text)
         {
             if (m_text.AsView() == text)
@@ -163,7 +160,7 @@ export namespace foundation::ui::toolkit
         Function<void(UIDrawContext&, Rectangle)> m_iconDraw; // null == "no icon"
     };
 
-    /// Toolbar toggle button - on/off state with accent background when active.
+    /// Toolbar toggle button: an on/off state with an accent background when active.
     class ToolbarToggle : public ToolbarButton
     {
         RTTI_OBJECT(ToolbarToggle, ToolbarButton)
@@ -212,8 +209,8 @@ export namespace foundation::ui::toolkit
     };
 
     /// Toolbar menu button: a button that opens a popup (OnClick, the caller shows a
-    /// ContextMenu under it) and carries a checked state like a toggle - "the mode this
-    /// dropdown holds is active" - drawn with a caret after its text.
+    /// ContextMenu under it) and carries a checked state like a toggle, meaning the mode this
+    /// dropdown holds is active. It is drawn with a caret after its text.
     class ToolbarMenuButton : public ToolbarButton
     {
         RTTI_OBJECT(ToolbarMenuButton, ToolbarButton)
@@ -265,7 +262,7 @@ export namespace foundation::ui::toolkit
             AddView(item, lp);
         }
 
-        /// Add any view with its own layout: a slider's width, a label centred on the bar.
+        /// Add any view with its own layout, such as a slider with a set width or a label centred on the bar.
         void AddItem(View* item, const LayoutStyle& style) { AddView(item, style); }
 
         /// Add a label centred on the bar (a status line, a caption). Returns it borrowed.
@@ -346,7 +343,7 @@ export namespace foundation::ui::toolkit
     {
         const Rectangle bounds{0, 0, Width(), Height()};
 
-        // Hover background - derive from parent toolbar's background.
+        // Hover background, derived from the parent toolbar's background.
         if (IsHovered())
         {
             Color bgColor = Rgb(50, 52, 62, 255);

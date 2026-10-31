@@ -1,5 +1,5 @@
 # Foundation::Geometry - `foundation.geometry`, the engine's runtime mesh format
-# (StaticMesh/SkinnedMesh + index buffer + procedural primitives). Pure data on
+# (StaticMesh/SkinnedMesh, index buffer, procedural primitives). Pure data on
 # top of Core; the renderer uploads the raw vertex/index streams.
 util_add_engine_library(Geometry ALIAS Foundation::Geometry)
 target_link_libraries(Geometry

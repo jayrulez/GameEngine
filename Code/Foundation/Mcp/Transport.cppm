@@ -3,11 +3,12 @@
 
 // Foundation::Mcp - :transport partition
 //
-// Line-oriented transport for newline-delimited JSON-RPC (one message per line, NO Content-Length
-// headers - that is LSP, not MCP). ITransport is the seam; InMemoryTransport drives tests and
-// embedding; StdioTransport is the real stdin/stdout pipe. NOTHING but responses may reach stdout -
-// engine logs must go to stderr in the host, or a stray print corrupts the stream. Serve is the v1
-// single-threaded loop: read a line, dispatch, write the response.
+// Line-oriented transport for newline-delimited JSON-RPC (one message per line, with no
+// Content-Length headers; those belong to LSP, not MCP). ITransport is the interface;
+// InMemoryTransport drives tests and embedding; StdioTransport is the real stdin/stdout pipe.
+// Nothing but responses may reach stdout: the host sends engine logs to stderr, or a stray print
+// would corrupt the stream. Serve is the single-threaded loop: read a line, dispatch, write the
+// response.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +34,7 @@ export namespace foundation::mcp
         virtual void WriteLine(StringView line) = 0;
     };
 
-    // Feed input lines, capture output lines - the test + in-process transport.
+    // Feeds input lines and captures output lines: the transport for tests and in-process use.
     class InMemoryTransport final : public ITransport
     {
         Array<String> m_input;
@@ -58,7 +59,7 @@ export namespace foundation::mcp
         [[nodiscard]] const String& Output(usize index) const { return m_output[index]; }
     };
 
-    // Real stdin/stdout pipe. Reads a full line of any length; writes a line + flush.
+    // Real stdin/stdout pipe. Reads a full line of any length; writes a line and flushes.
     class StdioTransport final : public ITransport
     {
     public:
@@ -95,9 +96,9 @@ export namespace foundation::mcp
         }
     };
 
-    // v1 serve loop: single-threaded read -> dispatch -> write, until the input stream ends. A
+    // Serve loop: single-threaded read, dispatch and write, until the input stream ends. A
     // notification produces no output line. A tool that is not finished is re-entered with the
-    // same line after a short sleep - stdio has no frame to pump, so this loop is the pump.
+    // same line after a short sleep; stdio has no frame to pump, so this loop is the pump.
     inline void Serve(McpServer& server, ITransport& transport)
     {
         String line;

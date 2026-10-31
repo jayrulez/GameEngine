@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - leaving (K0 of Specs/gui-lab-evolution-3.md): Node::Leave puts a node in `:leaving`, where
-// the sheet's exit transition or animation plays, keeps input off it, and removes it once that
-// ends; `transitionend` and `animationend` tell a node a sheet's motion on it ended.
+// GUI - leaving. Node::Leave puts a node in `:leaving`, where the sheet's exit transition or
+// animation plays, keeps input off it, and removes it once the motion ends. `transitionend` and
+// `animationend` tell a node that a sheet's motion on it has ended.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -78,12 +78,12 @@ TEST_CASE("leave: the sheet's exit transition plays, then the node goes")
     CHECK(bed.card->GetAlpha() == doctest::Approx(0.5f));
     CHECK(ended.Count == 0);
 
-    bed.Frame(0.25); // it ends: told, and taken off at the update's drain
+    bed.Frame(0.25); // it ends: the node is told, and removed at the update's drain
     CHECK(ended.Count == 1);
     CHECK(ended.Name == core::StringView(u8"opacity"));
     CHECK(ended.Elapsed == doctest::Approx(0.5f));
     CHECK_FALSE(bed.Attached());
-    CHECK_FALSE(bed.card->IsLeaving()); // out of its parent, it has left
+    CHECK_FALSE(bed.card->IsLeaving()); // removed from its parent, it has left
 }
 
 TEST_CASE("leave: with no exit in the sheet, it goes at the next update")
@@ -91,7 +91,7 @@ TEST_CASE("leave: with no exit in the sheet, it goes at the next update")
     LeaveBed bed(u8".card { opacity: 1; }");
     bed.card->Leave();
     bed.styles.ApplyTree(*bed.root);
-    CHECK(bed.Attached()); // never inside the style pass's walk
+    CHECK(bed.Attached()); // never removed inside the style pass's walk
     bed.root->GetContext().Update(Secs(0.0));
     CHECK_FALSE(bed.Attached());
 }
@@ -155,16 +155,16 @@ TEST_CASE("leave: a leaving node takes no pointer, focus or navigation")
     REQUIRE(bed.root->OverFind(over) == bed.card.Get());
 
     bed.card->Leave();
-    CHECK(dispatcher.GetFocusNode() == nullptr); // dropped, as from a removed subtree
+    CHECK(dispatcher.GetFocusNode() == nullptr); // the focus is dropped, as from a removed subtree
     CHECK(bed.root->OverFind(over) != bed.card.Get());
     bed.card->RequestFocus();
-    CHECK(dispatcher.GetFocusNode() == nullptr); // refused while it leaves
+    CHECK(dispatcher.GetFocusNode() == nullptr); // focus is refused while it leaves
     int clicks = 0;
     bed.card->SetOnClick([&clicks]() { ++clicks; });
     dispatcher.InjectMouseDown(over, MouseButton::Left);
     dispatcher.InjectMouseUp(over, MouseButton::Left);
     CHECK(clicks == 0);
-    (void)dispatcher.MoveFocus(NavDirection::Down); // nothing else to reach, and not it
+    (void)dispatcher.MoveFocus(NavDirection::Down); // there is nothing else to reach, and the leaving node is skipped
     CHECK(dispatcher.GetFocusNode() == nullptr);
 }
 
@@ -192,11 +192,11 @@ TEST_CASE("leave: transitionend tells each property once, and a replaced transit
     bed.card->AddClass(core::StringView(u8"dim"));
     bed.Frame(0.0);
     bed.Frame(0.2);
-    bed.card->RemoveClass(core::StringView(u8"dim")); // replaced halfway: back toward 1
+    bed.card->RemoveClass(core::StringView(u8"dim")); // replaced halfway, so it heads back toward 1
     bed.Frame(0.0);
     CHECK(ended.Count == 0);
     bed.Frame(0.4);
-    CHECK(ended.Count == 1); // the one that ran to its end
+    CHECK(ended.Count == 1); // only the transition that ran to its end
     CHECK(ended.Name == core::StringView(u8"opacity"));
     bed.Frame(1.0);
     CHECK(ended.Count == 1);

@@ -143,9 +143,9 @@ export namespace foundation::rhi
         BindingType type = BindingType::UniformBuffer;
         TextureViewDimension textureDimension = TextureViewDimension::Texture2D;
         TextureSampleType textureSampleType = TextureSampleType::Float;
-        // WebGPU-only: a Sampler entry that binds nearest-only samplers (required
+        // WebGPU only: a Sampler entry that binds nearest-only samplers (required
         // when the paired texture is UnfilterableFloat, e.g. depth read as data).
-        // Vulkan/DX12 have no such distinction and ignore it.
+        // Vulkan and DX12 have no such distinction and ignore it.
         bool samplerNonFiltering = false;
         bool textureMultisampled = false;
         TextureFormat storageTextureFormat = TextureFormat::Undefined;
@@ -188,7 +188,7 @@ export namespace foundation::rhi
         }
 
         /// Factory: storage buffer binding. `stride` is the HLSL element size when the
-        /// shader declares (RW)StructuredBuffer<T> - REQUIRED on DX12, where the SRV/UAV
+        /// shader declares (RW)StructuredBuffer<T>. It is required on DX12, where the SRV/UAV
         /// descriptor is built structured (stride) or raw (0, ByteAddressBuffer). A raw
         /// descriptor bound to a StructuredBuffer<T> shader is undefined behavior on DX12
         /// (garbage reads). Vulkan ignores it (SSBOs are unstructured).
@@ -321,7 +321,7 @@ export namespace foundation::rhi
             return {{BlendFactor::One, BlendFactor::OneMinusSrcAlpha, BlendOperation::Add},
                     {BlendFactor::One, BlendFactor::OneMinusSrcAlpha, BlendOperation::Add}};
         }
-        // Additive: src + dst - accumulate, e.g. the bloom upsample chain.
+        // Additive: src + dst, to accumulate (e.g. the bloom upsample chain).
         static constexpr BlendState Additive()
         {
             return {{BlendFactor::One, BlendFactor::One, BlendOperation::Add},
@@ -462,8 +462,8 @@ export namespace foundation::rhi
         QuerySet* timestampQuerySet = nullptr;
         u32 beginTimestampIndex = 0;
         u32 endTimestampIndex = 0;
-        // The query set Begin/EndOcclusionQuery will target. WebGPU REQUIRES the
-        // declaration at pass begin; Vulkan/DX12 receive the set in the Begin call
+        // The query set Begin/EndOcclusionQuery will target. WebGPU requires the
+        // declaration at pass begin; Vulkan and DX12 receive the set in the Begin call
         // itself and need nothing here (the validation layer may cross-check).
         QuerySet* occlusionQuerySet = nullptr;
         // How draws are supplied. Default Inline; set SecondaryCommandBuffers to execute render
@@ -472,8 +472,8 @@ export namespace foundation::rhi
         StringView label;
     };
 
-    // Describes a render bundle's target signature so it can be validated against - and replayed
-    // into - compatible render passes: the attachment formats + sample count it records for. The
+    // Describes a render bundle's target signature so it can be validated against, and replayed
+    // into, compatible render passes: the attachment formats and sample count it records for. The
     // render-area extent lets the Vulkan backend record a full-target viewport/scissor into the
     // secondary command buffer (bundles carry no pass-level dynamic state; other backends inherit
     // it from the pass and ignore the extent).
@@ -482,14 +482,14 @@ export namespace foundation::rhi
         TextureFormat colorFormats[MaxColorAttachments] = {TextureFormat::Undefined};
         u32 colorFormatCount = 0;
         TextureFormat depthStencilFormat = TextureFormat::Undefined;
-        // Whether the bundle leaves the aspect unwritten. WebGPU VALIDATES these
+        // Whether the bundle leaves the aspect unwritten. WebGPU validates these
         // against the executing pass (a read-only pass only accepts read-only
-        // bundles); Vulkan/DX12 bundles carry no such state and ignore them.
+        // bundles); Vulkan and DX12 bundles carry no such state and ignore them.
         bool depthReadOnly = false;
         bool stencilReadOnly = false;
         u32 sampleCount = 1;
         // The bundle's viewport/scissor (a sub-rect of the target for split-screen). x/y default to 0;
-        // width/height are the viewport extent. A Vulkan secondary / DX12 bundle records this up front
+        // width/height are the viewport extent. A Vulkan secondary or DX12 bundle records this up front
         // since it can't inherit dynamic viewport state from the parent.
         i32 viewportX = 0;
         i32 viewportY = 0;

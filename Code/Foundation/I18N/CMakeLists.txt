@@ -1,5 +1,5 @@
-# Foundation::I18N - `foundation.i18n`: a game's and the editor's text in several languages
-# (Documentation/Specs/i18n.md). String tables that describe their languages whole (texts, plural
+# Foundation::I18N - `foundation.i18n`: a game's and the editor's text in several languages.
+# String tables that describe their languages whole (texts, plural
 # forms, each locale's plural rule and direction), a resolver merging them with a fallback chain,
 # positional formatting, plural forms and pseudolocalization. A leaf over Core: no resource, RHI,
 # UI or messaging; whoever needs text owns a Localization.

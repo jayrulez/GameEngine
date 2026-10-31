@@ -3,13 +3,12 @@
 
 // Editor::Project - :export_controller partition.
 //
-// ExportPresetsController: the non-UI logic behind the editor's "Export presets" panel - a
-// load -> mutate (add / edit / duplicate / delete) -> save round-trip over a project's
-// export_presets.xml (:export_preset). Factored out of the raw UI so the authoring rules
-// (name uniqueness, the duplicate " Copy" suffix, ordering) are testable headlessly; the dialog
-// is a thin driver over this. Mirrors the ExportPreset persistence helpers - Load falls back to
-// DefaultExportPresets when a project has no file yet; Save writes through the project's writable
-// filesystem.
+// ExportPresetsController is the non-UI logic behind the editor's "Export presets" panel: it
+// loads a project's export_presets.xml (:export_preset), applies changes (add, edit, duplicate,
+// delete) and saves it back. Keeping it apart from the UI makes the authoring rules (unique names,
+// the duplicate " Copy" suffix, ordering) testable headlessly; the dialog is a thin driver over
+// it. As with the ExportPreset persistence helpers, Load falls back to DefaultExportPresets when
+// a project has no file yet, and Save writes through the project's writable filesystem.
 
 module;
 #include "Core/Prelude.h"
@@ -26,13 +25,15 @@ namespace vfs = foundation::vfs;
 export namespace editor
 {
     // Owns a project's ExportPresetSet and the add/edit/duplicate/delete operations the editor's
-    // presets panel performs on it. Value-holding (copy the loaded set in, mutate, save back), so a
-    // test can drive the whole round-trip against a temp filesystem without any UI.
+    // presets panel performs on it. It holds the set by value (the loaded set is copied in, changed
+    // and saved back), so a test can drive the whole round trip against a temp filesystem without
+    // any UI.
     class ExportPresetsController
     {
     public:
-        // Load the project's export_presets.xml; when absent (first export), seed with the built-in
-        // default (one host-platform preset) so the panel always has something to show / export.
+        // Loads the project's export_presets.xml. When it is absent (the first export), seeds the
+        // built-in default (one host-platform preset) so the panel always has something to show
+        // and export.
         void Load(vfs::IFileSystem& projectFs)
         {
             m_set.presets.Clear();
@@ -42,8 +43,8 @@ export namespace editor
             }
         }
 
-        // Persist the current set to export_presets.xml (the panel calls this after every mutation
-        // it wants durable - Add/Edit/Duplicate/Delete).
+        // Saves the current set to export_presets.xml (the panel calls this after every change it
+        // wants to keep: Add, Edit, Duplicate, Delete).
         [[nodiscard]] Status Save(vfs::IWritableFileSystem& projectFs)
         {
             return SaveExportPresets(projectFs, m_set);
@@ -55,7 +56,7 @@ export namespace editor
         [[nodiscard]] const ExportPresetSet& Set() const noexcept { return m_set; }
         [[nodiscard]] ExportPresetSet& Set() noexcept { return m_set; }
 
-        // Append `preset`, forcing a unique, non-empty name (export-by-name needs it). Returns the
+        // Appends `preset`, forcing a unique, non-empty name (export by name needs it). Returns the
         // new preset's index.
         usize Add(const ExportPreset& preset)
         {
@@ -65,8 +66,8 @@ export namespace editor
             return m_set.presets.Size() - 1;
         }
 
-        // Replace the preset at `index` with `preset`, keeping its name unique among the OTHERS
-        // (a no-op rename when the name is unchanged, since `index` is excluded from the check).
+        // Replaces the preset at `index` with `preset`, keeping its name unique among the others
+        // (an unchanged name stays as it is, since `index` is excluded from the check).
         void Update(usize index, const ExportPreset& preset)
         {
             if (index >= m_set.presets.Size())
@@ -78,8 +79,8 @@ export namespace editor
             m_set.presets[index] = Move(copy);
         }
 
-        // Append a copy of the preset at `index` with a distinct "<name> Copy" name. Returns the new
-        // index (or `index` unchanged when out of range).
+        // Appends a copy of the preset at `index` with a distinct "<name> Copy" name. Returns the
+        // new index (or `index` unchanged when it is out of range).
         usize Duplicate(usize index)
         {
             if (index >= m_set.presets.Size())
@@ -88,12 +89,12 @@ export namespace editor
             }
             ExportPreset copy = m_set.presets[index];
             copy.name =
-                UniqueName(copy.name.AsView(), -1); // original still present => gets " Copy"
+                UniqueName(copy.name.AsView(), -1); // the original is still present, so the copy gets " Copy"
             m_set.presets.PushBack(Move(copy));
             return m_set.presets.Size() - 1;
         }
 
-        // Drop the preset at `index` (out-of-range = no-op).
+        // Removes the preset at `index` (does nothing when it is out of range).
         void Remove(usize index)
         {
             if (index < m_set.presets.Size())
@@ -102,7 +103,7 @@ export namespace editor
             }
         }
 
-        // A name unique among the presets (excluding index `skip`, or -1 for none): `base` verbatim
+        // A name unique among the presets (excluding index `skip`, or -1 for none): `base` as it is
         // when free, else "<base> Copy", then "<base> Copy 2", "<base> Copy 3", ... Empty `base`
         // becomes "Preset".
         [[nodiscard]] String UniqueName(StringView base, isize skip) const

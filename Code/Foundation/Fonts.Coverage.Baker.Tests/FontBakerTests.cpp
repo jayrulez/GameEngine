@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Fonts.Tests/FontImporterTests.bf - drives the editor-
-// time baking pipeline (FontBaker::Bake) over the bundled Roboto asset and
-// confirms the produced BakedFont + BakedFontAtlas carry usable data.
+// Drives the editor-time baking pipeline (FontBaker::Bake) over the bundled
+// Roboto asset and confirms the produced BakedFont and BakedFontAtlas carry
+// usable data.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -20,7 +20,7 @@ using namespace foundation::fonts;
 namespace
 {
     // "<data root>" + rel (rel starts with '/'): the bundled fonts are found the way
-    // every executable finds engine data - the Data/.dataroot walk from the test binary.
+    // every executable finds engine data: the Data/.dataroot walk from the test binary.
     String AssetPath(const char* rel)
     {
         String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there

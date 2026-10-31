@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Animation editor: cook a SkeletonAsset through its builder into the content DB, then load it back
-// through the resource factory and verify the runtime skeleton. Exercises the authoring -> cook ->
-// product path.
+// through the resource factory and verify the runtime skeleton. Exercises the path from authoring
+// through cook to product.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -40,7 +40,7 @@ TEST_CASE("skeleton asset: builder cooks into the content DB, factory loads it b
         auto* inst = db.RootGroup()->CreateInstance(u8"skel", SkeletonSource::StaticType());
         id = inst->Id();
 
-        // Author a skeleton asset (source populated from a runtime skeleton - model importer later).
+        // Author a skeleton asset, its source populated from a runtime skeleton.
         Skeleton skel{2};
         skel.Bones()[0].index = 0;
         skel.Bones()[0].parentIndex = -1;
@@ -81,8 +81,8 @@ TEST_CASE("skeleton asset: builder cooks into the content DB, factory loads it b
 
 TEST_CASE("clip asset: the builder bakes root motion from a named root through the clip's skeleton")
 {
-    // root-motion.md P0: the clip names its root bone; the builder resolves it against the skeleton
-    // the clip addresses (read from the SOURCE database, and declared as a read so a changed
+    // The clip names its root bone; the builder resolves it against the skeleton
+    // the clip addresses (read from the source database, and declared as a read so a changed
     // skeleton re-cooks the clip), bakes the travel and strips it from the cooked pose.
     RegisterAnimationAssets();
     RegisterAnimationResourceTypes();

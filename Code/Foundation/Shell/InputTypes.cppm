@@ -265,7 +265,7 @@ export namespace foundation::shell
 
     // ---- Touch ------------------------------------------------------------
 
-    // A finger: where it is NORMALIZED over the space its source's mouse reports in (0..1 across
+    // A finger: where it is, normalized over the space its source's mouse reports in (0..1 across
     // the window, or the content a surface fits; what the touch bindings' regions read), and the
     // same place in that mouse's own coordinates (pointerX/Y; what a pointer consumer, the UI,
     // reads, so a finger lands where the cursor would).
@@ -283,7 +283,7 @@ export namespace foundation::shell
     //
     // Every input state change is emitted as an InputEvent, tagged with the source
     // window. The manager's polled device snapshot is a fold over the frame's events,
-    // and the viewport surfaces / UI dispatch consume the same stream - so
+    // and the viewport surfaces and UI dispatch consume the same stream, so
     // poll and event views never disagree.
 
     enum class InputEventKind : core::u8
@@ -315,16 +315,16 @@ export namespace foundation::shell
         InputEventKind kind{};
         core::u32 window = 0; // source window id (0 = unknown/global)
 
-        // Payload - interpret by `kind`:
+        // Payload, interpreted by `kind`:
         KeyCode key{};                  // KeyDown/KeyUp
         KeyModifiers modifiers{};       // KeyDown/KeyUp; the mouse's: those held (a Shift+click)
         MouseButton button{};           // MouseButton*
         GamepadButton padButton{};      // GamepadButton*
         GamepadAxis padAxis{};          // GamepadAxis
         core::i32 gamepad = 0;          // Gamepad* device index
-        core::f32 x = 0.0f, y = 0.0f;   // window-space pos (MouseMove/Touch) / wheel delta
+        core::f32 x = 0.0f, y = 0.0f;   // window-space pos (MouseMove/Touch), or wheel delta
         core::f32 dx = 0.0f, dy = 0.0f; // relative movement (MouseMove)
-        core::f32 value = 0.0f;         // GamepadAxis value / touch pressure
+        core::f32 value = 0.0f;         // GamepadAxis value, or touch pressure
         core::u64 touchId = 0;          // Touch*
         core::utf8char text[64] = {};   // TextInput / TextEditing (UTF-8, null-terminated, whole characters)
         core::i32 editCursor = 0;       // TextEditing: the caret within the composition, in characters

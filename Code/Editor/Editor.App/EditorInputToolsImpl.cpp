@@ -29,9 +29,9 @@ namespace editor::app
     namespace
     {
         constexpr usize kFindLimit = 50; // nodes editor_find lists; the count says how many there were
-        constexpr usize kNamedLimit = 10; // nodes a refusal names when a target finds several
+        constexpr usize kNamedLimit = 10; // nodes a refusal names when a target matches several
 
-        // The seams, shared by every handler: they outlive the server through the handlers' holds.
+        // The state every handler shares; the handlers' references keep it alive past the server.
         class InputToolState final : public RefCounted
         {
         public:
@@ -45,7 +45,7 @@ namespace editor::app
             }
         };
 
-        // An acting tool's call: done, its answer waits for the frame after it.
+        // An acting tool's call: the act is done, and its answer waits for the next frame.
         class FrameWait final : public ToolCallState
         {
         public:
@@ -81,7 +81,7 @@ namespace editor::app
             return out;
         }
 
-        // What `args` names: a finder from `target` and `within`, all it finds.
+        // Finds everything `args` names, with a finder built from `target` and `within`.
         bool FindAll(gui::SceneRoot& root, const JsonValue& args, Array<gui::Node*>& found, String& error)
         {
             const String target = args.Get(u8"target").AsString();
@@ -99,7 +99,7 @@ namespace editor::app
         }
 
         // Where `args` aims: the middle of the one node it names (refused when something else lies
-        // there), or its point. `node` is what the pointer reaches there.
+        // there), or the point it gives. `node` is what the pointer reaches there.
         bool Aim(gui::SceneRoot& root, const JsonValue& args, Float2& at, gui::Node*& node, String& error)
         {
             if (!args.Has(u8"target"))
@@ -111,7 +111,7 @@ namespace editor::app
                 }
                 at = Float2{static_cast<f32>(args.Get(u8"x").AsNumber()), static_cast<f32>(args.Get(u8"y").AsNumber())};
                 gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
-                node = dispatcher != nullptr ? dispatcher->NodeAt(at) : root.OverFind(at); // a popup's first, as input
+                node = dispatcher != nullptr ? dispatcher->NodeAt(at) : root.OverFind(at); // a popup's node first, as input sees it
                 return true;
             }
             Array<gui::Node*> found;
@@ -145,7 +145,7 @@ namespace editor::app
             return word.Size() == name.Size() && word.ContainsIgnoreCase(name);
         }
 
-        // "ctrl-shift" as the dispatcher's modifier bits; false for a word it does not know.
+        // Parses "ctrl-shift" into the dispatcher's modifier bits; false for an unknown word.
         bool ParseModifiers(StringView text, u32& modifiers)
         {
             modifiers = 0;
@@ -179,7 +179,7 @@ namespace editor::app
             return out;
         }
 
-        // The focus and what lies under the pointer, as the frame after an act shows them.
+        // Adds the focus and what lies under the pointer, as the frame after an act shows them.
         void AddAfter(gui::SceneRoot& root, JsonValue& answer)
         {
             gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
@@ -187,7 +187,8 @@ namespace editor::app
             answer.Set(u8"focus", focus != nullptr ? NodeJson(*focus) : JsonValue::MakeNull());
         }
 
-        // An acting tool: `act` on its first entry (an answer, or an error), the answer a frame later.
+        // An acting tool: `act` runs on the first entry (giving an answer or an error), and the
+        // answer is sent a frame later.
         using Act = Function<bool(gui::SceneRoot& root, const JsonValue& args, JsonValue& answer, String& error)>;
         foundation::mcp::ToolCallHandler Acting(const RefPtr<InputToolState>& state, Act act)
         {

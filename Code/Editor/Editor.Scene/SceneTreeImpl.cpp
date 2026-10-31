@@ -34,7 +34,7 @@ namespace editor
         top.icon = String(sceneIcon);
         m_rows.PushBack(Move(top));
         // Roots in list order (the order reordering keeps and saving writes), then each one's
-        // children depth first; with a search, an entity whose subtree holds a match.
+        // children depth first; with a search, only entities whose subtree holds a match.
         for (scene::EntityHandle r = scene.GetFirstRoot(); r.IsAssigned(); r = scene.GetNextSibling(r))
             if (SubtreeMatches(scene, r))
                 AddEntity(scene, r, 0);
@@ -50,7 +50,7 @@ namespace editor
         row.name = String(scene.GetEntityName(e));
         if (row.name.IsEmpty())
             row.name = String(u8"(unnamed)");
-        // A prefab's members read apart; an entity that is not active, with what is under it, dims.
+        // A prefab's members are marked apart; an inactive entity dims, with everything under it.
         scene::PrefabMemberInfo member;
         const bool prefabMember = scene::FindPrefabMember(scene, row.entity, member);
         const bool active = scene.IsEffectivelyActive(e);
@@ -67,7 +67,8 @@ namespace editor
                 AddEntity(scene, c, node);
     }
 
-    // An entity by its first component that has an icon of its own; a plain entity by the generic one.
+    // An entity shows the icon of its first component that has one of its own; a plain entity shows
+    // the generic one.
     void SceneTreeModel::IconOf(scene::Scene& scene, scene::EntityHandle e, Row& row) const
     {
         if (m_icons == nullptr)

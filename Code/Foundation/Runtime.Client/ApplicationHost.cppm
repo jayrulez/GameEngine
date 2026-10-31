@@ -3,21 +3,20 @@
 
 // Foundation::Runtime.Client - the `foundation.runtime.client` module.
 //
-// ApplicationHost: the concrete, generic host that drives exactly ONE IApplication.
-// Owns a SubsystemManager, an optional (borrowed) GraphicsDevice, and the LIST of
-// RenderWindows it presents. It is infrastructure, NOT subclassed - all behavior
-// lives in the IApplication. It is deliberately LOOP-AGNOSTIC: the shell layer
-// drives Start/Tick/Stop (a blocking loop on desktop, a callback on Emscripten),
-// so the host contains no run loop.
+// ApplicationHost: the concrete, generic host that drives exactly one IApplication.
+// Owns a SubsystemManager, an optional (borrowed) GraphicsDevice, and the list of
+// RenderWindows it presents. It is infrastructure and is not subclassed; all behavior
+// lives in the IApplication. It has no run loop: the shell layer drives
+// Start/Tick/Stop (a blocking loop on desktop, a callback on Emscripten).
 //
 // The host implements IApplicationHost (the view the application gets of it). The
-// application registers its subsystems in Configure() - the host forces in none -
+// application registers its subsystems in Configure() and the host forces in none,
 // so the subsystem set is the application's alone and identical standalone or in
 // the editor.
 //
 // Multi-window is uniform: the main window is windows[0]; every frame renders the
-// whole list. Windows can be opened/closed at runtime (OpenWindow/CloseWindow) -
-// the basis for detachable UI windows - with close deferred to frame end.
+// whole list. Windows can be opened and closed at runtime (OpenWindow/CloseWindow),
+// the basis for detachable UI windows, with close deferred to frame end.
 
 module;
 #include "Core/Prelude.h"
@@ -42,15 +41,15 @@ import foundation.profiler.capture;
 extern "C" const char* BuildStamp();
 
 namespace core = foundation::core;
-using namespace foundation::shell; // IShell + input/window types (moved from foundation::runtime)
-using namespace foundation::graphics; // GraphicsDevice/RenderWindow/FrameContext (moved from foundation::runtime)
+using namespace foundation::shell; // IShell and the input/window types
+using namespace foundation::graphics; // GraphicsDevice/RenderWindow/FrameContext
 
 export namespace foundation::runtime
 {
     class ApplicationHost final : public IApplicationHost
     {
     public:
-        // The allocator (required - the entry point decides) becomes the runtime
+        // The allocator (required; the entry point decides) becomes the runtime
         // SubsystemManager's allocator authority for every subsystem this host runs.
         explicit ApplicationHost(core::IAllocator& allocator) noexcept : m_subsystems(allocator) {}
         ~ApplicationHost() override = default;
@@ -59,9 +58,9 @@ export namespace foundation::runtime
         ApplicationHost& operator=(const ApplicationHost&) = delete;
 
         // Bring the application up: read settings, register subsystems (app's
-        // Configure), start the SubsystemManager, create the main RenderWindow (if shell
-        // +graphics), then enter play (app OnLaunch). Idempotent. The application,
-        // shell, and graphics device are all BORROWED (owned by the entry point);
+        // Configure), start the SubsystemManager, create the main RenderWindow (given a shell
+        // and graphics), then enter play (app OnLaunch). Idempotent. The application,
+        // shell and graphics device are all borrowed (owned by the entry point);
         // shell/graphics stay null for headless runs.
         void Start(IApplication& app, IShell* shell = nullptr, GraphicsDevice* graphics = nullptr)
         {
@@ -81,13 +80,13 @@ export namespace foundation::runtime
             {
                 core::SetCurrentThreadName(core::StringView(u8"Main"));
             }
-            // Running from here on, so a RequestExit raised DURING startup (Configure/OnStartup:
+            // Running from here on, so a RequestExit raised during startup (Configure/OnStartup:
             // no data root, an unreadable dist) is honored by the run loop instead of being
             // overwritten when Start completes.
             m_running = true;
 
             // Fatal-signal backtraces: a crash anywhere in the app prints a native stack to
-            // stderr before dying (raw segfaults printed nothing; asserts already did).
+            // stderr before dying, which a raw segfault otherwise would not.
             core::InstallCrashBacktrace();
 
             // Bring up the engine-wide JobSystem before any subsystem starts, so it is
@@ -113,7 +112,7 @@ export namespace foundation::runtime
                     else
                     {
                         // The host keeps ticking with no render window, so nothing draws and
-                        // nothing says why - a long hunt on the web port. Name it.
+                        // nothing would say why. Name it.
                         LOG_ERROR(u8"Runtime",
                                   u8"failed to create the main render window (surface/swap chain) "
                                   u8"- the application runs but renders NOTHING");
@@ -136,13 +135,13 @@ export namespace foundation::runtime
 
             {
                 PROFILE_SCOPE("Update");
-                // Simulation lanes run on SCALED time (slow-mo/pause); the app hook and
+                // Simulation lanes run on scaled time (slow-mo, pause); the app hook and
                 // frame bookkeeping keep the raw dt.
                 const core::f32 scaledDelta = deltaTime * m_subsystems.TimeScale();
-                // The fixed step is CONFIG on the context (the scene bridge seeds per-scene
-                // steppers from it); there is no context-level fixed EXECUTION lane. The host
-                // stepper serves the APP-level fixed hook (OnFixedUpdate), available to any app
-                // that needs one - the default app does not use it (networking's pump runs in
+                // The fixed step is configuration on the manager (the scene bridge seeds
+                // per-scene steppers from it); subsystems have no fixed phase. The host stepper
+                // serves the app-level fixed hook (OnFixedUpdate) for any app that needs one;
+                // the default app does not use it (networking's pump runs in
                 // NetworkSubsystem::PostUpdate).
                 m_subsystems.SetFixedTimeStep(m_settings.fixedTimeStep);
                 m_stepper.step = m_settings.fixedTimeStep;
@@ -166,8 +165,8 @@ export namespace foundation::runtime
                 for (auto& rw : m_windows)
                 {
                     rw->SyncSize();
-                    // Acquire BLOCKS the CPU until a swapchain image is free - under vsync (or a
-                    // GPU-bound frame) this is where the CPU waits for the display/GPU, so scope it
+                    // Acquire blocks the CPU until a swapchain image is free. Under vsync (or a
+                    // GPU-bound frame) this is where the CPU waits for the display or GPU, so scope it
                     // separately to tell a healthy present-wait from a real stall.
                     FrameContext frame{};
                     {
@@ -235,7 +234,7 @@ export namespace foundation::runtime
             m_pendingClose.Clear();
             m_windows.Clear(); // RenderWindow dtors WaitIdle + free GPU resources
 
-            // Tear down the engine-wide JobSystem last - after every subsystem (SubsystemManager.Shutdown)
+            // Tear down the engine-wide JobSystem last, after every subsystem (SubsystemManager.Shutdown)
             // and all GPU resource frees (window dtors), so nothing references it afterward.
             core::ShutdownGlobalJobSystem();
 
@@ -321,7 +320,7 @@ export namespace foundation::runtime
         // the OS window. Runs at frame end, after the GPU finished the frame. The window
         // manager's queue is flushed every frame, not only when the host closed one of its
         // own: a window closed through the manager directly (the editor's splash, which has
-        // no RenderWindow) otherwise stayed on screen, waiting for a flush that never came.
+        // no RenderWindow) would otherwise stay on screen.
         void FlushPendingCloses()
         {
             IWindowManager* wm = (m_shell != nullptr) ? m_shell->WindowManager() : nullptr;

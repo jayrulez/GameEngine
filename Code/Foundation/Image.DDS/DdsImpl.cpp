@@ -230,7 +230,7 @@ namespace foundation::image::dds
 
     namespace
     {
-        // The header parse LoadDds and ParseDdsHeader share: the facts + where the payload starts.
+        // The header parse LoadDds and ParseDdsHeader share: the facts and where the payload starts.
         Status ParseHeader(Span<const u8> bytes, DdsHeader& out, usize& payloadStart)
         {
             if (bytes.Size() < kFileHeaderBytes || !IsDds(bytes))

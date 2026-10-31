@@ -3,13 +3,12 @@
 
 // Editor::Core - :page partition.
 //
-// The document model: each open asset is an EditorPage - a dock
-// tab with its OWN command stack (Sedulous/Traktor per-page undo), dirty tracking, and Save.
-// This is the HEADLESS half: concrete pages live in UI-side modules and add their widget tree on top.
+// The document model: each open asset is an EditorPage, a dock tab with its own command stack
+// (undo is per page), dirty tracking, and Save. This is the headless half: concrete pages live in
+// UI-side modules and add their widget tree on top.
 //
-// Pages are created by IEditorPageFactory, dispatched by the instance's primary-object type
-// with nearest-type matching along the base chain (Traktor's type_difference contest), via
-// EditorPageRegistry.
+// Pages are created by an IEditorPageFactory, chosen by EditorPageRegistry from the instance's
+// primary-object type, with the nearest type along the base chain winning.
 
 module;
 #include "Core/Prelude.h"
@@ -27,12 +26,12 @@ export namespace editor
 {
     class EditorContext; // defined in :context (pages receive it on creation)
 
-    /// An interface a page implements and PUBLISHES for other parts of the editor to act
-    /// through - a scene page's ISceneEditorPage (its edit context, its simulation control).
-    /// The base is what keeps a page's service table typed: a service IS-A IPageService, and
-    /// the TypeId it is published under says which one, so no erased pointer and no RTTI on
-    /// pages is needed. Pages have no runtime type of their own; this is how another module
-    /// learns what a page can do.
+    /// An interface a page implements and publishes for other parts of the editor to act
+    /// through, such as a scene page's ISceneEditorPage (its edit context, its simulation
+    /// control). The base keeps a page's service table typed: every service derives from
+    /// IPageService, and the TypeId it is published under says which one, so pages need no
+    /// erased pointers and no RTTI. Pages have no runtime type of their own; this is how another
+    /// module learns what a page can do.
     class IPageService
     {
     protected:
@@ -75,13 +74,13 @@ export namespace editor
         ~IGameRunPage() = default;
     };
 
-    // One open document. Owns its command stack; the context routes Edit>Undo/Redo to the
-    // active page's stack. `Commands().OnChanged` is wired by the base to mark the page dirty.
+    // One open document. Owns its command stack; the context routes Edit > Undo and Redo to the
+    // active page's stack. The base wires `Commands().OnChanged` to mark the page dirty.
     class EditorPage
     {
     public:
-        // The allocator (required - the page factory forwards the EditorContext's
-        // tagged "Editor" root) backs everything this page creates.
+        // The allocator (required; the page factory forwards the EditorContext's tagged "Editor"
+        // root) backs everything this page creates.
         explicit EditorPage(IAllocator& allocator) : m_allocator(&allocator)
         {
             m_commands.OnChanged = [this]() { m_dirty = true; };
@@ -103,9 +102,10 @@ export namespace editor
         void ClearDirty() noexcept { m_dirty = false; }
 
         /// Revert all unsaved edits to the last-saved state (the toolbar's "Discard Changes").
-        /// Default: undo the whole command stack, then clear it and the dirty flag - correct for
-        /// pages that route every edit through commands. Pages that mutate state directly (or cache
-        /// loaded content) override to reload from the last-saved snapshot / the source DB.
+        /// The default undoes the whole command stack, then clears it and the dirty flag, which is
+        /// correct for pages that route every edit through commands. Pages that change state
+        /// directly (or cache loaded content) override it to reload from the last-saved snapshot or
+        /// the source database.
         virtual void DiscardChanges()
         {
             while (m_commands.CanUndo())
@@ -118,14 +118,16 @@ export namespace editor
 
         [[nodiscard]] EditorCommandStack& Commands() noexcept { return m_commands; }
 
-        /// Unsaved work the page holds that is not its asset (a clip its animation panel edits,
-        /// with a history and a Save of its own; any panel of its like): each named for the prompts
-        /// ("The clip 'Bounce'"), none when all is saved. The page's unsaved mark never covers it;
-        /// closing the page and leaving the editor name each beside the page's own changes.
+        /// Unsaved work the page holds besides its asset, such as a clip its animation panel edits
+        /// with its own history and Save. Each item is named for the prompts ("The clip 'Bounce'");
+        /// none are listed when everything is saved. The page's unsaved mark never covers this
+        /// work; closing the page or leaving the editor lists each item beside the page's own
+        /// changes.
         virtual void ListUnsavedBesides(Array<String>& out) const { (void)out; }
-        /// Saves all of that work; what the saves said (the first that failed).
+        /// Saves all of that work; returns the first failure, if any.
         virtual Status SaveBesides() { return Status{}; }
-        /// The page's changes or that work unsaved: what the close and the exit ask about.
+        /// Whether the page's changes or that other work are unsaved; closing and exiting ask
+        /// about this.
         [[nodiscard]] bool HasUnsavedWork() const
         {
             if (IsDirty())
@@ -135,24 +137,24 @@ export namespace editor
             return !besides.IsEmpty();
         }
 
-        /// The asset this page edits changed OUTSIDE the page (apply-to-prefab, re-import).
-        /// Default no-op; pages that cache loaded content override to refresh themselves.
+        /// The asset this page edits changed outside the page (apply to prefab, reimport).
+        /// The default does nothing; pages that cache loaded content override it to refresh.
         virtual void OnAssetExternallyModified() {}
 
-        /// Rebind this page to a DIFFERENT source instance (Save As): the caller created
-        /// `instance` and invokes Save() next, so the page's current content lands there.
-        /// Pages that cache the asset's name override (calling the base) to refresh it.
+        /// Rebind this page to a different source instance (Save As): the caller created
+        /// `instance` and calls Save() next, so the page's current content lands there. Pages
+        /// that cache the asset's name override this (calling the base) to refresh it.
         virtual void OnSavedAs(foundation::content::Instance& instance)
         {
             m_instanceId = instance.Id();
         }
 
-        /// The source-DB instance this page edits (zero Guid for instance-less pages).
+        /// The source database instance this page edits (a zero Guid for pages with no instance).
         [[nodiscard]] const Guid& InstanceId() const noexcept { return m_instanceId; }
         void SetInstanceId(const Guid& id) noexcept { m_instanceId = id; }
 
-        // === Services: the interfaces this page publishes (the SubsystemManager / Scene
-        // pattern - a TypeId-keyed table - scoped to one page) ===
+        // === Services: the interfaces this page publishes (a TypeId-keyed table, as the
+        // SubsystemManager and Scene use, scoped to one page) ===
 
         /// Publish an interface this page implements, from its constructor. The table dies
         /// with the page, so nothing is ever unpublished.
@@ -163,7 +165,7 @@ export namespace editor
             m_services.InsertOrAssign(TypeOf<T>().id, static_cast<IPageService*>(&service));
         }
 
-        /// The interface this page publishes as T, or null: this is not that kind of page.
+        /// The interface this page publishes as T, or null when this is not that kind of page.
         template <typename T>
             requires std::is_base_of_v<IPageService, T>
         [[nodiscard]] T* Service() const noexcept
@@ -182,7 +184,7 @@ export namespace editor
         HashMap<TypeId, IPageService*> m_services; // keyed like the SubsystemManager's subsystems
     };
 
-    // Creates pages for one primary-object type (and, via nearest-type dispatch, its
+    // Creates pages for one primary-object type (and, through nearest-type dispatch, its
     // subclasses unless a more specific factory is registered).
     class IEditorPageFactory
     {
@@ -192,13 +194,13 @@ export namespace editor
         /// The primary-object type this factory's pages edit.
         [[nodiscard]] virtual const TypeInfo* PrimaryType() const = 0;
 
-        /// Create a page editing `instance`. Null on failure (unreadable object etc.).
+        /// Create a page editing `instance`. Null on failure (an unreadable object, for one).
         [[nodiscard]] virtual UniquePtr<EditorPage>
         CreatePage(EditorContext& context, foundation::content::Instance& instance) = 0;
     };
 
-    // Factory registry with Traktor-style nearest-type dispatch: the factory whose
-    // PrimaryType() is closest along the asset type's base chain wins.
+    // Factory registry with nearest-type dispatch: the factory whose PrimaryType() is closest
+    // along the asset type's base chain wins.
     class EditorPageRegistry
     {
     public:

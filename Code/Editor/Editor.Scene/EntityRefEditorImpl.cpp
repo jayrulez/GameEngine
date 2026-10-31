@@ -34,7 +34,7 @@ namespace editor
             id.ToChars(chars);
             return String(StringView(chars, 36));
         }
-        // An entity's first component's icon, else the plain entity's.
+        // The icon of an entity's first component, or the plain entity icon.
         TypeIcon IconOf(scene::Scene& scene, scene::EntityHandle e, EditorIcons* icons)
         {
             TypeIcon found;
@@ -120,7 +120,7 @@ namespace editor
         ApplyEdit(gui::PropertyWrite{gui::Variant(id.IsNil() ? StringView{} : GuidText(id).AsView())});
     }
 
-    // An entity dragged from the hierarchy: the first it carries.
+    // Accepts an entity dragged from the hierarchy (the first one the payload carries).
     void EntityRefEditor::OnDragQuery(gui::DropQuery& query)
     {
         Array<Guid> entities;

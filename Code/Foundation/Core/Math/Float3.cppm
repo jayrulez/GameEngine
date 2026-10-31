@@ -3,7 +3,7 @@
 
 // Core - :float3 partition
 //
-// Float3: 3D f32 vector - arithmetic, Dot/Cross/Length/Normalized, Min/Max,
+// Float3: 3D f32 vector with arithmetic, Dot/Cross/Length/Normalized, Min/Max,
 // Lerp, component constants. Converts from Float2.
 
 module;

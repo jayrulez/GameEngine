@@ -3,7 +3,7 @@
 
 // UI - :spacer partition
 //
-// Empty view for explicit spacing. Ported from Sedulous.UI/src/Controls/Spacer.bf.
+// Empty view for explicit spacing.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"

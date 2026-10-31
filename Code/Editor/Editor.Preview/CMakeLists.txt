@@ -1,8 +1,6 @@
 # Editor::Preview - `editor.preview`: the thumbnail stage, and the preview viewport re-exported
 # from its own library (Editor::Preview.Viewport, which a tool can link without the editor's core).
 # Linked by the editor app and its page libs; never by the runtime.
-# On the GUI (Documentation/Specs/editor-gui.md, 5.3 and 5.4): the thumbnail stage, then the preview
-# viewport on GUI.Viewport with the asset pages (X6, layer 3).
 
 util_add_engine_library(Editor.Preview ALIAS Editor::Preview)
 target_link_libraries(Editor.Preview

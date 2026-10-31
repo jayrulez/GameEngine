@@ -12,12 +12,12 @@ import foundation.core;
 import foundation.scene;
 import foundation.render;     // debug::DebugDraw
 import foundation.shell;      // IKeyboard (layer hotkeys)
-import foundation.geometry;   // StaticMesh (bounds -> the spacing reach)
+import foundation.geometry;   // StaticMesh (its bounds give the spacing reach)
 import foundation.heightfield;
 import foundation.physics;    // PhysicsWorld::ShapeOverlap (collision rejection)
 import foundation.vegetation; // ScatterStamp, EraseInstancesInDisc
 import engine.physics;        // PhysicsSceneSystem (the scene's world), UnpackEntity
-import engine.vegetation;     // TerrainVegetationComponent(Manager)
+import engine.vegetation;     // TerrainVegetationComponent, TerrainVegetationComponentManager
 import editor.core;
 import editor.viewporttools;
 
@@ -41,9 +41,9 @@ namespace editor
             return static_cast<TerrainVegetationComponentManager*>(base);
         }
 
-        // The stroke command: the layer's whole instance list before / after (props are few).
-        // Re-resolves the component each time (pools move); the manager re-buckets on the
-        // content hash. One per stroke; never merges.
+        // The stroke command holds the layer's whole instance list before and after (props are
+        // few). It resolves the component again each time, because pools move; the manager
+        // re-buckets on the content hash. One per stroke; it never merges.
         class ScatterStrokeCommand final : public IEditorCommand
         {
         public:
@@ -121,13 +121,13 @@ namespace editor
             if (kb->IsKeyPressed(KeyCode::Num9)) SetLayer(8);
             if (kb->IsKeyPressed(KeyCode::Num0)) SetEraser(true);
         }
-        // Shift + wheel resizes the brush; the bare wheel stays the camera's dolly (2026-09-23).
+        // Shift and the wheel resize the brush; the wheel alone stays the camera's dolly.
         if (input.pointerOver && input.shift && input.wheelDelta != 0.0f)
         {
             SetRadius(m_radius * (1.0f + 0.12f * input.wheelDelta));
         }
-        // The prop brush picks the terrain PLANE, through a cut (the stamp itself refuses a cut
-        // cell; the eraser must reach the props left standing over one - Specs/terrain-holes.md).
+        // The prop brush picks the terrain plane through a cut. The stamp itself refuses a cut
+        // cell, but the eraser has to reach props left standing over one.
         const VegetationPick fp = VegetationPick::Resolve(*m_scene, input.ray.origin, input.ray.direction,
                                                           /*requireMask*/ false, /*ignoreHoles*/ true);
         if (fp.valid)
@@ -139,7 +139,7 @@ namespace editor
                              fp.component->propLayers[m_layer].mesh.Get() != nullptr;
         }
         bool consumed = m_stroking;
-        if (!input.editingLocked) // Simulate: the props feed the live scene - no edits
+        if (!input.editingLocked) // no edits while simulating, since the props feed the live scene
         {
             const bool paintable =
                 fp.valid && fp.component != nullptr && m_layer < fp.component->propLayers.Size();
@@ -184,8 +184,8 @@ namespace editor
         m_lastStampLocal = fp.localHit;
     }
 
-    // Distance-spaced stamps along the drag (the paint brushes' walker): a stamp every
-    // m_stampSpacing x radius of terrain-local travel, so a fast drag leaves no gaps.
+    // Distance-spaced stamps along the drag, walked as the paint brushes do: a stamp every
+    // m_stampSpacing times the radius of terrain-local travel, so a fast drag leaves no gaps.
     void VegetationScatterTool::AdvanceStroke(const ViewportToolInput& input)
     {
         const VegetationPick fp = VegetationPick::Resolve(*m_scene, input.ray.origin, input.ray.direction,
@@ -227,8 +227,8 @@ namespace editor
             ++m_strokeStamps;
             return;
         }
-        // The collision query: the override (tests, hosts), else the scene's physics world with
-        // the terrain's own body excluded (every stamp sits on it), else nothing.
+        // The collision query: the override (tests, hosts), or else the scene's physics world
+        // with the terrain's own body excluded (every stamp sits on it), or else nothing.
         veg::BlockedQuery blocked;
         const Float4x4 terrainWorld = fp.terrainWorld;
         if (m_blockedOverride)
@@ -330,7 +330,7 @@ namespace editor
         const i32 radius = static_cast<i32>(m_radius + 0.5f);
         m_status = Format(u8"Paint Props [{} layer {}]  radius {}  (1-9 layer, 0 erase, Shift+wheel size)",
                           m_erase ? StringView(u8"ERASE") : StringView(u8"paint"),
-                          static_cast<i32>(m_layer) + 1, radius); // from 1, as its key and the panel
+                          static_cast<i32>(m_layer) + 1, radius); // counted from 1, like its key and the panel
         if (!m_erase && !m_layerHasMesh)
         {
             m_status = Format(u8"{}  - layer {} has no mesh: props place but nothing draws",

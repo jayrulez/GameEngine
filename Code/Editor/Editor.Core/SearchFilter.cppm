@@ -2,11 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor Core - :search_filter partition
 //
-// What the editor's filter fields find, the asset browser's and picker's and the hierarchy's and
-// entity picker's alike: a thing whose name contains the text (any case), or whose guid begins
-// with it - so a guid copied from a log line, an MCP answer or a scene file finds what it names,
-// written whole or as its first few digits, with or without braces and dashes, in any case. A
-// whole guid (FilterAsGuid) is a request for that one thing: the fields select it.
+// What the editor's filter fields find, in the asset browser, the picker, the hierarchy and the
+// entity picker alike: a thing whose name contains the text (in any case), or whose guid begins
+// with it. A guid copied from a log line, an MCP answer or a scene file therefore finds what it
+// names, written whole or as its first few digits, with or without braces and dashes, in any case.
+// A whole guid (FilterAsGuid) asks for that one thing, and the fields select it.
 module;
 #include "Core/Prelude.h"
 
@@ -30,8 +30,8 @@ export namespace editor
             return (l >= utf8char('0') && l <= utf8char('9')) || (l >= utf8char('a') && l <= utf8char('f'));
         }
 
-        /// The filter's hex digits, lowercased, when it reads as (part of) a guid: hex digits,
-        /// dashes, braces and surrounding spaces only, at least 4 digits. Empty otherwise.
+        /// The filter's hex digits, lowercased, when it reads as a guid or part of one (only hex
+        /// digits, dashes, braces and surrounding spaces, with at least 4 digits). Empty otherwise.
         [[nodiscard]] inline String GuidDigits(StringView filter)
         {
             String digits;
@@ -72,7 +72,7 @@ export namespace editor
     }
 
     /// Whether `text` contains `part`, in any case: a filter field's match for things with no guid
-    /// (a component type). Empty `part` is in everything.
+    /// (a component type). An empty `part` matches everything.
     [[nodiscard]] inline bool TextContains(StringView text, StringView part)
     {
         return part.IsEmpty() || search_filter_detail::NameContains(text, part);
@@ -110,7 +110,8 @@ export namespace editor
         return matched == digits.Size();
     }
 
-    /// The guid the filter spells whole (all 32 digits; braces, case and dashes aside), if it does.
+    /// The guid the filter spells in full (all 32 digits, ignoring braces, case and dashes), if
+    /// it does.
     [[nodiscard]] inline bool FilterAsGuid(StringView filter, Guid& out)
     {
         const String digits = search_filter_detail::GuidDigits(filter);

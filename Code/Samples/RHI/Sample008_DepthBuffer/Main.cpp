@@ -2,11 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample008 - Depth Buffer. Ported from Sedulous Sample008_DepthBuffer.
+/// Sample008 - Depth Buffer.
 /// Three overlapping quads at different Z depths demonstrate depth testing.
-/// Red (z=0.2, far), Green (z=0.5, mid), Blue (z=0.8, near) - drawn far-to-near,
-/// in the engine's REVERSE-Z convention (rhi::depth: nearer = larger, clear = far = 0),
-/// depth buffer ensures correct visibility.
+/// Red (z=0.2, far), green (z=0.5, mid) and blue (z=0.8, near) are drawn far to near in the
+/// engine's reverse-Z convention (rhi::depth: nearer is larger, and the clear is the far plane,
+/// 0); the depth buffer gives correct visibility.
 
 #include <cstdint>
 
@@ -56,9 +56,9 @@ private:
     )";
 
     // Three overlapping quads drawn in order: red (far), green (middle), blue (near).
-    // Stride: 7 floats per vertex (pos xyz + color rgba).
+    // Stride: 7 floats per vertex (pos xyz, color rgba).
     static constexpr float kVerts[] = {
-        // Quad 0: Red - large, behind (z=0.2), drawn first.
+        // Quad 0: red, large, behind (z=0.2), drawn first.
         -0.6f,
         -0.6f,
         0.2f,
@@ -87,7 +87,7 @@ private:
         0.2f,
         0.2f,
         1.0f,
-        // Quad 1: Green - overlaps red, closer (z=0.5), drawn second.
+        // Quad 1: green, overlaps red, closer (z=0.5), drawn second.
         -0.2f,
         -0.4f,
         0.5f,
@@ -116,7 +116,7 @@ private:
         1.0f,
         0.2f,
         1.0f,
-        // Quad 2: Blue - overlaps both, nearest (z=0.8), drawn third.
+        // Quad 2: blue, overlaps both, nearest (z=0.8), drawn third.
         -0.4f,
         -0.7f,
         0.8f,
@@ -224,7 +224,7 @@ foundation::core::Status DepthBufferSample::OnInit()
     batch->Submit();
     m_graphicsQueue->DestroyTransferBatch(batch);
 
-    // Pipeline layout (empty - no bind groups needed).
+    // Pipeline layout (empty: no bind groups needed).
     rhi::PipelineLayoutDesc pld{};
     if (m_device->CreatePipelineLayout(pld, m_pl) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
@@ -298,7 +298,7 @@ void DepthBufferSample::OnRender()
     rp->SetScissor(0, 0, m_width, m_height);
     rp->SetVertexBuffer(0, m_vb, 0);
     rp->SetIndexBuffer(m_ib, rhi::IndexFormat::UInt16, 0);
-    // Draw all 3 quads - depth buffer determines visibility.
+    // Draw all 3 quads; the depth buffer decides visibility.
     rp->DrawIndexed(18);
     rp->End();
 

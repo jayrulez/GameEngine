@@ -9,7 +9,7 @@
 //              * object mode - owns a RefPtr<Object> and reports the object's
 //                dynamic GetType() (so scripting can wrap it as the right type).
 // Instance - a borrowed { void*, TypeInfo* } target for member access. Variant
-//            ALWAYS owns its value (no reference mode).
+//            always owns its value (no reference mode).
 
 module;
 #include "Core/Prelude.h"
@@ -79,16 +79,15 @@ namespace foundation::core::detail
 
 export namespace foundation::core
 {
-    // Reflection mutation generation: bumped whenever a reflected container is STRUCTURALLY mutated
-    // (create/emplace/remove/move - the reflection wrappers bump it centrally so registrants cannot
-    // forget). A Variant borrow captures the current value and revalidates on every dereference; any
-    // structural mutation between capture and use invalidates ALL live borrows (coarse by design - a
-    // borrow is a cached raw pointer, same rule as the bind-group-cache generation). Main-thread:
-    // reflection mutation is main-thread by the async rules. Lives here (the lowest partition both the
-    // Variant borrow and the :reflection container wrappers share) to avoid a partition cycle.
-    // NON-inline (RefCountedImpl.cpp): a per-library generation counter would let a
-    // stale Variant borrow revalidate (mutation in library A never bumps library B's
-    // counter) - a use-after-free (shared-libraries.md rendezvous rule).
+    // Reflection mutation generation: bumped whenever a reflected container is structurally mutated
+    // (create, emplace, remove, move). The reflection wrappers bump it centrally so registrants cannot
+    // forget. A Variant borrow captures the current value and revalidates on every dereference; any
+    // structural mutation between capture and use invalidates all live borrows. That is coarse, but a
+    // borrow is a cached raw pointer. Main thread only, as reflection mutation is. It lives here (the
+    // lowest partition both the Variant borrow and the :reflection container wrappers share) to avoid
+    // a partition cycle. Not inline (defined in RefCountedImpl.cpp): a per-library counter would let
+    // a stale borrow revalidate (a mutation in library A never bumps library B's counter), which is a
+    // use-after-free.
     [[nodiscard]] u64& ReflectionMutationGenerationRef() noexcept;
     [[nodiscard]] inline u64 GlobalReflectionMutationGeneration() noexcept
     {
@@ -107,7 +106,7 @@ export namespace foundation::core
             if constexpr (std::is_same_v<T, Variant>)
             {
                 // Pass-through: a reflected method that returns a Variant hands back a runtime-typed
-                // value (e.g. entity.get(Type) -> a RESOLVE-mode component ref). Preserve its dynamic
+                // value (e.g. entity.get(Type) returning a resolve-mode component ref). Preserve its dynamic
                 // type instead of boxing a Variant inside a Variant, so the backend wraps it as the
                 // right script class.
                 return value;
@@ -140,14 +139,14 @@ export namespace foundation::core
             return From<RefPtr<Object>>(object);
         }
 
-        // A BORROW: a handle over a member/element ADDRESS (`addr`, reflected `type`) that pins its
-        // owning object graph alive via `parent`'s root and revalidates against the mutation
+        // A borrow: a handle over a member or element address (`addr`, reflected `type`) that pins
+        // its owning object graph alive via `parent`'s root and revalidates against the mutation
         // generation on every dereference. Internally an object-mode Variant whose SBO holds the
-        // KEEP-ALIVE root RefPtr; `m_borrowAddr` overrides ToInstance to point at the borrowed member.
+        // keep-alive root RefPtr; `m_borrowAddr` overrides ToInstance to point at the borrowed member.
         // The root is `parent`'s object (object-mode parent) or `parent`'s own root (borrow-mode
-        // parent - so N-level descent pins the same root). A value-mode parent has no object to pin,
-        // so the borrow is REFUSED (empty) - no script author can reason about an engine-temporary's
-        // lifetime, and all facade roots are object-mode anyway (Fable ruling).
+        // parent, so N-level descent pins the same root). A value-mode parent has no object to pin,
+        // so the borrow is refused (empty): no script author can reason about an engine temporary's
+        // lifetime, and all facade roots are object-mode anyway.
         [[nodiscard]] static Variant Borrow(void* addr, const TypeInfo* type, const Variant& parent)
         {
             if (addr == nullptr || type == nullptr)
@@ -173,13 +172,13 @@ export namespace foundation::core
             return v;
         }
 
-        // A RE-RESOLVING handle: `type` is the reflected type; `resolver(v)` returns the value's
-        // CURRENT address each deref (or null if gone), reading its context from `v`'s inline storage
-        // (seeded from `ctx`). For LIVE scene state a borrow cannot safely hold: the component pool
-        // swap-removes, so the address must be recomputed, never cached (Fable Correction 1). `Ctx`
-        // is a trivially-copyable POD <= kInlineSize (e.g. {Scene*, EntityHandle, ComponentManagerBase*});
-        // the resolver, defined in the OWNING layer (core stays generic), casts ResolveContext() back
-        // to Ctx. Weak by design: a dead entity resolves to null -> the deref is a clean no-op.
+        // A re-resolving handle: `type` is the reflected type; `resolver(v)` returns the value's
+        // current address on each deref (or null if gone), reading its context from `v`'s inline
+        // storage (seeded from `ctx`). For live scene state a borrow cannot safely hold: the component
+        // pool swap-removes, so the address must be recomputed, never cached. `Ctx` is a
+        // trivially-copyable POD <= kInlineSize (e.g. {Scene*, EntityHandle, ComponentManagerBase*});
+        // the resolver, defined in the owning layer (core stays generic), casts ResolveContext() back
+        // to Ctx. Weak: a dead entity resolves to null, so the deref is a clean no-op.
         template <typename Ctx>
         [[nodiscard]] static Variant Resolving(const TypeInfo* type,
                                                void* (*resolver)(const Variant&), const Ctx& ctx)
@@ -199,7 +198,7 @@ export namespace foundation::core
             return v;
         }
 
-        // Resolving, with a retained ANCHOR: the handle (and every copy of it) holds a strong
+        // Resolving, with a retained anchor: the handle (and every copy of it) holds a strong
         // reference to `anchor`, the object the resolver's context points into (a GUI's element
         // table), so a handle that outlives its owner resolves to null instead of reading freed
         // memory. The owner empties the anchor when it goes; the anchor itself lives on while
@@ -223,7 +222,7 @@ export namespace foundation::core
         [[nodiscard]] bool IsResolving() const noexcept { return m_resolver != nullptr; }
         // Raw resolve-context bytes; the owning layer casts back to its Ctx. Valid in resolve mode.
         [[nodiscard]] const void* ResolveContext() const noexcept { return m_storage.inlineBytes; }
-        // The value's CURRENT address, or null (dead). Valid in resolve mode; null otherwise.
+        // The value's current address, or null (dead). Valid in resolve mode; null otherwise.
         [[nodiscard]] void* Resolve() const
         {
             return m_resolver != nullptr ? m_resolver(*this) : nullptr;
@@ -378,10 +377,10 @@ export namespace foundation::core
             return m_vtable != nullptr || m_resolver != nullptr;
         }
 
-        // True if this holds an OWNED object (RefPtr<Object>), not a plain value and NOT a borrow.
-        // A borrow's SBO also holds a RefPtr (its keep-alive root), but that root is NOT the value the
-        // borrow represents - so a borrow is excluded here, or AsObject()-style extraction would hand
-        // back the wrong object (the root) and marshal it as the borrowed type (Fable ruling).
+        // True if this holds an owned object (RefPtr<Object>), not a plain value and not a borrow.
+        // A borrow's SBO also holds a RefPtr (its keep-alive root), but that root is not the value the
+        // borrow represents. A borrow is excluded here, or AsObject()-style extraction would hand
+        // back the wrong object (the root) and marshal it as the borrowed type.
         [[nodiscard]] bool IsObject() const noexcept
         {
             return m_dynamicType != nullptr && m_borrowAddr == nullptr && m_resolver == nullptr;
@@ -394,7 +393,7 @@ export namespace foundation::core
         [[nodiscard]] void* BorrowAddress() const noexcept { return m_borrowAddr; }
 
         // Whether a borrow is still live: no structural reflection mutation has happened since capture.
-        // A stale borrow (owner element removed / array reallocated) fails this - callers then treat it
+        // A stale borrow (owner element removed / array reallocated) fails this; callers then treat it
         // as empty rather than dereferencing a dangling address.
         [[nodiscard]] bool BorrowValid() const noexcept
         {
@@ -420,7 +419,7 @@ export namespace foundation::core
             return m_vtable != nullptr ? m_vtable->typeInfo() : nullptr;
         }
 
-        // Borrowed view of the held OWNED object, or null if empty / not an owned object. A borrow
+        // Borrowed view of the held owned object, or null if empty / not an owned object. A borrow
         // returns null here (its stored RefPtr is the keep-alive root, not the borrowed value).
         [[nodiscard]] Object* AsObject() const noexcept
         {
@@ -450,7 +449,7 @@ export namespace foundation::core
             // Vtable-address equality is the same-library fast path; kVariantVTable<T>
             // is an inline variable, so each shared library holds its own copy. The
             // TypeId compare (via the vtable's typeInfo) makes Is<T> hold across
-            // library boundaries (shared-libraries.md identity rule).
+            // library boundaries.
             if (m_vtable == &detail::kVariantVTable<T>)
             {
                 return true;
@@ -489,10 +488,11 @@ export namespace foundation::core
             return *static_cast<const T*>(Data());
         }
 
-        // The underlying integer of an ENUM-typed VALUE Variant (Type() reports an enum). Enums cross
-        // to script as their underlying int - script backends have no native enum type, and an AngelScript enum is
-        // int-backed - so the backends read the value with this instead of a typed TryGet<E>() (which
-        // they cannot spell without the C++ enum type). Reads the stored value by its byte width.
+        // The underlying integer of an enum-typed value Variant (Type() reports an enum). Enums cross
+        // to script as their underlying int (script backends have no native enum type, and an
+        // AngelScript enum is int-backed), so the backends read the value with this instead of a typed
+        // TryGet<E>(), which they cannot spell without the C++ enum type. Reads the stored value by
+        // its byte width.
         [[nodiscard]] i64 AsEnumInt() const noexcept
         {
             const void* p = Data();
@@ -513,9 +513,9 @@ export namespace foundation::core
         }
 
     private:
-        // Big enough to inline the RESOLVE contexts too - {Scene*, EntityHandle, ComponentManagerBase*}
-        // is 3 words on LP64 but the u64 EntityHandle keeps it from shrinking with the pointers on
-        // wasm32 (4-byte pointers -> 3 words is only 12 bytes), so floor at 24.
+        // Big enough to inline the resolve contexts too. {Scene*, EntityHandle, ComponentManagerBase*}
+        // is 3 words on LP64, but the u64 EntityHandle keeps it from shrinking with the pointers on
+        // wasm32 (3 words of 4-byte pointers is only 12 bytes), so floor at 24.
         static constexpr usize kInlineSize = 3 * sizeof(void*) < 24 ? 24 : 3 * sizeof(void*);
         static constexpr usize kInlineAlign = alignof(std::max_align_t);
 
@@ -548,15 +548,16 @@ export namespace foundation::core
 
         Storage m_storage{};
         bool m_isHeap = false;
-        const TypeInfo* m_dynamicType = nullptr; // non-null => object OR borrow (dynamic/borrowed type)
+        const TypeInfo* m_dynamicType = nullptr; // non-null for an object or a borrow (dynamic/borrowed type)
         const detail::VariantVTable* m_vtable = nullptr;
-        void* m_borrowAddr = nullptr; // non-null => BORROW mode; overrides ToInstance to this address
+        void* m_borrowAddr = nullptr; // non-null in borrow mode; overrides ToInstance to this address
         u64 m_borrowGeneration = 0;   // mutation generation captured at Borrow(); revalidated on deref
-        // non-null => RESOLVE mode: recompute the value's CURRENT address on every deref (live scene
+        // Non-null in resolve mode: recompute the value's current address on every deref (live scene
         // state a borrow cannot safely hold). Context lives in m_storage's inline bytes; no owned
-        // value (m_vtable == nullptr), no heap, weak toward the value (m_anchor may retain what the context points into). See Resolving() / ToInstance.
+        // value (m_vtable == nullptr), no heap, weak toward the value (m_anchor may retain what the
+        // context points into). See Resolving() / ToInstance.
         void* (*m_resolver)(const Variant&) = nullptr;
-        // RESOLVE mode only: the object the context points into, retained (Resolving's anchored
+        // Resolve mode only: the object the context points into, retained (Resolving's anchored
         // overload); null for a plain weak handle.
         const RefCounted* m_anchor = nullptr;
 

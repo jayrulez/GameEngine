@@ -3,9 +3,7 @@
 
 // UI - :thickness partition
 //
-// Thickness for padding, margin, and border - with symmetric constructors.
-// Ported faithfully from Sedulous.UI/src/Core/Thickness.bf (PascalCase fields;
-// Beef properties -> methods).
+// Thickness for padding, margin, and border, with symmetric constructors.
 
 module;
 #include "Core/Prelude.h"

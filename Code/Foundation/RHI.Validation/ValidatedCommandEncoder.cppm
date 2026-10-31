@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Validation wrapper for CommandEncoder + RayTracingEncoderExt.
-/// Ported from Sedulous.RHI.Validation/ValidatedCommandEncoder.bf.
+/// Validation wrapper for CommandEncoder and RayTracingEncoderExt.
 
 module;
 #include "Core/Prelude.h"
@@ -40,12 +39,12 @@ export namespace foundation::rhi::validation
         ~ValidatedCommandEncoder() override
         {
             // Bundle encoders (and the bundles they own) live until the command encoder is
-            // destroyed - by then its submission has completed, so the inner bundles are done.
+            // destroyed; by then its submission has completed, so the inner bundles are done.
             for (auto* e : m_bundleEncoders)
                 m_allocator.Delete(e);
         }
 
-        // Called by sub-encoders when their end() fires.
+        // Called by sub-encoders when their End() runs.
         void onPassEnded() { m_state = EncoderState::Recording; }
 
         // ---- CommandEncoder ----
@@ -478,7 +477,7 @@ export namespace foundation::rhi::validation
         Array<ValidatedRenderBundleEncoder*> m_bundleEncoders; // owned wrappers (freed in dtor)
     };
 
-    // ---- Deferred end() implementations ----
+    // ---- Deferred End() implementations ----
 
     void ValidatedRenderPassEncoder::End()
     {

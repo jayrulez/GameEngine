@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::RHI.Capture - `foundation.rhi.capture`: the backbuffer -> PNG capture behind
+// Foundation::RHI.Capture - `foundation.rhi.capture`: the backbuffer to PNG capture behind
 // DefaultApplication::CaptureScreenshot, the editor's window and viewport captures, the sample
-// framework's F12 and every host's --screenshot flags. RHI and image only, so a sample or a tool
-// captures without the engine. Legacy Sedulous had the request and the GPU copy and stopped there (the readback buffer
-// was filled and nothing mapped it); this is the whole path: arm, copy the presented backbuffer
-// inside the frame (RenderTarget -> CopySrc -> RenderTarget, so the host's own Present
-// transition still holds), then after the GPU is done map the 256-byte-aligned rows into a
-// tight RGBA8 image, swizzle BGRA surfaces, and write the PNG through foundation.image.io.
+// framework's F12 and every host's --screenshot flags. It needs only the RHI and image, so a
+// sample or a tool captures without the engine. The path: arm, copy the presented backbuffer
+// inside the frame (RenderTarget, then CopySrc, then back to RenderTarget, so the host's own
+// Present transition still holds), then after the GPU is done map the 256-byte-aligned rows into
+// a tight RGBA8 image, swizzle BGRA surfaces, and write the PNG through foundation.image.io.
 //
 // Two halves so each is testable on its own: Record() needs a live encoder and a copy-capable
 // backbuffer (Vulkan surfaces expose TRANSFER_SRC when the driver allows; the WebGPU swapchain
@@ -32,8 +31,8 @@ export namespace foundation::rhi
 {
     /// The --screenshot flags: capture to `path` at rendered frame `frame` (1-based) or, when
     /// `afterSeconds` is set, at the first frame past that many seconds of run time (frame
-    /// rate independent - the form a "screenshot after 15 seconds" wants); exit once it is
-    /// written when asked. Empty path = no capture.
+    /// rate independent, the form a "screenshot after 15 seconds" wants); exit once it is
+    /// written when asked. An empty path means no capture.
     struct ScreenshotOptions
     {
         String path;
@@ -145,7 +144,7 @@ export namespace foundation::rhi
     class ScreenshotCapture
     {
     public:
-        static constexpr u32 kRowAlignment = 256; // Vulkan + WebGPU buffer-copy row pitch
+        static constexpr u32 kRowAlignment = 256; // the Vulkan and WebGPU buffer-copy row pitch
 
         ~ScreenshotCapture() { Release(); }
 
@@ -161,8 +160,8 @@ export namespace foundation::rhi
         [[nodiscard]] StringView Path() const noexcept { return m_path.AsView(); }
 
         /// Whether a surface format can be written as an 8-bit PNG: the 8-bit RGBA/BGRA surfaces
-        /// straight through, and RGBA16Float - the viewports' LINEAR target (the tonemap and the
-        /// UI both write linear there) - encoded to sRGB bytes.
+        /// straight through, and RGBA16Float, the viewports' linear target (the tonemap and the
+        /// UI both write linear values there), encoded to sRGB bytes.
         [[nodiscard]] static bool CanCapture(rhi::TextureFormat format) noexcept
         {
             switch (format)
@@ -187,15 +186,15 @@ export namespace foundation::rhi
                    format == rhi::TextureFormat::BGRA8UnormSrgb;
         }
 
-        /// Records the copy into `encoder` while `backbuffer` sits in `state` - RenderTarget for
-        /// a presented backbuffer (the state the host hands the frame over in and expects back),
-        /// ShaderRead for an editor viewport's finished colour target - and leaves it there.
+        /// Records the copy into `encoder` while `backbuffer` sits in `state` (RenderTarget for
+        /// a presented backbuffer, the state the host hands the frame over in and expects back;
+        /// ShaderRead for an editor viewport's finished colour target) and leaves it there.
         /// Disarms; false when nothing was armed, the format cannot be captured, or the readback
-        /// buffer could not be made - each logged, so a silent no-op never passes for a
-        /// screenshot. `originX` / `originY` capture a sub-rectangle of that size from there (a
+        /// buffer could not be made. Each failure is logged, so a silent no-op never passes for a
+        /// screenshot. `originX` and `originY` capture a sub-rectangle of that size from there (a
         /// letterboxed game's image without its bars). The PNG is the captured pixels: a view drawn
-        /// smaller than its content's resolution is written at the size it was drawn (scaling it
-        /// back up only blurred it into something that looked like a font problem).
+        /// smaller than its content's resolution is written at the size it was drawn, since
+        /// scaling it back up would only blur it.
         bool Record(rhi::Device& device, rhi::CommandEncoder& encoder, rhi::Texture* backbuffer,
                     rhi::TextureFormat format, u32 width, u32 height,
                     rhi::ResourceState state = rhi::ResourceState::RenderTarget, u32 originX = 0,
@@ -293,7 +292,7 @@ export namespace foundation::rhi
             }
         }
 
-        /// After the GPU has finished the recorded copy (the caller waits - a fence or WaitIdle):
+        /// After the GPU has finished the recorded copy (the caller waits, on a fence or WaitIdle):
         /// maps the readback, unpacks it (through `allocator`, the caller's) into `outImage`
         /// (RGBA8) and writes the PNG at Path(). Consumes the recording. The image is returned as
         /// well so a test can look at it.

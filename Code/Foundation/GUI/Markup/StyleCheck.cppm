@@ -3,11 +3,12 @@
 
 // GUI - :style_check partition
 //
-// What a sheet's declarations name that nothing takes (E1 of Specs/gui-lab-evolution-3.md): a cook
-// warns of a typo (`colour: red`) the style pass would drop without a word. A name stands when the
-// style table has it (a property or a shorthand), when it is a custom property (`--accent`), or
-// when an element type registered now takes it by its CSS name (`nav-up`, a gamekit screen's
-// `covers`): so the check asks the element types the tools register, not a list.
+// Finds the declarations in a sheet whose names nothing takes, so a cook can warn about a typo
+// (`colour: red`) that the style pass would otherwise drop silently. A name is known when the
+// style table has it (as a property or a shorthand), when it is a custom property (`--accent`), or
+// when a currently registered element type takes it by its CSS name (`nav-up`, a gamekit screen's
+// `covers`). The check therefore asks the element types the tools register rather than a fixed
+// list.
 
 module;
 #include "Core/Prelude.h"
@@ -27,7 +28,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// The CSS names the registered element types take as reflected properties (with their bases').
+    /// Returns the CSS names that the registered element types, and their base types, take as
+    /// reflected properties.
     [[nodiscard]] inline Array<core::String> RegisteredCssNames()
     {
         Array<core::String> names;
@@ -49,7 +51,7 @@ export namespace foundation::gui
         return names;
     }
 
-    /// Whether a declaration's `name` is one a style takes (see the partition's note).
+    /// Whether a declaration's `name` is one a style takes, by the rules at the top of this file.
     [[nodiscard]] inline bool IsKnownStyleName(core::StringView name, core::StringView value, const Array<core::String>& cssNames)
     {
         if (name.Size() > 2 && name[0] == u8'-' && name[1] == u8'-')
@@ -65,8 +67,8 @@ export namespace foundation::gui
         return false;
     }
 
-    /// Says each declaration of `sheet`'s rules and keyframe stops whose name nothing takes, with
-    /// its rule's line.
+    /// Adds a diagnostic to `out`, with the rule's line, for each declaration in `sheet`'s rules
+    /// and keyframe stops whose name nothing takes.
     inline void CheckStyleSheetNames(const StyleSheet& sheet, Array<GuiDiagnostic>& out)
     {
         const Array<core::String> cssNames = RegisteredCssNames();

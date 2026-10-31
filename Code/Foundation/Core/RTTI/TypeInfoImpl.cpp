@@ -3,17 +3,17 @@
 
 // Core - :type_info implementation unit
 //
-// The process-single TypeInfo slot table behind TypeOf<T>(). Defined here - NON-inline,
-// one definition in Core - so every image that instantiates TypeOf<T>() (each with its
-// own cached reference) resolves to the same TypeInfo, and metadata patched by one
-// library's registrars is what every other library reads. shared-libraries.md P5/W1.
+// The process-single TypeInfo slot table behind TypeOf<T>(). It is defined here, not
+// inline, so there is one definition in Core: every image that instantiates TypeOf<T>()
+// (each with its own cached reference) resolves to the same TypeInfo, and metadata
+// patched by one library's registrars is what every other library reads.
 //
-// STATIC STORAGE, deliberately. The index and the slot pool are zero-initialized .bss
-// (pages untouched cost nothing), so the table is usable from the first TypeOf<T>()
+// The table lives in static storage. The index and the slot pool are zero-initialized
+// .bss (untouched pages cost nothing), so the table is usable from the first TypeOf<T>()
 // call in static initialization, needs no allocator, and has no destructor to order
-// against static destruction. It also means an image that embeds its own Core (the
-// static-engine test plugin - an unsupported model, but it is dlclosed by a test) leaves
-// nothing on the heap behind it for LeakSanitizer to report. Only a process with more
+// against static destruction. An image that embeds its own Core (the static-engine test
+// plugin, an unsupported model that a test dlcloses) also leaves nothing on the heap
+// behind it for LeakSanitizer to report. Only a process with more
 // value types than the pool holds grows onto the heap, and that memory is never freed:
 // a slot must outlive its first registrar's image (a hot-reloaded module finds its
 // slots already there and re-patches them).
@@ -28,7 +28,7 @@ namespace foundation::core::detail
 {
     namespace
     {
-        // Sizing: a few hundred TypeOf<T>() instantiations exist today (plus container /
+        // Sizing: a few hundred TypeOf<T>() instantiations exist (plus container and
         // handle instantiations); 4096 slots is an order of magnitude of headroom before
         // the first heap chunk. The index runs open addressing at <= 50% load.
         constexpr usize kStaticIndexCapacity = 16384; // power of two
@@ -73,8 +73,9 @@ namespace foundation::core::detail
         }
 
         // Past the static index (a pathological count of value types): rehash into a heap
-        // array twice the size (composition root - this is process-lifetime state). Every
-        // probe runs under g_lock, so a heap-allocated predecessor can be freed at once.
+        // array twice the size. This is process-lifetime state, so it uses the default
+        // allocator. Every probe runs under g_lock, so a heap-allocated predecessor can be
+        // freed at once.
         void GrowIndex() noexcept
         {
             const usize capacity = g_indexCapacity * 2;

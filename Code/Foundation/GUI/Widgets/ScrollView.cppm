@@ -4,9 +4,9 @@
 // GUI - :scroll_view partition
 //
 // ScrollView: a Panel that scrolls (`overflow: auto` on both axes) and takes focus, so the keys
-// scroll it. Scrolling itself is the base node's, for any node a sheet gives `overflow: scroll`
-// or `auto` (E2 of Specs/gui-lab-evolution.md): the wheel, the keys while focused, its bars, a
-// focused descendant brought into view. Its children are its content.
+// scroll it. The scrolling itself comes from the base node and works for any node a sheet gives
+// `overflow: scroll` or `auto`: the wheel, the keys while focused, the scroll bars, and bringing a
+// focused descendant into view. The scroll view's children are its content.
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +28,7 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"scrollview"));
             SetTabFocusable(true);
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             EditLayoutStyle(
                 [](LayoutStyle& s)
                 {

@@ -3,16 +3,16 @@
 
 // GUI.Code - :code_completion partition
 //
-// The language service (C6 of Specs/gui-lab-evolution-3.md): what the editor asks its host for, so
-// the widget stays language-neutral (Godot's and Zero's): completions at a place, and what to say
-// about the word under the pointer. The host answers from its compiler (a script module's API, the
-// markup registry); the library ships none, as it ships no language.
+// The language service is what the editor asks its host for, so that the widget stays
+// language-neutral: the completions at a position, and the text to show for the word under the
+// pointer. The host answers from its compiler (a script module's API, the markup registry). The
+// library ships no service, just as it ships no language.
 //
-// The completion list: a core popup that never takes the focus (the editor keeps the keys, its
-// "completing" key context sending Up, Down, Return, Tab and Escape to the list), filtered fuzzily
-// as the word grows (zed's and VS Code's: the letters in order, a match at the start or at a word's
-// start, and a run of them, scoring higher), each row its kind, its label with the matched letters
-// marked, and its detail.
+// The completion list is a core popup that never takes the focus. The editor keeps the keys, and
+// its "completing" key context sends Up, Down, Return, Tab and Escape to the list. The list filters
+// fuzzily as the word grows: the letters must come in order, and a match at the start, at a word's
+// start, or in a run scores higher. Each row shows the item's kind, its label with the matched
+// letters marked, and its detail.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,8 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::gui
 {
-    /// What a completion is, for its mark and its colour (the list's part of the kind's name).
+    /// What a completion is. It picks the row's mark and colour (the list's style part named after
+    /// the kind).
     enum class CodeCompletionKind : u8
     {
         Text,
@@ -57,7 +58,7 @@ export namespace foundation::gui
         const usize i = static_cast<usize>(kind);
         return core::StringView(i < static_cast<usize>(CodeCompletionKind::Count) ? kNames[i] : kNames[0]);
     }
-    /// The letter a row marks its kind with (in the kind's colour).
+    /// Returns the letter a row uses to mark its kind (drawn in the kind's colour).
     [[nodiscard]] inline core::StringView CodeCompletionKindMark(CodeCompletionKind kind) noexcept
     {
         static constexpr const char8_t* kMarks[] = {u8"t", u8"k", u8"v", u8"f", u8"m", u8"p", u8"d",
@@ -71,38 +72,42 @@ export namespace foundation::gui
         core::String Label;  ///< what the list shows and the typed word is matched against
         CodeCompletionKind Kind = CodeCompletionKind::Text;
         core::String Detail; ///< shown dim at the row's end (a type, a signature)
-        core::String Insert; ///< what accepting puts in place of the typed word; empty: the label
+        core::String Insert; ///< what accepting puts in place of the typed word; the label when empty
     };
 
-    /// What the editor asks completions for.
+    /// The place and circumstances the editor asks completions for.
     struct CodeCompletionRequest
     {
         CodePosition At;      ///< the primary caret
-        CodePosition WordStart; ///< where the word being typed begins (At when none is)
-        bool Invoked = false; ///< asked for (Ctrl+Space) rather than opened by typing
+        CodePosition WordStart; ///< where the word being typed begins (At when there is none)
+        bool Invoked = false; ///< asked for explicitly (Ctrl+Space) rather than opened by typing
         char8_t Trigger = 0;  ///< the trigger character just typed (a `.`), else 0
     };
 
-    /// The host's: completions and hover for its language. Asked on the GUI's thread, at once.
+    /// Implemented by the host to give completions and hover text for its language. It is called on
+    /// the GUI's thread and answers synchronously.
     class ICodeLanguageService
     {
     public:
         virtual ~ICodeLanguageService() = default;
-        /// The characters that open the list when typed (`.` and `:`), with an empty word.
+        /// Returns the characters (such as `.` and `:`) that open the list, with an empty word, when
+        /// typed.
         [[nodiscard]] virtual core::StringView CompletionTriggers() const = 0;
-        /// Every completion that may apply at `request.At`; the editor filters them by the word as
-        /// it is typed, asking again only when the list opens or a trigger is typed.
+        /// Gives every completion that may apply at `request.At`. The editor filters them by the
+        /// word as it is typed, and asks again only when the list opens or a trigger is typed.
         virtual void Complete(const CodeDocument& document, const CodeCompletionRequest& request,
                               core::Array<CodeCompletionItem>& out) = 0;
-        /// What to say of what is at `at` (a declaration, a value while debugging); false: nothing.
+        /// Writes the text to show for what is at `at` (a declaration, a value while debugging).
+        /// Returns false when there is nothing to show.
         virtual bool Hover(const CodeDocument& document, CodePosition at, core::String& out) = 0;
     };
 
-    /// How well `pattern` matches `label` fuzzily: below 0 none, else higher better. Its letters
-    /// must come in order, case aside, the first at the label's start or a word's (after `_`, `-`
-    /// or `.`, or a capital after a small letter); each scores, more at the start, at a word's
-    /// start (the first letter most), right after the letter before it, and in the pattern's case. `positions`, when given, gets
-    /// the byte of each matched letter.
+    /// Scores how well `pattern` matches `label` fuzzily. Returns a value below 0 for no match;
+    /// otherwise higher is better. The pattern's letters must appear in order, ignoring case, and
+    /// the first must match at the label's start or at a word's start (after `_`, `-` or `.`, or a
+    /// capital after a small letter). Each matched letter scores, and scores more at the start, at
+    /// a word's start (most for the first letter), right after the previous matched letter, and in
+    /// the pattern's case. `positions`, when given, receives the byte offset of each matched letter.
     [[nodiscard]] inline i32 CodeFuzzyMatch(core::StringView pattern, core::StringView label, core::Array<u32>* positions = nullptr)
     {
         if (positions != nullptr)
@@ -125,7 +130,7 @@ export namespace foundation::gui
         constexpr usize kPattern = 32, kLabel = 128;
         if (m > kPattern || n > kLabel)
         {
-            // Too long to weigh: a prefix, case aside, or nothing.
+            // Too long to score fully: match a prefix, ignoring case, or nothing.
             for (usize i = 0; i < m; ++i)
                 if (lower(pattern[i]) != lower(label[i]))
                     return -1;
@@ -150,7 +155,7 @@ export namespace foundation::gui
         }
         for (usize i = 1; i < m; ++i)
         {
-            i16 best = kNone; // the best of row i - 1 before j - 1
+            i16 best = kNone; // the best score in row i - 1 before column j - 1
             u8 bestAt = 0;
             for (usize j = 0; j < n; ++j)
             {
@@ -201,9 +206,9 @@ export namespace foundation::gui
         return total;
     }
 
-    /// The editor's completion list (`codecompletion`): the service's completions filtered by the
-    /// word typed, best first, one selected. It never takes the focus, and a press in it leaves the
-    /// focus in the editor; a click picks a row.
+    /// The editor's completion list (`codecompletion`). It shows the service's completions filtered
+    /// by the word typed, best first, with one selected. It never takes the focus: a press in it
+    /// leaves the focus in the editor, and a click picks a row.
     class CodeCompletionList : public UIWidget
     {
         RTTI_OBJECT(CodeCompletionList, UIWidget)
@@ -221,15 +226,15 @@ export namespace foundation::gui
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; });
         }
 
-        /// The service's completions, filtered by the word typed.
+        /// Sets the service's completions and filters them by the word typed so far (`prefix`).
         void SetItems(core::Array<CodeCompletionItem> items, core::StringView prefix)
         {
             m_items = core::Move(items);
             (void)Filter(prefix);
         }
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
-        /// Shows those `prefix` matches, best first (in the service's order while it is empty), the
-        /// first selected; how many.
+        /// Shows the items that match `prefix`, best first, and selects the first. While `prefix` is
+        /// empty, the items keep the service's order. Returns how many are shown.
         usize Filter(core::StringView prefix)
         {
             m_prefix = core::String(prefix);
@@ -245,7 +250,7 @@ export namespace foundation::gui
                 {
                     if (a.Score != b.Score)
                         return a.Score > b.Score;
-                    return m_items[a.Item].Label.Size() < m_items[b.Item].Label.Size(); // the shorter, at a tie
+                    return m_items[a.Item].Label.Size() < m_items[b.Item].Label.Size(); // on a tie, the shorter label first
                 });
             m_rows.Clear();
             m_selected = 0;
@@ -258,7 +263,7 @@ export namespace foundation::gui
         [[nodiscard]] usize ShownCount() const noexcept { return m_shown.Size(); }
         [[nodiscard]] const CodeCompletionItem& ShownItem(usize index) const { return m_items[m_shown[index].Item]; }
         [[nodiscard]] usize GetSelected() const noexcept { return m_selected; }
-        /// The selected completion; null when none shows.
+        /// Returns the selected completion, or null when none is shown.
         [[nodiscard]] const CodeCompletionItem* SelectedItem() const
         {
             return m_selected < m_shown.Size() ? &ShownItem(m_selected) : nullptr;
@@ -276,7 +281,8 @@ export namespace foundation::gui
             if (m_onSelected)
                 m_onSelected(m_selected);
         }
-        /// Up and Down (`wrap`: past an end to the other), the pages (stopping at the ends).
+        /// Moves the selection by `delta` rows. With `wrap`, a single step (Up or Down) past one end
+        /// wraps to the other; larger steps (the pages) stop at the ends.
         void MoveSelection(i32 delta, bool wrap)
         {
             if (m_shown.IsEmpty())
@@ -287,10 +293,11 @@ export namespace foundation::gui
                 to = (to % count + count) % count;
             SetSelected(static_cast<usize>(core::Clamp<i64>(to, 0, count - 1)));
         }
-        /// The page a Page Up or Down moves.
+        /// The number of rows a Page Up or Page Down moves.
         [[nodiscard]] static i32 PageRows() noexcept { return static_cast<i32>(kRowsShown) - 1; }
 
-        /// How far across a row its label begins: the editor lines it up with the word.
+        /// Returns how far across a row the label begins, so the editor can line the label up with
+        /// the word.
         [[nodiscard]] f32 LabelInset() const { return GetChrome().Left + kPad + m_measure.LayoutFor(Rect{}).Width + kPad; }
         [[nodiscard]] f32 RowHeight() const
         {
@@ -313,7 +320,7 @@ export namespace foundation::gui
     protected:
         core::Float2 MeasureContent(core::Float2) override
         {
-            // As wide as its widest rows (of the first few), within bounds; as tall as ten rows.
+            // As wide as the widest of the first few rows, within bounds, and as tall as ten rows.
             f32 widest = 0.0f;
             const usize measured = core::Min<usize>(m_shown.Size(), 50);
             for (usize i = 0; i < measured; ++i)
@@ -323,7 +330,7 @@ export namespace foundation::gui
         }
         void OnLayout() override
         {
-            // Not the base's: it has no children; what it scrolls over is its rows.
+            // Overrides the base layout: the list has no children, and what it scrolls over is its rows.
             const Rect content = GetContentBounds();
             SetScrollExtent(core::Float2{content.width, static_cast<f32>(m_shown.Size()) * RowHeight()});
         }
@@ -376,7 +383,7 @@ export namespace foundation::gui
                 };
                 draw(row.Mark, content.x + kPad);
                 draw(row.Label, content.x + kPad + row.MarkWidth + kPad);
-                // The detail at the end, where it clears the label.
+                // The detail goes at the row's end, where it clears the label.
                 const f32 labelEnd = content.x + kPad + row.MarkWidth + kPad + row.LabelWidth;
                 const f32 detailX = content.x + content.width - kPad - row.DetailWidth;
                 if (row.DetailWidth > 0.0f && detailX >= labelEnd + kPad * 2.0f)
@@ -413,7 +420,7 @@ export namespace foundation::gui
             f32 MarkWidth = 0.0f;
             f32 LabelWidth = 0.0f;
             f32 DetailWidth = 0.0f;
-            f32 Width = 0.0f; // the whole row's, padded
+            f32 Width = 0.0f; // the whole row's width, padded
         };
 
         [[nodiscard]] static core::String ColorTag(Color c)
@@ -434,7 +441,7 @@ export namespace foundation::gui
             const PartStyle& style = GetPartStyle(part);
             return style.HasColor ? style.TextColor : fallback;
         }
-        // Its shown row `index`, made as it is first drawn or measured.
+        // Returns shown row `index`, making it the first time it is drawn or measured.
         const Row& RowFor(usize index) const
         {
             while (m_rows.Size() < m_shown.Size())
@@ -453,7 +460,8 @@ export namespace foundation::gui
             }
             row.Mark.SetColor(PartText(CodeCompletionKindName(item.Kind), GetTextColor()));
             row.Mark.SetString(CodeCompletionKindMark(item.Kind));
-            // The label, its matched letters in the match part's colour ("[[" a "[").
+            // The label as markup, with its matched letters in the match part's colour. A literal
+            // "[" is written "[[".
             core::Array<u32> matched(const_cast<CodeCompletionList*>(this)->MemoryAllocator());
             (void)CodeFuzzyMatch(m_prefix.AsView(), item.Label.AsView(), &matched);
             const core::String open = ColorTag(PartText(core::StringView(u8"match"), GetTextColor()));
@@ -498,7 +506,7 @@ export namespace foundation::gui
         mutable core::Array<core::UniquePtr<Row>> m_rows; // by shown index
         core::String m_prefix;
         usize m_selected = 0;
-        Text m_measure; // one wide letter: the kind's column
+        Text m_measure; // one wide letter, measuring the kind's column
         core::Function<void(Text&)> m_styleText;
         core::Function<void(usize)> m_onPicked;
         core::Function<void(usize)> m_onSelected;

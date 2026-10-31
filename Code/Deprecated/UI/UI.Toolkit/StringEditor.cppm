@@ -3,14 +3,12 @@
 
 // UI Toolkit - :string_editor partition
 //
-// String property editor - an EditText with focus-based edit transactions. BeginEdit on focus gained,
-// EndEdit on focus lost or Enter (OnSubmit); Escape cancels and restores the pre-edit value. Ported from
-// Sedulous.UI.Toolkit/src/PropertyGrid/StringEditor.bf.
+// String property editor: an EditText with focus-based edit transactions. BeginEdit on focus gained,
+// EndEdit on focus lost or Enter (OnSubmit); Escape cancels and restores the pre-edit value.
 //
-// The Beef private inner `StringEditorEditText : EditText` becomes a PUBLIC nested class so it carries its
-// own RTTI_OBJECT identity. Its overrides dereference the enclosing StringEditor (incomplete inside the
-// class body), so those bodies are defined out-of-line after StringEditor is complete - the same idiom
-// ColorPicker/Toolbar use. Beef `delegate void(StringView) Setter` -> Function<void(StringView)>.
+// StringEditorEditText is a public nested class so it carries its own RTTI_OBJECT identity. Its
+// overrides dereference the enclosing StringEditor, which is incomplete inside the class body, so those
+// bodies are defined out of line after StringEditor is complete, as in ColorPicker and Toolbar.
 
 module;
 #include "Core/Prelude.h"
@@ -27,7 +25,7 @@ using namespace foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// String property editor - EditText with focus-based edit transactions.
+    /// String property editor: an EditText with focus-based edit transactions.
     class StringEditor : public PropertyEditor
     {
         RTTI_OBJECT(StringEditor, PropertyEditor)

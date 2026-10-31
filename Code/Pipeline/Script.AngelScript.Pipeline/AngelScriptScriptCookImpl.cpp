@@ -3,11 +3,11 @@
 
 // Pipeline::Script.AngelScript - implementation unit for the AngelScript cook.
 //
-// Compile-check + the shared handler scan + PROPERTY HARVEST. The behavior class is
+// The compile-check, the shared handler scan and the property harvest. The behavior class is
 // built through the vendored CScriptBuilder add-on, which pre-processes `[metadata]`
 // declarations; the cook then walks the behavior class's member fields and, for every
-// field WITH metadata, resolves the field's declared type + the metadata default +
-// description into a ScriptPropertyDesc (identical metadata shape across backends).
+// field with metadata, resolves the field's declared type, the metadata default and the
+// description into a ScriptPropertyDesc (the same metadata shape across backends).
 //
 // The AngelScript editor-property convention (typed member field + [metadata]):
 //     class Mover {
@@ -17,11 +17,11 @@
 //     }
 // The field's declared type picks the ScriptPropertyType (float->Float, int->Int,
 // bool->Bool, string->String, Color->Color, Float3->Vec3, Entity->Entity); a Guid field
-// with an `asset:<TypeName>` metadata tag -> Asset. A field with NO metadata is NOT a
-// property (explicit declaration only - the explicit-declaration principle).
+// with an `asset:<TypeName>` metadata tag is an Asset. A field with no metadata is not a
+// property: properties are declared explicitly.
 //
-// This is a module IMPLEMENTATION unit, so the AngelScript SDK header AND the
-// scriptbuilder add-on header live here only (GCC module hygiene by construction).
+// The AngelScript SDK header and the scriptbuilder add-on header are included only in this
+// implementation unit, never in a module interface.
 
 module;
 #include "Core/Prelude.h"
@@ -99,7 +99,7 @@ namespace pipeline{
 
         // Splits metadata content into top-level comma-separated tokens, honouring string
         // literals and (), [], {} nesting (so a `(1, 0, 0)` vector default is one token).
-        // Each token is trimmed. `[default, "description"]` -> { "default", "\"description\"" }.
+        // Each token is trimmed. `[default, "description"]` gives { "default", "\"description\"" }.
         [[nodiscard]] Array<String> SplitTopLevel(StringView content)
         {
             Array<String> tokens;
@@ -350,7 +350,7 @@ namespace pipeline{
         }
 
         // Walks the behavior class's member fields and appends one ScriptPropertyDesc per
-        // field WITH metadata. Returns false (a cook error, reported to `sink`) when a metadata'd
+        // field with metadata. Returns false (a cook error, reported to `sink`) when a metadata'd
         // field has an unsupported type. Fields without metadata are simply not properties.
         [[nodiscard]] bool HarvestProperties(CScriptBuilder& builder, asIScriptEngine* engine,
                                              StringView className, StringView assetName,
@@ -405,11 +405,11 @@ namespace pipeline{
                     return false;
                 }
                 // A reflected/resource property (Color, Float3, Entity, or an asset:Guid) is a
-                // REFERENCE type in AngelScript (every reflected type is asOBJ_REF). Declared as a
-                // VALUE member it cannot receive its value at runtime - AngelScript owns the member's
+                // reference type in AngelScript (every reflected type is asOBJ_REF). Declared as a
+                // value member it cannot receive its value at runtime: AngelScript owns the member's
                 // lifecycle and lazily reconstructs it, discarding the applied value (see the
-                // AngelScript backend's WriteTypedAddress). So require a handle here, at cook, with the
-                // exact fix - the runtime warning is defense-in-depth for non-cooked paths.
+                // AngelScript backend's WriteTypedAddress). So the cook requires a handle and names
+                // the fix; the runtime warning covers paths that are not cooked.
                 const bool reflectedRef = desc.type == ScriptPropertyType::Color ||
                                           desc.type == ScriptPropertyType::Vec3 ||
                                           desc.type == ScriptPropertyType::Entity ||
@@ -481,7 +481,7 @@ namespace pipeline{
             }
 
             // AngelScript bytecode is tied to the library version: fold it into the cook
-            // fingerprint so a vendor bump recooks every AngelScript pack (mirrors the Luau cook).
+            // fingerprint so a vendor bump recooks every AngelScript pack (as the Luau cook does).
             [[nodiscard]] u32 CookVersion() const override
             {
                 return foundation::script::angelscript::AngelScriptBytecodeVersion();
@@ -494,7 +494,7 @@ namespace pipeline{
                 // AngelScript keeps per-thread local data (active-context stack, type-name
                 // scratch) that only asThreadCleanup releases. Cooks run on job workers that
                 // never exit through AngelScript's own teardown, so release it here, after
-                // the engine this cook built is gone - else every worker leaks it.
+                // the engine this cook built is gone; otherwise every worker leaks it.
                 asThreadCleanup();
                 return ok;
             }
@@ -528,7 +528,7 @@ namespace pipeline{
                                        assetName);
                     return false;
                 }
-                // Same "main"-module surface the runtime registers (core + facades), so a
+                // Same "main"-module surface the runtime registers (core and facades), so a
                 // facade-using behavior compiles at cook exactly as at runtime; FinalizeTypes
                 // emits every reflected type into the engine CScriptBuilder builds against.
                 RegisterCoreTypes();
@@ -543,7 +543,7 @@ namespace pipeline{
                 }
 
                 // Build the behavior through CScriptBuilder: it strips `[metadata]` (which is
-                // NOT valid AngelScript syntax to the raw compiler) and records it for the
+                // not valid AngelScript syntax to the raw compiler) and records it for the
                 // per-field lookup below. Errors route into the cook sink for the report.
                 CookMessageForward forward{&sink};
                 engine->SetMessageCallback(asFUNCTION(ForwardBuildMessage), &forward, asCALL_CDECL);
@@ -599,9 +599,9 @@ namespace pipeline{
                 }
 
                 // Bytecode into the pack: SaveByteCode the module CScriptBuilder just built (the
-                // `[metadata]`-STRIPPED, compiled module the runtime would run) into a blob, then
-                // store the SERIALIZED blob - identical format to the Luau cook, so the runtime
-                // reconstructs it via CreateBlob + Serialize(read) + LoadBlob (no compiler, no
+                // `[metadata]`-stripped, compiled module the runtime would run) into a blob, then
+                // store the serialized blob in the same format as the Luau cook, so the runtime
+                // reconstructs it via CreateBlob, Serialize(read) and LoadBlob (no compiler, no
                 // metadata re-parse). Source stays on the record for dev-mode hot reload.
                 RefPtr<IScriptBlob> blob =
                     foundation::script::angelscript::AngelScriptBlobFromModule(builder.GetModule(),

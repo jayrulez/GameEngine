@@ -2,7 +2,7 @@
 """controls.py: Snowline's input map (Controls), written through the editor's MCP, and made the
 project's default.
 
-- Move: WASD or the left stick (x steers: carves left and right; y unused yet).
+- Move: WASD or the left stick (x steers: carves left and right; y is unused).
 - Jump: Space, or the gamepad's south button (A): crouch to pop off a lip.
 - Tuck: Left Shift, or the west button (X) or right shoulder: low and fast.
 - Grab: E, or the east button (B): in the air, a hand to the board.

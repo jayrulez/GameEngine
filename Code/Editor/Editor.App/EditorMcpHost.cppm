@@ -3,12 +3,12 @@
 // Editor::App - :mcp_host partition.
 //
 // EditorMcpHost: the editor's MCP host. It serves the engine surface every host serves
-// (editor.mcp's RegisterEngineTools, pointed at the editor's LIVE project - one
-// ContentDatabase, one writer) plus this host's own host_info, over localhost HTTP + SSE behind
-// a bearer token (foundation.mcp.http), and is pumped ONCE PER FRAME on the main thread, so a
-// tool may touch anything the editor owns. It lives for one open project: the application
-// starts it once the project's services are up and stops it before they go. The token is also
-// written to a file beside the editor's settings, so a local agent self-configures.
+// (editor.mcp's RegisterEngineTools, pointed at the editor's live project, so there is one
+// ContentDatabase and one writer) plus this host's own host_info, over localhost HTTP and SSE
+// behind a bearer token (foundation.mcp.http). It is pumped once per frame on the main thread, so
+// a tool may touch anything the editor owns. It lives for one open project: the application
+// starts it once the project's services are up and stops it before they go away. The token is
+// also written to a file beside the editor's settings, so a local agent can configure itself.
 module;
 #include "Core/Prelude.h"
 
@@ -42,7 +42,7 @@ export namespace editor::app
         /// Registers the shared engine surface over `session` (pointed at the editor's live
         /// project), this host's host_info, and every domain's MCP tool contribution on
         /// `context` (what the scene editor and the like serve over the live editor);
-        /// `operations` is how this host runs the cook / import / export behind their tools.
+        /// `operations` is how this host runs the cook, import and export behind their tools.
         /// Every reference must outlive the host: the application owns them all for the
         /// project's life.
         EditorMcpHost(IAllocator& allocator, editor::EditorContext& context,
@@ -51,8 +51,8 @@ export namespace editor::app
                       const pipeline::AssetCreatorRegistry& creators,
                       const editor::mcp::EngineToolPaths& paths,
                       editor::mcp::IProjectOperations& operations, String buildStamp);
-        /// Stops, and takes back what the host wired on the session: the session outlives
-        /// the host, and what it announces to must not.
+        /// Stops, and removes what the host wired into the session: the session outlives the
+        /// host, so its callbacks must not point at the host afterwards.
         ~EditorMcpHost()
         {
             Stop();
@@ -67,18 +67,18 @@ export namespace editor::app
         [[nodiscard]] bool Start(const EditorMcpHostConfig& config);
         void Stop() { m_http.Stop(); }
 
-        /// One pump of the transport: answers a waiting call, re-enters a not-finished one.
-        /// Once per frame, on the main thread.
+        /// One pump of the transport: answers a waiting call and re-enters an unfinished one.
+        /// Call once per frame, on the main thread.
         void Pump() { (void)m_http.Pump(); }
 
         [[nodiscard]] bool IsRunning() const noexcept { return m_http.IsRunning(); }
         [[nodiscard]] u16 BoundPort() const noexcept { return m_http.BoundPort(); }
-        /// An agent is waiting on a not-finished tool: keep pumping.
+        /// Whether an agent is waiting on an unfinished tool, so pumping must continue.
         [[nodiscard]] bool HasPendingRequest() const noexcept { return m_http.HasPendingRequest(); }
         [[nodiscard]] foundation::mcp::McpServer& Server() noexcept { return m_server; }
 
-        /// Told (tool, isError) after every finished tools/call - the application shows the
-        /// agent's activity.
+        /// Called with (tool, isError) after every finished tools/call, so the application can
+        /// show the agent's activity.
         Function<void(StringView, bool)> OnToolFinished;
 
     private:

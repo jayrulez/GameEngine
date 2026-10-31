@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit ColorEditor: value round-trip through the ColorView swatch.
+// Smoke test for the toolkit ColorEditor: the value round-trips through the ColorView swatch.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -24,7 +24,7 @@ TEST_CASE("toolkit-coloreditor: RoundTripSwatch")
     REQUIRE(swatch != nullptr);
     CHECK(swatch->Color.Value().r == doctest::Approx(1.0f));
 
-    // External SetValue updates the swatch (opening the picker dialog needs a live UIContext, skipped).
+    // An external SetValue updates the swatch (opening the picker dialog needs a live UIContext, so it is not tested).
     ed->SetValue(core::Color{0.0f, 0.5f, 1.0f, 1.0f});
     CHECK(swatch->Color.Value().b == doctest::Approx(1.0f));
     CHECK(swatch->Cursor == CursorType::Hand);

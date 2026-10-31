@@ -1,23 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// RenderStressTest - a deliberate worst-case renderer benchmark, ported from Sedulous's
-// EngineRenderStressTest. It keeps us honest as rendering features land: a flat grid of
-// spheres positioned so the camera sees ALL of them at once (frustum culling can't help),
-// growable 8000 at a time. Two axes of stress:
+// RenderStressTest - a worst-case renderer benchmark that keeps the renderer honest as features
+// land: a flat grid of spheres positioned so the camera sees all of them at once (frustum culling
+// cannot help), growable 8000 at a time. It stresses two axes:
 //
-//   * Batching   - by default every sphere shares ONE material + mesh, so the renderer
-//                  should collapse them into a single instanced draw. Press U to give each
-//                  sphere its OWN material (unique hue) → defeats batching → a draw per sphere.
-//   * Static opt - press B for a sin-wave bob that rewrites EVERY sphere's transform each
-//                  frame, so nothing can be cached as static (full extraction every frame).
+//   * Batching: by default every sphere shares one material and mesh, so the renderer should
+//     collapse them into a single instanced draw. Press U to give each sphere its own material
+//     (a unique hue), which defeats batching and costs a draw per sphere.
+//   * Static optimization: press B for a sin-wave bob that rewrites every sphere's transform each
+//     frame, so nothing can be cached as static (full extraction every frame).
 //
-// No HUD (UI/VG not used here): stats print to the console once per second (toggle H), and the
-// inherited P key dumps the CPU scope tree + per-pass GPU timings. Fly camera: WASD/QE move,
-// hold RMB (or Tab to capture) to look, Shift to move fast, Esc to exit.
+// Stats show in an ImGui HUD (H toggles it), and the inherited P key dumps the CPU scope tree and
+// per-pass GPU timings. Fly camera: WASD/QE move, hold RMB (or Tab to capture) to look, Shift to
+// move fast, Esc to exit.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (HUD) - used directly; engine integration is extensions.imgui
+#include "imgui.h" // Dear ImGui (HUD), used directly; extensions.imgui does the engine integration
 
 import foundation.core;
 import foundation.rhi; // PresentMode (run the benchmark vsync-off)
@@ -51,7 +50,7 @@ namespace materials = foundation::materials;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -73,7 +72,7 @@ namespace
 
     public:
         // Run uncapped (vsync off) so the frame time reflects real CPU+GPU work, not the display
-        // refresh. The numbers tear visually - that's fine for a benchmark. Switch to Fifo to cap.
+        // refresh. The image tears, which is fine for a benchmark. Switch to Fifo to cap.
         graphics::RenderWindowDesc MainRenderWindow() const override
         {
             graphics::RenderWindowDesc d;
@@ -108,12 +107,12 @@ namespace
                 env->Environment().ambientIntensity = 0.30f;
             }
 
-            // Shared sphere material (gray PBR). Every sphere points at THIS one by default, so the
+            // Shared sphere material (gray PBR). Every sphere points at this one by default, so the
             // renderer can batch them. Unique mode (U) builds a per-sphere material instead.
             m_sharedMat = materials::CreatePBR(u8"stress.shared",
                                                core::Float4{0.7f, 0.7f, 0.7f, 1.0f}, 0.1f, 0.4f);
 
-            // One sphere mesh, shared by all instances (matches Sedulous: radius 0.5, 16x8).
+            // One sphere mesh, shared by all instances (radius 0.5, 16x8).
             m_sphere = geometry::Primitives::Sphere(AppRoot(), 0.5f, 16, 8);
 
             // Large ground plane so the bobbing spheres read against a surface.
@@ -144,7 +143,7 @@ namespace
                 m_sun = sun; // K toggles its shadows (for shadowed-vs-unshadowed benchmarking)
             }
 
-            // Fly camera, pulled well back + up so the whole grid is in frame (worst case for culling).
+            // Fly camera, pulled well back and up so the whole grid is in frame (worst case for culling).
             m_camera = m_scene->CreateEntity(u8"camera");
             if (auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>())
             {
@@ -158,7 +157,7 @@ namespace
 
             AddSphereBatch(); // start with one batch
 
-            // Lower default exposure: the procedural-sky IBL + sun are bright, so AgX washes out at 1.0.
+            // Lower default exposure: the procedural-sky IBL and sun are bright, so AgX washes out at 1.0.
             if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 render->SetExposure(0.5f);
@@ -190,21 +189,21 @@ namespace
                     }
                 }
             }
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
 
             // HUD over the scene (backbuffer is RenderTarget after the default render path).
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
         void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
         {
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime); // inherited P-key profiler dump
 
-            // Smooth the frame time every frame + build the ImGui HUD (drawn in OnRenderWindow).
+            // Smooth the frame time every frame and build the ImGui HUD (drawn in OnRenderWindow).
             m_frameMs = m_frameMs * 0.9f + (deltaTime * 1000.0f) * 0.1f;
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
@@ -275,7 +274,7 @@ namespace
                 }
             }
             if (kb->IsKeyPressed(shell::KeyCode::I))
-            { // toggle prepass->forward instance-data sharing (A/B regression/perf)
+            { // toggle sharing instance data between prepass and forward (A/B for regressions and perf)
                 if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                 {
                     const bool on = !render->InstanceSharing();
@@ -286,7 +285,7 @@ namespace
                 }
             }
             if (kb->IsKeyPressed(shell::KeyCode::K))
-            { // toggle directional shadows (Sedulous's 104k demo runs shadow-OFF)
+            { // toggle directional shadows
                 if (auto* lights = m_scene->GetSystem<engine::render::LightComponentManager>())
                 {
                     if (engine::render::LightComponent* sl =
@@ -313,7 +312,7 @@ namespace
                 for (scene::EntityHandle e : m_spheres)
                 {
                     core::Transform t = meshScene->GetLocalTransform(e);
-                    // Phase from world X/Z (stable as the grid grows). Bob AROUND the base height so the
+                    // Phase from world X/Z (stable as the grid grows). Bob around the base height so the
                     // spheres stay above the floor (full, separated shadows) instead of dipping through it.
                     const core::f32 phase = (t.position.x + t.position.z) * 0.2f;
                     t.position.y = kSphereHeight + core::Sin(m_time * speed + phase) * amplitude;
@@ -338,19 +337,19 @@ namespace
         }
 
         // Grow the ground plane to cover the current grid, and re-frame the fly camera so the whole grid
-        // is in view (called on every batch change) - like AnimStressTest. Keeps the ground under the
-        // whole field and the far plane wide enough that no spheres get frustum-far-culled.
+        // is in view (called on every batch change), as AnimStressTest does. This keeps the ground under
+        // the whole field and the far plane wide enough that no spheres get frustum-far-culled.
         void FitFloorAndCamera()
         {
             const core::f32 gridWidth =
                 static_cast<core::f32>(m_gridSize) * kSphereSpacing; // full grid extent
-            // Floor: scale the base plane so it covers the grid + a margin (uniform XZ; Y stays flat).
+            // Floor: scale the base plane so it covers the grid and a margin (uniform XZ; Y stays flat).
             const core::f32 scale = core::Max(0.1f, (gridWidth + 40.0f) / kFloorBaseSize);
             core::Transform ft = m_scene->GetLocalTransform(m_ground);
             ft.scale = core::Float3{scale, 1.0f, scale};
             m_scene->SetLocalTransform(m_ground, ft);
 
-            // Camera: pull back + up so the grid fits the 60° FOV, looking down at the center.
+            // Camera: pull back and up so the grid fits the 60° FOV, looking down at the center.
             const core::f32 extent = gridWidth * 0.5f + 6.0f;
             const core::f32 dist = extent / core::Tan(0.5236f) + 10.0f; // half of 60° = 0.5236 rad
             const core::f32 camY = extent * 0.55f + kSphereHeight;
@@ -368,8 +367,6 @@ namespace
             PushCameraToEntity();
         }
 
-        // Spawn 8000 more spheres on the auto-sized grid. Position only depends on a global index, so
-        // existing spheres keep their world positions when the grid widens.
         // Grid position of sphere `index` for the current grid size (existing spheres keep their spot as
         // the grid widens; only new indices use the new size).
         [[nodiscard]] core::Float3 SphereTranslation(core::i32 index) const
@@ -385,6 +382,8 @@ namespace
             return core::Float3{x, kSphereHeight, z};
         }
 
+        // Spawn 8000 more spheres on the auto-sized grid. Position only depends on a global index, so
+        // existing spheres keep their world positions when the grid widens.
         void AddSphereBatch()
         {
             const core::i32 startIndex = m_batchCount * kSpheresPerBatch;
@@ -394,7 +393,7 @@ namespace
 
             if (m_multiMesh)
             {
-                // MultiMesh: no per-entity entities exist - grow the canonical transform list + the set.
+                // MultiMesh: no per-sphere entities exist, so grow the canonical transform list and the set.
                 m_mmTransforms.Reserve(static_cast<core::u32>(newTotal));
                 for (core::i32 i = 0; i < kSpheresPerBatch; ++i)
                 {
@@ -542,9 +541,9 @@ namespace
         }
 
         // Convert between per-entity spheres and the single MultiMesh set when the mode flips. Entering
-        // MultiMesh: capture the spheres' world transforms, DESTROY the per-entity entities (so extraction
-        // never iterates them - a genuine O(1) extract), build the set. Leaving: destroy the set + respawn
-        // the per-entity spheres from the captured transforms. AddSphereBatch/RemoveLastBatch then operate
+        // MultiMesh captures the spheres' world transforms, destroys the per-entity entities (so
+        // extraction never iterates them, a genuine O(1) extract) and builds the set. Leaving destroys
+        // the set and respawns the per-entity spheres from the captured transforms. AddSphereBatch/RemoveLastBatch then operate
         // on whichever representation is live, so the count always matches what's drawn.
         void RebuildMultiMesh()
         {
@@ -609,7 +608,7 @@ namespace
             core::ConsoleWrite(s.AsView());
         }
 
-        // ImGui HUD: benchmark stats + controls (H toggles it). Built in OnUpdate, drawn in OnRenderWindow.
+        // ImGui HUD: benchmark stats and controls (H toggles it). Built in OnUpdate, drawn in OnRenderWindow.
         void BuildHud(engine::render::RenderSubsystem* render)
         {
             if (!m_showStats)
@@ -705,7 +704,7 @@ namespace
                 {
                     render->SetBloomEnabled(bloomOn);
                 }
-                // The sun's shadow reach is the scene's (its environment settings).
+                // The sun's shadow reach lives in the scene's environment settings.
                 if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
                 {
                     ImGui::SliderFloat("Shadow dist", &env->Environment().shadowDistance, 50.0f, 1000.0f, "%.0f");
@@ -755,14 +754,14 @@ namespace
         core::i32 m_gridSize = 0;
         bool m_uniqueMaterials = false;
         bool m_bob = false;
-        bool m_multiMesh = false; // M: draw the whole grid as ONE InstancedMeshComponent
+        bool m_multiMesh = false; // M: draw the whole grid as one InstancedMeshComponent
         scene::EntityHandle m_multiMeshEntity{}; // the single set entity (when m_multiMesh)
         core::Array<core::Float4x4>
             m_mmTransforms; // canonical instance transforms while in MultiMesh mode
-                            // (the per-entity spheres are DESTROYED, not hidden)
+                            // (the per-entity spheres are destroyed, not hidden)
         core::f32 m_time = 0.0f;
 
-        // Fly camera, pulled well back + up so the whole grid is in frame (worst case for culling).
+        // Fly camera, pulled well back and up so the whole grid is in frame (worst case for culling).
         samples::FlyCamera m_fly{.position = core::Float3{0.0f, 50.0f, 200.0f}, .pitch = -0.245f};
 
         // Stats

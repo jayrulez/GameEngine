@@ -4,8 +4,7 @@
 // Foundation::Fonts - :atlas_texture partition
 //
 // Expands a font atlas's single-channel R8 coverage buffer into a renderer-
-// friendly RGBA8 image (white RGB, alpha = coverage). Ported from
-// Sedulous.Fonts (FontAtlasTexture.bf). Caller owns the returned image.
+// friendly RGBA8 image (white RGB, alpha = coverage). Caller owns the returned image.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +23,7 @@ export namespace foundation::fonts
     {
     public:
         // Returns a heap OwnedImageData allocated from `allocator` (caller deletes
-        // through the SAME allocator), or null if the atlas has no usable pixel data.
+        // through the same allocator), or null if the atlas has no usable pixel data.
         [[nodiscard]] static foundation::image::OwnedImageData*
         ExpandR8ToRGBA8(const IFontAtlas* atlas, IAllocator& allocator)
         {

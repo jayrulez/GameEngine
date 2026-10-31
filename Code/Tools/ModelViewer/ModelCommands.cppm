@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:commands`: every operation as a command (Documentation/Specs/
-// model-viewer.md, P6). A command has a name (`collection.create`), its arguments as JSON with a
-// schema, a JSON result, and whether it changes anything; CommandSet runs them by name, and tells
-// its listeners after each change, so the window refreshes whoever ran it (a button or an agent
-// through MCP, which serves the same set). LibrarySession holds the open library: its file, the
-// undo history (the library as it was before each change, the last 50) and the library's commands.
+// ModelViewer - `modelviewer:commands`: every operation as a command. A command has a name
+// (`collection.create`), JSON arguments with a schema, a JSON result, and a kind saying whether it
+// changes anything. CommandSet runs commands by name and notifies its listeners after each change,
+// so the window refreshes whether a button or an agent ran it (MCP serves the same set).
+// LibrarySession holds the open library: its file, the undo history (a copy of the library before
+// each of the last 50 changes) and the library's commands.
 
 module;
 #include "Core/Prelude.h"
@@ -47,16 +47,16 @@ export namespace modelviewer
         }
     };
 
-    /// What a command does to the library or the window, as MCP's tool annotations say it: an
-    /// agent's client runs reads freely and confirms the rest. Everything but Reads is a change
-    /// (announced, and for the library undoable).
+    /// What a command does to the library or the window, mapped onto MCP's tool annotations: an
+    /// agent's client runs reads freely and asks to confirm the rest. Every kind but Reads is a
+    /// change, announced to listeners and, for the library, undoable.
     enum class CommandKind : u8
     {
         Reads,   // changes nothing
         Creates, // adds something new (a model, a collection, a membership)
-        Changes, // replaces what is there (a name, a note, a place); the same call again lands the same
+        Changes, // replaces what is there (a name, a note, a place); repeating the call has no further effect
         Deletes, // takes something away
-        Adjusts, // the window's state (a tab, the camera), nothing kept
+        Adjusts, // the window's state (a tab, the camera); nothing is saved
     };
 
     struct Command
@@ -128,8 +128,8 @@ export namespace modelviewer
         }
         [[nodiscard]] Span<const Command> All() const { return m_commands.AsSpan(); }
 
-        /// Runs `name` with `args` (an object; null reads as none); after a change that went
-        /// through, each listener hears the command's name.
+        /// Runs `name` with `args` (an object; null counts as no arguments). After a change that
+        /// succeeds, each listener is told the command's name.
         CommandResult Execute(StringView name, const JsonValue& args = JsonValue::MakeObject())
         {
             const Command* command = Find(name);
@@ -162,8 +162,8 @@ export namespace modelviewer
         {
         }
 
-        /// Opens the library in `folder`; a shortlist found there (P4's) comes in as the Shortlist
-        /// collection once, its file renamed `.imported`. False when the library does not read.
+        /// Opens the library in `folder`. A shortlist file found there is imported once as the
+        /// Shortlist collection and renamed `.imported`. False when the library cannot be read.
         bool Open(StringView folder, String& error)
         {
             if (!m_file.Open(folder, m_library, error))
@@ -185,8 +185,8 @@ export namespace modelviewer
         [[nodiscard]] CommandSet& Commands() noexcept { return m_commands; }
         [[nodiscard]] LibraryFile& File() noexcept { return m_file; }
 
-        /// A change under `label`: the library as it was kept for undo, `change` run, the file
-        /// written when it went through (the library put back as it was when it did not).
+        /// Runs `change` as an undoable step named `label`. The library is copied for undo first;
+        /// if the change succeeds the file is written, otherwise the library is restored.
         CommandResult Change(StringView label, const Function<CommandResult()>& change)
         {
             if (m_file.ReadOnly())
@@ -208,7 +208,7 @@ export namespace modelviewer
             return result;
         }
 
-        /// Steps back over the last change; false when there is none (or read-only).
+        /// Undoes the last change; false when there is none or the library is read-only.
         bool Undo(String& label)
         {
             if (m_history.IsEmpty() || m_file.ReadOnly())
@@ -222,7 +222,7 @@ export namespace modelviewer
             label = foundation::core::Move(step.label);
             return true;
         }
-        /// The changes undo would step back over, the last first.
+        /// The labels of the changes undo can revert, most recent first.
         void HistoryLabels(Array<String>& out) const
         {
             for (usize i = m_history.Size(); i-- > 0;)
@@ -340,8 +340,8 @@ export namespace modelviewer
         }
     }
 
-    /// `viewer.info`: what the host says about itself (`info`'s object: its process, version, window
-    /// or headless), with the library's folder and whether it is writable added.
+    /// `viewer.info`: the object `info` returns (the host's process, version, and whether it has a
+    /// window), with the library's folder and whether it is writable added.
     inline void RegisterInfoCommand(LibrarySession& session, StringView libraryFolder, Function<JsonValue()> info)
     {
         LibrarySession* s = &session;
@@ -366,7 +366,7 @@ export namespace modelviewer
 
     /// The library's commands into `session`'s set: `entry.*`, `collection.*`, `member.*`,
     /// `tag.*`, `search`, `history.*`.
-    // Defined in ModelCommandsImpl.cpp: inline in this interface, gcc 15 emitted some of its
-    // lambdas twice in one object ("symbol already defined" at assembly), so it lives in one unit.
+    // Defined in ModelCommandsImpl.cpp: inline in this interface, gcc 15 emits some of its lambdas
+    // twice in one object ("symbol already defined" at assembly), so it lives in one unit.
     void RegisterLibraryCommands(LibrarySession& session);
 }

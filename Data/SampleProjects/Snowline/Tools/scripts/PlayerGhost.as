@@ -1,11 +1,13 @@
-// PlayerGhost - the player's own best run, ridden again beside them. On the ghost's entity, whose
-// first child is the rider model in its own see-through colour. Placed by Tools/course.py.
+// PlayerGhost: the player's own best run, ridden again beside them. The script sits on the ghost's
+// entity, whose first child is the rider model in its own see-through colour. Tools/course.py
+// places it.
 //
 // Every run is recorded from the rider's first frame ("RunStarted") at `sampleRate` samples a
-// second, each sample the rider's position and facing (x, y, z, yaw). When a run sets the course's
-// best (Snowline.as's "NewBest"), its recording is saved as the course's ghost ("ghost.<scene>", a
-// list of numbers in the save) and becomes the ghost of the runs after it. The ghost rides the
-// saved run, interpolated between its samples; with none saved it stays hidden.
+// second; each sample is the rider's position and facing (x, y, z, yaw). When a run sets the
+// course's best ("NewBest" from Snowline.as), its recording is saved as the course's ghost
+// ("ghost.<scene>", a list of numbers in the save) and becomes the ghost for the runs after it.
+// The ghost rides the saved run, interpolated between its samples; with none saved it stays
+// hidden.
 
 const int kSampleSize = 4; // x, y, z, yaw
 
@@ -17,7 +19,7 @@ class PlayerGhost
 
     private Entity@ m_rider;
     private Entity@ m_model;
-    private array<float> m_recording; // this run, as it is ridden
+    private array<float> m_recording; // this run, recorded as it is ridden
     private array<float> m_ghost;     // the best run, played back
     private bool m_started = false;
     private bool m_recordingOn = false;
@@ -40,7 +42,7 @@ class PlayerGhost
         m_recordingOn = true;
     }
 
-    // A new run: record afresh, and ride the best from the top.
+    // A new run: start a fresh recording, and ride the best run from the top.
     void onRunRestart(int unused)
     {
         m_recording.resize(0);
@@ -56,7 +58,7 @@ class PlayerGhost
         m_recordingOn = false;
     }
 
-    // This run is the course's best: it is the ghost from now on, and it is saved.
+    // This run is the course's best, so it becomes the ghost from now on and is saved.
     void onNewBest(int hundredths)
     {
         m_ghost = m_recording;
@@ -81,7 +83,8 @@ class PlayerGhost
 
     private void record()
     {
-        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        // The rider is a root entity, so position() holds this frame's pose; worldPosition() still
+        // holds last frame's.
         Float3 at = m_rider.position();
         Float3 forward = Quaternion::RotateVector(m_rider.rotation(), Float3(0.0f, 0.0f, 1.0f));
         m_recording.insertLast(at.x);
@@ -90,8 +93,8 @@ class PlayerGhost
         m_recording.insertLast(Math::Atan2(forward.x, forward.z));
     }
 
-    // The saved run at this run's time, between its two samples; it stays at its last one once its
-    // run is over.
+    // Places the ghost where the saved run was at this run's time, interpolating between two
+    // samples. Once the saved run is over it stays at its last sample.
     private void play()
     {
         int samples = int(m_ghost.length()) / kSampleSize;

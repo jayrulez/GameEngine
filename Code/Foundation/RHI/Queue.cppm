@@ -28,14 +28,14 @@ export namespace foundation::rhi
         /// Submit command buffers for execution.
         virtual void Submit(Span<CommandBuffer* const> commandBuffers) = 0;
 
-        /// Submit with fence signaling. `signalFence` is REQUIRED: a fenced overload with a null
-        /// fence is rejected (nothing is submitted; the validation layer reports it) - use the
+        /// Submit with fence signaling. `signalFence` is required: a fenced overload with a null
+        /// fence is rejected (nothing is submitted; the validation layer reports it). Use the
         /// plain overload to submit without signalling.
         virtual void Submit(Span<CommandBuffer* const> commandBuffers, Fence* signalFence,
                             u64 signalValue) = 0;
 
         /// Submit with full synchronization: wait on fences, then signal. `signalFence` is
-        /// REQUIRED here as well; same rule as the fenced overload above.
+        /// required here as well, by the same rule as the fenced overload above.
         virtual void Submit(Span<CommandBuffer* const> commandBuffers,
                             Span<Fence* const> waitFences, Span<const u64> waitValues,
                             Fence* signalFence, u64 signalValue) = 0;
@@ -43,7 +43,7 @@ export namespace foundation::rhi
         /// Block until all submitted work on this queue completes.
         virtual void WaitIdle() = 0;
 
-        /// Create a transfer batch for batching CPU→GPU uploads.
+        /// Create a transfer batch for batching CPU to GPU uploads.
         virtual Status CreateTransferBatch(TransferBatch*& out) = 0;
         /// Destroy a transfer batch.
         virtual void DestroyTransferBatch(TransferBatch*& batch) = 0;

@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - translation (E9a of Specs/gui-lab-evolution.md): markup's @key resolves through the
-// context's Localization (foundation.i18n), follows a language change, takes a plural count and
-// arguments from the GUI's data, waits for a node to join a GUI, stops under auto-translate off;
-// :lang() matches a node's language.
+// GUI - translation. A markup @key resolves through the context's Localization (foundation.i18n),
+// follows a language change, takes a plural count and arguments from the GUI's data, waits for its
+// node to join a GUI, and stops under auto-translate off. :lang() matches a node's language.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -20,7 +19,7 @@ namespace
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
     core::Duration Frame() { return core::Duration::FromSeconds(1.0 / 60.0); }
 
-    // English and Portuguese texts, with English's plural rule.
+    // English and Portuguese texts, with the English plural rule.
     struct Texts
     {
         i18n::StringTable table;
@@ -91,9 +90,9 @@ TEST_CASE("translation: markup's @key resolves through the context's Localizatio
     texts.loc.SetLanguage(SV(u8"pt"));
     bed.Step();
     CHECK(core::Cast<Label>(Find(*page, SV(u8"title")))->GetText() == SV(u8"Jogar"));
-    CHECK(core::Cast<UIWidget>(Find(*page, SV(u8"go")))->GetTooltipText() == core::String(u8"Start the game")); // English's, the fallback
+    CHECK(core::Cast<UIWidget>(Find(*page, SV(u8"go")))->GetTooltipText() == core::String(u8"Start the game")); // the English text, which is the fallback
 
-    bed.root->GetContext().SetLocalization(nullptr); // none: a key shows as itself
+    bed.root->GetContext().SetLocalization(nullptr); // with no localization, a key shows as itself
     bed.Step();
     CHECK(core::Cast<Label>(Find(*page, SV(u8"title")))->GetText() == SV(u8"menu.play"));
 }
@@ -190,8 +189,8 @@ TEST_CASE("translation: an attribute ending in -count or -args is the widget's o
         count = count || d.Name == core::String(u8"animation-iteration-count");
         args = args || d.Name == core::String(u8"tooltip-args");
     }
-    CHECK(count); // not taken for a translation's count
-    CHECK(args);  // tooltip is no @key here
+    CHECK(count); // not taken as a translation's count
+    CHECK(args);  // the tooltip is not an @key here
 }
 
 TEST_CASE("translation: a property markup names by its CSS name takes @key and {{}} by that name")

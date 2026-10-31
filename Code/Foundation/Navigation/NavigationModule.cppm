@@ -3,12 +3,11 @@
 
 // Foundation::Navigation - the `foundation.navigation` module.
 //
-// The navmesh core over vendored recastnavigation:
-// the Recast BAKE (triangle soup + agent profile -> serialized tiled navmesh) and
-// the Detour RUNTIME (navmesh load, path query, agent crowd + local avoidance). Recast
-// and Detour are the committed backends with NO abstraction layer, but rc*/dt* types
-// never cross the public surface. The bake is a pure function - no scene, no geometry
-// module, no device - so the whole thing is testable headless.
+// The navmesh core over vendored recastnavigation: the Recast bake (triangle soup and an agent
+// profile in, a serialized tiled navmesh out) and the Detour runtime (navmesh load, path query,
+// agent crowd and local avoidance). Recast and Detour are used directly, with no abstraction
+// layer, but rc* and dt* types never cross the public surface. The bake is a pure function (no
+// scene, no geometry module, no device), so the whole module is testable headless.
 
 export module foundation.navigation;
 

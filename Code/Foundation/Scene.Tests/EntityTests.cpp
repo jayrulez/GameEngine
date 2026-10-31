@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Phase 1 - the entity table: generational handles, free-list slot reuse + stale-handle
-// detection, persistent-Guid <-> handle mapping, active/name state. These encode the
-// entity-lifecycle/validity behaviors pinned from the Sedulous test suite.
+// The entity table: generational handles, free-list slot reuse and stale-handle
+// detection, the mapping between persistent Guids and handles, active/name state.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -161,7 +160,7 @@ TEST_CASE("revision advances on structural change")
 TEST_CASE("revision advances on rename, reparent, and active toggle")
 {
     // Observers (e.g. an editor hierarchy) rebuild off Revision(); every mutation that changes
-    // what they display must advance it. Local transforms deliberately do NOT (they'd churn a
+    // what they display must advance it. Local transforms do not (they would churn a
     // rebuild every frame of a gizmo drag).
     Scene scene{DefaultAllocator()};
     EntityHandle a = scene.CreateEntity(u8"a");
@@ -221,12 +220,12 @@ TEST_CASE("MoveBefore reorders siblings and roots")
     scene.MoveBefore(c, b);
     CHECK(scene.Revision() == r);
 
-    // SetParent to invalid = move to END of the root list: c, b, ... a.
+    // SetParent to invalid moves to the end of the root list: c, b, ... a.
     scene.SetParent(a, EntityHandle::Invalid());
     CHECK(scene.GetFirstRoot() == c);
     CHECK(scene.GetNextSibling(b) == a);
 
-    // Reorder INTO a child list: parent p with child b -> move a before b under p.
+    // Reorder into a child list: parent p with child b; move a before b under p.
     EntityHandle p = scene.CreateEntity(u8"p");
     scene.SetParent(b, p);
     scene.MoveBefore(a, b);
@@ -280,8 +279,8 @@ TEST_CASE("entity find: by name (first match) and by hierarchy path")
     CHECK_FALSE(scene.FindChildByName(player, u8"Muzzle").IsAssigned()); // grandchild
 }
 
-// === effective active: own flag AND every ancestor's flag,
-// cached O(1), resettled at the SetActive / reparent / creation choke points ===
+// === effective active: own flag and every ancestor's flag,
+// cached O(1), resettled at SetActive, reparent and creation ===
 
 TEST_CASE("effective active: deep chain - a mid-ancestor's flag darks the whole subtree")
 {
@@ -297,7 +296,7 @@ TEST_CASE("effective active: deep chain - a mid-ancestor's flag darks the whole 
     CHECK(scene.IsEffectivelyActive(a));
     CHECK(scene.IsEffectivelyActive(d));
 
-    scene.SetActive(b, false); // the MIDDLE of the chain
+    scene.SetActive(b, false); // the middle of the chain
     CHECK(scene.IsEffectivelyActive(a));
     CHECK_FALSE(scene.IsEffectivelyActive(b));
     CHECK_FALSE(scene.IsEffectivelyActive(c));
@@ -326,7 +325,7 @@ TEST_CASE("effective active: child's own flag survives a parent toggle (restore 
     CHECK_FALSE(scene.IsEffectivelyActive(offChild));
 
     scene.SetActive(parent, true);
-    CHECK(scene.IsEffectivelyActive(onChild));       // was on -> back on
+    CHECK(scene.IsEffectivelyActive(onChild));       // was on, back on
     CHECK_FALSE(scene.IsEffectivelyActive(offChild)); // own flag off stays off
     CHECK_FALSE(scene.IsActive(offChild));
 }
@@ -361,7 +360,7 @@ TEST_CASE("effective active: MoveBefore across parents resettles the subtree")
     scene.SetParent(mover, activeParent);
     scene.SetActive(inactiveParent, false);
 
-    scene.MoveBefore(mover, anchor); // splice into the INACTIVE parent's child list
+    scene.MoveBefore(mover, anchor); // splice into the inactive parent's child list
     CHECK(scene.GetParent(mover) == inactiveParent);
     CHECK_FALSE(scene.IsEffectivelyActive(mover));
 }

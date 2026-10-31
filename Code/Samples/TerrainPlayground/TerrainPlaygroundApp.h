@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TerrainPlaygroundApp - the terrain showcase, shared by the desktop and web entry points
-// (Main.cpp / WebMain.cpp - the WebSceneApp.h pattern: this header uses the modules the including
-// TU imports, so it declares NO imports of its own). Builds a heightfield IN CODE, wraps it in an
-// in-memory TerrainResource (no cooking - Ref<> sub-resources take a direct product), attaches a
+// TerrainPlaygroundApp: the terrain showcase, shared by the desktop and web entry points (Main.cpp
+// and WebMain.cpp). Like WebSceneApp.h, this header uses the modules the including translation unit
+// imports and declares no imports of its own. It builds a heightfield in code, wraps it in an
+// in-memory TerrainResource (no cooking: Ref<> sub-resources take a direct product), attaches a
 // TerrainComponent, and lets engine.terrain draw the chunked geo-mipmap terrain through its
-// dedicated TerrainRenderer. An ImGui HUD tweaks the sun / LOD bias / heightfield live. WASD/RMB
-// fly camera.
+// TerrainRenderer. An ImGui HUD tweaks the sun, the LOD bias and the heightfield live, and a fly
+// camera moves with WASD and the right mouse button.
 #ifndef SAMPLES_TERRAINPLAYGROUND_APP_H
 #define SAMPLES_TERRAINPLAYGROUND_APP_H
 
-#include "../Common/FlyCamera.h" // shared free-fly camera (WASD/QE + RMB-look)
+#include "../Common/FlyCamera.h" // shared free-fly camera (WASD/QE, right mouse button to look)
 #include "imgui.h"
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: the one place it chooses the ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -53,7 +53,8 @@ namespace samples
     constexpr core::f32 kCasterRadius = 8.0f; // the orbiting shadow-caster sphere
 
     // Rewrite every sample from the current controls, then BumpVersion so the GPU height texture and
-    // the chunk model re-upload. Pattern in [0,1] -> scaled by `amplitude` -> the u16 range.
+    // the chunk model re-upload. The pattern is in [0,1], scaled by `amplitude`, then mapped to the
+    // u16 range.
     inline void GenerateHeightfield(hf::Heightfield& grid, TerrainType type, core::f32 amplitude,
                                     core::f32 frequency)
     {
@@ -72,7 +73,7 @@ namespace samples
                 switch (type)
                 {
                 case TerrainType::Hills:
-                    // Layered sines - a rolling landscape.
+                    // Layered sines: a rolling landscape.
                     h = 0.5f + 0.25f * core::Sin(fx * frequency) * core::Cos(fz * frequency) +
                         0.15f * core::Sin(fx * frequency * 2.3f + 1.7f) +
                         0.10f * core::Cos(fz * frequency * 3.1f);
@@ -140,7 +141,7 @@ namespace samples
                 env->Environment().ambientIntensity = 0.5f;
             }
 
-            // Camera - high + pulled back, angled down over the terrain.
+            // Camera: high and pulled back, angled down over the terrain.
             m_camera = m_scene->CreateEntity(u8"camera");
             if (auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>())
             {
@@ -150,7 +151,7 @@ namespace samples
             m_fly.position = core::Float3{0.0f, 110.0f, 175.0f};
             m_fly.pitch = -0.45f;
 
-            // The sun - a directional light the terrain shades against (driven by the HUD sliders).
+            // The sun: a directional light the terrain shades against, driven by the HUD sliders.
             m_sun = m_scene->CreateEntity(u8"sun");
             if (auto* lights = m_scene->GetSystem<engine::render::LightComponentManager>())
             {
@@ -158,11 +159,11 @@ namespace samples
                 lc.type = engine::render::LightType::Directional;
                 lc.color = core::Color{1.0f, 0.96f, 0.88f, 1.0f};
                 lc.intensity = 1.0f;
-                lc.castsShadows = true; // drives the CSM - terrain casts + receives
+                lc.castsShadows = true; // drives the CSM; the terrain casts and receives
             }
             ApplySun();
 
-            // The terrain: an in-memory heightfield + TerrainResource (direct product, no cook).
+            // The terrain: an in-memory heightfield and TerrainResource (a direct product, no cook).
             m_heightfield =
                 MakeRef<hf::Heightfield>(AppRoot(), kGridSize,
                                          core::Float2{kWorldSize, kWorldSize}, 0.0f, kMaxHeight);
@@ -170,9 +171,9 @@ namespace samples
             ApplyHole();
 
             m_terrainResource = MakeRef<terrain::TerrainResource>(AppRoot());
-            m_terrainResource->heightfield = m_heightfield; // Ref direct product (no proxy/guid)
-            // A splat with palette layer 0 painted on the x < 0 half (no palette textures: the
-            // terrain itself still shades from the height ramp; the paint drives the GRASS).
+            m_terrainResource->heightfield = m_heightfield; // a Ref to a direct product, with no proxy or guid
+            // A splat with palette layer 0 painted on the x < 0 half. There are no palette
+            // textures, so the terrain still shades from the height ramp; the paint drives the grass.
             m_splat = MakeRef<terrain::SplatWeights>(AppRoot(), kSplatSize, kSplatSize);
             PaintHalfSplat(*m_splat);
             m_terrainResource->weights = m_splat;
@@ -186,8 +187,8 @@ namespace samples
             }
 
             // The grass: the terrain's vegetation component with one layer following splat
-            // layer 0 - grass on the painted half, none on the other, thinning to nothing at
-            // fadeEnd.
+            // layer 0, so grass grows on the painted half and not on the other, thinning to
+            // nothing at fadeEnd.
             if (auto* vegetation =
                     m_scene->GetSystem<engine::vegetation::TerrainVegetationComponentManager>())
             {
@@ -197,9 +198,9 @@ namespace samples
                 layer.mesh = geometry::Primitives::Cone(AppRoot(), 0.24f, 1.4f); // a tuft
                 core::RefPtr<materials::Material> grass = materials::CreatePBR(
                     u8"grass", core::Float4{0.25f, 0.62f, 0.18f, 1.0f}, 0.0f, 0.85f);
-                // Wind: the tufts sway (their tips; the cone's base sits at local y = -0.7). The
-                // Wind group comes from the effect's table, which the shader system serves (a
-                // material built in code takes it from whoever holds the shader system).
+                // Wind: the tufts' tips sway (the cone's base sits at local y = -0.7). The Wind group
+                // comes from the effect's table, which the shader system serves; a material built
+                // in code gets it from whatever holds the shader system.
                 auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
                 const foundation::shaders::ShaderEffect* wind =
                     render != nullptr && render->Shaders() != nullptr
@@ -224,8 +225,8 @@ namespace samples
                 c.proceduralLayers.PushBack(layer);
             }
 
-            // A floating sphere that orbits over the terrain - a moving shadow caster so the CSM is
-            // obvious (its shadow sweeps across the surface). Meshes cast automatically (Opaque).
+            // A floating sphere that orbits over the terrain: a moving shadow caster that makes the
+            // CSM obvious as its shadow sweeps across the surface. Opaque meshes cast automatically.
             m_caster = m_scene->CreateEntity(u8"caster");
             if (auto* meshes = m_scene->GetSystem<engine::render::MeshComponentManager>())
             {
@@ -269,7 +270,7 @@ namespace samples
                 {
                     m_orbitTime += deltaTime * m_orbitSpeed;
                 }
-                ApplyCaster(); // re-apply each frame so height/radius sliders track live
+                ApplyCaster(); // re-apply each frame so the height and radius sliders track live
             }
         }
 
@@ -280,7 +281,7 @@ namespace samples
             {
                 return;
             }
-            // Light forward = travel direction: yaw about Y, pitch down by the elevation.
+            // The light's forward is its travel direction: yaw about Y, pitch down by the elevation.
             const core::Quaternion rot =
                 core::Quaternion::FromAxisAngle(core::Float3{0.0f, 1.0f, 0.0f}, m_sunAzimuth) *
                 core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -m_sunElevation);
@@ -349,8 +350,8 @@ namespace samples
                         GenerateHeightfield(*m_heightfield, m_type, m_amplitude, m_frequency);
                     }
                 }
-                // A hole (Specs/terrain-holes.md): a cut disc off-centre; nothing draws, casts,
-                // collides or grows there, and the sky shows through from above.
+                // A hole: a cut disc off-centre. Nothing draws, casts, collides or grows there, and
+                // the sky shows through from above.
                 bool holeChanged = ImGui::Checkbox("hole (a cut disc at -30, 70)", &m_hole);
                 holeChanged |= ImGui::SliderFloat("hole radius", &m_holeRadius, 2.0f, 40.0f, "%.0f");
                 if (holeChanged)
@@ -409,8 +410,8 @@ namespace samples
         FlyCamera m_fly;
         core::f32 m_frameSmooth = 0.016f;
 
-        // The hole: the whole plane solid, then one cut disc when enabled (the sample kept
-        // separate from GenerateHeightfield so a regenerate keeps the cut where it is).
+        // The hole: the whole plane solid, then one cut disc when enabled. This is kept separate
+        // from GenerateHeightfield so that regenerating keeps the cut where it is.
         void ApplyHole()
         {
             if (!m_heightfield)

@@ -3,11 +3,11 @@
 
 /// Foundation::Render - the `:debug_blit` partition.
 ///
-/// The editor's debug-view pass: visualize ANY named render-graph texture in the viewport.
-/// A fullscreen pass declared after the compose chain (tonemap/FXAA) and before overlays -
+/// The editor's debug-view pass: visualize any named render-graph texture in the viewport.
+/// A fullscreen pass declared after the compose chain (tonemap, FXAA) and before overlays,
 /// it overwrites the view's sub-rect with the selected resource run through channel select,
-/// range remap, and optional depth linearization; gizmos and overlays still draw on top.
-/// Reading the source is a REAL graph dependency, so transient aliasing keeps the resource
+/// range remap and optional depth linearization; gizmos and overlays still draw on top.
+/// Reading the source is a real graph dependency, so transient aliasing keeps the resource
 /// alive to this pass with no special machinery. The source binds UnfilterableFloat and the
 /// shader reads via Load, so every texture format works (WebGPU included); depth resources
 /// bind through their depth-only view.
@@ -35,7 +35,7 @@ export namespace foundation::render
     // checks it against the compiled shader, member by member.
     struct GpuDebugBlitPush
     {
-        f32 uvScaleX, uvScaleY;   // the shader's UvScale: fullscreen uv -> the view's sub-rect
+        f32 uvScaleX, uvScaleY;   // the shader's UvScale: fullscreen uv to the view's sub-rect
         f32 uvOffsetX, uvOffsetY; // UvOffset
         f32 sourceW, sourceH;     // SourceSize, in texels
         f32 rangeMin, rangeMax;
@@ -62,7 +62,7 @@ export namespace foundation::render
         Status Initialize()
         {
             // Load-read (no sampler): UnfilterableFloat accepts every color format, and
-            // depth binds through its depth-only view (the MsaaResolve pass precedent).
+            // depth binds through its depth-only view (as in the MSAA resolve pass).
             rhi::BindGroupLayoutEntry texEntry =
                 rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment);
             texEntry.textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
@@ -89,7 +89,7 @@ export namespace foundation::render
         }
 
         // Declare the blit: read `src` (any 1-sample graph texture), overwrite `ldr`'s view
-        // sub-rect with its visualization. `srcIsDepth` selects the depth-only view + the
+        // sub-rect with its visualization. `srcIsDepth` selects the depth-only view and the
         // linearize path from `config`.
         void DeclareDebugBlit(rendergraph::RenderGraph& graph, rendergraph::RGHandle src,
                               rendergraph::RGHandle ldr, rhi::TextureFormat ldrFormat, i32 vpX,

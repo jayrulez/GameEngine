@@ -5,7 +5,7 @@
 //
 // SubsystemManager: owns the engine's subsystems, looks them up by type, and drives
 // their lifecycle and per-frame phases in UpdateOrder. Type identity uses the
-// reflection TypeOf<T>() (We have -fno-rtti, so no std::type_index).
+// reflection TypeOf<T>() (the build uses -fno-rtti, so no std::type_index).
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +36,7 @@ export namespace foundation::runtime
 
         [[nodiscard]] bool IsRunning() const noexcept { return m_running; }
 
-        // The runtime's allocator authority: subsystems thread THIS (usually
+        // The runtime's allocator authority: subsystems thread this one (usually
         // wrapped in a per-system TaggedAllocator) instead of reaching for the
         // ambient default.
         [[nodiscard]] core::IAllocator& Allocator() const noexcept { return *m_allocator; }
@@ -101,25 +101,24 @@ export namespace foundation::runtime
             m_running = true;
         }
 
-        // Engine time scale (ez-style): 1 = realtime, 0 = paused, 0.5 = slow-mo. The host
+        // Engine time scale: 1 = realtime, 0 = paused, 0.5 = slow-mo. The host
         // scales the dt feeding FixedUpdate accumulation and the Update/PostUpdate phases;
         // frame-rate-tied work (UI, app hooks) keeps the raw dt. Gameplay code and the
         // input runtime's per-action timeScale flag read it from here.
         void SetTimeScale(core::f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
         [[nodiscard]] core::f32 TimeScale() const noexcept { return m_timeScale; }
 
-        // The live runs (Documentation/Specs/run-context.md): whoever owns them (DefaultApplication)
-        // sets their manager here, so every subsystem - an engine one or a game plugin's,
-        // registered whenever - finds them through Manager()->RunManager(). Null: no game here
-        // (a tool, a test, the editor's outer runtime), so no runs. Borrowed.
+        // The live runs: whoever owns them (DefaultApplication) sets their manager here, so
+        // every subsystem (an engine one or a game plugin's, registered at any time) finds them
+        // through Manager()->RunManager(). Null when there is no game (a tool, a test, the
+        // editor's outer runtime), so no runs. Borrowed.
         void SetRunManager(foundation::run::IRunManager* runs) noexcept { m_runs = runs; }
         [[nodiscard]] foundation::run::IRunManager* RunManager() const noexcept { return m_runs; }
 
-        // The app's configured fixed step - plain CONFIG (a float), not an execution lane.
-        // The scene bridge reads it to seed per-scene fixed steppers; fixed-rate interpolation
-        // is PER SCENE (Scene::FixedAlpha). There is no context-level fixed lane (no FixedUpdate
-        // fan, no context-level FixedAlpha): no subsystem overrides FixedUpdate and no reader
-        // consumes a context alpha.
+        // The app's configured fixed step: plain configuration (a float), not an execution
+        // lane. The scene bridge reads it to seed per-scene fixed steppers; fixed-rate
+        // interpolation is per scene (Scene::FixedAlpha). The manager runs no fixed phase of
+        // its own and keeps no alpha.
         void SetFixedTimeStep(core::f32 step) noexcept { m_fixedStep = step; }
         [[nodiscard]] core::f32 FixedTimeStep() const noexcept { return m_fixedStep; }
 
@@ -253,7 +252,7 @@ export namespace foundation::runtime
         core::IAllocator* m_allocator;
         // Keyed by TypeId, not TypeInfo*: a plugin library resolving GetSubsystem<T>()
         // holds its own copy of TypeOf<T>'s static, so addresses diverge across shared
-        // library boundaries while ids do not (shared-libraries.md identity rule).
+        // library boundaries while ids do not.
         core::HashMap<core::TypeId, Subsystem*> m_byType;
         core::Array<Subsystem*> m_sorted;                // non-owning, UpdateOrder-sorted
         core::Array<core::UniquePtr<Subsystem>> m_owned; // ownership

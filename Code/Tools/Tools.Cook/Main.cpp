@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tools.Cook - the command-line cooker. Headless: opens the
-// project, registers every builder, plans + executes the incremental cook.
+// Tools.Cook - the command-line cooker. Headless: opens the project, registers every builder, then
+// plans and executes the incremental cook.
 //
 // Usage: Tools.Cook <projectDirectory> [--rebuild] [--dry-run] [--target <id>]
 //                   [--data-root <dir>]
-//   --rebuild        force-cook every buildable asset (the "forgot the version bump" big hammer)
-//   --dry-run        print the plan (dirty set + orphans) without cooking
-//   --target <id>    cook a per-target DB under Cooked/<id>/ instead of the host DB (asset-variants).
-//                    Cooks the host first, then carries platform-invariant products forward and
-//                    recooks only variant products (textures: BC vs ASTC) for the target. "web-astc"
-//                    is the ASTC mobile-web target; everything else is BC desktop. "host" = default.
-// Exit code = number of failed cooks (0 = success).
+//   --rebuild        force-cook every buildable asset (for when a builder changed without a
+//                    version bump)
+//   --dry-run        print the plan (dirty set and orphans) without cooking
+//   --target <id>    also cook a per-target DB under Cooked-<id>/ beside the host DB. Cooks the
+//                    host first, then carries platform-invariant products forward and recooks only
+//                    variant products (textures: BC or ASTC) for the target. "web-astc" is the
+//                    ASTC mobile-web target; everything else is BC desktop. "host" is the default.
+// The exit code is the number of failed cooks (0 on success).
 
 #include <cstdio>
 #include <cstring>
@@ -23,7 +24,7 @@ import foundation.content;
 import foundation.vfs;
 import pipeline.core;
 import pipeline.registration;
-import engine.composition; // RegisterAllScriptFacades - the COMPLETE engine facade surface
+import engine.composition; // RegisterAllScriptFacades: the complete engine facade surface
 import editor.project;
 import pipeline.cook;
 
@@ -32,7 +33,7 @@ namespace vfs = foundation::vfs;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: the one place it chooses the ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -95,8 +96,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // The engine data root (a custom shader's cook compiles against <dataRoot>/Shaders):
-    // --data-root, else the Data/.dataroot walk from this tool's executable.
+    // The engine data root (a custom shader's cook compiles against <dataRoot>/Shaders): the
+    // --data-root argument, else the Data/.dataroot walk up from this tool's executable.
     const String dataRoot = foundation::vfs::ResolveDataRoot(argc, argv);
     if (dataRoot.IsEmpty())
     {
@@ -106,17 +107,17 @@ int main(int argc, char** argv)
     }
 
     pipeline::BuilderRegistry registry{AppRoot()};
-    pipeline::RegisterPipelineTypes(); // every asset/product/resource type + script cooks
+    pipeline::RegisterPipelineTypes(); // every asset, product and resource type, and the script cooks
     pipeline::RegisterAllBuilders(registry, dataRoot.AsView());
-    // The COMPLETE engine script surface into the global registry (run/ui/physics/audio/... facades),
-    // so script cooks compile against the same surface a running game has - the foundation-only
-    // registration RegisterPipelineTypes performs is missing every Engine-level facade. Metadata
-    // only (no device/GPU/world), idempotent.
+    // The complete engine script surface (the run, ui, physics, audio and other facades) goes into
+    // the global registry, so script cooks compile against the same surface a running game has.
+    // RegisterPipelineTypes registers only the foundation-level surface, without the Engine-level
+    // facades. This registers metadata only (no device, GPU or world) and is idempotent.
     engine::RegisterAllScriptFacades();
 
     vfs::NativeFileSystem sourcesMount(project->SourcesRoot().AsView(), AppRoot());
     vfs::NativeFileSystem cacheMount(project->CacheRoot().AsView(), AppRoot());
-    JobSystem jobs(AppRoot()); // cook tool composition root
+    JobSystem jobs(AppRoot()); // owned by the tool's composition root
 
     pipeline::CookProgress progress;
     progress.onItem = [](usize done, usize total, StringView path, bool ok)
@@ -127,7 +128,7 @@ int main(int argc, char** argv)
 
     const bool hostOnly = (targetId == StringView(u8"host"));
 
-    // The host cook is always run: it is the editor's DB AND the copy-forward source for any target.
+    // The host cook always runs: it is the editor's DB and the copy-forward source for any target.
     pipeline::CookDriver host(AppRoot(), project->SourceDb(), project->CookedDb(), registry,
                               &sourcesMount, &cacheMount, &jobs);
     pipeline::CookPlan hostPlan = host.Plan(rebuild);
@@ -151,10 +152,10 @@ int main(int argc, char** argv)
 
     if (!hostOnly)
     {
-        // Materialize the per-target DB lazily. It roots at a SIBLING Cooked-<id>/ (NOT Cooked/<id>/):
-        // the desktop pack walks Cooked/ recursively, so a nested target subtree would leak into the
-        // desktop Content.pak (Fable ruling Q2 - "desktop byte-identical" must be structural). Its
-        // cook.db lives under .cache/<id>/.
+        // Create the per-target DB on demand. It lives in a sibling Cooked-<id>/, not Cooked/<id>/:
+        // the desktop pack walks Cooked/ recursively, so a nested target folder would leak into the
+        // desktop Content.pak, and keeping it outside guarantees the desktop pack is unchanged by
+        // target cooks. Its cook.db lives under .cache/<id>/.
         String cookedDir(project->Directory());
         cookedDir.Append(u8"/Cooked-");
         cookedDir.Append(targetId);

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the export dialog over its markup (Data/Editor/Export.xml), a presets
-// controller and a scratch templates root: the presets listed and the selected one's settings on
-// the grid in their sections under the card naming the template it exports with (or why none),
-// a template picked by name deciding the platform and config, edits applied as made and saved when
-// the selection moves, an override's rows shown only while it overrides, add, duplicate and remove
-// (after asking), and Export running the selected preset after saving.
+// Editor::App tests: the export dialog over its markup (Data/Editor/Export.xml), a presets
+// controller and a scratch templates root. The presets are listed, and the selected preset's
+// settings appear on the grid in their sections, under a card naming the template it exports with
+// (or why there is none). A template picked by name decides the platform and config. Edits apply as
+// they are made and are saved when the selection moves, and an override's rows show only while it
+// overrides. Also covers add, duplicate and remove (after asking), and Export running the selected
+// preset after saving.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -182,8 +183,8 @@ TEST_CASE("export dialog: edits apply as made and save when the selection moves;
     CHECK_FALSE(dialog->IsOpen());
 }
 
-// Present transform P2: a preset holds the game its own way (a phone-facing Web preset says
-// Landscape), and the dialog shows the preset's choice again when it is selected.
+// A preset can set its own orientation (a phone-facing Web preset says Landscape), and the dialog
+// shows the preset's choice again when it is selected.
 TEST_CASE("export dialog: a preset overrides the orientation, its row shown only while it does")
 {
     Fixture f;
@@ -199,7 +200,7 @@ TEST_CASE("export dialog: a preset overrides the orientation, its row shown only
     CHECK(f.presets.At(0).orientation == ScreenOrientation::Landscape);
     CHECK_FALSE(f.presets.At(1).overridesOrientation);
 
-    // The other preset shows its own; coming back shows this one's again.
+    // The other preset shows its own orientation; selecting this one again shows this one's.
     dialog->Select(1);
     CHECK_FALSE(dialog->Rows()->GetValue(u8"overridesOrientation", 0).AsBool());
     dialog->Select(0);
@@ -215,7 +216,7 @@ TEST_CASE("export dialog: add, duplicate, and remove after asking")
     dialog->AddPreset();
     CHECK(dialog->PresetCount() == 3u);
     CHECK(dialog->SelectedIndex() == 2);
-    CHECK(f.presets.At(2).platform == StringView(u8"Linux64")); // the host's
+    CHECK(f.presets.At(2).platform == StringView(u8"Linux64")); // the host's platform
     CHECK(dialog->Rows()->GetValue(u8"name", 0).AsString() == StringView(u8"New Preset"));
 
     dialog->Select(0);
@@ -224,7 +225,7 @@ TEST_CASE("export dialog: add, duplicate, and remove after asking")
     CHECK(dialog->SelectedIndex() == 3);
     CHECK(f.presets.At(3).name == StringView(u8"Linux Copy"));
 
-    // Remove asks; Escape keeps it, Remove removes it.
+    // Remove asks first: Escape keeps the preset, and Remove removes it.
     dialog->RemoveSelected();
     gui::MessageBox* box = FindBox(*f.ui);
     REQUIRE(box != nullptr);

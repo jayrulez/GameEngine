@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - border-image and @spritesheet (E13 of Specs/gui-lab-evolution-2.md): a nine-slice skin cut
-// from an image (or a sprite's region of an atlas, or an SVG, its pieces drawn as paths) drawn in
-// place of the border, and sprites named as images, written as their atlas and region.
+// GUI - border-image and @spritesheet. A nine-slice skin is cut from an image, from a sprite's
+// region of an atlas, or from an SVG whose pieces are drawn as paths, and is drawn in place of the
+// border. Sprites named as images are rewritten as their atlas and region.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -19,7 +19,7 @@ namespace image = foundation::image;
 namespace
 {
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
-    // A 64 by 32 atlas, whatever path is asked for (the last remembered).
+    // A 64 by 32 atlas, returned for any path asked for; the last path asked is remembered.
     class Atlas : public IResourceProvider
     {
     public:
@@ -75,7 +75,7 @@ TEST_CASE("border-image: a percentage slice is of the image, and no slice is all
     const BorderImage& skin = bed.panel->GetBox().Skin;
     CHECK(skin.Slice[0] == doctest::Approx(8.0f));  // 25% of 32
     CHECK(skin.Slice[1] == doctest::Approx(16.0f)); // 25% of 64
-    CHECK(skin.Width[0] < 0.0f);                    // no width: the border's
+    CHECK(skin.Width[0] < 0.0f);                    // no width given, so the border's width is used
     CHECK(skin.RepeatX == BorderImageRepeat::Stretch);
 }
 
@@ -94,7 +94,7 @@ TEST_CASE("spritesheet: a sprite named as an image is its atlas and region, in a
     {
         CHECK(path == SV(u8"theme/atlas.png")); // the atlas, not the sprite's name
     }
-    // Its own size is the region's.
+    // The image's own size is the region's size.
     const core::Rectangle placed = PlaceImageLayer(box.Layers[0], core::Rectangle{0.0f, 0.0f, 100.0f, 100.0f}, 16.0f, 16.0f);
     CHECK(placed.width == doctest::Approx(16.0f));
 }
@@ -119,7 +119,7 @@ TEST_CASE("border-image: an SVG is sliced in its own units, each piece drawn as 
     const NodeBox& box = bed.panel->GetBox();
     REQUIRE(box.Skin.Svg != nullptr);
     CHECK(box.Skin.Image == nullptr);
-    CHECK(box.Skin.Slice[1] == doctest::Approx(10.0f)); // in its units
+    CHECK(box.Skin.Slice[1] == doctest::Approx(10.0f)); // in the SVG's units
     CHECK_FALSE(box.IsEmpty());
 
     foundation::vg::VGContext ctx;
@@ -166,8 +166,8 @@ TEST_CASE("border-image: an SVG is sliced in its own units, each piece drawn as 
 
 namespace
 {
-    // Bakes what it is asked for at once, on the second asking (the first queues it), and
-    // counts the askings.
+    // Bakes a picture the second time it is asked for (the first request queues it), and counts
+    // the requests.
     class FakeBaker : public IPictureBaker
     {
     public:
@@ -193,7 +193,8 @@ namespace
 
 TEST_CASE("border-image: an SVG skin draws from its bake once there is one, sized at its corners' scale in device pixels")
 {
-    // 30 units sliced 10, drawn 20 wide: twice its size; at a device scale of 1.5, three times.
+    // 30 units sliced at 10 and drawn 20 wide: twice its size, or three times at a device scale
+    // of 1.5.
     Bed bed(u8".skin { border-image: url(\"data:image/svg+xml,<svg width='30' height='30'><rect width='30' height='30' fill='red'/></svg>\") 10 fill / 20px stretch; }");
     const NodeBox& box = bed.panel->GetBox();
     REQUIRE(box.Skin.Svg != nullptr);
@@ -232,7 +233,8 @@ TEST_CASE("border-image: an SVG skin draws from its bake once there is one, size
             CHECK(command.compositeLayer == -1);
             CHECK(ctx.GetBatch().textures[static_cast<core::usize>(command.textureIndex)] == &baker.key);
         }
-        // A premultiplied quad a piece, the middle filled: nine quads of one texture, one draw.
+        // One premultiplied quad per piece, the middle filled: nine quads of one texture in one
+        // draw.
         CHECK(draws == 1u);
         CHECK(indices == 9 * 6);
         CHECK(ctx.GetBatch().vertices.Size() == 36u);

@@ -3,18 +3,19 @@
 
 // Foundation::UI.Application - the `foundation.ui.application` module.
 //
-// The docking / workbench layer: RuntimeDockableWindowHost implements the toolkit's IDockableWindowHost in
-// terms of the runtime host (IApplicationHost::OpenWindow/CloseWindow) + the reusable UIHost + the shell's
-// window geometry / global mouse. A DockManager's floating panels become real OS windows (OS-chromed on
-// Linux, borderless with app-drawn chrome elsewhere - see UsesOSChrome), each
-// its own RootView attached to the shared UIHost. This is the ONLY UI module that pulls in
-// foundation.ui.toolkit, so docking cannot bleed into games (which never link it) or into the toolkit-free
-// foundation.ui.shell / foundation.ui.runtime layers.
+// The docking and workbench layer. RuntimeDockableWindowHost implements the toolkit's
+// IDockableWindowHost on top of the runtime host (IApplicationHost::OpenWindow/CloseWindow), the
+// shared UIHost, and the shell's window geometry and global mouse. A DockManager's floating panels
+// become real OS windows (OS-chromed on Linux, borderless with app-drawn chrome elsewhere; see
+// UsesOSChrome), each with its own RootView attached to the shared UIHost. This is the only UI
+// module that imports foundation.ui.toolkit, so docking stays out of games (which never link it)
+// and out of the toolkit-free foundation.ui.shell and foundation.ui.runtime layers.
 //
-// Usage: construct once with the app's IApplicationHost + its UIHost, then
+// Usage: construct once with the app's IApplicationHost and its UIHost, then
 //   dockManager->DockableWindowHost = &host;
 // Floating a panel opens an OS window; TryGetDockableWindowBounds/Move/Resize keep it in sync during
-// drag/resize (all position/size writes are ATOMIC - per-axis writes race on async X11).
+// drag and resize. Every position and size write sets both axes at once, because separate per-axis
+// writes race on asynchronous X11.
 
 module;
 #include "Core/Prelude.h"
@@ -44,10 +45,10 @@ export namespace foundation::ui::application
     using core::u32;
     using core::usize;
 
-    /// Platform default for dockable-window chrome: Linux window
-    /// systems (X11/Wayland) get OS-chromed floats - Wayland punishes app-positioned borderless
-    /// windows and XWayland blocks cross-monitor drags; no true-X11 special case (one platform
-    /// default). Everything else keeps borderless floats with app-drawn chrome.
+    /// Platform default for dockable-window chrome. Linux window systems (X11 and Wayland) get
+    /// OS-chromed floats, because Wayland handles app-positioned borderless windows badly and
+    /// XWayland blocks cross-monitor drags; native X11 is not special-cased. Everything else keeps
+    /// borderless floats with app-drawn chrome.
     [[nodiscard]] constexpr bool PrefersOSChromedDockables(shell::WindowSystem system) noexcept
     {
         return system == shell::WindowSystem::X11 || system == shell::WindowSystem::Wayland;
@@ -55,7 +56,7 @@ export namespace foundation::ui::application
 
     /// Implements the toolkit docking host on the runtime's multi-window graphics host. Assign to a
     /// DockManager's DockableWindowHost; floated panels become OS windows drawn by the UIHost
-    /// (OS-chromed on Linux, borderless elsewhere - see UsesOSChrome).
+    /// (OS-chromed on Linux, borderless elsewhere; see UsesOSChrome).
     class RuntimeDockableWindowHost final : public toolkit::IDockableWindowHost
     {
     public:
@@ -70,10 +71,10 @@ export namespace foundation::ui::application
 
         [[nodiscard]] bool SupportsOSWindows() override { return true; }
 
-        /// Linux (X11/Wayland) floats default to OS-chromed windows; borderless (app-drawn
-        /// chrome + app-driven move) is the default elsewhere (Wayland punishes app-positioned
-        /// borderless windows, XWayland blocks cross-monitor drags). Override via
-        /// SetOSChromeOverride for tests or an explicit setting.
+        /// Linux (X11 and Wayland) floats default to OS-chromed windows, because Wayland handles
+        /// app-positioned borderless windows badly and XWayland blocks cross-monitor drags.
+        /// Elsewhere the default is borderless, with app-drawn chrome and app-driven moves.
+        /// SetOSChromeOverride overrides the default for tests or an explicit setting.
         [[nodiscard]] bool UsesOSChrome() override
         {
             if (m_osChromeOverride.HasValue())
@@ -106,7 +107,7 @@ export namespace foundation::ui::application
             i32 mainX = 0, mainY = 0;
             MainOrigin(mainX, mainY);
 
-            // Chromed windows show a real OS title bar - propagate the panel's title.
+            // Chromed windows show a real OS title bar, so give it the panel's title.
             core::String title(u8"Panel");
             if (auto* fw = Cast<toolkit::DockableWindow>(dockableWindow))
             {
@@ -123,8 +124,8 @@ export namespace foundation::ui::application
             ws.positioned = true;
             ws.x = mainX + static_cast<i32>(x);
             ws.y = mainY + static_cast<i32>(y);
-            // Borderless mode: the DockablePanel draws its own title bar. Chromed mode: the OS
-            // provides title bar / close / resize borders.
+            // In borderless mode the DockablePanel draws its own title bar. In chromed mode the OS
+            // provides the title bar, close button and resize borders.
             ws.borderless = !UsesOSChrome();
             ws.resizable = true;
 
@@ -153,7 +154,7 @@ export namespace foundation::ui::application
                     m_uiHost->DetachWindow(
                         rw); // logical detach; payload stays for the window teardown
                     m_host->CloseWindow(
-                        rw); // deferred: RenderWindow dtor WaitIdles + frees the payload
+                        rw); // deferred: the RenderWindow destructor waits for idle, then frees the payload
                     m_entries.RemoveAt(
                         i); // drops our root ref (the payload still holds one until close)
                     return;
@@ -168,7 +169,7 @@ export namespace foundation::ui::application
                 i32 mainX = 0, mainY = 0;
                 MainOrigin(mainX, mainY);
                 e->rw->Window().SetPosition(mainX + static_cast<i32>(x),
-                                            mainY + static_cast<i32>(y)); // atomic
+                                            mainY + static_cast<i32>(y)); // both axes in one write
             }
         }
 
@@ -180,9 +181,9 @@ export namespace foundation::ui::application
                 i32 mainX = 0, mainY = 0;
                 MainOrigin(mainX, mainY);
                 e->rw->Window().SetPosition(mainX + static_cast<i32>(x),
-                                            mainY + static_cast<i32>(y)); // atomic
+                                            mainY + static_cast<i32>(y)); // both axes in one write
                 e->rw->Window().SetSize(static_cast<u32>(width > 1.0f ? width : 1.0f),
-                                        static_cast<u32>(height > 1.0f ? height : 1.0f)); // atomic
+                                        static_cast<u32>(height > 1.0f ? height : 1.0f)); // both axes in one write
             }
         }
 
@@ -230,14 +231,14 @@ export namespace foundation::ui::application
 
         /// Per-frame drag-follow for floating OS windows: while a dock-panel drag from one of our OS
         /// windows is active, move that window so the grab point stays under the desktop-global cursor.
-        /// Borderless floats have no WM title bar to drag, and the DockManager delegates OS-window movement
-        /// to the app (its OnDragOver is a no-op for IsOSWindow), so - like Sedulous's editor - we move it
-        /// here. Call once per frame from the app's OnUpdate.
+        /// Borderless floats have no WM title bar to drag, and the DockManager leaves OS-window movement
+        /// to the app (its OnDragOver does nothing for IsOSWindow), so the host moves the window here.
+        /// Call once per frame from the app's OnUpdate.
         void Tick()
         {
             // Route native close-button clicks to the toolkit's close flow. Only chromed windows
-            // have an OS close button, but matching is harmless either way (the shell posts
-            // CloseRequested per window id; non-dockable ids never match our entries).
+            // have an OS close button, but matching is harmless either way: the shell posts
+            // CloseRequested per window id, and ids of other windows never match our entries.
             DispatchCloseRequests();
 
             DragDropManager* dd = m_uiHost->Context().DragDrop();
@@ -246,9 +247,9 @@ export namespace foundation::ui::application
                 return;
             }
 
-            // Under OS chrome the float must NOT chase the cursor during a re-dock drag (that
-            // app-driven-move pattern is exactly what Wayland punishes); the drag-drop adorner is
-            // the in-flight visual instead, and the window stays where the OS put it.
+            // Under OS chrome the float does not chase the cursor during a re-dock drag, since
+            // Wayland handles app-driven moves badly. The drag-drop adorner shows the drag instead,
+            // and the window stays where the OS put it.
             if (UsesOSChrome())
             {
                 m_dragWindow = nullptr;
@@ -261,9 +262,9 @@ export namespace foundation::ui::application
                 return;
             }
 
-            // Latch the dragged OS window + grab offset once, when the drag begins. Offset = how far the
-            // cursor sits from the window's top-left at grab (in global coords); keeping it fixed pins the
-            // grab point to the window as it follows.
+            // Latch the dragged OS window and the grab offset once, when the drag begins. The offset is
+            // how far the cursor sits from the window's top-left at the grab, in global coordinates;
+            // keeping it fixed pins the grab point to the window as it follows.
             if (m_dragWindow == nullptr)
             {
                 if (auto* pd = Cast<toolkit::DockPanelDragData>(dd->CurrentDragData()))
@@ -288,7 +289,7 @@ export namespace foundation::ui::application
                 GetGlobalMousePosition(gx, gy);
                 m_dragWindow->Window().SetPosition(
                     static_cast<i32>(gx - m_dragOffX),
-                    static_cast<i32>(gy - m_dragOffY)); // atomic, global coords
+                    static_cast<i32>(gy - m_dragOffY)); // both axes in one write, global coords
             }
         }
 
@@ -381,12 +382,12 @@ export namespace foundation::ui::application
         ui::runtime::UIHost* m_uiHost;               // borrowed (the app owns it)
         core::Array<Entry> m_entries;
 
-        // Drag-follow state (Tick): the OS window currently being dragged + the grab offset.
+        // Drag-follow state (Tick): the OS window currently being dragged and the grab offset.
         graphics::RenderWindow* m_dragWindow = nullptr;
         f32 m_dragOffX = 0.0f;
         f32 m_dragOffY = 0.0f;
 
-        // Explicit chrome-policy override (tests / user setting); unset = platform default.
+        // Explicit chrome-policy override (tests or a user setting); unset means the platform default.
         core::Optional<bool> m_osChromeOverride;
     };
 }

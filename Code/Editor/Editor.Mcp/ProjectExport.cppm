@@ -3,13 +3,12 @@
 
 // Editor::Mcp - :project_export partition
 //
-// project_export: a thin wrapper over the ONE export entry
-// point (editor::ExportOne) - the same call the editor's Export menu and the export CLI make,
-// so an MCP export produces an identical dist. Presets come from the project's
-// export_presets.xml (else the synthesized host preset); the template registry resolves from
-// the shared templates root plus the host tool directory (the player next to the executable);
-// scene streams pre-transcode over the FULL manager set (Engine.Composition) and the
-// reachability scanner reuses the same full-manager scan asset_uses runs.
+// project_export: a thin wrapper over the single export entry point (editor::ExportOne), the same
+// call the editor's Export menu and the export CLI make, so an MCP export produces an identical
+// dist. Presets come from the project's export_presets.xml (else the synthesized host preset). The
+// template registry resolves from the shared templates root and the host tool directory (the
+// player next to the executable). Scene streams are pre-transcoded over the full manager set
+// (Engine.Composition), and the reachability scanner reuses the full-manager scan asset_uses runs.
 
 module;
 #include "Core/Prelude.h"
@@ -36,9 +35,9 @@ namespace vfs = foundation::vfs;
 
 export namespace editor::mcp
 {
-    // The INLINE export - what the stdio host runs on the calling thread and what the export
-    // CLI does: templates from the shared root plus the host tool directory (the player next to
-    // the executable), scene streams pre-transcoded over the full manager set, the reachability
+    // The inline export, which the stdio host runs on the calling thread and the export CLI also
+    // does: templates from the shared root and the host tool directory (the player next to the
+    // executable), scene streams pre-transcoded over the full manager set, the reachability
     // scanner over the same scan asset_uses runs, then ExportOne with the cook folded in.
     // `hostToolDir` is the host executable's directory; `dataRoot` the engine data root (the
     // shader cook reads <dataRoot>/Shaders).

@@ -17,7 +17,7 @@ import foundation.runtime;
 import foundation.runtime.client;
 import foundation.scene;
 import foundation.scene.resource; // SceneDocument, what the preview's scene slot takes
-import foundation.settings; // the project's editor store (the kept preview scene)
+import foundation.settings; // the project's editor store (where the preview scene choice is kept)
 import foundation.resource;
 import foundation.geometry;
 import foundation.materials;
@@ -81,7 +81,7 @@ namespace editor
         {
             return false;
         }
-        // A scene that takes its values from a profile renders that profile's COOKED values; the
+        // A scene that takes its values from a profile renders that profile's cooked values; the
         // preview shows the ones being edited, so the block goes back to its own first.
         target.ForEachSystem(
             [&](scene::SceneSystem& system)
@@ -94,9 +94,9 @@ namespace editor
         return ApplySettingsProfileToScene(profileAsset, target, resources);
     }
 
-    // The profile's values as the grid shows them: the settings type's reflection, the block's own
-    // fields left out (nested ones, and those marked `sceneOnly`: the source, the profile
-    // reference), which are a scene's and not a profile's.
+    // The profile's values as the grid shows them: the settings type's reflection without the
+    // block's own fields (nested ones, and those marked `sceneOnly`, such as the source and the
+    // profile reference), which belong to a scene rather than a profile.
     class SettingsProfilePage::ValuesSource final : public gui::IPropertySource, private gui::IPropertySourceClient
     {
     public:
@@ -123,8 +123,8 @@ namespace editor
             m_inner.SetObjects(Span<const Instance>(&object, 1u));
         }
         [[nodiscard]] gui::ReflectedPropertySource& Inner() noexcept { return m_inner; }
-        /// Told whenever the values change under it: a gesture's previews (written in place as
-        /// they go), its cancel, a commit, an undo; the page's preview follows them.
+        /// Called whenever the values change under it: a gesture's previews (written in place as it
+        /// goes), its cancel, a commit or an undo. The page's preview follows them.
         Function<void()> OnValuesWritten;
         void Refresh() { m_inner.Refresh(); }
 
@@ -175,7 +175,8 @@ namespace editor
     SettingsProfilePage::SettingsProfilePage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::SettingsProfileAsset::StaticType(), kPath), m_format(context.Allocator())
     {
-        // The asset reflects its wrapper; the rows are its values', as a scene's settings show them.
+        // The asset's own reflection is its wrapper; the rows show its values, as a scene's
+        // settings do.
         HideAssetRows();
         m_values = MakeUnique<ValuesSource>(Allocator(), Allocator(), m_format);
         SettingsProfilePage* self = this;
@@ -200,8 +201,8 @@ namespace editor
                                                   }),
                                               EditorRootAllocator()));
                                       });
-        // The preview scene follows the values as they change, a slider's drag included (the old
-        // page's did; the commit alone left the scene still until the release).
+        // The preview scene follows the values as they change, including during a slider's drag,
+        // not only on the commit at its release.
         m_values->OnValuesWritten = [self]() { self->ApplyPreview(); };
         BindValues();
         if (pipeline::SettingsProfileAsset* asset = AssetOf(Object()))

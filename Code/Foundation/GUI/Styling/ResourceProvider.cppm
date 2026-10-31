@@ -3,14 +3,14 @@
 
 // GUI - :resource_provider partition
 //
-// IResourceProvider: the seam the CSS engine uses to load image assets referenced by
-// background-image: url(path). Aligned with Sedulous.UI / foundation.ui's IResourceProvider - it
-// returns a raw, provider-owned image (not a framework Drawable), so the provider stays a pure
-// asset loader (VFS + foundation.image) with no dependency on the GUI's drawable types; the
-// StyleApplier wraps the image into an ImageDrawable. Font resolution is a separate seam
-// (IFontProvider). An SVG may also be written inline, as a `data:image/svg+xml,...` URL (its
-// markup percent-encoded or plain, or base64 after `;base64`): the provider parses it once and
-// keeps it as it keeps a named one, so a box borrows either for as long as the provider lives.
+// IResourceProvider: the interface through which the CSS engine loads image assets referenced by
+// background-image: url(path). It returns a raw, provider-owned image (not a framework Drawable),
+// so the provider stays a pure asset loader (the VFS and foundation.image) with no dependency on
+// the GUI's drawable types; the StyleApplier wraps the image in an ImageDrawable. Fonts are
+// resolved separately (fonts::IFontService). An SVG may also be written inline as a
+// `data:image/svg+xml,...` URL (its markup plain or percent-encoded, or base64 after `;base64`).
+// The provider parses it once and keeps it as it keeps a named SVG, so a box can borrow either
+// for as long as the provider lives.
 
 module;
 #include "Core/Prelude.h"
@@ -60,7 +60,7 @@ export namespace foundation::gui
                 return 63;
             return -1;
         }
-        // `%XX` escapes decoded; a `%` not followed by two hex digits is kept as it is.
+        // Decodes `%XX` escapes; a `%` not followed by two hex digits is kept as it is.
         inline void DecodePercent(core::StringView in, core::String& out)
         {
             for (usize i = 0; i < in.Size(); ++i)
@@ -76,7 +76,8 @@ export namespace foundation::gui
                     out.PushBack(in[i]);
             }
         }
-        // Base64 (either alphabet, white space and padding skipped); false on any other character.
+        // Decodes base64 (either alphabet, skipping white space and padding). Returns false on any
+        // other character.
         [[nodiscard]] inline bool DecodeBase64(core::StringView in, core::String& out)
         {
             u32 bits = 0;
@@ -108,8 +109,8 @@ export namespace foundation::gui
                (source[kPrefix.Size()] == u8',' || source[kPrefix.Size()] == u8';');
     }
 
-    /// The SVG markup a `data:image/svg+xml[;param]*[;base64],payload` URL carries; false when
-    /// `source` is not one or its payload does not decode.
+    /// Extracts the SVG markup a `data:image/svg+xml[;param]*[;base64],payload` URL carries.
+    /// Returns false when `source` is not such a URL or its payload does not decode.
     [[nodiscard]] inline bool DecodeSvgDataUrl(core::StringView source, core::String& out)
     {
         out.Clear();
@@ -135,8 +136,8 @@ export namespace foundation::gui
         return detail::DecodeBase64(unescaped.AsView(), out);
     }
 
-    /// Whether a picture's source is an SVG: a path ending in .svg (either case), or one written
-    /// inline (IsSvgDataUrl). Drawn as paths, not loaded as a raster.
+    /// Whether a picture's source is an SVG: a path ending in .svg (either case), or an inline SVG
+    /// (IsSvgDataUrl). An SVG is drawn as paths rather than loaded as a raster.
     [[nodiscard]] inline bool IsSvgSource(core::StringView source) noexcept
     {
         if (IsSvgDataUrl(source))
@@ -155,17 +156,17 @@ export namespace foundation::gui
         // Load image data for a path (background-image: url(path)). Returns a borrowed pointer
         // owned by the provider (valid until the provider releases it), or null if not found.
         [[nodiscard]] virtual const image::ImageData* LoadImage(core::StringView path) = 0;
-        // A text file's contents (a sheet's @import, E13 of Specs/gui-lab-evolution-2.md): true and
-        // `out` filled when it is there.
+        // Loads a text file's contents (for a sheet's @import). Returns true and fills `out` when
+        // the file exists.
         [[nodiscard]] virtual bool LoadText(core::StringView path, core::String& out) = 0;
-        // An SVG picture by its path (a CSS image whose path ends in .svg, E13): a borrowed
-        // document the provider keeps (parsed once), drawn as paths at whatever size it fills;
-        // null if not found. Callers ask Svg, which answers an inline one itself.
+        // Loads an SVG picture by its path (a CSS image whose path ends in .svg). Returns a
+        // borrowed document the provider keeps (parsed once), drawn as paths at whatever size it
+        // fills, or null if not found. Callers use Svg, which handles inline SVGs itself.
         [[nodiscard]] virtual const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) = 0;
 
-        /// An SVG picture by its source: one written inline (a data: URL) parsed the first time
-        /// and kept here, any other through LoadSvg. Borrowed; null when there is none (an inline
-        /// one that does not parse is remembered as none).
+        /// Returns an SVG picture by its source. An inline one (a data: URL) is parsed the first
+        /// time and kept here; any other goes through LoadSvg. The result is borrowed, and null when
+        /// there is none (an inline SVG that does not parse is remembered as none).
         [[nodiscard]] const foundation::vg::svg::SVGDocument* Svg(core::StringView source)
         {
             if (!IsSvgDataUrl(source))
@@ -190,7 +191,7 @@ export namespace foundation::gui
         struct InlineSvg
         {
             core::String Source;
-            UniquePtr<foundation::vg::svg::SVGDocument> Document; // null: it did not parse
+            UniquePtr<foundation::vg::svg::SVGDocument> Document; // null when it did not parse
         };
         IAllocator* m_allocator;
         Array<InlineSvg> m_inline;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor.App :property_names - a reflected property's name as a row's label.
+// Editor.App :property_names: a reflected property's name as a row's label.
 
 #include <doctest/doctest.h>
 

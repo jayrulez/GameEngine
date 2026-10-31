@@ -3,9 +3,8 @@
 
 // UI - :input_filter partition
 //
-// Filters characters before insertion into a text control. Ported from
-// Sedulous.UI/src/Editing/InputFilter.bf. Self-contained (no View dependency); a plain value type
-// held by the text-editing behavior. The Beef `delegate bool(char32)` becomes Function<bool(char32_t)>;
+// Filters characters before insertion into a text control. Self-contained (no View dependency); a
+// plain value type held by the text-editing behavior. A custom filter is a Function<bool(char32_t)>;
 // factory methods return by value (no heap).
 
 module;

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// AnimationSampler: track/clip sampling + pose blending. Covers the ported math directly (no
-// Sedulous sampler test existed).
+// AnimationSampler: track and clip sampling, and pose blending.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -48,7 +47,7 @@ TEST_CASE("sampler: SampleClip animates targeted bones, bind pose otherwise")
     BoneTransform poses[2] = {};
     SampleClip(clip, skel, 0.5f, Span<BoneTransform>{poses, 2});
     CHECK(NearlyEqual(poses[0].position, Float3{0, 5, 0})); // animated
-    CHECK(NearlyEqual(poses[1].position, Float3{7, 7, 7})); // untouched -> bind pose
+    CHECK(NearlyEqual(poses[1].position, Float3{7, 7, 7})); // untouched: bind pose
 }
 
 TEST_CASE("sampler: BlendPoses + AdditivePoses")

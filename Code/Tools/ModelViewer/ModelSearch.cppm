@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:search`: finding models in the library
-// (Documentation/Specs/model-viewer.md, P6). A query is terms that must all hold: a plain word
-// matches a member's name, the file's name, the note or a tag, any case; `tag:boss` a tag;
-// `collection:act1` membership of that collection or one under it; `rigged`, `animated` and
-// `missing` the entry's state. A term with spaces is quoted (`tag:"night sky"`). A search runs over
-// a collection and what is under it (its members in their order), or the whole library.
+// ModelViewer - `modelviewer:search`: finding models in the library. A query is a list of terms
+// that must all match. A plain word matches a member's name, the file's name, the note or a tag,
+// ignoring case; `tag:boss` matches a tag; `collection:act1` matches membership of that collection
+// or one under it; `rigged`, `animated` and `missing` match the entry's state. A term with spaces
+// is quoted (`tag:"night sky"`). A search runs over a collection and its sub-collections (members
+// in their order), or over the whole library.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,7 @@ export namespace modelviewer
         bool missing = false;
     };
 
-    /// Splits `text` into its terms (quotes keep spaces in one).
+    /// Splits `text` into terms; quotes keep spaces inside one term.
     [[nodiscard]] inline SearchQuery ParseQuery(StringView text)
     {
         SearchQuery query;
@@ -123,9 +123,9 @@ export namespace modelviewer
         return true;
     }
 
-    /// The entries meeting `query`: over `scope` and the collections under it (each entry once,
-    /// in the members' order), or the whole library in its order when `scope` is nil; at most
-    /// `limit` (0: all).
+    /// The entries matching `query` within `scope` and its sub-collections (each entry once, in
+    /// member order), or within the whole library in its order when `scope` is nil. At most
+    /// `limit` are returned; 0 means no limit.
     [[nodiscard]] inline Array<Guid> Search(const Library& library, const SearchQuery& query, const Guid& scope = Guid{}, usize limit = 0)
     {
         Array<Guid> found;
@@ -154,9 +154,9 @@ export namespace modelviewer
         return found;
     }
 
-    /// The models of `ids` with ANY of `tags` (in any case), in their order; all of them when
-    /// `tags` is empty. The Library tab's tag chips: each tag that is on adds its models, where a
-    /// query's tag: terms must all hold.
+    /// The models of `ids` that carry any of `tags` (ignoring case), in their order; all of them
+    /// when `tags` is empty. This backs the Library tab's tag chips, where each active tag adds
+    /// its models, unlike a query's `tag:` terms, which must all match.
     [[nodiscard]] inline Array<Guid> WithAnyTag(const Library& library, Span<const Guid> ids, Span<const String> tags)
     {
         Array<Guid> kept;

@@ -13,7 +13,7 @@ import :math;
 export namespace foundation::core
 {
     // =======================================================================
-    // Color - RGBA, float components (typically 0..1). An AUTHORED colour (a component's
+    // Color - RGBA, float components (typically 0..1). An authored colour (a component's
     // colour, a material's colour property, a UI colour) is sRGB: the value a colour picker and
     // a hex code show, the same encoding as an sRGB image. The renderer decodes it to linear
     // (ToLinear below) where it hands the colour to the GPU, as the hardware decodes an sRGB
@@ -97,10 +97,10 @@ export namespace foundation::core
 
     // =======================================================================
     // Color32 - packed 8-bit RGBA, for compact storage: image pixels, vertex
-    // colors, asset interchange. The byte-color counterpart of the float Color
-    // (which stays the linear/HDR runtime currency). Conversions are plain
-    // 0..255 <-> 0..1 with NO gamma; sRGB<->linear is handled explicitly at the
-    // texture/format edge (ImageColorSpace, *UnormSrgb formats).
+    // colors, asset interchange. The byte-color counterpart of the float Color.
+    // Conversions are plain 0..255 <-> 0..1 with no gamma; sRGB to linear is
+    // handled explicitly at the texture and format boundary (ImageColorSpace,
+    // *UnormSrgb formats).
     // =======================================================================
     struct ENGINE_EXPORT_DATA Color32
     {

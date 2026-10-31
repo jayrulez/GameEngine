@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A light's shadow controls on a real device (the shadow-controls spec):
-//  - acne: a wall the sun meets at a grazing angle (PaperKid's house walls and sun, 2026-10-03)
-//    reads uniformly lit across a sweep of normal offsets and at the default. (The mottling seen on
-//    PaperKid's walls was the roof overhang's shadow under-resolved by the cascades, not acne: a
-//    nearer camera far plane resolves it into a clean band.);
+// A light's shadow controls on a real device:
+//  - acne: a wall the sun meets at a grazing angle (as PaperKid's house walls meet its sun)
+//    reads uniformly lit across a sweep of normal offsets and at the default;
 //  - strength: a cube's shadow on a plane darkens fully at strength 1, half as much at 0.5 and not
 //    at all at 0, so the per-light value reaches the sampling.
 #include <doctest/doctest.h>
@@ -147,9 +145,9 @@ namespace
         return image;
     }
 
-    // PaperKid's case (2026-10-03): a house wall beside the street, facing it (+X), the camera at eye
-    // height looking down the street with its 300 m far plane (the cascades are fitted to it), and
-    // the game's sun, which meets that wall at N.L ~ 0.17.
+    // PaperKid's case: a house wall beside the street, facing it (+X), the camera at eye height
+    // looking down the street with its 300 m far plane (the cascades are fitted to it), and the
+    // game's sun, which meets that wall at N.L ~ 0.17.
     ShadowScene GrazingWall(f32 normalBias)
     {
         ShadowScene spec;

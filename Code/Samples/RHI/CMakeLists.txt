@@ -1,4 +1,4 @@
-# RHI samples (GPU/display dependent - built, not run in CI).
+# RHI samples (GPU and display dependent: built, not run in CI).
 
 add_subdirectory(Sample001_Triangle)
 add_subdirectory(Sample002_Textures)

@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Conversion utilities between foundation::rhi enums and Vulkan enums.
-/// Ported from Sedulous.RHI.Vulkan/VulkanConversions.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -19,8 +18,8 @@ using namespace foundation::core;
 export namespace foundation::rhi::vk
 {
 
-    /// Depth format support flags - set once at VkDevice init via setDepthFormatSupport().
-    /// Defaults to supported; probing overrides if hardware lacks D24.
+    /// Depth format support flags, set once at VkDevice init via setDepthFormatSupport(). They
+    /// default to supported; probing overrides them when the hardware lacks D24.
     namespace detail
     {
         inline bool g_depth24S8Supported = true;

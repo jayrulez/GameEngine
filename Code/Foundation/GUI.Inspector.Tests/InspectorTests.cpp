@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Inspector - the inspector (E8e of Specs/gui-lab-evolution.md): its tree follows the
-// inspected one, its details show what a node is and where its styles came from, and picking
-// walks out through what holds the node under the pointer and selects on a click; its details say
-// what a screen reader is told (E9d).
+// GUI.Inspector - the inspector. Its tree follows the inspected one, and its details show what a
+// node is, where its styles came from, and what a screen reader is told. Picking walks out through
+// the nodes that hold the node under the pointer, and selects on a click.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -81,7 +80,7 @@ TEST_CASE("inspector: the details show what the selected node is and where its s
     CHECK(bed.DetailsHave(SV(u8"10px")));
     bed.page->RemoveChild(bed.ok.Get());
     bed.inspect.Select(bed.ok.Get());
-    bed.ok.Reset(); // gone: the selection lets it go
+    bed.ok.Reset(); // the node is gone, so the selection releases it
     CHECK(bed.inspect.GetSelected() == nullptr);
 }
 
@@ -119,7 +118,7 @@ TEST_CASE("inspector: a branch folds out of the tree and opens again, and select
     CHECK(bed.inspect.IsCollapsed(bed.page.Get()));
     CHECK(bed.inspect.TreeRowCount() < all); // the button and its parts are gone from the list
     const usize folded = bed.inspect.TreeRowCount();
-    bed.inspect.Select(bed.ok.Get()); // inside the fold: it opens
+    bed.inspect.Select(bed.ok.Get()); // selecting inside the fold opens it
     CHECK_FALSE(bed.inspect.IsCollapsed(bed.page.Get()));
     CHECK(bed.inspect.TreeRowCount() == all);
     bed.inspect.SetCollapsed(bed.page.Get(), true);
@@ -132,7 +131,7 @@ TEST_CASE("inspector: a style value edited in its field changes the rule, and ev
 {
     Bed bed;
     bed.inspect.Select(bed.ok.Get());
-    // The field showing opacity's 0.8 (the button rule's).
+    // The field showing the button rule's opacity of 0.8.
     TextField* field = nullptr;
     const auto find = [&field](auto& self, Node& node) -> void
     {

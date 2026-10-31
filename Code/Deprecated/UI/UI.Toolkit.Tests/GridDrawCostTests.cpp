@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Draw-cost probe for large property grids (the ImportTest blank-UI incident: a ~1300-field
-// generic asset form exceeded the VG renderer's per-frame vertex ceiling, blanking the whole
-// window - blank-but-interactive, the 9e35fb51 class). Pins that off-screen rows contribute no
-// tessellated geometry: a ScrollView'd grid must draw its VIEWPORT, not its whole content.
-// (Headless: no FontService, so text is excluded - the on-screen cost is strictly higher, which
-// makes the bound this test pins conservative.)
+// Draw cost of large property grids. A generic asset form can have more than a thousand fields,
+// enough to exceed the VG renderer's per-frame vertex ceiling and blank the whole window. These
+// tests check that off-screen rows contribute no tessellated geometry: a grid inside a ScrollView
+// draws its viewport, not its whole content. (Headless, with no FontService, text is excluded;
+// the real on-screen cost is higher, so the bound checked here is conservative.)
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <cstdio>
@@ -60,8 +59,8 @@ TEST_CASE("propertygrid: off-screen rows tessellate no geometry (blank-UI ceilin
     const u32 smallVerts = DrawOnce(*root);
     root->RemoveView(small.Get(), true);
 
-    // The incident-sized grid: ~1300 rows, same viewport. Only ~20 rows are visible; the
-    // draw cost must track the VIEWPORT, not the row count.
+    // A large grid: ~1300 rows, same viewport. Only ~20 rows are visible, so the draw cost
+    // tracks the viewport, not the row count.
     auto big = makeGrid(1300);
     root->AddView(big.Get());
     ctx.BeginFrame(0.016f);
@@ -73,13 +72,13 @@ TEST_CASE("propertygrid: off-screen rows tessellate no geometry (blank-UI ceilin
                 bigVerts);
     CHECK(smallVerts > 0u);
     // Off-screen culling bound: the big grid may cost somewhat more (scrollbar, partial rows),
-    // but never scale with total row count. 4x the visible-set cost is generous headroom;
+    // but it does not scale with the total row count. 4x the visible-set cost is generous headroom;
     // without culling the 1300-row grid draws ~65x the small one and this fails.
     CHECK(bigVerts < smallVerts * 4u);
 }
 
-// Companion to the draw cull: a DEFAULT-COLLAPSED category's rows are Gone - they cost no
-// MEASURE either, so a bulk section makes neither the draw list nor the per-frame layout scale
+// Alongside the draw cull: the rows of a category collapsed by default are Gone, so they cost no
+// measure either, and a bulk section makes neither the draw list nor the per-frame layout scale
 // with its row count (the generic asset form marks every array group collapsed).
 TEST_CASE("propertygrid: a default-collapsed category costs no layout or draw")
 {
@@ -107,8 +106,8 @@ TEST_CASE("propertygrid: a default-collapsed category costs no layout or draw")
 
     const u32 collapsedVerts = DrawOnce(*root);
 
-    // A tiny grid with just the visible row + an empty expander header is the same ballpark:
-    // the 1000 collapsed rows must contribute neither geometry nor (by being Gone) layout.
+    // A tiny grid with just the visible row and an empty expander header costs about the same:
+    // the 1000 collapsed rows contribute neither geometry nor (being Gone) layout.
     auto tiny = MakeRef<toolkit::PropertyGrid>(DefaultAllocator());
     tiny->SetCategoryDefaultCollapsed(u8"bulk");
     tiny->AddProperty(RefPtr<toolkit::PropertyEditor>(
@@ -126,5 +125,5 @@ TEST_CASE("propertygrid: a default-collapsed category costs no layout or draw")
 
     std::printf("[grid-collapsed] 1000 collapsed rows = %u verts, 1 collapsed row = %u verts\n",
                 collapsedVerts, tinyVerts);
-    CHECK(collapsedVerts <= tinyVerts + 64u); // same ballpark: bulk contributes ~nothing
+    CHECK(collapsedVerts <= tinyVerts + 64u); // about the same: the bulk rows contribute almost nothing
 }

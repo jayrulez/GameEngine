@@ -1,6 +1,6 @@
 # RenderStressTest - a worst-case renderer benchmark (grid of all-visible spheres, shared/unique
-# materials, sin-wave bob) we use to keep performance honest as rendering features land. Same
-# dependency set as the Sandbox: desktop shell + Vulkan GPU factory + default-app/scene/render.
+# materials, sin-wave bob) that keeps performance honest as rendering features are added. Same
+# dependency set as the Sandbox: the desktop shell, the GPU factory, default-app, scene and render.
 
 add_executable(RenderStressTest main.cpp)
 

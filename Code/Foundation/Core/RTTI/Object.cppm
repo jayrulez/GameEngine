@@ -28,10 +28,10 @@ export namespace foundation::core
 
         [[nodiscard]] virtual const TypeInfo* GetType() const noexcept { return &StaticType(); }
 
-        // NON-inline (RefCountedImpl.cpp): the root of every base chain - an in-class
-        // body is implicitly inline and would duplicate per shared library
-        // (shared-libraries.md rendezvous rule; id compares make lookups safe, one
-        // definition keeps chain walks cheap and the metadata single-instance).
+        // Not inline (defined in RefCountedImpl.cpp): this is the root of every base chain,
+        // and an in-class body is implicitly inline and would be duplicated per shared
+        // library. Id compares keep lookups correct either way; one definition keeps chain
+        // walks cheap and the metadata single-instance.
         [[nodiscard]] static const TypeInfo& StaticType() noexcept;
     };
 
@@ -39,8 +39,8 @@ export namespace foundation::core
     // Cast / IsA - replace dynamic_cast by walking the single-inheritance chain.
     // Comparison is by TypeId, not pointer: each shared library holds its own copy
     // of vague-linkage TypeInfo statics, so addresses diverge across boundaries
-    // while ids do not (shared-libraries.md identity rule). The chain pointers
-    // stay - they are internally consistent within whichever library built them.
+    // while ids do not. The chain pointers are still used: they are internally
+    // consistent within whichever library built them.
     // =======================================================================
     [[nodiscard]] inline bool IsDerivedFrom(const TypeInfo* type, const TypeInfo* base) noexcept
     {

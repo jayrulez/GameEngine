@@ -1,10 +1,11 @@
 """Lamplight's look: two shared profiles (Lamplight Environment, Lamplight Post) every level's scene
-names in its settings, so the look is tuned in one place (Snowline's arrangement, its look.py).
+names in its settings, so the look is tuned in one place (arranged as Snowline's look.py is).
 
 Night: a deep blue sky and a faint blue ambient, so the lamps light the scene and the dark between
-them is real cover. Cellars (its own environment profile): darker still, for the levels below. TAA (SSGI's few rays need it), SSR for polished floors and wet stone, SSGI for
-lamplight bouncing off walls, GTAO, bloom on the flames, and auto exposure for walking from a lit
-hall into a dark cellar. Colours are sRGB, as entered anywhere.
+them is real cover. Cellars (its own environment profile): darker still, for the levels below.
+TAA (SSGI's few rays need it), SSR for polished floors and wet stone, SSGI for lamplight bouncing
+off walls, GTAO, bloom on the flames, and auto exposure for walking from a lit hall into a dark
+cellar. Colours are sRGB, as entered anywhere.
 """
 import xml.etree.ElementTree as ET
 from scenegen import mcp, settings, num

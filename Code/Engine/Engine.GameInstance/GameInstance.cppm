@@ -3,15 +3,15 @@
 
 // Engine::GameInstance - the `engine.gameinstance` module.
 //
-// A single RUNNING GAME as a first-class object: its scene pairing,
-// its script run context + `Game` object + error sink, and its instance time scale. The player owns
-// ONE (N=1); the editor owns an Array<GameInstance> (multi-instance play-in-editor + an in-editor
-// headless dedicated server). This is the run bracket the player and the
-// editor's Game tab would otherwise hand-roll identically.
+// A single running game as a first-class object: its scene pairing, its script run context, `Game`
+// object and error sink, and its instance time scale. The player owns one; the editor owns an
+// Array<GameInstance> (several play-in-editor instances and an in-editor headless dedicated
+// server). It holds the run bracket the player and the editor's Game tab would otherwise each
+// write.
 //
-// Owns the SCRIPT run state + bracket + the instance time-scale term; the scene is
-// created by the caller and paired in via SetScene. BORROWS the ScriptSubsystem and the app's subsystems
-// (never owns them).
+// It owns the script run state, its bracket and the instance time-scale term. The caller creates
+// the scene and pairs it in with SetScene. The ScriptSubsystem and the app's subsystems are
+// borrowed, never owned.
 
 module;
 #include "Core/Prelude.h"
@@ -28,13 +28,13 @@ import foundation.scene;
 import foundation.shell;
 import foundation.scene.resource; // LoadScene / ResolveSceneResources / ResolveScenePrefabs
 import foundation.content;        // content::Instance (the cooked scene record)
-import foundation.resource;       // ResourceManager + AsyncBindScope (async level load, task #123)
+import foundation.resource;       // ResourceManager and AsyncBindScope (async level load)
 import foundation.script;
 import foundation.script.resource; // ScriptClass (the cooked Game class a run starts from)
 import engine.script;
 import foundation.script.facades; // RegisterExtraFacadeName (the run behavior-prelude hook)
-import foundation.net.manager; // NetworkManager + INetworkController + NetScriptBinding
-import foundation.input;       // ActionRuntime + IInputSourceProvider + InputMap (per-instance input)
+import foundation.net.manager; // NetworkManager, INetworkController, NetScriptBinding
+import foundation.input;       // ActionRuntime, IInputSourceProvider, InputMap (per-instance input)
 import foundation.net.tls;     // the run's TLS backend (https requests, wss joins)
 import foundation.http.client; // CreateHttpClient: the platform's client
 import foundation.http.script; // HttpScriptBinding: the run's HTTP for its scripts (the Http facade)
@@ -60,20 +60,22 @@ export namespace engine::runtime
     namespace input = foundation::input;
     namespace messaging = foundation::messaging; // EventBus
 
-    // NetworkController + its SpawnResolver live in the :networkcontroller partition (re-exported above).
+    // NetworkController and its SpawnResolver live in the :networkcontroller partition (re-exported
+    // above).
 
-    // ---- run.* script facade: the run/app tier surfaced to
-    // scripts, including the running instance's LEVEL-LOAD control. Owned HERE (the project that owns
-    // load orchestration), NOT the neutral Foundation facade lib - the out-of-tree pattern
-    // foundation.net's Net facade uses. A RunScriptBinding is installed as a per-context service; the
-    // app fills its pointers, backed by THIS instance's LoadSceneAsync + ticket registry + the content
-    // DB (guid -> cooked scene). Bound to scripts LOWERCASE as `run` (NOT Game): a facade sharing the
-    // mandatory `Game` orchestrator class name is a hard AngelScript name conflict.
+    // ---- run.* script facade: the run and app tier surfaced to scripts, including the running
+    // instance's level-load control. It lives here, in the library that owns load orchestration,
+    // rather than in the neutral Foundation facade library, the same out-of-tree pattern
+    // foundation.net's Net facade uses. A RunScriptBinding is installed as a per-context service;
+    // the app fills its pointers, backed by this instance's LoadSceneAsync, ticket registry and the
+    // content DB (guid -> cooked scene). Scripts see it in lowercase as `run`, not `Game`: a facade
+    // sharing the name of the mandatory `Game` orchestrator class is a hard AngelScript name
+    // conflict.
 
     inline constexpr StringView kRunScriptService = u8"run.runtime";
 
     // Installed as a per-context script service; the run facade resolves it. The app fills the
-    // pointers (backed by the owning GameInstance + content DB). Null pointers = safe no-ops.
+    // pointers (backed by the owning GameInstance and content DB). Null pointers are safe no-ops.
     struct RunScriptBinding
     {
         core::Function<i32(const core::Guid&)> loadSceneAsync; // -> ticket (0 = failed to start)
@@ -81,18 +83,18 @@ export namespace engine::runtime
         core::Function<bool(i32)> loadComplete;                // ticket -> complete?
         core::Function<bool(i32)> loadFailed;                  // ticket -> failed?
         core::Function<bool(const core::Guid&)> loadScene;     // sync load -> success
-        core::Function<bool()> sceneReady;                     // current scene loaded + active?
+        core::Function<bool()> sceneReady;                     // current scene loaded and active?
         core::Function<scene::Scene*()> currentScene;          // the instance's live scene (or null)
         core::Function<void(i32)> requestExit;                 // end the run (standalone stops the loop;
                                                                // the editor stops the Game tab's session)
-        core::Function<void(f32)> setTimeScale;                // set the run's scene-GROUP time scale
+        core::Function<void(f32)> setTimeScale;                // set the run's scene-group time scale
                                                                // (0 = pause gameplay, 0.5 = slow-mo, 1 =
                                                                // real time); the Game orchestrator keeps
                                                                // running so it can resume.
         core::Function<f32()> timeScale;                       // the run's current scene-group time scale
-        // The app's profiler overlay (Specs/profiler.md, P4): show or hide it, and whether the app
-        // can show one (a build with the profiler, an app that has an overlay). Unwired: nothing
-        // shows and it is unavailable, so a script calls them the same in every build.
+        // The app's profiler overlay: show or hide it, and whether the app can show one (a build
+        // with the profiler, an app that has an overlay). Unwired, nothing shows and it reports
+        // unavailable, so a script calls them the same way in every build.
         core::Function<void(bool)> setProfilerOverlay;
         core::Function<bool()> profilerAvailable;
         // This frame's seconds before any time scale, and the seconds of frames since the run
@@ -100,7 +102,7 @@ export namespace engine::runtime
         // update(dt) and coroutine waits stand still at time scale 0. The GameInstance writes them.
         f32 realDeltaSeconds = 0.0f;
         f64 realSeconds = 0.0;
-        // This run's event bus: ONE service carries load + run-bus.
+        // This run's event bus; the same service carries the load controls and the run bus.
         // run.events() publishes here. The GameInstance fills it with &Events(), the run's bus.
         messaging::EventBus* runEvents = nullptr;
     };
@@ -114,27 +116,29 @@ export namespace engine::runtime
         scriptContext.SetService(kRunScriptService, nullptr);
     }
 
-    // ---- run.* script facade: the run/app tier surfaced to scripts. A
-    // STATIC facade bound to scripts LOWERCASE as `run` (the ScriptName alias). run.events() -> the
-    // run-bus handle (publish to the run tier); the load methods control this instance's level loads.
-    // Nothing else may bind the name `run` (the FinalizeTypes collision trap enforces it).
+    // ---- run.* script facade: the run and app tier surfaced to scripts. A static facade bound to
+    // scripts in lowercase as `run` (the ScriptName alias). run.events() returns the run-bus handle
+    // (publish to the run tier); the load methods control this instance's level loads. Nothing else
+    // may bind the name `run` (the FinalizeTypes collision check enforces it).
 
-    // A BOUND run-event-bus handle: `run.events().emit("Delivered", n)` publishes a NAMED event onto this
-    // run's bus (deferred; delivered at the next run-bus drain). Mirrors SceneEvents; the payload is a
-    // Variant (the one currency that crosses C++<->script and AngelScript<->Luau). Value type.
+    // A bound run-event-bus handle: `run.events().emit("Delivered", n)` publishes a named event
+    // onto this run's bus (deferred; delivered at the next run-bus drain). Shaped like SceneEvents;
+    // the payload is a Variant, the one type that crosses between C++ and script and between
+    // AngelScript and Luau. A value type.
     struct RunEvents
     {
-        messaging::EventBus* bus = nullptr; // NOT reflected - resolved from the run context at run.events()
+        messaging::EventBus* bus = nullptr; // not reflected; resolved from the run context at run.events()
         void emit(core::String name) const;
         void emit(core::String name, core::Variant payload) const;
     };
 
-    /// run.*: the run/app tier. `run.events()` is the run-bus handle; `loadSceneAsync` kicks an async
-    /// scene load and returns a ticket the script polls - `var t = run.loadSceneAsync(id); while
-    /// (!run.loadComplete(t)) yield`. loadScene is a sync convenience; sceneReady reports whether the
-    /// instance's current scene is live. Static facade (resolve per call via CurrentScriptContext),
-    /// bound to scripts as `run` via ScriptName. Resolves its OWN per-context service; unwired -> safe
-    /// no-ops (an empty RunEvents whose emit no-ops; loadComplete returns true so a poll never hangs).
+    /// run.*: the run and app tier. `run.events()` is the run-bus handle; `loadSceneAsync` starts
+    /// an async scene load and returns a ticket the script polls: `var t = run.loadSceneAsync(id);
+    /// while (!run.loadComplete(t)) yield`. loadScene is a synchronous convenience; sceneReady
+    /// reports whether the instance's current scene is live. A static facade (resolved per call
+    /// through CurrentScriptContext), bound to scripts as `run` through ScriptName. It resolves its
+    /// own per-context service; unwired, every call is a safe no-op (an empty RunEvents whose emit
+    /// does nothing; loadComplete returns true so a poll never hangs).
     class Run final : public Object
     {
         RTTI_OBJECT(Run, Object)
@@ -184,10 +188,10 @@ export namespace engine::runtime
             RunScriptBinding* b = Resolve();
             return (b != nullptr && b->sceneReady) ? b->sceneReady() : false;
         }
-        /// The instance's current scene as a BOUND Scene handle - the orchestrator's door to
-        /// `scene.spawn/find` (it has no entity to reach a scene through). Resolved AT THE CALL from
-        /// instance state, so it is deterministic regardless of who invoked the script. Pre-scene /
-        /// unwired -> a null-scene handle whose methods are safe no-ops.
+        /// The instance's current scene as a bound Scene handle: the orchestrator's way to
+        /// `scene.spawn/find`, since it has no entity to reach a scene through. Resolved at the
+        /// call from instance state, so it is the same whoever invoked the script. Before a scene
+        /// exists, or unwired, it is a null-scene handle whose methods are safe no-ops.
         [[nodiscard]] static script::Scene currentScene()
         {
             RunScriptBinding* b = Resolve();
@@ -195,9 +199,9 @@ export namespace engine::runtime
             handle.scene = (b != nullptr && b->currentScene) ? b->currentScene() : nullptr;
             return handle;
         }
-        /// run.requestExit(code): end the run with an exit code (default 0). Routes to the app host -
-        /// standalone stops the loop; the editor's embedded host stops the Game tab's play session.
-        /// Unwired -> a safe no-op (the standard guard).
+        /// run.requestExit(code): end the run with an exit code (default 0). Routes to the app
+        /// host: standalone stops the loop; the editor's embedded host stops the Game tab's play
+        /// session. Unwired, a safe no-op.
         static void requestExit(i32 code)
         {
             RunScriptBinding* b = Resolve();
@@ -206,15 +210,15 @@ export namespace engine::runtime
                 b->requestExit(code);
             }
         }
-        /// Arity-0 convenience: exit with code 0 (mirrors the C++ host default). Exposed as its own
-        /// overload so `run::requestExit()` / `run.requestExit()` bind on both backends.
+        /// Arity-0 convenience: exit with code 0 (the C++ host's default). Exposed as its own
+        /// overload so `run::requestExit()` and `run.requestExit()` bind on both backends.
         static void requestExit() { requestExit(0); }
 
-        /// run.setTimeScale(scale): scale the run's GAMEPLAY time - 0 pauses the scene (behaviors +
-        /// physics freeze; the timer stops), 0.5 is slow-mo, 1 is real time. The general "pause" is
-        /// setTimeScale(0). It scales the run's scene GROUP, not the whole context, so the Game
-        /// orchestrator (this script tier) keeps running to resume, and the editor is unaffected.
-        /// Unwired -> a safe no-op.
+        /// run.setTimeScale(scale): scale the run's gameplay time. 0 pauses the scene (behaviors
+        /// and physics freeze; the timer stops), 0.5 is slow motion, 1 is real time; the general
+        /// pause is setTimeScale(0). It scales the run's scene group, not the whole context, so the
+        /// Game orchestrator (this script tier) keeps running to resume, and the editor is
+        /// unaffected. Unwired, a safe no-op.
         static void setTimeScale(f32 scale)
         {
             RunScriptBinding* b = Resolve();
@@ -243,8 +247,8 @@ export namespace engine::runtime
             return b != nullptr ? b->realSeconds : 0.0;
         }
         /// run.setProfilerOverlay(shown): show or hide the app's profiler overlay (frame times, the
-        /// longest scopes and GPU passes, the counters). The app decides what that means; in a build
-        /// without the profiler (Shipping) nothing shows. Unwired -> a safe no-op.
+        /// longest scopes and GPU passes, the counters). The app decides what that means; in a
+        /// build without the profiler (Shipping) nothing shows. Unwired, a safe no-op.
         static void setProfilerOverlay(bool shown)
         {
             RunScriptBinding* b = Resolve();
@@ -262,23 +266,23 @@ export namespace engine::runtime
         }
     };
 
-    // Registers the `Run` facade (bound to scripts as `run` via ScriptName) + its RunEvents handle type
-    // + the behavior-prelude name. Idempotent; call before a script manager is created (the run host /
-    // cook builder do).
+    // Registers the `Run` facade (bound to scripts as `run` through ScriptName), its RunEvents
+    // handle type and the behavior-prelude name. Idempotent; call before a script manager is
+    // created (the run host and the cook builder do).
     void RegisterRunScriptFacade();
 
-    // Handle for an in-flight ASYNC scene load (task #123). LoadSceneAsync creates the scene
-    // INACTIVE (not ticked/rendered) and kicks its resources off on workers; poll IsComplete() /
-    // Progress() to drive a loading screen, then GameInstance::ActivateLoadedScene() to bring it
-    // live. Scene() is the pending scene - its RESOURCES are ready only once IsComplete(). A tiny
-    // value type (mirrors resource::AsyncLoadBatch + the scene/failed state); safe to copy/store.
+    // Handle for an in-flight async scene load. LoadSceneAsync creates the scene inactive (not
+    // ticked or rendered) and starts its resources on workers; poll IsComplete() and Progress() to
+    // drive a loading screen, then call GameInstance::ActivateLoadedScene() to bring it live.
+    // Scene() is the pending scene; its resources are ready only once IsComplete(). A small value
+    // type, safe to copy and store.
     //
-    // LIMITATION (Fable review): IsComplete/Progress poll ResourceManager::PendingCount - the WHOLE
-    // manager - and m_total snapshots that global count. Two overlapping loads (or any unrelated
-    // BindAsync in flight) conflate: each handle waits on ALL pending work (the SAFE direction) and
-    // progress distorts. Fine for the boot + single-level-switch reality here; MUST move to per-batch
-    // tracking (resource::AsyncLoadBatch already does exactly this) before overlapping / background
-    // loads become real.
+    // Limitation: IsComplete and Progress poll ResourceManager::PendingCount, which counts the
+    // whole manager, and m_total snapshots that global count. Two overlapping loads (or any
+    // unrelated BindAsync in flight) conflate: each handle waits on all pending work (the safe
+    // direction) and progress is distorted. That is fine for boot and single level switches;
+    // overlapping or background loads need per-batch tracking, which resource::AsyncLoadBatch
+    // provides.
     class SceneLoadHandle
     {
     public:
@@ -314,25 +318,26 @@ export namespace engine::runtime
         bool m_failed = false;
     };
 
-    // A running game COMPOSES its networking: GameInstance holds a NetworkController (which IS the
-    // INetworkController the Net facade drives) and forwards to it. The
-    // controller is a stable member, so its binding never dangles; the endpoint inside it comes and goes.
-    // A running game, and the run (Documentation/Specs/run-context.md): it IS its IRun, through
-    // RunBase (its id, name, sessions, event bus, and the services below registered on it).
+    // A running game, and its run: it is its own IRun, through RunBase (its id, name, sessions,
+    // event bus, and the services below registered on it). Its networking is composed: GameInstance
+    // holds a NetworkController (which is the INetworkController the Net facade drives) and
+    // forwards to it. The controller is a stable member, so its binding never dangles; the endpoint
+    // inside it comes and goes.
     class GameInstance final : public foundation::run::RunBase
     {
     public:
         GameInstance() : RunBase(DefaultAllocator(), u8"Game")
         {
-            // Every scene this run creates BORROWS the run's bus: set it on the group so
-            // CreateScene injects it BEFORE the script systems bind (OnSceneCreate), not after.
+            // Every scene this run creates borrows the run's bus: set it on the group so
+            // CreateScene injects it before the script systems bind (OnSceneCreate), not after.
             m_sceneManager.SetSceneEventBus(&Events());
-            // This instance IS the run: its scenes and its scripts carry it, so run-scoped systems
+            // This instance is the run: its scenes and its scripts carry it, so run-scoped systems
             // (audio) group them by it.
             m_sceneManager.SetSceneRun(this);
             m_runHost.Binding().run = this;
-            // Every context of this run reads THIS run's services (run.*, its input, its save), the
-            // behaviors' as much as a game script's: a project with no game script still has input.
+            // Every context of this run reads this run's services (run.*, its input, its save), a
+            // behavior context as much as a game script's: a project with no game script still has
+            // input.
             m_runHost.SetOwnerServices(core::Function<void(script::IScriptContext&)>{
                 [this](script::IScriptContext& scriptContext) { InstallRunServices(scriptContext); }});
             // The run's HTTP client is made on its scripts' first request, and https and a wss
@@ -369,7 +374,7 @@ export namespace engine::runtime
             m_network.SetReplicatedScene(scene); // keep replication on the current scene across loads
             if (scene != nullptr)
             {
-                scene->SetEventBus(&Events()); // adopt path shares THIS run's bus
+                scene->SetEventBus(&Events()); // the adopt path shares this run's bus
                 scene->SetRun(this);
             }
         }
@@ -384,35 +389,35 @@ export namespace engine::runtime
             return m_errorHandler;
         }
 
-        /// Headless: simulate + run scripts, but the host does NOT render this instance (no camera/
-        /// swapchain needed) - the in-editor dedicated server.
+        /// Headless: simulate and run scripts, but the host does not render this instance (no
+        /// camera or swapchain needed). Used for the in-editor dedicated server.
         void SetHeadless(bool headless) noexcept { m_headless = headless; }
         [[nodiscard]] bool IsHeadless() const noexcept { return m_headless; }
 
-        /// This run's global time scale - the `instance` term in the generalized time model
-        /// (dt a scene sees = host dt x context scale x INSTANCE scale x scene scale). Defaults to 1,
-        /// so at N=1 it collapses to the previous two-level model (no behaviour change).
+        /// This run's global time scale: the `instance` term in the time model (dt a scene sees =
+        /// host dt x context scale x instance scale x scene scale). Defaults to 1.
         void SetInstanceTimeScale(f32 scale) noexcept { m_instanceTimeScale = scale; }
         [[nodiscard]] f32 InstanceTimeScale() const noexcept { return m_instanceTimeScale; }
 
-        /// Compile + launch the `Game` script (a class with launch()/update(dt)/exit()) on THIS instance's
-        /// run host. The host must be configured first (the app's
-        /// ScriptSubsystem::ConfigureRunHost exposes the facades + routing); a bare test just needs a
-        /// backend registered. Idempotent start (stops a prior run first). false on compile / no-`Game`.
+        /// Compile and launch the `Game` script (a class with launch()/update(dt)/exit()) on this
+        /// instance's run host. The host must be configured first (the app's
+        /// ScriptSubsystem::ConfigureRunHost exposes the facades and routing); a bare test only
+        /// needs a backend registered. Restarting stops a prior run first. Returns false if it
+        /// fails to compile or has no `Game`.
         bool StartScript(core::StringView source, core::StringView name)
         {
             return StartScript(source, name, core::Span<const core::String>{});
         }
 
-        /// As above, plus the Game class's declared handler names (from the cooked ScriptClass) so the
-        /// Game tier's on<Event> inbox can subscribe to the run bus. A caller
-        /// with no handler list (raw-source tests) gets a Game with no inbox - the rest is unchanged.
+        /// As above, plus the Game class's declared handler names (from the cooked ScriptClass) so
+        /// the Game tier's on<Event> inbox can subscribe to the run bus. A caller with no handler
+        /// list (raw-source tests) gets a Game with no inbox.
         bool StartScript(core::StringView source, core::StringView name,
                          core::Span<const core::String> gameHandlers);
 
-        /// The cooked `Game` class - its source, its file identity and its declared handlers, so its
-        /// on<Event> inbox hears the run bus - as Sedulous's StartScript(ScriptClass). Every host
-        /// that starts a cooked game (the player, the editor's Game tab) starts it this way.
+        /// The cooked `Game` class: its source, its file identity and its declared handlers, so its
+        /// on<Event> inbox hears the run bus. Every host that starts a cooked game (the player, the
+        /// editor's Game tab) starts it this way.
         bool StartScript(const foundation::script::ScriptClass& scriptClass)
         {
             return StartScript(scriptClass.source.AsView(), scriptClass.sourceName.AsView(),
@@ -420,19 +425,20 @@ export namespace engine::runtime
                                                               scriptClass.handlers.Size()));
         }
 
-        /// exit() the `Game` + release the game-script hold (idempotent; the update-fault path lands here).
-        /// The run host tears down when nothing else pins it (the scene-stop observer drives that).
+        /// exit() the `Game` and release the game-script hold (idempotent; the update-fault path
+        /// lands here). The run host tears down when nothing else pins it (the scene-stop observer
+        /// drives that).
         void StopScript();
 
-        /// Create a scene in this instance's group AND bind its behaviors to this instance's run host
-        /// Use this instead of Scenes().CreateScene so the re-bind happens.
-        /// `activate` (default true) matches the classic behavior; false creates it inactive for an
-        /// async load (see LoadSceneAsync).
+        /// Create a scene in this instance's group and bind its behaviors to this instance's run
+        /// host. Use this instead of Scenes().CreateScene so the re-bind happens. `activate`
+        /// (default true) makes it active at once; false creates it inactive for an async load (see
+        /// LoadSceneAsync).
         scene::Scene* CreateScene(core::StringView name, bool activate = true);
         /// Destroy a scene in this instance's group. Drops any tracked async load whose pending
-        /// target IS this scene BEFORE freeing it, so PumpScriptLoads can never activate a dangling
-        /// Scene* (Fable review finding: the handle holds a raw Scene*). A dropped ticket then reads
-        /// terminal-safe (complete=true, failed=false) via the unknown-ticket fallback.
+        /// target is this scene before freeing it, since the handle holds a raw Scene* and
+        /// PumpScriptLoads must never activate a dangling one. A dropped ticket then reads
+        /// terminal-safe (complete=true, failed=false) through the unknown-ticket fallback.
         void DestroyScene(scene::Scene* scene)
         {
             for (core::usize i = m_scriptLoads.Size(); i > 0; --i)
@@ -442,9 +448,9 @@ export namespace engine::runtime
                     m_scriptLoads.RemoveAt(i - 1);
                 }
             }
-            // Scene-dies-before-endpoint: if this IS the
-            // replicated scene, clear the cache + detach its NetworkSceneSystem BEFORE it is freed, so a
-            // later Start/Connect never wires a dead scene and the live endpoint stops replicating it.
+            // If this is the replicated scene, clear the cache and detach its NetworkSceneSystem
+            // before it is freed, so a later Start/Connect never wires a dead scene and the live
+            // endpoint stops replicating it.
             if (scene == m_scene)
             {
                 SetScene(nullptr);
@@ -452,66 +458,71 @@ export namespace engine::runtime
             m_sceneManager.DestroyScene(scene);
         }
 
-        /// Tear down ALL of this instance's scenes for a run STOP that KEEPS the instance alive (the
-        /// editor Game tab stopping between plays). Drops every in-flight tracked script load FIRST -
-        /// the handles hold a raw Scene* into the group, so a later PumpScriptLoads must not activate a
-        /// just-freed scene - then clears the current-scene pointer (net replication follows) and
-        /// destroys the whole group (aware subsystems notified). ReleaseInstance/OnShutdown free the
-        /// entire instance, so they only need Scenes().Clear(); this is for the persistent-instance stop.
+        /// Tear down all of this instance's scenes for a run stop that keeps the instance alive
+        /// (the editor Game tab stopping between plays). Drops every in-flight tracked script load
+        /// first, since the handles hold a raw Scene* into the group and a later PumpScriptLoads
+        /// must not activate a freed scene; then clears the current-scene pointer (net replication
+        /// follows) and destroys the whole group (aware subsystems are notified). ReleaseInstance
+        /// and OnShutdown free the entire instance, so they only need Scenes().Clear(); this is for
+        /// the persistent-instance stop.
         void ClearScenes()
         {
             m_scriptLoads.Clear();
             SetScene(nullptr);
             m_sceneManager.Clear();
-            // The group time scale is RUN-scoped (run.setTimeScale): the SceneManager survives a
+            // The group time scale is run-scoped (run.setTimeScale): the SceneManager survives a
             // stop on the persistent editor instance, so a game paused at Stop must not leave the
             // next Play frozen at scale 0.
             m_sceneManager.SetTimeScale(1.0f);
         }
 
-        // ---- scene / level load (task #123): the load ORCHESTRATION lives on the instance (the
-        // user-controllable unit), de-duping the identical block PlayerApplication + GamePageImpl
-        // both ran. The APP still owns POLICY (WHAT to load; EnsureCamera + Start + SetScene after).
+        // ---- scene and level load: the load orchestration lives on the instance (the
+        // user-controllable unit), so the player and the editor's Game page share it. The app still
+        // owns the policy: what to load, and EnsureCamera, Start and SetScene afterwards.
 
-        /// Load a cooked scene instance into this group and resolve its resources SYNCHRONOUSLY.
-        /// Returns the loaded, ACTIVE, fully-resolved scene (NOT started - the caller runs its policy:
-        /// EnsureCamera, Start, SetSimulationEnabled, SetScene). Null on a LoadScene failure.
-        /// `prefabProvider` reads a nested-prefab payload by guid (empty function = no prefabs).
+        /// Load a cooked scene instance into this group and resolve its resources synchronously.
+        /// Returns the loaded, active, fully resolved scene, not yet started: the caller runs its
+        /// policy (EnsureCamera, Start, SetSimulationEnabled, SetScene). Null on a LoadScene
+        /// failure. `prefabProvider` reads a nested-prefab payload by guid (an empty function means
+        /// no prefabs).
         scene::Scene*
         LoadScene(content::Instance& sceneInstance, resource::ResourceManager& resources,
                   core::Function<core::UniquePtr<core::IStream>(const core::Guid&)> prefabProvider);
 
-        /// Async load: creates the scene INACTIVE, deserializes it, and kicks its resource binds onto
-        /// workers (BindAsync). Returns a SceneLoadHandle - poll IsComplete()/Progress() (loading
-        /// screen), then ActivateLoadedScene(). The scene never ticks/renders while loading.
+        /// Async load: creates the scene inactive, deserializes it, and starts its resource binds
+        /// on workers (BindAsync). Returns a SceneLoadHandle: poll IsComplete()/Progress() for a
+        /// loading screen, then call ActivateLoadedScene(). The scene never ticks or renders while
+        /// loading.
         [[nodiscard]] SceneLoadHandle LoadSceneAsync(
             content::Instance& sceneInstance, resource::ResourceManager& resources,
             core::Function<core::UniquePtr<core::IStream>(const core::Guid&)> prefabProvider);
 
-        /// Activate a COMPLETED async-loaded scene (add to the active/render set + make current).
-        /// Returns the now-active scene, or null if the handle failed or is not yet complete. The
-        /// caller then runs the same policy as the sync path (EnsureCamera, Start, ...).
+        /// Activate a completed async-loaded scene (add it to the active and render set and make it
+        /// current). Returns the now-active scene, or null if the handle failed or is not yet
+        /// complete. The caller then runs the same policy as the sync path (EnsureCamera, Start,
+        /// ...).
         scene::Scene* ActivateLoadedScene(SceneLoadHandle& handle);
 
-        // ---- script-driven scene loads (task #123): the run facade's `loadSceneAsync -> ticket ->
-        // poll` model. The instance owns the in-flight handles keyed by ticket; the app drives
-        // completion each frame via PumpScriptLoads, which activates a finished load, makes it the
-        // current scene (SetScene), then runs the app's render/sim POLICY hook. Kept on the instance
-        // (not the app) so the orchestrator script that launched with NO scene resolves its loads
-        // through its OWN instance host - see the app's per-host facade install.
+        // ---- script-driven scene loads: the run facade's model of loadSceneAsync, a ticket, then
+        // polling. The instance owns the in-flight handles keyed by ticket; the app drives
+        // completion each frame through PumpScriptLoads, which activates a finished load, makes it
+        // the current scene (SetScene), then runs the app's render and simulation policy hook. This
+        // sits on the instance rather than the app so an orchestrator script that launched with no
+        // scene resolves its loads through its own instance's host.
 
         /// Makes a just-loaded, active scene the run's level: the instance's bookkeeping (current
         /// scene, net replication, the scene manager's current), then the app's policy, then the
-        /// level it lands over is DESTROYED. Left alone the old level kept ticking unseen beside
-        /// the new one - its player read the input, its events reached the run bus - and every
-        /// restart stacked one more. A behaviour that loads a level from inside the scene it
-        /// replaces is safe: the scene manager defers a destroy asked for during its update to
+        /// level it replaces is destroyed. Left alive, the old level would keep ticking unseen
+        /// beside the new one (its player reading input, its events reaching the run bus), and
+        /// every restart would stack one more. A behaviour that loads a level from inside the scene
+        /// it replaces is safe: the scene manager defers a destroy asked for during its update to
         /// the end of that update. The async pump and the synchronous run.loadScene both use this.
         void AdoptLoadedScene(scene::Scene* activated);
 
-        /// The post-activation policy the APP owns (EnsureCamera, Start, SetSimulationEnabled - the
-        /// render/sim half; SetScene is the instance's own bookkeeping and runs first). Set once by
-        /// the app; PumpScriptLoads invokes it on a scene the moment its tracked load completes.
+        /// The post-activation policy the app owns (EnsureCamera, Start, SetSimulationEnabled: the
+        /// render and simulation half; SetScene is the instance's own bookkeeping and runs first).
+        /// Set once by the app; PumpScriptLoads invokes it on a scene the moment its tracked load
+        /// completes.
         using SceneActivationPolicy = core::Function<void(scene::Scene*)>;
         void SetSceneActivationPolicy(SceneActivationPolicy policy)
         {
@@ -519,25 +530,23 @@ export namespace engine::runtime
         }
 
         /// Register an in-flight async load under a fresh ticket (1-based; 0 is never issued, so it
-        /// doubles as "failed to start"). The run facade hands this ticket to the script;
+        /// also means "failed to start"). The run facade hands this ticket to the script;
         /// ScriptLoad{Progress,Complete,Failed} query by it. The handle is a value type (stored).
         ///
-        /// CAUTION (Fable review): the handle holds a raw Scene*. Nothing destroys a PENDING inactive
-        /// scene today, so PumpScriptLoads never activates a dangling pointer. If a path that destroys
-        /// a pending scene ever appears (instance-level scene sweeps, a script-driven load cancel),
-        /// it MUST clear the matching tracked load(s) first, or PumpScriptLoads would activate freed
-        /// memory.
+        /// The handle holds a raw Scene*. DestroyScene and ClearScenes drop the matching tracked
+        /// loads before freeing a scene; any other path that destroys a pending scene must do the
+        /// same, or PumpScriptLoads would activate freed memory.
         i32 TrackScriptLoad(SceneLoadHandle handle);
 
-        /// Drive tracked script loads: any whose resources finished get ActivateLoadedScene +
-        /// SetScene + the activation policy, exactly once. Call each frame (the app's OnUpdate,
+        /// Drive tracked script loads: any whose resources finished get ActivateLoadedScene,
+        /// SetScene and the activation policy, exactly once. Call each frame (the app's OnUpdate,
         /// after the resource pump). Cheap when nothing is in flight.
         void PumpScriptLoads();
 
-        /// Ticket queries for the run facade. Unknown ticket -> Progress 1, Complete true (a bad or
-        /// expired ticket never hangs a `while (!complete) yield` loop), Failed false.
+        /// Ticket queries for the run facade. An unknown ticket reads Progress 1, Complete true (a
+        /// bad or expired ticket never hangs a `while (!complete) yield` loop), Failed false.
         [[nodiscard]] f32 ScriptLoadProgress(i32 ticket) const;
-        [[nodiscard]] bool ScriptLoadComplete(i32 ticket) const; // true once terminal (live OR failed)
+        [[nodiscard]] bool ScriptLoadComplete(i32 ticket) const; // true once terminal (live or failed)
         [[nodiscard]] bool ScriptLoadFailed(i32 ticket) const;
 
         /// run.sceneReady: this instance has a live current scene. A script on the app-driven
@@ -545,20 +554,23 @@ export namespace engine::runtime
         /// launch().
         [[nodiscard]] bool SceneReady() const noexcept { return m_scene != nullptr; }
 
-        /// The run facade's per-context binding for THIS instance - the app fills its pointers
-        /// (backed by LoadSceneAsync + the ticket registry + the content DB); GameInstance installs it
-        /// on the run context when the game script starts. Stable member, so it never dangles.
+        /// The run facade's per-context binding for this instance. The app fills its pointers
+        /// (backed by LoadSceneAsync, the ticket registry and the content DB); GameInstance
+        /// installs it on the run context when the game script starts. A stable member, so it never
+        /// dangles.
         [[nodiscard]] RunScriptBinding& RunBinding() noexcept
         {
             return m_runBinding;
         }
 
-        /// Tick the `Game` script with gameplay time: hostDt x contextScale x instanceScale x sceneScale.
-        /// A faulting update disables THIS instance's script (drops the `Game`), not the app.
+        /// Tick the `Game` script with gameplay time: hostDt x contextScale x instanceScale x
+        /// sceneScale. A faulting update disables this instance's script (drops the `Game`), not
+        /// the app.
         void TickScript(f32 hostDeltaTime, f32 contextTimeScale);
 
-        /// Drive this instance's run host each frame: advance the script binding clock (Time.now/delta)
-        /// and step its GC. The subsystem drives its OWN (editor) host; each instance drives its own.
+        /// Drive this instance's run host each frame: advance the script binding clock
+        /// (Time.now/delta) and step its GC. The subsystem drives its own (editor) host; each
+        /// instance drives its own.
         void DriveRunHost(f32 deltaTime);
 
     private:
@@ -583,7 +595,7 @@ export namespace engine::runtime
         /// run reported, or that it did not compile or instantiate. Empty while it runs or after
         /// a clean stop; a start clears it.
         [[nodiscard]] core::StringView ScriptFault() const noexcept { return m_scriptFault.AsView(); }
-        /// Seconds of frames since ResetRunClock: the host's delta, NOT scaled by the context's,
+        /// Seconds of frames since ResetRunClock: the host's delta, not scaled by the context's,
         /// the instance's or the scene's time scale, so it keeps going while the game pauses its
         /// scene at time scale 0 (a menu over a paused scene still takes clicks); a scripted
         /// playtest times its input by it. Stands still while the debugger holds the run.
@@ -599,35 +611,36 @@ export namespace engine::runtime
             return m_scriptContext.Get();
         }
 
-        /// This run's script host - the gameplay context shared by the game script AND this instance's
-        /// scenes' behaviors (one gameplay context per instance). Owned HERE;
-        /// the ScriptSubsystem borrows it. Storing the
-        /// context on the instance is the prerequisite for per-instance runs (Array<GameInstance>).
+        /// This run's script host: the gameplay context shared by the game script and this
+        /// instance's scenes' behaviors (one gameplay context per instance). Owned here; the
+        /// ScriptSubsystem borrows it, so each instance in an Array<GameInstance> runs its own.
         [[nodiscard]] engine::script::ScriptRunHost& RunHost() noexcept { return m_runHost; }
 
-        /// This run's scene group: the set of scenes the run manages + its
-        /// current scene, ticked on the Context lane once registered with the SceneSubsystem. Wire its
-        /// aware-registry (from the SceneSubsystem) before creating scenes in it.
+        /// This run's scene group: the set of scenes the run manages and its current scene, ticked
+        /// on the Context lane once registered with the SceneSubsystem. Wire its aware-registry
+        /// (from the SceneSubsystem) before creating scenes in it.
         [[nodiscard]] scene::SceneManager& Scenes() noexcept { return m_sceneManager; }
 
-        /// This run's ONE event bus: app-owned, injected into every scene this instance
-        /// creates/adopts (Scene::SetEventBus), so `scene.events` and the run bus are the SAME object.
-        /// The Game tier's on<Event> inbox subscribes here, and a behavior in any of the run's scenes
-        /// emits straight onto it - there is NO relay to cross (a Level may still re-emit as a deliberate
-        /// translation, never as plumbing). The instance drains it once per frame (DrainRunEvents); the
-        /// borrowing scenes do not. The run's bus: IRun::Events().
+        /// This run's one event bus: app-owned, injected into every scene this instance creates or
+        /// adopts (Scene::SetEventBus), so `scene.events` and the run bus are the same object. The
+        /// Game tier's on<Event> inbox subscribes here, and a behavior in any of the run's scenes
+        /// emits straight onto it with no relay in between (a Level may still re-emit an event to
+        /// translate it). The instance drains it once per frame (DrainRunEvents); the borrowing
+        /// scenes do not. The run's bus is IRun::Events().
 
-        /// Deliver this frame's queued run-bus events. Called on the instance tick AFTER TickScript (no VM
-        /// call active), so a subscriber may dispatch script handlers directly. Cascade-bounded like the
-        /// scene bus; safe with no game script (native run-bus subscribers still fire).
+        /// Deliver this frame's queued run-bus events. Called on the instance tick after TickScript
+        /// (no VM call active), so a subscriber may dispatch script handlers directly.
+        /// Cascade-bounded like the scene bus; safe with no game script (native run-bus subscribers
+        /// still fire).
         void DrainRunEvents() { Events().Drain(); }
 
-        // ---- input (this instance's OWN action runtime - the input analog of the
-        // per-instance scene group + net endpoint) ----
+        // ---- input (this instance's own action runtime, the input counterpart of the per-instance
+        // scene group and net endpoint) ----
 
-        /// This run's input source (the editor Game tab's gated viewport, or the player's shell devices).
-        /// The host sets it; the per-instance runtime reads ONLY this source, so per-surface focus gating
-        /// isolates input across Game tabs (only the focused tab's source reports keys). Null = no input.
+        /// This run's input source (the editor Game tab's gated viewport, or the player's shell
+        /// devices). The host sets it; the per-instance runtime reads only this source, so
+        /// per-surface focus gating isolates input across Game tabs (only the focused tab's source
+        /// reports keys). Null means no input.
         void SetInputSource(input::IInputSourceProvider* source) noexcept
         {
             m_inputSource = source;
@@ -635,11 +648,11 @@ export namespace engine::runtime
         [[nodiscard]] input::IInputSourceProvider* InputSource() const noexcept { return m_inputSource; }
 
         /// Install the action map (the game's controls, from the project's input-map asset) on this
-        /// instance's runtime. Each instance has its own runtime + map copy.
+        /// instance's runtime. Each instance has its own runtime and its own copy of the map.
         void SetInputMap(const input::InputMap& map) { m_inputRuntime.SetMap(map); }
 
-        /// This run's action runtime - the Input facade resolves it per script context (installed into
-        /// this instance's context, so instance A's script never sees instance B's keys).
+        /// This run's action runtime. The Input facade resolves it per script context (installed
+        /// into this instance's context, so instance A's script never sees instance B's keys).
         [[nodiscard]] input::ActionRuntime& InputRuntime() noexcept { return m_inputRuntime; }
 
         /// Evaluate this instance's action runtime against its source (call before TickScript so the game
@@ -654,36 +667,38 @@ export namespace engine::runtime
         void SetSaveFile(core::StringView path) { m_save.Open(path); }
         [[nodiscard]] RunSave& Saves() noexcept { return m_save; }
 
-        // ---- networking (composed: this instance's NetworkController; forwards below) ----
+        // ---- networking (this instance's NetworkController; the forwards below) ----
 
-        /// This instance's networking controller (the endpoint owner + INetworkController). Exposed so
-        /// the app can reach it directly as the extraction proceeds; GameInstance's own net methods below
-        /// are thin forwards so existing callers/tests stay churn-free.
+        /// This instance's networking controller (the endpoint owner and INetworkController), for
+        /// callers that reach it directly; GameInstance's own net methods below are thin forwards
+        /// to it.
         [[nodiscard]] NetworkController& Network() noexcept { return m_network; }
 
-        // The prefab net-spawn resolver factory is injected once via Network().SetSpawnResolverFactory(...);
-        // the controller makes one per endpoint. GameInstance carries no online hook.
+        // The prefab net-spawn resolver factory is injected once through
+        // Network().SetSpawnResolverFactory(...); the controller makes one per endpoint.
 
-        // The per-frame transport pump lives on engine::net::NetworkSubsystem::PostUpdate: the
-        // subsystem enumerates live endpoints (via an app-provided source) and drives UpdateTransport.
-        // GameInstance does not forward a DriveNetwork.
+        // The per-frame transport pump lives in engine::net::NetworkSubsystem::PostUpdate: the
+        // subsystem enumerates live endpoints (through an app-provided source) and drives
+        // UpdateTransport.
 
-        // Net facade role controls - forwards to the composed controller. StartServer/Connect open a
-        // real UDP socket and enter the role (false if it fails); StopNetworking drops the endpoint.
+        // Net facade role controls, forwarded to the composed controller. StartServer/Connect open
+        // a real UDP socket and enter the role (false if that fails); StopNetworking drops the
+        // endpoint.
         bool StartServer(u16 port, bool dedicated) { return m_network.StartServer(port, dedicated); }
         bool Connect(core::StringView host, u16 port) { return m_network.Connect(host, port); }
         void StopNetworking() { m_network.StopNetworking(); }
         [[nodiscard]] net::NetworkManager* NetEndpoint() const noexcept { return m_network.NetEndpoint(); }
 
     private:
-        /// The run-bus sink for the Game tier: dispatch `on<Event>(payload)` to the Game object. Called at
-        /// run-bus drain time (no VM active), so it invokes directly; a faulting handler disables the game
-        /// (m_game = nullptr) exactly like a faulting update(), and a debugger suspension is not a fault.
+        /// The run-bus sink for the Game tier: dispatch `on<Event>(payload)` to the Game object.
+        /// Called at run-bus drain time (no VM active), so it invokes directly; a faulting handler
+        /// disables the game (m_game = nullptr) as a faulting update() does, and a debugger
+        /// suspension is not a fault.
         void DispatchGameEvent(core::StringView eventName, const core::Variant& payload);
 
         engine::script::ScriptRunHost m_runHost{
-            foundation::core::DefaultAllocator()}; // owned: the game's script context (process
-                                                   // root until the instance phase threads one)
+            foundation::core::DefaultAllocator()}; // owned: the game's script context (from the
+                                                   // process root allocator)
         scene::SceneManager m_sceneManager{DefaultAllocator()}; // owned; registered with the SceneSubsystem to tick
         scene::Scene* m_scene = nullptr;
         script::IScriptErrorHandler* m_errorHandler = nullptr;
@@ -699,7 +714,7 @@ export namespace engine::runtime
         core::IAllocator* m_allocator = &DefaultAllocator(); // what the run's TLS and HTTP are made from
         // Before the networking and the HTTP binding, so it outlives every session they made from it.
         core::UniquePtr<foundation::net::ITlsBackend> m_tls; // made on first use (TlsBackend)
-        NetworkController m_network; // this run's networking (endpoint + INetworkController), composed
+        NetworkController m_network; // this run's networking (endpoint and INetworkController)
         RunScriptBinding
             m_runBinding; // stable; app fills its pointers, installed per context (StartScript)
 
@@ -710,13 +725,13 @@ export namespace engine::runtime
         input::IInputSourceProvider* m_inputSource =
             nullptr; // borrowed: the viewport / shell devices
 
-        // Script-driven scene loads (task #123): in-flight handles keyed by ticket. An entry lives
-        // only while its load is IN FLIGHT or has FAILED - PumpScriptLoads RETIRES an entry the moment
-        // it activates successfully (Fable review: was monotonic growth). A retired ticket reads
-        // terminal-safe via the unknown-ticket fallback (progress 1, complete true, failed false),
-        // which is exactly the post-activation answer, so dropping it is transparent to the script.
-        // Failed entries linger so ScriptLoadFailed stays truthful; failures are exceptional, so the
-        // array stays bounded across level switches. m_nextScriptTicket only grows -> tickets never alias.
+        // Script-driven scene loads: in-flight handles keyed by ticket. An entry lives only while
+        // its load is in flight or has failed; PumpScriptLoads retires an entry the moment it
+        // activates. A retired ticket reads terminal-safe through the unknown-ticket fallback
+        // (progress 1, complete true, failed false), which is the post-activation answer anyway, so
+        // dropping it is invisible to the script. Failed entries stay so ScriptLoadFailed remains
+        // truthful; failures are rare, so the array stays bounded across level switches.
+        // m_nextScriptTicket only grows, so tickets never alias.
         struct TrackedScriptLoad
         {
             i32 ticket = 0;
@@ -731,8 +746,8 @@ export namespace engine::runtime
 
 export namespace engine::runtime
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection and to the script
+    /// surface, and which resource modules come with it. Defined in the implementation unit (one
+    /// instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& RunDomain() noexcept;
 }

@@ -13,7 +13,7 @@ import foundation.scene;
 import foundation.propertyanimation;
 
 using namespace foundation::core;
-namespace core = foundation::core; // `Transform` named plainly beside the scene's
+namespace core = foundation::core; // so core::Transform reads plainly beside the scene's types
 namespace propanim = foundation::propertyanimation;
 namespace scene = foundation::scene;
 
@@ -21,8 +21,8 @@ namespace editor
 {
     namespace
     {
-        // A component type is offered only when reflected (an unreflected type has no name, or the
-        // "<value>" fallback, the inspector's rule).
+        // A component type is offered only when reflected: an unreflected type has no name, or has
+        // the "<value>" fallback. The inspector uses the same rule.
         [[nodiscard]] bool IsReflectedType(const TypeInfo* type)
         {
             return type != nullptr && type->name != nullptr && type->name[0] != '<';
@@ -80,7 +80,8 @@ namespace editor
         const scene::EntityHandle handle = m_scene->FindEntity(entity);
         if (!handle.IsAssigned())
             return seeds;
-        // Every entity has a transform (the scene's, not a reflected component): its TRS first.
+        // Every entity has a transform (the scene's, not a reflected component), so its position,
+        // rotation and scale come first.
         seeds.PushBack(AnimatablePropertyInfo{String(kTransformName), String(u8"position"), propanim::TrackValueKind::Float3});
         seeds.PushBack(AnimatablePropertyInfo{String(kTransformName), String(u8"rotation"), propanim::TrackValueKind::Quat});
         seeds.PushBack(AnimatablePropertyInfo{String(kTransformName), String(u8"scale"), propanim::TrackValueKind::Float3});
@@ -107,7 +108,8 @@ namespace editor
             Stop();
             return;
         }
-        // Kept again when the entity or the tracks changed: what was kept may name targets gone.
+        // Save the values again when the entity or the tracks changed, since the saved ones may name
+        // targets that are gone.
         Array<String> tracks;
         for (const propanim::PropertyTrack& track : clip.tracks)
             tracks.PushBack(TrackKey(track));
@@ -129,7 +131,8 @@ namespace editor
         }
         for (const propanim::PropertyTrack& track : clip.tracks)
         {
-            // A channel with no keys keeps what the entity has (an X-only track leaves Y and Z be).
+            // A channel with no keys keeps the entity's current value (an X-only track leaves Y and
+            // Z alone).
             const Variant current = ReadTarget(handle, track.componentType.AsView(), track.propertyPath.AsView());
             WriteTarget(handle, track.componentType.AsView(), track.propertyPath.AsView(), track.SampleMerged(time, current));
         }

@@ -36,7 +36,7 @@ export namespace foundation::core
         }
 
         // ToMatrix's inverse: decompose a TRS matrix into a Transform (identity components on a
-        // degenerate matrix). The editor's world-preserving reparent seam.
+        // degenerate matrix). The editor reparents through it while keeping the world transform.
         [[nodiscard]] static Transform FromMatrix(const Float4x4& m) noexcept
         {
             Transform t;
@@ -44,7 +44,7 @@ export namespace foundation::core
             return t;
         }
 
-        // Component-wise interpolation: position/scale lerp, rotation slerp. (Sedulous BoneTransform.Lerp.)
+        // Component-wise interpolation: position/scale lerp, rotation slerp.
         [[nodiscard]] static Transform Lerp(const Transform& a, const Transform& b, f32 t) noexcept
         {
             return Transform{
@@ -55,15 +55,15 @@ export namespace foundation::core
         }
     };
 
-    // Identity transform (position 0, rotation identity, scale 1) - the default-constructed value.
+    // Identity transform (position 0, rotation identity, scale 1), the default-constructed value.
     inline constexpr Transform IdentityTransform{};
 
-    // The affine transform with scale removed (translation + rotation only). Use where a matrix
-    // must PLACE something whose dimensions are absolute in world units and so must not be warped
-    // by the placing entity's scale - e.g. a baked navmesh, whose agent radius / cell size are
-    // world-unit quantities, so both the bake frame and the runtime placement must be rigid (a
-    // zone sharing a scaled entity with its geometry would otherwise un-scale the geometry the
-    // bake sees and erode the navmesh to nothing).
+    // The affine transform with scale removed (translation and rotation only). Use it where a
+    // matrix places something whose dimensions are absolute in world units and must not be warped
+    // by the placing entity's scale. A baked navmesh is one: its agent radius and cell size are in
+    // world units, so both the bake frame and the runtime placement must be rigid. Otherwise a zone
+    // sharing a scaled entity with its geometry would un-scale the geometry the bake sees and erode
+    // the navmesh to nothing.
     [[nodiscard]] inline Float4x4 RigidPart(const Float4x4& m) noexcept
     {
         Transform t = Transform::FromMatrix(m);

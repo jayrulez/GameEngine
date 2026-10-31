@@ -3,9 +3,9 @@
 
 // GUI - :toggle_switch partition
 //
-// ToggleSwitch: the button core (E6 of Specs/gui-lab-evolution.md) as a toggle with a track and a
-// knob for its indicator, its text beside it: a check box for a setting that takes effect at
-// once. Its parts: switch::track (filled when it is on) and ::knob.
+// ToggleSwitch: a ButtonBase toggle whose indicator is a track and a knob, with its text beside
+// it. It works as a check box for a setting that takes effect at once. Its parts are
+// switch::track (filled when on) and ::knob.
 
 module;
 #include "Core/Prelude.h"
@@ -35,7 +35,7 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"switch"));
             {
                 StyleWriteScope defaults(*this);
-                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // its text beside its indicator
+                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // the text sits beside the indicator
             }
             SetToggle(true);
             MakeIndicator();
@@ -53,7 +53,7 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Theming parts: switch::track / ::knob.
+        // Style parts: switch::track and ::knob.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"track"));
@@ -68,7 +68,7 @@ export namespace foundation::gui
             const f32 r = box.height * 0.5f;
             GetPartStyle(u8"track").Draw(ctx, box, FilledBox(on ? m_trackOn : m_trackOff, vg::CornerRadii(r)));
             const f32 knobR = core::Max(0.0f, r - 3.0f);
-            // On at the inline end.
+            // The knob sits at the inline end when on.
             const f32 cx = MirroredX(on ? box.x + box.width - r : box.x + r, box, IsRightToLeft());
             const f32 cy = box.y + r;
             GetPartStyle(u8"knob").Draw(ctx, Rect{cx - knobR, cy - knobR, knobR * 2.0f, knobR * 2.0f},

@@ -4,8 +4,8 @@
 // The shader page's preview shader slot: it registers both stages under the page's name, a
 // release removes them, and once released it never reaches the shader system again. At editor
 // exit the page outlives the renderer that owns the system (OnClose, then the runtime context
-// shuts down, then the pages are destroyed), so a release from the page's destructor that still
-// held it touched a freed system (Sedulous found it in their port, 2026-10-12).
+// shuts down, then the pages are destroyed), so a release from the page's destructor must not
+// touch the freed system.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -36,9 +36,10 @@ TEST_CASE("shader page: the preview slot registers, releases once and then lets 
         CHECK_FALSE(system.HasSource(name, shaders::ShaderStage::Vertex));
         CHECK_FALSE(system.HasSource(name, shaders::ShaderStage::Fragment));
         CHECK_FALSE(slot.IsHeld());
-    } // the renderer (and its shader system) goes
+    } // the renderer (and its shader system) is destroyed
 
-    // The page's destructor: nothing left to reach. Registering after a release does nothing.
+    // The page's destructor releases again and reaches nothing. Registering after a release does
+    // nothing.
     slot.Release();
     slot.Register(u8"", u8"VSMain", shaders::ShaderFlags::None, u8"PSMain",
                   shaders::ShaderFlags::None);

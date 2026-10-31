@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/CurveUtilsTests.bf. Mirrors the Sedulous
-// assertions (Test.Assert -> CHECK; Float2 -> Float2; List -> Array; .X/.Y -> .x/.y).
+// CurveUtils: flattening and point evaluation of quadratic and cubic curves.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

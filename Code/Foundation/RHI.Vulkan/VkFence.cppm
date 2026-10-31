@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of Fence (timeline semaphore).
-/// Ported from Sedulous.RHI.Vulkan/VulkanFence.bf.
 
 module;
 #include "Core/Prelude.h"

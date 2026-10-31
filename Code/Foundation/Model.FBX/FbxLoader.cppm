@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// FBX/OBJ model loader using ufbx.
-/// Ported from Sedulous.Models.FBX/FbxLoader.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -37,12 +36,10 @@ export namespace foundation::model::fbx
     using namespace foundation::core;
     using namespace foundation::model;
 
-    /// Vertex deduplication by CONTENT: the hash picks a bucket, the bytes decide. The
-    /// previous map was keyed on the hash alone, so two different vertices that collided
-    /// became one - rare, and it surfaced as a pulled seam nothing in the source file
-    /// explained (found by the Beef port, whose welder compares). Buckets are an intrusive
-    /// chain over vertex indices, so welding allocates nothing per vertex beyond the
-    /// vertex itself.
+    /// Vertex deduplication by content: the hash picks a bucket, the bytes decide. Keying on
+    /// the hash alone would merge two different vertices that collide, which shows up as a
+    /// pulled seam nothing in the source file explains. Buckets are an intrusive chain over
+    /// vertex indices, so welding allocates nothing per vertex beyond the vertex itself.
     class VertexWelder
     {
     public:
@@ -81,7 +78,7 @@ export namespace foundation::model::fbx
 
 
     // ufbx hands back char* (UTF-8); the engine String is UTF-8 too, so these just
-    // wrap the bytes in an owned String - no transcoding.
+    // wrap the bytes in an owned String with no transcoding.
     inline String Utf8FromC(const char* s)
     {
         if (!s)
@@ -160,11 +157,10 @@ export namespace foundation::model::fbx
             m_loadOpts.generate_missing_normals = true;
             m_loadOpts.clean_skin_weights = true;
             m_loadOpts.use_blender_pbr_material = true;
-            // OBJ materials live in a sidecar .mtl that ufbx reads ONLY when asked. Without
-            // this every OBJ arrived with its material NAMES and default colours, which looked
-            // like it worked (found by the Beef port's material test: `usemtl red` gave a
-            // material called "red" with a white base colour). A missing sidecar is not an
-            // error - the file still describes geometry.
+            // OBJ materials live in a sidecar .mtl that ufbx reads only when asked. Without
+            // these options an OBJ arrives with its material names but default colours
+            // (`usemtl red` gives a material called "red" with a white base colour). A missing
+            // sidecar is not an error: the file still describes geometry.
             m_loadOpts.load_external_files = true;
             m_loadOpts.ignore_missing_external_files = true;
             m_loadOpts.obj_search_mtl_by_filename = true;
@@ -280,8 +276,8 @@ export namespace foundation::model::fbx
                     if (mat->pbr.roughness.has_value)
                         material->roughnessFactor = static_cast<f32>(mat->pbr.roughness.value_real);
 
-                    // FBX authors SEPARATE grayscale metalness/roughness maps (glTF packs them
-                    // G/B). Keep them separate; the importer bakes a packed texture downstream.
+                    // FBX authors separate grayscale metalness and roughness maps (glTF packs them
+                    // in G and B). Keep them separate; the importer bakes a packed texture downstream.
                     if (mat->pbr.metalness.texture)
                         material->separateMetalnessTextureIndex =
                             getOrCreateTextureIndex(mat->pbr.metalness.texture, model);
@@ -323,11 +319,11 @@ export namespace foundation::model::fbx
                 }
                 else
                 {
-                    // Legacy FBX (Lambert, Phong) and a classic OBJ .mtl: imported as authored
-                    // (Specs/phong-material.md). Phong and the .mtl's Kd/Ks/Ns keep their highlight,
-                    // Lambert has none; a legacy material of another kind (a shader the engine has
-                    // no built-in for) stays the PBR approximation below. Blender's exports are
-                    // their own kind (it labels every material Phong) and take the PBR branch above.
+                    // Legacy FBX (Lambert, Phong) and a classic OBJ .mtl: imported as authored.
+                    // Phong and the .mtl's Kd/Ks/Ns keep their highlight, Lambert has none; a legacy
+                    // material of another kind (a shader the engine has no built-in for) stays the
+                    // PBR approximation below. Blender's exports are their own kind (it labels every
+                    // material Phong) and take the PBR branch above.
                     const bool phong = mat->shader_type == UFBX_SHADER_FBX_PHONG || mat->shader_type == UFBX_SHADER_WAVEFRONT_MTL;
                     if (phong || mat->shader_type == UFBX_SHADER_FBX_LAMBERT)
                         material->shadingModel = phong ? ShadingModel::Phong : ShadingModel::Lambert;
@@ -350,8 +346,8 @@ export namespace foundation::model::fbx
                     if (mat->fbx.diffuse_color.has_value)
                     {
                         // The colour alone: DiffuseFactor is ignored, as glTF has none. Blender
-                        // writes its legacy 0.8 there, which made an FBX a fifth darker than the
-                        // same model's glTF.
+                        // writes its legacy 0.8 there, which would make an FBX a fifth darker than
+                        // the same model's glTF.
                         auto c = mat->fbx.diffuse_color.value_vec4;
                         material->baseColorFactor = SrgbColor(c.x, c.y, c.z, 1.0);
                     }
@@ -386,7 +382,7 @@ export namespace foundation::model::fbx
                         material->emissiveTextureIndex =
                             getOrCreateTextureIndex(mat->fbx.emission_color.texture, model);
 
-                    // The PBR approximation's (what a legacy material of another kind is drawn as).
+                    // The PBR approximation, which a legacy material of another kind is drawn as.
                     material->metallicFactor = 0.0f;
                     material->roughnessFactor = 0.8f;
                 }
@@ -399,7 +395,7 @@ export namespace foundation::model::fbx
                 else
                     material->doubleSided = true;
 
-                // Alpha / opacity (scalar values only -- texture-based alpha detection
+                // Alpha and opacity, scalar values only (texture-based alpha detection
                 // is handled by detectAlphaFromTextures after textures are loaded).
                 if (mat->features.opacity.enabled)
                 {
@@ -479,7 +475,7 @@ export namespace foundation::model::fbx
                 }
                 else if (tex->has_file)
                 {
-                    // External file - try relative path, then walk parent directories, then absolute.
+                    // External file: try the relative path, then walk parent directories, then absolute.
                     std::string relPath;
                     if (tex->relative_filename.data && tex->relative_filename.length > 0)
                         relPath =
@@ -517,7 +513,7 @@ export namespace foundation::model::fbx
 
                         if (!std::filesystem::exists(imagePath))
                         {
-                            // Rel path may be wrong - try just the filename.
+                            // The relative path may be wrong: try just the filename.
                             auto fileName = std::filesystem::path(relPath).filename().string();
                             imagePath = (std::filesystem::path(m_basePath) / fileName).string();
                         }
@@ -626,7 +622,7 @@ export namespace foundation::model::fbx
 
         /// Post-process: detect alpha mode from base color texture content.
         /// FBX doesn't have an explicit alpha mode like glTF, so we analyze
-        /// the albedo texture's alpha channel (like Godot does).
+        /// the albedo texture's alpha channel.
         static void detectAlphaFromTextures(Model& model)
         {
             for (auto* material : model.materials())
@@ -864,7 +860,7 @@ export namespace foundation::model::fbx
                 }
                 else
                 {
-                    // No material parts - process all faces as a single part.
+                    // No material parts: process all faces as a single part.
                     i32 indexCount = 0;
 
                     for (size_t fi = 0; fi < fbxMesh->faces.count; ++fi)
@@ -929,8 +925,8 @@ export namespace foundation::model::fbx
             }
         }
 
-        // Largest vertex the layout below can produce: position + normal + uv + color +
-        // tangent + joints + weights.
+        // Largest vertex the layout below can produce: position, normal, uv, color,
+        // tangent, joints and weights.
         static constexpr i32 kMaxVertexStride = 12 + 12 + 8 + 4 + 16 + 8 + 16;
 
         /// Builds the vertex at the given face index and welds it into the vertex buffer
@@ -960,8 +956,8 @@ export namespace foundation::model::fbx
             if (hasTangent)
             {
                 tangent = readVec3(fbxMesh->uv_sets.data[0].vertex_tangent, idx);
-                // TBN handedness from ufbx's bitangent: w = sign(dot(cross(N,T), B)) - mirrored
-                // UVs produce a bitangent opposing cross(N,T).
+                // TBN handedness from ufbx's bitangent: w = sign(dot(cross(N,T), B)), since
+                // mirrored UVs produce a bitangent opposing cross(N,T).
                 if (fbxMesh->uv_sets.data[0].vertex_bitangent.exists)
                 {
                     const ufbx_vec3 bt = readVec3(fbxMesh->uv_sets.data[0].vertex_bitangent, idx);
@@ -1028,7 +1024,7 @@ export namespace foundation::model::fbx
                 static_cast<u32>(cr) | (static_cast<u32>(cg) << 8) | (static_cast<u32>(cb) << 16) |
                 (static_cast<u32>(ca) << 24);
 
-            // Tangent (xyz) + handedness (w).
+            // Tangent (xyz) and handedness (w).
             *reinterpret_cast<Float4*>(vertex + tangentOffset) =
                 Float4(static_cast<f32>(tangent.x), static_cast<f32>(tangent.y),
                        static_cast<f32>(tangent.z), tangentW);
@@ -1205,7 +1201,7 @@ export namespace foundation::model::fbx
                     auto sit = m_skinIndexMap.Find(skinDef->element.typed_id);
                     if (sit != nullptr)
                         bone->skinIndex = *sit;
-                    // Note: skin index may be set later when loadSkins runs.
+                    // The skin index may be set later, when loadSkins runs.
                 }
 
                 // A limb or root node of the file's skeleton (ufbx's bone attribute), not an empty.
@@ -1302,7 +1298,7 @@ export namespace foundation::model::fbx
                 if (stack->element.name.data && stack->element.name.length > 0)
                     animation->setName(Utf8FromUfbx(stack->element.name));
 
-                // Bake the animation - this pre-computes T/R/S keyframes per node
+                // Bake the animation: this precomputes T/R/S keyframes per node
                 // in the target coordinate system (Y-up), handling Euler-to-quaternion
                 // conversion and layer blending automatically.
                 ufbx_bake_opts bakeOpts = {};

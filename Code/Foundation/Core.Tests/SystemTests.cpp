@@ -148,8 +148,8 @@ TEST_CASE("system: console write does not crash")
 
 TEST_CASE("system: OpenPathInFileManager rejects an empty path without launching")
 {
-    // Guard only - an empty/whitespace path must return false and NOT spawn a process. A real path is
-    // deliberately not exercised here: it would pop a file-manager window during the test run.
+    // Guard only: an empty or whitespace path must return false and not spawn a process. A real
+    // path is not exercised here because it would pop a file-manager window during the test run.
     CHECK_FALSE(OpenPathInFileManager(u8""));
 }
 
@@ -243,7 +243,7 @@ TEST_CASE("system: RunProcess propagates a non-zero exit code")
 
 TEST_CASE("system: RunProcess reports failure to spawn a missing binary")
 {
-    // Explicit path, no PATH search - a bogus name cannot resolve on any platform.
+    // Explicit path, no PATH search: a bogus name cannot resolve on any platform.
     const ProcessResult r = RunProcess(u8"scratch_no_such_binary_zzz", Span<const StringView>());
     CHECK_FALSE(r.Ran());
     CHECK(r.exitCode < 0);
@@ -252,10 +252,9 @@ TEST_CASE("system: RunProcess reports failure to spawn a missing binary")
 #endif // !PLATFORM_WEB (subprocess spawning is desktop-only)
 
 // NormalizePathSeparators is fanned out to the platform backends; the Win32 OpenPathInFileManager
-// relies on it (Explorer refuses '/'). The direction is OS-NATIVE and therefore host-dependent:
-// '\' on Windows, '/' on POSIX - so the separator expectations are compiled per platform. Writing
-// only the POSIX ones (the dev box) made this fail on Windows, where the function is correct and
-// the test was wrong. The empty / exact-fit / overlong contract is shared and asserted once.
+// relies on it (Explorer refuses '/'). The direction is OS-native and therefore host-dependent
+// ('\' on Windows, '/' on POSIX), so the separator expectations are compiled per platform. The
+// empty, exact-fit and overlong contract is shared and asserted once.
 TEST_CASE("system: NormalizePathSeparators yields OS-native separators")
 {
     char out[64];
@@ -309,15 +308,14 @@ TEST_CASE("system: NormalizePathSeparators yields OS-native separators")
 #include <sys/wait.h>
 #include <unistd.h>
 
-// The fatal-signal backtrace (PaperKid editor-crash lesson): a child installs the handler and
-// segfaults; the parent asserts the crash banner + backtrace reached stderr AND the default
-// signal disposition was preserved (the child still dies BY the signal, so cores/exit status
-// behave as before).
+// The fatal-signal backtrace: a child installs the handler and segfaults; the parent asserts
+// that the crash banner and backtrace reached stderr and that the default signal disposition was
+// preserved (the child still dies by the signal, so cores and exit status behave as usual).
 TEST_CASE("system: InstallCrashBacktrace prints a native stack on SIGSEGV")
 {
 #if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
-    // Under AddressSanitizer InstallCrashBacktrace is a no-op by design (the sanitizer's own
-    // handler reports the faulting frame and the freeing stack; ours would replace it).
+    // Under AddressSanitizer InstallCrashBacktrace is a no-op: the sanitizer's own handler
+    // reports the faulting frame and the freeing stack, and ours would replace it.
     MESSAGE("AddressSanitizer build: the engine's crash handler yields to the sanitizer's");
     return;
 #endif
@@ -334,7 +332,7 @@ TEST_CASE("system: InstallCrashBacktrace prints a native stack on SIGSEGV")
         close(pipeFds[1]);
         InstallCrashBacktrace();
         volatile int* nullPointer = nullptr;
-        *nullPointer = 42; // SIGSEGV -> handler prints -> re-raises with SIG_DFL
+        *nullPointer = 42; // SIGSEGV: the handler prints, then re-raises with SIG_DFL
         _exit(0);          // unreachable
     }
 
@@ -356,7 +354,7 @@ TEST_CASE("system: InstallCrashBacktrace prints a native stack on SIGSEGV")
     int status = 0;
     REQUIRE(waitpid(child, &status, 0) == child);
     CHECK(WIFSIGNALED(status));                       // default disposition preserved
-    CHECK(WTERMSIG(status) == SIGSEGV);               // died BY the segfault, post-print
+    CHECK(WTERMSIG(status) == SIGSEGV);               // died by the segfault, after printing
     CHECK(std::strstr(buffer, "SIGSEGV") != nullptr); // the banner
     CHECK(std::strstr(buffer, "backtrace") != nullptr);
     CHECK(std::strstr(buffer, "0x") != nullptr); // at least one frame line

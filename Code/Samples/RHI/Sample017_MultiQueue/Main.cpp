@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample017 - MultiQueue (Async Compute). Ported from Sedulous Sample017_MultiQueue.
+/// Sample017 - MultiQueue (Async Compute).
 /// A compute shader generates an animated vertex grid on the compute queue,
 /// then the graphics queue waits on the compute fence and renders the result.
 
@@ -236,7 +236,7 @@ foundation::core::Status MultiQueueSample::OnInit()
     if (m_device->CreateRenderPipeline(rpd, m_renPipe) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Command pools - one per queue type.
+    // Command pools: one per queue type.
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_gfxPool) !=
         foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
@@ -304,7 +304,7 @@ void MultiQueueSample::OnRender()
     m_computeQueue->Submit(Span<rhi::CommandBuffer* const>(cCbs, 1), m_compFence, m_compFenceVal);
     m_computePool->DestroyEncoder(cEnc);
 
-    // === Graphics pass - waits on compute fence before executing ===
+    // === Graphics pass, which waits on the compute fence before executing ===
     m_gfxPool->Reset();
     rhi::CommandEncoder* gEnc = nullptr;
     if (m_gfxPool->CreateEncoder(gEnc) != foundation::core::ErrorCode::Ok || !gEnc)
@@ -343,7 +343,7 @@ void MultiQueueSample::OnRender()
     m_gfxFenceVal++;
     rhi::CommandBuffer* gCbs[1] = {gCb};
 
-    // Submit graphics - wait on compute fence, signal graphics fence.
+    // Submit graphics: wait on the compute fence, signal the graphics fence.
     rhi::Fence* waitFences[1] = {m_compFence};
     foundation::core::u64 waitValues[1] = {m_compFenceVal};
     m_graphicsQueue->Submit(

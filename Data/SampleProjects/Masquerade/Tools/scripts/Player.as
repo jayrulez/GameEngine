@@ -1,19 +1,21 @@
-// Player - a guest someone plays. On a guest's entity like any other (a navigation agent and an
-// Instance Member of a costume), so it looks like one. It moves where the stick points, relative
-// to where the camera looks, by driving its agent at that velocity (no path to wait for): the crowd
-// makes way round it and it round the crowd, as guests do for each other. A guest's stroll by default;
-// Sprint is faster (and marks you, Ball.as); Dance, held, dances; Tag tells the ball (Ball.as
-// decides who is in reach). It shoulders past guests, at half pace while it is pressed against one
-// (`crowd`), so it cannot plough through a group; standing guests step out of its way (Guest.as). It wears its costume on a child, one of six looks (Ball.as picks), so
-// the clip goes to each look. Its `activity` is a guest's.
+// Player: a guest that someone plays. It sits on a guest's entity like any other (a navigation
+// agent and an Instance Member of a costume), so it looks like a guest. It moves where the stick
+// points, relative to where the camera looks, by driving its agent at that velocity, with no path
+// to wait for; the crowd makes way round it and it round the crowd, as guests do for each other.
+// It walks at a guest's stroll by default. Sprint is faster but makes you stand out (Ball.as);
+// holding Dance dances; Tag tells the ball, and Ball.as decides who is in reach. It shoulders past
+// guests at half pace while pressed against one (`crowd`), so it cannot plough through a group,
+// and standing guests step out of its way (Guest.as). It wears its costume on a child, one of six
+// looks that Ball.as picks between, so the clip goes to each look. Its `activity` values are the
+// same as a guest's.
 //
-// Over the network the host moves every hunter: a client's own hunter sends its stick, sprint,
-// dance and tags to the host (Net "input" and "tag"), the host's Ball hands them to the hunter
-// ("Input"), and the transform and activity come back replicated. A spawned hunter (a joining
-// player's) finds the camera, the crowd and the Ball by name, and the client's own tells the
-// camera to follow it.
+// Over the network the host moves every hunter. A client's own hunter sends its stick, sprint,
+// dance and tags to the host (Net "input" and "tag"), the host's Ball passes them to the hunter
+// ("Input"), and the transform and activity come back replicated. A hunter spawned for a joining
+// player finds the camera, the crowd and the Ball by name, and on that player's own client it
+// tells the camera to follow it.
 
-const int kIdle = 0; // the clips, in the Guests entity's instanced skinning order
+const int kIdle = 0; // clip indices, in the instanced skinning order of the Guests entity
 const int kWalk = 1;
 const int kTalk = 2;
 const int kDance = 3;
@@ -35,18 +37,19 @@ class Player
     private bool m_moving = false;
     private float m_pressCheck = 0.0f;
     private bool m_pressed = false;
-    private Float4 m_remote = Float4(0.0f, 0.0f, 0.0f, 0.0f); // a remote player's input (the host)
+    private Float4 m_remote = Float4(0.0f, 0.0f, 0.0f, 0.0f); // host: a remote player's input
     private float m_remoteAge = 99.0f;
-    private int m_sent = -1;          // the input last sent to the host (a client)
-    private bool m_ringShown = false;  // the ring under this hunter shown (it is this peer's)
+    private int m_sent = -1;          // client: the input last sent to the host
+    private bool m_ringShown = false;  // the ring under this hunter is shown (it is this peer's own)
     private float m_sendIn = 0.0f;
-    private bool m_handedOver = false; // a client's: its agent stopped for the host's transforms
+    private bool m_handedOver = false; // client: the agent is stopped so the host's transforms rule
 
     Player(Entity@ entity) { @self = entity; }
 
     void onStart()
     {
-        // A spawned hunter (a joining player's) names nothing in the scene: it finds what it needs.
+        // A hunter spawned for a joining player has no scene references set, so it finds what it
+        // needs by name.
         if (camera is null || !camera.isValid())
         {
             @camera = self.scene.find("Camera");
@@ -58,7 +61,7 @@ class Player
         Entity@ ball = self.scene.find("Ball");
         if (ball !is null && ball.isValid())
         {
-            ball.send("Hunter", self); // so the seats can find it, on every peer
+            ball.send("Hunter", self); // on every peer, so the seats can find it
         }
         if (mine() && camera !is null && camera.isValid())
         {
@@ -66,7 +69,8 @@ class Player
         }
     }
 
-    // Whose: 0 the host, else the id the host gave a client. Mine when this peer plays it.
+    // The owning player: 0 for the host, otherwise the id the host gave a client. mine() is true
+    // when this peer plays it.
     private int owner()
     {
         NetworkComponent@ net = NetworkComponent::of(self);
@@ -79,7 +83,7 @@ class Player
         return owner() == (me < 0 ? 0 : me);
     }
 
-    // The host: a remote player's stick (x, z), sprint and dance, from Ball.as.
+    // Host only: a remote player's stick (x, z), sprint and dance, passed on by Ball.as.
     void onInput(Float4 input)
     {
         m_remote = input;
@@ -89,8 +93,9 @@ class Player
     void onUpdate(double dt)
     {
         float d = float(dt);
-        // The ring on the floor under your own guest (maps.py: hidden on every hunter), once whose
-        // this hunter is is known (a joiner's hunter becomes its own as the host's state arrives).
+        // Show the ring on the floor under your own guest (maps.py hides it on every hunter) once
+        // this hunter's owner is known; a joiner's hunter becomes its own as the host's state
+        // arrives.
         bool own = mine();
         if (own != m_ringShown)
         {
@@ -105,7 +110,7 @@ class Player
                 }
             }
         }
-        // What the player asks for: the stick as a direction on the floor, sprint, dance, a tag.
+        // Read the player's input: the stick as a direction on the floor, sprint, dance and tag.
         float dx = 0.0f;
         float dz = 0.0f;
         bool sprint = false;
@@ -121,7 +126,7 @@ class Player
                 {
                     stick = Float2(stick.x / amount, stick.y / amount);
                 }
-                // The camera's facing along the floor: forward, and right of it.
+                // The camera's facing projected onto the floor: forward, and right of it.
                 Float3 look = Quaternion::RotateVector(camera.rotation(), Float3(0.0f, 0.0f, -1.0f));
                 float flat = Math::Max(Math::Sqrt(look.x * look.x + look.z * look.z), 0.0001f);
                 Float3 forward = Float3(look.x / flat, 0.0f, look.z / flat);
@@ -149,11 +154,11 @@ class Player
         {
             if (!m_handedOver)
             {
-                NavAgentComponent::of(self).stop(); // walking since the scene loaded: the host's now
+                NavAgentComponent::of(self).stop(); // it walked since the scene loaded; the host moves it now
                 m_handedOver = true;
             }
-            // The host moves every hunter; a client sends its own player's asking, and plays what
-            // the host replicates back.
+            // The host moves every hunter. A client sends its own player's input and plays what the
+            // host replicates back.
             if (mine())
             {
                 send(dx, dz, sprint, dance, d);
@@ -200,8 +205,8 @@ class Player
         playClip();
     }
 
-    // A client: its player's asking, packed in one number (the stick to a hundredth, sprint and
-    // dance as bits), to the host when it changes and five times a second besides.
+    // Client only: sends the player's input to the host, packed in one number (the stick to a
+    // hundredth, sprint and dance as bits), whenever it changes and five times a second anyway.
     private void send(float dx, float dz, bool sprint, bool dance, float d)
     {
         int ix = int(Math::Clamp((dx + 1.0f) * 100.0f + 0.5f, 0.0f, 200.0f));
@@ -216,7 +221,8 @@ class Player
         }
     }
 
-    // The clip on each of its looks (only the one it wears is drawn), from its replicated activity.
+    // Plays the clip for its replicated activity on each of its looks; only the one it wears is
+    // drawn.
     private void playClip()
     {
         Entity@ child = self.firstChild();
@@ -231,7 +237,7 @@ class Player
         }
     }
 
-    // Pressed against a guest: one of the crowd's within pressDistance.
+    // Whether it is pressed against a guest: any member of the crowd within pressDistance.
     private bool pressing()
     {
         if (crowd is null || !crowd.isValid())
@@ -260,7 +266,7 @@ class Player
         return false;
     }
 
-    // Face where it goes (the model faces +Z), turning the short way round.
+    // Turns to face where it goes (the model faces +Z), the short way round.
     private void face(float dx, float dz, float d)
     {
         float want = Math::Atan2(dx, dz);

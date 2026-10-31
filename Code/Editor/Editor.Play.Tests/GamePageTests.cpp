@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Game tab from its markup (Data/Editor/Game.xml) on a headless host, no game running: the
-// kit's transport (Play while stopped; Pause and Stop while it runs or waits; the state named;
-// a Play waiting for the cook said so and cancelled by Stop), the resolutions in the dropdown, the
-// phone kept with the project, and the debugger opened by its toggle.
+// The Game tab from its markup (Data/Editor/Game.xml) on a headless host with no game running: the
+// kit's transport (Play while stopped; Pause and Stop while it runs or waits; the state named; a
+// Play waiting for the cook shown as waiting and cancelled by Stop), the resolutions in the
+// dropdown, the phone preview kept with the project, and the debugger opened by its toggle.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -148,7 +148,7 @@ TEST_CASE("game tab: the resolutions in the dropdown, a pick and the phone kept 
     const Span<const GameResolutionChoice> choices = bed.page->ResolutionChoices();
     REQUIRE(choices.Size() >= 2u);
     CHECK(resolution->ItemCount() == choices.Size());
-    CHECK(resolution->GetSelectedText() == choices[0].label.AsView()); // the project's
+    CHECK(resolution->GetSelectedText() == choices[0].label.AsView()); // the project's entry
     resolution->SelectByUser(1);
     CHECK(bed.page->ResolutionKey() == choices[1].key.AsView());
     const GamePageSettings* saved = bed.store.Find<GamePageSettings>();
@@ -162,8 +162,8 @@ TEST_CASE("game tab: the resolutions in the dropdown, a pick and the phone kept 
     CHECK(bed.page->PhonePreview());
     CHECK(bed.store.Find<GamePageSettings>()->phonePreview);
 
-    // The debugger is out of the split until its toggle puts it beside the game; it comes back at
-    // the share it was given.
+    // The debugger stays out of the split until its toggle puts it beside the game, and it comes
+    // back at the share it was given.
     auto* stage = bed.Find<gui::Splitter>(u8"game-stage");
     auto* toggle = bed.Find<gui::ButtonBase>(u8"game-debugger-toggle");
     REQUIRE(stage != nullptr);
@@ -191,7 +191,7 @@ TEST_CASE("game tab: tabs side by side are told apart: Game, then Game 2, Game 3
     CHECK(GameEditorPage::TitleFor(u8"game-page") == StringView(u8"Game"));
     CHECK(GameEditorPage::TitleFor(u8"game-page-1") == StringView(u8"Game 2"));
     CHECK(GameEditorPage::TitleFor(u8"game-page-2") == StringView(u8"Game 3"));
-    Bed bed; // the bed's tab is the first
+    Bed bed; // the bed's tab is the first one
     CHECK(bed.page->Title() == StringView(u8"Game"));
 }
 
@@ -204,7 +204,7 @@ TEST_CASE("game tab: Shift+F1 gives the keyboard back: the game view lets the fo
     (void)root->UpdateLayout();
     gui::Viewport* view = bed.page->View();
     REQUIRE(view != nullptr);
-    // As a running game's view is: focused (a click) and capturing every key.
+    // As a running game's view: focused (by a click) and capturing every key.
     view->RequestFocus();
     view->SetCapturesAllKeys(true);
     REQUIRE(view->IsFocused());

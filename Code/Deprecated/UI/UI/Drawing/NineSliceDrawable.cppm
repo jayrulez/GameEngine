@@ -4,8 +4,7 @@
 // UI - :nine_slice_drawable partition
 //
 // 9-slice image drawable with optional Expand (shadow/glow extending beyond the logical bounds).
-// Ported from Sedulous.UI/src/Drawing/NineSliceDrawable.bf. Slices is image::NineSlice (lowercase
-// fields); Expand is a ui::Thickness (PascalCase).
+// Slices is an image::NineSlice (lowercase fields); Expand is a ui::Thickness (PascalCase).
 
 module;
 #include "Core/Prelude.h"

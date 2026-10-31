@@ -1,12 +1,12 @@
-// MapMarkers - on the block's top-down camera, which draws the Minimap texture the HUD shows. Places
-// the HUD's markers over that image from world positions: a dot per subscriber (dimmed once it has
-// its paper) and the bike, turned to its heading. The camera is orthographic and looks straight
-// down, so world to map is a scale and an offset: map right is +X, map up is -Z.
+// MapMarkers: sits on the block's top-down camera, which draws the Minimap texture the HUD shows,
+// and places the HUD's markers over that image from world positions: a dot per subscriber (dimmed
+// once it has its paper) and the bike, turned to its heading. The camera is orthographic and looks
+// straight down, so world to map is a scale and an offset: map right is +X, map up is -Z.
 // The HUD has this many subscriber dots (map-sub-0 ...).
 const uint kDots = 8;
 
-// A HUD element: the top screen's first, then any (a HUD just replaced is still in the tree while it
-// leaves, with the same ids, and would be found first).
+// Finds a HUD element, searching the top screen first. A HUD just replaced stays in the tree while
+// it leaves, with the same ids, and would otherwise be found first.
 Node@ hud(string id)
 {
     ScreenStack@ stack = ScreenStack::of(gui::root().find("screens"));
@@ -25,15 +25,15 @@ class MapMarkers
     [2, "The delivery zones' collision group"] int zoneGroup;
 
     private array<Entity@> m_zones;
-    private array<int> m_waiting; // each dot's state shown: 1 waiting, 0 delivered, -1 not yet shown
+    private array<int> m_waiting; // the state each dot shows: 1 waiting, 0 delivered, -1 not yet shown
     private bool m_found = false;
 
     MapMarkers(Entity@ entity) { @self = entity; }
 
     void onUpdate(double dt)
     {
-        // The zones are static triggers, there once physics has built them, so look once on the
-        // first update rather than in onStart.
+        // The zones are static triggers that exist only once physics has built them, so look them
+        // up once on the first update rather than in onStart.
         if (!m_found)
         {
             findZones();
@@ -47,7 +47,7 @@ class MapMarkers
             }
             Entity@ marker = m_zones[i].findChildByName("Marker");
             int waiting = marker !is null && marker.isValid() && marker.active() ? 1 : 0;
-            if (waiting != m_waiting[i]) // the sheet's 0 until placed, then full or dimmed
+            if (waiting != m_waiting[i]) // the style sheet's opacity 0 until placed, then full or dimmed
             {
                 m_waiting[i] = waiting;
                 dot.tween("opacity", waiting == 1 ? "1" : "0.3", 0.0f, "linear");
@@ -62,8 +62,9 @@ class MapMarkers
         {
             return;
         }
-        // The bike faces its local +Z; on the map that points (x, z) with z down the screen, and a
-        // view turns clockwise from up. Set every frame (a tween of no length replaces the last).
+        // The bike faces its local +Z. On the map that direction is (x, z) with z down the screen,
+        // and a view's rotation runs clockwise from up. It is set every frame; a tween of zero
+        // length replaces the previous one.
         Float3 f = Quaternion::RotateVector(bike.rotation(), Float3(0.0f, 0.0f, 1.0f));
         arrow.tween("transform", at(bike.position(), 10.0f, 16.0f) + " rotate(" + Math::RadiansToDegrees(Math::Atan2(f.x, -f.z)) + "deg)",
                     0.0f, "linear");
@@ -92,8 +93,8 @@ class MapMarkers
         }
     }
 
-    // The move that centres a marker of the given pixel size on a world position, from the map's
-    // corner (a CSS transform).
+    // The CSS transform, from the map's corner, that centres a marker of the given pixel size on a
+    // world position.
     private string at(Float3 world, float width, float height)
     {
         Float3 c = self.position();

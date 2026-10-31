@@ -3,21 +3,22 @@
 
 // GUI - :style_selector partition
 //
-// CSS selector matching (started from eepp's css/StyleSheetSelector; E3 of
-// Specs/gui-lab-evolution.md). A StyleSelector is a chain of compound selectors joined by
-// combinators: descendant (space), child (>), adjacent sibling (+) and general sibling (~). A
-// compound constrains the tag, #id, .classes, [attributes] and :pseudo-classes of one widget:
+// CSS selector matching, started from eepp's css/StyleSheetSelector. A StyleSelector is a chain
+// of compound selectors joined by combinators: descendant (space), child (>), adjacent sibling (+)
+// and general sibling (~). A compound constrains the tag, #id, .classes, [attributes] and
+// :pseudo-classes of one widget:
 //
 // - state: :hover, :active, :focus, :focus-visible, :focus-within, :disabled, :enabled, and the
-//   widget's own (:checked, :indeterminate, :read-only, :read-write, :placeholder-shown, :selected, and E7's :drop-target and :drag-source), which a
-//   widget reports through UIWidget::GetWidgetStates, and :leaving and :entering (K0, K5: Node::Leave, Node::Enter);
+//   states a widget defines for itself (:checked, :indeterminate, :read-only, :read-write,
+//   :placeholder-shown, :selected, :drop-target and :drag-source), which a widget reports through
+//   UIWidget::GetWidgetStates, and :leaving and :entering (Node::Leave, Node::Enter);
 // - structure: :first-child, :last-child, :only-child, :first-of-type, :last-of-type, :empty,
 //   :nth-child(), :nth-last-child(), :nth-of-type(), :nth-last-of-type() (an+b, odd, even);
 // - logic: :not(), :is() and :where() over selector lists;
 // - attributes: [name], [name=value], ^=, $=, *=, ~= and |=, read from the widget's id, classes
 //   and reflected properties by their CSS names (`checked`, `placeholder`, `text`, ...).
 //
-// A pseudo-class the GUI does not know makes its rule match nothing (eepp's rule), so a typo
+// A pseudo-class the GUI does not know makes its rule match nothing, so a typo
 // does not widen a rule. Matching backtracks through the combinators, as CSS's does.
 
 module;
@@ -37,7 +38,8 @@ namespace core = foundation::core;
 
 namespace foundation::gui
 {
-    // CSS specificity buckets (packed, matching eepp: lexicographic id > class > tag).
+    // CSS specificity buckets, packed as eepp packs them so they compare lexicographically: id
+    // over class over tag.
     inline constexpr i64 kSpecificityId = 1048576;
     inline constexpr i64 kSpecificityClass = 1024;
     inline constexpr i64 kSpecificityTag = 1;
@@ -54,9 +56,8 @@ export namespace foundation::gui
         Sibling,    ///< `a ~ b`: b after a, among the same parent's children
     };
 
-    /// The pseudo-classes a compound can require, as flags.
-    /// The pseudo-classes a compound can require, as flags; those that follow a node's state are
-    /// its Node::StyleState bits.
+    /// The pseudo-classes a compound can require, as flags. The ones that follow a node's state
+    /// use the same bits as Node::StyleState.
     enum PseudoClass : u32
     {
         PseudoNone = 0,
@@ -79,14 +80,14 @@ export namespace foundation::gui
         PseudoFirstOfType = 1u << 16,
         PseudoLastOfType = 1u << 17,
         PseudoSelected = Node::StateSelected,
-        PseudoDropTarget = Node::StateDropTarget, ///< a drag would drop here (E7)
-        PseudoDragSource = Node::StateDragSource, ///< it is being dragged (E7)
-        /// A widget at the top of its tree, under no widget (E13: where a theme's tokens go, so
+        PseudoDropTarget = Node::StateDropTarget, ///< a drag would drop here
+        PseudoDragSource = Node::StateDragSource, ///< it is being dragged
+        /// A widget at the top of its tree, under no widget (where a theme's tokens go, so
         /// every widget inherits them and a subtree can override them).
         PseudoRoot = 1u << 21,
-        /// On its way out (K0): Node::Leave, until its exit ends and it goes.
+        /// Set from Node::Leave until the node's exit ends and the node is removed.
         PseudoLeaving = Node::StateLeaving,
-        /// On its way in (K5): Node::Enter, until its entrance ends.
+        /// Set from Node::Enter until the node's entrance ends.
         PseudoEntering = Node::StateEntering,
     };
     /// The pseudo-classes that follow interaction (what `applyPseudo = false` ignores).
@@ -131,7 +132,7 @@ export namespace foundation::gui
 
     class StyleSelector;
 
-    // One compound selector (e.g. "button#ok.primary:hover") plus the combinator that relates
+    // One compound selector ("button#ok.primary:hover", say) and the combinator that relates
     // it to the compound on its left.
     class StyleSelectorRule
     {
@@ -145,10 +146,11 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
         [[nodiscard]] const Array<core::String>& GetClasses() const noexcept { return m_classes; }
         [[nodiscard]] u32 GetPseudoClasses() const noexcept { return m_pseudo; }
-        // The `::part` pseudo-element (empty = none) - its declarations style a widget part.
+        // The `::part` pseudo-element (empty: none); its declarations style a widget part.
         [[nodiscard]] core::StringView GetPseudoElement() const { return m_pseudoElement.AsView(); }
-        /// The part's own states it asks for (`::scrollbar-thumb:hover`): :hover and :active after
-        /// the part, which the widget reports for it (GetPartStates).
+        /// The states this compound asks of its part, such as :hover in `::scrollbar-thumb:hover`.
+        /// Only :hover and :active can follow a part; the widget reports them through
+        /// GetPartStates.
         [[nodiscard]] u32 GetPartPseudoClasses() const noexcept { return m_partPseudo; }
         /// Whether it names a pseudo-class the GUI does not know (it then matches nothing).
         [[nodiscard]] bool IsNever() const noexcept { return m_never; }
@@ -164,8 +166,9 @@ export namespace foundation::gui
         void ForEachNested(F&& f) const;
 
         [[nodiscard]] bool Matches(const UIWidget& element, bool applyPseudo = true) const;
-        /// Whether its tag, id, classes and attributes match `element`: it matches there in some
-        /// position and state (its pseudo-classes and nested selectors are not asked).
+        /// Whether this compound's tag, id, classes and attributes match `element`, so that it
+        /// could match there in some position and state. Its pseudo-classes and nested selectors
+        /// are not checked.
         [[nodiscard]] bool MatchesIdentity(const UIWidget& element) const;
 
     private:
@@ -177,7 +180,7 @@ export namespace foundation::gui
         core::String m_tag;
         core::String m_id;
         core::String m_pseudoElement;
-        u32 m_partPseudo = 0; // pseudo-classes after the part: the part's states
+        u32 m_partPseudo = 0; // pseudo-classes written after the part, which test the part's states
         Array<core::String> m_classes;
         Array<AttributeTest> m_attributes;
         Array<NthPattern> m_nths;
@@ -191,8 +194,8 @@ export namespace foundation::gui
         i64 m_specificity = 0;
     };
 
-    /// StyleSelector::kAncestorKeys, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// StyleSelector::kAncestorKeys, at namespace scope for another library to read (MSVC exports
+    /// no class's static constexpr member from a shared library).
     inline constexpr u8 kStyleSelectorAncestorKeys = 4;
 
     class StyleSelector
@@ -205,8 +208,8 @@ export namespace foundation::gui
         [[nodiscard]] bool IsEmpty() const noexcept { return m_rules.Size() == 0; }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
         [[nodiscard]] const StyleSelectorRule& RuleAt(usize i) const { return m_rules[i]; }
-        /// It can match nothing: a compound names a pseudo-class or function the GUI does not know,
-        /// or does not parse (E1: what a cook warns of).
+        /// Whether the selector can match nothing, because a compound names a pseudo-class or
+        /// function the GUI does not know, or does not parse. A cook warns about these.
         [[nodiscard]] bool IsNever() const noexcept
         {
             for (const StyleSelectorRule& rule : m_rules)
@@ -219,7 +222,7 @@ export namespace foundation::gui
         {
             return m_rules.Size() != 0 ? m_rules[m_rules.Size() - 1].GetPseudoElement() : core::StringView{};
         }
-        /// The part's own states the subject asks for (none for a normal selector).
+        /// The part states the subject compound asks for; none for a normal selector.
         [[nodiscard]] u32 PartPseudoClasses() const noexcept
         {
             return m_rules.Size() != 0 ? m_rules[m_rules.Size() - 1].GetPartPseudoClasses() : 0u;
@@ -232,10 +235,12 @@ export namespace foundation::gui
             return m_rules.Size() != 0 && MatchAt(m_rules.Size() - 1, element, applyPseudo);
         }
 
-        /// The states this selector reads through an ancestor (`:hover x`, `:focus-within > x`) and
-        /// through an earlier sibling (`:checked + x`): a change of one restyles the node's subtree,
-        /// or its later siblings. `outer` is where the whole selector sits (inside a compound that
-        /// is itself an ancestor's or a sibling's, every state it reads counts there).
+        /// Adds to `ancestor` the states this selector reads through an ancestor (`:hover x`,
+        /// `:focus-within > x`), and to `sibling` those it reads through an earlier sibling
+        /// (`:checked + x`). A change of an ancestor state restyles the node's subtree; a change of
+        /// a sibling state restyles its later siblings. `outer` is nonzero when this selector is
+        /// nested in a compound that stands for an ancestor (or, with `outerIsSibling`, a sibling);
+        /// every state the selector reads then counts as that kind.
         void CollectRelationStates(u32& ancestor, u32& sibling, u32 outer = 0, bool outerIsSibling = false) const
         {
             for (usize i = 0; i < m_rules.Size(); ++i)
@@ -259,12 +264,12 @@ export namespace foundation::gui
             }
         }
 
-        /// Calls `f(compound, states)` for each compound whose own states it reads through a
-        /// descendant or child step (`button.revert:hover` in `button.revert:hover > icon`): a
-        /// change of one of them restyles the subtree of a widget that compound could match, and
-        /// no other's. What nested selectors read (`:is()`, `:not()` and `:has()` in any
-        /// compound) cannot be placed on one widget, and goes into `unplaced`: a change of one of
-        /// those restyles any widget's subtree, as every ancestor read once did.
+        /// Calls `f(compound, states)` for each compound whose states the selector reads through
+        /// a descendant or child step (`button.revert:hover` in `button.revert:hover > icon`). A
+        /// change of one of those states restyles only the subtree of a widget that compound
+        /// could match. The states nested selectors read (`:is()`, `:not()` and `:has()` in any
+        /// compound) cannot be tied to one widget, so they go into `unplaced`; a change of one of
+        /// them restyles the subtree of any widget.
         template <typename F>
         void ForEachStateReadAbove(F&& f, u32& unplaced) const
         {
@@ -279,16 +284,16 @@ export namespace foundation::gui
                     continue;
                 const Combinator next = m_rules[i + 1].GetCombinator();
                 if (next == Combinator::Adjacent || next == Combinator::Sibling)
-                    continue; // a sibling's state: CollectRelationStates' sibling states restyle the later siblings
+                    continue; // a sibling state: CollectRelationStates reports it, and it restyles later siblings
                 const u32 states = rule.GetPseudoClasses() & kDynamicPseudoClasses;
                 if (states != 0)
                     f(rule, states);
             }
         }
 
-        /// Whether it reads a widget's siblings anywhere (its position among them, or `+` and `~`),
-        /// nested selectors included: then a change to the children's arrangement can change what
-        /// it matches.
+        /// Whether the selector reads a widget's siblings anywhere, through its position among them
+        /// or through `+` and `~`, nested selectors included. If it does, rearranging a parent's
+        /// children can change what it matches.
         [[nodiscard]] bool ReadsSiblings() const
         {
             for (usize i = 0; i < m_rules.Size(); ++i)
@@ -307,9 +312,10 @@ export namespace foundation::gui
 
         /// Calls `f(compound)` for each compound that reads siblings with a child or descendant step
         /// below it (`.row:first-child` in `.row:first-child .label`; both of `.a + .b` in
-        /// `.a + .b .c`), nested selectors included: a rearrangement of a parent's children can then
-        /// change what matches inside a child that compound matches, not only the child. Read at the
-        /// subject alone (`li:nth-child(odd)`, `.a + .b`), it changes the children only.
+        /// `.a + .b .c`), nested selectors included. Rearranging a parent's children can then
+        /// change what matches inside a child that compound matches, not only the child. When the
+        /// subject alone reads siblings (`li:nth-child(odd)`, `.a + .b`), a rearrangement restyles
+        /// only the children.
         template <typename F>
         void ForEachSiblingReadAbove(F&& f) const
         {
@@ -481,9 +487,10 @@ export namespace foundation::gui
             for (const StyleSelectorRule& rule : m_rules)
                 m_specificity += rule.Specificity();
 
-            // What its subject's ancestors must have: the id, classes and tag of each compound a
-            // child or descendant combinator relates to the one on its right (`a > b + c`: a is
-            // c's parent too; `a + b > c`: a is only a sibling of c's parent).
+            // Collect what the subject's ancestors must carry: the id, classes and tag of each
+            // compound that a child or descendant combinator relates to the compound on its right.
+            // In `a > b + c`, a is also c's parent; in `a + b > c`, a is only a sibling of c's
+            // parent, so it gives no key.
             m_ancestorKeyCount = 0;
             const auto key = [this](core::StringView name)
             {
@@ -516,13 +523,14 @@ export namespace foundation::gui
     };
 
     /// The names (ids, classes and tags) of the widgets above the one being styled, kept while a
-    /// restyle walks the tree, so a rule that needs an ancestor none of them has is turned away
-    /// without walking up (WebKit's SelectorFilter). A counting Bloom filter: two counters per
-    /// name, so it can say "maybe" wrongly but never "no" wrongly; a counter that fills stays full.
+    /// restyle walks the tree. A rule that needs an ancestor name none of them carries is
+    /// rejected without walking up the tree, as WebKit's SelectorFilter does. It is a counting
+    /// Bloom filter with two counters per name, so it can say "maybe" wrongly but never "no"
+    /// wrongly; a counter that fills stays full.
     class AncestorFilter
     {
     public:
-        /// `widget`'s names join (it is now above what is styled next).
+        /// Adds `widget`'s names, since it is now above the widgets styled next.
         void Push(const UIWidget& widget)
         {
             m_frames.PushBack(static_cast<u32>(m_keys.Size()));
@@ -531,7 +539,7 @@ export namespace foundation::gui
                 Add(cls.AsView());
             Add(widget.GetTag());
         }
-        /// The last pushed widget's names leave (those it had when pushed).
+        /// Removes the names the last pushed widget had when it was pushed.
         void Pop()
         {
             const usize from = m_frames[m_frames.Size() - 1];
@@ -578,7 +586,7 @@ export namespace foundation::gui
             for (u32 which = 0; which < 2; ++which)
             {
                 u8& c = m_counts[Slot(key, which)];
-                if (c != 255) // a full counter stays full: it can no longer tell when to empty
+                if (c != 255) // a full counter stays full, since it can no longer tell when to empty
                     c = static_cast<u8>(c + delta);
             }
         }
@@ -881,7 +889,8 @@ export namespace foundation::gui
             return true;
         const u32 states = element.GetWidgetStates();
         const auto has = [&](u32 flag) { return (wanted & flag) != 0; };
-        // A state the inspector forces reads as set (E8d); forced disabled is not enabled.
+        // A state the inspector forces reads as set, and a widget forced to :disabled does not
+        // match :enabled.
         const u32 forced = element.GetForcedStyleStates();
         const auto forcing = [forced](u32 state) { return (forced & state) != 0; };
         const bool enabled = element.IsEnabled() && !forcing(Node::StateDisabled);
@@ -940,7 +949,8 @@ export namespace foundation::gui
     {
         usize i = 0;
         const usize n = fragment.Size();
-        // The text inside a bracket pair starting at `open` (i left after the closing one).
+        // Returns the text inside a bracket pair that opens at i, and leaves i after the closing
+        // bracket.
         const auto enclosed = [&](char8_t opening, char8_t closing) -> core::StringView
         {
             const usize start = i + 1;
@@ -994,8 +1004,8 @@ export namespace foundation::gui
                 }
                 else if (m_pseudoElement.AsView().Size() != 0)
                 {
-                    // After the part, a pseudo-class is the part's own state: :hover and :active,
-                    // the states a part has (any other matches nothing).
+                    // A pseudo-class after the part tests the part's state. A part has only :hover
+                    // and :active; any other pseudo-class here matches nothing.
                     ++i;
                     const core::StringView name = ReadIdent(fragment, i);
                     if (name == core::StringView(u8"hover"))
@@ -1121,8 +1131,8 @@ export namespace foundation::gui
         if (m_id.AsView().Size() != 0)
             s += kSpecificityId;
         i64 classes = static_cast<i64>(m_classes.Size() + m_attributes.Size() + m_nths.Size() + (m_langs.IsEmpty() ? 0u : 1u));
-        // Its pseudo-classes and its part's states, each one a class's worth (counted apart: the
-        // two sets use the same bits).
+        // Each pseudo-class and each part state counts as much as a class. The two sets are
+        // counted separately because they use the same bits.
         const u32 sets[2] = {m_pseudo, m_partPseudo};
         for (u32 pseudo : sets)
             while (pseudo != 0)
@@ -1135,7 +1145,8 @@ export namespace foundation::gui
             s += kSpecificityTag;
         if (m_pseudoElement.AsView().Size() != 0)
             s += kSpecificityTag; // pseudo-elements count as a type
-        // :not() and :is() add their most specific argument's; :where() adds nothing.
+        // :not() and :is() add the specificity of their most specific argument; :where() adds
+        // nothing.
         const auto most = [](const Array<StyleSelector>& list)
         {
             i64 best = 0;

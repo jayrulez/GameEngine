@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net:datagram - the in-memory unreliable datagram sim.
+// foundation.net:datagram - the in-memory unreliable datagram simulator.
 #include <doctest/doctest.h>
 #include <initializer_list>
 #include "Core/Prelude.h"

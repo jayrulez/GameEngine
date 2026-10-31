@@ -3,10 +3,11 @@
 
 /// Foundation::Animation.Resource - the `foundation.animation.resource` module.
 ///
-/// Skeletons + animation clips as resources: a cooked SkeletonSource / AnimationClipSource
-/// (ISerializable - flat parallel arrays) is built by a factory into the runtime
-/// animation::Skeleton / animation::AnimationClip. Mirrors foundation.geometry.resource
-/// (Source -> Factory -> Product). The graph resource (composite, references clips) lands later.
+/// Skeletons, animation clips and animation graphs as resources. A cooked SkeletonSource or
+/// AnimationClipSource (an ISerializable of flat parallel arrays) is built by a factory into the
+/// runtime animation::Skeleton or animation::AnimationClip, with the same source, factory and
+/// product shape as foundation.geometry.resource. An AnimationGraphSource is authored directly, and
+/// its factory resolves the clips it references.
 
 module;
 #include "Core/Prelude.h"
@@ -72,7 +73,7 @@ export namespace foundation::animation
             }
         }
 
-        // Populate a runtime Skeleton from this source (rebuilds name map + hierarchy).
+        // Populate a runtime Skeleton from this source (rebuilds the name map and hierarchy).
         void FillSkeleton(Skeleton& skel) const
         {
             const i32 count = static_cast<i32>(parentIndices.Size());
@@ -105,8 +106,8 @@ export namespace foundation::animation
     class SkeletonFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates (required: the
+        // application that registers the factory decides).
         explicit SkeletonFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] const TypeInfo* ProductType() const override
@@ -138,9 +139,9 @@ export namespace foundation::animation
 
     // ---- animation clip ------------------------------------------------------------------------
 
-    // What a clip extracts for root motion (root-motion.md), authored on the clip: the root (a bone
-    // name; empty = the armature's own channels when the clip has them, else the skeleton's first
-    // root) and which parts of its travel. Every part is OFF by default.
+    // What a clip extracts for root motion, authored on the clip: the root (a bone name; empty
+    // means the armature's own channels when the clip has them, else the skeleton's first root)
+    // and which parts of its travel. Every part is off by default.
     struct RootMotionSettings
     {
         String rootBone;
@@ -151,8 +152,8 @@ export namespace foundation::animation
         [[nodiscard]] bool Any() const noexcept { return horizontal || vertical || yaw; }
     };
 
-    // Cooked clip: per-track metadata + a dense keyframe pool (times + Float4 values: xyz for
-    // position/scale, xyzw for rotation), plus events. A track whose bone is -1 is a MODEL track:
+    // Cooked clip: per-track metadata and a dense keyframe pool (times and Float4 values: xyz
+    // for position and scale, xyzw for rotation), plus events. A bone -1 track is a model track:
     // the armature node's own channels (the importer keeps them for root motion); the pose never
     // plays it. Appended last: the root motion settings and the curve the cook baked.
     class AnimationClipSource : public ISerializable
@@ -197,9 +198,10 @@ export namespace foundation::animation
             foundation::core::Serialize(ar, "keyValues", keyValues);
             foundation::core::Serialize(ar, "eventTimes", eventTimes);
             foundation::core::Serialize(ar, "eventNames", eventNames);
-            // Appended (root-motion.md P0): a text clip from before them reads with root motion
-            // off. Cooked (binary, positional) clips re-cook: the clip builder's version moved.
-            // Each its own key: a structure writes its fields flat, with no key of its own to test.
+            // Appended fields: a text clip written without them reads with root motion off. Cooked
+            // (binary, positional) clips do not read this way; the clip builder's version makes
+            // them re-cook. Each field has its own key, since a structure writes its fields flat,
+            // with no key of its own to test.
             SerializeAppended(ar, "rootBone", rootMotion.rootBone);
             SerializeAppended(ar, "rootHorizontal", rootMotion.horizontal);
             SerializeAppended(ar, "rootVertical", rootMotion.vertical);
@@ -270,10 +272,10 @@ export namespace foundation::animation
             out.rootYaws = clip.rootMotion.yaws;
         }
 
-        /// Rebuilds `clip` in place. False - and the clip left EMPTY - when the record is
+        /// Rebuilds `clip` in place. False, with the clip left empty, when the record is
         /// malformed: a track table shorter than its bone list, or a keyframe run past the
-        /// pool. Cooked data is ours, but a truncated or corrupt record must refuse, not read
-        /// past the end of an array.
+        /// pool. Cooked data is ours, but a truncated or corrupt record is refused rather than
+        /// read past the end of an array.
         [[nodiscard]] bool FillClip(AnimationClip& clip) const
         {
             clip.ClearForReload();
@@ -436,8 +438,8 @@ export namespace foundation::animation
         }
     }
 
-    /// The root motion cook (root-motion.md P0): bakes the root's travel into the clip's curve and,
-    /// for a root BONE, strips what was extracted from its own tracks so the pose plays in place,
+    /// The root motion cook: bakes the root's travel into the clip's curve and, for a root bone,
+    /// strips what was extracted from its own tracks so the pose plays in place,
     /// keeping frame 0 (a walk keeps its bob when `vertical` is off). `root` is a bone index in the
     /// clip's tracks, or -1 for the armature's own channels (model tracks: converted into model
     /// space by the inverse of the armature's rest transform `modelRest`, and never stripped, as the
@@ -564,8 +566,8 @@ export namespace foundation::animation
     class AnimationClipFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates (required: the
+        // application that registers the factory decides).
         explicit AnimationClipFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] const TypeInfo* ProductType() const override
@@ -599,14 +601,16 @@ export namespace foundation::animation
     };
 
     // ---- animation graph (authored, composite) -------------------------------------------------
-    // The graph is authored directly (its source IS the authoritative form, unlike skeleton/clip which
-    // are captured from models). The factory builds a runtime AnimationGraph, resolving each clip
-    // reference (Guid) via manager.Bind<AnimationClip> - which records a dependency edge, so the manager
-    // keeps the clips alive while the graph is bound (the graph's nodes hold borrowed AnimationClip*).
+    // The graph is authored directly (its source is the authoritative form, unlike skeletons
+    // and clips, which are captured from models). The factory builds a runtime AnimationGraph,
+    // resolving each clip reference (Guid) via manager.Bind<AnimationClip>, which records a
+    // dependency edge, so the manager keeps the clips alive while the graph is bound (the
+    // graph's nodes hold borrowed AnimationClip*).
 
-    // Authored sub-records - plain copyable value structs (so they live in Array<T>), each with a free
-    // Serialize overload found by ADL from the Array<T> serializer. (Not ISerializable, which is
-    // non-copyable.) One state node: a clip, or a 1D/2D blend tree; clips referenced by resource id.
+    // Authored sub-records are plain copyable value structs, so they can live in Array<T>; each
+    // has a free Serialize overload the Array<T> serializer finds by ADL. They are not
+    // ISerializable, which is non-copyable. One state node: a clip, or a 1D or 2D blend tree,
+    // with clips referenced by resource id.
     struct GraphNodeData
     {
         u8 kind = 0;                            // 0 = clip, 1 = blend1d, 2 = blend2d
@@ -698,7 +702,7 @@ export namespace foundation::animation
         foundation::core::Serialize(ar, "transitions", l.transitions);
     }
 
-    // Cooked graph: parameters (name/type + default values) + layers (states/transitions/mask).
+    // Cooked graph: parameters (name, type, default values) and layers (states, transitions, mask).
     class AnimationGraphSource : public ISerializable
     {
         RTTI_OBJECT(AnimationGraphSource, ISerializable)
@@ -791,7 +795,8 @@ export namespace foundation::animation
         }
 
     private:
-        // Resolve a clip reference (null id -> null clip). Bind records the graph->clip dependency edge.
+        // Resolve a clip reference (a null id gives a null clip). Bind records the graph's
+        // dependency on the clip.
         [[nodiscard]] static AnimationClip* ResolveClip(resource::ResourceManager& manager,
                                                         const Guid& id)
         {
@@ -832,8 +837,8 @@ export namespace foundation::animation
     class AnimationGraphFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates (required: the
+        // application that registers the factory decides).
         explicit AnimationGraphFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] const TypeInfo* ProductType() const override
@@ -870,7 +875,8 @@ export namespace foundation::animation
 
 export namespace foundation::animation
 {
-    /// Registers the cooked records + products (content-DB construction by type name). Idempotent.
+    /// Registers the cooked records and products (content-DB construction by type name).
+    /// Idempotent.
     inline void RegisterAnimationResourceTypes()
     {
         GlobalTypeRegistry().Register(SkeletonSource::StaticType());
@@ -884,8 +890,8 @@ export namespace foundation::animation
         GlobalTypeRegistry().Register(AnimationGraph::StaticType());
     }
 
-    /// The animation resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The animation resource module: the engine composition composes this library's factories
+    /// from it.
     inline constexpr foundation::resource::ResourceFactoryDesc kAnimationResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<Skeleton, SkeletonSource, SkeletonFactory>(),
         foundation::resource::FactoryWithAllocator<AnimationClip, AnimationClipSource, AnimationClipFactory>(),

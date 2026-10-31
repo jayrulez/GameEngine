@@ -3,16 +3,15 @@
 
 // Foundation::Input - :runtime partition.
 //
-// ActionRuntime: per-frame evaluation of an InputMap against
-// polled shell device facades. Godot's value model (per-device OR/MAX folding, [0,1]
-// strength, frame-counter-exact edges, circular dead zones) on ez's set model (all enabled
-// sets evaluate; queries resolve flat by priority; exclusive-set push with HELD-SUPPRESSION
-// latching - an action suppressed while physically held stays released until the physical
-// release, so closing a menu never re-fires a held "Fire").
+// ActionRuntime: per-frame evaluation of an InputMap against polled shell device facades.
+// Bindings fold per device (digital OR, analog max magnitude) into a [0, 1] strength, with
+// frame-counter-exact edges and circular dead zones. Every enabled set evaluates and queries
+// resolve flat by set priority. Pushing an exclusive set latches held actions: an action
+// suppressed while physically held stays released until the physical release, so closing a
+// menu never re-fires a held "Fire".
 //
-// Devices arrive through IInputSourceProvider: the game host passes the raw shell, play-in-
-// editor passes the Game viewport's gated InputSurface facades - fixing, by construction,
-// Sedulous's "editor viewport forwards nothing".
+// Devices arrive through IInputSourceProvider: the game host passes the raw shell, and play in
+// the editor passes the Game viewport's gated InputSurface facades.
 
 module;
 #include "Core/Prelude.h"
@@ -32,12 +31,12 @@ export namespace foundation::input
     namespace shell = foundation::shell;
 
     // The per-context script service key: the Input facade resolves an ActionRuntime under this key
-    // (each context can read a DIFFERENT runtime - the shared editor runtime, or a per-GameInstance
+    // (each context can read a different runtime: the shared editor runtime, or a per-GameInstance
     // one). Lives here (not the subsystem) so a GameInstance can install its own runtime without
     // pulling the whole InputSubsystem in.
     inline constexpr core::StringView kInputScriptService = u8"input.runtime";
 
-    // The device seam. All accessors may return null / zero - devices come and go (hotplug,
+    // The device interface. All accessors may return null or zero: devices come and go (hotplug,
     // unfocused editor viewport) and evaluation treats absence as "released".
     class IInputSourceProvider
     {
@@ -47,13 +46,13 @@ export namespace foundation::input
         [[nodiscard]] virtual shell::IMouse* Mouse() = 0;
         [[nodiscard]] virtual i32 GamepadCount() const = 0;
         [[nodiscard]] virtual shell::IGamepad* Gamepad(i32 index) = 0;
-        // Defaulted (not every provider has one): touch coordinates are NORMALIZED window
+        // Defaulted (not every provider has one): touch coordinates are normalized window
         // space, matching the touch bindings' region model.
         [[nodiscard]] virtual shell::ITouch* Touch() { return nullptr; }
         // This frame's tagged shell event stream, gated like the device facades (a
         // viewport provider returns it only while it owns keyboard focus). Consumers
-        // needing ORDER or PAYLOADS polling cannot carry - key sequence, TextInput
-        // characters - read these; the span is valid until the next shell pump.
+        // needing order or payloads that polling cannot carry (key sequence, TextInput
+        // characters) read these; the span is valid until the next shell pump.
         // Defaulted empty: pure-polling providers (tests, fakes) stay valid.
         [[nodiscard]] virtual Span<const shell::InputEvent> Events() { return {}; }
     };
@@ -102,11 +101,10 @@ export namespace foundation::input
         [[nodiscard]] bool IsValid() const noexcept { return index != kInvalid; }
     };
 
-    // Rebind capture (ez GetPressedInputSlot shape): poll once per frame from the rebind
-    // UI; the first ACTIVATED input matching the filter comes back as a ready-made Binding.
-    // Returns false while nothing qualifies (the UI keeps listening; Esc-to-cancel is the
-    // UI's affair). Axis/stick activation threshold is deliberately high (0.6) so drift
-    // never binds.
+    // Rebind capture: poll once per frame from the rebind UI; the first activated input
+    // matching the filter comes back as a ready-made Binding. Returns false while nothing
+    // qualifies (the UI keeps listening; Esc-to-cancel is the UI's affair). The axis and
+    // stick activation threshold is high (0.6) so drift never binds.
     struct CaptureFilter
     {
         bool keys = true;
@@ -228,7 +226,7 @@ export namespace foundation::input
     public:
         static constexpr f32 kPressPoint = 0.5f;
 
-        /// Installs (copies) the map and rebuilds all state. Every set starts ENABLED.
+        /// Installs (copies) the map and rebuilds all state. Every set starts enabled.
         void SetMap(const InputMap& map)
         {
             m_map = map;
@@ -281,11 +279,11 @@ export namespace foundation::input
             return false;
         }
 
-        /// Modal contexts: while the stack is non-empty, only the TOP set's actions read
-        /// active; everything else reads released (with proper release edges + latching).
-        /// Every exclusive TRANSITION additionally latches all physically-held actions -
-        /// ez's require-key-up-on-activation: a held Fire neither Confirms the menu that
-        /// just opened nor re-fires when it closes; modal boundaries demand a fresh press.
+        /// Modal contexts: while the stack is non-empty, only the top set's actions read
+        /// active; everything else reads released (with proper release edges and latching).
+        /// Every exclusive transition also latches all physically held actions, so a held
+        /// Fire neither confirms the menu that just opened nor re-fires when it closes:
+        /// modal boundaries demand a fresh press.
         void PushExclusiveSet(StringView name)
         {
             m_exclusiveStack.PushBack(String(name));
@@ -306,8 +304,8 @@ export namespace foundation::input
         [[nodiscard]] usize ExclusiveDepth() const noexcept { return m_exclusiveStack.Size(); }
 
         // ---- resolution ----
-        /// Flat resolution (the approved model): the name is looked up across ALL sets;
-        /// at query time the highest-priority candidate in an ENABLED set answers.
+        /// Flat resolution: the name is looked up across all sets; at query time the
+        /// highest-priority candidate in an enabled set answers.
         [[nodiscard]] ActionRef Resolve(StringView name)
         {
             for (u32 i = 0; i < static_cast<u32>(m_refs.Size()); ++i)
@@ -359,7 +357,7 @@ export namespace foundation::input
             usize flat = 0;
             for (usize s = 0; s < m_map.sets.Size(); ++s)
             {
-                // Disabled behaves exactly like exclusive-suppressed: released + latching.
+                // Disabled behaves exactly like exclusive-suppressed: released, with latching.
                 const bool suppressed = (m_setEnabled[s] == 0u) ||
                                         (exclusiveTop >= 0 && static_cast<i32>(s) != exclusiveTop);
                 for (usize a = 0; a < m_map.sets[s].actions.Size(); ++a, ++flat)
@@ -472,19 +470,19 @@ export namespace foundation::input
         }
 
         /// Engine time scale, applied to actions whose processors set `timeScale` (their
-        /// VALUE multiplies by it - a rate driving per-second gameplay slows with the
-        /// world). Mouse-delta-style rates should simply not set the flag (the ez rule).
+        /// value multiplies by it, so a rate driving per-second gameplay slows with the
+        /// world). Mouse-delta-style rates should not set the flag.
         void SetTimeScale(f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
         [[nodiscard]] f32 TimeScale() const noexcept { return m_timeScale; }
 
-        /// UI consumption: device CLASSES the UI consumed this frame -
-        /// bindings on those classes read RELEASED through actions (raw facades stay
-        /// unfiltered). Separate classes so a menu eating the mouse doesn't mute gamepad
-        /// movement. Republished every frame by the UI subsystem; sticky until changed.
+        /// UI consumption: the device classes the UI consumed this frame. Bindings on
+        /// those classes read released through actions (raw facades stay unfiltered).
+        /// Classes are separate so a menu eating the mouse doesn't mute gamepad movement.
+        /// Republished every frame by the UI subsystem; sticky until changed.
         struct ConsumptionMask
         {
             bool pointer = false;  // MouseButton/MouseAxis/MouseDelta/TouchButton/TouchStick
-            bool keyboard = false; // Key (+ Composite2D, which is four keys)
+            bool keyboard = false; // Key (and Composite2D, which is four keys)
         };
         void SetConsumptionMask(ConsumptionMask mask) noexcept { m_consumed = mask; }
         [[nodiscard]] ConsumptionMask GetConsumptionMask() const noexcept { return m_consumed; }
@@ -532,7 +530,7 @@ export namespace foundation::input
             return state != nullptr ? state->value : Float2{0.0f, 0.0f};
         }
 
-        /// Ad-hoc composition helpers (Godot): a signed axis from two actions, a vector
+        /// Ad-hoc composition helpers: a signed axis from two actions, a vector
         /// from four, with circular length clamping.
         [[nodiscard]] f32 Axis(ActionRef negative, ActionRef positive) const
         {
@@ -663,10 +661,10 @@ export namespace foundation::input
             {
                 return false;
             }
-            // Modifier semantics per GROUP (shift / ctrl / alt / gui): a binding that names the
-            // group (KeyModifiers::Shift = both bits) is satisfied by EITHER side held; one
-            // that names a specific side needs that side. Requiring every bit of the mask made
-            // a plain Shift binding unreachable (nobody holds both shifts). Found by the Beef port.
+            // Modifier semantics per group (shift, ctrl, alt, gui): a binding that names the
+            // group (KeyModifiers::Shift = both bits) is satisfied by either side held; one
+            // that names a specific side needs that side. Requiring every bit of the mask would
+            // make a plain Shift binding unreachable (nobody holds both shifts).
             const u32 held = static_cast<u32>(keyboard->Modifiers());
             static constexpr u32 kGroups[] = {
                 static_cast<u32>(shell::KeyModifiers::Shift),
@@ -846,7 +844,7 @@ export namespace foundation::input
             }
         }
 
-        // Touch bindings carry per-action STATE (the stick's owning touch + anchor), so
+        // Touch bindings carry per-action state (the stick's owning touch and anchor), so
         // they evaluate here rather than in the stateless per-binding helper.
         [[nodiscard]] static Contribution
         EvaluateTouchBinding(const Binding& b, IInputSourceProvider& devices, ActionState& state)
@@ -879,7 +877,8 @@ export namespace foundation::input
                 return out;
             }
 
-            // TouchStick: a floating stick anchored where its owning touch STARTED.
+            // TouchStick: a floating stick, anchored where its owning touch was when the stick
+            // captured it (the first frame that touch lay inside the region).
             const i32 count = touch->TouchCount();
             if (state.touchHeld)
             {
@@ -956,7 +955,7 @@ export namespace foundation::input
         void EvaluateAction(const Action& action, ActionState& state, IInputSourceProvider& devices,
                             f32 deltaTime, bool suppressed, bool latchHeld)
         {
-            // Fold bindings: per-component max magnitude (Godot MAX), digital OR.
+            // Fold bindings: per-component max magnitude, digital OR.
             Float2 target{0.0f, 0.0f};
             bool digitalDown = false;
             for (const Binding& b : action.bindings)
@@ -981,7 +980,7 @@ export namespace foundation::input
             }
 
             // Processors: response curve, then key-axis smoothing (sensitivity ramp,
-            // gravity recenter, snap-on-flip). sensitivity==0 = instant.
+            // gravity recenter, snap-on-flip). A sensitivity of 0 is instant.
             const ActionProcessors& proc = action.processors;
             target.x = ApplyResponse(target.x, proc.responseExponent);
             target.y = ApplyResponse(target.y, proc.responseExponent);
@@ -1009,9 +1008,9 @@ export namespace foundation::input
             const f32 strength = Max(std::fabs(state.smoothed.x), std::fabs(state.smoothed.y));
             const bool physicallyPressed = digitalDown || strength > kPressPoint;
 
-            // Suppression latching (ez RequireKeyUp): a press that lives through a
-            // suppression window must not re-fire when the window ends; an exclusive
-            // TRANSITION latches every held action (modal boundaries demand a fresh press).
+            // Suppression latching: a press that lives through a suppression window must not
+            // re-fire when the window ends; an exclusive transition latches every held action
+            // (modal boundaries demand a fresh press).
             if ((suppressed || latchHeld) && physicallyPressed)
             {
                 state.latched = true;
@@ -1030,7 +1029,7 @@ export namespace foundation::input
             }
             state.value = (suppressed || state.latched) ? Float2{0.0f, 0.0f} : reportedValue;
 
-            // Interactions reshape the EFFECTIVE press into the reported one (Hold delays
+            // Interactions reshape the effective press into the reported one (Hold delays
             // it, Tap/DoubleTap turn it into one-frame pulses); None passes through.
             bool reported = effective;
             switch (action.interaction.kind)

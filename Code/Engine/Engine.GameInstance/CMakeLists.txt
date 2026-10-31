@@ -1,5 +1,5 @@
 # Engine::GameInstance - `engine.gameinstance`: a running game as a first-class
-# object (scene pairing + script run context + `Game` + instance time scale). Over scene + script.
+# object (scene pairing, script run context, `Game`, instance time scale). Over scene and script.
 
 util_add_engine_library(Engine.GameInstance ALIAS Engine::GameInstance)
 target_link_libraries(Engine.GameInstance PUBLIC

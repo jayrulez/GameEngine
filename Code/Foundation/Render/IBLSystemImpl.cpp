@@ -3,23 +3,24 @@
 
 /// Foundation::Render - the `:ibl` partition.
 ///
-/// Image-Based Lighting: the split-sum environment pipeline (ported from Sedulous.Renderer/IBL with
-/// improvements), PER SCENE. A frame can render several scenes side-by-side (editor pages), each
-/// with its own authored sky - so the products live in per-scene CONTEXTS pooled by scene identity,
-/// and every view binds ITS scene's products (the set-0 bind group is per-view downstream):
+/// Image-Based Lighting: the split-sum environment pipeline, per scene. A frame can render several
+/// scenes side by side (editor pages), each with its own authored sky, so the products live in
+/// per-scene contexts pooled by scene identity, and every view binds its own scene's products (the
+/// set-0 bind group is per view downstream):
 ///   - env cubemap (256², RGBA16F)        : the source radiance, written from the scene's sky source
-///                                          (procedural gradient / analytic / HDR equirect / cubemap).
-///   - SH9 diffuse irradiance (buffer)    : 9 RGB spherical-harmonic coeffs projected from the env
-///                                          cube (REPLACES Sedulous's 32² irradiance cube - cheaper,
-///                                          smoother, seamless). Improvement over Sedulous.
-///   - GGX prefiltered specular (cube+mips): Karis split-sum, importance-sampled per roughness mip.
-/// Shared across scenes: the BRDF integration LUT (sky-independent), all pipelines/layouts/samplers,
-/// and the PROGRAMMATIC equirect/cubemap pixel sources (SetEquirect/SetCubemap - tools/samples).
+///                                          (procedural gradient, analytic, HDR equirect or cubemap).
+///   - SH9 diffuse irradiance (buffer)    : 9 RGB spherical-harmonic coefficients projected from the
+///                                          env cube (cheaper and smoother than an irradiance cube,
+///                                          with no seams).
+///   - GGX prefiltered specular (cube, mips): Karis split-sum, importance-sampled per roughness mip.
+/// Shared across scenes: the BRDF integration LUT (sky-independent), all pipelines, layouts and
+/// samplers, and the programmatic equirect and cubemap pixel sources (SetEquirect, SetCubemap; for
+/// tools and samples).
 ///
-/// Precompute runs only when a context's source is dirty; products are persistent, imported every
-/// frame so the forward pass orders after + samples them (set 0). Context generations come from ONE
-/// system-wide counter, so a generation value never collides across contexts - downstream bind-group
-/// caches can key on it alone ([[bind-group-cache-versioning]]).
+/// Precompute runs only when a context's source is dirty; products are persistent and imported every
+/// frame so the forward pass orders after them and samples them (set 0). Context generations come
+/// from one system-wide counter, so a generation value never collides across contexts and downstream
+/// bind-group caches can key on it alone.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +32,7 @@ import foundation.rhi;
 import foundation.rendergraph;
 import foundation.shaders;
 import foundation.shaders.system;
-import :data;        // SkySnapshot / SkyMode / ExtractedScene (context identity)
+import :data;        // SkySnapshot, SkyMode, ExtractedScene (context identity)
 
 using namespace foundation::core;
 namespace rendergraph = foundation::rendergraph;
@@ -42,7 +43,7 @@ namespace foundation::render
 {
     Status IBLSystem::Initialize()
     {
-        // Cube/LUT fragment shaders share the fullscreen VS; the cube ones prepend IblCommon().
+        // Cube and LUT fragment shaders share the fullscreen VS; the cube ones prepend IblCommon().
 
         if (!CreateSharedResources())
         {
@@ -58,9 +59,9 @@ namespace foundation::render
     void IBLSystem::BeginFrame(rendergraph::RenderGraph& graph)
     {
         // Hot reload: any IBL shader change rebuilds the pipelines and re-runs the whole
-        // precompute (contexts + BRDF) - the cached results are stale. Polled BEFORE the
-        // ready gate: a failed rebuild (broken shader) clears m_ready; a later successful
-        // one restores it. GPU idled by the subsystem on reload.
+        // precompute (contexts and BRDF), since the cached results are stale. Polled before
+        // the ready gate: a failed rebuild (broken shader) clears m_ready and a later
+        // successful one restores it. The subsystem idles the GPU on reload.
         const u64 shaderVersion =
             m_shaders->Version(u8"ibl_fs") + m_shaders->Version(u8"ibl_procenv") +
             m_shaders->Version(u8"ibl_analytic") + m_shaders->Version(u8"ibl_equirect") +
@@ -145,7 +146,7 @@ namespace foundation::render
         ctx->m_lastUsedFrame = m_frame;
 
         // Sky authoring: re-dirty only for fields baked into the env cube (sunAngularSize is
-        // analytic-only - the sky pass draws the disc live). Sun direction feeds the procedural env.
+        // analytic only; the sky pass draws the disc live). Sun direction feeds the procedural env.
         if (!PrecomputeEqual(sky, ctx->m_sky))
         {
             ctx->m_dirty = true;
@@ -156,15 +157,15 @@ namespace foundation::render
             ctx->m_sunDir = sunDir;
             ctx->m_dirty = true;
         }
-        // A programmatic pixel source changed (SetEquirect/SetCubemap): textured modes re-bake.
+        // A programmatic pixel source changed (SetEquirect, SetCubemap): textured modes re-bake.
         if (ctx->m_sourceStamp != m_sourceStamp &&
             (sky.mode == SkyMode::HDREquirect || sky.mode == SkyMode::Cubemap))
         {
             ctx->m_dirty = true;
         }
         ctx->m_sourceStamp = m_sourceStamp;
-        // Asset-driven sky texture: (re)build the context's external bind group when the PRODUCT
-        // changes - detected by uid, never the pointer (reloads reuse freed addresses; deferred
+        // Asset-driven sky texture: (re)build the context's external bind group when the product
+        // changes, detected by uid rather than the pointer (reloads reuse freed addresses; deferred
         // product destruction keeps the old view alive for in-flight frames).
         if (sky.textureUid != ctx->m_externalUid)
         {
@@ -206,7 +207,7 @@ namespace foundation::render
             }
             ctx->m_dirty = true;
         }
-        ctx->m_sky = sky; // always store the latest (the sky pass reads sun size/intensity live)
+        ctx->m_sky = sky; // always store the latest (the sky pass reads sun size and intensity live)
 
         ProcessContext(*ctx, graph);
         return ctx;
@@ -284,8 +285,8 @@ namespace foundation::render
             return;
         }
         DestroyCubemap();
-        // sRGB format so the hardware decodes the (sRGB-encoded LDR) faces to linear on sample - the
-        // env cube is a linear working-space texture. Without this the sky reads washed out.
+        // sRGB format so the hardware decodes the sRGB-encoded LDR faces to linear on sample: the
+        // env cube is a linear working-space texture, and without this the sky reads washed out.
         rhi::TextureDesc td{};
         td.format = rhi::TextureFormat::RGBA8UnormSrgb;
         td.width = faceSize;
@@ -399,17 +400,17 @@ namespace foundation::render
         {
             --ctx.m_bakeWarmup; // startup re-bake window (survives dropped-submit startup frames)
         }
-        // Generation tracks PRODUCT IDENTITY (consumers key bind-group caches on it), so it moves
-        // only on a real content change - not on a warmup re-bake, which re-renders the same
-        // content into the same textures. Bumping it there would churn every downstream cache for
-        // the whole warmup window and break the steady-state contract.
+        // Generation tracks product identity (consumers key bind-group caches on it), so it moves
+        // only on a real content change, not on a warmup re-bake, which re-renders the same
+        // content into the same textures. Bumping it there would rebuild every downstream cache
+        // through the whole warmup window.
         if (ctx.m_dirty)
         {
             ctx.m_generation = ++m_nextGeneration; // system-wide: never collides across contexts
         }
         ctx.m_dirty = false;
 
-        // (1) Source -> env cube: 6 faces. The scene-authored ASSET texture wins over the
+        // Step 1, source to env cube: 6 faces. The scene-authored asset texture wins over the
         // programmatic pixel path (SetEquirect/SetCubemap) when both are present.
         const rendergraph::RGHandle envH = ctx.m_envH;
         rhi::BindGroup* equirectBG =
@@ -423,8 +424,8 @@ namespace foundation::render
                                        : useCubemap  ? m_cubemapPipeline
                                        : useAnalytic ? m_analyticPipeline
                                                      : m_envPipeline;
-        // Procedural/analytic have no env source; bind the dummy so the declared
-        // group is always satisfied (WebGPU requirement, harmless elsewhere).
+        // Procedural and analytic skies have no env source; bind the dummy so the
+        // declared group is always satisfied (a WebGPU requirement, harmless elsewhere).
         rhi::BindGroup* envBG =
             useEquirect ? equirectBG : useCubemap ? cubemapBG : m_dummyEnvBindGroup;
         for (u32 face = 0; face < 6; ++face)
@@ -454,12 +455,12 @@ namespace foundation::render
                                 });
         }
 
-        // (2) Build the env mip pyramid: box-downsample each mip from the previous. Reads mip m-1 (a
-        // single-mip view) and writes mip m - non-overlapping subresources, so the graph orders + barriers
-        // it correctly. SH/prefilter (whole-resource reads) then run after the whole chain is written.
+        // Step 2, the env mip pyramid: box-downsample each mip from the previous. Each pass reads mip m-1
+        // (a single-mip view) and writes mip m, non-overlapping subresources, so the graph orders it and
+        // places barriers correctly. SH and prefilter (whole-resource reads) run after the chain is written.
         DeclareEnvMips(ctx, graph, envH);
 
-        // (3) env -> SH9 diffuse (compute), (4) env -> prefilter mips (PDF-samples the pyramid).
+        // Step 3, env to SH9 diffuse (compute); step 4, env to prefilter mips (PDF-samples the pyramid).
         DeclareShProjection(ctx, graph, envH, ctx.m_shH);
         DeclarePrefilter(ctx, graph, envH, ctx.m_prefilterH);
     }
@@ -680,8 +681,8 @@ namespace foundation::render
         {
             return false;
         }
-        // Single-mip cube views of each env mip - bound as the source when downsampling the NEXT mip, so
-        // the read descriptor covers only mip m (never the mip m+1 being rendered -> no read/write hazard).
+        // Single-mip cube views of each env mip, bound as the source when downsampling the next mip, so
+        // the read descriptor covers only mip m, never the mip m+1 being rendered (no read/write hazard).
         for (u32 m = 0; m < kEnvMips; ++m)
         {
             rhi::TextureViewDesc mv{};
@@ -719,7 +720,7 @@ namespace foundation::render
             return false;
         }
 
-        // SH9 coefficient buffer (RW for the compute write, read-only in forward).
+        // SH9 coefficient buffer (read-write for the compute pass, read-only in forward).
         rhi::BufferDesc sd{};
         sd.size = ShBytes();
         sd.usage = rhi::BufferUsage::Storage;
@@ -730,7 +731,7 @@ namespace foundation::render
             return false;
         }
 
-        // env sample bind group (for prefilter: full mip chain) + per-mip downsample sources.
+        // env sample bind group (for prefilter: full mip chain) and the per-mip downsample sources.
         rhi::BindGroupEntry be[] = {rhi::BindGroupEntry::TextureEntry(ctx.m_envSampleView),
                                     rhi::BindGroupEntry::SamplerEntry(m_sampler)};
         rhi::BindGroupDesc bgd{};
@@ -753,7 +754,7 @@ namespace foundation::render
             }
         }
 
-        // SH compute bind group (t0 env cube + s0 sampler + u0 SH buffer).
+        // SH compute bind group (t0 env cube, s0 sampler, u0 SH buffer).
         rhi::BindGroupEntry she[] = {
             rhi::BindGroupEntry::TextureEntry(ctx.m_envSampleView),
             rhi::BindGroupEntry::SamplerEntry(m_sampler),
@@ -859,7 +860,7 @@ namespace foundation::render
             }
         }
 
-        // --- env sample bind group layout (t0 cube + s0 sampler), shared by prefilter ---
+        // --- env sample bind group layout (t0 cube, s0 sampler), shared by prefilter ---
         rhi::BindGroupLayoutEntry envTex = rhi::BindGroupLayoutEntry::SampledTexture(
             0, rhi::ShaderStage::Fragment, rhi::TextureViewDimension::TextureCube);
         rhi::BindGroupLayoutEntry envSamp =
@@ -889,8 +890,8 @@ namespace foundation::render
         pcRange.stages = rhi::ShaderStage::Fragment;
         pcRange.offset = 0;
         pcRange.size = sizeof(GpuIblPush);
-        // procedural env: push constants + the env bind group (unused but included so
-        // push constants land at space1, matching the prefilter/downsample/equirect layouts).
+        // procedural env: push constants and the env bind group (unused, but included so
+        // push constants land at space1, matching the prefilter, downsample and equirect layouts).
         rhi::BindGroupLayout* envLayouts[] = {m_envLayout};
         rhi::PipelineLayoutDesc envPld{};
         envPld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{envLayouts, 1};
@@ -899,7 +900,7 @@ namespace foundation::render
         {
             return false;
         }
-        // prefilter: env bind group + push constants.
+        // prefilter: env bind group and push constants.
         rhi::BindGroupLayout* preLayouts[] = {m_envLayout};
         rhi::PipelineLayoutDesc prePld{};
         prePld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{preLayouts, 1};
@@ -931,7 +932,7 @@ namespace foundation::render
             return false;
         }
 
-        // --- SH compute pipeline (t0 cube + s0 sampler + u0 SH buffer; bind groups are per context) ---
+        // --- SH compute pipeline (t0 cube, s0 sampler, u0 SH buffer; bind groups are per context) ---
         rhi::ShaderModule* cs = m_shaders->GetVariant(u8"ibl_sh", shaders::ShaderStage::Compute,
                                                       shaders::ShaderFlags::None);
         if (cs == nullptr)
@@ -1019,7 +1020,7 @@ namespace foundation::render
             m_shPipeline = nullptr;
         }
 
-        // equirect/cubemap are rebuilt lazily by their Ensure*Pipeline on next use.
+        // equirect and cubemap are rebuilt lazily by their Ensure*Pipeline on next use.
         return m_envPipeline != nullptr && m_analyticPipeline != nullptr &&
                m_downsamplePipeline != nullptr && m_prefilterPipeline != nullptr &&
                m_brdfPipeline != nullptr && m_shPipeline != nullptr;

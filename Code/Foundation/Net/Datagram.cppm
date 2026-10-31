@@ -3,11 +3,11 @@
 
 /// Foundation::Net - `foundation.net:datagram` partition.
 ///
-/// The UNRELIABLE datagram substrate the reliability layer is built on.
-/// `IDatagramSocket` is a connectionless send/recv over an opaque `DatagramEndpoint`; its
-/// backends are a real UDP socket (Core/System) and the in-memory `SimDatagramNetwork`
-/// here. Splitting reliability from the socket is what lets the reliable-UDP protocol be tested
-/// against deterministic packet loss/reorder with no OS sockets.
+/// The unreliable datagram layer the reliability layer is built on.
+/// `IDatagramSocket` is a connectionless send and receive over an opaque `DatagramEndpoint`; its
+/// backends include a real UDP socket (Core/System) and the in-memory `SimDatagramNetwork`
+/// here. Keeping reliability apart from the socket lets the reliable-UDP protocol be tested
+/// against deterministic packet loss and reordering with no OS sockets.
 
 module;
 #include "Core/Prelude.h"
@@ -22,8 +22,8 @@ using namespace foundation::core;
 export namespace foundation::net
 {
 
-    // An opaque datagram address. Real UDP packs IPv4+port; the sim uses a socket index. Comparable +
-    // hashable so a transport can key per-remote connection state off it.
+    // An opaque datagram address. Real UDP packs IPv4 and port; the sim uses a socket index. Comparable
+    // and hashable so a transport can key per-remote connection state off it.
     struct DatagramEndpoint
     {
         u64 value = 0;
@@ -38,7 +38,7 @@ export namespace foundation::net
         [[nodiscard]] bool IsValid() const noexcept { return value != 0; }
     };
 
-    // Connectionless, unreliable datagram I/O - the substrate reliability rides on. No ordering, no
+    // Connectionless, unreliable datagram I/O, which reliability is built on. No ordering, no
     // delivery guarantee; a datagram arrives whole or not at all.
     class IDatagramSocket
     {
@@ -52,7 +52,7 @@ export namespace foundation::net
 
     class SimDatagramNetwork;
 
-    // A sim socket: Send routes through the shared network (which applies loss/latency on Advance);
+    // A sim socket: Send routes through the shared network (which applies loss and latency on Advance);
     // Receive drains what the network has delivered here.
     class SimDatagramSocket final : public IDatagramSocket
     {
@@ -90,12 +90,12 @@ export namespace foundation::net
     };
 
     // A deterministic in-memory datagram network: hands out sockets with unique endpoints and routes
-    // datagrams between them under injectable conditions (seeded rng + manual clock via Advance). This
-    // is the reliability layer's test harness - lossy on purpose.
+    // datagrams between them under injectable conditions (a seeded rng and a manual clock via Advance).
+    // This is the reliability layer's test harness, lossy on purpose.
     class SimDatagramNetwork
     {
     public:
-        // The allocator (required - the owner decides) backs the simulated sockets.
+        // The allocator (required; the owner decides) backs the simulated sockets.
         explicit SimDatagramNetwork(IAllocator& allocator, const SimConditions& sim = {})
             : m_allocator(&allocator), m_sim(sim), m_rng(sim.seed)
         {
@@ -158,7 +158,7 @@ export namespace foundation::net
 
         void Route(const DatagramEndpoint& from, const DatagramEndpoint& to, Span<const byte> data)
         {
-            // Every datagram is subject to loss/reorder/dup (this is the raw unreliable layer).
+            // Every datagram is subject to loss, reordering and duplication (this is the raw unreliable layer).
             if (Chance(m_sim.lossPct))
             {
                 return;

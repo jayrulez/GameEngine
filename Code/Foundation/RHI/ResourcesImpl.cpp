@@ -3,8 +3,8 @@
 
 // RHI - :resources implementation unit.
 //
-// Out-of-line bodies whose headers must stay out of the interface (GCC gcm-cluster
-// hygiene): currently just the TextureView unique-id counter (<atomic>).
+// Out-of-line bodies whose headers stay out of the interface, where they would make GCC emit an
+// unreadable gcm cluster for consumers: the TextureView unique-id counter (<atomic>).
 
 module;
 #include <atomic>

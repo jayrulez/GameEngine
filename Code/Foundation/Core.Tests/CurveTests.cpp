@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Curve (foundation.core:curve) - the scalar keyframe sampler: exact key hits, per-segment
+// Curve (foundation.core:curve), the scalar keyframe sampler: exact key hits, per-segment
 // interpolation (Constant/Linear/Cubic), end clamping, key ordering, and the Hermite tangent math.
 
 #include <doctest/doctest.h>
@@ -90,8 +90,8 @@ TEST_CASE("curve: cubic Hermite - endpoints exact, flat tangents ease (smoothste
 
 TEST_CASE("curve: cubic with matched linear tangents equals the straight line")
 {
-    // Tangent = slope (rise/run) on both ends of a value-0..10 over-time-0..2 segment => the cubic
-    // collapses to the linear line through the endpoints.
+    // With the tangent equal to the slope (rise over run) on both ends of a value-0..10,
+    // time-0..2 segment, the cubic collapses to the straight line through the endpoints.
     Curve c;
     const f32 slope = 5.0f; // (10-0)/(2-0)
     c.AddKey(Key(0.0f, 0.0f, CurveKeyInterpolation::Cubic, slope, slope));
@@ -121,9 +121,9 @@ TEST_CASE("curve: coincident keys jump to the later value")
     Curve c;
     c.AddKey(Key(0.0f, 0.0f));
     c.AddKey(Key(1.0f, 5.0f));
-    c.AddKey(Key(1.0f, 50.0f)); // same time - a hard step
+    c.AddKey(Key(1.0f, 50.0f)); // same time: a hard step
     CHECK(c.Evaluate(0.5f) == doctest::Approx(2.5f));
-    // At/just before the coincident pair, the segment is degenerate -> later value.
+    // At the coincident pair the segment is degenerate, so the later value wins.
     CHECK(c.Evaluate(1.0f) == doctest::Approx(50.0f));
 }
 

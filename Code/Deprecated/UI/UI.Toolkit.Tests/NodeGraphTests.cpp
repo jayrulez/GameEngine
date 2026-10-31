@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Verbatim port of Sedulous.UI.Tests/src/NodeGraphTests.bf (SedulousEngine).
-// Data-model + add/remove/connection/selection/transform/auto-size/custom-validator coverage for the
-// toolkit NodeGraphCanvas. Beef `scope NodeGraphNode()` (heap, owned) -> the canvas stores nodes as
-// UniquePtr<NodeGraphNode>, so tests build a node via MakeUnique, keep the raw pointer for later
-// assertions (the canvas keeps a stable address), and Move the owner into AddNode.
+// Tests for the toolkit NodeGraphCanvas: the data model, adding and removing nodes, connections,
+// selection, coordinate transforms, auto-sizing and custom validators. The canvas stores nodes as
+// UniquePtr<NodeGraphNode>, so tests build a node with MakeUnique, keep the raw pointer for later
+// checks (the canvas keeps a stable address), and move the owner into AddNode.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -19,7 +18,7 @@ namespace core = foundation::core;
 
 namespace
 {
-    // Beef byte `Color(r,g,b,a)` literal -> float core::Color.
+    // Builds a float core::Color from byte channels.
     [[nodiscard]] core::Color Rgb(u8 r, u8 g, u8 b, u8 a = 255)
     {
         return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
@@ -142,7 +141,7 @@ TEST_CASE("nodegraph: RemoveNode_RemapsConnectionIndices")
     // Connection: B(1) -> C(2).
     canvas->AddConnection(Conn(1, 0, 2, 0));
 
-    // Remove A(0) - B becomes 0, C becomes 1.
+    // Remove A(0): B becomes 0, C becomes 1.
     canvas->RemoveNode(0);
     CHECK(canvas->ConnectionCount() == 1);
     const NodeGraphConnection conn = canvas->GetConnection(0);
@@ -205,7 +204,7 @@ TEST_CASE("nodegraph: AddConnection_RejectsInvalidIndices")
     n0->OutputPorts.PushBack(MakePort(PortDirection::Output));
     canvas->AddNode(Move(n0));
 
-    // Dest node doesn't exist.
+    // The destination node does not exist.
     const i32 idx = canvas->AddConnection(Conn(0, 0, 5, 0));
     CHECK(idx == -1);
 }
@@ -229,7 +228,7 @@ TEST_CASE("nodegraph: AddConnection_TypeValidation_SameType")
     n1->InputPorts.PushBack(in1);
     canvas->AddNode(Move(n1));
 
-    // Mismatched types should be rejected.
+    // Mismatched types are rejected.
     const i32 idx = canvas->AddConnection(Conn(0, 0, 1, 0));
     CHECK(idx == -1);
 }
@@ -288,7 +287,7 @@ TEST_CASE("nodegraph: SelectNode")
     CHECK(n0->IsSelected);
     CHECK(!n1->IsSelected);
 
-    // Selecting another clears previous.
+    // Selecting another clears the previous selection.
     canvas->SelectNode(1);
     CHECK(!n0->IsSelected);
     CHECK(n1->IsSelected);
@@ -418,7 +417,7 @@ TEST_CASE("nodegraph: AutoSize_ExpandsForPorts")
 
     NodeGraphNode* raw = node.Get();
     canvas->AddNode(Move(node)); // AddNode calls AutoSizeNode.
-    CHECK(raw->Size.y > 40);     // Should have expanded for 5 ports.
+    CHECK(raw->Size.y > 40);     // Expanded for 5 ports.
 }
 
 // === Custom Connection Validator ===
@@ -468,7 +467,7 @@ TEST_CASE("nodegraph: straight mode connects PORT-LESS nodes and allows parallel
 
     // Port-less edges connect (BezierPorts would refuse: no ports to validate).
     CHECK(canvas.AddConnection(Conn(a, 0, b, 0)) >= 0);
-    // A second A->B transition is LEGAL (state machines draw them in offset lanes).
+    // A second A->B transition is legal (state machines draw them in offset lanes).
     CHECK(canvas.AddConnection(Conn(a, 0, b, 0)) >= 0);
     // The reverse direction too.
     CHECK(canvas.AddConnection(Conn(b, 0, a, 0)) >= 0);
@@ -485,7 +484,7 @@ TEST_CASE("nodegraph: bezier mode still refuses port-less connections (regressio
     NodeGraphCanvas canvas; // default BezierPorts
     const i32 a = canvas.AddNode(MakeNode(u8"A"));
     const i32 b = canvas.AddNode(MakeNode(u8"B"));
-    CHECK(canvas.AddConnection(Conn(a, 0, b, 0)) == -1); // no ports -> invalid
+    CHECK(canvas.AddConnection(Conn(a, 0, b, 0)) == -1); // no ports, so invalid
 }
 
 TEST_CASE("nodegraph: StartLinkFrom ignores invalid indices and ReadOnly canvases")
@@ -496,9 +495,9 @@ TEST_CASE("nodegraph: StartLinkFrom ignores invalid indices and ReadOnly canvase
     bool fired = false;
     canvas.OnNodeLinkRequested.Add([&fired](i32, i32) { fired = true; });
 
-    canvas.StartLinkFrom(-1); // out of range: no-op
+    canvas.StartLinkFrom(-1); // out of range: ignored
     canvas.StartLinkFrom(5);
     canvas.ReadOnly = true;
-    canvas.StartLinkFrom(a); // read-only: no-op
+    canvas.StartLinkFrom(a); // read-only: ignored
     CHECK_FALSE(fired);      // no gesture ever started, so nothing can fire
 }

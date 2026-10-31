@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// CodeEditView headless tests: real InputManager key/mouse driving (typing, navigation,
-// undo chords, Tab-through-WantsTabKey, gutter breakpoint clicks, clipboard round trip) plus
-// CompletionModel unit coverage (filter ranking + popup key routing without a UIContext).
+// CodeEditView headless tests, driving keys and the mouse through a real InputManager (typing,
+// navigation, undo chords, Tab through WantsTabKey, gutter breakpoint clicks, clipboard round
+// trip), and CompletionModel unit coverage (filter ranking and popup key routing without a
+// UIContext).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -156,7 +157,7 @@ TEST_CASE("toolkit-codeeditview: SmartHome")
 TEST_CASE("toolkit-codeeditview: TabThroughFocusManager")
 {
     Harness h;
-    // Tab must REACH the editor (WantsTabKey) instead of moving focus.
+    // Tab reaches the editor (WantsTabKey) instead of moving focus.
     h.Type(u8"a");
     h.Key(KeyCode::Tab);
     CHECK(h.ctx.GetFocusManager()->FocusedView() == h.view.Get());
@@ -181,7 +182,7 @@ TEST_CASE("toolkit-codeeditview: UndoRedoChords")
     CHECK(h.view->Text().IsEmpty());
     h.Key(KeyCode::Y, KeyModifiers::Ctrl);
     CHECK(h.view->Text().AsView() == StringView(u8"abc"));
-    h.Key(KeyCode::Z, KeyModifiers::Ctrl | KeyModifiers::Shift); // Ctrl+Shift+Z = redo (no-op here)
+    h.Key(KeyCode::Z, KeyModifiers::Ctrl | KeyModifiers::Shift); // Ctrl+Shift+Z is redo (nothing to redo here)
     CHECK(h.view->Text().AsView() == StringView(u8"abc"));
 }
 
@@ -210,7 +211,7 @@ TEST_CASE("toolkit-codeeditview: UnknownChordsStayUnhandled")
 {
     Harness h;
     h.Type(u8"x");
-    // Ctrl+S is an application shortcut - the editor must NOT consume it.
+    // Ctrl+S is an application shortcut, so the editor does not consume it.
     const bool handled =
         h.ctx.GetInputManager()->ProcessKeyDown(KeyCode::S, KeyModifiers::Ctrl, false);
     (void)handled; // dispatch itself may return true via shortcut table; the text is untouched
@@ -267,7 +268,7 @@ TEST_CASE("toolkit-codeeditview: CompletionEndToEnd")
     REQUIRE(h.view->Completion().IsOpen());
     CHECK(h.view->Completion().ItemCount() == 2);
 
-    // Down + Enter accepts the second candidate (sorted: continue_run, counter).
+    // Down then Enter accepts the second candidate (sorted: continue_run, counter).
     h.Key(KeyCode::Down);
     h.Key(KeyCode::Return);
     CHECK(!h.view->Completion().IsOpen());
@@ -284,10 +285,9 @@ TEST_CASE("toolkit-codeeditview: CompletionEndToEnd")
 
 TEST_CASE("toolkit-codeeditview: AutoScrollKeepsCaretLineFullyVisible")
 {
-    // Regression (first smoke run): each Enter at the bottom edge advanced the scroll via
-    // EnsureCursorVisible, then the vertical ScrollBar - fed the new value BEFORE its max was
-    // updated - clamped it against the stale max and wrote the clamped value back, leaving
-    // the caret line half-hidden. Reproduce the exact sequence: Enter, then a layout pass.
+    // Each Enter at the bottom edge advances the scroll via EnsureCursorVisible. The vertical
+    // ScrollBar must not clamp the new value against a stale max and write it back, which would
+    // leave the caret line half-hidden. The sequence is Enter, then a layout pass.
     Harness h;
     const f32 lineH = h.view->LineHeight();
     const i32 overflow = static_cast<i32>(600.0f / lineH) + 10;
@@ -296,7 +296,7 @@ TEST_CASE("toolkit-codeeditview: AutoScrollKeepsCaretLineFullyVisible")
         h.Key(KeyCode::Return);
         h.LayoutPass();
     }
-    // The caret line's bottom must sit fully inside the widget after every pass.
+    // The caret line's bottom sits fully inside the widget after every pass.
     const f32 caretBottom = 4.0f +
                             (static_cast<f32>(h.view->CursorPosition().line) + 1.0f) * lineH -
                             h.view->ScrollY();
@@ -306,7 +306,7 @@ TEST_CASE("toolkit-codeeditview: AutoScrollKeepsCaretLineFullyVisible")
 
 TEST_CASE("toolkit-codeeditview: CursorPerRegion")
 {
-    // The gutter + scrollbars must not show the IBeam. The text area is IBeam;
+    // The gutter and scrollbars do not show the IBeam. The text area is IBeam;
     // the gutter and the scrollbar children resolve to the arrow.
     Harness h;
     h.view->SetText(u8"one\ntwo");
@@ -373,7 +373,7 @@ TEST_CASE("toolkit-codeeditview: FindBarSearchAndNavigate")
     CHECK(h.view->CurrentMatchIndex() == 0);
     CHECK(h.view->SelectedText().AsView() == StringView(u8"alpha")); // typing selects
 
-    // F3 from the FIELD advances (capture-phase interplay), wrapping at the end.
+    // F3 from the field advances (through the capture phase), wrapping at the end.
     h.Key(KeyCode::F3);
     CHECK(h.view->CurrentMatchIndex() == 1);
     h.Key(KeyCode::F3);
@@ -511,7 +511,7 @@ TEST_CASE("toolkit-codeeditview: DiagnosticTooltip")
     CHECK(h.view->CreateTooltipContent().Get() == nullptr);
 }
 
-// ---- trigger characters + markup completion ----
+// ---- trigger characters and markup completion ----
 
 namespace
 {
@@ -538,7 +538,7 @@ TEST_CASE("toolkit-codeeditview: TriggerCharacterOpensCompletion")
     h.view->AddCompletionProvider(&probe);
     h.view->DocumentWordCompletion = false;
 
-    // '.' (the default trigger) opens the popup with an EMPTY prefix.
+    // '.' (the default trigger) opens the popup with an empty prefix.
     h.Type(u8"x.");
     REQUIRE(h.view->Completion().IsOpen());
     CHECK(probe.lastPrefix.IsEmpty());
@@ -549,9 +549,9 @@ TEST_CASE("toolkit-codeeditview: TriggerCharacterOpensCompletion")
     h.Key(KeyCode::Return);
     CHECK(h.view->Text().AsView() == StringView(u8"x.Member"));
 
-    // Ranking: provider results sort ABOVE document words even when the words are
-    // capitalized (ASCII-uppercase would otherwise win the alphabetical sort and bury
-    // context results below the popup fold - the first-smoke-run finding).
+    // Ranking: provider results sort above document words even when the words are capitalized
+    // (ASCII uppercase would otherwise win the alphabetical sort and push context results below
+    // the popup's visible rows).
     h.view->DocumentWordCompletion = true;
     h.view->SetText(u8"Aardvark Banana\ny.");
     h.view->SetCursorPosition(CodePosition{1, 2});
@@ -646,7 +646,7 @@ TEST_CASE("toolkit-completionmodel: KeyRouting")
     CHECK(model.HandleKey(KeyCode::Tab) == CompletionKeyResult::Accepted);
     CHECK(model.HandleKey(KeyCode::Escape) == CompletionKeyResult::Dismissed);
     CHECK(!model.IsOpen());
-    CHECK(model.HandleKey(KeyCode::Down) == CompletionKeyResult::Ignored); // closed = inert
+    CHECK(model.HandleKey(KeyCode::Down) == CompletionKeyResult::Ignored); // closed, so it ignores keys
 }
 
 TEST_CASE("toolkit-codeeditview: InsertAtCursor is one discrete undo unit")
@@ -657,7 +657,7 @@ TEST_CASE("toolkit-codeeditview: InsertAtCursor is one discrete undo unit")
     CHECK(h.view->Text().AsView() == StringView(u8"call Float3"));
     CHECK(h.view->CursorPosition() == CodePosition{0, 11});
 
-    // Replaces a selection, and the empty string is a no-op.
+    // Replaces a selection, and the empty string does nothing.
     h.view->SetCursorPosition(CodePosition{0, 5});
     h.Key(KeyCode::End, KeyModifiers::Shift);
     h.view->InsertAtCursor(u8"Quaternion");

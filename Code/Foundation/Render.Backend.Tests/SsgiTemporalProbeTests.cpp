@@ -3,12 +3,12 @@
 
 // SSGI under a small, bright, moving light, measured at the pixel on real Vulkan and WebGPU devices
 // through the full RenderFrame chain: a lantern-sized glowing cube walks along a grey wall over a
-// grey floor under a dim ambient, as Lamplight's guard carries his lantern past a hedge. The few
-// GI rays that hit so small and bright a source flash far above the bounce around them; history
-// kept those flashes and faded them slowly on still pixels, so a speckled smear trailed the
-// lantern (the user's report). Measured: the specks around the light, the floor just behind it
-// against just ahead of it, the frame-to-frame steadiness once it stops, and how mottled its
-// glow on the wall is then and how much its pixels flicker.
+// grey floor under a dim ambient, as a guard carries a lantern past a hedge. The few GI rays that
+// hit so small and bright a source flash far above the bounce around them; a history that keeps
+// those flashes and fades them slowly on still pixels leaves a speckled smear trailing the
+// lantern. Measured: the specks around the light, the floor just behind it against just ahead of
+// it, the frame-to-frame steadiness once it stops, and how mottled its glow on the wall is then
+// and how much its pixels flicker.
 // Cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
 //   OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 ./Render.Backend.Tests
 #include <doctest/doctest.h>
@@ -188,7 +188,7 @@ namespace
             scene.SetAmbient(Float3{0.05f, 0.05f, 0.06f});
             MeshRenderData* floor = scene.Add<MeshRenderData>();
             // Each with an id of its own: the renderer keys last frame's transform (the motion
-            // vectors) by it, and a shared id made every mesh look moved.
+            // vectors) by it, so a shared id would make every mesh look moved.
             floor->entityId = 1;
             floor->world = Float4x4::Identity();
             floor->worldRadius = 15.0f;
@@ -373,23 +373,21 @@ namespace
                                          << " without SSGI), shimmer a pixel " << on.shimmer
                                          << ", bind groups built standing " << on.groupsStanding);
         REQUIRE(on.nearStill > off.nearStill + 10.0f); // the bounce is there to see
-        // No trail: behind the light no brighter than ahead of it (the trusted history left it
-        // 38.6 behind against 23.7 ahead). No flashes on top of the scene's own edges, and as
-        // steady as before once it stands (0.8 a frame).
+        // No trail: behind the light no brighter than ahead of it. No flashes on top of the scene's
+        // own edges, and steady once it stands.
         CHECK(on.behind <= on.ahead * 1.15f + 3.0f);
         CHECK(on.specks <= off.specks + 5.0f);
         CHECK(on.wobble <= 1.5f);
-        // No clouds: the tight clip alone held the history to a noisy neighbourhood and left the
-        // glow mottled (3.6, against 3.0 for the old resolve and 0.7 without SSGI, the user's
-        // blotchy walls in Lamplight); the a-trous denoise after the accumulate smooths it (2.55).
+        // No clouds: a tight clip alone holds the history to a noisy neighbourhood and leaves the
+        // glow mottled; the a-trous denoise after the accumulate smooths it.
         CHECK(on.blotch <= 2.8f);
-        // No flicker: with the history that close to the frame, two rays a pixel left the wall
-        // beside the glow changing 0.98 a pixel a frame once it stood (Lamplight's wall by the
-        // guard, 0.77); four rays of half the steps, the same taps, 0.43.
+        // No flicker: with the history that close to the frame, two rays a pixel leave the wall
+        // beside the glow changing visibly once it stands; four rays of half the steps, with the
+        // same taps, keep it under the bound.
         CHECK(on.shimmer <= 0.7f);
-        // A still view's inputs all come back, so its bind groups do too: the composite and the
-        // next frame's accumulate shared one cache keyed by the same history view and threw each
-        // other's group away, two built a frame (38 over the standing frames).
+        // A still view's inputs all come back, so its bind groups do too. The composite and the
+        // next frame's accumulate must not share one cache keyed by the same history view, or they
+        // throw each other's group away and build two a frame.
         CHECK(on.groupsStanding == 0u);
     }
 

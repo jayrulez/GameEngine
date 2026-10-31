@@ -4,7 +4,7 @@ util_add_engine_library(Geometry.Pipeline ALIAS Pipeline::Geometry)
 target_link_libraries(Geometry.Pipeline
     PUBLIC Foundation::Core Pipeline::Core Foundation::Content
            Foundation::Geometry Foundation::Geometry.Resource Foundation::Policy
-    # Cook-time only; PRIVATE + impl-unit include keeps the vendored
+    # Cook-time only; a PRIVATE link and an include in the implementation unit keep the vendored
     # header out of the module interface and out of every consumer's link line.
     PRIVATE ThirdParty::MeshOptimizer)
 

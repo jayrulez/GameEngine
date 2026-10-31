@@ -117,7 +117,7 @@ TEST_CASE("keyframes: the animation is spawned once, not re-spawned each ApplyTr
 
     mgr.ApplyTree(*root.Get());
     root->GetContext().Update(Secs(1.0));                       // t=0.5 -> 0
-    mgr.ApplyTree(*root.Get());                    // re-apply must NOT restart the animation
+    mgr.ApplyTree(*root.Get());                    // re-apply must not restart the animation
     CHECK(w->GetAlpha() == doctest::Approx(0.0f)); // still mid-animation, not reset to t=0
 }
 
@@ -186,14 +186,14 @@ TEST_CASE("keyframes: delay, iteration count, alternate direction and fill forwa
 {
     AnimBed bed(u8"@keyframes grow { from { width: 100; } to { width: 200; } } "
                 u8".a { width: 50; animation: grow 1s linear 0.5s 2 alternate forwards; }");
-    CHECK(bed.w->GetSize().x == doctest::Approx(50.0f)); // the delay, no backwards fill: the target
+    CHECK(bed.w->GetSize().x == doctest::Approx(50.0f)); // in the delay, with no backwards fill, it shows the target
     bed.root->GetContext().Update(Secs(0.75));                         // 0.25 into the first, forwards
     CHECK(bed.w->GetSize().x == doctest::Approx(125.0f));
     bed.root->GetContext().Update(Secs(1.0));                          // 0.25 into the second, backwards
     CHECK(bed.w->GetSize().x == doctest::Approx(175.0f));
-    bed.root->GetContext().Update(Secs(2.0));                          // ended: the last iteration's end (100)
+    bed.root->GetContext().Update(Secs(2.0));                          // ended, showing the last iteration's end (100)
     CHECK(bed.w->GetSize().x == doctest::Approx(100.0f));
-    CHECK_FALSE(bed.root->GetActionManager()->IsEmpty()); // forwards keeps showing it
+    CHECK_FALSE(bed.root->GetActionManager()->IsEmpty()); // fill-mode forwards keeps showing it
 }
 
 TEST_CASE("keyframes: a stop's timing function eases its segment; a missing end takes the target")
@@ -216,14 +216,14 @@ TEST_CASE("keyframes: removing the animation stops it and the target shows")
     CHECK(bed.w->GetAlpha() == doctest::Approx(0.25f));
     bed.w->RemoveClass(core::StringView(u8"a"));
     bed.mgr.ApplyTree(*bed.root.Get());
-    CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f)); // no animation: the node's own 1
+    CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f)); // no animation, so the node's own value of 1
     bed.root->GetContext().Update(Secs(0.5));
     CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f));
 }
 
-// A label's text scales with its node (Masquerade's clock): a scale pulse beside an opacity one,
-// started on the label from the first styling or later by a class, reaches the world transform it
-// draws through.
+// A label's text scales with its node, as an animated clock label does. A scale pulse beside an
+// opacity pulse, started on the label at its first styling or later by a class, reaches the world
+// transform the label draws through.
 TEST_CASE("keyframes: a label's scale pulse reaches its world transform, from the start or by a class")
 {
     for (int pass = 0; pass < 2; ++pass)

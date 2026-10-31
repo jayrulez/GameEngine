@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Gamekit - the screen stack (K4 of Specs/gui-lab-evolution-3.md): push, pop, replace and
-// clear; covering, blocking and pausing; focus per screen; `back` from the keys and the pad; the
-// lifecycle events; screens from markup and documents. Its script surface is Integration.ScriptFacades'.
+// GUI.Gamekit - the screen stack: push, pop, replace and clear; covering, blocking and pausing;
+// focus per screen; `back` from the keys and the pad; the lifecycle events; screens from markup and
+// documents. Integration.ScriptFacades tests its script surface.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -284,7 +284,7 @@ TEST_CASE("screens: content that is not a screen is pushed in one; a popped scre
     auto first = bed.MakeScreen(u8"first");
     (void)bed.stack->Push(*first);
     auto label = core::MakeRef<Label>(core::DefaultAllocator());
-    // Held: the stack owns its screens, and the popped one is freed as it goes.
+    // Hold a reference: the stack owns its screens, and would free the popped one as it goes.
     core::RefPtr<Screen> wrapped(bed.stack->Push(*label));
     REQUIRE(wrapped.Get() != nullptr);
     CHECK(label->GetParent() == wrapped.Get());
@@ -425,7 +425,7 @@ TEST_CASE("screens: a pop during an entrance leaves from where it is; the screen
 TEST_CASE("screens: content pushed without a Screen of its own fills the screen made for it, as a menu's scrim must")
 {
     Bed bed;
-    auto scrim = core::MakeRef<UIWidget>(core::DefaultAllocator()); // a panel sized by nothing of its own
+    auto scrim = core::MakeRef<UIWidget>(core::DefaultAllocator()); // a panel with no size of its own
     auto card = core::MakeRef<UIWidget>(core::DefaultAllocator());
     card->EditLayoutStyle([](LayoutStyle& s)
     {

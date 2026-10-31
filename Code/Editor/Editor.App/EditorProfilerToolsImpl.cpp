@@ -34,7 +34,7 @@ namespace editor::app
         constexpr f64 kMaxSeconds = 30.0;
         constexpr usize kTopCount = 10;
 
-        // The seams outlive the server through the handler's shared ref.
+        // The handler's shared reference keeps this state alive past the server.
         class ProfilerToolState final : public RefCounted
         {
         public:

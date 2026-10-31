@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A property source made of others (an inspector's: an entity's parts, a source each): each
-// section's top-level properties under its title, their paths under its key; reads, edits and
-// what a section's source says all reach the section's own source; a grid shows a header per
+// A property source made of other sources, as an inspector has one source per part of an entity.
+// Each section's top-level properties appear under its title, with their paths under its key. Reads,
+// edits and notifications all go to and from the section's own source, and a grid shows a header per
 // section with its rows under it.
 
 #include <doctest/doctest.h>
@@ -64,7 +64,7 @@ TEST_CASE("property sections: each source's properties under its title and key; 
     CHECK(light.GetValue(u8"intensity", 0).AsFloat() == doctest::Approx(5.0));
     CHECK(transform.GetValue(u8"position", 0).AsFloat() == doctest::Approx(1.0)); // the other section untouched
 
-    // What a section's source says reaches the sections' client.
+    // A notification from a section's source reaches the client of the sections.
     const int before = watcher.values;
     light.SetValue(u8"intensity", 0, gui::Variant(6.0));
     CHECK(watcher.values > before);
@@ -84,7 +84,7 @@ TEST_CASE("property sections: each source's properties under its title and key; 
     CHECK(light.GetValue(u8"intensity", 0).AsFloat() == doctest::Approx(6.0));
     sections.SetReadOnly(false);
 
-    sections.Clear(); // the sources let go
+    sections.Clear(); // the sources are released
     CHECK(light.GetClient() == nullptr);
 }
 

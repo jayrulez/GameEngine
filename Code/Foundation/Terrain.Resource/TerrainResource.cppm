@@ -3,13 +3,13 @@
 
 /// Foundation::Terrain.Resource - the `foundation.terrain.resource` module.
 ///
-/// The cooked terrain resource: a bundle of REFERENCES (a heightfield, the top-K splat weights,
-/// an explicit BASE layer + an unbounded paint PALETTE of albedo layers) + a cast-shadows flag -
-/// NOT embedded bulk. TerrainSource is the serialized form (guids + params, the Material.Resource
-/// pattern); TerrainFactory resolves each guid through the manager into the runtime
+/// The cooked terrain resource: a bundle of references (a heightfield, the top-K splat weights,
+/// an explicit base layer and an unbounded paint palette of albedo layers) and a cast-shadows
+/// flag, not embedded bulk. TerrainSource is the serialized form (guids and params, as in
+/// Material.Resource); TerrainFactory resolves each guid through the manager into the runtime
 /// TerrainResource. TerrainComponent (engine.terrain) references Ref<TerrainResource>. The
-/// heightfield is the shared source of truth - physics/nav resolve the SAME Ref<Heightfield>.
-/// The BASE layer is what shows wherever painted weights do not sum to 1;
+/// heightfield is the shared source of truth: physics and nav resolve the same Ref<Heightfield>.
+/// The base layer is what shows wherever painted weights do not sum to 1;
 /// it is not part of the palette and is never painted directly.
 
 module;
@@ -24,37 +24,37 @@ import foundation.content;
 import foundation.heightfield;
 import foundation.texture.resource;
 
-export import :splatmap; // SplatWeights (top-K rasters) + brush cores + cooked source/factory
+export import :splatmap; // SplatWeights (top-K rasters), brush cores, cooked source and factory
 
 using namespace foundation::core;
 using namespace foundation::resource;
 
 export namespace foundation::terrain
 {
-    /// The cooked terrain (serialized): the referenced resources by guid + per-layer tiling +
+    /// The cooked terrain (serialized): the referenced resources by guid, per-layer tiling and
     /// cast-shadows. The factory resolves the guids; nothing here is bulk data.
-    /// The top-K model: base + palette + weightsId, per-layer normal/ORM/height/coverage maps
-    /// (nil = the OFF path for that feature) + heightBlendContrast. One layout: the current
+    /// The top-K model: base, palette and weightsId, per-layer normal/ORM/height/coverage maps
+    /// (nil turns that feature off) and heightBlendContrast. One layout: the current
     /// data version (a cooked terrain stamped otherwise is refused and re-cooks).
     class TerrainSource final : public ISerializable
     {
         RTTI_OBJECT(TerrainSource, ISerializable)
     public:
         Guid heightfieldId;           // the shared Ref<Heightfield> (also used by physics/nav)
-        Guid weightsId;               // the SplatWeights product (nil = none: pure base)
-        Guid baseAlbedoId;            // the BASE layer albedo (nil = white dummy)
-        Guid baseNormalId;            // the BASE normal map (nil = flat); DataVersion 3
-        Guid baseOrmId;               // the BASE ORM (nil = 1,1,0 default); DataVersion 3
-        Guid baseHeightId;            // the BASE height/displacement map (nil = dummy); DataVersion 4
+        Guid weightsId;               // the SplatWeights product (nil: none, pure base)
+        Guid baseAlbedoId;            // the base layer albedo (nil = white dummy)
+        Guid baseNormalId;            // the base normal map (nil = flat)
+        Guid baseOrmId;               // the base ORM (nil = 1,1,0 default)
+        Guid baseHeightId;            // the base height/displacement map (nil = dummy)
         f32 baseTileScale = 1.0f;
         Array<Guid> paletteAlbedoIds; // paint layers, unbounded (parallel to paletteTileScales)
-        Array<Guid> paletteNormalIds; // per-palette-layer normal map (nil allowed); DataVersion 3
-        Array<Guid> paletteOrmIds;    // per-palette-layer ORM (nil allowed); DataVersion 3
-        Array<Guid> paletteHeightIds; // per-palette-layer height map (nil allowed); DataVersion 4
-        Array<Guid> paletteMaskIds;   // per-palette-layer coverage/opacity map (nil allowed); DV 5
+        Array<Guid> paletteNormalIds; // per-palette-layer normal map (nil allowed)
+        Array<Guid> paletteOrmIds;    // per-palette-layer ORM (nil allowed)
+        Array<Guid> paletteHeightIds; // per-palette-layer height map (nil allowed)
+        Array<Guid> paletteMaskIds;   // per-palette-layer coverage/opacity map (nil allowed)
         Array<f32> paletteTileScales;
         // Height-blend soft-skirt width (consulted only when height maps are
-        // present). 0..1; small = sharp interlock, large = washes toward an equal mix. DataVersion 4.
+        // present). 0..1; small gives a sharp interlock, large washes toward an equal mix.
         f32 heightBlendContrast = 0.25f;
         bool castShadows = true;
 
@@ -78,11 +78,11 @@ export namespace foundation::terrain
         }
     };
 
-    /// The cook-built paint-palette texel data: every palette albedo resized to ONE common slice
+    /// The cook-built paint-palette texel data: every palette albedo resized to one common slice
     /// size and mip-chained, concatenated slice-major (slice 0 mips 0..M-1, slice 1 mips ...).
-    /// CPU-side (the heightfield/weights model): engine.terrain derives + caches the GPU
-    /// Texture2DArray keyed by `uid`. Rides the terrain's own cooked instance as the
-    /// `kPaletteStream` sidecar - no extra product guid.
+    /// CPU-side, like the heightfield and weights: engine.terrain derives and caches the GPU
+    /// Texture2DArray keyed by `uid`. It travels in the terrain's own cooked instance as the
+    /// `kPaletteStream` sidecar, with no extra product guid.
     class TerrainPaletteData final : public Object
     {
         RTTI_OBJECT(TerrainPaletteData, Object)
@@ -92,19 +92,18 @@ export namespace foundation::terrain
         u32 sliceSize = 0;  // square slice side (power of two)
         u32 mipCount = 0;   // mips per slice (down to 1x1)
         u32 sliceCount = 0; // == the palette layer count at cook time
-        Array<u8> texels;   // ALBEDO array: RGBA8, slice-major, each slice = its full mip chain
-        // The NORMAL / ORM arrays, built ON DEMAND: empty = absent (no palette
-        // layer used that map -> the renderer binds a 1x1 dummy). Present arrays share the albedo's
-        // sliceSize/mipCount/sliceCount geometry. The renderer ignores these until the palette-PBR
-        // shader consumes them.
+        Array<u8> texels;   // albedo array: RGBA8, slice-major, each slice its full mip chain
+        // The normal and ORM arrays, built on demand: empty means absent (no palette
+        // layer used that map, so the renderer binds a 1x1 dummy). Present arrays share the albedo's
+        // sliceSize/mipCount/sliceCount geometry.
         Array<u8> normalTexels;
         Array<u8> ormTexels;
-        // The HEIGHT/displacement array, built ON DEMAND: empty = absent (no
-        // palette layer used a height map -> the renderer binds a 1x1 mid-height dummy). Same geometry
-        // as albedo; read via the red channel.
+        // The height (displacement) array, built on demand: empty means absent (no
+        // palette layer used a height map, so the renderer binds a 1x1 mid-height dummy). Same geometry
+        // as albedo; read through the red channel.
         Array<u8> heightTexels;
-        // The COVERAGE/opacity array, built ON DEMAND: empty = absent (no
-        // palette layer used a mask -> a 1x1 OPAQUE dummy binds). Same geometry; read via red channel.
+        // The coverage (opacity) array, built on demand: empty means absent (no
+        // palette layer used a mask, so a 1x1 opaque dummy binds). Same geometry; read through red.
         Array<u8> maskTexels;
 
         /// Total bytes of one slice's full mip chain for `sliceSize`/`mipCount`.
@@ -147,8 +146,8 @@ export namespace foundation::terrain
         }
     };
 
-    /// The terrain cooked instance's palette sidecar streams (see TerrainPaletteData). The normal /
-    /// ORM / height / mask streams are ABSENT when no palette layer uses that map (layer-pbr R4).
+    /// The terrain cooked instance's palette sidecar streams (see TerrainPaletteData). The normal,
+    /// ORM, height and mask streams are absent when no palette layer uses that map.
     inline constexpr StringView kPaletteStream = u8"palette";
     inline constexpr StringView kPaletteNormalStream = u8"palette.normal";
     inline constexpr StringView kPaletteOrmStream = u8"palette.orm";
@@ -156,14 +155,14 @@ export namespace foundation::terrain
     inline constexpr StringView kPaletteMaskStream = u8"palette.mask";
 
     /// The runtime terrain product: the resolved resource handles the renderer draws with. The
-    /// heightfield drives geometry (via foundation.terrain's chunk model) + the shared collision.
+    /// heightfield drives geometry (through foundation.terrain's chunk model) and the shared collision.
     class TerrainResource final : public Object
     {
         RTTI_OBJECT(TerrainResource, Object)
     public:
         struct Layer
         {
-            // Ref (not Proxy): the cooked factory binds it as a proxy, but in-memory/procedural
+            // Ref (not Proxy): the cooked factory binds it as a proxy, but in-memory or procedural
             // terrain (playgrounds, tests, runtime generation) can assign a product directly.
             Ref<texture::Texture> albedo;
             Ref<texture::Texture> normal; // tangent-space normal map (nil = flat)
@@ -176,7 +175,7 @@ export namespace foundation::terrain
         Ref<heightfield::Heightfield> heightfield;
         Ref<SplatWeights> weights; // the top-K paint rasters (nil = pure base)
         Layer base;                // shows wherever paint doesn't sum to 1; never painted
-        Array<Layer> palette;      // the paint layers, unbounded (8-bit index -> <= 256 used)
+        Array<Layer> palette;      // the paint layers, unbounded (an 8-bit index, so <= 256 used)
         // The cook-built palette texel array (null = no palette or an in-memory terrain that
         // assigns it directly); engine.terrain uploads it as the Texture2DArray.
         RefPtr<TerrainPaletteData> paletteData;
@@ -192,12 +191,12 @@ export namespace foundation::terrain
     };
 
     /// Resolves a TerrainSource into a runtime TerrainResource, binding each referenced resource through the
-    /// manager (recording the dependency edges, so a heightfield/texture reload cascades). A missing
+    /// manager (recording the dependency edges, so a heightfield or texture reload cascades). A missing
     /// sub-resource (not cooked, or no GPU factory in headless tools) leaves that handle unbound.
     class TerrainFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
+        // The allocator backs every product this factory creates (required;
         // the application that registers the factory decides).
         explicit TerrainFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -220,8 +219,8 @@ export namespace foundation::terrain
             terrain->castShadows = src->castShadows;
             terrain->heightBlendContrast = src->heightBlendContrast;
             // Stamp each ref's serialized identity (its source guid) as well as binding the proxy:
-            // Ref<T>::id exists precisely to carry this, and factory-built products must round-trip
-            // their sub-ref ids (serializing one otherwise writes nil) - and the editor resolves the
+            // Ref<T>::id exists to carry this, and factory-built products must round-trip their
+            // sub-ref ids (serializing one otherwise writes nil); the editor also resolves the
             // heightfield asset from TerrainResource.heightfield.id (product guid == source guid).
             if (!src->heightfieldId.IsNil())
             {
@@ -234,7 +233,7 @@ export namespace foundation::terrain
                 terrain->weights.SetProxy(manager.Bind<SplatWeights>(src->weightsId));
                 terrain->weights.SetId(src->weightsId);
             }
-            // Bind + stamp a texture ref from its source guid (nil = leave unbound -> renderer dummy).
+            // Bind and stamp a texture ref from its source guid (nil leaves it unbound: a dummy).
             auto bind = [&manager](Ref<texture::Texture>& ref, const Guid& id)
             {
                 if (!id.IsNil())
@@ -272,10 +271,9 @@ export namespace foundation::terrain
                 }
                 terrain->palette.PushBack(Move(layer));
             }
-            // The cook-built palette texel arrays: albedo (kPaletteStream) + optional normal / ORM
-            // sidecars on this same cooked instance (each a {sliceSize, mipCount, sliceCount} header +
-            // texels; absent = no array). The renderer ignores normal/ORM
-            // until the palette-PBR shader consumes them.
+            // The cook-built palette texel arrays: albedo (kPaletteStream) and the optional
+            // sidecars on this same cooked instance (each a {sliceSize, mipCount, sliceCount} header
+            // and texels; absent means no array).
             u32 hdr[3] = {0, 0, 0};
             Array<u8> texels;
             if (ReadArrayStream(instance, kPaletteStream, hdr, texels))
@@ -328,7 +326,7 @@ export namespace foundation::terrain
 
     private:
         // Read a "{sliceSize, mipCount, sliceCount} u32 header + texels" palette stream. Returns false
-        // if the stream is absent or truncated; on success fills `outHeader` + `outTexels`.
+        // if the stream is absent or truncated; on success fills `outHeader` and `outTexels`.
         [[nodiscard]] static bool ReadArrayStream(foundation::content::Instance& instance,
                                                   StringView name, u32 outHeader[3],
                                                   Array<u8>& outTexels)
@@ -356,7 +354,7 @@ export namespace foundation::terrain
         IAllocator* m_allocator;
     };
 
-    /// Register the terrain resource types (product + cooked source) for load.
+    /// Register the terrain resource types (product and cooked source) for load.
     inline void RegisterTerrainResourceTypes()
     {
         GlobalTypeRegistry().Register(TerrainResource::StaticType());
@@ -379,8 +377,8 @@ export namespace foundation::terrain
         RegisterSplatmapResourceTypes();
     }
 
-    /// The terrain resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The terrain resource module: what the engine composition composes this library's
+    /// factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kTerrainResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<TerrainResource, TerrainSource, TerrainFactory>(),
         foundation::resource::FactoryWithAllocator<SplatWeights, SplatWeightsSource, SplatWeightsFactory>(),

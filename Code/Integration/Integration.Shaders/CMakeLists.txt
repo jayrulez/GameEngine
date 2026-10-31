@@ -1,11 +1,11 @@
-# Integration.Shaders - a surface shader against the engine's own, on REAL GPU backends: the
+# Integration.Shaders - a surface shader against the engine's own, on real GPU backends: the
 # built-in PBR written as a surface shader (Data/Tests/Shaders/surface_pbr) is cooked by the
 # shader pipeline (Pipeline::Shaders) and drawn by the Foundation render chain beside `forward`,
-# and the two images must agree. Cross-collection flow (Pipeline cook x Foundation render), so it
-# lives in Code/Integration. Skips cleanly when no GPU backend is available.
-# With ZERO GPU backends configured the probe would compile into a vacuously-PASSING test
-# (every #ifdef block empty, one MESSAGE, ctest green with zero assertions - mistaken for
-# coverage). Skip the target entirely instead, like Samples::Framework does.
+# and the two images must agree. The flow crosses collections (the Pipeline cook and the Foundation
+# render), so it lives in Code/Integration. Skips cleanly when no GPU backend is available.
+# With no GPU backend configured the probe would compile into a test that passes vacuously
+# (every #ifdef block empty, one MESSAGE, ctest green with zero assertions), which reads as
+# coverage. Skip the target entirely instead, as Samples::Framework does.
 if(NOT TARGET Foundation::RHI.Vulkan AND NOT TARGET Foundation::RHI.WebGPU
    AND NOT TARGET Foundation::RHI.DX12)
     message(STATUS "Integration.Shaders: no GPU backend configured - skipped")
@@ -19,8 +19,8 @@ target_link_libraries(Integration.Shaders PRIVATE
     Pipeline::Shaders Foundation::VFS doctest::doctest)
 
 # Link each GPU backend that is present and flag it (OPTION_HAS_*); the probe iterates whichever
-# are compiled in. None is hardcoded, so this builds on any platform (Vulkan+WebGPU on Linux,
-# DX12+WebGPU on Windows).
+# are compiled in. None is hardcoded, so this builds on any platform (Vulkan and WebGPU on Linux,
+# DX12 and WebGPU on Windows).
 if(TARGET Foundation::RHI.Vulkan)
     target_link_libraries(Integration.Shaders PRIVATE Foundation::RHI.Vulkan)
     target_compile_definitions(Integration.Shaders PRIVATE OPTION_HAS_VULKAN)

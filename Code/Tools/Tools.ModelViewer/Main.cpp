@@ -1,41 +1,29 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tools.ModelViewer - a standalone viewer for model files (Documentation/Specs/model-viewer.md):
-// open a glTF, GLB, FBX or OBJ file without a project and look at it in a lit 3D view with the
-// editor's camera. The app is the engine's default application (its scene, render and animation
-// subsystems) with a GUI of its own on the window (the editor's look: its sheet, its density, the
-// viewer's rules after them), the view a preview viewport in it. A model opens through the
-// `modelviewer` library: cooked into the viewer's cache, bound, put into the preview scene. Each
-// open model has a tab (modelviewer::ModelTabs): its instance stays in the scene, active only while
-// its tab is in front, and the camera it was left with comes back with it.
+// Tools.ModelViewer - a standalone viewer for model files: open a glTF, GLB, FBX or OBJ file
+// without a project and look at it in a lit 3D view with the editor's camera. The app is the
+// engine's default application (its scene, render and animation subsystems) with its own GUI on
+// the window, styled like the editor (the editor's sheet and density, then the viewer's rules),
+// and the 3D view is a preview viewport inside it. A model opens through the `modelviewer`
+// library: cooked into the viewer's cache, bound, and put into the preview scene. Each open model
+// has a tab (modelviewer::ModelTabs). Its instance stays in the scene but is active only while its
+// tab is in front, and the tab restores the camera it was left with.
 //
 //   Tools.ModelViewer [model files...] [--rest] [--skeleton] [--mcp | --mcp-port <port>]
 //                     [--screenshot <png> [--screenshot-exit] ...]
 //   Tools.ModelViewer --headless
 //
-// --rest shows the model in its rest pose, no clip playing; --skeleton starts with the bones drawn.
-// --mcp serves the viewer's commands to an agent over HTTP (port 7406, or --mcp-port's), with the
-// bearer token in the user data folder's mcp-token; --headless serves them over stdio with no
-// window (Documentation/Shipping/ModelViewerGuide.md).
+// --rest shows the model in its rest pose with no clip playing; --skeleton starts with the bones
+// drawn. --mcp serves the viewer's commands to an agent over HTTP (port 7406, or the --mcp-port
+// value), with the bearer token in mcp-token in the user data folder; --headless serves them over
+// stdio with no window. The agent's manual is ModelViewerGuide.md.
 //
-// P0: the window, the view, one model from the command line, framed, on a grid scaled to it.
-// P1: a tab per model (the command line, dropped files, the Open dialog), the side panel's numbers,
-// exposure, ambient and sky, a turntable, and a screenshot of the view.
-// P2: the animation bar (modelviewer::ClipPlayback: the clip, play and pause, stop, step, scrub,
-// loop, speed) and the skeleton drawn over the model.
-// P3: the Browse tab (always first): a folder tree, the filters, and a thumbnail per model under
-// the chosen folder (modelviewer::ThumbnailRenderer draws them into the thumbnail cache); clicking
-// one opens it. The folder is remembered in the viewer's settings.
-// P4: the shortlist (modelviewer::Shortlist: a star and a note on the tab in front, a Starred filter
-// and a CSV export in the browser, kept in `model-viewer/shortlist.txt`) and the loose texture
-// rule's toggle (remembered in the settings, for models opened from then on).
-// P6-P7: the library (modelviewer::LibrarySession, its commands) opened at startup, and served to an
-// agent over MCP (--mcp, --headless).
-// P8: every control runs one of the window's commands (WindowCommandSpecs); the Library tab (the
-// collections and tags, the search, the models of what is chosen), the browser's selection and
-// Add selected, and the panel's Library section (the collections a model is in, its names there,
-// its tags and note). The views refresh from the library's change announcements, whoever made them.
+// The window has a Browse tab (a folder tree, filters, and a thumbnail per model, drawn by
+// modelviewer::ThumbnailRenderer), a Library tab (collections, tags, search), and a tab per open
+// model with its side panel, animation bar (modelviewer::ClipPlayback) and skeleton overlay. Every
+// control runs one of the window's commands (WindowCommandSpecs), the same commands an agent runs
+// over MCP, and the views refresh from the library's change notifications whoever made the change.
 
 #include <cmath>
 #include <cstdio>
@@ -93,15 +81,15 @@ namespace gui = foundation::gui;
 namespace scene = foundation::scene;
 namespace render = foundation::render;
 
-extern "C" const char* BuildStamp(); // Runtime.Client's: this build's identity
+extern "C" const char* BuildStamp(); // defined in Runtime.Client: this build's identity
 
 namespace modelviewer_window
 {
     namespace gui = foundation::gui;
 
-    /// One model as a grid draws it, as the editor's asset tiles do: its picture (its kind's
-    /// glyph until one is drawn) with a mark in its corner when it is in the library and a badge
-    /// when its file is missing, then its name, and under it the name it has in the collection shown.
+    /// One model's cell in a grid, drawn like the editor's asset tiles: the thumbnail (a glyph until
+    /// one is drawn), a corner mark when the model is in the library and a badge when its file is
+    /// missing, then its name, and below that its member name in the collection shown.
     class ModelCell final : public gui::UIWidget
     {
         RTTI_OBJECT(ModelCell, gui::UIWidget)
@@ -124,7 +112,7 @@ namespace modelviewer_window
             m_picture = Part<gui::Image>(*m_thumb, u8"model-picture");
             m_mark = Part<gui::Panel>(*m_thumb, u8"model-mark");
             m_mark->SetTooltip(u8"In the library");
-            m_mark->SetHitTestVisible(true); // its tooltip
+            m_mark->SetHitTestVisible(true); // so its tooltip shows
             m_badge = Part<gui::Label>(*m_thumb, u8"badge");
             m_badge->AddClass(u8"danger");
             m_badge->SetText(u8"Missing");
@@ -166,14 +154,14 @@ namespace modelviewer_window
     };
     RTTI_DEFINE_OBJECT(ModelCell, "rtti::modelviewer::window")
 
-    /// A grid's rows: a model file each, its id the path's hash (so a selection survives a refill).
+    /// A grid row: one model file, with the path's hash as its id so a selection survives a refill.
     struct GridRow
     {
         String path;
-        String sub;     // its name in the collection shown
+        String sub;     // its member name in the collection shown
         bool inLibrary = false;
         bool missing = false;
-        Guid entry;     // its library entry, when it has one
+        Guid entry;     // its library entry, if any
     };
 
     class GridModel final : public gui::IModel
@@ -216,12 +204,12 @@ namespace modelviewer_window
 
 namespace
 {
-    constexpr u16 kDefaultMcpPort = 7406; // the editor's is 7405: both may run
+    constexpr u16 kDefaultMcpPort = 7406; // the editor uses 7405, so both can run at once
 
     [[nodiscard]] String LibraryFolder() { return PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer"); }
 
-    // The bearer token an agent presents: the user data folder's mcp-token (the editor's, shared),
-    // minted from the system's entropy when there is none yet.
+    // The bearer token an agent presents: mcp-token in the user data folder, shared with the
+    // editor, generated from system entropy when it does not exist yet.
     [[nodiscard]] String McpToken()
     {
         const String path = PathJoin(GetUserDataDirectory().AsView(), u8"mcp-token");
@@ -244,17 +232,17 @@ namespace
         return token;
     }
 
-    // The viewer's folder in the user data folder: the settings, and by default the cache.
+    // The viewer's folder in the user data folder: it holds the settings and, by default, the cache.
     [[nodiscard]] String ViewerDataFolder() { return PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer"); }
     [[nodiscard]] String SettingsPath() { return PathJoin(ViewerDataFolder().AsView(), u8"settings.txt"); }
-    // Where the cooked models and the thumbnails go, as the settings say.
+    // Where the cooked models and thumbnails go, per the settings.
     [[nodiscard]] String CacheBase(const modelviewer::ViewerSettings& settings)
     {
         return modelviewer::CacheBaseOf(settings, ViewerDataFolder().AsView());
     }
 
-    // The library opened in the user data folder, its commands, the settings' and viewer.info
-    // registered; cache.clear refused while `busy` says why.
+    // Opens the library in the user data folder and registers its commands, the settings commands
+    // and viewer.info; cache.clear is refused while `busy` returns a reason.
     void OpenLibrary(modelviewer::LibrarySession& library, StringView mode, modelviewer::SettingsStore& settings, Function<String()> busy)
     {
         String error;
@@ -280,7 +268,7 @@ namespace
                                          });
     }
 
-    // The commands as the MCP server's tools, and the guide.
+    // Serves the commands as the MCP server's tools, along with the guide.
     void ServeCommands(foundation::mcp::McpServer& server, modelviewer::LibrarySession& library)
     {
         server.SetServerInfo(String(u8"model-viewer"), String(reinterpret_cast<const char8_t*>(BuildStamp())));
@@ -293,7 +281,7 @@ namespace
         modelviewer::RegisterGuideResource(server, guide.AsView());
     }
 
-    // Engine logs to stderr: in --headless, stdout is the protocol's.
+    // Sends engine logs to stderr, since under --headless stdout carries the protocol.
     class StderrSink final : public ILogSink
     {
     public:
@@ -305,7 +293,7 @@ namespace
         }
     };
 
-    // --headless: the library's commands over stdio, no window, until the input ends.
+    // --headless: serves the library's commands over stdio, with no window, until the input ends.
     int RunHeadless()
     {
         static StderrSink sink;
@@ -317,7 +305,7 @@ namespace
         OpenLibrary(library, u8"headless", settings,
                     [held]()
                     {
-                        // A window viewer holding the library is using the cache too.
+                        // A windowed viewer that holds the library is using the cache too.
                         return held->ReadOnly()
                                    ? Format(u8"another viewer (process {}) is using the cache: clear it there", held->File().LockHolder())
                                    : String{};
@@ -331,12 +319,12 @@ namespace
     }
 
     constexpr const char8_t* kMarkupPath = u8"ModelViewer/Viewer.xml";
-    constexpr StringView kDensities[] = {u8"compact", u8"default", u8"comfortable"}; // the editor's: Editor/density-<name>.css
+    constexpr StringView kDensities[] = {u8"compact", u8"default", u8"comfortable"}; // the editor's densities: Editor/density-<name>.css
 
     constexpr i32 kFixedTabs = 2; // Browse and Library, before the model tabs
-    constexpr StringView kModelsDrag = u8"modelviewer.models"; // a drag of grid tiles: their paths, a line each
-    // The grids' cells at each step of the tile size (small, medium, large): the picture's side
-    // (viewer.css, .tiles-small and .tiles-large) with room for the padding and two lines of name.
+    constexpr StringView kModelsDrag = u8"modelviewer.models"; // a drag of grid tiles carries their paths, one per line
+    // The grid cell width for each tile size (small, medium, large): the thumbnail's side (from
+    // viewer.css, .tiles-small and .tiles-large) plus room for padding and two lines of name.
     constexpr f32 kTileWidths[] = {120.0f, 152.0f, 216.0f};
     constexpr f32 kTileHeights[] = {152.0f, 184.0f, 248.0f};
     constexpr StringView kGridLists[] = {u8"viewer-grid", u8"viewer-lib-grid"};
@@ -349,14 +337,15 @@ namespace
         Library,
     };
 
-    /// The Library tab's tree model: its collection and tag rows rename in place (the view's commit
-    /// hook runs the rename command; the tree is rebuilt from the library after, so the model
-    /// itself keeps nothing).
+    /// The Library tab's tree model. Collection and tag rows rename in place: the view's commit
+    /// hook runs the rename command and the tree is rebuilt from the library afterwards, so the
+    /// model itself stores nothing.
     class LibraryTreeModel final : public gui::TreeModel
     {
     public:
         Function<bool(i32 node)> renamable;
-        /// A collection's row, for models dropped on it (`kModelsDrag`'s paths); null elsewhere.
+        /// Whether a row is a collection that accepts dropped models (`kModelsDrag` paths). When it
+        /// is unset, no row accepts them.
         Function<bool(i32 node)> takesModels;
         Function<void(i32 node, StringView paths)> dropModels;
 
@@ -378,7 +367,7 @@ namespace
         bool Drop(const gui::ModelDrop& drop) override
         {
             if (drop.Payload == nullptr || drop.Payload->Type.AsView() != kModelsDrag)
-                return false; // the tree's own rows do not move: the library says where they are
+                return false; // the tree's own rows cannot be dragged: the library decides where they are
             String ignored;
             if (CanDrop(drop, ignored) == gui::DropEffect::None || !dropModels)
                 return false;
@@ -433,11 +422,11 @@ namespace
             if (auto* text = FindAs<gui::Label>(u8"viewer-empty-text"))
                 m_emptyText = String(text->GetText());
             m_viewport = MakeUnique<editor::PreviewViewport>(m_allocator, m_allocator, host, m_guiHost.Get(), u8"model.viewer");
-            m_viewport->SetSimulationEnabled(true); // the animation plays
+            m_viewport->SetSimulationEnabled(true); // so the animation plays
             if (gui::Node* view = FindById(u8"viewer-view"))
                 view->AddChild(m_viewport->View().Get());
             SetUpScene();
-            // The cache's folder and the thumbnails' size are the settings' at the start.
+            // The cache folder and thumbnail size are read from the settings at startup only.
             const String cacheBase = CacheBase(m_settings.value);
             m_cacheRoot = PathJoin(cacheBase.AsView(), u8"cache");
             m_thumbnailSize = m_settings.value.thumbnailSize;
@@ -477,7 +466,7 @@ namespace
                 library->SetTooltip(u8"The models kept, in their collections, with their tags and names");
             }
             ApplySettings();
-            // The view's light starts as the settings have it.
+            // The view's lighting starts from the settings.
             JsonValue light = JsonValue::MakeObject();
             light.Set(String(u8"exposure"), Number(m_settings.value.exposure));
             light.Set(String(u8"ambient"), Number(m_settings.value.ambient));
@@ -504,7 +493,7 @@ namespace
 
         void OnUpdate(runtime::IApplicationHost& host, f32 deltaTime) override
         {
-            DefaultApplication::OnUpdate(host, deltaTime); // a recorded screenshot written, --screenshot-exit
+            DefaultApplication::OnUpdate(host, deltaTime); // writes a recorded screenshot and handles --screenshot-exit
             if (!m_guiHost)
                 return;
             for (i32 i = 0; i < m_tabs.Count(); ++i)
@@ -548,7 +537,7 @@ namespace
             }
             m_guiHost->RenderWindow(frame);
             if (frame.window == m_window)
-                FinishFrame(host, frame); // --screenshot: this frame as presented, the GUI included
+                FinishFrame(host, frame); // --screenshot: captures this frame as presented, GUI included
         }
 
         void OnShutdown(runtime::IApplicationHost& host) override
@@ -568,7 +557,7 @@ namespace
                 m_viewport->Shutdown();
             m_viewport.Reset();
             m_tabs.Clear();
-            // The GUI's tree (the viewport's render targets in it) goes before its host and the device.
+            // Release the GUI tree, which holds the viewport's render targets, before its host and the device.
             m_frame = {};
             m_root = {};
             m_guiHost.Reset();
@@ -579,9 +568,8 @@ namespace
         }
 
     private:
-        // The window's GUI: the GUI's shaders, the faces, the host, the editor's sheet with the
-        // viewer's after it, the frame from the viewer's markup.
-        // The editor's sheet, the density's after it (the settings', else default), the viewer's.
+        // Applies the style sheets in order: the editor's, the density's (from the settings, else
+        // default), then the viewer's.
         void ApplySheets()
         {
             m_density = String(u8"default");
@@ -604,6 +592,8 @@ namespace
             m_guiHost->Styles().SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"ModelViewer/viewer.css")));
         }
 
+        // Sets up the window's GUI: the GUI shaders, the fonts, the host, the style sheets, and the
+        // frame loaded from the viewer's markup.
         bool OpenGui(runtime::IApplicationHost& host)
         {
             m_dataRoot = String(DataRoot());
@@ -656,7 +646,8 @@ namespace
             return true;
         }
 
-        // A face the sheet's @font-face names, from its file under the data root (the editor's own way).
+        // Loads a font face named by the sheet's @font-face from its file under the data root, as
+        // the editor does.
         bool LoadFontFace(StringView face, StringView source)
         {
             fonts::FontLoadOptions options = fonts::FontLoadOptions::ExtendedLatin();
@@ -668,7 +659,7 @@ namespace
             return false;
         }
 
-        // The preview scene's light: the procedural sky (its image lighting) and a sun with shadows.
+        // Lights the preview scene with the procedural sky (and its image lighting) and a sun with shadows.
         void SetUpScene()
         {
             scene::Scene* level = m_viewport->Scene();
@@ -685,7 +676,7 @@ namespace
             {
                 const scene::EntityHandle sun = level->CreateEntity(u8"sun");
                 Transform t;
-                t.rotation = FromYawPitchRoll(0.6f, -0.9f, 0.0f); // from the side, down at 50 degrees
+                t.rotation = FromYawPitchRoll(0.6f, -0.9f, 0.0f); // from the side, pointing down at about 50 degrees
                 level->SetLocalTransform(sun, t);
                 engine::render::LightComponent& light = lights->Add(sun);
                 light.type = engine::render::LightType::Directional;
@@ -696,13 +687,14 @@ namespace
 
         // === The window's commands (modelviewer::WindowCommandSpecs) ===
         //
-        // Every control runs one of these (Run), and an agent the same through MCP; each brings
-        // the controls it touches up to date, so either way the window shows what happened.
+        // Every control runs one of these through Run, and an agent runs the same ones through MCP.
+        // Each command updates the controls it affects, so the window shows the result either way.
 
         using JsonValue = foundation::json::JsonValue;
         using CommandResult = modelviewer::CommandResult;
 
-        /// Runs a command for a control; a refusal is logged (an agent gets it as its answer).
+        /// Runs a command for a control. A refusal is logged and shown as a warning toast; an agent
+        /// running the same command gets the refusal as its result.
         void Run(StringView name, const JsonValue& args = JsonValue::MakeObject())
         {
             Array<String> before;
@@ -711,11 +703,12 @@ namespace
             if (!result.ok)
             {
                 LOG_WARNING(u8"ModelViewer", u8"{}: {}", name, result.error.AsView());
-                // What the user asked for and could not have, said where they look.
+                // Show the refusal in the window, where the user is looking.
                 Toast(gui::ToastSeverity::Warning, Capitalized(result.error.AsView()).AsView(), name);
                 return;
             }
-            // A change to the library, said as its undo step names it, with Undo beside it.
+            // Announce a library change by its undo label, with an Undo button; an undo announces
+            // what it undid.
             if (name == StringView(u8"history.undo"))
             {
                 Toast(gui::ToastSeverity::Info, Format(u8"Undone: {}", result.value.Get(String(u8"undone")).AsString().AsView()).AsView(), u8"library");
@@ -724,12 +717,12 @@ namespace
             Array<String> after;
             m_library.HistoryLabels(after);
             if (!after.IsEmpty() && (after.Size() != before.Size() || before.IsEmpty() || after[0] != before[0]) &&
-                name != StringView(u8"entry.note.set")) // a note saves as it is typed: no notice each time
+                name != StringView(u8"entry.note.set")) // a note saves as it is typed, so no notice for each change
                 Toast(gui::ToastSeverity::Success, Capitalized(after[0].AsView()).AsView(), u8"library", /*undo*/ true);
         }
 
-        // A notice in the window's corner (the editor's toasts): `key` folds repeats into one; an
-        // Undo button steps back over the library's last change.
+        // Shows a notice in the window's corner, like the editor's toasts. Repeats with the same
+        // `key` fold into one; `undo` adds a button that undoes the library's last change.
         void Toast(gui::ToastSeverity severity, StringView message, StringView key = {}, bool undo = false)
         {
             if (!m_toasts)
@@ -807,7 +800,7 @@ namespace
             v.Set(String(u8"speed"), Number(p.Speed()));
             return v;
         }
-        /// The playback of the model in front, or why there is none.
+        /// The playback of the front model, or null with `why` set.
         [[nodiscard]] modelviewer::ClipPlayback* FrontPlayback(String& why)
         {
             modelviewer::ModelTab* tab = m_browsing ? nullptr : m_tabs.ActiveTab();
@@ -828,7 +821,7 @@ namespace
             }
             return tab->playback.Get();
         }
-        /// A tab argument: the one named, else the one in front; -1 when there is none.
+        /// The tab an argument names, else the front tab; -1 when there is none.
         [[nodiscard]] i32 TabArg(const JsonValue& a) const
         {
             if (a.Has(String(u8"tab")) && !a.Get(String(u8"tab")).IsNull())
@@ -913,7 +906,7 @@ namespace
                     editor::EditorCamera& camera = self->m_viewport->Camera();
                     if (a.Has(String(u8"yaw")) || a.Has(String(u8"pitch")))
                     {
-                        // From the angle asked, as near as the model fits the view.
+                        // At the requested angle, as close as the model still fits the view.
                         camera.yaw = static_cast<f32>(a.Get(String(u8"yaw")).AsNumber(0.0)) * kPi / 180.0f;
                         camera.pitch = static_cast<f32>(a.Get(String(u8"pitch")).AsNumber(-15.0)) * kPi / 180.0f;
                         const f32 distance = tab->radius / Sin(camera.fovY * 0.5f) * 1.1f;
@@ -1056,16 +1049,17 @@ namespace
                           modelviewer::WindowCommandSpecs().Size());
         }
 
-        // The bar's buttons, the tabs, the panel's controls, and files dropped on the window.
+        // Wires the toolbar buttons, the tabs, the panel's controls, and files dropped on the window.
         void WireControls(runtime::IApplicationHost& host)
         {
             ModelViewerApp* self = this;
             if (auto* tabs = FindAs<gui::TabBar>(u8"viewer-tabs"))
             {
-                // The bar's first tab is Browse; a model's tab is one after its place in m_tabs.
+                // The bar's first two tabs are Browse and Library; a model's bar index is its index in
+                // m_tabs plus kFixedTabs.
                 tabs->SetOnSelected([self](i32 index)
                                     {
-                                        // Browse and Library first: -1 and -2, then the models from 0.
+                                        // tabs.select takes -1 for Browse, -2 for Library, and models from 0.
                                         if (!self->m_syncingTabs)
                                             self->Run(u8"tabs.select", Arg(u8"tab", Number(index == 0 ? -1 : index == 1 ? -2 : index - kFixedTabs)));
                                     });
@@ -1080,7 +1074,7 @@ namespace
                                             return;
                                         if (from < kFixedTabs || to < kFixedTabs)
                                         {
-                                            // Browse and Library stay first: dragged, they go back.
+                                            // Browse and Library stay first: a drag involving them is undone.
                                             self->m_syncingTabs = true;
                                             tabs->MoveTab(to, from);
                                             self->m_syncingTabs = false;
@@ -1157,7 +1151,7 @@ namespace
                                   Span<const shell::FileFilter>(filters, 2), {}, true);
         }
 
-        // The view (not the window's panels) to a PNG the save dialog names.
+        // Saves the 3D view (without the window's panels) to a PNG chosen in the save dialog.
         void ShowScreenshotDialog(runtime::IApplicationHost& host)
         {
             shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
@@ -1177,7 +1171,7 @@ namespace
                                   Span<const shell::FileFilter>(filters, 1), suggested.AsView());
         }
 
-        // An armed capture copies the view's colour target once the frame drew it.
+        // When a capture is armed, copies the view's colour target after the frame has drawn it.
         void RecordCapture(rhi::CommandEncoder& encoder)
         {
             if (!m_capture.Armed() || m_device == nullptr)
@@ -1189,7 +1183,7 @@ namespace
                                    view->RenderHeight(), rhi::ResourceState::ShaderRead);
         }
 
-        // A copy recorded last frame, written once the GPU has run it.
+        // Writes the copy recorded last frame, once the GPU has run it.
         void FinishCapture()
         {
             if (!m_capture.Recorded() || m_device == nullptr)
@@ -1201,9 +1195,9 @@ namespace
                 LOG_INFO(u8"ModelViewer", u8"saved the view, {}x{}", written.Width(), written.Height());
         }
 
-        // A model file opened into a tab of its own (or its tab brought to the front, open
-        // already): cooked or taken from the cache, put into the scene, framed. What failed is
-        // said where the empty view is, and in the log.
+        // Opens a model file in a new tab, or brings its tab to the front when it is already open.
+        // The model is cooked or taken from the cache, put into the scene and framed. A failure is
+        // shown in the empty view and logged.
         void OpenFile(StringView path)
         {
             SaveCamera();
@@ -1227,21 +1221,21 @@ namespace
                     added->SetTooltip(tab.path.AsView());
                 }
                 if (opened.needsFile)
-                    m_tabLoads.Request(tab.path.AsView(), m_settings.value.looseTextures); // the tab shows "cooking" till it comes
+                    m_tabLoads.Request(tab.path.AsView(), m_settings.value.looseTextures); // the tab shows "cooking" until the read arrives
                 else
                     PlaceModel(tab, opened.outcome);
             }
             ShowTab(opened.index);
         }
 
-        // The viewer's own commands (the GUI's command model): each with its label, its keys and
-        // what it does, for the shortcuts. Most press the bar's button or run the command the
-        // window has for it already, so a key and a click are one path.
+        // The viewer's own commands in the GUI's command model, each with a label, keys and an
+        // action, for the shortcuts. Most press the toolbar's button or run the window command
+        // that already exists for it, so a key and a click take the same path.
         struct ViewerCommand
         {
             StringView id;
             StringView label;
-            StringView keys; // the keymap's spelling ("ctrl-o"); empty: none
+            StringView keys; // in the keymap's spelling ("ctrl-o"); empty for none
         };
         static constexpr ViewerCommand kViewerCommands[] = {
             {u8"viewer.open", u8"Open...", u8"ctrl-o"},
@@ -1258,7 +1252,7 @@ namespace
             {u8"viewer.frame", u8"Frame the Model", u8"f"},
         };
 
-        // Presses a button of the window's, as a click would.
+        // Presses one of the window's buttons, as a click would.
         void Press(StringView id)
         {
             if (auto* button = FindAs<gui::Button>(id); button != nullptr && button->IsTreeEnabled())
@@ -1296,7 +1290,7 @@ namespace
             on(u8"viewer.previous-tab", [self]() { self->StepTab(-1); });
             on(u8"viewer.find", [self]()
                {
-                   // The search of the page in front (a model's page has none).
+                   // Focus the front page's search field (a model's page has none).
                    if (self->m_page == Page::Model)
                        return;
                    if (auto* field = self->FindAs<gui::TextField>(self->m_page == Page::Library ? StringView(u8"viewer-lib-search")
@@ -1318,7 +1312,7 @@ namespace
                                       self->ShowTagChips();
                                       self->ShowLibraryGrid();
                                   });
-            // The bar's: the tab before and after. The model tab's own bar: frame, and the side panel shown or not.
+            // The tab bar's previous and next tab. The model tab's own bar: frame, and toggle the side panel.
             if (auto* frame = FindAs<gui::Button>(u8"viewer-frame"))
                 frame->SetOnClick([self]() { self->Run(u8"view.camera", Arg(u8"frame", Flag(true))); });
             if (auto* previous = FindAs<gui::Button>(u8"viewer-tab-previous"))
@@ -1327,7 +1321,7 @@ namespace
                 next->SetOnClick([self]() { self->StepTab(1); });
             if (auto* toggle = FindAs<gui::Button>(u8"viewer-panel-toggle"))
                 toggle->SetOnClick([self, toggle]() { self->ShowSidePanel(toggle->IsChecked()); });
-            // The toolbar's grid: the preference, as Preferences sets it.
+            // The toolbar's grid toggle changes the same preference Preferences sets.
             if (auto* grid = FindAs<gui::Button>(u8"viewer-grid-toggle"))
                 grid->SetOnClick([self, grid]()
                                  {
@@ -1336,8 +1330,8 @@ namespace
                                  });
         }
 
-        // A model tab's side panel, a pane of its splitter: taken out (its share to the view) and
-        // put back, as a splitter's pane comes and goes.
+        // Shows or hides a model tab's side panel, which is a pane of the splitter. Hiding takes the
+        // pane out and gives its space to the view; showing puts it back.
         void ShowSidePanel(bool shown)
         {
             auto* body = FindAs<gui::Splitter>(u8"viewer-model-body");
@@ -1355,11 +1349,11 @@ namespace
                 body->AddChild(m_sidePanel.Get());
             m_sidePanel = {};
             if (m_tabs.ActiveTab() != nullptr && !m_browsing)
-                ShowTab(m_tabs.Active()); // what changed while it was out
+                ShowTab(m_tabs.Active()); // refresh what changed while it was hidden
         }
 
-        // The light's popover under the toolbar's Lighting button: its sliders, shut by a click
-        // elsewhere or Escape, as a menu is.
+        // Shows the lighting sliders as a popover under the toolbar's Lighting button. Like a menu,
+        // it closes on a click elsewhere or Escape.
         void ShowLightPopover(gui::Node& anchor)
         {
             gui::EventDispatcher* dispatcher = m_root ? m_root->GetEventDispatcher() : nullptr;
@@ -1376,7 +1370,7 @@ namespace
         }
 
 
-        // A collection's CSV to a file the save dialog names.
+        // Saves a collection's CSV to a file chosen in the save dialog.
         void ExportCsvDialog(StringView collection)
         {
             shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
@@ -1403,7 +1397,7 @@ namespace
                                   Span<const shell::FileFilter>(filters, 1), Format(u8"{}.csv", modelviewer::export_detail::SafeName(c->name.AsView()).AsView()).AsView());
         }
 
-        // A collection's files into a folder the folder dialog names, and what happened said.
+        // Copies a collection's files into a folder chosen in the folder dialog and reports the result.
         void CopyFilesDialog(StringView collection)
         {
             shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
@@ -1440,8 +1434,8 @@ namespace
                                             for (i64 i = 0; i < clashes.Count() && i < 10; ++i)
                                                 text += Format(u8"\n{}", clashes.At(i).AsString().AsView()).AsView();
                                         }
-                                        // What went wrong, if anything, with its list in the log; the toast stays until
-                                        // closed then (a warning's), else it goes by itself.
+                                        // Report any problems, with the full list in the log. A warning toast stays
+                                        // until closed; a success toast dismisses itself.
                                         const bool trouble = missing.Count() > 0 || clashes.Count() > 0;
                                         if (!trouble)
                                         {
@@ -1459,7 +1453,7 @@ namespace
                                     });
         }
 
-        // The next or previous tab of the bar's (Browse, Library, then the models), round.
+        // Steps to the next or previous tab (Browse, Library, then the models), wrapping around.
         void StepTab(i32 by)
         {
             const i32 count = kFixedTabs + m_tabs.Count();
@@ -1468,7 +1462,7 @@ namespace
             Run(u8"tabs.select", Arg(u8"tab", Number(next == 0 ? -1 : next == 1 ? -2 : next - kFixedTabs)));
         }
 
-        // The grid's count line, with how far the thumbnails have got while they are drawn
+        // The grid's count line, with thumbnail progress while they are drawn
         // ("12 of 12 models, drawing 3 of 12").
         void ShowProgress()
         {
@@ -1484,7 +1478,7 @@ namespace
                 count->SetText(line.AsView());
         }
 
-        // A tab's model, ready, put into the scene: its instance, its playback, its bounds.
+        // Puts a tab's ready model into the scene and sets up its instance, playback and bounds.
         void PlaceModel(modelviewer::ModelTab& tab, modelviewer::OpenModel::Outcome outcome)
         {
             LOG_INFO(u8"ModelViewer", u8"opened {} ({})", tab.path.AsView(), OutcomeText(outcome));
@@ -1497,8 +1491,8 @@ namespace
             MeasureBounds(tab);
         }
 
-        // The files the worker has read: each tab waiting for one finished (cooked, bound, placed;
-        // shown when in front), or closed saying why it did not open.
+        // Takes the files the worker has read. Each waiting tab is finished (cooked, bound, placed,
+        // and shown when in front), or closed with a message saying why it did not open.
         void TakeReads()
         {
             modelviewer::FileRead read;
@@ -1506,7 +1500,7 @@ namespace
             {
                 const i32 index = m_tabs.Find(read.path.AsView());
                 if (index < 0 || m_tabs.At(index).ready)
-                    continue; // closed while it was read, or read twice
+                    continue; // the tab closed during the read, or the file was read twice
                 const modelviewer::OpenModel::Outcome outcome = m_tabs.Finish(index, read);
                 if (outcome != modelviewer::OpenModel::Outcome::Opened)
                 {
@@ -1522,8 +1516,8 @@ namespace
             }
         }
 
-        // The tab in front: its model the only one active in the scene, its camera back (framed
-        // the first time), its numbers in the panel.
+        // Brings a tab to the front: its model becomes the only active one in the scene, its camera
+        // is restored (framed the first time), and its stats fill the panel.
         void ShowTab(i32 index)
         {
             if (!m_tabs.Valid(index))
@@ -1566,7 +1560,7 @@ namespace
             ShowEmpty();
         }
 
-        // The camera left on the tab in front, for when it comes back.
+        // Saves the front tab's camera for when the tab comes back.
         void SaveCamera()
         {
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
@@ -1588,8 +1582,8 @@ namespace
             if (level != nullptr && level->IsValid(m_tabs.At(index).instance.root))
                 level->DestroyEntity(m_tabs.At(index).instance.root);
             const bool wasActive = index == m_tabs.Active();
-            // The frames in flight still draw the model's textures (their views are in the
-            // frame's descriptor sets): the GPU finishes them before the model lets them go.
+            // The frames in flight still draw the model's textures (their views are in the frames'
+            // descriptor sets), so wait for the GPU before the model releases them.
             if (m_device != nullptr)
                 m_device->WaitIdle();
             const i32 next = m_tabs.Close(index);
@@ -1602,29 +1596,29 @@ namespace
             if (wasActive)
                 m_tabs.SetActive(-1); // nothing to save: the camera belonged to the closed tab
             if (m_browsing)
-                return; // a tab closed from the browser: the browser stays
+                return; // a tab closed from the browser keeps the browser in front
             if (next >= 0)
                 ShowTab(next);
             else
                 ShowBrowser();
         }
 
-        // The panel's numbers for the tab in front: the file, then a row per count.
+        // Fills the panel with the front tab's stats: the file, then a row per count.
         void ShowStats(const modelviewer::ModelTab& tab)
         {
             if (auto* file = FindAs<gui::Label>(u8"viewer-file"))
                 file->SetText(tab.path.AsView());
-            // The size as it stands in the view (the file's axes turned upright, its node scale in
-            // it), not the file's raw box.
+            // Show the size as placed in the view (the file's axes turned upright, its node scale
+            // applied), not the file's raw box.
             modelviewer::ModelStats stats = tab.open->Stats();
             stats.size = tab.size;
             ShowStatRows(u8"viewer-stats", stats);
             ShowContents(u8"viewer", stats);
         }
 
-        // A model's materials (how each shades, the textures in its slots) and its textures (their
-        // pixels' size, their image's file or "in the file"), as rows under `prefix`-materials and
-        // `prefix`-textures.
+        // Lists a model's materials (how each shades, the textures in its slots) and its textures
+        // (size in pixels, and the image's file or "in the file") as rows under `prefix`-materials
+        // and `prefix`-textures.
         void ShowContents(StringView prefix, const modelviewer::ModelStats& stats)
         {
             auto fill = [this](gui::Node* rows, auto&& each, usize count, StringView none)
@@ -1698,7 +1692,7 @@ namespace
                  stats.textureList.Size(), stats.textures > 0 ? StringView(u8"Listed once it cooks again.") : StringView(u8"None."));
         }
 
-        // A model's numbers as rows in the panel `id` names (a model tab's, or a details pane's).
+        // Fills the panel `id` names (a model tab's panel or a details pane) with a model's stats.
         void ShowStatRows(StringView id, const modelviewer::ModelStats& stats)
         {
             gui::Node* rows = FindById(id);
@@ -1727,13 +1721,13 @@ namespace
             m_turntable = on;
             if (on)
                 return;
-            // Off: the model faces the way it came in.
+            // Turned off: the model faces the way it was imported.
             m_turnAngle = 0.0f;
             if (modelviewer::ModelTab* tab = m_tabs.ActiveTab())
                 PlaceTurned(*tab);
         }
 
-        // The turntable turns the model in front about the middle of its footprint, slowly.
+        // The turntable slowly turns the front model about the middle of its footprint.
         void Turn(f32 deltaTime)
         {
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
@@ -1755,7 +1749,7 @@ namespace
             level->SetLocalTransform(tab.instance.root, t);
         }
 
-        // The animation bar runs the clip commands on the tab in front's playback.
+        // The animation bar runs the clip commands on the front tab's playback.
         void WireAnimationBar()
         {
             ModelViewerApp* self = this;
@@ -1777,7 +1771,7 @@ namespace
                                          self->Run(u8"clip.play", Arg(u8"playing", Flag(!p->Playing())));
                                  });
             if (auto* stop = FindAs<gui::Button>(u8"viewer-stop"))
-                stop->SetOnClick([self]() { self->Run(u8"clip.scrub", Arg(u8"seconds", Number(0.0))); }); // the start, paused
+                stop->SetOnClick([self]() { self->Run(u8"clip.scrub", Arg(u8"seconds", Number(0.0))); }); // rewind to the start, paused
             auto step = [self, playback](i32 frames)
             {
                 if (modelviewer::ClipPlayback* p = playback())
@@ -1808,8 +1802,8 @@ namespace
                                              });
         }
 
-        // The bar for the tab in front: its clips, the one playing, its loop and speed; hidden
-        // for a model without clips.
+        // Fills the animation bar for the front tab: its clips, the one playing, looping and speed.
+        // The bar is hidden for a model without clips.
         void ShowClips(const modelviewer::ModelTab& tab)
         {
             gui::Node* bar = FindById(u8"viewer-anim");
@@ -1842,8 +1836,8 @@ namespace
             m_syncingBar = false;
         }
 
-        // Each frame: the scrub bar and the time follow the clip (not while dragged), the play
-        // button says what a click does.
+        // Each frame, the scrub bar and time follow the clip (except while dragged), and the play
+        // button shows what a click will do.
         void ShowPlayback()
         {
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
@@ -1866,8 +1860,8 @@ namespace
             }
         }
 
-        // The bones over the model in front: a line from each to its parent, in the pose it
-        // stands in (the rest pose before any clip), through its skin's space.
+        // Draws the front model's bones as a line from each bone to its parent, in the current pose
+        // (the rest pose before any clip plays), through the skin's space.
         void DrawSkeleton()
         {
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
@@ -1946,7 +1940,7 @@ namespace
                                         });
         }
 
-        // Which page fills the window: a model (the stage and the panel), the browser or the library.
+        // Chooses the page that fills the window: a model (the view and panel), the browser or the library.
         void SetPage(Page page)
         {
             m_page = page;
@@ -1959,7 +1953,7 @@ namespace
                 model->SetDisplayed(page == Page::Model);
         }
 
-        // The Library tab in front: the collections and tags, the search, the models.
+        // Brings the Library tab to the front: the collections and tags, the search, the models.
         void ShowLibrary()
         {
             SaveCamera();
@@ -1973,7 +1967,7 @@ namespace
             RefreshLibrary();
         }
 
-        // The Browse tab in front: the models' instances stay where they are, the browser shows.
+        // Brings the Browse tab to the front; the models' instances stay in the scene.
         void ShowBrowser()
         {
             SaveCamera();
@@ -1991,10 +1985,10 @@ namespace
                     count->SetText(u8"Choose a folder to browse");
         }
 
-        // A new folder to browse: the tree starts over at it, it is selected and its models shown.
+        // Browses a new folder: the tree restarts at it, selects it and shows its models.
         void SetBrowseRoot(StringView chosen)
         {
-            const String folderCopy(chosen); // `chosen` may be a view of m_settings.value.folder itself
+            const String folderCopy(chosen); // copied because `chosen` may view m_settings.value.folder, which changes below
             const StringView folder = folderCopy.AsView();
             m_settings.value.folder = folderCopy;
             NoteRecent(true, folder);
@@ -2024,7 +2018,8 @@ namespace
             return id;
         }
 
-        // A node's subfolders, and theirs one level ahead, so a folder with more inside shows its arrow.
+        // Lists a node's subfolders and theirs one level ahead, so a folder with more inside shows
+        // its expand arrow.
         void ListFolderNode(i32 id, u32 depth = 2)
         {
             if (depth == 0 || id < 0 || static_cast<usize>(id) >= m_folderNodes.Size())
@@ -2041,7 +2036,7 @@ namespace
                     ListFolderNode(static_cast<i32>(i), depth - 1);
         }
 
-        // A folder chosen in the tree: every model under it, in the grid.
+        // A folder chosen in the tree shows every model under it in the grid.
         void ShowFolderNode(i32 id)
         {
             if (id < 0 || static_cast<usize>(id) >= m_folderNodes.Size())
@@ -2061,7 +2056,7 @@ namespace
             ShowGrid();
         }
 
-        // The grid for the folder's models that pass the filter, their thumbnails queued in order.
+        // Fills the grid with the folder's models that pass the filter and queues their thumbnails in order.
         void ShowGrid()
         {
             m_browseGrid.rows.Clear();
@@ -2098,7 +2093,7 @@ namespace
             return nullptr;
         }
 
-        // A thumbnail drawn (or found drawn): its picture on its tile, the model's numbers known now.
+        // A thumbnail is ready (drawn now or before): put it on its tile, and record the model's stats.
         void ThumbnailDone(StringView model, StringView png)
         {
             for (usize i = 0; i < m_folderModels.Size(); ++i)
@@ -2109,7 +2104,7 @@ namespace
                         KeepStats(model, m_folderStats[i]);
                 }
             if (SectionModel(u8"browse").AsView() == model)
-                ShowDetails(u8"browse"); // its numbers are known now
+                ShowDetails(u8"browse"); // its stats are known now
             if (png.IsEmpty() || ThumbImageFor(model) != nullptr)
                 return;
             auto image = MakeUnique<foundation::image::Image>(m_allocator);
@@ -2118,14 +2113,14 @@ namespace
             const foundation::image::Image* raw = image.Get();
             m_thumbImages.PushBack(ThumbImage{String(model), foundation::core::Move(image)});
             (void)raw;
-            m_browseGrid.Changed(); // the cells bind their pictures anew
+            m_browseGrid.Changed(); // the cells rebind their pictures
             m_libraryGrid.Changed();
-            // The rigged and animated boxes learn as models are drawn: the grid catches up now and then.
+            // The rigged and animated filters learn as models are drawn, so refilter the grid every so often.
             if ((m_filter.riggedOnly || m_filter.animatedOnly) && (++m_doneSinceFilter >= 25 || (m_thumbnails && m_thumbnails->Remaining() == 0)))
                 ShowGrid();
         }
 
-        // The commands over HTTP when asked (--mcp): localhost and the shared bearer token.
+        // Serves the commands over HTTP when asked (--mcp), on localhost with the shared bearer token.
         void StartMcp()
         {
             if (m_mcpPort == 0)
@@ -2176,9 +2171,9 @@ namespace
             return paths;
         }
 
-        // Both grids: the editor's asset tiles, a cell per model, selection the list's own (click,
-        // Ctrl, Shift, Ctrl+A), a double click opening, a drag carrying the models (onto a
-        // collection in the Library tab), a right-click menu for the row pressed.
+        // Wires both grids like the editor's asset tiles: a cell per model, the list's own selection
+        // (click, Ctrl, Shift, Ctrl+A), double click to open, dragging the models onto a collection
+        // in the Library tab, and a right-click menu for the row pressed.
         void WireGrids()
         {
             ModelViewerApp* self = this;
@@ -2199,7 +2194,7 @@ namespace
                     modelviewer_window::ModelCell::Shown shown;
                     shown.name = modelviewer::FileTitle(row.path.AsView());
                     shown.sub = row.sub;
-                    shown.inLibrary = row.inLibrary && grid == &self->m_browseGrid; // the library's are all in it
+                    shown.inLibrary = row.inLibrary && grid == &self->m_browseGrid; // every model in the library grid is in the library, so no mark
                     shown.missing = row.missing;
                     if (const foundation::image::Image* image = self->ThumbImageFor(row.path.AsView()))
                         shown.picture = MakeRef<gui::ImageDrawable>(self->m_allocator, image);
@@ -2248,9 +2243,9 @@ namespace
             }
         }
 
-        // A tile's menu: open it, add the selection to a collection, take it out of the one shown,
-        // copy its path, show its folder, take it out of the library. A press on a tile not
-        // selected selects it alone first, so the menu acts on it (the editor's way).
+        // A tile's menu: open, add the selection to a collection, remove it from the collection
+        // shown, copy its path, show its folder, remove it from the library. Right-clicking a tile
+        // that is not selected first selects it alone, so the menu acts on it, as in the editor.
         void ShowGridMenu(gui::ListView& list, const modelviewer_window::GridModel& grid, bool library, i32 item, Float2 at)
         {
             if (item < 0 || !grid.Valid(list.GetItemIndex(item).Row))
@@ -2326,8 +2321,8 @@ namespace
             Run(u8"member.remove", a);
         }
 
-        /// The model at `path` as a library entry (added when it is not one yet); false when the
-        /// file is not there or the library refused.
+        /// The library entry for the model at `path`, adding one when needed. False when the file
+        /// does not exist or the library refused.
         bool EntryFor(StringView path, String& id)
         {
             const modelviewer::CommandResult r = m_library.Commands().Execute(u8"entry.add", Arg(u8"path", Text(path)));
@@ -2339,7 +2334,7 @@ namespace
             id = r.value.Get(String(u8"id")).AsString();
             return true;
         }
-        /// The ids of the models at `paths`, each added to the library when it is not in it.
+        /// The entry ids of the models at `paths`, adding any not yet in the library.
         JsonValue EntriesFor(Span<const String> paths)
         {
             JsonValue ids = JsonValue::MakeArray();
@@ -2351,7 +2346,7 @@ namespace
             }
             return ids;
         }
-        /// The collection a combo's choice names (its items are the tree's collections in order).
+        /// The collection a combo's selected item names; the items are the tree's collections in order.
         [[nodiscard]] Guid ComboCollection(StringView comboId) const
         {
             auto* combo = FindAs<gui::ComboBox>(comboId);
@@ -2370,7 +2365,7 @@ namespace
         void WireLibrary(runtime::IApplicationHost&)
         {
             ModelViewerApp* self = this;
-            // The browser: select all, and add the selection to a collection.
+            // The browser's buttons: select all, and add the selection to a collection.
             if (auto* all = FindAs<gui::Button>(u8"viewer-select-all"))
                 all->SetOnClick([self]()
                                 {
@@ -2392,7 +2387,7 @@ namespace
                                           field->SetText(u8"");
                                       self->ShowLibraryGrid();
                                   });
-            // The library's tree: a choice shows its models; the toolbar acts on it.
+            // The library's tree: selecting a row shows its models, and the toolbar acts on it.
             if (auto* tree = FindAs<gui::TreeView>(u8"viewer-lib-tree"))
                 tree->SetOnSelectionChanged([self](gui::ModelIndex index)
                                             {
@@ -2408,7 +2403,7 @@ namespace
                                                  self->ShowLibraryMenu(*tree, static_cast<const gui::MouseEvent&>(e).Position);
                                                  e.Handled = true;
                                              });
-                // A rename in place runs the command; a refusal (a clash) keeps the row editing.
+                // A rename in place runs the command; a refusal (a name clash) keeps the row editing.
                 tree->SetOnEditCommit([self](const gui::ModelIndex& index, StringView text)
                                       {
                                           const LibraryNode* node = self->NodeAt(static_cast<i32>(index.InternalId));
@@ -2426,7 +2421,7 @@ namespace
             if (auto* create = FindAs<gui::Button>(u8"viewer-lib-new"))
                 create->SetOnClick([self]()
                                    {
-                                       // Inside the collection chosen, else at the top.
+                                       // Inside the selected collection, else at the top level.
                                        const LibraryNode* node = self->ChosenNode();
                                        self->NewCollection(node != nullptr && node->kind == LibraryNode::Kind::Collection
                                                                ? Format(u8"{}", node->collection).AsView()
@@ -2434,15 +2429,15 @@ namespace
                                    });
             if (auto* undo = FindAs<gui::Button>(u8"viewer-lib-undo"))
                 undo->SetOnClick([self]() { self->Run(u8"history.undo"); });
-            // The library's grid: the search and its scope; take the selection out.
+            // The library grid's controls: the search, its scope, and removing the selection.
             if (auto* search = FindAs<gui::TextField>(u8"viewer-lib-search"))
                 search->SetOnTextChanging([self](StringView) { self->ShowLibraryGrid(); });
             if (auto* everywhere = FindAs<gui::CheckBox>(u8"viewer-lib-everywhere"))
                 everywhere->SetOnToggled([self](bool) { self->ShowLibraryGrid(); });
             if (auto* sub = FindAs<gui::CheckBox>(u8"viewer-lib-sub"))
                 sub->SetOnToggled([self](bool) { self->ShowLibraryGrid(); });
-            // Each Library section: the model tab's (the model in front), Browse's and Library's
-            // details panes (the model chosen in their grid).
+            // Each Library section: the model tab's (for the front model), and the Browse and Library
+            // details panes (for the model selected in their grid).
             const StringView sections[] = {u8"viewer", u8"browse", u8"library"};
             for (const StringView section : sections)
             {
@@ -2474,7 +2469,7 @@ namespace
                                                    return;
                                                const modelviewer::Entry* existing = self->m_library.Get().FindEntryByPath(path.AsView());
                                                if (existing == nullptr && text.IsEmpty())
-                                                   return; // nothing to keep: the model stays out of the library
+                                                   return; // nothing to store, so the model stays out of the library
                                                String id;
                                                if (!self->EntryFor(path.AsView(), id))
                                                    return;
@@ -2490,15 +2485,15 @@ namespace
                                              self->Run(u8"model.open", Arg(u8"path", Text(path.AsView())));
                                      });
             }
-            // A grid's choice shows in its details pane.
+            // A grid's selection shows in its details pane.
             if (auto* grid = FindAs<gui::ListView>(u8"viewer-grid"))
                 grid->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowDetails(u8"browse"); });
             if (auto* grid = FindAs<gui::ListView>(u8"viewer-lib-grid"))
                 grid->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowDetails(u8"library"); });
         }
 
-        // The library changed (or the window started): the tree, the grids' marks, the combos
-        // and the panel brought up to date.
+        // Refreshes the tree, the grids' marks, the combos and the panel after the library changes
+        // or the window starts.
         void RefreshLibrary()
         {
             m_libraryStale = false;
@@ -2508,11 +2503,11 @@ namespace
                 ShowLibraryGrid();
             else if (m_page == Page::Browse)
                 ShowGrid();
-            ShowLibraryPanel(); // every Library section: the tab's and the details panes
+            ShowLibraryPanel(); // every Library section: the model tab's and the details panes
         }
 
-        // The tree: All models, Unsorted, the collections nested, then the tags with their counts;
-        // the choice kept by what it names.
+        // Rebuilds the tree: All models, Unsorted, the nested collections, then the tags with their
+        // counts. The selection is kept by what it refers to, not by row.
         void RefreshLibraryTree()
         {
             auto* tree = FindAs<gui::TreeView>(u8"viewer-lib-tree");
@@ -2582,9 +2577,9 @@ namespace
                         (void)tree->BeginEdit(item);
             }
         }
-        // The Library tab's tags as chips, each on or off (the grid shows the models with any tag
-        // that is on), its count beside it; a chip's right-click menu renames it (in place) or
-        // deletes it from every model.
+        // Shows the Library tab's tags as toggle chips with their counts; the grid shows the models
+        // with any active tag. A chip's right-click menu renames the tag in place or deletes it from
+        // every model.
         void ShowTagChips()
         {
             gui::Node* chips = FindById(u8"viewer-tag-chips");
@@ -2595,7 +2590,7 @@ namespace
             Array<String> tags;
             Array<u32> counts;
             m_library.Get().TagCounts(tags, counts);
-            // A tag that went (renamed, deleted) is no longer on.
+            // A tag that no longer exists (renamed or deleted) is no longer active.
             for (usize i = m_activeTags.Size(); i-- > 0;)
             {
                 bool there = false;
@@ -2640,7 +2635,7 @@ namespace
             }
         }
 
-        // Tags match in any case, as the library's search matches them.
+        // Tags match ignoring case, as the library's search matches them.
         [[nodiscard]] static bool SameTag(StringView a, StringView b) { return a.Size() == b.Size() && a.ContainsIgnoreCase(b); }
 
         void ToggleTag(StringView tag)
@@ -2670,8 +2665,8 @@ namespace
             m_libraryMenu->OpenBelow(chip, chip);
         }
 
-        // A field where the chip was, its name in it: Enter renames the tag on every model,
-        // leaving it puts the chip back.
+        // Replaces the chip with a text field holding its name. Enter renames the tag on every
+        // model; leaving the field puts the chip back.
         void RenameTagInPlace(gui::Button& chip, StringView tag)
         {
             gui::Node* chips = chip.GetParent();
@@ -2689,7 +2684,7 @@ namespace
                                        a.Set(String(u8"to"), Text(text));
                                        for (String& active : self->m_activeTags)
                                            if (SameTag(active.AsView(), from.AsView()))
-                                               active = String(text); // still on under its new name
+                                               active = String(text); // stays active under its new name
                                        self->Run(u8"tag.rename", a);
                                    }
                                    self->m_libraryStale = true;
@@ -2708,8 +2703,8 @@ namespace
             return node >= 0 && static_cast<usize>(node) < m_libraryNodes.Size() ? &m_libraryNodes[static_cast<usize>(node)] : nullptr;
         }
 
-        // A row's menu (the hierarchy's way: the press's row, a menu built for it): a collection
-        // makes one inside, renames or goes; elsewhere, a new collection.
+        // A tree row's context menu, built for the row pressed as the hierarchy panel does. On a
+        // collection it offers a new collection inside, rename and delete; elsewhere, a new collection.
         void ShowLibraryMenu(gui::TreeView& tree, Float2 at)
         {
             const i32 item = tree.ItemAt(at);
@@ -2739,8 +2734,8 @@ namespace
             m_libraryMenu->Open(tree, at);
         }
 
-        // A collection named "New collection" (inside `parent`, a collection's id, when given),
-        // its row then renaming in place.
+        // Creates a collection named "New collection" (inside `parent`, a collection id, when given)
+        // and starts renaming its row in place.
         void NewCollection(StringView parent)
         {
             JsonValue a = Arg(u8"name", Text(u8"New collection"));
@@ -2786,8 +2781,8 @@ namespace
             return m_libraryChoice >= 0 && static_cast<usize>(m_libraryChoice) < m_libraryNodes.Size() ? &m_libraryNodes[static_cast<usize>(m_libraryChoice)] : nullptr;
         }
 
-        // The combos that name a collection (the browser's and the panel's): the tree's
-        // collections in order, nested ones indented.
+        // Refills the collection combos (the browser's and the panel's) with the tree's collections
+        // in order, nested ones indented.
         void RefreshCollectionCombos()
         {
             m_comboCollections.Clear();
@@ -2818,7 +2813,7 @@ namespace
                 }
         }
 
-        // The library's grid: the models of the tree's choice that the search finds.
+        // Fills the library grid with the models of the selected tree row that match the search.
         void ShowLibraryGrid()
         {
             const modelviewer::Library& library = m_library.Get();
@@ -2860,7 +2855,7 @@ namespace
                     if (!in.IsEmpty())
                         found.RemoveAt(i);
                 }
-            // The tags that are on: the models with any of them (each tag adds its models).
+            // Keep the models with any active tag (each tag adds its models).
             found = modelviewer::WithAnyTag(library, found.AsSpan(), m_activeTags.AsSpan());
             m_libraryGrid.rows.Clear();
             Array<String> undrawn;
@@ -2885,7 +2880,7 @@ namespace
                 m_thumbnails->SetQueue(undrawn.AsSpan());
         }
 
-        // A missing model pointed at its file's new place.
+        // Points a missing model's entry at its file's new location.
         void RelinkDialog(const Guid& entry)
         {
             shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
@@ -2905,10 +2900,8 @@ namespace
                                   Span<const shell::FileFilter>(filters, 1));
         }
 
-        // The panel's Library section for the model in front: the collections it is in (its name
-        // in each, editable; a button to take it out), its tags (a click takes one off), its note.
-        // Every Library section: the model tab's (the model in front) and Browse's and Library's
-        // details (the model chosen in each grid).
+        // Refreshes every Library section: the model tab's (for the front model) and the Browse and
+        // Library details panes (for the model selected in each grid).
         void ShowLibraryPanel()
         {
             if (const modelviewer::ModelTab* tab = m_tabs.ActiveTab())
@@ -2917,7 +2910,7 @@ namespace
             ShowDetails(u8"library");
         }
 
-        // The model a Library section is about: the tab's in front, or the one chosen in a grid.
+        // The model a Library section shows: the front tab's, or the one selected in a grid.
         [[nodiscard]] String SectionModel(StringView prefix) const
         {
             if (prefix == StringView(u8"viewer"))
@@ -2931,8 +2924,9 @@ namespace
             return chosen.Size() == 1 ? chosen[0] : String{};
         }
 
-        // A grid's details pane (`prefix` browse or library): the model chosen, its numbers as its
-        // cook counted them (once drawn), its Library section; or what to do when none or several are.
+        // Fills a grid's details pane (`prefix` is browse or library) for the selected model: its
+        // stats as its cook counted them (once its thumbnail is drawn) and its Library section. With
+        // none or several selected, it shows a hint instead.
         void ShowDetails(StringView prefix)
         {
             const bool browse = prefix == StringView(u8"browse");
@@ -2976,8 +2970,9 @@ namespace
             ShowLibrarySection(prefix, path.AsView());
         }
 
-        // A Library section (`prefix`: viewer, the model tab's; browse or library, a details pane's)
-        // about the model at `path`: the collections it is in with its name in each, its tags, its note.
+        // Fills a Library section (`prefix` is viewer for the model tab, or browse or library for a
+        // details pane) for the model at `path`: the collections it is in with its editable name in
+        // each and a button to remove it, its tags (a click removes one), and its note.
         void ShowLibrarySection(StringView prefix, StringView path)
         {
             gui::Node* rows = FindById(Format(u8"{}-lib-memberships", prefix).AsView());
@@ -3020,7 +3015,7 @@ namespace
                                           a.Set(String(u8"entry"), Text(entryId.AsView()));
                                           a.Set(String(u8"name"), Text(text));
                                           self->Run(u8"member.rename", a);
-                                          self->m_libraryStale = true; // a refused name goes back
+                                          self->m_libraryStale = true; // a refused name reverts on the next refresh
                                       });
                     auto out = MakeRef<gui::Button>(m_allocator);
                     out->AddClass(u8"slot-button");
@@ -3077,7 +3072,7 @@ namespace
             m_syncingPanel = false;
         }
 
-        /// What a cook counted, kept on the model's entry (when it has one) for the search.
+        /// Stores the stats a cook counted on the model's entry, when it has one, for search.
         void KeepStats(StringView path, const modelviewer::ModelStats& stats)
         {
             const modelviewer::Entry* e = m_library.Get().FindEntryByPath(path);
@@ -3096,11 +3091,11 @@ namespace
         }
 
         void SaveSettings() { (void)m_settings.Save(); }
-        // A model or folder to the front of the recents (the Recent button's menu).
+        // Moves a model or folder to the front of the recents (the Recent button's menu).
         void NoteRecent(bool folder, StringView path) { m_settings.Recent(folder, path); }
 
-        // The settings changed (or the window started): the density's sheet, the loose texture
-        // rule, the panel's toggle. The thumbnails' size and the cache's folder wait for the next start.
+        // Applies the settings after a change or at startup: the density's sheet, the loose texture
+        // rule, the panel's toggle. The thumbnail size and cache folder take effect on the next start.
         void ApplySettings()
         {
             if (m_settings.value.density != m_density)
@@ -3114,7 +3109,7 @@ namespace
             m_syncingPanel = false;
         }
 
-        // The grids' tiles at the settings' size, both sliders showing it.
+        // Sizes the grid tiles from the settings and sets both sliders to match.
         void ApplyTileSize()
         {
             const u32 step = Min(m_settings.value.tileSize, 2u);
@@ -3137,8 +3132,8 @@ namespace
             m_syncingTiles = false;
         }
 
-        // Why the cache cannot be cleared now (a model open reads its cooked files; a thumbnail
-        // being drawn writes there), or empty.
+        // Why the cache cannot be cleared now (an open model reads its cooked files; a thumbnail
+        // being drawn writes there), or empty when it can.
         [[nodiscard]] String CacheBusy() const
         {
             if (m_tabs.Count() > 0)
@@ -3147,18 +3142,19 @@ namespace
                 return String(u8"thumbnails are being drawn: try again when they are done");
             return {};
         }
-        // The cache cleared: the thumbnails' folder back for what is drawn next. The pictures shown
-        // stay in memory (the grid's tiles draw them); their files are drawn again when next queued.
+        // After the cache is cleared, recreates the thumbnail folder for what is drawn next. The
+        // pictures on screen stay in memory for the grid's tiles; their files are drawn again when
+        // next queued.
         void CacheCleared() { (void)CreateDirectories(m_thumbnailRoot.AsView()); }
 
-        // A screenshot's file name for the model in `tab`, by the settings' pattern.
+        // A screenshot's file name for the model in `tab`, from the settings' pattern.
         [[nodiscard]] String ScreenshotNameFor(const modelviewer::ModelTab& tab) const
         {
             const StringView clip = tab.playback.Get() != nullptr && tab.playback->HasClips() ? tab.playback->ClipName(tab.playback->Selected()).AsView() : StringView{};
             return modelviewer::ScreenshotName(m_settings.value.screenshotPattern.AsView(), tab.path.AsView(), clip, GetTicks());
         }
 
-        // The Recent button's menu: the models opened lately, then the folders browsed.
+        // The Recent button's menu: recently opened models, then recently browsed folders.
         void ShowRecentMenu(gui::Button& anchor)
         {
             ModelViewerApp* self = this;
@@ -3182,7 +3178,7 @@ namespace
             m_recentMenu->OpenBelow(anchor, anchor);
         }
 
-        // Preferences, a modal window over the viewer; Save runs settings.set.
+        // Opens Preferences as a modal window over the viewer; Save runs settings.set.
         void ShowPreferences()
         {
             if (!m_preferences)
@@ -3255,7 +3251,7 @@ namespace
             return u8"";
         }
 
-        // The empty view while nothing is open: how to open one, or why the last did not.
+        // The empty view while nothing is open: how to open a model, or why the last one failed.
         void ShowEmpty()
         {
             gui::Node* empty = FindById(u8"viewer-empty");
@@ -3284,8 +3280,8 @@ namespace
             }
         }
 
-        // A model's bounds as placed: each of its meshes' boxes through its entity's world (a
-        // file's node scale, 0.01 or 100, is in it), measured when the model opens.
+        // Measures a model's bounds as placed when it opens: each mesh's box through its entity's
+        // world transform, which includes the file's node scale (often 0.01 or 100).
         void MeasureBounds(modelviewer::ModelTab& tab)
         {
             tab.center = Float3{};
@@ -3324,9 +3320,10 @@ namespace
             radius = tab != nullptr ? tab->radius : 1.0f;
         }
 
-        // The clip range follows the model: a 2 cm prop and a 200 m building both in reach. The
-        // near plane at a twentieth of its size keeps the scene's reverse-Z depth well above the
-        // grid's fixed bias toward the viewer, which a nearer plane lets the grid win through.
+        // The clip range follows the model, so a 2 cm prop and a 200 m building are both in reach.
+        // The near plane sits at a twentieth of the model's size: that keeps the scene's reverse-Z
+        // depth precision well above the grid's fixed bias toward the viewer, which a nearer plane
+        // would let the grid show through.
         void ClipToModel(f32 radius)
         {
             editor::EditorCamera& camera = m_viewport->Camera();
@@ -3342,11 +3339,12 @@ namespace
             ClipToModel(radius);
             m_viewport->Frame(center, radius);
             if (snap)
-                m_viewport->Camera().Advance(1000.0f); // straight there, no glide on opening
+                m_viewport->Camera().Advance(1000.0f); // jump straight there, with no glide on opening
         }
 
-        // The ground grid, its cells sized to the model (a tenth of its size, to a power of ten)
-        // and fading at twenty times it, so a 2 cm prop and a 200 m building both sit on one.
+        // Draws the ground grid with cells sized to the model (a tenth of its size, rounded to a
+        // power of ten) and fading out at twenty times its size, so a 2 cm prop and a 200 m
+        // building both sit on a usable grid.
         void DrawGrid()
         {
             if (!m_settings.value.grid || !m_viewport || !m_viewport->IsValid())
@@ -3363,8 +3361,8 @@ namespace
             m_viewport->SceneDebugDraw().DrawGridPlane(grid);
         }
 
-        // A node of the window's by id: in the page, else in the light's popover (out of the page
-        // while it is shut, and in the popup layer while it is open).
+        // Finds a window node by id: in the page, else in the lighting popover, which is outside the
+        // page while closed and in the popup layer while open.
         [[nodiscard]] gui::Node* FindById(StringView id) const
         {
             gui::Node* found = m_frame ? FindIn(*m_frame, id) : nullptr;
@@ -3402,17 +3400,17 @@ namespace
         RefPtr<gui::Node> m_frame;
         UniquePtr<editor::PreviewViewport> m_viewport;
         modelviewer::ModelTabs m_tabs{m_allocator};
-        bool m_syncingTabs = false; // the bar changed by code, not by a click
+        bool m_syncingTabs = false; // the tab bar is being changed by code, not a click
         bool m_turntable = false;
         f32 m_turnAngle = 0.0f;
-        bool m_syncingBar = false;   // the animation bar set by code, not by a hand
-        bool m_syncingView = false;  // the View section set by a command, not by a hand
+        bool m_syncingBar = false;   // the animation bar is being set by code, not the user
+        bool m_syncingView = false;  // the View section is being set by a command, not the user
         String m_thumbnailRoot;
-        bool m_shownPlaying = true; // what the play button shows (pause while playing, as the markup starts)
+        bool m_shownPlaying = true; // the play button's state (shows pause while playing, matching the markup's initial state)
         bool m_showSkeleton = false;
         Array<Float4x4> m_bonePoses;
 
-        // The browser.
+        // The browser's state.
         struct ThumbImage
         {
             String path;
@@ -3422,17 +3420,17 @@ namespace
         {
             String path;
             i32 parent = -1;
-            bool listed = false; // its subfolders added
+            bool listed = false; // its subfolders have been listed
         };
         bool m_browsing = false; // a fixed page (Browse or Library) is in front, not a model
         Page m_page = Page::Browse;
 
-        // The library in the window.
+        // The library's state in the window.
         bool m_libraryStale = true;
         bool m_syncingLibrary = false;
         UniquePtr<LibraryTreeModel> m_libraryModel;
         RefPtr<gui::Menu> m_libraryMenu;
-        Guid m_renameAfterRefresh; // a collection just made: its row starts its rename
+        Guid m_renameAfterRefresh; // a newly created collection whose row starts renaming
         Array<LibraryNode> m_libraryNodes; // by the tree model's node id
         i32 m_libraryChoice = 0;
         Array<Guid> m_comboCollections;    // what each combo item names
@@ -3440,15 +3438,15 @@ namespace
         modelviewer_window::GridModel m_libraryGrid;
         RefPtr<gui::Menu> m_gridMenu;
         modelviewer::SettingsStore m_settings;
-        modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' files, read off the main thread
-        String m_emptyText; // the empty view's own words, from the markup
+        modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' file reads, off the main thread
+        String m_emptyText; // the empty view's text from the markup
         String m_gridCount; // the browse grid's "n of m models"
         RefPtr<gui::ToastHost> m_toasts;
-        bool m_syncingTiles = false;
+        bool m_syncingTiles = false; // the tile sliders are being set by code
         Array<String> m_activeTags; // the Library tab's tags that are on
-        bool m_panelShown = true;   // a model tab's side panel (its bar's toggle)
-        RefPtr<gui::Node> m_sidePanel; // the panel while it is out of the splitter
-        RefPtr<gui::Node> m_lightPopover; // the light's sliders, the Lighting button's popover // the tile sliders set by code
+        bool m_panelShown = true;   // whether a model tab's side panel is shown (its bar's toggle)
+        RefPtr<gui::Node> m_sidePanel; // holds the panel while it is out of the splitter
+        RefPtr<gui::Node> m_lightPopover; // the lighting sliders, shown as the Lighting button's popover
         String m_shownProgress;
         String m_density; // the density whose sheet is applied
         u32 m_thumbnailSize = 128;
@@ -3464,10 +3462,9 @@ namespace
         Array<ThumbImage> m_thumbImages;
         u32 m_doneSinceFilter = 0;
 
-        // The shortlist and the loose texture toggle.
-        bool m_syncingPanel = false; // the panel's note set by code, not by a hand
+        bool m_syncingPanel = false; // the panel's note is being set by code, not the user
 
-        // The library, and the agent's way in.
+        // The library, and the MCP server agents use.
         modelviewer::LibrarySession m_library{m_allocator};
         foundation::mcp::McpServer m_mcpServer;
         UniquePtr<foundation::mcp::McpHttpHost> m_mcpHost;
@@ -3509,7 +3506,7 @@ int main(int argc, char** argv)
         if (arg.Size() > 0 && arg[0] == u8'-')
         {
             if (arg.StartsWith(u8"--screenshot") && i + 1 < argc && arg != StringView(u8"--screenshot-exit"))
-                ++i; // the option's value (read by ScreenshotOptionsFromArguments)
+                ++i; // skip the option's value (ScreenshotOptionsFromArguments reads it)
             continue;
         }
         app.AddFile(arg);

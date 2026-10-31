@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// CodeDocument headless tests: line buffer + span extraction, the single Edit mutation with
+// CodeDocument headless tests: the line buffer and span extraction, the single Edit mutation with
 // delta undo/redo and typing coalescing, marker line-tracking under edits, diagnostics and the
 // execution line, word boundaries, and the word harvest behind document-word completion.
 #include <doctest/doctest.h>
@@ -21,7 +21,7 @@ namespace
         return doc;
     }
 
-    // Types one codepoint at the cursor, the way the widget will drive Edit for a keystroke.
+    // Types one codepoint at the cursor, the way the widget drives Edit for a keystroke.
     CodePosition Type(CodeDocument& doc, CodePosition at, const char8_t* ch, f64 time)
     {
         return doc.Edit(CodeSpan{at, at}, StringView(ch), CodeEditKind::Typing,
@@ -51,7 +51,7 @@ TEST_CASE("toolkit-codedocument: LinesAndText")
 
 TEST_CASE("toolkit-codedocument: CodepointColumns")
 {
-    // "héllo" - the 'é' is two bytes, one column.
+    // "héllo": the 'é' is two bytes, one column.
     CodeDocument doc = MakeDoc(u8"héllo");
     CHECK(doc.LineLength(0) == 5);
     CHECK(doc.ColumnToByte(0, 1) == 1);
@@ -101,7 +101,7 @@ TEST_CASE("toolkit-codedocument: UndoCoalescesTyping")
     cursor = Type(doc, cursor, u8"c", 0.4);
     CHECK(doc.Text().AsView() == StringView(u8"abc"));
 
-    // All three keystrokes were contiguous + same kind + inside the window: ONE undo entry.
+    // All three keystrokes were contiguous, of the same kind and inside the window: one undo entry.
     CodeCursorState state;
     CHECK(doc.Undo(state));
     CHECK(doc.Text().IsEmpty());
@@ -377,7 +377,7 @@ TEST_CASE("toolkit-codedocument: CompoundEditIsOneUndoEntry")
 
     CodeCursorState state;
     CHECK(doc.Undo(state));
-    CHECK(doc.Text().AsView() == StringView(u8"aa bb aa")); // BOTH edits reverted at once
+    CHECK(doc.Text().AsView() == StringView(u8"aa bb aa")); // both edits reverted at once
     CHECK(!doc.CanUndo());
     CHECK(doc.Redo(state));
     CHECK(doc.Text().AsView() == StringView(u8"XX bb XX"));
@@ -398,7 +398,7 @@ TEST_CASE("toolkit-codedocument: BracketMatching")
     REQUIRE(doc.FindMatchingBracket(CodePosition{0, 9}, match));
     CHECK(match == CodePosition{1, 6});
 
-    // Not a bracket / unmatched.
+    // Not a bracket, or unmatched.
     CHECK(!doc.FindMatchingBracket(CodePosition{0, 0}, match));
     doc.SetText(u8"(((");
     CHECK(!doc.FindMatchingBracket(CodePosition{0, 0}, match));

@@ -1,4 +1,4 @@
-// Goal - the level's end: the player reaching the flag emits "GoalReached", once.
+// Goal: the level's end. The player reaching the flag emits "GoalReached", once.
 // FX/FxConfetti: the celebration at the flag.
 Guid kConfetti = Guid("b9828141-6700-49dd-bb97-1947a7ce2d82");
 

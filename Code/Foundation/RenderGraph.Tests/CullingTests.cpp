@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.RenderGraph.Tests/CullingTests.bf
+// Pass culling: an unused pass is culled unless a flag, a final-state import or a live reader keeps it.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Viewport - the Viewport widget hosted on GuiHost, on the Null RHI backend and the null shell: bound
-// to the renderer of the window its node is in, its targets at the node's device pixels and its
-// colour target registered with that renderer, its drawing recorded on that window's frame (a clear
-// when it has none), bound again when its node moves to another window, and let go when it leaves;
-// what a game in a panel needs: a clear once outside drawing stops, the colour target's twin view,
-// hosted text input, and the pointer mapped into the content's own resolution.
+// GUI.Viewport - the Viewport widget hosted on GuiHost, on the Null RHI backend and the null shell.
+// It binds to the renderer of the window its node is in. Its targets match the node's device pixels,
+// and its colour target is registered with that renderer. Its drawing is recorded on that window's
+// frame, with a clear when it has no content. It binds again when its node moves to another window,
+// and releases everything when it leaves. Also covered is what a game in a panel needs: a clear once
+// drawing from outside stops, the colour target's twin view, hosted text input, and the pointer
+// mapped into the content's own resolution.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -111,9 +112,9 @@ TEST_CASE("gui.viewport: bound to its window's renderer, its targets at the node
     CHECK(renders == 1); // on the window's frame
     CHECK(bed.viewport->Mouse() != nullptr);
     bed.Frame(bed.main.Get());
-    CHECK(renders == 2); // live content: every frame
+    CHECK(renders == 2); // live content renders every frame
 
-    // At twice the density, twice the pixels.
+    // At twice the density, the targets have twice the pixels.
     bed.host->SetUiScale(2.0f);
     bed.Frame(bed.main.Get());
     CHECK(bed.viewport->RenderWidth() == 640u);
@@ -124,7 +125,7 @@ TEST_CASE("gui.viewport: with nothing to draw it clears; hidden it records nothi
 {
     Bed bed;
     bed.Frame(bed.main.Get());
-    CHECK(bed.viewport->IsReady()); // cleared to its colour, sampled by the GUI
+    CHECK(bed.viewport->IsReady()); // cleared to its colour, so the GUI can sample it
     int renders = 0;
     bed.viewport->OnRender = [&renders](Viewport&, rhi::CommandEncoder&, i32) { ++renders; };
     bed.viewport->SetVisible(false);
@@ -137,18 +138,20 @@ TEST_CASE("gui.viewport: drawn outside OnRender, its picture is kept; made again
     Bed bed;
     bed.Frame(bed.main.Get());
     REQUIRE(bed.viewport->IsReady());
-    CHECK(bed.viewport->ClearCount() == 1u); // nothing defined yet: cleared, ready to sample
+    CHECK(bed.viewport->ClearCount() == 1u); // nothing defined yet, so it is cleared and ready to sample
     CHECK(bed.viewport->ColorState() == rhi::ResourceState::ShaderRead);
     bed.Frame(bed.main.Get());
-    CHECK(bed.viewport->ClearCount() == 1u); // what it holds is kept
+    CHECK(bed.viewport->ClearCount() == 1u); // what it holds is kept, so no second clear
 
-    // A renderer with its own frame draws it, from the state it was in, and leaves it to sample.
+    // A renderer with its own frame draws it, starting from the state it was in, and leaves it
+    // ready to sample.
     bed.viewport->SetColorState(rhi::ResourceState::RenderTarget);
     bed.viewport->SetColorState(rhi::ResourceState::ShaderRead);
     bed.Frame(bed.main.Get());
     CHECK(bed.viewport->ClearCount() == 1u); // not cleared over
 
-    // Made again at another size: undefined until something draws it.
+    // When the targets are made again at another size, they are undefined until something draws
+    // them.
     bed.viewport->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(400.0f); });
     bed.Frame(bed.main.Get());
     CHECK(bed.viewport->RenderWidth() == 400u);
@@ -200,7 +203,7 @@ TEST_CASE("gui.viewport: an sRGB target has its twin view; a float one has none"
 {
     Bed bed;
     bed.Frame(bed.main.Get());
-    CHECK(bed.viewport->ColorAlternateView() == nullptr); // RGBA16Float: no twin
+    CHECK(bed.viewport->ColorAlternateView() == nullptr); // RGBA16Float has no twin
     bed.viewport->SetFormats(rhi::TextureFormat::RGBA8UnormSrgb, bed.viewport->DepthFormat());
     bed.Frame(bed.main.Get());
     CHECK(bed.viewport->ColorAlternateView() != nullptr);
@@ -216,14 +219,14 @@ TEST_CASE("gui.viewport: the hosted content's text input is the node's; the poin
     bed.Frame(bed.main.Get());
     shell::InputSurface* surface = bed.viewport->HostedSurface();
     REQUIRE(surface != nullptr);
-    CHECK(surface->Fit().contentSize.x == doctest::Approx(320.0f)); // the targets' own
+    CHECK(surface->Fit().contentSize.x == doctest::Approx(320.0f)); // the targets' own resolution
     bed.viewport->SetContentResolution(1920, 1080, FitMode::Letterbox);
     bed.Frame(bed.main.Get());
     CHECK(surface->Fit().contentSize.x == doctest::Approx(1920.0f));
     CHECK(surface->Fit().contentSize.y == doctest::Approx(1080.0f));
     CHECK(surface->Fit().mode == FitMode::Letterbox);
 
-    // At a fixed resolution too: the region is the content's rectangle inside the drawn targets.
+    // At a fixed resolution too, the region is the content's rectangle inside the drawn targets.
     bed.viewport->SetFixedResolution(160, 200); // a tall screen in a wide node
     bed.viewport->SetFitMode(FitMode::Letterbox);
     bed.Frame(bed.main.Get());

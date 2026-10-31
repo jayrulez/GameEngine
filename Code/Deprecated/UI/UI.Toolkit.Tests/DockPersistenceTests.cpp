@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Faithful port of Sedulous.UI.Tests/src/DockPersistenceTests.bf (19 cases: PersistenceId, ExportLayout,
-// ApplyLayout, and Export->Apply round-trips). Beef `scope`/`new` view trees become RefPtr-owned views;
-// `===` -> pointer `==`; heap `DockLayoutNode` -> stack value / UniquePtr; `defer delete` dropped (RAII).
+// Dock persistence tests: PersistenceId, ExportLayout, ApplyLayout, and round trips from export to
+// apply. View trees are RefPtr-owned; a DockLayoutNode is a stack value or a UniquePtr.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -13,10 +12,10 @@ using namespace foundation::ui;
 using namespace foundation::ui::toolkit;
 using namespace foundation::core;
 
-// new Label("...") -> a RefPtr<Label>; pass .Get() to AddPanel (the panel/tree adopts a ref).
+// Makes a RefPtr<Label>; pass .Get() to AddPanel (the panel or tree adopts a ref).
 static RefPtr<Label> MakeLabel(StringView text) { return MakeRef<Label>(DefaultAllocator(), text); }
 
-// Beef private helper CountPanels(DockLayoutNode) -> recurse over the value struct via raw pointers.
+// Counts the panels in a layout, recursing over the node values through raw pointers.
 static int CountPanels(const DockLayoutNode* node)
 {
     if (node == nullptr)
@@ -195,7 +194,7 @@ TEST_CASE("dock-persistence: ExportLayout_PreservesSplitRatio")
     dm->DockPanel(p1, DockPosition::Center);
     dm->DockPanel(p2, DockPosition::Right);
 
-    // Adjust split ratio.
+    // Adjust the split ratio.
     if (auto* split = Cast<DockSplit>(dm->RootNode()))
     {
         split->SetSplitRatio(0.3f);
@@ -232,7 +231,7 @@ TEST_CASE("dock-persistence: ExportLayout_NestedSplit")
     CHECK(layout.Get() != nullptr);
     CHECK(layout->Type == DockLayoutNodeType::Split);
 
-    // Should be a nested split tree with all 3 panels.
+    // A nested split tree with all 3 panels.
     const int panelCount = CountPanels(layout.Get());
     CHECK(panelCount == 3);
 }
@@ -252,7 +251,7 @@ TEST_CASE("dock-persistence: ApplyLayout_SinglePanel")
     DockablePanel* panel = dm->AddPanel(StringView(u8"Assets"), MakeLabel(u8"Content").Get());
     panel->SetPersistenceId(StringView(u8"assets"));
 
-    // Build layout manually.
+    // Build the layout by hand.
     DockLayoutNode layout;
     layout.Type = DockLayoutNodeType::TabGroup;
     layout.PanelIds.PushBack(String(u8"assets"));
@@ -260,7 +259,7 @@ TEST_CASE("dock-persistence: ApplyLayout_SinglePanel")
 
     dm->ApplyLayout(&layout);
 
-    // Panel should be docked.
+    // The panel is docked.
     CHECK(panel->Parent != nullptr);
     CHECK(dm->RootNode() != nullptr);
 }
@@ -354,7 +353,7 @@ TEST_CASE("dock-persistence: ApplyLayout_UnknownPanelId_Skipped")
 
     dm->ApplyLayout(&layout);
 
-    // Only the known panel should be docked.
+    // Only the known panel is docked.
     CHECK(Cast<DockTabGroup>(dm->RootNode()) != nullptr);
     auto* group = Cast<DockTabGroup>(dm->RootNode());
     CHECK(group->PanelCount() == 1);
@@ -391,11 +390,11 @@ TEST_CASE("dock-persistence: ApplyLayout_EmptySplitBranch_Collapsed")
 
     dm->ApplyLayout(&layout);
 
-    // Split should collapse since second is empty.
+    // The split collapses, since its second side is empty.
     CHECK(Cast<DockTabGroup>(dm->RootNode()) != nullptr);
 }
 
-// === Roundtrip (Export -> Apply) ===
+// === Round trip (export, then apply) ===
 
 TEST_CASE("dock-persistence: Roundtrip_SinglePanel")
 {
@@ -448,10 +447,10 @@ TEST_CASE("dock-persistence: Roundtrip_ComplexLayout")
 
     const int originalPanelCount = CountPanels(layout.Get());
 
-    // Apply (rebuilds tree).
+    // Apply (rebuilds the tree).
     dm->ApplyLayout(layout.Get());
 
-    // Export again and verify structure matches.
+    // Export again and check that the structure matches.
     auto layout2 = dm->ExportLayout();
 
     CHECK(layout2.Get() != nullptr);
@@ -509,7 +508,7 @@ TEST_CASE("dock-persistence: Roundtrip_PreservesActiveTab")
     dm->DockPanel(p1, DockPosition::Center);
     dm->DockPanelRelativeTo(p2, DockPosition::Center, p1->Parent);
 
-    // Select second tab.
+    // Select the second tab.
     if (auto* group = Cast<DockTabGroup>(dm->RootNode()))
     {
         group->SetSelectedIndex(1);

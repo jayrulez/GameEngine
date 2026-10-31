@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.gui - the engine's GUI from a script (E8 of Specs/gui-lab-evolution-3.md), on both
-// backends: the surface the GUI domain registers, installed in a script context by the subsystem;
-// `gui::root()` is the screen tier's root, its `screens` the gamekit's stack, which pushes a cooked
-// document by its asset guid through the engine's resource provider. Engine.GUI's own suite stays
-// backend-neutral.
+// engine.gui: the engine's GUI driven from a script, on both backends. The GUI domain registers
+// the script surface and the subsystem installs it in a script context. `gui::root()` is the root
+// of the screen tier, and its `screens` is the gamekit's stack, which pushes a cooked document by
+// its asset guid through the engine's resource provider. Engine.GUI's own suite stays
+// backend-neutral, so these checks live here.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -15,7 +15,7 @@ import foundation.runtime;
 import foundation.content;
 import foundation.resource;
 import foundation.script;
-import foundation.script.facades; // the base behaviour facades (Entity, which a component's `of` takes)
+import foundation.script.facades; // the base behaviour facades, including Entity for a component's `of`
 import foundation.gui;
 import foundation.gui.gamekit;
 import foundation.gui.resources;
@@ -45,8 +45,8 @@ namespace
         }
     };
 
-    // A project holding one cooked document, the engine's GUI over it, and a script context the
-    // subsystem gave its surface.
+    // A project holding one cooked document, the engine's GUI over it, and a script context in
+    // which the subsystem installed its surface.
     struct Bed
     {
         String folder{u8"scratch_engine_gui_script"};
@@ -131,8 +131,8 @@ namespace
                 REQUIRE(value != nullptr);
                 return *value;
             };
-            CHECK(number(u8"isScreenRoot") == doctest::Approx(1.0)); // gui::root() is the screen tier's
-            CHECK(number(u8"pushMenu") == doctest::Approx(1.0));     // the document by its guid
+            CHECK(number(u8"isScreenRoot") == doctest::Approx(1.0)); // gui::root() is the screen tier root
+            CHECK(number(u8"pushMenu") == doctest::Approx(1.0));     // pushed the document by its guid
             CHECK(gui->Screens()->Count() == 1u);
             CHECK(gui->Screens()->IsPaused());
             CHECK(number(u8"hasStatus") == doctest::Approx(1.0));
@@ -160,8 +160,8 @@ TEST_CASE("engine-gui-script: AngelScript finds the screen tier at gui::root() a
 #ifdef OPTION_HAS_ANGELSCRIPT
 TEST_CASE("engine-gui-script: AngelScript reaches a canvas's, a billboard's and a world panel's tree by root()")
 {
-    // root() hands back a Node handle in a Variant; AngelScript binds it only with the type named,
-    // so a script calling it fails to compile without.
+    // root() returns a Node handle in a Variant. AngelScript binds that only when the type is
+    // registered by name, so without it a script calling root() fails to compile.
     Bed bed;
     RefPtr<script::IScriptManager> manager = script::angelscript::CreateScriptManager(DefaultAllocator());
     script::RegisterReflectedTypes(*manager);

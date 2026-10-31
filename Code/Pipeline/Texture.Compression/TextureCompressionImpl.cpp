@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// texture.compression impl - the encoder dispatch + policy table. The heavy encoder headers live
-// ONLY here (GCC module hygiene). bc7enc = BC7; rgbcx = BC1/3/4/5.
+// texture.compression impl - the encoder dispatch and policy table. The heavy encoder headers live
+// only here, out of the module interface. bc7enc does BC7; rgbcx does BC1/3/4/5.
 
 module;
 #include "Core/Prelude.h"
@@ -77,11 +77,11 @@ namespace texcomp
         if (usage == TextureUsage::HDR)
         {
             // BC6H (unsigned) is part of the same BC feature we already require on desktop and
-            // desktop browsers; the mobile ASTC-HDR variant is the asset-variants follow-up.
+            // desktop browsers; there is no ASTC-HDR path, so other targets keep HDR uncompressed.
             return profile.bc ? F::BC6HRGBUfloat : uncompressed;
         }
 
-        if (profile.bc) // desktop + desktop browsers - prefer BC (checked first if a profile had both)
+        if (profile.bc) // desktop and desktop browsers: prefer BC (checked first if a profile had both)
         {
             switch (usage)
             {
@@ -92,12 +92,12 @@ namespace texcomp
                 }
                 return sRGB ? F::BC1RGBAUnormSrgb : F::BC1RGBAUnorm; // opaque, Default
             case TextureUsage::Normal:
-                // BC7-linear, NOT BC5: the shaders decode rgb * 2 - 1 and BC5 has no B
-                // (z decodes to -1 = the white-normals bug). Same 1 byte/texel as BC5;
-                // BC5 + shader z-reconstruction is the deferred quality step.
+                // BC7-linear, not BC5: the shaders decode rgb * 2 - 1 and BC5 has no B
+                // (z decodes to -1, so normals shade white). Same 1 byte/texel as BC5;
+                // BC5 needs the shaders to reconstruct z first.
                 return F::BC7RGBAUnorm;
             case TextureUsage::Mask:
-                // A packed ORM/ARM authored as Mask carries THREE meaningful channels;
+                // A packed ORM/ARM authored as Mask carries three meaningful channels;
                 // BC4 would keep R only. The cook's channel sniff routes those to
                 // BC7-linear; true single-channel masks (rough/AO/height) stay BC4.
                 return multiChannel ? F::BC7RGBAUnorm : F::BC4RUnorm;
@@ -105,14 +105,14 @@ namespace texcomp
                 return uncompressed; // handled above
             }
         }
-        if (profile.astc) // mobile browsers - one 4x4 format covers every LDR usage (alpha built in)
+        if (profile.astc) // mobile browsers: one 4x4 format covers every LDR usage (alpha built in)
         {
             // ASTC has no per-usage format split like BC: the 4x4 block encodes RGBA at ~8 bpp, and
             // the encoder is told the semantic (normal/perceptual) via flags at encode time. sRGB
             // only meaningfully applies to color; Normal/Mask stay linear.
             return (sRGB && usage == TextureUsage::Color) ? F::ASTC4x4UnormSrgb : F::ASTC4x4Unorm;
         }
-        // ETC2 + any other family stay uncompressed.
+        // ETC2 and any other family stay uncompressed.
         return uncompressed;
     }
 
@@ -158,7 +158,7 @@ namespace texcomp
             return out;
         }
 
-        // astcenc wants a non-const slice-pointer array; the codec only READS it when compressing.
+        // astcenc wants a non-const slice-pointer array; the codec only reads it when compressing.
         void* slice = const_cast<u8*>(rgba);
         astcenc_image image{};
         image.dim_x = width;
@@ -215,16 +215,15 @@ namespace texcomp
             blockBytes = 16;
             break;
         default:
-            return Array<byte>{}; // BC6H / ASTC not supported in this build
+            return Array<byte>{}; // not an RGBA8 block format (BC6H goes through EncodeBlockCompressedHdr)
         }
         out.Resize(BlockCompressedSize(format, width, height));
         // rgbcx level 0..18 (BC1/3); bc7enc uber level 0..4. Map both from `quality` 0..255.
         const u32 rgbcxLevel = (static_cast<u32>(quality) * rgbcx::MAX_LEVEL) / 255u;
         bc7enc_compress_block_params bc7params;
         bc7enc_compress_block_params_init(&bc7params);
-        // Default (128) = bc7enc's uber 0 - its own default, and ~4x faster than uber 2 for a
-        // fraction of a dB (2026-09-23: the mid mapping cost a 4k texture ~50 s of CPU);
-        // Quality (255) = uber 4, the export-grade effort.
+        // Default (128) is bc7enc's uber 0, its own default, and about 4x faster than uber 2 for a
+        // fraction of a dB; Quality (255) is uber 4, the export-grade effort.
         bc7params.m_uber_level = quality >= 255u ? 4u : (quality >= 192u ? 2u : 0u);
         // One block row per work item: each row writes its own slice of `out`, every block is
         // encoded on its own (the encoders keep no state past EnsureInit), so the fan-out is

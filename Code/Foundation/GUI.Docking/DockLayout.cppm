@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - :layout partition: DockLayout, a dock layout as plain data (D1 of
-// Specs/gui-lab-evolution-3.md).
+// GUI.Docking - :layout partition: DockLayout, a dock layout as plain data.
 //
 // The layout is data, not widgets: what the dock widgets show is reconciled from it, a drop's
-// preview is an operation run on a copy of it, and it is tested without a GUI. Surfaces are the
-// main window's and each floating window's, each a whole tree (a floating window can be docked
-// into, and docks whole: its panels as a stack's tabs, or its tree beside a stack or along an edge). Nodes live in one table by stable id: a split has an axis, children and their weights (a
-// share each, summing to one), a stack its panels (by registered id, never by title), the active
-// one and its flags. The main surface has one central stack (the documents' area), kept when it is
-// empty. A panel closed keeps its last place, to be shown there again.
+// preview is an operation run on a copy of it, and it is tested without a GUI. There is one
+// surface for the main window and one for each floating window, and each surface holds a whole
+// tree. Panels can be docked into a floating window, and a floating window can dock whole: its
+// panels become a stack's tabs, or its tree goes beside a stack or along an edge. Nodes live in one
+// table by stable id. A split has an axis, children and their weights (one share per child,
+// summing to one). A stack has its panels (by registered id, never by title), the active one and
+// its flags. The main surface has one central stack (the documents' area), which is kept when it
+// is empty. A closed panel keeps its last place, so it can be shown there again.
 //
 // An operation either does what it says or refuses with its reason and changes nothing; none falls
-// back to doing something else (zed's split of the first pane when its target is gone). After each,
-// the layout is normalized: a stack left empty goes (not the central one), a split left with one
-// child gives way to it, a split inside a split of the same axis is merged into it, weights sum to
-// one, a floating surface left empty goes. A child that goes gives its share to its neighbours, the
-// rest keeping theirs (zed set them all equal again).
+// back to doing something else (such as splitting another pane when its target is gone). After
+// each operation the layout is normalized: an empty stack is removed (except the central one), a
+// split left with one child is replaced by that child, a split inside a split of the same axis is
+// merged into it, weights are made to sum to one, and an empty floating surface is removed. A
+// removed child's share goes to its neighbours, and the rest keep theirs.
 
 module;
 #include "Core/Prelude.h"
@@ -64,21 +65,21 @@ export namespace foundation::gui
     enum DockStackFlag : u32
     {
         DockStackCentral = 1u << 0, ///< the main surface's documents area: kept when empty
-        DockStackLocked = 1u << 1,  ///< no panel tabs into it or leaves it
+        DockStackLocked = 1u << 1,  ///< no panel may be tabbed into it or leave it
         DockStackNoSplit = 1u << 2, ///< nothing docks beside it
-        DockStackNoTabs = 1u << 3,  ///< one panel, no more tabs into it
+        DockStackNoTabs = 1u << 3,  ///< holds one panel; no more may be tabbed into it
     };
 
     struct DockNode
     {
         DockNodeId Id = kNoDock;
-        DockNodeId Parent = kNoDock; ///< kNoDock: a surface's root
+        DockNodeId Parent = kNoDock; ///< kNoDock for a surface's root
         DockNodeKind Kind = DockNodeKind::Stack;
-        // A split's.
+        // Split fields.
         DockAxis Axis = DockAxis::Horizontal;
         Array<DockNodeId> Children;
-        Array<f32> Weights; ///< a share each, summing to one
-        // A stack's.
+        Array<f32> Weights; ///< one share per child, summing to one
+        // Stack fields.
         Array<String> Panels;
         u32 Active = 0;
         u32 Flags = 0;
@@ -97,14 +98,14 @@ export namespace foundation::gui
         DockSurfaceId Id = kNoDock;
         DockSurfaceKind Kind = DockSurfaceKind::Main;
         DockNodeId Root = kNoDock;
-        Rectangle Bounds{0.0f, 0.0f, 0.0f, 0.0f}; ///< a floating one's, in logical units on its screen
+        Rectangle Bounds{0.0f, 0.0f, 0.0f, 0.0f}; ///< a floating surface's, in logical units on its screen
         String Screen;                         ///< the screen it was on (by name)
         f32 Scale = 1.0f;                      ///< that screen's scale
         DockNodeId Maximized = kNoDock;        ///< a stack shown alone over the surface
     };
 
-    /// Where a panel was: its stack and its place among its tabs, and the panels about it then (to
-    /// find a place near them when the stack is gone).
+    /// Where a panel was: its stack, its position among the stack's tabs, and the panels around it
+    /// at the time, used to find a place near them when the stack is gone.
     struct DockPlace
     {
         DockSurfaceId Surface = kNoDock;
@@ -130,7 +131,8 @@ export namespace foundation::gui
 
     class DockLayoutDocument;
 
-    /// What an operation did: nothing refused, or its reason.
+    /// The result of an operation: Refused is empty when it succeeded, or holds the reason it was
+    /// refused.
     struct DockOutcome
     {
         String Refused;
@@ -141,7 +143,7 @@ export namespace foundation::gui
     class DockLayout
     {
     public:
-        /// A main surface holding its central stack, empty.
+        /// Makes a layout of a main surface holding an empty central stack.
         DockLayout()
         {
             DockNode& central = MakeNode(DockNodeKind::Stack);
@@ -212,8 +214,8 @@ export namespace foundation::gui
 
         // === What it does ===
 
-        /// A panel not docked yet (or hidden) as a tab of `stack`, at `index` (past the end: last),
-        /// and made its active one.
+        /// Docks a panel that is not docked yet (or is hidden) as a tab of `stack` at `index`, or
+        /// last when `index` is past the end, and makes it the stack's active tab.
         DockOutcome InsertTab(core::StringView panel, DockNodeId stack, i32 index = -1)
         {
             if (DockOutcome refused = CanEnter(panel); !refused.Ok())
@@ -225,8 +227,8 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// A panel not docked yet (or hidden) in a stack of its own beside `stack`, taking `share`
-        /// of the room `stack` had.
+        /// Docks a panel that is not docked yet (or is hidden) in a new stack beside `stack`, taking
+        /// `share` of the room `stack` had.
         DockOutcome InsertBeside(core::StringView panel, DockNodeId stack, DockSide side, f32 share = 0.5f)
         {
             if (DockOutcome refused = CanEnter(panel); !refused.Ok())
@@ -238,8 +240,8 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// A panel not docked yet (or hidden) in a stack of its own along a whole surface's edge,
-        /// taking `share` of the surface.
+        /// Docks a panel that is not docked yet (or is hidden) in a new stack along the edge of a
+        /// whole surface, taking `share` of the surface.
         DockOutcome InsertAtEdge(core::StringView panel, DockSurfaceId surface, DockSide side, f32 share = 0.25f)
         {
             if (DockOutcome refused = CanEnter(panel); !refused.Ok())
@@ -252,7 +254,8 @@ export namespace foundation::gui
             return {};
         }
 
-        /// A docked panel moved to a tab of `stack` (its own: to another place among its tabs).
+        /// Moves a docked panel to a tab of `stack`. When `stack` is the panel's own stack, the panel
+        /// moves to another place among its tabs.
         DockOutcome MoveToTab(core::StringView panel, DockNodeId stack, i32 index = -1)
         {
             if (DockOutcome refused = CanLeave(panel); !refused.Ok())
@@ -276,7 +279,7 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// A docked panel moved into a stack of its own beside `stack`.
+        /// Moves a docked panel into a new stack beside `stack`.
         DockOutcome MoveBeside(core::StringView panel, DockNodeId stack, DockSide side, f32 share = 0.5f)
         {
             if (DockOutcome refused = CanLeave(panel); !refused.Ok())
@@ -290,7 +293,7 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// A docked panel moved to a whole surface's edge.
+        /// Moves a docked panel to the edge of a whole surface.
         DockOutcome MoveToEdge(core::StringView panel, DockSurfaceId surface, DockSide side, f32 share = 0.25f)
         {
             if (DockOutcome refused = CanLeave(panel); !refused.Ok())
@@ -305,8 +308,8 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// A panel (docked, hidden or new) in a floating surface of its own at `bounds`; `made` is
-        /// that surface.
+        /// Puts a panel (docked, hidden or new) in a new floating surface at `bounds`, and sets
+        /// `made` to that surface.
         DockOutcome Float(core::StringView panel, Rectangle bounds, DockSurfaceId* made = nullptr)
         {
             if (panel.IsEmpty())
@@ -331,9 +334,10 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        // === A floating surface docked whole (D5) ===
-        /// Every panel of floating `surface` as tabs of `stack`, in its stacks' order (the float's
-        /// active panel active there); the surface goes.
+        // === Docking a whole floating surface ===
+        /// Moves every panel of floating `surface` into `stack` as tabs, in the order of the
+        /// surface's stacks, and makes the float's active panel active there. The surface is
+        /// removed.
         DockOutcome DockSurfaceInto(DockSurfaceId surface, DockNodeId stack)
         {
             if (DockOutcome refused = CanDockWhole(surface, stack); !refused.Ok())
@@ -355,10 +359,11 @@ export namespace foundation::gui
             }
             DockNode& into = *Node(stack);
             into.Active = IndexIn(into, active.AsView());
-            Normalize(); // the emptied surface goes
+            Normalize(); // removes the emptied surface
             return {};
         }
-        /// Floating `surface`'s whole tree beside `stack`, taking `share` of its room; the surface goes.
+        /// Docks the whole tree of floating `surface` beside `stack`, taking `share` of the stack's
+        /// room. The surface is removed.
         DockOutcome DockSurfaceBeside(DockSurfaceId surface, DockNodeId stack, DockSide side, f32 share = 0.5f)
         {
             if (DockOutcome refused = CanDockWhole(surface, stack); !refused.Ok())
@@ -370,7 +375,8 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// Floating `surface`'s whole tree along the edge of surface `into`; the floating one goes.
+        /// Docks the whole tree of floating `surface` along the edge of surface `into`. The floating
+        /// surface is removed.
         DockOutcome DockSurfaceAtEdge(DockSurfaceId surface, DockSurfaceId into, DockSide side, f32 share = 0.25f)
         {
             const DockSurface* from = FindSurface(surface);
@@ -386,9 +392,10 @@ export namespace foundation::gui
             return {};
         }
 
-        // === A stack moved whole (its strip's grip) ===
-        /// Every panel of `stack` as tabs of `into` at `index` (-1: last), in order, its active panel
-        /// active there; the emptied stack goes (the central one stays, empty).
+        // === Moving a whole stack (dragged by the grip on its strip) ===
+        /// Moves every panel of `stack`, in order, into `into` as tabs at `index` (-1 for last), and
+        /// makes its active panel active there. The emptied stack is removed, except the central
+        /// stack, which stays empty.
         DockOutcome MoveStackInto(DockNodeId stack, DockNodeId into, i32 index = -1)
         {
             if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
@@ -413,7 +420,8 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// `stack` beside `target`, taking `share` of its room (a float it was all of goes).
+        /// Moves `stack` beside `target`, taking `share` of the target's room. A floating surface
+        /// that held only `stack` is removed.
         DockOutcome MoveStackBeside(DockNodeId stack, DockNodeId target, DockSide side, f32 share = 0.5f)
         {
             if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
@@ -426,7 +434,7 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// `stack` along the whole edge of `surface`.
+        /// Moves `stack` along the whole edge of `surface`.
         DockOutcome MoveStackToEdge(DockNodeId stack, DockSurfaceId surface, DockSide side, f32 share = 0.25f)
         {
             if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
@@ -440,7 +448,7 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// `stack` in a floating surface of its own at `bounds`; `made` is that surface.
+        /// Moves `stack` into a new floating surface at `bounds`, and sets `made` to that surface.
         DockOutcome FloatStack(DockNodeId stack, Rectangle bounds, DockSurfaceId* made = nullptr)
         {
             if (DockOutcome refused = CanMoveStack(stack); !refused.Ok())
@@ -461,7 +469,8 @@ export namespace foundation::gui
             return {};
         }
 
-        /// A docked panel closed: no longer docked, its place kept to show it there again.
+        /// Closes a docked panel: it is no longer docked, and its place is kept so it can be shown
+        /// there again.
         DockOutcome Close(core::StringView panel)
         {
             if (DockOutcome refused = CanLeave(panel); !refused.Ok())
@@ -477,14 +486,15 @@ export namespace foundation::gui
                 if (other.AsView() != panel)
                     hidden.Last.Neighbours.PushBack(other);
             if (hidden.Last.Neighbours.IsEmpty())
-                NeighboursBeside(stackId, hidden.Last.Neighbours); // alone: those in the stack beside it
+                NeighboursBeside(stackId, hidden.Last.Neighbours); // alone in its stack: remember the panels in the stack beside it
             TakeOut(panel);
             m_hidden.PushBack(core::Move(hidden));
             Normalize();
             return {};
         }
-        /// A closed panel shown again where it was: among its stack's tabs; that stack gone, beside
-        /// a neighbour from then; none of them docked, in the central stack.
+        /// Shows a closed panel again where it was, among its stack's tabs. When that stack is gone,
+        /// the panel goes beside the first of the panels around it then that is still docked in a
+        /// stack that allows it; when none is, it goes in the central stack.
         DockOutcome Show(core::StringView panel)
         {
             const DockHidden* hidden = FindHidden(panel);
@@ -502,7 +512,7 @@ export namespace foundation::gui
                 return InsertTab(panel, central);
             return DockOutcome::Refuse(u8"there is nowhere to show it");
         }
-        /// A closed panel's place let go: it is no longer remembered.
+        /// Forgets the remembered place of a closed panel.
         DockOutcome Forget(core::StringView panel)
         {
             if (FindHidden(panel) == nullptr)
@@ -510,7 +520,7 @@ export namespace foundation::gui
             Unhide(panel);
             return {};
         }
-        /// A docked panel made its stack's active tab.
+        /// Makes a docked panel its stack's active tab.
         DockOutcome Activate(core::StringView panel)
         {
             const DockNodeId stack = StackOf(panel);
@@ -520,7 +530,8 @@ export namespace foundation::gui
             node.Active = IndexIn(node, panel);
             return {};
         }
-        /// A split's children's shares (any scale; one each).
+        /// Sets the shares of a split's children, one per child. They may be at any scale, since the
+        /// layout is normalized afterwards.
         DockOutcome SetWeights(DockNodeId split, Span<const f32> weights)
         {
             DockNode* node = Node(split);
@@ -533,7 +544,8 @@ export namespace foundation::gui
             Normalize();
             return {};
         }
-        /// A stack shown alone over its surface (kNoDock on a surface: none).
+        /// Shows a stack alone over its surface. Restore clears it; a surface's Maximized is kNoDock
+        /// when no stack is maximized.
         DockOutcome Maximize(DockNodeId stack)
         {
             const DockNode* node = FindNode(stack);
@@ -560,7 +572,8 @@ export namespace foundation::gui
             node->Flags = flags;
             return {};
         }
-        /// A floating surface's place and screen (what a host reports when the layout is taken).
+        /// Sets a floating surface's bounds and screen, as a host reports them (the controller notes
+        /// the user's moves through this).
         DockOutcome SetSurfaceBounds(DockSurfaceId surface, Rectangle bounds, core::StringView screen, f32 scale)
         {
             DockSurface* found = SurfaceRef(surface);
@@ -572,11 +585,12 @@ export namespace foundation::gui
             return {};
         }
 
-        /// `read` (a layout restored from text) made this one, if it holds together; refused with
-        /// what does not, this one unchanged. A panel it names that is not registered stays, a
-        /// placeholder for when it is; one registered (in `known`) that it names nowhere goes to its
-        /// default place; a floating surface off every one of `screens` (logical units; none: no
-        /// check) comes back onto the first, no larger than it.
+        /// Replaces this layout with `read` (a layout restored from text) if `read` holds together.
+        /// Otherwise it refuses with what is wrong and leaves this layout unchanged. A panel `read`
+        /// names that is not registered stays as a placeholder for when it is registered. A
+        /// registered panel (in `known`) that `read` names nowhere goes to its default place. A
+        /// floating surface off every one of `screens` (in logical units; an empty list skips the
+        /// check) comes back onto the first screen, no larger than it.
         DockOutcome Adopt(DockLayout read, Span<const DockDefault> known, Span<const Rectangle> screens = {})
         {
             String why;
@@ -612,10 +626,11 @@ export namespace foundation::gui
             return {};
         }
 
-        /// Whether it holds together: every node in one place in one surface's tree, splits of two
-        /// or more children whose shares sum to one and none of its own axis inside it, no empty stack
-        /// but the central one, which is in the main surface, a panel in one stack at most and never
-        /// also hidden, a floating surface never empty. `why` says what does not, for a test.
+        /// Whether the layout holds together. Every node is in one place in one surface's tree.
+        /// Every split has two or more children whose shares sum to one, and no child split of its
+        /// own axis. No stack is empty except the central one, which is in the main surface. A panel
+        /// is in one stack at most and never also hidden. No floating surface is empty. `why`
+        /// receives what is wrong, for a test.
         [[nodiscard]] bool CheckInvariants(String* why = nullptr) const;
 
     private:
@@ -650,7 +665,7 @@ export namespace foundation::gui
                 return DockOutcome::Refuse(u8"that stack holds one panel");
             return {};
         }
-        // A floating surface, docked whole at `stack` of another surface.
+        // Checks that floating `surface` can dock whole at `stack` of another surface.
         [[nodiscard]] DockOutcome CanDockWhole(DockSurfaceId surface, DockNodeId stack) const
         {
             const DockSurface* from = FindSurface(surface);
@@ -662,7 +677,7 @@ export namespace foundation::gui
                 return DockOutcome::Refuse(u8"a surface cannot dock into itself");
             return {};
         }
-        // A stack picked up whole: one there, with panels, not locked.
+        // Checks that `stack` can be picked up whole: it exists, has panels and is not locked.
         [[nodiscard]] DockOutcome CanMoveStack(DockNodeId stack) const
         {
             const DockNode* node = FindNode(stack);
@@ -684,7 +699,7 @@ export namespace foundation::gui
             return {};
         }
 
-        // === Changes (Normalize after) ===
+        // === Changes (call Normalize after them) ===
         DockNode& MakeNode(DockNodeKind kind)
         {
             DockNode node;
@@ -711,7 +726,7 @@ export namespace foundation::gui
                     return;
                 }
         }
-        // Out of its stack, which may be left empty until Normalize.
+        // Takes `panel` out of its stack, which may be left empty until Normalize.
         void TakeOut(core::StringView panel)
         {
             DockNode& stack = *Node(StackOf(panel));
@@ -727,14 +742,15 @@ export namespace foundation::gui
             stack.Panels.Insert(at, String(panel));
             stack.Active = static_cast<u32>(at);
         }
-        // A new stack holding `panel`, `share` of `targetId`'s room, on `side` of it.
+        // Makes a new stack holding `panel` on `side` of `targetId`, with `share` of its room.
         void PlaceBeside(core::StringView panel, DockNodeId targetId, DockSide side, f32 share)
         {
             DockNode& made = MakeNode(DockNodeKind::Stack);
             made.Panels.PushBack(String(panel));
             PlaceNodeBeside(made.Id, targetId, side, share);
         }
-        // Node `madeId` (a root of none) `share` of `targetId`'s room, on `side` of it.
+        // Places node `madeId`, which is attached nowhere yet, on `side` of `targetId` with `share`
+        // of its room.
         void PlaceNodeBeside(DockNodeId madeId, DockNodeId targetId, DockSide side, f32 share)
         {
             share = Clamp(share, 0.05f, 0.95f);
@@ -743,7 +759,8 @@ export namespace foundation::gui
             DockNode* parent = Node(target->Parent);
             if (parent != nullptr && parent->Axis == axis)
             {
-                // A sibling in the split it is in: its share parted between them.
+                // The target's parent split has the same axis: insert the node beside the target
+                // there and divide the target's share between them.
                 usize at = 0;
                 while (parent->Children[at] != targetId)
                     ++at;
@@ -757,14 +774,14 @@ export namespace foundation::gui
             }
             Wrap(targetId, madeId, axis, IsBefore(side), share);
         }
-        // A new stack holding `panel` along the whole surface's edge.
+        // Makes a new stack holding `panel` along the edge of the whole surface.
         void PlaceAtEdge(core::StringView panel, DockSurfaceId surfaceId, DockSide side, f32 share)
         {
             DockNode& made = MakeNode(DockNodeKind::Stack);
             made.Panels.PushBack(String(panel));
             PlaceNodeAtEdge(made.Id, surfaceId, side, share);
         }
-        // Node `madeId` (a root of none) along the whole surface's edge.
+        // Places node `madeId`, which is attached nowhere yet, along the edge of the whole surface.
         void PlaceNodeAtEdge(DockNodeId madeId, DockSurfaceId surfaceId, DockSide side, f32 share)
         {
             share = Clamp(share, 0.05f, 0.95f);
@@ -782,8 +799,8 @@ export namespace foundation::gui
             }
             Wrap(root->Id, madeId, axis, IsBefore(side), share);
         }
-        // `targetId` and `madeId` in a new split of `axis` where `targetId` was, `madeId` first when
-        // `before`, with `share` of the room.
+        // Puts `targetId` and `madeId` in a new split of `axis` where `targetId` was, `madeId` first
+        // when `before`. `madeId` takes `share` of the room.
         void Wrap(DockNodeId targetId, DockNodeId madeId, DockAxis axis, bool before, f32 share)
         {
             DockNode& split = MakeNode(DockNodeKind::Split);
@@ -832,8 +849,9 @@ export namespace foundation::gui
                     return;
                 }
         }
-        // Detaches `id` from where it is (its parent, or its surface: a floating surface goes; the
-        // main one is never left without a root, since its central stack is never removed).
+        // Detaches `id` from its parent, or from its surface when it is a root, in which case a
+        // floating surface is removed. The main surface is never left without a root, since its
+        // central stack is never removed.
         void Detach(DockNodeId id)
         {
             DockNode* node = Node(id);
@@ -871,8 +889,9 @@ export namespace foundation::gui
                         surface.Root = childId;
             Node(childId)->Parent = parentId;
         }
-        // A stack taken from where it is, the root of none now, to be placed (a float it was all of
-        // goes). The central stack stays where it is, emptied: a new stack takes its panels and goes.
+        // Takes a stack out of where it is, attached nowhere and ready to be placed; a floating
+        // surface that held only this stack is removed. The central stack itself stays where it is
+        // and is emptied: a new stack takes its panels and is the one returned.
         DockNodeId TakeStack(DockNodeId stack)
         {
             if (Node(stack)->Has(DockStackCentral))
@@ -889,15 +908,17 @@ export namespace foundation::gui
             Node(stack)->Parent = kNoDock;
             return stack;
         }
-        // A floating surface's root taken off it (the root of none now) and the surface gone.
+        // Takes the root off a floating surface, leaving the root attached nowhere, and removes the
+        // surface.
         DockNodeId Lift(DockSurfaceId surface)
         {
             const DockNodeId root = SurfaceRef(surface)->Root;
-            Detach(root); // a floating surface's root: the surface goes
+            Detach(root); // detaching a floating surface's root removes the surface
             Node(root)->Parent = kNoDock;
             return root;
         }
-        // The panels under `id`, in order (stacks depth first), and the first stack's active one.
+        // Collects the panels under `id` into `out` in order (stacks depth first), and the first
+        // stack's active panel into `active`.
         void CollectPanels(DockNodeId id, Array<String>& out, String& active) const
         {
             const DockNode* node = FindNode(id);
@@ -942,7 +963,7 @@ export namespace foundation::gui
                 DockNode& node = m_nodes[i];
                 if (node.IsStack())
                 {
-                    // An empty stack goes, but the central one.
+                    // An empty stack is removed, except the central one.
                     if (node.Panels.IsEmpty() && !node.Has(DockStackCentral))
                     {
                         const DockNodeId id = node.Id;
@@ -955,7 +976,7 @@ export namespace foundation::gui
                 const DockNodeId id = node.Id;
                 if (node.Children.Size() <= 1)
                 {
-                    // A split of one gives way to it (of none, goes).
+                    // A split with one child is replaced by it; a split with none is removed.
                     if (node.Children.Size() == 1)
                         Replace(id, node.Children[0]);
                     else
@@ -964,7 +985,8 @@ export namespace foundation::gui
                     changed = true;
                     continue;
                 }
-                // A split of its own axis inside it: its children merged in, sharing its share.
+                // A child split of the same axis is merged in: its children take its place and
+                // divide its share.
                 for (usize c = 0; c < node.Children.Size(); ++c)
                 {
                     DockNode* child = Node(node.Children[c]);
@@ -992,7 +1014,8 @@ export namespace foundation::gui
                 }
             }
         }
-        // Shares summing to one; actives within their stacks; maximized stacks still there.
+        // Make the shares sum to one, keep each stack's active index within its panels, and clear
+        // a surface's maximized stack when it is no longer on that surface.
         for (DockNode& node : m_nodes)
         {
             if (node.IsStack())
@@ -1022,7 +1045,8 @@ export namespace foundation::gui
         {
             if (sibling == stack)
                 continue;
-            // The stacks in the sibling's subtree, nearest first: enough to find a place near.
+            // The stacks in the sibling's subtree, nearest first, which is enough to find a place
+            // near the panel.
             Array<DockNodeId> todo;
             todo.PushBack(sibling);
             while (!todo.IsEmpty())
@@ -1053,7 +1077,7 @@ export namespace foundation::gui
             return fail(u8"the main surface is not first");
         for (const DockNode& node : m_nodes)
             if (node.Id == kNoDock || node.Id >= m_nextNode)
-                return fail(u8"a node's id past the next one made"); // a new one would collide
+                return fail(u8"a node's id past the next one made"); // the next id made would collide with it
         for (const DockSurface& surface : m_surfaces)
             if (surface.Id == kNoDock || surface.Id >= m_nextSurface)
                 return fail(u8"a surface's id past the next one made");

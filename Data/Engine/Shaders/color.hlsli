@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The sRGB transfer functions (IEC 61966-2-1), for shaders that receive an AUTHORED colour as
-// bytes or floats: authored colours are sRGB, the value a colour picker and a hex code show, and
+// The sRGB transfer functions (IEC 61966-2-1), for shaders that receive an authored colour as
+// bytes or floats. Authored colours are sRGB (the value a colour picker and a hex code show) and
 // rendering works in linear, so a vertex colour is decoded once on its way in. Componentwise
-// step/lerp keeps them portable through DXC and naga.
+// step and lerp keep the functions portable through DXC and naga.
 #ifndef COLOR_HLSLI
 #define COLOR_HLSLI
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/DashGeneratorTests.bf.
+// DashGenerator: dash patterns, offsets and closed paths.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -48,8 +48,8 @@ TEST_CASE("dash: closed path wraps")
 
 TEST_CASE("dash: an odd-length pattern repeats to even (SVG rule) - [10] is ten on, ten off")
 {
-    // A 40-unit line under [10]: dashes at 0-10 and 20-30, gaps between. The old
-    // index-parity rule made a one-element pattern index 0 forever = a solid line in pieces.
+    // A 40-unit line under [10]: dashes at 0-10 and 20-30, gaps between. A one-element pattern
+    // read by index parity would stay on index 0 forever and draw a solid line in pieces.
     const Float2 points[2] = {Float2{0.0f, 0.0f}, Float2{40.0f, 0.0f}};
     const f32 pattern[1] = {10.0f};
     Array<Array<Float2>> dashes;
@@ -61,7 +61,7 @@ TEST_CASE("dash: an odd-length pattern repeats to even (SVG rule) - [10] is ten 
     CHECK(dashes[1].Front().x == doctest::Approx(20.0f));
     CHECK(dashes[1].Back().x == doctest::Approx(30.0f));
 
-    // Three elements repeat as six: [5, 3, 2] = 5 on, 3 off, 2 on, 5 off, 3 on, 2 off (20).
+    // Three elements repeat as six: [5, 3, 2] is 5 on, 3 off, 2 on, 5 off, 3 on, 2 off (20).
     const Float2 line[2] = {Float2{0.0f, 0.0f}, Float2{20.0f, 0.0f}};
     const f32 three[3] = {5.0f, 3.0f, 2.0f};
     dashes.Clear();

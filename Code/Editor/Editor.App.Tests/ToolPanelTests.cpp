@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Viewport tool-PANEL seam tests. The registry (keyed by tool id,
-// idempotent, first-wins) and ViewportToolPanelHost (the active-tool -> panel mount controller) are
-// pure logic, so they exercise headlessly: fake tools drive a ViewportToolManager, fake providers
-// build throwaway views, and mount/clear callbacks record what the host asked the page to dock.
-// Covers the H1 acceptance list: panel appears/disappears with the tool, an unknown/panel-less tool
-// shows nothing and never crashes, and gesture-safe switching between two paneled tools clears the
-// old panel before mounting the new one.
+// Viewport tool panel tests. The registry (keyed by tool id; registering again is ignored and the
+// first provider wins) and ViewportToolPanelHost (which mounts the active tool's panel) are pure
+// logic, so they run headlessly: fake tools drive a ViewportToolManager, fake providers build
+// throwaway views, and mount and clear callbacks record what the host asked the page to dock. The
+// panel appears and disappears with its tool, an unknown or panel-less tool shows nothing and does
+// not crash, and switching between two tools with panels clears the old panel before mounting the
+// new one.
 
 #include <doctest/doctest.h>
 
@@ -26,7 +26,7 @@ namespace gui = foundation::gui;
 
 namespace
 {
-    // A minimal viewport tool that only carries an id (the panel seam keys on Id() alone).
+    // A minimal viewport tool that only carries an id (panels are keyed on Id() alone).
     class FakeTool final : public IViewportTool
     {
     public:
@@ -76,10 +76,10 @@ TEST_CASE("tool-panel registry: idempotent, first-wins per tool id")
     FakeProvider terrain(u8"terrain");
 
     registry.Register(&anim);
-    registry.Register(&anim); // same pointer -> ignored
+    registry.Register(&anim); // same pointer: ignored
     CHECK(registry.Count() == 1);
 
-    registry.Register(&animAgain); // second provider for "anim" -> ignored (first wins)
+    registry.Register(&animAgain); // second provider for "anim": ignored (the first wins)
     CHECK(registry.Count() == 1);
     CHECK(registry.FindByToolId(u8"anim") == &anim);
 
@@ -94,7 +94,7 @@ TEST_CASE("tool-panel registry: idempotent, first-wins per tool id")
 TEST_CASE("tool-panel host: panel appears and disappears with its tool")
 {
     ViewportToolManager tools;
-    AddTool(tools, u8"select"); // first added = default, no panel
+    AddTool(tools, u8"select"); // the first added is the default, with no panel
     AddTool(tools, u8"anim");
 
     ViewportToolPanelRegistry registry;
@@ -129,10 +129,10 @@ TEST_CASE("tool-panel host: panel appears and disappears with its tool")
     CHECK(tools.ActivateById(u8"anim"));
     host.Sync();
     CHECK(mounts == 1);
-    CHECK(clears == 0); // nothing to clear - the tool we left had no panel
+    CHECK(clears == 0); // nothing to clear: the tool we left had no panel
     CHECK(host.CurrentPanel() != nullptr);
     CHECK(lastMounted == host.CurrentPanel());
-    CHECK(mountedFor == StringView(u8"anim")); // the tool it is for, for its chrome
+    CHECK(mountedFor == StringView(u8"anim")); // the tool the panel is for, for its chrome
     CHECK(animPanel.CreateCount == 1);
 
     // A Sync with no active-tool change is a no-op (the view is not rebuilt every frame).
@@ -163,7 +163,7 @@ TEST_CASE("tool-panel host: unknown / panel-less tool docks nothing")
                                [&]() { ++clears; });
 
     CHECK(tools.ActivateById(u8"anim"));
-    host.Sync(); // no provider for "anim" -> no panel, no crash
+    host.Sync(); // no provider for "anim": no panel and no crash
     CHECK(mounts == 0);
     CHECK(clears == 0);
     CHECK(host.CurrentPanel() == nullptr);

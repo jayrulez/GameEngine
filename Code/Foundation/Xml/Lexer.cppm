@@ -3,10 +3,10 @@
 
 // Foundation::Xml - :lexer partition
 //
-// Low-level UTF-8 scanning primitives: name/value/content reading, entity and
-// character-reference decoding, CDATA/comment/PI bodies. Operates on byte
+// Low-level UTF-8 scanning primitives: name, value and content reading, entity and
+// character-reference decoding, CDATA, comment and PI bodies. Operates on byte
 // (UTF-8) StringViews; bytes >= 0x80 count as name characters so multi-byte
-// names pass through. Ported from Sedulous.Xml/XmlLexer.bf.
+// names pass through.
 
 module;
 #include "Core/Prelude.h"
@@ -334,7 +334,7 @@ export namespace foundation::xml
             return true;
         }
 
-        // Splits "prefix:local" into prefix + local (prefix empty if no colon).
+        // Splits "prefix:local" into prefix and local (prefix empty if no colon).
         static void SplitQualifiedName(StringView qualifiedName, String& prefix, String& localName)
         {
             prefix.Clear();
@@ -547,7 +547,7 @@ export namespace foundation::xml
             1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
         };
 
-        // 1 = valid XML name char (above + digits, '-', '.').
+        // 1 = valid XML name char (the above, digits, '-', '.').
         static constexpr u8 sNameCharState[256] = {
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, // '-' (0x2D), '.' (0x2E)

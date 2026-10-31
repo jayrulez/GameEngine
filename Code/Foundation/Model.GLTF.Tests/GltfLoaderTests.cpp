@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// glTF loader: node transforms. A glTF node carries EITHER a TRS triple or a 4x4 matrix
+// glTF loader: node transforms. A glTF node carries either a TRS triple or a 4x4 matrix
 // (column-major, column-vector convention). Every consumer of a ModelBone reads its TRS
-// fields (the cook copies them into the resource's Transform), so both spellings must land
-// there - a matrix-only node used to leave the fields at identity and cook at the origin.
+// fields (the cook copies them into the resource's Transform), so both spellings have to land
+// there, or a matrix-only node keeps the fields at identity and cooks at the origin.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -21,7 +21,7 @@ using namespace foundation::model;
 
 namespace
 {
-    // Two nodes describing the SAME transform: translation (10,0,0), uniform scale 2, no
+    // Two nodes describing the same transform: translation (10,0,0), uniform scale 2, no
     // rotation. glTF's matrix is column-major, so the translation sits in the last four.
     constexpr const char* kDocument = R"({
   "asset": {"version": "2.0"},
@@ -125,7 +125,7 @@ TEST_CASE("gltf: colour factors (linear by the glTF spec) are read as authored s
     std::remove(path);
 }
 
-// KHR_materials_unlit: the material comes in on the built-in Unlit (Specs/phong-material.md), its
+// KHR_materials_unlit: the material comes in on the built-in Unlit, its
 // colour read from the metallic-roughness block as the extension says; a material without it is PBR.
 TEST_CASE("gltf: a material with KHR_materials_unlit is unlit; one without is PBR")
 {

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// DX12 implementation of RenderPassEncoder + MeshShaderPassExt.
+/// DX12 implementation of RenderPassEncoder and MeshShaderPassExt.
 /// Records render pass commands into the parent command encoder's command list.
-/// Ported from Sedulous.RHI.DX12/DX12RenderPassEncoder.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -32,7 +31,7 @@ using namespace foundation::core;
 export namespace foundation::rhi::dx12
 {
 
-    // A recorded bundle command list (+ its allocator, which must outlive GPU execution). Lives
+    // A recorded bundle command list (and its allocator, which must outlive GPU execution). Lives
     // here (not in :render_bundle_encoder) so ExecuteBundles can use it without a module cycle.
     class DxRenderBundleImpl : public RenderBundle
     {
@@ -88,7 +87,7 @@ export namespace foundation::rhi::dx12
             m_currentMeshPipeline = nullptr;
         }
 
-        // ---- RenderPassEncoder: Pipeline & Binding ----
+        // ---- RenderPassEncoder: pipeline and binding ----
 
         void SetPipeline(RenderPipeline* pipeline) override
         {
@@ -106,7 +105,7 @@ export namespace foundation::rhi::dx12
 
             // Re-apply cached vertex buffers with correct strides from the new pipeline.
             // DX12 vertex buffer views include stride, which comes from the pipeline.
-            // If setVertexBuffer was called before setPipeline, the stride was 0.
+            // If SetVertexBuffer was called before SetPipeline, the stride was 0.
             for (u32 slot = 0; slot < m_cachedVbCount; ++slot)
             {
                 if (m_cachedVbs[slot].BufferLocation != 0)
@@ -133,7 +132,7 @@ export namespace foundation::rhi::dx12
 
             // Copy-on-bind: copy bind group's descriptors into encoder's staging region,
             // then bind from the staging offset. This makes bind group destruction safe
-            // during command recording -- the GPU only references the staging copy.
+            // during command recording: the GPU only references the staging copy.
 
             // Bind CBV/SRV/UAV table (staged).
             if (dxGroup->cbvSrvUavOffset() >= 0 && dxLayout && dxLayout->cbvSrvUavCount() > 0)
@@ -154,7 +153,7 @@ export namespace foundation::rhi::dx12
             }
 
             // Bind sampler table: baked into the shader-visible heap at bind-group creation
-            // (no staging - the 2048-cap sampler heap cannot fit per-draw copies).
+            // (no staging: the sampler heap's 2048 cap cannot fit per-draw copies).
             if (dxGroup->gpuSamplerOffset() >= 0 && dxLayout && dxLayout->samplerCount() > 0)
             {
                 i32 rootIdx = layout->getSamplerRootIndex(index);
@@ -166,7 +165,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Bind dynamic offset root descriptors (not staged -- uses GPU virtual addresses).
+            // Bind dynamic offset root descriptors (not staged; they use GPU virtual addresses).
             auto dynAddrs = dxGroup->dynamicGpuAddresses();
             usize dynOffsetIdx = 0;
             for (usize i = 0; i < layout->dynamicRootEntries().Size(); ++i)
@@ -213,7 +212,7 @@ export namespace foundation::rhi::dx12
                 static_cast<UINT>(layout->pushConstantRootIndex()), size / 4, data, offset / 4);
         }
 
-        // ---- Vertex & Index Buffers ----
+        // ---- Vertex and index buffers ----
 
         void SetVertexBuffer(u32 slot, Buffer* buffer, u64 offset) override
         {
@@ -518,7 +517,7 @@ export namespace foundation::rhi::dx12
             m_currentMeshPipeline = nullptr;
         }
 
-        // Accessors for bundle recording: the last pipeline/root-sig set on this encoder.
+        // Accessors for bundle recording: the last pipeline and root signature set on this encoder.
         [[nodiscard]] ID3D12PipelineState* currentPso() const
         {
             return m_currentPipeline ? m_currentPipeline->handle() : nullptr;

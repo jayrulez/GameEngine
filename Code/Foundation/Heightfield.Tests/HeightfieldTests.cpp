@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.heightfield: the pure grid + sampling math. Covers the size contract, exact grid-point
-// and bilinear-midpoint sampling, edge clamp, world<->grid round-trip, normals, cell bounds, and the
-// ray-march query (the editor-brush / physics-shared height source). Heightfield IS-A Object (a
-// resource product), so it is held through a RefPtr.
+// foundation.heightfield: the pure grid and sampling math. Covers the size contract, exact
+// grid-point and bilinear-midpoint sampling, edge clamp, the world-to-grid round trip, normals, cell
+// bounds, and the ray-march query (the height source the editor brushes and physics share).
+// Heightfield is an Object (a resource product), so it is held through a RefPtr.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -300,7 +300,7 @@ TEST_CASE("heightfield sculpt: a brush entirely off-grid touches nothing")
     CHECK(h->Version() == v0); // no change -> no re-upload signal
 }
 
-// ---- holes (Specs/terrain-holes.md): a per-sample cut; a triangle with a hole vertex is gone ----
+// ---- holes: a per-sample cut; a triangle with a hole vertex is gone ----
 
 TEST_CASE("heightfield holes: a fresh grid is solid; SetHole counts, SetHoles replaces and refuses a wrong size")
 {
@@ -421,12 +421,12 @@ TEST_CASE("heightfield holes: a ray through a cut cell misses and one beside it 
     REQUIRE(h->QueryRay(Float3{-6.0f, 5.5f, 0.0f}, Float3{1.0f, -0.05f, 0.0f}, t));
     const f32 hitX = -6.0f + t * (1.0f / Sqrt(1.0f + 0.05f * 0.05f));
     CHECK(hitX > 2.5f); // not inside the cut
-    // Starting UNDER the surface inside the cut (a cave) is no hit at the entry.
+    // Starting under the surface inside the cut (a cave) is no hit at the entry.
     CHECK_FALSE(h->QueryRay(Float3{0.0f, 2.0f, 0.0f}, Float3{0.0f, -1.0f, 0.0f}, t));
     // The brushes' pick treats the cut as surface: the same ray lands on the plane at 5 m.
     REQUIRE(h->QueryRayIgnoringHoles(Float3{0.0f, 20.0f, 0.0f}, Float3{0.0f, -1.0f, 0.0f}, t));
     CHECK(Near(20.0f - t, 5.0f, 5.0e-2f));
-    // An angled ray whose crossing lies INSIDE the cut (x ~ -1): the surface rule passes through
+    // An angled ray whose crossing lies inside the cut (x ~ -1): the surface rule passes through
     // and never comes back above the field (no hit); the brushes' rule lands on the plane there.
     CHECK_FALSE(h->QueryRay(Float3{-6.0f, 5.25f, 0.0f}, Float3{1.0f, -0.05f, 0.0f}, t));
     REQUIRE(h->QueryRayIgnoringHoles(Float3{-6.0f, 5.25f, 0.0f}, Float3{1.0f, -0.05f, 0.0f}, t));

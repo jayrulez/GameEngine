@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WebMain.cpp - the BROWSER entry point for Engine.Player. Shares PlayerApplication.h with the
-// desktop Main.cpp and runs the exact same generic game runner; it differs only in the platform
-// trio (web shell + WebGPU + the requestAnimationFrame runner, via APP_MAIN's web body)
-// and in how the game reaches it: the browser has no argv, so the player FETCHES the dist from
-// the SERVING FOLDER at startup - player.xml + Content.pak (the export output) and the Data/
-// tree (Data/.dataroot + Data/Engine/Shaders/shaders.dpak, the same layout a desktop dist stages)
-// (the export-cooked WGSL engine pack; browsers have no shader compiler) - into the MEMFS root,
-// then runs with projectDir ".". Nothing is baked at link time, which is what makes this binary
-// a reusable EXPORT TEMPLATE: export any project, drop the files next to the player, serve the
-// folder, browse. The fetches are synchronous under ASYNCIFY (the same yield mechanism the GPU
-// waits use).
+// WebMain.cpp: the browser entry point for Engine.Player. Shares PlayerApplication.h with the
+// desktop boot and runs the same generic game runner. It differs only in the platform trio (web
+// shell, WebGPU and the requestAnimationFrame runner, through APP_MAIN's web body) and in how
+// the game reaches it: the browser has no argv, so at startup the player fetches the dist from
+// the serving folder into the MEMFS root, then runs with projectDir ".". The dist is player.xml
+// and Content.pak (the export output) and the Data/ tree (Data/.dataroot and
+// Data/Engine/Shaders/shaders.dpak, the export-cooked WGSL engine pack, since browsers have no
+// shader compiler), in the same layout a desktop dist stages. Nothing is baked in at link time,
+// so this binary is a reusable export template: export any project, drop the files next to the
+// player, serve the folder, browse. The fetches are synchronous under ASYNCIFY (the same yield
+// mechanism the GPU waits use).
 
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -27,14 +27,14 @@ import foundation.resource;
 import foundation.fonts;
 import foundation.fonts.resource;
 import foundation.shell;
-import foundation.shell.web; // WebShell (the browser shell) - required by APP_MAIN's web body
+import foundation.shell.web; // WebShell (the browser shell), required by APP_MAIN's web body
 import foundation.graphics;
 import foundation.graphics.gpu;
-import foundation.rhi;        // adapter probe: pick the content pak by compressed-family (P3b)
+import foundation.rhi;        // adapter probe: pick the content pak by compressed-texture family
 import foundation.rhi.webgpu; // the browser's WebGPU backend (for the pre-boot adapter probe)
 import foundation.runtime;
 import foundation.runtime.client;
-import foundation.runtime.web; // RunApplication (the rAF runner) - required by APP_MAIN
+import foundation.runtime.web; // RunApplication (the rAF runner), required by APP_MAIN
 import engine.defaultapp;
 import foundation.scene;
 import engine.scene;
@@ -76,7 +76,7 @@ import engine.project;
 import foundation.vfs.pak;
 
 #include "PlayerApplication.h"      // the shared runner (uses the imports above)
-#include "Runtime.Client/AppMain.h" // APP_MAIN (web body: WebShell + WebGPU + rAF runner)
+#include "Runtime.Client/AppMain.h" // APP_MAIN (web body: WebShell, WebGPU and the rAF runner)
 
 using namespace foundation::core;
 
@@ -147,13 +147,13 @@ namespace
 {
     // Pull one dist file from the serving folder into the MEMFS root. Synchronous under
     // ASYNCIFY (emscripten_wget yields to the browser while the request runs). A build
-    // that PRELOADED the file (e.g. the WebScene sample shape) skips the fetch.
+    // that preloaded the file (for example the WebScene sample) skips the fetch.
     void FetchDistFile(const char* name)
     {
         const StringView path(reinterpret_cast<const utf8char*>(name));
         if (FileExists(path))
         {
-            return; // preloaded/bundled - nothing to fetch
+            return; // preloaded or bundled: nothing to fetch
         }
         emscripten_wget(name, name);
         if (!FileExists(path))
@@ -172,21 +172,21 @@ namespace
         return FileExists(StringView(reinterpret_cast<const utf8char*>(dst)));
     }
 
-    // Pick the content variant pak by the browser's compressed-texture family and fetch it AS
-    // Content.pak, so the project loader (which reads Content.pak) needs no change (asset-variants
-    // P3b, Fable ruling Q1). A web dist built by this engine ships Content-bc.pak (desktop browsers)
-    // + Content-astc.pak (mobile browsers); a single-pak/old bundle falls back to Content.pak.
+    // Pick the content variant pak by the browser's compressed-texture family and fetch it as
+    // Content.pak, so the project loader (which reads Content.pak) needs no change. A web dist
+    // built by this engine ships Content-bc.pak (desktop browsers) and Content-astc.pak (mobile
+    // browsers); a single-pak or older bundle falls back to Content.pak.
     //
-    // The probe creates a throwaway WebGPU backend to read the adapter's textureCompressionBC/ASTC
-    // flags (Asyncify makes requestAdapter synchronous here, the same yield the fetches use), then
-    // tears it down before the app boots and creates its own device (two adapter requests/page is
-    // fine). If neither family is reported (spec-impossible for a WebGPU device), we log and fall
-    // back to the single pak rather than render nothing.
+    // The probe creates a throwaway WebGPU backend to read the adapter's textureCompressionBC and
+    // ASTC flags (Asyncify makes requestAdapter synchronous here, the same yield the fetches use),
+    // then tears it down before the app boots and creates its own device (two adapter requests per
+    // page is fine). If neither family is reported (which the WebGPU spec rules out), we log and
+    // fall back to the single pak rather than render nothing.
     void SelectAndFetchContentPak()
     {
         if (FileExists(u8"Content.pak"))
         {
-            return; // preloaded/bundled single pak - nothing to select
+            return; // a preloaded or bundled single pak: nothing to select
         }
 
         bool bc = false;
@@ -216,7 +216,7 @@ namespace
         {
             return; // the matching variant pak is now mounted as Content.pak
         }
-        // No variant pak on the server (single-pak / old bundle), or neither family: the single pak.
+        // No variant pak on the server (a single-pak or older bundle), or neither family: the single pak.
         FetchDistFile("Content.pak");
     }
 
@@ -273,24 +273,24 @@ namespace
 
         static engine::player::PlayerOptions MakeOptions()
         {
-            // Fetch BEFORE the app boots: the project loader reads player.xml/Content.pak
+            // Fetch before the app boots: the project loader reads player.xml and Content.pak
             // during Initialize, and the app resolves its data root (Data/.dataroot) in
             // Configure, then the render subsystem loads Data/Engine/Shaders/shaders.dpak on device init.
             MountUserData(); // before the player reads the user's settings or a game its save
             FetchDistFile("player.xml");
-            // Content: pick the variant pak by the browser's compressed-texture family (BC vs ASTC)
-            // and mount it AS Content.pak, so the loader is unchanged (asset-variants P3b).
+            // Content: pick the variant pak by the browser's compressed-texture family (BC or ASTC)
+            // and mount it as Content.pak, so the loader is unchanged.
             SelectAndFetchContentPak();
-            // The data tree, at the SAME layout a desktop dist stages beside the player, so the
-            // one discovery walk (cwd "/" -> "/Data") finds it in the browser too.
+            // The data tree, in the same layout a desktop dist stages beside the player, so the
+            // one discovery walk (from cwd "/" to "/Data") finds it in the browser too.
             (void)CreateDirectories(u8"Data/Engine/Shaders");
             FetchDistFile("Data/.dataroot");
             FetchDistFile("Data/Engine/Shaders/shaders.dpak");
             engine::player::PlayerOptions options;
             options.projectDir = String(u8".");
 #if defined(ENGINE_SHIP_NATIVE_GAME)
-            // The web SHIP player (game-native-code.md N5): no dlopen in a browser - the
-            // game's plugin is compiled in, same contract as the desktop ship stub.
+            // The web ship player: a browser has no dlopen, so the game's plugin is compiled in,
+            // with the same contract as the desktop ship stub.
             options.nativeGame = CreatePlugin();
 #endif
             return options;

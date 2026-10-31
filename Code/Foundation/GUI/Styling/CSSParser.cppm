@@ -5,15 +5,16 @@
 //
 // CSSParser: turns `.css` text into a StyleSheet. Ported from eepp's css/StyleSheetParser
 // (common subset). Handles `/* comments */`, comma-separated selector lists, `name: value;`
-// declaration blocks (custom properties and `!important` among them), `@media` blocks and
-// `@keyframes` and `@font-face`; best-effort (malformed bits are skipped). Other at-rules
-// (`@import`) are skipped, and nesting is not read. A quoted string is whole, as CSS tokenizes
-// one: no `;`, brace or comment opener inside it ends or starts anything, and no `;` inside
-// parentheses ends a declaration either (an inline SVG's markup, `url(data:...;base64,...)`).
-// Given a diagnostics list (E1), what it skips goes there with its line, for a cook: an at-rule it
-// does not read, a declaration with no colon, text with no rule block, a rule not closed, a
-// selector that can match nothing. Property names are checked apart (CheckStyleSheetNames: they
-// depend on the element types registered).
+// declaration blocks (custom properties and `!important` among them), `@media`, `@keyframes`,
+// `@font-face` and `@spritesheet` blocks, and `@import` statements. Parsing is best-effort
+// (malformed parts are skipped), other at-rules are skipped, and nesting is not read. A quoted
+// string is one token, as CSS tokenizes it: no `;`, brace or comment opener inside it ends or
+// starts anything. Likewise no `;` inside parentheses ends a declaration (an inline SVG's markup,
+// `url(data:...;base64,...)`). When given a diagnostics list, the parser records each thing it
+// skips there with its line, for a cook: an at-rule it does not read, a declaration with no
+// colon, text with no rule block, an unclosed rule, a selector that can match nothing. Property
+// names are checked separately (CheckStyleSheetNames), since they depend on which element types
+// are registered.
 
 module;
 #include "Core/Prelude.h"
@@ -32,8 +33,8 @@ namespace core = foundation::core;
 
 namespace foundation::gui
 {
-    // Past the quoted string starting at `i` (its closing quote, a backslash escaping one), or
-    // `i` when no string starts there.
+    // Returns the index just past the quoted string starting at `i` (a backslash escapes a quote),
+    // or `i` when no string starts there.
     [[nodiscard]] inline usize SkipQuoted(core::StringView s, usize i) noexcept
     {
         if (i >= s.Size() || (s[i] != u8'"' && s[i] != u8'\''))
@@ -44,7 +45,8 @@ namespace foundation::gui
         return i < s.Size() ? i + 1 : i;
     }
 
-    // The first of `stops` from `i` outside quoted strings and parentheses; the end when none.
+    // Returns the index of the first of `stops` at or after `i`, outside quoted strings and
+    // parentheses, or the end when there is none.
     [[nodiscard]] inline usize ScanTo(core::StringView s, usize i, core::StringView stops) noexcept
     {
         usize depth = 0;
@@ -69,8 +71,8 @@ namespace foundation::gui
         return i;
     }
 
-    // Blank out /* ... */ comments, keeping their line breaks, so a rule's place in the result is
-    // its place in the source (its line, for the inspector).
+    // Blanks out /* ... */ comments, keeping their line breaks, so a rule's position in the result
+    // matches its position in the source (its line, for the inspector).
     [[nodiscard]] inline core::String StripComments(core::StringView s)
     {
         core::String out;
@@ -79,7 +81,7 @@ namespace foundation::gui
         while (i < n)
         {
             if (const usize past = SkipQuoted(s, i); past != i)
-                i = past; // a string's "/*" is its text
+                i = past; // a "/*" inside a string is part of the string
             else if (i + 1 < n && s[i] == u8'/' && s[i + 1] == u8'*')
             {
                 out.Append(s.SubStr(runStart, i - runStart));
@@ -107,9 +109,9 @@ export namespace foundation::gui
     class CSSParser
     {
     public:
-        /// Parses CSS source into a StyleSheet named `name` (a path, "theme": where its rules came
-        /// from, which each rule keeps with its line and selector, for the inspector).
-        /// Given `diagnostics`, what it skips is said there (E1).
+        /// Parses CSS source into a StyleSheet named `name` (a path, or "theme": where its rules
+        /// came from, which each rule keeps with its line and selector for the inspector). When
+        /// `diagnostics` is given, everything skipped is reported there.
         [[nodiscard]] static StyleSheet Parse(core::StringView css, core::StringView name = {},
                                               Array<GuiDiagnostic>* diagnostics = nullptr)
         {
@@ -126,13 +128,13 @@ export namespace foundation::gui
         }
 
     private:
-        // The whole source (every block a part of it) and where its lines start.
+        // The whole source (every block is a part of it) and where its lines start.
         struct Source
         {
             core::StringView Whole;
             Array<usize> LineStarts;
-            Array<GuiDiagnostic>* Diagnostics = nullptr; // E1: where what is skipped is said
-            // Says what was skipped at `part` (its line), when diagnostics were asked for.
+            Array<GuiDiagnostic>* Diagnostics = nullptr; // receives what is skipped
+            // Reports what was skipped at `part`, with its line, when diagnostics were requested.
             void Skipped(core::StringView part, core::String message) const
             {
                 if (Diagnostics != nullptr)
@@ -154,7 +156,7 @@ export namespace foundation::gui
             }
         };
 
-        // Parse a run of rules (and nested @media blocks), attaching `media` to each rule.
+        // Parses a run of rules (and nested @media blocks), attaching `media` to each rule.
         static void ParseBlock(StyleSheet& sheet, const Source& source, core::StringView src, const MediaQuery& media)
         {
             const usize n = src.Size();
@@ -175,7 +177,7 @@ export namespace foundation::gui
                     if (i < n && src[i] == u8';')
                     {
                         ++i;
-                        // @import url(path) or "path" (E13): the style manager loads it through
+                        // @import url(path) or "path": the style manager loads it through
                         // its resource provider. Other at-statements are skipped.
                         bool read = false;
                         if (prelude.Size() > 7 && prelude.SubStr(0, 7) == core::StringView(u8"@import"))
@@ -221,7 +223,7 @@ export namespace foundation::gui
                         const core::StringView condition =
                             Trim(prelude.SubStr(6, prelude.Size() - 6));
                         ParseBlock(sheet, source, inner,
-                                   MediaQuery{condition}); // v1: inner media replaces outer
+                                   MediaQuery{condition}); // an inner @media replaces the outer one
                     }
                     else if (IsKeyframes(prelude))
                     {
@@ -265,8 +267,9 @@ export namespace foundation::gui
             }
         }
 
-        // An @spritesheet's block (E13): `src: url(atlas.png);` and a `name: x y width height;` per
-        // sprite, in the image's pixels (px or none). One without a source is dropped.
+        // Parses an @spritesheet's block: `src: url(atlas.png);` and one `name: x y width height;`
+        // per sprite, in the image's pixels (px or unitless). A spritesheet without a source is
+        // dropped.
         static void ParseSpritesheet(const Source& source, StyleSheet& sheet, core::StringView name, core::StringView block)
         {
             Spritesheet out;
@@ -304,7 +307,8 @@ export namespace foundation::gui
                 sheet.AddSpritesheet(core::Move(out));
         }
 
-        // An @import's path: its url() or its quoted string (a media list after it is ignored).
+        // Returns an @import's path: its url() or its quoted string (a media list after it is
+        // ignored).
         [[nodiscard]] static core::StringView ImportPath(core::StringView rest)
         {
             core::StringView s = Trim(rest);
@@ -337,8 +341,9 @@ export namespace foundation::gui
                    prelude.SubStr(0, 10) == core::StringView(u8"@keyframes");
         }
 
-        // An @font-face's declarations: font-family and src (its first url, a path), font-weight
-        // (a number, normal or bold) and font-style; one without a family or a source is dropped.
+        // Parses an @font-face's declarations: font-family, src (its first url, a path),
+        // font-weight (a number, normal or bold) and font-style. A face without a family or a
+        // source is dropped.
         static void ParseFontFace(const Source& source, StyleSheet& sheet, core::StringView block)
         {
             FontFaceRule face;
@@ -381,7 +386,7 @@ export namespace foundation::gui
                 sheet.AddFontFace(core::Move(face));
         }
 
-        // Parse the inner of @keyframes: a run of `<offset-list> { decls }` stops (offset is a
+        // Parses the inside of @keyframes: a run of `<offset-list> { decls }` stops (offset is a
         // percentage, or from/to). Comma-separated offsets share a block.
         static void ParseKeyframes(const Source& source, StyleSheet& sheet, core::StringView name, core::StringView inner)
         {
@@ -409,7 +414,7 @@ export namespace foundation::gui
                 if (i < n)
                     ++i; // consume '}'
 
-                // A stop per (comma-separated) offset, sharing the declarations.
+                // One stop per comma-separated offset, all sharing the declarations.
                 usize s = 0;
                 const usize on = offsetList.Size();
                 for (usize k = 0; k <= on; ++k)
@@ -477,7 +482,8 @@ export namespace foundation::gui
             return true;
         }
 
-        // One rule per comma-separated selector, each carrying the block's declarations + media.
+        // Emits one rule per comma-separated selector, each carrying the block's declarations and
+        // media.
         static void EmitRules(const Source& source, StyleSheet& sheet, u32 line, core::StringView selectorList,
                               core::StringView block, const MediaQuery& media)
         {
@@ -496,14 +502,15 @@ export namespace foundation::gui
             }
         }
 
-        // Split `name: value;` declarations into the rule (later same-name wins via SetProperty).
+        // Splits `name: value;` declarations into the rule (a later declaration of the same name
+        // wins, through SetProperty).
         static void ApplyDeclarations(const Source& source, StyleRule& rule, core::StringView block)
         {
             for (const StyleProperty& p : ParseDeclList(source, block))
                 rule.SetProperty(p.Name.AsView(), p.Value.AsView(), p.Important);
         }
 
-        // Parse `name: value;` declarations into a flat property list (in source order).
+        // Parses `name: value;` declarations into a flat property list (in source order).
         [[nodiscard]] static Array<StyleProperty> ParseDeclList(const Source& source, core::StringView block)
         {
             Array<StyleProperty> out;

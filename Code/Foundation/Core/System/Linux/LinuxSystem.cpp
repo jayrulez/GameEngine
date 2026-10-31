@@ -50,7 +50,7 @@ namespace foundation::core::sys
         timespec rem{};
         while (nanosleep(&req, &rem) == -1)
         {
-            req = rem; // interrupted by a signal - resume for the remainder
+            req = rem; // interrupted by a signal; resume for the remainder
         }
     }
 
@@ -85,7 +85,7 @@ namespace foundation::core::sys
 
     std::size_t GetUserDataDirectory(char* out, std::size_t outSize) noexcept
     {
-        // XDG spec: $XDG_DATA_HOME, else ~/.local/share. snprintf returns the length it WOULD write
+        // XDG spec: $XDG_DATA_HOME, else ~/.local/share. snprintf returns the length it would write
         // (excl null), matching the truncation contract; it also tolerates out == nullptr.
         if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && xdg[0] != '\0')
         {
@@ -127,7 +127,7 @@ namespace foundation::core::sys
         {
             return false;
         }
-        // Double-fork so the grandchild (xdg-open) reparents to init and is reaped there - no zombie,
+        // Double-fork so the grandchild (xdg-open) reparents to init and is reaped there: no zombie,
         // no global SIGCHLD change. The parent only waits on the intermediate child, which exits
         // immediately, so this never blocks the UI thread. xdg-open detaches from our stdio via setsid.
         const pid_t child = fork();
@@ -188,7 +188,7 @@ namespace foundation::core::sys
             out[0] = '\0';
         }
 
-        // Build argv2 = [exe, argv..., nullptr] BEFORE the fork so the child does no allocation.
+        // Build argv2 = [exe, argv..., nullptr] before the fork so the child does no allocation.
         constexpr int kMaxArgs = 62;
         const char* argv2[kMaxArgs + 2];
         int n = 0;
@@ -207,7 +207,7 @@ namespace foundation::core::sys
         // Self-pipe (close-on-exec) so the child can report an exec() failure to the parent: on a
         // successful exec the write end auto-closes and the parent reads EOF; on failure the child
         // writes errno first. Without this a missing binary would surface as the child's exit 127,
-        // indistinguishable from a real 127, and inconsistent with the Win32 spawn-fails -> -1 path.
+        // indistinguishable from a real 127, and unlike Win32, where a failed spawn returns -1.
         int execErr[2] = {-1, -1};
         if (pipe(execErr) != 0)
         {
@@ -250,7 +250,7 @@ namespace foundation::core::sys
                 close(devnull);
             }
             execv(exe, const_cast<char* const*>(argv2));
-            const int e = errno; // exec failed - report to the parent, then bail
+            const int e = errno; // exec failed: report to the parent, then bail
             const ssize_t wrote = write(execErr[1], &e, sizeof(e));
             (void)wrote;
             _exit(127);
@@ -529,7 +529,7 @@ namespace foundation::core::sys
                 break;
             }
         }
-        // O_CREAT mode is masked by umask - re-apply the exact source mode (the +x bit).
+        // O_CREAT mode is masked by umask, so re-apply the exact source mode (the +x bit).
         if (ok && ::fchmod(dst, st.st_mode & 07777) != 0)
         {
             ok = false;
@@ -823,7 +823,7 @@ namespace foundation::core::sys
         if (fd < 0)
         {
             return kInvalidSocket;
-        } // EWOULDBLOCK => none pending
+        } // EWOULDBLOCK: none pending
         SetNonBlocking(fd);
         if (fromIp != nullptr)
         {
@@ -925,7 +925,7 @@ namespace foundation::core::sys
     }
 }
 
-// Emscripten reuses this POSIX backend but has no execinfo - wasm stack traces come from
+// Emscripten reuses this POSIX backend but has no execinfo; wasm stack traces come from
 // the host (node --stack-trace-limit / browser devtools), so WriteBacktrace is a no-op.
 #if defined(__EMSCRIPTEN__)
 
@@ -972,10 +972,10 @@ namespace foundation::core::sys
 
     namespace
     {
-        // Async-signal-safe-ish fatal handler: write the signal name + native stack to stderr,
+        // Async-signal-safe-ish fatal handler: write the signal name and native stack to stderr,
         // restore the default action, re-raise (preserves the exit status / core dump). Only
-        // write() and backtrace_symbols_fd are used - the accepted best-effort trade in a dying
-        // process. SA_RESETHAND makes a crash INSIDE the handler fall through to the default.
+        // write() and backtrace_symbols_fd are used, a best-effort trade accepted in a dying
+        // process. SA_RESETHAND makes a crash inside the handler fall through to the default.
         void FatalSignalHandler(int sig) noexcept
         {
             const char* name = "FATAL SIGNAL";
@@ -1009,13 +1009,13 @@ namespace foundation::core::sys
 #if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
         // Under AddressSanitizer the sanitizer's own signal handler is the useful one (it names
         // the faulting frame and the freeing stack); ours would replace it and print only its
-        // own two frames (the 2026-09-23 Reset Layout hunt). Leave the sanitizer in charge.
+        // own two frames. Leave the sanitizer in charge.
         return;
 #endif
 
-        // Warm the unwinder NOW: glibc's backtrace() dlopens/allocates on first use, so calling
-        // it from the handler could re-enter malloc - fatal when the crash IS a malloc abort
-        // (heap corruption raises SIGABRT while holding the arena lock -> deadlock, no output).
+        // Warm the unwinder now: glibc's backtrace() dlopens and allocates on first use, so calling
+        // it from the handler could re-enter malloc. That is fatal when the crash is a malloc abort:
+        // heap corruption raises SIGABRT while holding the arena lock, giving a deadlock and no output.
         {
             void* warm[2];
             (void)backtrace(warm, 2);

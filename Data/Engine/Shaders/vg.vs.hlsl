@@ -2,16 +2,17 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // VG (2D vector-graphics) vertex shader. Transforms a 2D position by the projection cbuffer and
-// passes texcoord / color / coverage / effect through. Shared by the standard and distance-field pipelines.
-// Cooked into the engine shader pack like every other engine shader (WGSL for web, SPIR-V/DXIL for
-// desktop) - the VG renderer/UI resolves it via ShaderSystem::GetVariant("vg", Vertex).
+// passes texcoord, colour, coverage and effect through. Shared by the standard and distance-field
+// pipelines. Cooked into the engine shader pack like every other engine shader (WGSL for web,
+// SPIR-V or DXIL for desktop); the VG renderer resolves it through
+// ShaderSystem::GetVariant("vg", Vertex).
 //
-// Vertex colors are AUTHORED IN sRGB (byte colors from themes/styles) but the whole VG
-// pipeline works in linear space on an sRGB target: textures and gradient LUTs are
-// sRGB-decoded by the sampler, and the swapchain encodes on write. Decoding here (once
-// per vertex, exact IEC transfer) makes solid fills/strokes/text display EXACTLY the
-// authored bytes - matching the texture paths - and makes color interpolation across
-// triangles happen in linear space. Alpha is coverage, not color: it stays linear.
+// Vertex colours are authored in sRGB (byte colours from themes and styles), but the VG pipeline
+// works in linear space on an sRGB target: textures and gradient LUTs are sRGB-decoded by the
+// sampler, and the swapchain encodes on write. Decoding here (once per vertex, exact IEC
+// transfer) makes solid fills, strokes and text display the authored bytes exactly, as the
+// texture paths do, and makes colour interpolation across triangles happen in linear space.
+// Alpha is coverage, not colour: it stays linear.
 // An Encoded canvas (BlendSpace 1, VGBlendSpace::Encoded) draws into a UNORM view of its target and
 // blends encoded values, as browsers do: its colours stay as authored.
 #pragma pack_matrix(row_major)

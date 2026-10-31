@@ -1,5 +1,5 @@
-"""Snowline's props: the mountain's trees, shrubs and rocks, the slalom gates, the finish and the gems, modelled in
-Blender on the shared kit.
+"""Snowline's props: the mountain's trees, shrubs and rocks, the slalom gates, the finish and the
+gems, modelled in Blender on the shared kit.
 
     blender --background --factory-startup --python props.py -- <out dir> [preview] [names]
 
@@ -72,7 +72,7 @@ def gate_pole():
 
 
 def gate_flag(colour):
-    """A gate's flag: a panel 0.55 m wide and 0.45 m tall, its ORIGIN on the hinge line (the pole's
+    """A gate's flag: a panel 0.55 m wide and 0.45 m tall, its origin on the hinge line (the pole's
     side, half way up the panel), the panel out along +X: the hinge turns it about up."""
     def build():
         kit3d.box("Flag", (0.55, 0.015, 0.45), P(0.3, 0, 0), colour, bevel=0.004)
@@ -129,7 +129,7 @@ def kicker():
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     kit3d.finish("Kicker", bm, "KickerSnow")
     # The lip's stripe: paint on the table just past the lip, 3 mm up, flat. It is in the collision
-    # too, so it must stand proud of nothing: a raised strip at the lip deflected riders upward.
+    # too, so it must stand proud of nothing: a raised strip at the lip would deflect riders upward.
     stripe = bmesh.new()
     corners = [P(-half, KICKER_RUN, KICKER_HEIGHT + 0.003), P(half, KICKER_RUN, KICKER_HEIGHT + 0.003),
                P(half, KICKER_RUN + 0.4, KICKER_HEIGHT + 0.003), P(-half, KICKER_RUN + 0.4, KICKER_HEIGHT + 0.003)]

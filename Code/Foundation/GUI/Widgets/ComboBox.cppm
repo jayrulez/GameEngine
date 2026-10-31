@@ -4,18 +4,20 @@
 // GUI - :combo_box partition
 //
 // ComboBox: a control that shows the current selection and, when clicked, drops down a list of
-// choices. Modeled on eepp's UIDropDownList (role only), built by composition: the dropdown is a
-// ListBox opened as an auto popup (E5): it stays the combo box's child while open, in the top
-// layer, placed below it (above when there is more room there, shrunk to the room), so a press
-// outside or Escape closes it. Picking an item sets the selection and closes the dropdown.
+// choices. The dropdown is a ListBox opened as an auto popup. While open it stays the combo box's
+// child, sits in the top layer and is placed below the combo box (above it when there is more
+// room there), shrunk to fit the room. A press outside or Escape closes it. Picking an item sets
+// the selection and closes the dropdown.
 //
-// The keyboard and the pad (E5): Return, Space, a pad's South or Alt+Down open it with the list
-// focused on the current item, where the arrows move and Return picks; closed, Up and Down step the
-// selection (given back past the first and the last, so focus moves on), and a letter or a digit
-// selects the next item starting with it.
+// Keyboard and gamepad: Return, Space, the pad's South button or Alt+Down opens the dropdown with
+// the list focused on the current item; there the arrows move and Return picks. While it is
+// closed, Up and Down move the selection by one item. Past the first or the last item the key is
+// left unhandled, so focus can move on. A letter or a digit selects the next item that starts
+// with it.
 //
-// With nothing selected (-1: none yet, or the values it stands for differ, a property grid's
-// mixed state) it shows its placeholder in the placeholder's colour.
+// When nothing is selected (index -1) the combo box shows its placeholder in the placeholder
+// colour. That happens before anything is picked, or when the values it stands for differ, as in a
+// property grid's mixed state.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +35,7 @@ import :text;
 import :node;
 import :ui_widget;
 import :list_box;
-import :event_dispatcher; // the popup stack (E5)
+import :event_dispatcher; // the popup stack
 import :popup_placement;
 import :reactive; // Observable: a binding follows the selection
 
@@ -61,10 +63,11 @@ export namespace foundation::gui
             m_items.PushBack(core::String(text));
             if (m_dropdown)
                 m_dropdown->AddItem(text);
-            RequestLayout(); // as wide as its widest item
+            RequestLayout(); // the combo box is as wide as its widest item
         }
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
-        /// The items as one text, '|' between them (markup's and a sheet's `items`).
+        /// Replaces the items with those in `text`, separated by '|'. Markup and style sheets set
+        /// `items` through this.
         void SetItemsText(const core::String& text)
         {
             m_items.Clear();
@@ -72,7 +75,7 @@ export namespace foundation::gui
                 m_dropdown->Clear();
             for (const core::StringView item : SplitItems(text.AsView()))
                 AddItem(item);
-            // The old selection is gone with its item: none shows.
+            // The selected item was removed with the others, so nothing is selected now.
             if (m_selected != -1)
             {
                 m_selected = -1;
@@ -83,8 +86,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetItemsText() const { return JoinItems(m_items); }
 
-        /// The selected item's index, or -1 (markup's and a sheet's `selected`; a read a binding
-        /// follows).
+        /// Returns the selected item's index, or -1 when nothing is selected. This is the
+        /// `selected` property of markup and style sheets, and a binding that reads it follows
+        /// later changes.
         [[nodiscard]] i32 GetSelectedIndex() const
         {
             m_selectedChanged.Track();
@@ -96,7 +100,7 @@ export namespace foundation::gui
                        ? m_items[static_cast<usize>(m_selected)].AsView()
                        : core::StringView{};
         }
-        /// Selects `index`, or none with -1.
+        /// Selects the item at `index`, or nothing when `index` is -1.
         void SetSelectedIndex(i32 index)
         {
             if (index < -1 || index >= static_cast<i32>(m_items.Size()))
@@ -110,8 +114,9 @@ export namespace foundation::gui
             if (m_onChanged)
                 m_onChanged(index);
         }
-        /// The user picked `index` (the keys, type-ahead, the dropdown): as SetSelectedIndex, and
-        /// a `change` event when it changed, as a slider's or a field's.
+        /// Selects `index` on the user's behalf (from the keys, type-ahead or the dropdown). It
+        /// does what SetSelectedIndex does and, when the selection changed, also sends a `change`
+        /// event, as a slider or a text field does.
         void SelectByUser(i32 index)
         {
             const i32 was = m_selected;
@@ -129,11 +134,11 @@ export namespace foundation::gui
             const EventDispatcher* dispatcher = m_dropdown ? m_dropdown->GetEventDispatcher() : nullptr;
             return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_dropdown);
         }
-        /// The dropdown list (built on first open).
+        /// Returns the dropdown list, or null until the dropdown first opens.
         [[nodiscard]] ListBox* GetDropdown() const noexcept { return m_dropdown.Get(); }
         void SetItemHeight(f32 height) { m_itemHeight = height; }
 
-        /// What shows while nothing is selected (`placeholder`).
+        /// Sets the text shown while nothing is selected (the `placeholder` property).
         void SetPlaceholder(const core::String& text)
         {
             m_placeholder = text;
@@ -146,7 +151,7 @@ export namespace foundation::gui
             ShowSelection();
         }
 
-        /// Its widest item and the arrow beside it, one line of its font tall (E2).
+        /// Measures the widest item plus the arrow beside it, one line of the font tall.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
             f32 widest = 0.0f;
@@ -155,7 +160,7 @@ export namespace foundation::gui
                     widest = core::Max(widest, GetFont()->font->MeasureString(item.AsView()));
             return core::Float2{widest + 24.0f, GetFont() != nullptr ? GetFont()->font->Metrics().lineHeight : 20.0f};
         }
-        /// The selection's baseline, where it draws it.
+        /// Returns the baseline of the selection text, where it is drawn.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
         {
             const Thickness c = GetChrome();
@@ -164,8 +169,8 @@ export namespace foundation::gui
         }
 
     protected:
-        // Its selection draws in its text style; the arrow is the text's colour; the dropdown
-        // takes its font.
+        // The selection text uses this text style, the arrow takes the text colour, and the
+        // dropdown shares the font.
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
@@ -215,10 +220,11 @@ export namespace foundation::gui
                 event.Handled = true;
             }
             else if (KeyTypesText(key))
-                event.Handled = true; // its text arrives next, for type-ahead (E12)
+                event.Handled = true; // the key's text arrives next, for type-ahead
         }
-        // Typed text (E12: through the keyboard layout and an IME): the next item after the
-        // selection starting with its first character, round the end.
+        // Typed text arrives through the keyboard layout and any IME. It selects the next item
+        // after the current one that starts with the text's first character, wrapping past the
+        // end of the list.
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled() && !m_items.IsEmpty(); }
         void OnTextInput(const TextInputEvent& event) override
         {
@@ -242,11 +248,12 @@ export namespace foundation::gui
 
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
-            // A visible box so it reads as a control even unstyled; a sheet's fill (a theme's) replaces it.
+            // Draw a visible box so it reads as a control even unstyled; a style sheet's fill
+            // replaces it.
             if (!BoxFills())
                 ctx.VG().FillRect(Rectangle{localBounds.x, localBounds.y, localBounds.width, localBounds.height}, m_boxColor);
             const Rect b = GetContentBounds();
-            const bool rtl = IsRightToLeft(); // the arrow at the inline end
+            const bool rtl = IsRightToLeft(); // the arrow sits at the inline end
             // Selection text (leaving room for the arrow).
             m_text.Draw(ctx, MirroredIn(Rect{b.x, b.y, core::Max(0.0f, b.width - 16.0f), b.height}, b, rtl));
             // A small down-arrow.
@@ -262,7 +269,7 @@ export namespace foundation::gui
         }
 
     private:
-        // The selected item in the text's colour, or the placeholder in its own.
+        // Shows the selected item in the text colour, or the placeholder in the placeholder colour.
         void ShowSelection()
         {
             const bool none = m_selected < 0 || static_cast<usize>(m_selected) >= m_items.Size();
@@ -290,8 +297,9 @@ export namespace foundation::gui
             if (dispatcher == nullptr || m_items.IsEmpty())
                 return;
             BuildDropdown();
-            // As wide as the combo box; as tall as its rows with its own padding and border (a sheet's
-            // popup surface), measured by the layout rather than pinned, up to the most it shows.
+            // The dropdown is as wide as the combo box. Its height is left to the layout, which
+            // measures its rows plus its own padding and border (the style sheet's popup surface),
+            // capped at m_dropdownMaxHeight.
             const f32 width = GetSize().x, most = m_dropdownMaxHeight;
             m_dropdown->EditLayoutStyle([width, most](LayoutStyle& s)
             {
@@ -300,12 +308,12 @@ export namespace foundation::gui
                 s.MaxHeight = LayoutLength::Px(most);
             });
             if (m_selected >= 0)
-                m_dropdown->SetSelectedIndex(m_selected); // the current item lit, in view
+                m_dropdown->SetSelectedIndex(m_selected); // highlights the current item and scrolls to it
             PopupOptions options;
             options.Anchor = this;
             options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
-            options.TakesFocus = true; // the list: the arrows move, Return picks; focus back on close
-            options.FitContent = true; // measured each pass: its rows, its padding and border
+            options.TakesFocus = true; // the list takes focus so the arrows and Return work; focus returns on close
+            options.FitContent = true; // re-measured each layout pass from its rows, padding and border
             dispatcher->OpenPopup(*this, *m_dropdown, core::Move(options));
         }
 
@@ -325,13 +333,13 @@ export namespace foundation::gui
 
         Array<core::String> m_items;
         Text m_text;
-        RefPtr<ListBox> m_dropdown; // its child while open (E5); kept here while closed
+        RefPtr<ListBox> m_dropdown; // a child of the combo box while open; held here while closed
         i32 m_selected = -1;
         f32 m_itemHeight = 24.0f;
         f32 m_dropdownMaxHeight = 160.0f;
         Color m_boxColor{0.18f, 0.20f, 0.25f, 1.0f};
         Color m_arrowColor{0.75f, 0.80f, 0.86f, 1.0f};
-        Color m_placeholderColor{0.55f, 0.58f, 0.62f, 1.0f}; // a text field's
+        Color m_placeholderColor{0.55f, 0.58f, 0.62f, 1.0f}; // the same as a text field's placeholder
         core::String m_placeholder;
         core::Function<void(i32)> m_onChanged;
         mutable Observable m_selectedChanged;

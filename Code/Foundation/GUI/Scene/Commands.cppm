@@ -3,22 +3,22 @@
 
 // GUI - :commands partition
 //
-// One command model (G7 of Specs/vg-and-gui-lab.md): a command has an id, a label, an icon, and
-// enabled and checked states; buttons, menu items, shortcuts and gamepad buttons name it by id, so
-// one disabled command greys every control bound to it. Its dispatch follows GPUI's
-// (`zed/crates/gpui/src/key_dispatch.rs`): running a command walks the focus path, capture handlers
-// from the root down, then bubble handlers from the focused widget up, a bubble handler stopping it
-// unless it lets it go on; and a command is available (its controls lit) when it is enabled and a
-// handler for it is on the focus path, so moving focus greys and lights the right controls with no
-// bookkeeping. Availability is observable: a control's binding follows focus, the command's
-// enabled state and the handlers.
+// The command model. A command has an id, a label, an icon, and enabled and checked states.
+// Buttons, menu items, shortcuts and gamepad buttons refer to it by id, so disabling the command
+// greys every control bound to it. Dispatch follows GPUI's (`zed/crates/gpui/src/key_dispatch.rs`):
+// running a command walks the focus path, first the capture handlers from the root down, then the
+// bubble handlers from the focused widget up. A bubble handler stops the command unless it sets
+// Propagate. A command is available (its controls enabled) when it is enabled and a handler for it
+// is on the focus path, so moving focus enables and greys the right controls without bookkeeping.
+// Availability is observable: a control's binding follows the focus, the command's enabled state
+// and the handlers.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:commands;
 
-import foundation.core; // String, Array, UniquePtr, Function
+import foundation.core;
 import :reactive;
 
 using namespace foundation::core;
@@ -38,13 +38,14 @@ export namespace foundation::gui
         void SetLabel(core::StringView label) { m_label.Set(core::String(label)); }
         [[nodiscard]] core::StringView GetIcon() const { return m_icon.Get().AsView(); }
         void SetIcon(core::StringView icon) { m_icon.Set(core::String(icon)); }
-        /// Reads a binding follows.
+        /// A binding that reads this follows changes to it.
         [[nodiscard]] bool IsEnabled() const { return m_enabled.Get(); }
         void SetEnabled(bool enabled) { m_enabled.Set(enabled); }
         [[nodiscard]] bool IsChecked() const { return m_checked.Get(); }
         void SetChecked(bool checked) { m_checked.Set(checked); }
-        /// Why it is disabled ("Nothing to save"), which a control bound to it shows while it is
-        /// (a tool bar's tooltip); a read a binding follows.
+        /// Why the command is disabled ("Nothing to save"). A control bound to it shows this while
+        /// the command is disabled (as a tool bar button's tooltip). A binding that reads this
+        /// follows changes to it.
         [[nodiscard]] core::StringView GetDisabledReason() const { return m_disabledReason.Get().AsView(); }
         void SetDisabledReason(core::StringView reason) { m_disabledReason.Set(core::String(reason)); }
 
@@ -57,32 +58,32 @@ export namespace foundation::gui
         Property<core::String> m_disabledReason;
     };
 
-    /// When a node's handler runs: on the way down from the root, or on the way up from the focused
-    /// widget (the usual place).
+    /// When a node's handler runs: on the way down from the root (capture), or on the way up from
+    /// the focused widget (bubble, the usual choice).
     enum class CommandPhase : u8
     {
         Capture,
         Bubble,
     };
 
-    /// What a handler is given: the command, and a way to let it go on past this handler.
+    /// What a handler receives: the command, and flags that let it pass on or stop the command.
     struct CommandEvent
     {
         core::StringView Id;
         CommandPhase Phase = CommandPhase::Bubble;
-        bool Propagate = false; ///< A bubble handler sets it to let the command go on up.
-        bool Stop = false;      ///< A capture handler sets it to take the command: none below it, nor any bubble handler, runs.
+        bool Propagate = false; ///< A bubble handler sets it to pass the command on up.
+        bool Stop = false;      ///< A capture handler sets it to take the command: no handler below it and no bubble handler runs.
     };
 
     using CommandHandler = core::Function<void(CommandEvent&)>;
 
-    /// What a control bound to a command is told of its state (Node::OnBoundCommandState).
+    /// The command state passed to a control bound to the command (Node::OnBoundCommandState).
     struct BoundCommandState
     {
-        bool Available = false; ///< Enabled, with a handler on the focus path.
+        bool Available = false; ///< The command is enabled and a handler for it is on the focus path.
         bool Checked = false;
-        /// Why it is not available: the command's disabled reason while it is disabled, else empty
-        /// (no handler where the focus is says nothing a user could act on).
+        /// Why the command is not available: its disabled reason while it is disabled, else empty
+        /// (a missing handler at the focus is not something the user could act on).
         core::StringView Reason;
     };
 
@@ -94,7 +95,8 @@ export namespace foundation::gui
         CommandSet(const CommandSet&) = delete;
         CommandSet& operator=(const CommandSet&) = delete;
 
-        /// The command `id`, defined now if new (enabled, its label the id until one is set).
+        /// Returns the command `id`, defining it if it is new (enabled, with the id as its label
+        /// until one is set).
         Command& Define(core::StringView id, IAllocator& allocator)
         {
             if (Command* found = Find(id))
@@ -112,7 +114,8 @@ export namespace foundation::gui
                     return command.Get();
             return nullptr;
         }
-        /// Something that decides availability changed (a definition, a handler added or removed).
+        /// Tells the bindings that something affecting availability changed (a definition, or a
+        /// handler added or removed).
         void NotifyChanged() { m_changed.Notify(); }
         void TrackChanges() const { m_changed.Track(); }
 

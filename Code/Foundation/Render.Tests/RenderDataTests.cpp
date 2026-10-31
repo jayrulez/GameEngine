@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The scene-agnostic render-data core (no GPU): the frame arena, ExtractedScene snapshot,
-// sort keys + radix sort, the RenderView draw-list build (cull/sort), and the view pool.
+// sort keys and radix sort, the RenderView draw-list build (cull/sort), and the view pool.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -124,7 +124,7 @@ TEST_CASE("RenderView::BuildDrawList frustum-culls a sphere entirely outside the
     add(Float3{0, 0, -20}, 1.0f, 4);   // farther in front: kept
 
     // A real perspective (the default ViewCamera's identity projection makes the frustum the
-    // reverse-Z unit box, which culls everything at a distance - the sort tests above never cull).
+    // reverse-Z unit box, which culls everything at a distance; the sort tests above never cull).
     ViewCamera camera;
     camera.projection = Float4x4::PerspectiveFovRH(1.0472f, 1.0f, 0.1f, 100.0f);
     ViewSettings settings;
@@ -149,11 +149,11 @@ TEST_CASE("RenderView::BuildDrawList frustum-culls a sphere entirely outside the
     CHECK(all.DrawList().Size() == 4);
     CHECK(all.CulledCount() == 0);
 
-    // The frame gates by BOTH: its global switch (on by default) and the view's setting.
+    // The frame gates by both: its global switch (on by default) and the view's setting.
     rhi::null::NullDevice device{DefaultAllocator()};
     RendererRegistry registry; // no renderer needed: AddView only builds the draw list
     RenderFrame frame(DefaultAllocator(), device, registry, /*framesInFlight*/ 2);
-    CHECK(frame.ViewCulling()); // the default since 2026-09-24
+    CHECK(frame.ViewCulling()); // on by default
     frame.SetViewCulling(true);
     ViewSettings optOut;
     optOut.frustumCull = false;
@@ -168,8 +168,8 @@ TEST_CASE("RenderView::BuildDrawList frustum-culls a sphere entirely outside the
     CHECK(framedCulled->DrawList().Size() == 2);
 }
 
-// Sedulous ebbf7a3b / 4ed0922d: a scene size of its own runs the chain at it and remembers the
-// output rectangle; the viewport's own size is no scaling at all, unless a crop shows a slice.
+// A scene size of its own runs the chain at it and remembers the output rectangle; the
+// viewport's own size is no scaling at all, unless a crop shows a slice.
 TEST_CASE("RenderView: a scene size splits the scene from the output")
 {
     ExtractedScene scene{DefaultAllocator()};

@@ -3,7 +3,6 @@
 
 /// DX12 implementation of SwapChain.
 /// Wraps IDXGISwapChain3 for presentation.
-/// Ported from Sedulous.RHI.DX12/DX12SwapChain.bf.
 
 module;
 #include "Core/Prelude.h"

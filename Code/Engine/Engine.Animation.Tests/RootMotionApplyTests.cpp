@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Root motion applied by an animator's mode (root-motion.md P2): Entity moves and turns the
+// Root motion applied by an animator's mode: Entity moves and turns the
 // animator's entity by the clip (through a moved and turned parent, over many loops); Ignore
 // leaves it; Script holds the world delta for SceneAnimation; Character walks the nearest
 // character at or above it through the scene's capability and lets it go when it stops; a v1
-// record reads with root motion off. (The real physics character is Integration.Runtime's.)
+// record reads with root motion off. The real physics character is tested in Integration.Runtime.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

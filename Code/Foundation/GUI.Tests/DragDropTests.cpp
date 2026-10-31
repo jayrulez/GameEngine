@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - drag and drop (E7): a press past the threshold offers the drag up from the pressed node,
-// a node owning its press ending the walk; every move, modifier change and requery asks the node
-// under the pointer and up its ancestors what a drop would do (an effect, a reason, a place); the
-// cursor, the preview and a hint show it; a release drops, Escape, a right press or the source
-// leaving cancels; the source is told how it ended; a finger drags after a long press; a source
-// may follow the drag itself, with no preview. Across roots of one GUI (D6), where a host tells where
-// they are: a drag goes on over another root, its targets asked there, and one let go over none ends
-// outside, where on the screen said; a root gone mid-drag is forgotten.
+// GUI - drag and drop. A press that moves past the threshold offers the drag to the pressed node
+// and up its ancestors; a node that owns its press ends that walk. Every move, modifier change and
+// requery asks the node under the pointer, then its ancestors, what a drop would do (an effect, a
+// reason, a place). The cursor, the preview and a hint show the answer. A release drops; Escape, a
+// right press or the source leaving cancels. The source is told how the drag ended. A finger drags
+// after a long press. A source may follow the drag itself, with no preview. Across the roots of one
+// GUI, where a host says where they are, a drag goes on over another root and asks the targets
+// there. A drag released over no root ends outside, with the screen position given. A root
+// destroyed mid-drag is forgotten.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -19,7 +20,7 @@ namespace core = foundation::core;
 
 namespace
 {
-    // A box at a place of its own in the root.
+    // A box placed directly in the root.
     core::RefPtr<Panel> Box(SceneRoot& root, float x, float y, float w, float h)
     {
         auto box = core::MakeRef<Panel>(core::DefaultAllocator());
@@ -63,7 +64,8 @@ namespace
             (void)root->UpdateLayout();
         }
         EventDispatcher& D() { return *root->GetEventDispatcher(); }
-        // Presses the source and moves `to`, in steps.
+        // Presses the source and moves the pointer to `to`, by way of a first step past the
+        // threshold.
         void DragTo(core::Float2 to, core::u32 modifiers = 0)
         {
             D().InjectMouseDown(core::Float2{30.0f, 30.0f}, MouseButton::Left);
@@ -105,7 +107,7 @@ TEST_CASE("dnd: a press starts a drag only past the threshold, and the press is 
 TEST_CASE("dnd: the drag is offered up from the pressed node; one owning its press ends the walk")
 {
     Scene s;
-    // A plain child of the source: the source above it gives the drag.
+    // Pressing a plain child of the source: the source above it offers the drag.
     auto child = core::MakeRef<Panel>(core::DefaultAllocator());
     child->EditLayoutStyle([](LayoutStyle& st)
     {
@@ -172,7 +174,7 @@ TEST_CASE("dnd: each move asks the node under the pointer and up its ancestors; 
     CHECK(overs == 2);
     CHECK(enters == 1);
 
-    // Off it: left.
+    // Moving off the target leaves it.
     s.D().InjectMouseMove(core::Float2{100.0f, 200.0f});
     CHECK(leaves == 1);
     CHECK_FALSE(s.target->IsDropTarget());
@@ -196,7 +198,7 @@ TEST_CASE("dnd: the modifiers choose the effect among those the source allows, a
     s.D().CancelDrag();
     s.D().InjectMouseUp(core::Float2{252.0f, 50.0f}, MouseButton::Left);
 
-    // A source allowing copy alone: Shift asks for a move, gets a copy.
+    // A source that allows only copy: Shift asks for a move and gets a copy.
     s.source->SetDragSource([](DragRequest& r)
     {
         r.Payload.Type = core::String(u8"card");
@@ -255,7 +257,7 @@ TEST_CASE("dnd: a target says what a drop would do, or refuses with a reason tha
     s.D().InjectMouseUp(core::Float2{p.x + 12.0f, p.y + 10.0f}, MouseButton::Left);
     CHECK(place == 3);
     CHECK(effect == DropEffect::Copy);
-    CHECK(s.ended.Effect == DropEffect::Copy); // the source told
+    CHECK(s.ended.Effect == DropEffect::Copy); // the source is told
     CHECK(s.ended.Target == picky.Get());
     CHECK_FALSE(s.ended.Cancelled);
     CHECK(s.D().GetDropHint() == nullptr);
@@ -274,13 +276,13 @@ TEST_CASE("dnd: the preview follows the pointer, held where the press was, and s
     CHECK(preview->GetScreenBounds().x == doctest::Approx(120.0f + 14.0f)); // beside the pointer
     s.D().InjectMouseMove(core::Float2{250.0f, 50.0f});
     CHECK(preview->GetEffect() == DropEffect::Move);
-    // It takes no hits: the target under it is still what is asked.
+    // The preview takes no hits, so the target under it is still the one asked.
     CHECK(s.D().GetDropTarget() == s.target.Get());
     s.D().CancelDrag();
     s.D().InjectMouseUp(core::Float2{250.0f, 50.0f}, MouseButton::Left);
     CHECK(s.D().GetDragPreview() == nullptr);
 
-    // A preview of the source's own keeps the grab point.
+    // A preview the source provides keeps the grab point.
     s.source->SetDragSource([](DragRequest& r)
     {
         r.Payload.Type = core::String(u8"card");
@@ -295,7 +297,8 @@ TEST_CASE("dnd: the preview follows the pointer, held where the press was, and s
     });
     s.DragTo(core::Float2{150.0f, 150.0f});
     (void)s.root->UpdateLayout();
-    // Pressed at (30, 30), 20 in from the source's corner (10, 10): the preview's corner 20 back.
+    // Pressed at (30, 30), 20 in from the source's corner at (10, 10), so the preview's corner
+    // sits 20 back from the pointer.
     CHECK(s.D().GetDragPreview()->GetScreenBounds().x == doctest::Approx(130.0f));
     CHECK(s.D().GetDragPreview()->GetScreenBounds().y == doctest::Approx(130.0f));
     s.D().CancelDrag();
@@ -313,7 +316,7 @@ TEST_CASE("dnd: a source that follows the drag itself has no preview; it moves f
         r.Follow = [&](core::Float2 at)
         {
             followed.PushBack(at);
-            s.source->SetHitTestVisible(false); // what a following source does: the drop is asked of what is below
+            s.source->SetHitTestVisible(false); // as a following source does, so the drop is asked of what is below
             s.source->SetPosition(core::Float2{at.x - 20.0f, at.y - 20.0f}); // the source under the pointer
         };
         return true;
@@ -328,7 +331,7 @@ TEST_CASE("dnd: a source that follows the drag itself has no preview; it moves f
     s.D().InjectMouseUp(core::Float2{250.0f, 50.0f}, MouseButton::Left);
     CHECK_FALSE(s.D().IsDragging());
     const core::usize calls = followed.Size();
-    s.D().InjectMouseMove(core::Float2{260.0f, 50.0f}); // over: no more calls
+    s.D().InjectMouseMove(core::Float2{260.0f, 50.0f}); // the drag is over: no more calls
     CHECK(followed.Size() == calls);
 }
 
@@ -358,7 +361,7 @@ TEST_CASE("dnd: Escape, a right press and the source leaving the tree cancel; th
     s.DragTo(core::Float2{250.0f, 50.0f});
     s.source->RemoveFromParent();
     CHECK_FALSE(s.D().IsDragging());
-    CHECK(s.ends == 2); // a source gone hears nothing
+    CHECK(s.ends == 2); // a destroyed source hears nothing
 }
 
 TEST_CASE("dnd: a finger drags after a long press over a source, and opens no context menu")
@@ -367,7 +370,7 @@ TEST_CASE("dnd: a finger drags after a long press over a source, and opens no co
     s.target->SetDropTypes(core::String(u8"card"));
     int menus = 0;
     (void)s.source->AddEventListener(EventType::ContextMenu, [&](const Event&) { ++menus; });
-    // A quick move is no drag (a finger's move pans first).
+    // A quick move is not a drag, because a finger's move pans first.
     s.D().InjectTouchDown(1, core::Float2{30.0f, 30.0f});
     s.D().InjectTouchMove(1, core::Float2{50.0f, 30.0f});
     CHECK_FALSE(s.D().IsDragging());
@@ -446,7 +449,7 @@ TEST_CASE("dnd: a drag near a scroller's edge scrolls it, faster deeper in, and 
 
 TEST_CASE("dnd: a drag that cannot land in a scroller passes its edge without scrolling it")
 {
-    // A panel dragged to dock: the list under the way takes nothing of it.
+    // A panel dragged to dock: the list it passes over takes none of it.
     Scene s;
     auto list = Box(*s.root, 200.0f, 120.0f, 150.0f, 100.0f);
     list->EditLayoutStyle([](LayoutStyle& st) { st.OverflowY = Overflow::Auto; });
@@ -585,7 +588,8 @@ namespace
             return view;
         }
         EventDispatcher& D() { return *root->GetEventDispatcher(); }
-        // A row's centre (y of row `item` in view `v`), and a point `frac` down it.
+        // A point in row `item` of view `v`, a fraction `frac` of the way down the row (its centre
+        // by default).
         static core::Float2 Row(ListView& v, int item, float frac = 0.5f)
         {
             const Rect r = v.GetScreenBounds();
@@ -637,12 +641,12 @@ TEST_CASE("dnd: a multi-selection drags as one, in order; a plain press on it al
     l.D().InjectMouseUp(Lists::Row(*l.a, 2), MouseButton::Left, KeyModCtrl);
     CHECK(l.a->GetSelectionCount() == 2);
     l.Drag(*l.a, 2, Lists::Row(*l.a, 4, 0.9f)); // A and C, after E
-    CHECK(l.a->GetSelectionCount() == 2); // the press kept them
+    CHECK(l.a->GetSelectionCount() == 2); // the press kept both selected
     CHECK(l.D().GetDragPayload().Label == core::StringView(u8"2 items"));
     l.D().InjectMouseUp(Lists::Row(*l.a, 4, 0.9f), MouseButton::Left);
     CHECK(Lists::Items(l.left) == core::StringView(u8"BDEAC"));
 
-    // A plain click on one of a multi-selection: that row alone.
+    // A plain click on one row of a multi-selection selects that row alone.
     l.D().InjectMouseDown(Lists::Row(*l.a, 3), MouseButton::Left);
     l.D().InjectMouseUp(Lists::Row(*l.a, 3), MouseButton::Left);
     CHECK(l.a->GetSelectionCount() == 1);
@@ -659,7 +663,7 @@ TEST_CASE("dnd: a list's owner says what a drag of its rows carries, told their 
                               for (const ItemId id : ids)
                                   told.PushBack(id);
                               payload.Type = core::String(u8"asset/instance");
-                              payload.Value = core::Variant::From<core::String>(core::String(u8"the assets")); // its own, not the view's
+                              payload.Value = core::Variant::From<core::String>(core::String(u8"the assets")); // the source's own payload, not the view's
                               payload.Label = core::Format(u8"{} assets", ids.Size());
                           });
     l.D().InjectMouseDown(Lists::Row(*l.a, 1), MouseButton::Left);
@@ -692,7 +696,7 @@ TEST_CASE("dnd: rows moved to another list leave the source; copied (Ctrl) they 
     CHECK(Lists::Items(l.right) == core::StringView(u8"AXB"));
     CHECK(Lists::Items(l.left) == core::StringView(u8"ACDE"));
 
-    // Below the last row: the end.
+    // Dropping below the last row places the item at the end.
     l.Drag(*l.a, 3, core::Float2{300.0f, 180.0f});
     CHECK(l.b->GetDropItem() == -1);
     l.D().InjectMouseUp(core::Float2{300.0f, 180.0f}, MouseButton::Left);
@@ -718,7 +722,7 @@ TEST_CASE("dnd: a tree takes a node onto another (its child) or beside it, and r
     EventDispatcher& d = *root->GetEventDispatcher();
     const auto row = [](int item, float frac) { return core::Float2{100.0f, 20.0f * (static_cast<float>(item) + frac)}; };
 
-    // A onto A1 (its own child): refused, with the reason.
+    // A dropped onto A1, its own child, is refused with a reason.
     d.InjectMouseDown(row(0, 0.5f), MouseButton::Left);
     d.InjectMouseMove(row(0, 0.8f));
     d.InjectMouseMove(row(1, 0.5f));
@@ -737,7 +741,7 @@ TEST_CASE("dnd: a tree takes a node onto another (its child) or beside it, and r
     CHECK(model.RowCount(model.IndexOfNode(a)) == 2);
     CHECK(model.IdOf(model.Index(1, 0, model.IndexOfNode(a))) == static_cast<ItemId>(b));
 
-    // A1 before A: back to the top level, first.
+    // A1 dropped before A goes back to the top level, first.
     (void)root->UpdateLayout();
     d.InjectMouseDown(row(1, 0.5f), MouseButton::Left);
     d.InjectMouseMove(row(1, 0.8f));
@@ -799,7 +803,7 @@ TEST_CASE("dnd: from the keys, drag.pick picks up at the focus, the focus moving
     CHECK(s.ended.Effect == DropEffect::Move);
     CHECK(s.ended.Target == s.target.Get());
 
-    // Ctrl+Shift+D (drag.pick in every GUI), then Escape.
+    // Ctrl+Shift+D (bound to drag.pick in every GUI), then Escape.
     s.source->RequestFocus();
     s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::D), KeyModCtrl | KeyModShift);
     CHECK(s.D().IsKeyboardDrag());
@@ -807,7 +811,7 @@ TEST_CASE("dnd: from the keys, drag.pick picks up at the focus, the focus moving
     CHECK_FALSE(s.D().IsDragging());
     CHECK(s.ended.Cancelled);
 
-    // The pad: North picks up, South drops.
+    // On the pad, North picks up and South drops.
     s.source->RequestFocus();
     s.D().InjectPadButton(PadButton::North);
     CHECK(s.D().IsKeyboardDrag());
@@ -825,8 +829,8 @@ TEST_CASE("dnd: from the keys a list's rows move: the arrows move the keyboard's
     CHECK(l.D().PickDrag());
     CHECK(l.D().GetDragPayload().Label == core::StringView(u8"A"));
     l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
-    l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // the keyboard on C
-    CHECK(l.a->GetSelectedItem() == -1); // the keyboard moved; A stays selected, not current
+    l.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // the keyboard moves to C
+    CHECK(l.a->GetSelectedItem() == -1); // the keyboard moved, so A stays selected but is not current
     CHECK(l.a->IsItemSelected(0));
     CHECK(l.a->GetDropItem() == 2);
     CHECK(l.a->GetDropPlace() == DropPlace::After); // a list takes nothing onto a row
@@ -872,11 +876,12 @@ TEST_CASE("dnd: in markup, drag-type, drag-value and drag-label make a source; d
     const Rect c = canvas->GetScreenBounds();
     const core::Float2 onCanvas{c.x + 50.0f, c.y + 50.0f};
 
-    // A press on the block child: the walk ends there, nothing drags.
+    // A press on the drag="block" child: the walk ends there, and nothing drags.
     drag(*grip, onCanvas);
     CHECK_FALSE(d.IsDragging());
     d.InjectMouseUp(onCanvas, MouseButton::Left);
-    // A press on the none child (with a type of its own): it passes the press up to the swatch.
+    // A press on the drag="none" child, even with a drag-type of its own, passes the press up to
+    // the swatch.
     drag(*quiet, onCanvas);
     REQUIRE(d.IsDragging());
     CHECK(d.GetDragPayload().Type == core::StringView(u8"color"));
@@ -907,8 +912,8 @@ TEST_CASE("dnd: a dragquery listener that takes the event takes the drop")
 
 namespace
 {
-    // Two roots of one GUI side by side on a screen: the scene's at 0,0 (400 by 300) and another at
-    // 500,0 (300 by 300), as a host that places its windows would tell.
+    // Two roots of one GUI side by side on a screen: the scene's root at 0,0 (400 by 300) and
+    // another at 500,0 (300 by 300), as a host that places its windows would report them.
     struct TwoPlaces final : IRootPlaces
     {
         EventDispatcher* first = nullptr;
@@ -959,7 +964,7 @@ TEST_CASE("dnd: across roots of one GUI, a drag goes on over another root; let g
     s.root->GetContext().SetRootPlaces(&places);
     CHECK(other->GetEventDispatcher() != nullptr);
 
-    // Over the other root (its 100,50: the screen's 600,50, past this root's edge).
+    // Over the other root, at its 100,50, which is the screen's 600,50, past this root's edge.
     s.DragTo(core::Float2{600.0f, 50.0f});
     REQUIRE(s.D().IsDragging());
     CHECK(s.D().GetDragOver() == other->GetEventDispatcher());
@@ -971,7 +976,7 @@ TEST_CASE("dnd: across roots of one GUI, a drag goes on over another root; let g
     CHECK(s.ended.Target == far.Get());
     CHECK_FALSE(s.ended.Outside);
 
-    // Between the two: over no root, outside, at the screen's 450,50.
+    // Between the two roots: over no root, so outside, at the screen's 450,50.
     s.DragTo(core::Float2{450.0f, 50.0f});
     CHECK(s.D().GetDragOver() == nullptr);
     CHECK(s.D().GetDropTarget() == nullptr);
@@ -982,7 +987,8 @@ TEST_CASE("dnd: across roots of one GUI, a drag goes on over another root; let g
     CHECK(s.ended.ScreenKnown);
     CHECK(s.ended.Screen.x == doctest::Approx(450.0f));
 
-    // The other root goes while the drag is over it: forgotten, and let go it is outside.
+    // The other root is destroyed while the drag is over it. It is forgotten, and a release there
+    // ends outside.
     s.DragTo(core::Float2{600.0f, 50.0f});
     REQUIRE(s.D().GetDropTarget() == far.Get());
     places.second = nullptr;
@@ -1003,7 +1009,7 @@ TEST_CASE("dnd: where no host tells the roots' places, a drag let go past its ro
     REQUIRE(s.ends == 1);
     CHECK(s.ended.Outside);
     CHECK_FALSE(s.ended.ScreenKnown);
-    // Let go over its own root where nothing takes it: not outside.
+    // Released over its own root where nothing takes it: the drag does not end outside.
     s.DragTo(core::Float2{150.0f, 200.0f});
     s.D().InjectMouseUp(core::Float2{150.0f, 200.0f}, MouseButton::Left);
     REQUIRE(s.ends == 2);

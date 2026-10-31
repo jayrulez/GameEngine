@@ -3,18 +3,18 @@
 
 // Script - :script_delegate partition
 //
-// IScriptDelegate: a script function held as a native callback (Traktor's
-// IRuntimeDelegate). A native API takes one as RefPtr<IScriptDelegate>; holding it
-// keeps the underlying script function alive (GC-safe), and Invoke() calls back
-// into script with reflected Variant args, returning the script result.
+// IScriptDelegate: a script function held as a native callback. A native API takes one
+// as RefPtr<IScriptDelegate>; holding it keeps the underlying script function alive
+// (GC-safe), and Invoke() calls back into script with reflected Variant args, returning
+// the script result.
 //
-// The seam is backend-neutral: each backend subclasses IScriptDelegate to wrap its
-// own callable primitive (AngelScript function handle), and marshals
-// a script function argument into one when a reflected method parameter is typed
-// RefPtr<IScriptDelegate>. Because IScriptDelegate derives core::Object, the existing
-// reflection object-argument marshalling (ParamTypeOf / AcceptArg / ConvertArg)
-// already recognizes RefPtr<IScriptDelegate> as an object parameter - the only
-// backend-specific work is wrapping the callable slot into a delegate.
+// The interface is backend-neutral: each backend subclasses IScriptDelegate to wrap its
+// own callable primitive (an AngelScript function handle, a Luau function ref), and
+// marshals a script function argument into one when a reflected method parameter is typed
+// RefPtr<IScriptDelegate>. Because IScriptDelegate derives core::Object, the reflection
+// object-argument marshalling (ParamTypeOf, AcceptArg, ConvertArg) already recognizes
+// RefPtr<IScriptDelegate> as an object parameter; the only backend-specific work is
+// wrapping the callable into a delegate.
 
 module;
 #include "Core/Prelude.h"
@@ -53,8 +53,8 @@ export namespace foundation::script
 
 namespace foundation::script
 {
-    // StaticType() defined here (not a reflected registry type - scripts never construct
-    // an IScriptDelegate; the type identity only needs to exist so reflected method
-    // parameters can be spelled RefPtr<IScriptDelegate> and the backends can recognize it).
+    // StaticType() is defined here rather than through the reflected registry: scripts never
+    // construct an IScriptDelegate, and the type identity only needs to exist so reflected
+    // method parameters can be spelled RefPtr<IScriptDelegate> and the backends recognize it.
     RTTI_DEFINE_OBJECT(IScriptDelegate, "rtti::script")
 }

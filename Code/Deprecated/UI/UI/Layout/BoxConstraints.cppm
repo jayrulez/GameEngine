@@ -4,7 +4,6 @@
 // UI - :box_constraints partition
 //
 // Immutable layout constraints carrying min/max on both axes (clamping math; no modes).
-// Ported from Sedulous.UI/src/Layout/BoxConstraints.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -67,16 +66,16 @@ export namespace foundation::ui
             return Max(MinHeight, Min(height, MaxHeight));
         }
 
-        /// THE unbounded test - the single check for `< kFloatMax` /
-        /// `< 100000` used across layouts and controls.
+        /// The bounded test used across layouts and controls, in place of ad hoc
+        /// `< kFloatMax` or `< 100000` checks.
         [[nodiscard]] static constexpr bool IsBounded(f32 extent) noexcept
         {
             return extent < kFloatMax;
         }
         /// The available extent on an axis, or `fallback` when the parent gave no bound. What
         /// fill-style leaves (Separator/ProgressBar/Slider/ScrollBar/list views) use instead of
-        /// grabbing MaxWidth/MaxHeight raw - which measured to kFloatMax and exploded layouts
-        /// under unbounded parents (a scroll axis, an old Expand() container).
+        /// MaxWidth/MaxHeight directly, which would measure to kFloatMax and break layouts under
+        /// unbounded parents (a scroll axis, an Expand() container).
         [[nodiscard]] f32 BoundedMaxWidth(f32 fallback) const noexcept
         {
             return IsBounded(MaxWidth) ? MaxWidth : fallback;

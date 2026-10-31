@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// FontAtlasDiskCache: the editor's startup MSDF bake cache. Round-trip a real Roboto DF
-// bake through Store/TryLoad and require byte-identical pixels + regions; keys must miss
-// on any option change; a corrupt file must fail closed (miss, never a bad atlas).
+// FontAtlasDiskCache: the editor's startup MSDF bake cache. A real Roboto DF bake round-trips
+// through Store/TryLoad with byte-identical pixels and regions; any option change makes the key
+// miss; a corrupt file fails closed (a miss, never a bad atlas).
 
 #include <doctest/doctest.h>
 

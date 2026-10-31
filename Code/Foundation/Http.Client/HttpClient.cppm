@@ -3,19 +3,19 @@
 
 /// Foundation::Http.Client - the `foundation.http.client` module.
 ///
-/// The game-facing HTTP client (Documentation/Specs/tls-http-wss.md, P2): requests go out, their
-/// responses come back by callback on the caller's thread when it pumps. `IHttpClient` is the seam;
-/// the native backend here runs each request on a worker thread (a name lookup blocks), speaking
-/// HTTP/1.1 over a PlainStream for http:// and a TlsStream for https:// (foundation.net.tls, the
-/// backend the application composes). A browser build has its own backend over the browser's
+/// The game-facing HTTP client: requests go out, and their responses come back by callback on the
+/// caller's thread when it pumps. `IHttpClient` is the interface; the native backend here runs each
+/// request on a worker thread (a name lookup blocks), speaking HTTP/1.1 over a PlainStream for
+/// http:// and a TlsStream for https:// (foundation.net.tls, the backend the application
+/// composes). A browser build has its own backend over the browser's
 /// fetch (emscripten's), which does TLS, redirects and certificates itself; there `url` is the URL
 /// asked for, maxRedirects is the browser's, and a cross-origin request needs the server's CORS
 /// headers (without them it fails, and the browser does not say why).
 ///
 /// What it does: GET, POST and any method; bodies by Content-Length, chunked, or until close;
 /// redirects within a limit (an https request is never followed to http); a timeout over the whole
-/// request; cancel; a cap on the response's size. What it does not, by design for v1: keep-alive or
-/// HTTP/2 (each request its own connection), cookies, proxies, IPv6 (the socket layer's).
+/// request; cancel; a cap on the response's size. What it does not do: keep-alive or HTTP/2 (each
+/// request has its own connection), cookies, proxies, IPv6 (the socket layer has none).
 ///
 /// Threading: Send, Cancel and Pump from one thread (the game's); callbacks run inside Pump.
 

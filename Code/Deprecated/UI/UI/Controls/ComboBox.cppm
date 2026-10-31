@@ -3,11 +3,10 @@
 
 // UI - :combo_box partition
 //
-// Drop-down selector: shows the selected item + a dropdown arrow, and opens a dedicated ComboBoxDropdown
-// panel (not ContextMenu) via the RootView's PopupLayer. Ported from Sedulous.UI/src/Controls/ComboBox.bf.
-// ComboBox is a View + IPopupOwner (multiple inheritance; IPopupOwner is a non-View pattern-B base).
-// Beef List<String> + manual delete -> Array<String> (RAII); get/set props -> methods; the dropdown is
-// RefPtr-owned by PopupLayer (ownsView) and closed via a deferred MutationQueue action.
+// Drop-down selector: shows the selected item and a dropdown arrow, and opens a dedicated
+// ComboBoxDropdown panel (not ContextMenu) via the RootView's PopupLayer. ComboBox is a View and an
+// IPopupOwner (a non-View interface base). PopupLayer owns the dropdown (ownsView), and it is closed
+// through a deferred MutationQueue action.
 
 module;
 #include "Core/Prelude.h"
@@ -193,10 +192,10 @@ export namespace foundation::ui
                 if (fonts::CachedFont* font = Context->FontService()->GetFont(family, fontSize))
                 {
                     textH = font->font->Metrics().lineHeight;
-                    // Measuring EVERY item per measure pass is O(items) text shaping per frame
-                    // (measure runs every frame today) - cache the max width, keyed on the items
-                    // generation + font family/size (value keys, never the font pointer - the
-                    // freed-then-reused-address cache rule).
+                    // Measuring every item per measure pass costs O(items) text shaping, and
+                    // measure can run every frame, so cache the max width. It is keyed on the items
+                    // generation and the font family and size: value keys, never the font pointer,
+                    // since a freed font's address can be reused by another.
                     if (m_measuredGeneration != m_itemsGeneration ||
                         m_measuredFontSize != fontSize || m_measuredFamily != family)
                     {
@@ -321,7 +320,7 @@ export namespace foundation::ui
         f32 m_arrowAreaWidth = 24.0f;
     };
 
-    /// Dedicated dropdown panel for ComboBox - matches the parent width, highlights selected/hovered items.
+    /// Dedicated dropdown panel for ComboBox: matches the parent width, highlights selected/hovered items.
     class ComboBoxDropdown : public View
     {
         RTTI_OBJECT(ComboBoxDropdown, View)
@@ -351,8 +350,8 @@ export namespace foundation::ui
             const Color textColor =
                 ResolveStyleColor(StyleProperty::TextColor,
                                   Color{220.0f / 255.0f, 225.0f / 255.0f, 235.0f / 255.0f, 1.0f});
-            // Dropdown hover/selection fill the item rect, so use a TRANSLUCENT tint of the theme accent
-            // (the accent itself is opaque - filling with it would paint solid blocks behind the items).
+            // Dropdown hover and selection fill the item rect, so use a translucent tint of the theme accent
+            // (the accent itself is opaque; filling with it would paint solid blocks behind the items).
             const Color accentBase =
                 ResolveStyleColor(StyleProperty::AccentColor,
                                   Color{60.0f / 255.0f, 120.0f / 255.0f, 200.0f / 255.0f, 1.0f});
@@ -504,7 +503,7 @@ export namespace foundation::ui
 
         void QueueSelfClose()
         {
-            // Defer closing so we don't tear the popup down mid input-dispatch.
+            // Defer closing so we do not tear the popup down during input dispatch.
             if (Context == nullptr)
             {
                 return;

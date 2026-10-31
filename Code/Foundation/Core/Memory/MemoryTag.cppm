@@ -21,7 +21,7 @@ import :array;
 export namespace foundation::core
 {
     // =======================================================================
-    // Memory tagging - attribute allocations to a category. Core does NOT
+    // Memory tagging - attribute allocations to a category. Core does not
     // enumerate subsystems (that would couple it to higher layers); instead it
     // hands out opaque tags by name via a small registry. Higher layers do:
     //     static const MemoryTag kGraphics = RegisterMemoryTag("Graphics");
@@ -51,8 +51,8 @@ export namespace foundation::core
             MemoryTagRegistry() { names[0] = "Default"; }
         };
 
-        // NON-inline (RefCountedImpl.cpp): per-library registries would diverge the
-        // tag names in tracking output (shared-libraries.md rendezvous rule).
+        // Not inline (defined in RefCountedImpl.cpp): a registry per shared library would
+        // split the tag names in tracking output, so there is one definition in Core.
         [[nodiscard]] MemoryTagRegistry& MemoryTags() noexcept;
 
         [[nodiscard]] inline bool TagNameEquals(const char* a, const char* b) noexcept

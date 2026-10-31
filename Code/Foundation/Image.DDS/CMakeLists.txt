@@ -1,5 +1,5 @@
-# Foundation::Image.DDS - `foundation.image.dds` (DDS container read / write + BCn decode).
-# The ONE place the vendored bcdec decoder is implemented (PRIVATE: the header does not leak).
+# Foundation::Image.DDS - `foundation.image.dds` (DDS container read and write, BCn decode).
+# The one place the vendored bcdec decoder is implemented (private, so the header does not leak).
 util_add_engine_library(Image.DDS ALIAS Foundation::Image.DDS)
 target_link_libraries(Image.DDS PUBLIC Foundation::Image Foundation::Core Foundation::Policy PRIVATE ThirdParty::Bcdec)
 target_sources(Image.DDS

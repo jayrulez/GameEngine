@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ViewportToolManager + provider registry tests: the activation state machine (first-added is
-// default and active, ActivateById round trip, gesture-end guarantee on switch), the
-// availability fallback (an active tool whose predicate lapses is deactivated BEFORE seeing
-// another frame), routing (consumed flag comes from the active tool), and registry semantics
-// (explicit registration, idempotent duplicates, CreateAll ordering after the default).
+// Tests of ViewportToolManager and the provider registry: the activation state machine (the first
+// tool added is the default and active, the ActivateById round trip, the gesture ending on a
+// switch), the availability fallback (an active tool whose predicate lapses is deactivated before
+// it sees another frame), routing (the consumed flag comes from the active tool), and the
+// registry's behaviour (explicit registration, idempotent duplicates, CreateAll running after the
+// default is added).
 
 #include <doctest/doctest.h>
 
@@ -47,7 +48,7 @@ namespace
 
         bool available = true;
         bool consume = false;
-        String category; // empty = stands alone (the interface default)
+        String category; // empty when it stands alone (the interface default)
 
     private:
         String m_id;
@@ -86,7 +87,7 @@ TEST_CASE("viewporttools: ActivateById switches with the gesture-end guarantee, 
 
     REQUIRE(manager.ActivateById(u8"brush"));
     CHECK(manager.ActiveTool() == b);
-    CHECK(logA.deactivations == 1); // the old tool ended its gesture BEFORE the new activated
+    CHECK(logA.deactivations == 1); // the old tool ended its gesture before the new one activated
     CHECK(logB.activations == 1);
 
     CHECK(manager.ActivateById(u8"brush")); // re-activating the active tool is a no-op success
@@ -116,10 +117,10 @@ TEST_CASE("viewporttools: an unavailable tool is refused; a lapsing active tool 
 
     brush->available = true;
     REQUIRE(manager.ActivateById(u8"brush"));
-    brush->available = false; // the terrain got deleted mid-session
+    brush->available = false; // as if the terrain were deleted mid-session
     (void)manager.Update(ViewportToolInput{});
     CHECK(manager.ActiveTool()->Id() == StringView(u8"select"));
-    CHECK(logB.updates == 0); // the dead tool never saw another frame
+    CHECK(logB.updates == 0); // the unavailable tool never saw another frame
     CHECK(logB.deactivations == 1);
     CHECK(logA.updates == 1); // the default took the same frame
 }
@@ -155,8 +156,8 @@ namespace
 
 TEST_CASE("viewporttools: provider registry - explicit, idempotent, never the default")
 {
-    // NOTE: the registry is a process-global; this test uses its own provider instance and
-    // only asserts RELATIVE effects so it stays order-independent with other tests.
+    // The registry is process-global, so this test uses its own provider instance and checks
+    // only relative effects, which keeps it independent of the order tests run in.
     ToolLog log;
     TestProvider provider(log);
     ViewportToolProviderRegistry& registry = ViewportToolProviderRegistry::Get();

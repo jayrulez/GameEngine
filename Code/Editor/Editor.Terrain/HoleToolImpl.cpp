@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Terrain - :hole implementation (TerrainHoleTool + its stroke command + persist).
+// Editor::Terrain - :hole implementation (TerrainHoleTool, its stroke command and the save path).
 module;
 #include "Core/Prelude.h"
 
@@ -38,8 +38,9 @@ namespace editor
             return static_cast<engine::terrain::TerrainComponentManager*>(base);
         }
 
-        // The region-delta stroke command over the HOLE plane: replays the touched rect between
-        // its before / after byte blocks; one per stroke, never merges; keeps the grid alive.
+        // The region-delta stroke command over the hole plane. It replays the touched rect
+        // between its before and after byte blocks, is pushed once per stroke, never merges, and
+        // keeps the grid alive.
         class HoleStrokeCommand final : public IEditorCommand
         {
         public:
@@ -50,7 +51,7 @@ namespace editor
             }
             [[nodiscard]] bool Execute() override
             {
-                Write(m_after); // a no-op on push (the stroke already cut it), the replay on redo
+                Write(m_after); // a no-op on push (the stroke already cut it); the replay on redo
                 return !m_region.IsEmpty();
             }
             void Undo() override { Write(m_before); }
@@ -73,7 +74,7 @@ namespace editor
                                               static_cast<usize>(x)] != 0);
                     }
                 }
-                m_grid->BumpVersion(); // the chunk meshes, the collider and the grass follow
+                m_grid->BumpVersion(); // the chunk meshes, the collider and the grass update from it
             }
             RefPtr<hf::Heightfield> m_grid;
             hf::HeightfieldRegion m_region;
@@ -150,8 +151,8 @@ namespace editor
                 const Float3 localOrigin = TransformPoint(input.ray.origin, inv);
                 const Float3 localDir = TransformDirection(input.ray.direction, inv);
                 f32 t = 0.0f;
-                // The brush works ON the hole plane: QueryRay would pass through a cut and Fill
-                // could only land from the rim, so this pick treats cut samples as surface.
+                // The brush works on the hole plane. QueryRay would pass through a cut, so Fill
+                // could only land from the rim; this pick treats cut samples as surface.
                 if (!grid->QueryRayIgnoringHoles(localOrigin, localDir, t))
                 {
                     return;
@@ -185,7 +186,7 @@ namespace editor
             if (kb->IsKeyPressed(KeyCode::Num1)) SetMode(Mode::Cut);
             if (kb->IsKeyPressed(KeyCode::Num2)) SetMode(Mode::Fill);
         }
-        // Shift + wheel resizes the brush; the bare wheel stays the camera's dolly (2026-09-23).
+        // Shift and the wheel resize the brush; the wheel alone stays the camera's dolly.
         if (input.pointerOver && input.shift && input.wheelDelta != 0.0f)
         {
             SetRadius(m_radius * (1.0f + 0.12f * input.wheelDelta));
@@ -198,7 +199,7 @@ namespace editor
             m_hoverNormal = pick.worldNormal;
         }
         bool consumed = m_stroking;
-        if (!input.editingLocked) // Simulate: the collider is shared - no edits
+        if (!input.editingLocked) // no edits while simulating, since the collider is shared
         {
             if (!m_stroking && pick.valid && input.pointerOver && input.leftPressed)
             {
@@ -268,7 +269,7 @@ namespace editor
             {
                 changed = before[i] != after[i];
             }
-            if (changed) // a fill over solid ground (or a cut over a cut) is no command
+            if (changed) // a fill over solid ground (or a cut over a cut) pushes no command
             {
                 m_commands->Execute(UniquePtr<IEditorCommand>(
                     editor::EditorRootAllocator().New<HoleStrokeCommand>(m_strokeHf, m_region,
@@ -282,10 +283,11 @@ namespace editor
                         id,
                         [grid, id](content::ContentDatabase& db) -> Status
                         {
-                            // The SOURCE HeightfieldAsset (never the cooked type): sync the
-                            // params, clear fileName (the sidecars become the truth), then write
-                            // BOTH streams - the heights too, or an imported heightfield would
-                            // lose its image-born heights the moment its file name is cleared.
+                            // Write the source HeightfieldAsset, never the cooked type: sync the
+                            // params, clear fileName (the sidecars become authoritative), then
+                            // write both streams. The heights are written too, or an imported
+                            // heightfield would lose the heights from its image as soon as its
+                            // file name is cleared.
                             content::Instance* inst = db.GetInstance(id);
                             if (inst == nullptr || grid.Get() == nullptr)
                             {

@@ -127,7 +127,7 @@ TEST_CASE("vfs: CreateDirectory persists an EMPTY directory (empty content group
     REQUIRE(w != nullptr);
     REQUIRE(e != nullptr);
 
-    // An empty directory with a missing ancestor - and NO file under it (the empty-group case, which
+    // An empty directory with a missing ancestor and no file under it (the empty-group case, which
     // Save-driven parent creation never reaches).
     REQUIRE(w->CreateDirectory(u8"scratch_vfs_empty/group").IsOk());
 
@@ -228,7 +228,7 @@ TEST_CASE("vfs: NativeFileSystem change source detects adds, edits, and removals
     CHECK_FALSE(source->Poll(changed));
     CHECK(changed.IsEmpty());
 
-    // Added file (incl. inside a subdirectory) is reported once, then goes quiet.
+    // An added file (here inside a subdirectory) is reported once, then goes quiet.
     REQUIRE(fs.AsWritable()->Save(u8"sub/new.bin", Span<const byte>(a, 2)).IsOk());
     CHECK(source->Poll(changed));
     REQUIRE(changed.Size() == 1u);
@@ -274,7 +274,7 @@ TEST_CASE("vfs.sourcePath: normalization table")
     CHECK(SourcePath(u8"Roboto.ttf").View() == u8"Roboto.ttf");
     CHECK(SourcePath(u8"").IsEmpty());
 
-    // Contract violations normalize to EMPTY - a missing reference, never a wrong one.
+    // Contract violations normalize to empty: a missing reference, never a wrong one.
     CHECK(SourcePath(u8"/abs/path.ttf").IsEmpty());          // absolute
     CHECK(SourcePath(u8"\\abs\\path.ttf").IsEmpty());        // absolute (backslash)
     CHECK(SourcePath(u8"../escape.ttf").IsEmpty());          // escapes the mount
@@ -299,7 +299,7 @@ TEST_CASE("vfs.sourcePath: accessors")
     CHECK(noExt.Extension().IsEmpty());
     CHECK(noExt.Stem() == u8"README");
 
-    // Comparison is case-SENSITIVE everywhere (one rule; lint catches case bugs).
+    // Comparison is case-sensitive everywhere (one rule; a lint catches case bugs).
     CHECK(SourcePath(u8"a.ttf") != SourcePath(u8"A.ttf"));
     CHECK(SourcePath(u8"A.ttf") < SourcePath(u8"a.ttf"));
     CHECK(SourcePath(u8"a/b.ttf") == SourcePath(u8"a\\b.ttf"));
@@ -307,8 +307,8 @@ TEST_CASE("vfs.sourcePath: accessors")
 
 TEST_CASE("vfs.sourcePath: wire shape is String-compatible (existing data loads)")
 {
-    // Write a plain String field, read it back as a SourcePath - the exact upgrade an
-    // existing .xasset/.rasset goes through. Windows-authored separators heal on read.
+    // Write a plain String field and read it back as a SourcePath, as an existing .xasset or
+    // .rasset does on load. Windows-authored separators are fixed on read.
     MemoryStream stream;
     {
         BinarySerializer ar(stream, SerializeMode::Write);
@@ -356,7 +356,7 @@ TEST_CASE("vfs: data-root discovery via the .dataroot marker")
     CHECK(FindDataRootFrom(base) == dataDir);
     const String deep = PathJoin(PathJoin(base, u8"sub").AsView(), u8"deep");
     CHECK(FindDataRootFrom(deep.AsView()) == dataDir);
-    // No Data/.dataroot anywhere up the chain -> empty.
+    // No Data/.dataroot anywhere up the chain: empty.
     CHECK(FindDataRootFrom(u8"scratch_dataroot_absent").IsEmpty());
 
     // DataPath joins; an empty root passes the relative through unchanged.
@@ -365,7 +365,7 @@ TEST_CASE("vfs: data-root discovery via the .dataroot marker")
     CHECK(DataPath(u8"", u8"Assets/x.ttf") == String(u8"Assets/x.ttf"));
 
     // ResolveDataRoot: a valid override wins verbatim; an override without the marker is
-    // refused (empty, logged) rather than silently used; no override = the discovery walk.
+    // refused (empty, logged) rather than silently used; no override means the discovery walk.
     CHECK(ResolveDataRoot(dataDir.AsView()) == dataDir);
     CHECK(ResolveDataRoot(base).IsEmpty());
     CHECK(ResolveDataRoot(u8"scratch_dataroot_absent").IsEmpty());

@@ -5,13 +5,10 @@
 //
 // Standalone multi-component numeric fields for editing Float2/Float3/Float4/Quaternion outside the
 // PropertyGrid framework. Each is a horizontal FlexLayout of one NumericField per component with the same
-// colored axis labels the property-grid editors use (X=red, Y=green, Z=blue, W=gold). Ported from
-// Sedulous.UI.Toolkit/src/VectorFields.bf.
+// colored axis labels the property-grid editors use (X=red, Y=green, Z=blue, W=gold).
 //
-// Beef `AxisLabel` (View) + `AggregatingVectorField` (abstract FlexLayout) + the concrete field classes all
-// live in one partition. Beef Vector2/3/4 -> Float2/Float3/Float4 (.x/.y/.z/.w); Quaternion -> core
-// Quaternion; `SetPrefix(new AxisLabel(...))` -> SetPrefix(View*) (adopts a RefPtr). Byte `Color(r,g,b,a)`
-// axis colors -> constexpr Color via /255. The deferred edit-end goes through Context->MutationQueueRef().
+// AxisLabel, AggregatingVectorField (an abstract FlexLayout) and the concrete field classes share one
+// partition. The deferred edit end goes through Context->MutationQueueRef().
 
 module;
 #include "Core/Prelude.h"
@@ -642,12 +639,10 @@ export namespace foundation::ui::toolkit
         }
 
     public:
-        // Conversion helpers - X=pitch (around X), Y=yaw (around Y), Z=roll (around Z). The
-        // forward composition below is Z, then Y, then X, so the MIDDLE axis (Y) is the one
-        // that comes from an arcsine; X and Z come from arctangents. (The arcsine used to sit
-        // on X, which inverted a single-axis rotation correctly and every compound rotation
-        // wrongly - 30/45/60 read back as -16.3/50.4/39.6 and was then rewritten to match on
-        // the first keystroke. Found by the Beef port.)
+        // Conversion helpers: X=pitch (around X), Y=yaw (around Y), Z=roll (around Z). The
+        // forward composition below is Z, then Y, then X, so the middle axis (Y) is the one
+        // that comes from an arcsine; X and Z come from arctangents. Putting the arcsine on
+        // another axis still inverts single-axis rotations but gets every compound one wrong.
         static Float3 QuaternionToEulerDegrees(Quaternion q)
         {
             const f32 sinXCosY = 2.0f * (q.w * q.x + q.y * q.z);

@@ -1,5 +1,5 @@
 # Foundation::Physics - `foundation.physics`: the Jolt-backed rigid-body core.
-# Jolt is PRIVATE: JPH types never cross the module surface.
+# Jolt is private: JPH types never cross the module surface.
 util_add_engine_library(Physics ALIAS Foundation::Physics)
 target_link_libraries(Physics
     PUBLIC Foundation::Core Foundation::Policy
@@ -7,7 +7,7 @@ target_link_libraries(Physics
 
 target_sources(Physics
     PRIVATE
-        PhysicsWorldImpl.cpp   # module IMPLEMENTATION unit: all Jolt contact (see PhysicsWorld.cppm)
+        PhysicsWorldImpl.cpp   # module implementation unit: all Jolt contact (see PhysicsWorld.cppm)
     PUBLIC
         FILE_SET physics_modules TYPE CXX_MODULES FILES
             PhysicsModule.cppm

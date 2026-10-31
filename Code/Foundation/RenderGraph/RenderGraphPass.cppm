@@ -5,8 +5,7 @@
 //
 // A single pass: its declared resource accesses, attachments, dependencies, and
 // typed execute callback. GetInputs/GetOutputs fold attachment load/store ops
-// into the read/write access set the compiler reasons about. Ported from
-// Sedulous.RenderGraph (RenderGraphPass.bf).
+// into the read/write access set the compiler reasons about.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +32,7 @@ export namespace foundation::rendergraph
         }
 
         // Explicitly defaulted so the (move-only, due to Function members) special
-        // members are synthesized in this module and usable by importers - GCC's
+        // members are synthesized in this module and usable by importers; GCC's
         // module support otherwise reports the implicit destructor as deleted.
         ~RenderGraphPass() = default;
         RenderGraphPass(RenderGraphPass&&) = default;
@@ -41,7 +40,7 @@ export namespace foundation::rendergraph
         RenderGraphPass(const RenderGraphPass&) = delete;
         RenderGraphPass& operator=(const RenderGraphPass&) = delete;
 
-        // Resource handles this pass reads (declared accesses + Load attachments).
+        // Resource handles this pass reads (declared accesses and Load attachments).
         void GetInputs(Array<RGResourceAccess>& out) const
         {
             for (const RGResourceAccess& access : accesses)
@@ -70,7 +69,7 @@ export namespace foundation::rendergraph
             }
         }
 
-        // Resource handles this pass writes (declared accesses + Store attachments).
+        // Resource handles this pass writes (declared accesses and Store attachments).
         void GetOutputs(Array<RGResourceAccess>& out) const
         {
             for (const RGResourceAccess& access : accesses)

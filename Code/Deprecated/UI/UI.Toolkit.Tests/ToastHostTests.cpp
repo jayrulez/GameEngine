@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ToastHost tests: timed expiry vs sticky toasts, deferred removal (never mid-dispatch),
-// action/close buttons, and the bottom-right stacking layout.
+// ToastHost tests: timed expiry and sticky toasts, deferred removal (never during dispatch),
+// the action and close buttons, and the bottom-right stacking layout.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -48,7 +48,7 @@ TEST_CASE("toolkit-toasthost: TimedExpiryAndStickiness")
     } // sticky never expires
     CHECK(host->Contains(b));
 
-    // Dismiss defers removal to the next Update (mutation-queue rule without the queue).
+    // Dismiss defers removal to the next Update (the mutation-queue rule, without the queue).
     host->Dismiss(b);
     CHECK(host->Contains(b));
     host->Update(0.0f);
@@ -70,7 +70,7 @@ TEST_CASE("toolkit-toasthost: ActionAndCloseButtons")
 
     auto* card = Cast<ViewGroup>(host->GetChildAt(0));
     REQUIRE(card != nullptr);
-    REQUIRE(card->ChildCount() == 3u); // message + action + close
+    REQUIRE(card->ChildCount() == 3u); // message, action and close
     auto* action = Cast<Button>(card->GetChildAt(1));
     REQUIRE(action != nullptr);
     action->OnClick.Invoke(action);
@@ -86,7 +86,7 @@ TEST_CASE("toolkit-toasthost: ActionAndCloseButtons")
     (void)host->Show(Move(plain));
     card = Cast<ViewGroup>(host->GetChildAt(0));
     REQUIRE(card != nullptr);
-    REQUIRE(card->ChildCount() == 2u); // message + close
+    REQUIRE(card->ChildCount() == 2u); // message and close
     auto* close = Cast<Button>(card->GetChildAt(1));
     REQUIRE(close != nullptr);
     close->OnClick.Invoke(close);

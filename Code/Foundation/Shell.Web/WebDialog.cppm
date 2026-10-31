@@ -3,9 +3,9 @@
 
 // Foundation::Shell.Web - `foundation.shell.web:dialogs`.
 //
-// The web shell's file-dialog service. Stubbed to cancel immediately; the browser equivalents are a
-// hidden <input type=file> (open) and an anchor-download (save), wired here later. Kept as the web
-// shell's own service so that wiring has a home.
+// The web shell's file-dialog service. It cancels immediately; the browser equivalents would be a
+// hidden <input type=file> (open) and an anchor download (save). It is the web shell's own service
+// so that wiring has a home.
 
 module;
 #include "Core/Prelude.h"

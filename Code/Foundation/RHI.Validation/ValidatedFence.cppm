@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for Fence.
-/// Ported from Sedulous.RHI.Validation/ValidatedFence.bf.
 
 module;
 #include "Core/Prelude.h"

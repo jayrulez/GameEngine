@@ -3,16 +3,15 @@
 
 // Pipeline::Importer - the `pipeline.importer` module.
 //
-// The file-import seam: an OS file (drag-dropped onto the editor)
-// becomes a SOURCE - the raw bytes copied into the project's Sources/ tree - plus a typed Asset
-// instance in the content DB whose import settings point at it. Cooking then owns the
-// source -> product path like any other asset (the imported file's content is part of the
-// recipe hash).
+// File import: an OS file (drag-dropped onto the editor) becomes a source, its raw bytes copied
+// into the project's Sources/ tree, and a typed Asset instance in the content DB whose import
+// settings point at it. Cooking then takes the source to its product like any other asset (the
+// imported file's content is part of the recipe hash).
 //
-// IFileImporter implementations live with their asset modules (texture/image/...) and are
+// IFileImporter implementations live with their asset modules (texture, image, ...) and are
 // registered by the executable; routing is by lowercase extension. Several importers may claim
-// one extension - v1 takes the FIRST match (the Sedulous-style chooser dialog is a later
-// nicety; the registry API already exposes all matches).
+// one extension: FindFor returns the first match, and FindAllFor returns them all so the editor
+// can offer a chooser.
 
 module;
 #include "Core/Prelude.h"
@@ -28,11 +27,8 @@ using namespace foundation::core;
 
 export namespace pipeline
 {
-    /// Everything an import needs to know about WHERE it lands - deliberately not the
-    /// editor's project object: the pipeline is headless-drivable (CLI, MCP, tests), so the
-    /// caller supplies the two facts imports consume and keeps its project model to itself.
     /// What an import does when the name it would take is held by an asset of its own type that
-    /// ANOTHER file made (an asset of another type is always refused; a re-import of the same file
+    /// another file made (an asset of another type is always refused; a re-import of the same file
     /// replaces its asset without asking). The editor asks the user and passes the answer; a
     /// headless caller (MCP, a script) refuses unless it says.
     enum class ImportConflictChoice : u8
@@ -44,7 +40,10 @@ export namespace pipeline
 
     struct ImportContext
     {
-        // The import's allocator (required - the editor page / cook tool decides).
+        // Everything an import needs to know about where it lands, rather than the editor's
+        // project object: the pipeline is headless-drivable (CLI, MCP, tests), so the caller
+        // supplies the facts imports consume and keeps its project model to itself. The
+        // allocator is required; the editor page or cook tool decides.
         ImportContext(IAllocator& alloc, StringView root) : allocator(&alloc), sourcesRoot(root) {}
 
         IAllocator* allocator;
@@ -52,7 +51,7 @@ export namespace pipeline
         ImportConflictChoice onConflict = ImportConflictChoice::Refuse;
         // The import ledger (ImportLedgerPath: under the project's ignored .cache/): which OS
         // file each file under Sources/ came from, so a re-import of the same file is told from
-        // another file of the same name. Empty: none kept (a file name alone decides, as before).
+        // another file of the same name. Empty: none kept (the file name alone decides).
         String ledgerPath;
     };
 
@@ -65,7 +64,7 @@ export namespace pipeline
         Skeleton,
         AnimationClip,
         Collision,
-        Asset, // a single-asset importer's one product (texture/image/audio/font/... file)
+        Asset, // a single-asset importer's one product (a texture, image, audio, font, ... file)
     };
 
     [[nodiscard]] inline StringView ImportResourceKindLabel(ImportResourceKind kind) noexcept
@@ -83,10 +82,10 @@ export namespace pipeline
         return u8"Resources";
     }
 
-    // (SingleAssetPlan - the shared single-asset DescribeImport - is defined below the path
+    // (SingleAssetPlan, the shared single-asset DescribeImport, is defined below the path
     // helpers it uses.)
 
-    /// One resource an import WOULD create. `sourceName` is the importer's deterministic base
+    /// One resource an import would create. `sourceName` is the importer's deterministic base
     /// name for the resource (the stable key the commit matches on); `targetName` is what the
     /// user wants it called (defaults to sourceName); unchecked entries are skipped.
     struct ImportPlanEntry
@@ -98,7 +97,7 @@ export namespace pipeline
     };
 
     /// DescribeImport's result: everything the import would create, in fan-out order.
-    /// Empty = the importer does not support per-resource review (toggles only).
+    /// Empty means the importer does not support per-resource review (toggles only).
     struct ImportPlan
     {
         Array<ImportPlanEntry> entries;
@@ -132,9 +131,9 @@ export namespace pipeline
         foundation::core::Serialize(ar, "entries", p.entries);
     }
 
-    /// Re-import memory: overlay the STORED decisions of a previous import onto a freshly
-    /// described plan. Matched entries (kind + sourceName) take the stored enabled state and
-    /// rename; resources NEW in the source stay at their described defaults.
+    /// Re-import memory: overlay the stored decisions of a previous import onto a freshly
+    /// described plan. Matched entries (kind and sourceName) take the stored enabled state and
+    /// rename; resources new in the source stay at their described defaults.
     inline void MergeStoredSelection(ImportPlan& plan, const ImportPlan& stored)
     {
         for (ImportPlanEntry& e : plan.entries)
@@ -151,9 +150,9 @@ export namespace pipeline
     }
 
     /// Importer-specific options, shown by the import dialog before the import runs. The
-    /// dialog renders one checkbox per Toggle (each points into the options object) - a
-    /// declarative description, no reflection required. Subclasses add their fields and
-    /// return the toggle list; the base is intentionally empty (no options = no dialog).
+    /// dialog renders one checkbox per Toggle (each points into the options object), a
+    /// declarative description with no reflection required. Subclasses add their fields and
+    /// return the toggle list; the base is empty (no options, no dialog).
     class ImportOptions : public ISerializable
     {
         RTTI_OBJECT(ImportOptions, ISerializable)
@@ -169,8 +168,8 @@ export namespace pipeline
         void Serialize(ISerializer&) override {}
 
         /// The review dialog's per-resource decisions (edited copy of DescribeImport's plan).
-        /// Empty = import everything under default names. Importers that support review
-        /// consult it via SelectionEnabled/SelectionName at each creation site; others
+        /// Empty imports everything under default names. Importers that support review
+        /// consult it through SelectionEnabled and SelectionName at each creation site; others
         /// ignore it.
         ImportPlan selection;
 
@@ -188,13 +187,13 @@ export namespace pipeline
         }
     };
 
-    /// A BULK write an importer defers to the worker flush. Three shapes, one struct:
-    ///  - data-stream write: `instance` + `streamName` (+ view/owned bytes)
-    ///  - envelope write:    `instance` + `object` (SERIALIZATION runs on the worker too -
+    /// A bulk write an importer defers to the worker flush. Three shapes, one struct:
+    ///  - data-stream write: `instance` and `streamName` (and view or owned bytes)
+    ///  - envelope write:    `instance` and `object` (serialization runs on the worker too;
     ///    a big mesh source rendered to XML is the single most expensive part of an import)
-    ///  - raw file copy:     `copyFrom` -> `copyTo` (source + sidecar provenance copies;
-    ///    identical bytes skip so mtimes don't churn recooks)
-    /// All three are pure file/mount IO with NO in-memory DB mutation, so they are safe off
+    ///  - raw file copy:     `copyFrom` to `copyTo` (source and sidecar provenance copies;
+    ///    identical bytes are skipped so mtimes don't churn recooks)
+    /// All three are pure file and mount IO with no in-memory DB mutation, so they are safe off
     /// the UI thread while the job lock excludes cooks and queues deletes. `view` borrows
     /// from the importer's prepared payload (kept alive through the flush).
     struct DeferredImportWrite
@@ -206,11 +205,11 @@ export namespace pipeline
         Array<byte> owned;
         String copyFrom; // raw copy when both paths set
         String copyTo;
-        // A LAZY payload: runs on the worker right before the write and fills `owned` (a
-        // mesh's conversion, LOD chain and geometry serialization - the import's CPU bulk).
-        // Import queues the write in microseconds; the work happens off the main thread
-        // (2026-09-23). Whatever it captures must outlive the flush (the editor keeps the
-        // prepared model alive for exactly this reason).
+        // A lazy payload: runs on the worker right before the write and fills `owned` (a
+        // mesh's conversion, LOD chain and geometry serialization, the import's CPU bulk).
+        // Import queues the write in microseconds; the work happens off the main thread.
+        // Whatever it captures must outlive the flush (the editor keeps the prepared model
+        // alive for this reason).
         Function<Status(Array<byte>&)> produce;
 
         [[nodiscard]] Span<const byte> Bytes() const noexcept
@@ -258,9 +257,9 @@ export namespace pipeline
                     }
                 }
                 // Nested destinations (a gltf referencing "textures/x.jpg" copies to
-                // Sources/textures/): create the parents first - raw WriteFile does not,
-                // unlike the inline path's NativeFileSystem::Save (the chess-set bug: all
-                // nine nested texture copies failed and the import never finished).
+                // Sources/textures/): create the parents first, since raw WriteFile does not,
+                // unlike the inline path's NativeFileSystem::Save (without them every nested
+                // copy fails and the import never finishes).
                 for (usize i = copyTo.Size(); i > 0; --i)
                 {
                     if (copyTo[i - 1] == utf8char('/'))
@@ -300,31 +299,31 @@ export namespace pipeline
     public:
         virtual ~IFileImporter() = default;
 
-        /// Shown in menus/choosers ("Texture", "Model", ...).
+        /// Shown in menus and choosers ("Texture", "Model", ...).
         [[nodiscard]] virtual StringView Label() const = 0;
 
         /// Does this importer claim the extension (lowercase, no dot: "png")?
         [[nodiscard]] virtual bool Accepts(StringView extension) const = 0;
 
-        /// Fresh options for one import (defaults set). Null = this importer has no options
+        /// Fresh options for one import (defaults set). Null means this importer has no options
         /// and the import runs immediately on drop, no dialog.
         [[nodiscard]] virtual RefPtr<ImportOptions> CreateOptions(IAllocator&) const
         {
             return {};
         }
 
-        /// Slow importers split in two: PrepareOnWorker runs OFF the UI thread (pure
-        /// parse/decode of the source file - NO project or DB access) and its payload is
-        /// then handed to Import on the MAIN thread for the fast DB fan-out. Default: no
+        /// Slow importers split in two: PrepareOnWorker runs off the UI thread (pure
+        /// parsing and decoding of the source file, with no project or DB access) and its payload
+        /// is then handed to Import on the main thread for the fast DB fan-out. Default: no
         /// worker phase (Import does everything inline).
         [[nodiscard]] virtual bool WantsWorkerPrepare() const { return false; }
         [[nodiscard]] virtual RefPtr<Object> PrepareOnWorker(StringView /*sourcePath*/,
                                                              IAllocator& allocator);
 
-        /// Enumerate everything Import would create (the review dialog's data), WITHOUT
+        /// Enumerate everything Import would create (the review dialog's data), without
         /// touching the project or DB. `prepared` is PrepareOnWorker's payload when the
         /// two-phase path ran (a supporting importer should reuse it, not re-parse).
-        /// Default: empty plan = no per-resource review; the dialog shows toggles only.
+        /// Default: an empty plan, so no per-resource review; the dialog shows toggles only.
         [[nodiscard]] virtual ImportPlan DescribeImport(StringView /*sourcePath*/,
                                                         const ImportOptions* /*options*/,
                                                         Object* /*prepared*/)
@@ -332,7 +331,7 @@ export namespace pipeline
             return {};
         }
 
-        /// The asset type a SINGLE-ASSET importer makes of `sourcePath` ("ImageAsset"), for the
+        /// The asset type a single-asset importer makes of `sourcePath` ("ImageAsset"), for the
         /// name-clash check before an import; empty for an importer that makes several (a
         /// model's), which keeps its own names apart.
         [[nodiscard]] virtual StringView AssetTypeName(StringView /*sourcePath*/) const { return {}; }
@@ -345,9 +344,9 @@ export namespace pipeline
         [[nodiscard]] virtual ImportClash FindClash(foundation::content::Group& group, StringView sourcePath, const ImportPlan& plan,
                                                            StringView ledgerPath) const;
 
-        /// Re-import memory: the selection a PREVIOUS import of this source stored in the
-        /// target group (empty = none / unsupported). The editor merges it onto the fresh
-        /// plan (MergeStoredSelection) so re-importing does not re-ask settled decisions.
+        /// Re-import memory: the selection a previous import of this source stored in the
+        /// target group (empty when there is none or it is unsupported). The editor merges it onto
+        /// the fresh plan (MergeStoredSelection) so re-importing does not re-ask settled decisions.
         [[nodiscard]] virtual ImportPlan StoredSelection(foundation::content::Group& /*group*/,
                                                         StringView /*sourcePath*/)
         {
@@ -358,10 +357,10 @@ export namespace pipeline
         /// the typed Asset instance(s) in `group`. Returns the primary created instance.
         /// `options` is the object CreateOptions() returned after the user edited it in the
         /// dialog (null when the importer has none or the import runs headless). `prepared`
-        /// is PrepareOnWorker's payload when the two-phase path ran (null = load inline).
-        /// `deferredWrites`: when non-null, the importer MAY park its bulk writes there
-        /// instead of writing inline - the caller flushes them on a worker (null =
-        /// headless/tests: everything writes inline).
+        /// is PrepareOnWorker's payload when the two-phase path ran (null loads inline).
+        /// `deferredWrites`: when non-null, the importer may park its bulk writes there
+        /// instead of writing inline, and the caller flushes them on a worker (null in
+        /// headless runs and tests: everything writes inline).
         [[nodiscard]] virtual Result<foundation::content::Instance*>
         Import(StringView sourcePath, const ImportContext& context,
                foundation::content::Group& group, const ImportOptions* options = nullptr,
@@ -374,18 +373,18 @@ export namespace pipeline
     class ImporterRegistry
     {
     public:
-        // The allocator (required - the owner decides) backs registered importers.
+        // The allocator (required; the owner decides) backs registered importers.
         explicit ImporterRegistry(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
         void Register(UniquePtr<IFileImporter> importer);
 
-        /// First importer claiming the extension (v1 routing), or null.
+        /// First importer claiming the extension, or null.
         [[nodiscard]] IFileImporter* FindFor(StringView extension) const;
 
-        /// EVERY importer claiming the extension, in registration order (empty when none). The editor
-        /// offers a chooser when more than one matches (e.g. image vs texture on the same extension).
+        /// Every importer claiming the extension, in registration order (empty when none). The editor
+        /// offers a chooser when more than one matches (image or texture on the same extension).
         [[nodiscard]] Array<IFileImporter*> FindAllFor(StringView extension) const;
 
         [[nodiscard]] usize Count() const noexcept { return m_importers.Size(); }
@@ -451,8 +450,8 @@ export namespace pipeline
         return fileName;
     }
 
-    /// The plan of a SINGLE-ASSET importer: one Asset entry named after the file stem - the
-    /// shared DescribeImport for texture/image/audio/font/heightfield/splatmap.
+    /// The plan of a single-asset importer: one Asset entry named after the file stem, the
+    /// shared DescribeImport for texture, image, audio, font, heightfield and splatmap.
     [[nodiscard]] inline ImportPlan SingleAssetPlan(StringView sourcePath)
     {
         ImportPlan plan;
@@ -464,7 +463,7 @@ export namespace pipeline
         return plan;
     }
 
-    /// The instance name a single-asset importer should CLAIM: the user's rename when a
+    /// The instance name a single-asset importer should claim: the user's rename when a
     /// selection carries one, else the stem.
     [[nodiscard]] inline StringView SingleAssetName(const ImportOptions* options, StringView stem)
     {
@@ -472,9 +471,9 @@ export namespace pipeline
                                     : stem;
     }
 
-    /// Re-import memory for single-asset importers: find the asset a PREVIOUS import of this
-    /// source created in `group` - matched by the typed fileName back-reference, so a RENAMED
-    /// asset stays findable - and return its current name as the stored rename. `typeName`
+    /// Re-import memory for single-asset importers: find the asset a previous import of this
+    /// source created in `group` (matched by the typed fileName back-reference, so a renamed
+    /// asset stays findable) and return its current name as the stored rename. `typeName`
     /// filters candidates before the envelope read (the read is the expensive part).
     [[nodiscard]] inline ImportPlan SingleAssetStoredSelection(foundation::content::Group& group,
                                                               StringView sourcePath,
@@ -623,7 +622,7 @@ export namespace pipeline
     /// The name under Sources/ a copy of `sourcePath` takes, from what is there and the ledger
     /// alone (no file is read): its own file name when that is free or this file's own copy
     /// (`mayOverwrite`, or the ledger saying it came from `sourcePath`); else, when that name is
-    /// ANOTHER file's (the ledger names another origin, or the caller says it may not overwrite),
+    /// another file's (the ledger names another origin, or the caller says it may not overwrite),
     /// the next free one ("a.2.png"). Noted in the ledger as `sourcePath`'s. For a copy made later
     /// (a deferred write); CopyIntoSources copies at once.
     [[nodiscard]] inline String SourcesNameFor(const ImportContext& context, StringView sourcePath, bool mayOverwrite = true,
@@ -660,10 +659,10 @@ export namespace pipeline
     }
 
     /// Copy an OS file into the project's Sources/ tree under SourcesNameFor's name. Returns the
-    /// sources-relative name the Asset should reference. An existing SAME-CONTENT file is reused
+    /// sources-relative name the Asset should reference. An existing same-content file is reused
     /// untouched (no recook churn); changed bytes overwrite this file's own copy (a re-import must
     /// see the edited file) and never another file's. The copy goes through the core file API and
-    /// the context's sources root only - the pipeline reads it back through the sources MOUNT.
+    /// the context's sources root only; the pipeline reads it back through the sources mount.
     [[nodiscard]] inline Result<String> CopyIntoSources(const ImportContext& context,
                                                         StringView sourcePath, bool mayOverwrite = true)
     {
@@ -754,7 +753,7 @@ export namespace pipeline
         }
         if (held == ownName)
         {
-            clash.kind = ImportClashKind::Reimport; // before the ledger: the file name decides, as it did
+            clash.kind = ImportClashKind::Reimport; // no ledger entry: the file name decides
         }
         return clash;
     }
@@ -782,7 +781,7 @@ export namespace pipeline
                (clash.kind == ImportClashKind::SameType && choice != ImportConflictChoice::Refuse);
     }
 
-    /// The asset a SINGLE-ASSET importer writes: its name (the user's, else the stem) claimed in
+    /// The asset a single-asset importer writes: its name (the user's, else the stem) claimed in
     /// `group` by the clash rule and the context's choice, and the file copied into Sources/
     /// (never over another file's copy). `sourcesName` gets the copy's name for the asset's
     /// fileName. Refused (AlreadyExists) for an asset of another type, or of its type from another

@@ -2,13 +2,14 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // VG distance-field (MSDF) text fragment shader. Decodes a median-of-3 signed distance from the
-// atlas and antialiases in SCREEN space (pxRange scaled by fwidth of the texcoord), so text stays
+// atlas and antialiases in screen space (pxRange scaled by fwidth of the texcoord), so text stays
 // crisp at any scale. Shares VGUniforms (b0) for the DF metadata; pairs with vg.vs. Resolved via
-// ShaderSystem::GetVariant("vg_df", Fragment). fwidth is called unconditionally (uniformity-safe
-// for the WGSL/naga+tint cook).
-// A text effect pass (VGContext::SetTextEffects: an outline, a glow, a soft shadow) carries EdgeShiftRamp:
-// x moves the edge outward and y widens it into a ramp, both in field units (0.5 is the edge); it
-// reads the true distance in alpha (MTSDF), whose contours round the corners past the edge.
+// ShaderSystem::GetVariant("vg_df", Fragment). fwidth is called unconditionally, which keeps it
+// uniformity-safe for the WGSL cook (naga and tint).
+// A text effect pass (VGContext::SetTextEffects: an outline, a glow, a soft shadow) carries
+// EdgeShiftRamp: x moves the edge outward and y widens it into a ramp, both in field units (0.5
+// is the edge). It reads the true distance in alpha (MTSDF), whose contours round the corners
+// past the edge.
 cbuffer VGUniforms : register(b0) { float4x4 Projection; float DistanceFieldPixelRange; float DistanceFieldAtlasWidth; float DistanceFieldAtlasHeight; float BlendSpace; };
 // The effect slot (VGVertex::Glyph) is this pipeline's edge shift (x) and ramp width (y).
 struct PSInput { float4 Position:SV_Position; float2 TexCoord:TEXCOORD0; float4 Color:COLOR0; float Coverage:COVERAGE; float2 EdgeShiftRamp:EFFECT; };
@@ -19,8 +20,8 @@ float4 main(PSInput input) : SV_Target {
     float4 mtsd = VGTexture.Sample(VGSampler, input.TexCoord);
     bool effectPass = input.EdgeShiftRamp.x != 0.0 || input.EdgeShiftRamp.y != 0.0;
     float sd = effectPass ? mtsd.a : Median(mtsd.r, mtsd.g, mtsd.b);
-    // Screen-space px range: convert the atlas-space DF spread to screen pixels via the texcoord
-    // derivatives, so the antialiased edge is ~1px wide regardless of magnification.
+    // Screen-space px range: convert the atlas-space DF spread to screen pixels through the texcoord
+    // derivatives, so the antialiased edge is about 1px wide regardless of magnification.
     float2 unitRange = float2(DistanceFieldPixelRange, DistanceFieldPixelRange) / float2(DistanceFieldAtlasWidth, DistanceFieldAtlasHeight);
     float2 screenTexSize = float2(1.0, 1.0) / max(fwidth(input.TexCoord), float2(1e-6, 1e-6));
     float screenPxRange = max(0.5 * dot(unitRange, screenTexSize), 1.0);

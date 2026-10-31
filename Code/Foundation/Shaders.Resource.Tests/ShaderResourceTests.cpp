@@ -3,7 +3,7 @@
 
 // Shaders as resources: build a ShaderResource through the ResourceManager from an
 // authored ShaderSource, compile variants through it, and verify a reload bumps the
-// shader's version (the PSO-cache reload signal). Real DXC + Null RHI + content DB.
+// shader's version (the PSO-cache reload signal). Uses real DXC, the Null RHI and a content DB.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -88,7 +88,7 @@ TEST_CASE("shader resource: built via the resource manager; reload bumps version
     CHECK(shader->GetVariant(ShaderStage::Fragment, ShaderFlags::None) == nullptr); // #error guard
 
     const u64 v0 = shader->Version();
-    CHECK(v0 >= 1u); // creation registered + invalidated -> version bumped
+    CHECK(v0 >= 1u); // creation registered and invalidated, so the version was bumped
 
     CHECK(manager.Reload(id));
     CHECK(shader->Version() > v0); // reload bumped the version (proxy follows the new product)

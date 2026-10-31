@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.vegetation.resource:mask - the painted vegetation mask.
+// foundation.vegetation.resource:mask: the painted vegetation mask.
 //
-// `planeCount` u8 DENSITY planes (0 = nothing grows, 255 = the layer's full density) over the
+// `planeCount` u8 density planes (0: nothing grows, 255: the layer's full density) over the
 // terrain's 0..1 footprint UV, plane-major in one blob. A vegetation layer with Mask placement
-// names its plane; the scatter reads the density at each candidate. IS-A Object so it is a
+// names its plane; the scatter reads the density at each candidate. It is an Object so it is a
 // referenceable product (Ref<VegetationMask>) the vegetation component holds; the per-object
-// uid + Version() drive the scatter cache invalidation (the SplatWeights precedent).
+// uid and Version() drive the scatter cache invalidation, as SplatWeights' do.
 //
-// Cooked form (the splat sidecar pattern): the metadata object `VegetationMaskSource` (dims +
-// plane count) + ONE sidecar stream `kVegetationMaskStream` ("densities") carrying every plane.
+// Cooked form, as for the splat: the metadata object `VegetationMaskSource` (dims and plane
+// count) and one sidecar stream `kVegetationMaskStream` ("densities") carrying every plane.
 // `VegetationMaskFactory` builds the runtime mask from a cooked instance.
 
 module;
@@ -35,8 +35,8 @@ export namespace foundation::vegetation
     {
         RTTI_OBJECT(VegetationMask, Object)
     public:
-        // Unique per-OBJECT id: caches key by THIS + Version(), never by pointer (the
-        // bind-group-cache-versioning rule).
+        // Unique per-object id: caches key by this and Version(), never by pointer, since a
+        // freed mask's address can be reused by another.
         const u64 uid = NextUid();
         [[nodiscard]] static u64 NextUid() noexcept
         {
@@ -137,7 +137,7 @@ export namespace foundation::vegetation
         Array<u8> m_densities;
     };
 
-    /// The inclusive texel rectangle a brush op touched (region-delta undo + the chunk regrow).
+    /// The inclusive texel rectangle a brush op touched (region-delta undo and the chunk regrow).
     struct MaskRegion
     {
         i32 minX = 0x7fffffff;
@@ -160,8 +160,8 @@ export namespace foundation::vegetation
     namespace detail
     {
         // The elliptical brush visitor (the splat brush's shape): calls fn(x, y, t) for every
-        // texel inside the WORLD circle (per-axis UV radii) with the falloff-scaled strength t in
-        // (0, 1]; `coreFraction` = the flat inner core's share of the radius (full strength
+        // texel inside the world circle (per-axis UV radii) with the falloff-scaled strength t in
+        // (0, 1]; `coreFraction` is the flat inner core's share of the radius (full strength
         // inside it, a cosine skirt outside).
         template <typename TFn>
         inline void VisitMaskBrush(const VegetationMask& mask, f32 uvX, f32 uvY, f32 uvRadiusX,
@@ -338,8 +338,8 @@ export namespace foundation::vegetation
         return region;
     }
 
-    /// Cooked mask METADATA: dims + plane count. The planes ride the `kVegetationMaskStream`
-    /// sidecar (bulk-data rule).
+    /// Cooked mask metadata: dims and plane count. The planes travel in the
+    /// `kVegetationMaskStream` sidecar, keeping bulk data out of the serialized object.
     class VegetationMaskSource final : public ISerializable
     {
         RTTI_OBJECT(VegetationMaskSource, ISerializable)
@@ -368,7 +368,7 @@ export namespace foundation::vegetation
             return Span<const byte>(reinterpret_cast<const byte*>(px.Data()), px.Size());
         }
 
-        /// Build the runtime product from this metadata + the sidecar blob. Inconsistent data
+        /// Build the runtime product from this metadata and the sidecar blob. Inconsistent data
         /// (bad dims, a blob size mismatch) yields an empty mask rather than a malformed one.
         [[nodiscard]] RefPtr<VegetationMask> Build(Span<const byte> densityBlob,
                                                    IAllocator& allocator) const
@@ -392,7 +392,7 @@ export namespace foundation::vegetation
     /// The sidecar stream carrying every plane, plane-major.
     inline constexpr StringView kVegetationMaskStream = u8"densities";
 
-    /// Builds a cooked mask (metadata + the stream) into a runtime VegetationMask. Pure-CPU,
+    /// Builds a cooked mask (metadata and the stream) into a runtime VegetationMask. Pure-CPU,
     /// async-safe.
     class VegetationMaskFactory final : public IResourceFactory
     {
@@ -466,8 +466,8 @@ export namespace foundation::vegetation
 
 export namespace foundation::vegetation
 {
-    /// The vegetation resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The vegetation resource module: the engine composition composes this library's
+    /// factories from it.
     inline constexpr foundation::resource::ResourceFactoryDesc kVegetationResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<VegetationMask, VegetationMaskSource, VegetationMaskFactory>(),
     };

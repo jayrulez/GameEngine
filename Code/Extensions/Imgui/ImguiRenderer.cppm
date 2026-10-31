@@ -3,10 +3,10 @@
 
 /// Extensions::Imgui - the `:renderer` partition.
 ///
-/// A Dear ImGui renderer built on our RHI (no stock imgui backend) - ported from the Sedulous
-/// ImGui sample, which uses the same RHI shape. Owns the GPU pipeline + font atlas + per-frame dynamic
-/// vertex/index/uniform buffers, and records ImDrawData into a render pass on a target each frame.
-/// The font atlas upload is deferred to the first Render (we get a command encoder there, not at init).
+/// A Dear ImGui renderer built on our RHI rather than a stock imgui backend. It owns the GPU
+/// pipeline, the font atlas and the per-frame dynamic vertex, index and uniform buffers, and records
+/// ImDrawData into a render pass on a target each frame. The font atlas upload waits for the first
+/// Render, since a command encoder is available there and not at init.
 
 module;
 #include "Core/Prelude.h"
@@ -28,9 +28,9 @@ namespace rhi = foundation::rhi;
 export namespace extensions::imgui
 {
 
-    // The ImGui VS/PS ship in the engine shader corpus (imgui.vs / imgui.ps) and are resolved via
-    // ShaderSystem::GetVariant("imgui", ...) - cooked WGSL from the pack on web, dev-compiled from
-    // Data/Engine/Shaders on desktop - so no inline HLSL / RegisterSource here.
+    // The ImGui vertex and pixel shaders ship with the engine shaders (imgui.vs and imgui.ps) and
+    // are resolved through ShaderSystem::GetVariant("imgui", ...): cooked WGSL from the pack on
+    // web, compiled from Data/Engine/Shaders on desktop. There is no inline HLSL here.
     class ImguiRenderer
     {
     public:
@@ -46,10 +46,10 @@ export namespace extensions::imgui
 
         Status Initialize()
         {
-            // The "imgui" shaders come from the ShaderSystem (cooked pack or dev file provider) -
-            // no RegisterSource; they are part of the engine corpus now.
+            // The "imgui" shaders come from the ShaderSystem (the cooked pack or the development
+            // file provider), as part of the engine shaders.
 
-            // set 0: projection UBO (b0, Vertex) + font texture (t0) + sampler (s0).
+            // set 0: projection UBO (b0, Vertex), font texture (t0) and sampler (s0).
             rhi::BindGroupLayoutEntry projE =
                 rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex);
             rhi::BindGroupLayoutEntry texE =
@@ -76,8 +76,8 @@ export namespace extensions::imgui
                 return Status{ErrorCode::Unknown};
             }
 
-            // Per-frame-in-flight projection UBO + bind group (font/sampler shared; UBO per slot so an
-            // in-flight frame's projection isn't overwritten).
+            // A projection UBO and bind group per frame in flight. The font and sampler are shared;
+            // the UBO is per slot so an in-flight frame's projection is not overwritten.
             for (u32 i = 0; i < m_fif; ++i)
             {
                 rhi::BufferDesc ud{};
@@ -105,8 +105,8 @@ export namespace extensions::imgui
             return Status{};
         }
 
-        // Record ImDrawData into a render pass on `target` (loaded, drawn on top of the scene). `enc` is the
-        // frame's primary encoder; the font upload + buffer fills happen on it before the render pass opens.
+        // Record ImDrawData into a render pass on `target`, loaded and drawn on top of the scene. `enc` is
+        // the frame's primary encoder; the font upload and buffer fills happen on it before the pass opens.
         void Render(rhi::CommandEncoder& enc, rhi::TextureView* target,
                     rhi::TextureFormat targetFormat, u32 width, u32 height,
                     const ImDrawData* drawData, u32 frameIndex)
@@ -300,10 +300,10 @@ export namespace extensions::imgui
             enc.TransitionTexture(m_fontTex, rhi::ResourceState::CopyDst,
                                   rhi::ResourceState::ShaderRead);
 #if PLATFORM_WEB
-            // A web startup submit can be dropped (the canvas texture expires if the frame
-            // yields), which would lose this one-shot copy while the latch says done - ImGui
-            // would render invisibly forever. Re-record the (tiny) copy for the first frames,
-            // the same startup window the IBL env bake and probe captures use.
+            // A submit during web startup can be dropped (the canvas texture expires if the frame
+            // yields), which would lose this one-shot copy while the latch says it is done, and
+            // ImGui would never be visible. Re-record the small copy for the first frames, the
+            // same startup window the IBL environment bake and probe captures use.
             m_fontUploaded = ++m_fontUploadFrames >= 20;
 #else
             m_fontUploaded = true;
@@ -353,7 +353,7 @@ export namespace extensions::imgui
             return true;
         }
 
-        // Grow a per-slot dynamic buffer to at least `bytes` (1.5x headroom; rounded to 64KiB).
+        // Grow a per-slot dynamic buffer to at least `bytes`, with 1.5x headroom, rounded to 64 KiB.
         bool EnsureBuffer(rhi::Buffer*& buf, u64& cap, u64 bytes, rhi::BufferUsage usage)
         {
             if (buf != nullptr && cap >= bytes)
@@ -401,7 +401,7 @@ export namespace extensions::imgui
                 m_pipeline = nullptr;
             }
 
-            // ImDrawVert = { ImVec2 pos; ImVec2 uv; ImU32 col } -> byte offsets 0 / 8 / 16, stride 20.
+            // ImDrawVert is { ImVec2 pos; ImVec2 uv; ImU32 col }: byte offsets 0, 8 and 16, stride 20.
             rhi::VertexAttribute attrs[] = {
                 {rhi::VertexFormat::Float32x2, 0, 0},
                 {rhi::VertexFormat::Float32x2, 8, 1},

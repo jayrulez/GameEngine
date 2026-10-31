@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net.manager - StateReplication driven end-to-end through NetworkManager over the sim
-// transport: a server-assigned networked entity's replicated state reaches a connected client's scene.
+// foundation.net.manager - StateReplication driven end to end through NetworkManager over the
+// simulated transport: a server-assigned networked entity's replicated state reaches a connected client's scene.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -89,7 +89,7 @@ TEST_CASE("net-manager: state replicates server -> client through the manager + 
     const net::NetworkId id = server.Replication().AssignNetworkId(serverScene, e);
     REQUIRE(id.IsValid());
 
-    // Drive until the client's scene mirrors it (reliable-ordered => converges).
+    // Drive until the client's scene mirrors it (reliable and ordered, so it converges).
     scene::EntityHandle ce = scene::EntityHandle::Invalid();
     for (int i = 0; i < 400; ++i)
     {
@@ -134,9 +134,8 @@ TEST_CASE("net-manager: a NetworkedTransform replicates an entity's movement ser
     client.SetInterpolationDelayMs(
         0.0); // sample the latest state (deterministic once movement stops)
 
-    // Server scene: an AUTHORED networked entity (NetworkComponent + NetworkedTransform), not yet
-    // assigned an id - SetReplicatedScene on the server auto-assigns it (the "author + auto-assign"
-    // path the demo uses; no manual AssignNetworkId).
+    // Server scene: an authored networked entity (NetworkComponent and NetworkedTransform), not yet
+    // assigned an id. SetReplicatedScene on the server assigns it, with no manual AssignNetworkId.
     scene::Scene serverScene{DefaultAllocator()};
     serverScene.AddSystem<net::NetworkComponentManager>();
     serverScene.AddSystem<net::NetworkedTransformComponentManager>();
@@ -170,8 +169,8 @@ TEST_CASE("net-manager: a NetworkedTransform replicates an entity's movement ser
     }
     REQUIRE(clientScene.IsValid(ce));
 
-    // Move the server entity's LOCAL transform; the client's transform follows (via the
-    // CaptureEntityTransforms -> wire -> ApplyEntityTransforms bridge, no manual sync).
+    // Move the server entity's local transform; the client's transform follows (CaptureEntityTransforms,
+    // then the wire, then ApplyEntityTransforms, with no manual sync).
     Transform t1;
     t1.position = Float3{9, 3, -5};
     serverScene.SetLocalTransform(e, t1);
@@ -199,15 +198,15 @@ TEST_CASE("net-manager: a shared authored scene matches by stable id (no duplica
     net::NetworkManager client(*network.CreateSocket());
     client.SetInterpolationDelayMs(0.0);
 
-    // Both peers author the same entity with the SAME authored Guid (as both Game tabs loading one
-    // scene from disk do). No hand-authored id - the id is derived from the Guid on both sides.
+    // Both peers author the same entity with the same Guid (as two games loading one scene from
+    // disk do). There is no hand-authored id: it is derived from the Guid on both sides.
     const Guid sharedGuid{0x0123456789ABCDEFull, 0xFEDCBA9876543210ull};
     const auto authorEntity = [&](scene::Scene& s) -> scene::EntityHandle
     {
         s.AddSystem<net::NetworkComponentManager>();
         s.AddSystem<net::NetworkedTransformComponentManager>();
         const scene::EntityHandle e = s.CreateEntity(sharedGuid, u8"Shared");
-        s.GetSystem<net::NetworkComponentManager>()->Add(e); // id 0 -> derived from sharedGuid
+        s.GetSystem<net::NetworkComponentManager>()->Add(e); // id 0: derived from sharedGuid
         s.GetSystem<net::NetworkedTransformComponentManager>()->Add(e);
         return e;
     };
@@ -217,9 +216,9 @@ TEST_CASE("net-manager: a shared authored scene matches by stable id (no duplica
     const scene::EntityHandle ce = authorEntity(clientScene);
 
     server.StartServer(/*dedicated=*/true);
-    server.SetReplicatedScene(&serverScene); // derives + registers the id for se
+    server.SetReplicatedScene(&serverScene); // derives and registers the id for se
     client.SetReplicatedScene(
-        &clientScene); // derives the SAME id for ce (client's OWN authored entity)
+        &clientScene); // derives the same id for ce (the client's own authored entity)
     (void)client.ConnectTo(sv->LocalEndpoint());
 
     const net::NetworkId id = serverScene.GetSystem<net::NetworkComponentManager>()->Get(se)->id;
@@ -227,7 +226,7 @@ TEST_CASE("net-manager: a shared authored scene matches by stable id (no duplica
     CHECK(clientScene.GetSystem<net::NetworkComponentManager>()->Get(ce)->id ==
           id); // both agree, no authoring
 
-    // Move the server's shared entity; the client's SAME entity follows - no second entity minted.
+    // Move the server's shared entity; the client's same entity follows, and no second one is minted.
     Transform t;
     t.position = Float3{4, 5, 6};
     serverScene.SetLocalTransform(se, t);
@@ -240,14 +239,13 @@ TEST_CASE("net-manager: a shared authored scene matches by stable id (no duplica
 
     CHECK(client.Replication().FindEntity(id) == ce); // matched the client's authored entity
     CHECK(clientScene.GetSystem<net::NetworkComponentManager>()->OwnerHandles().Size() ==
-          1u); // NO duplicate
+          1u); // no duplicate
     const Transform ct = clientScene.GetLocalTransform(ce);
     CHECK(ct.position.x == doctest::Approx(4.0f));
     CHECK(ct.position.z == doctest::Approx(6.0f));
 }
 
-// A joiner that loads the host's map after connecting (Masquerade: the host's map comes in its
-// welcome): with the host waiting for ready, the joiner hears RPCs but no state until it says it is
+// A joiner that loads the host's map after connecting (the map named in the host's welcome): with the host waiting for ready, the joiner hears RPCs but no state until it says it is
 // ready, and then gets everything from a full snapshot, an entity made before its ready included.
 TEST_CASE("net-manager: a held joiner hears no state until its ready, then all of it")
 {
@@ -317,7 +315,7 @@ TEST_CASE("net-manager: a held joiner hears no state until its ready, then all o
     CHECK(rc->health == 42);
 }
 
-// The default: a host that does not wait sends state at once, as before.
+// The default: a host that does not wait sends state at once.
 TEST_CASE("net-manager: a host that does not wait for ready holds no joiner")
 {
     net::SimConditions sim;

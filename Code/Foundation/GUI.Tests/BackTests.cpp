@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the `back` command (K1 of Specs/gui-lab-evolution-3.md): Escape and the pad's East run it
-// through the keymap; the topmost auto popup answers it by closing, before anything under it; a
-// modal dialog answers it as its close button does; else what handles it on the focus path (a
-// game's screen) does; a game rebinds or unbinds it like any key.
+// GUI - the `back` command. Escape and the pad's East button run it through the keymap. The
+// topmost auto popup handles it first, by closing. A modal dialog handles it as its close button
+// does. Otherwise whatever handles it on the focus path (a game's screen) does. A game rebinds or
+// unbinds it like any key.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -75,7 +75,7 @@ TEST_CASE("back: the topmost auto popup closes first, one at a time, whether or 
     CHECK(bed.d().IsPopupOpen(*outer));
     bed.d().InjectPadButton(PadButton::East);
     CHECK_FALSE(bed.d().IsPopupOpen(*outer));
-    CHECK(bed.backs == 0); // the screen under them heard neither
+    CHECK(bed.backs == 0); // the screen under the popups heard neither Escape
     bed.Escape();
     CHECK(bed.backs == 1);
 }
@@ -93,7 +93,7 @@ TEST_CASE("back: a modal dialog answers it as its close button does, and only wh
     CHECK(closed == 1);
     CHECK(bed.backs == 0); // what was under the modal is inert
 
-    // One that may not be closed keeps its back to itself: under it nothing hears it.
+    // A modal that cannot be closed still takes `back`, so nothing under it hears it.
     window->SetClosable(false);
     window->OpenModal(*bed.root);
     bed.Escape();
@@ -101,7 +101,7 @@ TEST_CASE("back: a modal dialog answers it as its close button does, and only wh
     CHECK(bed.backs == 0);
     window->Close();
 
-    // Not modal, it does not answer: the screen does.
+    // A window that is not modal does not handle `back`, so the screen does.
     window->SetClosable(true);
     window->Open(*bed.screen);
     bed.d().SetFocusNode(bed.button.Get());
@@ -136,7 +136,7 @@ TEST_CASE("back: a game unbinds Escape from it, and Escape closes nothing")
     bed.Escape();
     CHECK(bed.d().IsPopupOpen(*popup));
     CHECK(bed.backs == 0);
-    bed.d().InjectPadButton(PadButton::East); // the pad's binding stands
+    bed.d().InjectPadButton(PadButton::East); // the pad's binding is still in place
     CHECK_FALSE(bed.d().IsPopupOpen(*popup));
 }
 
@@ -146,6 +146,6 @@ TEST_CASE("back: a focused widget's own Escape still comes first")
     (void)bed.button->AddEventListener(EventType::KeyDown, [](const Event& e) { e.Handled = true; });
     bed.Escape();
     CHECK(bed.backs == 0);
-    bed.d().InjectPadButton(PadButton::East); // the pad's East is `back` first, by its binding
+    bed.d().InjectPadButton(PadButton::East); // the pad's East reaches `back` through its own binding
     CHECK(bed.backs == 1);
 }

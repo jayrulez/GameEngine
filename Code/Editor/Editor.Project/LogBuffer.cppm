@@ -3,17 +3,16 @@
 
 // Editor::Project - :log_buffer partition.
 //
-// EditorLogBuffer: the log capture every editor-domain host uses - the editor application
-// (its console panel), the MCP hosts (log_read), the cook and export tools. ONE thread-safe
-// bounded ILogSink on core's GlobalLogger replaces Sedulous's logger+listener+buffer trio -
-// a host never swaps the logger, it just adds a sink, so every LOG_* call across the engine is
-// captured for free. Register it FIRST THING in main (before shell/device creation) so early
-// startup logs are captured too.
+// EditorLogBuffer is the log capture every editor-domain host uses: the editor application (its
+// console panel), the MCP hosts (log_read), and the cook and export tools. It is one thread-safe,
+// bounded ILogSink on core's GlobalLogger. A host never swaps the logger, it only adds this sink,
+// so every LOG_* call across the engine is captured. Register it first in main (before the shell
+// and device are created) so early startup logs are captured too.
 //
-// Entries keep full-fidelity heap strings (core's RingLogSink truncates messages to 192 chars -
-// useless for build errors and file paths) and carry a monotonic sequence so main-thread
-// consumers poll incrementally with CollectSince; when the ring is full the oldest entry drops
-// but sequences keep advancing, so a consumer can tell (and report) that it missed entries.
+// Entries keep whole heap strings (core's RingLogSink truncates messages to 192 characters, which
+// is useless for build errors and file paths) and carry a monotonic sequence, so main-thread
+// consumers poll incrementally with CollectSince. When the ring is full the oldest entry drops but
+// sequences keep advancing, so a consumer can tell (and report) that it missed entries.
 
 module;
 #include "Core/Prelude.h"
@@ -46,8 +45,8 @@ export namespace editor
         EditorLogBuffer(const EditorLogBuffer&) = delete;
         EditorLogBuffer& operator=(const EditorLogBuffer&) = delete;
 
-        // ILogSink - called from any thread (Logger::Dispatch serializes sinks, but consumers
-        // read from the main thread concurrently, hence our own mutex).
+        // ILogSink: called from any thread. Logger::Dispatch serializes sinks, but consumers read
+        // from the main thread concurrently, hence the buffer's own mutex.
         void Write(LogLevel level, StringView category, StringView message) noexcept override
         {
             ScopedLock lock(m_mutex);
@@ -66,7 +65,7 @@ export namespace editor
             (void)m_entries.PushBack(Move(entry));
         }
 
-        /// Append every buffered entry with sequence > sinceSequence to `out` (oldest first).
+        /// Appends every buffered entry with sequence > sinceSequence to `out` (oldest first).
         /// Returns the new high-water sequence to pass next time. Main-thread polling API.
         u64 CollectSince(u64 sinceSequence, Array<EditorLogEntry>& out) const
         {
@@ -119,6 +118,6 @@ export namespace editor
         RingBuffer<EditorLogEntry> m_entries;
         u64 m_nextSequence = 1;
         u64 m_dropped = 0;
-        Stopwatch m_clock; // since it was made: each entry's time
+        Stopwatch m_clock; // runs from construction; gives each entry's time
     };
 }

@@ -1,7 +1,8 @@
-// Gem - a pickup off the safe line: it spins and bobs, and when the rider comes within reach it is
-// taken ("GemCollected"), with a sparkle and a chime. Taken, its model hides; the gem itself stays,
-// so a new run ("RunRestart") brings it back. On the gem's entity, whose first child is the Gem
-// model. Placed by Tools/course.py, in rows beside the course between the gates.
+// Gem: a pickup away from the safe line. It spins and bobs, and when the rider comes within reach
+// it is taken ("GemCollected") with a sparkle and a chime. Once taken its model hides, but the gem
+// entity stays, so a new run ("RunRestart") brings it back. The script sits on the gem's entity,
+// whose first child is the Gem model. Tools/course.py places gems in rows beside the course
+// between the gates.
 
 // Prefabs/GemSparkle (gems.py): the burst where a gem was taken.
 Guid kGemSparkle = Guid("4aa1e781-c982-4a98-952a-551a1aa43865");
@@ -47,7 +48,8 @@ class Gem
         {
             return;
         }
-        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        // The rider is a root entity, so position() holds this frame's pose; worldPosition() still
+        // holds last frame's.
         if (Float3::Distance(m_rider.position(), self.worldPosition()) < radius)
         {
             m_taken = true;
@@ -58,7 +60,7 @@ class Gem
         }
     }
 
-    // A new run: the gem is back for the taking.
+    // A new run: the gem is back to be taken.
     void onRunRestart(int unused)
     {
         m_taken = false;

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The shader page over its markup without a host (no preview drawn): the source read and checked
-// against the engine's library (what the shader is, its properties), a broken edit's problem with
-// the preview kept on the last version that compiled and saying so, and one history for the code
-// and the asset's grid. Skipped where no shader compiler is available, as the pipeline's tests are.
+// The shader page over its markup without a host, so no preview is drawn. The source is read and
+// checked against the engine's library (what kind of shader it is, its properties); a broken edit
+// reports its problem while the preview keeps the last version that compiled and says so; and the
+// code and the asset's grid share one history. Skipped where no shader compiler is available, as
+// the pipeline's tests are.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -77,7 +78,7 @@ namespace
             REQUIRE(static_cast<bool>(project));
             context.SetProject(project.Get());
             REQUIRE(ReadData(u8"SampleProjects/ShaderGallery/Sources/01_UnlitColour.hlsl", source));
-            // Line feeds alone, as the page's code document holds a file's text: a Windows checkout
+            // Line feeds only, as the page's code document holds a file's text; a Windows checkout
             // gives the sample CRLF endings.
             String feeds;
             for (const char8_t c : source.AsView())
@@ -136,7 +137,7 @@ TEST_CASE("shader page: checked against the engine's library, a broken edit's pr
     CHECK(page->PropertyCount() == 1u);
     CHECK_FALSE(page->PreviewStale());
 
-    // Broken: its problem, and the preview kept on the last version that compiled.
+    // Broken code reports its problem, and the preview keeps the last version that compiled.
     const u32 last = page->Code()->GetDocument().LineCount() - 1;
     page->Code()->SetCaret(gui::CodePosition{last, 0});
     page->Code()->Type(u8"this is not hlsl\n");
@@ -145,7 +146,7 @@ TEST_CASE("shader page: checked against the engine's library, a broken edit's pr
     CHECK(page->Kind().IsEmpty());
     CHECK(page->PreviewStale());
 
-    // The grid's edit after the typing: one history, undone in order.
+    // A grid edit after the typing: one history, undone in order.
     page->Edit(u8"name", gui::PropertyWrite{gui::Variant(StringView(u8"Paint"))});
     auto* asset = Cast<pipeline::ShaderAsset>(page->Object());
     REQUIRE(asset != nullptr);

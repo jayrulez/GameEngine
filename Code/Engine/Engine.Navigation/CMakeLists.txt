@@ -1,5 +1,5 @@
 # Engine::Navigation - `engine.navigation`: scene integration
-# (zone + agent components + per-scene Detour crowd + steering writeback).
+# (zone and agent components, a per-scene Detour crowd, steering writeback).
 util_add_engine_library(Engine.Navigation ALIAS Engine::Navigation)
 target_link_libraries(Engine.Navigation
     PUBLIC Foundation::Core Foundation::Runtime Foundation::Scene Engine::Scene Foundation::Resource

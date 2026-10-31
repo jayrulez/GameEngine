@@ -4,12 +4,12 @@
 // Foundation::Fonts.TrueType - foundation.fonts.truetype:service partition
 //
 // IFontService that loads TrueType/OpenType fonts through the source-format
-// pipeline (parse -> bake -> expand-to-RGBA8). With a VFS file system set, the
+// pipeline (parse, bake, expand to RGBA8). With a VFS file system set, the
 // locator is a path opened through it; otherwise it is a disk path (for
-// sandboxes/tools/tests). A distance-field family serves every size from one bake (scaled views);
-// a coverage family is baked again at each size asked for (once, rounded to whole pixels, from its
-// kept source), so a label's font-size is the size it draws at. Ported from Sedulous.Fonts.TTF/TrueTypeFontService.bf;
-// Beef's "Family@Height" string keys become explicit family + size fields.
+// sandboxes, tools and tests). A distance-field family serves every size from one bake (scaled
+// views); a coverage family is baked again at each size asked for (once, rounded to whole pixels,
+// from its kept source), so a label's font-size is the size it draws at. Entries are keyed by
+// explicit family and size fields.
 
 module;
 #include "Core/Prelude.h"
@@ -30,9 +30,9 @@ export namespace foundation::fonts
     class TrueTypeFontService final : public IFontService
     {
     public:
-        // `fileSystem` is optional + non-owning. When set, LoadFont treats the
+        // `fileSystem` is optional and non-owning. When set, LoadFont treats the
         // locator as a path opened through it; otherwise as a disk path.
-        // The allocator (required - the owner decides) backs fonts, atlases,
+        // The allocator (required; the owner decides) backs fonts, atlases,
         // shapers, cache entries, and atlas textures this service creates.
         explicit TrueTypeFontService(IAllocator& allocator,
                                      foundation::vfs::IFileSystem* fileSystem = nullptr)
@@ -65,7 +65,7 @@ export namespace foundation::fonts
             return result;
         }
 
-        // Load a font from in-memory TTF/OTF bytes (an EMBEDDED fallback: a relocated
+        // Load a font from in-memory TTF/OTF bytes (an embedded fallback: a relocated
         // editor must always have a face to fall back on, whatever the disk looks like).
         [[nodiscard]] FontLoadResult
         LoadFontFromMemory(StringView familyName, Span<const u8> bytes,
@@ -107,18 +107,17 @@ export namespace foundation::fonts
                 return exact->cachedFont;
             if (const FontEntry* closest = FindClosest(familyName, pixelHeight))
             {
-                // Distance-field families serve EVERY size from one bake: synthesize (and
-                // cache) a scaled view instead of handing out the bake-size tables - the
-                // per-size-scaled-views gap that kept the UI off MSDF.
+                // Distance-field families serve every size from one bake: synthesize (and
+                // cache) a scaled view instead of handing out the bake-size tables.
                 if (closest->cachedFont != nullptr && closest->cachedFont->atlas != nullptr &&
                     closest->cachedFont->atlas->Mode() == AtlasMode::DistanceField &&
                     closest->pixelHeight != pixelHeight)
                 {
                     return SynthesizeScaled(*closest, familyName, pixelHeight);
                 }
-                // A coverage atlas holds glyphs at its one size: drawn at another, the text came
-                // out at the bake's size whatever was asked (every label in a game without a UI
-                // font drew alike). Bake the size asked for, once, from the family's source.
+                // A coverage atlas holds glyphs at its one size, so text drawn from it comes out
+                // at the bake's size whatever was asked. Bake the size asked for, once, from the
+                // family's source.
                 if (CachedFont* baked = BakeSize(familyName, pixelHeight))
                 {
                     return baked;
@@ -150,7 +149,7 @@ export namespace foundation::fonts
             return nullptr;
         }
 
-        // Fonts are owned by the service - releasing is a no-op.
+        // Fonts are owned by the service, so releasing is a no-op.
         void ReleaseFont(CachedFont*) override {}
 
     private:
@@ -315,7 +314,7 @@ export namespace foundation::fonts
             m_allocator->Delete(entry);
         }
 
-        // ASCII case-insensitive family compare (matches Sedulous's ignore-case).
+        // ASCII case-insensitive family compare.
         static bool FamilyEquals(StringView a, StringView b)
         {
             if (a.Size() != b.Size())
@@ -334,7 +333,7 @@ export namespace foundation::fonts
         }
 
         // A scaled per-size entry over a DF base (views borrow the base font/atlas, the
-        // CachedFont owns the view wrappers + its own shaper; the entry SHARES the base's
+        // CachedFont owns the view wrappers and its own shaper; the entry shares the base's
         // atlas texture). Cached in m_fonts so the next request hits FindExact.
         [[nodiscard]] CachedFont* SynthesizeScaled(const FontEntry& base, StringView familyName,
                                                    f32 pixelHeight)
@@ -351,7 +350,7 @@ export namespace foundation::fonts
             entry->family = String(familyName);
             entry->pixelHeight = pixelHeight;
             entry->cachedFont = cachedFont;
-            entry->texture = base.texture; // SHARED with the base (see DeleteEntry)
+            entry->texture = base.texture; // shared with the base (see DeleteEntry)
             entry->sharedTexture = true;
             m_fonts.PushBack(entry);
             return cachedFont;
@@ -371,8 +370,8 @@ export namespace foundation::fonts
             IFontAtlas* atlas = baked.Value();
 
             // Distance-field atlases already store RGBA texels (the MSDF channels); wrap them
-            // directly in a LINEAR image (no sRGB decode - the field is geometric, not color).
-            // Coverage atlases are single-channel R8 and expand to RGBA8 as before.
+            // directly in a linear image (no sRGB decode: the field is geometric, not color).
+            // Coverage atlases are single-channel R8 and expand to RGBA8.
             foundation::image::OwnedImageData* texture =
                 (atlas->Mode() == AtlasMode::DistanceField)
                     ? m_allocator->New<foundation::image::OwnedImageData>(

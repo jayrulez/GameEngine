@@ -3,19 +3,19 @@
 
 /// Foundation::Render - the `:decal_pass` partition.
 ///
-/// Screen-space projected decals, ported from SedulousEngine's DecalPass/decal.frag: reconstruct the
-/// world position under each pixel from the scene depth, transform it into a decal's oriented unit box,
-/// clip to the box, and alpha-blend the decal texture onto the lit HDR - a "sprayed" sticker that lands
-/// on whatever surface is under the box (including animated meshes, since it reads the depth buffer).
+/// Screen-space projected decals: reconstruct the world position under each pixel from the scene
+/// depth, transform it into a decal's oriented unit box, clip to the box, and alpha-blend the decal
+/// texture onto the lit HDR. The result is a "sprayed" sticker that lands on whatever surface is under
+/// the box, including animated meshes, since it reads the depth buffer.
 ///
-/// Runs after the forward+sky pass and BEFORE AO/TAA, blending into the HDR (so decals get TAA-resolved).
-/// matches Sedulous's shader assumptions (row-major, D3D-style [0,1] clip depth, top-origin uv
-/// under the negative viewport - same reconstruction as AoPass), so the projection math ports verbatim.
+/// Runs after the forward and sky passes and before AO and TAA, blending into the HDR so decals are
+/// TAA-resolved. The shader assumes row-major matrices, D3D-style [0,1] clip depth and a top-origin uv
+/// under the negative viewport (the same reconstruction as AoPass).
 ///
-/// v1 draws a FULLSCREEN triangle per decal (robust across split-screen sub-rects + no box winding/cull
-/// pitfalls); the box test lives in the fragment shader. Receiver normal for angle-fade comes from the
-/// reconstructed world-position derivatives (ddx/ddy), faithful to the port. (A per-decal box mesh +
-/// sampling the normalT G-buffer are later optimizations.)
+/// Each decal draws a fullscreen triangle, which is robust across split-screen sub-rects and avoids box
+/// winding and culling pitfalls; the box test lives in the fragment shader. The receiver normal for the
+/// angle fade comes from the reconstructed world-position derivatives (ddx, ddy). A per-decal box mesh,
+/// and sampling the normal G-buffer instead, would be cheaper.
 
 module;
 #include "Core/Prelude.h"
@@ -40,12 +40,12 @@ namespace foundation::render
     Status DecalPass::Initialize()
     {
 
-        // set 0: scene depth (t0) + sampler (s0). set 1: per-decal UBO (dynamic). set 2: decal texture.
+        // set 0: scene depth (t0) and sampler (s0). set 1: per-decal UBO (dynamic). set 2: decal texture.
         rhi::BindGroupLayoutEntry depthEntries[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
         };
-        // WebGPU annotations (Vulkan/DX12 ignore): t0 IS the scene depth, read as
+        // WebGPU annotations (Vulkan and DX12 ignore them): t0 is the scene depth, read as
         // data through the point sampler.
         depthEntries[0].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         depthEntries[1].samplerNonFiltering = true;
@@ -92,7 +92,7 @@ namespace foundation::render
             s.magFilter = f;
             s.mipmapFilter = f == rhi::FilterMode::Nearest
                                  ? rhi::MipmapFilterMode::Nearest
-                                 : rhi::MipmapFilterMode::Linear; // see AO note
+                                 : rhi::MipmapFilterMode::Linear; // WebGPU: see AoPass's sampler
             s.addressU = rhi::AddressMode::ClampToEdge;
             s.addressV = rhi::AddressMode::ClampToEdge;
             s.addressW = rhi::AddressMode::ClampToEdge;
@@ -135,16 +135,16 @@ namespace foundation::render
         {
             samples = 1;
         }
-        // Hot reload / MSAA: rebuild the pipeline when the shader OR the sample count changed (decals
-        // draw into the MSAA hdr, so the PSO must match). GPU idled on shader reload.
+        // Hot reload and MSAA: rebuild the pipeline when the shader or the sample count changed (decals
+        // draw into the MSAA hdr, so the PSO must match). The GPU is idle on shader reload.
         const u64 shaderVersion = m_shaders->Version(u8"decal");
         if (shaderVersion != m_pipelineShaderVersion || samples != m_pipelineSampleCount)
         {
             if (m_pipeline != nullptr)
             {
-                // Rare rebuild (shader reload / MSAA toggle): the old pipeline may be referenced by
-                // in-flight command buffers, so DEFER its free by kRetireFrames (drained in Tick) rather
-                // than a render-path WaitIdle (web-hostile).
+                // Rare rebuild (shader reload or MSAA toggle): the old pipeline may be referenced by
+                // in-flight command buffers, so defer its free by kRetireFrames (drained in Tick) rather
+                // than WaitIdle on the render path, which the web cannot afford.
                 m_retired.PushBack(Retired{nullptr, m_pipeline, kRetireFrames});
             }
             m_pipeline = MakePipeline(samples);
@@ -159,8 +159,9 @@ namespace foundation::render
         const Float4x4 invViewProj = Inverse(viewProj);
         const Float2 invSize{1.0f / static_cast<f32>(w), 1.0f / static_cast<f32>(h)};
 
-        // This view's decals -> fresh ring slots (its own InvViewProj). Local list, captured by value into
-        // the pass so it survives to execute time (a shared member would be clobbered by the next view).
+        // This view's decals go into fresh ring slots (with its own InvViewProj). The list is local and
+        // captured by value into the pass so it survives to execute time; a shared member would be
+        // overwritten by the next view.
         Array<Draw> viewDraws;
         for (const DecalInstance& d : decals)
         {
@@ -182,8 +183,8 @@ namespace foundation::render
             u.fadeStartCos = Cos(d.fadeStart);
             u.fadeEndCos = Cos(d.fadeEnd);
             // Interpolant Y correction (the sky's SceneYSign convention): Vulkan's negative viewport
-            // makes the emitted NDC land on the right pixel already (+1 = verbatim, bit-identical
-            // to the pre-flip shader); Y-flip targets mirror the interpolant, so -1 un-mirrors.
+            // already makes the emitted NDC land on the right pixel (+1 leaves it as is); Y-flip
+            // targets mirror the interpolant, so -1 undoes the mirror.
             u.yFlip = m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f;
             MemCopy(r.ptr, &u, sizeof(u));
             viewDraws.PushBack(Draw{r.byteOffset, d.texture});
@@ -202,7 +203,7 @@ namespace foundation::render
                 b.SetColorTarget(0, hdr, rhi::LoadOp::Load, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
                 b.ReadTexture(depth);
-                // The view's sub-rect (matches the forward/sky), so the fullscreen tri's emitted NDC lines up
+                // The view's sub-rect (matches the forward and sky), so the fullscreen tri's emitted NDC lines up
                 // with the scene geometry's NDC at each pixel.
                 b.SetViewport(vpX, vpY, vpW, vpH);
                 b.NeverCull();
@@ -338,7 +339,7 @@ namespace foundation::render
             {
                 return found->bindGroup;
             }
-            // Address reuse: the cached group references a DESTROYED view - rebuild.
+            // Address reuse: the cached group references a destroyed view, so rebuild.
             if (found->bindGroup != nullptr)
             {
                 m_device->DestroyBindGroup(found->bindGroup);

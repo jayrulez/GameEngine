@@ -3,16 +3,15 @@
 
 // Pipeline::Importer - implementation unit.
 //
-// The file-import seam: an OS file (drag-dropped onto the editor)
-// becomes a SOURCE - the raw bytes copied into the project's Sources/ tree - plus a typed Asset
-// instance in the content DB whose import settings point at it. Cooking then owns the
-// source -> product path like any other asset (the imported file's content is part of the
-// recipe hash).
+// File import: an OS file (drag-dropped onto the editor) becomes a source, its raw bytes copied
+// into the project's Sources/ tree, and a typed Asset instance in the content DB whose import
+// settings point at it. Cooking then takes the source to its product like any other asset (the
+// imported file's content is part of the recipe hash).
 //
-// IFileImporter implementations live with their asset modules (texture/image/...) and are
+// IFileImporter implementations live with their asset modules (texture, image, ...) and are
 // registered by the executable; routing is by lowercase extension. Several importers may claim
-// one extension - v1 takes the FIRST match (the Sedulous-style chooser dialog is a later
-// nicety; the registry API already exposes all matches).
+// one extension: FindFor returns the first match, and FindAllFor returns them all so the editor
+// can offer a chooser.
 
 module;
 #include "Core/Prelude.h"

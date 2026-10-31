@@ -1,6 +1,6 @@
-# Foundation::PropertyAnimation - `foundation.propertyanimation`. The clip/track/curve data model +
-# evaluation + the reflection binding resolver. Depends on Core reflection ONLY (deliberately NOT
-# foundation.animation - a headless consumer evaluates a property clip without skeletal machinery).
+# Foundation::PropertyAnimation - `foundation.propertyanimation`: the clip/track/curve data model,
+# its evaluation and the reflection binding resolver. Depends only on Core reflection, not on
+# foundation.animation, so a headless consumer evaluates a property clip without skeletal machinery.
 util_add_engine_library(PropertyAnimation ALIAS Foundation::PropertyAnimation)
 target_link_libraries(PropertyAnimation
     PUBLIC Foundation::Core

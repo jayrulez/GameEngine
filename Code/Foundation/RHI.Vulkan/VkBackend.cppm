@@ -3,7 +3,6 @@
 
 /// Vulkan implementation of Backend.
 /// Creates VkInstance, enumerates physical devices, creates surfaces.
-/// Ported from Sedulous.RHI.Vulkan/VulkanBackend.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +16,7 @@ module;
 #include <cstring>
 
 // VkApplicationInfo identity strings; CMake bakes these from the project name on the RHI.Vulkan
-// target. Required - no in-source default, so the name lives only in the build system.
+// target. They are required, with no in-source default, so the name lives only in the build system.
 #ifndef VULKAN_APPLICATION_NAME
 #error "VULKAN_APPLICATION_NAME is not defined - set it on the RHI.Vulkan target (from ${PROJECT_NAME})"
 #endif
@@ -34,8 +33,8 @@ import :surface;
 
 using namespace foundation::core;
 
-// Linux surface types - forward-declared to avoid header pollution. In the module
-// purview (not the GMF): GCC requires the GMF to contain only #includes.
+// Linux surface types, forward-declared to avoid header pollution. They sit in the module purview
+// (not the GMF) because GCC requires the GMF to contain only #includes.
 #if defined(__linux__)
 extern "C"
 {
@@ -82,16 +81,17 @@ using PFN_vkCreateWaylandSurfaceKHR = VkResult(VKAPI_PTR*)(VkInstance,
 
 namespace foundation::rhi::vk
 {
-    // Every validation ERROR the debug messenger saw, process-wide (the messenger is per backend
+    // Every validation error the debug messenger saw, process-wide. The messenger is per backend
     // but the count is one: tests read it around a probe, so a stage-interface or layout mistake
-    // that the driver tolerates still fails the test instead of only printing).
+    // that the driver tolerates still fails the test instead of only printing.
     std::atomic<u32> g_validationErrorCount{0};
 } // namespace foundation::rhi::vk
 
 export namespace foundation::rhi::vk
 {
-    /// The number of Vulkan validation-layer ERRORS reported so far in this process (0 when
-    /// validation is off or the layer is not installed). Tests: snapshot before, compare after.
+    /// The number of Vulkan validation-layer errors reported so far in this process (0 when
+    /// validation is off or the layer is not installed). Tests snapshot it before and compare
+    /// after.
     [[nodiscard]] u32 ValidationErrorCount() noexcept
     {
         return g_validationErrorCount.load(std::memory_order_relaxed);
@@ -153,11 +153,12 @@ export namespace foundation::rhi::vk
                 return ErrorCode::Unknown;
             }
 #elif defined(__linux__)
-            // Create EXACTLY the surface type the shell used. `platform` is authoritative (it comes from the
-            // SDL video driver that actually created the window); feeding handles to the wrong WSI - e.g. an
-            // X11 Display* to vkCreateWaylandSurfaceKHR - dereferences a non-Wayland pointer and segfaults deep
-            // in the driver (the classic "force X11 under a Wayland session" crash). Only when the caller did
-            // not specify a platform (Unknown) do we fall back to the old WAYLAND_DISPLAY heuristic.
+            // Create the surface type the shell used. `platform` is authoritative (it comes from
+            // the SDL video driver that created the window); feeding handles to the wrong WSI, such
+            // as an X11 Display* to vkCreateWaylandSurfaceKHR, dereferences a non-Wayland pointer
+            // and segfaults deep in the driver (the classic "force X11 under a Wayland session"
+            // crash). Only when the caller did not specify a platform (Unknown) do we fall back to
+            // the WAYLAND_DISPLAY heuristic.
             VkResult vr = VK_ERROR_INITIALIZATION_FAILED;
             bool triedWayland = false, triedX11 = false;
 
@@ -251,9 +252,8 @@ export namespace foundation::rhi::vk
         Status init(bool enableValidation)
         {
             m_validationEnabled = enableValidation;
-            // Announce validation state so a perf run can confirm the layers are OFF: the
-            // layer validates every command, and a profile taken with it on measures the layer
-            // (the 2026-09-24 Bistro profile: 80 ms of draw recording against 20 ms of GPU).
+            // Announce validation state so a perf run can confirm the layers are off: the layer
+            // validates every command, so a profile taken with it on measures the layer.
             if (enableValidation)
             {
                 std::fprintf(stderr,
@@ -316,11 +316,10 @@ export namespace foundation::rhi::vk
             }
 #endif
 
-            // Debug utils whenever the loader has it, not only with validation: it is what a
-            // frame capture reads pass names out of, and the encoder's label calls degrade to
-            // nothing without it (they null-check their entry points). Validation still needs
-            // it for the messenger, so that case pushes it regardless. (Adopted from the Beef
-            // port, whose unguarded label calls crashed the shipping path.)
+            // Debug utils whenever the loader has it, not only with validation: frame captures read
+            // pass names from it, and the encoder's label calls do nothing without it (they
+            // null-check their entry points). Validation still needs it for the messenger, so that
+            // case pushes it regardless.
             {
                 u32 availCount = 0;
                 vkEnumerateInstanceExtensionProperties(nullptr, &availCount, nullptr);
@@ -386,8 +385,8 @@ export namespace foundation::rhi::vk
                       VkDebugUtilsMessageTypeFlagsEXT /*types*/,
                       const VkDebugUtilsMessengerCallbackDataEXT* data, void* /*userData*/)
         {
-            // Print straight to stderr (not only LogErrorf, whose sink may be swallowed) so validation
-            // is actually visible in dev builds - the point of running with it on.
+            // Print straight to stderr (not only LogErrorf, whose sink may be swallowed) so
+            // validation messages are visible in dev builds.
             if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
             {
                 g_validationErrorCount.fetch_add(1, std::memory_order_relaxed);
@@ -421,7 +420,7 @@ export namespace foundation::rhi::vk
                 m_adapterPtrs.PushBack(a);
             }
 
-            // Expose adapters best-GPU-first; callers take [0]. See Backend::enumerateAdapters.
+            // Expose adapters best-GPU-first; callers take [0]. See Backend::EnumerateAdapters.
             SortAdaptersByPreference(m_adapterPtrs);
         }
 
@@ -463,7 +462,7 @@ export namespace foundation::rhi::vk
 #endif
     };
 
-    /// Creates a Vulkan backend. Caller owns the returned pointer - dispose via Destroy().
+    /// Creates a Vulkan backend. The caller owns the returned pointer; dispose of it with Destroy().
     [[nodiscard]] Status CreateBackend(const VkBackendDesc& desc, Backend*& out,
                                        IAllocator& allocator = DefaultAllocator())
     {

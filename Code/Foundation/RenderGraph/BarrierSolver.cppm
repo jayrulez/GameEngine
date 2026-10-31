@@ -6,8 +6,7 @@
 // Computes and emits resource barriers between passes. State is tracked at two
 // levels: per-resource-handle (buffers; convenience for textures) and per-
 // Texture with per-subresource granularity (source of truth for textures, keyed
-// by the GPU texture pointer so the same texture unifies across handles). Ported
-// from Sedulous.RenderGraph (BarrierSolver.bf).
+// by the GPU texture pointer so the same texture unifies across handles).
 
 module;
 #include "Core/Prelude.h"
@@ -79,7 +78,7 @@ export namespace foundation::rendergraph
                 {
                     if (SubresourceStateTracker** existing = m_textureStates.Find(res->texture))
                     {
-                        // Same GPU texture via another handle - unify.
+                        // Same GPU texture via another handle: unify.
                         SubresourceStateTracker* tracker = *existing;
                         if (initialState == rhi::ResourceState::Undefined && tracker->IsUniform() &&
                             tracker->UniformState() != rhi::ResourceState::Undefined)

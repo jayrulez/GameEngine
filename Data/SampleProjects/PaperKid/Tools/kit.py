@@ -165,8 +165,7 @@ def aim_dot():
 
 def target_ring():
     """The reticle on the porch a throw is pulled toward: eight dashes round a 1.7 m circle (just
-    outside the porch mat), each
-    turned along it (Bike.as spins and pulses the root)."""
+    outside the porch mat), each turned along it (Bike.as spins and pulses the root)."""
     import math
     d = Doc("TargetRing")
     r = d.entity("TargetRing")

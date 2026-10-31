@@ -3,7 +3,6 @@
 
 /// DX12 implementation of CommandBuffer.
 /// Simple wrapper for a closed ID3D12GraphicsCommandList.
-/// Ported from Sedulous.RHI.DX12/DX12CommandBuffer.bf.
 
 module;
 #include "Core/Prelude.h"

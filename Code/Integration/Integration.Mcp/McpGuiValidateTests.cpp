@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - gui_validate: a document that builds is valid with the asset guids it names; a
-// document that does not build is invalid with its error's line; a sheet always reads, its
-// unknown property a warning on its rule's line.
+// Integration.Mcp: gui_validate. A document that builds is valid and lists the asset guids it
+// names; a document that does not build is invalid and reports its error's line. A sheet always
+// reads, and an unknown property is a warning on the line of its rule.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

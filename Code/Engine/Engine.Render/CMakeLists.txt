@@ -1,5 +1,5 @@
 # Engine::Render - `engine.render`, the scene side of rendering
-# (render components + extraction + later the RenderSubsystem). Depends on Scene AND
+# (render components, extraction, the RenderSubsystem). Depends on Scene and
 # Render (one-way: the renderer never depends back on this or on Scene).
 util_add_engine_library(Engine.Render ALIAS Engine::Render)
 target_link_libraries(Engine.Render

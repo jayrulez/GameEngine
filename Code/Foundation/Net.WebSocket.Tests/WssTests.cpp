@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The gateway over TLS (Documentation/Specs/tls-http-wss.md, P4): with a backend and a certificate
-// every connection is TLS first, then the upgrade, then frames, all through the same code as ws://.
+// The gateway over TLS: with a backend and a certificate every connection is TLS first, then the
+// upgrade, then frames, all through the same code as ws://.
 // A TLS client upgrades and exchanges binary frames both ways; a plain client is refused; a key
 // that does not load leaves the gateway closed, saying why.
 #include <doctest/doctest.h>
@@ -153,7 +153,7 @@ TEST_CASE("wss: a key that does not load leaves the gateway closed, saying why")
     CHECK(noBackend.Failure().ContainsIgnoreCase(u8"TLS backend"));
 }
 
-// ---- the native client socket (P4b) -------------------------------------------------------
+// ---- the native client socket ------------------------------------------------------------
 
 namespace
 {

@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The project-manager CONTROLLER - the headless decision layer between the manager UI and
-// the registry/manifest primitives (:project_registry). The UI (editor.app's
-// ProjectManagerView + the application's dialogs) renders what this class decides; nothing
-// here touches a view, so the open-gate logic and prompt copy are unit-testable.
-//
-// Future home of project TEMPLATES (create-from-template picks a scaffold here, not in UI).
+// The project manager's controller: the headless decision layer between the manager UI and the
+// registry and manifest primitives (:project_registry). The UI (editor.app's ProjectManagerView
+// and the application's dialogs) renders what this class decides; nothing here touches a view, so
+// the open-gate logic and the prompt text are unit-testable.
 
 module;
 #include "Core/Prelude.h"
@@ -26,13 +24,13 @@ export namespace editor
     namespace settings = foundation::settings;
     namespace project = engine::project;
 
-    // What Open must do for a directory, decided from the manifest probe + version relation.
+    // What Open must do for a directory, decided from the manifest probe and the version relation.
     enum class ProjectOpenGate
     {
-        NotAProject,       // no readable manifest - refuse (create is the explicit path)
-        OpenDirectly,      // same engine version - no ceremony
-        PromptOlderBackup, // older/unstamped - offer backup-then-upgrade (re-stamp on open)
-        PromptNewerEngine, // saved by a NEWER engine - warn hard before opening
+        NotAProject,       // no readable manifest: refuse (creating is the explicit path)
+        OpenDirectly,      // same engine version: open without prompting
+        PromptOlderBackup, // older or unstamped: offer a backup, then upgrade (re-stamp on open)
+        PromptNewerEngine, // saved by a newer engine: warn strongly before opening
     };
 
     class ProjectManagerController
@@ -54,8 +52,8 @@ export namespace editor
             String promptBody;
         };
 
-        // Probe + classify + compose the prompt copy for `directory` into `decision` (an
-        // out-param: ProjectSettings is neither copyable nor movable). Pure decision - the
+        // Probes and classifies `directory` and writes the prompt text into `decision` (an out
+        // parameter, since ProjectSettings is neither copyable nor movable). It only decides: the
         // caller shows dialogs for the prompt gates and calls the open path it owns.
         void DecideOpen(StringView directory, OpenDecision& decision) const
         {
@@ -100,8 +98,8 @@ export namespace editor
                 u8"re-save; use version control for whole-project safety.)";
         }
 
-        // Scaffold a new project at `directory` (no open - the caller opens on success).
-        // Later: a template parameter selects the scaffold instead of the bare layout.
+        // Scaffolds a new project at `directory` without opening it; the caller opens it on
+        // success.
         [[nodiscard]] Status Create(StringView directory, StringView name) const
         {
             return EditorProject::Create(foundation::core::DefaultAllocator(), directory, name);
@@ -113,7 +111,7 @@ export namespace editor
             return BackupProjectManifest(directory);
         }
 
-        // Registry mutations. NoteOpened records a successful open (most-recent-first with a
+        // Registry changes. NoteOpened records a successful open (most recent first, with a
         // fresh display snapshot); the caller persists the store afterward.
         void NoteOpened(StringView directory, StringView name, StringView engineVersion)
         {
@@ -123,7 +121,7 @@ export namespace editor
 
         [[nodiscard]] const RecentProjectsSettings& Entries()
         {
-            return m_store->Section<RecentProjectsSettings>(); // lazily creates: non-const
+            return m_store->Section<RecentProjectsSettings>(); // creates the section lazily, so not const
         }
         [[nodiscard]] settings::Settings& Store() noexcept { return *m_store; }
 

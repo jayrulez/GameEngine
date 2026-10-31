@@ -1,4 +1,5 @@
-// Bike - the player's ride, on the Bike entity (a Character component: a kinematic capsule).
+// Bike: the player's ride, on the Bike entity (a Character component, which is a kinematic
+// capsule).
 //
 // "Move": Y is throttle and brake, X steers. The bike keeps a heading and a signed speed, turns
 // the heading (harder the faster it goes, and reversed while backing up), drives the character
@@ -12,11 +13,12 @@
 // leaves the steering and throttle weak for a moment; the Level takes the time penalty.
 //
 // The feel: the bike leans into its turns (harder the faster it goes) and wobbles while it
-// recovers from a crash, which kicks up road dust; a throw and a crash each have their sound,
-// pitched a little at random so repeats do not sound the same, and each kicks the pad (a crash a
-// heavy jolt, a throw a flick). A cleared block bursts confetti over the rider. Near a subscriber, the throw is shown before it is made: a
-// trail of glowing dots along the path a paper would take, drifting forward, and a ring spinning
-// on the porch the throw is pulled toward (the AimDot and TargetRing prefabs, spawned once and moved each frame).
+// recovers from a crash, which kicks up road dust. A throw and a crash each have a sound, pitched a
+// little at random so repeats do not sound the same, and each rumbles the pad (a heavy jolt for a
+// crash, a flick for a throw). A cleared block bursts confetti over the rider. Near a subscriber,
+// the throw is previewed before it is made: a trail of glowing dots along the path a paper would
+// take, drifting forward, and a ring spinning on the porch the throw is pulled toward. These are
+// the AimDot and TargetRing prefabs, spawned once and moved each frame.
 
 Guid kPaper = Guid("6aa57026-4f4a-44ae-835d-2d2905746210");
 Guid kAimDot = Guid("97e1822e-5d3c-49ed-8beb-27fbad532ec7");
@@ -28,9 +30,9 @@ const int kAimDots = 14;
 const float kAimStep = 0.09f; // flight seconds between dots
 Guid kThrowSound = Guid("607bb198-5a73-47ba-8fe5-794aa1d1b51c");
 // The kid's clips (Models/KidBike, from Tools/blender/kid_bike.py). Ride turns the wheels twice and
-// the pedals once a second, 4.4 m of road, so it plays at the bike's speed over that; each throw is
-// the same second with that arm's throw in its first half, so Ride picks up where it ends. He throws
-// with the hand on the side the paper goes.
+// the pedals once a second, covering 4.4 m of road, so it plays at the bike's speed divided by
+// that. Each throw clip is the same one-second cycle with that arm's throw in its first half, so
+// Ride picks up where it ends. He throws with the hand on the side the paper goes.
 Guid kRideClip = Guid("1665cf6f-0df9-41eb-ad47-29a3eb080937");
 Guid kThrowLeftClip = Guid("2ae5fb65-f74f-46ed-af06-ddc1b2901b75");
 Guid kThrowRightClip = Guid("644becf9-ccd7-4cea-9409-cf4262aac508");
@@ -62,7 +64,7 @@ class Bike
 
     private float m_heading = 0.0f; // radians; 0 faces +Z
     private float m_speed = 0.0f;
-    private int m_papers = -1;      // -1: the Level has not said yet
+    private int m_papers = -1;      // -1 until the Level reports the count
     private float m_aimX = 0.0f;
     private float m_aimZ = 1.0f;
     private bool m_hasTarget = false;
@@ -72,7 +74,7 @@ class Bike
     private array<Entity@> m_dots;
     private Entity@ m_ring;
     private float m_clock = 0.0f;      // drives the dots' drift and the ring's spin
-    private Entity@ m_kid;             // the kid on his bike: the model whose clips play
+    private Entity@ m_kid;             // the kid on his bike, the model whose clips play
     private float m_throwing = 0.0f;   // seconds of the Throw clip left to play
 
     Bike(Entity@ entity) { @self = entity; }
@@ -119,7 +121,7 @@ class Bike
             return; // still down from the last one
         }
         m_recovering = crashTime;
-        // Bounce back against the way the bike was going: off whatever it ran into.
+        // Bounce back off whatever it ran into, against the way the bike was going.
         m_speed = (m_speed >= 0.0f) ? -knockback : knockback;
         Audio::playOneShot(kCrashSound, AudioBus::Effects, 1.0f, Random::range(0.9f, 1.1f));
         Input::rumble(0.9f, 0.5f, 0.35f); // the jolt of a crash
@@ -128,7 +130,8 @@ class Bike
         self.scene.events.emit("BikeCrashed", 1);
     }
 
-    // The block is cleared: confetti bursts over the rider, and hangs in the slow motion after.
+    // The block is cleared: confetti bursts over the rider and hangs in the slow motion that
+    // follows.
     void onQuotaMet(int secondsLeft)
     {
         ScenePrefabs::of(self.scene).spawn(kFxConfetti, self.position() + Float3(0.0f, 1.6f, 0.0f));
@@ -151,8 +154,9 @@ class Bike
         updateHeading(move.x, d);
         Float3 forward = facing();
         CharacterComponent::of(self).move(forward.x * m_speed, forward.z * m_speed);
-        // Lean into the turn (a positive roll tips the top toward screen right from behind, the
-        // way a right turn leans), eased so it settles rather than snaps; wobble while recovering.
+        // Lean into the turn (seen from behind, a positive roll tips the top toward screen right,
+        // the way a right turn leans), eased so it settles rather than snaps, and wobble while
+        // recovering.
         float authority = Math::Abs(m_speed) / maxSpeed;
         if (authority > 1.0f) { authority = 1.0f; }
         float lean = move.x * maxLean * authority;
@@ -209,9 +213,9 @@ class Bike
         {
             return;
         }
-        // Which side of the bike the paper goes: the porch it is aimed at, else the aim. The bike's
-        // +X is the kid's left (it turns by m_heading about +Y, which takes +X to (cos, 0, -sin)).
-        // Straight ahead, he throws right-handed.
+        // Which side of the bike the paper goes: toward the porch it is aimed at, otherwise along
+        // the aim. The bike's +X is the kid's left (it turns by m_heading about +Y, which takes +X
+        // to (cos, 0, -sin)). Straight ahead, he throws right-handed.
         float toX = m_aimX;
         float toZ = m_aimZ;
         if (m_hasTarget)
@@ -263,7 +267,8 @@ class Bike
         if (m_speed < -reverseSpeed) { m_speed = -reverseSpeed; }
     }
 
-    // A positive yaw turns +Z toward +X, which is screen left from behind: right steer lowers it.
+    // A positive yaw turns +Z toward +X, which is screen left from behind, so steering right
+    // lowers it.
     private void updateHeading(float steer, float d)
     {
         if (steer == 0.0f || m_speed == 0.0f)
@@ -322,8 +327,8 @@ class Bike
     }
 
     // The paper's launch velocity: along the aim at the throw speed, plus the bike's own speed.
-    // With a zone locked, the ground part leans (by autoAim) toward the velocity that lands the
-    // paper on the zone in its flight time - the soft auto-aim corrects the range as well as the
+    // With a zone locked, the horizontal part leans (by autoAim) toward the velocity that lands the
+    // paper on the zone in its flight time. The soft auto-aim corrects the range as well as the
     // direction, so a throw at a marked porch from a moving bike usually lands.
     private Float3 launchVelocity()
     {
@@ -347,10 +352,10 @@ class Bike
         return Float3(vx, vy, vz);
     }
 
-    // The throw's path, under the scene's gravity: a dot every kAimStep seconds of flight, the
-    // row drifting forward one step each half second and shrinking toward its end, stopped where
-    // the path meets the ground. The ring sits on the zone the throw is pulled toward. Both show
-    // only while a subscriber is in reach, so the road stays clear between houses.
+    // Places the throw preview under the scene's gravity: a dot every kAimStep seconds of flight.
+    // The row drifts forward one step each half second, shrinks toward its end, and stops where the
+    // path meets the ground. The ring sits on the zone the throw is pulled toward. Both show only
+    // while a subscriber is in reach, so the road stays clear between houses.
     private void placeGuides()
     {
         if (!m_hasTarget)
@@ -408,7 +413,7 @@ class Bike
         {
             return false;
         }
-        // An impulse is mass times the change in speed; the paper's mass is its rigid body's.
+        // An impulse is mass times the change in speed; the mass comes from the paper's rigid body.
         RigidBodyComponent@ body = RigidBodyComponent::of(paper);
         float mass = (body !is null && body.mass > 0.0f) ? body.mass : 1.0f;
         ScenePhysics::of(self.scene).applyImpulse(paper, launchVelocity() * mass);

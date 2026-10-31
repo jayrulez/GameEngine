@@ -10,7 +10,7 @@ GatePole, GateFlagRed, GateFlagBlue and Finish, each a model with its prefab.
   the joint's target is nil), limited to about 75 degrees either way: gravity does not swing it,
   and its damping takes a swing out. The flags are in collision group FLAG_GROUP, which the scene
   keeps from colliding with anything (course.py): a flag pinned at its limit is a wall, and a rider
-  riding into one stopped dead. Gate.as swings a flag the rider brushes past instead.
+  riding into one stops dead. Gate.as swings a flag the rider brushes past instead.
 - Prefabs/GateRedNarrow, Prefabs/GateBlueNarrow: the same, NARROW_HALF_WIDTH either side (Forest).
 - Prefabs/FinishLine: the finish arch.
 

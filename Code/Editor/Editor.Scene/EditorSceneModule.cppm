@@ -3,11 +3,9 @@
 
 // Editor::Scene - the `editor.scene` module.
 //
-// The scene subsystem's editor plugin: SceneEditorPage (per-page live Scene +
-// ViewportView through the real renderer + EditorCamera), its page factory, and the
-// RegisterSceneEditor entry point the editor EXECUTABLE calls - the editor core/app never link
-// this module. On the GUI in parts (Documentation/Specs/editor-gui.md, 5.3): the partitions still
-// on foundation.ui (the picker dialogs) come back with their layers.
+// The scene subsystem's editor plugin: SceneEditorPage (a live Scene per page, a ViewportView
+// through the real renderer, and an EditorCamera), its page factory, and the RegisterSceneEditor
+// entry point the editor executable calls. The editor core and app never link this module.
 
 export module editor.scene;
 

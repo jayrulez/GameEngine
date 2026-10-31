@@ -6,7 +6,7 @@
 // Guid: a 128-bit globally unique identifier (asset ids, object ids, ...).
 // Generate() produces an RFC 4122 version-4 (random) GUID from a caller-owned
 // PRNG, so ids are deterministic/replayable when the generator is seeded.
-// Trivially copyable, so it hashes out of the box (generic Hash<T> -> bytes)
+// Trivially copyable, so it hashes out of the box (the generic Hash<T> hashes its bytes)
 // and works as a HashMap/HashSet key.
 
 module;

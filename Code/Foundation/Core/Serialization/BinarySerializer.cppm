@@ -29,7 +29,7 @@ export namespace foundation::core
 {
     namespace detail
     {
-        // An IStream that forwards to a SWAPPABLE target. BinarySerializer's reader/writer wrap one of
+        // An IStream that forwards to a swappable target. BinarySerializer's reader/writer wrap one of
         // these so a framed region can redirect all I/O into a sub-stream without rebinding them.
         class RedirectStream final : public IStream
         {
@@ -101,12 +101,12 @@ export namespace foundation::core
         void Blob(void* data, usize size) override { RawBytes(data, size); }
         [[nodiscard]] bool BulkScalarArrays() const noexcept override { return true; }
 
-        // Compact: the raw 16 bytes (two u64 halves), not the canonical string. (Traktor-style.)
+        // Compact: the raw 16 bytes (two u64 halves), not the canonical string.
         void GuidValue(Guid& value) override { RawBytes(&value, sizeof(Guid)); }
 
         // === Framed regions (unknown-section passthrough) ===
-        // WRITE: redirect the enclosed writes into a fresh sub-buffer; End emits it as u32-length +
-        // bytes. READ: read the u32 length, pull that many bytes into a bounded sub-buffer, read from
+        // Write: redirect the enclosed writes into a fresh sub-buffer; End emits it as a u32 length
+        // and the bytes. Read: read the u32 length, pull that many bytes into a bounded sub-buffer, read from
         // it; End restores the outer stream, discarding any bytes the caller did not consume (skip).
         void BeginFramedRegion() override
         {
@@ -151,7 +151,7 @@ export namespace foundation::core
             }
             Frame frame = Move(m_frames[m_frames.Size() - 1]);
             m_frames.PopBack();
-            m_redirect.target = frame.previous; // restore BEFORE emitting, so writes hit the outer stream
+            m_redirect.target = frame.previous; // restore before emitting, so writes hit the outer stream
             if (IsWriting())
             {
                 const Span<const byte> bytes = frame.buffer->Bytes();
@@ -243,7 +243,7 @@ export namespace foundation::core
         }
 
         // A framed region in flight: the sub-buffer the enclosed I/O uses, plus the target to restore
-        // on End. Declared BEFORE the reader/writer so m_redirect is live when they bind to it.
+        // on End. Declared before the reader/writer so m_redirect is live when they bind to it.
         struct Frame
         {
             IStream* previous = nullptr;

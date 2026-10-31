@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - project_export: a REAL dist through the
-// tool - cook + scene staging + pack + player staging - against a scratch project with one
-// authored scene. The host template resolves from the directory of THIS test executable
-// (which sits next to Engine.Player in Bin, exactly the layout the MCP host and export CLI
-// run from).
+// Integration.Mcp: project_export builds a real dist through the tool (cook, scene staging,
+// pack and player staging) for a scratch project with one authored scene. The host template
+// resolves from the directory of this test executable, which sits next to Engine.Player in Bin,
+// the same layout the MCP host and the export CLI run from.
 #include <doctest/doctest.h>
-#include <cstdlib> // setenv (the scratch templates root)
+#include <cstdlib> // setenv, to point at the scratch templates root
 #include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -57,7 +56,8 @@ namespace
         return o;
     }
 
-    // Directory of THIS executable (next to Engine.Player in Bin) - the host-template source.
+    // The directory of this executable, next to Engine.Player in Bin, where the host template
+    // comes from.
     String TestExeDir() { return String(PathParent(ExecutablePath().AsView())); }
 }
 
@@ -89,7 +89,7 @@ TEST_CASE("integration.mcp: project_export - a real dist from an authored projec
                                                     foundation::vfs::FindDataRoot());
     editor::mcp::RegisterProjectExportTool(server, session, operations);
 
-    // No project -> guided refusal.
+    // With no project open, the tool refuses with guidance.
     (void)ExCall(server, u8"project_export", JsonValue::MakeObject(), /*expectOk=*/false);
 
     (void)ExCall(server, u8"project_create",
@@ -124,8 +124,8 @@ TEST_CASE("integration.mcp: project_export - a real dist from an authored projec
     const std::filesystem::path out(reinterpret_cast<const char*>(outputDir.CStr()));
     CHECK(std::filesystem::is_regular_file(out / "Content.pak", ec));
     CHECK(std::filesystem::is_regular_file(out / "player.xml", ec));
-    CHECK(exported.Get(u8"filesStaged").AsNumber() >= 1.0); // the player + sidecars are staged
-    // The licences the player's binary carries go with it: a sidecar the build lists.
+    CHECK(exported.Get(u8"filesStaged").AsNumber() >= 1.0); // the player and its sidecars are staged
+    // The licence notices for the player's binary ship with it, as a sidecar the build lists.
     CHECK(std::filesystem::is_regular_file(out / "THIRD-PARTY-NOTICES.txt", ec));
 
 #ifdef _WIN32

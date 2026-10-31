@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the accessibility tree (E9d of Specs/gui-lab-evolution.md): roles from the widget types,
-// names, values, ranges and states from their reflected properties and selector states; a node
-// with no role passes what it holds up, a leaf's parts are none; markup's role and aria attributes
-// override; a bridge that listens gets the whole tree, then only what changed and the focus; a
-// platform's requests run through the paths input takes, and one a node does not advertise is
-// refused.
+// GUI - the accessibility tree. Roles come from the widget types; names, values, ranges and states
+// come from reflected properties and selector states. A node with no role passes its children up to
+// its parent, and a leaf's parts get no nodes of their own. The role and aria attributes in markup
+// override these. A listening bridge gets the whole tree first, then only what changed and the
+// focus. A platform's requests run through the paths input takes, and a request for an action a
+// node does not advertise is refused.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -97,12 +97,12 @@ TEST_CASE("accessibility: roles from the widget types; a panel passes what it ho
     const AccessNode* root = tree.Find(tree.Root);
     REQUIRE(root != nullptr);
     CHECK(root->Role == AccessRole::Window);
-    CHECK(root->Children.Size() == 6u); // the panel has no role: its widgets are the window's
+    CHECK(root->Children.Size() == 6u); // the panel has no role, so its widgets are the window's children
     const AccessNode* save = bed.Described(tree, SV(u8"save"));
     REQUIRE(save != nullptr);
     CHECK(save->Role == AccessRole::Button);
     CHECK(save->Name == core::String(u8"Save"));
-    CHECK(save->Children.IsEmpty()); // its label part reads as the button
+    CHECK(save->Children.IsEmpty()); // its label part is read as part of the button
     CHECK(save->Takes(AccessAction::Activate));
     CHECK(save->Has(AccessFocusable));
     CHECK(bed.Described(tree, SV(u8"title"))->Role == AccessRole::Label);
@@ -158,7 +158,7 @@ TEST_CASE("accessibility: a listening bridge gets the whole tree, then what chan
     bed.Step();
     REQUIRE(bridge.Updates.Size() == 1u);
     CHECK(bridge.Updates[0].Full);
-    CHECK(bridge.Updates[0].Nodes.Size() == 7u); // the window and its six
+    CHECK(bridge.Updates[0].Nodes.Size() == 7u); // the window and its six widgets
     bed.Step();
     CHECK(bridge.Updates.Size() == 1u); // nothing changed: nothing sent
 
@@ -169,7 +169,7 @@ TEST_CASE("accessibility: a listening bridge gets the whole tree, then what chan
     const AccessNode* save = bed.Described(bridge.Updates[1], SV(u8"save"));
     REQUIRE(save != nullptr);
     CHECK(save->Name == core::String(u8"Save all"));
-    CHECK(bridge.Updates[1].Nodes.Size() <= 3u); // the button and what holds it
+    CHECK(bridge.Updates[1].Nodes.Size() <= 3u); // the button and the nodes that hold it
 
     bed.Find(SV(u8"name"))->RequestFocus();
     bed.Step();
@@ -179,11 +179,11 @@ TEST_CASE("accessibility: a listening bridge gets the whole tree, then what chan
     bridge.Listening = false;
     core::Cast<Button>(bed.Find(SV(u8"save")))->SetText(SV(u8"Save"));
     bed.Step();
-    CHECK(bridge.Updates.Size() == 3u); // no one listens: nothing built
+    CHECK(bridge.Updates.Size() == 3u); // with no listener, nothing is built
     bridge.Listening = true;
     bed.Step();
     REQUIRE(bridge.Updates.Size() == 4u);
-    CHECK(bridge.Updates[3].Full); // listening again: from the whole tree
+    CHECK(bridge.Updates[3].Full); // listening again: the whole tree is sent
     bed.Context().SetAccessibilityBridge(nullptr);
 }
 
@@ -209,7 +209,7 @@ TEST_CASE("accessibility: a platform's requests run as input does; what a node d
     CHECK(gui.RunAccessAction(AccessActionRequest{bed.IdOf(SV(u8"name")), AccessAction::Focus, {}, false, 0.0}));
     CHECK(name->IsFocused());
 
-    // Queued from elsewhere, run in the next frame.
+    // A request queued from outside the frame runs in the next frame.
     gui.RequestAccessAction(AccessActionRequest{bed.IdOf(SV(u8"save")), AccessAction::Activate, {}, false, 0.0});
     CHECK(clicks == 1);
     bed.Step();
@@ -247,7 +247,7 @@ TEST_CASE("accessibility: a node marked again but reading the same (an animation
     bed.Context().SetAccessibilityBridge(&bridge);
     bed.Step();
     REQUIRE(bridge.Updates.Size() == 1u);
-    bed.Find(SV(u8"save"))->SetAlpha(0.5f); // drawn differently, read the same
+    bed.Find(SV(u8"save"))->SetAlpha(0.5f); // drawn differently, but read out the same
     bed.Step();
     CHECK(bridge.Updates.Size() == 1u);
     core::Cast<Button>(bed.Find(SV(u8"save")))->SetText(SV(u8"Save now"));

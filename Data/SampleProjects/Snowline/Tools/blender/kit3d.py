@@ -1,4 +1,4 @@
-"""The modelling kit PaperKid's Blender scripts share: primitives built with bmesh (bevelled boxes,
+"""The modelling kit the Blender scripts share (a copy of PaperKid's): primitives built with bmesh (bevelled boxes,
 tubes, spheres and domes, tori), flat-colour materials from a palette, each part rigid on one bone
 (a vertex group weighted wholly to it), a two-bone IK solve for laying out limbs, and the export of
 a static model. Coordinates go through P(x, forward, up): Blender's forward is -Y, which glTF
@@ -12,8 +12,8 @@ from mathutils import Vector, Matrix
 
 
 def P(x, fwd, up):
-    """A point by (x, forward, up): Blender's forward is -Y (glTF exports it as +Z). The kid faces
-    -Y, so +X is his LEFT: a side of +1 is his left hand and leg, -1 his right."""
+    """A point by (x, forward, up): Blender's forward is -Y (glTF exports it as +Z). A figure faces
+    -Y, so +X is its left: a side of +1 is its left hand and leg, -1 its right."""
     return Vector((x, -fwd, up))
 
 
@@ -85,7 +85,7 @@ def tube(name, a, b, radius, mat, bone="root", segments=8, radius2=None):
 
 
 def disc(name, centre, radius, width, mat, bone="root", segments=16):
-    """A cylinder across the bike (its axis along X): hubs, the chainring."""
+    """A cylinder with its axis along X, as a wheel's hub is."""
     return tube(name, centre - Vector((width / 2, 0, 0)), centre + Vector((width / 2, 0, 0)), radius, mat, bone,
                 segments)
 
@@ -106,7 +106,7 @@ def ball(name, centre, radius, mat, bone="root", scale=(1, 1, 1), segments=(16, 
 
 
 def ring(name, centre, major, minor, mat, bone="root", major_segments=20, minor_segments=6):
-    """A torus standing in the bike's plane (its axis along X): tyres and rims."""
+    """A torus with its axis along X, standing upright as a wheel does."""
     bm = bmesh.new()
     for i in range(major_segments):
         a = 2 * math.pi * i / major_segments

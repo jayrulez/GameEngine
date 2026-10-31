@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Null RHI backend - stub implementations for all interfaces.
+/// Null RHI backend: stub implementations for all interfaces.
 /// Useful for headless testing, CI, or when no GPU is available.
 
 module;
@@ -685,7 +685,7 @@ export namespace foundation::rhi::null
         }
     };
 
-    /// Creates a null backend for headless / GPU-less testing.
+    /// Creates a null backend for headless, GPU-less testing.
     Status CreateNullBackend(Backend*& out, IAllocator& allocator = DefaultAllocator())
     {
         auto* b = allocator.New<NullBackend>(allocator);

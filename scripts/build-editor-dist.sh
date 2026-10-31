@@ -3,25 +3,25 @@
 # Copyright (c) 2026-Present Robert Campbell
 
 #
-# build-editor-dist.sh - assemble a portable, downloadable EDITOR distribution for Linux.
+# build-editor-dist.sh - assemble a portable, downloadable editor distribution for Linux.
 #
-# The result is an unzip-and-run folder: the Tools.Editor executable, its runtime sidecars
-# (DXC - the editor cooks/recompiles shaders), the Data root (Assets, the editor's own interface
-# under Editor, and the .dataroot marker) beside the exe. Data/Engine/Shaders holds the cooked engine shader pack (shaders.dpak, the path the
-# ShaderSystemHost opens), the shader SOURCES (an export cooks the game's pack from them) and the
-# .pack-first marker, so this editor starts from the pack and not by compiling the sources.
-# FindDataRoot() discovers Data/ beside the exe, and $ORIGIN on the exe's RUNPATH finds the
-# sidecars - so the folder relocates to any machine.
+# The result is an unzip-and-run folder: the Tools.Editor executable, its runtime sidecars (DXC,
+# since the editor cooks and recompiles shaders), and the Data root (Engine, Editor, Branding,
+# Templates and the .dataroot marker) beside the exe. Data/Engine/Shaders holds the cooked engine
+# shader pack (shaders.dpak, the path the ShaderSystemHost opens), the shader sources (an export
+# cooks the game's pack from them) and the .pack-first marker, so this editor starts from the pack
+# and not by compiling the sources. FindDataRoot() discovers Data/ beside the exe, and $ORIGIN on
+# the exe's RUNPATH finds the sidecars, so the folder relocates to any machine.
 #
 # Built RelWithDebInfo (the clang-reldbg preset): optimised, asserts kept (a development tool; an
 # assert names the bug), and the debug info split off into <dist>-symbols.tar.gz
 # (Tools.Editor.debug, linked from the stripped exe by .gnu_debuglink), so a crash in a shipped
 # editor can be resolved against the build that made it.
 #
-# NOT bundled: Vulkan (a system dependency - the target needs GPU drivers + the Vulkan loader,
-# same as the build deps in README.md).
+# Not bundled: Vulkan (a system dependency: the target needs GPU drivers and the Vulkan loader,
+# the same as the build dependencies).
 #
-# Windows is not built here (no toolchain on Linux) - use scripts/build-editor-dist.ps1 on a
+# Windows is not built here (no toolchain on Linux); use scripts/build-editor-dist.ps1 on a
 # Windows agent for the Win64 editor dist.
 #
 #   Usage:  scripts/build-editor-dist.sh
@@ -36,14 +36,14 @@ cd "$ROOT"
 
 JOBS="${JOBS:-4}"
 FORMATS="${FORMATS:-spirv}"
-PRESET="clang-reldbg"                        # RelWithDebInfo: $ORIGIN rpath + DXC beside the editor
+PRESET="clang-reldbg"                        # RelWithDebInfo: $ORIGIN rpath, DXC beside the editor
 BUILD="build/$PRESET"
 BIN="Bin/RelWithDebInfo/Linux64-Clang"       # Bin/<Config>/<Platform>-<Compiler>, from the preset
 
-# Version stamp: the SINGLE source of truth is project(VERSION) in the root CMakeLists (the same
-# value the binary reports via --version). Folded into the dist folder + archive name so a
-# download self-identifies (Editor-0.1.0-Linux64). Callers pass OUT as the LABEL (Editor-Linux64);
-# the version is inserted before the platform suffix.
+# Version stamp: the one source of truth is project(VERSION) in the root CMakeLists (the same
+# value the binary reports with --version). It is folded into the dist folder and archive names so
+# a download identifies itself (Editor-0.1.0-Linux64). Callers pass OUT as the label
+# (Editor-Linux64); the version is inserted before the platform suffix.
 VERSION="$(grep -oP '^\s*VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)"
 VERSION="${VERSION:-0.0.0}"
 RAW="${OUT:-dist/Editor-Linux64}"
@@ -53,7 +53,7 @@ DIST="$RAW_DIR/${RAW_NAME%-*}-${VERSION}-${RAW_NAME##*-}"  # e.g. dist/Editor-0.
 
 log() { printf '\n== %s ==\n' "$*"; }
 
-# 1. Build the editor + the shader-pack cooker (the preset: clang, RelWithDebInfo).
+# 1. Build the editor and the shader-pack cooker (the preset: clang, RelWithDebInfo).
 log "Building Tools.Editor + Tools.ShaderPack ($PRESET)"
 if [[ ! -f "$BUILD/CMakeCache.txt" ]]; then
     # The preset pins clang (the Bin/ folder is named for CMAKE_CXX_COMPILER_ID, so a default GCC
@@ -91,7 +91,7 @@ objcopy --only-keep-debug "$DIST/Tools.Editor" "$SYMBOLS/Tools.Editor.debug"
 strip --strip-debug "$DIST/Tools.Editor"
 objcopy --add-gnu-debuglink="$SYMBOLS/Tools.Editor.debug" "$DIST/Tools.Editor"
 
-# 4. The data the editor reads, whole folders (Specs/data-layout.md): Engine (what the runtime
+# 4. The data the editor reads, whole folders: Engine (what the runtime
 #    reads: the shader sources an export cooks a game's pack from, the GUI's font), Editor (its
 #    sheets, page markup, icons, fonts and code languages; without its frame the editor runs with no
 #    interface), Branding (the splash, the logo and the window icons) and Templates (what a new
@@ -104,7 +104,7 @@ cp -r "Data/Templates" "$DIST/Data/Templates"
 rm -rf "$DIST/Data/Editor/Mock"
 cp "Data/.dataroot" "$DIST/Data/.dataroot"
 
-# 5. Data/Engine/Shaders: the pack INTO the dist's data root (Data/Engine/Shaders/shaders.dpak is the
+# 5. Data/Engine/Shaders: the pack into the dist's data root (Data/Engine/Shaders/shaders.dpak is the
 #    one path the runtime opens; a pack beside the exe is never found), and the marker that makes
 #    this editor start from the pack (the sources beside it came with Data/Engine).
 log "Cooking Data/Engine/Shaders/shaders.dpak ($FORMATS)"

@@ -3,13 +3,12 @@
 
 // GUI - :tab_view partition
 //
-// TabView: a TabBar over the pages its tabs show (E6 of Specs/gui-lab-evolution.md), Godot's
-// TabContainer. Its pages are its children (markup's `<tabpage title="...">`, or AddPage), each
-// with a tab in the bar that follows its title, icon and `closable`. Only the selected page is
-// shown; the others stay alive, as they are (Godot's way), unless a page builds itself the first
-// time it is shown (a content factory). A close request reports `tabclose` at the view, and unless
-// a listener takes it, the page and its tab go. Ctrl+Tab and Ctrl+Shift+Tab cycle the pages with
-// the focus anywhere inside the view.
+// TabView: a TabBar above the pages its tabs show. The pages are the view's children (markup's
+// `<tabpage title="...">`, or AddPage), and each has a tab in the bar that follows the page's
+// title, icon and `closable`. Only the selected page is shown; the others stay alive and
+// unchanged. A page with a content factory builds itself the first time it is shown. A close
+// request sends `tabclose` at the view, and unless a listener handles it, the page and its tab are
+// removed. Ctrl+Tab and Ctrl+Shift+Tab cycle the pages while focus is anywhere inside the view.
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +28,7 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// One page of a TabView: its tab's title, icon and closable, and what it holds.
+    /// One page of a TabView. It holds the page's content and its tab's title, icon and closable flag.
     class TabPage : public Panel
     {
         RTTI_OBJECT(TabPage, Panel)
@@ -41,7 +40,7 @@ export namespace foundation::gui
             EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
         }
 
-        /// Its tab's text.
+        /// Sets the tab's text.
         void SetTitle(core::StringView title)
         {
             m_title = core::String(title);
@@ -52,7 +51,7 @@ export namespace foundation::gui
         void SetTitleString(const core::String& title) { SetTitle(title.AsView()); }
         [[nodiscard]] core::String GetTitleString() const { return m_title; }
 
-        /// Its tab's icon, by path (loaded through the GUI's resource provider).
+        /// Sets the tab's icon by path; it loads through the GUI's resource provider.
         void SetIconSource(const core::String& path)
         {
             m_icon = path;
@@ -61,7 +60,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetIconSource() const { return m_icon; }
 
-        /// Its tab can be closed.
+        /// Sets whether the tab can be closed.
         void SetClosable(bool closable)
         {
             m_closable = closable;
@@ -70,8 +69,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsClosable() const noexcept { return m_closable; }
 
-        /// The classes its tab carries, space-separated (a document's unsaved mark, say): the tab's
-        /// own, replacing the ones set before.
+        /// Sets the classes the tab carries, separated by spaces (a document's unsaved mark, say).
+        /// They replace the classes set by an earlier call.
         void SetTabClasses(core::StringView classes)
         {
             if (m_tab != nullptr)
@@ -84,14 +83,15 @@ export namespace foundation::gui
         void SetTabClassesString(const core::String& classes) { SetTabClasses(classes.AsView()); }
         [[nodiscard]] core::String GetTabClassesString() const { return m_tabClasses; }
 
-        /// Builds what it holds the first time it is shown (a heavy page left unbuilt until wanted).
+        /// Sets a factory that builds the page's content the first time it is shown, so a heavy page
+        /// is not built until it is needed.
         void SetContentFactory(core::Function<void(TabPage& page)> factory) { m_factory = core::Move(factory); }
-        /// Its tab (null while it is in no view).
+        /// Returns the page's tab, or null while the page is in no view.
         [[nodiscard]] Tab* GetTab() const noexcept { return m_tab; }
 
     private:
         friend class TabView;
-        // Its tab, which then takes its title, icon, closable and classes.
+        // Attaches the page's tab, which then takes the page's title, icon, closable flag and classes.
         void Attach(Tab* tab)
         {
             m_tab = tab;
@@ -115,13 +115,13 @@ export namespace foundation::gui
         core::String m_icon;
         core::String m_tabClasses;
         bool m_closable = true;
-        Tab* m_tab = nullptr; // owned by the view's bar
+        Tab* m_tab = nullptr; // owned by the view's tab bar
         core::Function<void(TabPage&)> m_factory;
     };
 
     class TabView;
 
-    // What holds the pages: it tells its view when they change.
+    // The container that holds the pages; it tells its view when they change.
     class TabPageHost : public Panel
     {
         RTTI_OBJECT(TabPageHost, Panel)
@@ -140,7 +140,7 @@ export namespace foundation::gui
         void OnChildrenChanged() override;
 
     private:
-        TabView& m_view; // its parent, which owns it
+        TabView& m_view; // the parent view, which owns this host
     };
 
     class TabView : public UIWidget
@@ -160,8 +160,9 @@ export namespace foundation::gui
             }
             m_bar = core::MakeRef<TabBar>(MemoryAllocator());
             {
-                // The strip keeps its height over pages taller than the view: a flex item shrinks in
-                // proportion to its basis, so a tall page would otherwise take the strip with it.
+                // The strip keeps its height even when a page is taller than the view. A flex item
+                // shrinks in proportion to its basis, so a tall page would otherwise shrink the
+                // strip too.
                 StyleWriteScope defaults(*m_bar);
                 m_bar->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
             }
@@ -179,7 +180,8 @@ export namespace foundation::gui
             });
             m_bar->SetOnTabMoved([self](i32, i32 to)
             {
-                // The pages keep the tabs' order (a script's children read as the strip does).
+                // Keep the pages in the tabs' order, so a script reading the children sees the
+                // strip's order.
                 if (Node* page = self->m_bar->GetTab(to)->GetPage())
                     self->m_host->SetChildIndex(page, static_cast<usize>(to));
                 if (self->m_onPageMoved)
@@ -187,12 +189,12 @@ export namespace foundation::gui
             });
             m_bar->SetOnTabRemoved([self](Tab& tab)
             {
-                // Code removed the tab from the bar: its page goes with it.
+                // Code removed the tab from the bar, so remove its page too.
                 if (Node* page = tab.GetPage(); page != nullptr && page->GetParent() == self->m_host.Get())
                     self->m_host->RemoveChild(page);
             });
             m_bar->SetCloseHandler([self](i32 index) { self->RequestClose(index); });
-            // A tab dropped here from another view brings its page (E7).
+            // A tab dropped here from another view brings its page with it.
             m_bar->SetPageAdopter([self](Node& page, i32 index)
             {
                 self->m_host->AddChildAt(&page, static_cast<usize>(core::Max(0, index)));
@@ -208,7 +210,7 @@ export namespace foundation::gui
             m_host->AddChild(page.Get());
             return page.Get();
         }
-        /// Adds a page made elsewhere (any node: one not a TabPage has an empty tab).
+        /// Adds a page made elsewhere. Any node works; a node that is not a TabPage gets an empty tab.
         void AddPage(Node& page) { m_host->AddChild(&page); }
         void RemovePage(i32 index)
         {
@@ -216,20 +218,21 @@ export namespace foundation::gui
                 m_host->RemoveChild(page);
         }
         [[nodiscard]] i32 GetPageCount() const noexcept { return m_bar->GetTabCount(); }
-        /// A page by its tab's index (the tabs' order, which a drag changes).
+        /// Returns the page at a tab index, in the tabs' order, which dragging can change.
         [[nodiscard]] Node* GetPage(i32 index) const
         {
             const Tab* tab = m_bar->GetTab(index);
             return tab != nullptr ? tab->GetPage() : nullptr;
         }
 
-        // === Selection (the bar's) ===
+        // === Selection, held by the bar ===
         [[nodiscard]] i32 GetSelectedIndex() const { return m_bar->GetSelectedIndex(); }
         void SetSelectedIndex(i32 index) { m_bar->SetSelectedIndex(index); }
         [[nodiscard]] Node* GetSelectedPage() const { return GetPage(m_bar->GetSelectedIndex()); }
-        /// The user selected a page (the `change` event's).
+        /// Sets the callback for the user selecting a page (as the `change` event reports).
         void SetOnSelected(core::Function<void(i32)> callback) { m_onSelected = core::Move(callback); }
-        /// The user dragged a page's tab to another place in the strip; `to` is where it is now.
+        /// Sets the callback for the user dragging a page's tab to another place in the strip; `to`
+        /// is its new index.
         void SetOnPageMoved(core::Function<void(i32 to)> callback) { m_onPageMoved = core::Move(callback); }
 
         // === The bar's settings, from markup ===
@@ -244,8 +247,8 @@ export namespace foundation::gui
         void SetGroup(const core::String& group) { m_bar->SetGroup(group); }
         [[nodiscard]] core::String GetGroup() const { return m_bar->GetGroup(); }
 
-        /// Asks to close a page, as its tab's close part does: `tabclose` is reported here, and
-        /// unless a listener takes it, the page goes.
+        /// Asks to close the page at `index`, as clicking its tab's close part does. The view sends
+        /// `tabclose`, and unless a listener handles it, the page is removed.
         void RequestClose(i32 index)
         {
             const Tab* tab = m_bar->GetTab(index);
@@ -258,16 +261,16 @@ export namespace foundation::gui
         }
 
         [[nodiscard]] TabBar* GetBar() const noexcept { return m_bar.Get(); }
-        /// Markup's children are its pages.
+        /// Returns the host for markup's children, which become the pages.
         [[nodiscard]] Node* GetChildHost() override { return m_host.Get(); }
 
     protected:
-        // A torn-out tab of its group dropped anywhere over the view (not only its strip) goes
-        // last; over the strip, the strip places it.
+        // A torn-out tab from the same group can be dropped anywhere over the view, not only on the
+        // strip, and then goes last. Dropped over the strip, the strip decides its place.
         void OnDragQuery(DropQuery& query) override { (void)m_bar->OfferTab(query, m_bar->GetTabCount()); }
         void OnDragLeave(const DragEvent&) override { m_bar->ClearTabMark(); }
         void OnDrop(const DragEvent& event) override { m_bar->DropTab(event.Payload); }
-        // Its bar writes in its font (and the bar's tabs).
+        // The bar, and its tabs, use the view's font.
         void OnTextStyleChange() override { ShareTextStyle(*m_bar, false); }
         void OnKeyDown(const KeyEvent& event) override
         {
@@ -281,7 +284,8 @@ export namespace foundation::gui
     private:
         friend class TabPageHost;
 
-        // The pages changed: a tab for each new one (in the pages' order), none for one gone.
+        // Called when the pages changed: adds a tab for each new page, in the pages' order, and
+        // removes the tab of each page that is gone.
         void SyncPages()
         {
             for (i32 i = m_bar->GetTabCount(); i-- > 0;)
@@ -314,7 +318,7 @@ export namespace foundation::gui
                     return m_bar->GetTab(i);
             return nullptr;
         }
-        // The selected tab's page alone is shown (built now if it builds itself).
+        // Shows only the selected tab's page, building it now if it has a content factory.
         void ShowSelected()
         {
             const Tab* selected = m_bar->GetSelectedTab();

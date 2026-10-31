@@ -1,6 +1,6 @@
-# Pipeline::Texture.Compression - `texture.compression`. The ONLY code that includes the block-
-# compression encoders (ThirdParty::Bc7enc, PRIVATE so the headers do not leak). Cook/import-time,
-# UI-free (the Pipeline rule).
+# Pipeline::Texture.Compression - `texture.compression`: the only code that includes the block-
+# compression encoders (ThirdParty::Bc7enc, PRIVATE so the headers do not leak). Runs at cook and
+# import time and is UI-free, like every Pipeline library.
 util_add_engine_library(Texture.Compression ALIAS Pipeline::Texture.Compression)
 target_link_libraries(Texture.Compression
     PUBLIC Foundation::Core Foundation::RHI

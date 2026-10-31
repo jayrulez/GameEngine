@@ -53,7 +53,7 @@ TEST_CASE("rhi.null: device creates resources and a mappable buffer")
     CHECK(device->CreateTexture(TextureDesc{}, texture).IsOk());
     CHECK(texture != nullptr);
 
-    // Unsupported extensions degrade, they don't crash.
+    // Unsupported extensions degrade; they do not crash.
     MeshPipeline* mesh = nullptr;
     CHECK(device->CreateMeshPipeline(MeshPipelineDesc{}, mesh).Code() == ErrorCode::NotSupported);
 
@@ -67,8 +67,8 @@ TEST_CASE("rhi: texture views carry unique monotonic ids (address-reuse guard)")
 {
     // Caches keyed by TextureView* validate uniqueId on every hit: a destroyed view's
     // address can be reused by the very next allocation, and a stale cached descriptor
-    // then samples a dead image view (the UI-render-target device-lost). Ids must be
-    // unique across create/destroy/create cycles - an address is never enough.
+    // then samples a dead image view and loses the device. Ids must be unique across
+    // create, destroy and create cycles; an address is never enough.
     Backend* backend = nullptr;
     REQUIRE(null::CreateNullBackend(backend).IsOk());
     REQUIRE(backend != nullptr);
@@ -87,7 +87,7 @@ TEST_CASE("rhi: texture views carry unique monotonic ids (address-reuse guard)")
     REQUIRE(device->CreateTextureView(texture, TextureViewDesc{}, b).IsOk());
     CHECK(b->uniqueId != idA);
 
-    // Destroy + recreate: even if the allocator reuses the address, the id is fresh.
+    // Destroy and recreate: even if the allocator reuses the address, the id is fresh.
     device->DestroyTextureView(a);
     TextureView* c = nullptr;
     REQUIRE(device->CreateTextureView(texture, TextureViewDesc{}, c).IsOk());
@@ -103,10 +103,9 @@ TEST_CASE("rhi: texture views carry unique monotonic ids (address-reuse guard)")
 
 TEST_CASE("rhi.format: every uncompressed format has a byte size, every compressed one a block size")
 {
-    // The Beef port found BytesPerPixel returning 0 for sixteen ordinary uncompressed formats
-    // (the table simply did not list them), so anything sizing an upload from one got zero
-    // bytes. Walk the WHOLE enum: a format is either per-texel sized or block sized, never
-    // neither - a new enumerator missing from the table fails here.
+    // A format missing from BytesPerPixel's table sizes its uploads at zero bytes. Walk the
+    // whole enum: a format is either per-texel sized or block sized, never neither, so a new
+    // enumerator missing from the table fails here.
     const u32 first = static_cast<u32>(TextureFormat::R8Unorm);
     const u32 last = static_cast<u32>(TextureFormat::ASTC8x8UnormSrgb);
     for (u32 i = first; i <= last; ++i)
@@ -124,7 +123,7 @@ TEST_CASE("rhi.format: every uncompressed format has a byte size, every compress
             CHECK((bpp == 1u || bpp == 2u || bpp == 4u || bpp == 8u || bpp == 16u));
         }
     }
-    // The ones that used to be missing.
+    // Ordinary integer, signed and packed formats that are easy to leave out of the table.
     CHECK(BytesPerPixel(TextureFormat::R8Uint) == 1u);
     CHECK(BytesPerPixel(TextureFormat::R8Snorm) == 1u);
     CHECK(BytesPerPixel(TextureFormat::RG8Sint) == 2u);
@@ -140,7 +139,7 @@ TEST_CASE("rhi.format: every uncompressed format has a byte size, every compress
 
 TEST_CASE("rhi.counters: a frame of known work counts what it did, a bundle each time it runs")
 {
-    // The device's counts for the profiler (Specs/profiler.md, P2): totals since it was made.
+    // The device's counts for the profiler: totals since it was made.
     null::NullDevice device{DefaultAllocator()};
     CommandPool* pool = nullptr;
     REQUIRE(device.CreateCommandPool(QueueType::Graphics, pool).IsOk());

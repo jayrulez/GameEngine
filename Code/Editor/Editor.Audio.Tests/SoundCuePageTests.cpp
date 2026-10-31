@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The sound cue page over its markup (Data/Editor/SoundCuePage.xml) and a scratch project, without
-// a host (no audio engine: nothing plays): the cue's rows and a variant per clip with one more to
-// fill, a clip picked or cleared one undo step that adds or takes out a variant, the cue's options,
-// and a cue with no clip said so.
+// a host (there is no audio engine, so nothing plays). Covers the cue's rows, with a variant per clip
+// and one more to fill; picking or clearing a clip as one undo step that adds or removes a variant;
+// the cue's options; and a cue with no clip reporting so.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -90,7 +90,7 @@ namespace
         }
     };
 
-    // A list edit by its parts, as the grid's list makes one.
+    // Builds a list edit from its parts, as the grid's list makes one.
     gui::ListEdit ListEditOf(gui::ListEdit::Op kind, usize index, usize to = 0)
     {
         gui::ListEdit edit;
@@ -146,18 +146,18 @@ TEST_CASE("sound cue page: Add makes a variant to fill, its clip picked joins th
 {
     Bed bed;
     UniquePtr<SoundCueEditorPage> page = bed.Open(*bed.steps);
-    // Add, as the list's button: a variant with no clip yet, the cue unchanged.
+    // Add, as the list's button does: a variant with no clip yet, and the cue unchanged.
     REQUIRE(page->VariantRows().EditList(u8"variants", ListEditOf(gui::ListEdit::Op::Insert, 2)));
     CHECK(Clips(*page, bed) == String(u8"left | right | -"));
     CHECK(page->VariantCount() == 2u);
     CHECK_FALSE(page->Commands().CanUndo());
-    // Its clip picked: it joins the cue, one step.
+    // Picking its clip adds it to the cue, in one undo step.
     page->EditRow(page->VariantRows(), u8"variants.2.clip", gui::Variant(Text(bed.third)));
     CHECK(page->VariantCount() == 3u);
     CHECK(Clips(*page, bed) == String(u8"left | right | third"));
     CHECK(page->IsDirty());
 
-    // Moved, as an element's grip does: the cue's order with it.
+    // Moved, as an element's grip does: the cue's order follows.
     REQUIRE(page->VariantRows().EditList(u8"variants", ListEditOf(gui::ListEdit::Op::Move, 2, 0)));
     CHECK(Clips(*page, bed) == String(u8"third | left | right"));
     auto* cue = Cast<pipeline::SoundCueAsset>(page->Object());

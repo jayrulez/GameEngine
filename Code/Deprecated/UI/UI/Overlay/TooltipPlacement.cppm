@@ -3,8 +3,7 @@
 
 // UI - :tooltip_placement partition
 //
-// Where a tooltip appears relative to its anchor view. Ported verbatim from
-// Sedulous.UI/src/Overlay/TooltipPlacement.bf.
+// Where a tooltip appears relative to its anchor view.
 
 module;
 #include "Core/Prelude.h"
@@ -24,8 +23,8 @@ export namespace foundation::ui
         Right,
         /// Left of the anchor; flips right if clipping left.
         Left,
-        /// At the mouse pointer (small offset below-right; clamped to the screen). For large
-        /// views with PER-REGION tooltip content (a code editor's diagnostic lines), where
+        /// At the mouse pointer (a small offset below and right, clamped to the screen). For large
+        /// views with per-region tooltip content (a code editor's diagnostic lines), where
         /// anchoring to the whole view's bounds lands nowhere near the hovered spot.
         Pointer
     };

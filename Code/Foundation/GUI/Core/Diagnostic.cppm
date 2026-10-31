@@ -3,17 +3,17 @@
 
 // GUI - :diagnostic partition
 //
-// What a loader or parser says about its input (E1 of Specs/gui-lab-evolution-3.md): a line (1-based;
-// 0 when it is not known) and a message. The markup loader and the CSS parser fill a list of them
-// when given one, so a cook can warn of what they dropped or fail on what they could not read;
-// without one they log, as a running GUI does.
+// A message from a loader or parser about its input: a line (1-based; 0 when it is not known) and
+// the message text. The markup loader and the CSS parser fill a list of these when given one, so a
+// cook can warn about what they dropped or fail on what they could not read. Without a list they
+// log instead, which is what a running GUI does.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:diagnostic;
 
-import foundation.core; // String, u32
+import foundation.core;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -24,7 +24,7 @@ export namespace foundation::gui
     {
         enum class Severity : u8
         {
-            Warning, ///< something was dropped; the rest stands
+            Warning, ///< something was dropped; the rest is kept
             Error,   ///< the input could not be read
         };
         Severity Level = Severity::Warning;

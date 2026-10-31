@@ -4,10 +4,10 @@
 // UI - :flex_layout partition
 //
 // CSS Flexbox-inspired container: grow and shrink distribution, justify-content, cross-axis
-// alignment, and (P4) line wrapping with align-content, gaps on both axes and flex-basis. Ported from
-// Sedulous.UI/src/Layout/FlexLayout.bf, then restructured around a LINE model: both passes
-// collect the in-flow children into items, break them into lines (one line when not wrapping),
-// and work per line. Per-child FlexGrow/FlexBasis/AlignSelf come from the child's LayoutStyle.
+// alignment, and line wrapping with align-content, gaps on both axes and flex-basis. It works on a
+// line model: both passes collect the in-flow children into items, break them into lines (one line
+// when not wrapping), and work per line. Per-child FlexGrow/FlexBasis/AlignSelf come from the
+// child's LayoutStyle.
 
 module;
 #include "Core/Prelude.h"
@@ -40,7 +40,7 @@ export namespace foundation::ui
         SpaceAround,
         SpaceEvenly
     };
-    /// Cross-axis packing of the LINES of a wrapping container (no effect on a single line).
+    /// Cross-axis packing of the lines of a wrapping container (no effect on a single line).
     enum class AlignContent
     {
         Start,
@@ -63,8 +63,8 @@ export namespace foundation::ui
         f32 Spacing = 0.0f;
         /// Cross-axis gap between wrapped lines.
         f32 LineSpacing = 0.0f;
-        /// CSS-named gaps by AXIS (rows/columns), mapped onto Spacing/LineSpacing by Direction
-        /// when set - what markup `gap` / `row-gap` / `column-gap` write.
+        /// CSS-named gaps by axis (rows/columns), mapped onto Spacing/LineSpacing by Direction
+        /// when set; markup `gap` / `row-gap` / `column-gap` write them.
         Optional<f32> RowGap;
         Optional<f32> ColumnGap;
         /// Break items into lines when the main axis is definite and they do not fit.
@@ -138,10 +138,10 @@ export namespace foundation::ui
                               : BoxConstraints{minCross, maxCross, minMain, maxMain};
         }
 
-        /// The SEMANTIC part of Flex's first measurement pass, kept parent-side by design:
-        /// Match fills the axis, but Match on the CROSS axis is demoted
-        /// to loose so it wraps naturally first (a base-side Match would defeat this). Fixed,
-        /// margin, and DPI are base-handled.
+        /// The part of Flex's first measurement pass that depends on flex semantics, so it
+        /// stays in the parent: Match fills the axis, but Match on the cross axis is demoted
+        /// to loose so it wraps naturally first (a base-side Match would defeat this). The base
+        /// class handles Fixed sizes, margins and DPI.
         static BoxConstraints MakeChildConstraintsLooseCross(BoxConstraints parent, View* child,
                                                              bool isHorizontal)
         {
@@ -211,7 +211,7 @@ export namespace foundation::ui
                                                   : BoxConstraints{0, inner.MaxWidth, inner.MinHeight, inner.MaxHeight};
 
             // 1. Items at their hypothetical main size: the basis (declared, or 0 for a growing
-            //    child - the `flex: <grow>` shorthand) or the content size.
+            //    child, as with `flex: <grow>`) or the content size.
             m_items.Clear();
             for (usize i = 0; i < ChildCount(); ++i)
             {
@@ -228,7 +228,7 @@ export namespace foundation::ui
                 const f32 basis = DeclaredBasis(child, availMain);
                 if (basis >= 0.0f && item.grow <= 0.0f)
                 {
-                    // A declared basis without grow IS the main size: tight main, loose cross.
+                    // A declared basis without grow is the main size: tight main, loose cross.
                     child->Measure(MainCross(basis, basis, 0.0f, Max(0.0f, availCross), horizontal));
                     item.main = MainOf(child->MarginBoxSize(), horizontal);
                     item.cross = CrossOf(child->MarginBoxSize(), horizontal);
@@ -275,7 +275,7 @@ export namespace foundation::ui
                     {
                         if (mainDefinite)
                         {
-                            // The grow share is the child's MARGIN-BOX main length; the base
+                            // The grow share is the child's margin-box main length; the base
                             // deflates its own margin from it.
                             const f32 childMain = item.main + remaining * item.grow / totalGrow;
                             item.child->Measure(MainCross(childMain, Max(0.0f, childMain), 0.0f,
@@ -291,8 +291,8 @@ export namespace foundation::ui
                     line.main += item.main;
                     line.cross = Max(line.cross, item.cross);
                 }
-                // Match on the cross axis: re-measure at the settled line cross size: tight
-                // MARGIN-BOX targets (the base insets to the border box).
+                // Match on the cross axis: re-measure at the settled line cross size, with tight
+                // margin-box targets (the base insets to the border box).
                 if (line.cross > 0.0f)
                 {
                     for (usize i = line.start; i < line.start + line.count; ++i)
@@ -399,7 +399,7 @@ export namespace foundation::ui
             const f32 gap = MainGap();
             const f32 crossGap = CrossGap();
 
-            // Items at their MEASURED sizes, re-broken against the arranged main size.
+            // Items at their measured sizes, re-broken against the arranged main size.
             m_items.Clear();
             for (usize i = 0; i < ChildCount(); ++i)
             {
@@ -438,8 +438,8 @@ export namespace foundation::ui
                 line.cross = Max(line.cross, line.baseline + belowBaseline);
             }
 
-            // Line packing on the cross axis. A single line IS the container (align-content
-            // has no effect - CSS); wrapped lines distribute the free cross space.
+            // Line packing on the cross axis. A single line is the container (align-content
+            // has no effect, as in CSS); wrapped lines distribute the free cross space.
             f32 crossStart = 0.0f;
             f32 crossBetween = crossGap;
             if (!Wrap && m_lines.Size() == 1)
@@ -508,7 +508,7 @@ export namespace foundation::ui
                     }
                     const Optional<Align>& alignSelf = item.child->Layout().AlignSelf;
                     const Align align = alignSelf.HasValue() ? alignSelf.Value() : AlignItems;
-                    // MARGIN-box placement (base insets by margin once).
+                    // Margin-box placement (the base insets by the margin once).
                     f32 itemCrossPos = crossPos;
                     f32 finalCross = item.cross;
                     switch (align)

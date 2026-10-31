@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Unit tests for the JSON DOM (parse / write / build) - foundation.json in isolation, no reflection
+// Unit tests for the JSON DOM (parse, write, build): foundation.json in isolation, no reflection
 // or scripting. The RTTI/script-usability flow is a cross-collection integration test and lives in
 // Code/Integration/Integration.Script.
 #include <doctest/doctest.h>
@@ -44,7 +44,7 @@ TEST_CASE("json.parse: scalars")
     CHECK(s.value.AsString() == StringView(u8"hi"));
 }
 
-// --- Parse: strings + escapes ----------------------------------------------
+// --- Parse: strings and escapes --------------------------------------------
 
 TEST_CASE("json.parse: string escapes")
 {
@@ -136,7 +136,7 @@ TEST_CASE("json.parse: nesting-depth guard rejects hostile input")
     CHECK_FALSE(r.ok); // guarded, not a stack overflow
 }
 
-// --- Write + round-trip ----------------------------------------------------
+// --- Write and round-trip --------------------------------------------------
 
 TEST_CASE("json.write: compact + round-trip")
 {
@@ -147,9 +147,8 @@ TEST_CASE("json.write: compact + round-trip")
     CHECK(JsonValue::MakeString(u8"a\"b\n").ToString() == StringView(u8"\"a\\\"b\\n\""));
 
     const StringView src = u8"{\"a\":1,\"b\":[true,null,\"x\"],\"c\":{}}";
-    // The reflected STATIC JsonValue::Parse (the script-facing entry, address-taken by the
-    // reflection registration - the MSVC link-fix commit's subject) parses identically to the
-    // free function.
+    // The reflected static JsonValue::Parse (the script-facing entry, address-taken by the
+    // reflection registration) parses identically to the free function.
     CHECK(JsonValue::Parse(String(src)).ToString() == src);
     ParseResult r = Parse(src);
     REQUIRE(r.ok);
@@ -183,7 +182,7 @@ TEST_CASE("json.build: construct + mutate is value-semantic")
     CHECK(obj.Get(u8"args").Count() == 2);
     CHECK(obj.ToString() == StringView(u8"{\"id\":8,\"name\":\"tool\",\"args\":[1,\"two\"]}"));
 
-    // Get returns an OWNED copy: mutating it must not touch the parent (no interior aliasing).
+    // Get returns an owned copy: mutating it must not touch the parent (no interior aliasing).
     JsonValue got = obj.Get(u8"args");
     got.Add(JsonValue::MakeNumber(3));
     CHECK(got.Count() == 3);

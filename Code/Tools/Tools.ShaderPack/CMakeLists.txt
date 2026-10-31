@@ -1,6 +1,6 @@
 # Tools.ShaderPack - headless CLI that cooks the engine shader corpus into a shaders.dpak
-# (the WGSL pack the web build ships). Needs DXC + the vendored naga/tint (baked into
-# foundation.shaders), so it is a desktop authoring tool - never built for Emscripten.
+# (the WGSL pack the web build ships). Needs DXC and the vendored naga/tint (baked into
+# foundation.shaders), so it is a desktop authoring tool, never built for Emscripten.
 if(EMSCRIPTEN)
     return()
 endif()

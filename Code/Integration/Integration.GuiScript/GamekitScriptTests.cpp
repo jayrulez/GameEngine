@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.gui.gamekit - the screen stack's script surface (K4 of
-// Specs/gui-lab-evolution-3.md) exercised end-to-end on both backends: a script makes a stack,
-// pushes a node and a document, reads the top's covering and the pause, hears a screen leave and
-// pops. The gamekit's own suite stays backend-neutral.
+// foundation.gui.gamekit: the screen stack's script surface, exercised end to end on both
+// backends. A script makes a stack, pushes a node and a document, reads whether the top screen
+// covers and pauses, hears a screen leave, and pops. The gamekit's own suite stays
+// backend-neutral.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -54,9 +54,9 @@ namespace
         }
     };
 
-    // Runs `source` against a GUI the script finds as gui.root(), then the story's checks: the
-    // script has made a stack under the root and pushed a node and pause.xml, listening for the
-    // pause screen's `screenleave`; it offers count(), paused(), covers(), popIt() and left().
+    // Runs `source` against a GUI the script reaches as gui.root(), then checks the result. The
+    // script has made a stack under the root, pushed a node and pause.xml, and listens for the
+    // pause screen's `screenleave`. It offers count(), paused(), covers(), popIt() and left().
     void CheckStack(script::IScriptManager& manager, const char8_t* source)
     {
         core::RegisterCoreTypes();

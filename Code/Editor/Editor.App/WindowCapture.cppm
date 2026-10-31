@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor App - :window_capture partition
 //
-// EditorWindowCapture: screenshots of the editor's own windows, UI and all, while it runs - the
+// EditorWindowCapture: screenshots of the editor's own windows, UI and all, while it runs: the
 // main window, or each floating one too. A request arms one capture per window; that window's
 // next frame records a copy of its finished backbuffer (after its UI has drawn); the next update
 // writes the PNG once the GPU has run the copy. editor_screenshot, the View > Screenshot action
@@ -85,7 +85,7 @@ export namespace editor::app
             return shots;
         }
 
-        /// Some requested capture is still waiting for its window.
+        /// Whether some requested capture is still waiting for its window.
         [[nodiscard]] bool Busy() const noexcept
         {
             for (const Slot& slot : m_slots)
@@ -98,7 +98,7 @@ export namespace editor::app
             return false;
         }
 
-        /// From window `windowId`'s frame, after its UI has drawn: records the copy of its
+        /// Called from window `windowId`'s frame, after its UI has drawn: records the copy of its
         /// backbuffer when a capture of it is armed.
         void Record(foundation::rhi::Device& device, foundation::rhi::CommandEncoder& encoder, u32 windowId,
                     foundation::rhi::Texture* backbuffer, foundation::rhi::TextureFormat format, u32 width,
@@ -116,7 +116,7 @@ export namespace editor::app
             }
         }
 
-        /// The next update: writes the copies recorded last frame. A one-off, so it waits for
+        /// Called at the next update: writes the copies recorded last frame. A one-off, so it waits for
         /// the whole GPU once, then maps and writes each.
         void Complete(foundation::rhi::Device& device, IAllocator& allocator)
         {

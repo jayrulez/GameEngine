@@ -76,7 +76,7 @@ TEST_CASE("node: a child held elsewhere outlives its parent and points at none")
     } // the parent's last reference dropped
     CHECK(child->GetParent() == nullptr);
     auto other = MakeNode();
-    other->AddChild(child.Get()); // it was reaching the freed parent to leave it
+    other->AddChild(child.Get()); // must not reach the freed parent to leave it
     CHECK(child->GetParent() == other.Get());
 }
 
@@ -202,14 +202,14 @@ TEST_CASE("node: a listener removes itself or adds another while listeners run (
                                      [&](const Event&)
                                      {
                                          ++first;
-                                         CHECK(node->RemoveEventListener(firstId)); // its own: from inside it
+                                         CHECK(node->RemoveEventListener(firstId)); // removes its own listener from inside it
                                          (void)node->AddEventListener(EventType::SizeChanged, [&](const Event&) { ++added; });
                                      });
     (void)node->AddEventListener(EventType::SizeChanged, [&](const Event&) { ++second; });
     node->SetSize(core::Float2{10.0f, 10.0f});
     CHECK(first == 1);
     CHECK(second == 1);  // the one after it still ran
-    CHECK(added == 0);   // the one added waits for the next event
+    CHECK(added == 0);   // the listener added during the event waits for the next one
     node->SetSize(core::Float2{20.0f, 20.0f});
     CHECK(first == 1);   // gone
     CHECK(second == 2);

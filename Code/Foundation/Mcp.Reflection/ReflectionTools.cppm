@@ -3,11 +3,10 @@
 
 // Foundation::Mcp.Reflection - `foundation.mcp.reflection`
 //
-// The reflection tool contribution: type_list + type_info, registered against a McpServer. These
-// let an agent discover the authored surface (types, properties, methods, enums) so it can write
-// correct scripts/scene edits - the doc calls this out as a uniquely high-value MCP tool. Pure
-// queries over a TypeRegistry; no project/pipeline dependency. A module contributes its own tools
-// (the script-facade pattern), and this is the reflection module's contribution.
+// The reflection tools, type_list and type_info, registered against a McpServer. They let an
+// agent discover the authored surface (types, properties, methods, enums) so it can write correct
+// scripts and scene edits. They are pure queries over a TypeRegistry, with no project or pipeline
+// dependency. Each module contributes its own tools; these are the reflection module's.
 
 module;
 #include "Core/Prelude.h"
@@ -65,9 +64,9 @@ namespace foundation::mcp::detail
         return a[i] == '\0'; // exact match: a is fully consumed
     }
 
-    // A domain's readable name from the small KNOWN set (just hashes the literals - no dependency
-    // on the Pipeline/Editor modules). Empty for a custom domain the tool does not know by name;
-    // the robust in-player bit (below) still works for any domain.
+    // A domain's readable name from the small known set (it hashes the literals, so there is no
+    // dependency on the Pipeline or Editor modules). Empty for a custom domain the tool does not
+    // know by name; the in-player bit (below) still works for any domain.
     inline StringView DomainName(TypeDomain domain)
     {
         if (domain == kRuntimeTypeDomain)
@@ -86,8 +85,9 @@ namespace foundation::mcp::detail
     }
 
     // Emit {domain, inPlayer} for a type: `domain` is the availability domain's readable name;
-    // `inPlayer` is true iff it ships in a runtime player (Runtime domain) - the agent-facing point
-    // (a TextureAsset exists for authoring but NOT in a runtime player). Non-Runtime = authoring-only.
+    // `inPlayer` is true iff it ships in a runtime player (the Runtime domain), which is what an
+    // agent needs to know (a TextureAsset exists for authoring but not in a runtime player). Any
+    // other domain is authoring-only.
     inline void SetDomain(JsonValue& out, const TypeRegistry& reg, TypeId id)
     {
         const TypeDomain domain = reg.DomainOf(id);
@@ -164,7 +164,7 @@ namespace foundation::mcp::detail
 
 export namespace foundation::mcp
 {
-    // Registers type_list + type_info against `server`, querying `registry` LIVE at call time (so
+    // Registers type_list and type_info against `server`, querying `registry` live at call time (so
     // types registered after this call are still visible). `registry` must outlive `server`; the
     // default GlobalTypeRegistry is process-lifetime.
     inline void RegisterReflectionTools(McpServer& server,

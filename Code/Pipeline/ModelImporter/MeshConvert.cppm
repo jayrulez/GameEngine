@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Pipeline::ModelImporter:mesh_convert - Model IR mesh -> geometry *Source.
+/// Pipeline::ModelImporter:mesh_convert - Model IR mesh to geometry *Source.
 ///
 /// Converts a `model::ModelMesh` (raw interleaved vertex bytes described by a
-/// VertexElement layout + index buffer + material parts) into a cooked
-/// `geometry::StaticMeshSource` / `SkinnedMeshSource`. Vertices are read BY SEMANTIC
-/// (position/normal/uv/color/tangent[/joints/weights]) so any loader layout works;
-/// the glTF/FBX loaders emit the canonical 48B (static) / 72B (skinned) interleave.
+/// VertexElement layout, an index buffer and material parts) into a cooked
+/// `geometry::StaticMeshSource` or `SkinnedMeshSource`. Vertices are read by semantic
+/// (position, normal, uv, color, tangent, and joints and weights when skinned) so any loader
+/// layout works; the glTF and FBX loaders emit the canonical 48-byte (static) or 72-byte
+/// (skinned) interleave.
 /// The model loaders always produce indexed geometry (non-indexed primitives get
 /// sequential indices generated at load), so there is no non-indexed path here.
 
@@ -121,11 +122,11 @@ namespace pipeline
 
     // ---- parts -> submesh ranges ----
 
-    // The material slots ONE mesh uses: the distinct model-wide material indices of its
+    // The material slots one mesh uses: the distinct model-wide material indices of its
     // parts, in first-appearance order. A cooked submesh's materialIndex is the position in
-    // THIS list (a per-mesh slot), never the model-wide index - so the entity's material
-    // list holds only what the mesh draws (Bistro: 254 materials per node before this,
-    // 2909 nodes; the material a submesh needs is one or two of them).
+    // this list (a per-mesh slot), never the model-wide index, so the entity's material
+    // list holds only what the mesh draws (in a large scene, a node draws one or two of
+    // hundreds of materials).
     void CollectMeshMaterialSlotsImpl(const model::ModelMesh& mesh, Array<i32>& out)
     {
         out.Clear();
@@ -197,7 +198,7 @@ namespace pipeline
             CollectMeshMaterialSlotsImpl(mesh, out);
         }
 
-        // model::TextureWrap -> rhi::AddressMode VALUE (as u8; enum orders differ - model has
+        // model::TextureWrap -> rhi::AddressMode value (as u8; the enum orders differ: model has
         // {Repeat, ClampToEdge, MirroredRepeat}, rhi has {Repeat, MirrorRepeat, ClampToEdge}).
         [[nodiscard]] u8 AddressModeFromWrap(model::TextureWrap wrap)
         {
@@ -214,7 +215,7 @@ namespace pipeline
         }
 
         // The sampler modes a material should use: its base-color texture's sampler (fallback:
-        // first slot with one). glTF's empty-sampler default is Repeat/Repeat.
+        // first slot with one). glTF's empty-sampler default is Repeat on both axes.
         void MaterialSamplerModes(const model::Model& mdl, const model::ModelMaterial& mat,
                                   u8& outU, u8& outV)
         {
@@ -242,7 +243,7 @@ namespace pipeline
         }
 
         // Asset name for an imported sub-object: the authored name, sanitized for file paths
-        // (instance names become envelope/sidecar file names), else "{fallback}.{index}".
+        // (instance names become envelope and sidecar file names), else "{fallback}.{index}".
         [[nodiscard]] String ImportedAssetName(core::StringView authored, core::StringView fallback,
                                                usize index)
         {
@@ -264,15 +265,16 @@ namespace pipeline
             return out;
         }
 
-        // Display name for an imported texture: the authored texture/image name when present,
-        // else the URI's file stem (Default_albedo.jpg -> Default_albedo), else "tex.{index}"
-        // (embedded textures with no identity). Callers unique-ify per destination group.
+        // Display name for an imported texture: the URI's file stem when there is one
+        // (Default_albedo.jpg -> Default_albedo), else the authored texture or image name, else
+        // "tex.{index}" (embedded textures with no identity). Callers make it unique per
+        // destination group.
         [[nodiscard]] String ImportedTextureName(const model::ModelTexture& texture, usize index)
         {
-            // FILE STEM first, authored image name as the fallback (embedded GLB images have
+            // File stem first, authored image name as the fallback (embedded GLB images have
             // no uri). The file is the identity the user sees on disk and greps for; authored
-            // names can lie about it - Poly Haven names its packed arm textures "*_rough",
-            // which imported an asset whose name matched neither the file nor its content.
+            // names can misdescribe it (packed arm textures named "*_rough", say), giving an
+            // asset whose name matches neither the file nor its content.
             StringView base;
             StringView uri = texture.uri();
             if (!uri.IsEmpty())
@@ -308,10 +310,9 @@ namespace pipeline
             return ImportedAssetName(base, u8"tex", index);
         }
 
-        // Fill a StaticMeshSource from a model mesh's static streams (pos/normal/uv/color/tangent).
-        // Authored chains: "Foo_LOD1" / "Foo_lod2" attach as chain levels of
-        // "Foo". Returns the level (>= 1) and writes the stripped base name; 0 = a plain
-        // name (including "_LOD0" - the base spells itself plainly, never with a suffix).
+        // Authored chains: "Foo_LOD1" and "Foo_lod2" attach as chain levels of
+        // "Foo". Returns the level (>= 1) and writes the stripped base name; 0 is a plain
+        // name (including "_LOD0": the base spells itself plainly, never with a suffix).
         [[nodiscard]] inline u32 ParseLodSuffix(StringView name, String& outBase)
         {
             const usize n = name.Size();
@@ -348,16 +349,17 @@ namespace pipeline
         void StaticMeshSourceFromModel(const model::ModelMesh& mesh,
                                        geometry::StaticMeshSource& out); // defined below
 
-        // Append `lodMesh` as the NEXT chain level of `base`: its vertices join the shared
-        // blob, its indices (offset by the pre-append vertex count) join the one index
-        // buffer, and one range lands per part. The level's part count must MATCH the
-        // base's submesh count (the material layout is per-chain; a level never resorts) -
-        // mismatch returns false with `base` unchanged. Coverage thresholds default to a
-        // halving ladder (LOD1 at 0.25 of the viewport half-height, LOD2 at 0.125, ...).
+        // Fill a StaticMeshSource from a model mesh's static streams (position, normal, uv,
+        // color, tangent), or a SkinnedMeshSource with its skinning stream too.
         void SkinnedMeshSourceFromModel(const model::ModelMesh& mesh, i32 skeletonIndex,
                                         geometry::SkinnedMeshSource& out); // defined below
 
-        // The shared append core over an ALREADY-CONVERTED level source.
+        // Append `level` (an already-converted source) as the next chain level of `base`: its
+        // vertices join the shared blob, its indices (offset by the pre-append vertex count) join
+        // the one index buffer, and one range lands per part. The level's part count must match
+        // the base's submesh count (the material layout is per chain; a level never resorts); a
+        // mismatch returns false with `base` unchanged. Coverage thresholds follow a halving
+        // ladder (LOD1 at 0.25 of the viewport half-height, LOD2 at 0.125, and so on).
         [[nodiscard]] inline bool AppendConvertedLodLevel(const geometry::StaticMeshSource& level,
                                                           geometry::StaticMeshSource& base)
         {
@@ -403,8 +405,8 @@ namespace pipeline
             return AppendConvertedLodLevel(level, base);
         }
 
-        // SKINNED chains: the level's parallel skinning stream appends in lockstep with its
-        // vertices (both streams grow by the level's vertex count - they cannot diverge).
+        // Skinned chains: the level's parallel skinning stream appends in step with its
+        // vertices (both streams grow by the level's vertex count, so they cannot diverge).
         // A level whose stream does not match its vertex count is refused.
         [[nodiscard]] inline bool AppendLodLevelFromModel(const model::ModelMesh& lodMesh,
                                                           geometry::SkinnedMeshSource& base)
@@ -466,9 +468,9 @@ namespace pipeline
             CopyIndices(mesh, out.indexData);
             CopyParts(mesh, out);
 
-            // No authored tangent stream (e.g. DamagedHelmet.gltf ships only NORMAL+TEXCOORD_0):
+            // No authored tangent stream (DamagedHelmet.gltf ships only NORMAL and TEXCOORD_0):
             // generate them, or every vertex keeps the {1,0,0,+1} default and the TBN is garbage
-            // everywhere - normal-mapped materials then shade wrong across the whole mesh.
+            // everywhere, so normal-mapped materials shade wrong across the whole mesh.
             if (eTan == nullptr && eNrm != nullptr && eUv != nullptr && !out.indexData.IsEmpty())
             {
                 geometry::StaticMesh::GenerateTangents(
@@ -477,8 +479,8 @@ namespace pipeline
             }
         }
 
-        // Fill a SkinnedMeshSource: the static streams above + the parallel skinning stream
-        // (joints u16x4 + weights) and the owning skeleton index.
+        // Fill a SkinnedMeshSource: the static streams above, the parallel skinning stream
+        // (joints u16x4 and weights) and the owning skeleton index.
         void SkinnedMeshSourceFromModel(const model::ModelMesh& mesh, i32 skeletonIndex,
                                         geometry::SkinnedMeshSource& out)
         {
@@ -512,16 +514,16 @@ namespace pipeline
     } // export
 
     // ============================================================================================
-    // Shared texture-import helpers (used by BOTH the drag-drop fan-out and the cook path).
+    // Shared texture-import helpers (used by both the drag-drop fan-out and the cook path).
     // ============================================================================================
     export {
 
-        // Classify each model texture's color space by USAGE: data maps (normal / packed or separate
-        // metal-rough / occlusion) must stay LINEAR - sRGB-decoding them corrupts the values (a flat
-        // normal 0.5 would linearize to ~0.21). Color maps (albedo, emissive) are sRGB-encoded.
-        // A texture referenced both ways classifies as linear (data correctness wins; rare).
-        // Which textures a material binds in its NORMAL slot (the usage a file-backed texture
-        // asset carries; the other linear slots - MR / rough / metal / AO - are data masks).
+        // Classify each model texture by usage. ClassifyLinearTextures marks the data maps
+        // (normal, packed or separate metal-rough, occlusion), which must stay linear: sRGB-decoding
+        // them corrupts the values (a flat normal 0.5 would linearize to ~0.21). Color maps (albedo,
+        // emissive) are sRGB-encoded, and a texture referenced both ways classifies as linear.
+        // ClassifyNormalTextures marks those a material binds in its normal slot (the usage a
+        // file-backed texture asset carries; the other linear slots are data masks).
         inline void ClassifyNormalTextures(const model::Model& mdl, Array<bool>& outNormal)
         {
             outNormal.Clear();
@@ -561,10 +563,10 @@ namespace pipeline
             }
         }
 
-        // Bake a glTF-style PACKED metallic-roughness texture (G = roughness, B = metalness; R = A =
+        // Bake a glTF-style packed metallic-roughness texture (G = roughness, B = metalness; R = A =
         // 255) from FBX's separate grayscale maps. Missing maps bake as 255 (identity: the factor
-        // carries the value). Sizes may differ - the output takes the larger and nearest-samples.
-        // Empty result = neither source usable (caller falls back to factors only).
+        // carries the value). Sizes may differ; the output takes the larger and nearest-samples.
+        // An empty result means neither source was usable (the caller falls back to factors only).
         [[nodiscard]] inline Array<u8> BakePackedMetallicRoughness(const model::Model& mdl,
                                                                    i32 roughnessIdx,
                                                                    i32 metalnessIdx, u32& outW,

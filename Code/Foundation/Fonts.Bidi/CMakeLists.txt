@@ -1,5 +1,5 @@
 # Foundation::Fonts.Bidi - `foundation.fonts.bidi`: the Unicode bidirectional algorithm over
-# SheenBidi, one implementation of the engine's IBidiResolver (F3 of Specs/vg-and-gui-lab.md).
+# SheenBidi, one implementation of the engine's IBidiResolver.
 # SheenBidi stays inside this library: its interface exports an install call, and no SheenBidi type
 # or header crosses it.
 

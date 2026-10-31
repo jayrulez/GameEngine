@@ -3,13 +3,12 @@
 
 // Engine::Script - :components partition.
 //
-// The attachment model: ONE ScriptComponent per entity
-// holding an ORDERED array of behaviors - each a cooked ScriptClass reference, an
-// enabled flag, and hash-keyed property OVERRIDES (values differing from the class's
-// harvested defaults; Godot's default-diff semantics with Lumix's rename-safe hashes).
-// Runtime fields (the live ScriptObject instance, dispatch state) are transient -
-// never serialized. Because overrides live in the component payload, the prefab
-// delta machinery (baseline blob compare) covers them with zero new code.
+// The attachment model: one ScriptComponent per entity holding an ordered array of
+// behaviors, each a cooked ScriptClass reference, an enabled flag, and property overrides
+// keyed by name hash (only the values that differ from the class's harvested defaults).
+// Runtime fields (the live ScriptObject instance, dispatch state) are transient and
+// never serialized. Because overrides live in the component payload, the prefab delta
+// machinery (baseline blob compare) covers them with no extra code.
 
 module;
 #include "Core/Prelude.h"
@@ -44,14 +43,14 @@ export namespace engine::script
         // Authored:
         foundation::resource::Ref<ScriptClass> script;
         bool enabled = true;
-        f32 updateInterval = 0.0f; // seconds between onUpdate calls; <=0 = every tick.
-                                   // The delivered dt is the ACCUMULATED time.
+        f32 updateInterval = 0.0f; // seconds between onUpdate calls; <=0 means every tick.
+                                   // The delivered dt is the accumulated time.
         Array<ScriptPropertyOverride> overrides;
 
         // Runtime (transient):
         RefPtr<ScriptObject> instance;
         const ScriptClass* boundClass = nullptr; // product the instance was built from
-                                                 // (a reload swaps the product -> re-instantiate)
+                                                 // (a reload swaps the product: re-instantiate)
         bool started = false;                    // onStart delivered
         bool active = false;          // last delivered enable state (onEnable/onDisable edges)
         bool entitySuspended = false; // entity-active latch: frozen by an inactive entity
@@ -121,7 +120,7 @@ export namespace engine::script
         }
     }
 
-    class ScriptSceneSystem; // forward (:subsystem) - the destroy hook dispatches onDestroy
+    class ScriptSceneSystem; // forward (:subsystem); the destroy hook dispatches onDestroy
 
     class ScriptComponentManager final
         : public foundation::scene::SerializableComponentManager<ScriptComponent>,
@@ -141,8 +140,8 @@ export namespace engine::script
         [[nodiscard]] bool WriteReplicatedState(foundation::scene::EntityHandle entity, Array<byte>& out) override;
         void ReadReplicatedState(foundation::scene::EntityHandle entity, Span<const byte> state) override;
 
-        /// The per-scene script system, wired by the subsystem right after AddSystem -
-        /// entity/component destruction routes onDestroy through it.
+        /// The per-scene script system, wired by the subsystem right after AddSystem;
+        /// entity and component destruction route onDestroy through it.
         void SetScriptSystem(ScriptSceneSystem* system) noexcept { m_scriptSystem = system; }
         [[nodiscard]] ScriptSceneSystem* ScriptSystem() const noexcept { return m_scriptSystem; }
 
@@ -155,7 +154,7 @@ export namespace engine::script
         ScriptSceneSystem* m_scriptSystem = nullptr;
     };
 
-    // Defined in SubsystemImpl.cpp (REFLECT_* bodies never sit in a module
-    // interface unit - the GCC gcm-cluster rule).
+    // Defined in ScriptSubsystemImpl.cpp (REFLECT_* bodies never sit in a module
+    // interface unit: GCC emits a gcm cluster for them).
     void RegisterScriptComponentReflection();
 }

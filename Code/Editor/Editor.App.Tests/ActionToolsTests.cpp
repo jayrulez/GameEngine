@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the MCP action bridge over a real registry: action_list with every
-// declaration's state over the active page, action_state for one, action_execute through the
-// funnel (a toggle flips, its state comes back), the refusals (unknown id, disabled over the
-// active page), and the unattended scope: an action that opens a dialog runs with the dialog
-// suppressed and reported.
+// Editor::App tests: the MCP action bridge over a real registry. action_list reports every
+// declaration's state for the active page and action_state reports one. action_execute runs through
+// the registry: a toggle flips and its new state comes back. Unknown ids and actions disabled for
+// the active page are refused. In the unattended scope, an action that opens a dialog runs with
+// the dialog suppressed and reported.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -101,7 +101,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
         d.enabled = [](EditorPage* page) { return page != nullptr; };
         d.disabledReason = [](EditorPage*) { return String(u8"Open a page to flip."); };
         d.checked = [](EditorPage* page)
-        { return page != nullptr && static_cast<TogglePage*>(page)->on; }; // asked disabled too
+        { return page != nullptr && static_cast<TogglePage*>(page)->on; }; // queried while disabled too
         d.execute = [](EditorPage* page)
         {
             auto* toggling = static_cast<TogglePage*>(page);
@@ -118,7 +118,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
         d.readOnly = false;
         d.execute = [over, &asked](EditorPage*)
         {
-            // The flow asks before it acts; dismissed, it acts not.
+            // The flow asks for confirmation first; if the dialog is dismissed, it does nothing.
             auto box = MakeRef<gui::MessageBox>(DefaultAllocator());
             box->Configure(u8"Unsaved changes", u8"Close anyway?", gui::MessageBox::Buttons::OkCancel);
             box->SetOnResult([&asked](gui::MessageBox::Result result) { asked = result == gui::MessageBox::Result::Ok; });
@@ -143,7 +143,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(found.Get(u8"kind").AsString() == StringView(u8"toggle"));
     CHECK(found.Get(u8"shortcut").AsString() == StringView(u8"Ctrl+F"));
     CHECK_FALSE(found.Get(u8"enabled").AsBool());
-    CHECK(found.Get(u8"disabledReason").AsString() == StringView(u8"Open a page to flip.")); // said where it has one
+    CHECK(found.Get(u8"disabledReason").AsString() == StringView(u8"Open a page to flip.")); // the reason, where there is one
     CHECK_FALSE(found.Get(u8"checked").AsBool());
     REQUIRE(FindById(listed.payload.Get(u8"actions"), u8"file.exit", found) != nullptr);
     CHECK(found.Get(u8"menuPath").AsString() == StringView(u8"File/Exit"));
@@ -176,8 +176,8 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(flipped.payload.Get(u8"checked").AsBool());
     CHECK(flipped.payload.Get(u8"enabled").AsBool());
 
-    // Unattended: the dialog the action opens is suppressed and named; the flow saw a
-    // dismissal, so nothing happened.
+    // Unattended, the dialog the action opens is suppressed and named in the answer. The flow
+    // sees a dismissal, so nothing happens.
     Answer closed = Call(server, u8"action_execute", u8"{\"id\":\"project.close\"}");
     REQUIRE(closed.ok);
     REQUIRE(closed.payload.Get(u8"suppressedDialogs").Count() == 1);
@@ -185,7 +185,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(closed.payload.Has(u8"note"));
     CHECK_FALSE(asked);
     CHECK(root->GetEventDispatcher()->PopupCount() == 0u);           // never shown
-    CHECK_FALSE(static_cast<bool>(root->GetEventDispatcher()->TakeModalInterceptor())); // the scope restored it
+    CHECK_FALSE(static_cast<bool>(root->GetEventDispatcher()->TakeModalInterceptor())); // the scope restored the dispatcher's interceptor
 
     context.ClosePage(page);
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net.websocket: handshake math (RFC vectors), frame codec (incl. the malformed
-// cases the accept path must survive - untrusted bytes), and the gateway + hybrid socket
-// over real localhost sockets (the TcpSocketTests precedent).
+// foundation.net.websocket: handshake math (RFC vectors), the frame codec (including the
+// malformed cases the accept path must survive, since its bytes are untrusted), and the gateway
+// and hybrid socket over real localhost sockets, as TcpSocketTests does.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -85,7 +85,7 @@ TEST_CASE("websocket: frame codec round-trips a masked client frame")
                               /*mask*/ true, 0xA1B2C3D4u, wire);
 
     net::WebSocketFrameParser parser;
-    // Feed in two arbitrary chunks - the parser is incremental.
+    // Feed in two arbitrary chunks: the parser is incremental.
     parser.Push(Span<const byte>{wire.Data(), 3});
     parser.Push(Span<const byte>{wire.Data() + 3, wire.Size() - 3});
     REQUIRE(!parser.Failed());
@@ -147,7 +147,7 @@ TEST_CASE("websocket: the parser rejects what the RFC forbids from clients")
     // Oversized declared length.
     {
         Array<byte> wire;
-        wire.PushBack(static_cast<byte>(0x82)); // FIN + Binary
+        wire.PushBack(static_cast<byte>(0x82)); // FIN, Binary
         wire.PushBack(static_cast<byte>(0x80u | 127u));
         for (usize i = 0; i < 8; ++i)
         {
@@ -160,7 +160,7 @@ TEST_CASE("websocket: the parser rejects what the RFC forbids from clients")
     // RSV bits set (no extension negotiated).
     {
         Array<byte> wire;
-        wire.PushBack(static_cast<byte>(0xC2)); // FIN + RSV1 + Binary
+        wire.PushBack(static_cast<byte>(0xC2)); // FIN, RSV1, Binary
         wire.PushBack(static_cast<byte>(0x80));
         net::WebSocketFrameParser parser;
         parser.Push(Span<const byte>{wire.Data(), wire.Size()});
@@ -231,12 +231,12 @@ TEST_CASE("websocket: handshake validation - the good request and each broken va
 
 namespace
 {
-    // Drive a real localhost client through connect + upgrade against a gateway.
+    // Drive a real localhost client through connect and upgrade against a gateway.
     struct WsTestClient
     {
         net::TcpSocket socket;
-        net::WebSocketFrameParser frames; // NOTE: parses SERVER frames, which are unmasked -
-                                          // so we read raw and decode by hand below instead.
+        net::WebSocketFrameParser frames; // unused for server frames, which are unmasked;
+                                          // they are read raw and decoded by hand below.
 
         [[nodiscard]] bool ConnectAndUpgrade(net::WebSocketServerGateway& gateway, u16 port)
         {
@@ -306,7 +306,7 @@ namespace
             (void)socket.Send(Span<const byte>{wire.Data(), wire.Size()});
         }
 
-        // Receive ONE unmasked server frame (blocking pump loop).
+        // Receive one unmasked server frame (blocking pump loop).
         [[nodiscard]] bool ReceiveBinary(net::WebSocketServerGateway& gateway,
                                          Array<byte>& outPayload)
         {
@@ -373,7 +373,7 @@ TEST_CASE("websocket: gateway - a client upgrades, exchanges binary frames, and 
     REQUIRE(connected);
     CHECK(gateway.ClientCount() == 1u);
 
-    // client -> gateway binary frame.
+    // Client to gateway binary frame.
     const Array<byte> hello = BytesOf(u8"hi server");
     client.SendBinary(Span<const byte>{hello.Data(), hello.Size()});
     bool received = false;
@@ -397,7 +397,7 @@ TEST_CASE("websocket: gateway - a client upgrades, exchanges binary frames, and 
     }
     REQUIRE(received);
 
-    // gateway -> client binary frame.
+    // Gateway to client binary frame.
     const Array<byte> reply = BytesOf(u8"hi browser");
     gateway.SendBinary(clientId, Span<const byte>{reply.Data(), reply.Size()});
     Array<byte> got;
@@ -474,7 +474,7 @@ TEST_CASE("websocket: hybrid socket - UDP and WS peers arrive as distinct datagr
     REQUIRE(hybrid.BoundPort() != 0u);
     REQUIRE(hybrid.WebSocketBoundPort() != 0u);
 
-    // A WS peer: upgrade, then a binary frame becomes a datagram with the WS endpoint bit.
+    // A WebSocket peer: upgrade, then a binary frame becomes a datagram with the WebSocket endpoint bit.
     WsTestClient browser;
     REQUIRE(browser.ConnectAndUpgrade(hybrid.Gateway(), hybrid.WebSocketBoundPort()));
     const Array<byte> wsMsg = BytesOf(u8"from-browser");
@@ -512,7 +512,7 @@ TEST_CASE("websocket: hybrid socket - UDP and WS peers arrive as distinct datagr
     REQUIRE(browser.ReceiveBinary(hybrid.Gateway(), browserGot));
     CHECK(browserGot.Size() == wsReply.Size());
 
-    // A UDP peer on the same socket keeps its normal endpoint (no WS bit).
+    // A UDP peer on the same socket keeps its normal endpoint (no WebSocket bit).
     net::UdpSocket udpPeer(0);
     REQUIRE(udpPeer.IsOpen());
     const Array<byte> udpMsg = BytesOf(u8"from-native");

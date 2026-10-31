@@ -1,11 +1,11 @@
-# Script mode (cmake -P): generate BuildStamp.cpp - the identity a running binary logs at
-# startup so a build can be told apart from a stale/cached one (browsers cache .wasm HARD;
-# the stamp is the ground truth for "am I running what I just built").
+# Script mode (cmake -P): generate BuildStamp.cpp, the identity a running binary logs at
+# startup so a build can be told apart from a stale or cached one (browsers cache .wasm hard,
+# and the stamp answers "am I running what I just built").
 #
-# Content: <git short hash>[-dirty.<fp8>] @ <generation time>. fp8 = a fingerprint over the
-# MODIFIED tracked files (path + mtime + size), so the stamp changes EXACTLY when source
-# changed - iterating a dirty tree refreshes it per edit, while true no-op rebuilds keep
-# the file byte-identical and nothing relinks.
+# Content: <git short hash>[-dirty.<fp8>] @ <generation time>, where fp8 is a fingerprint over
+# the modified tracked files (path, mtime and size), so the stamp changes exactly when source
+# changed: iterating a dirty tree refreshes it per edit, while true no-op rebuilds keep the
+# file byte-identical and nothing relinks.
 #
 # Inputs: -DOUT=<path to BuildStamp.cpp> -DSRC_ROOT=<repo root>
 
@@ -28,7 +28,7 @@ execute_process(
 
 set(SUFFIX "")
 if(NOT "${GIT_STATUS}" STREQUAL "")
-    # Fingerprint the modified set: path + mtime + size per entry.
+    # Fingerprint the modified set: path, mtime and size per entry.
     string(REPLACE "\n" ";" STATUS_LINES "${GIT_STATUS}")
     set(FP_INPUT "")
     foreach(LINE ${STATUS_LINES})

@@ -1,6 +1,6 @@
-// Flicker - a flame's light that will not hold still: its intensity wanders round what it was
-// authored at, two slow waves and a quick one, so a torch breathes rather than burns flat. Off (a
-// torch put out, Lamp.as) it stays off.
+// Flicker: makes a flame's light waver. Its intensity wanders around the authored value, following
+// two slow waves and a quick one, so a torch breathes rather than burns flat. A light that is off
+// (a torch put out through Lamp.as) stays off.
 class Flicker
 {
     private Entity@ self;
@@ -16,7 +16,7 @@ class Flicker
     void onStart()
     {
         m_base = LightComponent::of(self).intensity;
-        m_time = self.worldPosition().x * 1.7f + self.worldPosition().z * 0.9f; // each torch its own
+        m_time = self.worldPosition().x * 1.7f + self.worldPosition().z * 0.9f; // a different phase for each torch
     }
 
     void onUpdate(double dt)

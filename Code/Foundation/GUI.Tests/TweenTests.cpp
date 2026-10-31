@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - tweens (E14 of Specs/gui-lab-evolution-2.md): a property a sheet names moves over the
-// cascade on the GUI's clock, from the value underneath or a given start, through the same typed
-// values a transition moves (a number, a length, a colour, box shadows, a transform), and holds
-// its end until stopped, a sheet's later change leaving it be; a tween of the same property
-// replaces the running one from where it shows; delays, repeats, ping-pong and the callback at
-// the end; reflected properties move through their accessors; a paused GUI's tweens stand still,
-// and a destroyed node takes its tweens with it.
+// GUI - tweens. A property a sheet names moves over the cascade on the GUI's clock, from the value
+// underneath or a given start, through the same typed values a transition moves (a number, a
+// length, a colour, box shadows, a transform). It holds its end until stopped, and a later change
+// in the sheet leaves it alone. A tween of the same property replaces the running one from where
+// it shows. Also covered: delays, repeats, ping-pong and the callback at the end; reflected
+// properties moving through their accessors; a paused GUI's tweens standing still; and a
+// destroyed node taking its tweens with it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -20,7 +20,8 @@ namespace
 {
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
 
-    // A widget in a GUI styled by a sheet; a frame runs the clock, then the style pass, as a host does.
+    // A widget in a GUI styled by a sheet. A frame runs the clock, then the style pass, as a host
+    // does.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -62,12 +63,12 @@ TEST_CASE("tween: a sheet's property moves over the cascade from the value under
     bed.Frame(0.5);
     CHECK(bed.Red() == doctest::Approx(1.0f)); // held
 
-    // The sheet changes underneath: the tween's end still shows.
+    // The sheet changes underneath, and the tween's end still shows.
     bed.widget->AddClass(SV(u8"lit"));
     bed.Frame(0.1);
     CHECK(bed.Red() == doctest::Approx(1.0f));
     CHECK(bed.widget->GetBox().BackgroundColor.g == doctest::Approx(0.0f));
-    // Stopped: the property is the sheet's again.
+    // Once stopped, the property belongs to the sheet again.
     CHECK(bed.widget->StopAnimation(SV(u8"background-color")));
     bed.Frame(0.0);
     CHECK(bed.Red() == doctest::Approx(0.0f));
@@ -99,7 +100,7 @@ TEST_CASE("tween: a given start, the easing, and nothing to move from")
     Bed bed(u8"box { }");
     bed.widget->Animate(SV(u8"opacity"), SV(u8"1"), 1.0f, SV(u8"ease-in-quad"))->From(SV(u8"0"));
     bed.Frame(0.5);
-    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.25f)); // eased in: a quarter at half time
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.25f)); // eased in, so a quarter at half time
     // A property no sheet sets and with no start moves from its initial value (transparent).
     bed.widget->Animate(SV(u8"background-color"), SV(u8"#ff0000"), 1.0f, SV(u8"linear"));
     bed.Frame(0.5);
@@ -148,7 +149,8 @@ TEST_CASE("tween: a delay waits, repeats run again, ping-pong comes back, and th
     bed.Frame(1.0);
     CHECK(finished == 1);
 
-    // Forever: still running long after, and Cancel gives the property back.
+    // A tween that repeats forever is still running long after, and Cancel gives the property
+    // back.
     core::RefPtr<Tween> forever = bed.widget->Animate(SV(u8"opacity"), SV(u8"0"), 0.1f, SV(u8"linear"));
     forever->Repeat(-1);
     for (int i = 0; i < 40; ++i)
@@ -178,7 +180,7 @@ TEST_CASE("tween: a reflected property moves through its accessors, as code's")
     CHECK(label->GetX() == doctest::Approx(20.0f));
     bed.Frame(0.5);
     CHECK(slider->GetValue() == doctest::Approx(80.0f));
-    // A name nothing has: the tween ends at once, touching nothing.
+    // For a name nothing has, the tween ends at once and touches nothing.
     core::RefPtr<Tween> nothing = label->Animate(SV(u8"no-such-thing"), SV(u8"1"), 1.0f);
     bed.Frame(0.1);
     CHECK(nothing->IsDone());
@@ -214,7 +216,7 @@ TEST_CASE("tween: over a running transition, and a sheet transition after it end
     REQUIRE(bed.widget->GetAlpha() == doctest::Approx(0.75f));
     bed.widget->Animate(SV(u8"opacity"), SV(u8"1"), 0.5f, SV(u8"linear"))->From(SV(u8"0.5"));
     bed.Frame(0.25);
-    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.75f)); // the tween's, over the transition's 0.5
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.75f)); // the tween's value, over the transition's 0.5
     bed.Frame(0.25);
     CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f));
     bed.Frame(1.0); // the transition ended; the tween still holds
@@ -237,7 +239,7 @@ TEST_CASE("tween: a sequence runs its steps in order, each from where the last l
     bed.Frame(0.5);
     CHECK(bed.widget->GetAlpha() == doctest::Approx(0.5f));
     CHECK(bed.Red() == doctest::Approx(0.0f)); // not yet
-    bed.Frame(1.25); // the fade ends at 1.0, the call, the wait to 1.5, then 0.25 of the colour
+    bed.Frame(1.25); // the fade ends at 1.0, then the call, the wait to 1.5, and 0.25 of the colour
     CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
     REQUIRE(order.Size() == 1u);
     CHECK(bed.Red() == doctest::Approx(0.25f));
@@ -314,7 +316,7 @@ TEST_CASE("tween: a spring settles on its end; little damping overshoots and rin
     CHECK(finished == 1);
     CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f));
 
-    // Loose: past the end, then back under it.
+    // A loose spring goes past the end, then back under it.
     Bed loose(u8"box { width: 100; }");
     loose.widget->SpringTo(SV(u8"width"), SV(u8"200"), 300.0f, 4.0f);
     float most = 0.0f, leastAfter = 1000.0f;
@@ -351,7 +353,8 @@ TEST_CASE("tween: a spring retargeted mid-flight turns from where it is, with it
         bed.Frame(1.0 / 60.0);
     CHECK(bed.widget->GetSize().x == doctest::Approx(400.0f).epsilon(0.01));
 
-    // Toward a value of a different kind of distance (a colour): still continuous.
+    // Toward a value with a different kind of distance (a colour), the motion is still
+    // continuous.
     Bed colour(u8"box { background-color: #000000; }");
     colour.widget->SpringTo(SV(u8"background-color"), SV(u8"#ff0000"));
     for (int i = 0; i < 6; ++i)
@@ -385,7 +388,7 @@ TEST_CASE("tween: a spring moves a reflected property, and runs as a group's ste
     CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
 }
 
-// === A data value tweened (K3 of Specs/gui-lab-evolution-3.md) ===
+// === A data value tweened ===
 
 namespace
 {
@@ -475,7 +478,7 @@ TEST_CASE("tween: a data value a script set (a fraction's type) counts in whole 
 {
     DataBed bed;
     GUIContext& gui = bed.root->GetContext();
-    gui.GetData().Set(SV(u8"points"), core::Variant::From<core::f64>(0.0)); // as a script's numbers arrive
+    gui.GetData().Set(SV(u8"points"), core::Variant::From<core::f64>(0.0)); // a fraction, as a script's numbers arrive
     core::RefPtr<Tween> counting = gui.AnimateData(SV(u8"points"), 100.0, 1.0f, SV(u8"linear"));
     counting->Whole();
     for (int i = 0; i < 7; ++i)

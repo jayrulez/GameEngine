@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Render - foundation.render:mesh_renderer implementation unit (sec 3.2 / sec 10.6).
+// Render - foundation.render:mesh_renderer implementation unit.
 module;
 #include "Core/Prelude.h"
 
@@ -33,20 +33,20 @@ namespace foundation::render
     Status MeshRenderer::Initialize()
     {
 
-        // set 0: per-view UBO (ViewProj + camera + light range), dynamic offset, Vertex|Fragment;
-        // + the light list as a read-only StructuredBuffer (Fragment), bound whole.
+        // set 0: per-view UBO (ViewProj, camera, light range), dynamic offset, Vertex|Fragment;
+        // and the light list as a read-only StructuredBuffer (Fragment), bound whole.
         rhi::BindGroupLayoutEntry viewEntry = rhi::BindGroupLayoutEntry::UniformBuffer(
             0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment);
         viewEntry.hasDynamicOffset = true;
         rhi::BindGroupLayoutEntry lightEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
             0, rhi::ShaderStage::Fragment, /*readOnly*/ true,
             /*stride*/ sizeof(GpuLight)); // StructuredBuffer<GpuLight>
-        // Directional shadow map (t1) + comparison sampler (s0) live in set 0 (the bind-group budget
-        // is 4 SETS, not 4 bindings - shadows fold into the view set rather than needing a 5th set).
+        // Directional shadow map (t1) and comparison sampler (s0) live in set 0 (the bind-group budget
+        // is 4 sets, not 4 bindings, so shadows fold into the view set rather than needing a 5th set).
         rhi::BindGroupLayoutEntry shadowTexEntry = rhi::BindGroupLayoutEntry::SampledTexture(
             1, rhi::ShaderStage::Fragment, rhi::TextureViewDimension::Texture2DArray);
         shadowTexEntry.textureSampleType = rhi::TextureSampleType::Depth; // SampleCmp source
-        // Local-light (spot/point) shadow atlas (t2, Texture2D) + per-light shadow entries (t3, SRV).
+        // Local-light (spot and point) shadow atlas (t2, Texture2D) and per-light shadow entries (t3, SRV).
         rhi::BindGroupLayoutEntry atlasTexEntry = rhi::BindGroupLayoutEntry::SampledTexture(
             2, rhi::ShaderStage::Fragment, rhi::TextureViewDimension::Texture2DArray);
         atlasTexEntry.textureSampleType = rhi::TextureSampleType::Depth; // SampleCmp source
@@ -62,8 +62,8 @@ namespace foundation::render
         rhi::BindGroupLayoutEntry boneEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
             4, rhi::ShaderStage::Vertex, /*readOnly*/ true,
             /*stride*/ sizeof(Float4x4)); // StructuredBuffer<BoneMatrix> (4x float4)
-        // IBL folds into set 0 too: SH9 diffuse coeffs (t5, SRV), prefiltered specular cube
-        // (t6), BRDF LUT (t7), + a linear-clamp env sampler (s1, distinct from the comparison sampler s0).
+        // IBL folds into set 0 too: SH9 diffuse coefficients (t5, SRV), prefiltered specular cube
+        // (t6), BRDF LUT (t7) and a linear-clamp env sampler (s1, distinct from the comparison sampler s0).
         rhi::BindGroupLayoutEntry iblShEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
             5, rhi::ShaderStage::Fragment, /*readOnly*/ true,
             /*stride*/ 16); // StructuredBuffer<float4> IblSH
@@ -73,7 +73,7 @@ namespace foundation::render
             7, rhi::ShaderStage::Fragment, rhi::TextureViewDimension::Texture2D);
         rhi::BindGroupLayoutEntry envSampEntry =
             rhi::BindGroupLayoutEntry::Sampler(1, rhi::ShaderStage::Fragment);
-        // Reflection probes: a cube-ARRAY of local probe radiance (t8) + a probe metadata buffer (t9, SRV).
+        // Reflection probes: a cube array of local probe radiance (t8) and a probe metadata buffer (t9, SRV).
         rhi::BindGroupLayoutEntry probeEntry = rhi::BindGroupLayoutEntry::SampledTexture(
             8, rhi::ShaderStage::Fragment, rhi::TextureViewDimension::TextureCubeArray);
         rhi::BindGroupLayoutEntry probeBufEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
@@ -90,7 +90,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // set 1 (non-instanced): per-object UBO (World + Tint), dynamic offset.
+        // set 1 (non-instanced): per-object UBO (World, Tint), dynamic offset.
         rhi::BindGroupLayoutEntry objEntry =
             rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex);
         objEntry.hasDynamicOffset = true;
@@ -132,14 +132,14 @@ namespace foundation::render
             }
         }
 
-        // set 2 (material) is NOT a fixed renderer layout: it is derived per material from the
-        // material's own property list (materials::MaterialSystem::GetOrCreateLayout) and the forward
-        // pipeline layout is assembled per set-2 layout (GetOrCreatePipelineLayout). This is what makes
-        // the renderer truly material-driven - a custom shader (e.g. toon) with a different property set
-        // gets its own set-2 layout + PSO with zero renderer changes. The set-0/1/3 layouts below are
-        // the stable "frame contract" every material plugs into.
+        // set 2 (material) is not a fixed renderer layout: it is derived per material from the
+        // material's own property list (materials::MaterialSystem::GetOrCreateLayout), and the forward
+        // pipeline layout is assembled per set-2 layout (GetOrCreatePipelineLayout). A custom shader
+        // with a different property set therefore gets its own set-2 layout and PSO without renderer
+        // changes. The set 0, 1 and 3 layouts below are the stable frame contract every material
+        // plugs into.
 
-        // set 3: clustered light lists - per-cluster (offset,count) SRV (t0) + flat index SRV (t1).
+        // set 3: clustered light lists: per-cluster (offset, count) SRV (t0) and flat index SRV (t1).
         rhi::BindGroupLayoutEntry clOffEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
             0, rhi::ShaderStage::Fragment, /*readOnly*/ true,
             /*stride*/ 8); // StructuredBuffer<uint2> ClusterOffsets
@@ -154,12 +154,12 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Forward pipeline layouts (view + object/instance + material set-2 + cluster) are built
+        // Forward pipeline layouts (view, object or instance, material set 2, cluster) are built
         // on demand per material set-2 layout and cached in GetOrCreatePipelineLayout.
 
-        // Shadow depth-only path: a vertex-only shader + a 2-set pipeline layout
-        // (set 0 = light view UBO, set 1 = the SAME object/instance layouts as forward, so the
-        // object/instance bind groups are reused). No material/cluster sets. The view is the
+        // Shadow depth-only path: a vertex-only shader and a 2-set pipeline layout
+        // (set 0 the light view UBO, set 1 the same object and instance layouts as forward, so the
+        // object and instance bind groups are reused). No material or cluster sets. The view is the
         // pixel stage's too: a masked surface's depth and pick pixel stages run its Surface()
         // at the view's camera position and time (ShadowCamera and SceneTime, PickCamera and SceneTime).
         rhi::BindGroupLayoutEntry shadowViewEntry = rhi::BindGroupLayoutEntry::UniformBuffer(
@@ -217,7 +217,7 @@ namespace foundation::render
         m_activeProbeCube = has ? cubeArray : m_dummyProbeCubeView;
         m_activeProbeBuffer = has ? probeBuffer : m_dummyProbeBuffer;
         m_activeProbeCount =
-            has ? count : 0; // -> GpuView.probeCount (the forward's loop bound)
+            has ? count : 0; // becomes GpuView.probeCount (the forward's loop bound)
     }
 
     void MeshRenderer::UploadLocalShadows(Span<const GpuLocalShadow> shadows, u32 frameIndex)
@@ -280,12 +280,11 @@ namespace foundation::render
         {
             return;
         }
-        // Per-frame ring capacity: every pass that re-emits draws - the depth PREPASS + the forward,
-        // per-cascade CSM, per-spot-tile local atlas, probe faces, picks. Under-counting overflows the
-        // object/instance/offset rings -> Allocate() fails -> dropped draws (the prepass once went
-        // uncounted and the stress tests lost their spheres; sizing the shadow passes by the VIEW's
-        // draws let a block's off-camera casters starve the camera's own draws, so meshes vanished
-        // with their shadows still drawn, from wherever the camera saw few of them).
+        // Per-frame ring capacity covers every pass that re-emits draws: the depth prepass and the
+        // forward, each CSM cascade, each local-atlas tile, probe faces and picks. Under-counting
+        // overflows the object, instance and offset rings, Allocate() fails and draws are dropped.
+        // Shadow passes are sized by their casters, not the view's draws: off-camera casters would
+        // otherwise starve the camera's own draws, and meshes would vanish with their shadows drawn.
         const u32 drawCap = InstanceSlotsPerFrame(
             maxDraws, m_shadowCasterDraws, ShadowCascades::kCount + m_localShadowPassCount,
             m_captureFacePasses + m_pickPasses);
@@ -328,7 +327,7 @@ namespace foundation::render
     }
 
     // Grow the bone pool to hold `needed` matrices per frame: the next power of two, capped.
-    // Safe mid-frame ONLY here, before this frame's block is allocated: the ring has not mapped
+    // Safe mid-frame only here, before this frame's block is allocated: the ring has not mapped
     // yet (lazy), the old buffers retire through the queue, and the mirror's generation bump
     // makes every set-0 bind group rebuild at record time.
     bool MeshRenderer::GrowBonePool(u32 needed)
@@ -359,8 +358,8 @@ namespace foundation::render
         {
             return true;
         }
-        // Idle only when REPLACING a live buffer (first alloc has nothing to protect; a
-        // mid-frame wait on web pumps the event loop and drops the frame's submit).
+        // Idle only when replacing a live buffer (the first allocation has nothing to protect;
+        // a mid-frame wait on web pumps the event loop and drops the frame's submit).
         if (m_boneDevice != nullptr)
         {
             RetireOrDrainBuffer(m_boneDevice);
@@ -390,7 +389,7 @@ namespace foundation::render
         {
             return;
         }
-        UploadMultiMeshes(scenes); // ensure/upload the persistent instanced-mesh buffers (once per frame)
+        UploadMultiMeshes(scenes); // ensure and upload the persistent instanced-mesh buffers (once per frame)
         // One-time: bring the out-of-graph dummy depth textures into the layout their descriptors
         // expect, so they're never sampled while UNDEFINED on caster-less frames (VUID-09600).
         if (!m_dummyDepthInit)
@@ -405,7 +404,7 @@ namespace foundation::render
                 encoder.TransitionTexture(m_dummyAtlasTex, rhi::ResourceState::Undefined,
                                           rhi::ResourceState::DepthStencilRead);
             }
-            // IBL color fallbacks (cube + BRDF LUT) - also out-of-graph, sampled when no env is active.
+            // IBL color fallbacks (cube, BRDF LUT), also out of graph, sampled when no env is active.
             if (m_dummyCube != nullptr)
             {
                 encoder.TransitionTexture(m_dummyCube, rhi::ResourceState::Undefined,
@@ -423,10 +422,10 @@ namespace foundation::render
             }
             m_dummyDepthInit = true;
         }
-        // Pass 1: collect DISTINCT skinned instances (by boneMatrices ptr) across every scene of the
-        // frame. Total matrices = sum of 2*boneCount (current slab + previous slab). The map reserves
-        // the key so dups are skipped. All of them at once: the pool grows (if it must) before this
-        // frame's one block is allocated, the only time it may.
+        // Pass 1: collect distinct skinned instances (by boneMatrices pointer) across every scene of
+        // the frame. The total is the sum of 2*boneCount (current slab and previous slab). The map
+        // reserves the key so duplicates are skipped. All of them at once: the pool grows (if it must)
+        // before this frame's one block is allocated, the only time it may.
         u32 total = 0;
         for (const ExtractedScene* scene : scenes)
         for (RenderData* data : scene->Items())
@@ -434,7 +433,7 @@ namespace foundation::render
             if (data == nullptr || data->rendererId != RendererId())
             {
                 continue;
-            } // skip non-mesh (e.g. sprite) items
+            } // skip non-mesh items (sprites, for example)
             const auto* md = static_cast<const MeshRenderData*>(data);
             if (md->boneMatrices == nullptr || md->boneCount == 0)
             {
@@ -454,8 +453,8 @@ namespace foundation::render
                 SkinnedRef{md->boneMatrices, md->prevBoneMatrices, md->boneCount});
             total += md->boneCount * 2u;
         }
-        // Skinned-MultiMesh POSE POOLS: M palettes (poseCount * boneCount matrices) per crowd, uploaded once
-        // (no prev slab - crowd motion vectors are not produced). Each set's per-instance bone base is filled
+        // Skinned-MultiMesh pose pools: M palettes (poseCount * boneCount matrices) per crowd, uploaded once
+        // (no previous slab). Each set's per-instance bone base is filled
         // into its draw offsets buffer in FillSkinnedMultiMeshOffsets once the pool base is known.
         for (const ExtractedScene* scene : scenes)
         for (RenderData* data : scene->Items())
@@ -484,7 +483,7 @@ namespace foundation::render
             }
             m_boneStart.InsertOrAssign(mm->posePool, BoneSlot{});
             const u32 poolCount = mm->poseCount * mm->boneCount;
-            // cur + prev slab (per-bone motion vectors); prev == null falls back to cur (zero motion).
+            // current and previous slab (per-bone motion vectors); prev == null falls back to cur (zero motion).
             m_skinnedScratch.PushBack(
                 SkinnedRef{mm->posePool, mm->prevPosePool, poolCount, /*hasPrev*/ true});
             total += poolCount * 2u;
@@ -506,7 +505,7 @@ namespace foundation::render
             return;
         }
 
-        // Pass 2: write each distinct instance into the block (current then prev) + record its bases.
+        // Pass 2: write each distinct instance into the block (current, then previous) and record its bases.
         u32 cursor = 0; // matrix-units offset within the block
         for (const SkinnedRef& r : m_skinnedScratch)
         {
@@ -638,8 +637,8 @@ namespace foundation::render
     }
 
     // Replace-path release: retire the buffer through the frames-in-flight queue when
-    // wired (web-safe - no mid-frame WaitIdle pumping the browser event loop), else the
-    // classic drain. Nulls the pointer either way.
+    // wired (web-safe: no mid-frame WaitIdle pumping the browser event loop), otherwise
+    // drain. Nulls the pointer either way.
     void MeshRenderer::RetireOrDrainBuffer(rhi::Buffer*& buffer)
     {
         if (buffer == nullptr)
@@ -664,7 +663,7 @@ namespace foundation::render
         {
             return true;
         }
-        // An in-flight frame may still reference the old ramps: retire when wired, drain else.
+        // An in-flight frame may still reference the old ramps: retire when wired, otherwise drain.
         if (m_rampBuffer != nullptr)
         {
             RetireOrDrainBuffer(m_rampBuffer);
@@ -729,8 +728,8 @@ namespace foundation::render
 
         if (set->instanceBuf == nullptr || uploadCount > set->capacity)
         {
-            // An in-flight frame may still reference the old buffer/bind groups: retire
-            // when wired (web-safe), else drain once for the whole replacement.
+            // An in-flight frame may still reference the old buffer and bind groups: retire
+            // when wired (web-safe), otherwise drain once for the whole replacement.
             if (m_retire == nullptr &&
                 (set->instanceBuf != nullptr || set->instanceBG[0] != nullptr))
             {
@@ -793,7 +792,7 @@ namespace foundation::render
                 }
             }
             // A set-1 bind group per region (each over its own slice of the buffer, so the shader's
-            // Instances[i] indexes within the bound region - the shared static ramp / skinned offsets stay 0-based),
+            // Instances[i] indexes within the bound region; the shared static ramp and skinned offsets stay 0-based),
             // with that region's InstanceSet.
             bool ok = true;
             for (u32 r = 0; r < fif; ++r)
@@ -856,9 +855,9 @@ namespace foundation::render
             }
         }
 
-        // Each frame writes ONLY its own region while the GPU reads the previous one (hazard-free),
-        // and only when that region is behind the item: a new version (a static set thus writes
-        // once per region, a per-frame-dynamic set every frame) or a draw count above what the
+        // Each frame writes only its own region while the GPU reads the previous one (hazard-free),
+        // and only when that region is behind the item: a new version (so a static set writes
+        // once per region, a set that changes every frame writes every frame) or a draw count above what the
         // region was last written with (the tail would otherwise be stale bytes, per region).
         const bool behind = set->regionVersion[region] != mm.version ||
                             set->regionCount[region] < uploadCount;
@@ -878,8 +877,8 @@ namespace foundation::render
             }
         }
 
-        // Skinned crowds need a per-set draw offsets buffer (dynamic per-instance bone bases). Allocate/grow
-        // it here; it's FILLED in FillSkinnedMultiMeshOffsets once the pose pool's bone base is known.
+        // Skinned crowds need a per-set draw offsets buffer (dynamic per-instance bone bases). Allocate or
+        // grow it here; it is filled in FillSkinnedMultiMeshOffsets once the pose pool's bone base is known.
         set->skinned = (mm.posePool != nullptr && mm.poseCount > 0 && mm.boneCount > 0);
         if (set->skinned && (set->offsetsBuf == nullptr || mm.instanceCount > set->offsetsCapacity))
         {
@@ -892,8 +891,8 @@ namespace foundation::render
                 RetireOrDrainBuffer(set->pickOffsetsBuf);
             }
             rhi::BufferDesc od{};
-            // framesInFlight regions: the offsets are rewritten EVERY frame (dynamic bone bases), so each
-            // frame writes its own region while the GPU reads the previous frame's - never the same bytes.
+            // framesInFlight regions: the offsets are rewritten every frame (dynamic bone bases), so each
+            // frame writes its own region while the GPU reads the previous frame's, never the same bytes.
             od.size = static_cast<u64>(m_framesInFlight) * static_cast<u64>(mm.instanceCount) *
                       sizeof(GpuDrawOffsets);
             od.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
@@ -976,7 +975,7 @@ namespace foundation::render
 
     void MeshRenderer::FillSkinnedMultiMeshOffsets(const ExtractedScene& scene)
     {
-        const u32 region = m_frameIndex % m_framesInFlight; // this frame's FiF slot
+        const u32 region = m_frameIndex % m_framesInFlight; // this frame's frame-in-flight slot
         for (RenderData* data : scene.Items())
         {
             if (data == nullptr || data->rendererId != RendererId())
@@ -1005,7 +1004,7 @@ namespace foundation::render
             }
             const u32 base =
                 region *
-                set->offsetsCapacity; // write ONLY this frame's region (GPU reads the prev one)
+                set->offsetsCapacity; // write only this frame's region (the GPU reads the previous one)
             auto* od = static_cast<GpuDrawOffsets*>(set->offsetsBuf->Map());
             if (od == nullptr)
             {
@@ -1017,9 +1016,9 @@ namespace foundation::render
             const u32 M = mm->poseCount;
             for (u32 i = 0; i < mm->instanceCount; ++i)
             {
-                // Pick this instance's pose out of the M shared palettes per the caller's policy (pure,
-                // unit-tested in SelectPose). Exactly M palette evaluations regardless; the slot is stable
-                // per i across frames, so motion blur (prev pose) is unaffected.
+                // Pick this instance's pose out of the M shared palettes by the caller's policy (pure,
+                // unit-tested in SelectPose). There are M palette evaluations regardless; the slot is
+                // stable per i across frames, so motion blur (the previous pose) is unaffected.
                 const u32 pose = SelectPose(mm->poseAssignment, i, M, mm->poseIndices,
                                             mm->instanceClips != nullptr ? mm->instanceClips[i] : 0u,
                                             mm->posesPerClip);
@@ -1048,7 +1047,7 @@ namespace foundation::render
         {
             return;
         }
-        // This VIEW's set-0 group (its scene's IBL products; per-view slots - see the Ensure doc).
+        // This view's set-0 group (its scene's IBL products; per-view slots, see EnsureViewBindGroup).
         if (!EnsureViewBindGroup(ctx))
         {
             return;
@@ -1077,15 +1076,15 @@ namespace foundation::render
             }
         }
 
-        // Per-view UBO (shared by every draw in this call): ViewProj + camera + light range. The
+        // Per-view UBO (shared by every draw in this call): ViewProj, camera and light range. The
         // two pipeline layouts share set 0 (m_viewLayout), so the resolved binding is the same.
-        // The clustered light lists for this view (set 3). Empty binding -> dummy + ClusterGridX=0,
-        // which makes the shader fall back to looping all lights.
+        // The clustered light lists for this view (set 3). An empty binding gets the dummy and
+        // ClusterGridX=0, which makes the shader fall back to looping all lights.
         rhi::BindGroup* clusterBG = m_dummyClusterBG;
         if (ctx.cluster.Valid())
         {
-            // Per-(view, frame) slot - two views in one frame have different cluster buffers and
-            // must not share a bind group (else it thrashes / frees a set still in flight).
+            // Per-(view, frame) slot: two views in one frame have different cluster buffers and
+            // must not share a bind group, or it would be rebuilt and free a set still in flight.
             const u32 clusterSlot =
                 ctx.viewIndex * m_framesInFlight + (ctx.frameIndex % m_framesInFlight);
             clusterBG = EnsureClusterBindGroup(clusterSlot, ctx.cluster.offsets,
@@ -1107,17 +1106,17 @@ namespace foundation::render
         vd.ambient = ctx.ambient;
         const bool iblActive = ctx.ibl.valid && ctx.ibl.shBuffer != nullptr &&
                                ctx.ibl.prefilterView != nullptr && ctx.ibl.brdfView != nullptr;
-        vd.iblMaxLod = iblActive ? ctx.ibl.maxLod : -1.0f; // <0 => forward uses flat ambient
-        // Probes disabled during probe capture (ctx.probesEnabled=false) -> count 0 so metallics reflect the
-        // sky (global IBL), not the not-yet-built probe (which would bake them black - self-reflection).
-        // This view's SCENE's base into the Probes SRV (scenes' records are concatenated per frame) and its
+        vd.iblMaxLod = iblActive ? ctx.ibl.maxLod : -1.0f; // < 0: the forward uses flat ambient
+        // Probes are disabled during probe capture (ctx.probesEnabled=false), giving count 0, so metallics
+        // reflect the sky (global IBL) rather than the probe being built, which would bake them black.
+        // This view's scene's base into the Probes SRV (scenes' records are concatenated per frame) and its
         // count (the forward's loop bound); box, slice and the rest per probe live in the buffer.
         vd.probeBase = ctx.probeBase;
         vd.probeCount = ctx.probesEnabled ? ctx.probeCount : 0u;
 
         vd.lightCount = static_cast<f32>(lightCount);
         vd.lightOffset = lightOffset;
-        // CSM cascade data for THIS view (per-view fit, carried in ctx).
+        // CSM cascade data for this view (per-view fit, carried in ctx).
         if (ctx.cascades.valid)
         {
             for (u32 c = 0; c < ShadowCascades::kCount; ++c)
@@ -1133,17 +1132,17 @@ namespace foundation::render
             vd.cascadeLayerBase =
                 static_cast<f32>(ctx.cascadeLayerBase); // this view's first array layer
             // The caster light's own biases (its LightComponent, through DirectionalShadow): the
-            // normal offset in TEXELS (scaled by the cascade's world texel size in the shader), and
+            // normal offset in texels (scaled by the cascade's world texel size in the shader), and
             // the receiver's compare bias. Defaults: ShadowBiasDefaults.
             vd.shadowNormalBias = ctx.cascades.normalBias;
             vd.shadowDepthBias = ctx.cascades.depthBias;
             vd.shadowFarFade = ctx.cascades.farFade; // the scene's fade width at the reach
         }
-        // y = shadow-map sample uv.y sign. The shadow map rasterizes the same as the main color
+        // The shadow-map sample uv.y sign. The shadow map rasterizes the same as the main color
         // target, so on Y-flip targets (WebGPU, positive viewport) uv.y = +ndc.y*0.5+0.5; on
-        // Vulkan (negative-height viewport) it stays -ndc.y*0.5+0.5. Mirrors SkyPass's SceneYSign.
-        // OUTSIDE the cascades.valid block: SampleLocalShadow (spot/point tiles) uses this sign
-        // too, and local shadows exist without a valid directional CSM - the struct default (0)
+        // Vulkan (negative-height viewport) it stays -ndc.y*0.5+0.5. Matches SkyPass's SceneYSign.
+        // Set outside the cascades.valid block: SampleLocalShadow (spot and point tiles) uses this
+        // sign too, and local shadows exist without a valid directional CSM; the struct default (0)
         // would collapse every local lookup onto one atlas row.
         vd.shadowUvYSign = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
         vd.debugMode = static_cast<u32>(ctx.debugSemantic);
@@ -1151,7 +1150,7 @@ namespace foundation::render
         vd.iblSpecular = ctx.iblSpecularIntensity;
         vd.sceneTime = ctx.timeSeconds;
         vd.prevSceneTime = ctx.prevTimeSeconds; // the previous position sways at last frame's time
-        // Ring base + THIS view's scene's entry base (scenes' entries are concatenated per frame;
+        // Ring base plus this view's scene's entry base (scenes' entries are concatenated per frame;
         // lights carry scene-relative shadowIndex values).
         vd.localShadowBase = m_localShadowBase + ctx.localShadowEntryBase;
         if (ctx.cluster.Valid())
@@ -1177,7 +1176,7 @@ namespace foundation::render
         while (i < items.Size())
         {
             const auto* head = static_cast<const MeshRenderData*>(items[i].data);
-            // An instanced-mesh SET (MultiMesh): one item drawn N times from its persistent buffer, no
+            // An instanced-mesh set (MultiMesh): one item drawn N times from its persistent buffer, no
             // per-frame fill. Handled standalone (never merged into a neighbouring run).
             if (head->multiMesh)
             {
@@ -1194,7 +1193,7 @@ namespace foundation::render
             // collapse into one instanced draw, and a lone one draws by the single path, which carries
             // the same bones and fade per object.
             const bool headFaded = head->fade > 0.0f;
-            // Extend the run while mesh + material match (a batchable group), and the run's faded
+            // Extend the run while mesh and material match (a batchable group) and the run is faded
             // or solid as a whole: the two draw with different pipelines (DITHER). A mesh with
             // material overrides draws alone, with instances of its own.
             usize j = i + 1;
@@ -1281,15 +1280,15 @@ namespace foundation::render
         while (i < items.Size())
         {
             // Ours only: dispatchers group runs by rendererId, but a foreign item (a terrain
-            // item in a mixed Opaque run - the PIE-start type-confusion class) downcast to
-            // MeshRenderData is silent UB. Gate hard, like the terrain resolver.
+            // item in a mixed Opaque run) downcast to MeshRenderData is silent UB. Skip it,
+            // as the terrain resolver does.
             if (items[i].data->rendererId != RendererId())
             {
                 ++i;
                 continue;
             }
             const auto* head = static_cast<const MeshRenderData*>(items[i].data);
-            // MultiMesh caster: one set, drawn N times from its persistent buffer + the shared ramp,
+            // MultiMesh caster: one set, drawn N times from its persistent buffer and the shared ramp,
             // shared across the depth prepass and every shadow cascade (no per-cascade fill).
             if (head->multiMesh)
             {
@@ -1341,10 +1340,10 @@ namespace foundation::render
         m_instanceRing.EndFrame();
         m_boneRing.EndFrame();
         m_offsetsRing.EndFrame();
-        // This frame's world matrices become next frame's "previous" (motion vectors). Flat swap: O(1)
-        // pointer moves, no clear - each visible entity overwrites its own slot when resolved, and slots
-        // for now-invisible entities are never read (their draws don't resolve). Both buffers keep their
-        // capacity, so steady state does zero allocation.
+        // This frame's world matrices become next frame's "previous" (motion vectors). A flat swap: O(1)
+        // pointer moves and no clear. Each visible entity overwrites its own slot when resolved, and slots
+        // of entities no longer visible are never read (their draws don't resolve). Both buffers keep their
+        // capacity, so the steady state does no allocation.
         Array<Float4x4> recycled = Move(m_prevWorld);
         m_prevWorld = Move(m_curWorld);
         m_curWorld = Move(recycled);
@@ -1358,7 +1357,7 @@ namespace foundation::render
         materials::Material* mat = (md.material != nullptr) ? md.material : m_defaultMaterial.Get();
         materials::PipelineConfig config = ConfigFor(md, ctx, /*instanced*/ false);
 
-        // GPU skinning: a skinned mesh draws the SKINNED + SkinnedMesh-layout permutation, binds the
+        // GPU skinning: a skinned mesh draws the SKINNED permutation with the SkinnedMesh layout, binds the
         // skin stream (buffer 1), and reads its bones from the shared device pool at boneBase (matrix
         // units, computed once this frame by UploadSkinning). No per-pass upload here.
         u32 boneBase = 0, prevBoneBase = 0;
@@ -1377,7 +1376,7 @@ namespace foundation::render
             else
             {
                 skinned =
-                    false; // not uploaded (pool overflow) -> draw bind pose rather than garbage
+                    false; // not uploaded (pool overflow): draw the bind pose rather than garbage
             }
         }
 
@@ -1395,7 +1394,7 @@ namespace foundation::render
         od.fade = md.fade;
         *static_cast<GpuObject*>(obj.ptr) = od;
 
-        // Shared per-submesh draw state (view/object/cluster sets + vertex/index buffers + skinning).
+        // Shared per-submesh draw state (view, object and cluster sets, vertex and index buffers, skinning).
         ResolvedDraw base{};
         base.viewSet = m_viewBG;
         base.viewOffset = viewOffset;
@@ -1415,7 +1414,7 @@ namespace foundation::render
         base.indexFormat = mesh.indexFormat;
         base.instanceCount = 1;
 
-        // Emit one draw for an index sub-range with `m`'s material (set 2 = its data-driven bind group),
+        // Emit one draw for an index sub-range with `m`'s material (set 2 is its data-driven bind group),
         // the mesh's own instance of it when the mesh overrides properties in that `slot`.
         const auto emit = [&](materials::Material* m, u32 slot, u64 indexOffset, u32 indexCount)
         {
@@ -1440,8 +1439,8 @@ namespace foundation::render
             out.PushBack(d);
         };
 
-        // Multi-material: draw each submesh with its own material; else one draw for the whole
-        // mesh. A LOD chain routes BOTH branches through the selected level's submesh table -
+        // Multi-material: draw each submesh with its own material; otherwise one draw for the whole
+        // mesh. A LOD chain routes both branches through the selected level's submesh table, since
         // the whole-buffer fast path would draw every level's concatenated indices at once.
         const bool hasChain = md.mesh != nullptr && md.mesh->lodCount > 1;
         if (md.mesh != nullptr && !md.mesh->subMeshes.IsEmpty() &&
@@ -1481,8 +1480,8 @@ namespace foundation::render
         materials::Material* mat =
             (head.material != nullptr) ? head.material : m_defaultMaterial.Get();
         materials::PipelineConfig config = ConfigFor(head, ctx, /*instanced*/ true);
-        // Skinned instanced draw: the shared skin stream (joints/weights) is per-mesh; each instance's
-        // bone base rides in GpuDrawOffsets::boneBase (current) / prevBoneBase so one draw skins N characters.
+        // Skinned instanced draw: the shared skin stream (joints, weights) is per mesh; each instance's
+        // bone base rides in GpuDrawOffsets::boneBase (current) and prevBoneBase, so one draw skins N characters.
         const bool skinned = head.boneMatrices != nullptr && head.mesh != nullptr &&
                              head.mesh->IsSkinned() && mesh.skinBuffer != nullptr;
         if (skinned)
@@ -1490,8 +1489,8 @@ namespace foundation::render
             config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
             config.shaderFlags |= shaders::ShaderFlags::Skinned;
         }
-        // The camera depth prepass already filled this group's InstanceData + draw offsets (identical objects,
-        // same order) and cached the range - REUSE it instead of allocating + re-filling (build once). Falls
+        // The camera depth prepass already filled this group's InstanceData and draw offsets (identical objects,
+        // same order) and cached the range; reuse it instead of allocating and filling again. Falls
         // back to a fresh fill on a miss (no prepass, count mismatch, or ring exhausted). A faded run is
         // never prepassed, and a solid group of the same mesh and material must not lend it its range.
         const bool faded = head.fade > 0.0f;
@@ -1533,7 +1532,7 @@ namespace foundation::render
             offsByteOffset = offs.byteOffset;
         }
 
-        // Shared per-submesh draw state (view/instances/cluster sets + vertex/index buffers + skinning).
+        // Shared per-submesh draw state (view, instance and cluster sets, vertex and index buffers, skinning).
         ResolvedDraw base{};
         base.viewSet = m_viewBG;
         base.viewOffset = viewOffset;
@@ -1559,7 +1558,7 @@ namespace foundation::render
         base.indexFormat = mesh.indexFormat;
         base.instanceCount = count;
 
-        // Emit one instanced draw for an index sub-range with `m`'s material (set 2 = its bind group).
+        // Emit one instanced draw for an index sub-range with `m`'s material (set 2 is its bind group).
         const auto emit = [&](materials::Material* m, u64 indexOffset, u32 indexCount)
         {
             materials::Material* use = (m != nullptr) ? m : mat;
@@ -1583,9 +1582,9 @@ namespace foundation::render
             out.PushBack(d);
         };
 
-        // Multi-material: one instanced draw per submesh (its own material + index range); else
-        // one draw. A LOD chain selects ONE level for the whole batch from the head's bounds
-        // (per-set/per-batch selection, not per-instance LOD).
+        // Multi-material: one instanced draw per submesh (its own material and index range); otherwise
+        // one draw. A LOD chain selects one level for the whole batch from the head's bounds
+        // (per-batch selection, not per-instance LOD).
         const bool hasChain = head.mesh != nullptr && head.mesh->lodCount > 1;
         if (head.mesh != nullptr && !head.mesh->subMeshes.IsEmpty() &&
             (head.submeshMaterialCount > 0 || hasChain))
@@ -1670,7 +1669,7 @@ namespace foundation::render
         od.prevWorld = md.world; // depth pass ignores prevWorld
         od.tint = md.color;
         od.boneBase = boneBase;
-        od.pickIndex = EntityTag::Index(md.entityId) + 1u; // pick pass: 0 = nothing
+        od.pickIndex = EntityTag::Index(md.entityId) + 1u; // pick pass: 0 is nothing
         od.pickGeneration = EntityTag::Generation(md.entityId);
         *static_cast<GpuObject*>(obj.ptr) = od;
 
@@ -1762,9 +1761,9 @@ namespace foundation::render
         // pick-private, never shared with the forward, which reads the previous bone base from z.
         GpuDrawOffsets* od = static_cast<GpuDrawOffsets*>(offs.ptr);
         GpuPickDrawOffsets* pickOd = static_cast<GpuPickDrawOffsets*>(offs.ptr);
-        // When this prepass feeds the forward (camera depth prepass, fillInstanceCache), build the FULL
-        // InstanceData incl. REAL prevWorld so the forward can reuse it for motion vectors. Shadow casters
-        // leave prevWorld = world (the depth/shadow shaders ignore it - no extra prev-world lookup).
+        // When this prepass feeds the forward (camera depth prepass, fillInstanceCache), build the full
+        // InstanceData, including the real prevWorld, so the forward can reuse it for motion vectors. Shadow
+        // casters leave prevWorld = world (the depth and shadow shaders ignore it, so skip the lookup).
         const bool feedsForward = ctx.fillInstanceCache;
         for (u32 k = 0; k < count; ++k)
         {
@@ -1853,7 +1852,7 @@ namespace foundation::render
         {
             return;
         }
-        // Skinned crowd: per-instance bone base in the set's own draw offsets buffer (+ the skin stream);
+        // Skinned crowd: per-instance bone base in the set's own draw offsets buffer (and the skin stream);
         // static: the shared [i,0,0,0] ramp. A skinned set falls back to static if its skin data is missing.
         const bool skinned =
             set->skinned && set->offsetsBuf != nullptr && mesh.skinBuffer != nullptr;
@@ -1918,7 +1917,7 @@ namespace foundation::render
             out.PushBack(d);
         };
 
-        // A LOD chain selects one level for the whole set (merged bounds - spec v1).
+        // A LOD chain selects one level for the whole set (from its merged bounds).
         const bool hasChain = mm.mesh != nullptr && mm.mesh->lodCount > 1;
         if (mm.mesh != nullptr && !mm.mesh->subMeshes.IsEmpty() &&
             (mm.submeshMaterialCount > 0 || hasChain))
@@ -2084,7 +2083,7 @@ namespace foundation::render
         {
             c.shaderFlags |= shaders::ShaderFlags::Instanced;
         }
-        // Masked casters run the alpha-test fragment (samples cutout alpha -> discard) so their shadows
+        // Masked casters run the alpha-test fragment (it samples cutout alpha and discards) so their shadows
         // have holes; opaque casters stay vertex-only (depthOnly, no fragment).
         c.depthOnly = !masked;
         c.colorTargetCount = 0;
@@ -2093,24 +2092,23 @@ namespace foundation::render
             c.shaderFlags |= shaders::ShaderFlags::AlphaTest;
         }
         c.depthFormat = ctx.depthFormat;
-        // Scene-pass MSAA: ONLY the camera depth prepass is multisampled (its depth must
+        // Scene-pass MSAA: only the camera depth prepass is multisampled (its depth must
         // match the MSAA forward for early-Z). Shadow-map passes (ctx.depthPrepass == false) stay
-        // single-sample - shadows are not multisampled.
+        // single-sample; shadows are not multisampled.
         c.sampleCount = ctx.depthPrepass ? ctx.sampleCount : static_cast<u8>(1);
         c.depthMode = materials::DepthMode::ReadWrite;
         c.depthCompare = rhi::depth::Nearer();
-        // Render FRONT faces into the shadow map (cull back) - matches Sedulous (ShadowPipeline: .Back)
-        // and is the conventional default: flat/architectural casters get tight contacts. CURVED casters
-        // (spheres) keep a small grazing-contact gap inherent to shadow maps; the general fix is a later
-        // contact/screen-space shadow pass, not a cull-mode or bias change (back-face culling only trades
-        // the gap onto flat casters, which are far more common).
+        // Render front faces into the shadow map (cull back), the conventional default: flat and
+        // architectural casters get tight contacts. Curved casters (spheres) keep a small grazing-contact
+        // gap inherent to shadow maps; a contact or screen-space shadow pass would close it, where a
+        // cull-mode or bias change only moves the gap onto flat casters, which are far more common.
         c.cullMode = materials::CullModeConfig::Back;
-        // Hardware depth bias (ported from Sedulous): a constant offset + a slope-scaled term, applied
-        // in shadow-map depth space (so it adds little visible spatial gap, unlike the normal-offset).
-        // Pairs with the receiver-side (1 - NdotL) normal-offset bias in forward.frag for acne control.
-        // The camera depth PREPASS must NOT bias - its depth has to equal the forward pass's exactly so
-        // the NearerOrEqual early-Z accepts the re-drawn opaque fragments (bias would z-fight / reject
-        // them). The bias pushes casters AWAY from the light; its sign follows the depth convention.
+        // Hardware depth bias: a constant offset and a slope-scaled term, applied in shadow-map depth
+        // space (so it adds little visible spatial gap, unlike the normal offset). Pairs with the
+        // receiver-side (1 - NdotL) normal-offset bias in lighting.hlsli for acne control. The camera
+        // depth prepass must not bias: its depth has to equal the forward pass's exactly so the
+        // NearerOrEqual early-Z accepts the redrawn opaque fragments (a bias would reject them). The
+        // bias pushes casters away from the light; its sign follows the depth convention.
         if (!ctx.depthPrepass)
         {
             c.depthBias = static_cast<i16>(rhi::depth::BiasAwayFromViewer(50));
@@ -2187,9 +2185,9 @@ namespace foundation::render
         materials::PipelineConfig config =
             (material != nullptr) ? material->pipeline : materials::PipelineConfig::ForOpaqueMesh(u8"forward");
         config.depthFormat = ctx.depthFormat;
-        // Scene-pass MSAA: the opaque pass records at the view's count (ctx set it), the
-        // transparent pass at 1 - so the forward mesh PSO matches its pass's MSAA attachments. Shadow
-        // PSOs use ShadowConfigFor (unaffected - shadows stay single-sample).
+        // Scene-pass MSAA: the opaque pass records at the view's count (set in ctx) and the
+        // transparent pass at 1, so the forward mesh PSO matches its pass's MSAA attachments. Shadow
+        // PSOs use ShadowConfigFor and are unaffected; shadows stay single-sample.
         config.sampleCount = ctx.sampleCount;
         config.instanced = instanced;
         if (instanced)
@@ -2201,9 +2199,9 @@ namespace foundation::render
         {
             config.shaderFlags |= shaders::ShaderFlags::Dither; // the screen-door fade (a cutaway)
         }
-        // Opaque + masked render the MRT G-buffer pass: target 0 = shaded color (format overridden
-        // per-view at build); targets 1/2 = view-space normal + motion vector, 3 = roughness/metallic,
-        // 4 = diffuse albedo (the GBUFFER permutation writes them). Transparent renders a separate
+        // Opaque and masked render the MRT G-buffer pass: target 0 is the shaded color (format overridden
+        // per view at build); targets 1 and 2 the view-space normal and motion vector, 3 roughness and
+        // metallic, 4 diffuse albedo (the GBUFFER permutation writes them). Transparent renders a separate
         // color-only pass, so it stays single-target.
         const bool gbuffer = (config.blendMode == materials::BlendMode::Opaque ||
                               config.blendMode == materials::BlendMode::Masked);
@@ -2212,7 +2210,7 @@ namespace foundation::render
             config.colorTargetCount = 5;
             config.colorFormats[1] = kGNormalFormat;
             config.colorFormats[2] = kGVelocityFormat;
-            config.colorFormats[3] = kGMaterialFormat; // SSR: roughness/metallic
+            config.colorFormats[3] = kGMaterialFormat; // SSR: roughness and metallic
             config.colorFormats[4] = kGAlbedoFormat;   // SSGI: diffuse albedo
             config.shaderFlags |= shaders::ShaderFlags::GBuffer;
             // Equal-depth fragments from the depth prepass must pass (early-Z shades each opaque pixel once).
@@ -2294,7 +2292,7 @@ namespace foundation::render
     materials::MaterialInstance* MeshRenderer::InstanceFor(materials::Material* material)
     {
         // Keyed by the material's UID, never its pointer: a hot-reloaded material can
-        // reallocate at the freed address and would silently reuse the STALE instance
+        // reallocate at the freed address and would silently reuse the stale instance
         // (whose bind group references destroyed texture views).
         if (materials::MaterialInstance** found = m_instances.Find(material->uid))
         {
@@ -2483,7 +2481,7 @@ namespace foundation::render
                 RetireBuffer(m_materials->DetachUniformBuffer(inst));
                 RetireEffectBuffers(*inst);
                 m_instances.Remove(material->uid);
-                continue; // UniquePtr slot dropped -> instance destroyed (bg already detached)
+                continue; // dropping the UniquePtr slot destroys the instance (bind group already detached)
             }
             if (w != i)
             {
@@ -2586,7 +2584,7 @@ namespace foundation::render
         {
             m_activeProbeBuffer = m_dummyProbeBuffer;
         }
-        // This view's SCENE's IBL products (dummies when IBL is off/unavailable).
+        // This view's scene's IBL products (dummies when IBL is off or unavailable).
         const bool iblActive = ctx.ibl.valid && ctx.ibl.shBuffer != nullptr &&
                                ctx.ibl.prefilterView != nullptr && ctx.ibl.brdfView != nullptr;
         rhi::Buffer* sh = iblActive ? ctx.ibl.shBuffer : m_dummyShBuffer;
@@ -2705,7 +2703,7 @@ namespace foundation::render
         }
         m_activeShadowView = m_dummyShadowView;
 
-        // A 1x1 Texture2D dummy for the local-shadow atlas (t2) + a 1-element dummy data buffer (t3),
+        // A 1x1 Texture2D dummy for the local-shadow atlas (t2) and a 1-element dummy data buffer (t3),
         // bound when no local shadow caster exists this frame (the descriptor set stays complete).
         rhi::TextureDesc atd{};
         atd.format = rhi::TextureFormat::Depth32Float;
@@ -2729,9 +2727,9 @@ namespace foundation::render
         }
         m_activeAtlasView = m_dummyAtlasView;
 
-        // IBL fallbacks (bound when no environment is active): a zero-filled SH9 buffer (=> no diffuse
+        // IBL fallbacks (bound when no environment is active): a zero-filled SH9 buffer (no diffuse
         // ambient), a 1x1x6 black cube (prefilter), a 1x1 black BRDF LUT, and a linear-clamp env
-        // sampler. The color dummies transition UNDEFINED->ShaderRead once (with the depth dummies).
+        // sampler. The color dummies transition from UNDEFINED to ShaderRead once (with the depth dummies).
         rhi::SamplerDesc es{};
         es.minFilter = rhi::FilterMode::Linear;
         es.magFilter = rhi::FilterMode::Linear;
@@ -2793,7 +2791,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Dummy probe cube-ARRAY (6 layers = 1 cube) bound when no probe is active - count 0 keeps the
+        // Dummy probe cube array (6 layers, 1 cube) bound when no probe is active; count 0 keeps the
         // forward on the global IBL reflection, so the content is irrelevant.
         rhi::TextureDesc pcd{};
         pcd.format = rhi::TextureFormat::RGBA16Float;
@@ -2814,7 +2812,7 @@ namespace foundation::render
         {
             return Status{ErrorCode::Unknown};
         }
-        // Dummy probe-metadata buffer (t9) for the no-probe path - never read (count 0), just a valid SRV.
+        // Dummy probe-metadata buffer (t9) for the no-probe path: never read (count 0), just a valid SRV.
         rhi::BufferDesc pbd{};
         pbd.size = kProbeBufferBytes;
         pbd.usage = rhi::BufferUsage::Storage;
@@ -2846,8 +2844,8 @@ namespace foundation::render
             return false;
         }
         rhi::BindGroupEntry be[] = {
-            // Range = the larger of the two layouts that read this slot: ShadowView (80) and the
-            // pick pass's PickView (80). WebGPU validates the bound size against the shader's
+            // The range is the larger of the two layouts that read this slot: ShadowView (96) and
+            // the pick pass's PickView (96). WebGPU validates the bound size against the shader's
             // declared cbuffer, so the range must cover both; the slot (256) has room.
             rhi::BindGroupEntry::BufferEntry(buf, 0, Max(sizeof(GpuPickView), sizeof(GpuShadowView))),
             rhi::BindGroupEntry::BufferEntry(boneBuf, 0,
@@ -2888,7 +2886,7 @@ namespace foundation::render
         }
         // Zero-initialize dummy cluster buffers. DX12 default-heap buffers have undefined
         // contents; the forward shader reads ClusterOffsets[].y as a loop count, so garbage
-        // data causes an infinite GPU loop (TDR). Vulkan zero-initializes by luck.
+        // data causes an infinite GPU loop (TDR). Vulkan happens to zero-initialize.
         {
             rhi::Queue* q = m_device->GetQueue(rhi::QueueType::Graphics);
             rhi::TransferBatch* batch = nullptr;
@@ -2955,7 +2953,7 @@ namespace foundation::render
     void MeshRenderer::Shutdown()
     {
         // Release material instances first (their dtors notify the still-live MaterialSystem, which
-        // owns + destroys their data-driven bind groups). The default material's RefPtr then drops.
+        // owns and destroys their data-driven bind groups). The default material's RefPtr then drops.
         m_overrideInstances.Clear();
         m_instances.Clear();
         m_instanceStorage.Clear();
@@ -2980,7 +2978,7 @@ namespace foundation::render
             }
         }
         m_viewBGs.Clear();
-        m_viewBG = nullptr; // borrowed from a slot - already destroyed above
+        m_viewBG = nullptr; // borrowed from a slot, already destroyed above
         if (m_shadowViewBG)
         {
             m_device->DestroyBindGroup(m_shadowViewBG);
@@ -3077,7 +3075,7 @@ namespace foundation::render
             m_device->DestroyBindGroup(m_instanceBG);
             m_instanceBG = nullptr;
         }
-        // MultiMesh persistent per-set buffers/bind groups + the shared ramp.
+        // MultiMesh persistent per-set buffers and bind groups, and the shared ramp.
         for (auto& kv : m_multiMeshSets)
         {
             for (u32 r = 0; r < kMultiMeshMaxFiF; ++r)
@@ -3213,10 +3211,9 @@ namespace foundation::render
         return k;
     }
 
-    // The mesh-facing selection trio are THIN ADAPTERS over Foundation::Lod (the dedicated
-    // RHI-free LOD-math leaf - user ruling 2026-08-23: LOD is a domain concept core math
-    // must not know about) so foundation.terrain's chunk LOD and any headless consumer
-    // share the exact formula. See the terrain-doc layering ruling.
+    // The three mesh-facing selection functions are thin adapters over Foundation::Lod, the
+    // RHI-free LOD-math library (LOD is a domain concept core math does not know about), so
+    // foundation.terrain's chunk LOD and any headless consumer share the same formula.
     namespace
     {
         [[nodiscard]] Span<const f32> MeshThresholds(const geometry::StaticMesh& mesh)
@@ -3266,7 +3263,7 @@ namespace foundation::render
         }
         if (ctx.view == nullptr)
         {
-            // Camera-independent pass (local-shadow tiles): the COARSEST level - shadows
+            // Camera-independent pass (local-shadow tiles): the coarsest level, since shadows
             // never render finer than any view shows. Cascades pass their
             // owning view instead and share that view's selection memory.
             return maxLod;
@@ -3274,8 +3271,8 @@ namespace foundation::render
         const f32 coverage =
             LodCoverageFor(ctx.view->Camera(), md.worldCenter, md.worldRadius, md.lodBias);
         u32 sel = PickLodLevel(*mesh, coverage);
-        // Keyed per (view pointer, item) - entityId when there is one, else the mesh uid
-        // (page-local previews). Persisted across frames; that is what hysteresis needs.
+        // Keyed per (view pointer, item): entityId when there is one, else the mesh uid
+        // (page-local previews). Kept across frames, as hysteresis needs.
         const u64 itemId = (md.entityId != 0) ? md.entityId : mesh->uid;
         u64 key = kFnv1a64OffsetBasis; // FNV-1a
         key = (key ^ static_cast<u64>(reinterpret_cast<usize>(ctx.view))) * kFnv1a64Prime;
@@ -3286,7 +3283,7 @@ namespace foundation::render
         }
         if (m_lodLast.Size() > 65536)
         {
-            m_lodLast.Clear(); // bounded memory; worst case one unhysteresed frame
+            m_lodLast.Clear(); // bounded memory; at worst one frame without hysteresis
         }
         m_lodLast.InsertOrAssign(key, sel);
         return sel;

@@ -1,4 +1,4 @@
-# Pipeline::ModelImporter unit tests (doctest; loads a real glTF + cooks into a content DB - no GPU).
+# Pipeline::ModelImporter unit tests (doctest; loads a real glTF and cooks it into a content DB, no GPU).
 
 add_executable(ModelImporter.Tests
     TestsMain.cpp

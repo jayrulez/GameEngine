@@ -1,5 +1,5 @@
 add_executable(Mcp.Script.Tests TestsMain.cpp ScriptToolsTests.cpp)
-# Links whichever backend(s) are enabled - the test registers the first available one.
+# Links whichever backends are enabled; the test registers the first available one.
 target_link_libraries(Mcp.Script.Tests PRIVATE
     Foundation::Mcp.Script ${SCRIPTLIB_ANGELSCRIPT} ${SCRIPTLIB_LUAU}
     doctest::doctest)

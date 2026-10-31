@@ -4,10 +4,10 @@
 // Runtime - :plugin partition
 //
 // IRuntimePlugin: a unit of engine functionality delivered separately from the
-// core executable. A plugin registers its subsystems/services into the SubsystemManager
+// core executable. A plugin registers its subsystems and services into the SubsystemManager
 // on load and removes them on unload. Plugins may be linked statically (handed
 // to PluginHost::Add) or loaded from a shared library at runtime
-// (PluginHost::Load). Plugins own the subsystems they register - they register
+// (PluginHost::Load). Plugins own the subsystems they register: they register
 // them non-owningly via SubsystemManager::RegisterSubsystem and tear them down in
 // OnUnload, before the backing library is closed.
 
@@ -42,7 +42,7 @@ export namespace foundation::runtime
     // Signature of the factory a dynamically-loaded plugin library must export
     // under the C name in CreatePluginSymbol. It returns a plugin instance owned
     // by the library (typically a function-local static); the host never frees
-    // it - it closes the library after OnUnload.
+    // it, and closes the library after OnUnload.
     using CreatePluginFn = IRuntimePlugin* (*)();
 
     // The exported symbol name PluginHost::Load resolves in a plugin library.

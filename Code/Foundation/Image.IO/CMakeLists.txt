@@ -6,9 +6,10 @@ target_sources(Image.IO
     PRIVATE stb_impl.cpp)
 target_compile_options(Image.IO PRIVATE
     "$<$<CXX_COMPILER_ID:Clang,GNU>:-Wno-error=missing-field-initializers;-Wno-error=unused-function;-Wno-error=unused-but-set-variable;-Wno-error=sign-compare;-Wno-error=implicit-fallthrough;-Wno-error=type-limits>")
-# The stb decoders run optimised in EVERY configuration (not MSVC: /O2 fights the Debug runtime
-# checks): a Debug editor decodes 4k JPEGs on import and cook, and stb at -O0 takes seconds per
-# file (2026-09-23). The module unit stays at the build's level - only the vendored bodies.
+# The stb decoders run optimised in every configuration (except under MSVC, where /O2 conflicts with
+# the Debug runtime checks): a Debug editor decodes 4k JPEGs on import and cook, and stb at -O0
+# takes seconds per file. Only the vendored bodies are optimised; the module unit stays at the
+# build's level.
 if(NOT MSVC)
     set_source_files_properties(stb_impl.cpp PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Debug>:-O2>")
 endif()

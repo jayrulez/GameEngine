@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Script.Facades - implementation unit: the REFLECT_* bodies (they
-// never sit in a module interface unit - the GCC gcm-cluster rule).
+// Foundation::Script.Facades - implementation unit: the REFLECT_* bodies, which never
+// sit in a module interface unit (a GCC modules constraint).
 
 module;
 #include "Core/Prelude.h"
@@ -59,7 +59,7 @@ namespace foundation::script
         builder.Method<&Entity::localTransform>("localTransform");
         builder.Method<&Entity::setLocalTransform>("setLocalTransform", {"transform"});
         builder.Method<&Entity::destroy>("destroy");
-        // Identity and the hierarchy, as Sedulous's Entity.
+        // Identity and the hierarchy.
         builder.Method<&Entity::id>("id");
         builder.Method<&Entity::parent>("parent");
         builder.Method<&Entity::firstChild>("firstChild");
@@ -76,9 +76,9 @@ namespace foundation::script
         // A computed property (parens-less): `entity.scene` reads its bound Scene. Not a
         // method, so scripts write `entity.scene.find(...)` without call parens.
         builder.ComputedProperty<&Entity::sceneHandle>("scene");
-        // send - ONE conceptual method as an ARITY FAMILY: send(name) and
-        // send(name, payload:Variant), dispatched by argument count. The Variant carries any script
-        // value onto the StringHash+Variant bus (the honest payload type).
+        // send is one method as an arity family: send(name) and send(name, payload:Variant),
+        // dispatched by argument count. The Variant carries any script value onto the bus, which
+        // is StringHash and Variant underneath.
         builder.Method<static_cast<void (Entity::*)(String) const>(&Entity::send)>("send");
         builder.Method<static_cast<void (Entity::*)(String, Variant) const>(&Entity::send)>(
             "send", {"name", "payload"});
@@ -106,7 +106,7 @@ namespace foundation::script
         builder.Method<&Random::range>("range");
         builder.Method<&Random::intRange>("intRange");
         builder.Method<&Random::seed>("seed", {"seed"});
-        // Sedulous's Random.Bool; lowercase `bool` is a keyword in AngelScript (and C++).
+        // Not `bool`: lowercase `bool` is a keyword in AngelScript (and C++).
         builder.Method<&Random::boolean>("boolean");
         builder.Constructor();
     }
@@ -130,7 +130,7 @@ namespace foundation::script
 
     REFLECT_VALUE(SceneEvents, "rtti::script")
     {
-        // emit - ONE conceptual method as an ARITY FAMILY (mirrors Entity::send): emit(name) and
+        // emit is one method as an arity family, like Entity::send: emit(name) and
         // emit(name, payload:Variant), dispatched by argument count; the Variant carries any value.
         builder.Method<static_cast<void (SceneEvents::*)(String) const>(&SceneEvents::emit)>("emit");
         builder.Method<static_cast<void (SceneEvents::*)(String, Variant) const>(&SceneEvents::emit)>(
@@ -140,7 +140,7 @@ namespace foundation::script
 
     REFLECT_VALUE(ScenePrefabs, "rtti::script")
     {
-        // spawn - an ARITY FAMILY: (prefab, position), + rotation, + parent.
+        // spawn is an arity family: (prefab, position), then with rotation, then with parent.
         builder.Method<static_cast<Entity (ScenePrefabs::*)(Guid, Float3) const>(&ScenePrefabs::spawn)>(
             "spawn", {"prefab", "position"});
         builder.Method<static_cast<Entity (ScenePrefabs::*)(Guid, Float3, Quaternion) const>(
@@ -153,7 +153,7 @@ namespace foundation::script
 
     core::Span<const core::StringView> BehaviorFacadeNames()
     {
-        // Kept in sync with RegisterScriptFacadeReflection below.
+        // Keep in sync with RegisterScriptFacadeReflection below.
         static const core::StringView names[] = {
             u8"Entity", u8"Log", u8"Time", u8"Random", u8"Scene", u8"SceneEvents", u8"ScenePrefabs",
         };
@@ -202,11 +202,11 @@ namespace foundation::script
 
     void RegisterExtraFacadeName(StringView name)
     {
-        // Reserved contract-class names: a user's own script class MUST take these - the game
-        // orchestrator is class `Game` (StartScript does CreateInstance("Game")), and the scene
-        // tier is class `Level` (instantiated once per scene). A facade sharing either name would
-        // clash (AngelScript "Name conflict") and the user's class
-        // could not compile. Refuse the registration.
+        // Reserved class names, which a user's own script classes take: the game orchestrator is
+        // class `Game` (StartScript does CreateInstance("Game")), and the scene tier is class
+        // `Level` (instantiated once per scene). A facade sharing either name would clash
+        // (AngelScript "Name conflict") and the user's class could not compile, so refuse the
+        // registration.
         const StringView kReservedNames[] = {StringView(u8"Game"), StringView(u8"Level")};
         for (StringView reserved : kReservedNames)
         {
@@ -248,11 +248,11 @@ namespace foundation::script
             GlobalTypeRegistry().Register(Log::StaticType());
             GlobalTypeRegistry().Register(Time::StaticType());
             GlobalTypeRegistry().Register(Random::StaticType());
-            RttiRegisterValue_Scene(); // now a bound value type (mirrors Entity)
+            RttiRegisterValue_Scene(); // a bound value type, like Entity
             GlobalTypeRegistry().Register(TypeOf<Scene>());
-            RttiRegisterValue_SceneEvents(); // the scene.events handle (mirrors Scene)
+            RttiRegisterValue_SceneEvents(); // the scene.events handle, like Scene
             GlobalTypeRegistry().Register(TypeOf<SceneEvents>());
-            RttiRegisterValue_ScenePrefabs(); // ScenePrefabs.of(scene) (Sedulous's scene.Prefabs)
+            RttiRegisterValue_ScenePrefabs(); // ScenePrefabs.of(scene)
             GlobalTypeRegistry().Register(TypeOf<ScenePrefabs>());
             return true;
         }();

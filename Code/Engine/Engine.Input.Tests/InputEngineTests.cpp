@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Input tests - the ENGINE-level input surface: the InputSubsystem
-// (per-surface scene binding / source overrides) and the per-context Input facade.
+// Engine::Input tests - the engine-level input surface: the InputSubsystem (per-surface scene
+// binding, source overrides) and the per-context Input facade.
 //
-// Split out of Foundation/Input.Tests: these exercise engine.input (+ the script
-// backend), so they live in the Engine collection - Foundation must not link Engine. The
-// pure foundation action-model/rebind/interaction/reflection tests stay in Foundation.
+// These exercise engine.input and the script backend, so they live in the Engine collection
+// (Foundation must not link Engine). The pure foundation action-model, rebind, interaction and
+// reflection tests stay in Foundation.
 
 #include <doctest/doctest.h>
 
@@ -35,8 +35,8 @@ namespace shell = foundation::shell;
 #if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
 namespace
 {
-    // The per-context Input-facade drive, parameterized by the backend's manager + its read/push
-    // scripts. Shared so AngelScript and Luau prove identical PER-CONTEXT service resolution.
+    // The per-context Input-facade drive, parameterized by the backend's manager and its read and
+    // push scripts. Shared so AngelScript and Luau show the same per-context service resolution.
     void DrivePerContextInput(RefPtr<foundation::script::IScriptManager> manager,
                               StringView readScript, StringView pushScript)
     {
@@ -44,8 +44,8 @@ namespace
         RegisterCoreTypes(); // Float2, which value2D returns
         engine::input::RegisterInputScriptFacade();
 
-        // Two runtimes, two contexts - each script reads ITS OWN bound runtime (players /
-        // editor-vs-game). No process globals anywhere.
+        // Two runtimes, two contexts: each script reads its own bound runtime (several players, or
+        // the editor and the game). No process globals anywhere.
         ActionRuntime runtimeA;
         runtimeA.SetMap(MakeGameplayMap());
         runtimeA.DisableSet(u8"Menu");
@@ -83,7 +83,7 @@ namespace
         REQUIRE(ctxNone->Load(readScript, u8"main").IsOk());
         CHECK(ctxNone->GetGlobal(u8"Down").Get<bool>() == false);
 
-        // Script-driven exclusive push lands on the CONTEXT's runtime only.
+        // A script-driven exclusive push lands on the context's runtime only.
         runtimeA.EnableSet(u8"Menu");
         REQUIRE(ctxA->Load(pushScript, u8"main").IsOk());
         CHECK(runtimeA.ExclusiveDepth() == 1);
@@ -165,9 +165,9 @@ TEST_CASE("input: the Input facade resolves PER-CONTEXT services (Luau)")
 
 TEST_CASE("input.subsystem: the per-surface scene binding rides the source override")
 {
-    // SetSourceProvider carries the scene the source REPRESENTS (an
-    // opaque key - the SceneOverlayView::sceneKey convention); the UI pump confines
-    // routing/consumption to it. Un-bound sources follow the policy knob.
+    // SetSourceProvider carries the scene the source represents (an opaque key, the
+    // SceneOverlayView::sceneKey convention); the UI pump confines routing and consumption to it.
+    // Unbound sources follow the policy setting.
     InputSubsystem input(nullptr);
     CHECK(input.BoundSceneKey() == nullptr);
     CHECK(input.UnboundScenePolicy() == UnboundInputScenePolicy::AllScenes); // player default
@@ -178,12 +178,12 @@ TEST_CASE("input.subsystem: the per-surface scene binding rides the source overr
     CHECK(input.BoundSceneKey() == &sceneStandIn);
     CHECK(&input.ActiveSource() == static_cast<IInputSourceProvider*>(&devices));
 
-    // Re-setting without a scene un-binds (the Game tab's Stop: provider stays, the
-    // run's binding drops).
+    // Setting again without a scene unbinds (the Game tab's Stop: the provider stays, the run's
+    // binding drops).
     input.SetSourceProvider(&devices, nullptr);
     CHECK(input.BoundSceneKey() == nullptr);
 
-    // Clearing the provider always clears the binding - the shell source is un-bound.
+    // Clearing the provider always clears the binding; the shell source is unbound.
     input.SetSourceProvider(&devices, &sceneStandIn);
     input.SetSourceProvider(nullptr, &sceneStandIn);
     CHECK(input.BoundSceneKey() == nullptr);
@@ -195,8 +195,8 @@ TEST_CASE("input.subsystem: the per-surface scene binding rides the source overr
 TEST_CASE("input.subsystem: ClearSourceProviderIf drops only its own dangling override")
 {
     // A closing editor Game tab clears its viewport source before it is destroyed, so
-    // ActiveSource()/Update never dereference freed memory. The guard makes it a no-op
-    // when a DIFFERENT still-open tab is the active source.
+    // ActiveSource()/Update never dereference freed memory. The guard makes it a no-op when a
+    // different still-open tab is the active source.
     InputSubsystem input(nullptr);
     FakeDevices tabA;
     FakeDevices tabB;
@@ -205,13 +205,13 @@ TEST_CASE("input.subsystem: ClearSourceProviderIf drops only its own dangling ov
     input.SetSourceProvider(&tabA, &keyA);
     CHECK(&input.ActiveSource() == static_cast<IInputSourceProvider*>(&tabA));
 
-    // Closing a NON-active tab must not disturb the active override.
+    // Closing a non-active tab must not disturb the active override.
     input.ClearSourceProviderIf(&tabB);
     CHECK(&input.ActiveSource() == static_cast<IInputSourceProvider*>(&tabA));
     CHECK(input.BoundSceneKey() == &keyA);
 
-    // Closing the ACTIVE tab clears the override + its binding; ActiveSource falls back
-    // to the (always-valid) shell source, so the next pump can't dangle.
+    // Closing the active tab clears the override and its binding; ActiveSource falls back to the
+    // (always valid) shell source, so the next pump cannot dangle.
     input.ClearSourceProviderIf(&tabA);
     CHECK(&input.ActiveSource() != static_cast<IInputSourceProvider*>(&tabA));
     CHECK(input.BoundSceneKey() == nullptr);
@@ -277,9 +277,9 @@ namespace
 
 TEST_CASE("input: a fitted source reads the pointer in render pixels, through the bars too")
 {
-    // Sedulous f9b1feb7: a 320x180 game letterboxed into a 1280x1080 window (scale 4, bars of
-    // 180 above and below): the window's centre is the render's, a bar maps outside it rather
-    // than vanishing, motion scales to render pixels, and the buttons pass through.
+    // A 320x180 game letterboxed into a 1280x1080 window (scale 4, bars of 180 above and below):
+    // the window's centre is the render's, a bar maps outside it rather than vanishing, motion
+    // scales to render pixels, and the buttons pass through.
     PointSource inner;
     FittedInputSource fitted(inner);
     fitted.fit = ContentFit{Rectangle{0, 0, 1280, 1080}, Float2{320, 180}, FitMode::Letterbox};
@@ -327,9 +327,9 @@ TEST_CASE("input: a fitted source maps the fingers as it maps the mouse")
 
 TEST_CASE("input: a fitted source turned with the present reads the game's frame")
 {
-    // Present transform P3: a landscape game on a 1080x1920 portrait window, presented turned
-    // three quarters (its top on the screen's left), at the window's pixels turned (1920x1080,
-    // as the host fits it without a render resolution).
+    // A landscape game on a 1080x1920 portrait window, presented turned three quarters (its top on
+    // the screen's left), at the window's pixels turned (1920x1080, as the host fits it without a
+    // render resolution).
     PointSource inner;
     FittedInputSource fitted(inner);
     fitted.fit = ContentFit{Rectangle{0, 0, 1080, 1920}, Float2{1920, 1080}, FitMode::Stretch,

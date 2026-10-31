@@ -62,7 +62,7 @@ export namespace foundation::core
             MapIterator m_it;
         };
 
-        // Explicit iterator return types (NOT `auto`): GCC's C++ modules mis-merge `auto`-deduced return
+        // Explicit iterator return types (not `auto`): GCC's C++ modules mis-merge `auto`-deduced return
         // types for a class-template member when the same instantiation crosses several imported modules
         // ("conflicting deduced return type for imported declaration"). Naming the types avoids that.
         using Iterator = BasicIterator<typename MapType::Iterator>;

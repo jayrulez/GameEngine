@@ -3,9 +3,9 @@
 
 /// foundation.rhi.webgpu:pipeline_cache - PipelineCache stand-in.
 ///
-/// WebGPU has no pipeline-cache object (the browser/driver caches internally), and
-/// the RHI contract treats caches as best-effort - so creation succeeds with an
-/// empty cache: pipelines simply ignore it, GetData serves zero bytes.
+/// WebGPU has no pipeline-cache object (the browser or driver caches internally), and
+/// the RHI contract treats caches as best-effort, so creation succeeds with an empty
+/// cache: pipelines ignore it and GetData serves zero bytes.
 
 module;
 #include "Core/Prelude.h"

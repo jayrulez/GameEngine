@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Mcp - :export_presets partition (Sedulous 4f483f5e).
+// Editor::Mcp - :export_presets partition.
 //
 // export_presets and export_preset_set: the open project's export targets (export_presets.xml),
 // what the editor's Export Presets dialog edits, and the templates this machine can export them
 // with. project_export runs one. A preset's fields are ExportPreset's reflection, through
 // :reflected_fields; the tools' own rules are the preset's name (its identity), removal, and a
-// platform and config this machine has templates for. A templateId need not resolve here -
-// presets travel with the project and templates do not - so the answer says whether it does.
+// platform and config this machine has templates for. A templateId need not resolve here
+// (presets travel with the project and templates do not), so the answer says whether it does.
 
 module;
 #include "Core/Prelude.h"

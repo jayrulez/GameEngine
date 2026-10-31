@@ -3,13 +3,11 @@
 
 /// Foundation::Net - `foundation.net:transport` partition.
 ///
-/// The transport seam. `INetTransport` is the swappable-backend
-/// abstraction the rest of the stack (session, reliability, RPC, replication) rides on - because
-/// browsers cannot open raw UDP, multiple backends are MANDATORY (reliable-UDP, loopback/sim,
-/// websocket/webrtc). This provides the interface + the in-memory `LoopbackLink` sim, which is
-/// what makes rolling our own transport safe: injectable latency / jitter / loss / reorder /
-/// duplication with a SEEDED rng and a MANUAL logical clock, so reliability and replication become
-/// deterministic headless unit tests (no sockets, no flake).
+/// The transport interface. `INetTransport` is the swappable-backend abstraction the rest of the
+/// stack (session, RPC, replication) is built on. This partition provides the interface and the
+/// in-memory `LoopbackLink` sim: injectable latency, jitter, loss, reordering and duplication
+/// with a seeded rng and a manual logical clock, so the layers above become deterministic
+/// headless unit tests (no sockets, no flakiness).
 
 module;
 #include "Core/Prelude.h"
@@ -31,9 +29,9 @@ export namespace foundation::net
     // Delivery guarantee for a Send. Channels are independent ordering domains.
     enum class Reliability : u8
     {
-        Unreliable, // fire-and-forget: may drop, reorder, duplicate (cosmetic/continuous data)
+        Unreliable, // fire-and-forget: may drop, reorder, duplicate (cosmetic or continuous data)
         UnreliableSequenced, // may drop; never delivered out of order (stale ones discarded)
-        ReliableOrdered, // guaranteed, in order (commands/orders - the turn-based primary channel)
+        ReliableOrdered, // guaranteed, in order (commands and orders)
     };
 
     enum class NetEventKind : u8
@@ -52,7 +50,7 @@ export namespace foundation::net
         Array<byte> payload; // Received only
     };
 
-    // Per-peer link telemetry (net profiler / replication bandwidth budgeting later).
+    // Per-peer link telemetry (for a net profiler or replication bandwidth budgeting).
     struct TransportStats
     {
         f32 rttMs = 0.0f;
@@ -76,7 +74,7 @@ export namespace foundation::net
         // Drain one queued event; false when none remain this tick. Call in a loop.
         [[nodiscard]] virtual bool Poll(NetEvent& out) = 0;
 
-        // Advance internal time (deliver due packets, run timeouts/resends). dtMs in milliseconds.
+        // Advance internal time (deliver due packets, run timeouts and resends), in milliseconds.
         virtual void Update(f32 deltaMs) = 0;
 
         [[nodiscard]] virtual TransportStats Stats(PeerId peer) const = 0;
@@ -87,9 +85,9 @@ export namespace foundation::net
     {
         f32 latencyMs = 0.0f;  // base one-way latency
         f32 jitterMs = 0.0f;   // +/- uniform jitter added to latency
-        f32 lossPct = 0.0f;    // drop probability (UNRELIABLE channels only)
-        f32 dupPct = 0.0f;     // duplicate probability (UNRELIABLE channels only)
-        f32 reorderPct = 0.0f; // extra-random-delay probability (UNRELIABLE channels only)
+        f32 lossPct = 0.0f;    // drop probability (unreliable channels only)
+        f32 dupPct = 0.0f;     // duplicate probability (unreliable channels only)
+        f32 reorderPct = 0.0f; // extra-random-delay probability (unreliable channels only)
         u64 seed = 0x9E3779B97F4A7C15ull;
     };
 
@@ -132,8 +130,9 @@ export namespace foundation::net
     /// static constexpr member from a shared library).
     inline constexpr ENGINE_EXPORT_DATA PeerId kLoopbackLinkRemotePeer = 1;
 
-    // A deterministic in-memory link connecting two endpoints (A <-> B) with injectable sim conditions.
-    // The MANUAL clock (Advance / either endpoint's Update) + SEEDED rng make delivery reproducible.
+    // A deterministic in-memory link connecting two endpoints (A and B) with injectable sim conditions.
+    // The manual clock (Advance, or either endpoint's Update) and the seeded rng make delivery
+    // reproducible.
     // The remote PeerId on each side is 1 (a pair has exactly one remote).
     class LoopbackLink
     {
@@ -172,10 +171,10 @@ export namespace foundation::net
             }
         }
 
-        // Annotated on the MEMBER, not the class: dllexport on a class emits every implicit
-        // member and flags each non-exported member type C4251. const-integral is NOT exempt
-        // from needing this - odr-using it (binding to a const& parameter, taking its address)
-        // still needs the definition the owning DLL holds. shared-libraries.md P5/W1.
+        // Annotated on the member, not the class: dllexport on a class emits every implicit
+        // member and flags each non-exported member type C4251. A const integral is not exempt
+        // from needing this: odr-using it (binding to a const& parameter, taking its address)
+        // still needs the definition the owning DLL holds.
         static constexpr ENGINE_EXPORT_DATA PeerId kRemotePeer = kLoopbackLinkRemotePeer;
 
     private:
@@ -232,15 +231,15 @@ export namespace foundation::net
             m_inflight.Insert(i, static_cast<InFlight&&>(pkt));
         }
 
-        // The heart of the sim: apply loss/dup/reorder (unreliable channels) + latency/jitter, then queue.
+        // Apply loss, duplication and reordering (unreliable channels) and latency and jitter, then queue.
         void Submit(u32 srcSide, u8 channel, Span<const byte> data, Reliability reliability)
         {
             const u32 dstSide = (srcSide == 0) ? 1u : 0u;
             (srcSide == 0 ? m_a : m_b).m_stats.sentBytes += static_cast<u32>(data.Size());
 
             const bool unreliable = (reliability != Reliability::ReliableOrdered);
-            // Loss (unreliable only) - reliable channels are a guaranteed-delivery abstraction here; the
-            // real ack/resend implementation is the reliable-UDP transport (a later slice).
+            // Loss (unreliable only). Reliable channels are a guaranteed-delivery abstraction here; the
+            // real ack and resend implementation is the reliable-UDP transport (ReliableTransport).
             if (unreliable && Chance(m_sim.lossPct))
             {
                 return;

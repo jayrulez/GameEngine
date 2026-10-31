@@ -3,18 +3,18 @@
 
 // Foundation::UI.Runtime - the `foundation.ui.runtime` module.
 //
-// UIHost: the reusable bridge that draws foundation.ui on the runtime's multi-window graphics host
-// (foundation.graphics). It owns ONE UIContext with N RootViews (one per window), compiles the shared VG
-// shaders once, and gives each window its own VGContext + VGRenderer + InputSurface stashed on the
-// RenderWindow as a UIWindowData (graphics::IRenderWindowData - the payload the host reserves for exactly
-// this). Mirrors the Sedulous "one UIContext / N RootViews / per-window swapchain" model.
+// UIHost draws foundation.ui on the runtime's multi-window graphics host (foundation.graphics). It
+// owns one UIContext with one RootView per window, compiles the shared VG shaders once, and gives
+// each window its own VGContext, VGRenderer and InputSurface, stored on the RenderWindow as a
+// UIWindowData (the graphics::IRenderWindowData payload the host reserves for this).
 //
-// TOOLKIT-FREE by design: it renders any RootView, so games (single-window) and the editor (multi-window)
-// share it. The docking / floating-window workbench lives ABOVE this in foundation.ui.application, which is
-// the only module that pulls in foundation.ui.toolkit.
+// It does not depend on the toolkit: it renders any RootView, so games (one window) and the editor
+// (many windows) share it. The docking and floating-window layer sits above it in
+// foundation.ui.application, the only UI module that imports foundation.ui.toolkit.
 //
-// A game's IApplication owns a UIHost, AttachWindow(mainWindow, root) once, then calls Update(dt) from
-// OnUpdate and RenderWindow(frame) from OnRenderWindow. No bespoke swapchain / VG bring-up in the app.
+// A game's IApplication owns a UIHost, calls AttachWindow(mainWindow, root) once, then calls
+// Update(dt) from OnUpdate and RenderWindow(frame) from OnRenderWindow. The app sets up no swapchain
+// or VG state of its own.
 
 module;
 #include "Core/Prelude.h"
@@ -56,8 +56,8 @@ export namespace foundation::ui::runtime
     using core::u8;
     using core::usize;
 
-    /// Per-window UI payload stashed on a graphics::RenderWindow via SetData. Owns that window's VG
-    /// context + renderer + input surface; shares ownership of its RootView with the UIContext.
+    /// Per-window UI payload stored on a graphics::RenderWindow via SetData. Owns that window's VG
+    /// context, renderer and input surface; shares ownership of its RootView with the UIContext.
     class UIWindowData final : public graphics::IRenderWindowData
     {
     public:
@@ -68,24 +68,26 @@ export namespace foundation::ui::runtime
         vg::renderer::VGRenderer renderer;
         core::UniquePtr<shell::InputSurface> surface;
 
-        // VG quality targets (host-provided per the stencil-then-cover design): a 4x MSAA
-        // color target resolved into the backbuffer + a stencil attachment for the fill
-        // pipelines. Sized to the swapchain; Update() recreates on resize (desktop hosts -
-        // the WaitIdle there is outside any open frame). None = plain single-sampled pass.
+        // VG quality targets, provided by the host for stencil-then-cover filling: a 4x MSAA
+        // color target resolved into the backbuffer, and a stencil attachment for the fill
+        // pipelines. Sized to the swapchain; Update() recreates them on resize (desktop hosts
+        // only, where the WaitIdle runs outside any open frame). Without them the window draws a
+        // plain single-sampled pass.
         vg::renderer::VGPassTargets targets;
-        // Encoded: this window's UI blends encoded values, drawing through the backbuffer's
-        // UNORM view in drawFormat (its twin); else linear light in the backbuffer's own format.
+        // When set, this window's UI blends encoded values, drawing through the backbuffer's
+        // UNORM view in drawFormat; otherwise it blends linear light in the backbuffer's own format.
         bool encoded = false;
         rhi::TextureFormat drawFormat = rhi::TextureFormat::Undefined;
     };
 
-    /// Renders foundation.ui on the runtime graphics host. Construct once (compiles the VG shaders), attach
-    /// a RootView per window, drive Update()/RenderWindow() from the app's OnUpdate/OnRenderWindow.
+    /// Renders foundation.ui on the runtime graphics host. Construct once (this compiles the VG shaders),
+    /// attach a RootView per window, and call Update() and RenderWindow() from the app's OnUpdate and
+    /// OnRenderWindow.
     class UIHost
     {
     public:
-        // The allocator (required - the entry point decides) roots the WHOLE UI:
-        // the shared UIContext, every view tree under it, and the host's own services.
+        // The allocator is required (the entry point chooses it) and roots the whole UI: the
+        // shared UIContext, every view tree under it, and the host's own services.
         // `dataFileSystem` is the application's data mount (borrowed): the VG shaders resolve
         // from it (Shaders/ sources in dev, Shaders/shaders.dpak in a dist).
         UIHost(core::IAllocator& allocator, graphics::GraphicsDevice& device,
@@ -101,19 +103,20 @@ export namespace foundation::ui::runtime
             m_bridge = core::MakeUnique<UiInputBridge>(allocator, &m_ctx);
             m_clipboard = core::MakeUnique<ShellClipboard>(allocator, &shellRef);
             m_ctx.SetClipboard(m_clipboard.Get());
-            // Materialize the SHARED theme chrome glyphs before the app builds its theme, so
-            // every theme references bakeable instances (crisp icons stop being editor-only -
-            // ui-core-audit). Baked lazily at first window attach / BakeThemeIcons.
+            // Create the shared theme chrome glyphs before the app builds its theme, so every
+            // theme references instances that can be baked into crisp icons. They are baked at the
+            // first window attach or by BakeThemeIcons.
             ThemeIconSet::Get().Initialize();
         }
 
         ~UIHost()
         {
             // Per-window VGRenderers are disposed with their RenderWindow's payload (freed by the host
-            // after a GPU idle), not here. The VG shader modules (m_vs/m_fs) are BORROWED from the
+            // after a GPU idle), not here. The VG shader modules (m_vs/m_fs) are borrowed from the
             // shader host's ShaderSystem, which owns and frees them when it shuts down below.
-            // Theme glyphs' baked variants BORROW our atlases - detach them before the atlases
-            // die (any sheet-held glyph falls back to live vector), then drop the shared refs.
+            // The baked variants of the theme glyphs borrow our atlases, so detach them before the
+            // atlases are freed (glyphs held by a sheet fall back to live vector drawing), then
+            // drop the shared references.
             ThemeIconSet::Get().ClearBakedVariants();
             ThemeIconSet::Get().Shutdown();
         }
@@ -121,39 +124,38 @@ export namespace foundation::ui::runtime
         UIHost(const UIHost&) = delete;
         UIHost& operator=(const UIHost&) = delete;
 
-        /// The shared UI context (set the theme / stylesheet on it, look up focus, etc.).
+        /// The shared UI context (set the theme or stylesheet on it, look up focus, and so on).
         [[nodiscard]] UIContext& Context() noexcept { return m_ctx; }
 
-        /// USER UI-scale factor multiplied onto every window's OS content scale (editor
-        /// preference / accessibility). Roots pick it up next Update; callers re-bake any
+        /// The user's UI-scale factor, multiplied onto every window's OS content scale (an editor
+        /// preference for accessibility). Roots pick it up on the next Update; callers re-bake any
         /// baked icon sets themselves at the new effective scale.
         void SetUiScale(f32 scale) noexcept { m_uiScale = core::Clamp(scale, 0.5f, 3.0f); }
         [[nodiscard]] f32 UiScale() const noexcept { return m_uiScale; }
 
-        /// The damage gate's escape hatch (dogfooding): OFF = the old
-        /// relayout-and-redraw-every-frame behavior. Counters expose the win/health.
         /// The values a window's UI blends (VG's blend space), for windows added after the call.
         /// Encoded (the default) blends as browsers and design tools do: half black over white is
-        /// 50% grey. It needs the window's swapchain to offer its UNORM view, else that window
-        /// blends linear light as before.
+        /// 50% grey. It needs the window's swapchain to offer its UNORM view; otherwise that window
+        /// blends linear light.
         void SetBlendSpace(vg::VGBlendSpace space) noexcept { m_blendSpace = space; }
         [[nodiscard]] vg::VGBlendSpace BlendSpace() const noexcept { return m_blendSpace; }
 
+        /// Turns the damage gate off or on. Off, every frame lays out and redraws every window.
+        /// The frame counters below show how often the gate skips work.
         void SetDamageGatingEnabled(bool enabled) noexcept { m_damageGateEnabled = enabled; }
         [[nodiscard]] bool DamageGatingEnabled() const noexcept { return m_damageGateEnabled; }
         [[nodiscard]] u64 FramesDrawn() const noexcept { return m_framesDrawn; }
         [[nodiscard]] u64 FramesSkipped() const noexcept { return m_framesSkipped; }
-        /// Frames that ALSO re-measured + re-laid-out (subset of FramesDrawn; the gap is the
-        /// visual-only frames - hover/press/caret - that redraw over a valid layout).
+        /// Frames that also re-measured and laid out (a subset of FramesDrawn; the difference is the
+        /// visual-only frames, such as hover, press or caret changes, that redraw over a valid layout).
         [[nodiscard]] u64 FramesLaidOut() const noexcept { return m_framesLaidOut; }
 
         /// Background clear color behind the UI (the theme usually paints an opaque root over it).
-        /// Takes the theme's color as authored (sRGB, like every UI color). The swapchain
-        /// is an sRGB format, and pass CLEAR values are interpreted as LINEAR and hardware-
-        /// encoded on store - so the sRGB components must be linearized here or the
-        /// background clears visibly LIGHTER than the same color drawn by the UI (whose
-        /// vertex path linearizes in VGRenderVertex). The project-manager screen, mostly
-        /// bare background, showed this the loudest.
+        /// Takes the theme's color as authored (sRGB, like every UI color). The swapchain is an
+        /// sRGB format, and pass clear values are interpreted as linear and encoded by the
+        /// hardware on store, so the sRGB components are linearized here. Otherwise the background
+        /// would clear visibly lighter than the same color drawn by the UI, whose vertex path
+        /// linearizes in VGRenderVertex.
         void SetClearColor(f32 r, f32 g, f32 b, f32 a = 1.0f) noexcept
         {
             m_clear = rhi::ClearColor(core::SrgbToLinear(r), core::SrgbToLinear(g),
@@ -161,10 +163,10 @@ export namespace foundation::ui::runtime
             m_clearEncoded = rhi::ClearColor(r, g, b, a); // an Encoded window clears as authored
         }
 
-        /// Bake the SHARED theme chrome glyphs (close/chevrons/checkmark...) at the given UI
-        /// scale - the same pixel-snapped atlas recipe the editor uses for its own icons, now
-        /// for EVERY UIHost app. Call again after a UI-scale/DPI change (old variants are
-        /// detached first; drawables fall back to live vector until the re-bake lands).
+        /// Bake the shared theme chrome glyphs (close, chevrons, checkmark and so on) at the given
+        /// UI scale, with the same pixel-snapped atlas bake the editor uses for its own icons. Call
+        /// again after a UI-scale or DPI change: old variants are detached first, and drawables
+        /// fall back to live vector drawing until the new bake completes.
         bool BakeThemeIcons(f32 scale = 1.0f)
         {
             ThemeIconSet& set = ThemeIconSet::Get();
@@ -188,17 +190,18 @@ export namespace foundation::ui::runtime
             return m_themeIconsBaked;
         }
 
-        /// Give a RenderWindow a RootView: builds its VGContext + VGRenderer (against the window's swap
-        /// format + the device frame-ring) + InputSurface, and stashes the payload on the RenderWindow.
+        /// Give a RenderWindow a RootView: builds its VGContext, its VGRenderer (against the window's
+        /// swapchain format and the device frame ring) and its InputSurface, and stores the payload on
+        /// the RenderWindow.
         void AttachWindow(graphics::RenderWindow* window, core::RefPtr<RootView> root)
         {
             if (window == nullptr || !root)
             {
                 return;
             }
-            // First window = the device is live: bake the shared theme glyphs so every UIHost
-            // app (not just the editor) gets crisp pixel-snapped chrome icons. Scale-aware
-            // hosts re-bake via BakeThemeIcons on DPI/UI-scale changes.
+            // The first window attach means the device is live: bake the shared theme glyphs so
+            // every UIHost app gets crisp pixel-snapped chrome icons. Scale-aware hosts re-bake via
+            // BakeThemeIcons on DPI or UI-scale changes.
             if (!m_themeIconsBaked)
             {
                 (void)BakeThemeIcons(m_uiScale);
@@ -207,16 +210,16 @@ export namespace foundation::ui::runtime
             auto data = core::MakeUnique<UIWindowData>(*m_allocator, *m_allocator);
             data->root = root;
             data->vg = core::MakeUnique<vg::VGContext>(*m_allocator, m_fonts);
-            // Per-pixel radial/conic gradients only if both shaders resolved (a pre-cooked pack
-            // may predate them); otherwise the renderer + context fall back to the affine LUT.
+            // Per-pixel radial and conic gradients need both shaders (an older cooked pack may
+            // lack them); otherwise the renderer and context fall back to the affine LUT.
             const bool perPixelGrad = m_gradRadialFs != nullptr && m_gradConicFs != nullptr;
 
-            // VG quality targets: 4x MSAA (fill/stroke edge AA) + a stencil attachment
-            // (stencil-then-cover correctness for holes/self-intersection/even-odd). The
-            // renderer's pipelines must match the pass, so the target config is decided
-            // BEFORE Initialize; any creation failure falls back to the plain pass wholesale.
+            // VG quality targets: 4x MSAA for fill and stroke edge antialiasing, and a stencil
+            // attachment so stencil-then-cover handles holes, self-intersection and even-odd
+            // fills. The renderer's pipelines must match the pass, so the target configuration is
+            // decided before Initialize; any creation failure falls back to the plain pass.
             data->targets.Configure(*m_device->Raw());
-            // Encoded when asked for and the swapchain offers its UNORM view; else linear.
+            // Encoded when asked for and the swapchain offers its UNORM view; otherwise linear.
             data->encoded = m_blendSpace == vg::VGBlendSpace::Encoded &&
                             window->Swap()->AlternateViewFormat() != rhi::TextureFormat::Undefined;
             data->drawFormat = data->encoded ? window->Swap()->AlternateViewFormat() : window->Swap()->Format();
@@ -246,14 +249,14 @@ export namespace foundation::ui::runtime
             m_ctx.AddRootView(root.Get());
             m_router->AddSurface(data->surface.Get());
             m_bridge->SetTextInputTarget(
-                &window->Window()); // IME target (last attach wins; refined per-window later)
+                &window->Window()); // IME target (the last attach wins until Update follows focus)
 
             UIWindowData* raw = data.Get();
-            // RE-attach (the editor swaps a window between the project-manager root and the
-            // shell root): SetData below destroys the PREVIOUS payload - a live VGRenderer
-            // whose pipelines/descriptor sets/buffers in-flight frames still reference. Idle
-            // the GPU first; without this, replacing a window's root spews in-use validation
-            // errors and can crash (the DetachWindow comment's race, hit for real).
+            // On a re-attach (the editor swaps a window between the project-manager root and the
+            // shell root), SetData below destroys the previous payload: a live VGRenderer whose
+            // pipelines, descriptor sets and buffers in-flight frames still reference. Idle the GPU
+            // first, or replacing a window's root raises in-use validation errors and can crash
+            // (the race DetachWindow describes).
             if (window->Data() != nullptr && m_device->Raw() != nullptr)
             {
                 m_device->Raw()->WaitIdle();
@@ -264,10 +267,10 @@ export namespace foundation::ui::runtime
         }
 
         /// Logical detach: stop routing input to the window and remove its root from the context, so
-        /// nothing draws or hit-tests it anymore. The GPU payload (VGRenderer etc.) is deliberately LEFT
-        /// on the RenderWindow - it is freed when the host destroys the RenderWindow (CloseWindow), which
-        /// WaitIdles first. Freeing it here would race the GPU (no idle). So the docking-destroy path is
-        /// DetachWindow(rw) followed by IApplicationHost::CloseWindow(rw).
+        /// nothing draws or hit-tests it any more. The GPU payload (the VGRenderer and the rest) stays
+        /// on the RenderWindow and is freed when the host destroys the RenderWindow (CloseWindow), which
+        /// waits for the GPU to idle first; freeing it here, without an idle, would race the GPU. So a
+        /// docked window is destroyed with DetachWindow(rw) followed by IApplicationHost::CloseWindow(rw).
         void DetachWindow(graphics::RenderWindow* window)
         {
             for (usize i = 0; i < m_attached.Size(); ++i)
@@ -276,17 +279,17 @@ export namespace foundation::ui::runtime
                 {
                     UIWindowData* data = m_attached[i].data;
                     // A detached root gets no input and no ticks, so its open popups (menus,
-                    // dropdowns) can never dismiss - they would freeze and still be showing
-                    // if the root is re-attached later. Close them all now.
+                    // dropdowns) could never dismiss: they would freeze, and still be showing
+                    // if the root were attached again. Close them all now.
                     if (PopupLayer* popups = data->root->GetPopupLayer())
                     {
                         popups->CloseAllPopups();
                     }
                     m_router->RemoveSurface(data->surface.Get());
                     m_ctx.RemoveRootView(data->root.Get());
-                    // The window is closed after this: the bridge's text input must not keep it.
-                    // Until the next focus refresh, the hover pump synced IME against it, and a
-                    // closed popup or dialog window crashed the editor there.
+                    // The window is closed after this, so the bridge's text input must drop it.
+                    // Otherwise the hover pump would sync IME against the closed window until the
+                    // next focus refresh, and crash.
                     m_bridge->ForgetWindow(&window->Window());
                     m_attached.RemoveAt(i);
                     return;
@@ -299,28 +302,28 @@ export namespace foundation::ui::runtime
         {
             m_router->Update();
 
-            // Cross-window drag: while a drag is in flight and the cursor is over/from a SECONDARY window
-            // (a floating dock window follows the cursor, so it sits under the pointer), route the drag to
-            // the MAIN window using global-mouse -> main-relative coords so the main window's drop targets
-            // (e.g. a DockManager) see the drag-over and accept the drop. Mirrors Sedulous's editor: the OS
-            // window being under the cursor is bypassed; we feed the main window explicitly.
+            // Cross-window drag: while a drag is in flight and the cursor is over or came from a
+            // secondary window (a floating dock window follows the cursor, so it sits under the
+            // pointer), route the drag to the main window, mapping the global mouse to main-relative
+            // coordinates, so the main window's drop targets (such as a DockManager) see the drag-over
+            // and accept the drop. The OS window under the cursor is bypassed; the main window is fed
+            // explicitly.
             DragDropManager* dd = m_ctx.DragDrop();
             Attached* mainW = m_attached.IsEmpty() ? nullptr : &m_attached[0];
             const u32 focusedId =
                 (m_shell->Input() != nullptr) ? m_shell->Input()->FocusedWindow() : 0;
 
-            // Stuck-drag watchdog (PaperKid feedback: a floated dock window kept following the
-            // mouse after release). The float chases the cursor during a drag, and on some
-            // platforms (Wayland especially) the release event can land on a window edge/handoff
-            // and never reach the drag routing - leaving the drag latched forever. The SHELL's
-            // global button state is authoritative: if a drag is active but the OS says the left
-            // button is UP for a full frame, deliver the release at the current global position
-            // through the same path a normal release takes.
+            // Stuck-drag watchdog. A floated dock window chases the cursor during a drag, and on some
+            // platforms (Wayland especially) the release event can land during a window handoff and
+            // never reach the drag routing, which would leave the drag latched and the window
+            // following the mouse. The shell's global button state is authoritative: if a drag is
+            // active but the OS reports the left button up for a full frame, deliver the release at
+            // the current global position through the same path a normal release takes.
             if (dd != nullptr && dd->IsDragging() && m_shell->Input() != nullptr &&
                 m_shell->Input()->Mouse() != nullptr &&
                 !m_shell->Input()->Mouse()->IsButtonDown(shell::MouseButton::Left))
             {
-                if (m_dragReleaseMissedFrames++ >= 1) // one full frame of button-up = missed
+                if (m_dragReleaseMissedFrames++ >= 1) // a full frame with the button up means the release was missed
                 {
                     if (mainW != nullptr)
                     {
@@ -328,7 +331,7 @@ export namespace foundation::ui::runtime
                     }
                     if (dd->IsDragging())
                     {
-                        dd->CancelDrag(); // still latched (no drop target took it): hard-cancel
+                        dd->CancelDrag(); // still latched (no drop target took it), so cancel it
                     }
                     m_dragReleaseMissedFrames = 0;
                 }
@@ -342,13 +345,13 @@ export namespace foundation::ui::runtime
                 (dd != nullptr && dd->IsDragging() && mainW != nullptr && focusedId != 0 &&
                  focusedId != mainW->window->Window().Id());
 
-            // Route mouse to a SINGLE window per frame (Sedulous processes one active root, not all N):
-            // pumping non-hovered windows re-asserts their frozen last mouse position, spuriously
-            // re-hovering them and clobbering the shared hover/cursor state. Priority:
-            //   1. cross-window drag  -> the MAIN window (float sits under the cursor; see above);
-            //   2. a captured view    -> its window (a dock-window edge-resize, a slider drag, ...), fed
-            //                            LIVE global-relative coords so it keeps working off-window;
-            //   3. otherwise          -> the window under the pointer (normal surface pump, keeps scroll).
+            // Route the mouse to a single window per frame. Pumping windows that are not hovered
+            // re-asserts their frozen last mouse position, which re-hovers them and overwrites the
+            // shared hover and cursor state. In priority order:
+            //   1. a cross-window drag goes to the main window (the float sits under the cursor);
+            //   2. a captured view (a dock-window edge resize, a slider drag) gets its own window, fed
+            //      live global-relative coordinates so it keeps working outside the window;
+            //   3. otherwise the window under the pointer gets the normal surface pump, with scroll.
             Attached* captured = CapturedWindow();
             if (crossWindowDrag)
             {
@@ -378,15 +381,15 @@ export namespace foundation::ui::runtime
                 }
             }
 
-            // Keyboard / text + IME follow the FOCUSED OS window: point the active input root and the
-            // text-input target at the focused window's root, then dispatch its key/text events.
+            // Keyboard, text and IME follow the focused OS window: point the active input root and the
+            // text-input target at the focused window's root, then dispatch its key and text events.
             if (shell::IInputManager* input = m_shell->Input())
             {
                 Attached* focused = FindByWindowId(input->FocusedWindow());
                 if (focused == nullptr && !m_attached.IsEmpty())
                 {
                     focused = &m_attached[0];
-                } // fallback: main
+                } // falls back to the main window
                 if (focused != nullptr)
                 {
                     m_ctx.SetActiveInputRoot(focused->data->root.Get());
@@ -408,9 +411,9 @@ export namespace foundation::ui::runtime
             }
 
             // Keep OS mouse events flowing across window edges while a drag or a captured interaction
-            // (dock-window resize, slider, ...) is in progress - without an app-global capture the OS stops
-            // delivering events once the cursor leaves the window, stalling multi-window drag/resize at the
-            // edge and losing a release that happens outside the window.
+            // (a dock-window resize, a slider) is in progress. Without an app-global capture the OS stops
+            // delivering events once the cursor leaves the window, which stalls multi-window drags and
+            // resizes at the edge and loses a release that happens outside the window.
             if (m_shell->Input() != nullptr)
             {
                 if (shell::IMouse* mouse = m_shell->Input()->Mouse())
@@ -420,21 +423,20 @@ export namespace foundation::ui::runtime
                     mouse->SetGlobalCapture(capturing);
 
                     // Push the hovered view's cursor to the OS (borderless floats have no WM to show resize
-                    // grips). The UI<->shell cursor mapping lives in the bridge, with the rest of the enum
-                    // translation.
+                    // grips). The mapping between UI and shell cursors lives in the bridge, with the rest
+                    // of the enum translation.
                     m_bridge->SyncCursor(*mouse);
                 }
             }
 
             m_ctx.BeginFrame(deltaTime);
 
-            // === The damage gate ===
-            // One frame-scoped decision for ALL windows: when nothing invalidated (and no
-            // window resized / changed scale), skip layout AND the draw-tree walk this frame -
-            // RenderWindow re-encodes the RETAINED VG batch, so the present pipeline is
-            // untouched (no flicker, no app-loop changes). Producers were swept: input events,
-            // hover/focus/press, animations + focused-text caret (BeginFrame), drag adorner,
-            // list timers self-chain, popups/tooltips invalidate on show.
+            // The damage gate: one decision per frame for all windows. When nothing invalidated
+            // and no window resized or changed scale, skip both layout and the draw-tree walk this
+            // frame; RenderWindow re-encodes the retained VG batch, so presenting is unchanged.
+            // Invalidation comes from input events, hover, focus and press changes, animations and
+            // the focused-text caret (BeginFrame), the drag adorner, list timers, and popups and
+            // tooltips when they show.
             bool structural = false;
             for (const Attached& a : m_attached)
             {
@@ -456,10 +458,9 @@ export namespace foundation::ui::runtime
             }
             ++m_framesDrawn;
 
-            // Layout runs only on LAYOUT damage - visual-only frames (hover tint, press
-            // state, focus ring, caret blink) redraw without re-measuring every window's
-            // whole tree. That relayout was the interaction-frame cost: moving the mouse
-            // over a large dialog re-laid-out the entire editor each frame.
+            // Layout runs only on layout damage. Visual-only frames (hover tint, press state,
+            // focus ring, caret blink) redraw without re-measuring every window's whole tree, so
+            // moving the mouse over a large dialog does not lay out the entire editor each frame.
             const bool layoutDamaged =
                 !m_damageGateEnabled || structural || m_ctx.NeedsLayout();
             if (!layoutDamaged)
@@ -474,15 +475,15 @@ export namespace foundation::ui::runtime
                 a.data->root->ViewportSize =
                     core::Float2{static_cast<f32>(a.window->Window().Width()),
                                  static_cast<f32>(a.window->Window().Height())};
-                // Effective scale = OS content scale x the user UI-scale preference;
-                // refreshed per frame so monitor moves and preference changes both land.
+                // The effective scale is the OS content scale times the user's UI-scale preference,
+                // refreshed per frame so both monitor moves and preference changes apply.
                 a.data->root->DpiScale = a.window->Window().ContentScale() * m_uiScale;
                 m_ctx.UpdateRootView(a.data->root.Get());
 
-                // Resize the VG quality targets with the window - here, OUTSIDE any open
-                // frame, so the idle wait cannot yield mid-frame (desktop hosts only; the
-                // web player uses UISubsystem, not this host). In-flight frames may still
-                // reference the old targets, hence the idle before recreation.
+                // Resize the VG quality targets with the window. This happens here, outside any
+                // open frame, so the idle wait cannot yield mid-frame (desktop hosts only; the web
+                // player uses UISubsystem, not this host). In-flight frames may still reference the
+                // old targets, hence the idle before recreating them.
                 const u32 w = static_cast<u32>(a.window->Window().Width());
                 const u32 h = static_cast<u32>(a.window->Window().Height());
                 if (a.data->targets.NeedsResize(w, h))
@@ -512,8 +513,8 @@ export namespace foundation::ui::runtime
                 data->vg->Clear();
                 m_ctx.DrawRootView(data->root.Get(), *data->vg);
             }
-            // Clean frames re-encode the RETAINED batch (built on the last damaged frame) -
-            // the backbuffer is redrawn every frame, only the tree walk + shaping are skipped.
+            // Clean frames re-encode the retained batch built on the last damaged frame. The
+            // backbuffer is redrawn every frame; only the tree walk and text shaping are skipped.
             vg::VGBatch& batch = data->vg->GetBatch();
 
             data->renderer.BeginFrame(static_cast<i32>(frame.frameIndex));
@@ -554,15 +555,14 @@ export namespace foundation::ui::runtime
             frame.EndBackbufferPass();
         }
 
-        /// Bake SVG drawables into a shared bitmap atlas: each drawable x size renders
-        /// through the VG at 4x SUPERSAMPLE into an offscreen sRGB target, reads back, and
-        /// box-downsamples on the CPU - the Godot-verified icon recipe (AA baked into the
-        /// texels once; BakedSVGDrawable then draws pixel-snapped quads, so every instance
-        /// of an icon samples identical texels). The atlas CPU image is owned HERE (the
-        /// variants borrow it); call again after a DPI change with scaled sizes.
-        /// Synchronous (one small GPU roundtrip) - call at startup/theme load, not per
-        /// frame. Returns false untouched on any failure (drawables keep the live-vector
-        /// fallback).
+        /// Bake SVG drawables into a shared bitmap atlas. Each drawable, at each size, renders
+        /// through the VG at 4x supersampling into an offscreen sRGB target, is read back, and is
+        /// box-downsampled on the CPU. Antialiasing is baked into the texels once; BakedSVGDrawable
+        /// then draws pixel-snapped quads, so every instance of an icon samples identical texels.
+        /// The host owns the atlas CPU image and the variants borrow it; call again after a DPI
+        /// change with scaled sizes. Synchronous (one small GPU round trip), so call it at startup
+        /// or theme load, not per frame. Returns false and changes nothing on any failure, and the
+        /// drawables keep drawing live vectors.
         bool BakeSvgDrawables(core::Span<BakedSVGDrawable* const> drawables,
                               core::Span<const u32> sizes)
         {
@@ -575,7 +575,7 @@ export namespace foundation::ui::runtime
                 return false;
             }
 
-            // Shelf layout in FINAL atlas coordinates.
+            // Shelf layout in final atlas coordinates.
             struct Cell
             {
                 BakedSVGDrawable* drawable = nullptr;
@@ -614,7 +614,7 @@ export namespace foundation::ui::runtime
             const u32 rtWidth = kAtlasWidth * kSupersample;
             const u32 rtHeight = atlasHeight * kSupersample;
 
-            // Offscreen sRGB target (render + copy-out).
+            // Offscreen sRGB target, rendered into and copied out.
             rhi::TextureDesc rtDesc{};
             rtDesc.dimension = rhi::TextureDimension::Texture2D;
             rtDesc.format = rhi::TextureFormat::RGBA8UnormSrgb;
@@ -776,7 +776,7 @@ export namespace foundation::ui::runtime
         }
 
         /// The per-window VGRenderer for an attached window, or null if not attached. Exposed so an app
-        /// can register an external texture (e.g. a ui::viewport ViewportView's offscreen render target)
+        /// can register an external texture (such as a ui::viewport ViewportView's offscreen render target)
         /// into the same renderer that draws that window's UI, so the UI can sample it via DrawImage.
         [[nodiscard]] vg::renderer::VGRenderer* RendererFor(graphics::RenderWindow* window)
         {
@@ -785,8 +785,8 @@ export namespace foundation::ui::runtime
         }
 
         /// The attached window whose RootView is `root`, or null. Lets an app discover which window
-        /// currently hosts a given view tree - e.g. a ViewportView whose dockable panel was floated into
-        /// a new OS window, so the app can re-bind it (View::Root() -> WindowForRoot -> RendererFor).
+        /// currently hosts a given view tree, such as a ViewportView whose dockable panel was floated into
+        /// a new OS window, so the app can re-bind it (View::Root(), then WindowForRoot, then RendererFor).
         [[nodiscard]] graphics::RenderWindow* WindowForRoot(RootView* root)
         {
             if (root == nullptr)
@@ -804,9 +804,9 @@ export namespace foundation::ui::runtime
         }
 
     private:
-        /// CPU half of the bake: sRGB-decode, average the SS x SS premultiplied box,
-        /// UN-premultiply (the vg shader premultiplies its output, but DrawImage expects
-        /// straight alpha - it premultiplies again at draw), sRGB-encode.
+        /// CPU half of the bake: sRGB-decode, average the supersample-squared premultiplied box,
+        /// un-premultiply (the vg shader premultiplies its output, but DrawImage expects straight
+        /// alpha and premultiplies again when it draws), then sRGB-encode.
         [[nodiscard]] static core::UniquePtr<image::OwnedImageData>
         DownsampleBake(core::IAllocator& allocator, const u8* pixels, u32 rowPitch,
                        u32 atlasWidth, u32 atlasHeight, u32 supersample)
@@ -919,7 +919,7 @@ export namespace foundation::ui::runtime
             return nullptr;
         }
 
-        // Pump one window's mouse using LIVE desktop-global coords mapped to that window's local space, so a
+        // Pump one window's mouse using live desktop-global coords mapped to that window's local space, so a
         // captured resize/drag keeps updating even when the cursor leaves the window (the surface freezes
         // its position when not hovered). Button state comes from the raw mouse, so the release ends it.
         void PumpWindowAtGlobal(Attached& a)
@@ -942,14 +942,14 @@ export namespace foundation::ui::runtime
         }
 
         // Resolve the VG shaders through the shared ShaderSystemHost over the data mount: cooked
-        // WGSL from Shaders/shaders.dpak in a dist/browser (no compiler), or on-demand DXC over
-        // Shaders/ in dev. The VG shaders ship in the engine corpus like every other shader
-        // (vg.vs / vg.ps), so this is the SAME path the renderer uses.
+        // WGSL from Shaders/shaders.dpak in a dist or the browser (no compiler), or on-demand DXC
+        // over Shaders/ in dev. The VG shaders ship with the engine's shaders like every other
+        // shader (vg.vs, vg.ps), so this is the same path the renderer uses.
         void InitShaders(foundation::vfs::IFileSystem& dataFileSystem)
         {
             if (!m_shaderHost.Initialize(*m_device->Raw(), dataFileSystem))
             {
-                return; // no compiler and no pack - UI stays un-rendered (loud but not a crash)
+                return; // no compiler and no pack: the UI is not drawn (logged, not a crash)
             }
             m_vs = m_shaderHost.GetVariant(u8"vg", shaders::ShaderStage::Vertex,
                                            shaders::ShaderFlags::None);
@@ -961,21 +961,21 @@ export namespace foundation::ui::runtime
             m_gradConicFs = m_shaderHost.GetVariant(u8"vg_grad_conic",
                                                     shaders::ShaderStage::Fragment,
                                                     shaders::ShaderFlags::None);
-            // MSDF text fragment (the DistanceField draw-mode pipeline); a pre-cooked pack
-            // that predates it just means DF glyph runs fall back to the default sampler.
+            // MSDF text fragment (the DistanceField draw-mode pipeline). With an older cooked pack
+            // that lacks it, distance-field glyph runs fall back to the default sampler.
             m_distanceFieldFragmentShader = m_shaderHost.GetVariant(u8"vg_df", shaders::ShaderStage::Fragment,
                                              shaders::ShaderFlags::None);
-            // Box-shadow fragment (the BoxShadow draw-mode pipeline); a pack that predates it
-            // means shadows are skipped, never mis-drawn.
+            // Box-shadow fragment (the BoxShadow draw-mode pipeline). With a pack that lacks it,
+            // shadows are skipped rather than drawn wrong.
             m_boxShadowFs = m_shaderHost.GetVariant(u8"vg_shadow", shaders::ShaderStage::Fragment,
                                                     shaders::ShaderFlags::None);
-            // Analytic boxes (VGContext::DrawBox); a pack that predates them means boxes tessellate.
+            // Analytic boxes (VGContext::DrawBox). With a pack that lacks them, boxes tessellate.
             m_boxVs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
             m_boxFs = m_shaderHost.GetVariant(u8"vg_box", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
-            // Layer composites (VGContext::PushLayer); a pack that predates them means layers are
-            // opacity pushes.
+            // Layer composites (VGContext::PushLayer). With a pack that lacks them, layers fall
+            // back to opacity pushes.
             m_layerFs = m_shaderHost.GetVariant(u8"vg_layer", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
-            // Layer blurs; a pack that predates them leaves blurred layers sharp.
+            // Layer blurs. A pack that lacks them leaves blurred layers sharp.
             m_blurVs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
             m_blurFs = m_shaderHost.GetVariant(u8"vg_blur", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None);
         }
@@ -985,7 +985,7 @@ export namespace foundation::ui::runtime
         rhi::ShaderModule* m_distanceFieldFragmentShader = nullptr; // MSDF text fragment (borrowed; null = no DF pipeline)
         shell::IShell* m_shell;             // borrowed
         fonts::IFontService* m_fonts;       // borrowed
-        shaders::ShaderSystemHost m_shaderHost; // owns the ShaderSystem + the VG modules (ctor allocator)
+        shaders::ShaderSystemHost m_shaderHost; // owns the ShaderSystem and the VG modules (ctor allocator)
         rhi::ShaderModule* m_vs = nullptr;      // borrowed from m_shaderHost
         rhi::ShaderModule* m_fs = nullptr;      // borrowed from m_shaderHost
         rhi::ShaderModule* m_gradRadialFs = nullptr; // per-pixel radial gradient (borrowed)
@@ -997,22 +997,22 @@ export namespace foundation::ui::runtime
         rhi::ShaderModule* m_blurVs = nullptr;       // layer blur (borrowed)
         rhi::ShaderModule* m_blurFs = nullptr;
 
-        UIContext m_ctx; // shared context; owns N RootViews (allocator from the ctor)
+        UIContext m_ctx; // shared context; owns every window's RootView (allocator from the ctor)
         core::UniquePtr<shell::InputRouter> m_router;
         core::UniquePtr<UiInputBridge> m_bridge;
         core::UniquePtr<ShellClipboard> m_clipboard;
         core::Array<Attached> m_attached;
         core::u32 m_dragReleaseMissedFrames = 0; // stuck-drag watchdog (see Update)
-        // Default near-black, stored LINEAR (matches an sRGB backbuffer's clear semantics).
-        // Baked icon atlases (BakeSvgDrawables): drawables' variants borrow these.
+        // Baked icon atlases (BakeSvgDrawables); the drawables' variants borrow these.
         core::Array<core::UniquePtr<image::OwnedImageData>> m_bakedIconAtlases;
         bool m_themeIconsBaked = false; // first AttachWindow bakes lazily; rebake via BakeThemeIcons
-        bool m_damageGateEnabled = true; // escape hatch: SetDamageGatingEnabled(false)
+        bool m_damageGateEnabled = true; // SetDamageGatingEnabled(false) turns the gate off
         bool m_frameDamaged = true;      // frame-scoped (set in Update, read by RenderWindow)
         u64 m_framesDrawn = 0;
         u64 m_framesSkipped = 0;
         u64 m_framesLaidOut = 0;
         f32 m_uiScale = 1.0f; // user preference multiplier on the OS content scale
+        // Default near-black, stored linear (matches an sRGB backbuffer's clear semantics).
         rhi::ClearColor m_clear = rhi::ClearColor(0.006f, 0.006f, 0.009f, 1.0f);
         rhi::ClearColor m_clearEncoded = rhi::ClearColor(core::LinearToSrgb(0.006f), core::LinearToSrgb(0.006f),
                                                          core::LinearToSrgb(0.009f), 1.0f);

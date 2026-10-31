@@ -3,9 +3,8 @@
 
 // UI - :easing partition
 //
-// Convenience re-exports of foundation.core's easing functions (:easings) with short, UI-friendly names.
-// Ported from Sedulous.UI/src/Animation/Easing.bf (Beef `static class` of readonly EasingFunction ->
-// a struct of static constexpr function-pointer members). EasingFunction = f32(*)(f32).
+// Convenience re-exports of foundation.core's easing functions (:easings) with short, UI-friendly names,
+// as a struct of static constexpr function-pointer members. EasingFunction is f32(*)(f32).
 
 module;
 #include "Core/Prelude.h"
@@ -19,9 +18,9 @@ using namespace foundation::core;
 export namespace foundation::ui
 {
     /// Short UI-friendly names for the core easing functions.
-    // ENGINE_EXPORT_DATA: these are static DATA members (function pointers). Taking one
-    // by address from another library needs the annotation - a .def entry is not enough,
-    // since only a dllimport declaration changes the use site. shared-libraries.md P5/W1.
+    // ENGINE_EXPORT_DATA: these are static data members (function pointers). Taking one
+    // by address from another library needs the annotation; a .def entry is not enough,
+    // since only a dllimport declaration changes the use site.
     struct ENGINE_EXPORT_DATA Easing
     {
         static constexpr EasingFunction Linear = &EaseInLinear;

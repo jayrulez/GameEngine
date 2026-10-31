@@ -1,4 +1,4 @@
-# Foundation::GUI - `foundation.gui`, a fresh eepp-derived retained-mode UI framework
+# Foundation::GUI - `foundation.gui`, a retained-mode UI framework derived from eepp,
 # on the VG/Fonts stack.
 # Platform- and renderer-agnostic core; VG/Fonts/Image/Xml are linked in,
 # and the gui.shell input bridge is a separate library. Built bottom-up.

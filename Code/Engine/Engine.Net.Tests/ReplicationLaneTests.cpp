@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.net - replication rides the per-scene FIXED lane:
-// NetworkSceneSystem::OnFixedUpdate drives the endpoint's UpdateReplication, while the transport half
-// (UpdateTransport) pumps the socket per-frame. These tests prove the round-trip works when driven by
-// Scene::FixedUpdate, and that a scene whose fixed lane does not run produces no deltas even though the
-// connection stays live.
+// engine.net - replication rides the per-scene fixed lane: NetworkSceneSystem::OnFixedUpdate drives
+// the endpoint's UpdateReplication, while the transport half (UpdateTransport) pumps the socket per
+// frame. These tests check the round trip works when driven by Scene::FixedUpdate, and that a scene
+// whose fixed lane does not run produces no deltas even though the connection stays live.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -14,9 +13,9 @@ import foundation.runtime;         // SubsystemManager (drives the subsystem Pos
 import foundation.run;             // the runs whose endpoints the subsystem pumps
 import foundation.scene;
 import foundation.net;             // SimDatagramNetwork / IDatagramSocket
-import foundation.net.replication; // RegisterReplicationComponents + component managers
-import foundation.net.manager;     // NetworkManager (endpoint) + UpdateTransport/UpdateReplication
-import engine.net;                 // NetworkSceneSystem + engine::net::AddNetworkSceneManagers
+import foundation.net.replication; // RegisterReplicationComponents and component managers
+import foundation.net.manager;     // NetworkManager (endpoint), UpdateTransport/UpdateReplication
+import engine.net;                 // NetworkSceneSystem, engine::net::AddNetworkSceneManagers
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -24,12 +23,12 @@ namespace net = foundation::net;
 
 namespace
 {
-    // Wire an endpoint to a scene: install the net managers + the fixed-lane driver, make the endpoint
-    // replicate the scene, and point the scene's NetworkSceneSystem at the endpoint (what the
-    // NetworkController does at the edges in production).
+    // Wire an endpoint to a scene: install the net managers and the fixed-lane driver, make the
+    // endpoint replicate the scene, and point the scene's NetworkSceneSystem at the endpoint (what
+    // the NetworkController does at the edges in production).
     void Bind(net::NetworkManager& endpoint, scene::Scene& s)
     {
-        engine::net::AddNetworkSceneManagers(s); // component managers + NetworkSceneSystem
+        engine::net::AddNetworkSceneManagers(s); // component managers and NetworkSceneSystem
         endpoint.SetReplicatedScene(&s);
         s.GetSystem<engine::net::NetworkSceneSystem>()->SetEndpoint(&endpoint);
     }
@@ -55,20 +54,21 @@ TEST_CASE("net-scene-system: replication rides the scene fixed lane (server -> c
     scene::Scene clientScene{DefaultAllocator()};
     Bind(client, clientScene);
 
-    // An authored networked entity on the server (NetworkComponent + NetworkedTransform); SetReplicatedScene
-    // auto-assigned it a NetworkId inside Bind.
+    // An authored networked entity on the server (NetworkComponent and NetworkedTransform);
+    // SetReplicatedScene auto-assigned it a NetworkId inside Bind.
     const scene::EntityHandle e = serverScene.CreateEntity(u8"Mover");
     serverScene.GetSystem<net::NetworkComponentManager>()->Add(e);
     serverScene.GetSystem<net::NetworkedTransformComponentManager>()->Add(e);
     Transform t0;
     t0.position = Float3{1, 0, 0};
     serverScene.SetLocalTransform(e, t0);
-    // Re-run the server's id assignment now the entity exists (author-then-assign, as the demo does).
+    // Run the server's id assignment again now the entity exists (author, then assign).
     server.SetReplicatedScene(&serverScene);
     const net::NetworkId id = serverScene.GetSystem<net::NetworkComponentManager>()->Get(e)->id;
     REQUIRE(id.IsValid());
 
-    // Handshake over TRANSPORT only (no scene fixed lane needed - the connection is scene-independent).
+    // Handshake over transport only (no scene fixed lane needed: the connection is
+    // scene-independent).
     server.StartServer(/*dedicated=*/true);
     (void)client.ConnectTo(sv->LocalEndpoint());
     for (int i = 0; i < 60 && server.Session().PeerCount() == 0u; ++i)
@@ -79,8 +79,8 @@ TEST_CASE("net-scene-system: replication rides the scene fixed lane (server -> c
     }
     REQUIRE(server.Session().PeerCount() == 1u);
 
-    // Move the server entity, then drive replication ON THE SCENE FIXED LANE (server captures in
-    // serverScene.FixedUpdate, client samples in clientScene.FixedUpdate).
+    // Move the server entity, then drive replication on the scene fixed lane (the server captures
+    // in serverScene.FixedUpdate, the client samples in clientScene.FixedUpdate).
     Transform t1;
     t1.position = Float3{9, 3, -5};
     serverScene.SetLocalTransform(e, t1);
@@ -88,11 +88,11 @@ TEST_CASE("net-scene-system: replication rides the scene fixed lane (server -> c
     scene::EntityHandle ce = scene::EntityHandle::Invalid();
     for (int i = 0; i < 400; ++i)
     {
-        serverScene.FixedUpdate(kStep);  // -> NetworkSceneSystem -> server.UpdateReplication (capture+send)
-        server.UpdateTransport(10.0f);   // flush queued send + recv
+        serverScene.FixedUpdate(kStep);  // -> NetworkSceneSystem -> server.UpdateReplication (capture, send)
+        server.UpdateTransport(10.0f);   // flush queued sends, receive
         network.Advance(10.0f);
-        client.UpdateTransport(10.0f);   // recv + buffer the delta
-        clientScene.FixedUpdate(kStep);  // -> NetworkSceneSystem -> client.UpdateReplication (sample+apply)
+        client.UpdateTransport(10.0f);   // receive and buffer the delta
+        clientScene.FixedUpdate(kStep);  // -> NetworkSceneSystem -> client.UpdateReplication (sample, apply)
         ce = client.Replication().FindEntity(id);
         if (clientScene.IsValid(ce))
         {
@@ -132,7 +132,7 @@ TEST_CASE("net-scene-system: a scene whose fixed lane does not run sends no delt
     server.StartServer(/*dedicated=*/true);
     (void)client.ConnectTo(sv->LocalEndpoint());
 
-    // Pump TRANSPORT for many frames but NEVER tick the server scene's fixed lane (a paused scene).
+    // Pump transport for many frames but never tick the server scene's fixed lane (a paused scene).
     for (int i = 0; i < 200; ++i)
     {
         network.Advance(10.0f);
@@ -140,11 +140,12 @@ TEST_CASE("net-scene-system: a scene whose fixed lane does not run sends no delt
         client.UpdateTransport(10.0f);
         clientScene.FixedUpdate(kStep); // client lane runs; there is simply nothing to apply
     }
-    // The connection is live (transport pumped) but no state was ever captured -> the client saw nothing.
+    // The connection is live (transport pumped) but no state was ever captured, so the client saw
+    // nothing.
     CHECK(server.Session().PeerCount() == 1u);
     CHECK(!clientScene.IsValid(client.Replication().FindEntity(id)));
 
-    // Now run the SERVER's fixed lane: capture begins, and the client mirrors the entity.
+    // Now run the server's fixed lane: capture begins, and the client mirrors the entity.
     scene::EntityHandle ce = scene::EntityHandle::Invalid();
     for (int i = 0; i < 400 && !clientScene.IsValid(ce); ++i)
     {
@@ -165,16 +166,16 @@ TEST_CASE("net-scene-system: a NetworkSceneSystem with no endpoint is inert")
     engine::net::NetworkSceneSystem* sys = s.GetSystem<engine::net::NetworkSceneSystem>();
     REQUIRE(sys != nullptr);
     CHECK(sys->Endpoint() == nullptr);
-    s.FixedUpdate(kStep); // no endpoint -> OnFixedUpdate is a no-op (must not crash)
+    s.FixedUpdate(kStep); // no endpoint: OnFixedUpdate is a no-op (must not crash)
     CHECK(sys->Endpoint() == nullptr);
 }
 
 TEST_CASE("net-subsystem: the transport pump drives every enumerated endpoint per frame")
 {
-    // The NetworkSubsystem owns the per-frame transport pump: its PostUpdate visits every run's live
-    // endpoint (through the runs on its subsystem manager) and drives UpdateTransport. Driven here through a real Context (the
-    // production lane), a server + client connect purely because the subsystem pumps them - no
-    // DriveNetwork, no app fan-out.
+    // The NetworkSubsystem owns the per-frame transport pump: its PostUpdate visits every run's
+    // live endpoint (through the runs on its subsystem manager) and drives UpdateTransport. Driven
+    // here through a real Context (the production lane), a server and client connect purely because
+    // the subsystem pumps them, with no other driver.
     foundation::net::RegisterReplicationComponents();
     net::SimDatagramNetwork network(foundation::core::DefaultAllocator());
     net::IDatagramSocket* sv = network.CreateSocket();

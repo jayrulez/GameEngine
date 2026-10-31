@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Async resource loading (task #123): BindAsync / Pump / WaitAll, the two-stage factory protocol,
+// Async resource loading: BindAsync / Pump / WaitAll, the two-stage factory protocol,
 // dedup, sync-upgrade of a pending id, the decode-failure path, budget-bounded finalize, and the
 // destructor drain. The fake factory is TSAN-safe: DecodeStage runs on a worker and only reads
-// pre-populated maps + constructs objects whose StaticType() was force-initialized on the main
+// pre-populated maps and constructs objects whose StaticType() was force-initialized on the main
 // thread; it never calls ReadObject or touches the ResourceManager (per the protocol contract).
 #include <doctest/doctest.h>
 
@@ -122,7 +122,7 @@ namespace
             return blob;
         }
 
-        // Main thread: turn the blob into the product; record completion order + the calling thread.
+        // Main thread: turn the blob into the product; record completion order and the calling thread.
         [[nodiscard]] RefPtr<Object> FinalizeStage(ResourceManager& /*manager*/,
                                                    RefPtr<Object> decodedObject) override
         {
@@ -158,7 +158,7 @@ namespace
     };
 
     // Registers the reflected types once and forces every StaticType() the worker will touch to
-    // initialize on the MAIN thread (so a worker only ever reads them).
+    // initialize on the main thread (so a worker only ever reads them).
     void RegisterAsyncTypes()
     {
         GlobalTypeRegistry().Register(AsyncSource::StaticType());
@@ -181,9 +181,9 @@ namespace
         return id;
     }
 
-    // RECURSIVE clean: core RemoveDirectory is a bare rmdir (empty dirs only), so it silently
-    // no-oped on a populated scratch dir and the test then read STALE envelopes from a prior
-    // run (e.g. old type-namespace spellings that stopped resolving, causing phantom failures).
+    // Recursive clean: core RemoveDirectory is a bare rmdir (empty dirs only), which would leave a
+    // populated scratch dir in place and let the test read stale envelopes from a prior run (old
+    // type-namespace spellings that do not resolve, causing phantom failures).
     void CleanDir(StringView dir) { (void)RemoveDirectoryRecursive(dir); }
 }
 
@@ -349,7 +349,7 @@ TEST_CASE("resource.async: Pump respects its time budget and resumes on the next
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                           u8".rasset");
     AsyncFactory factory;
-    factory.finalizeSleepMs = 5; // each finalize (>1ms budget) => at most one per Pump
+    factory.finalizeSleepMs = 5; // each finalize (>1ms budget), so at most one per Pump
     JobSystem jobs(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db, &jobs);
     manager.AddFactory(&factory);
@@ -478,9 +478,9 @@ namespace
     };
 }
 
-// Sedulous 066007c4. A bind of a type no factory builds is a host wiring error, logged; a manager
-// that only collects references (a scene's reference scan, factory-less by design) says nothing,
-// the bind landing unresolved all the same. One asset_uses call logged 200 of these.
+// A bind of a type no factory builds is a host wiring error, logged; a manager that only collects
+// references (a scene's reference scan, which has no factories) says nothing, the bind landing
+// unresolved all the same.
 TEST_CASE("resource: a missing factory is logged unless the manager only collects references")
 {
     RegisterAsyncTypes();
@@ -526,7 +526,7 @@ TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
     }
     // Three decodes are held closed and must run concurrently (each spins on its gate until the
     // main thread opens it), so the pool needs at least three workers. A default JobSystem sizes
-    // to (cores - 1), which is 1 on a 2-core CI runner - too few, and the decodes deadlock. Pin
+    // to (cores - 1), which is 1 on a 2-core CI runner: too few, and the decodes deadlock. Pin
     // the worker count so the test does not depend on the host's core count.
     JobSystem jobs(DefaultAllocator(), 3);
     ResourceManager manager(DefaultAllocator(), db, &jobs);
@@ -548,7 +548,7 @@ TEST_CASE("resource.async: finalize follows decode-completion order (FIFO)")
         const int slot = releaseSlots[step];
         factory.gates[slot].store(true, std::memory_order_release);
         // Only this slot's gate is open, so only its decode can reach the completion queue. Pump
-        // until it is actually finalized - waiting on the decoded[] flag alone would race the
+        // until it is actually finalized: waiting on the decoded[] flag alone would race the
         // manager's post-decode push into the queue (the flag is set inside DecodeStage, before
         // the manager enqueues the result), so Pump could run before the entry lands and miss it.
         const usize target = static_cast<usize>(step) + 1u;
@@ -589,7 +589,7 @@ TEST_CASE("resource.async: OnReady fires once on the main thread when the load b
         });
 
     manager.WaitAll();
-    manager.Pump(); // a second pump must NOT re-fire
+    manager.Pump(); // a second pump must not re-fire
 
     CHECK(readyCount == 1);
     CHECK(readyThread == Thread::CurrentId());
@@ -699,10 +699,10 @@ TEST_CASE("resource.async: AsyncLoadBatch reports progress as loads finalize")
 
 namespace
 {
-    // The material pattern, distilled: a SYNC parent factory whose Create binds a child by the
-    // async flag. The 2026-08-12 Sponza-prefab stall: the material factory's direct Bind never
-    // consulted the flag, so 69 texture decodes ran serially on the UI thread inside material
-    // builds - and a pending child left the slot empty FOREVER (no rebuild on settle).
+    // The material pattern, distilled: a sync parent factory whose Create binds a child by the
+    // async flag. A direct Bind that ignored the flag would run texture decodes serially on the UI
+    // thread inside material builds, and a pending child would leave its slot empty for good (no
+    // rebuild on settle).
     class ParentProduct final : public Object
     {
         RTTI_OBJECT(ParentProduct, Object)
@@ -775,15 +775,15 @@ TEST_CASE("resource.async: a settling child RELOADS its dependents (the material
         AsyncBindScope scope(manager);
         parent = manager.BindAsync<ParentProduct>(parentInst->Id());
     }
-    // The parent (unmigrated factory) built synchronously - WITHOUT waiting for the child.
+    // The parent (a sync-only factory) built synchronously, without waiting for the child.
     REQUIRE(parent);
     CHECK(parent->childValue == -1); // child was pending: slot skipped, quietly
 
     factory.gates[0].store(true, std::memory_order_release); // let the child decode finish
     manager.WaitAll();
 
-    // The child's settle reloaded the parent through the recorded dependency edge: the SAME
-    // proxy now sees the rebuilt product with the slot filled - pop-in composes transitively.
+    // The child's settle reloaded the parent through the recorded dependency edge: the same
+    // proxy now sees the rebuilt product with the slot filled, so pop-in composes transitively.
     REQUIRE(parent);
     CHECK(parent->childValue == 7);
 }
@@ -820,9 +820,9 @@ TEST_CASE("resource.async: a settle-reload does NOT block-complete the dependent
     CHECK(manager.PendingCount() == 2u);
     CHECK_FALSE(manager.AsyncBindsEnabled()); // the caller's mode: sync binds from here on
 
-    // The second child's decode opens only after a delay: with the old behaviour the first
-    // settle's reload of the parent sync-bound it (a wait for the gate + finalize inline),
-    // so it would already be Ready below; the settle-reload must leave it Pending instead.
+    // The second child's decode opens only after a delay. If the first settle's reload of the
+    // parent sync-bound it (waiting for the gate and finalizing inline), it would already be Ready
+    // below; the settle-reload must leave it Pending instead.
     std::thread opener([&factory]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         factory.gates[1].store(true, std::memory_order_release);
@@ -866,7 +866,7 @@ TEST_CASE("resource.async: a sync Bind of a pending id finalizes THAT id only; t
     Proxy<AsyncProduct> pa = manager.BindAsync<AsyncProduct>(a);
     Proxy<AsyncProduct> pb = manager.BindAsync<AsyncProduct>(b);
     Proxy<AsyncProduct> pc = manager.BindAsync<AsyncProduct>(c);
-    // Let every decode finish on the workers WITHOUT pumping: three completed entries queued.
+    // Let every decode finish on the workers without pumping: three completed entries queued.
     while (!factory.decoded[0].load() || !factory.decoded[1].load() || !factory.decoded[2].load())
     {
         std::this_thread::yield();

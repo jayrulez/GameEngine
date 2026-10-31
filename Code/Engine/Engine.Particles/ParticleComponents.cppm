@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.particles:components - the ECS bridge between foundation.particles (the CPU
-// sim) and the renderer. Ported in spirit from Sedulous's ParticleComponent(Manager).
+// engine.particles:components - the ECS bridge between foundation.particles (the CPU simulation)
+// and the renderer.
 //
-//   ParticleEffectComponent        - attaches a ParticleEffect to an entity; owns its runtime instance.
-//   ParticleEffectComponentManager - a SceneSystem that (a) ticks every instance in PostUpdate
-//                                    (scene-driven sim) and (b) packs live billboards into
-//                                    ParticleBillboardRenderData during render extraction (the
-//                                    IRenderDataProvider role - called by the ParticleSubsystem).
+//   ParticleEffectComponent:        attaches a ParticleEffect to an entity; owns its runtime instance.
+//   ParticleEffectComponentManager: a SceneSystem that ticks every instance (scene-driven
+//                                   simulation) and packs live billboards into
+//                                   ParticleBillboardRenderData during render extraction (the
+//                                   IRenderDataProvider role, called by the ParticleSubsystem).
 
 module;
 #include "Core/Prelude.h"
@@ -27,11 +27,11 @@ import foundation.geometry;           // StaticMesh (mesh-mode particles)
 import foundation.materials;          // Material (mesh-mode particles)
 import foundation.particles;          // ParticleEffect / ParticleEffectInstance / ParticleSystem
 import foundation.resource;           // Proxy (cooked-resource handle)
-import foundation.particles.resource; // ParticleEffectResource + CloneEffect (cooked-effect path)
+import foundation.particles.resource; // ParticleEffectResource, CloneEffect (cooked-effect path)
 import foundation.texture;            // Texture::View() for resolved per-system textures
 import foundation.texture.resource;
-import foundation.script.facades; // script::Entity/Scene + CurrentRunResources (the SceneParticles handle)
-import engine.render;             // ExtractPrimaryCamera - the point the sort and the ribbons face
+import foundation.script.facades; // script::Entity/Scene, CurrentRunResources (the SceneParticles handle)
+import engine.render;             // ExtractPrimaryCamera: the point the sort and the ribbons face
 import :renderdata;
 
 using namespace foundation::core;
@@ -52,8 +52,9 @@ export namespace engine::particles
     namespace scene = foundation::scene;
     namespace script = foundation::script;
 
-    // Attach a particle effect to an entity. The effect is borrowed (the app owns it now; a cooked
-    // ParticleEffectResource later). SetEffect spins up the runtime instance.
+    // Attach a particle effect to an entity. On the code path the effect is borrowed (the app owns
+    // it); on the cooked path (effectAsset) the component owns a clone. SetEffect spins up the
+    // runtime instance.
     struct ParticleEffectComponent
     {
         ParticleEffect* effect = nullptr; // borrowed
@@ -72,26 +73,27 @@ export namespace engine::particles
         f32 lightRange = 4.0f;
         bool visible = true;
 
-        // Cooked-resource path: a guid-serialized, hot-reload-following ref to the cooked effect +
-        // the component's own independent clone (stable address across component moves - the
-        // instance borrows *ownedEffect). The manager attaches/re-attaches when the resolved
-        // product changes (a pick, a load, or a hot reload).
+        // Cooked-resource path: a guid-serialized ref to the cooked effect that follows hot
+        // reloads, and the component's own independent clone (a stable address across component
+        // moves; the instance borrows *ownedEffect). The manager attaches or re-attaches when the
+        // resolved product changes (a pick, a load, or a hot reload).
         foundation::resource::Ref<ParticleEffectResource> effectAsset;
         UniquePtr<ParticleEffect> ownedEffect;
         ParticleEffectResource* attachedResource = nullptr; // what ownedEffect was cloned from
 
-        // Runtime-only scratch (NOT serialized): per-system RefPtr view of the effect's resolved material
-        // proxies (from the cooked resource's SystemMaterials), refreshed at extract so a mesh system's
-        // MultiMeshRenderData can borrow a stable per-submesh array for the frame. Mirrors the render
-        // MeshComponent's materialCache. Indexed [systemIndex][SubMesh::materialIndex]; slot 0 = whole mesh.
+        // Runtime-only scratch (not serialized): a per-system RefPtr view of the effect's resolved
+        // material proxies (from the cooked resource's SystemMaterials), refreshed at extract so a
+        // mesh system's MultiMeshRenderData can borrow a stable per-submesh array for the frame, as
+        // the render MeshComponent's materialCache does. Indexed
+        // [systemIndex][SubMesh::materialIndex]; slot 0 is the whole mesh.
         Array<Array<RefPtr<materials::Material>>> effectMaterialCache;
 
         // Code path: attach a borrowed, app-owned effect (tests/samples building effects in code).
         void SetEffect(ParticleEffect& fx)
         {
             effect = &fx;
-            // Component value-bound (spec): pool-resident component spill stays on the
-            // process allocator until a per-manager component-spill seam exists.
+            // The component is a value in the manager's pool, and there is no per-manager allocator
+            // for what a component owns, so the instance comes from the process allocator.
             instance = MakeUnique<ParticleEffectInstance>(DefaultAllocator(), fx);
         }
         // Cooked path: attach a bound ParticleEffectResource. The component clones the cooked template
@@ -117,16 +119,17 @@ export namespace engine::particles
             instance = MakeUnique<ParticleEffectInstance>(DefaultAllocator(), *ownedEffect);
         }
 
-        // Attach a resource for RENDER-RESOURCE LOOKUP ONLY (its per-system SystemMesh/SystemTexture/
-        // SystemMaterial), WITHOUT re-cloning the effect. The editor preview keeps its live borrowed
-        // effect (SetEffect(ParticleEffect&)) for the sim - so scalar edits stay live - while these
-        // resolved resources drive rendering. Safe on the code path (no effectAsset proxy, so the
-        // manager never re-attaches over it). The caller OWNS `res` + keeps it alive + rebuilds it when
-        // the effect's refs / system set change.
+        // Attach a resource for render-resource lookup only (its per-system
+        // SystemMesh/SystemTexture/SystemMaterial), without re-cloning the effect. The editor
+        // preview keeps its live borrowed effect (SetEffect(ParticleEffect&)) for the simulation,
+        // so scalar edits stay live, while these resolved resources drive rendering. Safe on the
+        // code path (no effectAsset proxy, so the manager never re-attaches over it). The caller
+        // owns `res`, keeps it alive and rebuilds it when the effect's refs or system set change.
         void SetRenderResources(ParticleEffectResource* res) noexcept { attachedResource = res; }
     };
 
-    // Persist the resource refs + tunables; the live instance/clone and the raw view are runtime-only.
+    // Persist the resource refs and tunables; the live instance, the clone and the raw view are
+    // runtime-only.
     inline void Serialize(ISerializer& ar, ParticleEffectComponent& c)
     {
         foundation::core::Serialize(ar, "effect", c.effectAsset);
@@ -167,10 +170,10 @@ export namespace engine::particles
         /// primary camera as of the last tick (the origin until one exists).
         [[nodiscard]] Float3 CameraPosition() const noexcept { return m_cameraPos; }
 
-        // Scene-driven sim: advance every instance in PostTransform, once the transforms are
-        // final (and before render extraction reads them). Earlier, an effect spawned this frame
-        // (a prefab a behaviour placed in its update) read its not-yet-composed world position,
-        // the origin, and a one-shot burst went off there.
+        // Scene-driven simulation: advance every instance in PostTransform, once the transforms are
+        // final (and before render extraction reads them). Run any earlier, an effect spawned this
+        // frame (a prefab a behaviour placed in its update) would read its not-yet-composed world
+        // position, the origin, and fire a one-shot burst there.
         void OnUpdate(scene::ScenePhase phase, f32 deltaTime) override
         {
             if (phase != scene::ScenePhase::PostTransform || m_scene == nullptr)
@@ -178,9 +181,8 @@ export namespace engine::particles
                 return;
             }
             PROFILE_SCOPE("Particles.Simulate");
-            // The point the back-to-front sort and the camera-facing ribbons work from. It was
-            // declared, read in three places and written nowhere, so both faced the ORIGIN
-            // (found by the Beef port). The scene's primary camera, refreshed every tick.
+            // The point the back-to-front sort and the camera-facing ribbons work from: the scene's
+            // primary camera, refreshed every tick.
             {
                 render::ViewCamera camera;
                 if (::engine::render::ExtractPrimaryCamera(*m_scene, camera))
@@ -193,7 +195,7 @@ export namespace engine::particles
                 {
                     if (!m_scene->IsEffectivelyActive(owner))
                     {
-                        return; // no sim, no emission; live particles FREEZE
+                        return; // no simulation, no emission; live particles freeze
                     }
                     // Attach/re-attach when the ref's resolved product changed (a pick, a scene load's
                     // resolve pass, or a hot reload swapping the product behind the proxy).
@@ -213,7 +215,7 @@ export namespace engine::particles
 
         // render::IRenderDataProvider: pack each visible billboard system's live particles into a
         // ParticleBillboardRenderData batch and add it to the snapshot. Called during render extraction
-        // (this scene's turn). Mesh-mode systems are handled elsewhere (instanced-mesh).
+        // (this scene's turn). Mesh-mode systems are handled elsewhere (instanced mesh).
         void ExtractRenderData(render::ExtractedScene& snapshot) override
         {
             PROFILE_SCOPE("Particles.Extract");
@@ -228,9 +230,9 @@ export namespace engine::particles
                     if (!c.visible || !c.instance ||
                         (m_scene != nullptr && !m_scene->IsEffectivelyActive(owner)))
                     {
-                        return; // frozen particles also do not RENDER
+                        return; // frozen particles also do not render
                     }
-                    // The emitter's world transform - used to re-base Local-space particles at extract.
+                    // The emitter's world transform, used to re-base Local-space particles at extract.
                     m_emitterWorld = (m_scene != nullptr) ? m_scene->GetWorldMatrix(owner)
                                                           : Float4x4::Identity();
                     ParticleEffect& fx = c.instance->Effect();
@@ -320,7 +322,7 @@ export namespace engine::particles
             CPUStream<f32>* lifes = st.Lifetimes();
             const bool stretch = (sys.renderMode == ParticleRenderMode::StretchedBillboard);
             const f32 modeF = OrientationMode(sys.renderMode);
-            const f32 softDist = sys.softParticles ? sys.softDistance : 0.0f; // 0 => no soft fade
+            const f32 softDist = sys.softParticles ? sys.softDistance : 0.0f; // 0: no soft fade
             const bool flip = sys.flipbook.IsActive();
             const i32 alive = sys.AliveCount();
             const Float4x4 xform =
@@ -418,8 +420,9 @@ export namespace engine::particles
             return *m_scratch[m_scratchUsed++];
         }
 
-        // Maps a mesh-particle material's blend preset to a render category (mirrors the render
-        // subsystem's CategoryForMaterial). Opaque/Masked keep their pass; everything else is Transparent.
+        // Maps a mesh-particle material's blend preset to a render category (as the render
+        // subsystem's CategoryForMaterial does). Opaque and Masked keep their pass; everything else
+        // is Transparent.
         [[nodiscard]] static render::RenderCategory
         MeshCategoryFor(const materials::Material* m) noexcept
         {
@@ -438,32 +441,35 @@ export namespace engine::particles
             }
         }
 
-        // Mesh-mode: emit a MultiMeshRenderData drawn by the shared mesh renderer (the instanced-mesh
-        // path). Per-particle world transform + tint; a bumped version re-uploads the (dynamic) set each
-        // frame. No new renderer needed - particles reuse the InstancedMesh persistent-buffer machinery.
+        // Mesh-mode: emit a MultiMeshRenderData drawn by the shared mesh renderer (the
+        // instanced-mesh path), with a per-particle world transform and tint; a bumped version
+        // re-uploads the (dynamic) set each frame. Particles reuse the InstancedMesh
+        // persistent-buffer machinery, so no new renderer is needed.
         void ExtractMeshSystem(ParticleSystem& sys, ParticleEffectComponent& c,
                                scene::EntityHandle owner, i32 sysIndex,
                                render::ExtractedScene& snapshot)
         {
-            // Each mesh system's mesh + per-submesh materials come RESOLVED from attachedResource (bound
-            // from the effect's meshRef/materialRefs). attachedResource is that resource for BOTH the
-            // cooked runtime path (== the live effectAsset product) AND the editor preview (attached for
-            // render-lookup without re-cloning the live sim effect - so previews render every mesh system
-            // while scalar edits stay live). Null on the bare code path (an app-built effect, no resources).
+            // Each mesh system's mesh and per-submesh materials come resolved from attachedResource
+            // (bound from the effect's meshRef/materialRefs). attachedResource is that resource on
+            // both the cooked runtime path (the live effectAsset product) and in the editor preview
+            // (attached for render lookup without re-cloning the live simulation effect, so
+            // previews render every mesh system while scalar edits stay live). Null on the bare
+            // code path (an app-built effect, no resources).
             ParticleEffectResource* const res = c.attachedResource;
 
-            // Mesh: the COMPONENT's mesh WINS (the per-placement override); the system's resolved mesh is
-            // the fallback. meshScale follows whichever mesh is drawn.
+            // Mesh: the component's mesh wins (the per-placement override); the system's resolved
+            // mesh is the fallback. meshScale follows whichever mesh is drawn.
             geometry::StaticMesh* const componentMesh = c.mesh.Get();
             geometry::StaticMesh* const effectMesh =
                 (res != nullptr) ? res->SystemMesh(sysIndex).Get() : nullptr;
             geometry::StaticMesh* const mesh = (componentMesh != nullptr) ? componentMesh : effectMesh;
             const f32 meshScale = (componentMesh != nullptr) ? c.meshScale : sys.meshScale;
 
-            // Material: the COMPONENT's material WINS; the system's resolved per-submesh list is the
-            // fallback. When the fallback is used, refresh the component's RefPtr cache for this system so
-            // the snapshot can borrow a stable per-submesh array (slot 0 = whole-mesh, >1 = per-submesh by
-            // SubMesh::materialIndex). (v1: the component carries a single material; its array follows.)
+            // Material: the component's material wins; the system's resolved per-submesh list is
+            // the fallback. When the fallback is used, refresh the component's RefPtr cache for
+            // this system so the snapshot can borrow a stable per-submesh array (slot 0 is the
+            // whole mesh; with more than one slot, each submesh by SubMesh::materialIndex). The
+            // component itself carries a single material.
             Array<RefPtr<materials::Material>>* matCache = nullptr;
             if (c.material.Get() == nullptr && res != nullptr && sysIndex >= 0)
             {
@@ -514,27 +520,30 @@ export namespace engine::particles
             rd->transforms = xf.Data();
             rd->tints = tint.Data();
             rd->instanceCount = static_cast<u32>(alive);
-            rd->version = ++m_meshVersion; // dynamic: transforms change every frame -> re-upload
+            rd->version = ++m_meshVersion; // dynamic: transforms change every frame, so re-upload
             rd->mesh = mesh;
             rd->material = material;
-            // Per-submesh materials: when the effect carries >1 slot, hand the array to the renderer so
-            // ResolveMultiMesh draws each submesh with submeshMaterials[SubMesh::materialIndex] (falling
-            // back to `material` for null/OOB). A single slot leaves this null -> `material` covers all.
+            // Per-submesh materials: when the effect carries more than one slot, hand the array to
+            // the renderer so ResolveMultiMesh draws each submesh with
+            // submeshMaterials[SubMesh::materialIndex] (falling back to `material` for null or out
+            // of range). A single slot leaves this null, and `material` covers all.
             const bool perSubmesh = (matCache != nullptr) && (matCache->Size() > 1);
             rd->submeshMaterials = perSubmesh ? matCache->Data() : nullptr;
             rd->submeshMaterialCount = perSubmesh ? static_cast<u32>(matCache->Size()) : 0u;
             rd->rendererId = m_meshRendererId; // the mesh renderer, by its real registration id
-            // Category from the material's blend mode (like regular meshes + Sedulous): an opaque material
-            // stays Opaque; a transparent/additive one routes to the Transparent pass (ResolveMultiMesh
-            // still instances it - the set sorts as one item, fine for additive / approximate for alpha).
+            // Category from the material's blend mode, as for regular meshes: an opaque material
+            // stays Opaque; a transparent or additive one routes to the Transparent pass
+            // (ResolveMultiMesh still instances it; the set sorts as one item, fine for additive
+            // and approximate for alpha).
             rd->category = MeshCategoryFor(material);
             const Float3 center = (bmin + bmax) * 0.5f;
             rd->worldCenter = center;
             rd->worldRadius = Length(bmax - center) + LargestSize(sys) * meshScale;
         }
 
-        // Light-mode: add a point light per particle (capped + evenly strided across the set to stay
-        // under the forward light budget), colored by the particle, intensity faded by its alpha.
+        // Light-mode: add a point light per particle (capped and evenly strided across the set to
+        // stay under the forward light budget), coloured by the particle, its intensity faded by
+        // its alpha.
         void ExtractLights(ParticleSystem& sys, ParticleEffectComponent& c,
                            render::ExtractedScene& snapshot)
         {
@@ -566,13 +575,9 @@ export namespace engine::particles
             }
         }
 
-        // Trail-mode: build camera-facing ribbon geometry from each live particle's recorded point ring.
-        // Each pair of consecutive points becomes a quad (2 tris) whose "side" is perpendicular to both
-        // the segment and the view direction, so the ribbon always faces the camera. Width tapers
-        // widthStart -> widthEnd along the trail; alpha fades with each point's age. The vertices are
-        // packed into a frame-lived scratch buffer and handed off as one ParticleTrailRenderData batch.
-        // Resolve a system's billboard/trail texture: the cooked resource's per-system Proxy<Texture>
-        // (hot-reload-following) when this component is resource-driven, else the code-set c.texture.
+        // Resolve a system's billboard or trail texture: the cooked resource's per-system
+        // Proxy<Texture> (which follows hot reloads) when this component is resource-driven, else
+        // the code-set c.texture.
         [[nodiscard]] static rhi::TextureView* SystemTextureView(const ParticleEffectComponent& c,
                                                                  i32 systemIndex)
         {
@@ -586,6 +591,11 @@ export namespace engine::particles
             return c.texture;
         }
 
+        // Trail-mode: build camera-facing ribbon geometry from each live particle's recorded point ring.
+        // Each pair of consecutive points becomes a quad (2 triangles) whose side is perpendicular to both
+        // the segment and the view direction, so the ribbon always faces the camera. Width tapers from
+        // widthStart to widthEnd along the trail; alpha fades with each point's age. The vertices are
+        // packed into a frame-lived scratch buffer and handed off as one ParticleTrailRenderData batch.
         void ExtractTrailSystem(ParticleSystem& sys, ParticleEffectComponent& c, i32 systemIndex,
                                 render::ExtractedScene& snapshot)
         {
@@ -753,10 +763,11 @@ export namespace engine::particles
             return *m_trailScratch[m_trailUsed++];
         }
 
-        // Max point lights one Light system contributes/frame. Kept well above a Light system's typical
-        // alive count so the selection stride stays 1 (every particle gets a light) - a smaller cap strides
-        // across the set and, because swap-remove reshuffles indices each frame, makes lights pop in/out.
-        // Still far under the clustered-forward budget (256/view).
+        // Max point lights one Light system contributes per frame. Kept well above a Light system's
+        // typical alive count so the selection stride stays 1 (every particle gets a light): a
+        // smaller cap strides across the set and, because swap-remove reshuffles indices each
+        // frame, makes lights pop in and out. Still far under the clustered-forward budget (256 per
+        // view).
         static constexpr i32 kLightParticleCap = 200;
 
         scene::Scene* m_scene = nullptr;
@@ -779,18 +790,19 @@ export namespace engine::particles
         u32 m_meshVersion = 0; // bumped per mesh batch so the instanced-mesh path re-uploads
     };
 
-    // A scene-bound PARTICLES handle (SceneParticles.of(scene)): runtime WORLD ops on particle effects
-    // that need the component's manager-owned runtime ParticleEffectInstance (which the component data
-    // cannot reach) - play/stop/restart/pause emission, query, and swap the effect by resource id.
-    // Keyed by entity, mirroring ScenePhysics / SceneRender / SceneAudio / SceneAnimation (component =
-    // auto-reflected DATA: visible/meshScale/light*; scene-handle = world ops). The instance is built
-    // lazily by the manager when the effect resolves, so control from onUpdate sees it; a call before
-    // the effect is attached is a safe no-op.
+    // A scene-bound particles handle (SceneParticles.of(scene)): runtime world operations on
+    // particle effects that need the component's manager-owned runtime ParticleEffectInstance,
+    // which the component data cannot reach: play, stop, restart and pause emission, query, and
+    // swap the effect by resource id. Keyed by entity, like ScenePhysics, SceneRender, SceneAudio
+    // and SceneAnimation (the component is auto-reflected data: visible/meshScale/light*; the scene
+    // handle does world operations). The manager builds the instance lazily when the effect
+    // resolves, so control from onUpdate sees it; a call before the effect is attached is a safe
+    // no-op.
     struct SceneParticles
     {
         scene::Scene* scene = nullptr;
 
-        // Begin/resume emission on the entity's effect. No-op if no effect is attached yet.
+        // Begin or resume emission on the entity's effect. No-op if no effect is attached yet.
         void play(foundation::script::Entity entity) const
         {
             if (ParticleEffectInstance* i = Instance(entity))
@@ -815,7 +827,7 @@ export namespace engine::particles
                 i->Play();
             }
         }
-        // Pause/resume the whole simulation for this effect (freezes live particles too).
+        // Pause or resume the whole simulation for this effect (freezes live particles too).
         void pause(foundation::script::Entity entity, bool paused) const
         {
             if (ParticleEffectInstance* i = Instance(entity))
@@ -867,15 +879,15 @@ export namespace engine::particles
 
 } // exported namespace
 
-// Reflection (tooling). The REFLECT_VALUE body + RegisterParticleComponentReflection()
-// live in ParticleSubsystemImpl.cpp (kept out of this interface; see gcc-module-interface-hygiene).
+// Reflection (tooling). The REFLECT_VALUE body and RegisterParticleComponentReflection() live in
+// ParticleSubsystemImpl.cpp, kept out of this interface for GCC's module handling.
 export namespace engine::particles
 {
     void RegisterParticleComponentReflection();
 
-    // Surfaces the particle component to SCRIPT (Track A): ParticleEffectComponent.of(entity) for the
-    // DATA (visible/meshScale/light*), plus SceneParticles.of(scene) for the world ops (play/stop/
-    // restart/pause/isPlaying/setEffect). Registers + seeds + names them. Called by the composition
-    // root (like RegisterRenderScriptFacade).
+    // Surfaces the particle component to script: ParticleEffectComponent.of(entity) for the data
+    // (visible/meshScale/light*), and SceneParticles.of(scene) for the world operations
+    // (play/stop/restart/pause/isPlaying/setEffect). Registers, seeds and names them. Called by the
+    // composition root (like RegisterRenderScriptFacade).
     void RegisterParticleScriptFacade();
 }

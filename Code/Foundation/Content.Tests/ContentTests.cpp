@@ -280,7 +280,7 @@ TEST_CASE("content: Instance::DeleteData removes exactly one stream sidecar, ide
     REQUIRE(mount.Exists(u8"thing.alpha.bin"));
     REQUIRE(mount.Exists(u8"thing.beta.bin"));
 
-    // Removes ONLY the named stream (instance-scoped path - no over-delete).
+    // Removes only the named stream (an instance-scoped path, so nothing else goes).
     CHECK(inst->DeleteData(u8"alpha").IsOk());
     CHECK_FALSE(mount.Exists(u8"thing.alpha.bin"));
     CHECK(mount.Exists(u8"thing.beta.bin"));
@@ -295,7 +295,7 @@ TEST_CASE("content: Instance::DeleteData removes exactly one stream sidecar, ide
 namespace
 {
     // The text-stream tests create their own instances; RemoveTree only knows the steel
-    // fixture, so these clean their exact files - leftovers otherwise fail the NEXT run
+    // fixture, so these clean their exact files: leftovers would otherwise fail the next run
     // (a fresh DB scans the stale envelope and CloneInstance hits AlreadyExists).
     void RemoveTextStreamScratch(StringView root)
     {
@@ -451,7 +451,7 @@ TEST_CASE("content: CloneInstance deep-copies object + sidecars under a fresh gu
     CHECK(bytes[0] == byte{9});
     CHECK(bytes[2] == byte{7});
 
-    // Name collisions + unknown ids fail cleanly.
+    // Name collisions and unknown ids fail cleanly.
     CHECK(db.CloneInstance(steel->Id(), u8"copper") == nullptr);
     Random rng(99);
     CHECK(db.CloneInstance(Guid::Generate(rng), u8"x") == nullptr);
@@ -487,7 +487,7 @@ TEST_CASE("content: RenameInstance moves envelope + sidecars; RenameGroup moves 
     const byte extra[] = {byte{1}, byte{2}};
     REQUIRE(steel->WriteData(u8"extra", Span<const byte>(extra, 2)).IsOk());
 
-    // Instance rename: files move, guid + group stay, content still reads.
+    // Instance rename: files move, guid and group stay, content still reads.
     REQUIRE(db.RenameInstance(id, u8"bronze").IsOk());
     CHECK(steel->Name() == u8"bronze");
     CHECK(db.GetInstance(id) == steel); // guid identity untouched
@@ -572,15 +572,15 @@ TEST_CASE("content: DeleteGroup removes the whole subtree - files, directories, 
         // The root refuses.
         CHECK(db.DeleteGroup(*db.RootGroup()).Code() == ErrorCode::NotSupported);
 
-        REQUIRE(db.DeleteGroup(*outer).IsOk()); // outer/inner/a/b are DANGLING after this
+        REQUIRE(db.DeleteGroup(*outer).IsOk()); // outer/inner/a/b are dangling after this
 
-        // Registrations gone (guid index + tree), the sibling untouched.
+        // Registrations gone (guid index and tree), the sibling untouched.
         CHECK(db.GetInstance(aId) == nullptr);
         CHECK(db.GetInstance(bId) == nullptr);
         CHECK(db.RootGroup()->GetGroup(u8"outer") == nullptr);
         CHECK(db.GetInstance(keepId) == keep);
 
-        // Files AND directories gone (a rescan must not resurrect ghost groups).
+        // Files and directories gone (a rescan must not resurrect ghost groups).
         CHECK_FALSE(mount.Exists(u8"outer/a.xasset"));
         CHECK_FALSE(mount.Exists(u8"outer/a.extra.bin"));
         CHECK_FALSE(mount.Exists(u8"outer/inner/b.xasset"));
@@ -600,9 +600,9 @@ TEST_CASE("content: DeleteGroup removes the whole subtree - files, directories, 
 
 TEST_CASE("content: instance guids are unique across database sessions")
 {
-    // Regression: the guid rng was default-seeded (fixed PCG constant), so every session
-    // replayed the SAME guid sequence - a delete + reimport in a fresh session gave old
-    // guids to different assets, cross-typing persisted cook records/products (crash).
+    // Each database seeds its guid RNG afresh. A fixed seed would replay the same guid sequence
+    // every session, and a delete and reimport in a fresh session would give old guids to
+    // different assets, cross-typing persisted cook records and products.
     const StringView dirA = u8"scratch_content_guid_a";
     const StringView dirB = u8"scratch_content_guid_b";
     RemoveTree(dirA);
@@ -615,7 +615,7 @@ TEST_CASE("content: instance guids are unique across database sessions")
     ContentDatabase a(DefaultAllocator(), mountA, BinarySerializerFactory(), u8".rasset");
     ContentDatabase b(DefaultAllocator(), mountB, BinarySerializerFactory(), u8".rasset");
 
-    // Two fresh databases minting the same creation sequence must NOT agree on guids.
+    // Two fresh databases minting the same creation sequence must not agree on guids.
     Array<Guid> fromA;
     Array<Guid> fromB;
     Group* ga = a.RootGroup()->CreateGroup(u8"materials");
@@ -660,15 +660,14 @@ TEST_CASE("content: UniqueInstanceName / UniqueGroupName - the one general dedup
     CHECK(group->UniqueInstanceName(u8"Thing") == u8"Thing");
 
     // A taken base steps to `base.2`, `base.3`, ... (CreateInstance would silently
-    // return the EXISTING instance - the overwrite hazard the helper exists for).
+    // return the existing instance, the overwrite hazard the helper exists for).
     foundation::content::Instance* first =
         group->CreateInstance(u8"Thing", MaterialResource::StaticType());
     REQUIRE(first != nullptr);
     CHECK(group->CreateInstance(u8"Thing", MaterialResource::StaticType()) == first);
     CHECK(group->UniqueInstanceName(u8"Thing") == u8"Thing.2");
 
-    // Digits emit most-significant first - counter 12 is "Thing.12", never "Thing.21"
-    // (the bug every hand-rolled copy of this loop had).
+    // Digits emit most significant first: counter 12 is "Thing.12", never "Thing.21".
     for (i32 counter = 2; counter <= 11; ++counter)
     {
         const String next = group->UniqueInstanceName(u8"Thing");
@@ -713,7 +712,7 @@ TEST_CASE("content: the open scan reports envelope count + bytes opened (I4b ins
     }
     {
         ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::xml::XmlSerializerFactory(), u8".xasset");
-        // The reopen scan touched all three envelopes and counted their full file sizes -
+        // The reopen scan touched all three envelopes and counted their full file sizes:
         // the number that prices the open-time header scan (XML DOM-parses whole files).
         CHECK(db.LastScanStats().envelopes == 3);
         CHECK(db.LastScanStats().bytesOpened > 0);
@@ -734,8 +733,8 @@ TEST_CASE("content: group children stay name-sorted through create and rename")
     NativeFileSystem mount(dir, DefaultAllocator());
     ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".xasset");
 
-    // Created deliberately out of order (and mixed case) - readdir/import order must not
-    // leak into the surfaced order.
+    // Created out of order and in mixed case: readdir or import order must not leak into
+    // the surfaced order.
     Group* root = db.RootGroup();
     (void)root->CreateGroup(u8"zinc");
     (void)root->CreateGroup(u8"Alpha");
@@ -768,8 +767,8 @@ TEST_CASE("content: group children stay name-sorted through create and rename")
     RemoveDirectory(dir);
 }
 
-// Sedulous 3dae9ac8: an author's edit of a stored envelope reads the way a load reads the stored
-// one - the same instance, the same type, a payload this build reads - or is refused with why.
+// An author's edit of a stored envelope reads the way a load reads the stored one (the same
+// instance, the same type, a payload this build reads), or is refused with the reason.
 TEST_CASE("content: ReadObjectFrom reads an edited envelope, and refuses another's or a broken one")
 {
     GlobalTypeRegistry().Register(MaterialResource::StaticType());
@@ -827,7 +826,7 @@ TEST_CASE("content: ReadObjectFrom reads an edited envelope, and refuses another
     auto misspelled = readFrom(*steel, ReplaceAll(stored.AsView(), u8"shininess", u8"shine").AsView());
     REQUIRE_FALSE(misspelled.HasValue());
     CHECK(misspelled.Error().AsView().StartsWith(u8"the payload did not read"));
-    // And says which key, where, and what stood there (Sedulous ac705dee).
+    // And says which key, where, and what stood there.
     CHECK(misspelled.Error().AsView().ContainsIgnoreCase(
         u8" - no i32 'shininess' at payload (next there: <i32 name=\"shine\">)"));
     auto garbage = readFrom(*steel, u8"<nothing/>");
@@ -839,7 +838,7 @@ TEST_CASE("content: ReadObjectFrom reads an edited envelope, and refuses another
 }
 
 // A payload stamped with another data version is in another layout: it is refused, and not
-// read as this one (in binary that walked garbage counts past the end of the file).
+// read as this one (in binary, that would walk garbage counts past the end of the file).
 TEST_CASE("content: a payload of another data version is refused unread")
 {
     GlobalTypeRegistry().Register(CountedRecord::StaticType());
@@ -873,7 +872,7 @@ TEST_CASE("content: a payload of another data version is refused unread")
     RemoveDirectory(dir);
 }
 
-// A binary envelope reads field by field; straight off a file each field was a system call.
+// A binary envelope reads field by field; straight off a file, each field would be a system call.
 TEST_CASE("content: an object reads from its file in a few large reads")
 {
     GlobalTypeRegistry().Register(WordsRecord::StaticType());
@@ -906,7 +905,7 @@ TEST_CASE("content: an object reads from its file in a few large reads")
     REQUIRE(record != nullptr);
     REQUIRE(record->words.Size() == 500u);
     CHECK(record->words[499] == u8"word499");
-    CHECK(counting.reads < 8u); // was one per count, length and character: thousands
+    CHECK(counting.reads < 8u); // unbuffered: one per count, length and character, thousands
 
     (void)db.DeleteInstance(id);
     RemoveDirectory(dir);

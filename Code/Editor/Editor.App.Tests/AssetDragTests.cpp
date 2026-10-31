@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// What assets carry when dragged: the payload they make, read back whole; a target that takes
-// some types taking one or naming why not (several, a type it does not take); anything else not an asset.
+// The payload an asset drag carries, read back whole. A target that takes some types accepts one
+// asset of those types or says why not (several assets, or a type it does not take). Any other
+// payload is not an asset.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

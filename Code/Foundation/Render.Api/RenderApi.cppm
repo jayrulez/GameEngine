@@ -3,11 +3,10 @@
 
 /// Foundation::Render.Api - the `foundation.render.api` module.
 ///
-/// The renderer's SCENE-RENDERING INTERFACE, extracted into a light module (core + rhi + scene
-/// only) so tools can drive scene rendering through `ISceneRenderer` without linking the
-/// renderer (the editor shell's layering rule; Sedulous models the same split with its
-/// Abstractions assemblies). `foundation.render` re-exports everything here, so renderer-side
-/// code is unaffected; `RenderSubsystem` implements `ISceneRenderer`.
+/// The renderer's scene-rendering interface, kept in a light module (core, rhi and scene only) so
+/// tools can drive scene rendering through `ISceneRenderer` without linking the renderer.
+/// `foundation.render` re-exports everything here, so renderer-side code is unaffected;
+/// `RenderSubsystem` implements `ISceneRenderer`.
 ///
 /// The lifecycle (one bracket per frame, N views inside):
 ///
@@ -19,8 +18,8 @@
 /// BeginRendering resets shared per-frame state (the view pool, the renderers' transient
 /// buffers) once; each RenderScene extracts a scene into an immutable ExtractedScene and
 /// collects a view over it; EndRendering composes every collected view into the frame. The
-/// caller owns the encoder + targets + frame pacing. Begin/EndRendering self-guard when the
-/// renderer isn't ready yet, so a frame bracket may be driven unconditionally.
+/// caller owns the encoder, the targets and the frame pacing. Begin/EndRendering do nothing while
+/// the renderer is not ready, so a frame bracket may be driven unconditionally.
 
 module;
 #include "Core/Prelude.h"
@@ -69,7 +68,7 @@ export namespace foundation::render
         }
     };
 
-    // A viewport sub-rect within a render target, in pixels. Width 0 => the full target.
+    // A viewport sub-rect within a render target, in pixels. Width 0 means the full target.
     struct ViewportRect
     {
         i32 x = 0, y = 0;
@@ -89,7 +88,7 @@ export namespace foundation::render
         f32 sourceWidth = 1.0f;
         f32 sourceHeight = 1.0f;
         // How the finished image is turned as it is presented (a landscape game on a portrait
-        // screen; Specs/present-transform.md).
+        // screen).
         ContentRotation rotation = ContentRotation::None;
 
         SceneSize() = default;
@@ -126,48 +125,48 @@ export namespace foundation::render
     struct CameraOverride
     {
         ViewCamera camera;
-        // The view's backdrop, LINEAR like all render data (an authored colour is decoded with
+        // The view's backdrop, linear like all render data (an authored colour is decoded with
         // ToLinear before it lands here); cornflower blue's sRGB, decoded.
         Color clearColor = Color{0.127f, 0.300f, 0.846f, 1.0f};
     };
 
-    // Ephemeral per-view post-processing overrides for a RenderScene call - the editor viewport's
-    // "show flags". Applied ON TOP of the view's resolved
-    // post config; NEVER touches the scene asset. Lets an editor viewport strip effects for editing
-    // clarity (crisp unjittered image for pixel inspection, raw lit image without bloom/AO/SSR)
-    // without changing the authored look the game ships.
+    // Ephemeral per-view post-processing overrides for a RenderScene call: the editor viewport's
+    // "show flags". They apply on top of the view's resolved post config and never touch the scene
+    // asset, so an editor viewport can strip effects for editing clarity (a crisp unjittered image
+    // for pixel inspection, the raw lit image without bloom, AO or SSR) without changing the
+    // authored look the game ships.
     struct ViewPostOverride
     {
         bool disablePost =
-            false; // master: drop bloom + AO + SSR + AA (exposure + tonemap stay, so it still displays)
+            false; // drops bloom, AO, SSR and AA; exposure and tonemap stay, so it still displays
         bool disableBloom = false;
         bool disableAo = false;
         bool disableSsr = false;
-        bool disableAa = false; // TAA + FXAA off (crisp + unjittered)
+        bool disableAa = false; // TAA and FXAA off: crisp and unjittered
         bool disableSsgi = false;
-        // Draw EVERYTHING in the scene for this view, frustum test off: the A/B for what
-        // view-frustum culling saves (on by default since 2026-09-24; the player culls too).
+        // Draw everything in the scene for this view, with the frustum test off: the comparison
+        // for what view-frustum culling saves (culling is on by default, in the player too).
         bool disableCulling = false;
-        // Scene-pass MSAA for this view (the editor viewport's off/2x/4x toggle). 0 = no override
-        // (leave the resolved count as-is); 1/2/4 = force that sample count. The editor viewport is
-        // the source of its own MSAA count (the scene authors none), so
-        // it forces the count here. Capability-clamped downstream.
+        // Scene-pass MSAA for this view (the editor viewport's off/2x/4x toggle). 0 leaves the
+        // resolved count as it is; 1, 2 or 4 forces that sample count. The scene authors no MSAA
+        // count, so the editor viewport forces its own here. Clamped to the device's capability
+        // downstream.
         u8 msaaOverride = 0;
     };
 
     // Per-view debug-view selection (the editor viewport's "show me this texture"): `resource`
     // names a render-graph texture from GetDebugResources ("ao.ao", "ssr.refl", "gbuffer.depth",
-    // ...); empty = final image. The compose appends a blit pass that overwrites the view's
-    // sub-rect with the visualized resource - overlays/gizmos still draw on top. Never touches
-    // the scene asset; ephemeral per RenderScene call, like ViewPostOverride.
-    // Semantic (shader-instrumented) debug modes: the forward shader outputs the named
-    // term instead of the lit result (a uniform branch - free when off, never a cooked
-    // variant). Values reach the screen RAW (the compose blits the scene color past
-    // tonemap). Mesh/forward materials only - sky and bespoke renderers draw normally.
+    // ...); empty means the final image. The compose appends a blit pass that overwrites the view's
+    // sub-rect with the visualized resource; overlays and gizmos still draw on top. It never touches
+    // the scene asset and lives for one RenderScene call, like ViewPostOverride.
+    // Semantic (shader-instrumented) debug modes: the forward shader outputs the named term instead
+    // of the lit result, through a uniform branch that costs nothing when off (never a cooked
+    // variant). Values reach the screen raw, since the compose blits the scene colour past tonemap.
+    // Mesh and forward materials only; sky and bespoke renderers draw normally.
     enum class ViewDebugSemantic : u8
     {
         Off = 0,
-        Albedo,      // base color after vertex color + textures, pre-lighting
+        Albedo,      // base color after vertex color and textures, pre-lighting
         Normal,      // mapped world-space normal (0.5 remap)
         Roughness,   // final clamped roughness
         Metallic,    // final metallic
@@ -188,9 +187,9 @@ export namespace foundation::render
         f32 farZ = 1000.0f;
     };
 
-    // One row of the renderer's "what can I look at" table: the PREVIOUS frame's graph
-    // texture inventory (the graph rebuilds per frame under stable names). Multisampled
-    // sources are listed but not blittable - pick the resolved twin instead.
+    // One row of the renderer's "what can I look at" table: the previous frame's graph texture
+    // inventory (the graph rebuilds per frame under stable names). Multisampled sources are listed
+    // but cannot be blitted; pick the resolved twin instead.
     struct DebugResourceInfo
     {
         String name;
@@ -200,9 +199,10 @@ export namespace foundation::render
         bool isDepth = false;
     };
 
-    // How the render target's resource state is handled. Default = the host-managed backbuffer (present).
-    // For an offscreen target, give its `texture` (so the graph barriers it) + the state it's currently
-    // in + the state to leave it in (ShaderRead to sample it next, CopySrc to blit it).
+    // How the render target's resource state is handled. The default is the host-managed
+    // backbuffer (present). For an offscreen target, give its `texture` (so the graph barriers it),
+    // the state it is in now, and the state to leave it in (ShaderRead to sample it next, CopySrc
+    // to blit it).
     struct TargetState
     {
         rhi::Texture* texture = nullptr;
@@ -210,20 +210,21 @@ export namespace foundation::render
         rhi::ResourceState finalState = rhi::ResourceState::RenderTarget;
     };
 
-    // ---- overlay roles (the two-tier overlay coordination model, Sedulous-derived) ----
+    // ---- overlay roles: two tiers of overlay coordination ----
     //
-    // Scene tier (`ISceneOverlay`): content scoped to a SCENE's rendered output - HUD canvases,
-    // billboards. Sources register with the scene renderer ONCE; a shared per-view overlay pass
-    // inside the compose (after post, before debug draw - gizmos/diagnostics stay on top) calls
-    // every source with that view's real camera, so scene UI renders wherever the scene renders
-    // (player, editor viewports, camera previews) and projects correctly per view.
+    // Scene tier (`ISceneOverlay`): content scoped to a scene's rendered output, such as HUD
+    // canvases and billboards. Sources register with the scene renderer once; a shared per-view
+    // overlay pass inside the compose (after post and before debug draw, so gizmos and diagnostics
+    // stay on top) calls every source with that view's real camera. Scene UI therefore renders
+    // wherever the scene renders (player, editor viewports, camera previews) and projects
+    // correctly in each view.
     //
-    // Screen tier (`IScreenOverlay` + `IScreenRenderer`): window-space chrome - screen UI,
-    // profiler HUDs, editor overlays. Sources register with the `IScreenRenderer` (the render
-    // subsystem); the HOST makes one `RenderOverlays` call per window target after the scene
+    // Screen tier (`IScreenOverlay` and `IScreenRenderer`): window-space chrome such as screen UI,
+    // profiler HUDs and editor overlays. Sources register with the `IScreenRenderer` (the render
+    // subsystem); the host makes one `RenderOverlays` call per window target after the scene has
     // composed, and every source records into one shared Load-op pass in `OverlayOrder`.
     //
-    // Both signatures use only render-level types: the renderer stays unaware of higher-level
+    // Both signatures use only render-level types, so the renderer stays unaware of higher-level
     // tech (UI, VG, fonts). Registries are non-owning; callers unregister before destruction.
 
     // Everything an overlay source needs to draw into one view's output.
@@ -231,14 +232,14 @@ export namespace foundation::render
     {
         const void* sceneKey = nullptr; // opaque scene identity (the driving subsystem sets it;
                                         // sources that registered per-scene state match on it)
-        Float4x4 viewProjection = Float4x4::Identity(); // the view's UNJITTERED camera VP
+        Float4x4 viewProjection = Float4x4::Identity(); // the view's unjittered camera VP
         Float3 cameraPosition = Float3{0, 0, 0};
         i32 viewportX = 0, viewportY = 0; // the view's sub-rect within the target
         u32 viewportWidth = 0, viewportHeight = 0;
         u32 targetWidth = 0, targetHeight = 0; // full target extent (pixels)
         rhi::TextureFormat targetFormat = rhi::TextureFormat::BGRA8Unorm;
         // The pass's depth-stencil attachment format (Undefined = color-only pass).
-        // Sources may record stencil-based draws only when this is set AND matches the
+        // Sources may record stencil-based draws only when this is set and matches the
         // format their own pipelines were built against.
         rhi::TextureFormat depthStencilFormat = rhi::TextureFormat::Undefined;
         u32 frameIndex = 0;
@@ -337,8 +338,8 @@ export namespace foundation::render
         Array<TOverlay*> m_items;
     };
 
-    // The scene-rendering coordinator. Implemented by RenderSubsystem; queried by the app via
-    // the Context (a renderer-agnostic seam for tools/editor that render scenes themselves).
+    // The scene-rendering coordinator. Implemented by RenderSubsystem; queried by the app through
+    // the Context, so tools and the editor can render scenes without depending on the renderer.
     class ISceneRenderer
     {
     public:
@@ -349,16 +350,17 @@ export namespace foundation::render
         virtual void BeginRendering(rhi::CommandEncoder& encoder, u32 frameIndex) = 0;
 
         // Collect `scene`, viewed from its primary camera (or `cameraOverride` if given), to be
-        // drawn into `target`. The view's clear color comes from that camera. Must be called
-        // between Begin/EndRendering.
-        // `viewport` is the sub-rect of `target` to render into (default = full target); pass distinct
-        // viewports + camera overrides across multiple RenderScene calls for split-screen.
-        // `viewportKey` (default null) is a STABLE, per-view identity (e.g. the hosting ViewportView*).
-        // When non-null, this view's scene gizmos come from DebugView(viewportKey) instead of the
-        // shared per-scene DebugScene(scene) - so an editor viewport can draw grid/gizmos that appear
-        // ONLY in it, not in a second view of the same scene (the camera-preview inset). Null keeps the
-        // per-scene buffer (drawn in every view), which is what gameplay/player views want.
-        // A `sceneSize` other than the viewport's draws the scene at THAT size and scales the
+        // drawn into `target`. The view's clear color comes from that camera. Call it between
+        // Begin/EndRendering.
+        // `viewport` is the sub-rect of `target` to render into (default: the full target); pass
+        // distinct viewports and camera overrides across several RenderScene calls for split-screen.
+        // `viewportKey` (default null) is a stable per-view identity (e.g. the hosting
+        // ViewportView*). When non-null, this view's scene gizmos come from DebugView(viewportKey)
+        // instead of the shared per-scene DebugScene(scene), so an editor viewport can draw a grid
+        // and gizmos that appear only in it and not in a second view of the same scene (the
+        // camera-preview inset). Null keeps the per-scene buffer, drawn in every view, which is what
+        // gameplay and player views want.
+        // A `sceneSize` other than the viewport's draws the scene at that size and scales the
         // finished image (its shown part, for a crop) into the viewport, clearing the target around
         // it black: a game with a fixed render resolution fitted into a window of another shape.
         // The projection takes that size's aspect. Unset draws at the viewport's own size.
@@ -379,20 +381,20 @@ export namespace foundation::render
         // Default-empty so light ISceneRenderer fakes need not implement it.
         virtual void GetDebugResources(Array<DebugResourceInfo>& out) { out.Clear(); }
 
-        // Scene-tier overlay registry (idempotent; non-owning - unregister before destruction).
+        // Scene-tier overlay registry (idempotent; non-owning, so unregister before destruction).
         virtual void RegisterOverlay(ISceneOverlay* overlay) = 0;
         virtual void UnregisterOverlay(ISceneOverlay* overlay) = 0;
     };
 
-    // The window-space overlay coordinator. Implemented by RenderSubsystem. The pair
-    // (ISceneRenderer for scenes + per-view overlays, IScreenRenderer for window overlays
-    // after the scene blit) forms the engine's two-tier render coordination model.
+    // The window-space overlay coordinator. Implemented by RenderSubsystem. Together with
+    // ISceneRenderer (scenes and per-view overlays), IScreenRenderer (window overlays after the
+    // scene blit) forms the engine's two-tier render coordination.
     class IScreenRenderer
     {
     public:
         virtual ~IScreenRenderer() = default;
 
-        // Screen-tier overlay registry (idempotent; non-owning - unregister before destruction).
+        // Screen-tier overlay registry (idempotent; non-owning, so unregister before destruction).
         virtual void RegisterOverlay(IScreenOverlay* overlay) = 0;
         virtual void UnregisterOverlay(IScreenOverlay* overlay) = 0;
 

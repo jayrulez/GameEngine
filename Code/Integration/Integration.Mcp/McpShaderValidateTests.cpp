@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - shader_validate: the New Shader starter checks clean against the engine's
+// Integration.Mcp: shader_validate. The New Shader starter checks clean against the engine's
 // shader library, with its properties and both stages' variants reported; a broken shader comes
 // back with the file, line and column of its error.
 #include <doctest/doctest.h>

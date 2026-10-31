@@ -4,13 +4,13 @@
 // Editor::Scene - :scene_tree partition.
 //
 // SceneTreeModel: the scene as its hierarchy shows it, a GUI tree model built from the live scene,
-// for the hierarchy and the entity picker alike (Documentation/Specs/editor-gui.md, ruling 25: the
-// picker is the hierarchy's tree in a picker's frame). The scene is the top row (node 0); under it
-// the roots in list order, each one's children depth first; each entity by its first component's
-// type icon (a plain entity the generic one), a prefab's members and inactive entities marked as
-// such. With a search, an entity shows when its subtree holds a match, so a match keeps what holds
-// it. A row's id is its entity's guid (the scene's row a fixed one), so what is open and selected
-// survives each build. It is read only; the hierarchy's own model adds rename and drops.
+// shared by the hierarchy and the entity picker (the picker is the hierarchy's tree in a picker's
+// frame). The scene is the top row (node 0); under it come the roots in list order, each with its
+// children depth first. Each entity shows its first component's type icon (the generic one for a
+// plain entity), and a prefab's members and inactive entities are marked as such. With a search, an
+// entity shows when its subtree holds a match, so a match keeps its ancestors. A row's id is its
+// entity's guid (a fixed one for the scene's row), so what is open and selected survives each
+// build. It is read-only; the hierarchy's own model adds rename and drops.
 
 module;
 #include "Core/Prelude.h"
@@ -46,9 +46,10 @@ export namespace editor
 
         explicit SceneTreeModel(IAllocator& allocator);
 
-        /// The rows from `scene`, its own row reading `sceneName` by `sceneIcon`, the entities by
-        /// `icons`' type icons (null: none), only what `filter` keeps (empty: all). It does not
-        /// tell the view: the owner opens what it wants open, then calls Reset.
+        /// Builds the rows from `scene`: its own row reads `sceneName` with `sceneIcon`, the
+        /// entities use `icons`' type icons (null: none), and only what `filter` keeps is shown
+        /// (empty: all). It does not notify the view: the owner opens what it wants open, then
+        /// calls Reset.
         void Build(foundation::scene::Scene& scene, StringView sceneName, StringView sceneIcon, EditorIcons* icons, StringView filter);
         void Reset() { NotifyReset(); }
 

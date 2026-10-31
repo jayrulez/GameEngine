@@ -1,5 +1,5 @@
-# Editor::Fonts - `editor.fonts` (the FontAsset authoring page:
-# live atlas bake preview + bake-intent property grid), on the GUI. Tooling only.
+# Editor::Fonts - `editor.fonts` (the FontAsset authoring page: a live preview of the
+# baked atlas and a property grid of the bake settings), on the GUI. Tooling only.
 
 util_add_engine_library(Editor.Fonts ALIAS Editor::Fonts)
 target_link_libraries(Editor.Fonts

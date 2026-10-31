@@ -1,6 +1,5 @@
 
 add_executable(VG.Tests TestsMain.cpp VGCoreTests.cpp VGPathTests.cpp VGTessellationTests.cpp VGBatchCacheTests.cpp VGContextTests.cpp
-    # Ports of Sedulous.VG.Tests (inherit upstream coverage):
     VGCurveUtilsTests.cpp VGStyleTests.cpp VGTriangulatorTests.cpp VGDashGeneratorTests.cpp
     VGPathPortTests.cpp VGPathBuilderTests.cpp VGShapeBuilderTests.cpp
     VGFillTessellatorTests.cpp VGStrokeTessellatorTests.cpp

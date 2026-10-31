@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The data-driven material model: build a material with the fluent builder, verify
-// uniform-buffer layout + declared properties, drive a MaterialSystem (bind-group
+// uniform-buffer layout and declared properties, drive a MaterialSystem (bind-group
 // layout inferred from the property list) against the Null RHI, and check instance
-// overrides + dirty notification.
+// overrides and dirty notification.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -276,8 +276,8 @@ TEST_CASE("pipeline config: content hash + equality distinguish render state")
 }
 
 // A material built in code and a shader's properties block lay the same list out the same way:
-// HLSL's cbuffer packing, the offsets the shader reads. MaterialBuilder used to give a float3 a
-// whole row and let a float2 straddle one, which a shader reads elsewhere.
+// HLSL's cbuffer packing, the offsets the shader reads. A float after a float3 shares its row,
+// and a float2 never straddles one.
 TEST_CASE("material builder: lays uniforms out as a properties block (HLSL packing)")
 {
     RefPtr<Material> mat = MaterialBuilder(u8"packed")
@@ -308,7 +308,7 @@ TEST_CASE("material builder: lays uniforms out as a properties block (HLSL packi
     CHECK(mat->UniformDataSize() == block.uniformSize);
 }
 
-// --- Effect groups (Specs/wind-for-every-shader.md) ----------------------------------------
+// --- Effect groups --------------------------------------------------------------------------
 
 namespace
 {

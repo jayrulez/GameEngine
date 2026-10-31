@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - effects through VG (G4 of Specs/vg-and-gui-lab.md): filter and backdrop-filter blurs,
-// mix-blend-mode, group opacity through layers, and overflow clipping to rounded corners; each
-// parsed, applied, animated where it moves, and drawn.
+// GUI - effects through VG: filter and backdrop-filter blurs, mix-blend-mode, group opacity through
+// layers, and overflow clipping to rounded corners. Each is parsed, applied, animated where it can
+// move, and drawn.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -33,7 +33,7 @@ namespace
         ApplyStyle(w, sheet.Resolve(w));
     }
 
-    // `w` drawn into a canvas with layers (and, when asked, stencil fills) on.
+    // Draws `node` into a canvas with layers on (and stencil fills, when asked).
     void DrawWith(Node& node, vg::VGContext& canvas, bool stencil = false)
     {
         canvas.SetLayers(true);
@@ -76,15 +76,15 @@ TEST_CASE("effects: the sheet's filter, backdrop filter and blend become the box
     auto w = Box(u8"card");
     Apply(*w.Get(), u8"card { filter: blur(3px) blur(4px); backdrop-filter: blur(6px); mix-blend-mode: screen; }");
     const NodeBox& box = w->GetBox();
-    CHECK(box.FilterBlur == doctest::Approx(5.0f)); // two blurs: the root of the squares' sum
+    CHECK(box.FilterBlur == doctest::Approx(5.0f)); // two blurs combine as the square root of the sum of squares
     CHECK(box.BackdropBlur == doctest::Approx(6.0f));
     CHECK(box.BlendMode == vg::VGBlendMode::Screen);
     CHECK(box.NeedsLayer());
 
     Apply(*w.Get(), u8"card { mix-blend-mode: plus-lighter; }");
     CHECK(w->GetBox().BlendMode == vg::VGBlendMode::Additive);
-    CHECK(w->GetBox().FilterBlur == doctest::Approx(0.0f)); // the sheet owns the box: dropped
-    Apply(*w.Get(), u8"card { mix-blend-mode: difference; }"); // not one VG composites
+    CHECK(w->GetBox().FilterBlur == doctest::Approx(0.0f)); // the sheet owns the box, so the blur is dropped
+    Apply(*w.Get(), u8"card { mix-blend-mode: difference; }"); // not a mode VG composites
     CHECK(w->GetBox().BlendMode == vg::VGBlendMode::Normal);
 }
 
@@ -211,9 +211,9 @@ TEST_CASE("effects: text-shadow, text-outline and text-glow reach the text, inhe
         CHECK(e.shadowBlur == doctest::Approx(3.0f));
         CHECK(e.outlineWidth == doctest::Approx(2.0f));   // its own
         CHECK(e.outlineColor.r == doctest::Approx(16.0f / 255.0f).epsilon(0.01));
-        CHECK_FALSE(e.HasGlow());                          // none: the parent's turned off
+        CHECK_FALSE(e.HasGlow());                          // none, since the parent's glow is turned off
     }
-    // A text-glow interpolates (an animated title).
+    // A text-glow interpolates, as for an animated title.
     StyleValue from, to;
     REQUIRE(ParseStyleValue(StyleGrammar::TextGlow, SV(u8"2px #ffffff"), from));
     REQUIRE(ParseStyleValue(StyleGrammar::TextGlow, SV(u8"10px #ffffff"), to));
@@ -225,8 +225,8 @@ TEST_CASE("effects: text-shadow, text-outline and text-glow reach the text, inhe
 
 TEST_CASE("effects: a fading panel's backdrop blur is of what lies behind it, at its opacity")
 {
-    // Frosted settings rising in (opacity 0 -> 1, with children): the blur must see the orbs behind
-    // it while it fades, not the panel's own empty layer.
+    // A frosted settings panel fading in (opacity 0 to 1, with children). The blur must see the
+    // orbs behind it while it fades, not the panel's own empty layer.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto orb = Box(u8"orb");
     auto panel = Box(u8"panel");
@@ -237,7 +237,7 @@ TEST_CASE("effects: a fading panel's backdrop blur is of what lies behind it, at
     Apply(*orb.Get(), u8"orb { background-color: blue; }");
     Apply(*panel.Get(), u8"panel { background-color: rgba(255,255,255,0.1); backdrop-filter: blur(8px); }");
     Apply(*row.Get(), u8"row { background-color: red; }");
-    panel->SetAlpha(0.5f); // mid-fade: a layer of its own
+    panel->SetAlpha(0.5f); // mid-fade, so it has a layer of its own
     vg::VGContext canvas;
     DrawWith(*root.Get(), canvas);
     const vg::VGBatch& batch = canvas.GetBatch();

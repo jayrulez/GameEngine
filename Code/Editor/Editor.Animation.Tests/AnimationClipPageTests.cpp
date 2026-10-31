@@ -2,11 +2,12 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The animation clip page over its markup (Data/Editor/AnimationClipPage.xml) and a scratch project,
-// without a host (no preview): the clip's rows its own (Looping, the root motion, the events a list
-// named by each event's name and summed up by its time), its facts read only; each edit one undo
-// step; a new event at the playhead; the events as the ruler's markers, a marker's move one step
-// and a cancelled one none; the preview starting on the skeleton its import names; Travel and the
-// clock the page's own, never the clip's.
+// without a host, so there is no preview. Covers: the page builds its own rows (Looping, the root
+// motion, and the events as a list titled by each event's name and summarised by its time); the
+// clip's facts are read-only; each edit is one undo step; a new event goes at the playhead; the
+// events are the ruler's markers, and moving a marker is one undo step while a cancelled move is
+// none; the preview starts on the skeleton the import names; Travel and the clock belong to the
+// page and never change the clip.
 
 #include <doctest/doctest.h>
 #include <initializer_list>
@@ -140,7 +141,7 @@ TEST_CASE("clip page: the clip's rows its own, its facts read only, its events n
     CHECK(bed.page->ClipRows().GetValue(u8"looping", 0).AsBool() == false);
     CHECK(bed.page->RootRows().GetValue(u8"yaw", 0).AsBool() == false);
 
-    // The events as a list of groups, each named by its name, closed showing when it fires.
+    // The events are a list of groups, each titled by its name and showing when it fires while closed.
     const Optional<gui::PropertyInfo> first = Bed::Info(bed.page->EventRows(), u8"events", u8"0");
     REQUIRE(first.HasValue());
     CHECK(first->DisplayName == String(u8"FootLeft"));
@@ -161,7 +162,7 @@ TEST_CASE("clip page: each edit one undo step, a new event at the playhead")
     CHECK(bed.Source().rootMotion.rootBone == String(u8"Hips"));
     Bed::Edit(bed.page->EventRows(), u8"events.1.name", gui::Variant(StringView(u8"Land")));
     CHECK(bed.Source().eventNames[1] == String(u8"Land"));
-    Bed::Edit(bed.page->EventRows(), u8"events.0.time", gui::Variant(5.0)); // kept within the clip
+    Bed::Edit(bed.page->EventRows(), u8"events.0.time", gui::Variant(5.0)); // clamped to the clip's length
     CHECK(bed.Source().eventTimes[0] == doctest::Approx(1.2f));
 
     bed.page->Commands().Undo();
@@ -175,7 +176,7 @@ TEST_CASE("clip page: each edit one undo step, a new event at the playhead")
     bed.page->Commands().Undo();
     CHECK_FALSE(bed.Source().isLooping);
 
-    // Added where the playhead is, named to be renamed; removed by its place.
+    // A new event goes at the playhead with a placeholder name; removal is by index.
     bed.page->SetTime(0.6f);
     REQUIRE(bed.page->EventRows().EditList(u8"events", ListEditOf(gui::ListEdit::Op::Insert, 2)));
     REQUIRE(bed.Source().eventTimes.Size() == 3u);
@@ -220,7 +221,7 @@ TEST_CASE("clip page: the events are the ruler's markers; a marker's move is one
     CHECK(bed.page->EventRows().GetValue(u8"events.0.time", 0).AsFloat() == doctest::Approx(0.3));
     CHECK_FALSE(bed.page->Commands().CanUndo());
 
-    // Chosen on the ruler: the same event chosen on the page.
+    // Choosing on the ruler chooses the same event on the page.
     bed.page->ChooseEvent(1);
     CHECK(bed.page->Ruler()->GetChosenMarker() == 1);
 }
@@ -234,7 +235,7 @@ TEST_CASE("clip page: the preview starts on the skeleton its import names; Trave
     REQUIRE(bed.page->Rig()->SkeletonSlot() != nullptr);
     REQUIRE(bed.page->Rig()->MeshSlot() != nullptr);
 
-    // Not cooked here: nothing to play, the clock still the page's to move.
+    // The clip is not cooked in this test, so nothing plays, but the page can still move its clock.
     CHECK_FALSE(bed.page->CanPlay());
     bed.page->SetTime(0.5f);
     CHECK(bed.page->Time() == doctest::Approx(0.5f));
@@ -252,5 +253,5 @@ TEST_CASE("clip page: the preview starts on the skeleton its import names; Trave
 
     bed.page->SetTravel(true);
     CHECK(bed.page->Travels());
-    CHECK_FALSE(bed.page->IsDirty()); // never the clip's
+    CHECK_FALSE(bed.page->IsDirty()); // the clock never changes the clip
 }

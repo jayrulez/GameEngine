@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// DDS (DirectDraw Surface) container: the file format GPU-ready textures ship in - block-
-/// compressed (BC1-BC7, BC6H) or uncompressed levels, a full mip chain, 2D / cubemap / array,
-/// with either the legacy FourCC header or the DX10 extension header that names the DXGI
+/// DDS (DirectDraw Surface) container: the file format GPU-ready textures ship in. It holds
+/// block-compressed (BC1-BC7, BC6H) or uncompressed levels, a full mip chain, 2D, cubemap or
+/// array, with either the legacy FourCC header or the DX10 extension header that names the DXGI
 /// format (and so the colour space). This module reads the container as-is (a `DdsImage`
-/// keeps the payload BYTES), decodes any level to an `Image` (bcdec), and writes the DX10 form.
+/// keeps the payload bytes), decodes any level to an `Image` (bcdec), and writes the DX10 form.
 ///
 /// Policy lives elsewhere: the texture pipeline decides whether a DDS payload passes through
 /// to the cooked texture untouched or is decoded and re-encoded; Image.IO's loaders sniff the
@@ -170,7 +170,7 @@ export namespace foundation::image::dds
         u32 arrayLayers = 1; // 6 x arraySize for cubemaps
         bool cubemap = false;
         DdsFormat format = DdsFormat::Unknown;
-        // A DX10 header names the DXGI format, so sRGB-or-not is a FACT of the file; a legacy
+        // A DX10 header names the DXGI format, so sRGB-or-not is a fact of the file; a legacy
         // FourCC header says nothing about colour space (readers fall back on usage).
         bool colorSpaceKnown = false;
         Array<u8> data;
@@ -228,8 +228,8 @@ export namespace foundation::image::dds
 
     /// The facts a DDS header states, without the payload: what an importer needs to decide a
     /// texture's usage (BC5 = normal map, BC4 = mask, an HDR format = a skybox) and colour
-    /// space. Reading these used to mean reading the whole file (2026-09-23: Bistro's 390 DDS
-    /// files, gigabytes, on the editor's main thread); ReadDdsHeader reads kDdsHeaderBytes.
+    /// space. ReadDdsHeader reads only kDdsHeaderBytes, so classifying a large set of DDS files
+    /// does not read gigabytes of payload.
     struct DdsHeader
     {
         u32 width = 0;
@@ -244,7 +244,7 @@ export namespace foundation::image::dds
     /// Magic + DDS_HEADER + the DX10 extension: the most bytes any header can take.
     inline constexpr usize kDdsHeaderBytes = 4 + 124 + 20;
 
-    /// Parse only the header (legacy or DX10) from the FIRST bytes of a file - kDdsHeaderBytes is
+    /// Parse only the header (legacy or DX10) from the first bytes of a file: kDdsHeaderBytes is
     /// always enough, a legacy header needs 128. The same refusals as LoadDds (a volume, an
     /// unknown format, a partial cubemap: NotSupported; too short: InvalidArgument); nothing
     /// about the payload is checked.

@@ -3,10 +3,9 @@
 
 // Foundation::Fonts.TrueType - foundation.fonts.truetype:common partition
 //
-// Small helpers shared by the TTF parser + atlas baker: the supported
-// extension list and a case-insensitive extension compare. Sedulous duplicated
-// these in both classes; here they live once to avoid cross-TU inline-symbol
-// clashes in C++ modules.
+// Small helpers shared by the TTF parser and atlas baker: the supported
+// extension list and a case-insensitive extension compare. They live once here
+// to avoid cross-TU inline-symbol clashes in C++ modules.
 
 module;
 #include "Core/Prelude.h"
@@ -37,7 +36,7 @@ export namespace foundation::fonts
         return true;
     }
 
-    // .ttf / .ttc / .otf - the formats the TTF backend handles.
+    // .ttf, .ttc and .otf: the formats the TTF backend handles.
     [[nodiscard]] inline Span<const StringView> TrueTypeExtensions()
     {
         static const StringView exts[] = {StringView(u8".ttf"), StringView(u8".ttc"),

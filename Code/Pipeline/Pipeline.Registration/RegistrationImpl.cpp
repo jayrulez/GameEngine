@@ -3,9 +3,9 @@
 
 // Pipeline::Registration - implementation unit.
 //
-// The wide fan-in lives HERE (one TU), keeping the interface BMI lean for the four hosts. This
-// is the ONLY place the engine's full builder/importer/type set is written down - hosts call the
-// three entry points, never restate the list.
+// The wide fan-in lives here, in one TU, keeping the interface BMI lean for the hosts. This is
+// the one place the engine's full builder, importer and type set is written down; hosts call the
+// entry points instead of restating the list.
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +50,7 @@ import foundation.navigation.resource;
 import navigation.pipeline;
 import foundation.vg.resource;
 import vg.pipeline;
-import foundation.gui.resources; // the GUI's documents and sheets (gui-lab-evolution-3.md E3)
+import foundation.gui.resources; // the GUI's documents and sheets
 import gui.pipeline;
 import foundation.audio;
 import foundation.audio.resource;
@@ -91,25 +91,25 @@ namespace pipeline
 
     void RegisterPipelineTypes()
     {
-        // Everything a builder registers AT BUILD TIME goes here first, on the caller's thread,
+        // Everything a builder registers at build time goes here first, on the caller's thread,
         // so the parallel cook phase never performs a first-time registration: the registries
         // lock their writes, but a reader iterating the type list (the script cooks) while another
         // worker first-registers is still a race. After this, the builders' own calls are no-ops.
         foundation::core::RegisterCoreTypes();
         foundation::script::RegisterScriptFacadeReflection();
 
-        RegisterAssetReflection(); // base Asset::fileName + SourcePath
+        RegisterAssetReflection(); // base Asset::fileName and SourcePath
         RegisterTextureAsset();
-        RegisterFontAsset(); // asset + FontResource product
+        RegisterFontAsset(); // asset and FontResource product
         RegisterImageAsset();
         RegisterHeightfieldAsset();
-        foundation::heightfield::RegisterHeightfieldResourceTypes(); // Heightfield product + source
+        foundation::heightfield::RegisterHeightfieldResourceTypes(); // Heightfield product and source
         RegisterTerrainAsset();
-        foundation::terrain::RegisterTerrainResourceTypes(); // Terrain product + source
+        foundation::terrain::RegisterTerrainResourceTypes(); // Terrain product and source
         RegisterSplatmapAsset();
-        foundation::terrain::RegisterSplatmapResourceTypes(); // Splatmap product + source
+        foundation::terrain::RegisterSplatmapResourceTypes(); // Splatmap product and source
         RegisterVegetationMaskAsset();
-        foundation::vegetation::RegisterVegetationMaskResourceTypes(); // Vegetation mask product + source
+        foundation::vegetation::RegisterVegetationMaskResourceTypes(); // Vegetation mask product and source
         RegisterMeshAssets();
         RegisterAnimationAssets();
         RegisterPropertyAnimationAssets();
@@ -118,7 +118,7 @@ namespace pipeline
         RegisterParticleEffectAsset();
         RegisterInputMapAsset();
         RegisterModelManifestAsset();
-        // Product/resource types: ReadObject constructs cooked products BY TYPE NAME, so the
+        // Product/resource types: ReadObject constructs cooked products by type name, so the
         // runtime-facing types must be registered too (meshes/materials/textures/animation/
         // manifest via the model-importer helper, plus the image resource).
         foundation::model::RegisterModelResourceTypes();
@@ -137,8 +137,8 @@ namespace pipeline
         foundation::audio::RegisterAudioResource();
         RegisterScriptAssets();
         foundation::script::RegisterScriptResource();
-        // The builder resolves a per-language COOK through the registry (B3); registering
-        // backends + cooks is the composition root's job - both languages.
+        // The script builder resolves a per-language cook through the registry; registering the
+        // backends and their cooks, for both languages, is the composition root's job.
 #ifdef OPTION_HAS_ANGELSCRIPT
         foundation::script::angelscript::RegisterAngelScriptBackend();
         RegisterAngelScriptScriptCook();
@@ -147,11 +147,11 @@ namespace pipeline
         foundation::script::RegisterLuauScriptBackend();
         RegisterLuauScriptCook();
 #endif
-        // Scenes are packed/read as SceneDocument (export staging + a headless scene cook path):
-        // register the type + its serializer so ReadObject/WriteObject round-trip them.
+        // Scenes are packed and read as SceneDocument (export staging and a headless scene cook):
+        // register the type and its serializer so ReadObject/WriteObject round-trip them.
         GlobalTypeRegistry().Register(foundation::scene::SceneDocument::StaticType());
-        // The prefab twin (PrefabDocument primary + the referenced scene stream): reading one back
-        // through the registry refused it as an unknown type until 2026-09-18.
+        // The same for prefabs (a PrefabDocument primary and the referenced scene stream), which the
+        // registry otherwise refuses to read back as an unknown type.
         GlobalTypeRegistry().Register(foundation::scene::PrefabDocument::StaticType());
         RegisterSerializable<foundation::scene::PrefabDocument>();
         RegisterSerializable<foundation::scene::SceneDocument>();

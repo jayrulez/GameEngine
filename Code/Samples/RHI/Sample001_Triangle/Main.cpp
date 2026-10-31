@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample001 - Triangle. Ported from Sedulous Sample001_Triangle.
-/// Renders a colored triangle using vertex buffer + render pipeline.
+/// Sample001 - Triangle.
+/// Renders a colored triangle using a vertex buffer and a render pipeline.
 
 #include <cstdio>
 #include <cstdint>
@@ -141,7 +141,7 @@ foundation::core::Status TriangleSample::OnInit()
     if (m_device->CreateRenderPipeline(rpd, m_pipeline) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Command pool + fence.
+    // Command pool and fence.
     if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) !=
         foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;

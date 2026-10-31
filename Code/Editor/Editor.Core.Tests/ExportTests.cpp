@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// End-to-end export pipeline: author a project programmatically (scene + a cooked mesh asset
-// + a resource ref between them + a game script), ExportProject it, then consume the dist the
-// way Engine.Player does - ONE binary ContentDatabase over the pak for products AND scenes, the
-// script as a raw pak entry, the manifest via the lean project helpers. Everything under the
-// versioned-payload formats.
+// End-to-end export pipeline: author a project programmatically (a scene, a cooked mesh asset,
+// a resource ref between them and a game script), export it with ExportProject, then consume the
+// dist the way Engine.Player does: one binary ContentDatabase over the pak for products and
+// scenes, the script as a raw pak entry, and the manifest through the lean project helpers. Every
+// format involved is a versioned payload.
 #include <atomic> // gcc modules: pull in std::atomic bodies before this import mix
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -30,14 +30,14 @@ import editor.core;
 import foundation.settings;
 import foundation.shaders; // CookedShaderPack (the web export test reads the staged pack)
 import foundation.shaders.resource; // ShaderSource: a custom shader's product in the dist
-import shaders.pipeline;            // ShaderAsset + its compiling cook
-// Only the two export-driver tests use a script asset; the ~30 template/preset/manifest tests are
-// backend-neutral and build with no script backend at all. So the script imports (and those two
-// tests) are guarded, and the file always compiles.
+import shaders.pipeline;            // ShaderAsset and its compiling cook
+// Only the export-driver tests use a script asset; the template, preset and manifest tests are
+// backend-neutral and build with no script backend at all. The script imports (and the tests that
+// need them) are guarded, so the file always compiles.
 #if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
-import foundation.script;          // the backend registries + ScriptClassFactory namespace
-import script.pipeline;            // ScriptClassAsset + ScriptClassAssetBuilder
-import foundation.script.resource; // RegisterScriptResource + ScriptClass + ScriptClassFactory
+import foundation.script;          // the backend registries and ScriptClassFactory namespace
+import script.pipeline;            // ScriptClassAsset, ScriptClassAssetBuilder
+import foundation.script.resource; // RegisterScriptResource, ScriptClass, ScriptClassFactory
 #endif
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript; // the AngelScript backend (the cook compile-checks against it)
@@ -56,7 +56,7 @@ namespace geometry = foundation::geometry;
 namespace
 {
     // The engine data root the export's shader cook reads (<root>/Shaders), found the way every
-    // executable finds it - the Data/.dataroot walk from the test binary.
+    // executable finds it: the Data/.dataroot walk up from the test binary.
     StringView TestDataRoot()
     {
         static const String root = foundation::vfs::FindDataRoot();
@@ -81,7 +81,8 @@ namespace
         StringView source;
     };
 
-    // Registers every enabled script backend + cook + the ScriptClassAsset type (all idempotent).
+    // Registers every enabled script backend, its cook and the ScriptClassAsset type (all
+    // idempotent).
     void RegisterScriptExportDeps()
     {
         namespace script = foundation::script;
@@ -98,8 +99,8 @@ namespace
         RegisterSerializable<pipeline::ScriptClassAsset>();
     }
 
-    // A Game-tier startup script in the FIRST enabled language (for tests whose subject is not the
-    // script itself - just some cookable content).
+    // A Game-tier startup script in the first enabled language, for tests whose subject is not the
+    // script itself but which need some cookable content.
     [[nodiscard]] ScriptSample FirstScriptSample()
     {
 #ifdef OPTION_HAS_ANGELSCRIPT
@@ -114,9 +115,9 @@ namespace
 #endif
     }
 
-    // Test-#1 driver: author a project with a startup SCRIPT asset in sample.language, export it, and
-    // consume the dist the way Engine.Player does (manifest guid -> Bind<ScriptClass> from the pak).
-    // The export/cook/pak/bind path is backend-generic, so both languages ride it identically.
+    // Authors a project with a startup script asset in sample.language, exports it, and consumes the
+    // dist the way Engine.Player does (manifest guid -> Bind<ScriptClass> from the pak). The export,
+    // cook, pak and bind path is backend-generic, so both languages take it identically.
     void DriveStartupScriptExport(StringView projectDir, StringView distDir, ScriptSample sample)
     {
         namespace script = foundation::script;
@@ -130,7 +131,7 @@ namespace
             UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir);
             REQUIRE(static_cast<bool>(project));
 
-            // The game script SOURCE in Sources/ (what New-Asset writes).
+            // The game script source in Sources/ (what New-Asset writes).
             String srcPath(project->SourcesRoot());
             srcPath.Append(u8"/");
             srcPath.Append(sample.file);
@@ -139,7 +140,7 @@ namespace
                                                sample.source.Size()))
                         .IsOk());
 
-            // The ScriptClassAsset instance recording file + language (the picker's target).
+            // The ScriptClassAsset instance recording file and language (the picker's target).
             foundation::content::Instance* scriptAsset =
                 project->SourceDb().RootGroup()->CreateInstance(
                     u8"NetGame", pipeline::ScriptClassAsset::StaticType());
@@ -154,7 +155,7 @@ namespace
             REQUIRE(project->SaveSettings().IsOk());
         }
 
-        // Export (cooks the reachable closure - here the startup script) with the script builder.
+        // Export with the script builder (it cooks the reachable closure: here the startup script).
         pipeline::BuilderRegistry registry{DefaultAllocator()};
         registry.Register(UniquePtr<pipeline::IAssetBuilder>(
             DefaultAllocator().New<pipeline::ScriptClassAssetBuilder>(), DefaultAllocator()));
@@ -166,7 +167,7 @@ namespace
             CHECK(stats.cooked >= 1u); // the script cooked
         }
 
-        // Consume the dist exactly like the player: manifest guid -> Bind<ScriptClass> from the pak.
+        // Consume the dist as the player does: manifest guid -> Bind<ScriptClass> from the pak.
         foundation::vfs::NativeFileSystem distRoot(distDir, foundation::core::DefaultAllocator());
         engine::project::ProjectSettings manifest;
         REQUIRE(project::LoadProjectSettings(distRoot, manifest, project::kDistManifestFile).IsOk());
@@ -184,7 +185,7 @@ namespace
             resources.Bind<script::ScriptClass>(manifest.startupScriptId);
         REQUIRE(static_cast<bool>(proxy));
         CHECK(proxy->className == u8"Game"); // the cook harvested the class
-        CHECK(proxy->source.Size() > 0u);    // the source rode into the pak
+        CHECK(proxy->source.Size() > 0u);    // the source is in the pak
 
         NukeTree(projectDir);
         NukeTree(distDir);
@@ -266,9 +267,9 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
             REQUIRE(scene::SaveScene(scene, *sceneInstance).IsOk());
         }
 
-        // The startup script is a guid-authoritative ScriptClass asset now (bound from the content DB
-        // by the player). Here we just verify the manifest carries the guid; a full script-asset-in-dist
-        // export/bind test belongs with the script-cook fixtures.
+        // The startup script is a ScriptClass asset named by guid (the player binds it from the
+        // content DB). This test only checks that the manifest carries the guid; the full export and
+        // bind of a script asset is DriveStartupScriptExport above.
         project->Settings().defaultSceneId = sceneId;
         project->Settings().defaultScene = String(u8"Scenes/Main");
         project->Settings().startupScriptId = scriptId;
@@ -281,8 +282,8 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
         pipeline::BuilderRegistry registry{DefaultAllocator()};
         registry.Register(UniquePtr<pipeline::IAssetBuilder>(
             DefaultAllocator().New<pipeline::StaticMeshAssetBuilder>(), DefaultAllocator()));
-        // Pre-transcode the scene stream like the editor/CLI do: the staged pak carries
-        // the BINARY wire even though the source (SaveScene) is XML now.
+        // Pre-transcode the scene stream as the editor and CLI do: the staged pak carries
+        // the binary wire format even though the source (SaveScene) is XML.
         HashMap<Guid, Array<byte>> sceneStreams;
         {
             UniquePtr<IStream> src = sceneInstance->ReadData(u8"scene");
@@ -301,21 +302,21 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
                     .IsOk());
         CHECK(stats.cooked == 1u); // the cube
         CHECK(stats.scenesStaged == 1u);
-        CHECK(stats.filesPacked >= 2u); // product + scene envelope + scene stream
+        CHECK(stats.filesPacked >= 2u); // product, scene envelope, scene stream
     }
 
-    // --- consume the dist exactly like Engine.Player's dist mode ---
+    // --- consume the dist as Engine.Player's dist mode does ---
     foundation::vfs::NativeFileSystem distRoot(distDir, foundation::core::DefaultAllocator());
     engine::project::ProjectSettings manifest;
     REQUIRE(project::LoadProjectSettings(distRoot, manifest, project::kDistManifestFile).IsOk());
     CHECK(manifest.defaultScene == u8"Scenes/Main");
     CHECK(manifest.defaultSceneId == sceneId); // dist manifest carries the guid too
     CHECK(manifest.startupScriptId ==
-          scriptId); // the startup script rides as a guid (bound from the DB)
+          scriptId); // the startup script is carried as a guid (bound from the DB)
     // The player reads the loading screen and the MSAA from the dist manifest too.
     CHECK(manifest.guiLoadingDocumentId == sceneId);
     CHECK(manifest.renderMsaaSamples == 4u);
-    REQUIRE(manifest.uiFontIds.Size() == 1u); // the other UI fonts (Sedulous fbf1a4ff)
+    REQUIRE(manifest.uiFontIds.Size() == 1u); // the other UI fonts
     CHECK(manifest.uiFontIds[0] == sceneId);
 
     foundation::vfs::PakFileSystem pak(PathJoin(distDir, project::kDistContentPak).AsView());
@@ -323,7 +324,7 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), pak, BinarySerializerFactory(),
                                           project::kCookedAssetExtension);
 
-    // The scene loads from the pak under its ORIGINAL guid/path, and its mesh ref resolves
+    // The scene loads from the pak under its original guid and path, and its mesh ref resolves
     // against the pak-hosted product through the CPU mesh factory.
     // Resolve by guid (the player's primary path), then confirm the path mirror agrees.
     foundation::content::Instance* sceneInstance = db.GetInstance(manifest.defaultSceneId);
@@ -331,7 +332,7 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
     CHECK(sceneInstance->Id() == sceneId);
     CHECK(db.GetInstance(manifest.defaultScene.AsView()) == sceneInstance);
 
-    // The PACKED stream is the binary wire (the transcode map was honored).
+    // The packed stream is the binary wire format (the transcode map was honored).
     {
         UniquePtr<IStream> packed = sceneInstance->ReadData(u8"scene");
         REQUIRE(packed.Get() != nullptr);
@@ -359,9 +360,8 @@ TEST_CASE("export: project -> dist pak -> player-style load-back (versioned form
     NukeTree(distDir);
 }
 
-// Sedulous 7d6e4460: a preset may carry its own render size or window for its platform; the
-// dist's player.xml ships the effective values, and a preset file saved before the overrides
-// reads none.
+// A preset may carry its own render size or window for its platform; the dist's player.xml
+// ships the effective values, and a preset file saved without the overrides reads none.
 TEST_CASE("export: a preset's display overrides what the dist manifest carries")
 {
     const String dir = PathJoin(StringView(reinterpret_cast<const utf8char*>(
@@ -451,8 +451,8 @@ TEST_CASE("export: a preset's display overrides what the dist manifest carries")
     NukeTree(dir.AsView());
 }
 
-// Sedulous 4f483f5e (reflected here, not a hand list): every field a preset editor sets is
-// described by ExportPreset's reflection, labelled, the sizes with their ranges.
+// Every field a preset editor sets is described by ExportPreset's reflection rather than a
+// hand-written list: each is labelled, and the sizes carry their ranges.
 TEST_CASE("export: a preset describes its fields through reflection")
 {
     editor::RegisterExportPresetReflection();
@@ -493,7 +493,7 @@ TEST_CASE("export: preset set round-trips through export_presets.xml")
     REQUIRE(CreateDirectory(dir.AsView()));
     foundation::vfs::NativeFileSystem root(dir.AsView(), foundation::core::DefaultAllocator());
 
-    // Absent file => NotFound, so callers know to fall back to defaults.
+    // An absent file gives NotFound, so callers know to fall back to defaults.
     {
         editor::ExportPresetSet loaded;
         CHECK_FALSE(editor::LoadExportPresets(root, loaded).IsOk());
@@ -528,7 +528,7 @@ TEST_CASE("export: preset set round-trips through export_presets.xml")
     out.presets.PushBack(Move(b));
     REQUIRE(editor::SaveExportPresets(*root.AsWritable(), out).IsOk());
 
-    // Load back and check every field survived, including the additionalFiles array + lookup.
+    // Load back and check every field survived, including the additionalFiles array and lookup.
     editor::ExportPresetSet loaded;
     REQUIRE(editor::LoadExportPresets(root, loaded).IsOk());
     REQUIRE(loaded.presets.Size() == 2u);
@@ -570,10 +570,10 @@ namespace
             name, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
     }
 
-    // A scene/prefab reference scanner for the pruning tests (mirrors the CLI's MakeSceneScanner but
-    // with just the manager these tests use). Loads the instance, resolves its Refs through a
+    // A scene and prefab reference scanner for the pruning tests (like the CLI's MakeSceneScanner,
+    // with only the manager these tests use). It loads the instance, resolves its Refs through a
     // factory-less ResourceManager so every bound id lands in CollectUnresolved, and reads back the
-    // parked prefab instances (the scene->prefab->asset chain).
+    // parked prefab instances (the scene -> prefab -> asset chain).
     editor::SceneReferenceScanner MakePruningScanner()
     {
         return [](foundation::content::Instance& instance, foundation::content::ContentDatabase& db,
@@ -605,8 +605,8 @@ namespace
         return inst->Id();
     }
 
-    // A minimal host export template in `toolDir` (fake player + no sidecars). Returns a preset
-    // targeting it (blank templateId => resolve by host platform).
+    // A minimal host export template in `toolDir` (a fake player and no sidecars). Returns a
+    // preset targeting it (a blank templateId resolves by host platform).
     void SetupHostTemplate(StringView toolDir, editor::TemplateRegistry& registry)
     {
         REQUIRE(CreateDirectory(toolDir));
@@ -623,7 +623,7 @@ TEST_CASE("export: template.xml round-trips + host synthesis reads its runtime-l
     REQUIRE(CreateDirectory(dir.AsView()));
     foundation::vfs::NativeFileSystem root(dir.AsView(), foundation::core::DefaultAllocator());
 
-    // template.xml round-trip, including the v2 (platform, config) axis: config + compiler + symbols[].
+    // template.xml round-trip, including the (platform, config) axis: config, compiler and symbols[].
     editor::ExportTemplate t;
     t.id = String(TEMPLATE_ID_PREFIX u8"-win64-release-0.1.0");
     t.name = String(u8"Windows Desktop Release 0.1.0");
@@ -650,7 +650,8 @@ TEST_CASE("export: template.xml round-trips + host synthesis reads its runtime-l
     REQUIRE(loaded.symbols.Size() == 1u);
     CHECK(loaded.symbols[0] == u8"Engine.Player.pdb");
 
-    // Host synthesis: id/platform/config/player from the host; sidecars from "<player>.runtime-libs".
+    // Host synthesis: id, platform, config and player from the host; sidecars from
+    // "<player>.runtime-libs".
     SaveText(root, u8"Engine.Player.runtime-libs", u8"SDL3.dll\r\n\n  dxil.dll  \n");
     editor::ExportTemplate host;
     editor::SynthesizeHostTemplate(dir.AsView(), &root, host);
@@ -665,7 +666,7 @@ TEST_CASE("export: template.xml round-trips + host synthesis reads its runtime-l
     CHECK(host.id == expectedId.AsView());
     CHECK(host.playerBinary == GetExecutableName(u8"Engine.Player"));
     CHECK(host.directory == dir);
-    REQUIRE(host.sidecars.Size() == 2u); // blank line skipped, CR + spaces trimmed
+    REQUIRE(host.sidecars.Size() == 2u); // blank line skipped, CR and spaces trimmed
     CHECK(host.sidecars[0] == u8"SDL3.dll");
     CHECK(host.sidecars[1] == u8"dxil.dll");
 
@@ -679,8 +680,8 @@ TEST_CASE("export: a v1 template.xml (another data version) is REFUSED, not defa
     REQUIRE(CreateDirectory(dir.AsView()));
     foundation::vfs::NativeFileSystem root(dir.AsView(), foundation::core::DefaultAllocator());
 
-    // A hand-written v1 manifest: the OLD schema (dataVersion 1, no config/compiler/symbols).
-    // The reader accepts exactly the current data version - a stale template fails to load and
+    // A hand-written v1 manifest: the old schema (dataVersion 1, no config, compiler or symbols).
+    // The reader accepts only the current data version, so a stale template fails to load and
     // has to be re-created by its build.
     const StringView v1 = u8"<root>"
                           u8"<array name=\"dataVersions\" count=\"1\">"
@@ -715,7 +716,7 @@ TEST_CASE("export: template registry resolves by id, by platform, and host-falls
     foundation::vfs::NativeFileSystem rootFs(rootDir.AsView(), foundation::core::DefaultAllocator());
     foundation::vfs::NativeFileSystem hostFs(hostDir.AsView(), foundation::core::DefaultAllocator());
 
-    // One imported template for a NON-host platform, so the host-fallback check below is valid on
+    // One imported template for a non-host platform, so the host-fallback check below is valid on
     // every host: if the import shared the host platform it would out-rank the synthesized host
     // (that branch has its own test). Pick whichever of Win64/Linux64 is not the current host.
     const StringView hostPlatform = GetHostPlatformName();
@@ -732,7 +733,7 @@ TEST_CASE("export: template registry resolves by id, by platform, and host-falls
 
     editor::TemplateRegistry reg;
     reg.Refresh(rootDir.AsView(), &rootFs, hostDir.AsView(), &hostFs);
-    CHECK(reg.Count() == 2u); // imported foreign + synthesized host
+    CHECK(reg.Count() == 2u); // imported foreign and synthesized host
 
     // Explicit id.
     const editor::ExportTemplate* byId = reg.FindById(TEMPLATE_ID_PREFIX u8"-foreign-0.1.0");
@@ -742,12 +743,12 @@ TEST_CASE("export: template registry resolves by id, by platform, and host-falls
     // By (platform, config): the imported (Release) template answers its own platform; the host
     // platform falls back to the synthesized host template (whatever config built this binary).
     CHECK(reg.FindBy(foreignPlatform.AsView(), u8"Release") == byId);
-    CHECK(reg.FindBy(foreignPlatform.AsView(), u8"") == byId); // empty config => Release
+    CHECK(reg.FindBy(foreignPlatform.AsView(), u8"") == byId); // empty config means Release
     const editor::ExportTemplate* hostT = reg.FindBy(hostPlatform, GetBuildConfigName());
     REQUIRE(hostT != nullptr);
     CHECK(hostT->isHost);
 
-    // Resolve a preset: blank-id-by-(platform,config), explicit id, and no-match => null.
+    // Resolve a preset: a blank id by (platform, config), an explicit id, and no match (null).
     editor::ExportPreset p;
     p.platform = foreignPlatform; // blank config -> Release, which the imported foreign template is
     CHECK(reg.Resolve(p) == byId); // blank templateId -> by (platform, config)
@@ -774,7 +775,7 @@ TEST_CASE("export: an imported template out-ranks the synthesized host for the h
     foundation::vfs::NativeFileSystem rootFs(rootDir.AsView(), foundation::core::DefaultAllocator());
     foundation::vfs::NativeFileSystem hostFs(hostDir.AsView(), foundation::core::DefaultAllocator());
 
-    // An imported template for the SAME platform AND config as this host build - so the exact-match
+    // An imported template for the same platform and config as this host build, so the exact-match
     // pass returns both, and the imported (non-host) bundle must win the tiebreak.
     editor::ExportTemplate imported;
     imported.id = String(TEMPLATE_ID_PREFIX u8"-host-import");
@@ -787,10 +788,10 @@ TEST_CASE("export: an imported template out-ranks the synthesized host for the h
 
     editor::TemplateRegistry reg;
     reg.Refresh(rootDir.AsView(), &rootFs, hostDir.AsView(), &hostFs);
-    CHECK(reg.Count() == 2u); // imported + synthesized host (same platform)
+    CHECK(reg.Count() == 2u); // imported and synthesized host (same platform)
 
     // FindBy prefers the real imported bundle over the synthesized host template (platform-only
-    // fallback: the imported template has no config => Release, and outranks the host).
+    // fallback: the imported template has no config, which means Release, and outranks the host).
     const editor::ExportTemplate* byPlatform =
         reg.FindBy(GetHostPlatformName(), GetBuildConfigName());
     REQUIRE(byPlatform != nullptr);
@@ -819,14 +820,14 @@ TEST_CASE("export: ExportOne stages the resolved template's player + sidecars al
     NukeTree(toolDir.AsView());
     NukeTree(outRoot.AsView());
 
-    // A minimal (asset-less) project - enough for the content pipeline; the driver test is about the
-    // player/sidecar staging on top of it.
+    // A minimal (asset-less) project is enough for the content pipeline; the driver test is about
+    // the player and sidecar staging on top of it.
     REQUIRE(editor::EditorProject::Create(DefaultAllocator(), projectDir.AsView(), u8"ExportOneTest").IsOk());
     UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), projectDir.AsView());
     REQUIRE(static_cast<bool>(project));
     REQUIRE(project->SaveSettings().IsOk());
 
-    // Fake host tool dir: a "player" + its runtime-libs listing one sidecar + the sidecar file.
+    // Fake host tool dir: a "player", its runtime-libs listing one sidecar, and the sidecar file.
     REQUIRE(CreateDirectory(toolDir.AsView()));
     foundation::vfs::NativeFileSystem toolFs(toolDir.AsView(), foundation::core::DefaultAllocator());
     SaveText(toolFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
@@ -841,24 +842,24 @@ TEST_CASE("export: ExportOne stages the resolved template's player + sidecars al
     preset.platform = String(GetHostPlatformName()); // -> the host template
     preset.outputSubdir = String(u8"host");
 
-    pipeline::BuilderRegistry builders{DefaultAllocator()}; // no assets -> no builders needed
+    pipeline::BuilderRegistry builders{DefaultAllocator()}; // no assets, so no builders needed
     editor::ExportResult result;
     REQUIRE(
         editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result)
             .IsOk());
 
-    // The dist carries the player, the sidecar, and the content (Content.pak + player.xml).
+    // The dist carries the player, the sidecar, and the content (Content.pak and player.xml).
     foundation::vfs::NativeFileSystem distFs(result.outputDir.AsView(), foundation::core::DefaultAllocator());
     CHECK(distFs.Exists(GetExecutableName(u8"Engine.Player").AsView()));
     CHECK(distFs.Exists(u8"libfoo.so"));
     CHECK(distFs.Exists(u8"Content.pak"));
     CHECK(distFs.Exists(u8"player.xml"));
-    // The engine data tree the player's data-root discovery finds beside it: the marker + the
-    // cooked pack at the one layout every executable reads (Data/Engine/Shaders/shaders.dpak).
+    // The engine data tree the player's data-root discovery finds beside it: the marker and the
+    // cooked pack at the layout every executable reads (Data/Engine/Shaders/shaders.dpak).
     CHECK(distFs.Exists(u8"Data/.dataroot"));
     CHECK(distFs.Exists(u8"Data/Engine/Shaders/shaders.dpak"));
     CHECK(foundation::vfs::IsDataRoot(PathJoin(result.outputDir.AsView(), u8"Data").AsView()));
-    CHECK(result.filesStaged == 4u); // player + pack + marker + one sidecar (no additionalFiles)
+    CHECK(result.filesStaged == 4u); // player, pack, marker and one sidecar (no additionalFiles)
     // The host template is stamped with this build's engine version, so no soft-mismatch warning.
     CHECK(result.engineVersionWarning.IsEmpty());
 
@@ -1120,7 +1121,7 @@ TEST_CASE("export: a template built against a different engine version warns but
     REQUIRE(static_cast<bool>(project));
     REQUIRE(project->SaveSettings().IsOk());
 
-    // An imported template for the host platform stamped with a DIFFERENT engine version.
+    // An imported template for the host platform stamped with a different engine version.
     REQUIRE(CreateDirectory(rootDir.AsView()));
     REQUIRE(CreateDirectory(PathJoin(rootDir.AsView(), u8"old-template").AsView()));
     foundation::vfs::NativeFileSystem rootFs(rootDir.AsView(), foundation::core::DefaultAllocator());
@@ -1147,7 +1148,7 @@ TEST_CASE("export: a template built against a different engine version warns but
 
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     editor::ExportResult result;
-    // Export still SUCCEEDS (soft match) ...
+    // Export still succeeds (a soft match) ...
     REQUIRE(
         editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result)
             .IsOk());
@@ -1168,7 +1169,7 @@ TEST_CASE("export: ImportTemplate installs a bundle the registry then resolves")
     NukeTree(root.AsView());
     REQUIRE(CreateDirectory(src.AsView()));
 
-    // A source bundle: template.xml + a fake player + a sidecar.
+    // A source bundle: template.xml, a fake player and a sidecar.
     foundation::vfs::NativeFileSystem srcFs(src.AsView(), foundation::core::DefaultAllocator());
     editor::ExportTemplate t;
     t.id = String(TEMPLATE_ID_PREFIX u8"-win64-import");
@@ -1214,7 +1215,7 @@ TEST_CASE("export: CreateTemplate packages a Bin/<Config> dir and the registry t
     NukeTree(root.AsView());
 
     // A fake build dir with the canonical layout "…/Bin/<Config>/<Platform>-<Compiler>", holding a
-    // player + its runtime-libs manifest + the one sidecar it lists.
+    // player, its runtime-libs manifest and the one sidecar it lists.
     String leaf(GetHostPlatformName());
     leaf += u8"-Clang";
     const String binDir = PathJoin(
@@ -1225,12 +1226,12 @@ TEST_CASE("export: CreateTemplate packages a Bin/<Config> dir and the registry t
     SaveText(binFs, u8"Engine.Player.runtime-libs", u8"libfoo.so\n");
     SaveText(binFs, u8"libfoo.so", u8"foo\n");
 
-    // Install mode: writes into <root>/<id>. config/compiler come from the packaged dir path.
+    // Install mode writes into <root>/<id>. The config and compiler come from the packaged dir path.
     String createdId, createdDir;
     REQUIRE(editor::CreateTemplate(binDir.AsView(), root.AsView(), editor::TemplateOutput::Install,
                                    &createdId, &createdDir)
                 .IsOk());
-    // id = <prefix>-<platform>-<config>-<engineVersion> (lowercased platform/config).
+    // id = <prefix>-<platform>-<config>-<engineVersion> (platform and config lowercased).
     String expectedId(TEMPLATE_ID_PREFIX u8"-");
     expectedId += editor::AsciiLower(GetHostPlatformName());
     expectedId += u8"-release-";
@@ -1238,7 +1239,7 @@ TEST_CASE("export: CreateTemplate packages a Bin/<Config> dir and the registry t
     CHECK(createdId == expectedId.AsView());
     CHECK(createdDir == PathJoin(root.AsView(), createdId.AsView()));
 
-    // The bundle exists on disk: manifest + player + the sidecar.
+    // The bundle exists on disk: manifest, player and the sidecar.
     foundation::vfs::NativeFileSystem bundleFs(createdDir.AsView(), foundation::core::DefaultAllocator());
     CHECK(bundleFs.Exists(u8"template.xml"));
     CHECK(bundleFs.Exists(GetExecutableName(u8"Engine.Player").AsView()));
@@ -1307,7 +1308,8 @@ TEST_CASE("export: CreateTemplate --out mode writes a self-contained bundle to t
     REQUIRE(CreateDirectories(binDir.AsView()));
     foundation::vfs::NativeFileSystem binFs(binDir.AsView(), foundation::core::DefaultAllocator());
     SaveText(binFs, GetExecutableName(u8"Engine.Player").AsView(), u8"#!player\n");
-    // No runtime-libs manifest => no sidecars (an rpath-style build); the player alone still packages.
+    // No runtime-libs manifest means no sidecars (an rpath-style build); the player alone still
+    // packages.
 
     String createdId, createdDir;
     REQUIRE(editor::CreateTemplate(binDir.AsView(), outFolder.AsView(),
@@ -1344,7 +1346,7 @@ TEST_CASE("export: FindBy resolves exact (platform,config) and falls back prefer
     REQUIRE(CreateDirectory(rootDir.AsView()));
     REQUIRE(CreateDirectory(hostDir.AsView()));
 
-    // Two imported templates for the SAME non-host platform: a Debug one and a Release one.
+    // Two imported templates for the same non-host platform: a Debug one and a Release one.
     const StringView hostPlatform = GetHostPlatformName();
     const String plat =
         (hostPlatform == StringView(u8"Win64")) ? String(u8"Linux64") : String(u8"Win64");
@@ -1378,7 +1380,7 @@ TEST_CASE("export: FindBy resolves exact (platform,config) and falls back prefer
     CHECK(reg.FindBy(plat.AsView(), u8"Debug") == dbg);
     CHECK(reg.FindBy(plat.AsView(), u8"Release") == rel);
 
-    // No RelWithDebInfo template for this platform => platform-only fallback prefers the Release one.
+    // No RelWithDebInfo template for this platform: the platform-only fallback prefers Release.
     CHECK(reg.FindBy(plat.AsView(), u8"RelWithDebInfo") == rel);
     // Empty config defaults to Release (exact match).
     CHECK(reg.FindBy(plat.AsView(), u8"") == rel);
@@ -1390,7 +1392,7 @@ TEST_CASE("export: FindBy resolves exact (platform,config) and falls back prefer
     CHECK(reg.Resolve(p) == dbg);
     p.config = String(u8"Release");
     CHECK(reg.Resolve(p) == rel);
-    p.config.Clear(); // blank => Release
+    p.config.Clear(); // blank means Release
     CHECK(reg.Resolve(p) == rel);
 
     NukeTree(rootDir.AsView());
@@ -1413,7 +1415,7 @@ TEST_CASE("export: ExportOne stages template symbols only when the preset opts i
     REQUIRE(static_cast<bool>(project));
     REQUIRE(project->SaveSettings().IsOk());
 
-    // An imported template with a player, one required sidecar, and one SYMBOL file.
+    // An imported template with a player, one required sidecar, and one symbol file.
     REQUIRE(CreateDirectory(rootDir.AsView()));
     REQUIRE(CreateDirectory(PathJoin(rootDir.AsView(), u8"sym-template").AsView()));
     foundation::vfs::NativeFileSystem rootFs(rootDir.AsView(), foundation::core::DefaultAllocator());
@@ -1452,7 +1454,7 @@ TEST_CASE("export: ExportOne stages template symbols only when the preset opts i
         CHECK(distFs.Exists(GetExecutableName(u8"Engine.Player").AsView()));
         CHECK(distFs.Exists(u8"libfoo.so"));                // required sidecar always staged
         CHECK_FALSE(distFs.Exists(u8"Engine.Player.debug")); // symbols stripped by default
-        CHECK(result.filesStaged == 4u);                    // player + pack + marker + sidecar
+        CHECK(result.filesStaged == 4u);                    // player, pack, marker, sidecar
     }
 
     // Opt-in preset: symbols staged too.
@@ -1468,7 +1470,7 @@ TEST_CASE("export: ExportOne stages template symbols only when the preset opts i
                     .IsOk());
         foundation::vfs::NativeFileSystem distFs(result.outputDir.AsView(), foundation::core::DefaultAllocator());
         CHECK(distFs.Exists(u8"Engine.Player.debug")); // opted in
-        CHECK(result.filesStaged == 5u);              // player + pack + marker + sidecar + symbol
+        CHECK(result.filesStaged == 5u);              // player, pack, marker, sidecar, symbol
     }
 
     NukeTree(projectDir.AsView());
@@ -1484,7 +1486,7 @@ TEST_CASE("export: a v1 export_presets.xml (another data version) is REFUSED, no
     REQUIRE(CreateDirectory(dir.AsView()));
     foundation::vfs::NativeFileSystem root(dir.AsView(), foundation::core::DefaultAllocator());
 
-    // A hand-written v1 export_presets.xml (dataVersion 1, no config/stageSymbols on the preset):
+    // A hand-written v1 export_presets.xml (dataVersion 1, no config or stageSymbols on the preset)
     // refused by the versioned-payload reader; the presets file is re-created from the editor.
     const StringView v1 = u8"<root>"
                           u8"<array name=\"dataVersions\" count=\"1\">"
@@ -1513,8 +1515,8 @@ TEST_CASE("export: ResolveTemplatesRoot prefers an explicit override")
 {
     // An explicit override (the editor's EditorExportSettings::templatesRoot) wins verbatim.
     CHECK(editor::ResolveTemplatesRoot(u8"/shared/templates") == u8"/shared/templates");
-    // An empty override falls through to env/default - a non-empty root, same as the no-arg form
-    // the CLI uses (the two surfaces resolve identically when no setting is present).
+    // An empty override falls through to the environment or the default: a non-empty root, the
+    // same as the no-argument form the CLI uses (both resolve identically when no setting is set).
     const String fallback = editor::ResolveTemplatesRoot(u8"");
     CHECK_FALSE(fallback.IsEmpty());
     CHECK(fallback == editor::ResolveTemplatesRoot());
@@ -1566,7 +1568,8 @@ TEST_CASE("export: EditorExportSettings round-trips through the editor settings 
     REQUIRE(CreateDirectory(dir.AsView()));
     foundation::vfs::NativeFileSystem root(dir.AsView(), foundation::core::DefaultAllocator());
 
-    // First run: no file => NotFound, and the section is absent (reads as its defaults on access).
+    // First run: no file gives NotFound, and the section is absent (it reads as its defaults on
+    // access).
     {
         settings::Settings store(foundation::core::DefaultAllocator());
         CHECK_FALSE(editor::LoadEditorSettings(root, store).IsOk());
@@ -1580,7 +1583,7 @@ TEST_CASE("export: EditorExportSettings round-trips through the editor settings 
         REQUIRE(editor::SaveEditorSettings(*root.AsWritable(), store).IsOk());
     }
 
-    // Load it back into a fresh store - the override survives the XML round-trip.
+    // Load it back into a fresh store: the override survives the XML round-trip.
     {
         settings::Settings store(foundation::core::DefaultAllocator());
         REQUIRE(editor::LoadEditorSettings(root, store).IsOk());
@@ -1681,7 +1684,7 @@ TEST_CASE("export: pruned dist keeps the referenced closure, drops the rest, and
     foundation::vfs::NativeFileSystem distFs(result.outputDir.AsView(), foundation::core::DefaultAllocator());
     CHECK(distFs.Exists(u8"export-report.txt")); // report written beside the dist
 
-    // --- non-pruned (default) export: EVERYTHING ships, no report (escape hatch, no regression) ---
+    // --- non-pruned (default) export: everything ships and no report is written ---
     editor::ExportPreset full;
     full.name = String(u8"Full");
     full.platform = String(GetHostPlatformName());
@@ -1757,13 +1760,13 @@ TEST_CASE(
     editor::TemplateRegistry registry;
     SetupHostTemplate(toolDir.AsView(), registry);
 
-    // MAIN-THREAD pre-scan: expand the reachable closure with a scanner (as the editor does before
-    // submitting the background job), then export with scanner=null + the precomputed guid set - the
-    // scene loading (unsafe off the main thread) has already happened.
+    // Main-thread pre-scan: expand the reachable closure with a scanner (as the editor does before
+    // submitting the background job), then export with a null scanner and the precomputed guid set.
+    // The scene loading, which is unsafe off the main thread, has already happened.
     const editor::SceneReferenceScanner scanner = MakePruningScanner();
     const Array<editor::ExportRoot> seeds = editor::CollectExportRoots(*project);
     const Array<Guid> reachable = editor::ExpandReachableRoots(*project, seeds, scanner);
-    CHECK(reachable.Size() >= 2u); // at least the scene + its referenced mesh
+    CHECK(reachable.Size() >= 2u); // at least the scene and its referenced mesh
 
     editor::ExportPreset preset;
     preset.name = String(u8"Pruned");
@@ -1785,8 +1788,8 @@ TEST_CASE(
     CHECK(db.GetInstance(meshDeadId) == nullptr); // pruned via the precomputed set, no live scanner
     CHECK(result.pruning.pruned);
 
-    // Guard: pruning requested but NEITHER a scanner NOR a precomputed set -> safe fallback (pack
-    // everything, no prune) rather than a silently-broken dist.
+    // Pruning requested with neither a scanner nor a precomputed set falls back safely (pack
+    // everything, no prune) rather than producing a silently broken dist.
     editor::ExportPreset noHelp;
     noHelp.name = String(u8"NoHelp");
     noHelp.platform = String(GetHostPlatformName());
@@ -1834,8 +1837,8 @@ TEST_CASE("export: pruning keeps a scene -> prefab -> asset chain")
     const Guid meshInPrefab = AuthorMesh(*meshes, u8"PrefabMesh");
     const Guid meshDead = AuthorMesh(*meshes, u8"Unreferenced");
 
-    // The prefab body: an entity with a MeshComponent -> meshInPrefab, captured into the prefab
-    // instance's "scene" stream. meshInPrefab is reachable ONLY through this prefab.
+    // The prefab body: an entity with a MeshComponent referencing meshInPrefab, captured into the
+    // prefab instance's "scene" stream. meshInPrefab is reachable only through this prefab.
     foundation::content::Group* prefabsGroup =
         project->SourceDb().RootGroup()->CreateGroup(u8"Prefabs");
     foundation::content::Instance* prefabInst =
@@ -1858,8 +1861,8 @@ TEST_CASE("export: pruning keeps a scene -> prefab -> asset chain")
         REQUIRE(prefabInst->WriteData(u8"scene", bytes).IsOk());
     }
 
-    // The main scene spawns the prefab, then saves it (persists as ref + deltas -> a
-    // PendingPrefabInstance on load, NOT a flattened mesh).
+    // The main scene spawns the prefab, then saves it. It persists as a ref and deltas, which load
+    // as a PendingPrefabInstance, not a flattened mesh.
     foundation::content::Group* scenes = project->SourceDb().RootGroup()->CreateGroup(u8"Scenes");
     foundation::content::Instance* sceneInst =
         scenes->CreateInstance(u8"Main", scene::SceneDocument::StaticType());
@@ -1901,8 +1904,8 @@ TEST_CASE("export: pruning keeps a scene -> prefab -> asset chain")
                               &result, {}, true, nullptr, &scanner)
                 .IsOk());
 
-    // The whole chain is kept: scene staged, prefab staged (scene->prefab), the prefab's mesh cooked
-    // in (prefab->asset); the unreferenced mesh is gone.
+    // The whole chain is kept: the scene is staged, the prefab is staged (scene -> prefab), and the
+    // prefab's mesh is cooked in (prefab -> asset); the unreferenced mesh is gone.
     foundation::vfs::PakFileSystem pak(
         PathJoin(result.outputDir.AsView(), project::kDistContentPak).AsView());
     REQUIRE(pak.IsValid());
@@ -1926,7 +1929,7 @@ TEST_CASE(
     REQUIRE(CreateDirectory(dir.AsView()));
     foundation::vfs::NativeFileSystem root(dir.AsView(), foundation::core::DefaultAllocator());
 
-    // First load, no file yet => seeded with the built-in default (one host-platform preset).
+    // First load with no file yet: seeded with the built-in default (one host-platform preset).
     editor::ExportPresetsController ctl;
     ctl.Load(root);
     REQUIRE(ctl.Count() == 1u);
@@ -1947,7 +1950,7 @@ TEST_CASE(
     CHECK(ctl.At(idup).name == u8"Windows Copy"); // name collision resolved on Add
     REQUIRE(ctl.Count() == 3u);
 
-    // Edit: rename + change fields on the "Windows" preset.
+    // Edit: rename and change fields on the "Windows" preset.
     editor::ExportPreset edited = ctl.At(ia);
     edited.name = String(u8"Windows Ship");
     edited.playerName = String(u8"MyGame.exe");
@@ -1975,7 +1978,7 @@ TEST_CASE(
     CHECK(ship->additionalFiles[0] == u8"icon.ico");
     CHECK(reloaded.Set().Find(u8"Windows Ship Copy") != nullptr);
 
-    // Delete: drop the duplicate, save, reload - it's gone; the rest stays.
+    // Delete: drop the duplicate, save and reload; it is gone and the rest stays.
     for (usize i = 0; i < reloaded.Count(); ++i)
     {
         if (reloaded.At(i).name == u8"Windows Ship Copy")
@@ -2039,18 +2042,18 @@ TEST_CASE("export: RemoveTemplate deletes an installed bundle the registry then 
 
 TEST_CASE("export: TemplateEngineMatches flags a version mismatch, passes host + unstamped")
 {
-    // The synthesized host template carries this build's engine version => matches.
+    // The synthesized host template carries this build's engine version, so it matches.
     editor::ExportTemplate host;
     host.engineVersion = String(engine::project::kEngineVersionString);
     CHECK(editor::TemplateEngineMatches(host));
 
-    // A stamped, differing version => mismatch (the "!" note in the templates manager).
+    // A stamped, differing version is a mismatch (the "!" note in the templates manager).
     editor::ExportTemplate old;
     old.engineVersion = String(u8"0.0.0-ancient");
     CHECK_FALSE(editor::TemplateEngineMatches(old));
 
-    // An unstamped (hand-written) manifest is treated as a match (driver only soft-warns on a real
-    // differing stamp).
+    // An unstamped (hand-written) manifest is treated as a match (the driver only soft-warns on a
+    // stamp that really differs).
     editor::ExportTemplate blank;
     CHECK(editor::TemplateEngineMatches(blank));
 }
@@ -2097,7 +2100,7 @@ TEST_CASE("export: ExportRootsSet membership toggle is idempotent and round-trip
     CHECK(loaded.ToggleGroup(u8"Weapons/Runtime") == false);
     CHECK(loaded.IsEmpty());
 
-    // A project with no export_roots.xml => NotFound (caller treats as the empty set).
+    // A project with no export_roots.xml gives NotFound (the caller treats it as the empty set).
     editor::ExportRootsSet none;
     CHECK(editor::LoadExportRoots(root, none, u8"does_not_exist.xml").Code() ==
           ErrorCode::NotFound);
@@ -2125,7 +2128,7 @@ TEST_CASE("export: CollectGroupInstances enumerates a group subtree, not its sib
     foundation::content::Group* props = db.RootGroup()->CreateGroup(u8"Props");
     const Guid crate = props->CreateInstance(u8"Crate", ty)->Id();
 
-    // "Weapons" pulls its own instances AND the nested Rare subtree, but not the Props sibling.
+    // "Weapons" pulls its own instances and the nested Rare subtree, but not the Props sibling.
     Array<Guid> got;
     editor::CollectGroupInstances(db, u8"Weapons", got);
     const auto has = [&](const Guid& id)
@@ -2145,7 +2148,7 @@ TEST_CASE("export: CollectGroupInstances enumerates a group subtree, not its sib
     CHECK(has(excalibur));
     CHECK_FALSE(has(crate));
 
-    // Empty path = the whole DB (root subtree); a missing group contributes nothing.
+    // An empty path is the whole DB (the root subtree); a missing group contributes nothing.
     Array<Guid> all;
     editor::CollectGroupInstances(db, u8"", all);
     CHECK(all.Size() == 4u);
@@ -2177,7 +2180,7 @@ TEST_CASE("export: CollectExportRoots seeds Always-Export flags + group members,
     project->Settings().defaultSceneId = mainScene;
     project->ExportRoots().SetInstance(weaponMesh, true);     // an explicit instance flag
     project->ExportRoots().SetGroup(u8"RuntimeLoaded", true); // a group subtree flag
-    // The default scene ALSO flagged directly => must dedupe to one root, keeping DefaultScene.
+    // The default scene is also flagged directly; it must dedupe to one root, keeping DefaultScene.
     project->ExportRoots().SetInstance(mainScene, true);
 
     const Array<editor::ExportRoot> roots = editor::CollectExportRoots(*project);
@@ -2193,7 +2196,7 @@ TEST_CASE("export: CollectExportRoots seeds Always-Export flags + group members,
         }
         return nullptr;
     };
-    // Exactly three distinct roots (default scene deduped despite the redundant flag).
+    // Three distinct roots (the default scene deduped despite the redundant flag).
     CHECK(roots.Size() == 3u);
     REQUIRE(reasonOf(mainScene) != nullptr);
     CHECK(reasonOf(mainScene)->reason == editor::ExportRootReason::DefaultScene); // wins over Flag
@@ -2215,10 +2218,10 @@ TEST_CASE("export: CollectExportRoots seeds Always-Export flags + group members,
 
 TEST_CASE("export: template create recognizes a WEB build dir (player page + web sidecars)")
 {
-    // A wasm build dir holds the browser player PAGE (html) + js/wasm sidecars, not a host
-    // executable: CreateTemplate must synthesize a platform "Web" template whose player is the
-    // page - the reusable web export template (the player fetches the dist from the serving
-    // folder, so nothing project-specific is inside).
+    // A wasm build dir holds the browser player page (html) and js/wasm sidecars, not a host
+    // executable. CreateTemplate must synthesize a platform "Web" template whose player is the
+    // page: the reusable web export template. The player fetches the dist from the serving
+    // folder, so nothing project-specific is inside.
     const String dir = TempDir(u8"scratch_web_template_src");
     const String dest = TempDir(u8"scratch_web_template_out");
     NukeTree(dir.AsView());
@@ -2248,7 +2251,7 @@ TEST_CASE("export: template create recognizes a WEB build dir (player page + web
     CHECK(created.sidecars[0] == u8"Engine.Player.js");
     CHECK(created.sidecars[1] == u8"Engine.Player.wasm");
     CHECK(created.sidecars[2] == u8"serve.py");
-    // The bundle materialized the page + every sidecar.
+    // The bundle holds the page and every sidecar.
     CHECK(out.Exists(u8"Engine.Player.html"));
     CHECK(out.Exists(u8"Engine.Player.js"));
     CHECK(out.Exists(u8"Engine.Player.wasm"));
@@ -2260,10 +2263,10 @@ TEST_CASE("export: template create recognizes a WEB build dir (player page + web
 
 TEST_CASE("export: a Web preset stages the browser player + a WGSL shader pack")
 {
-    // The full web export pipeline: preset (platform Web) -> the imported Web template ->
-    // a served-folder dist (player page + js/wasm/serve.py + Content.pak + player.xml +
-    // a WGSL-format shaders.dpak). This is the export-from-editor flow; the output folder
-    // is directly servable (serve.py) and the player fetches the three dist files.
+    // The full web export pipeline: a preset for platform Web resolves to the imported Web
+    // template and produces a served-folder dist (the player page, js, wasm, serve.py,
+    // Content.pak, player.xml and a WGSL-format shaders.dpak). This is the export-from-editor
+    // flow; the output folder is directly servable (serve.py) and the player fetches the dist.
     const String projectDir = TempDir(u8"scratch_webexport_proj");
     const String rootDir = TempDir(u8"scratch_webexport_root");
     const String toolDir = TempDir(u8"scratch_webexport_tool");
@@ -2305,7 +2308,7 @@ TEST_CASE("export: a Web preset stages the browser player + a WGSL shader pack")
 
     editor::ExportPreset preset;
     preset.name = String(u8"Web Build");
-    preset.platform = String(u8"Web"); // -> the Web template by platform
+    preset.platform = String(u8"Web"); // resolves to the Web template by platform
     preset.outputSubdir = String(u8"web");
 
     pipeline::BuilderRegistry builders{DefaultAllocator()};
@@ -2314,23 +2317,24 @@ TEST_CASE("export: a Web preset stages the browser player + a WGSL shader pack")
         editor::ExportOne(*project, preset, registry, builders, outRoot.AsView(), TestDataRoot(), false, &result)
             .IsOk());
 
-    // The served folder: page + sidecars + content + the ENGINE shader pack.
+    // The served folder: page, sidecars, content and the engine shader pack.
     foundation::vfs::NativeFileSystem distFs(result.outputDir.AsView(), foundation::core::DefaultAllocator());
     CHECK(distFs.Exists(u8"Engine.Player.html"));
     CHECK(distFs.Exists(u8"Engine.Player.js"));
     CHECK(distFs.Exists(u8"Engine.Player.wasm"));
     CHECK(distFs.Exists(u8"serve.py"));
-    // Web dist ships TWO variant content paks (BC for desktop browsers, ASTC for mobile), selected
-    // by the wasm boot from the adapter's compressed-family - NOT a single Content.pak.
+    // A web dist ships two variant content paks (BC for desktop browsers, ASTC for mobile), and the
+    // wasm boot picks one by the adapter's compressed-texture family. There is no single Content.pak.
     CHECK(distFs.Exists(u8"Content-bc.pak"));
     CHECK(distFs.Exists(u8"Content-astc.pak"));
     CHECK_FALSE(distFs.Exists(u8"Content.pak"));
     CHECK(distFs.Exists(u8"player.xml"));
-    // Single shader pack (platform-keyed, compression-orthogonal) at the same Data/ layout a desktop
-    // dist stages - the web player fetches Data/.dataroot + Data/Engine/Shaders/shaders.dpak into MEMFS.
+    // A single shader pack (keyed by platform, independent of texture compression) at the same
+    // Data/ layout a desktop dist stages: the web player fetches Data/.dataroot and
+    // Data/Engine/Shaders/shaders.dpak into MEMFS.
     CHECK(distFs.Exists(u8"Data/.dataroot"));
     CHECK(distFs.Exists(u8"Data/Engine/Shaders/shaders.dpak"));
-    CHECK_FALSE(distFs.Exists(u8"shaders.dpak")); // never at the serving-folder root any more
+    CHECK_FALSE(distFs.Exists(u8"shaders.dpak")); // not at the serving-folder root
 
     // The pack is WGSL-format (the Web platform's runtime format), not SPIR-V/DXIL.
     {
@@ -2368,7 +2372,8 @@ TEST_CASE("export: VariantsForPlatform - desktop single pak, web BC + ASTC sibli
     CHECK(desk[0].pakName == u8"Content.pak");
     CHECK(desk[0].cookedDir.AsView().EndsWith(u8"Cooked"));
 
-    // Web: two complete variants, BC + ASTC, packed from SIBLING Cooked-web-*/ dirs (not under Cooked/).
+    // Web: two complete variants, BC and ASTC, packed from sibling Cooked-web-*/ dirs (not under
+    // Cooked/).
     const Array<editor::ContentVariant> web = editor::VariantsForPlatform(*project, u8"Web");
     REQUIRE(web.Size() == 2u);
     CHECK(web[0].key == u8"bc");
@@ -2384,11 +2389,11 @@ TEST_CASE("export: VariantsForPlatform - desktop single pak, web BC + ASTC sibli
 #if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
 TEST_CASE("export: desktop Content.pak is byte-identical with a sibling target DB present (Q2)")
 {
-    // Fable ruling Q2, made executable: a materialized per-target DB (Cooked-web-astc/) is a SIBLING
-    // of Cooked/, so the desktop pack (which walks Cooked/ recursively) can never sweep it in. Export
-    // the same project twice - once clean, once with a junk-filled sibling target DB present - and
-    // assert the desktop Content.pak is byte-for-byte identical. The startup script is just cookable
-    // content here (the subject is pak byte-identity), so ANY enabled backend serves.
+    // A materialized per-target DB (Cooked-web-astc/) is a sibling of Cooked/, so the desktop pack
+    // (which walks Cooked/ recursively) can never sweep it in. Export the same project twice, once
+    // clean and once with a junk-filled sibling target DB present, and assert the desktop
+    // Content.pak is byte-for-byte identical. The startup script is only cookable content here (the
+    // subject is the pak's bytes), so any enabled backend serves.
     RegisterScriptExportDeps();
     const ScriptSample sample = FirstScriptSample();
 
@@ -2488,7 +2493,7 @@ TEST_CASE("export: player output name carries the executable or page extension (
     CHECK(PlayerOutputName(u8"Web", u8"", u8"Engine.Player.html") == StringView(u8"Engine.Player.html"));
 }
 
-// --- Native ship link derivations (game-native-code.md N3) --------------------------------
+// --- Native ship link derivations ----------------------------------------------------------
 TEST_CASE("export: native target derives from the manifest's dev-module path")
 {
     using editor::detail::NativeTargetFromModulePath;
@@ -2524,7 +2529,7 @@ TEST_CASE("export: the NativeSample fixture pins the native-game conventions")
         editor::detail::NativeTargetFromModulePath(settings.nativeModule.AsView());
     CHECK(target == u8"NativeSample");
 
-    // The fixture's CMakeLists declares exactly that target through the engine seam.
+    // The fixture's CMakeLists declares that target through util_add_engine_library.
     UniquePtr<IStream> cml = fs.Open(u8"Native/CMakeLists.txt", FileMode::Read);
     REQUIRE(static_cast<bool>(cml));
     Array<char> text;
@@ -2571,17 +2576,17 @@ TEST_CASE("export: Add Native Code scaffolds the reference shape and wires the m
     CHECK(editor::detail::NativeTargetFromModulePath(reread.nativeModule.AsView()) ==
           u8"MyScaffold7");
 
-    // Never overwrites: a second call refuses (module declared / dir exists).
+    // It never overwrites: a second call refuses (the module is declared and the dir exists).
     CHECK(editor::ScaffoldNativeModule(*project).Code() == ErrorCode::AlreadyExists);
 
     NukeTree(dir);
 }
 
 
-// A template carries its own icon (icon.svg, named by its manifest), which the editor shows it by:
-// its platform's built-in one unless its maker names another (the Deck build's `handheld`) or gives
-// an .svg; an unknown name refuses the template. The host template, and a manifest from before
-// icons, show the platform's built-in icon.
+// A template carries its own icon (icon.svg, named by its manifest), which the editor shows for
+// it. The icon is the platform's built-in one unless the template's maker names another (the Deck
+// build's `handheld`) or supplies an .svg; an unknown name refuses the template. The host
+// template, and a manifest without an icon, show the platform's built-in icon.
 TEST_CASE("export: a created template carries its icon, the platform's unless one is named")
 {
     const String base = TempDir(u8"scratch_createtmpl_icon");
@@ -2626,7 +2631,7 @@ TEST_CASE("export: a created template carries its icon, the platform's unless on
     REQUIRE(create(handheld).IsOk());
     CHECK(bundledIcon() == editor::BuiltInTemplateIconSvg(u8"handheld"));
 
-    // An .svg of the maker's own, copied in.
+    // An .svg the maker supplies is copied in.
     const StringView own = u8"<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg>";
     SaveText(binFs, u8"own.svg", own);
     editor::TemplateIdentity custom;
@@ -2643,8 +2648,8 @@ TEST_CASE("export: a created template carries its icon, the platform's unless on
     missing.icon = u8"/nowhere/at/all.svg";
     CHECK_FALSE(create(missing).IsOk());
 
-    // Refused before anything is written: an installed bundle of that id still stands (Sedulous
-    // found Install deleting it first).
+    // Refused before anything is written: an installed bundle of that id still stands (Install
+    // must not delete it first).
     const String root = TempDir(u8"scratch_createtmpl_icon_root");
     NukeTree(root.AsView());
     String installedId, installedDir;

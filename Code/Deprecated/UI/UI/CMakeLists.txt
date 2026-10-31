@@ -1,6 +1,5 @@
-# Foundation::UI - `foundation.ui`, the retained-mode UI framework (faithful port of
-# Sedulous.UI). Platform-agnostic core; VG/Fonts are added as those phases land, and
-# the ui.shell bridge is a separate library. Built bottom-up (Core first).
+# Foundation::UI - `foundation.ui`, the retained-mode UI framework. Platform-agnostic
+# core; the ui.shell bridge is a separate library. Built bottom-up (Core first).
 util_add_engine_library(UI ALIAS Foundation::UI)
 target_link_libraries(UI
     PUBLIC Foundation::Core Foundation::VG Foundation::VG.SVG Foundation::Fonts Foundation::Image Foundation::Policy Foundation::Xml)

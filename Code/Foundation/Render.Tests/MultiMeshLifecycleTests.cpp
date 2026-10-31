@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// MultiMesh set lifecycle + the per-item shadow opt-out, the two renderer contracts
+// MultiMesh set lifecycle and the per-item shadow opt-out, the two renderer contracts
 // vegetation stands on: a set unseen for kMultiMeshEvictFrames leaves the renderer's pool
 // (its buffers and bind groups through the retire queue when one is wired), and a RenderData
 // with castShadows = false is absent from the shadow caster list.
@@ -121,7 +121,7 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
     renderer.PrepareFrame(2, 0);
     UploadOne(renderer, partial); // one past the window
     CHECK(renderer.MultiMeshSetCount() == 1u);
-    // Its buffer + the two region bind groups went through the queue, not vkDestroy in place.
+    // Its buffer and the two region bind groups went through the queue, not vkDestroy in place.
     CHECK(retire.PendingCount() >= pendingAfterUpload + 3u);
 
     // An empty frame still ages: the survivor goes too once unseen long enough.
@@ -213,7 +213,7 @@ TEST_CASE("shadows: castShadows = false keeps an Opaque item out of the caster l
 TEST_CASE("multimesh: a set's region capacity keeps every region offset storage-aligned on every backend")
 {
     // 144-byte InstanceData x a multiple of 16 = a multiple of 2304 = 9 x 256: the strictest
-    // storage-buffer offset alignment (WebGPU + D3D12) holds for region 1, 2, ... at any count.
+    // storage-buffer offset alignment (WebGPU and D3D12) holds for region 1, 2, ... at any count.
     for (const u32 count : {1u, 15u, 16u, 17u, 941u, 1024u, 2048u, 4095u, 4096u})
     {
         const u32 capacity = MeshRenderer::MultiMeshRegionCapacity(count);
@@ -228,10 +228,10 @@ TEST_CASE("multimesh: a set's region capacity keeps every region offset storage-
 
 TEST_CASE("multimesh: a draw count that grows within the capacity rewrites the region it outgrew")
 {
-    // The vegetation fade draws a PREFIX of a set's instances that changes with the camera's
+    // The vegetation fade draws a prefix of a set's instances that changes with the camera's
     // distance, under one unchanged version. A region written with a short prefix and then drawn
-    // with a longer one showed stale bytes for the tail - per region, so the tail blinked between
-    // frames-in-flight (the loaded-scene prop flicker of 2026-09-22).
+    // with a longer one must be rewritten, or the tail shows stale bytes, per region, and blinks
+    // between frames in flight.
     Systems s;
     if (!s.Init())
     {
@@ -286,7 +286,7 @@ TEST_CASE("multimesh: a draw count that grows within the capacity rewrites the r
     CHECK(world.m[3][2] == doctest::Approx(5.0f));
 
     // A shrink under the same version writes nothing: the regions already hold the longer prefix.
-    transforms[7].m[3][1] = 9.0f; // a change the renderer was NOT told about (no version bump)
+    transforms[7].m[3][1] = 9.0f; // a change the renderer was not told about (no version bump)
     frame(5, 4, 2);
     frame(6, 4, 2);
     REQUIRE(renderer.ReadMultiMeshInstance(0x77u, 1, 7, world));
@@ -297,8 +297,8 @@ TEST_CASE("multimesh: a draw count that grows within the capacity rewrites the r
 
 TEST_CASE("multimesh: a set with an uploadCount holds its whole list from the first frame, the draw prefix never re-uploads")
 {
-    // The vegetation contract (renderer.md): the GPU buffer holds the full chunk once; only the
-    // draw count moves with distance.
+    // The vegetation contract: the GPU buffer holds the full chunk once; only the draw count moves
+    // with distance.
     Systems s;
     if (!s.Init())
     {
@@ -335,7 +335,7 @@ TEST_CASE("multimesh: a set with an uploadCount holds its whole list from the fi
     CHECK(world.m[3][0] == doctest::Approx(7.0f));
     frame(1, 3);
     // The camera comes closer: the prefix grows to eight under the same version. Nothing is
-    // rewritten - a change the renderer was not told about stays invisible to it.
+    // rewritten, so a change the renderer was not told about stays invisible to it.
     transforms[7].m[3][1] = 9.0f;
     frame(2, 8);
     frame(3, 8);

@@ -1,5 +1,5 @@
-# Foundation::VG pixel-probe ("golden") tests: render deterministic VG scenes on REAL backends
-# (Vulkan + WebGPU) single-sampled + stencil, read the pixels back, and assert SEMANTIC pixel
+# Foundation::VG pixel-probe ("golden") tests: render deterministic VG scenes on real backends
+# (Vulkan and WebGPU), single-sampled with stencil, read the pixels back, and assert semantic pixel
 # properties (fill correctness, spreads, blends, clip, solid-vs-gradient color agreement).
 # Structural probes instead of stored image diffs: no cross-driver golden drift, and each
 # assertion names the property it guards. Skips cleanly when a backend/GPU is unavailable.

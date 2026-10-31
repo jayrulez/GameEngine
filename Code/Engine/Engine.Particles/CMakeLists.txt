@@ -1,6 +1,6 @@
 # Engine::Particles - `engine.particles`: scene/render integration for the
-# particle system (ECS component + manager + dedicated ParticleRenderer + ParticleSubsystem). Links
-# render.subsystem (the register-renderer/register-provider seam), scene, and the CPU particle core.
+# particle system (ECS component, manager, a dedicated ParticleRenderer, ParticleSubsystem). Links
+# render.subsystem (to register the renderer and provider), scene, and the CPU particle core.
 util_add_engine_library(Engine.Particles ALIAS Engine::Particles)
 target_link_libraries(Engine.Particles
     PUBLIC Foundation::Core Foundation::RHI Foundation::Shaders Foundation::Shaders.System

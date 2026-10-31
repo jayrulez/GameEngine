@@ -4,11 +4,11 @@
 // Editor::Scene - :view_gizmo partition.
 //
 // The scene view's orientation gizmo: an axis tripod in the viewport's top-right that turns with
-// the camera - the world's X, Y and Z and their negatives as labelled knobs, the positive ones on
-// arms from the centre - and a click on a knob looks along that axis; a click on the centre
-// switches the view between perspective and orthographic. The pure parts live here
-// (where the knobs sit for a camera, which one a click lands on, the angles a click snaps to) so
-// they are testable without a viewport; the page draws it and routes the click.
+// the camera, showing the world's X, Y and Z and their negatives as labelled knobs, the positive
+// ones on arms from the centre. A click on a knob looks along that axis; a click on the centre
+// switches the view between perspective and orthographic. The pure parts live here (where the knobs
+// sit for a camera, which one a click lands on, the angles a click snaps to) so they are testable
+// without a viewport; the page draws it and routes the click.
 
 module;
 #include "Core/Prelude.h"
@@ -51,8 +51,8 @@ export namespace editor
     /// static constexpr member from a shared library).
     inline constexpr f32 kViewGizmoMargin = 12.0f;
 
-    /// ViewGizmo::kStraightPitch, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ViewGizmo::kStraightPitch, at namespace scope for another library to read (MSVC exports no
+    /// class's static constexpr member from a shared library).
     inline constexpr f32 kViewGizmoStraightPitch = 1.5707963f;
 
     struct ViewGizmo

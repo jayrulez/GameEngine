@@ -12,6 +12,6 @@ VSOut main(VSIn i) {
     float2 ndc = float2(i.pos.x * pc.InvSize.x * 2.0 - 1.0, 1.0 - i.pos.y * pc.InvSize.y * 2.0);
     o.pos = float4(ndc, 0.0, 1.0);
     o.uv = i.uv;
-    o.col = float4(SrgbToLinear(i.col.rgb), i.col.a); // authored sRGB -> linear, as debug_geom
+    o.col = float4(SrgbToLinear(i.col.rgb), i.col.a); // authored sRGB to linear, as in debug_geom
     return o;
 }

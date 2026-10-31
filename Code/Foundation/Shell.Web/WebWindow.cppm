@@ -3,9 +3,9 @@
 
 // Foundation::Shell.Web - `foundation.shell.web:window`.
 //
-// The web shell's window IS an HTML <canvas>. Its size comes from the live canvas
+// The web shell's window is an HTML <canvas>. Its size comes from the live canvas
 // (emscripten_get_canvas_element_size), and Native() hands back the canvas CSS selector, which the
-// WebGPU RHI turns into a surface (WGPUEmscriptenSurfaceSourceCanvasHTMLSelector - see the WebGPU
+// WebGPU RHI turns into a surface (WGPUEmscriptenSurfaceSourceCanvasHTMLSelector; see the WebGPU
 // backend's CreateSurface). CSS can resize the canvas at any time, so QuerySize() re-polls it.
 
 module;

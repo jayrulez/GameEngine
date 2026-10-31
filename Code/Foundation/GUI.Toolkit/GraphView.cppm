@@ -3,40 +3,44 @@
 
 // GUI.Toolkit - :graph_view partition
 //
-// The graph view (T6 of Specs/gui-lab-evolution-3.md): a graph source's nodes on a canvas that pans
-// and zooms over a grid. A node is a widget (its header, title and a row per pin, which the sheet
-// styles), made only while it is in view and reused as the view moves
-// (Godot, traktor); a node never seen is made once to learn its size. The canvas runs left to right
-// in every language, as a dopesheet's time does: where the nodes are placed is the graph's, so inputs
-// stay on a node's left and outputs on its right, and only its text follows the language. Mouse first:
-//   - a click selects a node (Shift or Ctrl adds or takes it away), a drag from nothing selects by
-//     a box (Shift or Ctrl adding to what is selected);
-//   - a drag moves the selected nodes (one gesture through the source, on the grid where it snaps;
-//     Escape cancels it);
-//   - a drag from a pin links it (ezEngine): the source is asked of each pin, which it answers
-//     allowed or refused (and why) and which links it would replace, so the pins that fit are lit,
-//     the rest dimmed, a link about to be replaced faded and a refusal's reason shown; a drag from an
-//     input that has a link takes that link's end, to rewire it or, dropped on nothing, let it go;
-//   - a drag from just outside a node's edge links it to another node (a state machine's
-//     transition), where the source takes node links: a straight arrow between their borders, the
-//     two ways kept apart, a node to itself when the drag leaves it and comes back;
-//   - a click on a link selects it (Shift or Ctrl adds or takes it away);
-//   - a link dropped on nothing opens the picker of the kinds of node with a pin that fits, the
-//     node chosen made there, linked to it, in one change;
-//   - the menu over nothing adds a node (the picker: by category, with a search), pastes, and frames
-//     every node or the selection; a node's copies, duplicates, deletes and begins a node link (then
-//     the link follows the pointer until a click ends it); a link's deletes it;
-//   - Delete deletes the selected nodes and links, Escape cancels a drag or clears the selection,
-//     Ctrl+C copies the selected nodes and Ctrl+V pastes them at the pointer, as the property grid's;
-//   - a frame (a titled, tinted box behind the nodes; with a body, a comment) moves by its title, the
-//     nodes and frames inside it moving with it, and resizes from its edges, each one change; a
-//     double click on its title or its body edits it in place.
-//   - a double click on a node is the application's (a subgraph opened);
-//   - the wheel zooms about the pointer within limits, a middle drag pans.
-// Frames' boxes are drawn by the view under the links, their titles and bodies widgets over them.
-// Links are drawn by the view under the nodes, culled to it, each pin's place kept from when its
-// node was last laid out. The application may highlight nodes and links (a state machine's active
-// state). Read only, it selects and does not edit.
+// The graph view shows a graph source's nodes on a canvas that pans and zooms over a grid. Each
+// node is a widget (its header, title and a row per pin, which the sheet styles). Node widgets are
+// made only while the node is in view and are reused as the view moves; a node never seen is made
+// once to learn its size. The canvas runs left to right in every language, as a dopesheet's time
+// does. Node positions belong to the graph, so inputs stay on a node's left and outputs on its
+// right, and only the text follows the language. The view is driven mostly by the mouse:
+//   - A click selects a node (Shift or Ctrl adds it or takes it away). A drag from empty canvas
+//     selects with a box (Shift or Ctrl adds to the selection).
+//   - A drag moves the selected nodes as one gesture through the source, snapping to the grid when
+//     snapping is on. Escape cancels it.
+//   - A drag from a pin starts a link. The view asks the source about each pin: whether the link
+//     may end there (and why not) and which links it would replace. Pins that fit are highlighted,
+//     the rest are dimmed, a link about to be replaced fades, and a refusal's reason is shown. A
+//     drag from an input that has a link picks up that link's end, to rewire it or, when dropped
+//     on empty canvas, to remove it.
+//   - Where the source accepts node links, a drag from just outside a node's edge links it to
+//     another node (a state machine's transition). The link is a straight arrow between the
+//     nodes' borders; the two directions are drawn apart, and a node links to itself when the drag
+//     leaves it and comes back.
+//   - A click on a link selects it (Shift or Ctrl adds it or takes it away).
+//   - A link dropped on empty canvas opens the picker of the kinds of node with a pin that fits.
+//     The chosen node is made there and linked, in one change.
+//   - The menu over empty canvas adds a node (through the picker, by category, with a search),
+//     pastes, and frames every node or the selection. A node's menu copies, duplicates, deletes,
+//     or begins a node link, which then follows the pointer until a click ends it. A link's menu
+//     deletes it.
+//   - Delete deletes the selected nodes and links. Escape cancels a drag or clears the selection.
+//     Ctrl+C copies the selected nodes and Ctrl+V pastes them at the pointer, as in the property
+//     grid.
+//   - A frame (a titled, tinted box behind the nodes; with a body, a comment) moves by its title,
+//     taking the nodes and frames inside it along, and resizes from its edges; each is one change.
+//     A double click on its title or body edits it in place.
+//   - A double click on a node is reported to the application (to open a subgraph, say).
+//   - The wheel zooms about the pointer within limits, and a middle drag pans.
+// The view draws frame boxes under the links, and their titles and bodies are widgets over them.
+// It draws links under the nodes, culled to the view, using each pin's position from when its node
+// was last laid out. The application may highlight nodes and links (a state machine's active
+// state). A read-only view selects but does not edit.
 
 module;
 #include "Core/Prelude.h"
@@ -56,8 +60,8 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// What a pin or a node is to a link being dragged: nothing, a place it may end (lit), one it
-    /// may not (dimmed), or the one under the pointer that it would end at.
+    /// How a pin or a node relates to a link being dragged: not involved, a place the link may end
+    /// (highlighted), a place it may not (dimmed), or the target under the pointer.
     enum class GraphLinkState : u8
     {
         None,
@@ -80,7 +84,7 @@ export namespace foundation::gui
             widget.AddClass(core::StringView(u8"target"));
     }
 
-    /// A pin's row in a node: its name, the pin drawn on the node's edge by the node.
+    /// A pin's row in a node, showing its name. The node draws the pin itself on its edge.
     class GraphPinRow : public UIWidget
     {
         RTTI_OBJECT(GraphPinRow, UIWidget)
@@ -100,7 +104,7 @@ export namespace foundation::gui
             }
             m_name = core::MakeRef<Label>(MemoryAllocator());
             m_name->SetHitTestVisible(false);
-            m_name->SetLayoutDirection(LayoutDirection::Auto); // its text reads as written; the row stays left to right
+            m_name->SetLayoutDirection(LayoutDirection::Auto); // the text reads in its own direction; the row stays left to right
             AddChild(m_name.Get());
         }
 
@@ -125,14 +129,14 @@ export namespace foundation::gui
         [[nodiscard]] GraphPinDirection GetDirection() const noexcept { return m_direction; }
         [[nodiscard]] Color GetTypeColor() const noexcept { return m_color; }
         [[nodiscard]] Label& GetNameLabel() noexcept { return *m_name; }
-        /// What it is to a link being dragged.
+        /// Sets how the row's pin relates to a link being dragged.
         void SetLinkState(GraphLinkState state)
         {
             if (state == m_linkState)
                 return;
             m_linkState = state;
             ShowLinkState(*this, state);
-            // The node draws its pins: up from the row through its column and the body.
+            // The node draws its pins, so walk up from the row through its column and the body.
             Node* node = this;
             for (i32 up = 0; up < 3 && node != nullptr; ++up)
                 node = node->GetParent();
@@ -178,7 +182,7 @@ export namespace foundation::gui
     protected:
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
-            // Rounded as the node's top corners are, inside its border.
+            // Round the corners as the node's top corners are, inside its border.
             vg::CornerRadii radii{};
             if (const Node* node = GetParent())
             {
@@ -194,9 +198,9 @@ export namespace foundation::gui
         Color m_color{0.27f, 0.47f, 0.73f, 1.0f};
     };
 
-    /// A node of a graph view: its header and a row per pin, inputs on its left and outputs on its
-    /// right in every language (the canvas's flow), each pin drawn on the node's edge. A view fills it
-    /// from the source.
+    /// A node of a graph view: its header and a row per pin. Inputs are on its left and outputs on
+    /// its right in every language, following the canvas's flow, and each pin is drawn on the node's
+    /// edge. A view fills it from the source.
     class GraphNodeWidget : public UIWidget
     {
         RTTI_OBJECT(GraphNodeWidget, UIWidget)
@@ -256,7 +260,7 @@ export namespace foundation::gui
             }
         }
 
-        /// Shows `node` (what changed since it last showed one).
+        /// Shows `node`, updating only what changed since the last node it showed.
         void Show(const GraphNodeInfo& node)
         {
             m_node = node.Id;
@@ -275,7 +279,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] GraphId GetNodeId() const noexcept { return m_node; }
 
-        /// Shown selected (the sheet's `graphnode.selected`).
+        /// Shows it as selected (the sheet's `graphnode.selected`).
         void SetSelected(bool selected)
         {
             if (selected == m_selected)
@@ -287,7 +291,8 @@ export namespace foundation::gui
                 RemoveClass(core::StringView(u8"selected"));
         }
         [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
-        /// Highlighted by the application (the sheet's `graphnode.highlighted`): a state machine's active state.
+        /// Shows it as highlighted by the application (the sheet's `graphnode.highlighted`), for
+        /// example a state machine's active state.
         void SetHighlighted(bool highlighted)
         {
             if (highlighted == m_highlighted)
@@ -299,7 +304,7 @@ export namespace foundation::gui
                 RemoveClass(core::StringView(u8"highlighted"));
         }
         [[nodiscard]] bool IsHighlighted() const noexcept { return m_highlighted; }
-        /// What the node is to a node link being dragged.
+        /// Sets how the node relates to a node link being dragged.
         void SetLinkState(GraphLinkState state)
         {
             if (state == m_linkState)
@@ -309,8 +314,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] GraphLinkState GetLinkState() const noexcept { return m_linkState; }
 
-        /// Where pin `pin` is drawn, in the node's own space (on its left edge for an input, its right
-        /// for an output, across from its row's middle); false when it has no such pin.
+        /// Sets `out` to where pin `pin` is drawn, in the node's own space: on its left edge for an
+        /// input, its right edge for an output, level with the middle of its row. Returns false when
+        /// it has no such pin.
         [[nodiscard]] bool PinPoint(GraphId pin, core::Float2& out) const
         {
             const auto find = [&](const core::Array<core::RefPtr<GraphPinRow>>& rows, bool output)
@@ -327,7 +333,7 @@ export namespace foundation::gui
             };
             return find(m_inputRows, false) || find(m_outputRows, true);
         }
-        /// The pin rows, inputs then outputs.
+        /// Returns the number of pin rows, inputs then outputs.
         [[nodiscard]] usize PinRowCount() const noexcept { return m_inputRows.Size() + m_outputRows.Size(); }
         [[nodiscard]] GraphPinRow& PinRowAt(usize index) const noexcept
         {
@@ -336,10 +342,10 @@ export namespace foundation::gui
         [[nodiscard]] Label& GetTitleLabel() noexcept { return *m_title; }
         [[nodiscard]] Label& GetSubtitleLabel() noexcept { return *m_subtitle; }
         [[nodiscard]] GraphNodeHeader& GetHeader() noexcept { return *m_header; }
-        /// Under the pin rows: where an application puts widgets of its own.
+        /// Returns the body under the pin rows, where an application puts widgets of its own.
         [[nodiscard]] UIWidget& GetBody() noexcept { return *m_body; }
 
-        /// What it draws: its box and its pins over its edges.
+        /// Returns what it draws: its box, and its pins, which reach over its edges.
         [[nodiscard]] Rect GetInkBounds() const override
         {
             const Rect ink = UIWidget::GetInkBounds();
@@ -356,8 +362,8 @@ export namespace foundation::gui
                 core::Float2 at{};
                 if (!PinPoint(row.GetPinId(), at))
                     continue;
-                // While a link is dragged: the pins it may end at ringed light, the one under the
-                // pointer larger, the rest dimmed.
+                // While a link is dragged, ring the pins it may end at in light, draw the one under
+                // the pointer larger, and dim the rest.
                 const GraphLinkState state = row.GetLinkState();
                 const f32 radius = state == GraphLinkState::Target ? kPinRadius + 2.0f : kPinRadius;
                 Color ringColor{0.0f, 0.0f, 0.0f, 0.55f};
@@ -403,7 +409,7 @@ export namespace foundation::gui
                 rows.RemoveAt(rows.Size() - 1);
             }
         }
-        // `inner`'s top-left in this node's space (nothing between them is transformed).
+        // Returns `inner`'s top-left in this node's space (nothing between them is transformed).
         [[nodiscard]] core::Float2 OffsetIn(const Node& inner) const
         {
             core::Float2 at{};
@@ -426,8 +432,9 @@ export namespace foundation::gui
         GraphLinkState m_linkState = GraphLinkState::None;
     };
 
-    /// A frame of a graph view: its title and its body (a comment's), each edited in place by a
-    /// double click. The view draws its tinted box under the links; it holds the words over them.
+    /// A frame of a graph view: its title and its body (for a comment), each edited in place by a
+    /// double click. The view draws the frame's tinted box under the links, and this widget holds
+    /// the text over them.
     class GraphFrameWidget : public UIWidget
     {
         RTTI_OBJECT(GraphFrameWidget, UIWidget)
@@ -454,9 +461,9 @@ export namespace foundation::gui
                 m_title->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
             }
             AddChild(m_title.Get());
-            // The comment in the room the frame has left, as tall as its text and scrolled there when
-            // longer (the wheel taken while it moves, then the view's again; while it is typed in, to
-            // keep the caret in view).
+            // The comment fills the room left in the frame. It is as tall as its text, and scrolls
+            // when the text is longer. The comment takes the wheel while it is scrolling, and then
+            // the view takes it again; while it is typed in, it scrolls to keep the caret in view.
             m_bodyBox = core::MakeRef<UIWidget>(MemoryAllocator());
             m_bodyBox->SetTag(core::StringView(u8"graphframebody"));
             {
@@ -502,20 +509,20 @@ export namespace foundation::gui
         [[nodiscard]] GraphId GetFrameId() const noexcept { return m_frame; }
         [[nodiscard]] EditableLabel& GetTitleLabel() noexcept { return *m_title; }
         [[nodiscard]] EditableLabel& GetBodyLabel() noexcept { return *m_body; }
-        /// What scrolls a comment longer than the frame.
+        /// Returns the box that scrolls a comment longer than the frame.
         [[nodiscard]] UIWidget& GetBodyBox() noexcept { return *m_bodyBox; }
-        /// Edits its body in place, shown while it does (a frame made a comment).
+        /// Edits the body in place, showing it during the edit; this turns a frame into a comment.
         void EditBody()
         {
             m_body->SetDisplayed(true);
             m_body->BeginEdit();
         }
-        /// How tall its title band is, in its own space: what a press moves it by.
+        /// Returns how tall the title band is, in the frame's own space. A press there moves the frame.
         [[nodiscard]] f32 HeaderHeight() const
         {
             return core::Max(kHeaderMin, m_title->GetPosition().y + m_title->GetSize().y + 4.0f);
         }
-        /// Shown selected (the sheet's `graphframe.selected`).
+        /// Shows it as selected (the sheet's `graphframe.selected`).
         void SetSelected(bool selected)
         {
             if (selected == m_selected)
@@ -527,7 +534,8 @@ export namespace foundation::gui
                 RemoveClass(core::StringView(u8"selected"));
         }
         [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
-        /// A title or a body (`body`) committed: the view's, to edit the frame through the source.
+        /// Called when a title, or the body (`body` true), is committed. The view uses it to edit the
+        /// frame through the source.
         void SetOnCommitted(core::Function<void(GraphId, core::StringView, bool)> callback) { m_onCommitted = core::Move(callback); }
 
     private:
@@ -551,7 +559,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(GraphView, UIWidget)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"grid"));
@@ -564,22 +572,22 @@ export namespace foundation::gui
             out.PushBack(core::StringView(u8"selection-box"));
         }
         static constexpr f32 kDragThreshold = 3.0f;
-        /// How near a pin a press or a drop takes it (at least; the pin's own size when larger).
+        /// How near a pin a press or a drop must be to hit it (or the pin's own size when larger).
         static constexpr f32 kPinReach = 9.0f;
         /// How far outside a node's edge a press begins a node link.
         static constexpr f32 kEdgeReach = 7.0f;
-        /// How near a link a click selects it.
+        /// How near a link a click must be to select it.
         static constexpr f32 kLinkReach = 5.0f;
         /// How far apart a node link and its reverse are drawn.
         static constexpr f32 kParallelGap = kGraphViewParallelGap;
         /// How far inside a frame's edge a press resizes it.
         static constexpr f32 kFrameEdge = 6.0f;
-        /// The least a frame is resized to, in the graph's units.
+        /// The smallest width a frame can be resized to, in the graph's units.
         static constexpr f32 kFrameMinWidth = kGraphViewFrameMinWidth;
         static constexpr f32 kFrameMinHeight = 48.0f;
-        /// How far past its edges nodes are made before they come into view.
+        /// How far past the view's edges node widgets are made before the nodes come into view.
         static constexpr f32 kViewMargin = 64.0f;
-        /// The size a node is taken to have before it was measured.
+        /// The size assumed for a node before it has been measured.
         [[nodiscard]] static core::Float2 EstimatedNodeSize() noexcept { return core::Float2{160.0f, 80.0f}; }
 
         GraphView()
@@ -587,7 +595,7 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"graphview"));
             SetTabFocusable(true);
             SetClipChildren(true);
-            SetPlacesChildren(true); // the nodes at their points on the canvas, which stays left to right
+            SetPlacesChildren(true); // it places nodes at canvas points; the canvas stays left to right
         }
         ~GraphView() override
         {
@@ -596,7 +604,8 @@ export namespace foundation::gui
         }
 
         // === What it shows ===
-        /// The graph it shows and edits (not owned: the source outlives the view or is set to null first).
+        /// Sets the graph it shows and edits. The source is not owned: it must outlive the view, or
+        /// be set to null first.
         void SetSource(IGraphSource* source)
         {
             if (m_source)
@@ -612,12 +621,12 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] IGraphSource* GetSource() const noexcept { return m_source; }
-        /// Read only: it selects, and moves and edits nothing.
+        /// Sets read-only mode, in which the view selects but moves and edits nothing.
         void SetReadOnly(bool readOnly) noexcept { m_readOnly = readOnly; }
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
 
         // === The canvas ===
-        /// The graph's point at its content box's top-left.
+        /// Sets the graph point shown at the content box's top-left.
         void SetPan(core::Float2 pan)
         {
             m_fitting = false;
@@ -625,7 +634,8 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] core::Float2 GetPan() const noexcept { return m_pan; }
-        /// The zoom (within its limits), the graph's point at `about` (its own space) kept in place.
+        /// Sets the zoom (within its limits), keeping the graph point under `about` (in the view's
+        /// space) in place.
         void SetZoom(f32 zoom, core::Float2 about)
         {
             m_fitting = false;
@@ -645,7 +655,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] f32 ZoomMin() const noexcept { return m_zoomMin; }
         [[nodiscard]] f32 ZoomMax() const noexcept { return m_zoomMax; }
-        /// The grid's cell in the graph's units, what a move snaps to when it snaps.
+        /// Sets the grid's cell size in the graph's units, which a move snaps to when snapping is on.
         void SetGridSize(f32 size)
         {
             m_gridSize = core::Max(1.0f, size);
@@ -666,41 +676,43 @@ export namespace foundation::gui
             return core::Float2{m_pan.x + (local.x - box.x) / m_zoom, m_pan.y + (local.y - box.y) / m_zoom};
         }
 
-        /// Fits every node in view (at most at the zoom of 1), and goes on fitting them as it is laid
-        /// out (its size settling, its nodes measured) until the canvas is moved: a press or the wheel
-        /// in it, or code setting its pan or zoom.
+        /// Fits every node in view, at a zoom of 1 at most. It keeps fitting them on each layout (as
+        /// the view's size settles and its nodes are measured) until the canvas is moved by a press
+        /// or the wheel in it, or by code setting its pan or zoom.
         void FrameAll()
         {
             m_fitting = true;
             Frame(false);
             RequestLayout();
         }
-        /// Fits the selected nodes in view; every node with none selected.
+        /// Fits the selected nodes in view, or every node when none is selected.
         void FrameSelection()
         {
             m_fitting = false;
             Frame(!m_selection.IsEmpty());
         }
-        /// Whether it still fits every node (FrameAll, the canvas not moved since).
+        /// Returns whether it is still fitting every node: FrameAll was called and the canvas has not
+        /// moved since.
         [[nodiscard]] bool IsFitting() const noexcept { return m_fitting; }
 
         // === Edits of the selection (one change each, through the source) ===
-        /// Deletes the selected nodes (and their links), then the selected links left; false when
-        /// nothing went.
+        /// Deletes the selected nodes with their links, then the selected links that remain. Returns
+        /// false when nothing was deleted.
         bool DeleteSelected();
         /// Copies the selected nodes (and the links among them) to the clipboard as the source's text.
         bool CopySelected();
-        /// Pastes the clipboard's nodes, their top-left at `at` (the graph's), selecting them.
+        /// Pastes the clipboard's nodes with their top-left at `at` (in graph space), and selects them.
         bool PasteAt(core::Float2 at);
-        /// Copies and pastes the selected nodes beside them, selecting the copies (the clipboard kept).
+        /// Copies the selected nodes and pastes them beside the originals, selecting the copies. The
+        /// clipboard is left unchanged.
         bool DuplicateSelected();
-        /// Makes a node of `type` at `at` (the graph's), linked from pin `linkFrom` when it is not 0,
-        /// selecting it; its id, 0 when it was not made.
+        /// Makes a node of `type` at `at` (in graph space), linked from pin `linkFrom` when that is
+        /// not 0, and selects it. Returns its id, or 0 when it was not made.
         GraphId AddNode(core::StringView type, core::Float2 at, GraphId linkFrom = 0);
 
         // === Frames ===
-        /// Where a frame is, in its own space (as it is being resized, while it is); empty when there
-        /// is no such frame.
+        /// Returns where a frame is, in the view's space, including any resize in progress. Returns
+        /// an empty rectangle when there is no such frame.
         [[nodiscard]] Rect FrameRect(GraphId frame) const
         {
             GraphFrameInfo info;
@@ -725,14 +737,15 @@ export namespace foundation::gui
             ReselectFrames(core::Move(next));
         }
         [[nodiscard]] bool IsFrameSelected(GraphId frame) const noexcept { return Holds(m_selectedFrames, frame); }
-        /// Makes a frame (with `comment`, a comment: a frame with a body) around the selected nodes, or
-        /// at `at` (the graph's) with none selected, selecting it; its id, 0 when none was made.
+        /// Makes a frame around the selected nodes, or at `at` (in graph space) when none is
+        /// selected, and selects it. With `comment`, the frame gets a body. Returns its id, or 0 when
+        /// none was made.
         GraphId AddFrame(core::Float2 at, bool comment = false);
 
         // === Menus ===
-        /// Opens the node picker at `local` (its own space), the node chosen made there; with
-        /// `fitting`, a pin, only the kinds a link from it reaches, the node linked to it. False when
-        /// there is no kind to offer.
+        /// Opens the node picker at `local` (in the view's space); the chosen node is made there.
+        /// With `fitting` set to a pin, it offers only the kinds a link from that pin can reach, and
+        /// links the new node to it. Returns false when there is no kind to offer.
         bool OpenNodePicker(core::Float2 local, GraphId fitting = 0);
         [[nodiscard]] bool IsNodePickerOpen() const
         {
@@ -740,20 +753,21 @@ export namespace foundation::gui
             return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_picker);
         }
         [[nodiscard]] GraphNodePicker* GetNodePicker() const noexcept { return m_picker.Get(); }
-        /// The context menu while it is open; null when it is not.
+        /// Returns the context menu while it is open, or null when it is not.
         [[nodiscard]] Menu* GetMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
-        /// Begins a node link from `node` that follows the pointer until a click ends it (a node's
-        /// menu); false when the source takes none from it.
+        /// Begins a node link from `node` that follows the pointer until a click ends it, as a node's
+        /// menu does. Returns false when the source accepts no link from it.
         bool BeginNodeLink(GraphId node);
 
         // === Nodes ===
-        /// A node's size as last measured (an estimate before it was).
+        /// Returns a node's size as last measured, or an estimate before it has been measured.
         [[nodiscard]] core::Float2 NodeSize(GraphId node) const
         {
             const core::Float2* size = m_sizes.Find(node);
             return size != nullptr ? *size : EstimatedNodeSize();
         }
-        /// Where a node is, in its own space; empty when there is no such node.
+        /// Returns where a node is, in the view's space, or an empty rectangle when there is no such
+        /// node.
         [[nodiscard]] Rect NodeRect(GraphId node) const
         {
             const GraphNodeInfo* info = m_source ? m_source->GetNode(node) : nullptr;
@@ -763,7 +777,7 @@ export namespace foundation::gui
             const core::Float2 size = NodeSize(node);
             return Rect{at.x, at.y, size.x * m_zoom, size.y * m_zoom};
         }
-        /// The topmost node at `local` (its own space); 0 when none.
+        /// Returns the topmost node at `local` (in the view's space), or 0 when there is none.
         [[nodiscard]] GraphId HitNode(core::Float2 local) const
         {
             if (!m_source)
@@ -775,8 +789,8 @@ export namespace foundation::gui
                     return order[i];
             return 0;
         }
-        /// Where pin `pin` is drawn, in its own space, as its node was last laid out; false when the
-        /// view has not laid it out.
+        /// Sets `out` to where pin `pin` is drawn, in the view's space, as its node was last laid
+        /// out. Returns false when the view has not laid that node out.
         [[nodiscard]] bool PinPoint(GraphId pin, core::Float2& out) const
         {
             const PinPlace* place = m_pins.Find(pin);
@@ -787,21 +801,23 @@ export namespace foundation::gui
             out = core::Float2{at.x + place->Offset.x * m_zoom, at.y + place->Offset.y * m_zoom};
             return true;
         }
-        /// The pin of a node in view at `local` (its own space); 0 when none.
+        /// Returns the pin of a node in view at `local` (in the view's space), or 0 when there is none.
         [[nodiscard]] GraphId HitPin(core::Float2 local) const { return NearestPin(local, PinReach()); }
-        /// The line link `link` is drawn along, in its own space (a curve's points, or an edge with its
-        /// arrow at the end); false when an end has no place yet.
+        /// Fills `out` with the line link `link` is drawn along, in the view's space: a curve's
+        /// points, or a node edge with its arrow at the end. Returns false when an end has no
+        /// position yet.
         [[nodiscard]] bool LinkPoints(const GraphLinkInfo& link, core::Array<core::Float2>& out) const;
-        /// The topmost link at `local` (its own space); 0 when none.
+        /// Returns the topmost link at `local` (in the view's space), or 0 when there is none.
         [[nodiscard]] GraphId HitLink(core::Float2 local) const;
 
-        /// A node's widget while it is made (in view); null when it is not.
+        /// Returns a node's widget while one is made for it (while it is in view), else null.
         [[nodiscard]] GraphNodeWidget* GetNodeWidget(GraphId node) const
         {
             const core::RefPtr<GraphNodeWidget>* widget = m_live.Find(node);
             return widget != nullptr ? widget->Get() : nullptr;
         }
-        /// How many node widgets are made now (those in view), and how many wait to be reused.
+        /// How many node widgets exist now (those in view), and how many wait in the pool to be
+        /// reused.
         [[nodiscard]] usize MadeNodeCount() const noexcept { return m_live.Size(); }
         [[nodiscard]] usize PooledNodeCount() const noexcept { return m_pool.Size(); }
 
@@ -827,7 +843,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsLinkSelected(GraphId link) const noexcept { return Holds(m_selectedLinks, link); }
 
-        // === Highlights (the application's: a state machine's active state) ===
+        // === Highlights, set by the application (a state machine's active state) ===
         void SetHighlightedNodes(core::Span<const GraphId> nodes)
         {
             m_highlightedNodes.Clear();
@@ -845,20 +861,21 @@ export namespace foundation::gui
         [[nodiscard]] bool IsNodeHighlighted(GraphId node) const noexcept { return Holds(m_highlightedNodes, node); }
         [[nodiscard]] bool IsLinkHighlighted(GraphId link) const noexcept { return Holds(m_highlightedLinks, link); }
 
-        /// Whether a link is being dragged, and what the source said of where it would end (Allowed
-        /// false with no reason: it is over nothing).
+        /// Whether a link is being dragged, and the source's answer for where it would end. Allowed
+        /// false with no reason means the pointer is over empty canvas.
         [[nodiscard]] bool IsLinking() const noexcept { return m_drag == Drag::Link; }
         [[nodiscard]] const GraphLinkCheck& GetLinkCheck() const noexcept { return m_targetCheck; }
-        /// Told each time the selection changes.
+        /// Called each time the selection changes.
         void SetOnSelectionChanged(core::Function<void()> callback) { m_onSelectionChanged = core::Move(callback); }
-        /// A double click on a node: the application's (a subgraph opened).
+        /// Called on a double click on a node; the application decides what it does (opening a
+        /// subgraph, say).
         void SetOnNodeDoubleClick(core::Function<void(GraphId)> callback) { m_onNodeDoubleClick = core::Move(callback); }
 
         void OnGraphChanged() override
         {
             if (!m_source)
                 return;
-            core::Array<GraphId> kept; // an undo may take nodes away
+            core::Array<GraphId> kept; // an undo may have removed nodes
             for (const GraphId node : m_selection)
                 if (m_source->GetNode(node) != nullptr)
                     kept.PushBack(node);
@@ -925,9 +942,9 @@ export namespace foundation::gui
             Link,
             Resize,
         };
-        // A frame's edges a press is on (several at a corner).
+        // Bits for the frame edges a press is on (several at a corner).
         static constexpr u8 kEdgeLeft = 1, kEdgeTop = 2, kEdgeRight = 4, kEdgeBottom = 8;
-        // Where a pin is in its node, as the node was last laid out.
+        // Where a pin sits in its node, as the node was last laid out.
         struct PinPlace
         {
             GraphId Node = 0;
@@ -937,7 +954,7 @@ export namespace foundation::gui
         };
 
         [[nodiscard]] f32 PinReach() const noexcept { return core::Max(kPinReach, (GraphNodeWidget::kPinRadius + 3.0f) * m_zoom); }
-        // The pin of a made node nearest `local` within `reach`; 0 when none.
+        // Returns the pin of a node widget nearest `local` within `reach`, or 0 when there is none.
         [[nodiscard]] GraphId NearestPin(core::Float2 local, f32 reach) const
         {
             GraphId best = 0;
@@ -958,7 +975,7 @@ export namespace foundation::gui
             }
             return best;
         }
-        // The node whose edge `local` is just outside of (none when it is inside a node).
+        // Returns the node whose edge `local` is just outside of, or 0 when it is inside a node.
         [[nodiscard]] GraphId HitNodeEdge(core::Float2 local) const
         {
             if (!m_source)
@@ -975,7 +992,8 @@ export namespace foundation::gui
             }
             return 0;
         }
-        // The link a drag would make ending at `target` (a pin, or a node for a node link).
+        // Returns the link a drag would make if it ended at `target` (a pin, or a node for a node
+        // link).
         [[nodiscard]] GraphLinkInfo Candidate(GraphId target) const
         {
             GraphLinkInfo link;
@@ -1018,7 +1036,8 @@ export namespace foundation::gui
                 }
             return false;
         }
-        // The topmost frame at `local`: on which of its edges, and whether on its title band.
+        // Returns the topmost frame at `local`, and sets `edges` to the edges the point is on and
+        // `header` to whether it is on the title band.
         [[nodiscard]] GraphId HitFrame(core::Float2 local, u8& edges, bool& header) const
         {
             edges = 0;
@@ -1091,9 +1110,10 @@ export namespace foundation::gui
         void LinkTo(core::Float2 local);
         void EndLink(bool commit);
         void ShowLinkStates();
-        // A curve from an output's point to an input's, leaving and arriving along the reading direction.
+        // Fills a curve from an output's point to an input's, leaving and arriving horizontally.
         void CurvePoints(core::Float2 from, core::Float2 to, core::Array<core::Float2>& out) const;
-        // A straight edge between two nodes' borders (`gap` to its right), or a loop on one node.
+        // Fills a straight edge between two nodes' borders, offset by `gap` to its right, or a loop
+        // when both are one node.
         void EdgePoints(const Rect& from, const Rect& to, f32 gap, core::Array<core::Float2>& out) const;
         void StrokeLine(DrawContext& ctx, core::Span<const core::Float2> points, Color color, f32 width, bool arrow) const;
 
@@ -1112,7 +1132,7 @@ export namespace foundation::gui
             m_selection = core::Move(next);
             if (same)
                 return;
-            RequestLayout(); // selected nodes stand on top
+            RequestLayout(); // selected nodes are drawn on top
             Invalidate();
             if (m_onSelectionChanged)
                 m_onSelectionChanged();
@@ -1134,7 +1154,7 @@ export namespace foundation::gui
                 next.PushBack(node);
             Reselect(core::Move(next));
         }
-        // The source's nodes in the order they are drawn: the selected last, over the rest.
+        // Lists the source's nodes in drawing order, with the selected ones last, over the rest.
         void PaintOrder(core::Array<GraphId>& out) const
         {
             out.Clear();
@@ -1171,60 +1191,61 @@ export namespace foundation::gui
         f32 m_zoomMax = 2.0f;
         f32 m_gridSize = 16.0f;
         bool m_snap = true;
-        bool m_fitting = false; // FrameAll's: fitting every node until the canvas is moved
+        bool m_fitting = false; // set by FrameAll: fit every node until the canvas is moved
         core::Array<GraphId> m_selection;
         core::Function<void()> m_onSelectionChanged;
         core::Function<void(GraphId)> m_onNodeDoubleClick;
 
         core::HashMap<GraphId, core::RefPtr<GraphNodeWidget>> m_live; // the nodes made, by id
-        core::Array<core::RefPtr<GraphNodeWidget>> m_pool;            // made, waiting to be reused
+        core::Array<core::RefPtr<GraphNodeWidget>> m_pool;            // widgets made earlier, waiting to be reused
         core::HashMap<GraphId, core::Float2> m_sizes;                  // each node's size as last measured
-        core::HashMap<GraphId, PinPlace> m_pins;                       // each pin's place, by pin id
+        core::HashMap<GraphId, PinPlace> m_pins;                       // each pin's position, by pin id
         core::Array<GraphId> m_selectedLinks;
         core::Array<GraphId> m_highlightedNodes;
         core::Array<GraphId> m_highlightedLinks;
         core::HashMap<GraphId, core::RefPtr<GraphFrameWidget>> m_frameWidgets;
         core::Array<GraphId> m_selectedFrames;
-        core::Array<GraphId> m_frameBoxBase;   // the frames a box adds to
-        core::Array<GraphId> m_moveNodes;      // what a move moves: the selected nodes, and those inside the selected frames
+        core::Array<GraphId> m_frameBoxBase;   // the frames selected before a box selection, which it adds to
+        core::Array<GraphId> m_moveNodes;      // the selected nodes, and those inside the selected frames
         core::Array<GraphId> m_moveFrames;
         GraphId m_pressedFrame = 0;            // the frame pressed by its title
         GraphId m_resizeFrame = 0;
         u8 m_resizeEdges = 0;
-        Rect m_resizeFrom{};                   // the graph's
+        Rect m_resizeFrom{};                   // in graph space
         Rect m_resizeTo{};
 
         Drag m_drag = Drag::None;
-        core::Float2 m_pressAt{};   // where the gesture began, its own space
+        core::Float2 m_pressAt{};   // where the gesture began, in the view's space
         core::Float2 m_boxTo{};
         GraphId m_pressed = 0;      // the node pressed
-        core::Float2 m_pressedFrom{}; // its place in the graph when the move began
+        core::Float2 m_pressedFrom{}; // its position in the graph when the move began
         bool m_additive = false;    // Shift or Ctrl held at the press
-        core::Array<GraphId> m_boxBase; // what a box adds to
+        core::Array<GraphId> m_boxBase; // the nodes selected before a box selection, which it adds to
         core::Float2 m_panFrom{};
 
-        // A link dragged: from a pin (or, a node link, a node), or an existing link's input end.
+        // The link being dragged: from a pin (or from a node, for a node link), or by an existing
+        // link's input end.
         GraphLinkKind m_linkKind = GraphLinkKind::Pins;
         GraphId m_anchorNode = 0;
         GraphId m_anchorPin = 0;
         bool m_anchorOutput = true;    // the anchor is the link's From end
-        GraphId m_relinking = 0;       // the link whose end is carried
-        GraphId m_relinkFrom = 0;      // the input it came off
-        bool m_linkMoved = false;      // past the threshold
+        GraphId m_relinking = 0;       // the link whose end is being carried
+        GraphId m_relinkFrom = 0;      // the input the carried end came off
+        bool m_linkMoved = false;      // moved past the drag threshold
         bool m_leftAnchor = false;     // a node link's pointer left its node (so it may come back to it)
         core::Float2 m_linkTo{};
         GraphId m_target = 0;
         GraphLinkCheck m_targetCheck;
-        core::HashMap<GraphId, bool> m_fits; // each pin's (or node's) answer, asked once per drag
-        bool m_sticky = false;         // begun from a menu: it follows the pointer until a click
+        core::HashMap<GraphId, bool> m_fits; // whether each pin (or node) fits, asked once per drag
+        bool m_sticky = false;         // begun from a menu, so it follows the pointer until a click
         mutable Text m_text;           // a refusal's reason
 
-        core::Float2 m_pointer{};      // where the pointer was last over it, its own space
+        core::Float2 m_pointer{};      // where the pointer was last over the view, in its space
         bool m_pointerInside = false;
         core::RefPtr<Menu> m_menu;
         core::RefPtr<GraphNodePicker> m_picker;
-        core::Float2 m_pickAt{};       // where the node picked goes, the graph's
-        GraphId m_pickFrom = 0;        // the pin it is linked from
+        core::Float2 m_pickAt{};       // where the picked node goes, in graph space
+        GraphId m_pickFrom = 0;        // the pin the picked node is linked from
     };
 
     // === Making the nodes in view ===
@@ -1251,7 +1272,8 @@ export namespace foundation::gui
         const Rect box = GetContentBounds();
         const Rect reach{box.x - kViewMargin, box.y - kViewMargin, box.width + 2.0f * kViewMargin, box.height + 2.0f * kViewMargin};
         usize index = 0;
-        // The frames first, under the nodes; few, each made while it is in the graph.
+        // Make the frames first, under the nodes. They are few, so each has a widget for as long as
+        // it is in the graph.
         {
             core::Array<GraphFrameInfo> frames;
             if (m_source)
@@ -1317,7 +1339,7 @@ export namespace foundation::gui
             const core::Float2 size = widget->Measure(LayoutConstraints{});
             sizes.InsertOrAssign(id, size);
             widget->Arrange(Rect{at.x, at.y, size.x, size.y});
-            for (usize i = 0; i < widget->PinRowCount(); ++i) // the pins' places, kept for the links
+            for (usize i = 0; i < widget->PinRowCount(); ++i) // keep the pins' positions for drawing the links
             {
                 const GraphPinRow& row = widget->PinRowAt(i);
                 core::Float2 offset{};
@@ -1333,7 +1355,8 @@ export namespace foundation::gui
                 unseen.PushBack(widget.Get());
             live.InsertOrAssign(id, core::Move(widget));
         }
-        // Those that left the view (or the graph) go back to the pool, as do those made only to be measured.
+        // Widgets whose nodes left the view (or the graph) go back to the pool, as do those made only
+        // to be measured.
         for (auto& entry : m_live)
         {
             RemoveChild(entry.value.Get());
@@ -1349,14 +1372,14 @@ export namespace foundation::gui
             }
         m_live = core::Move(live);
         m_sizes = core::Move(sizes);
-        core::HashMap<GraphId, PinPlace> pins; // those of nodes gone go
+        core::HashMap<GraphId, PinPlace> pins; // drop the pins of nodes that are gone
         for (const auto& entry : m_pins)
             if (m_sizes.Find(entry.value.Node) != nullptr)
                 pins.InsertOrAssign(entry.key, entry.value);
         m_pins = core::Move(pins);
         ShowLinkStates();
         if (m_fitting)
-            Frame(false); // every node measured now; laid out again where that moves them
+            Frame(false); // every node is measured now; refit, which lays out again if the nodes move
     }
 
     // === Gestures ===
@@ -1365,7 +1388,7 @@ export namespace foundation::gui
     {
         if (!m_source || (m_drag != Drag::None && !(m_drag == Drag::Link && m_sticky)))
             return;
-        m_fitting = false; // the canvas is the user's now
+        m_fitting = false; // the user has moved the canvas, so stop fitting
         const core::Float2 local = ConvertToNodeSpace(event.Position); // events come in screen space
         if (event.Button == MouseButton::Middle)
         {
@@ -1376,7 +1399,7 @@ export namespace foundation::gui
             CapturePointer();
             return;
         }
-        if (m_drag == Drag::Link && m_sticky) // a link begun from a menu: a click ends it
+        if (m_drag == Drag::Link && m_sticky) // a click ends a link begun from a menu
         {
             event.Handled = true;
             LinkTo(local);
@@ -1533,7 +1556,7 @@ export namespace foundation::gui
                 if (!Holds(next, id) && area.Intersects(NodeRect(id)))
                     next.PushBack(id);
             Reselect(core::Move(next));
-            core::Array<GraphId> frames = m_frameBoxBase; // a frame wholly inside
+            core::Array<GraphId> frames = m_frameBoxBase; // frames wholly inside the box are selected too
             core::Array<GraphFrameInfo> all;
             m_source->GetFrames(all);
             for (const GraphFrameInfo& frame : all)
@@ -1572,12 +1595,12 @@ export namespace foundation::gui
         if (m_drag == Drag::Link)
         {
             if (m_sticky)
-                return; // the press that began it from a menu, or the one that ended it
+                return; // ignore the release of the press that began it from a menu, or of the click that ended it
             LinkTo(ConvertToNodeSpace(event.Position));
             EndLink(true);
             return;
         }
-        if (m_drag == Drag::Pending && !m_additive) // a click on one of several selected selects it alone
+        if (m_drag == Drag::Pending && !m_additive) // a click on one of several selected nodes selects it alone
         {
             SelectOnly(m_pressed);
             core::Array<GraphId> frames;
@@ -1597,7 +1620,7 @@ export namespace foundation::gui
     inline void GraphView::OnKeyDown(const KeyEvent& event)
     {
         if (event.Target != this)
-            return; // a frame's title being edited types its own keys
+            return; // while a frame's title is edited, it handles its own keys
         const KeyCode key = static_cast<KeyCode>(event.KeyCode);
         if (key == KeyCode::Escape && (m_drag == Drag::Nodes || m_drag == Drag::Resize))
         {
@@ -1644,7 +1667,8 @@ export namespace foundation::gui
         GraphFrameInfo pressedFrame;
         if (pressed == nullptr && FindFrame(m_pressedFrame, pressedFrame))
             m_pressedFrom = pressedFrame.Position;
-        // What moves: the selected nodes and frames, and what lies wholly inside the selected frames.
+        // Collect what moves: the selected nodes and frames, and whatever lies wholly inside the
+        // selected frames.
         m_moveNodes = m_selection;
         m_moveFrames = m_selectedFrames;
         core::Array<GraphFrameInfo> frames;
@@ -1672,7 +1696,7 @@ export namespace foundation::gui
     inline void GraphView::MoveTo(core::Float2 local)
     {
         core::Float2 delta{(local.x - m_pressAt.x) / m_zoom, (local.y - m_pressAt.y) / m_zoom};
-        if (m_snap) // the pressed node lands on the grid; the rest keep their places to it
+        if (m_snap) // the pressed node snaps to the grid; the rest keep their offsets from it
         {
             const f32 x = core::Round((m_pressedFrom.x + delta.x) / m_gridSize) * m_gridSize;
             const f32 y = core::Round((m_pressedFrom.y + delta.y) / m_gridSize) * m_gridSize;
@@ -1739,14 +1763,14 @@ export namespace foundation::gui
             return;
         const Rect box = GetContentBounds();
         if (box.width <= 0.0f || box.height <= 0.0f)
-            return; // not laid out yet: fitting does it once it is
+            return; // not laid out yet; fitting runs once it is
         const f32 margin = 32.0f;
         const f32 width = right - left + 2.0f * margin, height = bottom - top + 2.0f * margin;
         const f32 zoom = core::Clamp(core::Min(1.0f, core::Min(box.width / width, box.height / height)), m_zoomMin, m_zoomMax);
         const core::Float2 middle{(left + right) * 0.5f, (top + bottom) * 0.5f};
         const core::Float2 pan{middle.x - box.width * 0.5f / zoom, middle.y - box.height * 0.5f / zoom};
         if (core::Abs(zoom - m_zoom) < 1e-5f && core::Abs(pan.x - m_pan.x) < 0.01f && core::Abs(pan.y - m_pan.y) < 0.01f)
-            return; // where it is already: nothing to lay out again
+            return; // already there, so nothing needs laying out again
         m_zoom = zoom;
         m_pan = pan;
         RequestLayout();
@@ -1764,7 +1788,7 @@ export namespace foundation::gui
             const core::Array<GraphId> nodes = m_selection;
             any = m_source->DeleteNodes(nodes.AsSpan());
         }
-        if (!m_selectedLinks.IsEmpty()) // those the nodes did not take with them
+        if (!m_selectedLinks.IsEmpty()) // the links that were not deleted with the nodes
         {
             core::Array<GraphLinkInfo> links;
             m_source->GetLinks(links);
@@ -1857,7 +1881,7 @@ export namespace foundation::gui
         frame.Position = at;
         bool any = false;
         f32 left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
-        for (const GraphId node : m_selection) // around the selected nodes, room for its title above them
+        for (const GraphId node : m_selection) // around the selected nodes, leaving room for the title above them
             if (const GraphNodeInfo* info = m_source->GetNode(node))
             {
                 const core::Float2 size = NodeSize(node);
@@ -2086,7 +2110,8 @@ export namespace foundation::gui
         {
             const PinPlace& place = *m_pins.Find(pin);
             m_linkKind = GraphLinkKind::Pins;
-            // An input with a link: its end is taken (the last made), to rewire it or let it go.
+            // On an input with a link, pick up the end of its last-made link, to rewire it or
+            // remove it.
             if (place.Direction == GraphPinDirection::Input)
             {
                 core::Array<GraphLinkInfo> links;
@@ -2114,7 +2139,7 @@ export namespace foundation::gui
                 if (!m_source->CheckLink(begin).Allowed)
                     return false;
             }
-            // Each pin asked once: where this link may end.
+            // Ask the source once per pin whether this link may end there.
             for (const auto& entry : m_pins)
             {
                 if (entry.key == m_anchorPin)
@@ -2195,7 +2220,7 @@ export namespace foundation::gui
             target = HitNode(local);
             if (target != m_anchorNode && HitNodeEdge(local) != m_anchorNode)
                 m_leftAnchor = true;
-            if (target == m_anchorNode && !m_leftAnchor) // to itself only once it has left and come back
+            if (target == m_anchorNode && !m_leftAnchor) // a self-link only after the pointer left and came back
                 target = 0;
         }
         if (target != m_target)
@@ -2203,7 +2228,7 @@ export namespace foundation::gui
             m_target = target;
             m_targetCheck = GraphLinkCheck{};
             if (target != 0 && target == m_relinkFrom)
-                m_targetCheck.Allowed = true; // back where it came from: nothing changes
+                m_targetCheck.Allowed = true; // back where it came from, which changes nothing
             else if (target != 0)
                 m_targetCheck = m_source->CheckLink(Candidate(target));
             ShowLinkStates();
@@ -2228,12 +2253,12 @@ export namespace foundation::gui
             return;
         if (target == 0)
         {
-            if (m_relinking != 0) // an end dropped on nothing lets the link go
+            if (m_relinking != 0) // an end dropped on empty canvas removes the link
             {
                 const GraphId gone[] = {m_relinking};
                 (void)m_source->Disconnect(gone);
             }
-            else if (m_linkKind == GraphLinkKind::Pins) // a new one: the kinds of node it may reach
+            else if (m_linkKind == GraphLinkKind::Pins) // a new link: offer the kinds of node it may reach
                 (void)OpenNodePicker(m_linkTo, m_anchorPin);
             return;
         }
@@ -2290,7 +2315,7 @@ export namespace foundation::gui
         const core::Float2 b{to.x + to.width * 0.5f, to.y + to.height * 0.5f};
         f32 dx = b.x - a.x, dy = b.y - a.y;
         const f32 length = core::Sqrt(dx * dx + dy * dy);
-        if (length < 1e-3f) // a node to itself: a loop over its top right corner
+        if (length < 1e-3f) // a link from a node to itself is a loop over its top right corner
         {
             const f32 side = from.Right() - 24.0f * m_zoom;
             const f32 lift = 36.0f * m_zoom, spread = 14.0f * m_zoom;
@@ -2308,7 +2333,7 @@ export namespace foundation::gui
         }
         dx /= length;
         dy /= length;
-        const core::Float2 side{-dy * gap, dx * gap}; // to the edge's right, so its reverse lies apart
+        const core::Float2 side{-dy * gap, dx * gap}; // offset to the edge's right, so its reverse is drawn apart
         // Where the line from the middle leaves each box.
         const auto exitAt = [](const Rect& box, f32 x, f32 y)
         {
@@ -2331,7 +2356,7 @@ export namespace foundation::gui
         {
             if (m_source->GetNode(link.FromNode) == nullptr || m_source->GetNode(link.ToNode) == nullptr)
                 return false;
-            // Apart from its reverse; a second the same way further apart again.
+            // Offset it from its reverse; a second link in the same direction goes further out.
             f32 gap = 0.0f;
             usize before = 0;
             bool reverse = false;
@@ -2393,7 +2418,7 @@ export namespace foundation::gui
         ctx.VG().StrokePath(line.ToPath(), color, vg::StrokeStyle(width));
         if (!arrow)
             return;
-        // Its head at the end, along the last stretch.
+        // Draw its arrowhead at the end, along the last stretch.
         const core::Float2 tip = points[points.Size() - 1], back = points[points.Size() - 2];
         f32 dx = tip.x - back.x, dy = tip.y - back.y;
         const f32 length = core::Sqrt(dx * dx + dy * dy);
@@ -2424,7 +2449,8 @@ export namespace foundation::gui
             color.a *= part.Opacity;
             return color;
         };
-        // The grid: a line each cell while they stand apart, and a stronger one each eighth.
+        // The grid: a line at each cell while the lines are far enough apart, and a stronger line
+        // at every eighth.
         const Color minor = partColor(u8"grid", Color{1.0f, 1.0f, 1.0f, 0.04f});
         const Color major = partColor(u8"grid-major", Color{1.0f, 1.0f, 1.0f, 0.09f});
         const f32 cell = m_gridSize * m_zoom;
@@ -2444,7 +2470,7 @@ export namespace foundation::gui
             const f32 y = GraphToView(core::Float2{0.0f, static_cast<f32>(i) * step}).y;
             ctx.VG().FillRect(Rectangle{box.x, core::Floor(y), box.width, 1.0f}, strong ? major : minor);
         }
-        // The frames' boxes, under the links: tinted, their title bands more so.
+        // The frames' boxes, under the links: tinted, with their title bands tinted more.
         if (m_source)
         {
             core::Array<GraphFrameInfo> frames;
@@ -2465,7 +2491,8 @@ export namespace foundation::gui
                 ctx.VG().FillRoundedRect(Rectangle{r.x, r.y, r.width, band}, top, strong);
             }
         }
-        // The links, under the nodes, each culled to the view; one being rewired is drawn as the drag.
+        // The links, under the nodes, each culled to the view. A link being rewired is drawn as part
+        // of the drag instead.
         if (m_source)
         {
             const Color nodeLink = partColor(u8"node-link", Color{0.8f, 0.82f, 0.88f, 1.0f});
@@ -2533,7 +2560,7 @@ export namespace foundation::gui
             {
                 core::Float2 anchor{}, carried = m_linkTo;
                 if (m_target != 0 && m_targetCheck.Allowed)
-                    (void)PinPoint(m_target, carried); // it snaps to the pin it would end at
+                    (void)PinPoint(m_target, carried); // the carried end snaps to the pin it would end at
                 if (PinPoint(m_anchorPin, anchor))
                 {
                     if (m_anchorOutput)
@@ -2545,7 +2572,7 @@ export namespace foundation::gui
                     StrokeLine(ctx, points.AsSpan(), color, width, false);
                 }
             }
-            // Why not, beside the pointer.
+            // Show the refusal's reason beside the pointer.
             if (m_target != 0 && !m_targetCheck.Allowed && !m_targetCheck.Reason.IsEmpty() && m_text.HasFont())
             {
                 m_text.SetString(m_targetCheck.Reason.AsView());

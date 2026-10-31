@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Shared test doubles for the View cluster (faithful port of Sedulous.UI.Tests/src/TestHelpers.bf).
-// Declared here, defined once in TestHelpers.cpp (RTTI_OBJECT type-info must be single-definition).
+// Shared test doubles for the view tests. Declared here and defined once in TestHelpers.cpp, since
+// RTTI_OBJECT type info needs a single definition.
 // The including TU must `import foundation.ui;` before including this header.
 #pragma once
 #include "Core/Reflection/Reflect.h"
@@ -35,8 +35,8 @@ namespace foundation::ui::tests
                       foundation::core::f32 height) override;
     };
 
-    /// Simple IListAdapter test double (Sedulous.UI.Tests SimpleListAdapter): a mutable Count and
-    /// 100x30 TestView items. Not an Object, so it's header-inline (no RTTI_OBJECT needed).
+    /// Simple IListAdapter test double: a mutable Count and 100x30 TestView items. It is not an
+    /// Object, so it can live inline in the header (no RTTI_OBJECT needed).
     class SimpleListAdapter : public foundation::ui::ListAdapterBase
     {
     public:
@@ -52,7 +52,7 @@ namespace foundation::ui::tests
         void BindView(foundation::ui::View*, foundation::core::i32) override {}
     };
 
-    /// Test tree adapter (Sedulous.UI.Tests SimpleTreeAdapter): 3 roots; root 0 has 2 children (10,11),
+    /// Test tree adapter: 3 roots; root 0 has 2 children (10, 11),
     /// root 1 has 1 child (20), root 2 has none. Depth 1 for ids >= 10, else 0.
     class SimpleTreeAdapter : public foundation::ui::ITreeAdapter
     {
@@ -110,7 +110,7 @@ namespace foundation::ui::tests
         }
     };
 
-    /// Sets up a UIContext + RootView (both owned by the caller).
+    /// Sets up a UIContext and RootView (both owned by the caller).
     inline void Init(foundation::ui::UIContext& ctx, foundation::ui::RootView* root,
                      foundation::core::f32 width = 800.0f, foundation::core::f32 height = 600.0f)
     {

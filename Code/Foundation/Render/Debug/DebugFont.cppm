@@ -3,10 +3,9 @@
 
 /// Foundation::Render - the `:debug_font` partition (Debug layer).
 ///
-/// Embedded 8x8 bitmap font for debug text rendering, ported faithfully from SedulousEngine's
-/// Sedulous.DebugFont. Covers printable ASCII (32..126). Data is 8 bytes per glyph (one byte per
-/// row, MSB = left pixel). Baked at runtime into a single-channel (R8) atlas with a trailing solid
-/// white block (used for filled rects). Lives inside the renderer under Debug - not a separate library.
+/// Embedded 8x8 bitmap font for debug text rendering. Covers printable ASCII (32..126). Data is
+/// 8 bytes per glyph (one byte per row, the MSB is the left pixel). Baked at runtime into a
+/// single-channel (R8) atlas with a trailing solid white block (used for filled rects).
 
 module;
 #include "Core/Prelude.h"
@@ -20,7 +19,7 @@ using namespace foundation::core;
 export namespace foundation::render::debug
 {
 
-    // Glyph + atlas geometry (95 printable ASCII glyphs, 16 per row -> 128x48 atlas).
+    // Glyph and atlas geometry (95 printable ASCII glyphs, 16 per row, in a 128x48 atlas).
     inline constexpr i32 kCharWidth = 8;
     inline constexpr i32 kCharHeight = 8;
     inline constexpr i32 kFirstChar = 32;                         // Space
@@ -31,7 +30,7 @@ export namespace foundation::render::debug
     inline constexpr i32 kTextureHeight =
         ((kCharCount + kCharsPerRow - 1) / kCharsPerRow) * kCharHeight; // 48
 
-    // Font bitmap - 8 bytes per glyph (one byte per row). Classic 8x8 bitmap font.
+    // Font bitmap: 8 bytes per glyph (one byte per row). A classic 8x8 bitmap font.
     inline constexpr u8 kFontData[kCharCount * 8] = {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // ' ' (32)
         0x18, 0x18, 0x18, 0x18, 0x18, 0x00, 0x18, 0x00, // ! (33)

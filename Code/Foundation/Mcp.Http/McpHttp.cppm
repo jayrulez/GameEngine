@@ -3,22 +3,22 @@
 
 // Foundation::Mcp.Http - the `foundation.mcp.http` module.
 //
-// The MCP streamable-HTTP binding: the SAME McpServer registry the
-// stdio host serves, over foundation.http - localhost + bearer token (the trust decision).
-// A satellite of foundation.mcp (the Mcp.Reflection/Mcp.Script pattern), so the protocol
-// core stays transport-free.
+// The MCP streamable-HTTP binding: the same McpServer registry the stdio host serves, over
+// foundation.http, bound to localhost and guarded by a bearer token. It is a separate module from
+// foundation.mcp (as Mcp.Reflection and Mcp.Script are), so the protocol core stays free of
+// transports.
 //
-// Surface (the ez-validated subset, plus the SSE channel the user kept in scope):
-//   POST /mcp     - one JSON-RPC message per request (the body is the line); the JSON-RPC
-//                   response is the 200 body. A notification (no response) answers 202.
-//   GET  /events  - the Server-Sent Events channel for server-initiated traffic (progress
-//                   notifications, resource changes). Events are broadcast with
-//                   McpHttpHost::Broadcast; a `: connected` comment confirms the stream.
-//   Anything else - 404; wrong method on /mcp - 405; missing/wrong bearer token - 401
-//                   (both endpoints; localhost is the boundary, the token is the lock).
+// Endpoints:
+//   POST /mcp     one JSON-RPC message per request (the body is the line); the JSON-RPC
+//                 response is the 200 body. A notification (no response) answers 202.
+//   GET  /events  the Server-Sent Events channel for server-initiated traffic (progress
+//                 notifications, resource changes). Events are broadcast with
+//                 McpHttpHost::Broadcast; a `: connected` comment confirms the stream.
+//   Otherwise     404; a wrong method on /mcp is 405; a missing or wrong bearer token is 401
+//                 on both endpoints (localhost is the boundary, the token is the lock).
 //
-// Threading matches the editor-host plan: Pump() from ONE thread (the editor's main thread,
-// per frame) - handlers run synchronously there, so tools may touch main-thread state.
+// Threading: call Pump() from one thread (the editor's main thread, per frame). Handlers run
+// synchronously there, so tools may touch main-thread state.
 // Broadcast is safe from that same thread; SseStream itself serializes its writes. A tool that
 // is not finished leaves its request waiting on the connection (the handler answers
 // foundation.http's "not yet") and is re-entered by the next Pump; HasPendingRequest says a
@@ -40,10 +40,10 @@ export namespace foundation::mcp
     struct McpHttpConfig
     {
         u16 port = 0;   // 0 = OS-assigned (read BoundPort after Start)
-        String token;   // REQUIRED bearer token; Start refuses an empty one
+        String token;   // required bearer token; Start refuses an empty one
     };
 
-    /// Hosts an McpServer over HTTP + SSE. The McpServer must outlive the host.
+    /// Hosts an McpServer over HTTP and SSE. The McpServer must outlive the host.
     class McpHttpHost
     {
     public:
@@ -65,7 +65,7 @@ export namespace foundation::mcp
             return m_http.PendingRequestCount() > 0;
         }
 
-        /// One pump of the underlying HTTP server (accept/read/dispatch/write). Call per
+        /// One pump of the underlying HTTP server (accept, read, dispatch, write). Call per
         /// frame or in a loop. Returns completed requests this call.
         usize Pump();
 

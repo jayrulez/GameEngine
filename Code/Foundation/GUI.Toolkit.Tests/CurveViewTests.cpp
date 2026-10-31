@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the curve view (T5 of Specs/gui-lab-evolution-3.md): a source's curves of Core's keys
-// edited as gestures through it, one change each (a drag previewed and committed on release, or
-// cancelled by Escape); keys selected by a click or a box, moved (sorted again as they pass, on
-// frames, in a curve's range, Shift locking an axis), their tangents set by their handles and their
-// modes, added by a double click on a curve, set and deleted from their menu; the wheel zooming and a
-// middle drag panning.
+// GUI.Toolkit - the curve view. It edits a source's curves of Core's keys in gestures through the
+// source, one change each: a drag previews and commits on release, or Escape cancels it. Keys are
+// selected by a click or a box and moved (sorted again as they pass, snapped to frames, kept in a
+// curve's range, with Shift locking an axis). Their tangents are set by their handles and their
+// modes. A double click on a curve adds a key, and the key menu sets and deletes keys. The wheel
+// zooms and a middle drag pans.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -33,8 +33,8 @@ namespace
         return key;
     }
 
-    // A 520 by 220 view over 0 to 1 s (500 px a second) and values -0.05 to 1.05 (200 px a unit): the
-    // time t and value v at (500 t, 210 - 200 v), no key on its edge.
+    // A 520 by 220 view over 0 to 1 s (500 px per second) and values -0.05 to 1.05 (200 px per unit).
+    // Time t and value v sit at (500 t, 210 - 200 v), so no key lies on the view's edge.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -81,7 +81,7 @@ namespace
             Press(at, modifiers);
             D().InjectMouseUp(at, MouseButton::Left, modifiers);
         }
-        void Pause() // a later press is not the second of a double
+        void Pause() // so the next press does not count as the second click of a double click
         {
             D().InjectMouseMove(core::Float2{590.0f, 290.0f});
             D().InjectMouseDown(core::Float2{590.0f, 290.0f}, MouseButton::Left);
@@ -141,7 +141,7 @@ TEST_CASE("CurveSet: an edit previews live, commits once with each changed curve
     set.Apply(commits[0], false);
     CHECK(set.GetKeys(1)[0].value == 0.5f);
 
-    set.BeginKeysEdit(); // nothing changed: nothing told
+    set.BeginKeysEdit(); // nothing changed, so nothing is reported
     set.CommitKeysEdit();
     CHECK(commits.Size() == 1);
 }
@@ -181,7 +181,7 @@ TEST_CASE("CurveView: a click selects a key, Shift adds one, a click on nothing 
     bed.Click(Bed::At(0.6f, 0.8f), KeyModShift);
     CHECK(bed.view->GetSelection().Size() == 2);
     bed.Pause();
-    bed.Click(Bed::At(0.6f, 0.8f), KeyModShift); // again: taken away
+    bed.Click(Bed::At(0.6f, 0.8f), KeyModShift); // again, which takes it away
     CHECK(bed.view->GetSelection().Size() == 1);
     bed.Pause();
     bed.Click(Bed::At(0.5f, 0.1f)); // nothing there
@@ -213,12 +213,12 @@ TEST_CASE("CurveView: a drag moves the selected keys as one change, sorted again
     CHECK(bed.Keys()[1].value == doctest::Approx(0.3f));
     CHECK(bed.view->IsSelected(CurveKeyRef{0, 1})); // the selection followed it
 
-    // On frames: the pressed key lands on one.
+    // With a frame rate, the pressed key snaps to a frame.
     bed.axis->SetFrameRate(10.0f);
     bed.Pause();
     bed.Drag(Bed::At(0.6f, 0.8f), Bed::At(0.73f, 0.8f));
     CHECK(bed.Keys()[2].time == doctest::Approx(0.7f));
-    // In its range.
+    // Values stay in the curve's range.
     bed.Pause();
     bed.Drag(Bed::At(0.7f, 0.8f), Bed::At(0.7f, 1.4f));
     CHECK(bed.Keys()[2].value == doctest::Approx(1.0f));
@@ -252,12 +252,12 @@ TEST_CASE("CurveView: auto and smooth keys follow a move; a handle sets the tang
                                    Key(0.5f, 0.5f, core::CurveKeyInterpolation::Cubic, core::CurveTangentMode::Auto),
                                    Key(1.0f, 0.0f, core::CurveKeyInterpolation::Cubic, core::CurveTangentMode::Auto)};
     bed.curves.AddCurve(CurveInfo{}, keys);
-    // Auto: each key's slope that between its neighbours, set by the move.
+    // Auto: the move sets each key's slope to the slope between its neighbours.
     bed.Drag(Bed::At(1.0f, 0.0f), Bed::At(1.0f, 1.0f));
     CHECK(bed.Keys()[1].tangentOut == doctest::Approx(1.0f)); // (1 - 0) / (1 - 0)
     CHECK(bed.Keys()[1].tangentMode == core::CurveTangentMode::Auto);
 
-    // The middle key selected shows both handles; its out handle dragged flat.
+    // The selected middle key shows both handles; drag its out handle flat.
     bed.Pause();
     bed.Click(Bed::At(0.5f, 0.5f));
     REQUIRE(bed.view->IsSelected(CurveKeyRef{0, 1}));
@@ -267,10 +267,10 @@ TEST_CASE("CurveView: auto and smooth keys follow a move; a handle sets the tang
     bed.Click(Bed::At(0.5f, 0.5f));
     bed.Drag(handle, Bed::At(0.7f, 0.5f));
     CHECK(bed.Keys()[1].tangentOut == doctest::Approx(0.0f));
-    CHECK(bed.Keys()[1].tangentIn == doctest::Approx(0.0f)); // smooth: one slope through it
+    CHECK(bed.Keys()[1].tangentIn == doctest::Approx(0.0f)); // smooth keeps one slope through the key
     CHECK(bed.Keys()[1].tangentMode == core::CurveTangentMode::Smooth);
 
-    // Broken: the in handle alone.
+    // Broken: the in handle moves alone.
     bed.view->SetTangentMode(core::CurveTangentMode::Broken);
     const core::Float2 in = bed.view->HandlePoint(bed.Keys()[1], false);
     bed.Pause();
@@ -285,10 +285,10 @@ TEST_CASE("CurveView: a handle shows only where a cubic segment meets its key")
     const core::CurveKey keys[] = {Key(0.0f, 0.0f, core::CurveKeyInterpolation::Linear), Key(0.5f, 0.5f, core::CurveKeyInterpolation::Cubic),
                                    Key(1.0f, 0.0f)};
     CHECK_FALSE(CurveView::HasHandle(keys, 0, true));
-    CHECK_FALSE(CurveView::HasHandle(keys, 1, false)); // the linear segment arrives
+    CHECK_FALSE(CurveView::HasHandle(keys, 1, false)); // the segment arriving here is linear
     CHECK(CurveView::HasHandle(keys, 1, true));
     CHECK(CurveView::HasHandle(keys, 2, false));
-    CHECK_FALSE(CurveView::HasHandle(keys, 2, true)); // the last key leaves nothing
+    CHECK_FALSE(CurveView::HasHandle(keys, 2, true)); // no segment leaves the last key
 }
 
 TEST_CASE("CurveView: a double click on a curve adds a key on it, unless the curve is full")
@@ -303,7 +303,7 @@ TEST_CASE("CurveView: a double click on a curve adds a key on it, unless the cur
     REQUIRE(bed.Keys().Size() == 3);
     CHECK(bed.Keys()[1].time == doctest::Approx(0.5f));
     CHECK(bed.Keys()[1].value == doctest::Approx(0.5f));
-    CHECK(bed.Keys()[1].interpolation == core::CurveKeyInterpolation::Linear); // the segment's it split
+    CHECK(bed.Keys()[1].interpolation == core::CurveKeyInterpolation::Linear); // from the segment it split
     CHECK(bed.view->IsSelected(CurveKeyRef{0, 1}));
     CHECK(bed.commits.Size() == 1);
 
@@ -378,7 +378,7 @@ TEST_CASE("CurveView: the menu over nothing frames every curve or the selection"
     CHECK(last.x < 520.0f);
     CHECK(last.x - first.x > 400.0f);
 
-    // The selection alone: its one key in the middle.
+    // Frame the selection alone: its one key lands in the middle.
     const CurveKeyRef second[] = {CurveKeyRef{0, 1}};
     bed.view->SetSelection(second);
     bed.view->FrameSelection();
@@ -412,7 +412,7 @@ TEST_CASE("CurveView: the wheel zooms about the pointer, Ctrl only time and Shif
     bed.D().InjectMouseMove(at + core::Float2{-100.0f, 40.0f});
     bed.D().InjectMouseUp(at + core::Float2{-100.0f, 40.0f}, MouseButton::Middle);
     CHECK(bed.axis->Scroll() == doctest::Approx(1.2f));
-    CHECK(bed.view->ValueLow() == doctest::Approx(low + 0.2f)); // dragged down 40 px: the values move up
+    CHECK(bed.view->ValueLow() == doctest::Approx(low + 0.2f)); // dragging down 40 px moves the values up
 }
 
 TEST_CASE("CurveView: an undo that takes keys away takes them from the selection")

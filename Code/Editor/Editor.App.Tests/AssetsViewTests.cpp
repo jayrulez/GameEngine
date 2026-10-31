@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Assets panel over its markup (Data/Editor/Assets.xml) and a scratch project: the group tree
-// and the breadcrumb following where it is; a group's subgroups then its assets, each by name, what
-// it is and its star; entering a group and opening an asset; the search over every group saying
-// where each match is, and the type filter, each with its state when nothing is left and the way
-// back; tiles or a list kept with the project; building again when the database's shape moves;
-// Reveal; and a drag of the selection carrying its assets.
+// The Assets panel over its markup (Data/Editor/Assets.xml) and a scratch project. The group tree
+// and the breadcrumb follow the current group, which lists its subgroups and then its assets, each
+// with its name, kind and star. Covers entering a group and opening an asset; the search over every
+// group, which shows where each match is, and the type filter, each with an empty state and a way
+// back; the tiles or list choice saved with the project; rebuilding when the database changes
+// shape; Reveal; and dragging the selection, which carries its assets.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -102,7 +102,7 @@ namespace
             Bed* self = this;
             services.open = [self](content::Instance& instance) { self->opened.PushBack(instance.Id()); };
             editor::app::AssetOperations::Services operations;
-            operations.context = &context; // no cook, no later: at once
+            operations.context = &context; // no cook and no deferral, so operations run at once
             ops = MakeUnique<editor::app::AssetOperations>(DefaultAllocator(), Move(operations));
             services.operations = ops.Get();
             services.create = [self](const pipeline::AssetCreator& creator, content::Group*) { self->created.PushBack(creator.label); };
@@ -116,7 +116,8 @@ namespace
                 s.Height = gui::LayoutLength::Px(600.0f);
             });
             root->AddChild(panel.Get());
-            // No sheet here: the list its own room (the editor's sheet grows it).
+            // There is no style sheet here, so give the list room of its own (in the editor, the
+            // sheet makes it grow).
             view->List()->EditLayoutStyle([](gui::LayoutStyle& s)
             {
                 s.Width = gui::LayoutLength::Px(600.0f);
@@ -155,7 +156,7 @@ namespace
                     return static_cast<i32>(i);
             return -1;
         }
-        // The cell a row is drawn by, once laid out.
+        // The cell that draws a row, after layout.
         AssetCell* Cell(i32 row)
         {
             (void)root->UpdateLayout();
@@ -216,7 +217,7 @@ TEST_CASE("assets: a search looks in the group shown and under it, saying where 
     REQUIRE(cell != nullptr);
     CHECK(cell->Kind() == StringView(u8"BrowserMesh in Content/Models/Town"));
 
-    // A guid's start finds it too.
+    // The start of a guid finds it too.
     utf8char chars[37];
     bed.crate->Id().ToChars(chars);
     bed.view->SetSearch(StringView(chars, 8));
@@ -282,13 +283,13 @@ TEST_CASE("assets: tiles or a list, kept with the project; a favourite starred; 
     CHECK(cell->ShowsStar());
     AssetCell* group = bed.Cell(bed.RowOf(u8"Models"));
     REQUIRE(group != nullptr);
-    CHECK(group->Kind().IsEmpty()); // its folder says it is a group: no words for it
+    CHECK(group->Kind().IsEmpty()); // its folder icon marks it as a group, so it has no kind text
 }
 
 TEST_CASE("assets: it builds again when the database's shape moves, however it moved; Reveal shows an asset where it lives")
 {
     Bed bed;
-    REQUIRE(bed.top->CreateInstance(u8"Anvil", BrowserMesh::StaticType()) != nullptr); // as an agent's write would
+    REQUIRE(bed.top->CreateInstance(u8"Anvil", BrowserMesh::StaticType()) != nullptr); // as a write from outside the view would
     bed.view->Refresh();
     CHECK(bed.Rows() == String(u8"/Models /Sounds Anvil Crate"));
 
@@ -344,7 +345,7 @@ TEST_CASE("assets: under the editor's sheet the toolbar keeps its height however
     (void)bed.root->UpdateLayout();
     gui::Node* bar = bed.view->Crumbs()->GetParent();
     REQUIRE(bar != nullptr);
-    CHECK(bar->GetSize().y == doctest::Approx(34.0f)); // the density's --bar, its search inside it with room above and below
+    CHECK(bar->GetSize().y == doctest::Approx(34.0f)); // the density's --bar height, with room above and below the search field
 
     gui::Node& panel = *bed.view->Content();
     gui::Button* types = nullptr;
@@ -403,8 +404,8 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
         const gui::Rect r = kind->GetScreenBounds();
         return r.x + r.width;
     };
-    // Every row's Always Export and star in the same columns, each an icon's width (a class of
-    // another dialog's once stretched the row's).
+    // Every row's Always Export badge and star sit in the same columns, each an icon wide, and a
+    // class from another dialog's styles does not stretch them.
     for (usize i = 0; i < barrel->ChildCount() && i < bell->ChildCount(); ++i)
     {
         const gui::Rect a = barrel->GetChildAt(i)->GetScreenBounds();
@@ -415,15 +416,15 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
     CHECK(barrel->GetChildAt(barrel->ChildCount() - 2)->GetSize().x == doctest::Approx(14.0f)); // Always Export
     CHECK(barrel->ShowsAlwaysExport());
     CHECK_FALSE(bell->ShowsAlwaysExport());
-    // Lit, a favourite's star is gold (its token defined: an undefined one left it white), and
-    // Always Export green; greyed when not.
+    // When lit, a favourite's star is gold and Always Export is green; both are grey when off. The
+    // star's colour token must be defined, or the star shows white.
     const auto starOf = [](AssetCell& cell) { return Cast<gui::Image>(cell.GetChildAt(cell.ChildCount() - 1)); };
     REQUIRE(starOf(*barrel) != nullptr);
     const Color gold = starOf(*barrel)->GetImageColor();
     CHECK(gold.r > gold.b + 0.3f); // yellow: red and green well over blue
     CHECK(gold.g > gold.b + 0.2f);
     CHECK(starOf(*bell)->GetImageColor().r < gold.r);
-    CHECK(kindRight(*barrel) == doctest::Approx(kindRight(*bell))); // the star's and the export badge's columns kept on the row without them
+    CHECK(kindRight(*barrel) == doctest::Approx(kindRight(*bell))); // a row without the star or the badge keeps their columns
     // On one baseline: the name's and the kind's text baselines at the same height.
     const auto baseline = [](const gui::Node& label) { return label.GetScreenBounds().y + label.GetBaseline(); };
     CHECK(baseline(*barrel->NameLabel()) == doctest::Approx(baseline(*barrel->KindLabel())).epsilon(0.02));
@@ -431,7 +432,7 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
 
 namespace
 {
-    // The menu's item by its text, in it or its submenus' rows.
+    // Finds a menu item by its text, in the menu or any of its submenus.
     gui::MenuItem* ItemNamed(gui::Node& menu, StringView text)
     {
         for (usize i = 0; i < menu.ChildCount(); ++i)
@@ -463,7 +464,7 @@ TEST_CASE("assets: an asset's menu, a group's, and the shown group's with New; D
     }
     menu->Close();
 
-    // A group's row, and the group shown (the empty space): New and New Group there.
+    // On a group's row, and on the shown group (the empty space), the menu offers New and New Group.
     bed.view->ShowMenuFor(bed.RowOf(u8"Models"));
     menu = bed.view->OpenMenu();
     REQUIRE(menu != nullptr);
@@ -476,14 +477,14 @@ TEST_CASE("assets: an asset's menu, a group's, and the shown group's with New; D
     CHECK(ItemNamed(*menu, u8"New") != nullptr);
     gui::MenuItem* newGroup = ItemNamed(*menu, u8"New Group");
     REQUIRE(newGroup != nullptr);
-    CHECK(ItemNamed(*menu, u8"Cook All") != nullptr); // the top group's: all
+    CHECK(ItemNamed(*menu, u8"Cook All") != nullptr); // on the top group it cooks everything
     CHECK(ItemNamed(*menu, u8"Delete Group...") == nullptr); // Content is not deleted
     CHECK(newGroup->HandleActivate());
     CHECK(bed.view->CurrentGroup() != nullptr);
     CHECK(bed.view->CurrentGroup()->Name() == StringView(u8"Group")); // made and shown
     bed.view->Navigate(*bed.top);
 
-    // Delete on the selection: asked, naming it; Delete deletes.
+    // Delete on the selection asks for confirmation, naming the asset; the Delete button deletes it.
     list.SetSelectedItem(bed.RowOf(u8"Crate"));
     list.RequestFocus();
     bed.root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(gui::KeyCode::Delete));
@@ -618,7 +619,7 @@ TEST_CASE("assets: a right click on a group in the tree opens its menu; a browse
         d.InjectMouseDown(at, gui::MouseButton::Right);
         d.InjectMouseUp(at, gui::MouseButton::Right);
     };
-    // Each row its row height: Town is the third (Content, Models, Town).
+    // Each row is one row height tall; Town is the third row (Content, Models, Town).
     const f32 rowHeight = tree.GetRowHeight() > 0.0f ? tree.GetRowHeight() : 26.0f;
     rightClick(box.y + rowHeight * (static_cast<f32>(town) + 0.5f));
     REQUIRE(bed.view->OpenMenu() != nullptr);

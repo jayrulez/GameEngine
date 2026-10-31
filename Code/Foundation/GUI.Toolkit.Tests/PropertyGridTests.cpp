@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the property grid (T1 of Specs/gui-lab-evolution-3.md): a source's properties as rows,
-// categories first-seen and groups folded by path, a search keeping what holds a match, only the
-// rows in view realised, one label split dragged at any row, the wheel scrolling and never editing,
-// and an edit as the source's gesture, its row not rebound from its own previews.
+// GUI.Toolkit - the property grid. It shows a source's properties as rows, with categories in the
+// order first seen and groups folded by path. A search keeps the properties that match and their
+// ancestors. Only the rows in view are realised. One label split can be dragged at any row. The
+// wheel scrolls and never edits. An edit is a gesture on the source, and its row is not rebound
+// from its own previews.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -97,16 +98,16 @@ TEST_CASE("property grid: what has no category first, then categories as they fi
     CHECK_FALSE(bed.grid->GetRow(5)->Open);
     CHECK(bed.grid->FindEditor(SV(u8"intensity")) != nullptr);
 
-    // A group opened shows its parts a level in; the folding is by path, so it stays when the
+    // An open group shows its parts one level in. Folding is kept by path, so it stays when the
     // source's properties are read again.
     bed.grid->SetOpen(SV(u8"position"), true);
     CHECK(Join(bed.Paths()) == core::String(u8"name #Light intensity color #Transform position position.x position.y"));
     CHECK(bed.grid->GetRow(6)->Depth == 1);
     bed.bag.Add(SV(u8"scale"), PropertyKind::Float, Variant(1.0)).Category = core::String(u8"Transform");
-    bed.bag.PropertiesChanged(); // its category, set after it was added
+    bed.bag.PropertiesChanged(); // picks up its category, set after it was added
     CHECK(Join(bed.Paths()) == core::String(u8"name #Light intensity color #Transform position position.x position.y scale"));
 
-    // A category closed hides what is in it.
+    // Closing a category hides what is in it.
     bed.grid->SetOpen(SV(u8"#Light"), false);
     CHECK(Join(bed.Paths()) == core::String(u8"name #Light #Transform position position.x position.y scale"));
 }
@@ -141,8 +142,8 @@ TEST_CASE("property grid: the chevron, a header's click and Left and Right fold 
     bed.grid->SetOpen(SV(u8"#Physics"), true);
     bed.Frame();
 
-    // The chevron: one fold per click (its press folds; the click after it does not reach the
-    // header, which would unfold it again).
+    // The chevron folds once per click: its press folds, and the click that follows does not reach
+    // the header, which would unfold it again.
     const auto chevron = [&]() -> Node*
     {
         core::Array<Node*> stack(core::DefaultAllocator());
@@ -173,7 +174,7 @@ TEST_CASE("property grid: the chevron, a header's click and Left and Right fold 
     CHECK(bed.grid->IsOpen(SV(u8"#Physics")));
     bed.Frame();
 
-    // The group's row selected, Right opens it and Left closes it.
+    // With the group's row selected, Right opens it and Left closes it.
     bed.grid->SetSelectedItem(1);
     bed.grid->RequestFocus();
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
@@ -189,7 +190,7 @@ TEST_CASE("property grid: a closed group says what it holds in a line, where an 
     PropertyInfo& shape = bed.Add(u8"shape", PropertyKind::Group);
     shape.Summary = core::String(u8"Box, 2 x 1 x 2");
     bed.Add(u8"shape.width", PropertyKind::Float, Variant(2.0));
-    bed.Add(u8"plain", PropertyKind::Group); // nothing to say: no line
+    bed.Add(u8"plain", PropertyKind::Group); // no summary, so no line
     bed.Add(u8"plain.x", PropertyKind::Float, Variant(0.0));
     bed.Show();
     PropertyRowContent* row = bed.grid->FindRowContent(SV(u8"shape"));
@@ -206,7 +207,7 @@ TEST_CASE("property grid: a closed group says what it holds in a line, where an 
     bed.Frame();
     row = bed.grid->FindRowContent(SV(u8"shape"));
     REQUIRE(row != nullptr);
-    CHECK_FALSE(row->GetSummary()->IsDisplayed()); // its rows say it now
+    CHECK_FALSE(row->GetSummary()->IsDisplayed()); // once open, its rows show what the summary said
 }
 
 TEST_CASE("property grid: a search keeps matches by name or path, with what holds them opened; the folding stays")
@@ -220,11 +221,11 @@ TEST_CASE("property grid: a search keeps matches by name or path, with what hold
     bed.Show();
     bed.grid->SetOpen(SV(u8"#Light"), false);
 
-    bed.grid->SetFilter(SV(u8"ALONG")); // by shown name, either case
+    bed.grid->SetFilter(SV(u8"ALONG")); // matches the shown name, ignoring case
     CHECK(Join(bed.Paths()) == core::String(u8"#Transform position position.x"));
-    bed.grid->SetFilter(SV(u8"position.y")); // by path
+    bed.grid->SetFilter(SV(u8"position.y")); // matches the path
     CHECK(Join(bed.Paths()) == core::String(u8"#Transform position position.y"));
-    bed.grid->SetFilter(SV(u8"inten")); // in a closed category: opened while searching
+    bed.grid->SetFilter(SV(u8"inten")); // in a closed category, which opens while searching
     CHECK(Join(bed.Paths()) == core::String(u8"#Light intensity"));
     bed.grid->SetFilter(SV(u8"position")); // a group that matches keeps its own folding
     CHECK(Join(bed.Paths()) == core::String(u8"#Transform position"));
@@ -266,7 +267,7 @@ TEST_CASE("property bag: an owner is told of each preview and of a gesture given
     bag.CancelEdit(SV(u8"rough"));
     REQUIRE(told.Size() == 2u);
     CHECK(told[0] == core::String(u8"preview rough=0.5"));
-    CHECK(told[1] == core::String(u8"cancel rough=0.25")); // the value back by then
+    CHECK(told[1] == core::String(u8"cancel rough=0.25")); // the value is back by then
 }
 
 TEST_CASE("property grid: an edit is one gesture of the source; its row keeps its editor while it previews")
@@ -277,7 +278,7 @@ TEST_CASE("property grid: an edit is one gesture of the source; its row keeps it
     bed.bag.SetValue(SV(u8"speed"), 1, Variant(5.0));
     core::Array<PropertyBag::Commit> commits(core::DefaultAllocator());
     bed.bag.SetOnCommit([&commits](const PropertyBag::Commit& commit) { commits.PushBack(commit); });
-    core::Array<core::f64> previews(core::DefaultAllocator()); // what an owner showing them live reads
+    core::Array<core::f64> previews(core::DefaultAllocator()); // what an owner that shows previews live reads
     bed.bag.SetOnPreview([&bed, &previews](core::StringView path) { previews.PushBack(bed.bag.GetValue(path, 0).AsFloat()); });
     bed.Show();
 
@@ -302,12 +303,12 @@ TEST_CASE("property grid: an edit is one gesture of the source; its row keeps it
     CHECK(commits[0].Before[0].AsFloat() == doctest::Approx(2.0));
     CHECK(commits[0].Before[1].AsFloat() == doctest::Approx(5.0));
     CHECK(commits[0].After[1].AsFloat() == doctest::Approx(6.0));
-    REQUIRE(previews.Size() == 2u); // told of each preview as it went
+    REQUIRE(previews.Size() == 2u); // reported each preview as it went
     CHECK(previews[0] == doctest::Approx(4.0));
     CHECK(previews[1] == doctest::Approx(6.0));
     CHECK_FALSE(field.IsMixed());
 
-    // A value changed elsewhere (an undo) shows.
+    // A value changed elsewhere (by an undo) shows.
     bed.bag.SetValue(SV(u8"speed"), 0, Variant(9.0));
     bed.Frame();
     CHECK(field.IsMixed());
@@ -316,7 +317,7 @@ TEST_CASE("property grid: an edit is one gesture of the source; its row keeps it
 TEST_CASE("property grid: the label split is dragged at any row, for every row, mirrored right to left")
 {
     Bed bed;
-    bed.root->SetPadding(Thickness{50.0f, 30.0f, 0.0f, 0.0f}); // the grid away from the origin
+    bed.root->SetPadding(Thickness{50.0f, 30.0f, 0.0f, 0.0f}); // move the grid away from the origin
     bed.Add(u8"a", PropertyKind::Float, Variant(1.0));
     bed.Add(u8"b", PropertyKind::Float, Variant(2.0));
     bed.Show();
@@ -377,8 +378,8 @@ TEST_CASE("property grid: an application's editor for a hint, a hint none takes,
     bed.Frame();
     CHECK(core::Cast<BoolPropertyEditor>(bed.grid->FindEditor(SV(u8"look"))) != nullptr);
 
-    // A group hinted for an editor no one registered says so (a hinted group with rows of its own
-    // shows them instead); one with no hint has no editor.
+    // A group hinted for an editor nobody registered says so (a hinted group with rows of its own
+    // shows them instead). A group with no hint has no editor.
     bed.Add(u8"falloff", PropertyKind::Group).Hint = core::String(u8"curve");
     bed.Add(u8"plain", PropertyKind::Group);
     bed.Frame();
@@ -410,7 +411,7 @@ TEST_CASE("property grid: a Float3 is one row of a field per part, each mixed an
     bed.bag.SetOnCommit([&commits](const PropertyBag::Commit& commit) { commits.PushBack(commit); });
     bed.Show();
 
-    // One row, no chevron, nothing under it.
+    // One row, with no chevron and nothing under it.
     CHECK(Join(bed.Paths()) == core::String(u8"#Transform position"));
     CHECK_FALSE(bed.grid->GetRow(1)->HasChildren);
     FloatsPropertyEditor* editor = core::Cast<FloatsPropertyEditor>(bed.grid->FindEditor(SV(u8"position")));
@@ -424,7 +425,7 @@ TEST_CASE("property grid: a Float3 is one row of a field per part, each mixed an
     CHECK(editor->GetPart(1)->GetField()->IsMixed());
     CHECK_FALSE(editor->GetPart(2)->GetField()->IsMixed());
 
-    // A scrub of X writes X alone, on both, and keeps the row while it goes.
+    // A scrub of X writes only X, on both objects, and the row keeps its editor while it goes.
     x.SetStep(1.0);
     const core::Float2 at = Centre(x) - core::Float2{10.0f, 0.0f};
     bed.D().InjectMouseDown(at, MouseButton::Left);
@@ -484,7 +485,7 @@ TEST_CASE("property grid: a list shows its elements, the fewest any object has, 
     CHECK(bed.grid->GetRow(1)->Element);
     CHECK(bed.grid->GetRow(1)->Depth == 1);
 
-    // The second object with one more: the count is mixed, and the three both have show.
+    // The second object has one more element: the count is mixed, and the three both have show.
     bed.bag.ResizeList(SV(u8"weights"), 1, 4);
     bed.Frame();
     list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"weights")));
@@ -519,12 +520,12 @@ TEST_CASE("property grid: Add puts an element at the end of each object's list a
     list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"tags")));
     REQUIRE(list != nullptr);
     CHECK(bed.bag.ElementCount(SV(u8"tags"), 0) == 3u);
-    CHECK_FALSE(list->GetAddButton()->IsEnabled()); // its most
+    CHECK_FALSE(list->GetAddButton()->IsEnabled()); // the list is full
 }
 
 namespace
 {
-    // A list edit by its parts (the struct's other fields left as they are).
+    // Builds a list edit from its parts, leaving the struct's other fields as they are.
     ListEdit ListEditOf(ListEdit::Op kind, usize index, usize to = 0)
     {
         ListEdit edit;
@@ -554,7 +555,7 @@ TEST_CASE("property bag: a list of groups, each element its fields, added, edite
     bed.bag.SetValue(SV(u8"variants.1.clip"), 0, Variant(SV(u8"scuff")));
     bed.bag.SetValue(SV(u8"variants.1.weight"), 0, Variant(3.0));
 
-    // An element is a group; its fields are its rows, each with what it says.
+    // An element is a group whose fields are its rows, each with its own info.
     core::Array<PropertyInfo> elements(core::DefaultAllocator());
     bed.bag.GetProperties(SV(u8"variants"), elements);
     REQUIRE(elements.Size() == 2u);
@@ -566,20 +567,20 @@ TEST_CASE("property bag: a list of groups, each element its fields, added, edite
     CHECK(fields[1].HasRange);
     CHECK(bed.bag.GetValue(SV(u8"variants.1.weight"), 0).AsFloat() == doctest::Approx(3.0));
 
-    // The grid shows it as any list: the count with Add, an element a group of its rows.
+    // The grid shows it as any list: the count with Add, and each element as a group of its rows.
     bed.Show();
     REQUIRE(core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"variants"))) != nullptr);
 
-    // A field edited as the grid commits one.
+    // Edit a field the way the grid commits one.
     bed.bag.BeginEdit(SV(u8"variants.0.weight"));
     bed.bag.CommitEdit(SV(u8"variants.0.weight"), PropertyWrite{Variant(5.0)});
     CHECK(bed.bag.GetValue(SV(u8"variants.0.weight"), 0).AsFloat() == doctest::Approx(5.0));
 
-    // Added with its fields' new values; moved and removed whole.
+    // An element is added with its fields' new values, and moved and removed whole.
     CHECK(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Insert, 2)));
     CHECK(bed.bag.ElementCount(SV(u8"variants"), 0) == 3u);
     CHECK(bed.bag.GetValue(SV(u8"variants.2.weight"), 0).AsFloat() == doctest::Approx(1.0));
-    CHECK_FALSE(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Insert, 3))); // its most
+    CHECK_FALSE(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Insert, 3))); // the list is full
     CHECK(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Move, 1, 0)));
     CHECK(bed.bag.GetValue(SV(u8"variants.0.clip"), 0).AsString() == SV(u8"scuff"));
     CHECK(bed.bag.GetValue(SV(u8"variants.0.weight"), 0).AsFloat() == doctest::Approx(3.0));
@@ -670,13 +671,13 @@ TEST_CASE("property grid: an element's grip drags it to another place in its lis
     const core::Float2 from = Centre(first);
     bed.D().InjectMouseMove(from);
     bed.D().InjectMouseDown(from, MouseButton::Left);
-    bed.D().InjectMouseMove(lower(u8"steps.2")); // below the third: it goes third
+    bed.D().InjectMouseMove(lower(u8"steps.2")); // below the third element, so it goes third
     CHECK(bed.grid->GetReorderTarget() == 2);
     bed.D().InjectMouseUp(lower(u8"steps.2"), MouseButton::Left);
     bed.Frame();
     CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 3 1 4"));
 
-    // Let go off the list: nothing moves.
+    // Released off the list, nothing moves.
     PropertyGrip& last = grip(u8"steps.3");
     bed.D().InjectMouseDown(Centre(last), MouseButton::Left);
     bed.D().InjectMouseMove(core::Float2{Centre(last).x, 400.0f});
@@ -700,7 +701,7 @@ TEST_CASE("property grid: a row differing from its default is marked, so is what
     bed.grid->SetOpen(SV(u8"offset"), true);
     CHECK(bed.grid->IsRowChanged(SV(u8"offset.x")));
 
-    // Changed, the row's content says so.
+    // Once changed, the row's content shows it.
     bed.bag.SetValue(SV(u8"size"), 0, Variant(3.0));
     bed.Frame();
     CHECK(bed.grid->IsRowChanged(SV(u8"size")));
@@ -708,14 +709,14 @@ TEST_CASE("property grid: a row differing from its default is marked, so is what
     REQUIRE(row != nullptr);
     CHECK(core::Cast<PropertyRowContent>(row->GetContent())->IsChanged());
 
-    // The group's Revert puts back each object's own default.
+    // The group's Revert restores each object's own default.
     REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"offset")), core::Float2{20.0f, 20.0f}));
     Activate(*bed.grid->GetRowMenu(), SV(u8"Revert to default"));
     bed.Frame();
     CHECK(bed.bag.GetValue(SV(u8"offset.x"), 1).AsFloat() == doctest::Approx(4.0));
     CHECK_FALSE(bed.grid->IsRowChanged(SV(u8"offset")));
 
-    // Unchanged, its Revert is disabled.
+    // When unchanged, its Revert is disabled.
     REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"offset.x")), core::Float2{20.0f, 20.0f}));
     for (usize i = 0; i < bed.grid->GetRowMenu()->ChildCount(); ++i)
         if (MenuItem* item = core::Cast<MenuItem>(bed.grid->GetRowMenu()->GetChildAt(i)); item != nullptr)
@@ -807,7 +808,7 @@ TEST_CASE("property grid: a sheet sets the column a row keeps for a group's arro
         if (auto* label = core::Cast<Label>(content->GetChildAt(i)); label != nullptr && label->GetTag() == SV(u8"propertyname"))
             name = label;
     REQUIRE(name != nullptr);
-    // The name after the 10 px column and its 2 px gap.
+    // The name starts after the 10 px column and its 2 px gap.
     CHECK(name->GetScreenBounds().x - content->GetScreenBounds().x - content->GetPadding().Left == doctest::Approx(12.0f));
 }
 
@@ -838,7 +839,7 @@ TEST_CASE("property grid: the row whose editor takes the focus is the current on
         PropertyEditor* editor = bed.grid->FindEditor(SV(path));
         REQUIRE(editor != nullptr);
         core::Array<TextField*> fields(core::DefaultAllocator());
-        // A text field's editor, a number field's: both are text fields underneath.
+        // A string editor and a number editor are both text fields underneath.
         for (usize i = 0; i < editor->ChildCount(); ++i)
             if (auto* f = core::Cast<TextField>(editor->GetChildAt(i)))
                 fields.PushBack(f);
@@ -871,7 +872,7 @@ TEST_CASE("property grid: a reference is its Guid's text by default; a paste tak
     CHECK(bed.bag.GetValue(SV(u8"mesh"), 0).AsString() == SV(u8"00001234-0000-0000-0000-000000005678"));
     CHECK_FALSE(bed.bag.PasteValue(SV(u8"mesh"), SV(u8"wood"), reason));
     CHECK(reason == core::String(u8"\"wood\" is no guid"));
-    CHECK(bed.bag.PasteValue(SV(u8"mesh"), SV(u8""), reason)); // nothing: cleared
+    CHECK(bed.bag.PasteValue(SV(u8"mesh"), SV(u8""), reason)); // pasting nothing clears it
     CHECK(bed.bag.GetValue(SV(u8"mesh"), 0).AsString().IsEmpty());
 }
 
@@ -933,8 +934,8 @@ TEST_CASE("property grid: a value being typed is kept as the source's values ref
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::A), KeyModCtrl);
     bed.D().InjectText(SV(u8"7.5"));
     CHECK(field->IsEditing());
-    // A refresh mid-typing (an inspector re-reads its values each frame): the text stays.
-    bed.bag.SetValue(SV(u8"speed"), 0, Variant(1.0)); // the stored value, told again
+    // A refresh while typing (an inspector re-reads its values each frame) leaves the text as it is.
+    bed.bag.SetValue(SV(u8"speed"), 0, Variant(1.0)); // the stored value, reported again
     bed.Frame();
     CHECK(field->GetText() == SV(u8"7.5"));
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));

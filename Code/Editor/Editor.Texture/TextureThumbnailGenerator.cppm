@@ -3,16 +3,16 @@
 
 // Editor Texture - :thumbnail_generator partition
 //
-// The texture-domain thumbnail generator. Lives in the DOMAIN lib:
-// generators belong beside the asset type's editor surface, which
-// already owns the pipeline knowledge - Editor.App links no pipeline libs for thumbnails, and
-// registration rides the domain's RegisterTextureEditor call from the Tools.Editor composition
-// root. TextureThumbnailGenerator:
-// Prepare (main thread) reads the TextureAsset's source bytes - external file stream (named by
-// fileName) or the embedded "pixels" stream from model imports; Generate (light worker) decodes,
-// aspect-fit box-downscales into a 128x128 RGBA8 tile, and composites a checkerboard behind
-// translucent texels (the Traktor touch: alpha reads as alpha, not as darkness). GPU-rendered
-// previews (mesh/material/prefab/scene) are the preview-bake path, not generators here.
+// The texture-domain thumbnail generator. It lives in the domain library because generators
+// belong beside the asset type's editor code, which already knows the pipeline; Editor.App links
+// no pipeline libraries for thumbnails, and the generator is registered by the domain's
+// RegisterTextureEditor call from the Tools.Editor composition root.
+// Prepare (main thread) reads the TextureAsset's source bytes: the external file stream (named
+// by fileName) or the embedded "pixels" stream from model imports. Generate (light worker)
+// decodes, box-downscales with aspect fit into a 128x128 RGBA8 tile, and composites a
+// checkerboard behind translucent texels so alpha reads as alpha rather than as darkness.
+// GPU-rendered previews (mesh, material, prefab, scene) go through the preview-bake path, not
+// through generators here.
 
 module;
 #include "Core/Prelude.h"
@@ -140,14 +140,14 @@ export namespace editor
             return read == static_cast<u64>(size) ? Status{} : Status{ErrorCode::Internal};
         }
 
-        /// Aspect-fit box downscale into the square tile, checkerboard composited behind any
-        /// translucency, transparent letterbox padding. Pure CPU (light worker).
+        /// Box-downscales with aspect fit into the square tile, compositing a checkerboard behind
+        /// any translucency and padding the letterbox with transparency. Pure CPU (light worker).
         [[nodiscard]] static Status DownscaleIntoTile(const image::Image& source,
                                                       image::Image& out)
         {
             if (source.Format() != image::PixelFormat::RGBA8)
             {
-                return Status{ErrorCode::InvalidArgument}; // loaders always yield RGBA8 today
+                return Status{ErrorCode::InvalidArgument}; // the loaders always yield RGBA8
             }
             constexpr u32 kTile = editor::kThumbnailServiceThumbnailSize;
             const u32 sourceW = source.Width();
@@ -164,7 +164,7 @@ export namespace editor
             const u32 offsetY = (kTile - fitH) / 2;
 
             out = image::Image(kTile, kTile, image::PixelFormat::RGBA8);
-            Span<u8> dst = out.PixelDataMut(); // Image() clears to zero = transparent letterbox
+            Span<u8> dst = out.PixelDataMut(); // Image() clears to zero, a transparent letterbox
             const Span<const u8> src = source.PixelData();
 
             for (u32 y = 0; y < fitH; ++y)
@@ -213,7 +213,7 @@ export namespace editor
         }
     };
 
-    /// Registered by RegisterTextureEditor (the domain's one composition entry point).
+    /// Registered by RegisterTextureEditor, the domain's single composition entry point.
     inline void RegisterTextureThumbnailGenerator(editor::ThumbnailService& service)
     {
         service.RegisterGenerator(MakeUnique<TextureThumbnailGenerator>(editor::EditorRootAllocator()));

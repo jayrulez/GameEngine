@@ -1,5 +1,5 @@
 # Foundation::RHI.Capture - `foundation.rhi.capture`: a presented backbuffer (or any copyable
-# texture) to a PNG, and the --screenshot flags. RHI + image only, so the engine's applications,
+# texture) to a PNG, and the --screenshot flags. RHI and image only, so the engine's applications,
 # the editor and the sample framework all capture through it.
 
 util_add_engine_library(RHI.Capture ALIAS Foundation::RHI.Capture)

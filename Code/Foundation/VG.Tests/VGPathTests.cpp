@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VG geometry: PathBuilder/Path queries, flattening, shapes, dashing.
+// VG geometry: PathBuilder and Path queries, flattening, shapes, dashing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -95,7 +95,7 @@ TEST_CASE("vg.dash: splits a line into dashes")
     DashGenerator::GenerateDashes(Span<const Float2>(line, 2), false, Span<const f32>(pattern, 2),
                                   0.0f, dashes);
 
-    // 10 units / 4 per cycle => dashes at [0,2],[4,6],[8,10] = 3 segments.
+    // 10 units at 4 per cycle: dashes at [0,2], [4,6], [8,10], 3 segments.
     CHECK(dashes.Size() == 3u);
     for (usize i = 0; i < dashes.Size(); ++i)
         CHECK(dashes[i].Size() >= 2u);

@@ -4,16 +4,15 @@
 // Core - :content_fit partition
 //
 // ContentFit: how a content box (of `contentSize`) is placed inside an outer `region`
-// through a FitMode, and the maps between REGION-space and content-space. Pure geometry
-// - the outer rect is region-space (the caller's coordinate space); it is NOT inherently
-// a window. The renderer places the image with DstRect/SrcRect; input remaps points with
-// ToContent/FromContent. One computation shared by both, so they can never drift.
+// through a FitMode, and the maps between region space and content space. Pure geometry:
+// the outer rect is in region space (the caller's coordinate space), which is not
+// necessarily a window. The renderer places the image with DstRect/SrcRect; input remaps
+// points with ToContent/FromContent. Both share one computation, so they cannot drift.
 //
-// The content may be presented TURNED (`rotation`, clockwise in quarters): a landscape game on a
-// portrait screen is shown turned a quarter (Specs/present-transform.md). The fit is computed in the
-// region turned back (a quarter turn swaps its sides), so a 1080 x 1920 region fits 1920 x 1080
-// content exactly; DstRect is the axis-aligned rectangle the turned content covers, and the point
-// maps turn through it. None is the unturned behaviour, unchanged.
+// The content may be presented turned (`rotation`, clockwise in quarters): a landscape game on a
+// portrait screen is shown turned. The fit is computed in the region turned back (a quarter turn
+// swaps its sides), so a 1080 x 1920 region fits 1920 x 1080 content exactly; DstRect is the
+// axis-aligned rectangle the turned content covers, and the point maps turn through it.
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +49,7 @@ export namespace foundation::core
     };
 
     // The shape a game is made for: Any takes the window's shape; Landscape or Portrait is turned to
-    // fit a window of the other shape (Specs/present-transform.md).
+    // fit a window of the other shape.
     enum class ScreenOrientation
     {
         Any,
@@ -76,7 +75,7 @@ export namespace foundation::core
 
     struct ContentFit
     {
-        Rectangle region = Rectangle{0, 0, 0, 0}; // outer rect, REGION-space
+        Rectangle region = Rectangle{0, 0, 0, 0}; // outer rect, region space
         Float2 contentSize = Float2{0, 0};        // logical content resolution
         FitMode mode = FitMode::Stretch;
         ContentRotation rotation = ContentRotation::None;
@@ -102,7 +101,7 @@ export namespace foundation::core
         [[nodiscard]] Rectangle SrcRect() const noexcept { return Compute().src; }
 
         // Region-space point -> content-space. Returns false when the point is outside the drawn
-        // content (e.g. a letterbox bar) - the "no hit" contract for input.
+        // content (e.g. a letterbox bar): the "no hit" contract for input.
         [[nodiscard]] bool ToContent(Float2 pt, Float2& out) const noexcept
         {
             const Placement p = Compute();
@@ -142,7 +141,7 @@ export namespace foundation::core
             return FromLocal(Float2{p.dst.x + rx * p.dst.width, p.dst.y + ry * p.dst.height});
         }
 
-        // Region -> content scale factor (content units per region unit), per CONTENT axis (equal
+        // Region -> content scale factor (content units per region unit), per content axis (equal
         // for the aspect-preserving modes). For a relative movement (a mouse delta) use
         // ToContentDelta, which turns it as well.
         [[nodiscard]] Float2 Scale() const noexcept

@@ -3,11 +3,11 @@
 
 // Editor::Audio - :audition partition.
 //
-// What the audio pages audition with (Documentation/Specs/editor-gui.md, 5.4, layer 5): a clip read
-// from its asset's source file, as the cook reads it, and one voice played through the RUNTIME
-// context's AudioSubsystem (the game's engine, buses and voice pool, so what is heard is what the
-// game plays). A clip page plays its clip; a cue page plays the variant the runtime's resolver
-// picks. Either way one voice at a time: playing again stops the last.
+// What the audio pages audition with: a clip read from its asset's source file, as the cook reads
+// it, and one voice played through the runtime context's AudioSubsystem (the game's engine, buses
+// and voice pool, so what is heard is what the game plays). A clip page plays its clip; a cue page
+// plays the variant the runtime's resolver picks. Either way only one voice plays at a time, and
+// playing again stops the previous one.
 
 module;
 #include "Core/Prelude.h"
@@ -27,9 +27,9 @@ export namespace editor
 {
     namespace audio = foundation::audio;
 
-    /// The clip `asset` names, read from its source file under `project` (its options applied:
-    /// gain, loop); null when the file is missing or does not decode. `metadata` (when given) gets
-    /// what the probe read.
+    /// Reads the clip `asset` names from its source file under `project`, with its options (gain,
+    /// loop) applied; null when the file is missing or does not decode. `metadata`, when given,
+    /// receives what the probe read.
     [[nodiscard]] inline RefPtr<audio::AudioClip> ReadAuditionClip(IAllocator& allocator, const EditorProject& project, const pipeline::AudioClipAsset& asset,
                                                                   audio::AudioClipMetadata* metadata = nullptr)
     {
@@ -54,8 +54,8 @@ export namespace editor
         return clip;
     }
 
-    /// A transport's state beside it (`label`, the kit's transport-state): its class (stopped,
-    /// playing, paused, faulted) the only one of them it has, and `text`.
+    /// Shows a transport's state in `label` (the kit's transport-state label): `state` becomes its
+    /// only state class (stopped, playing, paused or faulted), and `text` its text.
     inline void ShowTransportState(foundation::gui::Label* label, StringView state, StringView text)
     {
         if (label == nullptr)
@@ -67,8 +67,8 @@ export namespace editor
         label->SetText(text);
     }
 
-    /// One audition voice through the runtime's audio engine (none without an engine: a test, a
-    /// headless host).
+    /// One audition voice through the runtime's audio engine. Nothing plays without an engine, as in
+    /// a test or a headless host.
     class AuditionVoice
     {
     public:
@@ -83,13 +83,13 @@ export namespace editor
         [[nodiscard]] bool IsPaused() const noexcept { return m_voice.IsValid() && m_paused; }
         [[nodiscard]] bool IsPlaying() const noexcept { return m_voice.IsValid() && !m_paused; }
 
-        /// Plays `clip` from its start (the last voice stopped first); false when no voice started.
+        /// Plays `clip` from its start, stopping the previous voice first; false when no voice started.
         bool Start(const RefPtr<audio::AudioClip>& clip, audio::AudioPlayParams params)
         {
             Stop();
             if (!HasEngine() || clip.Get() == nullptr)
                 return false;
-            params.allowDedupe = false; // a quick play again starts again, never merges
+            params.allowDedupe = false; // a quick replay starts a new voice rather than merging with the last
             m_voice = m_audio->Engine()->Play(clip, params);
             if (m_voice.IsValid())
                 m_audio->Engine()->SetVoiceVolume(m_voice, m_volume);
@@ -110,7 +110,7 @@ export namespace editor
             m_voice = audio::VoiceHandle{};
             m_paused = false;
         }
-        /// The voice's volume, 0 to 1, this voice only; heard at once while it plays.
+        /// The volume of this voice only, 0 to 1; heard at once while it plays.
         void SetVolume(f32 volume)
         {
             m_volume = Clamp(volume, 0.0f, 1.0f);
@@ -118,8 +118,9 @@ export namespace editor
                 m_audio->Engine()->SetVoiceVolume(m_voice, m_volume);
         }
         [[nodiscard]] f32 Volume() const noexcept { return m_volume; }
-        /// Once a frame: where the voice is in its clip (seconds, the voice's own cursor: pitch and
-        /// loop wraps honoured); false when it finished or was taken (it is let go).
+        /// Called once a frame: where the voice is in its clip, in seconds (the voice's own cursor,
+        /// which honours pitch and loop wraps). False when the voice finished or was taken, in which
+        /// case it is released.
         bool Poll(f32& cursorSeconds)
         {
             if (!m_voice.IsValid() || !HasEngine())

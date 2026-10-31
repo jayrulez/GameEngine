@@ -24,7 +24,7 @@ namespace editor
 {
     namespace
     {
-        // Widen a raw scalar into the field's storage / narrow it back out.
+        // Widen a raw scalar into the field's storage, or narrow it back out.
         void ReadScalarInto(AssetFormField& field, const void* value, ScalarKind kind)
         {
             field.scalarKind = kind;
@@ -203,8 +203,8 @@ namespace editor
                 }
                 return String(StringView(reinterpret_cast<const utf8char*>(m_lastKey.CStr())));
             }
-            // The OUTERMOST enclosing array's key becomes the field's category (see
-            // AssetFormField::category - array groups build collapsed).
+            // The outermost enclosing array's key becomes the field's category (see
+            // AssetFormField::category; array groups start collapsed).
             void StampCategory(AssetFormField& field) const
             {
                 if (!m_arrayKeys.IsEmpty())
@@ -243,8 +243,8 @@ namespace editor
             Array<u32> m_arrayIndices;
         };
 
-        // Feeds recorded fields back through Serialize, with ONE field patched. A shape
-        // mismatch flips the replay inert - the object keeps its live values from there.
+        // Feeds recorded fields back through Serialize, with one field patched. A shape
+        // mismatch makes the replay inert, and the object keeps its live values from there.
         class FormReplaySerializer final : public Serializer
         {
         public:
@@ -465,7 +465,7 @@ namespace editor
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-cook"), u8"build.cookPage");
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-rebuild"), u8"build.rebuildPage");
             if (auto* kind = Find<gui::Label>(u8"form-kind"); kind != nullptr && m_object.Get() != nullptr)
-                kind->SetText(TypeAttrString(*m_object->GetType(), "displayName", StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)))); // its display name, as every page's
+                kind->SetText(TypeAttrString(*m_object->GetType(), "displayName", StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)))); // its display name, as every page shows it
             if (gui::Node* state = Find<gui::Node>(u8"form-state"))
                 state->SetDisplayed(m_object.Get() == nullptr);
             m_grid = Find<gui::PropertyGrid>(u8"form-grid");
@@ -638,7 +638,7 @@ namespace editor
         }
         (void)ApplyAssetFormField(*m_object, m_fields, index, newValue);
 
-        // Undo step (coalesced per field label + ordinal).
+        // Undo step (coalesced per field label and ordinal).
         String key(newValue.label.AsView());
         key.Append(Format(u8"#{}", index).AsView());
         Array<byte> after = Snapshot();

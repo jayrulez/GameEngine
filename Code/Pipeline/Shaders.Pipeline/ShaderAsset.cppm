@@ -3,18 +3,18 @@
 
 // Pipeline::Shaders - the `shaders.pipeline` module (tooling).
 //
-// Source-side custom shaders + their cook (Specs/custom-shaders.md, phase 1):
-//   * ShaderAsset (pipeline::Asset): a shader name, ONE .hlsl file (the inherited fileName)
+// Source-side custom shaders and their cook:
+//   * ShaderAsset (pipeline::Asset): a shader name, one .hlsl file (the inherited fileName)
 //     holding both stages, and each stage's entry point (VSMain / PSMain by default).
 //   * ShaderAssetBuilder (DefaultAssetBuilder): reads the file (a low-level shader, or a surface
 //     shader assembled from the engine's templates into its forward, depth and pick programs),
-//     replaces its properties block with the generated set-2 declarations, and COMPILES every
-//     variant both stages declare,
-//     with the engine's shader library on the include path. A failure fails the cook with
+//     replaces its properties block with the generated set-2 declarations, and compiles every
+//     variant both stages declare, with the engine's shader library on the include path. A
+//     failure fails the cook with
 //     `File.hlsl:line: message` (the cook keeps the last good product); success writes a
 //     ShaderSource carrying the expanded source, both entries, both lattices and the property
 //     table every material on the shader is laid out by.
-//   * CheckShaderSource (:check): what the cook proves, as data - the editor and the MCP tools
+//   * CheckShaderSource (:check): what the cook proves, as data; the editor and the MCP tools
 //     check a shader with it without cooking.
 //   * RegisterShaderCreators / ShaderFileImporter: File > New's Shader (the kShaderStarter text)
 //     and a dropped .hlsl, each a shader asset linking its file in Sources/.
@@ -111,7 +111,7 @@ float4 PSMain(VSOutput input) : SV_Target0 {
 }
 )hlsl";
 
-    // The starter a new lit surface shader's .hlsl holds: the lava of the custom shaders docs.
+    // The starter a new lit surface shader's .hlsl holds: glowing lava cracks over dark rock.
     inline constexpr StringView kLitSurfaceShaderStarter = u8R"hlsl(// A surface shader: say what the surface is, and the engine lights it, with every light,
 // shadow and reflection probe, in every pass (shadows and picking included).
 // surface: lit
@@ -190,7 +190,7 @@ void Surface(SurfaceInput input, inout SurfaceOutput surface)
     {
     public:
         // `dataRoot`: the engine's data root, whose shader library (`Shaders/`) is on every
-        // custom shader's include path. Empty = includes resolve nowhere.
+        // custom shader's include path. Empty means includes resolve nowhere.
         explicit ShaderAssetBuilder(StringView dataRoot = {})
             : m_shaderLibrary(dataRoot.IsEmpty()
                                   ? String()
@@ -304,7 +304,7 @@ void Surface(SurfaceInput input, inout SurfaceOutput surface)
         String m_shaderLibrary; // <data root>/Shaders, the include path
     };
 
-    // Authoring helper: fill a ShaderAsset from a name + its .hlsl path.
+    // Authoring helper: fill a ShaderAsset from a name and its .hlsl path.
     class ShaderImporter
     {
     public:
@@ -320,8 +320,8 @@ void Surface(SurfaceInput input, inout SurfaceOutput surface)
     // asset named like its instance.
     void RegisterShaderCreators(AssetCreatorRegistry& registry);
 
-    /// Drag-drop importer for `.hlsl` files: the file is STAGED into the project's Sources/ tree
-    /// and a shader asset, named after its stem, LINKS it through fileName (as a script and a UI
+    /// Drag-drop importer for `.hlsl` files: the file is staged into the project's Sources/ tree
+    /// and a shader asset, named after its stem, links it through fileName (as a script and a UI
     /// document do). The entry points stay VSMain and PSMain; the shader page edits them.
     class ShaderFileImporter final : public pipeline::IFileImporter
     {
@@ -372,16 +372,16 @@ void Surface(SurfaceInput input, inout SurfaceOutput surface)
         }
     };
 
-    // Registers ShaderAsset for content-DB construction + deserialization.
+    // Registers ShaderAsset for content-DB construction and deserialization.
     inline void RegisterShaderAsset()
     {
         GlobalTypeRegistry().Register(ShaderAsset::StaticType(), TypeDomain(u8"Pipeline"));
         RegisterSerializable<ShaderAsset>();
-        // The cooked PRODUCT: ReadObject constructs it by type name in cook hosts, so it
+        // The cooked product: ReadObject constructs it by type name in cook hosts, so it
         // must be registered here (no other production site registers it).
         GlobalTypeRegistry().Register(foundation::shaders::ShaderSource::StaticType());
         RegisterSerializable<foundation::shaders::ShaderSource>();
     }
 
-    // ShaderAsset::StaticType() is defined WITH reflected properties in ShaderAssetImpl.cpp.
+    // ShaderAsset::StaticType() is defined with its reflected properties in ShaderAssetImpl.cpp.
 }

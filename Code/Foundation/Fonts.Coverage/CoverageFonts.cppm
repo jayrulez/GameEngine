@@ -4,9 +4,8 @@
 // Foundation::Fonts.Coverage - the `foundation.fonts.coverage` module.
 //
 // Pre-baked IFont / IFontAtlas implementations with no rasterizer dependency:
-// a packaged game gets every glyph + region from disk (resource deserialization)
-// and never touch stb_truetype. Ported from Sedulous.Fonts.Baked
-// (BakedFont.bf, BakedFontAtlas.bf) - its own library, matching Sedulous.
+// a packaged game gets every glyph and region from disk (resource deserialization)
+// and never touches stb_truetype.
 
 module;
 #include "Core/Prelude.h"
@@ -20,13 +19,13 @@ using namespace foundation::core;
 
 export namespace foundation::fonts
 {
-    // IFont backed by pre-baked glyph + kerning tables.
+    // IFont backed by pre-baked glyph and kerning tables.
     class BakedFont final : public IFont
     {
     public:
         BakedFont() = default;
 
-        // Clears all glyph + kerning tables and metadata in place so the same
+        // Clears all glyph and kerning tables and metadata in place so the same
         // instance can be re-populated from disk on hot-reload without
         // invalidating outside references.
         void ClearForReload()
@@ -122,7 +121,7 @@ export namespace foundation::fonts
 
     private:
         // Kerning pairs packed as (first << 32) | (second & 0xFFFFFFFF) so the
-        // key stays compact + hashable without a tuple key.
+        // key stays compact and hashable without a tuple key.
         [[nodiscard]] static i64 PackKey(i32 first, i32 second)
         {
             return (static_cast<i64>(first) << 32) | static_cast<i64>(static_cast<u32>(second));
@@ -136,16 +135,16 @@ export namespace foundation::fonts
         HashMap<i64, f32> m_kerning;
     };
 
-    // IFontAtlas backed by a pre-rasterized 8-bit alpha buffer + region table.
+    // IFontAtlas backed by a pre-rasterized 8-bit alpha buffer and a region table.
     class BakedFontAtlas final : public IFontAtlas
     {
     public:
         BakedFontAtlas() = default;
 
-        /// The pack-time oversampling factors (stb packs glyph BITMAPS at oversample times the
-        /// logical size for better filtering; packedchar offsets/advances stay LOGICAL). Screen
-        /// quads must divide the raw region span back down - losing this factor was the
-        /// 2026-08-12 jumbled-text bug (glyphs drawn at 2x, overlapping). 1 = no oversampling.
+        /// The pack-time oversampling factors (stb packs glyph bitmaps at oversample times the
+        /// logical size for better filtering; packedchar offsets and advances stay logical). Screen
+        /// quads must divide the raw region span back down, or glyphs draw at the oversampled
+        /// size and overlap. 1 = no oversampling.
         void SetOversample(f32 x, f32 y)
         {
             m_oversampleX = x > 0.0f ? x : 1.0f;
@@ -154,7 +153,7 @@ export namespace foundation::fonts
         [[nodiscard]] f32 OversampleX() const { return m_oversampleX; }
         [[nodiscard]] f32 OversampleY() const { return m_oversampleY; }
 
-        // Clears all glyph regions + pixel buffer in place for hot-reload.
+        // Clears all glyph regions and the pixel buffer in place for hot-reload.
         void ClearForReload()
         {
             m_regions.Clear();
@@ -260,9 +259,9 @@ export namespace foundation::fonts
             const f32 invW = 1.0f / static_cast<f32>(m_width);
             const f32 invH = 1.0f / static_cast<f32>(m_height);
 
-            // Screen-space quad: position + offsets + dimensions. Region width/height are RAW
-            // atlas pixels (oversampled); offsets/advance are logical - divide the span only
-            // (exactly stbtt_GetPackedQuad's correction).
+            // Screen-space quad: position, offsets and dimensions. Region width and height are
+            // raw atlas pixels (oversampled); offsets and advance are logical, so divide the span
+            // only (the same correction stbtt_GetPackedQuad makes).
             const f32 qx0 = x + region.offsetX;
             const f32 qy0 = y + region.offsetY;
             const f32 qx1 = qx0 + static_cast<f32>(region.width) / m_oversampleX;

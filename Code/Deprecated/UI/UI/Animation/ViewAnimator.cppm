@@ -3,11 +3,9 @@
 
 // UI - :view_animator partition
 //
-// Static convenience factories for common view animations. Returned animations are NOT automatically
-// added to an AnimationManager - the caller adds them (ctx.Animations()->Add(ViewAnimator::FadeIn(...))).
-// Ported from Sedulous.UI/src/Animation/ViewAnimator.bf. Beef `new FloatAnimation` + owned setter
-// delegate -> UniquePtr<FloatAnimation> (converting-moves to UniquePtr<Animation>) + Function<void(f32)>
-// capturing the borrowed View*.
+// Static convenience factories for common view animations. Returned animations are not automatically
+// added to an AnimationManager; the caller adds them (ctx.Animations()->Add(ViewAnimator::FadeIn(...))).
+// Each setter captures the borrowed View*.
 
 module;
 #include "Core/Prelude.h"

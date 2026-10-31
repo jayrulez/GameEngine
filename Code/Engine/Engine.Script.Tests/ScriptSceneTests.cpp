@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.script tests - the behaviors core, HEADLESS (real script VM, real
-// Scene, zero device deps): lifecycle dispatch (deferred start, onUpdate(dt), enable/
-// disable edges, onDestroy on entity destroy AND scene stop), defaults + hash-keyed
-// overrides, the fault-disables-one-behavior rule, hot reload (product swap ->
-// re-instantiate -> overrides re-applied, transient state reset), the entity facade
-// (+ Log/Time/Random), component wire symmetry through SerializeScene, and the
-// prefab-override round-trip (zero new code - the component payload carries it).
+// engine.script tests: the behaviours core, headless (a real script VM and a real Scene, no
+// device). Covers lifecycle dispatch (deferred start, onUpdate(dt), enable and disable edges,
+// onDestroy on entity destroy and on scene stop), defaults and hash-keyed overrides, a fault
+// disabling only its own behaviour, hot reload (the product swaps, instances are re-created,
+// overrides re-applied, transient state reset), the entity facade (with Log, Time and Random),
+// component serialization symmetry through SerializeScene, and the prefab-override round trip
+// (the component payload carries it with no extra code).
 
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
-#include "Core/Reflection/Reflect.h" // REFLECT_VALUE (the OPTION 1 test component)
+#include "Core/Reflection/Reflect.h" // REFLECT_VALUE (the Gadget test component)
 #include <initializer_list>
 #include <cstdio>
 #include <filesystem>
@@ -22,11 +22,11 @@ import foundation.vfs; // the data mount the subsystem reads engine data through
 import foundation.runtime;
 import foundation.scene;
 import foundation.scene.resource;
-import foundation.content; // ContentDatabase - a prefab for scene.spawn to reach
+import foundation.content; // ContentDatabase: a prefab for scene.spawn to reach
 import engine.scene;
 import foundation.resource;
 import foundation.script;
-import foundation.script.facades; // script::Entity + RegisterExtraScriptRootType/FacadeName (OPTION 1)
+import foundation.script.facades; // script::Entity, RegisterExtraScriptRootType/FacadeName
 import foundation.script.angelscript;
 import foundation.script.luau;
 import foundation.script.resource;
@@ -63,11 +63,10 @@ namespace scene = foundation::scene;
 namespace physics = foundation::physics;
 namespace anim = foundation::animation;
 
-// ---- OPTION 1 (Fable ruling, spec Section 12): a component reached ONLY via a per-type
-// `Gadget.of(entity)` factory whose DECLARED return IS the component type. Proves the whole
-// script-facing pipeline: extra-emission-root -> emitted script class; the ReturnType-override `of`
-// -> a RESOLVE Variant of the component; a property set through the re-resolving handle mutates
-// the LIVE component. ----
+// ---- A component reached only through a per-type `Gadget.of(entity)` factory whose declared
+// return is the component type. Covers the whole script-facing pipeline: an extra emission root
+// gives an emitted script class, the ReturnType-overridden `of` gives a resolving Variant of the
+// component, and a property set through the re-resolving handle mutates the live component. ----
 namespace
 {
     struct Gadget
@@ -81,15 +80,15 @@ namespace
 REFLECT_VALUE(Gadget, "rtti::engine::script::test")
 {
     builder.Property<&Gadget::power>("power");
-    // The generic OPTION 1 factory: Gadget.of(entity) -> a RESOLVE handle of type Gadget.
+    // The generic factory: Gadget.of(entity) returns a resolving handle of type Gadget.
     builder.Method<&foundation::script::ComponentOf<Gadget>, Gadget>("of");
 }
 namespace
 {
-    // Register the component once (idempotent) - AFTER the reflect macro so RttiRegisterValue_
-    // Gadget is declared. Runs its reflect builder (patches TypeOf<Gadget>), puts it in the registry
-    // (both backends emit it), seeds it as an extra emission root (script reachability), and makes its
-    // class name import-visible in behavior preludes.
+    // Registers the component once (idempotent). It sits after the reflect macro so
+    // RttiRegisterValue_Gadget is declared. Runs its reflect builder (patching TypeOf<Gadget>),
+    // puts it in the registry (both backends emit it), seeds it as an extra emission root (so
+    // scripts can reach it), and makes its class name visible to behaviour preludes.
     void EnsureGadgetRegistered()
     {
         static const bool once = []()
@@ -106,8 +105,8 @@ namespace
 
 namespace
 {
-    // A cooked-product stand-in: samples/tests build ScriptClass products directly
-    // (the factory test proves the cooked path; here the RUNTIME is under test).
+    // A cooked-product stand-in: samples and tests build ScriptClass products directly (the
+    // factory test covers the cooked path; here the runtime is under test).
     [[nodiscard]] RefPtr<ScriptClass>
     MakeClass(StringView className, StringView source, std::initializer_list<StringView> handlers,
               std::initializer_list<ScriptPropertyDesc> properties = {})
@@ -173,9 +172,9 @@ namespace
 
     struct ScriptedScene
     {
-        // The test fixture IS the run scope (scenes hold
-        // only a borrowed bus) - it owns the bus, injects it before systems bind, and
-        // drains it at frame top exactly like GameInstance / the editor page do.
+        // The test fixture is the run scope (scenes hold only a borrowed bus): it owns the bus,
+        // injects it before systems bind, and drains it at frame top as GameInstance and the
+        // editor page do.
         foundation::messaging::EventBus bus;
         scene::Scene scene{DefaultAllocator(), u8"script-test"};
         ScriptRunHost host{DefaultAllocator()};
@@ -197,7 +196,7 @@ namespace
             RegisterCoreTypes();
             RegisterScriptComponentReflection();
             RegisterScriptFacadeReflection();
-            scene.SetEventBus(&bus); // BEFORE AddSystem - the bridge binds at OnSceneCreate
+            scene.SetEventBus(&bus); // before AddSystem: the bridge binds at OnSceneCreate
             components = scene.AddSystem<ScriptComponentManager>();
             scripts = scene.AddSystem<ScriptSceneSystem>();
             components->SetScriptSystem(scripts);
@@ -240,8 +239,8 @@ namespace
     bool Near(f32 a, f32 b) { return Abs(a - b) < 1e-4f; }
 
     // What scene.spawn reaches: the scene's PrefabSpawnSystem pointed at a content database holding
-    // ONE prefab, Turret -> Barrel. The scene's scripts spawn it by id; the assertions read the
-    // scene (a Turret root exists, where, with its child) rather than a recording callback.
+    // one prefab, Turret with a Barrel child. The scene's scripts spawn it by id; the assertions read
+    // the scene (whether a Turret root exists, where, and with its child) rather than a callback.
     struct PrefabSource
     {
         std::filesystem::path dir = "scratch_script_prefabs";
@@ -352,7 +351,7 @@ TEST_CASE("script.scene: lifecycle - onStart once (deferred to the first simulat
     CHECK_FALSE(bed.host.IsActive());
 
     bed.scene.SetSimulationEnabled(true);
-    bed.Frame(); // instantiate + onStart + first onUpdate, all this tick
+    bed.Frame(); // instantiate, onStart and the first onUpdate, all this tick
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"started"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f)); // 2.0 * 0.5
     bed.Frame();
@@ -378,8 +377,8 @@ TEST_CASE("script.scene: entity-active - starts-inactive never instantiates; act
                   u8"}\n",
                   {u8"onStart", u8"onUpdate"}, {});
 
-    // Inactive via the PARENT (the hierarchy path), set BEFORE Start - the
-    // scene-starts-inactive case.
+    // Inactive through the parent (the hierarchy path), set before Start: the scene starts
+    // with the entity inactive.
     const scene::EntityHandle parent = bed.scene.CreateEntity(u8"holder");
     const scene::EntityHandle e = bed.AddScripted(mover, u8"walker");
     bed.scene.SetParent(e, parent);
@@ -393,7 +392,7 @@ TEST_CASE("script.scene: entity-active - starts-inactive never instantiates; act
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.0f));
 
     bed.scene.SetActive(parent, true);
-    bed.Frame(); // first ACTIVE tick: instantiate + onStart + onUpdate
+    bed.Frame(); // first active tick: instantiate, onStart, onUpdate
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"started"));
     CHECK(bed.scripts->InstanceCount() == 1u);
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.5f));
@@ -426,12 +425,12 @@ TEST_CASE("script.scene: entity-active - deactivation freezes updates with NO li
     bed.Frame();
     bed.Frame();
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.5f)); // frozen
-    CHECK(bed.scene.GetEntityName(e) == StringView(u8"mid"));     // and SILENT (v1: no events)
+    CHECK(bed.scene.GetEntityName(e) == StringView(u8"mid"));     // and silent (no events)
 
     bed.scene.SetActive(e, true);
     bed.Frame();
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f)); // resumed
-    CHECK(bed.scene.GetEntityName(e) == StringView(u8"mid"));     // onStart did NOT re-fire
+    CHECK(bed.scene.GetEntityName(e) == StringView(u8"mid"));     // onStart did not fire again
     CHECK(bed.scripts->InstanceCount() == 1u);
 }
 
@@ -458,7 +457,7 @@ TEST_CASE("script.scene: the entity facade exposes active/setActive/activeInHier
     const scene::EntityHandle e = bed.AddScripted(toggler, u8"walker");
     bed.Start();
 
-    bed.Frame(); // onStart saw active+activeInHierarchy; onUpdate moved then SELF-deactivated
+    bed.Frame(); // onStart saw active and activeInHierarchy; onUpdate moved, then deactivated itself
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"live"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
     CHECK_FALSE(bed.scene.IsActive(e)); // setActive(false) reached the scene
@@ -477,7 +476,7 @@ TEST_CASE("script.scene: LUAU behavior lifecycle + property field-apply through 
     ScriptedScene bed;
     // The Luau idiom: a global class table, colon methods, plain instance fields for properties.
     // The run host resolves the Luau backend from the class's language and dispatches the same
-    // onStart/onUpdate; ApplyProperties writes the `speed` field via the new setter special-case.
+    // onStart/onUpdate; ApplyProperties writes the `speed` field through the field setter.
     RefPtr<ScriptClass> mover = MakeClassLang(
         u8"luau", u8"Mover",
         u8"Mover = {}\n"
@@ -496,7 +495,7 @@ TEST_CASE("script.scene: LUAU behavior lifecycle + property field-apply through 
 
     const scene::EntityHandle e = bed.AddScripted(mover, u8"walker");
     bed.Start();
-    bed.Frame(); // instantiate + apply speed=2.0 + onStart + first onUpdate
+    bed.Frame(); // instantiate, apply speed=2.0, onStart, first onUpdate
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"started"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f)); // 2.0 * 0.5
     bed.Frame();
@@ -520,7 +519,7 @@ TEST_CASE("script.scene: LUAU hash-keyed property override wins over the harvest
         u8"end\n",
         {u8"onUpdate"}, {FloatProperty(u8"speed", 2.0)});
 
-    // Override speed -> 10.0 (the field-setter applies it AFTER construction, over the default).
+    // Override speed to 10.0 (the field setter applies it after construction, over the default).
     const scene::EntityHandle e = bed.AddScripted(mover, u8"fast");
     {
         ScriptComponent* c = bed.components->Get(e);
@@ -567,7 +566,7 @@ TEST_CASE("script.scene: LUAU entity.send invokes on<Message>(arg) on the target
     }
 
     bed.Start();
-    bed.Frame(); // both instantiate; sender.onStart -> send "ping" 7 -> receiver.onPing(7)
+    bed.Frame(); // both instantiate; sender.onStart sends "ping" 7, receiver.onPing(7) runs
     CHECK(bed.scene.GetEntityName(target) == StringView(u8"pinged:7"));
 }
 
@@ -590,7 +589,7 @@ TEST_CASE("script.scene: LUAU updateInterval throttles onUpdate and delivers acc
     bed.Start();
     bed.Frame(0.5f); // acc 0.5 < 1.0 -> no update
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.0f));
-    bed.Frame(0.5f); // acc 1.0 -> ONE update, dt = accumulated 1.0
+    bed.Frame(0.5f); // acc 1.0 -> one update, dt = accumulated 1.0
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.y, 1.0f)); // accumulated dt, not 0.5
 }
@@ -617,7 +616,7 @@ TEST_CASE("script.scene: LUAU coroutine waitSeconds(1.0) runs its body only afte
     bed.Start();
     bed.Frame(0.5f); // onStart starts waitSeconds 1.0; +0.5s -> still pending
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.0f));
-    bed.Frame(0.5f); // +0.5s -> 1.0s reached -> resume sets position
+    bed.Frame(0.5f); // +0.5s reaches 1.0s; the resume sets the position
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 5.0f));
     bed.Frame(0.5f); // completed coroutine does not run again
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 5.0f));
@@ -690,7 +689,7 @@ TEST_CASE("script.scene: enable/disable edges dispatch onEnable/onDisable; disab
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
 
     bed.components->Get(e)->behaviors[0].enabled = true;
-    bed.Frame(); // onEnable again + ticks
+    bed.Frame(); // onEnable again, and ticks
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"t+on+off+on"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 2.0f));
 }
@@ -795,7 +794,7 @@ TEST_CASE("script.scene: hot reload - product swap re-instantiates, re-applies "
                              u8"        self.setPosition(p.x + speed * float(dt), p.y, p.z);\n"
                              u8"    }\n"
                              u8"}\n";
-    // v2: same convention, DOUBLE speed effect - observable difference after reload.
+    // v2: same convention, double the speed effect, so the reload is observable.
     const char8_t* moverV2 = u8"class Mover {\n"
                              u8"    private Entity@ self;\n"
                              u8"    float speed;\n"
@@ -830,7 +829,7 @@ TEST_CASE("script.scene: hot reload - product swap re-instantiates, re-applies "
         MakeClass(u8"Mover", moverV2, {u8"onStart", u8"onUpdate"}, {FloatProperty(u8"speed", 1.0)});
     bed.components->Get(e)->behaviors[0].script = v2;
 
-    bed.Frame(); // re-instantiate (fresh state, onStart again), override RE-APPLIED
+    bed.Frame(); // re-instantiate (fresh state, onStart again), override re-applied
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"m+start+restart"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 4.5f)); // +2*3*0.5
     CHECK(bed.components->Get(e)->behaviors[0].boundClass == v2.Get());
@@ -1018,7 +1017,7 @@ TEST_CASE("script.scene: a prefab-instance override on a behavior property round
     MemoryStream payload;
     REQUIRE(scene::CapturePrefab(author, root, payload).IsOk());
 
-    // Level: two instances; ONE overrides the behavior's speed.
+    // Level: two instances; one overrides the behavior's speed.
     scene::Scene level(DefaultAllocator(), u8"level");
     auto* levelScripts = level.AddSystem<ScriptComponentManager>();
     (void)payload.Seek(0, SeekOrigin::Begin);
@@ -1037,7 +1036,7 @@ TEST_CASE("script.scene: a prefab-instance override on a behavior property round
     const Guid inst1Id = level.GetEntityId(inst1);
     const Guid inst2Id = level.GetEntityId(inst2);
 
-    // Save -> load -> resolve prefabs (instances live as ref+deltas on the wire).
+    // Save, load and resolve prefabs (instances are a ref and deltas on the wire).
     MemoryStream saved;
     {
         BinarySerializer w(saved, SerializeMode::Write);
@@ -1121,8 +1120,8 @@ TEST_CASE("script.scene: entity.send invokes on<Message>(arg) on every declaring
 {
     ScriptedScene bed;
 
-    // Receiver at index 0 so it is instantiated before the sender (index 1) fires its
-    // onStart send this same tick - dispatch skips not-yet-live instances by design.
+    // Receiver at index 0 so it is instantiated before the sender (index 1) fires its onStart
+    // send this same tick: dispatch skips instances that are not live yet.
     RefPtr<ScriptClass> receiver =
         MakeClass(u8"Receiver",
                   u8"class Receiver {\n"
@@ -1153,7 +1152,7 @@ TEST_CASE("script.scene: entity.send invokes on<Message>(arg) on every declaring
     }
 
     bed.Start();
-    bed.Frame(); // both instantiate; sender.onStart -> send "ping" -> receiver.onPing
+    bed.Frame(); // both instantiate; sender.onStart sends "ping", receiver.onPing runs
 
     CHECK(bed.scene.GetEntityName(target) == u8"pinged:7");
 }
@@ -1177,13 +1176,12 @@ TEST_CASE("script.scene: entity.send to a target with no matching handler is a s
     CHECK_FALSE(c->behaviors[0].faulted);
 }
 
-// ---- the "Roll Call" sample game's core loop, headless (mirrors SampleGame/Scripts/*.as):
-// proximity-collect orbs -> EMIT "OrbCollected" onto the scene bus -> the LEVEL scores -> win at
-// the total. This is the Track B reference: the game rules live in the scene's Level tier, and
-// orbs announce a NAMED event instead of find()-ing a "GameManager" entity and send()-ing it.
-// No GameManager entity exists (the anti-pattern the tiers exist to kill). Score is observed
-// through a stable "Scoreboard" entity's transform. The input/character path needs Input +
-// Physics (exercised on Play), so it is out of this bed by design. ----
+// ---- The "Roll Call" sample game's core loop, headless: orbs collected by proximity emit
+// "OrbCollected" onto the scene bus, the Level scores, and the game is won at the total. The game
+// rules live in the scene's Level tier, and orbs announce a named event instead of finding a
+// "GameManager" entity and sending to it; no GameManager entity exists. Score is observed through
+// a stable "Scoreboard" entity's transform. The input and character path needs Input and Physics
+// (exercised on Play), so it is outside this bed. ----
 
 TEST_CASE("script.scene: the Roll Call sample game - orbs EMIT OrbCollected, the Level scores "
           "and wins, with NO GameManager entity (Track B reference)")
@@ -1192,9 +1190,9 @@ TEST_CASE("script.scene: the Roll Call sample game - orbs EMIT OrbCollected, the
     SceneScriptSystem* level = bed.scene.AddSystem<SceneScriptSystem>();
     level->SetRunHost(&bed.host);
 
-    // The Level (mirror of Level.as): the scene's rules tier, total 2 for a short round. Score
-    // lives in per-instance fields; onOrbCollected mirrors it onto the Scoreboard transform so the
-    // test can observe it. It receives events by declaring on<Event> - no wiring, no manager entity.
+    // The Level: the scene's rules tier, total 2 for a short round. Score lives in per-instance
+    // fields; onOrbCollected mirrors it onto the Scoreboard transform so the test can observe it.
+    // It receives events by declaring on<Event>, with no wiring and no manager entity.
     RefPtr<ScriptClass> levelClass =
         MakeClass(u8"Level",
                   u8"class Level {\n"
@@ -1229,7 +1227,7 @@ TEST_CASE("script.scene: the Roll Call sample game - orbs EMIT OrbCollected, the
                   {u8"onStart", u8"onOrbCollected", u8"onPlayerFell"});
     level->Settings().script = levelClass;
 
-    // Pickup (mirror of Pickup.as): proximity to "Player" -> emit "OrbCollected", remove self.
+    // Pickup: near "Player", emit "OrbCollected" and remove itself.
     RefPtr<ScriptClass> pickup =
         MakeClass(u8"Pickup",
                   u8"class Pickup {\n"
@@ -1273,19 +1271,18 @@ TEST_CASE("script.scene: the Roll Call sample game - orbs EMIT OrbCollected, the
     bed.scene.SetLocalPosition(orb2, Float3{5.0f, 0.0f, 0.0f});
 
     bed.Start();
-    bed.Frame(); // instantiate + onStart; player far -> nothing collected
+    bed.Frame(); // instantiate and onStart; the player is far, nothing collected
     CHECK(bed.scripts->InstanceCount() == 2u); // 2 orbs (the Level is not an entity behavior)
     CHECK(level->LevelActive());               // the rules tier is live, no GameManager entity
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.x, 0.0f));
 
-    // Walk onto orb1: it collects itself and EMITS "OrbCollected". Delivery follows the RUN
-    // SCOPE cadence: the scope drains at the NEXT frame's
-    // top - events emitted in frame N arrive in frame N+1 (the same cadence GameInstance
-    // ships; the old same-frame delivery was an owned-fallback artifact production never had).
+    // Walk onto orb1: it collects itself and emits "OrbCollected". Delivery follows the run
+    // scope's cadence: the scope drains at the next frame's top, so events emitted in frame N
+    // arrive in frame N+1, the cadence GameInstance has.
     bed.scene.SetLocalPosition(player, Float3{0.0f, 0.0f, 0.0f});
-    bed.Frame(); // orb1 onUpdate: proximity hit -> emit("OrbCollected") + destroy
+    bed.Frame(); // orb1 onUpdate: proximity hit, emit("OrbCollected"), destroy
     CHECK_FALSE(bed.scene.IsValid(orb1));
-    bed.Frame(); // scope drain at frame top -> the Level's onOrbCollected scores
+    bed.Frame(); // the scope drains at frame top; the Level's onOrbCollected scores
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.x, 1.0f));
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.y, 0.0f)); // not won yet
 
@@ -1355,22 +1352,22 @@ TEST_CASE("script.scene: the Roll Call sample game runs on a LUAU Level")
     bed.scene.SetLocalPosition(orb2, Float3{5.0f, 0.0f, 0.0f});
 
     bed.Start();
-    bed.Frame(); // instantiate + onStart; player far -> nothing collected
+    bed.Frame(); // instantiate and onStart; the player is far, nothing collected
     CHECK(bed.scripts->InstanceCount() == 2u);
     CHECK(level->LevelActive());
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.x, 0.0f));
 
     bed.scene.SetLocalPosition(player, Float3{0.0f, 0.0f, 0.0f});
-    bed.Frame(); // orb1 collected -> emit (delivery = scope cadence, next frame's drain)
+    bed.Frame(); // orb1 collected and emits (delivered at the next frame's drain)
     CHECK_FALSE(bed.scene.IsValid(orb1));
-    bed.Frame(); // scope drain -> Level scores
+    bed.Frame(); // scope drain: the Level scores
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.x, 1.0f));
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.y, 0.0f)); // not won yet
 
     bed.scene.SetLocalPosition(player, Float3{5.0f, 0.0f, 0.0f});
     bed.Frame(); // last orb collected
     CHECK_FALSE(bed.scene.IsValid(orb2));
-    bed.Frame(); // scope drain -> win
+    bed.Frame(); // scope drain: win
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.x, 2.0f));
     CHECK(Near(bed.scene.GetLocalTransform(scoreboard).position.y, 1.0f)); // win branch ran
 }
@@ -1378,10 +1375,9 @@ TEST_CASE("script.scene: the Roll Call sample game runs on a LUAU Level")
 TEST_CASE("script.scene: bus token teardown - a destroyed subscriber is never touched, "
           "survivors still fire")
 {
-    // The owner-held-token discipline: the script system owns the bus subscriptions and
-    // dispatch resolves LIVE components at drain time - a behavior whose entity died
-    // between emit and drain is simply not found (no dead-instance dispatch, no crash).
-    // Run under ASAN in the battery (the lifetime-sensitive class).
+    // The script system owns the bus subscriptions, and dispatch resolves live components at
+    // drain time: a behaviour whose entity died between emit and drain is not found (no dispatch
+    // to a dead instance, no crash). This is lifetime-sensitive, so it matters under ASAN.
     ScriptedScene bed;
     RefPtr<ScriptClass> listener =
         MakeClass(u8"Listener",
@@ -1397,7 +1393,7 @@ TEST_CASE("script.scene: bus token teardown - a destroyed subscriber is never to
     bed.Frame(); // instantiate both
 
     bed.bus.Publish(StringHash(u8"Ping"), Variant{});
-    bed.scene.DestroyEntity(doomed); // dies BETWEEN emit and the next frame's drain
+    bed.scene.DestroyEntity(doomed); // dies between emit and the next frame's drain
     bed.Frame();                     // drain: dispatch resolves live components only
 
     CHECK_FALSE(bed.scene.IsValid(doomed));
@@ -1425,7 +1421,7 @@ TEST_CASE("script.scene: updateInterval throttles onUpdate and delivers the accu
     bed.Start();
     bed.Frame(0.5f); // acc 0.5 < 1.0 -> no update
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.0f));
-    bed.Frame(0.5f); // acc 1.0 -> ONE update, dt = accumulated 1.0
+    bed.Frame(0.5f); // acc 1.0 -> one update, dt = accumulated 1.0
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.y, 1.0f)); // accumulated dt, not 0.5
     bed.Frame(0.5f);                                              // acc 0.5 -> no update
@@ -1495,7 +1491,7 @@ TEST_CASE("script.scene: LUAU enable/disable edges dispatch onEnable/onDisable; 
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
 
     bed.components->Get(e)->behaviors[0].enabled = true;
-    bed.Frame(); // onEnable again + ticks
+    bed.Frame(); // onEnable again, and ticks
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"t+on+off+on"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 2.0f));
 }
@@ -1589,7 +1585,7 @@ TEST_CASE("script.scene: LUAU hot reload - product swap re-instantiates + re-app
         u8"    local p = self.entity:position()\n"
         u8"    self.entity:setPosition(p.x + self.speed * dt, p.y, p.z)\n"
         u8"end\n";
-    // v2: DOUBLE the speed effect - an observable difference after reload.
+    // v2: double the speed effect, so the reload is observable.
     const char8_t* moverV2 =
         u8"Mover = {}\n"
         u8"Mover.__index = Mover\n"
@@ -1620,7 +1616,7 @@ TEST_CASE("script.scene: LUAU hot reload - product swap re-instantiates + re-app
                       {FloatProperty(u8"speed", 1.0)});
     bed.components->Get(e)->behaviors[0].script = v2;
 
-    bed.Frame(); // re-instantiate (fresh state, onStart again), override RE-APPLIED
+    bed.Frame(); // re-instantiate (fresh state, onStart again), override re-applied
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"m+start+restart"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 4.5f)); // +2*3*0.5
     CHECK(bed.components->Get(e)->behaviors[0].boundClass == v2.Get());
@@ -1729,7 +1725,7 @@ TEST_CASE("script.scene: LUAU Scene.spawn reaches the scene's PrefabSpawnSystem 
     PrefabSource prefabs(bed);
 
     // The prefab id crosses as an Asset property (a Guid), is stored on the instance field, then
-    // read back and passed to spawn - exercising Guid marshalling both ways through the Luau VM.
+    // read back and passed to spawn, exercising Guid marshalling both ways through the Luau VM.
     RefPtr<ScriptClass> spawner = MakeClassLang(
         u8"luau", u8"Spawner",
         u8"Spawner = {}\n"
@@ -1894,10 +1890,10 @@ TEST_CASE("script.scene: worldRotation composes the ancestors' turns, worldScale
     CHECK(bed.scene.GetEntityName(child) == StringView(u8"composed"));
 }
 
-// ---- second backend, uniformly: a .as behavior runs the SAME neutral
-// runtime path as any backend - the RunHost resolves the backend by the class's language, assembles
-// the module through the backend (AngelScript needs no prelude), instantiates, and dispatches
-// lifecycle. Property harvest is deferred for AS, so this behavior carries no properties.
+// ---- A second backend: a .as behaviour runs the same neutral runtime path as any backend. The
+// RunHost resolves the backend by the class's language, assembles the module through the backend
+// (AngelScript needs no prelude), instantiates and dispatches the lifecycle. This behaviour
+// carries no properties.
 
 TEST_CASE("script.scene: an AngelScript behavior runs the neutral lifecycle path "
           "(onStart + onUpdate(dt)) - proves both backends, uniformly")
@@ -1919,7 +1915,7 @@ TEST_CASE("script.scene: an AngelScript behavior runs the neutral lifecycle path
 
     const scene::EntityHandle e = bed.AddScripted(mover, u8"walker");
     bed.Start();
-    bed.Frame(); // instantiate + onStart + first onUpdate (dt 0.5): x = 1.0
+    bed.Frame(); // instantiate, onStart, first onUpdate (dt 0.5): x = 1.0
     CHECK(bed.host.Language() == StringView(u8"angelscript"));
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"started"));
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f)); // 2.0 * 0.5
@@ -1930,17 +1926,16 @@ TEST_CASE("script.scene: an AngelScript behavior runs the neutral lifecycle path
     CHECK_FALSE(c->behaviors[0].faulted);
 }
 
-// ---- the step debugger through the subsystem: a breakpoint in a
-// behavior handler PAUSES the game (the world holds still - behaviors stop advancing) while
-// the debugger owns the suspended handler; Continue runs it to completion and ticking resumes.
-// The suspension is NOT a fault. Proves the game-pause wiring + the debug-suspend handling
-// end-to-end through the real ScriptSceneSystem, headless.
+// ---- The step debugger through the subsystem: a breakpoint in a behaviour handler pauses the
+// game (behaviours stop advancing) while the debugger owns the suspended handler; Continue runs it
+// to completion and ticking resumes. The suspension is not a fault. Covers the game-pause wiring
+// and the debug-suspend handling end to end through the real ScriptSceneSystem, headless.
 
 TEST_CASE("script.scene: a breakpoint in a behavior handler pauses the game and resumes clean")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
     ScriptedScene bed;
-    // Line-numbered so the breakpoint below lands inside onUpdate BEFORE x is incremented.
+    // Line-numbered so the breakpoint below lands inside onUpdate before x is incremented.
     RefPtr<ScriptClass> breaker =
         MakeClassLang(u8"angelscript", u8"Breaker",
                       u8"class Breaker {\n"                                           // 1
@@ -1953,8 +1948,8 @@ TEST_CASE("script.scene: a breakpoint in a behavior handler pauses the game and 
                       u8"    }\n"                                    // 8
                       u8"}\n",                                       // 9
                       {u8"onUpdate"});
-    // The cook stamps sourceName = the asset file; the runtime loads this class in its OWN
-    // section named by it, so a breakpoint keyed on the SOURCE FILE (the editor's key) lines up.
+    // The cook stamps sourceName with the asset file; the runtime loads this class in its own
+    // section named by it, so a breakpoint keyed on the source file (the editor's key) lines up.
     breaker->sourceName = String(u8"Breaker.as");
 
     bed.host.RequestDebugger(Function<void(IScriptDebugger&)>{}); // debuggable run
@@ -1964,15 +1959,15 @@ TEST_CASE("script.scene: a breakpoint in a behavior handler pauses the game and 
     bed.Frame(); // instantiate + onUpdate (no breakpoint yet): x = 1
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
 
-    // Set the breakpoint on the SOURCE FILE (the editor's breakpoint key) at the increment
-    // line, now that the debugger + module exist - it must line up with the class's section.
+    // Set the breakpoint on the source file (the editor's breakpoint key) at the increment line,
+    // now that the debugger and module exist; it has to line up with the class's section.
     IScriptDebugger* debugger = bed.host.Debugger();
     REQUIRE(debugger != nullptr);
     CHECK_FALSE(bed.host.IsDebugPaused());
     debugger->SetBreakpoint(u8"Breaker.as", 6);
 
-    // Next tick: onUpdate hits the breakpoint and SUSPENDS before the increment -> the game
-    // is paused, the world holds still (position frozen at 1), and the behavior is NOT faulted.
+    // Next tick: onUpdate hits the breakpoint and suspends before the increment. The game is
+    // paused, the world holds still (position frozen at 1), and the behaviour is not faulted.
     bed.Frame();
     CHECK(bed.host.IsDebugPaused());
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
@@ -1983,7 +1978,7 @@ TEST_CASE("script.scene: a breakpoint in a behavior handler pauses the game and 
     Array<ScriptStackFrame> frames = debugger->CaptureStackFrames();
     REQUIRE_FALSE(frames.IsEmpty());
     CHECK(frames[0].line == 6);
-    CHECK(StringView(frames[0].file) == u8"Breaker.as"); // the section IS the source file
+    CHECK(StringView(frames[0].file) == u8"Breaker.as"); // the section is the source file
     Array<ScriptVariable> locals = debugger->CaptureLocals(0);
     bool sawDt = false;
     for (const ScriptVariable& local : locals)
@@ -2014,8 +2009,8 @@ TEST_CASE("script.scene: a breakpoint in a behavior handler pauses the game and 
     CHECK_FALSE(bed.components->Get(e)->behaviors[0].faulted);
 }
 
-// The SAME run-host debugger wiring, backend-neutral, on Luau: a breakpoint in a Luau
-// behavior handler pauses the game, the world holds still, Continue resumes clean, no fault.
+// The same run-host debugger wiring, backend-neutral, on Luau: a breakpoint in a Luau behaviour
+// handler pauses the game, the world holds still, Continue resumes clean, no fault.
 TEST_CASE("script.scene: LUAU a breakpoint in a behavior handler pauses the game and resumes clean")
 {
     ScriptedScene bed;
@@ -2044,7 +2039,7 @@ TEST_CASE("script.scene: LUAU a breakpoint in a behavior handler pauses the game
     CHECK_FALSE(bed.host.IsDebugPaused());
     debugger->SetBreakpoint(u8"Breaker.luau", 7);
 
-    // Next tick: onUpdate hits the breakpoint and suspends -> paused, world frozen, not faulted.
+    // Next tick: onUpdate hits the breakpoint and suspends: paused, world frozen, not faulted.
     bed.Frame();
     CHECK(bed.host.IsDebugPaused());
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
@@ -2053,14 +2048,14 @@ TEST_CASE("script.scene: LUAU a breakpoint in a behavior handler pauses the game
     Array<ScriptStackFrame> frames = debugger->CaptureStackFrames();
     REQUIRE_FALSE(frames.IsEmpty());
     CHECK(frames[0].line == 7);
-    CHECK(StringView(frames[0].file) == u8"Breaker.luau"); // the per-class chunk IS the source file
+    CHECK(StringView(frames[0].file) == u8"Breaker.luau"); // the per-class chunk is the source file
 
     // Frozen while paused.
     bed.Frame();
     CHECK(bed.host.IsDebugPaused());
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
 
-    // Continue runs the handler to completion: setPosition uses the incremented x -> position 2.
+    // Continue runs the handler to completion: setPosition uses the incremented x, position 2.
     debugger->Continue();
     CHECK_FALSE(bed.host.IsDebugPaused());
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 2.0f));
@@ -2072,10 +2067,10 @@ TEST_CASE("script.scene: LUAU a breakpoint in a behavior handler pauses the game
     CHECK_FALSE(bed.components->Get(e)->behaviors[0].faulted);
 }
 
-// A breakpoint in a handler reached through a NESTED entity.send: the sender's onUpdate is
-// mid-send (a C facade boundary) on its pooled thread when the receiver's onPing breaks on a
-// SECOND pooled thread (pool depth = nesting depth). The game pauses; Continue completes the
-// nested handler. Proves the executor + debugger survive re-entrant dispatch across the C boundary.
+// A breakpoint in a handler reached through a nested entity.send: the sender's onUpdate is
+// mid-send (a C facade boundary) on its pooled thread when the receiver's onPing breaks on a second
+// pooled thread (pool depth equals nesting depth). The game pauses; Continue completes the nested
+// handler. The executor and debugger survive re-entrant dispatch across the C boundary.
 TEST_CASE("script.scene: LUAU a breakpoint in a nested entity.send handler pauses on a second thread")
 {
     ScriptedScene bed;
@@ -2125,7 +2120,7 @@ TEST_CASE("script.scene: LUAU a breakpoint in a nested entity.send handler pause
     REQUIRE(debugger != nullptr);
     debugger->SetBreakpoint(u8"Receiver.luau", 7);
 
-    // Next tick: sender.onUpdate sends ping 8; the nested onPing breaks BEFORE setName -> the game
+    // Next tick: sender.onUpdate sends ping 8; the nested onPing breaks before setName. The game
     // pauses, the name still reads the previous frame's value, and the innermost frame is onPing.
     bed.Frame();
     CHECK(bed.host.IsDebugPaused());
@@ -2141,9 +2136,9 @@ TEST_CASE("script.scene: LUAU a breakpoint in a nested entity.send handler pause
     CHECK(bed.scene.GetEntityName(target) == StringView(u8"pinged:8"));
 }
 
-// Bytecode consumption end-to-end through the run host: a behavior ScriptClass carrying only
-// cooked bytecode (source stripped, the player case) instantiates + ticks. Proves the run host
-// threads ScriptClass::bytecode into LoadBehaviorModule and the backend loads it (no compiler).
+// Bytecode consumption end to end through the run host: a behaviour ScriptClass carrying only
+// cooked bytecode (source stripped, as the player has it) instantiates and ticks. The run host
+// threads ScriptClass::bytecode into LoadBehaviorModule and the backend loads it with no compiler.
 TEST_CASE("script.scene: LUAU a behavior runs from cooked bytecode with no source (player path)")
 {
     foundation::script::RegisterLuauScriptBackend();
@@ -2161,8 +2156,8 @@ TEST_CASE("script.scene: LUAU a behavior runs from cooked bytecode with no sourc
         {u8"onUpdate"});
     mover->sourceName = String(u8"Mover.luau");
 
-    // COOK the source to bytecode (a standalone Luau manager, as the cook does), store it on the
-    // class, then STRIP the source - only the bytecode can drive the behavior now (the player).
+    // Cook the source to bytecode (a standalone Luau manager, as the cook does), store it on the
+    // class, then strip the source: only the bytecode can drive the behaviour now, as in the player.
     RefPtr<IScriptManager> cooker = foundation::script::CreateLuauScriptManager(DefaultAllocator());
     Result<RefPtr<IScriptBlob>> blob = cooker->CompileToBlob(mover->source.AsView(), u8"Mover.luau");
     REQUIRE(blob.HasValue());
@@ -2181,7 +2176,7 @@ TEST_CASE("script.scene: LUAU a behavior runs from cooked bytecode with no sourc
 
     const scene::EntityHandle e = bed.AddScripted(mover, u8"walker");
     bed.Start();
-    bed.Frame(); // instantiate + onUpdate, all from bytecode
+    bed.Frame(); // instantiate and onUpdate, all from bytecode
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
     bed.Frame();
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 2.0f));
@@ -2189,17 +2184,17 @@ TEST_CASE("script.scene: LUAU a behavior runs from cooked bytecode with no sourc
 }
 
 // AngelScript bytecode consumption through the run host: the cook produces a single-class module
-// blob (SaveByteCode); the run host LoadByteCode's it into its own module, and CreateInstance/
-// FindFunction find the class across owned modules. A behavior with source stripped, bytecode
-// only, instantiates + ticks (the player path - no Build()).
+// blob (SaveByteCode); the run host loads it into its own module with LoadByteCode, and
+// CreateInstance/FindFunction find the class across owned modules. A behaviour with its source
+// stripped instantiates and ticks from bytecode alone (the player path, no Build()).
 TEST_CASE("script.scene: ANGELSCRIPT a behavior runs from cooked bytecode with no source (player path)")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
     ScriptedScene bed;
 
-    // Bring up the AngelScript run context first (EnsureContext registers the reflected surface +
-    // facades on its engine) so we can cook an Entity-using behavior on the SAME engine that will
-    // LoadByteCode it - AngelScript bytecode is bound to the engine's type registration.
+    // Bring up the AngelScript run context first (EnsureContext registers the reflected surface and
+    // facades on its engine) so we can cook an Entity-using behaviour on the same engine that will
+    // load it with LoadByteCode: AngelScript bytecode is bound to the engine's type registration.
     REQUIRE(bed.host.EnsureContext(u8"angelscript") != nullptr);
     IScriptManager* manager = bed.host.Manager();
     REQUIRE(manager != nullptr);
@@ -2230,20 +2225,20 @@ TEST_CASE("script.scene: ANGELSCRIPT a behavior runs from cooked bytecode with n
     {
         mover->bytecode.PushBack(bytes[i]);
     }
-    // source stays empty -> only the bytecode can drive it.
+    // source stays empty, so only the bytecode can drive it.
 
     const scene::EntityHandle e = bed.AddScripted(mover, u8"walker");
     bed.Start();
-    bed.Frame(); // instantiate + onUpdate, all from bytecode (LoadByteCode, never Build)
+    bed.Frame(); // instantiate and onUpdate, all from bytecode (LoadByteCode, never Build)
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f));
     bed.Frame();
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 2.0f));
     CHECK_FALSE(bed.components->Get(e)->behaviors[0].faulted);
 }
 
-// The cook keeps debug info + the sourceName section in the AngelScript blob, so a breakpoint
-// still lines up on a behavior loaded from BYTECODE (not source). Locks the stripDebugInfo=false
-// + section=sourceName decisions that make consumed bytecode debuggable.
+// The cook keeps debug info and the sourceName section in the AngelScript blob, so a breakpoint
+// still lines up on a behaviour loaded from bytecode. Pins the stripDebugInfo=false and
+// section=sourceName choices that make consumed bytecode debuggable.
 TEST_CASE("script.scene: ANGELSCRIPT a breakpoint works on a behavior loaded from bytecode (debug info survives)")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
@@ -2288,13 +2283,13 @@ TEST_CASE("script.scene: ANGELSCRIPT a breakpoint works on a behavior loaded fro
     IScriptDebugger* debugger = bed.host.Debugger();
     REQUIRE(debugger != nullptr);
     debugger->SetBreakpoint(u8"Breaker.as", 6);
-    bed.Frame(); // onUpdate hits the breakpoint -> paused; the section IS the sourceName
+    bed.Frame(); // onUpdate hits the breakpoint: paused; the section is the sourceName
     CHECK(bed.host.IsDebugPaused());
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 1.0f)); // frozen before the increment
     Array<ScriptStackFrame> frames = debugger->CaptureStackFrames();
     REQUIRE_FALSE(frames.IsEmpty());
     CHECK(frames[0].line == 6);
-    CHECK(StringView(frames[0].file) == u8"Breaker.as"); // debug info + section survived the cook
+    CHECK(StringView(frames[0].file) == u8"Breaker.as"); // debug info and section survived the cook
 
     debugger->Continue();
     CHECK_FALSE(bed.host.IsDebugPaused());
@@ -2302,8 +2297,8 @@ TEST_CASE("script.scene: ANGELSCRIPT a breakpoint works on a behavior loaded fro
 }
 
 // A harvested AngelScript editor property (a member field) reaches the instance through the
-// neutral setter-Invoke path: the subsystem Invokes `<name>=`, which the AngelScript backend
-// writes to the same-named member field. Both the default and a hash-keyed override drive it.
+// neutral setter Invoke: the subsystem invokes `<name>=`, which the AngelScript backend writes to
+// the same-named member field. Both the default and a hash-keyed override drive it.
 
 TEST_CASE("script.scene: an AngelScript harvested float property applies (default + override) "
           "and drives onUpdate")
@@ -2350,8 +2345,8 @@ TEST_CASE("script.scene: an AngelScript harvested float property applies (defaul
     }
 }
 
-// ---- coroutines: the coroutine `Behavior` base + host scheduler wired
-// through the subsystem tick (AdvanceCoroutines once per frame) + cancel on disable/destroy.
+// ---- Coroutines: the coroutine `Behavior` base and the host scheduler, driven by the subsystem
+// tick (AdvanceCoroutines once per frame), and cancelled on disable or destroy.
 
 TEST_CASE("script.scene: a coroutine wait(1.0) runs its body only after ~1s of ticks")
 {
@@ -2373,7 +2368,7 @@ TEST_CASE("script.scene: a coroutine wait(1.0) runs its body only after ~1s of t
     bed.Start();
     bed.Frame(0.5f); // onStart registers wait 1.0; +0.5s -> still pending
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.0f));
-    bed.Frame(0.5f); // +0.5s -> 1.0s reached -> resume runs finish()
+    bed.Frame(0.5f); // +0.5s reaches 1.0s; the resume runs finish()
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 5.0f));
     bed.Frame(0.5f); // completed coroutine does not run again
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 5.0f));
@@ -2411,7 +2406,7 @@ TEST_CASE("script.scene: a coroutine waitUntil resumes when the predicate flips"
     bed.Frame(0.5f); // tick 1, gate closed
     bed.Frame(0.5f); // tick 2, gate closed
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 0.0f));
-    bed.Frame(0.5f); // tick 3 opens the gate -> waitUntil resumes -> finish()
+    bed.Frame(0.5f); // tick 3 opens the gate; waitUntil resumes and runs finish()
     CHECK(Near(bed.scene.GetLocalTransform(e).position.x, 9.0f));
 }
 
@@ -2439,7 +2434,7 @@ TEST_CASE("script.scene: destroying a behavior cancels its pending coroutine (ne
     bed.scene.DestroyEntity(e); // onDestroy path cancels the coroutine
     bed.Frame(0.5f);
     bed.Frame(0.5f);
-    bed.Frame(0.5f); // well past 1.0s - a cancelled coroutine must not run
+    bed.Frame(0.5f); // well past 1.0s: a cancelled coroutine does not run
 
     const Variant fired = bed.host.ScriptContext()->GetGlobal(u8"GhostFired");
     REQUIRE(fired.TryGet<f64>() != nullptr);
@@ -2471,28 +2466,28 @@ TEST_CASE("script.scene: disabling a behavior cancels its pending coroutine (nev
     bed.components->Get(e)->behaviors[0].enabled = false;
     bed.Frame(0.5f); // onDisable edge cancels the coroutine
     bed.Frame(0.5f);
-    bed.Frame(0.5f); // past 1.0s - must not fire
+    bed.Frame(0.5f); // past 1.0s: does not fire
 
     const Variant fired = bed.host.ScriptContext()->GetGlobal(u8"SleeperFired");
     REQUIRE(fired.TryGet<f64>() != nullptr);
     CHECK(*fired.TryGet<f64>() == 0.0);
 }
 
-// ---- physics contact events -> behaviors (end-to-end, real Jolt + real Scene) ----
-// A full subsystem manager wiring SceneSubsystem + PhysicsSubsystem + ScriptSubsystem: the
-// physics tick resolves contacts to entities and pushes them to the script subsystem
-// (registered as an IContactListener at OnReady), which enqueues them onto the owning
-// scene's deferred queue; the scene tick drains and dispatches the on<Event> handler.
+// ---- Physics contact events reach behaviours (end to end, real Jolt and a real Scene) ----
+// A full subsystem manager wiring SceneSubsystem, PhysicsSubsystem and ScriptSubsystem: the
+// physics tick resolves contacts to entities and pushes them to the script subsystem (registered
+// as an IContactListener at OnReady), which enqueues them onto the owning scene's deferred queue;
+// the scene tick drains them and dispatches the on<Event> handler.
 
 namespace
 {
     namespace runtime = foundation::runtime;
 
-    // Builds a SubsystemManager with all three subsystems started + a live scene, returns the scene.
-    // Acts as its OWN composition root: bridges physics contacts to the script subsystem's
-    // neutral DeliverContact ingress with the SAME adapter DefaultApplication uses in a real
-    // run (engine.integration) - so these contact tests also exercise that bridge, and
-    // the script subsystem itself keeps no physics dependency.
+    // Builds a SubsystemManager with all three subsystems started and a live scene, and returns the
+    // scene. It acts as its own composition root: it bridges physics contacts to the script
+    // subsystem's neutral DeliverContact ingress with the same adapter DefaultApplication uses in a
+    // real run (engine.integration), so these contact tests also exercise that bridge, and the
+    // script subsystem itself keeps no physics dependency.
     struct ContactWorld
     {
         runtime::SubsystemManager ctx{DefaultAllocator()};
@@ -2525,7 +2520,7 @@ namespace
                 scenes->SetComposition(scene::SceneComposition::Build(modules));
             }
             ctx.Startup();
-            bridge.Install(*physics, *scripts); // the composition-root bridge (the real adapter)
+            bridge.Install(*physics, *scripts); // the real composition-root adapter
             sm = MakeUnique<scene::SceneManager>(DefaultAllocator(), DefaultAllocator());
             scenes->RegisterManager(sm.Get());
             scene = sm->CreateScene(u8"level");
@@ -2567,8 +2562,8 @@ namespace
             scene->SetSimulationEnabled(true);
             for (int i = 0; i < frames; ++i)
             {
-                ctx.BeginFrame(1.0f / 60.0f); // fixed steps: physics contacts -> script enqueue
-                ctx.Update(1.0f / 60.0f);     // scene tick: drain -> behavior dispatch
+                ctx.BeginFrame(1.0f / 60.0f); // fixed steps: physics contacts are enqueued for scripts
+                ctx.Update(1.0f / 60.0f);     // scene tick: drain and dispatch to behaviours
             }
         }
     };
@@ -2584,8 +2579,8 @@ TEST_CASE("script.scene: a physics collision dispatches onContactBegin(other, po
     const scene::EntityHandle box = world.AddBody(
         u8"box", Float3{0, 1.4f, 0}, physics::MotionKind::Dynamic, Float3{0.5f, 0.5f, 0.5f});
 
-    // Records the OTHER entity's name only if speed is non-negative and the normal is unit-ish
-    // - proving all four args crossed the boundary intact.
+    // Records the other entity's name only if speed is non-negative and the normal is about unit
+    // length, so all four arguments crossed the boundary intact.
     RefPtr<ScriptClass> bumper = MakeClass(
         u8"Bumper",
         u8"class Bumper {\n"
@@ -2642,8 +2637,8 @@ TEST_CASE("script.scene: LUAU physics onContactBegin(other, point, normal, speed
     const scene::EntityHandle box = world.AddBody(
         u8"box", Float3{0, 1.4f, 0}, physics::MotionKind::Dynamic, Float3{0.5f, 0.5f, 0.5f});
 
-    // The `normal` + `point` are Float3 native vectors; `other` is an Entity handle; `speed` an
-    // f64 - proving the whole 4-arg contact payload marshals through the Luau metatable dispatch.
+    // `normal` and `point` are Float3 native vectors; `other` is an Entity handle; `speed` an f64.
+    // The whole four-argument contact payload marshals through the Luau metatable dispatch.
     RefPtr<ScriptClass> bumper = MakeClassLang(
         u8"luau", u8"Bumper",
         u8"Bumper = {}\n"
@@ -2675,7 +2670,7 @@ TEST_CASE("script.scene: behaviors tick without error when no physics subsystem 
         const scene::SceneModule* modules[] = {&scriptModule};
         scenes->SetComposition(scene::SceneComposition::Build(modules));
     }
-    ctx.AddSubsystem<ScriptSubsystem>(); // NO physics subsystem
+    ctx.AddSubsystem<ScriptSubsystem>(); // no physics subsystem
     foundation::script::angelscript::RegisterAngelScriptBackend();
     RegisterCoreTypes();
     RegisterScriptComponentReflection();
@@ -2709,14 +2704,14 @@ TEST_CASE("script.scene: behaviors tick without error when no physics subsystem 
     ctx.Shutdown();
 }
 
-// ---- Scene-facade safety regression battery (Fable option B). The bound Scene carries its OWN
-//      scene ptr, so there is no ambient "current scene" to misroute: every call site - update,
-//      onDestroy, a resumed coroutine, cross-scene - targets the right scene by construction. These
-//      pin the FORMER footgun paths (the ambient model read a stale/null currentScene from them). ----
+// ---- Scene-facade safety. The bound Scene carries its own scene pointer, so there is no ambient
+//      "current scene" to misroute: every call site (update, onDestroy, a resumed coroutine,
+//      cross-scene) targets the right scene by construction. These pin the paths where an ambient
+//      current scene would be stale or null. ----
 
 TEST_CASE("script-facade: entity.scene() is bound to the entity's OWN scene (cross-scene isolation)")
 {
-    // Pure facade test - no VM. Two scenes; an entity of A resolves + finds in A, never B.
+    // A pure facade test with no VM. Two scenes; an entity of A resolves and finds in A, never B.
     scene::Scene a(DefaultAllocator(), u8"A");
     scene::Scene b(DefaultAllocator(), u8"B");
     const scene::EntityHandle ea = a.CreateEntity(u8"ea");
@@ -2756,7 +2751,7 @@ TEST_CASE("script.scene: entity.scene.spawn works from onDestroy - a FORMER foot
     CHECK(PrefabSource::Spawned(bed.scene) == 0u);
 
     bed.scene.DestroyEntity(e);
-    bed.Frame(); // removal detected -> onDestroy -> spawn into the entity's own scene
+    bed.Frame(); // removal detected: onDestroy spawns into the entity's own scene
     CHECK(PrefabSource::Spawned(bed.scene) == 1u); // the entity's scene, from the bound handle
     const scene::EntityHandle spawned = bed.scene.FindEntityByName(u8"Turret");
     REQUIRE(spawned.IsAssigned());
@@ -2788,8 +2783,8 @@ TEST_CASE("script.scene: entity.scene.spawn works from a resumed coroutine - a F
     bed.Start();
     bed.Frame(0.5f); // registers wait(1.0); +0.5s -> pending, no spawn
     CHECK(PrefabSource::Spawned(bed.scene) == 0u);
-    bed.Frame(0.5f); // +0.5s -> 1.0s reached -> coroutine resumes -> spawn
-    CHECK(PrefabSource::Spawned(bed.scene) == 1u); // resumed OUTSIDE any tick swap, the right scene
+    bed.Frame(0.5f); // +0.5s reaches 1.0s; the coroutine resumes and spawns
+    CHECK(PrefabSource::Spawned(bed.scene) == 1u); // resumed outside any tick, still the right scene
     CHECK(Near(bed.scene.GetLocalTransform(bed.scene.FindEntityByName(u8"Turret")).position.x, 7.0f));
 }
 
@@ -2816,13 +2811,13 @@ TEST_CASE("script.scene: an AngelScript behavior spawns through self.scene() (bo
     (void)bed.AddScripted(spawner, u8"as");
     bed.Start();
     bed.Frame();
-    // The bound Scene value carried the entity's scene through AS: the spawn landed HERE.
+    // The bound Scene value carried the entity's scene through AngelScript: the spawn landed here.
     CHECK(PrefabSource::Spawned(bed.scene) == 1u);
     CHECK(Near(bed.scene.GetLocalTransform(bed.scene.FindEntityByName(u8"Turret")).position.x, 1.0f));
 }
 
 // ---- Scene-level scripting (the third tier): one `Level` object per scene, constructed with the
-//      scene's BOUND handle, sim-gated, dispatched onStart/onUpdate(dt)/onFixedUpdate(dt)/onStop. ----
+//      scene's bound handle, gated on simulation, dispatched onStart/onUpdate(dt)/onFixedUpdate(dt)/onStop. ----
 
 TEST_CASE("script.scene: a Level runs onStart/onUpdate/onStop through its bound scene, sim-gated")
 {
@@ -2850,7 +2845,7 @@ TEST_CASE("script.scene: a Level runs onStart/onUpdate/onStop through its bound 
                   {u8"onStart", u8"onUpdate", u8"onStop"});
     level->Settings().script = levelClass;
 
-    bed.Start(); // OnSceneStarted -> construct new(scene) + onStart
+    bed.Start(); // OnSceneStarted: construct new(scene), then onStart
     CHECK(level->LevelActive());
     CHECK(bed.scene.GetEntityName(flag) == StringView(u8"started")); // onStart ran via bound scene
 
@@ -2860,13 +2855,13 @@ TEST_CASE("script.scene: a Level runs onStart/onUpdate/onStop through its bound 
     CHECK(Near(bed.scene.GetLocalTransform(ticker).position.x, 2.0f));
 
     bed.scene.SetSimulationEnabled(false);
-    bed.Frame(); // sim-gated -> no onUpdate
+    bed.Frame(); // gated on simulation: no onUpdate
     CHECK(Near(bed.scene.GetLocalTransform(ticker).position.x, 2.0f));
     bed.scene.SetSimulationEnabled(true);
     bed.Frame();
     CHECK(Near(bed.scene.GetLocalTransform(ticker).position.x, 3.0f));
 
-    bed.scene.Stop(); // OnSceneStopped -> onStop + destroy
+    bed.scene.Stop(); // OnSceneStopped: onStop, then destroy
     CHECK(bed.scene.GetEntityName(flag) == StringView(u8"stopped"));
     CHECK_FALSE(level->LevelActive());
 }
@@ -2879,7 +2874,7 @@ TEST_CASE("script.scene: a Level's harvested property default is applied before 
     const scene::EntityHandle probe = bed.scene.CreateEntity(u8"probe");
 
     // The Level reads its declared `timeLimit` in onStart and stamps it into a bound-scene entity,
-    // so the test can read back the applied value. No override -> the harvested default (90) applies.
+    // so the test can read back the applied value. With no override the harvested default (90) applies.
     RefPtr<ScriptClass> levelClass =
         MakeClass(u8"Level",
                   u8"class Level {\n"
@@ -2891,7 +2886,7 @@ TEST_CASE("script.scene: a Level's harvested property default is applied before 
                   {u8"onStart"}, {FloatProperty(u8"timeLimit", 90.0)});
     level->Settings().script = levelClass;
 
-    bed.Start(); // construct + apply timeLimit=90 (default) + onStart
+    bed.Start(); // construct, apply timeLimit=90 (default), onStart
     CHECK(level->LevelActive());
     CHECK(Near(bed.scene.GetLocalTransform(probe).position.x, 90.0f)); // default reached the field
 }
@@ -2914,7 +2909,7 @@ TEST_CASE("script.scene: a Level's hash-keyed property override wins over the ha
                   {u8"onStart"}, {FloatProperty(u8"timeLimit", 90.0)});
     level->Settings().script = levelClass;
 
-    // The scene-settings override (the inspector-authored value) must win over the class default.
+    // The scene-settings override (the inspector-authored value) wins over the class default.
     ScriptPropertyValue five;
     five.kind = ScriptPropertyType::Float;
     five.number = 5.0;
@@ -2926,7 +2921,7 @@ TEST_CASE("script.scene: a Level's hash-keyed property override wins over the ha
 
 TEST_CASE("script.scene: SceneScriptSettings overrides round-trip through a v2 versioned payload")
 {
-    // The exact machinery the editor's settings-block command and the scene-file path use:
+    // The machinery the editor's settings-block command and the scene-file path use:
     // BeginVersionedPayload(TypeOf<SceneScriptSettings>) writes the v2 chain, the Serialize body's
     // `ar.Version() >= 2` gate lets the overrides through, and the read reconstructs them.
     RegisterScriptComponentReflection(); // patches DataVersion(2) onto the TypeInfo
@@ -2982,13 +2977,13 @@ TEST_CASE("script.scene: a Level receives onFixedUpdate on the fixed lane")
     level->Settings().script = levelClass;
 
     bed.Start();
-    bed.scene.FixedUpdate(1.0f / 60.0f); // one fixed step -> onFixedUpdate
+    bed.scene.FixedUpdate(1.0f / 60.0f); // one fixed step runs onFixedUpdate
     CHECK(Near(bed.scene.GetLocalTransform(f).position.x, 1.0f));
     bed.scene.FixedUpdate(1.0f / 60.0f);
     CHECK(Near(bed.scene.GetLocalTransform(f).position.x, 2.0f));
 
     bed.scene.SetSimulationEnabled(false);
-    bed.scene.FixedUpdate(1.0f / 60.0f); // sim-gated
+    bed.scene.FixedUpdate(1.0f / 60.0f); // gated on simulation
     CHECK(Near(bed.scene.GetLocalTransform(f).position.x, 2.0f));
 }
 
@@ -3019,7 +3014,7 @@ TEST_CASE("script.scene: a faulting Level handler disables THAT scene's level on
     CHECK(level->LevelFaulted());
 
     bed.scene.SetEntityName(t, u8"reset");
-    bed.Frame(); // faulted -> no further dispatch
+    bed.Frame(); // faulted: no further dispatch
     CHECK(bed.scene.GetEntityName(t) == StringView(u8"reset"));
 }
 
@@ -3052,7 +3047,7 @@ TEST_CASE("script.scene: two scenes sharing one Level class get INDEPENDENT obje
     b.Start();
     a.Frame();
     a.Frame(); // A ticks twice
-    b.Frame(); // B ticks once - each Level targets ITS OWN scene
+    b.Frame(); // B ticks once; each Level targets its own scene
     CHECK(Near(a.scene.GetLocalTransform(ta).position.x, 2.0f));
     CHECK(Near(b.scene.GetLocalTransform(tb).position.x, 1.0f));
 }
@@ -3104,9 +3099,9 @@ TEST_CASE("script.scene: SceneScriptSettings round-trips its Level ref + enabled
     CHECK_FALSE(in.enabled);
 }
 
-// ---- OPTION 1 end-to-end: Gadget.of(self).power = 5 mutates the LIVE component (AngelScript). Proves
-// the extra-emission-root (Gadget emitted though no signature reaches it), the ReturnType-override
-// factory, and property mutation through the re-resolving handle - all together. ----
+// ---- End to end: Gadget.of(self).power = 5 mutates the live component (AngelScript). Covers the
+// extra emission root (Gadget is emitted though no signature reaches it), the ReturnType-overridden
+// factory, and property mutation through the re-resolving handle, together. ----
 TEST_CASE("script.scene: OPTION 1 - Component.of(entity).field mutates the live component through a "
           "re-resolving handle")
 {
@@ -3132,12 +3127,12 @@ TEST_CASE("script.scene: OPTION 1 - Component.of(entity).field mutates the live 
     bed.Start();
     bed.Frame(); // onStart: Gadget.of(_entity).power = 5.0
     REQUIRE(gadgets->Get(e) != nullptr);
-    CHECK(gadgets->Get(e)->power == doctest::Approx(5.0f)); // the LIVE component was mutated
+    CHECK(gadgets->Get(e)->power == doctest::Approx(5.0f)); // the live component was mutated
 }
 
-// OPTION 1 on the SECOND backend: AngelScript is statically typed, so the ReturnType-override is
-// what makes `Gadget::of(self)` box as a Gadget handle (its declared return). Proves cross-backend
-// parity of the whole entity.get shape.
+// The same on the second backend: AngelScript is statically typed, so the ReturnType override is
+// what makes `Gadget::of(self)` box as a Gadget handle (its declared return). Cross-backend parity
+// for the entity.get shape.
 TEST_CASE("script.scene: OPTION 1 - Component::of(entity).field mutates the live component "
           "(AngelScript) - cross-backend parity")
 {
@@ -3165,14 +3160,13 @@ TEST_CASE("script.scene: OPTION 1 - Component::of(entity).field mutates the live
     bed.Start();
     bed.Frame();
     REQUIRE(gadgets->Get(e) != nullptr);
-    CHECK(gadgets->Get(e)->power == doctest::Approx(5.0f)); // the LIVE component was mutated
+    CHECK(gadgets->Get(e)->power == doctest::Approx(5.0f)); // the live component was mutated
 }
 
 // Component.of(entity) is null for an entity without the component, so the `!is null` test scripts
-// write reads as it says (it used to be a handle that resolved to nothing, and a write through it
-// crashed). A handle taken while the component was there, used after it is removed, is the
-// script's error, not a write through null: the behaviour faults (disabled, as any script error
-// leaves it) and the rest of the scene goes on.
+// write reads as it says. A handle taken while the component was there, used after it is removed,
+// is the script's error, not a write through null: the behaviour faults (disabled, as any script
+// error leaves it) and the rest of the scene goes on.
 TEST_CASE("script.scene: Component::of is null without the component, and a gone one is an error (AngelScript)")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
@@ -3290,8 +3284,8 @@ TEST_CASE("script.scene: PathFollowComponent.of(entity) sets a follower's speed 
     CHECK(bed.scene.GetWorldPosition(ghost).x == doctest::Approx(follows->Get(ghost)->distance).epsilon(0.02));
 }
 
-// OPTION 1 on a REAL engine component: RigidBodyComponent.of(entity).friction, on a live physics
-// scene. Same machinery as the Gadget proof, wired to an actual engine component.
+// The same on a real engine component: RigidBodyComponent.of(entity).friction, on a live physics
+// scene. Same machinery as the Gadget case, wired to an actual engine component.
 TEST_CASE("script.scene: OPTION 1 - RigidBodyComponent.of(entity).friction mutates the live "
           "physics component")
 {
@@ -3318,12 +3312,12 @@ TEST_CASE("script.scene: OPTION 1 - RigidBodyComponent.of(entity).friction mutat
 
     world.Play(2); // onStart: RigidBodyComponent.of(_entity).friction = 0.5
     REQUIRE(bodies->Get(e) != nullptr);
-    CHECK(bodies->Get(e)->friction == doctest::Approx(0.5f)); // the LIVE component was mutated
+    CHECK(bodies->Get(e)->friction == doctest::Approx(0.5f)); // the live component was mutated
 }
 
-// scene.physics via the OPTION 1 factory ScenePhysics.of(scene): reflected physics ops act on THIS
-// scene's world. Also the reflected-path parity - gravityY reads the same world the static Physics
-// facade reads (both delegate to PhysicsSceneSystem->World()->Gravity()), verified against ground truth.
+// scene.physics through the factory ScenePhysics.of(scene): reflected physics ops act on this
+// scene's world. Also checks parity: gravityY reads the same world the static Physics facade reads
+// (both delegate to PhysicsSceneSystem->World()->Gravity()), verified against ground truth.
 TEST_CASE("script.scene: ScenePhysics.of(scene) reads + writes gravity on THIS scene's world")
 {
     engine::physics::RegisterPhysicsScriptFacade();
@@ -3337,24 +3331,24 @@ TEST_CASE("script.scene: ScenePhysics.of(scene) reads + writes gravity on THIS s
                   u8"    Driver(Entity@ entity) { @self = entity; }\n"
                   u8"    void onStart() {\n"
                   u8"        ScenePhysics@ p = ScenePhysics::of(self.scene);\n"
-                  u8"        p.setGravity(0.0f, -20.0f, 0.0f);\n"          // write THIS scene's world
+                  u8"        p.setGravity(0.0f, -20.0f, 0.0f);\n"          // write this scene's world
                   u8"        self.setPosition(p.gravityY(), 0.0f, 0.0f);\n" // read it back: x = -20
                   u8"    }\n"
                   u8"}\n",
                   {u8"onStart"});
     world.Attach(e, driver);
 
-    world.Play(2); // onStart: ScenePhysics.of(scene).setGravity + gravityY
+    world.Play(2); // onStart: ScenePhysics.of(scene).setGravity, then gravityY
     auto* sys = world.scene->GetSystem<engine::physics::PhysicsSceneSystem>();
     REQUIRE(sys != nullptr);
     REQUIRE(sys->World() != nullptr);
     CHECK(world.scene->GetLocalTransform(e).position.x == doctest::Approx(-20.0f)); // gravityY read
-    CHECK(sys->World()->Gravity().y == doctest::Approx(-20.0f)); // setGravity hit the REAL scene world
+    CHECK(sys->World()->Gravity().y == doctest::Approx(-20.0f)); // setGravity hit the real scene world
 }
 
 // DebugDraw.of(scene): the immediate-mode debug-draw facade is script-callable. No render service is
-// installed in this bed, so each draw is a safe no-op (SceneDebug resolves null); the test proves the
-// facade RESOLVES and the calls run to completion without faulting (a rename after the draws lands).
+// installed in this bed, so each draw is a safe no-op (SceneDebug resolves null); the facade
+// resolves and the calls run to completion without faulting (a rename after the draws lands).
 TEST_CASE("script.scene: DebugDraw.of(scene) is script-callable + null-safe without a render service")
 {
     engine::render::RegisterRenderScriptFacade(); // registers the DebugDraw facade type + prelude name
@@ -3377,14 +3371,14 @@ TEST_CASE("script.scene: DebugDraw.of(scene) is script-callable + null-safe with
     const scene::EntityHandle e = bed.AddScripted(gizmo, u8"gizmo");
     bed.scene.Start();
     bed.scene.SetSimulationEnabled(true);
-    bed.Frame(); // instantiate + onStart: DebugDraw::of + no-op draws + the rename
+    bed.Frame(); // instantiate and onStart: DebugDraw::of, no-op draws, the rename
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"drew"));
 }
 
-// DebugDraw.of(scene) with the render service INSTALLED (the way RenderSubsystem::ExposeToScript
-// wires a real run): the draw lands in THAT scene's per-scene debug list on the subsystem, and no
+// DebugDraw.of(scene) with the render service installed (as RenderSubsystem::ExposeToScript wires
+// a real run): the draw lands in that scene's per-scene debug list on the subsystem, and in no
 // other scene's. A headless RenderSubsystem over the NullDevice (DebugScene is pure accumulator
-// state, no GPU) is the real service - the same object the render pass reads at frame end.
+// state, no GPU) is the real service, the same object the render pass reads at frame end.
 TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the real render service")
 {
     engine::render::RegisterRenderScriptFacade();
@@ -3395,7 +3389,7 @@ TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the
 
     ScriptedScene bed;
     // The app-side wiring: ExposeToScript installs the per-context render service at context
-    // creation (the host's configurator seam, exactly like Input/Audio in a real run).
+    // creation through the host's configurator, as Input and Audio are in a real run.
     bed.host.SetContextConfigurator(Function<void(IScriptContext&)>{
         [&sub](IScriptContext& scriptContext) { sub.ExposeToScript(scriptContext); }});
 
@@ -3417,7 +3411,7 @@ TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the
     bed.scene.SetSimulationEnabled(true);
     bed.Frame(); // instantiate + onStart: the draw goes through the service into the subsystem
 
-    // The scripted scene's per-scene list got EXACTLY the one line (2 vertices), endpoints intact.
+    // The scripted scene's per-scene list got exactly the one line (2 vertices), endpoints intact.
     auto& drawn = sub.DebugScene(bed.scene);
     CHECK(drawn.HasAnyDraws());
     REQUIRE(drawn.LineVertices().Size() == 2u);
@@ -3425,12 +3419,12 @@ TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the
     CHECK(drawn.LineVertices()[1].position.y == doctest::Approx(2.0f));
     CHECK(drawn.LineVertices()[1].position.z == doctest::Approx(3.0f));
 
-    // Another scene's list on the SAME subsystem stays empty - per-scene isolation, no bleed.
+    // Another scene's list on the same subsystem stays empty: per-scene isolation.
     scene::Scene other{DefaultAllocator(), u8"other-scene"};
     CHECK_FALSE(sub.DebugScene(other).HasAnyDraws());
 }
 
-// scene.physics on the SECOND backend - ScenePhysics::of returns the concrete handle type (its
+// scene.physics on the second backend: ScenePhysics::of returns the concrete handle type (its
 // declared return), so AngelScript boxes it right. Cross-backend parity for the scene-system facade.
 TEST_CASE("script.scene: ScenePhysics.of(scene) reads + writes gravity on THIS scene's world "
           "(AngelScript) - cross-backend parity")
@@ -3462,10 +3456,10 @@ TEST_CASE("script.scene: ScenePhysics.of(scene) reads + writes gravity on THIS s
     CHECK(sys->World()->Gravity().y == doctest::Approx(-20.0f)); // setGravity hit the real world
 }
 
-// Fuller physics surface: per-entity character control via CharacterComponent.of(entity).move/jump.
-// These are component-DATA ops (the tick reads moveVelocity/jumpSpeed), so they work through the
-// re-resolving handle with no world access - and per ENTITY, fixing the static facade's "first
-// character only" limitation.
+// Per-entity character control through CharacterComponent.of(entity).move/jump. These are
+// component-data ops (the tick reads moveVelocity/jumpSpeed), so they work through the re-resolving
+// handle with no world access, and per entity, unlike the static facade, which reaches only the
+// first character.
 TEST_CASE("script.scene: CharacterComponent.of(entity).move/jump - per-entity control")
 {
     engine::physics::RegisterPhysicsScriptFacade();
@@ -3522,7 +3516,7 @@ TEST_CASE("script.scene: CharacterComponent.of(entity).move/jump - per-entity co
     REQUIRE(characters->Get(e) != nullptr);
     CHECK(characters->Get(e)->moveVelocity.x == doctest::Approx(5.0f));
     CHECK(characters->Get(e)->jumpSpeed == doctest::Approx(6.0f));
-    // A launch, the air's jump (Sedulous 86b1dd31), held for the physics step.
+    // A launch, the air's jump, held for the physics step.
     CHECK(characters->Get(e)->launchPending);
     CHECK(characters->Get(e)->launchSpeed == doctest::Approx(4.0f));
 }
@@ -3563,9 +3557,8 @@ TEST_CASE("script.scene: CharacterComponent velocity, groundNormal and drive (An
     CHECK(characters->Get(e)->driveVelocity.z == doctest::Approx(4.0f));
 }
 
-// The scriptable-impulse gameplay op (Roll Call finding #1: "no scriptable impulse on a dynamic
-// body"), now available: ScenePhysics.of(scene).applyImpulse(entity, x, y, z). A world op, keyed
-// by entity. The upward impulse gives the dynamic body positive Y velocity.
+// A scriptable impulse on a dynamic body: ScenePhysics.of(scene).applyImpulse(entity, x, y, z), a
+// world op keyed by entity. The upward impulse gives the dynamic body positive Y velocity.
 TEST_CASE("script.scene: ScenePhysics.of(scene).applyImpulse(entity, ...) - scriptable impulse")
 {
     engine::physics::RegisterPhysicsScriptFacade();
@@ -3591,11 +3584,10 @@ TEST_CASE("script.scene: ScenePhysics.of(scene).applyImpulse(entity, ...) - scri
     CHECK(sys->World()->LinearVelocity(bodies->Get(e)->body).y > 0.0f); // impulse dominated gravity
 }
 
-// The FULL overlap set reaches script as a NATIVE array. ScenePhysics.overlapSphere returns
-// Array<Entity>, which crosses as a real AngelScript `array<Entity@>`; a behavior iterates it with
-// .length()/[] and acts on EVERY hit. This proves the container-return marshaling end to end.
-// The scanner impulses each overlapped body upward; both dynamic targets
-// end with positive Y velocity.
+// The full overlap set reaches script as a native array. ScenePhysics.overlapSphere returns
+// Array<Entity>, which crosses as a real AngelScript `array<Entity@>`; a behaviour iterates it with
+// .length()/[] and acts on every hit, covering container-return marshalling end to end. The
+// scanner impulses each overlapped body upward; both dynamic targets end with positive Y velocity.
 TEST_CASE("script.scene: ScenePhysics.overlapSphere returns a native array - behavior acts on every hit")
 {
     engine::physics::RegisterPhysicsScriptFacade();
@@ -3632,9 +3624,9 @@ TEST_CASE("script.scene: ScenePhysics.overlapSphere returns a native array - beh
     CHECK(sys->World()->LinearVelocity(bodies->Get(b)->body).y > 0.0f);
 }
 
-// The Luau twin: overlapSphere's Array<Entity> crosses as a 1-indexed Lua table walked with #/[]. This
-// is the case the u64/precision rule protects (a Lua table element is an f64, so the facade returns
-// RESOLVED Entity elements, never packed handles). A Luau behavior impulses every hit.
+// The Luau twin: overlapSphere's Array<Entity> crosses as a 1-indexed Lua table walked with #/[].
+// This is the case the u64 precision rule protects (a Lua table element is an f64, so the facade
+// returns resolved Entity elements, never packed handles). A Luau behaviour impulses every hit.
 TEST_CASE("script.scene: LUAU ScenePhysics.overlapSphere returns a Lua table - acts on every hit")
 {
     engine::physics::RegisterPhysicsScriptFacade();
@@ -3669,10 +3661,10 @@ TEST_CASE("script.scene: LUAU ScenePhysics.overlapSphere returns a Lua table - a
     CHECK(sys->World()->LinearVelocity(bodies->Get(b)->body).y > 0.0f);
 }
 
-// ---- Track B: the scene event bus reaches script. A behavior publishes scene.events.emit(name, x);
-//      EVERY behavior AND the Level that declare on<Name>(x) receive it (same bus, both tiers), the
-//      payload surviving as a Variant. Auto-unsubscribe when a subscriber is torn down. The bus is
-//      native + backend-neutral, so proving each backend on its own bus proves the pair. ----
+// ---- The scene event bus reaches script. A behaviour publishes scene.events.emit(name, x); every
+//      behaviour and the Level that declare on<Name>(x) receive it (same bus, both tiers), the
+//      payload surviving as a Variant. A subscriber torn down is unsubscribed. The bus is native
+//      and backend-neutral, so each backend is checked on its own bus. ----
 
 TEST_CASE("script.scene: scene.events.emit reaches a sibling behavior AND the Level's "
           "on<Event>(payload) - both tiers, one bus")
@@ -3721,12 +3713,12 @@ TEST_CASE("script.scene: scene.events.emit reaches a sibling behavior AND the Le
     const scene::EntityHandle levelmark = bed.scene.CreateEntity(u8"levelmark");
 
     bed.Start();
-    bed.Frame(); // instantiate all; emitter.onUpdate emits; bus drains same frame -> both receive
-    bed.Frame(); // slack for any instantiation/subscription ordering
+    bed.Frame(); // instantiate all; emitter.onUpdate emits; the bus drains, both receive
+    bed.Frame(); // slack for any instantiation or subscription ordering
 
-    // The sibling behavior received on<Event>(payload) - payload 5 survived as a Variant.
+    // The sibling behavior received on<Event>(payload): payload 5 survived as a Variant.
     CHECK(bed.scene.GetEntityName(listener) == StringView(u8"got:5"));
-    // The Level received the SAME event on the SAME bus (P-B1 named inbox) - no GameManager entity.
+    // The Level received the same event on the same bus, with no GameManager entity.
     CHECK(bed.scene.GetEntityName(levelmark) == StringView(u8"level:5"));
 }
 
@@ -3827,7 +3819,7 @@ TEST_CASE("script.scene: LUAU scene.events.emit reaches a sibling behavior AND t
     const scene::EntityHandle levelmark = bed.scene.CreateEntity(u8"levelmark");
 
     bed.Start();
-    bed.Frame(); // instantiate all; emitter emits; bus drains same frame -> both receive
+    bed.Frame(); // instantiate all; the emitter emits; the bus drains, both receive
     bed.Frame(); // slack for subscription ordering
 
     CHECK(bed.scene.GetEntityName(listener) == StringView(u8"got5"));   // sibling behavior
@@ -3873,18 +3865,18 @@ TEST_CASE("script.scene: a destroyed subscriber stops receiving bus events; the 
     bed.scene.DestroyEntity(receiverEntity); // the only onBump subscriber is gone
     bed.Frame();
     bed.Frame();
-    // The counter is frozen: the destroyed subscriber no longer receives, and BroadcastEvent's
-    // per-behavior re-resolution simply finds nothing to deliver to (the system subscription is
-    // harmlessly inert). The emitter kept publishing without faulting.
+    // The counter is frozen: the destroyed subscriber receives nothing, and BroadcastEvent's
+    // per-behaviour re-resolution finds nothing to deliver to (the system subscription stays,
+    // harmless). The emitter kept publishing without faulting.
     CHECK(Near(bed.scene.GetLocalTransform(counter).position.x, whileAlive));
     ScriptComponent* emitterComp = bed.components->Get(emitterEntity);
     REQUIRE(emitterComp != nullptr);
     CHECK_FALSE(emitterComp->behaviors[0].faulted);
 }
 
-// The generic payload: a REFLECTED VALUE (here a live component handle from Gadget.of) rides the
-// bus as a Variant and the receiver reads its live field. Proves the emit(name, Variant) sink +
-// the ?&in / Variant-accepts-any overload path - the design's "reflected value" payload.
+// The generic payload: a reflected value (here a live component handle from Gadget.of) rides the
+// bus as a Variant and the receiver reads its live field. Covers the emit(name, Variant) sink and
+// the ?&in overload that accepts any Variant.
 TEST_CASE("script.scene: scene.events.emit carries a reflected component handle as the payload; "
           "the receiver reads its live field")
 {
@@ -3915,12 +3907,12 @@ TEST_CASE("script.scene: scene.events.emit carries a reflected component handle 
     gadgets->Add(consumerEntity).power = 1.0f; // overwritten from the payload's live field
 
     bed.Start();
-    bed.Frame(); // producer.onStart emits Gadget.of(producer); bus drains -> consumer.onConfigured
+    bed.Frame(); // producer.onStart emits Gadget.of(producer); the bus drains to consumer.onConfigured
     bed.Frame();
 
     REQUIRE(gadgets->Get(consumerEntity) != nullptr);
-    // The payload handle re-resolved to the producer's live Gadget (power 7) across the bus - a
-    // reflected VALUE survived as the event payload, and the receiver read its live field.
+    // The payload handle re-resolved to the producer's live Gadget (power 7) across the bus: a
+    // reflected value survived as the event payload, and the receiver read its live field.
     CHECK(gadgets->Get(consumerEntity)->power == doctest::Approx(7.0f));
 }
 
@@ -3936,7 +3928,7 @@ TEST_CASE("script.scene: an event's reflected value reaches a handler that takes
                   u8"    void onStart() { self.scene.events.emit(\"Spotted\", Float3(1.0f, 2.0f, 3.0f)); }\n"
                   u8"}\n",
                   {u8"onStart"});
-    // By value (`Float3 at`) once arrived null and faulted the behaviour; by handle always worked.
+    // The same Float3 payload reaches a handler taking it by value (`Float3 at`) and one taking a handle.
     RefPtr<ScriptClass> byValue =
         MakeClass(u8"ByValue",
                   u8"class ByValue {\n"
@@ -3965,9 +3957,9 @@ TEST_CASE("script.scene: an event's reflected value reaches a handler that takes
     CHECK(bed.scene.GetEntityName(b) == StringView(u8"seen"));
 }
 
-// ---- render surface: MeshComponent.of / LightComponent.of - a behavior reaches the real
-//      render components by type and mutates them live, exactly like the physics components. Pure-data
-//      props (visible/intensity/range/enabled); resource-ref swaps (mesh/material) are Phase 1b. ----
+// ---- Render surface: MeshComponent.of / LightComponent.of. A behaviour reaches the real render
+//      components by type and mutates them live, as with the physics components. Pure-data props
+//      (visible/intensity/range/enabled); resource swaps (mesh/material) go through SceneRender. ----
 
 TEST_CASE("script.scene: MeshComponent.of / LightComponent.of set live render props")
 {
@@ -4071,12 +4063,12 @@ TEST_CASE("script.scene: MeshComponent::of / LightComponent::of set live render 
     CHECK(lights->Get(e)->range == doctest::Approx(25.0f));
 }
 
-// ---- resource-swap primitive: SceneRender.of(scene).setMesh(entity, id) /
-//      setMaterial(entity, id) - a WORLD op keyed by entity (it needs the run's resource manager,
-//      which the component data cannot reach), so it lives on the scene-handle like ScenePhysics.
-//      The resource id (a Guid) reaches the behavior as an asset property (the "swap to the mesh I
-//      picked" pattern). Here no ResourceManager is wired, so the swap sets the id (the script->
-//      component path); Ref::Bind resolution is covered natively in the render resource-ref tests. ----
+// ---- The resource-swap primitive: SceneRender.of(scene).setMesh(entity, id) /
+//      setMaterial(entity, id). A world op keyed by entity (it needs the run's resource manager,
+//      which the component data cannot reach), so it lives on the scene handle like ScenePhysics.
+//      The resource id (a Guid) reaches the behaviour as an asset property ("swap to the mesh I
+//      picked"). No ResourceManager is wired here, so the swap sets the id (the script to component
+//      path); Ref::Bind resolution is covered natively in the render resource-ref tests. ----
 
 TEST_CASE("script.scene: SceneRender.setMesh / setMaterial swap a component's resource id from "
           "script")
@@ -4132,7 +4124,7 @@ TEST_CASE("script.scene: SceneRender.setMesh / setMaterial swap a component's re
     CHECK(meshes->Get(e)->mesh.id == meshId);          // mesh Ref id swapped from script
     REQUIRE_FALSE(meshes->Get(e)->materials.IsEmpty()); // slot 0 created
     CHECK(meshes->Get(e)->materials[0].id == matId);    // material slot-0 Ref id swapped
-    // Slot 2 by number (Sedulous's SetMaterial slot): the slots grew to reach it; -1 refused.
+    // Slot 2 by number: the slots grew to reach it; -1 refused.
     REQUIRE(meshes->Get(e)->materials.Size() == 3u);
     CHECK(meshes->Get(e)->materials[2].id == matId);
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"swapped"));
@@ -4294,7 +4286,7 @@ TEST_CASE("script.scene: SceneRender.setCameraTarget points a camera at a render
     bed.Frame(); // onStart: the camera now draws into the texture
     REQUIRE(cameras->Get(e) != nullptr);
     CHECK(cameras->Get(e)->target.id == textureId);
-    CHECK(cameras->Get(e)->HasTarget()); // never the screen camera now
+    CHECK(cameras->Get(e)->HasTarget()); // a target, so not the screen's camera
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"targeted"));
 
     bed.Frame();
@@ -4302,11 +4294,11 @@ TEST_CASE("script.scene: SceneRender.setCameraTarget points a camera at a render
     CHECK_FALSE(cameras->Get(e)->HasTarget());
 }
 
-// ---- audio surface: AudioSourceComponent.of (live volume/pitch/loop - DATA) +
-//      SceneAudio.of(scene) (play/stop/pause/isPlaying/setClip - WORLD ops keyed by entity, reaching
-//      the scene's AudioEngine). No engine is wired here (the ops are null-safe), so this proves the
-//      script surface + forwarding + the data/resource paths cross-backend; actual voice playback is
-//      covered natively in AudioSceneTests. ----
+// ---- Audio surface: AudioSourceComponent.of (live volume/pitch/loop, data) and
+//      SceneAudio.of(scene) (play/stop/pause/isPlaying/setClip, world ops keyed by entity that
+//      reach the scene's AudioEngine). No engine is wired here (the ops are null-safe), so this
+//      covers the script surface, forwarding and the data and resource paths on both backends;
+//      voice playback is covered natively in AudioSceneTests. ----
 
 TEST_CASE("script.scene: AudioSourceComponent.of props + SceneAudio.of play/stop/pause/setClip "
           "are bound and control the component")
@@ -4314,7 +4306,7 @@ TEST_CASE("script.scene: AudioSourceComponent.of props + SceneAudio.of play/stop
     engine::audio::RegisterAudioScriptFacade();
     ScriptedScene bed;
     auto* sources = bed.scene.AddSystem<engine::audio::AudioSourceComponentManager>();
-    (void)bed.scene.AddSystem<engine::audio::AudioSceneSystem>(); // no engine set -> ops are safe no-ops
+    (void)bed.scene.AddSystem<engine::audio::AudioSceneSystem>(); // no engine set: the ops are safe no-ops
 
     RefPtr<ScriptClass> tweaker =
         MakeClass(u8"AudioTweaker",
@@ -4360,7 +4352,7 @@ TEST_CASE("script.scene: AudioSourceComponent.of props + SceneAudio.of play/stop
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"silent")); // isPlaying() returned a bool
     ScriptComponent* comp = bed.components->Get(e);
     REQUIRE(comp != nullptr);
-    CHECK_FALSE(comp->behaviors[0].faulted); // play/stop/pause all bound + callable
+    CHECK_FALSE(comp->behaviors[0].faulted); // play/stop/pause all bound and callable
 }
 
 TEST_CASE("script.scene: AudioSourceComponent::of props + SceneAudio::of play/stop/setClip "
@@ -4414,8 +4406,8 @@ TEST_CASE("script.scene: Guid constructs from its canonical string in AngelScrip
     auto* sources = bed.scene.AddSystem<engine::audio::AudioSourceComponentManager>();
     (void)bed.scene.AddSystem<engine::audio::AudioSceneSystem>();
 
-    // Guid("...") replaces the Guid(high, low) hex-halves spelling scripts had to use when
-    // copying an id out of an .xasset. Malformed input yields Nil (checkable via IsNil).
+    // Guid("...") parses the canonical spelling, so an id copies straight out of an .xasset
+    // instead of being split into Guid(high, low) halves. Malformed input yields Nil (IsNil).
     RefPtr<ScriptClass> writer = MakeClassLang(
         u8"angelscript", u8"GuidWriter",
         u8"class GuidWriter {\n"
@@ -4472,11 +4464,10 @@ TEST_CASE("script.scene: Guid.new constructs from its canonical string in Luau")
     CHECK(Near(bed.scene.GetLocalTransform(bed.scene.FindEntityByName(u8"Turret")).position.y, 2.0f));
 }
 
-// An asset/resource (Guid) editor property applies to an AngelScript behavior when declared as a
-// HANDLE member (`Guid@ res;`) - the idiomatic AngelScript spelling for a reference type. (A plain
-// VALUE member is owned by AngelScript's lifecycle and can't take a native write; the runtime logs a
-// warning guiding the author to a handle - see WriteTypedAddress / SetMemberField.) This closes the
-// AngelScript/Luau parity gap for editor-picked resource properties.
+// An asset (Guid) editor property applies to an AngelScript behaviour when declared as a handle
+// member (`Guid@ res;`), the idiomatic AngelScript spelling for a reference type. A plain value
+// member is owned by AngelScript's lifecycle and cannot take a native write; the runtime logs a
+// warning pointing the author to a handle (see WriteTypedAddress / SetMemberField).
 TEST_CASE("script.scene: an asset (Guid) editor property applies to an AngelScript handle member")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
@@ -4485,7 +4476,7 @@ TEST_CASE("script.scene: an asset (Guid) editor property applies to an AngelScri
         u8"angelscript", u8"Holder",
         u8"class Holder {\n"
         u8"    private Entity@ self;\n"
-        u8"    Guid@ res;\n" // reflected/resource property -> a handle member
+        u8"    Guid@ res;\n" // a reflected or resource property is a handle member
         u8"    Holder(Entity@ entity) { @self = entity; }\n"
         u8"    void onStart() { if (res !is null && res.high == 0xEE55) self.setName(\"applied\"); }\n"
         u8"}\n",
@@ -4504,8 +4495,8 @@ TEST_CASE("script.scene: an asset (Guid) editor property applies to an AngelScri
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"applied")); // the Guid reached the handle member
 }
 
-// The rest of the render component set also reaches script via `.of` (all pure-data): Camera,
-// Sprite, Decal, InstancedMesh, ReflectionProbe. Spot-check Camera + Sprite from a behavior.
+// The rest of the render component set also reaches script through `.of` (all pure data): Camera,
+// Sprite, Decal, InstancedMesh, ReflectionProbe. Spot-check Camera and Sprite from a behaviour.
 TEST_CASE("script.scene: CameraComponent.of / SpriteComponent.of set live props")
 {
     engine::render::RegisterRenderScriptFacade();
@@ -4541,12 +4532,12 @@ TEST_CASE("script.scene: CameraComponent.of / SpriteComponent.of set live props"
     CHECK_FALSE(sprites->Get(e)->visible);
 }
 
-// ---- animation surface: SkeletalAnimationComponent.of / AnimationGraphComponent.of
-//      (live speed/autoPlay/active - DATA) + SceneAnimation.of(scene) (play/stop/pause + graph params
-//      setFloat/setBool/setTrigger + setClip - WORLD ops keyed by entity, reaching the manager-owned
-//      runtime player). No skeleton/graph is bound here, so the players are never built and the world
-//      ops are safe no-ops; this proves the surface + forwarding + data/resource paths cross-backend.
-//      Actual playback is covered natively in the animation tests. ----
+// ---- Animation surface: SkeletalAnimationComponent.of / AnimationGraphComponent.of (live
+//      speed/autoPlay/active, data) and SceneAnimation.of(scene) (play/stop/pause, graph params
+//      setFloat/setBool/setTrigger, and setClip: world ops keyed by entity that reach the
+//      manager-owned runtime player). No skeleton or graph is bound here, so the players are never
+//      built and the world ops are safe no-ops; this covers the surface, forwarding and the data and
+//      resource paths on both backends. Playback is covered natively in the animation tests. ----
 
 TEST_CASE("script.scene: SkeletalAnimation/AnimationGraph .of + SceneAnimation ops are bound and "
           "control the components")
@@ -4646,11 +4637,10 @@ TEST_CASE("script.scene: SkeletalAnimation::of + SceneAnimation ops are bound (A
     CHECK_FALSE(comp->behaviors[0].faulted);
 }
 
-// ---- render scene-systems: EnvironmentSettings.of(scene) / PostProcessSettings.of(
-//      scene) - a re-resolving handle over the scene's ONE-PER-SCENE render settings (owned by the
-//      EnvironmentSystem / PostProcessSystem). A behavior edits the live sky/ambient + exposure/bloom.
-//      Scene-scoped analogue of a component's `.of`. (No active-camera handle - that design is the
-//      user's to bless; the "first entity named Camera" convention stands.) ----
+// ---- Render scene systems: EnvironmentSettings.of(scene) / PostProcessSettings.of(scene), a
+//      re-resolving handle over the scene's one-per-scene render settings (owned by the
+//      EnvironmentSystem / PostProcessSystem). A behaviour edits the live sky and ambient, exposure
+//      and bloom: the scene-scoped analogue of a component's `.of`. ----
 
 TEST_CASE("script.scene: EnvironmentSettings.of / PostProcessSettings.of edit the scene's live "
           "render settings")
@@ -4681,7 +4671,7 @@ TEST_CASE("script.scene: EnvironmentSettings.of / PostProcessSettings.of edit th
     REQUIRE(envSys->Environment().ambientIntensity != doctest::Approx(0.75f));
 
     bed.Start();
-    bed.Frame(); // onStart edits the LIVE settings through the re-resolving handles
+    bed.Frame(); // onStart edits the live settings through the re-resolving handles
 
     CHECK(envSys->Environment().ambientIntensity == doctest::Approx(0.75f));
     CHECK(envSys->Environment().skyIntensity == doctest::Approx(2.0f));
@@ -4720,11 +4710,12 @@ TEST_CASE("script.scene: EnvironmentSettings::of / PostProcessSettings::of edit 
     CHECK(postSys->Post().exposureEV == doctest::Approx(1.5f));
 }
 
-// ---- particle surface: ParticleEffectComponent.of (live visible/meshScale/light*
-//      - DATA) + SceneParticles.of(scene) (play/stop/restart/pause/isPlaying + setEffect - WORLD ops
-//      keyed by entity, reaching the manager-owned runtime ParticleEffectInstance). No effect is
-//      attached here, so the instance is never built and the world ops are safe no-ops; this proves
-//      the surface + forwarding + data/resource paths cross-backend. Real sim is native. ----
+// ---- Particle surface: ParticleEffectComponent.of (live visible/meshScale/light*, data) and
+//      SceneParticles.of(scene) (play/stop/restart/pause/isPlaying and setEffect: world ops keyed
+//      by entity that reach the manager-owned runtime ParticleEffectInstance). No effect is attached
+//      here, so the instance is never built and the world ops are safe no-ops; this covers the
+//      surface, forwarding and the data and resource paths on both backends. The simulation is
+//      tested natively. ----
 
 TEST_CASE("script.scene: ParticleEffectComponent.of + SceneParticles.of ops are bound and control "
           "the component")
@@ -4776,7 +4767,7 @@ TEST_CASE("script.scene: ParticleEffectComponent.of + SceneParticles.of ops are 
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"idle"));    // isPlaying() returned a bool
     ScriptComponent* comp = bed.components->Get(e);
     REQUIRE(comp != nullptr);
-    CHECK_FALSE(comp->behaviors[0].faulted); // play/stop/restart/pause all bound + callable
+    CHECK_FALSE(comp->behaviors[0].faulted); // play/stop/restart/pause all bound and callable
 }
 
 TEST_CASE("script.scene: ParticleEffectComponent::of + SceneParticles::of ops are bound (AngelScript)")
@@ -4818,8 +4809,8 @@ TEST_CASE("script.scene: ParticleEffectComponent::of + SceneParticles::of ops ar
     CHECK_FALSE(comp->behaviors[0].faulted);
 }
 
-// Enum-typed component properties cross to script as their underlying int. LightComponent.type is a
-// LightType enum (Directional=0, Point=1, Spot=2). Proves the enum marshalling half.
+// Enum-typed component properties cross to script as their underlying int. LightComponent.type is
+// a LightType enum (Directional=0, Point=1, Spot=2).
 TEST_CASE("script.scene: an enum component property reads/writes as an int")
 {
     engine::render::RegisterRenderScriptFacade();
@@ -4845,10 +4836,10 @@ TEST_CASE("script.scene: an enum component property reads/writes as an int")
     bed.Frame();
 
     REQUIRE(lights->Get(e) != nullptr);
-    CHECK(lights->Get(e)->type == engine::render::LightType::Spot); // read (==0) + write (=2) both crossed
+    CHECK(lights->Get(e)->type == engine::render::LightType::Spot); // read (==0) and write (=2) both crossed
 }
 
-// AngelScript gets NATIVE enums (named). LightComponent.type is a LightType enum.
+// AngelScript gets native (named) enums. LightComponent.type is a LightType enum.
 TEST_CASE("script.scene: an enum component property reads/writes as a native enum in AngelScript")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
@@ -4875,13 +4866,13 @@ TEST_CASE("script.scene: an enum component property reads/writes as a native enu
     bed.Frame();
 
     REQUIRE(lights->Get(e) != nullptr);
-    CHECK(lights->Get(e)->type == engine::render::LightType::Spot); // named-enum read + write crossed
+    CHECK(lights->Get(e)->type == engine::render::LightType::Spot); // named-enum read and write crossed
 }
 
-// ---- net surface: NetworkComponent.of - authority (an enum) for authority-gated gameplay.
-//      Replication owns the identity: a script READS authority and id, assigns neither
-//      (the property flag is pinned in Net.Replication.Tests, the missing setter in
-//      Script.AngelScript.Tests; here, the gate works and the assignment never starts).
+// ---- Net surface: NetworkComponent.of, authority (an enum) for authority-gated gameplay.
+//      Replication owns the identity: a script reads authority and id and assigns neither (the
+//      property flag is pinned in Net.Replication.Tests, the missing setter in
+//      Script.AngelScript.Tests; here, the gate works and the assignment never runs).
 TEST_CASE("script.scene: NetworkComponent.of exposes replication authority - AngelScript (named enum)")
 {
     foundation::script::angelscript::RegisterAngelScriptBackend();
@@ -4988,9 +4979,9 @@ TEST_CASE("script.scene: NetworkComponent.of authority crosses as an int")
     CHECK(net->Get(e)->authority == foundation::net::NetworkAuthority::Server); // read, untouched
 }
 
-// The entity's identity, its local transform by value and the hierarchy (Sedulous's Entity): a
-// behaviour walks its children, reorders and reparents them, and moves one by Float3 and
-// Quaternion. Shared by both backends; each script writes the same outcome.
+// The entity's identity, its local transform by value and the hierarchy: a behaviour walks its
+// children, reorders and reparents them, and moves one by Float3 and Quaternion. Shared by both
+// backends; each script writes the same outcome.
 namespace
 {
     void CheckEntityHierarchyScript(StringView language, StringView className, StringView source)
@@ -5082,8 +5073,8 @@ TEST_CASE("script.scene: a Luau behaviour walks, reorders and reparents its chil
         u8"end\n");
 }
 
-// ScenePrefabs.of(scene) (Sedulous's scene.Prefabs): a prefab by asset id at a Float3, turned by a
-// Quaternion, under a parent. Both backends spawn the same Turret the same way.
+// ScenePrefabs.of(scene): a prefab by asset id at a Float3, turned by a Quaternion, under a
+// parent. Both backends spawn the same Turret the same way.
 namespace
 {
     void CheckScenePrefabsScript(StringView language, StringView className, StringView prefix,
@@ -5165,9 +5156,9 @@ TEST_CASE("script.scene: ScenePrefabs spawns by asset id at a position, turned, 
         u8"end\n");
 }
 
-// SceneScripts.of(scene) (Sedulous's scene.Scripts): the scene's script time, send to another
-// entity's behaviours, emit on the scene's bus, and a behaviour added by class id - queued after the
-// tick and present on the entity next frame; a nil id is refused.
+// SceneScripts.of(scene): the scene's script time, send to another entity's behaviours, emit on
+// the scene's bus, and a behaviour added by class id (queued after the tick and present on the
+// entity next frame; a nil id is refused).
 namespace
 {
     void CheckSceneScriptsScript(StringView language, StringView bossSource, StringView receiverSource)
@@ -5270,8 +5261,8 @@ TEST_CASE("script.scene: SceneScripts gives the scene's script time, sends, emit
         u8"end\n");
 }
 
-// The scene makes, ends and finds entities by id, and names itself; Random restarts from a seed
-// (Sedulous's Scene and Random). The script checks what it can, the test the rest.
+// The scene makes, ends and finds entities by id, and names itself; Random restarts from a seed.
+// The script checks what it can, the test the rest.
 namespace
 {
     void CheckSceneEntitiesScript(StringView language, StringView source)
@@ -5356,9 +5347,9 @@ TEST_CASE("script.scene: a behaviour makes, ends and finds entities by id; Rando
         u8"end\n");
 }
 
-// ScenePhysics in Sedulous's Float3 forms: a ray down onto a body (and the material it is made of),
-// the overlap set by a center, an impulse by a Float3, gravity by a Float3. Both backends act the
-// same way.
+// ScenePhysics in its Float3 forms: a ray down onto a body (and the material it is made of), the
+// overlap set by a center, an impulse by a Float3, gravity by a Float3. Both backends act the same
+// way.
 namespace
 {
     void CheckPhysicsFloat3Script(StringView language, StringView className, StringView source)
@@ -5474,8 +5465,8 @@ TEST_CASE("script.scene: ScenePhysics drives an entity's character, as Sedulous'
     CHECK(bed.scene.GetEntityName(e) == StringView(u8"airborne"));
 }
 
-// DebugDraw in Sedulous's forms: points by Float3, a Color, overlay, a wire box, screen text. On the
-// real render service the depth-tested and the overlay draws land in their own lists.
+// DebugDraw in its Float3 and Color forms: points by Float3, a Color, overlay, a wire box, screen
+// text. On the real render service the depth-tested and the overlay draws land in their own lists.
 TEST_CASE("script.scene: DebugDraw draws by Float3 and Color, over the scene with overlay, and "
           "on screen")
 {

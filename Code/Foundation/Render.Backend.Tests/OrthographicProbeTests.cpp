@@ -3,17 +3,17 @@
 
 // Ambient occlusion, TAA, SSR and SSGI under an orthographic camera, proven at the pixel on real Vulkan and
 // WebGPU devices through the full RenderFrame chain (structural assertions, no golden images).
-// Each once assumed a perspective eye (a divide by view depth, a view vector to the eye, a
-// perspective depth linearization or march), so an orthographic view ran without them
-// (Specs/orthographic-views.md).
+// Each is easy to write for a perspective eye only (a divide by view depth, a view vector to the
+// eye, a perspective depth linearization or march), so these probes check an orthographic view
+// gets the same result.
 //  - AO: an inside corner seen through an orthographic camera takes the occlusion a nearly
 //    orthographic perspective view of it takes, GTAO and SSAO both.
 //  - SSR and SSGI: a mirror floor's reflection and a corner's bounce, as a nearly orthographic
 //    perspective view of them shows.
 //  - TAA: a still orthographic view settles on what it shows without TAA, its slanted edge
-//    antialiased and nothing else changed: the jitter in the row
-//    an orthographic projection needs (a constant shift, not one that grows with depth) and its
-//    linear depth in the disocclusion test.
+//    antialiased and nothing else changed: the jitter in the row an orthographic projection needs
+//    (a constant shift, not one that grows with depth) and its linear depth in the disocclusion
+//    test.
 // Cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
 //   OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 ./Render.Backend.Tests
 #include <doctest/doctest.h>
@@ -314,9 +314,9 @@ namespace
     }
 
     // The orthographic view against a perspective one that is nearly orthographic (the same 4 m
-    // across at the edge, seen from 30 m: 7.6 degrees): the same occlusion. Before, the passes
-    // divided an orthographic view's x and y by its 30 m depth, and their samples landed in the
-    // wrong place (SSAO) or a pixel away (GTAO's radius).
+    // across at the edge, seen from 30 m: 7.6 degrees): the same occlusion. Passes that divide an
+    // orthographic view's x and y by its 30 m depth put their samples in the wrong place (SSAO) or a
+    // pixel away (GTAO's radius).
     void ProbeAo(rhi::Device& device, const char* backend, AoMode mode, const char* name)
     {
         CAPTURE(backend);
@@ -328,17 +328,16 @@ namespace
                                          << ortho.open << " (perspective " << reference.open << ")");
         REQUIRE(ortho.edgeOff > 100.0f); // the walls are where we look
         CHECK(ortho.edge < 0.99f);       // the corner occludes itself
-        // Tight: the right projection matches to a few thousandths; SSAO with its orthographic
-        // flag off came within 0.02, so a looser band let that regression through (Sedulous
-        // found it in their port).
+        // Tight: the right projection matches to a few thousandths, while SSAO with its orthographic
+        // flag off comes within 0.02, so a looser band would let that regression through.
         CHECK(Abs(ortho.edge - reference.edge) < 0.005f);
         CHECK(Abs(ortho.open - reference.open) < 0.06f);
     }
 
     // The red down the pillar's columns with SSR off and on: the reflection mirrors the pillar about
     // the floor, adding about as much again, as it does in the nearly orthographic perspective view.
-    // Before, the march divided an orthographic view's x and y by its depth and stepped 1/depth along
-    // a ray whose depth is linear on screen.
+    // A march that divides an orthographic view's x and y by its depth, and steps 1/depth along a ray
+    // whose depth is linear on screen, misses it.
     void ProbeSsr(rhi::Device& device, const char* backend)
     {
         CAPTURE(backend);
@@ -418,8 +417,8 @@ namespace
                                          << ", pixels lost " << lost);
         CHECK(lost == 0u);
         // The jittered samples average back to the still image but for the slanted edge, which
-        // they antialias (so TAA ran). A jitter that grew with depth (row 2 under orthographic, 30 m
-        // back: thirty times the shift) smeared the edge over many pixels.
+        // they antialias (so TAA ran). A jitter that grows with depth (row 2 under orthographic, 30 m
+        // back: thirty times the shift) would smear the edge over many pixels.
         CHECK(meanDiff > 0.1f);
         CHECK(meanDiff < 4.0f);
     }

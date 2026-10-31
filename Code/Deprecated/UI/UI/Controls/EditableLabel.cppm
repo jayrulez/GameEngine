@@ -4,14 +4,11 @@
 // UI - :editable_label partition
 //
 // Displays as a plain text label and switches to an editable field on BeginEdit() (double-click or
-// slow-click). Extends EditText for cursor/selection/clipboard in edit mode. Ported from
-// Sedulous.UI/src/Controls/EditableLabel.bf.
+// slow-click). Extends EditText for cursor, selection and clipboard in edit mode.
 //
-// In label mode: read-only, not focusable, draws plain (optionally ellipsized) text. In edit mode:
-// editable, focusable, draws EditText's text content + accent border. Port taxes: Beef `new SetText`
-// (hiding) -> a same-named method calling EditText::SetText; `newText.IsWhiteSpace`/Length==0 ->
-// core::Trimmed(newText).IsEmpty(); ValidateRename delegate -> Function<bool(StringView)>; Text.RawChars
-// ellipsis loop -> byte-tracked codepoint decode. EditText::DrawTextContent is protected for reuse here.
+// In label mode it is read-only and not focusable, and draws plain (optionally ellipsized) text. In
+// edit mode it is editable and focusable, and draws EditText's text content with an accent border.
+// SetText hides EditText::SetText; EditText::DrawTextContent is protected for reuse here.
 
 module;
 #include "Core/Prelude.h"
@@ -79,8 +76,8 @@ export namespace foundation::ui
 
         [[nodiscard]] bool IsEditing() const noexcept { return m_isEditing; }
 
-        /// Its text where it draws it (past TextOffsetX), and a little room after: an editable label
-        /// measures to fill, so its width says nothing of how long its text is.
+        /// The width of its text where it draws it (past TextOffsetX), plus a little room after. An
+        /// editable label measures to fill, so its laid-out width says nothing of how long its text is.
         [[nodiscard]] f32 NaturalWidth(f32 height) override
         {
             (void)height;
@@ -141,7 +138,7 @@ export namespace foundation::ui
             }
             const StringView newText = Text();
 
-            // Debug-log the rejection paths - a silently-cancelled commit looks like "nothing
+            // Debug-log the rejection paths: a silently cancelled commit looks like "nothing
             // happened" from the outside.
             if (Trimmed(newText).IsEmpty())
             {
@@ -188,7 +185,7 @@ export namespace foundation::ui
 
         void OnFocusLost() override
         {
-            // Don't commit if focus was pushed to the stack for a popup.
+            // Do not commit if focus was pushed to the stack for a popup.
             if (m_isEditing && Context != nullptr &&
                 Context->GetFocusManager()->FocusStackDepth() == 0)
             {
@@ -198,7 +195,7 @@ export namespace foundation::ui
             EditText::OnFocusLost();
         }
 
-        // Keyboard Return commits via OnKeyDown (dispatch-first); this covers the OTHER
+        // Keyboard Return commits via OnKeyDown (dispatch-first); this covers the other
         // activation sources (gamepad A, programmatic activate) with the same commit semantics.
         void OnActivate() override
         {
@@ -231,7 +228,7 @@ export namespace foundation::ui
                 EditText::OnKeyDown(e);
                 return;
             }
-            // Not editing - don't handle keys.
+            // Not editing: do not handle keys.
         }
 
         void OnMouseDown(MouseEventArgs& e) override
@@ -270,7 +267,7 @@ export namespace foundation::ui
                 m_wasClickedOnce = true;
                 m_lastClickTime = now;
             }
-            // Don't set e.Handled - let the parent handle selection.
+            // Do not set e.Handled; let the parent handle selection.
         }
 
         void OnDraw(UIDrawContext& ctx) override

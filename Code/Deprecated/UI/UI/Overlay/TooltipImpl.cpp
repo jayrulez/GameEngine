@@ -6,7 +6,7 @@
 // Holds the View-touching bodies of TooltipManager (it reaches across the whole View cluster: UIContext,
 // RootView, PopupLayer, TooltipView, ITooltipProvider, Label). Like InputImpl.cpp / UIClusterImpl.cpp it
 // lives in an implementation unit outside the interface-partition dependency graph, so :tooltip_manager
-// only forward-declares the view types. Ported from Sedulous.UI/src/Overlay/TooltipManager.bf.
+// only forward-declares the view types.
 
 module;
 #include "Core/Prelude.h"
@@ -25,8 +25,8 @@ namespace foundation::ui
     TooltipManager::~TooltipManager()
     {
         // During destruction the PopupLayer may already be freed. The TooltipView was shown with
-        // ownsView:false, so nothing else deletes it; null Parent/Context so the RefPtr drop below does
-        // not touch freed objects (matches the Beef destructor's manual detach).
+        // ownsView:false, so nothing else deletes it; clear its Parent and Context so the RefPtr drop
+        // below does not touch freed objects.
         if (m_tooltipView)
         {
             m_tooltipView->Parent = nullptr;
@@ -34,11 +34,11 @@ namespace foundation::ui
         }
     }
 
-    // The tooltip OWNER for a hovered view: the view itself or its nearest ancestor with
-    // tooltip content (provider or text). Hit-testing returns the LEAF under the cursor, so
-    // a container carrying one tooltip for all its children (e.g. an inspector property row)
-    // would otherwise never show it; resolution also keeps the timer alive while hover moves
-    // between children of the same owner.
+    // The tooltip owner for a hovered view: the view itself or its nearest ancestor with
+    // tooltip content (a provider or text). Hit-testing returns the leaf under the cursor, so
+    // a container carrying one tooltip for all its children (an inspector property row, say)
+    // would otherwise never show it. Resolving the owner also keeps the timer running while
+    // hover moves between children of the same owner.
     static View* ResolveTooltipOwner(View* view)
     {
         for (View* v = view; v != nullptr; v = v->Parent)
@@ -53,8 +53,8 @@ namespace foundation::ui
 
     void TooltipManager::OnHoverChanged(View* newTarget)
     {
-        // Hover onto the tooltip itself never dismisses (checked on the RAW view - the
-        // tooltip's own content carries no TooltipText).
+        // Hovering onto the tooltip itself never dismisses it. This checks the raw view, since
+        // the tooltip's own content carries no TooltipText.
         if (m_showing && newTarget != nullptr && IsTooltipOrDescendant(newTarget))
         {
             return;
@@ -104,7 +104,7 @@ namespace foundation::ui
                 else
                 {
                     m_hoverTarget = ViewId::Invalid;
-                } // View was deleted
+                } // the view was deleted
             }
         }
         else
@@ -151,14 +151,13 @@ namespace foundation::ui
         }
 
         m_interactive = target->IsTooltipInteractive;
-        // Hit-test visibility is SELF-only (the tool-float layers rely on that), so it alone
-        // left the tooltip's CONTENT catching the pointer between the cursor and the thing
-        // described. Interaction takes out the whole subtree: an ordinary tooltip is
-        // pass-through, an interactive one is a real target.
+        // Hit-test visibility applies to the view alone (the tool-float layers rely on that), so
+        // it would leave the tooltip's content catching the pointer between the cursor and the
+        // thing described. Interaction covers the whole subtree: an ordinary tooltip passes the
+        // pointer through, and an interactive one is a real target.
         m_tooltipView->IsHitTestVisible = m_interactive;
         m_tooltipView->IsInteractionEnabled = m_interactive;
 
-        // Get the popup layer from the active root.
         RootView* root = m_context->ActiveInputRoot();
         if (root == nullptr)
         {
@@ -166,15 +165,15 @@ namespace foundation::ui
         }
         PopupLayer* popupLayer = root->GetPopupLayer();
 
-        // Show at (0,0) first so the tooltip gets context-attached (needed for measurement).
-        // closeOnClickOutside=false, modal=false, ownsView=false, takesFocus=false -
-        // a tooltip must NEVER disturb the focused view (typing, completion popups).
+        // Show at (0,0) first so the tooltip is attached to the context, which measurement needs.
+        // closeOnClickOutside=false, modal=false, ownsView=false, takesFocus=false: a tooltip
+        // leaves the focused view alone (typing, completion popups).
         popupLayer->ShowPopup(m_tooltipView.Get(), nullptr, 0, 0, false, false, false,
                               false);
         m_showing = true;
         m_showTime = 0;
 
-        // Measure then reposition.
+        // Measure, then reposition.
         const Float2 logical = root->LogicalSize();
         const BoxConstraints layerConstraints = BoxConstraints::Loose(logical.x, logical.y);
         m_tooltipView->Measure(layerConstraints);

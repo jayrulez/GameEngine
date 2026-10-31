@@ -4,7 +4,6 @@
 // UI - :style_property partition
 //
 // Identifies a style property settable in a StyleRule. COUNT sizes property arrays.
-// Ported from Sedulous.UI/src/Styling/StyleProperty.bf.
 
 export module foundation.ui:style_property;
 
@@ -47,7 +46,7 @@ export namespace foundation::ui
         // Bool properties
         WordWrap,
 
-        // === P2 box model (appended: the parser's range predicates depend on the order above) ===
+        // === Box model (appended: the parser's range predicates depend on the order above) ===
         /// `box-shadow: x y blur spread color [inset]` (a Shadow value).
         BoxShadow,
         // Length properties feeding LayoutStyle (see View::RefreshEffectiveLayout).
@@ -71,11 +70,11 @@ export namespace foundation::ui
         /// `start` | `end` | `center` | `stretch` | `baseline`.
         AlignSelf,
 
-        // === P3 transitions ===
+        // === Transitions ===
         /// `transition: <property|all> <duration> [<easing>] [<delay>], ...` | `none`.
         Transition,
 
-        // === P4 wrap / gap / ellipsis ===
+        // === Wrap, gap and ellipsis ===
         /// Length feeding LayoutStyle::FlexBasis.
         FlexBasis,
         /// `clip` | `ellipsis` (single-line text views truncate with the font's ellipsis).
@@ -90,14 +89,14 @@ export namespace foundation::ui
         /// the view blurred inside its corners, under its own background. Only the blur is drawn.
         BackdropFilter,
 
-        // === Text effects (F4: VG TextEffects, drawn under text) ===
+        // === Text effects (VG TextEffects, drawn under the text) ===
         // A Shadow value each. They carry to what the view draws and its children, as CSS's
         // text-shadow does, through the VG's state rather than the cascade; `none` turns one off.
         /// `text-shadow: <x> <y> [blur] [color]`.
         TextShadow,
-        /// `text-outline: <width> [color]` (the width rides as the shadow's spread).
+        /// `text-outline: <width> [color]` (the width is stored as the shadow's spread).
         TextOutline,
-        /// `text-glow: <radius> [color]` (the radius rides as the shadow's blur).
+        /// `text-glow: <radius> [color]` (the radius is stored as the shadow's blur).
         TextGlow,
 
         // === Motion ===
@@ -118,8 +117,8 @@ export namespace foundation::ui
     };
 
     /// Properties whose change never moves geometry: a transition on one of these marks
-    /// redraw damage per frame, the others mark layout damage (the property's kind decides,
-    /// never the rule's - see the spec's layout-gate gotcha).
+    /// redraw damage per frame, and on any other marks layout damage. The property's kind
+    /// decides, not the rule it came from.
     [[nodiscard]] constexpr bool IsVisualOnlyStyleProperty(StyleProperty prop) noexcept
     {
         switch (prop)

@@ -3,11 +3,11 @@
 
 // Editor Audio - :thumbnail_generator partition
 //
-// The audio-domain thumbnail generator: a waveform strip. Prepare (main thread) reads the
-// clip's encoded source bytes from the Sources/ mount; Generate (light worker) buckets peak
-// magnitudes per column via the engine-free decode helper (streams in chunks - full-PCM
-// decode of a long clip would balloon) and draws symmetric bars in the clip page's teal over
-// the tile ground.
+// The audio thumbnail generator: a waveform strip. Prepare (main thread) opens the clip's encoded
+// source bytes from the Sources/ mount; Generate (light worker) buckets peak magnitudes per column
+// with the engine-free decode helper, which streams in chunks because decoding a long clip to full
+// PCM would take too much memory, and draws symmetric bars in the clip page's teal over the tile
+// background.
 
 module;
 #include "Core/Prelude.h"
@@ -98,7 +98,7 @@ export namespace editor
         }
     };
 
-    /// Registered by RegisterAudioClipEditor (the domain's one composition entry point).
+    /// Registered by RegisterAudioClipEditor, the domain's single composition entry point.
     inline void RegisterAudioThumbnailGenerator(editor::ThumbnailService& service)
     {
         service.RegisterGenerator(MakeUnique<AudioClipThumbnailGenerator>(editor::EditorRootAllocator()));

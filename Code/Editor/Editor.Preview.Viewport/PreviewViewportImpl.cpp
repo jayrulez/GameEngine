@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// PreviewViewport implementation (see PreviewViewport.cppm). The bodies here are the
-// substrate each bespoke page would otherwise hand-roll verbatim: build a private preview
-// scene, drive the EditorCamera from the viewport's own input, and render the scene through
-// the real renderer with a CameraOverride into the viewport's color target.
+// PreviewViewport implementation (see PreviewViewport.cppm). The bodies here do what each bespoke
+// page would otherwise write by hand: build a private preview scene, drive the EditorCamera from
+// the viewport's own input, and render the scene through the real renderer with a CameraOverride
+// into the viewport's color target.
 //
-// All the heavy render/scene/rhi imports live HERE, behind Impl, so the module interface can be
-// imported by heavy page TUs without the GCC module-merge ICE.
+// All the heavy render, scene and RHI imports live here, behind Impl, so heavy page translation
+// units can import the module interface without hitting GCC's module-merge crash.
 
 module;
 #include "Core/Prelude.h"
@@ -42,7 +42,7 @@ namespace editor
         engine::scene::SceneSubsystem* scenes = nullptr;
         explicit Impl(IAllocator& allocator) : sceneManager(allocator) {}
 
-        scene::SceneManager sceneManager; // this preview's OWN scene group
+        scene::SceneManager sceneManager; // this preview's own scene group
         engine::render::RenderSubsystem* render = nullptr;
         scene::Scene* scene = nullptr;
         EditorCamera camera = PreviewCamera();
@@ -58,8 +58,8 @@ namespace editor
             return c;
         }
 
-        // Its content has the input: hovered, focused, or holding a press (a look drag, its
-        // pointer locked and hidden, may drift off it).
+        // Its content has the input while hovered, focused, or holding a press (during a look drag
+        // the pointer is locked and hidden and may drift off it).
         [[nodiscard]] bool IsActive() const
         {
             const foundation::shell::InputSurface* surface = view->HostedSurface();
@@ -170,7 +170,7 @@ namespace editor
         {
             foundation::shell::IKeyboard* keyboard = m_impl->Keyboard();
             m_impl->camera.Update(keyboard, view.Mouse(), dt);
-            // An orbit, look or pan drag: the pointer locked meanwhile, ended with the press.
+            // An orbit, look or pan drag locks the pointer until the press ends.
             if (surface != nullptr)
                 surface->SetPointerLock(m_impl->camera.WantsPointerLock());
             // F frames, as the scene view's does (not while the camera flies on WASD).
@@ -183,7 +183,7 @@ namespace editor
             if (surface != nullptr)
                 surface->SetPointerLock(false);
         }
-        m_impl->camera.Advance(dt); // a framing glides on either way
+        m_impl->camera.Advance(dt); // a framing keeps gliding either way
         return frame;
     }
 

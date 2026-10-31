@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - scrolling: the ScrollBar control, and any node that scrolls (overflow: scroll or auto, E2
-// of Specs/gui-lab-evolution.md): its range over the laid-out content, the content moving without a
-// new layout, the wheel, the keys while focused, its bars (drag, page, over the content), a focused
+// GUI - scrolling: the ScrollBar control, and any node that scrolls (overflow: scroll or auto).
+// Covers its range over the laid-out content, the content moving without a new layout, the wheel,
+// the keys while it is focused, its bars (dragging, paging, drawn over the content), a focused
 // descendant brought into view, and the extent following the content.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -84,7 +84,7 @@ TEST_CASE("scrollbar: drag keeps tracking after the cursor leaves it (capture + 
     CHECK(sb->IsHovered());
     d->InjectMouseDown(core::Float2{8.0f, 10.0f}, MouseButton::Left);
 
-    // Drag well past the bottom edge -> the value saturates at the end (still tracking after leave).
+    // Drag well past the bottom edge: the value saturates at the end (still tracking after leave).
     d->InjectMouseMove(core::Float2{8.0f, 500.0f});
     CHECK_FALSE(sb->IsHovered());
     CHECK(sb->GetValue() == doctest::Approx(100.0));
@@ -124,7 +124,7 @@ TEST_CASE("scrollbar: clicking the track pages toward the click")
     root->AddChild(sb.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Click below the thumb (y=150) -> page down by one page.
+    // Click below the thumb (y=150): a page down.
     d->InjectMouseDown(core::Float2{8.0f, 150.0f}, MouseButton::Left);
     CHECK(sb->GetValue() == doctest::Approx(50.0));
     d->InjectMouseUp(core::Float2{8.0f, 150.0f}, MouseButton::Left);
@@ -142,10 +142,10 @@ TEST_CASE("scrollbar: grabbing the thumb drags by cursor delta (no jump-to-cente
     root->AddChild(sb.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Grab the thumb at y=40 (inside [0,100]); pressing there must NOT move the value.
+    // Grab the thumb at y=40 (inside [0,100]); pressing there must not move the value.
     d->InjectMouseDown(core::Float2{8.0f, 40.0f}, MouseButton::Left);
     CHECK(sb->GetValue() == doctest::Approx(0.0));
-    // Move the cursor down 20px -> thumb moves 20px -> a fifth of the travel: 20 of the 100 it can go.
+    // Move the cursor down 20px: the thumb moves 20px, a fifth of the travel (20 of the 100 it can go).
     d->InjectMouseMove(core::Float2{8.0f, 60.0f});
     CHECK(sb->GetValue() == doctest::Approx(20.0));
 }
@@ -175,7 +175,7 @@ TEST_CASE("scroll: the wheel scrolls it from the content; keys scroll it only wh
     s.D().SetFocusNode(s.rows[0].Get());
     const f32 before = s.view->GetScrollOffset().y;
     s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown));
-    CHECK(s.view->GetScrollOffset().y == doctest::Approx(before)); // the row's key, left to navigation
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(before)); // the row's key, which is left to navigation
     s.D().SetFocusNode(s.view.Get());
     CHECK(s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::End)));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
@@ -186,7 +186,7 @@ TEST_CASE("scroll: the wheel over a disabled control inside scrolls its scroller
 {
     Scroller s;
     for (const core::RefPtr<Panel>& row : s.rows)
-        row->SetEnabled(false); // a list of cards, these disabled
+        row->SetEnabled(false); // a list of cards, all of them disabled
     CHECK(s.D().InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f}));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(s.view->GetScrollStep()));
     CHECK(s.D().InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f}));
@@ -217,10 +217,10 @@ TEST_CASE("scroll: its bar lies over the content; the thumb drags, the track pag
     (void)s.rows[0]->AddEventListener(EventType::MouseDown, [&](const Event&) { ++rowPresses; });
     const core::Float2 grab{96.0f, thumb.y + 5.0f};
     s.D().InjectMouseDown(grab, MouseButton::Left);
-    CHECK(rowPresses == 0); // the bar's, not the row's under it
+    CHECK(rowPresses == 0); // the press goes to the bar, not to the row under it
     CHECK(s.D().GetPointerCapture() == s.view.Get());
     s.D().InjectMouseMove(core::Float2{96.0f, grab.y + (100.0f - thumb.height) * 0.5f});
-    CHECK(s.view->GetScrollOffset().y == doctest::Approx(100.0f)); // half the travel: half the range
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(100.0f)); // half the travel gives half the range
     s.D().InjectMouseUp(core::Float2{96.0f, 90.0f}, MouseButton::Left);
     s.view->SetScrollOffset(core::Float2{0.0f, 0.0f});
     s.D().InjectMouseDown(core::Float2{96.0f, 90.0f}, MouseButton::Left); // the track below the thumb
@@ -233,7 +233,7 @@ TEST_CASE("scroll: a focused descendant comes into view, by the least that shows
     Scroller s;
     s.D().SetFocusNode(s.rows[4].Get()); // y 200..250
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(150.0f));
-    s.D().SetFocusNode(s.rows[1].Get()); // y 50..100: above the view now
+    s.D().SetFocusNode(s.rows[1].Get()); // y 50..100, which is above the view now
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(50.0f));
 }
 
@@ -296,13 +296,13 @@ TEST_CASE("scroll: the handle scrolls to an offset, to the end, and a descendant
     s.view->ScrollIntoView(*s.rows[4], ScrollAlign::Start); // row 4 at 200
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f));
     s.root->UpdateLayout();
-    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::End); // its bottom (250) at the view's
+    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::End); // its bottom (250) at the view's bottom
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(150.0f));
     s.root->UpdateLayout();
-    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::Center); // its middle (225) at the view's
+    s.view->ScrollIntoView(*s.rows[4], ScrollAlign::Center); // its middle (225) at the view's middle
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(175.0f));
     s.root->UpdateLayout();
-    s.view->ScrollIntoView(*s.rows[4]); // already shown: no move
+    s.view->ScrollIntoView(*s.rows[4]); // already shown, so no move
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(175.0f));
 }
 
@@ -329,7 +329,7 @@ TEST_CASE("scroll: a smooth scroll eases there on the GUI's clock, and wheel not
     s.D().InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f});
     CHECK(s.view->GetScrollTarget().y == doctest::Approx(80.0f));
     CHECK(s.view->GetScrollOffset().y < 80.0f);
-    // An instant scroll ends the easing where it puts it.
+    // An instant scroll ends the easing at the position it sets.
     s.view->SetScrollOffset(core::Float2{0.0f, 10.0f});
     CHECK_FALSE(s.view->IsSmoothScrolling());
     gui.Update(core::Duration::FromSeconds(0.5));
@@ -360,7 +360,7 @@ TEST_CASE("scroll: Shift turns the wheel across, and a scroller that only scroll
     d.InjectMouseWheel(core::Float2{50.0f, 20.0f}, core::Float2{0.0f, -1.0f}); // a vertical notch
     CHECK(strip->GetScrollOffset().x == doctest::Approx(40.0f));
 
-    Scroller s; // both axes may scroll; Shift and a vertical notch go across, and there is no room
+    Scroller s; // both axes may scroll; Shift with a vertical notch goes across, and there is no room
     s.view->EditLayoutStyle([](LayoutStyle& st) { st.OverflowX = Overflow::Auto; });
     auto wide = Make<Panel>();
     wide->EditLayoutStyle([](LayoutStyle& st) { st.Width = LayoutLength::Px(300.0f); st.Height = LayoutLength::Px(10.0f); });
@@ -397,13 +397,13 @@ TEST_CASE("scroll: at its end a scroller passes the wheel on, unless it contains
 
     inner->SetScrollOffset(core::Float2{0.0f, 50.0f}); // at its end
     d.InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f});
-    CHECK(outer->GetScrollOffset().y == doctest::Approx(40.0f)); // passed on
+    CHECK(outer->GetScrollOffset().y == doctest::Approx(40.0f)); // the wheel is passed on to the outer scroller
 
     outer->SetScrollOffset(core::Float2{0.0f, 0.0f});
     inner->EditLayoutStyle([](LayoutStyle& st) { st.Overscroll = OverscrollBehavior::Contain; });
     root->UpdateLayout();
     CHECK(d.InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -1.0f}));
-    CHECK(outer->GetScrollOffset().y == doctest::Approx(0.0f)); // kept
+    CHECK(outer->GetScrollOffset().y == doctest::Approx(0.0f)); // the outer scroller keeps its offset
 }
 
 TEST_CASE("scroll: a sheet sets scroll-behavior and overscroll-behavior")
@@ -491,12 +491,12 @@ TEST_CASE("scroll: overlay bars show while it scrolls or is hovered, then fade")
     gui.Update(core::Duration::FromSeconds(0.5));
     CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(0.0f));
 
-    // Hovered, it shows and stays.
+    // When hovered, the bar shows and stays.
     s.D().InjectMouseMove(core::Float2{50.0f, 50.0f});
     gui.Update(core::Duration::FromSeconds(2.0));
     CHECK(s.view->GetScrollbarOpacity() == doctest::Approx(1.0f));
 
-    // A sheet chooses it, and the width.
+    // A sheet chooses the bar's behaviour and width.
     Scroller t;
     t.view->AddClass(core::StringView(u8"slim"));
     StyleManager styles(CSSParser::Parse(core::StringView(u8".slim { scrollbar-width: thin; scrollbar-visibility: overlay; }")));
@@ -507,8 +507,8 @@ TEST_CASE("scroll: overlay bars show while it scrolls or is hovered, then fade")
 
 namespace
 {
-    // The fixture's rows are their content's width (none) in a scroller on both axes; a finger
-    // test needs them under it.
+    // In a scroller on both axes, the fixture's rows are as wide as their content, which is
+    // nothing; a finger test needs them under the finger.
     void WidenRows(Scroller& s)
     {
         for (auto& row : s.rows)
@@ -533,13 +533,13 @@ TEST_CASE("scroll: a finger that stays put taps; one that moves pans, cancelling
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
 
     d.InjectTouchDown(1, core::Float2{40.0f, 90.0f});
-    d.InjectTouchMove(1, core::Float2{40.0f, 75.0f}); // past the slop: a pan
+    d.InjectTouchMove(1, core::Float2{40.0f, 75.0f}); // past the slop, so it pans
     CHECK(d.IsPanning());
     CHECK(cancels == 1);
-    CHECK(s.view->GetScrollOffset().y == doctest::Approx(15.0f)); // the content keeps to the finger
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(15.0f)); // the content stays under the finger
     d.InjectTouchMove(1, core::Float2{40.0f, 50.0f});
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(40.0f));
-    d.InjectTouchUp(1, core::Float2{40.0f, 50.0f}); // let go still: no fling, no click
+    d.InjectTouchUp(1, core::Float2{40.0f, 50.0f}); // lifted without moving: no fling and no click
     CHECK_FALSE(d.IsPanning());
     CHECK_FALSE(s.view->IsFlinging());
     CHECK(clicks == 1);
@@ -550,13 +550,13 @@ TEST_CASE("scroll: the pan slop is in DIPs: a finger's 12-pixel wobble taps on a
     {
         Scroller s(10);
         WidenRows(s);
-        s.root->SetDisplayScale(2.0f); // device pixels twice the root's units: row 1 is 100..200 down
+        s.root->SetDisplayScale(2.0f); // device pixels are twice the root's units, so row 1 is 100..200 down
         (void)s.root->UpdateLayout();
         int clicks = 0;
         s.rows[1]->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
         EventDispatcher& d = s.D();
         d.InjectTouchDown(1, core::Float2{80.0f, 140.0f});
-        d.InjectTouchMove(1, core::Float2{80.0f, 152.0f}); // 6 DIPs: within the 8
+        d.InjectTouchMove(1, core::Float2{80.0f, 152.0f}); // 6 DIPs, within the 8
         CHECK_FALSE(d.IsPanning());
         d.InjectTouchUp(1, core::Float2{80.0f, 152.0f});
         CHECK(clicks == 1);
@@ -566,7 +566,7 @@ TEST_CASE("scroll: the pan slop is in DIPs: a finger's 12-pixel wobble taps on a
         WidenRows(s);
         EventDispatcher& d = s.D();
         d.InjectTouchDown(1, core::Float2{40.0f, 70.0f});
-        d.InjectTouchMove(1, core::Float2{40.0f, 82.0f}); // 12 DIPs: past it
+        d.InjectTouchMove(1, core::Float2{40.0f, 82.0f}); // 12 DIPs, past it
         CHECK(d.IsPanning());
         d.InjectTouchUp(1, core::Float2{40.0f, 82.0f});
     }
@@ -574,7 +574,7 @@ TEST_CASE("scroll: the pan slop is in DIPs: a finger's 12-pixel wobble taps on a
 
 TEST_CASE("scroll: let go moving, a pan flings on, slowing, and a new finger catches it")
 {
-    Scroller s(40); // 2000 tall: room to glide
+    Scroller s(40); // 2000 tall, so there is room to glide
     WidenRows(s);
     GUIContext& gui = s.root->GetContext();
     EventDispatcher& d = s.D();
@@ -583,7 +583,7 @@ TEST_CASE("scroll: let go moving, a pan flings on, slowing, and a new finger cat
         row->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
 
     d.InjectTouchDown(1, core::Float2{40.0f, 95.0f});
-    for (int i = 1; i <= 5; ++i) // 15 px a step at 60 Hz: 900 px a second upward
+    for (int i = 1; i <= 5; ++i) // 15 px per step at 60 Hz, so 900 px per second upward
     {
         gui.Update(core::Duration::FromSeconds(1.0 / 60.0));
         d.InjectTouchMove(1, core::Float2{40.0f, 95.0f - 15.0f * static_cast<float>(i)});
@@ -607,7 +607,7 @@ TEST_CASE("scroll: let go moving, a pan flings on, slowing, and a new finger cat
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(caughtAt));
     CHECK(clicks == 0); // neither the pan nor the catch clicked a row
 
-    // Left alone, a fling stops by itself (or at the end).
+    // Left alone, a fling stops by itself, or at the end.
     d.InjectTouchDown(3, core::Float2{40.0f, 95.0f});
     for (int i = 1; i <= 5; ++i)
     {
@@ -633,7 +633,7 @@ TEST_CASE("scroll: only a finger pans; a sideways finger over a scroller that ca
     int cancels = 0;
     s.rows[1]->AddEventListener(EventType::PointerCancel, [&](const Event&) { ++cancels; });
     d.InjectTouchDown(1, core::Float2{20.0f, 70.0f});
-    d.InjectTouchMove(1, core::Float2{60.0f, 72.0f}); // across: nothing scrolls that way
+    d.InjectTouchMove(1, core::Float2{60.0f, 72.0f}); // across, and nothing scrolls that way
     CHECK_FALSE(d.IsPanning());
     CHECK(cancels == 0);
     d.InjectTouchUp(1, core::Float2{60.0f, 72.0f});
@@ -650,11 +650,11 @@ TEST_CASE("scroll: a pad's right stick scrolls the nearest scroller around the f
     gui.Update(core::Duration::FromSeconds(0.1));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
 
-    d.SetScrollStick(core::Float2{0.0f, 1.0f}); // all the way: 1400 px a second
+    d.SetScrollStick(core::Float2{0.0f, 1.0f}); // all the way gives 1400 px per second
     gui.Update(core::Duration::FromSeconds(0.1));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(140.0f));
 
-    d.SetScrollStick(core::Float2{0.0f, -0.6f}); // half way past the dead zone, squared: a quarter
+    d.SetScrollStick(core::Float2{0.0f, -0.6f}); // half way past the dead zone, squared, gives a quarter
     gui.Update(core::Duration::FromSeconds(0.1));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(140.0f - 35.0f));
 
@@ -662,7 +662,7 @@ TEST_CASE("scroll: a pad's right stick scrolls the nearest scroller around the f
     gui.Update(core::Duration::FromSeconds(0.1));
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(105.0f));
 
-    // With no focus, the scroller under the pointer.
+    // With no focus, the stick scrolls the scroller under the pointer.
     d.SetFocusNode(nullptr);
     d.InjectMouseMove(core::Float2{40.0f, 40.0f});
     d.SetScrollStick(core::Float2{0.0f, 1.0f});
@@ -672,7 +672,7 @@ TEST_CASE("scroll: a pad's right stick scrolls the nearest scroller around the f
 
 TEST_CASE("scroll: stuck to its end, it follows the content; scrolled away it lets go, and back it holds again")
 {
-    Scroller s(1); // 50 of content in a 100 view: at its end
+    Scroller s(1); // 50 of content in a 100 view, so it is at its end
     s.view->SetStickToEnd(true);
     CHECK(s.view->IsLatchedToEnd());
     const auto addRows = [&](int count)
@@ -685,17 +685,17 @@ TEST_CASE("scroll: stuck to its end, it follows the content; scrolled away it le
         }
         s.root->UpdateLayout();
     };
-    addRows(3); // 200 of content: the end is 100
+    addRows(3); // 200 of content, so the end is 100
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(100.0f));
     addRows(1);
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(150.0f));
 
-    s.view->ScrollBy(core::Float2{0.0f, -60.0f}); // away: it lets go
+    s.view->ScrollBy(core::Float2{0.0f, -60.0f}); // scrolled away, so it lets go
     CHECK_FALSE(s.view->IsLatchedToEnd());
     addRows(1);
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(90.0f));
 
-    s.view->ScrollToEnd(); // back: it holds again
+    s.view->ScrollToEnd(); // back at the end, so it holds again
     CHECK(s.view->IsLatchedToEnd());
     addRows(2);
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(300.0f));
@@ -707,8 +707,8 @@ TEST_CASE("scroll: content clipped away takes no press: a row below the view is 
     WidenRows(s);
     Node* hit = s.root->OverFind(core::Float2{20.0f, 150.0f});
     CHECK(hit != s.rows[3].Get());
-    CHECK(hit == s.root.Get()); // what lies beyond the view there: the root
-    CHECK(s.root->OverFind(core::Float2{20.0f, 20.0f}) == s.rows[0].Get()); // inside, the row
+    CHECK(hit == s.root.Get()); // beyond the view there lies the root
+    CHECK(s.root->OverFind(core::Float2{20.0f, 20.0f}) == s.rows[0].Get()); // inside the view, the row
 }
 
 TEST_CASE("scroll: a pan moves the content with the finger at a display scale, in the view's own units")
@@ -719,7 +719,7 @@ TEST_CASE("scroll: a pan moves the content with the finger at a display scale, i
     s.root->UpdateLayout();
     EventDispatcher& d = s.D();
     d.InjectTouchDown(1, core::Float2{80.0f, 180.0f});
-    d.InjectTouchMove(1, core::Float2{80.0f, 150.0f}); // 30 device pixels up: 15 of the view's
+    d.InjectTouchMove(1, core::Float2{80.0f, 150.0f}); // 30 device pixels up, which is 15 of the view's units
     REQUIRE(d.IsPanning());
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(15.0f));
     d.InjectTouchUp(1, core::Float2{80.0f, 150.0f});

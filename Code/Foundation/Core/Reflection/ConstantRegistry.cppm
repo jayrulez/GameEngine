@@ -3,7 +3,7 @@
 
 // Core - :constant_registry partition
 //
-// A registry of named constants that aren't members of a struct - e.g.
+// A registry of named constants that aren't members of a struct, e.g.
 // namespace-level math constants (foundation::core::kPi, kEpsilon). Per-type
 // constants live on the TypeInfo (see ConstantInfo / TypeBuilder::Constant);
 // this is for the free-standing ones. Registered explicitly; queryable by

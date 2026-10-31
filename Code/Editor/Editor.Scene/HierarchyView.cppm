@@ -3,20 +3,23 @@
 
 // Editor::Scene - :hierarchy partition.
 //
-// SceneHierarchyView: the entity tree inside a scene page, one per page (everything scene-scoped is
-// the page's), on the GUI's TreeView (Documentation/Specs/editor-gui.md, 5.3, layer 3). Its model
-// is built again from the live scene when the scene's revision moves, so every edit, undo and redo
-// shows; a row's id is its entity's guid, so the selection and what is open survive each build.
-//   - The scene is the top row (ruling 12: its settings are the scene selected); each entity by its
-//     first component's type icon, a prefab's members and inactive entities marked as such.
-//   - The selection is the page's, shared with the viewport both ways, several at once.
-//   - A double-click frames the entity; F2 renames in place; dragging a row onto another
-//     reparents it, between two reorders it, onto the scene's row makes it a root.
-//   - The row menu, the background menu, the add button and Delete are the scene editor's actions
-//     over the page, one path, so they are refused visibly while it simulates.
-//   - The search keeps a match's ancestors; a whole guid selects that entity and opens its way.
-//   - A dragged row carries its entities, for an entity slot; a prefab dropped in is spawned,
-//     under the row it lands on.
+// SceneHierarchyView: the entity tree inside a scene page, one per page, on the GUI's TreeView. Its
+// model is rebuilt from the live scene whenever the scene's revision changes, so every edit, undo
+// and redo shows. A row's id is its entity's guid, so the selection and the open rows survive each
+// rebuild.
+//   - The scene is the top row; selecting it selects the scene, whose settings the inspector
+//     shows. Each entity shows its first component's type icon, and a prefab's members and
+//     inactive entities are marked as such.
+//   - The selection belongs to the page and is shared with the viewport both ways; several
+//     entities can be selected at once.
+//   - A double-click frames the entity; F2 renames in place. Dragging a row onto another reparents
+//     it, between two rows reorders it, and onto the scene's row makes it a root.
+//   - The row menu, the background menu, the add button and Delete all run the scene editor's
+//     actions over the page through one path, so they are refused visibly while it simulates.
+//   - The search keeps a match's ancestors; a whole guid selects that entity and opens the path to
+//     it.
+//   - A dragged row carries its entities, for an entity slot; a prefab dropped in is spawned under
+//     the row it lands on.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +44,8 @@ export namespace editor
     {
         static constexpr StringView kType = u8"scene/entity";
 
-        /// A payload carrying `entities`, labelled by `name` (the first's) or their count.
+        /// A payload carrying `entities`, labelled by `name` (the first entity's) or by their
+        /// count.
         [[nodiscard]] static foundation::gui::DragPayload Payload(Span<const Guid> entities, StringView name)
         {
             foundation::gui::DragPayload payload;
@@ -84,30 +88,33 @@ export namespace editor
             EditorContext* context = nullptr;
             EditorPage* page = nullptr;         // the page its actions run over
             EditorIcons* icons = nullptr;       // the entities' type icons (null: none)
-            StringView sceneIcon;               // the top row's
+            StringView sceneIcon;               // the top row's icon
             Function<StringView()> sceneName;   // the top row's text
             Function<void(const Guid&)> frame;  // a double-click frames an entity
-            /// A prefab dropped in, under `parent` (nil: the scene's root); false when it was not.
+            /// Spawns a prefab dropped in, under `parent` (nil: the scene's root); false when it
+            /// did not.
             Function<bool(const Guid& prefab, const Guid& parent)> spawnPrefab;
         };
 
-        /// The hierarchy over `edit`'s scene in `pane` (the markup's: `hierarchy-tree`,
-        /// `hierarchy-search`, `hierarchy-clear`, `hierarchy-add`, by id).
+        /// The hierarchy over `edit`'s scene in `pane` (found in the markup by id:
+        /// `hierarchy-tree`, `hierarchy-search`, `hierarchy-clear`, `hierarchy-add`).
         SceneHierarchyView(IAllocator& allocator, SceneEditContext& edit, Services services, foundation::gui::Node& pane);
         SceneHierarchyView(const SceneHierarchyView&) = delete;
         SceneHierarchyView& operator=(const SceneHierarchyView&) = delete;
         ~SceneHierarchyView();
 
-        /// Once a frame: built again when the scene changed; the add button as its action is now.
+        /// Once a frame: rebuilds the tree when the scene has changed and updates the add button's
+        /// state.
         void Refresh();
-        /// The search, as typing it does.
+        /// Searches for `text`, as typing it does.
         void Search(StringView text);
-        /// The in-place rename of an entity's row (F2, the menu's Rename).
+        /// Starts the in-place rename of an entity's row (F2, the menu's Rename).
         void BeginRename(const Guid& entity);
-        /// Whether the scene's own row is selected (ruling 12: the scene's settings are the scene
-        /// selected; the inspector shows them).
+        /// Whether the scene's own row is selected, which selects the scene; the inspector then
+        /// shows its settings.
         [[nodiscard]] bool SceneSelected() const;
-        /// The menu of the row at item `item` (-1: the background's) at `at`, where the press was.
+        /// Shows the menu of the row at `item` (-1 for the background's) at `at`, where the press
+        /// was.
         void ShowMenu(i32 item, Float2 at);
 
         // === For tests ===
@@ -128,8 +135,8 @@ export namespace editor
         [[nodiscard]] foundation::gui::ModelIndex IndexOf(const Guid& entity) const;
 
     private:
-        // The tree's model: the scene as the shared tree shows it, plus rename in place and drops
-        // (a reparent, a reorder, a prefab spawned). A build tells the view once.
+        // The tree's model: the scene as the shared tree shows it, plus in-place rename and drops
+        // (a reparent, a reorder, a prefab spawned). Each build notifies the view once.
         class Model final : public SceneTreeModel
         {
         public:
@@ -144,7 +151,8 @@ export namespace editor
         };
 
         void Build();
-        // A drop's target: the entity it goes under (nil: a root) and the sibling it goes before (nil: last).
+        // A drop's target: the entity it goes under (nil: a root) and the sibling it goes before
+        // (nil: last).
         [[nodiscard]] bool DropTarget(const foundation::gui::ModelDrop& drop, Guid& parent, Guid& before) const;
         void SyncSelectionToTree();
         void SyncSelectionFromTree();
@@ -155,7 +163,7 @@ export namespace editor
         SceneEditContext* m_edit;
         Services m_services;
         Model m_model;
-        HashSet<foundation::gui::ItemId> m_known; // rows built with children before: one new to children opens
+        HashSet<foundation::gui::ItemId> m_known; // rows built with children; a row gaining children opens
         foundation::gui::TreeView* m_tree = nullptr;
         foundation::gui::TextField* m_search = nullptr;
         foundation::gui::Button* m_clear = nullptr;
@@ -165,6 +173,6 @@ export namespace editor
         u64 m_revision = ~0ull;
         bool m_syncing = false;
         bool m_built = false;
-        bool m_opened = false; // the first build is done: what gains children from now on opens
+        bool m_opened = false; // after the first build, a row that gains children opens
     };
 }

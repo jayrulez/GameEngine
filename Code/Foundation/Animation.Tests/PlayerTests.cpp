@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// AnimationPlayer: playback, event firing, looping, evaluation. Ports the player section of
-// Sedulous.Animation.Tests.AnimationEventTests + adds playback/eval coverage.
+// AnimationPlayer: playback, event firing, looping, evaluation.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -133,7 +132,7 @@ TEST_CASE("player: Evaluate drives skinning matrices from the clip")
     player.Play(&clip);
     player.SetCurrentTime(1.0f);
     Span<const Float4x4> skin = player.GetSkinningMatrices();
-    // At t=1 the bone translated +10 in Y from its (identity) bind pose -> skin matrix has Ty=10.
+    // At t=1 the bone moved +10 in Y from its (identity) bind pose, so its skin matrix has Ty=10.
     CHECK(skin.Size() == 1);
     CHECK(NearlyEqual(skin[0].m[3][1], 10.0f));
 }

@@ -3,15 +3,14 @@
 
 // Editor::Scene - :scene_bar partition.
 //
-// The scene page's bar (Documentation/Specs/editor-gui.md, 5.3, layer 5, part 1): Save, Undo and
-// Redo; Select, Move, Rotate and Scale as one choice; the space, its icon the space it is in;
-// Snap, every drag snapping while it is on, with its increments in its menu (they had no UI:
-// Ctrl snapped by fixed steps); Vertex Snap; Simulate, Pause and Stop, the state named beside
-// them while it runs (layer 7, part 1: Simulate is named so, Play is the Game tab's); Frame; the
-// property animation panel shown or not (the old bar's Animation, spec 5.6 gap 10). Each button is an action over the page
-// (PageActionBar), so its tooltip says its keys and it is disabled where the action is (the
+// The scene page's bar: Save, Undo and Redo; Select, Move, Rotate and Scale as one choice; the
+// space, whose icon shows the space it is in; Snap, which makes every drag snap while it is on,
+// with its increments in its menu; Vertex Snap; Simulate, Pause and Stop, with the state named
+// beside them while it runs (Simulate is named so because Play belongs to the Game tab); Frame; and
+// a toggle for the property animation panel. Each button is an action over the page
+// (PageActionBar), so its tooltip names its keys and it is disabled where the action is (the
 // transform choice while the camera owns the keys). The view's own controls are the HUD's chips,
-// not the bar's (ruling 22).
+// not the bar's.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +33,7 @@ export namespace editor
     class SceneBar
     {
     public:
-        /// An increment the snap menu offers; 0 for a move: the grid's cell.
+        /// An increment the snap menu offers; 0 for a move means the grid's cell.
         struct Increment
         {
             f32 value = 0.0f;
@@ -56,8 +55,8 @@ export namespace editor
             Scale,
         };
 
-        /// The bar's buttons, by their markup ids (`scene-save` ... `scene-frame`), found by
-        /// `find`; `state` the label naming Simulate's state (null: none); `gizmos` the page's
+        /// The bar's buttons, found by `find` by their markup ids (`scene-save` ... `scene-frame`).
+        /// `state` is the label naming Simulate's state (null: none); `gizmos` is the page's
         /// controller, asked each time (the tool may come later).
         SceneBar(IAllocator& allocator, EditorActionRegistry& actions, EditorPage& page, const Function<foundation::gui::ButtonBase*(StringView)>& find,
                  foundation::gui::Label* state, Function<GizmoController*()> gizmos)
@@ -89,8 +88,8 @@ export namespace editor
         SceneBar(const SceneBar&) = delete;
         SceneBar& operator=(const SceneBar&) = delete;
 
-        /// Once a frame: each button as its action is now over the page; the space's icon and
-        /// the increments' checks as the gizmo has them.
+        /// Once a frame: syncs each button with its action's current state over the page, and the
+        /// space's icon and the increments' checks with the gizmo.
         void Sync()
         {
             m_bar.Sync();
@@ -144,9 +143,10 @@ export namespace editor
         [[nodiscard]] StringView State() const { return m_state != nullptr && m_state->IsVisible() ? m_state->GetText() : StringView{}; }
 
     private:
-        // Simulate's state beside its buttons: shown while it runs, the edits locked meanwhile. Its
-        // place is kept while it shows nothing, and its width is the sheet's whatever it says, so the
-        // buttons centred beside it never move as it starts, pauses or stops.
+        // Simulate's state beside its buttons, shown while it runs (edits are locked meanwhile).
+        // Its place is kept while it shows nothing, and its width comes from the style sheet
+        // whatever it says, so the buttons centred beside it never move as it starts, pauses or
+        // stops.
         void SyncState()
         {
             if (m_state == nullptr)
@@ -179,7 +179,7 @@ export namespace editor
             AddIncrements(*menu.AddSubMenu(u8"Rotate"), SnapKind::Rotate, kRotateIncrements, m_rotateItems);
             AddIncrements(*menu.AddSubMenu(u8"Scale"), SnapKind::Scale, kScaleIncrements, m_scaleItems);
         }
-        // The item whose increment is `value` checked, the others not (a value no item has
+        // Checks the item whose increment is `value` and unchecks the others (a value no item has
         // checks none).
         template <usize N>
         static void Check(Array<foundation::gui::MenuItem*>& items, const Increment (&increments)[N], f32 value)
@@ -201,7 +201,7 @@ export namespace editor
         foundation::gui::ButtonBase* m_space = nullptr;
         bool m_world = true;
         bool m_spaceShown = false;
-        Array<foundation::gui::MenuItem*> m_moveItems; // the menu's, which the button keeps
+        Array<foundation::gui::MenuItem*> m_moveItems; // items of the menu the button keeps
         Array<foundation::gui::MenuItem*> m_rotateItems;
         Array<foundation::gui::MenuItem*> m_scaleItems;
     };

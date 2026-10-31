@@ -4,12 +4,9 @@
 // Foundation::VG - :vertex partition.
 //
 // VGVertex: the GPU vertex for vector graphics with analytical-AA coverage.
-// Ported from Sedulous.VG/VGVertex.bf. Color is stored as a full float Color
-// (RGBA). The renderer's GPU color attribute is Float32x4 (see VGRenderVertex),
-// so packing to a byte Color32 here only quantized colors to 8-bit for no GPU
-// benefit - it re-expanded to float immediately, and the quantization showed up
-// as visible banding across gradients and AA fringes. Keeping float precision
-// end to end removes that banding (see [[vg-quality-track]]).
+// Color is stored as a full float Color (RGBA). The renderer's GPU color attribute is
+// Float32x4 (see VGRenderVertex), so packing to a byte Color32 here would only quantize
+// colors to 8 bits, which shows as banding across gradients and AA fringes.
 
 module;
 #include <cstddef> // offsetof
@@ -35,7 +32,7 @@ export namespace foundation::vg
     /// - a layer composite (LayerComposite, vg_layer.ps): `effect` is the colour filter as
     ///   offsets from no filter, (1 - saturation, brightness - 1).
     // ENGINE_EXPORT_DATA for SizeInBytes: a static data member read from another
-    // library needs the annotation (shared-libraries.md P5/W1).
+    // library needs the annotation.
     struct ENGINE_EXPORT_DATA VGVertex
     {
         Float2 position;     ///< Position in screen/world coordinates.
@@ -58,7 +55,6 @@ export namespace foundation::vg
 
         constexpr VGVertex() noexcept = default;
 
-        // Constructors take float Color and pack to Color32 at emission.
         constexpr VGVertex(Float2 inPosition, Float2 inTexCoord, Color inColor,
                            f32 inCoverage = 1.0f) noexcept
             : position(inPosition), texCoord(inTexCoord), color(inColor), coverage(inCoverage)

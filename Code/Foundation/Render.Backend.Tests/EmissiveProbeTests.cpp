@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// EMISSIVE probe on REAL devices: in a scene with no light at all, a material whose EmissiveColor is
+// Emissive probe on real devices: in a scene with no light at all, a material whose EmissiveColor is
 // set and that has no emissive texture glows its colour (glTF: emission = factor x texture, the
 // texture white when absent), and one with the default black EmissiveColor stays black. Three cards:
-// plain, glowing orange, glowing orange at twice the intensity. Vulkan + WebGPU.
+// plain, glowing orange, glowing orange at twice the intensity. Vulkan and WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

@@ -5,8 +5,8 @@
 //
 // Assertions are macro-based, so they live in a classic header (macros cannot
 // be exported by modules). The reporting functions have external linkage in the
-// global module, which lets *any* translation unit - including other module
-// units' global-module-fragments (e.g. :base) - include this and call them with
+// global module, which lets any translation unit (including the global module
+// fragments of other module units, e.g. :base) include this and call them with
 // no module-import cycle.
 //
 // Usage: `#include "Core/Debug/Assert.h"` in a global module fragment.
@@ -60,8 +60,8 @@ namespace foundation::core
                 : (void)0))
 
 #if BUILD_SHIPPING
-// Disabled asserts still REFERENCE the expression, unevaluated (sizeof of a ternary):
-// zero codegen, but parameters/locals used only in asserts stay "used" - otherwise every
+// Disabled asserts still reference the expression, unevaluated (sizeof of a ternary):
+// zero codegen, but parameters and locals used only in asserts stay "used". Otherwise every
 // assert-only parameter breaks the shipping build under -Werror=unused-parameter.
 #define DIAGNOSTIC_ASSERT(cond) ((void)sizeof((cond) ? 1 : 0))
 #define DIAGNOSTIC_ASSERT_MSG(cond, msg) ((void)sizeof((cond) ? 1 : 0))

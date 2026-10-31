@@ -6,7 +6,6 @@
 // Hashing utilities: a byte hash (FNV-1a, 64-bit), an integer finalizer, and
 // the Hash<T> function object used by hashed containers. (Hash specializations
 // for the string types live with those types in :string.)
-// specializations.
 
 module;
 #include "Core/Prelude.h"
@@ -19,8 +18,8 @@ import :base;
 export namespace foundation::core
 {
     /// FNV-1a 64-bit, as published: the offset basis and the prime. Type ids, script property
-    /// hashes and every stable key are built on these; a private copy of either drifts (the
-    /// basis here was 1469598103934665603, a digit short, until 2026-10-01).
+    /// hashes and every stable key are built on these, so use these constants rather than a
+    /// private copy that can drift.
     inline constexpr u64 kFnv1a64OffsetBasis = 14695981039346656037ull;
     inline constexpr u64 kFnv1a64Prime = 1099511628211ull;
 
@@ -38,7 +37,7 @@ export namespace foundation::core
         return hash;
     }
 
-    // splitmix64 finalizer - good avalanche for integer keys.
+    // splitmix64 finalizer: good avalanche for integer keys.
     [[nodiscard]] constexpr u64 HashInteger(u64 x) noexcept
     {
         x ^= x >> 33;

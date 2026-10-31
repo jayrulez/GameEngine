@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Audio - AudioEngine implementation (module IMPLEMENTATION unit).
+// Foundation::Audio - AudioEngine implementation (module implementation unit).
 //
-// ALL miniaudio contact lives here: the interface stays ma_*-free (API hygiene + GCC's
-// module serializer must never see the 4 MB header in an interface unit's global
-// fragment). The MINIAUDIO_IMPLEMENTATION translation unit is MiniaudioImpl.cpp; this
-// file only consumes the declarations.
+// All miniaudio contact lives here, so the interface stays free of ma_* types (for API
+// hygiene, and because GCC's module serializer must not see the 4 MB header in an interface
+// unit's global fragment). The MINIAUDIO_IMPLEMENTATION translation unit is MiniaudioImpl.cpp;
+// this file only consumes the declarations.
 //
 // Layout of the miniaudio object graph:
-//   ma_engine (device or headless mixer + resource manager with our ma_vfs bridge)
-//     Master group <- Effects / Music / UI groups (the fixed bus layout)
-//       per-scene child groups under each bus (lazy; scene pause stops the group node)
+//   ma_engine (device or headless mixer, and a resource manager with our ma_vfs bridge)
+//     Master group, with the Effects, Music and UI groups under it (the fixed buses)
+//       run and scene child groups under each bus (lazy; a scene pause stops its group node)
 //         ma_sound voices from the fixed pool
-//           [an ma_lpf node per 3D voice for distance low-pass - the slot is
-//            reserved on VoiceSlot (`lowpassNode`) and in the attach path below]
+//           [an ma_lpf node per 3D voice for distance low-pass (VoiceSlot::lowpassNode),
+//            and a splitter for the reverb send (VoiceSlot::splitterNode)]
 
 module;
 #include "Core/Prelude.h"
@@ -64,7 +64,7 @@ namespace foundation::audio
         };
 
         // Registered in-memory payload handed to miniaudio's resource manager. The
-        // manager does NOT copy - the registry owns the decoded frames / keeps the
+        // manager does not copy: the registry owns the decoded frames and keeps the
         // clip (and with it the encoded bytes) alive.
         struct RegisteredClip
         {
@@ -98,10 +98,10 @@ namespace foundation::audio
         }
 
         // ---- the Freeverb ma_node wrapper: pure DSP lives in :reverb ----
-        // CONTINUOUS processing so the tail keeps ringing after inputs stop.
+        // Continuous processing, so the tail keeps ringing after inputs stop.
         struct ReverbNode
         {
-            ma_node_base base; // FIRST: a ReverbNode* is a valid ma_node*
+            ma_node_base base; // first, so a ReverbNode* is a valid ma_node*
             FreeverbState* state = nullptr;
             u32 channels = 0;
         };
@@ -171,8 +171,8 @@ namespace foundation::audio
         void* node = nullptr;
     };
 
-    // A named custom bus (additive topology): one extra
-    // ma_sound_group, parented to a fixed bus or another custom bus per the layout.
+    // A named custom bus: one extra ma_sound_group, parented to a fixed bus or another
+    // custom bus per the layout.
     struct CustomBusData
     {
         String name;
@@ -185,8 +185,8 @@ namespace foundation::audio
         Array<BusEffectNode> effects;
         // Runs' and scenes' child groups under this bus (made lazily, heap-held: ma_sound_group is
         // address-stable), the same way the fixed buses have a child per run and per scene: a
-        // voice on this bus routes scene child -> run child -> this bus, so the run's and the
-        // scene's stop, pause, mute and gains reach it through the graph.
+        // voice on this bus routes through its scene's child, then its run's child, then this
+        // bus, so the run's and the scene's stop, pause, mute and gains reach it through the graph.
         HashMap<u64, ma_sound_group*> runChildren;
         HashMap<u64, ma_sound_group*> sceneChildren;
     };
@@ -225,7 +225,7 @@ namespace foundation::audio
     struct VoiceSlot
     {
         // Arena-backed (Impl::soundArena): the ma_sound must survive its slot on a
-        // faded steal - the pointer HANDS OVER to the dying side list while the slot
+        // faded steal: the pointer is handed over to the dying side list while the slot
         // is immediately reused. ma_sound is not movable (the node graph points into
         // it), so ownership moves, the storage never does.
         ma_sound* sound = nullptr;
@@ -245,13 +245,13 @@ namespace foundation::audio
         u64 sceneGroup = 0;
         u64 runGroup = 0; // the run this voice belongs to (its own, or its scene group's)
         RefPtr<AudioClip> clip;
-        // Per-voice reverb send: a splitter at the END of the voice chain - out 0 is
-        // the dry path to the group, out 1 (volume = reverbSend) feeds the scene's
-        // wet-only SEND reverb in parallel. nullptr = played with reverbSend 0.
+        // Per-voice reverb send: a splitter at the end of the voice chain. Out 0 is
+        // the dry path to the group; out 1 (volume = reverbSend) feeds the scene's
+        // wet-only send reverb in parallel. nullptr = played with reverbSend 0.
         ma_splitter_node* splitterNode = nullptr;
         f32 reverbSend = 0.0f;
         // Distance low-pass: an ma_lpf node between the sound and its group; the
-        // cutoff glides open->floor across [min, max] distance every Update.
+        // cutoff glides from open to the floor across [min, max] distance every Update.
         ma_lpf_node* lowpassNode = nullptr;
         f32 lowpassFloorHz = 0.0f;
         f32 lowpassMinDistance = 1.0f;
@@ -268,10 +268,10 @@ namespace foundation::audio
         bool paused = false;
         ReverbNode* reverb = nullptr; // zone reverb on the Effects child group
         f32 reverbWet = 0.0f;
-        // The per-voice send target: a WET-ONLY Freeverb (dry pinned to 0) fed by
-        // voice splitters, straight into the Effects bus. Zones retune roomSize/
+        // The per-voice send target: a wet-only Freeverb (dry pinned to 0) fed by
+        // voice splitters, straight into the Effects bus. Zones retune roomSize and
         // damping through SetSceneReverb; sends stay audible regardless of zone
-        // occupancy (the send level is the VOICE's own knob).
+        // occupancy (the send level is the voice's own knob).
         ReverbNode* sendReverb = nullptr;
     };
 
@@ -342,7 +342,7 @@ namespace foundation::audio
         ma_engine engine{};
         Bridge bridge{};
 
-        f32 masterVolume = 1.0f; // engine endpoint gain (I7 editor knob), applied on init + on set
+        f32 masterVolume = 1.0f; // engine endpoint gain, applied at init and on set
 
         ma_sound_group busGroups[static_cast<usize>(AudioBus::Count)]{};
         bool busGroupInitialized[static_cast<usize>(AudioBus::Count)] = {};
@@ -353,8 +353,8 @@ namespace foundation::audio
         u32 voiceCount = 0;
         u32 streamVoiceCount = 0;
 
-        // Fixed ma_sound storage (pool + dying headroom; never resized after init -
-        // pointers into it are stable) + the free-index stack.
+        // Fixed ma_sound storage for the pool and the dying headroom (never resized after
+        // init, so pointers into it are stable), and the free-index stack.
         Array<ma_sound> soundArena;
         Array<u32> freeSounds;
 
@@ -380,7 +380,7 @@ namespace foundation::audio
         HashMap<void*, DedupeEntry> recentPlays;        // key = AudioClip*
 
         Float3 listenerPosition{0.0f, 0.0f, 0.0f};
-        VoiceHandle musicVoice; // the PlayMusic cross-fade tracks ONE music voice
+        VoiceHandle musicVoice; // the PlayMusic cross-fade tracks one music voice
 
         Array<BusEffectNode> busEffects[static_cast<usize>(AudioBus::Count)];
         // Named custom buses (heap entries: ma_sound_group is address-stable).
@@ -521,7 +521,7 @@ namespace foundation::audio
             voiceCount = settings.voiceCount;
             streamVoiceCount = settings.streamVoiceCount;
             voices.Resize(static_cast<usize>(voiceCount) + streamVoiceCount);
-            // Storage for every pool slot PLUS the dying headroom (a steal briefly
+            // Storage for every pool slot plus the dying headroom (a steal briefly
             // needs both the victim's fading sound and the newcomer's).
             soundArena.Resize(static_cast<usize>(voiceCount) + streamVoiceCount +
                               settings.dyingVoiceCapacity);
@@ -570,7 +570,7 @@ namespace foundation::audio
             return engineInitialized;
         }
 
-        // The node a bus's output feeds when it has NO effects: Master for the leaves,
+        // The node a bus's output feeds when it has no effects: Master for the leaves,
         // the graph endpoint for Master itself.
         [[nodiscard]] ma_node* BusParentNode(usize bus)
         {
@@ -618,7 +618,7 @@ namespace foundation::audio
             ClearEffectChain(busEffects[bus]);
         }
 
-        // Rebuild one bus's chain: group -> e0 -> e1 -> ... -> parent.
+        // Rebuild one bus's chain, from its group through each effect in order to its parent.
         void BuildBusEffects(usize bus, Span<const AudioBusEffectDesc> effects)
         {
             ClearBusEffects(bus);
@@ -630,8 +630,8 @@ namespace foundation::audio
                              BusParentNode(bus), effects);
         }
 
-        // Generic splice: source -> e0 -> e1 -> ... -> parent (shared by fixed and
-        // named custom buses). `chain` must be empty on entry.
+        // Generic splice from `source` through each effect in order to `parent` (shared by
+        // fixed and named custom buses). `chain` must be empty on entry.
         void BuildEffectChain(ma_node* source, Array<BusEffectNode>& chain, ma_node* parent,
                               Span<const AudioBusEffectDesc> effects)
         {
@@ -740,7 +740,7 @@ namespace foundation::audio
         }
 
         // A removed custom bus hands its live voices back to their fixed fallback bus
-        // (voices SURVIVE a layout rebuild; only the routing changes).
+        // (voices survive a layout rebuild; only the routing changes).
         void DetachVoicesFromCustomBus(CustomBusData& bus)
         {
             for (VoiceSlot& slot : voices)
@@ -758,7 +758,7 @@ namespace foundation::audio
             }
         }
 
-        // The voice chain's LAST node (what attaches to the group): splitter (dry out
+        // The voice chain's last node (what attaches to the group): the splitter (dry out
         // 0) if present, else the distance low-pass, else the sound itself.
         [[nodiscard]] static ma_node* VoiceOutputNode(VoiceSlot& slot)
         {
@@ -786,7 +786,7 @@ namespace foundation::audio
             if (data.sendReverb == nullptr)
             {
                 AudioReverbParams params;
-                params.wet = 1.0f; // full tail; the SEND level is the voice's knob
+                params.wet = 1.0f; // full tail; the send level is the voice's knob
                 params.dry = 0.0f; // wet-only: the dry path already reaches the bus
                 data.sendReverb = CreateReverbNode(*allocator, engine, params);
                 if (data.sendReverb != nullptr &&
@@ -829,9 +829,9 @@ namespace foundation::audio
             allocator->Delete(bus);
         }
 
-        // Reconcile the live custom-bus set with the layout BY NAME: kept buses update
-        // in place (voices keep playing through them), removed buses fall their voices
-        // back, new buses splice in. Cycles are defused to Master (cook rejects them;
+        // Reconcile the live custom-bus set with the layout by name: kept buses update
+        // in place (voices keep playing through them), removed buses hand their voices
+        // back, new buses splice in. Cycles are defused to Master (the cook rejects them;
         // this is the runtime backstop).
         void RebuildCustomBuses(Span<const AudioNamedBus> desired)
         {
@@ -961,7 +961,7 @@ namespace foundation::audio
                 }
             }
 
-            // Apply settings + rebuild each bus's effect chain into its parent.
+            // Apply settings and rebuild each bus's effect chain into its parent.
             for (const AudioNamedBus* named : wanted)
             {
                 const i32 index = FindCustomBus(named->name.AsView());
@@ -1082,7 +1082,7 @@ namespace foundation::audio
                 }
                 else
                 {
-                    // Decode-on-load (open question 2's default for SFX).
+                    // Decode-on-load, the default for sound effects.
                     if (DecodeToF32(clip->EncodedBytes(), 0, entry->decodedFrames,
                                     entry->decodedChannels, entry->decodedFrameCount))
                     {
@@ -1214,9 +1214,9 @@ namespace foundation::audio
             ++slot.generation;
         }
 
-        // Faded steal: the victim's handle dies NOW (the slot is reused at once), but
+        // Faded steal: the victim's handle dies now (the slot is reused at once), but
         // its ma_sound fades on the dying list instead of clicking off. Silent victims
-        // (paused) release immediately - nothing audible to protect.
+        // (paused) release immediately: there is nothing audible to protect.
         void StealSlot(VoiceSlot& slot)
         {
             if (!slot.soundInitialized || slot.state == VoiceState::Paused ||
@@ -1227,7 +1227,7 @@ namespace foundation::audio
             }
             while (dyingVoices.Size() >= settings.dyingVoiceCapacity)
             {
-                ReapDyingVoice(0); // full: hard-cut the OLDEST tail
+                ReapDyingVoice(0); // full: hard-cut the oldest tail
             }
             (void)ma_sound_stop_with_fade_in_milliseconds(slot.sound, StealFadeMilliseconds());
             DyingVoice dying;
@@ -1282,8 +1282,8 @@ namespace foundation::audio
             return dx * dx + dy * dy + dz * dz; // squared is fine for ordering
         }
 
-        // Traktor policy: free slot -> lowest priority strictly below the new voice ->
-        // farthest same-priority. Returns the pool size when nothing may be taken.
+        // A free slot, else the lowest priority strictly below the new voice, else the
+        // farthest voice of the same priority. Returns the pool size when nothing may be taken.
         [[nodiscard]] usize AcquireSlot(bool streamPool, u8 priority)
         {
             const usize begin = streamPool ? voiceCount : 0;
@@ -1311,7 +1311,7 @@ namespace foundation::audio
             }
             if (victim == voices.Size())
             {
-                // No lower-priority victim; try the farthest voice of EQUAL priority.
+                // No lower-priority victim; try the farthest voice of equal priority.
                 for (usize i = begin; i < end; ++i)
                 {
                     if (voices[i].priority != priority)
@@ -1327,7 +1327,7 @@ namespace foundation::audio
             }
             if (victim < voices.Size())
             {
-                // Faded steal: the victim's slot frees NOW, its audio tail fades on
+                // Faded steal: the victim's slot frees now, its audio tail fades on
                 // the dying list (~stealFadeSeconds) instead of clicking off.
                 StealSlot(voices[victim]);
                 return victim;
@@ -1338,8 +1338,8 @@ namespace foundation::audio
         // ---------------- distance low-pass ----------------
 
         // Cutoff mapping: fully open inside minDistance, gliding linearly down to the
-        // voice's floor at maxDistance. Reinit only on audible change (>1%) - filter
-        // reconfiguration is not free.
+        // voice's floor at maxDistance. Reinit only on an audible change (>1%), since
+        // filter reconfiguration is not free.
         void UpdateVoiceLowpass(VoiceSlot& slot)
         {
             if (slot.lowpassNode == nullptr)
@@ -1447,7 +1447,7 @@ namespace foundation::audio
 
         // A run's gain on its child under custom bus `index`: its own gains down the bus's chain
         // (each custom ancestor's by name, then the fixed bus the chain roots in) under its Master
-        // gain, volume and mute ramp - what its children under the fixed buses carry.
+        // gain, volume and mute ramp, as its children under the fixed buses carry.
         [[nodiscard]] f32 RunCustomGain(const RunGroupData& run, i32 index) const
         {
             f32 gain = 1.0f;
@@ -1782,7 +1782,7 @@ namespace foundation::audio
 
         // Reap: fades that completed, one-shots that reached their end. The same walk
         // glides every filtered voice's distance low-pass (covers one-shots and a
-        // moving listener - voices the scene sync never repositions).
+        // moving listener: voices the scene sync never repositions).
         for (VoiceSlot& slot : impl.voices)
         {
             if (slot.state != VoiceState::Free)
@@ -1839,7 +1839,7 @@ namespace foundation::audio
         // Recent-play dedupe: a same-clip play inside the window merges into the
         // existing voice instead of stacking (shotgun pellets, particle bursts).
         // Opt-out plays (persistent component sources) neither merge nor arm the
-        // window - a persistent voice must not swallow later legitimate one-shots.
+        // window: a persistent voice must not swallow later legitimate one-shots.
         if (params.allowDedupe)
         {
             if (DedupeEntry* recent = impl.recentPlays.Find(clipPtr))
@@ -1855,8 +1855,8 @@ namespace foundation::audio
         const bool wantMonoDownmix = params.spatial && clipPtr->channels > 1 && !clipPtr->stream;
         if (params.spatial && clipPtr->channels > 1)
         {
-            // Runtime mono-guard (Lumix): 3D wants mono - warn once, downmix in-memory
-            // clips for real; streamed stereo spatializes as-is (reimport force-mono).
+            // Mono guard: 3D wants mono, so warn once and downmix in-memory clips;
+            // streamed stereo spatializes as is (reimport it with force-mono).
             if (clipPtr->stream)
             {
                 if (!impl.warnedStreamStereoSpatial)
@@ -1905,10 +1905,10 @@ namespace foundation::audio
         if (slot.sound == nullptr)
         {
             return {};
-        } // unreachable: arena covers pool + dying
+        } // unreachable: the arena covers the pool and the dying list
 
         // Named-bus addressing: a known custom bus overrides the enum bus. Unknown
-        // names warn once and fall back - content typos never silence a game.
+        // names warn once and fall back, so a typo in content never silences a game.
         // A scene group's voice belongs to the scene's run; a scene-less voice to its own.
         u64 runGroup = params.runGroup;
         if (params.sceneGroup != 0)
@@ -1967,7 +1967,7 @@ namespace foundation::audio
         slot.looping = params.loop || clipPtr->loop;
 
         // Distance low-pass: splice an ma_lpf between the sound and its group. Wholly
-        // per-voice; 0 Hz = no node (the chain stays sound->group).
+        // per-voice; 0 Hz = no node (the sound feeds its group directly).
         if (params.spatial && params.distanceLowpassHz > 0.0f && group != nullptr)
         {
             auto* node = impl.allocator->New<ma_lpf_node>();
@@ -1992,8 +1992,8 @@ namespace foundation::audio
             }
         }
 
-        // Per-voice reverb send: splice a splitter at the END of the chain - out 0
-        // stays the dry route into the group, out 1 (volume = reverbSend) feeds the
+        // Per-voice reverb send: splice a splitter at the end of the chain. Out 0
+        // stays the dry route into the group; out 1 (volume = reverbSend) feeds the
         // scene's wet-only send reverb in parallel. Scene-group voices only (the send
         // reverb is per-scene); failure just plays dry.
         if (params.reverbSend > 0.0f && params.sceneGroup != 0 && group != nullptr)
@@ -2096,7 +2096,7 @@ namespace foundation::audio
         }
         if (slot->state == VoiceState::Paused)
         {
-            m_impl->ReleaseSlot(*slot); // silent already - no fade needed
+            m_impl->ReleaseSlot(*slot); // already silent: no fade needed
             return;
         }
         if (slot->state != VoiceState::Stopping)
@@ -2118,7 +2118,7 @@ namespace foundation::audio
         RunGroupData* run = impl.FindRun(runGroup);
         VoiceHandle& slotHandle = (run != nullptr) ? run->musicVoice : impl.musicVoice;
 
-        // Fade the incumbent out over the SAME window the newcomer fades in.
+        // Fade the incumbent out over the same window the newcomer fades in.
         if (VoiceSlot* current = impl.Resolve(slotHandle))
         {
             if (current->state != VoiceState::Stopping)
@@ -2433,7 +2433,7 @@ namespace foundation::audio
         {
             return;
         }
-        // The steal-farthest heuristic + distance low-pass track listener 0 (primary).
+        // The steal-farthest heuristic and the distance low-pass track listener 0 (primary).
         if (index == 0)
         {
             impl.listenerPosition = position;
@@ -2793,7 +2793,8 @@ namespace foundation::audio
                 data.reverbWet = 0.0f;
                 return;
             } // nothing to build
-            // Splice on the scene's Effects child group: group -> reverb -> Effects bus.
+            // Splice on the scene's Effects child group: the group feeds the reverb, which
+            // feeds the Effects bus.
             ma_sound_group* group = impl.GroupFor(sceneGroup, 0, AudioBus::Effects);
             if (group == nullptr || group == &impl.busGroups[static_cast<usize>(AudioBus::Effects)])
             {
@@ -2819,8 +2820,8 @@ namespace foundation::audio
             applied.wet = data.reverbWet;
             data.reverb->state->SetParams(applied);
         }
-        // The per-voice SEND reverb shares the room character but stays wet-only and
-        // fully open - the send level lives on each voice's splitter.
+        // The per-voice send reverb shares the room character but stays wet-only and
+        // fully open: the send level lives on each voice's splitter.
         if (data.sendReverb != nullptr && data.sendReverb->state != nullptr)
         {
             AudioReverbParams sendParams = params;
@@ -2925,8 +2926,8 @@ namespace foundation::audio
         {
             return false;
         }
-        // A canonical 44-byte PCM16 RIFF header + the sample payload (no encoder state
-        // needed - WAV is the one container we write, and it is trivial).
+        // A canonical 44-byte PCM16 RIFF header and the sample payload (no encoder state
+        // needed: WAV is the one container we write, and it is trivial).
         const u32 dataBytes = static_cast<u32>(interleavedSamples.Size() * sizeof(i16));
         const u32 byteRate = sampleRate * channels * static_cast<u32>(sizeof(i16));
         const u16 blockAlign = static_cast<u16>(channels * sizeof(i16));
@@ -2960,7 +2961,7 @@ namespace foundation::audio
         pushBytes(interleavedSamples.Data(), dataBytes);
         return true;
     }
-    // ---- editor waveform: pure decode -> per-bucket peaks ----
+    // ---- editor waveform: a pure decode into per-bucket peaks ----
 
     bool BuildWaveformPeaks(Span<const byte> encoded, u32 buckets, Array<f32>& outPeaks)
     {
@@ -2978,7 +2979,7 @@ namespace foundation::audio
         }
         const u32 channels = decoder.outputChannels;
 
-        // Total length drives the frame->bucket map; fall back to a growing two-pass
+        // Total length drives the frame-to-bucket map; fall back to a growing two-pass
         // walk when the container cannot report it (some mp3s).
         ma_uint64 totalFrames = 0;
         (void)ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames);
@@ -2992,7 +2993,7 @@ namespace foundation::audio
         f32 chunk[4096];
         const u64 chunkFrames = 4096 / (channels == 0 ? 1 : channels);
         u64 frameCursor = 0;
-        Array<f32> unknownLengthPeaks; // per-CHUNK peaks when length is unknown
+        Array<f32> unknownLengthPeaks; // per-chunk peaks when length is unknown
         for (;;)
         {
             ma_uint64 read = 0;

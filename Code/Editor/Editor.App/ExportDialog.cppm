@@ -3,19 +3,19 @@
 
 // Editor App - :export_dialog partition
 //
-// Export (Documentation/Specs/editor-gui.md, 5.2, layer 6): Project > Export, a window over its
-// markup (Data/Editor/Export.xml). The project's export presets on the left (add, duplicate,
-// remove after asking), each by the icon of the template it resolves to here, warned of when none
-// does; the selected one on the right under a card naming the template it exports with, or saying
-// why there is none, its settings on the property grid as Project Settings' are (ruling 20): a
-// section per category (General: its name, template, platform, config, player and output folder;
-// Content: the extra files as a list, symbols, pruning, shader source; Display: its own render
-// size, window and orientation, each shown only when the preset overrides it). A template picked
-// by name decides the platform and config. Edits apply as they are made and are saved when the
-// selection moves, an export starts or it closes. Export runs the selected preset, Export All
-// every one; Export Templates opens that window over this one, and the card follows what it
-// changed. What it needs from outside comes through ExportDialogSeams, so a test drives it
-// without a window system.
+// Export: Project > Export, a window over its markup (Data/Editor/Export.xml). The project's
+// export presets are listed on the left (add, duplicate, remove after asking), each with the icon
+// of the template it resolves to on this machine, and a warning when none does. The selected
+// preset is on the right, under a card naming the template it exports with or saying why there is
+// none. Its settings are on the property grid, as Project Settings' are, with a section per
+// category (General: its name, template, platform, config, player and output folder; Content: the
+// extra files as a list, symbols, pruning, shader source; Display: its own render size, window and
+// orientation, each shown only when the preset overrides it). A template picked by name decides
+// the platform and config. Edits apply as they are made and are saved when the selection moves,
+// an export starts, or the dialog closes. Export runs the selected preset and Export All every
+// one; Export Templates opens that window over this one, and the card follows what it changed.
+// What it needs from outside comes through ExportDialogSeams, so a test drives it without a
+// window system.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -39,19 +39,19 @@ export namespace editor::app
     /// What the export dialog asks of the application.
     struct ExportDialogSeams
     {
-        /// Fill `registry` with the templates this host sees.
+        /// Fills `registry` with the templates this host sees.
         Function<void(editor::TemplateRegistry&)> refresh;
-        /// Persist the presets (the controller the dialog edits) to the project.
+        /// Persists the presets (the controller the dialog edits) to the project.
         Function<void()> save;
-        /// Run the export of one preset by name, or of every preset (`all`).
+        /// Runs the export of one preset by name, or of every preset (`all`).
         Function<void(StringView preset, bool all)> runExport;
-        /// Open Export Templates over this one; `closed` hears when it closes.
+        /// Opens Export Templates over this one; `closed` is called when it closes.
         Function<void(Function<void()> closed)> openTemplates;
-        /// Ask for files; `chosen` hears their paths, or nothing when the user cancels.
+        /// Asks for files; `chosen` gets their paths, or nothing when the user cancels.
         Function<void(Function<void(Array<String>)> chosen)> pickFiles;
-        /// The host's platform, a new preset's.
+        /// The host's platform, used for a new preset.
         String hostPlatform;
-        /// Where exports are written, said under the presets.
+        /// Where exports are written, shown under the presets.
         String outputRoot;
     };
 
@@ -62,7 +62,7 @@ export namespace editor::app
     class ExportDialog
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kExportDialogPath;
 
         ExportDialog(IAllocator& allocator, editor::ExportPresetsController& presets, ExportDialogSeams seams,
@@ -88,7 +88,7 @@ export namespace editor::app
                 m_list->SetModel(&m_model);
                 m_list->SetOnSelectionChanged([self](gui::ModelIndex)
                                                {
-                                                   self->Save(); // the one left is kept
+                                                   self->Save(); // save the presets that remain
                                                    self->Load();
                                                });
             }
@@ -115,7 +115,7 @@ export namespace editor::app
                   });
             if (auto* where = Find<gui::Label>(u8"export-where"))
                 where->SetText(Format(u8"Exports go to {}", m_seams.outputRoot).AsView());
-            // However it closes, what was edited is kept.
+            // However it closes, the edits are kept.
             m_window->SetOnClose([self]() { self->Save(); });
         }
         ExportDialog(const ExportDialog&) = delete;
@@ -129,8 +129,8 @@ export namespace editor::app
                 m_list->SetModel(nullptr);
         }
 
-        /// Opens it over `root`, the templates read again and the first preset selected; false
-        /// with no markup or one open.
+        /// Opens the dialog over `root`, reading the templates again and selecting the first
+        /// preset; false with no markup or when one is already open.
         bool Open(gui::Node& root)
         {
             if (!m_window || m_window->IsOpen())
@@ -160,7 +160,7 @@ export namespace editor::app
         }
         void Select(usize index)
         {
-            Save(); // the one left is kept
+            Save(); // save the presets that remain
             if (m_list != nullptr)
             {
                 if (index < m_presets->Count())
@@ -357,7 +357,8 @@ export namespace editor::app
         }
 
         // The values a choice offers: the preset's own, the fallback (the host's platform,
-        // Release), then the templates' here; a platform with no template stays choosable.
+        // Release), then those of the templates found here; a platform with no template stays
+        // selectable.
         void FillChoices(gui::PropertyInfo& row, Array<String>& values, StringView current, StringView fallback, bool platforms) const
         {
             values.Clear();
@@ -414,7 +415,7 @@ export namespace editor::app
             return row;
         }
 
-        // The selected preset's rows, the card and the buttons.
+        // Loads the selected preset's rows, the card and the buttons.
         void Load()
         {
             if (m_grid != nullptr)
@@ -486,9 +487,9 @@ export namespace editor::app
             if (m_grid != nullptr)
                 m_grid->SetSource(m_bag.Get());
         }
-        // The platform and config rows as the preset has them: their choices, the preset's, and
-        // read only while a template picked by name decides them. In place: this runs inside the
-        // rows' own commit.
+        // Shows the platform and config rows as the preset has them: their choices and the
+        // preset's values, read-only while a template picked by name decides them. They are
+        // updated in place, because this runs inside the rows' own commit.
         void ShowChoices(const editor::ExportPreset& preset, bool byTemplate)
         {
             gui::PropertyInfo* platform = m_bag->FindInfo(u8"platform");
@@ -520,7 +521,7 @@ export namespace editor::app
             show(u8"orientation", preset.overridesOrientation);
             m_bag->PropertiesChanged();
         }
-        // The rows into the selected preset, then what shows it.
+        // Stores the rows into the selected preset, then updates what shows it.
         void Store()
         {
             const i32 index = SelectedIndex();
@@ -536,7 +537,7 @@ export namespace editor::app
             const editor::ExportTemplate* tmpl = chosen > 0 && static_cast<usize>(chosen) <= m_registry.Count() ? m_registry.At(static_cast<usize>(chosen) - 1) : nullptr;
             if (tmpl != nullptr)
             {
-                // A template by name: its platform and config.
+                // A template picked by name decides the platform and config.
                 preset.templateId = tmpl->id;
                 preset.platform = tmpl->platform;
                 preset.config = String(tmpl->EffectiveConfig());
@@ -663,7 +664,7 @@ export namespace editor::app
         HashMap<String, RefPtr<gui::Drawable>> m_icons; // by template id and folder
         UniquePtr<gui::PropertyBag> m_bag;              // the selected preset's rows
         Array<String> m_platforms;                      // the platform row's choices, by index
-        Array<String> m_configs;                        // the config row's
+        Array<String> m_configs;                        // the config row's choices, by index
         gui::ListView* m_list = nullptr;
         gui::PropertyGrid* m_grid = nullptr;
         gui::Button* m_export = nullptr;

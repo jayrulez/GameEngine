@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The model viewer's preferences and recents (Documentation/Specs/model-viewer.md, P9): the
-// settings file's round trip keeps a line it does not know; recents come newest first, once each,
-// as many as the preference keeps; settings.set takes what it names and refuses what is out of
-// range, changing nothing; a screenshot's name from its pattern; cache.clear empties the cache
-// folders and is refused while the window says it is busy.
+// The model viewer's preferences and recents. The settings file's round trip keeps lines it does
+// not recognise; recents are newest first, without duplicates, up to the preferred count;
+// settings.set applies what it names and refuses out-of-range values without changing anything; a
+// screenshot's name follows its pattern; and cache.clear empties the cache folders and is refused
+// while the window reports it is busy.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -42,13 +42,13 @@ TEST_CASE("model viewer settings: the file's round trip keeps a line it does not
     CHECK_FALSE(read.looseTextures);
     CHECK(read.thumbnailSize == 192);
     CHECK(read.exposure == doctest::Approx(-1.5f));
-    CHECK(read.loop); // not in the file: the default
+    CHECK(read.loop); // not in the file, so the default
     REQUIRE(read.unknown.Size() == 1);
     CHECK(read.unknown[0] == u8"future-thing on");
     REQUIRE(read.recentModels.Size() == 2);
     CHECK(read.recentModels[0] == u8"/a.glb");
 
-    // Written and read again: the same, the unknown line still there.
+    // Written and read again: unchanged, with the unknown line still there.
     const String written = modelviewer::WriteSettings(read);
     CHECK(written.AsView().ContainsIgnoreCase(u8"future-thing on\n"));
     const modelviewer::ViewerSettings again = modelviewer::ReadSettings(written.AsView());
@@ -62,7 +62,7 @@ TEST_CASE("model viewer settings: the file's round trip keeps a line it does not
     CHECK(again.recentFolders.Size() == 1);
     CHECK(modelviewer::WriteSettings(again) == written);
 
-    // The viewer before P9 wrote two lines; they read as before.
+    // An older settings file with only the folder and loose texture lines still reads.
     const modelviewer::ViewerSettings old = modelviewer::ReadSettings(u8"folder /old\nloose 1\n");
     CHECK(old.folder == u8"/old");
     CHECK(old.looseTextures);
@@ -75,17 +75,17 @@ TEST_CASE("model viewer settings: recents are newest first, once each, as many a
     modelviewer::PushRecent(list, u8"/a", 3);
     modelviewer::PushRecent(list, u8"/b", 3);
     modelviewer::PushRecent(list, u8"/c", 3);
-    modelviewer::PushRecent(list, u8"/a", 3); // again: to the front, not twice
+    modelviewer::PushRecent(list, u8"/a", 3); // again: moved to the front, not duplicated
     REQUIRE(list.Size() == 3);
     CHECK(list[0] == u8"/a");
     CHECK(list[1] == u8"/c");
     CHECK(list[2] == u8"/b");
-    modelviewer::PushRecent(list, u8"/d", 3); // over the limit: the oldest goes
+    modelviewer::PushRecent(list, u8"/d", 3); // over the limit: the oldest is dropped
     REQUIRE(list.Size() == 3);
     CHECK(list[0] == u8"/d");
     CHECK(list[2] == u8"/c");
 
-    // Through the store and its commands: kept in the file, listed newest first.
+    // Through the store and its commands: saved to the file and listed newest first.
     const String folder = Folder(u8"scratch_viewer_recents");
     const String path = PathJoin(folder.AsView(), u8"settings.txt");
     {
@@ -105,7 +105,7 @@ TEST_CASE("model viewer settings: recents are newest first, once each, as many a
     CHECK(recents.value.Get(String(u8"models")).At(0).AsString() == u8"/m2.glb");
     CHECK(recents.value.Get(String(u8"folders")).At(0).AsString() == u8"/models");
 
-    // Fewer kept: the lists cut at once.
+    // A lower count trims the lists at once.
     JsonValue fewer = JsonValue::MakeObject();
     fewer.Set(String(u8"recentCount"), JsonValue::MakeNumber(1));
     REQUIRE(set.Execute(u8"settings.set", fewer).ok);
@@ -133,7 +133,7 @@ TEST_CASE("model viewer settings: settings.set takes what it names, and refuses 
     REQUIRE(set1.ok);
     CHECK(set1.value.Get(String(u8"thumbnailSize")).AsInt() == 96);
     CHECK(heard == 1);
-    // In the file, with what it did not name as it was.
+    // In the file, with the values it did not name unchanged.
     modelviewer::SettingsStore reread;
     reread.Open(path.AsView());
     CHECK(reread.value.thumbnailSize == 96);
@@ -144,7 +144,7 @@ TEST_CASE("model viewer settings: settings.set takes what it names, and refuses 
     REQUIRE(reread.value.unknown.Size() == 1);
     CHECK(reread.value.unknown[0] == u8"hand-written yes");
 
-    // Out of range: refused, nothing changed (the good value beside it neither).
+    // An out-of-range value is refused and nothing changes, not even the valid value beside it.
     JsonValue bad = JsonValue::MakeObject();
     bad.Set(String(u8"loop"), JsonValue::MakeBool(true));
     bad.Set(String(u8"thumbnailSize"), JsonValue::MakeNumber(100));
@@ -164,7 +164,7 @@ TEST_CASE("model viewer settings: settings.set takes what it names, and refuses 
     blank.Set(String(u8"screenshotPattern"), JsonValue::MakeString(String(u8"")));
     CHECK_FALSE(set.Execute(u8"settings.set", blank).ok);
 
-    // settings.get: the preferences, and where screenshots go when the folder is left empty.
+    // settings.get returns the preferences and where screenshots go when the folder is empty.
     const modelviewer::CommandResult got = set.Execute(u8"settings.get");
     REQUIRE(got.ok);
     CHECK(got.value.Get(String(u8"density")).AsString() == u8"comfortable");
@@ -175,7 +175,7 @@ TEST_CASE("model viewer settings: a screenshot's name from its pattern")
 {
     CHECK(modelviewer::ScreenshotName(u8"{model}_{time}", u8"/models/Knight.glb", u8"", 42) == u8"Knight_42.png");
     CHECK(modelviewer::ScreenshotName(u8"{model} {clip}", u8"/m/hero.fbx", u8"Run", 0) == u8"hero Run.png");
-    // What a file name cannot hold becomes _.
+    // Characters a file name cannot hold become _.
     CHECK(modelviewer::ScreenshotName(u8"{clip}", u8"/m/a.glb", u8"Armature|Walk", 0) == u8"Armature_Walk.png");
     CHECK(modelviewer::ScreenshotName(u8"{clip}", u8"/m/a.glb", u8"", 0) == u8"screenshot.png");
 }
@@ -207,6 +207,6 @@ TEST_CASE("model viewer settings: cache.clear empties the cache folders, refused
     const modelviewer::CommandResult cleared = set.Execute(u8"cache.clear");
     REQUIRE(cleared.ok);
     CHECK(cleared.value.Get(String(u8"freed")).AsInt() == 14);
-    CHECK(DirectoryExists(cache.AsView())); // there, empty, for what is cooked next
+    CHECK(DirectoryExists(cache.AsView())); // still there and empty, ready for the next cook
     CHECK(modelviewer::FolderBytes(folder.AsView()) == 0);
 }

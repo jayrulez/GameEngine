@@ -3,9 +3,9 @@
 
 // Pipeline::Texture - reflection implementation unit: TextureAsset's reflected surface.
 //
-// Kept OUT of the TextureAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). The class declares its identity via RTTI_OBJECT
-// in the interface; this unit defines TextureAsset::StaticType() WITH properties + tooling
+// Kept out of the TextureAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm
+// cluster). The class declares its identity via RTTI_OBJECT in the interface; this unit
+// defines TextureAsset::StaticType() with its properties and tooling
 // attributes, so the generic asset page and the script backends see the authored surface.
 // The enum property types (TextureShape/Filter/Wrap, ImageColorSpace) are reflected in their
 // owning modules and registered by RegisterTextureAsset.
@@ -27,7 +27,7 @@ using namespace foundation::texture;
 namespace pipeline{
     REFLECT_MEMBERS(TextureAsset, "rtti::pipeline::texture")
     {
-        builder.DataVersion(3) // v3 = sourceHint provenance (v2 = asset-variants usage/compression)
+        builder.DataVersion(3) // v3: sourceHint provenance (v2: usage/compression)
             .Attribute("displayName", String(u8"Texture"))
             .Attribute("category", String(u8"Textures"))
             .Property<&TextureAsset::colorSpace>("colorSpace")

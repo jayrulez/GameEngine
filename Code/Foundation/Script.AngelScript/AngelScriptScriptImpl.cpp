@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Script.AngelScript - implementation (module IMPLEMENTATION unit).
+// Foundation::Script.AngelScript - implementation unit.
 //
-// ALL AngelScript SDK contact lives here: the interface unit stays engine-types-only
-// (GCC module hygiene - the SDK header never sits in an interface unit's global
-// fragment). See AngelScriptScript.cppm for the emission mapping.
+// All AngelScript SDK contact lives here, so the SDK header never sits in an interface
+// unit's global module fragment (which GCC's modules handle badly). See
+// AngelScriptScript.cppm for the emission mapping.
 //
 // Architecture:
-//  - One asIScriptEngine per AngelScriptManager. RegisterType COLLECTS TypeInfos;
-//    FinalizeTypes emits in TWO PHASES: RegisterObjectType for every collected type
-//    first, then behaviours/properties/methods - declaration strings may therefore
+//  - One asIScriptEngine per AngelScriptManager. RegisterType collects TypeInfos;
+//    FinalizeTypes emits in two phases: RegisterObjectType for every collected type
+//    first, then behaviours, properties and methods, so declaration strings may
 //    reference any reflected type (the reason IScriptManager::FinalizeTypes exists).
 //  - Every reflected instance visible to script is a BoxedVariant: a refcounted box
 //    holding the engine Variant (value or Object), registered as asOBJ_REF with
@@ -18,7 +18,7 @@
 //  - An IScriptContext is a family of asIScriptModules on the shared engine (one
 //    fresh module per Load; lookups target the most recent). Execution borrows
 //    asIScriptContexts from the engine's context pool (nesting-safe).
-//  - ScriptCallScope brackets EVERY dispatch into script (Build's global
+//  - ScriptCallScope brackets every dispatch into script (Build's global
 //    initializers, Call, Invoke, factories) so native facades can resolve their
 //    per-context services through CurrentScriptContext().
 
@@ -79,11 +79,11 @@ namespace foundation::script::angelscript
     }
 
     // A compiled AngelScript bytecode unit (the Bytecode capability). CompileToBlob produces one
-    // at COOK via asIScriptModule::SaveByteCode; LoadBlob feeds it to LoadByteCode in the PLAYER.
-    // AngelScript bytecode is tied to the engine's TYPE REGISTRATION and library version, so the
-    // runtime must register the same reflected surface (it does - the shared global registry) and
-    // the cook fingerprint carries ANGELSCRIPT_VERSION. Opaque per IScriptBlob (no RTTI node) -
-    // only this backend produces/consumes it, so LoadBlob downcasts by static_cast.
+    // at cook time via asIScriptModule::SaveByteCode; LoadBlob feeds it to LoadByteCode in the
+    // player. AngelScript bytecode is tied to the engine's type registration and library version,
+    // so the runtime must register the same reflected surface (the shared global registry ensures
+    // it) and the cook fingerprint carries ANGELSCRIPT_VERSION. Opaque per IScriptBlob (no RTTI
+    // node); only this backend produces and consumes it, so LoadBlob downcasts by static_cast.
     class AngelScriptScriptBlob final : public IScriptBlob
     {
     public:
@@ -99,7 +99,7 @@ namespace foundation::script::angelscript
         core::Array<core::byte> m_bytecode;
     };
 
-    // asIBinaryStream over a byte buffer: WRITE appends (SaveByteCode), READ advances a cursor
+    // asIBinaryStream over a byte buffer: Write appends (SaveByteCode), Read advances a cursor
     // (LoadByteCode). AngelScript's Read/Write return 0 on success, negative on error.
     class ByteBufferStream final : public asIBinaryStream
     {
@@ -290,11 +290,11 @@ namespace foundation::script::angelscript
         return Variant::From<f64>(d);
     }
 
-    // An already-typed 64-bit integer Variant (i64/u64) coerced to the reflected type the callee
-    // wants, WITHOUT a double stopover - so values above 2^53 round-trip exactly (CoerceNumber
-    // funnels through double and would corrupt them). Integer targets cast integer->integer on the
-    // two's-complement bit pattern; float targets convert honoring the source's signedness. Only
-    // valid when `src` holds i64 or u64 (the caller guarantees it). expected==null keeps the source.
+    // An already-typed 64-bit integer Variant (i64 or u64) coerced to the reflected type the callee
+    // wants without passing through double, so values above 2^53 round-trip exactly (CoerceNumber
+    // funnels through double and would corrupt them). Integer targets cast on the two's-complement
+    // bit pattern; float targets convert honoring the source's signedness. Only valid when `src`
+    // holds i64 or u64 (the caller guarantees it). A null `expected` keeps the source.
     inline core::Variant CoerceInteger(const core::Variant& src, const core::TypeInfo* expected)
     {
         using namespace core;
@@ -354,8 +354,8 @@ namespace foundation::script::angelscript
         return src;
     }
 
-    // Reflected scalar/string -> AngelScript type name (null when `type` is not a
-    // primitive - i.e. it needs an object-type registration instead).
+    // The AngelScript type name of a reflected scalar or string (null when `type` is not a
+    // primitive, that is, when it needs an object-type registration instead).
     inline const char* PrimitiveDeclName(const core::TypeInfo* type) noexcept
     {
         using namespace core;
@@ -410,7 +410,7 @@ namespace foundation::script::angelscript
         return nullptr;
     }
 
-    // A short display string for a captured Variant (a debugger local / object member):
+    // A short display string for a captured Variant (a debugger local or object member):
     // strings quoted inline, bools as true/false, any number decimal, an object/value type
     // rendered as its type name (its fields fetched lazily via CaptureObject).
     inline core::String DebugValueText(const core::Variant& value)
@@ -440,9 +440,9 @@ namespace foundation::script::angelscript
         return core::String(ViewOfAscii(type != nullptr ? type->name : "object"));
     }
 
-    // Max arguments a reflected facade method / script call marshals (fixed-size temp arrays below).
-    // 16, not 8: facade methods take flat scalar args and can exceed 8 (e.g. DebugDraw.line = 6
-    // coords + 3 color = 9); a smaller cap silently truncates an over-cap call's trailing args.
+    // Max arguments a reflected facade method or script call marshals (fixed-size temp arrays
+    // below). Facade methods take flat scalar args and can exceed 8 (DebugDraw.line takes 6
+    // coordinates and 3 color components); a call over the cap loses its trailing args.
     inline constexpr int kMaxArgs = 16;
 
     // Every reflected instance held by script: a refcounted box around a Variant.
@@ -452,8 +452,8 @@ namespace foundation::script::angelscript
         core::i32 refCount = 1;
     };
 
-    // Boxes cross the AS engine through captureless generic-call thunks (no owner
-    // reachable at release) - a documented process-scope bound, like the reflection
+    // Boxes cross the AngelScript engine through captureless generic-call thunks, so no owner
+    // is reachable at release; the box allocation is process-scoped, like the reflection
     // thunk ABI.
     inline BoxedVariant* NewBox(core::Variant value)
     {
@@ -473,7 +473,7 @@ namespace foundation::script::angelscript
     class AngelScriptManager;
 
     // Auxiliary payload for every generic registration (AngelScript hands it back
-    // via asIScriptGeneric::GetAuxiliary - no trampoline pool needed).
+    // via asIScriptGeneric::GetAuxiliary, so no trampoline pool is needed).
     struct Binding
     {
         enum class Kind
@@ -482,20 +482,21 @@ namespace foundation::script::angelscript
             PropertyGet,
             PropertySet,
             Method,
-            // Container-member ops, registered as methods on the OWNER (`behaviors_at(uint)` etc.):
-            // computed transiently on `self` each call, so an object element handle comes back OWNED
-            // (a boxed dynamic-type Variant). `property` is the container member. Non-Object value
+            // Container-member ops, registered as methods on the owner (`behaviors_at(uint)` and so
+            // on): computed transiently on `self` each call, so an object element handle comes back
+            // owned (a boxed dynamic-type Variant). `property` is the container member. Non-Object value
             // TODO: surface non-Object value elements (reached only by address); not surfaced here.
             ContainerCount,
             ContainerAt,
             ContainerAdd,
             ContainerRemoveAt,
             ContainerMove,
-            // A plain nested-VALUE member (`emitter`, a curve): getter returns a BORROW handle over the
-            // member address (edited in place; owner pinned + generation-guarded). `property` = member.
+            // A plain nested value member (`emitter`, a curve): the getter returns a borrow handle over
+            // the member address (edited in place; owner pinned and generation-guarded). `property` is
+            // the member.
             NestedGet,
             // A reflected operator (MethodInfo::op) as the object's opAdd/opSub/opMul/opDiv/opNeg/
-            // opEquals: the static invoked with `self` as its left operand. `method` = the static.
+            // opEquals: the static invoked with `self` as its left operand. `method` is the static.
             Operator,
             // Its compound form (opAddAssign ...): the result written back into `self`.
             OperatorAssign
@@ -510,7 +511,7 @@ namespace foundation::script::angelscript
 
     void FactoryDispatch(asIScriptGeneric* gen);
     void ContainerDispatch(asIScriptGeneric* gen); // container-member ops (count/at/add/removeAt/move)
-    void NestedGetDispatch(asIScriptGeneric* gen); // nested-value member getter -> borrow handle
+    void NestedGetDispatch(asIScriptGeneric* gen); // nested-value member getter, returns a borrow handle
     void AssignDispatch(asIScriptGeneric* gen); // value assignment (T& opAssign(const T&in))
     void AddRefDispatch(asIScriptGeneric* gen);
     void ReleaseDispatch(asIScriptGeneric* gen);
@@ -523,7 +524,7 @@ namespace foundation::script::angelscript
     void CoroutineWaitDispatch(asIScriptGeneric* gen);  // wait(float seconds)
 
     // The suspension-based step debugger (implements IScriptDebugger). Defined after the
-    // context class; forward-declared so the manager can hold + hand out the active one, and
+    // context class; forward-declared so the manager can hold and hand out the active one, and
     // ExecuteCall can arm/adopt it. Its line callback is a plain CDECL function taking the
     // debugger back as `param` (AngelScript's SetLineCallback contract).
     class AngelScriptDebugger;
@@ -531,21 +532,23 @@ namespace foundation::script::angelscript
     // Arm a debugger's line callback on a pooled executor before Execute (owner = the
     // IScriptContext scoped for that call, re-established when the debugger resumes it).
     void ArmDebugger(AngelScriptDebugger& debugger, asIScriptContext* ctx, IScriptContext* owner);
-    // After Execute returned SUSPENDED: did THIS debugger cause it (a breakpoint/step on
-    // `ctx`)? If so it adopts the context (owns it until resume) and fires its listener.
+    // After Execute returned asEXECUTION_SUSPENDED: true when this debugger caused it (a breakpoint
+    // or step on `ctx`), in which case it adopts the context (owns it until resume) and fires its
+    // listener.
     [[nodiscard]] bool AdoptDebuggerSuspension(AngelScriptDebugger& debugger,
                                                asIScriptContext* ctx);
 
-    // A script funcdef-handle argument -> an AngelScriptDelegate wrapping it, as an
+    // Wraps a script funcdef-handle argument into an AngelScriptDelegate, as an
     // object-mode Variant (defined after AngelScriptDelegate). Forward-declared so
     // AngelScriptManager::ValueFromArg can wrap a delegate parameter.
     core::Variant MakeAngelScriptDelegateVariant(asIScriptFunction* function);
 
     // Reflected RefPtr<IScriptDelegate> parameters are spelled `?&in` (AppendDeclType), so a
-    // script may pass a funcdef handle of ANY signature; ValueFromArg detects the funcdef handle
-    // and wraps it, and Invoke marshals against the handler's ACTUAL params. `ScriptDelegate`
-    // (double(double)) is the engine-provided args+return shape; `void Action()` (RegisterDelegate
-    // Surface) is the common void callback. Kept as a NAMED handle for the rare non-param position.
+    // script may pass a funcdef handle of any signature; ValueFromArg detects the funcdef handle
+    // and wraps it, and Invoke marshals against the handler's actual params. `ScriptDelegate`
+    // (double(double)) is the engine-provided shape with args and a return; `void Action()`
+    // (RegisterDelegateSurface) is the common void callback. This named handle serves the rare
+    // position that is not a parameter.
     inline constexpr const char* kScriptDelegateFuncdef = "double ScriptDelegate(double)";
     inline constexpr const char* kScriptDelegateTypeName = "ScriptDelegate";
 
@@ -553,7 +556,7 @@ namespace foundation::script::angelscript
     // section, so it never shifts the user source's error line numbers). `wait` and the
     // funcdefs are host-registered engine-globally; only waitUntil needs a script body,
     // and it polls in-script so the host scheduler only ever deals with numeric waits.
-    // It lives in a `Coroutine` NAMESPACE (authored as `Coroutine::waitUntil(...)`) so it
+    // It lives in a `Coroutine` namespace (authored as `Coroutine::waitUntil(...)`) so it
     // can never redefine-collide with a user's own global `waitUntil`; the global `wait`
     // and CoroutinePredicate funcdef still resolve from inside the namespace.
     inline constexpr const char* kCoroutinePreludeSection =
@@ -565,27 +568,27 @@ namespace foundation::script::angelscript
     public:
         AngelScriptManager()
         {
-            // Pin the PROCESS-GLOBAL thread manager for the process lifetime. AngelScript
-            // refcounts it across engines (first engine creates, last release frees); a
-            // multi-engine process (the cook builds one engine per script) can otherwise
-            // interleave into a double-unprepare that asserts at teardown
-            // (asCThreadManager::Unprepare 'threadManager' failed). One deliberate extra
-            // prepare keeps the manager alive until process exit - the upstream idiom for
-            // multi-engine hosts. Never unprepared: the OS reclaims at exit.
+            // Pin the process-global thread manager for the process lifetime. AngelScript
+            // refcounts it across engines (the first engine creates it, the last release frees
+            // it); a multi-engine process (the cook builds one engine per script) can otherwise
+            // interleave into a double unprepare that asserts at teardown
+            // (asCThreadManager::Unprepare 'threadManager' failed). One extra prepare keeps the
+            // manager alive until process exit, the upstream idiom for multi-engine hosts. It is
+            // never unprepared; the OS reclaims it at exit.
             static const int threadManagerPin = asPrepareMultithread();
             (void)threadManagerPin;
             m_engine = asCreateScriptEngine();
             m_engine->SetMessageCallback(asFUNCTION(&AngelScriptManager::OnMessage), this,
                                          asCALL_CDECL);
             RegisterStdString(m_engine);
-            // NOTE: RegisterStdString already registers the number-concat operators
-            // (string opAdd(int64/double/bool/...)), so `"Score: " + n` works. The formatInt/
-            // formatFloat GLOBALS (RegisterStdStringUtils) are NOT vendored (their upstream
-            // scriptstdstring_utils.cpp is absent); add them only when precision/padding is needed.
+            // RegisterStdString already registers the number-concat operators
+            // (string opAdd(int64/double/bool/...)), so `"Score: " + n` works. The formatInt and
+            // formatFloat globals (RegisterStdStringUtils) are not vendored (their upstream
+            // scriptstdstring_utils.cpp is absent); add them when precision or padding is needed.
             m_stringTypeId = m_engine->GetTypeIdByDecl("string");
             // The native `array<T>` type. `defaultArray=true` also enables the `T[]` sugar. A facade
             // that returns an engine Array<T> is rendered as a CScriptArray on the way out
-            // (SetGenericReturn / BuildScriptArray).
+            // (SetGenericReturn, BuildScriptArray).
             RegisterScriptArray(m_engine, true);
             RegisterCoroutineSurface();
             RegisterDelegateSurface();
@@ -593,8 +596,8 @@ namespace foundation::script::angelscript
 
         ~AngelScriptManager() override
         {
-            // Coroutine contexts belong to the engine - drop them (and their owner refs)
-            // BEFORE the engine is torn down.
+            // Coroutine contexts belong to the engine, so drop them (and their owner refs)
+            // before the engine is torn down.
             DropAllCoroutines();
             if (m_engine != nullptr)
             {
@@ -637,15 +640,15 @@ namespace foundation::script::angelscript
                 return;
             }
             m_finalized = true;
-            // The overload contract: fail loudly if any type binds two methods to the same script
-            // name at the same arity (see foundation.script ValidateScriptMethodNames).
+            // Fail loudly if any type binds two methods to the same script name at the same arity
+            // (see foundation.script ValidateScriptMethodNames).
             ValidateScriptMethodNames(
                 core::Span<const core::TypeInfo* const>{m_types.Data(), m_types.Size()});
-            // ...and fail loudly if two types bind to the same script-facing name (class name or
-            // scriptName alias) - the alias mechanism's collision guard.
+            // ...and if two types bind to the same script-facing name (class name or scriptName
+            // alias).
             ValidateScriptTypeNames(
                 core::Span<const core::TypeInfo* const>{m_types.Data(), m_types.Size()});
-            // Phase 1: DECLARE every collected type - after this, any declaration
+            // Phase 1: declare every collected type. After this, any declaration
             // string may reference any reflected type.
             for (const core::TypeInfo* type : m_types)
             {
@@ -677,13 +680,14 @@ namespace foundation::script::angelscript
 
         [[nodiscard]] ScriptCapabilities Capabilities() const override
         {
-            // host-side asIScriptContext scheduler + funcdef-handle-backed delegate seam +
-            // suspension-based step debugger (context Suspend + AS introspection).
+            // A host-side asIScriptContext coroutine scheduler, delegates backed by funcdef
+            // handles, a suspension-based step debugger (context Suspend and AngelScript
+            // introspection), and bytecode blobs.
             return ScriptCapabilities::Coroutines | ScriptCapabilities::Delegates |
                    ScriptCapabilities::Debugger | ScriptCapabilities::Bytecode;
         }
 
-        // Compile source to an AngelScript bytecode blob (the cook side of the Bytecode seam):
+        // Compile source to an AngelScript bytecode blob (the cook side of the Bytecode capability):
         // build a throwaway module on the shared engine, SaveByteCode it (debug info kept so the
         // player reports source lines), and discard the module. The engine already carries the
         // reflected surface (FinalizeTypes), which the bytecode references.
@@ -706,7 +710,7 @@ namespace foundation::script::angelscript
             (void)module->AddScriptSection("__coroutine_support", kCoroutinePreludeSection);
             BeginMessageCapture();
             const int built = module->Build();
-            EndMessageCapture(nullptr, ScriptErrorKind::Compile); // cook validates + reports itself
+            EndMessageCapture(nullptr, ScriptErrorKind::Compile); // the cook validates and reports itself
             if (built < 0)
             {
                 module->Discard();
@@ -762,22 +766,22 @@ namespace foundation::script::angelscript
                 core::MakeRef<AngelScriptScriptBlob>(MemoryAllocator()).Get());
         }
 
-        // A step debugger over this engine's contexts (suspension breakpoints + AS
+        // A step debugger over this engine's contexts (suspension breakpoints and AngelScript
         // introspection). One at a time; it registers itself as the active debugger on
         // construction (ExecuteCall consults it) and unregisters on destruction.
         [[nodiscard]] core::UniquePtr<IScriptDebugger> CreateDebugger() override;
 
-        /// The active debugger the dispatch path arms/adopts, or null (the default). The
-        /// debugger sets this from its ctor/dtor - one per manager.
+        /// The active debugger the dispatch path arms and adopts, or null (the default). The
+        /// debugger sets this from its constructor and destructor; there is one per manager.
         void SetActiveDebugger(AngelScriptDebugger* debugger) noexcept { m_debugger = debugger; }
         [[nodiscard]] AngelScriptDebugger* ActiveDebugger() const noexcept { return m_debugger; }
 
-        // The ACTUAL AngelScript-callable surface: one entry per declared object type, with
+        // The AngelScript-callable surface as bound: one entry per declared object type, with
         // members spelled the way AngelScript presents them (statics as `Type::name(...)`,
         // properties as `get_`/`set_` accessors). A member whose declaration the backend
         // could not express (and therefore did not register) is omitted, so the surface
-        // matches what BindType actually bound - which is exactly what the reflection diff
-        // needs to catch a silently-unbound type.
+        // matches what BindType actually bound, which is what the reflection diff needs to
+        // catch a type that silently failed to bind.
         [[nodiscard]] core::Array<ScriptApiType> DescribeBoundApi() const override
         {
             core::Array<ScriptApiType> result;
@@ -905,9 +909,8 @@ namespace foundation::script::angelscript
         }
 
         // The AngelScript behavior module: just the concatenated class sources. AngelScript
-        // needs NO import prelude - reflected types and the coroutine surface (startCoroutine/
-        // wait) are registered engine-globally, so every reflected type is already visible.
-        // This keeps the language framing in the backend, off the neutral libs.
+        // needs no import prelude, because reflected types and the coroutine surface
+        // (startCoroutine, wait) are registered engine-globally.
         [[nodiscard]] core::String
         AssembleBehaviorModuleSource(core::Span<const core::StringView> classSources) const override
         {
@@ -920,13 +923,13 @@ namespace foundation::script::angelscript
             return moduleSource;
         }
 
-        // ---- the from-scratch coroutine scheduler (one asIScriptContext each) ----
+        // ---- the coroutine scheduler (one asIScriptContext per coroutine) ----
 
         /// One live coroutine: its own execution context, the seconds still to wait, the owning
-        /// behavior instance (AddRef'd) so CancelCoroutinesFor can drop by owner, and the HOME
-        /// script context it was started from - so a resume from AdvanceCoroutines (outside any
+        /// behavior instance (AddRef'd) so CancelCoroutinesFor can drop by owner, and the home
+        /// script context it was started from, so a resume from AdvanceCoroutines (outside any
         /// script call) re-establishes CurrentScriptContext and the coroutine's facade calls
-        /// (scene.spawn, entity.send, ...) resolve the right per-context services.
+        /// (scene.spawn, entity.send and the rest) resolve the right per-context services.
         struct Coroutine
         {
             asIScriptContext* ctx = nullptr;
@@ -937,8 +940,8 @@ namespace foundation::script::angelscript
 
         /// `startCoroutine(fn)`: spins up a dedicated context for the coroutine function
         /// (a delegate carries its owner), runs it to the first `wait`/suspend, and keeps
-        /// it if it suspended. Called from inside a script Execute - a nested Execute on a
-        /// fresh context is fine (AngelScript contexts are independent).
+        /// it if it suspended. Called from inside a script Execute; a nested Execute on a
+        /// fresh context is fine because AngelScript contexts are independent.
         void StartCoroutine(asIScriptFunction* fn)
         {
             if (fn == nullptr || m_engine == nullptr)
@@ -972,9 +975,9 @@ namespace foundation::script::angelscript
                 owner->AddRef();
             }
 
-            // Record BEFORE Execute so the `wait` host call can find it (by active ctx). Capture
-            // the home context (this initial run is already inside the caller's ScriptCallScope;
-            // a resume from AdvanceCoroutines re-pushes it - see there).
+            // Record it before Execute so the `wait` host call can find it (by active context).
+            // Capture the home context: this initial run is already inside the caller's
+            // ScriptCallScope, and a resume from AdvanceCoroutines pushes it again.
             m_coroutines.PushBack(Coroutine{co, 0.0, owner, CurrentScriptContext()});
             const int result = co->Execute();
             ResolveCoroutineExecution(co, result);
@@ -1006,9 +1009,9 @@ namespace foundation::script::angelscript
             {
                 co.wait -= deltaSeconds;
             }
-            // Snapshot due contexts (stable pointers): a resumed coroutine may start more
-            // (append) - not advanced this frame - and re-finding by ctx tolerates a
-            // nested cancel dropping an entry mid-loop.
+            // Snapshot due contexts (stable pointers): a resumed coroutine may start more,
+            // which are appended and not advanced this frame, and finding each by context again
+            // tolerates a nested cancel dropping an entry mid-loop.
             m_dueScratch.Clear();
             for (const Coroutine& co : m_coroutines)
             {
@@ -1026,7 +1029,7 @@ namespace foundation::script::angelscript
                 } // a nested cancel removed it
                 // Re-establish the home script context: the resume runs outside any script call
                 // (from the run-host tick), so the coroutine's facade calls resolve per-context
-                // services (scene.spawn / entity.send) instead of no-opping on a null context.
+                // services (scene.spawn, entity.send) instead of doing nothing on a null context.
                 ScriptCallScope scope(m_coroutines[static_cast<core::usize>(index)].home);
                 const int result = ctx->Execute();
                 ResolveCoroutineExecution(ctx, result);
@@ -1036,12 +1039,12 @@ namespace foundation::script::angelscript
         void
         CancelCoroutinesFor(ScriptObject& instance) override; // by owner; after AngelScriptObject
 
-        // ---- shared services for contexts / dispatchers ---------------------
+        // ---- shared services for contexts and dispatchers -------------------
         [[nodiscard]] asIScriptEngine* Engine() const noexcept { return m_engine; }
         [[nodiscard]] int StringTypeId() const noexcept { return m_stringTypeId; }
 
         // The reflected type behind an AngelScript type id (handle flags ignored);
-        // null when the id is not one of OUR registered object types.
+        // null when the id is not one of our registered object types.
         [[nodiscard]] const core::TypeInfo* TypeInfoForTypeId(int typeId) const noexcept
         {
             const int base = typeId & ~(asTYPEID_OBJHANDLE | asTYPEID_HANDLETOCONST);
@@ -1055,7 +1058,7 @@ namespace foundation::script::angelscript
             return nullptr;
         }
 
-        // A script array argument (`const array<Elem> &in`) -> an Array<Variant> of its elements,
+        // A script array argument (`const array<Elem> &in`) as an Array<Variant> of its elements,
         // each narrowed to the container's element type (the reflection call converts the list
         // into the parameter's Array<E>). Numbers, bools, strings and our reflected handles.
         [[nodiscard]] core::Variant ListFromArg(asIScriptGeneric* gen, asUINT index,
@@ -1077,8 +1080,8 @@ namespace foundation::script::angelscript
             return core::Variant::From<core::Array<core::Variant>>(core::Move(list));
         }
 
-        // A value at `addr` of AngelScript type `typeId` (an array element) -> a Variant narrowed to
-        // `expected`.
+        // A value at `addr` of AngelScript type `typeId` (an array element), as a Variant narrowed
+        // to `expected`.
         [[nodiscard]] core::Variant ValueFromAddress(int typeId, const void* addr,
                                                      const core::TypeInfo* expected) const
         {
@@ -1132,7 +1135,7 @@ namespace foundation::script::angelscript
             return core::Variant{};
         }
 
-        // Script argument -> engine Variant (generic calling convention).
+        // A script argument as an engine Variant (generic calling convention).
         [[nodiscard]] core::Variant ValueFromArg(asIScriptGeneric* gen, asUINT index,
                                                  const core::TypeInfo* expected) const
         {
@@ -1145,14 +1148,15 @@ namespace foundation::script::angelscript
             }
 
             // A `?&in` variable-type arg (the emit/send Variant-payload sink, and any `&in`
-            // primitive) arrives BY REFERENCE: the arg slot holds a POINTER to the caller's
-            // value, so the by-value accessors below (GetArgDouble/GetArgDWord/...) would read
-            // the pointer bits as the value. Read a primitive through its address instead. Object
-            // handles + strings keep the by-value paths below (GetArgObject/GetArgAddress already
-            // return the referenced value for a reference arg); funcdef handles are handled there.
+            // primitive) arrives by reference: the arg slot holds a pointer to the caller's
+            // value, so the by-value accessors below (GetArgDouble, GetArgDWord and the rest) would
+            // read the pointer bits as the value. Read a primitive through its address instead.
+            // Object handles and strings keep the by-value paths below (GetArgObject and
+            // GetArgAddress already return the referenced value for a reference arg); funcdef
+            // handles are handled there.
             if (ArgIsInReference(gen, index))
             {
-                // GetArgAddress returns the VALUE pointer for a reference arg (like the string
+                // GetArgAddress returns the value pointer for a reference arg (like the string
                 // case below), unlike GetAddressOfArg which returns the slot (a T** here).
                 if (const void* addr = gen->GetArgAddress(index))
                 {
@@ -1190,7 +1194,7 @@ namespace foundation::script::angelscript
                     case asTYPEID_DOUBLE:
                         return CoerceNumber(*static_cast<const double*>(addr), expected);
                     default:
-                        break; // string / enum / handle: fall through to the by-value paths
+                        break; // string, enum or handle: fall through to the by-value paths
                     }
                 }
             }
@@ -1217,7 +1221,7 @@ namespace foundation::script::angelscript
             case asTYPEID_UINT32:
                 return CoerceNumber(gen->GetArgDWord(index), expected);
             // 64-bit integers carry their exact type across (never via double) so values
-            // above 2^53 survive - the reason CoerceInteger exists.
+            // above 2^53 survive; this is why CoerceInteger exists.
             case asTYPEID_INT64:
                 return CoerceInteger(
                     core::Variant::From<core::i64>(static_cast<core::i64>(gen->GetArgQWord(index))),
@@ -1238,8 +1242,8 @@ namespace foundation::script::angelscript
                 return (s != nullptr) ? core::Variant::From<core::String>(StringFromStd(*s))
                                       : core::Variant{};
             }
-            // A native enum argument: read its int32 value and carry it as an i64 (the property setter
-            // / enum-arg path casts it to the enum - enums cross as their underlying int).
+            // A native enum argument: read its int32 value and carry it as an i64. Enums cross as
+            // their underlying int, and the property setter or enum-arg path casts it to the enum.
             if (const core::TypeInfo* enumType = TypeInfoForTypeId(typeId);
                 enumType != nullptr && enumType->enumeratorCount > 0)
             {
@@ -1248,10 +1252,10 @@ namespace foundation::script::angelscript
             }
             if (TypeInfoForTypeId(typeId) != nullptr && !IsFuncdefTypeId(typeId))
             {
-                // A reflected value (e.g. a component `Gadget@` from `.of`) boxed as our value type.
-                // Passed to a `?&in` sink (scene.events.emit / entity.send), AngelScript dereferences
-                // the handle and delivers the OBJECT by reference - WITHOUT the OBJHANDLE bit - so the
-                // arg-slot holds a pointer to the box; a by-value handle is the object direct.
+                // A reflected value (for example a component `Gadget@` from `.of`) boxed as our value
+                // type. Passed to a `?&in` sink (scene.events.emit, entity.send), AngelScript
+                // dereferences the handle and delivers the object by reference without the OBJHANDLE
+                // bit, so the arg slot holds a pointer to the box; a by-value handle is the object.
                 // An explicit handle (`@node`, the OBJHANDLE bit set) arrives one level deeper: the slot
                 // holds the address of the handle variable, which holds the box.
                 const BoxedVariant* box = nullptr;
@@ -1271,14 +1275,14 @@ namespace foundation::script::angelscript
             }
             // A funcdef handle (a delegate parameter): wrap the function into a script delegate.
             // A generic IScriptDelegate param is spelled `?&in` (by reference). AngelScript does
-            // NOT deliver that reference at a single fixed indirection: a plain function reference
-            // (`ScriptDelegate(fn)`) is dereferenced to the OBJECT, so the arg slot holds the
-            // asIScriptFunction* directly (GETOBJREF); a METHOD delegate (`Action(obj.method)`) is
-            // an explicit handle, so the slot holds the ADDRESS of the temporary handle variable
-            // (GETREF) - one level deeper. Both carry the OBJHANDLE bit, so the type id cannot tell
-            // them apart. ResolveDelegateArgFunction peels the right number of levels safely (a
-            // by-value funcdef handle, e.g. a coroutine's ScriptCoroutine@, arrives as the object
-            // directly through GetArgObject).
+            // not deliver that reference at a single fixed indirection: a plain function reference
+            // (`ScriptDelegate(fn)`) is dereferenced to the object, so the arg slot holds the
+            // asIScriptFunction* directly (GETOBJREF); a method delegate (`Action(obj.method)`) is
+            // an explicit handle, so the slot holds the address of the temporary handle variable
+            // (GETREF), one level deeper. Both carry the OBJHANDLE bit, so the type id cannot tell
+            // them apart. ResolveDelegateArgFunction peels the right number of levels safely. A
+            // by-value funcdef handle (a coroutine's ScriptCoroutine@) arrives as the object
+            // directly through GetArgObject.
             if ((typeId & asTYPEID_OBJHANDLE) != 0 && IsFuncdefTypeId(typeId))
             {
                 asIScriptFunction* fn = nullptr;
@@ -1298,9 +1302,9 @@ namespace foundation::script::angelscript
             return core::Variant{};
         }
 
-        // True when parameter `index` of the executing generic function is an IN-reference
-        // (`&in` / `?&in`): its value arrives as a reference to the caller's variable, not by
-        // value, and the callee does NOT own a reference to it.
+        // True when parameter `index` of the executing generic function is an in-reference
+        // (`&in` or `?&in`): its value arrives as a reference to the caller's variable, not by
+        // value, and the callee does not own a reference to it.
         [[nodiscard]] static bool ArgIsInReference(asIScriptGeneric* gen, asUINT index) noexcept
         {
             asIScriptFunction* self = (gen != nullptr) ? gen->GetFunction() : nullptr;
@@ -1334,7 +1338,7 @@ namespace foundation::script::angelscript
             asIScriptFunction* known = (gen != nullptr) ? gen->GetFunction() : nullptr;
             if (known == nullptr)
             {
-                return candidate; // nothing to compare against - assume the direct form
+                return candidate; // nothing to compare against; assume the direct form
             }
             const void* const functionVTable = *reinterpret_cast<void* const*>(known);
             // Object-ref form: the slot already holds a valid function object.
@@ -1343,8 +1347,8 @@ namespace foundation::script::angelscript
                 return candidate;
             }
             // Handle-ref form: the slot is the address of the handle variable; the function is one
-            // level deeper. Accept it only if it, too, is a real function (else the handle was null
-            // or unrecognized - yield nothing so the caller produces an empty delegate, no crash).
+            // level deeper. Accept it only if it, too, is a real function; otherwise the handle was
+            // null or unrecognized, so yield nothing and the caller produces an empty delegate.
             asIScriptFunction* deeper = *reinterpret_cast<asIScriptFunction* const*>(candidate);
             if (deeper != nullptr && *reinterpret_cast<void* const*>(deeper) == functionVTable)
             {
@@ -1365,8 +1369,8 @@ namespace foundation::script::angelscript
             return info != nullptr && info->GetFuncdefSignature() != nullptr;
         }
 
-        // Engine Variant -> the generic call's declared return slot. An empty
-        // Variant produces the type's zero value (null handle / empty string).
+        // Writes an engine Variant to the generic call's declared return slot. An empty
+        // Variant produces the type's zero value (a null handle or an empty string).
         void SetGenericReturn(asIScriptGeneric* gen, const core::Variant& value) const
         {
             const int typeId = gen->GetReturnTypeId();
@@ -1404,7 +1408,7 @@ namespace foundation::script::angelscript
             case asTYPEID_INT64:
             case asTYPEID_UINT64:
             {
-                // Prefer the Variant's exact 64-bit value (a facade returning i64/u64); only a
+                // Prefer the Variant's exact 64-bit value (a facade returning i64 or u64); only a
                 // float source falls back through `number`, which is the correct currency there.
                 if (const core::i64* iv = value.TryGet<core::i64>())
                 {
@@ -1453,10 +1457,10 @@ namespace foundation::script::angelscript
             }
         }
 
-        // Engine container Variant (Array<T>) -> a native CScriptArray of `arrType` (the declared
-        // `array<Elem>` return). Each element is walked via reflection getAt: an object/handle element
-        // is a refcounted box (SetValue AddRefs, the local ref is then dropped so the array owns the
-        // only one); a numeric element is copied width-matched.
+        // Builds a native CScriptArray of `arrType` (the declared `array<Elem>` return) from an
+        // engine container Variant (Array<T>). Each element is walked via reflection getAt: an object
+        // or handle element is a refcounted box (SetValue AddRefs, then the local ref is dropped so
+        // the array owns the only one); a numeric element is copied width-matched.
         [[nodiscard]] CScriptArray* BuildScriptArray(asITypeInfo* arrType,
                                                      const core::TypeInfo& containerType,
                                                      const core::Variant& value) const
@@ -1466,10 +1470,10 @@ namespace foundation::script::angelscript
                 return nullptr;
             }
             const core::ContainerInfo& ci = *containerType.container;
-            // Nested containers (Array<Array<T>>) are OUTSIDE the array-return contract: the
+            // Nested containers (Array<Array<T>>) are not supported as array returns: the
             // OBJHANDLE branch below would box the inner array as a BoxedVariant and SetValue
-            // would AddRef it as the (different) declared subtype - type-confused refcounting.
-            // Refuse loudly instead of corrupting.
+            // would AddRef it as the (different) declared subtype, confusing the refcounts.
+            // Refuse loudly instead.
             if (ci.elementType != nullptr && ci.elementType->container != nullptr)
             {
                 LOG_WARNING(u8"Script",
@@ -1512,7 +1516,7 @@ namespace foundation::script::angelscript
             return arr;
         }
 
-        // A numeric / bool / enum array element: hand CScriptArray::SetValue a width-matched temporary
+        // A numeric, bool or enum array element: hand CScriptArray::SetValue a width-matched temporary
         // (it byte-copies per the subtype id). Enum subtype ids sort above asTYPEID_DOUBLE and are
         // int32-backed, matching the 32-bit case.
         void WriteScalarElement(CScriptArray& arr, asUINT index, int subId,
@@ -1523,7 +1527,7 @@ namespace foundation::script::angelscript
             if (!ok)
             {
                 // A non-numeric element in a numeric array slot: 0 is written (below) so the
-                // array stays well-formed, but say so - silence here is the no-op bug class.
+                // array stays well-formed, and the warning says so rather than failing silently.
                 LOG_WARNING(u8"Script",
                             u8"non-numeric element written as 0 into a numeric script array");
             }
@@ -1575,7 +1579,7 @@ namespace foundation::script::angelscript
                 arr.SetValue(index, &d);
                 return;
             }
-            default: // INT32 / UINT32 and enum subtypes (id > asTYPEID_DOUBLE): all 32-bit
+            default: // INT32, UINT32 and enum subtypes (id > asTYPEID_DOUBLE): all 32-bit
             {
                 asDWORD d = static_cast<asDWORD>(static_cast<core::i64>(num));
                 arr.SetValue(index, &d);
@@ -1584,9 +1588,9 @@ namespace foundation::script::angelscript
             }
         }
 
-        // Typed script storage (module global / finished call's return register)
-        // -> engine Variant. Numbers surface uniformly as f64, strings as String,
-        // handles to OUR types as a copy of the boxed Variant.
+        // Reads typed script storage (a module global, or a finished call's return register) as
+        // an engine Variant. Numbers surface uniformly as f64, strings as String, and handles to
+        // our types as a copy of the boxed Variant.
         [[nodiscard]] core::Variant VariantFromTypedAddress(int typeId, void* address) const
         {
             if (address == nullptr)
@@ -1634,8 +1638,7 @@ namespace foundation::script::angelscript
             }
             // A plain reflected-type member or global (`Guid m`, OBJHANDLE clear): AngelScript
             // hands back the address of the object itself, the box (a reflected type is an
-            // asOBJ_REF box), not of a handle to it. It read as empty, so a playtest probe of a
-            // script's Guid field answered null.
+            // asOBJ_REF box), not of a handle to it, so read the box directly.
             if (TypeInfoForTypeId(typeId) != nullptr)
             {
                 return static_cast<const BoxedVariant*>(address)->value;
@@ -1643,7 +1646,7 @@ namespace foundation::script::angelscript
             return core::Variant{};
         }
 
-        // Engine Variant -> typed script storage (SetGlobal). False when the
+        // Writes an engine Variant to typed script storage (SetGlobal). False when the
         // slot's type cannot take the value.
         bool WriteTypedAddress(int typeId, void* address, const core::Variant& value) const
         {
@@ -1733,12 +1736,12 @@ namespace foundation::script::angelscript
                 *static_cast<std::string*>(address) = StdFromVariantString(value);
                 return true;
             }
-            // A reflected-type member (every reflected type is registered as asOBJ_REF - a
-            // BoxedVariant box). A HANDLE member (`Type@ m`, OBJHANDLE set) stores a BoxedVariant* we
-            // can set, so a resource id / reflected value applies straight into it. A plain VALUE
+            // A reflected-type member (every reflected type is registered as asOBJ_REF, a
+            // BoxedVariant box). A handle member (`Type@ m`, OBJHANDLE set) stores a BoxedVariant* we
+            // can set, so a resource id or reflected value applies straight into it. A plain value
             // member (`Type m`, OBJHANDLE clear) is owned by AngelScript, which lazily (re)constructs
-            // it - a native slot write does not survive to the first script access - so we reject it
-            // and the caller guides the author to use a handle (see SetMemberField).
+            // it, so a native slot write does not survive to the first script access; we reject it
+            // and the caller tells the author to use a handle (see SetMemberField).
             if ((typeId & asTYPEID_OBJHANDLE) != 0 && TypeInfoForTypeId(typeId) != nullptr)
             {
                 BoxedVariant** slot = static_cast<BoxedVariant**>(address);
@@ -1750,9 +1753,9 @@ namespace foundation::script::angelscript
         }
 
         // ---- compile-message routing ----------------------------------------
-        // Build both compiles AND runs global initializers, and errors from either
+        // Build both compiles and runs global initializers, and errors from either
         // phase arrive through the one engine message callback. Buffer during
-        // Build; the caller classifies by Build's return code (compile failure vs
+        // Build; the caller classifies by Build's return code (compile failure or
         // asINIT_GLOBAL_VARS_FAILED) and flushes with the right ScriptErrorKind.
         void BeginMessageCapture()
         {
@@ -1788,7 +1791,7 @@ namespace foundation::script::angelscript
 
     private:
         // Registers the coroutine surface once: the funcdefs (a coroutine body and a
-        // bool predicate) plus the `startCoroutine`/`wait` host functions. `waitUntil` is
+        // bool predicate) and the `startCoroutine` and `wait` host functions. `waitUntil` is
         // script-side (kCoroutinePreludeSection), added per module in Load.
         void RegisterCoroutineSurface()
         {
@@ -1807,10 +1810,10 @@ namespace foundation::script::angelscript
         }
 
         // Registers the delegate funcdef surface. Reflected RefPtr<IScriptDelegate> parameters are
-        // spelled `?&in` (see AppendDeclType), so a script may pass a funcdef handle of ANY shape -
-        // including a user-declared funcdef. These are the engine-provided common shapes so authors
-        // rarely need to declare their own: `Action` (void() - a click/notify handler) and
-        // `ScriptDelegate` (double(double) - the args+return case). The backend wraps whichever
+        // spelled `?&in` (see AppendDeclType), so a script may pass a funcdef handle of any shape,
+        // including a user-declared funcdef. These are the engine-provided common shapes, so authors
+        // rarely need to declare their own: `Action` (void(), a click or notify handler) and
+        // `ScriptDelegate` (double(double), for args and a return). The backend wraps whichever
         // funcdef handle arrives; the invocation marshals against the handler's actual signature.
         void RegisterDelegateSurface()
         {
@@ -1820,7 +1823,7 @@ namespace foundation::script::angelscript
             }
             (void)m_engine->RegisterFuncdef("void Action()");
             (void)m_engine->RegisterFuncdef(kScriptDelegateFuncdef);
-            // The shapes facades registered for their own callbacks (Net.on's handlers, ...).
+            // The shapes facades registered for their own callbacks (such as Net.on's handlers).
             for (const core::String& shape : DelegateShapes())
             {
                 const std::string declaration(reinterpret_cast<const char*>(shape.Data()), shape.Size());
@@ -1832,7 +1835,7 @@ namespace foundation::script::angelscript
         }
 
         // Marshals `args` into a prepared context's argument slots against `function`'s
-        // declared parameters. Shared by ExecuteDelegate (and mirrors the context's own
+        // declared parameters. Used by ExecuteDelegate (and follows the context's own
         // BindArgs); boxTemps hold object references released by the caller after Execute.
         void BindArgsInto(asIScriptContext* executor, asIScriptFunction* function,
                           core::Span<core::Variant> args, std::string* stringTemps,
@@ -1896,8 +1899,7 @@ namespace foundation::script::angelscript
                     continue;
                 }
                 // A reflected value, to a handle parameter (`Float3@ at`) or a by-value one
-                // (`Float3 at`: AngelScript copies the box in). A by-value parameter once got
-                // nothing and faulted the handler on its first use of it.
+                // (`Float3 at`: AngelScript copies the box in).
                 if (const core::TypeInfo* reflected = TypeInfoForTypeId(typeId);
                     reflected != nullptr && reflected->enumeratorCount == 0 && !IsFuncdefTypeId(typeId) &&
                     !value.IsEmpty())
@@ -1909,9 +1911,6 @@ namespace foundation::script::angelscript
             }
         }
 
-        // Builds the AngelScript declaration string of a method for the introspection
-        // surface (return name(params), statics as Type::name). False when a return/param
-        // type is not expressible - i.e. BindType never registered it either.
         // An operator as a script writes it: `Float3 + Float3 -> Float3 (and +=)`, `-Float3 ->
         // Float3`. False for a method that binds as no operator (RegisterOperator's rule).
         [[nodiscard]] bool BuildOperatorSignature(core::String& out, const core::TypeInfo& type,
@@ -1960,6 +1959,9 @@ namespace foundation::script::angelscript
             return true;
         }
 
+        // Builds the AngelScript declaration string of a method for the introspection
+        // surface (return name(params), statics as Type::name). False when a return or param
+        // type is not expressible, in which case BindType never registered it either.
         [[nodiscard]] bool BuildMemberSignature(core::String& out, const core::TypeInfo& type,
                                                 const core::MethodInfo& method) const
         {
@@ -2026,7 +2028,7 @@ namespace foundation::script::angelscript
         }
 
         // After an Execute: keep it if it suspended (its next wait is already recorded);
-        // drop it (finished/faulted) otherwise.
+        // drop it (finished or faulted) otherwise.
         void ResolveCoroutineExecution(asIScriptContext* ctx, int result)
         {
             if (result == asEXECUTION_SUSPENDED)
@@ -2062,7 +2064,7 @@ namespace foundation::script::angelscript
             if (message->type != asMSGTYPE_ERROR)
             {
                 return;
-            } // warnings/info: quiet
+            } // warnings and info stay quiet
             if (self->m_capturing)
             {
                 CapturedMessage captured;
@@ -2088,17 +2090,17 @@ namespace foundation::script::angelscript
             return false;
         }
 
-        // Appends the AngelScript declaration name for a reflected type: scalars/
-        // string by value (strings as `const string &in` in parameter position),
-        // declared object types as handles. False = not expressible, skip member.
+        // Appends the AngelScript declaration name for a reflected type: scalars and
+        // strings by value (strings as `const string &in` in parameter position),
+        // declared object types as handles. False when not expressible; skip the member.
         bool AppendDeclType(core::String& out, const core::TypeInfo* type, bool isParam) const
         {
             if (type == nullptr)
             {
                 return false;
             }
-            // A delegate parameter accepts ANY callable. IScriptDelegate is a GENERIC callback
-            // (Invoke marshals dynamic Variants against the handler's actual arity), so the honest
+            // A delegate parameter accepts any callable. IScriptDelegate is a generic callback
+            // (Invoke marshals dynamic Variants against the handler's actual arity), so the fitting
             // AngelScript type is the variable-type in-reference `?&in`: a script passes a funcdef
             // handle of any signature (a void() click handler, a double(double) value callback, a
             // user-declared funcdef) and the generic dispatch detects the funcdef handle and wraps
@@ -2118,8 +2120,8 @@ namespace foundation::script::angelscript
                 return true;
             }
             // A Variant parameter is the generic payload sink (scene.events.emit(name, anyValue)):
-            // spelled `?&in` so a script may pass ANY value - number, string, bool, or a boxed
-            // reflected handle - and ValueFromArg boxes whatever arrives straight into a Variant.
+            // spelled `?&in` so a script may pass any value (number, string, bool, or a boxed
+            // reflected handle), and ValueFromArg boxes whatever arrives straight into a Variant.
             // Declared last among overloads, so a specific typed overload still wins on exact match.
             // Return position never carries a raw Variant (the ReturnType-override path handles that).
             if (type == &core::TypeOf<core::Variant>())
@@ -2142,7 +2144,7 @@ namespace foundation::script::angelscript
                 return true;
             }
             // A reflected container (Array<T>): the native array. The element reuses its own spelling
-            // (`Entity@`, `int`, `string`, ...). A return is `array<Elem>@` (a facade returning a
+            // (`Entity@`, `int`, `string` and so on). A return is `array<Elem>@` (a facade returning a
             // set); a parameter is `const array<Elem> &in` (a script handing a facade a list, read
             // into an Array<Variant> by ValueFromArg).
             if (core::IsContainer(*type))
@@ -2158,7 +2160,7 @@ namespace foundation::script::angelscript
                 AppendAscii(out, isParam ? "> &in" : ">@");
                 return true;
             }
-            // A native AngelScript enum: an int-backed VALUE type, spelled by name with no handle.
+            // A native AngelScript enum: an int-backed value type, spelled by name with no handle.
             if (type->enumeratorCount > 0)
             {
                 AppendAscii(out, ScriptTypeName(*type)); // the alias, so references match the declaration
@@ -2168,17 +2170,17 @@ namespace foundation::script::angelscript
             {
                 return false;
             }
-            AppendAscii(out, ScriptTypeName(*type)); // the alias (Type@ params/returns/members)
+            AppendAscii(out, ScriptTypeName(*type)); // the alias (Type@ params, returns, members)
             AppendAscii(out, "@");
             return true;
         }
 
-        // Phase 1: declare the object type (skips scalars/string/enums/containers
-        // and anything AngelScript's own registry rejects, e.g. name collisions).
+        // Phase 1: declare the object type (skips scalars, strings, enums and containers,
+        // and anything AngelScript's own registry rejects, such as name collisions).
         void DeclareType(const core::TypeInfo& type)
         {
             // The script-facing name: the scriptName alias when set, else the C++ name. AngelScript
-            // binds + references the class under THIS (the native/wire identity stays type.name).
+            // binds and references the class under this name (the native identity stays type.name).
             const char* const scriptName = ScriptTypeName(type);
             if (!IsValidIdentifier(scriptName))
             {
@@ -2187,10 +2189,10 @@ namespace foundation::script::angelscript
             if (PrimitiveDeclName(&type) != nullptr)
             {
                 return;
-            } // scalar/string currency
+            } // scalar or string currency
             if (type.enumeratorCount > 0)
             {
-                DeclareEnum(type); // AngelScript has native enums - register it + its values
+                DeclareEnum(type); // AngelScript has native enums; register it and its values
                 return;
             }
             if (type.container != nullptr)
@@ -2212,10 +2214,10 @@ namespace foundation::script::angelscript
             m_registered.PushBack(RegisteredType{&type, typeId});
         }
 
-        // AngelScript has native enums: register the enum type + each enumerator (a named int32), so
-        // a script writes `NetworkAuthority::Server` and an enum-typed property/param binds. Recorded
-        // in m_registered like object types, so TypeInfoForTypeId maps the enum typeId back for
-        // marshalling (enum values cross as their underlying int - the property setter casts).
+        // AngelScript has native enums: register the enum type and each enumerator (a named int32),
+        // so a script writes `NetworkAuthority::Server` and an enum-typed property or param binds.
+        // Recorded in m_registered like object types, so TypeInfoForTypeId maps the enum typeId back
+        // for marshalling (enum values cross as their underlying int; the property setter casts).
         void DeclareEnum(const core::TypeInfo& type)
         {
             if (IsDeclared(&type))
@@ -2235,17 +2237,18 @@ namespace foundation::script::angelscript
                 m_engine->RegisterEnumValue(scriptName, value.name,
                                             static_cast<int>(value.value));
             }
-            // Record RegisterEnum's OWN typeId (not GetTypeIdByDecl, which may not resolve a bare
-            // enum name) so TypeInfoForTypeId maps the return/arg enum typeId back at marshal time -
-            // else SetGenericReturn misses the enum branch and boxes an int as an object (a crash).
+            // Record RegisterEnum's own typeId (not GetTypeIdByDecl, which may not resolve a bare
+            // enum name) so TypeInfoForTypeId maps a return or arg enum typeId back at marshal time;
+            // otherwise SetGenericReturn misses the enum branch and boxes an int as an object, which
+            // crashes.
             m_registered.PushBack(RegisteredType{&type, enumTypeId});
         }
 
-        // Declare any ENUM referenced by a collected type's members (property types + constructor/
-        // method params). An enum is not separately registered - it rides a member's type - so we
-        // harvest them in Phase 1 so a member declaration string can name the enum (AngelScript
-        // otherwise rejects a decl that references an undeclared enum, and a broken property binding
-        // crashes at dispatch). Idempotent (DeclareEnum no-ops on a re-seen enum).
+        // Declare any enum referenced by a collected type's members (property types and constructor
+        // or method params). An enum is not separately registered (it rides a member's type), so we
+        // harvest them in phase 1 so a member declaration string can name the enum. AngelScript
+        // otherwise rejects a declaration that references an undeclared enum, and a broken property
+        // binding crashes at dispatch. Idempotent (DeclareEnum does nothing for an enum seen before).
         void DeclareReferencedEnums(const core::TypeInfo& type)
         {
             auto maybe = [&](const core::TypeInfo* t)
@@ -2278,10 +2281,10 @@ namespace foundation::script::angelscript
         }
 
         // Bind a container member as owner methods: `<name>_count() -> uint`, `<name>_at(uint) ->
-        // Elem@`, `<name>_add(const string &in) -> Elem@` (polymorphic) / `<name>_add() -> Elem@`
+        // Elem@`, `<name>_add(const string &in) -> Elem@` (polymorphic) or `<name>_add() -> Elem@`
         // (homogeneous), `<name>_removeAt(uint)`, `<name>_move(uint, uint)`. The element handle
         // spelling comes from the container's static element type; at/add are skipped if it is not
-        // expressible (count/removeAt/move still register).
+        // expressible (count, removeAt and move still register).
         void RegisterContainerMethods(const char* name, const core::TypeInfo& type,
                                       const core::PropertyInfo& property)
         {
@@ -2334,9 +2337,9 @@ namespace foundation::script::angelscript
             }
         }
 
-        // Bind a nested-VALUE member as a read getter returning a borrow handle: `<NestedType>@
+        // Bind a nested value member as a read getter returning a borrow handle: `<NestedType>@
         // get_<name>() property`. Skipped if the nested type is not expressible as a handle (not
-        // declared). No setter - a nested value is edited in place through the borrow, not reassigned.
+        // declared). No setter: a nested value is edited in place through the borrow, not reassigned.
         void RegisterNestedGetter(const char* name, const core::TypeInfo& type,
                                   const core::PropertyInfo& property)
         {
@@ -2401,9 +2404,10 @@ namespace foundation::script::angelscript
 
         void BindType(const core::TypeInfo& type)
         {
-            // An enum is fully declared by DeclareEnum (a native enum + its values); it has no object
-            // members. Binding object behaviours (opAssign, factories, ...) onto an enum name crashes
-            // AngelScript - so skip it here. (Also skips scalars/containers, which have no bindings.)
+            // An enum is fully declared by DeclareEnum (a native enum and its values); it has no object
+            // members. Binding object behaviours (opAssign, factories) onto an enum name crashes
+            // AngelScript, so skip it here. This also skips scalars and containers, which have no
+            // bindings.
             if (type.enumeratorCount > 0)
             {
                 return;
@@ -2412,7 +2416,7 @@ namespace foundation::script::angelscript
             {
                 return;
             }
-            // Bind all members under the SCRIPT-FACING name (the scriptName alias when set) - it must
+            // Bind all members under the script-facing name (the scriptName alias when set). It has to
             // match the name DeclareType registered the object type under, or AngelScript cannot find it.
             const char* name = ScriptTypeName(type);
 
@@ -2462,7 +2466,7 @@ namespace foundation::script::angelscript
                 }
             }
 
-            // Properties -> virtual property accessors (`v.x`, `v.x = 9`), the type's own and its
+            // Properties become virtual property accessors (`v.x`, `v.x = 9`), the type's own and its
             // bases' (a Button's `text` and its Node's `width`), as Luau's dispatch walks the chain.
             for (const core::PropertyInfo* inherited : ChainProperties(type))
             {
@@ -2474,7 +2478,7 @@ namespace foundation::script::angelscript
                 if (core::IsNested(property))
                 {
                     // A container member binds as owner methods (count/at/add/removeAt/move); a plain
-                    // nested-VALUE member binds as a getter returning a borrow handle (edited in place).
+                    // nested value member binds as a getter returning a borrow handle (edited in place).
                     if (property.type != nullptr && property.type->container != nullptr)
                     {
                         RegisterContainerMethods(name, type, property);
@@ -2519,10 +2523,10 @@ namespace foundation::script::angelscript
                 }
             }
 
-            // Methods. AngelScript overloads by full signature, so EVERY reflected
+            // Methods. AngelScript overloads by full signature, so every reflected
             // overload registers distinctly (no arity collapsing).
-            // Statics become global functions in a namespace named after the class
-            // - script calls read `Float3::Dot(a, b)`.
+            // Statics become global functions in a namespace named after the class,
+            // so script calls read `Float3::Dot(a, b)`.
             // Instance methods come from the bases too (derived first, so an override's declaration
             // wins the dedupe); statics stay on the type that declares them (`Button::of`).
             core::Array<core::String> usedStatics;
@@ -2735,15 +2739,15 @@ namespace foundation::script::angelscript
         AngelScriptDebugger* m_debugger = nullptr; // borrowed; the active debugger (self-registers)
     };
 
-    // ---- generic dispatchers (run DURING script execution; the surrounding
+    // ---- generic dispatchers (run during script execution; the surrounding
     // Call/Load/Invoke already pushed the ScriptCallScope) ---------------------
 
     // Generic-call handle ownership (asEP_GENERIC_CALL_MODE == 1, the modern
-    // default): a plain `Type@` parameter arrives with a reference the CALLEE
-    // owns and must release - the engine adds no cleanup instruction for it.
+    // default): a plain `Type@` parameter arrives with a reference the callee
+    // owns and must release; the engine adds no cleanup instruction for it.
     // Every dispatcher that takes arguments calls this after marshalling (the
-    // Variants hold copies by then). Missing this leaks one reference per
-    // object argument (found by ASAN).
+    // Variants hold copies by then). Skipping it leaks one reference per
+    // object argument.
     inline void ReleaseHandleArgs(asIScriptGeneric* gen, const AngelScriptManager* manager)
     {
         const asUINT argc = gen->GetArgCount();
@@ -2760,9 +2764,9 @@ namespace foundation::script::angelscript
             }
             else if (manager->IsFuncdefTypeId(typeId) && !AngelScriptManager::ArgIsInReference(gen, i))
             {
-                // A BY-VALUE funcdef-handle arg (e.g. a coroutine's ScriptCoroutine@): the callee
+                // A by-value funcdef-handle arg (such as a coroutine's ScriptCoroutine@): the callee
                 // owns this reference. The wrapper AddRef'd its own; release the incoming one. A
-                // `?&in` delegate handle is BORROWED (the caller owns its temporary) - skipped.
+                // `?&in` delegate handle is borrowed (the caller owns its temporary), so it is skipped.
                 if (asIScriptFunction* fn = static_cast<asIScriptFunction*>(gen->GetArgObject(i)))
                 {
                     fn->Release();
@@ -2776,9 +2780,8 @@ namespace foundation::script::angelscript
         int argc = static_cast<int>(gen->GetArgCount());
         if (argc > kMaxArgs)
         {
-            // Loud, not silent: a dropped trailing argument is the "facade call quietly no-ops"
-            // bug class (the DebugDraw.line lesson). The call still proceeds with the first
-            // kMaxArgs so existing behavior is unchanged.
+            // Warn: a dropped trailing argument otherwise makes the facade call quietly do the
+            // wrong thing. The call still proceeds with the first kMaxArgs.
             LOG_WARNING(u8"Script", u8"reflected factory call has {} args; only {} are marshaled",
                         argc, kMaxArgs);
             argc = kMaxArgs;
@@ -2903,9 +2906,9 @@ namespace foundation::script::angelscript
         return nullptr;
     }
 
-    // The Variant to hand a script for container element `index`: an object / value element via getAt
-    // (owned); a NON-Object value element (getAt empty) via a BORROW over its address, pinned to the
-    // container owner `parent` and generation-guarded. Empty if out of range / no element.
+    // The Variant to hand a script for container element `index`: an object or value element via
+    // getAt (owned); a non-Object value element (getAt empty) via a borrow over its address, pinned to
+    // the container owner `parent` and generation-guarded. Empty if out of range or no element.
     core::Variant ContainerElementVariant(const core::ContainerInfo& ci,
                                           const core::Instance& container, core::usize index,
                                           const core::Variant& parent)
@@ -2922,7 +2925,7 @@ namespace foundation::script::angelscript
         return element;
     }
 
-    // A nested-VALUE member getter: returns a borrow handle over the member address (edited in place).
+    // A nested value member getter: returns a borrow handle over the member address (edited in place).
     void NestedGetDispatch(asIScriptGeneric* gen)
     {
         const Binding* binding = static_cast<const Binding*>(gen->GetAuxiliary());
@@ -2937,7 +2940,7 @@ namespace foundation::script::angelscript
     }
 
     // One dispatcher for every container op; the Binding::Kind selects which. The owner is `self`,
-    // the container member is reached transiently via property.address. Object / value elements come
+    // the container member is reached transiently via property.address. Object and value elements come
     // back owned; a non-Object value element comes back as a borrow (pinned to the owner).
     void ContainerDispatch(asIScriptGeneric* gen)
     {
@@ -3074,14 +3077,14 @@ namespace foundation::script::angelscript
                                            result.HasValue() ? result.Value() : core::Variant{});
     }
 
-    // ---- coroutine host functions (auxiliary = the manager) ----
+    // ---- coroutine host functions (the auxiliary is the manager) ----
     void CoroutineStartDispatch(asIScriptGeneric* gen)
     {
         AngelScriptManager* manager = static_cast<AngelScriptManager*>(gen->GetAuxiliary());
-        // `ScriptCoroutine@ fn` is a by-value handle argument: the generic callee OWNS this
+        // `ScriptCoroutine@ fn` is a by-value handle argument: the generic callee owns this
         // reference. StartCoroutine copies what it needs (the delegate's function via Prepare's
         // AddRef, the owner via an explicit AddRef), so release our reference here or the delegate
-        // (and, through it, the coroutine's owner + module) leaks.
+        // (and, through it, the coroutine's owner and module) leaks.
         asIScriptFunction* fn = static_cast<asIScriptFunction*>(gen->GetArgObject(0));
         if (manager != nullptr)
         {
@@ -3106,7 +3109,7 @@ namespace foundation::script::angelscript
     // A delegate borrows its owning context (to scope CurrentScriptContext around the
     // callback); the context tracks its delegates and Detach()es them at close. Declared
     // here so AngelScriptContext can hold Array<AngelScriptDelegate*>; the methods that
-    // touch its members stay out-of-line (it is defined further down).
+    // touch its members stay out of line (it is defined further down).
     class AngelScriptDelegate;
 
     class AngelScriptContext final : public IScriptContext
@@ -3119,7 +3122,7 @@ namespace foundation::script::angelscript
             AppendUint(m_namePrefix, id);
         }
 
-        // Out-of-line: the destructor Detach()es tracked delegates, which needs the
+        // Out of line: the destructor Detach()es tracked delegates, which needs the
         // complete AngelScriptDelegate type (defined further down).
         ~AngelScriptContext() override;
 
@@ -3128,7 +3131,7 @@ namespace foundation::script::angelscript
 
         // A delegate wrapping one of this context's script functions registers itself here so
         // the context can Detach() it at close (after which its Invoke fails cleanly instead of
-        // touching a discarded module). Borrowed - the delegate untracks itself on destruction.
+        // touching a discarded module). Borrowed; the delegate untracks itself on destruction.
         void TrackDelegate(AngelScriptDelegate* delegate) { m_delegates.PushBack(delegate); }
         void UntrackDelegate(AngelScriptDelegate* delegate)
         {
@@ -3159,12 +3162,12 @@ namespace foundation::script::angelscript
             const core::String section(chunkName);
             (void)module->AddScriptSection(
                 CStr(section), reinterpret_cast<const char*>(source.Data()), source.Size());
-            // The in-script `waitUntil` helper, in its OWN section so it never shifts the
-            // user source's error line numbers (the funcdefs + `wait` are engine-global).
+            // The in-script `waitUntil` helper, in its own section so it never shifts the
+            // user source's error line numbers (the funcdefs and `wait` are engine-global).
             (void)module->AddScriptSection("__coroutine_support", kCoroutinePreludeSection);
 
-            // Build compiles AND runs global initializers; classify buffered errors
-            // by the return code (compile failure vs failed global init).
+            // Build compiles and runs global initializers; classify buffered errors
+            // by the return code (compile failure or failed global init).
             int result;
             m_manager->BeginMessageCapture();
             {
@@ -3184,9 +3187,9 @@ namespace foundation::script::angelscript
             m_ownedModules.PushBack(module);
             m_module = module;
 
-            // Top-level entry convention: a module-level `void main()` runs at load
-            // (AngelScript has no top-level statements; this is the runtime-fault
-            // and script-setup seam the contract's Load semantics map onto).
+            // Top-level entry convention: a module-level `void main()` runs at load.
+            // AngelScript has no top-level statements, so this is where Load's
+            // script setup and runtime faults happen.
             if (asIScriptFunction* entry = module->GetFunctionByName("main"))
             {
                 core::Result<core::Variant> ran =
@@ -3199,15 +3202,15 @@ namespace foundation::script::angelscript
             return core::Status{};
         }
 
-        // Load a precompiled bytecode blob (the player path - LoadByteCode, never Build). Same
-        // module lifecycle + main() entry convention as Load; AngelScript restores global vars
-        // during LoadByteCode. The engine must carry the SAME reflected registration the blob was
-        // saved against (the shared global registry guarantees it) or LoadByteCode rejects it.
+        // Load a precompiled bytecode blob (the player path: LoadByteCode, never Build). Same
+        // module lifecycle and main() entry convention as Load; AngelScript restores global vars
+        // during LoadByteCode. The engine must carry the same reflected registration the blob was
+        // saved against (the shared global registry ensures it) or LoadByteCode rejects it.
         core::Status LoadBlob(IScriptBlob& blob) override
         {
             // IScriptBlob is opaque (no RTTI node); only this backend produces AngelScript blobs
-            // and the run host pairs the AS context with the AS manager, so this downcast is the
-            // committed pattern.
+            // and the run host pairs the AngelScript context with the AngelScript manager, so the
+            // downcast is safe.
             AngelScriptScriptBlob& asBlob = static_cast<AngelScriptScriptBlob&>(blob);
             if (asBlob.Bytes().IsEmpty())
             {
@@ -3250,13 +3253,13 @@ namespace foundation::script::angelscript
             return core::Status{};
         }
 
-        // The behaviors module. A class carrying cooked BYTECODE loads as its OWN module via
-        // LoadByteCode (the player path - no compiler; the cooked blob is a single-class module
-        // that kept its debug info + sourceName section, so breakpoints still line up). Classes
-        // WITHOUT bytecode (freshly authored, not yet cooked) build together into one combined
-        // module, each in its own section named by its sourceName - GetLineNumber then reports
-        // (sourceFile, sourceLine). CreateInstance/FindFunction search
-        // ALL owned modules newest-first, so the bytecode/source split is transparent to callers.
+        // The behaviors module. A class carrying cooked bytecode loads as its own module via
+        // LoadByteCode (the player path, with no compiler; the cooked blob is a single-class module
+        // that kept its debug info and sourceName section, so breakpoints still line up). Classes
+        // without bytecode (freshly authored, not yet cooked) build together into one combined
+        // module, each in its own section named by its sourceName, so GetLineNumber reports
+        // (sourceFile, sourceLine). CreateInstance and FindFunction search all owned modules
+        // newest-first, so the split between bytecode and source is invisible to callers.
         core::Status LoadBehaviorModule(core::Span<const BehaviorModuleClass> classes,
                                         core::StringView moduleName) override
         {
@@ -3289,9 +3292,9 @@ namespace foundation::script::angelscript
                 return core::Status{core::ErrorCode::Internal};
             }
 
-            // One section PER CLASS, named by its sourceName (the editor's breakpoint key).
-            // A class with no sourceName falls back to the module name (still compiles; only
-            // its breakpoints won't line up - the cook always stamps sourceName).
+            // One section per class, named by its sourceName (the editor's breakpoint key).
+            // A class with no sourceName falls back to the module name: it still compiles, but
+            // its breakpoints will not line up. The cook always stamps sourceName.
             for (const BehaviorModuleClass& entry : sourceOnly)
             {
                 const core::String section(entry.name.IsEmpty() ? moduleName : entry.name);
@@ -3299,7 +3302,7 @@ namespace foundation::script::angelscript
                                                reinterpret_cast<const char*>(entry.source.Data()),
                                                entry.source.Size());
             }
-            // The in-script `waitUntil` helper, in its OWN section (line numbers unaffected).
+            // The in-script `waitUntil` helper, in its own section (line numbers unaffected).
             (void)module->AddScriptSection("__coroutine_support", kCoroutinePreludeSection);
 
             int result;
@@ -3333,10 +3336,10 @@ namespace foundation::script::angelscript
             return core::Status{};
         }
 
-        // Reconstruct a cooked AngelScript blob from its SERIALIZED bytes (ScriptClass::bytecode -
-        // AngelScriptBlobFromModule -> Serialize) and LoadByteCode it into its own module, exactly
-        // as LoadBlob does (unique module name -> hot reload keeps old generations alive; main()
-        // runs). The player path for a single behavior class.
+        // Reconstruct a cooked AngelScript blob from its serialized bytes (ScriptClass::bytecode,
+        // written by AngelScriptBlobFromModule and Serialize) and LoadByteCode it into its own
+        // module, as LoadBlob does: a unique module name lets hot reload keep old generations
+        // alive, and main() runs. The player path for a single behavior class.
         core::Status LoadClassBytecode(core::Span<const core::byte> serialized)
         {
             AngelScriptScriptBlob blob;
@@ -3406,8 +3409,8 @@ namespace foundation::script::angelscript
         [[nodiscard]] core::RefPtr<ScriptObject>
         CreateInstance(core::StringView className, core::Span<core::Variant> args) override;
 
-        // Prepare + execute a script function on the engine's pooled contexts.
-        // The public seam AngelScriptObject::Invoke dispatches through as well.
+        // Prepare and execute a script function on the engine's pooled contexts.
+        // AngelScriptObject::Invoke dispatches through it as well.
         [[nodiscard]] core::Result<core::Variant>
         ExecuteCall(asIScriptFunction* function, void* object, core::Span<core::Variant> args)
         {
@@ -3431,7 +3434,7 @@ namespace foundation::script::angelscript
             BindArgs(executor, function, args, stringTemps, boxTemps);
 
             // Arm the step debugger (if attached) on this executor: its line callback calls
-            // ctx->Suspend() on a breakpoint/step line, unwinding back here as SUSPENDED.
+            // ctx->Suspend() on a breakpoint or step line, unwinding back here as suspended.
             AngelScriptDebugger* debugger = m_manager->ActiveDebugger();
             if (debugger != nullptr)
             {
@@ -3444,12 +3447,12 @@ namespace foundation::script::angelscript
                 result = executor->Execute();
             }
 
-            // A DEBUGGER suspension is distinct from a coroutine suspend (which happens on a
-            // coroutine's OWN dedicated context, never this pooled executor). When the debugger
-            // caused it, it now OWNS the suspended context for inspection + resume: do NOT
-            // return it to the pool, and report a paused status the subsystem recognizes (via
-            // the run host's pause flag) - never a fault, never completion. Value args only
-            // (lifecycle handlers take a numeric dt or nothing), so releasing box args is safe.
+            // A debugger suspension is distinct from a coroutine suspend, which happens on the
+            // coroutine's own dedicated context, never this pooled executor. When the debugger
+            // caused it, the debugger owns the suspended context for inspection and resume: do
+            // not return it to the pool, and report a paused status the subsystem recognizes (via
+            // the run host's pause flag), neither a fault nor completion. Lifecycle handlers take
+            // a numeric dt or nothing, so releasing box args is safe.
             if (result == asEXECUTION_SUSPENDED && debugger != nullptr &&
                 AdoptDebuggerSuspension(*debugger, executor))
             {
@@ -3492,9 +3495,9 @@ namespace foundation::script::angelscript
         [[nodiscard]] asIScriptFunction* FindFunction(core::StringView name, int argc) const
         {
             const core::String functionName(name);
-            // Search owned modules NEWEST-first: hot reload appends a fresh generation (so the
-            // newest wins, the "resolves against the last loaded module" contract), and per-class
-            // bytecode modules mean a function can live in any owned module, not just m_module.
+            // Search owned modules newest-first: hot reload appends a fresh generation, and lookups
+            // resolve against the last loaded module; per-class bytecode modules mean a function
+            // can live in any owned module, not just m_module.
             asIScriptFunction* byName = nullptr;
             for (core::usize m = m_ownedModules.Size(); m-- > 0;)
             {
@@ -3623,8 +3626,8 @@ namespace foundation::script::angelscript
     };
 
     // A live instance of a script-declared class. Holds the asIScriptObject plus a
-    // strong reference to its owning context (which keeps the manager - and thus
-    // the engine - alive).
+    // strong reference to its owning context (which keeps the manager, and so
+    // the engine, alive).
     class AngelScriptObject final : public ScriptObject
     {
     public:
@@ -3659,9 +3662,9 @@ namespace foundation::script::angelscript
 
             // The neutral property-apply path Invokes the setter as `<name>=` with one
             // argument (the setter convention). AngelScript has no method
-            // by that name; its editor properties are plain member FIELDS. So a trailing
-            // `=` with exactly one arg writes the same-named member field directly - the
-            // "settable member" AngelScript exposes for harvested behavior properties.
+            // by that name; its editor properties are plain member fields. So a trailing
+            // `=` with exactly one arg writes the same-named member field directly, which is
+            // how AngelScript exposes harvested behavior properties as settable.
             if (args.Size() == 1 && !method.IsEmpty() && method[method.Size() - 1] == u8'=')
             {
                 const core::StringView fieldName = method.SubStr(0, method.Size() - 1);
@@ -3711,7 +3714,7 @@ namespace foundation::script::angelscript
     private:
         // Writes the instance member field named `fieldName` from `value` (the harvested
         // editor-property apply path). Marshals through the manager's typed-address writer,
-        // so scalars/string/reflected-handle members all take the value uniformly. False
+        // so scalar, string and reflected-handle members all take the value uniformly. False
         // when no such (writable) member exists or the value's type cannot fill it.
         [[nodiscard]] bool SetMemberField(core::StringView fieldName, const core::Variant& value)
         {
@@ -3730,10 +3733,10 @@ namespace foundation::script::angelscript
                 {
                     return true;
                 }
-                // A reflected/resource property (asset:X, or any reflected value) declared as a
-                // plain VALUE member cannot be set from native (AngelScript owns its lifecycle).
-                // Guide the author to use a handle - the idiomatic AngelScript spelling for a
-                // reference type - which DOES take the value.
+                // A reflected or resource property (asset:X, or any reflected value) declared as a
+                // plain value member cannot be set from native (AngelScript owns its lifecycle).
+                // Tell the author to use a handle, the idiomatic AngelScript spelling for a
+                // reference type, which does take the value.
                 if ((typeId & asTYPEID_MASK_OBJECT) != 0 && (typeId & asTYPEID_OBJHANDLE) == 0)
                 {
                     LOG_WARNING(
@@ -3751,10 +3754,10 @@ namespace foundation::script::angelscript
         asIScriptObject* m_instance;
     };
 
-    // A script function/closure held as a native callback. Holds the manager (keeps the
-    // engine alive) and one AddRef on the funcdef handle (the GC-safe promise); Invoke runs
-    // it on a pooled context. It references the MANAGER, not the owning context, so it never
-    // cycles with a context that stores it back (e.g. through a reflected event object).
+    // A script function or closure held as a native callback. Holds the manager (keeps the
+    // engine alive) and one AddRef on the funcdef handle (so the GC keeps it); Invoke runs
+    // it on a pooled context. It references the manager, not the owning context, so it never
+    // forms a cycle with a context that stores it back (through a reflected event object).
     class AngelScriptDelegate final : public IScriptDelegate
     {
     public:
@@ -3795,7 +3798,7 @@ namespace foundation::script::angelscript
             }
             // Scope the owning context around the callback so facades the handler calls
             // (ui::pop, run::loadScene) resolve their per-context services through
-            // CurrentScriptContext() - mirrors LuauScriptDelegate::Invoke. ExecuteDelegate
+            // CurrentScriptContext(), as LuauScriptDelegate::Invoke does. ExecuteDelegate
             // itself runs the function on a pooled asIScriptContext.
             ScriptCallScope scope(m_context);
             return m_manager->ExecuteDelegate(m_function, args);
@@ -3807,7 +3810,7 @@ namespace foundation::script::angelscript
         asIScriptFunction* m_function;
     };
 
-    // Out-of-line (needs the complete AngelScriptDelegate above): Detach() every delegate that
+    // Out of line (needs the complete AngelScriptDelegate above): Detach() every delegate that
     // wrapped one of this context's functions so a later Invoke fails cleanly, then discard the
     // owned modules. No ScriptObject outlives its context (they hold a strong ref), so the
     // module discard is safe here.
@@ -3844,8 +3847,8 @@ namespace foundation::script::angelscript
 
     void AngelScriptManager::CancelCoroutinesFor(ScriptObject& instance)
     {
-        // We hold the owner pointer directly - drop every coroutine started by this
-        // behavior instance (its context is aborted + released, its owner ref freed).
+        // We hold the owner pointer directly: drop every coroutine started by this
+        // behavior instance (its context is aborted and released, its owner ref freed).
         asIScriptObject* owner = static_cast<AngelScriptObject&>(instance).ScriptInstance();
         for (core::usize i = m_coroutines.Size(); i-- > 0;)
         {
@@ -3860,10 +3863,9 @@ namespace foundation::script::angelscript
     //
     // Single-threaded, non-blocking: a breakpoint is a line callback that calls
     // ctx->Suspend(), unwinding execution back to ExecuteCall (which reports it up as a
-    // paused status). While suspended the context is fully inspectable (GetCallstackSize /
-    // GetVar / GetAddressOfVar). Continue/Step re-Execute the SAME held context. The editor
-    // UI + a future remote transport drive only the neutral IScriptDebugger - nothing here
-    // leaks to the contract.
+    // paused status). While suspended the context is fully inspectable (GetCallstackSize,
+    // GetVar, GetAddressOfVar). Continue and Step execute the same held context again. The
+    // editor drives only the neutral IScriptDebugger; nothing here leaks into it.
     class AngelScriptDebugger final : public IScriptDebugger
     {
     public:
@@ -3877,7 +3879,7 @@ namespace foundation::script::angelscript
 
         ~AngelScriptDebugger() override
         {
-            // A held (paused) context is aborted + returned so the engine tears down cleanly.
+            // A held (paused) context is aborted and returned so the engine tears down cleanly.
             if (m_pausedContext != nullptr)
             {
                 (void)m_pausedContext->Abort();
@@ -4048,13 +4050,13 @@ namespace foundation::script::angelscript
 
         [[nodiscard]] bool IsPaused() const noexcept { return m_paused; }
 
-        // The line callback (control is INSIDE Execute here): suspend when the current line is
+        // The line callback (control is inside Execute here): suspend when the current line is
         // a breakpoint, a satisfied step, or a pending manual Break.
         void OnLine(asIScriptContext* ctx)
         {
             // One held context at a time: while paused, a re-entrant script call (an event
-            // handler firing during the pause) runs through without suspending - adopting a
-            // second context would orphan the held one.
+            // handler firing during the pause) runs through without suspending, because adopting
+            // a second context would orphan the held one.
             if (m_pausedContext != nullptr && m_pausedContext != ctx)
             {
                 return;
@@ -4133,8 +4135,8 @@ namespace foundation::script::angelscript
             return false;
         }
 
-        // Fill a ScriptVariable's display text + expandability from a captured Variant: a
-        // reflected object/value with properties gets a non-zero objectRef for lazy expansion.
+        // Fill a ScriptVariable's display text and expandability from a captured Variant: a
+        // reflected object or value with properties gets a non-zero objectRef for lazy expansion.
         void DescribeValue(ScriptVariable& variable, const core::Variant& value)
         {
             const core::TypeInfo* type = value.Type();
@@ -4166,8 +4168,8 @@ namespace foundation::script::angelscript
             return nullptr;
         }
 
-        // Re-Execute the held context. None = run to the next breakpoint/completion;
-        // Into/Over arm a one-line step. Re-establishes the owning context's call scope so
+        // Execute the held context again. None runs to the next breakpoint or completion;
+        // Into and Over arm a one-line step. Re-establishes the owning context's call scope so
         // resumed facade calls still resolve their per-context services.
         void Resume(StepMode mode)
         {
@@ -4263,8 +4265,8 @@ namespace foundation::script::angelscript
 
     core::RefPtr<IScriptContext> AngelScriptManager::CreateContext()
     {
-        // Defensive finalize (the documented contract): a context may be created
-        // without RegisterReflectedTypes having driven the two-phase emission.
+        // Finalize defensively: a context may be created without RegisterReflectedTypes
+        // having driven the two-phase emission.
         FinalizeTypes();
         return core::RefPtr<IScriptContext>(core::MakeRef<AngelScriptContext>(
             MemoryAllocator(), core::RefPtr<AngelScriptManager>(this), m_nextContextId++));
@@ -4274,9 +4276,8 @@ namespace foundation::script::angelscript
                                                                   core::Span<core::Variant> args)
     {
         const core::String name(className);
-        // Search owned modules NEWEST-first (hot reload's fresh generation wins; a class can live
-        // in its own per-class bytecode module, not just m_module - the same generalization as
-        // FindFunction).
+        // Search owned modules newest-first, as FindFunction does: hot reload's fresh generation
+        // wins, and a class can live in its own per-class bytecode module, not just m_module.
         asITypeInfo* type = nullptr;
         for (core::usize m = m_ownedModules.Size(); m-- > 0;)
         {
@@ -4300,7 +4301,7 @@ namespace foundation::script::angelscript
             }
             if (args.Size() == 1)
             {
-                // Skip the implicit copy factory (one self-typed parameter) - a
+                // Skip the implicit copy factory (one self-typed parameter): a
                 // Variant argument can never be a live script object.
                 int paramTypeId = 0;
                 (void)candidate->GetParam(0, &paramTypeId);
@@ -4398,7 +4399,7 @@ namespace foundation::script::angelscript
     void* AngelScriptEngineHandle(IScriptManager& manager) noexcept
     {
         // Only this backend produces AngelScriptManager instances, and the editor cook
-        // resolves the manager by language id "angelscript" before calling - so the
+        // resolves the manager by language id "angelscript" before calling, so the
         // static_cast is safe. The engine already carries the reflected types the cook
         // registered, which is exactly what CScriptBuilder needs to build a behavior.
         return static_cast<AngelScriptManager&>(manager).Engine();

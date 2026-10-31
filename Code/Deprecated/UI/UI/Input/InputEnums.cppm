@@ -3,9 +3,8 @@
 
 // UI - :input_enums partition
 //
-// Input enums ported from Sedulous.UI/src/Input (MouseButton, KeyModifiers, EventPhase,
-// FocusDirection, KeyCode). Values match Sedulous.Shell.Input so a runtime bridge can cast directly.
-// Grouped into one partition (Beef had a file per enum).
+// Input enums (MouseButton, KeyModifiers, EventPhase, FocusDirection, KeyCode), grouped into one
+// partition. The ui.shell bridge (UiInputBridge) maps platform input onto them.
 
 module;
 #include "Core/Prelude.h"
@@ -69,7 +68,7 @@ export namespace foundation::ui
         return (static_cast<u32>(value) & static_cast<u32>(flag)) != 0u;
     }
 
-    /// Phase of event propagation: Capture (root->target) -> Target -> Bubble (target->root).
+    /// Phase of event propagation: Capture (root to target), then Target, then Bubble (target to root).
     enum class EventPhase
     {
         Capture,
@@ -86,7 +85,7 @@ export namespace foundation::ui
         Right
     };
 
-    /// Keyboard key codes (values match Sedulous.Shell.Input.KeyCode).
+    /// Keyboard key codes.
     enum class KeyCode : u32
     {
         Unknown = 0,
@@ -225,7 +224,7 @@ export namespace foundation::ui
     };
 
     /// The key's name as a shortcut shows it ("S", "F5", "Page Up", "Keypad +"); empty for
-    /// Unknown. The table next to the enum, so a new key names itself here.
+    /// Unknown. The table sits next to the enum so a new key gets its name here.
     [[nodiscard]] constexpr const char8_t* KeyCodeName(KeyCode key) noexcept
     {
         switch (key)

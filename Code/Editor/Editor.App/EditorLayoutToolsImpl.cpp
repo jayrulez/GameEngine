@@ -84,7 +84,8 @@ namespace editor::app
             for (const gui::DockSurface& surface : layout.Surfaces())
                 if (surface.Kind == gui::DockSurfaceKind::Floating)
                     CollectPanels(dock, surface.Root, floating);
-            // Hidden: closed with their place kept, and registered panels the layout never placed.
+            // Hidden panels: those closed with their place kept, and registered panels the layout
+            // never placed.
             JsonValue hidden = JsonValue::MakeArray();
             for (const gui::DockHidden& closed : layout.Hidden())
                 hidden.Add(PanelJson(dock, closed.Panel.AsView()));
@@ -136,13 +137,13 @@ namespace editor::app
             return choices;
         }
 
-        // A panel the tools may name: registered, or placed by the layout.
+        // Whether the tools may name a panel: it is registered, or placed by the layout.
         [[nodiscard]] bool Known(const gui::DockController& dock, StringView id)
         {
             return !id.IsEmpty() && (dock.Describe(id) != nullptr || dock.GetLayout().StackOf(id) != gui::kNoDock);
         }
 
-        // A float's size when the tool makes one: where a drag out of the window would put it.
+        // The bounds of a floating window the tool makes, where a drag out of the window would put it.
         constexpr Rectangle kFloatBounds{120.0f, 120.0f, 640.0f, 420.0f};
     }
 

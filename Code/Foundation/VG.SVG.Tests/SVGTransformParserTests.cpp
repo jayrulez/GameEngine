@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/SVGTransformParserTests.bf.
-// (M11->m[0][0], M12->m[0][1], M21->m[1][0], M22->m[1][1], M41->m[3][0], M42->m[3][1].)
+// Tests for SVGTransformParser. SVG matrix entries map to Float4x4 as
+// M11->m[0][0], M12->m[0][1], M21->m[1][0], M22->m[1][1], M41->m[3][0], M42->m[3][1].
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -68,8 +68,8 @@ TEST_CASE("svg.transform: matrix")
 TEST_CASE("svg.transform: rotate(angle, cx, cy) leaves the centre fixed")
 {
     // rotate(90, 50, 50): the centre stays put and a point 10 to its right swings to 10 below
-    // it (SVG's y-down frame). Three successive pre-multiplications ran the translate-rotate-
-    // translate group BACKWARDS and put the centre at (-150, 50) - found by the Beef port.
+    // it (SVG's y-down frame). Three successive pre-multiplications would run the
+    // translate-rotate-translate group backwards and put the centre at (-150, 50).
     const Result<Float4x4> r = SVGTransformParser::Parse(u8"rotate(90, 50, 50)");
     REQUIRE(r.HasValue());
     const Float4x4 m = r.Value();

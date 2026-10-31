@@ -3,8 +3,8 @@
 
 // UI - :rich_text partition
 //
-// RichText: a paragraph of styled runs (F2 of Specs/vg-and-gui-lab.md), the sibling of Label,
-// which keeps its single-run contract and measure cache. Its text is markup (see :text_runs) or
+// RichText: a paragraph of styled runs, the sibling of Label (which keeps its single-run contract
+// and measure cache). Its text is markup (see :text_runs) or
 // runs set directly; runs take the control's font family, size and text colour where they leave
 // them unset; it wraps at its width unless told not to; a click on a link raises OnLink with the
 // link's id. Markup problems are logged once per text and the offending text drawn as written.
@@ -89,8 +89,8 @@ export namespace foundation::ui
             Invalidate();
         }
 
-        /// Add a run after the others, as SetRuns would with it on the end (the markup's runs, when
-        /// there is markup, are kept and the markup cleared).
+        /// Append a run, as SetRuns would with it on the end. When there is markup, its runs are
+        /// kept and the markup is cleared.
         void AppendRun(TextRun run)
         {
             Array<TextRun> runs = Document().runs;
@@ -105,12 +105,12 @@ export namespace foundation::ui
         /// Raise OnLink as a click on the link `id` does (keyboard activation, tools, tests).
         void ActivateLink(StringView id)
         {
-            m_lastLink = String(id); // kept: the handler may change the text
+            m_lastLink = String(id); // copied, since the handler may change the text
             const String held = m_lastLink;
             OnLink.Invoke(this, held.AsView());
         }
 
-        /// The runs the control draws (its markup's, or those set directly).
+        /// The runs the control draws (parsed from its markup, or set directly).
         [[nodiscard]] const TextDocument& Document()
         {
             SyncDocument();
@@ -202,8 +202,8 @@ export namespace foundation::ui
                                                                                 : 0.0f};
             const bool dim = !IsEffectivelyEnabled();
             const auto tone = [dim](Color c) { return dim ? Palette::ComputeDisabled(c) : c; };
-            // Every run's effects (the view's, with what its markup sets in their place) go under
-            // every run's glyphs, so one run's outline or shadow never covers its neighbour.
+            // All runs' effects (the view's effects, replaced where the markup sets its own) draw
+            // under all runs' glyphs, so one run's outline or shadow never covers its neighbour.
             const vg::TextEffects inherited = ctx.VG().GetTextEffects();
             ctx.VG().PushState();
             ctx.VG().SetTextEffectsOnly(true);

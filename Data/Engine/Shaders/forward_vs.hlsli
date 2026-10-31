@@ -6,10 +6,10 @@
 #include "wind.hlsli"
 #endif
 #ifdef SKINNED
-// GPU skinning: per-bone skinning matrices (= inverseBind * worldPose), v * skin (row-vector).
-// A per-frame pool shared by all skinned draws; BoneBase (Object cbuffer) selects this draw's run.
-// Stored as 4 explicit float4 ROWS (Sedulous-faithful) so the major-ness is unambiguous - DXC's
-// row_major modifier is unreliable on a StructuredBuffer matrix element.
+// GPU skinning: per-bone skinning matrices (inverseBind * worldPose), applied as v * skin
+// (row-vector). A per-frame pool shared by all skinned draws; BoneBase (Object cbuffer) selects
+// this draw's run. Each matrix is stored as four explicit float4 rows so its majorness is
+// unambiguous: DXC's row_major modifier is unreliable on a StructuredBuffer matrix element.
 struct BoneMatrix { float4 Row0, Row1, Row2, Row3; };
 StructuredBuffer<BoneMatrix> BoneMatrices : register(t4, space0);
 float4x4 BlendBones(uint4 j, float4 w, uint base) {
@@ -31,7 +31,8 @@ StructuredBuffer<InstanceData> Instances : register(t0, space1);
 #include "object_block.hlsli"
 #endif
 // Every input pins its location (SPIR-V; the semantics give DXIL the same): without them DXC numbers
-// them in order, and a non-instanced skinned variant's joints would take drawOffsets' 5.
+// them in order, and a non-instanced skinned variant's joints would take location 5, which
+// belongs to drawOffsets.
 struct VSInput {
     [[vk::location(0)]] float3 position : TEXCOORD0;
     [[vk::location(1)]] float3 normal   : TEXCOORD1;
@@ -81,7 +82,7 @@ VSOutput FORWARD_VS_ENTRY(VSInput input) {
     float3 lt = input.tangent.xyz;
     float3 lpPrev = input.position;   // previous-frame local position (differs from lp only when skinned)
 #ifdef SKINNED
-    // Blend the four influencing bones (joint indices packed 4x u16 -> 2x u32) into a skin matrix. The
+    // Blend the four influencing bones (joint indices packed as 4x u16 in 2x u32) into a skin matrix. The
     // bone base is per-instance (drawOffsets.y) for the instanced path; the device pool holds [cur][prev]
     // per skeleton (drawOffsets.z = prev base, for motion vectors).
   #ifdef INSTANCED
@@ -95,7 +96,7 @@ VSOutput FORWARD_VS_ENTRY(VSInput input) {
                     input.jointsPacked.y & 0xFFFFu, input.jointsPacked.y >> 16);
     float4x4 skin     = BlendBones(j, input.weights, boneBase);
     float4x4 skinPrev = BlendBones(j, input.weights, prevBoneBase);
-    lpPrev = mul(float4(input.position, 1.0), skinPrev).xyz;   // deform with LAST frame's pose
+    lpPrev = mul(float4(input.position, 1.0), skinPrev).xyz;   // deform with last frame's pose
     lp = mul(float4(lp, 1.0), skin).xyz;
     ln = mul(float4(ln, 0.0), skin).xyz;
     lt = mul(float4(lt, 0.0), skin).xyz;
@@ -135,7 +136,7 @@ VSOutput FORWARD_VS_ENTRY(VSInput input) {
     o.tangentWS = float4(tWS, input.tangent.w);
 #else
     o.normalWS  = normalize(mul(float4(ln, 0.0), world).xyz);
-    o.color     = input.color * tint;                           // vertex color * per-instance tint
+    o.color     = input.color * tint;                           // vertex colour times per-instance tint
     o.uv        = input.uv;                                     // consume the full vertex layout
     o.tangentWS = float4(mul(float4(lt, 0.0), world).xyz, input.tangent.w);
 #endif

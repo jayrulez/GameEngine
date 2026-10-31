@@ -4,8 +4,8 @@
 // Foundation::Shell - reflection implementation unit: the input code enums.
 //
 // An input map stores key, button and axis codes as numbers, and a scripted playtest names them;
-// reflecting the cases lets type_info and the tools name them from the one enum (Sedulous
-// a577cb16). Every case below Count is listed; ShellReflectionTests holds the list to Count.
+// reflecting the cases lets type_info and the tools name them from the one enum. Every case below
+// Count is listed; ShellReflectionTests holds the list to Count.
 
 module;
 #include "Core/Prelude.h"

@@ -127,9 +127,9 @@ def leg_angles(body, forward, down):
 def planted(body, g, t, frames):
     """For a moving gait at time t (0..1 of the cycle): each leg's ankle (forward of the hip, its
     lift above the ground, on the ground or not) and the highest the hips can be with every leg
-    reaching its foot. A foot strikes the ground a quarter cycle in (where the old sine stride put
-    the leg furthest forward, so the arms keep their swing against it), the right half a cycle
-    after the left."""
+    reaching its foot. A foot strikes the ground a quarter cycle in (where a sine stride puts the
+    leg furthest forward, so the arms keep their swing against it), the right half a cycle after
+    the left."""
     fps = bpy.context.scene.render.fps
     seconds = frames / fps
     stance = g["stance"]
@@ -205,8 +205,8 @@ def clip(rig, body, name, g):
             for bone in ("thigh_", "shin_", "foot_", "upperarm_", "forearm_"):
                 pb[bone + s].keyframe_insert("rotation_quaternion", frame=f)
         breath = 0.006 * math.sin(phase) if g["breath"] else 0.0
-        # Hips' local Y is up: a moving gait's hips where the planted legs hold them; a standing
-        # one's the crouch's drop and the bob.
+        # Hips' local Y is up. A moving gait puts the hips where the planted legs hold them; a
+        # standing gait lowers them by the crouch's drop and adds the bob.
         if moving:
             rise = hip_height - body.hip_y
         else:
@@ -225,7 +225,8 @@ def clip(rig, body, name, g):
 
 
 def rest(rig):
-    """Back to rest: unkeyed, the pose keeps the last clip's (a preview of the rest pose)."""
+    """Back to rest, for a preview of the rest pose: with no action the pose would keep the last
+    clip's, so every bone is reset."""
     rig.animation_data.action = None
     for b in rig.pose.bones:
         b.rotation_quaternion = Quaternion()

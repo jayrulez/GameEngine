@@ -3,20 +3,19 @@
 
 // GUI - :rect partition
 //
-// Rect: 2D float rectangle stored as (x, y, width, height) - matching core::Rectangle
-// and the VG render surface, so it converts losslessly for DrawContext. Adapts eepp's
-// Rectf (which stores Left/Right/Top/Bottom): the edge accessors Left/Top/Right/Bottom
-// reproduce eepp's field reads, while storage stays x/y/w/h for the render path.
+// Rect: a 2D float rectangle stored as (x, y, width, height), matching core::Rectangle and the
+// VG render surface, so it converts losslessly for DrawContext. The edge accessors
+// Left/Top/Right/Bottom read like eepp's Rectf, which stores its edges, while the storage stays
+// x/y/w/h for the render path.
 //
-// Derived from eepp include/eepp/math/rect.hpp; eepp Vector2f -> core::Float2,
-// camelCase -> PascalCase.
+// Derived from eepp include/eepp/math/rect.hpp.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:rect;
 
-import foundation.core; // Float2, Rectangle
+import foundation.core;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -41,7 +40,7 @@ export namespace foundation::gui
         {
         }
 
-        // Build from edges (eepp Rectf's Left/Top/Right/Bottom layout).
+        // Build from edges.
         [[nodiscard]] static constexpr Rect FromLTRB(f32 left, f32 top, f32 right,
                                                      f32 bottom) noexcept
         {
@@ -56,7 +55,7 @@ export namespace foundation::gui
             return Rect{r.x, r.y, r.width, r.height};
         }
 
-        // Edge accessors (eepp field reads).
+        // Edge accessors.
         [[nodiscard]] constexpr f32 Left() const noexcept { return x; }
         [[nodiscard]] constexpr f32 Top() const noexcept { return y; }
         [[nodiscard]] constexpr f32 Right() const noexcept { return x + width; }
@@ -137,13 +136,15 @@ export namespace foundation::gui
         }
     };
 
-    /// `x` mirrored across `within` when `mirror`: a widget's own part in right to left (E17a), as
-    /// far from the right edge as it was from the left. Its shape mirrors with its points.
+    /// Returns `x` mirrored across `within` when `mirror` is set, for laying out a part of a widget
+    /// right to left: the result is as far from the right edge as `x` was from the left. A shape
+    /// is mirrored by mirroring its points.
     [[nodiscard]] constexpr f32 MirroredX(f32 x, const Rect& within, bool mirror) noexcept
     {
         return mirror ? within.x + within.Right() - x : x;
     }
-    /// `r` mirrored across `within` when `mirror`: a part placed from the left, placed from the right.
+    /// Returns `r` mirrored across `within` when `mirror` is set: a part placed at some distance
+    /// from the left edge moves to the same distance from the right edge.
     [[nodiscard]] constexpr Rect MirroredIn(const Rect& r, const Rect& within, bool mirror) noexcept
     {
         return mirror ? Rect{within.x + within.Right() - r.Right(), r.y, r.width, r.height} : r;

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Core - :quaternion partition
-// Quaternion: unit quaternion rotation - FromAxisAngle, Hamilton product,
+// Quaternion: unit quaternion rotation: FromAxisAngle, Hamilton product,
 // Conjugate/Dot/Normalized/Slerp, RotateVector, and RotationMatrix (-> Float4x4).
 //
 // Conventions: row-major storage m[row][col];
@@ -116,7 +116,7 @@ export namespace foundation::core
             cosTheta = -cosTheta;
         }
 
-        if (cosTheta > 0.9995f) // nearly parallel - lerp + normalize
+        if (cosTheta > 0.9995f) // nearly parallel: lerp and normalize
         {
             return Normalized(Quaternion{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
                                          a.z + (b.z - a.z) * t, a.w + (b.w - a.w) * t});
@@ -145,7 +145,6 @@ export namespace foundation::core
     }
 
     // Yaw (Y), pitch (X), roll (Z) in radians -> quaternion (XNA convention: q = qY * qX * qZ).
-    // Ported from Sedulous Quaternion.CreateFromYawPitchRoll.
     [[nodiscard]] inline Quaternion FromYawPitchRoll(f32 yaw, f32 pitch, f32 roll) noexcept
     {
         const f32 sr = Sin(roll * 0.5f), cr = Cos(roll * 0.5f);
@@ -156,7 +155,7 @@ export namespace foundation::core
     }
 
     // FromYawPitchRoll's inverse (pitch clamped to +-90deg; at the gimbal poles yaw/roll are not
-    // unique). The editor's rotation-as-euler display seam.
+    // unique). The editor shows rotations as Euler angles through it.
     inline void ToYawPitchRoll(Quaternion q, f32& yaw, f32& pitch, f32& roll) noexcept
     {
         pitch = Asin(Clamp(2.0f * (q.w * q.x - q.y * q.z), -1.0f, 1.0f));
@@ -165,8 +164,7 @@ export namespace foundation::core
     }
 
     // RotationMatrix's inverse: the unit quaternion of a pure rotation matrix (row-vector, XNA
-    // layout). Shepperd's method over the trace / dominant diagonal. Ported from Sedulous
-    // Quaternion.CreateFromRotationMatrix (Mrc -> m[r-1][c-1]).
+    // layout). Shepperd's method over the trace / dominant diagonal.
     [[nodiscard]] inline Quaternion QuaternionFromRotationMatrix(const Float4x4& m) noexcept
     {
         const f32 trace = m.m[0][0] + m.m[1][1] + m.m[2][2];
@@ -212,8 +210,8 @@ export namespace foundation::core
 
     // TRS decompose of a row-vector S*R*T matrix: translation (row 3), per-axis scale (basis row
     // lengths), rotation (normalized basis). False (identity outputs) when a scale axis is zero
-    // (degenerate - rotation is unrecoverable). Ported from Sedulous Matrix.Decompose; like the
-    // original, mirrored (negative-determinant) matrices land the sign on an arbitrary axis.
+    // (degenerate: rotation is unrecoverable). Mirrored (negative-determinant) matrices land the
+    // sign on an arbitrary axis.
     [[nodiscard]] inline bool Decompose(const Float4x4& m, Float3& translation,
                                         Quaternion& rotation, Float3& scale) noexcept
     {

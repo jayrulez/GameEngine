@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - CSS value parsers + typed property application: parse value strings into
-// Color/length/bool/Thickness, and apply a resolved (or parsed) stylesheet onto a widget.
+// GUI - CSS value parsers and typed property application: parse value strings into Color, length,
+// bool and Thickness, and apply a resolved (or parsed) stylesheet onto a widget.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -139,7 +139,7 @@ TEST_CASE("style-applier: text-align / vertical-align reach a label")
     StyleSheet right = CSSParser::Parse(SV(u8"label { text-align: right; }"));
     ApplyStyle(*l.Get(), right.Resolve(*l.Get(), MediaContext{}, false));
     CHECK(l->GetTextAlignH() == TextHAlign::Right);
-    CHECK(l->GetTextAlignV() == TextVAlign::Middle); // no longer set: the label's own again
+    CHECK(l->GetTextAlignV() == TextVAlign::Middle); // no longer set, so the label's own value again
 }
 
 TEST_CASE("style-applier: sizes, min and max, percentages and auto reach the layout style")
@@ -220,7 +220,7 @@ TEST_CASE("style-applier: border longhands override the shorthand, and a border 
         SV(u8"box { border-width: 4; border-color: blue; } .styled { border-style: solid; border-left-color: red; }"));
     auto w = Widget(u8"box");
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));
-    CHECK(w->GetBox().BorderWidths.IsZero()); // no border-style: none (CSS)
+    CHECK(w->GetBox().BorderWidths.IsZero()); // no border-style means none, as in CSS
 
     w->AddClass(SV(u8"styled"));
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get(), MediaContext{}, /*applyPseudo*/ false));

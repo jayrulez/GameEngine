@@ -26,8 +26,9 @@ namespace editor
 
         /// The entry an agent asks for (pie_resolution): by its key ("preset:HD"), by its label as
         /// the dropdown shows it, in any case ("hd 1280x720"), or by a size ("1280x720", the first
-        /// entry of that size). Empty when none matches. Kept here, not inline in :game_resolution:
-        /// GCC 15 then fails to read the partition's importers back ("Bad file data").
+        /// entry of that size). Empty when none matches. It lives here rather than inline in
+        /// :game_resolution, because GCC 15 then fails to read the partition's importers back
+        /// ("Bad file data").
         [[nodiscard]] Optional<usize> MatchGameResolution(Span<const GameResolutionChoice> choices, StringView asked)
         {
             for (usize i = 0; i < choices.Size(); ++i)
@@ -55,13 +56,13 @@ namespace editor
             return {};
         }
 
-        /// Frames: five minutes at 60 Hz, the cook Play waits on included, then pie_start gives
+        /// Frames: five minutes at 60 Hz, including the cook Play waits on; then pie_start gives
         /// up.
         constexpr u32 kStartPumpLimit = 18000;
         /// Frames: ten seconds at 60 Hz, then pie_screenshot gives up.
         constexpr u32 kCapturePumpLimit = 600;
 
-        /// One pie_start in flight, its call's state: the tab it started and the pumps it has
+        /// The state of one pie_start call in flight: the tab it started and the pumps it has
         /// waited. Two identical starts (two agents each opening a new instance) each keep their
         /// own.
         struct StartWait final : foundation::mcp::ToolCallState
@@ -70,13 +71,13 @@ namespace editor
             u32 pumps = 0;
         };
 
-        /// One pie_screenshot in flight, its call's state.
+        /// The state of one pie_screenshot call in flight.
         struct CaptureWait final : foundation::mcp::ToolCallState
         {
             EditorPage* page = nullptr; // borrowed; checked against the open pages before use
             u32 pumps = 0;
-            /// Where this call's capture writes: a tab holds one request at a time, so a call
-            /// whose request another replaced asks again once that one is done.
+            /// Where this call's capture writes. A tab holds one request at a time, so a call whose
+            /// request was replaced by another asks again once the other is done.
             String path;
         };
 
@@ -141,8 +142,9 @@ namespace editor
                     return Err(Format(u8"PIE instance '{}' did not start (log_read says why)",
                                       pie->PieId()));
                 }
-                // A tab behind another never renders its first frame: to front, unless the front
-                // is another start's tab still waiting for its own (they take turns, not fight).
+                // A tab behind another never renders its first frame, so bring it to the front,
+                // unless the front tab belongs to another start still waiting for its own first
+                // frame (they take turns rather than fight).
                 if (pie->IsRunning() && context.ActivePage() != page)
                 {
                     IPieInstancePage* front =
@@ -308,7 +310,7 @@ namespace editor
                                                      serial.value)
                                                   .AsView());
             }
-            context.RevealPage(page); // to front: a background tab's viewport never renders
+            context.RevealPage(page); // bring it to the front: a background tab's viewport never renders
             pie->RequestViewportCapture(path.AsView());
             auto wait = MakeUnique<CaptureWait>(context.Allocator());
             wait->page = page;

@@ -3,15 +3,17 @@
 
 // Editor::Scene - :prefab_flows partition.
 //
-// The scene page's prefab flows, which write assets and ask first where they cannot be undone: a
-// prefab made from an entity and what is under it (under "Prefabs/", named after the entity, the
-// original replaced by an instance of it, one undo group); an instance's state written back to its
-// prefab and every instance in the open scenes rebuilt from it (not undoable, so asked first); an
-// instance's overrides discarded (asked first too: entities parented under it that are not the
-// prefab's go); an instance spawned through the asset picker. And the prefab half of a save: what
-// refuses it (a prefab has one root and never holds itself), and the other open scenes' instances
-// rebuilt once it is saved. Out of the page's class as it was (Documentation/Specs/editor-gui.md,
-// 5.3, layer 2); the page's dialogs, its deferral and its picker come in as services.
+// The scene page's prefab flows, which write assets and ask first where they cannot be undone:
+//   - making a prefab from an entity and what is under it (saved under "Prefabs/", named after the
+//     entity, with the original replaced by an instance of it, as one undo group);
+//   - writing an instance's state back to its prefab and rebuilding every instance in the open
+//     scenes from it (not undoable, so it asks first);
+//   - discarding an instance's overrides (it asks first too, since entities parented under the
+//     instance that are not the prefab's are removed);
+//   - spawning an instance through the asset picker.
+// It also holds the prefab half of a save: what refuses it (a prefab has one root and never
+// contains itself), and rebuilding the other open scenes' instances once it is saved. It lives
+// outside the page's class; the page's dialogs, its deferral and its picker come in as services.
 
 module;
 #include "Core/Prelude.h"
@@ -51,7 +53,8 @@ export namespace editor
 
         explicit PrefabFlows(Services services) : m_services(Move(services)) {}
 
-        /// A prefab asset from `entityId` and everything under it, the entity replaced by an instance.
+        /// Makes a prefab asset from `entityId` and everything under it, replacing the entity with
+        /// an instance.
         void CreateFromEntity(const Guid& entityId)
         {
             EditorProject* project = Project();
@@ -117,8 +120,9 @@ export namespace editor
             // never in the middle of the dialog's event.
             m_services.confirm(u8"Apply to Prefab", text.AsView(), u8"Apply", [self, rootId]() { self->Later([self, rootId]() { self->ApplyNow(rootId); }); });
         }
-        /// The instance's current state becomes the template (source-id keyed, so other instances'
-        /// overrides stay valid), then every instance everywhere rebuilds from it, this one too.
+        /// The instance's current state becomes the template (keyed by source id, so other
+        /// instances' overrides stay valid), then every instance everywhere, this one included,
+        /// rebuilds from it.
         void ApplyNow(const Guid& rootId)
         {
             EditorProject* project = Project();
@@ -162,7 +166,7 @@ export namespace editor
             PrefabFlows* self = this;
             m_services.confirm(u8"Revert Instance", text.AsView(), u8"Revert", [self, rootId]() { self->Later([self, rootId]() { self->RevertNow(rootId); }); });
         }
-        /// The instance respawned from the current template, its placement kept. Not undoable.
+        /// Respawns the instance from the current template, keeping its placement. Not undoable.
         void RevertNow(const Guid& rootId)
         {
             EditorProject* project = Project();
@@ -191,7 +195,8 @@ export namespace editor
             }
         }
 
-        /// An instance of the prefab the picker gives, under `parent` (nil: the scene's root).
+        /// Spawns an instance of the prefab the picker gives, under `parent` (nil: the scene's
+        /// root).
         void PickAndSpawn(const Guid& parent)
         {
             if (Project() == nullptr || !m_services.pickAsset)
@@ -200,7 +205,8 @@ export namespace editor
             PrefabFlows* self = this;
             m_services.pickAsset(Span<const String>(types, 1u), [self, parent](const Guid& picked) { self->Spawn(picked, parent); });
         }
-        /// An instance of prefab `prefabId` under `parent`; false, said, when it cannot be.
+        /// Spawns an instance of prefab `prefabId` under `parent`; false, with the reason reported,
+        /// when it cannot.
         bool Spawn(const Guid& prefabId, const Guid& parent)
         {
             EditorProject* project = Project();
@@ -238,8 +244,8 @@ export namespace editor
                 return String(u8"A prefab cannot contain an instance of itself - remove it, then save.");
             return String{};
         }
-        /// The prefab `asset` was saved: its instances in every other open scene rebuild, their
-        /// overrides kept (captured, respawned, applied again).
+        /// Called when the prefab `asset` was saved: its instances in every other open scene
+        /// rebuild with their overrides kept (captured, respawned and applied again).
         void RebuildOtherInstances(foundation::content::Instance& asset)
         {
             UniquePtr<IStream> payload = asset.ReadData(u8"scene");
@@ -263,7 +269,7 @@ export namespace editor
             else
                 work();
         }
-        // Every open scene's instances of `prefabId` from `payload`, but `skip`'s.
+        // Rebuilds every open scene's instances of `prefabId` from `payload`, except `skip`'s.
         void RebuildInstances(const Guid& prefabId, Span<const byte> payload, foundation::scene::Scene* skip)
         {
             EditorContext& context = Context();

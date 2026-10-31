@@ -2,18 +2,18 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :action_menus partition.
 //
-// ActionMenuBar: the menu bar GENERATED from the action registry (Documentation/Specs/
-// editor-gui.md, 5.1, layer 7). Every action with a menuPath ("File/Save", "Scene/Simulate/Start")
-// lands in the menu its first segment names, the rest as nested submenus. The application declares
-// its menus' order (SetMenuOrder: names, and "*" where every other menu goes), so a domain's menu
-// (Scene), or an extension's, registered later still lands before Help; without a declaration, and
-// for the menus "*" holds, the order their names first appear among the registrations (a menu
-// holding only leading items after them). Items order by menuOrder with a separator between order
-// bands (hundreds), each showing its effective chord. The bar is built again when the registry
-// changes (a registration, a rebind); as a menu opens, its items' enabled and checked states are
-// asked of the registry, so they are its answer at that moment; every item executes through the
-// registry, the one funnel. A menu may carry LEADING items that are not actions - a list-driven set
-// such as File > New <creator> - through AddLeadingItems; they come first, then a separator.
+// ActionMenuBar: the menu bar generated from the action registry. Every action with a menuPath
+// ("File/Save", "Scene/Simulate/Start") lands in the menu its first segment names, the rest as
+// nested submenus. The application declares its menus' order (SetMenuOrder: names, and "*" where
+// every other menu goes), so a domain's menu (Scene), or an extension's, registered later still
+// lands before Help. Without a declaration, and for the menus "*" holds, menus keep the order their
+// names first appear among the registrations; a menu holding only leading items comes after them.
+// Items order by menuOrder with a separator between order bands (hundreds), each showing its
+// effective chord. The bar is built again when the registry changes (a registration, a rebind). As
+// a menu opens, its items' enabled and checked states are asked of the registry, and every item
+// executes through the registry. A menu may carry leading items that are not actions (a
+// list-driven set such as File > New <creator>) through AddLeadingItems; they come first, then a
+// separator.
 module;
 #include "Core/Prelude.h"
 
@@ -46,16 +46,16 @@ export namespace editor::app
         }
         ActionMenuBar(const ActionMenuBar&) = delete;
         ActionMenuBar& operator=(const ActionMenuBar&) = delete;
-        /// The bar's items execute through this object, so they go with it: the bar is left
-        /// empty and the registry no longer calls back.
+        /// The bar's items execute through this object, so destroying it empties the bar and
+        /// stops the registry calling back.
         ~ActionMenuBar()
         {
             m_changed.Reset();
             m_bar->ClearMenus();
         }
 
-        /// Items that are not actions, at the top of `menu` (created when absent): the
-        /// list-driven sets. Made again with the bar.
+        /// Adds items that are not actions (a list-driven set) at the top of `menu`, creating the
+        /// menu when absent. They are made again whenever the bar is rebuilt.
         void AddLeadingItems(StringView menu, LeadingItems items)
         {
             Leading entry;
@@ -76,14 +76,14 @@ export namespace editor::app
             Rebuild();
         }
 
-        /// The whole bar from the registry: the menus and their items.
+        /// Builds the whole bar, its menus and their items, from the registry.
         void Rebuild()
         {
             m_bar->ClearMenus();
             m_items.Clear();
             m_submenus.Clear();
-            // The menus there are, in the order their names first appear among the actions; a
-            // menu that holds only leading items comes after them.
+            // Collect the menus in the order their names first appear among the actions; a menu
+            // that holds only leading items comes after them.
             Array<String> present;
             const auto note = [&present](StringView name)
             {
@@ -97,7 +97,7 @@ export namespace editor::app
                     note(TopLevel(action.menuPath.AsView()));
             for (const Leading& leading : m_leading)
                 note(leading.menu.AsView());
-            // Then laid out by the declared order.
+            // Then arrange them in the declared order.
             const auto declared = [this](StringView name)
             {
                 for (const String& entry : m_order)
@@ -137,15 +137,15 @@ export namespace editor::app
             }
         }
 
-        /// What each action item shows that the registry answers at the moment: enabled (and why
-        /// not), checked.
+        /// Updates each action item's enabled state (with the reason when disabled) and checked
+        /// state from the registry's current answer.
         void Refresh(gui::Menu& menu) const
         {
             for (const Item& item : m_items)
                 if (item.menu == &menu)
                 {
                     item.item->SetEnabled(m_actions->IsEnabled(item.action.AsView()));
-                    item.item->SetTooltip(m_actions->DisabledReason(item.action.AsView()).AsView()); // why it is disabled, when it says
+                    item.item->SetTooltip(m_actions->DisabledReason(item.action.AsView()).AsView()); // the reason it is disabled, when the action gives one
                     if (item.item->IsCheckable())
                         item.item->SetCheckedSilently(m_actions->IsChecked(item.action.AsView()));
                 }
@@ -197,7 +197,7 @@ export namespace editor::app
             Watch(menu);
         }
 
-        // As it opens, its items' states are the registry's answer.
+        // Refreshes the menu's item states from the registry each time it opens.
         void Watch(gui::Menu& menu)
         {
             const ActionMenuBar* self = this;
@@ -219,8 +219,8 @@ export namespace editor::app
             return StringView();
         }
 
-        /// `path` is the part after the top-level menu: "Save", or "Simulate/Start" (a submenu
-        /// "Simulate" holding "Start"; found when present, made when not).
+        /// `path` is the part after the top-level menu: "Save", or "Simulate/Start" (the item
+        /// "Start" in the submenu "Simulate", which is created when it does not exist yet).
         void AddItem(gui::Menu& menu, StringView path, const EditorActionDeclaration& action)
         {
             const StringView head = TopLevel(path);
@@ -267,6 +267,6 @@ export namespace editor::app
         Array<String> m_order; // SetMenuOrder: names, "*" for every other menu
         Array<Item> m_items;   // the action items of the bar as built
         Array<Submenu> m_submenus;
-        UniquePtr<gui::Effect> m_changed; // the bar again when the registry changes
+        UniquePtr<gui::Effect> m_changed; // rebuilds the bar when the registry changes
     };
 }

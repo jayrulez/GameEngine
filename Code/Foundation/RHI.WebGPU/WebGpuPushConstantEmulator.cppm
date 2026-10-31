@@ -3,14 +3,14 @@
 
 /// foundation.rhi.webgpu:push_constant_emulator - the uniform-buffer push-constant fallback.
 ///
-/// Where a device has no immediates path (browsers - Dawn/emdawnwebgpu - or the fallback
-/// forced for testing on wgpu-native), push constants are emulated: the block is bound as an
-/// ordinary uniform buffer at the pipeline's @group(space) @binding(0) (the shape the web WGSL
-/// cook emits, see Data/Engine/Shaders/push_constant.hlsli). This helper is shared by the pass
-/// encoders. It keeps a CPU shadow of the block, and before each draw uploads a FRESH uniform
-/// buffer (so consecutive draws never alias the same memory) and binds it. Every buffer/bind
-/// group created this way lives until the pass ends, then Release() frees them - the recorded
-/// commands retain what the GPU needs, so releasing the wrappers after End is safe.
+/// Where a device has no immediates path (browsers, which use Dawn/emdawnwebgpu, or the
+/// fallback forced for testing on wgpu-native), push constants are emulated: the block is bound
+/// as an ordinary uniform buffer at the pipeline's @group(space) @binding(0) (the shape the web
+/// WGSL cook emits, see Data/Engine/Shaders/push_constant.hlsli). The pass encoders share this
+/// helper. It keeps a CPU shadow of the block, and before each draw uploads a fresh uniform
+/// buffer (so consecutive draws never alias the same memory) and binds it. Every buffer and
+/// bind group created this way lives until the pass ends, then Release() frees them; the
+/// recorded commands retain what the GPU needs, so releasing the wrappers after End is safe.
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +43,7 @@ export namespace foundation::rhi::webgpu
             m_buffers.Clear();
             m_bindGroups.Clear();
             // Clear the shadow too: push data is "undefined until set" per pass, and a
-            // reused pass-encoder object must not carry the PREVIOUS pass's bytes into a
+            // reused pass-encoder object must not carry the previous pass's bytes into a
             // draw that never called SetPushConstants (Vulkan immediates would not).
             for (u8& b : m_shadow)
             {
@@ -68,7 +68,8 @@ export namespace foundation::rhi::webgpu
         }
 
         /// On SetPushConstants: fold the sub-range into the shadow. Returns false when the
-        /// current pipeline is NOT emulating, so the caller takes the native SetImmediates path.
+        /// current pipeline is not emulating, so the caller takes the native SetImmediates
+        /// path.
         bool Write(u32 offset, u32 size, const void* data)
         {
             if (m_group < 0)
@@ -91,9 +92,9 @@ export namespace foundation::rhi::webgpu
             return true;
         }
 
-        /// Before a draw/dispatch: if a fresh block is pending, upload it to a new uniform buffer
-        /// and hand back the bind group + @group to set. Returns false when nothing needs
-        /// (re)binding (not emulating, or the current block is already bound).
+        /// Before a draw or dispatch: if a fresh block is pending, upload it to a new uniform
+        /// buffer and hand back the bind group and @group to set. Returns false when nothing
+        /// needs (re)binding (not emulating, or the current block is already bound).
         bool FlushBeforeDraw(i32& group, WGPUBindGroup& bindGroup)
         {
             if (m_group < 0 || !m_dirty || m_layout == nullptr || m_device == nullptr)
@@ -143,7 +144,7 @@ export namespace foundation::rhi::webgpu
             return true;
         }
 
-        /// On pass End (AFTER the pass encoder's End): free everything created this pass.
+        /// On pass End (after the pass encoder's End): free everything created this pass.
         void Release()
         {
             if (m_api == nullptr)

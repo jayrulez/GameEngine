@@ -4,13 +4,8 @@
 // UI - :theme_atlas partition
 //
 // Builds a packed image atlas for theme drawables. Wraps ImageAtlasBuilder and creates
-// AtlasImageDrawable/AtlasNineSliceDrawable from packed regions. Single atlas texture = zero
-// texture switches during UI rendering. Ported from Sedulous.UI/src/Styling/ThemeAtlas.bf.
-//
-// Divergences (language): the Beef `ImageAtlasBuilder mBuilder ~ delete _` owned pointer becomes a
-// by-value member; factories return RefPtr<...> (drawables are Object/RefPtr here, not raw owning
-// pointers); CreateStateDrawable's Beef tuple span `Span<(ControlState, StringView)>` becomes a
-// Span<const StateImageEntry>.
+// AtlasImageDrawable and AtlasNineSliceDrawable from packed regions. A single atlas texture means no
+// texture switches during UI rendering.
 
 module;
 #include "Core/Prelude.h"
@@ -18,8 +13,8 @@ module;
 
 export module foundation.ui:theme_atlas;
 
-import foundation.core;  // Color, RefPtr, Span, StringView, Rectangle
-import foundation.image; // ImageAtlasBuilder, ImageData, NineSlice, RectI
+import foundation.core;
+import foundation.image;
 import :thickness;
 import :control_state;
 import :drawable;
@@ -40,8 +35,8 @@ export namespace foundation::ui
     };
 
     /// Builds a packed image atlas for theme drawables and creates atlas-backed drawables from it.
-    /// Derives Object so a StyleSheet can hold it via OwnResource (RefPtr<Object>) - the textured theme
-    /// keeps the atlas alive as long as the atlas-backed drawables that reference it. Not scripted.
+    /// Derives Object so a StyleSheet can hold it through OwnResource (RefPtr<Object>): the textured
+    /// theme keeps the atlas alive as long as the atlas-backed drawables that reference it. Not scripted.
     class ThemeAtlas : public Object
     {
         RTTI_OBJECT(ThemeAtlas, Object)

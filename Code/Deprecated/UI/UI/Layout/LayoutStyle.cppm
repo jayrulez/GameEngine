@@ -3,11 +3,11 @@
 
 // UI - :layout_style partition
 //
-// The ONE per-child placement record. Every View carries a LayoutStyle value (View::Layout /
+// The per-child placement record. Every View carries a LayoutStyle value (View::Layout /
 // View::SetLayout); every container reads the fields it understands and ignores the rest, so a
 // child keeps its intent across reparenting and a custom container needs no parameter subclass.
 // Container-owned data (Grid tracks, Flex direction/justify/align-items, Dock LastChildFill) stays
-// on the container. Spec: Documentation/Specs/ui-layout-and-style-model.md, section 1.
+// on the container.
 
 module;
 #include "Core/Prelude.h"
@@ -50,15 +50,15 @@ export namespace foundation::ui
     {
         /// Laid out by the container (Flex/Flow/Grid/Dock/Frame/Absolute rules).
         Static,
-        /// Taken OUT of the container's flow and placed by the base ViewGroup against the
+        /// Taken out of the container's flow and placed by the base ViewGroup against the
         /// container's content box from the Left/Top/Right/Bottom insets (CSS absolute).
         Absolute
     };
 
-    /// A LayoutStyle field that remembers whether it was SET. Assignment declares; the
+    /// A LayoutStyle field that remembers whether it was set. Assignment declares; the
     /// default-constructed field is undeclared and the cascade (`width:`, `margin:` ... in a
     /// sheet) may fill it. An inline (declared) value always wins over the sheet, even when
-    /// it equals the default - the CSS inline-style rule. Reads convert implicitly to T;
+    /// it equals the default, as CSS inline styles do. Reads convert implicitly to T;
     /// member access goes through `->`.
     template <typename T>
     struct Declared
@@ -129,7 +129,7 @@ export namespace foundation::ui
         /// How much this child shrinks when space is insufficient.
         Declared<f32> FlexShrink{};
         /// Main-axis starting size before grow (a zero unit = auto: the content size, or 0 for
-        /// a growing child - the `flex: <grow>` shorthand). %, em and calc resolve like a size.
+        /// a growing child, as with `flex: <grow>`). %, em and calc resolve like a size.
         Declared<Unit> FlexBasis{};
         /// Cross-axis override (empty = the parent's AlignItems, or the sheet's align-self).
         Optional<Align> AlignSelf;

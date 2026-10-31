@@ -3,8 +3,8 @@
 
 // GUI - :thickness partition
 //
-// Thickness: four edge insets (padding / margin / border / layer inset). Adapts eepp,
-// which overloads Rectf's Left/Top/Right/Bottom for this; a dedicated type is clearer.
+// Thickness: four edge insets (padding, margin, border, layer inset). A type of its own rather
+// than a Rect's Left/Top/Right/Bottom, which would read as a rectangle.
 
 module;
 #include "Core/Prelude.h"

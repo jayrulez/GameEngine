@@ -3,9 +3,9 @@
 // The first low-level shader. A surface shader says what a surface is and the engine lights it; a
 // low-level shader is the whole drawing program, both stages, so it can light the surface however
 // it likes. This one lights it in hard bands, with a colour of its own for the dark side and a
-// bright rim, in place of the engine's physically based light. What it keeps of the engine's:
+// bright rim, in place of the engine's physically based light. What it keeps from the engine:
 //   - the vertex stage, which the engine's library writes for it (below, under its own name);
-//   - the frame's lights, shadows and fog (the lighting library), which it walks itself;
+//   - the frame's lights and shadows (the lighting library), which it walks itself;
 //   - the targets the effects after it read, under GBUFFER (colour, normal, motion and so on).
 // The `variants` lines say which versions the engine may ask for: skinned or instanced meshes,
 // cut-out materials (ALPHA_TEST), the deferred targets (GBUFFER), the distance fade (DITHER).

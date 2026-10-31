@@ -3,13 +3,14 @@
 
 // Editor::Image - the `editor.image` module.
 //
-// ImageEditorPage (the Texture page's source-side sibling): the inspect + intent surface over an
-// ImageAsset, the raw source image that Texture assets (and future consumers) build on. On the GUI
-// from the image pages' markup (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md, 5.4,
-// layer 2): the decoded file (the same decode the cook rides, as RGBA8 for display) to zoom, pan and
-// read pixels in, beside the grid: its source file and colour-space intent, then the source's facts
-// read only (its size, pixel format and data size). Each edit is one undo step; Save writes the asset and
-// asks for a cook so bound products hot-swap.
+// ImageEditorPage (the source-side sibling of the Texture page): the page that inspects an
+// ImageAsset and sets its intent. An ImageAsset is the raw source image that Texture assets (and
+// other consumers) build on. The page is built from the image pages' markup
+// (Data/Editor/ImagePage.xml): the decoded file (the same decode the cook uses, as RGBA8 for
+// display), which can be zoomed and panned and its pixels read, beside the grid: its source file
+// and colour-space intent, then the source's facts, read only (its size, pixel format and data
+// size). Each edit is one undo step; Save writes the asset and requests a cook so bound products
+// hot-swap.
 
 module;
 #include "Core/Prelude.h"
@@ -58,7 +59,8 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// A page asks for its services when it is made (the window exists by then).
+    /// Registers the image page. A page asks for its services when it is made (the window exists
+    /// by then).
     inline void RegisterImageEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

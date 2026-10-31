@@ -3,9 +3,8 @@
 
 // UI - :image_view partition
 //
-// Displays an image with configurable scaling. Ported from Sedulous.UI/src/Controls/ImageView.bf.
-// (The `ScaleType` property shadows the enum type, so enum values are fully qualified. Image is a
-// borrowed pointer - not owned.)
+// Displays an image with configurable scaling. The `ScaleType` property shadows the enum type, so
+// enum values are fully qualified. The image is a borrowed pointer, not owned.
 
 module;
 #include "Core/Prelude.h"
@@ -46,11 +45,11 @@ export namespace foundation::ui
         /// What to show, named by a string the context's resource provider resolves (the engine
         /// takes an asset id: a texture, or a render texture a camera draws into). Resolved when
         /// the view is measured or drawn in a context that has a provider; until the provider
-        /// answers (an asset still loading), the view shows nothing and asks again. Empty: the
-        /// image SetImage gave.
+        /// answers (an asset still loading), the view shows nothing and asks again. When empty,
+        /// the view shows the image given to SetImage.
         Property<core::String> Source;
-        /// Rounds the picture's corners (the drawn picture's own rect: the fitted rect under
-        /// FitCenter, the view under CenterCrop and FillBounds). Zero: square corners.
+        /// Rounds the corners of the drawn picture: the fitted rect under FitCenter, and the
+        /// whole view under CenterCrop and FillBounds. Zero gives square corners.
         Property<vg::CornerRadii> CornerRadius;
 
         ImageView()
@@ -136,7 +135,7 @@ export namespace foundation::ui
             const StringView source = Source.Value().AsView();
             if (source.IsEmpty())
             {
-                if (!m_resolvedSource.IsEmpty()) // the source was cleared: so is its image
+                if (!m_resolvedSource.IsEmpty()) // the source was cleared, so clear its image
                 {
                     m_resolvedSource = String{};
                     m_image = nullptr;
@@ -164,7 +163,7 @@ export namespace foundation::ui
         }
 
         const image::ImageData* m_image = nullptr;
-        core::String m_resolvedSource; // the Source m_image answers
+        core::String m_resolvedSource; // the Source that m_image was resolved from
     };
 
     RTTI_DEFINE_OBJECT(ImageView, "rtti::ui")

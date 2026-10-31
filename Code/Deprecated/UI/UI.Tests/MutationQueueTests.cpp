@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/MutationQueueTests.bf (faithful, full file, 7 cases). Tests the
-// deferred-mutation queue: enqueue actions, HasPending, Drain (in-order + re-entrant), BeginFrame drain,
-// and QueueDelete's double-delete guard. Beef `scope MutationQueue()` -> a stack MutationQueue value;
-// `queue.HasPending` (property) -> queue.HasPending() (method); `new [&] () => {}` delegate -> a bare
-// C++ lambda (QueueAction takes a Function<void()>); `ctx.MutationQueue.X` -> ctx.MutationQueueRef().X.
+// Tests for the deferred-mutation queue: queued actions, HasPending, Drain (in order, and
+// re-entrant), the drain at BeginFrame, and QueueDelete's guard against deleting twice.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -69,7 +66,7 @@ TEST_CASE("mutation-queue: Drain_HandlesReentrantEnqueue")
         });
 
     queue.Drain();
-    CHECK(counter == 2); // Both original and re-entrant executed
+    CHECK(counter == 2); // both the original and the re-entrant action ran
     CHECK_FALSE(queue.HasPending());
 }
 
@@ -94,8 +91,8 @@ TEST_CASE("mutation-queue: QueueDelete_PreventsDoubleDelete")
     ctx.MutationQueueRef().QueueDelete(view.Get());
     CHECK(view->IsPendingDeletion);
 
-    // Second queue should be no-op
+    // Queueing it again does nothing
     ctx.MutationQueueRef().QueueDelete(view.Get());
-    // Drain should only delete once
+    // Drain deletes it only once
     ctx.MutationQueueRef().Drain();
 }

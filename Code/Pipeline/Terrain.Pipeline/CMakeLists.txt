@@ -1,4 +1,4 @@
-# Pipeline::Terrain - `terrain.pipeline` (tooling: TerrainAsset + builder; a reference pass-through).
+# Pipeline::Terrain - `terrain.pipeline` (tooling: TerrainAsset and its builder, a pass-through of references).
 util_add_engine_library(Terrain.Pipeline ALIAS Pipeline::Terrain)
 target_link_libraries(Terrain.Pipeline PUBLIC
     Foundation::Core Foundation::VFS Pipeline::Core Pipeline::Importer

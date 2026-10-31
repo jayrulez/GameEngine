@@ -4,13 +4,8 @@
 // UI Toolkit - :gradient_editor partition
 //
 // Interactive color-ramp editor. Stops along a normalized [0,1] time axis carry RGBA (HDR-allowed Float4);
-// the widget renders a live linearly-interpolated gradient strip and lets the user add / move / delete /
-// re-color stops via direct manipulation. Ported from Sedulous.UI.Toolkit/src/Controls/GradientEditor.bf
-// (a View).
-//
-// Beef `List<Stop>` -> Array<Stop>; `Span<Stop>` -> Span<const Stop>; nested `struct Stop` -> a public
-// nested value struct; byte `Color(r,g,b,a)` -> private static Rgb(); float `Color(r,g,b,a)` -> Color{...}.
-// The immediate path API (BeginPath/MoveTo/LineTo/ClosePath/Fill/Stroke) ports 1:1 to foundation.vg.
+// the widget renders a live linearly-interpolated gradient strip and lets the user add, move, delete and
+// re-color stops by direct manipulation.
 
 module;
 #include "Core/Prelude.h"
@@ -112,7 +107,7 @@ export namespace foundation::ui::toolkit
                     return;
                 }
 
-                // Click on gradient strip - add a stop at the clicked time; initial color sampled from the
+                // Click on the gradient strip: add a stop at the clicked time; initial color sampled from the
                 // existing gradient so the new stop "blends in".
                 if (IsOverStrip(e.Y) && static_cast<i32>(m_stops.Size()) < MaxStops)
                 {
@@ -194,7 +189,7 @@ export namespace foundation::ui::toolkit
 
         void OnDraw(UIDrawContext& ctx) override
         {
-            // Outer background from the theme (background-color = raw-color resolve).
+            // Outer background from the theme (background-color resolves as a raw color).
             const core::Color canvasBg =
                 ResolveStyleColor(StyleProperty::Background, Rgb(28, 28, 33, 255));
             ctx.VG().FillRect(Rectangle{0, 0, Width(), Height()}, canvasBg);
@@ -222,11 +217,11 @@ export namespace foundation::ui::toolkit
             ctx.VG().FillRect(Rectangle{0, 0, Width(), 1}, stripBorder);
             ctx.VG().FillRect(Rectangle{0, stripH - 1, Width(), 1}, stripBorder);
 
-            // Marker strip background - a step up from the canvas.
+            // Marker strip background, a step up from the canvas.
             ctx.VG().FillRect(Rectangle{0, stripH, Width(), kMarkerStripHeight},
                               Palette::Lighten(canvasBg, 0.05f));
 
-            // Markers - triangle pointing up.
+            // Markers: triangles pointing up.
             for (i32 i = 0; i < static_cast<i32>(m_stops.Size()); ++i)
             {
                 const f32 mx = TimeToX(m_stops[static_cast<usize>(i)].Time);

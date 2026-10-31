@@ -4,8 +4,8 @@
 /// Foundation::Render - the `:tonemap` partition.
 ///
 /// The HDR resolve: the forward pass renders linear HDR into a transient (RGBA16F); this fullscreen
-/// pass reads it, applies exposure + a tonemap operator + the display OETF, and writes the LDR
-/// target. Keeps the renderer in a strict linear working space that the IBL/post stack is
+/// pass reads it, applies exposure, a tonemap operator and the display OETF, and writes the LDR
+/// target. Keeps the renderer in a strict linear working space that the IBL and post stack are
 /// designed against. The operator is selectable: a trivial clamp or AgX.
 
 module;
@@ -29,7 +29,7 @@ namespace foundation::render
     Status TonemapPass::Initialize()
     {
 
-        // set 0: HDR (t0) + bloom (t1) + AO (t2), all sampled, + a linear sampler (s0).
+        // set 0: HDR (t0), bloom (t1) and AO (t2), all sampled, and a linear sampler (s0).
         rhi::BindGroupLayoutEntry hdrEntry =
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment);
         rhi::BindGroupLayoutEntry bloomEntry =
@@ -102,13 +102,13 @@ namespace foundation::render
         // The scene input is mirrored on Y-flip backends unless the TAA resolve un-mirrored
         // it upstream; tonemap compensates then (see tonemap.ps.hlsl FlipSceneY).
         const bool flipSceneY = sceneYFlipped && m_device->NeedsClipSpaceYFlip();
-        // Auto-exposure / grading are optional: unbound slots fall back to the HDR view (any
-        // valid texture - the shader gates on the flags, never the binding).
+        // Auto-exposure and grading are optional: unbound slots fall back to the HDR view (any
+        // valid texture; the shader gates on the flags, never the binding).
         const bool autoOn = autoExposure.view != nullptr && autoExposure.enabled;
         const bool gradeOn = grading.view != nullptr && grading.lutSize >= 2.0f;
-        // Encode for display ONCE: an sRGB target encodes on write and a float target is linear
+        // Encode for display once: an sRGB target encodes on write and a float target is linear
         // (encoded wherever it is shown), so only a plain UNORM target takes the display
-        // encoding as the shader writes it. Writing it to an sRGB swapchain encoded it twice.
+        // encoding as the shader writes it. Writing it to an sRGB swapchain would encode it twice.
         const bool encodeOutput = !rhi::IsSrgb(ldrFormat) && !rhi::IsFloat(ldrFormat);
         GpuTonemapPush push{};
         push.exposure = exposure;
@@ -182,11 +182,11 @@ namespace foundation::render
     rhi::RenderPipeline* TonemapPass::EnsurePipeline(rhi::TextureFormat fmt)
     {
         const u64 shaderVersion = m_shaders->Version(u8"tonemap"); // hot reload rebuilds
-        // Per-format cache: NEVER destroy on a format mismatch - a frame can hold views with
-        // different target formats, and the earlier view's commands still reference their
-        // pipeline. A stale-shader-version entry rebuilds in place (hot reload is a dev-loop
-        // event, the pre-existing trade); an unknown format takes a free slot, or evicts slot
-        // 0 when all are taken (more distinct formats per run than slots is not a real case).
+        // Per-format cache: never destroy on a format mismatch, since a frame can hold views
+        // with different target formats and the earlier view's commands still reference their
+        // pipeline. A stale-shader-version entry rebuilds in place (hot reload happens only
+        // during development); an unknown format takes a free slot, or evicts slot 0 when all
+        // are taken (more distinct formats per run than slots is not a real case).
         PipelineEntry* entry = nullptr;
         for (PipelineEntry& candidate : m_pipelines)
         {

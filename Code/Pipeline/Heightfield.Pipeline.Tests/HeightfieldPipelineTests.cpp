@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full heightfield asset pipeline: author a HeightfieldAsset (blank or a 16-bit heightmap) -> cook
-// with HeightfieldAssetBuilder into an output content DB -> load the cooked Heightfield through the
-// ResourceManager. Plus the resample helper and the size-snap guard.
+// Full heightfield asset pipeline: author a HeightfieldAsset (blank or a 16-bit heightmap), cook it
+// with HeightfieldAssetBuilder into an output content DB, and load the cooked Heightfield through
+// the ResourceManager. Also the resample helper and the size-snap guard.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -88,7 +88,7 @@ TEST_CASE("heightfield.pipeline: a blank asset cooks a flat grid")
     RemoveTree();
     NativeFileSystem outMount(u8"scratch_hfpipe_out_db", DefaultAllocator());
 
-    HeightfieldAsset asset; // no fileName -> blank
+    HeightfieldAsset asset; // no fileName: blank
     asset.size = 65;
     asset.worldSize = Float2{64.0f, 64.0f};
     asset.minY = -2.0f;
@@ -120,7 +120,7 @@ TEST_CASE("heightfield.pipeline: an invalid size snaps to the next valid one")
     NativeFileSystem outMount(u8"scratch_hfpipe_out_db", DefaultAllocator());
 
     HeightfieldAsset asset; // no fileName
-    asset.size = 100; // not 64k+1 -> snaps to 129
+    asset.size = 100; // not 64k+1: snaps to 129
     asset.worldSize = Float2{64.0f, 64.0f};
 
     HeightfieldFactory factory(DefaultAllocator());
@@ -190,8 +190,8 @@ TEST_CASE("heightfield.pipeline: a heightmap image cooks into the grid (16-bit p
 
 TEST_CASE("heightfield cook: degenerate extents snap to legal values")
 {
-    // A hand-edited asset with a zero footprint / inverted Y range must still cook a grid
-    // whose math is finite - the same defensive posture the size snap established.
+    // A hand-edited asset with a zero footprint or a closed Y range must still cook a grid
+    // whose math is finite, as the size snap guards the grid size.
     RegisterHeightfieldResourceTypes();
     RegisterHeightfieldAsset();
     RemoveTree();
@@ -221,10 +221,10 @@ TEST_CASE("heightfield cook: degenerate extents snap to legal values")
     RemoveTree();
 }
 
-// The editable-source convention: an EMBEDDED asset (fileName empty) cooks from the
-// authored "heights" sidecar - the sculpt save writes exactly that - and the builder declares the
-// sidecar as a source stream so painting it re-cooks. A fileName-backed asset ignores the sidecar
-// (the file is the truth; re-import resets).
+// The editable-source convention: an embedded asset (fileName empty) cooks from the authored
+// "heights" sidecar, which the sculpt save writes, and the builder declares the sidecar as a
+// source stream so painting it re-cooks. A fileName-backed asset ignores the sidecar (the file
+// is the truth; re-import resets).
 TEST_CASE("heightfield.pipeline: an embedded asset cooks from the authored heights sidecar")
 {
     RegisterHeightfieldResourceTypes();
@@ -239,7 +239,7 @@ TEST_CASE("heightfield.pipeline: an embedded asset cooks from the authored heigh
     authored->SetSample(33, 40, 60000);
     authored->SetHole(20, 21, true); // a cut the hole brush persisted
 
-    HeightfieldAsset asset; // fileName empty = embedded: the sidecar is the truth
+    HeightfieldAsset asset; // fileName empty, so embedded: the sidecar is the truth
     asset.size = 65;
     asset.worldSize = Float2{64.0f, 64.0f};
     asset.minY = 0.0f;
@@ -301,7 +301,7 @@ TEST_CASE("heightfield.pipeline: builder ProductType is HeightfieldSource (the c
 {
     // The cook stamps the cooked instance with builder->ProductType(); returning the runtime
     // Heightfield (not HeightfieldSource) makes ReadObject build the wrong type and the factory's
-    // Cast<HeightfieldSource> fail - the resource never binds. Pin it.
+    // Cast<HeightfieldSource> fail, and the resource never binds.
     CHECK(pipeline::HeightfieldAssetBuilder{}.ProductType() ==
           &foundation::heightfield::HeightfieldSource::StaticType());
 }

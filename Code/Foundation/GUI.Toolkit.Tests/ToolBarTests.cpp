@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the tool bar (T0 of Specs/gui-lab-evolution-3.md): its buttons name commands and
-// show what the command says (label, keys, checked, why it is disabled) in their tooltips; what
-// does not fit goes into an overflow menu, the lowest priority then the last first, separators only
-// between shown items, a widget no menu row can stand for never going; drop-down and split menu
-// buttons; a column, right to left, and markup.
+// GUI.Toolkit - the tool bar. Its buttons name commands and show what the command reports (label,
+// keys, checked state, why it is disabled) in their tooltips. What does not fit goes into an
+// overflow menu: the lowest priority goes first, then the last item. Separators show only between
+// shown items, and a widget that no menu row can stand for never overflows. Also drop-down and split
+// menu buttons, a vertical bar, right to left, and markup.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -53,7 +53,7 @@ namespace
             root->GetContext().Update(core::Duration::FromSeconds(0.016));
             root->UpdateLayout();
         }
-        // A button of a size of its own (no sheet, no font).
+        // Makes a button with a fixed size (there is no sheet and no font).
         core::RefPtr<ToolButton> Button(f32 width = 40.0f)
         {
             auto b = Make<ToolButton>();
@@ -105,7 +105,7 @@ TEST_CASE("tool bar: a button bound to a command shows its icon alone, its toolt
 
     CHECK(save->GetLabel() == SV(u8"Save"));
     REQUIRE(save->GetTextPart() != nullptr);
-    CHECK_FALSE(save->GetTextPart()->IsDisplayed()); // an icon: its text does not show
+    CHECK_FALSE(save->GetTextPart()->IsDisplayed()); // it has an icon, so its text does not show
     CHECK(save->GetTooltipText() == SV(u8"Save (Ctrl+S)"));
 
     command.SetEnabled(false);
@@ -113,7 +113,7 @@ TEST_CASE("tool bar: a button bound to a command shows its icon alone, its toolt
     CHECK_FALSE(save->IsEnabled());
     CHECK(save->GetTooltipText() == SV(u8"Save (Ctrl+S)\nNothing to save"));
 
-    save->SetShowsText(true); // asked: its text beside its icon
+    save->SetShowsText(true); // when asked, it shows its text beside its icon
     CHECK(save->GetTextPart()->IsDisplayed());
     save->SetTooltip(SV(u8"Write the scene")); // its own tooltip wins
     CHECK(save->GetTooltipText() == SV(u8"Write the scene"));
@@ -134,8 +134,8 @@ TEST_CASE("tool bar: what does not fit overflows, the lowest priority first, the
     b[1]->SetOverflowPriority(-1);
     bed.Lay();
 
-    // Six of 40 with gaps of 2 ask 250; four fit with the overflow button (12) after them.
-    CHECK_FALSE(b[1]->IsVisible()); // the lowest priority went first
+    // Six buttons of 40 with gaps of 2 need 250; four fit, with the overflow button (12) after them.
+    CHECK_FALSE(b[1]->IsVisible()); // the lowest priority overflowed first
     CHECK_FALSE(b[5]->IsVisible()); // then the last
     CHECK(b[0]->IsVisible());
     CHECK(b[2]->IsVisible());
@@ -149,7 +149,7 @@ TEST_CASE("tool bar: what does not fit overflows, the lowest priority first, the
     CHECK(b[2]->GetPosition().x == doctest::Approx(46.0f)); // the hidden one leaves no gap
     CHECK(overflow->GetPosition().x + overflow->GetSize().x == doctest::Approx(196.0f)); // at the end
 
-    // Room again: everything shows, and no overflow button.
+    // With room again, everything shows and the overflow button goes.
     bed.Width(400.0f);
     for (const auto& button : b)
         CHECK(button->IsVisible());
@@ -163,8 +163,8 @@ TEST_CASE("tool bar: an item that may shrink to a minimum of its own gives up it
     core::Array<core::RefPtr<ToolButton>> b(core::DefaultAllocator());
     for (i32 i = 0; i < 3; ++i)
         b.PushBack(bed.Button());
-    // A long status, 160 wide, that shrinks and may go to nothing (min-width: 0, as a label that
-    // ellipsizes); three tools of 40 with gaps of 2 beside it ask 290.
+    // A long status, 160 wide, that can shrink to nothing (min-width: 0, as a label that
+    // ellipsizes). With three tools of 40 and gaps of 2 beside it, the bar needs 290.
     auto status = Make<UIWidget>();
     status->EditLayoutStyle([](LayoutStyle& s) {
         s.Width = LayoutLength::Px(160.0f);
@@ -180,13 +180,13 @@ TEST_CASE("tool bar: an item that may shrink to a minimum of its own gives up it
     CHECK_FALSE(bed.bar->GetOverflowButton()->IsVisible());
     CHECK(status->GetSize().x == doctest::Approx(192.0f - 3 * 40.0f - 3 * 2.0f)); // what is left: 66
 
-    // Below its minimum it holds, and only then do tools overflow.
+    // It does not shrink below its minimum, and only then do tools overflow.
     status->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength::Px(100.0f); });
     bed.Lay();
     CHECK(status->GetSize().x == doctest::Approx(100.0f));
     CHECK_FALSE(bed.bar->GetOverflowed().IsEmpty());
 
-    // With an automatic minimum (its content) it never shrinks: the tools overflow as before.
+    // With an automatic minimum (its content), it never shrinks, so the tools overflow as before.
     status->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength{}; });
     bed.Lay();
     CHECK(status->GetSize().x == doctest::Approx(160.0f));
@@ -207,11 +207,11 @@ TEST_CASE("tool bar: a separator shows only between shown items; a widget no men
     CHECK_FALSE(twice->IsVisible());
     CHECK_FALSE(trailing->IsVisible());
     CHECK(bed.bar->GetOverflowed().Size() == 3u); // the separators left out
-    CHECK_FALSE(bed.bar->GetOverflowButton()->IsVisible()); // but no item: nothing overflows
+    CHECK_FALSE(bed.bar->GetOverflowButton()->IsVisible()); // but with no item overflowed, there is no overflow button
     (void)a;
     (void)b;
 
-    // A field wider than the bar: the buttons go, the field stays.
+    // With a field wider than the bar, the buttons overflow and the field stays.
     Bed narrow(100.0f);
     auto button = narrow.Button();
     auto field = Make<Panel>();
@@ -271,7 +271,7 @@ TEST_CASE("tool bar: the overflow menu stands for each button: a command's row w
     Click(bed, Middle(*rows[0]));
     bed.Frame();
     CHECK(grids == 1);
-    CHECK(bed.bar->GetOverflowMenu() == nullptr); // picked: it closed
+    CHECK(bed.bar->GetOverflowMenu() == nullptr); // picking a row closes the menu
 
     Click(bed, Middle(*bed.bar->GetOverflowButton()));
     bed.Frame();
@@ -398,7 +398,7 @@ TEST_CASE("tool bar: markup's vertical bar stays a column through a restyle, its
     StyleManager styles;
     styles.SetUserAgentSheet(CSSParser::Parse(ToolkitSheetCSS()));
     styles.ApplyTree(*root.Get());
-    styles.ApplyTree(*root.Get()); // and again: a restyle keeps it
+    styles.ApplyTree(*root.Get()); // style again; a restyle keeps it
     root->UpdateLayout();
     CHECK(bar->IsVertical());
     CHECK(bar->GetOrientationName() == core::String(u8"vertical"));
@@ -431,7 +431,7 @@ TEST_CASE("tool bar: an item's box sits inside its margins; a separator a sheet 
     const core::f32 aEnd = a->GetPosition().x + a->GetSize().x;
     CHECK(line->GetSize().x == doctest::Approx(1.0f)); // its own width, not its slot with its margins
     CHECK(line->GetPosition().x == doctest::Approx(aEnd + 2.0f + 4.0f)); // past the gap and its margin
-    CHECK(b->GetPosition().x == doctest::Approx(aEnd + 2.0f + 9.0f + 2.0f)); // its slot: 4 + 1 + 4
+    CHECK(b->GetPosition().x == doctest::Approx(aEnd + 2.0f + 9.0f + 2.0f)); // the separator's slot is 4 + 1 + 4
     CHECK(line->GetSize().y == doctest::Approx(12.0f)); // its height, not the bar's
     const core::f32 content = 28.0f - bed.bar->GetPadding().TotalVertical();
     CHECK(line->GetPosition().y == doctest::Approx(bed.bar->GetPadding().Top + (content - 12.0f) * 0.5f));

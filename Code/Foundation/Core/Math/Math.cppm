@@ -32,8 +32,8 @@ export namespace foundation::core
     inline constexpr f32 kFloatMax = 3.402823466e38f;
 
     // Overloaded so integer and double arguments do not silently narrow through the f32
-    // version. `Abs(a - b)` over two integers is common in pixel/index code and was quietly
-    // round-tripping through float (MSVC C4244); it now stays integral and exact.
+    // version (MSVC C4244). `Abs(a - b)` over two integers, common in pixel and index code,
+    // stays integral and exact.
     [[nodiscard]] constexpr f32 Abs(f32 x) noexcept { return x < 0.0f ? -x : x; }
     [[nodiscard]] constexpr f64 Abs(f64 x) noexcept { return x < 0.0 ? -x : x; }
     [[nodiscard]] constexpr i32 Abs(i32 x) noexcept { return x < 0 ? -x : x; }
@@ -85,9 +85,9 @@ export namespace foundation::core
         return Abs(x) <= epsilon;
     }
 
-    // Script-facing anchor: the free scalar functions above are reflected as STATICS on this type
-    // (CoreReflectionImpl), so scripts call `Math.Sin(x)` / `Math::Atan2(y, x)` etc. Empty by design -
-    // it only exists to give the reflected math functions a home (there is no reflecting a namespace).
+    // Script-facing anchor: the free scalar functions above are reflected as statics on this type
+    // (CoreReflectionImpl), so scripts call `Math.Sin(x)`, `Math::Atan2(y, x)` and so on. It is
+    // empty: it only gives the reflected math functions a home, since a namespace cannot be reflected.
     struct Math
     {
     };

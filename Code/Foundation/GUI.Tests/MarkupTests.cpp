@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - MarkupLoader tests: inflate a widget tree from XML - element -> widget,
-// nesting -> children, id/class -> identity, claimed attributes (text/orientation) structural,
-// and everything else applied as inline CSS through the StyleApplier.
+// GUI - MarkupLoader tests: inflate a widget tree from XML. An element becomes a widget, nesting
+// becomes children, id and class become identity, claimed attributes (text, orientation) are
+// structural, and everything else applies as inline CSS through the StyleApplier.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -122,10 +122,10 @@ TEST_CASE("markup: {{name}} binds to the GUI's data model, two-way where the use
     auto* volume = core::Cast<Label>(tree->GetChildAt(2));
     auto* literal = core::Cast<Label>(tree->GetChildAt(3));
     REQUIRE((score != nullptr && slider != nullptr && volume != nullptr && literal != nullptr));
-    CHECK(score->GetText() == SV(u8"Score: 7 of ")); // max unset: empty, and followed
+    CHECK(score->GetText() == SV(u8"Score: 7 of ")); // max is unset, so it shows empty and is still followed
     CHECK(slider->GetValue() == doctest::Approx(0.5f));
     CHECK(volume->GetText() == SV(u8"0.5"));
-    CHECK(literal->GetText() == SV(u8"{{unclosed")); // malformed: as written
+    CHECK(literal->GetText() == SV(u8"{{unclosed")); // malformed, so kept as written
     CHECK(volume->BindingCount() == 1u); // a label's text does not write back
 
     data.Set(SV(u8"max"), core::Variant::From<core::i32>(10));
@@ -160,7 +160,7 @@ TEST_CASE("markup: widget properties reflected with CSS names are markup attribu
     CHECK(grid->GetLayoutStyle().Columns.Size() == 3u);
     CHECK(grid->GetLayoutStyle().RowGap == doctest::Approx(6.0f));
     CHECK(core::Cast<ScrollView>(tree->GetChildAt(2))->IsScrollContainer());
-    auto* combo = core::Cast<ComboBox>(tree->GetChildAt(3)); // creatable by tag now
+    auto* combo = core::Cast<ComboBox>(tree->GetChildAt(3)); // creatable by its tag
     REQUIRE(combo != nullptr);
     REQUIRE(combo->ItemCount() == 3u);
     CHECK(combo->GetItemsText() == core::String(u8"Apple|Banana|Cherry"));
@@ -242,8 +242,8 @@ TEST_CASE("markup: an element or an attribute nothing takes is said, not dropped
         u8R"(<Panel padding="4" border="1px solid #fff" auto-translate="off" colour="red"><Lable text="x"/></Panel>)"));
     core::GlobalLogger().RemoveSink(&sink);
     REQUIRE(page);
-    REQUIRE(sink.Lines.Size() == 2u); // colour, and <Lable>; the style property, the shorthand and the
-                                      // reflected one pass
+    REQUIRE(sink.Lines.Size() == 2u); // colour and <Lable>; the style property, the shorthand and the
+                                      // reflected property pass
     bool colour = false, lable = false;
     for (const core::String& line : sink.Lines)
     {

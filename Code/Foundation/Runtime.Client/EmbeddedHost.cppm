@@ -3,16 +3,15 @@
 
 // Foundation::Runtime.Client - :embedded_host partition.
 //
-// EmbeddedApplicationHost: the editor-embedding adapter (Sedulous
-// EditorApplicationHost lineage). An IApplication programs against IApplicationHost and
-// runs UNCHANGED whether hosted standalone or inside the editor: this adapter routes
-// Subsystems() to an EMBEDDED runtime SubsystemManager (owned by the embedder, distinct from the outer
-// host's editor-app context) while sharing the outer host's shell and REAL graphics
-// device (deviation from Sedulous's Graphics=null, which forced it to re-point subsystem
-// device/window after Configure). The embedded app renders into viewport textures, so
-// MainRenderWindow is null and window open/close are refused. "Exit" from inside the
-// embedded app means "stop the play session" - the embedder supplies that meaning via
-// the exit handler (deferred to frame end by the embedder, never torn down mid-callback).
+// EmbeddedApplicationHost: the editor-embedding adapter. An IApplication programs against
+// IApplicationHost and runs unchanged whether hosted standalone or inside the editor: this
+// adapter routes Subsystems() to an embedded runtime SubsystemManager (owned by the embedder,
+// distinct from the outer host's editor-app context) while sharing the outer host's shell and
+// real graphics device, so subsystems see the device from Configure on. The embedded app
+// renders into viewport textures, so MainRenderWindow is null and window open/close are
+// refused. "Exit" from inside the embedded app means "stop the play session": the embedder
+// supplies that meaning via the exit handler (deferred to frame end by the embedder, never
+// torn down mid-callback).
 
 module;
 #include "Core/Prelude.h"
@@ -46,8 +45,8 @@ export namespace foundation::runtime
         [[nodiscard]] IShell* Shell() noexcept override { return m_outer->Shell(); }
         [[nodiscard]] GraphicsDevice* Graphics() noexcept override { return m_outer->Graphics(); }
 
-        // The embedded app has no OS window - it renders into the embedder's viewport
-        // texture (the Game tab). Attach-to-main-window code must tolerate null, exactly
+        // The embedded app has no OS window; it renders into the embedder's viewport
+        // texture (the Game tab). Attach-to-main-window code must tolerate null, just
         // as it must for headless runs.
         [[nodiscard]] RenderWindow* MainRenderWindow() noexcept override { return nullptr; }
         RenderWindow* OpenWindow(const WindowSettings&, const RenderWindowDesc&) override

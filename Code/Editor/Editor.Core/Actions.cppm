@@ -3,22 +3,21 @@
 // Editor::Core - :actions partition.
 //
 // Editor actions: one declaration per user command, and the registry every surface is built
-// from - the menu bar (from menuPath), the shortcuts (from the effective chord), the toolbars
-// (by id), the command palette, Preferences > Shortcuts, and the MCP action bridge. A surface
-// never binds a command of its own; it asks the registry whether an action is enabled or
-// checked and tells it to Execute. The declaration carries what every surface needs to show
-// it and the three bindings that ARE the command: execute, enabled (pulled, never pushed) and
-// checked (a Toggle or Window's state). Actions are nullary from every surface's and the
-// agent's point of view; what they run OVER is a SUBJECT PAGE the surface supplies - the
-// active page for the menu bar, a chord, the palette and the MCP bridge (the registry asks
-// its ActiveSubject), a page's OWN page for that page's toolbar (a split layout shows two
-// pages and only one is active). One rule, whichever surface asks. Anything that takes a
-// real parameter is a tool or a list-driven menu, not an action.
+// from: the menu bar (from menuPath), the shortcuts (from the effective chord), the toolbars (by
+// id), the command palette, Preferences > Shortcuts, and the MCP action bridge. A surface never
+// binds a command of its own; it asks the registry whether an action is enabled or checked and
+// tells it to Execute. The declaration carries what every surface needs to show the action, and
+// the three bindings that make up the command: execute, enabled (queried, never pushed) and
+// checked (the state of a Toggle or Window). Actions take no arguments from any surface or from an
+// agent. They run over a subject page the surface supplies: the active page for the menu bar, a
+// chord, the palette and the MCP bridge (the registry asks its ActiveSubject), and the toolbar's
+// own page for a page's toolbar, since a split layout shows two pages and only one is active.
+// Anything that takes a real parameter is a tool or a list-driven menu, not an action.
 //
-// Registration is explicit, in the composition roots (the application for the editor-wide
-// set, each domain's Register<Domain>Editor for its own), like pages, creators and the MCP
-// tool contributions. An id registered twice is a programming error at boot, refused and
-// logged, so the surfaces never see two actions with one name.
+// Registration is explicit, in the composition roots (the application for the editor-wide set,
+// each domain's Register<Domain>Editor for its own), like pages, creators and the MCP tool
+// contributions. An id registered twice is a programming error at boot, refused and logged, so
+// the surfaces never see two actions with one name.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -34,9 +33,9 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// A keyboard chord, the GUI keymap's keystroke: unset (no key) means the action has no
-    /// shortcut. Written as a binding writes it ("ctrl-shift-z": Of, Keys), the form the keymap
-    /// binds and the settings keep.
+    /// A keyboard chord, the GUI keymap's keystroke; unset (no key) means the action has no
+    /// shortcut. Its text form is the one a binding uses ("ctrl-shift-z", through Of and Keys),
+    /// which the keymap binds and the settings store.
     struct EditorShortcut
     {
         foundation::gui::Keystroke stroke{};
@@ -49,7 +48,7 @@ export namespace editor
         }
         [[nodiscard]] bool IsSet() const noexcept { return stroke.Code != 0; }
         [[nodiscard]] bool operator==(const EditorShortcut&) const noexcept = default;
-        /// As a binding writes it ("ctrl-shift-z"); empty when unset.
+        /// The chord as a binding writes it ("ctrl-shift-z"); empty when unset.
         [[nodiscard]] String Keys() const { return IsSet() ? foundation::gui::KeystrokeName(stroke) : String{}; }
     };
 
@@ -69,38 +68,39 @@ export namespace editor
 
     struct EditorActionDeclaration
     {
-        /// Stable, dotted: "file.save", "edit.undo", "scene.simulate.start". The identity the
-        /// shortcut overrides, the palette and the MCP bridge use; never shown as a label.
+        /// Stable and dotted: "file.save", "edit.undo", "scene.simulate.start". The shortcut
+        /// overrides, the palette and the MCP bridge identify the action by it; it is never shown
+        /// as a label.
         String id;
         String label;       // "Save" (menus, toolbars)
         String description; // "Save the active page" (palette, tooltips, MCP)
         /// The menu bar is generated from these: "File/Save", "Edit/Undo", "Scene/Simulate/
-        /// Start". Empty = not in the menu bar. Items order by menuOrder within a menu, with a
-        /// separator between order bands (hundreds).
+        /// Start". Empty means not in the menu bar. Items are ordered by menuOrder within a menu,
+        /// with a separator between order bands (hundreds).
         String menuPath;
         i32 menuOrder = 0;
-        /// An icon by name, resolved by the surface that draws it; empty = text only.
+        /// An icon by name, resolved by the surface that draws it; empty means text only.
         String icon;
         EditorShortcut shortcut; // the default; the user's override wins (Rebind)
-        /// A second chord the action also answers to, fixed (Ctrl+Y beside Ctrl+Shift+Z for
-        /// redo); never rebound, counted as taken.
+        /// A fixed second chord the action also answers to (Ctrl+Y beside Ctrl+Shift+Z for redo).
+        /// It is never rebound and counts as taken.
         EditorShortcut alternateShortcut;
         EditorActionKind kind = EditorActionKind::Command;
-        /// Changes nothing (the MCP readOnlyHint; runs under a read-only editor).
+        /// The action changes nothing (the MCP readOnlyHint), so it runs under a read-only editor.
         bool readOnly = false;
 
-        /// The bindings, over the subject page (null when no page is the subject; an
+        /// The bindings, called with the subject page (null when no page is the subject; an
         /// editor-wide action ignores it).
         Function<void(EditorPage*)> execute;
-        Function<bool(EditorPage*)> enabled; // unset = always enabled
-        Function<bool(EditorPage*)> checked; // Toggle / Window only; unset = never checked
-        /// Why it is disabled over the subject, said where it shows (a tool with nothing to work
-        /// on); unset or empty = nothing to say.
+        Function<bool(EditorPage*)> enabled; // unset means always enabled
+        Function<bool(EditorPage*)> checked; // Toggle and Window only; unset means never checked
+        /// Why the action is disabled for the subject, shown where the action shows (for example,
+        /// a tool with nothing to work on); unset or empty means no reason is given.
         Function<String(EditorPage*)> disabledReason;
     };
 
-    /// The interface `page` publishes, or null when there is no page or it is not that kind:
-    /// what a domain's action binds through ("enabled iff the subject is a scene page").
+    /// The interface `page` publishes, or null when there is no page or it is not that kind of
+    /// page. A domain's action binds through it ("enabled iff the subject is a scene page").
     template <typename T>
         requires std::is_base_of_v<IPageService, T>
     [[nodiscard]] T* ServiceOf(EditorPage* page) noexcept
@@ -116,17 +116,17 @@ export namespace editor
         EditorActionRegistry& operator=(const EditorActionRegistry&) = delete;
 
         /// Records a read of the actions for the GUI's reactive evaluation in progress (an
-        /// Effect): registrations and rebinds run it again, so a surface that caches (the menu
+        /// Effect). Registrations and rebinds run it again, so a surface that caches (the menu
         /// bar, the keymap's bindings) rebuilds without subscribing by hand.
         void TrackChanges() const { m_changed.Track(); }
 
-        /// The subject the nullary calls run over: the context wires it to its active page.
-        /// Unset (a bare registry) = no subject.
+        /// The subject the argument-less calls run over; the context wires it to its active page.
+        /// Unset (a bare registry) means no subject.
         Function<EditorPage*()> ActiveSubject;
         [[nodiscard]] EditorPage* Subject() const { return ActiveSubject ? ActiveSubject() : nullptr; }
 
         /// Register a declaration. Refused (false, logged) when the id or label is empty, when
-        /// execute is unset, or when the id is already registered - each a mistake in a
+        /// execute is unset, or when the id is already registered; each is a mistake in a
         /// composition root, never a runtime condition.
         bool Register(EditorActionDeclaration declaration)
         {
@@ -156,7 +156,7 @@ export namespace editor
             {
                 return &m_actions[*slot];
             }
-            // A hash collision or an unknown id: the linear walk is the truth.
+            // A hash collision or an unknown id: the linear walk gives the answer.
             for (const EditorActionDeclaration& action : m_actions)
             {
                 if (action.id.AsView() == id)
@@ -187,7 +187,7 @@ export namespace editor
             return !action.enabled || action.enabled(subject);
         }
         [[nodiscard]] String DisabledReason(StringView id) const { return DisabledReason(id, Subject()); }
-        /// Why `id` is disabled over `subject`; empty when it is enabled or says nothing.
+        /// Why `id` is disabled for `subject`; empty when it is enabled or gives no reason.
         [[nodiscard]] String DisabledReason(StringView id, EditorPage* subject) const
         {
             const EditorActionDeclaration* action = Find(id);
@@ -206,11 +206,11 @@ export namespace editor
             return static_cast<bool>(action.checked) && action.checked(subject);
         }
 
-        /// The one funnel: a menu click, a chord, a toolbar click, the palette and the MCP
-        /// bridge all execute through here, over the active subject or the page a surface
-        /// names. NotFound for an unknown id; NotSupported when the action is not enabled over
-        /// that subject (the surfaces never offer a disabled action, so this is the bridge's
-        /// refusal); Ok once execute ran.
+        /// The single entry point: a menu click, a chord, a toolbar click, the palette and the MCP
+        /// bridge all execute through here, over the active subject or the page a surface names.
+        /// NotFound for an unknown id; NotSupported when the action is not enabled for that
+        /// subject (the surfaces never offer a disabled action, so this is the bridge's refusal);
+        /// Ok once execute ran.
         [[nodiscard]] Status Execute(StringView id) const { return Execute(id, Subject()); }
         [[nodiscard]] Status Execute(StringView id, EditorPage* subject) const
         {
@@ -227,8 +227,8 @@ export namespace editor
             return Status{};
         }
 
-        /// The effective chord: the user's override when one is set (an unset override is
-        /// "no shortcut" on purpose), else the declaration's default.
+        /// The effective chord: the user's override when one is set (an unset override means
+        /// the user chose no shortcut), otherwise the declaration's default.
         [[nodiscard]] EditorShortcut Shortcut(StringView id) const
         {
             const EditorActionDeclaration* action = Find(id);
@@ -245,8 +245,8 @@ export namespace editor
             const EditorActionDeclaration* action = Find(id);
             return action != nullptr ? action->alternateShortcut : EditorShortcut{};
         }
-        /// The action holding a chord, effective bindings and alternates considered; null
-        /// when free.
+        /// The action holding a chord, considering effective bindings and alternates; null when
+        /// the chord is free.
         [[nodiscard]] const EditorActionDeclaration* HolderOf(EditorShortcut chord) const
         {
             if (!chord.IsSet())
@@ -262,10 +262,10 @@ export namespace editor
             }
             return nullptr;
         }
-        /// Bind the user's chord to an action (an unset chord = no shortcut). NotFound for an
-        /// unknown id; AlreadyExists when another action holds the chord, naming it in
-        /// `holder` so the settings page can say so. The override persists with the settings
-        /// (a later layer); the registry keeps it for the session.
+        /// Bind the user's chord to an action (an unset chord means no shortcut). NotFound for an
+        /// unknown id; AlreadyExists when another action holds the chord, naming it in `holder`
+        /// so the settings page can say so. The registry keeps the override for the session;
+        /// EditorShortcutSettings persists it.
         [[nodiscard]] Status Rebind(StringView id, EditorShortcut chord,
                                     const EditorActionDeclaration** holder = nullptr)
         {
@@ -309,10 +309,10 @@ export namespace editor
         HashMap<u64, EditorShortcut> m_overrides; // id hash -> the user's chord
     };
 
-    /// Items for the actions `ids`, in that order, appended to a menu over `subject`: each
+    /// Appends items for the actions `ids`, in that order, to a menu over `subject`. Each item is
     /// labelled from its declaration with its effective chord, enabled as the registry answers
-    /// now, executing through the registry over the subject. An id nobody registered adds
-    /// nothing (the menu's author asked for a name its domain never declared). Returns how many
+    /// now, and executes through the registry over the subject. An id nobody registered adds
+    /// nothing (the menu's author named an action its domain never declared). Returns how many
     /// were added.
     inline usize AppendActionItems(foundation::gui::Menu& menu,
                                    const EditorActionRegistry& actions, EditorPage* subject,

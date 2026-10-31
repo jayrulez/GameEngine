@@ -3,8 +3,8 @@
 
 // The full authoring bake: author a ParticleEffectAsset in code, cook it with
 // ParticleEffectAssetBuilder into a content-DB instance, then load the cooked ParticleEffectResource
-// back through the ResourceManager + factory and confirm it round-trips + simulates. Mirrors
-// TexturePipelineTests, adapted for an AUTHORED (not imported) asset.
+// back through the ResourceManager and factory and confirm it round-trips and simulates. Shaped
+// like TexturePipelineTests, adapted for an authored (not imported) asset.
 #include <doctest/doctest.h>
 #include <string>
 #include "Core/Prelude.h"
@@ -133,7 +133,7 @@ TEST_CASE("particles.pipeline: Build resolves a texture path ref -> cooked GUID 
                                 Span<const byte>(reinterpret_cast<const byte*>(px), sizeof(px)))
                     .IsOk());
 
-        // Author an effect that references the texture BY PATH, then cook it.
+        // Author an effect that references the texture by path, then cook it.
         auto* fxInst =
             db.RootGroup()->CreateInstance(u8"effect", ParticleEffectResource::StaticType());
         effectId = fxInst->Id();
@@ -163,9 +163,9 @@ TEST_CASE("particles.pipeline: Build resolves a texture path ref -> cooked GUID 
     Proxy<ParticleEffectResource> res = manager.Bind<ParticleEffectResource>(effectId);
     REQUIRE(res);
 
-    // The path was resolved to the texture's cooked GUID during Build...
+    // The path was resolved to the texture's cooked GUID during Build,
     CHECK(res->Effect().GetSystem(0)->textureRef == texId);
-    // ...and the factory bound it to a live, hot-reload-following Proxy<Texture>.
+    // and the factory bound it to a live, hot-reload-following Proxy<Texture>.
     Proxy<foundation::texture::Texture> tex = res->SystemTexture(0);
     REQUIRE(tex);
     CHECK(tex->GpuTexture() != nullptr);

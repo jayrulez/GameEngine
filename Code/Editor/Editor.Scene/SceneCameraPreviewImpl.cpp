@@ -101,7 +101,7 @@ namespace editor
             m_panel->SetDisplayed(!m_target.IsNil());
         if (m_target.IsNil())
             return;
-        // Titled with its camera: its name, the camera's icon.
+        // Titled with its camera's name and icon.
         const StringView name = sc.GetEntityName(sc.FindEntity(m_target));
         if (m_name != nullptr)
             m_name->SetText(name.IsEmpty() ? StringView(u8"(unnamed)") : name);
@@ -124,7 +124,8 @@ namespace editor
             }
             m_pin->SetTooltip(on ? StringView(u8"Unpin: show the selected camera again") : StringView(u8"Pin: keep showing this camera"));
         }
-        // At the camera's aspect, kept sensible (a thin strip or a tower helps no one).
+        // At the camera's aspect, clamped to something sensible (a thin strip or a tower helps no
+        // one).
         const engine::render::CameraComponent* camera = CameraOf(m_target);
         const f32 aspect = Clamp(camera != nullptr && camera->aspect > 0.0f ? camera->aspect : 16.0f / 9.0f, 0.5f, 3.0f);
         const Float2 size{kPictureWidth, Round(kPictureWidth / aspect)};
@@ -170,7 +171,8 @@ namespace editor
         target.currentState = m_view->ColorState();
         target.finalState = foundation::rhi::ResourceState::ShaderRead;
         // Keyed by the preview's own viewport: its debug list is empty, so the editor's overlays
-        // (drawn into the main view's) never show here; no shading override, the game's look.
+        // (drawn into the main view's) never show here, and no shading override applies, so it
+        // shows the game's look.
         render->RenderScene(sc, m_view->ColorView(), m_view->ColorFormat(), w, h, foundation::render::ViewportRect{0, 0, w, h}, &cameraOverride, target,
                             nullptr, m_view.Get(), nullptr);
         m_view->SetColorState(foundation::rhi::ResourceState::ShaderRead);

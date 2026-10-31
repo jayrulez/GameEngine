@@ -3,7 +3,6 @@
 
 /// DX12 implementation of CommandPool.
 /// Wraps an ID3D12CommandAllocator.
-/// Ported from Sedulous.RHI.DX12/DX12CommandPool.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -44,8 +43,8 @@ export namespace foundation::rhi::dx12
                 return ErrorCode::Unknown;
 
             // Create SRV descriptor staging (shared by all encoders from this pool).
-            // Samplers are NOT staged: the shader-visible sampler heap is hard-capped at 2048
-            // by D3D12, which cannot fit per-pool staging blocks - sampler tables are baked
+            // Samplers are not staged: the shader-visible sampler heap is hard-capped at 2048
+            // by D3D12, which cannot fit per-pool staging blocks, so sampler tables are baked
             // into that heap once at bind-group creation instead (see DxBindGroup).
             (void)cpuSamplerHeap;
             (void)gpuSamplerHeap;
@@ -63,8 +62,8 @@ export namespace foundation::rhi::dx12
         void Reset() override
         {
             // Contract: every encoder has called Finish (closing its list) before Reset.
-            // DX12 cannot reset an allocator while one of its lists is recording -
-            // surface the violation here instead of via a cryptic driver error.
+            // DX12 cannot reset an allocator while one of its lists is recording, so
+            // surface the violation here instead of through a cryptic driver error.
             if (m_unfinishedEncoders != 0)
                 LogErrorf("DxCommandPool::Reset: %d encoder(s) still recording (Finish not "
                           "called); ID3D12CommandAllocator::Reset will fail",
@@ -72,7 +71,7 @@ export namespace foundation::rhi::dx12
             releaseCommandBuffers();
             // Render bundles minted this cycle die at the frame boundary (fence-guarded).
             releaseBundleEncoders();
-            // Reset descriptor staging -- GPU is done (fence waited), so staging
+            // Reset descriptor staging. The GPU is done (the fence was waited on), so staging
             // bump pointers can safely return to start.
             m_srvStaging.Reset();
             m_allocator->Reset();
@@ -92,10 +91,10 @@ export namespace foundation::rhi::dx12
         [[nodiscard]] DxDescriptorStaging* srvStaging() { return &m_srvStaging; }
         [[nodiscard]] IAllocator& allocator() const { return *m_allocPtr; }
 
-        /// Called by DxCommandEncoderImpl::finish() to register a command buffer with this pool.
+        /// Called by DxCommandEncoderImpl::Finish() to register a command buffer with this pool.
         void trackCommandBuffer(DxCommandBufferImpl* cb) { m_trackedBuffers.PushBack(cb); }
 
-        /// Called by DxCommandEncoderImpl::Finish() -- its command list is now closed.
+        /// Called by DxCommandEncoderImpl::Finish() once its command list is closed.
         void markEncoderFinished()
         {
             if (m_unfinishedEncoders > 0)

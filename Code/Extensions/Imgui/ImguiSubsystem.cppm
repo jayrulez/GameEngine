@@ -3,11 +3,12 @@
 
 /// Extensions::Imgui - the `:subsystem` partition.
 ///
-/// ImguiSubsystem: an application-level subsystem that owns the Dear ImGui context + the RHI renderer and
-/// exposes the per-frame hooks an app drives - NewFrame (feed input + display size, begin the UI frame)
-/// and Render (record the built draw data onto the frame's target). Apps register it, call NewFrame at
-/// the top of their update, build UI with ImGui:: directly, and call Render after the scene. The
-/// subsystem is self-contained (its own DXC compiler + ShaderSystem) so it has no renderer dependency.
+/// ImguiSubsystem: an application-level subsystem that owns the Dear ImGui context and the RHI
+/// renderer, and exposes the per-frame hooks an app drives. NewFrame feeds input and the display size
+/// and begins the UI frame; Render records the built draw data onto the frame's target. Apps register
+/// it, call NewFrame at the top of their update, build UI with ImGui:: directly, and call Render after
+/// the scene. The subsystem has its own DXC compiler and ShaderSystem, so it does not depend on the
+/// renderer.
 
 module;
 #include "Core/Prelude.h"
@@ -22,7 +23,7 @@ import foundation.shell;    // IInputManager / IMouse / IKeyboard / KeyCode / Mo
 import foundation.graphics; // FrameContext
 import foundation.shaders;
 import foundation.shaders.system;
-import foundation.vfs; // IFileSystem: the application's data mount (the ImGui shaders live in it)
+import foundation.vfs; // IFileSystem: the application's data mount, which holds the ImGui shaders
 import :renderer;
 
 using namespace foundation::core;
@@ -36,7 +37,7 @@ export namespace extensions::imgui
     class ImguiSubsystem final : public foundation::runtime::Subsystem
     {
     public:
-        // `dataFileSystem` = the application's data mount (borrowed): the ImGui shaders resolve
+        // `dataFileSystem` is the application's data mount, borrowed. The ImGui shaders resolve
         // from it like every other engine shader.
         ImguiSubsystem(rhi::Device& device, u32 framesInFlight,
                        foundation::vfs::IFileSystem& dataFileSystem) noexcept
@@ -45,7 +46,8 @@ export namespace extensions::imgui
         {
         }
 
-        // Begin a UI frame: stamp display size (cached from the last Render) + dt, feed input, NewFrame.
+        // Begin a UI frame: set the display size (cached from the last Render) and dt, feed input,
+        // and call ImGui::NewFrame.
         // Call at the top of the app's update, before any ImGui:: widget calls.
         void NewFrame(shell::IInputManager* input, f32 deltaTime)
         {
@@ -69,7 +71,7 @@ export namespace extensions::imgui
             m_frameOpen = true;
         }
 
-        // Finish the UI frame + render it onto the frame's backbuffer (drawn over the scene). Call after the
+        // Finish the UI frame and render it onto the frame's backbuffer, over the scene. Call after the
         // app has rendered its scene to the backbuffer, before present.
         void Render(foundation::graphics::FrameContext& frame)
         {
@@ -100,11 +102,12 @@ export namespace extensions::imgui
     protected:
         void OnInit() override
         {
-            // Resolve the ImGui shaders via the shared ShaderSystemHost over the data mount: cooked
-            // WGSL from Shaders/shaders.dpak (dist/browser) or dev DXC over Shaders/.
+            // Resolve the ImGui shaders through the shared ShaderSystemHost over the data mount:
+            // cooked WGSL from Shaders/shaders.dpak in a dist or the browser, or DXC over Shaders/
+            // during development.
             if (!m_shaderHost.Initialize(*m_device, *m_dataFileSystem))
             {
-                return; // no compiler and no shader pack - ImGui stays inert
+                return; // no compiler and no shader pack: ImGui stays inert
             }
 
             IMGUI_CHECKVERSION();
@@ -183,12 +186,12 @@ export namespace extensions::imgui
 
         rhi::Device* m_device;
         u32 m_framesInFlight = 2;
-        shaders::ShaderSystemHost m_shaderHost{DefaultAllocator()}; // owns the ShaderSystem + the ImGui modules
-        foundation::vfs::IFileSystem* m_dataFileSystem; // borrowed (the application's data mount)
+        shaders::ShaderSystemHost m_shaderHost{DefaultAllocator()}; // owns the ShaderSystem and the ImGui modules
+        foundation::vfs::IFileSystem* m_dataFileSystem; // the application's data mount, borrowed
         UniquePtr<ImguiRenderer> m_renderer;
         ImGuiContext* m_context = nullptr;
         u32 m_width = 1280,
-            m_height = 720; // cached from the last Render (display size for NewFrame)
+            m_height = 720; // cached from the last Render, the display size for NewFrame
         bool m_ready = false;
         bool m_frameOpen = false;
     };

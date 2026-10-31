@@ -3,13 +3,13 @@
 
 // Editor::Mcp - `editor.mcp`
 //
-// The project MCP tool contribution over foundation.mcp, built on the headless EditorProject (VFS +
-// manifest; no UI): project_info + the asset tools here, the scene / script / health / export /
-// log tools in the partitions, and at the end RegisterEngineTools - the ONE list of the engine
-// surface every host serves (the stdio host and the editor host compose through it, so they
-// cannot drift; kEngineToolCount is its tripwire). project_create / project_open are the stdio
-// host's own additions (RegisterProjectOpenTools): the editor's project is the editor's. A
-// ProjectSession points every tool at the current project without owning it.
+// The project MCP tool contribution over foundation.mcp, built on the headless EditorProject (VFS
+// and manifest; no UI): project_info and the asset tools here, the scene, script, health, export
+// and log tools in the partitions, and at the end RegisterEngineTools, the single list of the
+// engine surface every host serves. The stdio host and the editor host both compose through it, so
+// they cannot drift, and kEngineToolCount is its tripwire. project_create and project_open are the
+// stdio host's own additions (RegisterProjectOpenTools), because the editor's project belongs to
+// the editor. A ProjectSession points every tool at the current project without owning it.
 
 module;
 #include "Core/Prelude.h"
@@ -96,10 +96,9 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // Registers project_create / project_open / project_info against `server`, backed by `session`.
-    // Registers project_create / project_open - the STDIO host's additions. What project_open
-    // opens is stored in `owner` and the session is pointed at it; the editor host, whose project
-    // is the editor's own, registers neither.
+    // Registers project_create and project_open, the stdio host's additions, backed by `session`.
+    // What project_open opens is stored in `owner` and the session is pointed at it; the editor
+    // host, whose project is the editor's own, registers neither.
     // `creators` and `dataRoot` let project_create seed the new project's starter content as the
     // editor's New Project does (SeedStarterContent: the default UI font, the sky, the primitives);
     // a host that passes none creates the bare project.
@@ -136,7 +135,7 @@ export namespace editor::mcp
                                       directory.AsView(), static_cast<i32>(st.Code())));
                 }
                 // The starter content, as the editor's New Project seeds it: without it a project
-                // made here had no default UI font, and its exported game showed no text.
+                // made here has no default UI font, and its exported game shows no text.
                 bool seeded = false;
                 if (creators != nullptr && !seedRoot.IsEmpty())
                 {
@@ -183,7 +182,7 @@ export namespace editor::mcp
             });
     }
 
-    // Registers project_info against `server` - the open project's identity, part of the
+    // Registers project_info against `server`: the open project's identity, part of the
     // surface every host serves.
     inline void RegisterProjectInfoTool(foundation::mcp::McpServer& server,
                                         ProjectSession& session)
@@ -218,8 +217,8 @@ export namespace editor::mcp
             });
     }
 
-    // Registers asset_list / asset_info against `server`, reading the open project's content
-    // databases. Register alongside the project tools (same ProjectSession).
+    // Registers asset_list and asset_info against `server`, reading the open project's content
+    // databases. Register them alongside the project tools (same ProjectSession).
     inline void RegisterAssetTools(foundation::mcp::McpServer& server, ProjectSession& session)
     {
         using foundation::mcp::SchemaBuilder;
@@ -330,10 +329,10 @@ export namespace editor::mcp
         }
     }
 
-    // Registers asset_import / asset_cook - the WRITE side. Routing (which importer, by
-    // extension), refusals and the result shapes are here, shared by every host; the work runs
-    // through the host's IProjectOperations - inline on the stdio host, the editor's cook and
-    // job services otherwise, the tool re-entered each pump until they finish. `importers` is
+    // Registers asset_import and asset_cook, the write side. Routing (which importer, by
+    // extension), refusals and the result shapes are here, shared by every host. The work runs
+    // through the host's IProjectOperations: inline on the stdio host, otherwise on the editor's
+    // cook and job services with the tool re-entered each pump until they finish. `importers` is
     // the host's registry (the same set the editor's drag-drop routes through).
     inline void RegisterAssetWriteTools(foundation::mcp::McpServer& server, ProjectSession& session,
                                         pipeline::ImporterRegistry& importers,
@@ -376,9 +375,10 @@ export namespace editor::mcp
                 request.source = args.Get(u8"source").AsString();
                 request.groupPath = args.Get(u8"group").AsString();
                 const String ext = pipeline::FileExtensionLower(request.source.AsView());
-                // Every claimant, as the interactive path asks (FindFor's first claimant
-                // always won: `.png` is claimed by the texture, image and heightfield
-                // importers). No hint = the first, with the alternatives in the result.
+                // Every claimant, as the interactive path asks for them, since several
+                // importers can claim one extension (`.png` is claimed by the texture, image and
+                // heightfield importers). With no hint the first is used, and the alternatives
+                // are listed in the result.
                 const Array<pipeline::IFileImporter*> claimants = imp->FindAllFor(ext.AsView());
                 if (claimants.IsEmpty())
                 {
@@ -570,11 +570,12 @@ export namespace editor::mcp
     }
 
     // The stdio host's operations: everything runs on the calling thread and every step
-    // answers at once. The cook is the driver's plan + execute over second mounts on Sources/ +
-    // Cache/ with its own job system (so its timings mean what the editor's would); the import
-    // is the editor's two-phase path run inline (worker prepare, main-thread fan-out, the
-    // deferred flush - timed apart, so the tool reports what the editor's UI thread would have
-    // paid); the export is RunExportInline. `hostToolDir` and `dataRoot` are the export's.
+    // answers at once. The cook is the driver's plan and execute over second mounts on Sources/
+    // and Cache/ with its own job system (so its timings mean what the editor's would). The import
+    // is the editor's two-phase path run inline (worker prepare, main-thread fan-out, the deferred
+    // flush), with each part timed separately so the tool reports what the editor's UI thread
+    // would have paid. The export is RunExportInline. `hostToolDir` and `dataRoot` are for the
+    // export.
     class InlineProjectOperations final : public IProjectOperations
     {
     public:
@@ -672,7 +673,7 @@ export namespace editor::mcp
                                    m_dataRoot.AsView(), request);
         }
 
-        /// Creates at once; nothing follows it here: the agent cooks next.
+        /// Creates at once, and nothing follows it here: the agent cooks next.
         [[nodiscard]] OperationStep<CreateOutcome> Create(foundation::mcp::ToolCall&,
                                                           const CreateRequest& request) override
         {
@@ -707,7 +708,7 @@ export namespace editor::mcp
 {
     // Paths the shared surface needs that only a host can discover, each host its own way (the
     // stdio host walks up from its executable, the editor knows its data root). An empty
-    // knownIssues path leaves known_issues erring with guidance; an empty shippingDocsDir
+    // knownIssues path leaves known_issues failing with guidance; an empty shippingDocsDir
     // registers no docs:// resources.
     struct EngineToolPaths
     {
@@ -716,14 +717,13 @@ export namespace editor::mcp
         String shaderLibrary;   ///< the engine's Shaders/ folder (shader_validate's include path)
     };
 
-    // The number of tools RegisterEngineTools registers. A new engine tool bumps this
-    // DELIBERATELY; a lost registration then fails the test loudly (the Pipeline::Registration
-    // pattern). host_info and the stdio host's project_create / project_open are NOT in it -
-    // each host registers its own.
+    // The number of tools RegisterEngineTools registers. Adding an engine tool means bumping
+    // this by hand, so a lost registration fails the test loudly. host_info and the stdio host's
+    // project_create and project_open are not counted: each host registers its own.
     inline constexpr usize kEngineToolCount = 33;
 
-    // Every *.md in `docsDir` as a read-only `docs://<FileName>` resource: the CURATED,
-    // distribution-facing docs set (internal design/spec/process docs are never exposed).
+    // Every *.md in `docsDir` as a read-only `docs://<FileName>` resource: the curated,
+    // distribution-facing docs set (internal design and process docs are never exposed).
     // Readers re-read the file per request, so edits are live without restarting the host.
     inline void RegisterShippingDocResources(foundation::mcp::McpServer& server,
                                              StringView docsDir)
@@ -767,15 +767,16 @@ export namespace editor::mcp
         }
     }
 
-    // The engine tool surface EVERY MCP host serves, listed ONCE: reflection (type_list /
-    // type_info), script_api, project_info / project_settings_set, export_presets /
-    // export_preset_set, the asset tools (list / info / import / cook / uses /
-    // creators / create / data read and write),
-    // project_health, the log tools (log_read / log_write / known_issues), the scene and prefab
-    // tools, script_validate / script_create, shader_validate, material_set_shader, project_export, and the docs:// + project://
-    // resources. A host adds what only it can serve on top (the stdio host: project_create /
-    // project_open; the editor: its live tools) and its own host_info. `operations` is how
-    // THIS host runs the cook / import / export behind their tools (IProjectOperations).
+    // The engine tool surface every MCP host serves, listed once: reflection (type_list,
+    // type_info), script_api, project_info and project_settings_set, export_presets and
+    // export_preset_set, the asset tools (list, info, import, cook, uses, delete, creators,
+    // create, data read and write), project_health, the log tools (log_read, log_write,
+    // known_issues), the scene and prefab tools, component_schema, script_validate and
+    // script_create, shader_validate, gui_validate, material_set_shader, project_export, and the
+    // docs:// and project:// resources. A host adds what only it can serve on top (the stdio
+    // host: project_create and project_open; the editor: its live tools) and its own host_info.
+    // `operations` is how this host runs the cook, import and export behind their tools
+    // (IProjectOperations).
     inline void RegisterEngineTools(foundation::mcp::McpServer& server, ProjectSession& session,
                                     pipeline::BuilderRegistry& builders,
                                     pipeline::ImporterRegistry& importers,
@@ -798,7 +799,7 @@ export namespace editor::mcp
         RegisterProjectHealthTool(server, session, builders);
         RegisterLogTools(server, logBuffer, paths.knownIssues);
         RegisterSceneTools(server, session);
-        // The scene format reference, generated NOW from this host's own registrations (the
+        // The scene format reference, generated here from this host's own registrations (the
         // engine composition's managers, settings systems and factory descriptions, plus its
         // builders) and served live: docs://generated/* beside the shipping docs,
         // component_schema for one entry. Every host answers the same for the same build.
@@ -824,12 +825,12 @@ export namespace editor::mcp
 
 export namespace editor::mcp
 {
-    // Locates the curated shipping docs for a host's EngineToolPaths, walking UP from each
+    // Locates the curated shipping docs for a host's EngineToolPaths, walking up from each
     // start directory in turn (a host passes its executable's directory, then its working
     // directory) and checking the distribution layout first (KnownIssues.md staged beside the
-    // executable) and the engine checkout second (Documentation/Shipping/). The first hit
-    // wins per field; a field left empty means not found - known_issues then errs with
-    // guidance and no docs:// resources register. Same walk for both hosts, so they agree.
+    // executable) and the engine checkout second (Documentation/Shipping/). The first hit wins
+    // per field; a field left empty means not found, so known_issues fails with guidance and no
+    // docs:// resources register. Both hosts use the same walk, so they agree.
     inline void LocateShippingDocs(Span<const String> starts, EngineToolPaths& paths)
     {
         for (const String& start : starts)

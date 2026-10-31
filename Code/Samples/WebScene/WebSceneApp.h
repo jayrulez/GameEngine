@@ -1,40 +1,43 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WebSceneApp - the FULL-RENDERER exercise scene, shared by the desktop and web entry points
-// (Main.cpp / WebMain.cpp - the PlayerApplication.h pattern: this header uses the modules the
-// including TU imports). One lean, procedurally built scene that touches every renderer feature,
-// so desktop --vulkan / --webgpu and the browser can be compared side by side:
+// WebSceneApp: the scene that exercises the full renderer, shared by the desktop and web entry
+// points (Main.cpp and WebMain.cpp). Like PlayerApplication.h, this header uses the modules the
+// including translation unit imports. One lean, procedurally built scene touches every renderer
+// feature, so desktop --vulkan, --webgpu and the browser can be compared side by side:
 //
-//   - analytic (Preetham) sky -> IBL bake (env cube + SH diffuse + prefiltered specular + BRDF)
-//   - directional sun with CSM shadows (TOGGLEABLE - local shadows must survive sun-off: the
-//     shadowParams.y regression class), plus a spot and an orbiting point light, both shadowed
-//   - a roughness x metallic sphere grid + a glossy floor (SSR) + a spinning cube (TAA motion)
-//   - a chrome sphere inside a box reflection probe (parallax probe path)
-//   - an instanced-mesh ring (per-instance addressing path)
-//   - a projected decal + three sprites (alpha / additive / post-tonemap) off one procedural texture
-//   - a particle fountain (additive billboards) + spark trails (ribbon path)
-//   - an ImGui panel (when the extension is available - desktop and web alike) tweaking
-//     exposure/sky/post (TAA/FXAA/bloom/AO/SSR/MSAA) and the feature toggles
-//   - debug draw (grid/axes/wire volumes/3D text via DebugScene + FPS overlay via DebugScreen)
-//   - game UI on the engine's GUI (Engine.GUI): a scene-tier HUD canvas (click-counter button =
-//     pointer consumption), a billboard nameplate riding the spinning cube, and a passive
-//     screen-tier badge on the overlay layer - together they exercise both overlay passes (and
-//     their stencil attachments) + the bundled font
+//   - an analytic (Preetham) sky baked into IBL (environment cube, SH diffuse, prefiltered
+//     specular, BRDF)
+//   - a directional sun with CSM shadows, which can be turned off (local shadows must still work
+//     with the sun off), plus a spot and an orbiting point light, both shadowed
+//   - a roughness by metallic sphere grid, a glossy floor (SSR) and a spinning cube (TAA motion)
+//   - a chrome sphere inside a box reflection probe (the parallax probe path)
+//   - an instanced mesh ring (the per-instance addressing path)
+//   - a projected decal and three sprites (alpha, additive, post-tonemap) from one procedural
+//     texture
+//   - a particle fountain (additive billboards) and spark trails (the ribbon path)
+//   - an ImGui panel, when the extension is available (desktop and web alike), tweaking exposure,
+//     sky and post effects (TAA, FXAA, bloom, AO, SSR, MSAA) and the feature toggles
+//   - debug draw (grid, axes, wire volumes and 3D text through DebugScene, and an FPS overlay
+//     through DebugScreen)
+//   - game UI on the engine's GUI (Engine.GUI): a scene-tier HUD canvas whose click-counter
+//     button shows pointer consumption, a billboard nameplate riding the spinning cube, and a
+//     passive screen-tier badge on the overlay layer; together they exercise both overlay passes,
+//     their stencil attachments and the bundled font
 //
-// Not exercised yet: skinning (needs a skinned asset - procedural skinned content is its own task)
-// and multi-view split-screen (Sandbox covers it; this scene stays single-view light).
+// Not covered: skinning, which needs a skinned asset, and multi-view split screen, which Sandbox
+// covers; this scene stays single-view.
 #ifndef SAMPLES_WEBSCENE_APP_H
 #define SAMPLES_WEBSCENE_APP_H
 
-#include "../Common/FlyCamera.h" // shared free-fly camera (WASD/QE + RMB-look)
+#include "../Common/FlyCamera.h" // shared free-fly camera (WASD/QE, right mouse button to look)
 
 #if OPTION_HAS_EXTENSION_IMGUI
 #include "imgui.h"
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: the one place it chooses the ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -76,8 +79,8 @@ namespace samples
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
-            // The base wires resource-type registration AND the GUI's render bring-up
-            // (GuiSubsystem::EnsureRenderReady) - skip it and the GUI silently never draws.
+            // The base class registers the resource types and brings up the GUI's rendering
+            // (GuiSubsystem::EnsureRenderReady); without it the GUI silently never draws.
             engine::runtime::DefaultApplication::OnStartup(host);
             core::ConsoleWrite(u8"WebScene: building the full-renderer scene...\n");
             if (host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>() == nullptr)
@@ -87,8 +90,8 @@ namespace samples
             }
             m_scene = PrimaryScenes().CreateScene(u8"web");
 
-            // The exercise scene turns the optional passes ON by default - it exists to
-            // exercise them (the panel can toggle everything off).
+            // This scene turns the optional passes on by default, since it exists to exercise
+            // them; the panel can toggle everything off.
             if (auto* renderSub = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 renderSub->SetSsrEnabled(true);
@@ -96,7 +99,7 @@ namespace samples
             }
 
             BuildEnvironment();
-            BuildTexture(host); // the shared procedural texture (decal + sprites)
+            BuildTexture(host); // the shared procedural texture for the decal and sprites
             BuildGeometry();
             BuildLights();
             BuildProbe();
@@ -107,9 +110,9 @@ namespace samples
             BuildGameUI(host);
             BuildNavigation();
 
-            // Simulation ON so the navigation crowd ticks (agents cross + avoid). The showcase's
-            // manual animations (cube spin, orbiting light) are driven directly in OnUpdate and are
-            // unaffected; there is no physics here, so nothing else simulates.
+            // Simulation is on so the navigation crowd ticks (agents cross and avoid each other).
+            // The manual animations (the cube's spin, the orbiting light) are driven directly in
+            // OnUpdate and are unaffected; there is no physics here, so nothing else simulates.
             m_scene->Start();
             m_scene->SetSimulationEnabled(true);
 
@@ -134,8 +137,8 @@ namespace samples
 
             m_time += deltaTime;
 
-            // HUD button binding, once the GUI built the canvas's tree: the click counter proves the
-            // browser's pointer path routes into the game's GUI and is CONSUMED there.
+            // Bind the HUD button once the GUI has built the canvas's tree. The click counter shows
+            // that the browser's pointer path routes into the game's GUI and is consumed there.
             if (!m_hudBound)
             {
                 if (auto* canvases = m_scene->GetSystem<engine::gui::GuiCanvasComponentManager>())
@@ -160,7 +163,7 @@ namespace samples
                 }
             }
 
-            // The spinning cube: constant motion so TAA/velocity is always exercised.
+            // The spinning cube: constant motion, so TAA and velocity are always exercised.
             core::Transform ct = m_scene->GetLocalTransform(m_cube);
             ct.rotation = core::Quaternion::FromAxisAngle(core::Float3{0.0f, 1.0f, 0.0f}, m_time) *
                           core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f},
@@ -173,7 +176,8 @@ namespace samples
                                       core::Float3{core::Cos(orbit) * 4.5f, 2.2f,
                                                    core::Sin(orbit) * 4.5f});
 
-            // Free-fly camera (WASD/QE + RMB look) - drives the web input path end to end.
+            // Free-fly camera (WASD/QE, right mouse button to look), which drives the web input
+            // path end to end.
             m_fly.Update(host, deltaTime);
             core::Transform camT = m_scene->GetLocalTransform(m_camera);
             camT.position = m_fly.position;
@@ -196,8 +200,8 @@ namespace samples
                 }
             }
 
-            // Debug draw: immediate-mode, re-issued every frame. The gizmos exercise the 3D pass
-            // (lines + bitmap text through the scene camera); the FPS readout stays on regardless
+            // Debug draw: immediate mode, re-issued every frame. The gizmos exercise the 3D pass
+            // (lines and bitmap text through the scene camera); the FPS readout stays on regardless
             // and exercises the screen-space pass.
             if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
@@ -207,14 +211,14 @@ namespace samples
                     dbg.DrawGrid(core::Float3{0.0f, 0.01f, 0.0f}, 40.0f, 20,
                                  core::Color{0.25f, 0.25f, 0.30f, 1.0f});
                     dbg.DrawAxis(core::Float4x4::Identity(), 2.0f, /*overlay*/ true);
-                    // The reflection probe's box volume + a label - matches BuildProbe exactly, so
-                    // the probe's coverage (and the chrome sphere inside it) is visible at a glance.
+                    // The reflection probe's box volume and a label. It matches BuildProbe, so the
+                    // probe's coverage and the chrome sphere inside it are visible at a glance.
                     dbg.DrawWireBoxCenter(core::Float3{4.0f, 1.0f, 2.0f},
                                           core::Float3{5.0f, 3.5f, 5.0f},
                                           core::Color{0.2f, 0.9f, 1.0f, 1.0f});
                     dbg.DrawText3D(core::Float3{4.0f, 4.7f, 2.0f}, core::StringView(u8"probe"),
                                    core::Color{0.2f, 0.9f, 1.0f, 1.0f});
-                    // The orbiting point light's current position (it moves - a live gizmo).
+                    // The orbiting point light's current position, a gizmo that moves with it.
                     dbg.DrawWireSphere(
                         core::BoundingSphere{m_scene->GetLocalTransform(m_pointLight).position,
                                              0.25f},
@@ -284,7 +288,7 @@ namespace samples
             if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
             {
                 engine::render::EnvironmentSettings& e = env->Environment();
-                e.skyMode = render::SkyMode::Analytic; // Preetham -> IBL bake from the sky
+                e.skyMode = render::SkyMode::Analytic; // Preetham; the IBL is baked from the sky
                 e.turbidity = 3.0f;
                 e.ambientColor = core::Color{0.10f, 0.12f, 0.16f, 1.0f};
                 e.ambientIntensity = 0.15f; // mostly IBL ambient; a little flat fill
@@ -300,7 +304,7 @@ namespace samples
             }
 
             // Glossy floor: low roughness so SSR has something to reflect into. Metallic and
-            // roughness are LIVE-tweakable from the panel (the SSR eye test).
+            // roughness can be tweaked live from the panel, to judge SSR by eye.
             m_floor = m_scene->CreateEntity(u8"floor");
             m_scene->SetLocalPosition(m_floor, core::Float3{0.0f, -0.75f, 0.0f});
             engine::render::MeshComponent& fm = meshes->Add(m_floor);
@@ -330,7 +334,7 @@ namespace samples
                 }
             }
 
-            // The spinning cube (TAA motion) + a chrome sphere for the probe to reflect.
+            // The spinning cube (TAA motion) and a chrome sphere for the probe to reflect.
             m_cube = m_scene->CreateEntity(u8"cube");
             m_scene->SetLocalPosition(m_cube, core::Float3{0.0f, 0.6f, 0.0f});
             engine::render::MeshComponent& mc = meshes->Add(m_cube);
@@ -354,8 +358,8 @@ namespace samples
                 return;
             }
 
-            // The sun: CSM shadows. Toggleable from the panel - LOCAL shadows must keep
-            // working with the sun (and its cascades) off.
+            // The sun, with CSM shadows. The panel can turn it off, and local shadows must keep
+            // working with the sun and its cascades off.
             m_sun = m_scene->CreateEntity(u8"sun");
             core::Transform st = m_scene->GetLocalTransform(m_sun);
             st.rotation = core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, -0.9f) *
@@ -437,15 +441,15 @@ namespace samples
         {
             if (m_texView == nullptr)
             {
-                return; // texture creation failed; decal/sprites just stay absent
+                return; // texture creation failed; the decal and sprites stay absent
             }
             if (auto* decals = m_scene->GetSystem<engine::render::DecalComponentManager>())
             {
                 m_decal = m_scene->CreateEntity(u8"decal");
                 core::Transform dt = m_scene->GetLocalTransform(m_decal);
                 dt.position = core::Float3{-2.5f, -0.2f, 2.5f};
-                // Decals project along local +Z; rotate so that axis points DOWN at the floor
-                // (an unrotated box projects horizontally and the angle fade removes it).
+                // Decals project along local +Z; rotate so that axis points down at the floor.
+                // An unrotated box projects horizontally and the angle fade removes it.
                 dt.rotation =
                     core::Quaternion::FromAxisAngle(core::Float3{1.0f, 0.0f, 0.0f}, 1.5707963f);
                 m_scene->SetLocalTransform(m_decal, dt);
@@ -574,9 +578,9 @@ namespace samples
             m_scene->SetLocalTransform(m_camera, ct);
         }
 
-        // Game UI on the engine's GUI, all three faces of it (documents made in code, styled
-        // through the markup's inline CSS):
-        //   - scene tier:  a HUD canvas (title + controls + a click-counter Button)
+        // Game UI on the engine's GUI, in all three of its forms, from documents made in code and
+        // styled through the markup's inline CSS:
+        //   - scene tier:  a HUD canvas (title, controls and a click-counter Button)
         //   - billboard:   a nameplate riding the spinning cube (distance-scaled)
         //   - screen tier: a passive bottom-right badge on the overlay layer
         void BuildGameUI(runtime::IApplicationHost& host)
@@ -596,8 +600,8 @@ namespace samples
             if (auto* canvases = m_scene->GetSystem<engine::gui::GuiCanvasComponentManager>())
                 canvases->Add(m_hudEntity).document = m_hudDocument;
 
-            // Billboard nameplate on the spinning cube (the moving anchor makes the
-            // world-tracking path obvious at a glance).
+            // Billboard nameplate on the spinning cube; the moving anchor makes the
+            // world-tracking path obvious at a glance.
             m_plateDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
             m_plateDocument->markup = core::String(
                 u8"<Panel padding=\"4\" background-color=\"rgb(20, 24, 30)\" border-radius=\"4\">"
@@ -612,9 +616,9 @@ namespace samples
                 plate.referenceDistance = 12.0f;
             }
 
-            // Screen-tier badge: OUTSIDE any scene (it survives scene swaps), in the bottom-right
-            // corner. Passive (pointer-events none on its root): an overlay that takes the pointer
-            // is modal, which would shield the scene's HUD from every click.
+            // Screen-tier badge in the bottom-right corner, outside any scene so it survives scene
+            // swaps. It is passive (pointer-events none on its root): an overlay that takes the
+            // pointer is modal, which would shield the scene's HUD from every click.
             if (auto* gameGui = host.Subsystems().GetSubsystem<engine::gui::GuiSubsystem>())
             {
                 m_badgeDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
@@ -655,8 +659,8 @@ namespace samples
             }
         }
 
-        // One shared procedural texture (a soft ring on a checker) for the decal + sprites,
-        // uploaded through the transfer batch (the ParticleRenderer white-dot pattern).
+        // One shared procedural texture (a soft ring on a checker) for the decal and sprites,
+        // uploaded through the transfer batch as ParticleRenderer uploads its white dot.
         void BuildTexture(runtime::IApplicationHost& host)
         {
             auto* gfx = host.Graphics();
@@ -758,8 +762,8 @@ namespace samples
                 {
                     if (engine::render::LightComponent* sun = lights->Get(m_sun))
                     {
-                        // THE regression case: local (spot/point) shadows must be correct
-                        // with the sun - and with it, the CSM cascades - disabled.
+                        // Local (spot and point) shadows must stay correct with the sun, and
+                        // so the CSM cascades, disabled.
                         ImGui::Checkbox("Sun enabled", &sun->enabled);
                         ImGui::Checkbox("Sun shadows (CSM)", &sun->castsShadows);
                         ImGui::SliderFloat("Sun intensity", &sun->intensity, 0.0f, 6.0f);
@@ -784,10 +788,10 @@ namespace samples
                 {
                     renderSub->SetSsrEnabled(ssr);
                 }
-                // Scene-pass MSAA (independent of TAA - both can be on). Levels + labels come from
-                // engine::render::kMsaaLevels (the single source of truth; add 8x there and it shows
-                // here). Offer ONLY device-supported counts: the valid set is not contiguous - WebGPU
-                // has no 2x - so on web this shows just "Off" and "4x".
+                // Scene-pass MSAA, independent of TAA (both can be on). The levels and labels come
+                // from engine::render::kMsaaLevels, so a level added there shows here. Only counts
+                // the device supports are offered; the valid set is not contiguous (WebGPU has no
+                // 2x), so on web this shows just "Off" and "4x".
                 core::u32 msaaCounts[engine::render::MsaaLevelCount()] = {};
                 const char* msaaItems[engine::render::MsaaLevelCount()] = {};
                 int msaaN = 0;
@@ -813,8 +817,8 @@ namespace samples
                 {
                     renderSub->SetMsaaSamples(msaaCounts[msaaIdx]);
                 }
-                // The SSR eye test wants a tunable reflector (roughness feeds the SSR
-                // cutoff/cone-gather; metallic drives reflectivity).
+                // Judging SSR by eye needs a tunable reflector: roughness feeds the SSR cutoff and
+                // cone gather, and metallic drives reflectivity.
                 bool floorChanged = false;
                 floorChanged |= ImGui::SliderFloat("Floor Metallic", &m_floorMetallic, 0.0f, 1.0f);
                 floorChanged |=
@@ -850,8 +854,9 @@ namespace samples
                 {
                     if (engine::render::ReflectionProbeComponent* pc = probes->Get(m_probe))
                     {
-                        // Diagnostic for the web black-probe hunt: Realtime re-captures every
-                        // frame, separating "capture path broken" from "startup result lost".
+                        // A diagnostic for a probe that renders black on the web: Realtime
+                        // re-captures every frame, which tells a broken capture path apart from a
+                        // lost startup result.
                         bool realtime = pc->update == render::ProbeUpdateMode::Realtime;
                         if (ImGui::Checkbox("Probe realtime re-capture", &realtime))
                         {
@@ -885,11 +890,11 @@ namespace samples
         }
 #endif
 
-        // --- navigation: an inline-baked navmesh + a small avoiding crowd -------------------------
-        // The navmesh is baked HERE at startup from the floor + an obstacle box (the runtime bake
-        // primitive, foundation.navigation - the editor/cook bake is tools-only and absent on web),
-        // so this same code path runs on desktop AND in the browser. The zone binds the baked
-        // product directly (no content DB); agents cross the field routing around the box.
+        // --- navigation: an inline-baked navmesh and a small avoiding crowd ---------------------
+        // The navmesh is baked here at startup from the floor and an obstacle box, with the runtime
+        // bake in foundation.navigation (the editor and cook bake is tools-only and absent on web),
+        // so the same code path runs on desktop and in the browser. The zone binds the baked
+        // product directly, with no content DB; agents cross the field, routing around the box.
         static void AddGroundSoup(core::Array<core::Float3>& verts, core::Array<core::u32>& indices,
                                   core::f32 y, core::f32 minX, core::f32 maxX, core::f32 minZ,
                                   core::f32 maxZ)
@@ -935,8 +940,8 @@ namespace samples
         {
             const core::f32 floorY = -0.75f; // the floor plane's height
 
-            // Bake: the floor minus a central obstacle box (the agents route around it - it sits
-            // under the spinning cube at the origin, so the detour reads against a visible object).
+            // Bake the floor minus a central obstacle box. The agents route around it, and it sits
+            // under the spinning cube at the origin, so the detour reads against a visible object.
             core::Array<core::Float3> verts;
             core::Array<core::u32> indices;
             AddGroundSoup(verts, indices, floorY, -13.0f, 13.0f, -13.0f, 13.0f);
@@ -955,21 +960,22 @@ namespace samples
                     core::Span<const core::byte>{blob.Data(), blob.Size()});
             }
 
-            // Overlay the navmesh surface (cyan) + agent target lines (yellow).
+            // Overlay the navmesh surface (cyan) and the agents' target lines (yellow).
             if (auto* navSys = m_scene->GetSystem<engine::navigation::NavigationSceneSystem>())
             {
                 navSys->Settings().debugDraw = true;
                 navSys->Settings().debugDrawPaths = true;
             }
 
-            // The zone entity (origin, identity - so zone-local == world) binding the baked navmesh.
+            // The zone entity, at the origin with identity rotation so zone-local equals world,
+            // binding the baked navmesh.
             {
                 scene::EntityHandle zoneEntity = m_scene->CreateEntity(u8"nav-zone");
                 engine::navigation::NavMeshZoneComponent& zone =
                     m_scene->GetSystem<engine::navigation::NavMeshZoneComponentManager>()->Add(
                         zoneEntity);
                 zone.extents = core::Float3{14.0f, 4.0f, 14.0f};
-                zone.zone = m_navZone; // implicit RefPtr -> Ref (like mesh = Primitives::...)
+                zone.zone = m_navZone; // implicit RefPtr to Ref conversion, as with mesh = Primitives::...
             }
 
             // Six agents (small spheres): three lanes each direction, crossing the field.
@@ -1005,7 +1011,7 @@ namespace samples
         };
 
         scene::Scene* m_scene = nullptr;
-        core::RefPtr<navigation::NavigationZoneResource> m_navZone; // the inline-baked navmesh (bound to the zone)
+        core::RefPtr<navigation::NavigationZoneResource> m_navZone; // the inline-baked navmesh, bound to the zone
         core::Array<NavAgent> m_navAgents;
         scene::EntityHandle m_cube{};
         scene::EntityHandle m_camera{};
@@ -1021,13 +1027,14 @@ namespace samples
         scene::EntityHandle m_sparksEntity{};
         particles::ParticleEffect m_fountain;
         particles::ParticleEffect m_sparks;
-        rhi::Texture* m_tex = nullptr; // freed in OnShutdown (validation-clean teardown)
+        rhi::Texture* m_tex = nullptr; // freed in OnShutdown, so teardown is validation-clean
         rhi::TextureView* m_texView = nullptr;
         FlyCamera m_fly;
         core::f32 m_time = 0.0f;
-        core::f32 m_floorMetallic = 0.0f;  // floor material tweakables (SSR eye test)
+        core::f32 m_floorMetallic = 0.0f;  // floor material values the panel tweaks, to judge SSR
         core::f32 m_floorRoughness = 0.12f;
-        // Game UI (the documents keep their markup alive; the badge kept to take off again).
+        // Game UI. The documents keep their markup alive, and the badge is kept so it can be
+        // removed again.
         core::RefPtr<gui::GuiDocument> m_hudDocument;
         core::RefPtr<gui::GuiDocument> m_plateDocument;
         core::RefPtr<gui::GuiDocument> m_badgeDocument;

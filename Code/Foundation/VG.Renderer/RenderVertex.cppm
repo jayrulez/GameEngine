@@ -5,9 +5,8 @@
 //
 // VGRenderVertex: the GPU vertex layout (float2 pos, float2 uv, float4 color,
 // float coverage, float2 effect) the vg shader expects. Built from the CPU VGVertex; the color
-// passes through UNCONVERTED - vertex colors are authored sRGB and the vg vertex
-// shader performs the single sRGB->linear decode (decoding here too would double-
-// decode). Ported from Sedulous.VG.Renderer/VGRenderVertex.bf.
+// passes through unconverted: vertex colors are authored sRGB and the vg vertex shader
+// performs the single sRGB-to-linear decode (decoding here too would decode twice).
 
 module;
 #include <cstddef> // offsetof

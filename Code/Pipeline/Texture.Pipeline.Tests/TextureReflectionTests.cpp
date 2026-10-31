@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TextureAsset's reflected surface + the enum reflection its properties
+// TextureAsset's reflected surface and the enum reflection its properties
 // reference. Verifies the authored fields enumerate with tooling attributes, round-trip through
 // get/set, and that the enum property types resolve named values (the generic asset page's
-// enum-by-name dropdowns + the script backends read exactly this).
+// enum-by-name dropdowns and the script backends read exactly this).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -54,7 +54,7 @@ namespace
 
 TEST_CASE("reflection-p1: TextureAsset exposes its authored properties with tooling attributes")
 {
-    pipeline::RegisterTextureAsset(); // registers the type + its enum reflection
+    pipeline::RegisterTextureAsset(); // registers the type and its enum reflection
 
     const TypeInfo& type = pipeline::TextureAsset::StaticType();
 
@@ -70,7 +70,7 @@ TEST_CASE("reflection-p1: TextureAsset exposes its authored properties with tool
         CHECK_MESSAGE(FindProperty(type, name) != nullptr, name);
     }
 
-    // Attributes the generic asset page consumes: friendly labels + a slider range.
+    // Attributes the generic asset page consumes: friendly labels and a slider range.
     const PropertyInfo* aniso = FindProperty(type, "anisotropy");
     REQUIRE(aniso != nullptr);
     CHECK(DisplayName(*aniso) == StringView(u8"Anisotropy"));
@@ -131,7 +131,7 @@ TEST_CASE("reflection-p1: enum property types resolve named values")
     CHECK(EnumeratorCount(cs) == 2u);
     CHECK(CEq(EnumValueName(cs, static_cast<i64>(image::ImageColorSpace::Linear)), "Linear"));
 
-    // The colorSpace property's declared type IS the reflected enum (the page maps it to a dropdown).
+    // The colorSpace property's declared type is the reflected enum (the page maps it to a dropdown).
     const PropertyInfo* colorSpace =
         FindProperty(pipeline::TextureAsset::StaticType(), "colorSpace");
     REQUIRE(colorSpace != nullptr);
@@ -146,7 +146,7 @@ TEST_CASE("reflection-p1: the base Asset::fileName is inherited by every concret
 
     const TypeInfo& type = pipeline::TextureAsset::StaticType();
 
-    // fileName is NOT an own property of TextureAsset (it lives on the base)...
+    // fileName is not an own property of TextureAsset (it lives on the base)...
     CHECK(FindProperty(type, "fileName") != nullptr);         // ...but the base chain finds it
     bool ownHasFileName = false;
     for (const PropertyInfo& p : Properties(type))
@@ -178,7 +178,7 @@ TEST_CASE("reflection-p1: SourcePath reflects as a value type with read accessor
     CHECK(FindMethod(type, "Stem") != nullptr);
     CHECK(FindMethod(type, "Extension") != nullptr);
 
-    // Construct + read through reflection.
+    // Construct and read through reflection.
     Variant args[] = {Variant::From(StringView(u8"Audio/hit.wav"))};
     Result<Variant> made = Construct(type, Span<Variant>{args, 1});
     REQUIRE(made.HasValue());

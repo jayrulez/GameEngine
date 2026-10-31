@@ -6,12 +6,12 @@
 // NativeFileSystem: backs logical paths with a real directory prefix. Supports
 // read, enumerate, write, stat, and watch.
 //
-// The watch capability is a STAT-SWEEP change source: Track(dir) snapshots every regular file
-// under the directory (recursive; "" = the whole mount); each Poll() re-walks the tracked
-// trees and diffs (size, mtime) against the snapshot, emitting added/changed/removed locators.
-// Deterministic and portable (no inotify/RDCW plumbing); a sweep is O(files), so CALLERS
-// throttle the poll rate (the editor polls every couple of seconds). Platform event backends
-// can replace the sweep behind the same Poll() later.
+// The watch capability is a stat-sweep change source: Track(dir) snapshots every regular file
+// under the directory (recursive; "" is the whole mount), and each Poll() re-walks the tracked
+// trees and diffs (size, mtime) against the snapshot, emitting added, changed and removed
+// locators. It is deterministic and portable (no inotify or ReadDirectoryChangesW plumbing). A
+// sweep is O(files), so callers throttle the poll rate (the editor polls every couple of
+// seconds). A platform event backend could replace the sweep behind the same Poll().
 
 module;
 #include "Core/Prelude.h"
@@ -25,9 +25,6 @@ using namespace foundation::core;
 
 export namespace foundation::vfs
 {
-    // =======================================================================
-    // NativeFileSystem - backs logical paths with a real directory prefix.
-    // =======================================================================
     // Stat-sweep change source over a NativeFileSystem (see the header comment).
     class NativeChangeSource final : public IChangeSource
     {
@@ -44,7 +41,7 @@ export namespace foundation::vfs
                 }
             }
             m_roots.PushBack(String(locator));
-            // Baseline WITHOUT emitting: pre-existing files are not "changes".
+            // Baseline without emitting: pre-existing files are not changes.
             Sweep(locator, nullptr);
         }
 
@@ -101,7 +98,7 @@ export namespace foundation::vfs
         };
 
         // Walk `folder` recursively; stat regular files; diff against the snapshot. Null
-        // `outChanged` = baseline mode (record without emitting).
+        // `outChanged` means baseline mode (record without emitting).
         void Sweep(StringView folder, Array<String>* outChanged)
         {
             IEnumerableFileSystem* enumerable = m_fs->AsEnumerable();
@@ -276,7 +273,7 @@ export namespace foundation::vfs
         {
             const String full = PathJoin(m_root.AsView(), path, *m_allocator);
             EnsureParentDirectories(full.AsView()); // the ancestors
-            // ...then the leaf itself (foundation::core:: - the member CreateDirectory shadows it here).
+            // ...then the leaf itself (qualified: the member CreateDirectory shadows it here).
             return foundation::core::CreateDirectory(full.AsView()) ? Status{}
                                                                     : Status{ErrorCode::Unknown};
         }

@@ -1,5 +1,5 @@
-# Pipeline::Fonts - `fonts.pipeline` (FontAsset + importer + FontAssetBuilder:
-# the source/cook tier of the fonts triad). Tooling only; requires the msdfgen DF baker.
+# Pipeline::Fonts - `fonts.pipeline` (FontAsset, its importer and FontAssetBuilder: the
+# source and cook side of fonts). Tooling only; requires the msdfgen distance-field baker.
 
 util_add_engine_library(Fonts.Pipeline ALIAS Pipeline::Fonts)
 target_link_libraries(Fonts.Pipeline

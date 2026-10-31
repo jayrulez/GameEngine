@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tools.Export - packages a project into shippable dist(s). A thin CLI over the export DRIVER in
-// editor (the editor's Export menu calls the same ExportOne/ExportAll; tests drive it
-// headlessly). The whole dist - content (Content.pak + player.xml) AND the player + its runtime
-// sidecars - comes from an export preset resolving to an export template, so a preset produces the
-// same result whichever surface triggers it. Links ZERO editor code into the result.
+// Tools.Export - packages a project into shippable dists. A thin CLI over the editor's export
+// driver: the editor's Export menu calls the same ExportOne and ExportAll, and tests drive it
+// headlessly. The whole dist (the content, Content.pak and player.xml, plus the player and its
+// runtime sidecars) comes from an export preset that resolves to an export template, so a preset
+// produces the same result whichever front end runs it. No editor code goes into the result.
 //
 // Usage:
 //   Tools.Export <projectDir> [--out <dir>] [--preset <name> | --all] [--rebuild] [--data-root <dir>]
@@ -14,8 +14,9 @@
 //   Tools.Export --template create <configDir> [--install | --out <folder>] [--id <id>] [--name <name>]
 //                                  [--notes <text>] [--icon <built-in name | file.svg>]
 //
-// No export_presets.xml in the project => a host preset for the current platform is synthesized, so a
-// quick dev export works out of the box (the host template = the player next to this tool).
+// Without an export_presets.xml in the project, a host preset for the current platform is
+// synthesized, so a quick development export works out of the box (the host template is the
+// player next to this tool).
 
 #include <cstdio>
 #include <cstring>
@@ -58,8 +59,8 @@ import foundation.audio.resource;
 import audio.pipeline;
 import foundation.script;
 import foundation.script.resource;
-import script.pipeline; // the per-language script cooks (angelscript | luau) come from
-                        // RegisterPipelineTypes - the composition root registers every enabled
+import script.pipeline; // the per-language script cooks (AngelScript, Luau) come from
+                        // RegisterPipelineTypes: the composition root registers every enabled
                         // backend, so export cooks scripts of either language without naming one here.
 
 using namespace foundation::core;
@@ -69,7 +70,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: the one place it chooses the ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -85,19 +86,20 @@ namespace
     {
         return StringView(reinterpret_cast<const utf8char*>(s));
     }
-    // Takes const String& (not StringView): a StringView argument binds an implicit String temporary to
-    // this reference parameter, which lives to the end of the full-expression - so the returned CStr()
-    // is valid for the enclosing printf. (A by-value StringView would return a dangling pointer.)
+    // Takes const String&, not StringView: a StringView argument binds an implicit String temporary to
+    // this reference parameter, which lives to the end of the full-expression, so the returned CStr()
+    // stays valid for the enclosing printf. A by-value StringView would return a dangling pointer.
     [[nodiscard]] const char* Cs(const String& s)
     {
         return reinterpret_cast<const char*>(s.CStr());
     }
 
-    // The builder + type registration set now lives in Pipeline::Registration (the composition
-    // root) - see RegisterPipelineTypes / RegisterAllBuilders. main() calls them directly.
+    // The builder and type registrations live in Pipeline::Registration (the composition root);
+    // main() calls RegisterPipelineTypes and RegisterAllBuilders directly.
 
-    // Directory containing this executable (Bin/... - where Engine.Player + its .runtime-libs live,
-    // i.e. the host template's source). argv[0] can be bare/relative, so canonicalize it.
+    // The directory holding this executable (under Bin/, where Engine.Player and its .runtime-libs
+    // live, which makes it the host template's source). argv[0] can be bare or relative, so it is
+    // canonicalized.
     [[nodiscard]] String ToolDir(const char* argv0)
     {
         std::error_code ec;
@@ -106,11 +108,11 @@ namespace
         return String(StringView(reinterpret_cast<const utf8char*>(dir.c_str())));
     }
 
-    // Templates root: $ENV_TEMPLATES_DIR or <user-data-dir>/templates (the CLI has no editor
-    // settings, so it passes no override - same resolution the editor uses with an empty setting).
+    // The templates root: $ENV_TEMPLATES_DIR, else <user-data-dir>/templates. The CLI has no editor
+    // settings, so it passes no override, which matches the editor with an empty setting.
     [[nodiscard]] String TemplatesRoot() { return editor::ResolveTemplatesRoot(); }
 
-    // Build the registry from the templates root (if it exists) + the host template (from toolDir).
+    // Builds the registry from the templates root (if it exists) and the host template (from toolDir).
     void BuildRegistry(editor::TemplateRegistry& registry, StringView templatesRoot,
                        StringView toolDir)
     {
@@ -174,11 +176,12 @@ namespace
         return 0;
     }
 
-    // --template create <configDir> [--install | --out <folder>] [--id] [--name] [--notes]. Default:
-    // install into the templates root (usable immediately). --out <folder> writes a self-contained
-    // bundle to that folder to zip. --id/--name/--notes replace the canonical identity, so a second
-    // bundle for one platform (the Steam Deck build) sits beside the first; --icon names the icon the
-    // template carries (a built-in one, `handheld` for the Deck, or an .svg), else its platform's.
+    // --template create <configDir> [--install | --out <folder>] [--id] [--name] [--notes]. By
+    // default the template is installed into the templates root, ready to use. --out <folder>
+    // writes a self-contained bundle to that folder, to zip. --id, --name and --notes replace the
+    // canonical identity, so a second bundle for one platform (the Steam Deck build) can sit beside
+    // the first. --icon names the template's icon (a built-in one, `handheld` for the Deck, or an
+    // .svg); without it the platform's icon is used.
     int TemplateCreate(int argc, char** argv)
     {
         // argv[3] = configDir; optional argv[4..] = --install | --out <folder>.
@@ -332,8 +335,8 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // The engine data root (the shader cook reads <dataRoot>/Shaders): --data-root, else the
-    // Data/.dataroot walk from this tool's executable - the same mechanism every executable uses.
+    // The engine data root (the shader cook reads <dataRoot>/Shaders): the --data-root argument,
+    // else the Data/.dataroot walk up from this tool's executable, as every executable finds it.
     const String dataRoot = vfs::ResolveDataRoot(argc, argv);
     if (dataRoot.IsEmpty())
     {
@@ -343,22 +346,22 @@ int main(int argc, char** argv)
     }
 
     pipeline::BuilderRegistry builders{AppRoot()};
-    pipeline::RegisterPipelineTypes(); // every asset/product/resource type + script cooks
+    pipeline::RegisterPipelineTypes(); // every asset, product and resource type, and the script cooks
     pipeline::RegisterAllBuilders(builders, dataRoot.AsView());
-    // The COMPLETE engine script surface into the global registry (run/ui/physics/audio/... facades),
-    // so the export cook compiles scripts against the same surface a running game has - the
-    // foundation-only registration RegisterPipelineTypes performs is missing every Engine-level
-    // facade. Metadata only (no device/GPU/world), idempotent.
+    // The complete engine script surface (the run, ui, physics, audio and other facades) goes into
+    // the global registry, so the export cook compiles scripts against the same surface a running
+    // game has. RegisterPipelineTypes registers only the foundation-level surface, without the
+    // Engine-level facades. This registers metadata only (no device, GPU or world) and is idempotent.
     engine::RegisterAllScriptFacades();
 
-    // Component reflection (data-version gates) before any scene stream deserializes - ALL
-    // domains, via the scene-surface composition root (the old per-domain list here had drifted:
-    // audio/script/UI/net were missing).
+    // Component reflection (with its data-version gates) for every domain, through the scene
+    // composition root, before any scene stream deserializes. One shared list keeps this host
+    // from missing a domain.
     engine::RegisterAllSceneComponentReflection();
     HashMap<Guid, Array<byte>> sceneStreams;
     engine::CollectSceneStreams(AppRoot(), *project->SourceDb().RootGroup(), sceneStreams);
 
-    // Presets: from <project>/export_presets.xml, else a synthesized host preset.
+    // The presets come from <project>/export_presets.xml, else a synthesized host preset.
     editor::ExportPresetSet presets;
     {
         vfs::NativeFileSystem projectFs(project->Directory(), AppRoot());

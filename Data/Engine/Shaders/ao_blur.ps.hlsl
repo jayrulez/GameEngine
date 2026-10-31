@@ -5,7 +5,7 @@
 Texture2D    AoTex     : register(t0, space0);
 Texture2D    DepthTex  : register(t1, space0);
 SamplerState PointSamp : register(s0, space0);
-struct BlurPush { float2 Dir; float2 TexelSize; float DepthSigma; float _pad0, _pad1, _pad2; }; // scalar pad (WGSL uniform vec3 align)
+struct BlurPush { float2 Dir; float2 TexelSize; float DepthSigma; float _pad0, _pad1, _pad2; }; // scalar padding: a vec3 needs 16-byte alignment in a WGSL uniform
 PUSH_CONSTANT(BlurPush, pc, space1);
 
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {

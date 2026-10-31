@@ -3,12 +3,12 @@
 
 // Editor::App - :app_actions partition.
 //
-// The editor-wide actions (File, Edit, Project, Build, Game, View, Help), out of the application
-// (Documentation/Specs/editor-gui.md, 5.1, layer 3): one registration per menu, each declaration
-// as the menu bar, the shortcuts, the palette and the MCP bridge read it. Registered in menu
-// order (the bar lists menus as their names first appear). An action runs what the application
-// gives it; one it gives nothing for (a dialog not on the GUI yet) is left out until it is, so a
-// surface never offers what cannot run.
+// The editor-wide actions (File, Edit, Project, Build, Game, View, Help), kept out of the
+// application: one registration function per menu, each declaration as the menu bar, the
+// shortcuts, the palette and the MCP bridge read it. They are registered in menu order, since the
+// bar lists menus in the order their names first appear. An action runs the function the
+// application gives it; an action the application gives nothing for is not registered, so no
+// surface offers what cannot run.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -35,7 +35,7 @@ export namespace editor::app
             d.menuOrder = order;
             return d;
         }
-        // Registered when it can run: `run` given.
+        // Registers the action only when it can run, that is when `run` is given.
         inline void Add(EditorActionRegistry& actions, EditorActionDeclaration d, Function<void()> run)
         {
             if (!run)
@@ -119,7 +119,7 @@ export namespace editor::app
         detail::Add(actions,
                     detail::Declare(u8"edit.exportTemplates", u8"Export Templates...",
                                     u8"Install, inspect and remove the export templates this editor exports with", u8"Edit/Export Templates...",
-                                    201), // the editor's, beside Preferences: every project shares them
+                                    201), // editor-wide, beside Preferences, since every project shares them
                     Move(run.exportTemplates));
     }
 
@@ -184,8 +184,8 @@ export namespace editor::app
         const EditorContext* context = nullptr;
         Function<void()> cookAll;
         Function<void()> rebuildAll;
-        /// The page's asset and what it needs cooked (rebuild: again, whether changed or not),
-        /// its unsaved changes saved first so the cook reads them.
+        /// Cooks the page's asset and what it needs (a rebuild cooks again whether changed or
+        /// not), saving its unsaved changes first so the cook reads them.
         Function<void(EditorPage& page)> cookPage;
         Function<void(EditorPage& page)> rebuildPage;
     };
@@ -199,8 +199,8 @@ export namespace editor::app
                     detail::NeedsProject(run.context, detail::Declare(u8"build.rebuildAll", u8"Rebuild All", u8"Cook every asset again",
                                                                       u8"Build/Rebuild All", 101)),
                     Move(run.rebuildAll));
-        // An asset page's: on its bar, and in Build's menu over the active page. Where the old
-        // collision page had its own Cook now, every asset page has these.
+        // An asset page's actions: on its bar, and in the Build menu over the active page. Every
+        // asset page has them.
         const EditorContext* context = run.context;
         const auto pageAction = [&actions, context](StringView id, StringView label, StringView description, StringView menuPath, i32 order,
                                                     Function<void(EditorPage&)> cook)

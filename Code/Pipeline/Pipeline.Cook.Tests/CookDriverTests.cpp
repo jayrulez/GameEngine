@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// CookDriver headless tests: the recipe-hash staleness model end to end. Fixture = four
+// CookDriver headless tests: the recipe-hash staleness model end to end. The fixture is four
 // NativeFileSystem mounts (source DB, cooked DB, sources, cache) under a temp tree, one
-// file-reading builder + one dependency-declaring builder.
+// file-reading builder and one dependency-declaring builder.
 
 #include <doctest/doctest.h>
 
@@ -87,7 +87,7 @@ namespace
         }
     };
 
-    // An asset that READS one instance and REFERENCES another (the two dependency kinds).
+    // An asset that reads one instance and references another (the two dependency kinds).
     class ChainAsset final : public Asset
     {
         RTTI_OBJECT(ChainAsset, Asset)
@@ -134,9 +134,9 @@ namespace
         }
     };
 
-    // A PLATFORM-VARIANT asset: its product depends on the export target, so it
-    // cooks per target and is salted in the recipe - never copied forward. The product's cookedValue
-    // encodes the target (astc -> 999, else 100) + a data sidecar, so a test can see it recooked.
+    // A platform-variant asset: its product depends on the export target, so it
+    // cooks per target and is salted in the recipe, never copied forward. The product's cookedValue
+    // encodes the target (999 for astc, else 100) beside a data sidecar, so a test can see it recooked.
     class VariantAsset final : public Asset
     {
         RTTI_OBJECT(VariantAsset, Asset)
@@ -369,7 +369,7 @@ TEST_CASE("cook: full cook then clean; products carry the source guid + product 
     content::Instance* productA = fx.cookedDb->GetInstance(a);
     REQUIRE(productA != nullptr);
     CHECK(productA->TypeName() == StringView(u8"CookWidgetProduct"));
-    CHECK(fx.CookedValue(a) == 15); // quality 10 + 5 file bytes
+    CHECK(fx.CookedValue(a) == 15); // quality 10 plus 5 file bytes
     CHECK(fx.CookedValue(b) == 20);
 
     // Everything clean on the next plan.
@@ -398,7 +398,7 @@ TEST_CASE("cook: source-file edit dirties exactly the consumer; settings + versi
     (void)driver.Execute(p1);
     CHECK(fx.CookedValue(a) == 17);
 
-    // Import-settings change (rewrite the instance's object -> envelope hash moves).
+    // Import-settings change (rewriting the instance's object moves the envelope hash).
     {
         content::Instance* inst = fx.sourceDb->GetInstance(a);
         CookWidgetAsset asset;
@@ -411,7 +411,7 @@ TEST_CASE("cook: source-file edit dirties exactly the consumer; settings + versi
     (void)driver.Execute(p2);
     CHECK(fx.CookedValue(a) == 18);
 
-    // Builder version bump re-cooks every product of THAT builder.
+    // A builder version bump re-cooks every product of that builder.
     CookWidgetBuilder::version = 2;
     CookPlan p3 = driver.Plan();
     CHECK(p3.dirty.Size() == 2u);
@@ -423,7 +423,7 @@ TEST_CASE("cook: read deps chain hashes + order; references never dirty their co
     fx.WriteSourceFile(u8"tex.bin", u8"xx");
     const Guid texture = fx.AddWidget(u8"Texture", 1, u8"tex.bin");
 
-    // Material READS the texture; Scene REFERENCES the texture.
+    // Material reads the texture; Scene references the texture.
     Guid material, scene;
     {
         content::Instance* inst =
@@ -463,7 +463,7 @@ TEST_CASE("cook: read deps chain hashes + order; references never dirty their co
     (void)driver.Execute(plan);
     REQUIRE(PlanDirty(driver) == 0u);
 
-    // Editing the texture's file dirties texture + material (read chain), NOT the scene.
+    // Editing the texture's file dirties the texture and material (read chain), not the scene.
     fx.WriteSourceFile(u8"tex.bin", u8"xxxx");
     CookPlan p = driver.Plan();
     REQUIRE(p.dirty.Size() == 2u);
@@ -494,7 +494,7 @@ TEST_CASE("cook: failures stay dirty and keep the record failed; orphans are swe
     CHECK(PlanDirty(driver) == 0u);
     CHECK(fx.CookedValue(a) == 5);
 
-    // Orphan: delete the source instance -> the plan sweeps its product + record.
+    // Orphan: delete the source instance, and the plan sweeps its product and record.
     REQUIRE(fx.sourceDb->DeleteInstance(a).IsOk());
     CookPlan sweep = driver.Plan();
     REQUIRE(sweep.orphans.Size() == 1u);
@@ -518,7 +518,7 @@ TEST_CASE("cook: pipeline db persists across sessions; corruption degrades to a 
         (void)driver.Execute(plan);
     }
 
-    // A fresh session (new driver + reopened DBs) sees everything clean.
+    // A fresh session (new driver, reopened DBs) sees everything clean.
     fx.Reopen();
     {
         CookDriver driver = fx.MakeDriver();
@@ -539,10 +539,9 @@ TEST_CASE("cook: pipeline db persists across sessions; corruption degrades to a 
     }
 }
 
-// Regression (user-reported segfault): the first big PARALLEL cook (a ~30-asset model drop in
-// the editor) crashed - CookItem_ created product instances on worker threads concurrently,
-// racing the content DB's group tree + GUID index. Products are now pre-created serially;
-// workers only read the DB. This cooks a wide level on a real JobSystem.
+// A wide dependency level cooks in parallel on a real JobSystem. Product instances are
+// pre-created serially, because creating them on worker threads would race the content DB's
+// group tree and GUID index; workers only read the DB.
 TEST_CASE("cook: a wide dependency level cooks in parallel on the JobSystem")
 {
     Fixture fx(u8"scratch_cook_test_parallel");
@@ -576,9 +575,9 @@ TEST_CASE("cook: a wide dependency level cooks in parallel on the JobSystem")
 
 TEST_CASE("cook variant axis: target cook recooks variant products + copies invariant ones forward")
 {
-    // Host cook (BC desktop) then a "web-astc" target cook into a SEPARATE DB:
-    // the platform-VARIANT product recooks with the target profile (100 -> 999); the INVARIANT
-    // products are carried forward from the host DB, never rebuilt (the cook-stats assertion).
+    // Host cook (BC desktop), then a "web-astc" target cook into a separate DB:
+    // the platform-variant product recooks with the target profile (100 becomes 999); the
+    // invariant products are carried forward from the host DB, never rebuilt (the cook-stats assertion).
     Fixture fx(u8"scratch_cook_variant");
     fx.WriteSourceFile(u8"a.txt", u8"12345");
     const Guid inv1 = fx.AddWidget(u8"Inv1", 10, u8"a.txt"); // invariant (file-backed)
@@ -592,9 +591,9 @@ TEST_CASE("cook variant axis: target cook recooks variant products + copies inva
     CookStats hostStats = host.Execute(hostPlan);
     CHECK(hostStats.cooked == 3u);
     CHECK(hostStats.copiedForward == 0u);
-    CHECK(fx.CookedValue(var) == 100); // host = BC profile (astc=false)
+    CHECK(fx.CookedValue(var) == 100); // host: BC profile (astc=false)
 
-    // --- a per-target cooked DB + its own cook cache ---
+    // --- a per-target cooked DB and its own cook cache ---
     (void)CreateDirectory(PathJoin(fx.root.AsView(), u8"Cooked-astc").AsView());
     (void)CreateDirectory(PathJoin(fx.root.AsView(), u8"Cache-astc").AsView());
     vfs::NativeFileSystem targetCookedFs(PathJoin(fx.root.AsView(), u8"Cooked-astc").AsView(), DefaultAllocator());
@@ -610,13 +609,13 @@ TEST_CASE("cook variant axis: target cook recooks variant products + copies inva
     REQUIRE(targetPlan.dirty.Size() == 3u); // fresh DB: everything is "dirty"
     CookStats targetStats = target.Execute(targetPlan);
 
-    // The ACCEPTANCE property: exactly the one variant product cooked; the two invariant ones were
+    // The key property: exactly the one variant product cooked; the two invariant ones were
     // copied forward, not rebuilt.
     CHECK(targetStats.cooked == 1u);
     CHECK(targetStats.copiedForward == 2u);
     CHECK(targetStats.failed == 0u);
 
-    // The variant product differs per target (ASTC branch); invariants match the host byte-for-byte.
+    // The variant product differs per target (ASTC branch); invariants match the host byte for byte.
     auto targetValue = [&](const Guid& id)
     {
         RefPtr<ISerializable> obj = targetDb.ReadObject(id);
@@ -639,13 +638,13 @@ TEST_CASE("cook variant axis: target cook recooks variant products + copies inva
 TEST_CASE("cook variant axis: an invariant product that READS variant content recooks per target")
 {
     // The salt must propagate through read-deps (CookDriverImpl folds each read's recipe). An
-    // INVARIANT builder whose product reads a VARIANT product's content is effectively variant: its
-    // recipe differs per target, so copy-forward must DECLINE and it recooks - otherwise the target
+    // invariant builder whose product reads a variant product's content is effectively variant: its
+    // recipe differs per target, so copy-forward must decline and it recooks; otherwise the target
     // DB would inherit host-BC-derived bytes.
     Fixture fx(u8"scratch_cook_variant_readchain");
     const Guid var = fx.AddVariant(u8"Var");         // platform-variant
-    (void)fx.AddChain(u8"Reader", var);              // invariant builder, READS the variant
-    const Guid plain = fx.AddWidget(u8"Plain", 7);   // invariant, reads nothing -> copies forward
+    (void)fx.AddChain(u8"Reader", var);              // invariant builder, reads the variant
+    const Guid plain = fx.AddWidget(u8"Plain", 7);   // invariant, reads nothing: copies forward
 
     CookDriver host = fx.MakeDriver();
     CookPlan hostPlan = host.Plan();
@@ -667,7 +666,7 @@ TEST_CASE("cook variant axis: an invariant product that READS variant content re
     CookPlan targetPlan = target.Plan();
     CookStats targetStats = target.Execute(targetPlan);
 
-    // Var (variant) + Reader (reads var, salted recipe mismatch) both recook; only Plain copies.
+    // Var (variant) and Reader (reads var, salted recipe mismatch) both recook; only Plain copies.
     CHECK(targetStats.cooked == 2u);
     CHECK(targetStats.copiedForward == 1u);
     CHECK(targetStats.failed == 0u);

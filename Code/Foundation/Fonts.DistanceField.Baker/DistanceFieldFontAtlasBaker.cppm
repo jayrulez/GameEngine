@@ -33,7 +33,7 @@ namespace
 
     // Cleared texels left between packed cells. The atlas starts zeroed (fully "outside"), so a
     // gutter guarantees bilinear sampling at a glyph's UV edge blends into empty space, never into
-    // the neighbouring glyph - which otherwise shows as flickering seams under magnification.
+    // the neighbouring glyph, which would show as flickering seams under magnification.
     constexpr u32 kCellGutter = 2;
 
     // The solid block for solid-colour draws, packed as a cell like any glyph.
@@ -245,7 +245,7 @@ export namespace foundation::fonts
             for (const i32 glyphIdx : glyphs)
             {
 
-                // Blank glyphs (space, NBSP - no outline) still carry an advance. Record an
+                // Blank glyphs (space, NBSP: no outline) still carry an advance. Record an
                 // advance-only region or the cursor-walk draw paths, which step by
                 // region.advanceX, render "hello world" as "helloworld". The raster baker
                 // gets this for free from stb's packed chars.
@@ -280,7 +280,7 @@ export namespace foundation::fonts
                     continue;
                 }
 
-                // Cell = glyph + padding on each side + 1px safety margin.
+                // Cell = glyph, plus padding on each side, plus a 1px safety margin.
                 const i32 cellW = glyphW + pad * 2 + 2;
                 const i32 cellH = glyphH + pad * 2 + 2;
 
@@ -298,8 +298,8 @@ export namespace foundation::fonts
                 item.glyph = glyphIdx;
                 item.cellW = cellW;
                 item.cellH = cellH;
-                // msdfgen's Projection is scale*(coord + translate), so translate is in FONT
-                // UNITS (added before scaling). Map the glyph bbox min corner (fuX0, fuY0) to
+                // msdfgen's Projection is scale*(coord + translate), so translate is in font
+                // units (added before scaling). Map the glyph bbox min corner (fuX0, fuY0) to
                 // pixel (pad+1, pad+1): translate = (pad+1)/s - bboxMin. The msdfgen bitmap is
                 // Y-up (row 0 = bottom); the output loop flips rows to the top-down atlas
                 // convention, which lands the descender (low font Y) near the cell's bottom.

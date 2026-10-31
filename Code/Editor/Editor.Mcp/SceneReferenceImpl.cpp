@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Mcp - the scene format reference generator (:scene_reference), the live docs://
 // resources and the component_schema tool. See the partition's header for what the two
-// documents are; the spec (Documentation/Specs/scene-format-reference.md) for why.
+// documents are.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -18,7 +18,7 @@ import foundation.resource;
 import foundation.script.resource;
 import foundation.mcp;
 import pipeline.core;
-import engine.composition; // the FULL composition: every manager + settings system
+import engine.composition; // the full composition: every manager and settings system
 import engine.script;      // the example's script behaviour with one override per kind
 
 using namespace foundation::core;
@@ -142,16 +142,16 @@ namespace
         return false;
     }
 
-    // ---- the reference join (D4) ----
+    // ---- the reference join ----
 
     struct Joiner
     {
         const pipeline::BuilderRegistry* builders = nullptr;
 
         // `ref` for a reference-shaped value type: "entity" for an EntityRef, {resource, asset}
-        // for a Ref<T> - the runtime type T, the factory DESCRIPTION the composition carries for
-        // it (its cooked form; engine-composition.md D1), the builder that produces that cooked
-        // form, its asset type. A factory that reads several cooked forms (a texture's, a render
+        // for a Ref<T>. The join goes from the runtime type T to the factory description the
+        // composition carries for it (its cooked form), to the builder that produces that cooked
+        // form, to its asset type. A factory that reads several cooked forms (a texture's, a render
         // texture's) gives several asset types: `asset` is the first, and `assets` lists them all
         // when there is more than one. Nothing is constructed: the join reads declarations, so
         // every host answers the same. `asset` is omitted (and `resolved` false) only when no
@@ -195,7 +195,7 @@ namespace
         }
     };
 
-    // ---- recorded fields -> JSON, annotated by the reflected twin (D3) ----
+    // ---- recorded fields as JSON, annotated by the reflected twin ----
 
     constexpr StringView kReservedFieldKeys[] = {u8"key",     u8"kind", u8"default", u8"fields",
                                                  u8"element", u8"count", u8"blobSize",
@@ -492,7 +492,7 @@ namespace
         return fields;
     }
 
-    // ---- the example scene (D2, D5) ----
+    // ---- the example scene ----
 
     struct Example
     {
@@ -855,8 +855,8 @@ namespace
         // The hash, with a worked example a reader can check.
         {
             JsonValue hash = JsonValue::MakeObject();
-            // The numbers are the ones the hash uses, interpolated, never retyped: a retyped
-            // basis once documented the standard value while the code used another.
+            // The numbers are the ones the hash uses, interpolated rather than retyped, so the
+            // documented basis cannot drift from the one the code uses.
             hash.Set(u8"algorithm",
                      JsonValue::MakeString(Format(u8"FNV-1a, 64-bit, over the UTF-8 bytes of the "
                                                   u8"property name: offset basis {}, prime {}, no "
@@ -873,7 +873,7 @@ namespace
             out.Set(u8"hash", Move(hash));
         }
         // Every kind: its number on the wire, its authored spelling, and the payload key the
-        // value uses - taken from the value's own Serialize, one kind at a time.
+        // value uses, taken from the value's own Serialize one kind at a time.
         {
             JsonValue kinds = JsonValue::MakeArray();
             for (const script::ScriptPropertyTypeEntry& entry : script::ScriptPropertyTypeNames())
@@ -1005,7 +1005,7 @@ namespace editor::mcp
         Random rng(0x5CE7EF0247A7ull); // fixed: the example's guids reproduce run after run
         const Example example = ComposeExample(world, rng);
 
-        // The schema's bodies first, over the DEFAULTS (D1), before the example gets its content.
+        // The schema's bodies first, over the defaults, before the example gets its content.
         Joiner joiner{&builders};
         JsonValue schema = JsonValue::MakeObject();
         JsonValue components = ComponentsSection(allocator, world, example, joiner);

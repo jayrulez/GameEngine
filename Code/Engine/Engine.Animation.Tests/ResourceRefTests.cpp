@@ -3,7 +3,7 @@
 
 // Resource-reference layer: SkeletalAnimationComponent's skeleton/clip resource::Ref fields
 // round-trip through scene serialization by Guid and resolve through the ResourceManager's
-// proxy handles (mirrors the MeshComponent coverage in Render/Subsystem/Tests).
+// proxy handles, as the MeshComponent tests in Engine.Render.Tests do.
 
 #include <doctest/doctest.h>
 
@@ -45,7 +45,7 @@ namespace
         (void)RemoveDirectory(root);
     }
 
-    // A 2-bone chain root(0) -> child(1); enough structure to assert survival through the cook.
+    // A 2-bone chain root(0) -> child(1), enough structure to assert survival through the cook.
     void BuildSkeleton(animation::Skeleton& s)
     {
         Array<animation::Bone>& bones = s.Bones();
@@ -74,7 +74,7 @@ TEST_CASE("resource-ref: scene round-trip resolves skeleton + clip refs through 
     GlobalTypeRegistry().Register(animation::AnimationClipSource::StaticType());
     RegisterSerializable<animation::AnimationClipSource>();
 
-    // Cook a skeleton + a clip into the content DB (the products a model import fans out).
+    // Cook a skeleton and a clip into the content DB (the products a model import fans out).
     foundation::content::ContentDatabase cookedDb(foundation::core::DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
     Guid skeletonId;
     Guid clipId;
@@ -112,7 +112,7 @@ TEST_CASE("resource-ref: scene round-trip resolves skeleton + clip refs through 
     resources.AddFactory(&skeletonFactory);
     resources.AddFactory(&clipFactory);
 
-    // Author a scene whose SkeletalAnimationComponent references both BY GUID only.
+    // Author a scene whose SkeletalAnimationComponent references both by Guid only.
     MemoryStream blob;
     {
         scene::Scene scene{DefaultAllocator()};
@@ -130,7 +130,7 @@ TEST_CASE("resource-ref: scene round-trip resolves skeleton + clip refs through 
         REQUIRE(ar.IsOk());
     }
 
-    // Load into a FRESH scene, then run the post-load resolve pass.
+    // Load into a fresh scene, then run the post-load resolve pass.
     scene::Scene loaded{DefaultAllocator()};
     loaded.AddSystem<engine::render::MeshComponentManager>();
     loaded.AddSystem<engine::animation::SkeletalAnimationComponentManager>();
@@ -148,7 +148,7 @@ TEST_CASE("resource-ref: scene round-trip resolves skeleton + clip refs through 
     mgr->ForEach([&](engine::animation::SkeletalAnimationComponent& c, scene::EntityHandle) { a = &c; });
     REQUIRE(a != nullptr);
 
-    // Identity + tunables survived; nothing is bound until the resolve pass runs.
+    // Identity and tunables survived; nothing is bound until the resolve pass runs.
     CHECK(a->skeleton.id == skeletonId);
     CHECK(a->clip.id == clipId);
     CHECK(a->skeleton.Get() == nullptr);
@@ -166,7 +166,7 @@ TEST_CASE("resource-ref: scene round-trip resolves skeleton + clip refs through 
     CHECK(clip->duration == doctest::Approx(2.0f));
     CHECK(clip->isLooping);
 
-    // The close-and-reopen editor flow: after load + resolve, the FIRST tick builds the player
+    // The close-and-reopen editor flow: after load and resolve, the first tick builds the player
     // and autoPlay starts the persisted clip at the persisted startTime.
     CHECK(a->player.Get() == nullptr);
     loaded.Update(1.0f / 60.0f);
@@ -178,7 +178,7 @@ TEST_CASE("resource-ref: scene round-trip resolves skeleton + clip refs through 
 
 TEST_CASE("resource-ref: raw runtime skeleton/clip pointers still assign (sample/spawn path)")
 {
-    // Samples hand the component objects that live behind proxies elsewhere - the raw-pointer
+    // Samples hand the component objects that live behind proxies elsewhere: the raw-pointer
     // conversion must hold its own strong ref and skip serialization (nil id).
     RefPtr<animation::Skeleton> skel = MakeRef<animation::Skeleton>(DefaultAllocator(), 2);
     BuildSkeleton(*skel);
@@ -196,9 +196,9 @@ TEST_CASE("resource-ref: raw runtime skeleton/clip pointers still assign (sample
 
 TEST_CASE("resource-ref: sequential picks start playback (skeleton first, clip later)")
 {
-    // The editor flow: refs land ONE AT A TIME across frames. The manager must start playback
-    // when the clip arrives after the player was already built for the skeleton (and re-play
-    // when the clip behind the ref changes, e.g. a hot reload or a different pick).
+    // The editor flow: refs land one at a time across frames. The manager must start playback
+    // when the clip arrives after the player was already built for the skeleton, and replay when
+    // the clip behind the ref changes (a hot reload or a different pick).
     scene::Scene scene{DefaultAllocator()};
     scene.AddSystem<engine::render::MeshComponentManager>();
     auto* mgr = scene.AddSystem<engine::animation::SkeletalAnimationComponentManager>();
@@ -213,18 +213,18 @@ TEST_CASE("resource-ref: sequential picks start playback (skeleton first, clip l
 
     engine::animation::SkeletalAnimationComponent& a = mgr->Add(e);
 
-    // Frame 1: only the skeleton is picked - a player exists but nothing plays.
+    // Frame 1: only the skeleton is picked; a player exists but nothing plays.
     a.skeleton = skel.Get();
     scene.Update(1.0f / 60.0f);
     REQUIRE(a.player.Get() != nullptr);
     CHECK(a.player->CurrentClip() == nullptr);
 
-    // Frame 2: the clip pick lands - autoPlay must start it on the EXISTING player.
+    // Frame 2: the clip pick lands, and autoPlay must start it on the existing player.
     a.clip = walk.Get();
     scene.Update(1.0f / 60.0f);
     CHECK(a.player->CurrentClip() == walk.Get());
 
-    // Picking a DIFFERENT clip re-plays (same mechanism covers hot reload's product swap).
+    // Picking a different clip replays (the same mechanism covers hot reload's product swap).
     a.clip = run.Get();
     scene.Update(1.0f / 60.0f);
     CHECK(a.player->CurrentClip() == run.Get());
@@ -247,7 +247,7 @@ TEST_CASE("mesh-entities: one animator feeds multiple parts by EntityRef, and th
     (void)meshes->Add(partA);
     (void)meshes->Add(partB);
 
-    // The multi-part character: ONE animator on the rig, parts referenced by stable guid.
+    // The multi-part character: one animator on the rig, parts referenced by stable guid.
     engine::animation::SkeletalAnimationComponent& a = mgr->Add(rig);
     a.skeleton = skel.Get();
     a.clip = clip.Get();
@@ -259,13 +259,13 @@ TEST_CASE("mesh-entities: one animator feeds multiple parts by EntityRef, and th
     engine::render::MeshComponent* fedB = meshes->Get(partB);
     REQUIRE(fedA != nullptr);
     REQUIRE(fedB != nullptr);
-    CHECK(fedA->boneMatrices != nullptr); // both parts received the ONE player's matrices
+    CHECK(fedA->boneMatrices != nullptr); // both parts received the one player's matrices
     CHECK(fedB->boneMatrices != nullptr);
     CHECK(fedA->boneCount == 2u);
     CHECK(fedA->boneMatrices == fedB->boneMatrices); // same evaluation, not per-part players
 
-    // The refs are part of the component's persisted state (v1): a scene round-trip keeps
-    // them, still naming the same entities by guid.
+    // The refs are part of the component's persisted state (data version 1): a scene round-trip
+    // keeps them, still naming the same entities by guid.
     MemoryStream blob;
     {
         BinarySerializer ar(blob, SerializeMode::Write);

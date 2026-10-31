@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// DITHER FADE probe on REAL devices: a mesh's fade (MeshRenderData::fade, the cutaway's knob)
+// Dither fade probe on real devices: a mesh's fade (MeshRenderData::fade, the cutaway's knob)
 // thins its pixels by a screen-door pattern. Three cards side by side: solid, faded 0.5 and faded
 // out, with a solid card behind the faded-out one. The solid card is untouched, the half-faded one
 // keeps about half its pixels, and the faded-out one draws none and hides none of the card behind
 // it, so it stayed out of the depth prepass too. The two faded cards share one instanced draw,
 // each with its own fade; drawn apart (each its own material), each is a lone draw by the single
-// path, which thins them the same. Vulkan + WebGPU.
+// path, which thins them the same. Vulkan and WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

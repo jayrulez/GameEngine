@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ViewTests.bf (faithful; Beef `scope`/`new` -> RefPtr via MakeRef,
-// `===` -> pointer ==, Vector2 -> Float2 (.x/.y), UserData Object -> void*).
+// View tests. Views are created with MakeRef; UserData is a void*.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -141,7 +140,7 @@ TEST_CASE("view: View_Visibility_GoneSkipsMeasure")
     root->AddView(child.Get());
 
     LayoutPass(ctx, root.Get());
-    // Gone views should not affect parent measurement (no crash / no assertion).
+    // Gone views do not affect the parent's measurement (no crash, no assertion).
 }
 
 TEST_CASE("view: View_UserData_SetAndGet")

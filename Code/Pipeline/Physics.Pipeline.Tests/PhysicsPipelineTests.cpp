@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full collision pipeline: author a mesh (source db) -> CollisionShapeAsset -> cook via
-// the builder into an output db -> load the CollisionShape product through the factory ->
-// hand its blob to a live PhysicsWorld. Same for PhysicalMaterial.
+// Full collision pipeline: author a mesh in the source db, wrap it in a CollisionShapeAsset,
+// cook it through the builder into an output db, load the CollisionShape product through the
+// factory, and hand its blob to a live PhysicsWorld. The same for PhysicalMaterial.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -32,7 +32,7 @@ namespace
     void RemoveTree(StringView dir)
     {
         Array<String> names;
-        // Content DBs write flat files; nuke known extensions then the dir.
+        // Content DBs write flat files; remove the known files, then the dir.
         for (const utf8char* f : {u8"cube.rasset", u8"shape.rasset", u8"surface.rasset"})
         {
             String path(dir);
@@ -121,11 +121,10 @@ TEST_CASE("physics.pipeline: mesh -> CollisionShapeAsset cook -> CollisionShape 
     RemoveTree(u8"scratch_physpipe_out_db");
 }
 
-// Regression (issues-triage #7 / smoke #7): the real editor cook resolves the mesh `reads` edge to
-// the mesh's cooked PRODUCT - a StaticMeshSource - not the source StaticMeshAsset. The builder must
-// cook from the product; when it only Cast<StaticMeshAsset> it failed every generate-collision cook
-// with "source is not a mesh asset". Feed the guid a StaticMeshSource exactly as the db holds it
-// after the mesh cooks and before the collision cook reads it.
+// The editor cook resolves the mesh `reads` edge to the mesh's cooked product, a StaticMeshSource,
+// not the source StaticMeshAsset, so the builder must cook from the product. Feed the guid a
+// StaticMeshSource exactly as the db holds it after the mesh cooks and before the collision cook
+// reads it.
 TEST_CASE("physics.pipeline: collision cooks from the mesh PRODUCT (StaticMeshSource)")
 {
     RegisterPhysicsResource();
@@ -160,7 +159,7 @@ TEST_CASE("physics.pipeline: collision cooks from the mesh PRODUCT (StaticMeshSo
     auto* outInstance =
         outDb.RootGroup()->CreateInstance(u8"shape", CollisionShapeSource::StaticType());
     ctx.output = outInstance;
-    REQUIRE(builder.Build(asset, ctx).IsOk()); // was Status::InvalidArgument before the fix
+    REQUIRE(builder.Build(asset, ctx).IsOk()); // a builder reading only the asset type fails here
 
     CollisionShapeFactory factory;
     ResourceManager manager(DefaultAllocator(), outDb);

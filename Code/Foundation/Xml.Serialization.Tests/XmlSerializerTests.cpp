@@ -224,8 +224,8 @@ TEST_CASE("xml.serialize: a failure deep inside names its path, the first failur
 
 namespace
 {
-    // A struct whose fields serialize as a FLAT keyed group (no per-element object wrapper) -
-    // the model-manifest ModelNode shape that exposed the repeated-key bug.
+    // A struct whose fields serialize as a flat keyed group (no per-element object wrapper),
+    // the shape of a model manifest's ModelNode.
     struct FlatNode
     {
         String name;
@@ -242,9 +242,9 @@ namespace
 
 TEST_CASE("xml.serialize: array of keyed structs round-trips each element distinctly")
 {
-    // Regression guard: a keyed lookup that restarts at FirstChild for every field makes every
-    // element of a flat keyed-struct array read as a copy of the FIRST one (the Fox model
-    // manifest then loses every node's meshIndex - and with it, its prefab's components).
+    // A keyed lookup that restarts at FirstChild for every field makes every element of a flat
+    // keyed-struct array read as a copy of the first one, and a model manifest then loses every
+    // node's meshIndex.
     Array<FlatNode> nodes;
     for (i32 i = 0; i < 3; ++i)
     {
@@ -278,11 +278,11 @@ TEST_CASE("xml.serialize: array of keyed structs round-trips each element distin
     CHECK(loaded[2].parent == 1);
     CHECK(loaded[0].mesh == -1);
     CHECK(loaded[1].mesh == -1);
-    CHECK(loaded[2].mesh == 0); // the field the Fox manifest lost
+    CHECK(loaded[2].mesh == 0); // not the first element's -1
 }
 
 // --- Framed regions (unknown-section passthrough). XML is self-describing, so the frame markers are
-//     no-ops and RawRemainder captures/re-injects the current scope's remaining element subtree. ---
+//     no-ops and RawRemainder captures and re-injects the current scope's remaining element subtree. ---
 
 TEST_CASE("xml.serialize: BeginFramedRegion/EndFramedRegion are no-ops (identical output)")
 {
@@ -317,7 +317,7 @@ TEST_CASE("xml.serialize: BeginFramedRegion/EndFramedRegion are no-ops (identica
 
 TEST_CASE("xml.serialize: RawRemainder captures an unknown payload and re-injects it")
 {
-    // Author a section: typeName + a framed payload object {v=42}.
+    // Author a section: typeName and a framed payload object {v=42}.
     String out;
     {
         XmlSerializer w(foundation::core::DefaultAllocator());
@@ -341,7 +341,7 @@ TEST_CASE("xml.serialize: RawRemainder captures an unknown payload and re-inject
         w.GetOutput(out);
     }
 
-    // Read as a build that does NOT know "Foo": capture the framed remainder as raw bytes.
+    // Read as a build that does not know "Foo": capture the framed remainder as raw bytes.
     Array<u8> captured;
     {
         XmlDocument doc(foundation::core::DefaultAllocator());
@@ -378,7 +378,7 @@ TEST_CASE("xml.serialize: RawRemainder captures an unknown payload and re-inject
         w.GetOutput(out2);
     }
 
-    // A build that DOES know "Foo" recovers v=42 from the re-emitted section.
+    // A build that does know "Foo" recovers v=42 from the re-emitted section.
     {
         XmlDocument doc(foundation::core::DefaultAllocator());
         REQUIRE(doc.Parse(out2) == XmlResult::Ok);
@@ -425,7 +425,7 @@ namespace
 
 TEST_CASE("xml.serialize: an appended field reads its default from an older payload")
 {
-    // Sedulous 39147576: a payload saved before the field (no key) reads with the field at its
+    // A payload saved before the field (no key) reads with the field at its
     // default, and one saved after it reads the value; the rest of the object either way.
     GrownSettings saved;
     saved.size = 7;

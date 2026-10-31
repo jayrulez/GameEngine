@@ -3,17 +3,17 @@
 
 // Scene-pass MSAA first-sample (sample 0) resolve.
 //
-// Reads the multisampled depth + G-buffer aux (normal / velocity / material / albedo) written by the MSAA
-// forward pass and writes SAMPLE 0 into single-sample 1x targets that the post consumers
-// (GTAO / SSR / TAA / motion reprojection) read unchanged. Depth goes through SV_Depth into a real
-// depth-format target so no consumer's binding or shader declaration changes. Scene COLOR is
-// resolved separately by the hardware resolve attachment (averaged - the real edge AA); this pass
-// never touches color.
+// Reads the multisampled depth and G-buffer aux targets (normal, velocity, material, albedo) written
+// by the MSAA forward pass, and writes sample 0 into single-sample targets that the post consumers
+// (GTAO, SSR, TAA, motion reprojection) read unchanged. Depth goes through SV_Depth into a real
+// depth-format target, so no consumer's binding or shader declaration changes. Scene colour is
+// resolved separately by the hardware resolve attachment (averaged, which is the real edge AA); this
+// pass never touches colour.
 //
-// SAMPLE-0 NUANCE: sample 0 of a standard MSAA pattern is NOT the pixel centre, so resolved
-// depth/normals sit ~0.4px off where a 1x prepass would have sampled. It is consistent
-// frame-to-frame and benign under TAA's own jitter. Depth is NEVER averaged: it is nonlinear, so an
-// averaged edge depth is a point in empty space; taking one sample preserves usable depth values.
+// Sample 0 of a standard MSAA pattern is not the pixel centre, so resolved depth and normals sit
+// about 0.4px off where a 1x prepass would have sampled. The offset is consistent from frame to
+// frame and harmless under TAA's own jitter. Depth is never averaged: it is nonlinear, so an
+// averaged edge depth is a point in empty space, while one sample keeps usable depth values.
 
 Texture2DMS<float2> gNormalMS   : register(t0, space0); // RG16Float octahedral view-space normal
 Texture2DMS<float2> gVelocityMS : register(t1, space0); // RG16Float screen-space motion (UV delta)

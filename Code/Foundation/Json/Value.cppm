@@ -3,14 +3,14 @@
 
 // Foundation::Json - :value partition
 //
-// JsonValue: a hand-rolled JSON DOM value (null / bool / number / string / array / object), the
-// engine's boundary codec for JSON (MCP wire protocol + game-chosen data interchange). Value
-// SEMANTICS throughout: accessors return owned copies and mutators copy in, so no interior pointer
-// into a reallocatable document ever escapes (the re-resolving-handle lesson). Numbers are f64 -
-// matching both script backends' number model. Objects preserve insertion order (parallel key/value
-// arrays), which JSON-RPC/MCP determinism wants; lookups are linear (fine for wire-sized objects).
+// JsonValue: a hand-rolled JSON DOM value (null, bool, number, string, array, object), the
+// engine's boundary codec for JSON (the MCP wire protocol and game-chosen data interchange). Value
+// semantics throughout: accessors return owned copies and mutators copy in, so no interior pointer
+// into a reallocatable document ever escapes. Numbers are f64, matching both script backends'
+// number model. Objects preserve insertion order (parallel key/value arrays), which JSON-RPC/MCP
+// determinism wants; lookups are linear (fine for wire-sized objects).
 //
-// NOT an engine data format: there is deliberately no ISerializer backend (unlike foundation.xml).
+// Not an engine data format: there is no ISerializer backend (unlike foundation.xml).
 
 module;
 #include "Core/Prelude.h"
@@ -62,7 +62,7 @@ export namespace foundation::json
         [[nodiscard]] bool IsArray() const noexcept { return m_type == JsonType::Array; }
         [[nodiscard]] bool IsObject() const noexcept { return m_type == JsonType::Object; }
 
-        // --- Scalar accessors (typed; facade-numerics rule on the method path) ------------------
+        // --- Scalar accessors (typed, with a fallback) ------------------------------------------
         [[nodiscard]] bool AsBool(bool fallback = false) const noexcept
         {
             return m_type == JsonType::Bool ? m_bool : fallback;
@@ -75,7 +75,7 @@ export namespace foundation::json
         {
             return m_type == JsonType::Number ? static_cast<i64>(m_number) : fallback;
         }
-        // The string value as an OWNED copy ("" if not a string). Owned rather than a view so it
+        // The string value as an owned copy ("" if not a string). Owned rather than a view so it
         // marshals cleanly to script and never aliases the document.
         [[nodiscard]] String AsString() const { return m_type == JsonType::String ? m_string : String(); }
 
@@ -83,24 +83,24 @@ export namespace foundation::json
         [[nodiscard]] i64 Count() const noexcept { return static_cast<i64>(m_items.Size()); }
 
         // --- Array ------------------------------------------------------------------------------
-        // Element by index as an OWNED copy (null if out of range) - never an interior reference.
+        // Element by index as an owned copy (null if out of range), never an interior reference.
         [[nodiscard]] JsonValue At(i64 index) const;
         // Append (coerces a null/non-array into an empty array first).
         void Add(JsonValue value);
 
         // --- Object -----------------------------------------------------------------------------
         [[nodiscard]] bool Has(String key) const;
-        // Member by name as an OWNED copy (null if absent).
+        // Member by name as an owned copy (null if absent).
         [[nodiscard]] JsonValue Get(String key) const;
         // Set/overwrite a member (coerces a null/non-object into an empty object first).
         void Set(String key, JsonValue value);
         // Member names in insertion order (empty unless Object).
         [[nodiscard]] const Array<String>& Keys() const noexcept { return m_keys; }
-        // Member name by index as an OWNED copy ("" if out of range) - the script-friendly iterator
+        // Member name by index as an owned copy ("" if out of range): the script-friendly iterator
         // (pair with Count()) that avoids marshaling the whole key array.
         [[nodiscard]] String KeyAt(i64 index) const;
 
-        // --- Convenience (defined in the primary module; forward to :writer / :parser) ----------
+        // --- Convenience (defined in ReflectionImpl.cpp; forward to :writer and :parser) --------
         // Serialize to a JSON string (compact, or 2-space pretty).
         [[nodiscard]] String ToString(bool pretty = false) const;
         // Parse JSON text; returns a Null value on any error (script never sees a half-value). Use

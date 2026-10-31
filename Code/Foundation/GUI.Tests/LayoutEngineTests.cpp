@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - measure and arrange (E2 of Specs/gui-lab-evolution.md): a node asks for a size within
-// constraints and its container places it; the display kinds (flex by CSS's rules, grid, stack,
-// dock) and the out-of-flow children; sizes in lengths, percentages and auto, min and max, the
-// box sizing; visibility against display; what a change lays out again; and the same from a sheet.
+// GUI - measure and arrange. A node asks for a size within constraints, and its container places
+// it. Covers the display kinds (flex by CSS's rules, grid, stack, dock) and out-of-flow children;
+// sizes in lengths, percentages and auto, min and max, and the box sizing; visibility against
+// display; what a change lays out again; and the same driven from a sheet.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -66,7 +66,7 @@ TEST_CASE("layout: a plain container is a flex column; its children stack and st
     auto a = Box(*page.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(30.0f); });
     auto b = Box(*page.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(50.0f); });
     bed.Layout();
-    CheckRect(*page, 0, 0, 400, 100); // stretched across the root; as tall as what it holds
+    CheckRect(*page, 0, 0, 400, 100); // stretched across the root, and as tall as its content
     CheckRect(*a, 10, 10, 380, 30);
     CheckRect(*b, 10, 40, 380, 50);
 }
@@ -133,23 +133,23 @@ TEST_CASE("layout: grow shares free space; shrink takes an overflow, stopping at
     auto a = Box(*line.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(100.0f); s.Grow = 1.0f; });
     auto b = Box(*line.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(100.0f); s.Grow = 3.0f; });
     bed.Layout();
-    CHECK(a->GetSize().x == doctest::Approx(150.0f)); // 200 free: a quarter
+    CHECK(a->GetSize().x == doctest::Approx(150.0f)); // a quarter of the 200 free
     CHECK(b->GetSize().x == doctest::Approx(250.0f));
 
     a->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(300.0f); s.Grow = 0.0f; s.MinWidth = LayoutLength::Px(280.0f); });
     b->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(300.0f); s.Grow = 0.0f; });
     bed.Layout();
-    CHECK(a->GetSize().x == doctest::Approx(280.0f)); // its share would take it to 200
+    CHECK(a->GetSize().x == doctest::Approx(280.0f)); // its share of the shrink would take it to 200
     CHECK(b->GetSize().x == doctest::Approx(120.0f));
     b->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
     bed.Layout();
-    CHECK(b->GetSize().x == doctest::Approx(300.0f)); // does not shrink: the line overflows
+    CHECK(b->GetSize().x == doctest::Approx(300.0f)); // it does not shrink, so the line overflows
 }
 
 TEST_CASE("layout: a width of its own holds with no room; an item shrinks no narrower than a fixed child")
 {
-    // Measured with no room (its min-content), a node with a width keeps it: the room limits an auto
-    // size, not one its style gives, unless the container fixes the size exactly.
+    // Measured with no room (its min-content), a node with a width keeps that width. The room
+    // limits an auto size, not a size its style gives, unless the container fixes the size exactly.
     auto lone = core::MakeRef<Panel>(core::DefaultAllocator());
     lone->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(120.0f); });
     CHECK(lone->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{0.0f, kUnbounded}}).x == doctest::Approx(120.0f));
@@ -160,12 +160,12 @@ TEST_CASE("layout: a width of its own holds with no room; an item shrinks no nar
         s.Height = LayoutLength::Px(40.0f);
         s.Direction = FlexDirection::Row;
     });
-    auto a = Box(*line.Get(), [](LayoutStyle&) {}); // auto width: its content's
+    auto a = Box(*line.Get(), [](LayoutStyle&) {}); // auto width, so its content's width
     (void)Fixed(*a.Get(), 150.0f, 20.0f);
     auto b = Box(*line.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(400.0f); });
     bed.Layout();
-    CHECK(a->GetSize().x == doctest::Approx(150.0f)); // its automatic minimum: the fixed child
-    CHECK(b->GetSize().x == doctest::Approx(250.0f)); // the overflow all b's
+    CHECK(a->GetSize().x == doctest::Approx(150.0f)); // its automatic minimum is the fixed child
+    CHECK(b->GetSize().x == doctest::Approx(250.0f)); // b takes all of the overflow
 }
 
 TEST_CASE("layout: flex wraps into lines; reverse and order change the sequence")
@@ -192,7 +192,7 @@ TEST_CASE("layout: flex wraps into lines; reverse and order change the sequence"
     second.Layout();
     CHECK(first->GetPosition().x == doctest::Approx(350.0f));
     CHECK(last->GetPosition().x == doctest::Approx(300.0f));
-    first->EditLayoutStyle([](LayoutStyle& s) { s.Order = 1; }); // after the other, so first from the end... last
+    first->EditLayoutStyle([](LayoutStyle& s) { s.Order = 1; }); // order 1 puts it after the other, so second from the right in a reversed row
     second.Layout();
     CHECK(first->GetPosition().x == doctest::Approx(300.0f));
 }
@@ -221,7 +221,7 @@ TEST_CASE("layout: margins, percentages, min and max, and the box sizing")
     CheckRect(*half, 5, 6, 200, 20);
     CHECK(capped->GetPosition().y == doctest::Approx(6 + 20 + 4));
     CHECK(capped->GetSize().x == doctest::Approx(150.0f));
-    CHECK(content->GetSize().x == doctest::Approx(120.0f)); // its width is the content's: padding outside
+    CHECK(content->GetSize().x == doctest::Approx(120.0f)); // its width is the content's, with the padding outside
     CHECK(content->GetSize().y == doctest::Approx(30.0f));
 }
 
@@ -246,7 +246,7 @@ TEST_CASE("layout: grid tracks of lengths, fr and auto; items flow, span and sit
     CHECK(b->GetPosition().x == doctest::Approx(110.0f));
     CHECK(b->GetSize().x == doctest::Approx(93.0f)); // 110 to 203.33
     CHECK(c->GetPosition().x == doctest::Approx(213.0f));
-    CHECK(wide->GetPosition().y == doctest::Approx(30.0f + 5.0f)); // the first row as tall as its tallest
+    CHECK(wide->GetPosition().y == doctest::Approx(30.0f + 5.0f)); // the first row is as tall as its tallest item
     CHECK(wide->GetSize().x == doctest::Approx(203.0f));
     CHECK(placed->GetPosition().x == doctest::Approx(0.0f));
     CHECK(placed->GetPosition().y == doctest::Approx(35.0f + 10.0f + 5.0f));
@@ -311,13 +311,13 @@ TEST_CASE("layout: out of flow by its insets; placed from code; relative moves i
     });
     auto third = Box(*page.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(30.0f); });
     bed.Layout();
-    CheckRect(*banner, 20, 250, 360, 40); // left and right stretch it; bottom places it
+    CheckRect(*banner, 20, 250, 360, 40); // left and right stretch it, and bottom places it
     CHECK(second->GetPosition().y == doctest::Approx(30.0f)); // the banner takes no space
     CHECK(second->GetPosition().x == doctest::Approx(15.0f));
-    CHECK(third->GetPosition().x == doctest::Approx(0.0f)); // its sibling where it was
+    CHECK(third->GetPosition().x == doctest::Approx(0.0f)); // its sibling stays where it was
     CHECK(third->GetPosition().y == doctest::Approx(60.0f));
 
-    first->SetPosition(core::Float2{200.0f, 100.0f}); // from code: out of the flow, at that place
+    first->SetPosition(core::Float2{200.0f, 100.0f}); // set from code: out of the flow, at that place
     bed.Layout();
     CHECK(first->GetPosition().x == doctest::Approx(200.0f));
     CHECK(second->GetPosition().y == doctest::Approx(0.0f)); // the others closed the gap
@@ -359,10 +359,10 @@ TEST_CASE("layout: a change lays out what it affects; a fixed-size box stops it"
     (void)before;
     leaf->SetSize(core::Float2{30.0f, 40.0f});
     bed.Layout();
-    CHECK(outer->GetSize().y == doctest::Approx(100.0f)); // inner's size held: outer untouched
+    CHECK(outer->GetSize().y == doctest::Approx(100.0f)); // inner's size is fixed, so outer is untouched
     CHECK(bed.root->LastLayoutCount() <= 2u);             // inner, and the leaf at its new size
     bed.Layout();
-    CHECK(bed.root->LastLayoutCount() == 0u); // nothing waiting: nothing laid out
+    CHECK(bed.root->LastLayoutCount() == 0u); // nothing is waiting, so nothing is laid out
 }
 
 TEST_CASE("layout: a sheet's display, flex, grid and size properties reach the layout")
@@ -385,7 +385,7 @@ TEST_CASE("layout: a sheet's display, flex, grid and size properties reach the l
     bed.Layout();
     CHECK(grid->GetLayoutStyle().Kind == Display::Grid);
     CHECK(grid->GetLayoutStyle().Columns.Size() == 2u);
-    CHECK(cards[1]->GetPosition().x == doctest::Approx(10.0f + 180.0f + 20.0f)); // (380 - 20) / 2 a column
+    CHECK(cards[1]->GetPosition().x == doctest::Approx(10.0f + 180.0f + 20.0f)); // each column is (380 - 20) / 2
     CHECK(cards[1]->GetPosition().y == doctest::Approx(10.0f));
     CHECK(cards[2]->GetPosition().x == doctest::Approx(10.0f));
     CHECK(cards[2]->GetPosition().y == doctest::Approx(10.0f + 40.0f + 10.0f));
@@ -401,7 +401,7 @@ TEST_CASE("layout: a sheet's display, flex, grid and size properties reach the l
 
 namespace
 {
-    // 6px a byte, 12px a line.
+    // 6px per byte, 12px per line.
     class SixFont : public fonts::IFont
     {
     public:
@@ -470,7 +470,7 @@ TEST_CASE("layout: a wrapping label wraps to the width it is given, and shrinks 
     auto text = core::MakeRef<Label>(core::DefaultAllocator());
     text->SetFont(&font);
     text->SetWhiteSpace(TextWhiteSpace::Normal);
-    text->SetText(SV(u8"aaaa bbbb cccc dddd")); // words of 24, a space 6: four words take 114
+    text->SetText(SV(u8"aaaa bbbb cccc dddd")); // words of 24 and spaces of 6, so four words take 114
     column->AddChild(text.Get());
     bed.Layout();
     CHECK(text->GetSize().x == doctest::Approx(100.0f)); // stretched across
@@ -484,16 +484,16 @@ TEST_CASE("layout: a wrapping label wraps to the width it is given, and shrinks 
     row->AddChild(squeezed.Get());
     (void)Fixed(*row.Get(), 50.0f, 10.0f);
     bed.Layout();
-    CHECK(squeezed->GetSize().x == doctest::Approx(48.0f)); // its longest word: the sibling overflows
+    CHECK(squeezed->GetSize().x == doctest::Approx(48.0f)); // its longest word, so the sibling overflows
     CHECK(squeezed->GetSize().y == doctest::Approx(24.0f));
 }
 
 
 TEST_CASE("layout: a row aligned by baseline lines up its items' text, and grows to hold them")
 {
-    // SixFont's ascent is 10 on a 12 line. A label's baseline is its padding plus the ascent
-    // (its line fills its content box); a button's the same; a plain box's the bottom of its
-    // content box.
+    // SixFont's ascent is 10 on a 12 line. A label's baseline is its padding plus the ascent,
+    // since its line fills its content box, and a button's is the same. A plain box's baseline is
+    // the bottom of its content box.
     fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr);
     Bed bed;
     auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.AlignItems = Align::Baseline; });
@@ -512,21 +512,21 @@ TEST_CASE("layout: a row aligned by baseline lines up its items' text, and grows
     pushed->SetFont(&font);
     pushed->SetText(SV(u8"x"));
     pushed->SetPadding(Thickness{4.0f});
-    pushed->SetMargin(Thickness{0.0f, 6.0f, 0.0f, 0.0f}); // its margin box's baseline at 20
+    pushed->SetMargin(Thickness{0.0f, 6.0f, 0.0f, 0.0f}); // its margin box's baseline is at 20
     row->AddChild(pushed.Get());
     bed.Layout();
 
-    // The baselines meet at 30, the deepest above it; each item sits so its baseline is there.
+    // The baselines meet at 30, the deepest baseline; each item sits so its baseline is there.
     CHECK(label->GetPosition().y == doctest::Approx(16.0f));
     CHECK(button->GetPosition().y == doctest::Approx(14.0f));
     CHECK(box->GetPosition().y == doctest::Approx(0.0f));
     CHECK(pushed->GetPosition().y == doctest::Approx(16.0f)); // 10 down, then its margin
     CHECK(label->GetPosition().y + label->GetBaseline() == doctest::Approx(30.0f));
     CHECK(button->GetPosition().y + button->GetBaseline() == doctest::Approx(30.0f));
-    // The row holds what reaches furthest below the baseline too: the button's 8.
+    // The row also holds what reaches furthest below the baseline: the button's 8.
     CHECK(row->GetSize().y == doctest::Approx(38.0f));
 
-    // In a column, baseline places as start.
+    // In a column, baseline alignment places items as start does.
     row->EditLayoutStyle([](LayoutStyle& s) { s.Direction = FlexDirection::Column; });
     bed.Layout();
     CHECK(label->GetPosition().x == doctest::Approx(0.0f));
@@ -540,19 +540,19 @@ TEST_CASE("layout: a label's baseline follows its vertical alignment and its wra
     label->SetFont(&font);
     label->SetText(SV(u8"aaaa bbbb"));
     label->SetPadding(Thickness{2.0f});
-    const core::Float2 size{100.0f, 40.0f}; // a 36 tall content box from 2
+    const core::Float2 size{100.0f, 40.0f}; // a content box 36 tall, starting at 2
     label->SetTextAlignment(TextHAlign::Left, TextVAlign::Top);
     CHECK(label->BaselineAt(size) == doctest::Approx(2.0f + 10.0f));
     label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
     CHECK(label->BaselineAt(size) == doctest::Approx(2.0f + 12.0f + 10.0f));
     label->SetTextAlignment(TextHAlign::Left, TextVAlign::Bottom);
     CHECK(label->BaselineAt(size) == doctest::Approx(38.0f - 2.0f)); // the descent above the bottom
-    // Wrapped to two lines in 30 wide, centred: the block of 24 starts 6 down, its first line's
-    // baseline 10 below that.
+    // Wrapped to two lines in 30 wide and centred, the block of 24 starts 6 down, with its first
+    // line's baseline 10 below that.
     label->SetWhiteSpace(TextWhiteSpace::Normal);
     label->SetTextAlignment(TextHAlign::Left, TextVAlign::Middle);
     CHECK(label->BaselineAt(core::Float2{34.0f, 40.0f}) == doctest::Approx(2.0f + 6.0f + 10.0f));
-    // Any other node: the bottom of its content box.
+    // For any other node, the baseline is the bottom of its content box.
     auto panel = core::MakeRef<Panel>(core::DefaultAllocator());
     panel->SetPadding(Thickness{0.0f, 0.0f, 0.0f, 5.0f});
     CHECK(panel->BaselineAt(core::Float2{50.0f, 30.0f}) == doctest::Approx(25.0f));
@@ -560,8 +560,8 @@ TEST_CASE("layout: a label's baseline follows its vertical alignment and its wra
 
 TEST_CASE("layout: arranged edges round to the device grid at scales 1, 1.25 and 2")
 {
-    // Three equal items across 100 units: edges at 33.33 and 66.67. Each edge rounds on its own,
-    // so neighbours still meet and the widths add up; in device pixels every edge is whole.
+    // Three equal items across 100 units have edges at 33.33 and 66.67. Each edge rounds on its
+    // own, so neighbours still meet and the widths add up, and in device pixels every edge is whole.
     const f32 scales[] = {1.0f, 1.25f, 2.0f};
     for (const f32 scale : scales)
     {
@@ -609,7 +609,8 @@ TEST_CASE("layout: a new display scale lays the whole tree out again on its grid
 
 namespace
 {
-    // The box the vertices of one colour cover (by its red, green and blue), and how many.
+    // The box covered by the vertices of one colour (matched by red, green and blue), and how
+    // many vertices there are.
     struct Extent
     {
         core::usize count = 0;
@@ -680,7 +681,7 @@ TEST_CASE("layout: the overlay draws margins, padding, bounds and text baselines
     }
     {
         auto vg = draw(DebugOverlay{false, false, false, true});
-        const Extent b = ExtentOf(*vg, baseline); // the label's alone, about y 70
+        const Extent b = ExtentOf(*vg, baseline); // only the label's, at about y 70
         REQUIRE(b.count > 0u);
         CHECK(b.min.y > 68.5f); // a hairline, with its edge fringe
         CHECK(b.max.y < 71.5f);
@@ -707,7 +708,7 @@ TEST_CASE("layout: a row's item that does not stretch is as tall as its content,
     (void)a;
     (void)b;
 
-    // Stretched, it is the row's height.
+    // Stretched, it takes the row's height.
     row->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Stretch; });
     bed.Layout();
     CHECK(column->GetSize().y == doctest::Approx(50.0f));
@@ -730,8 +731,9 @@ namespace
 
 TEST_CASE("layout: deep nesting measures each node a bounded number of times, not twice per level")
 {
-    // Each flex level measures its item for the base size and again at the size resolved; with a
-    // one-entry measure cache that doubled per level (30 levels: about a billion measures).
+    // Each flex level measures its item for the base size and again at the resolved size. With a
+    // one-entry measure cache that would double per level, about a billion measures for 30
+    // levels.
     Bed bed;
     Node* at = bed.root.Get();
     for (int i = 0; i < 30; ++i)
@@ -751,8 +753,8 @@ TEST_CASE("layout: deep nesting measures each node a bounded number of times, no
 
 TEST_CASE("layout: a wrapping row in a column is as tall as its lines at the width it gets")
 {
-    // Six items of 80 in a row 300 wide wrap to two lines (three on each): the row is two lines
-    // tall, and what follows it in the column comes after both.
+    // Six items of 80 in a row 300 wide wrap to two lines of three. The row is two lines tall, and
+    // what follows it in the column comes after both.
     Bed bed(300.0f, 400.0f);
     auto column = Box(*bed.root.Get(), [](LayoutStyle& s)
     {
@@ -774,8 +776,9 @@ TEST_CASE("layout: a wrapping row in a column is as tall as its lines at the wid
 
 TEST_CASE("layout: a wrapping row whose items grow after a layout wraps and grows with them")
 {
-    // The inspector's toggles get their font after they are first laid out: narrow first (one
-    // line), then 447 in all in 440 (two lines). The row must grow to both lines.
+    // The inspector's toggles get their font after they are first laid out, so they are narrow
+    // at first (one line) and then 447 wide in all within 440 (two lines). The row must grow to
+    // hold both lines.
     Bed bed(600.0f, 600.0f);
     auto scroller = Box(*bed.root.Get(), [](LayoutStyle& s)
     {
@@ -833,8 +836,9 @@ TEST_CASE("layout: each line of a wrapping row is as tall as its own items, not 
 
 TEST_CASE("layout: a single-line row measured under a height limit is as tall as its content, not the limit")
 {
-    // A checkbox is such a row (its box and its label): asked its height with room for 48 it
-    // said 48, so a wrapping row of them made each line 48 tall and the second line fell out.
+    // A checkbox is such a row (its box and its label). Asked for its height with room for 48, it
+    // must not answer 48, or a wrapping row of checkboxes makes each line 48 tall and the second
+    // line falls out.
     Bed bed(600.0f, 600.0f);
     auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; });
     (void)Fixed(*row.Get(), 20.0f, 20.0f);
@@ -842,7 +846,7 @@ TEST_CASE("layout: a single-line row measured under a height limit is as tall as
     LayoutConstraints limit;
     limit.Max = core::Float2{100.0f, 48.0f};
     CHECK(row->Measure(limit).y == doctest::Approx(20.0f));
-    // Told its height exactly, it takes it.
+    // Given its height exactly, it takes that height.
     CHECK(row->Measure(LayoutConstraints::Tight(core::Float2{100.0f, 48.0f}, core::Float2{-1.0f, -1.0f})).y == doctest::Approx(48.0f));
 }
 
@@ -850,7 +854,7 @@ TEST_CASE("layout: a dock's fill takes what every side left, wherever it stands 
 {
     Bed bed;
     auto dock = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Kind = Display::Dock; s.Height = LayoutLength::Px(300.0f); });
-    auto fill = Box(*dock.Get(), [](LayoutStyle&) {}); // first, though it fills
+    auto fill = Box(*dock.Get(), [](LayoutStyle&) {}); // added first, though it fills
     auto left = Box(*dock.Get(), [](LayoutStyle& s) { s.DockSide = Dock::Left; s.Width = LayoutLength::Px(80.0f); });
     auto top = Box(*dock.Get(), [](LayoutStyle& s) { s.DockSide = Dock::Top; s.Height = LayoutLength::Px(30.0f); });
     bed.Layout();
@@ -892,7 +896,8 @@ TEST_CASE("layout: percentage margins, padding and gaps are of the container's c
     styles.ApplyTree(*bed.root.Get());
     bed.Layout();
     CHECK(row->GetPadding().Left == doctest::Approx(20.0f)); // 5% of the root's 400
-    // a starts after the padding (20) and its margin (25% of the row's content width, 380: 95).
+    // a starts after the padding (20) and its margin (25% of the row's content width of 380, so
+    // 95).
     CHECK(a->GetPosition().x == doctest::Approx(20.0f + 95.0f));
     CHECK(b->GetPosition().x == doctest::Approx(20.0f + 95.0f + 50.0f + 38.0f)); // the gap: 10% of 380
 }
@@ -901,7 +906,7 @@ TEST_CASE("layout: calc() mixes pixels and percentages where percentages resolve
 {
     Bed bed; // 400 wide
     auto row = Box(*bed.root.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; s.AlignItems = Align::Start; });
-    // Their heights from code; their widths the sheet's.
+    // Their heights come from code and their widths from the sheet.
     auto a = Box(*row.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(20.0f); });
     auto b = Box(*row.Get(), [](LayoutStyle& s) { s.Height = LayoutLength::Px(20.0f); });
     row->AddClass(SV(u8"row"));
@@ -914,12 +919,13 @@ TEST_CASE("layout: calc() mixes pixels and percentages where percentages resolve
     bed.Layout();
     CHECK(a->GetLayoutStyle().Width.Kind == LayoutLengthKind::Calc);
     CHECK(row->GetPadding().Left == doctest::Approx(20.0f)); // 10% of 400, less 20
-    // The row's content is 380 wide: a is half of it less 20, after its margin (5% of 380, and 2).
+    // The row's content is 380 wide: a is half of it less 20, after its margin (5% of 380, plus
+    // 2).
     CHECK(a->GetSize().x == doctest::Approx(170.0f));
     CHECK(a->GetPosition().x == doctest::Approx(20.0f + 21.0f));
-    CHECK(b->GetLayoutStyle().Width.Kind == LayoutLengthKind::Px); // no percent part: plain pixels
-    CHECK(b->GetSize().x == doctest::Approx(20.0f));                // 1em of 16, and 4
-    CHECK(b->GetPosition().x == doctest::Approx(41.0f + 170.0f + 29.0f)); // the gap: 10 and 5% of 380
+    CHECK(b->GetLayoutStyle().Width.Kind == LayoutLengthKind::Px); // no percent part, so plain pixels
+    CHECK(b->GetSize().x == doctest::Approx(20.0f));                // 1em of 16, plus 4
+    CHECK(b->GetPosition().x == doctest::Approx(41.0f + 170.0f + 29.0f)); // the gap is 10 plus 5% of 380
 }
 
 TEST_CASE("layout: fit-content is as wide as what it holds, not stretched across")
@@ -939,7 +945,7 @@ TEST_CASE("layout: z-index orders siblings for drawing and the pointer, else the
     auto under = Fixed(*stack.Get(), 100.0f, 100.0f);
     auto over = Fixed(*stack.Get(), 100.0f, 100.0f);
     bed.Layout();
-    CHECK(bed.root->OverFind(core::Float2{50.0f, 50.0f}) == over.Get()); // the later stands on top
+    CHECK(bed.root->OverFind(core::Float2{50.0f, 50.0f}) == over.Get()); // the later sibling is on top
     under->EditLayoutStyle([](LayoutStyle& s) { s.ZIndex = 1; });
     bed.Layout();
     CHECK(bed.root->OverFind(core::Float2{50.0f, 50.0f}) == under.Get()); // raised above its sibling
@@ -961,8 +967,9 @@ namespace
 
 TEST_CASE("layout: a content size rounds up to the device grid, so a box keeps all of its content")
 {
-    // Each edge rounds to the grid on its own: a label 29.06 wide placed off the grid was 29
-    // wide, and its text ended in an ellipsis. Measured up to the grid, it is 30 wherever it lands.
+    // Each edge rounds to the grid on its own, so a label 29.06 wide placed off the grid could
+    // come out 29 wide, and its text would end in an ellipsis. Measured up to the grid, it is 30
+    // wide wherever it lands.
     const f32 scales[] = {1.0f, 2.0f};
     for (const f32 scale : scales)
     {
@@ -992,9 +999,10 @@ TEST_CASE("layout: a content size rounds up to the device grid, so a box keeps a
 
 TEST_CASE("layout: a row whose items grow is as wide as its items when measured, not the space offered")
 {
-    // A button's text grows to fill the button. Centred in a column 300 wide, the button was
-    // measured 300 wide (its text grown into all of it), so it filled the column; as in CSS, a
-    // row's content is its items before they grow, and they grow in the size it is given.
+    // A button's text grows to fill the button. Centred in a column 300 wide, the button must not
+    // measure 300 wide (its text grown into all of it) and fill the column. As in CSS, a row's
+    // content size is its items before they grow, and they then grow within the size the row is
+    // given.
     Bed bed;
     auto column = Box(*bed.root.Get(), [](LayoutStyle& s)
     {
@@ -1031,7 +1039,7 @@ TEST_CASE("layout: a scroller in a column has no automatic minimum on the axis i
                           s.Width = LayoutLength::Px(200.0f);
                           s.Height = LayoutLength::Px(200.0f);
                       });
-    // A virtualised list whose rows are all one height: it realises the rows its height shows.
+    // A virtualised list whose rows are all one height realises the rows its height shows.
     core::Array<core::String> items;
     for (int i = 0; i < 200; ++i)
         items.PushBack(core::String(SV(u8"row")));
@@ -1044,10 +1052,10 @@ TEST_CASE("layout: a scroller in a column has no automatic minimum on the axis i
     for (int pass = 0; pass < 5; ++pass)
     {
         bed.Layout();
-        list->RequestLayout(); // again, as a frame's new line does
+        list->RequestLayout(); // asked again, as a new line in a frame does
     }
     bed.Layout();
     CHECK(list->GetSize().y == doctest::Approx(200.0f)); // not the rows it realised, nor all of them
     CHECK(list->GetScrollRange().y == doctest::Approx(200.0f * 20.0f - 200.0f));
-    list->SetModel(nullptr); // the model, made after the bed, dies before the bed's tree
+    list->SetModel(nullptr); // the model was made after the bed, so it dies before the bed's tree
 }

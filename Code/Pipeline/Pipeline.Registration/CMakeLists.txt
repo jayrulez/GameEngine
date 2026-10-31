@@ -1,7 +1,7 @@
-# Pipeline::Registration - `pipeline.registration`: the pipeline's composition root. Links every
-# pipeline module (its whole job - the deliberate fan-in point) and exposes RegisterPipelineTypes /
-# RegisterAllBuilders / RegisterAllImporters. Headless (no shell/GPU/editor): the CLI cooker, export
-# packager, editor, and MCP server all consume it. NO Editor::Core dependency by design.
+# Pipeline::Registration - `pipeline.registration`: the pipeline's composition root. Its job is to
+# link every pipeline module, and it exposes RegisterPipelineTypes, RegisterAllBuilders and
+# RegisterAllImporters. Headless (no shell, GPU or editor): the CLI cooker, export packager, editor
+# and MCP server all consume it, so it must not depend on Editor::Core.
 
 util_add_engine_library(Pipeline.Registration ALIAS Pipeline::Registration)
 target_link_libraries(Pipeline.Registration PUBLIC
@@ -23,7 +23,7 @@ target_link_libraries(Pipeline.Registration PUBLIC
     Pipeline::Scene
     Foundation::Policy)
 
-# The GUI's documents and sheets, when the GUI is built (gui-lab-evolution-3.md E3).
+# The GUI's documents and sheets, when the GUI is built.
 target_link_libraries(Pipeline.Registration PUBLIC Pipeline::GUI Foundation::GUI.Resources)
 
 target_sources(Pipeline.Registration

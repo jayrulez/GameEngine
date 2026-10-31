@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Inverse kinematics on scene entities (inverse-kinematics.md P2): the end bone follows a moving
+// Inverse kinematics on scene entities: the end bone follows a moving
 // target entity in the world, through a model space that is the mesh entity's (moved and turned
 // apart from the animator); the weight eases over fadeSeconds and the modifier leaves the player
 // at zero; components run in their order; an unknown bone disables with one log line; the script
@@ -212,7 +212,7 @@ TEST_CASE("ik component: components on one animator run in their order")
     CHECK(Length(s.BoneWorld(3) - Float3{7, 5, 1}) < 1.0e-3f);
 
     auto* legs = s.level.GetSystem<engine::animation::TwoBoneIkComponentManager>();
-    legs->Get(OwnerOf(s, u8"IkA"))->order = 2; // A now runs after B
+    legs->Get(OwnerOf(s, u8"IkA"))->order = 2; // A runs after B
     s.Tick();
     CHECK(Length(s.BoneWorld(3) - Float3{6, 4, 0}) < 1.0e-3f);
     CHECK(s.Player().Modifiers().Count() == 2u);
@@ -430,8 +430,8 @@ TEST_CASE("ik aim component: a v0 record's one maxAngle becomes both limits, hel
 
 namespace
 {
-    // Flat ground at `height` everywhere, answered as the scene's solid-surface ray query (the seam
-    // physics fills in a running game); counts the rays it is asked.
+    // Flat ground at `height` everywhere, answered as the scene's solid-surface ray query (the
+    // capability physics fills in a running game); counts the rays it is asked.
     class FlatGround final : public scene::SceneSystem, public scene::ISceneRayQuery
     {
     public:
@@ -618,8 +618,8 @@ TEST_CASE("ik component: on a gameplay root, it drives the first animator below 
     CHECK(leg.runtime.animator == s.rider);
     CHECK(Length(s.BoneWorld(3) - Float3{6, 4, 0}) < 1.0e-3f);
 
-    // A second animated child (a pet, a held prop): which one is meant is no longer clear, and
-    // child order must not decide it. The component turns off with one log line.
+    // A second animated child (a pet, a held prop): which one is meant is not clear, and child
+    // order must not decide it. The component turns off with one log line.
     CountingSink sink;
     GlobalLogger().AddSink(&sink);
     const scene::EntityHandle pet = s.level.CreateEntity(u8"Pet");

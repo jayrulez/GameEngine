@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of BindGroupLayout.
-/// Ported from Sedulous.RHI.Vulkan/VulkanBindGroupLayout.bf.
 
 module;
 #include "Core/Prelude.h"

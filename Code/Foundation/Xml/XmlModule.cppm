@@ -3,10 +3,8 @@
 
 // Foundation::Xml - the `foundation.xml` module.
 //
-// A DOM XML parser + writer (UTF-8), faithfully ported from the hand-written
-// Sedulous.Xml library so future Sedulous ports (UI markup, SVG) and an XML
-// serialization backend can build on a compatible API. One named module
-// composed of partitions.
+// A DOM XML parser and writer (UTF-8), the base for UI markup, SVG and the XML
+// serialization backend. One named module composed of partitions.
 
 export module foundation.xml;
 

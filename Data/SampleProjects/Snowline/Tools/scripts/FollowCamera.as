@@ -1,6 +1,6 @@
-// FollowCamera - the chase camera: it springs toward a seat behind and above the target and aims at
-// it. "Behind" is the camera's own lag: as the rider goes on, the camera falls back, so the ground
-// direction from the rider back to the camera already points the right way.
+// FollowCamera: the chase camera. It springs toward a seat behind and above the target and aims at
+// it. "Behind" comes from the camera's own lag: as the rider goes on, the camera falls back, so the
+// direction along the ground from the rider back to the camera already points the right way.
 class FollowCamera
 {
     private Entity@ self;
@@ -18,7 +18,7 @@ class FollowCamera
     // is drawn, dying away, so it never pulls the follow off course.
     private Float3 m_base = Float3(0.0f, 0.0f, 0.0f);
     private float m_shake = 0.0f;
-    private bool m_reseat = false; // a new run: seat behind the rider again on the next update
+    private bool m_reseat = false; // a new run began, so seat behind the rider again on the next update
 
     FollowCamera(Entity@ entity) { @self = entity; }
 
@@ -27,15 +27,17 @@ class FollowCamera
         seatBehind();
     }
 
-    // A new run puts the rider back at the top: the camera goes straight behind it again. Its lag
-    // would otherwise seat it on the side it was last on (downhill, at the finish), facing the
-    // rider. On the next update, once the board has turned the rider back down the course.
+    // A new run puts the rider back at the top, and the camera goes straight behind them again;
+    // its lag would otherwise seat it on the side it was last on (downhill, at the finish), facing
+    // the rider. This happens on the next update, once the board has turned the rider back down
+    // the course.
     void onRunRestart(int unused)
     {
         m_reseat = true;
     }
 
-    // Straight behind the rider's facing, not wherever the scene or the last run left the camera.
+    // Seats the camera straight behind the rider's facing, not wherever the scene or the last run
+    // left it.
     private void seatBehind()
     {
         if (target is null || !target.isValid())
@@ -68,10 +70,10 @@ class FollowCamera
             seatBehind();
             return;
         }
-        // The target's LOCAL position (the rider is a root): physics has already written this
-        // frame's interpolated pose there, while worldPosition() is last frame's until the scene
-        // updates its transforms after every script, and following it makes the rider shake
-        // against the camera at speed.
+        // Use the target's local position (the rider is a root entity). Physics has already written
+        // this frame's interpolated pose there, while worldPosition() still holds last frame's
+        // until the scene updates its transforms after every script; following that would make the
+        // rider shake against the camera at speed.
         Float3 at = target.position();
         Float3 cam = m_base;
         float backX = cam.x - at.x;
@@ -84,8 +86,8 @@ class FollowCamera
             flat = 1.0f;
         }
         Float3 seat = Float3(at.x + backX / flat * distance, at.y + height, at.z + backZ / flat * distance);
-        // A jump of the target (a respawn back at the top) snaps the seat rather than flying the
-        // camera the length of the course behind it.
+        // When the target jumps a long way (a respawn back at the top), snap the seat rather than
+        // fly the camera the length of the course after it.
         float jx = seat.x - cam.x;
         float jy = seat.y - cam.y;
         float jz = seat.z - cam.z;

@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The neutral-builder cook round-trip driven with ANGELSCRIPT sources: source -> the builder's
-// cooker VM -> cooked record -> factory -> runtime metadata, the compile-error path (cook FAILS,
-// last good record survives), backend-neutrality (the builder resolves its cook through the
-// registry by the asset's LANGUAGE), and the ScriptPage save->recook seam. The Luau leg of the same
+// The neutral-builder cook round-trip driven with AngelScript sources: from source through the
+// builder's cooker VM, the cooked record and the factory to runtime metadata; the compile-error
+// path (the cook fails, the last good record survives); backend-neutrality (the builder resolves
+// its cook through the registry by the asset's language); and the ScriptPage save-and-recook
+// loop. The Luau leg of the same
 // neutral path lives in LuauPipelineTests.cpp; the pure text scanners in ScriptPipelineTests.cpp.
 
 #include "CookBed.h"
 
-import editor.core;       // ScriptSourceDocument (the ScriptPage save->recook seam)
+import editor.core;       // ScriptSourceDocument (the ScriptPage save-and-recook loop)
 import pipeline.importer; // ScriptFileImporter (extension acceptance)
 
 using namespace foundation::core;
@@ -57,7 +58,7 @@ TEST_CASE("script.pipeline: full harvest round-trip (angelscript) - source -> co
     CHECK(product->source == kMoverSource);
     REQUIRE(product->properties.Size() == 8u);
 
-    // Every declared property is present + typed (looked up by hash, so declaration order is
+    // Every declared property is present and typed (looked up by hash, so declaration order is
     // irrelevant to the record's contents).
     const ScriptPropertyDesc* speed = product->FindProperty(ScriptPropertyNameHash(u8"speed"));
     REQUIRE(speed != nullptr);
@@ -147,13 +148,13 @@ TEST_CASE("script.pipeline: compile errors FAIL the cook and the last good recor
     content::Instance* instance = nullptr;
     REQUIRE(bed.Cook(u8"mover.as", u8"angelscript", instance).IsOk());
 
-    // Break the source; the rebuild must FAIL without touching the cooked record.
+    // Break the source; the rebuild must fail without touching the cooked record.
     bed.WriteSource(u8"mover.as", u8"class Mover {\n  this is not valid code at all(\n");
     CHECK_FALSE(bed.Cook(u8"mover.as", u8"angelscript", instance).IsOk());
 
     RefPtr<ISerializable> object = instance->ReadObject();
     ScriptClassSource* cooked = Cast<ScriptClassSource>(object.Get());
-    REQUIRE(cooked != nullptr); // the LAST GOOD record
+    REQUIRE(cooked != nullptr); // the last good record
     CHECK(cooked->className == u8"Mover");
     CHECK(cooked->source == kMoverSource);
     CHECK(cooked->properties.Size() == 8u);
@@ -200,7 +201,7 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
     bed.WriteSource(u8"fake.ftl", u8"anything goes - the fake cook accepts it\n");
     content::Instance* instance = nullptr;
     REQUIRE(bed.Cook(u8"fake.ftl", u8"faketest", instance).IsOk());
-    CHECK(cooked == 1); // the cook came from the REGISTRY, by language
+    CHECK(cooked == 1); // the cook came from the registry, by language
 
     RefPtr<ISerializable> object = instance->ReadObject();
     ScriptClassSource* record = Cast<ScriptClassSource>(object.Get());
@@ -208,7 +209,7 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
     CHECK(record->language == u8"faketest");
     CHECK(record->properties.IsEmpty()); // the fake cook harvests nothing
 
-    // An asset naming an UNREGISTERED language fails the cook cleanly (no cook resolves).
+    // An asset naming an unregistered language fails the cook cleanly (no cook resolves).
     content::Instance* second =
         bed.outputDb->RootGroup()->CreateInstance(u8"cooked2", ScriptClassSource::StaticType());
     ScriptClassAsset asset;
@@ -220,7 +221,7 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
     ctx.output = second;
     CHECK_FALSE(builder.Build(asset, ctx).IsOk());
 
-    // The importer accepts exactly the REGISTERED extensions (language-clean).
+    // The importer accepts exactly the registered extensions (language-clean).
     ScriptFileImporter importer;
     CHECK(importer.Accepts(u8"as"));
     CHECK(importer.Accepts(u8"ftl"));
@@ -265,7 +266,7 @@ TEST_CASE("script.pipeline: ScriptSourceDocument is the ScriptPage save->recook 
     CHECK(doc.Source() == kMoverSource);
     CHECK_FALSE(doc.IsModified());
 
-    // Validate: a compile-check through the SAME language cook - no product write.
+    // Validate: a compile-check through the same language cook, with no product write.
     CHECK(doc.Validate());
     CHECK(doc.LastCompileOk());
     CHECK(doc.ClassName() == u8"Mover");
@@ -281,7 +282,7 @@ TEST_CASE("script.pipeline: ScriptSourceDocument is the ScriptPage save->recook 
         CHECK(cooked->className == u8"Mover");
     }
 
-    // Edit to a broken script THROUGH the document + save it to disk.
+    // Edit to a broken script through the document and save it to disk.
     constexpr StringView kBroken = u8"class Mover {\n"
                                    u8"    onStart() { this is not valid code )( }\n";
     doc.SetSource(kBroken);
@@ -295,23 +296,23 @@ TEST_CASE("script.pipeline: ScriptSourceDocument is the ScriptPage save->recook 
     REQUIRE(reopened.Load().IsOk());
     CHECK(reopened.Source() == kBroken);
 
-    // Validate now surfaces compile errors (file/line + message) and compiles false.
+    // Validate now surfaces compile errors (file/line and message) and compiles false.
     CHECK_FALSE(doc.Validate());
     CHECK_FALSE(doc.LastCompileOk());
     REQUIRE(doc.Errors().Size() >= 1u);
     CHECK_FALSE(doc.Errors().Data()[0].message.IsEmpty());
 
-    // The recook of the now-broken source FAILS - and the last good cooked product survives.
+    // The recook of the now-broken source fails, and the last good cooked product survives.
     CHECK_FALSE(bed.Cook(u8"mover.as", u8"angelscript", product).IsOk());
     {
         RefPtr<ISerializable> object = product->ReadObject();
         ScriptClassSource* cooked = Cast<ScriptClassSource>(object.Get());
         REQUIRE(cooked != nullptr);
-        CHECK(cooked->className == u8"Mover"); // unchanged - the failed cook never wrote
+        CHECK(cooked->className == u8"Mover"); // unchanged: the failed cook never wrote
     }
 }
 
-// Sedulous 89b70b54: a behaviour's class takes its asset's name, as an identifier.
+// A behaviour's class takes its asset's name, as an identifier.
 TEST_CASE("script.pipeline: a class name from an asset name, and the starter that spells it")
 {
     CHECK(ClassNameFor(u8"Player Controller", u8"NewBehavior") == u8"PlayerController");

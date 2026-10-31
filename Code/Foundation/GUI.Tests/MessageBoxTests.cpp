@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - modal Window + MessageBox tests: OpenModal adds a scrim and confines input to
-// the dialog (background clicks are swallowed by the dispatcher's modal root); MessageBox shows
-// the right buttons and reports the pressed result, then closes; one a dispatcher's modal
-// interceptor refuses never shows and answers as its cancel (a window as its close).
+// GUI - modal Window and MessageBox tests: OpenModal adds a scrim and confines input to the dialog
+// (background clicks are swallowed by the dispatcher's modal root); MessageBox shows the right
+// buttons and reports the pressed result, then closes. A box that a dispatcher's modal interceptor
+// refuses never shows, and answers as its cancel does (a window answers as its close does).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -18,7 +18,7 @@ namespace fonts = foundation::fonts;
 
 namespace
 {
-    // 6 px a byte, 12 px lines: a message measures (and wraps) without a real font.
+    // 6 px per byte and 12 px lines, so a message measures and wraps without a real font.
     class WideFont : public fonts::IFont
     {
     public:
@@ -57,7 +57,7 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    // Sum of a node's positions up to the root, plus half its size = its world-space center
+    // Sum of a node's positions up to the root, plus half its size: its world-space center
     // (identity transforms, matching the popup/menu model). Used to click a nested button.
     core::Float2 WorldCenter(Node* node)
     {
@@ -102,10 +102,10 @@ TEST_CASE("window: a modal swallows clicks on the background")
     root->AddChild(background.Get());
 
     auto window = Make<Window>();
-    window->SetSize(core::Float2{200.0f, 100.0f}); // centered -> covers (100,150)-(300,250)
+    window->SetSize(core::Float2{200.0f, 100.0f}); // centered, it covers (100,150)-(300,250)
     window->OpenModal(*root.Get());
 
-    // Click the background button (outside the modal) -> swallowed.
+    // A click on the background button, outside the modal, is swallowed.
     d->InjectMouseDown(core::Float2{50.0f, 20.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{50.0f, 20.0f}, MouseButton::Left);
     CHECK(backgroundClicks == 0);
@@ -185,7 +185,7 @@ TEST_CASE("messagebox: pressing a button reports the result and closes")
             ++results;
         });
     box->OpenModal(*root.Get());
-    (void)root->UpdateLayout(); // its content flows: its buttons are placed by the layout pass
+    (void)root->UpdateLayout(); // its content flows, so the layout pass places its buttons
 
     // Buttons: [Cancel, OK] (OK rightmost). Click OK.
     Button* okButton = box->ButtonAt(1);
@@ -200,8 +200,9 @@ TEST_CASE("messagebox: pressing a button reports the result and closes")
     CHECK(d->PopupCount() == 0u);
 }
 
-// A box nothing else holds (an editor's prompt: made, opened, its reference dropped) tells its
-// answer after its close let the popup layer's reference go: it lives until the event is out.
+// A box that nothing else holds (an editor's prompt that is made, opened, and has its reference
+// dropped) still reports its answer after closing releases the popup layer's reference. It stays
+// alive until the event has been delivered.
 TEST_CASE("messagebox: one only its popup holds tells its answer after closing")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -218,7 +219,7 @@ TEST_CASE("messagebox: one only its popup holds tells its answer after closing")
         box->OpenModal(*root.Get());
         (void)root->UpdateLayout();
         okButton = box->ButtonAt(1);
-    } // the popup layer holds it alone now
+    } // now only the popup layer holds it
     REQUIRE(okButton != nullptr);
     const core::Float2 center = WorldCenter(okButton);
     d->InjectMouseDown(center, MouseButton::Left);
@@ -255,7 +256,7 @@ TEST_CASE("window: its close button closes it; closable and resizable show or hi
     d->InjectMouseDown(close, MouseButton::Left);
     d->InjectMouseUp(close, MouseButton::Left);
     CHECK(window->IsOpen()); // no close button there now
-    // No grip: a drag from the corner does not resize it.
+    // With no grip, a drag from the corner does not resize it.
     const core::Float2 corner{w.x + w.width - 5.0f, w.y + w.height - 5.0f};
     d->InjectMouseDown(corner, MouseButton::Left);
     d->InjectMouseMove(core::Float2{corner.x + 60.0f, corner.y + 60.0f});
@@ -291,7 +292,8 @@ TEST_CASE("messagebox: under the theme, its message wraps (styled after it is wr
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{800.0f, 600.0f});
     fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<WideFont>(), nullptr, nullptr);
-    // Written first, as markup does, then styled: the sheet's white-space reaches the message after its box sized itself.
+    // Written first, as markup does, then styled: the sheet's white-space reaches the message after
+    // its box has sized itself.
     const auto make = [&](const char8_t* text)
     {
         auto box = Make<MessageBox>();
@@ -343,7 +345,7 @@ TEST_CASE("message box: shown in no GUI it refuses, rather than becoming its own
     CHECK(box->GetParent() == nullptr);
     CHECK(box->GetChildIndex(box.Get()) == kNodeInvalidIndex);
     auto window = core::MakeRef<Window>(core::DefaultAllocator());
-    window->OpenModal(*window); // inside itself: refused
+    window->OpenModal(*window); // opening inside itself is refused
     CHECK_FALSE(window->IsOpen());
 }
 
@@ -359,12 +361,12 @@ TEST_CASE("message box: its buttons' labels follow the GUI's language where a ta
     root->AddChild(box.Get());
     box->Configure(core::StringView(u8"?"), core::StringView(u8"Proceed?"), MessageBox::Buttons::OkCancel);
     root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
-    CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"OK")); // English: no table has it in English
+    CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"OK")); // English, since no table has it
     CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel"));
     loc.SetLanguage(core::StringView(u8"pt"));
     root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
     CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"Confirmar"));
-    CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel")); // no table names it: English
+    CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel")); // no table names it, so English
     root->GetContext().SetLocalization(nullptr);
 }
 
@@ -396,7 +398,8 @@ TEST_CASE("message box: each button has a role: the primary is focused, the canc
     CHECK(box->GetButtonRole(1) == DialogRole::Primary);
     CHECK(box->ButtonAt(1)->HasClass(core::StringView(u8"primary")));
 
-    // A verb of the caller's own after them is not the default: the primary still is.
+    // A verb the caller adds after them does not become the default; the primary button still
+    // is.
     (void)box->AddButton(core::StringView(u8"Discard"), core::StringView(u8"discard"), DialogRole::Destructive);
     CHECK(box->ButtonAt(2)->HasClass(core::StringView(u8"destructive")));
     REQUIRE(box->Show());
@@ -415,14 +418,16 @@ TEST_CASE("message box: verbs from markup; with no primary a destructive button 
     CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel"));
     CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"Delete"));
     CHECK(box->GetButtonRole(1) == DialogRole::Destructive);
-    // Return alone cannot destroy: the focus goes to the last button that destroys nothing.
+    // Return alone cannot destroy anything, so the focus goes to the last button that is not
+    // destructive.
     CHECK(box->GetDefaultButton() == box->ButtonAt(0));
     REQUIRE(box->Show());
     CHECK(root->GetEventDispatcher()->GetFocusNode() == box->ButtonAt(0));
     CHECK(box->ButtonAt(1)->HandleActivate());
     CHECK(box->GetResultName() == core::String(u8"delete"));
 
-    // A verb with no result answers with its text in lower case; with no role it is normal.
+    // A verb with no result answers with its text in lower case, and with no role it is a
+    // normal button.
     CHECK(box->SetMarkupAttribute(core::StringView(u8"buttons"), core::StringView(u8"Keep|Create:create:primary")));
     REQUIRE(box->ButtonCount() == 2u);
     CHECK(box->GetButtonRole(0) == DialogRole::Normal);
@@ -466,7 +471,7 @@ TEST_CASE("message box: refused by its dispatcher's modal interceptor it never s
     CHECK(got == MessageBox::Result::Cancel);
     CHECK(changed == 1);
 
-    // A plain window answers as its close.
+    // A plain window answers as its close does.
     auto window = core::MakeRef<Window>(core::DefaultAllocator());
     window->SetTitle(core::StringView(u8"Preferences"));
     int closes = 0;
@@ -476,7 +481,7 @@ TEST_CASE("message box: refused by its dispatcher's modal interceptor it never s
     CHECK(closes == 1);
     CHECK(asked.Size() == 2u);
 
-    // The interceptor taken back: windows open again.
+    // Once the interceptor is taken back, windows open again.
     (void)d.TakeModalInterceptor();
     window->OpenModal(*root.Get());
     CHECK(window->IsOpen());

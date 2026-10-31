@@ -88,7 +88,8 @@ export namespace foundation::ui
             return Transform2D{ia, ib, ic, id, -(ia * tx + ic * ty), -(ib * tx + id * ty)};
         }
 
-        /// The uniform scale it draws at, when it is one: a scale (and a move), no turn or skew.
+        /// The uniform scale, when the transform is only a scale and a translation (no rotation,
+        /// skew or uneven scale).
         [[nodiscard]] constexpr bool UniformScale(f32& out) const noexcept
         {
             if (b == 0.0f && c == 0.0f && a == d && a > 0.0f)

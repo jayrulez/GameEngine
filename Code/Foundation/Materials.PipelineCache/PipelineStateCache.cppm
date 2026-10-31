@@ -3,18 +3,17 @@
 
 /// Foundation::Materials.PipelineCache - the `foundation.materials.pipelinecache` module.
 ///
-/// The render-side PSO cache: the one piece of the shader/material stack that lives
-/// outside the resource system (the "lone exception" from the hot-reload design). It
-/// maps a PipelineConfig (× render-target signature) to a compiled RHI RenderPipeline,
-/// pulling shader variants from the ShaderSystem and mapping the material's render
-/// state to RHI pipeline state.
+/// The render-side PSO cache: the one piece of the shader and material stack that lives
+/// outside the resource system. It maps a PipelineConfig and render-target signature to a
+/// compiled RHI RenderPipeline, pulling shader variants from the ShaderSystem and mapping
+/// the material's render state to RHI pipeline state.
 ///
-/// Hot reload is handled by VERSION POLLING at point of use: each cached entry records
+/// Hot reload is handled by version polling at the point of use: each cached entry records
 /// the ShaderSystem version of its shader at build time; GetPipeline compares against
 /// the current version and lazily rebuilds when a shader was invalidated (reloaded).
-/// This costs one HashMap lookup + integer compare per draw - the same as a dirty-flag
-/// check - with no listener bookkeeping. Superseded pipelines are retired to a
-/// graveyard and freed by ReleaseRetired() once the GPU is done with them.
+/// This costs one HashMap lookup and an integer compare per draw, the same as a dirty-flag
+/// check, with no listener bookkeeping. Superseded pipelines are retired and freed by
+/// ReleaseRetired() once the GPU is done with them.
 
 module;
 #include "Core/Prelude.h"
@@ -68,7 +67,7 @@ export namespace foundation::materials
                 {
                     return e->pipeline;
                 }
-                // shader was reloaded since this PSO was built: retire the stale one + rebuild.
+                // shader was reloaded since this PSO was built: retire the stale one and rebuild.
                 if (e->pipeline != nullptr)
                 {
                     m_retired.PushBack(e->pipeline);
@@ -103,7 +102,7 @@ export namespace foundation::materials
             m_retired.Clear();
         }
 
-        // Destroys all live pipelines (retires nothing - call at shutdown).
+        // Destroys all live pipelines without retiring them; call at shutdown.
         void Clear()
         {
             for (auto& e : m_entries)
@@ -147,10 +146,11 @@ export namespace foundation::materials
             desc.label = config.shaderName;
 
             // --- vertex ---
-            // Up to three buffers, in slot order matching the renderer's draw bindings: mesh stream
-            // (slot 0); the skinning stream (slot 1, joints loc 6 + weights loc 7) when skinned; the
-            // instance-stepped offsets stream (loc 5) when instanced: [mesh], [mesh, skin],
-            // [mesh, offsets] or [mesh, skin, offsets]. The shaders pin their input locations.
+            // Up to three buffers, in slot order matching the renderer's draw bindings: the mesh
+            // stream (slot 0); the skinning stream (slot 1, joints at location 6 and weights at 7)
+            // when skinned; the instance-stepped offsets stream (location 5) when instanced. That
+            // gives [mesh], [mesh, skin], [mesh, offsets] or [mesh, skin, offsets]. The shaders pin
+            // their input locations.
             rhi::VertexBufferLayout buffers[3] = {
                 VertexLayoutHelper::BufferLayout(config.vertexLayout), {}, {}};
             u32 bufferCount = (config.vertexLayout != VertexLayoutType::None) ? 1u : 0u;
@@ -169,9 +169,10 @@ export namespace foundation::materials
             }
 
             // --- fragment (omitted for depth-only passes) ---
-            // Up to colorTargetCount targets (MRT): target 0 is the shaded color (blended per blendMode +
-            // format from colorOverride when set, e.g. the per-view HDR/LDR format); targets 1+ are the
-            // G-buffer aux outputs (view-normal, motion vector) - no blend, formats from config.colorFormats.
+            // Up to colorTargetCount targets (MRT). Target 0 is the shaded color, blended per blendMode,
+            // its format from colorOverride when set (the per-view HDR or LDR format). Targets 1+ are
+            // the G-buffer aux outputs (view normal, motion vector), unblended, formats from
+            // config.colorFormats.
             rhi::ColorTargetState colorTargets[rhi::MaxColorAttachments] = {};
             if (!config.depthOnly)
             {
@@ -181,8 +182,8 @@ export namespace foundation::materials
                 {
                     return nullptr;
                 }
-                // Honor colorTargetCount exactly - 0 means a fragment that writes no color (e.g. the masked
-                // shadow pass: alpha-test discard + depth only). No fallback to 1.
+                // Honor colorTargetCount as given, with no fallback to 1: 0 means a fragment that writes
+                // no color (the masked shadow pass: alpha-test discard and depth only).
                 const u32 count = Min<u32>(config.colorTargetCount, rhi::MaxColorAttachments);
                 for (u32 i = 0; i < count; ++i)
                 {
@@ -192,8 +193,8 @@ export namespace foundation::materials
                             : config.colorFormats[i];
                     colorTargets[i].blend =
                         (i == 0) ? BlendFor(config.blendMode) : Optional<rhi::BlendState>{};
-                    // Aux G-buffer targets (1+) only write when writeAuxTargets is set - transparent draws
-                    // bind them (to match the pass) but leave the opaque normal/velocity underneath intact.
+                    // Aux G-buffer targets (1+) write only when writeAuxTargets is set. Transparent draws
+                    // bind them to match the pass but leave the opaque normal and velocity underneath intact.
                     colorTargets[i].writeMask = (i == 0 || config.writeAuxTargets)
                                                     ? config.colorWriteMask
                                                     : rhi::ColorWriteMask::None;

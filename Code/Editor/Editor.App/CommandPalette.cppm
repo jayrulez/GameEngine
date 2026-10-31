@@ -3,14 +3,14 @@
 
 // Editor::App - :command_palette partition.
 //
-// CommandPalette: every action by name (Documentation/Specs/editor-gui.md, 5.1, layer 10). Its
-// frame is markup (Data/Editor/CommandPalette.xml: the kit's picker, a search field over a list
-// and a hint), its rows the registry's declarations filtered by what is typed (ASCII case folded):
-// labels that start with it first, then labels that hold it, then a description or id that does.
-// A row shows the action's label, its menu path and its chord; one disabled over the active page
-// is dimmed and refuses with a line in the hint. Up and Down move along the rows, Enter or a click
-// runs the lit one through the registry and closes the palette, Escape or a press outside closes
-// it. It opens as a modal popup near the top of the window, the field focused.
+// CommandPalette: every action, found by name. Its frame is markup (Data/Editor/CommandPalette.xml:
+// the kit's picker, a search field over a list, and a hint). Its rows are the registry's
+// declarations filtered by what is typed (ASCII case folded): labels that start with the text
+// first, then labels that contain it, then actions whose description or id contains it. A row
+// shows the action's label, its menu path and its chord; an action disabled for the active page is
+// dimmed, and running it shows the reason in the hint. Up and Down move along the rows; Enter or a
+// click runs the highlighted action through the registry and closes the palette; Escape or a press
+// outside closes it. It opens as a modal popup near the top of the window with the field focused.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -27,8 +27,8 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
-    /// One action's row: its label, where it is in the menus, its chord. The pointer over it lights
-    /// it; a click runs it (its palette's callbacks, by the row's place).
+    /// One action's row: its label, its place in the menus and its chord. Hovering highlights it; a
+    /// click runs it through the palette's callbacks, which identify the row by its index.
     class CommandPaletteRow final : public gui::UIWidget
     {
         RTTI_OBJECT(CommandPaletteRow, gui::UIWidget)
@@ -90,8 +90,8 @@ export namespace editor::app
     class CommandPalette
     {
     public:
-        /// The palette over `actions`, its frame `content` (the markup's: `palette-search`,
-        /// `palette-list`, `palette-hint` by id).
+        /// The palette over `actions`, in the frame `content` (from the markup, binding
+        /// `palette-search`, `palette-list` and `palette-hint` by id).
         CommandPalette(IAllocator& allocator, EditorActionRegistry& actions, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_actions(&actions), m_content(Move(content)), m_shown(allocator), m_rows(allocator)
         {
@@ -105,7 +105,7 @@ export namespace editor::app
             CommandPalette* self = this;
             if (m_search != nullptr)
                 m_search->SetOnTextChanging([self](StringView text) { self->Filter(text); });
-            // Up, Down and Enter before the search field takes them.
+            // Handle Up, Down and Enter before the search field takes them.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
                                                   const auto& key = static_cast<const gui::KeyEvent&>(e);
@@ -129,8 +129,8 @@ export namespace editor::app
         CommandPalette& operator=(const CommandPalette&) = delete;
         ~CommandPalette() { Close(); }
 
-        /// Opens it over `root`, near its top, the query empty and the field focused; false with
-        /// no frame or a root in no GUI.
+        /// Opens the palette over `root`, near its top, with the query empty and the field focused;
+        /// false with no frame or a root in no GUI.
         bool Open(gui::SceneRoot& root)
         {
             gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
@@ -171,7 +171,8 @@ export namespace editor::app
                 m_search->SetText(text);
             Filter(text);
         }
-        /// The actions shown now, in their order, and the lit one (Enter's; -1 with none).
+        /// The actions shown now, in their order, and the highlighted one (which Enter runs; -1
+        /// with none).
         [[nodiscard]] Span<const EditorActionDeclaration* const> Shown() const noexcept { return Span<const EditorActionDeclaration* const>{m_shown.Data(), m_shown.Size()}; }
         [[nodiscard]] i32 Lit() const noexcept { return m_lit; }
         void Light(i32 index)
@@ -190,8 +191,9 @@ export namespace editor::app
             }
         }
         void Step(i32 by) { Light(m_lit + by); }
-        /// Runs the lit action: the palette closes first (an action may open a dialog of its own).
-        /// One disabled over the active page stays, its refusal in the hint; with none lit, nothing.
+        /// Runs the highlighted action, closing the palette first (an action may open a dialog of
+        /// its own). For an action disabled over the active page the palette stays open and shows
+        /// the reason in the hint; with nothing highlighted it does nothing.
         Status RunLit() { return Run(m_lit); }
         Status Run(i32 index)
         {
@@ -223,7 +225,7 @@ export namespace editor::app
                 if (label.ContainsIgnoreCase(query))
                 {
                     if (query.IsEmpty() || label.SubStr(0, Min(query.Size(), label.Size())).ContainsIgnoreCase(query))
-                        m_shown.PushBack(&action); // a label that starts with it
+                        m_shown.PushBack(&action); // a label that starts with the query
                     else
                         holds.PushBack(&action);
                 }

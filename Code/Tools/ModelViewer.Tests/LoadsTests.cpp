@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Model files read on a thread of their own (Documentation/Specs/model-viewer.md, P10): a file
-// read on the worker and finished on the main thread cooks into the same model as an open done
-// all at once on the main thread; a missing file comes back said so; a path asked twice while
-// queued is read once; and Cancel hands nothing over of what was queued or being read, while
-// what is asked after it still comes. A tab is added before its model is ready and finished
-// from the worker's read.
+// Model files read on a worker thread. A file read on the worker and finished on the main thread
+// cooks into the same model as an open done entirely on the main thread; a missing file is
+// reported; a path requested twice while queued is read once; and Cancel hands over nothing that
+// was queued or being read, while requests made after it still arrive. A tab is added before its
+// model is ready and finished from the worker's read.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -36,7 +35,7 @@ namespace
         return path;
     }
 
-    // Waits (a few seconds at most) for the worker to have nothing queued or under way.
+    // Waits, a few seconds at most, until the worker has nothing queued or under way.
     void Settle(const modelviewer::FileLoads& loads)
     {
         for (u32 i = 0; i < 2000 && loads.Pending() > 0; ++i)
@@ -96,7 +95,7 @@ TEST_CASE("model viewer loads: read on the worker and finished on the main threa
         CHECK(found);
     }
 
-    // Begun again over that cache: bound, no file to read.
+    // Begun again over that cache: bound, with no file to read.
     modelviewer::OpenModel again(DefaultAllocator());
     CHECK(again.Begin(fox.AsView(), worked.AsView(), nullptr, outcome) == modelviewer::OpenModel::Begun::Bound);
     CHECK(outcome == modelviewer::OpenModel::Outcome::FromCache);
@@ -111,8 +110,8 @@ TEST_CASE("model viewer loads: a missing file is said so; a path asked twice whi
     modelviewer::FileRead read;
     REQUIRE(loads.Take(read));
     CHECK(read.outcome == modelviewer::OpenModel::Outcome::NotFound);
-    // Asked twice, it may have been read once or (the first read already under way) twice; never
-    // more, and never with the second queued beside the first.
+    // Requested twice, it is read once, or twice if the first read was already under way; never
+    // more, and the second request is never queued beside the first.
     u32 more = 0;
     while (loads.Take(read))
         ++more;
@@ -129,7 +128,7 @@ TEST_CASE("model viewer loads: a cancelled queue hands nothing over; what is ask
     loads.Request(oozi.AsView(), true);
     loads.Request(oobi.AsView(), true);
     CHECK(loads.IsPending(oobi.AsView()));
-    loads.Cancel(); // the fox may be under way: it finishes, and is dropped
+    loads.Cancel(); // the fox may be under way: it finishes and is dropped
     CHECK_FALSE(loads.IsPending(oobi.AsView()));
     Settle(loads);
     modelviewer::FileRead read;
@@ -163,7 +162,7 @@ TEST_CASE("model viewer loads: a tab added before its model is ready, finished f
     CHECK(tabs.At(begun.index).ready);
     CHECK(tabs.At(begun.index).open->Model() != nullptr);
 
-    // Opened again in a second set of tabs: bound from the cache, ready at once.
+    // Opened again in a second set of tabs: bound from the cache and ready at once.
     modelviewer::ModelTabs other(DefaultAllocator());
     const modelviewer::ModelTabs::Opened cached = other.Begin(fox.AsView(), cache.AsView(), nullptr);
     CHECK_FALSE(cached.needsFile);

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// FontEditorPage tests: the page from the image pages' markup over a font in a project (Roboto, the
-// bundled face): its atlas baked in place (no job service here) and shown with its facts, the
-// raster ramp's sizes a row of the page's own (text that is no list refused with a notice, a list
-// one undo step), shown only while the font bakes a ramp.
+// FontEditorPage tests: the page from the image pages' markup over a font in a project (Roboto,
+// the bundled face). The atlas is baked in place (there is no job service here) and shown with its
+// facts. The raster ramp's sizes are a row the page adds: text that is not a list is refused with
+// a notice, a list is one undo step, and the row shows only while the font bakes a ramp.
 
 #include <doctest/doctest.h>
 
@@ -90,7 +90,7 @@ namespace
 
 TEST_CASE("FontEditor registers a factory the registry routes for FontAsset")
 {
-    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
+    const app::AssetPageServicesSource none; // no services, only the registration; declared first so it outlives the context
     EditorContext context{DefaultAllocator()};
     RegisterFontEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::FontAsset::StaticType());
@@ -126,7 +126,7 @@ TEST_CASE("font page: its atlas baked and shown with its facts; the ramp's sizes
     CHECK(asset->sizes[1] == doctest::Approx(16.0f));
     CHECK(page->Ramp().GetValue(u8"sizes", 0).AsString() == StringView(u8"12, 16"));
 
-    // A distance field bakes one size: the ramp's row goes while it does.
+    // A distance field bakes one size, so the ramp's row is hidden while it does.
     gui::PropertyWrite mode;
     mode.Value = gui::Variant(static_cast<i64>(pipeline::FontBakeMode::DistanceField));
     page->Edit(u8"mode", mode);

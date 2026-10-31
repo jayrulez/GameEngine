@@ -31,7 +31,7 @@ namespace editor
                 return layer >= 0 && static_cast<usize>(layer) < asset.source.layers.Size();
             }
 
-            // `base`, else `base 2`, `base 3`... the first `taken` says is free.
+            // `base`, else `base 2`, `base 3` and so on: the first one `taken` reports as free.
             [[nodiscard]] String Unique(StringView base, const Function<bool(StringView)>& taken)
             {
                 if (!taken(base))
@@ -59,7 +59,7 @@ namespace editor
             for (usize l = 0; l < layers.Size(); ++l)
             {
                 Array<Float2>& positions = asset.layerStatePositions[l];
-                // A state with no place yet fans out to the right, five to a row.
+                // States without a position yet fan out to the right, five to a row.
                 while (positions.Size() < layers[l].states.Size())
                     positions.PushBack(Float2{240.0f + 200.0f * static_cast<f32>(positions.Size() % 5), 90.0f + 110.0f * static_cast<f32>(positions.Size() / 5)});
                 while (positions.Size() > layers[l].states.Size())
@@ -101,7 +101,7 @@ namespace editor
             if (state < 0 || static_cast<usize>(state) >= data.states.Size() || data.states.Size() <= 1)
                 return false;
             data.states.RemoveAt(static_cast<usize>(state));
-            // Its transitions go; those after it move down.
+            // Remove its transitions, and shift down the indices of the states after it.
             for (usize t = data.transitions.Size(); t-- > 0;)
             {
                 animation::GraphTransitionData& transition = data.transitions[t];
@@ -133,7 +133,7 @@ namespace editor
                                                      return true;
                                              return false;
                                          });
-            // The parallel arrays as long as the names, whatever an older graph kept.
+            // Make the parallel arrays as long as the names, whatever an older graph saved.
             const usize count = source.paramNames.Size();
             source.paramTypes.Resize(count, 0);
             source.paramFloats.Resize(count, 0.0f);
@@ -162,7 +162,7 @@ namespace editor
                 source.paramInts.RemoveAt(at);
             if (at < source.paramBools.Size())
                 source.paramBools.RemoveAt(at);
-            // A blend driver reading it reads nothing now; those after it move down.
+            // Clear the blend drivers that read it; shift down the indices of the parameters after it.
             const auto remap = [parameter](i32& index)
             {
                 if (index == parameter)
@@ -178,7 +178,7 @@ namespace editor
                     remap(state.node.paramIndexX);
                     remap(state.node.paramIndexY);
                 }
-                // A condition on it says nothing now: it goes.
+                // A condition on the removed parameter has no meaning any more, so delete it.
                 for (animation::GraphTransitionData& transition : layer.transitions)
                     for (usize c = transition.conditions.Size(); c-- > 0;)
                     {
@@ -245,7 +245,7 @@ namespace editor
         if (layer == m_layer)
             return;
         m_layer = layer;
-        m_stateIds.Clear(); // another layer's states: ids of their own
+        m_stateIds.Clear(); // a different layer's states get fresh ids
         m_transitionIds.Clear();
         Refresh();
     }
@@ -256,13 +256,13 @@ namespace editor
         if (asset != nullptr)
         {
             m_layer = Clamp(m_layer, 0, Max(static_cast<i32>(asset->source.layers.Size()) - 1, 0));
-            animgraph::SquareLayout(*asset); // a place for each state before one is drawn
+            animgraph::SquareLayout(*asset); // give each state a position before any is drawn
         }
         const animation::GraphLayerData* layer = LayerData();
         const usize states = layer != nullptr ? layer->states.Size() : 0;
         const usize transitions = layer != nullptr ? layer->transitions.Size() : 0;
-        // Kept by place: this source's own edits keep the tables in step before they change the
-        // asset; another's (an undo) may leave a count off, made good at the end.
+        // Ids are kept by index. This source's own edits update the id tables before they change
+        // the asset; a change from elsewhere (an undo) may leave a count wrong, corrected at the end.
         while (m_stateIds.Size() > states)
             m_stateIds.RemoveAt(m_stateIds.Size() - 1);
         while (m_stateIds.Size() < states)
@@ -319,7 +319,7 @@ namespace editor
                 node.Subtitle = state.node.clipRef.IsNil() ? String(u8"No clip") : (NameOf ? NameOf(state.node.clipRef) : String(u8"A clip"));
                 break;
             }
-            // The state the layer starts in, apart from the rest.
+            // Mark the layer's default state apart from the rest.
             if (static_cast<i32>(s) == layer->defaultState)
             {
                 node.Subtitle = Format(u8"Starts here · {}", node.Subtitle);
@@ -362,13 +362,13 @@ namespace editor
         if (asset == nullptr)
             return;
         if (m_edit)
-            m_edit(typeId, mutate); // the page's step; it refreshes this after
+            m_edit(typeId, mutate); // the page takes the undo step and refreshes this source afterwards
         else
             mutate(*asset);
         Refresh();
     }
 
-    // === What there is ===
+    // === Nodes and links ===
 
     void AnimationGraphStates::GetNodes(Array<gui::GraphId>& out) const
     {
@@ -425,7 +425,7 @@ namespace editor
         if (!m_moving || asset == nullptr || LayerData() == nullptr)
             return;
         const usize l = static_cast<usize>(m_layer);
-        // Live in the asset, each from where it was when the move began.
+        // Write positions into the asset live, each offset from where it was when the move began.
         for (const gui::GraphId id : nodes)
         {
             if (id == kAnyState)
@@ -444,7 +444,7 @@ namespace editor
             return;
         m_moving = false;
         const usize l = static_cast<usize>(m_layer);
-        // The step's before is where the move began; its after, where it ended.
+        // The undo step's before state is where the move began, and its after state where it ended.
         const Float2 anyAfter = asset->layerAnyStatePositions[l];
         const Array<Float2> statesAfter = asset->layerStatePositions[l];
         asset->layerAnyStatePositions[l] = m_before[0];
@@ -489,7 +489,7 @@ namespace editor
         }
         if (link.ToNode == 0)
         {
-            check.Allowed = true; // one may begin here
+            check.Allowed = true; // a transition may begin here
             return check;
         }
         if (link.ToNode == kAnyState)
@@ -519,7 +519,7 @@ namespace editor
         const i32 dst = StateOf(link.ToNode);
         const i32 layer = m_layer;
         const gui::GraphId id = Next();
-        m_transitionIds.PushBack(id); // in step before the asset changes
+        m_transitionIds.PushBack(id); // update the id table before the asset changes
         Change(u8"add_animgraph_transition", [layer, src, dst](pipeline::AnimationGraphAsset& asset)
                {
                    animation::GraphTransitionData transition;
@@ -555,7 +555,7 @@ namespace editor
                 gone.PushBack(t);
         if (gone.IsEmpty())
             return false;
-        // Highest first, so each removal leaves the others' places as they were.
+        // Remove the highest index first, so each removal leaves the remaining indices unchanged.
         for (usize i = 0; i < gone.Size(); ++i)
             for (usize j = i + 1; j < gone.Size(); ++j)
                 if (gone[j] > gone[i])
@@ -594,12 +594,12 @@ namespace editor
                     gone[j] = gone[i];
                     gone[i] = higher;
                 }
-        // A layer keeps one state: the first of them stays when all were asked for.
+        // A layer keeps at least one state: when all of them are asked for, the first one stays.
         while (!gone.IsEmpty() && gone.Size() >= layer->states.Size())
             gone.RemoveAt(gone.Size() - 1);
         if (gone.IsEmpty())
             return false;
-        // The ids in step: the states', and the transitions' that go with them.
+        // Update the id tables: the states', and those of the transitions that go with them.
         Array<bool> transitionGoes;
         transitionGoes.Resize(layer->transitions.Size(), false);
         for (usize t = 0; t < layer->transitions.Size(); ++t)
@@ -641,7 +641,7 @@ namespace editor
         const StringView base = kind == animgraph::StateKind::Clip ? StringView(u8"State") : StringView(u8"Blend");
         const i32 index = m_layer;
         const gui::GraphId id = Next();
-        m_stateIds.PushBack(id); // in step before the asset changes
+        m_stateIds.PushBack(id); // update the id table before the asset changes
         Change(u8"add_animgraph_state", [index, base, kind, at](pipeline::AnimationGraphAsset& asset) { (void)animgraph::AddState(asset, index, base, kind, at); });
         return id;
     }

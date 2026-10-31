@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - direction: auto (E11 of Specs/gui-lab-evolution-2.md): each paragraph of a node's text
-// runs as its first strong character reads, typed or translated; one with none runs as the node's
-// boxes do, which follow what holds it. With the resolver installed and without. Over DejaVu Sans
-// Mono, which draws Arabic.
+// GUI - direction: auto. Each paragraph of a node's text, typed or translated, runs in the
+// direction of its first strong character. A paragraph with none runs as the node's boxes do, and
+// they follow the node's container. The tests run with the bidi resolver installed and without it,
+// using DejaVu Sans Mono, which draws Arabic.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -77,7 +77,7 @@ TEST_CASE("auto direction: digits and punctuation alone run as the node does")
     Bidi bidi;
     CHECK(Lay(font, StringView(u8"42 - 7"), true).Lines[0].RightToLeft);
     CHECK_FALSE(Lay(font, StringView(u8"42 - 7"), false).Lines[0].RightToLeft);
-    CHECK(Lay(font, StringView{}, true).Lines[0].RightToLeft); // an empty field's caret on its node's start
+    CHECK(Lay(font, StringView{}, true).Lines[0].RightToLeft); // an empty field's caret sits at its node's start
 }
 
 TEST_CASE("auto direction: without a resolver the first strong character still decides")
@@ -105,7 +105,7 @@ TEST_CASE("auto direction: a sheet's direction: auto sets a label's paragraphs b
     styles.ApplyTree(*root.Get());
 
     CHECK(label->GetLayoutDirection() == Node::LayoutDirection::Auto);
-    CHECK(label->IsRightToLeft()); // its boxes: as the page's
+    CHECK(label->IsRightToLeft()); // its boxes run as the page's do
     CHECK(label->GetTextLayout().GetDirection().Direction == fonts::TextDirection::Auto);
     CHECK(label->GetTextLayout().GetDirection().AutoRightToLeft);
     label->SetText(StringView(kLatinFirst));

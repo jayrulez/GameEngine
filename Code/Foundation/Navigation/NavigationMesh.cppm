@@ -3,12 +3,12 @@
 
 // Foundation::Navigation - :mesh partition.
 //
-// The Detour runtime wrappers: NavigationMesh (a loaded single-tile navmesh), its query
-// (NavigationMeshQuery - pathfinding) and its crowd (NavigationCrowd - agents that steer to
+// The Detour runtime wrappers: NavigationMesh (a loaded tiled navmesh), its query
+// (NavigationMeshQuery, for pathfinding) and its crowd (NavigationCrowd, agents that steer to
 // targets and avoid each other). Each is PIMPL: the Detour dt* types live only in
-// NavigationImpl.cpp. A query/crowd borrows its mesh's Detour handle, so the NavigationMesh
-// MUST outlive every query/crowd built against it (the engine subsystem owns all three per
-// zone, so this holds naturally).
+// NavigationImpl.cpp. A query or crowd borrows its mesh's Detour handle, so the NavigationMesh
+// has to outlive every query and crowd built against it (the engine subsystem owns all three
+// per zone, so this holds).
 
 module;
 #include "Core/Prelude.h"
@@ -22,7 +22,7 @@ using namespace foundation::core;
 export namespace foundation::navigation
 {
     // A straight-line path across the navmesh (corner points from start to end). `complete`
-    // is false when the destination could not be reached - `corners` then leads to the nearest
+    // is false when the destination could not be reached; `corners` then leads to the nearest
     // reachable point. An empty `corners` with a failing Status means start/end were off-mesh.
     struct NavigationPath
     {
@@ -30,8 +30,8 @@ export namespace foundation::navigation
         bool complete = false;
     };
 
-    // A live crowd agent's introspection snapshot (AgentState). The values are OUR stable
-    // contract, remapped from Detour's internals - safe for scripts and tools to key on.
+    // A live crowd agent's introspection snapshot (AgentState). The values are the engine's own
+    // stable contract, remapped from Detour's internals, so scripts and tools can key on them.
     enum class NavAgentCrowdState : u8
     {
         Invalid = 0, // not a live agent
@@ -41,7 +41,7 @@ export namespace foundation::navigation
     enum class NavAgentTargetState : u8
     {
         None = 0,       // no move request
-        Requesting = 1, // pathfind queued/running (any Detour in-flight stage)
+        Requesting = 1, // pathfind queued or running (any Detour in-flight stage)
         Valid = 2,      // moving on a valid corridor
         Velocity = 3,   // velocity-driven (no corridor)
         Failed = 4,     // pathfind failed
@@ -68,8 +68,8 @@ export namespace foundation::navigation
         bool avoidOthers = true;
     };
 
-    // A loaded single-tile navmesh (from NavigationMeshBuilder::Build output). Move-only; owns
-    // the Detour navmesh. The allocator (required - the owner decides) backs the impl block.
+    // A loaded tiled navmesh (from NavigationMeshBuilder::Build output). Move-only; owns
+    // the Detour navmesh. The allocator (required; the owner decides) backs the impl block.
     class NavigationMesh
     {
     public:
@@ -89,19 +89,20 @@ export namespace foundation::navigation
         [[nodiscard]] f32 BakedAgentRadius() const noexcept;
         [[nodiscard]] f32 BakedAgentHeight() const noexcept;
 
-        // PARTIAL REBAKE: swap one tile of a LOADED TILED navmesh (remove + add) with fresh
-        // Detour tile data (BuildTileInGrid output). Empty data = remove the tile. Fails for
-        // a single-tile grid (it cannot place arbitrary tiles) and invalid data.
-        // Queries/crowds over this mesh see the change immediately.
+        // Partial rebake: swap one tile of a loaded tiled navmesh (remove, then add) with fresh
+        // Detour tile data (BuildTileInGrid output). Empty data removes the tile. Fails for
+        // a single-tile grid (it cannot place arbitrary tiles) and for invalid data.
+        // Queries and crowds over this mesh see the change immediately.
         [[nodiscard]] Status ReplaceTile(i32 tileX, i32 tileY, Span<const byte> tileData);
 
         // Append the navmesh's walkable triangles (in navmesh-local space, 3 verts per triangle)
-        // to `out` for debug draw. Drawn from the LIVE dtNavMesh, so it reflects exactly what
-        // queries path on (catches load/version/transform drift a bake-time outline would mask).
+        // to `out` for debug draw. Drawn from the live dtNavMesh, so it reflects exactly what
+        // queries path on (it catches load, version or transform drift a bake-time outline would
+        // hide).
         // Does not clear `out` (append semantics). No-op when invalid.
         void DebugTriangles(Array<Float3>& out) const;
 
-        // INTERNAL: the Detour dtNavMesh* as an opaque handle, for query/crowd construction
+        // Internal: the Detour dtNavMesh* as an opaque handle, for query and crowd construction
         // inside foundation.navigation only. Null when invalid. Do not reinterpret elsewhere.
         [[nodiscard]] void* NativeHandle() const noexcept;
 
@@ -125,11 +126,11 @@ export namespace foundation::navigation
 
         // Path from `start` to `end`. Ok + out.complete=true when reachable; Ok +
         // out.complete=false when the nearest reachable point falls short (unreachable
-        // destination - reported, never a crash or a false success); a failing Status when
+        // destination, reported, never a crash or a false success); a failing Status when
         // start or end has no polygon within the search box.
         [[nodiscard]] Status FindPath(Float3 start, Float3 end, NavigationPath& out) const;
 
-        // Nearest point ON the navmesh to `point` within the default search box. False if none.
+        // Nearest point on the navmesh to `point` within the default search box. False if none.
         [[nodiscard]] bool FindNearestPoint(Float3 point, Float3& out) const;
 
     private:
@@ -158,8 +159,8 @@ export namespace foundation::navigation
         [[nodiscard]] i32 AddAgent(Float3 position, const NavigationAgentParams& params);
         void RemoveAgent(i32 agentId);
 
-        // Update a LIVE agent's steering profile (speed/acceleration/radius/height) - per-call
-        // speed control without remove/re-add. No-op for invalid agents.
+        // Update a live agent's steering profile (speed, acceleration, radius, height): per-call
+        // speed control without removing and re-adding it. No-op for invalid agents.
         void SetAgentParams(i32 agentId, const NavigationAgentParams& params);
 
         // Steer the agent toward `target` (snapped to the nearest polygon). False if the agent
@@ -177,7 +178,7 @@ export namespace foundation::navigation
         [[nodiscard]] bool IsAgentValid(i32 agentId) const;
 
         // The live agent's internals (state machine, move-request stage, speed intent, path
-        // progress) - the debugging window into WHY an agent is or is not moving.
+        // progress), for debugging why an agent is or is not moving.
         [[nodiscard]] NavigationAgentState AgentState(i32 agentId) const;
 
     private:

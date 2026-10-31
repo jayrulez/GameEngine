@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// TerrainHoleTool tests (headless, Specs/terrain-holes.md): a scripted stroke cuts the shared
-// heightfield's hole plane with a hard edge, ONE region-delta command undoes / redoes it, Fill
-// restores, the brush is unavailable with no terrain and refuses edits while editingLocked, and
-// the persist closure writes BOTH sidecar streams so the cut survives a re-cook and an imported
-// heightfield keeps its heights.
+// Headless TerrainHoleTool tests. A scripted stroke cuts the shared heightfield's hole plane with a
+// hard edge, and one region-delta command undoes and redoes it. Fill restores the surface. The
+// brush is unavailable with no terrain and refuses edits while editingLocked. The save closure
+// writes both sidecar streams, so the cut survives a re-cook and an imported heightfield keeps its
+// heights.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -70,7 +70,7 @@ namespace
             {
                 for (i32 x = 0; x < 65; ++x)
                 {
-                    grid->SetSample(x, z, 32768); // a flat field at ~5 m (a ray has a surface to hit)
+                    grid->SetSample(x, z, 32768); // a flat field at about 5 m, so a ray has a surface to hit
                 }
             }
             res = MakeRef<terrain::TerrainResource>(DefaultAllocator());
@@ -101,7 +101,7 @@ namespace
         return false;
     }
 
-    // Press, drag one frame, release - at (x, z).
+    // Press, drag one frame and release, at (x, z).
     void Stroke(editor::TerrainHoleTool& tool, f32 x, f32 z)
     {
         editor::ViewportToolInput press = RayAt(x, z);
@@ -127,7 +127,7 @@ TEST_CASE("terrain holes: a stroke cuts a hard-edged disc, bumps the version, an
     editor::ViewportToolInput press = RayAt(0.0f, 0.0f);
     press.leftPressed = true;
     press.leftDown = true;
-    CHECK(tool.Update(press)); // consumed: the brush owns the click
+    CHECK(tool.Update(press)); // consumed, since the brush owns the click
     CHECK(fx.grid->IsHole(32, 32));
     CHECK(fx.grid->IsHole(34, 32));      // 2 m out: inside
     CHECK_FALSE(fx.grid->IsHole(35, 32)); // 3 m out: the rim, not cut (hard edge)
@@ -143,7 +143,7 @@ TEST_CASE("terrain holes: a stroke cuts a hard-edged disc, bumps the version, an
     const u64 vStroke = fx.grid->Version();
     commands.Undo();
     CHECK(fx.grid->HoleCount() == 0u);
-    CHECK(fx.grid->Version() > vStroke); // the consumers re-read on undo too
+    CHECK(fx.grid->Version() > vStroke); // undo bumps the version too, so consumers re-read
     commands.Redo();
     CHECK(fx.grid->HoleCount() == cut);
     CHECK(Mentions(tool.StatusText(), u8"CUT"));
@@ -157,8 +157,8 @@ TEST_CASE("terrain holes: Fill restores a cut from inside it; a fill over solid 
     tool.SetRadius(3.0f);
     Stroke(tool, 0.0f, 0.0f);
     REQUIRE(fx.grid->HasHoles());
-    // The brush picks the hole plane (QueryRayIgnoringHoles), so a fill lands INSIDE the cut
-    // with the same radius - no rim dance.
+    // The brush picks the hole plane (QueryRayIgnoringHoles), so a fill lands inside the cut
+    // with the same radius, without having to aim at the rim.
     tool.SetMode(editor::TerrainHoleTool::Mode::Fill);
     CHECK(Mentions(tool.StatusText(), u8"FILL"));
     Stroke(tool, 0.0f, 0.0f);
@@ -170,8 +170,8 @@ TEST_CASE("terrain holes: Fill restores a cut from inside it; a fill over solid 
     still.SetMode(editor::TerrainHoleTool::Mode::Fill);
     Stroke(still, 10.0f, 10.0f);
     CHECK_FALSE(quiet.CanUndo());
-    // A ray straight into a cut still finds the plane (the brush is live over a hole), and a
-    // cut over a cut changes nothing: consumed, no command.
+    // A ray straight into a cut still finds the plane, so the brush works over a hole, and a
+    // cut over a cut changes nothing: the input is consumed but no command is pushed.
     editor::EditorCommandStack blind;
     editor::TerrainHoleTool cutter(fx.scene, blind, nullptr);
     cutter.SetRadius(3.0f);
@@ -184,7 +184,7 @@ TEST_CASE("terrain holes: Fill restores a cut from inside it; a fill over solid 
     editor::ViewportToolInput press = RayAt(0.0f, 0.0f);
     press.leftPressed = true;
     press.leftDown = true;
-    CHECK(over.Update(press)); // the plane under the cursor: the stroke begins
+    CHECK(over.Update(press)); // the plane is under the cursor, so the stroke begins
     editor::ViewportToolInput release = RayAt(0.0f, 0.0f);
     release.leftReleased = true;
     (void)over.Update(release);
@@ -238,10 +238,10 @@ TEST_CASE("terrain holes: a save writes both sidecars to the source asset; the c
         src.worldSize = Float2{64.0f, 64.0f};
         src.minY = 0.0f;
         src.maxY = 10.0f;
-        src.fileName = foundation::vfs::SourcePath(u8"legacy.png"); // an IMPORTED heightfield
+        src.fileName = foundation::vfs::SourcePath(u8"legacy.png"); // an imported heightfield
         REQUIRE(inst->WriteObject(src).IsOk());
     }
-    Fixture fx; // the runtime grid is flat at 32768: image-born heights the save must keep
+    Fixture fx; // the runtime grid is flat at 32768, standing in for imported heights the save must keep
     fx.res->heightfield.SetId(id);
     FakeAssetEditSink sink;
     editor::EditorCommandStack commands;
@@ -261,7 +261,7 @@ TEST_CASE("terrain holes: a save writes both sidecars to the source asset; the c
         RefPtr<ISerializable> object = inst->ReadObject();
         auto* asset = Cast<pipeline::HeightfieldAsset>(object.Get());
         REQUIRE(asset != nullptr);
-        CHECK(asset->fileName.View().IsEmpty()); // the sidecars are the truth now
+        CHECK(asset->fileName.View().IsEmpty()); // the sidecars are now authoritative
         content::ContentDatabase cookedDb(foundation::core::DefaultAllocator(), cookedMount,
                                           foundation::core::BinarySerializerFactory(), u8".rasset");
         content::Instance* cookedInst = cookedDb.RootGroup()->CreateInstanceWithId(
@@ -300,7 +300,7 @@ TEST_CASE("terrain holes: the wheel resizes the brush only with Shift (the bare 
     editor::ViewportToolInput wheel = RayAt(0.0f, 0.0f);
     wheel.wheelDelta = 1.0f;
     (void)tool.Update(wheel);
-    CHECK(tool.Radius() == before); // the camera's scroll
+    CHECK(tool.Radius() == before); // the wheel alone scrolls the camera
     wheel.shift = true;
     (void)tool.Update(wheel);
     CHECK(tool.Radius() > before);

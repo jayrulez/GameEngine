@@ -3,9 +3,9 @@
 
 // Foundation::RenderGraph - :types partition
 //
-// Core value types: resource/pass handles, pass + access enums, subresource
-// ranges. Ported from Sedulous.RenderGraph (Types.bf). Access types map to RHI
-// ResourceState, the currency the barrier solver works in.
+// Core value types: resource/pass handles, pass and access enums, subresource
+// ranges. Access types map to RHI ResourceState, the currency the barrier solver
+// works in.
 
 module;
 #include "Core/Prelude.h"
@@ -76,7 +76,7 @@ export namespace foundation::rendergraph
         ReadBuffer,
         ReadDepthStencil,
         ReadCopySrc,
-        // Sample a DEPTH texture in a shader: like ReadTexture (sampled, not an attachment) but the
+        // Sample a depth texture in a shader: like ReadTexture (sampled, not an attachment) but the
         // layout must be DepthStencilRead (DEPTH_STENCIL_READ_ONLY_OPTIMAL), not ShaderRead.
         SampleDepthStencil,
         // Writes
@@ -84,7 +84,7 @@ export namespace foundation::rendergraph
         WriteDepthTarget,
         WriteStorage,
         WriteCopyDst,
-        // Read + Write
+        // Read and write
         ReadWriteStorage,
         ReadWriteDepthTarget,
         ReadWriteColorTarget,

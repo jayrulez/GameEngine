@@ -7,10 +7,11 @@
 // show what no one source stands for (a scene inspector: an entity's name, its transform and each
 // of its components, each a source of its own). The grid shows the sections in their order, each
 // section's top-level properties under its title as their category (a header the grid folds). A
-// section's paths are its source's under a key of its own ("s2/position.x"), so every call is the
-// section's source's for its own path; what a section's source tells its client reaches this one's.
-// The sources stay their owners' and outlive being sections. The editor's for now; it moves to
-// GUI.Toolkit if something outside the editor needs it.
+// section's paths are its source's paths under a key of its own ("s2/position.x"), so every call is
+// forwarded to the section's source with its own path, and what a section's source tells its
+// client is passed on to this source's client. The sources remain their owners' and must outlive
+// their time as sections. It lives in the editor for now and moves to GUI.Toolkit if something
+// outside the editor needs it.
 
 module;
 #include "Core/Prelude.h"
@@ -33,30 +34,32 @@ export namespace editor::app
     {
     public:
         explicit PropertySections(core::IAllocator& allocator) : m_sections(allocator), m_forwarder(*this) {}
-        // Its sources let go, its client told nothing: whoever it told may be gone already.
+        // Releases its sources without telling its client anything: the client may already be gone.
         ~PropertySections() override { Release(); }
         PropertySections(const PropertySections&) = delete;
         PropertySections& operator=(const PropertySections&) = delete;
 
-        /// A section after the others: `source`'s properties under `title` (`key`: what its paths
-        /// start with and a caller finds it by again; unique among the sections, no '.' or '/').
+        /// Adds a section after the others: `source`'s properties under `title`. `key` is what the
+        /// section's paths start with and how a caller finds it again; it is unique among the
+        /// sections and holds no '.' or '/'.
         void Add(core::StringView key, core::StringView title, gui::IPropertySource& source)
         {
             m_sections.PushBack(Section{core::String(key), core::String(title), &source});
             source.SetClient(&m_forwarder);
             NotifyPropertiesChanged();
         }
-        /// No sections; their sources let go.
+        /// Removes every section, releasing their sources.
         void Clear()
         {
             Release();
             NotifyPropertiesChanged();
         }
-        /// No sections, their sources not touched: for an owner whose sources may be gone already
-        /// (a page's own sources are a derived page's members, which die before its base).
+        /// Removes every section without touching their sources, for an owner whose sources may
+        /// already be gone (a page's own sources are a derived page's members, which are destroyed
+        /// before its base).
         void Abandon() { m_sections.Clear(); }
         [[nodiscard]] usize SectionCount() const noexcept { return m_sections.Size(); }
-        /// Every row read only, every edit through it refused (a scene page while it simulates).
+        /// Makes every row read-only and refuses every edit through it (a scene page while it simulates).
         void SetReadOnly(bool readOnly)
         {
             if (m_readOnly == readOnly)
@@ -191,7 +194,7 @@ export namespace editor::app
             core::String Title;
             gui::IPropertySource* Source = nullptr;
         };
-        // What a section's source tells reaches this one's client.
+        // Passes what a section's source reports on to this source's client.
         class Forwarder final : public gui::IPropertySourceClient
         {
         public:

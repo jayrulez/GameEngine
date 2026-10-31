@@ -15,7 +15,7 @@ using namespace foundation::core;
 
 // --- Threading -------------------------------------------------------------
 
-// The web build is single-threaded (no wasm-pthreads): every case here SPAWNS real
+// The web build is single-threaded (no wasm-pthreads): every case here spawns real
 // threads, so the suite sits out the web build.
 // TODO: a "JobSystem inline mode" would bring a web-runnable subset back.
 #if !PLATFORM_WEB
@@ -249,7 +249,7 @@ TEST_CASE("threading: JobSystem allocates deques and job boxes from ITS allocato
         jobs.WaitForAll();
         CHECK(ran.load() == 8);
     }
-    // Deques + every job closure box returned to the tracker - a leak check per pool.
+    // The deques and every job closure box returned to the tracker: a leak check per pool.
     CHECK_FALSE(tracker.HasLeaks());
 }
 
@@ -369,7 +369,7 @@ TEST_CASE("threading: nested ParallelFor does not deadlock (caller participation
 {
     JobSystem jobs(DefaultAllocator(), 4);
     Atomic<i64> total{0};
-    // A ParallelFor whose body runs another ParallelFor - a worker that Waits on the inner
+    // A ParallelFor whose body runs another ParallelFor: a worker that waits on the inner
     // loop participates in running it, so no worker is parked while work remains.
     jobs.ParallelFor(8u, [&](u32) { jobs.ParallelFor(8u, [&](u32) { total.fetch_add(1); }); });
     CHECK(total.load() == 64);

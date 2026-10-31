@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample029 -- ResolveTexture (Explicit 4x MSAA). Ported from Sedulous Sample029_ResolveTexture.
+/// Sample029 -- ResolveTexture (Explicit 4x MSAA).
 /// Demonstrates explicit MSAA resolve via CommandEncoder::resolveTexture().
 /// Unlike Sample010 (which uses ColorAttachment.resolveTarget for automatic
 /// render-pass resolve), this sample renders to a 4x MSAA target and then
@@ -287,7 +287,7 @@ void ResolveTextureSample::OnRender()
 
     rhi::ColorAttachment ca{};
     ca.view = m_msaaView;
-    ca.resolveTarget = nullptr; // No auto-resolve -- we do it manually.
+    ca.resolveTarget = nullptr; // No auto-resolve; we resolve explicitly.
     ca.loadOp = rhi::LoadOp::Clear;
     ca.storeOp = rhi::StoreOp::Store;
     ca.clearValue = rhi::ClearColor(0.08f, 0.08f, 0.12f, 1.0f);

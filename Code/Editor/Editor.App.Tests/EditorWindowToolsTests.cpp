@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - editor_screenshot over fake window seams: the main window captured to the
-// given path or a new one under the screenshots folder, every window with "all" (each further one
-// beside the first), the call re-entered until the captures land, and the failures it names (a
-// failed capture, no window to capture, no frame in time).
+// Editor::App tests: editor_screenshot over fake window hooks. The main window is captured to the
+// given path, or to a new one under the screenshots folder; "all" captures every window, each one
+// after the first written beside it. The call is re-entered until the captures land, and it names
+// its failures: a failed capture, no window to capture, or no frame in time.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -21,7 +21,7 @@ using json::JsonValue;
 
 namespace
 {
-    // What the application would be: its windows, and a capture the test moves along by hand.
+    // Stands in for the application: its windows, and a capture the test advances by hand.
     struct FakeWindows
     {
         Array<u32> windows{DefaultAllocator()};
@@ -125,7 +125,7 @@ TEST_CASE("editor_screenshot: the main window to a PNG, waiting for its frame")
     CHECK(fake.shots[0].main);
     CHECK(fake.shots[0].path == StringView(u8"/tmp/editor.png"));
 
-    // Re-entered until it lands; the same request, not a new one.
+    // Re-entered until it lands, with the same request rather than a new one.
     CHECK(Pump(server, u8"{\"path\":\"/tmp/editor.png\"}").state == LineState::NotFinished);
     CHECK(fake.requests == 1u);
     fake.Land(app::WindowCaptureState::Written);
@@ -139,7 +139,7 @@ TEST_CASE("editor_screenshot: the main window to a PNG, waiting for its frame")
     CHECK(shots.At(0).Get(u8"width").AsNumber() == doctest::Approx(1600));
     CHECK(shots.At(0).Get(u8"height").AsNumber() == doctest::Approx(900));
 
-    // With no path, a new file under the screenshots folder, a new one each time.
+    // With no path, each capture goes to a new file under the screenshots folder.
     CHECK(Pump(server, u8"{}").state == LineState::NotFinished);
     REQUIRE(fake.shots.Size() == 1);
     const String first = fake.shots[0].path;

@@ -1,13 +1,12 @@
 # Foundation::RHI - the `foundation.rhi` module (the backend-agnostic RHI interface).
-# Ported from the Sedulous RHI, adapted to our types (foundation.core) and the
-# minimal-STL / -fno-exceptions / -fno-rtti policy. Backends (Null, Vulkan, DX12,
-# Validation) are separate targets.
+# Uses our types (foundation.core) under the minimal-STL, -fno-exceptions and
+# -fno-rtti policy. Backends (Null, Vulkan, DX12, WebGPU, Validation) are separate targets.
 
 util_add_engine_library(RHI ALIAS Foundation::RHI)
 target_link_libraries(RHI PUBLIC Foundation::Core Foundation::Policy)
 
-# Implementation units (headers they need stay OUT of the interface gcm - GCC hygiene).
-# Listed as regular sources, NOT in the CXX_MODULES file set.
+# Implementation units, so the headers they need stay out of the interface gcm (for GCC).
+# Listed as regular sources, not in the CXX_MODULES file set.
 target_sources(RHI PRIVATE
     ResourcesImpl.cpp
     LogImpl.cpp)                   # the process-wide log-sink slot (one per process)

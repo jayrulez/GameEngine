@@ -1,6 +1,6 @@
-# WebTriangle - the first browser-running app. Emscripten-only: it links the web app
-# stack (WebShell + the web runner + the WebGPU graphics factory) and emits an HTML shell + .js +
-# .wasm. ASYNCIFY is required because device bring-up blocks-and-yields to the browser event loop
+# WebTriangle - a minimal browser app. Emscripten-only: it links the web app stack (WebShell,
+# the web runner, the WebGPU graphics factory) and emits an HTML shell, .js and .wasm. ASYNCIFY
+# is required because device bring-up blocks and yields to the browser event loop
 # (see the WebGPU backend's pump). The emdawnwebgpu port flag rides in transitively from
 # Foundation::RHI.WebGPU (PUBLIC), so it does not need repeating here.
 if(NOT EMSCRIPTEN)

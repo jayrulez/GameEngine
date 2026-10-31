@@ -3,9 +3,8 @@
 
 // UI - :image_drawable partition
 //
-// Draws an image stretched to fill bounds. Ported from Sedulous.UI/src/Drawing/ImageDrawable.bf.
-// Sedulous IImageData -> foundation::image::ImageData (non-owning pointer; the image is owned by the
-// theme/atlas, not the drawable).
+// Draws an image stretched to fill bounds. Holds a non-owning foundation::image::ImageData pointer;
+// the image is owned by the theme/atlas, not the drawable.
 
 module;
 #include "Core/Prelude.h"

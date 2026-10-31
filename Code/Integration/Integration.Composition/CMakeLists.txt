@@ -1,7 +1,7 @@
-# Integration.Composition - the engine composition x the pipeline registration: every factory
+# Integration.Composition - the engine composition against the pipeline registration: every factory
 # description's cooked form is a registered serializable some builder produces (the link the
-# scene format reference joins). Cross-collection (Engine x Pipeline), so it lives here and the
-# engine suites stay pipeline-free.
+# scene format reference relies on). It crosses collections (Engine and Pipeline), so it lives here
+# and the engine suites stay pipeline-free.
 add_executable(Integration.Composition TestsMain.cpp CompositionPipelineTests.cpp UpdateOrderTests.cpp)
 target_link_libraries(Integration.Composition PRIVATE
     Engine::Composition Foundation::Resource Pipeline::Registration Pipeline::Core

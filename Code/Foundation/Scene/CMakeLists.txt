@@ -1,5 +1,5 @@
 # Foundation::Scene - `foundation.scene`, the scene / ECS foundation (entities, transform
-# hierarchy, components + per-scene systems, SceneSubsystem). Pure data + logic on
+# hierarchy, components and per-scene systems, SceneSubsystem). Pure data and logic on
 # top of Core; renderer-agnostic.
 util_add_engine_library(Scene ALIAS Foundation::Scene)
 target_link_libraries(Scene
@@ -20,5 +20,4 @@ target_sources(Scene
         SceneComposition.cppm
             SceneModule.cppm)
 
-# The application-level scene driver (bridges Scene + Runtime - the scene-composition registry).
 

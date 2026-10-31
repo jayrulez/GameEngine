@@ -3,15 +3,16 @@
 
 // GUI - :style_interpolation partition
 //
-// Interpolating typed style values (G3 of Specs/vg-and-gui-lab.md), so every property a sheet
-// sets can transition and be keyframed, not only opacity and colour: numbers, lengths of one
-// unit, colours (straight RGBA), shadow lists (the shorter padded with transparent shadows, as
-// CSS does), transform lists of the same functions (function by function), transform origins, and
-// gradient layers of the same shape (angle, stop colours and positions). With a context (the
-// length context and the box's size), lengths in different units move in pixels, and transform
-// lists of different functions move through their matrices, decomposed into translation, rotation,
-// skew and scale (the rotation the short way round). What cannot interpolate (keywords, a
-// percentage against another unit) switches at the halfway point: CSS's discrete animation.
+// Interpolates typed style values, so every property a sheet sets can transition and be
+// keyframed, not only opacity and colour. Supported are numbers, lengths of one unit, colours
+// (straight RGBA), shadow lists (the shorter list padded with transparent shadows, as in CSS),
+// transform lists with the same functions (function by function), transform origins, and gradient
+// layers of the same shape (angle, stop colours and positions). Given a context (the length
+// context and the box's size), lengths in different units interpolate in pixels, and transform
+// lists with different functions interpolate through their matrices, decomposed into translation,
+// rotation, skew and scale (rotating the short way round). Values that cannot interpolate
+// (keywords, a percentage against another unit) switch at the halfway point, as in CSS's discrete
+// animation.
 
 module;
 #include "Core/Prelude.h"
@@ -29,8 +30,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// What interpolating lengths of different units and different transform lists needs: the
-    /// length context (em, rem, vw, vh) and the size of the box the value is for.
+    /// What is needed to interpolate lengths in different units and different transform lists:
+    /// the length context (em, rem, vw, vh) and the size of the box the value is for.
     struct StyleInterpolationContext
     {
         LengthContext Lengths{};
@@ -49,7 +50,7 @@ export namespace foundation::gui
         [[nodiscard]] inline bool MixLength(LengthValue a, LengthValue b, f32 t, LengthValue& out,
                                             const StyleInterpolationContext* ctx = nullptr) noexcept
         {
-            // A calc() on either side: term by term (E13), each unit as it is.
+            // With a calc() on either side, interpolate term by term, each unit separately.
             if (a.Unit == LengthUnit::Calc || b.Unit == LengthUnit::Calc)
             {
                 f32 x[kLengthUnitCount]{}, y[kLengthUnitCount]{}, mixed[kLengthUnitCount]{};
@@ -67,8 +68,8 @@ export namespace foundation::gui
                 b.Unit = a.Unit;
             if (a.Unit != b.Unit)
             {
-                // Different units meet in pixels, when neither is a percentage (whose base the
-                // property decides).
+                // Different units are converted to pixels, provided neither is a percentage (whose
+                // base depends on the property).
                 if (ctx == nullptr || a.Unit == LengthUnit::Percent || b.Unit == LengthUnit::Percent)
                     return false;
                 out = LengthValue{Mix(ResolveLengthValue(a, ctx->Lengths), ResolveLengthValue(b, ctx->Lengths), t),
@@ -86,7 +87,8 @@ export namespace foundation::gui
             out.Clear();
             for (usize i = 0; i < n; ++i)
             {
-                // The shorter list is padded with a transparent shadow of the other's insetness.
+                // Pad the shorter list with transparent shadows that match the other list's inset
+                // setting.
                 ShadowValue from = i < a.Size() ? a[i] : ShadowValue{};
                 ShadowValue to = i < b.Size() ? b[i] : ShadowValue{};
                 if (i >= a.Size())
@@ -114,8 +116,9 @@ export namespace foundation::gui
             return true;
         }
 
-        // A 2D matrix as translation, rotation, skew and scale: M = T * R(angle) * K(skew) * S, K the
-        // x-shear (x' = x + skew y); the scale's y takes a reflection's sign.
+        // A 2D matrix decomposed into translation, rotation, skew and scale: M = T * R(angle) *
+        // K(skew) * S, where K is the x-shear (x' = x + skew y). The y scale carries the sign of
+        // any reflection.
         struct Decomposed
         {
             f32 Tx = 0.0f, Ty = 0.0f, Angle = 0.0f, Skew = 0.0f, Sx = 1.0f, Sy = 1.0f;
@@ -151,7 +154,7 @@ export namespace foundation::gui
             return m;
         }
 
-        // Two transform lists of different functions, through their matrices.
+        // Interpolates two transform lists with different functions through their matrices.
         [[nodiscard]] inline TransformFunction MixMatrices(const Array<TransformFunction>& a,
                                                            const Array<TransformFunction>& b, f32 t, core::Float2 size)
         {
@@ -183,8 +186,8 @@ export namespace foundation::gui
                                                 f32 t, Array<TransformFunction>& out,
                                                 const StyleInterpolationContext* ctx)
         {
-            // none against a list: the list's identity functions (CSS), so `none -> rotate(90deg)`
-            // turns from 0.
+            // `none` against a list stands for the list's identity functions (as in CSS), so
+            // `none -> rotate(90deg)` turns from 0.
             const auto identity = [](const TransformFunction& like)
             {
                 TransformFunction id;
@@ -208,7 +211,8 @@ export namespace foundation::gui
                     padded.PushBack(identity(f));
                 to = &padded;
             }
-            // Lists of different functions (or lengths that cannot meet) go through their matrices.
+            // Lists with different functions (or lengths that cannot be converted) go through their
+            // matrices.
             const auto throughMatrices = [&]()
             {
                 out.Clear();
@@ -278,8 +282,9 @@ export namespace foundation::gui
             return true;
         }
 
-        // Filter lists: the shorter padded with the other's functions at their identity (blur(0)),
-        // then function by function; lists of different functions switch.
+        // Filter lists: the shorter list is padded with the other's functions at their identity
+        // (blur(0)), then they interpolate function by function. Lists with different functions
+        // switch.
         [[nodiscard]] inline bool MixFilters(const Array<FilterFunction>& a, const Array<FilterFunction>& b, f32 t,
                                              Array<FilterFunction>& out, const StyleInterpolationContext* ctx)
         {
@@ -294,15 +299,15 @@ export namespace foundation::gui
                 FilterFunction mixed{from.Kind, LengthValue{}};
                 if (!MixLength(from.Amount, to.Amount, t, mixed.Amount, ctx))
                     return false;
-                mixed.Amount.Value = Max(0.0f, mixed.Amount.Value); // an overshooting easing
+                mixed.Amount.Value = Max(0.0f, mixed.Amount.Value); // clamp, since an overshooting easing can go negative
                 out.PushBack(mixed);
             }
             return true;
         }
     }
 
-        /// `a` toward `b` at `t` (0: a, 1: b; t may leave [0, 1] for an overshooting easing). Values
-    /// that cannot interpolate switch at t = 0.5.
+    /// Interpolates from `a` toward `b` at `t` (0 gives a, 1 gives b; t may leave [0, 1] for an
+    /// overshooting easing). Values that cannot interpolate switch at t = 0.5.
     [[nodiscard]] inline StyleValue InterpolateStyleValue(const StyleValue& a, const StyleValue& b, f32 t,
                                                           const StyleInterpolationContext* ctx = nullptr)
     {

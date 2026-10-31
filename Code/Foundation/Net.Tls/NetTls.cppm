@@ -3,12 +3,12 @@
 
 /// Foundation::Net.Tls - the `foundation.net.tls` module.
 ///
-/// The TLS seam (Documentation/Specs/tls-http-wss.md). A TLS session is a byte engine that never
-/// touches a socket (a "memory BIO"): the caller hands it what arrived from the peer, takes what it
-/// must send, and reads and writes plaintext. So any transport carries it (a TcpSocket, a test's
-/// in-memory pipe), two sessions wired together run a whole handshake headlessly, and a backend is
-/// only the crypto. The backends live in modules of their own (foundation.net.tls.mbedtls, the
-/// first); the application chooses one at composition, and nothing else includes a TLS library.
+/// The TLS interface. A TLS session is a byte engine that never touches a socket (a "memory BIO"):
+/// the caller hands it what arrived from the peer, takes what it must send, and reads and writes
+/// plaintext. So any transport carries it (a TcpSocket, a test's in-memory pipe), two sessions wired
+/// together run a whole handshake headlessly, and a backend is only the crypto. The backends live in
+/// modules of their own (foundation.net.tls.mbedtls, for one); the application chooses one at
+/// composition, and nothing else includes a TLS library.
 ///
 /// A client checks the server's certificate against a TlsTrust: the system's roots (the default;
 /// LoadSystemRoots), roots the game ships as PEM (a private backend's own CA), or, for a test only,

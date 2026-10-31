@@ -3,9 +3,9 @@
 
 // Shell - foundation.shell.desktop implementation unit.
 //
-// Out-of-line definitions for the SDL3 backend classes (sec 3.2 / sec 10.6): all the SDL_*
-// call sites live here. SDL3Shell.cppm keeps the class declarations (which reference SDL
-// handle types) + trivial inline accessors.
+// Out-of-line definitions for the SDL3 backend classes: all the SDL_* call sites live here.
+// SDL3Shell.cppm keeps the class declarations (which reference SDL handle types) and trivial
+// inline accessors.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +24,7 @@ namespace core = foundation::core;
 
 namespace foundation::shell
 {
-    // ---- file-local SDL helpers, PIMPL'd out of SDL3Shell.cppm (sec 3.2 / sec 10.6) ----
+    // ---- file-local SDL helpers, kept out of SDL3Shell.cppm ----
     struct Context
     {
         core::IAllocator* allocator = nullptr; // frees this box in the SDL dialog callback
@@ -425,8 +425,8 @@ namespace foundation::shell
             return core::Err(core::ErrorCode::Unknown);
         }
 
-        // Place the window if an explicit position was requested (dockable/floating windows do;
-        // the main window leaves it to the OS/centered default).
+        // Place the window if an explicit position was requested (dockable and floating windows do;
+        // the main window leaves it to the OS's centered default).
         if (settings.positioned)
         {
             SDL_SetWindowPosition(window, static_cast<int>(settings.x),
@@ -462,7 +462,7 @@ namespace foundation::shell
 
     IWindow* SDL3WindowManager::MainWindow() const noexcept
     {
-        // Tracked by id, so destroying/flushing the main window never promotes another
+        // Tracked by id, so destroying or flushing the main window never promotes another
         // window into its place; returns null once the main window is gone.
         return GetWindow(m_mainWindowId);
     }
@@ -692,7 +692,7 @@ namespace foundation::shell
         if (enabled == m_globalCapture)
         {
             return;
-        } // SDL_CaptureMouse is refcounted-ish; avoid churn
+        } // SDL_CaptureMouse is roughly refcounted; avoid churn
         SDL_CaptureMouse(enabled);
         m_globalCapture = enabled;
     }
@@ -1009,11 +1009,10 @@ namespace foundation::shell
         {
             return;
         }
-        // Reveal via the native, non-blocking Core/System backend (Explorer / xdg-open), NOT
+        // Reveal through the native, non-blocking Core/System backend (Explorer or xdg-open), not
         // SDL_OpenURL. SDL_OpenURL wraps ShellExecute on a file:// URL, which on Windows can
-        // synchronously block (or pop a protocol chooser) and hang this UI thread - observed
-        // reliably here and intermittently in the Beef/Sedulous build. OpenPathInFileManager
-        // launches detached and returns immediately.
+        // synchronously block (or pop a protocol chooser) and hang this UI thread.
+        // OpenPathInFileManager launches detached and returns immediately.
         if (core::OpenPathInFileManager(path))
         {
             LOG_DEBUG(u8"Shell", u8"OpenPath: revealed '{}'", path);
@@ -1041,7 +1040,7 @@ namespace foundation::shell
         ctx->allocator = &allocator;
         ctx->callback = static_cast<DialogResultCallback&&>(callback);
         ctx->defaultPath = core::String(defaultPath); // null-terminated copy for the C API
-        // Fill filterStrings FIRST (so the array stops growing), THEN alias sdlFilters at them -
+        // Fill filterStrings first (so the array stops growing), then alias sdlFilters at them;
         // otherwise a PushBack realloc would dangle the SDL filter pointers.
         for (const FileFilter& f : filters)
         {
@@ -1062,7 +1061,7 @@ namespace foundation::shell
     {
         Context* ctx = static_cast<Context*>(userdata);
         core::Array<core::String> paths;
-        if (filelist != nullptr) // null => cancelled or error
+        if (filelist != nullptr) // null means cancelled or error
         {
             for (const char* const* p = filelist; *p != nullptr; ++p)
             {
@@ -1079,7 +1078,7 @@ namespace foundation::shell
 
     void SDL3Shell::ProcessEvents()
     {
-        // Roll input state (current -> previous, clear deltas) before pumping;
+        // Roll input state (current becomes previous, deltas clear) before pumping;
         // clear last frame's window events (they're valid only until now).
         m_input.Update();
         m_windows.ClearEvents();
@@ -1121,8 +1120,8 @@ namespace foundation::shell
             case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             {
                 const core::u32 id = static_cast<core::u32>(event.window.windowID);
-                // MAIN window close is interceptable; when vetoed, nothing happens
-                // (no event, no teardown - the app exits later via the host).
+                // The main window's close is interceptable; when vetoed, nothing happens
+                // (no event, no teardown; the app exits later through the host).
                 IWindow* main = m_windows.MainWindow();
                 if (main != nullptr && main->Id() == id && OnMainWindowCloseRequested &&
                     !OnMainWindowCloseRequested())
@@ -1194,7 +1193,7 @@ namespace foundation::shell
                 }
                 break;
 
-            // --- Keyboard --- (emit event, then fold into the snapshot)
+            // --- Keyboard --- (emit the event, then fold it into the snapshot)
             case SDL_EVENT_KEY_DOWN:
             case SDL_EVENT_KEY_UP:
             {
@@ -1215,7 +1214,7 @@ namespace foundation::shell
                 m_input.KeyboardDevice().SetModifiers(e.modifiers);
                 break;
             }
-            case SDL_EVENT_TEXT_INPUT: // only arrives after SDL_StartTextInput (focus-driven, later)
+            case SDL_EVENT_TEXT_INPUT: // only arrives after SDL_StartTextInput (focus-driven)
             {
                 InputEvent e{};
                 e.kind = InputEventKind::TextInput;
@@ -1399,7 +1398,7 @@ namespace foundation::shell
 
     bool SDL3Shell::IsRunning() const noexcept
     {
-        IWindow* main = m_windows.MainWindow(); // MainWindow() is const now - no const_cast needed
+        IWindow* main = m_windows.MainWindow();
         return m_running && main != nullptr && main->IsOpen();
     }
 
@@ -1414,7 +1413,7 @@ namespace foundation::shell
 
     void SDL3Shell::SetClipboardText(core::StringView text)
     {
-        const core::String owned(text); // guarantee null-termination for the C API
+        const core::String owned(text); // null-terminated for the C API
         SDL_SetClipboardText(reinterpret_cast<const char*>(owned.Data()));
     }
 

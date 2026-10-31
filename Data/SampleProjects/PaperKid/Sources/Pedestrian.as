@@ -1,6 +1,7 @@
-// Pedestrian - wanders the block on the navmesh: picks a spot around the ring road (on a verge
-// or across it), walks there, picks another. The Level sets the walking speed ("PedestrianSpeed")
-// and says where the ring road runs ("BlockRing"), which sets the band the walks stay in.
+// Pedestrian: wanders the block on the navmesh. It picks a spot around the ring road (on a verge
+// or across it), walks there, then picks another. The Level sets the walking speed
+// ("PedestrianSpeed") and says where the ring road runs ("BlockRing"), which sets the band the
+// walks stay in.
 //
 // The figure (Models/Town/PedestrianModel) turns toward where it walks, easing round rather than
 // snapping, and its Walk clip (two 0.65 m steps a second) plays at the pace it walks.
@@ -55,8 +56,8 @@ class Pedestrian
         {
             pickTarget();
         }
-        // Face the way the walk goes (turning the short way round, a few times a second), and
-        // step at the pace of it; standing, the figure stands still.
+        // Face the way the walk goes (turning the short way round, a few times a second) and step
+        // at its pace; when not moving, the figure stands still.
         float vx = agent.velocityX();
         float vz = agent.velocityZ();
         float pace = Math::Sqrt(vx * vx + vz * vz);

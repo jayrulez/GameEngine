@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of ShaderModule.
-/// Ported from Sedulous.RHI.Vulkan/VulkanShaderModule.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -3,14 +3,14 @@
 
 /// Foundation::Net - `foundation.net:rpc` partition.
 ///
-/// Remote procedure calls (`foundation.net.rpc`). An RpcTable maps
-/// RPC names to handlers; Call serializes (rpc-id + args) and sends it over a NetSession on a
-/// reserved channel; the receiver Dispatches it to the registered handler. Args are written/read
-/// through the bit-exact wire layer - the same primitives reflection auto-marshaling
-/// emits, so a `Replicated`/reflected-arg convenience layers cleanly on top of this mechanism.
+/// Remote procedure calls. An RpcTable maps RPC names to handlers; Call serializes the rpc id and
+/// args and sends them over a NetSession on a reserved channel; the receiver Dispatches the call to
+/// the registered handler. Args are written and read through the bit-exact wire layer, the same
+/// primitives reflection-driven marshaling emits, so a reflected-argument convenience layers on top
+/// of this mechanism.
 ///
-/// For the turn-based target this is the PRIMARY gameplay path: a client Calls an order RPC on the
-/// server; the server validates + resolves it and CallAlls the result back out.
+/// In an order-driven game this is the main gameplay path: a client Calls an order RPC on the
+/// server; the server validates and resolves it and CallAlls the result back out.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,7 @@ export namespace foundation::net
     // to RpcTable::Dispatch; games use channels 0..253 for their own raw messages.
     inline constexpr u8 kRpcChannel = 254;
 
-    // A name->handler registry for remote calls over a NetSession. Register once; Call/CallAll to invoke
+    // A name-to-handler registry for remote calls over a NetSession. Register once; Call or CallAll to invoke
     // remotely; Dispatch the matching Received events. Handlers read their args from the given BitReader.
     class RpcTable
     {
@@ -40,7 +40,7 @@ export namespace foundation::net
         using Handler = Function<void(PeerId sender, BitReader& args)>;
 
         // Register a handler for `name` (re-registering replaces it). Names are hashed to a u32 id on the
-        // wire, so both ends must use the SAME names.
+        // wire, so both ends must use the same names.
         void On(StringView name, Handler handler)
         {
             m_handlers.InsertOrAssign(Hash(name), static_cast<Handler&&>(handler));
@@ -112,7 +112,7 @@ export namespace foundation::net
             }
         }
 
-        // The wire id a name maps to (FNV-1a). Exposed for tests / debugging.
+        // The wire id a name maps to (FNV-1a). Exposed for tests and debugging.
         [[nodiscard]] static u32 Hash(StringView name) noexcept
         {
             u32 h = 2166136261u;

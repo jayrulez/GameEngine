@@ -5,10 +5,12 @@
 // variants: HOLES
 #include "depth.hlsli"
 
-// Terrain chunk PS. Terrain is always opaque, so it writes the full forward GBUFFER (like unlit.ps):
-// SV_Target0 shaded colour, 1 octahedral view-space normal, 2 screen-space motion vector, 3 material
-// (roughness/metallic) for SSR. Colour is height-lit: a low-to-high ramp (grass -> rock) modulated by
-// a directional term + ambient, then attenuated by the CSM (SampleCSM). Splat-map blending (D2) later.
+// Terrain chunk pixel stage. Terrain is always opaque, so it writes the full forward GBUFFER set
+// (like unlit.ps): SV_Target0 shaded colour, 1 octahedral view-space normal, 2 screen-space motion
+// vector, 3 material (roughness/metallic) for SSR, 4 diffuse albedo for SSGI. The albedo comes from
+// the splat-blended base and palette layers, or from a height and slope ramp (grass to rock) when
+// no material is bound; it is lit by the sun term, attenuated by the CSM (SampleCSM), and a fixed
+// ambient.
 
 #define TERRAIN_CASCADE_COUNT 4
 cbuffer TerrainView : register(b0, space0) {
@@ -17,7 +19,7 @@ cbuffer TerrainView : register(b0, space0) {
     float4x4 View;
     float4x4 PrevViewProj;
     float4x4 CascadeViewProj[TERRAIN_CASCADE_COUNT];
-    float3   LightDir;   // direction TO the light (normalized)
+    float3   LightDir;   // direction to the light (normalized)
     float    _terrainViewPad0;
     float3   CameraPos;
     float    _terrainViewPad1;
@@ -54,13 +56,13 @@ struct PSIn {
     float4 curClip  : TEXCOORD2;
     float4 prevClip : TEXCOORD3;
     float3 worldPos : TEXCOORD4;
-    float2 localXZ  : TEXCOORD5; // terrain-LOCAL XZ (pre-ChunkToWorld) for albedo tiling
+    float2 localXZ  : TEXCOORD5; // terrain-local XZ (before ChunkToWorld) for albedo tiling
     float2 splatUV  : TEXCOORD6; // 0..1 across the terrain footprint (splatmap lookup)
 };
 
 #ifdef HOLES
-// Terrain holes (Specs/terrain-holes.md, P2): the R8 hole mask over the samples, sampled
-// BILINEARLY; a fragment whose mask is above one half is inside the cut. The geometry already
+// Terrain holes: the R8 hole mask over the samples, sampled bilinearly; a fragment whose mask
+// is above one half is inside the cut. The geometry already
 // drops the quads cut at every corner; this shapes the rim between cut and solid samples into a
 // smooth iso-line instead of a staircase of whole triangles, at every LOD.
 Texture2D    HoleMask    : register(t1, space2);
@@ -72,30 +74,30 @@ float HoleCoverage(float2 splatUV) {
 }
 #endif
 
-// Top-K splat material (set 3): per texel, up to 4 (palette index,
-// weight) pairs; the BASE layer owns the remainder (1 - sum). The index map is INTEGER and
-// Load-ONLY - filtering palette indices interpolates layer ids into garbage - so the
-// splat bilinear is done MANUALLY over the 2x2 texel neighborhood: evaluate the full blend per
-// corner, lerp the results. Albedos (base + palette array slices) sample normally (trilinear).
+// Top-K splat material (set 3): per texel, up to 4 (palette index, weight) pairs; the base
+// layer owns the remainder (1 - sum). The index map is integer and read with Load only, since
+// filtering palette indices interpolates layer ids into garbage. So the splat bilinear is done
+// by hand over the 2x2 texel neighbourhood: evaluate the full blend per corner, then lerp the
+// results. The albedos (base and palette array slices) sample normally (trilinear).
 Texture2D<uint4>        IndexMap     : register(t0, space3); // 4 palette indices per texel
 Texture2D               WeightMap    : register(t1, space3); // 4 weights per texel (0..1)
 Texture2D               BaseAlbedo   : register(t2, space3);
 Texture2DArray          PaletteArray : register(t3, space3); // one slice per palette layer
 StructuredBuffer<float> TileScales   : register(t4, space3); // [i] = palette layer i's tiling
-// Per-layer PBR maps: tangent-space normal + ORM (R=AO G=rough B=metal),
-// blended by the SAME top-K weights as albedo. Absent -> a flat / default 1x1 dummy binds.
+// Per-layer PBR maps: tangent-space normal and ORM (R=AO G=rough B=metal), blended by the same
+// top-K weights as the albedo. When absent, a flat or default 1x1 dummy binds.
 Texture2D               BaseNormal   : register(t5, space3);
 Texture2DArray          NormalArray  : register(t6, space3);
 Texture2D               BaseOrm      : register(t7, space3);
 Texture2DArray          OrmArray     : register(t8, space3);
-// Per-layer HEIGHT/displacement maps: the top-K weights are re-biased
-// toward the tallest layer per texel (Mishkinis), .r channel. Absent -> a 1x1 mid-height dummy binds
-// AND HeightMapsBound reads 0, so the reweight is skipped and the blend stays linear (byte-identical).
+// Per-layer height (displacement) maps, .r channel: the top-K weights are re-biased toward the
+// tallest layer per texel (Mishkinis). When absent, a 1x1 mid-height dummy binds and
+// HeightMapsBound reads 0, so the reweight is skipped and the blend stays linear.
 Texture2D               BaseHeight   : register(t9, space3);
 Texture2DArray          HeightArray  : register(t10, space3);
-// Per-layer COVERAGE/opacity mask: multiplies into a palette layer's weight
-// before the base-weight recompute so a sparse layer reveals the base through its gaps. .r channel.
-// Absent -> a 1x1 OPAQUE (1.0) dummy binds AND MaskMapsBound reads 0, so the multiply is skipped.
+// Per-layer coverage (opacity) mask, .r channel: multiplies into a palette layer's weight before
+// the base-weight recompute, so a sparse layer reveals what lies under it through its gaps. When
+// absent, a 1x1 opaque (1.0) dummy binds and MaskMapsBound reads 0, so the multiply is skipped.
 Texture2DArray          MaskArray    : register(t11, space3);
 SamplerState            AlbedoSampler : register(s0, space3); // repeat, trilinear
 
@@ -107,14 +109,14 @@ struct PSOutput {
     float4 albedo   : SV_Target4; // rgb = diffuse albedo (SSGI tints its bounce by it)
 };
 
-// CSM cascade depth ARRAY (t1, one layer per cascade) + a comparison sampler (s0) for hardware PCF.
-// Same set-0 layout role as the forward's ShadowMap/ShadowSampler.
+// CSM cascade depth array (t1, one layer per cascade) and a comparison sampler (s0) for hardware
+// PCF. The same set-0 layout role as the forward pass's ShadowMap and ShadowSampler.
 Texture2DArray         ShadowMap     : register(t1, space0);
 SamplerComparisonState ShadowSampler : register(s0, space0);
 static const float kTerrainShadowTexel = 1.0 / 1024.0; // 1 / shadow resolution
 
-// One cascade with a normal-offset bias (fading at grazing angles) + 3x3 hardware PCF. 1 = lit.
-// Adapted verbatim from forward.ps.hlsl SampleCascade, mapped to terrain's cbuffer fields.
+// One cascade with a normal-offset bias (fading at grazing angles) and 3x3 hardware PCF. 1 = lit.
+// The same as SampleCascade in lighting.hlsli, mapped to the terrain's cbuffer fields.
 float SampleCascade(int cascade, float3 worldPos, float3 N, float NdotL) {
     float texelWorld = CascadeTexelSize[cascade];
     float3 biasedPos = worldPos + N * (ShadowNormalBias * texelWorld * (1.0 - NdotL));
@@ -138,7 +140,7 @@ float SampleCascade(int cascade, float3 worldPos, float3 N, float NdotL) {
 // Cascaded shadow: pick the cascade by view-space depth, sample, blend the seam, fade at the far edge.
 float SampleCSM(float3 worldPos, float3 N, float NdotL, float viewDepth) {
     int count = (int)CascadeCount;
-    if (count <= 0) { return 1.0; } // no directional caster this frame -> fully lit
+    if (count <= 0) { return 1.0; } // no directional caster this frame: fully lit
 
     int cascade = count - 1;
     [unroll] for (int i = 0; i < TERRAIN_CASCADE_COUNT; ++i) {
@@ -160,7 +162,7 @@ float SampleCSM(float3 worldPos, float3 N, float NdotL, float viewDepth) {
     return lerp(1.0, shadow, farFade);
 }
 
-// Octahedral encode a unit vector -> [-1,1]^2 (matches forward/unlit OctEncode).
+// Octahedral-encodes a unit vector into [-1,1]^2 (matches forward_ps.hlsli's OctEncode).
 float2 OctEncode(float3 n) {
     n /= (abs(n.x) + abs(n.y) + abs(n.z));
     float2 e = n.xy;
@@ -183,17 +185,17 @@ PSOutput main(PSIn i) {
     float3 blendedOrm = float3(1.0, 1.0, 0.0); // AO, roughness, metallic (default material)
     bool hasBase = BaseBound != 0;
     bool hasWeights = WeightsBound != 0 && PaletteCount >= 0.5;
-    // The procedural height/slope colour ramp (grass -> rock). It is BOTH the no-material
-    // fallback AND the implicit BASE when no base albedo is assigned: a fresh terrain starts on
-    // the ramp, and adding paint layers must composite OVER that same look (not flip the
-    // unpainted remainder to the white dummy - the "why did my terrain turn white" confusion).
+    // The procedural height and slope colour ramp (grass to rock). It is both the no-material
+    // fallback and the implicit base when no base albedo is assigned: a fresh terrain starts on
+    // the ramp, and paint layers composite over that same look rather than turning the unpainted
+    // remainder into the white dummy.
     const float3 kRampLow  = float3(0.24, 0.40, 0.16); // grass
     const float3 kRampHigh = float3(0.52, 0.50, 0.46); // rock
     float3 rampCol = lerp(kRampLow, kRampHigh, i.heightT);
     rampCol = lerp(kRampHigh * 0.8, rampCol, saturate(n.y)); // steep faces read as exposed rock
     if (hasWeights || hasBase) {
-        // Base maps tile in terrain-LOCAL XZ (glued to the surface under move/rotate). These are in
-        // UNIFORM control flow, so plain Sample (implicit derivatives) is valid.
+        // Base maps tile in terrain-local XZ (fixed to the surface when it moves or rotates). These
+        // are in uniform control flow, so a plain Sample (implicit derivatives) is valid.
         float2 baseUV = i.localXZ / max(BaseTileScale, 1e-3);
         float3 baseCol =
             hasBase ? BaseAlbedo.Sample(AlbedoSampler, baseUV).rgb : rampCol;
@@ -208,8 +210,8 @@ PSOutput main(PSIn i) {
         bool  maskBound = MaskMapsBound != 0;
         if (hasWeights) {
             // Manual bilinear over the splat texels: Load index+weight at the 4 corners, blend
-            // per corner (skip zero-weight slots - the typical texel uses 1-2), lerp the results.
-            // Palette taps use SampleGrad with gradients hoisted OUT of the data-dependent
+            // per corner (skipping zero-weight slots; the typical texel uses 1-2), lerp the results.
+            // Palette taps use SampleGrad with gradients hoisted out of the data-dependent
             // branches: WGSL forbids implicit-derivative sampling in non-uniform control flow
             // (grad of localXZ/tile == grad(localXZ)/tile, so the mip selection is identical).
             float2 dxLocal = ddx(i.localXZ);
@@ -228,22 +230,22 @@ PSOutput main(PSIn i) {
                 int2 texel = clamp(t00 + offs, int2(0, 0), maxT);
                 uint4 idx = IndexMap.Load(int3(texel, 0));
                 float4 w = WeightMap.Load(int3(texel, 0));
-                // Coverage mask: multiply each palette slot's weight by its
-                // mask BEFORE the base-weight recompute, so masked-out coverage falls to base. Uniform
-                // branch (MaskMapsBound); the freed weight reveals whatever is beneath. Composes with
-                // height-blend below, which then reweights the already-masked weights.
+                // Coverage mask: multiply each palette slot's weight by its mask before the
+                // base-weight recompute, so masked-out coverage falls to the base. The branch is
+                // uniform (MaskMapsBound); the freed weight reveals whatever is beneath. Composes
+                // with the height blend below, which then reweights the already-masked weights.
                 if (maskBound) {
-                    // Sample each slot's coverage mask and cut its weight; the REMOVED coverage is
-                    // handed to the other PAINTED layers so a sparse layer reveals the layer you
-                    // PAINTED beneath it - not the base canvas. Receptivity is CONTINUOUS
-                    // (smoothstep on the mask value), not a hard >= 0.999 test: a byte-quantized
-                    // photo mask (opaque pixels at 250..254/255) and bilinear-filtered texels near a
-                    // hole must still receive, and a step would draw a hard ring along its
-                    // iso-contour. Heavily-cut areas of a layer receive ~nothing, so a mask still
-                    // cuts its own layer. The redistributed share also fades out (the /kRecvKnee
-                    // saturate) as the receiver pool vanishes, instead of amplifying a vanishing
-                    // slot to full coverage; whatever is not redistributed falls to base via the
-                    // baseW recompute below (sparse-over-base -> reveal base, unchanged).
+                    // Sample each slot's coverage mask and cut its weight. The removed coverage is
+                    // handed to the other painted layers, so a sparse layer reveals the layer painted
+                    // beneath it rather than the base. Receptivity is continuous (a smoothstep on the
+                    // mask value), not a hard >= 0.999 test: a byte-quantized photo mask (opaque
+                    // pixels at 250..254/255) and bilinear-filtered texels near a hole must still
+                    // receive, and a step would draw a hard ring along its iso-contour. Heavily cut
+                    // areas of a layer receive almost nothing, so a mask still cuts its own layer.
+                    // The redistributed share also fades out (the saturate over kRecvKnee) as the
+                    // receiver pool vanishes, instead of amplifying a vanishing slot to full
+                    // coverage. Whatever is not redistributed falls to the base through the baseW
+                    // recompute below, so a sparse layer over the base still reveals the base.
                     float freed = 0.0;
                     float recvSum = 0.0;
                     float recv[4];
@@ -272,8 +274,8 @@ PSOutput main(PSIn i) {
                 float baseW = saturate(1.0 - (w.x + w.y + w.z + w.w));
                 float3 c, nTS, orm;
                 if (!heightBound) {
-                    // LINEAR blend (OFF path) - byte-identical to pre-height-blend: base gets the
-                    // remainder weight, each active palette slot gets its raw weight.
+                    // Linear blend (height blend off): the base gets the remainder weight, and each
+                    // active palette slot gets its raw weight.
                     c = baseCol * baseW;
                     nTS = baseNrm * baseW;
                     orm = baseOrm * baseW;
@@ -291,7 +293,7 @@ PSOutput main(PSIn i) {
                         }
                     }
                 } else {
-                    // HEIGHT-BLEND (Mishkinis): sample each active slot's maps once, then re-bias the
+                    // Height blend (Mishkinis): sample each active slot's maps once, then re-bias the
                     // weights toward the tallest contributor with a soft skirt of width `contrast`,
                     // renormalize (stays convex), and combine albedo/normal/ORM with the new weights.
                     float3 slotC[4], slotN[4]; float3 slotO[4]; float slotH[4];
@@ -312,7 +314,7 @@ PSOutput main(PSIn i) {
                             slotH[k] = HeightArray.SampleGrad(AlbedoSampler, uvk, gx, gy).r;
                         }
                     }
-                    // Scores = weight + height; the base competes only when it has remainder weight.
+                    // Scores are weight plus height; the base competes only when it has remainder weight.
                     float sBase = (baseW > 0.0) ? (baseW + baseH) : -1e30;
                     float sMax = sBase;
                     float sK[4];
@@ -353,12 +355,12 @@ PSOutput main(PSIn i) {
             blendedOrm = baseOrm;
         }
     } else {
-        base = rampCol; // no material at all -> the ramp (headless tools, layerless terrains)
+        base = rampCol; // no material at all: the ramp (headless tools, layerless terrains)
     }
 
-    // Perturb the shading normal by the blended tangent-space normal. The frame is analytic in the
-    // CHUNK frame: the tiling UV is terrain-LOCAL XZ, so the map's U axis is
-    // local +X rotated to world by ChunkToWorld (world +X would shear on a rotated terrain).
+    // Perturb the shading normal by the blended tangent-space normal. The tangent frame is analytic
+    // in the chunk frame: the tiling UV is terrain-local XZ, so the map's U axis is local +X rotated
+    // to world by ChunkToWorld (world +X would shear on a rotated terrain).
     float3 axisU = normalize(mul(float4(1.0, 0.0, 0.0, 0.0), ChunkToWorld).xyz);
     float3 T = normalize(axisU - n * dot(axisU, n));
     float3 B = cross(n, T);
@@ -366,7 +368,7 @@ PSOutput main(PSIn i) {
     float ndlN = saturate(dot(N, sun));
     float ao = blendedOrm.r;
 
-    // CSM: attenuate only the DIRECT (sun) term; ambient is indirect (AO-modulated). The shadow bias
+    // CSM: attenuate only the direct (sun) term; ambient is indirect (AO-modulated). The shadow bias
     // uses the stable geometric normal n (perturbed N would add acne from high-frequency detail).
     float viewDepth = -mul(float4(i.worldPos, 1.0), View).z;
     float shadow = lerp(1.0, SampleCSM(i.worldPos, n, ndlN, viewDepth), saturate(ShadowStrength));
@@ -374,7 +376,7 @@ PSOutput main(PSIn i) {
     const float3 ambient = float3(0.28, 0.30, 0.34);
     float3 lit = base * (ambient * ao + ndlN * shadow);
 
-    // GBuffer motion vector: current vs previous NDC (unjittered), NDC.y flipped vs UV.y.
+    // GBuffer motion vector: current minus previous NDC (unjittered), with NDC.y flipped relative to UV.y.
     float2 curNDC  = i.curClip.xy  / i.curClip.w  + Jitter;
     float2 prevNDC = i.prevClip.xy / i.prevClip.w + PrevJitter;
 

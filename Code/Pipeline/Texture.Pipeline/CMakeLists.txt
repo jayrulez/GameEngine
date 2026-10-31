@@ -1,4 +1,4 @@
-# Pipeline::Texture - `texture.pipeline` (tooling: TextureAsset + builder + importer).
+# Pipeline::Texture - `texture.pipeline` (tooling: TextureAsset, its builder and importer).
 util_add_engine_library(Texture.Pipeline ALIAS Pipeline::Texture)
 target_link_libraries(Texture.Pipeline PUBLIC
     Foundation::Core Pipeline::Core Pipeline::Importer Foundation::RHI Foundation::Texture Foundation::Texture.Resource

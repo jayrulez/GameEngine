@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Pipeline::Core - :asset_creator partition (agent-playtesting-and-asset-creation.md P1).
+// Pipeline::Core - :asset_creator partition.
 //
 // An AssetCreator is one way to make a new source asset from nothing (File > New in the editor,
 // asset_create over MCP): a fresh instance of its type, seeded with its defaults, in a group. It
@@ -36,7 +36,7 @@ export namespace pipeline
         /// refuses.
         StringView sourcesRoot;
         /// The name asked for; empty lets the creator use its own ("Material"). A creator makes
-        /// it unique in the group, so a caller that wants it EXACT refuses a taken name first.
+        /// it unique in the group, so a caller that wants it exact refuses a taken name first.
         StringView name;
         /// The creator's folder under the root when nothing was picked; empty is the root.
         StringView defaultGroup;
@@ -109,7 +109,7 @@ export namespace pipeline
             return run(context);
         }
 
-        /// The group a creation lands in, WITHOUT making it: the picked group, else the default
+        /// The group a creation lands in, without making it: the picked group, else the default
         /// group if it exists, else the root; null when the default group does not exist yet
         /// (nothing in it can clash).
         [[nodiscard]] foundation::content::Group* TargetFor(foundation::content::Group* picked,
@@ -190,7 +190,7 @@ export namespace pipeline
             return nullptr;
         }
 
-        /// The ONE creator of `typeName`, or null when there is none or several (materials come
+        /// The one creator of `typeName`, or null when there is none or several (materials come
         /// as PBR and Unlit, so the type alone does not say which).
         [[nodiscard]] const AssetCreator* FindByType(StringView typeName) const noexcept
         {

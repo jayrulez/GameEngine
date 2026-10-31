@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Image data types: ImageColorSpace, OwnedImageData, ImageDataRef.
-/// Ported from Sedulous.Images.ImageData.
 
 module;
 #include "Core/Prelude.h"
@@ -31,9 +30,9 @@ export namespace foundation::image
         Linear,
     };
 
-    // Reflects ImageColorSpace for tooling (enum-by-name dropdowns) + scripting. Idempotent;
-    // called by consumers that need the enum names (texture/image asset registration). Body
-    // lives in the impl unit (gcc module-interface hygiene).
+    // Reflects ImageColorSpace for tooling (enum-by-name dropdowns) and scripting. Idempotent;
+    // called by consumers that need the enum names (texture and image asset registration). The
+    // body lives in the implementation unit, as REFLECT_* bodies in an interface trouble GCC.
     void RegisterImageReflection();
 
     /// Abstract interface for image data. Implemented by OwnedImageData (owning)
@@ -44,7 +43,7 @@ export namespace foundation::image
     public:
         ImageData() : m_instanceId(NextInstanceId()) {}
         // Copies are new identities; assignment keeps the target's identity (renderer
-        // caches key on it - see InstanceId()).
+        // caches key on it; see InstanceId()).
         ImageData(const ImageData&) : m_instanceId(NextInstanceId()) {}
         ImageData& operator=(const ImageData&) { return *this; }
         virtual ~ImageData() = default;
@@ -55,14 +54,14 @@ export namespace foundation::image
         [[nodiscard]] virtual ImageColorSpace ColorSpace() const = 0;
 
         /// Process-unique generation id, minted per constructed instance. Identity-keyed
-        /// GPU caches (VGRenderer's texture cache) MUST validate this alongside the raw
-        /// pointer: after delete, the allocator can hand a NEW image the SAME address, and
-        /// a pointer-only key then serves the dead image's texture (the editor's
-        /// rainbow-glyph stale previews). Never key a cache on ImageData* alone.
+        /// GPU caches (VGRenderer's texture cache) must validate this alongside the raw
+        /// pointer: after delete, the allocator can hand a new image the same address, and
+        /// a pointer-only key then serves the dead image's texture. Never key a cache on
+        /// ImageData* alone.
         [[nodiscard]] u64 InstanceId() const { return m_instanceId; }
 
     private:
-        // ONE counter per process (ImageDataImpl.cpp): a static in this interface unit is
+        // One counter per process (ImageDataImpl.cpp): a static in this interface unit is
         // instantiated per shared library, and two libraries would mint the same id.
         static u64 NextInstanceId();
         u64 m_instanceId = 0;

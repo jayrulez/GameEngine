@@ -83,7 +83,7 @@ TEST_CASE("runtime: fixed stepper - exact cadence, alpha, and the hitch clamp")
 {
     using foundation::runtime::FixedStepper;
 
-    // Exact cadence: sixty 1/60 frames = sixty steps, alpha stays ~0 (no drift blowup).
+    // Exact cadence: sixty 1/60 frames give sixty steps, alpha stays ~0 (no drift blowup).
     FixedStepper stepper;
     stepper.step = 1.0f / 60.0f;
     stepper.maxSteps = 4;
@@ -97,7 +97,7 @@ TEST_CASE("runtime: fixed stepper - exact cadence, alpha, and the hitch clamp")
     CHECK(stepper.Alpha() >= 0.0f);
     CHECK(stepper.Alpha() < 1.0f);
 
-    // Sub-step frames accumulate: two half-steps = one step, alpha reflects the leftover.
+    // Sub-step frames accumulate: two half-steps make one step, alpha reflects the leftover.
     FixedStepper half;
     half.step = 0.02f;
     CHECK(half.Advance(0.01f) == 0u);
@@ -105,7 +105,7 @@ TEST_CASE("runtime: fixed stepper - exact cadence, alpha, and the hitch clamp")
     CHECK(half.Advance(0.01f) == 1u);
     CHECK(half.Alpha() == doctest::Approx(0.0f).epsilon(0.01));
 
-    // A hitch is CLAMPED, never a step storm: one 1-second frame at 1/60 yields exactly
+    // A hitch is clamped, never a step storm: one 1-second frame at 1/60 yields exactly
     // maxSteps, the excess time is dropped, and alpha stays a valid weight in [0,1).
     FixedStepper hitch;
     hitch.step = 1.0f / 60.0f;
@@ -113,7 +113,7 @@ TEST_CASE("runtime: fixed stepper - exact cadence, alpha, and the hitch clamp")
     CHECK(hitch.Advance(1.0f) == 4u);
     CHECK(hitch.Alpha() >= 0.0f);
     CHECK(hitch.Alpha() < 1.0f);
-    // The next normal frame is back to a single step - no debt carried.
+    // The next normal frame is back to a single step; no debt is carried.
     CHECK(hitch.Advance(1.0f / 60.0f) <= 1u);
 
     // Degenerate inputs: negative/zero dt never steps; zero step never divides by zero.
@@ -188,7 +188,7 @@ TEST_CASE("runtime: Dispose shuts down running subsystems")
         Sys<1>* a = ctx.AddSubsystem<Sys<1>>(0, nullptr);
         ctx.Startup();
         CHECK(a->IsInitialized());
-        // ctx destructs here -> Dispose -> Shutdown -> destroy
+        // ctx destructs here: Dispose, then Shutdown, then destroy
     }
     // (Lifecycle correctness is covered above; this exercises the dtor path.)
     CHECK(shutdowns == 0);
@@ -207,9 +207,9 @@ TEST_CASE("runtime: register a caller-owned subsystem; SubsystemManager does not
         ctx.Update(0.016f);
         CHECK(owned.inits == 1);
         CHECK(owned.updates == 1);
-        // ctx disposes here: shuts the subsystem down but must NOT destroy it.
+        // ctx disposes here: shuts the subsystem down but must not destroy it.
     }
-    CHECK(owned.shutdowns == 1); // object still valid -> reading it is safe
+    CHECK(owned.shutdowns == 1); // object still valid, so reading it is safe
 }
 
 TEST_CASE("runtime: subsystems registered after Startup come up immediately")
@@ -358,7 +358,7 @@ TEST_CASE("embedded host routes Ctx to the runtime context and exit to the embed
     foundation::runtime::SubsystemManager runtimeContext(DefaultAllocator());
     foundation::runtime::EmbeddedApplicationHost embedded(outer, runtimeContext);
 
-    // The hosted app configures into the EMBEDDED context, not the editor's.
+    // The hosted app configures into the embedded context, not the editor's.
     EmbeddedProbeApp app;
     app.Configure(embedded);
     CHECK(app.configuredInto == &runtimeContext);
@@ -368,7 +368,7 @@ TEST_CASE("embedded host routes Ctx to the runtime context and exit to the embed
     CHECK(embedded.MainRenderWindow() == nullptr);
     CHECK(embedded.OpenWindow({}, {}) == nullptr);
 
-    // Exit means "stop the play session" - the embedder's handler receives it.
+    // Exit means "stop the play session"; the embedder's handler receives it.
     int exitCode = -1;
     embedded.SetExitHandler(
         foundation::core::Function<void(int)>{[&](int code) { exitCode = code; }});
@@ -377,9 +377,9 @@ TEST_CASE("embedded host routes Ctx to the runtime context and exit to the embed
 }
 
 // ---------------------------------------------------------------------------
-// Plugin cross-boundary identity (ENGINE_SHARED_LIBS lanes only) - the supported
-// plugin model is plugins linked against the SHARED engine; this proves the
-// shared-libraries work across a real dlopen boundary (shared-libraries.md P4).
+// Plugin cross-boundary identity (ENGINE_SHARED_LIBS lanes only). The supported
+// plugin model is plugins linked against the shared engine; this proves type and
+// object identity across a real dlopen boundary.
 // ---------------------------------------------------------------------------
 #ifdef CROSS_PLUGIN_PATH
 #include "CrossBoundaryProbe.h"
@@ -390,7 +390,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
 
     SubsystemManager ctx(DefaultAllocator());
     RegisterCoreTypes(); // the host image patches Float3's metadata (see 3b)
-    // Host-side probe subsystem, registered BEFORE the plugin loads.
+    // Host-side probe subsystem, registered before the plugin loads.
     crossprobe::HostProbeSubsystem hostProbe;
     ctx.RegisterSubsystem<crossprobe::HostProbeSubsystem>(&hostProbe);
 
@@ -419,14 +419,14 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
     auto loaded = host.Load(path);
     REQUIRE(loaded.HasValue());
     CHECK(loaded.Value()->Name() == StringView{u8"CrossPlugin"});
-    // The plugin contributed its Fancy manager (S1) - recorded, and reversed below.
+    // The plugin contributed its Fancy manager: recorded, and reversed below.
     CHECK(foundation::scene::SceneModuleContributions::Global().Contains(
         TypeOf<crossprobe::FancyManager>().id));
 
     DynamicLibrary probe{path};
     REQUIRE(probe.IsLoaded());
 
-    // 1. The plugin resolved the HOST's subsystem through the TypeId-keyed SubsystemManager
+    // 1. The plugin resolved the host's subsystem through the TypeId-keyed SubsystemManager
     //    (its own TypeOf<HostProbeSubsystem> copy lives at a different address).
     const auto resolved = probe.GetSymbol<int (*)()>(u8"CrossPluginResolvedHostValue");
     REQUIRE(resolved != nullptr);
@@ -452,10 +452,10 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
     REQUIRE(found != nullptr);
     CHECK(found->id == crossprobe::ProbeObject::StaticType().id);
 
-    // 3b. TypeOf<T>() is ONE TypeInfo per process: the plugin's own TypeOf<Float3>() is
+    // 3b. TypeOf<T>() is one TypeInfo per process: the plugin's own TypeOf<Float3>() is
     //     the host's slot and carries the properties Core's registrar patched in (with a
-    //     per-image TypeInfo the plugin would read an unpatched copy: 0 properties, the
-    //     W1 finding). Core types are registered by the host, before the plugin loaded.
+    //     per-image TypeInfo the plugin would read an unpatched copy with 0 properties).
+    //     Core types are registered by the host, before the plugin loaded.
     const auto pluginTypeOf =
         probe.GetSymbol<const TypeInfo* (*)()>(u8"CrossPluginTypeOfFloat3");
     const auto pluginPropertyCount =
@@ -466,7 +466,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
     CHECK(pluginPropertyCount() == 3u);
     CHECK(Properties(TypeOf<Float3>()).Size() == 3u);
 
-    // 4. Unload reverses the RECORDED registrations (the N6 RegistrationScope): the
+    // 4. Unload reverses the recorded registrations (the RegistrationScope): the
     //    registry entry pointing into the closed library is gone...
     host.UnloadAll();
     CHECK(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") == nullptr);
@@ -481,8 +481,8 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
     host.UnloadAll();
     CHECK(GlobalTypeRegistry().FindByName("crossprobe", "ProbeObject") == nullptr);
 
-    // 5. The editor's hot-reload shape (N6): unload KEEPING the old mapping alive
-    //    (leak-on-purpose), then load a fresh versioned COPY - dlopen refcounts by
+    // 5. The editor's hot-reload shape: unload keeping the old mapping alive
+    //    (leaked on purpose), then load a fresh versioned copy. dlopen refcounts by
     //    path, so only a new file yields a genuinely new module. Registrations land
     //    in the freed slots.
     const StringView copyPath = u8".test-scratch/reload-copy-crossplugin.so";
@@ -509,7 +509,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
             TypeOf<crossprobe::FancyManager>().id)); // the contribution reversed with it
     }
 
-    // 6. The MyFancyComponent walkthrough (game-native-code.md N6 + S1): a scene ALIVE across
+    // 6. The MyFancyComponent walkthrough: a scene alive across
     //    a plugin reload keeps a plugin-owned component through the snapshot bracket.
     {
         using foundation::scene::Scene;
@@ -526,7 +526,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
             },
             live);
 
-        // Plugin loads AFTER the scene exists: the contribution reaches the live scene.
+        // Plugin loads after the scene exists: the contribution reaches the live scene.
         auto again = host.Load(copyPath);
         REQUIRE(again.HasValue());
         crossprobe::FancyManager* fancy = scene.GetSystem<crossprobe::FancyManager>();
@@ -534,8 +534,8 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
         const foundation::scene::EntityHandle hero = scene.CreateEntity(u8"hero");
         fancy->Add(hero).payload = 9;
 
-        // The reload bracket: snapshot -> unload (the manager leaves the live scene while its
-        // code is mapped; the old mapping is kept) -> load the rebuild -> restore.
+        // The reload bracket: snapshot, unload (the manager leaves the live scene while its
+        // code is mapped; the old mapping is kept), load the rebuild, restore.
         auto snapshot = foundation::scene::SceneSnapshot::Capture(scene);
         REQUIRE(snapshot);
         host.UnloadAll(/*closeLibraries*/ false);

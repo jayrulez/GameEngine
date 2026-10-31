@@ -3,15 +3,15 @@
 
 // UI Toolkit - :code_lexer partition (interface).
 //
-// The lexing seam of CodeEditView, built on the line-state
-// model: a lexer receives ONE line plus the entry state (e.g. "inside a block comment") and
+// The lexer interface of CodeEditView, built on the line-state
+// model: a lexer receives one line plus the entry state (e.g. "inside a block comment") and
 // returns styled token spans plus the exit state. CodeHighlighter caches per-line entry/exit
 // states and tokens; an edit re-lexes from the edited line downward only until exit states
 // converge (usually one line), lazily up to the last visible line.
 //
 // Implementations live beside this file: CodeHighlighter.cpp (the incremental cache),
-// CLikeLexer.cpp (the configurable scanner behind AngelScript/Luau/HLSL), XmlLexer.cpp, and
-// CodeLexerFactory.cpp (language-id mapping + the keyword tables).
+// CLikeLexer.cpp (the configurable scanner for C-family languages such as AngelScript and HLSL),
+// LuaLikeLexer.cpp (Luau), XmlLexer.cpp, and CodeLexerRegistry.cpp (language id to lexer factory).
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +30,7 @@ export namespace foundation::ui::toolkit
 
     enum class CodeTokenKind : u8
     {
-        Default,      // identifiers, plain text - drawn in the theme text color
+        Default,      // identifiers, plain text; drawn in the theme text color
         Keyword,
         Type,         // builtin/primitive type names
         Number,
@@ -54,7 +54,7 @@ export namespace foundation::ui::toolkit
     };
 
     /// Lexes one line given the entry state; appends tokens and returns the exit state.
-    /// State 0 is "default"; everything else is lexer-private. Contract: all VISIBLE content
+    /// State 0 is "default"; everything else is lexer-private. Contract: all visible content
     /// is covered by a token (the renderer draws only tokens); whitespace may be skipped.
     class ICodeLexer
     {
@@ -141,8 +141,8 @@ export namespace foundation::ui::toolkit
 
     // Lua-family syntax the C-like scanner cannot express: `--` line comments, `--[[ ]]` /
     // `--[=[ ]=]` long (level-bracketed) block comments, `[[ ]]` / `[=[ ]=]` long strings, and
-    // backtick interpolated strings. Keyword/type tables come from the OWNER, like CLikeLexer -
-    // the toolkit ships no language tables. Comment-toggle (Ctrl+/) uses `--`.
+    // backtick interpolated strings. As with CLikeLexer, the keyword and type tables come from
+    // the owner; the toolkit ships no language tables. Comment-toggle (Ctrl+/) uses `--`.
     struct LuaLikeLexerSpec
     {
         Span<const StringView> keywords;
@@ -181,11 +181,10 @@ export namespace foundation::ui::toolkit
 
     // ---- language registry -------------------------------------------------------------------
 
-    /// Language-id -> lexer-factory registry. TOOLKIT SHIPS NO LANGUAGE TABLES: the modules
-    /// that OWN a language register here (editor.script registers "angelscript" and
-    /// "luau" beside the page; the shader page will bring "hlsl") - the same layering
-    /// as ICompletionProvider, where reflection-fed providers plug in from outside. Pages
-    /// with static knowledge (the XML document page) construct their lexer directly instead.
+    /// Maps a language id to a lexer factory. The toolkit ships no language tables: the module
+    /// that owns a language registers its lexer here, the same layering as ICompletionProvider,
+    /// where providers fed by reflection plug in from outside. A page with static knowledge
+    /// (an XML document page) constructs its lexer directly instead.
     /// Ids are ASCII case-insensitive; Create returns null for unknown ids (unstyled text).
     class CodeLexerRegistry
     {

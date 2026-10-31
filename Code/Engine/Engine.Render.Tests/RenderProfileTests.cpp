@@ -139,7 +139,7 @@ TEST_CASE("render profiles: the blocks round-trip their source, and older blocks
     CHECK(read.Environment().source == SettingsSource::Profile);
     CHECK(read.Environment().profile.id == Guid{0x12u, 0x34u});
 
-    // A v5 environment (no source) and a v3 post block read as their scene's own values.
+    // A version 5 environment (no source) and a version 3 post block read as their scene's own values.
     EnvironmentSettings older;
     older.ambientIntensity = 0.4f;
     MemoryStream v5 = WriteAtVersion(envType, 5, [&](ISerializer& ar)

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Audio - implementation unit: the per-frame engine drive (listener
-// push with active-camera fallback + engine tick) and the component reflection bodies.
-// Both live OUTSIDE the interface for GCC: the render import stays out of the
-// interface's module graph, and REFLECT_* bodies in a partition interface
-// make GCC emit an unreadable gcm cluster for -fno-module-lazy consumers.
+// Engine::Audio - implementation unit: the per-frame engine drive (the listener push with its
+// active-camera fallback, and the engine tick) and the component reflection bodies. Both live
+// outside the interface for GCC: the render import stays out of the interface's module graph,
+// and REFLECT_* bodies in a partition interface make GCC emit an unreadable gcm cluster for
+// -fno-module-lazy consumers.
 
 module;
 #include "Core/Prelude.h"
@@ -33,8 +33,8 @@ namespace engine::audio
 {
     namespace
     {
-        // Godot behavior: no listener component anywhere = the active camera IS the
-        // listener. First enabled camera of the scene wins.
+        // With no listener component anywhere, the active camera is the listener. The first
+        // enabled camera of the scene wins.
         [[nodiscard]] bool CameraListenerPose(foundation::scene::Scene& scene, Float3& outPosition,
                                               Float3& outForward, Float3& outUp)
         {
@@ -70,11 +70,11 @@ namespace engine::audio
         }
         PROFILE_SCOPE("Audio.Engine");
 
-        // Listeners (multi-listener): every active listener COMPONENT across the
-        // started scenes fills an engine listener slot, in scene order, up to the
-        // engine's configured count - spatial voices attenuate against the CLOSEST
-        // enabled listener (split-screen ears). No component anywhere = the first
-        // started scene's camera stands in on slot 0. Unused slots disable.
+        // Listeners (multi-listener): every active listener component across the started scenes
+        // fills an engine listener slot, in scene order, up to the engine's configured count.
+        // Spatial voices attenuate against the closest enabled listener (split-screen ears). With
+        // no component anywhere, the first started scene's camera stands in on slot 0. Unused
+        // slots are disabled.
         ReapEndedRuns(deltaTime);
 
         // Only heard runs' scenes feed the listeners: two Game tabs' cameras must not both be
@@ -123,7 +123,7 @@ namespace engine::audio
             engine->SetListenerEnabled(i, false);
         }
 
-        engine->Update(deltaTime); // reap + dedupe clock (+ headless pump)
+        engine->Update(deltaTime); // reap, the dedupe clock, and the headless pump
     }
 }
 
@@ -138,7 +138,7 @@ namespace engine::audio
         builder.Value("UI", AudioBus::UI);
     }
 
-    // A voice the Audio facade started (Sedulous's VoiceHandle): invalid when nothing played.
+    // A voice the Audio facade started: invalid when nothing played.
     REFLECT_VALUE(VoiceHandle, "rtti::engine::audio")
     {
         builder.Property<&VoiceHandle::slot>("slot");
@@ -165,15 +165,15 @@ namespace engine::audio
 
     REFLECT_VALUE(AudioSourceComponent, "rtti::engine::audio")
     {
-        // v4: sourceType discriminant (Clip/Cue) drives the inspector + runtime.
+        // The sourceType discriminant (Clip/Cue, data version 4) drives the inspector and runtime.
         builder.Attribute("displayName", String(u8"Audio Source"))
             .Attribute("category", String(u8"Audio"))
             .Attribute("description",
                        String(u8"Plays a sound clip or cue from the entity, positioned in 3D or "
                               u8"flat."))
             .DataVersion(4);
-        // Script (Track A): AudioSourceComponent.of(entity) -> live volume/pitch/loop/spatial/etc.
-        // play/stop/pause + clip swap are engine ops -> SceneAudio.of(scene) (world ops keyed by entity).
+        // Scripts: AudioSourceComponent.of(entity) gives live volume/pitch/loop/spatial/etc.
+        // play/stop/pause and clip swap are engine ops on SceneAudio.of(scene) (world ops keyed by entity).
         builder.Method<&foundation::script::ComponentOf<AudioSourceComponent>, AudioSourceComponent>(
             "of");
         // Source: pick Clip or Cue; only the chosen Ref shows (visibleWhen keys on sourceType).
@@ -227,7 +227,7 @@ namespace engine::audio
 
     REFLECT_MEMBERS(Audio, "rtti::engine::audio")
     {
-        // By asset id and AudioBus, as Sedulous's facade: each an ARITY FAMILY.
+        // By asset id and AudioBus: each is an arity family.
         builder.Method<static_cast<VoiceHandle (*)(Guid)>(&Audio::playOneShot)>("playOneShot", {"clip"});
         builder.Method<static_cast<VoiceHandle (*)(Guid, AudioBus)>(&Audio::playOneShot)>(
             "playOneShot", {"clip", "bus"});
@@ -247,7 +247,7 @@ namespace engine::audio
             "playMusic", {"clip", "crossFadeSeconds", "volume"});
         builder.Method<&Audio::setBusVolume>("setBusVolume", {"bus", "volume"});
         builder.Method<&Audio::busVolume>("busVolume", {"bus"});
-        // Ours beside them: a bus by name (the layout's custom buses too), muting, the music stop.
+        // Beside them: a bus by name (the layout's custom buses too), muting, the music stop.
         builder.Method<&Audio::setNamedBusVolume>("setNamedBusVolume", {"bus", "volume"});
         builder.Method<&Audio::namedBusVolume>("namedBusVolume", {"bus"});
         builder.Method<&Audio::setBusMuted>("setBusMuted");
@@ -268,7 +268,7 @@ namespace engine::audio
             "setVoicePitch", {"voice", "pitch"});
         builder.Method<static_cast<void (*)(VoiceHandle, f32, f32)>(&Audio::setVoicePitch)>(
             "setVoicePitch", {"voice", "pitch", "seconds"});
-        // Content-path playback: path = the editor's source-DB content path.
+        // Content-path playback: the path is the editor's source-DB content path.
         builder.Method<&Audio::playOneShotPath>("playOneShotPath");
         builder.Method<&Audio::playOneShot3DPath>("playOneShot3DPath");
         builder.Method<&Audio::playCuePath>("playCuePath");
@@ -277,8 +277,8 @@ namespace engine::audio
     }
 
     // The scene-bound audio handle: SceneAudio.of(scene).play(entity) / stop / pause / isPlaying /
-    // setClip(entity, id). `of` returns SceneAudio by value (concrete cross-backend return), like
-    // ScenePhysics. All world ops keyed by entity - they reach the scene's AudioEngine.
+    // setClip(entity, id). `of` returns SceneAudio by value (a concrete cross-backend return), like
+    // ScenePhysics. All world ops are keyed by entity, since they reach the scene's AudioEngine.
     REFLECT_VALUE(SceneAudio, "rtti::engine::audio")
     {
         builder.Method<&SceneAudio::play>("play", {"entity"});
@@ -296,8 +296,8 @@ namespace engine::audio
     {
         RegisterAudioComponentReflection(); // ensure component TypeData (incl `of`) is built first
         GlobalTypeRegistry().Register(Audio::StaticType());
-        // So the behavior/Level prelude imports `Audio` too (AngelScript binds by
-        // registry). Without this only top-level `main`/Game scripts can see it. Idempotent.
+        // So the behavior/Level prelude imports `Audio` too (AngelScript binds by registry).
+        // Without this only top-level `main`/Game scripts can see it. Idempotent.
         foundation::script::RegisterExtraFacadeName(u8"Audio");
         // The bus its calls take, and the voice its plays return.
         GlobalTypeRegistry().Register(core::TypeOf<AudioBus>());
@@ -305,13 +305,13 @@ namespace engine::audio
         GlobalTypeRegistry().Register(core::TypeOf<VoiceHandle>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<VoiceHandle>());
 
-        // Surface the audio SOURCE component to script (AudioSourceComponent.of(entity) - live
+        // Surface the audio source component to scripts (AudioSourceComponent.of(entity), with live
         // volume/pitch/loop/...): register it, seed the emission root, name it for the prelude.
         GlobalTypeRegistry().Register(core::TypeOf<AudioSourceComponent>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<AudioSourceComponent>());
         foundation::script::RegisterExtraFacadeName(u8"AudioSourceComponent");
 
-        // The scene-bound audio handle (SceneAudio.of(scene)): reflect it, register + seed + name it.
+        // The scene-bound audio handle (SceneAudio.of(scene)): reflect, register, seed and name it.
         RttiRegisterValue_SceneAudio();
         GlobalTypeRegistry().Register(core::TypeOf<SceneAudio>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<SceneAudio>());

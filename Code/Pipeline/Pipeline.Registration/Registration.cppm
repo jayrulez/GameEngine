@@ -3,18 +3,15 @@
 
 // Pipeline::Registration - the `pipeline.registration` module.
 //
-// The pipeline's COMPOSITION ROOT as a library. Every host that cooks or imports - the CLI
-// cooker, the export packager, the editor, the headless MCP server - needs the SAME set of
-// builders, importers, and product/resource type registrations. Registering that set inline in
-// each host's main() duplicates it verbatim; a builder added to two of three copies is a silent
-// gap (cook works in the editor, missing from CLI export - the collision-cook class of bug).
-// This library is the single source of truth: it links every pipeline module (its entire job -
-// the deliberate fan-in point) and exposes three entry points the hosts call instead of
-// restating the list.
+// The pipeline's composition root as a library. Every host that cooks or imports (the CLI
+// cooker, the export packager, the editor, the headless MCP server) needs the same set of
+// builders, importers, and product/resource type registrations. A copy of that set in each
+// host's main() drifts: a builder added to two of three copies cooks in the editor and is
+// missing from a CLI export. This library is the one list: it links every pipeline module and
+// exposes the entry points the hosts call instead of restating it.
 //
-// The wide imports live in the implementation unit, not here: this interface stays lean (three
-// declarations + the tripwire counts) so the four hosts that consume it do not each pull the
-// whole pipeline into their BMI (GCC module-interface hygiene).
+// The wide imports live in the implementation unit, not here, so this interface stays lean and
+// the hosts that consume it do not each pull the whole pipeline into their BMI.
 
 module;
 #include "Core/Prelude.h"
@@ -32,9 +29,9 @@ export namespace pipeline
 {
     /// Register every asset/product/resource type, script backend, and per-language cook the
     /// pipeline ships, into the global type/serializable/cook registries. A headless cook needs
-    /// these because ReadObject constructs cooked products BY TYPE NAME. Call once at startup,
-    /// before planning a cook. Does NOT touch a BuilderRegistry (that is RegisterAllBuilders) and
-    /// registers NO editor-UI services (those are the editor's own concern, kept host-side).
+    /// these because ReadObject constructs cooked products by type name. Call once at startup,
+    /// before planning a cook. Does not touch a BuilderRegistry (that is RegisterAllBuilders) and
+    /// registers no editor UI services (those stay with the editor).
     void RegisterPipelineTypes();
 
     /// Populate `registry` with every asset builder the engine ships. Independent of
@@ -62,14 +59,12 @@ export namespace pipeline
                      const ImportOptions* options);
 
     // === Tripwire counts (Pipeline.Registration.Tests asserts against these) ===
-    // A new builder/importer bumps the matching constant DELIBERATELY; a lost registration then
-    // fails the test loudly. This converts "nobody checks the three copies stay in sync" into
-    // "the build checks the one copy is complete".
-    /// The GUI's (a document and a style sheet), when the GUI is built (gui-lab-evolution-3.md E3).
+    // A new builder or importer bumps the matching constant on purpose; a lost registration then
+    // fails the test.
+    /// The GUI's asset kinds (a document and a style sheet), when the GUI is built.
     inline constexpr usize kGuiAssetKinds = 2;
-    // 29 and 12: the old UI's document and theme builders and its importer gone with it.
     inline constexpr usize kBuilderCount = 29 + kGuiAssetKinds;
     inline constexpr usize kImporterCount = 12;
     /// The creators every build has; the scripts add three per language with a cook on top.
-    inline constexpr usize kCreatorCount = 30 + kGuiAssetKinds; // 30: the old UI's document and theme gone
+    inline constexpr usize kCreatorCount = 30 + kGuiAssetKinds;
 }

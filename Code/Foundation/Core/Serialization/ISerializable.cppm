@@ -9,7 +9,7 @@
 // reflected type identity (GetType()), which the polymorphic save/load path uses
 // for a type tag + reflection-driven reconstruction.
 //
-// Value/POD/container types don't need this - they use the non-intrusive
+// Value/POD/container types don't need this; they use the non-intrusive
 // Serialize(ISerializer&, T&) free functions instead. ISerializable is for the
 // objects that live in the content database.
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SelectTransformTool tests: the default viewport tool preserves the pre-framework page
-// behavior exactly - gizmo drags are one undo entry and consume the pointer (pick suppressed),
-// click-pick selects/toggles/clears, editingLocked (Simulate) blocks drags but NOT selection,
-// and OnDeactivate ends an in-flight drag with no half-applied command group.
+// SelectTransformTool tests for the default viewport tool. A gizmo drag is one undo entry and
+// consumes the pointer, so no pick happens; a click-pick selects, toggles or clears;
+// editingLocked (Simulate) blocks drags but not selection; and OnDeactivate ends a drag in
+// progress without leaving a half-applied command group.
 
 #include <doctest/doctest.h>
 
@@ -56,7 +56,7 @@ TEST_CASE("select-tool: identity and default availability")
 {
     Fixture f;
     CHECK(f.tool.Id() == StringView(u8"select"));
-    CHECK(f.tool.IsAvailable()); // the default tool must never report unavailable
+    CHECK(f.tool.IsAvailable()); // the default tool never reports itself unavailable
 }
 
 TEST_CASE("select-tool: click picks the nearest entity, Ctrl toggles, empty space clears")
@@ -66,30 +66,31 @@ TEST_CASE("select-tool: click picks the nearest entity, Ctrl toggles, empty spac
     const Guid farId = f.edit.CreateEntity(u8"Far");
     {
         core::Transform t;
-        t.position = Float3{0.0f, 0.0f, -5.0f}; // behind Near along the same click ray
+        t.position = Float3{0.0f, 0.0f, -5.0f}; // behind Near, along the same click ray
         f.scene.SetLocalTransform(f.edit.Resolve(farId), t);
     }
     Selection<Guid>& selection = f.edit.EntitySelection();
-    // CreateEntity auto-selects (editor UX) - clear so the gizmo is INACTIVE and the first
-    // click below reaches picking instead of the selected entity's center handle.
+    // CreateEntity selects the new entity, so clear the selection: the gizmo is then inactive
+    // and the first click below reaches picking instead of the selected entity's center handle.
     selection.Clear();
 
-    // Click through both entity centers: the NEARER one wins.
+    // Click through both entity centers: the nearer one wins.
     CHECK(!f.tool.Update(Frame(Float3{}, true, true, false)));
     CHECK(selection.Contains(nearId));
     CHECK(!selection.Contains(farId));
     (void)f.tool.Update(Frame(Float3{}, false, false, true));
 
-    // Ctrl-click far off to the side: nothing hit, Ctrl preserves the selection.
+    // Ctrl-click far off to the side: nothing is hit, and Ctrl preserves the selection.
     CHECK(!f.tool.Update(Frame(Float3{50.0f, 0.0f, 0.0f}, true, true, false, true)));
     CHECK(selection.Contains(nearId));
     (void)f.tool.Update(Frame(Float3{50.0f, 0.0f, 0.0f}, false, false, true));
 
-    // Plain click on empty space clears.
+    // A plain click on empty space clears the selection.
     CHECK(!f.tool.Update(Frame(Float3{50.0f, 0.0f, 0.0f}, true, true, false)));
     CHECK(!selection.Contains(nearId));
 
-    // pointerOver=false: a press cannot pick (click-initiated gestures need the pointer OVER).
+    // With pointerOver=false a press cannot pick; gestures started by a click need the pointer
+    // over the view.
     (void)f.tool.Update(Frame(Float3{50.0f, 0.0f, 0.0f}, false, false, true));
     ViewportToolInput away = Frame(Float3{}, true, true, false);
     away.pointerOver = false;
@@ -105,7 +106,7 @@ TEST_CASE("select-tool: a gizmo drag consumes the pointer, is one undo entry, an
     const Guid otherId = f.edit.CreateEntity(u8"Other");
     {
         core::Transform t;
-        t.position = Float3{20.0f, 0.0f, 0.0f}; // out of the way; must stay unselected
+        t.position = Float3{20.0f, 0.0f, 0.0f}; // out of the way; stays unselected
         f.scene.SetLocalTransform(f.edit.Resolve(otherId), t);
     }
     f.edit.EntitySelection().Set(boxId);
@@ -114,11 +115,12 @@ TEST_CASE("select-tool: a gizmo drag consumes the pointer, is one undo entry, an
     const f32 size = TransformGizmo::ScreenScale(kCamPos, kCamFwd, 1.0472f, Float3{});
     const Float3 grab{size * 0.6f, 0.0f, 0.0f};
 
-    // Hover the X shaft: consumed (hot handle), no command, selection untouched.
+    // Hovering the X shaft is consumed (the handle is hot), with no command and the selection
+    // untouched.
     CHECK(f.tool.Update(Frame(grab, false, false, false)));
     CHECK_FALSE(f.commands.CanUndo());
 
-    // Press-drag-release: +X by ~2, exactly one undo entry, restore on undo.
+    // Press, drag, release: about 2 along +X, exactly one undo entry, restored on undo.
     CHECK(f.tool.Update(Frame(grab, true, true, false)));
     CHECK(f.tool.Update(Frame(grab + Float3{1.0f, 0, 0}, false, true, false)));
     CHECK(f.tool.Update(Frame(grab + Float3{2.0f, 0, 0}, false, true, false)));
@@ -143,9 +145,9 @@ TEST_CASE("select-tool: editingLocked blocks drags but selection picking still w
     const f32 size = TransformGizmo::ScreenScale(kCamPos, kCamFwd, 1.0472f, Float3{});
     const Float3 grab{size * 0.6f, 0.0f, 0.0f};
 
-    // A press on the X shaft with editing locked: the gizmo is pointer-less (no hot handle, no
-    // drag, no command). The press falls through to PICKING - the ray through the shaft misses
-    // the entity's pick sphere, so the selection CLEARS (selecting is not an edit).
+    // A press on the X shaft with editing locked: the gizmo gets no pointer (no hot handle, no
+    // drag, no command). The press falls through to picking; the ray through the shaft misses
+    // the entity's pick sphere, so the selection clears (selecting is not an edit).
     ViewportToolInput locked = Frame(grab, true, true, false);
     locked.editingLocked = true;
     CHECK(!f.tool.Update(locked));
@@ -176,8 +178,8 @@ TEST_CASE("select-tool: OnDeactivate ends an in-flight drag - no half-applied co
 
     f.tool.OnDeactivate(); // tool switch mid-drag
 
-    // The gesture is closed: whatever it left is a COMPLETE undo unit - undo restores the exact
-    // start transform and the stack is empty after (never a dangling open group).
+    // The gesture is closed, and whatever it left is a complete undo unit: undo restores the
+    // exact start transform and leaves the stack empty, with no group left open.
     if (f.commands.CanUndo())
     {
         f.commands.Undo();
@@ -255,7 +257,8 @@ TEST_CASE("select-tool: with a picker a click asks the GPU for the pointer pixel
     Selection<Guid>& selection = f.edit.EntitySelection();
     selection.Clear();
 
-    // Press: a 1x1 request at the pointer pixel; nothing selected until the answer lands.
+    // A press sends a 1x1 request at the pointer pixel; nothing is selected until the answer
+    // arrives.
     CHECK(!f.tool.Update(PixelFrame(Float3{}, true, 123, 45)));
     CHECK(picker.requests == 1u);
     CHECK(picker.lastX == 123);
@@ -265,8 +268,8 @@ TEST_CASE("select-tool: with a picker a click asks the GPU for the pointer pixel
     CHECK(f.tool.HasPendingPick());
     CHECK(selection.IsEmpty());
 
-    // The GPU saw the FAR entity's surface (it is what is drawn under the pointer, whatever the
-    // CPU origin pick would say): the answer wins.
+    // The GPU saw the far entity's surface. That is what is drawn under the pointer, whatever
+    // the CPU origin pick would say, so the GPU answer wins.
     Array<foundation::scene::EntityHandle> hits;
     hits.PushBack(f.edit.Resolve(farId));
     picker.Answer(1, Move(hits));
@@ -291,17 +294,17 @@ TEST_CASE("select-tool: a GPU miss falls back to the CPU pick; Ctrl rides along;
     Selection<Guid>& selection = f.edit.EntitySelection();
     selection.Clear();
 
-    // Click through both origins: the GPU answers "nothing drawn there" (e.g. an empty or a
-    // light) -> the CPU origin pick's nearest entity is selected.
+    // Click through both origins. When the GPU answers that nothing is drawn there (for example
+    // an empty or a light), the nearest entity from the CPU origin pick is selected.
     CHECK(!f.tool.Update(PixelFrame(Float3{}, true, 10, 10)));
     picker.Answer(1, Array<foundation::scene::EntityHandle>{});
     (void)f.tool.Update(PixelFrame(Float3{}, false, 10, 10));
     CHECK(selection.Contains(nearId));
     CHECK(!selection.Contains(farId));
 
-    // Ctrl-click answered with the far entity: toggled INTO the selection (Ctrl was captured
-    // with the click, not read at answer time). The current selection is an entity OFF the
-    // click ray, so its gizmo does not consume the press (the gizmo-first rule is unchanged).
+    // A Ctrl-click answered with the far entity toggles it into the selection; Ctrl is captured
+    // with the click, not read when the answer arrives. The current selection is an entity off
+    // the click ray, so its gizmo does not consume the press (the gizmo still gets first claim).
     (void)f.tool.Update(PixelFrame(Float3{}, false, 10, 10));
     const Guid asideId = f.edit.CreateEntity(u8"Aside");
     {
@@ -321,7 +324,8 @@ TEST_CASE("select-tool: a GPU miss falls back to the CPU pick; Ctrl rides along;
     CHECK(selection.Contains(farId));
     CHECK(!selection.Contains(nearId));
 
-    // Two clicks before any answer: the FIRST request's answer is ignored, the second applies.
+    // Two clicks before any answer: the first request's answer is ignored, and the second
+    // applies.
     selection.Clear();
     CHECK(!f.tool.Update(PixelFrame(Float3{}, true, 10, 10)));
     (void)f.tool.Update(PixelFrame(Float3{}, false, 10, 10));
@@ -368,13 +372,14 @@ TEST_CASE("select-tool: no pixel position, or a picker that refuses, picks on th
     Selection<Guid>& selection = f.edit.EntitySelection();
     selection.Clear();
 
-    // No viewport size on the input (a host without pixels): immediate CPU pick, no request.
+    // With no viewport size on the input (a host without pixels), the CPU picks at once and no
+    // request is sent.
     CHECK(!f.tool.Update(Frame(Float3{}, true, true, false)));
     CHECK(picker.requests == 0u);
     CHECK(selection.Contains(nearId));
     (void)f.tool.Update(Frame(Float3{}, false, false, true));
 
-    // The picker refuses (renderer not ready): immediate CPU pick.
+    // When the picker refuses (the renderer is not ready), the CPU picks at once.
     selection.Clear();
     picker.refuse = true;
     CHECK(!f.tool.Update(PixelFrame(Float3{}, true, 5, 5)));
@@ -382,8 +387,8 @@ TEST_CASE("select-tool: no pixel position, or a picker that refuses, picks on th
     CHECK_FALSE(f.tool.HasPendingPick());
     CHECK(selection.Contains(nearId));
 
-    // A pointer outside the view never asks the GPU (selection cleared first: a selected
-    // entity under the ray would hand the press to its gizmo).
+    // A pointer outside the view never asks the GPU. The selection is cleared first, because a
+    // selected entity under the ray would hand the press to its gizmo.
     picker.refuse = false;
     (void)f.tool.Update(PixelFrame(Float3{}, false, 5, 5));
     selection.Clear();
@@ -440,7 +445,7 @@ TEST_CASE("select-tool: a drag past the threshold becomes a marquee rect pick; t
     Selection<Guid>& selection = f.edit.EntitySelection();
     selection.Clear();
 
-    // Press on empty space far to the side: the click asks the GPU (request 1)...
+    // A press on empty space far to the side: the click asks the GPU (request 1)...
     const Float3 empty{50.0f, 0.0f, 0.0f};
     CHECK(!f.tool.Update(PixelFrame(empty, true, 100, 80)));
     CHECK(f.tool.HasPendingPick());
@@ -449,13 +454,15 @@ TEST_CASE("select-tool: a drag past the threshold becomes a marquee rect pick; t
     CHECK(!f.tool.Update(DragFrame(empty, 102, 81)));
     CHECK(!f.tool.IsMarqueeActive());
     CHECK(f.tool.HasPendingPick());
-    // ...past the threshold it is a marquee: the click's pick is dropped, the pointer consumed.
+    // ...past the threshold it becomes a marquee: the click's pick is dropped and the pointer
+    // consumed.
     CHECK(f.tool.Update(DragFrame(empty, 160, 140)));
     CHECK(f.tool.IsMarqueeActive());
     CHECK_FALSE(f.tool.HasPendingPick());
     CHECK(picker.requests == 1u);
 
-    // Release: ONE rect request over the dragged pixels (inclusive), any corner order.
+    // Release sends one rect request over the dragged pixels (inclusive), whatever the corner
+    // order.
     (void)f.tool.Update(ReleaseFrame(empty, 40, 140));
     CHECK(!f.tool.IsMarqueeActive());
     CHECK(f.tool.HasPendingMarquee());
@@ -464,9 +471,10 @@ TEST_CASE("select-tool: a drag past the threshold becomes a marquee rect pick; t
     CHECK(picker.lastY == 80);
     CHECK(picker.lastW == 61u);
     CHECK(picker.lastH == 61u);
-    CHECK(selection.IsEmpty()); // nothing until the answer lands
+    CHECK(selection.IsEmpty()); // nothing until the answer arrives
 
-    // The answer: both entities drawn in the rect -> both selected; a dead handle is skipped.
+    // The answer has both entities drawn in the rect, so both are selected; a dead handle is
+    // skipped.
     Array<foundation::scene::EntityHandle> hits;
     hits.PushBack(f.edit.Resolve(nearId));
     hits.PushBack(f.edit.Resolve(farId));
@@ -478,7 +486,8 @@ TEST_CASE("select-tool: a drag past the threshold becomes a marquee rect pick; t
     CHECK(selection.Contains(farId));
     CHECK(selection.Items().Size() == 2);
 
-    // A marquee that answers nothing clears (plain), the stale click's answer never applies.
+    // A plain marquee whose answer is empty clears the selection, and the stale click's answer
+    // never applies.
     CHECK(!f.tool.Update(PixelFrame(empty, true, 300, 300)));
     (void)f.tool.Update(DragFrame(empty, 340, 340));
     (void)f.tool.Update(ReleaseFrame(empty, 340, 340));
@@ -522,12 +531,12 @@ TEST_CASE("select-tool: Ctrl-marquee adds to the selection and the press's click
     CHECK(selection.Contains(farId));
     CHECK(selection.Items().Size() == 3);
 
-    // Plain (no Ctrl) press on empty space with a synchronous CPU click (picker refuses): the
-    // click CLEARS the selection; dragging into a marquee puts it back first, then the rect's
+    // A plain (no Ctrl) press on empty space with a synchronous CPU click (the picker refuses):
+    // the click clears the selection, dragging into a marquee restores it, and then the rect's
     // answer replaces it.
     picker.refuse = true;
     CHECK(!f.tool.Update(PixelFrame(empty, true, 200, 200)));
-    CHECK(selection.IsEmpty()); // the click's CPU answer: nothing there
+    CHECK(selection.IsEmpty()); // the click's CPU answer found nothing there
     (void)f.tool.Update(DragFrame(empty, 260, 260));
     CHECK(selection.Items().Size() == 3); // restored while the marquee is dragged
     picker.refuse = false;
@@ -571,7 +580,7 @@ TEST_CASE("select-tool: without a picker the marquee selects the origins project
     CHECK(!selection.Contains(behindId));
     CHECK(selection.Items().Size() == 3);
 
-    // A tight rect around the aside entity's pixel: only it.
+    // A tight rect around the aside entity's pixel selects only that entity.
     i32 ax = 0, ay = 0;
     FixturePixel(Float3{3.0f, 1.0f, 0.0f}, ax, ay);
     CHECK(!f.tool.Update(PixelFrame(empty, true, ax - 6, ay - 6)));
@@ -580,7 +589,7 @@ TEST_CASE("select-tool: without a picker the marquee selects the origins project
     CHECK(selection.Items().Size() == 1);
     CHECK(selection.Contains(asideId));
 
-    // OnDeactivate mid-drag drops the marquee: nothing applied, selection untouched.
+    // OnDeactivate mid-drag drops the marquee: nothing is applied and the selection is untouched.
     CHECK(!f.tool.Update(PixelFrame(empty, true, 0, 0)));
     (void)f.tool.Update(DragFrame(empty, 639, 359));
     CHECK(f.tool.IsMarqueeActive());

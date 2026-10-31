@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Mcp - :asset_delete partition (Sedulous ac63071d).
+// Editor::Mcp - :asset_delete partition.
 //
-// asset_delete: the Assets browser's Delete for an agent. Nothing could remove an asset, so an
-// agent replacing one left the old behind. Refused while anything still uses it, by the same
-// scan asset_uses runs, unless `force` says the breakage is meant; the host does the rest (the
-// editor closes the asset's page and waits out a cook, IProjectOperations::Delete).
+// asset_delete: the Assets browser's Delete for an agent, so an agent replacing an asset can
+// remove the old one. It is refused while anything still uses the asset, by the same scan
+// asset_uses runs, unless `force` says the breakage is intended. The host does the rest through
+// IProjectOperations::Delete (the editor closes the asset's page and waits out a cook).
 
 module;
 #include "Core/Prelude.h"
@@ -66,7 +66,7 @@ export namespace editor::mcp
                 content::Instance* instance = s->project->SourceDb().GetInstance(id);
                 if (instance == nullptr)
                 {
-                    // A re-entered call (waiting out a cook) whose asset went meanwhile: done.
+                    // A re-entered call (waiting out a cook) whose asset is already gone: done.
                     if (call.isReentry)
                     {
                         JsonValue gone = JsonValue::MakeObject();

@@ -3,7 +3,7 @@
 
 // Pipeline::ModelImporter tests - load a real glTF, cook it through the importer into a
 // content DB, then bind the cooked ModelResource back through the resource manager and
-// verify the whole convert -> cook -> bind chain (manifest nodes + resolved meshes).
+// verify the whole chain from convert through cook to bind (manifest nodes and resolved meshes).
 
 #include "Core/Prelude.h"
 #include <doctest/doctest.h>
@@ -148,7 +148,7 @@ TEST_CASE("import skinned glTF -> cooked skeleton + animations + skinned mesh")
     resource::Proxy<model::ModelResource> model = manager.Bind<model::ModelResource>(modelGuid);
     REQUIRE(model);
 
-    // The Fox is skinned + animated: a resolved skeleton with bones + animation clips.
+    // The Fox is skinned and animated: a resolved skeleton with bones, and animation clips.
     REQUIRE(model->skeleton);
     CHECK(model->skeleton->BoneCount() > 0);
     CHECK(model->animations.Size() > 0);
@@ -158,7 +158,7 @@ TEST_CASE("import skinned glTF -> cooked skeleton + animations + skinned mesh")
         CHECK(clip->duration > 0.0f);
     }
 
-    // The mesh is flagged skinned + resolved as a SkinnedMesh (skin stream present).
+    // The mesh is flagged skinned and resolved as a SkinnedMesh (skin stream present).
     REQUIRE(model->meshes.Size() > 0);
     bool anySkinned = false;
     for (usize i = 0; i < model->meshSkinned.Size(); ++i)
@@ -174,14 +174,14 @@ TEST_CASE("import skinned glTF -> cooked skeleton + animations + skinned mesh")
     CHECK(anySkinned);
 }
 
-// === Source-side file import (editor pipeline): GLB fan-out + full incremental cook ===
+// === Source-side file import (editor pipeline): GLB fan-out and full incremental cook ===
 
 TEST_CASE("model-import: GLB fans out into source assets and cooks through the driver")
 {
     using namespace editor;
     using namespace pipeline;
 
-    // Types the fan-out creates + their builders.
+    // Types the fan-out creates, and their builders.
     pipeline::RegisterModelManifestAsset();
     pipeline::RegisterTextureAsset();
     pipeline::RegisterMeshAssets();
@@ -196,7 +196,7 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     const StringView dir = u8"scratch_model_import_project";
     auto cleanTree = [&]()
     {
-        // Recursive best-effort cleanup of Content/Cooked/Sources/.cache trees.
+        // Recursive best-effort cleanup of the Content, Cooked, Sources and .cache trees.
         for (StringView sub : {u8"Content", u8"Cooked", u8"Sources", u8".cache"})
         {
             foundation::vfs::NativeFileSystem fs(PathJoin(dir, sub).AsView(), foundation::core::DefaultAllocator());
@@ -234,7 +234,7 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
 
-    // Import the Kenney character GLB (skinned: skeleton + clips expected).
+    // Import the Kenney character GLB (skinned: a skeleton and clips expected).
     pipeline::ModelFileImporter importer;
     CHECK(importer.Accepts(u8"glb"));
     Result<foundation::content::Instance*> imported =
@@ -245,7 +245,7 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     REQUIRE(manifestInst != nullptr);
     CHECK(manifestInst->TypeName() == StringView(u8"ModelManifestAsset"));
 
-    // The fan-out produces a subgroup: meshes + a manifest at minimum.
+    // The fan-out produces a subgroup: meshes and a manifest at minimum.
     foundation::content::Group* modelGroup =
         project->SourceDb().RootGroup()->GetGroup(u8"character-oozi");
     REQUIRE(modelGroup != nullptr);
@@ -257,7 +257,7 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     REQUIRE(manifestAsset->manifest.meshGuids.Size() >= 1u);
     CHECK(manifestAsset->manifest.nodes.Size() >= 1u);
 
-    // Cook EVERYTHING through the incremental driver (the real pipeline path).
+    // Cook everything through the incremental driver (the real pipeline path).
     BuilderRegistry builders{DefaultAllocator()};
     auto add = [&](auto* builder)
     { builders.Register(UniquePtr<IAssetBuilder>(builder, DefaultAllocator())); };
@@ -274,13 +274,13 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     CookDriver driver(DefaultAllocator(), project->SourceDb(), project->CookedDb(), builders, &sourcesFs, &cacheFs);
 
     CookPlan plan = driver.Plan();
-    CHECK(plan.dirty.Size() >= 2u); // manifest + meshes (+ any materials/skeleton/clips)
+    CHECK(plan.dirty.Size() >= 2u); // manifest and meshes (and any materials, skeleton, clips)
     CookStats stats = driver.Execute(plan);
     CHECK(stats.failed == 0u);
     CHECK(stats.cooked == plan.dirty.Size());
     CHECK(driver.Plan().dirty.IsEmpty()); // incremental: everything clean now
 
-    // Products land under the source guids: the manifest product + a bindable mesh.
+    // Products land under the source guids: the manifest product and a bindable mesh.
     CHECK(project->CookedDb().GetInstance(manifestInst->Id()) != nullptr);
     const Guid meshGuid = manifestAsset->manifest.meshGuids[0];
     RefPtr<ISerializable> meshProduct = project->CookedDb().ReadObject(meshGuid);
@@ -289,9 +289,8 @@ TEST_CASE("model-import: GLB fans out into source assets and cooks through the d
     cleanTree();
 }
 
-// Regression (user-reported): dropping a .gltf with EXTERNAL sidecars (Fox.bin, Texture.png)
-// failed - the importer loaded from the Sources/ copy where the sidecars don't exist. It now
-// loads from the original path and copies the referenced sidecars into Sources/.
+// A .gltf with external sidecars (Fox.bin, Texture.png) imports: the importer loads from the
+// original path, where the sidecars are, and copies the referenced sidecars into Sources/.
 TEST_CASE("model-import: external-sidecar .gltf imports and its sidecars land in Sources")
 {
     using namespace editor;
@@ -349,25 +348,24 @@ TEST_CASE("model-import: external-sidecar .gltf imports and its sidecars land in
     REQUIRE(imported.HasValue());
     REQUIRE(imported.Value() != nullptr);
 
-    // Main file + both referenced sidecars are in Sources/.
+    // The main file and both referenced sidecars are in Sources/.
     CHECK(FileExists(PathJoin(dir, u8"Sources/Fox.gltf").AsView()));
     CHECK(FileExists(PathJoin(dir, u8"Sources/Fox.bin").AsView()));
     CHECK(FileExists(PathJoin(dir, u8"Sources/Texture.png").AsView()));
 
-    // The fan-out produced meshes + the Fox's animation clips.
+    // The fan-out produced meshes and the Fox's animation clips.
     RefPtr<ISerializable> object = imported.Value()->ReadObject();
     auto* manifest = Cast<pipeline::ModelManifestAsset>(object.Get());
     REQUIRE(manifest != nullptr);
     CHECK(manifest->manifest.meshGuids.Size() >= 1u);
-    CHECK(manifest->manifest.animationGuids.Size() >= 1u); // Survey/Walk/Run
+    CHECK(manifest->manifest.animationGuids.Size() >= 1u); // Survey, Walk, Run
 
     cleanTree();
 }
 
-// Regression (user-reported): a freshly imported model's material rendered UNTEXTURED when
-// picked directly (the Sandbox spawn-composite path wired textures; the self-contained
-// MaterialSource path must too). Full chain: import -> cook -> bind material -> the albedo
-// texture is installed as the material's default.
+// A freshly imported model's material, picked on its own, draws textured: the self-contained
+// MaterialSource path wires its textures as the composite spawn path does. Full chain: import,
+// cook, bind the material, and the albedo texture is installed as the material's default.
 TEST_CASE("model-import: a bound material carries its albedo texture")
 {
     using namespace editor;
@@ -419,7 +417,7 @@ TEST_CASE("model-import: a bound material carries its albedo texture")
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
 
-    // Import the Duck (textured, static) + cook everything.
+    // Import the Duck (textured, static) and cook everything.
     pipeline::ModelFileImporter importer;
     Result<foundation::content::Instance*> imported =
         importer.Import(MiDuck().AsView(),
@@ -451,7 +449,7 @@ TEST_CASE("model-import: a bound material carries its albedo texture")
     REQUIRE(stats.failed == 0u);
 
     // Bind the material like the editor does (null GPU device backs the texture factory).
-    // Device FIRST: it must outlive the manager's cached products (their destructors release
+    // The device comes first: it must outlive the manager's cached products (their destructors release
     // GPU objects through it).
     foundation::rhi::null::NullDevice device{DefaultAllocator()};
     resource::ResourceManager resources(DefaultAllocator(), project->CookedDb());
@@ -485,8 +483,8 @@ TEST_CASE("model-import: a bound material carries its albedo texture")
 TEST_CASE("importer: FBX separate metal/rough maps bake into one packed MR texture")
 {
     // Two 2x2 grayscale sources: roughness = 200, metalness = 60. The packed result must be
-    // glTF-convention (G = roughness, B = metalness; R = A = 255) - feeding either source
-    // directly into the packed slot would bleed its value across BOTH channels.
+    // glTF-convention (G = roughness, B = metalness; R = A = 255); feeding either source
+    // directly into the packed slot would bleed its value across both channels.
     model::Model mdl;
     const auto makeGray = [&](u8 value) -> i32
     {
@@ -525,7 +523,7 @@ TEST_CASE("importer: FBX separate metal/rough maps bake into one packed MR textu
     CHECK(roughOnly[1] == 200u);
     CHECK(roughOnly[2] == 255u);
 
-    // Usage classification: both sources are data maps -> LINEAR.
+    // Usage classification: both sources are data maps, so linear.
     Array<bool> linear;
     auto* mat = new model::ModelMaterial();
     mat->separateRoughnessTextureIndex = roughIdx;
@@ -539,8 +537,8 @@ TEST_CASE("importer: FBX separate metal/rough maps bake into one packed MR textu
 
 TEST_CASE("mesh convert: missing tangent stream generates tangents (DamagedHelmet class)")
 {
-    // A quad in the XY plane, normal +Z, with U mapped along +Y - so the generated tangent
-    // must be ~(0,1,0), NOT the {1,0,0} default a missing stream would otherwise leave behind.
+    // A quad in the XY plane, normal +Z, with U mapped along +Y, so the generated tangent
+    // must be ~(0,1,0), not the {1,0,0} default a missing stream would otherwise leave behind.
     struct SrcVertex
     {
         Float3 pos;
@@ -577,13 +575,13 @@ TEST_CASE("mesh convert: missing tangent stream generates tangents (DamagedHelme
         CHECK(Abs(t.y) == doctest::Approx(1.0f).epsilon(0.01)); // U runs along +Y
         CHECK(Abs(t.x) < 0.01f);
         CHECK(Abs(t.z) < 0.01f);
-        // This U-along-Y mapping is MIRRORED: B = dP/dv = +X but cross(N,T) = -X, so the
-        // generated handedness must be -1 (also proves w isn't stuck at the +1 default).
+        // This U-along-Y mapping is mirrored: B = dP/dv = +X but cross(N,T) = -X, so the
+        // generated handedness must be -1 (which also shows w isn't stuck at the +1 default).
         CHECK(t.w == doctest::Approx(-1.0f));
         CHECK(Abs(Dot(Float3{t.x, t.y, t.z}, out[i].normal)) < 0.01f);
     }
 
-    // An AUTHORED tangent stream passes through untouched (no regeneration).
+    // An authored tangent stream passes through untouched (no regeneration).
     struct SrcVertexT
     {
         Float3 pos;
@@ -622,11 +620,11 @@ TEST_CASE("mesh convert: missing tangent stream generates tangents (DamagedHelme
     }
 }
 
-// Regression (user-reported): delete a model's group -> reimport the same file -> recook ->
-// the editor crashed with garbage vkCreateImage params (a texture product misparsed). The
-// suspicious seam: EnsureProduct adopts a same-named cooked instance from the PREVIOUS
-// generation via CreateInstanceWithId's return-existing-by-name behavior, breaking the
-// "product guid == source guid" invariant. This walks the exact user flow at DB level.
+// Delete a model's group, reimport the same file, and recook: every product keeps the invariant
+// that its guid is its source's. The risk is EnsureProduct adopting a same-named cooked instance
+// from the previous generation through CreateInstanceWithId's return-existing-by-name behaviour,
+// which leaves a misparsed texture product (garbage image parameters). This walks that flow at
+// the DB level.
 TEST_CASE("cook: delete group -> reimport -> recook keeps product identities clean")
 {
     using namespace editor;
@@ -695,7 +693,7 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
     foundation::vfs::NativeFileSystem cacheFs(project->CacheRoot().AsView(), foundation::core::DefaultAllocator());
     CookDriver driver(DefaultAllocator(), project->SourceDb(), project->CookedDb(), builders, &sourcesFs, &cacheFs);
 
-    // Duck has a texture (the crashing product kind). Import + cook generation 1.
+    // Duck has a texture (the product kind a misparse breaks). Import and cook generation 1.
     pipeline::ModelFileImporter importer;
     Result<foundation::content::Instance*> firstImport =
         importer.Import(MiDuck().AsView(),
@@ -710,7 +708,7 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
         oldGuids.PushBack(inst->Id());
     }
     const usize assetCount = oldGuids.Size();
-    REQUIRE(assetCount >= 3u); // manifest + mesh + material + texture
+    REQUIRE(assetCount >= 3u); // manifest, mesh, material, texture
 
     CookPlan plan1 = driver.Plan();
     CookStats stats1 = driver.Execute(plan1);
@@ -720,10 +718,10 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
         CHECK(project->CookedDb().GetInstance(id) != nullptr);
     }
 
-    // === user step 1: delete the group (source side only - DeleteGroupNow's behavior) ===
+    // === step 1: delete the group (source side only, as DeleteGroupNow does) ===
     REQUIRE(project->SourceDb().DeleteGroup(*duckGroup).IsOk());
 
-    // === user step 2: reimport the same file ===
+    // === step 2: reimport the same file ===
     Result<foundation::content::Instance*> secondImport =
         importer.Import(MiDuck().AsView(),
                         pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()}, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
@@ -737,13 +735,13 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
     }
     REQUIRE(newGuids.Size() == assetCount);
 
-    // === user step 3: the next cook (sweeps generation-1 orphans, cooks generation 2) ===
+    // === step 3: the next cook (sweeps generation-1 orphans, cooks generation 2) ===
     CookPlan plan2 = driver.Plan();
-    CHECK(plan2.orphans.Size() == assetCount); // EVERY dead source must be an orphan
+    CHECK(plan2.orphans.Size() == assetCount); // every dead source must be an orphan
     CookStats stats2 = driver.Execute(plan2);
     CHECK(stats2.failed == 0u);
 
-    // Identity invariant: every generation-2 product exists UNDER ITS SOURCE GUID and
+    // Identity invariant: every generation-2 product exists under its source guid and
     // matches its source's name; no generation-1 product survives.
     for (usize i = 0; i < newGuids.Size(); ++i)
     {
@@ -769,9 +767,9 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
         CHECK(project->CookedDb().GetInstance(id) == nullptr);
     }
 
-    // Identity-guard regression (the guid-replay crash): plant a STALE same-named product
-    // with a foreign guid and a CROSS-TYPED product under a real source guid, then force a
-    // recook - EnsureProduct must remove both and land every product on source guid + type.
+    // Identity guard: plant a stale same-named product with a foreign guid and a cross-typed
+    // product under a real source guid, then force a recook. EnsureProduct must remove both and
+    // land every product on its source's guid and type.
     {
         foundation::content::Group* cookedDuck = project->CookedDb().RootGroup()->GetGroup(u8"Duck");
         REQUIRE(cookedDuck != nullptr);
@@ -808,7 +806,7 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
         CHECK(project->CookedDb().GetInstance(foreign) == nullptr); // stale removed
     }
 
-    // Scoped plans: PlanFor(roots) covers the roots + their dependency closure ONLY.
+    // Scoped plans: PlanFor(roots) covers only the roots and their dependency closure.
     {
         Guid matGuid, meshGuid;
         for (foundation::content::Instance* inst : duckGroup2->Instances())
@@ -831,7 +829,7 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
         CHECK(clean.dirty.IsEmpty());
         CHECK(clean.orphans.IsEmpty()); // scoped plans never sweep
 
-        // Force re-cooks the ROOT only; its clean dependency closure (textures) stays out.
+        // Force re-cooks the root only; its clean dependency closure (textures) stays out.
         Guid matRoots[] = {matGuid};
         CookPlan forced = driver.PlanFor(Span<const Guid>{matRoots, 1}, true);
         REQUIRE(forced.dirty.Size() == 1u);
@@ -841,8 +839,8 @@ TEST_CASE("cook: delete group -> reimport -> recook keeps product identities cle
         CHECK(scopedStats.cooked == 1u);
     }
 
-    // The texture product must deserialize to a SANE TextureResource (the crash showed
-    // garbage width/height/mips from a misparsed product).
+    // The texture product must deserialize to a sane TextureResource (a misparsed product
+    // shows garbage width, height and mips).
     bool textureChecked = false;
     for (const Guid& id : newGuids)
     {
@@ -877,7 +875,7 @@ TEST_CASE("import: texture assets keep their source names")
     CHECK(pipeline::ImportedTextureName(fromUri, 3).AsView() ==
           StringView(u8"Default_albedo"));
 
-    model::ModelTexture bare; // embedded, no identity -> indexed fallback
+    model::ModelTexture bare; // embedded, no identity: indexed fallback
     CHECK(pipeline::ImportedTextureName(bare, 7).AsView() == StringView(u8"tex.7"));
 }
 
@@ -897,7 +895,7 @@ TEST_CASE("import: sub-assets keep authored names (sanitized), indexed fallback 
     // Path-hostile characters sanitize (names become envelope file names).
     CHECK(pipeline::ImportedAssetName(u8"body/armor:v2", u8"mesh", 0).AsView() ==
           StringView(u8"body_armor_v2"));
-    // No authored name -> indexed fallback.
+    // No authored name: indexed fallback.
     CHECK(pipeline::ImportedAssetName(u8"", u8"anim", 4).AsView() == StringView(u8"anim.4"));
 }
 
@@ -980,9 +978,9 @@ TEST_CASE("model-import: options gate textures/materials/animations")
     CHECK_FALSE(options->generateScene); // opt-in
     CHECK_FALSE(options->generateCollision); // opt-in
     CHECK_FALSE(options->collisionConvex);
-    CHECK(options->Toggles().Size() == 9u); // + Root motion // +Generate LODs
+    CHECK(options->Toggles().Size() == 9u); // including Root motion and Generate LODs
 
-    // Geometry-only import: no textures, no materials, no skeleton/clips in the fan-out.
+    // Geometry-only import: no textures, no materials, no skeleton or clips in the fan-out.
     options->importTextures = false;
     options->importMaterials = false;
     options->importAnimations = false;
@@ -1040,7 +1038,7 @@ TEST_CASE("model-import: generate-collision emits CollisionShapeAssets wired to 
     RefPtr<ISerializable> object = imported.Value()->ReadObject();
     auto* manifest = Cast<pipeline::ModelManifestAsset>(object.Get());
     REQUIRE(manifest != nullptr);
-    // collisionGuids parallels meshGuids; STATIC meshes get shapes (skinned stay nil).
+    // collisionGuids parallels meshGuids; static meshes get shapes (skinned stay nil).
     REQUIRE(manifest->manifest.collisionGuids.Size() == manifest->manifest.meshGuids.Size());
     usize shapeCount = 0;
     for (usize i = 0; i < manifest->manifest.collisionGuids.Size(); ++i)
@@ -1106,8 +1104,8 @@ TEST_CASE("model-import: re-import WITHOUT delete reuses instances (same guids, 
     const usize assetCount = before.Size();
     REQUIRE(assetCount >= 3u);
 
-    // Re-drop the SAME file with the group intact: every instance is REUSED by (name, type) -
-    // guids survive (placed refs + the prefab keep working) and nothing duplicates as ".2".
+    // Re-drop the same file with the group intact: every instance is reused by (name, type), so
+    // guids survive (placed refs and the prefab keep working) and nothing duplicates as ".2".
     Result<foundation::content::Instance*> second =
         importer.Import(MiDuck().AsView(),
                         pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()}, *project->SourceDb().RootGroup(), nullptr, nullptr, nullptr);
@@ -1137,14 +1135,14 @@ TEST_CASE("mesh lod: _LODn suffix parsing (case-insensitive; _LOD0 and non-suffi
     CHECK(pipeline::ParseLodSuffix(u8"Foo", base) == 0);
     CHECK(pipeline::ParseLodSuffix(u8"Foo_LOD0", base) == 0);  // the base names itself plainly
     CHECK(pipeline::ParseLodSuffix(u8"Foo_LOD", base) == 0);   // no digits
-    CHECK(pipeline::ParseLodSuffix(u8"LOD1", base) == 0);      // no underscore/base
+    CHECK(pipeline::ParseLodSuffix(u8"LOD1", base) == 0);      // no underscore or base
     CHECK(pipeline::ParseLodSuffix(u8"Foo_MOD1", base) == 0);  // wrong tag
 }
 
-// Sandbox's character drew its face and eyes in the wrong materials: since submeshes index their
-// mesh's own slots, a runtime user of the model needs each mesh's slot list, and the bound model
-// dropped it. It keeps it now, and MeshMaterialIndices gives the model-wide material each of a
-// mesh's slots is, the list an entity drawing the mesh binds.
+// Submeshes index their mesh's own material slots, so a runtime user of the model needs each
+// mesh's slot list: the bound model keeps it, and MeshMaterialIndices gives the model-wide
+// material each of a mesh's slots is, the list an entity drawing the mesh binds (without it a
+// character's face and eyes draw in the wrong materials).
 TEST_CASE("model resource: each mesh keeps its material slots, the materials its submeshes index")
 {
     const String characterStorage = MiPath(u8"Samples/Models/QuaterniusCharacter/glTF/Character.gltf");
@@ -1290,7 +1288,7 @@ TEST_CASE("mesh lod: authored level appends into the base's chain (offset indice
     makeQuad(lodMesh, 100.0f, 3, 3, lodIndices);
     REQUIRE(pipeline::AppendLodLevelFromModel(lodMesh, source));
 
-    // Chain shape: 2 levels, level 1 = one range after the base's 6 indices, indices
+    // Chain shape: 2 levels, level 1 one range after the base's 6 indices, indices
     // offset past the base's 4 vertices, default threshold ladder (LOD1 at 0.25).
     CHECK(source.lodCount == 2);
     REQUIRE(source.lodStart.Size() == 1);
@@ -1448,8 +1446,8 @@ TEST_CASE("model-import: DescribeImport lists the fan-out; the selection filters
     const String glbStorage = MiGlb();
     const StringView glb = glbStorage.AsView();
 
-    // The plan of a skinned character: meshes + materials + skeleton + clips, all enabled,
-    // target = source name.
+    // The plan of a skinned character: meshes, materials, skeleton and clips, all enabled,
+    // each target the source name.
     pipeline::ImportPlan plan = importer.DescribeImport(glb, nullptr, nullptr);
     REQUIRE(!plan.IsEmpty());
     usize meshCount = 0, clipCount = 0, skeletonCount = 0;
@@ -1465,7 +1463,7 @@ TEST_CASE("model-import: DescribeImport lists the fan-out; the selection filters
     REQUIRE(clipCount >= 1u);
     REQUIRE(skeletonCount == 1u);
 
-    // PARITY: an unfiltered import creates an instance for EVERY plan entry, by name.
+    // Parity: an unfiltered import creates an instance for every plan entry, by name.
     {
         Result<foundation::content::Instance*> imported = importer.Import(
             glb, pipeline::ImportContext{DefaultAllocator(), project->SourcesRoot()},
@@ -1478,7 +1476,7 @@ TEST_CASE("model-import: DescribeImport lists the fan-out; the selection filters
         }
     }
 
-    // Selection: clips OFF, first mesh RENAMED - the fan-out skips and renames accordingly.
+    // Selection: clips off, first mesh renamed; the fan-out skips and renames accordingly.
     {
         auto options = MakeRef<pipeline::ModelImportOptions>(DefaultAllocator());
         options->selection = importer.DescribeImport(glb, options.Get(), nullptr);
@@ -1520,9 +1518,9 @@ TEST_CASE("model-import: DescribeImport lists the fan-out; the selection filters
         CHECK(!manifest->manifest.meshGuids.IsEmpty());
         CHECK(!manifest->manifest.meshGuids[0].IsNil());
 
-        // RE-IMPORT MEMORY: the manifest stored the decisions; StoredSelection reads them
-        // back, and merging onto a fresh plan reproduces them - clips stay off, the rename
-        // sticks, without the user re-answering anything.
+        // Re-import memory: the manifest stored the decisions; StoredSelection reads them
+        // back, and merging onto a fresh plan reproduces them (clips stay off, the rename
+        // sticks) without the user answering anything again.
         pipeline::ImportPlan stored = importer.StoredSelection(*target, glb);
         REQUIRE(!stored.IsEmpty());
         pipeline::ImportPlan fresh = importer.DescribeImport(glb, nullptr, nullptr);
@@ -1548,9 +1546,9 @@ TEST_CASE("model-import: DescribeImport lists the fan-out; the selection filters
 
 TEST_CASE("model-import: LOD folding holds the manifest slot so node mesh indices stay valid")
 {
-    // Regression: meshes [Part_LOD1, Part] folded the level OUT of manifest.meshGuids while
-    // node.meshIndex kept the MODEL index - the Part node's index 1 fell out of the 1-entry
-    // array and the generated prefab silently lost the mesh.
+    // Meshes [Part_LOD1, Part]: the level folds into its base but keeps its manifest.meshGuids
+    // slot, because node.meshIndex is a model index; without the slot the Part node's index 1
+    // would fall out of a 1-entry array and the generated prefab would lose the mesh.
     using namespace editor;
     using namespace pipeline;
     pipeline::RegisterModelManifestAsset();
@@ -1572,8 +1570,8 @@ TEST_CASE("model-import: LOD folding holds the manifest slot so node mesh indice
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
 
-    // The dropped file only needs to EXIST (provenance copy); the parsed model arrives as
-    // the prepared payload, exactly like the editor's worker-prepare path.
+    // The dropped file only needs to exist (provenance copy); the parsed model arrives as
+    // the prepared payload, as on the editor's worker-prepare path.
     const String fakeSource = PathJoin(dir, u8"lodtest.glb");
     const byte junk[4] = {byte{1}, byte{2}, byte{3}, byte{4}};
     REQUIRE(WriteFile(fakeSource.AsView(), Span<const byte>(junk, 4)).IsOk());
@@ -1608,12 +1606,12 @@ TEST_CASE("model-import: LOD folding holds the manifest slot so node mesh indice
     };
 
     auto prepared = MakeRef<pipeline::LoadedModel>(DefaultAllocator());
-    // The LEVEL sits at index 0, the BASE at index 1 - the shape that shifted the slots.
+    // The level sits at index 0 and the base at index 1, the order that would shift the slots.
     (void)prepared->model.addMesh(makeMesh(u8"Part_LOD1"));
     (void)prepared->model.addMesh(makeMesh(u8"Part"));
     auto* node = new model::ModelBone();
     node->setName(u8"PartNode");
-    node->meshIndex = 1; // references the BASE by model index
+    node->meshIndex = 1; // references the base by model index
     (void)prepared->model.addBone(node);
     prepared->model.calculateBounds();
 
@@ -1628,7 +1626,7 @@ TEST_CASE("model-import: LOD folding holds the manifest slot so node mesh indice
     REQUIRE(manifestAsset != nullptr);
     const foundation::model::ModelManifestSource& manifest = manifestAsset->manifest;
 
-    // BOTH model meshes hold a slot: the folded level as nil, the base as a real asset -
+    // Both model meshes hold a slot, the folded level as nil and the base as a real asset,
     // and the node's model-space index resolves to the base's guid.
     REQUIRE(manifest.meshGuids.Size() == 2u);
     CHECK(manifest.meshGuids[0].IsNil());
@@ -1642,11 +1640,10 @@ TEST_CASE("model-import: LOD folding holds the manifest slot so node mesh indice
     CHECK(imported.Value()->OwningGroup().GetInstance(u8"Part_LOD1") == nullptr);
 }
 
-// Regression (user-reported, chess_set_4k): a .gltf whose sidecars live in a SUBFOLDER
-// ("textures/x.jpg") imported its assets but the DEFERRED provenance copies into
-// Sources/textures/ all failed - raw WriteFile creates no parent directories (the inline
-// path's NativeFileSystem::Save does, which is why headless repros passed). The failed job
-// then skipped FinishImport, so the prefab/scene generators never ran.
+// A .gltf whose sidecars live in a subfolder ("textures/x.jpg"): the deferred provenance copies
+// into Sources/textures/ must create their parent directories, as the inline path's
+// NativeFileSystem::Save does. A failed copy fails the job, which then skips FinishImport and
+// the prefab and scene generators.
 TEST_CASE("model-import: nested-subfolder sidecars survive the DEFERRED write path")
 {
     using namespace editor;
@@ -1699,10 +1696,10 @@ TEST_CASE("model-import: nested-subfolder sidecars survive the DEFERRED write pa
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
 
-    // Deferred mode = the editor's worker path: PrepareOnWorker loads the model, Import
-    // QUEUES envelope/stream/copy writes, and the caller executes them while the PREPARED
-    // payload stays alive - the deferred views BORROW its decoded pixels (the editor's job
-    // captures it for exactly this reason; dropping it before Execute is a use-after-free).
+    // Deferred mode is the editor's worker path: PrepareOnWorker loads the model, Import
+    // queues the envelope, stream and copy writes, and the caller executes them while the
+    // prepared payload stays alive. The deferred views borrow its decoded pixels (the editor's
+    // job captures it for this reason; dropping it before Execute is a use-after-free).
     Array<pipeline::DeferredImportWrite> deferred;
     pipeline::ModelFileImporter importer;
     RefPtr<Object> prepared = importer.PrepareOnWorker(
@@ -1716,8 +1713,7 @@ TEST_CASE("model-import: nested-subfolder sidecars survive the DEFERRED write pa
     REQUIRE(imported.Value() != nullptr);
     REQUIRE(!deferred.IsEmpty());
 
-    // EVERY deferred write must succeed - the nested Sources/textures/ copy included
-    // (with the old raw WriteFile this is the one that failed).
+    // Every deferred write must succeed, the nested Sources/textures/ copy included.
     for (pipeline::DeferredImportWrite& write : deferred)
     {
         const Status s = write.Execute();
@@ -1727,8 +1723,8 @@ TEST_CASE("model-import: nested-subfolder sidecars survive the DEFERRED write pa
     CHECK(FileExists(PathJoin(dir, u8"Sources/Fox.bin").AsView()));
     CHECK(FileExists(PathJoin(dir, u8"Sources/textures/Texture.png").AsView()));
 
-    // Naming prefers the FILE STEM over the authored image name (this fixture's image is
-    // named "authored_name_lies" - the Poly Haven arm-as-"rough" shape), and the asset
+    // Naming prefers the file stem over the authored image name (this fixture's image is
+    // named "authored_name_lies", like a packed arm map named "*_rough"), and the asset
     // records its provenance uri for the texture page's Source row.
     foundation::content::Instance* tex =
         imported.Value()->OwningGroup().GetInstance(u8"Texture");
@@ -1740,10 +1736,10 @@ TEST_CASE("model-import: nested-subfolder sidecars survive the DEFERRED write pa
     CHECK(texAsset->sourceHint == u8"textures/Texture.png");
 }
 
-// DDS textures referenced by a model (2026-09-22: the Bistro package ships BC-compressed DDS)
-// are NOT decoded and embedded: the loader leaves them on disk, the importer copies the file
-// into Sources/ and creates a FILE-BACKED TextureAsset with the slot's usage, and the cook
-// passes the GPU-ready levels through (or decodes when they do not fit the policy).
+// DDS textures referenced by a model (packages such as Bistro ship BC-compressed DDS) are not
+// decoded and embedded: the loader leaves them on disk, the importer copies the file into
+// Sources/ and creates a file-backed TextureAsset with the slot's usage, and the cook passes
+// the GPU-ready levels through (or decodes when they do not fit the policy).
 namespace
 {
     void PutF32(Array<byte>& out, f32 v)
@@ -1966,7 +1962,7 @@ TEST_CASE("model-import: DDS textures stay on disk as file-backed assets and pas
 
     // The editor's path defers the bulk writes to a worker: every queued write must succeed.
     // The PNG twins the glTF names but the package does not ship are warnings, not writes
-    // (a failed write fails the whole import in the editor: the Bistro report of 2026-09-22).
+    // (a failed write fails the whole import in the editor).
     REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
     project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
@@ -2060,8 +2056,8 @@ TEST_CASE("model-import: with a prepared model the geometry writes are LAZY - pr
         if (write.streamName.AsView() == pipeline::kMeshGeometryStreamName)
         {
             ++lazyGeometryWrites;
-            CHECK(static_cast<bool>(write.produce)); // the work is parked on the worker...
-            CHECK(write.owned.IsEmpty());            // ...nothing was serialized on this thread
+            CHECK(static_cast<bool>(write.produce)); // the work is parked on the worker, and
+            CHECK(write.owned.IsEmpty());            // nothing was serialized on this thread
         }
     }
     CHECK(lazyGeometryWrites >= 1u);
@@ -2075,7 +2071,7 @@ TEST_CASE("model-import: with a prepared model the geometry writes are LAZY - pr
     const Array<byte> produced = geometryBytes(*lazyMesh);
     REQUIRE(produced.Size() == reference.Size());
     CHECK(MemCompare(produced.Data(), reference.Data(), reference.Size()) == 0);
-    // The envelope was written AFTER the geometry was produced: it reads back as a mesh asset.
+    // The envelope was written after the geometry was produced: it reads back as a mesh asset.
     RefPtr<ISerializable> envelope = lazyMesh->ReadObject();
     CHECK(envelope.Get() != nullptr);
 
@@ -2145,7 +2141,7 @@ TEST_CASE("model-import: a material named like the model leaves the manifest its
 
 TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's parent")
 {
-    // The prefab puts skinned meshes at identity under this node (inverse-kinematics.md P0a),
+    // The prefab puts skinned meshes at identity under this node,
     // so it must be the node the joints hang from: Blender's armature object, not a joint.
     model::Model m;
     auto bone = [&](StringView name, i32 parent)
@@ -2181,8 +2177,8 @@ TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's p
 TEST_CASE("model-import: the node an unskinned mesh hangs under joins the skeleton, its animation played")
 {
     // 3ds Max's Biped animates a weapon's prop node with the hand; the file does not make it a
-    // bone and no vertex is bound to it. Left outside the skeleton, its channels were dropped and
-    // the weapon rode the pelvis.
+    // bone and no vertex is bound to it. Left outside the skeleton, its channels would be dropped
+    // and the weapon would follow the pelvis.
     model::Model m;
     auto bone = [&](StringView name, i32 parent, bool isBone, i32 mesh = -1)
     {
@@ -2238,7 +2234,7 @@ TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, 
 {
     // 3ds Max hangs a skeleton from a Dummy helper bone with no vertices of its own and animates it
     // with the pose (a creature bobbing as it idles). Left outside the skeleton, as Blender's
-    // armature object is, the bob was a model track the pose never played.
+    // armature object is, the bob would be a model track the pose never plays.
     for (const bool helperIsBone : {true, false})
     {
         model::Model m;
@@ -2306,7 +2302,7 @@ TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, 
 
 TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and rest, and a re-import keeps its root motion")
 {
-    // root-motion.md P0: the armature node (the skeleton's parent) animated in the file keeps its
+    // The armature node (the skeleton's parent) animated in the file keeps its
     // channels as model tracks (bone -1), the clip names its skeleton and the armature's rest for
     // the root motion cook, and root motion settings authored on the clip survive a re-import.
     using namespace editor;
@@ -2430,8 +2426,8 @@ TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and 
     CHECK(run->source.rootMotion.yaw);
 }
 
-// Each material made on the built-in its shading model names, as its file authored it
-// (Specs/phong-material.md), by the one function both cooks make materials with.
+// Each material made on the built-in its shading model names, as its file authored it, by the
+// one function both cooks make materials with.
 TEST_CASE("model import: a material is made on the built-in its shading model names, its maps wired")
 {
     model::Model mdl;
@@ -2514,8 +2510,8 @@ TEST_CASE("model import: a material is made on the built-in its shading model na
 
 TEST_CASE("model-cook: a mesh, a texture and a material of one name all cook (3ds Max exports name them alike)")
 {
-    // The direct cook named meshes, clips and the skeleton without making them unique: a mesh
-    // called as its texture was refused its instance and the model came without its body.
+    // The direct cook makes the names of meshes, clips and the skeleton unique: a mesh named
+    // like its texture still gets its instance, and the model comes with its body.
     model::RegisterModelResourceTypes();
     model::gltf::GltfLoader gltf;
     model::io::registerLoader(&gltf);

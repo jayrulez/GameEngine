@@ -192,7 +192,7 @@ namespace editor
         return manager != nullptr && e.IsAssigned() ? manager->Get(e) : nullptr;
     }
 
-    // The fewest any entity has: a list shows what every object holds.
+    // The fewest any entity has, since a list shows what every object holds.
     usize ScriptBehaviorsSource::BehaviorCount() const
     {
         usize count = ~usize{0};
@@ -475,7 +475,7 @@ namespace editor
         const script::ScriptPropertyDesc* property = PropertyOf(index, where.row.AsView());
         if (property == nullptr)
         {
-            // Its own rows: their defaults.
+            // Its own rows revert to their defaults.
             if (where.row == StringView(u8"enabled") || where.row == StringView(u8"interval"))
             {
                 const bool enabled = where.row == StringView(u8"enabled");

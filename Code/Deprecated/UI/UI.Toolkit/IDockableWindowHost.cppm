@@ -4,9 +4,7 @@
 // UI Toolkit - :idockable_window_host partition
 //
 // Bridge between the docking system (UI layer) and the application (framework layer). Abstracts whether
-// dockable windows are real OS windows or virtual (PopupLayer) overlays. Ported from
-// Sedulous.UI.Toolkit/src/Docking/IDockableWindowHost.bf. Beef `delegate void(View)` -> Function<void(View*)>;
-// Beef `out float` params -> `f32&` out-params.
+// dockable windows are real OS windows or virtual (PopupLayer) overlays.
 //
 // Coordinate frame: all positions are logical pixels relative to the main editor window's client-area
 // top-left; sizes are logical pixels.
@@ -33,10 +31,10 @@ export namespace foundation::ui::toolkit
         [[nodiscard]] virtual bool SupportsOSWindows() = 0;
 
         /// Whether OS windows created by this host carry native chrome (title bar, close button,
-        /// resize borders). False (default) = borderless: the DockablePanel draws its own title
-        /// bar / close button and the app moves/resizes the window. True = the OS owns move /
-        /// resize / close, so the docking layer suppresses its close button and inner resize
-        /// edges, and a drag from the panel header re-docks WITHOUT the window chasing the
+        /// resize borders). False (the default) means borderless: the DockablePanel draws its own
+        /// title bar and close button and the app moves and resizes the window. True means the OS
+        /// owns move, resize and close, so the docking layer suppresses its close button and inner
+        /// resize edges, and a drag from the panel header re-docks without the window chasing the
         /// cursor. Linux hosts default to chromed (Wayland punishes app-positioned borderless
         /// windows; XWayland blocks cross-monitor drags).
         [[nodiscard]] virtual bool UsesOSChrome() { return false; }
@@ -56,8 +54,8 @@ export namespace foundation::ui::toolkit
         virtual void ResizeDockableWindow(View* dockableWindow, f32 x, f32 y, f32 width,
                                           f32 height) = 0;
 
-        /// Read the OS window's current logical-px position (main-window-relative) AND size. Returns false
-        /// when the view isn't OS-hosted.
+        /// Read the OS window's current logical-px position (main-window-relative) and size. Returns false
+        /// when the view is not OS-hosted.
         [[nodiscard]] virtual bool TryGetDockableWindowBounds(View* dockableWindow, f32& x, f32& y,
                                                               f32& width, f32& height) = 0;
 

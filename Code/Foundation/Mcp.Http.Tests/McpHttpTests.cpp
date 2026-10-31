@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Mcp.Http tests - the streamable-HTTP binding over REAL loopback sockets: an
-// authorized JSON-RPC exchange (initialize + a tool call) through HttpFetch, every refusal
+// Foundation::Mcp.Http tests - the streamable-HTTP binding over real loopback sockets: an
+// authorized JSON-RPC exchange (initialize and a tool call) through HttpFetch, every refusal
 // (no token, wrong token, wrong method, unknown endpoint), the 202 notification path, and
 // the SSE event channel end to end (connect, broadcast, receive, disconnect sweep).
 #include <doctest/doctest.h>
@@ -105,7 +105,7 @@ TEST_CASE("mcp.http: an McpServer over HTTP - the exchange, every refusal, and 2
             HttpRequest elsewhere = Post(u8"sekrit", u8"{}");
             elsewhere.target = String(u8"/nope");
             outcome.badPath = HttpFetch(u8"127.0.0.1", port, elsewhere);
-            // A notification (no id) has no JSON-RPC response - the transport answers 202.
+            // A notification (no id) has no JSON-RPC response; the transport answers 202.
             outcome.note = HttpFetch(
                 u8"127.0.0.1", port,
                 Post(u8"sekrit",
@@ -233,7 +233,7 @@ TEST_CASE("mcp.http: the SSE event channel - connect, broadcast, receive, sweep"
     CHECK(sawEvent);
 
     // The peer is gone; the liveness-polling sweep drops the listener within a few pumps
-    // (a WRITE alone cannot detect a fresh close - TCP buffers it until the reset arrives).
+    // (a write alone cannot detect a fresh close: TCP buffers it until the reset arrives).
     for (u32 i = 0; i < 2000 && host.ListenerCount() != 0; ++i)
     {
         (void)host.Pump();
@@ -308,8 +308,8 @@ TEST_CASE("mcp.http: a tool that is not finished keeps the caller waiting across
     CHECK_FALSE(host.HasPendingRequest());
 }
 
-// Sedulous d509904a: over HTTP a call is known by its request's number, so two identical calls in
-// flight keep separate states; a caller that hangs up ends its call, the state going with it.
+// Over HTTP a call is known by its request's number, so two identical calls in flight keep
+// separate states; a caller that hangs up ends its call, the state going with it.
 namespace
 {
     struct Entries final : ToolCallState

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.terrain: the terrain model over a heightfield - chunk grid + bounds, per-chunk LOD
-// selection determinism, quadtree correctness (build + frustum cull), and the splat descriptor.
+// foundation.terrain: the terrain model over a heightfield: chunk grid and bounds, per-chunk LOD
+// selection determinism, quadtree correctness (build and frustum cull), and the splat descriptor.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -75,7 +75,7 @@ TEST_CASE("terrain: per-chunk LOD via the shared coverage metric (foundation.lod
     Array<TerrainChunk> chunks;
     BuildChunks(*h, chunks);
 
-    // Descending coverage thresholds (thresholds[0] = 1.0 by convention, level 0 = fallback).
+    // Descending coverage thresholds (thresholds[0] = 1.0 by convention, level 0 the fallback).
     const f32 thresholds[] = {1.0f, 0.2f, 0.05f};
     const Span<const f32> lod{thresholds, 3};
 
@@ -89,8 +89,8 @@ TEST_CASE("terrain: per-chunk LOD via the shared coverage metric (foundation.lod
     const u32 lodNear = SelectChunkLod(chunks[0], identity, nearView, proj, lod);
     const u32 lodFar = SelectChunkLod(chunks[0], identity, farView, proj, lod);
     CHECK(lodNear <= lodFar); // closer is never coarser
-    CHECK(lodNear == 0u);     // close -> high coverage -> finest
-    CHECK(lodFar > 0u);       // very far -> low coverage -> coarser
+    CHECK(lodNear == 0u);     // close: high coverage, finest
+    CHECK(lodFar > 0u);       // very far: low coverage, coarser
 
     // Batch matches the per-chunk call.
     Array<u32> lods;
@@ -114,7 +114,7 @@ TEST_CASE("terrain: quadtree builds over the chunk grid")
     TerrainQuadtree tree;
     tree.Build(Span<const TerrainChunk>(chunks.Data(), chunks.Size()), ChunksPerSide(h->Size()));
     CHECK_FALSE(tree.IsEmpty());
-    // 2x2: root + 4 leaves = 5 nodes.
+    // 2x2: the root and 4 leaves make 5 nodes.
     CHECK(tree.NodeCount() == 5u);
 }
 
@@ -155,7 +155,7 @@ TEST_CASE("terrain: shared chunk grid mesh - surface + skirt verts + per-LOD ind
 {
     Array<Float3> verts;
     BuildChunkGridVertices(verts);
-    // Surface grid + a skirt copy (each vertex = u, v, skirtFlag).
+    // Surface grid and a skirt copy (each vertex is u, v, skirtFlag).
     REQUIRE(verts.Size() == static_cast<usize>(kChunkVerts) * kChunkVerts * 2);
     CHECK(Near(verts[0].x, 0.0f));
     CHECK(Near(verts[0].y, 0.0f));
@@ -165,7 +165,7 @@ TEST_CASE("terrain: shared chunk grid mesh - surface + skirt verts + per-LOD ind
     CHECK(Near(verts[verts.Size() - 1].y, 1.0f));
     CHECK(Near(verts[verts.Size() - 1].z, 1.0f));
 
-    // Per LOD: surface (quads*quads*6) + a skirt wall around the 4 edges (48 indices per border
+    // Per LOD: surface (quads*quads*6) and a skirt wall around the 4 edges (48 indices per border
     // segment: 4 double-sided tris; segments = quads per edge).
     Array<u32> lod0;
     BuildChunkGridIndices(0, lod0);
@@ -289,11 +289,11 @@ TEST_CASE("terrain: holed chunk indices drop every quad with a cut sample and th
     BuildHoledChunkIndices(*grid, chunks[3].gridX0, chunks[3].gridZ0, 0, idx, surface);
     CHECK(surface == (64u * 64u - 4u) * 6u);
     CHECK(idx.Size() == surface + 64u * 4u * 12u);
-    // At LOD 6 (one quad per chunk) the cut removes the whole chunk's surface AND its skirt.
+    // At LOD 6 (one quad per chunk) the cut removes the whole chunk's surface and its skirt.
     BuildHoledChunkIndices(*grid, chunks[3].gridX0, chunks[3].gridZ0, kMaxChunkLod, idx, surface);
     CHECK(surface == 0u);
     CHECK(idx.IsEmpty());
-    // At LOD 1 (stride 2) in chunk 3 the cut at (100,100) = local (36,36) sits on a quad corner:
+    // At LOD 1 (stride 2) in chunk 3 the cut at (100,100), local (36,36), sits on a quad corner:
     // the four stride-2 quads around it go.
     BuildHoledChunkIndices(*grid, chunks[3].gridX0, chunks[3].gridZ0, 1, idx, surface);
     CHECK(surface == (32u * 32u - 4u) * 6u);
@@ -328,7 +328,7 @@ TEST_CASE("terrain: holed chunk indices drop every quad with a cut sample and th
 
 TEST_CASE("terrain: the render rule keeps a quad while one sample is solid; the strict rule drops it on any cut")
 {
-    // P2 (Specs/terrain-holes.md): the GPU draws the superset and the hole mask shapes the rim.
+    // The GPU draws the superset of quads and the hole mask shapes the rim.
     RefPtr<hf::Heightfield> grid = MakeRef<hf::Heightfield>(
         DefaultAllocator(), 65, Float2{64.0f, 64.0f}, 0.0f, 10.0f);
     grid->SetHole(10, 10, true); // one cut sample: 4 quads touch it at LOD 0

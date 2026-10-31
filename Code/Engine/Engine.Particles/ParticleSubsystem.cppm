@@ -3,11 +3,12 @@
 
 // engine.particles:subsystem - the application-level ParticleSubsystem.
 //
-// Mirrors AnimationSubsystem: injects the ParticleEffectComponentManager into every scene (so
-// attaching a ParticleEffectComponent is all an app needs). Additionally it owns the dedicated
-// ParticleRenderer and registers it + itself (as the render-data extractor / IRenderDataProvider)
-// with RenderSubsystem via the generic seam - so NO particle code lives in RenderSubsystem. Its
-// ExtractInto delegates to the scene's manager, which packs the live billboards.
+// Shaped like AnimationSubsystem: injects the ParticleEffectComponentManager into every scene (so
+// attaching a ParticleEffectComponent is all an app needs). It also owns the dedicated
+// ParticleRenderer and registers it, and itself as the render-data extractor (IRenderDataProvider),
+// with RenderSubsystem through its generic registration, so no particle code lives in
+// RenderSubsystem. Its ExtractInto delegates to the scene's manager, which packs the live
+// billboards.
 
 module;
 #include "Core/Prelude.h"
@@ -22,7 +23,7 @@ import foundation.runtime;          // Subsystem, Context
 import foundation.scene; // Scene
 import engine.scene;  // SceneSubsystem
 import foundation.render;           // ExtractedScene
-import engine.render; // RenderSubsystem + IRenderExtractor seam
+import engine.render; // RenderSubsystem, IRenderExtractor
 import :renderer;
 import :components;
 
@@ -36,7 +37,7 @@ export namespace engine::particles
     // Foundation aliases (sibling engine::* namespaces would otherwise shadow these).
     namespace scene = foundation::scene;
 
-    // THE particle manager set for a scene - injected by the subsystem at runtime AND by headless
+    // The particle manager set for a scene, injected by the subsystem at runtime and by headless
     // scene consumers (Engine.Composition). Renderer wiring (dispatch id, provider registration)
     // stays with the subsystem. A manager added here reaches the composition (Engine.Composition)
     // automatically.
@@ -97,7 +98,7 @@ export namespace engine::particles
             }
         }
 
-        // Create + register the ParticleRenderer once the render GPU systems exist (idempotent).
+        // Create and register the ParticleRenderer once the render GPU systems exist (idempotent).
         void EnsureRenderer()
         {
             if (m_renderer.Get() != nullptr || m_render == nullptr)
@@ -134,8 +135,8 @@ export namespace engine::particles
 
 export namespace engine::particles
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection and to the script
+    /// surface, and which resource modules come with it. Defined in the implementation unit (one
+    /// instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& ParticleDomain() noexcept;
 }

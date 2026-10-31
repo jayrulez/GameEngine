@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/GravityTests.bf (faithful; enum-vs-int compares via underlying u32).
+// Gravity tests (enum values compare through their underlying u32).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

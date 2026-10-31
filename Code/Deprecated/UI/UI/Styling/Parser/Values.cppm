@@ -4,19 +4,15 @@
 // UI - :style_value_parser partition
 //
 // Parses style value literals from .sss token text (shared between the .sss parser and the .sml
-// markup loader). Ported from Sedulous.UI/src/Styling/Parser/Values.bf (StyleValueParser).
-//
-// Divergences (language): Beef Result<Color> -> Optional<Color>; the Beef Color int ctor (0..255)
-// is expressed as float components divided by 255 (our Color is float 0..1). Named colors
-// missing from core::Color (yellow/cyan/magenta/gray, and the CSS dark "green") are built as float
-// literals to match Sedulous exactly.
+// markup loader). Named colors missing from core::Color (yellow, cyan, magenta, gray, and the CSS
+// dark "green") are built from 0..255 components divided by 255.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:style_value_parser;
 
-import foundation.core; // Color, StringView, Optional
+import foundation.core;
 import :thickness;
 import :unit;
 
@@ -113,8 +109,8 @@ export namespace foundation::ui
             return Unit::Dp(value); // default: dp (includes "dp" and unitless)
         }
 
-        /// Parse a length from TEXT (markup attributes): `240`, `240px`, `16dp`, `12pt`, `50%`,
-        /// `2em`, or `calc(a + b)` / `calc(a - b)` over two such terms (one nesting level).
+        /// Parse a length from text (markup attributes): `240`, `240px`, `16dp`, `12pt`, `50%`,
+        /// `2em`, or `calc(a + b)` or `calc(a - b)` over two such terms (one nesting level).
         /// Empty on anything else.
         [[nodiscard]] static Optional<Unit> ParseLengthText(StringView text)
         {

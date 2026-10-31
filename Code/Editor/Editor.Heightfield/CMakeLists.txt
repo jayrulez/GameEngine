@@ -1,5 +1,6 @@
-# Editor::Heightfield - `editor.heightfield`: the HeightfieldAsset inspect + author page (2D grayscale
-# height preview + the authored fields) + factory, on the GUI. Linked by the editor EXECUTABLE only.
+# Editor::Heightfield - `editor.heightfield`: the HeightfieldAsset page for inspecting and authoring
+# (a 2D grayscale height preview and the authored fields) and its factory, on the GUI. Linked by the
+# editor executable only.
 util_add_engine_library(Editor.Heightfield ALIAS Editor::Heightfield)
 target_link_libraries(Editor.Heightfield
     PUBLIC

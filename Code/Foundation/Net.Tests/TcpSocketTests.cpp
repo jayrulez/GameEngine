@@ -20,7 +20,7 @@ TEST_CASE("tcp: connect + accept + bidirectional stream over localhost")
     net::TcpSocket client = net::TcpSocket::Connect(u8"127.0.0.1", listener.BoundPort());
     REQUIRE(client.IsOpen());
 
-    // Drive the non-blocking connect + accept to completion.
+    // Drive the non-blocking connect and accept to completion.
     net::TcpSocket server;
     for (int i = 0; i < 300 && !(server.IsOpen() && client.ConnectStatus() == 1); ++i)
     {

@@ -25,5 +25,4 @@ target_sources(Shaders
             Cook/ShaderPackCooker.cppm
             ShadersModule.cppm)
 
-# The shader system (variant compile-on-demand + cache) needs the RHI to create
 

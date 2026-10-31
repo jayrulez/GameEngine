@@ -4,13 +4,10 @@
 // UI - `foundation.ui.vfs`: an IResourceProvider backed by a VFS filesystem.
 //
 // The IO model that backs the UI's resource provider: StyleSheetLoader (@import / @icon SVG text) and
-// the image/nine-slice drawable factories resolve external files through this. Ported from
-// Sedulous.UI.IO/src/VfsResourceProvider.bf. Kept in a SEPARATE module (like Sedulous.UI.IO) so the
-// core foundation.ui stays free of a VFS dependency - the app wires this provider into StyleSheetLoader.
-//
-// Divergences (language): Beef IMount -> foundation.vfs::IFileSystem (borrowed, caller-owned); Beef
-// Result<void>/Result<IImageData> -> the ported IResourceProvider's bool / borrowed const ImageData*
-// (this provider owns the decoded images in m_images, matching "provider owns the returned image").
+// the image and nine-slice drawable factories resolve external files through this. It is a separate
+// module so the core foundation.ui stays free of a VFS dependency; the app wires this provider into
+// StyleSheetLoader. The filesystem is borrowed (the caller owns it); the provider owns the decoded
+// images it returns, in m_images.
 
 module;
 #include "Core/Prelude.h"
@@ -28,15 +25,14 @@ namespace image = foundation::image;
 
 export namespace foundation::ui::vfs
 {
-    /// IResourceProvider that loads resources from a VFS filesystem. The caller owns the filesystem -
+    /// IResourceProvider that loads resources from a VFS filesystem. The caller owns the filesystem;
     /// this provider does not delete it.
     class VfsResourceProvider final : public IResourceProvider
     {
     public:
         explicit VfsResourceProvider(foundation::vfs::IFileSystem* fs) noexcept : m_fs(fs) {}
 
-        /// Load text content from a path relative to the filesystem root. Empty files succeed (matching
-        /// Sedulous's length<=0 -> Ok).
+        /// Load text content from a path relative to the filesystem root. Empty files succeed.
         bool LoadText(StringView path, String& outText) override
         {
             if (m_fs == nullptr)

@@ -1,4 +1,4 @@
-# Editor::Geometry - `editor.geometry`: the mesh page (preview + stats). Editor exe only.
+# Editor::Geometry - `editor.geometry`: the mesh page (preview and stats). Editor exe only.
 util_add_engine_library(Editor.Geometry ALIAS Editor::Geometry)
 target_link_libraries(Editor.Geometry PUBLIC
     Foundation::Core Foundation::Content Foundation::Resource Foundation::Settings

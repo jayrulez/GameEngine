@@ -4,14 +4,14 @@
 // Engine::Navigation - :components partition.
 //
 // The authoring components:
-//   * NavMeshZoneComponent - a navmesh zone: AABB half-extents (the bake region), the bake
+//   * NavMeshZoneComponent: a navmesh zone: AABB half-extents (the bake region), the bake
 //     params (used by the editor's Bake action; the runtime ignores them), and a Ref to the
 //     cooked NavigationZoneResource the subsystem loads.
-//   * NavAgentComponent - an agent that steers to targets through the crowd. Reflected runtime
+//   * NavAgentComponent: an agent that steers to targets through the crowd. Reflected runtime
 //     methods (navigate/stop/finished/remaining/velocity) write intent to transient fields; the
 //     NavigationSceneSystem tick consumes them and (in MoveEntity mode) writes the transform.
 //
-// Runtime fields (agent id, zone index, target request, status) are transient - never serialized.
+// Runtime fields (agent id, zone index, target request, status) are transient and never serialized.
 
 module;
 #include "Core/Prelude.h"
@@ -42,8 +42,8 @@ export namespace engine::navigation
         f32 agentMaxSlopeDegrees = 45.0f;
         // The cooked navmesh this zone loads at runtime.
         foundation::resource::Ref<nav::NavigationZoneResource> zone;
-        // The most agents its crowd moves at once (data version 2; before, 128 fixed). A crowd
-        // reserves its agents up front, so ask for what the scene will use.
+        // The most agents its crowd moves at once (data version 2; a version 1 zone keeps the
+        // default). A crowd reserves its agents up front, so ask for what the scene will use.
         i32 maxAgents = 128;
 
         // Runtime (transient): index into the subsystem's live-zone list, -1 until started.
@@ -57,12 +57,13 @@ export namespace engine::navigation
         f32 height = 2.0f;
         f32 maxSpeed = 3.5f;
         f32 maxAcceleration = 8.0f;
-        // Arrival radius: the agent counts as finished (and stops steering) within this
-        // distance of the target - "walk NEAR the door", follow-at-distance, surround
-        // behaviors. 0 = the legacy walk-onto-the-point arrival.
+        // Arrival radius: the agent counts as finished (and stops steering) within this distance of
+        // the target, for "walk near the door", following at a distance, or surrounding. 0 walks
+        // onto the point itself.
         f32 stopDistance = 0.0f;
         // MoveEntity (default): the agent writes the entity transform from crowd output.
-        // ReportOnly: the entity is NOT moved; script/physics reads the desired velocity instead.
+        // ReportOnly: the entity is not moved; script or physics reads the desired velocity
+        // instead.
         bool moveEntity = true;
         // Steer round other agents (on, the default: a guest in a crowd). Off, it goes straight
         // where it is sent and shoulders past anyone in its way, the crowd pushing them apart (a
@@ -85,8 +86,8 @@ export namespace engine::navigation
         bool finished = true;
         f32 remainingDistance = 0.0f;
         Float3 desiredVelocity{0, 0, 0}; // crowd steering output (world space), for ReportOnly
-        f32 appliedSpeed = -1.0f;        // steering profile last pushed into the crowd - the
-        f32 appliedAcceleration = -1.0f; // tick re-applies on ANY change (script or inspector)
+        f32 appliedSpeed = -1.0f;        // steering profile last pushed into the crowd; the
+        f32 appliedAcceleration = -1.0f; // tick re-applies on any change (script or inspector)
         bool appliedAvoidOthers = true;
         // Introspection cache (filled from the crowd each tick; see the foundation enums):
         u8 crowdState = 0;       // NavAgentCrowdState: 0 invalid, 1 walking, 2 off-mesh
@@ -142,19 +143,19 @@ export namespace engine::navigation
             stopRequested = false;
             finished = vx == 0.0f && vz == 0.0f;
         }
-        // Per-call speed control (Lumix parity): applies to the LIVE crowd agent next tick.
+        // Per-call speed control: applies to the live crowd agent next tick.
         void setSpeed(f32 speed) { maxSpeed = speed; }
         void setStopDistance(f32 distance) { stopDistance = distance; }
         [[nodiscard]] f32 speed() const { return maxSpeed; }
-        // navigate + speed + arrival radius in one call (the common scripted move order).
+        // navigate, speed and arrival radius in one call (the common scripted move order).
         void navigateAt(f32 x, f32 y, f32 z, f32 moveSpeed, f32 arriveDistance)
         {
             maxSpeed = moveSpeed;
             stopDistance = arriveDistance;
             navigate(x, y, z);
         }
-        // Introspection (Lumix parity): WHY an agent is/is not moving. Numeric contracts
-        // (the enums above) - stable for script logic and logging.
+        // Introspection: why an agent is or is not moving. Numeric contracts (the enums above),
+        // stable for script logic and logging.
         [[nodiscard]] i32 state() const { return static_cast<i32>(crowdState); }
         [[nodiscard]] i32 targetState() const { return static_cast<i32>(crowdTargetState); }
         [[nodiscard]] f32 desiredSpeed() const { return crowdDesiredSpeed; }
@@ -168,14 +169,15 @@ export namespace engine::navigation
 
     // Per-scene navigation settings (the NavigationSceneSystem's settings block). `debugDraw`
     // renders the loaded navmesh surface; `debugDrawPaths` adds agent target lines. Both work in
-    // editor AND player (the physics-debug precedent), gated here, drawn by the runtime subsystem.
+    // the editor and the player, as the physics debug draw does: gated here, drawn by the runtime
+    // subsystem.
     struct NavigationSceneSettings
     {
         bool debugDraw = false;
         bool debugDrawPaths = false;
-        // Bake-stage overlay (Lumix parity): the LAST editor bake's intermediate Recast data
-        // (walkable spans + region contours) - how the bake ARRIVED at the mesh. Cleared per
-        // bake; the live-dtNavMesh draw above stays the query ground truth.
+        // Bake-stage overlay: the last editor bake's intermediate Recast data (walkable spans and
+        // region contours), showing how the bake arrived at the mesh. Cleared per bake; the live
+        // dtNavMesh draw above stays the ground truth for queries.
         bool debugDrawBakeStages = false;
     };
 
@@ -268,13 +270,14 @@ export namespace engine::navigation
         Array<ReleasedAgent> m_released;
     };
 
-    // Registers the component reflection (displayName/category, the `.of` handle + agent methods,
-    // the zone Ref picker). Defined in the implementation unit (REFLECT_VALUE bodies stay out of
-    // interface units - GCC module hygiene).
+    // Registers the component reflection (displayName/category, the `.of` handle and agent methods,
+    // the zone Ref picker). Defined in the implementation unit, since REFLECT_VALUE bodies stay out
+    // of interface units for GCC's module handling.
     void RegisterNavigationComponentReflection();
 
-    // Metadata-only script-facade registrar (DefaultApp + Engine.Composition call it): surfaces
-    // NavAgentComponent to the script backends so behaviors can call NavAgent.of(entity).navigate(...)
-    // and reference the class name in their prelude. Touches no device/world.
+    // Metadata-only script-facade registrar (NavigationDomain's registerScriptFacade): surfaces
+    // NavAgentComponent to the script backends so behaviors can call
+    // NavAgent.of(entity).navigate(...) and name the class in their prelude. Touches no device or
+    // world.
     void RegisterNavigationScriptFacade();
 }

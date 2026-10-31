@@ -3,19 +3,19 @@
 
 // Editor::Mcp - :asset_uses partition
 //
-// asset_uses: the REVERSE dependency query - "what uses
-// this asset". Required reading before any destructive change (delete/rename/move): the agent
-// sees every direct user and the kind of each edge before it breaks one.
+// asset_uses: the reverse dependency query, "what uses this asset". An agent should run it before
+// any destructive change (delete, rename, move) to see every direct user and the kind of each
+// edge before it breaks one.
 //
-// Edges come from the SAME sources the engine itself uses, computed LIVE (never a cached graph):
-//   - buildable assets: the builder's ScanDependencies (exactly what the cook driver hashes) -
+// Edges come from the same sources the engine itself uses, computed live (never a cached graph):
+//   - buildable assets: the builder's ScanDependencies (what the cook driver hashes), giving
 //     `reads` (content consumed at cook time) and `references` (the product's runtime refs);
-//   - scenes/prefabs: LoadScene over the FULL manager set (Engine.Composition) + a factory-less
-//     ResourceManager whose unresolved set IS the component Ref list (the export
-//     reachability-scanner recipe), plus each parked prefab instance's id;
-//   - project settings: the manifest's Guid fields (default scene, startup script, input map,
-//     bus layout, UI theme, UI font, loading document).
-// Direct users only - re-run on a user to walk the chain outward.
+//   - scenes and prefabs: LoadScene over the full manager set (Engine.Composition) and a
+//     factory-less ResourceManager whose unresolved set is the component Ref list (the same
+//     recipe as the export reachability scanner), plus each parked prefab instance's id;
+//   - project settings: the manifest's asset settings, found by reflection
+//     (ForEachSettingAsset).
+// It reports direct users only; run it again on a user to walk the chain outward.
 
 module;
 #include "Core/Prelude.h"
@@ -52,7 +52,7 @@ namespace editor::mcp::detail
         return false;
     }
 
-    // One direct user of the queried asset: the using instance + every edge kind it holds.
+    // One direct user of the queried asset: the using instance and every edge kind it holds.
     struct AssetUse
     {
         content::Instance* user = nullptr;
@@ -60,9 +60,9 @@ namespace editor::mcp::detail
         Array<String> edges;
     };
 
-    // A scene/prefab instance's DIRECT references (component resource Refs + parked prefab-instance
-    // ids), as every exporting host scans them. Returns false when the stored stream does not load
-    // (project_health counts those; asset_uses skips them).
+    // A scene or prefab instance's direct references (component resource Refs and parked
+    // prefab-instance ids), as every exporting host scans them. Returns false when the stored
+    // stream does not load (project_health counts those; asset_uses skips them).
     inline bool CollectSceneReferences(content::Instance& instance, content::ContentDatabase& db,
                                        Array<Guid>& resources, Array<Guid>& prefabs)
     {
@@ -152,7 +152,7 @@ namespace editor::mcp::detail
     }
 
     // The project settings naming `target`, each by the setting's name, as project_info and
-    // project_settings_set know it (a list setting once).
+    // project_settings_set know it (a list setting is named once).
     inline Array<String> SettingsUsesOf(const engine::project::ProjectSettings& settings, const Guid& target)
     {
         Array<String> names;

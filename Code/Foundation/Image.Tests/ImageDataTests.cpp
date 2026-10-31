@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Images.Tests/ImageDataTests.bf - OwnedImageData,
-// NineSlice, ImageAtlasBuilder, PixelFormat. Mirrors the Sedulous assertions so
-// the ported lib inherits that suite's coverage. (Test.Assert -> CHECK; Beef
-// scope/new -> stack/Array; nullable RectangleI -> const RectI*.)
+// Image data types: OwnedImageData, NineSlice, ImageAtlasBuilder, PixelFormat,
+// and ImageData's instance identity.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -202,7 +200,7 @@ TEST_CASE("image.atlas: grows when needed")
     }
 
     CHECK(builder.Build());
-    // 20 x 64x64 = 81920 px; 256x256=65536 too small -> should have grown.
+    // 20 x 64x64 = 81920 px; 256x256 = 65536 is too small, so the atlas grew.
     CHECK((builder.Atlas()->Width() >= 512u || builder.Atlas()->Height() >= 512u));
 }
 

@@ -4,7 +4,7 @@
 // Core - :logger partition
 //
 // Logging frontend: log levels, the ILogSink interface, the Logger (sink list
-// + level filter) and the Logf frontend behind the LOG_* macros.
+// and level filter) and the Logf frontend behind the LOG_* macros.
 // Concrete sinks (Console/File/Ring) live in their own partitions.
 //
 // Thread-safe: an atomic level filters cheaply on the hot path; a mutex guards

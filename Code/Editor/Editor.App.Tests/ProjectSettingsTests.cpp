@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Project Settings over its markup (Data/Editor/ProjectSettings.xml): the manifest's labelled
-// settings as the grid's rows, in their categories; an asset setting a reference to the source
-// type it names (its slot), a list setting a list of them, an enum its choices by name, MSAA the
-// render subsystem's levels, the project's engine version read only; Save writing the rows back
-// (a list's empty and repeated entries dropped) and persisting, Cancel leaving the manifest as it
-// was.
+// Project Settings over its markup (Data/Editor/ProjectSettings.xml). The manifest's labelled
+// settings are the grid's rows, in their categories. An asset setting is a reference (a slot) to the
+// source type it names and a list setting is a list of them; an enum shows its choices by name; MSAA
+// offers the render subsystem's levels; and the project's engine version is read only. Save writes
+// the rows back (dropping a list's empty and repeated entries) and persists them; Cancel leaves the
+// manifest as it was.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -140,7 +140,7 @@ TEST_CASE("project settings: Save writes the rows back, a list's empty and repea
 {
     Bed bed;
     bed.Edit(u8"name", gui::Variant(StringView(u8"Renamed")));
-    // Cancel first: the manifest is as it was.
+    // Cancel first: the manifest stays as it was.
     bed.dialog->Close();
     CHECK(bed.project->Settings().name == String(u8"Settings"));
     CHECK(bed.project->Settings().defaultSceneId == bed.scene);

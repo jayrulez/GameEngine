@@ -3,20 +3,20 @@
 
 // GUI - :layout_style partition
 //
-// What a node asks of layout (E2 of Specs/gui-lab-evolution.md), one record on every node, filled
-// from its sheet, its markup or code: how it sizes (width, height, min, max: a length, a
-// percentage of its container, or auto), how it lays out its children (display: flex, grid,
-// stack, dock or none, with each kind's properties), how its container places it (the flex,
-// grid and dock item properties, margin), whether it is out of flow (position and insets), and
-// whether it clips or scrolls (overflow). Lengths in em, rem, vw and vh are resolved to pixels
-// when the style is applied; percentages and auto wait for layout, which knows the container.
+// What a node asks of layout: one record on every node, filled from its sheet, its markup or code.
+// It says how the node sizes (width, height, min, max: a length, a percentage of its container, or
+// auto), how it lays out its children (display: flex, grid, stack, dock or none, with each kind's
+// properties), how its container places it (the flex, grid and dock item properties, margin),
+// whether it is out of flow (position and insets), and whether it clips or scrolls (overflow). Lengths in em, rem, vw
+// and vh are resolved to pixels when the style is applied; percentages and auto wait for layout,
+// which knows the container.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:layout_style;
 
-import foundation.core; // Array, Float2, Optional
+import foundation.core;
 import :thickness;
 
 using namespace foundation::core;
@@ -36,7 +36,7 @@ export namespace foundation::gui
         MinContent,
         MaxContent,
         None,
-        Calc, ///< Value pixels and Percent of the base (a calc() mixing them, E13)
+        Calc, ///< Value pixels plus Percent of the base (a calc() mixing them)
     };
     struct LayoutLength
     {
@@ -49,8 +49,9 @@ export namespace foundation::gui
         [[nodiscard]] static constexpr LayoutLength None() noexcept { return {LayoutLengthKind::None, 0.0f}; }
         [[nodiscard]] static constexpr LayoutLength Calc(f32 px, f32 percent) noexcept { return {LayoutLengthKind::Calc, px, percent}; }
         [[nodiscard]] constexpr bool IsAuto() const noexcept { return Kind == LayoutLengthKind::Auto; }
-        /// The length in pixels against `base` (the container's content length, negative when it
-        /// is not known yet); none for auto, a content size, or a percentage of an unknown base.
+        /// Returns the length in pixels against `base` (the container's content length, negative
+        /// when it is not known yet); none for auto, a content size, or a percentage of an unknown
+        /// base.
         [[nodiscard]] Optional<f32> Resolve(f32 base) const noexcept
         {
             switch (Kind)
@@ -86,7 +87,8 @@ export namespace foundation::gui
         Dock,  ///< children docked to the sides in order, the last filling what remains
         None,  ///< the node and its subtree take no space and draw nothing
     };
-    /// In its container's flow, offset after it, or out of it (placed by its insets).
+    /// Whether a node is in its container's flow, offset after it, or out of it (placed by its
+    /// insets).
     enum class Position : u8
     {
         Static,
@@ -117,8 +119,8 @@ export namespace foundation::gui
         SpaceEvenly,
         Stretch, ///< align-content's normal: lines share the free space
     };
-    /// Placement across an axis (align-items, align-self, justify-items, justify-self). Auto on
-    /// an item takes the container's.
+    /// Placement across an axis (align-items, align-self, justify-items, justify-self). Auto on an
+    /// item uses the container's value.
     enum class Align : u8
     {
         Auto,
@@ -135,7 +137,7 @@ export namespace foundation::gui
         Top,
         Right,
         Bottom,
-        Start, ///< the inline start: left, or right in right to left (E9b)
+        Start, ///< the inline start: left, or right in right to left
         End,   ///< the inline end
     };
     /// Visible draws children outside the box; hidden clips them; scroll and auto clip and
@@ -148,7 +150,8 @@ export namespace foundation::gui
         Auto,
     };
     /// How a scroll moves (CSS's scroll-behavior): at once, or easing to where it is going. A call
-    /// may ask for either, or for Auto, the node's own (`scroll-behavior: smooth` opts in).
+    /// may ask for either, or for Auto, which uses the node's own (`scroll-behavior: smooth` opts
+    /// in).
     enum class ScrollBehavior : u8
     {
         Auto,
@@ -162,8 +165,8 @@ export namespace foundation::gui
         Auto,
         Contain,
     };
-    /// How thick a scroller's bars are (CSS's scrollbar-width); `none` hides them, the node still
-    /// scrolling by the wheel, the keys and touch.
+    /// How thick a scroller's bars are (CSS's scrollbar-width). `none` hides them, while the node
+    /// still scrolls by the wheel, the keys and touch.
     enum class ScrollbarWidth : u8
     {
         Auto,
@@ -177,8 +180,8 @@ export namespace foundation::gui
         Auto,
         Overlay,
     };
-    /// Where a scroll into view puts what it shows: the least move that shows it, or its start,
-    /// centre or end at the box's.
+    /// Where a scroll into view puts what it shows: the smallest move that shows it, or its start,
+    /// centre or end aligned with the box's.
     enum class ScrollAlign : u8
     {
         Nearest,
@@ -226,7 +229,7 @@ export namespace foundation::gui
         // --- The node's own box ---
         LayoutLength Width{};
         LayoutLength Height{};
-        LayoutLength MinWidth{}; ///< auto: none, but a flex item's content minimum
+        LayoutLength MinWidth{}; ///< auto: no minimum, except a flex item's content minimum
         LayoutLength MinHeight{};
         LayoutLength MaxWidth = LayoutLength::None();
         LayoutLength MaxHeight = LayoutLength::None();
@@ -280,8 +283,8 @@ export namespace foundation::gui
         foundation::gui::Dock DockSide = foundation::gui::Dock::Fill;
     };
 
-    /// The properties a sheet may set through a node's setters, one bit each (E3): code that sets
-    /// one makes it its own, as CSS's inline style, and the sheet leaves it be (Node pins it).
+    /// The properties a sheet may set through a node's setters, one bit each. Code that sets one
+    /// makes it its own, like CSS's inline style, and the sheet then leaves it alone (Node pins it).
     enum StyleSlot : u32
     {
         SlotOpacity,
@@ -303,8 +306,8 @@ export namespace foundation::gui
         SlotFontWeight, SlotFontStyle, SlotOverflowWrap,
         SlotCount,
     };
-    /// A set of StyleSlots: what code pinned, what a change touched. Two words: the slots passed 64
-    /// with E11's font-weight, font-style and overflow-wrap.
+    /// A set of StyleSlots: the slots code pinned, or the slots a change touched. It takes two
+    /// words, as there are more than 64 slots.
     struct StyleSlotSet
     {
         static constexpr usize kWords = 2;
@@ -332,7 +335,8 @@ export namespace foundation::gui
         set.Words[slot / 64] = u64{1} << (slot % 64);
         return set;
     }
-    /// The longhand a slot is, as a sheet names it (the inspector's "set by code").
+    /// Returns the longhand property a slot stands for, as a sheet names it (for the inspector's
+    /// "set by code").
     [[nodiscard]] constexpr const char8_t* StyleSlotProperty(StyleSlot slot) noexcept
     {
         constexpr const char8_t* kNames[] = {
@@ -358,8 +362,8 @@ export namespace foundation::gui
         return kNames[slot];
     }
 
-    /// Calls `f(slot, member)` for each LayoutStyle field a sheet sets as one property (the margin,
-    /// four properties in one field, is apart).
+    /// Calls `f(slot, member)` for each LayoutStyle field a sheet sets as one property. The margin,
+    /// four properties in one field, is handled separately.
     template <typename F>
     constexpr void ForEachLayoutField(F&& f)
     {
@@ -448,10 +452,10 @@ export namespace foundation::gui
 
     /// What a container allows a child when it measures it: the border-box size from `Min` to
     /// `Max` (kUnbounded for none), and the lengths its percentages resolve against (negative when
-    /// the container's own size is not known yet). On an axis marked exact the container fixes the
-    /// size (Min, a flex item's resolved size, a stretch), which even a size the child's style gives
-    /// takes; on any other, that size overflows the room, as in CSS, even when the room is none
-    /// (min-content asks with none).
+    /// the container's own size is not known yet). On an axis marked exact, the container fixes the
+    /// size at Min (a flex item's resolved size, a stretch), and even a size the child's style gives
+    /// yields to it. On any other axis, a size the style gives overflows the room, as in CSS, even
+    /// when there is no room (min-content asks with none).
     struct LayoutConstraints
     {
         core::Float2 Min{0.0f, 0.0f};

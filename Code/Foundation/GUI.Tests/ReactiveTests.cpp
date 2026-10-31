@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the reactive layer (G5 of Specs/vg-and-gui-lab.md): properties that record their readers,
-// computed values that recompute lazily, and effects that rerun when what they read changes,
-// batched on a scheduler; no manual subscriptions.
+// GUI - the reactive layer: properties that record their readers, computed values that recompute
+// lazily, and effects that rerun when what they read changes, batched on a scheduler; no manual
+// subscriptions.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -69,7 +69,7 @@ TEST_CASE("reactive: a computed value recomputes lazily, once per change")
     CHECK(total.Get() == 12);
     CHECK(evaluations == 2);
 
-    // An effect reading the computed reruns through it.
+    // An effect that reads the computed value reruns through it.
     int shown = 0;
     Effect effect([&] { shown = total.Get(); });
     count.Set(1);
@@ -139,7 +139,7 @@ TEST_CASE("reactive: an untracked read records nothing")
 
 TEST_CASE("reactive: an effect that changes what it read reruns after itself, never inside itself")
 {
-    // No scheduler: the effect would otherwise run again inside its own run, recursing.
+    // With no scheduler, the effect would otherwise run again inside its own run, recursing.
     Property<int> a{0};
     int depth = 0, deepest = 0;
     Effect settles([&] {
@@ -153,7 +153,7 @@ TEST_CASE("reactive: an effect that changes what it read reruns after itself, ne
     CHECK(deepest == 1);
     CHECK(settles.RunCount() == 4u); // 0, 1, 2, 3
 
-    // One that never settles is cut off, still flat.
+    // An effect that never settles is cut off, still without recursing.
     Property<int> b{0};
     deepest = 0;
     Effect runaway([&] {

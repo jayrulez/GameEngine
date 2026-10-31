@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUISandbox - the Code page (C8 of Specs/gui-lab-evolution-3.md): GUI.Code's editor as a host
-// uses it. A script in the sandbox's own AngelScript, checked by the engine's compiler a moment
-// after each edit without running it (IScriptManager::Check), its errors the editor's diagnostics;
-// a click in the gutter sets a breakpoint; completion and hover from the surface the script
-// backend bound (DescribeBoundApi) and the language's words; and a shader beside it. The
-// languages are the editor's too (Data/Editor/Code), read through the XML serialization.
+// GUISandbox - the Code page: GUI.Code's editor used the way a host uses it. The script is in the
+// sandbox's own AngelScript; the engine's compiler checks it a moment after each edit without
+// running it (IScriptManager::Check), and its errors become the editor's diagnostics. A click in
+// the gutter sets a breakpoint. Completion and hover come from the surface the script backend bound
+// (DescribeBoundApi) and the language's words. A shader editor sits beside it. The languages are
+// the editor's own (Data/Editor/Code), read through the XML serialization.
 
 module;
 #include "Core/Prelude.h"
@@ -28,8 +28,8 @@ namespace gui = foundation::gui;
 
 export namespace sandbox
 {
-    /// Outlives the page's editors (the host keeps it before the GUI), so it never reaches into
-    /// them as it goes: its change listener goes with the script's document.
+    /// Outlives the page's editors (the host declares it before the GUI), so its destructor does not
+    /// reach into them; its change listener is destroyed with the script's document.
     class CodePage final : public gui::ICodeLanguageService
     {
     public:
@@ -87,7 +87,7 @@ export namespace sandbox
                 Check();
         }
 
-        /// Compiles the script as it stands, nothing of it run, and shows what the compiler said.
+        /// Compiles the script as it stands, without running it, and shows the compiler's messages.
         void Check()
         {
             m_checkIn = 0.0f;
@@ -122,7 +122,7 @@ export namespace sandbox
         /// How many times the script has been checked, for a test.
         [[nodiscard]] u32 CheckCount() const noexcept { return m_checks; }
 
-        /// Sets a breakpoint on `line`, or takes away the one there.
+        /// Sets a breakpoint on `line`, or removes the one there.
         void ToggleBreakpoint(u32 line)
         {
             if (m_script == nullptr)
@@ -356,8 +356,8 @@ export namespace sandbox
             }
         }
 
-        /// The script's own names (its functions, variables), as an editor offers the words of
-        /// the file: each once, not the word being typed, not what the list holds already.
+        /// The script's own names (its functions and variables), as an editor offers the words of
+        /// the file. Each appears once, skipping the word being typed and words the list already holds.
         static void AddDocumentWords(const gui::CodeDocument& document, const gui::CodeCompletionRequest& request,
                                      Array<gui::CodeCompletionItem>& out)
         {

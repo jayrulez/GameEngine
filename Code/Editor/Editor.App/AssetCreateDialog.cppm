@@ -3,13 +3,13 @@
 
 // Editor App - :asset_create_dialog partition
 //
-// Create Asset (Documentation/Specs/editor-gui.md, 5.2, layer 5): a window over its markup
-// (Data/Editor/AssetCreate.xml) that names a new asset and the group it goes in, for any type:
-// it creates nothing itself, its owner does with what Create answers. The groups are a tree in it,
-// every one open, the group it starts in chosen and a click choosing another (the old dialog's);
-// the name is checked as it is typed (AssetNames, the rule Save
-// As keeps too), Create waiting while it is refused and the line under the name saying why, else
-// what it will make. Enter in the name creates, Escape or Cancel closes.
+// Create Asset: a window over its markup (Data/Editor/AssetCreate.xml) that names a new asset of
+// any type and picks the group it goes in. It creates nothing itself; its owner creates the asset
+// from what Create answers. The groups show as a fully expanded tree with the starting group
+// selected, and a click selects another. The name is checked as it is typed (AssetNames, the same
+// rule Save As uses): while the name is refused, Create does nothing and the line under the name
+// says why; otherwise that line says what will be made. Enter in the name field creates; Escape or
+// Cancel closes.
 module;
 #include "Core/Prelude.h"
 
@@ -59,10 +59,10 @@ export namespace editor::app
         static constexpr f32 kWidth = 440.0f;
         static constexpr f32 kHeight = 420.0f;
 
-        /// Opens it over `root` with `body` (the markup's), titled `title` ("New Material"), the
-        /// group `group` of `sources` chosen in its tree to start, the name `suggested`. `create`
-        /// is told the group and the name Create was pressed with (a name it takes), then it
-        /// closes. Null when `body` lacks its parts.
+        /// Opens the dialog over `root` with `body` (loaded from the markup), titled `title` ("New
+        /// Material"), with the group `group` of `sources` selected in its tree and the name
+        /// `suggested`. When Create is pressed with an accepted name, `create` gets the group and
+        /// the name, and the dialog closes. Returns null when `body` lacks its parts.
         static RefPtr<gui::Window> Open(IAllocator& allocator, gui::SceneRoot& root, RefPtr<gui::Node> body, foundation::content::ContentDatabase& sources,
                                         foundation::content::Group& group, StringView title, StringView suggested,
                                         Function<void(foundation::content::Group&, StringView)> create)
@@ -82,14 +82,14 @@ export namespace editor::app
             window->SetSize(Float2{kWidth, kHeight});
             window->GetContent()->AddChild(body.Get());
 
-            // What the window holds while it is open: the group, the tree's model and its groups by
-            // node, and the owner's create.
+            // What the window holds while it is open: the group, the tree's model, the groups by
+            // tree node, and the owner's create callback.
             struct State : public RefCounted
             {
                 explicit State(IAllocator& allocator) : groups(allocator) {}
                 foundation::content::Group* group = nullptr;
                 gui::TreeModel model;
-                Array<foundation::content::Group*> groups; // by the tree's node
+                Array<foundation::content::Group*> groups; // indexed by tree node
                 Function<void(foundation::content::Group&, StringView)> create;
             };
             RefPtr<State> state = MakeRef<State>(allocator, allocator);
@@ -97,7 +97,7 @@ export namespace editor::app
             state->create = Move(create);
             AddGroups(state->model, state->groups, *sources.RootGroup(), gui::kTreeModelRoot);
             tree->SetModel(&state->model);
-            // A tree has no size of its own: room for a few groups whatever the sheet says.
+            // A tree has no intrinsic size: give it room for a few groups whatever the style sheet says.
             tree->EditLayoutStyle([](gui::LayoutStyle& s) { s.MinHeight = gui::LayoutLength::Px(160.0f); });
             for (usize node = 0; node < state->groups.Size(); ++node)
                 tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
@@ -127,7 +127,7 @@ export namespace editor::app
             {
                 const String chosen(name->GetText());
                 if (!AssetNames::Refusal(*state->group, chosen.AsView()).IsEmpty())
-                    return; // Create waits; the line says why
+                    return; // refused: the line under the name says why
                 Function<void(foundation::content::Group&, StringView)> made = Move(state->create);
                 foundation::content::Group* in = state->group;
                 raw->Close();
@@ -142,7 +142,7 @@ export namespace editor::app
                                             state->group = state->groups[node];
                                             check();
                                         });
-            window->SetOnClose([tree]() { tree->SetModel(nullptr); }); // the model goes with the window
+            window->SetOnClose([tree]() { tree->SetModel(nullptr); }); // release the model when the window closes
             name->SetOnTextChanging([check](StringView) { check(); });
             (void)name->AddEventListener(gui::EventType::Submit, [commit](const gui::Event&) { commit(); });
             createButton->SetOnClick(commit);
@@ -157,7 +157,8 @@ export namespace editor::app
         }
 
     private:
-        // `group` and every group under it, by name ("Content" the top), in the database's order.
+        // Adds `group` and every group under it by name (the top shown as "Content"), in the
+        // database's order.
         static void AddGroups(gui::TreeModel& model, Array<foundation::content::Group*>& groups, foundation::content::Group& group, i32 parent)
         {
             const i32 node = model.AddNode(parent, group.Parent() == nullptr ? GroupPicker::kTop : group.Name());

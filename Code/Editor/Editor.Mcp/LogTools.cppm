@@ -3,14 +3,14 @@
 
 // Editor::Mcp - :log_tools partition
 //
-// The diagnostics tools: log_read / log_write /
-// known_issues. The host registers ONE EditorLogBuffer sink on the global logger first thing in
-// main, so every LOG_* line across the engine (cook warnings, scene-load errors, subsystem
-// output) is captured with a monotonic sequence; log_read polls it incrementally
-// (sinceSequence), log_write drops an agent marker INTO the same stream (correlating agent
-// actions with engine output - the ez adoption), and known_issues returns the engine's
-// KNOWN_ISSUES.md register so an agent checks whether a symptom is already known before
-// re-diagnosing it. All read-only against the repo; log_write touches only the in-memory log.
+// The diagnostics tools: log_read, log_write and known_issues. The host registers one
+// EditorLogBuffer sink on the global logger first thing in main, so every LOG_* line across the
+// engine (cook warnings, scene-load errors, subsystem output) is captured with a monotonic
+// sequence. log_read polls it incrementally (sinceSequence); log_write drops an agent marker into
+// the same stream, to correlate agent actions with engine output; known_issues returns the
+// engine's KnownIssues.md register so an agent can check whether a symptom is already known
+// before diagnosing it again. All are read-only against the repo; log_write touches only the
+// in-memory log.
 
 module;
 #include "Core/Prelude.h"
@@ -68,10 +68,10 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // Registers log_read / log_write / known_issues. `logBuffer` is the host's sink (registered
-    // on the global logger before anything else logs; must outlive the server).
-    // `knownIssuesPath` is the resolved absolute path of KNOWN_ISSUES.md ("" = not found - the
-    // tool then errs with guidance instead of being absent, so agents learn why).
+    // Registers log_read, log_write and known_issues. `logBuffer` is the host's sink (registered
+    // on the global logger before anything else logs; it must outlive the server).
+    // `knownIssuesPath` is the resolved absolute path of KnownIssues.md ("" when not found; the
+    // tool then fails with guidance instead of being absent, so agents learn why).
     inline void RegisterLogTools(foundation::mcp::McpServer& server,
                                  editor::EditorLogBuffer& logBuffer, String knownIssuesPath)
     {

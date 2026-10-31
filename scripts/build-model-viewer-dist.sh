@@ -3,8 +3,8 @@
 # Copyright (c) 2026-Present Robert Campbell
 
 #
-# build-model-viewer-dist.sh - assemble a portable, downloadable MODEL VIEWER for Linux
-# (Documentation/Specs/model-viewer.md, P5), as build-editor-dist.sh does the editor.
+# build-model-viewer-dist.sh - assemble a portable, downloadable model viewer for Linux, as
+# build-editor-dist.sh does the editor.
 #
 # The result is an unzip-and-run folder: the Tools.ModelViewer executable, its runtime sidecars,
 # and the Data root it reads beside it: Engine (the shader sources and the cooked pack, the GUI's
@@ -15,7 +15,7 @@
 # Built RelWithDebInfo (the clang-reldbg preset), the debug info split off into
 # <dist>-symbols.tar.gz (Tools.ModelViewer.debug, linked from the stripped exe by .gnu_debuglink).
 #
-# NOT bundled: Vulkan (a system dependency: GPU drivers and the Vulkan loader).
+# Not bundled: Vulkan (a system dependency: GPU drivers and the Vulkan loader).
 #
 #   Usage:  scripts/build-model-viewer-dist.sh
 #   Env:    JOBS=N     build parallelism (default 4; higher OOMs the modules build)

@@ -3,11 +3,11 @@
 
 /// foundation.rhi.webgpu:transfer_batch - TransferBatch over queue writes.
 ///
-/// WebGPU's wgpuQueueWriteBuffer/WriteTexture ARE staged uploads (the runtime owns
-/// the staging ring), so the batch records payload COPIES and replays them as queue
-/// writes at Submit - preserving the RHI ordering contract (writes land at Submit
-/// time, not Write time). Submit blocks like the Vulkan batch (queue drain);
-/// SubmitAsync signals the fence from OnSubmittedWorkDone instead.
+/// WebGPU's wgpuQueueWriteBuffer/WriteTexture are staged uploads (the runtime owns the
+/// staging ring), so the batch records payload copies and replays them as queue writes
+/// at Submit, preserving the RHI ordering contract (writes land at Submit time, not
+/// Write time). Submit blocks like the Vulkan batch (queue drain); SubmitAsync signals
+/// the fence from OnSubmittedWorkDone instead.
 
 module;
 #include "Core/Prelude.h"
@@ -66,7 +66,7 @@ export namespace foundation::rhi::webgpu
             // The RHI's extent is the level's size in texels; WebGPU copies a block-compressed
             // texture in whole blocks only, so a level smaller than a block (a 2x2 or 1x1 mip of a
             // 4x4-block format) is written as one block. Vulkan takes the texel size as it is;
-            // the browser refused it, and the mip chain's tail stayed unwritten.
+            // WebGPU refuses it, which would leave the mip chain's tail unwritten.
             const TextureFormat format = texture->desc.format;
             if (IsCompressed(format))
             {
@@ -90,13 +90,13 @@ export namespace foundation::rhi::webgpu
 #if !PLATFORM_WEB
             // The Vulkan batch drains the queue before returning; match it on desktop.
             //
-            // On WEB the drain is SKIPPED - and it must be: wgpuQueueWriteBuffer/WriteTexture
-            // copy the payload at CALL time and the single WebGPU queue preserves ordering, so
-            // every later submit already sees the data (nothing here needs completion). Pumping
-            // would yield to the browser MID-FRAME - lazy first-use uploads (GpuMesh, textures,
+            // On web the drain is skipped, and must be: wgpuQueueWriteBuffer/WriteTexture copy
+            // the payload at call time and the single WebGPU queue preserves ordering, so every
+            // later submit already sees the data (nothing here needs completion). Pumping would
+            // yield to the browser mid-frame: lazy first-use uploads (GpuMesh, textures,
             // debug-draw fonts) run inside a frame, the yield returns the rAF, the browser
             // expires the canvas texture, and that frame's submit is dropped ("Destroyed
-            // texture used in a submit" - the startup killer of one-shot bakes/uploads).
+            // texture used in a submit").
             bool done = false;
             WGPUQueueWorkDoneCallbackInfo info = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
             info.mode = WGPUCallbackMode_AllowProcessEvents;
@@ -187,7 +187,7 @@ export namespace foundation::rhi::webgpu
             {
                 // WriteBuffer sizes must be 4-byte multiples; the payload slice is
                 // already contiguous, so rounding within it is safe only when the
-                // tail exists - pad via the aligned staging copy when it does not.
+                // tail exists; pad via the aligned staging copy when it does not.
                 const usize aligned = (write.size + 3u) & ~usize{3};
                 if (aligned == write.size)
                 {

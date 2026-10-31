@@ -25,7 +25,7 @@ namespace editor
 {
     namespace
     {
-        // The value's parts as a track's channels take them (a Float3's three, a Color's four).
+        // Keys the value's parts into the track's channels (three for a Float3, four for a Color).
         void KeyValue(propanim::PropertyTrack& track, f32 time, const Variant& value)
         {
             const auto key = [time](f32 v) { return CurveKey{time, v, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Auto}; };
@@ -35,7 +35,7 @@ namespace editor
                 for (CurveKey& existing : curve.Keys())
                     if (Abs(existing.time - time) < 1e-4f)
                     {
-                        existing.value = v; // a key already there takes the value
+                        existing.value = v; // a key already at that time takes the value
                         curve.ApplyTangentModes();
                         return;
                     }
@@ -107,7 +107,7 @@ namespace editor
         m_document.OnChanged = [self]() { self->Changed(); };
         m_source.CurrentValue = [self](const propanim::PropertyTrack& track) { return self->EntityValue(track.componentType.AsView(), track.propertyPath.AsView()); };
 
-        // One axis under the ruler, the dopesheet and the curve view; a scrub poses the entity.
+        // One axis serves the ruler, the dopesheet and the curve view; a scrub poses the entity.
         m_axis = MakeRef<gui::TimeAxis>(EditorRootAllocator());
         m_axis->SetPixelsPerSecond(120.0f);
         m_axis->SetFrameRate(30.0f);
@@ -162,7 +162,7 @@ namespace editor
         m_save = button(u8"anim-save", [self]() { (void)self->Save(); });
         m_undo = button(u8"anim-undo", [self]() { self->Undo(); });
         m_redo = button(u8"anim-redo", [self]() { self->Redo(); });
-        (void)button(u8"anim-bind", [self]() { self->BindSelected(); }); // always on: the page's selection is read when clicked
+        (void)button(u8"anim-bind", [self]() { self->BindSelected(); }); // always enabled; reads the page's selection on click
         (void)button(u8"anim-pick", [self]() { self->PickEntity(); });
         m_addTrack = button(u8"anim-add-track", [self]() { self->OpenTrackMenu(); });
         m_key = button(u8"anim-key", [self]() { (void)self->KeyChosen(); });
@@ -187,7 +187,7 @@ namespace editor
         if (auto* loop = Find<gui::ButtonBase>(u8"anim-loop"))
             loop->SetOnToggled([self](bool on) { self->SetLooping(on); });
 
-        // The keys it binds, while it holds the focus: the clip's, never the scene's.
+        // The keys it binds while it holds the focus act on the clip, never on the scene.
         if (m_content)
         {
             m_commands.PushBack(m_content->OnCommand(u8"edit.undo", [self](gui::CommandEvent&) { self->Undo(); }));
@@ -276,7 +276,7 @@ namespace editor
     {
         if (entity == m_entity)
             return;
-        m_preview.Stop(); // the one posed goes back first
+        m_preview.Stop(); // restore the posed entity first
         m_entity = entity;
         Pose();
         ShowBar();
@@ -322,7 +322,7 @@ namespace editor
             return;
         const Variant value = EntityValue(seed.componentType.AsView(), seed.propertyPath.AsView());
         const f32 time = m_transport.Time();
-        m_preview.Stop(); // the tracks change: what the preview keeps is taken again
+        m_preview.Stop(); // the tracks change, so the preview's saved values are taken again
         m_document.Edit(u8"propanim-add-track", [&seed, &value, time](propanim::PropertyAnimationClip& clip)
                         {
                             propanim::PropertyTrack track;
@@ -330,7 +330,7 @@ namespace editor
                             track.propertyPath = seed.propertyPath;
                             track.kind = seed.kind;
                             if (!value.IsEmpty())
-                                KeyValue(track, time, value); // it starts holding what the entity shows
+                                KeyValue(track, time, value); // the track starts with the entity's current value
                             clip.tracks.PushBack(Move(track));
                         });
     }
@@ -363,7 +363,7 @@ namespace editor
         if (tracks.IsEmpty())
             for (usize t = 0; t < m_document.Clip().tracks.Size(); ++t)
                 tracks.PushBack(t);
-        // What the entity shows, read before the edit (the preview poses it after).
+        // Read the entity's current values before the edit (the preview poses it afterwards).
         Array<Variant> values;
         for (const usize t : tracks)
         {
@@ -390,12 +390,12 @@ namespace editor
         Array<usize> tracks = ChosenTracks();
         if (tracks.IsEmpty())
             return false;
-        m_preview.Stop(); // what it wrote goes back before its tracks go
+        m_preview.Stop(); // restore what the preview wrote before its tracks go
         if (m_sheet != nullptr)
             m_sheet->SetSelection(Span<const gui::TimelineKeyRef>{});
         m_document.Edit(u8"propanim-remove-tracks", [&tracks](propanim::PropertyAnimationClip& clip)
                         {
-                            // Last first, so each index still names its track.
+                            // Remove the last first, so each index still names its track.
                             for (usize i = 1; i < tracks.Size(); ++i)
                             {
                                 const usize track = tracks[i];
@@ -417,7 +417,7 @@ namespace editor
     {
         if (m_addTrack == nullptr)
             return;
-        // Made fresh each time: what it offers follows the entity and the tracks.
+        // Built anew each time, so what it offers follows the entity and the tracks.
         m_trackMenu = MakeRef<gui::Menu>(EditorRootAllocator());
         m_trackMenu->SetAutoWidth(true);
         PropertyAnimationPanel* self = this;
@@ -474,7 +474,7 @@ namespace editor
 
     void PropertyAnimationPanel::Scrub(f32 time)
     {
-        m_axis->SetPlayhead(time); // as the ruler's scrub: the transport and the pose follow
+        m_axis->SetPlayhead(time); // as a ruler scrub does; the transport and the pose follow
     }
 
     void PropertyAnimationPanel::FrameCurves()
@@ -504,7 +504,7 @@ namespace editor
         }
         if (high - low < 1e-3f)
         {
-            low -= 1.0f; // one value: a span about it
+            low -= 1.0f; // a single value: show a span around it
             high += 1.0f;
         }
         const f32 margin = (high - low) * 0.1f;
@@ -518,7 +518,7 @@ namespace editor
             m_simulating = simulating;
             if (simulating)
             {
-                m_transport.Pause(); // the scene's own animators run; the preview stands down
+                m_transport.Pause(); // the scene's own animators run, so the preview stands down
                 m_preview.Stop();
             }
             ShowBar();
@@ -532,7 +532,7 @@ namespace editor
             if (!m_transport.IsPlaying())
                 ShowBar(); // it stopped at the end
         }
-        // The dopesheet tells no one of its choice: the curve view follows it here.
+        // The dopesheet does not announce its choice, so the curve view follows it here.
         ShowCurves();
         if (m_fitValues)
         {
@@ -547,17 +547,18 @@ namespace editor
     {
         m_source.Refresh();
         m_axis->SetDuration(m_document.Length());
-        // Another clip, or tracks come or gone: the curves shown are others (a key's edit is not).
+        // Another clip, or tracks added or removed: the shown curves are different ones (editing a
+        // key does not count).
         if (m_document.ClipId() != m_shownClip || m_document.Clip().tracks.Size() != m_trackCount)
         {
             m_shownClip = m_document.ClipId();
             m_trackCount = m_document.Clip().tracks.Size();
             m_fitValues = true;
         }
-        // The length it plays over (a new clip's second, its last key's time when later).
+        // The length it plays over (one second for a new clip, or its last key's time when later).
         if (m_length != nullptr && static_cast<f32>(m_length->GetValue()) != m_document.Length())
             m_length->SetValue(static_cast<f64>(m_document.Length()));
-        Pose(); // an edit, an undo: the entity shows the clip as it is now
+        Pose(); // after an edit or an undo, the entity shows the clip as it is now
         ShowBar();
     }
 
@@ -576,7 +577,7 @@ namespace editor
         Array<usize> tracks = ChosenTracks();
         if (tracks.IsEmpty())
             for (usize t = 0; t < m_document.Clip().tracks.Size(); ++t)
-                tracks.PushBack(t); // none chosen: every track's
+                tracks.PushBack(t); // with none chosen, every track's curves
         bool same = tracks.Size() == m_shownTracks.Size();
         for (usize i = 0; same && i < tracks.Size(); ++i)
             same = tracks[i] == m_shownTracks[i];
@@ -584,7 +585,7 @@ namespace editor
             return;
         m_shownTracks = tracks;
         m_source.ShowTracks(tracks.AsSpan());
-        m_fitValues = true; // other curves: their values fill the view
+        m_fitValues = true; // different curves: fit their values to the view
     }
 
     void PropertyAnimationPanel::ShowBar()

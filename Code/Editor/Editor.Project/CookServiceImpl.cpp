@@ -1,28 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Core - :cook_service partition.
+// Editor::Project - :cook_service partition.
 //
-// EditorCookService: the in-editor face of the cook driver. Owns the
-// project's sources/.cache mounts + a CookDriver over the project DBs, and runs cooks on a
-// BACKGROUND thread (one at a time - Traktor's build lock): the UI stays live, progress
-// messages queue through a mutex and drain on the main thread via Update(). Cook badges give
-// the Assets panel a cheap per-instance state without recomputing recipes (exact dirtiness is
-// the driver's job at cook time):
-//   NoBuilder - the instance's type has no registered builder (scenes, raw data)
-//   Failed    - the last cook of this asset failed (Console has the log)
-//   Missing   - no record or no product yet (never cooked, or swept)
-//   Cooked    - record + product exist (a stale recipe still shows Cooked until the next cook)
+// EditorCookService is the editor's front end to the cook driver. It owns the project's sources
+// and .cache mounts and a CookDriver over the project DBs, and runs cooks on a background thread,
+// one at a time, so the UI stays live; progress messages queue through a mutex and drain on the
+// main thread in Update(). Cook badges give the Assets panel a cheap per-instance state without
+// recomputing recipes (exact dirtiness is the driver's job at cook time):
+//   NoBuilder: the instance's type has no registered builder (scenes, raw data)
+//   Failed:    the last cook of this asset failed (the Console has the log)
+//   Missing:   no record or no product yet (never cooked, or swept)
+//   Cooked:    record and product exist (a stale recipe still shows Cooked until the next cook)
 //
 // The service also watches the project's Sources/ tree (the native mount's stat-sweep
-// IChangeSource, polled every couple of seconds from Update): an external edit of a source
-// file queues an automatic incremental cook - the driver's plan recomputes exactly what the
-// change dirtied. After every cook, LastCookedProducts() lists the rebuilt product guids so the
-// application can hot-reload them through the ResourceManager (proxy swap in live scenes).
+// IChangeSource, polled every couple of seconds from Update): an external edit of a source file
+// queues an automatic incremental cook, and the driver's plan recomputes exactly what the change
+// dirtied. After every cook, LastCookedProducts() lists the rebuilt product guids so the
+// application can hot-reload them through the ResourceManager (a proxy swap in live scenes).
 //
-// Known v1 hazard (documented, Traktor shares it): editing source assets WHILE a cook runs
-// races the driver's source reads; the UI disables cook triggers during a cook but does not
-// lock edits.
+// Known hazard: editing source assets while a cook runs races the driver's source reads. The UI
+// disables cook triggers during a cook but does not lock edits.
 
 module;
 #include "Core/Prelude.h"
@@ -72,9 +70,9 @@ namespace editor
     void EditorCookService::Shutdown()
     {
         JoinWorker();
-        // Quiescent, whatever phase the join cut short: a worker joined mid-plan never reaches
-        // the build that clears m_cooking, and a stuck flag would make the NEXT project's first
-        // request "remembered" forever. The deferred mutations belonged to the closed project.
+        // Reset to quiescent, whatever phase the join cut short: a worker joined mid-plan never
+        // reaches the build that clears m_cooking, and a stuck flag would leave the next project's
+        // first request "remembered" forever. The deferred mutations belonged to the closed project.
         m_cooking.store(false);
         m_planReady.store(false);
         m_finishedPending.store(false);
@@ -102,7 +100,7 @@ namespace editor
         {
             return;
         }
-        if (MutationLocked()) // cook running OR an external job is reading the DBs
+        if (MutationLocked()) // a cook is running or an external job is reading the DBs
         {
             m_pendingCook = true;
             m_pendingForce = m_pendingForce || force;
@@ -110,15 +108,15 @@ namespace editor
         }
         JoinWorker(); // reap the previous worker's handle
 
-        // Three phases so the UI never stalls AND nothing races:
-        //   1. Plan on the WORKER - it only READS the DBs, and their structure is frozen
-        //      while IsCooking(): every main-thread structural mutation (import, delete,
-        //      rename, create) gates through RunWhenIdle. (Planning hashes every source
-        //      file - on the main thread it froze the editor for whole rebuilds.)
-        //   2. PrepareProducts on the MAIN thread (Update drains m_planReady) - the only
-        //      phase that MUTATES the cooked DB, which main-thread resource loads read at
-        //      any time.
-        //   3. Builds on the worker (no DB queries - snapshotted pointers).
+        // Three phases, so the UI never stalls and nothing races:
+        //   1. Plan on the worker. It only reads the DBs, and their structure is frozen while
+        //      IsCooking(): every main-thread structural mutation (import, delete, rename,
+        //      create) goes through RunWhenIdle. Planning hashes every source file, which would
+        //      freeze the editor for whole rebuilds on the main thread.
+        //   2. PrepareProducts on the main thread (Update drains m_planReady). This is the only
+        //      phase that changes the cooked DB, which main-thread resource loads read at any
+        //      time.
+        //   3. Builds on the worker (no DB queries; it uses snapshotted pointers).
         m_cooking.store(true);
         CookDriver* driver = m_driver.Get();
         EditorCookService* self = this;
@@ -138,9 +136,9 @@ namespace editor
         }
         if (MutationLocked())
         {
-            // MERGE, don't queue closures: concurrent requests for overlapping roots
-            // (several pages opening over the same uncooked assets) replay as ONE
-            // scoped cook. A pending FULL cook supersedes - its plan covers any roots.
+            // Merge rather than queue closures: concurrent requests for overlapping roots (several
+            // pages opening over the same uncooked assets) replay as one scoped cook. A pending
+            // full cook supersedes them, since its plan covers any roots.
             if (!m_pendingCook)
             {
                 for (const Guid& id : roots)
@@ -188,8 +186,8 @@ namespace editor
             m_lastSummary.upToDate = m_plan.upToDate;
             m_lastSummary.unbuildable = m_plan.unbuildable;
         }
-        // Zero-work plans run SILENTLY (no "cooking 0 asset(s)" line): page-open and
-        // import requests are cheap to make and often find everything already cooked.
+        // Plans with no work run silently (no "cooking 0 asset(s)" line): page-open and import
+        // requests are cheap to make and often find everything already cooked.
         if (total > 0 || !m_plan.orphans.IsEmpty())
         {
             Post(FormatPlanned(total, m_plan.orphans.Size()));
@@ -238,8 +236,8 @@ namespace editor
 
     void EditorCookService::Update(const Function<void(StringView)>& status)
     {
-        // Phase hand-off: the plan worker finished - run the main-thread product
-        // pre-create and kick the build worker.
+        // Phase hand-off: the plan worker finished, so pre-create the products on the main thread
+        // and start the build worker.
         if (m_planReady.exchange(false))
         {
             StartBuilds();
@@ -276,8 +274,8 @@ namespace editor
             }
         }
 
-        // Deferred source-DB mutations (imports/deletes queued while the cook worker was
-        // reading snapshotted instances) + a cook request that arrived mid-cook.
+        // Deferred source-DB mutations (imports and deletes queued while the cook worker was
+        // reading snapshotted instances), and a cook request that arrived mid-cook.
         if (!MutationLocked())
         {
             if (!m_idleQueue.IsEmpty())
@@ -308,9 +306,9 @@ namespace editor
             }
         }
 
-        // Watcher: throttled stat sweep; any source change queues an incremental cook.
-        // Held off while ANY background DB reader runs (a mid-export cook would rewrite
-        // the very cooked files the export job is packing).
+        // Watcher: a throttled stat sweep, where any source change queues an incremental cook.
+        // Held off while any background DB reader runs (a cook during an export would rewrite
+        // the cooked files the export job is packing).
         if (m_watcher != nullptr && !MutationLocked())
         {
             const f64 now = TicksToSeconds(GetTicks());

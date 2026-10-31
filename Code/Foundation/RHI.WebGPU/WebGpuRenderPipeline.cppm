@@ -3,9 +3,9 @@
 
 /// foundation.rhi.webgpu:render_pipeline - RenderPipeline over WGPURenderPipeline.
 ///
-/// One honest narrowing: FillMode::Wireframe has no WebGPU shape (polygon mode is
-/// not in the API) - NotSupported, callers keep their debug-wireframe toggles off
-/// this backend. depthBias rides the depth-stencil state as WebGPU defines it.
+/// One narrowing: FillMode::Wireframe has no WebGPU shape (polygon mode is not in the
+/// API) and fails with NotSupported, so callers keep their debug-wireframe toggles off
+/// this backend. depthBias goes in the depth-stencil state as WebGPU defines it.
 
 module;
 #include "Core/Prelude.h"
@@ -86,7 +86,7 @@ export namespace foundation::rhi::webgpu
                 ToWgpuPrimitiveTopology(pipelineDesc.primitive.topology);
             wgpuDesc.primitive.frontFace = ToWgpuFrontFace(pipelineDesc.primitive.frontFace);
             wgpuDesc.primitive.cullMode = ToWgpuCullMode(pipelineDesc.primitive.cullMode);
-            // WebGPU strip topologies REQUIRE a strip index format; lists must leave it
+            // WebGPU strip topologies require a strip index format; lists must leave it
             // Undefined. UInt32 matches the engine's index buffers.
             const bool isStrip =
                 pipelineDesc.primitive.topology == PrimitiveTopology::LineStrip ||

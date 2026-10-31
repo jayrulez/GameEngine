@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// An application's profiler overlay (Specs/profiler.md, P4; on the GUI, Specs/engine-ui-removal.md,
-// layer 1): off until the app shows it; shown, it sits on the GUI's overlay layer taking no
-// pointer (so the layer stays passive), arms the profiler and reads its frames; hidden, it leaves
-// the layer and lets the profiler go.
+// An application's profiler overlay on the GUI: off until the app shows it; shown, it sits on the
+// GUI's overlay layer taking no pointer (so the layer stays passive), arms the profiler and reads
+// its frames; hidden, it leaves the layer and lets the profiler go.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

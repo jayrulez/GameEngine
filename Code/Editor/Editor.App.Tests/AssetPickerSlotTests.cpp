@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The asset slot: a verb shows once wired (open, reveal and clear only with something referenced), an
-// empty slot says None, each verb runs once per click, a click on the slot picks, and a dragged
-// asset of a type it takes is dropped on it while one it does not take is refused, saying why.
+// The asset slot. A verb button shows once it is wired (open, reveal and clear only while something
+// is referenced), an empty slot says None, each verb runs once per click, and a click on the slot
+// opens the picker. A dragged asset of a type the slot takes can be dropped on it; one of another
+// type is refused with the reason.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

@@ -1,36 +1,39 @@
-// Masquerade - the game's orchestrator (the reserved class Game): the title, a round at the ball
-// under its HUD, the pause menu, and the results.
+// Masquerade: the game's orchestrator (the reserved class Game). It runs the title, a round at the
+// ball under its HUD, the pause menu and the results.
 //
-// The title offers play alone, host, join or quit; the first two choose a map (Maps), then play it alone or host it (the server on `kPort`, waiting for each
-// joiner's ready, then the map); or joins a host: the connection first, from the title, then the
-// host's map (named in its welcome) loads, and the joiner says it is ready, so the map's networked
-// entities are in place for the host's first snapshot. The round itself is the scene's (Ball.as): this hears it. "InReach" (someone to tag
-// in front of you, or no longer), "HunterNear" (the hunter whose mark you are, near, or no longer), "Hud" (four times a second: your
-// points, the seconds left, your target's costume, your place), "Note" (something happened to
-// you, or a mask flared), "RoundOver" (everyone's points) and "RoundStart" (the host began another
-// round). Pause (Escape or Start) shows the pause menu, holding the round still when playing alone
-// (a networked round goes on). The title picks the map; the save keeps each map's best round
-// ("best.Palace", "best.Canal", "best.Gardens").
+// The title offers Play alone, Host, Join, Controls and Quit. Play alone and Host lead to the map
+// page (Maps), then play the map alone or host it: the server listens on `kPort` and waits for
+// each joiner to report ready. Join connects to a host from the title; the host's welcome names
+// its map, which then loads, and the joiner reports ready so the map's networked entities are in
+// place for the host's first snapshot.
+//
+// The round itself is run by the scene (Ball.as); this script listens to it: "InReach" (someone
+// to tag is in front of you, or no longer), "HunterNear" (your hunter is near, or no longer),
+// "Hud" (four times a second: your points, the seconds left, your target's costume, your place),
+// "Note" (something happened to you, or a mask flared), "RoundOver" (everyone's points) and
+// "RoundStart" (the host began another round). Pause (Escape or Start) shows the pause menu, which
+// freezes the round when playing alone; a networked round goes on. The save keeps each map's best
+// round ("best.Palace", "best.Canal", "best.Gardens").
 
 const float kControlsShown = 7.0f; // how long the controls show as a round starts (s)
-// The screens, on the engine GUI's screen stack (pushed by their documents' ids).
+// The screens, shown on the engine GUI's screen stack, by the asset ids of their documents.
 const string kTitleDoc = "{2c8d8d4f-d770-496d-a766-d14cfbfcd328}";
 const string kMapsDoc = "{bef19424-1fc4-4f06-b262-b49abeacf1a6}";
 const string kJoinDoc = "{36b90866-3b41-4a1c-8b87-c0305859bb5d}";
 const string kControlsDoc = "{9e97d8b6-d7f7-42c0-8554-07fb7c631b59}";
-// Each costume's portrait (Tools/portraits.py), in the costumes' order (rose, teal and gold gowns,
-// black, plum and ivory coats), as the HUD's Image takes a texture: "{id}".
+// Each costume's portrait (Tools/portraits.py), in costume order (rose, teal and gold gowns, then
+// black, plum and ivory coats), in the "{id}" form the HUD's Image takes for a texture.
 array<string> kPortraits = {"{cc8a11f4-8f17-44d7-8de3-4eb3cb85ecba}", "{41b5c641-67bf-42bf-ba9c-f9c806f3ed14}",
                             "{7676ab80-0ce8-4fd6-9930-6ac5efaee6c3}", "{9ec8ca2c-9a53-4c3b-9bdf-bb4bf1ace540}",
                             "{96fe7fa5-05f5-4509-b87c-e2ad11df97a8}", "{72a109fb-d9b4-468e-a9c7-b4978d6ad72b}"};
-const float kLateSeconds = 30.0f; // the clock warms for the round's last half minute
+const float kLateSeconds = 30.0f; // the clock turns warm for the last half minute of the round
 const string kHudDoc = "{e183e431-f835-4289-a1eb-88d33b67db46}";
 const string kPauseDoc = "{76517a0e-2810-4018-ad32-036418a2bc1c}";
 const string kResultsDoc = "{d6ee5f73-8622-4f72-8f7b-1d7e43f609b8}";
 Guid kPalace = Guid("20eb69af-217d-4b37-93d2-d032e63094fb");
 Guid kCanal = Guid("67c261b3-8da6-4a11-bab2-c96595b651cf");
 Guid kGardens = Guid("6c8abc4e-60ff-4614-864b-68fd5dc21e19");
-// sounds.py's: what the round says to the player, and the buttons.
+// Sounds made by sounds.py: the round's cues to the player, and the buttons.
 Guid kTagSound = Guid("ea04649b-1257-4914-9348-2c9369d71bb4");
 Guid kMissSound = Guid("beb39d19-017a-498f-a6d0-6ebb036b5f13");
 Guid kFlareSound = Guid("2eb1ef65-d86b-4806-8a02-94b50e9702ea");
@@ -38,7 +41,7 @@ Guid kChimeSound = Guid("75d06e2f-5b1f-468e-96fd-e4177e8a3a8f");
 Guid kFanfare = Guid("5a0d5172-db3d-44be-8922-f9249c64fa39");
 Guid kClick = Guid("98658096-7e9e-4891-9f68-7b1f7125b3a2");
 
-// Ball.as's notes.
+// The notes Ball.as sends (the same values as there).
 const int kNoteGotTarget = 1;
 const int kNoteMissed = 2;
 const int kNoteTagged = 3;
@@ -55,40 +58,41 @@ funcdef bool EventHandler(GuiEvent e);
 
 // The GUI's screen stack, and a node of the screens by its id.
 ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
-// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
-// with the same ids, and would be found first.
+// Searches the top screen first. A screen just cleared or popped stays in the tree while its exit
+// animation plays, with the same ids, and would otherwise be found first.
 Node@ find(string id)
 {
     Screen@ top = screens().top();
     Node@ n = top !is null ? top.find(id) : null;
     return n !is null ? n : gui::root().find(id);
 }
-void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // `on*` names are the engine's handlers
+void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // handlers are named on*, like the engine's event handlers
 void setText(string id, string text) { Label::of(find(id)).text = text; }
 
 class Game
 {
     private bool m_inRound = false;
     private bool m_paused = false;
-    private float m_note = 0.0f;         // how long the HUD's word shows yet
-    private float m_delta = 0.0f;        // how long the points' change shows yet
+    private float m_note = 0.0f;         // how much longer the HUD's message shows
+    private float m_delta = 0.0f;        // how much longer the change in points shows
     private int m_shownScore = 0;        // the points the HUD shows
     private int m_shownCostume = -1;     // the mark whose portrait the HUD shows
-    private bool m_late = false;         // the clock in the round's last half minute
-    private float m_roundSeconds = 0.0f; // the round's length, as its first report gave the time
-    private bool m_inputHeld = false;    // the "Menu" set pushed (holdInput)
-    private float m_controlsShow = 0.0f; // how long the controls panel shows yet
-    private bool m_onTitle = false;      // the title (or a page over it) is up: the camera sweeps before the dais
+    private bool m_late = false;         // the clock is in the round's last half minute
+    private float m_roundSeconds = 0.0f; // the round's length, taken from the time in its first report
+    private bool m_inputHeld = false;    // the "Menu" input set is pushed (holdInput)
+    private float m_controlsShow = 0.0f; // how much longer the controls panel shows
+    private bool m_onTitle = false;      // the title (or a page over it) is up, so the camera sweeps before the dais
     private int m_map = 0;               // 0 the Palace, 1 the Canal, 2 the Gardens
     private int m_mode = kAlone;
     private string m_address = "127.0.0.1";
-    private float m_readyIn = -1.0f;     // a joiner: until it tells the host it is ready, once the host's map has loaded
-    private float m_joinWait = -1.0f;    // a joiner on the title: how long until it gives up on the host
+    private float m_readyIn = -1.0f;     // joiner: time until it tells the host it is ready, once the host's map has loaded
+    private float m_joinWait = -1.0f;    // joiner on the title: time left before it gives up on the host
 
     void launch()
     {
-        // A joiner hears the host's map in its welcome (Ball.as's onJoined), here rather than in a
-        // scene's behaviour, as it arrives while the title's scene is the one loaded.
+        // A joiner learns the host's map from its welcome (sent by Ball.as in onJoined). The handler
+        // lives here rather than in a scene script because the welcome arrives while the title's
+        // scene is the one loaded.
         NetTextHandler@ map = NetTextHandler(this.onHostMap);
         Net::on("map", map);
         showTitle();
@@ -109,7 +113,7 @@ class Game
         wire("host-btn", EventHandler(this.onHost));
         if (!Net::canHost())
         {
-            UIWidget::of(find("host-btn")).addClass("gone"); // a browser cannot host; it joins a host's ball
+            UIWidget::of(find("host-btn")).addClass("gone"); // a browser cannot host, only join
         }
         wire("join-btn", EventHandler(this.onJoin));
         wire("controls-btn", EventHandler(this.onControls));
@@ -134,8 +138,9 @@ class Game
         return true;
     }
 
-    // Its Back, or the game's Pause (Escape, Start): the screen stack's own back would also reach
-    // the pause menu under it, as Escape is the game's Pause too.
+    // Closes the controls page on its Back button or the game's Pause (Escape, Start). The screen
+    // stack's own back handling is not used: Escape is also the game's Pause, so it would close the
+    // pause menu underneath too.
     private void closeControls()
     {
         if (!m_controlsOpen)
@@ -147,8 +152,8 @@ class Game
         screens().pop();
     }
 
-    // ---- the map, to play alone or to host: a card each, the chosen one lit, then Start ----
-    private bool m_hostChosen = false; // the map page's Start hosts (else it plays alone)
+    // ---- the map page, to play alone or host: a card per map, the chosen one lit, then Start ----
+    private bool m_hostChosen = false; // Start on the map page hosts (otherwise it plays alone)
 
     private void showMaps(bool host)
     {
@@ -175,7 +180,7 @@ class Game
     private bool onMap1(GuiEvent e) { choose(1, true); return true; }
     private bool onMap2(GuiEvent e) { choose(2, true); return true; }
 
-    // The chosen card lit; a click on it chooses, Start then plays or hosts it.
+    // Lights the chosen card. Clicking a card chooses it; Start then plays or hosts it.
     private void choose(int map, bool click)
     {
         if (click)
@@ -223,7 +228,7 @@ class Game
         return true;
     }
 
-    // The map page's Start: play the chosen map alone, or host it.
+    // Start on the map page: play the chosen map alone, or host it.
     private bool onStart(GuiEvent e)
     {
         sound(kClick);
@@ -244,7 +249,7 @@ class Game
         return true;
     }
 
-    // ---- joining: the address, then Join; the map is the host's ----
+    // ---- joining: enter the address, then Join; the host chooses the map ----
     private bool onJoin(GuiEvent e)
     {
         sound(kClick);
@@ -277,7 +282,8 @@ class Game
         return true;
     }
 
-    // A joiner: the host's map. It loads, and once it is ready the host's state begins.
+    // Joiner only: the host's map arrives. It loads, and once it is ready the host's state starts
+    // to arrive.
     void onHostMap(int sender, const string &in name)
     {
         if (!Net::isClient() || m_mode != kJoining || m_joinWait < 0.0f)
@@ -288,7 +294,7 @@ class Game
         m_map = name == "Canal" ? 1 : (name == "Gardens" ? 2 : 0);
         setText("net-status", "Joining " + mapTitle(m_map) + "...");
         startRound();
-        m_readyIn = 0.2f; // once the map has loaded, a moment more for its first frame
+        m_readyIn = 0.2f; // after the map loads, wait a moment more for its first frame
     }
 
     private string mapName(int map) { return map == 0 ? "Palace" : (map == 1 ? "Canal" : "Gardens"); }
@@ -320,13 +326,13 @@ class Game
         m_shownCostume = -1;
         m_roundSeconds = 0.0f;
         m_late = false;
-        find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the sheet's 0
+        find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the style sheet's 0
         m_controlsShow = kControlsShown;
-        letGo(); // time again, and the player's input: a round may start from any menu
+        letGo(); // restore time and the player's input, since a round may start from any menu
         run::loadScene(m_map == 0 ? kPalace : (m_map == 1 ? kCanal : kGardens));
     }
 
-    // The camera back behind the player (CameraRig) as the title gives way to a round.
+    // Puts the camera back behind the player (CameraRig) as the title gives way to a round.
     private void leaveTitle()
     {
         if (m_onTitle)
@@ -421,20 +427,21 @@ class Game
         }
         int costume = int(hud.z);
         setText("hud-target", costumeName(costume));
-        // In its colour: the sheet's class for the costume.
+        // Colour the target by the style sheet's class for its costume.
         UIWidget@ mark = UIWidget::of(find("hud-target"));
         for (int c = 0; c < 6; ++c)
         {
             mark.removeClass("costume-" + c);
         }
         mark.addClass("costume-" + costume);
-        // Only as the mark changes: setting the picture again would load it again, blank meanwhile.
+        // Change the portrait only when the target changes: setting the picture reloads it, and it
+        // shows blank meanwhile.
         if (costume != m_shownCostume && costume >= 0 && costume < int(kPortraits.length()))
         {
             m_shownCostume = costume;
             Image::of(find("hud-portrait")).src = kPortraits[costume];
         }
-        // The points, and each change floating beside them a moment, gold up, red down.
+        // The points, with each change floating beside them for a moment: gold up, red down.
         int score = int(hud.x);
         if (score != m_shownScore)
         {
@@ -448,11 +455,12 @@ class Game
             find("hud-delta").tween("opacity", "1", 0.15f, "ease");
             m_delta = 1.4f;
         }
-        // The time over a bar of the round left (the round's length: the first time it reports).
+        // The time, over a bar of the round remaining (the round's length is the first time
+        // reported).
         m_roundSeconds = Math::Max(m_roundSeconds, hud.y);
         setText("hud-time", clock(hud.y));
         ProgressBar::of(find("hud-timebar")).value = m_roundSeconds > 0.0f ? hud.y / m_roundSeconds : 0.0f;
-        // Only as it changes: the class set again each report would start its pulse over.
+        // Set the class only when it changes; setting it on every report would restart its pulse.
         bool late = hud.y <= kLateSeconds && hud.y > 0.0f;
         if (late != m_late)
         {
@@ -470,7 +478,7 @@ class Game
         setText("hud-rank", place(int(hud.w)) + " of 4");
     }
 
-    // The hunter whose mark you are, near (Ball.as): a quiet line under your mark while it is.
+    // Your own hunter is near (from Ball.as): a quiet line shows under your target while it is.
     void onHunterNear(int yes)
     {
         if (m_inRound)
@@ -479,7 +487,7 @@ class Game
         }
     }
 
-    // Someone to tag in front of you (Ball.as): Tag's prompt shows by your hunter's line of sight.
+    // Someone is in front of you to tag (from Ball.as), so the Tag prompt shows.
     void onInReach(int yes)
     {
         if (m_inRound)
@@ -546,7 +554,7 @@ class Game
         screens().push(kResultsDoc);
         setText("res-title", place == 1 ? "The ball is yours" : "The music stops");
         setText("res-you", "You came " + this.place(place) + " with " + you + " points");
-        // Every hunter by points, the most first (yours first among equals), your row lit.
+        // Every hunter by points, most first (yours first among equals), with your row lit.
         array<string> names = {"You", "Hunter 1", "Hunter 2", "Hunter 3"};
         array<int> points = {you, int(scores.y), int(scores.z), int(scores.w)};
         array<int> order = {0, 1, 2, 3};
@@ -577,11 +585,11 @@ class Game
         }
         setText("res-best", record ? "Your best round yet" : "Your best: " + best + " points");
         wire("again-btn", EventHandler(this.onAgain));
-        find("again-btn").visible = m_mode != kJoining; // the host starts the next round
+        find("again-btn").visible = m_mode != kJoining; // only the host starts the next round
         wire("title-btn", EventHandler(this.onTitle));
     }
 
-    // The host started another round in the same scene: a joiner leaves its results for it.
+    // The host started another round in the same scene, so a joiner leaves its results screen.
     void onRoundStart(int unused)
     {
         if (m_inRound || m_mode != kJoining)
@@ -601,7 +609,7 @@ class Game
         screens().push(kPauseDoc);
         wire("resume-btn", EventHandler(this.onResume));
         wire("restart-btn", EventHandler(this.onAgain));
-        find("restart-btn").visible = m_mode != kJoining; // the host's to start over
+        find("restart-btn").visible = m_mode != kJoining; // only the host can start over
         wire("title-btn", EventHandler(this.onTitle));
         wire("pause-controls-btn", EventHandler(this.onControls));
     }
@@ -624,8 +632,8 @@ class Game
         letGo();
     }
 
-    // Another round: alone, the map afresh; hosting, the same scene goes on (the players' hunters
-    // with it) and the Ball starts over ("Restart").
+    // Another round. Alone, the map loads afresh. Hosting, the same scene goes on, keeping the
+    // players' hunters, and the Ball starts over ("Restart").
     private bool onAgain(GuiEvent e)
     {
         sound(kClick);
@@ -639,10 +647,10 @@ class Game
         return true;
     }
 
-    // Under any menu the player's actions read released: the input map's "Menu" set (Pause alone)
-    // is pushed as the only one in effect, and a press already held when it opens or closes stays
-    // latched until let go, so the press that works a menu's button is never a Tag. Once, however
-    // many menus ask.
+    // While any menu is up, the player's actions read as released. The input map's "Menu" set,
+    // which holds only Pause, is pushed as the only set in effect, and a press already held when it
+    // is pushed or popped stays latched until released, so the press that clicks a menu button is
+    // never read as a Tag. The set is pushed once, however many menus ask.
     private void holdInput()
     {
         if (!m_inputHeld)
@@ -661,8 +669,9 @@ class Game
         }
     }
 
-    // Alone, the scene stops behind a menu too. In a networked round it goes on (the host runs the
-    // world for everyone, and a joiner's scene must keep hearing the host: a new round, say).
+    // When playing alone, the scene also stops behind a menu. In a networked round it goes on: the
+    // host runs the world for everyone, and a joiner's scene must keep receiving the host's
+    // updates, such as a new round starting.
     private void holdStill()
     {
         holdInput();
@@ -678,7 +687,7 @@ class Game
         releaseInput();
     }
 
-    // The HUD over the scene that is already running.
+    // Shows the HUD over the scene that is already running.
     private void enterRound()
     {
         leaveTitle();
@@ -712,11 +721,11 @@ class Game
     private void note(string text)
     {
         setText("hud-note", text);
-        find("hud-note").tween("opacity", "1", 0.15f, "ease"); // from the sheet's 0, or a fade going
+        find("hud-note").tween("opacity", "1", 0.15f, "ease"); // from the style sheet's 0, or from a fade in progress
         m_note = 3.0f;
     }
 
-    // In blender/guest.py's costume order, which the crowd and the looks follow.
+    // In the costume order of blender/guest.py, which the crowd and the looks follow.
     private string costumeName(int costume)
     {
         if (costume == 0) return "a rose gown";

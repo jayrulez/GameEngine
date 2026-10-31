@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SceneEditContext tests (headless live Scene): every mutation is an undoable command by Guid.
-// Covers create (redo keeps the SAME Guid), rename (merge), reparent (cycle-refusal, undo),
-// destroy (undo restores the FULL subtree - names, transforms, hierarchy, active flags, and
-// serializable components - the fix for Sedulous's lossy destroy-undo), and selection pruning.
+// SceneEditContext tests over a headless live Scene: every mutation is an undoable command
+// addressed by Guid. They cover create (redo keeps the same Guid), rename (merging), reparent
+// (cycle refusal and undo), destroy (undo restores the full subtree: names, transforms,
+// hierarchy, active flags and serializable components) and selection pruning.
 
 #include <doctest/doctest.h>
 
@@ -68,7 +68,7 @@ TEST_CASE("scene-edit: create entity - undo/redo keeps the same Guid, parents ap
     CHECK(scene.EntityCount() == 1);
     CHECK(!edit.Resolve(child).IsAssigned());
 
-    commands.Redo(); // child back with the SAME Guid + parent
+    commands.Redo(); // child back with the same Guid and parent
     CHECK(scene.EntityCount() == 2);
     REQUIRE(edit.Resolve(child).IsAssigned());
     CHECK(scene.GetParent(edit.Resolve(child)) == edit.Resolve(parent));
@@ -85,7 +85,7 @@ TEST_CASE("scene-edit: rename merges and undoes to the original")
     edit.RenameEntity(id, u8"Second"); // merges into the previous rename
     CHECK(scene.GetEntityName(edit.Resolve(id)) == u8"Second");
 
-    commands.Undo(); // ONE undo reverts both renames
+    commands.Undo(); // one undo reverts both renames
     CHECK(scene.GetEntityName(edit.Resolve(id)) == u8"Original");
     commands.Redo();
     CHECK(scene.GetEntityName(edit.Resolve(id)) == u8"Second");
@@ -102,24 +102,24 @@ TEST_CASE("scene-edit: reparent - undo restores, cycles and no-ops are refused")
     const Guid c = edit.CreateEntity(u8"C");
     const usize baseline = commands.Size();
 
-    edit.ReparentEntity(b, c); // A/B -> C/B
+    edit.ReparentEntity(b, c); // A/B becomes C/B
     CHECK(scene.GetParent(edit.Resolve(b)) == edit.Resolve(c));
 
     commands.Undo();
     CHECK(scene.GetParent(edit.Resolve(b)) == edit.Resolve(a));
 
-    // A cycle (parent A under its own subtree via B... i.e. A under B) is refused + dropped.
+    // A reparent that would make a cycle is refused and dropped.
     commands.Redo();           // back to C/B
-    edit.ReparentEntity(a, b); // a's descendant?? b is not under a anymore, so this is LEGAL
+    edit.ReparentEntity(a, b); // legal: B is no longer under A
     CHECK(scene.GetParent(edit.Resolve(a)) == edit.Resolve(b));
-    edit.ReparentEntity(c, a); // c is now an ancestor of a?? a is under b under c: cycle -> refused
+    edit.ReparentEntity(c, a); // A is under B under C, so this is a cycle and is refused
     CHECK(scene.GetParent(edit.Resolve(c)) == scene::EntityHandle::Invalid());
 
-    // Self-parenting refused; no-op reparent (same parent) refused.
+    // Self-parenting is refused, and so is a reparent to the same parent.
     edit.ReparentEntity(b, b);
     CHECK(scene.GetParent(edit.Resolve(b)) == edit.Resolve(c));
     const usize before = commands.Size();
-    edit.ReparentEntity(b, c); // already C's child - dropped, no undo pollution
+    edit.ReparentEntity(b, c); // already C's child: dropped, nothing pushed on the undo stack
     CHECK(commands.Size() == before);
     (void)baseline;
 }
@@ -189,7 +189,7 @@ TEST_CASE("scene-edit: destroying a missing entity is a safe no-op")
 
     edit.DestroyEntity(Guid{1, 2});
     CHECK(commands.Size() == 0);
-    edit.RenameEntity(Guid{1, 2}, u8"nope"); // failed execute -> dropped
+    edit.RenameEntity(Guid{1, 2}, u8"nope"); // a failed execute is dropped
     CHECK(commands.Size() == 0);
 }
 
@@ -214,7 +214,7 @@ TEST_CASE("scene-edit: sibling reorder command with undo/redo")
     commands.Redo();
     CHECK(scene.GetFirstRoot() == edit.Resolve(c));
 
-    // Move A to the END of the root list (empty sibling): c, b, a.
+    // Move A to the end of the root list (empty sibling): c, b, a.
     edit.MoveEntityBefore(a, Guid{});
     CHECK(scene.GetNextSibling(edit.Resolve(b)) == edit.Resolve(a));
     commands.Undo(); // back to c, a, b (A was before B)
@@ -272,7 +272,7 @@ TEST_CASE("scene-edit: reparent preserves the world transform; undo restores the
         for (i32 c = 0; c < 4; ++c)
             CHECK(worldRedo.m[r][c] == doctest::Approx(worldBefore.m[r][c]).epsilon(0.001f));
 
-    // Same-parent reorder keeps the local EXACT (no decompose noise).
+    // A same-parent reorder keeps the local transform exact (no decompose noise).
     const Guid s1 = edit.CreateEntity(u8"S1", parent);
     Transform ts;
     ts.position = Float3{0.25f, 0.5f, 0.75f};
@@ -284,8 +284,8 @@ TEST_CASE("scene-edit: reparent preserves the world transform; undo restores the
 
 namespace
 {
-    // A reflected (but NOT serializable) component - exercises the property paths and the
-    // reflected-snapshot remove-undo.
+    // A reflected but not serializable component, which exercises the property paths and the
+    // undo of a remove from a reflected snapshot.
     enum class TestMode : u32
     {
         Off = 0,
@@ -329,7 +329,7 @@ TEST_CASE("scene-edit: transform + active commands (merge, undo)")
     const Guid id = edit.CreateEntity(u8"E");
     const usize baseline = commands.Size();
 
-    // A "drag": many transform sets merge into ONE undo entry.
+    // A drag: many transform sets merge into one undo entry.
     Transform t;
     for (i32 i = 1; i <= 5; ++i)
     {
@@ -345,7 +345,7 @@ TEST_CASE("scene-edit: transform + active commands (merge, undo)")
     CHECK(!scene.IsActive(edit.Resolve(id)));
     commands.Undo();
     CHECK(scene.IsActive(edit.Resolve(id)));
-    edit.SetEntityActive(id, true); // no-op - dropped
+    edit.SetEntityActive(id, true); // no-op, dropped
     CHECK(commands.Size() == baseline + 1);
 }
 
@@ -368,7 +368,7 @@ TEST_CASE("scene-edit: component property commands (variant + raw enum, merge, u
     CHECK(!widgets->HasComponent(edit.Resolve(id)));
     commands.Redo();
     REQUIRE(widgets->HasComponent(edit.Resolve(id)));
-    edit.AddComponent(id, type); // already present - dropped
+    edit.AddComponent(id, type); // already present, dropped
     const usize afterAdd = commands.Size();
 
     // Variant path with merge: a scrub of `speed` is one undo entry.
@@ -380,7 +380,7 @@ TEST_CASE("scene-edit: component property commands (variant + raw enum, merge, u
     CHECK(widgets->Get(edit.Resolve(id))->speed == doctest::Approx(1.0f));
     commands.Redo();
 
-    // Different property does NOT merge.
+    // A different property does not merge.
     edit.SetComponentProperty(id, type, "offset", Variant::From<Float3>(Float3{1, 2, 3}));
     CHECK(commands.Size() == afterAdd + 2);
     CHECK(widgets->Get(edit.Resolve(id))->offset.y == doctest::Approx(2.0f));
@@ -418,10 +418,9 @@ TEST_CASE("scene-edit: remove-component undo via serialization blob (serializabl
     CHECK(health->Get(edit.Resolve(id))->amount == 42); // full fidelity via the blob
 }
 
-// Regression (user-reported): undoing an entity destroy restored the entity but LOST its
-// LightComponent - destroy-undo snapshots components through SERIALIZABLE managers only, and
-// the light/camera/probe managers weren't serializable (which also silently dropped them from
-// scene saves).
+// Undoing an entity destroy restores its LightComponent with its values. Destroy-undo
+// snapshots components only through serializable managers, so the light, camera and probe
+// managers have to be serializable (which also keeps them in scene saves).
 TEST_CASE("edit-context: destroy-undo restores light components (and their values)")
 {
     scene::Scene scene{DefaultAllocator()};
@@ -481,7 +480,7 @@ TEST_CASE("edit-context: duplicate entity - fresh guids, subtree + components, o
     REQUIRE(edit.EntitySelection().Primary() != nullptr);
     CHECK(*edit.EntitySelection().Primary() == copy); // the copy becomes the selection
 
-    // The child came along, with its component values, under the COPY (not the original).
+    // The child is copied with its component values, under the copy rather than the original.
     REQUIRE(scene.GetChildCount(copyRoot) == 1u);
     const scene::EntityHandle copyChild = scene.GetFirstChild(copyRoot);
     CHECK(scene.GetEntityName(copyChild) == u8"Lamp");
@@ -490,7 +489,7 @@ TEST_CASE("edit-context: duplicate entity - fresh guids, subtree + components, o
     REQUIRE(light != nullptr);
     CHECK(light->intensity == doctest::Approx(7.0f));
 
-    // One undo removes the whole copy; redo brings it back with the SAME fresh guids.
+    // One undo removes the whole copy; redo brings it back with the same fresh guids.
     commands.Undo();
     CHECK_FALSE(edit.Resolve(copy).IsAssigned());
     CHECK(edit.Resolve(parent).IsAssigned()); // original untouched
@@ -515,7 +514,7 @@ TEST_CASE("edit-context: copy/paste entities across scenes with fresh guids")
     const Array<byte> blob = editA.CopyEntity(src);
     REQUIRE(!blob.IsEmpty());
 
-    // Paste into a DIFFERENT scene (its own command stack), under a chosen parent.
+    // Paste into a different scene (with its own command stack), under a chosen parent.
     scene::Scene sceneB{DefaultAllocator()};
     sceneB.AddSystem<engine::render::LightComponentManager>();
     EditorCommandStack commandsB;
@@ -534,7 +533,7 @@ TEST_CASE("edit-context: copy/paste entities across scenes with fresh guids")
     REQUIRE(light != nullptr);
     CHECK(light->range == doctest::Approx(12.0f));
 
-    // The same blob pastes AGAIN (fresh guids every time); the source scene never changed.
+    // The same blob pastes again (with fresh guids every time); the source scene is unchanged.
     const Guid pasted2 = editB.PasteEntities(Span<const byte>{blob.Data(), blob.Size()});
     REQUIRE(pasted2 != Guid{});
     CHECK(pasted2 != pasted);
@@ -563,7 +562,7 @@ TEST_CASE("edit-context: copy/paste component - add, overwrite, and exact undo")
     CHECK(SceneEditContext::PeekComponentTypeId(Span<const byte>{blob.Data(), blob.Size()}) ==
           u8"light");
 
-    // Paste onto an entity WITHOUT the component: adds it. Undo removes it again.
+    // Pasting onto an entity without the component adds it. Undo removes it again.
     REQUIRE(edit.PasteComponent(b, Span<const byte>{blob.Data(), blob.Size()}));
     REQUIRE(lights->Get(edit.Resolve(b)) != nullptr);
     CHECK(lights->Get(edit.Resolve(b))->intensity == doctest::Approx(9.0f));
@@ -572,7 +571,7 @@ TEST_CASE("edit-context: copy/paste component - add, overwrite, and exact undo")
     commands.Redo();
     REQUIRE(lights->Get(edit.Resolve(b)) != nullptr);
 
-    // Paste onto an entity WITH the component: overwrites; undo restores the prior values.
+    // Pasting onto an entity with the component overwrites it; undo restores the prior values.
     lights->Get(edit.Resolve(b))->intensity = 1.0f;
     REQUIRE(edit.PasteComponent(b, Span<const byte>{blob.Data(), blob.Size()}));
     CHECK(lights->Get(edit.Resolve(b))->intensity == doctest::Approx(9.0f));
@@ -605,10 +604,10 @@ TEST_CASE("edit-context: generic container mutation (MutateComponent-style add) 
         return Instance(matProp->address(comp), matProp->type);
     };
 
-    // Step 1: does emplace on the live component add an element?
+    // Emplacing on the live component adds an element.
     CHECK(ContainerSize(ci, containerInstance()) == 0u);
 
-    // Replicate MutateComponent exactly: snapshot A, emplace, snapshot B, restore A, paste B.
+    // The same steps MutateComponent takes: snapshot A, emplace, snapshot B, restore A, paste B.
     Array<byte> before = edit.CopyComponent(a, type);
     REQUIRE(!before.IsEmpty()); // MeshComponent is serializable
     (void)ContainerEmplaceDefault(ci, containerInstance(), ContainerSize(ci, containerInstance()));
@@ -616,7 +615,8 @@ TEST_CASE("edit-context: generic container mutation (MutateComponent-style add) 
     Array<byte> after = edit.CopyComponent(a, type);
     REQUIRE(!after.IsEmpty());
 
-    // Restore live to A (non-undoable), then paste B as the undo step - the MutateComponent tail.
+    // Restore the live component to A (not undoable), then paste B as the undo step, as the end
+    // of MutateComponent does.
     {
         MemoryStream buffer;
         (void)buffer.Write(before.Data(), before.Size());
@@ -683,12 +683,12 @@ TEST_CASE("edit-context: scene-setting edits are undoable commands and merge lik
 
     const TypeInfo* type = &TypeOf<WindSettings>();
 
-    // Two consecutive edits to the same property MERGE into one undo entry...
+    // Two consecutive edits to the same property merge into one undo entry...
     edit.SetSceneSettingProperty(type, "speed", Variant::From<f32>(2.0f));
     edit.SetSceneSettingProperty(type, "speed", Variant::From<f32>(3.0f));
     CHECK(wind->settings.speed == 3.0f);
 
-    // ...whose undo restores the ORIGINAL value in one step.
+    // ...whose undo restores the original value in one step.
     commands.Undo();
     CHECK(wind->settings.speed == 1.0f);
     commands.Redo();
@@ -827,7 +827,7 @@ TEST_CASE("scene-edit: spawn prefab instance - undoable, redo recreates the SAME
     CHECK(scene.PrefabInstanceCount() == 0u);
 
     commands.Redo();
-    scene::EntityHandle back = edit.Resolve(rootId); // the SAME guid
+    scene::EntityHandle back = edit.Resolve(rootId); // the same guid
     REQUIRE(back.IsAssigned());
     CHECK(health->Has(back));
     CHECK(scene.PrefabInstanceCount() == 1u);
@@ -870,13 +870,14 @@ TEST_CASE("scene-edit: replace entity with prefab instance is ONE undo step")
     REQUIRE(inst.IsAssigned());
     CHECK(scene.GetParent(inst) == edit.Resolve(parent));                // same parent
     CHECK(Abs(scene.GetLocalTransform(inst).position.x - 4.0f) < 1e-4f); // same placement
-    // Same SIBLING SLOT: Before -> instance -> After (spawn otherwise appends at the end).
+    // The same sibling slot: Before, then the instance, then After (a spawn otherwise appends at
+    // the end).
     scene::EntityHandle first = scene.GetFirstChild(edit.Resolve(parent));
     CHECK(first == edit.Resolve(before));
     CHECK(scene.GetNextSibling(first) == inst);
     CHECK(scene.GetNextSibling(inst) == edit.Resolve(after));
 
-    commands.Undo(); // ONE step: instance gone, original restored
+    commands.Undo(); // one step: instance gone, original restored
     CHECK(!edit.Resolve(instanceRoot).IsAssigned());
     CHECK(edit.Resolve(original).IsAssigned());
     CHECK(scene.PrefabInstanceCount() == 0u);
@@ -912,7 +913,7 @@ TEST_CASE("scene-edit: revert component to prefab baseline is undoable")
     commands.Undo();
     CHECK(health->Get(live)->amount == 31); // the override is restored
 
-    // A user-ADDED component reverts by removal.
+    // A component the user added reverts by removal.
     scene::EntityHandle plain = scene.CreateEntity(u8"NotAMember");
     CHECK(!edit.RevertComponentToBaseline(scene.GetEntityId(plain), type)); // non-member no-op
 }
@@ -966,7 +967,7 @@ TEST_CASE("scene-edit: a property path edits a struct element inside a reflected
     commands.Redo();
     CHECK(layer(1).density == 5.0f);
 
-    // Consecutive edits of the SAME path merge into the entry on top of the stack (the redone
+    // Consecutive edits of the same path merge into the entry on top of the stack (the redone
     // 5.0 write, whose original old value is 0.1): one undo reverts the whole scrub.
     edit.SetComponentProperty(id, type, ComponentPropertyPath{"proceduralLayers", 1}, "density",
                               Variant::From<f32>(6.0f));
@@ -1020,9 +1021,9 @@ TEST_CASE("scene-edit: a property path edits a struct element inside a reflected
     CHECK(layer(0).name == String(u8"Grass"));
 }
 
-// A component mutates in one undo step through the edit context, typed (the value before kept by
-// copy) or through its instance (kept by its serialized form): what the inspector's lists and
-// the MCP edit tools both run.
+// A component mutates in one undo step through the edit context, either typed (the old value is
+// kept as a copy) or through its instance (the old value is kept in serialized form). The
+// inspector's lists and the MCP edit tools both use this path.
 TEST_CASE("scene-edit: a component mutates in one undo step, typed or through its instance")
 {
     scene::Scene scene{DefaultAllocator()};

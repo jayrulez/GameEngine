@@ -3,14 +3,14 @@
 
 // Pipeline::Materials - the `foundation.materials.editor` module (tooling).
 //
-// Source-side material authoring + cook:
-//   * MaterialAsset (pipeline::Asset): wraps a MaterialSource (the authored material -
-//     shader reference + declared properties + render-state presets + default
-//     uniforms). A material has no external source file to decode, so the asset IS
-//     the authored data; cooking resolves it into the product DB.
+// Source-side material authoring and cook:
+//   * MaterialAsset (pipeline::Asset): wraps a MaterialSource (the authored material: its
+//     shader reference, declared properties, render-state presets and default uniforms).
+//     A material has no external source file to decode, so the asset is the authored
+//     data; cooking resolves it into the product DB.
 //   * MaterialAssetBuilder (DefaultAssetBuilder): writes the resolved MaterialSource
 //     into the output DB (where MaterialFactory later builds it into a Material).
-//   * MaterialImporter: fills a MaterialAsset from a Material authored in code + the
+//   * MaterialImporter: fills a MaterialAsset from a Material authored in code and the
 //     shader resource id it references.
 //
 // Never linked by the runtime.
@@ -156,7 +156,7 @@ export namespace pipeline{
     // Keeps the effect groups of `from` whose effect `declared` (the new shader's vertex variants)
     // still declares, values and all, as `to`'s; drops the rest with a warning. A material moved
     // between two shaders that both declare WIND keeps its wind; one moved to a shader that does
-    // not, loses it (Specs/wind-for-every-shader.md). A shader that declares an effect the
+    // not, loses it. A shader that declares an effect the
     // material has no group for gets none here: the factory adds it at the effect's defaults when
     // it has the shader system.
     inline void KeepDeclaredEffects(const MaterialSource& from, MaterialSource& to,
@@ -229,15 +229,15 @@ export namespace pipeline{
         KeepDeclaredEffects(authored, out, static_cast<foundation::shaders::ShaderFlags>(shader.vertexVariantMask));
     }
 
-    // Cooks a MaterialAsset -> MaterialSource in the output DB (the authored source is
+    // Cooks a MaterialAsset into a MaterialSource in the output DB (the authored source is
     // already the runtime source; writing it is the cook).
     class MaterialAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
-        // Cook version 2 (2026-09-08): MaterialSource 3 - the property arrays use full names; a product cooked under the older record
+        // Cook version 2: MaterialSource 3, whose property arrays use full names; a product cooked under the older record
         // version is refused by the reader, so the recipe hash must change to re-cook it.
         // Version 3: a material on a custom shader is laid out by the shader's property table.
-        // Version 4: MaterialSource 4 - the effect groups, and PBR's wind lanes migrated into one.
+        // Version 4: MaterialSource 4, the effect groups, with PBR's wind lanes migrated into one.
         [[nodiscard]] u32 Version() const override { return 4; }
 
         [[nodiscard]] const TypeInfo* AssetType() const override
@@ -249,8 +249,8 @@ export namespace pipeline{
             return &MaterialSource::StaticType();
         }
 
-        // Bound textures are runtime REFERENCES: their products must exist, but a texture edit
-        // never re-cooks the material (the factory re-binds at load/reload).
+        // Bound textures are runtime references: their products must exist, but a texture edit
+        // never re-cooks the material (the factory re-binds at load and reload).
         void ScanDependencies(const pipeline::Asset& asset,
                               pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
@@ -263,7 +263,7 @@ export namespace pipeline{
                     out.references.PushBack(id);
                 }
             }
-            // A custom shader's property table lays the product out: its CONTENT is read, so a
+            // A custom shader's property table lays the product out: its content is read, so a
             // shader edit (a property added, removed or retyped) re-cooks the material.
             if (!ma.source.shaderId.IsNil())
             {
@@ -305,7 +305,7 @@ export namespace pipeline{
         }
     };
 
-    // Authoring helper: capture a Material (built in code) + its shader id into an asset.
+    // Authoring helper: capture a Material (built in code) and its shader id into an asset.
     class MaterialImporter
     {
     public:
@@ -361,7 +361,7 @@ export namespace pipeline{
         AssignMaterialSource(source, to);
     }
 
-    // Registers MaterialAsset for content-DB construction + deserialization.
+    // Registers MaterialAsset for content-DB construction and deserialization.
     inline void RegisterMaterialAsset()
     {
         RegisterMaterialsTypeReflection(); // the render-state enums the source's fields resolve to
@@ -369,8 +369,8 @@ export namespace pipeline{
         RegisterSerializable<MaterialAsset>();
     }
 
-    // MaterialAsset::StaticType() is defined WITH its reflected surface (a Nested `source`
-    // property) in MaterialAssetImpl.cpp - GCC module hygiene: REFLECT_MEMBERS out of interfaces.
+    // MaterialAsset::StaticType() is defined with its reflected surface (a Nested `source`
+    // property) in MaterialAssetImpl.cpp, keeping REFLECT_MEMBERS out of the interface for GCC.
 
 
     /// A material on the built-in `shading` in `target`, named `baseName` made unique.

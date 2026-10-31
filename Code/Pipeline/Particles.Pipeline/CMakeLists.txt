@@ -1,5 +1,5 @@
-# Pipeline::Particles - `particles.pipeline`: the edit-time ParticleEffectAsset + its
-# builder (the bake). Tooling only - the runtime/app never links this.
+# Pipeline::Particles - `particles.pipeline`: the edit-time ParticleEffectAsset and its
+# builder (the bake). Tooling only; the runtime and app never link this.
 util_add_engine_library(Particles.Pipeline ALIAS Pipeline::Particles)
 target_link_libraries(Particles.Pipeline
     PUBLIC Foundation::Core Pipeline::Core Foundation::Particles Foundation::Particles.Resource

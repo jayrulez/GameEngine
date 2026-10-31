@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// A complete 3D model with meshes, materials, skeleton, and animations.
-/// Ported from Sedulous.Models/Model.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -303,11 +302,9 @@ export namespace foundation::model
         /// Build bone hierarchy from parent indices.
         void buildBoneHierarchy()
         {
-            // Clear existing children.
             for (auto* bone : m_bones)
                 bone->clearChildren();
 
-            // Build hierarchy.
             for (usize i = 0; i < m_bones.Size(); ++i)
             {
                 auto* bone = m_bones[i];

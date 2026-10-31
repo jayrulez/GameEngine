@@ -4,27 +4,29 @@
 // GUI.Hosting - :gui_host partition: GuiHost, the GUI on the runtime's multi-window graphics
 // host (foundation.graphics).
 //
-// One GUIContext and one style manager for the application, and a SceneRoot per RenderWindow with
-// that window's VG context, VG renderer and pass targets (multisampling, and the stencil the fills
-// use), stashed on the window as its payload. A window may hold more roots, panes, each over a region
-// of it with an input surface and bridge of its own (a root has a dispatcher of its own) and, when it
-// belongs to another GUI (a tool's, such as the inspector), that GUI's style manager. The picture baker serves every window: a picture baked once registers with each
-// window's renderer. An application constructs one host, attaches a root to its main window (and
-// to each window it opens), and calls Update from its update and RenderWindow from its render.
+// The application gets one GUIContext and one style manager, and each RenderWindow gets a SceneRoot
+// with that window's VG context, VG renderer and pass targets (multisampling, and the stencil the
+// fills use), stashed on the window as its payload. A window may hold more roots, called panes,
+// each over a region of it with its own input surface and bridge (a root has its own dispatcher)
+// and, when it belongs to another GUI (a tool's, such as the inspector), that GUI's style manager.
+// The picture baker serves every window: a picture baked once registers with each window's
+// renderer. An application constructs one host, attaches a root to its main window (and to each
+// window it opens), and calls Update from its update and RenderWindow from its render.
 //
 // Input: the pointer goes to the window under it, or to the window a press began in until every
-// button is up (the GUI has no capture to ask, so a held press is one), each of its panes pumped
-// through its own surface (the router gates them by region); keys, text and the gamepad go to the
-// focused window's pane that was clicked last, else its first; a file dropped goes to the window it
-// landed on. An application may take a pane's pointer for itself first (a tool picking what is under
-// it) and draw over a window after its panes (a tool's highlights). A root draws when it
-// needs a frame (E8a's NeedsFrame: something changed, an animation runs, a bake landed); otherwise
-// its window re-encodes the batch it drew last, since the runtime host presents every frame.
+// button is up (the GUI has no capture to ask for, so a held press acts as one). Each of the
+// window's panes is pumped through its own surface, and the router gates them by region. Keys,
+// text and the gamepad go to the pane clicked last in the focused window, else to its first pane.
+// A dropped file goes to the window it landed on. An application may take a pane's pointer for
+// itself first (a tool picking what is under it) and draw over a window after its panes (a tool's
+// highlights). A root draws when it needs a frame (NeedsFrame: something changed, an animation
+// runs, a bake finished); otherwise its window re-encodes the batch it drew last, since the runtime
+// host presents every frame.
 //
-// Windows of its own (D6): given an opener (the application's), the host opens an OS window for a
-// root and closes it, tells its owner what happens to each window by its root (moved, resized,
-// focus, a close asked for), and says which root is under a screen point and where a root's point is
-// on the screen, where the window system lets it place windows (not Wayland).
+// Windows of its own: given an opener from the application, the host opens and closes an OS window
+// for a root, and tells the owner what happens to each window, identified by its root (moved,
+// resized, focus, a close requested). Where the window system lets it place windows (not Wayland),
+// it also says which root is under a screen point and where a point in a root is on the screen.
 //
 // Order of teardown: detach a window before its RenderWindow goes (its renderer leaves the baker's
 // targets), and let the host go before the shader library whose modules it draws with.
@@ -44,7 +46,7 @@ import foundation.vg;
 import foundation.vg.renderer;
 import foundation.gui;
 import foundation.gui.shell; // GuiInputBridge, ShellClipboard
-import foundation.input;       // InputKindTracker (K2b)
+import foundation.input;       // InputKindTracker
 import :vg_shaders;
 import :picture_baker;
 import :hosted_content;
@@ -59,8 +61,8 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::gui
 {
-    /// One window's GUI, the payload GuiHost stashes on its RenderWindow (which owns it, and frees it
-    /// after the GPU is done with it).
+    /// One window's GUI, the payload GuiHost stashes on its RenderWindow. The RenderWindow owns it and
+    /// frees it after the GPU is done with it.
     class GuiWindowData final : public graphics::IRenderWindowData
     {
     public:
@@ -69,7 +71,7 @@ export namespace foundation::gui
         {
             RefPtr<SceneRoot> Root;
             Rectangle Region{};
-            StyleManager* Styles = nullptr; ///< another GUI's; null: the host's
+            StyleManager* Styles = nullptr; ///< another GUI's styles; null uses the host's
             UniquePtr<shell::InputSurface> Surface;
             UniquePtr<GuiInputBridge> Bridge;
         };
@@ -80,7 +82,7 @@ export namespace foundation::gui
         UniquePtr<vg::VGContext> Canvas;
         vg::renderer::VGRenderer Renderer;
         UniquePtr<vg::renderer::VGPassTargets> Targets; ///< null: a plain single-sampled pass
-        bool Multisampled = false; ///< its renderer draws the multisampled pass (its targets were made), never the plain one
+        bool Multisampled = false; ///< the renderer was made for the multisampled pass (its targets exist) and never draws the plain one
         /// Targets a resize replaced, kept until the frames in flight that drew into them are done.
         struct RetiredTargets
         {
@@ -90,7 +92,7 @@ export namespace foundation::gui
         Array<RetiredTargets> Retired;
         bool Encoded = false; ///< blends encoded values, through the backbuffer's UNORM view
         rhi::TextureFormat DrawFormat = rhi::TextureFormat::Undefined;
-        bool NeedsFrame = true; ///< Update's verdict: the panes draw this frame, else the last batch is encoded
+        bool NeedsFrame = true; ///< set by Update: the panes draw this frame, otherwise the last batch is encoded again
         u32 LoggedWidth = 0, LoggedHeight = 0; ///< the frame size its sizes were last logged at
 
         [[nodiscard]] SceneRoot* Root() const noexcept { return Panes.IsEmpty() ? nullptr : Panes[0]->Root.Get(); }
@@ -100,19 +102,21 @@ export namespace foundation::gui
     {
     public:
         /// Takes a pane's pointer for the application before the pane sees it (a tool picking what
-        /// is under it, a boundary being dragged): true when it did, and the pane is not pumped.
+        /// is under it, a boundary being dragged). Returns true when it did; the pane is then not
+        /// pumped.
         using PointerFilter = Function<bool(SceneRoot& pane, shell::InputSurface& surface)>;
         /// Draws over a window after its panes, in the window's pixels.
         using Overlay = Function<void(graphics::RenderWindow& window, DrawContext& context)>;
-        /// Opens and closes the OS windows the host makes for a root: the application's (its
-        /// IApplicationHost's OpenWindow and CloseWindow), which owns them.
+        /// Opens and closes the OS windows the host makes for a root. The application supplies it
+        /// (its IApplicationHost's OpenWindow and CloseWindow) and owns the windows.
         struct WindowOpener
         {
             Function<graphics::RenderWindow*(const shell::WindowSettings&)> Open;
             Function<void(graphics::RenderWindow&)> Close;
         };
-        /// Told what happens to a window the host serves, by the window's root: moved, resized, focus
-        /// gained or lost, a close asked for (the host closes nothing itself: its owner decides).
+        /// Told what happens to a window the host serves, identified by the window's root: moved,
+        /// resized, focus gained or lost, a close requested. The host closes nothing itself; the
+        /// window's owner decides.
         using WindowEventListener = Function<void(SceneRoot& root, const shell::WindowEvent& event)>;
 
         /// `fonts` is the font service the GUI's text and an SVG's text draw with; `shaders` the VG
@@ -123,7 +127,7 @@ export namespace foundation::gui
               m_context(MakeRef<GUIContext>(allocator)), m_attached(allocator), m_contents(allocator)
         {
             m_context->SetFontService(fonts);
-            m_context->SetRootPlaces(&m_places); // a drag goes on from window to window
+            m_context->SetRootPlaces(&m_places); // a drag can continue from window to window
             m_styles.SetFontService(fonts);
             m_clipboard = MakeUnique<ShellClipboard>(allocator, &shellRef);
             m_router = MakeUnique<shell::InputRouter>(allocator, shellRef.Input());
@@ -164,21 +168,22 @@ export namespace foundation::gui
         /// The baker every window's SVG skins draw from; null without a device or shaders.
         [[nodiscard]] GpuPictureBaker* Baker() noexcept { return m_baker.Get(); }
 
-        /// The user's scale on every window's content scale (a preference, accessibility).
+        /// Sets the user's scale, applied on top of every window's content scale (a preference, or
+        /// for accessibility).
         void SetUiScale(f32 scale) noexcept { m_uiScale = core::Clamp(scale, 0.5f, 3.0f); }
         [[nodiscard]] f32 GetUiScale() const noexcept { return m_uiScale; }
-        /// How a window attached after the call blends: Encoded (the default) as browsers and design
-        /// tools do, half black over white a 50% grey, when its swapchain offers its UNORM view;
-        /// Linear otherwise.
+        /// Sets how a window attached after this call blends. Encoded (the default) blends as
+        /// browsers and design tools do, so half black over white gives a 50% grey; it applies when
+        /// the swapchain offers a UNORM view. Otherwise the window blends Linear.
         void SetBlendSpace(vg::VGBlendSpace space) noexcept { m_blendSpace = space; }
-        /// What shows behind a root that does not cover its window, as authored (sRGB).
+        /// Sets what shows behind a root that does not cover its window, as authored (sRGB).
         void SetClearColor(Color color) noexcept { m_clear = color; }
         void SetPointerFilter(PointerFilter filter) { m_pointerFilter = Move(filter); }
-        /// The input kind the host tracks from the shell's devices each frame and gives every pane
-        /// (K2b): the pointer, the keyboard or a pad. An application reads it, or sets a starting kind.
+        /// The input kind the host tracks from the shell's devices each frame and gives every pane:
+        /// the pointer, the keyboard or a pad. An application reads it, or sets a starting kind.
         [[nodiscard]] foundation::input::InputKindTracker& GetInputKindTracker() noexcept { return m_inputKind; }
-        /// Every pane's cursor follows its GUI again (after the application set one of its own, a
-        /// boundary's resize cursor).
+        /// Makes every pane's cursor follow its GUI again, after the application set one of its own
+        /// (a boundary's resize cursor).
         void ResetCursors()
         {
             shell::IMouse* mouse = m_shell.Input() != nullptr ? m_shell.Input()->Mouse() : nullptr;
@@ -187,8 +192,9 @@ export namespace foundation::gui
                     pane->Bridge->SetCursorTarget(mouse);
         }
         void SetOverlay(Overlay overlay) { m_overlay = Move(overlay); }
-        /// Content its node shows that draws outside the GUI (a viewport's scene): bound, placed and
-        /// recorded by the host each frame while it is added. Remove it before it goes.
+        /// Adds content that its node shows but that draws outside the GUI (a viewport's scene).
+        /// While it is added, the host binds, places and records it each frame. Remove it before it
+        /// is destroyed.
         void AddContent(IHostedContent& content)
         {
             for (const Hosted& hosted : m_contents)
@@ -214,7 +220,7 @@ export namespace foundation::gui
                     return;
                 }
         }
-        /// Told of each file the OS drops, before the window it landed on is.
+        /// Sets the observer told of each file the OS drops, before the window it landed on is told.
         void SetDropObserver(Function<void(const shell::DroppedFile&)> observer) { m_dropObserver = Move(observer); }
 
         /// Gives `window` the root `root` (made with Context()) over all of it: its canvas, renderer,
@@ -250,12 +256,12 @@ export namespace foundation::gui
             data->Canvas->SetLayers(m_shaders.Layer != nullptr);
             data->Canvas->SetStencilFills(data->Renderer.StencilFillsSupported());
 
-            // The bakes: the first window gives the baker its format, every window samples them.
+            // The first window gives the baker its format, and every window samples the bakes.
             if (EnsureBaker(data->DrawFormat, config.blendSpace))
                 m_baker->AddTarget(data->Renderer);
 
             GuiWindowData* raw = data.Get();
-            // A payload replaced while frames in flight use it: wait for them first.
+            // The payload is replaced while frames in flight may use it, so wait for them first.
             if (window.Data() != nullptr)
                 m_device.Raw()->WaitIdle();
             window.SetData(Move(data));
@@ -263,9 +269,10 @@ export namespace foundation::gui
             AddPane(window, Move(root), Rectangle{});
         }
 
-        /// Another root in `window` (attached first), over `region` of it in its pixels (empty: all
-        /// of it), with its own input; `styles` styles it when it belongs to another GUI (a tool's),
-        /// else the host's do. Drawn after the window's root and the panes added before it.
+        /// Adds another root to `window` (which must be attached first) over `region` of it in its
+        /// pixels (empty: all of it), with its own input. `styles` styles it when it belongs to
+        /// another GUI (a tool's); otherwise the host's styles do. It is drawn after the window's
+        /// root and the panes added before it.
         void AddPane(graphics::RenderWindow& window, RefPtr<SceneRoot> root, Rectangle region, StyleManager* styles = nullptr)
         {
             GuiWindowData* data = Find(&window);
@@ -283,7 +290,7 @@ export namespace foundation::gui
             pane->Bridge->SetTextInputTarget(&window.Window());
             if (m_shell.Input() != nullptr)
                 pane->Bridge->SetCursorTarget(m_shell.Input()->Mouse());
-            pane->Bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad (K2b)
+            pane->Bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad
             root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
             root->SetDisplayScale(window.Window().ContentScale() * m_uiScale);
             root->SetViewportSize(Float2{area.width, area.height});
@@ -315,14 +322,14 @@ export namespace foundation::gui
                     }
         }
 
-        // === Windows of its own (D6) ===
-        /// How the host opens a window for a root; without one it opens none.
+        // === Windows of its own ===
+        /// Sets how the host opens a window for a root; without an opener it opens none.
         void SetWindowOpener(WindowOpener opener) { m_opener = Move(opener); }
-        /// It opens windows of its own: it has an opener, and the shell opens windows beside the main
-        /// one (not the web's one canvas).
+        /// Whether the host can open windows of its own: it has an opener, and the shell opens
+        /// windows beside the main one (not the web's single canvas).
         [[nodiscard]] bool CanOpenWindows() const noexcept { return m_opener.Open && m_opener.Close && Capabilities().multipleWindows; }
-        /// Opens an OS window as `settings` say and gives it `root` (made with Context()); the window,
-        /// or null when it opens none.
+        /// Opens an OS window as `settings` say and gives it `root` (made with Context()). Returns
+        /// the window, or null when none opened.
         graphics::RenderWindow* OpenWindow(RefPtr<SceneRoot> root, const shell::WindowSettings& settings)
         {
             if (!CanOpenWindows() || !root)
@@ -333,12 +340,12 @@ export namespace foundation::gui
             AttachWindow(*window, Move(root));
             if (Find(window) == nullptr)
             {
-                m_opener.Close(*window); // attaching failed: no window without its GUI
+                m_opener.Close(*window); // attaching failed: close the window rather than leave it without its GUI
                 return nullptr;
             }
             return window;
         }
-        /// Closes the window OpenWindow opened for `root`: detached, then closed by its opener.
+        /// Closes the window OpenWindow opened for `root`: it is detached, then closed by the opener.
         void CloseWindow(const SceneRoot& root)
         {
             graphics::RenderWindow* window = WindowFor(&root);
@@ -347,8 +354,8 @@ export namespace foundation::gui
             DetachWindow(*window);
             m_opener.Close(*window);
         }
-        /// Adds a listener to the windows' events (the application's, docking's), each told in the
-        /// order added; the token removes it.
+        /// Adds a listener to the windows' events (the application's, docking's). Listeners are told
+        /// in the order added. Returns a token for RemoveWindowEventListener.
         u32 AddWindowEventListener(WindowEventListener listener)
         {
             m_windowListeners.PushBack(WindowListener{m_nextWindowListener, Move(listener)});
@@ -363,8 +370,9 @@ export namespace foundation::gui
                     return;
                 }
         }
-        /// Whether its windows hold the places it gives them and the pointer is read across them, as
-        /// the shell says (not Wayland, where a client does neither, nor the web's one canvas).
+        /// Whether windows stay at the places the host gives them and the pointer is read across
+        /// them, as the shell says. Neither holds on Wayland, where a client can do neither, or on
+        /// the web's single canvas.
         [[nodiscard]] bool PlacesWindows() const noexcept { return Capabilities().placesWindows; }
         /// The screens there are, as the shell last read them.
         [[nodiscard]] Span<const shell::Screen> Screens() const noexcept
@@ -372,9 +380,10 @@ export namespace foundation::gui
             const shell::IWindowManager* windows = m_shell.WindowManager();
             return windows != nullptr ? windows->Screens() : Span<const shell::Screen>{};
         }
-        /// The root under `screen` (screen units), the pane on top in the window focused last where
-        /// windows overlap, and the point in it (`local`, the root's pointer units); null over none.
-        /// Where the host cannot place windows, every window's place is unknown: null.
+        /// Returns the root under `screen` (in screen units); where windows overlap, it is the top
+        /// pane in the window focused last. `local` receives the point in that root, in the root's
+        /// pointer units. Returns null over no root, and always where the host cannot place windows,
+        /// since every window's place is then unknown.
         SceneRoot* RootAt(Float2 screen, Float2* local = nullptr)
         {
             if (!PlacesWindows())
@@ -410,9 +419,9 @@ export namespace foundation::gui
                     return root;
             return nullptr;
         }
-        /// Where `local` (a point in `root`, its pointer units) is on the screen; false when the root
-        /// is in no window or the host cannot place windows. (What its GUI's drags ask, as
-        /// IRootPlaces.)
+        /// Converts `local` (a point in `root`, in its pointer units) to screen coordinates. Returns
+        /// false when the root is in no window or the host cannot place windows. The GUI's drags ask
+        /// this through IRootPlaces.
         bool ToScreen(const SceneRoot& root, Float2 local, Float2& screen)
         {
             if (!PlacesWindows())
@@ -431,9 +440,9 @@ export namespace foundation::gui
             return false;
         }
 
-        /// Stops drawing and feeding the window's panes, and lets their roots go; its renderer forgets
-        /// the bakes. The rest of the payload stays on the RenderWindow, which frees it when it goes
-        /// (after the GPU is idle).
+        /// Stops drawing and feeding the window's panes and releases their roots; its renderer
+        /// forgets the bakes. The rest of the payload stays on the RenderWindow, which frees it when
+        /// it is destroyed (after the GPU is idle).
         void DetachWindow(graphics::RenderWindow& window)
         {
             for (usize i = 0; i < m_attached.Size(); ++i)
@@ -453,12 +462,9 @@ export namespace foundation::gui
                 }
         }
 
-        /// Once per frame: each window's input to its panes, the GUI's clock, then every pane styled
-        /// and laid out at its region's size and its window's scale, and asked whether it needs a
-        /// frame (a pane of another GUI runs on that GUI's clock, which its owner advances).
-        /// Each pane's root takes its window's size and scale now (Update does it too): an
-        /// application that sizes its own nodes from a root's size calls it first, so they follow a
-        /// resized window in the same frame rather than the next.
+        /// Gives each pane's root its window's size and scale now (Update does this too). An
+        /// application that sizes its own nodes from a root's size calls this first, so they follow
+        /// a resized window in the same frame rather than the next.
         void SizePanes()
         {
             for (const Attached& attached : m_attached)
@@ -466,10 +472,14 @@ export namespace foundation::gui
                     attached.Data->NeedsFrame = true;
         }
 
+        /// Runs once per frame: passes each window's input to its panes, advances the GUI's clock,
+        /// then styles and lays out every pane at its region's size and its window's scale, and asks
+        /// whether it needs a frame. A pane of another GUI runs on that GUI's clock, which its owner
+        /// advances.
         void Update(f32 deltaTime)
         {
             // What the player uses now, from this frame's devices, before the panes' bridges pass
-            // it on with their input (K2b).
+            // it on with their input.
             foundation::input::ShellInputSource devices(m_shell.Input());
             m_inputKind.Update(devices);
             m_router->Update();
@@ -490,10 +500,10 @@ export namespace foundation::gui
                 data.NeedsFrame = needs;
             }
             PlaceContents();
-            // A content that changes as it is placed (a viewport made again at a new size, its old
-            // image let go) invalidates its node: its window draws, rather than encode a batch that
-            // still names what was let go. Its root's own flag, not NeedsFrame, which closes the
-            // frame's stats.
+            // A content that changes as it is placed (a viewport made again at a new size, releasing
+            // its old image) invalidates its node. Its window then draws, rather than encoding a batch
+            // that still names what was released. This reads the root's own flag rather than
+            // NeedsFrame, which closes the frame's stats.
             for (const Attached& attached : m_attached)
                 for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
                     if (pane->Root->NeedsRedraw())
@@ -502,8 +512,8 @@ export namespace foundation::gui
         }
 
         /// Draws `frame`'s window: its panes when any needs a frame (else the batch drawn last) and
-        /// the overlay, the baker's queue (once a frame, before any pass samples it), the layers, then
-        /// the pass.
+        /// the overlay, then the baker's queue (once a frame, before any pass samples it), the
+        /// layers, and the pass.
         void RenderWindow(graphics::FrameContext& frame)
         {
             if (!frame.valid || frame.encoder == nullptr)
@@ -536,12 +546,13 @@ export namespace foundation::gui
                 (void)m_baker->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
                 m_bakesRecorded = true;
             }
-            // What the window's nodes show from outside the GUI, drawn before the GUI samples it.
+            // Record what the window's nodes show from outside the GUI, before the GUI samples it.
             for (const Hosted& hosted : m_contents)
                 if (hosted.Window == frame.window && hosted.Content->HostedNode()->IsTreeVisible())
                     hosted.Content->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
-            // Every size a window's drawing depends on, once per frame size: on a scaled display the
-            // window's units, its pixels, the swapchain and the root's viewport must agree to fill it.
+            // Log every size a window's drawing depends on, once per frame size: on a scaled display
+            // the window's units, its pixels, the swapchain and the root's viewport must agree for the
+            // drawing to fill the window.
             if (frame.width != data->LoggedWidth || frame.height != data->LoggedHeight)
             {
                 data->LoggedWidth = frame.width;
@@ -564,9 +575,9 @@ export namespace foundation::gui
             rhi::TextureView* view = data->Encoded ? frame.backbufferAlternateView : frame.backbufferView;
             // The targets follow the backbuffer this frame draws into, not the window: while a window
             // is resized its swapchain need not match it, and a pass resolves only into its own size.
-            // New ones are made at once and the old retired, freed once the frames in flight that drew
-            // into them are done: no wait for the GPU, which on the web would yield to the browser
-            // with the canvas's texture taken.
+            // New targets are made at once and the old ones retired, then freed once the frames in
+            // flight that drew into them are done. This avoids waiting for the GPU, which on the web
+            // would yield to the browser while the canvas's texture is taken.
             RetireTargets(*data);
             if (data->Multisampled && (data->Targets.Get() == nullptr || !data->Targets->Matches(frame.width, frame.height)))
             {
@@ -585,8 +596,8 @@ export namespace foundation::gui
                 return;
             }
             // A renderer made for the multisampled pass cannot draw the plain one (its pipelines'
-            // sample count is the targets'): with no targets at this size the frame is only cleared,
-            // and the next draws again.
+            // sample count is the targets'). With no targets at this size the frame is only cleared,
+            // and the next frame draws again.
             if (rhi::RenderPassEncoder* encoder = frame.BeginBackbufferPass(clear, view))
             {
                 if (!data->Multisampled)
@@ -597,28 +608,29 @@ export namespace foundation::gui
             frame.EndBackbufferPass();
         }
 
-        /// The multisampled targets `window`'s GUI draws into, sized to its backbuffer as each frame
-        /// draws; null when it has none (a plain single-sampled pass).
+        /// Returns the multisampled targets `window`'s GUI draws into, sized to its backbuffer as
+        /// each frame draws, or null when it has none (a plain single-sampled pass).
         [[nodiscard]] const vg::renderer::VGPassTargets* PassTargetsFor(const graphics::RenderWindow* window) noexcept
         {
             GuiWindowData* data = Find(window);
             return data != nullptr && data->Multisampled ? data->Targets.Get() : nullptr;
         }
-        /// How many replaced targets `window` still keeps for the frames in flight.
+        /// Returns how many replaced targets `window` still keeps for the frames in flight.
         [[nodiscard]] usize RetiredTargetsFor(const graphics::RenderWindow* window) noexcept
         {
             GuiWindowData* data = Find(window);
             return data != nullptr ? data->Retired.Size() : 0;
         }
 
-        /// The renderer drawing `window`'s GUI (where a viewport registers its target); null when it
-        /// has none.
+        /// Returns the renderer drawing `window`'s GUI (where a viewport registers its target), or
+        /// null when it has none.
         [[nodiscard]] vg::renderer::VGRenderer* RendererFor(const graphics::RenderWindow* window) noexcept
         {
             GuiWindowData* data = Find(window);
             return data != nullptr ? &data->Renderer : nullptr;
         }
-        /// The window `root` is a pane of (its root or another); null when it is in none.
+        /// Returns the window that `root` is a pane of (as its root or another pane), or null when it
+        /// is in none.
         [[nodiscard]] graphics::RenderWindow* WindowFor(const SceneRoot* root) noexcept
         {
             for (const Attached& attached : m_attached)
@@ -627,7 +639,7 @@ export namespace foundation::gui
                         return attached.Window;
             return nullptr;
         }
-        /// Where `root` draws in its window's pixels; empty when it is in none.
+        /// Returns where `root` draws, in its window's pixels; empty when it is in no window.
         [[nodiscard]] Rectangle PaneArea(const SceneRoot& root) noexcept
         {
             for (const Attached& attached : m_attached)
@@ -638,8 +650,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] usize WindowCount() const noexcept { return m_attached.Size(); }
 
-        /// Styles `root` through `styles` (null: the host's) and lays it out, as Update does each
-        /// pane's: for a root drawn elsewhere (offscreen).
+        /// Styles `root` through `styles` (null: the host's) and lays it out, as Update does for each
+        /// pane. This is for a root drawn elsewhere (offscreen).
         void StyleAndLayOut(SceneRoot& root, StyleManager* styles = nullptr)
         {
             StyleManager& manager = styles != nullptr ? *styles : m_styles;
@@ -648,7 +660,8 @@ export namespace foundation::gui
             root.UpdateLayout();
         }
 
-        /// Frames a window's panes were drawn in, and frames a window encoded its last batch again.
+        /// FramesDrawn counts frames in which a window's panes were drawn; FramesReused counts frames
+        /// in which a window encoded its last batch again.
         [[nodiscard]] u64 FramesDrawn() const noexcept { return m_framesDrawn; }
         [[nodiscard]] u64 FramesReused() const noexcept { return m_framesReused; }
 
@@ -661,7 +674,7 @@ export namespace foundation::gui
             return windows != nullptr ? windows->Capabilities() : shell::WindowCapabilities{};
         }
 
-        // The panes' roots at their regions' sizes and the window's scale; whether one changed.
+        // Sizes the panes' roots to their regions and the window's scale; returns whether any changed.
         bool SizePanes(GuiWindowData& data, graphics::RenderWindow& window, f32 scale)
         {
             bool changed = false;
@@ -680,7 +693,8 @@ export namespace foundation::gui
             return changed;
         }
 
-        // The baker's renderer takes the first target's format and blend space; false without one.
+        // Initializes the baker's renderer with the first target's format and blend space. Returns
+        // false when there is no baker or it failed to initialize.
         bool EnsureBaker(rhi::TextureFormat format, vg::VGBlendSpace space)
         {
             if (!m_baker)
@@ -699,32 +713,34 @@ export namespace foundation::gui
         struct Attached
         {
             graphics::RenderWindow* Window = nullptr;
-            GuiWindowData* Data = nullptr; // the RenderWindow's
+            GuiWindowData* Data = nullptr; // owned by the RenderWindow
         };
 
-        // A pane's area in its window's pixels (a region is given in them too): all of the window by
-        // default. The GUI lays out to it and draws into the swapchain at the same size, so a scaled
-        // display (more pixels than window units) is filled, not drawn into a corner.
+        // Returns a pane's area in its window's pixels (a region is given in pixels too), the whole
+        // window by default. The GUI lays out to it and draws into the swapchain at the same size, so
+        // a scaled display (more pixels than window units) is filled rather than drawn into a corner.
         [[nodiscard]] static Rectangle AreaOf(graphics::RenderWindow& window, Rectangle region) noexcept
         {
             if (region.width > 0.0f && region.height > 0.0f)
                 return region;
             return Rectangle{0.0f, 0.0f, static_cast<f32>(window.Window().PixelWidth()), static_cast<f32>(window.Window().PixelHeight())};
         }
-        // How many of the window's pixels a window unit holds, across and down (1 on an unscaled display).
+        // Returns how many of the window's pixels a window unit holds, across and down (1 on an
+        // unscaled display).
         [[nodiscard]] static Float2 PixelsPerUnit(const shell::IWindow& window) noexcept
         {
             const f32 w = static_cast<f32>(window.Width());
             const f32 h = static_cast<f32>(window.Height());
             return Float2{w > 0.0f ? static_cast<f32>(window.PixelWidth()) / w : 1.0f, h > 0.0f ? static_cast<f32>(window.PixelHeight()) / h : 1.0f};
         }
-        // A pane's area in window units, where the pointer arrives.
+        // Converts a pane's area to window units, in which the pointer arrives.
         [[nodiscard]] static Rectangle InWindowUnits(graphics::RenderWindow& window, Rectangle area) noexcept
         {
             const Float2 ratio = PixelsPerUnit(window.Window());
             return Rectangle{area.x / ratio.x, area.y / ratio.y, area.width / ratio.x, area.height / ratio.y};
         }
-        // A window's multisampled targets at `width` x `height`; null when the device takes none.
+        // Makes a window's multisampled targets at `width` x `height`; returns null when the device
+        // takes none.
         [[nodiscard]] UniquePtr<vg::renderer::VGPassTargets> MakeTargets(rhi::TextureFormat format, u32 width, u32 height)
         {
             UniquePtr<vg::renderer::VGPassTargets> targets = MakeUnique<vg::renderer::VGPassTargets>(m_allocator);
@@ -733,7 +749,8 @@ export namespace foundation::gui
                 return UniquePtr<vg::renderer::VGPassTargets>{};
             return targets;
         }
-        // One of `data`'s frames begins: the retired targets age, those no frame in flight uses go.
+        // Called as one of `data`'s frames begins: the retired targets age, and those no frame in
+        // flight uses are freed.
         static void RetireTargets(GuiWindowData& data)
         {
             for (usize i = data.Retired.Size(); i > 0; --i)
@@ -775,14 +792,14 @@ export namespace foundation::gui
         {
             IHostedContent* Content = nullptr;
             graphics::RenderWindow* Window = nullptr; // the window it is bound to
-            bool Routed = false; // its surface in the router: bound and its node shown
+            bool Routed = false; // its surface is in the router: it is bound and its node shown
         };
 
-        // Each content bound to the window its node is in (again when that changes), and placed
-        // over its node; then their router, so the application reads what it gates this frame. A
-        // content whose node is not shown (a page behind another tab) leaves the router until it
-        // is: it keeps the place it had, the shown one's, and the router's last match would give
-        // it the pointer meant for what is in front.
+        // Binds each content to the window its node is in (again when that changes) and places it
+        // over its node, then updates their router, so the application reads what it gates this
+        // frame. A content whose node is not shown (a page behind another tab) leaves the router
+        // until it is shown. It keeps the place it had while shown, so otherwise the router's last
+        // match would give it the pointer meant for what is in front.
         void PlaceContents()
         {
             for (Hosted& hosted : m_contents)
@@ -804,7 +821,7 @@ export namespace foundation::gui
                 const bool shown = node->IsTreeVisible();
                 Route(hosted, shown);
                 if (!shown)
-                    continue; // its targets kept for when it shows again
+                    continue; // its targets are kept for when it shows again
                 const Rectangle pane = PaneArea(*root);
                 const Rect bounds = node->GetScreenBounds(); // the root's device pixels
                 const Rectangle pixels{pane.x + bounds.x, pane.y + bounds.y, bounds.width, bounds.height};
@@ -813,7 +830,7 @@ export namespace foundation::gui
             }
             m_contentRouter->Update();
         }
-        // Its surface in the content router (`on`) or out of it.
+        // Puts the content's surface in the content router (`on`) or takes it out.
         void Route(Hosted& hosted, bool on)
         {
             shell::InputSurface* surface = hosted.Content->HostedSurface();
@@ -839,24 +856,25 @@ export namespace foundation::gui
             m_router->RemoveSurface(pane.Surface.Get());
             pane.Bridge->SetTextInputTarget(nullptr); // the window may close after this
         }
-        // A window leaves: its panes' roots are let go now (the trees may hold widgets showing
-        // models their application frees next), its renderer forgets the bakes, and its hosted
-        // contents let it go; the GPU half of the payload stays with the RenderWindow until the GPU
-        // is done with it.
+        // Forgets a window that is leaving. Its panes' roots are released now (the trees may hold
+        // widgets showing models their application frees next), its renderer forgets the bakes, and
+        // its hosted contents release it. The GPU half of the payload stays with the RenderWindow
+        // until the GPU is done with it.
         void Forget(const Attached& attached)
         {
             for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
                 Forget(*pane);
             attached.Data->Panes.Clear();
-            for (Hosted& hosted : m_contents) // their window goes: they let its renderer go
+            for (Hosted& hosted : m_contents) // their window is going, so they release its renderer
                 if (hosted.Window == attached.Window)
                     Unbind(hosted);
             if (m_baker)
                 m_baker->RemoveTarget(attached.Data->Renderer);
         }
 
-        // What happened to the windows it serves since the last pump: the focus order kept (where
-        // windows overlap, the one focused last is on top), and each told by its root.
+        // Reports what happened to the windows the host serves since the last pump. It keeps the
+        // focus order (where windows overlap, the one focused last is on top) and tells the
+        // listeners about each window by its root.
         void ReportWindowEvents()
         {
             const shell::IWindowManager* windows = m_shell.WindowManager();
@@ -878,12 +896,12 @@ export namespace foundation::gui
                     m_focusOrder.Insert(0, event.windowId);
                 }
                 const RefPtr<SceneRoot> root = attached->Data->Panes[0]->Root; // a listener may close it
-                for (usize l = 0; l < m_windowListeners.Size(); ++l) // by place: a listener may remove one
+                for (usize l = 0; l < m_windowListeners.Size(); ++l) // by index, since a listener may remove one
                 {
                     const u32 token = m_windowListeners[l].Token;
                     m_windowListeners[l].Listener(*root, event);
                     if (l < m_windowListeners.Size() && m_windowListeners[l].Token != token)
-                        --l; // it removed itself: the next is at its place
+                        --l; // it removed itself, so the next listener is at this index
                 }
             }
         }
@@ -893,9 +911,9 @@ export namespace foundation::gui
             shell::IInputManager* input = m_shell.Input();
             if (input == nullptr || m_attached.IsEmpty())
                 return;
-            // The pointer: the window a press began in while any button is held, and on the frame
-            // they are let go (wherever the pointer is then: outside every window, over another),
-            // else the one under it.
+            // The pointer goes to the window a press began in while any button is held, and on the
+            // frame the buttons are released (wherever the pointer is then, outside every window or
+            // over another); otherwise it goes to the window under it.
             bool held = false;
             if (shell::IMouse* mouse = input->Mouse())
             {
@@ -928,7 +946,8 @@ export namespace foundation::gui
             }
             if (!held)
                 m_pressWindow = 0; // its release was routed above
-            // Keys, text and the gamepad: the focused window's pane clicked last, else its first.
+            // Keys, text and the gamepad go to the pane clicked last in the focused window, else to
+            // its first pane.
             const Attached* focused = FindById(input->FocusedWindow());
             if (focused == nullptr)
                 focused = &m_attached[0];
@@ -951,7 +970,7 @@ export namespace foundation::gui
                     default:
                         break;
                     }
-            // Files the OS dropped: the window they landed on (its root).
+            // Files the OS dropped go to the window they landed on (its root).
             Array<shell::DroppedFile> drops(m_allocator);
             m_shell.DrainDroppedFiles(drops);
             if (m_dropObserver)
@@ -963,8 +982,8 @@ export namespace foundation::gui
                         (void)attached.Data->Panes[0]->Bridge->DispatchFileDrops(drops, attached.Window->Window().Id());
         }
 
-        // The clear colour for a window: as authored when it blends encoded, else in linear light
-        // (an sRGB target encodes what a pass clears to).
+        // Returns the clear colour for a window: as authored when it blends encoded, else in linear
+        // light (an sRGB target encodes what a pass clears to).
         [[nodiscard]] rhi::ClearColor ClearFor(bool encoded) const noexcept
         {
             if (encoded)
@@ -972,7 +991,7 @@ export namespace foundation::gui
             return rhi::ClearColor(SrgbToLinear(m_clear.r), SrgbToLinear(m_clear.g), SrgbToLinear(m_clear.b), m_clear.a);
         }
 
-        // The GUI's roots' places, as its drags ask them: the host's windows.
+        // Answers the GUI's drags about where its roots are, from the host's windows.
         class Places final : public IRootPlaces
         {
         public:
@@ -1004,7 +1023,7 @@ export namespace foundation::gui
         StyleManager m_styles;
         UniquePtr<ShellClipboard> m_clipboard;
         UniquePtr<shell::InputRouter> m_router;
-        foundation::input::InputKindTracker m_inputKind; // the host's, from the shell's devices (K2b)
+        foundation::input::InputKindTracker m_inputKind; // tracked by the host from the shell's devices
         UniquePtr<shell::InputRouter> m_contentRouter; // the hosted contents' surfaces
         UniquePtr<GpuPictureBaker> m_baker;
         PictureBakerSetup m_bakerSetup;
@@ -1025,7 +1044,7 @@ export namespace foundation::gui
         Array<WindowListener> m_windowListeners{m_allocator};
         u32 m_nextWindowListener = 1;
         Places m_places{*this};
-        Array<u32> m_focusOrder{m_allocator}; // window ids, the one focused last first
+        Array<u32> m_focusOrder{m_allocator}; // window ids, most recently focused first
         f32 m_uiScale = 1.0f;
         vg::VGBlendSpace m_blendSpace = vg::VGBlendSpace::Encoded;
         Color m_clear{0.07f, 0.07f, 0.09f, 1.0f};

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ViewGroupTests.bf (faithful; RefPtr views, `===` -> pointer ==,
-// Vector2 -> Float2, LayoutParams -> the LayoutStyle value on View).
+// ViewGroup tests. Each child's placement is the LayoutStyle value on the View.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -150,7 +149,7 @@ TEST_CASE("viewgroup: AddView_WithLayoutStyle_SetsIt")
 
 TEST_CASE("viewgroup: Reparent_KeepsLayoutIntent")
 {
-    // The placement record travels WITH the view: moving it from a Flex to a Grid (or to a
+    // The placement record travels with the view: moving it from a Flex to a Grid (or to a
     // plain group) keeps every field, so a container reads what it understands and the rest
     // waits for the next container.
     UIContext ctx{DefaultAllocator()};
@@ -456,7 +455,7 @@ TEST_CASE("viewgroup: FindByName_DeeplyNested")
     CHECK(root->FindByName(u8"deep-target") == target.Get());
 }
 
-// A transformed child hit-tests at its DRAWN position, not its layout bounds (ViewTransform inverse in
+// A transformed child hit-tests at its drawn position, not its layout bounds (ViewTransform inverse in
 // HitTest). The child fills the group; a +50px x-translation shifts its drawn position right by 50.
 TEST_CASE("viewgroup: HitTest_AppliesInverseTransform")
 {
@@ -471,7 +470,7 @@ TEST_CASE("viewgroup: HitTest_AppliesInverseTransform")
     LayoutPass(ctx, root.Get());
 
     child->Transform.Translation =
-        Float2{50, 0}; // drawn 50px to the right (transform doesn't relayout)
+        Float2{50, 0}; // drawn 50px to the right (a transform does not relayout)
 
     // At the drawn position the child is hit...
     CHECK(root->HitTest(Float2{60, 10}) == child.Get());
@@ -479,8 +478,8 @@ TEST_CASE("viewgroup: HitTest_AppliesInverseTransform")
     CHECK(root->HitTest(Float2{10, 10}) != child.Get());
 }
 
-// MoveView: a pure reorder - the child changes index without a Detach/Attach round-trip
-// (Context/registration survive), clamped, and a non-child is ignored.
+// MoveView is a pure reorder: the child changes index without a Detach and Attach round trip (its
+// Context and registration survive), the index is clamped, and a non-child is ignored.
 TEST_CASE("viewgroup: MoveView_ReordersWithoutDetach")
 {
     UIContext ctx{DefaultAllocator()};
@@ -518,9 +517,9 @@ TEST_CASE("viewgroup: MoveView_ReordersWithoutDetach")
     CHECK(group->GetChildAt(0) == b.Get());
 }
 
-// Destruction lifetime guarantees: destroying a group must not leave externally-held children
-// with dangling back-pointers, and a still-ATTACHED subtree destroyed by dropping its owning
-// RefPtr must leave no freed View* behind in the UIContext registry.
+// Destruction lifetime guarantees: destroying a group leaves no externally held child with a
+// dangling back-pointer, and a still-attached subtree destroyed by dropping its owning RefPtr
+// leaves no freed View* behind in the UIContext registry.
 TEST_CASE("viewgroup: destruction clears child Parent back-pointers")
 {
     auto child = MakeTestView();
@@ -529,9 +528,9 @@ TEST_CASE("viewgroup: destruction clears child Parent back-pointers")
         group->AddView(child.Get());
         CHECK(child->Parent == group.Get());
     }
-    CHECK(child->Parent == nullptr); // group died; the held child must not point at freed memory
+    CHECK(child->Parent == nullptr); // the group died; the held child does not point at freed memory
 
-    // The child is reusable: adding it to a NEW group must not touch the dead parent.
+    // The child is reusable: adding it to a new group does not touch the dead parent.
     auto second = MakeTestGroup();
     second->AddView(child.Get());
     CHECK(child->Parent == second.Get());
@@ -550,20 +549,20 @@ TEST_CASE("viewgroup: destroying an ATTACHED subtree detaches it from the contex
         root->AddView(group.Get());
         group->AddView(child.Get());
         childId = child->Id;
-        REQUIRE(ctx.GetViewById(childId) == child.Get()); // attached + registered
-        // Destroy the subtree by dropping the owning refs WITHOUT RemoveView - the dtor path.
+        REQUIRE(ctx.GetViewById(childId) == child.Get()); // attached and registered
+        // Destroy the subtree by dropping the owning refs without RemoveView (the destructor path).
         root->RemoveView(group.Get());
     }
-    // RemoveView detached the group; the group dtor must have detached the child too - the
-    // registry may not keep a freed (or stale) pointer for it.
+    // RemoveView detached the group, and the group's destructor detached the child too, so the
+    // registry keeps no freed or stale pointer for it.
     CHECK(ctx.GetViewById(childId) == nullptr);
     CHECK(child->Parent == nullptr);
 }
 
 TEST_CASE("popup-layer: destruction clears entry popups' Parent (the non-child popups)")
 {
-    // Popups live in PopupLayer::m_entries, not m_children - a persistent menu view (MenuBar,
-    // ComboBox dropdown) survives its layer and must not keep a dangling Parent into it.
+    // Popups live in PopupLayer::m_entries, not m_children. A persistent menu view (a MenuBar, a
+    // ComboBox dropdown) outlives its layer and does not keep a dangling Parent into it.
     auto popup = MakeTestView();
     {
         auto layer = core::MakeRef<PopupLayer>(core::DefaultAllocator());

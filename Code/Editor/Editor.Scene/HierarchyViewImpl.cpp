@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :hierarchy partition, its body (Documentation/Specs/editor-gui.md, 5.3,
-// layer 3). See HierarchyView.cppm.
+// Editor::Scene - :hierarchy partition, its body. See HierarchyView.cppm.
 
 module;
 #include "Core/Prelude.h"
@@ -137,7 +136,8 @@ namespace editor
         m_filter = String(text);
         if (m_clear != nullptr)
             m_clear->SetVisible(!m_filter.IsEmpty());
-        // A whole guid asks for that entity: shown with its way open, selected and scrolled to.
+        // A whole guid asks for that entity: it is shown with the path to it open, selected and
+        // scrolled to.
         Guid wanted;
         const bool whole = FilterAsGuid(m_filter.AsView(), wanted) && m_edit->Scene().IsValid(m_edit->Scene().FindEntity(wanted));
         Build();
@@ -155,8 +155,8 @@ namespace editor
         const String name = m_services.sceneName ? String(m_services.sceneName()) : String(scene.Name());
         m_model.Build(scene, name.AsView(), m_services.sceneIcon, m_services.icons, m_filter.AsView());
         // The scene's row is always open. The scene opens with its top level shown (a model's
-        // skeleton stays closed); after that an entity seen with children for the first time
-        // opens (what an edit makes shows), and one the user closed stays closed.
+        // skeleton stays closed). After that, an entity seen with children for the first time
+        // opens, so what an edit makes shows, and one the user closed stays closed.
         if (m_tree != nullptr)
         {
             m_tree->SetIdExpanded(kSceneRowId, true);
@@ -174,7 +174,7 @@ namespace editor
                     (void)m_known.Insert(id);
                 }
             }
-            // A search opens every way to its matches.
+            // A search opens the path to each of its matches.
             if (!m_filter.IsEmpty())
                 for (const SceneTreeModel::Row& row : m_model.Rows())
                     if (!row.entity.IsNil() && !row.children.IsEmpty())
@@ -248,7 +248,7 @@ namespace editor
         const Guid entity = EntityAt(item);
         if (entity.IsNil())
         {
-            // The scene's row or the background: what makes a root.
+            // The scene's row or the background: the actions that make a root.
             const StringView ids[] = {SceneActionIds::kEntityCreate, SceneActionIds::kEntitySpawnPrefab, SceneActionIds::kEntityPaste};
             (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(ids, 3));
         }
@@ -292,7 +292,7 @@ namespace editor
         if (m_services.context == nullptr)
             return;
         const Status ran = m_services.context->Actions().Execute(id, m_services.page);
-        // Refused (while simulating, say): said, not swallowed.
+        // Refused (while simulating, say): reported, not swallowed.
         if (!ran.IsOk() && ran.Code() == ErrorCode::NotSupported)
             m_services.context->SetStatus(u8"Not while the scene simulates: stop it first.");
     }
@@ -416,7 +416,7 @@ namespace editor
             }
             return gui::DropEffect::Move;
         }
-        // Prefabs from the assets: an instance of each, there.
+        // Prefabs dragged from the assets: an instance of each is spawned at the drop.
         Array<app::AssetDrag> assets;
         if (drop.Payload != nullptr && app::AssetDrag::ReadAll(*drop.Payload, assets) && m_view.m_services.spawnPrefab)
         {

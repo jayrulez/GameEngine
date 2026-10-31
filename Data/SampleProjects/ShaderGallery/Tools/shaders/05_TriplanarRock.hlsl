@@ -3,7 +3,7 @@
 // Builds on lesson 2. New here: mapping by input.worldPos instead of the mesh's uv. The texture is
 // projected three times, along each world axis, and the three are blended by how much the surface
 // faces each axis; a lumpy rock has no good uv, and this needs none. And a normal map: the surface's
-// bumps as normals, which `surface.normal` takes in TANGENT space (x along the uv's u, y along v, z
+// bumps as normals, which `surface.normal` takes in tangent space (x along the uv's u, y along v, z
 // out of the surface), so the world-space bumps the projections give are turned into it at the end.
 // surface: lit
 

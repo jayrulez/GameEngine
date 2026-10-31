@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net.manager - the runtime networking home (NetworkManager) mechanics + facade registration.
+// foundation.net.manager - NetworkManager mechanics and the Net facade's registration.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -73,9 +73,9 @@ TEST_CASE("net-manager: server + client connect, and an RPC routes through the m
 TEST_CASE(
     "net-manager: HostServer/JoinServer own their UDP sockets and exchange an RPC over localhost")
 {
-    // The self-contained runtime path: each endpoint opens its OWN real UDP socket (no shared sim
-    // network, no externally-owned socket) - two NetworkManagers in one process talking over real
-    // loopback, exactly the in-editor server<->client scenario.
+    // The self-contained runtime path: each endpoint opens its own real UDP socket (no shared
+    // simulated network, no borrowed socket), so two NetworkManagers in one process talk over real
+    // loopback, as a server and client do in the editor.
     UniquePtr<net::NetworkManager> server =
         net::NetworkManager::HostServer(DefaultAllocator(), /*port=*/0, /*dedicated=*/true);
     REQUIRE(static_cast<bool>(server));
@@ -177,10 +177,10 @@ TEST_CASE("net-manager: an endpoint that closes tells its peers at once")
 
 TEST_CASE("net-manager: the Net facade type registers")
 {
-    net::RegisterNetScriptFacade(); // idempotent; must not crash + registers the reflected type
+    net::RegisterNetScriptFacade(); // idempotent; registers the reflected type
     const TypeInfo& ti = net::Net::StaticType();
     CHECK(PropertyCount(ti) == 0u); // a facade has methods, not properties
-    // (End-to-end script binding on both backends is exercised in FacadeScriptTests.cpp.)
+    // (End-to-end script binding on both backends is exercised in NetFacadeScriptTests.cpp.)
 }
 
 TEST_CASE("net-startup: role=None yields an inactive runtime (single-player)")

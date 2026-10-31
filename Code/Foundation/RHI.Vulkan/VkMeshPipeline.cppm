@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of MeshPipeline.
-/// Ported from Sedulous.RHI.Vulkan/VulkanMeshPipeline.bf.
 
 module;
 #include "Core/Prelude.h"

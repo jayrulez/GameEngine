@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Fonts.Tests/BakedFontTests.bf - pure-data exercises of
-// BakedFont + BakedFontAtlas (no rasterizer / no TTF).
+// Pure-data exercises of BakedFont and BakedFontAtlas (no rasterizer, no TTF).
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -82,7 +81,7 @@ TEST_CASE("baked.font: MeasureString uses kerning")
 
     // "AB": advance(A) + kerning(A,B) + advance(B) = 10 + (-3) + 10 = 17.
     CHECK(font.MeasureString(u8"AB") == 17.0f);
-    // "BA" has no kerning entry -> 20.
+    // "BA" has no kerning entry: 20.
     CHECK(font.MeasureString(u8"BA") == 20.0f);
 }
 

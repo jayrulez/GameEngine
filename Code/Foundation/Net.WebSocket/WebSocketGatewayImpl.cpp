@@ -36,7 +36,7 @@ namespace foundation::net
     {
         u32 h[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu, 0x10325476u, 0xC3D2E1F0u};
 
-        // Padded message: data + 0x80 + zeros + 64-bit big-endian bit length.
+        // Padded message: data, 0x80, zeros, then the 64-bit big-endian bit length.
         Array<byte> padded;
         padded.Reserve(data.Size() + 72);
         for (byte b : data)
@@ -154,7 +154,7 @@ namespace foundation::net
 
     String ComputeWebSocketAccept(StringView clientKey)
     {
-        // RFC 6455 magic GUID, concatenated to the key VERBATIM (no decode).
+        // RFC 6455 magic GUID, concatenated to the key verbatim (no decode).
         static constexpr StringView kMagic = u8"258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         Array<byte> input;
         input.Reserve(clientKey.Size() + kMagic.Size());
@@ -176,7 +176,7 @@ namespace foundation::net
     void EncodeWebSocketFrame(WsOpcode opcode, Span<const byte> payload, bool mask,
                               u32 maskingKey, Array<byte>& out)
     {
-        out.PushBack(static_cast<byte>(0x80u | static_cast<u8>(opcode))); // FIN + opcode
+        out.PushBack(static_cast<byte>(0x80u | static_cast<u8>(opcode))); // FIN and opcode
         const u8 maskBit = mask ? 0x80u : 0x00u;
         if (payload.Size() < 126)
         {
@@ -264,7 +264,7 @@ namespace foundation::net
             if ((b0 & 0x70u) != 0 || !fin)
             {
                 // RSV bits (no extensions negotiated) and fragmentation are protocol errors
-                // in this deliberately-bounded server.
+                // in this server, which supports neither.
                 m_failed = true;
                 return;
             }
@@ -272,7 +272,7 @@ namespace foundation::net
             const bool masked = (b1 & 0x80u) != 0;
             if (masked != m_serverSide)
             {
-                m_failed = true; // RFC 6455 5.1: client frames MUST be masked, server frames MUST NOT
+                m_failed = true; // RFC 6455 5.1: client frames are masked, server frames are not
                 return;
             }
             u64 length = b1 & 0x7Fu;
@@ -308,7 +308,7 @@ namespace foundation::net
             const usize keyBytes = masked ? 4 : 0;
             if (m_buffer.Size() - cursor < keyBytes + length)
             {
-                break; // need the masking key + full payload
+                break; // need the masking key and the full payload
             }
             byte key[4] = {};
             if (masked)
@@ -514,9 +514,9 @@ namespace foundation::net
                 usize offset = 0;
                 if (!client.upgraded)
                 {
-                    // Feed the handshake BYTE-WISE so bytes past the request head (an eager
-                    // client's first frame in the same segment) land in the frame parser,
-                    // not the HTTP parser - Push reports no consumed count.
+                    // Feed the handshake byte by byte so bytes past the request head (an eager
+                    // client's first frame in the same segment) land in the frame parser, not
+                    // the HTTP parser: Push reports no consumed count.
                     while (offset < static_cast<usize>(got))
                     {
                         // A request starts with its method's letters: anything else (a TLS hello
@@ -564,7 +564,7 @@ namespace foundation::net
                     }
                     if (!client.upgraded)
                     {
-                        continue; // handshake still incomplete - read more
+                        continue; // handshake still incomplete: read more
                     }
                 }
                 client.frames.Push(
@@ -828,8 +828,8 @@ namespace foundation::net
 #if PLATFORM_WEB
     // ---- the browser client socket -------------------------------------------------------
     // Callback-driven (emscripten/websocket.h); without pthreads the callbacks run on the
-    // main-thread event loop, so the queues below need no locking. Sends before onopen
-    // BUFFER - the session fires its connect packet immediately, well inside the WS
+    // main-thread event loop, so the queues below need no locking. Sends before onopen are
+    // buffered: the session fires its connect packet immediately, well inside the WebSocket
     // handshake latency.
 
     struct WebSocketClientSocket::Impl

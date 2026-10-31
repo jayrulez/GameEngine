@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/GridViewTests.bf (faithful). Beef get/set props -> methods
-// (gv->SetAdapter / gv->ScrollY()); shared SimpleListAdapter test double from TestHelpers.h; the borrowed
-// adapter is declared before the GridView so it outlives it. Logic only, no font.
+// GridView tests, logic only (no font). They use the SimpleListAdapter test double from
+// TestHelpers.h; the borrowed adapter is declared before the GridView so it outlives it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -33,7 +32,7 @@ TEST_CASE("grid-view: NoAdapter_NoViews")
     root->AddView(gv.Get());
     LayoutPass(ctx, root.Get());
 
-    // VisualChildCount = active views (0) + scrollbar (1).
+    // VisualChildCount is the active views (0) plus the scrollbar (1).
     CHECK(gv->VisualChildCount() == 1u);
 }
 
@@ -57,7 +56,7 @@ TEST_CASE("grid-view: ColumnCalculation")
     root->AddView(gv.Get());
     LayoutPass(ctx, root.Get());
 
-    // 300 / (60 + 4) = 4.68 -> 4 columns; items at different x map to positions.
+    // 300 / (60 + 4) = 4.68, so 4 columns; items at different x map to positions.
     CHECK(gv->GetItemAtPoint(0, 0) == 0);
     CHECK(gv->GetItemAtPoint(64, 0) == 1);
 }
@@ -119,7 +118,7 @@ TEST_CASE("grid-view: GetActiveView + OnItemKeyDown (item keys before navigation
 
     gv->Selection.Select(1);
 
-    // An item-key handler sees the key FIRST and can consume it (F2-rename contract).
+    // An item-key handler sees the key first and can consume it (as F2 rename does).
     i32 seenPosition = -1;
     gv->OnItemKeyDown.Add(
         [&](i32 position, KeyEventArgs& e)
@@ -141,7 +140,7 @@ TEST_CASE("grid-view: GetActiveView + OnItemKeyDown (item keys before navigation
     KeyEventArgs right{};
     right.Key = KeyCode::Right;
     gv->OnKeyDown(right);
-    CHECK(seenPosition == 1);                  // handler saw it (pre-navigation position)
+    CHECK(seenPosition == 1);                  // the handler saw it at the position before navigation
     CHECK(gv->Selection.FirstSelected() == 2); // then navigation moved the selection
 }
 

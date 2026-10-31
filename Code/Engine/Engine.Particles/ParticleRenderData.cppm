@@ -3,10 +3,10 @@
 
 // engine.particles:renderdata - the render-data the particle billboard path produces.
 //
-// A ParticleBillboardRenderData is a BATCH: one item per (system, texture, blend) carrying a
+// A ParticleBillboardRenderData is a batch: one item per (system, texture, blend) carrying a
 // borrowed pointer to `count` packed billboard instances. This is the key difference from the
-// sprite path (one item per sprite) - particle counts would flood the draw-list sort otherwise.
-// The ParticleRenderer packs the batch into its instance ring and emits one instanced draw.
+// sprite path (one item per sprite): particle counts would otherwise flood the draw-list sort. The
+// ParticleRenderer packs the batch into its instance ring and emits one instanced draw.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +17,7 @@ export module engine.particles:renderdata;
 
 import foundation.core;
 import foundation.rhi;
-import foundation.render;    // RenderData base + RenderCategories
+import foundation.render;    // RenderData base, RenderCategories
 import foundation.particles; // ParticleBlendMode
 
 using namespace foundation::core;
@@ -80,8 +80,9 @@ export namespace engine::particles
     };
     static_assert(std::is_trivially_destructible_v<ParticleBillboardRenderData>);
 
-    // One ribbon vertex - world position + uv + color, pre-built camera-facing by the extractor. The
-    // trail path draws these as a plain triangle list (no instancing, geometry already oriented).
+    // One ribbon vertex: world position, uv and color, already built camera-facing by the
+    // extractor. The trail path draws these as a plain triangle list (no instancing, geometry
+    // already oriented).
     struct TrailVertex
     {
         Float3 position{0.0f, 0.0f, 0.0f};

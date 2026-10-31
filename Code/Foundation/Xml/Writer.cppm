@@ -3,9 +3,9 @@
 
 // Foundation::Xml - :writer partition
 //
-// XmlWriter: serializes a node/tree to UTF-8 text with optional pretty-printing.
+// XmlWriter: serializes a node or tree to UTF-8 text with optional pretty-printing.
 // WriteDocument is declared here but defined in :document (it needs XmlDocument
-// complete). Ported from Sedulous.Xml/XmlWriter.bf.
+// complete).
 
 module;
 #include "Core/Prelude.h"
@@ -81,7 +81,7 @@ export namespace foundation::xml
                 WriteProcessingInstruction(static_cast<const XmlProcessingInstruction&>(node));
                 break;
             default:
-                break; // Attribute / Document handled specially
+                break; // Attribute and Document handled specially
             }
         }
 
@@ -225,7 +225,7 @@ export namespace foundation::xml
             m_output->Append(StringView(u8"?>"));
         }
 
-        // Escaping re-exposed for API parity (forwards to the :escape helpers).
+        // Escaping re-exposed as static methods (forwards to the :escape helpers).
         static void EscapeText(StringView text, String& output)
         {
             foundation::xml::EscapeText(text, output);

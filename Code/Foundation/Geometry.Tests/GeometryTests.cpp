@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The engine runtime mesh format: vertex/stream sizes, the index buffer, StaticMesh
-// geometry ops, and the key design point -- SkinnedMesh IS-A StaticMesh, so its static
-// stream is usable anywhere a StaticMesh is, with the skinning stream discoverable via
-// the virtual hooks. Plus the procedural primitives.
+// The engine runtime mesh format: vertex and stream sizes, the index buffer, StaticMesh
+// geometry ops, and SkinnedMesh deriving from StaticMesh, so its static stream is usable
+// anywhere a StaticMesh is, with the skinning stream discoverable through the virtual hooks.
+// Also the procedural primitives.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -37,7 +37,7 @@ TEST_CASE("index buffer: format, set/get, raw size")
     IndexBuffer ib32(IndexBuffer::Format::U32);
     CHECK(ib32.IndexSize() == 4);
     ib32.Resize(2);
-    ib32.Set(0, 70000); // exceeds u16 range -> needs 32-bit
+    ib32.Set(0, 70000); // exceeds the u16 range: needs 32-bit
     CHECK(ib32.Get(0) == 70000);
 }
 
@@ -85,13 +85,13 @@ TEST_CASE("skinned mesh IS-A static mesh: static stream is substitutable")
         skinned->skinning.PushBack(s);
     }
 
-    // pass it where a StaticMesh& is expected -- the static ops just work
+    // pass it where a StaticMesh& is expected: the static ops work as is
     StaticMesh& asStatic = *skinned;
     asStatic.CalculateBounds();
     CHECK(asStatic.VertexCount() == 3);
     CHECK(asStatic.bounds.max.x == doctest::Approx(1.0f));
 
-    // a consumer holding the base ref can discover + reach the skinning stream
+    // a consumer holding the base ref can discover and reach the skinning stream
     CHECK(asStatic.IsSkinned());
     CHECK(asStatic.SkinningStream().Size() == 3);
     CHECK(asStatic.SkinningStream()[0].joints[0] == 2);
@@ -102,7 +102,7 @@ TEST_CASE("skinned mesh IS-A static mesh: static stream is substitutable")
     CHECK(down->skeletonIndex == 3);
     CHECK(down->SkinningDataSize() == 3 * 24);
 
-    // a plain static mesh reports not-skinned + an empty stream
+    // a plain static mesh reports not skinned and an empty stream
     StaticMesh plain;
     CHECK_FALSE(plain.IsSkinned());
     CHECK(plain.SkinningStream().Size() == 0);
@@ -186,7 +186,7 @@ TEST_CASE("clear-for-reload empties in place (skinned clears both streams)")
 TEST_CASE("tangent generation: mirrored UVs produce handedness w = -1")
 {
     // Two triangles with identical geometry; the second's UVs are U-mirrored. The bitangent
-    // accumulation opposes cross(N, T) there, so tangent.w flips - the shader's TBN then
+    // accumulation opposes cross(N, T) there, so tangent.w flips, and the shader's TBN then
     // lights normal maps correctly on mirrored halves.
     RefPtr<StaticMesh> mesh = MakeRef<StaticMesh>(DefaultAllocator());
     auto addTri = [&](f32 xBase, bool mirrored)

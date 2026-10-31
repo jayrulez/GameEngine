@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Vulkan backend: what the profiler needs from queries (Specs/profiler.md, P1). A queue reads its
+// Vulkan backend: what the profiler needs from queries. A queue reads its
 // timestamp and core::GetTicks' clock together (calibrated timestamps), and a pipeline-statistics
 // query resolves to a record as wide as the device says, decoded into the RHI's counters. The
 // cases run on a real adapter and skip without one.

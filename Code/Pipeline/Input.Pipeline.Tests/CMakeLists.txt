@@ -1,4 +1,4 @@
-# input.pipeline tests: InputMapAsset reflection (Nested map + traversable InputMap tree).
+# input.pipeline tests: InputMapAsset reflection (the Nested map and the traversable InputMap tree).
 add_executable(Input.Pipeline.Tests TestsMain.cpp InputMapAssetTests.cpp)
 target_link_libraries(Input.Pipeline.Tests PRIVATE
     Pipeline::Input Foundation::Input Pipeline::Core doctest::doctest)

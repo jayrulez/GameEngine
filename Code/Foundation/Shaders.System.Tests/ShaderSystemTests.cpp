@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Headless tests for the shader variant system: compile-on-demand, flags->defines,
+// Headless tests for the shader variant system: compile-on-demand, flags to defines,
 // caching, and invalidation. Compiles real SPIR-V via DXC; creates modules on the
 // Null RHI backend (so distinct compiles yield distinct module objects).
 #include <doctest/doctest.h>
@@ -23,7 +23,7 @@ namespace rhi = foundation::rhi;
 
 namespace
 {
-    // Fails to compile unless NORMAL_MAP is defined - proves flags->defines apply.
+    // Fails to compile unless NORMAL_MAP is defined, which proves flags become defines.
     constexpr const char8_t* kNeedsNormalMap = u8"float4 main() : SV_Target {\n"
                                                u8"#ifndef NORMAL_MAP\n"
                                                u8"#error NORMAL_MAP required\n"
@@ -60,10 +60,10 @@ TEST_CASE("shader system: flags become defines; a failure is remembered until th
         ShaderSystem ss(*compiler, device);
         ss.RegisterSource(u8"guarded", ShaderStage::Fragment, kNeedsNormalMap, kCorpusEntryPoint);
 
-        // Without the flag, NORMAL_MAP is undefined -> compile error -> null (not cached).
+        // Without the flag, NORMAL_MAP is undefined: a compile error, so null (not cached).
         CHECK(ss.GetVariant(u8"guarded", ShaderStage::Fragment, ShaderFlags::None) == nullptr);
 
-        // With NormalMap -> #define NORMAL_MAP -> compiles.
+        // NormalMap defines NORMAL_MAP, so it compiles.
         rhi::ShaderModule* m =
             ss.GetVariant(u8"guarded", ShaderStage::Fragment, ShaderFlags::NormalMap);
         CHECK(m != nullptr);
@@ -71,10 +71,10 @@ TEST_CASE("shader system: flags become defines; a failure is remembered until th
         // Same variant is cached (same module object).
         CHECK(ss.GetVariant(u8"guarded", ShaderStage::Fragment, ShaderFlags::NormalMap) == m);
 
-        // A different flag doesn't define NORMAL_MAP -> still fails (specific mapping).
+        // A different flag doesn't define NORMAL_MAP, so it still fails (specific mapping).
         CHECK(ss.GetVariant(u8"guarded", ShaderStage::Fragment, ShaderFlags::Emissive) == nullptr);
 
-        // Unknown shader / wrong stage -> null.
+        // An unknown shader or wrong stage is null.
         CHECK(ss.GetVariant(u8"missing", ShaderStage::Fragment, ShaderFlags::NormalMap) == nullptr);
         CHECK(ss.GetVariant(u8"guarded", ShaderStage::Vertex, ShaderFlags::NormalMap) == nullptr);
 
@@ -149,26 +149,26 @@ TEST_CASE("shader system: cooked pack path - blob lookup + canonicalization, no 
         rhi::ShaderModule* m = ss.GetVariant(u8"vs", ShaderStage::Vertex, ShaderFlags::None);
         CHECK(m != nullptr);
 
-        // Canonicalization: only declared bits survive. Skinned|Emissive -> Skinned variant.
+        // Canonicalization: only declared bits survive, so Skinned|Emissive is the Skinned variant.
         rhi::ShaderModule* s = ss.GetVariant(u8"vs", ShaderStage::Vertex,
                                              ShaderFlags::Skinned | ShaderFlags::Emissive);
         CHECK(s != nullptr);
         CHECK(s != m);
 
-        // Emissive alone is NOT declared -> canonicalizes to None -> dedups onto the None module.
+        // Emissive alone is not declared, so it canonicalizes to None and dedups onto the None module.
         CHECK(ss.GetVariant(u8"vs", ShaderStage::Vertex, ShaderFlags::Emissive) == m);
 
-        // A name absent from the pack is a cook-coverage miss -> null (logged).
+        // A name absent from the pack is a cook-coverage miss: null (logged).
         CHECK(ss.GetVariant(u8"nope", ShaderStage::Vertex, ShaderFlags::None) == nullptr);
 
-        // Dist boot: a COMPILER-FREE ShaderSystem (no DXC) serves the same pack. This is what a
+        // Dist boot: a compiler-free ShaderSystem (no DXC) serves the same pack. This is what a
         // dist player does when the DXC sidecar is absent.
         ShaderSystem packOnly(device); // no compiler
         packOnly.SetCookedPack(&pack);
         CHECK(packOnly.GetVariant(u8"vs", ShaderStage::Vertex, ShaderFlags::None) != nullptr);
         CHECK(packOnly.GetVariant(u8"vs", ShaderStage::Vertex,
                                   ShaderFlags::Skinned | ShaderFlags::Emissive) != nullptr);
-        // With no compiler and no pack entry, on-demand compilation is unavailable -> null.
+        // With no compiler and no pack entry, on-demand compilation is unavailable: null.
         CHECK(packOnly.GetVariant(u8"nope", ShaderStage::Vertex, ShaderFlags::None) == nullptr);
     }
 
@@ -215,8 +215,8 @@ TEST_CASE("shader system: an explicitly registered source beats the cooked pack"
 
     rhi::null::NullDevice device{DefaultAllocator()};
     {
-        // A pack that does NOT contain "user_shader" - the shape of a dist with the engine
-        // pack loaded and a user shader ASSET (ShaderResource) registered at runtime.
+        // A pack that does not contain "user_shader": the shape of a dist with the engine
+        // pack loaded and a user shader asset (ShaderResource) registered at runtime.
         CookedShaderPack pack;
         const byte bogus[] = {byte{1}};
         pack.Add(u8"engine_only", ShaderStage::Vertex, ShaderFlags::None,
@@ -243,7 +243,7 @@ TEST_CASE("shader system: dev mode canonicalizes corpus requests like the cooked
         return;
     }
 
-    // A tiny corpus: one shader DECLARING Skinned, one with no directive (single-variant).
+    // A tiny corpus: one shader declaring Skinned, one with no directive (single-variant).
     const std::filesystem::path root = "shader_canon_corpus";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root);
@@ -264,8 +264,8 @@ TEST_CASE("shader system: dev mode canonicalizes corpus requests like the cooked
         ShaderSystem ss(*compiler, device);
         ss.SetSourceProvider(&provider);
 
-        // Declared mask Skinned: a request carrying an extra UNDECLARED flag collapses onto
-        // the declared-only variant - the same module object, not a recompile.
+        // Declared mask Skinned: a request carrying an extra undeclared flag collapses onto
+        // the declared-only variant, the same module object, not a recompile.
         rhi::ShaderModule* declared =
             ss.GetVariant(u8"declared", ShaderStage::Vertex, ShaderFlags::Skinned);
         REQUIRE(declared != nullptr);
@@ -278,13 +278,13 @@ TEST_CASE("shader system: dev mode canonicalizes corpus requests like the cooked
         CHECK(ss.GetVariant(u8"declared", ShaderStage::Vertex, ShaderFlags::Emissive) == none);
         CHECK(none != declared);
 
-        // No directive = single-variant: EVERY request lands on the one variant.
+        // No directive means single-variant: every request lands on the one variant.
         rhi::ShaderModule* plain = ss.GetVariant(u8"plain", ShaderStage::Vertex, ShaderFlags::None);
         REQUIRE(plain != nullptr);
         CHECK(ss.GetVariant(u8"plain", ShaderStage::Vertex,
                             ShaderFlags::Skinned | ShaderFlags::Instanced) == plain);
 
-        // Explicitly REGISTERED sources are outside the corpus model: raw flags still apply
+        // Explicitly registered sources are outside the corpus model: raw flags still apply
         // (the NormalMap-guarded source only compiles when the define survives).
         ss.RegisterSource(u8"guarded", ShaderStage::Fragment, kNeedsNormalMap, kCorpusEntryPoint);
         CHECK(ss.GetVariant(u8"guarded", ShaderStage::Fragment, ShaderFlags::NormalMap) !=
@@ -298,7 +298,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     namespace vfs = foundation::vfs;
     rhi::null::NullDevice device{DefaultAllocator()};
 
-    // A scratch DATA ROOT in the production shape: Engine/Shaders/<sources> + Engine/Shaders/shaders.dpak.
+    // A scratch data root in the production shape: Engine/Shaders/<sources> and its shaders.dpak.
     const std::filesystem::path root = "host_data_root";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root / "Engine" / "Shaders");
@@ -319,7 +319,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     CHECK(kShaderPackPath == u8"Engine/Shaders/shaders.dpak"); // the layout every writer targets
 
     {
-        // Automatic: dev is possible (DXC + Shaders/), so the pack must NOT take over.
+        // Automatic: dev is possible (DXC and Engine/Shaders/), so the pack must not take over.
         ShaderSystemHost host{DefaultAllocator()};
         if (!host.Initialize(device, dataFs))
         {
@@ -330,7 +330,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         CHECK(host.GetVariant(u8"hosted", ShaderStage::Vertex, ShaderFlags::None) != nullptr);
     }
     {
-        // A distribution marks itself (Shaders/.pack-first): Automatic then starts from the pack
+        // A distribution marks itself (Engine/Shaders/.pack-first): Automatic then starts from the pack
         // although the sources and DXC are there; the sources stay for whoever cooks from them.
         {
             std::ofstream marker(root / "Engine" / "Shaders" / ".pack-first", std::ios::binary);
@@ -342,8 +342,8 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         std::filesystem::remove(root / "Engine" / "Shaders" / ".pack-first");
     }
     {
-        // Explicit opt-in: ForcePack loads Shaders/shaders.dpak from the data root - and ONLY
-        // from there (no executable-dir or cwd probing), so it is exactly our one-variant pack.
+        // Explicit opt-in: ForcePack loads Engine/Shaders/shaders.dpak from the data root, and
+        // only from there (no executable-dir or cwd probing), so it is our one-variant pack.
         ShaderSystemHost host{DefaultAllocator()};
         REQUIRE(host.Initialize(device, dataFs, ShaderPackPolicy::ForcePack));
         CHECK(host.UsingPack());
@@ -351,7 +351,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     }
     {
         // ForceDev ignores the pack even when the source folder is missing (registered-only
-        // mode): a data root with no Shaders/ at all.
+        // mode): a data root with no Engine/Shaders/ at all.
         std::filesystem::create_directories("host_data_root_empty");
         vfs::NativeFileSystem emptyFs(u8"host_data_root_empty", DefaultAllocator());
         ShaderSystemHost host{DefaultAllocator()};
@@ -360,7 +360,7 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         CHECK(host.GetVariant(u8"hosted", ShaderStage::Vertex, ShaderFlags::None) == nullptr);
     }
     {
-        // Pack mode with NO pack present and no compiler path forced: Automatic on an empty
+        // Pack mode with no pack present and no compiler path forced: Automatic on an empty
         // root still succeeds (a compiler exists) but serves only registered sources.
         vfs::NativeFileSystem emptyFs(u8"host_data_root_empty", DefaultAllocator());
         ShaderSystemHost host{DefaultAllocator()};
@@ -374,10 +374,10 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
     namespace vfs = foundation::vfs;
     rhi::null::NullDevice device{DefaultAllocator()};
 
-    // The layout every dist stages (export + the editor dist scripts): Data/Engine/Shaders/ holds the
-    // cooked pack and nothing else - no .hlsl sources. With DXC present (the editor dist ships
-    // it) the folder's existence must not read as "sources present": that put the shipped
-    // editor in dev mode over an empty corpus (2026-09-21).
+    // The layout every dist stages (export and the editor dist scripts): Data/Engine/Shaders/ holds
+    // the cooked pack and nothing else, no .hlsl sources. With DXC present (the editor dist ships
+    // it) the folder's existence must not read as "sources present", or the shipped editor would
+    // run in dev mode over an empty corpus.
     const std::filesystem::path root = "host_dist_root";
     std::filesystem::remove_all(root);
     std::filesystem::create_directories(root / "Engine" / "Shaders");
@@ -397,7 +397,7 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
         CHECK(host.UsingPack());
         CHECK(host.PackVariantCount() == 1u);
     }
-    // Is a compiler available on this machine? A root with ONE source and no pack initializes
+    // Whether a compiler is available on this machine: a root with one source and no pack initializes
     // only through DXC.
     bool haveCompiler = false;
     {
@@ -561,7 +561,7 @@ TEST_CASE("shader system: with a compiler, a stripped registered shader is serve
     compiler->Destroy();
 }
 
-// The effects the engine's includes declare (Specs/wind-for-every-shader.md): a game reads their
+// The effects the engine's includes declare: a game reads their
 // tables from the cooked pack, the editor parses them from the sources it serves.
 TEST_CASE("shader system: effects are served by name and by flag from the pack")
 {
@@ -631,7 +631,7 @@ TEST_CASE("shader system: in dev, effects are parsed from the provider's include
 }
 
 // What a shader's stage declares, asked by the material factory for the effects a material on it
-// carries (Specs/wind-for-every-shader.md): a registered lattice, the pack's, or the source's line.
+// carries: a registered lattice, the pack's, or the source's line.
 TEST_CASE("shader system: a stage's declared variants, registered, packed or read from its source")
 {
     rhi::null::NullDevice device{DefaultAllocator()};

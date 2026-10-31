@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The GUI asset pages over their markup without a host (no runtime GUI: no preview drawn): a
-// document's code checked as the cook checks it, its problems on their lines; a sheet previewed over
-// markup of the page's own (first a little of everything, which builds clean), whose edits never
-// dirty the sheet and are kept in the project's editor settings, whose problems are named apart,
-// and which can be a copy of a document's markup.
+// The GUI asset pages over their markup without a host, so there is no runtime GUI and no preview
+// is drawn. A document's code is checked as the cook checks it, with its problems on their lines.
+// A sheet is previewed over markup the page keeps (at first a stock sample that builds cleanly).
+// Edits to that markup never dirty the sheet and are kept in the project's editor settings, its
+// problems are listed under their own name, and it can start as a copy of a document's markup.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -59,7 +59,7 @@ namespace
     constexpr StringView kSheet = u8".hud { padding: 8px; }\n.score { color: #ffcc00; }\n";
 
     // A project with a document ("Hud", Sources/Hud.xml) and a sheet ("Theme", Sources/Theme.css),
-    // its editor settings the context's.
+    // whose editor settings are the context's.
     struct Bed
     {
         String dir = String(u8"scratch_gui_page_project");
@@ -157,7 +157,7 @@ TEST_CASE("gui pages: a sheet over markup of the page's own, kept apart from the
     CHECK(page->PreviewMarkup() == gui_pages::kStockPreviewMarkup);
     CHECK(page->ErrorCount() == 0u);
 
-    // Its edits: the preview's, not the sheet's.
+    // Edits to the preview markup change the preview, not the sheet.
     page->PreviewMarkupEditor()->SetCaret(gui::CodePosition{0, 0});
     page->PreviewMarkupEditor()->Type(u8"<Broken\n");
     CHECK_FALSE(page->IsDirty());

@@ -3,13 +3,8 @@
 
 // UI - :style_rule partition
 //
-// A single style rule: a selector plus a set of property assignments. Ported from
-// Sedulous.UI/src/Styling/StyleRule.bf.
-//
-// Divergence (language): Beef's manual AddRef/Release/delete lifecycle for DrawableRef/StringRef
-// values disappears - StyleValue owns its RefPtr<Drawable>/String, so overwriting or destroying an
-// entry releases the old resource automatically. The `consumeRef` parameter is gone (pass a
-// RefPtr<Drawable>; ownership is by-value).
+// A single style rule: a selector plus a set of property assignments. Each StyleValue owns its
+// RefPtr<Drawable> or String, so overwriting or destroying an entry releases the old resource.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +12,7 @@ module;
 
 export module foundation.ui:style_rule;
 
-import foundation.core; // Object, Array, Optional, RefPtr, Color, StringView
+import foundation.core;
 import :thickness;
 import :drawable;
 import :style_property;
@@ -45,11 +40,10 @@ export namespace foundation::ui
 
         StyleRule() = default;
 
-        /// The owning sheet's version counter (set by the sheet on AddRule; re-homed by
-        /// MergeFrom; cleared when the sheet dies). A rule edit bumps it, so only the views
-        /// whose chain includes THAT sheet rebuild their computed style - a game context's
-        /// sheet edits never touch the editor's caches, and an inline style edit on one view
-        /// touches that view alone.
+        /// The owning sheet's version counter (set by the sheet on AddRule, moved by MergeFrom,
+        /// cleared when the sheet dies). A rule edit bumps it, so only the views whose chain
+        /// includes that sheet rebuild their computed style: a game context's sheet edits never
+        /// touch the editor's caches, and an inline style edit on one view touches that view alone.
         void BindOwnerVersion(u32* version) noexcept { m_ownerVersion = version; }
         [[nodiscard]] u32* OwnerVersion() const noexcept { return m_ownerVersion; }
 
@@ -83,7 +77,7 @@ export namespace foundation::ui
             SetOverwrite(prop, StyleValue::StringRef(value));
             return *this;
         }
-        /// Any value, including Length / Inherit / Initial / Variable references.
+        /// Any value, including Length, Inherit, Initial and Variable references.
         StyleRule& SetValue(StyleProperty prop, StyleValue value)
         {
             SetOverwrite(prop, Move(value));

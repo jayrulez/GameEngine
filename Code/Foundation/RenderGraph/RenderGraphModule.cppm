@@ -5,9 +5,8 @@
 //
 // A render graph over the RHI: passes declare resource accesses, the graph
 // resolves dependencies, allocates/aliases transient resources, and inserts the
-// right barriers automatically. Ported from Sedulous.RenderGraph (whose RHI is
-// the same one our RHI is a faithful port of). One named module composed of
-// partitions, re-exported here.
+// right barriers automatically. One named module composed of partitions,
+// re-exported here.
 
 export module foundation.rendergraph;
 

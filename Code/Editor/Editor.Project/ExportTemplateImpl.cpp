@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Core - :export_template partition.
+// Editor::Project - :export_template partition.
 //
-// Export templates: portable, per-platform prebuilt bundles (a player binary + its runtime sidecars +
-// a template.xml manifest) that presets reference by id/platform. They live
-// in a machine-local templates root (not committed), are importable/downloadable, and are decoupled
-// from any one machine's paths. The HOST implicit template is synthesized from the running tool's own
-// directory (Bin/...), so a dev export for the current platform needs zero setup.
+// Export templates are portable, per-platform prebuilt bundles (a player binary, its runtime
+// sidecars and a template.xml manifest) that presets reference by id or platform. They live in a
+// machine-local templates root (not committed), can be imported or downloaded, and do not depend
+// on any one machine's paths. The host's implicit template is synthesized from the running tool's
+// own directory (Bin/...), so a development export for the current platform needs no setup.
 
 module;
 #include "Core/Prelude.h"
@@ -41,11 +41,11 @@ namespace editor
         foundation::core::Serialize(ar, "playerBinary", playerBinary);
         foundation::core::Serialize(ar, "sidecars", sidecars);
         foundation::core::Serialize(ar, "notes", notes);
-        // The (platform, config) axis: config + compiler metadata + a parallel symbols group.
+        // The (platform, config) axis: config, compiler metadata and a parallel symbols group.
         foundation::core::Serialize(ar, "config", config);
         foundation::core::Serialize(ar, "compiler", compiler);
         foundation::core::Serialize(ar, "symbols", symbols);
-        SerializeAppended(ar, "icon", icon); // after the rest: older manifests lack it
+        SerializeAppended(ar, "icon", icon); // after the rest, since older manifests lack it
         if (ar.Mode() == SerializeMode::Read && config.IsEmpty())
         {
             config = String(u8"Release"); // an empty config resolves to Release
@@ -122,9 +122,8 @@ namespace editor
         return FindBy(preset.platform.AsView(), preset.config.AsView());
     }
 
-    // Declared in ExportTemplate.cppm; defined here so <filesystem> stays out of the module
-    // interface (see the note at those declarations). Bodies are unchanged from when they were
-    // inline there.
+    // Declared in ExportTemplate.cppm and defined here so <filesystem> stays out of the module
+    // interface (see the note at those declarations).
     Status ImportTemplate(StringView srcDir, StringView templatesRoot, String* outId)
     {
         vfs::NativeFileSystem srcFs(srcDir, editor::EditorRootAllocator());
@@ -170,6 +169,6 @@ namespace editor
             return Status{ErrorCode::Internal};
         }
         return (removed > 0) ? Status{}
-                             : Status{ErrorCode::NotFound}; // nothing deleted => not there
+                             : Status{ErrorCode::NotFound}; // nothing deleted, so it was not there
     }
 }

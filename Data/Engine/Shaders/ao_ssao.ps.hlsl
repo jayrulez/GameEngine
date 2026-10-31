@@ -30,9 +30,10 @@ float3 ViewPos(float2 uv, float depth) {
     float4 h = mul(float4(ndc, depth, 1.0), pc.InvProj);
     return h.xyz / h.w;
 }
-// View-space position -> top-origin uv (inverse of ViewPos's uv->ndc: uv.y = (1-ndc.y)/2). The jitter
-// (off the diagonal ProjXX/YY) must be included or the back-projected UV won't match the jittered
-// depth buffer we sample -> per-frame occlusion oscillation (flicker under TAA).
+// View-space position to top-origin uv (the inverse of ViewPos's uv to ndc: uv.y = (1-ndc.y)/2).
+// The jitter (off the diagonal ProjXX/YY) has to be included, or the back-projected uv misses the
+// jittered depth buffer we sample and the occlusion oscillates from frame to frame (flicker under
+// TAA).
 float2 ViewToUv(float3 vp) {
     // Full jittered ndc = diagonal ndc - jitter (either projection shifts ndc by -jitter).
     float2 ndc = ViewToNdcXY(vp, float2(pc.ProjXX, pc.ProjYY), pc.Orthographic != 0) - pc.Jitter;
@@ -56,9 +57,9 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float3 P = ViewPos(uv, depth);
     float3 N = OctDecode(NormalTex.SampleLevel(PointSamp, uv, 0).rg);
 
-    // Per-pixel rotation + TBN for hemisphere orientation. Interleaved-gradient noise (not white-noise
-    // hash): it denoises cleanly under the bilateral blur + TAA, whereas a white-noise pattern swims under
-    // motion and flickers when the AO is baked into color pre-TAA.
+    // Per-pixel rotation and TBN for hemisphere orientation. Interleaved-gradient noise rather than a
+    // white-noise hash: it denoises cleanly under the bilateral blur and TAA, whereas white noise swims
+    // under motion and flickers when the AO is baked into colour before TAA.
     float ign = frac(52.9829189 * frac(dot(pos.xy, float2(0.06711056, 0.00583715))));
     float a = ign * 6.2831853;
     float ca = cos(a), sa = sin(a);
@@ -70,8 +71,8 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float occlusion = 0.0; int valid = 0;
     [loop] for (int i = 0; i < count; ++i) {
         float3 k = KERNEL[i];
-        k.z = abs(k.z);   // HEMISPHERE: the table is a sphere; a sample below the surface reads the
-                          // surface itself as its occluder (a flat floor came out half occluded)
+        k.z = abs(k.z);   // fold into the hemisphere: the table is a sphere, and a sample below the
+                          // surface would read the surface itself as its occluder
         float3 rot = float3(k.x * ca - k.y * sa, k.x * sa + k.y * ca, k.z);   // rotate in tangent plane
         float3 off = tangent * rot.x + bitangent * rot.y + N * rot.z;         // orient to hemisphere
         float  scale = (float(i) + 1.0) / float(count);
@@ -81,14 +82,14 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
         float2 sUv = ViewToUv(samplePos);
         if (any(sUv < 0.0) || any(sUv > 1.0)) { continue; }
         float  sampleZ = ViewPos(sUv, DepthTex.SampleLevel(PointSamp, sUv, 0).r).z;
-        // The scene surface under the SAMPLE's pixel against the SAMPLE point (not against P):
-        // RH view space, an occluder (closer) is less negative -> positive diff. Comparing to P
-        // instead darkened every oblique flat surface - the floor's own depth gradient toward
-        // the camera read as occlusion, and moved with the view (Bistro's ground, 2026-09-24).
+        // Compare the scene surface under the sample's pixel against the sample point, not against
+        // P. In RH view space a closer occluder is less negative, so the diff is positive. Comparing
+        // against P would darken every oblique flat surface: the floor's own depth gradient toward
+        // the camera reads as occlusion and moves with the view.
         float  diff = sampleZ - samplePos.z;
-        // Smooth occlusion ramp, NOT a hard step: under TAA the depth is jittered sub-pixel each frame, so
-        // a binary test flips samples on/off between frames -> shimmer. A soft band makes SSAO continuous
-        // in its inputs (like GTAO's arc integral), so TAA can stabilize it.
+        // A smooth occlusion ramp, not a hard step. Under TAA the depth is jittered sub-pixel each
+        // frame, so a binary test flips samples on and off between frames and shimmers. A soft band
+        // makes SSAO continuous in its inputs (like GTAO's arc integral), so TAA can stabilize it.
         float  band = max(pc.Radius * 0.15, 1e-3);
         float  occluded = smoothstep(pc.Bias, pc.Bias + band, diff);
         float  rangeCheck = smoothstep(0.0, 1.0, pc.Radius / (abs(diff) + 0.001));

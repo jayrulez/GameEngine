@@ -3,7 +3,7 @@
 
 // Foundation::Runtime.Client - :device_counters partition
 //
-// Hands a device's counts to the profiler once a frame (Specs/profiler.md, P2): what the frame
+// Hands a device's counts to the profiler once a frame: what the frame
 // recorded (the differences of the device's running totals: draws, dispatches, passes, binds,
 // bytes through transfer batches), the GPU memory its resources hold now, and the driver's own
 // budget and use where it gives them, read once a second. The host calls it at each frame's end.

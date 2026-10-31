@@ -3,23 +3,26 @@
 
 // GUI - :number_field partition
 //
-// NumberField: a number typed, stepped or scrubbed (E6 of Specs/gui-lab-evolution.md), on E4's
-// field core with a RangeValue, after Godot's SpinBox and LunarSong's drag fields.
+// NumberField: a text field for a number that can be typed, stepped or scrubbed, holding its
+// value in a RangeValue.
 //
-// - Its text is its value, written with the step's decimals (none for an `integer` field), between
-//   its `prefix` and `suffix`.
-// - Typed, the text is read as an expression when it commits (Return, or focus leaving): numbers,
-//   + - * /, parentheses; then snapped to the step and kept in the range (unless allowed past it).
-//   Text that is no number goes back to the value it had.
-// - Not yet being edited, a press and a drag across scrubs it (past a few pixels; Shift fine, Ctrl
-//   coarse), reporting `input` as it goes and `change` on release; a press let go without a drag
-//   starts editing, all of it selected.
-// - Its arrows (repeat buttons, the button core's) step it, as do Up and Down (Page Up and Down a
-//   page) and the wheel while it is focused.
-// - A value set from code reports nothing but to bindings, as a range's does.
-// - Mixed (several objects' values differing, a property grid's): no number shows, its placeholder
-//   does, and whatever the user does next sets one, even the value it holds.
-// - Escape during a scrub puts the value back as it was before the press and reports the cancel.
+// - The text shows the value with the step's number of decimals (none for an `integer` field),
+//   between the `prefix` and `suffix`.
+// - Typed text is read as an expression when it commits (on Return, or when focus leaves). It may
+//   use numbers, +, -, *, / and parentheses. The result is snapped to the step and kept in the
+//   range, unless the field allows values past it. Text that is not a number reverts to the
+//   previous value.
+// - While the field is not being edited, pressing and dragging across it scrubs the value once
+//   the pointer has moved a few pixels (Shift for fine, Ctrl for coarse). Scrubbing sends `input`
+//   as it goes and `change` on release. A press released without a drag starts editing with all
+//   the text selected.
+// - The arrows (repeat buttons built on ButtonBase) step the value, as do Up and Down, Page Up and
+//   Page Down (by a page), and the wheel while the field is focused.
+// - A value set from code notifies bindings only and sends no events, as with a range widget.
+// - In the mixed state (several objects with different values, as in a property grid) no number
+//   shows; the placeholder does. Whatever the user does next sets a value, even if it equals the
+//   one held.
+// - Escape during a scrub restores the value from before the press and reports the cancel.
 
 module;
 #include "Core/Prelude.h"
@@ -49,8 +52,8 @@ export namespace foundation::gui
 {
     namespace detail
     {
-        // At namespace scope, not local to EvaluateExpression: clang does not emit the members
-        // of a class local to an exported inline function for its importers.
+        // This is at namespace scope rather than local to EvaluateExpression because clang does not
+        // emit the members of a class local to an exported inline function for its importers.
         struct ExpressionParser
         {
             core::StringView s;
@@ -123,8 +126,8 @@ export namespace foundation::gui
         };
     }
 
-    /// `text` read as arithmetic: numbers (with a decimal point), + - * /, unary minus and
-    /// parentheses; none when it is not one (or divides by zero).
+    /// Evaluates `text` as arithmetic: numbers (with a decimal point), +, -, *, /, unary minus and
+    /// parentheses. Returns an empty Optional when it is not a valid expression or divides by zero.
     [[nodiscard]] inline Optional<f64> EvaluateExpression(core::StringView text)
     {
         detail::ExpressionParser p{text};
@@ -135,7 +138,7 @@ export namespace foundation::gui
         return v;
     }
 
-    /// A number field's arrow: a repeat button acting on the press, its triangle the
+    /// A number field's arrow: a repeat button that acts on press. Its triangle takes the
     /// `spinbutton::arrow` part's background colour.
     class SpinButton : public ButtonBase
     {
@@ -145,7 +148,7 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"spinbutton"));
             AddClass(core::StringView(up ? u8"up" : u8"down"));
-            SetTabFocusable(false); // the field keeps the focus
+            SetTabFocusable(false); // focus stays on the field
             SetRepeat(true);
             SetRepeatDelay(0.4f);
             SetRepeatInterval(0.06f);
@@ -205,13 +208,13 @@ export namespace foundation::gui
         }
 
         // === Value ===
-        /// The value (a read a binding records).
+        /// Returns the value. A binding that reads it follows later changes.
         [[nodiscard]] f64 GetValue() const
         {
             m_valueChanged.Track();
             return m_range.Value;
         }
-        /// Sets the value from code: constrained, shown, reported to bindings, no events.
+        /// Sets the value from code. It is constrained, shown and reported to bindings, with no events.
         void SetValue(f64 value)
         {
             m_mixed = false;
@@ -226,14 +229,14 @@ export namespace foundation::gui
         void SetMax(f64 max) { EditRange([&](RangeValue& r) { r.Max = max; }); }
         [[nodiscard]] f64 GetStep() const noexcept { return m_range.Step; }
         void SetStep(f64 step) { EditRange([&](RangeValue& r) { r.Step = step < 0.0 ? 0.0 : step; }); }
-        /// Page Up and Down's step (0: a tenth of the range).
+        /// Returns the step for Page Up and Page Down; 0 means a tenth of the range.
         [[nodiscard]] f64 GetPage() const noexcept { return m_range.Page; }
         void SetPage(f64 page) { EditRange([&](RangeValue& r) { r.Page = page < 0.0 ? 0.0 : page; }); }
         [[nodiscard]] bool AllowsGreater() const noexcept { return m_range.AllowGreater; }
         void SetAllowGreater(bool allow) { EditRange([&](RangeValue& r) { r.AllowGreater = allow; }); }
         [[nodiscard]] bool AllowsLesser() const noexcept { return m_range.AllowLesser; }
         void SetAllowLesser(bool allow) { EditRange([&](RangeValue& r) { r.AllowLesser = allow; }); }
-        /// Whole numbers only: snapped to them and written without decimals.
+        /// Whether the field holds whole numbers only, snapping to them and writing no decimals.
         [[nodiscard]] bool IsInteger() const noexcept { return m_integer; }
         void SetInteger(bool integer)
         {
@@ -242,7 +245,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] const RangeValue& GetRange() const noexcept { return m_range; }
 
-        /// Text before and after the number ("$", " px").
+        /// Sets the text before the number (such as "$"); SetSuffix sets the text after it (" px").
         void SetPrefix(const core::String& prefix)
         {
             m_prefix = prefix;
@@ -256,7 +259,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetSuffix() const { return m_suffix; }
 
-        // Markup's prefix and suffix as written: a suffix's leading space is part of it.
+        // Markup sets the prefix and suffix exactly as written, so a suffix's leading space is kept.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
             if (name == core::StringView(u8"prefix"))
@@ -268,12 +271,15 @@ export namespace foundation::gui
             return true;
         }
 
-        /// Each change the user makes, as it goes (a scrub's steps).
+        /// Sets the callback for each change the user makes as it happens, such as each step of a
+        /// scrub.
         void SetOnValueChanging(core::Function<void(f64)> callback) { m_onChanging = core::Move(callback); }
-        /// A change the user committed (a typed value, a step, a scrub's release).
+        /// Sets the callback for a change the user committed: a typed value, a step, or a scrub's
+        /// release.
         void SetOnValueChanged(core::Function<void(f64)> callback) { m_onChanged = core::Move(callback); }
 
-        /// Neither value shown: the values it stands for differ. Set after SetValue, which clears it.
+        /// Sets the mixed state, in which no value shows because the values it stands for differ.
+        /// Call this after SetValue, which clears it.
         void SetMixed(bool mixed)
         {
             if (m_mixed == mixed)
@@ -284,17 +290,20 @@ export namespace foundation::gui
             ShowValue();
         }
         [[nodiscard]] bool IsMixed() const noexcept { return m_mixed; }
-        /// Whether the wheel steps it while it is focused (on); off, the wheel goes on to what scrolls.
+        /// Sets whether the wheel steps the value while the field is focused. When off, the wheel
+        /// event passes on to whatever scrolls.
         void SetStepsOnWheel(bool steps) noexcept { m_stepsOnWheel = steps; }
         [[nodiscard]] bool StepsOnWheel() const noexcept { return m_stepsOnWheel; }
-        /// A scrub given up with Escape: the value is back as it was before it.
+        /// Sets the callback for a scrub cancelled with Escape, after the value is restored.
         void SetOnValueCancelled(core::Function<void()> callback) { m_onCancelled = core::Move(callback); }
 
-        /// Being edited as text (typed into, or a press let go on it); otherwise a press scrubs.
+        /// Returns whether the field is being edited as text (typed into, or clicked). When it is
+        /// not, a press scrubs.
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
-        /// Whether its arrows show: only while its number keeps room beside them. A field too narrow
-        /// for both (a vector's part in a narrow inspector) gives the arrows' room to the number;
-        /// a drag still scrubs it and the arrow keys still step it.
+        /// Returns whether the arrows show, which they do only while the number still has room
+        /// beside them. A field too narrow for both (one component of a vector in a narrow
+        /// inspector) gives the arrows' room to the number; dragging still scrubs it and the arrow
+        /// keys still step it.
         [[nodiscard]] bool ShowsArrows() const
         {
             const Thickness b = GetBorderThickness();
@@ -306,7 +315,8 @@ export namespace foundation::gui
         [[nodiscard]] SpinButton* GetUpButton() const noexcept { return m_up.Get(); }
         [[nodiscard]] SpinButton* GetDownButton() const noexcept { return m_down.Get(); }
 
-        /// The value as it is written: the step's decimals, between the prefix and the suffix.
+        /// Formats `value` as the field writes it: with the step's decimals, between the prefix and
+        /// the suffix.
         [[nodiscard]] core::String FormatValue(f64 value) const
         {
             const i32 decimals = m_integer ? 0 : m_range.Decimals();
@@ -324,7 +334,8 @@ export namespace foundation::gui
         }
 
     protected:
-        // The text read as an expression; a number committed, else the old value back.
+        // Reads the text as an expression. A valid number is committed; otherwise the old value is
+        // shown again.
         void OnCommitting() override
         {
             core::StringView text = Trim(GetModel().GetText());
@@ -336,7 +347,7 @@ export namespace foundation::gui
             if (const Optional<f64> v = EvaluateExpression(text); v.HasValue())
                 ChangeByUser(v.Value(), false);
             else if (m_mixed)
-                return; // nothing typed into a mixed field: still mixed
+                return; // nothing valid was typed into a mixed field, so it stays mixed
             ShowValue();
             CommitValue();
         }
@@ -368,7 +379,7 @@ export namespace foundation::gui
                     return;
                 }
                 if (key == KeyCode::Space || (key >= KeyCode::A && key <= KeyCode::Num9))
-                    m_editing = true; // typing into it
+                    m_editing = true; // the user is typing into it
             }
             TextField::OnKeyDown(event);
         }
@@ -392,7 +403,7 @@ export namespace foundation::gui
                 TextField::OnMouseDown(event);
                 return;
             }
-            // Not editing: a press may become a scrub, or a click that starts editing.
+            // Not editing: the press may become a scrub, or a click that starts editing.
             RequestFocus();
             event.Handled = true;
             m_pressing = true;
@@ -408,12 +419,12 @@ export namespace foundation::gui
                 TextField::OnMouseMove(event);
                 return;
             }
-            // Toward the inline end raises it, as a slider's does.
+            // Dragging toward the inline end raises the value, as with a slider.
             const f32 dx = (event.Position.x - m_pressX) * (IsRightToLeft() ? -1.0f : 1.0f);
             if (!m_scrubbing && core::Abs(dx) < kScrubThreshold)
                 return;
             m_scrubbing = true;
-            // A step per few pixels; Shift a tenth as fast, Ctrl ten times.
+            // One step per few pixels; Shift goes a tenth as fast, Ctrl ten times as fast.
             f64 rate = (m_range.Step > 0.0 ? m_range.Step : (m_range.Max - m_range.Min) / 200.0) / kPixelsPerStep;
             if ((event.Modifiers & KeyModShift) != 0)
                 rate *= 0.1;
@@ -436,7 +447,7 @@ export namespace foundation::gui
                 CommitValue();
                 return;
             }
-            // A click: editing, all of it selected.
+            // A click starts editing with all the text selected.
             m_editing = true;
             GetModel().SelectAll();
             Synced();
@@ -455,7 +466,7 @@ export namespace foundation::gui
             m_editing = false;
         }
 
-        // Its text kept clear of its arrows, at its inline end.
+        // Keeps the text clear of the arrows at the inline end.
         [[nodiscard]] Rect EditBounds() const override
         {
             const Rect content = GetContentBounds();
@@ -471,7 +482,7 @@ export namespace foundation::gui
             return Rect{content.x, content.y, core::Max(0.0f, right - content.x), content.height};
         }
 
-        // Its arrows stacked at its inline end, inside its border.
+        // Stacks the arrows at the inline end, inside the border.
         void OnLayout() override
         {
             const Thickness b = GetBorderThickness();
@@ -487,9 +498,9 @@ export namespace foundation::gui
 
     private:
         static constexpr f32 kSpinWidth = 16.0f;
-        static constexpr f32 kSpinGap = 2.0f; // between its text and its arrows
-        static constexpr f32 kNumberRoom = 32.0f; // the least room its number keeps beside its arrows
-        static constexpr f32 kScrubThreshold = 4.0f; // pixels a press moves before it scrubs
+        static constexpr f32 kSpinGap = 2.0f; // gap between the text and the arrows
+        static constexpr f32 kNumberRoom = 32.0f; // the least room the number needs beside the arrows
+        static constexpr f32 kScrubThreshold = 4.0f; // pixels a press must move before it scrubs
         static constexpr f32 kPixelsPerStep = 4.0f;
 
         bool Apply(f64 value)
@@ -499,7 +510,7 @@ export namespace foundation::gui
             value = m_range.Constrain(value);
             if (value == m_range.Value && !m_mixed)
                 return false;
-            m_mixed = false; // the user set one value, whatever it is
+            m_mixed = false; // the user set a single value, whatever it is
             m_range.Value = value;
             m_valueChanged.Notify();
             return true;
@@ -517,14 +528,15 @@ export namespace foundation::gui
             }
             ShowValue();
         }
-        // The user moved it: `input`, and `change` now or at the gesture's end.
+        // Applies a change made by the user. With `reportInput` it sends `input`; CommitValue sends
+        // `change`, now or at the end of the gesture.
         void ChangeByUser(f64 value, bool reportInput)
         {
             const bool wasMixed = m_mixed;
             if (!Apply(value))
                 return;
             if (wasMixed)
-                m_commitAlways = true; // committed even at the value it held
+                m_commitAlways = true; // commit even if the value equals the one it held
             if (reportInput)
             {
                 if (m_onChanging)
@@ -542,7 +554,7 @@ export namespace foundation::gui
                 m_onChanged(m_range.Value);
             SendEvent(Event(EventType::Changed, this));
         }
-        // A step from an arrow, a key or the wheel: committed at once, any typing dropped.
+        // Steps from an arrow, a key or the wheel. The step commits at once and any typing is dropped.
         void StepBy(f64 steps) { StepValue(m_range.KeyStep() * steps); }
         void StepValue(f64 by)
         {
@@ -553,10 +565,11 @@ export namespace foundation::gui
             ShowValue();
             CommitValue();
         }
-        // The text shows the value (and is the committed text, so the field reports no edit);
-        // mixed, it is empty and the placeholder shows.
+        // Shows the value as the text, which also becomes the committed text so the field reports no
+        // edit. In the mixed state the text is empty and the placeholder shows.
         void ShowValue() { SetText(m_mixed ? core::StringView{} : FormatValue(m_range.Value).AsView()); }
-        // Escape mid-scrub: the value and the mixed state back, the press over, the cancel told.
+        // Handles Escape during a scrub: restores the value and the mixed state, ends the press and
+        // reports the cancel.
         void CancelScrub()
         {
             const bool scrubbed = m_scrubbing;
@@ -579,11 +592,11 @@ export namespace foundation::gui
         f64 m_committedValue = 0.0;
         bool m_integer = false;
         bool m_editing = false;
-        bool m_pressing = false;  // a press not yet a click or a scrub
+        bool m_pressing = false;  // a press that has not yet become a click or a scrub
         bool m_scrubbing = false;
         bool m_mixed = false;
         bool m_scrubFromMixed = false;
-        bool m_commitAlways = false; // a mixed field's first change commits whatever its value
+        bool m_commitAlways = false; // a mixed field's first change commits whatever the value
         bool m_stepsOnWheel = true;
         f32 m_pressX = 0.0f;
         f64 m_scrubFrom = 0.0;

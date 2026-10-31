@@ -5,8 +5,8 @@
 //
 // Visual overlay shown during a drag operation. Wraps a user-provided visual or shows a default
 // indicator. Shown via PopupLayer; the entire subtree is invisible to hit testing (IsInteractionEnabled
-// = false) so the underlying drop target can be found. Ported from Sedulous.UI/src/DragDrop/DragAdorner.bf.
-// The visual is owned by the ViewGroup tree (AddView RefPtr).
+// = false) so the underlying drop target can be found. The visual is owned by the ViewGroup tree
+// (AddView RefPtr).
 
 module;
 #include "Core/Prelude.h"
@@ -65,8 +65,7 @@ export namespace foundation::ui
         {
             if (ChildCount() > 0)
             {
-                // Equivalent of Sedulous ViewGroup.OnMeasure (max-of-children): our ViewGroup
-                // does not port that default (all concrete containers override), so replicate it here.
+                // Size to the largest visible child, measured inside the padding, plus the padding.
                 const BoxConstraints inner = constraints.Deflate(Padding);
                 f32 maxW = 0, maxH = 0;
                 for (usize i = 0; i < ChildCount(); ++i)

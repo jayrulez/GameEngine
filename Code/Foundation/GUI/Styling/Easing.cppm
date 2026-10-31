@@ -3,7 +3,7 @@
 
 // GUI - :easing partition
 //
-// CSS easing functions (G3 of Specs/vg-and-gui-lab.md): cubic-bezier(x1, y1, x2, y2), steps(n,
+// CSS easing functions: cubic-bezier(x1, y1, x2, y2), steps(n,
 // position), linear, and the named curves (ease, ease-in, ease-out, ease-in-out, step-start,
 // step-end). A cubic Bezier maps time to progress through its x(s) = t, solved by Newton's method
 // with a bisection fallback, then y(s).
@@ -26,12 +26,12 @@ export namespace foundation::gui
         Linear,
         CubicBezier,
         Steps,
-        Named, ///< one of the named curves past CSS's (E14): a family eased in, out, or both
+        Named, ///< one of the named curves beyond CSS's: a family eased in, out, or both
     };
 
-    /// The named curves' families (easings.net's, as Godot's Tween and Zero's eases name them):
-    /// powers of t, a sine, an exponential, a circle, and three that leave [0, 1] on the way
-    /// (back overshoots, elastic rings, bounce bounces at the end).
+    /// The families of the named curves, as easings.net names them: powers of t, a sine, an
+    /// exponential, a circle, and three that leave [0, 1] along the way (back overshoots, elastic
+    /// oscillates, bounce bounces at the end).
     enum class EaseFamily : u8
     {
         Sine,
@@ -66,10 +66,10 @@ export namespace foundation::gui
     struct Easing
     {
         EasingKind Kind = EasingKind::Linear;
-        f32 X1 = 0.0f, Y1 = 0.0f, X2 = 1.0f, Y2 = 1.0f; ///< CubicBezier's control points
+        f32 X1 = 0.0f, Y1 = 0.0f, X2 = 1.0f, Y2 = 1.0f; ///< the control points, for CubicBezier
         i32 Steps = 1;
         StepPosition Position = StepPosition::JumpEnd;
-        EaseFamily Family = EaseFamily::Quad; ///< Named's
+        EaseFamily Family = EaseFamily::Quad; ///< the family, for Named
         EaseMode Mode = EaseMode::Out;
 
         [[nodiscard]] static constexpr Easing Linear() noexcept { return Easing{}; }
@@ -102,7 +102,8 @@ export namespace foundation::gui
         /// CSS's default easing.
         [[nodiscard]] static constexpr Easing Ease() noexcept { return Bezier(0.25f, 0.1f, 0.25f, 1.0f); }
 
-        /// Progress at time `t` in [0, 1] (a Bezier's y may leave [0, 1]: overshoot is allowed).
+        /// Returns the progress at time `t` in [0, 1]. A Bezier's y may leave [0, 1], since
+        /// overshoot is allowed.
         [[nodiscard]] f32 Evaluate(f32 t) const noexcept
         {
             t = Clamp(t, 0.0f, 1.0f);
@@ -121,7 +122,7 @@ export namespace foundation::gui
         }
 
     private:
-        // Foundation's curves (Math/Easings), by family and mode.
+        // Evaluates Foundation's curves (Math/Easings) by family and mode.
         [[nodiscard]] f32 NamedAt(f32 t) const noexcept
         {
             static constexpr EasingFunction kCurves[][3] = {
@@ -150,7 +151,7 @@ export namespace foundation::gui
             const f32 u = 1.0f - s;
             return 3.0f * u * u * p1 + 6.0f * u * s * (p2 - p1) + 3.0f * s * s * (1.0f - p2);
         }
-        // The parameter s whose x is `x` (x is monotonic in s for x1, x2 in [0, 1]).
+        // Finds the parameter s whose x is `x` (x is monotonic in s for x1, x2 in [0, 1]).
         [[nodiscard]] f32 SolveForX(f32 x) const noexcept
         {
             f32 s = x;
@@ -188,7 +189,7 @@ export namespace foundation::gui
             if (Position == StepPosition::JumpStart || Position == StepPosition::JumpBoth)
                 ++step;
             if (t >= 1.0f && (Position == StepPosition::JumpEnd || Position == StepPosition::JumpNone))
-                step = n; // the last interval's end
+                step = n; // the end of the last interval
             i32 jumps = n;
             if (Position == StepPosition::JumpNone)
                 jumps = n - 1;
@@ -207,11 +208,12 @@ export namespace foundation::gui
         inline constexpr const char8_t* kEaseModePrefixes[] = {u8"ease-in-", u8"ease-out-", u8"ease-in-out-"}; // by EaseMode
     }
 
-    /// A named curve: `ease-in-<family>`, `ease-out-<family>` or `ease-in-out-<family>`, the
-    /// family one of sine, quad, cubic, quart, quint, expo, circ, back, elastic, bounce.
+    /// Parses a named curve: `ease-in-<family>`, `ease-out-<family>` or `ease-in-out-<family>`,
+    /// where the family is one of sine, quad, cubic, quart, quint, expo, circ, back, elastic,
+    /// bounce.
     [[nodiscard]] inline Optional<Easing> ParseNamedEasing(core::StringView v)
     {
-        // In-out first: "ease-in-" is a prefix of it.
+        // Try in-out first, since "ease-in-" is a prefix of "ease-in-out-".
         constexpr EaseMode kOrder[] = {EaseMode::InOut, EaseMode::In, EaseMode::Out};
         for (const EaseMode mode : kOrder)
         {
@@ -226,7 +228,7 @@ export namespace foundation::gui
         }
         return {};
     }
-    /// A named curve's name, as ParseNamedEasing reads it.
+    /// Returns a named curve's name in the form ParseNamedEasing reads.
     [[nodiscard]] inline core::String NamedEasingText(const Easing& e)
     {
         core::String text{core::StringView(detail::kEaseModePrefixes[static_cast<usize>(e.Mode)])};
@@ -235,8 +237,8 @@ export namespace foundation::gui
     }
 
     /// A CSS <easing-function>: linear, ease, ease-in, ease-out, ease-in-out, step-start,
-    /// step-end, cubic-bezier(x1, y1, x2, y2) (x1 and x2 in [0, 1]) or steps(n[, position]); or a
-    /// named curve past CSS's (ParseNamedEasing), so sheets and code ease alike.
+    /// step-end, cubic-bezier(x1, y1, x2, y2) (x1 and x2 in [0, 1]) or steps(n[, position]), or a
+    /// named curve beyond CSS's (ParseNamedEasing), so sheets and code share the same easings.
     [[nodiscard]] inline Optional<Easing> ParseEasing(core::StringView text)
     {
         const core::StringView v = Trim(text);
@@ -305,7 +307,7 @@ export namespace foundation::gui
         return {};
     }
 
-    /// A CSS <time>: `300ms`, `0.3s`; seconds out.
+    /// Parses a CSS <time> (`300ms`, `0.3s`) and returns seconds.
     [[nodiscard]] inline Optional<f32> ParseTime(core::StringView text)
     {
         const core::StringView v = Trim(text);

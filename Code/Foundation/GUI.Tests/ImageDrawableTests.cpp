@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the image drawable, the one kind of drawable (image content: an Image widget's picture, an
-// icon); a node's look is its box. Its tint state, its intrinsic size and the geometry it draws
-// (GPU-free: a VGContext tessellates into a CPU vertex batch).
+// GUI - the image drawable, the only kind of drawable, which draws image content (an Image
+// widget's picture, an icon); the rest of a node's look comes from its box. Tests its tint state,
+// its intrinsic size and the geometry it draws, without a GPU, since a VGContext tessellates into
+// a CPU vertex batch.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -31,7 +32,7 @@ namespace
 TEST_CASE("image-drawable: its tint, colour and alpha")
 {
     ImageDrawable d;
-    CHECK(d.GetColor().r == doctest::Approx(1.0f)); // white: drawn as it is
+    CHECK(d.GetColor().r == doctest::Approx(1.0f)); // white, so drawn as it is
     d.SetColor(core::Color::Blue);
     CHECK(d.GetColor().b == doctest::Approx(1.0f));
     d.SetAlpha(0.5f);

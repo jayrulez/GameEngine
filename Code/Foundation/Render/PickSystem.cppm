@@ -3,17 +3,15 @@
 
 // GPU picking: which entity is under a pixel (or inside a rect) of a view, answered by the GPU.
 //
-// A pick is an ON-REQUEST pass: the requesting view's draw list is re-emitted through each
+// A pick is an on-request pass: the requesting view's draw list is re-emitted through each
 // renderer's ResolvePickIds (the depth-only caster path with an id-writing fragment) into a tiny
-// RG32Uint target the size of the requested rect - the camera projection is CROPPED so the rect
-// fills the whole target (a click renders a 1x1 target: vertex work only, no fragment cost). Its
-// own depth keeps the nearest surface per texel; x = entity index + 1 (0 = nothing), y = the
-// entity generation, so a hit resolves to an exact EntityHandle. The target is copied into a
-// GpuToCpu buffer by a graph copy pass and mapped when the device ring has LEFT and RETURNED to
-// the submitting slot (the ThumbnailStage retire rule) - never a WaitIdle, never a stall.
-// Legacy Sedulous (PickPass.bf) rendered every mesh at full resolution into an RGBA8 target and
-// copied one pixel; this keeps its shape (request / poll, entityIndex+1) and drops the
-// full-screen cost, the 8-bit ids and the fixed two-frame wait.
+// RG32Uint target the size of the requested rect. The camera projection is cropped so the rect
+// fills the whole target (a click renders a 1x1 target: vertex work only, almost no fragment
+// cost). Its own depth keeps the nearest surface per texel; x is the entity index + 1 (0 for
+// nothing) and y the entity generation, so a hit resolves to an exact EntityHandle. The target is
+// copied into a GpuToCpu buffer by a graph copy pass and mapped once the device ring has left and
+// returned to the submitting slot (the ThumbnailStage retire rule), so there is no WaitIdle and
+// no stall.
 //
 // Keyed by the same opaque `viewportKey` a RenderScene call carries, so a request binds to the
 // view of one viewport (split-screen, camera-preview insets and thumbnails never answer it).
@@ -31,7 +29,7 @@ namespace rhi = foundation::rhi;
 
 export namespace foundation::render
 {
-    // A rect in VIEW pixels (viewport-relative, y down, row 0 = top), like the mouse position.
+    // A rect in view pixels (viewport-relative, y down, row 0 at the top), like the mouse position.
     struct PickRect
     {
         i32 x = 0;
@@ -54,12 +52,12 @@ export namespace foundation::render
     {
         PickRequestId id = kInvalidPickRequest;
         Array<PickHit> hits;   // unique, first-seen order (row-major over the rect)
-        bool rendered = false; // false = the view never rendered within the expiry window
+        bool rendered = false; // false: the view never rendered within the expiry window
     };
 
     inline constexpr rhi::TextureFormat kPickIdFormat = rhi::TextureFormat::RG32Uint;
     inline constexpr u32 kPickTexelBytes = 8;
-    inline constexpr u32 kPickRowAlignment = 256; // texture->buffer copies: WebGPU + D3D12 row pitch
+    inline constexpr u32 kPickRowAlignment = 256; // texture-to-buffer copies: WebGPU and D3D12 row pitch
 
     // Clamp `rect` to the viewport; false when nothing is left (fully outside or empty).
     [[nodiscard]] bool ClampPickRect(PickRect& rect, u32 viewportWidth, u32 viewportHeight) noexcept;
@@ -78,15 +76,15 @@ export namespace foundation::render
     void DecodePickTexels(const u8* rows, u32 width, u32 height, u32 rowStrideBytes,
                           Array<PickHit>& out);
 
-    // Records the pick draws into the pass: `viewProj` is the CROPPED world->clip, `rect` the
+    // Records the pick draws into the pass: `viewProj` is the cropped world-to-clip, `rect` the
     // request (its size is the target size), `viewContext` what DeclarePasses was handed. A plain
-    // function + context (not a Function object): the frame holds no callable member.
+    // function and context rather than a Function object: the frame holds no callable member.
     using PickRecordFn = void (*)(void* context, rhi::RenderPassEncoder& pass,
                                   const Float4x4& viewProj, const PickRect& rect,
                                   const void* viewContext);
 
-    /// PickSystem::kExpireFrames, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// PickSystem::kExpireFrames, at namespace scope for another library to read (MSVC does not export
+    /// a class's static constexpr member from a shared library).
     inline constexpr u32 kPickSystemExpireFrames = 32;
 
     class PickSystem
@@ -101,7 +99,7 @@ export namespace foundation::render
         PickSystem(const PickSystem&) = delete;
         PickSystem& operator=(const PickSystem&) = delete;
 
-        // Readback buffers retire through the queue (frames-in-flight safe); null = WaitIdle.
+        // Readback buffers retire through the queue (frames-in-flight safe); null means WaitIdle.
         void SetRetireQueue(GpuRetireQueue* retire) noexcept { m_retire = retire; }
 
         // Ask for the ids inside `rect` of the view that renders with `viewportKey`. The rect is
@@ -122,11 +120,11 @@ export namespace foundation::render
 
         // ---- frame hooks (the RenderFrame drives these) ----
 
-        // Retire readbacks whose submission provably completed (ring left + returned to its
+        // Retire readbacks whose submission provably completed (the ring left and returned to its
         // slot) and decode them; age requests toward expiry.
         void BeginFrame(u32 frameIndex);
 
-        // Declare one pick pass + readback copy per request pending on `viewportKey`, for the
+        // Declare one pick pass and readback copy per request pending on `viewportKey`, for the
         // view whose camera is (`view`, `projection`) over a viewportWidth x viewportHeight
         // viewport. Returns the number declared.
         // `record(context, ...)` runs inside the pass; `viewContext` is handed back to it.

@@ -47,7 +47,7 @@ TEST_CASE("textures.data: bytes per pixel")
     CHECK(TextureData::GetBytesPerPixel(rhi::TextureFormat::RGBA16Float) == 8u);
     CHECK(TextureData::GetBytesPerPixel(rhi::TextureFormat::RGBA32Float) == 16u);
     CHECK(TextureData::GetBytesPerPixel(rhi::TextureFormat::Depth16Unorm) == 2u);
-    // Formerly its own table with a default of 4: wrong for these two.
+    // A blanket default of 4 bytes would be wrong for these two.
     CHECK(TextureData::GetBytesPerPixel(rhi::TextureFormat::RGBA16Unorm) == 8u);
     CHECK(TextureData::GetBytesPerPixel(rhi::TextureFormat::Stencil8) == 1u);
     // Block-compressed formats have no per-texel size; mips are sized by block.
@@ -87,8 +87,8 @@ TEST_CASE("textures.format: PixelFormat -> TextureFormat with color space")
     CHECK(TextureFormatUtils::Convert(PixelFormat::R32F, ImageColorSpace::Linear) ==
           rhi::TextureFormat::R32Float);
     // R16 (heightmap loads) has no unorm GPU format on our backends: it maps to the
-    // R16Uint integer container the terrain height upload uses - never to RGBA8, which
-    // is what the old catch-all default answered (wrong channel count AND depth).
+    // R16Uint integer container the terrain height upload uses, never to RGBA8 (wrong
+    // channel count and depth).
     CHECK(TextureFormatUtils::Convert(PixelFormat::R16, ImageColorSpace::Linear) ==
           rhi::TextureFormat::R16Uint);
     CHECK(TextureFormatUtils::Convert(PixelFormat::R16, ImageColorSpace::Srgb) ==

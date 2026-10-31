@@ -5,12 +5,12 @@
 //
 // Cooked physics content, mirroring the mesh-resource split:
 //   * CollisionShapeSource  - the cooked record: a Jolt binary shape blob (from
-//     CookConvexHull/CookTriangleMesh) + cached debug-outline triangles (gizmos draw
+//     CookConvexHull or CookTriangleMesh) and cached debug-outline triangles (gizmos draw
 //     without restoring the shape).
 //   * CollisionShape        - the runtime product a component's Ref<> binds; hands the
 //     blob to PhysicsWorld as ShapeKind::Cooked.
 //   * PhysicalMaterialSource / PhysicalMaterial - surface properties a RigidBody can
-//     reference instead of authoring friction/restitution inline.
+//     reference instead of authoring friction and restitution inline.
 
 module;
 #include "Core/Prelude.h"
@@ -27,7 +27,7 @@ namespace resource = foundation::resource;
 
 export namespace foundation::physics
 {
-    // Cooked collision shape: the Jolt binary blob + debug outline (xyz triples, 3 per
+    // Cooked collision shape: the Jolt binary blob and debug outline (xyz triples, 3 per
     // triangle). Both produced by the CollisionShapeAssetBuilder.
     class CollisionShapeSource : public ISerializable
     {
@@ -45,7 +45,7 @@ export namespace foundation::physics
         }
     };
 
-    // Runtime product: what RigidBody/Collider components bind via Ref<CollisionShape>.
+    // Runtime product: what RigidBody and Collider components bind through Ref<CollisionShape>.
     class CollisionShape : public Object
     {
         RTTI_OBJECT(CollisionShape, Object)
@@ -153,7 +153,7 @@ export namespace foundation::physics
         }
     };
 
-    // Registers the cooked record + product types (content-DB construction by type name).
+    // Registers the cooked record and product types (content-database construction by type name).
     inline void RegisterPhysicsResource()
     {
         GlobalTypeRegistry().Register(CollisionShapeSource::StaticType());
@@ -172,8 +172,8 @@ export namespace foundation::physics
 
 export namespace foundation::physics
 {
-    /// The physics resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The physics resource module: what the engine composition builds this library's
+    /// factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kPhysicsResourceFactories[] = {
         foundation::resource::FactoryByDefault<CollisionShape, CollisionShapeSource, CollisionShapeFactory>(),
         foundation::resource::FactoryByDefault<PhysicalMaterial, PhysicalMaterialSource, PhysicalMaterialFactory>(),

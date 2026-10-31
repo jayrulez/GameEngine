@@ -1,20 +1,21 @@
-// Guest - one guest of the ball. On a guest's entity, which carries a navigation agent and an
-// Instance Member of its costume's instanced mesh (the Guests entity's: one draw for everyone in
-// that costume); what the guest is doing is its `activity`, which is also the clip it plays.
+// Guest: one guest at the ball. The script sits on a guest's entity, which carries a navigation
+// agent and an Instance Member of its costume's instanced mesh (on the Guests entity, so everyone
+// in that costume is one draw). What the guest is doing is its `activity`, which is also the clip
+// it plays.
 //
-// The orchestra's cue (the "Cue" event, from Orchestra.as) says what the ball does:
+// The orchestra's cue (the "Cue" event from Orchestra.as) sets what the ball does:
 // - Stroll (0): wander from place to place (the children of `spots`), stopping a while at each to
-//   stand or to talk; mostly somewhere near, now and then across the ball.
+//   stand or talk; mostly somewhere near, now and then across the ball.
 // - Gather (1): go to the nearest place and talk there until the cue changes.
-// - Dance (2): dance, there and then, wherever the guest is (the music calls everyone).
+// - Dance (2): dance on the spot, wherever the guest is, because the music calls everyone.
 //
-// A bot hunter is a guest too (Ball.as hunts for it): it wears its costume on a child, one of six
-// looks, so the clip goes to whichever it wears, and Ball sends it "Approach" (walk to someone, a
-// little brisk) and "Resume" (back to the ball). A guest standing in a player's way steps aside,
-// as people at a ball do, then back to its group (walking guests already steer round). `activity` is replicated: the host decides it,
-// and every peer's guest plays it.
+// A bot hunter is a guest too, and Ball.as does its hunting. It wears its costume on a child, one
+// of six looks, so the clip goes to whichever look it wears. Ball sends it "Approach" (walk briskly
+// to someone) and "Resume" (go back to mingling). A standing guest in a player's way steps aside,
+// as people at a ball do, then returns to its group; walking guests already steer round.
+// `activity` is replicated: the host decides it, and the guest plays it on every peer.
 
-const int kIdle = 0; // the clips, in the Guests entity's instanced skinning order
+const int kIdle = 0; // clip indices, in the instanced skinning order of the Guests entity
 const int kWalk = 1;
 const int kTalk = 2;
 const int kDance = 3;
@@ -40,21 +41,21 @@ class Guest
     private int m_cue = kStroll;
     private bool m_going = false;
     private float m_stay = 0.0f;
-    private int m_settle = kIdle; // what to do on arriving
+    private int m_settle = kIdle; // the activity to take up on arriving
     private float m_yaw = 0.0f;
-    private Float3 m_place = Float3(0.0f, 0.0f, 0.0f); // the middle of where it is going: a group faces it
+    private Float3 m_place = Float3(0.0f, 0.0f, 0.0f); // centre of the place it is going to; the group faces it
     private bool m_hasPlace = false;
-    private Float3 m_target = Float3(0.0f, 0.0f, 0.0f); // the spot by the place it is walking to
+    private Float3 m_target = Float3(0.0f, 0.0f, 0.0f); // the spot near that place it walks to
     private Float3 m_last = Float3(0.0f, 0.0f, 0.0f);   // where it was at the last progress check
-    private float m_check = 0.0f;                       // until the next progress check
-    private float m_walked = 0.0f;                      // seconds on the way
+    private float m_check = 0.0f;                       // time until the next progress check
+    private float m_walked = 0.0f;                      // seconds spent walking there
     private array<Entity@> m_spots;
     private bool m_approaching = false; // a bot walking to someone it means to tag
-    private bool m_handedOver = false;  // a client's guest, its agent stopped for the host's transforms
+    private bool m_handedOver = false;  // on a client: the agent is stopped so the host's transforms rule
     private bool m_aside = false;       // stepping out of a player's way
     private float m_asideFor = 0.0f;
-    private int m_asideActivity = 0;    // what it was doing, to go back to
-    private float m_wayCheck = 0.0f;    // until the next look for a player coming
+    private int m_asideActivity = 0;    // the activity to go back to
+    private float m_wayCheck = 0.0f;    // time until it next checks for an approaching player
 
     Guest(Entity@ entity) { @self = entity; }
 
@@ -66,7 +67,7 @@ class Guest
         // Start mid-evening: some walking, some standing, some talking.
         m_stay = Random::range(0.0f, stayMax);
         activity = Random::boolean() ? kTalk : kIdle;
-        m_wayCheck = Random::range(0.0f, 0.25f); // not every guest looks on the same frame
+        m_wayCheck = Random::range(0.0f, 0.25f); // spread the checks so guests do not all look on the same frame
     }
 
     void onCue(int cue)
@@ -98,8 +99,8 @@ class Guest
         }
         else if (!m_handedOver)
         {
-            // Joined: the host moves this guest now, so its own agent (walking since the scene
-            // loaded) stops, or it would fight the replicated transform.
+            // Joined a host: the host moves this guest from now on, so stop its own agent (walking
+            // since the scene loaded), or it would fight the replicated transform.
             NavAgentComponent::of(self).stop();
             m_handedOver = true;
         }
@@ -107,8 +108,8 @@ class Guest
         turn(d);
     }
 
-    // A bot's orders (Ball.as). Approach: walk, a little brisk, to the point (where the one it
-    // suspects is now; sent again as they move). Resume: back to the ball, soon.
+    // A bot's orders from Ball.as. Approach: walk briskly to the point, which is where its suspect
+    // is now (Ball sends it again as they move). Resume: go back to mingling shortly.
     void onApproach(Float3 at)
     {
         m_approaching = true;
@@ -125,8 +126,8 @@ class Guest
         m_stay = Random::range(1.0f, 4.0f);
     }
 
-    // The clip on the guest's own Instance Member, or (a hunter) on each of its looks: only the one
-    // it wears is drawn.
+    // Plays a clip on the guest's own Instance Member, or, for a hunter, on each of its looks; only
+    // the look it wears is drawn.
     private void playClip(uint clip)
     {
         InstanceMemberComponent@ member = InstanceMemberComponent::of(self);
@@ -158,7 +159,7 @@ class Guest
         {
             if (agent.finished())
             {
-                activity = kIdle; // there; Ball decides what comes next
+                activity = kIdle; // arrived; Ball decides what comes next
             }
             return;
         }
@@ -184,7 +185,7 @@ class Guest
             m_stay = 1.0e9f;
             return;
         }
-        // Off to the next place, and what to do there, by the cue.
+        // Pick the next place, and what to do there, according to the cue.
         if (m_spots.length() == 0)
         {
             m_stay = stayMax;
@@ -213,8 +214,9 @@ class Guest
         m_going = true;
     }
 
-    // A standing guest a player is coming at steps aside, to the side it already stands on, and
-    // after a moment goes back to what it was doing. True while it is out of the way.
+    // A standing guest that a player is walking toward steps aside, to the side it already stands
+    // on, and after a moment goes back to what it was doing. Returns true while it is out of the
+    // way.
     private bool makeWay(NavAgentComponent@ agent, float d)
     {
         if (m_aside)
@@ -252,10 +254,10 @@ class Guest
                 float vx = walker.velocityX();
                 float vz = walker.velocityZ();
                 float speed = Math::Sqrt(vx * vx + vz * vz);
-                // Coming at it: moving, and this guest ahead of it.
+                // The player is coming at it: moving, with this guest ahead.
                 if (speed > 0.3f && (dx * vx + dz * vz) / (distance * speed) > 0.5f)
                 {
-                    // Out of the line it walks, on the side the guest is already on.
+                    // Step out of the player's line, toward the side the guest is already on.
                     float side = (vx * dz - vz * dx) > 0.0f ? 1.0f : -1.0f;
                     float ox = -vz / speed * side;
                     float oz = vx / speed * side;
@@ -272,9 +274,10 @@ class Guest
         return false;
     }
 
-    // There, or as near as the crowd lets it: a place is a group, and its middle is taken. Close
-    // to its spot, or near the place and no longer getting anywhere (the group in the way), or
-    // walking far too long (a spot it cannot reach), it stops where it is.
+    // Whether the guest has arrived, or got as near as the crowd allows: a place holds a group, so
+    // its middle is often taken. It stops where it is when it is close to its spot, when it is near
+    // the place but no longer making progress (the group is in the way), or when it has walked far
+    // too long (the spot is unreachable).
     private bool arrived(NavAgentComponent@ agent, float d)
     {
         m_walked += d;
@@ -298,7 +301,7 @@ class Guest
         return stuck && flatDistance(p, m_place) < spread + 2.5f;
     }
 
-    // The next place: mostly the nearest of a few picked at random, so most walks are short and
+    // The next place: usually the nearest of a few picked at random, so most walks are short and
     // the crowd drifts rather than crossing the ball all the time.
     private Entity@ pick(array<Entity@>@ places)
     {
@@ -346,8 +349,8 @@ class Guest
         return Math::Sqrt(dx * dx + dz * dz);
     }
 
-    // Facing where the crowd moves the guest (its own velocity, not positions differenced: scripts
-    // update before the crowd).
+    // Faces where the crowd moves the guest, using the agent's velocity rather than the change in
+    // position, because scripts update before the crowd.
     private void turn(float d)
     {
         NavAgentComponent@ agent = NavAgentComponent::of(self);
@@ -363,7 +366,7 @@ class Guest
             {
                 return;
             }
-            Float3 p = self.worldPosition(); // standing: face the middle of the group
+            Float3 p = self.worldPosition(); // standing, so face the middle of the group
             vx = m_place.x - p.x;
             vz = m_place.z - p.z;
             if (vx * vx + vz * vz < 0.01f)
@@ -379,7 +382,7 @@ class Guest
         self.setRotationEuler(0.0f, m_yaw * 57.2957795f, 0.0f);
     }
 
-    // The host decides; a client's guest plays what it is told (offline is the host).
+    // The host decides; a client's guest plays what it is told. Offline counts as the host.
     private bool authority() { return !Net::isClient(); }
 
     private void gatherChildren(Entity@ parent, array<Entity@>@ into)

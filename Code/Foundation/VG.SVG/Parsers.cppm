@@ -4,9 +4,9 @@
 // Foundation::VG.SVG::SVG - :parsers partition.
 //
 // The standalone SVG attribute parsers (no XML dependency): SVGColorParser
-// (hex/#rgb/rgb()/named), SVGTransformParser (translate/scale/rotate/skew/matrix
-// -> Float4x4), SVGPathParser (the `d` path-data string -> PathBuilder). Ported from
-// Sedulous.VG.SVG. Public colors are float Color; transforms are Float4x4.
+// (hex, #rgb, rgb(), named), SVGTransformParser (translate, scale, rotate, skew and
+// matrix into a Float4x4), SVGPathParser (the `d` path-data string into a PathBuilder).
+// Public colors are float Color; transforms are Float4x4.
 
 module;
 #include "Core/Prelude.h"
@@ -61,7 +61,7 @@ export namespace foundation::vg::svg
         }
     }
 
-    /// Parses SVG color strings (hex, named, or rgb()) into Color32.
+    /// Parses SVG color strings (hex, named, or rgb()) into Color, or packed Color32 bytes.
     class SVGColorParser
     {
     public:
@@ -75,7 +75,7 @@ export namespace foundation::vg::svg
         }
 
     private:
-        // The hex/#rgb/rgb()/named parse, producing packed bytes.
+        // The hex, #rgb, rgb() and named parse, producing packed bytes.
         static Result<Color32> ParseBytes(StringView colorStr)
         {
             StringView s = colorStr;
@@ -340,9 +340,9 @@ export namespace foundation::vg::svg
                     {
                         // rotate(a, cx, cy) = translate(cx, cy) rotate(a) translate(-cx, -cy):
                         // applied to a point as T(-c), then R, then T(+c). Row-vector matrices
-                        // apply the LEFT operand first, so that group is ONE factor
-                        // T(-c) * R * T(+c) - three successive pre-multiplications ran it
-                        // backwards and moved the centre (found by the Beef port).
+                        // apply the left operand first, so that group is one factor
+                        // T(-c) * R * T(+c); three successive pre-multiplications would run it
+                        // backwards and move the centre.
                         const Float4x4 aboutCentre = Float4x4::Translation(Float3{-cx, -cy, 0.0f}) *
                                                      Float4x4::RotationZ(angle) *
                                                      Float4x4::Translation(Float3{cx, cy, 0.0f});
@@ -397,7 +397,7 @@ export namespace foundation::vg::svg
                     if (!SkipCloseParen(transform, pos))
                         return Err(ErrorCode::InvalidArgument);
 
-                    // SVG matrix(a,b,c,d,e,f) -> M11=a M12=b M21=c M22=d M41=e M42=f.
+                    // SVG matrix(a,b,c,d,e,f): M11=a M12=b M21=c M22=d M41=e M42=f.
                     Float4x4 mat = Float4x4::Identity();
                     mat.m[0][0] = v[0];
                     mat.m[0][1] = v[1];
@@ -730,7 +730,7 @@ export namespace foundation::vg::svg
                 ++pos;
         }
 
-        // Scan + parse one float, advancing pos; returns false on failure.
+        // Scan and parse one float, advancing pos; returns false on failure.
         [[nodiscard]] static bool Float(StringView s, usize& pos, f32& out)
         {
             SkipWhitespaceAndCommas(s, pos);

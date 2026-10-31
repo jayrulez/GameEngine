@@ -36,9 +36,8 @@ export namespace foundation::net
         return static_cast<u16>(e.value & 0xFFFFull);
     }
 
-    // Parse "a.b.c.d" + port into an endpoint; an invalid (value 0) endpoint on parse failure.
     /// The endpoint for `host` (a dotted-quad literal or a DNS name; a name resolves through
-    /// the platform resolver and blocks for that lookup - call at the connect edge) and
+    /// the platform resolver and blocks for that lookup, so call it when connecting) and
     /// `port`. Invalid (IsValid() false) when the host does not resolve to an IPv4 address.
     [[nodiscard]] inline DatagramEndpoint ResolveEndpoint(StringView host, u16 port)
     {
@@ -105,8 +104,9 @@ export namespace foundation::net
             return true;
         }
 
-        // For a real socket, "local endpoint" = loopback + the bound port - the address a peer on the
-        // same host connects to. (A real remote uses the public/LAN ip; resolve it via ResolveEndpoint.)
+        // For a real socket, the local endpoint is loopback and the bound port: the address a peer on
+        // the same host connects to. A real remote uses the public or LAN ip; resolve it with
+        // ResolveEndpoint.
         [[nodiscard]] DatagramEndpoint LocalEndpoint() const override
         {
             u32 loopback = 0;

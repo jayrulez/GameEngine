@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Xml.Tests/NamespaceTests.bf
+// XML namespaces: declarations, prefixes, inheritance and the reserved names.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

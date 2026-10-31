@@ -4,12 +4,10 @@
 // UI - :popup_layer partition
 //
 // Central overlay manager: always the last child of RootView (topmost for drawing, first for hit-test).
-// Manages popup lifecycle, modal backdrops, and click-outside dismissal. Popups are NOT regular children
-// - they are tracked via PopupEntry (RefPtr<View>-held) and positioned/drawn/hit-tested independently.
-// Ported from Sedulous.UI/src/Overlay/PopupLayer.bf. Ownership: popups are RefPtr-held (RAII), so the
-// Beef destructor's manual detach/delete is unnecessary; `ownsView` is stored for parity (drop-on-close
-// destroys iff no other ref). The factory ShowPopup's Beef `delegate Vector2?(int32)` -> Function<
-// Optional<Float2>(i32)>.
+// Manages popup lifecycle, modal backdrops, and click-outside dismissal. Popups are not regular
+// children: each is tracked by a PopupEntry that holds it by RefPtr, and is positioned, drawn and
+// hit-tested independently. Closing a popup drops its entry, which destroys the popup only if nothing
+// else holds a reference.
 
 module;
 #include "Core/Prelude.h"
@@ -37,11 +35,11 @@ export namespace foundation::ui
     public:
         ~PopupLayer() override
         {
-            // Popups live in m_entries, NOT m_children - so ~ViewGroup's back-pointer clearing
+            // Popups live in m_entries, not m_children, so ~ViewGroup's back-pointer clearing
             // never sees them. A popup view held elsewhere (a MenuBar's persistent menu, a
             // ComboBox dropdown) would keep a dangling Parent into this freed layer, and the
-            // next ShowPopup would dereference it. No OnPopupClosed / focus-restore here: the
-            // whole layer is dying with its root.
+            // next ShowPopup would dereference it. There is no OnPopupClosed or focus restore
+            // here, since the whole layer is dying with its root.
             for (PopupEntry& entry : m_entries)
             {
                 View* popup = entry.Popup.Get();
@@ -84,8 +82,8 @@ export namespace foundation::ui
             return nullptr;
         }
 
-        /// The topmost popup that took focus on open (menus, dialogs - not tooltips). While one is
-        /// open it IS the keyboard focus scope: FocusManager confines Tab/arrow traversal to it,
+        /// The topmost popup that took focus on open (menus and dialogs, not tooltips). While one is
+        /// open it is the keyboard focus scope: FocusManager confines Tab and arrow traversal to it,
         /// which both traps the keyboard inside modals and makes popup content Tab-reachable
         /// (popups are attached but not ViewGroup children, so the root walk never finds them).
         [[nodiscard]] View* TopmostFocusScopePopup() const
@@ -110,7 +108,7 @@ export namespace foundation::ui
         }
 
         /// Show a popup using a position factory: called with attempt 0,1,2,... returning candidate
-        /// positions (None to stop). The popup is attached + measured first, then candidates are tried
+        /// positions (None to stop). The popup is attached and measured first, then candidates are tried
         /// until one fits the viewport; otherwise the last is clamped.
         void ShowPopup(View* popup, IPopupOwner* owner,
                        Function<Optional<Float2>(i32)> positionFactory,
@@ -150,10 +148,10 @@ export namespace foundation::ui
             UpdatePopupPosition(popup, bestX, bestY);
         }
 
-        /// Close EVERY open popup (topmost first; ClosePopup cascades dependents). Used when
+        /// Close every open popup, topmost first (ClosePopup cascades to dependents). Used when
         /// a root view is detached from its window: a detached root receives no input and no
         /// ticks, so an open menu would freeze and still be showing when the root is
-        /// re-attached later (the editor's mode swap hit exactly this with the File menu).
+        /// re-attached later.
         void CloseAllPopups()
         {
             while (!m_entries.IsEmpty())
@@ -185,13 +183,14 @@ export namespace foundation::ui
                     {
                         entry.Owner->OnPopupClosed(popup);
                     }
-                    // entry (and its RefPtr) drops here -> popup destroyed iff no other ref (ownsView).
+                    // The entry and its RefPtr drop here; the popup is destroyed only if nothing
+                    // else holds a reference.
 
                     if (entry.PushedFocus && Context != nullptr)
                     {
-                        // Restore what THIS popup displaced (validated: no-op if the target died,
-                        // was disabled, or hidden meanwhile). Restores with the original
-                        // FocusSource - a pointer-focused button comes back ringless.
+                        // Restore what this popup displaced. RestoreFocus does nothing if the
+                        // target died, was disabled or was hidden meanwhile, and it restores the
+                        // original FocusSource, so a pointer-focused button comes back without a ring.
                         Context->GetFocusManager()->RestoreFocus(entry.SavedFocusEntry);
                     }
                     if (!HasModalPopup() && m_backdrop && m_backdrop->Parent != nullptr)
@@ -206,7 +205,7 @@ export namespace foundation::ui
 
         /// Close popups stacked above the topmost popup containing `hitView` (topmost first). When hitView
         /// is null or outside every popup, every CloseOnClickOutside popup is closed. Returns true if any
-        /// popup was closed AND button is LMB (0) - i.e. the click was consumed.
+        /// popup was closed and button is the left button (0), meaning the click was consumed.
         bool HandleClickOutside(View* hitView, i32 button)
         {
             i32 hitPopupIndex = -1;
@@ -367,8 +366,8 @@ export namespace foundation::ui
             entry.X = x;
             entry.Y = y;
 
-            // Tooltips (takesFocus=false) must never disturb focus - a tooltip appearing
-            // mid-typing would otherwise clear the editor's focus and kill its completion popup.
+            // Tooltips (takesFocus=false) leave focus alone: a tooltip appearing mid-typing
+            // would otherwise clear the editor's focus and close its completion popup.
             if (takesFocus && Context != nullptr)
             {
                 entry.SavedFocusEntry = Context->GetFocusManager()->SaveAndClearFocus();
@@ -397,7 +396,8 @@ export namespace foundation::ui
             Invalidate();
         }
 
-        /// Close popups whose owner lives inside `parent`'s subtree (restart after each - list mutates).
+        /// Close popups whose owner lives inside `parent`'s subtree. The scan restarts after each
+        /// close, because closing mutates the list.
         void CloseDependentPopups(View* parent)
         {
             while (true)

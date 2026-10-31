@@ -1,4 +1,4 @@
-# Pipeline::Physics - `physics.pipeline` (tooling: collision shape + physical material assets/builders).
+# Pipeline::Physics - `physics.pipeline` (tooling: collision shape and physical material assets and builders).
 util_add_engine_library(Physics.Pipeline ALIAS Pipeline::Physics)
 target_link_libraries(Physics.Pipeline PUBLIC
     Foundation::Core Pipeline::Core Foundation::Content Foundation::Geometry Pipeline::Geometry

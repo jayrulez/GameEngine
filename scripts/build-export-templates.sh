@@ -3,25 +3,26 @@
 # Copyright (c) 2026-Present Robert Campbell
 
 #
-# build-export-templates.sh - build export TEMPLATES (prebuilt runtime bundles) for the
-# supported platforms, so `Tools.Export` / the editor can stamp shippable dists against them.
+# build-export-templates.sh - build export templates (prebuilt runtime bundles) for the
+# supported platforms, so `Tools.Export` and the editor can stamp shippable dists against them.
 #
-# A template = the Engine.Player runtime for one (platform, config) + its runtime sidecars +
-# a template.xml manifest. It is NOT game content and NOT a toolchain - it is the prebuilt
-# runtime you ship against.
+# A template is the Engine.Player runtime for one (platform, config), its runtime sidecars and a
+# template.xml manifest. It is neither game content nor a toolchain: it is the prebuilt runtime
+# you ship against.
 #
-# What this does per platform: build Engine.Player (+ the native Tools.Export once), then run
+# Per platform this builds Engine.Player (and the native Tools.Export once), then runs
 #   Tools.Export --template create <Bin/<Config>/<Platform>-<Compiler>>
-# which reads the build's runtime-libs manifest, copies the player + sidecars, writes template.xml.
+# which reads the build's runtime-libs manifest, copies the player and sidecars, and writes
+# template.xml.
 #
 # The Linux template is built RelWithDebInfo (the clang-reldbg preset, the tree the editor
 # distribution builds too, so a release builds the engine once): the player is optimised, and its
-# debug info is split off before packaging - the template's player is stripped (an export copies it
+# debug info is split off before packaging: the template's player is stripped (an export copies it
 # as it is, so every game would carry it otherwise) and Engine.Player.debug goes to
 # <OUT>/linux64-release-symbols, to keep with the build. The template's config, and so its id, is
 # RelWithDebInfo (gameengine-linux64-relwithdebinfo-<version>).
 #
-# Windows is NOT built here (no toolchain on Linux) - use scripts/build-export-templates.ps1 on a
+# Windows is not built here (no toolchain on Linux); use scripts/build-export-templates.ps1 on a
 # Windows agent for the Win64 template.
 #
 # The web templates are two: web-release (the wasm-shipping preset: smallest, no profiler), which
@@ -54,8 +55,8 @@ WEB_PROFILE_BIN="Bin/Release/Emscripten-Clang"
 VERSION="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\+\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"
 PREFIX="$(sed -n 's/^set(TEMPLATE_ID_PREFIX_VALUE[[:space:]]*"\([^"]*\)".*/\1/p' CMakeLists.txt | head -1)"
 
-# The native exporter packages EVERY platform's bundle (it runs on the host, pointing at the
-# target's Bin dir - including the wasm one, which it synthesizes into a "Web" template).
+# The native exporter packages every platform's bundle (it runs on the host, pointing at the
+# target's Bin dir, including the wasm one, which it synthesizes into a "Web" template).
 EXPORTER="$LINUX_BIN/Tools.Export"
 
 log() { printf '\n== %s ==\n' "$*"; }
@@ -69,7 +70,7 @@ create_template() { # <config-dir> <out-subdir-tag> [Tools.Export --id/--name/..
         return 1
     fi
     if [[ -n "$OUT" ]]; then
-        # --out writes the bundle FLAT into the given folder, so each platform needs its OWN
+        # --out writes the bundle flat into the given folder, so each platform needs its own
         # subfolder or a multi-platform run would clobber one template.xml with the next.
         local dest="$OUT/$tag"
         mkdir -p "$dest"
@@ -84,7 +85,7 @@ build_linux() {
     if [[ ! -f "$LINUX_BUILD/CMakeCache.txt" ]]; then
         echo ">> configuring $LINUX_BUILD (the $LINUX_PRESET preset)"
         # The preset pins clang (the Bin/ dir is compiler-derived); CXX_COMPILER overrides it
-        # for a versioned clang - see build-editor-dist.sh.
+        # for a versioned clang (see build-editor-dist.sh).
         CXX_BIN="${CXX_COMPILER:-clang++}"
         C_BIN="${C_COMPILER:-clang}"
         cmake --preset "$LINUX_PRESET" -DCMAKE_C_COMPILER="$C_BIN" -DCMAKE_CXX_COMPILER="$CXX_BIN" \
@@ -131,7 +132,7 @@ build_web() {
         cmake --preset wasm-shipping
     fi
     cmake --build "$WEB_BUILD" --target Engine.Player -j"$JOBS"
-    # Packaged by the NATIVE exporter (built in the Linux step) -> a "Web" template.
+    # Packaged into a "Web" template by the native exporter (built in the Linux step).
     create_template "$WEB_BIN" "web-release"
 
     log "Web (profiling) template"

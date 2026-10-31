@@ -3,10 +3,9 @@
 
 // UI - :grid_layout partition
 //
-// Row/column grid with Auto/Fixed/Flex track sizing and auto-flow placement. Ported from
-// Sedulous.UI/src/Layout/GridLayout.bf. Per-child placement comes from the child's LayoutStyle
-// (GridRow/GridColumn/spans); auto-flow cells are resolved per pass, never written back. (Beef
-// scope float[] -> Array<f32>; Math.Clamp -> local clamp helpers.)
+// Row/column grid with Auto/Fixed/Flex track sizing and auto-flow placement. Per-child placement
+// comes from the child's LayoutStyle (GridRow/GridColumn/spans); auto-flow cells are resolved per
+// pass, never written back.
 
 module;
 #include "Core/Prelude.h"
@@ -91,9 +90,9 @@ export namespace foundation::ui
                 const Cell cell = m_cells[i];
                 const i32 col = cell.Column;
                 const i32 row = cell.Row;
-                // BOUNDED loose constraints (unbounded fill-style leaves measured to
-                // kFloatMax would explode auto tracks); tracks aggregate MARGIN boxes so cell
-                // placement + the base margin inset compose.
+                // Bounded loose constraints (unbounded fill-style leaves would measure to
+                // kFloatMax and break auto tracks); tracks aggregate margin boxes so cell
+                // placement and the base margin inset compose.
                 child->Measure(BoxConstraints{
                     0, Max(0.0f, constraints.MaxWidth - chrome.TotalHorizontal()), 0,
                     Max(0.0f, constraints.MaxHeight - chrome.TotalVertical())});
@@ -257,7 +256,7 @@ export namespace foundation::ui
         }
         [[nodiscard]] i32 RowCount() const { return static_cast<i32>(Max<usize>(1, Rows.Size())); }
 
-        /// A child's resolved cell for THIS pass. Auto-flow children (GridRow/GridColumn < 0)
+        /// A child's resolved cell for this pass. Auto-flow children (GridRow/GridColumn < 0)
         /// take the next free cursor cell; the child's LayoutStyle keeps its -1 intent, so
         /// reordering or reparenting re-flows instead of pinning the first placement.
         struct Cell

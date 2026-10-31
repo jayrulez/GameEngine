@@ -48,14 +48,14 @@ import foundation.vg.renderer;     // VGPassTargets: a texture's multisampled pa
 
 using namespace foundation::core;
 using namespace foundation::gui;
-namespace rhi = foundation::rhi; // the interface's alias is its own: MSVC does not carry it here
+namespace rhi = foundation::rhi; // repeated here because MSVC does not carry the interface's alias
 
 namespace engine::gui
 {
     namespace
     {
-        // Whether `instance` was cooked as `cooked`: a guid is bound only as what it is, since a
-        // handle bound as another product caches its failure.
+        // Whether `instance` was cooked as `cooked`. A guid is bound only as the product type it
+        // really is, because a handle bound as another product type caches its failure.
         [[nodiscard]] bool IsCookedAs(const foundation::content::Instance& instance, const TypeInfo& cooked) noexcept
         {
             return instance.TypeName() == StringView(reinterpret_cast<const utf8char*>(cooked.name)) &&
@@ -71,8 +71,8 @@ namespace engine::gui
     {
         explicit State(IAllocator& allocator) noexcept : Allocator(&allocator), Texts(allocator), Pictures(allocator), Images(allocator), Retired(allocator), RetiredPictures(allocator) {}
 
-        // A document or sheet read: its handle, and the product it last answered with (held, so
-        // a new product never takes its address).
+        // A document or sheet that was read: its handle, and the product it last answered with.
+        // The product is held so that a new product never reuses its address.
         struct Text
         {
             Guid Id;
@@ -93,7 +93,7 @@ namespace engine::gui
             Guid Id;
             resource::Proxy<foundation::texture::Texture> Texture;
             UniquePtr<image::ImageDataRef> Key;
-            u64 Uid = 0; // the texture product the key stands for; 0: none (yet)
+            u64 Uid = 0; // the texture product the key stands for; 0 when there is none yet
         };
 
         IAllocator* Allocator;
@@ -101,8 +101,8 @@ namespace engine::gui
         Array<Text> Texts;
         Array<UniquePtr<Picture>> Pictures;
         Array<UniquePtr<Image>> Images;
-        Array<UniquePtr<image::ImageDataRef>> Retired; // keys no texture backs now (views may hold them)
-        Array<UniquePtr<foundation::vg::svg::SVGDocument>> RetiredPictures; // pictures replaced (widgets may hold them)
+        Array<UniquePtr<image::ImageDataRef>> Retired; // keys no texture backs any more (views may still hold them)
+        Array<UniquePtr<foundation::vg::svg::SVGDocument>> RetiredPictures; // pictures that were replaced (widgets may still hold them)
         TextureSink Sink;
 
         [[nodiscard]] const foundation::content::Instance* InstanceOf(const Guid& id) const
@@ -116,8 +116,8 @@ namespace engine::gui
                 Sink(key, view);
         }
 
-        // An image's key in line with its texture's current product.
-        // True when the texture has just arrived (an image that had none has one now).
+        // Brings an image's key in line with its texture's current product. Returns true when the
+        // texture has just arrived, so an image that had no texture now has one.
         bool Refresh(Image& entry)
         {
             foundation::texture::Texture* texture = entry.Texture.Get();
@@ -127,8 +127,8 @@ namespace engine::gui
             const bool arrived = entry.Uid == 0 && uid != 0;
             if (uid != 0 && (!entry.Key || entry.Key->Width() != texture->Width() || entry.Key->Height() != texture->Height()))
             {
-                // A key's size is the image's natural size: another size takes a new key, the old one
-                // kept for the views that hold it.
+                // A key's size is the image's natural size, so a new size needs a new key. The old
+                // key is kept for the views that still hold it.
                 if (entry.Key)
                 {
                     Tell(entry.Key.Get(), nullptr);
@@ -141,7 +141,7 @@ namespace engine::gui
             return arrived;
         }
 
-        // A picture parsed again when its vector image's product changed.
+        // Parses a picture again when its vector image's product has changed.
         void Refresh(Picture& entry)
         {
             foundation::vg::VectorImage* product = entry.Image.Get();
@@ -219,7 +219,7 @@ namespace engine::gui
             const foundation::content::Instance* instance = state.InstanceOf(id);
             if (instance == nullptr || IsCookedAs(*instance, foundation::vg::VectorImageSource::StaticType()) ||
                 IsCookedAs(*instance, GuiDocumentSource::StaticType()) || IsCookedAs(*instance, GuiStyleSheetSource::StaticType()))
-                return nullptr; // not a texture (the texture records are several cooked types)
+                return nullptr; // not a texture (texture records come in several cooked types)
             UniquePtr<State::Image> made = MakeUnique<State::Image>(*state.Allocator);
             made->Id = id;
             made->Texture = state.Resources->Bind<foundation::texture::Texture>(id);
@@ -314,10 +314,10 @@ namespace engine::gui
 
     namespace
     {
-        // A canvas's place in its scene's root, filling it (the `canvas` element to a sheet): its
-        // document laid out at the root's size, or at the reference resolution and scaled
-        // uniformly to fit, centred on a whole pixel. Paints nothing, so it never takes the
-        // pointer from the game: only what its document paints does.
+        // A canvas's place in its scene's root, which it fills; a sheet sees it as the `canvas`
+        // element. The document is laid out at the root's size, or at the reference resolution and
+        // then scaled uniformly to fit, centred on a whole pixel. The host paints nothing, so it
+        // never takes the pointer from the game; only what its document paints does.
         class CanvasHost final : public UIWidget
         {
         public:
@@ -376,7 +376,7 @@ namespace engine::gui
             .Attribute("description", String(u8"Shows a GUI document in its scene, as a menu or a HUD, or draws it into a texture."))
             .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<GuiCanvasComponent>, GuiCanvasComponent>("of");
-        builder.Method<&GuiCanvasComponent::rootNode, Node>("root"); // its Variant a Node handle: AngelScript binds it only typed
+        builder.Method<&GuiCanvasComponent::rootNode, Node>("root"); // typed as Node: AngelScript binds a Variant return only typed
         builder.Property<&GuiCanvasComponent::document>("document");
         builder.Property<&GuiCanvasComponent::sheet>("sheet");
         builder.Property<&GuiCanvasComponent::order>("order");
@@ -408,7 +408,7 @@ namespace engine::gui
             .Attribute("description", String(u8"Shows a GUI document over the entity, such as a nameplate or a health bar."))
             .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<GuiBillboardComponent>, GuiBillboardComponent>("of");
-        builder.Method<&GuiBillboardComponent::rootNode, Node>("root"); // its Variant a Node handle: AngelScript binds it only typed
+        builder.Method<&GuiBillboardComponent::rootNode, Node>("root"); // typed as Node: AngelScript binds a Variant return only typed
         builder.Property<&GuiBillboardComponent::document>("document");
         builder.Property<&GuiBillboardComponent::sheet>("sheet");
         builder.Property<&GuiBillboardComponent::offset>("offset");
@@ -459,7 +459,7 @@ namespace engine::gui
             .Attribute("description", String(u8"Shows a GUI document on a panel in the world, in the entity's plane, optionally taking the pointer."))
             .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<GuiWorldPanelComponent>, GuiWorldPanelComponent>("of");
-        builder.Method<&GuiWorldPanelComponent::rootNode, Node>("root"); // its Variant a Node handle: AngelScript binds it only typed
+        builder.Method<&GuiWorldPanelComponent::rootNode, Node>("root"); // typed as Node: AngelScript binds a Variant return only typed
         builder.Property<&GuiWorldPanelComponent::document>("document");
         builder.Property<&GuiWorldPanelComponent::sheet>("sheet");
         builder.Property<&GuiWorldPanelComponent::sizeMeters>("sizeMeters");
@@ -499,7 +499,7 @@ namespace engine::gui
     {
         static const bool once = []()
         {
-            RegisterGuiComponentReflection(); // the components' TypeData, `of` among it, first
+            RegisterGuiComponentReflection(); // first: the components' TypeData, which includes `of`
             RegisterGuiScriptSurface();  // `gui`, the widgets, the events, the tweens
             RegisterGamekitElements();   // the screen stack, screens, prompts
             foundation::script::RegisterExtraFacadeName(u8"gui"); // the prelude imports the alias
@@ -566,8 +566,9 @@ namespace engine::gui
 
     namespace
     {
-        // The mouse as a world panel sees it: at the point the ray crosses it, in its pixels; its
-        // buttons, wheel and the rest the real one's.
+        // The mouse as a world panel sees it. Its position is the point where the ray crosses the
+        // panel, in the panel's pixels; its buttons, wheel and everything else come from the real
+        // mouse.
         class PanelMouse final : public foundation::shell::IMouse
         {
         public:
@@ -608,17 +609,18 @@ namespace engine::gui
         UniquePtr<GuiPassRenderer> Renderer;
         // What PrepareOverlay recorded for the screen tier, and for which view.
         GuiPassRenderer::Prepared Screen{};
-        GuiPassRenderer::Prepared RunScreen{}; // the drawn run's tier, under the shared one
+        GuiPassRenderer::Prepared RunScreen{}; // the drawn run's tier, beneath the shared tier
         bool HasRunScreen = false;
         render::ScreenOverlayView ScreenView{};
         bool ScreenPrepared = false;
 
         // A texture a canvas or a panel draws into: the sampled texture, and the multisampled
-        // colour and stencil its pass resolves from (none: a plain pass straight into it).
+        // colour and stencil its pass resolves from. Without them, a plain pass draws straight
+        // into the texture.
         struct Target
         {
             explicit Target(IAllocator&) noexcept {}
-            const SceneRoot* Root = nullptr; // whose
+            const SceneRoot* Root = nullptr; // the root that draws into it
             scene::Scene* Scene = nullptr;
             scene::EntityHandle Entity{};
             rhi::Texture* Texture = nullptr;
@@ -651,8 +653,9 @@ namespace engine::gui
             target.View = nullptr;
             target.Texture = nullptr;
         }
-        // `root`'s texture at `width` x `height`, made or made again at that size (the GPU waited
-        // for: the scene may still sample the old one); null when the device makes none.
+        // Returns `root`'s texture at `width` x `height`, making it, or making it again at a new
+        // size. Remaking waits for the GPU, because the scene may still sample the old texture.
+        // Returns null when the device makes no texture.
         Target* EnsureTarget(const SceneRoot& root, scene::Scene& scene, scene::EntityHandle entity, u32 width, u32 height,
                              IAllocator& allocator)
         {
@@ -699,7 +702,7 @@ namespace engine::gui
             return found;
         }
 
-        // sRGB, as the window's: the shaders write linear light, the texture encodes it, the
+        // sRGB, as the window is. The shaders write linear light, the texture encodes it, and the
         // scene samples linear light back.
         static constexpr rhi::TextureFormat kTextureFormat = rhi::TextureFormat::RGBA8UnormSrgb;
     };
@@ -720,7 +723,8 @@ namespace engine::gui
         return m_promptRuntime != nullptr ? m_promptRuntime : (m_input != nullptr ? &m_input->Runtime() : nullptr);
     }
 
-    // The prompts on the runtime they should read, told again when its bindings may have changed.
+    // Points the prompts at the runtime they should read, and tells them again when its bindings
+    // may have changed.
     void GuiSubsystem::SyncPrompts()
     {
         const foundation::input::ActionRuntime* runtime = PromptRuntime();
@@ -742,8 +746,8 @@ namespace engine::gui
 
     void GuiSubsystem::SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others)
     {
-        // The editor sets the fonts again after every cook, mostly the same ones: those keep the
-        // service they are in, and every label keeps what it was styled with.
+        // The editor sets the fonts again after every cook, mostly to the same ones. Unchanged
+        // fonts keep the service they are in, and every label keeps what it was styled with.
         usize given = 0;
         bool same = m_projectFonts && m_defaultFont.Get() == defaultFont;
         for (const foundation::fonts::Font* font : others)
@@ -761,7 +765,7 @@ namespace engine::gui
                 m_otherFonts.PushBack(RefPtr<foundation::fonts::Font>(const_cast<foundation::fonts::Font*>(font)));
         if (m_projectFonts)
         {
-            m_retiredFonts.PushBack(Move(m_projectFonts)); // labels styled with it hold its fonts yet
+            m_retiredFonts.PushBack(Move(m_projectFonts)); // labels styled with it still hold its fonts
         }
         m_projectFonts = nullptr;
         if (m_defaultFont)
@@ -775,12 +779,12 @@ namespace engine::gui
         }
         else if (!m_otherFonts.IsEmpty())
             LOG_WARNING(u8"GUI", u8"{} GUI font(s) wait for a default font", static_cast<u64>(m_otherFonts.Size()));
-        // Everything that measures or draws text from now on asks the new service; every root
-        // measures again.
+        // From here on, everything that measures or draws text asks the new service, and every
+        // root measures again.
         foundation::fonts::IFontService* fonts = Fonts();
         m_context->SetFontService(fonts);
         m_styles.SetFontService(fonts);
-        ApplyUserAgentSheet(); // the default family is the new service's
+        ApplyUserAgentSheet(); // the default family now comes from the new service
         if (m_render && m_render->Renderer)
             m_render->Renderer->SetFontService(fonts);
         if (m_screen.Root)
@@ -810,13 +814,14 @@ namespace engine::gui
     void GuiSubsystem::OnInit()
     {
         RegisterGuiElements();     // the GUI's widgets, by tag from markup
-        RegisterGamekitElements(); // and a game's screens and prompts
-        // Before any font loads: a font gets its shaper and its atlas's glyphs when it loads.
+        RegisterGamekitElements(); // a game's screens and prompts
+        // Installed before any font loads, because a font gets its shaper and its atlas's glyphs as
+        // it loads.
         foundation::fonts::HarfBuzzShaping::Install();
         foundation::fonts::BidiAlgorithm::Install();
         UniquePtr<foundation::fonts::TrueTypeFontService> fonts = MakeUnique<foundation::fonts::TrueTypeFontService>(m_allocator, m_allocator);
-        // The built-in font through the data mount (in a dev tree and any dist that stages it); the
-        // project's own fonts come with the player's settings (E9).
+        // The built-in font comes through the data mount (present in a dev tree and in any dist
+        // that stages it). The project's own fonts come with the player's settings.
         constexpr StringView kDefaultFont = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         Array<u8> bytes(m_allocator);
         if (ReadDataFile(kDefaultFont, bytes) &&
@@ -831,11 +836,12 @@ namespace engine::gui
         ApplySheets();
 
         // The shared screen tier: the screen stack, and the overlay layer above it, each filling the
-        // root. Neither paints, so neither takes the pointer from the game until something in it does.
+        // root. Neither paints, so neither takes the pointer from the game until something in it
+        // does.
         MakeScreenTier(m_screen);
         m_overlay = MakeRef<UIWidget>(m_allocator);
         m_overlay->SetTag(StringView(u8"overlays"));
-        m_overlay->SetHitTestVisible(false); // over the screens: only what is on it takes the pointer
+        m_overlay->SetHitTestVisible(false); // over the screens; only its contents take the pointer
         {
             Node::StyleWriteScope defaults(*m_overlay);
             m_overlay->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
@@ -844,11 +850,12 @@ namespace engine::gui
         // The touch controls' guide, beneath the screens pushed on this tier and the overlays.
         m_touchGuide = MakeRef<GuiTouchGuide>(m_allocator);
         m_screen.Root->AddChildAt(m_touchGuide.Get(), 0);
-        // A script's root is its run's screen tier (the shared one in the player).
+        // A script's root is its run's screen tier (the shared tier in the player).
         m_scriptBinding.resolve = [this]() { return ScreenRootFor(foundation::script::CurrentRun()); };
     }
 
-    // A screen tier's root, filled by its stack (its id what a script finds), with its input.
+    // Makes a screen tier's root, filled by its stack, and the tier's input. Scripts find the stack
+    // by its id.
     void GuiSubsystem::MakeScreenTier(ScreenTier& tier)
     {
         tier.Root = MakeRef<SceneRoot>(m_allocator, m_context);
@@ -890,17 +897,17 @@ namespace engine::gui
         if (context == nullptr)
             return;
         m_input = context->GetSubsystem<engine::input::InputSubsystem>();
-        // The runs' lifecycle: a run's tier goes with its session.
+        // Follows the runs' lifecycle, so a run's tier goes away with its session.
         if ((m_runManager = context->RunManager()) != nullptr)
             m_runManager->Subscribe(*this);
-        m_prompts.Install(*m_context); // every prompt in the game's GUI names its bindings through it
+        m_prompts.Install(*m_context); // every prompt in the game's GUI names its bindings through this
         SyncPrompts();
         if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
         {
             scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
             scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
         }
-        // Headless contexts (tests, the cooker) have no render subsystem: nothing registers.
+        // Headless contexts (tests, the cooker) have no render subsystem, so nothing registers.
         if (auto* renderer = context->GetSubsystem<engine::render::RenderSubsystem>())
         {
             m_sceneRenderer = renderer;
@@ -940,13 +947,13 @@ namespace engine::gui
         if (m_screen.Screens)
             m_screen.Screens->Clear();
         m_overlay = nullptr;
-        m_scriptBinding.resolve = nullptr; // a script still running finds no root, not a freed one
+        m_scriptBinding.resolve = nullptr; // a script still running then finds no root, rather than a freed one
         m_screen.Bridge = nullptr;
         m_screen.Screens = nullptr;
         m_screen.Root = nullptr;
         m_resources->SetTextureSink(nullptr);
         m_context->SetPictureBaker(nullptr);
-        m_render = nullptr; // waits for the GPU, then lets the renderers go
+        m_render = nullptr; // waits for the GPU, then releases the renderers
     }
 
     void GuiSubsystem::BeginFrame(f32 deltaTime)
@@ -956,11 +963,11 @@ namespace engine::gui
         if (m_render && m_render->Renderer)
             m_render->Renderer->BeginFrame();
         if (m_resources->Poll())
-            ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
+            ApplySheets(); // a sheet or a document was cooked again, so the GUI restyles
         if (m_resources->TakeImagesArrived())
         {
-            // A texture an image asked for before it loaded is here: every root lays out again, and
-            // the images that got nothing ask again.
+            // A texture that an image asked for before it loaded has arrived. Every root lays out
+            // again, and the images that got nothing ask again.
             if (m_screen.Root)
                 m_screen.Root->RequestLayoutTree();
             for (const UniquePtr<ScreenTier>& tier : m_runTiers)
@@ -979,8 +986,8 @@ namespace engine::gui
             SyncCanvases(tier);
             SyncPanels(tier);
         }
-        // The roots of textures whose canvas or panel went (their textures go as RenderTextures
-        // next runs).
+        // Drops the roots of textures whose canvas or panel has gone. The textures themselves go
+        // the next time RenderTextures runs.
         for (usize i = m_textureRoots.Size(); i-- > 0;)
             if (!m_textureRoots[i]->Seen)
             {
@@ -991,7 +998,7 @@ namespace engine::gui
                 m_textureRoots.RemoveAt(i);
             }
         PumpInput();
-        // Unscaled: menus move while the game is paused.
+        // Unscaled time, so menus still move while the game is paused.
         m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
         if (m_screen.Root)
             StyleAndLayOut(*m_screen.Root, m_screen.Root->GetViewportSize());
@@ -1002,7 +1009,7 @@ namespace engine::gui
     void GuiSubsystem::SetResourceManager(resource::ResourceManager* resources)
     {
         m_resources->SetResourceManager(resources);
-        ApplySheets(); // the sheets resolve in the new project (or not at all)
+        ApplySheets(); // the sheets now resolve in the new project, or not at all
     }
 
     void GuiSubsystem::SetStyleSheets(Span<const Guid> sheets)
@@ -1016,8 +1023,9 @@ namespace engine::gui
 
     // The user agent's sheet: the built-in theme, and the text of every tree in the default family
     // at the body size. The style applier gives text a font only where a family is declared, and a
-    // root is no text node to hold one: each tree's top elements (:root) declare it, the rest
-    // inherit, and the game's sheets, above the user agent, choose otherwise.
+    // root is not a text node that could hold one. So each tree's top elements (:root) declare the
+    // family, the rest inherit it, and the game's sheets, which sit above the user agent, may choose
+    // another.
     void GuiSubsystem::ApplyUserAgentSheet()
     {
         String css(DefaultThemeCSS(), m_allocator);
@@ -1030,8 +1038,8 @@ namespace engine::gui
         m_styles.SetUserAgentSheet(CSSParser::Parse(css.AsView(), StringView(u8"theme")));
     }
 
-    // The game's sheets as one author sheet importing each, in order: the style manager expands
-    // the imports through the provider, each over the ones before it.
+    // Applies the game's sheets as one author sheet that imports each of them in order. The style
+    // manager expands the imports through the provider, each over the ones before it.
     void GuiSubsystem::ApplySheets()
     {
         String css(m_allocator);
@@ -1073,7 +1081,7 @@ namespace engine::gui
             Node::StyleWriteScope defaults(*tier.Root);
             tier.Root->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; }); // each canvas fills it
         }
-        // The billboards' layer, under every canvas; it paints nothing, so it takes no pointer.
+        // The billboards' layer, under every canvas. It paints nothing, so it takes no pointer.
         tier.Billboards = MakeRef<UIWidget>(m_allocator);
         tier.Billboards->SetTag(StringView(u8"billboards"));
         tier.Root->AddChild(tier.Billboards.Get());
@@ -1083,7 +1091,7 @@ namespace engine::gui
 
     void GuiSubsystem::OnDestroying(scene::Scene& scene)
     {
-        for (usize i = m_textureRoots.Size(); i-- > 0;) // its canvases' and panels' own roots
+        for (usize i = m_textureRoots.Size(); i-- > 0;) // the roots that the scene's canvases and panels draw into
             if (m_textureRoots[i]->Scene == &scene)
             {
                 if (m_activeRoot == m_textureRoots[i]->Root.Get())
@@ -1116,8 +1124,8 @@ namespace engine::gui
         return root;
     }
 
-    // A component's tree built again when its document's product changed (a re-cook, another
-    // document): the old one out of wherever it was. True when it was.
+    // Builds a component's tree again when its document's product has changed (a re-cook, or
+    // another document), removing the old tree from wherever it was. Returns true when it rebuilt.
     template <typename Component>
     bool GuiSubsystem::RebuildIfChanged(Component& c)
     {
@@ -1132,7 +1140,8 @@ namespace engine::gui
         return true;
     }
 
-    // A component's own sheet on its tree (in a GUI by now), again when its product changed.
+    // Applies a component's own sheet to its tree (which is in a GUI by now), and applies it again
+    // when the sheet's product has changed.
     template <typename Component>
     void GuiSubsystem::ApplySheet(Component& c, StringView name)
     {
@@ -1146,8 +1155,9 @@ namespace engine::gui
         c.sheetFrom = RefPtr<Object>(sheet);
     }
 
-    // The root of its own a texture's content (a render-texture canvas, a world panel) is drawn
-    // in: made for the entity the first time, holding `content` alone, kept while seen each frame.
+    // Returns the root that a texture's content (a render-texture canvas, a world panel) is drawn
+    // in. The root is made for the entity the first time, holds `content` alone, and is kept as
+    // long as it is seen each frame.
     RefPtr<SceneRoot> GuiSubsystem::TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, Node& content)
     {
         TextureRoot* found = nullptr;
@@ -1180,10 +1190,11 @@ namespace engine::gui
         return found->Root;
     }
 
-    // Each canvas's tree in line with its component: built from its document (again when the
-    // document is cooked again), in its host in the scene's root or a root of its own for its
-    // texture, its sheet, shown while the canvas and its entity are; the hosts of canvases gone
-    // swept; the hosts ordered.
+    // Brings each canvas's tree in line with its component. The tree is built from the document
+    // (and again when the document is re-cooked) and placed in the canvas's host in the scene's
+    // root, or in a root of its own for a texture. Its sheet is applied, and it is shown while the
+    // canvas and its entity are visible. Then the hosts of canvases that have gone are removed,
+    // and the remaining hosts are ordered.
     void GuiSubsystem::SyncCanvases(SceneTier& tier)
     {
         auto* canvases = tier.Scene->GetSystem<GuiCanvasComponentManager>();
@@ -1195,14 +1206,15 @@ namespace engine::gui
                     const bool wantsTexture = c.renderMode == GuiCanvasRenderMode::RenderTexture;
                     if (!RebuildIfChanged(c) && c.root && wantsTexture != (c.renderRoot.Get() != nullptr))
                     {
-                        // Its mode changed: out of where it was, its sheet applied afresh where it goes.
+                        // Its mode changed: take the tree out of where it was. Its sheet is
+                        // applied afresh where it goes.
                         if (c.root->GetParent() != nullptr)
                             c.root->GetParent()->RemoveChild(c.root.Get());
                         c.sheetFrom = nullptr;
                     }
                     if (wantsTexture)
                     {
-                        c.host = nullptr; // swept below, unseen
+                        c.host = nullptr; // not seen, so removed below
                         c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<SceneRoot>{};
                     }
                     else
@@ -1228,8 +1240,9 @@ namespace engine::gui
                     c.root->SetDisplayed(c.visible && tier.Scene->IsEffectivelyActive(entity));
                     c.root->SetInert(!c.interactive);
                 });
-        // The hosts whose canvas went (despawned, the component removed, drawn into a texture
-        // now), then the order: by `order`, stably, after whatever else the root holds.
+        // Removes the hosts whose canvas has gone (despawned, its component removed, or now drawn
+        // into a texture), then orders the rest stably by `order`, after whatever else the root
+        // holds.
         Array<CanvasHost*> hosts(m_allocator);
         for (usize i = 0; i < tier.Canvases.Size();)
         {
@@ -1246,7 +1259,7 @@ namespace engine::gui
             tier.Root->RemoveChild(host);
             tier.Canvases.RemoveAt(i);
         }
-        // In the root's order, for the sort.
+        // Gather the hosts in the root's order, for the stable sort.
         for (usize i = 1; i < hosts.Size(); ++i)
             for (usize j = i; j > 0 && tier.Root->GetChildIndex(hosts[j]) < tier.Root->GetChildIndex(hosts[j - 1]); --j)
                 Swap(hosts[j - 1], hosts[j]);
@@ -1262,9 +1275,10 @@ namespace engine::gui
             tier.Root->SetChildIndex(host, tier.Root->ChildCount() - 1);
     }
 
-    // Each billboard's tree in line with its component, in the scene's billboard layer (rebuilt
-    // when its document changes, its sheet, shown while it and its entity are); the trees of
-    // billboards gone swept. Where each shows is a view's (PlaceBillboards).
+    // Brings each billboard's tree in line with its component, in the scene's billboard layer.
+    // The tree is rebuilt when its document changes, its sheet is applied, and it is shown while
+    // the billboard and its entity are visible. Trees of billboards that have gone are removed.
+    // Each view decides where a billboard shows (PlaceBillboards).
     void GuiSubsystem::SyncBillboards(SceneTier& tier)
     {
         auto* billboards = tier.Scene->GetSystem<GuiBillboardComponentManager>();
@@ -1296,7 +1310,8 @@ namespace engine::gui
         }
     }
 
-    // Each world panel's tree in line with its component, in a root of its own for its texture.
+    // Brings each world panel's tree in line with its component, in a root of its own for its
+    // texture.
     void GuiSubsystem::SyncPanels(SceneTier& tier)
     {
         auto* panels = tier.Scene->GetSystem<GuiWorldPanelComponentManager>();
@@ -1319,9 +1334,10 @@ namespace engine::gui
             });
     }
 
-    // Each shown billboard placed for `view`: hung by its bottom centre on its projected point (its
-    // size the last layout's: a new one settles the next frame), scaled toward that point, hidden
-    // behind the camera, keeping its layout so nothing else moves.
+    // Places each shown billboard for `view`. A billboard hangs by its bottom centre from its
+    // projected point, using its size from the last layout (a new size settles the next frame). It
+    // is scaled toward that point and hidden when the point is behind the camera. Its layout is
+    // kept, so nothing else moves.
     void GuiSubsystem::PlaceBillboards(SceneTier& tier, const render::SceneOverlayView& view)
     {
         auto* billboards = tier.Scene->GetSystem<GuiBillboardComponentManager>();
@@ -1360,7 +1376,7 @@ namespace engine::gui
     UniquePtr<GuiInputBridge> GuiSubsystem::MakeBridge(SceneRoot& root)
     {
         UniquePtr<GuiInputBridge> bridge = MakeUnique<GuiInputBridge>(m_allocator, root.GetEventDispatcher());
-        bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad (K2b)
+        bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad
         bridge->SetTextInputTarget(m_textInputTarget);
         return bridge;
     }
@@ -1389,9 +1405,10 @@ namespace engine::gui
         return nullptr;
     }
 
-    // The nearest interactive world panel the pointer's ray crosses, through each reachable scene's
-    // camera at the shape its GUI last drew (through the view's centre when the mouse is captured:
-    // the crosshair is the pointer), and the point in its pixels; none: no root.
+    // Finds the nearest interactive world panel the pointer's ray crosses, and the point in the
+    // panel's pixels. The ray is cast through each reachable scene's camera at the shape its GUI
+    // last drew. When the mouse is captured, the ray goes through the view's centre, because the
+    // crosshair is the pointer. With no panel hit, the target has no root.
     GuiSubsystem::InputTarget GuiSubsystem::PanelUnderPointer(Float2 point, bool centreAim)
     {
         InputTarget found;
@@ -1403,7 +1420,7 @@ namespace engine::gui
                 continue;
             const Float2 viewSize = tier.Root->GetViewportSize();
             if (viewSize.x <= 0.0f || viewSize.y <= 0.0f)
-                continue; // not drawn yet: no shape to cast through
+                continue; // not drawn yet, so there is no shape to cast through
             render::ViewCamera camera;
             if (!engine::render::ExtractPrimaryCamera(*tier.Scene, camera, nullptr, viewSize.x / viewSize.y))
                 continue;
@@ -1426,8 +1443,9 @@ namespace engine::gui
         return found;
     }
 
-    // Whether this frame's input may reach `tier`'s scene: the source's own scene when it is bound
-    // to one (an editor Game tab), else every scene or none, as the input subsystem's policy says.
+    // Whether this frame's input may reach `tier`'s scene. When the source is bound to a scene (an
+    // editor Game tab), only that scene; otherwise every scene or none, as the input subsystem's
+    // policy says.
     bool GuiSubsystem::InputReaches(const SceneTier& tier) const noexcept
     {
         if (m_input == nullptr)
@@ -1441,15 +1459,16 @@ namespace engine::gui
     {
         if (!m_screen.Root)
             return {};
-        // The shared tier's overlay layer, occupied (a system menu, a loading screen), is modal; a
-        // passive one (a watermark, `pointer-events: none`) draws over everything and takes nothing.
+        // When the shared tier's overlay layer is occupied (a system menu, a loading screen), it is
+        // modal. A passive overlay (a watermark, `pointer-events: none`) draws over everything and
+        // takes no input.
         for (usize i = 0; m_overlay && i < m_overlay->ChildCount(); ++i)
             if (m_overlay->GetChildAt(i)->IsDisplayed() && m_overlay->GetChildAt(i)->IsHitTestVisible())
                 return InputTarget{m_screen.Root.Get(), ScreenPointerPoint(m_screen, point), m_screen.HasResolution(), false};
-        // The screen tier input reaches (the bound run's), its pointer in its own pixels.
+        // The screen tier input reaches (the bound run's tier), with the pointer in its own pixels.
         ScreenTier& tier = InputTier();
         const InputTarget screen{tier.Root.Get(), ScreenPointerPoint(tier, point), tier.HasResolution(), false};
-        // The GUI under the pointer, the screen tier's over a scene's, then a world panel's.
+        // The GUI under the pointer: the screen tier first, then a scene's GUI, then a world panel.
         if (pointer)
         {
             if (tier.Root->GetEventDispatcher()->IsPointerOver(screen.Point))
@@ -1460,7 +1479,7 @@ namespace engine::gui
             if (const InputTarget panel = PanelUnderPointer(point, centreAim); panel.Root != nullptr)
                 return panel;
         }
-        // The keys and a pad: the screens a game pushed, else a scene's GUI.
+        // The keys and a pad go to the screens a game pushed, or else to a scene's GUI.
         if (tier.Screens->Count() > 0)
             return screen;
         for (const SceneTier& scene : m_sceneTiers)
@@ -1489,7 +1508,7 @@ namespace engine::gui
         else if (mouse != nullptr)
             point = Float2{mouse->X(), mouse->Y()};
         const bool pointer = fingers || mouse != nullptr;
-        // The touch guide: from the first touch on, the controls of the sets in effect.
+        // From the first touch on, the touch guide shows the controls of the sets in effect.
         m_touchSeen = m_touchSeen || fingers;
         if (m_touchGuide)
             m_touchGuide->Update(*m_input, m_touchSeen);
@@ -1497,8 +1516,9 @@ namespace engine::gui
                                                            mouse->IsButtonDown(foundation::shell::MouseButton::Right) ||
                                                            mouse->IsButtonDown(foundation::shell::MouseButton::Middle)));
 
-        // One root a frame; a held press stays with the root it began in, so its release lands (on a
-        // panel, where the ray crosses it still, else where it last did).
+        // Input goes to one root a frame. A held press stays with the root it began in, so that its
+        // release lands there. On a panel, the release lands where the ray still crosses it, or else
+        // where it last did.
         const bool centreAim = mouse != nullptr && mouse->RelativeMode();
         InputTarget target = PickInputRoot(pointer, point, centreAim);
         if (held && m_pressRoot != nullptr && target.Root != m_pressRoot)
@@ -1518,7 +1538,7 @@ namespace engine::gui
         SceneRoot* root = target.Root;
         if (root != m_activeRoot && m_activeRoot != nullptr && pointer)
         {
-            // The root input leaves: nothing in it stays hovered.
+            // Input is leaving this root, so move the pointer away and nothing in it stays hovered.
             (void)m_activeRoot->GetEventDispatcher()->InjectMouseMove(Float2{-1.0e6f, -1.0e6f});
         }
         m_activeRoot = root;
@@ -1527,19 +1547,20 @@ namespace engine::gui
             return;
         if (held && m_pressRoot == nullptr)
         {
-            m_pressRoot = root; // the press begins: where it began says whether the GUI took it
+            m_pressRoot = root; // a press begins; where it began decides whether the GUI took it
             m_pressTaken = target.Panel || root->GetEventDispatcher()->IsPointerOver(target.Point);
         }
         if (target.Mapped)
         {
-            // A panel's pointer is where the ray crosses it, a fitted screen tier's where the render-
-            // space pointer falls in its pixels (fingers come as the mouse SDL copies them to).
+            // A panel's pointer is where the ray crosses it. A fitted screen tier's pointer is where
+            // the render-space pointer falls in its pixels. Fingers arrive as the mouse, since SDL
+            // copies them to it.
             PanelMouse mapped(mouse, target.Point);
             bridge->PumpDevices(mouse != nullptr ? &mapped : nullptr, nullptr, devices.Keyboard());
         }
         else
             bridge->PumpDevices(mouse, touch, devices.Keyboard());
-        // Keys, text and the pad through their events, in order; the pointer was polled above.
+        // Keys, text and the pad go through their events, in order; the pointer was polled above.
         for (const foundation::shell::InputEvent& event : devices.Events())
             switch (event.kind)
             {
@@ -1555,11 +1576,12 @@ namespace engine::gui
             default:
                 break;
             }
-        bridge->SyncInputKind(); // a pad or keys with no event this frame still count
+        bridge->SyncInputKind(); // a pad or keys held with no event this frame still count
 
-        // What the action layer is told the GUI took: the pointer over GUI that takes it, or a press
-        // that began there while it is held; the keys while text is edited. Added to any claim
-        // made earlier in this lane; EndFrame clears them after the frame read them.
+        // Tell the action layer what the GUI took: the pointer while it is over GUI that takes it,
+        // or while a press that began there is held; the keys while text is being edited. These are
+        // added to any claim made earlier in this lane, and EndFrame clears them after the frame has
+        // read them.
         m_pointerTaken = pointer && (held ? m_pressTaken : target.Panel || root->GetEventDispatcher()->IsPointerOver(target.Point));
         const bool keys = root->GetEventDispatcher()->WantsTextInput();
         m_textWanted = keys;
@@ -1628,7 +1650,8 @@ namespace engine::gui
         if (tier == nullptr || !HasContent(*tier))
             return;
         PlaceBillboards(*tier, view);
-        // Laid out at the viewport's size (a split screen's half lays out its own) and drawn there.
+        // Laid out at the viewport's size and drawn there; each half of a split screen lays out at
+        // its own size.
         StyleAndLayOut(*root, Float2{static_cast<f32>(view.viewportWidth), static_cast<f32>(view.viewportHeight)});
         GuiPassView pass;
         pass.X = view.viewportX;
@@ -1661,9 +1684,10 @@ namespace engine::gui
         }
     }
 
-    // A screen tier placed on `view`'s target and recorded (its layers on `encoder` when given): laid
-    // out at the game's resolution over its scale and drawn into the fitted rectangle, turned with the
-    // game's image, or at the target's own size over all of it.
+    // Places a screen tier on `view`'s target and records it, with its layers on `encoder` when one
+    // is given. The tier is laid out at the game's resolution and scale and drawn into the fitted
+    // rectangle, rotated with the game's image, or else drawn at the target's own size over all of
+    // it.
     static GuiPassRenderer::Prepared PrepareScreenTier(GuiPassRenderer& renderer, SceneRoot& root,
                                                             const GuiScreenPlacement& place, Float2 target,
                                                             const render::ScreenOverlayView& view, rhi::CommandEncoder* encoder,
@@ -1693,7 +1717,7 @@ namespace engine::gui
         if (!IsRenderReady())
             return;
         m_render->ScreenPrepared = false;
-        // The bakes before any pass samples them, once a frame.
+        // Record the bakes, once a frame, before any pass samples them.
         (void)m_render->Renderer->RecordBakes(encoder, view.frameIndex);
         if (!m_screen.Root || view.width == 0 || view.height == 0)
             return;
@@ -1706,7 +1730,7 @@ namespace engine::gui
             tier.Turn = place.Turn;
             return PrepareScreenTier(*m_render->Renderer, *tier.Root, place, target, view, &encoder, layOut);
         };
-        // The drawn run's own screens (its Game tab), then the shared tier above them.
+        // Draw the drawn run's own screens (its Game tab) first, then the shared tier above them.
         ScreenTier* run = m_runScreens ? FindRunTier(m_renderRun) : nullptr;
         m_render->HasRunScreen = run != nullptr;
         if (run != nullptr)
@@ -1729,7 +1753,7 @@ namespace engine::gui
             m_render->Renderer->Draw(encoder, m_render->Screen);
             return;
         }
-        // Not prepared for this view: recorded now, their layers drawn in place.
+        // Nothing was prepared for this view, so record now and draw the layers in place.
         const Float2 target{static_cast<f32>(view.width), static_cast<f32>(view.height)};
         const Function<void(SceneRoot&, Float2)> layOut = [this](SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
         const auto draw = [&](ScreenTier& tier)
@@ -1754,9 +1778,9 @@ namespace engine::gui
         const ContentRotation turn = TurnFor(orientation, target.x, target.y);
         const bool hasResolution = resolution.x > 0.0f && resolution.y > 0.0f;
         if (!hasResolution && turn == ContentRotation::None)
-            return place; // the plain draw
+            return place; // a plain draw
         const bool swaps = turn == ContentRotation::Quarter || turn == ContentRotation::ThreeQuarter;
-        // The game's frame: its resolution, else the target's own pixels at the game's shape.
+        // The game's frame: its resolution, or else the target's own pixels in the game's shape.
         const Float2 content = hasResolution ? resolution : (swaps ? Float2{target.y, target.x} : target);
         const ContentFit placed{Rectangle{0.0f, 0.0f, target.x, target.y}, content, hasResolution ? fit : FitMode::Stretch, turn};
         place.Fitted = true;
@@ -1767,8 +1791,8 @@ namespace engine::gui
         place.DpiScale = scale > 0.0f ? 1.0f / scale : 1.0f;
         if (turn != ContentRotation::None)
         {
-            // The root's pixels onto the rectangle's, turned as the game's image is: the image of
-            // the origin and of each axis through the same fit, as a row-vector affine.
+            // Map the root's pixels onto the rectangle's, rotated as the game's image is. The affine
+            // (row-vector form) is built from where the same fit takes the origin and each axis.
             const ContentFit turned{Rectangle{0.0f, 0.0f, place.Rect.width, place.Rect.height}, place.DrawSize, FitMode::Stretch, turn};
             const Float2 origin = turned.FromContent(Float2{0.0f, 0.0f});
             const Float2 xAxis = turned.FromContent(Float2{1.0f, 0.0f});
@@ -1834,7 +1858,7 @@ namespace engine::gui
 
     void GuiSubsystem::SetScreenResolution(foundation::run::IRun* run, u32 width, u32 height, FitMode fit)
     {
-        // Made on first use, so a tab can size its tier before anything is pushed.
+        // The tier is made on first use, so a tab can size it before anything is pushed.
         ScreenTier* tier = TierOfRoot(ScreenRootFor(run));
         if (tier != nullptr)
             ApplyResolution(*tier, width, height, fit);
@@ -1881,9 +1905,9 @@ namespace engine::gui
     Float2 GuiSubsystem::ScreenPointerPoint(const ScreenTier& tier, Float2 point) noexcept
     {
         if (!tier.HasResolution())
-            return point; // the target's own pixels (a turned game's pointer arrives in its frame)
-        // As PlaceScreen fitted it on the last draw: the part of the resolution a crop leaves out
-        // offsets it, and the root's scale takes it to its pixels.
+            return point; // already in the target's own pixels (a rotated game's pointer arrives in its frame)
+        // Map the point as PlaceScreen fitted the tier on the last draw: offset it by the part of
+        // the resolution a crop leaves out, then scale it into the root's pixels.
         const ContentFit fit{Rectangle{0.0f, 0.0f, tier.TargetSize.x, tier.TargetSize.y}, tier.Resolution, tier.Fit, tier.Turn};
         const Rectangle source = fit.SrcRect();
         const f32 scale = fit.Scale().y;
@@ -1943,8 +1967,9 @@ namespace engine::gui
 
     namespace
     {
-        // A texture's content drawn into it: laid out at its size (inset by `padding` on each side,
-        // left clear), offscreen layers first, then its pass, the texture left ready to sample.
+        // Draws a texture's content into it. The content is laid out at the texture's size, inset by
+        // `padding` on each side (left clear). The offscreen layers are drawn first, then the pass,
+        // and the texture is left ready to sample.
         void DrawTexture(GuiPassRenderer& renderer, rhi::CommandEncoder& encoder, auto& target, SceneRoot& root, u32 padding,
                          u32 frameIndex)
         {
@@ -1990,7 +2015,7 @@ namespace engine::gui
     {
         if (!IsRenderReady() || m_texturesSerial == m_frameSerial)
             return;
-        m_texturesSerial = m_frameSerial; // several pages of an editor share one GUI: once a frame
+        m_texturesSerial = m_frameSerial; // once a frame, since several editor pages share one GUI
         GuiPassRenderer& renderer = *m_render->Renderer;
         (void)renderer.RecordBakes(encoder, frameIndex); // before any pass samples them
         for (const UniquePtr<RenderState::Target>& target : m_render->Targets)
@@ -1999,8 +2024,9 @@ namespace engine::gui
         {
             auto* sprites = tier.Scene->GetSystem<engine::render::SpriteComponentManager>();
             auto* decals = tier.Scene->GetSystem<engine::render::DecalComponentManager>();
-            // A render-texture canvas's entity's own sprite and decal show its texture (the same
-            // override a script would set); one that showed the old one lets it go.
+            // The entity of a render-texture canvas shows the canvas's texture on its sprite and
+            // decal, through the same override a script would set. A sprite or decal that showed
+            // the old texture lets it go.
             const auto show = [&](scene::EntityHandle entity, rhi::TextureView* was, rhi::TextureView* now)
             {
                 if (auto* sprite = sprites != nullptr ? sprites->Get(entity) : nullptr; sprite != nullptr && (now != nullptr || sprite->texture == was))
@@ -2021,14 +2047,15 @@ namespace engine::gui
                         c.renderTextureView = target != nullptr ? target->View : nullptr;
                         show(entity, was, c.renderTextureView);
                         if (target == nullptr || !c.visible || !tier.Scene->IsEffectivelyActive(entity))
-                            return; // the texture kept, not drawn
+                            return; // the texture is kept but not drawn
                         StyleAndLayOut(*c.renderRoot, Float2{static_cast<f32>(target->Width), static_cast<f32>(target->Height)});
                         DrawTexture(renderer, encoder, *target, *c.renderRoot, 0, frameIndex);
                     });
-            // A world panel's sprite is driven outright: the quad in its entity's plane, a little
-            // larger than the panel for the transparent edge its texture keeps (the quad's own edge
-            // falls in clear texels, smoothed by sampling), drawn after the tone mapping so the
-            // panel keeps its authored colours, as the screen's GUI does.
+            // The subsystem drives a world panel's sprite outright. The sprite is the quad in its
+            // entity's plane, a little larger than the panel to cover the transparent edge its texture
+            // keeps, so the quad's own edge falls in clear texels and sampling smooths it. It is
+            // drawn after tone mapping, so the panel keeps its authored colours, as the screen's GUI
+            // does.
             constexpr u32 kEdge = 2;
             if (auto* panels = tier.Scene->GetSystem<GuiWorldPanelComponentManager>())
                 panels->ForEach(
@@ -2060,8 +2087,9 @@ namespace engine::gui
                         DrawTexture(renderer, encoder, *target, *c.renderRoot, kEdge, frameIndex);
                     });
         }
-        // The textures whose canvas or panel went: a sprite or decal of a scene still here that
-        // shows one lets it go, then it goes (the GPU waited for).
+        // Removes the textures whose canvas or panel has gone. A sprite or decal in a scene that
+        // still exists lets go of such a texture first; then the texture is destroyed, after
+        // waiting for the GPU.
         for (usize i = m_render->Targets.Size(); i-- > 0;)
         {
             RenderState::Target& target = *m_render->Targets[i];
@@ -2110,7 +2138,7 @@ namespace engine::gui
                                                                            shown.finger = control.finger;
                                                                            shown.radius = b.stickRadius > 0.0f ? b.stickRadius : 0.15f;
                                                                            m_controls.PushBack(shown);
-                                                                           // The action's name, centred in its zone (a stick's while no finger holds it).
+                                                                           // The action's name, centred in its zone (for a stick, only while no finger holds it).
                                                                            if (m_labels.Size() < m_controls.Size())
                                                                            {
                                                                                RefPtr<Label> label = MakeRef<Label>(MemoryAllocator());
@@ -2134,8 +2162,8 @@ namespace engine::gui
                 continue;
             const Float2 centre = GuideCentre(m_controls[i], w, h);
             const f32 size = GuideRadius(m_controls[i], w, h) * 2.0f;
-            // The name grows with its button, as the button grows with the screen: a fixed size
-            // was legible on a desktop window and tiny on a phone's many pixels (user, 2026-10-11).
+            // The name grows with its button, as the button grows with the screen. A fixed size
+            // that is legible in a desktop window is tiny on a phone's dense pixels.
             const f32 fontSize = Max(kGuideMinFontSize, size * kGuideFontPerSize);
             label.SetInlineStyle(StringView(u8"font-size"), Format(u8"{}px", fontSize).AsView());
             label.SetInlineStyle(StringView(u8"opacity"), StringView(m_controls[i].down ? u8"1" : u8"0.85"));
@@ -2143,12 +2171,12 @@ namespace engine::gui
             {
                 s.Placement = Position::Absolute;
                 s.Left = LayoutLength::Px(centre.x - size * 0.5f);
-                s.Top = LayoutLength::Px(centre.y - fontSize * 0.65f); // the line's middle on the centre
+                s.Top = LayoutLength::Px(centre.y - fontSize * 0.65f); // puts the line's middle on the centre
                 s.Width = LayoutLength::Px(size);
             });
         }
-        // Redraw while a control shows (fingers move), and once more as the last one goes; idle with
-        // nothing shown it asks for nothing.
+        // Ask for a redraw while a control shows (fingers move), and once more as the last one goes.
+        // When idle with nothing shown, it asks for nothing.
         const bool wasShown = IsVisible();
         SetVisible(!m_controls.IsEmpty());
         if (!m_controls.IsEmpty() || wasShown)
@@ -2164,8 +2192,8 @@ namespace engine::gui
         {
             if (shown.stick && shown.held)
             {
-                // A ring where the finger came down, the stick's reach; a knob where it is, held
-                // inside the ring.
+                // A ring where the finger came down shows the stick's reach, and a knob where the
+                // finger is, held inside the ring.
                 const Float2 anchor{shown.anchor.x * w, shown.anchor.y * h};
                 const f32 reach = shown.radius * w;
                 Float2 knob{shown.finger.x * w, shown.finger.y * h};
@@ -2179,9 +2207,9 @@ namespace engine::gui
                 g.StrokeCircle(knob, reach * 0.4f, Color{0.0f, 0.0f, 0.0f, 0.35f}, 2.0f);
                 continue;
             }
-            // A button fills its zone (what is seen is what is tapped); an idle stick is a small ring
-            // low in its zone, where a thumb rests. A dark wash with a light edge reads on snow and at
-            // night alike.
+            // A button fills its zone, so what is seen is what is tapped. An idle stick is a small
+            // ring low in its zone, where a thumb rests. A dark wash with a light edge reads on snow
+            // and at night alike.
             const Float2 centre = GuideCentre(shown, w, h);
             const f32 radius = GuideRadius(shown, w, h);
             g.FillCircle(centre, radius, Color{0.0f, 0.0f, 0.0f, shown.down ? 0.34f : 0.2f});
@@ -2192,7 +2220,8 @@ namespace engine::gui
     DefaultLoadingScreen BuildDefaultLoadingScreen(IAllocator& allocator, StringView logoSvg)
     {
         DefaultLoadingScreen screen;
-        // The screen: dark, its column in the middle (the overlay layer stacks it over the window).
+        // The screen is dark, with its column in the middle; the overlay layer stacks it over the
+        // window.
         screen.Root = MakeRef<UIWidget>(allocator);
         {
             UIWidget& root = static_cast<UIWidget&>(*screen.Root);

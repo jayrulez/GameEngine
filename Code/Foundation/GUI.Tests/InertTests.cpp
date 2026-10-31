@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - inert subtrees (K4 of Specs/gui-lab-evolution-3.md, HTML's `inert`): an inert node and
-// what it holds draw but take no pointer, focus, navigation, keys or commands, and let go of what
-// the dispatcher held in them; made live again, they take input again.
+// GUI - inert subtrees, as with HTML's `inert`. An inert node and its descendants still draw, but
+// take no pointer, focus, navigation, keys or commands, and the dispatcher lets go of whatever it
+// held in them. Made live again, they take input again.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

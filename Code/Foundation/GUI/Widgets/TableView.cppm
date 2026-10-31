@@ -3,16 +3,16 @@
 
 // GUI - :table_view partition
 //
-// TableView: a virtualised table over a model (eepp's UITableView in role, its column model the
-// fullest of the surveyed ones). ItemView realises its rows; a row's content is one cell
-// (`tablecell`) per column. Its header (`tableheader`) shows the column names and stays at the top
-// while the rows scroll under it, and across with them. Columns are pixels, a percentage of the
-// view's width, or auto (an equal share of what is left, no narrower than a minimum); columns
-// wider than the view scroll it across. Dragging a header cell's right edge resizes its column (to
-// pixels from then on). A click on a header cell reports its column, or with nothing listening
-// sorts by it where the model can; the sorted column's cell shows which way. In markup,
-// `columns="Name|Score"` and `<TableItem cells="Ada|42"/>` children make a model of its own
-// (behind a sorting proxy, numbers kept as numbers so they sort by value).
+// TableView: a virtualised table over a model. ItemView realises the rows, and each row's content
+// is one cell (`tablecell`) per column. The header (`tableheader`) shows the column names. It stays
+// at the top while the rows scroll vertically beneath it, and scrolls horizontally with them.
+// Column widths are pixels, a percentage of the view's width, or auto (an equal share of the
+// remaining width, no narrower than a minimum); columns wider than the view make it scroll
+// horizontally. Dragging a header cell's right edge resizes its column, which then has a pixel
+// width. A click on a header cell reports its column; with no listener it sorts by that column
+// where the model can, and the sorted column's cell shows the direction. In markup,
+// `columns="Name|Score"` and `<TableItem cells="Ada|42"/>` children give the table its own model,
+// behind a sorting proxy, with numbers kept as numbers so they sort by value.
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +21,7 @@ module;
 export module foundation.gui:table_view;
 
 import foundation.core; // RefPtr, MakeRef, Array, Function, Move, Max
-import foundation.vg;   // PathBuilder (the sort indicator)
+import foundation.vg;   // PathBuilder, for the sort indicator
 import :rect;
 import :event;
 import :node;
@@ -37,7 +37,7 @@ import :variant;
 import :list_box; // SplitItems
 import :draw_context;
 import :layout_style;     // LayoutLength, Overflow
-import :event_dispatcher; // SuppressClick (a resize is no click)
+import :event_dispatcher; // SuppressClick, so a resize is not taken as a click
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -47,8 +47,9 @@ export namespace foundation::gui
 {
     class TableView;
 
-    // A column's header cell: a click reports its column; a drag from its right edge resizes the
-    // column; the sorted column's cell shows which way (a triangle, up ascending).
+    // A column's header cell. A click reports its column, and a drag from its right edge resizes
+    // the column. The sorted column's cell shows the direction with a triangle, pointing up for
+    // ascending.
     class TableHeaderCell : public Label
     {
         RTTI_OBJECT(TableHeaderCell, Label)
@@ -56,7 +57,7 @@ export namespace foundation::gui
         explicit TableHeaderCell(TableView& table) : m_table(table)
         {
             SetTag(core::StringView(u8"tableheadercell"));
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
         }
@@ -64,8 +65,8 @@ export namespace foundation::gui
         [[nodiscard]] usize GetColumn() const noexcept { return m_column; }
         [[nodiscard]] bool IsResizing() const noexcept { return m_resizing; }
 
-        // A press on its edge, its inline end, resizes its column (E7): a drag from what holds it is
-        // not offered.
+        // A press on the cell's inline-end edge resizes its column, so no drag is offered to the
+        // nodes that hold it.
         [[nodiscard]] bool OwnsPressDrag(core::Float2 local) const override { return OnGripAt(local.x); }
 
     protected:
@@ -77,18 +78,18 @@ export namespace foundation::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
 
     private:
-        static constexpr f32 kGrip = 5.0f; // how near its inline-end edge a press resizes
+        static constexpr f32 kGrip = 5.0f; // how near the inline-end edge a press must be to resize
         [[nodiscard]] bool OnGripAt(f32 x) const { return IsRightToLeft() ? x <= kGrip : x >= GetSize().x - kGrip; }
         [[nodiscard]] bool OnGrip(core::Float2 world) const { return OnGripAt(ConvertToNodeSpace(world).x); }
 
-        TableView& m_table; // the view whose header holds it
+        TableView& m_table; // the view whose header holds this cell
         usize m_column = 0;
         bool m_resizing = false;
         f32 m_pressX = 0.0f;
         f32 m_startWidth = 0.0f;
     };
 
-    // A table row's content: one cell per column, placed by the table's widths.
+    // A table row's content: one cell per column, placed by the table's column widths.
     class TableRowContent : public UIWidget
     {
         RTTI_OBJECT(TableRowContent, UIWidget)
@@ -97,17 +98,17 @@ export namespace foundation::gui
 
         [[nodiscard]] usize CellCount() const noexcept { return m_cells.Size(); }
         [[nodiscard]] Label* CellAt(usize i) const { return i < m_cells.Size() ? m_cells[i].Get() : nullptr; }
-        /// As many cells as `count`.
+        /// Makes sure the row has `count` cells.
         void EnsureCells(usize count)
         {
             while (m_cells.Size() < count)
             {
                 auto cell = core::MakeRef<Label>(MemoryAllocator());
-                cell->SetTag(core::StringView(u8"tablecell")); // a row's, not a sheet's generic label
+                cell->SetTag(core::StringView(u8"tablecell")); // tagged so sheets style cells apart from generic labels
                 StyleWriteScope defaults(*cell);
                 cell->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
                 cell->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
-                cell->SetHitTestVisible(false); // a press on it is the row's
+                cell->SetHitTestVisible(false); // presses go through to the row
                 ShareTextStyle(*cell);
                 AddChild(cell.Get());
                 m_cells.PushBack(core::Move(cell));
@@ -126,11 +127,11 @@ export namespace foundation::gui
         }
 
     private:
-        const TableView& m_table; // the view whose row holds it
+        const TableView& m_table; // the view whose row holds this content
         Array<core::RefPtr<Label>> m_cells;
     };
 
-    /// A row of a table written in markup: its cells as text, '|' between them.
+    /// A table row written in markup, holding its cells as text with '|' between them.
     class TableItem : public UIWidget
     {
         RTTI_OBJECT(TableItem, UIWidget)
@@ -138,7 +139,7 @@ export namespace foundation::gui
         TableItem()
         {
             SetTag(core::StringView(u8"tableitem"));
-            SetDisplayed(false); // data, not drawn
+            SetDisplayed(false); // only data; never drawn
         }
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
@@ -148,15 +149,15 @@ export namespace foundation::gui
             return true;
         }
         [[nodiscard]] core::String GetCells() const { return m_cells; }
-        /// Its cells, '|' between them; set after the table took it in (a script's `add` then
-        /// `cells`), the table's row follows.
+        /// Sets the cells, with '|' between them. When set after the table adopted the item (a
+        /// script's `add`, then `cells`), the table's row is updated to match.
         void SetCells(const core::String& cells)
         {
             m_cells = cells;
             if (m_onCellsChanged)
                 m_onCellsChanged();
         }
-        /// The table that took it in hears when its cells change.
+        /// Sets the callback the adopting table uses to hear when the cells change.
         void SetOnCellsChanged(core::Function<void()> callback) { m_onCellsChanged = core::Move(callback); }
 
     private:
@@ -173,14 +174,15 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"tableview"));
             m_header = core::MakeRef<UIWidget>(MemoryAllocator());
             m_header->SetTag(core::StringView(u8"tableheader"));
-            m_header->SetBox(FilledBox(m_headerColor)); // its own face, which a sheet's replaces
+            m_header->SetBox(FilledBox(m_headerColor)); // the default face; a style sheet's box replaces it
             AddChild(m_header.Get());
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextColor(Color{0.86f, 0.89f, 0.94f, 1.0f});
-            EditLayoutStyle([](LayoutStyle& s) { s.OverflowX = Overflow::Auto; }); // columns past its width
+            EditLayoutStyle([](LayoutStyle& s) { s.OverflowX = Overflow::Auto; }); // scroll when the columns are wider than the view
         }
 
-        // Its own model goes before the view's base would let go of it: let go first.
+        // The table's own model is destroyed before the ItemView base releases it, so detach the
+        // model first.
         ~TableView() override { SetModel(nullptr); }
 
         void SetHeaderHeight(f32 height)
@@ -188,7 +190,7 @@ export namespace foundation::gui
             m_headerHeight = core::Max(0.0f, height);
             RequestLayout();
         }
-        /// A column's width: pixels, a percentage of the view's width, or auto.
+        /// Sets a column's width: pixels, a percentage of the view's width, or auto.
         void SetColumnWidth(usize column, LayoutLength width)
         {
             while (m_columnWidths.Size() <= column)
@@ -196,8 +198,8 @@ export namespace foundation::gui
             m_columnWidths[column] = width;
             RequestLayout();
         }
-        /// Every column's width as text, one per column (`120px 30% auto`; a bare number is
-        /// pixels): markup's `column-widths`.
+        /// Sets every column's width from text, one value per column (`120px 30% auto`; a bare
+        /// number means pixels). This is markup's `column-widths`.
         void SetColumnWidthsText(const core::String& text)
         {
             m_columnWidths.Clear();
@@ -237,14 +239,16 @@ export namespace foundation::gui
             }
             return text;
         }
-        /// The narrowest a column gets (an auto one squeezed, one dragged).
+        /// Sets the narrowest a column can get, whether an auto column is squeezed or a column is
+        /// dragged.
         void SetMinColumnWidth(f32 width)
         {
             m_minColumnWidth = core::Max(1.0f, width);
             RequestLayout();
         }
         [[nodiscard]] f32 GetMinColumnWidth() const noexcept { return m_minColumnWidth; }
-        /// Its columns' total width in the last layout (past the view's: it scrolls across).
+        /// Returns the columns' total width in the last layout. When it exceeds the view's width,
+        /// the view scrolls horizontally.
         [[nodiscard]] f32 GetColumnsWidth() const
         {
             f32 total = 0.0f;
@@ -252,7 +256,8 @@ export namespace foundation::gui
                 total += w;
             return total;
         }
-        /// The sort indicator: which column shows which way (a header click that sorts sets it).
+        /// Sets the sort indicator: which column shows which direction. A header click that sorts
+        /// sets it.
         void SetSortIndicator(i32 column, SortOrder order)
         {
             m_sortColumn = column;
@@ -262,12 +267,12 @@ export namespace foundation::gui
         }
         [[nodiscard]] i32 GetSortColumn() const noexcept { return m_sortColumn; }
         [[nodiscard]] SortOrder GetSortOrder() const noexcept { return m_sortOrder; }
-        /// A column's width in the last layout.
+        /// Returns a column's width in the last layout.
         [[nodiscard]] f32 GetColumnWidth(usize column) const { return column < m_widths.Size() ? m_widths[column] : 0.0f; }
         [[nodiscard]] usize GetColumnCount() const { return GetModel() != nullptr ? GetModel()->ColumnCount() : 0; }
 
-        // === Markup: a model of its own ===
-        /// Its columns' names, '|' between them (markup's `columns`).
+        // === Markup: the table's own model ===
+        /// Sets the column names, with '|' between them (markup's `columns`).
         void SetColumnsText(const core::String& text)
         {
             EnsureOwnModel();
@@ -283,7 +288,7 @@ export namespace foundation::gui
                 columns.PushBack(GetModel()->ColumnName(c));
             return JoinItems(columns);
         }
-        /// Its own model's cells may be edited in place (F2).
+        /// Sets whether the cells of the table's own model may be edited in place (F2).
         void SetEditable(bool editable)
         {
             EnsureOwnModel();
@@ -291,7 +296,7 @@ export namespace foundation::gui
             m_editable = editable;
         }
         [[nodiscard]] bool IsEditable() const noexcept { return m_editable; }
-        /// Markup's children are its rows (TableItems).
+        /// Returns the host for markup's children, which become rows (TableItems).
         [[nodiscard]] Node* GetChildHost() override
         {
             if (!m_markupHost)
@@ -307,8 +312,8 @@ export namespace foundation::gui
                         TableItem* item = core::Cast<TableItem>(child.Get());
                         if (item == nullptr)
                             continue;
-                        // Its row, and the item kept: a script that added it sets its cells after,
-                        // through the handle it holds, and the row follows.
+                        // Add the item's row and keep the item. A script that added it may set its
+                        // cells later through the handle it holds, and the row then follows.
                         const usize row = self->m_ownModel->RowCount(ModelIndex{});
                         self->m_ownModel->AddRow(ParseCells(item->GetCells()));
                         item->SetOnCellsChanged([self, item, row]()
@@ -324,12 +329,13 @@ export namespace foundation::gui
             return m_markupHost.Get();
         }
 
-        // Header clicks (a column); with none set, a click sorts where the model can.
+        // Sets the callback for header clicks, passing the column. With no callback set, a click
+        // sorts where the model can.
         void SetOnColumnHeaderClicked(core::Function<void(usize)> callback) { m_onHeaderClicked = core::Move(callback); }
         [[nodiscard]] Node* GetHeader() const noexcept { return m_header.Get(); }
 
     protected:
-        // Its header cells write in its font (their colour is their own: tableheadercell { color }).
+        // The header cells use the table's font; their colour is their own (tableheadercell { color }).
         void OnTextStyleChange() override
         {
             for (const core::RefPtr<TableHeaderCell>& h : m_headerCells)
@@ -339,8 +345,8 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"tablerow"); }
         [[nodiscard]] f32 ContentTopInset() const override { return m_headerHeight; }
         void OnModelChanged() override { SyncHeader(); }
-        // The columns' widths for this layout, from the content box's width: a row is as wide as
-        // the view, or as the columns when they are wider.
+        // Works out the column widths for this layout from the content box's width. A row is as
+        // wide as the view, or as the columns when they are wider.
         [[nodiscard]] f32 RowWidth(f32 width) const override
         {
             ComputeColumnWidths(width);
@@ -365,10 +371,10 @@ export namespace foundation::gui
             return MirroredIn(Rect{x, box.y, GetColumnWidth(static_cast<usize>(core::Max(0, column))), box.height}, box, IsRightToLeft());
         }
 
-        // The header lies at the top of the view, over the rows scrolled under it.
+        // Places the header at the top of the view, over the rows that scroll beneath it.
         void OnLayoutDecorations() override
         {
-            // Over the rows, from where they start (their columns from the inline start).
+            // The header lines up with where the rows start, with columns from the inline start.
             const Rect box = GetContentBounds();
             m_header->SetVisible(m_headerHeight > 0.0f);
             const f32 width = core::Max(box.width, GetColumnsWidth());
@@ -383,15 +389,15 @@ export namespace foundation::gui
                 x += w;
             }
             if (GetChildIndex(m_header.Get()) + 1 != ChildCount())
-                m_header->ToFront(); // drawn, and pressed, over the rows
+                m_header->ToFront(); // drawn over the rows and hit before them
         }
 
     private:
         friend class TableRowContent;
         friend class TableHeaderCell;
 
-        // The header's cells follow the columns (cells kept while the columns stay, so a press on
-        // one that sorts does not free the cell under the pointer).
+        // Keeps the header cells in step with the columns. Existing cells are kept while their
+        // columns stay, so a press that sorts does not destroy the cell under the pointer.
         void SyncHeader()
         {
             const usize columns = GetColumnCount();
@@ -422,15 +428,16 @@ export namespace foundation::gui
                 m_onHeaderClicked(column);
                 return;
             }
-            // Nothing listening: sort by it where the model can (a new column ascending, the
-            // same one turning over).
+            // Nothing is listening, so sort by the column where the model can: ascending for a new
+            // column, reversing the order for the same one.
             const SortOrder order = m_sortColumn == static_cast<i32>(column) && m_sortOrder == SortOrder::Ascending ? SortOrder::Descending : SortOrder::Ascending;
             if (GetModel() != nullptr && GetModel()->Sort(column, order))
                 SetSortIndicator(static_cast<i32>(column), order);
         }
 
-        // Pixels and percentages as they say, auto columns an equal share of what is left; none
-        // narrower than the minimum (so the columns may come out wider than the view).
+        // Pixel and percentage widths are used as given, and auto columns share what is left
+        // equally. No column is narrower than the minimum, so the columns may come out wider than
+        // the view.
         void ComputeColumnWidths(f32 bodyWidth) const
         {
             const usize columns = GetColumnCount();
@@ -451,13 +458,13 @@ export namespace foundation::gui
             for (usize c = 0; c < columns; ++c)
             {
                 const LayoutLength w = c < m_columnWidths.Size() ? m_columnWidths[c] : LayoutLength{};
-                // Read as the given widths are above: ValueOr on this temporary goes unemitted in an
-                // optimized clang build, which then fails to link.
+                // Read the value the same way as in the loop above. ValueOr on this temporary is not
+                // emitted in an optimized clang build, which then fails to link.
                 const core::Optional<f32> px = w.Resolve(bodyWidth);
                 m_widths.PushBack(core::Max(m_minColumnWidth, px.HasValue() ? px.Value() : share));
             }
-            // Widths changed with the row's own width the same (one column narrower, an auto one
-            // wider): the rows' cells are placed again, as the header's are.
+            // The column widths can change while the row's width stays the same (one column
+            // narrower, an auto one wider), so lay the rows' cells out again, as the header's are.
             bool changed = before.Size() != m_widths.Size();
             for (usize c = 0; c < m_widths.Size() && !changed; ++c)
                 changed = before[c] != m_widths[c];
@@ -474,7 +481,7 @@ export namespace foundation::gui
             m_ownProxy = core::MakeUnique<SortingProxyModel>(MemoryAllocator(), m_ownModel.Get());
             SetModel(m_ownProxy.Get());
         }
-        // A row's cells from text: a number stays a number (it sorts by value).
+        // Parses a row's cells from text. A number stays a number, so it sorts by value.
         [[nodiscard]] static Array<Variant> ParseCells(const core::String& text)
         {
             Array<Variant> cells;
@@ -493,22 +500,22 @@ export namespace foundation::gui
             }
             return cells;
         }
-        // A drag of a header cell's edge: the column takes that many pixels.
+        // Handles a drag of a header cell's edge: the column gets that many pixels.
         void ResizeColumn(usize column, f32 width) { SetColumnWidth(column, LayoutLength::Px(core::Max(m_minColumnWidth, width))); }
 
         core::RefPtr<UIWidget> m_header;
         Array<core::RefPtr<TableHeaderCell>> m_headerCells;
         Array<LayoutLength> m_columnWidths; // auto when unset
-        mutable Array<f32> m_widths;   // resolved for the current layout (RowWidth works them out)
+        mutable Array<f32> m_widths;   // resolved widths for the current layout, worked out by RowWidth
         core::Function<void(usize)> m_onHeaderClicked;
         i32 m_sortColumn = -1;
         SortOrder m_sortOrder = SortOrder::None;
         f32 m_headerHeight = 26.0f;
         f32 m_minColumnWidth = 40.0f;
-        core::UniquePtr<TableModel> m_ownModel;         // markup's rows
-        Array<core::RefPtr<TableItem>> m_rowItems;      // the items they came from, each its row's
-        core::UniquePtr<SortingProxyModel> m_ownProxy; // over it, so its header sorts
-        core::RefPtr<Node> m_markupHost;               // where markup's rows land, then taken in
+        core::UniquePtr<TableModel> m_ownModel;         // the rows from markup
+        Array<core::RefPtr<TableItem>> m_rowItems;      // the item each row came from, in row order
+        core::UniquePtr<SortingProxyModel> m_ownProxy; // over m_ownModel, so the header can sort
+        core::RefPtr<Node> m_markupHost;               // receives markup's rows before they are adopted
         bool m_editable = false;
         Color m_headerColor{0.20f, 0.22f, 0.27f, 1.0f};
         Color m_headerTextColor{0.86f, 0.89f, 0.94f, 1.0f};
@@ -518,7 +525,7 @@ export namespace foundation::gui
     {
         if (event.Button != MouseButton::Left || !OnGrip(event.Position))
             return;
-        // On its edge: a resize, not a click (no sort follows).
+        // A press on the edge is a resize, not a click, so no sort follows.
         event.Handled = true;
         m_resizing = true;
         m_pressX = event.Position.x;
@@ -531,12 +538,12 @@ export namespace foundation::gui
     {
         if (m_resizing)
         {
-            // Pulled toward the inline end, it widens.
+            // Dragging toward the inline end widens the column.
             const f32 dx = event.Position.x - m_pressX;
             m_table.ResizeColumn(m_column, m_startWidth + (IsRightToLeft() ? -dx : dx));
             return;
         }
-        SetCursor(OnGrip(event.Position) ? Cursor::EwResize : Cursor::Auto); // the edge says it resizes
+        SetCursor(OnGrip(event.Position) ? Cursor::EwResize : Cursor::Auto); // the cursor shows the edge resizes
     }
 
     inline void TableHeaderCell::OnMouseClick(const MouseEvent& event)
@@ -550,7 +557,7 @@ export namespace foundation::gui
         Label::OnDraw(ctx, localBounds);
         if (m_table.GetSortColumn() != static_cast<i32>(m_column) || m_table.GetSortOrder() == SortOrder::None)
             return;
-        // A small triangle at its inline end, up for ascending, down for descending.
+        // A small triangle at the cell's inline end, up for ascending, down for descending.
         const Rect box = GetContentBounds();
         const f32 s = 4.0f;
         const f32 cx = MirroredX(box.x + box.width - s, box, IsRightToLeft());
@@ -566,7 +573,7 @@ export namespace foundation::gui
 
     inline core::Float2 TableRowContent::MeasureContent(core::Float2 available)
     {
-        // As tall as its tallest cell at its column's width.
+        // The row is as tall as its tallest cell at that cell's column width.
         f32 height = 0.0f;
         for (usize c = 0; c < m_cells.Size(); ++c)
             if (m_cells[c]->IsDisplayed())
@@ -579,7 +586,7 @@ export namespace foundation::gui
 
     inline void TableRowContent::OnLayout()
     {
-        // Its columns from the inline start.
+        // Place the cells by column from the inline start.
         const Rect box = GetContentBounds();
         const bool rtl = IsRightToLeft();
         f32 x = box.x;

@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Primary module for the vector-graphics library. Re-exports all partitions.
-/// Ported from Sedulous.VG.
 
 export module foundation.vg;
 

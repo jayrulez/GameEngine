@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Resource composition (engine-composition.md D1-D3): a module's factory descriptions, the
+// Resource composition: a module's factory descriptions, the
 // services a gated factory asks for by type, and the set that creates, owns and registers.
 
 #include <doctest/doctest.h>

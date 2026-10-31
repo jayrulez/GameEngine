@@ -1,4 +1,4 @@
-# Foundation::Shaders.System - `foundation.shaders.system` (variant compile-on-demand + cache,
+# Foundation::Shaders.System - `foundation.shaders.system` (variant compile on demand and cache,
 # plus the dev file-backed source provider). Needs the RHI (to create GPU modules) on
 # top of the RHI-free foundation.shaders; the VFS for the file provider.
 

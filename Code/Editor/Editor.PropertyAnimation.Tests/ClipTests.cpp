@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The property animation panel's UI-free half (Documentation/Specs/editor-gui.md, 5.4, layer 9,
-// part 1): the track seeds; the clip document over a scratch project (its own history, its unsaved
-// mark following the history to where it was saved, a gesture one step or nothing); the clip as the
-// dopesheet's and the curve view's source (its channels and paths, keys moved, deleted and inserted,
-// each one step); the preview (the entity posed, what it held put back, never a step of anyone's);
-// the transport's clock.
+// The property animation panel's UI-free half: the track seeds; the clip document over a scratch
+// project (its own history, its unsaved mark following the history back to where it was saved, a
+// gesture as one step or nothing); the clip as the dopesheet's and curve view's source (its channels
+// and paths, keys moved, deleted and inserted, each as one step); the preview (the entity posed and
+// its values restored, never a step in any history); and the transport's clock.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -29,7 +28,7 @@ namespace propanim = foundation::propertyanimation;
 namespace scene = foundation::scene;
 namespace gui = foundation::gui;
 
-// A plain value component (REFLECT_VALUE patches TypeOf<PreviewComp>(), what its manager names).
+// A plain value component (REFLECT_VALUE patches TypeOf<PreviewComp>(), which its manager names).
 struct PreviewComp
 {
     Float3 position{0.0f, 0.0f, 0.0f};
@@ -42,8 +41,8 @@ REFLECT_VALUE(PreviewComp, "rtti::propanim::cliptest")
 
 namespace
 {
-    // A nested reflected struct (the light.tint path), inside a component of every animatable kind
-    // and one leaf no track takes.
+    // A nested reflected struct (the light.tint path) inside a component that has every animatable
+    // kind and one leaf no track takes.
     class TestLight : public Object
     {
         RTTI_OBJECT(TestLight, Object)
@@ -159,7 +158,7 @@ TEST_CASE("clip seeds: the four animatable kinds, nested leaves by their paths, 
         tint = tint || (seed.propertyPath == String(u8"light.tint") && seed.kind == propanim::TrackValueKind::Color);
     CHECK(tint);
 
-    // An entity's: its transform's three first, then its components'.
+    // An entity's seeds: its transform's three first, then its components'.
     scene::Scene sc(DefaultAllocator(), u8"seeds");
     auto* manager = sc.AddSystem<scene::ComponentManager<PreviewComp>>();
     const scene::EntityHandle e = sc.CreateEntity(u8"e");
@@ -189,7 +188,7 @@ TEST_CASE("clip document: its own history, unsaved until back where it was saved
     bed.document->Commands().Redo();
     CHECK(bed.document->IsDirty());
 
-    // Saved, then read back: the track kept.
+    // Saved, then read back: the track is kept.
     REQUIRE(bed.document->Save().IsOk());
     CHECK_FALSE(bed.document->IsDirty());
     ClipDocument again(bed.context);
@@ -197,14 +196,15 @@ TEST_CASE("clip document: its own history, unsaved until back where it was saved
     REQUIRE(again.Clip().tracks.Size() == 1u);
     CHECK(again.Clip().tracks[0].channels[1].Evaluate(0.0f) == doctest::Approx(2.0f));
 
-    // Below the save, a new step: the save is off the history, unsaved even back there.
+    // A new step below the save takes the save off the history, so the clip is unsaved even back
+    // there.
     bed.document->Commands().Undo();
     CHECK(bed.document->IsDirty());
     bed.AddTrack(Float3Track(u8"PreviewComp", 0.0f, 0.0f, 0.0f));
     bed.document->Commands().Undo();
     CHECK(bed.document->IsDirty());
 
-    // A gesture: live, then one step; cancelled, nothing.
+    // A gesture edits live, then becomes one step; a cancelled one changes nothing.
     bed.document->Commands().Redo();
     const usize steps = bed.document->Commands().Size();
     bed.document->BeginGesture();
@@ -219,7 +219,7 @@ TEST_CASE("clip document: its own history, unsaved until back where it was saved
     CHECK(bed.document->Clip().tracks[0].channels[0].Evaluate(0.0f) == doctest::Approx(9.0f));
     CHECK(bed.document->Commands().Size() == steps + 1u);
 
-    // Its length covers its keys.
+    // The length covers the keys.
     bed.document->Edit(u8"test", [](propanim::PropertyAnimationClip& clip) { clip.tracks[0].channels[0].AddKey(Key(3.0f, 1.0f)); });
     CHECK(bed.document->Length() == doctest::Approx(3.0f));
     CHECK(bed.changes > 0u);
@@ -252,7 +252,8 @@ TEST_CASE("clip source: a channel per curve and per rotation, keys moved, delete
     REQUIRE(times.Size() == 2u);
     CHECK(times[1] == doctest::Approx(1.0f));
 
-    // A move previewed from where the keys were, then one step; the key's new place told.
+    // A move is previewed from where the keys were, then becomes one step; the key's new place is
+    // reported.
     bed.AddTrack(Float3Track(u8"PreviewComp", 0.0f, 0.0f, 0.0f)); // channels 4..6
     bed.document->Edit(u8"test", [](propanim::PropertyAnimationClip& clip) { clip.tracks[2].channels[0].AddKey(Key(1.0f, 5.0f)); });
     const usize steps = bed.document->Commands().Size();
@@ -263,7 +264,7 @@ TEST_CASE("clip source: a channel per curve and per rotation, keys moved, delete
     REQUIRE(moved.Size() == 1u);
     CHECK(moved[0].Index == 1u); // past the key at 1 s
     source.PreviewKeysMove(Span<const gui::TimelineKeyRef>(&first, 1u), 0.5f, moved);
-    CHECK(moved[0].Index == 0u); // each preview from the start
+    CHECK(moved[0].Index == 0u); // each preview starts from the original place
     source.CommitKeysMove();
     CHECK(bed.document->Commands().Size() == steps + 1u);
     source.GetKeyTimes(4, times);
@@ -272,18 +273,18 @@ TEST_CASE("clip source: a channel per curve and per rotation, keys moved, delete
     source.GetKeyTimes(4, times);
     CHECK(times[0] == doctest::Approx(0.0f));
 
-    // Deleted: one step; none there, nothing.
+    // Deleting is one step; with no key there, nothing changes.
     const gui::TimelineKeyRef rotationFirst{3, 0};
     REQUIRE(source.DeleteKeys(Span<const gui::TimelineKeyRef>(&rotationFirst, 1u)));
     CHECK(bed.document->Clip().tracks[1].quatKeys.Size() == 1u);
     const gui::TimelineKeyRef nowhere{3, 9};
     CHECK_FALSE(source.DeleteKeys(Span<const gui::TimelineKeyRef>(&nowhere, 1u)));
 
-    // Inserted: the clip's value there; on an empty channel, the application's.
+    // Inserting takes the clip's value at that time; on an empty channel, the application's.
     gui::TimelineKeyRef made;
     REQUIRE(source.InsertKey(4, 0.5f, made));
     CHECK(made.Index == 1u);
-    CHECK(bed.document->Clip().tracks[2].channels[0].Keys()[1].value == doctest::Approx(2.5f)); // halfway 0 -> 5
+    CHECK(bed.document->Clip().tracks[2].channels[0].Keys()[1].value == doctest::Approx(2.5f)); // halfway from 0 to 5
     source.CurrentValue = [](const propanim::PropertyTrack&) { return Variant::From(Float3{7.0f, 8.0f, 9.0f}); };
     bed.document->Edit(u8"test", [](propanim::PropertyAnimationClip& clip) { clip.tracks[2].channels[1].Clear(); });
     REQUIRE(source.InsertKey(5, 1.0f, made));
@@ -321,7 +322,7 @@ TEST_CASE("clip preview: the entity posed, what it held put back, kept again whe
     CHECK(manager->Get(e)->position.y == doctest::Approx(200.0f));
     CHECK(preview.Read(id, u8"PreviewComp", u8"position").Get<Float3>().z == doctest::Approx(300.0f));
 
-    // A transform track added: the preview keeps the transform as it was too.
+    // A transform track added: the preview saves and restores the transform too.
     clip.tracks.PushBack(Float3Track(u8"Transform", 9.0f, 9.0f, 9.0f));
     preview.Pose(id, clip, 0.5f);
     CHECK(sc.GetLocalTransform(e).position.x == doctest::Approx(9.0f));

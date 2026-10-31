@@ -3,13 +3,13 @@
 
 // Editor App - :resource_ref_editor partition
 //
-// The inspector's asset reference (Documentation/Specs/editor-gui.md, 5.2, layer 4): the property
-// grid's editor for GUI.Toolkit's Reference kind, an asset slot. What may fill it is asked of the
-// builders, never listed here (ruling 19): the source asset types whose builder makes the type the
-// reference points at, or one derived from it. Pick, drop and clear are one write, the grid's, so
-// one undo step; a pick opens the asset picker (AssetPickerWindow). Open and reveal show the asset.
-// What it asks of the editor is a table of its own (ResourceRefServices), so a test gives its own
-// and the application fills it from its context.
+// The inspector's asset reference: the property grid's editor for GUI.Toolkit's Reference kind, an
+// asset slot. What may fill it is asked of the builders, never listed here: the source asset types
+// whose builder makes the type the reference points at, or a type derived from it. Pick, drop and
+// clear are each one write through the grid, so each is one undo step; a pick opens the asset
+// picker (AssetPickerWindow). Open and reveal show the asset. What it needs from the editor is a
+// table of its own (ResourceRefServices), so a test supplies its own and the application fills it
+// from its context.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -40,24 +40,25 @@ export namespace editor::app
         RefPtr<gui::Drawable> Picture;
     };
 
-    /// What a reference row asks of the editor. Each is optional: one unset leaves its verb out.
+    /// The services a reference row needs from the editor. Each is optional; an unset one leaves
+    /// its verb out.
     struct ResourceRefServices
     {
         /// The asset types, by name, that may fill a reference to `target`.
         Function<Array<String>(const TypeInfo& target)> AcceptedTypes;
-        /// What `id` names; false when the project has no such asset (a dangling reference).
+        /// Describes what `id` names; false when the project has no such asset (a dangling reference).
         Function<bool(const Guid& id, ResourceRefShown& out)> Describe;
-        /// Opens a picker over `types` (empty: any), `current` checked; `chosen`
-        /// assigns what it picks (nil: None).
+        /// Opens a picker over `types` (empty: any) with `current` checked; `chosen` assigns what it
+        /// picks (nil: None).
         Function<void(Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)> Pick;
         Function<void(const Guid&)> Open;
         Function<void(const Guid&)> Reveal;
 
-        /// Filled from the editor's context: the builders' types (SourceAssetTypesOf; none, the
-        /// type itself, a reference naming a source asset type), the
-        /// project's names, the type icons and thumbnails, the asset picker over the project's assets (`open`
-        /// shows the asset picker for a request), the context's open and reveal. `context`
-        /// and `icons` outlive what it is given to.
+        /// Fills the table from the editor's context: the types the builders make the target from
+        /// (SourceAssetTypesOf; when there are none, the type itself, for a reference naming a
+        /// source asset type), the project's names, the type icons and thumbnails, the asset picker
+        /// over the project's assets (`open` shows the asset picker for a request), and the
+        /// context's open and reveal. `context` and `icons` outlive whatever the table is given to.
         [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons,
                                                       Function<void(AssetPickRequest request)> open)
         {
@@ -76,8 +77,8 @@ export namespace editor::app
                     request.chosen = Move(chosen);
                     openPicker(Move(request));
                 };
-            // What the builders make it from; none: the type itself, a reference naming a source
-            // asset type (Project Settings', ruling 20).
+            // The types the builders make it from; when there are none, the type itself, for a
+            // reference naming a source asset type (as Project Settings' references do).
             services.AcceptedTypes = [ctx](const TypeInfo& target)
             {
                 Array<String> names;
@@ -103,7 +104,7 @@ export namespace editor::app
                     out.GlyphClass = icon.Class;
                 }
                 if (ctx->Thumbnails() != nullptr)
-                    out.Picture = ctx->Thumbnails()->Get(id); // null until generated; a bind asks again
+                    out.Picture = ctx->Thumbnails()->Get(id); // null until generated; the next bind asks again
                 return true;
             };
             services.Open = [ctx](const Guid& id)
@@ -130,14 +131,14 @@ export namespace editor::app
     public:
         static constexpr StringView kMissingText = kResourceRefEditorMissingText;
 
-        /// `services` outlives the editor (the registrar's).
+        /// `services` (the registrar's) outlives the editor.
         explicit ResourceRefEditor(const ResourceRefServices& services) : m_services(&services)
         {
             AddClass(u8"reference");
             m_slot = MakeRef<AssetPickerSlot>(MemoryAllocator());
             Hold(*m_slot);
         }
-        ResourceRefEditor() : ResourceRefEditor(m_none) {} // what RTTI makes (its own empty services); the registry's has its services
+        ResourceRefEditor() : ResourceRefEditor(m_none) {} // the constructor RTTI uses (with its own empty services); the registry's instance has real services
 
         /// The editor for every Reference property `registry` shows; `services` outlives it.
         static void Register(gui::PropertyEditorRegistry& registry, const ResourceRefServices& services)
@@ -165,7 +166,8 @@ export namespace editor::app
         }
 
     private:
-        // Its verbs, as far as the services and the property allow: a read-only one only opens.
+        // Wires its verbs as far as the services and the property allow; a read-only reference
+        // only opens.
         void Wire()
         {
             ResourceRefEditor* self = this;
@@ -201,7 +203,7 @@ export namespace editor::app
             else
             {
                 m_slot->SetGlyph({});
-                m_slot->SetValue(kMissingText); // still cleared, still replaced
+                m_slot->SetValue(kMissingText); // it can still be cleared or replaced
             }
         }
         // The picker answers later, when the row may show another property (rows are pooled):
@@ -219,7 +221,7 @@ export namespace editor::app
         // One write through the grid: a pick, a drop and a clear alike.
         void Assign(const Guid& id)
         {
-            RefPtr<ResourceRefEditor> keep(this); // the write may rebind the row
+            RefPtr<ResourceRefEditor> keep(this); // keep alive: the write may rebind the row
             String text;
             if (!id.IsNil())
             {
@@ -229,7 +231,7 @@ export namespace editor::app
             }
             ApplyEdit(gui::PropertyWrite{gui::Variant(text.AsView())});
         }
-        ResourceRefServices m_none; // an editor RTTI made has no services: its own, empty (a process-wide one would be state in an interface)
+        ResourceRefServices m_none; // an editor RTTI makes has no services, so it owns an empty table (a process-wide one would put state in an interface)
         const ResourceRefServices* m_services;
         RefPtr<AssetPickerSlot> m_slot;
         Array<String> m_types;

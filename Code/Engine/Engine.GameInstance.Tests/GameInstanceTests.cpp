@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.gameinstance - the extracted run bracket owns the script run state + time scale.
+// engine.gameinstance - the run bracket owns the script run state and time scale.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
 import foundation.core;
 import engine.gameinstance;
-import foundation.runtime;      // foundation runtime SubsystemManager/Subsystem (was transitively reachable pre-namespace-split)
+import foundation.runtime;      // SubsystemManager/Subsystem
 import foundation.scene;
-import foundation.scene.resource;    // SceneDocument + LoadScene round-trip
+import foundation.scene.resource;    // SceneDocument and the LoadScene round-trip
 import foundation.content;           // ContentDatabase / Instance
 import foundation.resource;          // ResourceManager
 import foundation.vfs;               // NativeFileSystem
@@ -89,11 +89,11 @@ namespace
 
 TEST_CASE("script.facades: reserved contract-class names (Game/Level) are refused as facades")
 {
-    // A user's own class MUST take these names (the game orchestrator is `Game`, the scene
-    // tier is `Level`), so a facade sharing one would clash. Registration must be refused.
+    // A user's own class has to take these names (the game orchestrator is `Game`, the scene tier
+    // is `Level`), so a facade sharing one would clash. Registration must be refused.
     script::RegisterExtraFacadeName(u8"Game");
     script::RegisterExtraFacadeName(u8"Level");
-    // A non-reserved name still registers (idempotently) - the control.
+    // A non-reserved name still registers (idempotently): the control.
     script::RegisterExtraFacadeName(u8"run");
 
     bool sawGame = false;
@@ -151,8 +151,8 @@ TEST_CASE("game-instance: an instance is its scenes' and scripts' run")
     b.SetScene(nullptr);
 }
 
-// The run as a type (Documentation/Specs/run-context.md, P2): a GameInstance is its IRun - its
-// scenes borrow the run's own bus, and what it owns is reached through the run.
+// The run as a type: a GameInstance is its IRun, its scenes borrow the run's own bus, and what it
+// owns is reached through the run.
 TEST_CASE("game-instance: the instance is an IRun, its scenes on the run's bus, its services through the run")
 {
     engine::runtime::GameInstance gi;
@@ -180,9 +180,9 @@ TEST_CASE("game-instance: the instance is an IRun, its scenes on the run's bus, 
 TEST_CASE("game-instance: each instance's input runtime reads ONLY its own source (per-instance "
           "isolation)")
 {
-    // The multi-instance-PIE fix: each GameInstance has its OWN ActionRuntime bound to its OWN source,
-    // so one tab's keys never reach another tab's game (the shared-runtime bug that flipped the server
-    // tab into a client). Same map, same key, two sources - only the source with the key held fires.
+    // Each GameInstance has its own ActionRuntime bound to its own source, so one tab's keys never
+    // reach another tab's game (a shared runtime would let a key in the server tab drive the
+    // client). Same map, same key, two sources: only the source with the key held fires.
     engine::runtime::GameInstance a;
     engine::runtime::GameInstance b;
     OneKeySource srcA;
@@ -201,7 +201,7 @@ TEST_CASE("game-instance: each instance's input runtime reads ONLY its own sourc
 
     CHECK(a.InputRuntime().IsDown(a.InputRuntime().Resolve(u8"fire")) == true); // A's source has it
     CHECK(b.InputRuntime().IsDown(b.InputRuntime().Resolve(u8"fire")) ==
-          false); // B's does NOT (no cross-feed)
+          false); // B's does not (no cross-feed)
 
     // Flip which source holds the key: isolation holds the other way too.
     srcA.keyboard.down = false;
@@ -215,9 +215,9 @@ TEST_CASE("game-instance: each instance's input runtime reads ONLY its own sourc
 TEST_CASE("game-instance: each instance owns an independent networked endpoint (server + client "
           "over UDP)")
 {
-    // The per-instance networking model: a GameInstance COMPOSES a NetworkController (the
-    // INetworkController), opening its OWN real UDP endpoint on StartServer/Connect. The GameInstance
-    // forwards to it, so this end-to-end path is unchanged. Two instances = two isolated endpoints.
+    // The per-instance networking model: a GameInstance composes a NetworkController (the
+    // INetworkController), which opens its own real UDP endpoint on StartServer/Connect. The
+    // GameInstance forwards to it. Two instances are two isolated endpoints.
     engine::runtime::GameInstance server;
     engine::runtime::GameInstance client;
     CHECK(server.NetEndpoint() == nullptr); // offline until a role is entered
@@ -235,7 +235,7 @@ TEST_CASE("game-instance: each instance owns an independent networked endpoint (
 
     for (int i = 0; i < 400 && server.NetEndpoint()->Session().PeerCount() == 0u; ++i)
     {
-        // Transport pump is NetworkManager::UpdateTransport.
+        // The transport pump is NetworkManager::UpdateTransport.
         server.NetEndpoint()->UpdateTransport(16.0f);
         client.NetEndpoint()->UpdateTransport(16.0f);
         SleepMilliseconds(1);
@@ -247,8 +247,8 @@ TEST_CASE("game-instance: each instance owns an independent networked endpoint (
     CHECK(server.NetEndpoint() != nullptr); // the server is unaffected (isolation)
 }
 
-// A ws:// join address (Documentation/Specs/tls-http-wss.md, P4/P5): a native client joins the host's
-// browser gateway, at the game port + 1 (the StartServer convention) since the address names none.
+// A ws:// join address: a native client joins the host's browser gateway, at the game port + 1 (the
+// StartServer convention) since the address names none.
 TEST_CASE("game-instance: a ws:// address joins the host's gateway at port + 1, natively")
 {
     engine::runtime::GameInstance server;
@@ -284,10 +284,10 @@ TEST_CASE("game-instance: a ws:// address joins the host's gateway at port + 1, 
 
 TEST_CASE("network-controller: role lifecycle - start, stop, reconnect, and the online hook")
 {
-    // NetworkController, tested directly: it owns the
-    // endpoint + INetworkController role. The app-injected spawn resolver is applied to EVERY endpoint
-    // the controller opens (reconnect too - not consumed), asserted via Replication().HasSpawnHandler().
-    // The final destruct with a LIVE endpoint exercises the socket + session teardown path (ASAN).
+    // NetworkController, tested directly: it owns the endpoint and the INetworkController role. The
+    // app-injected spawn resolver is applied to every endpoint the controller opens (a reconnect
+    // too; it is not consumed), asserted through Replication().HasSpawnHandler(). The final
+    // destruction with a live endpoint exercises the socket and session teardown path (ASAN).
     engine::runtime::NetworkController controller;
     controller.SetSpawnResolverFactory(
         []() -> foundation::net::StateReplication::SpawnHandler
@@ -308,17 +308,18 @@ TEST_CASE("network-controller: role lifecycle - start, stop, reconnect, and the 
     controller.StopNetworking();
     CHECK(controller.NetEndpoint() == nullptr);     // the endpoint drops
 
-    // Reconnect: a fresh endpoint, and the resolver is applied AGAIN (the controller owns it, not consumed).
+    // Reconnect: a fresh endpoint, and the resolver is applied again (the controller owns it).
     REQUIRE(controller.StartServer(/*port=*/0, /*dedicated=*/true));
     REQUIRE(controller.NetEndpoint() != nullptr);
     CHECK(controller.NetEndpoint()->Replication().HasSpawnHandler());
-    // controller destructs here holding a live endpoint - the socket + session teardown path.
+    // controller destructs here holding a live endpoint: the socket and session teardown path.
 }
 
 TEST_CASE("network-controller: a fresh endpoint replicates the cached scene")
 {
-    // SetReplicatedScene cached BEFORE going online is applied to the endpoint at StartServer (a server
-    // assigns NetworkIds from the scene), and a live change is forwarded to the running endpoint too.
+    // SetReplicatedScene cached before going online is applied to the endpoint at StartServer (a
+    // server assigns NetworkIds from the scene), and a live change is forwarded to the running
+    // endpoint too.
     engine::runtime::NetworkController controller;
     scene::SceneManager scenes{DefaultAllocator()};
     scene::Scene* level = scenes.CreateScene(u8"Level");
@@ -336,10 +337,10 @@ TEST_CASE("network-controller: a fresh endpoint replicates the cached scene")
 TEST_CASE("network-controller: the replicated scene's NetworkSceneSystem drives the endpoint; "
           "stop detaches; reconnect re-wires (P2)")
 {
-    // The endpoint is wired into ONLY the replicated
-    // scene's NetworkSceneSystem, at the controller's edges. endpoint-dies-before-scene: StopNetworking
-    // detaches the system before the endpoint dies. stop-start-reconnect against a LIVE scene re-wires.
-    // (ASAN covers the teardown - the controller + scene destruct here holding a live endpoint.)
+    // The endpoint is wired into only the replicated scene's NetworkSceneSystem, at the
+    // controller's edges. Endpoint dies before scene: StopNetworking detaches the system before the
+    // endpoint dies. Stop, start and reconnect against a live scene re-wires. (ASAN covers the
+    // teardown: the controller and scene destruct here holding a live endpoint.)
     foundation::net::RegisterReplicationComponents();
     engine::runtime::NetworkController controller;
     scene::Scene s{DefaultAllocator()};
@@ -348,13 +349,13 @@ TEST_CASE("network-controller: the replicated scene's NetworkSceneSystem drives 
     REQUIRE(sys != nullptr);
 
     controller.SetReplicatedScene(&s);
-    CHECK(sys->Endpoint() == nullptr); // attached while offline -> inert (no endpoint yet)
+    CHECK(sys->Endpoint() == nullptr); // attached while offline: inert (no endpoint yet)
 
     REQUIRE(controller.StartServer(/*port=*/0, /*dedicated=*/true));
     CHECK(sys->Endpoint() == controller.NetEndpoint()); // the scene's fixed lane now drives the endpoint
 
     controller.StopNetworking();
-    CHECK(sys->Endpoint() == nullptr); // detached BEFORE the endpoint died (endpoint-dies-before-scene)
+    CHECK(sys->Endpoint() == nullptr); // detached before the endpoint died (endpoint-dies-before-scene)
     CHECK(controller.NetEndpoint() == nullptr);
 
     REQUIRE(controller.StartServer(/*port=*/0, /*dedicated=*/true)); // reconnect on the live scene
@@ -363,10 +364,10 @@ TEST_CASE("network-controller: the replicated scene's NetworkSceneSystem drives 
 
 TEST_CASE("game-instance: destroying the replicated scene clears the endpoint's scene (no dangling)")
 {
-    // Scene-dies-before-endpoint. DestroyScene of the CURRENT
-    // scene runs SetScene(nullptr) first, so the endpoint's replicated-scene pointer + the controller's
-    // cache clear BEFORE the scene is freed. A later transport pump / reconnect never touches dead memory
-    // (ASAN is the real assertion here).
+    // Scene dies before endpoint. DestroyScene of the current scene runs SetScene(nullptr) first,
+    // so the endpoint's replicated-scene pointer and the controller's cache clear before the scene
+    // is freed. A later transport pump or reconnect never touches dead memory (ASAN is the real
+    // assertion here).
     engine::runtime::GameInstance gi;
     scene::Scene* level = gi.CreateScene(u8"Level");
     REQUIRE(level != nullptr);
@@ -435,9 +436,9 @@ TEST_CASE("game-instance: starts, ticks, and stops a LUAU Game orchestrator (the
     CHECK_FALSE(gi.ScriptRunning());
 }
 
-// The run's HTTP (Documentation/Specs/tls-http-wss.md, P5): a game script's Http.get goes through the
-// client the run makes on its first request, and the answer reaches the handler on the run's tick.
-// Stopping the script drops what is still under way: its handler is never called.
+// The run's HTTP: a game script's Http.get goes through the client the run makes on its first
+// request, and the answer reaches the handler on the run's tick. Stopping the script drops what is
+// still under way: its handler is never called.
 TEST_CASE("game-instance: a game script fetches over the run's HTTP client; stopping drops what waits")
 {
     RegisterCoreTypes();
@@ -480,12 +481,12 @@ TEST_CASE("game-instance: a game script fetches over the run's HTTP client; stop
     CHECK(gi.Http().Pending() == 0);
 }
 
-// task #123 boot reorder: the game script now launches BEFORE any scene, so a `class Game`
-// orchestrator's launch()/update() may call the Scene + run facades with NO current scene.
-// Two properties under test: (1) the facades are NULL-SCENE-SAFE (no deref of a null currentScene -
-// the run must launch + tick without faulting); (2) the load facade binds LOWERCASE as `run`, NOT Game -
-// a facade named Game is a hard AngelScript name conflict with the mandatory `Game` orchestrator
-// class, so THIS test compiling at all is the regression guard for that.
+// The game script launches before any scene, so a `class Game` orchestrator's launch()/update() may
+// call the Scene and run facades with no current scene. Two properties under test: the facades are
+// null-scene-safe (no dereference of a null currentScene; the run must launch and tick without
+// faulting), and the load facade binds in lowercase as `run`, not Game. A facade named Game is a
+// hard AngelScript name conflict with the mandatory `Game` orchestrator class, so this test
+// compiling at all guards that.
 TEST_CASE("game-instance: Scene/run facades are null-scene-safe from a pre-scene "
           "orchestrator")
 {
@@ -495,7 +496,7 @@ TEST_CASE("game-instance: Scene/run facades are null-scene-safe from a pre-scene
     foundation::script::angelscript::RegisterAngelScriptBackend();
 
     engine::runtime::GameInstance gi;
-    CHECK_FALSE(gi.SceneReady()); // no scene yet - the orchestrator-first condition
+    CHECK_FALSE(gi.SceneReady()); // no scene yet: the orchestrator-first condition
     const bool ok = gi.StartScript(
         u8"class Game {\n"
         u8"  Game() {}\n"
@@ -513,10 +514,10 @@ TEST_CASE("game-instance: Scene/run facades are null-scene-safe from a pre-scene
         u8"  void exit() {}\n"
         u8"}\n",
         u8"game.as");
-    REQUIRE(ok); // compiled (no Game-name clash) + launch() ran the pre-scene facade calls, no fault
+    REQUIRE(ok); // compiled (no Game-name clash) and launch() ran the pre-scene facade calls, no fault
     CHECK(gi.ScriptRunning());
     gi.DriveRunHost(0.016f);
-    gi.TickScript(0.016f, 1.0f); // update() calls them again - still no fault
+    gi.TickScript(0.016f, 1.0f); // update() calls them again; still no fault
     CHECK(gi.ScriptRunning());
     gi.StopScript();
 }
@@ -530,8 +531,9 @@ TEST_CASE("game-instance: Scene/run facades are null-scene-safe from a pre-scene
     foundation::script::angelscript::RegisterAngelScriptBackend();
 
     engine::runtime::GameInstance gi;
-    // A facade named `Game` would fail HERE with "Name conflict. 'Game' is an extended data type" -
-    // binding the load facade lowercase as `run` is exactly what lets this `class Game` compile alongside it.
+    // A facade named `Game` would fail here with "Name conflict. 'Game' is an extended data type";
+    // binding the load facade in lowercase as `run` is what lets this `class Game` compile beside
+    // it.
     const bool ok = gi.StartScript(
         u8"class Game {\n"
         u8"  Game() {}\n"
@@ -555,13 +557,14 @@ TEST_CASE("game-instance: Scene/run facades are null-scene-safe from a pre-scene
     gi.StopScript();
 }
 
-// The run.* load facade routing PROVEN end-to-end on both backends (raw context, Net-style): a
-// fake RunScriptBinding (standing in for the app's content-DB-backed load pointers) is
-// installed as the run.runtime service, then a script kicks an async load and polls the
-// ticket to completion. What is under test is the facade->binding routing + the ticket round-trip.
+// The run.* load facade routing, end to end on both backends (raw context, as the Net tests do): a
+// fake RunScriptBinding (standing in for the app's content-DB-backed load pointers) is installed as
+// the run.runtime service, then a script starts an async load and polls the ticket to completion.
+// Under test: the facade-to-binding routing and the ticket round-trip.
 namespace
 {
-    // Fake load host: hands back a fixed ticket, reports complete on the 2nd poll of THAT ticket.
+    // Fake load host: hands back a fixed ticket, reports complete on the second poll of that
+    // ticket.
     struct RunFake
     {
         engine::runtime::RunScriptBinding binding;
@@ -603,7 +606,7 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (Lu
     RunFake fake;
     engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
 
-    // Kick the load, then poll to completion; record the observable results in module globals.
+    // Start the load, then poll to completion; record the observable results in module globals.
     const Status status = scriptContext->Load(u8"t = run.loadSceneAsync(Guid.new(0xABC, 0xDEF))\n"
                                     u8"Poll1 = run.loadComplete(t)\n"
                                     u8"Prog = run.loadProgress(t)\n"
@@ -650,10 +653,11 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (An
     CHECK(scriptContext->GetGlobal(u8"Poll2").Get<bool>() == true);
 }
 
-// run.requestExit routing PROVEN on both backends: a fake RunScriptBinding whose requestExit records
-// the code stands in for the app's host route (standalone stops the loop; the editor stops the Game
-// tab). A tiny script calls run::requestExit(2) / run.requestExit(2), and the arity-0 overload routes
-// code 0. What is under test is the facade->binding routing + the arity family, NOT the host itself.
+// run.requestExit routing on both backends: a fake RunScriptBinding whose requestExit records the
+// code stands in for the app's host route (standalone stops the loop; the editor stops the Game
+// tab). A small script calls run::requestExit(2) / run.requestExit(2), and the arity-0 overload
+// routes code 0. Under test: the facade-to-binding routing and the arity family, not the host
+// itself.
 namespace
 {
     struct ExitFake
@@ -763,23 +767,22 @@ TEST_CASE("game-instance: a debugger suspension in update is not a fault - the s
     BreakCounter counter;
     gi.RunHost().SetExternalDebugListener(&counter);
 
-    // Hitting the breakpoint suspends update MID-CALL. The suspension surfaces as an error
-    // result - the regression was TickScript reading it as a fault and killing the game
-    // script ("Here" logged once, breakpoint never hit again).
+    // Hitting the breakpoint suspends update mid-call. The suspension surfaces as an error result,
+    // and TickScript must not read it as a fault and kill the game script.
     gi.TickScript(0.016f, 1.0f);
     CHECK(gi.RunHost().IsDebugPaused());
-    CHECK(gi.ScriptRunning()); // the script SURVIVES the pause
+    CHECK(gi.ScriptRunning()); // the script survives the pause
     CHECK(counter.breaks == 1);
 
-    // Ticking WHILE paused must not start a new update call (the per-frame re-break /
-    // locals-flicker regression): no new pause events, still paused, still alive.
+    // Ticking while paused must not start a new update call (it would break again every frame and
+    // flicker the locals): no new pause events, still paused, still alive.
     gi.TickScript(0.016f, 1.0f);
     gi.TickScript(0.016f, 1.0f);
     CHECK(counter.breaks == 1);
     CHECK(gi.RunHost().IsDebugPaused());
     CHECK(gi.ScriptRunning());
 
-    // Continue completes the held call; the next tick hits the breakpoint AGAIN.
+    // Continue completes the held call; the next tick hits the breakpoint again.
     debugger->Continue();
     CHECK_FALSE(gi.RunHost().IsDebugPaused());
     CHECK(gi.ScriptRunning());
@@ -788,8 +791,8 @@ TEST_CASE("game-instance: a debugger suspension in update is not a fault - the s
     CHECK(gi.ScriptRunning());
     CHECK(counter.breaks == 2);
 
-    // Removing the breakpoint while paused: Continue finishes the held call and the next
-    // ticks run FREELY (the user's remove-during-pause flow, at the backend level).
+    // Removing the breakpoint while paused: Continue finishes the held call and the next ticks run
+    // freely (the remove-during-pause flow, at the backend level).
     debugger->RemoveBreakpoint(u8"game.as", 4);
     debugger->Continue();
     gi.TickScript(0.016f, 1.0f);
@@ -837,7 +840,7 @@ TEST_CASE("game-instance: the run-scoped event bus - deferred delivery, order, c
     engine::runtime::GameInstance gi;
     messaging::EventBus& bus = gi.Events();
 
-    // Deferred delivery + payload + subscription order (the native run bus, zero script).
+    // Deferred delivery, payload and subscription order (the native run bus, no script).
     Array<i32> order;
     i32 received = 0;
     (void)bus.Subscribe(StringHash(StringView(u8"Ping")),
@@ -851,7 +854,7 @@ TEST_CASE("game-instance: the run-scoped event bus - deferred delivery, order, c
     CHECK(order[1] == 2);
     CHECK(received == 42); // payload delivered
 
-    // Cascade: a handler's Publish is delivered within the SAME drain.
+    // Cascade: a handler's Publish is delivered within the same drain.
     bool cascaded = false;
     (void)bus.Subscribe(StringHash(StringView(u8"First")), [&](const Variant&)
                         { bus.Publish(StringHash(StringView(u8"Second")), Variant{}); });
@@ -860,7 +863,7 @@ TEST_CASE("game-instance: the run-scoped event bus - deferred delivery, order, c
     gi.DrainRunEvents();
     CHECK(cascaded);
 
-    // Two instances own INDEPENDENT buses (the multi-instance correctness check).
+    // Two instances own independent buses (the multi-instance correctness check).
     engine::runtime::GameInstance other;
     i32 aHits = 0, bHits = 0;
     (void)gi.Events().Subscribe(StringHash(StringView(u8"Only")), [&](const Variant&) { ++aHits; });
@@ -902,7 +905,7 @@ TEST_CASE("game-instance: the Game tier's on<Event> inbox harvests the run bus (
     gi.DrainRunEvents();
     CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // delivered with payload
 
-    // An event with NO matching on<Event> handler is ignored (only declared handlers subscribe).
+    // An event with no matching on<Event> handler is ignored (only declared handlers subscribe).
     gi.Events().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
     gi.DrainRunEvents();
     CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // unchanged
@@ -911,8 +914,7 @@ TEST_CASE("game-instance: the Game tier's on<Event> inbox harvests the run bus (
 }
 
 // The cooked class carries its handlers: a game started from it (the player's and the Game tab's
-// way) hears the run bus without the caller spelling the list out. The player once started from
-// the source alone, so a shipped game never heard its coins or its flag.
+// way) hears the run bus without the caller spelling the list out.
 TEST_CASE("game-instance: a Game started from its cooked class hears the run bus through its handlers")
 {
     RegisterCoreTypes();
@@ -991,7 +993,7 @@ TEST_CASE("game-instance: run.events().emit publishes on the run bus, round-trip
         u8"double Pinged = 0;\n"
         u8"class Game {\n"
         u8"  Game() {}\n"
-        u8"  void launch() { run::events().emit(\"Ping\", 7); }\n" // publish on the RUN bus from script
+        u8"  void launch() { run::events().emit(\"Ping\", 7); }\n" // publish on the run bus from script
         u8"  void update(float dt) {}\n"
         u8"  void exit() {}\n"
         u8"  void onPing(int x) { Pinged = x; }\n" // the Game's own inbox hears it
@@ -1000,7 +1002,7 @@ TEST_CASE("game-instance: run.events().emit publishes on the run bus, round-trip
     REQUIRE(ok);
     auto* scriptContext = gi.RunHost().ScriptContext();
     REQUIRE(scriptContext != nullptr);
-    // launch() emitted, but the run bus delivers deferred - nothing fires until the drain.
+    // launch() emitted, but the run bus delivers deferred: nothing fires until the drain.
     CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0));
     gi.DrainRunEvents();
     CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(7.0)); // script -> run bus -> script
@@ -1131,8 +1133,8 @@ TEST_CASE("game-instance: ClearScenes resets the run-scoped group time scale to 
     engine::runtime::GameInstance gi;
     (void)gi.Scenes().CreateScene(u8"L1");
 
-    // A game paused via run.setTimeScale(0) then stopped: the SceneManager survives a stop on the
-    // persistent editor instance, so the RUN-scoped scale must not leak into the next Play.
+    // A game paused through run.setTimeScale(0) then stopped: the SceneManager survives a stop on
+    // the persistent editor instance, so the run-scoped scale must not leak into the next Play.
     gi.Scenes().SetTimeScale(0.0f);
     CHECK(gi.Scenes().TimeScale() == doctest::Approx(0.0f));
 
@@ -1216,7 +1218,7 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
             gi.LoadScene(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{});
         REQUIRE(s != nullptr);
         CHECK(s->EntityCount() == 2u);
-        CHECK(gi.Scenes().IsActive(s)); // sync path activates immediately (unchanged behavior)
+        CHECK(gi.Scenes().IsActive(s)); // the sync path activates immediately
     }
 
     SUBCASE("async LoadSceneAsync creates the scene INACTIVE until ActivateLoadedScene")
@@ -1227,12 +1229,12 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
         REQUIRE(handle.Scene() != nullptr);
         CHECK_FALSE(handle.Failed());
         CHECK_FALSE(gi.Scenes().IsActive(handle.Scene())); // inactive while "loading"
-        CHECK(handle.IsComplete());                        // no async resources -> complete at once
+        CHECK(handle.IsComplete());                        // no async resources: complete at once
         CHECK(handle.Progress() == doctest::Approx(1.0f));
 
         scene::Scene* activated = gi.ActivateLoadedScene(handle);
         REQUIRE(activated == handle.Scene());
-        CHECK(gi.Scenes().IsActive(activated)); // now ticked + rendered
+        CHECK(gi.Scenes().IsActive(activated)); // now ticked and rendered
         CHECK(activated->EntityCount() == 2u);
     }
 
@@ -1310,7 +1312,7 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
         CHECK_FALSE(gi.Scenes().IsActive(pending));
         CHECK(policyRanOn == nullptr);
 
-        gi.PumpScriptLoads(); // resources already complete -> activate + SetScene + policy
+        gi.PumpScriptLoads(); // resources already complete: activate, SetScene, policy
         CHECK(gi.ScriptLoadComplete(ticket));
         CHECK_FALSE(gi.ScriptLoadFailed(ticket));
         CHECK(gi.ScriptLoadProgress(ticket) == doctest::Approx(1.0f));
@@ -1344,9 +1346,8 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
 
     SUBCASE("destroying a pending scene sweeps its tracked load (no dangling activation)")
     {
-        // Fable review finding: the tracked handle holds a raw Scene*. Destroying the pending
-        // scene before it activates must drop the tracked load, or PumpScriptLoads would later
-        // activate freed memory.
+        // The tracked handle holds a raw Scene*. Destroying the pending scene before it activates
+        // must drop the tracked load, or PumpScriptLoads would later activate freed memory.
         engine::runtime::GameInstance gi;
         engine::runtime::SceneLoadHandle handle =
             gi.LoadSceneAsync(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{});
@@ -1355,7 +1356,7 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
         const i32 ticket = gi.TrackScriptLoad(handle);
         CHECK_FALSE(gi.ScriptLoadComplete(ticket)); // in flight (not yet activated)
 
-        gi.DestroyScene(pending);   // sweeps the tracked entry BEFORE freeing the scene
+        gi.DestroyScene(pending);   // sweeps the tracked entry before freeing the scene
         gi.PumpScriptLoads();       // must be a safe no-op (nothing to activate)
         CHECK(gi.ScriptLoadComplete(ticket));   // the ticket now reads terminal-safe via the fallback
         CHECK_FALSE(gi.ScriptLoadFailed(ticket));
@@ -1364,10 +1365,10 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
 
     SUBCASE("ClearScenes drops in-flight tracked loads + tears the group down (no dangling activation)")
     {
-        // The editor Game tab's Stop tears the run's scenes down while KEEPING the instance. An
+        // The editor Game tab's Stop tears the run's scenes down while keeping the instance. An
         // async load still in flight at that moment holds a raw Scene* in the tracked registry;
-        // ClearScenes must drop it BEFORE Scenes().Clear() frees the scene, or the next
-        // PumpScriptLoads (still driven every frame) would activate + Start() freed memory.
+        // ClearScenes must drop it before Scenes().Clear() frees the scene, or the next
+        // PumpScriptLoads (still driven every frame) would activate and Start() freed memory.
         engine::runtime::GameInstance gi;
         scene::Scene* live =
             gi.LoadScene(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{});
@@ -1375,11 +1376,11 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
         gi.SetScene(live);
         REQUIRE(gi.SceneReady());
 
-        // A second load left IN FLIGHT (inactive, tracked) - the scene that would dangle.
+        // A second load left in flight (inactive, tracked): the scene that would dangle.
         const i32 ticket = gi.TrackScriptLoad(
             gi.LoadSceneAsync(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{}));
         CHECK_FALSE(gi.ScriptLoadComplete(ticket)); // in flight
-        CHECK(gi.Scenes().SceneCount() == 2u);      // the live scene + the pending inactive one
+        CHECK(gi.Scenes().SceneCount() == 2u);      // the live scene and the pending inactive one
 
         bool policyRan = false;
         gi.SetSceneActivationPolicy(
@@ -1390,7 +1391,7 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
         CHECK(gi.GetScene() == nullptr);
         CHECK_FALSE(gi.SceneReady());
 
-        gi.PumpScriptLoads(); // the dropped ticket must NOT activate a freed scene
+        gi.PumpScriptLoads(); // the dropped ticket must not activate a freed scene
         CHECK_FALSE(policyRan);
         CHECK(gi.ScriptLoadComplete(ticket)); // terminal-safe via the unknown-ticket fallback
         CHECK(gi.GetScene() == nullptr);      // still no current scene
@@ -1398,13 +1399,13 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
 
     SUBCASE("script-load registry: a successful load is RETIRED on activation (bounded growth)")
     {
-        // m_scriptLoads must not grow monotonically. After activation the
-        // entry is dropped, so re-destroying the (now active) scene is a safe no-op and the ticket
-        // still reads terminal-safe - the externally observable contract is unchanged.
+        // m_scriptLoads must not grow without bound. After activation the entry is dropped, so
+        // destroying the (now active) scene again is a safe no-op and the ticket still reads
+        // terminal-safe.
         engine::runtime::GameInstance gi;
         const i32 ticket = gi.TrackScriptLoad(
             gi.LoadSceneAsync(*sceneInst, resources, Function<UniquePtr<IStream>(const Guid&)>{}));
-        gi.PumpScriptLoads(); // activates + retires the entry
+        gi.PumpScriptLoads(); // activates and retires the entry
         REQUIRE(gi.SceneReady());
         scene::Scene* live = gi.GetScene();
         CHECK(gi.ScriptLoadComplete(ticket)); // retired -> fallback (complete)
@@ -1421,33 +1422,33 @@ TEST_CASE("game-instance: LoadScene / LoadSceneAsync own the scene load orchestr
 
 TEST_CASE("game-instance: created scenes share the run bus - cross-scene delivery, single drain (no relay)")
 {
-    // Every scene the instance creates borrows THE run bus, so scene.events and the run
-    // bus are one object. A subscriber in scene A hears an emit from scene B (and the Game tier would too)
-    // with NO relay, delivered exactly ONCE by the instance's drain - the borrowing scenes never drain it.
+    // Every scene the instance creates borrows the run bus, so scene.events and the run bus are one
+    // object. A subscriber in scene A hears an emit from scene B (and the Game tier would too) with
+    // no relay, delivered exactly once by the instance's drain; the borrowing scenes never drain
+    // it.
     engine::runtime::GameInstance gi;
     scene::Scene* a = gi.CreateScene(u8"A");
     scene::Scene* b = gi.CreateScene(u8"B");
     REQUIRE(a != nullptr);
     REQUIRE(b != nullptr);
-    CHECK(a->Events() == &gi.Events()); // both borrow the ONE run bus
+    CHECK(a->Events() == &gi.Events()); // both borrow the one run bus
     CHECK(b->Events() == &gi.Events());
 
     int hits = 0;
     (void)a->Events()->Subscribe(StringHash(u8"Ping"), [&](const Variant&) { ++hits; });
-    b->Events()->Publish(StringHash(u8"Ping"), Variant{}); // emit from a DIFFERENT scene
+    b->Events()->Publish(StringHash(u8"Ping"), Variant{}); // emit from a different scene
 
-    // Ticking the borrowing scenes must NOT deliver it (they do not drain a borrowed bus).
+    // Ticking the borrowing scenes must not deliver it (they do not drain a borrowed bus).
     a->Update(0.016f);
     b->Update(0.016f);
     CHECK(hits == 0);
 
-    gi.DrainRunEvents(); // the instance drains the shared bus ONCE
+    gi.DrainRunEvents(); // the instance drains the shared bus once
     CHECK(hits == 1);    // delivered exactly once, cross-scene, no relay
 }
 
-// agent-playtesting-and-asset-creation.md P3 (Sedulous 8d873538): a faulting game script is
-// remembered with where it faulted and why, and the run's clock is the gameplay time the script
-// moved by. A new start clears the fault; a clean stop is not one.
+// A faulting game script is remembered with where it faulted and why, and the run's clock is the
+// gameplay time the script moved by. A new start clears the fault; a clean stop is not one.
 TEST_CASE("game-instance: a faulted game script says where and why, and the run clock counts "
           "gameplay time")
 {
@@ -1492,8 +1493,7 @@ TEST_CASE("game-instance: a faulted game script says where and why, and the run 
 }
 
 // A project with no game script (a scene of behaviours alone) still runs, and a playtest times its
-// run by this clock: it counts the frames either way (Snowline's first scene had none, and every
-// pie_run on it waited out its timeout at run time 0).
+// run by this clock: it counts the frames either way.
 TEST_CASE("game-instance: the run clock counts frames without a game script")
 {
     RegisterCoreTypes();
@@ -1509,9 +1509,8 @@ TEST_CASE("game-instance: the run clock counts frames without a game script")
 }
 
 // A project with no game script runs its behaviors on the run's host all the same, and they need
-// the run's services: Snowline's board read Input on a context that only a game script's start
-// had given the run's input runtime, so no action ever fired (it read the shared runtime, which has
-// no project map). Every context the run's host makes now takes them.
+// the run's services: a behavior reading Input on a context without the run's input runtime would
+// read the shared runtime, which has no project map. Every context the run's host makes takes them.
 TEST_CASE("game-instance: a context for behaviors gets the run's input, run and save services without a game script")
 {
     RegisterCoreTypes();
@@ -1525,9 +1524,9 @@ TEST_CASE("game-instance: a context for behaviors gets the run's input, run and 
     CHECK(scriptContext->GetService(engine::runtime::kSaveScriptService) == &gi.Saves());
 }
 
-// agent-playtesting-and-asset-creation.md P4 (Sedulous aaf5ff78): the run clock is the host's
-// unscaled delta, so it keeps going while the game pauses its scene (behind a menu) and a
-// playtest's timeline goes on; and a playtest reads the running game script's properties.
+// The run clock is the host's unscaled delta, so it keeps going while the game pauses its scene
+// (behind a menu) and a playtest's timeline goes on; and a playtest reads the running game script's
+// properties.
 TEST_CASE("game-instance: the run clock ignores time scale, and a game script's properties read")
 {
     RegisterCoreTypes();
@@ -1556,7 +1555,7 @@ TEST_CASE("game-instance: the run clock ignores time scale, and a game script's 
     REQUIRE(score.HasValue());
     CHECK(score.Value().Get<f64>() == doctest::Approx(3.0));
     CHECK_FALSE(gi.GetScriptProperty(u8"lives").HasValue());
-    // Sedulous 2ad3026c: a script reads the real clock too, for a pause menu to time by.
+    // A script reads the real clock too, for a pause menu to time by.
     CHECK(gi.GetScriptProperty(u8"real").Value().Get<f64>() == doctest::Approx(3.0 / 60.0).epsilon(1e-4));
     CHECK(gi.RunBinding().realSeconds == doctest::Approx(3.0 / 60.0).epsilon(1e-5));
     CHECK_FALSE(gi.GetScriptProperty(u8"update").HasValue()); // a method is not a property
@@ -1564,7 +1563,7 @@ TEST_CASE("game-instance: the run clock ignores time scale, and a game script's 
     CHECK_FALSE(gi.GetScriptProperty(u8"score").HasValue());
 }
 
-// ---- save data: the values a game keeps between runs (Documentation/Specs/save-data.md) ----
+// ---- save data: the values a game keeps between runs ----
 
 namespace
 {

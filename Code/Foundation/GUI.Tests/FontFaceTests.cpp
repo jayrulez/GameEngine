@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - @font-face (E11 of Specs/gui-lab-evolution-2.md): a sheet names a face of a family and its
-// file; the style manager asks the host's loader for each, once, under the name the face is chosen
-// by ("Brand Bold"), before the restyle that draws in it.
+// GUI - @font-face: a sheet names a face of a family and its file. The style manager asks the
+// host's loader for each face once, under the name the face is chosen by ("Brand Bold"), before
+// the restyle that draws with it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -62,7 +62,7 @@ TEST_CASE("font face: the loader is asked once per face per sheet, under the nam
     CHECK(asked[1] == StringView(u8"Brand Light Italic=li.ttf"));
     CHECK(asked[2] == StringView(u8"Brand=r.ttf"));
     styles.ApplyTree(*root.Get());
-    CHECK(asked.Size() == 3u); // not again for the same sheet
+    CHECK(asked.Size() == 3u); // not asked again for the same sheet
 }
 
 TEST_CASE("font face: a face loaded through the host draws the label that asks for its weight")
@@ -81,7 +81,7 @@ TEST_CASE("font face: a face loaded through the host draws the label that asks f
             ++loads;
             return service.LoadFont(face, foundation::vfs::DataPath(root.AsView(), source).AsView()) == fonts::FontLoadResult::Success;
         });
-    // The regular face the service has already is not asked for.
+    // The regular face, which the service already has, is not asked for.
     styles.SetStyleSheet(CSSParser::Parse(StringView(u8"@font-face { font-family: Brand; src: url(Engine/Fonts/roboto/Roboto-Regular.ttf); }"
                                                      u8"@font-face { font-family: Brand; src: url(Engine/Fonts/roboto/Roboto-Bold.ttf); font-weight: bold; }"
                                                      u8".text { font-family: Brand; font-size: 16px; font-weight: 700; }")));

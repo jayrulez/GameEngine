@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Style model v2, P3 (ui-layout-and-style-model.md section 4): `transition` parsing, the
-// per-view transitions that overlay ResolveStyle (started on a computed-style change from a
-// class toggle or a control-state change, retargeting mid-flight from the CURRENT value),
-// the state cross-fade through Drawable::Draw, layout-vs-visual damage per property kind,
-// the user-agent defaults on interactive controls, and the sheet-swap / detach edges.
+// `transition` parsing, the per-view transitions that overlay ResolveStyle (started on a
+// computed-style change from a class toggle or a control-state change, and retargeting mid-flight
+// from the current value), the state cross-fade through Drawable::Draw, layout or visual damage
+// per property kind, motion as theme data, the sheet-swap and detach edges, and @keyframes
+// animations.
 
 #include <doctest/doctest.h>
 
@@ -45,7 +45,7 @@ namespace
     };
     RTTI_DEFINE_OBJECT(StatefulView, "rtti::ui::tests")
 
-    /// Paints a rect whose color says which STATE it was drawn with (red normal, green hover).
+    /// Paints a rect whose color says which state it was drawn with (red normal, green hover).
     class StateColorDrawable final : public Drawable
     {
         RTTI_OBJECT(StateColorDrawable, Drawable)
@@ -130,7 +130,7 @@ TEST_CASE("transition: the list parses properties, all, times in ms/s, easings, 
     CHECK(list->Specs[1].Duration == doctest::Approx(1.0f));
     CHECK(list->Specs[1].Easing == TimingFunction::Ease());
     CHECK(list->Specs[2].Property == StyleProperty::COUNT); // all
-    CHECK(list->Specs[2].Duration == doctest::Approx(0.12f)); // bare number = ms
+    CHECK(list->Specs[2].Duration == doctest::Approx(0.12f)); // a bare number is milliseconds
     CHECK(list->Specs[2].Easing == TimingFunction::EaseOut());
     // Later entries govern: `all` came last, so it covers text-color too.
     CHECK(list->Find(StyleProperty::TextColor) == &list->Specs[2]);
@@ -178,7 +178,7 @@ TEST_CASE("transition: LerpStyleValue interpolates colors, numbers, lengths, thi
     CHECK(c.AsColor().Value().a == doctest::Approx(0.5f));
     CHECK(LerpStyleValue(StyleValue::FloatVal(10), StyleValue::FloatVal(20), 0.25f).AsFloat().Value() ==
           doctest::Approx(12.5f));
-    // Float x Length mixes as a length (the float is dp).
+    // A Float mixed with a Length mixes as a length (the float is dp).
     const StyleValue mixed = LerpStyleValue(StyleValue::FloatVal(10), StyleValue::LengthVal(Unit::Em(2)), 0.5f);
     REQUIRE(mixed.AsLength().HasValue());
     CHECK(mixed.AsLength().Value().dp == doctest::Approx(5));
@@ -214,7 +214,7 @@ TEST_CASE("transition: a class toggle animates only the listed properties")
     auto v = f.Leaf();
     CHECK(Red(*v) == doctest::Approx(0.0f)); // builds the cache
     v->AddClass(u8"big");
-    // The first read after the change starts the transition FROM the old value ...
+    // The first read after the change starts the transition from the old value ...
     CHECK(Red(*v) == doctest::Approx(0.0f));
     CHECK(v->ResolveStyleFloat(StyleProperty::FontSize) == doctest::Approx(20)); // unlisted: instant
     CHECK(v->ActiveTransitionCount() == 1);
@@ -259,7 +259,7 @@ TEST_CASE("transition: hover in then out mid-flight retargets from the current v
     CHECK(Red(*v) == doctest::Approx(0.0f)); // starts
     f.ctx.BeginFrame(0.05f);
     CHECK(Red(*v) == doctest::Approx(0.5f));
-    // Hover out at the halfway point: the new transition runs 0.5 -> 0 over a full 100ms.
+    // Hover out at the halfway point: the new transition runs from 0.5 to 0 over a full 100ms.
     v->State = ControlState::Normal;
     CHECK(Red(*v) == doctest::Approx(0.5f));
     CHECK(v->ActiveTransitionCount() == 1); // retargeted, not stacked
@@ -280,7 +280,7 @@ TEST_CASE("transition: easing and delay shape the curve")
     CHECK(Red(*v) == doctest::Approx(0.0f));
     f.ctx.BeginFrame(0.05f); // inside the delay
     CHECK(Red(*v) == doctest::Approx(0.0f));
-    f.ctx.BeginFrame(0.05f); // t = 0.5 -> CSS's ease-in, cubic-bezier(0.42, 0, 1, 1), is 0.3154
+    f.ctx.BeginFrame(0.05f); // at t = 0.5, CSS's ease-in, cubic-bezier(0.42, 0, 1, 1), is 0.3154
     CHECK(Red(*v) == doctest::Approx(0.3154f).epsilon(0.002));
 }
 
@@ -313,7 +313,7 @@ TEST_CASE("transition: a transform interpolates function by function, or through
     CHECK(mid.Functions[0].Y.dp == doctest::Approx(-4.0f));
     CHECK(mid.Functions[1].A == doctest::Approx(45.0f));
     CHECK(mid.Functions[2].A == doctest::Approx(1.25f));
-    // `none` against a list: the list's identities, so it turns from 0.
+    // `none` against a list interpolates from the list's identity functions, so it turns from 0.
     mid = lerp(parse(u8"none"), parse(u8"rotate(90deg)"), 0.5f);
     REQUIRE(mid.Count == 1u);
     CHECK(mid.Functions[0].A == doctest::Approx(45.0f));
@@ -445,7 +445,7 @@ TEST_CASE("transition: motion comes from the theme's View rule; the engine adds 
     CHECK(button->ResolveStyle(StyleProperty::Transition).AsTransitions() == nullptr);
     CHECK(leaf->ResolveStyle(StyleProperty::Transition).AsTransitions() == nullptr);
 
-    // The shipped themes declare it on View, so every view - a Button, a plain leaf - gets it;
+    // The shipped themes declare it on View, so every view (a Button, a plain leaf) gets it;
     // a later rule on a type opts that type out.
     f.ctx.SetStyleSheet(LoadSSS(u8"View { transition: all 120ms ease-out; }\n"
                                 u8"ButtonBase { transition: none; }\n"));
@@ -502,7 +502,7 @@ TEST_CASE("transition: only a changed winner starts an entry (a theme-wide rule 
                       u8".tag { border-color: #ff0000; }\n"));
     auto v = f.Leaf();
     CHECK(Red(*v) == doctest::Approx(0.0f));
-    v->AddClass(u8"tag"); // border-color gains a winner; text-color / font-size keep theirs
+    v->AddClass(u8"tag"); // border-color gains a winner; text-color and font-size keep theirs
     (void)Red(*v);
     CHECK(v->ActiveTransitionCount() == 0); // border-color had no old value to start from
     v->RemoveClass(u8"tag");

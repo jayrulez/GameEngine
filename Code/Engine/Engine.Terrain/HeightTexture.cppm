@@ -3,12 +3,11 @@
 
 // Engine::Terrain - the `:heighttexture` partition.
 //
-// The GPU height texture. The renderer's VS fetches per-vertex height via textureLoad, so
-// each heightfield's u16 grid is uploaded to an R16Uint 2D texture (one texel per sample, exact).
-// CACHED by the heightfield resource id + version: two terrains referencing one heightfield share
-// ONE texture, and a version bump (a sculpt re-upload) rebuilds it - the bind-group-cache
-// versioning rule. Foundation::Heightfield stays a CPU grid (nav/physics pay no GPU); the texture is
-// owned HERE.
+// The GPU height texture. The renderer's VS fetches per-vertex height with textureLoad, so each
+// heightfield's u16 grid is uploaded to an R16Uint 2D texture (one texel per sample, exact). Cached
+// by the heightfield's id and version: two terrains referencing one heightfield share one texture,
+// and a version bump (a sculpt re-upload) rebuilds it. Foundation::Heightfield stays a CPU grid
+// (navigation and physics pay nothing on the GPU); the texture is owned here.
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +27,7 @@ export namespace engine::terrain
     namespace render = foundation::render;
     namespace heightfield = foundation::heightfield;
 
-    /// Owns + caches the per-heightfield GPU height textures (R16Uint), keyed by resource id+version.
+    /// Owns and caches the per-heightfield GPU height textures (R16Uint), keyed by id and version.
     class TerrainHeightTextureCache
     {
     public:
@@ -36,21 +35,19 @@ export namespace engine::terrain
         TerrainHeightTextureCache(const TerrainHeightTextureCache&) = delete;
         TerrainHeightTextureCache& operator=(const TerrainHeightTextureCache&) = delete;
 
-        /// In-flight-safe destruction (wired by the subsystem): a version-bump rebuild RETIRES
-        /// the old texture/view through the frame-aged queue instead of destroying immediately -
-        /// submitted frames still reference the old view through the renderer's set-2 bind
-        /// group (regenerate/toggle in the playground hit exactly this validation error).
-        /// Unwired (Null-device tests, headless) falls back to direct destroy.
+        /// In-flight-safe destruction (wired by the subsystem): a version-bump rebuild retires
+        /// the old texture and view through the frame-aged queue instead of destroying them at
+        /// once, because submitted frames still reference the old view through the renderer's
+        /// set-2 bind group. Unwired (Null-device tests, headless), it destroys directly.
         void SetRetireQueue(render::GpuRetireQueue* retire) noexcept { m_retire = retire; }
 
-        /// The R16Uint height texture view for `hf` at `version`. Keyed by the heightfield's
-        /// UID (never its pointer - a freed grid's address can be reused by a fresh one at an
-        /// equal version, and pointer keying would serve the dead grid's texture; the
-        /// bind-group-cache versioning rule). Two terrains referencing one
-        /// heightfield share ONE texture, and in-memory heightfields with no resource guid
-        /// work (the uid is per-object, not per-resource). Creates + uploads + caches on a
-        /// miss; a stale version for the same heightfield rebuilds in place (the sculpt
-        /// re-upload path). Returns null on a device failure or an empty grid.
+        /// The R16Uint height texture view for `hf` at `version`. Keyed by the heightfield's uid,
+        /// never its pointer: a freed grid's address can be reused by a fresh one at an equal
+        /// version, and a pointer key would serve the dead grid's texture. Two terrains
+        /// referencing one heightfield share one texture, and in-memory heightfields with no
+        /// resource guid work (the uid is per object, not per resource). Creates, uploads and
+        /// caches on a miss; a stale version for the same heightfield rebuilds in place (the
+        /// sculpt re-upload path). Returns null on a device failure or an empty grid.
         [[nodiscard]] rhi::TextureView* GetOrCreate(rhi::Device& device,
                                                     const heightfield::Heightfield& hf, u64 version)
         {
@@ -86,8 +83,7 @@ export namespace engine::terrain
             return m_entries[m_entries.Size() - 1].view;
         }
 
-        /// Destroy every cached texture/view (call before the device dies).
-        /// Drop every entry. Runs at SCENE DESTROY as well as at shutdown (stopping
+        /// Drops every entry. This runs at scene destroy as well as at shutdown (stopping
         /// play-in-editor destroys the run's scenes mid frame loop), so a live entry may still
         /// sit in a submitted frame's descriptor set: with a retire queue wired the GPU objects
         /// age past every in-flight frame before they are freed (VUID 01026); without one
@@ -106,7 +102,7 @@ export namespace engine::terrain
     private:
         struct Entry
         {
-            u64 key = 0; // Heightfield::uid - never a pointer (address reuse aliases)
+            u64 key = 0; // Heightfield::uid, never a pointer (address reuse aliases)
             u64 version = 0;
             rhi::Texture* texture = nullptr;
             rhi::TextureView* view = nullptr;
@@ -183,6 +179,6 @@ export namespace engine::terrain
         }
 
         Array<Entry> m_entries;
-        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns + ticks it)
+        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns and ticks it)
     };
 }

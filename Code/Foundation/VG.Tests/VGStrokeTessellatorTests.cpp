@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/StrokeTessellatorTests.bf.
+// StrokeTessellator: strips, caps and the miter limit.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

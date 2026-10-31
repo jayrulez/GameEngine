@@ -1,23 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Pipeline::Script.AngelScript - the `foundation.script.angelscript.editor` module.
+// Pipeline::Script.AngelScript - the `script.angelscript.pipeline` module.
 //
-// The AngelScript cook service: compile-check in a cooker-owned
-// AngelScript VM (resolved through the backend registry by language) + the shared
-// on<Upper>(...) handler scan + PROPERTY HARVEST + an AngelScript starter template.
+// The AngelScript cook service: a compile-check in a cooker-owned AngelScript VM (resolved
+// through the backend registry by language), the shared on<Upper>(...) handler scan, the
+// property harvest and the AngelScript starter templates.
 //
-// AngelScript's editor-property surface is typed member FIELDS annotated with the
+// AngelScript's editor-property surface is typed member fields annotated with the
 // language's own `[metadata]`: `[default, "description"]` before a field declares that
 // field an inspector property (a field with no metadata is not one). The cook builds the
 // behavior through the vendored CScriptBuilder add-on (which pre-processes `[metadata]`)
-// and walks the class's fields, mapping each metadata'd field's declared type + default +
-// description into the SAME ScriptPropertyDesc metadata other backends produce. All the
-// AngelScript / scriptbuilder contact lives in the implementation unit.
+// and walks the class's fields, mapping each metadata'd field's declared type, default and
+// description into the same ScriptPropertyDesc metadata other backends produce. All the
+// AngelScript and scriptbuilder contact lives in the implementation unit.
 //
-// Plain module interface unit: no AngelScript SDK header appears here (GCC module hygiene
-// by construction); the implementation unit reaches the cook VM's engine through the
-// backend's AngelScriptEngineHandle seam.
+// No AngelScript SDK header appears in this interface unit; the implementation unit reaches the
+// cook VM's engine through the backend's AngelScriptEngineHandle.
 
 module;
 #include "Core/Prelude.h"
@@ -62,7 +61,7 @@ export namespace pipeline{
 
     // The New Asset starter for a Level (the scene-scripting tier): one object per scene,
     // constructed with the scene handle. All handlers optional. onUpdate/onFixedUpdate run
-    // ONLY while the scene simulates.
+    // only while the scene simulates.
     inline constexpr StringView kAngelScriptLevelStarter =
         u8"// Level class - the per-scene script. Set it on the scene's Scene Script settings.\n"
         u8"// One instance per scene, constructed with the scene handle. In AngelScript the\n"
@@ -82,7 +81,7 @@ export namespace pipeline{
         u8"    void onStop() {}\n"
         u8"}\n";
 
-    // The New Asset starter for the game orchestrator: the MANDATORY class `Game`. One per
+    // The New Asset starter for the game orchestrator: the mandatory class `Game`. One per
     // run; drives scene loading (through the run facade) and the game-wide update.
     inline constexpr StringView kAngelScriptGameStarter =
         u8"// Game class - the game orchestrator (mandatory name `Game`). One per run.\n"

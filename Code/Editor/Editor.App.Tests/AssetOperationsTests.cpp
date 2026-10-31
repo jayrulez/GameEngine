@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// What can be done to a project's assets and groups, over a scratch project: a rename kept by the
-// name rule (refused saying why, the default scene's path mirror following), a group's rename; a
-// duplicate beside its source; a new group a folder on disk at once; a delete naming what goes, its
-// pages closed first and the default scene let go with it; a group's delete with all it holds; and
-// the export flag kept with the project.
+// The operations on a project's assets and groups, over a scratch project. A rename follows the
+// naming rule (a refusal says why) and the default scene's mirrored path follows it; groups rename
+// too. A duplicate lands beside its source, and a new group is a folder on disk at once. A delete
+// names what goes, closes its pages first and clears the default scene if it was one; deleting a
+// group removes everything in it. The export flag is saved with the project.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -70,7 +70,7 @@ namespace
             services.context = &context;
             Bed* self = this;
             services.closePages = [self](const Guid& id) { self->closed.PushBack(id); };
-            ops = MakeUnique<AssetOperations>(DefaultAllocator(), Move(services)); // no cook, no later: at once
+            ops = MakeUnique<AssetOperations>(DefaultAllocator(), Move(services)); // no cook and no deferral, so operations run at once
         }
         ~Bed()
         {
@@ -142,7 +142,7 @@ TEST_CASE("asset operations: a delete names what goes, closes its pages first an
     CHECK(bed.closed[0] == crate);
     CHECK(bed.project->Settings().defaultSceneId.IsNil()); // gone with it
 
-    // A group with all it holds; what showed it is moved to its parent first.
+    // Delete a group and everything in it; the view showing it moves to its parent first.
     const Guid bell = bed.bell->Id();
     content::Group* shownNext = nullptr;
     CHECK(AssetOperations::CountAssets(*bed.town) == 1u);
@@ -161,7 +161,7 @@ TEST_CASE("asset operations: the export flag on an asset and on a group's conten
     CHECK(bed.ops->IsAlwaysExported(bed.crate->Id()));
     bed.ops->ToggleAlwaysExport(*bed.town);
     CHECK(bed.ops->IsAlwaysExported(*bed.town));
-    // Kept: a project opened again reads them.
+    // Saved: the project opened again reads them.
     UniquePtr<editor::EditorProject> again = editor::EditorProject::Open(DefaultAllocator(), u8"asset_ops_project");
     REQUIRE(again);
     CHECK(again->ExportRoots().HasInstance(bed.crate->Id()));
@@ -181,7 +181,7 @@ TEST_CASE("asset operations: a move takes assets and their files into another gr
     bed.ops->MoveTo(two, *bed.town);
     CHECK(&bed.crate->OwningGroup() == bed.town);
     CHECK(&bed.barrel->OwningGroup() == bed.town);
-    CHECK(bed.crate->ReadObject().Get() != nullptr); // its file moved with it: it reads where it is now
+    CHECK(bed.crate->ReadObject().Get() != nullptr); // its file moved with it, so it reads from the new place
     CHECK_FALSE(bed.ops->CanMove(two.AsSpan(), *bed.town, why));
     CHECK(why == String(u8"Already in Town"));
 

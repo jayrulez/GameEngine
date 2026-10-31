@@ -3,20 +3,21 @@
 
 // GUI.Code - :code_language partition
 //
-// A language's definition (C2 of Specs/gui-lab-evolution-3.md, ruling 1): a value its owners supply,
-// built in code or read from a file through the engine's serialization (a script module's for its
-// language, the sandbox's for its pages); the library ships none. A definition is contexts, each a
-// list of rules tried in turn at each place of a line: a literal, an identifier (looked up in the
-// language's words: keywords, types, constants), a number, one of some characters or a run of them,
-// the rest of the line, and a long bracket's open or close (Luau's `[==[`). A rule gives its text a token, and may
-// enter a context (a string, a comment, a tag) or leave some; what no rule takes is its context's
-// token, an escape character taking the next with it. A context may end at the line's end (a line
-// comment, a preprocessor line).
+// A language's definition. It is a value that the language's owner supplies, built in code or read
+// from a file through the engine's serialization (a script module supplies its language, the
+// sandbox supplies one for its pages). The library ships none. A definition is a set of contexts.
+// Each context is a list of rules, tried in turn at each position of a line. A rule matches a
+// literal, an identifier (looked up in the language's words: keywords, types, constants), a number,
+// one of a set of characters or a run of them, the rest of the line, or a long bracket's open or
+// close (Luau's `[==[`). A rule gives the text it matched a token, and may enter a context (a
+// string, a comment, a tag) or leave some. Text that no rule matches gets its context's token, and
+// an escape character takes the next character with it. A context may end at the line's end (a
+// line comment, a preprocessor line).
 //
-// The tokenizer reads one line at a time from the state the line before ended in (the contexts
-// entered, a long bracket's level), as every editor surveyed does; a view keeps each line's tokens
-// with the state it began in and the line's hash, and stops tokenizing where a line ends in the state
-// it ended in before (eepp's).
+// The tokenizer reads one line at a time, starting from the state the previous line ended in (the
+// contexts entered and a long bracket's level). A view keeps each line's tokens together with the
+// state the line began in and the line's hash, and stops tokenizing at a line that ends in the same
+// state as it did before.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +31,7 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// What a run of code is: each draws in its part's colour (`codeeditor::keyword`).
+    /// What kind a run of code is. Each kind draws in its part's colour (`codeeditor::keyword`).
     enum class CodeToken : u8
     {
         Text,
@@ -60,7 +61,8 @@ export namespace foundation::gui
             u8"tag",          u8"attribute", u8"property",   u8"selector", u8"invalid",
         };
     }
-    /// A token's name: its part's (`keyword`), and how a definition file writes it.
+    /// Returns a token's name, which is both its part's name (`keyword`) and how a definition file
+    /// writes it.
     [[nodiscard]] inline core::StringView CodeTokenName(CodeToken token) noexcept
     {
         return token < CodeToken::Count ? core::StringView(detail::kCodeTokenNames[static_cast<usize>(token)]) : core::StringView(u8"text");
@@ -73,17 +75,17 @@ export namespace foundation::gui
         return CodeToken::Text;
     }
 
-    /// What a rule matches at a place in a line.
+    /// What a rule matches at a position in a line.
     enum class CodeMatch : u8
     {
-        Literal,    ///< its text, as it is
-        Identifier, ///< a name (letters, digits, underscores; not first a digit), looked up in the words
-        Number,     ///< a number: decimal, 0x hex, with a fraction, an exponent, a suffix
-        AnyOf,      ///< one of its text's characters
-        Run,        ///< one or more of its text's characters (a CSS colour's `#1a2b3c`)
+        Literal,    ///< the rule's text, exactly
+        Identifier, ///< a name (letters, digits, underscores; not starting with a digit), looked up in the words
+        Number,     ///< a number: decimal or 0x hex, with an optional fraction, exponent and suffix
+        AnyOf,      ///< one of the characters in the rule's text
+        Run,        ///< one or more of the characters in the rule's text (as in a CSS colour's `#1a2b3c`)
         LineRest,   ///< the rest of the line
-        LongOpen,   ///< its text's character, '='s, the character again (Luau's `[==[`), the '='s kept
-        LongClose,  ///< its text's character, as many '='s as the open's, the character again
+        LongOpen,   ///< the text's character, some '='s, then the character again (Luau's `[==[`); the '=' count is kept
+        LongClose,  ///< the text's character, as many '='s as the open had, then the character again
     };
     namespace detail
     {
@@ -95,39 +97,40 @@ export namespace foundation::gui
     struct CodeRule
     {
         CodeMatch Match = CodeMatch::Literal;
-        core::String Text;          ///< the literal; the characters of any-of; a long bracket's character
-        CodeToken Token = CodeToken::Text; ///< an identifier's when the words do not name it
-        core::String Enter;         ///< the context it enters, by name (empty: none)
-        u8 Leave = 0;               ///< how many contexts it leaves (before entering)
-        bool LineStart = false;     ///< only first on its line, past the indent (a `#` line)
+        core::String Text;          ///< the literal, the characters for AnyOf or Run, or a long bracket's character
+        CodeToken Token = CodeToken::Text; ///< for an identifier, the token used when the words do not name it
+        core::String Enter;         ///< the name of the context it enters (empty for none)
+        u8 Leave = 0;               ///< how many contexts it leaves (before entering Enter)
+        bool LineStart = false;     ///< matches only first on its line, past the indent (a `#` line)
     };
 
     struct CodeContext
     {
         core::String Name;
-        CodeToken Token = CodeToken::Text; ///< what no rule takes is
-        core::String Escape;               ///< an escape: it and the character after it, escape tokens
-        bool EndsAtLineEnd = false;        ///< left where its line ends
+        CodeToken Token = CodeToken::Text; ///< the token of text no rule matches
+        core::String Escape;               ///< the escape character; it and the character after it get the escape token
+        bool EndsAtLineEnd = false;        ///< the context is left at the end of its line
         core::Array<CodeRule> Rules;
     };
 
-    /// Words a language names, of one token: its keywords, its types, its constants (`List` the
-    /// words, space-separated).
+    /// Words of one token kind that a language names: its keywords, its types or its constants.
+    /// `List` holds the words, separated by spaces.
     struct CodeWords
     {
         CodeToken Token = CodeToken::Keyword;
         core::String List;
     };
 
-    /// A pair the editor knows: a bracket it matches, or what typing one side puts the other for.
+    /// A pair the editor knows: brackets it matches, or characters where typing the first inserts
+    /// the second.
     struct CodePair
     {
         core::String Open;
         core::String Close;
     };
 
-    /// Where a line's tokenizing stands: the contexts entered (the first context below them all) and
-    /// an open long bracket's level.
+    /// The tokenizer's state at a line boundary: the stack of contexts entered (with the first
+    /// context below them all) and the level of an open long bracket.
     struct CodeLexState
     {
         static constexpr u8 kDepth = 7;
@@ -147,7 +150,7 @@ export namespace foundation::gui
         }
     };
 
-    /// A run of a line's bytes and its token.
+    /// A run of a line's bytes and the token it has.
     struct CodeSpan
     {
         u32 Start = 0;
@@ -158,26 +161,26 @@ export namespace foundation::gui
     class CodeLanguage
     {
     public:
-        core::String Id;   ///< what its owners register it by ("angelscript")
-        core::String Name; ///< what it is called ("AngelScript")
-        core::Array<core::String> Extensions; ///< file name endings it is for ("as")
-        bool IdentifierDashes = false;        ///< names may hold '-' and begin with it (CSS's)
+        core::String Id;   ///< the id its owner registers it by ("angelscript")
+        core::String Name; ///< its display name ("AngelScript")
+        core::Array<core::String> Extensions; ///< the file name extensions it applies to ("as")
+        bool IdentifierDashes = false;        ///< names may contain and begin with '-' (as in CSS)
         core::Array<CodeWords> Words;
-        core::Array<CodeContext> Contexts;    ///< the first is where a file starts
-        // How it is edited (C3):
+        core::Array<CodeContext> Contexts;    ///< a file starts in the first context
+        // Editing settings:
         core::String LineComment;             ///< what a line comment begins with ("//", "--")
         CodePair BlockComment;                ///< a block comment's ends ("/*" "*/", "<!--" "-->")
-        core::Array<CodePair> Brackets;       ///< matched, and indent between ("(" ")", "{" "}")
-        core::Array<CodePair> AutoClose;      ///< typing the open puts the close ("(" ")", "\"" "\"")
-        core::String IndentAfter;             ///< what, ending a line, indents the next (space-separated: "{ ( [", Luau's "then do")
-        core::String OutdentFirst;            ///< what, first on its line, outdents it ("}", Luau's "end else until")
-        // How it folds (C7):
-        bool FoldByIndent = false;            ///< by indentation rather than by its brackets (Luau's blocks, markup)
-        core::String RegionStart;             ///< a line beginning with it opens a fold to its RegionEnd ("#pragma region")
+        core::Array<CodePair> Brackets;       ///< matched, with lines between them indented ("(" ")", "{" "}")
+        core::Array<CodePair> AutoClose;      ///< typing the open inserts the close ("(" ")", "\"" "\"")
+        core::String IndentAfter;             ///< space-separated words or marks that, ending a line, indent the next ("{ ( [", Luau's "then do")
+        core::String OutdentFirst;            ///< space-separated words or marks that outdent their line when first on it ("}", Luau's "end else until")
+        // Folding settings:
+        bool FoldByIndent = false;            ///< fold by indentation rather than by brackets (Luau's blocks, markup)
+        core::String RegionStart;             ///< a line beginning with it opens a fold that runs to the matching RegionEnd ("#pragma region")
         core::String RegionEnd;
 
-        /// Resolves what refers by name (a rule's context, the words), once after it is filled in or
-        /// read; tokenizing asks it first.
+        /// Resolves the references by name (a rule's context, the words). Call it once after the
+        /// definition is filled in or read, before tokenizing.
         void Prepare()
         {
             m_enter.Clear();
@@ -211,8 +214,9 @@ export namespace foundation::gui
             m_prepared = true;
         }
 
-        /// Tokenizes `line` from `state` (the line before's end), leaving it as this line ends; the
-        /// runs in order, those of one token joined.
+        /// Tokenizes `line`, starting from `state` (where the previous line ended), and leaves
+        /// `state` as this line ends. `out` receives the runs in order, with adjacent runs of the
+        /// same token joined.
         void Tokenize(core::StringView line, CodeLexState& state, core::Array<CodeSpan>& out) const
         {
             out.Clear();
@@ -276,7 +280,7 @@ export namespace foundation::gui
                 emit(pos, end, context.Token);
                 pos = end;
             }
-            // A line comment, a preprocessor line: done where the line is.
+            // Leave the contexts that end with the line (a line comment, a preprocessor line).
             while (state.Depth > 0 && state.Top() < Contexts.Size() && Contexts[state.Top()].EndsAtLineEnd)
                 --state.Depth;
         }
@@ -327,7 +331,7 @@ export namespace foundation::gui
             case CodeMatch::Literal: return StartsAt(line, pos, rule.Text.AsView()) ? rule.Text.Size() : 0;
             case CodeMatch::Identifier:
             {
-                // With dashes (CSS), a name may begin with them: `-webkit-x`, `--token`.
+                // With IdentifierDashes (CSS), a name may begin with dashes: `-webkit-x`, `--token`.
                 usize start = pos;
                 while (IdentifierDashes && start < line.Size() && line[start] == u8'-')
                     ++start;
@@ -419,12 +423,12 @@ export namespace foundation::gui
             return 0;
         }
 
-        core::Array<i32> m_enter; // each rule's context to enter, in context order
+        core::Array<i32> m_enter; // the context index each rule enters, in context order
         core::HashMap<core::String, CodeToken> m_words;
         bool m_prepared = false;
     };
 
-    // === Serialization: a definition as its owners keep it (the engine's XML, any serializer) ===
+    // === Serialization: a definition as its owner stores it (the engine's XML, or any serializer) ===
     namespace detail
     {
         template <typename T>

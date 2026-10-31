@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - culling tests (E8b of Specs/gui-lab-evolution.md): a node whose subtree's ink misses the
-// clip is not drawn, and culling never changes what shows. The differential test draws the same
-// tree with culling off and on and requires the same geometry where it can show: every triangle
-// that lands inside its command's scissor (in a layer that itself shows), the same in both.
+// GUI - culling tests: a node whose subtree's ink misses the clip is not drawn, and culling never
+// changes what shows. The differential test draws the same tree with culling off and on and
+// requires the same geometry wherever it can show: every triangle that lands inside its command's
+// scissor, in a layer that itself shows, must be the same in both.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -37,11 +37,12 @@ namespace
         return w;
     }
 
-    // What can show of a batch: a hash per triangle that lands inside its command's scissor (or in
-    // an unscissored command), in order, with what it is drawn with. A layer's commands show only
-    // when its composite does; layers count by their order among those that show (a culled node's
-    // layer shifts the others' indices), and textures by their first use among what shows (each
-    // draw has a canvas of its own, so a texture's address is no identity across draws).
+    // Returns what can show of a batch: a hash per triangle that lands inside its command's
+    // scissor (or in an unscissored command), in order, together with what it is drawn with. A
+    // layer's commands show only when its composite does. Layers are numbered by their order among
+    // the layers that show, because a culled node's layer shifts the indices of the others.
+    // Textures are numbered by their first use among what shows, because each draw has a canvas of
+    // its own, so a texture's address does not identify it across draws.
     core::Array<u64> VisibleGeometry(const vg::VGBatch& batch)
     {
         const auto triangleShows = [&](const vg::VGCommand& cmd, usize first) -> bool
@@ -65,7 +66,7 @@ namespace
             return cmd.fillPhase != vg::VGFillPhase::StencilWrite && cmd.fillPhase != vg::VGFillPhase::ClipApply &&
                    cmd.fillPhase != vg::VGFillPhase::ClipClear;
         };
-        // Which layers show: one whose composite has a triangle that shows, inside a layer that shows.
+        // A layer shows when its composite has a triangle that shows, inside a layer that shows.
         core::Array<bool> layerShows;
         layerShows.Resize(batch.layers.Size());
         for (usize c = batch.commands.Size(); c-- > 0;) // a child layer composites after its own commands
@@ -126,8 +127,8 @@ namespace
         return out;
     }
 
-    // A long scrolled page of what reaches past its box: outer shadows, rounded clips holding more
-    // than they show, rotated boxes, blurred groups, and a box half off the window.
+    // A long scrolled page of content that reaches past its boxes: outer shadows, rounded clips
+    // holding more than they show, rotated boxes, blurred groups, and a box half off the window.
     struct Page
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -189,7 +190,7 @@ TEST_CASE("culling: the same geometry shows with culling on as off, at the top, 
         const core::Array<u64> reference = page.Draw(false, &culledOff);
         const core::Array<u64> culled = page.Draw(true, &culledOn);
         CHECK(culledOff == 0u);
-        CHECK(culledOn < 20u); // the 80 rows out of view are skipped by the scroller's index (E15), not visited
+        CHECK(culledOn < 20u); // the 80 rows out of view are skipped by the scroller's index, not visited
         REQUIRE(reference.Size() == culled.Size());
         bool same = true;
         for (usize i = 0; i < reference.Size(); ++i)
@@ -210,15 +211,15 @@ TEST_CASE("culling: a node's ink reaches its outer shadow and its filter, and it
         u8"blurred { width: 20px; height: 20px; filter: blur(2px); }")));
     styles.ApplyTree(*root.Get());
     root->UpdateLayout();
-    // The outer shadow: 2 of spread and 15 of blur (three sigma of a CSS blur of 10) past the
-    // offset; the inset one adds nothing.
+    // The outer shadow reaches 2 of spread and 15 of blur (three sigma of a CSS blur of 10) past
+    // its offset; the inset shadow adds nothing.
     const Rect ink = box->GetInkBounds();
     CHECK(ink.x == doctest::Approx(4.0f - 17.0f));
     CHECK(ink.y == doctest::Approx(6.0f - 17.0f));
     CHECK(ink.Right() == doctest::Approx(100.0f + 4.0f + 17.0f));
     CHECK(ink.Bottom() == doctest::Approx(50.0f + 6.0f + 17.0f));
 
-    // A child placed past the box widens the subtree's ink, and moving it changes the ink kept.
+    // A child placed past the box widens the subtree's ink, and moving it updates the stored ink.
     auto far = Add(*box.Get(), u8"far");
     styles.ApplyTree(*root.Get());
     root->UpdateLayout();
@@ -226,7 +227,7 @@ TEST_CASE("culling: a node's ink reaches its outer shadow and its filter, and it
     far->SetPosition(core::Float2{300.0f, 0.0f});
     CHECK(box->GetSubtreeInk().Right() == doctest::Approx(310.0f));
 
-    // A filter's blur widens it all by three sigma.
+    // A filter's blur widens the whole ink by three sigma.
     auto blurred = Add(*root.Get(), u8"blurred");
     styles.ApplyTree(*root.Get());
     root->UpdateLayout();
@@ -236,7 +237,8 @@ TEST_CASE("culling: a node's ink reaches its outer shadow and its filter, and it
 
 namespace
 {
-    // A host's frame: style, tick, lay out, ask, draw; what it asked.
+    // Runs a host's frame (style, tick, lay out, ask whether a frame is needed, draw) and
+    // returns whether the root asked for a frame.
     bool HostFrame(SceneRoot& root, StyleManager& styles)
     {
         styles.ApplyTree(root);
@@ -266,21 +268,21 @@ TEST_CASE("culling: a fading box out of view asks for no frames, scrolled into v
         u8"@keyframes turn { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }")));
 
     CHECK(HostFrame(*root.Get(), styles)); // the first frame
-    CHECK(fading->GetDrawnFrame() == 0u);  // culled: below the page's view
+    CHECK(fading->GetDrawnFrame() == 0u);  // culled, since it is below the page's view
     CHECK_FALSE(HostFrame(*root.Get(), styles));
     CHECK(root->GetLastFrameStats().AnimatedNode.IsEmpty());
 
-    page->SetScrollOffset(core::Float2{0.0f, 1900.0f}); // into view: a redraw, which draws it
+    page->SetScrollOffset(core::Float2{0.0f, 1900.0f}); // scrolled into view: a redraw, which draws it
     CHECK(HostFrame(*root.Get(), styles));
     CHECK(fading->GetDrawnFrame() != 0u);
-    CHECK(HostFrame(*root.Get(), styles)); // now its animation asks
+    CHECK(HostFrame(*root.Get(), styles)); // now its animation asks for frames
     CHECK(root->GetLastFrameStats().Reasons.Animation);
 
     page->SetScrollOffset(core::Float2{0.0f, 0.0f});
     CHECK(HostFrame(*root.Get(), styles));
     CHECK_FALSE(HostFrame(*root.Get(), styles)); // out of view again: quiet
 
-    // A turning box could swing into view: out of view, it still asks.
+    // A turning box could swing into view, so it asks for frames even out of view.
     auto turning = Add(*page.Get(), u8"turning");
     CHECK(HostFrame(*root.Get(), styles));
     CHECK(HostFrame(*root.Get(), styles));
@@ -299,13 +301,14 @@ TEST_CASE("culling: a box in view fading in from nothing keeps asking for frames
         u8"@keyframes rise { from { opacity: 0; } to { opacity: 1; } }")));
     CHECK(HostFrame(*root.Get(), styles)); // the first frame, at opacity 0
     CHECK(fading->GetDrawnFrame() != 0u);   // in view, though nothing of it shows
-    CHECK(HostFrame(*root.Get(), styles));  // its fade asks: it is no quiet animation out of sight
+    CHECK(HostFrame(*root.Get(), styles));  // its fade asks for frames, since it is not out of sight
     CHECK(root->GetLastFrameStats().Reasons.Animation);
 }
 
 namespace
 {
-    // What the index must give: every child whose transformed subtree ink meets `area`, in order.
+    // Returns what the index must give: every child whose transformed subtree ink meets `area`,
+    // in order.
     core::Array<Node*> ReachingByWalk(Node& parent, const Rect& area)
     {
         core::Array<Node*> out;
@@ -352,19 +355,19 @@ TEST_CASE("child index: a node's index of its children agrees with a walk, moved
     const core::u32 builds = scroller.GetChildIndexBuilds();
     CHECK(builds >= 1u);
 
-    // A card fades in a row: something under the scroller changed, but no reach moved.
+    // A card in a row fades: something under the scroller changed, but no child's reach moved.
     scroller.GetChildAt(5)->GetChildAt(0)->SetAlpha(0.5f);
     page.Draw(true);
     CHECK(agree());
     CHECK(scroller.GetChildIndexBuilds() == builds);
 
-    // Rows moved and scattered out of order: built again, and still agreeing.
+    // Rows moved out of order: the index is built again and still agrees.
     scroller.GetChildAt(3)->SetPosition(core::Float2{20.0f, 2500.0f});
     scroller.GetChildAt(70)->SetPosition(core::Float2{0.0f, 10.0f});
     page.Draw(true);
     CHECK(scroller.GetChildIndexBuilds() > builds);
     CHECK(agree());
-    // A child taken away and one added: the index is of the children it has.
+    // A child removed and one added: the index covers the children the scroller has now.
     scroller.RemoveChild(scroller.GetChildAt(10));
     (void)Add(scroller, u8"row");
     page.Draw(true);
@@ -391,7 +394,7 @@ TEST_CASE("child index: a point finds through the index what it finds by trying 
                 expected = &scroller;
             Node* hit = page.root->OverFind(p);
             if (hit == page.root.Get())
-                hit = nullptr; // the root's own box: what the walk above does not try
+                hit = nullptr; // the root's own box, which the walk above does not try
             same = same && hit == expected;
             found += hit != nullptr ? 1 : 0;
         }

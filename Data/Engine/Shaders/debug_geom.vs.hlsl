@@ -13,8 +13,8 @@ VSOut main(VSIn i) {
     VSOut o;
     o.pos = mul(float4(i.pos, 1.0), pc.ViewProj);
     o.pos = BiasClipTowardViewer(o.pos, kDepthBias);   // pull toward the camera to beat TAA-jitter depth noise
-    // Debug colours are authored sRGB (like every colour); the target stores linear (an sRGB
-    // target encodes on write), as VG's vertex colours do.
+    // Debug colours are authored in sRGB, like every colour, and the target stores linear (an sRGB
+    // target encodes on write), so they are decoded here as VG's vertex colours are.
     o.col = float4(SrgbToLinear(i.col.rgb), i.col.a);
     return o;
 }

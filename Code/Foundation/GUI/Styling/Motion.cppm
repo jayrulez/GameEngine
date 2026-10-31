@@ -3,11 +3,12 @@
 
 // GUI - :motion partition
 //
-// What `transition` and `animation` declare (G3 of Specs/vg-and-gui-lab.md): their lists, the
-// shorthands expanded into their longhands (transition-property, -duration, -timing-function,
-// -delay; animation-name, -duration, -timing-function, -delay, -iteration-count, -direction,
-// -fill-mode, -play-state) so each cascades on its own, and the specs composed back from the
-// longhands, a shorter list repeating to the length of the property or name list, as CSS does.
+// What `transition` and `animation` declare. This partition parses their lists, expands the
+// shorthands into their longhands (transition-property, -duration, -timing-function, -delay;
+// animation-name, -duration, -timing-function, -delay, -iteration-count, -direction, -fill-mode,
+// -play-state) so each longhand cascades on its own, and composes the specs back from the
+// longhands. As in CSS, a shorter longhand list repeats to the length of the property or name
+// list.
 
 module;
 #include "Core/Prelude.h"
@@ -35,8 +36,9 @@ export namespace foundation::gui
         Easing Timing = Easing::Ease();
     };
 
-    /// `transition`: a comma list of `<property> <duration> [<easing>] [<delay>]` in any order
-    /// past the property (the first time is the duration, the second the delay); `none` is empty.
+    /// Parses `transition`: a comma list of `<property> <duration> [<easing>] [<delay>]`, in any
+    /// order after the property (the first time is the duration, the second the delay). `none`
+    /// gives an empty list.
     [[nodiscard]] inline Array<TransitionSpec> ParseTransitionList(core::StringView value)
     {
         Array<TransitionSpec> out;
@@ -105,8 +107,9 @@ export namespace foundation::gui
         bool Paused = false; ///< animation-play-state: paused
     };
 
-    /// `animation`: a comma list of `<name> <duration> [<easing>] [<delay>] [<iteration-count> |
-    /// infinite] [<direction>] [<fill-mode>]`, keywords in any order; `none` is empty.
+    /// Parses `animation`: a comma list of `<name> <duration> [<easing>] [<delay>]
+    /// [<iteration-count> | infinite] [<direction>] [<fill-mode>]`, with keywords in any order.
+    /// `none` gives an empty list.
     [[nodiscard]] inline Array<AnimationSpec> ParseAnimationList(core::StringView value)
     {
         Array<AnimationSpec> out;
@@ -190,15 +193,15 @@ export namespace foundation::gui
             return core::String(u8"ease");
         }
 
-        // The `index`-th item of a comma list, the list repeating when shorter (CSS's rule for the
-        // longhands); empty when the list is.
+        // Returns the `index`-th item of a comma list, repeating the list when it is shorter (CSS's
+        // rule for the longhands), or empty when the list is empty.
         [[nodiscard]] inline core::StringView Cycled(const Array<core::StringView>& list, usize index)
         {
             return list.IsEmpty() ? core::StringView{} : list[index % list.Size()];
         }
     }
 
-    /// `transition` as its four longhands (each a comma list, one item per entry).
+    /// Expands `transition` into its four longhands (each a comma list, one item per entry).
     inline void ExpandTransition(core::StringView value, Array<core::String>& names, Array<core::String>& values)
     {
         core::String properties, durations, timings, delays;
@@ -222,7 +225,7 @@ export namespace foundation::gui
         }
     }
 
-    /// `animation` as its eight longhands.
+    /// Expands `animation` into its eight longhands.
     inline void ExpandAnimation(core::StringView value, Array<core::String>& names, Array<core::String>& values)
     {
         core::String n, durations, timings, delays, counts, directions, fills, states;
@@ -260,9 +263,9 @@ export namespace foundation::gui
         }
     }
 
-    /// The transitions the longhands declare: one per item of transition-property (none: no
-    /// transitions), the other lists repeating to its length; an item that does not parse takes
-    /// the longhand's initial value.
+    /// Composes the transitions the longhands declare: one per item of transition-property (`none`
+    /// gives no transitions), with the other lists repeating to its length. An item that does not
+    /// parse takes the longhand's initial value.
     [[nodiscard]] inline Array<TransitionSpec> ComposeTransitions(core::StringView properties, core::StringView durations,
                                                                   core::StringView timings, core::StringView delays)
     {
@@ -285,7 +288,8 @@ export namespace foundation::gui
         return out;
     }
 
-    /// The animations the longhands declare: one per item of animation-name (none: none).
+    /// Composes the animations the longhands declare: one per item of animation-name (`none` gives
+    /// none).
     [[nodiscard]] inline Array<AnimationSpec> ComposeAnimations(core::StringView names, core::StringView durations,
                                                                 core::StringView timings, core::StringView delays,
                                                                 core::StringView counts, core::StringView directions,

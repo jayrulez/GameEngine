@@ -6,10 +6,9 @@
 // Where a scene was left, kept per scene in the project's editor settings (SceneViewPref): the
 // overlays, the camera, the selection and the page's panes. The page reads it when it opens and
 // writes the whole of it on a toggle and when it closes, so saving one part never brings back
-// another's default. The panes are one splitter of three on the GUI (hierarchy, viewport,
-// inspector) where the prefs keep the old page's two nested ratios (hierarchy | the rest, then
-// viewport | inspector), so the weights convert both ways and the prefs' format stands. Out of the
-// page's class (Documentation/Specs/editor-gui.md, 5.3, layer 2).
+// another's default. The panes are one splitter of three (hierarchy, viewport, inspector), while
+// the prefs keep two nested ratios (hierarchy against the rest, then viewport against inspector),
+// so the weights convert both ways and the prefs' format stays as it is.
 
 module;
 #include "Core/Prelude.h"
@@ -110,7 +109,8 @@ export namespace editor
             return pref;
         }
 
-        /// The camera where the pref left it; false when no page saved one (the caller's framing stands).
+        /// The camera where the pref left it; false when no page saved one (the caller's framing
+        /// stands).
         static bool RestoreCamera(const SceneViewPref& pref, EditorCamera& camera)
         {
             if (!pref.hasCamera)
@@ -123,8 +123,8 @@ export namespace editor
             return true;
         }
 
-        /// The saved selection's ids still in `scene` (deleted since, or spawned by a Simulate and
-        /// selected at close: never a ghost).
+        /// The saved selection's ids still in `scene`, so entities deleted since, or spawned by a
+        /// Simulate and selected at close, never come back as ghosts.
         [[nodiscard]] static Array<Guid> LiveSelection(const SceneViewPref& pref, foundation::scene::Scene& scene)
         {
             Array<Guid> live;

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// script.luau.pipeline tests: the Luau cook service in isolation - the tier starters, the
+// script.luau.pipeline tests: the Luau cook service in isolation. The tier starters, the
 // construct-and-walk property harvest (number/bool/string/Float3, non-scalars skipped, sorted),
-// the compile-check, and the shared startCoroutine coroutine opt-in - driven straight through
-// IScriptLanguageCook (no project/VFS needed since Cook takes source bytes directly). The full
-// source->builder->factory round-trip is covered by the neutral pipeline suite.
+// the compile-check, and the shared startCoroutine coroutine opt-in, driven straight through
+// IScriptLanguageCook (no project or VFS needed, since Cook takes source bytes directly). The
+// neutral pipeline suite covers the full round-trip from source through builder to factory.
 
 #include <doctest/doctest.h>
 
@@ -15,7 +15,7 @@
 import foundation.core;
 import foundation.script;
 import foundation.script.resource;
-import foundation.script.luau; // CreateLuauScriptManager + LuauBytecodeVersion (the player path)
+import foundation.script.luau; // CreateLuauScriptManager and LuauBytecodeVersion (the player path)
 import script.pipeline;
 import script.luau.pipeline;
 
@@ -27,12 +27,12 @@ namespace
 {
     [[nodiscard]] IScriptLanguageCook* LuauCook()
     {
-        RegisterLuauScriptCook(); // registers the Luau backend + cook (idempotent)
+        RegisterLuauScriptCook(); // registers the Luau backend and cook (idempotent)
         return ScriptLanguageCookRegistry::Get().FindByLanguage(u8"luau");
     }
 
     // A class whose constructor sets one field of each harvestable kind plus two that must be
-    // skipped (a table, and the nil owner - which Lua drops from the instance entirely).
+    // skipped (a table, and the nil owner, which Lua drops from the instance entirely).
     constexpr StringView kMultiProp = u8R"lua(
 Multi = {}
 Multi.__index = Multi
@@ -49,8 +49,8 @@ end
 function Multi:onStart() end
 )lua";
 
-    // A class whose constructor dereferences the entity - harvest constructs with a nil owner,
-    // so this FAULTS; the cook must still succeed (valid at runtime) with no properties.
+    // A class whose constructor dereferences the entity. The harvest constructs with a nil owner,
+    // so this faults; the cook must still succeed (valid at runtime) with no properties.
     constexpr StringView kFaultyCtor = u8R"lua(
 Risky = {}
 Risky.__index = Risky
@@ -133,7 +133,7 @@ TEST_CASE("luau.cook: construct-and-walk harvest - each scalar kind, non-scalars
     REQUIRE(cook->Cook(kMultiProp, u8"Multi.luau", sink, out));
     CHECK(out.className == u8"Multi");
 
-    // Four scalars harvested (speed/enabled/label/offset); `data` (table) + `owner` (nil) skipped.
+    // Four scalars harvested (speed/enabled/label/offset); `data` (table) and `owner` (nil) skipped.
     // pairs() order is unspecified, so the cook sorts by name: enabled, label, offset, speed.
     REQUIRE(out.properties.Size() == 4u);
     CHECK(out.properties[0].name == u8"enabled");
@@ -192,7 +192,7 @@ TEST_CASE("luau.cook: a constructor that faults on the nil owner cooks with no p
 
     CookScriptErrorSink sink;
     ScriptClassSource out;
-    // The class compiles + loads fine; only the harvest construction faults - the cook succeeds.
+    // The class compiles and loads fine; only the harvest construction faults, and the cook succeeds.
     REQUIRE(cook->Cook(kFaultyCtor, u8"Risky.luau", sink, out));
     CHECK(out.className == u8"Risky");
     CHECK(out.properties.IsEmpty());
@@ -233,8 +233,8 @@ TEST_CASE("luau.cook: the cook stores loadable bytecode in the pack (the player 
     REQUIRE_FALSE(out.bytecode.IsEmpty());
     CHECK_FALSE(out.source.IsEmpty());
 
-    // Player path: a fresh Luau VM reconstructs the blob from the STORED bytes with no compiler
-    // (CreateBlob + Serialize(read)), loads it, and instantiates the class - proving the pack
+    // Player path: a fresh Luau VM reconstructs the blob from the stored bytes with no compiler
+    // (CreateBlob, then Serialize(read)), loads it, and instantiates the class, showing the pack
     // carries runnable bytecode, not just source.
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
     RefPtr<IScriptBlob> blob = manager->CreateBlob();

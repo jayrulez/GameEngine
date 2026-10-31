@@ -3,15 +3,15 @@
 
 // Editor::App - :native_module partition.
 //
-// EditorNativeModule: a project's native code (game-native-code.md) in the editor, out of the
-// application (Documentation/Specs/editor-gui.md, 5.1, layer 3). It loads the module the project
-// declares into the EMBEDDED runtime when the project opens, reloads it on request (Project >
-// Reload Native Module) with every running game stopped and every live scene carried across, and
-// unloads it when the project closes, before the runtime and the resources go.
+// EditorNativeModule: a project's native code in the editor, kept out of the application. It
+// loads the module the project declares into the embedded runtime when the project opens, reloads
+// it on request (Project > Reload Native Module) with every running game stopped and every live
+// scene carried across, and unloads it when the project closes, before the runtime and the
+// resources go.
 //
-// Always through a staged copy under the project's cache, never the declared path: on Windows
+// It always loads a staged copy under the project's cache, never the declared path. On Windows
 // LoadLibraryW holds the image open against writes, so mapping Native/<Target>.dll directly would
-// stop "Build Native Module" relinking it; and a reload needs a fresh path anyway (dlopen
+// stop "Build Native Module" relinking it, and a reload needs a fresh path anyway (dlopen
 // refcounts by path).
 module;
 #include "Core/Prelude.h"
@@ -39,8 +39,9 @@ export namespace editor::app
         EditorNativeModule(const EditorNativeModule&) = delete;
         EditorNativeModule& operator=(const EditorNativeModule&) = delete;
 
-        /// The project opened: its declared module loads into `runtime` (nothing when it declares
-        /// none). A failure says so and the project opens without it (scripts work regardless).
+        /// Called when the project opens: loads its declared module into `runtime` (nothing when it
+        /// declares none). A failure is reported and the project opens without the module (scripts
+        /// work regardless).
         void Load(editor::EditorProject& project, editor::EditorContext& context, foundation::runtime::SubsystemManager& runtime)
         {
             if (project.Settings().nativeModule.IsEmpty())
@@ -67,11 +68,11 @@ export namespace editor::app
             }
         }
 
-        /// Reloads the project's module (it was rebuilt): every game run stops, every live scene on
-        /// `runtime` is captured, the old module unloads (and stays mapped: no page is freed under
-        /// a pointer the teardown missed), the new one loads, and the scenes are restored, its
-        /// components rehydrating through its registrations. The scenes are restored even when the
-        /// load fails, never left stripped.
+        /// Reloads the project's module after a rebuild. Every game run stops, every live scene on
+        /// `runtime` is captured, the old module unloads (its library stays mapped, so no page is
+        /// freed under a pointer the teardown missed), the new one loads, and the scenes are
+        /// restored, their components rehydrating through the new module's registrations. The
+        /// scenes are restored even when the load fails, so they are never left stripped.
         void Reload(editor::EditorProject* project, editor::EditorContext& context, foundation::runtime::SubsystemManager& runtime,
                     foundation::resource::ResourceManager* resources)
         {
@@ -133,8 +134,8 @@ export namespace editor::app
             }
         }
 
-        /// The project closes: the module's managers and systems withdraw while the runtime and
-        /// the resources are still alive.
+        /// Called when the project closes: the module's managers and systems withdraw while the
+        /// runtime and the resources are still alive.
         void Unload()
         {
             if (m_plugins)
@@ -146,10 +147,10 @@ export namespace editor::app
 
         [[nodiscard]] bool IsLoaded() const noexcept { return m_plugins.Get() != nullptr; }
 
-        /// The module's staged copy (Library/native-hot/reload-<n>-<name>), from the declared path
-        /// or, when it is absent, this platform's spelling of the same target (a project opened
-        /// on Linux and Windows names one of Native/libX.so and Native/X.dll); empty (logged) when
-        /// it cannot be read or written.
+        /// Makes the module's staged copy (Library/native-hot/reload-<n>-<name>) from the declared
+        /// path or, when that is absent, this platform's spelling of the same target (a project
+        /// opened on both Linux and Windows names one of Native/libX.so and Native/X.dll). Returns
+        /// empty (logged) when it cannot be read or written.
         [[nodiscard]] String StageCopy(const editor::EditorProject& project)
         {
             const StringView declared = project.Settings().nativeModule.AsView();
@@ -193,6 +194,6 @@ export namespace editor::app
     private:
         IAllocator& m_allocator;
         UniquePtr<foundation::runtime::PluginHost> m_plugins;
-        u32 m_reloads = 0; // versions the staged copies
+        u32 m_reloads = 0; // numbers the staged copies' versions
     };
 }

@@ -6,18 +6,10 @@
 // Model-agnostic interactive node graph canvas. Renders nodes with typed ports and bezier connections.
 // Supports pan/zoom, selection, node dragging, drag-to-connect (with detach-and-reroute), box-select,
 // context menus, hover, and keyboard delete / select-all. Follows the CurveCanvas pattern: the widget
-// owns rendering and input; callers push node/connection data in and listen to events. Ported from
-// Sedulous.UI.Toolkit/src/NodeGraph/NodeGraphCanvas.bf (a View).
+// owns rendering and input; callers push node and connection data in and listen to events.
 //
-// Port taxes: Beef `List<NodeGraphNode*>` (heap, stable pointers) -> Array<UniquePtr<NodeGraphNode>>;
-// GetNode returns the raw pointer (m_nodes[i].Get()); AddNode takes UniquePtr by move; RemoveNode's
-// `delete + RemoveAt` collapses to RemoveAt (UniquePtr frees). `List<NodeGraphConnection>` /
-// `List<int32>` -> Array by value. `Vector2` -> Float2; `Vector2.Distance` -> core::Distance. Beef
-// tuples -> private DragStart / PortHit structs. `delegate` validator -> Function<...>;
-// `Event<delegate ...> ~ _.Dispose()` -> Event<...> fired via .Invoke(). `mDrawOrder.Remove(value)` ->
-// RemoveValue find-and-RemoveAt. `%` on floats -> std::fmod; `float.MaxValue/MinValue` ->
-// std::numeric_limits<f32>::max()/lowest(). KeyModifiers::Shift/Ctrl with free-function HasFlag;
-// KeyCode::Delete/A. byte Color(...) -> private static Rgb().
+// Nodes are held as Array<UniquePtr<NodeGraphNode>> so their pointers stay stable; GetNode returns the
+// raw pointer, AddNode takes a UniquePtr by move, and RemoveNode frees the node.
 
 module;
 #include <cmath>
@@ -39,7 +31,7 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::ui::toolkit
 {
-    /// How a canvas anchors + renders its connections.
+    /// How a canvas anchors and renders its connections.
     enum class ConnectionStyle : u8
     {
         /// Dataflow look: output-port to input-port horizontal-tangent beziers (the default).
@@ -106,10 +98,10 @@ export namespace foundation::ui::toolkit
         Event<void(i32)> OnNodeDeleted;
         Event<void(i32)> OnConnectionCreated;
         Event<void(i32, i32, i32, i32)> OnConnectionRemoved;
-        /// Fired at the START of RemoveConnection with the connection INDEX (still valid when the
-        /// event fires). Lets an index-mapped caller model (e.g. transitions parallel to
-        /// connections) mirror keyboard/interactive deletions unambiguously - OnConnectionRemoved
-        /// only carries endpoints, which parallel edges share.
+        /// Fired at the start of RemoveConnection with the connection index (still valid when the
+        /// event fires). It lets a caller whose model maps by index (for example transitions kept
+        /// parallel to connections) mirror keyboard and interactive deletions unambiguously, since
+        /// OnConnectionRemoved only carries endpoints, which parallel edges share.
         Event<void(i32)> OnConnectionDeleting;
         Event<void()> OnSelectionChanged;
         Event<void(f32, f32)> OnCanvasContextMenu;
@@ -117,7 +109,7 @@ export namespace foundation::ui::toolkit
         Event<void(i32)> OnConnectionContextMenu;
         Event<void(i32)> OnNodeDoubleClicked;
         /// Fired when a StartLinkFrom gesture lands on a target node: (sourceNode, targetNode).
-        /// The CALLER decides what a link means (e.g. adds a transition + a connection).
+        /// The caller decides what a link means (for example, it adds a transition and a connection).
         Event<void(i32, i32)> OnNodeLinkRequested;
 
         // ========== Constructor ==========
@@ -460,7 +452,7 @@ export namespace foundation::ui::toolkit
 
             const Float2 canvasPos = ScreenToCanvas(Float2{e.X, e.Y});
 
-            // Pending link: a LEFT click on a node completes it; anything else cancels.
+            // Pending link: a left click on a node completes it; anything else cancels.
             if (m_interaction == InteractionMode::PendingLink)
             {
                 const i32 source = m_linkSourceNode;
@@ -536,12 +528,12 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Port hit - start connection drag.
+            // Port hit: start a connection drag.
             const PortHit portHit = HitTestPort(e.X, e.Y);
             if (portHit.nodeIdx >= 0)
             {
                 // If dragging from an input port that already has a connection, detach the existing
-                // connection and drag from the original source output port instead - allows re-routing.
+                // connection and drag from the original source output port instead, which allows re-routing.
                 if (portHit.dir == PortDirection::Input)
                 {
                     const i32 existingIdx = FindConnectionToInput(portHit.nodeIdx, portHit.portIdx);
@@ -582,7 +574,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Node hit - select and start drag.
+            // Node hit: select and start a drag.
             const i32 nodeHit = HitTestNode(e.X, e.Y);
             if (nodeHit >= 0)
             {
@@ -629,7 +621,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Connection hit - select.
+            // Connection hit: select.
             const i32 connHit = HitTestConnection(e.X, e.Y);
             if (connHit >= 0)
             {
@@ -642,7 +634,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Empty space - start box selection.
+            // Empty space: start box selection.
             if (!HasFlag(e.Modifiers, KeyModifiers::Shift))
             {
                 ClearSelectionSilent();
@@ -720,7 +712,7 @@ export namespace foundation::ui::toolkit
             switch (m_interaction)
             {
             case InteractionMode::PendingLink:
-                // The link completes/cancels on mouse DOWN; the release is inert.
+                // The link completes or cancels on mouse down; the release is inert.
                 break;
 
             case InteractionMode::Panning:
@@ -960,7 +952,7 @@ export namespace foundation::ui::toolkit
                                          Rgb(38, 40, 48, 255));
             }
 
-            // Header (uses node's HeaderColor - caller controls this per node).
+            // Header (uses the node's HeaderColor, which the caller sets per node).
             ctx.VG().FillRoundedRect(Rectangle{pos.x, pos.y, size.x, headerH}, cornerR,
                                      node->HeaderColor);
             // Square off bottom corners of header.
@@ -976,7 +968,7 @@ export namespace foundation::ui::toolkit
                                            accentColor, 2);
             }
 
-            // Emphasis ring (caller-driven; e.g. the ACTIVE state in a live graph preview).
+            // Emphasis ring (caller-driven; for example the active state in a live graph preview).
             if (node->IsHighlighted)
             {
                 ctx.VG().StrokeRoundedRect(Rectangle{pos.x - 3, pos.y - 3, size.x + 6, size.y + 6},
@@ -1037,7 +1029,7 @@ export namespace foundation::ui::toolkit
                 const Float2 portPos = GetPortScreenPos(nodeIdx, i, dir);
                 const f32 r = PortRadius * m_zoom;
 
-                // Port circle (colored by port type - not themed, since callers define type colors).
+                // Port circle (colored by port type, not themed, since callers define type colors).
                 ctx.VG().FillCircle(portPos, r, port.PortType.Color);
                 ctx.VG().StrokeCircle(portPos, r, Rgb(0, 0, 0, 100), 1);
 
@@ -1163,10 +1155,10 @@ export namespace foundation::ui::toolkit
             return center + dir * t;
         }
 
-        // Screen-space endpoints of a straight edge: center-to-center, laterally offset by the
-        // connection's LANE among edges of the same ordered pair (an opposite-direction edge
-        // shifts both directions apart automatically - its perpendicular flips with dir), then
-        // clipped to the two node rects. False = degenerate (self edge / overlapping nodes).
+        // Screen-space endpoints of a straight edge: center to center, laterally offset by the
+        // connection's lane among edges of the same ordered pair, then clipped to the two node
+        // rects. An opposite-direction edge shifts apart automatically, since its perpendicular
+        // flips with dir. Returns false when degenerate (a self edge or overlapping nodes).
         [[nodiscard]] bool ComputeStraightEdge(i32 connIndex, Float2& outStart,
                                                Float2& outEnd) const
         {
@@ -1186,7 +1178,7 @@ export namespace foundation::ui::toolkit
             const Float2 dir = delta * (1.0f / len);
             const Float2 perp{-dir.y, dir.x};
 
-            // Lane among SAME-ordered-pair edges + whether the opposite direction exists.
+            // Lane among edges of the same ordered pair, and whether the opposite direction exists.
             i32 lane = 0, sameCount = 0;
             bool hasOpposite = false;
             for (i32 i = 0; i < static_cast<i32>(m_connections.Size()); i++)
@@ -1486,8 +1478,8 @@ export namespace foundation::ui::toolkit
                 return false;
             }
 
-            // Straight node-to-node edges are PORT-LESS: node bounds + no-self is the whole
-            // contract, and parallel duplicates are legal (multiple transitions between one
+            // Straight node-to-node edges have no ports: valid node bounds and no self edge are
+            // the whole contract, and parallel duplicates are legal (multiple transitions between one
             // state pair render in offset lanes).
             if (EdgeStyle == ConnectionStyle::StraightNodeToNode)
             {
@@ -1607,7 +1599,7 @@ export namespace foundation::ui::toolkit
             }
         }
 
-        // Removes the first element equal to `value` (mirrors Beef List<int32>.Remove(value)).
+        // Removes the first element equal to `value`.
         static void RemoveValue(Array<i32>& arr, i32 value)
         {
             for (usize i = 0; i < arr.Size(); ++i)

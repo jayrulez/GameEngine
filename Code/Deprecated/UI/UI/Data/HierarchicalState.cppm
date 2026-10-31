@@ -3,9 +3,9 @@
 
 // UI - :hierarchical_state partition
 //
-// Captures/restores TreeView state (expansion + selection + scroll) across data reloads or view
-// rebuilds. Ported from Sedulous.UI/src/Data/HierarchicalState.bf. Depends on TreeView (its FlatAdapter /
-// Selection / InternalListView), so it sits above :tree_view (clean DAG - TreeView doesn't reference it).
+// Captures/restores TreeView state (expansion, selection and scroll) across data reloads or view
+// rebuilds. Depends on TreeView (its FlatAdapter / Selection / InternalListView), so it sits above
+// :tree_view; TreeView does not reference it.
 
 module;
 #include "Core/Prelude.h"

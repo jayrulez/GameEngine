@@ -3,13 +3,12 @@
 
 // Editor::Project - :export_preset partition.
 //
-// Export presets: named, per-platform descriptions of how to produce a shippable dist - which
-// export template (player + runtime sidecars) to use, plus game-specific extra files and output
-// naming. Project-local and committable (references a template by id/platform, never an absolute
-// path). Persisted to <project>/export_presets.xml (ProjectSettings-shape versioned XML). The
-// Tools.Export CLI and the editor's Export menu both drive the export from these, so a preset
-// produces the SAME dist whichever surface triggers it (the cook uniformity, extended to the whole
-// dist).
+// Export presets are named, per-platform descriptions of how to produce a shippable dist: which
+// export template (player and runtime sidecars) to use, plus game-specific extra files and output
+// naming. They are project-local and can be committed, since they reference a template by id or
+// platform, never by an absolute path. They are saved to <project>/export_presets.xml (versioned
+// XML in the ProjectSettings shape). The Tools.Export CLI and the editor's Export menu both drive
+// the export from these, so a preset produces the same dist whichever of them triggers it.
 
 module;
 #include "Core/Prelude.h"
@@ -31,27 +30,28 @@ export namespace editor
 
     inline constexpr StringView kExportPresetsFile = u8"export_presets.xml";
 
-    // One export target. A plain value type (copyable/movable) so a project can hold an
+    // One export target, a plain value type (copyable and movable) so a project can hold an
     // Array<ExportPreset>; only the root set below is a versioned-payload object.
     //
-    // References an ExportTemplate (see :export_template) rather than an absolute path, so a preset is
-    // portable/committable: `templateId` picks a template exactly, or blank => the installed template
-    // for `platform` (the host implicit template counts). `additionalFiles` are GAME-specific extras
-    // (icon, config, data) staged into the dist ON TOP of the template's own runtime sidecars.
+    // It references an ExportTemplate (see :export_template) rather than an absolute path, so a
+    // preset is portable and can be committed: `templateId` picks a template exactly, or when blank
+    // the installed template for `platform` is used (the host's implicit template counts).
+    // `additionalFiles` are game-specific extras (icon, config, data) staged into the dist on top of
+    // the template's own runtime sidecars.
     struct ExportPreset
     {
         String name;         // "Windows Desktop"
-        String platform;     // "Win64" / "Linux64" (the Bin/<Config>/<Platform> tag)
-        String config;       // "Debug"/"Release"/"RelWithDebInfo"; "" => Release (default)
-        String templateId;   // which template; "" => resolve by (platform, config)
-        String playerName;   // output exe name; "" => the template's player basename
-        String outputSubdir; // export-root-relative output dir; "" => sanitized `name`
+        String platform;     // "Win64" or "Linux64" (the Bin/<Config>/<Platform> tag)
+        String config;       // "Debug", "Release" or "RelWithDebInfo"; "" means Release (the default)
+        String templateId;   // which template; "" resolves by (platform, config)
+        String playerName;   // output executable name; "" uses the template's player basename
+        String outputSubdir; // output directory relative to the export root; "" uses the sanitized `name`
         Array<String> additionalFiles; // game-specific extra files (beyond the template's sidecars)
         bool stageSymbols =
-            false; // stage the template's symbols[] into the dist (default: stripped)
-        bool pruneToReachable = false; // ship only the closure of the entry points (default: pack
-                                       // everything - the escape hatch for teams not managing
-                                       // reachability).
+            false; // stage the template's symbols[] into the dist (by default they are left out)
+        bool pruneToReachable = false; // ship only the closure of the entry points (by default
+                                       // everything is packed, for teams that do not manage
+                                       // reachability)
         // This platform draws at its own resolution rather than the project's (a handheld's native
         // panel, say): the dist's player.xml carries these instead.
         bool overridesRender = false;
@@ -71,7 +71,7 @@ export namespace editor
         ScreenOrientation orientation = ScreenOrientation::Any;
         // The dist keeps its custom shaders' HLSL (a game that wants modders to read them). Off:
         // the pack carries the shaders as bytecode and the dist ships no shader source, as the
-        // engine's own ship none.
+        // engine's own shaders ship none.
         bool includeShaderSource = false;
 
         void Serialize(ISerializer& ar)
@@ -82,13 +82,13 @@ export namespace editor
             foundation::core::Serialize(ar, "playerName", playerName);
             foundation::core::Serialize(ar, "outputSubdir", outputSubdir);
             foundation::core::Serialize(ar, "additionalFiles", additionalFiles);
-            // The config axis: a preset selects (platform, config) and opts symbols in/out
+            // The config axis: a preset selects (platform, config) and opts symbols in or out
             // (config "" resolves to Release).
             foundation::core::Serialize(ar, "config", config);
             foundation::core::Serialize(ar, "stageSymbols", stageSymbols);
-            // Closure pruning (false = pack the whole cooked dir).
+            // Closure pruning (false packs the whole cooked directory).
             foundation::core::Serialize(ar, "pruneToReachable", pruneToReachable);
-            // The display overrides, appended: a preset file saved before them reads none.
+            // The display overrides are appended, so a preset file written without them reads none.
             SerializeAppended(ar, "overridesRender", overridesRender);
             SerializeAppended(ar, "renderWidth", renderWidth);
             SerializeAppended(ar, "renderHeight", renderHeight);
@@ -105,13 +105,13 @@ export namespace editor
     };
 
     // ExportPreset's reflection: every field a preset editor sets, each with a `label` (the
-    // engine.project setting convention), the sizes with their `range`; the MCP preset tools build
-    // their arguments, checks and answers from it. Call before reading TypeOf<ExportPreset>().
+    // engine.project settings convention), and the sizes with their `range`. The MCP preset tools
+    // build their arguments, checks and answers from it. Call before reading TypeOf<ExportPreset>().
     void RegisterExportPresetReflection();
 
     // ADL hook so Serialize(ar, Array<ExportPreset>&) resolves each element to the member above.
-    // Frames each element as its own object node (the generic Array<T> helper does not), so the
-    // per-element keys stay separated on read. Declared before ExportPresetSet so it is visible at
+    // It frames each element as its own object node (the generic Array<T> helper does not), so the
+    // per-element keys stay separate on read. Declared before ExportPresetSet so it is visible at
     // that template's instantiation point.
     inline void Serialize(ISerializer& ar, ExportPreset& p)
     {
@@ -120,7 +120,7 @@ export namespace editor
         ar.EndObject();
     }
 
-    // A project's set of export presets - the root, versioned payload of export_presets.xml.
+    // A project's set of export presets: the root, versioned payload of export_presets.xml.
     class ExportPresetSet final : public ISerializable
     {
         RTTI_OBJECT(ExportPresetSet, ISerializable)
@@ -132,7 +132,7 @@ export namespace editor
             foundation::core::Serialize(ar, "presets", presets);
         }
 
-        // Find a preset by name (case-sensitive); null when absent.
+        // Finds a preset by name (case-sensitive); null when absent.
         [[nodiscard]] const ExportPreset* Find(StringView presetName) const
         {
             for (const ExportPreset& p : presets)
@@ -146,7 +146,7 @@ export namespace editor
         }
     };
 
-    // Fill `out` with the built-in default: one preset targeting the host platform, sourcing the
+    // Fills `out` with the built-in default: one preset targeting the host platform, sourcing the
     // player from the driving tool's own directory. Used when a project has no export_presets.xml.
     inline void DefaultExportPresets(ExportPresetSet& out)
     {
@@ -159,7 +159,7 @@ export namespace editor
         out.presets.PushBack(Move(host));
     }
 
-    // Read export_presets.xml from `root`. NotFound when absent (caller falls back to defaults).
+    // Reads export_presets.xml from `root`. NotFound when absent (the caller falls back to defaults).
     [[nodiscard]] inline Status LoadExportPresets(vfs::IFileSystem& root, ExportPresetSet& out,
                                                   StringView fileName = kExportPresetsFile)
     {
@@ -180,7 +180,7 @@ export namespace editor
         return ctx->serializer->IsOk() ? Status{} : ctx->serializer->GetStatus();
     }
 
-    // Write export_presets.xml to `root`.
+    // Writes export_presets.xml to `root`.
     [[nodiscard]] inline Status SaveExportPresets(vfs::IWritableFileSystem& writable,
                                                   ExportPresetSet& presets,
                                                   StringView fileName = kExportPresetsFile)
@@ -203,16 +203,17 @@ export namespace editor
         return writable.Save(fileName, buffer.Bytes());
     }
 
-    // Editor-level export preferences - a Settings section (foundation.settings store), NOT project-local
-    // and NOT in export_presets.xml. Currently just the templates-root override: when non-empty it wins
-    // over $ENV_TEMPLATES_DIR and the built-in <user-data>/templates default (see
+    // Editor-level export preferences: a Settings section (foundation.settings store), not
+    // project-local and not in export_presets.xml. It holds the templates-root override: when
+    // non-empty it wins over $ENV_TEMPLATES_DIR and the built-in <user-data>/templates default (see
     // ResolveTemplatesRoot in :export_template), letting the user point the editor at a shared or
-    // checked-out templates directory. Empty (the default) preserves the env-then-default behaviour.
+    // checked-out templates directory. Empty (the default) keeps the environment-then-default
+    // behaviour.
     class EditorExportSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorExportSettings, ISerializable)
     public:
-        String templatesRoot; // "" => $ENV_TEMPLATES_DIR, else <user-data>/templates
+        String templatesRoot; // "" means $ENV_TEMPLATES_DIR, else <user-data>/templates
 
         void Serialize(ISerializer& ar) override
         {

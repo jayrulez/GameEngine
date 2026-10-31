@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ThumbnailService tests. A stub generator + a real EditorJobService
-// (Update pumped like JobServiceTests) + a scratch cache dir exercise the full pipeline
-// headlessly: icon-fallback-until-ready (Get empty, then a drawable + ONE ready signal),
-// negative caching (unknown id / unsupported type / failed generate never re-schedule),
-// content-hash disk round-trip (a second service instance serves from disk without invoking
-// the generator), and RAM-only mode while the content hash is unknown.
+// ThumbnailService tests. A stub generator, a real EditorJobService (Update pumped as in
+// JobServiceTests) and a scratch cache dir exercise the full pipeline headlessly: the icon
+// fallback until ready (Get is empty, then a drawable and a single ready signal), negative
+// caching (an unknown id, an unsupported type or a failed generate never reschedules), the
+// content-hash disk round-trip (a second service instance serves from disk without invoking the
+// generator), and RAM-only mode while the content hash is unknown.
 //
-// The stub's resolve returns a pointer to a NEVER-DEREFERENCED sentinel instance for ids the
-// test declares "known": the service only touches the instance through TypeName()/Name(), so
-// the stub builds one real Instance over a scratch ContentDatabase-free constructor.
+// The stub resolve returns one real Instance for the id the test declares known. The service
+// only reads it through TypeName() and Name(), so the fixture builds it over a ContentDatabase
+// on an empty scratch mount.
 
 #include <doctest/doctest.h>
 
@@ -23,7 +23,7 @@ import foundation.gui;
 import editor.core;
 import foundation.vfs;
 import foundation.scene;    // the stub scene generator's Stage signature
-import foundation.resource; // (never driven here; the STAGE owns the GPU side)
+import foundation.resource; // (never driven here; the stage owns the GPU side)
 
 using namespace foundation::core;
 using namespace editor;
@@ -72,7 +72,7 @@ namespace
                 bytes.Resize(100, byte{7});
                 (void)stream->Write(bytes.Data(), bytes.Size());
                 (void)stream->Seek(0, SeekOrigin::Begin);
-                out.stream = UniquePtr<IStream>(Move(stream)); // derived -> base move
+                out.stream = UniquePtr<IStream>(Move(stream)); // move from derived to base
             }
             return Status{};
         }
@@ -110,7 +110,7 @@ namespace
         Guid known{0x1111, 0x2222};
         int prepares = 0;
         int generates = 0;
-        usize payloadSeen = 0; // what Generate received (header + the worker's stream read)
+        usize payloadSeen = 0; // what Generate received (the header and the worker's stream read)
         explicit Fixture(StringView cacheDir, u64 hash = 0x77, bool failGenerate = false,
                          bool handStream = false)
             : db(DefaultAllocator(), NullMount(), nullptr, u8"asset"),
@@ -136,8 +136,8 @@ namespace
                 u8"thumbs_empty_mount");
         }
 
-        // An EMPTY dedicated mount: ContentDatabase's ctor SCANS the mount, and a null
-        // serializer factory only stays un-invoked if the scan finds no envelopes.
+        // An empty dedicated mount: ContentDatabase's constructor scans the mount, and the null
+        // serializer factory is only safe if the scan finds no envelopes.
         static foundation::vfs::NativeFileSystem& NullMount()
         {
             (void)CreateDirectory(u8"thumbs_empty_mount");
@@ -150,7 +150,7 @@ namespace
 
 TEST_CASE("thumbnails: icon-first, then the drawable + ONE ready signal")
 {
-    // Scratch persists across runs - a stale cache file would serve and skip Generate.
+    // Scratch persists across runs, and a stale cache file would serve and skip Generate.
     (void)RemoveDirectoryRecursive(u8"thumbs_happy");
     Fixture f(u8"thumbs_happy");
     int ready = 0;
@@ -167,9 +167,9 @@ TEST_CASE("thumbnails: icon-first, then the drawable + ONE ready signal")
 
 TEST_CASE("thumbnails: the worker reads the stream Prepare opened; Generate sees header + bytes")
 {
-    // Prepare is main-thread and cheap: it OPENS the source and composes a header; the light
-    // worker does the read (2026-09-23: the grid view froze while Prepare read whole 4k
-    // textures on the main thread). The stub hands a 100-byte stream behind a 1-byte header.
+    // Prepare runs on the main thread and is cheap: it opens the source and composes a header,
+    // and the light worker does the read (reading whole 4k textures on the main thread freezes
+    // the grid view). The stub hands a 100-byte stream behind a 1-byte header.
     (void)RemoveDirectoryRecursive(u8"thumbs_stream");
     Fixture f(u8"thumbs_stream", 0, /*failGenerate*/ false, /*handStream*/ true);
     CHECK(!f.service.Get(f.known));
@@ -219,8 +219,8 @@ TEST_CASE("thumbnails: content-hash disk cache round-trips without regenerating"
         CHECK(f.generates == 1);
     }
     {
-        // A fresh service (new session): the <guid>-<hash>.png file serves; Generate is NOT
-        // called (Prepare is also skipped - the disk file short-circuits it).
+        // A fresh service (new session): the <guid>-<hash>.png file serves and Generate is not
+        // called (Prepare is skipped too, because the disk file short-circuits it).
         Fixture f(u8"thumbs_disk", 0xabc);
         (void)f.service.Get(id);
         PumpLight(f.jobs);
@@ -229,7 +229,7 @@ TEST_CASE("thumbnails: content-hash disk cache round-trips without regenerating"
         CHECK(f.prepares == 0);
     }
     {
-        // A DIFFERENT hash (content changed): the old file mismatches; regenerate.
+        // A different hash (content changed): the old file mismatches, so it regenerates.
         Fixture f(u8"thumbs_disk", 0xdef);
         (void)f.service.Get(id);
         PumpLight(f.jobs);
@@ -272,16 +272,16 @@ TEST_CASE("thumbnails: a corrupt cache file self-heals (deleted + regenerated, n
         CHECK(FileExists(path.AsView()));
     }
     // Corrupt the cache file: the load fails, and because the file existed Prepare was
-    // skipped - the old code cached a silent PERMANENT negative here.
+    // skipped. The service must not cache a permanent negative here.
     (void)WriteFile(path.AsView(), Span<const byte>(reinterpret_cast<const byte*>("junk"), 4));
     {
         Fixture f(u8"thumbs_corrupt", 0x55);
         CHECK(!f.service.Get(id)); // schedules; file exists so Prepare skipped
         PumpLight(f.jobs);
-        // Self-heal pass: the stale file was deleted and NOTHING was cached...
+        // Self-heal pass: the stale file was deleted and nothing was cached...
         CHECK(!FileExists(path.AsView()));
         CHECK(f.service.CachedCount() == 0);
-        // ...so the next Get takes the full Prepare + Generate path and succeeds.
+        // ...so the next Get takes the full Prepare and Generate path and succeeds.
         CHECK(!f.service.Get(id));
         PumpLight(f.jobs);
         CHECK(f.service.Get(id));
@@ -290,7 +290,7 @@ TEST_CASE("thumbnails: a corrupt cache file self-heals (deleted + regenerated, n
     }
 }
 
-// ---- the GPU lane (scene generators + the one-in-flight job queue) -------------------------
+// ---- the GPU lane (scene generators and the one-in-flight job queue) -----------------------
 
 namespace
 {
@@ -306,7 +306,7 @@ namespace
                                                foundation::resource::ResourceManager&,
                                                ThumbnailFraming&) override
         {
-            return ThumbnailStageStep::Failed; // never driven here - the STAGE owns Stage()
+            return ThumbnailStageStep::Failed; // never driven here: the stage owns Stage()
         }
         void Unstage(foundation::scene::Scene&) override {}
     };
@@ -452,7 +452,7 @@ TEST_CASE("thumbnails: the scene-generated disk cache round-trips through the li
         fx.service.AcceptSceneResult(fx.known, SolidTile(90), true);
         PumpLight(fx.jobs); // persist
     }
-    // A fresh service (same cache dir + hash): the file serves on the LIGHT lane; the GPU
+    // A fresh service (same cache dir and hash): the file serves on the light lane, and the GPU
     // queue is never touched.
     GpuFixture fx(dir);
     CHECK(fx.service.Get(fx.known).Get() == nullptr); // scheduled, not yet loaded
@@ -485,8 +485,8 @@ TEST_CASE("thumbnails: jobs route to the generator covering the asset's type")
     CHECK(fx.service.Get(fx.known).Get() == nullptr); // StubGpuAsset: queued
     const SceneThumbnailJob job = fx.service.TakeSceneJob();
     REQUIRE(job.generator != nullptr);
-    // The job carries the STUB generator (covers "StubGpuAsset"), not the other one - and the
-    // stub keeps the shared-stage default while the other opts into a private scene.
+    // The job carries the stub generator (which covers "StubGpuAsset"), not the other one, and
+    // the stub keeps the shared-stage default while the other opts into a private scene.
     CHECK(job.generator->AssetTypeNames()[0] == StringView(u8"StubGpuAsset"));
     CHECK(!job.generator->NeedsPrivateScene());
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Gamekit - button prompts (K6 of Specs/gui-lab-evolution-3.md): a prompt shows the binding of
-// its action for the input kind in use, from the game's runtime after its rebinding and in its
-// enabled sets by priority, labelled by foundation.input's names, with `binding` and `kind` for a
-// sheet's glyphs, and follows the input kind and the bindings as they change.
+// GUI.Gamekit - button prompts. A prompt shows the binding of its action for the input kind in use.
+// It reads the game's runtime after the player's rebinding, in the enabled sets by priority, labels
+// the binding with foundation.input's names, and exposes `binding` and `kind` for a sheet's glyphs.
+// It follows the input kind and the bindings as they change.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -141,7 +141,7 @@ TEST_CASE("prompts: the highest-priority enabled set that has the action, or the
     bed.prompts.NotifyBindingsChanged();
     bed.Frame();
     CHECK(bed.prompt->GetBinding() == SV(u8"e"));
-    bed.prompt->SetSet(core::String(u8"Menu")); // named: read there, enabled or not
+    bed.prompt->SetSet(core::String(u8"Menu")); // with a set named, the action is read there, enabled or not
     bed.Frame();
     CHECK(bed.prompt->GetBinding() == SV(u8"return"));
 }
@@ -167,7 +167,7 @@ TEST_CASE("prompts: none until the host installs its prompts; from markup by act
     runtime.SetMap(map);
     InputPrompts prompts;
     prompts.SetRuntime(&runtime);
-    prompts.Install(root->GetContext()); // installed later: the prompt follows
+    prompts.Install(root->GetContext()); // installed later, and the prompt follows
     root->GetContext().Update(core::Duration{});
     CHECK(prompt->GetBinding() == SV(u8"space"));
     InputPrompts::Uninstall(root->GetContext());

@@ -3,22 +3,21 @@
 
 // GUI - :button_base partition
 //
-// ButtonBase: the one button core (E6 of Specs/gui-lab-evolution.md), after Godot's BaseButton.
-// It activates on a click, Return, Space or the pad's South; `toggle` makes it hold a checked
-// state (`:checked`); `action-on="press"` activates it on the press instead of the release;
-// `repeat` activates it again while it is held (after a delay, at an interval, on the GUI's clock,
-// only while the pointer is over it); a group makes its toggles exclusive. A group is a
-// ButtonGroup from code or a `name` in markup, the name's scope being the GUI the button is in
-// (two windows' groups of one name never meet). The arrows move round an exclusive group,
-// checking as they go, as a browser's radios do.
+// ButtonBase is the core that every button is built on. It activates on a click, Return, Space or
+// the pad's South button. `toggle` makes it hold a checked state (`:checked`). `action-on="press"`
+// activates it on the press instead of the release. `repeat` activates it again while it is held:
+// after a delay, then at an interval on the GUI's clock, and only while the pointer is over it. A
+// group makes its toggles exclusive. A group is a ButtonGroup from code, or a `name` in markup whose
+// scope is the GUI the button is in, so groups of the same name in two windows never meet. The
+// arrow keys move round an exclusive group, checking as they go, as a browser's radio buttons do.
 //
-// A button is a container: `text` and an icon are shorthands for parts it makes (a text and an
-// image, nodes of their own, which take the button's text style, as Window's title does), and
-// markup may put anything inside it. CheckBox, RadioButton and ToggleSwitch are this core with an
-// indicator part, a node drawn by the button from its own parts (checkbox::box and ::mark, ...).
+// A button is a container. `text` and an icon are shorthands for parts it makes: a text node and an
+// image node, which take the button's text style, as Window's title does. Markup may put anything
+// inside it. CheckBox, RadioButton and ToggleSwitch are this core with an indicator part, a node the
+// button draws from its own parts (checkbox::box and ::mark, and so on).
 //
-// A change the user makes reports `change` (and the toggled callback); a state set from code
-// reports nothing but to bindings, as a range's value does.
+// A change the user makes reports `change` (and calls the toggled callback). A state set from code
+// is reported only to bindings, as a range's value is.
 
 module;
 #include "Core/Prelude.h"
@@ -27,18 +26,18 @@ module;
 export module foundation.gui:button_base;
 
 import foundation.core; // Function, Move, RefPtr, Array, String, Duration, Max
-import :reactive;       // Observable (what bindings follow)
+import :reactive;       // Observable, which bindings follow
 import :rect;
 import :event;
 import :draw_context;
 import :drawable;
-import :text;           // TextHAlign / TextVAlign
+import :text;           // TextHAlign, TextVAlign
 import :ui_widget;
 import :label;
 import :image;
 import :layout_style;
-import :actions;        // TickAction (the repeat)
-import :event_dispatcher; // SuppressClick (a press that activated)
+import :actions;        // TickAction, for the repeat
+import :event_dispatcher; // SuppressClick, after a press that activated
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -54,22 +53,23 @@ export namespace foundation::gui
         Press,
     };
 
-    /// An exclusive group of toggle buttons from code (markup groups them by a `name`): at most one
-    /// is checked, and unless it allows none, a click on the checked one leaves it checked. The
-    /// buttons hold the group, so it outlives them, and each leaves it as it goes.
+    /// An exclusive group of toggle buttons, made from code (markup groups them by a `name`). At
+    /// most one is checked, and unless the group allows none, a click on the checked one leaves it
+    /// checked. The buttons hold the group, so it outlives them, and each leaves it before it goes
+    /// away.
     class ButtonGroup : public RefCounted
     {
     public:
-        /// A click on the checked button unchecks it (Godot's allow_unpress).
+        /// Sets whether a click on the checked button unchecks it.
         void SetAllowsNone(bool allows) noexcept { m_allowsNone = allows; }
         [[nodiscard]] bool AllowsNone() const noexcept { return m_allowsNone; }
 
-        /// The buttons in it, in the order they joined.
+        /// Returns the buttons in it, in the order they joined.
         [[nodiscard]] const core::Array<ButtonBase*>& GetButtons() const noexcept { return m_buttons; }
-        /// The checked one, if any.
+        /// Returns the checked button, or null.
         [[nodiscard]] ButtonBase* GetChecked() const;
 
-        /// The user checked `button` (not code's changes).
+        /// Called when the user checks `button` (not for changes from code).
         void SetOnChanged(core::Function<void(ButtonBase*)> callback) { m_onChanged = core::Move(callback); }
 
     private:
@@ -85,14 +85,14 @@ export namespace foundation::gui
                 }
         }
 
-        core::Array<ButtonBase*> m_buttons; // non-owning: each leaves as it goes
+        core::Array<ButtonBase*> m_buttons; // non-owning: each button leaves before it goes away
         bool m_allowsNone = false;
         core::Function<void(ButtonBase*)> m_onChanged;
     };
 
-    // A button's indicator (a check box's box, a radio's ring, a switch's track): a node of its own,
-    // laid out among the button's children and sized by a sheet as `checkbox > indicator`, drawn
-    // by its button from the button's parts.
+    // A button's indicator (a check box's box, a radio's ring, a switch's track). It is a node of its
+    // own, laid out among the button's children and sized by a sheet as `checkbox > indicator`, and
+    // its button draws it from the button's parts.
     class ButtonIndicator : public UIWidget
     {
         RTTI_OBJECT(ButtonIndicator, UIWidget)
@@ -119,13 +119,13 @@ export namespace foundation::gui
         }
 
         // === Activation ===
-        /// Invoked on each activation (a click, a key, a repeat).
+        /// Sets the callback invoked on each activation (a click, a key, a repeat).
         void SetOnClick(core::Function<void()> callback) { m_onClick = core::Move(callback); }
         [[nodiscard]] bool HasOnClick() const noexcept { return static_cast<bool>(m_onClick); }
 
         void SetActionOn(ButtonAction action) noexcept { m_actionOn = action; }
         [[nodiscard]] ButtonAction GetActionOn() const noexcept { return m_actionOn; }
-        /// "release" or "press" (markup's and a sheet's `action-on`).
+        /// Sets when it activates, "release" or "press" (the `action-on` of markup and sheets).
         void SetActionOnName(const core::String& name)
         {
             m_actionOn = name.AsView() == core::StringView(u8"press") ? ButtonAction::Press : ButtonAction::Release;
@@ -135,7 +135,8 @@ export namespace foundation::gui
             return core::String(m_actionOn == ButtonAction::Press ? core::StringView(u8"press") : core::StringView(u8"release"));
         }
 
-        /// Activates again while held: on the press, then after the delay at the interval.
+        /// Sets whether it activates again while held: on the press, then after the delay, then at
+        /// the interval.
         void SetRepeat(bool repeat) noexcept { m_repeat = repeat; }
         [[nodiscard]] bool IsRepeat() const noexcept { return m_repeat; }
         void SetRepeatDelay(f32 seconds) noexcept { m_repeatDelay = core::Max(0.0f, seconds); }
@@ -153,28 +154,29 @@ export namespace foundation::gui
                 ApplyChecked(false);
         }
         [[nodiscard]] bool IsToggle() const noexcept { return m_toggle; }
-        /// Its access key: the character its text marked with `&` (E12).
+        /// Returns its access key, the character its text marked with `&`.
         [[nodiscard]] char32_t GetMnemonic() const override { return m_mnemonic; }
-        /// A checked button that keeps its check (a radio) is its focus group's current member.
+        /// A checked button that keeps its check (a radio) is the current member of its focus group.
         [[nodiscard]] bool IsCurrentInGroup() const override { return m_checked && KeepsChecked(); }
 
-        /// Whether it is checked (a read a binding records).
+        /// Returns whether it is checked; a binding that reads this follows the state.
         [[nodiscard]] bool IsChecked() const
         {
             m_checkedChanged.Track();
             return m_checked;
         }
-        /// Sets the checked state from code: an exclusive group's others clear; no events.
+        /// Sets the checked state from code. The other buttons of an exclusive group clear, and no
+        /// events fire.
         void SetChecked(bool checked)
         {
             if (m_toggle || !checked)
                 ApplyChecked(checked);
         }
-        /// Toggled by the user (each change the user makes, not code's).
+        /// Called on each toggle the user makes (not for changes from code).
         void SetOnToggled(core::Function<void(bool)> callback) { m_onToggled = core::Move(callback); }
 
         // === Group ===
-        /// Joins `group` (null: leaves it); a group's toggles are exclusive.
+        /// Joins `group`, or leaves its group with null. A group's toggles are exclusive.
         void SetGroup(core::RefPtr<ButtonGroup> group)
         {
             if (group == m_group)
@@ -186,10 +188,11 @@ export namespace foundation::gui
                 m_group->Join(this);
         }
         [[nodiscard]] ButtonGroup* GetGroup() const noexcept { return m_group.Get(); }
-        /// Its group's name in markup (buttons of one name in one GUI are a group).
+        /// Sets its group's name in markup; buttons with the same name in one GUI form a group.
         void SetName(const core::String& name) { m_name = name; }
         [[nodiscard]] core::String GetName() const { return m_name; }
-        /// The buttons of its group, itself among them, in tree order for a name's (none: ungrouped).
+        /// Fills `out` with the buttons of its group, itself included, in tree order for a named
+        /// group. It adds none when the button is ungrouped.
         void CollectGroup(core::Array<ButtonBase*>& out) const
         {
             if (m_group)
@@ -207,7 +210,7 @@ export namespace foundation::gui
         }
 
         // === Content ===
-        /// Its text (a part it makes, after its icon; empty: none).
+        /// Sets its text, a part it makes after its icon; empty removes it.
         void SetText(core::StringView text)
         {
             m_textFromCommand = false;
@@ -218,7 +221,7 @@ export namespace foundation::gui
             m_textChanged.Track();
             return m_textPart ? m_textPart->GetText() : core::StringView{};
         }
-        /// Its icon (an image part before its text; null: none).
+        /// Sets its icon, an image part before its text; null removes it.
         void SetIcon(core::RefPtr<Drawable> icon)
         {
             if (!icon)
@@ -233,27 +236,29 @@ export namespace foundation::gui
             EnsureIconPart();
             m_iconPart->SetDrawable(core::Move(icon));
         }
-        /// Its icon by path (markup's `icon`), loaded through the GUI's resource provider; empty: none.
+        /// Sets its icon by path (markup's `icon`), loaded through the GUI's resource provider; empty
+        /// removes it.
         void SetIconSource(const core::String& path)
         {
             m_iconSource = path;
             ShowIconSource();
         }
         [[nodiscard]] core::String GetIconSource() const { return m_iconSource; }
-        /// A toggle's icon while it is checked (markup's `checked-icon`: a play button showing pause
-        /// while it plays, as what a click does then); empty: its icon either way.
+        /// Sets a toggle's icon for while it is checked (markup's `checked-icon`), such as a play
+        /// button that shows pause while playing, since a click then pauses. Empty uses its icon in
+        /// both states.
         void SetCheckedIconSource(const core::String& path)
         {
             m_checkedIconSource = path;
             ShowIconSource();
         }
         [[nodiscard]] core::String GetCheckedIconSource() const { return m_checkedIconSource; }
-        /// The parts it made (null until it has them).
+        /// Returns the parts it made, or null until it makes them.
         [[nodiscard]] Label* GetTextPart() const noexcept { return m_textPart.Get(); }
         [[nodiscard]] Image* GetIconPart() const noexcept { return m_iconPart.Get(); }
         [[nodiscard]] Node* GetIndicatorPart() const noexcept { return m_indicator.Get(); }
 
-        // Markup: <Button text="Save">, its text a part.
+        // Markup: <Button text="Save"> makes its text a part.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
             if (name == core::StringView(u8"text"))
@@ -263,15 +268,15 @@ export namespace foundation::gui
             }
             return UIWidget::SetMarkupAttribute(name, value);
         }
-        /// Its text's first baseline (a row aligned by baseline lines buttons up with labels): the
-        /// text part sits centred across its content box.
+        /// Returns its text's first baseline, so a row aligned by baseline lines buttons up with
+        /// labels. The text part sits centred across its content box.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
         {
             if (!m_textPart || !m_textPart->IsDisplayed())
                 return UIWidget::BaselineAt(size);
             const Thickness c = GetChrome();
             const Thickness pc = m_textPart->GetChrome();
-            // Its arranged height, or before it is arranged, one line's.
+            // Use its arranged height, or one line's height before it is arranged.
             const f32 partH = m_textPart->GetSize().y > 0.0f ? m_textPart->GetSize().y
                                                              : m_textPart->GetTextLayout().GetLineHeight() + pc.TotalVertical();
             const f32 contentH = core::Max(0.0f, size.y - c.TotalVertical());
@@ -302,7 +307,7 @@ export namespace foundation::gui
         ButtonBase()
         {
             SetTabFocusable(true);
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // set as its own defaults, which a restyle returns to
             SetTextAlignment(TextHAlign::Center, TextVAlign::Middle);
             EditLayoutStyle([](LayoutStyle& s)
             {
@@ -313,7 +318,7 @@ export namespace foundation::gui
         }
 
         // --- The indicator (a check box's box, a radio's ring, a switch's track) ---
-        /// Makes the indicator part (first among its children); the button draws it.
+        /// Makes the indicator part, first among its children; the button draws it.
         void MakeIndicator()
         {
             if (m_indicator)
@@ -323,15 +328,16 @@ export namespace foundation::gui
         }
         /// The indicator's size when nothing sizes it.
         [[nodiscard]] virtual core::Float2 IndicatorSize() const { return core::Float2{20.0f, 20.0f}; }
-        /// Draws the indicator into `box` (its content box, in its space) from the button's parts.
+        /// Draws the indicator into `box` (the indicator's content box, in its space) from the
+        /// button's parts.
         virtual void DrawIndicator(DrawContext& ctx, const Rect& box) const
         {
             (void)ctx;
             (void)box;
         }
-        /// A radio's way: a click on it checked leaves it checked, grouped or not.
+        /// Sets radio behaviour: a click on it while checked leaves it checked, grouped or not.
         void SetKeepsChecked(bool keeps) noexcept { m_keepsChecked = keeps; }
-        /// The mixed state (CSS's :indeterminate): a check box shows it until it is set.
+        /// Sets the mixed state (CSS's :indeterminate), which a check box shows until it is set.
         void SetIndeterminateState(bool indeterminate)
         {
             if (indeterminate == m_indeterminate)
@@ -341,12 +347,12 @@ export namespace foundation::gui
             RedrawIndicator();
         }
         [[nodiscard]] bool IsIndeterminateState() const noexcept { return m_indeterminate; }
-        /// The checked state changed (a switch moves its knob).
+        /// Called when the checked state changed (a switch moves its knob).
         virtual void OnCheckedChange() {}
 
         // --- Activation ---
-        /// One activation: a toggle toggles (unless an exclusive group keeps it), a command runs,
-        /// the click callback is invoked.
+        /// Performs one activation: a toggle toggles (unless an exclusive group keeps it checked), a
+        /// bound command runs, and the click callback is invoked.
         void Activate()
         {
             if (m_toggle && !HasCommand())
@@ -356,12 +362,12 @@ export namespace foundation::gui
                     ChangeCheckedByUser(m_indeterminate ? true : !m_checked);
             }
             if (HasCommand())
-                (void)RunBoundCommand(); // bound to a command, the command decides (its state comes back)
+                (void)RunBoundCommand(); // a bound command decides, and its state comes back to the button
             if (m_onClick)
                 m_onClick();
         }
 
-        bool OnActivate() override { return ActivateAsClick(); } // Return, Space, South: a click
+        bool OnActivate() override { return ActivateAsClick(); } // Return, Space and South act as a click
         void OnMouseClick(const MouseEvent& event) override
         {
             event.Handled = true; // a click inside a clickable card is the button's, not the card's
@@ -372,7 +378,7 @@ export namespace foundation::gui
             if (event.Button != MouseButton::Left || (m_actionOn != ButtonAction::Press && !m_repeat))
                 return;
             event.Handled = true;
-            // It activates now: the release makes no second click.
+            // It activates now, so the release must not make a second click.
             if (EventDispatcher* d = GetEventDispatcher())
                 d->SuppressClick();
             (void)ActivateAsClick();
@@ -391,7 +397,8 @@ export namespace foundation::gui
             if (event.Modifiers != 0 || !m_toggle)
                 return;
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-            // Down and the arrow toward the inline end go on; Up and toward the start go back.
+            // Down and the arrow toward the inline end move forward; Up and the arrow toward the
+            // start move back.
             const i32 step = key == KeyCode::Down ? 1 : key == KeyCode::Up ? -1 : InlineStep(key);
             if (step == 0)
                 return;
@@ -404,7 +411,7 @@ export namespace foundation::gui
                 ++at;
             if (at == group.Size())
                 return;
-            // The next one that can take it, round the group.
+            // Find the next button round the group that can take the check.
             for (usize n = 1; n < group.Size(); ++n)
             {
                 ButtonBase* next = group[step > 0 ? (at + n) % group.Size() : (at + group.Size() - n) % group.Size()];
@@ -418,7 +425,7 @@ export namespace foundation::gui
             event.Handled = true;
         }
 
-        // Its text part takes its font, colour and alignment (a sheet's inheritance gives the same).
+        // The text part takes the button's font, colour and alignment, as a sheet's inheritance would.
         void OnTextStyleChange() override
         {
             if (!m_textPart)
@@ -431,7 +438,7 @@ export namespace foundation::gui
     private:
         void ApplyText(core::StringView marked)
         {
-            // Its access key (E12): `&File` shows `File`, F its key.
+            // The access key: `&File` shows `File`, with F as its key.
             const Mnemonic mnemonic = ParseMnemonic(marked);
             m_mnemonic = mnemonic.Key;
             const core::StringView text = mnemonic.Shown.AsView();
@@ -440,12 +447,12 @@ export namespace foundation::gui
             if (!m_textPart)
             {
                 m_textPart = core::MakeRef<Label>(MemoryAllocator());
-                m_textPart->SetTag(core::StringView(u8"text")); // not a `label`: a sheet's labels are not its text
+                m_textPart->SetTag(core::StringView(u8"text")); // tagged `text`, not `label`, so a sheet's label rules do not reach it
                 m_textPart->SetHitTestVisible(false);
                 {
                     StyleWriteScope defaults(*m_textPart);
-                    m_textPart->SetTextAlignment(GetTextAlignH(), TextVAlign::Middle); // its button's
-                    // It takes the space the icon and the indicator leave, its text aligned in it.
+                    m_textPart->SetTextAlignment(GetTextAlignH(), TextVAlign::Middle); // the button's alignment
+                    // It takes the space the icon and the indicator leave, with its text aligned in it.
                     m_textPart->EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
                 }
                 ShareTextStyle(*m_textPart);
@@ -464,11 +471,11 @@ export namespace foundation::gui
                 return;
             m_iconPart = core::MakeRef<Image>(MemoryAllocator());
             m_iconPart->SetTag(core::StringView(u8"icon"));
-            m_iconPart->SetHitTestVisible(false); // a press on it is the button's
+            m_iconPart->SetHitTestVisible(false); // a press on it goes to the button
             m_iconPart->SetFit(ObjectFit::Contain);
             AddChildAt(m_iconPart.Get(), PartIndex());
         }
-        // Where its first part goes: after its indicator.
+        // Returns where its first part goes: after its indicator.
         [[nodiscard]] usize PartIndex() const noexcept { return m_indicator ? 1 : 0; }
 
         [[nodiscard]] bool KeepsChecked() const
@@ -478,7 +485,8 @@ export namespace foundation::gui
             return m_keepsChecked || !m_name.IsEmpty();
         }
 
-        // The icon its state shows: the checked one while checked (where it has one), else its own.
+        // Shows the icon for its state: the checked icon while checked (when it has one), else its
+        // own.
         void ShowIconSource()
         {
             const core::String& path = m_checked && !m_checkedIconSource.IsEmpty() ? m_checkedIconSource : m_iconSource;
@@ -548,7 +556,8 @@ export namespace foundation::gui
             }
         }
 
-        // Held, it activates again after the delay, then at the interval, while the pointer is over it.
+        // While held, it activates again after the delay, then at the interval, as long as the
+        // pointer is over it.
         void StartRepeat()
         {
             m_repeating = true;
@@ -566,7 +575,7 @@ export namespace foundation::gui
                     return false;
                 }
                 if (!self->IsHovered())
-                    return true; // paused while the pointer is off it
+                    return true; // the repeat pauses while the pointer is off it
                 self->m_repeatClock += static_cast<f32>(elapsed.AsSecondsF());
                 while (self->m_repeating && self->m_repeatClock >= self->m_repeatInterval)
                 {
@@ -584,10 +593,10 @@ export namespace foundation::gui
         core::String m_iconSource;        // `icon`
         core::String m_checkedIconSource; // `checked-icon`: shown while checked
         core::RefPtr<Label> m_textPart;
-        char32_t m_mnemonic = 0; // its access key (E12), from an `&` in its text
+        char32_t m_mnemonic = 0; // its access key, from an `&` in its text
         core::RefPtr<Image> m_iconPart;
         core::RefPtr<ButtonIndicator> m_indicator;
-        Observable m_checkedChanged; // what bindings reading the state follow
+        Observable m_checkedChanged; // bindings that read the state follow this
         Observable m_textChanged;
         ButtonAction m_actionOn = ButtonAction::Release;
         bool m_toggle = false;
@@ -596,17 +605,17 @@ export namespace foundation::gui
         bool m_keepsChecked = false;
         bool m_textFromCommand = false; // its text is its command's label (OnBoundCommandText)
         bool m_repeat = false;
-        bool m_repeating = false;     // held, repeating
+        bool m_repeating = false;     // held and repeating
         bool m_repeatRunning = false; // its tick is running
         f32 m_repeatDelay = 0.5f;
         f32 m_repeatInterval = 0.08f;
-        f32 m_repeatClock = 0.0f; // seconds toward the next repeat (below 0: the delay)
+        f32 m_repeatClock = 0.0f; // seconds toward the next repeat (below 0 during the delay)
     };
 
     inline ButtonIndicator::ButtonIndicator(ButtonBase& owner) : m_owner(owner)
     {
         SetTag(core::StringView(u8"indicator"));
-        SetHitTestVisible(false); // a press on it is the button's
+        SetHitTestVisible(false); // a press on it goes to the button
     }
     inline core::Float2 ButtonIndicator::MeasureContent(core::Float2) { return m_owner.IndicatorSize(); }
     inline void ButtonIndicator::OnDraw(DrawContext& ctx, const Rect& localBounds)

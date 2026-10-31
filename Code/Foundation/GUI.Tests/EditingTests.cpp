@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The input filter and the undo stack, copied from foundation.ui with their tests (E4 of
-// Specs/gui-lab-evolution.md); the undo stack's offsets are bytes here.
+// The input filter and the undo stack; the undo stack's offsets are bytes.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

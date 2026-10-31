@@ -43,7 +43,8 @@ namespace editor
                                        StringView shaderLibrary)
         : app::CodeAssetPage(context, Move(services), instance, pipeline::ShaderAsset::StaticType(), kPath), m_shaderLibrary(shaderLibrary)
     {
-        // A name of the page's own: the preview never replaces the cooked shader a scene draws.
+        // The preview uses a name of the page's own, so it never replaces the cooked shader a
+        // scene draws.
         auto* render = Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::render::RenderSubsystem>() : nullptr;
         m_previewShader.Attach(render != nullptr ? render->Shaders() : nullptr, Format(u8"editor.preview.{}", instance.Id()));
         if (Content())
@@ -53,8 +54,8 @@ namespace editor
             m_pane->OnFrame = [self]() { self->FramePreview(); };
             if (PreviewViewport* preview = m_pane->Viewport())
             {
-                // The scene's clock runs only while it simulates, and Time() reads it: a surface that
-                // scrolls or a Vertex() that moves would stand still otherwise.
+                // The scene's clock runs only while it simulates, and Time() reads it, so without
+                // this a scrolling surface or a moving Vertex() would stand still.
                 preview->SetSimulationEnabled(true);
                 preview->Camera().position = Float3{0.0f, 0.9f, 2.6f};
                 preview->Camera().LookAt(Float3{0.0f, 0.0f, 0.0f});
@@ -62,7 +63,7 @@ namespace editor
         }
         m_staleNote = Find<gui::Node>(u8"shader-stale");
         BuildPreviewScene();
-        OpenCode(u8"hlsl"); // checked at once: the page opens with the shader's state and its preview
+        OpenCode(u8"hlsl"); // checked at once, so the page opens with the shader's state and preview
     }
 
     ShaderEditorPage::~ShaderEditorPage()
@@ -94,7 +95,7 @@ namespace editor
     {
         if (m_pane)
             m_pane->Close();
-        m_previewShader.Release(); // before the renderer goes: the page is destroyed after it
+        m_previewShader.Release(); // before the renderer goes, since the page is destroyed after it
     }
 
     void ShaderEditorPage::FramePreview()
@@ -145,7 +146,8 @@ namespace editor
         options.compiler = m_compiler;
         const pipeline::ShaderCheck check = pipeline::CheckShaderSource(text, SourceFileName(), options);
 
-        // This file's errors on their lines; an include's named by its file; the whole file's at its top.
+        // This file's errors go on their lines, an include's errors are named by its file, and
+        // errors for the whole file go at its top.
         Array<app::CodeProblem> problems;
         for (const pipeline::ShaderDiagnostic& d : check.errors)
         {
@@ -169,7 +171,8 @@ namespace editor
         }
         else
             m_kind.Clear();
-        // The preview keeps the last code that compiled, and says so while the code is not it.
+        // The preview keeps the last code that compiled, and says so while the current code
+        // differs from it.
         m_stale = !check.IsOk() && m_compiled;
         if (m_staleNote != nullptr)
             m_staleNote->SetDisplayed(m_stale);
@@ -197,8 +200,8 @@ namespace editor
         m_previewShader.Register(main.text.AsView(), main.vertexEntryPoint.AsView(), main.vertexMask,
                                  main.fragmentEntryPoint.AsView(), main.fragmentMask);
 
-        // A material laid out by the block as a cooked material on this shader is, at its
-        // defaults.
+        // A material laid out by the properties block, as a cooked material on this shader would
+        // be, with its default values.
         shaders::ShaderSource shader;
         shader.name = String(name);
         shader.SetProperties(check.block);

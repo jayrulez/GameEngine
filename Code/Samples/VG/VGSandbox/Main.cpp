@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VG Sandbox - faithful port of Sedulous Samples/VG/VGSandbox. A NanoVG-style
-// demo exercising the whole VG stack (foundation.vg + .renderer + .svg + fonts +
-// image): line widths/caps/joins, animated eyes, an HSL color wheel, an area
-// graph, scissor clipping, image draws, text, UI convenience primitives,
-// immediate-mode paths, and SVG rendering. Window/device/swapchain via the
-// sample framework; per frame: VGContext -> VGBatch -> VGRenderer -> RHI.
+// VG Sandbox: a NanoVG-style demo exercising the whole VG stack (foundation.vg,
+// .renderer, .svg, fonts and images): line widths, caps and joins, animated eyes,
+// an HSL color wheel, an area graph, scissor clipping, image draws, text, UI
+// convenience primitives, immediate-mode paths and SVG rendering. The sample
+// framework provides the window, device and swapchain; each frame goes from
+// VGContext to VGBatch to VGRenderer to the RHI.
 
 #include <new>
 #include <cstdio>
@@ -34,7 +34,7 @@ namespace vg = foundation::vg;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: the one place it chooses the ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -46,7 +46,8 @@ namespace
 
 namespace
 {
-    // VG shaders ship in the engine corpus (vg.vs/vg.ps); resolved via ShaderSystemHost in OnInit.
+    // The VG shaders ship with the engine shaders (vg.vs, vg.ps) and are resolved through
+    // ShaderSystemHost in OnInit.
     // The demo font is the engine's built-in Roboto under the data root.
     constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
 
@@ -61,7 +62,7 @@ public:
     {
         m_width = 1000;
         m_height = 720;
-    } // match Sedulous VGSandbox layout
+    }
     StringView Title() const override { return u8"VG Sandbox"; }
     u32 BufferCount() const override { return kFrames; }
 
@@ -98,20 +99,20 @@ private:
     static f32 HueToRGB(f32 p, f32 q, f32 t);
     [[nodiscard]] bool HasFonts() const { return FileExists(DataPath(kFontAsset).AsView()); }
 
-    shaders::ShaderSystemHost m_shaderHost{AppRoot()}; // owns the ShaderSystem + the VG modules
+    shaders::ShaderSystemHost m_shaderHost{AppRoot()}; // owns the ShaderSystem and the VG modules
     rhi::ShaderModule* m_vs = nullptr;      // borrowed from m_shaderHost
     rhi::ShaderModule* m_fs = nullptr;
     rhi::ShaderModule* m_distanceFieldFragmentShader = nullptr;         // MSDF distance-field fragment shader
     rhi::ShaderModule* m_gradRadialFs = nullptr; // per-pixel radial gradient fragment shader
-    rhi::ShaderModule* m_gradConicFs = nullptr;
+    rhi::ShaderModule* m_gradConicFs = nullptr; // per-pixel conic gradient fragment shader
     rhi::ShaderModule* m_boxShadowFs = nullptr; // blurred rounded rect fragment shader
-    // VG quality targets: 4x MSAA color (resolved into the swapchain) + stencil
-    // (stencil-then-cover fills). Fixed window size, so created once at init.
+    // VG quality targets: 4x MSAA color (resolved into the swapchain) and stencil
+    // (for stencil-then-cover fills). Created in OnInit and recreated by OnResize.
     rhi::Texture* m_msaaColor = nullptr;
     rhi::TextureView* m_msaaColorView = nullptr;
     rhi::Texture* m_depthStencil = nullptr;
-    rhi::TextureView* m_depthStencilView = nullptr;  // per-pixel conic gradient fragment shader
-    bool m_quality = false; // renderer initialized with 4x MSAA + stencil (see OnInit)
+    rhi::TextureView* m_depthStencilView = nullptr;
+    bool m_quality = false; // renderer initialized with 4x MSAA and stencil (see OnInit)
     rhi::CommandPool* m_pool = nullptr;
     rhi::Fence* m_fence = nullptr;
     u64 m_fenceVal = 0;
@@ -135,8 +136,9 @@ private:
 
 Status VGSandbox::OnInit()
 {
-    // Resolve the VG shaders through the shared ShaderSystemHost over the data mount (cooked pack
-    // or dev DXC over Shaders/) - the SAME cooked corpus (vg.vs/vg.ps/vg_df.ps) the runtime UI uses.
+    // Resolve the VG shaders through the shared ShaderSystemHost over the data mount (the cooked
+    // pack, or DXC over Shaders/ during development): the same shaders (vg.vs, vg.ps, vg_df.ps and
+    // the rest) the engine GUI uses.
     if (!m_shaderHost.Initialize(*m_device, DataFileSystem()))
         return ErrorCode::Unknown;
     m_vs = m_shaderHost.GetVariant(u8"vg", shaders::ShaderStage::Vertex, shaders::ShaderFlags::None);
@@ -154,9 +156,10 @@ Status VGSandbox::OnInit()
         m_gradConicFs == nullptr)
         return ErrorCode::Unknown;
 
-    // Quality targets: 4x MSAA + stencil. Failure (unlikely on desktop) falls back to
-    // the plain single-sampled pass with tessellated fills. Recreated at the window
-    // size by OnResize (the framework idles the device + resizes the swapchain first).
+    // Quality targets: 4x MSAA and stencil. On failure (unlikely on desktop) this falls
+    // back to the plain single-sampled pass with tessellated fills. OnResize recreates
+    // them at the window size, after the framework idles the device and resizes the
+    // swapchain.
     vg::renderer::VGTargetConfig targetConfig;
     if (CreateQualityTargets())
     {
@@ -219,10 +222,10 @@ Status VGSandbox::OnInit()
                                           image::PixelFormat::RGBA8, Move(copy));
     }
 
-    // SVG badge + star icon.
+    // SVG badge and star icon.
     {
-        // The badge disc uses an SVG radial gradient (defs + url() reference) - the
-        // gradient pass-through's visible proof; the tinted copy must render FLAT.
+        // The badge disc uses an SVG radial gradient (defs and a url() reference), which
+        // shows the gradient passing through; the tinted copy must render flat.
         Result<vg::svg::SVGDocument> r = vg::svg::SVGLoader::Load(
             u8"<svg viewBox=\"0 0 100 100\">"
             u8"<defs><radialGradient id=\"disc\" cx=\"0.35\" cy=\"0.3\" r=\"0.8\">"
@@ -286,12 +289,12 @@ void VGSandbox::DrawScene(vg::VGContext& vgc, f32 w, f32 h, f32 t)
     DrawFillCorrectness(vgc, 560, 340, t);
 }
 
-// Stencil-then-cover verification block. LEFT: a donut (outer + inner contour) - holes
-// must be holes, not solid disks. MIDDLE: a five-point star drawn edge-to-edge
-// (self-intersecting) under NonZero - the core must fill. RIGHT: the same star under
-// EvenOdd - the core must stay OPEN (background shows through). The whole block rotates
-// slowly so MSAA edge quality shows on non-axis-aligned edges. Without stencil fills all
-// three render wrong (solid donut, mangled star cores).
+// Stencil-then-cover check. On the left, a donut (outer and inner contour) whose hole
+// must stay a hole, not a solid disk. In the middle, a five-point star drawn edge to
+// edge (self-intersecting) under NonZero, whose core must fill. On the right, the same
+// star under EvenOdd, whose core must stay open so the background shows through. The
+// stars rotate slowly so MSAA edge quality shows on edges that are not axis-aligned.
+// Without stencil fills all three render wrong (a solid donut, mangled star cores).
 void VGSandbox::DrawFillCorrectness(vg::VGContext& vgc, f32 x, f32 y, f32 t)
 {
     vgc.PushState();
@@ -316,7 +319,7 @@ void VGSandbox::DrawFillCorrectness(vg::VGContext& vgc, f32 x, f32 y, f32 t)
         const f32 r = 30.0f;
         for (i32 i = 0; i < 5; ++i)
         {
-            // Every second point of a pentagon = the self-intersecting star.
+            // Every second point of a pentagon gives the self-intersecting star.
             const f32 a = static_cast<f32>(i) * (4.0f * kPi / 5.0f) - kPi * 0.5f;
             const f32 px = Cos(a) * r;
             const f32 py = Sin(a) * r;
@@ -329,12 +332,12 @@ void VGSandbox::DrawFillCorrectness(vg::VGContext& vgc, f32 x, f32 y, f32 t)
         vgc.FillPath(pb.ToPath(), color, rule);
         vgc.PopState();
     };
-    starAt(105.0f, 30.0f, vg::FillRule::NonZero, GC(120, 200, 120, 255)); // core FILLED
-    starAt(180.0f, 30.0f, vg::FillRule::EvenOdd, GC(120, 160, 220, 255)); // core OPEN
+    starAt(105.0f, 30.0f, vg::FillRule::NonZero, GC(120, 200, 120, 255)); // core filled
+    starAt(180.0f, 30.0f, vg::FillRule::EvenOdd, GC(120, 160, 220, 255)); // core open
 
-    // Gradient spreads: one red->blue ramp, the gradient LINE spanning a third of each
-    // square. Pad clamps to blue after the first third; Repeat shows three hard-seamed
-    // bands; Reflect ping-pongs red->blue->red. The radial repeat rings the same ramp.
+    // Gradient spreads: one red-to-blue ramp, with the gradient line spanning a third of
+    // each square. Pad clamps to blue after the first third; Repeat shows three bands with
+    // hard edges; Reflect goes red, blue, red. The radial repeat rings the same ramp.
     {
         auto spreadRect = [&](f32 cx, vg::VGGradientSpread spread)
         {
@@ -362,10 +365,10 @@ void VGSandbox::DrawFillCorrectness(vg::VGContext& vgc, f32 x, f32 y, f32 t)
         vg::ShapeBuilder::BuildCircle(Float2{245.0f, 95.0f}, 24.0f, pb);
         vgc.FillPath(pb.ToPath(), rings, vg::FillRule::NonZero);
 
-        // Color-pipeline consistency: a SOLID fill (vertex-color path, sRGB-decoded in
-        // vg.vs) butted against a SAME-COLOR two-stop gradient (LUT texture path,
-        // sRGB-decoded by the sampler). One seamless red block = both paths agree on
-        // what an authored byte color means; a visible seam = a decode regression.
+        // Color pipeline consistency: a solid fill (the vertex color path, sRGB-decoded in
+        // vg.vs) next to a two-stop gradient of the same color (the LUT texture path,
+        // sRGB-decoded by the sampler). One seamless red block means both paths agree on
+        // what an authored byte color means; a visible seam means a decode regression.
         auto halfRect = [&](f32 cx)
         {
             vg::PathBuilder half;
@@ -383,10 +386,10 @@ void VGSandbox::DrawFillCorrectness(vg::VGContext& vgc, f32 x, f32 y, f32 t)
         vgc.FillPath(halfRect(310.0f), flat, vg::FillRule::NonZero);
     }
 
-    // Blend modes over a LIGHT strip - it must be bright in LINEAR space or additive
-    // (src + dst) and screen (src + dst*(1-src)) become near-indistinguishable: the
-    // difference is how much of dst survives, and a mid-grey decodes to ~0.15 linear.
-    // Against ~0.7 linear, additive clips hard toward white while screen stays soft.
+    // Blend modes over a light strip. It must be bright in linear space, or additive
+    // (src + dst) and screen (src + dst*(1-src)) look almost the same: they differ in how
+    // much of dst survives, and a mid-grey decodes to about 0.15 linear. Against about
+    // 0.7 linear, additive clips hard toward white while screen stays soft.
     {
         vg::PathBuilder strip;
         strip.MoveTo(0.0f, 135.0f);
@@ -411,8 +414,8 @@ void VGSandbox::DrawFillCorrectness(vg::VGContext& vgc, f32 x, f32 y, f32 t)
         blendCircle(245.0f, vg::VGBlendMode::Normal, GC(180, 60, 40, 255));
     }
 
-    // Path clipping: a rotating star-shaped CLIP over a grid of stripes. The stripes
-    // must be visible ONLY inside the star (hard stencil edge), including a complex
+    // Path clipping: a rotating star-shaped clip over a grid of stripes. The stripes
+    // must be visible only inside the star (a hard stencil edge), including a complex
     // (self-intersecting, stencil-then-cover) fill drawn while clipped.
     {
         vgc.PushState();
@@ -674,10 +677,10 @@ void VGSandbox::DrawGraph(vg::VGContext& vgc, f32 x, f32 y, f32 w, f32 h, f32 t)
                          Sin(t * 0.68363f + static_cast<f32>(i) * 1.3f) +
                          Sin(t * 1.1642f + static_cast<f32>(i) * static_cast<f32>(i) * 0.54f)) *
                         0.25f;
-        // Clamp >= 0. The raw value ranges [-0.5, 1.0]; a negative sample pushes the
-        // curve point below the baseline (y+h), so the area-fill "ribbon" self-
-        // intersects and ear-clipping emits sliver triangles - the stray line
-        // artifacts seen in the original Sedulous sample. (Latent data-gen bug.)
+        // Clamp to >= 0. The raw value ranges over [-0.5, 1.0]; a negative sample
+        // pushes the curve point below the baseline (y+h), so the area fill's "ribbon"
+        // intersects itself and ear clipping emits sliver triangles that show as stray
+        // lines.
         samples[i] = Max(0.0f, raw);
     }
 
@@ -833,17 +836,18 @@ void VGSandbox::DrawDFTextDemo(vg::VGContext& vgc, f32 x, f32 y, f32 t)
     const f32 ascent = m_fontDF->font->Metrics().ascent;
     const f32 lineH = m_fontDF->font->Metrics().lineHeight;
 
-    // Native size (verifies baseline alignment + descenders).
+    // Native size, to check baseline alignment and descenders.
     vgc.DrawText(u8"Typography", m_fontDF, Float2{x, y + 20 + ascent}, GC(255, 220, 100, 255));
 
-    // Minified (0.6x) - the same atlas stays legible when shrunk.
+    // Minified (0.6x): the same atlas stays legible when shrunk.
     vgc.PushState();
     vgc.Translate(x, y + 20 + ascent + lineH + 4.0f);
     vgc.Scale(0.6f, 0.6f);
     vgc.DrawText(u8"Typography", m_fontDF, Float2{0, ascent}, GC(200, 255, 200, 255));
     vgc.PopState();
 
-    // Animated magnification - stays crisp as it resizes (MSDF resolution independence).
+    // Animated magnification: the text stays crisp as it resizes, since MSDF is resolution
+    // independent.
     vgc.PushState();
     vgc.Translate(x, y + 20 + ascent + lineH * 2.0f + 12.0f);
     const f32 zoom = 1.3f + Sin(t * 0.8f) * 0.5f;
@@ -971,7 +975,7 @@ void VGSandbox::OnRender()
     if (m_fenceVal > 0)
         m_fence->Wait(m_fenceVal, ~0ull);
     if (m_quality && m_msaaColorView == nullptr)
-        return; // resize recreate failed - the 4x pipelines cannot draw a 1x pass
+        return; // recreating at the new size failed, and the 4x pipelines cannot draw a 1x pass
     if (m_swapChain->AcquireNextImage() != ErrorCode::Ok)
         return;
 
@@ -990,9 +994,9 @@ void VGSandbox::OnRender()
 
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined,
                            rhi::ResourceState::RenderTarget);
-    // The offscreen attachments need the same explicit transitions the swapchain gets -
-    // the backend does not auto-transition pass attachments. From Undefined every frame:
-    // both are fully cleared, so the previous contents are discardable.
+    // The offscreen attachments need the same explicit transitions the swapchain gets,
+    // because the backend does not transition pass attachments itself. They start from
+    // Undefined every frame: both are fully cleared, so the previous contents can go.
     if (m_msaaColor != nullptr)
     {
         enc->TransitionTexture(m_msaaColor, rhi::ResourceState::Undefined,
@@ -1088,9 +1092,10 @@ void VGSandbox::DestroyQualityTargets()
 
 void VGSandbox::OnResize(u32 /*width*/, u32 /*height*/)
 {
-    // The framework already idled the device and resized the swapchain; the MSAA +
-    // stencil targets must follow it or the old-size resolve leaves the grown window
-    // region black. The renderer's 4x pipelines are size-agnostic - only the targets go.
+    // The framework has already idled the device and resized the swapchain. The MSAA
+    // and stencil targets must follow, or resolving at the old size leaves the grown part
+    // of the window black. The renderer's 4x pipelines do not depend on size, so only the
+    // targets are recreated.
     if (!m_quality)
         return;
     DestroyQualityTargets();
@@ -1111,7 +1116,7 @@ void VGSandbox::OnShutdown()
         m_device->DestroyFence(m_fence);
     if (m_pool)
         m_device->DestroyCommandPool(m_pool);
-    // m_vs/m_fs/m_distanceFieldFragmentShader are borrowed from m_shaderHost's ShaderSystem, which frees them.
+    // The shader modules are borrowed from m_shaderHost's ShaderSystem, which frees them.
     m_shaderHost.Shutdown();
 }
 

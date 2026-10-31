@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI - CSS StyleSelector tests: parsing, specificity, and matching against the
-// UIWidget identity (tag/#id/.class), pseudo-classes via control state, and descendant /
+// UIWidget identity (tag/#id/.class), pseudo-classes via control state, and descendant and
 // child combinators. Derived from eepp css selector semantics (common subset).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -38,7 +38,7 @@ TEST_CASE("selector: specificity buckets")
     CHECK(Sel(u8"#ok").Specificity() == 1048576);   // id
     CHECK(Sel(u8"button.primary#ok").Specificity() == 1048576 + 1024 + 1);
     CHECK(Sel(u8"*").Specificity() == 0);                   // universal
-    CHECK(Sel(u8"div .item").Specificity() == 1 + 1024);    // tag + class across two rules
+    CHECK(Sel(u8"div .item").Specificity() == 1 + 1024);    // tag and class across two rules
     CHECK(Sel(u8"button:hover").Specificity() == 1 + 1024); // pseudo counts as a class
 }
 
@@ -69,7 +69,7 @@ TEST_CASE("selector: descendant vs child combinators")
 
     // Descendant: container is an ancestor of the button.
     CHECK(Sel(u8".container button").Select(*deep.Get()));
-    // Child: button's direct parent is `mid`, not `.container` -> no match.
+    // Child: the button's direct parent is `mid`, not `.container`, so no match.
     CHECK_FALSE(Sel(u8".container > button").Select(*deep.Get()));
 
     auto direct = Widget(u8"button");
@@ -94,7 +94,7 @@ TEST_CASE("selector: pseudo-classes track control state")
     d->InjectMouseMove(core::Float2{50.0f, 50.0f}); // hover w
     CHECK(Sel(u8"button:hover").Select(*w.Get()));
 
-    d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left); // press + focus
+    d->InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left); // press and focus
     CHECK(Sel(u8"button:active").Select(*w.Get()));
     CHECK(Sel(u8"button:focus").Select(*w.Get()));
 
@@ -103,12 +103,12 @@ TEST_CASE("selector: pseudo-classes track control state")
     CHECK(Sel(u8"button:disabled").Select(*w.Get()));
 }
 
-// ===================== E3: the selector forms =====================
+// ===================== The selector forms =====================
 
 namespace
 {
-    // A parent widget holding `count` children tagged by the letters of `tags` ('b' button, 'l'
-    // label), in order.
+    // A parent widget holding one child per letter of `tags`, in order, tagged by the letter ('b'
+    // button, 'l' label).
     struct Row
     {
         core::RefPtr<UIWidget> parent = Make<UIWidget>();
@@ -194,7 +194,7 @@ TEST_CASE("selector: attributes read the id, classes and reflected properties by
     CHECK(Sel(u8"[placeholder*=the]").Select(*field.Get()));
     CHECK(Sel(u8"[placeholder~=the]").Select(*field.Get()));
     CHECK_FALSE(Sel(u8"[placeholder~=th]").Select(*field.Get()));
-    CHECK(Sel(u8"[class|=dark]").Select(*field.Get()) == false); // "wide dark-mode" is not dark or dark-...
+    CHECK(Sel(u8"[class|=dark]").Select(*field.Get()) == false); // "wide dark-mode" is neither dark nor starts with dark-
     CHECK(Sel(u8"[class~=wide]").Select(*field.Get()));
     CHECK(Sel(u8"[id=q]").Select(*field.Get()));
     CHECK(Sel(u8"checkbox[checked=false]").Select(*box.Get()));
@@ -251,7 +251,7 @@ TEST_CASE("selector: an unknown pseudo-class or a stray character makes the rule
 
 TEST_CASE("selector: combinators try every candidate, not only the nearest")
 {
-    // a.x > b > c, and c's nearest `b` ancestor is not a child of .x: a greedy walk fails.
+    // a.x > b > c, where c's nearest `b` ancestor is not a child of .x, so a greedy walk fails.
     auto x = Make<UIWidget>();
     x->AddClass(core::StringView(u8"x"));
     auto b1 = Widget(u8"b");
@@ -285,7 +285,7 @@ TEST_CASE("selector: what changes a structural or state match restyles the widge
     styles.ApplyTree(*root.Get());
     CHECK(first->GetAlpha() == doctest::Approx(0.5f));
 
-    // A new last child: the old one is no longer last.
+    // With a new last child, the old one is no longer last.
     auto second = Widget(u8"item");
     list->AddChild(second.Get());
     styles.ApplyTree(*root.Get());
@@ -310,13 +310,13 @@ TEST_CASE("selector: the ancestor keys come from compounds a child or descendant
         return false;
     };
     const StyleSelector parentOfSibling(core::StringView(u8"panel > label + .note"));
-    CHECK(has(parentOfSibling, u8"panel")); // label's parent is .note's parent too
+    CHECK(has(parentOfSibling, u8"panel")); // the label's parent is also .note's parent
     CHECK_FALSE(has(parentOfSibling, u8"label"));
     CHECK_FALSE(has(parentOfSibling, u8"note")); // the subject's own names are not an ancestor's
 
     const StyleSelector siblingOfParent(core::StringView(u8"panel + #box .cell"));
     CHECK(has(siblingOfParent, u8"box"));
-    CHECK_FALSE(has(siblingOfParent, u8"panel")); // only a sibling of an ancestor
+    CHECK_FALSE(has(siblingOfParent, u8"panel")); // panel is only a sibling of an ancestor
 
     CHECK(StyleSelector(core::StringView(u8".a.b .c.d .e .f")).AncestorKeys().Size() == kStyleSelectorAncestorKeys);
     CHECK(StyleSelector(core::StringView(u8"button:hover")).AncestorKeys().Size() == 0);
@@ -339,7 +339,8 @@ TEST_CASE("selector: the ancestor filter turns away a rule whose ancestor is mis
     CHECK(filter.MayMatch(needsTop));
     CHECK_FALSE(filter.MayMatch(needsDeep));
 
-    // More of one name than a counter holds: popping all but one still says maybe.
+    // Pushing one name more times than a counter holds, then popping all but one, still says
+    // maybe.
     for (int i = 0; i < 300; ++i)
         filter.Push(*deep.Get());
     for (int i = 0; i < 299; ++i)
@@ -360,7 +361,7 @@ TEST_CASE("selector: positions and siblings follow the children as they are adde
     CHECK(Sel(u8":nth-child(2)").Select(row[0]));
     CHECK(Sel(u8":nth-last-child(1)").Select(row[2]));
 
-    // A plain node among them is not counted, and a label added after changes the count.
+    // A plain node among them is not counted, and a label added afterwards changes the count.
     auto plain = core::MakeRef<Node>(core::DefaultAllocator());
     row.parent->AddChildAt(plain.Get(), 1);
     auto label = Widget(u8"label");
@@ -369,7 +370,7 @@ TEST_CASE("selector: positions and siblings follow the children as they are adde
     CHECK(Sel(u8":nth-last-child(1)").Select(*label.Get()));
     CHECK(Sel(u8"button + label").Select(*label.Get()));
 
-    // Moved to another parent: numbered there, and gone from here.
+    // Moved to another parent, a child is numbered there and no longer here.
     Row other(u8"ll");
     other.parent->AddChild(row.kids[3].Get());
     CHECK(Sel(u8":nth-child(3)").Select(row[3]));
@@ -381,7 +382,7 @@ TEST_CASE("selector: positions and siblings follow the children as they are adde
 
 TEST_CASE("selector: a part's state counts as a pseudo-class of its own, beside the compound's")
 {
-    // :first-of-type and the part's :hover both count (they shared bits before).
+    // :first-of-type and the part's :hover both count.
     CHECK(Sel(u8"slider:first-of-type::thumb:hover").Specificity() == 2 * 1024 + 1 + 1);
     CHECK(Sel(u8"slider::thumb:hover").Specificity() == 1024 + 1 + 1);
     CHECK(Sel(u8"slider:hover::thumb:hover").Specificity() == 2 * 1024 + 1 + 1);

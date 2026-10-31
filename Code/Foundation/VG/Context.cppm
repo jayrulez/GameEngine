@@ -3,11 +3,10 @@
 
 // Foundation::VG - :context partition.
 //
-// VGState (the per-state-stack snapshot) and VGContext - the main user-facing
+// VGState (the per-state-stack snapshot) and VGContext, the main user-facing
 // vector-graphics API. Immediate-mode drawing of paths, shapes, images, 9-slice,
 // and text; produces a batched VGBatch for an external renderer to consume.
-// Ported from Sedulous.VG (VGState/VGContext). The 2D transform is a Float4x4
-// (mirroring Sedulous's 4x4 Matrix); colors are float Color (packed to Color32 only at the vertex).
+// The 2D transform is a Float4x4; colors are float Color, kept as float in the vertices.
 
 module;
 #include "Core/Prelude.h"
@@ -40,7 +39,7 @@ export namespace foundation::vg
         Rectangle clipRect{};
         VGClipMode clipMode = VGClipMode::None;
         // A rectangle clip is active (clipRect, empty = nothing draws), alone (clipMode Scissor)
-        // or inside path clips (clipMode Stencil: the draw is scissored AND stencil-tested).
+        // or inside path clips (clipMode Stencil: the draw is scissored and stencil-tested).
         bool scissored = false;
         f32 opacity = 1.0f;
         i32 stencilRef = 0;
@@ -60,7 +59,7 @@ export namespace foundation::vg
             bool scissored = false;
         };
         // One active path clip: its flattened path and the transform it was pushed under (a pop
-        // replays the clips that remain), and its DEVICE-space bounds.
+        // replays the clips that remain), and its device-space bounds.
         struct ClipPathLevel
         {
             Array<FlattenedSubPath> subPaths;
@@ -87,14 +86,14 @@ export namespace foundation::vg
         static constexpr f32 MaxLayerBlur = 32.0f;
         /// Distinct gradient ramps kept in the persistent LUT cache before a whole-cache
         /// eviction (announced via VGBatch::evictedTextures). Generous: a UI with a few
-        /// static gradients never gets near it; only continuously ANIMATED ramp colors do.
+        /// static gradients never gets near it; only continuously animated ramp colors do.
         static constexpr usize kMaxGradientLutCacheEntries = 256;
 
         explicit VGContext(fonts::IFontService* fontService = nullptr) : m_fontService(fontService)
         {
             m_stateStack.Reserve(16);
 
-            // 1x1 white texture for solid-color draws (Textures[0] -> color passthrough).
+            // 1x1 white texture for solid-color draws (texture 0 passes the vertex color through).
             const u8 whitePixel[4] = {255, 255, 255, 255};
             m_whiteTexture = image::OwnedImageData(1, 1, image::PixelFormat::RGBA8,
                                                    Span<const u8>(whitePixel, 4));
@@ -105,10 +104,9 @@ export namespace foundation::vg
         [[nodiscard]] fonts::IFontService* FontService() const { return m_fontService; }
 
         /// The service the CachedFont convenience DrawText overloads resolve atlases through.
-        /// UIContext::DrawRootView PUSHES its current service here every draw - a VG whose
-        /// construction-time service went stale (the UI swapped to a cooked default font after
-        /// this context was built) would otherwise GetAtlasTexture a CachedFont the old service
-        /// never made: null, silent skip, invisible text (the 2026-08-12 dist incident).
+        /// A host sets its current service here before drawing: a context still holding a stale
+        /// service (the host swapped fonts after this context was built) would ask it for the
+        /// atlas of a CachedFont it never made, get null, and draw no text.
         void SetFontService(fonts::IFontService* fontService) { m_fontService = fontService; }
 
         // === Output ===
@@ -138,16 +136,16 @@ export namespace foundation::vg
             m_currentTextureIndex = 0;
             m_commandStartIndex = 0;
 
-            // Gradient LUTs live in a PERSISTENT content-keyed cache (see BindGradientLut):
+            // Gradient LUTs live in a persistent content-keyed cache (see BindGradientLut):
             // stable ImageData pointers per distinct ramp, so the renderer's identity-keyed
             // GPU texture cache stays valid across frames. Last frame's eviction list has
-            // been consumed by now - the held images can finally die.
+            // been consumed by now, so the held images can be freed.
             m_evictedLutHold.Clear();
             if (m_gradientLutCache.Size() > kMaxGradientLutCacheEntries)
             {
-                // Over budget (many DISTINCT ramps - e.g. animated gradient colors): drop
-                // the whole cache and tell the renderer which sources died via the batch's
-                // eviction list (identity keys only - never dereferenced). The images are
+                // Over budget (many distinct ramps, e.g. animated gradient colors): drop
+                // the whole cache and tell the renderer which sources died through the batch's
+                // eviction list (identity keys only, never dereferenced). The images are
                 // held one frame so those keys are not dangling while in flight.
                 for (auto& kv : m_gradientLutCache)
                 {
@@ -165,27 +163,27 @@ export namespace foundation::vg
         [[nodiscard]] f32 Tolerance() const { return m_tolerance; }
         void SetTolerance(f32 tolerance) { m_tolerance = tolerance; }
 
-        /// Enable per-pixel radial/conic gradients. A host must ONLY enable this if its VGRenderer
-        /// was given the vg_grad_radial/vg_grad_conic shaders; otherwise those draw modes have no
-        /// pipeline. Off (default): radial/conic use the affine LUT approximation, which every
-        /// renderer can draw. Linear gradients are exact either way.
+        /// Enable per-pixel radial and conic gradients. A host enables this only if its VGRenderer
+        /// was given the vg_grad_radial and vg_grad_conic shaders; otherwise those draw modes have
+        /// no pipeline. Off (the default), radial and conic use the affine LUT approximation, which
+        /// every renderer can draw. Linear gradients are exact either way.
         void SetPerPixelGradients(bool enabled) { m_perPixelGradients = enabled; }
         /// DrawBox draws analytically (one quad, fill and border from a signed distance in the
-        /// box shader). Opt-in by the HOST, once it gave the renderer the box shaders; off, DrawBox
+        /// box shader). Opt-in by the host, once it gave the renderer the box shaders; off, DrawBox
         /// tessellates its fill and border as FillRoundedRect does.
         void SetAnalyticBoxes(bool enabled) { m_analyticBoxes = enabled; }
         [[nodiscard]] bool AnalyticBoxes() const { return m_analyticBoxes; }
-        /// PushLayer draws into offscreen layers. Opt-in by the HOST, once its renderer was given the
+        /// PushLayer draws into offscreen layers. Opt-in by the host, once its renderer was given the
         /// layer composite shader and the host calls VGRenderer::RenderLayers before its pass; off,
         /// a layer is an opacity push (each shape fades on its own, overlaps show through).
         void SetLayers(bool enabled) { m_layersEnabled = enabled; }
         [[nodiscard]] bool Layers() const { return m_layersEnabled; }
         [[nodiscard]] bool PerPixelGradients() const { return m_perPixelGradients; }
 
-        /// Enable stencil-then-cover for COMPLEX path fills (holes, self-intersection,
-        /// even-odd) - the fill-correctness path. Opt-in by the HOST, and only after it
-        /// gave the renderer a stencil attachment (VGRenderer target config): the write/
-        /// cover commands are dropped by a renderer without stencil pipelines. Convex
+        /// Enable stencil-then-cover for complex path fills (holes, self-intersection,
+        /// even-odd), the path that fills them correctly. Opt-in by the host, and only after
+        /// it gave the renderer a stencil attachment (VGRenderer target config): a renderer
+        /// without stencil pipelines drops the write and cover commands. Convex
         /// single-contour fills keep the tessellated fast path either way.
         void SetStencilFills(bool enabled) { m_stencilFills = enabled; }
         [[nodiscard]] bool StencilFills() const { return m_stencilFills; }
@@ -193,19 +191,19 @@ export namespace foundation::vg
         // === Path clipping (stencil bit 0x80; see VGFillPhase) ===
 
         /// Clip subsequent draws to `path` (NonZero winding; EvenOdd clip paths are not
-        /// supported in v1), within any path clip already active: clips nest, each the
+        /// supported), within any path clip already active: clips nest, each the
         /// intersection of its path and the clips around it, so a rounded card can hold a list of
         /// rounded items. A rectangle clip (PushClipRect) inside or around one still applies.
         /// Requires stencil fills (a host-provided stencil attachment); without one this degrades
-        /// to a SCISSOR of the path's transformed bounds. Balance with PopClipPath before
-        /// Clear()/frame end.
+        /// to a scissor of the path's transformed bounds. Balance with PopClipPath before
+        /// Clear() or the frame's end.
         void PushClipPath(const Path& path)
         {
             ClipPathLevel level;
             PathFlattener::Flatten(path, GetScaledTolerance(), level.subPaths);
             if (!m_stencilFills)
             {
-                // Fallback: scissor to the transformed bounds - coarse but contained.
+                // Fallback: scissor to the transformed bounds, coarse but contained.
                 Float2 mn{3.4e38f, 3.4e38f};
                 Float2 mx{-3.4e38f, -3.4e38f};
                 for (const FlattenedSubPath& sp : level.subPaths)
@@ -270,9 +268,9 @@ export namespace foundation::vg
             RefreshClipMode();
         }
 
-        /// Pixel snapping: axis-aligned filled rects, borders and horizontal/vertical lines are
-        /// snapped to the device pixel grid and drawn WITHOUT the AA fringe (an axis-aligned edge
-        /// on a pixel boundary is already crisp and needs no AA). Rotated / curved / diagonal
+        /// Pixel snapping: axis-aligned filled rects, borders and horizontal or vertical lines are
+        /// snapped to the device pixel grid and drawn without the AA fringe (an axis-aligned edge
+        /// on a pixel boundary is already crisp and needs no AA). Rotated, curved and diagonal
         /// geometry is untouched. On by default; disable to compare.
         void SetPixelSnapEnabled(bool enabled) { m_pixelSnap = enabled; }
         [[nodiscard]] bool PixelSnapEnabled() const { return m_pixelSnap; }
@@ -327,11 +325,11 @@ export namespace foundation::vg
             RefreshClipMode(); // inside a path clip, both apply
         }
 
-        /// Whether a rect (CURRENT local coordinates) can contribute any pixels under the active
-        /// scissor clip. True when no clip is active. Callers (the UI's child-draw loop) use it to
-        /// skip tessellating geometry the scissor would discard anyway - a ScrollView'd list draws
-        /// its viewport, not its whole content (the ImportTest blank-UI lesson: a ~1300-row form
-        /// exceeded the renderer's per-frame vertex ceiling).
+        /// Whether a rect (in current local coordinates) can contribute any pixels under the
+        /// active scissor clip. True when no clip is active. Callers (a UI's child-draw loop) use
+        /// it to skip tessellating geometry the scissor would discard anyway, so a scrolled list
+        /// draws its viewport, not its whole content, and a long one stays under the renderer's
+        /// per-frame vertex ceiling.
         [[nodiscard]] bool IsRectVisible(Rectangle rect) const
         {
             if (!m_currentState.scissored)
@@ -345,7 +343,7 @@ export namespace foundation::vg
             return TransformRect(rect).Intersects(m_currentState.clipRect);
         }
 
-        /// The active scissor clip in CURRENT local coordinates: the bounds of its corners mapped
+        /// The active scissor clip in current local coordinates: the bounds of its corners mapped
         /// back through the transform (a box around it under a rotation, never smaller). False
         /// when no clip is active, where everything can show. A caller with many children asks
         /// once which of them can show, rather than asking IsRectVisible of each.
@@ -434,7 +432,7 @@ export namespace foundation::vg
 
         /// Draw what follows into an offscreen layer, composited into what is under it once, at
         /// PopLayer, with `opacity` and `blendMode`: a group fades as one, its overlapping parts
-        /// never showing through each other (V3 of Specs/vg-and-gui-lab.md). Inside, opacity
+        /// never showing through each other. Inside, opacity
         /// starts again at 1 and no clip applies (the clips around the layer apply to its
         /// composite); the transform carries on. `blur` blurs the layer before its composite, a
         /// Gaussian of that sigma in device pixels (up to MaxLayerBlur). Without SetLayers, or past
@@ -646,7 +644,7 @@ export namespace foundation::vg
             }
         }
 
-        // Switch straight sampling vs MSDF decode; flushes the in-progress command so the mode
+        // Switch straight sampling or MSDF decode; flushes the in-progress command so the mode
         // change lands on a fresh command boundary.
         void SetDrawMode(VGDrawMode mode)
         {
@@ -657,9 +655,9 @@ export namespace foundation::vg
             }
         }
 
-        /// The spread the NEXT gradient draw samples its LUT with (a sampler-address
-        /// property of the command, so a change cuts the batch - two fills sharing one
-        /// cached ramp may still spread differently).
+        /// The spread the next gradient draw samples its LUT with. It is a sampler-address
+        /// property of the command, so a change cuts the batch: two fills sharing one
+        /// cached ramp may still spread differently.
         void SetGradientSpread(VGGradientSpread spread)
         {
             if (spread != m_currentGradientSpread)
@@ -722,7 +720,7 @@ export namespace foundation::vg
             if (gradientTess != VGGradientTess::Gouraud)
             {
                 // Restore the default sampling mode so later solid draws aren't stuck on the
-                // gradient pipeline / LUT texture.
+                // gradient pipeline and LUT texture.
                 SetDrawMode(VGDrawMode::Default);
                 SetupForSolidDraw();
             }
@@ -802,8 +800,8 @@ export namespace foundation::vg
         }
 
         /// A box: `rect` filled with `fill` and rounded by `radii`, with a border of `borders`
-        /// widths (per side) in `borderColor` drawn over the fill inside its edge (V4 of
-        /// Specs/vg-and-gui-lab.md). Analytic when the host enabled it (SetAnalyticBoxes): one
+        /// widths (per side) in `borderColor` drawn over the fill inside its edge. Analytic when
+        /// the host enabled it (SetAnalyticBoxes): one
         /// quad whose fill and border come from one signed distance, so they cannot disagree, a
         /// thin border has no halo and small radii are exact; where neighbouring borders differ,
         /// the inner corner is a quarter ellipse. An axis-aligned box snaps to device pixels as
@@ -856,7 +854,7 @@ export namespace foundation::vg
                 const f32 r = (scale.x + scale.y) * 0.5f;
                 box.halfSize = Float2{(x1 - x0) * 0.5f, (y1 - y0) * 0.5f};
                 box.radii = Float4{radii.topLeft * r, radii.topRight * r, radii.bottomRight * r, radii.bottomLeft * r};
-                // Each border a whole number of device pixels, never thinner than one (V5): a 2 px
+                // Each border a whole number of device pixels, never thinner than one: a 2 px
                 // border on a canvas scaled to 0.48 is one crisp pixel, not a 0.96 px blur.
                 const auto snapWidth = [](f32 w, f32 s) { return w > 0.0f ? Max(1.0f, Round(w * s)) : 0.0f; };
                 box.borders = Float4{snapWidth(borders.top, scale.y), snapWidth(borders.right, scale.x),
@@ -890,15 +888,15 @@ export namespace foundation::vg
             EmitBox(box, corner, local);
         }
 
-        /// A Gaussian-blurred rounded rectangle - the UI box-shadow. `rect`/`radii` are the
+        /// A Gaussian-blurred rounded rectangle: the UI box-shadow. `rect` and `radii` are the
         /// shadow's own box (the caller applies offset and spread); `blur` is the CSS blur
         /// radius (sigma = blur / 2; the shadow fades over three sigma outside the box). An
-        /// OUTSET shadow paints outside the box and is fully opaque inside it (the box's own
-        /// background covers the inside); an INSET shadow paints only inside, fading inward
+        /// outset shadow paints outside the box and is fully opaque inside it (the box's own
+        /// background covers the inside); an inset shadow paints only inside, fading inward
         /// from the edge. blur <= 0 degrades to a hard rounded rect (outset) or nothing (inset).
         ///
-        /// Emitted as FOUR QUADRANT quads in the BoxShadow draw mode: within one quadrant the
-        /// rounded-box SDF operand `|p - c| - (halfSize - r)` is LINEAR in position, so it
+        /// Emitted as four quadrant quads in the BoxShadow draw mode: within one quadrant the
+        /// rounded-box SDF operand `|p - c| - (halfSize - r)` is linear in position, so it
         /// interpolates exactly from the vertices (in sigma units, in texcoord) and the shader
         /// only has to finish `length(max(q,0)) + min(max(q.x,q.y),0) - r`. Non-uniform radii
         /// come for free: each quadrant carries its own corner radius (r / sigma, negated for
@@ -996,8 +994,8 @@ export namespace foundation::vg
         void StrokeRect(Rectangle rect, Color color, f32 width = 1.0f)
         {
             // Crisp path: a centered axis-aligned border drawn as four pixel-snapped bars (no
-            // fringe). Top/bottom span the full outer width (owning the corners); the side bars
-            // fill vertically BETWEEN them, so coverage is exact with no seams or double-blend.
+            // fringe). Top and bottom span the full outer width (owning the corners); the side
+            // bars fill vertically between them, so coverage is exact with no gaps or double blend.
             if (m_pixelSnap && TransformIsAxisAligned())
             {
                 const Float2 p0 = TransformPoint(Float2{rect.x, rect.y});
@@ -1047,7 +1045,7 @@ export namespace foundation::vg
             }
             // Crisp path: under an axis-aligned transform, snap the rect
             // so each edge's stroke centerline lands where StrokeRect's pixel-snapped bars
-            // would - a 1px themed rounded border renders as a crisp 1-device-pixel line
+            // would, so a 1px themed rounded border renders as a crisp 1-device-pixel line
             // instead of a 2px blur. Corners keep the analytic path stroke; only placement and
             // the (device-rounded) thickness snap. Flipped transforms fall through unsnapped.
             if (m_pixelSnap && TransformIsAxisAligned())
@@ -1263,7 +1261,7 @@ export namespace foundation::vg
             TransformVertices(startVertex);
         }
 
-        /// DrawImage for a texture that already holds PREMULTIPLIED colour in the canvas's blend
+        /// DrawImage for a texture that already holds premultiplied colour in the canvas's blend
         /// space, as a layer's target does (a picture drawn once into a GPU texture and registered
         /// with the renderer under `texture`, RegisterExternalTexture): sampled as a layer's
         /// composite is, scaled by `opacity`, never premultiplied again. The plain DrawImage takes
@@ -1347,12 +1345,11 @@ export namespace foundation::vg
             FillConvexPathWithImage(pb.ToPath(), texture, destRect, srcRect, tint);
         }
 
-        /// DrawImage with the DEST rect snapped to the device pixel grid (axis-aligned
-        /// transforms only; rotated draws fall through unsnapped). The crispness half of
-        /// the icon-bake pipeline: a baked bitmap drawn at a fractional origin smears
-        /// under bilinear sampling and reads differently per instance (the tab-close-X
-        /// artifact); snapping makes every instance sample identical texels. The snapped
-        /// rect keeps the SOURCE size when it already matches (a baked icon at its bake
+        /// DrawImage with the destination rect snapped to the device pixel grid (axis-aligned
+        /// transforms only; rotated draws fall through unsnapped). For baked icons: a baked
+        /// bitmap drawn at a fractional origin smears under bilinear sampling and looks
+        /// different per instance; snapping makes every instance sample identical texels. The
+        /// snapped rect keeps the source size when it already matches (a baked icon at its bake
         /// size maps 1:1), else rounds the scaled extent.
         void DrawImageSnapped(const image::ImageData* texture, Rectangle destRect,
                               Rectangle srcRect, Color tint = Color::White)
@@ -1375,10 +1372,10 @@ export namespace foundation::vg
             const i32 textureIndex = GetOrAddTexture(texture);
             SetupForTextureDraw(textureIndex);
             const usize startVertex = m_batch.vertices.Size();
-            // Device-space quad: emit WITHOUT the transform (positions are final).
+            // Device-space quad: emit without the transform (positions are final).
             EmitTexturedQuad(Rectangle{x0, y0, x1 - x0, y1 - y0}, srcRect, texture->Width(),
                              texture->Height(), ApplyOpacity(tint));
-            (void)startVertex; // no TransformVertices - the points are device-space already
+            (void)startVertex; // no TransformVertices: the points are device-space already
         }
 
         /// Draw a 9-slice image scaled to fit a destination rectangle.
@@ -1655,8 +1652,8 @@ export namespace foundation::vg
 
             // Same DF handling as DrawText: MSDF atlases decode through the distance-field
             // pipeline, or the raw field channels render as rainbow glyphs. This is the
-            // SHAPED path every real control uses (EditText, wrapped text), so without this
-            // branch the UI could never use MSDF fonts.
+            // shaped path controls use (edit text, wrapped text), so without this branch a UI
+            // could not use MSDF fonts.
             const bool isDF = font->atlas->Mode() == fonts::AtlasMode::DistanceField;
             if (isDF)
             {
@@ -1817,7 +1814,6 @@ export namespace foundation::vg
             }
         }
 
-        /// Emit a glyph quad into the batch in untransformed coordinates.
         /// Emits a run of glyphs under the current text effects: `forEachQuad(emit)` calls
         /// `emit(quad)` for each glyph's quad, once per pass (shadow, glow, outline, then the
         /// glyphs themselves in `color`). Effects in pixels become field units per glyph (a quad's
@@ -1864,6 +1860,7 @@ export namespace foundation::vg
                 pass(Float2{}, color, 0.0f, 0.0f);
         }
 
+        /// Emit a glyph quad into the batch in untransformed coordinates.
         void EmitGlyphQuad(const fonts::GlyphQuad& quad, Color color, Float2 edgeShiftRamp = Float2{})
         {
             const u32 baseIndex = static_cast<u32>(m_batch.vertices.Size());
@@ -1962,13 +1959,13 @@ export namespace foundation::vg
             return static_cast<i32>(m_batch.textures.Size() - 1);
         }
 
-        // Bake a gradient's color ramp into a 256x1 RGBA8/sRGB LUT, bind it as the active texture,
+        // Bake a gradient's color ramp into a 256x1 RGBA8 sRGB LUT, bind it as the active texture,
         // and select the draw mode. Returns the tessellation emit mode (Gouraud for solid fills).
         // The LUT lives in the persistent content-keyed cache (see m_gradientLutCache);
         // the GPU decodes the sRGB texels to linear on sample, matching the vertex-color path.
-        // Linear gradients stay on the Default pipeline (affine LUT parameter is exact); radial/
-        // conic upgrade to their per-pixel pipelines only when the host enabled per-pixel gradients
-        // (i.e. wired the shaders) - otherwise they fall back to the same affine LUT approximation.
+        // Linear gradients stay on the Default pipeline (the affine LUT parameter is exact); radial
+        // and conic move to their per-pixel pipelines only when the host enabled per-pixel
+        // gradients (wired the shaders), otherwise they use the same affine LUT approximation.
         [[nodiscard]] VGGradientTess BindGradientLut(const IVGFill& fill)
         {
             if (!fill.RequiresInterpolation())
@@ -1992,9 +1989,9 @@ export namespace foundation::vg
             }
 
             // Content-keyed persistent cache: identical ramps (N fills of one gradient, and
-            // the same gradient across frames) share ONE ImageData - the stable identity the
-            // renderer's GPU texture cache keys on. A per-frame pool here caused freed-and-
-            // reallocated LUTs to cache-hit stale GPU ramps (or leak one texture per fill).
+            // the same gradient across frames) share one ImageData, the stable identity the
+            // renderer's GPU texture cache keys on. A per-frame pool would let freed and
+            // reallocated LUTs hit stale GPU ramps in that cache (or leak one texture per fill).
             const u64 rampHash = HashBytes(pixels, sizeof(pixels));
             image::OwnedImageData* raw = nullptr;
             if (UniquePtr<image::OwnedImageData>* cached = m_gradientLutCache.Find(rampHash))
@@ -2055,8 +2052,8 @@ export namespace foundation::vg
         // === Stencil-then-cover emission (complex fills; see SetStencilFills) ===
 
         /// True when a fill's contours cannot be drawn correctly by the direct tessellator:
-        /// multiple contours (holes / disjoint pieces) or a non-convex single contour
-        /// (self-intersection, concavity - ear clipping mis-fills both under either rule).
+        /// multiple contours (holes, disjoint pieces) or a non-convex single contour
+        /// (self-intersection or concavity; ear clipping mis-fills both under either rule).
         [[nodiscard]] static bool NeedsStencilFill(const Array<FlattenedSubPath>& subPaths,
                                                    FillRule /*fillRule*/)
         {
@@ -2081,10 +2078,10 @@ export namespace foundation::vg
             return !IsConvexSimpleLoop(single->points);
         }
 
-        /// Convex AND simple: every turn has the same sign and the winding totals exactly
-        /// one revolution (a pentagram-style loop turns 2+ revolutions and would slip past
-        /// a sign-only test; under NonZero its core must fill, under EvenOdd it must not -
-        /// both need the stencil).
+        /// Convex and simple: every turn has the same sign and the winding totals exactly
+        /// one revolution. A pentagram-style loop turns two or more revolutions and would slip
+        /// past a sign-only test; under NonZero its core must fill and under EvenOdd it must
+        /// not, so both need the stencil.
         [[nodiscard]] static bool IsConvexSimpleLoop(const Array<Float2>& points)
         {
             usize n = points.Size();
@@ -2095,7 +2092,7 @@ export namespace foundation::vg
             }
             if (n < 3)
             {
-                return true; // degenerate - nothing the stencil would improve
+                return true; // degenerate: nothing the stencil would improve
             }
             f32 turnSign = 0.0f;
             f32 totalTurn = 0.0f;
@@ -2280,8 +2277,8 @@ export namespace foundation::vg
         // Write one path clip into the stencil mask and return its device bounds. The outermost:
         // its winding over the clear mask, then ClipApply over its bounds. A nested one: its
         // winding only where the mask is already set (a clipped write), then ClipApply over the
-        // OUTER clip's bounds, which keeps the mask where the new winding is and zeroes it
-        // elsewhere - the intersection, with the pipelines fills already use.
+        // outer clip's bounds, which keeps the mask where the new winding is and zeroes it
+        // elsewhere: the intersection, with the pipelines fills already use.
         Rectangle EmitClipLevel(const ClipPathLevel& level, bool nested, Rectangle outer)
         {
             const Float4x4 savedTransform = m_currentState.transform;
@@ -2321,12 +2318,8 @@ export namespace foundation::vg
             m_currentState.clipMode = savedMode;
         }
 
-        /// Emit a stencil-then-cover fill: a color-masked winding pass (per-contour fans
-        /// from each contour's first point) then a bounding-quad cover carrying the fill's
-        /// color/gradient data. `fill` null = solid `solidColor` (already opacity-applied);
-        /// non-null follows the same gradient plumbing as the tessellated path.
         /// Emit color-masked winding fans (one per contour, device-transformed) as a
-        /// StencilWrite command. Returns the DEVICE-space bounds of the emitted points
+        /// StencilWrite command. Returns the device-space bounds of the emitted points
         /// (zero-sized when degenerate). Shared by stencil fills and PushClipPath.
         Rectangle EmitWindingFans(const Array<FlattenedSubPath>& subPaths,
                                   FillRule fillRule = FillRule::NonZero)
@@ -2375,8 +2368,8 @@ export namespace foundation::vg
             return Rectangle{mn.x, mn.y, mx.x - mn.x, mx.y - mn.y};
         }
 
-        /// Emit a color-masked DEVICE-space quad as `phase` (ClipApply / ClipClear -
-        /// no vertex transform: the rect is already in device coordinates).
+        /// Emit a color-masked device-space quad as `phase` (ClipApply or ClipClear), with
+        /// no vertex transform: the rect is already in device coordinates.
         void EmitDeviceQuad(Rectangle rect, VGFillPhase phase)
         {
             SetDrawMode(VGDrawMode::Default);
@@ -2401,6 +2394,10 @@ export namespace foundation::vg
             PushExplicitCommand(startIndex, phase, FillRule::NonZero);
         }
 
+        /// Emit a stencil-then-cover fill: a color-masked winding pass (per-contour fans
+        /// from each contour's first point), then a bounding-quad cover carrying the fill's
+        /// color or gradient data. A null `fill` means solid `solidColor` (opacity already
+        /// applied); a non-null one follows the same gradient handling as the tessellated path.
         void EmitStencilFill(const Array<FlattenedSubPath>& subPaths, FillRule fillRule,
                              Color solidColor, const IVGFill* fill)
         {
@@ -2429,7 +2426,7 @@ export namespace foundation::vg
             (void)EmitWindingFans(subPaths, fillRule);
 
             // --- Cover pass: a bounds quad with the fill's shading. Gradient fills bind
-            // their LUT / per-pixel mode exactly like the tessellated path.
+            // their LUT or per-pixel mode as the tessellated path does.
             VGGradientTess gradientTess = VGGradientTess::Gouraud;
             if (fill != nullptr)
             {
@@ -2479,7 +2476,7 @@ export namespace foundation::vg
             if (gradientTess != VGGradientTess::Gouraud)
             {
                 // Restore default sampling so later solid draws aren't stuck on the
-                // gradient pipeline / LUT texture (mirrors FillPath's gradient epilogue).
+                // gradient pipeline and LUT texture (as FillPath does after a gradient).
                 SetDrawMode(VGDrawMode::Default);
                 SetupForSolidDraw();
             }
@@ -2553,9 +2550,9 @@ export namespace foundation::vg
             return m_tolerance;
         }
 
-        // The AA fringe width to hand the tessellators, kept ~constant in SCREEN pixels. The
+        // The AA fringe width to hand the tessellators, kept roughly constant in screen pixels. The
         // fringe geometry is built in content space and then scaled by the current transform, so
-        // pre-divide by that scale (mirrors GetScaledTolerance) - otherwise a scaled-up shape gets
+        // pre-divide by that scale (as GetScaledTolerance does); otherwise a scaled-up shape gets
         // a proportionally wider, blurrier edge.
         [[nodiscard]] f32 GetScaledFringe() const
         {
@@ -2571,10 +2568,10 @@ export namespace foundation::vg
             return (scale > 0.0001f) ? kBaseFringe / scale : kBaseFringe;
         }
 
-        // === Pixel snapping (crisp axis-aligned rects/lines) ===
+        // === Pixel snapping (crisp axis-aligned rects and lines) ===
 
-        // The current transform has no rotation/skew (its linear part is diagonal), so device
-        // axis-aligned geometry maps to axis-aligned pixels - safe to snap to the pixel grid.
+        // The current transform has no rotation or skew (its linear part is diagonal), so
+        // axis-aligned geometry maps to axis-aligned pixels and is safe to snap to the pixel grid.
         [[nodiscard]] bool TransformIsAxisAligned() const
         {
             const Float4x4& m = m_currentState.transform;
@@ -2586,7 +2583,7 @@ export namespace foundation::vg
             const Float4x4& m = m_currentState.transform;
             return Float2{Abs(m(0, 0)), Abs(m(1, 1))};
         }
-        // Emit a crisp (NO fringe) filled rect whose corners are already in DEVICE space; the
+        // Emit a crisp filled rect (no fringe) whose corners are already in device space; the
         // caller has snapped the edges to the pixel grid, so no anti-aliasing is needed.
         void EmitDeviceRect(f32 x0, f32 y0, f32 x1, f32 y1, Color color)
         {
@@ -2661,10 +2658,9 @@ export namespace foundation::vg
 
         VGBatch m_batch;
         image::OwnedImageData m_whiteTexture;
-        // Per-frame baked gradient ramp LUTs (owned; UniquePtr for stable addresses since the
-        // batch textures hold raw pointers). Cleared on Clear() once the batch is consumed.
-        // Gradient ramp LUTs, keyed by ramp CONTENT hash, persisted across frames (stable
-        // ImageData identities for the renderer's texture cache). Over-budget eviction is
+        // Gradient ramp LUTs, keyed by ramp content hash, persisted across frames (stable
+        // ImageData identities for the renderer's texture cache; UniquePtr because the batch's
+        // textures hold raw pointers). Over-budget eviction is
         // whole-cache, announced through VGBatch::evictedTextures, with the images held one
         // frame (m_evictedLutHold) so the announced keys are not dangling in flight.
         HashMap<u64, UniquePtr<image::OwnedImageData>> m_gradientLutCache;
@@ -2701,10 +2697,10 @@ export namespace foundation::vg
         VGBlendMode m_currentBlendMode = VGBlendMode::Normal;
         VGDrawMode m_currentDrawMode = VGDrawMode::Default;
         VGGradientSpread m_currentGradientSpread = VGGradientSpread::Pad;
-        bool m_perPixelGradients = false;
+        bool m_perPixelGradients = false; // radial and conic use dedicated per-pixel shaders when set
         bool m_analyticBoxes = false;
         bool m_layersEnabled = false;
-        bool m_stencilFills = false; // host opt-in: stencil-then-cover for complex fills // radial/conic use dedicated per-pixel shaders when set
+        bool m_stencilFills = false; // host opt-in: stencil-then-cover for complex fills
         i32 m_currentTextureIndex = 0;
         i32 m_commandStartIndex = 0;
         f32 m_tolerance = 0.05f;

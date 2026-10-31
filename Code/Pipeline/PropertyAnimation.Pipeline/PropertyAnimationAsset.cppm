@@ -3,9 +3,9 @@
 
 // Pipeline::PropertyAnimation - `propertyanimation.pipeline` (tooling).
 //
-// The source asset for a property-animation clip + its XML->binary builder. Clips are authored
-// in-editor (no OS-file importer): the asset EMBEDS the cooked wire struct (PropertyAnimationClipSource)
-// as its authored data (the AnimationClipAsset pattern), so the builder writes it verbatim to the
+// The source asset for a property-animation clip and its XML-to-binary builder. Clips are authored
+// in the editor (no OS-file importer): the asset embeds the cooked wire struct (PropertyAnimationClipSource)
+// as its authored data, as AnimationClipAsset does, so the builder writes it verbatim to the
 // cooked product and the runtime factory (foundation.propertyanimation.resource) loads it.
 
 module;
@@ -26,7 +26,7 @@ export namespace pipeline
 {
     namespace propanim = foundation::propertyanimation;
 
-    // Source asset: the authored clip. `source` IS the cooked wire (edited in place by the clip page);
+    // Source asset: the authored clip. `source` is the cooked wire (edited in place by the clip page);
     // the builder cooks it unchanged.
     class PropertyAnimationClipAsset final : public pipeline::Asset
     {
@@ -41,7 +41,7 @@ export namespace pipeline
         }
     };
 
-    // Cooks the authored asset -> the PropertyAnimationClipSource product (written verbatim; the
+    // Cooks the authored asset to the PropertyAnimationClipSource product (written verbatim; the
     // runtime factory rebuilds the evaluate-ready clip).
     class PropertyAnimationClipAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
@@ -66,10 +66,10 @@ export namespace pipeline
         }
     };
 
-    // Register the asset type (Pipeline domain) + the cooked source/resource types (Runtime domain).
+    // Register the asset type (Pipeline domain) and the cooked source/resource types (Runtime domain).
     inline void RegisterPropertyAnimationAssets()
     {
-        propanim::RegisterPropertyAnimationResource(); // the cooked source + runtime resource types
+        propanim::RegisterPropertyAnimationResource(); // the cooked source and runtime resource types
         GlobalTypeRegistry().Register(PropertyAnimationClipAsset::StaticType(),
                                       TypeDomain(u8"Pipeline"));
         RegisterSerializable<PropertyAnimationClipAsset>();

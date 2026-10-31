@@ -3,17 +3,16 @@
 
 // foundation.gui.inspector - :inspector partition
 //
-// Inspector: the GUI's inspector (E8e of Specs/gui-lab-evolution.md), built from the GUI's own
-// widgets in a root of its own on the inspected GUI's context, which a host shows as a pane beside
-// the root it inspects. The Elements tab lists the tree (live: rebuilt when its shape changes) over
-// the selected node's details: what it is, its states with toggles that force them, its box, its
-// styles grouped by rule with sheet and line (inherited ones under their ancestor), its reflected
-// properties edited live as markup sets them, its bindings, commands and listeners, and how it
-// measures. Picking (the host routes the pointer over the inspected root here while it is on)
-// outlines what is under the pointer, the wheel walking out and in through what holds it (gpui's),
-// and a click selects it. The Frames tab draws the frame costs the host records. The host draws
-// DrawOverTarget over the inspected root: the box model of the node under the pointer and of the
-// one selected.
+// Inspector: the GUI's inspector, built from the GUI's own widgets in its own root on the inspected
+// GUI's context. A host shows it as a pane beside the root it inspects. The Elements tab lists the
+// tree, rebuilt live when its shape changes, above the selected node's details: what it is, its
+// states with toggles that force them, its box, its styles grouped by rule with sheet and line
+// (inherited ones under their ancestor), its reflected properties (edited live as markup sets
+// them), its bindings, commands and listeners, and how it measures. While picking is on, the host
+// routes the pointer over the inspected root here: picking outlines what is under the pointer, the
+// wheel walks out and in through the nodes that hold it, and a click selects it. The Frames tab
+// draws the frame costs the host records. The host calls DrawOverTarget over the inspected root to
+// draw the box model of the node under the pointer and of the selected one.
 
 module;
 #include "Core/Prelude.h"
@@ -68,7 +67,8 @@ export namespace foundation::gui::inspector
         {
             vg::VGContext& g = ctx.VG();
             g.FillRect(local.ToRectangle(), core::Color{0.08f, 0.09f, 0.11f, 1.0f});
-            // A line at 16.7 ms (a 60 Hz frame); the bars scale to the larger of it and the worst.
+            // A line at 16.7 ms (a 60 Hz frame); the bars scale to the larger of that and the worst
+            // frame.
             f32 worst = 16.7f;
             for (const Sample& s : m_samples)
                 worst = core::Max(worst, s.Style + s.Layout + s.Draw);
@@ -121,12 +121,13 @@ export namespace foundation::gui::inspector
         Inspector& operator=(const Inspector&) = delete;
         ~Inspector()
         {
-            // The views hold the models: they go before them.
+            // The views hold the models, so the views are destroyed first.
             if (m_root)
                 m_root->RemoveAllChildren();
         }
 
-        /// What it inspects: a root and the style manager that styles it (for the styles' origins).
+        /// Sets what to inspect: a root and the style manager that styles it (for the styles'
+        /// origins).
         void Inspect(SceneRoot* target, StyleManager* targetStyles)
         {
             m_target = target;
@@ -136,18 +137,18 @@ export namespace foundation::gui::inspector
         }
         [[nodiscard]] SceneRoot* GetTarget() const noexcept { return m_target; }
         [[nodiscard]] SceneRoot& GetRoot() const noexcept { return *m_root; }
-        /// Its root held, for a host that draws it as a pane of a window.
+        /// Returns a reference to its root, for a host that draws it as a pane of a window.
         [[nodiscard]] RefPtr<SceneRoot> GetRootRef() const noexcept { return m_root; }
         [[nodiscard]] StyleManager& GetStyles() noexcept { return m_styles; }
 
-        /// Once a frame, before its root's style pass: the tree when its shape changed, the details
-        /// now and then (values move).
+        /// Called once a frame, before its root's style pass. Rebuilds the tree when its shape
+        /// changed, and refreshes the details now and then because values change.
         void Refresh()
         {
             if (m_target == nullptr)
                 return;
             ++m_refreshes;
-            if (m_refreshes % 10 == 1) // the shape's signature walks the tree: a few times a second
+            if (m_refreshes % 10 == 1) // computing the shape's signature walks the tree, so only a few times a second
             {
                 const u64 signature = Signature(*m_target);
                 if (signature != m_signature)
@@ -156,15 +157,15 @@ export namespace foundation::gui::inspector
                     RebuildTree();
                 }
             }
-            // The details again when the selection changed, and now and then for values that moved,
-            // but not under a field being edited there.
+            // Show the details again when the selection changed, and now and then for values that
+            // changed, but not while a field there is being edited.
             Node* selected = GetSelected();
             if (selected != m_detailsFor || m_detailsStale || (m_refreshes % 60 == 0 && !EditingDetails()))
                 RebuildDetails();
         }
 
         // === The tree's branches ===
-        /// Folds `node`'s branch away in the tree (its descendants leave the list) or opens it.
+        /// Folds `node`'s branch in the tree (its descendants leave the list), or opens it.
         void SetCollapsed(Node* node, bool collapsed)
         {
             if (node == nullptr || IsCollapsed(node) == collapsed)
@@ -192,7 +193,7 @@ export namespace foundation::gui::inspector
         // === Selection ===
         void Select(Node* node)
         {
-            // What holds it opens, so its row shows.
+            // Open the nodes that hold it, so its row shows.
             bool opened = false;
             for (Node* n = node != nullptr ? node->GetParent() : nullptr; n != nullptr; n = n->GetParent())
                 for (usize i = 0; i < m_collapsed.Size(); ++i)
@@ -217,7 +218,7 @@ export namespace foundation::gui::inspector
                     }
             RebuildDetails();
         }
-        /// The node selected while it lives (null once it is gone).
+        /// Returns the selected node while it lives (null once it is gone).
         [[nodiscard]] Node* GetSelected() const
         {
             if (m_selected.table != nullptr)
@@ -236,7 +237,8 @@ export namespace foundation::gui::inspector
                 m_target->Invalidate();
         }
         [[nodiscard]] bool IsPicking() const noexcept { return m_picking; }
-        /// The pointer at `world` (the inspected root's world) while picking: what is under it.
+        /// Called with the pointer at `world` (in the inspected root's world) while picking; outlines
+        /// what is under it.
         void PickHover(core::Float2 world)
         {
             if (!m_picking || m_target == nullptr)
@@ -250,7 +252,8 @@ export namespace foundation::gui::inspector
             m_hoverLevel = 0;
             m_target->Invalidate();
         }
-        /// The wheel while picking: out to what holds the node (up) or back in (down).
+        /// Called for the wheel while picking: moves out to the node that holds the outlined one (up)
+        /// or back in (down).
         void PickWheel(f32 delta)
         {
             if (!m_picking || m_hoverPath.IsEmpty())
@@ -259,7 +262,7 @@ export namespace foundation::gui::inspector
             m_hoverLevel = static_cast<usize>(core::Clamp(level, 0, static_cast<i32>(m_hoverPath.Size()) - 1));
             m_target->Invalidate();
         }
-        /// A click while picking: selects what is outlined and stops picking.
+        /// Called for a click while picking: selects what is outlined and stops picking.
         void PickClick()
         {
             if (!m_picking)
@@ -269,8 +272,8 @@ export namespace foundation::gui::inspector
             if (picked != nullptr)
                 Select(picked);
         }
-        /// Selects the first widget `selector` matches in the inspected root (the query field's
-        /// Enter); how many it matched.
+        /// Selects the first widget `selector` matches in the inspected root (Enter in the query
+        /// field). Returns how many widgets it matched.
         usize SelectQuery(core::StringView selector)
         {
             if (m_target == nullptr)
@@ -282,7 +285,8 @@ export namespace foundation::gui::inspector
             return found.Size();
         }
 
-        /// What picking outlines (null when nothing, or when it is gone since the pointer moved).
+        /// Returns what picking outlines (null when nothing is outlined, or when the node has gone
+        /// since the pointer moved).
         [[nodiscard]] Node* GetHovered() const
         {
             if (!m_picking || m_hoverLevel >= m_hoverPath.Size() || m_target == nullptr)
@@ -291,16 +295,16 @@ export namespace foundation::gui::inspector
             return Contains(*m_target, node) ? node : nullptr;
         }
 
-        /// The frames tab's next bar (the inspected root's last frame).
+        /// Adds the Frames tab's next bar, from the inspected root's last frame.
         void RecordFrame(const FrameStats& stats)
         {
             if (m_frames != nullptr)
                 m_frames->Record(stats);
         }
 
-        /// Over the inspected root, drawn in its world with the canvas untransformed: the box
-        /// model (margin orange, padding green, content blue) of what picking outlines, else of the
-        /// node selected, with its name.
+        /// Draws over the inspected root, in its world with the canvas untransformed, the box model
+        /// (margin orange, padding green, content blue) and name of what picking outlines, else of
+        /// the selected node.
         void DrawOverTarget(DrawContext& ctx) const
         {
             const Node* node = GetHovered();
@@ -331,7 +335,7 @@ export namespace foundation::gui::inspector
             }
         }
 
-        /// The details' rows (for tests): each label's and field's text, in order.
+        /// Returns the details' rows (for tests): the text of each label and field, in order.
         [[nodiscard]] Array<core::String> DetailsText() const
         {
             Array<core::String> out;
@@ -430,10 +434,10 @@ export namespace foundation::gui::inspector
                 if (self->m_selecting || !index.IsValid() || static_cast<usize>(index.Row) >= self->m_entries.Size())
                     return;
                 Node* node = self->m_entries[static_cast<usize>(index.Row)].Target;
-                if (self->m_target != nullptr && Contains(*self->m_target, node)) // the tree may have changed since
+                if (self->m_target != nullptr && Contains(*self->m_target, node)) // the tree may have changed since the row was made
                     self->Select(node);
             });
-            // A row activated (a double click, Enter) folds its branch or opens it.
+            // Activating a row (a double click, Enter) folds its branch or opens it.
             tree->SetOnActivated([self](ModelIndex index)
             {
                 if (!index.IsValid() || static_cast<usize>(index.Row) >= self->m_entries.Size())
@@ -453,7 +457,7 @@ export namespace foundation::gui::inspector
             m_frames = Add<FramesGraph>(*frames).Get();
         }
 
-        // The focus is in the details (a property being edited).
+        // Whether the focus is in the details (a property being edited).
         [[nodiscard]] bool EditingDetails() const
         {
             for (const Node* n = m_root->GetEventDispatcher()->GetFocusNode(); n != nullptr; n = n->GetParent())
@@ -471,7 +475,7 @@ export namespace foundation::gui::inspector
                     return true;
             return false;
         }
-        // The tree's shape: each node and its children's arrangement, hashed in order.
+        // Hashes the tree's shape: each node and the arrangement of its children, in order.
         [[nodiscard]] static u64 Signature(Node& root)
         {
             u64 hash = core::kFnv1a64OffsetBasis;
@@ -490,7 +494,8 @@ export namespace foundation::gui::inspector
 
         void RebuildTree()
         {
-            // The whole tree, less what folded branches hold; a fold of a node gone is forgotten.
+            // The whole tree, minus what folded branches hold; the fold of a node that is gone is
+            // forgotten.
             const Array<TreeEntry> all = Tree(*m_target);
             for (usize i = m_collapsed.Size(); i-- > 0;)
             {
@@ -513,10 +518,12 @@ export namespace foundation::gui::inspector
             for (const TreeEntry& e : m_entries)
             {
                 core::String row;
-                // Indented by no-break spaces: a row's white space collapses, theirs does not.
+                // Indent with no-break spaces: ordinary white space in a row collapses, but no-break
+                // spaces do not.
                 for (u32 d = 0; d < e.Depth; ++d)
                     row += core::StringView(u8"\u00A0\u00A0\u00A0");
-                // A branch says whether it is open (-) or folded (+); a leaf leaves the room.
+                // A branch shows whether it is open (-) or folded (+); a leaf leaves the same room
+                // blank.
                 row += core::StringView(e.Target->ChildCount() == 0 ? u8"\u00A0\u00A0" : IsCollapsed(e.Target) ? u8"+\u00A0" : u8"-\u00A0");
                 row += e.Label.AsView();
                 if (!e.Shown)
@@ -608,8 +615,8 @@ export namespace foundation::gui::inspector
                            core::Format(u8"measures {} x {} unbounded", static_cast<i32>(wanted.x), static_cast<i32>(wanted.y)).AsView());
             }
 
-            // Styles, grouped by rule (the winner of each property first; overridden ones dim). A
-            // rule's declaration and the inline style's are fields: Enter edits the rule itself
+            // Styles, grouped by rule (the winner of each property first; overridden ones are dimmed).
+            // A rule's declarations and the inline style's are fields. Enter edits the rule itself
             // (every node it matches follows), or the node's inline style.
             if (const UIWidget* widget = core::Cast<UIWidget>(node); widget != nullptr && m_targetStyles != nullptr)
             {
@@ -675,7 +682,7 @@ export namespace foundation::gui::inspector
                         RefPtr<TextField> field = Add<TextField>(*row);
                         field->SetText(line.Important ? core::Format(u8"{} !important", line.Value).AsView() : line.Value.AsView());
                         const core::String property = line.Property;
-                        const StyleRule* rule = line.Rule; // compared, never followed: a sheet replaced since makes it a miss
+                        const StyleRule* rule = line.Rule; // only compared, never followed: if the sheet was replaced since, it simply misses
                         const bool inlineStyle = line.Inline;
                         field->SetOnSubmit([self, property, rule, inlineStyle](core::StringView text)
                         {
@@ -686,7 +693,7 @@ export namespace foundation::gui::inspector
                                 (void)SetProperty(*n, property.AsView(), text);
                             else if (rule != nullptr)
                                 (void)self->m_targetStyles->EditDeclaration(rule, property.AsView(), text);
-                            self->m_detailsStale = true; // shown again next refresh, not under this field's call
+                            self->m_detailsStale = true; // shown again at the next refresh, not inside this field's callback
                         });
                     }
                 }
@@ -699,7 +706,7 @@ export namespace foundation::gui::inspector
             for (const ReflectedValue& p : d.Properties)
             {
                 RefPtr<Panel> row = Add<Panel>(body, core::StringView(u8"iprop"));
-                // A translated one names its key ("text @menu.play").
+                // A translated property names its key ("text @menu.play").
                 const core::StringView shown = p.CssName.Size() != 0 ? p.CssName.AsView() : p.Name.AsView();
                 (void)Text(*row, {}, p.Key.Size() != 0 ? core::Format(u8"{} @{}", shown, p.Key).AsView() : shown);
                 if (p.ReadOnly)
@@ -718,7 +725,7 @@ export namespace foundation::gui::inspector
                 });
             }
 
-            // What a screen reader is told of it (E9d), and what in the GUI it would trip on.
+            // What a screen reader is told about the node, and what in the GUI it would trip on.
             {
                 (void)Text(body, core::StringView(u8"isection"), core::StringView(u8"Accessibility"));
                 const AccessDescription a = DescribeAccess(*node);
@@ -777,18 +784,18 @@ export namespace foundation::gui::inspector
         fonts::CachedFont* m_font = nullptr;
         RefPtr<SceneRoot> m_root;
         StyleManager m_styles;
-        SceneRoot* m_target = nullptr;              // not owned: the host's
-        StyleManager* m_targetStyles = nullptr; // edits its rules (the styles' fields)
+        SceneRoot* m_target = nullptr;              // not owned; the host owns it
+        StyleManager* m_targetStyles = nullptr; // the styles' fields edit its rules
         bool m_detailsStale = false;            // an edit wants the details shown again
         UniquePtr<StringListModel> m_model;         // before the views (they go first, in the destructor)
-        Panel* m_shell = nullptr;                   // owned by the root, as the rest
+        Panel* m_shell = nullptr;                   // owned by the root, as are the other widgets
         CheckBox* m_pick = nullptr;
         gui::Label* m_queryCount = nullptr;
         ListView* m_tree = nullptr;
         Panel* m_details = nullptr;
         FramesGraph* m_frames = nullptr;
-        Array<TreeEntry> m_entries;   // the rows: the tree less its folded branches
-        Array<const Node*> m_collapsed; // the folded branches (by identity; forgotten once gone)
+        Array<TreeEntry> m_entries;   // the rows: the tree minus its folded branches
+        Array<const Node*> m_collapsed; // the folded branches, by identity; a branch is forgotten once it is gone
         u64 m_signature = 0;
         u64 m_refreshes = 0;
         Node::ElementRef m_selected{};
@@ -796,7 +803,7 @@ export namespace foundation::gui::inspector
         const Node* m_detailsFor = nullptr;
         bool m_selecting = false;
         bool m_picking = false;
-        Array<Node*> m_hoverPath; // the node under the pointer, then what holds it, outward
+        Array<Node*> m_hoverPath; // the node under the pointer, then the nodes that hold it, outward
         usize m_hoverLevel = 0;
     };
 }

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The model-loader registry storage: one instance per process (loader libraries
-// register, Model.IO dispatches - shared-libraries.md rendezvous rule).
+// The model-loader registry storage: one instance per process, because loader libraries
+// register here and Model.IO dispatches from it, which must be the same list across shared
+// libraries.
 
 module;
 #include "Core/Prelude.h"

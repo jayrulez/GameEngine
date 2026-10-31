@@ -4,7 +4,7 @@
 /// Foundation::Render - the `:exposure` partition.
 ///
 /// Auto-exposure: one 1x1 pass per view measures the HDR frame's geometric-mean luminance (a
-/// fixed 16x16 sample grid over the view's sub-rect) and eases the PREVIOUS adapted value
+/// fixed 16x16 sample grid over the view's sub-rect) and eases the previous adapted value
 /// toward it (exponential eye adaptation). The adapted 1x1 is a persistent per-view ping-pong
 /// (the TAA-history pattern) imported into the graph, so the tonemap's read is a proper graph
 /// edge. The tonemap turns it into a key/average multiplier clamped to the authored EV window.
@@ -32,16 +32,16 @@ export namespace foundation::render
     // Integration.ShaderBlocks checks it against the compiled shader, member by member.
     struct GpuExposurePush
     {
-        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv -> the view's sub-rect
+        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv to the view's sub-rect
         Float2 uvOffset{0.0f, 0.0f};
         f32 dtSpeed = 0.0f;      // this frame's adaptation step: seconds x adapt speed
-        f32 historyValid = 0.0f; // 0 = no previous level (snap instead of easing)
+        f32 historyValid = 0.0f; // 0: no previous level (snap instead of easing)
         f32 pad0 = 0.0f;
         f32 pad1 = 0.0f;
     };
     static_assert(sizeof(GpuExposurePush) == 32, "push ExposurePush layout drift");
 
-    // Measures + adapts scene luminance into a persistent per-view 1x1 the tonemap samples.
+    // Measures and adapts scene luminance into a persistent per-view 1x1 the tonemap samples.
     class ExposurePass
     {
     public:
@@ -99,9 +99,9 @@ export namespace foundation::render
             return Status{};
         }
 
-        /// Declare the measure+adapt pass for one view. Returns the view's ADAPTED 1x1 as an
-        /// imported handle (left in ShaderRead) for the tonemap to ReadTexture, plus the raw
-        /// view to bind - or an invalid handle when the pass cannot run (missing shader/GPU).
+        /// Declare the measure and adapt pass for one view. Returns the view's adapted 1x1 as an
+        /// imported handle (left in ShaderRead) for the tonemap to ReadTexture, and the raw
+        /// view to bind; or an invalid handle when the pass cannot run (missing shader or GPU).
         /// `sceneSerial` names the scene the view shows (ExtractedScene::SceneSerial): when it
         /// changes the history is dropped and the new scene's exposure snaps.
         struct Result
@@ -154,12 +154,11 @@ export namespace foundation::render
             push.pad0 = 0.0f;
             push.pad1 = 0.0f;
             rhi::TextureView* prevView = state.view[prev];
-            // Per-(view, frame) slots (the FxaaPass scheme): prevView PING-PONGS every
-            // frame, so a per-view-only slot mismatches every frame and EnsureBindGroup
-            // then frees a set the previous frame's in-flight command buffer still
-            // references (VUID-vkFreeDescriptorSets-00309 spam with auto-exposure on).
-            // With frameIndex folded in, a slot is only rewritten framesInFlight frames
-            // later - after its command buffer completed.
+            // Per-(view, frame) slots (as in FxaaPass): prevView ping-pongs every frame, so
+            // a per-view-only slot mismatches every frame and EnsureBindGroup would free a
+            // set the previous frame's in-flight command buffer still references
+            // (VUID-vkFreeDescriptorSets-00309). With frameIndex folded in, a slot is
+            // rewritten only framesInFlight frames later, after its command buffer completed.
             const u32 slot =
                 (viewIndex % kMaxViews) * m_framesInFlight + (frameIndex % m_framesInFlight);
             graph.AddRenderPass(

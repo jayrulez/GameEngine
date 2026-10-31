@@ -3,8 +3,7 @@
 
 // UI - :atlas_nine_slice_drawable partition
 //
-// 9-slice drawable over a sub-region of a shared atlas image. Ported from
-// Sedulous.UI/src/Drawing/AtlasNineSliceDrawable.bf.
+// 9-slice drawable over a sub-region of a shared atlas image.
 
 module;
 #include "Core/Prelude.h"

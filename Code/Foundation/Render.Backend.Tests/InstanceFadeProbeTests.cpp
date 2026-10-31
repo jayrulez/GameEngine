@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// INSTANCE FADE probe on REAL devices: three cards of one instanced set at 3, 6 and 12 m under a
+// Instance fade probe on real devices: three cards of one instanced set at 3, 6 and 12 m under a
 // 4..8 m window. The near one (density 1) draws; the middle one sits at density 0.5 with rank 0.5
 // and collapses; the far one is past the window. With no window all three draw. The dissolve is
-// per instance, at the instance's own distance - the seam-free replacement for the per-chunk
-// fade (instance_fade.hlsli). Vulkan + WebGPU.
+// per instance, at the instance's own distance, so no edge shows where chunks meet
+// (instance_fade.hlsli). Vulkan and WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

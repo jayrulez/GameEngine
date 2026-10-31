@@ -3,24 +3,28 @@
 
 // GUI.Gamekit - :screen_stack partition
 //
-// A game's screens (K4 of Specs/gui-lab-evolution-3.md): a `screens` element (ScreenStack), placed
-// where a game's screens go (any number per root), holding `screen` elements on a stack. Push takes
-// a node, or a document loaded fresh each time; pop, replace and clear. A screen says whether it
-// covers what is under it (hides it), blocks its input (makes it inert, so a press held there is let
-// go) and pauses the game; the stack reports the pause (the game decides what pausing means). A
-// screen is a navigation scope and remembers its focus, so a pop refocuses the screen now on top;
-// on a push, its `nav-default` or its first focusable, else the screen itself (a HUD: `back` still
-// starts there). A press on a screen's empty area leaves the
-// focus where it is, so `back` (Escape, the pad's East) still reaches it: the top screen hears
-// `back` first (a script's handler may take it; `back="none"` keeps it), else the stack pops, never
-// below its last screen and never in the frame that pushed. A screen popped leaves through the
-// core's Leave (its sheet's exit plays, K5), out of the stack, its focus and its input at once; one
-// pushed enters through the core's Enter (`:entering` while its sheet's entrance plays), and a pop
-// during its entrance leaves from where it is. The screens under a covering one show again as it
-// starts leaving, not once it has gone. A game that may hitch caps the GUI's clock step
-// (GUIContext::SetMaxClockStep) so an entrance or exit is slowed rather than skipped.
-// Lifecycle as named events on the screen: `screenenter`, `screenshown`, `screenleave`,
-// `screenhidden` (covered) and `screenrevealed`; the stack tells `pausechange`.
+// A game's screens. A `screens` element (ScreenStack) is placed where a game's screens go (any
+// number per root) and holds `screen` elements on a stack. Push takes a node, or a document that is
+// loaded fresh each time; there are also pop, replace and clear. Each screen says whether it covers
+// what is under it (hides it), blocks its input (makes it inert, so a press held there is
+// released) and pauses the game. The stack reports the pause; the game decides what pausing means.
+//
+// A screen is a navigation scope and remembers its focus, so a pop refocuses the screen that is
+// then on top. On a push, the focus goes to the screen's `nav-default` or its first focusable, else
+// to the screen itself (for a HUD, so `back` still starts there). A press on a screen's empty area
+// leaves the focus where it is, so `back` (Escape, the pad's East) still reaches the screen. The top
+// screen hears `back` first (a script's handler may take it; `back="none"` keeps it); otherwise the
+// stack pops, but never below its last screen and never in the frame that pushed.
+//
+// A popped screen leaves through the core's Leave (its sheet's exit plays) and leaves the stack,
+// the focus and the input at once. A pushed screen enters through the core's Enter (`:entering`
+// while its sheet's entrance plays), and a pop during its entrance leaves from where it is. The
+// screens under a covering screen show again as soon as it starts leaving, not once it has gone. A
+// game that may hitch caps the GUI's clock step (GUIContext::SetMaxClockStep) so an entrance or exit
+// slows down rather than being skipped.
+//
+// The lifecycle is sent as named events on the screen: `screenenter`, `screenshown`,
+// `screenleave`, `screenhidden` (covered) and `screenrevealed`. The stack sends `pausechange`.
 
 module;
 #include "Core/Prelude.h"
@@ -48,7 +52,8 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"screen"));
             SetNavScope(NavScope::Contain); // Tab and the arrows stay in it; it remembers its focus
             SetKeepsFocus(true);            // a press on its empty area keeps the focus (and `back`) here
-            // Its entrance over (K5: the core's Enter), it is shown, while it is still on its stack.
+            // When its entrance (the core's Enter) is over and it is still on its stack, the screen
+            // sends `screenshown`.
             Screen* self = this;
             (void)AddEventListener(EventType::Entered, [self](const Event&)
                                    {
@@ -57,26 +62,28 @@ export namespace foundation::gui
                                    });
         }
 
-        /// It hides the screens under it (a full-screen menu over the game).
+        /// Whether it hides the screens under it (a full-screen menu over the game).
         [[nodiscard]] bool GetCovers() const noexcept { return m_covers; }
         void SetCovers(bool covers);
-        /// The screens under it take no input (a pause menu); off, they do (a HUD over the game).
+        /// Whether the screens under it take no input (a pause menu); when off, they do (a HUD over
+        /// the game).
         [[nodiscard]] bool GetBlocks() const noexcept { return m_blocks; }
         void SetBlocks(bool blocks);
-        /// The game pauses while it is on the stack (the stack reports it).
+        /// Whether the game pauses while this screen is on the stack (the stack reports it).
         [[nodiscard]] bool GetPauses() const noexcept { return m_pauses; }
         void SetPauses(bool pauses);
-        /// What `back` does on it: "pop" (the default) or "none" (it keeps its back: a title screen).
+        /// What `back` does on this screen: "pop" (the default) or "none" (the screen keeps its
+        /// back, as a title screen does).
         [[nodiscard]] core::String GetBack() const { return core::String(m_popsOnBack ? core::StringView(u8"pop") : core::StringView(u8"none")); }
         void SetBack(const core::String& back) { m_popsOnBack = back.AsView() != core::StringView(u8"none"); }
         [[nodiscard]] bool PopsOnBack() const noexcept { return m_popsOnBack; }
 
         /// The stack it is on, or null (not pushed, or popped and leaving).
         [[nodiscard]] ScreenStack* GetStack() const noexcept { return m_stack; }
-        /// Hidden by a covering screen above it.
+        /// Whether a covering screen above hides it.
         [[nodiscard]] bool IsCovered() const noexcept { return m_covered; }
 
-        /// The script surface: its stack (null when on none).
+        /// For scripts: returns its stack (null when it is on none).
         [[nodiscard]] core::Variant StackElement();
 
     private:
@@ -105,8 +112,8 @@ export namespace foundation::gui
             (void)OnCommand(core::StringView(kBackCommand), [self](CommandEvent&) { (void)self->Back(); });
         }
 
-        /// A screen markup (or code) adds as a child is pushed, in order: `<Screens>` holding
-        /// `<Screen>`s starts with them on its stack, the last on top.
+        /// A screen that markup (or code) adds as a child is pushed, in order, so a `<Screens>`
+        /// holding `<Screen>`s starts with them on its stack, the last on top.
         Node* AddChild(Node* child) override
         {
             Screen* screen = child != nullptr && !m_adding ? Cast<Screen>(child) : nullptr;
@@ -118,9 +125,10 @@ export namespace foundation::gui
             return UIWidget::AddChild(child);
         }
 
-        /// Pushes `content`: a Screen as it is, anything else in a new screen; it shows on top, takes
-        /// the focus (its remembered, its `nav-default`, else its first focusable) and hears
-        /// `screenenter`. The screen, or null when `content` is a screen already on a stack.
+        /// Pushes `content`: a Screen as it is, anything else wrapped in a new screen. The screen
+        /// shows on top, takes the focus (its remembered focus, its `nav-default`, else its first
+        /// focusable) and hears `screenenter`. Returns the screen, or null when `content` is a
+        /// screen already on a stack.
         Screen* Push(Node& content)
         {
             RefPtr<Screen> screen(Cast<Screen>(&content));
@@ -128,8 +136,8 @@ export namespace foundation::gui
                 return nullptr;
             if (!screen)
             {
-                // Made for it: the content fills it, as a document's root fills the screen (a
-                // menu's scrim covers the game, not only its card).
+                // A screen made for the content: the content fills it, as a document's root fills
+                // the screen, so a menu's scrim covers the game and not only its card.
                 screen = core::MakeRef<Screen>(MemoryAllocator());
                 {
                     StyleWriteScope defaults(*screen);
@@ -138,7 +146,7 @@ export namespace foundation::gui
                 screen->AddChild(&content);
             }
             if (screen->GetParent() == this && screen->IsLeaving())
-                RemoveChild(screen.Get()); // one leaving, pushed again: whole again
+                RemoveChild(screen.Get()); // a screen still leaving is pushed again: take it out to add it afresh
             screen->m_stack = this;
             screen->m_covered = false;
             screen->SetInert(false);
@@ -151,19 +159,19 @@ export namespace foundation::gui
             Settle();
             FocusScreen(*screen);
             screen->SendNamedEvent(core::StringView(u8"screenenter"));
-            screen->Enter(); // :entering for the sheet's entrance; `screenshown` once it has played (K5)
+            screen->Enter(); // :entering for the sheet's entrance; `screenshown` once it has played
             return screen.Get();
         }
-        /// Pushes the document at `path` (its markup, loaded fresh through the GUI's resources, its
-        /// `{{values}}` bound to the GUI's data). Null when it cannot be read or made.
+        /// Pushes the document at `path`. Its markup is loaded fresh through the GUI's resources, and
+        /// its `{{values}}` are bound to the GUI's data. Returns null when it cannot be read or made.
         Screen* PushDocument(core::StringView path)
         {
             RefPtr<Node> content = LoadDocument(path);
             return content ? Push(*content) : nullptr;
         }
-        /// Takes the top screen off: it leaves (its exit plays, out of input at once), the screens
-        /// under it show and take input as the new top says, and the new top takes the focus it
-        /// had. False when the stack is empty.
+        /// Takes the top screen off. It leaves (its exit plays, and it stops taking input at once),
+        /// the screens under it show and take input as the new top says, and the new top takes back
+        /// the focus it had. Returns false when the stack is empty.
         bool Pop()
         {
             if (m_screens.IsEmpty())
@@ -174,7 +182,8 @@ export namespace foundation::gui
                 FocusScreen(*top);
             return true;
         }
-        /// Swaps the top screen for `content` (pushed as Push does); with none, pushes it.
+        /// Swaps the top screen for `content`, pushed as Push does. With no screen on the stack, it
+        /// just pushes `content`.
         Screen* Replace(Node& content)
         {
             if (Cast<Screen>(&content) != nullptr && Cast<Screen>(&content)->m_stack != nullptr)
@@ -195,8 +204,9 @@ export namespace foundation::gui
                 TakeOffTop();
             Settle();
         }
-        /// What `back` does when the top screen did not take it: pops it, unless it keeps its back,
-        /// it is the last, or it was pushed this frame (the Back that pushed it). Whether it popped.
+        /// Handles `back` when the top screen did not take it: pops the top screen, unless it keeps
+        /// its back, it is the last, or it was pushed this frame (by the Back that pushed it).
+        /// Returns whether it popped.
         bool Back()
         {
             Screen* top = Top();
@@ -210,8 +220,8 @@ export namespace foundation::gui
         [[nodiscard]] Screen* At(usize index) const noexcept { return index < m_screens.Size() ? m_screens[index].Get() : nullptr; }
         /// Whether a screen on the stack pauses the game.
         [[nodiscard]] bool IsPaused() const noexcept { return m_paused; }
-        /// Whether the game should take the input: no screen on top that blocks it, and the pointer
-        /// at `position` (device pixels) over nothing of the GUI that takes it.
+        /// Whether the game should take the input: no screen on top blocks it, and the pointer at
+        /// `position` (device pixels) is over no part of the GUI that takes input.
         [[nodiscard]] bool WantsGameInput(core::Float2 position) const
         {
             if (const Screen* top = Top(); top != nullptr && top->GetBlocks())
@@ -219,10 +229,11 @@ export namespace foundation::gui
             const EventDispatcher* dispatcher = GetEventDispatcher();
             return dispatcher == nullptr || !dispatcher->IsPointerOver(position);
         }
-        /// Told when the pause starts or ends (as `pausechange` is, with "paused" or "running").
+        /// Sets the callback told when the pause starts or ends (as `pausechange` is, with "paused"
+        /// or "running").
         void SetOnPausedChanged(core::Function<void(bool)> callback) { m_onPausedChanged = core::Move(callback); }
 
-        /// How the screens sit, after one of them changed how it covers, blocks or pauses.
+        /// Updates how the screens sit after one of them changed how it covers, blocks or pauses.
         void Settle()
         {
             bool blocked = false;
@@ -268,8 +279,9 @@ export namespace foundation::gui
         [[nodiscard]] i32 CountScript() const noexcept { return static_cast<i32>(m_screens.Size()); }
 
     private:
-        // Its remembered focus, its `nav-default` or its first focusable; with nothing focusable
-        // (a HUD), the screen itself, so `back` and its commands still start in it.
+        // Focuses the screen's remembered focus, its `nav-default` or its first focusable. With
+        // nothing focusable (a HUD), the screen itself takes the focus, so `back` and its commands
+        // still start in it.
         void FocusScreen(Screen& screen)
         {
             if (screen.FocusElement())
@@ -281,7 +293,8 @@ export namespace foundation::gui
         {
             return screen != nullptr ? screen->HandleAs(Screen::StaticType()) : core::Variant{};
         }
-        // The top screen leaves: off the stack and out of input now, its exit still to play.
+        // Makes the top screen leave: it comes off the stack and out of input now, with its exit
+        // still to play.
         void TakeOffTop()
         {
             RefPtr<Screen> top = m_screens[m_screens.Size() - 1];
@@ -290,7 +303,8 @@ export namespace foundation::gui
             top->SendNamedEvent(core::StringView(u8"screenleave"));
             top->Leave();
         }
-        // The frame that pushed may not pop (the Back that pushed it): marked until the GUI's next drain.
+        // Marks a push until the GUI's next drain, because the frame that pushed may not pop (the
+        // Back that pushed the screen would pop it again).
         void NoteJustPushed()
         {
             m_justPushed = true;
@@ -320,7 +334,7 @@ export namespace foundation::gui
         Array<RefPtr<Screen>> m_screens; // bottom first
         bool m_paused = false;
         bool m_justPushed = false;
-        bool m_adding = false; // Push adding its screen as a child
+        bool m_adding = false; // set while Push adds its screen as a child
         core::Function<void(bool)> m_onPausedChanged;
     };
 

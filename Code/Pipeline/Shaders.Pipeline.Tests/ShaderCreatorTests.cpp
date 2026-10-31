@@ -63,7 +63,7 @@ TEST_CASE("shader creator: the starter compiles, every variant, against the engi
     }
     CHECK(check.IsOk());
     CHECK(check.block.properties.Size() == 6u);
-    // WIND: the starter sways by its material's Wind group (Specs/wind-for-every-shader.md, rule 4).
+    // WIND: the starter sways by its material's Wind group.
     CHECK(check.vertexMask == (foundation::shaders::ShaderFlags::Skinned | foundation::shaders::ShaderFlags::Instanced |
                                foundation::shaders::ShaderFlags::Wind));
 }
@@ -159,7 +159,7 @@ TEST_CASE("shader creator: the surface starters compile as surface shaders")
     CHECK(creators.FindByLabel(u8"Lit Surface Shader") != nullptr);
     CHECK(creators.FindByLabel(u8"Unlit Surface Shader") != nullptr);
     CHECK(creators.FindByLabel(u8"Low-Level Shader") != nullptr);
-    CHECK(creators.FindByLabel(u8"Shader") == nullptr); // renamed
+    CHECK(creators.FindByLabel(u8"Shader") == nullptr); // no bare "Shader": each names its kind
     if (!HaveCompiler())
     {
         MESSAGE("DXC unavailable; skipping");

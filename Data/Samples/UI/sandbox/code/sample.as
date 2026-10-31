@@ -1,5 +1,5 @@
 // The Code page's script: a counter for a page.
-// It is only checked, never run.
+// The page only compiles it to show diagnostics; it never runs.
 
 funcdef bool EventHandler(GuiEvent e);
 
@@ -16,7 +16,7 @@ bool pressed(GuiEvent e)
     ++clicks;
     Node@ root = gui::root();
     show(Label::of(root.find("counter-label")));
-    // A misspelling the compiler marks: tweem is no method of Node.
+    // A deliberate misspelling for the compiler to flag: Node has no method tweem.
     root.find("counter-button").tweem("opacity", "0.6", 0.1, "ease-out");
     return true;
 }

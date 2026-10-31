@@ -3,20 +3,19 @@
 
 // Editor::Scene - :edit partition.
 //
-// SceneEditContext: the per-page scene mutation mediator (the Lumix
-// WorldEditor role, but PER PAGE, never global: multi-scene). Every mutation is an
-// IEditorCommand on the page's stack; nothing edits the scene directly. Commands reference
-// entities by persistent Guid (stable across destroy/undo - handles are generation-guarded
-// pool slots and die with the entity), resolving through the scene at execute time.
+// SceneEditContext: the scene mutation mediator for one page. There is one per page, never a global
+// one, so several scenes can be edited at once. Every mutation is an IEditorCommand on the page's
+// stack; nothing edits the scene directly. Commands reference entities by persistent Guid, which is
+// stable across destroy and undo (handles are generation-guarded pool slots and die with the
+// entity), and resolve them through the scene at execute time.
 //
-// DestroyEntity's undo restores the FULL serialized subtree - names, transforms, active flags,
-// hierarchy, and every serializable component (via the managers' WriteComponent/ReadComponent,
-// the same per-entity routing SerializeScene uses). This is the fix for Sedulous's lossy
-// "TODO: Restore components and children".
+// DestroyEntity's undo restores the full serialized subtree: names, transforms, active flags,
+// hierarchy, and every serializable component (through the managers' WriteComponent and
+// ReadComponent, the same per-entity routing SerializeScene uses).
 //
-// Reparents preserve the WORLD transform (Scene keep-world overloads + TRS decompose); undo
-// restores the captured local exactly (no decompose round-trip drift). Same-parent reorders
-// keep the local untouched.
+// Reparenting preserves the world transform (Scene's keep-world overloads and a TRS decompose);
+// undo restores the captured local transform exactly, with no drift from a decompose round trip.
+// Reordering under the same parent leaves the local transform untouched.
 
 module;
 #include "Core/Prelude.h"
@@ -35,11 +34,11 @@ export namespace editor
 {
     namespace scene = foundation::scene;
 
-    /// Where a reflected property lives on a component: on the component itself (`container`
-    /// null) or on element `index` of a reflected container property of it (a struct inside an
-    /// `Array<Struct>` - a vegetation layer's density). Every property command and inspector
-    /// row builder takes one, so a struct element in a list edits exactly like a component
-    /// field: by name, undoable, merged per (entity, component, path, property).
+    /// Where a reflected property lives on a component: on the component itself (`container` null)
+    /// or on element `index` of one of its reflected container properties (a struct inside an
+    /// `Array<Struct>`, such as a vegetation layer's density). Every property command and inspector
+    /// row builder takes one, so a struct element in a list edits just like a component field: by
+    /// name, undoable, and merged per (entity, component, path, property).
     struct ComponentPropertyPath
     {
         const char* container = nullptr; // static string from PropertyInfo::name
@@ -80,18 +79,18 @@ export namespace editor
         [[nodiscard]] EditorCommandStack& Commands() noexcept { return *m_commands; }
 
         /// The runtime resource manager (optional; wired by the page). When set, commands that
-        /// materialize components from blobs (paste, duplicate, destroy-undo) resolve the
-        /// scene's resource refs immediately - without it, a pasted mesh ref stays unbound and
-        /// nothing renders until the next scene load runs the resolve pass.
+        /// materialize components from blobs (paste, duplicate, destroy-undo) resolve the scene's
+        /// resource refs immediately. Without it, a pasted mesh ref stays unbound and nothing
+        /// renders until the next scene load runs the resolve pass.
         void SetResources(foundation::resource::ResourceManager* resources) noexcept;
         void ResolveRestoredResources();
-        /// `entity`'s component of `componentType` bound to what its references name now (an edit
-        /// that wrote a reference's id through reflection: the mesh it names shows at once).
+        /// Binds `entity`'s component of `componentType` to what its references name now, after an
+        /// edit wrote a reference's id through reflection, so the mesh it names shows at once.
         void ResolveComponentResources(const Guid& entity, const TypeInfo* componentType);
-        /// A settings block's references bound to what they name now, likewise.
+        /// Binds a settings block's references to what they name now, likewise.
         void ResolveSettingsResources(const TypeInfo* settingsType);
 
-        /// Payload resolver for NESTED prefab records (wired by the page from the source DB).
+        /// Payload resolver for nested prefab records (wired by the page from the source DB).
         /// Without it, spawning a prefab that contains other prefabs skips the nested parts.
         void SetPrefabResolver(scene::PrefabPayloadResolver resolver);
         [[nodiscard]] const scene::PrefabPayloadResolver* PrefabResolver() const noexcept;
@@ -101,16 +100,17 @@ export namespace editor
 
         // === Entity clipboard / duplication ===
         //
-        // A captured subtree is a self-contained binary blob: pre-order entity records
-        // (original guid for intra-subtree parent relinking + name/transform/active) each with
-        // its serializable components (typeId + payload). Pasting instantiates the records with
-        // FRESH guids (per-scene identity; commands stay guid-routed), so the same blob pastes
-        // repeatedly and across scenes/pages. Blob kind for the editor clipboard: "entities".
+        // A captured subtree is a self-contained binary blob: pre-order entity records (the
+        // original guid, for relinking parents within the subtree, and the name, transform and
+        // active flag), each with its serializable components (typeId and payload). Pasting
+        // instantiates the records with fresh guids (identity is per scene; commands stay routed by
+        // guid), so the same blob pastes repeatedly and across scenes and pages. The blob's kind
+        // for the editor clipboard is "entities".
 
         /// Capture `entity`'s subtree into a clipboard blob (empty on failure).
         [[nodiscard]] Array<byte> CopyEntity(const Guid& entity);
 
-        /// Paste a captured subtree as a child of `parent` (root when nil/unresolvable).
+        /// Paste a captured subtree as a child of `parent` (at the root when nil or unresolved).
         /// Returns the new root entity's Guid (nil on failure); it becomes the selection.
         Guid PasteEntities(Span<const byte> blob, const Guid& parent = Guid{});
 
@@ -121,25 +121,26 @@ export namespace editor
         [[nodiscard]] String UniqueSiblingName(StringView base, scene::EntityHandle parent);
 
         // === Component clipboard ===
-        // Blob: typeId string + the manager's WriteComponent payload. Kind: "component".
+        // The blob is the typeId string followed by the manager's WriteComponent payload; its kind
+        // is "component".
 
         /// Capture one serializable component into a clipboard blob (empty on failure).
         [[nodiscard]] Array<byte> CopyComponent(const Guid& entity, const TypeInfo* componentType);
 
-        /// The component type id a clipboard blob carries ("" when unreadable) - for menu labels.
+        /// The component type id a clipboard blob carries ("" when unreadable), for menu labels.
         [[nodiscard]] static String PeekComponentTypeId(Span<const byte> blob);
 
         /// Paste a copied component onto `entity` (adds it, or overwrites the existing one).
-        /// Undo restores the prior state exactly. False when the blob/manager doesn't apply.
+        /// Undo restores the prior state exactly. False when the blob or the manager does not apply.
         bool PasteComponent(const Guid& entity, Span<const byte> blob);
 
-        /// Resolve a selected/stored Guid to a live handle (Invalid if the entity is gone).
+        /// Resolve a selected or stored Guid to a live handle (Invalid if the entity is gone).
         [[nodiscard]] scene::EntityHandle Resolve(const Guid& id);
 
         // === Mutations (each an undoable command; failed executes are dropped by the stack) ===
 
         /// Create an empty entity (child of `parent` when valid). Returns its Guid (empty on
-        /// failure). Redo recreates the SAME Guid. The new entity becomes the selection.
+        /// failure). Redo recreates the same Guid. The new entity becomes the selection.
         Guid CreateEntity(StringView name, const Guid& parent = Guid{});
 
         /// Destroy an entity and its subtree (undo restores everything, components included).
@@ -148,24 +149,25 @@ export namespace editor
         /// Rename an entity (consecutive renames of the same entity merge into one undo entry).
         void RenameEntity(const Guid& entity, StringView newName);
 
-        /// Reparent an entity (`newParent` empty = make root; appended at the END of the new
-        /// parent's children). Cycles are refused (the command's Execute fails and drops).
+        /// Reparent an entity (an empty `newParent` makes it a root; it is appended at the end of
+        /// the new parent's children). Cycles are refused (the command's Execute fails and is
+        /// dropped).
         void ReparentEntity(const Guid& entity, const Guid& newParent);
 
-        /// Sibling reorder: move an entity immediately BEFORE `sibling` (under sibling's
-        /// parent), or - when `sibling` is empty - to the END of the root list. Undo restores
-        /// the previous parent AND position. Cycles/no-ops are refused.
+        /// Sibling reorder: move an entity immediately before `sibling` (under sibling's parent)
+        /// or, when `sibling` is empty, to the end of the root list. Undo restores the previous
+        /// parent and position. Cycles and no-ops are refused.
         void MoveEntityBefore(const Guid& entity, const Guid& sibling);
 
         /// Set an entity's active flag (undoable).
         void SetEntityActive(const Guid& entity, bool active);
 
-        /// Set an entity's local transform. Consecutive edits of the same entity MERGE into one
+        /// Set an entity's local transform. Consecutive edits of the same entity merge into one
         /// undo entry (inspector field scrubs, gizmo drags).
         void SetLocalTransform(const Guid& entity, const Transform& transform);
 
-        /// Set a reflected component property by Variant. Consecutive edits of the same
-        /// entity+component+property MERGE.
+        /// Set a reflected component property by Variant. Consecutive edits of the same entity,
+        /// component and property merge.
         void SetComponentProperty(const Guid& entity, const TypeInfo* componentType,
                                   const char* property, const Variant& value);
         /// The same, on the property owner `path` addresses (a struct element in a list).
@@ -173,10 +175,10 @@ export namespace editor
                                   const ComponentPropertyPath& path, const char* property,
                                   const Variant& value);
 
-        /// Point a component's resource::Ref<T> property at a new asset (the inspector's
-        /// picker): writes the Guid through PropertyInfo::address and rebinds through the
-        /// ResourceManager (nullable - the ref then resolves on the next scene open). Undo
-        /// restores the previous target. NOT merged (each pick is its own undo entry).
+        /// Point a component's resource::Ref<T> property at a new asset (the inspector's picker):
+        /// writes the Guid through PropertyInfo::address and rebinds through the ResourceManager
+        /// (which may be null; the ref then resolves on the next scene open). Undo restores the
+        /// previous target. Not merged: each pick is its own undo entry.
         template <typename T>
         void SetComponentResourceRef(const Guid& entity, const TypeInfo* componentType,
                                      const char* property, const Guid& value,
@@ -198,10 +200,10 @@ export namespace editor
         }
 
         /// The same, for a reference-shaped property known only by its TypeInfo (an agent's
-        /// component_set, a generic editor): the id set through the type's ReferenceOps, the
-        /// runtime binding dropped, and the entity's subtree re-resolved so the new id binds
-        /// (`resources` nullable - it binds on the next scene open). Undo restores the old id
-        /// the same way. NOT merged.
+        /// component_set, a generic editor): the id is set through the type's ReferenceOps, the
+        /// runtime binding dropped, and the entity's subtree resolved again so the new id binds
+        /// (`resources` may be null; it then binds on the next scene open). Undo restores the old
+        /// id the same way. Not merged.
         void SetComponentReference(const Guid& entity, const TypeInfo* componentType,
                                    const ComponentPropertyPath& path, const char* property,
                                    const Guid& value, foundation::resource::ResourceManager* resources)
@@ -212,8 +214,9 @@ export namespace editor
                                                                       path, property, value, resources),
                 editor::EditorRootAllocator()));
         }
-        /// Point a component's EntityRef property at a new entity (the inspector's entity picker) -
-        /// the entity-reference twin of SetComponentResourceRef. Undoable; `target` nil = cleared.
+        /// Point a component's EntityRef property at a new entity (the inspector's entity picker):
+        /// the entity-reference counterpart of SetComponentResourceRef. Undoable; a nil `target`
+        /// clears it.
         void SetComponentEntityRef(const Guid& entity, const TypeInfo* componentType,
                                    const char* property, const Guid& target)
         {
@@ -238,7 +241,7 @@ export namespace editor
                                      const ComponentPropertyPath& path, const char* property,
                                      i64 value);
 
-        /// Set a reflected property on a SCENE SYSTEM's settings block (the scene inspector,
+        /// Set a reflected property on a scene system's settings block (the scene inspector,
         /// shown when no entity is selected). Same merge semantics as SetComponentProperty
         /// (scrubs collapse into one undo entry); the settings instance is re-derived from
         /// the scene each apply.
@@ -256,15 +259,15 @@ export namespace editor
                 editor::EditorRootAllocator()));
         }
 
-        /// Whole-block scene-settings edit (shapes reflection rows can't express - e.g.
-        /// the collision-group matrix): `newBlob` = the settings serialized via the
-        /// system's own SerializeSettings; undo restores the prior serialized state.
-        /// The caller builds the blob from an EDITED COPY - the live settings are only
-        /// touched through the command (so undo/redo replay cleanly).
+        /// Whole-block scene-settings edit, for shapes reflection rows cannot express (such as the
+        /// collision-group matrix). `newBlob` is the settings serialized through the system's own
+        /// SerializeSettings; undo restores the prior serialized state. The caller builds the blob
+        /// from an edited copy, so the live settings are touched only through the command and undo
+        /// and redo replay cleanly.
         bool ApplySceneSettingsBlock(const TypeInfo* settingsType, Array<byte> newBlob);
 
-        /// Enum flavor of SetSceneSettingProperty (underlying integer through
-        /// PropertyInfo::address - same reason as SetComponentPropertyRaw).
+        /// Enum flavor of SetSceneSettingProperty (writes the underlying integer through
+        /// PropertyInfo::address, for the same reason as SetComponentPropertyRaw).
         void SetSceneSettingPropertyRaw(const TypeInfo* settingsType, const char* property,
                                         i64 value);
 
@@ -273,13 +276,14 @@ export namespace editor
 
         // === A settings block whose source is a profile ===
         // Its values in effect are the profile's, so an edit of a value field lands there (every
-        // scene sharing the profile sees it) and the page persists it to the profile's asset;
-        // the block's own fields ("sceneOnly": the source, the profile reference) stay the scene's.
+        // scene sharing the profile sees it) and the page persists it to the profile's asset. The
+        // block's own fields (those marked "sceneOnly": the source and the profile reference) stay
+        // in the scene.
 
         /// The profile an edit of `property` lands in: nil when it lands in the scene's block.
         [[nodiscard]] Guid SettingsEditProfile(const TypeInfo* settingsType, const char* property);
-        /// The values an edit for `profile` (from SettingsEditProfile) writes: the scene's block for
-        /// nil, the profile's values while the block still uses it, else null.
+        /// The values an edit for `profile` (from SettingsEditProfile) writes: the scene's block
+        /// for nil, the profile's values while the block still uses it, else null.
         [[nodiscard]] void* SettingsEditTarget(const TypeInfo* settingsType, const Guid& profile);
         /// The values `property` shows and edits now: SettingsEditTarget of SettingsEditProfile.
         [[nodiscard]] void* SettingsValuesFor(const TypeInfo* settingsType, const char* property)
@@ -288,29 +292,31 @@ export namespace editor
         }
         /// Called by the settings commands after they write a profile's values (nil = no-op).
         void NoteSettingsProfileEdited(const TypeInfo* settingsType, const Guid& profile);
-        /// The page's persistence of a profile edit (an asset edit for the save flow).
+        /// Set by the page to persist a profile edit (as an asset edit for the save flow).
         Function<void(const TypeInfo* settingsType, const Guid& profile)> OnSettingsProfileEdited;
 
-        /// One undoable mutation of a settings block, whatever it touches (its source, a copy of a
-        /// profile's values into it): the live block mutated, captured, restored, then applied
-        /// through the block command, which keeps the block before. False when there is none.
+        /// One undoable mutation of a settings block, whatever it touches (its source, or a copy of
+        /// a profile's values into it). The live block is mutated, captured and restored, then the
+        /// change is applied through the block command, which keeps the block as it was before.
+        /// False when there is no such block.
         bool MutateSceneSettings(const TypeInfo* settingsType,
                                  const Function<void(scene::SceneSystem&)>& mutate);
 
         /// Add a default-constructed component (undoable; fails if already present).
         void AddComponent(const Guid& entity, const TypeInfo* componentType);
 
-        /// Remove a component (undo restores it - full fidelity via the manager's serialization
-        /// when available, else the reflected properties).
+        /// Remove a component. Undo restores it with full fidelity through the manager's
+        /// serialization when available, otherwise from the reflected properties.
         void RemoveComponent(const Guid& entity, const TypeInfo* componentType);
 
         /// The scene manager whose component type is `type` (null if none).
         [[nodiscard]] scene::ComponentManagerBase* FindManager(const TypeInfo* type);
 
-        /// One undoable mutation of `entity`'s component of `componentType`, whatever it holds
-        /// (a reflected list, a hidden one like a Script component's behaviours): the live value
-        /// mutated, captured, restored from its serialized form, then PASTED, the paste command
-        /// keeping the value before - one undo step. False when the entity has no such component.
+        /// One undoable mutation of `entity`'s component of `componentType`, whatever it holds (a
+        /// reflected list, or a hidden one like a Script component's behaviours). The live value is
+        /// mutated, captured and restored from its serialized form, then pasted, with the paste
+        /// command keeping the value from before, so the whole change is one undo step. False when
+        /// the entity has no such component.
         bool MutateComponent(const Guid& entity, const TypeInfo* componentType,
                              const Function<void(const Instance&)>& mutate);
 
@@ -338,12 +344,12 @@ export namespace editor
                    PasteComponent(entity, Span<const byte>{blob.Data(), blob.Size()});
         }
 
-        /// The instance a property path addresses: the entity's component of `componentType`
-        /// (an empty path) or the element of its reflected container property at `path.index`.
-        /// `outOwnerType` (optional) receives the type whose properties apply - the component
-        /// type or the container's element type. Empty when anything along the path is missing
-        /// (no component, no such container, index out of range); re-derived on every call, so
-        /// it never holds a pointer across a pool move.
+        /// The instance a property path addresses: the entity's component of `componentType` (an
+        /// empty path) or the element of its reflected container property at `path.index`.
+        /// `outOwnerType` (optional) receives the type whose properties apply: the component type
+        /// or the container's element type. Empty when anything along the path is missing (no
+        /// component, no such container, index out of range). It is re-derived on every call, so it
+        /// never holds a pointer across a pool move.
         [[nodiscard]] Instance ResolvePropertyOwner(const Guid& entity, const TypeInfo* componentType,
                                                     const ComponentPropertyPath& path,
                                                     const TypeInfo** outOwnerType = nullptr);
@@ -387,7 +393,7 @@ export namespace editor
                     return false;
                 } // parent gone
 
-                // First execute records the generated Guid; redo recreates the SAME identity.
+                // First execute records the generated Guid; redo recreates the same identity.
                 const scene::EntityHandle entity = (m_id != Guid{})
                                                        ? scene.CreateEntity(m_id, m_name.AsView())
                                                        : scene.CreateEntity(m_name.AsView());
@@ -418,8 +424,8 @@ export namespace editor
             Guid m_id;
         };
 
-        // Shared subtree snapshot for the clipboard/duplicate path (DestroyEntityCommand keeps
-        // its own undo records - same shape, different lifetime).
+        // Shared subtree snapshot for the clipboard and duplicate paths. DestroyEntityCommand keeps
+        // its own undo records, of the same shape but with a different lifetime.
         struct SubtreeComponentRecord
         {
             String typeId;
@@ -427,7 +433,7 @@ export namespace editor
         };
         struct SubtreeRecord
         {
-            Guid id;     // ORIGINAL guid (parent relinking only - pastes mint fresh ids)
+            Guid id;     // original guid, only for relinking parents (pastes mint fresh ids)
             Guid parent; // nil = subtree root
             String name;
             Transform local;
@@ -446,7 +452,7 @@ export namespace editor
         // === Prefab instances ===
 
         /// Spawns an instance of a prefab payload as an undoable command (redo recreates the
-        /// SAME member guids). `payload` is the prefab's "scene" stream, captured by value so
+        /// same member guids). `payload` is the prefab's "scene" stream, captured by value so
         /// undo/redo stay stable against later asset edits. Returns the instance root's guid
         /// (nil on failure); it becomes the selection.
         Guid SpawnPrefabInstance(const Guid& prefabId, Array<byte> payload,
@@ -454,14 +460,15 @@ export namespace editor
                                  const Transform* rootTransform = nullptr,
                                  const Guid& placeBefore = Guid{});
 
-        /// Replaces `entity`'s subtree with an instance of `prefabId` (create-from-selection's
-        /// second half): one undo group [spawn at the same parent/transform, destroy original].
+        /// Replaces `entity`'s subtree with an instance of `prefabId` (the second half of
+        /// create-from-selection): one undo group that spawns at the same parent and transform,
+        /// then destroys the original.
         Guid ReplaceWithPrefabInstance(const Guid& entity, const Guid& prefabId,
                                        Array<byte> payload);
 
-        /// Reverts a prefab member's component to its spawn-time baseline, UNDOABLY:
-        /// template components restore their baseline payload (re-added if the user removed
-        /// them), user-ADDED components (no baseline) are removed. No-op for non-members.
+        /// Reverts a prefab member's component to its spawn-time baseline, undoably. Template
+        /// components restore their baseline payload (added again if the user removed them);
+        /// components the user added (with no baseline) are removed. No-op for non-members.
         bool RevertComponentToBaseline(const Guid& entity, const TypeInfo* componentType);
 
         class SpawnPrefabCommand final : public IEditorCommand
@@ -515,9 +522,9 @@ export namespace editor
                 m_rootId = scene.GetEntityId(root);
                 if (m_preassigned.Size() == 0)
                 {
-                    // First run: pin the minted member guids so redo recreates them exactly -
-                    // including every NESTED instance's members (as sub-records with the
-                    // template placement).
+                    // First run: pin the minted member guids so redo recreates them exactly,
+                    // including every nested instance's members (as sub-records with the template
+                    // placement).
                     if (scene::Scene::PrefabInstanceState* state =
                             scene.FindPrefabInstanceByRoot(m_rootId))
                     {
@@ -584,8 +591,9 @@ export namespace editor
     private:
         Guid RunPasteCommand(Array<SubtreeRecord> records, const Guid& parent);
 
-        // Instantiate captured records with FRESH guids; the old->new map relinks intra-subtree
-        // parents. Redo recreates the SAME fresh guids (minted once, on the first Execute).
+        // Instantiates captured records with fresh guids; a map from old to new guids relinks
+        // parents within the subtree. Redo recreates the same fresh guids (minted once, on the
+        // first Execute).
         class PasteEntitiesCommand final : public IEditorCommand
         {
         public:
@@ -614,7 +622,7 @@ export namespace editor
                 }
                 else
                 {
-                    // Redo: the ids are free again (undo destroyed them) - recreate them exactly.
+                    // Redo: the ids are free again (undo destroyed them), so recreate them exactly.
                     for (usize i = 0; i < m_records.Size(); ++i)
                     {
                         (void)scene.CreateEntity(m_newIds[i], m_records[i].name.AsView());
@@ -669,7 +677,7 @@ export namespace editor
 
             void Undo() override
             {
-                // Destroying the pasted ROOT takes the whole subtree with it (records are
+                // Destroying the pasted root takes the whole subtree with it (records are
                 // pre-order: index 0 is the root).
                 const scene::EntityHandle root = m_ctx->Resolve(m_newIds[0]);
                 if (root.IsAssigned())
@@ -803,7 +811,7 @@ export namespace editor
                     return false;
                 }
 
-                // Snapshot the subtree PRE-ORDER (parents before children) so Undo can recreate
+                // Snapshot the subtree pre-order (parents before children) so Undo can recreate
                 // top-down and parent immediately.
                 m_records.Clear();
                 m_ctx->CollectSubtree(root,
@@ -887,7 +895,7 @@ export namespace editor
             struct EntityRecord
             {
                 Guid id;
-                Guid parent; // empty = root (or a parent OUTSIDE the subtree resolved at undo)
+                Guid parent; // empty = root (or a parent outside the subtree resolved at undo)
                 String name;
                 Transform local;
                 bool active = true;
@@ -941,7 +949,7 @@ export namespace editor
                 {
                     return false;
                 }
-                prev.m_newName = Move(m_newName); // previous keeps its ORIGINAL old name
+                prev.m_newName = Move(m_newName); // previous keeps its original old name
                 return true;
             }
 
@@ -983,7 +991,7 @@ export namespace editor
                 if (!m_hasOld)
                 {
                     m_oldParent = scene.GetEntityId(scene.GetParent(e));
-                    // The exact old slot: the sibling the entity sat BEFORE (nil = it was last).
+                    // The exact old slot: the sibling the entity sat before (nil = it was last).
                     m_oldNextSibling = scene.GetEntityId(scene.GetNextSibling(e));
                     m_oldLocal = scene.GetLocalTransform(e);
                     m_hasOld = true;
@@ -991,9 +999,9 @@ export namespace editor
                 if (m_oldParent == m_newParent)
                 {
                     return false;
-                } // no-op - don't pollute undo
-                // Editor semantics: the entity STAYS PUT in the world across a reparent (its
-                // local transform is recomputed via TRS decompose).
+                } // a no-op: keep it off the undo stack
+                // Editor semantics: the entity stays put in the world across a reparent (its local
+                // transform is recomputed through a TRS decompose).
                 scene.SetParent(e, parent, /*keepWorldTransform*/ true);
                 return true;
             }
@@ -1007,8 +1015,8 @@ export namespace editor
                 }
                 scene::Scene& scene = m_ctx->Scene();
                 scene.SetParent(e, m_ctx->Resolve(m_oldParent));
-                // SetParent appends to the END of the sibling list; restore the exact slot
-                // (otherwise the undone entity visibly jumps to the bottom of its list).
+                // SetParent appends to the end of the sibling list; restore the exact slot, or the
+                // undone entity would visibly jump to the bottom of its list.
                 const scene::EntityHandle before = m_ctx->Resolve(m_oldNextSibling);
                 if (before.IsAssigned())
                 {
@@ -1029,9 +1037,9 @@ export namespace editor
             bool m_hasOld = false;
         };
 
-        // Sibling reorder: place `entity` before `sibling` (empty sibling = end of the ROOT
-        // list). Undo restores the exact previous position via the captured old next-sibling
-        // (empty = was last under its old parent).
+        // Sibling reorder: place `entity` before `sibling` (an empty sibling means the end of the
+        // root list). Undo restores the exact previous position through the captured old next
+        // sibling (empty when it was last under its old parent).
         class MoveEntityCommand final : public IEditorCommand
         {
         public:
@@ -1057,7 +1065,7 @@ export namespace editor
                 {
                     return false;
                 }
-                // Cycle: the target slot's PARENT lies inside the moved entity's own subtree.
+                // Cycle: the target slot's parent lies inside the moved entity's own subtree.
                 if (sibling.IsAssigned())
                 {
                     const scene::EntityHandle parent = scene.GetParent(sibling);
@@ -1076,7 +1084,7 @@ export namespace editor
                     m_hasOld = true;
                 }
 
-                // Keep the world transform only when the PARENT changes; a same-parent reorder
+                // Keep the world transform only when the parent changes; a same-parent reorder
                 // keeps the exact local (no decompose round-trip noise).
                 const scene::EntityHandle newParent = sibling.IsAssigned()
                                                           ? scene.GetParent(sibling)
@@ -1092,7 +1100,7 @@ export namespace editor
                 {
                     scene.SetParent(e, scene::EntityHandle::Invalid(), parentChanges);
                 }
-                return scene.Revision() != before; // unchanged position = no-op, drop
+                return scene.Revision() != before; // an unchanged position is a no-op, dropped
             }
 
             void Undo() override
@@ -1167,10 +1175,10 @@ export namespace editor
             bool m_old = false;
         };
 
-        // The settings twin of SetResourceRefCommand: the reference lives on a scene SYSTEM's
-        // settings block (no entity); the address re-derives from the scene each apply. Any
-        // reference-shaped field, through its reference traits (the id) and the system's own
-        // resolve (the rebind), so nothing names T.
+        // The settings counterpart of SetResourceRefCommand: the reference lives on a scene
+        // system's settings block (no entity), and the address is re-derived from the scene each
+        // apply. It handles any reference-shaped field through its reference traits (the id) and
+        // the system's own resolve (the rebind), so nothing names T.
         class SetSceneSettingReferenceCommand final : public IEditorCommand
         {
         public:
@@ -1313,7 +1321,7 @@ export namespace editor
             foundation::resource::ResourceManager* m_resources;
         };
 
-        /// The generic twin of SetResourceRefCommand: the property's type carries its
+        /// The generic counterpart of SetResourceRefCommand: the property's type carries its
         /// ReferenceOps, so no T is named. Re-resolves the entity's subtree after each apply.
         class SetReferenceCommand final : public IEditorCommand
         {
@@ -1394,9 +1402,9 @@ export namespace editor
             foundation::resource::ResourceManager* m_resources;
         };
 
-        // The entity-reference twin of SetResourceRefCommand: writes a component's EntityRef.id
-        // through the re-derived property address (pools move, so re-derive each apply), with undo.
-        // No resource rebind - an EntityRef is a dumb guid holder resolved at use.
+        // The entity-reference counterpart of SetResourceRefCommand: writes a component's
+        // EntityRef.id through the property address, re-derived each apply because pools move, with
+        // undo. No resource rebind: an EntityRef is a plain guid holder resolved at use.
         class SetEntityRefCommand final : public IEditorCommand
         {
         public:
@@ -1497,7 +1505,7 @@ export namespace editor
                 {
                     return false;
                 }
-                prev.m_new = m_new; // previous keeps its ORIGINAL old transform
+                prev.m_new = m_new; // previous keeps its original old transform
                 return true;
             }
 
@@ -1509,12 +1517,8 @@ export namespace editor
             bool m_hasOld = false;
         };
 
-        // One command for both property paths: Variant (typed get/set) and raw integer (enums -
-        // a Variant of a type known only by TypeInfo cannot be constructed, so those fields are
-        // written in place through PropertyInfo::address).
-        // Mirrors SetComponentPropertyCommand for a SCENE SYSTEM's settings block (no entity;
-        // the instance is re-derived from the scene each apply - systems are stable, but the
-        // re-derive keeps the command valid across snapshot restores).
+        // Replaces a scene system's whole settings block with a serialized blob; undo writes back
+        // the block's prior serialized state.
         class SetSceneSettingsBlockCommand final : public IEditorCommand
         {
         public:
@@ -1597,6 +1601,11 @@ export namespace editor
             Array<byte> m_old;
         };
 
+        // Sets a property on a scene system's settings block, either by Variant (typed get and set)
+        // or as a raw integer: a Variant of an enum type known only by TypeInfo cannot be
+        // constructed, so those fields are written in place through PropertyInfo::address. The
+        // instance is re-derived from the scene each apply; systems are stable, but re-deriving
+        // keeps the command valid across snapshot restores.
         class SetSceneSettingCommand final : public IEditorCommand
         {
         public:
@@ -1681,7 +1690,7 @@ export namespace editor
                 {
                     return false;
                 }
-                prev.m_new = m_new; // previous keeps its ORIGINAL old value
+                prev.m_new = m_new; // previous keeps its original old value
                 prev.m_newRaw = m_newRaw;
                 return true;
             }
@@ -1812,7 +1821,7 @@ export namespace editor
                 {
                     return false;
                 }
-                prev.m_new = m_new; // previous keeps its ORIGINAL old value
+                prev.m_new = m_new; // previous keeps its original old value
                 prev.m_newRaw = m_newRaw;
                 return true;
             }
@@ -1830,8 +1839,8 @@ export namespace editor
 
             [[nodiscard]] Instance ResolveComponent(const PropertyInfo** outProperty)
             {
-                // The owner the path addresses: the component, or a struct element of one of
-                // its container properties (re-derived every time - pools move).
+                // The owner the path addresses: the component, or a struct element of one of its
+                // container properties (re-derived every time, as pools move).
                 const TypeInfo* ownerType = nullptr;
                 const Instance owner =
                     m_ctx->ResolvePropertyOwner(m_entity, m_componentType, m_path, &ownerType);
@@ -1952,10 +1961,10 @@ export namespace editor
                     (void)buffer.Write(m_blob.Data(), m_blob.Size());
                     (void)buffer.Seek(0, SeekOrigin::Begin);
                     BinarySerializer ar(buffer, SerializeMode::Read);
-                    mgr->ReadComponent(ar, e); // adds + fills
-                    m_ctx->ResolveRestoredResources(); // re-bind the restored refs' proxies so the
-                                                       // component renders this frame (mesh/material
-                                                       // caches) - matches the paste / spawn paths
+                    mgr->ReadComponent(ar, e); // adds and fills
+                    m_ctx->ResolveRestoredResources(); // rebind the restored refs' proxies so the
+                                                       // component renders this frame (mesh and
+                                                       // material caches), as paste and spawn do
                     return;
                 }
                 if (!mgr->AddDefaultComponent(e))
@@ -1991,7 +2000,7 @@ export namespace editor
         scene::Scene* m_scene;
         foundation::resource::ResourceManager* m_resources = nullptr;
         scene::PrefabPayloadResolver
-            m_prefabResolver; // borrowed (optional)              // borrowed (SceneSubsystem owns it via the page)
+            m_prefabResolver; // optional; borrowed (SceneSubsystem owns it through the page)
         EditorCommandStack* m_commands; // borrowed (the page owns its stack)
         Selection<Guid> m_selection;
     };

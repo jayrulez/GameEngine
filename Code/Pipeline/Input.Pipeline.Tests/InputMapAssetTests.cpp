@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.input.editor tests: InputMapAsset's reflected surface - a Nested `map` property whose
-// InputMap tree (sets -> actions -> bindings) is traversable via reflection (scriptability). The
-// input editor page itself stays bespoke; this proves the asset is reflection-visible.
+// foundation.input.editor tests: InputMapAsset's reflected surface, a Nested `map` property whose
+// InputMap tree (sets, their actions, their bindings) is traversable through reflection, for
+// scripts. The input editor page itself is hand-written; this proves the asset is reflection-visible.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -20,7 +20,7 @@ using namespace foundation::input;
 
 TEST_CASE("input editor: InputMapAsset exposes its InputMap as a Nested, traversable property")
 {
-    RegisterInputMapAsset(); // registers the asset + the whole InputMap tree reflection
+    RegisterInputMapAsset(); // registers the asset and the whole InputMap tree reflection
 
     const PropertyInfo* mapProp = FindProperty(InputMapAsset::StaticType(), "map");
     REQUIRE(mapProp != nullptr);
@@ -28,10 +28,11 @@ TEST_CASE("input editor: InputMapAsset exposes its InputMap as a Nested, travers
     CHECK(mapProp->type == &TypeOf<InputMap>());
 
     InputMapAsset asset;
-    asset.SeedDefaultContent(); // one "Gameplay" set with Move/Look/Jump/Fire
+    asset.SeedDefaultContent(); // one "Gameplay" set with Move, Look, Jump, Fire
     Instance assetInst = Instance::From(&asset);
 
-    // Recurse: asset.map -> InputMap.sets (container) -> the ActionSet -> actions (container).
+    // Recurse from asset.map into InputMap.sets (a container), its ActionSet, and that set's
+    // actions (a container).
     void* mapAddr = mapProp->address(assetInst);
     REQUIRE(mapAddr != nullptr);
     const Instance mapInst(mapAddr, mapProp->type);
@@ -53,5 +54,5 @@ TEST_CASE("input editor: InputMapAsset exposes its InputMap as a Nested, travers
     CHECK(IsNested(*actionsProp));
     REQUIRE(IsContainer(*actionsProp->type));
     const Instance actionsInst(actionsProp->address(setInst), actionsProp->type);
-    CHECK(ContainerSize(*actionsProp->type->container, actionsInst) == 4u); // Move/Look/Jump/Fire
+    CHECK(ContainerSize(*actionsProp->type->container, actionsInst) == 4u); // Move, Look, Jump, Fire
 }

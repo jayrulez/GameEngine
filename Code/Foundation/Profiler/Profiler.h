@@ -3,7 +3,7 @@
 
 // Foundation::Profiler - instrumentation macros.
 //
-// Include this header (it's just macros) AND `import foundation.profiler` in a TU that instruments.
+// Include this header (it is only macros) and `import foundation.profiler` in a TU that instruments.
 // PROFILE_SCOPE("Name") profiles the enclosing block; the frame macros bracket a frame.
 // When BUILD_PROFILING is off (shipping builds), every macro compiles to nothing.
 #pragma once

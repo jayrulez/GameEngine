@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of QuerySet.
-/// Ported from Sedulous.RHI.Vulkan/VulkanQuerySet.bf.
 
 module;
 #include "Core/Prelude.h"

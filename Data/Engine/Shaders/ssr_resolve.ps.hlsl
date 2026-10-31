@@ -45,7 +45,7 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         float2 vel     = VelocityTex.SampleLevel(PointSamp, uv, 0).rg;   // viewport-local uv delta
         float2 histLoc = localUv - vel;
         if (all(histLoc >= 0.0) && all(histLoc <= 1.0)) {
-            // YCoCg neighborhood variance box from the CURRENT reflection (3x3).
+            // YCoCg neighbourhood variance box from the current reflection (3x3).
             float3 m1 = float3(0,0,0), m2 = float3(0,0,0);
             [unroll] for (int ny = -1; ny <= 1; ++ny) {
                 [unroll] for (int nx = -1; nx <= 1; ++nx) {
@@ -65,8 +65,8 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
             float3 curY    = RGBToYCoCg(curR.rgb);
             // Content-change rejection: where the reprojected history's luma disagrees with the current
             // reflection (a moving reflected object trailed into this pixel), drop history and trust current.
-            // This is what kills ghosting that surface-velocity reprojection can't (the surface is static
-            // but its reflection moved). Plus a motion-adaptive term for camera movement.
+            // This removes ghosting that surface-velocity reprojection cannot (the surface is static but
+            // its reflection moved). A motion-adaptive term handles camera movement.
             float  ghost = saturate(1.0 - abs(rawHistY.x - curY.x) * pc.GhostReject);
             float  motionMag = saturate(length(vel) * pc.MotionScale);
             float  blend = pc.BlendFactor * (1.0 - 0.5 * motionMag) * ghost;

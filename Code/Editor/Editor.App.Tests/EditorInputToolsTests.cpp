@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the input tools over a GUI root of their own: what a target finds, a click
-// reaching what it names (or refused: none, several, covered), a point clicked, text typed into
-// the focus and a key pressed, each answering a frame (a pump) after it acts.
+// Editor::App tests: the input tools over a GUI root of their own. Covers what a target finds, a
+// click reaching what it names (or refused when it names nothing, several things, or something
+// covered), clicking a point, typing into the focus and pressing a key. Each tool answers one
+// frame (a pump) after it acts.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -72,7 +73,7 @@ namespace
         bool ok = false;
         JsonValue payload;
         String error;
-        u32 pumps = 0; // entries before it answered
+        u32 pumps = 0; // pumps before it answered
     };
     // The call, pumped as the host would until it answers.
     Answer Call(McpServer& server, StringView tool, StringView argumentsJson)

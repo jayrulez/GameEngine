@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of BindGroup.
-/// Ported from Sedulous.RHI.Vulkan/VulkanBindGroup.bf.
 
 module;
 #include "Core/Prelude.h"

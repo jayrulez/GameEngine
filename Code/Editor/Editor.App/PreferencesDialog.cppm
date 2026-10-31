@@ -4,18 +4,17 @@
 // Editor::App - :preferences_dialog partition.
 //
 // EditorPreferencesDialog: the user's own editor settings (the foundation.settings store at
-// <user-data>/editor.settings.xml), distinct from Project Settings, which edits the project
-// (Documentation/Specs/editor-gui.md, 5.1, layer 12). A modal window of the editor's markup
-// (Data/Editor/Preferences.xml), a tab per category. Appearance holds the look's inputs: the
-// scheme, the accent (one of the editor's or any #rrggbb), the density, less motion and the UI
-// scale, and whether axis views are orthographic; each change of the look shows at once. Export
-// holds the templates' folder, Agent access the MCP host (on, its port, its token), Game preview
-// the sizes the Game tab offers. Shortcuts lists every action with its chord: a click captures the
-// next keys, Reset goes back to the declaration's. Then a tab per category other parts of the
-// editor contribute, its checks applied as they change. Save writes everything into the store (a
-// chord another action holds refused, a port out of range kept as it was, each said in a warning)
-// and persists it; Cancel, or closing the window, puts the look back as it was and forgets the
-// rest.
+// <user-data>/editor.settings.xml), distinct from Project Settings, which edits the project. It is
+// a modal window from the editor's markup (Data/Editor/Preferences.xml), with a tab per category.
+// Appearance holds the look's inputs: the scheme, the accent (one of the editor's, or any
+// #rrggbb), the density, reduced motion and the UI scale, plus whether axis views are
+// orthographic; each change to the look shows at once. Export holds the templates' folder, Agent
+// access the MCP host (enabled, its port, its token), and Game preview the sizes the Game tab
+// offers. Shortcuts lists every action with its chord: a click captures the next keys, and Reset
+// restores the declared chord. Then comes a tab per category that other parts of the editor
+// contribute, whose checks apply as they change. Save writes everything into the store and
+// persists it; a chord another action holds is refused and a port out of range is kept as it was,
+// each with a warning. Cancel, or closing the window, restores the look and discards the rest.
 module;
 #include "Core/Prelude.h"
 
@@ -41,19 +40,19 @@ export namespace editor::app
     class EditorPreferencesDialog
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kEditorPreferencesDialogPath;
 
-        /// What it works over.
+        /// The services it works with.
         struct Services
         {
             foundation::settings::Settings* user = nullptr; // the user's store
-            editor::EditorActionRegistry* actions = nullptr; // the Shortcuts tab's
-            /// Says a warning to the user (a chord another action holds).
+            editor::EditorActionRegistry* actions = nullptr; // what the Shortcuts tab lists and edits
+            /// Shows the user a warning (a chord another action holds).
             Function<void(StringView)> warn;
             /// The settings other parts of the editor contribute, a tab per category.
             const Array<editor::EditorContext::EditorSettingsContribution>* contributions = nullptr;
-            /// The MCP section was saved: the host follows it for the open project.
+            /// Called when the MCP section was saved, so the host follows it for the open project.
             Function<void()> mcpChanged;
             /// Shows a look (the window's SetLook).
             Function<void(const EditorLook&)> showLook;
@@ -77,7 +76,7 @@ export namespace editor::app
         EditorPreferencesDialog& operator=(const EditorPreferencesDialog&) = delete;
         ~EditorPreferencesDialog() { Close(); }
 
-        /// Opens it over `root`, its controls as the store has them; false with no markup.
+        /// Opens the dialog over `root` with its controls as the store has them; false with no markup.
         bool Open(gui::Node& root)
         {
             if (!m_window || m_window->IsOpen())
@@ -94,7 +93,7 @@ export namespace editor::app
         }
         [[nodiscard]] bool IsOpen() const noexcept { return m_window && m_window->IsOpen(); }
 
-        /// Keeps the look: into the store, persisted, the window closed.
+        /// Keeps the look: writes it into the store, persists it and closes the window.
         bool Save()
         {
             if (m_services.user != nullptr)
@@ -122,7 +121,7 @@ export namespace editor::app
         void Cancel()
         {
             if (m_window && m_window->IsOpen())
-                m_window->Close(); // its close puts the look back
+                m_window->Close(); // closing it restores the look
         }
 
         /// The look as the controls have it now.
@@ -155,7 +154,7 @@ export namespace editor::app
             return nullptr;
         }
 
-        // The controls, once: each change of the user's shows the look at once.
+        // Binds the controls once: each change the user makes shows the look at once.
         void Bind()
         {
             EditorPreferencesDialog* self = this;
@@ -213,7 +212,7 @@ export namespace editor::app
                 save->SetOnClick([self]() { (void)self->Save(); });
             if (auto* cancel = Find<gui::Button>(u8"pref-cancel"))
                 cancel->SetOnClick([self]() { self->Cancel(); });
-            // However it closes (Cancel, its close button, Escape), unsaved, the look goes back.
+            // However it closes unsaved (Cancel, its close button, Escape), the look is restored.
             m_window->SetOnClose([self]()
                                  {
                                      if (!self->m_saved && self->m_services.showLook)
@@ -230,7 +229,7 @@ export namespace editor::app
                 m_services.showLook(m_look);
         }
 
-        // The tabs beside the look and the keys, as the store has them.
+        // Fills the tabs other than the look and the keys, as the store has them.
         void ShowSettings()
         {
             foundation::settings::Settings* user = m_services.user;
@@ -292,7 +291,7 @@ export namespace editor::app
             }
         }
 
-        // Game preview: a row per resolution (its name, width and height, Remove), Add after them.
+        // Game preview: a row per resolution (its name, width and height, Remove), then Add.
         void ShowPreviews()
         {
             gui::Node* list = Find<gui::Node>(u8"pref-previews");
@@ -333,7 +332,7 @@ export namespace editor::app
             remove->SetText(u8"Remove");
             const usize index = m_previews.Size();
             EditorPreferencesDialog* self = this;
-            // Hidden and skipped on Save rather than taken out from under its own click.
+            // Hidden, and skipped on Save, rather than removed from under its own click.
             remove->SetOnClick([self, index]()
                                {
                                    self->m_previews[index].removed = true;
@@ -348,8 +347,8 @@ export namespace editor::app
             m_previews.PushBack(PreviewRow{row, nameField.Get(), widthField.Get(), heightField.Get(), false});
         }
 
-        // A tab per category other parts of the editor contribute (contributions naming one
-        // category share it), its checks applied as they change.
+        // Adds a tab per category other parts of the editor contribute (contributions naming the
+        // same category share it), its checks applied as they change.
         void AddContributions()
         {
             auto* tabs = Find<gui::TabView>(u8"pref-tabs");
@@ -380,8 +379,8 @@ export namespace editor::app
                     box->SetText(field.label.AsView());
                     if (!field.description.IsEmpty())
                         box->SetTooltip(field.description.AsView());
-                    // The field is the context's, kept from boot: registrations come before any
-                    // dialog opens.
+                    // The field belongs to the context and lives from startup: registrations come
+                    // before any dialog opens.
                     const editor::EditorContext::EditorSettingsBoolField* fieldPtr = &field;
                     gui::CheckBox* raw = box.Get();
                     (void)box->AddEventListener(gui::EventType::Changed, [fieldPtr, raw](const gui::Event&)
@@ -433,7 +432,7 @@ export namespace editor::app
                 reset->SetOnClick([self, id, captureRaw, resetRaw, declared]()
                                   {
                                       self->m_shortcutEdits.Reset(id.AsView());
-                                      captureRaw->SetChord(declared); // the default, shown at once
+                                      captureRaw->SetChord(declared); // show the default at once
                                       resetRaw->SetEnabled(false);
                                   });
                 row->AddChild(name.Get());
@@ -444,7 +443,7 @@ export namespace editor::app
             }
         }
 
-        // The controls as m_look has it (quietly: no change of theirs comes back).
+        // Sets the controls from m_look quietly, so none of their change callbacks fire.
         void ShowControls()
         {
             m_showing = true;
@@ -474,8 +473,8 @@ export namespace editor::app
         RefPtr<gui::Window> m_window;
         RefPtr<gui::ButtonGroup> m_accentGroup;
         Array<RefPtr<gui::Button>> m_accents;
-        EditorLook m_original; // as it was when it opened
-        EditorLook m_look;     // as the controls have it
+        EditorLook m_original; // the look as it was when the dialog opened
+        EditorLook m_look;     // the look as the controls have it
         struct PreviewRow
         {
             RefPtr<gui::Panel> row;

@@ -3,12 +3,11 @@
 
 // Editor::App - :asset_creation partition.
 //
-// EditorAssetCreation: File > New's create-and-open, out of the application
-// (Documentation/Specs/editor-gui.md, 5.1, layer 3). A creator writes the new asset into a group
-// (the root when none is given); a scene that the project's settings name no default scene for
-// becomes the default; the assets list shows the new row and an asset its builders cook is
-// cooked at once, so it can be picked; then its page opens. While a cook reads the databases
-// (their structure frozen) the create waits and runs when the cook is done.
+// EditorAssetCreation: File > New's create-and-open, kept out of the application. A creator writes
+// the new asset into a group (the root when none is given). A new scene becomes the project's
+// default scene when the settings name none. The assets list shows the new row, and an asset its
+// builders cook is cooked at once so it can be picked; then its page opens. While a cook reads the
+// databases (their structure frozen) the create waits and runs when the cook is done.
 module;
 #include "Core/Prelude.h"
 
@@ -33,16 +32,16 @@ export namespace editor::app
             pipeline::BuilderRegistry* builders = nullptr;
             /// Opens the new asset's page.
             Function<void(foundation::content::Instance& instance)> openPage;
-            /// A new asset exists (the assets list shows it).
+            /// Called when a new asset exists, so the assets list shows it.
             Function<void(foundation::content::Instance& instance)> created;
         };
 
         explicit EditorAssetCreation(Services services) : m_services(Move(services)) {}
 
-        /// The project assets are created in (null between projects).
+        /// Sets the project assets are created in (null between projects).
         void SetProject(editor::EditorProject* project) noexcept { m_project = project; }
 
-        /// `creator` writes a new asset into `group` (the root when null) and its page opens.
+        /// Has `creator` write a new asset into `group` (the root when null), then opens its page.
         void CreateAndOpen(const pipeline::AssetCreator& creator, foundation::content::Group* group = nullptr)
         {
             editor::EditorContext& context = *m_services.context;
@@ -71,8 +70,8 @@ export namespace editor::app
                 m_services.openPage(*instance);
         }
 
-        /// What follows any create (the menu's or an agent's): the default scene when there is
-        /// none, the row shown, the asset cooked when its builders cook it.
+        /// What follows any create (the menu's or an agent's): the asset becomes the default scene
+        /// when there is none, its row is shown, and it is cooked when its builders cook it.
         void AfterCreate(const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         {
             if (creator.setsDefaultScene && m_project != nullptr && m_project->Settings().defaultSceneId.IsNil() &&

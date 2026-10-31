@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - bindings (G5 of Specs/vg-and-gui-lab.md): a node's bindings follow what they read, on the
-// GUI's frame; any reflected property binds by name, converted to its type; a widget's user-set
-// state writes back; the GUI's data model holds named values; nothing subscribes by hand.
+// GUI - bindings. A node's bindings update from what they read, on the GUI's frame. Any reflected
+// property binds by name, with the value converted to its type. State the user sets on a widget
+// writes back. The GUI's data model holds named values, and nothing subscribes by hand.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -141,7 +141,7 @@ TEST_CASE("binding: outside a scene a binding runs at once; it ends with its nod
         data.Set(SV(u8"name"), core::Variant::From<core::String>(core::String(u8"Cy"))); // queued
         root->RemoveChild(gone.Get());
     }
-    root->GetContext().Update(Frame()); // the queued binding went with its node
+    root->GetContext().Update(Frame()); // the queued binding was removed with its node
     CHECK(root->GetContext().LastBindingCount() == 0u);
 }
 

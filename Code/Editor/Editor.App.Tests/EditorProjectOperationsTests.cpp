@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the editor host's operations over the REAL services on a scratch
-// project: a cook is requested through the cook service and answered not-finished until its
-// revision lands; an import runs the two-phase path (worker prepare, main-thread placement,
-// the deferred flush on the job service) and lands its stream; an export cooks first and then
-// runs the export job, whose failure (no template here) reaches the re-entered call as the
-// tool's error. Every step is pumped the way the editor pumps: the services' Update, then the
-// operation again.
+// Editor::App tests: the editor host's operations over the real services on a scratch project. A
+// cook is requested through the cook service and answers not-finished until its revision lands. An
+// import runs the two-phase path (prepare on a worker, placement on the main thread, then the
+// deferred flush on the job service) and lands its stream. An export cooks first and then runs the
+// export job, whose failure (there is no template here) reaches the re-entered call as the tool's
+// error. Every step is pumped the way the editor pumps: the services' Update, then the operation
+// again.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <filesystem>
@@ -103,7 +103,7 @@ namespace
             project = EditorProject::Open(DefaultAllocator(), dir.AsView());
             REQUIRE(project);
             cook.Initialize(*project, builders);
-            // The app's wiring: a running job holds the databases like a cook does.
+            // Wired as the application does: a running job holds the databases, as a cook does.
             EditorJobService* jobsPtr = &jobs;
             cook.ExternalMutationLock = [jobsPtr]() { return jobsPtr->IsBusy(); };
         }
@@ -127,7 +127,7 @@ namespace
             seams.timeoutSeconds = timeoutSeconds;
             return seams;
         }
-        // One editor frame: the services' main-thread pumps.
+        // One editor frame: the services' main-thread updates.
         void Pump()
         {
             cook.Update({});
@@ -168,7 +168,7 @@ TEST_CASE("editor-operations: a cook rides the cook service - not finished until
         Drive<editor::mcp::CookOutcome>(bench, [&ops](foundation::mcp::ToolCall& call) { return ops.Cook(call, false); }, waited);
     REQUIRE(first.HasValue());
     REQUIRE(first.Value().HasValue());
-    CHECK(waited >= 1u); // the first entry only requested; the worker answered later
+    CHECK(waited >= 1u); // the first entry only made the request; the worker answered later
     CHECK(first.Value().Value().planned == 0u);
     CHECK(bench.cook.Revision() == 1u);
 
@@ -187,7 +187,7 @@ TEST_CASE("editor-operations: an import runs the two-phase path - worker prepare
     Bench bench(u8"mcp_ops_import");
     app::EditorProjectOperationsSeams seams = bench.Seams();
     // The host's after-import effects (a model's prefab, the cook, the browser) run once per
-    // finished import, over its primary, and never for a failed one (Sedulous f9f5b8e2).
+    // finished import, over its primary asset, and never for a failed one.
     u32 afterImports = 0;
     Guid lastImported;
     seams.onImported = [&](content::Instance& primary, const pipeline::ImportOptions*)
@@ -207,7 +207,7 @@ TEST_CASE("editor-operations: an import runs the two-phase path - worker prepare
     REQUIRE(step.HasValue());
     REQUIRE(step.Value().HasValue());
     const editor::mcp::ImportOutcome& outcome = step.Value().Value();
-    CHECK(waited >= 2u); // the prepare job, then the flush job, each landed through a pump
+    CHECK(waited >= 2u); // the prepare job, then the flush job, each landing through a pump
     CHECK(importer.prepares == 1u);
     CHECK(importer.imports == 1u);
     CHECK(importer.sawPrepared);
@@ -221,7 +221,7 @@ TEST_CASE("editor-operations: an import runs the two-phase path - worker prepare
     REQUIRE(bulk);
     CHECK(bulk->Size() == 2);
     CHECK(afterImports == 1u);
-    CHECK(lastImported == outcome.guid); // after the writes landed, over the primary
+    CHECK(lastImported == outcome.guid); // after the writes landed, over the primary asset
 
     // An inline importer (no worker prepare) places at once and still flushes on the job.
     TwoPhaseImporter inlineImporter(/*worker=*/false);
@@ -238,16 +238,16 @@ TEST_CASE("editor-operations: an import runs the two-phase path - worker prepare
     step = Drive<editor::mcp::ImportOutcome>(bench, [&](foundation::mcp::ToolCall& call) { return ops.Import(call, request); }, waited);
     REQUIRE_FALSE(step.HasValue());
     CHECK(step.Error().AsView().StartsWith(u8"import of 'anything.two' failed"));
-    CHECK(afterImports == 2u); // a failed import has no after
+    CHECK(afterImports == 2u); // a failed import runs no after-import effects
     request.importer = &inlineImporter;
     step = Drive<editor::mcp::ImportOutcome>(bench, [&](foundation::mcp::ToolCall& call) { return ops.Import(call, request); }, waited);
     REQUIRE(step.HasValue());
     REQUIRE(step.Value().HasValue());
 }
 
-// Sedulous 76880c06: each import's progress is its call's own, so two agents' imports run side by
-// side, each to its own answer; a call whose caller left ends, its job keeping what it
-// shares until it is done.
+// Each import's progress belongs to its own call, so two clients' imports run side by side, each
+// to its own answer. A call whose caller leaves ends, and its job keeps what it shares alive until
+// the job is done.
 TEST_CASE("editor-operations: two imports run side by side, each on its own call")
 {
     Bench bench(u8"mcp_ops_two_imports");
@@ -318,7 +318,7 @@ TEST_CASE("editor-operations: an export cooks first, then runs the export job, a
     u32 waited = 0;
     editor::mcp::OperationStep<editor::mcp::ExportOutcome> step =
         Drive<editor::mcp::ExportOutcome>(bench, [&](foundation::mcp::ToolCall& call) { return ops.Export(call, request); }, waited);
-    // No template is installed here, so the job fails - after the cook landed and the job ran.
+    // No template is installed here, so the job fails, after the cook has landed and the job has run.
     REQUIRE_FALSE(step.HasValue());
     CHECK(step.Error().AsView().StartsWith(u8"export of preset '"));
     CHECK(waited >= 2u);
@@ -326,9 +326,9 @@ TEST_CASE("editor-operations: an export cooks first, then runs the export job, a
     CHECK_FALSE(bench.jobs.IsBusy());
 }
 
-// agent-playtesting-and-asset-creation.md P2 (Sedulous 14d6d524): asset_create on the editor
-// waits while a cook or an export holds the databases, then creates, names it exactly or
-// refuses a taken name, and runs the host's after-create effects.
+// asset_create on the editor waits while a cook or an export holds the databases, then creates the
+// asset under the exact name given (or refuses a taken name) and runs the host's after-create
+// effects.
 TEST_CASE("editor-operations: a creation waits for the cook gate, then creates and runs the "
           "host's effects")
 {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The render graph's half of the profiler (Specs/profiler.md, P1), without a GPU: on the Null
+// The render graph's half of the profiler, without a GPU: on the Null
 // device (no timestamps) a graph's passes show as CPU scopes of the frame and no GPU lane is
 // made; the GPU path is probed on Vulkan and WebGPU in Render.Backend.Tests.
 #include <doctest/doctest.h>

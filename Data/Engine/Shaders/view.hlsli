@@ -9,7 +9,7 @@
 #define CASCADE_COUNT 4
 cbuffer View : register(b0, space0) {
     row_major float4x4 ViewProj;   // Matrices are row-major; annotate so HLSL reads them right.
-    row_major float4x4 View;       // for view-space depth (cluster lookup + CSM cascade select, PS only)
+    row_major float4x4 View;       // for view-space depth (cluster lookup and CSM cascade select, PS only)
     row_major float4x4 CascadeViewProj[CASCADE_COUNT];   // CSM: world -> each cascade's light clip
     float3 CameraPos; float LightCount;
     uint   LightOffset; int ClusterVpX; int ClusterVpY; float IBLMaxLod;   // IBLMaxLod < 0 -> no IBL (flat ambient)
@@ -37,7 +37,7 @@ cbuffer View : register(b0, space0) {
     float  IblDiffuse;                 // the sky-lighting dimmer (diffuse image lighting)
     float  IblSpecular;                // the sky-reflection dimmer (specular image lighting)
     float  SceneTime;                  // the view's scene clock (s): the WIND sway, a surface's Time()
-    float  PrevSceneTime;              // last frame's (the previous position, for motion vectors)
+    float  PrevSceneTime;              // last frame's scene clock (the previous position, for motion vectors)
 };
 
 // Whether this view is orthographic: its view-projection's w column is exactly zero then (w stays 1)

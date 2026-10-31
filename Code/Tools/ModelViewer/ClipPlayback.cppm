@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:playback`: the animation bar's half that is not the window
-// (Documentation/Specs/model-viewer.md, P2). A model put into a scene by InstantiateModel has a
-// skeletal animation component on its root; this drives it: which clip plays (any of the model's),
-// play and pause, stop (back to the start, paused), stepping a frame while paused, scrubbing to a
-// time, looping and speed. The component's manager builds the player on its first tick and starts
-// a clip it is handed, so a choice takes effect on the next scene update; the rest acts on the
-// player at once.
+// ModelViewer - `modelviewer:playback`: the animation bar's state, kept apart from the window.
+// InstantiateModel puts a skeletal animation component on the root of the model it places, and
+// ClipPlayback drives that component: which of the model's clips plays, play and pause, stop
+// (rewind and pause), stepping a frame while paused, scrubbing to a time, looping and speed. The
+// component's manager builds the player on its first tick and starts the clip it was handed, so
+// selecting a clip takes effect on the next scene update; the other controls act on the player
+// at once.
 
 module;
 #include "Core/Prelude.h"
@@ -30,12 +30,12 @@ export namespace modelviewer
     class ClipPlayback
     {
     public:
-        /// Steps move a frame at this rate (the rate the importer samples clips at).
+        /// The frame rate Step moves by: the rate the importer samples clips at.
         static constexpr f32 kStepFps = 30.0f;
 
-        /// Drives the animator on `root` (InstantiateModel's), playing `model`'s clips. Without an
-        /// animator (a model without clips, or a scene without the animation managers) it has
-        /// nothing to drive and says so (HasClips).
+        /// Drives the animator on `root` (the entity InstantiateModel made), playing the clips of
+        /// `model`. When there is no animator (the model has no clips, or the scene has no animation
+        /// managers) there is nothing to drive, and HasClips returns false.
         ClipPlayback(scene::Scene& scene, scene::EntityHandle root, foundation::model::ModelResource& model)
             : m_scene(&scene), m_root(root), m_model(&model)
         {
@@ -44,13 +44,13 @@ export namespace modelviewer
                     if (m_model->animations[i].Get() == animator->clip.Get() && animator->clip.Get() != nullptr)
                         m_selected = static_cast<i32>(i);
             if (animation::AnimationClip* clip = Clip(m_selected))
-                clip->isLooping = m_looping; // a viewer loops what it shows, whatever the file says
+                clip->isLooping = m_looping; // the viewer loops clips whatever the file says
         }
 
         [[nodiscard]] bool HasClips() const { return Animator() != nullptr && !m_model->animations.IsEmpty(); }
         [[nodiscard]] i32 ClipCount() const { return static_cast<i32>(m_model->animations.Size()); }
         [[nodiscard]] i32 Selected() const noexcept { return m_selected; }
-        /// The clip's name as the cook made it, its model prefix ("model.") left off.
+        /// The clip's name as the cook made it, without the model prefix ("model.").
         [[nodiscard]] String ClipName(i32 index) const
         {
             const animation::AnimationClip* clip = Clip(index);
@@ -63,7 +63,7 @@ export namespace modelviewer
             return String(dot < name.Size() ? name.SubStr(dot + 1, name.Size() - dot - 1) : name);
         }
 
-        /// Plays clip `index` from its start (on the next scene update).
+        /// Plays clip `index` from its start, beginning on the next scene update.
         void Select(i32 index)
         {
             engine::animation::SkeletalAnimationComponent* animator = Animator();
@@ -83,7 +83,8 @@ export namespace modelviewer
             return player != nullptr && player->State() == animation::PlaybackState::Playing;
         }
 
-        /// Play from where it stands (from the start again once a clip that does not loop ended), or pause.
+        /// Plays from the current time, or pauses. A clip that does not loop and has reached its end
+        /// starts again from the beginning.
         void SetPlaying(bool playing)
         {
             animation::AnimationPlayer* player = Player();
@@ -100,7 +101,7 @@ export namespace modelviewer
                 player->Play(player->CurrentClip(), /*restart*/ Time() >= Duration());
         }
 
-        /// Back to the clip's start, paused.
+        /// Rewinds to the clip's start and pauses.
         void Stop()
         {
             animation::AnimationPlayer* player = Player();
@@ -110,7 +111,7 @@ export namespace modelviewer
             player->SetCurrentTime(0.0f);
         }
 
-        /// A frame forward (or back, negative), paused there.
+        /// Moves `frames` frames forward (backward when negative) and pauses there.
         void Step(i32 frames)
         {
             if (Player() == nullptr)
@@ -119,7 +120,8 @@ export namespace modelviewer
             Scrub(Time() + static_cast<f32>(frames) / kStepFps);
         }
 
-        /// The pose at `seconds` into the clip (clamped to it); playing goes on from there.
+        /// Jumps to `seconds` into the clip, clamped to its length. If the clip was playing it
+        /// continues from there.
         void Scrub(f32 seconds)
         {
             animation::AnimationPlayer* player = Player();
@@ -141,8 +143,8 @@ export namespace modelviewer
         }
 
         [[nodiscard]] bool Looping() const noexcept { return m_looping; }
-        /// Whether the clip starts over at its end (else it stops there). The viewer's own copy of
-        /// the clip, so the file is untouched.
+        /// Whether the clip starts over at its end, rather than stopping there. This changes the
+        /// viewer's copy of the clip; the file is untouched.
         void SetLooping(bool looping)
         {
             m_looping = looping;
@@ -161,7 +163,7 @@ export namespace modelviewer
                 animator->speed = speed;
         }
 
-        /// The player, once the animator's manager built it (its first tick).
+        /// The player, or null until the animator's manager builds it on its first tick.
         [[nodiscard]] animation::AnimationPlayer* Player() const
         {
             const engine::animation::SkeletalAnimationComponent* animator = Animator();

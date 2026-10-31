@@ -3,10 +3,10 @@
 
 // Foundation::Profiler.GUI - :widget partition
 //
-// What every profiler view shares: the focus it reads (joined while set), its colours from the
-// sheet's parts (each view's tag, Profiler.GUI's sheet giving them through the theme's tokens), a
-// name's colour (one of eight hues picked by the name, so a scope keeps its colour across frames
-// and lanes) and one text drawn in turn for its labels.
+// The base every profiler view shares. It holds the focus the view reads, joined while set; the
+// colours from the sheet's parts, keyed by each view's tag, which Profiler.GUI's sheet fills from
+// the theme's tokens; the colour for a name, one of eight hues picked from the name so a scope
+// keeps its colour across frames and lanes; and one Text reused to draw each label in turn.
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +29,7 @@ export namespace foundation::profiler::gui
     {
         RTTI_OBJECT(ProfilerWidget, UIWidget)
     public:
-        /// A name's colours: this many hues, the sheet's `hue-0` to `hue-7` parts.
+        /// The number of name hues, which are the sheet's `hue-0` to `hue-7` parts.
         static constexpr u32 kHueCount = 8;
 
         ProfilerWidget() = default;
@@ -39,7 +39,7 @@ export namespace foundation::profiler::gui
                 m_focus->Leave(this);
         }
 
-        /// What it shows (shared: every view on one page holds the same focus).
+        /// Sets the focus the view shows. Every view on a page holds the same focus.
         void SetProfileFocus(RefPtr<ProfileFocus> focus)
         {
             if (m_focus)
@@ -53,7 +53,8 @@ export namespace foundation::profiler::gui
         [[nodiscard]] ProfileFocus* GetProfileFocus() const noexcept { return m_focus.Get(); }
         [[nodiscard]] const IProfileSource* Source() const noexcept { return m_focus ? m_focus->Source() : nullptr; }
 
-        /// The hue a name is drawn in (0 to kHueCount - 1): the same for its every scope.
+        /// Returns the hue a name is drawn in (0 to kHueCount - 1), the same for every scope of
+        /// that name.
         [[nodiscard]] static u32 HueOf(StringView name) noexcept
         {
             u32 hash = 0;
@@ -62,8 +63,8 @@ export namespace foundation::profiler::gui
             return hash % kHueCount;
         }
 
-        /// The parts every view draws: a name's hues. Each view adds its own; a part the sheet is
-        /// to style must be named here, or the sheet never reaches it.
+        /// Lists the parts every view draws: the name hues. Each view adds its own parts. A part the
+        /// sheet should style must be listed, or the sheet never reaches it.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             static constexpr const char8_t* kHues[kHueCount] = {u8"hue-0", u8"hue-1", u8"hue-2", u8"hue-3",
@@ -77,7 +78,8 @@ export namespace foundation::profiler::gui
         void OnProfileChoiceChanged() override { Invalidate(); }
 
     protected:
-        /// A part's background colour (times its opacity), or `fallback` where the sheet gives none.
+        /// Returns a part's background colour multiplied by its opacity, or `fallback` where the
+        /// sheet sets none.
         [[nodiscard]] Color PartColor(StringView part, Color fallback) const
         {
             const PartStyle& style = GetPartStyle(part);
@@ -85,13 +87,13 @@ export namespace foundation::profiler::gui
             color.a *= style.Opacity;
             return color;
         }
-        /// A part's text colour, or the view's own.
+        /// Returns a part's text colour, or the view's own text colour.
         [[nodiscard]] Color PartTextColor(StringView part) const
         {
             const PartStyle& style = GetPartStyle(part);
             return style.HasColor ? style.TextColor : GetTextColor();
         }
-        /// A name's colour: its hue's part.
+        /// Returns a name's colour, taken from its hue's part.
         [[nodiscard]] Color NameColor(StringView name) const
         {
             static constexpr const char8_t* kHues[kHueCount] = {u8"hue-0", u8"hue-1", u8"hue-2", u8"hue-3",
@@ -106,7 +108,7 @@ export namespace foundation::profiler::gui
             m_text.SetWhiteSpace(TextWhiteSpace::NoWrap);
             m_text.SetOverflow(TextOverflow::Ellipsis);
         }
-        /// `text` in `bounds` (one line, cut with an ellipsis), placed by `align`, in `color`.
+        /// Draws `text` on one line in `bounds`, cut with an ellipsis, aligned by `align`, in `color`.
         void DrawLabel(DrawContext& ctx, StringView text, const Rect& bounds, Color color,
                        TextHAlign align = TextHAlign::Start) const
         {
@@ -117,7 +119,7 @@ export namespace foundation::profiler::gui
             m_text.SetAlignment(align, TextVAlign::Middle);
             m_text.Draw(ctx, bounds);
         }
-        /// How wide `text` is, in the view's font.
+        /// Returns how wide `text` is in the view's font.
         [[nodiscard]] f32 LabelWidth(StringView text) const
         {
             if (!m_text.HasFont())
@@ -125,10 +127,10 @@ export namespace foundation::profiler::gui
             m_text.SetString(text);
             return m_text.GetWidth();
         }
-        /// A point of an event (screen space) in its own space.
+        /// Converts an event's point from screen space to the view's own space.
         [[nodiscard]] core::Float2 Local(core::Float2 screen) const { return ConvertToNodeSpace(screen); }
 
         RefPtr<ProfileFocus> m_focus;
-        mutable Text m_text; // each label in turn
+        mutable Text m_text; // reused for each label in turn
     };
 }

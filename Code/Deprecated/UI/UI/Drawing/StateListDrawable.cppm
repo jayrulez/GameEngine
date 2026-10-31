@@ -3,9 +3,8 @@
 
 // UI - :state_list_drawable partition
 //
-// Maps ControlState flags -> Drawable with fallback lookup (tries the exact flag
-// combination, then strips flags one at a time, ultimately falling back to Normal).
-// Ported from Sedulous.UI/src/Drawing/StateListDrawable.bf.
+// Maps ControlState flags to Drawables with fallback lookup: the exact flag combination,
+// else the weightiest defined state made of its flags, else Normal (see Get).
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +27,7 @@ export namespace foundation::ui
     public:
         StateListDrawable() = default;
 
-        /// Set the drawable for a state (or flag combination); replaces + releases any prior.
+        /// Set the drawable for a state (or flag combination); replaces and releases any prior one.
         void Set(ControlState state, RefPtr<Drawable> drawable)
         {
             m_drawables.InsertOrAssign(static_cast<u32>(state), drawable);
@@ -37,10 +36,9 @@ export namespace foundation::ui
         /// Get the drawable for a state: the exact match, else the defined state within it that
         /// says the most (each flag weighed: Disabled, then Pressed, then Checked/Indeterminate,
         /// then Focused, then Hover), else Normal. So a pressed control under the pointer
-        /// (Pressed|Hover, rarely defined) draws pressed, not hover: stripping flags by bit value
-        /// dropped Pressed first, and a pressed button never showed it was pressed. Disabled
-        /// DOMINATES: with interaction flags set it takes its own drawable first, so a disabled
-        /// control never lights up under the mouse and reads as clickable.
+        /// (Pressed|Hover, rarely defined) draws pressed, not hover. Disabled dominates: with
+        /// interaction flags set it takes its own drawable first, so a disabled control never
+        /// lights up under the mouse and looks clickable.
         [[nodiscard]] Drawable* Get(ControlState state) const
         {
             const u32 key = static_cast<u32>(state);

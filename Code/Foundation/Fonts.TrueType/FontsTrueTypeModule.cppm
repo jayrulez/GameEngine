@@ -4,10 +4,9 @@
 // Foundation::Fonts.TrueType - the `foundation.fonts.truetype` module.
 //
 // TrueType/OpenType backend over stb_truetype: a TrueTypeFont (IFont), a
-// stb-packed TrueTypeFontAtlas (IFontAtlas), the matching parser + atlas baker,
+// stb-packed TrueTypeFontAtlas (IFontAtlas), the matching parser and atlas baker,
 // a text shaper, the registration helper (TrueTypeFonts), and a VFS-aware
-// IFontService. Ported from Sedulous.Fonts.TTF - its own library, matching
-// Sedulous. One named module composed of partitions.
+// IFontService. One named module composed of partitions.
 
 export module foundation.fonts.truetype;
 

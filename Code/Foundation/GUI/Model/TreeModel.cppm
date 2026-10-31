@@ -3,19 +3,18 @@
 
 // GUI - :tree_model partition
 //
-// TreeModel: a concrete hierarchical Model - nodes with a text label and children. Modeled on
-// eepp's tree models (role only). Nodes are stored in a flat array; a ModelIndex's InternalId
-// is the node's array index, which the tree methods (Index / ParentIndex / RowCount(parent) /
-// HasChildren) use to navigate. A removed node keeps its slot (it is detached, not erased), so
-// node ids stay stable and a view keeps selection and expansion by id. Each edit tells the
-// views the rows it touched under their parent.
+// TreeModel: a concrete hierarchical Model of nodes with a text label and children. Nodes are
+// stored in a flat array; a ModelIndex's InternalId is the node's array index, which the tree
+// methods (Index, ParentIndex, RowCount(parent), HasChildren) use to navigate. A removed node keeps
+// its slot (it is detached, not erased), so node ids stay stable and a view keeps selection and
+// expansion by id. Each edit tells the views which rows it touched under which parent.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:tree_model;
 
-import foundation.core; // Array, String, StringView, i32, i64
+import foundation.core;
 import :variant;
 import :model_index;
 import :model;
@@ -25,8 +24,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// TreeModel::kRoot, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// TreeModel::kRoot, at namespace scope so another library can read it (MSVC does not export
+    /// a class's static constexpr member from a shared library).
     inline constexpr i32 kTreeModelRoot = -1;
 
     class TreeModel : public IModel
@@ -36,7 +35,7 @@ export namespace foundation::gui
 
         TreeModel() = default;
 
-        // Add a node under `parentId` (kRoot for a top level node); returns the new node's id.
+        // Adds a node under `parentId` (kRoot for a top-level node) and returns the new node's id.
         i32 AddNode(i32 parentId, core::StringView text)
         {
             const i32 id = static_cast<i32>(m_nodes.Size());
@@ -46,7 +45,7 @@ export namespace foundation::gui
             NotifyRowsInserted(IndexOfNode(parentId), static_cast<i32>(siblings.Size()) - 1, 1);
             return id;
         }
-        /// Removes a node and what is under it (their ids are not reused).
+        /// Removes a node and its descendants. Their ids are not reused.
         void RemoveNode(i32 nodeId)
         {
             if (!IsLive(nodeId))
@@ -66,7 +65,8 @@ export namespace foundation::gui
             m_nodes[static_cast<usize>(nodeId)].Text = core::String(text);
             NotifyRowsChanged(IndexOfNode(m_nodes[static_cast<usize>(nodeId)].Parent), RowOf(nodeId), 1);
         }
-        /// A node's icon: its image's source, and a class on it a sheet styles (empty: none).
+        /// Sets a node's icon: the image's source, and a class on the image for a sheet to style.
+        /// An empty source means no icon.
         void SetIcon(i32 nodeId, core::StringView source, core::StringView iconClass = {})
         {
             if (!IsLive(nodeId))
@@ -75,8 +75,8 @@ export namespace foundation::gui
             m_nodes[static_cast<usize>(nodeId)].IconClass = core::String(iconClass);
             NotifyRowsChanged(IndexOfNode(m_nodes[static_cast<usize>(nodeId)].Parent), RowOf(nodeId), 1);
         }
-        /// Moves a node (with what is under it) under `parentId` at `row` (past the end: last).
-        /// False when that would put it inside itself.
+        /// Moves a node and its descendants under `parentId` at `row` (a row past the end makes it
+        /// the last child). Returns false when that would put the node inside itself.
         bool MoveNode(i32 nodeId, i32 parentId, usize row)
         {
             if (!IsLive(nodeId) || (parentId != kRoot && !IsLive(parentId)) || IsWithin(parentId, nodeId))
@@ -89,9 +89,9 @@ export namespace foundation::gui
             return true;
         }
 
-        // === Drops (E7) ===
-        // Its own nodes move: onto a node (its last child) or beside one; never inside themselves.
-        // `text` comes in as a new node.
+        // === Drops ===
+        // This model's own nodes move onto a node (becoming its last child) or beside one, but never
+        // inside themselves. Dropped `text` comes in as a new node.
         [[nodiscard]] DropEffect CanDrop(const ModelDrop& drop, core::String& reason) const override
         {
             const i32 parent = DropParent(drop);
@@ -103,7 +103,7 @@ export namespace foundation::gui
                         reason = core::String(u8"A node cannot go inside itself");
                         return DropEffect::None;
                     }
-                return DropEffect::Move; // a tree moves its nodes (copying a subtree is not taken)
+                return DropEffect::Move; // a tree moves its nodes; it does not copy subtrees
             }
             if (drop.Payload != nullptr && drop.Payload->Type.AsView() == core::StringView(u8"text"))
                 return DropEffect::Copy;
@@ -126,7 +126,8 @@ export namespace foundation::gui
             for (ItemId id : drop.Ids)
             {
                 const i32 node = static_cast<i32>(id);
-                // A node moving down within its own parent: the row past it shifts back by one.
+                // When a node moves down within its own parent, the target row shifts back by one
+                // once the node is taken out.
                 const Array<i32>& siblings = parent == kRoot ? m_roots : m_nodes[static_cast<usize>(parent)].Children;
                 for (usize i = 0; i < siblings.Size() && i < row; ++i)
                     if (siblings[i] == node)
@@ -216,8 +217,8 @@ export namespace foundation::gui
         struct Node
         {
             core::String Text;
-            core::String Icon;      // its image's source, or none
-            core::String IconClass; // a class on that image
+            core::String Icon;      // the icon image's source, or empty for none
+            core::String IconClass; // a class on the icon image
             i32 Parent = kRoot;
             Array<i32> Children;
             bool Removed = false; // detached: its slot kept so ids stay stable
@@ -284,7 +285,8 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        // The node a drop goes under: onto a node, that node; beside one, its parent.
+        // The node a drop goes under: the node itself for a drop onto it, its parent for a drop
+        // beside it.
         [[nodiscard]] i32 DropParent(const ModelDrop& drop) const
         {
             if (!drop.Index.IsValid())

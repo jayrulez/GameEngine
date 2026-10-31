@@ -1,4 +1,4 @@
-# Foundation::UI unit tests (doctest) - faithful ports of Sedulous.UI.Tests, added as each subsystem lands.
+# Foundation::UI unit tests (doctest).
 add_executable(UI.Tests
     TestsMain.cpp
     ThicknessTests.cpp

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ComboBoxTests.bf (faithful). Beef get/set props -> methods
-// (cb->SetSelectedIndex / SelectedIndex()); item/selection/event logic only - no popup, no font.
+// ComboBox tests: item, selection and event logic only (no popup, no font).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

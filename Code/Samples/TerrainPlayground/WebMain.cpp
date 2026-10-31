@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WebMain.cpp - the BROWSER entry for TerrainPlayground (see TerrainPlaygroundApp.h - the shared
-// terrain showcase). Web platform trio: WebShell + WebGPU + the requestAnimationFrame runner via
-// APP_MAIN's web body. The cooked WGSL shaders.dpak + this sample's preload wiring live in
-// CMakeLists (the sample BUNDLES its shader pack - the browser has no compiler).
+// WebMain.cpp: the browser entry for TerrainPlayground; the shared terrain showcase is in
+// TerrainPlaygroundApp.h. APP_MAIN's web body provides WebShell, WebGPU and the
+// requestAnimationFrame runner. The cooked WGSL shaders.dpak and this sample's preload wiring are
+// in CMakeLists.txt: the sample bundles its shader pack because the browser has no compiler.
 
 #include "Core/Prelude.h"
-// imgui.h must be TEXTUALLY included before `import extensions.imgui` - gcc does not merge the
-// module's global-module-fragment declarations into a LATER textual include (clang does), so
-// include-first is the portable order.
+// imgui.h must be textually included before `import extensions.imgui`: gcc does not merge the
+// module's global-module-fragment declarations into a later textual include (clang does), so
+// including it first is the portable order.
 #include "imgui.h"
 
 import foundation.core;
@@ -17,8 +17,8 @@ import foundation.rhi;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.shell;
-import foundation.runtime.web; // RunApplication (browser runner) - required by APP_MAIN
-import foundation.shell.web;   // WebShell - required by APP_MAIN
+import foundation.runtime.web; // RunApplication (the browser runner), required by APP_MAIN
+import foundation.shell.web;   // WebShell, required by APP_MAIN
 import foundation.graphics;
 import foundation.graphics.gpu;
 import engine.defaultapp;

@@ -99,7 +99,7 @@ TEST_CASE("manager-driven lifecycle: create immediately, init deferred, destroy 
     mgr.Add(E(0));
     mgr.Add(E(1));
     CHECK(mgr.created == 2);
-    CHECK(mgr.initialized == 0); // not yet - deferred
+    CHECK(mgr.initialized == 0); // not yet: deferred
 
     mgr.InitializePendingComponents();
     CHECK(mgr.initialized == 2);
@@ -129,11 +129,10 @@ TEST_CASE("component type id is stable + distinct per component type")
     CHECK(mgr.ComponentType() != manaMgr.ComponentType());
 }
 
-// The scene-side resolve for `entity.get(Type)` (game-ready-scripting P-A1): resolve the manager
-// by the component's reflected type, then re-resolve the LIVE component on every access. This is
-// the load-bearing safety property (Fable Correction 1): a re-resolving handle survives the pool's
-// swap-remove, where a cached (borrow) component address would go stale or, worse, point at a
-// different entity's component.
+// The scene-side resolve for `entity.get(Type)`: resolve the manager by the component's
+// reflected type, then re-resolve the live component on every access. That is what keeps it
+// safe: a re-resolving handle survives the pool's swap-remove, where a cached (borrowed)
+// component address would go stale or even point at a different entity's component.
 TEST_CASE("scene: FindManagerByComponentType + re-resolution survives swap-remove / growth "
           "(entity.get safety, Correction 1)")
 {
@@ -149,29 +148,29 @@ TEST_CASE("scene: FindManagerByComponentType + re-resolution survives swap-remov
     // Resolve the manager by the component's reflected type (the entity.get type token).
     ComponentManagerBase* found = scene.FindManagerByComponentType(TypeOf<Health>());
     REQUIRE(found == static_cast<ComponentManagerBase*>(mgr));
-    CHECK(scene.FindManagerByComponentType(TypeOf<int>()) == nullptr); // no manager -> null
+    CHECK(scene.FindManagerByComponentType(TypeOf<int>()) == nullptr); // no manager, null
 
-    // Shared-libraries identity rule: a CLONE of the TypeInfo (another library's copy -
-    // same id, different address) must route to the same manager.
+    // Shared-library identity: a clone of the TypeInfo (another library's copy, same id,
+    // different address) must route to the same manager.
     const TypeInfo dupHealth = TypeOf<Health>();
     CHECK(scene.FindManagerByComponentType(dupHealth) == found);
 
-    // Cache e2's CURRENT component address - what a borrow handle would keep.
+    // Cache e2's current component address, which is what a borrowing handle would keep.
     Instance before = found->GetComponentInstance(e2);
     REQUIRE(before.Pointer() != nullptr);
     void* staleAddr = before.Pointer();
     CHECK(static_cast<Health*>(before.Pointer())->value == doctest::Approx(30.0f));
 
-    // Remove ANOTHER entity's component: swap-remove moves e2's component within the dense pool.
+    // Remove another entity's component: swap-remove moves e2's component within the dense pool.
     mgr->RemoveComponent(e1);
 
-    // Re-resolution (what entity.get does per access) still finds e2's REAL component...
+    // Re-resolution (what entity.get does per access) still finds e2's real component...
     Instance after = found->GetComponentInstance(e2);
     REQUIRE(after.Pointer() != nullptr);
     CHECK(static_cast<Health*>(after.Pointer())->value == doctest::Approx(30.0f));
-    CHECK(after.Pointer() != staleAddr); // ...and it moved - the cached borrow would be wrong
+    CHECK(after.Pointer() != staleAddr); // ...and it moved, so the cached borrow would be wrong
 
-    // Pool growth (realloc) - re-resolution still correct.
+    // Pool growth (realloc): re-resolution still correct.
     for (int i = 0; i < 32; ++i)
     {
         mgr->Add(scene.CreateEntity(u8"filler")).value = 1.0f;
@@ -180,14 +179,14 @@ TEST_CASE("scene: FindManagerByComponentType + re-resolution survives swap-remov
     REQUIRE(grown.Pointer() != nullptr);
     CHECK(static_cast<Health*>(grown.Pointer())->value == doctest::Approx(30.0f));
 
-    // Component removed -> re-resolution is a clean empty Instance (null-op, no crash).
+    // Component removed: re-resolution is a clean empty Instance (no-op, no crash).
     mgr->RemoveComponent(e2);
     CHECK(found->GetComponentInstance(e2).Pointer() == nullptr);
 }
 
 // The full entity.get(Type) resolver: MakeComponentRef packages {scene, entity, manager} into a
-// RESOLVE-mode Variant, so ToInstance() (what a script get/set/call goes through) recomputes the
-// live component address every time - connecting FindManagerByComponentType + Variant RESOLVE mode.
+// resolve-mode Variant, so ToInstance() (what a script get/set/call goes through) recomputes the
+// live component address every time, joining FindManagerByComponentType and Variant resolve mode.
 TEST_CASE("scene: MakeComponentRef gives a RESOLVE Variant that re-resolves the live component")
 {
     Scene scene(DefaultAllocator(), u8"ref");
@@ -208,14 +207,14 @@ TEST_CASE("scene: MakeComponentRef gives a RESOLVE Variant that re-resolves the 
     CHECK(static_cast<Health*>(i0.Pointer())->value == doctest::Approx(22.0f));
     void* stale = i0.Pointer();
 
-    // Swap-remove e0 moves e1's component; the SAME ref re-resolves to the moved component.
+    // Swap-remove e0 moves e1's component; the same ref re-resolves to the moved component.
     mgr->RemoveComponent(e0);
     Instance i1 = ToInstance(ref);
     REQUIRE(i1.Pointer() != nullptr);
     CHECK(static_cast<Health*>(i1.Pointer())->value == doctest::Approx(22.0f));
     CHECK(i1.Pointer() != stale);
 
-    // Component removed -> the ref resolves to empty (a script get/set/call no-ops).
+    // Component removed: the ref resolves to empty (a script get/set/call no-ops).
     mgr->RemoveComponent(e1);
     CHECK(ToInstance(ref).Pointer() == nullptr);
 }

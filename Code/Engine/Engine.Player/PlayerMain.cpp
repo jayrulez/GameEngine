@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine.Player - the generic game runner.
+// Engine.Player: the generic game runner.
 //
-// Runs a project with ZERO native game code: engine subsystems + the project's content +
-// the default scene, simulating - and, when the manifest names one, the project's GAME SCRIPT
-// (the scripted IApplication counterpart: a `Game` class in AngelScript OR Luau with
-// launch/update(dt)/exit, orchestrating above scenes - the backend resolves by the script's
-// language). With scripting, player + scripts + cooked content IS the game; projects that outgrow
-// scripts graduate to a native IApplication at the same seam.
+// Runs a project with no native game code: engine subsystems, the project's content and the
+// default scene, simulating, and, when the manifest names one, the project's game script (the
+// scripted IApplication counterpart: a `Game` class in AngelScript or Luau with
+// launch/update(dt)/exit, orchestrating above scenes; the backend resolves by the script's
+// language). With scripting, the player, scripts and cooked content are the game; projects that
+// outgrow scripts move to a native IApplication at the same point.
 //
-// This is the DESKTOP boot, built as the Engine.Player.Main LIBRARY (launcher-as-library,
-// game-native-code.md N1): Main.cpp is the thin dev stub, and the exporter's generated ship
-// stub calls PlayerMain with the game's static plugin. The browser sibling is WebMain.cpp;
-// both share PlayerApplication.h.
+// This is the desktop boot, built as the Engine.Player.Main library: Main.cpp is the thin dev
+// stub, and ShipMain.cpp, the ship stub, calls PlayerMain with the game's static plugin. The
+// browser sibling is WebMain.cpp; both share PlayerApplication.h.
 //
 // Usage: Engine.Player <projectDir> [--scene <source-db-path>] [--exit-after <seconds>]
 //                      [--profile-capture <seconds>] [--profile-overlay]
@@ -22,12 +21,12 @@
 //                       [--screenshot-count N] [--screenshot-exit]]
 //
 // Two modes, detected by layout:
-//   PROJECT dir (Project.xml): scenes load from the authored source DB (their cooked form IS
-//     the authored form - scenes are builder-less by design), products resolve from Cooked/ -
-//     the editor's own runtime path. The dev loop.
-//   DIST dir (Content.pak + player.xml, staged by Tools.Export): ONE binary DB inside the pak
-//     holds products AND scenes; the game script rides in the pak as a raw entry. Zero editor
-//     code links into this binary - the shipping shape.
+//   Project dir (Project.xml): scenes load from the authored source DB (their cooked form is
+//     the authored form; scenes have no builder), and products resolve from Cooked/, the
+//     editor's own runtime path. The dev loop.
+//   Dist dir (Content.pak and player.xml, staged by Tools.Export): one binary DB inside the pak
+//     holds products and scenes; the game script rides in the pak as a raw entry. No editor
+//     code links into this binary: the shipping shape.
 
 module;
 
@@ -95,8 +94,8 @@ import foundation.gui;           // the GUI's nodes and data (the splash's progr
 import foundation.gui.resources; // GuiDocument (the GUI loading screen)
 import foundation.xml.serialization;
 import foundation.settings;
-import engine.project; // manifest + layout (runtime-side, editor-free)
-import foundation.vfs.pak; // dist mode: one Content.pak holds products + scenes + scripts
+import engine.project; // manifest and layout (runtime-side, editor-free)
+import foundation.vfs.pak; // dist mode: one Content.pak holds products, scenes and scripts
 
 #include "PlayerApplication.h" // the shared runner (uses the imports above)
 
@@ -112,7 +111,7 @@ extern "C" const char* BuildStamp();
 int engine::player::PlayerMain(int argc, char** argv,
                                foundation::runtime::IRuntimePlugin* nativeGame)
 {
-    // --version: report engine version + build identity and exit, before any startup work.
+    // --version: report the engine version and build identity and exit, before any startup work.
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--version") == 0)
@@ -140,7 +139,7 @@ int engine::player::PlayerMain(int argc, char** argv,
     }
     else
     {
-        // No path given: behave like a distributed game binary - the game is wherever we are.
+        // No path given: behave like a distributed game binary, whose game is wherever it is.
         // Try the current directory, then the executable's own directory (double-click /
         // run-from-anywhere), then the dev default.
         namespace fs = std::filesystem;
@@ -219,9 +218,10 @@ int engine::player::PlayerMain(int argc, char** argv,
         return 1;
     }
 
-    // Backend from the CLI (--vulkan default / --webgpu / --dx12), so the desktop player can drive the
-    // SAME WebGPU backend the browser uses - with the DXC runtime compiler + shader hot-reload present,
-    // which the web build lacks. Invaluable for debugging web-render issues without the wasm/export loop.
+    // The backend comes from the command line (--vulkan, the default, --webgpu or --dx12), so the
+    // desktop player can drive the same WebGPU backend the browser uses, with the DXC runtime
+    // compiler and shader hot-reload the web build lacks. This debugs web rendering without the
+    // wasm and export loop.
     // Validation follows the build config unless --gpu-validation / --no-gpu-validation says
     // otherwise, as in the editor, so their frame times compare.
     graphics::GraphicsDeviceDesc gdd = graphics::DeviceDescFromArguments(argc, argv);
@@ -232,8 +232,8 @@ int engine::player::PlayerMain(int argc, char** argv,
         return 1;
     }
 
-    // The statically-provided native game plugin (ship stubs); consumed at the host
-    // seam in N2 - carried on the options so dev and ship converge on one path.
+    // The statically-provided native game plugin (ship stubs), carried on the options so dev
+    // and ship builds converge on one path.
     options.nativeGame = nativeGame;
 
     PlayerApplication app(static_cast<PlayerOptions&&>(options));
@@ -241,7 +241,7 @@ int engine::player::PlayerMain(int argc, char** argv,
     // from the executable (a dist stages Data/ beside the player). Resolved in Configure.
     app.SetDataRoot(foundation::vfs::DataRootFromArguments(argc, argv).AsView());
     app.OnCommandLine(argc, argv); // the base app's flags (--screenshot ...)
-    app.SetExitAfterSeconds(exitAfterSeconds); // was parsed and never applied before
+    app.SetExitAfterSeconds(exitAfterSeconds); // --exit-after
 #if BUILD_PROFILING
     // --profile-capture <seconds>: a capture from the start, to <user-data>/profiles.
     if (profileCaptureSeconds > 0.0)

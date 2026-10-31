@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Regression: the "property-field" style class (the editor sizes property-grid fields through
-// it) must reach the NumericFields INSIDE every toolkit property editor. Float3Editor & friends
-// have their own nested field subclasses - a field created without the class silently keeps the
-// theme's default size (the "labels shrank but the numbers didn't" bug).
+// The "property-field" style class (the editor sizes property-grid fields through it) reaches the
+// NumericFields inside every toolkit property editor. Float3Editor and the other vector editors
+// have their own nested field subclasses, and a field created without the class would silently
+// keep the theme's default size.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

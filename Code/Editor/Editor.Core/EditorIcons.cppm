@@ -2,12 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Core - :editor_icons partition.
 //
-// A type's icon (Documentation/Specs/editor-gui.md, 3.2; catalog 2.7), found by asking the type,
-// never from a list of type names: the icon named after it (Editor/Icons/Types/<Name>.svg), else
-// its base's, up the chain, else a generic one the caller names (Component, Asset). Its tint is a
-// class a sheet styles, from the category the type declares (the reflected `category` attribute,
-// its own or its nearest base's): "Rendering" is `cat-rendering`. A type with no category keeps
-// the plain icon colour.
+// A type's icon, found by asking the type rather than from a list of type names: the icon named
+// after it (Editor/Icons/Types/<Name>.svg), else its base's, up the chain, else a generic one the
+// caller names (Component, Asset). Its tint is a class a sheet styles, derived from the category
+// the type declares (the reflected `category` attribute, its own or its nearest base's):
+// "Rendering" becomes `cat-rendering`. A type with no category keeps the plain icon colour.
 module;
 #include "Core/Prelude.h"
 
@@ -38,8 +37,8 @@ export namespace editor
         {
         }
 
-        /// The icon of `type`: its own, else its nearest base's, else `fallback`'s (a generic
-        /// type name: Component, Asset), else none; its class from the nearest category.
+        /// The icon of `type`: its own, else its nearest base's, else `fallback`'s (a generic type
+        /// name such as Component or Asset), else none. Its class comes from the nearest category.
         [[nodiscard]] TypeIcon For(const TypeInfo& type, StringView fallback)
         {
             const u64 key = reinterpret_cast<u64>(&type) ^ Hash<StringView>{}(fallback);
@@ -70,8 +69,8 @@ export namespace editor
         /// Forgets what it found (the icon files changed on disk).
         void Forget() { m_cache.Clear(); }
 
-        /// The class a category tints by: "cat-" and its letters and digits in lower case
-        /// ("Rendering": cat-rendering; "Visual Effects": cat-visualeffects).
+        /// The class a category tints by: "cat-" followed by its letters and digits in lower case
+        /// ("Rendering" becomes cat-rendering; "Visual Effects" becomes cat-visualeffects).
         [[nodiscard]] static String CategoryClass(StringView category)
         {
             String out(u8"cat-");
@@ -95,6 +94,6 @@ export namespace editor
         }
 
         Function<bool(StringView)> m_exists;
-        HashMap<u64, TypeIcon> m_cache; // by the type (and the fallback asked with it)
+        HashMap<u64, TypeIcon> m_cache; // keyed by the type and the fallback asked with it
     };
 }

@@ -38,7 +38,7 @@ namespace gui = foundation::gui;
 
 namespace editor
 {
-    // Per-asset mesh-preview prefs: {assetGuid -> preview-material guid} - a section in the
+    // Per-asset mesh-preview prefs (asset guid -> preview-material guid): a section in the
     // per-project editor-settings store, so a reopened mesh viewer restores its preview material.
     struct MeshPreviewPref
     {
@@ -71,8 +71,8 @@ namespace editor
 
     namespace
     {
-        // A stat line as a row: "Vertices: 1200" its name and value, "  [2] material 1 | 90
-        // indices" a submesh's, "  LOD 1: 400 triangles | ..." a level's.
+        // Splits a stat line into a row's name and value: "Vertices: 1200", a submesh's
+        // "  [2] material 1 | 90 indices", or a level's "  LOD 1: 400 triangles | ...".
         void SplitStat(StringView line, String& name, String& value)
         {
             usize start = 0;
@@ -133,7 +133,7 @@ namespace editor
             m_materialSlot->SetOnDropped([self](const Guid& dropped) { self->SetPreviewMaterial(dropped); });
             m_pane->AddControl(*m_materialSlot);
 
-            // A chain's level of detail: the one the game would choose, or one held.
+            // A chain's level of detail: the one the game would choose, or a fixed one.
             m_lod = MakeRef<gui::ComboBox>(Allocator());
             m_lod->AddClass(u8"preview-lod");
             m_lod->SetTooltip(u8"The level of detail the preview draws: Auto is the one the game would choose");
@@ -264,7 +264,7 @@ namespace editor
             lines.PushBack(
                 Format(u8"  [{}] material {}  |  {} indices", i, sm.materialIndex, sm.indexCount));
         }
-        // The LOD chain: per-level triangle totals + switch thresholds.
+        // The LOD chain: per-level triangle totals and switch thresholds.
         if (mesh.lodCount > 1)
         {
             lines.PushBack(Format(u8"LOD levels: {}", mesh.lodCount));
@@ -305,8 +305,8 @@ namespace editor
         app::AssetObjectPage::OnUpdate(host, dt);
         if (m_pane)
             m_pane->Update(dt);
-        // Product resolve / hot-reload watchdog: when the bound product first appears (cook) or
-        // its identity changes (re-cook), re-point the component + reframe + refresh stats.
+        // Product resolve and hot-reload watch: when the bound product first appears (a cook) or
+        // its identity changes (a re-cook), re-point the component, reframe and refresh the stats.
         const u64 uid = m_meshProxy ? m_meshProxy->uid : 0;
         if (uid != m_lastUid)
         {
@@ -329,7 +329,7 @@ namespace editor
         if (mesh != nullptr)
             mc->mesh = mesh; // direct override to the cooked product (Ref raw-assign AddRefs)
         else
-            mc->mesh.SetDirect(RefPtr<geometry::StaticMesh>{}); // not cooked yet - clear
+            mc->mesh.SetDirect(RefPtr<geometry::StaticMesh>{}); // not cooked yet: clear
         mc->forceLod = m_previewForceLod; // the LOD choice drives the real knob
         ApplyPreviewMaterial();
     }

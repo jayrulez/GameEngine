@@ -4,11 +4,11 @@
 // Render - :bind_group_cache partition
 //
 // The passes build a bind group over this frame's transient textures and keep it while the same
-// textures come back. A group is only still right while EVERY view it binds is the same view of
-// the same texture: the render graph's pool hands transients out per frame, and a pooled view can
-// return over another texture (its generation tells). A cache that checked only some of them kept
-// another frame's inputs bound: TAA kept frame 0's motion vectors behind one of its two history
-// textures, and the player's edges flickered every other frame (2026-10-02).
+// textures come back. A group stays valid only while every view it binds is the same view of the
+// same texture: the render graph's pool hands transients out per frame, and a pooled view can
+// return over another texture (its generation tells). A cache that checks only some inputs keeps
+// another frame's textures bound, for example a stale motion-vector buffer behind one of TAA's
+// two history textures, which shows as edges flickering every other frame.
 
 module;
 #include "Core/Prelude.h"

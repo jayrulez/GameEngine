@@ -1,6 +1,6 @@
-# Tools.Editor - the editor executable (assembly of editor.app + the
+# Tools.Editor - the editor executable (editor.app assembled with the
 # per-subsystem editor plugin modules).
-# The EMBEDDED fallback font: Roboto baked into the exe as a byte array, so a relocated
+# The embedded fallback font: Roboto baked into the exe as a byte array, so a relocated
 # editor always has a face even when every disk path fails (settings path, dev-tree path).
 set(_embedded_font_src "${CMAKE_CURRENT_BINARY_DIR}/EmbeddedEditorFont.cpp")
 add_custom_command(
@@ -15,40 +15,39 @@ add_custom_command(
     COMMENT "Embedding the editor fallback font")
 
 add_executable(Tools.Editor Main.cpp "${_embedded_font_src}")
-# The pages are parked while the editor moves onto the GUI (Documentation/Specs/editor-gui.md, 4.1):
-# each Editor:: page library comes back here with its port.
+# The editor's libraries, each Editor:: page library among them.
 target_link_libraries(Tools.Editor PRIVATE
     Foundation::Core
     Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop
     Foundation::Shell Foundation::Graphics Foundation::Graphics.Gpu
     Engine::Scene Engine::Render Engine::Animation Engine::Particles
-    Engine::Composition # RegisterAllScriptFacades: the COMPLETE engine facade surface the cook
-                          # AND live validation compile against (run/ui/physics/audio/... facades)
+    Engine::Composition # RegisterAllScriptFacades: the complete engine facade surface the cook
+                          # and live validation compile against (run/ui/physics/audio/... facades)
     Editor::Core Editor::App Editor::Navigation
-    Editor::Scene # the scene page (its hierarchy and inspector come with their layers)
+    Editor::Scene # the scene page, its hierarchy and inspector
     Editor::Play # the Game tabs and the PIE tools
     Editor::Spline # the scene view's spline tool
     Editor::Terrain # the scene view's terrain brushes
-    Editor::Vegetation # and the vegetation's
+    Editor::Vegetation # the scene view's vegetation brush
     Editor::Generic # the fallback asset page
-    Editor::Image Editor::Heightfield Editor::Texture Editor::Fonts Editor::Geometry Editor::Physics Editor::Materials Editor::Render Editor::Audio Editor::Input Editor::Script Editor::Shaders Editor::GUI Editor::Particles Editor::Animation # the asset pages, as they port (X6)
+    Editor::Image Editor::Heightfield Editor::Texture Editor::Fonts Editor::Geometry Editor::Physics Editor::Materials Editor::Render Editor::Audio Editor::Input Editor::Script Editor::Shaders Editor::GUI Editor::Particles Editor::Animation # the asset pages
     Pipeline::Core Pipeline::Cook
     Pipeline::Registration # the composition root: every builder/importer/type registration
     Foundation::Resource Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Texture.Resource
     Pipeline::Texture Pipeline::Fonts Pipeline::Image Pipeline::Geometry
     Pipeline::Animation Pipeline::Materials Pipeline::Shaders
     Pipeline::Particles Foundation::Input Foundation::Input.Resource Pipeline::Input Engine::Input Foundation::Physics Foundation::Physics.Resource Pipeline::Physics Engine::Physics Pipeline::Navigation Engine::Navigation Foundation::Navigation.Resource Foundation::Audio Foundation::Audio.Resource Pipeline::Audio Engine::Audio
-    # Script backends + cooks (angelscript | luau) come transitively from Pipeline::Registration.
+    # Script backends and cooks (AngelScript, Luau) come transitively from Pipeline::Registration.
     Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Pipeline::Script Engine::Script Pipeline::ModelImporter Foundation::Image.Resource
     Foundation::Animation.Resource)
-# Stage the editor's runtime deps beside it + emit Tools.Editor.runtime-libs (the editor packaging
+# Stage the editor's runtime deps beside it and emit Tools.Editor.runtime-libs (the editor packaging
 # script reads that list for its sidecars). SDL3 rides in as EXTRA (a no-op when unset, e.g. Linux).
-# DXC (libdxcompiler.so / dxcompiler.dll) is dlopen'd at runtime by the shader COOK: the editor
+# DXC (libdxcompiler.so / dxcompiler.dll) is dlopen'd at runtime by the shader cook: the editor
 # authors and recompiles shaders, so unlike a shipped game player it needs DXC present, and it is not
 # a link dependency so it must be staged explicitly. On Linux, $ORIGIN on the RUNPATH lets a relocated
 # dist find DXC beside the exe (Windows searches the exe dir for a bare DLL by default).
-# wgpu-native is a dlopen dependency with the SAME shape as DXC: the --webgpu backend resolves
-# the bare soname via $ORIGIN in a relocated dist, so it must be staged too - without it a dist
+# wgpu-native is a dlopen dependency shaped like DXC: the --webgpu backend resolves the bare
+# soname through $ORIGIN in a relocated dist, so it must be staged too; without it a dist
 # launched with --webgpu renders nothing.
 # The third-party notices ride along (cmake/ThirdPartyNotices.cmake).
 util_copy_runtime_deps(Tools.Editor EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB}

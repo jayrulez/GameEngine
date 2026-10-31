@@ -285,7 +285,7 @@ TEST_CASE("dds: a DX10 BC7 sRGB file with a mip chain round-trips through WriteD
         CHECK(p.b == 51);
         CHECK(p.a == 255);
     }
-    // A DX10 header that names the NON-sRGB twin is a linear fact, not a guess.
+    // A DX10 header that names the non-sRGB twin is a linear fact, not a guess.
     src.format = DdsFormat::BC7;
     REQUIRE(WriteDds(src, file).IsOk());
     REQUIRE(LoadDds(Span<const u8>(file.Data(), file.Size()), dds).IsOk());
@@ -425,8 +425,8 @@ TEST_CASE("dds: LoadDdsAsImage is level 0 of layer 0")
 TEST_CASE("dds: ParseDdsHeader reads the facts from the first bytes alone; ReadDdsHeader reads only the header from a file")
 {
     // An importer classifies a texture by its header (BC5 = normal, BC4 = mask, HDR = sky, a
-    // DX10 colour space). It must not need the payload: the model importer used to LoadDds
-    // every file whole to learn this (2026-09-23).
+    // DX10 colour space). It must not need the payload, so it never has to load every file
+    // whole to learn this.
     DdsImage source;
     source.width = 16;
     source.height = 8;

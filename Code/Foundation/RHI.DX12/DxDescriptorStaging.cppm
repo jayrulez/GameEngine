@@ -2,8 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Bump-allocating staging region within a GPU-visible descriptor heap.
-/// Copies bind group descriptors from CPU heap into GPU heap at bind time.
-/// Ported from Sedulous.RHI.DX12/DX12DescriptorStaging.bf.
+/// Copies bind group descriptors from the CPU heap into the GPU heap at bind time.
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +37,7 @@ export namespace foundation::rhi::dx12
             m_capacity = initialCapacity;
         }
 
-        /// Copies `count` descriptors from `srcOffset` in CPU heap into GPU staging.
+        /// Copies `count` descriptors from `srcOffset` in the CPU heap into GPU staging.
         /// Returns the staging offset in the GPU heap, or -1 on failure.
         /// Identical (srcOffset, count) runs staged earlier this cycle are deduplicated:
         /// bind groups are immutable after creation, so re-binding the same group per draw
@@ -48,7 +47,7 @@ export namespace foundation::rhi::dx12
             if (count == 0)
                 return -1;
 
-            // Dedup: already staged this cycle?
+            // Dedup: reuse a run already staged this cycle.
             for (const auto& e : m_staged)
             {
                 if (e.srcOffset == srcOffset && e.count == count)
@@ -67,7 +66,7 @@ export namespace foundation::rhi::dx12
                 m_current = 0;
             }
 
-            // Grow if needed: retire current block, allocate bigger.
+            // Grow if needed: retire the current block and allocate a bigger one.
             if (m_current + count > m_capacity)
             {
                 u32 newCap = std::max(m_capacity * 2, m_current + count);
@@ -92,7 +91,7 @@ export namespace foundation::rhi::dx12
             return static_cast<i32>(dstOffset);
         }
 
-        /// Resets bump pointer. Called when command pool resets after fence wait.
+        /// Resets the bump pointer. Called when the command pool resets after its fence wait.
         void Reset()
         {
             m_current = 0;
@@ -132,9 +131,9 @@ export namespace foundation::rhi::dx12
         // Bound on the dedup cache's linear scan; runs beyond it stage without caching.
         static constexpr usize kMaxDedupEntries = 256;
 
-        // A silent staging failure leaves the previous root descriptor table bound -
+        // A silent staging failure leaves the previous root descriptor table bound, and
         // draws then sample stale (or later, recycled) descriptors: flickering at best,
-        // a device hang at worst. Scream once per cycle so exhaustion is never silent.
+        // a device hang at worst. Log once per cycle so exhaustion is never silent.
         void logExhausted()
         {
             if (m_failLogged)

@@ -6,9 +6,9 @@
 // Function<R(Args...)>: a move-only, type-erased callable (the engine's delegate
 // type). Holds a function pointer, a lambda (with captures), or any callable.
 // Small callables live inline (small-buffer optimization); larger ones fall back
-// to an allocator. No exceptions, no RTTI - invoking an empty Function asserts.
+// to an allocator. No exceptions, no RTTI; invoking an empty Function asserts.
 //
-// Move-only by design: a stored callable need not be copyable, and ownership is
+// Move-only: a stored callable need not be copyable, and ownership is
 // unambiguous. Store it in an Array, pass it to a job, hand it to a render pass.
 
 module;
@@ -155,8 +155,8 @@ export namespace foundation::core
         }
 
         alignas(kInlineAlign) unsigned char m_storage[kInlineSize];
-        void* m_object = nullptr;          // -> &m_storage (inline) or heap
-        IAllocator* m_allocator = nullptr; // non-null => heap allocation owned
+        void* m_object = nullptr;          // points at m_storage (inline) or the heap
+        IAllocator* m_allocator = nullptr; // non-null when it owns a heap allocation
         InvokeFn m_invoke = nullptr;
         MoveFn m_move = nullptr;
         DestroyFn m_destroy = nullptr;

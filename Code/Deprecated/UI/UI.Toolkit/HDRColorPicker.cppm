@@ -3,14 +3,12 @@
 
 // UI Toolkit - :hdr_color_picker partition
 //
-// Interactive HDR-allowed color picker. Mirrors ColorPicker's SV square + hue strip + alpha strip, but the
-// widgets drive a normalized [0,1] LDR color while a separate intensity multiplier scales RGB into HDR.
-// Output is a Float4 (Vector4) with HDR-allowed channels and an alpha clamped to [0,1]. Ported from
-// Sedulous.UI.Toolkit/src/HDRColorPicker.bf (a ViewGroup).
+// Interactive HDR-allowed color picker. It has ColorPicker's SV square, hue strip and alpha strip, but
+// the widgets drive a normalized [0,1] LDR color while a separate intensity multiplier scales RGB into
+// HDR. Output is a Float4 with HDR-allowed channels and an alpha clamped to [0,1].
 //
-// Same inner-class idiom as ColorPicker: public nested SVSquare / HueStripView / AlphaStripView with their
-// OnDraw / UpdateFromMouse defined out-of-line once HDRColorPicker is complete. Beef Vector4 .X/.Y/.Z/.W ->
-// Float4 .x/.y/.z/.w; byte `Color(r,g,b,a)` -> private static Rgb(); float `Color(r,g,b,a)` -> Color{...}.
+// The inner views follow ColorPicker: SVSquare, HueStripView and AlphaStripView are public nested classes
+// whose OnDraw and UpdateFromMouse are defined out of line once HDRColorPicker is complete.
 
 module;
 #include <cmath>
@@ -28,7 +26,7 @@ namespace core = foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Interactive HDR color picker driving a normalized color + separate intensity multiplier.
+    /// Interactive HDR color picker driving a normalized color and a separate intensity multiplier.
     class HDRColorPicker : public ViewGroup
     {
         RTTI_OBJECT(HDRColorPicker, ViewGroup)
@@ -75,9 +73,9 @@ export namespace foundation::ui::toolkit
             DrawChildren(ctx);
         }
 
-        // === HSV + intensity decomposition helpers (ported verbatim) ===
+        // === HSV and intensity decomposition helpers ===
 
-        /// Combine HSV + intensity + alpha into an HDR Float4 (RGB = HSVToRGB(h,s,v) * intensity).
+        /// Combine HSV, intensity and alpha into an HDR Float4 (RGB = HSVToRGB(h,s,v) * intensity).
         [[nodiscard]] static Float4 HSVIToVec4(f32 h, f32 s, f32 v, f32 i, f32 a)
         {
             f32 r, g, b;
@@ -85,7 +83,7 @@ export namespace foundation::ui::toolkit
             return Float4{r * i, g * i, b * i, a};
         }
 
-        /// Decompose an HDR Float4 into HSV + intensity + alpha. Intensity is max(R,G,B); normalized
+        /// Decompose an HDR Float4 into HSV, intensity and alpha. Intensity is max(R,G,B); normalized
         /// color is RGB/intensity. On true black, HSV is left untouched so the SV indicator does not snap.
         static void Vec4ToHSVI(Float4 color, f32& h, f32& s, f32& v, f32& i, f32& a)
         {
@@ -475,7 +473,7 @@ export namespace foundation::ui::toolkit
         Float4 m_originalColor = Float4{1, 1, 1, 1};
         bool m_syncing = false;
 
-        // Inner views - borrowed raw (the child tree owns the RefPtr).
+        // Inner views, borrowed (the child tree owns them).
         SVSquare* m_svSquare = nullptr;
         HueStripView* m_hueStrip = nullptr;
         AlphaStripView* m_alphaStrip = nullptr;

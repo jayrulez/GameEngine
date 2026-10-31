@@ -5,11 +5,12 @@
 ///
 /// Ambient occlusion. Two interchangeable generators feed one shared pipeline:
 ///   - GTAO: Ground-Truth AO (Jimenez horizon integration over screen-space slices).
-///   - SSAO: classic hemisphere-kernel occlusion (Crysis-style), ported from Sedulous.
-/// Both consume the opaque depth + octahedral view-normal (G-buffer), write an R8 AO transient,
-/// then share the SAME depth-aware bilateral blur, the SAME apply pass (multiply into the HDR before
-/// TAA so the resolve stabilizes it), the SAME bind-group cache, and the SAME debug channels. The two
-/// modes are mutually exclusive (AoMode). All targets are render-graph transients (sized per view).
+///   - SSAO: classic hemisphere-kernel occlusion (Crysis-style).
+/// Both read the opaque depth and the octahedral view normal (G-buffer) and write an R8 AO
+/// transient. They share one depth-aware bilateral blur, one apply pass (a multiply into the HDR
+/// before TAA, so the resolve stabilizes it), one bind-group cache and one set of debug channels.
+/// The two modes are mutually exclusive (AoMode). All targets are render-graph transients, sized
+/// per view.
 
 module;
 #include "Core/Prelude.h"
@@ -32,16 +33,16 @@ namespace foundation::render
     Status AoPass::Initialize()
     {
 
-        // Shared bind-group layout: two sampled textures (t0, t1) + a sampler (s0).
+        // Shared bind-group layout: two sampled textures (t0, t1) and a sampler (s0).
         rhi::BindGroupLayoutEntry ge[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
         };
-        // Every AO sub-pass samples with the POINT sampler only, and t0/t1 receive
-        // depth (gtao/ssao/blur) as well as color views across passes - declare the
-        // slots UnfilterableFloat + the sampler non-filtering so WebGPU accepts both
-        // (Vulkan/DX12 ignore the annotations).
+        // Every AO sub-pass samples with the point sampler only, and t0 and t1 receive
+        // depth (gtao, ssao, blur) as well as color views across passes. Declaring the
+        // slots UnfilterableFloat and the sampler non-filtering lets WebGPU accept both
+        // (Vulkan and DX12 ignore the annotations).
         ge[0].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         ge[1].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         ge[2].samplerNonFiltering = true;
@@ -65,9 +66,9 @@ namespace foundation::render
         rhi::SamplerDesc ss{};
         ss.minFilter = rhi::FilterMode::Nearest;
         ss.magFilter = rhi::FilterMode::Nearest;
-        ss.mipmapFilter = rhi::MipmapFilterMode::Nearest; // ALL-nearest: WebGPU counts
-                                                          // a linear mip filter as
-                                                          // "filtering" (default Linear)
+        ss.mipmapFilter = rhi::MipmapFilterMode::Nearest; // all nearest: WebGPU counts
+                                                          // a linear mip filter (the
+                                                          // default) as "filtering"
         ss.addressU = rhi::AddressMode::ClampToEdge;
         ss.addressV = rhi::AddressMode::ClampToEdge;
         ss.addressW = rhi::AddressMode::ClampToEdge;
@@ -100,8 +101,8 @@ namespace foundation::render
         {
             return {};
         }
-        // Hot reload: rebuild all four pipelines when any AO shader changed (GPU idled
-        // on reload; the shared fullscreen/common .hlsli bumps every version at once).
+        // Hot reload: rebuild all four pipelines when any AO shader changed (the GPU is
+        // idle on reload; the shared fullscreen and common .hlsli bump every version at once).
         const u64 shaderVersion = m_shaders->Version(u8"ao_gtao") + m_shaders->Version(u8"ao_ssao") +
                                   m_shaders->Version(u8"ao_blur") + m_shaders->Version(u8"ao_apply");
         if (shaderVersion != m_pipelineShaderVersion)
@@ -197,7 +198,7 @@ namespace foundation::render
                         rp.Draw(3, 1, 0, 0);
                     });
             });
-        // Non-AO debug channels are raw per-pixel values - skip the bilateral blur that would smear them.
+        // Non-AO debug channels are raw per-pixel values; skip the bilateral blur that would smear them.
         if (debugMode >= 2)
         {
             return aoRaw;
@@ -219,8 +220,8 @@ namespace foundation::render
             graph.CreateTransient(u8"ao.applied", rendergraph::RGTextureDesc(kHdrFormat, w, h));
         GpuAoApplyPush ap{};
         ap.strength = strength;
-        // The SSAO/GTAO fullscreen passes store the AO buffer vertically flipped vs the HDR scene on
-        // Y-flip targets (WebGPU today, positive viewport); realign by sampling AO with flipped uv.y there.
+        // On Y-flip targets (WebGPU, positive viewport) the SSAO and GTAO fullscreen passes store the AO
+        // buffer vertically flipped relative to the HDR scene; realign by sampling AO with flipped uv.y.
         ap.flipAoY = m_device->NeedsClipSpaceYFlip() ? 1.0f : 0.0f;
         graph.AddRenderPass(
             u8"ao.apply",

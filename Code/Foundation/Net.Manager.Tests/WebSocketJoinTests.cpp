@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Joining a host's WebSocket gateway by address (Documentation/Specs/tls-http-wss.md, P4): a native
-// client given "ws://..." or "wss://..." joins over a WebSocket instead of UDP, the session and
-// its RPCs unchanged; wss with the host's certificate trusted.
+// Joining a host's WebSocket gateway by address: a native client given "ws://..." or "wss://..."
+// joins over a WebSocket instead of UDP, the session and its RPCs unchanged; wss with the host's
+// certificate trusted.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

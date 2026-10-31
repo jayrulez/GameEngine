@@ -3,8 +3,8 @@
 
 // UI - :theme_extension partition
 //
-// Lets external libraries inject style rules into a theme StyleSheet after base theme init.
-// Ported from Sedulous.UI/src/Styling/IThemeExtension.bf. Injected/held-by-reference (pattern B).
+// Lets external libraries inject style rules into a theme StyleSheet after the base theme is built.
+// Extensions are registered with and held by reference by ThemeRegistry.
 
 module;
 #include "Core/Prelude.h"

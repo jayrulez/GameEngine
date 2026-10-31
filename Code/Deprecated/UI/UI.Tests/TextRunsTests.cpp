@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Rich text runs and their markup (F2 of Specs/vg-and-gui-lab.md): what each tag sets, how runs
+// Rich text runs and their markup: what each tag sets, how runs
 // merge and nest, and that nothing malformed is ever dropped.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

@@ -34,9 +34,9 @@ def envelope(i, n, attack=0.02, release=0.25):
 def ambient(rate=11025, seconds=3.0):
     """A gentle looping minor-chord pad with slow tremolo.
 
-    Voiced in the mid range (A3 root) ON PURPOSE: the original 110/165/220 Hz
-    voicing was inaudible on typical laptop speakers - it played fine and nobody
-    could hear it. Keep pads >= ~220 Hz so the sample is audible everywhere.
+    Voiced in the mid range (A3 root): a 110/165/220 Hz voicing is inaudible on
+    typical laptop speakers. Keep pads at or above about 220 Hz so the sample is
+    audible everywhere.
     """
     n = int(rate * seconds)
     out = []

@@ -1,7 +1,7 @@
-// Pickup - something worth taking that is not a coin: a heart (a life) or a gem (a bonus). It
-// spins and bobs like a coin, and when the player comes within reach it is taken: the event named
-// in `takenEvent` goes out with `value` ("LifeCollected", "GemCollected"), a sparkle and a chime
-// mark it, and it is gone. On the pickup's entity, whose first child is its model.
+// Pickup: something worth taking that is not a coin, a heart (a life) or a gem (a bonus). It spins
+// and bobs like a coin. When the player comes within reach it is taken: the event named in
+// `takenEvent` goes out with `value` ("LifeCollected", "GemCollected"), a sparkle and a chime mark
+// it, and it disappears. The script sits on the pickup's entity, whose first child is its model.
 
 // FX/FxCoinSparkle: the burst where something was taken.
 Guid kTakenSparkle = Guid("245b459c-4b93-4876-9496-6e4eb3daa145");

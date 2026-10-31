@@ -3,12 +3,12 @@
 
 /// Foundation::Shaders.System - the `:shader_system` partition.
 ///
-/// Compile-on-demand + cache for shader VARIANTS. A shader is registered by name
+/// Compile-on-demand cache for shader variants. A shader is registered by name
 /// per stage (its HLSL source); GetVariant(name, stage, flags) compiles the
-/// permutation (flags -> #defines) via DXC, creates the GPU ShaderModule, and
+/// permutation (flags become #defines) through DXC, creates the GPU ShaderModule, and
 /// caches it by (nameHash, stage, flags). This is the layer above the stateless
-/// foundation.shaders Compiler that the material/PSO layers build on. Needs the RHI
-/// to create modules, so it's separate from the RHI-free foundation.shaders.
+/// foundation.shaders Compiler that the material and PSO layers build on. It needs the RHI
+/// to create modules, so it is separate from the RHI-free foundation.shaders.
 
 module;
 #include "Core/Prelude.h"
@@ -26,11 +26,11 @@ namespace rhi = foundation::rhi;
 export namespace foundation::shaders
 {
 
-    /// The pull seam for shader SOURCE: instead of passes pushing
-    /// strings, the ShaderSystem asks a provider on a source miss. Dev: files under
-    /// the engine shader root (edit -> hot reload, zero C++ rebuild). Dist:
-    /// cooked bytecode packs. Explicit RegisterSource still wins - modules with
-    /// bespoke inline shaders (imgui) keep working unchanged.
+    /// Where shader source is pulled from: instead of passes pushing strings, the
+    /// ShaderSystem asks a provider on a source miss. In dev, files under the engine
+    /// shader root (an edit hot-reloads with no C++ rebuild); in a dist, cooked bytecode
+    /// packs. An explicit RegisterSource still wins, so modules with bespoke inline
+    /// shaders (imgui) work unchanged.
     class IShaderSourceProvider
     {
     public:
@@ -41,7 +41,7 @@ export namespace foundation::shaders
         virtual bool FetchSource(core::StringView name, ShaderStage stage, core::String& outSource,
                                  core::String& outEntryPoint) = 0;
 
-        /// Every shader name the provider can serve (tooling: builtin dropdowns).
+        /// Every shader name the provider can serve (for tooling such as builtin dropdowns).
         virtual void CollectShaderNames(core::Array<core::String>& out) = 0;
 
         /// Every shared include (.hlsli) the provider serves, as an include names it
@@ -50,13 +50,14 @@ export namespace foundation::shaders
         virtual void CollectIncludeNames(core::Array<core::String>& out) = 0;
 
         /// Appends names whose source changed since the last poll (dev file watch);
-        /// returns true if any did. Called once per frame - implementations throttle.
+        /// returns true if any did. Called once per frame; implementations throttle.
         virtual bool PollChanges(core::Array<core::String>& outChangedNames) = 0;
     };
 
     // Map a device's expected shader format (rhi::ShaderFormat) to the cooked-pack blob format.
-    // The two enums are parallel but distinct: rhi is RHI-layer, CookedShaderFormat is pack-layer
-    // (foundation.shaders is RHI-free). Pure so the mapping is unit-testable without a live device.
+    // The two enums are parallel but distinct: rhi's belongs to the RHI layer, CookedShaderFormat
+    // to the pack layer (foundation.shaders is RHI-free). Pure, so the mapping is unit-testable
+    // without a live device.
     [[nodiscard]] inline CookedShaderFormat SelectCookedFormat(rhi::ShaderFormat format) noexcept
     {
         switch (format)
@@ -84,7 +85,7 @@ export namespace foundation::shaders
         {
         }
 
-        // Compiler-free construction for DIST/pack mode: GetVariant serves prebuilt blobs from the
+        // Compiler-free construction for dist (pack) mode: GetVariant serves prebuilt blobs from the
         // cooked pack, so no DXC is needed. The on-demand compile path is unavailable (returns null).
         explicit ShaderSystem(rhi::Device& device) noexcept : m_compiler(nullptr), m_device(&device)
         {
@@ -97,7 +98,7 @@ export namespace foundation::shaders
 
         // Register a shader's HLSL source for a stage (owned copy), and the entry point that
         // stage's function is called in it. With a declared variant mask (a cooked shader asset's
-        // lattice) requests canonicalize onto it, as the corpus's do; without one the RAW
+        // lattice) requests canonicalize onto it, as the corpus's do; without one the raw
         // requested flags compile (callers like the NormalMap-guarded tests rely on every
         // requested define being applied). Registering forgets the stage's failed variants.
         void RegisterSource(core::StringView name, ShaderStage stage, core::StringView hlsl,
@@ -117,7 +118,7 @@ export namespace foundation::shaders
             ForgetFailures(ShaderNameHash(name));
         }
 
-        // The source-pull seam (borrowed; may be null - see IShaderSourceProvider).
+        // The source provider (borrowed; may be null; see IShaderSourceProvider).
         void SetSourceProvider(IShaderSourceProvider* provider)
         {
             m_provider = provider;
@@ -130,8 +131,9 @@ export namespace foundation::shaders
 
         // Dist mode: a cooked pack (borrowed) replaces on-demand compilation. When set, GetVariant
         // canonicalizes the request against the stage's declared mask and looks up the prebuilt
-        // blob for this device's backend format - no DXC, no source. A miss is a loud cook-coverage
-        // bug. Set by the render subsystem when a shader pack ships beside the executable.
+        // blob for this device's backend format, with no DXC and no source. A miss is a logged
+        // cook-coverage bug. Set by the render subsystem when a shader pack ships beside the
+        // executable.
         void SetCookedPack(const CookedShaderPack* pack)
         {
             m_pack = pack;
@@ -140,7 +142,7 @@ export namespace foundation::shaders
         [[nodiscard]] const CookedShaderPack* CookedPack() const noexcept { return m_pack; }
 
         // Dev hot reload: asks the provider which sources changed, drops their
-        // cached source + variants, and bumps versions (the PSO cache rebuilds on
+        // cached source and variants, and bumps versions (the PSO cache rebuilds on
         // its existing poll). Call once per frame. Returns how many shaders reloaded.
         core::usize PumpReloads()
         {
@@ -186,8 +188,8 @@ export namespace foundation::shaders
             }
         }
 
-        // Where `#include`s resolve during on-demand compiles (borrowed; may be null = the
-        // compiler's disk handler with no search path). The dev file provider is one - it serves
+        // Where `#include`s resolve during on-demand compiles (borrowed; null means the
+        // compiler's disk handler with no search path). The dev file provider is one: it serves
         // the shared .hlsli from the same mount the sources come from.
         void SetIncludeResolver(IShaderIncludeResolver* resolver)
         {
@@ -199,8 +201,8 @@ export namespace foundation::shaders
             return m_includeResolver;
         }
 
-        // The effects the engine's shaders declare (`effect` blocks in the corpus's includes,
-        // Specs/wind-for-every-shader.md): the cooked pack's tables when a pack is set, else
+        // The effects the engine's shaders declare (`effect` blocks in the corpus's includes):
+        // the cooked pack's tables when a pack is set, else
         // parsed from the provider's includes, read through the include resolver, on the first
         // ask and again after a reload. What a material whose shader declares an effect's flag
         // takes its effect group from. The library, and pointers into it, stay valid until the
@@ -232,7 +234,7 @@ export namespace foundation::shaders
 
         // The variant flags `name`'s `stage` declares (its `// variants` line, or the lattice a
         // cooked shader was registered or packed with): what a material on the shader may turn on,
-        // so what effect groups it carries (Specs/wind-for-every-shader.md). Served the way
+        // so what effect groups it carries. Served the way
         // GetVariant would serve the stage: a registered source's mask, else the pack's, else the
         // provider's source, fetched and remembered as a compile would. None when unknown.
         [[nodiscard]] ShaderFlags DeclaredVariants(core::StringView name, ShaderStage stage)
@@ -271,7 +273,7 @@ export namespace foundation::shaders
             return ShaderFlags::None;
         }
 
-        // Get (compile-on-demand + cache) the GPU module for a variant. Returns null if the
+        // Get the GPU module for a variant, compiling and caching it on demand. Returns null if the
         // source is unknown or compilation fails. A failed variant is remembered until its source
         // changes (RegisterSource, InvalidateShader, a reload), so a broken shader is compiled
         // and reported once, not every frame the renderer asks for it.
@@ -296,7 +298,7 @@ export namespace foundation::shaders
             return GetCompiledVariant(name, stage, flags);
         }
 
-        // Drop + destroy every cached variant of a shader and BUMP its version (the
+        // Drop and destroy every cached variant of a shader and bump its version (the
         // reload signal consumers poll). Call on a shader reload. The next GetVariant
         // recompiles. Returns how many variants were invalidated.
         core::usize InvalidateShader(core::StringView name)
@@ -323,9 +325,9 @@ export namespace foundation::shaders
             return toRemove.Size();
         }
 
-        // Monotonic version of a shader: bumped each InvalidateShader (i.e. each
+        // Monotonic version of a shader: bumped by each InvalidateShader (that is, each
         // reload). The PSO cache stamps pipelines with this and rebuilds when it
-        // changes. 0 if the shader was never registered/invalidated.
+        // changes. 0 if the shader was never registered or invalidated.
         [[nodiscard]] core::u64 Version(core::StringView name) noexcept
         {
             core::u64* v = m_versions.Find(ShaderNameHash(name));
@@ -333,19 +335,19 @@ export namespace foundation::shaders
         }
 
     private:
-        // The cooked-blob format this device consumes (see SelectCookedFormat): DX12 -> DXIL, browser
-        // WebGPU -> WGSL text, everything else -> SPIR-V. The WebGPU backend ingests either SPIR-V
-        // (native, via ShaderSourceSPIRV) or WGSL (browser) - it sniffs the SPIR-V magic.
+        // The cooked-blob format this device consumes (see SelectCookedFormat): DXIL for DX12, WGSL
+        // text for browser WebGPU, SPIR-V for everything else. The WebGPU backend ingests either
+        // SPIR-V (native, through ShaderSourceSPIRV) or WGSL (browser); it sniffs the SPIR-V magic.
         [[nodiscard]] CookedShaderFormat FormatForDevice() const noexcept
         {
             return SelectCookedFormat(m_device->PreferredShaderFormat());
         }
 
-        // Dev path: resolve source (registered, or pulled from the provider), canonicalize
-        // provider-fetched (corpus) requests against the stage's declared variant mask EXACTLY
-        // like the cooked path does - the design requires dev and dist to canonicalize
-        // identically, and it dedupes variants (a PS that ignores SKINNED stops recompiling
-        // per skin). Explicitly registered sources have no mask entry and compile raw flags.
+        // Dev path: resolve the source (registered, or pulled from the provider) and canonicalize
+        // provider-fetched (corpus) requests against the stage's declared variant mask as the
+        // cooked path does. Dev and dist must canonicalize identically, and doing so dedupes
+        // variants (a PS that ignores SKINNED is not recompiled per skin). Explicitly registered
+        // sources have no mask entry and compile raw flags.
         [[nodiscard]] rhi::ShaderModule* GetCompiledVariant(core::StringView name,
                                                             ShaderStage stage, ShaderFlags flags)
         {
@@ -359,7 +361,7 @@ export namespace foundation::shaders
                     m_sources.InsertOrAssign(srcKey, core::Move(fetched));
                     source = m_sources.Find(srcKey);
                     // Corpus sources carry the variant directive; absent means single-variant
-                    // (mask None) - the same rule the cook applies.
+                    // (mask None), the same rule the cook applies.
                     const VariantDirective directive = ParseVariantDirective(source->hlsl.AsView());
                     m_declaredMasks.InsertOrAssign(
                         srcKey, directive.present ? directive.mask : ShaderFlags::None);
@@ -398,8 +400,8 @@ export namespace foundation::shaders
         }
 
         // Dist path: canonicalize against the declared mask, look up the prebuilt blob, and create
-        // the GPU module directly. Cached under the CANONICAL key so requests that differ only in
-        // ignored flags dedupe. A miss is a cook-coverage bug (loud, returns null).
+        // the GPU module directly. Cached under the canonical key so requests that differ only in
+        // ignored flags dedupe. A miss is a cook-coverage bug (logged; returns null).
         [[nodiscard]] rhi::ShaderModule* GetCookedVariant(core::StringView name, ShaderStage stage,
                                                           ShaderFlags flags)
         {
@@ -416,7 +418,7 @@ export namespace foundation::shaders
             const core::Array<core::byte>* blob = m_pack->Find(nameHash, stage, canon, format);
             if (blob == nullptr)
             {
-                // Loud, but once per variant - PSO layers retry every frame and the full
+                // Logged once per variant: PSO layers retry every frame and the full
                 // pack dump per frame would drown the log.
                 const core::u64 missKey = (SourceKey(name, stage) * 1099511628211ull) ^
                                           (static_cast<core::u64>(canon) << 32);
@@ -434,7 +436,7 @@ export namespace foundation::shaders
                                static_cast<unsigned>(stage), static_cast<unsigned>(canon),
                                static_cast<unsigned>(flags), static_cast<unsigned>(mask),
                                static_cast<unsigned>(format));
-                // Dump what the pack DID cook for this (name, stage) so the gap shows its shape.
+                // Dump what the pack did cook for this (name, stage) so the gap shows its shape.
                 m_pack->ForEachVariant(nameHash, stage,
                                        [&](ShaderFlags f, CookedShaderFormat fmt)
                                        {
@@ -475,7 +477,7 @@ export namespace foundation::shaders
         {
             if (m_compiler == nullptr)
             {
-                return nullptr; // compiler-free (pack) mode - on-demand compilation unavailable
+                return nullptr; // compiler-free (pack) mode: on-demand compilation is unavailable
             }
             const bool isDX12 = (m_device->type == rhi::DeviceType::DX12);
             const ShaderTarget target = isDX12 ? ShaderTarget::DXIL : ShaderTarget::SPIRV;
@@ -492,7 +494,7 @@ export namespace foundation::shaders
             if (!isDX12)
             {
                 // Vulkan: shift register spaces so HLSL b/t/u/s registers don't collide
-                // in SPIR-V (matches the sample framework's CompileToModule).
+                // in SPIR-V (as the sample framework's CompileToModule does).
                 opts.bindingShifts = shaders::BindingShifts::Standard();
                 opts.bindingShiftSets = 4;
                 if (m_device->type == rhi::DeviceType::WebGPU)
@@ -630,8 +632,8 @@ export namespace foundation::shaders
         rhi::Device* m_device;                            // borrowed
         IShaderSourceProvider* m_provider = nullptr;      // borrowed (may be null)
         const CookedShaderPack* m_pack = nullptr;         // dist mode: cooked blobs (borrowed)
-        core::HashMap<core::u64, Source> m_sources;       // (name,stage) -> HLSL + entry
-        // Declared variant mask per PROVIDER-FETCHED (corpus) source - the dev half of the
+        core::HashMap<core::u64, Source> m_sources;       // (name,stage) -> HLSL and entry
+        // Declared variant mask per provider-fetched (corpus) source: the dev half of the
         // canonicalization contract. Explicitly registered sources have no entry (raw flags).
         core::HashMap<core::u64, ShaderFlags> m_declaredMasks;
         core::HashMap<core::u64, bool> m_loggedFailures; // once-per-key error throttling

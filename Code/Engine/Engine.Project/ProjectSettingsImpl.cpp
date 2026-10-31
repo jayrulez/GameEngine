@@ -26,7 +26,7 @@ namespace engine::project
 
     REFLECT_MEMBERS(ProjectSettings, "rtti::engine::project")
     {
-        builder.DataVersion(10).ReadsDataVersionsFrom(9); // 9 carried the old UI's two settings
+        builder.DataVersion(10).ReadsDataVersionsFrom(9); // 9 carried two settings of a removed UI library
         // The enums the display settings take (their enumerators name the dialog's and the MCP
         // tools' choices): FitMode is the core's.
         RegisterCoreTypes();
@@ -42,7 +42,7 @@ namespace engine::project
         builder.Property<&ProjectSettings::name>("name")
             .PropAttribute(kSettingLabelAttribute, String(u8"Name"))
             .PropAttribute(kSettingCategoryAttribute, String(u8"General"));
-        // A project-relative path to the built native game module; empty = scripts only.
+        // A project-relative path to the built native game module; empty means scripts only.
         builder.Property<&ProjectSettings::nativeModule>("nativeModule")
             .PropAttribute(kSettingLabelAttribute, String(u8"Native module"))
             .PropAttribute(kSettingCategoryAttribute, String(u8"General"));
@@ -55,13 +55,13 @@ namespace engine::project
         // The cooked map the player (and the Game tab) binds at startup.
         builder.Property<&ProjectSettings::defaultInputMapId>("defaultInputMapId");
         asset(u8"Default input map", u8"InputMapAsset", u8"(none)", u8"Startup");
-        // The cooked mixer applied at startup; nil = the built-in neutral four-bus layout.
+        // The cooked mixer applied at startup; nil means the built-in neutral four-bus layout.
         builder.Property<&ProjectSettings::defaultBusLayoutId>("defaultBusLayoutId");
         asset(u8"Default bus layout", u8"AudioBusLayoutAsset", u8"(built-in)", u8"Audio");
         // The cooked font the game UI falls back to when a document names none.
         builder.Property<&ProjectSettings::defaultUiFontId>("defaultUiFontId");
         asset(u8"Default UI font", u8"FontAsset", u8"(built-in)", u8"UI");
-        // Scene-pass MSAA samples (the render subsystem's levels: 1 = off, 2, 4).
+        // Scene-pass MSAA samples (the render subsystem's levels: 1 is off, 2, 4).
         builder.Property<&ProjectSettings::renderMsaaSamples>("renderMsaaSamples")
             .PropAttribute(kSettingLabelAttribute, String(u8"MSAA"))
             .PropAttribute(kSettingCategoryAttribute, String(u8"Display"));
@@ -72,7 +72,7 @@ namespace engine::project
         // The engine GUI's sheets, in order over its theme (its fonts are the UI's above).
         builder.Property<&ProjectSettings::guiStyleSheetIds>("guiStyleSheetIds");
         asset(u8"GUI sheets", u8"GuiStyleSheetAsset", u8"(none)", u8"UI");
-        // The engine GUI's boot splash (its document binds `bootProgress`); nil = the engine's own.
+        // The engine GUI's boot splash (its document binds `bootProgress`); nil means the engine's own.
         builder.Property<&ProjectSettings::guiLoadingDocumentId>("guiLoadingDocumentId");
         asset(u8"Loading screen", u8"GuiDocumentAsset", u8"(built-in)", u8"Startup");
         // The display: the render resolution (0 x 0 is the output's size) and its fit, then the

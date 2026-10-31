@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Configure + build a Clang preset on Linux (default `clang`).
+# Configure and build a Clang preset on Linux (default `clang`).
 #
-#   ./build-clang.sh                                      configure + build everything (Debug)
+#   ./build-clang.sh                                      configure and build everything (Debug)
 #   ./build-clang.sh --target UI                          build just that target
 #   ./build-clang.sh -- -k 0                              keep going after failures (-- goes to ninja)
 #   ./build-clang.sh --preset clang-reldbg                a different Clang preset
 #   ./build-clang.sh --preset clang-reldbg --target Tools.Editor
 #
-# --preset must come FIRST: clang, clang-shared, clang-reldbg, clang-release, clang-shipping.
+# --preset must come first: clang, clang-shared, clang-reldbg, clang-release, clang-shipping.
 #
-# WHY THIS WRAPPER EXISTS: the preset asks for plain "clang++", but a distro's default clang is
-# routinely too old for this tree (README: Clang 21; Ubuntu 24.04 still ships 18, whose C++23
-# modules support is weaker and which rejects flags we pass under -Werror). So pick the NEWEST
-# versioned clang++ installed, verify it clears the floor, and pin C/CXX/ASM explicitly - the
-# same override CI applies by hand. ASM is driven by the C++ driver; the vendored C sources
+# The preset asks for plain "clang++", but a distro's default clang is often too old for this
+# tree, which needs Clang 21 (Ubuntu 24.04 ships 18, whose C++23 modules support is weaker and
+# which rejects flags we pass under -Werror). So this wrapper picks the newest versioned clang++
+# installed, verifies it clears the floor, and pins C/CXX/ASM explicitly, the same override CI
+# applies by hand. ASM is driven by the C++ driver; the vendored C sources
 # (SDL3 and friends) need the matching C driver.
 #
 # Set BUILD_CLANG_CXX to a specific binary to override the search, e.g.
@@ -25,7 +25,7 @@ CLANG_FLOOR=21 # what development and CI use; 18 is known to fail, 19 and 20 are
 
 # Linux only, and enforced rather than assumed. Under a Windows bash (git-bash/MSYS) every path
 # here comes out POSIX-shaped (/c/Program Files/...) while CMake's cache holds C:/Program
-# Files/...\ - so the "cached compiler differs" guard below can never match, and the script
+# Files/..., so the "cached compiler differs" guard below can never match, and the script
 # silently wipes a perfectly good build tree's cache on every run. Use build-clang.cmd there.
 case "$(uname -s 2>/dev/null)" in
     Linux) ;;
@@ -107,7 +107,7 @@ echo "[build-clang] Compiler : $CXX_PATH (Clang $MAJOR)"
 
 # --- Configure ---------------------------------------------------------------------------
 # Every preset in CMakePresets.json uses binaryDir build/<preset name>, so the build tree is
-# derivable from the name - keep that true if a preset is ever added with a different dir.
+# derivable from the name; keep that true if a preset is ever added with a different dir.
 # A cached compiler that differs from the selected one must not keep being used, so wipe the
 # cache when they disagree (the compiler is pinned in the cache on first configure).
 CACHE="$REPO/build/$PRESET/CMakeCache.txt"
@@ -127,7 +127,7 @@ cmake --preset "$PRESET" -S "$REPO" \
 echo "[build-clang] Building..."
 cmake --build --preset "$PRESET" "$@"
 
-# Read the output dir back out of the cache rather than mapping preset -> path here: the config
+# Read the output dir back out of the cache rather than mapping the preset to a path here: the config
 # and the suffix are both cache variables, so this cannot drift from CMakePresets.json.
 CFG="$(sed -n 's/^CMAKE_BUILD_TYPE:[^=]*=//p' "$CACHE" | head -1)"
 SFX="$(sed -n 's/^BUILDSYSTEM_OUTPUT_SUFFIX:[^=]*=//p' "$CACHE" | head -1)"

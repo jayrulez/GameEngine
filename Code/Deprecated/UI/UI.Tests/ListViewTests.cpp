@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ListViewTests.bf (faithful). Beef get/set props -> methods
-// (lv->SetAdapter / lv->ScrollY()); SimpleListAdapter test double lives in TestHelpers.h. The adapter is
-// borrowed (pattern-B) - declared before the ListView so it outlives it. Logic only, no font.
+// ListView tests, logic only (no font). The SimpleListAdapter test double lives in TestHelpers.h.
+// The ListView borrows its adapter, so the adapter is declared before the ListView to outlive it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -33,7 +32,7 @@ TEST_CASE("list-view: NoAdapter_NoViews")
     root->AddView(lv.Get());
     LayoutPass(ctx, root.Get());
 
-    // VisualChildCount = active views (0) + scrollbar (1).
+    // VisualChildCount is the active views (0) plus the scrollbar (1).
     CHECK(lv->VisualChildCount() == 1u);
 }
 
@@ -56,7 +55,7 @@ TEST_CASE("list-view: SetAdapter_CreatesVisibleViews")
     root->AddView(lv.Get());
     LayoutPass(ctx, root.Get());
 
-    // ~10 visible items (300 / 30) + scrollbar.
+    // About 10 visible items (300 / 30) plus the scrollbar.
     CHECK(lv->VisualChildCount() > 1u);
 }
 
@@ -124,8 +123,8 @@ TEST_CASE("list-view: NotifyDataChanged_PrunesOutOfRangeSelection")
     lv->SetAdapter(&small); // data set shrank under the selection
     lv->NotifyDataChanged();
 
-    // Index 8 no longer exists - it must be dropped, never left to silently highlight
-    // whichever row a future grow puts at position 8.
+    // Index 8 does not exist any more, so it is dropped rather than left to highlight whichever
+    // row a later grow puts at position 8.
     CHECK_FALSE(lv->Selection.IsSelected(8));
     CHECK(lv->Selection.SelectedCount() == 0u);
 }
@@ -149,8 +148,8 @@ TEST_CASE("list-view: AdapterObserver_OnDataSetChanged")
 
 namespace
 {
-    // Counts binds per position and tracks view identity, so a range-changed notify can be
-    // pinned as an IN-PLACE rebind (same view object, no recycle) of only the named items.
+    // Counts binds per position and tracks view identity, so a test can check that a range-changed
+    // notify rebinds only the named items in place (the same view object, no recycle).
     class BindCountingAdapter : public ListAdapterBase
     {
     public:
@@ -194,11 +193,11 @@ TEST_CASE("list-view: NotifyRangeChanged rebinds only the named visible item, in
 
     adapter.NotifyRangeChanged(2, 1);
     CHECK(adapter.Binds[2] == 2);            // rebound...
-    CHECK(adapter.BoundViews[2] == boundView); // ...into the SAME view (no recycle)
+    CHECK(adapter.BoundViews[2] == boundView); // ...into the same view (no recycle)
     CHECK(adapter.Binds[3] == 1);            // neighbors untouched
     CHECK(lv->VisualChildCount() == before); // no teardown
 
-    // An off-screen position no-ops (nothing active to rebind).
+    // An off-screen position does nothing (nothing active to rebind).
     adapter.NotifyRangeChanged(90, 1);
     CHECK(adapter.Binds[90] == 0);
 }
@@ -210,7 +209,7 @@ TEST_CASE("damage: visual-only invalidation redraws WITHOUT layout damage")
     Init(ctx, root.Get(), 200, 300);
     auto view = core::MakeRef<foundation::ui::tests::TestView>(core::DefaultAllocator(), 50.0f,
                                                                20.0f);
-    root->AddView(view.Get()); // tree mutation -> layout damage (the safe default)
+    root->AddView(view.Get()); // a tree mutation causes layout damage (the safe default)
     CHECK(ctx.NeedsLayout());
     CHECK(ctx.NeedsRedraw());
 
@@ -219,21 +218,21 @@ TEST_CASE("damage: visual-only invalidation redraws WITHOUT layout damage")
     ctx.ClearLayoutDamage();
     CHECK(!ctx.NeedsLayout());
 
-    // Visual-only producer (hover tint / press state / focus ring): redraw, no relayout.
+    // A visual-only change (hover tint, press state, focus ring): redraw, no relayout.
     view->InvalidateVisual();
     CHECK(!ctx.NeedsLayout());
     CHECK(ctx.NeedsRedraw());
 
-    // A plain Invalidate stays the safe default: layout + redraw.
+    // A plain Invalidate stays the safe default: layout and redraw.
     view->Invalidate();
     CHECK(ctx.NeedsLayout());
 }
 
 TEST_CASE("damage: setting a button's text or a scroll bar's viewport to what it is asks for no layout")
 {
-    // A page syncing its toolbar each frame, and a scroll view setting its bars from its own
-    // Layout, kept the editor re-laying-out its whole window every frame (a page with many
-    // controls went sluggish). A change still asks.
+    // Setting a property to the value it already has causes no layout damage, so a page that
+    // syncs its toolbar each frame, or a scroll view that sets its bars from its own Layout, does
+    // not lay out the whole window every frame. A real change still asks for layout.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
     Init(ctx, root.Get(), 200, 300);
@@ -258,8 +257,8 @@ TEST_CASE("damage: setting a button's text or a scroll bar's viewport to what it
     CHECK(ctx.NeedsLayout());
 }
 
-// Shift+arrow grows and shrinks ONE range from the anchor; before, each press re-ranged from an
-// arbitrary selected row, so the selection collapsed to two rows (Sedulous 5482ab11).
+// Shift with an arrow grows and shrinks one range from the anchor, so repeated presses keep
+// extending the same range.
 TEST_CASE("list-view: Shift+Down and Shift+Up extend one range from the anchor")
 {
     UIContext ctx{DefaultAllocator()};

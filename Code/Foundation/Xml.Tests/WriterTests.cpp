@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Xml.Tests/WriterTests.bf
+// XmlWriter: compact and pretty-printed output, escaping and declarations.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

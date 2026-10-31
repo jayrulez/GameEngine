@@ -3,8 +3,8 @@
 
 // Pipeline::Terrain - reflection implementation unit: TerrainAsset's reflected surface.
 //
-// Kept OUT of the TerrainAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
-// Heightfield/texture PICKERS ride the Editor.Terrain page; this reflects the scalar fields (the
+// Kept out of the TerrainAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
+// The heightfield and texture pickers are on the Editor.Terrain page; this reflects the scalar fields (the
 // cast-shadows flag is the one live toggle).
 
 module;
@@ -22,9 +22,9 @@ namespace pipeline
 {
     REFLECT_MEMBERS(TerrainAsset, "rtti::pipeline::terrain")
     {
-        // DataVersion 5 = per-layer coverage/opacity mask ids (nil -> opaque). v4 = per-layer
-        // height ids + heightBlendContrast (nil + 0.25 -> the OFF path). v3 = per-layer normal +
-        // ORM ids (nil -> flat/default). v2 = the top-K splat model (base + palette + weightsId);
+        // DataVersion 5: per-layer coverage/opacity mask ids (nil is opaque). v4: per-layer
+        // height ids and heightBlendContrast (nil and 0.25 give the off path). v3: per-layer normal
+        // and ORM ids (nil is flat/default). v2: the top-K splat model (base, palette, weightsId);
         // v<2 payloads carry the fixed-4-layer fields and upgrade in Serialize.
         builder.DataVersion(5)
             .Attribute("displayName", String(u8"Terrain"))

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:exports`: a collection taken out of the library (Documentation/Specs/
-// model-viewer.md, P11). Its CSV: a row per member (the collection's path, its name there, the
-// file, the tags, the note), with what is under it or without. And its files copied into a folder
-// for a game's project: a subfolder per sub-collection, each model renamed to its member's name
-// when it has one (its extension kept), with what it needs beside it: the images its materials
-// name (or the loose texture rule would take) and a glTF's buffers, kept where they were relative
-// to the model; a report of what was copied, what was missing and what clashed (a file there
-// already, different, is never overwritten). `export.csv` and `export.copy_files` run them.
+// ModelViewer - `modelviewer:exports`: exporting a collection from the library, either as CSV or
+// as files. The CSV has a row per member (the collection's path, the member's name, the file, the
+// tags, the note), optionally including sub-collections. The file copy puts a collection's models
+// into a folder for a game project, with a subfolder per sub-collection. Each model is renamed to
+// its member name when it has one (keeping its extension) and its companion files are copied with
+// it at the same relative place: the images its materials name (or the loose texture rule would
+// pick) and a glTF's buffers. The copy reports what was copied, what was missing and what clashed;
+// an existing different file is never overwritten. The `export.csv` and `export.copy_files`
+// commands run these.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +31,7 @@ export namespace modelviewer
 
     namespace export_detail
     {
-        // A name made safe for a file or folder: what a file system cannot hold becomes _.
+        // A name made safe for a file or folder: characters a file system cannot hold become _.
         [[nodiscard]] inline String SafeName(StringView name)
         {
             String safe(name);
@@ -56,7 +57,7 @@ export namespace modelviewer
                 --slash;
             return slash > 0 ? path.SubStr(0, slash - 1) : StringView{};
         }
-        // A CSV field: quoted when it holds a comma, a quote or a line break, its quotes doubled.
+        // A CSV field, quoted when it holds a comma, a quote or a line break, with quotes doubled.
         [[nodiscard]] inline String Field(StringView text)
         {
             bool quote = false;
@@ -92,7 +93,7 @@ export namespace modelviewer
         }
     }
 
-    /// A collection's path from the top: its name and its parents', "Moonfall/Act 1".
+    /// A collection's path from the top-level collection, such as "Moonfall/Act 1".
     [[nodiscard]] inline String CollectionPath(const Library& library, const Guid& id)
     {
         String path;
@@ -105,7 +106,7 @@ export namespace modelviewer
         return path;
     }
 
-    /// The collection's rows (and those under it when `recursive`), a header first.
+    /// The collection's CSV, header first, including sub-collections when `recursive`.
     [[nodiscard]] inline String ExportCsv(const Library& library, const Guid& id, bool recursive, u32* rows = nullptr)
     {
         using namespace export_detail;
@@ -140,9 +141,9 @@ export namespace modelviewer
         return csv;
     }
 
-    /// The files a model needs beside it: the images its materials name (after the loose texture
-    /// rule, when on) and a glTF's buffers, each with where it sits relative to the model's folder
-    /// (its own name, when it is elsewhere). False with the model unreadable.
+    /// A file a model needs beside it: an image its materials name (after the loose texture rule,
+    /// when on) or a glTF buffer, with its path relative to the model's folder (just its file name
+    /// when it lives elsewhere). CompanionFiles returns false when the model cannot be read.
     struct Companion
     {
         String source;
@@ -168,8 +169,8 @@ export namespace modelviewer
         ModelStats stats;
         if (OpenModel::LoadFile(modelPath, looseTextures, model, stats) != OpenModel::Outcome::Opened)
             return false;
-        // A texture names its file as the loader kept it: the file it read (FBX, a DDS), else its
-        // uri beside the model (glTF), never a data uri (inside the file).
+        // A texture names its file the way the loader recorded it: the file it read (FBX, a DDS),
+        // else its uri beside the model (glTF). A data uri is inside the file and is skipped.
         for (const foundation::model::ModelTexture* texture : model.textures())
             if (texture != nullptr)
             {
@@ -202,17 +203,17 @@ export namespace modelviewer
         };
         struct Missing
         {
-            String model; // the model it was for (itself, when the model is missing)
+            String model; // the model it belongs to (the file itself when the model is missing)
             String file;
         };
         Array<Copied> copied;
         Array<Missing> missing;
-        Array<String> clashes; // there already, different: left as it was
-        u32 skipped = 0;       // there already, the same
+        Array<String> clashes; // a different file already there, left untouched
+        u32 skipped = 0;       // an identical file already there
     };
 
-    /// The collection's model files (and those under it, a subfolder per collection, when
-    /// `recursive`) with what each needs, into `destination`.
+    /// Copies the collection's model files and their companions into `destination`, including
+    /// sub-collections (a subfolder each) when `recursive`.
     [[nodiscard]] inline CopyReport CopyCollectionFiles(const Library& library, const Guid& id, StringView destination, bool recursive,
                                                        bool looseTextures)
     {
@@ -239,7 +240,7 @@ export namespace modelviewer
             else
                 report.missing.PushBack(CopyReport::Missing{String(model), String(from)});
         };
-        // Each collection's folder: under the destination, the names from the one exported down.
+        // Each collection's folder: the destination, then the names from the exported collection down.
         auto folderOf = [&](const Guid& g)
         {
             String relative;
@@ -272,7 +273,7 @@ export namespace modelviewer
                 copy(e->path.AsView(), e->path.AsView(), PathJoin(into.AsView(), fileName.AsView()).AsView());
                 Array<Companion> companions;
                 if (!CompanionFiles(e->path.AsView(), looseTextures, companions))
-                    continue; // copied as it is; what it names could not be read
+                    continue; // the model is copied alone; the files it names could not be read
                 for (const Companion& c : companions)
                     copy(e->path.AsView(), c.source.AsView(), PathJoin(into.AsView(), c.relative.AsView()).AsView());
             }
@@ -280,8 +281,8 @@ export namespace modelviewer
         return report;
     }
 
-    /// `export.csv` and `export.copy_files` over the session's library; `looseTextures` says
-    /// whether the loose texture rule is on (the settings').
+    /// Registers `export.csv` and `export.copy_files` over the session's library. `looseTextures`
+    /// reports whether the loose texture rule is on in the settings.
     inline void RegisterExportCommands(LibrarySession& session, Function<bool()> looseTextures)
     {
         LibrarySession* s = &session;

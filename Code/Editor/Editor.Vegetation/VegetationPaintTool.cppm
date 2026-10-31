@@ -4,15 +4,15 @@
 // Editor::Vegetation - :paint partition.
 //
 // VegetationPaintTool: the scene-viewport vegetation mask brush (editor.viewporttools). It
-// ray-picks the terrain heightfield under the cursor, maps the hit to the mask's 0..1 footprint UV
-// and paints (or erases, or smooths) the SELECTED plane of the terrain's vegetation mask - the
-// shared runtime VegetationMask the TerrainVegetationComponent references. Each stamp tells the
-// vegetation manager which footprint rect changed (only the touched chunks regrow); one
-// region-delta undo command per stroke; on Save the painted planes are written back to the SOURCE
-// VegetationMaskAsset's "densities" sidecar (an imported mask converts to embedded).
+// ray-picks the terrain heightfield under the cursor, maps the hit to the mask's 0..1 footprint UV,
+// and paints, erases or smooths the selected plane of the terrain's vegetation mask (the shared
+// runtime VegetationMask that the TerrainVegetationComponent references). Each stamp tells the
+// vegetation manager which footprint rect changed, so only the touched chunks regrow. Each stroke
+// is one region-delta undo command. On Save the painted planes are written back to the source
+// VegetationMaskAsset's "densities" sidecar, and an imported mask becomes embedded.
 //
-// GCC module hygiene: the heavy engine / resource imports live in VegetationPaintToolImpl.cpp;
-// this interface stays on the light modules only.
+// For GCC module hygiene, the heavy engine and resource imports live in
+// VegetationPaintToolImpl.cpp; this interface imports only light modules.
 
 module;
 #include "Core/Prelude.h"
@@ -47,7 +47,7 @@ export namespace editor
         [[nodiscard]] StringView DisplayName() const override { return u8"Paint Vegetation"; }
         [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/TerrainVegetationComponent.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Vegetation"; }
-        /// Relevant only when the scene has a vegetation component whose mask (and its terrain's
+        /// Available only when the scene has a vegetation component whose mask (and its terrain's
         /// heightfield, for the pick) resolves.
         [[nodiscard]] bool IsAvailable() const override;
         [[nodiscard]] StringView UnavailableReason() const override
@@ -61,13 +61,13 @@ export namespace editor
         [[nodiscard]] StringView StatusText() const override { return m_status.AsView(); }
 
         // ---- brush parameters (the tool panel drives these) ----
-        /// Select the mask PLANE the brush works on (a layer with Mask placement names its
-        /// plane). The MODE (paint / erase / smooth) is a separate choice and stays: erase is
-        /// per plane, so "plane 2 while erasing" erases plane 2.
+        /// Selects the mask plane the brush works on (a layer with Mask placement names its
+        /// plane). The mode (paint, erase or smooth) is a separate choice and is kept: erasing
+        /// works per plane, so choosing plane 2 while erasing erases plane 2.
         void SetPlane(u32 plane)
         {
             m_plane = plane;
-            UpdateStatus(); // the status bar names the plane + mode without waiting for a frame
+            UpdateStatus(); // the status bar names the plane and mode without waiting for a frame
         }
         [[nodiscard]] u32 Plane() const noexcept { return m_plane; }
         /// Eraser mode: fades the plane toward 0 (nothing grows).
@@ -114,9 +114,9 @@ export namespace editor
         struct Pick
         {
             foundation::vegetation::VegetationMask* mask = nullptr;
-            Guid maskId;  // TerrainVegetationComponent.mask.id (the SOURCE asset guid; may be nil)
+            Guid maskId;  // TerrainVegetationComponent.mask.id (the source asset guid; may be nil)
             void* manager = nullptr; // the scene's TerrainVegetationComponentManager (regrow notices)
-            i32 gridSize = 0;        // the terrain heightfield's samples per side (footprint -> grid)
+            i32 gridSize = 0;        // the terrain heightfield's samples per side (maps the footprint to the grid)
             f32 uvX = 0.0f;          // hit in the mask's 0..1 footprint UV
             f32 uvY = 0.0f;
             f32 worldSizeX = 1.0f;
@@ -132,9 +132,9 @@ export namespace editor
         void EndStroke();
         void UpdateStatus();
 
-        foundation::scene::Scene* m_scene;      // borrowed (page owns it)
+        foundation::scene::Scene* m_scene;      // borrowed (the page owns it)
         EditorCommandStack* m_commands;         // borrowed
-        IAssetEditSink* m_assetEdits = nullptr; // borrowed; null = no persistence (tests)
+        IAssetEditSink* m_assetEdits = nullptr; // borrowed; null means nothing is saved (tests)
 
         u32 m_plane = 0;
         bool m_erase = false;
@@ -149,8 +149,8 @@ export namespace editor
         Float3 m_hoverWorld{};
         Float3 m_hoverNormal{0.0f, 1.0f, 0.0f};
 
-        // Stroke state (one command per press..release). m_strokeMask keeps the raster alive for
-        // the stroke; the full-plane snapshot covers the union region the release slices.
+        // Stroke state (one command from press to release). m_strokeMask keeps the raster alive
+        // for the stroke; the full-plane snapshot covers the union region that release slices out.
         bool m_stroking = false;
         f32 m_lastStampU = 0.0f;
         f32 m_lastStampV = 0.0f;
@@ -163,8 +163,8 @@ export namespace editor
         String m_status;
     };
 
-    /// The provider that contributes the vegetation brush to every scene viewport (explicit
-    /// registration from this module's registrar, never discovery).
+    /// The provider that adds the vegetation brush to every scene viewport. This module's
+    /// registrar registers it explicitly; it is not discovered.
     class VegetationViewportToolProvider final : public IViewportToolProvider
     {
     public:
@@ -174,6 +174,6 @@ export namespace editor
 
     /// Register the vegetation viewport tools (call once at editor start, from Tools.Editor).
     void RegisterVegetationViewportTools();
-    /// Register the vegetation brush settings panel (the viewport-tool-panel seam).
+    /// Register the vegetation brush settings panel in the viewport-tool-panel registry.
     void RegisterVegetationToolPanels();
 }

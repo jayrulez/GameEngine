@@ -3,13 +3,14 @@
 
 // GUI - :text_area partition
 //
-// TextArea: the multiline text field (E4 of Specs/gui-lab-evolution.md), over the same editing
-// model and keys as TextField (TextEditBase). Its text wraps at its width, its spaces and line
-// breaks as typed (white-space: pre-wrap); Return breaks a line; up and down move by the lines it
-// shows, keeping the column they started from, and page up and down by as many as fit; Home and End
-// go to a shown line's ends. It is `rows` lines tall unless something sizes it, and scrolls down to
-// keep the caret in view (the wheel scrolls it too). It declares "textinput multiline", the context
-// the multiline keys are bound in; Ctrl+Return submits it.
+// TextArea: the multiline text field, using the same editing model and keys as TextField
+// (TextEditBase). The text wraps at the area's width and keeps spaces and line breaks as typed
+// (white-space: pre-wrap). Return breaks a line. Up and Down move by displayed lines, keeping the
+// column they started from, and Page Up and Page Down move by as many lines as fit. Home and End
+// go to the ends of a displayed line. The area is `rows` lines tall unless something else sizes
+// it, and it scrolls vertically to keep the caret in view; the wheel scrolls it too. It declares
+// the key context "textinput multiline", where the multiline keys are bound, and Ctrl+Return
+// submits it.
 
 module;
 #include "Core/Prelude.h"
@@ -49,24 +50,25 @@ export namespace foundation::gui
         TextArea(const TextArea&) = delete;
         TextArea& operator=(const TextArea&) = delete;
 
-        /// How many lines tall it is when nothing sizes it.
+        /// Sets how many lines tall the area is when nothing else sizes it.
         void SetRows(i32 rows)
         {
             m_rows = core::Max(1, rows);
             RequestLayout();
         }
         [[nodiscard]] i32 GetRows() const noexcept { return m_rows; }
-        /// How far its text is scrolled down (to keep the caret in view).
+        /// Returns how far the text is scrolled down, which keeps the caret in view.
         [[nodiscard]] f32 GetScrollY() const noexcept { return m_scrollY; }
 
-        /// A text area's usual width, `rows` lines tall (E2).
+        /// Measures a text area's usual width and `rows` lines of height.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
             const f32 line = ShownText().GetFont() != nullptr ? ShownText().GetLineHeight() : 20.0f;
             return core::Float2{240.0f, line * static_cast<f32>(m_rows)};
         }
-        /// The size its text takes wrapped at `width` (widest line by total height), at least a line
-        /// tall: what a box that grows with what is typed measures (an editable label editing).
+        /// Returns the size of the text wrapped at `width` (the widest line by the total height),
+        /// at least one line tall. A box that grows with the typed text (an editing EditableLabel)
+        /// measures this.
         [[nodiscard]] core::Float2 MeasureText(f32 width) const
         {
             const f32 line = ShownText().GetFont() != nullptr ? ShownText().GetLineHeight() : 20.0f;
@@ -75,7 +77,7 @@ export namespace foundation::gui
             const core::Float2 size = ShownText().MeasureWrapped(width);
             return core::Float2{size.x, core::Max(size.y, line)};
         }
-        /// Its first line's baseline.
+        /// Returns the first line's baseline.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
         {
             const Thickness c = GetChrome();
@@ -93,7 +95,7 @@ export namespace foundation::gui
         {
             return core::Float2{content.x, content.y - m_scrollY};
         }
-        // Scrolls by the least that shows the caret's line, and no further than the text needs.
+        // Scrolls the least amount that shows the caret's line, and no further than the text needs.
         void KeepCaretInView() override
         {
             const f32 view = GetContentBounds().height;
@@ -108,7 +110,8 @@ export namespace foundation::gui
             if (m_scrollY != before)
                 Invalidate();
         }
-        // The wheel scrolls it, a few lines a notch; at an end the wheel goes on to what holds it.
+        // The wheel scrolls a few lines per notch. At an end the wheel event is left unhandled, so
+        // it passes on to the area's ancestors.
         void OnMouseWheel(const WheelEvent& event) override
         {
             const f32 view = GetContentBounds().height;
@@ -123,7 +126,7 @@ export namespace foundation::gui
         }
 
     private:
-        // The lines it shows, which vertical movement and a line's ends follow.
+        // The displayed lines, which vertical caret movement and Home and End follow.
         class ShownLines : public ITextLines
         {
         public:
@@ -136,7 +139,8 @@ export namespace foundation::gui
                     return {};
                 const usize index = layout.LineOf(m_area.DisplayOffset(offset));
                 const LaidOutLine& line = layout.Lines[index];
-                // A wrapped line's end is its next line's start: End stops before the space it broke at.
+                // A wrapped line ends where the next line starts, so End stops before the space
+                // where it broke.
                 const usize end = layout.OffsetOnLine(index, 1.0e9f);
                 return TextRange{m_area.ModelOffset(line.Start), m_area.ModelOffset(core::Max(line.Start, end))};
             }

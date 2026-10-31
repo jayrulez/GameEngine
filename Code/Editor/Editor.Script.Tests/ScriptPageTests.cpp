@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The script page over its markup without a host (AngelScript): the source read into the code and
-// checked, a broken edit's problem on its line, one history (the code's steps on the page's stack,
-// its Ctrl+Z the page's), Save writing the source, a missing source a problem and no save, the API
-// browser built when opened and searched, a breakpoint the editor's.
+// The script page over its markup without a host (AngelScript). The source is read into the code
+// and checked; a broken edit reports a problem on its line; there is one history (the code's
+// steps go on the page's stack, and Ctrl+Z is the page's undo); Save writes the source; a missing
+// source is a problem and cannot be saved; the API browser is built when opened and can be
+// searched; and a breakpoint belongs to the editor.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -53,8 +54,8 @@ namespace
         return loader.LoadFromString(text.AsView());
     }
 
-    // A project with a behaviour from the cook's starter ("Hero", Sources/Hero.as) and one whose
-    // source is not there ("Gone").
+    // A project with a behaviour made from the cook's starter ("Hero", Sources/Hero.as) and one
+    // whose source is missing ("Gone").
     struct Bed
     {
         String dir = String(u8"scratch_script_page_project");
@@ -136,10 +137,11 @@ TEST_CASE("script page: the source read and checked, a broken edit's problem on 
     CHECK(page->Text() == bed.source);
     CHECK(page->Language() == StringView(u8"angelscript"));
     CHECK(page->ErrorCount() == 0u);
-    CHECK(page->Problems()->Summary() == StringView(u8"No problems: compiles class Hero")); // the class it compiled, as the old page said
-    CHECK_FALSE(page->Code()->TokensOf(0).IsEmpty()); // coloured: its language read
+    CHECK(page->Problems()->Summary() == StringView(u8"No problems: compiles class Hero")); // names the class it compiled
+    CHECK_FALSE(page->Code()->TokensOf(0).IsEmpty()); // coloured, so its language was found
 
-    // Typing that breaks it: one step on the page's stack, the problem on its line once checked.
+    // Typing that breaks the code is one step on the page's stack, and once checked the problem
+    // shows on its line.
     page->Code()->SetCaret(gui::CodePosition{0, 0});
     page->Code()->Type(u8"this does not compile ");
     CHECK(page->IsDirty());
@@ -157,7 +159,7 @@ TEST_CASE("script page: the source read and checked, a broken edit's problem on 
     CHECK(page->Text().AsView().StartsWith(u8"this does not compile "));
     page->Commands().Undo();
 
-    // An edit, saved: the file holds it.
+    // An edit, once saved, is in the file.
     page->Code()->SetCaret(gui::CodePosition{0, 0});
     page->Code()->Type(u8"// a note\n");
     REQUIRE(page->Save().IsOk());
@@ -187,7 +189,7 @@ TEST_CASE("script page: the API browser built when it opens and searched; a brea
     page->ShowApi(true);
     CHECK(page->ApiShown());
     CHECK_FALSE(page->ApiTree().roots.IsEmpty());
-    REQUIRE(page->ApiModel() != nullptr); // the tree's rows, not only the page's list of them
+    REQUIRE(page->ApiModel() != nullptr); // the tree view's model, not only the page's list of rows
     CHECK(page->ApiModel()->RowCount() == page->ApiTree().roots.Size());
     page->SearchApi(u8"Float3");
     bool float3 = false;

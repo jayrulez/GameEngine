@@ -3,12 +3,12 @@
 
 // Editor::App - :ui_page partition.
 //
-// UIEditorPage: the UI-side extension of the headless editor::EditorPage - a page that owns a
-// GUI node, its content (docked as a closable center tab by EditorApplication), and receives
-// the app's frame hooks so it can drive per-page work (viewport binding, camera, offscreen
-// rendering). Every IEditorPageFactory registered into THIS app's context must produce
-// UIEditorPages (EditorApplication static_casts on open) - the headless EditorPage stays UI-free
-// for core tests, this is the one seam where pages meet the UI/runtime.
+// UIEditorPage: the UI-side extension of the headless editor::EditorPage. It owns a GUI node, its
+// content (docked as a closable center tab by EditorApplication), and receives the app's frame
+// hooks so it can drive per-page work (viewport binding, camera, offscreen rendering). Every
+// IEditorPageFactory registered into this app's context must produce UIEditorPages
+// (EditorApplication static_casts on open). The headless EditorPage stays UI-free for core tests;
+// this is the one place where pages meet the UI and the runtime.
 
 module;
 #include "Core/Prelude.h"
@@ -52,8 +52,8 @@ export namespace editor::app
             (void)frame;
         }
 
-        /// After the scene renderer's EndRendering (targets are COMPOSED): overlays that
-        /// draw ON the page's offscreen content (the Game tab's screen-tier UI).
+        /// After the scene renderer's EndRendering (the targets are composed): overlays that
+        /// draw on the page's offscreen content (the Game tab's screen-tier UI).
         virtual void OnAfterSceneRender(foundation::runtime::IApplicationHost& host,
                                         foundation::graphics::FrameContext& frame)
         {
@@ -61,7 +61,7 @@ export namespace editor::app
             (void)frame;
         }
 
-        /// Called right before the page is removed - release GPU/scene resources while the
+        /// Called right before the page is removed: release GPU and scene resources while the
         /// device and window are still alive.
         virtual void OnClose() {}
     };

@@ -3,20 +3,20 @@
 
 /// Foundation::Terrain.Resource - :splatmap partition.
 ///
-/// The editable terrain SPLAT WEIGHTS: the top-K (K = 4) blend model.
-/// Per texel, TWO equal-size rasters hold up to four (paletteIndex, weight) pairs:
-///   - indices: 4 x u8 palette indices (0..255); a slot is "unused" iff its weight is 0.
-///   - weights: 4 x u8 quantized weights (0..255 -> 0..1), sum <= 255.
-/// The BASE layer implicitly owns the remainder (baseW = 1 - sum/255): an all-zero raster is a
-/// valid "pure base" surface by construction - nothing needs seeding. This is the CPU SOURCE OF
-/// TRUTH (the Heightfield precedent); engine.terrain derives the GPU textures from it, keyed by
-/// uid + Version(). The pure brush cores (PaintTopK/EraseTopK) live here: no RHI, headless.
+/// The editable terrain splat weights: the top-K (K = 4) blend model.
+/// Per texel, two equal-size rasters hold up to four (paletteIndex, weight) pairs:
+///   - indices: 4 x u8 palette indices (0..255); a slot is unused iff its weight is 0.
+///   - weights: 4 x u8 quantized weights (0..255 maps to 0..1), sum <= 255.
+/// The base layer implicitly owns the remainder (baseW = 1 - sum/255): an all-zero raster is a
+/// valid pure-base surface by construction, so nothing needs seeding. This is the CPU source of
+/// truth, as the Heightfield is; engine.terrain derives the GPU textures from it, keyed by
+/// uid and Version(). The pure brush cores (PaintTopK/EraseTopK) live here: no RHI, headless.
 ///
-/// SplatWeightsSource is the cooked metadata (width/height); the two pixel blobs ride the
-/// `kSplatStream` ("pixels" = weights) and `kSplatIndexStream` ("indices") sidecars (bulk-data
-/// rule). SplatWeightsFactory builds the runtime SplatWeights. An IMPORTED flat RGBA8 raster
-/// (R = base share, G/B/A = palette 0..2) converts through SplatWeightsFromFixedLayerRaster -
-/// renormalized by the texel sum so the shares are exact (ruling R2).
+/// SplatWeightsSource is the cooked metadata (width and height); the two pixel blobs travel in
+/// the `kSplatStream` ("pixels", the weights) and `kSplatIndexStream` ("indices") sidecars, as
+/// bulk data does. SplatWeightsFactory builds the runtime SplatWeights. An imported flat RGBA8
+/// raster (R the base share, G/B/A palette 0..2) converts through
+/// SplatWeightsFromFixedLayerRaster, renormalized by the texel sum so the shares are exact.
 
 module;
 #include "Core/Prelude.h"
@@ -33,21 +33,21 @@ using namespace foundation::resource;
 
 export namespace foundation::terrain
 {
-    /// Layers blended per TEXEL (the K in top-K). The palette itself is unbounded (8-bit index,
-    /// up to 256 layers - exactly WebGPU's minimum maxTextureArrayLayers; do not widen the index
+    /// Layers blended per texel (the K in top-K). The palette itself is unbounded (8-bit index,
+    /// up to 256 layers, which is WebGPU's minimum maxTextureArrayLayers; do not widen the index
     /// without checking that limit).
     inline constexpr u32 kSplatSlotCount = 4;
 
-    /// The per-texel top-K (index, weight) rasters over the terrain's 0..1 footprint UV. IS-A
+    /// The per-texel top-K (index, weight) rasters over the terrain's 0..1 footprint UV. It is an
     /// Object so it is a referenceable product (Ref<SplatWeights>) the terrain holds. The
-    /// per-object uid + Version() drive the GPU cache invalidation (the Heightfield precedent).
+    /// per-object uid and Version() drive the GPU cache invalidation, as the Heightfield's do.
     class SplatWeights final : public Object
     {
         RTTI_OBJECT(SplatWeights, Object)
     public:
-        // Unique per-OBJECT id: GPU caches key by THIS + Version(), never by pointer - a freed
-        // raster's address can be reused by a fresh one at an equal version (the height-texture
-        // cache rule, bind-group-cache-versioning).
+        // Unique per-object id: GPU caches key by this and Version(), never by pointer, because a
+        // freed raster's address can be reused by a fresh one at an equal version (the same rule
+        // as the height-texture cache).
         const u64 uid = NextUid();
 
         [[nodiscard]] static u64 NextUid() noexcept
@@ -58,7 +58,7 @@ export namespace foundation::terrain
 
         SplatWeights() = default;
 
-        /// Allocate an all-zero pair of rasters: every weight 0 -> pure BASE everywhere (the base
+        /// Allocate an all-zero pair of rasters: every weight 0, so pure base everywhere (the base
         /// is a separate layer, so a fresh weights raster needs no seeding).
         SplatWeights(i32 width, i32 height) : m_width(width), m_height(height)
         {
@@ -73,7 +73,7 @@ export namespace foundation::terrain
         [[nodiscard]] i32 Height() const noexcept { return m_height; }
 
         /// Monotonic edit generation (starts at 1). Bump after a paint so the GPU splat textures
-        /// re-upload (the sculpt/regen path).
+        /// re-upload (the sculpt and regen path).
         [[nodiscard]] u64 Version() const noexcept { return m_version; }
         void BumpVersion() noexcept { ++m_version; }
 
@@ -104,7 +104,7 @@ export namespace foundation::terrain
             return m_weights[TexelOffset(x, y) + (slot & 3u)];
         }
 
-        /// The weight (0..255) this texel gives PALETTE layer `paletteIndex` (0 if not in a slot).
+        /// The weight (0..255) this texel gives palette layer `paletteIndex` (0 if not in a slot).
         [[nodiscard]] u8 WeightOfLayer(i32 x, i32 y, u32 paletteIndex) const noexcept
         {
             const usize at = TexelOffset(x, y);
@@ -118,7 +118,7 @@ export namespace foundation::terrain
             return 0;
         }
 
-        /// The implicit BASE weight (0..255) at a texel: 255 - sum(slot weights), clamped.
+        /// The implicit base weight (0..255) at a texel: 255 - sum(slot weights), clamped.
         [[nodiscard]] u8 BaseWeight(i32 x, i32 y) const noexcept
         {
             const usize at = TexelOffset(x, y);
@@ -168,9 +168,9 @@ export namespace foundation::terrain
 
     namespace detail
     {
-        // Shared elliptical-brush visitor: calls fn(x, y, t) for every texel inside the WORLD
-        // circle (per-axis UV radii - the same non-square-footprint handling the sculpt brush
-        // uses) with the falloff-scaled strength t in (0, 1]. `coreFraction` = the flat inner
+        // Shared elliptical-brush visitor: calls fn(x, y, t) for every texel inside the world
+        // circle (per-axis UV radii, the same non-square-footprint handling the sculpt brush
+        // uses) with the falloff-scaled strength t in (0, 1]. `coreFraction` is the flat inner
         // core's share of the radius (full strength inside it, cosine skirt outside).
         template <typename TFn>
         inline void VisitSplatBrush(const SplatWeights& sw, f32 uvX, f32 uvY, f32 uvRadiusX,
@@ -201,13 +201,13 @@ export namespace foundation::terrain
                     {
                         continue;
                     }
-                    // Hard inner core + cosine skirt: full strength inside `core`, the smooth
+                    // Hard inner core and cosine skirt: full strength inside `core`, the smooth
                     // falloff to the rim outside it. The core makes a full-strength stamp
-                    // DECISIVE (one-hot paint / clean erase at the texel under the cursor - the
-                    // stamp-brush model needs an exact 1 somewhere, and a pure cosine never
-                    // delivers it at a texel centre); the skirt keeps the edge soft. Callers
-                    // SCALE the core with the stamp amount (soft profile at blending strengths,
-                    // hard at 1.0) - see the paint tool.
+                    // decisive (one-hot paint or a clean erase at the texel under the cursor):
+                    // the stamp-brush model needs an exact 1 somewhere, and a pure cosine never
+                    // delivers it at a texel centre. The skirt keeps the edge soft. Callers
+                    // scale the core with the stamp amount (soft profile at blending strengths,
+                    // hard at 1.0); see the paint tool.
                     const f32 core = Clamp(coreFraction, 0.0f, 0.95f);
                     const f32 fall =
                         dist <= core
@@ -223,17 +223,17 @@ export namespace foundation::terrain
         }
     }
 
-    /// Paint PALETTE layer `paletteIndex` over a world-space brush disc (per-axis UV radii,
+    /// Paint palette layer `paletteIndex` over a world-space brush disc (per-axis UV radii,
     /// centre uvX/uvY, strength `amount` in [0,1]). Per touched texel, the top-K update:
-    ///   1. slot = the slot already holding L, else a free (weight-0) slot, else EVICT the
+    ///   1. slot = the slot already holding L, else a free (weight-0) slot, else evict the
     ///      minimum-weight slot unconditionally (index = L, weight = 0; the evicted weight falls
-    ///      to base - the error is bounded by the smallest weight, the least visible; ruling R8).
-    ///   2. every OTHER slot fades: w *= (1 - t) (base fades too, since base = 1 - sum).
+    ///      to base, so the error is bounded by the smallest weight, the least visible).
+    ///   2. every other slot fades: w *= (1 - t) (base fades too, since base = 1 - sum).
     ///   3. L raises: w = w + t * (1 - w).
     /// The result stays convex (sum' = lerp(sum, 1, t) <= 1); repeated full-strength painting
     /// drives the texel to pure L. Weights that quantize to 0 free their slot (index cleared) so
     /// the top-K stays meaningful. Bumps the version if anything changed; returns the touched
-    /// rect for region-delta undo + the bounded GPU re-upload.
+    /// rect for region-delta undo and the bounded GPU re-upload.
     inline SplatRegion PaintTopK(SplatWeights& sw, f32 uvX, f32 uvY, f32 uvRadiusX, f32 uvRadiusY,
                                  u32 paletteIndex, f32 amount, f32 coreFraction = 0.5f)
     {
@@ -253,7 +253,7 @@ export namespace foundation::terrain
             {
                 const usize at = sw.TexelOffset(x, y);
 
-                // 1. Choose L's slot: existing -> free -> evict-min.
+                // 1. Choose L's slot: the existing one, else a free one, else evict the minimum.
                 u32 slot = kSplatSlotCount;
                 for (u32 k = 0; k < kSplatSlotCount; ++k)
                 {
@@ -288,9 +288,9 @@ export namespace foundation::terrain
                     wts[at + slot] = 0; // evicted weight falls to base (sum drops)
                 }
 
-                // 2 + 3. Fade others, raise L; compute in float, quantize once. The raised slot
-                // quantizes LAST, capped by the others' quantized sum - per-slot round-to-nearest
-                // can otherwise push the u8 sum one over 255 (e.g. t = 0.5 rounds BOTH halves
+                // 2 and 3. Fade others, raise L; compute in float, quantize once. The raised slot
+                // quantizes last, capped by the others' quantized sum: per-slot round-to-nearest
+                // can otherwise push the u8 sum one over 255 (e.g. t = 0.5 rounds both halves
                 // up), and convexity (sum + base == 1) must hold exactly in the stored bytes.
                 bool texelChanged = false;
                 i32 othersSum = 0;
@@ -348,7 +348,7 @@ export namespace foundation::terrain
         return region;
     }
 
-    /// Erase over the brush disc: every slot fades w *= (1 - t) - the base (= the remainder)
+    /// Erase over the brush disc: every slot fades w *= (1 - t), so the base (the remainder)
     /// rises toward 1. Slots that quantize to 0 are freed (index cleared).
     inline SplatRegion EraseTopK(SplatWeights& sw, f32 uvX, f32 uvY, f32 uvRadiusX, f32 uvRadiusY,
                                  f32 amount, f32 coreFraction = 0.5f)
@@ -396,15 +396,15 @@ export namespace foundation::terrain
         return region;
     }
 
-    /// Smooth (blur) over the brush disc: every texel's weights move toward the AVERAGE of their
-    /// 3x3 neighborhood (clamped at the raster edge), `w = lerp(w, avg, t)` - feathering an
+    /// Smooth (blur) over the brush disc: every texel's weights move toward the average of their
+    /// 3x3 neighborhood (clamped at the raster edge), `w = lerp(w, avg, t)`, feathering an
     /// already-painted seam without repainting either side. The base needs no handling: it is the
     /// remainder, and an average of convex texels stays convex. Neighborhoods are read from a
-    /// SNAPSHOT of the touched rect (+1 ring) so the pass is order-independent - no directional
-    /// smearing from reading already-smoothed texels. Where the union of neighborhood layers
-    /// exceeds K, the K largest smoothed weights win (the dropped tail falls to base - the same
-    /// least-visible-error rule as paint eviction). Bumps the version if anything changed;
-    /// returns the touched rect for region-delta undo + the bounded GPU re-upload.
+    /// snapshot of the touched rect (plus a 1-texel ring) so the pass is order-independent, with no
+    /// directional smearing from reading already-smoothed texels. Where the union of neighborhood
+    /// layers exceeds K, the K largest smoothed weights win (the dropped tail falls to base, the
+    /// same least-visible-error rule as paint eviction). Bumps the version if anything changed;
+    /// returns the touched rect for region-delta undo and the bounded GPU re-upload.
     inline SplatRegion SmoothTopK(SplatWeights& sw, f32 uvX, f32 uvY, f32 uvRadiusX, f32 uvRadiusY,
                                   f32 amount, f32 coreFraction = 0.5f)
     {
@@ -415,7 +415,7 @@ export namespace foundation::terrain
         }
         const i32 w = sw.Width();
         const i32 h = sw.Height();
-        // Snapshot the brush rect + a 1-texel ring (every neighborhood read lands inside it).
+        // Snapshot the brush rect and a 1-texel ring (every neighborhood read lands inside it).
         const f32 cx = uvX * static_cast<f32>(w);
         const f32 cy = uvY * static_cast<f32>(h);
         const f32 rx = uvRadiusX * static_cast<f32>(w);
@@ -520,7 +520,7 @@ export namespace foundation::terrain
                     candNew[c] = cur + t * (avg - cur);
                 }
 
-                // Keep the K largest smoothed weights (selection sort - K is 4). Quantize in
+                // Keep the K largest smoothed weights (selection sort; K is 4). Quantize in
                 // descending order, each capped by the remaining byte budget, so convexity
                 // (sum <= 255) holds exactly and rounding error lands on the smallest weights.
                 const usize at = sw.TexelOffset(x, y);
@@ -576,7 +576,7 @@ export namespace foundation::terrain
         return region;
     }
 
-    /// Palette-remove remap (ruling R6): slots referencing `removedIndex` are FREED (their weight
+    /// Palette-remove remap: slots referencing `removedIndex` are freed (their weight
     /// falls to the base) and indices above it decrement so every surviving slot still names its
     /// layer. Whole-raster; bumps the version when anything changed. Returns whether it did.
     inline bool RemapOnPaletteRemove(SplatWeights& sw, u32 removedIndex)
@@ -613,8 +613,8 @@ export namespace foundation::terrain
         return changed;
     }
 
-    /// Convert an IMPORTED flat raster (RGBA8, four fixed layers: R = the base share, G/B/A =
-    /// palette 0,1,2) to the top-K model. Ruling R2: the channels are RENORMALIZED by the texel
+    /// Convert an imported flat raster (RGBA8, four fixed layers: R = the base share, G/B/A =
+    /// palette 0,1,2) to the top-K model. The channels are renormalized by the texel
     /// sum, so a raster whose sums drift from 255 still yields the exact shares (the base is the
     /// deficit, 255 - the palette slots). A zero-sum texel becomes pure base.
     [[nodiscard]] inline RefPtr<SplatWeights> SplatWeightsFromFixedLayerRaster(
@@ -639,7 +639,7 @@ export namespace foundation::terrain
             const f32 sum = w0 + w1 + w2 + w3;
             if (sum <= 0.0f)
             {
-                continue; // all-zero slots = pure base
+                continue; // all-zero slots: pure base
             }
             // Channels G/B/A -> palette indices 0..2, renormalized by the texel sum.
             const f32 scale = 255.0f / sum;
@@ -651,7 +651,7 @@ export namespace foundation::terrain
             wts[at + 1] = static_cast<u8>(Clamp(w2 * scale + 0.5f, 0.0f, 255.0f));
             wts[at + 2] = static_cast<u8>(Clamp(w3 * scale + 0.5f, 0.0f, 255.0f));
             wts[at + 3] = 0;
-            // Zero slots clear their index (weight 0 = unused); base = 255 - sum = w0's share.
+            // Zero slots clear their index (weight 0 is unused); base = 255 - sum, w0's share.
             for (u32 k = 0; k < kSplatSlotCount; ++k)
             {
                 if (wts[at + k] == 0)
@@ -663,8 +663,8 @@ export namespace foundation::terrain
         return sw;
     }
 
-    /// Cooked splat-weights METADATA: just the raster dimensions. The two pixel blobs are NOT
-    /// here - they ride the `kSplatStream` (weights) + `kSplatIndexStream` (indices) sidecars.
+    /// Cooked splat-weights metadata: just the raster dimensions. The two pixel blobs are not
+    /// here; they travel in the `kSplatStream` (weights) and `kSplatIndexStream` (indices) sidecars.
     class SplatWeightsSource final : public ISerializable
     {
         RTTI_OBJECT(SplatWeightsSource, ISerializable)
@@ -695,7 +695,7 @@ export namespace foundation::terrain
             return Span<const byte>(reinterpret_cast<const byte*>(px.Data()), px.Size());
         }
 
-        /// Build the runtime product from this metadata + the two sidecar blobs. Inconsistent
+        /// Build the runtime product from this metadata and the two sidecar blobs. Inconsistent
         /// data (bad dims, blob size mismatch) yields an empty raster rather than a malformed one.
         [[nodiscard]] RefPtr<SplatWeights> Build(Span<const byte> indexBlob,
                                                  Span<const byte> weightBlob,
@@ -718,17 +718,17 @@ export namespace foundation::terrain
         }
     };
 
-    /// Sidecar stream names: `kSplatStream` carries the WEIGHT raster, `kSplatIndexStream` the
+    /// Sidecar stream names: `kSplatStream` carries the weight raster, `kSplatIndexStream` the
     /// palette-index raster. Both are required; a cooked instance missing either fails to load.
     inline constexpr StringView kSplatStream = u8"pixels";
     inline constexpr StringView kSplatIndexStream = u8"indices";
 
-    /// Builds cooked splat weights (metadata + two streams) into a runtime SplatWeights.
+    /// Builds cooked splat weights (metadata and two streams) into a runtime SplatWeights.
     /// Pure-CPU, async-safe.
     class SplatWeightsFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
+        // The allocator backs every product this factory creates (required;
         // the application that registers the factory decides).
         explicit SplatWeightsFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -795,7 +795,7 @@ export namespace foundation::terrain
         IAllocator* m_allocator;
     };
 
-    /// Register the splat-weights resource types (product + cooked source) for load.
+    /// Register the splat-weights resource types (product and cooked source) for load.
     inline void RegisterSplatmapResourceTypes()
     {
         GlobalTypeRegistry().Register(SplatWeights::StaticType());

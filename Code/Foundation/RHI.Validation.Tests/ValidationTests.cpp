@@ -86,9 +86,8 @@ namespace
 TEST_CASE("rhi.validation: a fenced submit without a fence is reported on BOTH fenced overloads")
 {
     // The contract: the fenced overloads require a signal fence; the plain overload is the
-    // unsignalled path. This was reported on the 3-arg overload only - the Beef port's layer
-    // reported both, and its Vulkan backend rejected the submit while ours submitted
-    // unsignalled (and, on a graphics queue, consumed the swap-chain sync doing so).
+    // unsignalled path. Both fenced overloads must report a missing fence: submitting
+    // unsignalled instead would, on a graphics queue, consume the swap-chain sync.
     Backend* inner = nullptr;
     REQUIRE(null::CreateNullBackend(inner).IsOk());
     Backend* vb = validation::CreateValidatedBackend(inner, DefaultAllocator());
@@ -169,10 +168,10 @@ TEST_CASE("rhi.validation: a device destroyed with live textures names them by t
     LineCapture capture;
     capture.needle = "leak.probe.texture";
     SetLogSink(&LineCapture::Sink, &capture);
-    device->Destroy(); // the texture AND its view are still alive: both named
+    device->Destroy(); // the texture and its view are still alive: both named
     SetLogSink(nullptr, nullptr);
     CHECK(capture.matching == 2);
-    // The leak was deliberate; hand the two null objects back to their allocator through a
+    // The leak was on purpose; hand the two null objects back to their allocator through a
     // sibling null device so the sanitizer lanes stay quiet.
     Device* janitor = nullptr;
     REQUIRE(inner->EnumerateAdapters()[0]->CreateDevice(DeviceDesc{}, janitor).IsOk());

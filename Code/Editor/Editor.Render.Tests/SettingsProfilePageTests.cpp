@@ -3,9 +3,9 @@
 
 // The settings profile page: its preview takes the profile's values, on the built-in scene or on a
 // project scene that takes a profile, and the scene chosen to preview on is kept per profile. Then
-// the page from the preview pages' markup over a profile in a project, without a host (no
-// preview): its rows the values' (the scene's own fields left out), an edit one undo step, and
-// Discard Changes taking every edit back.
+// the page built from the preview pages' markup, over a profile in a project and without a host (so
+// no preview): its rows are the values without the scene's own fields, an edit is one undo step,
+// and Discard Changes takes every edit back.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -46,7 +46,7 @@ namespace
         String dir = String(u8"scratch_profile_page_project");
         UniquePtr<editor::EditorProject> project;
         foundation::settings::Settings store{DefaultAllocator()};
-        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
+        editor::app::AssetPageServicesSource none; // no services for the registration; outlives the context below
         editor::EditorContext context{DefaultAllocator()};
         foundation::content::Instance* dusk = nullptr;
 
@@ -54,7 +54,7 @@ namespace
         {
             RegisterRenderComponentReflection();
             pipeline::RegisterRenderProfileAssets();
-            editor::RegisterSettingsProfileEditor(context, none); // the prefs' section
+            editor::RegisterSettingsProfileEditor(context, none); // registers the prefs' section
             (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());
@@ -122,7 +122,7 @@ TEST_CASE("settings profiles: the profile page's preview takes the profile's val
     CHECK_FALSE(editor::ApplySettingsProfileToScene(*look, empty, nullptr)); // no block to take them
 }
 
-// A profile previewed on one of the project's scenes (user 2026-10-09): a scene whose block takes a
+// A profile previewed on one of the project's scenes: a scene whose block takes a
 // profile by reference renders that profile's cooked values, so the preview turns the block to its
 // own values before giving it the ones being edited.
 TEST_CASE("settings profiles: previewed on a scene that takes a profile, the edited values show")
@@ -175,7 +175,7 @@ TEST_CASE("settings profile page: its rows are the values', the scene's own fiel
     gui::IPropertySource& rows = page->Rows();
     CHECK(rows.ObjectCount() == 1u);
     CHECK(HasRow(rows, u8"turbidity"));
-    CHECK_FALSE(HasRow(rows, u8"source")); // a scene's, not a profile's
+    CHECK_FALSE(HasRow(rows, u8"source")); // belongs to a scene, not a profile
     CHECK_FALSE(HasRow(rows, u8"profile"));
     CHECK(rows.GetValue(u8"turbidity", 0).AsFloat() == doctest::Approx(3.0));
     CHECK(page->PreviewSceneId().IsNil()); // the built-in scene
@@ -209,7 +209,7 @@ TEST_CASE("settings profile page: a gesture's previews reach the preview as they
     UniquePtr<editor::SettingsProfilePage> page = bed.Open();
     gui::IPropertySource& rows = page->Rows();
     const usize before = page->PreviewsApplied();
-    // As a slider's drag: written in place as it goes, the preview given each value.
+    // Like a slider's drag: each value is written in place and given to the preview.
     rows.BeginEdit(u8"turbidity");
     rows.PreviewEdit(u8"turbidity", gui::PropertyWrite{gui::Variant(4.0)});
     CHECK(page->PreviewsApplied() == before + 1u);

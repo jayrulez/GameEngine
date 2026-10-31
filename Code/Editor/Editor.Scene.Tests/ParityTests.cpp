@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The scene editor's checks from before the GUI rewrite, on the new code: the camera's wheel dolly
-// keeps its pivot; the Scene creator names its scenes uniquely and seeds each with a Sun; a copy the
-// user asks for says what it copied; the hierarchy's double-click frames, its arrow keys move the
-// selection, its Copy ID puts the guid on the clipboard; a v3 view pref reads through the legacy
-// gate; the frame-rate readout; scene settings from a profile (an edit lands in the profile, Copy
-// Into Scene and a source switch one undo step each, Make Profile writes the asset and switches);
-// the settings source reads where the block's values are; a scene's world bounds; the settings
-// sections titled by display name; the render components' inspector attributes as the reflected
-// source evaluates them (the collision groups' cap is in ScenePageTests, beside the groups).
+// Scene editor behaviours: the camera's wheel dolly keeps its pivot; the Scene creator names
+// scenes uniquely and seeds each with a Sun; copying reports what it copied; the hierarchy frames
+// on double-click, moves the selection with the arrow keys and copies the guid with Copy ID; a
+// version-3 view preference still reads; the frame-rate readout; scene settings drawn from a
+// profile (edits land in the profile, Copy Into Scene and a source switch are one undo step each,
+// Make Profile writes the asset and switches to it); a scene's world bounds; settings sections
+// titled by display name; and the render components' inspector attributes as the reflected
+// source evaluates them. The collision groups' cap is tested in ScenePageTests.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -91,7 +90,7 @@ namespace
         return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
     }
 
-    // A project with a scene ("Level", a Crate in it), and the page over it.
+    // A project with a scene ("Level", with a Crate in it), and the page over it.
     struct Bed
     {
         String dir = String(u8"scratch_scene_parity_project");
@@ -139,8 +138,8 @@ namespace
         }
     };
 
-    // The page laid out in a GUI of its own under the editor's sheet, for its rows to be pressed
-    // where they show and keys sent to what has the focus.
+    // The page laid out in its own GUI under the editor's sheet, so a test can press its rows
+    // where they show and send keys to the focused node.
     struct Shown
     {
         RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
@@ -197,7 +196,7 @@ namespace
         void SetText(StringView text) override { stored = String(text); }
     };
 
-    // Only the wheel: what the camera's dolly reads.
+    // A mouse with only a wheel, which is all the camera's dolly reads.
     class WheelMouse final : public shell::IMouse
     {
     public:
@@ -221,7 +220,7 @@ namespace
         void SetGlobalCapture(bool) override {}
     };
 
-    // The Scene creator File > New runs, over a real project.
+    // Runs the Scene creator that File > New uses, over a real project.
     foundation::content::Instance* CreateScene(EditorProject& project)
     {
         pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
@@ -237,7 +236,7 @@ TEST_CASE("editor camera: the wheel dolly keeps the orbit pivot at any zoom, and
 {
     EditorCamera cam;
     cam.position = Float3{0.0f, 0.0f, 5.0f};
-    cam.LookAt(Float3{0.0f, 0.0f, 0.0f}); // the pivot the origin, 5 away
+    cam.LookAt(Float3{0.0f, 0.0f, 0.0f}); // the pivot is the origin, 5 units away
     WheelMouse mouse;
     mouse.scroll = 1.0f;
     for (int i = 0; i < 40; ++i)
@@ -250,7 +249,7 @@ TEST_CASE("editor camera: the wheel dolly keeps the orbit pivot at any zoom, and
     CHECK(cam.focusDistance < 1.0f);   // closer than a fixed floor of 1 would allow
     CHECK(cam.focusDistance >= 0.05f); // but never through the pivot
 
-    // Out again along the same axis, the pivot where it was.
+    // Dolly out again along the same axis; the pivot stays where it was.
     mouse.scroll = -1.0f;
     for (int i = 0; i < 40; ++i)
         cam.Update(nullptr, &mouse, 1.0f / 60.0f);
@@ -329,12 +328,12 @@ TEST_CASE("editor context: a copy the user asks for says what it copied, or that
     CHECK(kind == NoticeKind::Success);
     CHECK(notice == String(u8"Copied path"));
 
-    // No clipboard (a headless view): a warning, not a silent no-op.
+    // With no clipboard (a headless view) the copy warns rather than silently doing nothing.
     CHECK_FALSE(editor.CopyText(nullptr, u8"x", u8"GUID"));
     CHECK(kind == NoticeKind::Warning);
     CHECK(notice == String(u8"Could not copy GUID to the clipboard"));
 
-    // The typed editor clipboard: the slot holds the blob, and the toast names it.
+    // The typed editor clipboard: the slot holds the blob, and the toast names what was copied.
     Array<byte> blob;
     blob.PushBack(byte{7});
     editor.CopyToEditorClipboard(u8"component", Move(blob), u8"component 'Light'");
@@ -402,7 +401,7 @@ TEST_CASE("hierarchy: a double-click on a row frames its entity, eased, and star
     REQUIRE(camera != nullptr);
     Shown shown(*page);
 
-    // The scene's row: no entity, nothing framed.
+    // The scene's row has no entity, so nothing is framed.
     shown.Click(*tree->Tree(), 0);
     shown.Click(*tree->Tree(), 0);
     CHECK_FALSE(camera->IsGliding());
@@ -413,7 +412,7 @@ TEST_CASE("hierarchy: a double-click on a row frames its entity, eased, and star
     CHECK(page->EditContext().EntitySelection().Contains(lantern));
     CHECK_FALSE(camera->IsGliding()); // one click selects
     shown.Click(*tree->Tree(), item);
-    CHECK(camera->IsGliding()); // the second frames, eased
+    CHECK(camera->IsGliding()); // the second click frames the entity, eased
     CHECK_FALSE(tree->Tree()->IsEditing());
 
     // Once the glide is done, the pivot is on the entity (at the origin).
@@ -446,7 +445,7 @@ TEST_CASE("hierarchy: the arrow keys move the tree's selection and the scene's f
     shown.Key(gui::KeyCode::Up);
     CHECK(page->EditContext().EntitySelection().Contains(bed.crate));
     shown.Key(gui::KeyCode::Up);
-    CHECK(page->EditContext().EntitySelection().IsEmpty()); // the scene's row: no entity
+    CHECK(page->EditContext().EntitySelection().IsEmpty()); // the scene's row has no entity
     CHECK(tree->SceneSelected());
     page->OnClose();
 }
@@ -458,14 +457,14 @@ TEST_CASE("scene view settings: a v3 view pref reads through the legacy gate wit
     CHECK(type.dataVersion == 4u);
     CHECK(type.minReadDataVersion == 3u);
 
-    // A v3-shaped record: under a version-3 scope the body writes only the v3 keys.
+    // A version-3 record: under a version-3 scope the body writes only the version-3 keys.
     MemoryStream v3;
     {
         BinarySerializer ar(v3, SerializeMode::Write);
         const SerializedDataVersion chain[] = {{type.id, 3u}};
         ar.PushVersionScope(chain, 1);
         SceneViewPref pref{Guid{1, 2}, false, true, true, true, true};
-        pref.hasCamera = true; // must not reach the v3 record
+        pref.hasCamera = true; // does not reach the version-3 record
         pref.Serialize(ar);
         ar.PopVersionScope();
         REQUIRE(ar.IsOk());
@@ -483,7 +482,7 @@ TEST_CASE("scene view settings: a v3 view pref reads through the legacy gate wit
         CHECK_FALSE(pref.showGrid);
         CHECK(pref.showLodOverlay);
         CHECK(pref.showColliders);
-        CHECK_FALSE(pref.showMarkers); // the v4 defaults, not the writer's values
+        CHECK_FALSE(pref.showMarkers); // the version-4 defaults, not the writer's values
         CHECK_FALSE(pref.showFps);
         CHECK_FALSE(pref.hasCamera);
         CHECK(pref.selection.IsEmpty());
@@ -578,10 +577,10 @@ TEST_CASE("settings profiles: a value edit lands in the profile, the block's own
     s.commands.Undo();
     CHECK(s.profile->values.ambientIntensity == doctest::Approx(0.9f));
     CHECK(s.profile->values.skyMode != foundation::render::SkyMode::Analytic);
-    CHECK(edited.Size() == 4); // every write to the profile is persisted, the undos too
+    CHECK(edited.Size() == 4); // every write to the profile is persisted, undos included
 
-    // The source is the scene's own ("sceneOnly"): switching it edits the block, and after it an
-    // edit lands in the scene's own values.
+    // The source field always belongs to the scene ("sceneOnly"): switching it edits the block,
+    // and later edits land in the scene's own values.
     s.edit.SetSceneSettingPropertyRaw(EnvType(), "source", static_cast<i64>(SettingsSource::Scene));
     CHECK(s.env->Environment().source == SettingsSource::Scene);
     s.edit.SetSceneSettingProperty(EnvType(), "ambientIntensity", Variant::From<f32>(0.4f));
@@ -604,7 +603,7 @@ TEST_CASE("settings profiles: Copy Into Scene and a source switch are one undo s
     CHECK(s.env->Environment().source == SettingsSource::Scene);
     CHECK(s.env->Environment().ambientIntensity == doctest::Approx(0.9f));
     CHECK(s.env->Environment().turbidity == doctest::Approx(6.0f));
-    CHECK(s.env->Environment().profile.id == s.id); // kept: the profile is a pick away
+    CHECK(s.env->Environment().profile.id == s.id); // the profile reference is kept for switching back
     s.commands.Undo();
     CHECK(s.env->Environment().source == SettingsSource::Profile);
     CHECK(s.env->Environment().ambientIntensity == doctest::Approx(0.25f));
@@ -630,7 +629,8 @@ TEST_CASE("settings profiles: Make Profile writes the values and switches; an ed
         EditorContext context(DefaultAllocator());
         context.SetProject(project.Get());
         pipeline::RegisterRenderCreators(context.Creators());
-        // The join the app wires from its builders: the environment profile's asset.
+        // The product-to-asset mapping the app wires from its builders: here, the environment
+        // profile's asset type.
         context.SourceAssetTypesOf = [](const TypeInfo& product)
         {
             Array<const TypeInfo*> out;
@@ -664,8 +664,8 @@ TEST_CASE("settings profiles: Make Profile writes the values and switches; an ed
         CHECK(env->Environment().source == SettingsSource::Scene);
         commands.Redo();
 
-        // The profile loaded (here by hand; the editor binds the cooked product): an edit in
-        // profile mode is queued and the save flow writes it to the asset.
+        // Load the profile by hand (the editor binds the cooked product). An edit in profile
+        // mode is queued, and the save flow writes it to the asset.
         RefPtr<engine::render::EnvironmentProfile> product = MakeRef<engine::render::EnvironmentProfile>(DefaultAllocator());
         product->values = env->Environment();
         env->Environment().profile = product.Get();
@@ -703,7 +703,8 @@ TEST_CASE("settings profiles: the settings source reads a value where the block'
     app::XmlPropertyTextFormat format(DefaultAllocator());
     SceneSettingsSource source(DefaultAllocator(), s.edit, *EnvType(), format);
 
-    // Using the profile: a value field reads the profile's; the source (scene only) the block's.
+    // Using the profile, a value field reads the profile's value, while the source field (which
+    // is scene only) reads the block's.
     CHECK(source.GetValue(u8"turbidity", 0).AsFloat() == doctest::Approx(9.0));
     CHECK(source.GetValue(u8"source", 0).AsInt() == static_cast<i64>(SettingsSource::Profile));
     gui::PropertyWrite write;
@@ -715,14 +716,14 @@ TEST_CASE("settings profiles: the settings source reads a value where the block'
     REQUIRE(edited.Size() == 1);
     CHECK(edited[0] == s.id);
 
-    // The source switched: the next refresh follows the block's own values.
+    // After the source switches, the next refresh follows the block's own values.
     s.edit.SetSceneSettingPropertyRaw(EnvType(), "source", static_cast<i64>(SettingsSource::Scene));
     source.Refresh();
     CHECK(source.GetValue(u8"turbidity", 0).AsFloat() == doctest::Approx(3.0));
     source.BeginEdit(u8"turbidity");
     source.CommitEdit(u8"turbidity", write);
     CHECK(s.env->Environment().turbidity == doctest::Approx(4.0f));
-    CHECK(s.profile->values.turbidity == doctest::Approx(4.0f)); // the profile's own edit only
+    CHECK(s.profile->values.turbidity == doctest::Approx(4.0f)); // unchanged since its own edit
     CHECK(edited.Size() == 1);
 }
 
@@ -833,8 +834,8 @@ TEST_CASE("inspector attributes: the render components carry visibleWhen, range 
     using engine::render::LightComponent;
     using engine::render::LightType;
 
-    // Light: spot-only angles behind the type; the shadow controls while it casts shadows;
-    // intensity a slider.
+    // Light: the spot angles show only for a spot light, the shadow controls only while it casts
+    // shadows, and intensity is a slider.
     const TypeInfo& light = TypeOf<LightComponent>();
     CHECK(VisibleWhen(light, "innerAngle") == StringView(u8"type=2"));
     CHECK(VisibleWhen(light, "outerAngle") == StringView(u8"type=2"));
@@ -868,8 +869,8 @@ TEST_CASE("inspector attributes: the render components carry visibleWhen, range 
         CHECK(RowVisible(source, u8"range")); // type=1,2
     }
 
-    // Camera: the field of view for a perspective camera, the height for an orthographic one, the
-    // mode an enum by name.
+    // Camera: the field of view shows for a perspective camera and the height for an orthographic
+    // one; the projection is an enum shown by name.
     const TypeInfo& camera = TypeOf<CameraComponent>();
     CHECK(VisibleWhen(camera, "fovYRadians") == StringView(u8"projection=0"));
     CHECK(VisibleWhen(camera, "orthoHeight") == StringView(u8"projection=1"));
@@ -887,8 +888,8 @@ TEST_CASE("inspector attributes: the render components carry visibleWhen, range 
         CHECK(RowVisible(source, u8"orthoHeight"));
     }
 
-    // Environment: turbidity Analytic-only with a bounded slider; the shared zenith / color slot's
-    // own name.
+    // Environment: turbidity shows only for the Analytic sky, with a bounded slider, and the slot
+    // shared by the zenith and the color has its own display name.
     const TypeInfo& env = TypeOf<EnvironmentSettings>();
     CHECK(VisibleWhen(env, "turbidity") == StringView(u8"skyMode=1"));
     const PropertyInfo* turbidity = FindProperty(env, "turbidity");

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Fonts.Tests TTF suites (loader/font/atlas/shaper).
-// Sedulous loaded system fonts from C:/Windows/Fonts; the engine bundles the
-// Roboto asset (copied from Sedulous/Assets) under the data root's Engine/Fonts.
+// The TTF backend suites (loader, font, atlas, shaper, service), over the bundled
+// Roboto asset under the data root's Engine/Fonts.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -18,9 +17,9 @@ using namespace foundation::fonts;
 
 namespace
 {
-    // Build a UTF-8 path from the (ASCII) asset dir + a relative suffix.
+    // Build a UTF-8 path from the (ASCII) asset dir and a relative suffix.
     // "<data root>" + rel (rel starts with '/'): the bundled fonts are found the way
-    // every executable finds engine data - the Data/.dataroot walk from the test binary.
+    // every executable finds engine data: the Data/.dataroot walk from the test binary.
     String AssetPath(const char* rel)
     {
         String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there
@@ -335,8 +334,8 @@ TEST_CASE("ttf.shaper: ShapeTextWrapped honors explicit newlines")
 
 // ============================ the service: sizes =========================
 
-// A coverage family is baked at each size asked for: drawn from one bake, every label in a game
-// without a UI font came out at the bake's size whatever its font-size.
+// A coverage family is baked at each size asked for; drawn from one bake, every label would come
+// out at the bake's size whatever its font-size.
 TEST_CASE("ttf.service: a coverage family answers each size with its own bake, cached")
 {
     TrueTypeFonts::Initialize();
@@ -359,7 +358,7 @@ TEST_CASE("ttf.service: a coverage family answers each size with its own bake, c
     CHECK(service.GetFont(u8"Roboto", 40.0f) == large);
     CHECK(service.GetFont(u8"Roboto", 40.3f) == large);
     CHECK(service.GetAtlasTexture(u8"Roboto", 40.0f) == service.GetAtlasTexture(large));
-    // An unknown family falls back to the default family's first bake, as before.
+    // An unknown family falls back to the default family's first bake.
     CachedFont* fallback = service.GetFont(u8"Nope", 24.0f);
     REQUIRE(fallback != nullptr);
     CHECK(fallback->font->PixelHeight() == doctest::Approx(FontLoadOptions::ExtendedLatin().pixelHeight));

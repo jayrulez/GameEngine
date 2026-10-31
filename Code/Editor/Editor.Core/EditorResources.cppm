@@ -2,16 +2,16 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Core - :editor_resources partition.
 //
-// The editor's own files (Documentation/Specs/editor-gui.md, 3.5): its sheets, markup and icons
-// under Data/Editor and the fonts they name, given to the GUI as its resource provider, and
-// reloaded as they change on disk, the editor's development loop. Text (a sheet, a page's markup)
-// is read when it is asked for, so what reads it again reads the file as it is now. Images and
-// SVGs are kept once loaded, because the GUI borrows them; one whose file changed is set aside
-// (still alive for what draws it) and loaded afresh when next asked for.
+// The editor's own files: its sheets, markup and icons under Data/Editor and the fonts they name,
+// given to the GUI as its resource provider and reloaded as they change on disk, which makes the
+// editor's development loop. Text (a sheet, a page's markup) is read when it is asked for, so a
+// second read gets the file as it is now. Images and SVGs are kept once loaded, because the GUI
+// borrows them; one whose file changed is set aside (still alive for whatever draws it) and loaded
+// afresh when next asked for.
 //
-// Poll sweeps the files for changes (the caller throttles it: a sweep is a walk of the folder).
-// A change is a change to TrackChanges' observable, so a sheet or a page that read through it in
-// a GUI Effect reloads itself; LastChanged says which files they were.
+// Poll sweeps the files for changes (the caller throttles it, since a sweep walks the folder). A
+// change notifies TrackChanges' observable, so a sheet or a page that read through it in a GUI
+// Effect reloads itself; LastChanged says which files changed.
 module;
 #include "Core/Prelude.h"
 
@@ -34,7 +34,7 @@ export namespace editor
     class EditorResources final : public gui::IResourceProvider
     {
     public:
-        /// Over the folder `root` (the one holding Editor/ and Assets/): paths are relative to it
+        /// Over the folder `root` (the data root, which holds Editor/); paths are relative to it
         /// ("Editor/Icons/save.svg").
         EditorResources(IAllocator& allocator, StringView root)
             : IResourceProvider(allocator), m_allocator(allocator), m_fs(root, allocator), m_images(allocator), m_svgs(allocator),
@@ -52,7 +52,7 @@ export namespace editor
                     return e.Pixels.Get();
             Array<byte> bytes;
             if (!ReadBytes(path, bytes))
-                return nullptr; // asked again, it tries again: it may have arrived
+                return nullptr; // not cached: a later request tries again, since the file may have arrived
             image::Image decoded;
             if (!image::io::LoadImageFromMemory(Span<const u8>(reinterpret_cast<const u8*>(bytes.Data()), bytes.Size()), decoded).IsOk())
                 return nullptr;
@@ -89,9 +89,9 @@ export namespace editor
         [[nodiscard]] bool Exists(StringView path) { return m_fs.Exists(path); }
 
         // === Reload ===
-        /// Sweeps the files for changes since the last sweep: true when any changed, then the
-        /// images and SVGs loaded from them are set aside, LastChanged names them, and what
-        /// tracks the changes runs again.
+        /// Sweeps the files for changes since the last sweep. Returns true when any changed; the
+        /// images and SVGs loaded from them are then set aside, LastChanged names them, and
+        /// whatever tracks the changes runs again.
         bool Poll()
         {
             foundation::vfs::IChangeSource* source = m_fs.ChangeSource();
@@ -107,9 +107,9 @@ export namespace editor
             return true;
         }
         /// Records a read of the files for the GUI's reactive evaluation in progress: a change
-        /// found by Poll runs it again (a sheet reapplied, a page's markup loaded anew).
+        /// found by Poll runs it again (a sheet is reapplied, a page's markup is loaded again).
         void TrackChanges() const { m_changed.Track(); }
-        /// The files the last change was to, relative to the root.
+        /// The files the last change touched, relative to the root.
         [[nodiscard]] Span<const String> LastChanged() const noexcept { return Span<const String>(m_lastChanged.Data(), m_lastChanged.Size()); }
 
     private:
@@ -137,8 +137,8 @@ export namespace editor
             out.Resize(static_cast<usize>(read));
             return true;
         }
-        // What was loaded from `path` is set aside: alive for what still draws it, loaded afresh
-        // when next asked for.
+        // Sets aside what was loaded from `path`: it stays alive for whatever still draws it, and
+        // is loaded afresh when next asked for.
         void Forget(StringView path)
         {
             for (usize i = m_images.Size(); i-- > 0;)

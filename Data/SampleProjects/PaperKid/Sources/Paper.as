@@ -1,7 +1,7 @@
-// Paper - a thrown newspaper. Entering any trigger, it tells that trigger's entity it arrived
-// ("PaperArrived"); only a subscriber's delivery zone answers, so nothing here needs to know which
-// triggers are porches. Its first hard landing kicks up a puff of dust. Gone a while after it is
-// thrown, delivered or not.
+// Paper: a thrown newspaper. When it enters any trigger it tells that trigger's entity it arrived
+// ("PaperArrived"). Only a subscriber's delivery zone responds, so nothing here needs to know which
+// triggers are porches. Its first hard landing kicks up a puff of dust. It disappears a while after
+// it is thrown, delivered or not.
 
 Guid kFxPuff = Guid("9f997649-9c7f-48ed-99c4-6465890a41e9");
 

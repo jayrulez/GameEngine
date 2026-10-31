@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Cross-backend orientation probe: render ONE asymmetric scene (a bright cube in the TOP half
-// over a dim ground plane in the bottom) through the FULL RenderFrame chain - forward + tonemap,
-// with and without the TAA resolve - on REAL Vulkan and WebGPU devices, read the pixels back,
-// and assert each object lights its own half, on every backend, matching Vulkan. This is the
-// pixel-level ground truth for the Y-flip bug class: every regression in that class swaps the
-// halves (or culls the plane), so it fails loudly here instead of in someone's eyes.
+// Cross-backend orientation probe: render one asymmetric scene (a bright cube in the top half
+// over a dim ground plane in the bottom) through the full RenderFrame chain (forward and tonemap,
+// with and without the TAA resolve) on real Vulkan and WebGPU devices, read the pixels back, and
+// assert that each object lights its own half on every backend, matching Vulkan. This is the
+// pixel-level ground truth for Y-flip bugs: each one swaps the halves (or culls the plane), so it
+// fails here instead of going unnoticed.
 //
 // Run it on the cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
 //   OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 ./Render.Backend.Tests
@@ -61,10 +61,10 @@ namespace
     {
         Probe probe;
 
-        // ShaderSystemHost: dev DXC/SPIR-V by default; OPTION_USE_SHADER_PACK=1 (+
-        // ENV_WEBGPU_WGSL=1) runs the probe on the cooked pack - i.e. the BROWSER'S
-        // WGSL shader path on wgpu-native, so an ingestion-convention divergence between
-        // the SPIR-V and WGSL frontends shows up right here, locally.
+        // ShaderSystemHost: dev DXC/SPIR-V by default; OPTION_USE_SHADER_PACK=1 (with
+        // ENV_WEBGPU_WGSL=1) runs the probe on the cooked pack, the browser's WGSL shader path on
+        // wgpu-native, so an ingestion-convention divergence between the SPIR-V and WGSL frontends
+        // shows up here, locally.
         shaders::ShaderSystemHost host{DefaultAllocator()};
         if (!host.Initialize(device, testsupport::DataFileSystem()))
         {
@@ -94,8 +94,8 @@ namespace
                               cfg.taaEnabled ? &taa : nullptr,
                               /*ao*/ nullptr, /*fxaa*/ nullptr);
 
-            // The asymmetric scene: bright white cube ABOVE eye level (projects into the TOP
-            // half), dim wide ground plane below. Flat bright ambient - no lights needed.
+            // The asymmetric scene: a bright white cube above eye level (it projects into the top
+            // half) and a dim wide ground plane below. Flat bright ambient, so no lights are needed.
             RefPtr<geometry::StaticMesh> cubeMesh = geometry::Primitives::Cube(DefaultAllocator(), 1.6f);
             RefPtr<geometry::StaticMesh> planeMesh = geometry::Primitives::Plane(DefaultAllocator(), 24.0f, 24.0f);
             RefPtr<materials::Material> cubeMat =
@@ -154,7 +154,7 @@ namespace
             settings.clear = rhi::ClearColor::Black();
             settings.targetTexture = target;
             settings.targetFinalState = rhi::ResourceState::CopySrc;
-            // The TAA resolve is gated on the per-view post CONFIG, not just the pass pointer.
+            // The TAA resolve is gated on the per-view post config, not just the pass pointer.
             settings.post.taaEnabled = cfg.taaEnabled;
             settings.post.bloomEnabled = false;
 
@@ -178,7 +178,7 @@ namespace
                 pool->DestroyEncoder(encoder);
             }
 
-            // Target is left in CopySrc; the shared substrate does the copy + map + unpack.
+            // Target is left in CopySrc; the shared substrate does the copy, map and unpack.
             const testsupport::CapturedImage img = testsupport::Readback(device, target, kSize, kSize);
             REQUIRE(img.valid);
             for (u32 y = 0; y < kSize; ++y)
@@ -208,12 +208,12 @@ namespace
 
 TEST_CASE("orientation: WebGPU matches Vulkan at every stage, cube on top, plane visible")
 {
-    // Vulkan is the reference; WebGPU must agree at every stage of the chain. Each historical
-    // regression in the Y-flip class shows up here as a loud, specific failure:
-    //  - mirrored scene content (naga cook missing --keep-coordinate-space): cube drops to the
-    //    bottom half on raw-forward;
-    //  - TAA-off whole-image flip (tonemap-side compensation firing wrongly): cube drops on
-    //    "tonemap" but not "tonemap+taa" (or vice versa);
+    // Vulkan is the reference; WebGPU must agree at every stage of the chain. Each kind of Y-flip
+    // regression shows up here as a specific failure:
+    //  - mirrored scene content (the naga cook missing --keep-coordinate-space): the cube drops to
+    //    the bottom half on raw-forward;
+    //  - a whole-image flip with TAA off (tonemap-side compensation firing wrongly): the cube drops
+    //    on "tonemap" but not on "tonemap+taa" (or the other way round);
     //  - front-face winding hacks: the plane-only probe goes black (culled).
     rhi::Backend* vulkan = nullptr;
     (void)rhi::vk::CreateBackend(rhi::vk::VkBackendDesc{}, vulkan);
@@ -247,21 +247,21 @@ TEST_CASE("orientation: WebGPU matches Vulkan at every stage, cube on top, plane
             REQUIRE(out[i].valid);
             if (runs[i].cfg.includeCube && runs[i].cfg.includePlane)
             {
-                // Combined scene: the small bright cube lights the top half, the huge dim
-                // plane sums to MORE in the bottom half (area beats brightness). A flip swaps
-                // the halves - the plane's luma lands on top and dominance inverts.
+                // Combined scene: the small bright cube lights the top half, and the huge dim
+                // plane sums to more in the bottom half (area beats brightness). A flip swaps
+                // the halves: the plane's luma lands on top and dominance inverts.
                 CHECK(out[i].topLuma > 100000.0);
                 CHECK(out[i].bottomLuma > out[i].topLuma * 1.3);
             }
             else if (runs[i].cfg.includeCube)
             {
-                // Cube only, above eye level: ALL its light is in the top half.
+                // Cube only, above eye level: all its light is in the top half.
                 CHECK(out[i].topLuma > 100000.0);
                 CHECK(out[i].bottomLuma < out[i].topLuma * 0.05);
             }
             else
             {
-                // Plane only: it must RENDER (a winding hack culls it -> black) and it must
+                // Plane only: it must render (a winding hack culls it to black) and it must
                 // land entirely in the bottom half (a flip mirrors it up).
                 CHECK(out[i].bottomLuma > 100000.0);
                 CHECK(out[i].topLuma < out[i].bottomLuma * 0.05);
@@ -319,12 +319,12 @@ TEST_CASE("orientation: WebGPU matches Vulkan at every stage, cube on top, plane
     }
 }
 
-// The per-frame rings on an EMULATED mapping (WebGPU keeps a CPU shadow and compares it
-// against the last upload on Unmap). Before the lazy map + ranged flush, every ring paid a
-// full-buffer compare per frame whether or not anything wrote it - ~145 MB per frame in a
-// scene using none of the skinning/terrain/sprite/particle rings. Pinned through the
-// buffer's upload counter: an untouched ring never uploads, a written ring uploads exactly its
-// window once per frame, and an unchanged re-write is skipped by the ranged compare.
+// The per-frame rings on an emulated mapping (WebGPU keeps a CPU shadow and compares it against
+// the last upload on Unmap). A ring that compared its whole buffer every frame, written or not,
+// would cost about 145 MB a frame in a scene using none of the skinning, terrain, sprite or
+// particle rings. Pinned through the buffer's upload counter: an untouched ring never uploads, a
+// written ring uploads exactly its window once per frame, and an unchanged re-write is skipped by
+// the ranged compare.
 TEST_CASE("rings: an untouched DynamicUniformRing never flushes; a used one flushes its window")
 {
     rhi::Backend* webgpu = nullptr;

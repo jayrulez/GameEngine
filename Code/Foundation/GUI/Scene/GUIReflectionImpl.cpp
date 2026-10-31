@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the GUI's reflection, element registry and script surface (G1 of
-// Specs/vg-and-gui-lab.md).
+// GUI - the GUI's reflection, element registry and script surface.
 //
-// The widgets and their style-facing properties are reflected here as their native API is spelled
-// (StringView text included), so the engine's reflection-driven binding reaches the node tree from
-// AngelScript and Luau with no UI-script layer of its own, markup creates the same types by tag,
-// and a library adds widgets of its own the same way (ElementTypes::Register). The tree owns its
-// nodes; native code (Element<T>) and scripts (a resolve-mode handle, anchored on the table) hold
-// them weakly through their GUI's element table. Destroying from a script is deferred to the end
-// of the GUI's update (Node::Close).
+// The widgets and their style-facing properties are reflected here as their native API spells
+// them (StringView text included). The engine's reflection-driven binding therefore reaches the
+// node tree from AngelScript and Luau without a separate UI-script layer, markup creates the same
+// types by tag, and a library adds its own widgets the same way (ElementTypes::Register). The tree
+// owns its nodes. Native code (Element<T>) and scripts (a resolve-mode handle anchored on the
+// table) hold them weakly through their GUI's element table. A script's destroy is deferred to the
+// end of the GUI's update (Node::Close).
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +25,8 @@ namespace foundation::gui
 {
     namespace
     {
-        // A script handle's context: plain bytes in the Variant; the table is its retained anchor.
+        // A script handle's context, stored as plain bytes in the Variant. The table is the anchor
+        // the handle retains.
         struct ElementHandleCtx
         {
             ElementTable* table;
@@ -48,7 +48,8 @@ namespace foundation::gui
             return false;
         }
 
-        // `X.of(node)`: the same node's handle typed as X, or null when it is not an X (or gone).
+        // `X.of(node)`: returns a handle to the same node typed as X, or null when it is not an X
+        // or is gone.
         template <typename T>
         [[nodiscard]] core::Variant ElementOf(core::Variant handle)
         {
@@ -57,8 +58,8 @@ namespace foundation::gui
             return typed != nullptr ? typed->HandleAs(T::StaticType()) : core::Variant{};
         }
 
-        // An event as a script handler sees it: positions in the GUI's units (from device pixels
-        // through the root's display scale).
+        // Converts an event to what a script handler sees, with positions in the GUI's units
+        // (device pixels divided by the root's display scale).
         [[nodiscard]] GuiEvent ScriptEventOf(const Event& event, StringView name)
         {
             GuiEvent out;
@@ -90,7 +91,7 @@ namespace foundation::gui
             case EventType::ContextMenu:
             {
                 const MouseEvent& mouse = static_cast<const MouseEvent&>(event);
-                // Over an item view's row: which (a context menu for it).
+                // Over an item view's row, record which row (for a context menu on it).
                 for (Node* n = event.Target; n != nullptr; n = n->GetParent())
                     if (const ItemRow* row = Cast<ItemRow>(n))
                     {
@@ -141,7 +142,7 @@ namespace foundation::gui
             case EventType::TextInput: out.text = core::String(static_cast<const TextInputEvent&>(event).Text); break;
             case EventType::Link: out.text = core::String(static_cast<const LinkEvent&>(event).Link); break; // the link's id
             case EventType::Composition: out.text = core::String(static_cast<const CompositionEvent&>(event).Text); break;
-            case EventType::Toggle: // "open", or why it closed
+            case EventType::Toggle: // "open", or the reason it closed
             {
                 const ToggleEvent& toggle = static_cast<const ToggleEvent&>(event);
                 out.text = core::String(toggle.Open ? core::StringView(u8"open") : PopupCloseReasonName(toggle.Reason));
@@ -157,7 +158,7 @@ namespace foundation::gui
             case EventType::DragQuery:
             {
                 const DragEvent& drag = static_cast<const DragEvent&>(event);
-                place(drag.Position); // the root's space: as a pointer's
+                place(drag.Position); // in the root's space, like a pointer's position
                 static constexpr const char8_t* kEffects[] = {u8"none", u8"copy", u8"move", u8"link"};
                 out.dragType = drag.Payload.Type;
                 out.effect = core::String(kEffects[static_cast<usize>(drag.Effect)]);
@@ -192,8 +193,8 @@ namespace foundation::gui
             return nullptr;
         }
 
-        // The element registry: type knowledge, one per process (an implementation unit's static,
-        // the shared-library rendezvous rule).
+        // The element registry holds type knowledge, so there is one per process. It is a static in
+        // an implementation unit so that shared libraries all reach the same one.
         struct RegisteredElement
         {
             String tag;
@@ -226,13 +227,13 @@ namespace foundation::gui
             if (element.tag.AsView() != tag)
                 continue;
             if (element.type == &type)
-                return true; // registered already
+                return true; // already registered
             LOG_ERROR(u8"GUI", u8"the element tag '{}' is taken by another type ({}); not registered", tag,
                       StringView(reinterpret_cast<const char8_t*>(element.type->namespaceName)));
             return false;
         }
         RegisteredElements().PushBack(RegisteredElement{String(tag), &type});
-        GlobalTypeRegistry().Register(type); // scripts reach what markup creates
+        GlobalTypeRegistry().Register(type); // so scripts can reach what markup creates
         return true;
     }
 
@@ -315,7 +316,7 @@ namespace foundation::gui
             menu = Cast<Menu>(FindById(*root, m_contextMenuId.AsView()));
             if (menu == nullptr)
                 return false;
-            m_contextMenu = RefPtr<Node>(menu); // open, it leaves the page; kept here
+            m_contextMenu = RefPtr<Node>(menu); // kept here, since an open menu leaves the page
         }
         menu->Open(*this, root->ConvertToNodeSpace(event.Position));
         return true;
@@ -343,14 +344,15 @@ namespace foundation::gui
         EventType type = EventType::MouseClick;
         if (!handler || eventName.IsEmpty())
             return 0;
-        // A name the core does not know is one a library sends (a gamekit screen's `screenenter`).
+        // A name the core does not know is an event a library sends (a gamekit screen's
+        // `screenenter`).
         const bool named = !EventTypeNamed(eventName, type);
         if (named)
             type = EventType::Named;
         // The node holds the handler (and with it the script function); the script holds the node
         // only weakly, so neither keeps the other alive.
-        // The handler gets the event's data (one ignoring it may take no parameter), and takes the
-        // event by returning true.
+        // The handler receives the event's data (a handler that ignores it may take no parameter)
+        // and takes the event by returning true.
         return static_cast<i32>(AddEventListener(type,
                                [handler, named, name = core::String(eventName)](const Event& event)
                                {
@@ -368,8 +370,8 @@ namespace foundation::gui
 
     namespace
     {
-        // The reflected property named `name` on `type` or a base, by its own name or the CSS name
-        // markup writes it by (`aria-label` for `ariaLabel`), or null.
+        // Finds the reflected property named `name` on `type` or a base, by its own name or by the
+        // CSS name markup uses for it (`aria-label` for `ariaLabel`). Returns null when none.
         const PropertyInfo* FindReflectedProperty(const TypeInfo* type, StringView name)
         {
             for (; type != nullptr; type = type->base)
@@ -392,7 +394,8 @@ namespace foundation::gui
         if (property == nullptr || property->type == nullptr ||
             (static_cast<u32>(property->flags) & static_cast<u32>(PropertyFlags::ReadOnly)) != 0)
             return false;
-        // Bound again, a translation of it ends (BindTranslation records its own after this).
+        // Binding the property again ends any translation on it (BindTranslation records its own
+        // translation after this call).
         for (usize i = 0; i < m_translations.Size(); ++i)
             if (FindReflectedProperty(GetType(), m_translations[i].Property.AsView()) == property)
             {
@@ -402,7 +405,7 @@ namespace foundation::gui
         BindFor(property, false, [this, property, boundExpression = core::Move(expression)]() mutable
              {
                  const core::Variant value = ConvertVariant(boundExpression(), *property->type);
-                 // The write is not a read: setting a property must not make this binding follow it.
+                 // Untracked, so that setting the property does not make this binding follow it.
                  if (!value.IsEmpty())
                      Untracked([&] { (void)SetProperty(*property, Instance::From(this), value); });
              });
@@ -420,7 +423,8 @@ namespace foundation::gui
         const bool bound = BindProperty(property,
                             [this, keyText, fallbackText, dataModel = core::Move(data), countArgument = core::Move(count), arguments = core::Move(args)]() -> core::Variant
                             {
-                                // The GUI it is in (a binding made before it joins one reruns when it does).
+                                // The GUI the node is in. A binding made before the node joins a GUI
+                                // reruns when it does.
                                 SceneRoot* root = ObserveSceneRoot();
                                 foundation::i18n::Localization* loc = root != nullptr ? root->GetContext().GetLocalization() : nullptr;
                                 if (root != nullptr)
@@ -428,8 +432,9 @@ namespace foundation::gui
                                 if (loc == nullptr || !IsAutoTranslating())
                                     return core::Variant::From<core::String>(fallbackText.Size() != 0 ? fallbackText : keyText);
                                 if (fallbackText.Size() != 0 && !loc->Has(keyText.AsView()))
-                                    return core::Variant::From<core::String>(fallbackText); // no table names it: the widget's own
-                                // Arguments as text, a named one read from the GUI's data (followed).
+                                    return core::Variant::From<core::String>(fallbackText); // no table has the key, so use the widget's own text
+                                // Arguments become text; a named one is read from the GUI's data and
+                                // followed.
                                 const auto value = [&dataModel](const TranslationArgument& a) -> core::Variant
                                 {
                                     if (a.IsName && dataModel)
@@ -456,8 +461,8 @@ namespace foundation::gui
                             });
         if (!bound)
             return false;
-        // Recorded by the property's own name (the inspector asks by it), after the binding, which
-        // ends any translation the property had.
+        // Record the translation under the property's own name (the inspector looks it up by
+        // that), after BindProperty, which ends any translation the property had.
         m_translations.PushBack(TranslatedProperty{core::String(StringView(reinterpret_cast<const utf8char*>(info->name))), keyText});
         return true;
     }
@@ -469,7 +474,7 @@ namespace foundation::gui
             return false;
         BindFor(property, true, [this, property, writeBack = core::Move(write)]() mutable
              {
-                 const core::Variant value = GetProperty(*property, Instance::From(this)); // followed
+                 const core::Variant value = GetProperty(*property, Instance::From(this)); // a tracked read, so the binding follows it
                  Untracked([&] { writeBack(value); });
              });
         return true;
@@ -479,7 +484,8 @@ namespace foundation::gui
     {
         if (!expression)
             return false;
-        // The node holds the function (as it holds an event handler); a failed call binds nothing.
+        // The node holds the function, as it holds an event handler. A failed call yields an empty
+        // value, which binds nothing.
         return BindProperty(property,
                             [expression]
                             {
@@ -619,7 +625,7 @@ namespace foundation::gui
         options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
         options.TakesFocus = true;
         options.FitContent = true;
-        options.ReturnHome = true; // a script's popup: back where it stood, to open again
+        options.ReturnHome = true; // a script's popup returns to where it was, so it can open again
         dispatcher->OpenPopup(*this, *node, core::Move(options));
         return core::Variant::From<bool>(dispatcher->IsPopupOpen(*node));
     }
@@ -706,7 +712,8 @@ namespace foundation::gui
         return root != nullptr ? root->HandleAs(Node::StaticType()) : core::Variant{};
     }
 
-    // A node's tooltip by default: a Tooltip with its text (here, where the widgets are seen).
+    // A node's default tooltip: a Tooltip with its text. Defined here, where the widget types are
+    // visible.
     core::RefPtr<Node> Node::CreateTooltipContent(core::StringView text)
     {
         auto tip = core::MakeRef<Tooltip>(MemoryAllocator());
@@ -714,18 +721,18 @@ namespace foundation::gui
         return tip;
     }
 
-    // A drag's default preview: the payload's label (E7).
+    // A drag's default preview, which shows the payload's label.
     core::RefPtr<Node> Node::CreateDragPreview(const DragPayload& payload)
     {
         auto preview = core::MakeRef<DragPreview>(MemoryAllocator());
         preview->SetText(payload.Label.AsView());
         if (const UINode* source = Cast<UINode>(this))
-            source->ShareTextStyle(*preview, false); // in the source's font until a sheet says otherwise
+            source->ShareTextStyle(*preview, false); // uses the source's font until a sheet sets another
         return preview;
     }
 
-    // The hint beside a drag's pointer: a target's reason, a tooltip marked `drophint` (and
-    // `refused` when nothing takes the drop).
+    // The hint beside a drag's pointer: a tooltip with the target's reason, with class `drophint`
+    // (and `refused` when nothing takes the drop).
     core::RefPtr<Node> Node::CreateDropHint(core::StringView reason, bool refused)
     {
         auto hint = core::MakeRef<Tooltip>(MemoryAllocator());
@@ -776,23 +783,23 @@ namespace foundation::gui
             RegisterGuiElements();
             RttiRegisterValue_GuiEvent();
             TypeRegistry& registry = GlobalTypeRegistry();
-            registry.Register(TypeOf<GuiEvent>()); // what a handler is given
-            registry.Register(Node::StaticType()); // the bases a script names (Node.of, UIWidget.of)
+            registry.Register(TypeOf<GuiEvent>()); // the event a script handler receives
+            registry.Register(Node::StaticType()); // base types a script uses by name (Node.of, UIWidget.of)
             registry.Register(SceneRoot::StaticType());
             registry.Register(UINode::StaticType());
             registry.Register(UIWidget::StaticType());
             registry.Register(Gui::StaticType()); // binds as `gui` (its scriptName)
-            registry.Register(Tween::StaticType()); // what node.animate gives (E14)
+            registry.Register(Tween::StaticType()); // the type node.animate returns
             registry.Register(TweenGroup::StaticType());
             registry.Register(TweenSequence::StaticType());
             registry.Register(TweenParallel::StaticType());
-            registry.Register(ListModel::StaticType()); // a script's list (E16)
-            // A toast a script fills in and posts (T7 of round three).
+            registry.Register(ListModel::StaticType()); // a list model a script makes
+            // A toast that a script fills in and posts.
             RttiRegisterEnum_ToastSeverity();
             RttiRegisterValue_ToastRequest();
             registry.Register(TypeOf<ToastSeverity>());
             registry.Register(TypeOf<ToastRequest>());
-            foundation::script::RegisterDelegateShape(u8"void KeyHandler(const string &in keys)"); // gui::captureKey's
+            foundation::script::RegisterDelegateShape(u8"void KeyHandler(const string &in keys)"); // the handler shape for gui::captureKey
             return true;
         }();
         (void)once;
@@ -827,8 +834,8 @@ namespace foundation::gui
             .Property<&GuiEvent::dragType>("dragType")
             .Property<&GuiEvent::effect>("effect")
             .Property<&GuiEvent::elapsed>("elapsed")
-            // Constructible, so both languages take it by value and Luau binds it (a type a script
-            // can make is one it can be handed).
+            // Constructible, so both languages take it by value and Luau binds it (Luau can be
+            // handed only types a script can make).
             .Constructor<>();
     }
 
@@ -838,13 +845,14 @@ namespace foundation::gui
         builder.AccessorProperty<&Node::GetY, &Node::SetY>("y");
         builder.AccessorProperty<&Node::GetWidth, &Node::SetWidth>("width");
         builder.AccessorProperty<&Node::GetHeight, &Node::SetHeight>("height");
-        builder.AccessorProperty<&Node::IsVisible, &Node::SetVisible>("visible"); // hidden keeps its place
+        builder.AccessorProperty<&Node::IsVisible, &Node::SetVisible>("visible"); // a hidden node keeps its place in the layout
         builder.AccessorProperty<&Node::GetDropTypes, &Node::SetDropTypes>("dropTypes").PropAttribute("css", core::String(u8"drop-types"));
-        builder.AccessorProperty<&Node::IsDisplayed, &Node::SetDisplayed>("displayed"); // out of the layout when false
+        builder.AccessorProperty<&Node::IsDisplayed, &Node::SetDisplayed>("displayed"); // false takes the node out of the layout
         builder.AccessorProperty<&Node::IsEnabled, &Node::SetEnabled>("enabled");
         builder.AccessorProperty<&Node::GetAlpha, &Node::SetAlpha>("opacity");
         builder.AccessorProperty<&Node::IsStickToEnd, &Node::SetStickToEnd>("stickToEnd").PropAttribute("css", core::String(u8"stick-to-end"));
-        // Navigation (G7): reflected with their CSS names, so a sheet, markup and a script set them.
+        // Navigation overrides, reflected with their CSS names so a sheet, markup and a script can
+        // all set them.
         builder.AccessorProperty<&Node::GetNavUp, &Node::SetNavUp>("navUp").PropAttribute("css", core::String(u8"nav-up"));
         builder.AccessorProperty<&Node::GetNavDown, &Node::SetNavDown>("navDown").PropAttribute("css", core::String(u8"nav-down"));
         builder.AccessorProperty<&Node::GetNavLeft, &Node::SetNavLeft>("navLeft").PropAttribute("css", core::String(u8"nav-left"));
@@ -873,7 +881,7 @@ namespace foundation::gui
         builder.Method<&Node::ChildElement, Node>("childAt");
         builder.Method<&Node::ElementChildCount>("childCount");
         builder.Method<&Node::On>("on");
-        builder.Method<&Node::Off>("off"); // what on and onCommand gave (E16)
+        builder.Method<&Node::Off>("off"); // removes a handler that on or onCommand returned
         builder.Method<&Node::OpenPopupScript, bool, Node>("popup");
         builder.Method<&Node::ClosePopupScript>("closePopup");
         builder.Method<&Node::BindScript>("bind");
@@ -881,11 +889,11 @@ namespace foundation::gui
         builder.Method<&Node::OnCommandScript>("onCommand");
         builder.Method<&Node::FocusElement>("focus");
         builder.Method<&Node::Destroy>("destroy");
-        builder.Method<&Node::Leave>("leave"); // goes after its exit plays (K0)
+        builder.Method<&Node::Leave>("leave"); // removes the node after its exit plays
         builder.Method<&Node::IsLeaving>("isLeaving");
-        builder.Method<&Node::Enter>("enter"); // plays its entrance (K5)
+        builder.Method<&Node::Enter>("enter"); // plays its entrance
         builder.Method<&Node::IsArriving>("isEntering");
-        // Motion (E14): a tween, a spring, a group's run, and the property given back.
+        // Motion: a tween, a spring, running a group, and handing a property back to the sheet.
         builder.Method<&Node::Animate>("tween"); // `animate` is an expander's property
         builder.Method<&Node::CreateTween>("createTween");
         builder.Method<&Node::SpringTo>("springTo");
@@ -894,7 +902,7 @@ namespace foundation::gui
         builder.Method<&ElementOf<Node>, Node, Node>("of");
     }
 
-    // Motion (E14): `repeats`, as `repeat` is a word of Luau's.
+    // Motion. The method is `repeats` because `repeat` is a Luau keyword.
     REFLECT_MEMBERS(Tween, "rtti::gui")
     {
         builder.Method<&Tween::FromScript>("from");
@@ -902,7 +910,7 @@ namespace foundation::gui
         builder.Method<&Tween::RepeatScript>("repeats");
         builder.Method<&Tween::PingPongScript>("pingPong");
         builder.Method<&Tween::EaseScript>("ease");
-        builder.Method<&Tween::WholeScript>("whole"); // a data value counting in whole numbers (K3)
+        builder.Method<&Tween::WholeScript>("whole"); // a data value that counts in whole numbers
         builder.Method<&Tween::SpringScript>("spring");
         builder.Method<&Tween::OnFinishedScript>("onFinished");
         builder.Method<&Tween::Retarget>("retarget");
@@ -935,7 +943,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(TweenSequence, "rtti::gui")
     {
-        builder.Constructor<>(); // a script makes one: TweenSequence() / TweenSequence.new()
+        builder.Constructor<>(); // a script can make one: TweenSequence() / TweenSequence.new()
     }
 
     REFLECT_MEMBERS(TweenParallel, "rtti::gui")
@@ -960,8 +968,8 @@ namespace foundation::gui
             .PropAttribute("css", core::String(u8"tooltip"))
             .PropAttribute("translatable", true);
         builder.AccessorProperty<&UIWidget::IsTooltipInteractive, &UIWidget::SetTooltipInteractive>("tooltipInteractive")
-            .PropAttribute("css", core::String(u8"tooltip-interactive")); // E16
-        // Accessibility in markup (E9d): over what its type and its properties say.
+            .PropAttribute("css", core::String(u8"tooltip-interactive"));
+        // Accessibility in markup, which overrides what the type and its properties say.
         builder.AccessorProperty<&UIWidget::GetAccessRoleName, &UIWidget::SetAccessRoleName>("role").PropAttribute("css", core::String(u8"role"));
         builder.AccessorProperty<&UIWidget::GetAccessLabel, &UIWidget::SetAccessLabel>("ariaLabel")
             .PropAttribute("css", core::String(u8"aria-label"))
@@ -990,7 +998,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Label, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"label")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"label")); // the role a screen reader announces
         builder.AccessorProperty<&Label::GetText, &Label::SetText>("text").PropAttribute("access", core::String(u8"name")).PropAttribute("translatable", true);
         builder.AccessorProperty<&Label::GetTextColor, &Label::SetTextColor>("textColor");
         builder.AccessorProperty<&Label::IsRich, &Label::SetRich>("rich");
@@ -1009,13 +1017,13 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(ButtonBase, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"button")); // what a screen reader takes it for (E9d)
-        builder.Attribute("accessActivate", true); // a screen reader may press it
+        builder.Attribute("accessRole", core::String(u8"button")); // the role a screen reader announces
+        builder.Attribute("accessActivate", true); // a screen reader may activate it
         builder.AccessorProperty<&ButtonBase::GetText, &ButtonBase::SetText>("text").PropAttribute("access", core::String(u8"name")).PropAttribute("translatable", true);
         builder.AccessorProperty<&ButtonBase::IsToggle, &ButtonBase::SetToggle>("toggle").PropAttribute("css", core::String(u8"toggle"));
         builder.AccessorProperty<&ButtonBase::IsChecked, &ButtonBase::SetChecked>("checked")
             .PropAttribute("css", core::String(u8"checked"))
-            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can change it, so a binding may write it back
         builder.AccessorProperty<&ButtonBase::GetName, &ButtonBase::SetName>("name").PropAttribute("css", core::String(u8"name"));
         builder.AccessorProperty<&ButtonBase::GetActionOnName, &ButtonBase::SetActionOnName>("actionOn")
             .PropAttribute("css", core::String(u8"action-on"));
@@ -1042,7 +1050,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(CheckBox, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"checkbox")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"checkbox")); // the role a screen reader announces
         builder.AccessorProperty<&CheckBox::IsIndeterminate, &CheckBox::SetIndeterminate>("indeterminate")
             .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<CheckBox>, CheckBox, Node>("of");
@@ -1051,14 +1059,14 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(RadioButton, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"radio")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"radio")); // the role a screen reader announces
         builder.Method<&ElementOf<RadioButton>, RadioButton, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ColorSwatch, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"button")); // a screen reader may press it
+        builder.Attribute("accessRole", core::String(u8"button")); // a screen reader may activate it
         builder.Attribute("accessActivate", true);
         builder.AccessorProperty<&ColorSwatch::GetColor, &ColorSwatch::SetColor>("color").PropAttribute("css", core::String(u8"color-value"));
         builder.Method<&ElementOf<ColorSwatch>, ColorSwatch, Node>("of");
@@ -1077,7 +1085,7 @@ namespace foundation::gui
 
     RTTI_DEFINE_OBJECT(ColorPickerArea, "rtti::gui")
 
-    // Toasts (T7 of round three): a host markup places; a request a script fills in and posts.
+    // Toasts: a host that markup places, and a request that a script fills in and posts.
     RTTI_DEFINE_OBJECT(ToastCard, "rtti::gui")
     REFLECT_ENUM(ToastSeverity, "rtti::gui")
     {
@@ -1096,13 +1104,14 @@ namespace foundation::gui
             .Property<&ToastRequest::Severity>("severity")
             .Property<&ToastRequest::Duration>("duration")
             .Property<&ToastRequest::Key>("key")
-            .Property<&ToastRequest::Classes>("classes"); // `class` is a script's keyword
+            .Property<&ToastRequest::Classes>("classes"); // `class` is a keyword in scripts
         builder.Method<&ToastRequest::AddAction>("addAction");
         builder.Constructor();
     }
     namespace
     {
-        // `ToastHost.nearest(node)`: the toast host in that node's GUI (its root's subtree), else null.
+        // `ToastHost.nearest(node)`: returns the toast host in that node's GUI (its root's subtree),
+        // else null.
         [[nodiscard]] ToastHost* FindToastHostUnder(Node& node)
         {
             if (ToastHost* host = Cast<ToastHost>(&node))
@@ -1129,14 +1138,14 @@ namespace foundation::gui
         builder.ComputedProperty<&ToastHost::GetShownCountScript>("shownCount");
         builder.ComputedProperty<&ToastHost::GetWaitingCountScript>("waitingCount");
         builder.AccessorProperty<&ToastHost::GetMaxShownScript, &ToastHost::SetMaxShownScript>("maxShown");
-        builder.Method<&FindToastHost, ToastHost, Node>("nearest"); // not `find`: a node's find(id) has the name
+        builder.Method<&FindToastHost, ToastHost, Node>("nearest"); // not `find`, which a node's find(id) already uses
         builder.Method<&ElementOf<ToastHost>, ToastHost, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ToggleSwitch, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"switch")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"switch")); // the role a screen reader announces
         builder.Method<&ElementOf<ToggleSwitch>, ToggleSwitch, Node>("of");
         builder.Creator();
     }
@@ -1145,7 +1154,7 @@ namespace foundation::gui
     {
         builder.AccessorProperty<&RangeWidget::GetValue, &RangeWidget::SetValue>("value").PropAttribute("access", core::String(u8"value"))
             .PropAttribute("css", core::String(u8"value"))
-            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can change it, so a binding may write it back
         builder.AccessorProperty<&RangeWidget::GetMin, &RangeWidget::SetMin>("min").PropAttribute("access", core::String(u8"min")).PropAttribute("css", core::String(u8"min"));
         builder.AccessorProperty<&RangeWidget::GetMax, &RangeWidget::SetMax>("max").PropAttribute("access", core::String(u8"max")).PropAttribute("css", core::String(u8"max"));
         builder.AccessorProperty<&RangeWidget::GetStep, &RangeWidget::SetStep>("step").PropAttribute("access", core::String(u8"step")).PropAttribute("css", core::String(u8"step"));
@@ -1160,7 +1169,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Slider, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"slider")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"slider")); // the role a screen reader announces
         builder.AccessorProperty<&Slider::GetPage, &Slider::SetPage>("page").PropAttribute("css", core::String(u8"page"));
         builder.AccessorProperty<&Slider::GetOrientationName, &Slider::SetOrientationName>("orientation")
             .PropAttribute("css", core::String(u8"orientation"));
@@ -1171,7 +1180,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(ProgressBar, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"progress")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"progress")); // the role a screen reader announces
         builder.AccessorProperty<&ProgressBar::IsIndeterminate, &ProgressBar::SetIndeterminate>("indeterminate")
             .PropAttribute("css", core::String(u8"indeterminate"));
         builder.Method<&ElementOf<ProgressBar>, ProgressBar, Node>("of");
@@ -1189,23 +1198,23 @@ namespace foundation::gui
             .PropAttribute("css", core::String(u8"input-filter"));
         builder.AccessorProperty<&TextEditBase::GetText, &TextEditBase::SetText>("text").PropAttribute("access", core::String(u8"value"))
             .PropAttribute("css", core::String(u8"text"))
-            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can change it, so a binding may write it back
         builder.Method<&ElementOf<TextEditBase>, TextEditBase, Node>("of");
     }
 
     REFLECT_MEMBERS(TextField, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"textbox")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"textbox")); // the role a screen reader announces
         builder.AccessorProperty<&TextField::IsPassword, &TextField::SetPassword>("password")
             .PropAttribute("css", core::String(u8"password"))
-            .PropAttribute("access", core::String(u8"secret")); // its value is not read out (E9d)
+            .PropAttribute("access", core::String(u8"secret")); // a screen reader does not read the value out
         builder.Method<&ElementOf<TextField>, TextField, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(TextArea, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"textarea")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"textarea")); // the role a screen reader announces
         builder.AccessorProperty<&TextArea::GetRows, &TextArea::SetRows>("rows").PropAttribute("css", core::String(u8"rows"));
         builder.Method<&ElementOf<TextArea>, TextArea, Node>("of");
         builder.Creator();
@@ -1219,7 +1228,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(ScrollView, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"scrollview")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"scrollview")); // the role a screen reader announces
         builder.Method<&ElementOf<ScrollView>, ScrollView, Node>("of");
         builder.Creator();
     }
@@ -1237,11 +1246,11 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Expander, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"group")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"group")); // the role a screen reader announces
         builder.AccessorProperty<&Expander::GetTitleString, &Expander::SetTitleString>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
         builder.AccessorProperty<&Expander::IsOpen, &Expander::SetOpen>("open").PropAttribute("access", core::String(u8"expanded"))
             .PropAttribute("css", core::String(u8"open"))
-            .PropAttribute("twoWay", true); // the user opens it: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can open it, so a binding may write it back
         builder.AccessorProperty<&Expander::GetName, &Expander::SetName>("name").PropAttribute("css", core::String(u8"name"));
         builder.AccessorProperty<&Expander::IsAnimated, &Expander::SetAnimated>("animate").PropAttribute("css", core::String(u8"animate"));
         builder.Method<&Expander::Toggle>("toggle");
@@ -1263,12 +1272,12 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(TabStrip, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"tablist")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"tablist")); // the role a screen reader announces
     }
 
     REFLECT_MEMBERS(Tab, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"tab")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"tab")); // the role a screen reader announces
         builder.AccessorProperty<&Tab::IsClosable, &Tab::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
         builder.Method<&ElementOf<Tab>, Tab, Node>("of");
         builder.Creator();
@@ -1278,7 +1287,7 @@ namespace foundation::gui
     {
         builder.AccessorProperty<&TabBar::GetSelectedIndex, &TabBar::SetSelectedIndex>("selected")
             .PropAttribute("css", core::String(u8"selected"))
-            .PropAttribute("twoWay", true); // the user selects: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can select, so a binding may write it back
         builder.AccessorProperty<&TabBar::GetCloseDisplayName, &TabBar::SetCloseDisplayName>("closeDisplay")
             .PropAttribute("css", core::String(u8"close-display"));
         builder.AccessorProperty<&TabBar::GetListDisplayName, &TabBar::SetListDisplayName>("listDisplay")
@@ -1296,7 +1305,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(TabPage, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"tabpanel")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"tabpanel")); // the role a screen reader announces
         builder.AccessorProperty<&TabPage::GetTitleString, &TabPage::SetTitleString>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
         builder.AccessorProperty<&TabPage::GetIconSource, &TabPage::SetIconSource>("icon").PropAttribute("css", core::String(u8"icon"));
         builder.AccessorProperty<&TabPage::IsClosable, &TabPage::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
@@ -1334,10 +1343,10 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(NumberField, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"spinbutton")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"spinbutton")); // the role a screen reader announces
         builder.AccessorProperty<&NumberField::GetValue, &NumberField::SetValue>("value").PropAttribute("access", core::String(u8"value"))
             .PropAttribute("css", core::String(u8"value"))
-            .PropAttribute("twoWay", true); // the user changes it: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can change it, so a binding may write it back
         builder.AccessorProperty<&NumberField::GetMin, &NumberField::SetMin>("min").PropAttribute("access", core::String(u8"min")).PropAttribute("css", core::String(u8"min"));
         builder.AccessorProperty<&NumberField::GetMax, &NumberField::SetMax>("max").PropAttribute("access", core::String(u8"max")).PropAttribute("css", core::String(u8"max"));
         builder.AccessorProperty<&NumberField::GetStep, &NumberField::SetStep>("step").PropAttribute("access", core::String(u8"step")).PropAttribute("css", core::String(u8"step"));
@@ -1355,7 +1364,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Separator, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"separator")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"separator")); // the role a screen reader announces
         builder.AccessorProperty<&Separator::GetThickness, &Separator::SetThickness>("thickness").PropAttribute("css", core::String(u8"thickness"));
         builder.Method<&ElementOf<Separator>, Separator, Node>("of");
         builder.Creator();
@@ -1372,7 +1381,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(SplitterHandle, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"separator")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"separator")); // the role a screen reader announces
         builder.AccessorProperty<&SplitterHandle::GetValue, &SplitterHandle::SetValue>("value").PropAttribute("access", core::String(u8"value"));
         builder.ComputedProperty<&SplitterHandle::GetMin>("min").PropAttribute("access", core::String(u8"min"));
         builder.ComputedProperty<&SplitterHandle::GetMax>("max").PropAttribute("access", core::String(u8"max"));
@@ -1390,7 +1399,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Image, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"image")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"image")); // the role a screen reader announces
         builder.AccessorProperty<&Image::GetSource, &Image::SetSource>("src").PropAttribute("css", core::String(u8"src"));
         builder.AccessorProperty<&Image::GetFitName, &Image::SetFitName>("objectFit").PropAttribute("css", core::String(u8"object-fit"));
         builder.AccessorProperty<&Image::GetObjectPositionName, &Image::SetObjectPositionName>("objectPosition")
@@ -1423,7 +1432,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(TreeView, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"tree")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"tree")); // the role a screen reader announces
         builder.AccessorProperty<&TreeView::GetIndentWidth, &TreeView::SetIndentWidth>("indentWidth").PropAttribute("css", core::String(u8"indent-width"));
         builder.AccessorProperty<&TreeView::GetArrowSize, &TreeView::SetArrowSize>("arrowSize").PropAttribute("css", core::String(u8"arrow-size"));
         builder.AccessorProperty<&TreeView::GetIconSize, &TreeView::SetIconSize>("iconSize").PropAttribute("css", core::String(u8"icon-size"));
@@ -1441,7 +1450,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(TableView, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"table")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"table")); // the role a screen reader announces
         builder.AccessorProperty<&TableView::GetColumnsText, &TableView::SetColumnsText>("columns").PropAttribute("css", core::String(u8"columns"));
         builder.AccessorProperty<&TableView::GetColumnWidthsText, &TableView::SetColumnWidthsText>("columnWidths")
             .PropAttribute("css", core::String(u8"column-widths"));
@@ -1452,7 +1461,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(ScrollBar, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"scrollbar")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"scrollbar")); // the role a screen reader announces
         builder.AccessorProperty<&ScrollBar::GetPage, &ScrollBar::SetPage>("page").PropAttribute("css", core::String(u8"page"));
         builder.AccessorProperty<&ScrollBar::GetOrientationName, &ScrollBar::SetOrientationName>("orientation")
             .PropAttribute("css", core::String(u8"orientation"));
@@ -1462,7 +1471,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(MessageBox, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"dialog")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"dialog")); // the role a screen reader announces
         builder.ComputedProperty<&MessageBox::GetResultName>("result");
         builder.Method<&MessageBox::Show>("show");
         builder.Method<&ElementOf<MessageBox>, MessageBox, Node>("of");
@@ -1471,14 +1480,14 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(MenuSeparator, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"separator")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"separator")); // the role a screen reader announces
         builder.Creator();
     }
 
     REFLECT_MEMBERS(MenuItem, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"menuitem")); // what a screen reader takes it for (E9d)
-        builder.Attribute("accessActivate", true); // a screen reader may press it
+        builder.Attribute("accessRole", core::String(u8"menuitem")); // the role a screen reader announces
+        builder.Attribute("accessActivate", true); // a screen reader may activate it
         builder.AccessorProperty<&MenuItem::GetTextString, &MenuItem::SetTextString>("text")
             .PropAttribute("access", core::String(u8"name"))
             .PropAttribute("translatable", true);
@@ -1490,9 +1499,9 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Menu, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"menu")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"menu")); // the role a screen reader announces
         builder.Method<&Menu::Close>("close");
-        builder.Method<&Menu::OpenAtPoint>("openAt"); // a script's own menus (E16)
+        builder.Method<&Menu::OpenAtPoint>("openAt"); // for menus a script opens itself
         builder.Method<&Menu::OpenBelowNode, bool, Node>("openBelow");
         builder.Method<&Menu::IsOpen>("isOpen");
         builder.Method<&ElementOf<Menu>, Menu, Node>("of");
@@ -1501,7 +1510,7 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(MenuBar, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"menubar")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"menubar")); // the role a screen reader announces
         builder.AccessorProperty<&MenuBar::GetBarHeight, &MenuBar::SetBarHeight>("barHeight").PropAttribute("css", core::String(u8"bar-height"));
         builder.AccessorProperty<&MenuBar::GetItemPadding, &MenuBar::SetItemPadding>("itemPadding").PropAttribute("css", core::String(u8"item-padding"));
         builder.Method<&ElementOf<MenuBar>, MenuBar, Node>("of");
@@ -1511,13 +1520,13 @@ namespace foundation::gui
     REFLECT_MEMBERS(ItemView, "rtti::gui")
     {
         builder.AccessorProperty<&ItemView::GetItemsText, &ItemView::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
-        builder.Method<&ItemView::SetListModel>("setModel"); // a script's ListModel (E16)
+        builder.Method<&ItemView::SetListModel>("setModel"); // takes a script's ListModel
         builder.AccessorProperty<&ItemView::GetRowHeight, &ItemView::SetRowHeight>("rowHeight").PropAttribute("css", core::String(u8"row-height"));
         builder.AccessorProperty<&ItemView::GetEstimatedRowHeight, &ItemView::SetEstimatedRowHeight>("estimatedRowHeight")
             .PropAttribute("css", core::String(u8"estimated-row-height"));
         builder.AccessorProperty<&ItemView::GetSelectedItem, &ItemView::SetSelectedItem>("selected")
             .PropAttribute("css", core::String(u8"selected"))
-            .PropAttribute("twoWay", true); // the user selects: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can select, so a binding may write it back
         builder.AccessorProperty<&ItemView::GetSelectionModeName, &ItemView::SetSelectionModeName>("selectionMode")
             .PropAttribute("css", core::String(u8"selection-mode"));
         builder.AccessorProperty<&ItemView::GetRowTypeColumn, &ItemView::SetRowTypeColumn>("rowTypeColumn")
@@ -1533,14 +1542,14 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(ListView, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"list")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"list")); // the role a screen reader announces
         builder.Method<&ElementOf<ListView>, ListView, Node>("of");
         builder.Creator();
     }
 
     REFLECT_MEMBERS(ListBox, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"list")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"list")); // the role a screen reader announces
         builder.AccessorProperty<&ListBox::GetItemsText, &ListBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
         builder.Method<&ElementOf<ListBox>, ListBox, Node>("of");
         builder.Creator();
@@ -1548,12 +1557,12 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(ComboBox, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"combobox")); // what a screen reader takes it for (E9d)
-        builder.Attribute("accessActivate", true); // a screen reader may press it
+        builder.Attribute("accessRole", core::String(u8"combobox")); // the role a screen reader announces
+        builder.Attribute("accessActivate", true); // a screen reader may activate it
         builder.AccessorProperty<&ComboBox::GetItemsText, &ComboBox::SetItemsText>("items").PropAttribute("css", core::String(u8"items"));
         builder.AccessorProperty<&ComboBox::GetSelectedIndex, &ComboBox::SetSelectedIndex>("selected")
             .PropAttribute("css", core::String(u8"selected"))
-            .PropAttribute("twoWay", true); // the user picks: a binding may write it back
+            .PropAttribute("twoWay", true); // the user can pick, so a binding may write it back
         builder.AccessorProperty<&ComboBox::GetPlaceholder, &ComboBox::SetPlaceholder>("placeholder")
             .PropAttribute("css", core::String(u8"placeholder"))
             .PropAttribute("translatable", true);
@@ -1563,9 +1572,10 @@ namespace foundation::gui
 
     REFLECT_MEMBERS(Window, "rtti::gui")
     {
-        builder.Attribute("accessRole", core::String(u8"window")); // what a screen reader takes it for (E9d)
+        builder.Attribute("accessRole", core::String(u8"window")); // the role a screen reader announces
         builder.AccessorProperty<&Window::GetTitle, &Window::SetTitle>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
-        // A script's own windows (E16): opened where they are or modal, closed, listened to (`close`).
+        // Windows a script makes itself: opened in place or as modal, closed, and listened to
+        // (`close`).
         builder.AccessorProperty<&Window::IsClosable, &Window::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
         builder.AccessorProperty<&Window::IsResizable, &Window::SetResizable>("resizable").PropAttribute("css", core::String(u8"resizable"));
         builder.Method<&Window::OpenInPlace>("open");
@@ -1582,13 +1592,13 @@ namespace foundation::gui
         builder.Method<&Gui::Root, Node>("root");
         builder.Method<&Gui::GetNumber>("getNumber");
         builder.Method<&Gui::GetText>("getText");
-        builder.Method<&Gui::Translate>("tr"); // the localization's keys (E16)
+        builder.Method<&Gui::Translate>("tr"); // translates a localization key
         builder.Method<&Gui::TranslateCount>("trCount");
         builder.Method<&Gui::Language>("language");
         builder.Method<&Gui::GetBool>("getBool");
         builder.Method<&Gui::Set>("set");
-        builder.Method<&Gui::InputKindNow>("inputKind"); // K2b
-        builder.Method<&Gui::TweenData>("tween"); // a data value moving (K3)
+        builder.Method<&Gui::InputKindNow>("inputKind");
+        builder.Method<&Gui::TweenData>("tween"); // animates a data value
         builder.Method<&Gui::CreateDataTween>("createTween");
         builder.Method<&Gui::DefineCommand>("defineCommand");
         builder.Method<&Gui::SetCommandEnabled>("setCommandEnabled");

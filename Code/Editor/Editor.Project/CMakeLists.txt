@@ -1,7 +1,7 @@
 # Editor::Project - `editor.project` (the headless project half of the editor domain: the
-# open project, cook service, export, jobs, log buffer, project registry + manager, the root
-# allocator seam). What a host without an editor stands on: the MCP stdio server, the cook
-# and export tools. Tooling only - the runtime never links this.
+# open project, cook service, export, jobs, log buffer, project registry and manager, the root
+# allocator). What a host without an editor stands on: the MCP stdio server, the cook and
+# export tools. Tooling only; the runtime never links this.
 
 util_add_engine_library(Editor.Project ALIAS Editor::Project)
 target_link_libraries(Editor.Project
@@ -17,9 +17,9 @@ target_link_libraries(Editor.Project
 target_compile_definitions(Editor.Project PRIVATE
     BUILTIN_PLAYER_BASENAME=u8"${BUILTIN_PLAYER_BASENAME}")
 
-# Native ship link (game-native-code.md N3): the exporter re-invokes THIS cmake over THIS
-# checkout to build Engine.GamePlayer with the project's native module statically linked.
-# Both baked like the shader dir above; a relocated editor reports clearly instead of guessing.
+# Native shipping link: the exporter re-invokes this cmake over this checkout to build
+# Engine.GamePlayer with the project's native module statically linked. These paths are baked
+# in, so a relocated editor reports the problem clearly instead of guessing.
 target_compile_definitions(Editor.Project PRIVATE
     BUILDSYSTEM_CMAKE_PATH="${CMAKE_COMMAND}"
     BUILDSYSTEM_ENGINE_ROOT="${CMAKE_SOURCE_DIR}"

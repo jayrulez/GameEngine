@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of QuerySet. Wraps ID3D12QueryHeap.
-/// Ported from Sedulous.RHI.DX12/DX12QuerySet.bf.
 
 module;
 #include "Core/Prelude.h"

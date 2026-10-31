@@ -13,8 +13,8 @@ float2 DirToEquirect(float3 d) {
 }
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float3 dir = DirForFace(pc.FaceIndex, uv);
-    // Yaw by the sky rotation (SkyRotation) - this and the cubemap pass are where the user's
-    // rotation slider actually lands (the procedural gradient is rotation-invariant).
+    // Yaw by the sky rotation (SkyRotation). This pass and the cubemap pass are where the sky's
+    // rotation takes effect (the procedural gradient is rotation-invariant).
     float rot = pc.SkyRotation;
     float cr = cos(rot), sr = sin(rot);
     dir = float3(cr * dir.x + sr * dir.z, dir.y, -sr * dir.x + cr * dir.z);

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - MenuBar tests: a horizontal strip of buttons, each opening a Menu below it.
-// Clicking a button toggles its menu; while one is open, hovering another button switches to
-// it; an outside click dismisses and clears the bar's state; its menus cleared (an open one closed)
-// and a menu told as it opens, its submenus too. No font is set, so each button is
-// 2*padding (24px) wide and the bar is `barHeight` tall - giving a deterministic layout.
+// GUI - MenuBar tests: a horizontal strip of buttons, each opening a Menu below it. Clicking a
+// button toggles its menu; while one is open, hovering another button switches to it; an outside
+// click dismisses and clears the bar's state. Clearing the bar's menus closes an open one, and a
+// menu is told as it opens, as are its submenus. No font is set, so each button is 2*padding (24px)
+// wide and the bar is `barHeight` tall, which gives a deterministic layout.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -97,7 +97,7 @@ TEST_CASE("menubar: with a menu open, hovering another button switches to it")
     d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
     REQUIRE(fx.bar->CurrentMenu() == fx.fileMenu);
 
-    // Hover "Edit" (button 1, centered at x=36) - switches without a click.
+    // Hover "Edit" (button 1, centered at x=36): it switches without a click.
     d->InjectMouseMove(core::Float2{36.0f, 14.0f});
     CHECK(fx.bar->CurrentMenu() == fx.editMenu);
     CHECK(fx.editMenu->IsOpen());
@@ -149,7 +149,7 @@ TEST_CASE("menubar: the built-in theme rings no menu bar: a click opening a menu
     fx.d()->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
     fx.d()->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
     REQUIRE(fx.fileMenu->IsOpen());
-    REQUIRE(fx.bar->IsFocusWithin()); // what the old ring keyed on
+    REQUIRE(fx.bar->IsFocusWithin()); // the focus is within the bar, yet no ring is drawn
     styles.ApplyTree(*fx.root.Get());
     CHECK(fx.bar->GetBox().Shadows.IsEmpty());
 }
@@ -167,9 +167,9 @@ TEST_CASE("menubar: a menu is told each time just before it opens, its items as 
     fx.fileMenu->SetOnOpening([&](Menu& menu)
     {
         CHECK(&menu == fx.fileMenu);
-        CHECK_FALSE(menu.IsOpen()); // before, not after
+        CHECK_FALSE(menu.IsOpen()); // told before it opens, not after
         ++opening;
-        open->SetEnabled(opening % 2 == 0); // what the owner knows now
+        open->SetEnabled(opening % 2 == 0); // the owner updates the item as it knows now
     });
     d->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
@@ -194,7 +194,7 @@ TEST_CASE("menubar: a menu is told each time just before it opens, its items as 
         if (auto* item = core::Cast<MenuSubItem>(fx.fileMenu->GetChildAt(i)))
             recentItem = item;
     REQUIRE(recentItem != nullptr);
-    CHECK(recentItem->HandleActivate()); // as Return or a click on it opens its submenu
+    CHECK(recentItem->HandleActivate()); // as Return or a click on it does, this opens its submenu
     CHECK(recent->IsOpen());
     CHECK(subOpening == 1);
 }
@@ -206,7 +206,7 @@ TEST_CASE("menubar: its menus cleared, an open one closed first; menus added aft
     d->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
     REQUIRE(fx.fileMenu->IsOpen());
-    core::RefPtr<Menu> held(fx.fileMenu); // the test looks at it after the bar lets it go
+    core::RefPtr<Menu> held(fx.fileMenu); // the test reads it after the bar lets it go
     fx.bar->ClearMenus();
     CHECK_FALSE(held->IsOpen());
     CHECK(fx.bar->MenuCount() == 0u);

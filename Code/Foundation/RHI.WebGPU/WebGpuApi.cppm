@@ -3,24 +3,24 @@
 
 /// foundation.rhi.webgpu:api - the loaded WebGPU function table.
 ///
-/// The backend never links wgpu at build time. On DESKTOP the implementation is a
-/// runtime SIDECAR (wgpu-native, same pattern as DXC - see dxc-runtime-sidecar):
-/// dlopen/LoadLibrary + one dlsym per used function, resolved into this table. On WEB
-/// the browser provides the implementation at link time, so the table is filled with
-/// the direct symbol addresses. Backend code always calls through the table, making
-/// the two paths identical above this file.
+/// The backend never links wgpu at build time. On desktop the implementation is a runtime
+/// sidecar (wgpu-native, loaded the same way as DXC): dlopen/LoadLibrary and one dlsym
+/// per used function, resolved into this table. On web the browser provides the
+/// implementation at link time, so the table is filled with the direct symbol addresses.
+/// Backend code always calls through the table, so the two paths are identical above this
+/// file.
 ///
-/// ASYNC MODEL (learned the hard way): wgpu-native v29 PANICS on wgpuInstanceWaitAny
-/// with a nonzero timeout ("not implemented") even though the header advertises
-/// TimedWaitAny. All async completion therefore uses AllowProcessEvents callbacks +
-/// a wgpuInstanceProcessEvents pump - never WaitAny.
+/// Async model: wgpu-native v29 panics on wgpuInstanceWaitAny with a nonzero timeout
+/// ("not implemented") even though the header advertises TimedWaitAny. All async
+/// completion therefore uses AllowProcessEvents callbacks and a wgpuInstanceProcessEvents
+/// pump, never WaitAny.
 
 module;
 #include "Core/Prelude.h"
 #include "WebGpuIncludes.h"
 
 #if PLATFORM_WEB
-#include <emscripten/emscripten.h> // emscripten_sleep - yield to the browser event loop
+#include <emscripten/emscripten.h> // emscripten_sleep: yield to the browser event loop
 #include <cstdio>                  // mid-frame-yield diagnostic (fprintf carries a JS stack)
 #elif PLATFORM_WINDOWS
 #include <windows.h>
@@ -35,12 +35,12 @@ import foundation.core;
 using namespace foundation::core;
 
 #if PLATFORM_WEB
-// Dawn's webgpu.h (the emdawnwebgpu web port) declares none of the wgpu-native extensions,
-// nor the three helper types they need, so decltype(&::fn) on the NATIVE_EXT list below would
-// not compile. Forward-declare just enough - at GLOBAL scope, matching where wgpu-native's
-// wgpu.h puts them on desktop - that those members are well-formed function pointers. These
-// symbols are never defined, never bound (LoadWebGpuApi binds only the STANDARD list on web),
-// and never invoked (every call site null-guards), so no definition or link dependency exists.
+// Dawn's webgpu.h (the emdawnwebgpu web port) declares none of the wgpu-native extensions, nor the
+// three helper types they need, so decltype(&::fn) on the NATIVE_EXT list below would not compile.
+// Forward-declare just enough, at global scope where wgpu-native's wgpu.h puts them on desktop,
+// that those members are well-formed function pointers. These symbols are never defined, never
+// bound (LoadWebGpuApi binds only the standard list on web) and never invoked (every call site
+// null-guards), so no definition or link dependency exists.
 using WGPUSubmissionIndex = foundation::core::u64;
 struct WGPUInstanceEnumerateAdapterOptions;
 using WGPULogCallback = void (*)(int, char const*, void*);
@@ -59,11 +59,11 @@ extern "C"
 
 namespace foundation::rhi::webgpu
 {
-    // Every STANDARD wgpu entry point the backend uses - present in both the desktop
+    // Every standard wgpu entry point the backend uses, present in both the desktop
     // wgpu-native header and Dawn's webgpu.h (the emdawnwebgpu web port). decltype(&::fn)
-    // works because webgpu.h DECLARES the functions; nothing references them directly, so
+    // works because webgpu.h declares the functions; nothing references them directly, so
     // no link-time dependency exists. The wgpu-native-only extensions live in the separate
-    // NATIVE_EXT list below (absent from Dawn - compiled out on web).
+    // NATIVE_EXT list below (absent from Dawn, so compiled out on web).
 #define WEBGPU_FUNCTIONS(X)                                                               \
     X(wgpuCreateInstance)                                                                          \
     X(wgpuInstanceRelease)                                                                         \
@@ -170,9 +170,10 @@ namespace foundation::rhi::webgpu
     X(wgpuQueueOnSubmittedWorkDone)                                                                \
     X(wgpuQueueRelease)
 
-    // wgpu-native-only entry points. Present in wgpu-native's wgpu.h (desktop), ABSENT from
-    // Dawn's webgpu.h (the emdawnwebgpu web port). On desktop they resolve like any other; on
-    // web they stay null and every call site null-guards (SetImmediates falls back below).
+    // wgpu-native-only entry points. Present in wgpu-native's wgpu.h (desktop), absent from
+    // Dawn's webgpu.h (the emdawnwebgpu web port). On desktop they resolve like any other;
+    // on web they stay null and every call site null-guards (SetImmediates falls back
+    // below).
 #define WEBGPU_NATIVE_EXT_FUNCTIONS(X)                                                    \
     X(wgpuInstanceEnumerateAdapters)                                                               \
     X(wgpuDevicePoll)                                                                              \
@@ -195,30 +196,31 @@ namespace foundation::rhi::webgpu
         // instance feature): the desktop DXC dev loop. Browsers never have it.
         bool spirvIngestion = false;
 
-        /// Return control to the browser event loop so its microtasks run - the ONLY way
-        /// a WebGPU completion future (adapter/device/map/work-done) resolves on web, since
-        /// those callbacks fire from a microtask that cannot run while wasm spins. Requires
-        /// the linking executable to enable ASYNCIFY. A no-op on desktop, where wgpu-native
-        /// delivers callbacks synchronously from ProcessEvents/DevicePoll - so every pump
-        /// loop below is unchanged there and only gains a real progress path on web.
+        /// Return control to the browser event loop so its microtasks run. This is the only
+        /// way a WebGPU completion future (adapter/device/map/work-done) resolves on web,
+        /// since those callbacks fire from a microtask that cannot run while wasm spins.
+        /// Requires the linking executable to enable ASYNCIFY. A no-op on desktop, where
+        /// wgpu-native delivers callbacks synchronously from ProcessEvents/DevicePoll, so
+        /// every pump loop below is unchanged there and only gains a real progress path on
+        /// web.
         ///
-        /// NOT named Yield: <windows.h> defines Yield() as an EMPTY function-like macro, so
+        /// Not named Yield: <windows.h> defines Yield() as an empty function-like macro, so
         /// that spelling breaks the declaration and silently erases every call site.
         void YieldToEventLoop() const
         {
 #if PLATFORM_WEB
-            // The canvas texture the swapchain acquired EXPIRES when the requestAnimationFrame
+            // The canvas texture the swapchain acquired expires when the requestAnimationFrame
             // callback returns (the browser destroys it at composite time). Yielding between
-            // AcquireNextImage and Present hands control back to the browser MID-FRAME, so this
+            // AcquireNextImage and Present hands control back to the browser mid-frame, so this
             // frame's later submit lands on a destroyed texture ("Destroyed texture used in a
-            // submit") and Dawn drops the whole command buffer - silently losing any one-shot
-            // work it carried (env/probe bakes, the ImGui font atlas). Flag it loudly; the
+            // submit") and Dawn drops the whole command buffer, silently losing any one-shot
+            // work it carried (env/probe bakes, the ImGui font atlas). Log it as an error; the
             // browser console attaches the full call stack to this line, naming the waiter.
             if (frameOpen && !frameYieldWarned)
             {
                 frameYieldWarned = true;
-                // EM_LOG_C_STACK prints the wasm call stack INLINE (no console expansion
-                // needed) - the frames name the exact mid-frame waiter to fix.
+                // EM_LOG_C_STACK prints the wasm call stack inline (no console expansion
+                // needed); the frames name the mid-frame waiter to fix.
                 emscripten_log(EM_LOG_ERROR | EM_LOG_C_STACK,
                                "[webgpu] YieldToEventLoop DURING an open frame - the browser "
                                "will expire the canvas texture and this frame's submit will "
@@ -251,11 +253,11 @@ namespace foundation::rhi::webgpu
             }
         }
 
-        /// GPU-completion pump: map/work-done callbacks only fire when the DEVICE is
+        /// GPU-completion pump: map/work-done callbacks fire only when the device is
         /// polled, and a bare ProcessEvents spin can starve under real frame load.
-        /// DevicePoll is NON-blocking (wait=0) - wait=1 can block forever when the
-        /// queue is already empty (e.g. a MapAsync pending with no submissions in
-        /// flight). On web the browser's event loop delivers; ProcessEvents suffices.
+        /// DevicePoll is non-blocking (wait=0): wait=1 can block forever when the queue
+        /// is already empty (e.g. a MapAsync pending with no submissions in flight). On
+        /// web the browser's event loop delivers; ProcessEvents suffices.
         void PumpUntilWithDevice(WGPUInstance instance, WGPUDevice device,
                                  const bool& done) const
         {
@@ -275,19 +277,19 @@ namespace foundation::rhi::webgpu
         }
     };
 
-    /// Fills `api` - desktop: dlopen the wgpu-native sidecar (explicit path override,
-    /// else the vendored BUILDSYSTEM_WGPU_PATH, else the bare soname so a relocated dist
-    /// resolves the copy staged beside the executable via $ORIGIN); web: direct symbols.
+    /// Fills `api`. Desktop: dlopen the wgpu-native sidecar (explicit path override, else
+    /// the vendored BUILDSYSTEM_WGPU_PATH, else the bare soname so a relocated dist
+    /// resolves the copy staged beside the executable via $ORIGIN). Web: direct symbols.
     export Status LoadWebGpuApi(WebGpuApi& api, StringView libraryPathOverride);
 
-    /// Releases the sidecar handle (no-op on web / when never loaded).
+    /// Releases the sidecar handle (a no-op on web or when never loaded).
     export void UnloadWebGpuApi(WebGpuApi& api);
 
 #if PLATFORM_WEB
 
     Status LoadWebGpuApi(WebGpuApi& api, StringView)
     {
-        // The browser (via emscripten's library_webgpu) IS the implementation; the
+        // The browser (via emscripten's library_webgpu) is the implementation; the
         // wgpu-native-extension entries stay null and must not be reached on web.
 #define WEBGPU_BIND_DIRECT(fn) api.fn = &::fn;
         WEBGPU_FUNCTIONS(WEBGPU_BIND_DIRECT)
@@ -339,8 +341,8 @@ namespace foundation::rhi::webgpu
 #endif
         if (lib == nullptr)
         {
-            // Relocated dist: the vendored absolute path does not exist there - the bare
-            // soname searches RUNPATH ($ORIGIN => the copy staged beside the executable).
+            // Relocated dist: the vendored absolute path does not exist there, so the bare
+            // soname searches RUNPATH ($ORIGIN, the copy staged beside the executable).
             lib = dlopen("libwgpu_native.so", RTLD_NOW | RTLD_LOCAL);
         }
         if (lib == nullptr)
@@ -362,7 +364,7 @@ namespace foundation::rhi::webgpu
         {
             api.libraryHandle = lib;
             UnloadWebGpuApi(api);
-            return ErrorCode::NotSupported; // wrong / too-old sidecar
+            return ErrorCode::NotSupported; // wrong or too-old sidecar
         }
         api.libraryHandle = lib;
         return ErrorCode::Ok;

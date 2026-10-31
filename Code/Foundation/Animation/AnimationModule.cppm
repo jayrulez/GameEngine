@@ -3,10 +3,10 @@
 
 /// Foundation::Animation - `foundation.animation`, the engine's skeletal-animation foundation.
 ///
-/// A faithful port of Sedulous.Animation (foundation only - no rendering dependency; the renderer
-/// consumes evaluated skinning matrices). Depends solely on Core (math + containers). Aggregates the
-/// partitions: easing (:easing), the skeleton hierarchy (:skeleton), and the pose view (:pose).
-/// The clip/sampler/player and the animation graph land in later partitions.
+/// It has no rendering dependency (the renderer consumes evaluated skinning matrices) and depends
+/// only on Core (math and containers). It aggregates the partitions: easing, the skeleton
+/// hierarchy, the pose view, clips, the sampler, root motion, pose modifiers, inverse kinematics,
+/// the clip player and the animation graph.
 
 export module foundation.animation;
 

@@ -1,7 +1,7 @@
 # Integration.GuiScript - the GUI (foundation.gui) and its satellites driven from the script backends
 # (the GUI's reflected widgets built, styled, bound and clicked, the gamekit's screen stack, the
 # sandbox's game menu played from its real files, and the engine's GUI (Engine.GUI) found and
-# driven from a script, from AngelScript + Luau). Cross-layer (scripting x a GUI library), so it
+# driven from a script, from AngelScript and Luau). It crosses layers (scripting and a GUI library), so it
 # lives here and the libraries' own suites stay backend-neutral. Each backend leg is
 # #ifdef OPTION_HAS_<backend>-guarded; link only the enabled backends via ${SCRIPTLIB_*}.
 add_executable(Integration.GuiScript TestsMain.cpp GuiScriptTests.cpp GamekitScriptTests.cpp ShowcaseScriptTests.cpp EngineGuiScriptTests.cpp)

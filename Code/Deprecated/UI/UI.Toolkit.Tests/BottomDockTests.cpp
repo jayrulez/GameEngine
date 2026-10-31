@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// BottomDock tests: the Godot-style collapsible bottom strip. Headless - exercises the tab/expand
-// state machine + OnExpandedChanged event + per-tab content visibility (the host wires the event to
-// SplitView::SetPaneCollapsed; that half is covered by SplitViewTests).
+// BottomDock tests: the collapsible bottom strip. Headless; they exercise the tab and expand state
+// machine, the OnExpandedChanged event and per-tab content visibility. The host wires the event to
+// SplitView::SetPaneCollapsed, which SplitViewTests covers.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -35,7 +35,7 @@ TEST_CASE("toolkit-bottomdock: starts collapsed; clicking a tab expands, clickin
             lastExpanded = e;
         });
 
-    // Click the tab -> expands, content shown, event(true), active id set.
+    // Clicking the tab expands it: content shown, event(true), active id set.
     dock->ClickTab(u8"animation");
     CHECK(dock->IsExpanded());
     CHECK(anim->Visibility == Visibility::Visible);
@@ -43,7 +43,7 @@ TEST_CASE("toolkit-bottomdock: starts collapsed; clicking a tab expands, clickin
     CHECK(events == 1);
     CHECK(lastExpanded == true);
 
-    // Click the SAME (active) tab -> collapses back to just the bar, content hidden, event(false).
+    // Clicking the same (active) tab collapses back to just the bar: content hidden, event(false).
     dock->ClickTab(u8"animation");
     CHECK_FALSE(dock->IsExpanded());
     CHECK(anim->Visibility == Visibility::Gone);
@@ -64,7 +64,7 @@ TEST_CASE("toolkit-bottomdock: switching tabs keeps expanded and shows only the 
     CHECK(a->Visibility == Visibility::Visible);
     CHECK(b->Visibility == Visibility::Gone);
 
-    // Clicking the OTHER tab switches (still expanded), only B visible now.
+    // Clicking the other tab switches (still expanded), and only B is visible.
     dock->ClickTab(u8"b");
     CHECK(dock->IsExpanded());
     CHECK(dock->ActiveTabId() == StringView(u8"b"));
@@ -84,7 +84,7 @@ TEST_CASE("toolkit-bottomdock: ActivateTab expands the named tab")
     auto a = core::MakeRef<Panel>(core::DefaultAllocator());
     dock->AddTab(u8"a", u8"A", a.Get());
 
-    dock->ActivateTab(u8"nope"); // unknown id -> no change
+    dock->ActivateTab(u8"nope"); // unknown id: no change
     CHECK_FALSE(dock->IsExpanded());
 
     dock->ActivateTab(u8"a");
@@ -93,9 +93,9 @@ TEST_CASE("toolkit-bottomdock: ActivateTab expands the named tab")
     CHECK(a->Visibility == Visibility::Visible);
 }
 
-// Sedulous 5e7d4e94: opened from elsewhere, the dock is GONE while nothing is open, bar and all,
-// so the pane holding it takes no height; a tab added for a docked tool panel comes and goes
-// with it, and the remaining tabs' buttons still find their tabs by id.
+// When the dock is opened from elsewhere, it is hidden entirely while nothing is open (the bar
+// included), so the pane holding it takes no height. A tab added for a docked tool panel comes
+// and goes with the panel, and the remaining tabs' buttons still find their tabs by id.
 TEST_CASE("toolkit-bottomdock: hidden when collapsed, and tabs come and go")
 {
     auto dock = core::MakeRef<BottomDock>(core::DefaultAllocator());

@@ -3,7 +3,7 @@
 
 /// Foundation::Scene - the `:phase` partition.
 ///
-/// ScenePhase: the ordered slots a scene runs each update. Order is the contract -
+/// ScenePhase: the ordered slots a scene runs each update. Order is the contract:
 /// systems that depend on each other rely on it (input/physics readback before
 /// gameplay; gameplay before async work; everything before the transform recompute;
 /// render/spatial extraction after). TransformUpdate is internal (the Scene drives
@@ -28,7 +28,7 @@ export namespace foundation::scene
         Update,          // main gameplay / AI (sequential; cross-component reads safe)
         AsyncUpdate,     // parallel per-system; a system may touch only its own data
         PostUpdate,      // animation, constraints, late logic
-        TransformUpdate, // (internal) dirty transform propagation - Scene-driven
+        TransformUpdate, // (internal) dirty transform propagation, Scene-driven
         PostTransform,   // render extraction, spatial index update (final transforms ready)
         Cleanup,         // deferred destruction settles here
         Count,

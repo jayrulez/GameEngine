@@ -4,15 +4,15 @@
 /// Foundation::Render - the `:probes` partition.
 ///
 /// Reflection probes: local, parallax-corrected, cluster-assigned cubemap reflections.
-/// This system owns the per-probe GPU resources and drives capture + prefilter + froxel assignment:
-///   - captured cube-ARRAY (RGBA16F, [maxProbes×6] layers)   : the raw 6-face scene capture per probe.
-///   - prefiltered specular cube-ARRAY (RGBA16F, mip chain)  : GGX split-sum per probe, sampled by the
+/// This system owns the per-probe GPU resources and drives capture, prefilter and froxel assignment:
+///   - captured cube array (RGBA16F, [maxProbes×6] layers)   : the raw 6-face scene capture per probe.
+///   - prefiltered specular cube array (RGBA16F, mip chain)  : GGX split-sum per probe, sampled by the
 ///                                                             forward (set 0, t8) with parallax.
-///   - probe-metadata StructuredBuffer (GpuProbe[])          : center/box/blend/slice, sampled per froxel.
+///   - probe-metadata StructuredBuffer (GpuProbe[])          : center, box, blend, slice; sampled per froxel.
 ///
-/// A stable ProbeKey (entity id) → slot map keeps a probe's array slice persistent across frames, so only
-/// dirty probes re-capture (static caching). This system allocates the resources + the slot
-/// assignment and drives capture, prefilter, and the debug view.
+/// A stable map from ProbeKey (entity id) to slot keeps a probe's array slice across frames, so only
+/// dirty probes re-capture (static caching). This system allocates the resources and the slot
+/// assignment and drives capture, prefilter and the debug view.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +24,7 @@ import foundation.rhi;
 import foundation.rendergraph;
 import foundation.shaders;
 import foundation.shaders.system;
-import :data; // ReflectionProbe / kMaxReflectionProbes / ProbeUpdateMode
+import :data; // ReflectionProbe, kMaxReflectionProbes, ProbeUpdateMode
 
 using namespace foundation::core;
 namespace rendergraph = foundation::rendergraph;
@@ -48,8 +48,8 @@ namespace foundation::render
 
     void ReflectionProbeSystem::BeginFrame()
     {
-        // Hot reload: rebuild the blit/prefilter pipelines when their shaders changed
-        // (GPU idled on reload; layouts and cached bind groups survive).
+        // Hot reload: rebuild the blit and prefilter pipelines when their shaders changed
+        // (the GPU is idle on reload; layouts and cached bind groups survive).
         const u64 shaderVersion = m_shaders->Version(u8"probe_blit_vs") +
                                   m_shaders->Version(u8"probe_blit_ps") +
                                   m_shaders->Version(u8"probe_prefilter_ps");
@@ -124,7 +124,7 @@ namespace foundation::render
             SlotState& st = m_slotState[slot];
             // The warmup keeps re-capturing for the first frames: on web a startup submit can
             // be dropped (expired canvas texture), which would silently lose this one-shot bake
-            // while `captured` says done - the same window IBLSystem uses for the env bake.
+            // while `captured` says done; IBLSystem uses the same window for the env bake.
             if (!st.captured || st.signature != sig || p.update == ProbeUpdateMode::Realtime ||
                 st.captureRequest != p.captureRequest || m_captureWarmup > 0)
             {
@@ -145,7 +145,7 @@ namespace foundation::render
                         break;
                     }
                 }
-                // The capture renders THIS probe's owning scene (never another scene's geometry).
+                // The capture renders this probe's owning scene (never another scene's geometry).
                 if (!queued)
                 {
                     m_captures.PushBack(CaptureTask{slot, p.center, scene});
@@ -464,7 +464,7 @@ namespace foundation::render
             return false;
         }
 
-        // Texture2DArray, not Texture2D: the source is ONE LAYER of the captured cube-array,
+        // Texture2DArray, not Texture2D: the source is one layer of the captured cube array,
         // and a DX12 TEXTURE2D SRV cannot address a non-zero array slice (always layer 0).
         // The per-face view carries the slice; the shader samples slice 0 of it.
         if (m_blitLayout == nullptr) // layouts survive a shader hot reload
@@ -518,7 +518,7 @@ namespace foundation::render
         }
         rhi::TextureViewDesc vd{};
         vd.format = kCubeFormat;
-        // Single-slice ARRAY view (see the blit layout comment - DX12 TEXTURE2D SRVs
+        // Single-slice array view (see the blit layout comment: DX12 TEXTURE2D SRVs
         // cannot select an array slice).
         vd.dimension = rhi::TextureViewDimension::Texture2DArray;
         vd.baseArrayLayer = idx;
@@ -552,8 +552,8 @@ namespace foundation::render
             return false;
         }
 
-        // TextureCubeArray, not TextureCube: the source is ONE CUBE of the prefiltered
-        // cube-array, and a DX12 TEXTURECUBE SRV cannot address a non-zero first face
+        // TextureCubeArray, not TextureCube: the source is one cube of the prefiltered
+        // cube array, and a DX12 TEXTURECUBE SRV cannot address a non-zero first face
         // (always cube 0). The per-probe view carries the base; the shader samples cube 0.
         if (m_prefilterLayout == nullptr) // layouts survive a shader hot reload
         {
@@ -610,7 +610,7 @@ namespace foundation::render
         }
         rhi::TextureViewDesc vd{};
         vd.format = kCubeFormat;
-        // Single-cube ARRAY view (see the prefilter layout comment - DX12 TEXTURECUBE
+        // Single-cube array view (see the prefilter layout comment: DX12 TEXTURECUBE
         // SRVs cannot select a first face).
         vd.dimension = rhi::TextureViewDimension::TextureCubeArray;
         vd.baseMipLevel = 0;

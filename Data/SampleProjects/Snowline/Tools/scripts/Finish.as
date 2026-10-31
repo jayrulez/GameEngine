@@ -1,7 +1,8 @@
-// Finish - the finish line: when the rider crosses it down the course, "RunFinished". It holds
-// the course's medal times too, and announces them at the start ("MedalGold", "MedalSilver",
-// "MedalBronze", each in hundredths of a second) for Snowline.as to judge a run by. Placed by
-// Tools/course.py at the course line's end, facing up the course, with its course's times.
+// Finish: the finish line. When the rider crosses it going down the course, it emits
+// "RunFinished". It also holds the course's medal times and announces them at the start
+// ("MedalGold", "MedalSilver", "MedalBronze", each in hundredths of a second) for Snowline.as to
+// judge a run by. Tools/course.py places it at the end of the course line, facing up the course,
+// with that course's times.
 
 class Finish
 {
@@ -33,7 +34,8 @@ class Finish
         {
             return;
         }
-        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        // The rider is a root entity, so position() holds this frame's pose; worldPosition() still
+        // holds last frame's.
         Float3 d = m_rider.position() - self.worldPosition();
         float along = d.x * Math::Sin(heading) + d.z * Math::Cos(heading);
         if (m_seen && m_lastAlong < 0.0f && along >= 0.0f)

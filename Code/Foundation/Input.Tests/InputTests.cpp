@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.input tests: model round-trip (binary + XML) + validation, and ActionRuntime
-// evaluation over SYNTHETIC devices (the design's testing contract - no real hardware).
+// foundation.input tests: model round-trip (binary and XML) and validation, and ActionRuntime
+// evaluation over synthetic devices (no real hardware).
 
 #include <doctest/doctest.h>
 
@@ -24,7 +24,7 @@ namespace shell = foundation::shell;
 TEST_CASE("input: a map stamped with another wire version is REFUSED, not decoded")
 {
     // The map carries its own inline version. A stream written under another one would
-    // decode the wrong field list into plausible-looking bindings - the reader fails instead.
+    // decode the wrong field list into plausible-looking bindings; the reader fails instead.
     MemoryStream buffer;
     {
         BinarySerializer ar(buffer, SerializeMode::Write);
@@ -104,7 +104,7 @@ TEST_CASE("input: validation refuses kind mismatches and empty names")
     InputMap bad = MakeGameplayMap();
     Binding stick;
     stick.source = BindingSource::GamepadStick;
-    bad.sets[0].actions[0].bindings.PushBack(stick); // 2D binding on the Jump BUTTON
+    bad.sets[0].actions[0].bindings.PushBack(stick); // 2D binding on the Jump button
     String error;
     CHECK_FALSE(ValidateInputMap(bad, &error));
     CHECK(!error.IsEmpty());
@@ -128,7 +128,7 @@ TEST_CASE("input: buttons - edges, device folding, and key modifiers")
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK_FALSE(runtime.IsDown(jump));
 
-    // Keyboard press: down + a pressed edge exactly this frame, held next frame.
+    // Keyboard press: down and a pressed edge exactly this frame, held next frame.
     devices.keyboard.Set(shell::KeyCode::Space, true);
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK(runtime.IsDown(jump));
@@ -137,7 +137,7 @@ TEST_CASE("input: buttons - edges, device folding, and key modifiers")
     CHECK(runtime.IsDown(jump));
     CHECK_FALSE(runtime.WasPressed(jump));
 
-    // Release edge; then the GAMEPAD binding drives the same action (device folding).
+    // Release edge; then the gamepad binding drives the same action (device folding).
     devices.keyboard.Set(shell::KeyCode::Space, false);
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK_FALSE(runtime.IsDown(jump));
@@ -173,9 +173,9 @@ TEST_CASE("input: buttons - edges, device folding, and key modifiers")
     devices.keyboard.Set(shell::KeyCode::S, false);
     devices.keyboard.mods = shell::KeyModifiers::None;
 
-    // A binding that names a modifier GROUP (Shift = both bits) fires on EITHER side; one
-    // that names a specific side still needs that side. Requiring every bit made a Shift
-    // binding unreachable (nobody holds both shifts) - found by the Beef port.
+    // A binding that names a modifier group (Shift = both bits) fires on either side; one
+    // that names a specific side still needs that side. Requiring every bit would make a
+    // Shift binding unreachable (nobody holds both shifts).
     InputMap groupMap;
     ActionSet groupSet;
     groupSet.name = String(u8"Gameplay");
@@ -217,7 +217,7 @@ TEST_CASE("input: buttons - edges, device folding, and key modifiers")
 
 TEST_CASE("input: the state summary names every action, its value and whether it is down")
 {
-    // Sedulous 18961314: what the input trace prints, one line for every action of the map.
+    // What the input trace prints, one line for every action of the map.
     ActionRuntime runtime;
     runtime.SetMap(MakeGameplayMap());
     runtime.DisableSet(u8"Menu");
@@ -261,14 +261,14 @@ TEST_CASE("input: axes - composite, stick dead zone, and folding by magnitude")
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK(runtime.Value2D(move).x == doctest::Approx(1.0f).epsilon(0.01));
 
-    // Keyboard (0.7) vs stick (1.0): the larger magnitude wins the fold.
+    // Keys and stick together: the larger magnitude wins the fold.
     devices.keyboard.Set(shell::KeyCode::A,
-                         true); // x = -1 from keys, +1 from stick... stick larger? equal
+                         true); // x = -1 from the keys
     pad.axes[static_cast<u32>(shell::GamepadAxis::LeftX)] = 0.4f;
     runtime.Update(devices, 1.0f / 60.0f);
     v = runtime.Value2D(move);
     CHECK(v.x ==
-          doctest::Approx(-1.0f).epsilon(0.01)); // the full-press key out-magnitudes 0.25-ish stick
+          doctest::Approx(-1.0f).epsilon(0.01)); // the full key press outweighs the weaker stick
     devices.keyboard.Set(shell::KeyCode::A, false);
     pad.axes[static_cast<u32>(shell::GamepadAxis::LeftX)] = 0.0f;
 }
@@ -286,17 +286,16 @@ TEST_CASE("input: exclusive sets - priority resolution, suppression, and held la
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK(runtime.IsDown(jump));
 
-    // Menu goes exclusive mid-hold: Jump releases (edge fires once), Confirm must NOT
-    // fire from the stale hold... it is latched too? No: Confirm was suppressed BEFORE
-    // (not top set? it evaluates now) - Confirm became physically pressed only while its
-    // set was suppressed-inactive, so it latched and stays released until a re-press.
+    // Menu goes exclusive mid-hold: Jump releases (its edge fires once). Confirm became
+    // physically pressed while its set was suppressed, so it latched and stays released
+    // until a re-press.
     runtime.PushExclusiveSet(u8"Menu");
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK_FALSE(runtime.IsDown(jump));
     CHECK(runtime.WasReleased(jump));
     CHECK_FALSE(runtime.IsDown(confirm)); // latched: held from before the menu opened
 
-    // Releasing and re-pressing INSIDE the menu activates Confirm, not Jump.
+    // Releasing and re-pressing inside the menu activates Confirm, not Jump.
     devices.keyboard.Set(shell::KeyCode::Space, false);
     runtime.Update(devices, 1.0f / 60.0f);
     devices.keyboard.Set(shell::KeyCode::Space, true);
@@ -305,7 +304,7 @@ TEST_CASE("input: exclusive sets - priority resolution, suppression, and held la
     CHECK(runtime.WasPressed(confirm));
     CHECK_FALSE(runtime.IsDown(jump));
 
-    // Menu closes while Space is STILL held: Jump stays released (latched) until the
+    // Menu closes while Space is still held: Jump stays released (latched) until the
     // physical release; the next press works normally.
     runtime.PopExclusiveSet();
     runtime.Update(devices, 1.0f / 60.0f);
@@ -376,7 +375,7 @@ TEST_CASE("input: an action two sets share answers from the exclusive set while 
     devices.keyboard.Set(shell::KeyCode::F, false);
     devices.keyboard.Set(shell::KeyCode::Escape, true);
     runtime.Update(devices, 1.0f / 60.0f);
-    CHECK(runtime.WasPressed(pauseRef)); // was the Gameplay copy: suppressed, never pressed
+    CHECK(runtime.WasPressed(pauseRef)); // the menu's copy, not the suppressed Gameplay one
     devices.keyboard.Set(shell::KeyCode::Escape, false);
     runtime.Update(devices, 1.0f / 60.0f);
 
@@ -422,7 +421,7 @@ TEST_CASE("input: rebind overlay - apply over a pristine copy, clear restores, p
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK(runtime.IsDown(jump));
 
-    // Reset-to-default = clear the override; the pristine asset re-applies.
+    // Reset-to-default clears the override; the pristine asset re-applies.
     overlay.Clear(u8"Gameplay", u8"Jump");
     InputMap restored = asset;
     ApplyBindingOverrides(restored, overlay);
@@ -471,7 +470,7 @@ TEST_CASE("input: rebind capture - first activated input matching the filter")
     CHECK(captured.code == static_cast<u32>(shell::KeyCode::F));
     devices.keyboard.pressed[static_cast<u32>(shell::KeyCode::F)] = false;
 
-    // Stick noise is IGNORED for a key rebind; an opted-in stick filter captures it.
+    // Stick noise is ignored for a key rebind; an opted-in stick filter captures it.
     pad.axes[static_cast<u32>(shell::GamepadAxis::RightX)] = 0.9f;
     CHECK_FALSE(CaptureBinding(devices, keysOnly, captured));
     CaptureFilter stickFilter;
@@ -483,7 +482,7 @@ TEST_CASE("input: rebind capture - first activated input matching the filter")
     CHECK(captured.source == BindingSource::GamepadStick);
     CHECK(captured.code == static_cast<u32>(StickCode::Right));
 
-    // Gamepad button (must-not-have keys still capturing pads).
+    // Gamepad button, with keys and mouse buttons filtered out.
     pad.axes[static_cast<u32>(shell::GamepadAxis::RightX)] = 0.0f;
     pad.buttonsPressed[3] = true;
     CaptureFilter padButtons;
@@ -524,7 +523,7 @@ TEST_CASE("input: SurfaceTouch transforms + spatially gates through the ContentF
     shell::ITouch* touch = surface.Touch();
     REQUIRE(touch != nullptr);
 
-    // A finger OUTSIDE the region (window-normalized 0.01, 0.01 = 19,10 px): filtered.
+    // A finger outside the region (window-normalized 0.01, 0.01 = 19,10 px): filtered.
     manager.touch.Set(1, 0.01f, 0.01f);
     CHECK(touch->TouchCount() == 0);
     CHECK_FALSE(touch->HasTouch());
@@ -542,13 +541,13 @@ TEST_CASE("input: SurfaceTouch transforms + spatially gates through the ContentF
     CHECK(mapped.pointerX == doctest::Approx(400.0f).epsilon(0.01));
     CHECK(mapped.pointerY == doctest::Approx(300.0f).epsilon(0.01));
 
-    // Letterbox: 800x600 region showing 1280x800 content (16:10 in 4:3) - vertical bars
-    // ABOVE/BELOW? 16:10 content in 4:3 region: content wider -> bars top+bottom. A
-    // finger in the bar band is filtered ("no hit" contract); one in the content maps.
+    // Letterbox: an 800x600 region showing 1280x800 content (16:10 in 4:3). The content is
+    // wider, so the bars are above and below. A finger in a bar is filtered (no hit); one in
+    // the content maps.
     surface.SetContentSize(Float2{1280.0f, 800.0f});
     surface.SetFitMode(FitMode::Letterbox);
-    // dst: width 800, height 800*800/1280 = 500, centered in the 600-tall region ->
-    // region-local y in [50, 550) = window px [150, 650). Content center = window (500, 400).
+    // dst: width 800, height 800*800/1280 = 500, centered in the 600-tall region, so
+    // region-local y in [50, 550) is window px [150, 650). Content center = window (500, 400).
     manager.touch.Set(1, 500.0f / 1920.0f, 130.0f / 1080.0f); // in the top bar (region y 30)
     CHECK(touch->TouchCount() == 0);
     manager.touch.Set(1, 500.0f / 1920.0f, 400.0f / 1080.0f); // content center
@@ -562,7 +561,7 @@ TEST_CASE("input: SurfaceTouch transforms + spatially gates through the ContentF
     CHECK(touch->TouchCount() == 0);
 }
 
-// Present transform P3: the editor's Game tab previewing a portrait phone, a landscape game
+// The present transform: the editor's Game tab previewing a portrait phone, a landscape game
 // turned three quarters in a portrait viewport. The router maps the mouse and a finger into the
 // game's frame and turns a drag's motion with it.
 TEST_CASE("input: a turned surface reads the mouse and fingers in the game's frame")
@@ -833,9 +832,8 @@ TEST_CASE("input: touch - region buttons and the floating virtual stick")
     runtime.Update(devices, step);
     CHECK(runtime.WasReleased(fire));
 
-    // Stick: a touch starting in-region anchors (value 0), deflection scales over the
-    // radius, clamps at 1, and a touch that STARTED OUTSIDE never captures. The finger is id 0,
-    // as a browser numbers its first finger.
+    // Stick: a touch in the region anchors (value 0), and deflection scales over the radius
+    // and clamps at 1. The finger is id 0, as a browser numbers its first finger.
     devices.touch.Set(0, 0.25f, 0.5f);
     runtime.Update(devices, step); // capture frame: anchor == position
     CHECK(runtime.Value2D(move).x == doctest::Approx(0.0f));
@@ -881,14 +879,13 @@ TEST_CASE("input: touch - region buttons and the floating virtual stick")
     runtime.Update(devices, step);
     CHECK(runtime.Value2D(move).x == doctest::Approx(0.0f));
 
-    // The stick region does NOT capture a touch that began outside it - even if it
-    // later drifts inside (the finger belongs to whatever it started on).
+    // A touch that began outside the stick region and drifts inside is captured where it
+    // enters.
     devices.touch.Set(3, 0.9f, 0.9f);
     runtime.Update(devices, step);
     devices.touch.Set(3, 0.25f, 0.5f);
     runtime.Update(devices, step);
-    // NOTE: with the capture-scan running each frame a formerly-outside touch inside
-    // the region WILL capture (we scan current positions). Assert the ACTUAL contract:
+    // The capture scan reads current positions each frame, so the anchor is the entry point:
     CHECK(runtime.Value2D(move).x ==
           doctest::Approx(0.0f)); // anchor = entry point, so value starts at 0
 
@@ -937,7 +934,7 @@ TEST_CASE("input: the timeScale processor scales flagged action VALUES only")
     runtime.SetTimeScale(0.0f); // paused world: flagged values zero, digital press intact
     runtime.Update(devices, 1.0f / 60.0f);
     CHECK(runtime.Value(scaled) == doctest::Approx(0.0f));
-    CHECK(runtime.IsDown(scaled)); // the PRESS is physical; only the value scales
+    CHECK(runtime.IsDown(scaled)); // the press is physical; only the value scales
 }
 
 TEST_CASE("input: interactions - hold, tap, and double tap")
@@ -963,7 +960,7 @@ TEST_CASE("input: interactions - hold, tap, and double tap")
     const f32 step = 1.0f / 60.0f;
     FakeDevices devices;
 
-    // HOLD 0.2s: pressing does nothing until the threshold; then one pressed edge; the
+    // Hold 0.2s: pressing does nothing until the threshold; then one pressed edge; the
     // release edge fires on release as usual.
     {
         ActionRuntime runtime;
@@ -992,7 +989,7 @@ TEST_CASE("input: interactions - hold, tap, and double tap")
         CHECK(runtime.WasReleased(act));
     }
 
-    // TAP 0.15s: a short press pulses ONE frame at release; a long press never fires.
+    // Tap 0.15s: a short press pulses one frame at release; a long press never fires.
     {
         ActionRuntime runtime;
         runtime.SetMap(makeButtonMap(InteractionKind::Tap, 0.15f));
@@ -1021,7 +1018,7 @@ TEST_CASE("input: interactions - hold, tap, and double tap")
         CHECK_FALSE(runtime.WasPressed(act));
     }
 
-    // DOUBLE TAP 0.25s: two quick presses pulse on the SECOND; slow presses never fire.
+    // Double tap 0.25s: two quick presses pulse on the second; slow presses never fire.
     {
         ActionRuntime runtime;
         runtime.SetMap(makeButtonMap(InteractionKind::DoubleTap, 0.25f));
@@ -1104,7 +1101,7 @@ TEST_CASE("input: smoothing - sensitivity ramp, gravity recenter, snap on flip")
 
 TEST_CASE("input: the UI consumption mask gates device classes independently")
 {
-    // Self-contained map: one KEY action, one MOUSE-BUTTON action.
+    // Self-contained map: one key action, one mouse-button action.
     InputMap map;
     ActionSet set;
     set.name = String(u8"G");
@@ -1249,9 +1246,9 @@ TEST_CASE("input reflection: the InputMap container tree is traversable via refl
     CHECK(GetProperty(*aName, actionInst).Get<String>() == StringView(u8"Jump"));
 }
 
-// Sedulous a577cb16 and a700e581: every code an input map stores as a number has a reflected
-// name, so type_info names it and a scripted playtest parses it - every case below Count, held
-// to the enum so a code added without a name fails here.
+// Every code an input map stores as a number has a reflected name, so type_info names it and a
+// scripted playtest parses it. Every case below Count is checked against the enum, so a code
+// added without a name fails here.
 TEST_CASE("input reflection: every input code reflects its cases")
 {
     using namespace foundation::input;

@@ -6,8 +6,8 @@
 /// Owns the loaded function table (desktop: the dlopen'd wgpu-native sidecar), the
 /// WGPUInstance, and the enumerated adapters. Desktop enumeration uses wgpu-native's
 /// wgpuInstanceEnumerateAdapters extension (all adapters, synchronous); the web build
-/// will use the standard async wgpuInstanceRequestAdapter when the browser milestone
-/// lands (the extension entries are null there).
+/// uses the standard async wgpuInstanceRequestAdapter (the extension entries are null
+/// there).
 
 module;
 #include "Core/Prelude.h"
@@ -27,7 +27,7 @@ export namespace foundation::rhi::webgpu
 {
     struct WebGpuBackendDesc
     {
-        /// Explicit sidecar path; empty = the vendored BUILDSYSTEM_WGPU_PATH, then the
+        /// Explicit sidecar path; when empty, the vendored BUILDSYSTEM_WGPU_PATH, then the
         /// bare soname (a relocated dist's $ORIGIN-staged copy).
         StringView libraryPathOverride;
     };
@@ -45,15 +45,15 @@ export namespace foundation::rhi::webgpu
                 return loaded;
             }
 
-            // Request SPIR-V ingestion (a STANDARD instance feature) - the desktop DXC
-            // dev loop rides on it. There is no usable probe (wgpuGetInstanceFeatures
-            // PANICS "not implemented" in wgpu-native v29, like WaitAny), so request
-            // optimistically and fall back to a plain instance when refused; the
-            // browser build never requests it (no dlopen'd sidecar sets the flag).
+            // Request SPIR-V ingestion (a standard instance feature); the desktop DXC dev
+            // loop depends on it. There is no usable probe (wgpuGetInstanceFeatures panics
+            // "not implemented" in wgpu-native v29, like WaitAny), so request
+            // optimistically and fall back to a plain instance when refused; the browser
+            // build never requests it (no dlopen'd sidecar sets the flag).
             const WGPUInstanceFeatureName spirv = WGPUInstanceFeatureName_ShaderSourceSPIRV;
             WGPUInstanceDescriptor instanceDesc = WGPU_INSTANCE_DESCRIPTOR_INIT;
 #if !PLATFORM_WEB
-            // Restrict the sidecar instance to the PRIMARY backends (Vulkan/Metal/DX12). Left
+            // Restrict the sidecar instance to the primary backends (Vulkan/Metal/DX12). Left
             // unset, wgpu-native enables every backend including GL, whose WGL instance thread
             // on Windows dies with a fatal callback exception when an instance is created and
             // torn down without the event loop being pumped in between. We never select GL
@@ -118,7 +118,8 @@ export namespace foundation::rhi::webgpu
             canvas.selector = WGPUStringView{selector, WGPU_STRLEN};
             surfaceDesc.nextInChain = &canvas.chain;
 #else
-            // Exactly one platform source chains in (handle contract: Device.cppm:62).
+            // Exactly one platform source chains in (the handle contract is on
+            // Backend::CreateSurface).
             WGPUSurfaceSourceXlibWindow xlib = WGPU_SURFACE_SOURCE_XLIB_WINDOW_INIT;
             WGPUSurfaceSourceWaylandSurface wayland = WGPU_SURFACE_SOURCE_WAYLAND_SURFACE_INIT;
             WGPUSurfaceSourceWindowsHWND win32 = WGPU_SURFACE_SOURCE_WINDOWS_HWND_INIT;
@@ -204,16 +205,17 @@ export namespace foundation::rhi::webgpu
                 }
 
                 // The RHI host uses adapters[0], but wgpu's enumeration order is arbitrary and
-                // on Windows routinely leads with an adapter that cannot PRESENT (a layered /
-                // software / non-display-GPU entry) - the swapchain then dies at configure
+                // on Windows routinely leads with an adapter that cannot present (a layered,
+                // software or non-display-GPU entry); the swapchain then dies at configure
                 // ("Surface does not support the adapter's queue family"). Order real GPUs
                 // first (discrete, then integrated, then the rest, stable within a class), and
-                // honor ENV_WEBGPU_ADAPTER=<index into the logged list> as the escape
-                // hatch for hybrid-GPU machines where the heuristic still picks wrong.
-                // Rank = (backend, device class). One physical GPU appears once per wgpu
-                // backend; on WINDOWS prefer D3D12 entries - DXGI present works on every
-                // adapter, while a Vulkan entry's queue family often cannot present on
-                // hybrid (Optimus-style) machines and wgpu-native PANICS at configure.
+                // honour ENV_WEBGPU_ADAPTER=<index into the logged list> as the escape hatch
+                // for hybrid-GPU machines where the heuristic still picks wrong.
+                //
+                // The rank is (backend, device class). One physical GPU appears once per wgpu
+                // backend; on Windows prefer D3D12 entries: DXGI present works on every
+                // adapter, while a Vulkan entry's queue family often cannot present on hybrid
+                // (Optimus-style) machines and wgpu-native panics at configure.
                 const auto backendRank = [](Adapter* adapter) -> u32
                 {
                     const WGPUBackendType type =
@@ -241,7 +243,7 @@ export namespace foundation::rhi::webgpu
                     case AdapterType::Unknown:
                         return 2;
                     default:
-                        return 3; // Cpu/software last - never present-capable
+                        return 3; // Cpu/software last; never present-capable
                     }
                 };
                 const auto backendName = [](Adapter* adapter) -> const char*
@@ -303,7 +305,7 @@ export namespace foundation::rhi::webgpu
                 }
                 else
                 {
-                    // Stable sort by (backend, class) - insertion by rank preserves the
+                    // Stable sort by (backend, class): insertion by rank preserves the
                     // enumeration order within a bucket.
                     Array<Adapter*> ordered;
                     for (u32 backend = 0; backend < 3; ++backend)
@@ -325,10 +327,10 @@ export namespace foundation::rhi::webgpu
             }
             else
             {
-                // Standard path (web): one async request for the default adapter. The record
-                // is HEAP-allocated and ownership transfers to the callback if the pump gives
-                // up (the fence-fix pattern): a stack record would leave the still-registered
-                // callback writing through a dead frame on a later ProcessEvents.
+                // Standard path (web): one async request for the default adapter. The record is
+                // heap-allocated and ownership transfers to the callback if the pump gives up:
+                // a stack record would leave the still-registered callback writing through a
+                // dead frame on a later ProcessEvents.
                 struct Result
                 {
                     IAllocator* allocator = nullptr;
@@ -343,9 +345,10 @@ export namespace foundation::rhi::webgpu
                 result->api = &m_api;
                 WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
 #if PLATFORM_WEB
-                // Dawn (emdawnwebgpu) returns NO adapter when featureLevel is left Undefined - it
-                // must be an explicit level. wgpu-native (desktop) does not use this field, so the
-                // request is web-gated. Core = the full (non-compatibility) WebGPU feature set.
+                // Dawn (emdawnwebgpu) returns no adapter when featureLevel is left Undefined;
+                // it must be an explicit level. wgpu-native (desktop) does not use this field,
+                // so the request is web-gated. Core is the full (non-compatibility) WebGPU
+                // feature set.
                 options.featureLevel = WGPUFeatureLevel_Core;
 #endif
                 WGPURequestAdapterCallbackInfo callback =
@@ -431,7 +434,7 @@ export namespace foundation::rhi::webgpu
     };
 
     /// Creates the WebGPU backend. Fails with NotFound when the wgpu-native sidecar is
-    /// absent (desktop) - callers treat that as "backend unavailable", same as a
+    /// absent (desktop); callers treat that as "backend unavailable", the same as a
     /// missing Vulkan driver.
     Status CreateBackend(const WebGpuBackendDesc& desc, Backend*& out, IAllocator& allocator)
     {

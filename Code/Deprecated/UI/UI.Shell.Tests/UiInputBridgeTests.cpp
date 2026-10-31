@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tests for UiInputBridge (foundation.ui.shell) - our reimplementation, covered per the additions
-// rule. Synthetic shell::InputEvents drive a UIContext through the bridge; a mock IWindow verifies the
-// focus-driven text-input (IME) sync.
+// Tests for UiInputBridge (foundation.ui.shell). Synthetic shell::InputEvents drive a UIContext
+// through the bridge; a mock IWindow checks the focus-driven text-input (IME) sync.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -19,7 +18,7 @@ namespace shell = foundation::shell;
 
 namespace
 {
-    // A RootView-filling focusable/hittable EditText is created directly; no TestHelpers needed here.
+    // Creates a focusable, hit-testable EditText that fills the RootView; no TestHelpers needed.
     void SetupRoot(UIContext& ctx, RefPtr<RootView>& root)
     {
         root = core::MakeRef<RootView>(core::DefaultAllocator());
@@ -100,7 +99,7 @@ TEST_CASE("ui-shell: click focuses and typed text reaches the field")
 
     UiInputBridge bridge(&ctx);
 
-    bridge.Dispatch(MouseDown(10, 10)); // hits + focuses the full-window EditText
+    bridge.Dispatch(MouseDown(10, 10)); // hits and focuses the full-window EditText
     CHECK(ctx.WantsTextInput());        // an editable field is focused
 
     bridge.Dispatch(TextEvent(u8"hi"));
@@ -113,7 +112,7 @@ TEST_CASE("ui-shell: text input target follows focus (IME sync)")
     RefPtr<RootView> root;
     SetupRoot(ctx, root);
     auto edit = core::MakeRef<EditText>(core::DefaultAllocator());
-    edit->IsReadOnly.SetValue(true); // read-only -> does NOT want text input
+    edit->IsReadOnly.SetValue(true); // read-only, so it does not want text input
     auto edit2 = core::MakeRef<EditText>(core::DefaultAllocator());
     root->AddView(edit.Get());
     root->AddView(edit2.Get());
@@ -125,11 +124,11 @@ TEST_CASE("ui-shell: text input target follows focus (IME sync)")
 
     ctx.GetFocusManager()->SetFocus(edit2.Get());
     bridge.SyncTextInput();
-    CHECK(window.active); // editable field focused -> IME on
+    CHECK(window.active); // editable field focused: IME on
 
     ctx.GetFocusManager()->SetFocus(edit.Get()); // read-only
     bridge.SyncTextInput();
-    CHECK(!window.active); // read-only -> IME off
+    CHECK(!window.active); // read-only: IME off
 
     ctx.GetFocusManager()->SetFocus(edit2.Get());
     bridge.SyncTextInput();
@@ -137,7 +136,7 @@ TEST_CASE("ui-shell: text input target follows focus (IME sync)")
 
     ctx.GetFocusManager()->ClearFocus();
     bridge.SyncTextInput();
-    CHECK(!window.active); // nothing focused -> IME off
+    CHECK(!window.active); // nothing focused: IME off
 }
 
 TEST_CASE("ui-shell: a password box starts secret text input, and a move to a field switches it back")
@@ -167,8 +166,8 @@ TEST_CASE("ui-shell: a password box starts secret text input, and a move to a fi
 
 TEST_CASE("ui-shell: a window going away stops being the text input target")
 {
-    // The editor's crash: a dialog window was the target, it closed, and the next sync called into
-    // it. Forgetting it leaves no target, so a sync touches no window until the host sets one.
+    // A dialog window is the target and closes. Forgetting it leaves no target, so a sync touches
+    // no window (in particular, not the closed one) until the host sets a new target.
     UIContext ctx{DefaultAllocator()};
     RefPtr<RootView> root;
     SetupRoot(ctx, root);
@@ -192,7 +191,7 @@ TEST_CASE("ui-shell: a window going away stops being the text input target")
 
 TEST_CASE("ui-shell: ShellClipboard bridges the platform clipboard")
 {
-    shell::NullShell nullShell; // implements IShell incl. clipboard
+    shell::NullShell nullShell; // implements IShell, including the clipboard
     ShellClipboard clip(&nullShell);
 
     CHECK(!clip.HasText());
@@ -213,8 +212,8 @@ TEST_CASE("ui-shell: ShellClipboard with null shell is graceful")
     CHECK(!clip.GetText(out).IsOk());
 }
 
-// Regression: function keys were unmapped (KeyCode::Unknown), so F2-rename etc. never reached
-// the UI. The bridge now maps F1-F24 and the digit row.
+// The bridge maps F1-F24, the digit row and the keypad, so keys such as F2 (rename) reach the UI
+// instead of arriving as KeyCode::Unknown.
 TEST_CASE("ui-shell: function, digit and keypad keys map through the bridge")
 {
     UIContext ctx{DefaultAllocator()};
@@ -266,9 +265,9 @@ TEST_CASE("ui-shell: function, digit and keypad keys map through the bridge")
     CHECK(probe->last == KeyCode::LeftAlt);
     (void)bridge.Dispatch(key(shell::KeyCode::RightGui));
     CHECK(probe->last == KeyCode::RightGui);
-    (void)bridge.Dispatch(key(shell::KeyCode::Delete)); // pre-existing mapping still intact
+    (void)bridge.Dispatch(key(shell::KeyCode::Delete)); // the navigation keys still map
     CHECK(probe->last == KeyCode::Delete);
-    // The keypad: digits (an editor's Numpad 5 reached the UI as Unknown) and its operators.
+    // The keypad: digits (an editor binds Numpad 5) and its operators.
     (void)bridge.Dispatch(key(shell::KeyCode::Keypad5));
     CHECK(probe->last == KeyCode::Keypad5);
     (void)bridge.Dispatch(key(shell::KeyCode::Keypad1));
@@ -283,7 +282,7 @@ TEST_CASE("ui-shell: function, digit and keypad keys map through the bridge")
     CHECK(probe->last == KeyCode::KeypadPeriod);
 }
 
-// Numpad Enter maps to Return: both mean "confirm" to the UI (commit-on-Enter etc.).
+// Numpad Enter maps to Return: both mean "confirm" to the UI (commit on Enter, for example).
 TEST_CASE("ui-shell: keypad enter maps to Return")
 {
     UIContext ctx{DefaultAllocator()};

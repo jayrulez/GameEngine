@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Script - JSON through the scripting backends.
+// Integration.Script: JSON through the scripting backends.
 //
-// SUBJECT is the cross-collection flow foundation.json x foundation.script.angelscript: a script
-// parses, queries, builds, and stringifies JSON through the reflected value type - the user
-// requirement that made JsonValue RTTI-reflected. This needs the script VMs (a "weird dependency"
-// for the JSON module), so it lives here, not in Json.Tests (which stays pure DOM).
+// The flow crosses foundation.json and the script backends: a script parses, queries, builds and
+// stringifies JSON through the reflected JsonValue type, which is why JsonValue is reflected.
+// This needs the script VMs, which the JSON module should not depend on, so it lives here and
+// Json.Tests stays a pure DOM suite.
 
 #include <doctest/doctest.h>
 
@@ -29,7 +29,7 @@ using namespace foundation::core;
 using namespace foundation::json;
 using namespace foundation::script;
 
-// The reflected surface scripts consume (a precursor sanity check before driving a VM).
+// The reflected surface scripts consume, checked before driving a VM.
 TEST_CASE("integration.script: JsonValue's reflected surface is registered")
 {
     RegisterJsonTypes();
@@ -83,7 +83,8 @@ TEST_CASE("integration.script: parse / query / build / stringify from Luau")
     RegisterReflectedTypes(*manager);
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    // Luau: statics via `.` (JsonValue.Parse), instance methods via `:`; the chunk runs at top level.
+    // Luau calls statics with `.` (JsonValue.Parse) and instance methods with `:`; the chunk runs
+    // at top level.
     const Status status =
         scriptContext->Load(u8"local doc = JsonValue.Parse(\"{\\\"n\\\":7,\\\"name\\\":\\\"tool\\\"}\")\n"
                   u8"N = doc:Get(\"n\"):AsNumber(0)\n"

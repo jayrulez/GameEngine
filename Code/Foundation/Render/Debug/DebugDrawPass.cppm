@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:debug_pass` partition (Debug layer).
 ///
-/// The GPU side of debug draw (SedulousEngine's DebugDrawSystem + DebugGeometryPass + DebugScreenPass,
-/// folded into one owner adapted to the render graph). Owns the font atlas + per-(view,frame) dynamic
-/// vertex buffers + the pipelines, and exposes DeclareGeometry / DeclareScreen - each declared PER VIEW
-/// in the frame, merging a GLOBAL + a per-SCENE DebugDraw and projecting through that view's ViewProj
-/// into the LDR target's sub-rect (so side-by-side scenes/views don't bleed). Geometry has depth-tested
-/// (LessEqual, read-only depth) + overlay (Always) buckets; screen text/rects are always-on-top.
+/// The GPU side of debug draw, in one owner on the render graph. Owns the font atlas, the
+/// per-(view, frame) dynamic vertex buffers and the pipelines, and exposes DeclareGeometry and
+/// DeclareScreen. Both are declared per view in the frame: they merge the global and the per-scene
+/// DebugDraw and project through that view's ViewProj into the LDR target's sub-rect, so
+/// side-by-side scenes and views don't bleed. Geometry has depth-tested (LessEqual, read-only depth)
+/// and overlay (Always) buckets; screen text and rects are always on top.
 
 module;
 #include "Core/Prelude.h"
@@ -70,10 +70,10 @@ export namespace foundation::render
 
         Status Initialize();
 
-        // Declare the geometry pass for one view: draw `global`+`scene`+`view` world-space lines/
-        // triangles (depth + overlay) through `viewProj`, into `color` (Load), read-only against
-        // `depth`, in the view sub-rect. `scene` = drawn in every view of the scene; `view` = this
-        // view's private list (editor chrome).
+        // Declare the geometry pass for one view: draw the world-space lines and triangles of `global`,
+        // `scene` and `view` (depth-tested and overlay) through `viewProj`, into `color` (Load),
+        // read-only against `depth`, in the view sub-rect. `scene` is drawn in every view of the scene;
+        // `view` is this view's private list (editor chrome).
         void DeclareGeometry(rendergraph::RenderGraph& graph, rendergraph::RGHandle color,
                              rendergraph::RGHandle depth, const Float4x4& viewProj,
                              const debug::DebugDraw* global, const debug::DebugDraw* scene,
@@ -81,8 +81,9 @@ export namespace foundation::render
                              rhi::TextureFormat depthFmt, i32 vpX, i32 vpY, u32 vpW, u32 vpH,
                              u32 frameIndex, u32 viewIndex);
 
-        // Declare the screen pass for one view: build glyph/rect quads from `global`+`scene` 2D + 3D-text
-        // commands (3D projected through `viewProj`), draw always-on-top into `color` in the view sub-rect.
+        // Declare the screen pass for one view: build glyph and rect quads from the 2D and 3D-text commands
+        // of `global` and `scene` (3D projected through `viewProj`), and draw them on top into `color` in
+        // the view sub-rect.
         void DeclareScreen(rendergraph::RenderGraph& graph, rendergraph::RGHandle color,
                            const Float4x4& viewProj, const debug::DebugDraw* global,
                            const debug::DebugDraw* scene, const debug::DebugDraw* view,
@@ -109,7 +110,8 @@ export namespace foundation::render
                                 const Array<debug::DebugVertex>* b,
                                 const Array<debug::DebugVertex>* c = nullptr);
 
-        // Emit pixel-space glyph/rect quads (2 tris each) for a list's 2D commands + projected 3D text.
+        // Emit pixel-space glyph and rect quads (two triangles each) for a list's 2D commands and projected
+        // 3D text.
         void BuildScreenQuads(Array<debug::DebugTextVertex>& out, const debug::DebugDraw* d,
                               const Float4x4& viewProj, u32 vpW, u32 vpH);
 
@@ -149,7 +151,7 @@ export namespace foundation::render
         rhi::BindGroup* m_fontBg = nullptr;
         // Per-(color, depth) entries: a frame can hold views with different target formats,
         // and destroying on mismatch would free pipelines an earlier view's recorded commands
-        // still reference (the tonemap pass shipped that crash first).
+        // still reference.
         static constexpr usize kMaxGeomFormats = 4;
         Pipelines m_geom[kMaxGeomFormats] = {};
         rhi::RenderPipeline* m_screenPipe = nullptr;

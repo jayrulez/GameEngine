@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Separator and Spacer (E6): oriented by their parent's flex direction; a separator's line
-// stretched across, as thick as its thickness; a spacer flexible or of a fixed size.
+// GUI - Separator and Spacer. Both are oriented by their parent's flex direction. A separator's
+// line is stretched across, as thick as its thickness. A spacer is flexible or of a fixed size.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

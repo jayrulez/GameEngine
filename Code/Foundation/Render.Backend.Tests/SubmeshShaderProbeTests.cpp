@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// SUBMESH SHADER probe on REAL devices: a card of two submeshes, its left half's slot a PBR
+// Submesh shader probe on real devices: a card of two submeshes, its left half's slot a PBR
 // material and its right half's slot the `unlit` shader in green, in a scene with no light. Each
 // slot draws with its own material's program, so the left half stays dark (PBR, unlit by
-// anything) and the right half shows its green. It used to draw every slot with the first slot's
-// program, over the other slot's bind group: the right half then came out dark, or not at all.
-// Drawn alone, and as an instanced set (a crowd's per-slot materials). Vulkan + WebGPU.
+// anything) and the right half shows its green. Drawing every slot with the first slot's
+// program, over the other slot's bind group, would leave the right half dark or missing.
+// Drawn alone, and as an instanced set (a crowd's per-slot materials). Vulkan and WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

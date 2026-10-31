@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Fonts - foundation.fonts:factories partition (folded in from Fonts.IO 2026-09-05)
+// Foundation::Fonts - foundation.fonts:factories partition
 //
-// Process-global registries + dispatchers for IFontParser / IFontAtlasBaker.
+// Process-global registries and dispatchers for IFontParser and IFontAtlasBaker.
 // Extension-based routing: each parser/baker declares the extensions it
 // handles and the factory selects the match at call time. Backends register
 // themselves at startup (e.g. TrueTypeFonts::Initialize). The registries own
 // the registered objects and delete any still-registered on Shutdown; an
-// explicit Unregister transfers that responsibility back to the caller.
-//
-// Ported from Sedulous.Fonts.IO (FontParserFactory.bf, FontAtlasBakerFactory.bf),
-// keeping the static-class call style backed by function-local storage.
+// explicit Unregister transfers that responsibility back to the caller. The
+// factories are static classes backed by function-local storage.
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +48,7 @@ namespace foundation::fonts
 
 export namespace foundation::fonts
 {
-    // Registry + dispatcher for IFontParser implementations.
+    // Registry and dispatcher for IFontParser implementations.
     class FontParserFactory
     {
     public:
@@ -126,7 +124,7 @@ export namespace foundation::fonts
         }
     };
 
-    // Registry + dispatcher for IFontAtlasBaker implementations.
+    // Registry and dispatcher for IFontAtlasBaker implementations.
     class FontAtlasBakerFactory
     {
     public:

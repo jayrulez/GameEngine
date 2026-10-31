@@ -3,16 +3,14 @@
 
 // UI - :popup_positioner partition
 //
-// Static positioning helpers for popups, tooltips, and menus - pure calculations, no state. Ported from
-// Sedulous.UI/src/Overlay/PopupPositioner.bf. Beef `static class` -> a struct of static methods; the
-// `(float x, float y)` tuple returns -> Float2; RectangleF -> core::Rectangle; Vector2 -> Float2.
+// Static positioning helpers for popups, tooltips, and menus: pure calculations with no state.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:popup_positioner;
 
-import foundation.core; // Rectangle, Float2
+import foundation.core;
 
 using namespace foundation::core;
 

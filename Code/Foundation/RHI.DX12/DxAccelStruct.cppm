@@ -3,7 +3,6 @@
 
 /// DX12 implementation of AccelStruct.
 /// Wraps a D3D12 buffer resource in RAYTRACING_ACCELERATION_STRUCTURE state.
-/// Ported from Sedulous.RHI.DX12/DX12AccelStruct.bf.
 
 module;
 #include "Core/Prelude.h"

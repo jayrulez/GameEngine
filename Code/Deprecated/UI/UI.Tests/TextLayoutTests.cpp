@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The inline formatter (F2 of Specs/vg-and-gui-lab.md) over the bundled Roboto faces: mixed sizes
+// The inline formatter over the bundled Roboto faces: mixed sizes
 // share a baseline, a paragraph of three colours wraps inside its width, an icon sits on the
 // baseline, breaks and alignment, and bold and italic take a face or synthesize one.
 #include <doctest/doctest.h>

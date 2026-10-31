@@ -4,9 +4,8 @@
 // UI - :drag_data partition
 //
 // Base class for drag-and-drop payload data. Subclass to carry typed data; the Format string enables
-// type matching between drag sources and drop targets. Ported from Sedulous.UI/src/DragDrop/DragData.bf.
-// Per the locked decision, DragData derives Object + RTTI_OBJECT so subtype recovery uses our RTTI
-// (Cast<T>) and the manager can own it via RefPtr (Beef `~delete _` -> RAII).
+// type matching between drag sources and drop targets. DragData derives Object with RTTI_OBJECT so
+// subtypes are recovered with Cast<T> and the manager can own it via RefPtr.
 
 module;
 #include "Core/Prelude.h"

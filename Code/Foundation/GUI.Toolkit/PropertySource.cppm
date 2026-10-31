@@ -3,26 +3,27 @@
 
 // GUI.Toolkit - :property_source partition
 //
-// What a property grid reads (T1 of Specs/gui-lab-evolution-3.md): a source of properties over one
-// object or several. A property is one value (a bool, an integer, a float, a string, an enum or
-// flags) at a path; a group (a vector's parts in T2, a nested object) is a property whose children
-// are the paths under it (`position.x`), so values that differ between the objects differ per
-// part. The source says what is there and what each object holds; the grid edits through it as
-// gestures: begun, previewed live on every object, then committed (the originals put back and the
-// edit applied once, one undo entry) or cancelled (the originals put back). The undo is the
-// source's (an application's, as ezEngine's and Zero's), never the grid's.
+// What a property grid reads: a source of properties over one object or several. A property is
+// one value (a bool, an integer, a float, a string, an enum or flags) at a path. A group (a
+// vector's parts, a nested object) is a property whose children are the paths under it
+// (`position.x`), so values that differ between the objects differ per part. The source says what
+// properties there are and what each object holds. The grid edits through it in gestures: a gesture
+// begins, previews live on every object, and then either commits (the originals are put back and
+// the edit applied once, as one undo entry) or cancels (the originals are put back). The undo
+// belongs to the source, that is, to the application, and never to the grid.
 //
-// A source may say each object's default for a path: the grid marks what differs from it, and a
-// revert puts each object's own back, one undo entry.
+// A source may give each object's default for a path. The grid marks values that differ from it,
+// and a revert restores each object's own default as one undo entry.
 //
-// Copying and pasting go through the source as edits do: it writes a path and what is under it as
-// text and reads it back, one undo entry; the grid has the menu and the keys, and no format.
+// Copying and pasting go through the source as edits do. The source writes a path and what is
+// under it as text, and reads it back as one undo entry. The grid provides the menu and the keys,
+// and knows no format.
 //
-// A list's elements are its children by index, and a change to one (an insert, a removal, a move)
-// is one call, one undo entry, made in each object.
+// A list's elements are its children by index. A change to the list (an insert, a removal or a
+// move) is one call and one undo entry, made in each object.
 //
-// PropertyBag is a source of its own values in memory: what tests and a page without objects of
-// its own edit, its commits told to whoever keeps the undo.
+// PropertyBag is a source that holds its own values in memory. Tests use it, as does a page with no
+// objects of its own. It reports its commits to whoever keeps the undo.
 
 module;
 #include "Core/Prelude.h"
@@ -39,18 +40,18 @@ export namespace foundation::gui
 {
     enum class PropertyKind : u8
     {
-        Group,   ///< no value of its own: its children are the paths under it
+        Group,   ///< has no value of its own; its children are the paths under it
         Bool,
         Integer,
         Float,
         String,
-        Enum,    ///< an integer, one of its choices
-        Flags,   ///< an integer, any of its choices' bits
+        Enum,    ///< an integer holding one of its choices
+        Flags,   ///< an integer holding any of its choices' bits
         List,    ///< its elements are its children by index (`tags.0`); its value is their count
-        Color,   ///< a colour, its sRGB values (T4)
-        Curve,   ///< Core's curve keys, one value (T5); MaxCount its most keys, a range its values'
-        Gradient, ///< a ColorGradient, one value (T5); MaxCount its most stops of each kind
-        Reference, ///< what something kept elsewhere is known by (an asset, an entity): its Guid as text; ReferenceType is what it points at
+        Color,   ///< a colour, as sRGB values
+        Curve,   ///< Core's curve keys as one value; MaxCount limits the keys, and a range bounds the values
+        Gradient, ///< a ColorGradient as one value; MaxCount limits the stops of each kind
+        Reference, ///< the Guid, as text, of something kept elsewhere (an asset, an entity); ReferenceType is what it points at
     };
 
     /// What a list allows (PropertyInfo::ListOps).
@@ -61,50 +62,52 @@ export namespace foundation::gui
         PropertyListMove = 1u << 2,
     };
 
-    /// An enum's value or a flag's bit, and what it is called.
+    /// An enum's value or a flag's bit, and its name.
     struct PropertyChoice
     {
         core::String Name;
         i64 Value = 0;
     };
 
-    /// What a source says of one property. Read afresh each time the grid asks, so whether it shows
-    /// or may be edited can follow other values (T3's `visibleWhen`).
+    /// What a source reports about one property. It is read afresh each time the grid asks, so
+    /// whether it shows or may be edited can depend on other values (a reflected source's
+    /// `visibleWhen`).
     struct PropertyInfo
     {
         core::String Name;        ///< its segment of the path
-        core::String DisplayName; ///< what its row says; empty: its name
-        core::String Category;    ///< a top-level property's group in the grid; empty: none
+        core::String DisplayName; ///< what its row says; empty shows its name
+        core::String Category;    ///< a top-level property's category in the grid; empty for none
         core::String Description; ///< its row's tooltip
         PropertyKind Kind = PropertyKind::String;
-        core::String Hint;        ///< an editor asked for by name ("slider"), before its kind's
-        bool HasRange = false;    ///< a number kept between Min and Max; else unbounded
+        core::String Hint;        ///< an editor requested by name ("slider"), chosen before its kind's editor
+        bool HasRange = false;    ///< a number is kept between Min and Max; otherwise it is unbounded
         f64 Min = 0.0;
         f64 Max = 0.0;
-        f64 Step = 0.0;           ///< a number's step; 0: the editor's own
-        core::Array<PropertyChoice> Choices; ///< an enum's values, flags' bits
+        f64 Step = 0.0;           ///< a number's step; 0 uses the editor's default
+        core::Array<PropertyChoice> Choices; ///< an enum's values, or the flags' bits
         bool ReadOnly = false;
         bool Visible = true;
-        core::String Summary; ///< a group's: what it holds, said in a line on its row while it is closed
-        bool ShowsAlpha = true;   ///< a colour's alpha is edited (not an HDR colour's, nor one with `noAlpha`)
-        u8 ListOps = 0;           ///< a list's: PropertyListOps
-        u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's), a curve's most keys, a gradient's most stops; 0: no limit
-        core::Array<core::String> ElementTypes; ///< a list's types an add chooses from; empty: its one
-        const core::TypeInfo* ReferenceType = nullptr; ///< a reference's: the type it points at (an application finds what may fill it)
+        core::String Summary; ///< for a group, a one-line summary shown on its row while it is closed
+        bool ShowsAlpha = true;   ///< whether a colour's alpha is edited (not for an HDR colour, nor one with `noAlpha`)
+        u8 ListOps = 0;           ///< for a list, its PropertyListOps
+        u32 MaxCount = 0;         ///< the most elements of a list (a BoundedArray's), keys of a curve or stops of a gradient; 0 for no limit
+        core::Array<core::String> ElementTypes; ///< the types an add to a list chooses from; empty for its single type
+        const core::TypeInfo* ReferenceType = nullptr; ///< for a reference, the type it points at (the application finds what may fill it)
 
         [[nodiscard]] core::StringView ShownName() const noexcept { return DisplayName.Size() != 0 ? DisplayName.AsView() : Name.AsView(); }
     };
 
-    /// A value written by an edit. For flags only `Mask`'s bits change, each object keeping its
-    /// others, so a flag set on several objects leaves the flags they differ in as they were.
+    /// A value written by an edit. For flags only the bits in `Mask` change and each object keeps
+    /// its other bits, so setting a flag on several objects leaves the flags they differ in as they
+    /// were.
     struct PropertyWrite
     {
         Variant Value;
         u64 Mask = ~u64{0};
     };
 
-    /// A change to a list: an element inserted at Index (of ElementType, for a list of several), the
-    /// one at Index removed, or moved to To (its place after the move).
+    /// A change to a list: insert an element at Index (of ElementType, for a list of several
+    /// types), remove the one at Index, or move it to To (its index after the move).
     struct ListEdit
     {
         enum class Op : u8
@@ -119,14 +122,15 @@ export namespace foundation::gui
         core::String ElementType;
     };
 
-    /// What a source tells its grid.
+    /// The notifications a source sends its grid.
     class IPropertySourceClient
     {
     public:
         virtual ~IPropertySourceClient() = default;
-        /// Which properties there are, or what they say of themselves, changed: read them again.
+        /// Called when the set of properties or their info changed; the grid reads them again.
         virtual void OnPropertiesChanged() = 0;
-        /// Values changed (an undo, another editor, the objects themselves): show them again.
+        /// Called when values changed (by an undo, another editor or the objects themselves); the
+        /// grid shows them again.
         virtual void OnValuesChanged() = 0;
     };
 
@@ -135,38 +139,39 @@ export namespace foundation::gui
     public:
         virtual ~IPropertySource() = default;
 
-        /// How many objects it stands for; their values differing is a row's mixed state.
+        /// Returns how many objects it stands for. When their values differ, a row shows as mixed.
         [[nodiscard]] virtual usize ObjectCount() const = 0;
-        /// The properties under `parent` (empty: the top level), in their order.
+        /// Fills `out` with the properties under `parent` (empty for the top level), in order.
         virtual void GetProperties(core::StringView parent, core::Array<PropertyInfo>& out) const = 0;
-        /// The value at `path` of object `object`.
+        /// Returns the value at `path` of object `object`.
         [[nodiscard]] virtual Variant GetValue(core::StringView path, usize object) const = 0;
 
-        /// An edit of `path` begins: what each object holds now is what a cancel puts back.
+        /// Begins an edit of `path`. What each object holds now is what a cancel restores.
         virtual void BeginEdit(core::StringView path) = 0;
-        /// The edit as it goes (a scrub, a picker open): written to every object, live.
+        /// Writes the edit live to every object while it goes on (a scrub, an open picker).
         virtual void PreviewEdit(core::StringView path, const PropertyWrite& write) = 0;
-        /// The edit ends with `write`: the originals put back, then `write` applied as one change.
+        /// Ends the edit with `write`: puts the originals back, then applies `write` as one change.
         virtual void CommitEdit(core::StringView path, const PropertyWrite& write) = 0;
-        /// The edit is given up: the originals put back.
+        /// Cancels the edit and puts the originals back.
         virtual void CancelEdit(core::StringView path) = 0;
-        /// Changes the list `path` in each object, one undo entry; false when nothing changed.
+        /// Changes the list `path` in each object as one undo entry. Returns false when nothing
+        /// changed.
         virtual bool EditList(core::StringView path, const ListEdit& edit) = 0;
 
-        /// What object `object` would hold at `path` by default (the type's, a prefab's: the
-        /// source's to say); empty when it has none.
+        /// Returns what object `object` would hold at `path` by default, or empty when it has none.
+        /// The source decides what the default is (the type's, a prefab's).
         [[nodiscard]] virtual Variant GetDefault(core::StringView path, usize object) const = 0;
-        /// Puts each object's own default back at `path` and under it, one undo entry; false when
-        /// nothing changed.
+        /// Restores each object's own default at `path` and under it, as one undo entry. Returns
+        /// false when nothing changed.
         virtual bool Revert(core::StringView path) = 0;
-        /// What a revert of `path` is called ("Revert to default", "Revert to prefab").
+        /// Returns the menu text for reverting `path` ("Revert to default", "Revert to prefab").
         [[nodiscard]] virtual core::String GetRevertText(core::StringView path) const = 0;
 
-        /// `path` and what is under it as text for the clipboard (the engine's serialization is a
-        /// source's to use); empty when it cannot be copied.
+        /// Returns `path` and what is under it as text for the clipboard, or empty when it cannot be
+        /// copied. The source chooses the format (the engine's serialization, say).
         [[nodiscard]] virtual core::String CopyValue(core::StringView path) const = 0;
-        /// Reads `text` (CopyValue's) into `path` in each object, one undo entry; false, with
-        /// `reason` filled, when it does not fit.
+        /// Reads `text` (from CopyValue) into `path` in each object, as one undo entry. Returns false,
+        /// with `reason` filled in, when it does not fit.
         virtual bool PasteValue(core::StringView path, core::StringView text, core::String& reason) = 0;
 
         void SetClient(IPropertySourceClient* client) noexcept { m_client = client; }
@@ -188,7 +193,7 @@ export namespace foundation::gui
         IPropertySourceClient* m_client = nullptr;
     };
 
-    /// `path` joined under `parent` ("position" and "x": "position.x").
+    /// Returns `name` joined under `parent` ("position" and "x" give "position.x").
     [[nodiscard]] inline core::String JoinPropertyPath(core::StringView parent, core::StringView name)
     {
         core::String path(parent);
@@ -197,7 +202,7 @@ export namespace foundation::gui
         path.Append(name);
         return path;
     }
-    /// The path `path` is under ("" for a top-level property).
+    /// Returns the parent path of `path` ("" for a top-level property).
     [[nodiscard]] inline core::StringView ParentPropertyPath(core::StringView path)
     {
         for (usize i = path.Size(); i > 0; --i)
@@ -206,7 +211,7 @@ export namespace foundation::gui
         return core::StringView{};
     }
 
-    /// `write` applied to `old`: flags keep the bits outside its mask.
+    /// Returns `write` applied to `old`. For flags, the bits outside its mask are kept.
     [[nodiscard]] inline Variant ApplyPropertyWrite(const Variant& old, const PropertyWrite& write)
     {
         if (write.Mask == ~u64{0})
@@ -215,8 +220,8 @@ export namespace foundation::gui
         return Variant(static_cast<i64>(bits));
     }
 
-    /// A property's value over every object: the first object's, whether any differs, and for
-    /// flags which bits differ.
+    /// A property's value over every object: the first object's value, whether any differs, and
+    /// for flags, which bits differ.
     struct PropertyValue
     {
         Variant Value;
@@ -244,10 +249,10 @@ export namespace foundation::gui
         return out;
     }
 
-    /// A source of its own values in memory: properties declared by path, each object's values
-    /// kept here, and lists of values (each object's elements its own). A commit is told (path,
-    /// each object's value before, each after) to whoever keeps the undo, which puts values back
-    /// with SetValue; a list's change is told as it was asked.
+    /// A source that holds its own values in memory: properties declared by path, each object's
+    /// values, and lists of values (each object with its own elements). Each commit is reported to
+    /// whoever keeps the undo, with the path and each object's value before and after; that owner
+    /// restores values with SetValue. A list change is reported as the ListEdit that asked for it.
     class PropertyBag : public IPropertySource
     {
     public:
@@ -263,8 +268,8 @@ export namespace foundation::gui
         {
         }
 
-        /// Declares the property `path` (its name the last segment, under its parent's path) with
-        /// `value` for every object; returns its info to fill in.
+        /// Declares the property `path` with `value` for every object, and returns its info to fill
+        /// in. Its name is the last segment, and it sits under its parent's path.
         PropertyInfo& Add(core::StringView path, PropertyKind kind, const Variant& value = {})
         {
             Entry entry(*m_allocator);
@@ -281,9 +286,9 @@ export namespace foundation::gui
             NotifyPropertiesChanged();
             return m_properties.Back().Info;
         }
-        /// Declares the list `path` of values of `elementKind` (a new element `element`), with
-        /// `count` elements in every object; returns its info to fill in (by default it may add,
-        /// remove and move its elements).
+        /// Declares the list `path` of values of `elementKind`, with `count` elements in every object
+        /// and `element` as a new element's value. Returns its info to fill in; by default the list
+        /// may add, remove and move its elements.
         PropertyInfo& AddList(core::StringView path, PropertyKind elementKind, const Variant& element, usize count = 0)
         {
             PropertyInfo& info = Add(path, PropertyKind::List);
@@ -296,23 +301,25 @@ export namespace foundation::gui
                     elements.PushBack(element);
             return info;
         }
-        /// The info of `path`, to change; NotifyPropertiesChanged after.
+        /// Returns the info of `path` to change; call NotifyPropertiesChanged afterwards.
         [[nodiscard]] PropertyInfo* FindInfo(core::StringView path)
         {
             Entry* entry = Find(path);
             return entry != nullptr ? &entry->Info : nullptr;
         }
-        /// What every element of the list `path` says beyond its name, kind and read-only state (a
-        /// range, a reference's type), to fill in; null when `path` is no list.
+        /// Returns the info shared by every element of the list `path`, beyond its name, kind and
+        /// read-only state (a range, a reference's type), to fill in. Returns null when `path` is not
+        /// a list.
         [[nodiscard]] PropertyInfo* FindElementInfo(core::StringView path)
         {
             Entry* entry = Find(path);
             return entry != nullptr && entry->Info.Kind == PropertyKind::List ? &entry->ElementInfo : nullptr;
         }
-        /// Gives every element of the list `path` a field `name` of `kind` (new elements `value`):
-        /// its elements are groups of their fields from then on (`path.N.name`), as a reflected
-        /// list's struct elements are. Declared before the list has elements; returns the field's
-        /// info to fill in (a range, a reference's type), null when `path` is no list.
+        /// Gives every element of the list `path` a field `name` of `kind`, with `value` for new
+        /// elements. From then on its elements are groups of their fields (`path.N.name`), as a
+        /// reflected list's struct elements are. Declare fields before the list has elements.
+        /// Returns the field's info to fill in (a range, a reference's type), or null when `path` is
+        /// not a list.
         PropertyInfo* AddElementField(core::StringView path, core::StringView name, PropertyKind kind, const Variant& value = {})
         {
             Entry* list = Find(path);
@@ -327,10 +334,10 @@ export namespace foundation::gui
             NotifyPropertiesChanged();
             return &list->Fields.Back().Info;
         }
-        /// Tells the grid what FindInfo's changes were.
+        /// Tells the grid about changes made through FindInfo.
         void PropertiesChanged() { NotifyPropertiesChanged(); }
 
-        /// Sets object `object`'s value at `path` (a property's or an element's) from code.
+        /// Sets object `object`'s value at `path` (a property or an element) from code.
         void SetValue(core::StringView path, usize object, const Variant& value)
         {
             if (Variant* slot = Slot(path, object))
@@ -339,7 +346,8 @@ export namespace foundation::gui
                 NotifyValuesChanged();
             }
         }
-        /// Gives object `object`'s list `path` `count` elements from code (new ones its default).
+        /// Resizes object `object`'s list `path` to `count` elements from code; new elements take the
+        /// list's new-element value.
         void ResizeList(core::StringView path, usize object, usize count)
         {
             Entry* list = Find(path);
@@ -352,15 +360,15 @@ export namespace foundation::gui
                 list->AppendElement(elements);
             NotifyPropertiesChanged();
         }
-        /// How many elements object `object`'s list `path` has.
+        /// Returns how many elements object `object`'s list `path` has.
         [[nodiscard]] usize ElementCount(core::StringView path, usize object) const
         {
             const Entry* entry = Find(path);
             return entry != nullptr && object < entry->Elements.Size() ? entry->Elements[object].Size() / entry->Stride() : 0;
         }
 
-        /// Object `object`'s default at `path` (a property's or an element's); every object's with
-        /// kAllObjects.
+        /// Sets object `object`'s default at `path` (a property or an element), or every object's
+        /// default with kAllObjects.
         static constexpr usize kAllObjects = ~usize{0};
         void SetDefault(core::StringView path, const Variant& value, usize object = kAllObjects)
         {
@@ -378,20 +386,21 @@ export namespace foundation::gui
                 }
             NotifyValuesChanged();
         }
-        /// Told each revert (the path), to keep it for undo.
+        /// Called with the path of each revert, so it can be kept for undo.
         void SetOnReverted(core::Function<void(core::StringView)> onReverted) { m_onReverted = core::Move(onReverted); }
 
-        /// Told each commit, to keep it for undo.
+        /// Called with each commit, so it can be kept for undo.
         void SetOnCommit(core::Function<void(const Commit&)> onCommit) { m_onCommit = core::Move(onCommit); }
-        /// Told of each preview of a gesture (a drag, a scrub, a picker open) as it goes, the values
-        /// in the bag by then: an owner that shows them live (a preview) reads them; the gesture
-        /// ends in a commit or a cancel.
+        /// Called on each preview of a gesture (a drag, a scrub, an open picker) as it goes, after
+        /// the bag holds the previewed values. An owner that shows them live reads them then. The
+        /// gesture ends in a commit or a cancel.
         void SetOnPreview(core::Function<void(core::StringView path)> onPreview) { m_onPreview = core::Move(onPreview); }
-        /// Told of a gesture given up (Escape): the values are back as they were before it.
+        /// Called when a gesture is cancelled (Escape); the values are then back as they were before
+        /// it.
         void SetOnCancel(core::Function<void(core::StringView path)> onCancel) { m_onCancel = core::Move(onCancel); }
-        /// Told each list change made.
+        /// Called with each list change made.
         void SetOnListEdited(core::Function<void(core::StringView, const ListEdit&)> onEdited) { m_onListEdited = core::Move(onEdited); }
-        /// The edits begun and not yet ended.
+        /// Returns how many edits have begun and not yet ended.
         [[nodiscard]] usize OpenEdits() const noexcept { return m_originals.Size(); }
 
         [[nodiscard]] usize ObjectCount() const override { return m_objects; }
@@ -399,21 +408,21 @@ export namespace foundation::gui
         {
             const usize first = out.Size();
             ListProperties(parent, out);
-            // What the owner says of each (a list element named for what it holds, a closed group's
-            // line), as a reflected source's describe hook does: last.
+            // Let the owner describe each property last (a list element named for what it holds, a
+            // closed group's summary line), as a reflected source's describe hook does.
             if (m_onDescribe)
                 for (usize i = first; i < out.Size(); ++i)
                     m_onDescribe(JoinPropertyPath(parent, out[i].Name.AsView()).AsView(), out[i]);
         }
-        /// Told of each row as it is listed, its info to change: what the bag's entries cannot say
-        /// (a list element's name from its values, a closed group's line). The hook reads the
-        /// values through GetValue.
+        /// Called for each row as it is listed, with its info to change. It supplies what the bag's
+        /// entries cannot (a list element's name from its values, a closed group's summary line), and
+        /// reads the values through GetValue.
         void SetOnDescribe(core::Function<void(core::StringView path, PropertyInfo& info)> onDescribe) { m_onDescribe = core::Move(onDescribe); }
 
     private:
         void ListProperties(core::StringView parent, core::Array<PropertyInfo>& out) const
         {
-            // A list's elements: as many as the fewest any object has.
+            // A list shows as many elements as the object with the fewest has.
             if (const Entry* list = Find(parent); list != nullptr && list->Info.Kind == PropertyKind::List)
             {
                 usize count = ~usize{0};
@@ -429,7 +438,7 @@ export namespace foundation::gui
                 }
                 return;
             }
-            // A group element's fields ("variants.2": its clip, its weight).
+            // The fields of a group element ("variants.2" has its clip and its weight).
             if (const Entry* list = Find(ParentPropertyPath(parent)); list != nullptr && list->Info.Kind == PropertyKind::List && !list->Fields.IsEmpty())
             {
                 for (const ElementField& field : list->Fields)
@@ -489,7 +498,7 @@ export namespace foundation::gui
                 const Variant before = original != nullptr && i < original->Values.Size() ? original->Values[i] : (slot != nullptr ? *slot : Variant{});
                 commit.Before.PushBack(before);
                 if (slot != nullptr)
-                    *slot = ApplyPropertyWrite(before, write); // from the original, not the previews
+                    *slot = ApplyPropertyWrite(before, write); // apply to the original value, not to the previews
                 commit.After.PushBack(slot != nullptr ? *slot : Variant{});
             }
             EndEdit(path);
@@ -538,7 +547,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetRevertText(core::StringView) const override { return core::String(u8"Revert to default"); }
 
-        // A single value as its text, the first object's; a group or a list is not copied here.
+        // Copies a single value as text, taking the first object's; a group or a list is not copied
+        // here.
         [[nodiscard]] core::String CopyValue(core::StringView path) const override
         {
             const Variant* slot = const_cast<PropertyBag*>(this)->Slot(path, 0);
@@ -600,7 +610,7 @@ export namespace foundation::gui
             if ((list->Info.ListOps & needs) == 0)
                 return false;
             bool changed = false;
-            const usize stride = list->Stride(); // an element's values: one, or a group's fields
+            const usize stride = list->Stride(); // the values per element: one, or one per group field
             for (core::Array<Variant>& elements : list->Elements)
             {
                 const usize count = elements.Size() / stride;
@@ -649,7 +659,8 @@ export namespace foundation::gui
         }
 
     private:
-        // A group element's field: its info (name, kind, what else it says) and a new element's value.
+        // A field of a group element: its info (name, kind and the rest) and its value in a new
+        // element.
         struct ElementField
         {
             PropertyInfo Info;
@@ -660,16 +671,16 @@ export namespace foundation::gui
             explicit Entry(core::IAllocator& allocator) : Values(allocator), Elements(allocator), Fields(allocator) {}
             core::String Path;
             PropertyInfo Info;
-            core::Array<Variant> Values;                 // each object's
-            core::Array<core::Array<Variant>> Elements;  // a list's: each object's elements, a group's fields one after another
+            core::Array<Variant> Values;                 // one value per object
+            core::Array<core::Array<Variant>> Elements;  // for a list, each object's elements, with a group's fields one after another
             PropertyKind ElementKind = PropertyKind::Float;
             Variant ElementDefault;
-            PropertyInfo ElementInfo; // a list's: what each element says beyond its name and kind
-            core::Array<ElementField> Fields; // a list of groups: each element's fields, in order
+            PropertyInfo ElementInfo; // for a list, the info each element has beyond its name and kind
+            core::Array<ElementField> Fields; // for a list of groups, each element's fields, in order
 
-            /// How many values an element is: one, or its group's fields.
+            /// Returns how many values make one element: one, or one per group field.
             [[nodiscard]] usize Stride() const noexcept { return Fields.IsEmpty() ? 1u : Fields.Size(); }
-            /// A new element's values onto `elements`.
+            /// Appends a new element's values to `elements`.
             void AppendElement(core::Array<Variant>& elements) const
             {
                 if (Fields.IsEmpty())
@@ -698,7 +709,7 @@ export namespace foundation::gui
             return nullptr;
         }
         Entry* Find(core::StringView path) { return const_cast<Entry*>(static_cast<const PropertyBag*>(this)->Find(path)); }
-        // Object `object`'s value at `path`: a property's, or an element of a list ("tags.2").
+        // Returns object `object`'s value at `path`: a property, or an element of a list ("tags.2").
         Variant* Slot(core::StringView path, usize object)
         {
             if (object >= m_objects)
@@ -710,7 +721,7 @@ export namespace foundation::gui
             if (list != nullptr && list->Info.Kind == PropertyKind::List)
             {
                 if (!list->Fields.IsEmpty())
-                    return nullptr; // a group element has no value of its own: its fields do
+                    return nullptr; // a group element has no value of its own; only its fields do
                 const Optional<i64> index = core::ParseInt(path.SubStr(parent.Size() + 1, path.Size() - parent.Size() - 1));
                 core::Array<Variant>& elements = list->Elements[object];
                 return index.HasValue() && index.Value() >= 0 && static_cast<usize>(index.Value()) < elements.Size() ? &elements[static_cast<usize>(index.Value())] : nullptr;
@@ -744,7 +755,7 @@ export namespace foundation::gui
             const Entry* list = Find(ParentPropertyPath(path));
             if (list != nullptr && list->Info.Kind == PropertyKind::List)
                 return list->ElementKind;
-            // A group element's field: its own kind.
+            // A group element's field has its own kind.
             const core::StringView element = ParentPropertyPath(path);
             if (const Entry* outer = Find(ParentPropertyPath(element)); outer != nullptr && outer->Info.Kind == PropertyKind::List)
                 for (const ElementField& field : outer->Fields)

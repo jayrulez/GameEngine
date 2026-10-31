@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of CommandBuffer.
-/// Ported from Sedulous.RHI.Vulkan/VulkanCommandBuffer.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:store`: the library (Documentation/Specs/model-viewer.md, P6). An entry
-// is a model kept: a stable id, its path (and the file's size and time when it was added or last
-// relinked, so a moved or changed file is noticed), its tags, a note and the numbers its last cook
-// counted. A collection has a name and a parent (none at the top) and its members, in order: an
-// entry and the name it has there, unique (any case) across the collection's top-level collection
-// and everything under it, so a game's ids never clash. Deleting a collection takes what is under
-// it and its memberships, never an entry. The library reads and writes itself as XML (the engine's
-// serializer, a version first); LibraryFile keeps it in the user data folder, written through a
-// temporary file and a rename, under the system's file lock so one viewer at a time writes it.
+// ModelViewer - `modelviewer:store`: the model library. An entry is a kept model: a stable id, its
+// path (with the file's size and time when it was added or last relinked, so a moved or changed
+// file is noticed), its tags, a note, and the stats its last cook counted. A collection has a name,
+// a parent (nil at the top level) and an ordered list of members. A member is an entry plus the
+// name it has in that collection; the name is unique, ignoring case, across the collection's
+// top-level collection and everything under it, so a game's ids never clash. Deleting a collection
+// deletes its sub-collections and their memberships, never an entry. The library reads and writes
+// itself as XML with the engine's serializer, version first. LibraryFile keeps it in the user data
+// folder, writing through a temporary file and a rename, and holds the system's file lock so only
+// one viewer at a time writes it.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +26,7 @@ using namespace foundation::core;
 
 export namespace modelviewer
 {
-    /// The numbers an entry's last cook counted, for search without cooking.
+    /// The stats an entry's last cook counted, so search works without cooking.
     struct EntryStats
     {
         bool known = false;
@@ -39,7 +40,7 @@ export namespace modelviewer
     {
         Guid id;
         String path;
-        u64 size = 0;     // the file's, when added or relinked
+        u64 size = 0;     // the file's size and time when added or relinked
         i64 modified = 0;
         Array<String> tags;
         String note;
@@ -49,14 +50,14 @@ export namespace modelviewer
     struct Member
     {
         Guid entry;
-        String name; // the id a game knows it by here (empty: the file's name shows)
+        String name; // the id a game knows it by in this collection (empty: the file's name is shown)
     };
 
     struct Collection
     {
         Guid id;
         String name;
-        Guid parent; // nil: a top-level collection
+        Guid parent; // nil for a top-level collection
         Array<Member> members;
     };
 
@@ -123,12 +124,12 @@ export namespace modelviewer
     class Library
     {
     public:
-        /// The file format's version (raised when it changes; an older file reads as before).
+        /// The file format's version, raised when the format changes; older files still read.
         static constexpr i32 kVersion = 1;
 
         explicit Library(IAllocator& allocator) : m_entries(allocator), m_collections(allocator)
         {
-            // The ids are unique, not reproducible: the generator is seeded from the system.
+            // The ids need to be unique, not reproducible, so the generator is seeded from the system.
             u64 seed = 0;
             if (FillEntropy(Span<byte>(reinterpret_cast<byte*>(&seed), sizeof(seed))))
                 m_random = Random(seed);
@@ -154,7 +155,7 @@ export namespace modelviewer
             const i32 at = CollectionIndex(id);
             return at >= 0 ? &m_collections[static_cast<usize>(at)] : nullptr;
         }
-        /// A collection by name (any case), the first in the tree's order.
+        /// The first collection in tree order with this name, ignoring case.
         [[nodiscard]] const Collection* FindCollectionByName(StringView name) const
         {
             for (const Collection& c : m_collections)
@@ -163,7 +164,8 @@ export namespace modelviewer
             return nullptr;
         }
 
-        /// The top-level collection `id` is under (itself when it is one); nil for none.
+        /// The top-level collection that contains `id` (itself when it is top-level); nil when
+        /// there is none.
         [[nodiscard]] Guid TopOf(const Guid& id) const
         {
             Guid at = id;
@@ -199,9 +201,9 @@ export namespace modelviewer
             return false;
         }
 
-        /// The file is not where the entry says.
+        /// Whether the entry's file is missing from its path.
         [[nodiscard]] static bool IsMissing(const Entry& e) { return !FileExists(e.path.AsView()); }
-        /// The file there is not the one added (its size or time differ).
+        /// Whether the file at the entry's path differs from the one added (its size or time differ).
         [[nodiscard]] static bool IsChanged(const Entry& e)
         {
             u64 size = 0;
@@ -209,7 +211,7 @@ export namespace modelviewer
             return FileStat(e.path.AsView(), size, modified) && (size != e.size || modified != e.modified);
         }
 
-        /// An entry's name in a collection (empty when it is not a member, or has none).
+        /// An entry's name in a collection; empty when it is not a member or has no name there.
         [[nodiscard]] StringView MemberName(const Guid& collection, const Guid& entry) const
         {
             const Collection* c = FindCollection(collection);
@@ -230,7 +232,8 @@ export namespace modelviewer
                         break;
                     }
         }
-        /// Every tag, with how many entries carry it, in first-seen order (any case is one tag).
+        /// Every tag with the number of entries carrying it, in first-seen order. Tags that differ
+        /// only in case count as one.
         void TagCounts(Array<String>& tags, Array<u32>& counts) const
         {
             for (const Entry& e : m_entries)
@@ -250,8 +253,8 @@ export namespace modelviewer
 
         // === Entries ===
 
-        /// The model at `path` as an entry (the existing one when it has one). False when the
-        /// file is not there.
+        /// Adds the model at `path` as an entry, or returns its existing entry. False when the file
+        /// does not exist.
         bool AddEntry(StringView path, Guid& outId)
         {
             if (const Entry* existing = FindEntryByPath(path))
@@ -281,7 +284,8 @@ export namespace modelviewer
             m_entries.RemoveAt(static_cast<usize>(at));
             return true;
         }
-        /// Points an entry at `path` (the file moved, or changed): its size and time taken anew.
+        /// Points an entry at `path` after its file moved or changed, recording the file's size and
+        /// time again.
         bool Relink(const Guid& id, StringView path, String& error)
         {
             const i32 at = EntryIndex(id);
@@ -339,8 +343,8 @@ export namespace modelviewer
             c->name = String(name);
             return true;
         }
-        /// Puts a collection under `parent` (nil: the top). Refused inside itself, or where a
-        /// member's name would clash under the new top-level collection.
+        /// Moves a collection under `parent` (nil for the top level). Refused when `parent` is inside
+        /// the collection, or when a member's name would clash under the new top-level collection.
         bool MoveCollection(const Guid& id, const Guid& parent, String& error)
         {
             Collection* c = MutableCollection(id);
@@ -348,7 +352,7 @@ export namespace modelviewer
                 return Fail(error, u8"no such collection");
             if (!parent.IsNil() && (FindCollection(parent) == nullptr || IsUnder(parent, id)))
                 return Fail(error, u8"a collection cannot go inside itself");
-            // The names it brings must not clash with those of the top it joins.
+            // The member names it brings must not clash with those of the top-level collection it joins.
             const Guid newTop = parent.IsNil() ? id : TopOf(parent);
             if (newTop != TopOf(id))
             {
@@ -363,7 +367,7 @@ export namespace modelviewer
             MutableCollection(id)->parent = parent;
             return true;
         }
-        /// Deletes a collection, what is under it, and their memberships; the entries stay.
+        /// Deletes a collection, its sub-collections and their memberships; the entries stay.
         bool DeleteCollection(const Guid& id)
         {
             Array<Guid> doomed;
@@ -382,8 +386,8 @@ export namespace modelviewer
 
         // === Members ===
 
-        /// Adds entries to a collection at `at` (past the end: last); one there already stays
-        /// where it is.
+        /// Inserts entries into a collection at position `at` (past the end appends). An entry that
+        /// is already a member keeps its place.
         bool AddMembers(const Guid& collection, Span<const Guid> entries, i32 at, String& error)
         {
             Collection* c = MutableCollection(collection);
@@ -414,8 +418,8 @@ export namespace modelviewer
                         c->members.RemoveAt(i);
             return true;
         }
-        /// The name an entry has in a collection: unique (any case) across the collection's
-        /// top-level collection; empty clears it.
+        /// Sets the name an entry has in a collection. The name must be unique, ignoring case, across
+        /// the collection's top-level collection; an empty name clears it.
         bool RenameMember(const Guid& collection, const Guid& entry, StringView name, String& error)
         {
             Collection* c = MutableCollection(collection);
@@ -467,7 +471,7 @@ export namespace modelviewer
                         if (store_detail::SameIgnoreCase(e->tags[i].AsView(), tag))
                             e->tags.RemoveAt(i);
         }
-        /// Renames a tag on every entry (merging into `to` where an entry has both).
+        /// Renames a tag on every entry, merging it into `to` where an entry has both.
         void RenameTag(StringView from, StringView to)
         {
             for (Entry& e : m_entries)
@@ -504,8 +508,8 @@ export namespace modelviewer
             ar.GetOutput(text);
             return text;
         }
-        /// Reads Write's XML in place of what is here; false (the library unchanged) when it is
-        /// not one, or newer than this viewer reads.
+        /// Replaces the library with XML produced by Write. Returns false, leaving the library
+        /// unchanged, when the text is not a library or is newer than this viewer can read.
         bool Read(StringView text, String& error)
         {
             foundation::xml::XmlDocument document(m_entries.Allocator());
@@ -557,7 +561,8 @@ export namespace modelviewer
             return at >= 0 ? &m_collections[static_cast<usize>(at)] : nullptr;
         }
 
-        /// The member holding `name` (any case) anywhere under `top`, collections in `skip` left out.
+        /// The member that holds `name` (ignoring case) anywhere under `top`, skipping the
+        /// collections in `skip`.
         [[nodiscard]] const Member* NameHolder(const Guid& top, StringView name, const Array<Guid>* skip) const
         {
             Array<Guid> under;
@@ -587,11 +592,12 @@ export namespace modelviewer
         Random m_random;
     };
 
-    /// The library in its folder (the user data folder's model-viewer): `library.xml`, written
-    /// through a temporary file and a rename, so a crash never leaves half of it. While it is open
-    /// the viewer holds the system's lock on `library.lock` (FileTryLock: released when the viewer
-    /// ends, a crash included, so it is never left behind); a second viewer finds it held and opens
-    /// the library read-only. The lock file names the holder's process, for the message.
+    /// The library file in its folder (model-viewer in the user data folder). `library.xml` is
+    /// written through a temporary file and a rename, so a crash never leaves it half written.
+    /// While the library is open the viewer holds the system's lock on `library.lock`
+    /// (FileTryLock); the system releases it when the viewer ends, even by crashing, so it is
+    /// never left behind. A second viewer finds the lock held and opens the library read-only.
+    /// The lock file records the holder's process id for the message.
     class LibraryFile
     {
     public:
@@ -603,8 +609,8 @@ export namespace modelviewer
         LibraryFile& operator=(const LibraryFile&) = delete;
         ~LibraryFile() { Close(); }
 
-        /// Opens the library in `folder` into `library` (an empty one when there is no file yet).
-        /// False only when the file is there and does not read (`error` says why).
+        /// Opens the library in `folder` into `library`, which stays empty when there is no file
+        /// yet. Returns false only when the file exists and cannot be read (`error` says why).
         bool Open(StringView folder, Library& library, String& error)
         {
             Close();
@@ -618,7 +624,7 @@ export namespace modelviewer
             return library.Read(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()), error);
         }
 
-        /// Writes `library`: refused while read-only.
+        /// Writes `library`; refused while read-only.
         bool Save(const Library& library)
         {
             if (m_readOnly || m_folder.IsEmpty())
@@ -646,7 +652,8 @@ export namespace modelviewer
         }
 
         [[nodiscard]] bool ReadOnly() const noexcept { return m_readOnly; }
-        /// The process holding the lock when this one is read-only (0 when it did not say).
+        /// The process holding the lock when this viewer is read-only; 0 when the lock file did
+        /// not say.
         [[nodiscard]] u64 LockHolder() const noexcept { return m_holder; }
 
     private:
@@ -658,7 +665,7 @@ export namespace modelviewer
                 return false;
             if (!FileTryLock(m_lock))
             {
-                // Held: the holder's process id, from the start of the file.
+                // The lock is held: read the holder's process id from the start of the file.
                 char text[32] = {};
                 const i64 read = FileRead(m_lock, text, sizeof(text) - 1);
                 for (i64 i = 0; i < read && text[i] >= '0' && text[i] <= '9'; ++i)
@@ -679,9 +686,9 @@ export namespace modelviewer
         u64 m_holder = 0;
     };
 
-    /// The shortlist's file (Shortlist's text) into a top-level collection named Shortlist: an
-    /// entry and member per starred model whose file is there, its note the entry's. Returns how
-    /// many came in.
+    /// Imports a shortlist file (the text Shortlist::Write produces) into a top-level collection
+    /// named Shortlist: an entry and a member for each starred model whose file exists, with the
+    /// shortlist note as the entry's note. Returns how many models were imported.
     inline u32 ImportShortlistText(Library& library, StringView text)
     {
         Guid collection;
@@ -702,7 +709,7 @@ export namespace modelviewer
             usize tab = 0;
             while (tab < line.Size() && line[tab] != u8'\t')
                 ++tab;
-            // The shortlist's escapes: a path has none in practice; a note's are undone here.
+            // Undo the shortlist's escapes in the note; paths have none in practice.
             const StringView path = line.SubStr(0, tab);
             String note;
             for (usize i = tab + 1; i < line.Size(); ++i)

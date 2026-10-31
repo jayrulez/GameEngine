@@ -2,8 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of PipelineLayout.
-/// Creates ID3D12RootSignature from bind group layouts + push constant ranges.
-/// Ported from Sedulous.RHI.DX12/DX12PipelineLayout.bf.
+/// Creates an ID3D12RootSignature from bind group layouts and push constant ranges.
 
 module;
 #include "Core/Prelude.h"
@@ -126,7 +125,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Push constants → root 32-bit constants.
+            // Push constants become root 32-bit constants.
             for (usize i = 0; i < d.pushConstantRanges.Size(); ++i)
             {
                 const auto& pc = d.pushConstantRanges[i];

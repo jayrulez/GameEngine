@@ -4,12 +4,11 @@
 // UI - :property_owner partition
 //
 // IPropertyOwner: objects that own Property<T> instances and respond to value changes
-// with invalidation. Ported from Sedulous.UI/src/Core/IPropertyOwner.bf.
+// with invalidation.
 //
-// Port note: kept as a pure-abstract base (View inherits it) rather than folded into
-// View - this breaks the Property<->View dependency cycle cleanly, keeps Property<T>
-// self-contained/testable, and is faithful to Sedulous (whose Property stores an
-// IPropertyOwner). It is never tree-queried, so the As*() capability split is unaffected.
+// It is a pure-abstract base (View inherits it) rather than part of View, which breaks
+// the Property/View dependency cycle and keeps Property<T> self-contained and testable.
+// It is never queried through the tree, so the As*() capability split does not cover it.
 
 export module foundation.ui:property_owner;
 

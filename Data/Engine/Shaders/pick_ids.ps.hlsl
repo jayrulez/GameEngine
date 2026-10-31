@@ -3,7 +3,7 @@
 
 // GPU picking PS: write the draw's entity id (index + 1, generation) into the RG32Uint id target.
 // Masked materials keep their cutout (a hole in a leaf is not the leaf), sampling the material's
-// albedo alpha from set 2 exactly like shadow_depth.ps.
+// albedo alpha from set 2 as shadow_depth.ps does.
 // variants: ALPHA_TEST
 #ifdef ALPHA_TEST
 Texture2D    AlbedoMap   : register(t0, space2);

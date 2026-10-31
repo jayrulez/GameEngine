@@ -3,17 +3,18 @@
 
 // Foundation::PropertyAnimation - module `foundation.propertyanimation`.
 //
-// The data model + evaluation + reflection binding resolver for animating ANY reflected property on
-// ANY component with keyframe curves, as data. Depends on foundation.core
-// reflection ONLY - deliberately NOT part of foundation.animation (skeletal), so headless consumers
-// (editor page, tests, MCP hosts) evaluate a property clip without pulling bones/poses/skinning.
+// The data model, evaluation and reflection binding resolver for animating any reflected property
+// on any component with keyframe curves, as data. It depends only on foundation.core reflection
+// and is kept apart from foundation.animation (skeletal), so headless consumers (the editor page,
+// tests, MCP hosts) evaluate a property clip without pulling in bones, poses and skinning.
 //
-// A clip is a set of tracks; each track targets one component-type + property PATH and holds either
-// per-component scalar Curves (Float/Float3/Color) or quaternion keys (Quat, slerped - NEVER
-// per-component euler). Evaluation yields a Variant per track at time t; the binding resolver walks
-// the reflected property chain (nested paths included) and writes through reflection set, so
-// RESOLVE-mode rules + any setter side effects apply exactly as if the inspector wrote the value.
-// Scene-FREE: the resolver takes a reflection Instance; the engine binds entity -> component.
+// A clip is a set of tracks; each track targets one component type and property path and holds
+// either per-component scalar Curves (Float, Float3, Color) or quaternion keys (Quat, slerped,
+// never per-component Euler). Evaluation yields a Variant per track at time t; the binding
+// resolver walks the reflected property chain (nested paths included) and writes through
+// reflection set, so resolve-mode rules and any setter side effects apply exactly as if the
+// inspector wrote the value. Nothing here knows the scene: the resolver takes a reflection
+// Instance, and the engine binds the entity to its component.
 
 module;
 #include "Core/Prelude.h"
@@ -26,8 +27,8 @@ using namespace foundation::core;
 
 export namespace foundation::propertyanimation
 {
-    // The value a track animates. v1 set; Bool/enum STEP tracks are a later addition (the wire format
-    // reserves the kind byte). Float/Float3/Color = per-component scalar curves; Quat = slerped keys.
+    // The value a track animates. Float, Float3 and Color are per-component scalar curves; Quat is
+    // slerped keys. The wire stores the kind as a byte, so step tracks (Bool, enums) can be added.
     enum class TrackValueKind : u8
     {
         Float,
@@ -111,9 +112,9 @@ export namespace foundation::propertyanimation
             return Variant{};
         }
 
-        // Sample, but keep `current`'s value for any channel that has NO keys (an empty channel does
-        // not drive its component - otherwise it would sample 0 and, say, teleport an entity that
-        // only animates X to y=z=0). `current` is the target property's live value; if it is empty
+        // Sample, but keep `current`'s value for any channel that has no keys. An empty channel does
+        // not drive its component; otherwise it would sample 0 and, say, teleport an entity that
+        // only animates X to y = z = 0. `current` is the target property's live value; if it is empty
         // (unreadable) an empty channel falls back to 0. A track with all channels empty returns
         // `current` unchanged (a no-op write). Quat: empty quatKeys keeps `current`.
         [[nodiscard]] Variant SampleMerged(f32 time, const Variant& current) const
@@ -177,15 +178,15 @@ export namespace foundation::propertyanimation
         }
     };
 
-    // A cooked/authored clip: a duration and the tracks. Immutable SHARED data at runtime (each
-    // playing component owns only {time, state, binding cache}). Loop behavior is the animator
-    // COMPONENT's loopMode, not a clip field.
+    // A cooked or authored clip: a duration and the tracks. Immutable shared data at runtime (each
+    // playing component owns only its time, state and binding cache). Loop behavior is the animator
+    // component's loopMode, not a clip field.
     struct PropertyAnimationClip
     {
         f32 duration = 0.0f;
         Array<PropertyTrack> tracks;
 
-        // The clip's duration = the longest track (call after editing to refresh `duration`).
+        // The clip's duration, its longest track's (call after editing to refresh `duration`).
         [[nodiscard]] f32 ComputeDuration() const noexcept
         {
             f32 d = 0.0f;
@@ -198,13 +199,13 @@ export namespace foundation::propertyanimation
     };
 
     // ===================================================================================
-    // Binding resolver (reflection only - no scene dependency)
+    // Binding resolver (reflection only, no scene dependency)
     // ===================================================================================
 
     // A resolved property path: the chain of PropertyInfo from the component type down to the leaf.
-    // PropertyInfo pointers are STABLE static type metadata, so caching the chain is safe; the nested
-    // sub-instance ADDRESSES are re-walked on every write (the entity.get lesson: never cache raw
-    // component/sub-object pointers across structural changes). Empty chain = unresolved.
+    // PropertyInfo pointers are stable static type metadata, so caching the chain is safe; the nested
+    // sub-instance addresses are re-walked on every write, because a raw component or sub-object
+    // pointer does not survive a structural change. An empty chain means unresolved.
     struct PropertyBinding
     {
         Array<const PropertyInfo*> chain;
@@ -214,7 +215,7 @@ export namespace foundation::propertyanimation
 
     // Resolve a dot-joined `propertyPath` against `componentType`, walking Nested properties for the
     // intermediate segments. Returns an unresolved binding (empty chain) if any segment is missing or
-    // an intermediate segment is not a Nested struct. Pure over static type metadata - no instance.
+    // an intermediate segment is not a Nested struct. Reads only static type metadata, no instance.
     [[nodiscard]] PropertyBinding ResolveBinding(const TypeInfo& componentType, StringView propertyPath);
 
     // Write `value` through a resolved binding into `componentInstance`. Re-derives each nested
@@ -227,6 +228,6 @@ export namespace foundation::propertyanimation
     // Read the current leaf value through a resolved binding (the symmetric inverse of WriteBinding).
     // Re-derives each nested sub-instance address from the live instance, then reflection-gets the
     // leaf. Returns an empty Variant for an unresolved binding, an empty instance, or a null nested
-    // address. Used to SNAPSHOT a property before a transient write (the in-scene animation preview).
+    // address. Used to snapshot a property before a transient write (the in-scene animation preview).
     [[nodiscard]] Variant ReadBinding(const PropertyBinding& binding, const Instance& componentInstance);
 }

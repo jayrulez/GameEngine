@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // VG conic (angular/sweep) gradient fragment shader. The tessellator emits (pos-center) rotated by
-// -startAngle as TexCoord, so the parameter t = frac(atan2(y,x)/2pi) is computed PER PIXEL (exact
+// -startAngle as TexCoord, so the parameter t = frac(atan2(y,x)/2pi) is computed per pixel (an exact
 // angular sweep) instead of Gouraud-interpolating it. t is sampled from the baked 256x1 ramp LUT at
-// texel centers. Outputs PREMULTIPLIED-alpha color to pair with the PremultipliedAlpha blend.
+// texel centres. Outputs premultiplied-alpha colour to pair with the PremultipliedAlpha blend.
 // Resolved via ShaderSystem::GetVariant("vg_grad_conic", Fragment).
 #include "color.hlsli"
 cbuffer VGUniforms : register(b0) { float4x4 Projection; float DistanceFieldPixelRange; float DistanceFieldAtlasWidth; float DistanceFieldAtlasHeight; float BlendSpace; };
@@ -15,7 +15,7 @@ float4 main(PSInput input) : SV_Target {
     const float kInvTwoPi = 0.15915494309; // 1/(2pi)
     float a = atan2(input.TexCoord.y, input.TexCoord.x) * kInvTwoPi; // (-0.5, 0.5]
     float t = a - floor(a);                                          // [0, 1), 0 at +x axis
-    float u = (0.5 + t * 255.0) / 256.0; // texel center: pads + dodges the Repeat wrap seam
+    float u = (0.5 + t * 255.0) / 256.0; // texel centre: pads and avoids the Repeat wrap seam
     float4 ramp = VGTexture.Sample(VGSampler, float2(u, 0.5));
     // Sampled colour arrives in linear light (an sRGB texture decoded, or a linear one); an
     // Encoded canvas works on encoded values, so it is encoded back (white coverage stays 1).

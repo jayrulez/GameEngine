@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Menu tests: opening at a position as a popup, activating an item (runs the
-// action + closes), and dismissal (outside click / Escape) via the dispatcher popup support.
+// GUI - Menu tests: opening at a position as a popup, activating an item (runs the action and
+// closes), and dismissal (outside click or Escape) through the dispatcher's popup support.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -86,8 +86,8 @@ TEST_CASE("menu: activating an item runs its action and closes")
 
 TEST_CASE("menu: an item whose action lets go of its menu (and what held it) outlives the action")
 {
-    // The menu's only owner is let go by its item's own action, as a dock float's Move to menu is
-    // when the move ends the float.
+    // The item's own action releases the menu's only owner, as a dock float's "Move to" menu is
+    // released when the move ends the float.
     core::RefPtr<Menu> menu = Make<Menu>();
     int ran = 0;
     MenuItem* item = menu->AddItem(core::StringView(u8"End"), [&] { ++ran; menu = nullptr; });
@@ -112,7 +112,7 @@ TEST_CASE("menu: outside click and Escape dismiss it")
     d->InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left); // outside
     CHECK_FALSE(menu->IsOpen());
 
-    // Reopen and dismiss with Escape.
+    // Reopen it and dismiss it with Escape.
     menu->Open(*anchor, core::Float2{50.0f, 50.0f});
     REQUIRE(menu->IsOpen());
     d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
@@ -121,9 +121,8 @@ TEST_CASE("menu: outside click and Escape dismiss it")
 
 TEST_CASE("menu: an outside click dismisses even when the opener covers the click point")
 {
-    // Regression: the context menu was opened with the full-window panel as its popup owner,
-    // so clicks anywhere on the panel counted as "on the owner" and never dismissed. A menu
-    // has no persistent owner - any press outside the menu itself must close it.
+    // The context menu is opened with the full-window panel as its owner. A menu has no persistent
+    // owner, so a press anywhere outside the menu itself closes it, even one on the panel.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto panel = Make<UIWidget>();
@@ -137,7 +136,7 @@ TEST_CASE("menu: an outside click dismisses even when the opener covers the clic
     menu->Open(*panel, core::Float2{50.0f, 50.0f});
     REQUIRE(menu->IsOpen());
 
-    // Left-click on the panel, well away from the menu -> dismissed.
+    // A left-click on the panel, well away from the menu, dismisses it.
     d->InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left);
     CHECK_FALSE(menu->IsOpen());
     CHECK(d->PopupCount() == 0u);
@@ -160,7 +159,7 @@ TEST_CASE("menu: can be reopened after being dismissed")
     d->InjectMouseDown(core::Float2{300.0f, 300.0f}, MouseButton::Left); // dismiss
     REQUIRE_FALSE(menu->IsOpen());
 
-    // Reopen at a new position - must work and re-register as the popup.
+    // Reopening at a new position must work and register the menu as the popup again.
     menu->Open(*panel, core::Float2{120.0f, 90.0f});
     CHECK(menu->IsOpen());
     CHECK(d->TopPopup() == menu.Get());
@@ -181,7 +180,7 @@ TEST_CASE("menu: separators are non-selectable rows that add height")
 
     CHECK(menu->RowCount() == 3);
     CHECK(menu->ItemCount() == 2); // the separator is not counted as an item
-    CHECK(menu->GetSize().y == doctest::Approx(26.0f + 9.0f + 26.0f)); // item + separator + item
+    CHECK(menu->GetSize().y == doctest::Approx(26.0f + 9.0f + 26.0f)); // an item, a separator, an item
 }
 
 TEST_CASE("menu: a checkable item toggles, fires its callback, and closes the menu")
@@ -286,7 +285,7 @@ TEST_CASE(
     REQUIRE(sub->IsOpen());
 
     // The submenu sits at x in [210, 370], its "Deep" row at y in [76, 102). A press there is
-    // inside the chain -> the root menu must stay open (the popup 'contains' predicate).
+    // inside the chain, so the root menu must stay open (the popup 'contains' predicate).
     d->InjectMouseDown(core::Float2{260.0f, 88.0f}, MouseButton::Left);
     CHECK(menu->IsOpen());
     d->InjectMouseUp(core::Float2{260.0f, 88.0f}, MouseButton::Left);
@@ -312,7 +311,7 @@ TEST_CASE("menu: an outside click dismisses the whole open submenu chain")
     sub->AddItem(core::StringView(u8"Deep"), [] {});
     menu->Open(*anchor, core::Float2{50.0f, 50.0f});
 
-    d->InjectMouseMove(core::Float2{60.0f, 60.0f}); // "More" is row 0 (y in [50,76)) -> open sub
+    d->InjectMouseMove(core::Float2{60.0f, 60.0f}); // "More" is row 0 (y in [50,76)) : it opens the submenu
     REQUIRE(sub->IsOpen());
 
     d->InjectMouseDown(core::Float2{500.0f, 500.0f}, MouseButton::Left); // outside everything
@@ -345,19 +344,20 @@ TEST_CASE("menu: a submenu stays open while the pointer heads for it across anot
     auto* more = core::Cast<MenuItem>(sub->GetParent());
     REQUIRE(more != nullptr);
     d->InjectMouseMove(core::Float2{150.0f, 70.0f});
-    // Down and right toward the submenu, over "Next": the submenu stays, and only "More" is lit.
+    // Moving down and right toward the submenu, over "Next": the submenu stays open, and only
+    // "More" is lit.
     d->InjectMouseMove(core::Float2{190.0f, 80.0f});
     CHECK(sub->IsOpen());
     CHECK(more->IsLit());
     CHECK_FALSE(next->IsLit());
-    // Resting on "Next" a moment: it takes over.
+    // Resting on "Next" for a moment makes it take over.
     for (int i = 0; i < 5; ++i)
         root->GetContext().Update(core::Duration::FromSeconds(0.1));
     CHECK_FALSE(sub->IsOpen());
     CHECK(next->IsLit());
     CHECK_FALSE(more->IsLit());
 
-    // Straight down, away from it: the submenu closes at once.
+    // Moving straight down, away from the submenu, closes it at once.
     d->InjectMouseMove(core::Float2{100.0f, 60.0f});
     REQUIRE(sub->IsOpen());
     d->InjectMouseMove(core::Float2{100.0f, 110.0f}); // onto "Last", heading away
@@ -380,7 +380,7 @@ TEST_CASE("menu: one row is lit at a time: the pointer and the keys move the sam
     MenuItem* off = menu->AddItem(core::StringView(u8"Off"), [] {});
     off->SetEnabled(false);
     menu->Open(*anchor, core::Float2{50.0f, 50.0f});
-    root->GetContext().Update(core::Duration{}); // a frame: the popup placed
+    root->GetContext().Update(core::Duration{}); // a frame, which places the popup
     const auto centre = [](const Node& n)
     {
         const Rect r = n.GetScreenBounds();
@@ -398,7 +398,8 @@ TEST_CASE("menu: one row is lit at a time: the pointer and the keys move the sam
     d->InjectMouseMove(centre(*b));
     CHECK(b->IsLit());
     CHECK(lit() == 1);
-    // A key moves on from the pointer's row, the pointer resting where it was: one lit, the keys'.
+    // A key moves on from the pointer's row while the pointer rests where it was. Only one row is
+    // lit, the one the keys chose.
     (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
     CHECK(c->IsLit());
     CHECK(b->IsHovered());
@@ -409,7 +410,7 @@ TEST_CASE("menu: one row is lit at a time: the pointer and the keys move the sam
     REQUIRE(ob.y > cb.y + cb.height + 1.0f);
     d->InjectMouseMove(core::Float2{cb.x + cb.width * 0.5f, (cb.y + cb.height + ob.y) * 0.5f});
     CHECK(lit() == 0);
-    (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // from none, round to the first
+    (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // from no lit row, round to the first
     CHECK(a->IsLit());
     d->InjectMouseMove(centre(*off));
     CHECK(lit() == 0);
@@ -441,7 +442,7 @@ TEST_CASE("menu: in markup, items, separators and nested menus; an item reports 
 
     Menu* menu = core::Cast<Menu>(page->GetChildAt(1));
     REQUIRE(menu != nullptr);
-    CHECK_FALSE(menu->IsDisplayed()); // waits in the page, unseen
+    CHECK_FALSE(menu->IsDisplayed()); // waits in the page, not displayed
     CHECK(menu->RowCount() == 4);     // cut, grid, the separator, More
     CHECK(menu->ItemCount() == 3);
     auto* cut = core::Cast<MenuItem>(menu->GetChildAt(0));
@@ -456,7 +457,8 @@ TEST_CASE("menu: in markup, items, separators and nested menus; an item reports 
     // A context menu asked for over the label opens it at the pointer.
     int activations = 0;
     (void)cut->AddEventListener(EventType::ItemActivate, [&](const Event&) { ++activations; });
-    // It bubbles through the menu to what opened it, and on up: one listener hears every item.
+    // Activation bubbles through the menu to what opened it, and on up, so one listener hears
+    // every item.
     Node* heardFrom = nullptr;
     (void)page->AddEventListener(EventType::ItemActivate, [&](const Event& e) { heardFrom = e.Target; });
     EventDispatcher& d = *root->GetEventDispatcher();
@@ -472,7 +474,7 @@ TEST_CASE("menu: in markup, items, separators and nested menus; an item reports 
     CHECK(activations == 1);
     CHECK(heardFrom == cut);
     CHECK_FALSE(menu->IsOpen());
-    // Closed, it left the page; the label keeps it, and it opens again.
+    // Once closed it has left the page, but the label keeps it, and it opens again.
     d.InjectMouseDown(core::Float2{50.0f, 20.0f}, MouseButton::Right);
     d.InjectMouseUp(core::Float2{50.0f, 20.0f}, MouseButton::Right);
     CHECK(menu->IsOpen());
@@ -509,7 +511,7 @@ TEST_CASE("menu: a markup context menu opens again after an item is picked and a
     (void)root->UpdateLayout();
     Menu* menu = core::Cast<Menu>(page->GetChildAt(1));
     REQUIRE(menu != nullptr);
-    // As the sandbox's script does: a listener up the page takes the bubbling activate.
+    // As the sandbox's script does, a listener up the page takes the bubbling activate.
     (void)page->AddEventListener(EventType::ItemActivate, [](const Event& e) { e.Handled = true; });
     EventDispatcher& d = *root->GetEventDispatcher();
     const auto rclick = [&](core::Float2 at)
@@ -531,7 +533,7 @@ TEST_CASE("menu: a markup context menu opens again after an item is picked and a
     const Rect copy = menu->GetChildAt(0)->GetScreenBounds();
     click(core::Float2{copy.x + 10.0f, copy.y + copy.height * 0.5f});
     CHECK_FALSE(menu->IsOpen());
-    // The style pass writes the attribute again at every restyle (as the sandbox's does).
+    // The style pass writes the attribute again at every restyle, as the sandbox's does.
     core::Cast<UIWidget>(page->GetChildAt(0))->SetContextMenuId(core::String(u8"ctx"));
     rclick(core::Float2{200.0f, 40.0f});
     CHECK(menu->IsOpen());
@@ -551,7 +553,7 @@ TEST_CASE("menu: a submenu added before its title is set (a script's add, then t
 {
     auto menu = core::MakeRef<Menu>(core::DefaultAllocator());
     auto sub = core::MakeRef<Menu>(core::DefaultAllocator());
-    menu->GetChildHost()->AddChild(sub.Get()); // taken in at once, with no title yet
+    menu->GetChildHost()->AddChild(sub.Get()); // added at once, with no title yet
     sub->SetTitle(core::StringView(u8"Recent"));
     REQUIRE(menu->RowCount() == 1u);
     const auto named = [](auto& self, Node& node) -> bool
@@ -575,38 +577,38 @@ TEST_CASE("menu: taller than the window, it keeps to it and scrolls by wheel, ar
     root->AddChild(anchor.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     auto menu = Make<Menu>();
-    menu->SetWidth(160.0f); // a width of its own: the test points 50 in, and with no font here it measures narrow
+    menu->SetWidth(160.0f); // a width of its own, since the test points 50 in and with no font it measures narrow
     menu->SetItemHeight(25.0f);
     for (int i = 0; i < 40; ++i)
         menu->AddItem(core::StringView(u8"Item"), [] {});
     menu->Open(*anchor, core::Float2{20.0f, 20.0f});
-    root->GetContext().Update(core::Duration{}); // a frame: the popup placed
+    root->GetContext().Update(core::Duration{}); // a frame, which places the popup
     REQUIRE(d->IsPopupOpen(*menu));
     CHECK(menu->Scrolls());
     CHECK(menu->GetSize().y <= 300.0f);
     const core::Float2 at = menu->ConvertToWorldSpace(core::Float2{0.0f, 0.0f});
     CHECK(at.y >= 0.0f);
-    CHECK(at.y + menu->GetSize().y <= 300.0f + 0.5f); // kept to the window
+    CHECK(at.y + menu->GetSize().y <= 300.0f + 0.5f); // kept within the window
     CHECK(menu->GetItemScroll() == doctest::Approx(0.0f));
 
-    // The wheel, over its items.
+    // The wheel turned over its items.
     const core::Float2 middle = menu->ConvertToWorldSpace(core::Float2{50.0f, menu->GetSize().y * 0.5f});
     (void)d->InjectMouseWheel(middle, core::Float2{0.0f, -2.0f});
     CHECK(menu->GetItemScroll() > 0.0f);
     const float wheeled = menu->GetItemScroll();
 
-    // The pointer resting on the down arrow, half a second.
+    // The pointer rests on the down arrow for half a second.
     const core::Float2 bottom = menu->ConvertToWorldSpace(core::Float2{50.0f, menu->GetSize().y - 4.0f});
     d->InjectMouseMove(bottom);
     root->GetContext().Update(core::Duration::FromSeconds(0.25));
     root->GetContext().Update(core::Duration::FromSeconds(0.25));
     CHECK(menu->GetItemScroll() > wheeled + 100.0f);
-    d->InjectMouseMove(core::Float2{390.0f, 290.0f}); // off it: it stops
+    d->InjectMouseMove(core::Float2{390.0f, 290.0f}); // moving off the arrow stops the scroll
     const float rested = menu->GetItemScroll();
     root->GetContext().Update(core::Duration::FromSeconds(0.5));
     CHECK(menu->GetItemScroll() == doctest::Approx(rested));
 
-    // The keys: up from no item goes round to the last, which scrolls into view at the end.
+    // From the keys, Up from no item goes round to the last, which scrolls into view at the end.
     menu->RequestFocus();
     (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Up));
     const float end = 40.0f * 25.0f - (menu->GetSize().y - 32.0f);
@@ -620,7 +622,8 @@ TEST_CASE("menu: opening one in a scrolled page leaves the page where it was (E1
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 300.0f});
     EventDispatcher* d = root->GetEventDispatcher();
-    // A page that scrolls, a button half way down it, the button's menu inside it (a script's).
+    // A page that scrolls, a button half way down it, and the button's menu inside the page (as a
+    // script builds it).
     auto page = Make<UIWidget>();
     page->SetSize(core::Float2{400.0f, 200.0f}); // shorter than the window, as a page under a header is
     page->EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; s.Direction = FlexDirection::Column; });
@@ -648,7 +651,7 @@ TEST_CASE("menu: opening one in a scrolled page leaves the page where it was (E1
         REQUIRE(menu->OpenAtPoint(10.0f, 140.0f));
         menu->FocusFirstItem(); // focus goes into it, as from the keys
         root->GetContext().Update(core::Duration{});
-        CHECK(page->GetScrollOffset().y == doctest::Approx(scrolled)); // a popup is not the page's to scroll to
+        CHECK(page->GetScrollOffset().y == doctest::Approx(scrolled)); // the page must not scroll to a popup
         (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
         root->GetContext().Update(core::Duration{});
     }
@@ -657,7 +660,7 @@ TEST_CASE("menu: opening one in a scrolled page leaves the page where it was (E1
 TEST_CASE("menu bar: at a scale its width does not land on the device grid, it settles (no layout every frame)")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-    root->SetDisplayScale(1.3f); // its buttons' widths snap to the grid at a fraction of a unit
+    root->SetDisplayScale(1.3f); // at this scale its buttons' widths snap to the grid at a fraction of a unit
     root->SetViewportSize(core::Float2{520.0f, 390.0f});
     auto host = Make<UIWidget>();
     host->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
@@ -670,8 +673,8 @@ TEST_CASE("menu bar: at a scale its width does not land on the device grid, it s
     host->AddChild(bar.Get());
     for (int i = 0; i < 4; ++i)
         (void)root->UpdateLayout();
-    // Laid out again on its own (its text changed, a font came): it settles, rather than sizing
-    // itself back to the fraction and asking for another pass, each pass.
+    // Laid out again on its own (its text changed, or a font arrived), it settles, rather than
+    // sizing itself back to the fraction and asking for another pass every time.
     bar->RequestLayout();
     for (int i = 0; i < 4; ++i)
         (void)root->UpdateLayout();
@@ -728,20 +731,21 @@ TEST_CASE("menu: a padded menu's submenu opens just outside it, its first row le
     sub->SetPadding(Thickness{5.0f});
     sub->AddItem(core::StringView(u8"Deep"), [] {});
     menu->Open(*anchor, core::Float2{50.0f, 50.0f});
-    // The "More" row: inside the padding, at y 50 + 5 + 26.
+    // The "More" row sits inside the padding, at y 50 + 5 + 26.
     d->InjectMouseMove(core::Float2{60.0f, 50.0f + 5.0f + 26.0f + 13.0f});
     REQUIRE(sub->IsOpen());
     const core::Float2 at = sub->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
     CHECK(at.x == doctest::Approx(50.0f + 170.0f));          // the menu's outer edge (160 + 5 + 5), not inside it
     CHECK(at.y == doctest::Approx(50.0f + 5.0f + 26.0f - 5.0f)); // up by its own padding
-    // So its first row is level with the row that opened it.
+    // That puts its first row level with the row that opened it.
     REQUIRE(sub->ChildCount() > 0u);
     CHECK(at.y + 5.0f == doctest::Approx(50.0f + 5.0f + 26.0f));
-    // Its padding styled only after it opened (a sheet's first pass): placed by it then.
+    // When its padding is styled only after it opened (a sheet's first pass), the padding
+    // places it then.
     sub->SetPadding(Thickness{8.0f});
     (void)root->UpdateLayout();
     CHECK(sub->ConvertToRootSpace(core::Float2{0.0f, 0.0f}).y == doctest::Approx(50.0f + 5.0f + 26.0f - 8.0f));
-    CHECK_FALSE(sub->Scrolls()); // its rows all show: placed at its whole height
+    CHECK_FALSE(sub->Scrolls()); // all its rows show, so it is placed at its whole height
     CHECK(sub->GetSize().y == doctest::Approx(26.0f + 16.0f));
 }
 
@@ -780,8 +784,8 @@ TEST_CASE("menu: a submenu styled by a sheet after it opens shows all its rows")
 
 TEST_CASE("menu: a submenu with a fractional padding, lined up by its content, still shows all its rows")
 {
-    // A compact density's padding (3.4 + a 1 px border) moves it a fraction up; the device grid
-    // must not take that fraction off its height.
+    // A compact density's padding (3.4 and a 1 px border) moves it up by a fraction; the device
+    // grid must not take that fraction off its height.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
     auto anchor = Make<UIWidget>();
@@ -820,7 +824,7 @@ TEST_CASE("menu: a shortcut or text an item takes after the menu measured widens
     item->SetFont(service.GetFont(u8"DejaVu", 13.0f));
     const float narrow = menu->GetSize().x;
     CHECK(narrow >= item->PreferredWidth() - 0.5f);
-    // An action menu fills in the keys as it opens: the menu takes the room for them.
+    // An action menu fills in the shortcut keys as it opens, and the menu makes room for them.
     item->SetShortcut(core::StringView(u8"Ctrl+Shift+Alt+P"));
     CHECK(menu->GetSize().x >= item->PreferredWidth() - 0.5f);
     CHECK(menu->GetSize().x > narrow);

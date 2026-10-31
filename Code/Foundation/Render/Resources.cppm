@@ -6,14 +6,14 @@
 /// GPU resource primitives shared by the renderers. `DynamicUniformRing` is a
 /// frames-in-flight ring of fixed-stride slots over one buffer (a fixed-stride ring, not a
 /// grow-the-buffer UBO). The buffer is partitioned into `framesInFlight` equal
-/// regions; each frame writes ONLY its own region (selected by the device ring index), so the
+/// regions; each frame writes only its own region (selected by the device ring index), so the
 /// CPU never overwrites data the GPU is still reading for a frame in flight.
 ///
-/// It serves three roles by varying usage + stride: per-view / per-object dynamic-offset
-/// UNIFORM data (bound with the returned byte offset), per-instance STORAGE data (a
-/// StructuredBuffer bound whole + indexed by the returned absolute slot index), and the
-/// per-instance VERTEX offsets stream (bound with the returned byte offset). The ring grows
-/// by reallocating (rare - only when scene complexity exceeds the current per-frame capacity),
+/// It serves three roles by varying usage and stride: per-view and per-object dynamic-offset
+/// uniform data (bound with the returned byte offset), per-instance storage data (a
+/// StructuredBuffer bound whole and indexed by the returned absolute slot index), and the
+/// per-instance vertex offsets stream (bound with the returned byte offset). The ring grows
+/// by reallocating (rarely: only when scene complexity exceeds the current per-frame capacity),
 /// draining the GPU first so no in-flight frame references the old buffer; each (re)allocation
 /// bumps a generation so a consumer can rebuild the bind group it created over `Buffer()`.
 
@@ -30,15 +30,10 @@ namespace rhi = foundation::rhi;
 
 export namespace foundation::render
 {
-    /// Frames-in-flight deferred GPU destruction: the web-safe replacement for the
-    /// grow-path `WaitIdle` (on web the wait pumps the browser event loop MID-FRAME,
-    /// which expires the canvas texture and drops the whole frame's submit - the
-    /// dropped-submit class). A replaced resource is RETIRED instead: it stays alive
-    /// until every frame that could reference it has aged out, then frees on Tick().
     /// Probe the device for a single-sampled stencil-capable depth-stencil format, in
     /// the same candidate order as the VG renderer's PickStencilCapableFormat (keep the
     /// two in sync): the overlay passes attach the format this returns, and the UI
-    /// subsystem only records stencil fills when its own probe agrees. Undefined = no
+    /// subsystem records stencil fills only when its own probe agrees. Undefined means no
     /// stencil support (overlay UI falls back to tessellated fills).
     [[nodiscard]] inline rhi::TextureFormat PickStencilFormat(rhi::Device& device)
     {
@@ -65,16 +60,21 @@ export namespace foundation::render
         return rhi::TextureFormat::Undefined;
     }
 
+    /// Frames-in-flight deferred GPU destruction: the web-safe alternative to a grow-path
+    /// `WaitIdle` (on web the wait pumps the browser event loop mid-frame, which expires
+    /// the canvas texture and drops the whole frame's submit). A replaced resource is
+    /// retired instead: it stays alive until every frame that could reference it has aged
+    /// out, then frees on Tick().
     /// One queue per owner (the render subsystem shares one across its systems);
-    /// consumers fall back to WaitIdle when no queue is wired, so standalone/test use
-    /// keeps working unchanged.
+    /// consumers fall back to WaitIdle when no queue is wired, so standalone and test use
+    /// keeps working.
     class GpuRetireQueue
     {
     public:
         void Initialize(rhi::Device* device, i32 framesInFlight)
         {
             m_device = device;
-            // +1: an entry retired DURING frame N is safe once N's whole ring has cycled.
+            // +1: an entry retired during frame N is safe once N's whole ring has cycled.
             m_age = Max(framesInFlight, 1) + 1;
         }
 
@@ -108,7 +108,7 @@ export namespace foundation::render
         }
 
         /// Age everything one frame; free what has outlived every in-flight frame.
-        /// Call ONCE per frame, before or after the frame's submits - the +1 margin
+        /// Call once per frame, before or after the frame's submits; the +1 margin
         /// covers either placement.
         void Tick()
         {
@@ -128,7 +128,7 @@ export namespace foundation::render
             }
         }
 
-        /// Destroy everything NOW (shutdown; caller has idled the GPU).
+        /// Destroy everything now (shutdown; the caller has idled the GPU).
         void Flush()
         {
             if (m_device == nullptr)
@@ -184,9 +184,9 @@ export namespace foundation::render
 
     // A chunked GPU buffer sub-allocator: hands out (buffer, offset) ranges from large shared
     // chunks instead of one buffer per allocation (no per-mesh buffers). Allocations are
-    // bump-forward and persist until Clear(); the pool grows by adding a NEW chunk (existing
+    // bump-forward and persist until Clear(); the pool grows by adding a new chunk (existing
     // allocations keep their buffer, so growth never invalidates a live range). Used for mesh
-    // vertex/index streams (uploaded once, kept for the resource's lifetime).
+    // vertex and index streams (uploaded once, kept for the resource's lifetime).
     class GpuBufferPool
     {
     public:
@@ -209,7 +209,7 @@ export namespace foundation::render
         };
 
         // Sub-allocate `size` bytes aligned to `alignment` from the current chunk, growing (a new
-        // chunk) if it doesn't fit. Returns the chunk buffer + the byte offset within it.
+        // chunk) if it doesn't fit. Returns the chunk buffer and the byte offset within it.
         [[nodiscard]] Alloc Allocate(u64 size, u64 alignment)
         {
             if (size == 0)
@@ -317,7 +317,7 @@ export namespace foundation::render
             }
 
             // An in-flight frame may still reference the old buffer: retire it when a
-            // queue is wired (web-safe), else drain (standalone/test use).
+            // queue is wired (web-safe), otherwise drain (standalone and test use).
             if (m_retire != nullptr)
             {
                 m_retire->Retire(m_buffer);
@@ -346,11 +346,11 @@ export namespace foundation::render
             return true;
         }
 
-        // Begin a frame: select the device ring slot's region. The buffer is mapped LAZILY by
+        // Begin a frame: select the device ring slot's region. The buffer is mapped lazily by
         // the first allocation, so a ring nothing writes this frame never maps, flushes or
-        // compares anything - on a backend that emulates mapping with a CPU shadow (WebGPU)
-        // an unconditional map/unmap was a full-buffer compare per ring per frame, ~145 MB
-        // of it in a scene using none of the skinning/terrain/sprite/particle rings.
+        // compares anything. On a backend that emulates mapping with a CPU shadow (WebGPU)
+        // an unconditional map and unmap costs a full-buffer compare per ring per frame, even
+        // in a scene that uses none of the skinning, terrain, sprite or particle rings.
         void BeginFrame(u32 frameIndex)
         {
             m_frameBase = static_cast<u32>(frameIndex % m_framesInFlight) * m_slotsPerFrame;
@@ -361,8 +361,8 @@ export namespace foundation::render
 
         // A run of `count` contiguous slots in this frame's region. `slotIndex` is the absolute
         // index of the first slot (for StructuredBuffer indexing); `byteOffset` is its byte offset
-        // (for dynamic-offset uniform binding / SetVertexBuffer offset); `ptr` is writable for the
-        // whole run. ok=false if the region is exhausted (never silently grows mid-frame).
+        // (for dynamic-offset uniform binding or the SetVertexBuffer offset); `ptr` is writable for the
+        // whole run. ok=false if the region is exhausted (it never silently grows mid-frame).
         struct Range
         {
             u32 slotIndex = 0;
@@ -426,7 +426,7 @@ export namespace foundation::render
         }
         [[nodiscard]] u32 Generation() const noexcept { return m_generation; } // bumps on realloc
 
-        /// Wire the frames-in-flight retire queue (web-safe grows). Null = drain-on-grow.
+        /// Wire the frames-in-flight retire queue (web-safe grows). Null means drain on grow.
         void SetRetireQueue(GpuRetireQueue* retire) noexcept { m_retire = retire; }
 
     private:
@@ -443,7 +443,7 @@ export namespace foundation::render
         rhi::Device* m_device;
         rhi::BufferUsage m_usage;
         const char8_t* m_label;
-        GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
+        GpuRetireQueue* m_retire = nullptr; // borrowed; null means WaitIdle on grow
         rhi::Buffer* m_buffer = nullptr;
         u8* m_mapped = nullptr;
         u32 m_framesInFlight;

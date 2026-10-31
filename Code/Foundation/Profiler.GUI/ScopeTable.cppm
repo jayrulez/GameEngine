@@ -3,16 +3,17 @@
 
 // Foundation::Profiler.GUI - :scope_table partition
 //
-// The frames chosen's scopes as a table (X7 of Specs/editor-gui.md): by default the call tree,
-// each thread a group and the GPU's passes one, a scope under the one it ran in (the frames
-// merged: a scope's every run in the same place is one row); sorted by any other heading, a flat
-// list of names, the longest first (again: the other way). Columns: calls, total and self time
-// (its children's taken out), the mean and the longest call, and its share of the frames' time.
-// Over a span marked on the timeline, the span's: scopes cut to it.
+// The chosen frames' scopes as a table. By default it is the call tree: each thread is a group,
+// the GPU's passes form another, and each scope sits under the scope it ran in. The frames are
+// merged, so every run of a scope in the same place is one row. Sorted by any other heading, it is
+// a flat list of names, longest first; sorting by the same heading again reverses the order. The
+// columns are calls, total time, self time (total less the children's), the mean and the longest
+// call, and the share of the frames' time. When a span is marked on the timeline, the table covers
+// the span instead, with scopes cut to it.
 //
-// Mouse first: a click on a row chooses its name (the page's other views told), a click on a
-// row's arrow folds or opens it, a click on a heading sorts by it, the wheel scrolls the rows. A
-// filter shows the names holding its text (and in the tree, the rows they hang from).
+// The mouse: a click on a row chooses its name and tells the page's other views, a click on a
+// row's arrow folds or opens it, a click on a heading sorts by it, and the wheel scrolls the rows.
+// A filter shows the names that contain its text, and in the tree also the rows they hang from.
 
 module;
 #include "Core/Prelude.h"
@@ -32,10 +33,10 @@ using namespace foundation::gui;
 
 export namespace foundation::profiler::gui
 {
-    /// A table's column, its heading's order.
+    /// A table column, in the order of the headings.
     enum class ScopeColumn : u8
     {
-        Name, // the call tree; the others sort a flat list
+        Name, // sorting by name shows the call tree; the other columns sort a flat list
         Calls,
         Total,
         Self,
@@ -49,7 +50,7 @@ export namespace foundation::profiler::gui
     {
         NameId name = 0;
         bool gpu = false;
-        bool group = false; // a thread's (or the GPU's) group: a name, no numbers
+        bool group = false; // a thread's (or the GPU's) group, which has a name but no numbers
         String groupName;
         u32 thread = 0;
         i32 parent = -1;
@@ -58,18 +59,18 @@ export namespace foundation::profiler::gui
         u64 totalTicks = 0;
         u64 selfTicks = 0;
         u64 maxTicks = 0;
-        u64 key = 0; // its place, kept across rebuilds: the fold remembers it by this
+        u64 key = 0; // identifies the node's place across rebuilds; folding state is remembered by this key
         Array<u32> children;
     };
 
-    /// What the call tree is built from: the frames chosen and the span marked, if any.
+    /// The call tree, built from the chosen frames and the marked span, if any.
     struct ScopeTree
     {
-        Array<ScopeNode> nodes; // groups first in their order, then scopes as met
+        Array<ScopeNode> nodes; // the groups first, in order, then scopes in the order met
         Array<u32> roots;       // the groups
-        u64 frameTicks = 0;     // the frames' (or the span's) length, for a scope's share
+        u64 frameTicks = 0;     // the length of the frames (or the span), for each scope's share
 
-        /// Builds it from `source` over `frames`, the scopes cut to `span` when it is marked.
+        /// Builds the tree from `source` over `frames`, cutting the scopes to `span` when it is marked.
         void Build(const IProfileSource& source, FrameRange frames, MarkedSpan span)
         {
             nodes.Clear();
@@ -101,7 +102,7 @@ export namespace foundation::profiler::gui
                     AddRuns(passes.AsSpan(), group, true, span, order, stack);
                 }
             }
-            // Self: a node's total less its children's.
+            // Self time: a node's total less its children's totals.
             for (ScopeNode& node : nodes)
             {
                 u64 children = 0;
@@ -109,7 +110,7 @@ export namespace foundation::profiler::gui
                     children += nodes[child].totalTicks;
                 node.selfTicks = node.totalTicks - Min(children, node.totalTicks);
             }
-            // The GPU's group last; the threads' in their order.
+            // The threads' groups come in thread order, and the GPU's group last.
             roots.Sort([this](u32 a, u32 b)
             {
                 const ScopeNode& x = nodes[a];
@@ -155,8 +156,8 @@ export namespace foundation::profiler::gui
             return static_cast<u32>(nodes.Size() - 1);
         }
 
-        // A thread's runs of one frame into the tree: in order of their start (the outer first),
-        // each under the run it lies in.
+        // Adds a thread's runs from one frame to the tree, in order of their start (outer runs
+        // first), each under the run it lies in.
         void AddRuns(Span<const ScopeEvent> runs, u32 group, bool gpu, MarkedSpan span, Array<u32>& order, Array<u32>& stack)
         {
             order.Clear();
@@ -166,7 +167,7 @@ export namespace foundation::profiler::gui
             {
                 return runs[a].beginTick < runs[b].beginTick || (runs[a].beginTick == runs[b].beginTick && runs[a].depth < runs[b].depth);
             });
-            stack.Clear(); // the open runs' nodes, by depth
+            stack.Clear(); // the nodes of the open runs, by depth
             Array<u32> depths;
             for (const u32 i : order)
             {
@@ -227,13 +228,13 @@ export namespace foundation::profiler::gui
         static constexpr f32 kNumberWidth = 72.0f;
         static constexpr f32 kIndent = 16.0f;
         static constexpr f32 kArrowWidth = 16.0f;
-        static constexpr u32 kOpenDepth = 3; // tree rows open to this depth until folded
+        static constexpr u32 kOpenDepth = 3; // tree rows start open down to this depth
         static constexpr usize kColumnCount = 7;
 
-        /// A row shown: a tree node, or in the flat list a name's totals.
+        /// A row shown: a tree node, or in the flat list, a name's totals.
         struct Row
         {
-            i32 node = -1; // the tree's node (the tree), or -1 (the flat list)
+            i32 node = -1; // the tree node in tree mode, or -1 in the flat list
             NameId name = 0;
             bool gpu = false;
             bool group = false;
@@ -256,7 +257,7 @@ export namespace foundation::profiler::gui
         // === What it shows ===
         [[nodiscard]] ScopeColumn SortColumn() const noexcept { return m_sort; }
         [[nodiscard]] bool SortsDescending() const noexcept { return m_descending; }
-        /// Sorts by `column` (Name: the tree), longest first unless `descending` is false.
+        /// Sorts by `column` (Name shows the tree), longest first unless `descending` is false.
         void SortBy(ScopeColumn column, bool descending = true)
         {
             m_sort = column;
@@ -265,7 +266,7 @@ export namespace foundation::profiler::gui
             m_rowsDirty = true;
             Invalidate();
         }
-        /// Shows only the names holding `text` (any case); empty: all.
+        /// Shows only the names that contain `text`, ignoring case; empty text shows all.
         void SetFilter(StringView text)
         {
             m_filter = String(text);
@@ -275,7 +276,7 @@ export namespace foundation::profiler::gui
         }
         [[nodiscard]] StringView Filter() const noexcept { return m_filter.AsView(); }
 
-        /// Folds or opens a tree row (by its place).
+        /// Folds or opens a tree row; the state is kept by the row's place in the tree.
         void SetOpen(const Row& row, bool open)
         {
             if (row.node < 0)
@@ -294,7 +295,7 @@ export namespace foundation::profiler::gui
             Invalidate();
         }
 
-        // === The model (the draw and the tests read it) ===
+        // === The model, which the draw and the tests read ===
         [[nodiscard]] const ScopeTree& Tree() const
         {
             Refresh();
@@ -305,7 +306,7 @@ export namespace foundation::profiler::gui
             Refresh();
             return m_rows.AsSpan();
         }
-        /// The row at a point's y (its own space), or -1.
+        /// Returns the row at y in the view's own space, or -1.
         [[nodiscard]] i32 RowAt(f32 y) const
         {
             const Rect box = GetContentBounds();
@@ -315,7 +316,7 @@ export namespace foundation::profiler::gui
             const i32 row = static_cast<i32>(at / kRowHeight);
             return row < static_cast<i32>(Rows().Size()) ? row : -1;
         }
-        /// The heading at a point's x (its own space).
+        /// Returns the heading at x in the view's own space.
         [[nodiscard]] ScopeColumn ColumnAt(f32 x) const
         {
             const Rect box = GetContentBounds();
@@ -324,7 +325,7 @@ export namespace foundation::profiler::gui
                 return ScopeColumn::Name;
             return static_cast<ScopeColumn>(kColumnCount - 1 - static_cast<usize>(fromEnd / kNumberWidth));
         }
-        /// A row's value in a column (ms, or calls), as the table writes it.
+        /// Returns a row's value in a column (ms, or calls), formatted as the table writes it.
         [[nodiscard]] String CellText(const Row& row, ScopeColumn column) const
         {
             const IProfileSource* source = Source();
@@ -351,7 +352,7 @@ export namespace foundation::profiler::gui
             }
         }
 
-        /// The parts it draws, which the sheet styles as `tag::part`.
+        /// Lists the parts it draws, which the sheet styles as `tag::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             ProfilerWidget::CollectStyleParts(out);
@@ -368,7 +369,7 @@ export namespace foundation::profiler::gui
         void OnProfileFramesChanged() override { Dirty(); }
         void OnProfileChoiceChanged() override
         {
-            // The span cuts the scopes; the name only lights its rows.
+            // The span cuts the scopes; the chosen name only highlights its rows.
             const MarkedSpan span = m_focus ? m_focus->Span() : MarkedSpan{};
             if (!(span == m_builtSpan))
                 Dirty();
@@ -446,7 +447,7 @@ export namespace foundation::profiler::gui
             const Color separator = PartColor(u8"separator", Color{0.5f, 0.5f, 0.5f, 0.3f});
             const IProfileSource* source = Source();
 
-            // The headings.
+            // Draw the headings.
             ctx.VG().FillRect(Rectangle{box.x, box.y, box.width, kHeadingHeight}, PartColor(u8"heading", Color{0.0f, 0.0f, 0.0f, 0.12f}));
             static constexpr const char8_t* kHeadings[kColumnCount] = {u8"Name", u8"Calls", u8"Total ms", u8"Self ms", u8"Mean", u8"Max", u8"Frame"};
             for (usize c = 0; c < kColumnCount; ++c)
@@ -463,7 +464,7 @@ export namespace foundation::profiler::gui
             }
             ctx.VG().FillRect(Rectangle{box.x, box.y + kHeadingHeight - 1.0f, box.width, 1.0f}, separator);
 
-            // The rows.
+            // Draw the rows.
             const Rect rowsClip{box.x, box.y + kHeadingHeight, box.width, Max(box.height - kHeadingHeight, 0.0f)};
             ctx.PushClip(rowsClip);
             const ChosenName chosen = m_focus ? m_focus->Name() : ChosenName{};
@@ -507,7 +508,8 @@ export namespace foundation::profiler::gui
             Invalidate();
         }
 
-        // A column's cell on a line at `y`: the numbers right to left from the end, the name the rest.
+        // Returns a column's cell on a line at `y`. The number columns are laid out from the end
+        // backwards, and the name takes the rest.
         [[nodiscard]] Rect CellBounds(ScopeColumn column, f32 y, f32 height) const
         {
             const Rect box = GetContentBounds();
@@ -563,12 +565,12 @@ export namespace foundation::profiler::gui
         }
         [[nodiscard]] static char8_t ToLower(char8_t c) noexcept { return c >= u8'A' && c <= u8'Z' ? static_cast<char8_t>(c + 32) : c; }
 
-        // Whether a node, or one under it, holds the filter's text.
+        // Returns whether a node, or one under it, matches the filter's text.
         [[nodiscard]] bool Shows(u32 index, const IProfileSource& source) const
         {
             const ScopeNode& node = m_tree.nodes[index];
             if (!node.group && node.calls > 0 && Matches(source.NameOf(node.name)))
-                return true; // a node with no call ran only outside the span: shown for its children
+                return true; // a node with no calls ran only outside the span, so it shows only for its children
             for (const u32 child : node.children)
                 if (Shows(child, source))
                     return true;
@@ -581,7 +583,7 @@ export namespace foundation::profiler::gui
             for (const u64 key : m_toggled)
                 if (key == node.key)
                     open = !open;
-            return open || !m_filter.IsEmpty(); // a filter opens what it shows
+            return open || !m_filter.IsEmpty(); // while filtering, every shown row is open
         }
 
         void AddTreeRows(u32 index, const IProfileSource& source) const
@@ -605,7 +607,7 @@ export namespace foundation::profiler::gui
             m_rows.PushBack(core::Move(row));
             if (!IsOpen(node))
                 return;
-            // Children by their total, the longest first.
+            // Sort the children by total time, longest first.
             Array<u32> children;
             for (const u32 child : node.children)
                 children.PushBack(child);
@@ -690,7 +692,7 @@ export namespace foundation::profiler::gui
         ScopeColumn m_sort = ScopeColumn::Name;
         bool m_descending = true;
         String m_filter;
-        Array<u64> m_toggled; // nodes folded or opened against their default, by their place
+        Array<u64> m_toggled; // keys of the nodes folded or opened against their default
         f32 m_scroll = 0.0f;
         i32 m_hovered = -1;
 

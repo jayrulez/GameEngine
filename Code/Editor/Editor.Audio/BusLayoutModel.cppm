@@ -3,13 +3,13 @@
 
 // Editor::Audio - :bus_layout_model partition.
 //
-// The rules a bus layout's page edits by, apart from the page (Documentation/Specs/editor-gui.md,
-// 5.4, layer 5): the four fixed buses (Master, and Effects, Music and UI under it), a custom bus a
-// named slot under a fixed bus or another custom one, the tree they make, and the edits that keep it
-// one: a bus added in the first empty slot, one taken out (its children moving to Master), one
-// renamed (its children following the name), one moved under another (never under itself or its
-// own children: a cycle fails the cook). Pure functions over the asset, which the page's tests and
-// its edits share.
+// The rules the bus layout page edits by, kept apart from the page. There are four fixed buses
+// (Master, with Effects, Music and UI under it), and a custom bus is a named slot under a fixed bus
+// or another custom one. These functions build the tree the buses make and perform the edits that
+// keep it a tree: add a bus in the first empty slot, remove one (its children move to Master),
+// rename one (its children follow the name), and move one under another (never under itself or its
+// own descendants, since a cycle fails the cook). They are pure functions over the asset, shared by
+// the page's edits and its tests.
 
 module;
 #include "Core/Prelude.h"
@@ -74,7 +74,7 @@ export namespace editor
         return false;
     }
 
-    /// The custom slot named `name`, or -1 (a fixed name, an unknown one, an empty one).
+    /// The custom slot named `name`, or -1 for a fixed name, an unknown one or an empty one.
     [[nodiscard]] inline i32 FindBusSlot(const pipeline::AudioBusLayoutAsset& asset, StringView name)
     {
         if (name.IsEmpty() || IsFixedBusName(name))
@@ -109,7 +109,7 @@ export namespace editor
         return bus.slot >= 0 && static_cast<usize>(bus.slot) < pipeline::kAudioCustomBusSlotCount ? asset.custom[bus.slot].name.AsView() : StringView{};
     }
 
-    /// The layout's settings of `bus` (null: no such bus).
+    /// The layout's settings for `bus` (null when there is no such bus).
     [[nodiscard]] inline pipeline::AudioBusLayoutAsset::Bus* BusSettings(pipeline::AudioBusLayoutAsset& asset, const BusRef& bus)
     {
         switch (bus.fixed)
@@ -159,8 +159,8 @@ export namespace editor
             children(children, kFixedBusNames[f], 2);
         }
         children(children, kFixedBusNames[0], 1);
-        // Buses in a cycle (each under another of them) are reached from no fixed bus: shown under
-        // Master all the same, to be moved out of it (the cook fails until they are).
+        // Buses in a cycle (each under another of them) cannot be reached from a fixed bus. They are
+        // still shown under Master so they can be moved out of the cycle (the cook fails until they are).
         for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
         {
             if (asset.custom[i].name.IsEmpty())
@@ -196,8 +196,8 @@ export namespace editor
         return choices;
     }
 
-    /// A custom bus in the first empty slot, named "Bus N" (the first N free) under Master; its slot,
-    /// or -1 when every slot is in use.
+    /// Adds a custom bus under Master in the first empty slot, named "Bus N" with the first free N.
+    /// Returns its slot, or -1 when every slot is in use.
     inline i32 AddBus(pipeline::AudioBusLayoutAsset& asset)
     {
         for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
@@ -219,7 +219,7 @@ export namespace editor
         return -1;
     }
 
-    /// Takes custom slot `slot` out; its children move to Master.
+    /// Removes custom slot `slot`; its children move to Master.
     inline void RemoveBus(pipeline::AudioBusLayoutAsset& asset, i32 slot)
     {
         if (slot < 0 || static_cast<usize>(slot) >= pipeline::kAudioCustomBusSlotCount || asset.custom[slot].name.IsEmpty())
@@ -231,8 +231,8 @@ export namespace editor
         asset.custom[slot] = pipeline::AudioBusLayoutAsset::CustomBusSlot{};
     }
 
-    /// Renames custom slot `slot`, its children following the name; false (nothing changed) for an
-    /// empty name, a fixed bus's or another bus's.
+    /// Renames custom slot `slot`, and its children follow the name. False (nothing changed) for an
+    /// empty name, a fixed bus's name or another bus's name.
     inline bool RenameBus(pipeline::AudioBusLayoutAsset& asset, i32 slot, StringView name)
     {
         if (slot < 0 || static_cast<usize>(slot) >= pipeline::kAudioCustomBusSlotCount || asset.custom[slot].name.IsEmpty())

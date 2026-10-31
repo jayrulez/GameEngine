@@ -15,7 +15,7 @@ struct GpuLight {
     float3 positionWS; float range;
     float3 color;      float intensity;
     float3 directionWS;float type;           // 0=Directional, 1=Point, 2=Spot
-    float innerCos; float outerCos; float shadowIndex; float shadowStrength; // as lighting.hlsli
+    float innerCos; float outerCos; float shadowIndex; float shadowStrength; // as in lighting.hlsli
 };
 StructuredBuffer<GpuLight> Lights               : register(t0);
 RWStructuredBuffer<uint2>  ClusterOffsetsRW      : register(u0);
@@ -72,7 +72,7 @@ void main(uint3 dtid : SV_DispatchThreadID) {
         bool hit;
         if (L.type < 0.5) {                                  // directional: affects every cluster
             hit = true;
-        } else {                                             // point / spot: bounding sphere vs AABB
+        } else {                                             // point / spot: bounding sphere against AABB
             float3 posV = mul(float4(L.positionWS, 1.0), ViewMatrix).xyz;
             hit = SphereVsAABB(posV, L.range, aabbMin, aabbMax);
         }

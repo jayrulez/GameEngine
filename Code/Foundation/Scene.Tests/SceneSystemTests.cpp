@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Systems wired into the Scene: ownership + lookup, the phase-ordered update
+// Systems wired into the Scene: ownership and lookup, the phase-ordered update
 // loop, deferred destroy during update, entity-destroy freeing components, active-change
-// + start/stop notification, UpdateOrder, and simulation gating.
+// and start/stop notification, UpdateOrder, and simulation gating.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -97,7 +97,7 @@ TEST_CASE("destroying an entity frees its component via the manager")
     mgr->Add(e);
     CHECK(mgr->Has(e));
 
-    scene.DestroyEntity(e); // not during update -> immediate
+    scene.DestroyEntity(e); // not during update, so immediate
     CHECK_FALSE(mgr->Has(e));
     CHECK(mgr->destroyed == 1);
 }
@@ -184,7 +184,7 @@ TEST_CASE("systems run within a phase in UpdateOrder")
     };
     Scene scene{DefaultAllocator()};
     scene.AddSystem<Ordered>(10, &order); // added first, but higher order
-    scene.AddSystem<Ordered>(-5, &order); // added second, lower order -> runs first
+    scene.AddSystem<Ordered>(-5, &order); // added second, lower order, runs first
     scene.Update(0.016f);
     REQUIRE(order.Size() == 2);
     CHECK(order[0] == -5);
@@ -194,8 +194,8 @@ TEST_CASE("systems run within a phase in UpdateOrder")
 TEST_CASE("scene: Events() is the BORROWED scope bus - null unwired, never drained by the scene")
 {
     // No owned fallback: a scene holds only the scope's borrowed bus; unwired scenes have a
-    // null Events() and never emit; the scene NEVER drains (only the owning scope does) -
-    // fixtures inject a bus, exercising the exact runtime topology.
+    // null Events() and never emit; the scene never drains (only the owning scope does).
+    // Fixtures inject a bus, as the runtime does.
     namespace messaging = foundation::messaging;
 
     Scene scene{DefaultAllocator()};
@@ -208,7 +208,7 @@ TEST_CASE("scene: Events() is the BORROWED scope bus - null unwired, never drain
     (void)scope.Subscribe(StringHash(u8"Ping"), [&](const Variant&) { ++fired; });
     scene.Events()->Publish(StringHash(u8"Ping"), Variant{});
     scene.Update(0.016f);
-    CHECK(fired == 0);                 // the scene did NOT drain - scopes drain
+    CHECK(fired == 0);                 // the scene did not drain; scopes drain
     CHECK(scope.PendingCount() == 1u); // still queued for the owning scope
     scope.Drain();
     CHECK(fired == 1);

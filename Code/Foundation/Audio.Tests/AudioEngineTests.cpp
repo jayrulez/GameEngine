@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.audio core tests: the HEADLESS engine (no device - Update() pumps the mixer,
+// foundation.audio core tests on the headless engine (no device; Update() pumps the mixer,
 // so the whole voice state machine runs deterministically): handle validity across slot
-// generations, the Traktor steal policy (free -> lower priority -> farthest same
-// priority), fade-then-reap on stop, pause/resume, recent-play dedupe, buses, per-scene
-// groups, streamed voices through the IAudioStreamSource seam, and the codec helpers.
+// generations, the steal policy (a free slot, then a lower priority, then the farthest of
+// the same priority), fade-then-reap on stop, pause and resume, recent-play dedupe, buses,
+// per-scene groups, streamed voices through IAudioStreamSource, and the codec helpers.
 
 #include <doctest/doctest.h>
 
@@ -175,7 +175,7 @@ TEST_CASE("audio.engine: a one-shot plays, reaches its end, and reaps - the slot
     CHECK_FALSE(engine.IsValidHandle(first));
     CHECK(engine.ActiveVoiceCount() == 0u);
 
-    // The freed slot comes back with a NEW generation: same slot, old handle stays dead.
+    // The freed slot comes back with a new generation: same slot, old handle stays dead.
     const VoiceHandle second = engine.Play(clip);
     REQUIRE(second.IsValid());
     CHECK(second.slot == first.slot);
@@ -258,9 +258,9 @@ TEST_CASE("audio.engine: steal policy - free slot, then lowest lower priority, t
     REQUIRE(voiceB.IsValid());
     CHECK(engine.ActiveVoiceCount() == 2u);
 
-    // Pool full: a HIGHER-priority play steals the LOWEST priority below it (A at 10).
-    // FADED steal: A's handle dies at once but its ma_sound is NOT uninitialized yet -
-    // it fades on the dying side list while C already plays (no click, brief overlap).
+    // Pool full: a higher-priority play steals the lowest priority below it (A at 10).
+    // The steal fades: A's handle dies at once, but its ma_sound is not uninitialized yet;
+    // it fades on the dying side list while C already plays (no click, a brief overlap).
     AudioPlayParams high;
     high.priority = 30;
     high.loop = true;
@@ -278,7 +278,7 @@ TEST_CASE("audio.engine: steal policy - free slot, then lowest lower priority, t
     }
     CHECK(engine.DyingVoiceCount() == 0u);
 
-    // Pool full of strictly-higher priorities: the new play is REJECTED.
+    // Pool full of strictly higher priorities: the new play is rejected.
     AudioPlayParams lowest;
     lowest.priority = 5;
     CHECK_FALSE(engine.Play(clipD, lowest).IsValid());
@@ -311,7 +311,7 @@ TEST_CASE("audio.engine: same-priority contention steals the voice FARTHEST from
     REQUIRE(newVoice.IsValid());
     CHECK(engine.IsValidHandle(nearVoice));      // near survived
     CHECK_FALSE(engine.IsValidHandle(farVoice)); // far was stolen
-    CHECK(engine.DyingVoiceCount() == 1u);       // ... but its tail fades, no hard cut
+    CHECK(engine.DyingVoiceCount() == 1u);       // but its tail fades, with no hard cut
 }
 
 TEST_CASE("audio.engine: faded steal - the dying list is capacity-bounded (oldest "
@@ -345,14 +345,14 @@ TEST_CASE("audio.engine: faded steal - the dying list is capacity-bounded (oldes
     CHECK(engine.DyingVoiceCount() == 0u);
     CHECK(engine.IsPlaying(last));
 
-    // A PAUSED victim is already silent: stealing it never busies the dying list.
+    // A paused victim is already silent: stealing it never busies the dying list.
     engine.SetPaused(last, true);
     const VoiceHandle successor = engine.Play(clips[0], params);
     REQUIRE(successor.IsValid());
     CHECK_FALSE(engine.IsValidHandle(last));
     CHECK(engine.DyingVoiceCount() == 0u);
 
-    // Capacity 0 = the legacy immediate cut.
+    // Capacity 0 cuts at once.
     AudioEngineSettings immediate = HeadlessSettings(/*voiceCount=*/1, /*streamVoiceCount=*/0);
     immediate.dyingVoiceCapacity = 0;
     AudioEngine hardEngine(DefaultAllocator(), immediate);
@@ -387,8 +387,8 @@ TEST_CASE("audio.engine: recent-play dedupe merges same-clip plays inside the wi
 TEST_CASE("audio.engine: dedupe opt-out - persistent sources sharing a clip stay distinct")
 {
     // The component path plays with allowDedupe=false: four authored emitters sharing
-    // one clip autoplay in the SAME instant and must each get their own voice (the
-    // one-shot window silently collapsed all-but-one emitter - the AudioPlayground bug).
+    // one clip autoplay in the same instant and must each get their own voice (the
+    // one-shot window would merge all but one of them).
     AudioEngineSettings settings = HeadlessSettings();
     settings.dedupeWindowSeconds = 1.0f / 30.0f;
     AudioEngine engine(DefaultAllocator(), settings);
@@ -411,7 +411,7 @@ TEST_CASE("audio.engine: dedupe opt-out - persistent sources sharing a clip stay
         CHECK_FALSE(voices[i] == voices[0]);
     }
 
-    // Opt-out plays must not ARM the window either: a later defaulted (dedupe-eligible)
+    // Opt-out plays must not arm the window either: a later defaulted (dedupe-eligible)
     // play still creates a fresh voice instead of merging into a persistent source.
     AudioPlayParams oneShot;
     const VoiceHandle shot = engine.Play(clip, oneShot);
@@ -430,7 +430,7 @@ TEST_CASE("audio.engine: voice parameter setters land (volume/pitch/pan/position
     AudioPlayParams params;
     params.spatial = true;
     params.loop = true;
-    params.pitch = 1.5f; // real resampling, not stored-and-ignored
+    params.pitch = 1.5f; // resamples
     params.volume = 0.75f;
 
     const VoiceHandle voice = engine.Play(clip, params);
@@ -743,7 +743,8 @@ TEST_CASE("audio.engine: streamed clips play from an IAudioStreamSource through 
     CHECK(engine.IsPlaying(voice));
 
     // The stream pool is its own contention domain: a second stream play cannot steal
-    // a same-priority spatial=false voice... but CAN reject when full of higher priority.
+    // a same-priority non-spatial voice, but is rejected when the pool is full of higher
+    // priority.
     AudioPlayParams lower;
     lower.bus = AudioBus::Music;
     lower.priority = 1;
@@ -852,7 +853,7 @@ TEST_CASE("audio.engine: distance low-pass glides open -> floor across [min, max
     CHECK(status.lowpassCutoffHz > 4100.0f);
     CHECK(status.lowpassCutoffHz < openCutoff - 100.0f);
 
-    // 0 Hz disables the filter entirely - no node, no cutoff reported.
+    // 0 Hz disables the filter entirely: no node, no cutoff reported.
     AudioPlayParams unfiltered = params;
     unfiltered.distanceLowpassHz = 0.0f;
     const VoiceHandle plain = engine.Play(clip, unfiltered);
@@ -961,7 +962,7 @@ TEST_CASE("audio.engine: VoiceStatus.cursorSeconds is the TRUE voice cursor - it
     CHECK(start >= 0.0f);
     CHECK(start < 0.05f);
 
-    // Pump ~0.3 s of mixing: the cursor advances with the DATA, not wall time.
+    // Pump ~0.3 s of mixing: the cursor advances with the data, not wall time.
     for (int i = 0; i < 18; ++i)
     {
         engine.Update(1.0f / 60.0f);
@@ -1087,7 +1088,7 @@ TEST_CASE("audio.engine: a layout rebuild keeps voices ALIVE - kept buses update
     REQUIRE(onDrums.IsValid());
     REQUIRE(onVoices.IsValid());
 
-    // Rebuild WITHOUT "voices": drums persists (voice keeps its name), the removed
+    // Rebuild without "voices": drums persists (voice keeps its name), the removed
     // bus's voice survives on its fixed fallback (busName clears).
     AudioBusLayout rebuilt;
     AudioNamedBus drumsKept;
@@ -1124,11 +1125,11 @@ TEST_CASE("audio.engine: custom-bus degenerates defuse - parent cycles land on M
     b.parent = String(u8"a"); // a <-> b cycle
     AudioNamedBus orphan;
     orphan.name = String(u8"orphan");
-    orphan.parent = String(u8"ghost"); // unknown parent -> Master
+    orphan.parent = String(u8"ghost"); // unknown parent: Master
     AudioNamedBus dupe;
-    dupe.name = String(u8"a"); // duplicate -> skipped
+    dupe.name = String(u8"a"); // duplicate: skipped
     AudioNamedBus shadow;
-    shadow.name = String(u8"Effects"); // shadows a fixed bus -> skipped
+    shadow.name = String(u8"Effects"); // shadows a fixed bus: skipped
     layout.customBuses.PushBack(a);
     layout.customBuses.PushBack(b);
     layout.customBuses.PushBack(orphan);
@@ -1219,7 +1220,7 @@ TEST_CASE("audio.engine: a run reaches its custom-bus voices through the graph, 
     AudioPlayParams params;
     params.loop = true;
     params.busName = String(u8"drums");
-    params.sceneGroup = scene; // scene child -> run child -> drums -> Music
+    params.sceneGroup = scene; // through the scene's child, the run's child, drums, then Music
     const VoiceHandle voice = engine.Play(clip, params);
     AudioPlayParams otherParams = params;
     otherParams.sceneGroup = 0;
@@ -1343,7 +1344,7 @@ TEST_CASE("audio.cue: weighted resolution - no-repeat, sequential, jitter, degen
     CHECK(ResolveSoundCue(cue, rng, -1, cursor).variantIndex == 3);
     CHECK(ResolveSoundCue(cue, rng, -1, cursor).variantIndex == 0);
 
-    // No playable variant -> -1.
+    // No playable variant gives -1.
     SoundCue empty;
     empty.variants.PushBack(SoundCueVariant{RefPtr<AudioClip>{}, 1.0f});
     CHECK(ResolveSoundCue(empty, rng, -1, cursor).variantIndex == -1);
@@ -1373,7 +1374,7 @@ TEST_CASE("audio.reverb: freeverb - dry passthrough at wet 0, a tail past the im
     }
     CHECK(tail == doctest::Approx(0.0f));
 
-    // wet > 0: energy exists WELL past the impulse (the reverb tail), for seconds.
+    // wet > 0: energy exists well past the impulse (the reverb tail), for seconds.
     FreeverbState wetReverb;
     wetReverb.Initialize(44100);
     params.wet = 0.8f;
@@ -1396,7 +1397,7 @@ TEST_CASE("audio.reverb: freeverb - dry passthrough at wet 0, a tail past the im
     }
     CHECK(longTail > 1.0e-6f);
 
-    // Heavier damping + smaller room: the same late window carries LESS energy.
+    // Heavier damping and a smaller room: the same late window carries less energy.
     FreeverbState dampedReverb;
     dampedReverb.Initialize(44100);
     params.roomSize = 0.2f;
@@ -1471,7 +1472,7 @@ TEST_CASE("audio.engine: per-voice reverb sends - splitter splices per voice, li
     wet.sceneGroup = sceneGroup;
     wet.reverbSend = 0.5f;
     wet.spatial = true;
-    wet.distanceLowpassHz = 4000.0f; // send + low-pass coexist in one chain
+    wet.distanceLowpassHz = 4000.0f; // send and low-pass coexist in one chain
     const VoiceHandle sending = engine.Play(clip, wet);
     REQUIRE(sending.IsValid());
     VoiceStatus status;
@@ -1512,8 +1513,8 @@ TEST_CASE("audio.engine: per-voice reverb sends - splitter splices per voice, li
     REQUIRE(engine.GetVoiceStatus(sending, status));
     CHECK(status.reverbSend == doctest::Approx(1.0f));
 
-    // Steal the SEND voice (pool of 2, both taken, higher priority incoming): its
-    // splitter+sound hand over to the dying list and reap cleanly.
+    // Steal the send voice (pool of 2, both taken, higher priority incoming): its
+    // splitter and sound hand over to the dying list and reap cleanly.
     AudioPlayParams high;
     high.loop = true;
     high.priority = 200;
@@ -1532,7 +1533,7 @@ TEST_CASE("audio.engine: per-voice reverb sends - splitter splices per voice, li
     engine.DestroySceneGroup(sceneGroup);
     engine.Update(1.0f / 60.0f);
 
-    // Sends OUTSIDE a scene group are inert (no send reverb to feed).
+    // Sends outside a scene group are inert (no send reverb to feed).
     AudioPlayParams global;
     global.loop = true;
     global.reverbSend = 0.8f;

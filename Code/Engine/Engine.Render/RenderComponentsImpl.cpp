@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Render - render.subsystem implementation unit: component reflection bodies.
+// Engine::Render - implementation unit: component reflection bodies.
 //
-// Kept OUT of the :components interface partition (REFLECT_* bodies make GCC emit a
-// gcm cluster; see gcc-module-interface-hygiene). RenderComponents.cppm declares
-// RegisterRenderComponentReflection(); this unit defines it + the RttiRegister* bodies.
+// Kept out of the :components interface partition (REFLECT_* bodies there make GCC emit a
+// gcm cluster). RenderComponents.cppm declares RegisterRenderComponentReflection(); this unit
+// defines it and the RttiRegister* bodies.
 
 module;
 #include "Core/Prelude.h"
@@ -20,9 +20,9 @@ import foundation.geometry;
 import foundation.materials;
 import foundation.rhi;
 import foundation.render;          // debug::DebugDraw (the DebugDraw facade wraps DebugScene's accumulator)
-import foundation.script;          // IScriptContext::GetService + CurrentScriptContext (the render service)
-import foundation.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
-import :subsystem;                 // RenderSubsystem + RenderScriptBinding (the DebugDraw facade target)
+import foundation.script;          // IScriptContext::GetService, CurrentScriptContext (the render service)
+import foundation.script.facades; // ComponentOf<T>, RegisterExtra* (the script `.of` surface)
+import :subsystem;                 // RenderSubsystem, RenderScriptBinding (the DebugDraw facade target)
 
 using namespace foundation::core;
 using namespace foundation::render;
@@ -30,9 +30,9 @@ namespace core = foundation::core;
 
 // ============================================================================================
 // Reflection (tooling: the editor inspector auto-generates property grids from these).
-// Pointer/RefPtr/array fields (mesh, material, textures, bone matrices) are deliberately not
-// reflected - they need resource-picker editors. NON-export namespace:
-// the macros expand static helpers (internal linkage), per the CoreReflection.cppm pattern.
+// Raw pointer fields (borrowed textures, bone matrices, pose pools) are not reflected: they are
+// runtime state. A non-exported namespace: the macros expand static helpers (internal linkage),
+// as in CoreReflection.cppm.
 // ============================================================================================
 namespace engine::render
 {
@@ -70,9 +70,9 @@ namespace engine::render
             .Attribute("description",
                        String(u8"Draws a mesh with its materials at the entity's transform."))
             .DataVersion(5) // v5: fade (v4: LOD knobs, v3: unified materials array)
-            // Script (Track A): MeshComponent.of(entity) -> a re-resolving handle; `color`/`visible`
-            // set live from a behavior. `mesh`/`materials` are resource refs - swapped via the
-            // resource-resolve primitive (Phase 1b), not this raw property.
+            // Script: MeshComponent.of(entity) returns a re-resolving handle; `color` and `visible`
+            // set live from a behavior. `mesh` and `materials` are resource refs, swapped through
+            // SceneRender.setMesh and setMaterial, not this raw property.
             .Method<&foundation::script::ComponentOf<MeshComponent>, MeshComponent>("of")
             .Property<&MeshComponent::mesh>("mesh")
             .Property<&MeshComponent::color>("color")
@@ -91,8 +91,8 @@ namespace engine::render
             .PropAttribute("displayName", String(u8"Force LOD"))
             .PropAttribute("description",
                            String(u8"Pin one LOD level (0 = finest). -1 = automatic selection."))
-            // The material slots as a reflected container - the generic list editor renders it. The
-            // description surfaces as the list's hover tooltip (the slot-0 / submesh semantics).
+            // The material slots as a reflected container, which the generic list editor renders. The
+            // description surfaces as the list's hover tooltip (the slot-0 and submesh semantics).
             .Nested<&MeshComponent::materials>("materials")
             .PropAttribute("description",
                            String(u8"Material slots, indexed by the mesh's submesh material index. "
@@ -154,7 +154,7 @@ namespace engine::render
             .Attribute("description",
                        String(u8"Views the scene from the entity, in perspective or "
                               u8"orthographic, onto the screen or a render texture."))
-            .DataVersion(2) // v1: projection + orthoHeight; v2: target + targetInterval
+            .DataVersion(2) // v1: projection and orthoHeight; v2: target and targetInterval
             .Method<&foundation::script::ComponentOf<CameraComponent>, CameraComponent>("of")
             // The mode first: the inspector shows only the fields of the chosen projection.
             .Property<&CameraComponent::projection>("projection")
@@ -188,7 +188,7 @@ namespace engine::render
             .Attribute("description",
                        String(u8"Lights the scene from the entity: directional, point or spot, "
                               u8"optionally casting shadows."))
-            // Script (Track A): LightComponent.of(entity) -> live color/intensity/range/enabled/etc.
+            // Script: LightComponent.of(entity) gives live color, intensity, range, enabled and the rest.
             .Method<&foundation::script::ComponentOf<LightComponent>, LightComponent>("of")
             .DataVersion(1) // v1: shadowDepthBiasScale, shadowNormalBias, shadowStrength
             .Property<&LightComponent::type>("type")
@@ -230,9 +230,10 @@ namespace engine::render
                                   u8"type (1 = default)"));
     }
 
-    // The scene-bound render handle: SceneRender.of(scene).setMesh(entity, id) / setMaterial(...).
-    // `of` returns SceneRender by value (concrete cross-backend return, no ReturnType-override), like
-    // ScenePhysics. setMesh/setMaterial are world ops keyed by entity that swap a resource::Ref by id.
+    // The scene-bound render handle: SceneRender.of(scene).setMesh(entity, id), setMaterial(...).
+    // `of` returns SceneRender by value (a concrete cross-backend return, no ReturnType override),
+    // like ScenePhysics. setMesh and setMaterial are world operations keyed by entity that swap a
+    // resource::Ref by id.
     REFLECT_VALUE(SceneRender, "rtti::engine::render")
     {
         builder.Method<&SceneRender::setMesh>("setMesh", {"entity", "resourceId"});
@@ -404,7 +405,7 @@ namespace engine::render
             "cross", {"x", "y", "z", "size", "r", "g", "b"});
         builder.Method<static_cast<void (DebugDraw::*)(f32, f32, f32, String, f32, f32, f32) const>(
             &DebugDraw::text)>("text", {"x", "y", "z", "label", "r", "g", "b"});
-        // Sedulous's by Float3 and Color, with overlay; each an arity family with ours.
+        // By Float3 and Color, with overlay; each forms an arity family with the numeric forms.
         builder.Method<static_cast<Segment>(&DebugDraw::line)>("line", {"from", "to", "color"});
         builder.Method<static_cast<SegmentOverlay>(&DebugDraw::line)>("line",
                                                                       {"from", "to", "color", "overlay"});
@@ -491,11 +492,11 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Environment"))
             .Attribute("category", String(u8"Rendering"))
-            // Script (Track A): EnvironmentSettings.of(scene) -> the scene's LIVE environment (edit
-            // ambient/sky/fog fields). A scene-scoped re-resolving handle (the settings are one-per-scene).
+            // Script: EnvironmentSettings.of(scene) gives the scene's live environment (edit its
+            // ambient, sky and fog fields). A scene-scoped re-resolving handle (the settings are one per scene).
             .Method<&EnvironmentSettingsOf, EnvironmentSettings>("of")
-            .DataVersion(6) // v6: source + profile (v5: shadow reach; v4: IBL lighting dimmers)
-            .ReadsDataVersionsFrom(4) // v4/v5 scenes read the defaults for what they lack
+            .DataVersion(6) // v6: source and profile (v5: shadow reach; v4: IBL lighting dimmers)
+            .ReadsDataVersionsFrom(4) // v4 and v5 scenes read the defaults for what they lack
             .Property<&EnvironmentSettings::source>("source")
             .PropAttribute("sceneOnly", true)
             .PropAttribute("description",
@@ -627,10 +628,10 @@ namespace engine::render
     {
         builder.Attribute("displayName", String(u8"Post Processing"))
             .Attribute("category", String(u8"Rendering"))
-            .DataVersion(4) // v4: source + profile (v3: SSGI; v2: auto-exposure + grading)
+            .DataVersion(4) // v4: source and profile (v3: SSGI; v2: auto-exposure and grading)
             .ReadsDataVersionsFrom(3) // a v3 scene reads source Scene
-            // Script (Track A): PostProcessSettings.of(scene) -> the scene's LIVE post settings (edit
-            // exposure/tonemap/bloom/AA). A scene-scoped re-resolving handle.
+            // Script: PostProcessSettings.of(scene) gives the scene's live post settings (edit
+            // exposure, tonemap, bloom, AA). A scene-scoped re-resolving handle.
             .Method<&PostProcessSettingsOf, PostProcessSettings>("of")
             .Property<&PostProcessSettings::source>("source")
             .PropAttribute("sceneOnly", true)
@@ -788,7 +789,7 @@ namespace engine::render
                 {
                     return;
                 }
-                // The ray in the mesh's space, its direction NOT normalized: distances along it
+                // The ray in the mesh's space, its direction not normalized: distances along it
                 // stay world distances along the world ray.
                 const Float4x4 world = scene.ComposeWorldMatrix(entity);
                 const Float4x4 toLocal = Inverse(world);
@@ -872,11 +873,11 @@ namespace engine::render
 
     void RegisterRenderScriptFacade()
     {
-        RegisterRenderComponentReflection(); // ensure component TypeData (incl `of`) is built first
-        // Surface the render COMPONENTS to script (Track A: MeshComponent.of(entity), ...): register
-        // them (both backends emit registry types), seed the emission roots (nothing else
-        // reaches an of()-only type), and make their class names import-visible in behavior preludes.
-        // The WHOLE render component set - each `.of(entity)` exposes its editor-reflected properties.
+        RegisterRenderComponentReflection(); // ensure component TypeData (including `of`) is built first
+        // Surface the render components to scripts (MeshComponent.of(entity), ...): register them
+        // (both backends emit registry types), seed the emission roots (nothing else reaches an
+        // of()-only type), and make their class names import-visible in behavior preludes. The whole
+        // render component set: each `.of(entity)` exposes its editor-reflected properties.
         struct RenderComponentEntry
         {
             const core::TypeInfo* type;
@@ -912,9 +913,9 @@ namespace engine::render
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<DebugDraw>());
         foundation::script::RegisterExtraFacadeName(u8"DebugDraw");
 
-        // The render scene-SYSTEM settings handles (EnvironmentSettings.of(scene) / PostProcess-
-        // Settings.of(scene)): register + seed the emission root + name for the prelude. Their
-        // TypeData (incl `of`) was built by RegisterRenderComponentReflection above.
+        // The render scene systems' settings handles (EnvironmentSettings.of(scene) and
+        // PostProcessSettings.of(scene)): register, seed the emission root and name for the prelude.
+        // Their TypeData (including `of`) was built by RegisterRenderComponentReflection above.
         const core::TypeInfo* settings[] = {&core::TypeOf<EnvironmentSettings>(),
                                             &core::TypeOf<PostProcessSettings>()};
         const core::StringView settingsNames[] = {u8"EnvironmentSettings", u8"PostProcessSettings"};

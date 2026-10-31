@@ -3,11 +3,11 @@
 
 // Pipeline::Fonts - reflection implementation unit: FontAsset's reflected surface.
 //
-// Kept OUT of the FontAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster;
-// see gcc-module-interface-hygiene). The class declares identity via RTTI_OBJECT in the
-// interface; this unit defines FontAsset::StaticType() WITH properties + tooling attributes, plus
-// the FontBakeMode enum reflection.
-// TODO: the `sizes` ramp (Array<f32>) is unreflected - array container properties need editor
+// Kept out of the FontAsset.cppm interface, because REFLECT_MEMBERS bodies there make GCC emit a
+// gcm cluster. The class declares identity with RTTI_OBJECT in the interface; this unit defines
+// FontAsset::StaticType() with properties and tooling attributes, and the FontBakeMode enum
+// reflection.
+// TODO: the `sizes` ramp (Array<f32>) is unreflected; array container properties need editor
 // support beyond the flat-field pass.
 
 module;
@@ -31,9 +31,8 @@ namespace pipeline{
 
     REFLECT_MEMBERS(FontAsset, "rtti::pipeline::fonts")
     {
-        // v1 (2026-09-06): the distance-field size key is "distanceFieldSize"; v0 payloads
-        // read the abbreviated "dfSize" in Serialize. v2 (2026-10-16): "distanceFieldRange"; v1
-        // payloads read on (the legacy reader) and take the 4-texel default.
+        // v1: the distance-field size key is "distanceFieldSize". v2 adds "distanceFieldRange";
+        // v1 payloads still read (the legacy reader) and take the 4-texel default.
         builder.DataVersion(2)
             .ReadsDataVersionsFrom(1)
             .Attribute("displayName", String(u8"Font"))

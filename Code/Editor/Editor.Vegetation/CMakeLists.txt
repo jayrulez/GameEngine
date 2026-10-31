@@ -1,8 +1,8 @@
 # Editor::Vegetation - `editor.vegetation`: the scene-viewport Paint Vegetation brush
 # (VegetationPaintTool, tool id "vegetation.paint": paint / erase / smooth one plane of the terrain's
 # vegetation mask, one command per stroke, the mask written back to its source asset on Save, the
-# touched chunks regrown live) and its settings panel. The terrain brushes' shape (Editor::Terrain).
-# And the vegetation mask's page (Documentation/Specs/editor-gui.md, 5.4, layer 7, part 2).
+# touched chunks regrown live) and its settings panel, shaped like the terrain brushes
+# (Editor::Terrain); and the vegetation mask's page.
 util_add_engine_library(Editor.Vegetation ALIAS Editor::Vegetation)
 target_link_libraries(Editor.Vegetation PUBLIC
     Foundation::Core Foundation::Content

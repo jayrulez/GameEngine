@@ -1,5 +1,5 @@
 
-# Backend-neutral: the script-facade acceptance test moved to Integration::ScriptFacades.
+# Backend-neutral: the script-facade acceptance test lives in Integration.ScriptFacades.
 add_executable(Net.Manager.Tests TestsMain.cpp ManagerTests.cpp ReplicationWiringTests.cpp WebSocketJoinTests.cpp)
 target_link_libraries(Net.Manager.Tests PRIVATE Foundation::Net.Manager Foundation::Net.Tls.MbedTLS doctest::doctest)
 target_compile_definitions(Net.Manager.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

@@ -1,11 +1,10 @@
-# WebScene - the FULL-RENDERER exercise scene (WebSceneApp.h), built for BOTH targets:
-#   - desktop (Main.cpp): `WebScene --vulkan` vs `--webgpu` compares the same scene per backend,
+# WebScene - the scene that exercises the full renderer (WebSceneApp.h), built for both targets:
+#   - desktop (Main.cpp): `WebScene --vulkan` or `--webgpu` compares the same scene per backend,
 #     and OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 runs the browser's WGSL shader path
-#     on wgpu-native - the fast local repro for web-render bugs.
-#   - web (WebMain.cpp): the same app on WebShell + the rAF runner, bundling a cooked WGSL
+#     on wgpu-native, the fast local repro for web-render bugs.
+#   - web (WebMain.cpp): the same app on WebShell and the rAF runner, bundling a cooked WGSL
 #     shaders.dpak (no compiler in the browser). ASYNCIFY for the synchronous GPU waits.
-# The ImGui tweak panel links when the extension option is on (both targets - the web build
-# climbed the extension too).
+# The ImGui tweak panel links when the extension option is on, on both targets.
 
 set(_webscene_common_libs
     Foundation::Core
@@ -41,7 +40,7 @@ if(EMSCRIPTEN)
         target_link_libraries(WebScene PRIVATE Extensions::Imgui)
     endif()
 
-    # Cook the WGSL shader pack with the NATIVE tool (the browser has no compiler) and bundle it
+    # Cook the WGSL shader pack with the native tool (the browser has no compiler) and bundle it
     # into the virtual FS at /Data/Engine/Shaders/shaders.dpak, where the shader host finds it. Tools.ShaderPack
     # must be built first by any desktop preset (a native authoring tool, never built for wasm).
     set(_web_shader_pack "${CMAKE_CURRENT_BINARY_DIR}/shaders.dpak")
@@ -65,21 +64,21 @@ if(EMSCRIPTEN)
 
     target_link_options(WebScene PRIVATE
         "--shell-file=${_web_shell}"
-        "-sASYNCIFY"              # synchronous device init + per-frame GPU fence waits yield to the browser
-        # ASYNCIFY unwinds the WHOLE C++ stack into this buffer on every emscripten_sleep. The full
+        "-sASYNCIFY"              # synchronous device init and per-frame GPU fence waits yield to the browser
+        # ASYNCIFY unwinds the whole C++ stack into this buffer on every emscripten_sleep. The full
         # renderer's GPU-completion pump (PumpUntilWithDevice) yields from deep inside the render frame
         # (app -> render subsystem -> render frame -> passes -> RHI -> WebGPU), which overflows the 4 KB
         # default and traps as "unreachable". 1 MB comfortably fits the deepest render path.
         "-sASYNCIFY_STACK_SIZE=1048576"
         "-sALLOW_MEMORY_GROWTH=1"
         "-sASSERTIONS=1"
-        "-lwebsocket.js"          # the browser WS client socket (JoinServer on web)
+        "-lwebsocket.js"          # the browser WebSocket client socket (JoinServer on web)
         # The data tree at the layout every executable discovers (Data/.dataroot at "/Data"):
         # the cooked WGSL pack under Data/Engine/Shaders, exactly where a dist stages it.
         "--preload-file=${CMAKE_SOURCE_DIR}/Data/.dataroot@Data/.dataroot"
         "--preload-file=${_web_shader_pack}@Data/Engine/Shaders/shaders.dpak"
-        # The game-UI default font, at the exact dev-tree path the UI subsystem probes -
-        # without it the HUD renders shapes but no text (the startup warning).
+        # The game-UI default font, at the exact dev-tree path the UI subsystem probes;
+        # without it the HUD renders shapes but no text, and startup warns.
         "--preload-file=${CMAKE_SOURCE_DIR}/Data/Engine/Fonts/roboto/Roboto-Regular.ttf@Data/Engine/Fonts/roboto/Roboto-Regular.ttf")
 
     set_target_properties(WebScene PROPERTIES SUFFIX ".html")
@@ -94,6 +93,6 @@ else()
     if(OPTION_EXTENSION_IMGUI)
         target_link_libraries(WebScene PRIVATE Extensions::Imgui)
     endif()
-    util_copy_runtime_deps(WebScene) # SDL3 is vendored static now; no DLL to stage
+    util_copy_runtime_deps(WebScene) # SDL3 is vendored static; no DLL to stage
 
 endif()

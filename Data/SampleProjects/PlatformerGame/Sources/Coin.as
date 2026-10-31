@@ -1,15 +1,16 @@
-// Coin - a pickup: it spins and bobs, and when the player comes within reach it is collected
-// ("CoinCollected") and gone. On the coin's entity, whose first child is the Coin model.
+// Coin: a pickup that spins and bobs. When the player comes within reach it is collected
+// ("CoinCollected") and disappears. The script sits on the coin's entity, whose first child is the
+// Coin model.
 // FX/FxCoinSparkle: the burst where a coin was taken.
 Guid kCoinSparkle = Guid("245b459c-4b93-4876-9496-6e4eb3daa145");
 
 // Audio/powerUp7 (Kenney Digital Audio, CC0): the chime of a coin taken.
 Guid kCoinSound = Guid("6d963695-67f8-4b7f-9cf4-d234f8034116");
 
-// The hero looks at the nearest coin within its reach (an AimIkComponent on the Player) that it can
-// turn its head to: one in front of it, not too steep above or below. A coin behind it would twist
-// the head over backwards, so it does not count. Coins share these, one script module: the first
-// coin to update in a frame starts it over.
+// The hero looks at the nearest coin within reach (through an AimIkComponent on the Player) that it
+// can turn its head to: one in front of it, not too steeply above or below. A coin behind it would
+// twist the head over backwards, so it does not count. All coins share these globals, since they
+// are one script module; the first coin to update in a frame resets them.
 double g_lookFrame = -1.0;
 float g_lookNearest = 0.0f;
 
@@ -57,13 +58,14 @@ class Coin
             AimIkComponent@ aim = AimIkComponent::of(m_player);
             if (aim !is null)
             {
-                aim.active = false; // a coin still in reach takes the look back next frame
+                aim.active = false; // a coin still in reach takes over the look next frame
             }
             self.destroy();
         }
     }
 
-    // The nearest coin in reach this frame turns the hero's head to it; none, and the head eases back.
+    // The nearest coin in reach this frame turns the hero's head toward it; with none, the head
+    // eases back.
     private void look(float distance)
     {
         AimIkComponent@ aim = AimIkComponent::of(m_player);
@@ -86,9 +88,9 @@ class Coin
         }
     }
 
-    // Whether the hero can turn its head to this coin: the turn from its facing, and the angle
-    // above or below, each within its limit. The hero's centre stands in for its eyes (the head
-    // is about 0.1 m below it).
+    // Whether the hero can turn its head to this coin: both the turn away from its facing and the
+    // angle above or below must be within their limits. The hero's centre stands in for its eyes
+    // (the head is about 0.1 m below it).
     private bool inView()
     {
         Float3 to = self.worldPosition() - m_player.worldPosition();

@@ -290,13 +290,13 @@ export namespace foundation::rhi::vk
 
         bool HasCalibrationDomains() const
         {
-            // Ask for the entry point belonging to the extension THIS DEVICE advertised, not
-            // KHR-with-an-EXT-fallback. vkGetInstanceProcAddr answers for anything the LOADER
-            // knows, so the KHR name returns a valid trampoline even on a driver that only
-            // implements the EXT form - calling it then reaches an ICD with no such entry and the
-            // loader logs "ICD associated with VkPhysicalDevice does not support
-            // GetPhysicalDeviceCalibrateableTimeDomainsKHR". m_calibratedTimestamps already holds
-            // exactly which one queryExtensionSupport() saw in this device's extension list.
+            // Ask for the entry point of the extension this device advertised, not KHR with an EXT
+            // fallback. vkGetInstanceProcAddr answers for anything the loader knows, so the KHR
+            // name returns a valid trampoline even on a driver that implements only the EXT form;
+            // calling it then reaches an ICD with no such entry and the loader logs "ICD associated
+            // with VkPhysicalDevice does not support GetPhysicalDeviceCalibrateableTimeDomainsKHR".
+            // m_calibratedTimestamps holds the one queryExtensionSupport() found in this device's
+            // extension list.
             if (m_calibratedTimestamps == nullptr)
             {
                 return false;

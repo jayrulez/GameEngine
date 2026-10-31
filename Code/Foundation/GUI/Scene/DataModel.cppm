@@ -3,22 +3,21 @@
 
 // GUI - :data_model partition
 //
-// DataModel: a GUI's named values, which markup and scripts bind to (G5 of
-// Specs/vg-and-gui-lab.md, after RmlUi's data models). Each name is an observable value, so a
-// binding that reads `score` follows it with no subscription; a name read before it is set is
-// still followed, and takes its first value when one arrives. Values are Variants: whatever the
-// game, a script or a widget writes.
+// DataModel: a GUI's named values, which markup and scripts bind to. Each name is an observable
+// value, so a binding that reads `score` follows it without subscribing. A binding that reads a
+// name before it is set still follows it and picks up the first value when it arrives. Values are
+// Variants, written by the game, a script or a widget.
 //
-// The conversions bindings need live here too: a value meets a property of another type (a
-// script's number for a slider's f32, a count for a label's text), and two values compare across
-// numeric types, so writing back what was just read is no change.
+// The conversions that bindings need are here too. A value may feed a property of another type (a
+// script's number into a slider's f32, a count into a label's text), and values compare equal
+// across numeric types, so writing back a value that was just read is not a change.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:data_model;
 
-import foundation.core; // Variant, TypeInfo, TypeOf, String, Format, Array, UniquePtr
+import foundation.core;
 import :reactive;
 
 using namespace foundation::core;
@@ -28,7 +27,8 @@ export namespace foundation::gui
 {
     namespace detail
     {
-        // A numeric Variant's value as f64 (bool counts as 0 or 1); false when it holds no number.
+        // Reads a numeric Variant's value as f64 (a bool counts as 0 or 1). Returns false when it
+        // holds no number.
         [[nodiscard]] inline bool NumberOf(const Variant& v, f64& out)
         {
             if (const f64* d = v.TryGet<f64>()) { out = *d; return true; }
@@ -55,8 +55,8 @@ export namespace foundation::gui
         }
     }
 
-    /// `value` as text: a string as it is, a whole number without a fraction, another number in its
-    /// shortest form, a boolean as true or false; empty otherwise.
+    /// Formats `value` as text: a string as it is, a whole number without a fraction, another
+    /// number in its shortest form, and a boolean as true or false. Other types give empty text.
     [[nodiscard]] inline core::String FormatVariant(const Variant& value)
     {
         if (detail::IsText(value))
@@ -67,14 +67,15 @@ export namespace foundation::gui
         if (!detail::NumberOf(value, n))
             return {};
         if (const f32* f = value.TryGet<f32>(); f != nullptr && *f != static_cast<f32>(static_cast<i64>(*f)))
-            return Format(u8"{}", *f); // its own shortest form (0.4), not its widening's
+            return Format(u8"{}", *f); // the f32's shortest form (0.4), not that of its f64 widening
         if (Abs(n) < 1e15 && n == static_cast<f64>(static_cast<i64>(n)))
             return Format(u8"{}", static_cast<i64>(n));
         return Format(u8"{}", n); // the shortest form that reads back as the same number
     }
 
-    /// `value` as a Variant of `target`'s type: numbers convert among numeric types and from text,
-    /// anything formats to text, and numbers or "true"/"false" to bool. Empty when it cannot.
+    /// Converts `value` to a Variant of `target`'s type. Numbers convert among numeric types and
+    /// from text, anything formats to text, and numbers or "true"/"false" convert to bool. Returns
+    /// an empty Variant when no conversion applies.
     [[nodiscard]] inline Variant ConvertVariant(const Variant& value, const TypeInfo& target)
     {
         if (value.IsEmpty())
@@ -98,7 +99,7 @@ export namespace foundation::gui
         }
         if (!numeric)
             return {};
-        const i64 whole = static_cast<i64>(n < 0.0 ? n - 0.5 : n + 0.5); // to the nearest
+        const i64 whole = static_cast<i64>(n < 0.0 ? n - 0.5 : n + 0.5); // rounded to the nearest
         if (&target == &TypeOf<f32>()) return Variant::From<f32>(static_cast<f32>(n));
         if (&target == &TypeOf<f64>()) return Variant::From<f64>(n);
         if (&target == &TypeOf<i32>()) return Variant::From<i32>(static_cast<i32>(whole));
@@ -109,8 +110,9 @@ export namespace foundation::gui
         return {};
     }
 
-    /// Whether two values are the same value: numbers across numeric types, text by its bytes,
-    /// two empties; other types only when both are empty (they cannot be compared generically).
+    /// Whether two values are the same: numbers compare across numeric types, text compares by
+    /// bytes, and two empty values are equal. Other types are equal only when both are empty,
+    /// since they cannot be compared generically.
     [[nodiscard]] inline bool VariantsEqual(const Variant& a, const Variant& b)
     {
         if (a.IsEmpty() || b.IsEmpty())
@@ -123,7 +125,8 @@ export namespace foundation::gui
         return false;
     }
 
-    /// Shared by its GUIContext and every binding to it (MakeRef), so a binding never outlives it.
+    /// Shared by its GUIContext and every binding to it (MakeRef), so the model outlives every
+    /// binding.
     class DataModel : public RefCounted
     {
     public:
@@ -131,14 +134,16 @@ export namespace foundation::gui
         DataModel(const DataModel&) = delete;
         DataModel& operator=(const DataModel&) = delete;
 
-        /// The value named `name` (empty when unset); a read a binding records, set or not.
+        /// Returns the value named `name` (empty when unset). A binding records the read whether or
+        /// not the name is set.
         [[nodiscard]] Variant Get(core::StringView name)
         {
             Entry& entry = EntryFor(name);
             entry.Changed->Track();
             return entry.Value;
         }
-        /// Sets `name` (whatever reads it follows); false when it already held that value.
+        /// Sets `name`, and every binding that reads it follows. Returns false when it already held
+        /// that value.
         bool Set(core::StringView name, Variant value)
         {
             Entry& entry = EntryFor(name);
@@ -149,7 +154,8 @@ export namespace foundation::gui
             entry.Changed->Notify();
             return true;
         }
-        /// The value named `name`, read without a binding following it (a tween reading where it starts).
+        /// Returns the value named `name` without a binding recording the read (a tween reads its
+        /// start value this way).
         [[nodiscard]] Variant Peek(core::StringView name) const
         {
             for (const Entry& entry : m_entries)
@@ -157,8 +163,9 @@ export namespace foundation::gui
                     return entry.Value;
             return {};
         }
-        /// The tween now moving `name` (K3): a tween starting claims it, so the one before it sees it
-        /// was replaced and stops where it is. 0 when none has.
+        /// Records `owner` as the tween now animating `name`. A starting tween claims the name, so
+        /// the previous tween sees it was replaced and stops where it is. The owner is 0 when no
+        /// tween has claimed it.
         void ClaimTween(core::StringView name, u64 owner) { EntryFor(name).TweenOwner = owner; }
         [[nodiscard]] u64 TweenOwnerOf(core::StringView name) const
         {
@@ -181,8 +188,8 @@ export namespace foundation::gui
             core::String Name;
             Variant Value;
             bool HasValue = false;
-            u64 TweenOwner = 0; // the tween moving it (K3)
-            UniquePtr<Observable> Changed; // not movable: the entry array moves
+            u64 TweenOwner = 0; // the tween animating it
+            UniquePtr<Observable> Changed; // boxed because Observable is not movable and the entry array moves
         };
         Array<Entry> m_entries;
 

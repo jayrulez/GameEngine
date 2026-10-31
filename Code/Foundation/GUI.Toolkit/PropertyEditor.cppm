@@ -3,11 +3,11 @@
 
 // GUI.Toolkit - :property_editor partition
 //
-// A property grid's editors (T1 of Specs/gui-lab-evolution-3.md): the value part of a row, bound to
-// one property at a time (rows are pooled, so an editor shows one property, then another), editing
-// through its host as gestures (begun, previewed, committed or cancelled). The registry chooses an
-// editor in layers, as ezEngine's and Zero's do: by the property's hint, then by its kind, then a
-// row that says nothing fits; an application registers its own.
+// A property grid's editors. An editor is the value part of a row and is bound to one property at
+// a time; rows are pooled, so an editor shows one property and later another. It edits through its
+// host in gestures, which begin, preview, and then commit or cancel. The registry chooses an editor
+// in layers: by the property's hint, then by its kind, and otherwise a row that says nothing fits.
+// An application can register its own editors.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +24,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// What an editor edits through: its grid, which tracks the gesture and asks the source.
+    /// What an editor edits through: its grid, which tracks the gesture and forwards it to the
+    /// source.
     class IPropertyEditHost
     {
     public:
@@ -33,9 +34,10 @@ export namespace foundation::gui
         virtual void PreviewPropertyEdit(core::StringView path, const PropertyWrite& write) = 0;
         virtual void CommitPropertyEdit(core::StringView path, const PropertyWrite& write) = 0;
         virtual void CancelPropertyEdit(core::StringView path) = 0;
-        /// Changes a list (an insert, a removal, a move): one call, one undo entry.
+        /// Changes a list (an insert, a removal or a move). Each call is one undo entry.
         virtual bool EditPropertyList(core::StringView path, const ListEdit& edit) = 0;
-        /// What is under `path` and each one's value: what an editor covering its children shows.
+        /// Fills `out` with the properties under `path` and their values. An editor that covers its
+        /// children shows these.
         virtual void GetChildProperties(core::StringView path, core::Array<PropertyInfo>& out) const = 0;
         [[nodiscard]] virtual PropertyValue ReadPropertyValue(core::StringView path, PropertyKind kind) const = 0;
     };
@@ -57,17 +59,18 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::StringView GetPath() const noexcept { return m_path.AsView(); }
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
-        /// Being typed into: the grid then leaves what it shows alone as the values refresh (a
-        /// value typed is the edit's until Return or the focus leaving commits it).
+        /// Returns whether the editor is being typed into. While it is, the grid leaves what it shows
+        /// alone as the values refresh, because a typed value belongs to the edit until Return or
+        /// losing focus commits it.
         [[nodiscard]] virtual bool IsTyping() const { return false; }
 
     protected:
         [[nodiscard]] IPropertyEditHost* GetHost() const noexcept { return m_host; }
 
-        /// Shows a property and its value; read only, it shows and does not edit.
+        /// Shows a property and its value. A read-only editor shows the value but does not edit it.
         virtual void OnBind(const PropertyInfo& info, const PropertyValue& value) = 0;
 
-        // The gesture, through the host. Apply is one begun and committed at once (a click).
+        // The gesture, sent through the host. Apply begins and commits an edit at once (for a click).
         void BeginEdit()
         {
             if (m_host != nullptr && !m_readOnly)
@@ -101,7 +104,7 @@ export namespace foundation::gui
         bool m_readOnly = false;
     };
 
-    /// What a kind is called (the fallback row's words).
+    /// Returns a kind's name, as the fallback row shows it.
     [[nodiscard]] inline core::StringView PropertyKindName(PropertyKind kind) noexcept
     {
         switch (kind)
@@ -134,7 +137,8 @@ export namespace foundation::gui
         return core::StringView(u8"value");
     }
 
-    /// The row of a property no editor takes: it says so, the hint or the kind it could not fit.
+    /// The row of a property that no editor takes. It says so, naming the hint or the kind it
+    /// could not fit.
     class UnknownPropertyEditor : public PropertyEditor
     {
         RTTI_OBJECT(UnknownPropertyEditor, PropertyEditor)
@@ -167,8 +171,8 @@ export namespace foundation::gui
     /// static constexpr member from a shared library).
     inline constexpr u32 kPropertyEditorRegistryNoEditor = 0;
 
-    /// The editors a grid chooses from. Each registered editor has a type of row of its own (its
-    /// pool), numbered from 1; 0 is the row no editor takes.
+    /// The editors a grid chooses from. Each registered editor has its own row type (and so its own
+    /// pool), numbered from 1; 0 is the row for properties no editor takes.
     class PropertyEditorRegistry
     {
     public:
@@ -177,17 +181,20 @@ export namespace foundation::gui
         PropertyEditorRegistry() = default;
         explicit PropertyEditorRegistry(core::IAllocator& allocator) : m_entries(allocator) {}
 
-        /// The editor for properties hinted `hint`, before their kind's (replaces one of the hint).
-        /// One that `coversChildren` shows what is under the property itself: its row has no
-        /// chevron and no rows under it (a Float3's three fields on one row).
+        /// Registers the editor for properties hinted `hint`, chosen before their kind's editor. It
+        /// replaces any editor already registered for the hint. An editor registered with
+        /// `coversChildren` shows what is under the property itself, so its row has no chevron and
+        /// no rows under it (a Float3's three fields on one row).
         void RegisterHint(core::StringView hint, PropertyEditorFactory factory, bool coversChildren = false)
         {
             Register(core::String(hint), false, PropertyKind::Group, core::Move(factory), coversChildren);
         }
-        /// The editor for properties of `kind` that no hint takes (replaces the kind's).
+        /// Registers the editor for properties of `kind` that no hint takes, replacing any editor
+        /// already registered for the kind.
         void RegisterKind(PropertyKind kind, PropertyEditorFactory factory) { Register(core::String{}, true, kind, core::Move(factory), false); }
 
-        /// The editor `info` takes: by its hint, then its kind; kNoEditor when none.
+        /// Returns the editor type for `info`, chosen by its hint and then its kind, or kNoEditor when
+        /// none fits.
         [[nodiscard]] u32 Choose(const PropertyInfo& info) const
         {
             if (info.Hint.Size() != 0)
@@ -199,9 +206,9 @@ export namespace foundation::gui
                     return static_cast<u32>(i + 1);
             return kNoEditor;
         }
-        /// Whether the editor of `type` shows what is under its property.
+        /// Returns whether the editor of `type` shows what is under its property.
         [[nodiscard]] bool CoversChildren(u32 type) const noexcept { return type != kNoEditor && type <= m_entries.Size() && m_entries[type - 1].CoversChildren; }
-        /// A new editor of `type` (Choose's answer).
+        /// Makes a new editor of `type`, as returned by Choose.
         [[nodiscard]] core::RefPtr<PropertyEditor> Create(u32 type, core::IAllocator& allocator) const
         {
             if (type != kNoEditor && type <= m_entries.Size() && m_entries[type - 1].Factory)
@@ -209,7 +216,8 @@ export namespace foundation::gui
                     return made;
             return core::MakeRef<UnknownPropertyEditor>(allocator);
         }
-        /// Counts the changes: a grid whose pools were made before one starts them again.
+        /// Returns a count of registry changes. A grid whose pools were made before a change rebuilds
+        /// them.
         [[nodiscard]] u32 GetGeneration() const noexcept { return m_generation; }
 
     private:

@@ -1,6 +1,6 @@
 # Engine::Integration - `engine.integration`: cross-subsystem composition
-# helpers owned by the app. Depends on BOTH sides of each bridge so neither subsystem gains a
-# dependency on the other. First tenant: the physics-contact -> script bridge.
+# helpers owned by the app. Depends on both sides of each bridge so neither subsystem gains a
+# dependency on the other, as in the bridge from physics contacts to scripts.
 util_add_engine_library(Engine.Integration ALIAS Engine::Integration)
 target_link_libraries(Engine.Integration
     PUBLIC Foundation::Core Foundation::Scene Foundation::Physics
@@ -8,7 +8,7 @@ target_link_libraries(Engine.Integration
 
 target_sources(Engine.Integration
     PRIVATE
-        ScriptPhysicsContactBridge.cpp   # implementation unit: the virtual + subsystem calls
+        ScriptPhysicsContactBridge.cpp   # implementation unit: the virtual and subsystem calls
     PUBLIC
         FILE_SET integration_modules TYPE CXX_MODULES FILES
             ScriptPhysicsContactBridge.cppm)

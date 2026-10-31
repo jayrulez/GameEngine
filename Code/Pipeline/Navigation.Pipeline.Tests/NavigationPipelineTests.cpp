@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full navigation pipeline: bake a navmesh -> NavigationZoneAsset (blob in a SIDECAR stream) ->
-// cook via the builder into an output db -> load the NavigationZoneResource product through the factory
-// -> a query paths across it. Also proves the blob does NOT ride the (text-capable) envelope.
+// Full navigation pipeline: bake a navmesh into a NavigationZoneAsset (the blob in a sidecar
+// stream), cook it through the builder into an output db, load the NavigationZoneResource product
+// through the factory, and path across it with a query. Also shows the blob is not in the
+// (text-capable) envelope.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -80,7 +81,7 @@ TEST_CASE("navigation.pipeline: bake -> asset (sidecar) -> cook -> product -> qu
                 .IsOk());
     REQUIRE(blob.Size() > 0);
 
-    // Author the source asset: blob written to the sidecar, NOT inline in the envelope.
+    // Author the source asset: blob written to the sidecar, not inline in the envelope.
     auto* zoneInstance =
         srcDb.RootGroup()->CreateInstance(u8"zone", pipeline::NavigationZoneAsset::StaticType());
     REQUIRE(zoneInstance != nullptr);
@@ -96,9 +97,9 @@ TEST_CASE("navigation.pipeline: bake -> asset (sidecar) -> cook -> product -> qu
         RefPtr<ISerializable> object = zoneInstance->ReadObject();
         auto* readBack = Cast<pipeline::NavigationZoneAsset>(object.Get());
         REQUIRE(readBack != nullptr);
-        CHECK(readBack->navMeshBlob.IsEmpty()); // NOT inline in the (text-capable) envelope
+        CHECK(readBack->navMeshBlob.IsEmpty()); // not inline in the (text-capable) envelope
         REQUIRE(pipeline::EnsureNavMeshLoaded(*zoneInstance, *readBack).IsOk());
-        CHECK(readBack->navMeshBlob.Size() == blob.Size()); // ...but the sidecar has it
+        CHECK(readBack->navMeshBlob.Size() == blob.Size()); // but the sidecar has it
     }
 
     // Cook through the builder into the output db.

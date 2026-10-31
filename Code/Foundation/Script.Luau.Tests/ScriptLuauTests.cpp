@@ -3,7 +3,7 @@
 
 // The Luau backend against the shared conformance battery (the certification bar every
 // backend meets) with the Luau dialect: metatable-OOP classes, our coroutine primitives
-// (startCoroutine / waitSeconds / waitUntil), closures as delegates.
+// (startCoroutine, waitSeconds, waitUntil), closures as delegates.
 #include <doctest/doctest.h>
 
 #include <chrono>
@@ -99,8 +99,8 @@ OCT = over:combineText("x", 7)
 )lua";
 
     // Debugger dialect: a zero-arg entry. `tag` binds on line 3, two lines before the breakpoint
-    // (line 5) so it is reliably live at the pause - the Luau pause lands one bytecode instruction
-    // early (luau_callhook advances savedpc), so a local bound on the line JUST above the break may
+    // (line 5), so it is reliably live at the pause: the Luau pause lands one bytecode instruction
+    // early (luau_callhook advances savedpc), so a local bound on the line just above the break may
     // not be live yet. Luau prints a string local's raw content (no quotes); step lands on line 6,
     // continue completes.
     constexpr StringView kDebug = u8R"lua(gLast = 0
@@ -112,7 +112,7 @@ function debugRun()
 end
 )lua";
 
-    // --- enum fixture: a reflected type with an enum property + an enum-arg/return method ------
+    // --- enum fixture: a reflected type with an enum property and an enum arg and return method -
     enum class Facing : i32
     {
         North = 0,
@@ -144,7 +144,7 @@ end
         }
     };
 
-    // A script reads/writes the enum property by the named table and calls the enum method.
+    // A script reads and writes the enum property by the named table and calls the enum method.
     constexpr StringView kEnumProbe = u8R"lua(
 Probe = {}
 Probe.__index = Probe
@@ -168,7 +168,7 @@ function Probe:writeHeading()
 end
 )lua";
 
-    // A reflected type with a Float3 property + a Float3-arg/return method, to exercise the native
+    // A reflected type with a Float3 property and a Float3 arg and return method, to exercise the native
     // vector fast path through properties and methods (not just Float3.new).
     class VecHolder : public Object
     {
@@ -212,7 +212,7 @@ TEST_CASE("script.luau: Float3 maps to Luau's native vector (fast path - fields,
     RegisterCoreTypes(); // reflects Float3 (patches TypeOf<Float3>)
 
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
-    manager->RegisterType(TypeOf<Float3>()); // the class table: Float3.new / Float3.Dot / ...
+    manager->RegisterType(TypeOf<Float3>()); // the class table: Float3.new, Float3.Dot and the rest
     manager->RegisterType(VecHolder::StaticType());
     manager->FinalizeTypes();
 
@@ -221,21 +221,21 @@ TEST_CASE("script.luau: Float3 maps to Luau's native vector (fast path - fields,
     RefPtr<ScriptObject> probe = scriptContext->CreateInstance(u8"VecProbe", Span<Variant>{});
     REQUIRE(probe.Get() != nullptr);
 
-    // Float3.new returns a NATIVE vector: .x/.z are Luau's built-in fields, not a metatable.
+    // Float3.new returns a native vector: .x and .z are Luau's built-in fields, not a metatable.
     CHECK(probe->Invoke(u8"ctorX", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(2.0));
     CHECK(probe->Invoke(u8"ctorZ", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(4.0));
     // Native vector arithmetic (v + v).
     CHECK(probe->Invoke(u8"arith", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(4.0));
-    // A Float3 PROPERTY round-trips as a vector (set from a vector, get returns one).
+    // A Float3 property round-trips as a vector (set from a vector, get returns one).
     CHECK(probe->Invoke(u8"setGetZ", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(7.0));
-    // A Float3 method ARGUMENT (self) + Float3 RETURN marshal as vectors.
+    // A Float3 method argument (self) and a Float3 return marshal as vectors.
     CHECK(probe->Invoke(u8"methodRet", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(6.0));
     // A vector passed to a reflected static, number returned (1*4 + 2*5 + 3*6).
     CHECK(probe->Invoke(u8"dot", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(32.0));
 }
 
 // A facade Array<T> return renders as a native 1-indexed Lua table: a numeric
-// array and a reflected-value array (LuauRoom boxes as a userdata element - the Entity flavor).
+// array and a reflected-value array (LuauRoom boxes as a userdata element, as an Entity does).
 namespace
 {
     struct LuauRoom
@@ -391,10 +391,10 @@ TEST_CASE("script.luau: a table crosses into a facade Array<T> parameter")
     CHECK(probe->Invoke(u8"doubledOf", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(6.0));
 }
 
-// Container MEMBERS bind as owner ops (`shelf:rooms_count()` / `:rooms_at(0)` / `:rooms_add()` /
-// `:rooms_removeAt(0)` / `:rooms_move(a, b)`) - the AngelScript RegisterContainerMethods twin,
-// ZERO-based, write-through. The bare property is NOT exposed: it would cross
-// as a detached copy-table whose mutations are silently lost.
+// Container members bind as owner ops (`shelf:rooms_count()`, `:rooms_at(0)`, `:rooms_add()`,
+// `:rooms_removeAt(0)`, `:rooms_move(a, b)`), as AngelScript's RegisterContainerMethods does:
+// zero-based and write-through. The bare property is not exposed: it would cross as a detached
+// copy-table whose mutations are silently lost.
 namespace
 {
     class LuauShelf : public Object
@@ -421,12 +421,12 @@ TEST_CASE("script.luau: container members are owner ops - write-through, zero-ba
     manager->FinalizeTypes();
 
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-    // The C++-owned shelf crosses in as a global; script mutations must land in THIS object.
+    // The C++-owned shelf crosses in as a global; script mutations must land in this object.
     RefPtr<LuauShelf> shelf = MakeRef<LuauShelf>(DefaultAllocator());
     scriptContext->SetGlobal(u8"shelf", Variant::FromObject(RefPtr<Object>(shelf.Get())));
 
     REQUIRE(scriptContext
-                ->Load(u8"Bare = (shelf.rooms == nil) and 1 or 0\n" // the copy-table trap is CLOSED
+                ->Load(u8"Bare = (shelf.rooms == nil) and 1 or 0\n" // no detached copy-table
                        u8"local r = shelf:rooms_add()\n"
                        u8"r.size = 42\n"                            // through the returned handle
                        u8"Cnt = shelf:rooms_count()\n"
@@ -440,12 +440,12 @@ TEST_CASE("script.luau: container members are owner ops - write-through, zero-ba
     CHECK(scriptContext->GetGlobal(u8"Z").Get<f64>() == doctest::Approx(42.0));
     CHECK(scriptContext->GetGlobal(u8"OOB").Get<f64>() == doctest::Approx(1.0));
 
-    // The mutation is visible from C++ - the handle wrote into the REAL container, not a copy.
+    // The mutation is visible from C++: the handle wrote into the real container, not a copy.
     REQUIRE(shelf->rooms.Size() == 1u);
     CHECK(shelf->rooms[0]->size == doctest::Approx(42.0));
 }
 
-// The ScriptName alias mechanism on the Luau backend: a "scriptName" class attribute makes the class
+// The scriptName alias on the Luau backend: a "scriptName" class attribute makes the class
 // table install under the alias, not the C++ name.
 namespace
 {
@@ -470,10 +470,10 @@ TEST_CASE("script.luau: a scriptName alias installs the class table under the al
     manager->FinalizeTypes();
 
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-    REQUIRE(scriptContext->Load(u8"Got = aka.answer()\n", u8"luau.alias").IsOk()); // the ALIAS
+    REQUIRE(scriptContext->Load(u8"Got = aka.answer()\n", u8"luau.alias").IsOk()); // the alias
     CHECK(scriptContext->GetGlobal(u8"Got").Get<f64>() == doctest::Approx(42.0));
 
-    // The C++ name is NOT installed (the alias replaces it): indexing `LuauAliasProbe` (nil) errors.
+    // The C++ name is not installed (the alias replaces it): indexing `LuauAliasProbe` (nil) errors.
     RefPtr<IScriptContext> context2 = manager->CreateContext();
     CHECK_FALSE(context2->Load(u8"Got = LuauAliasProbe.answer()\n", u8"luau.alias2").IsOk());
 
@@ -512,10 +512,9 @@ TEST_CASE("script.luau: native-vector construct+access throughput (perf case)")
     manager->RegisterType(TypeOf<Float3>());
     manager->FinalizeTypes();
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-    // Hot loop: construct a Float3 and read all three fields each iteration - the exact case the
-    // native-vector path optimizes (no per-value userdata alloc, native field reads). MEASURED
-    // (RelWithDebInfo, 200k iters): ~33.9 ms native vector vs ~89.3 ms boxed - about 2.6x - and the
-    // native path additionally ENABLES `v + v` vector arithmetic the boxed handle cannot do at all.
+    // Hot loop: construct a Float3 and read all three fields each iteration, the case the
+    // native-vector path optimizes (no per-value userdata allocation, native field reads). The
+    // native path also allows `v + v` vector arithmetic, which a boxed handle cannot do.
     REQUIRE(scriptContext
                 ->Load(u8"function hot(n)\n"
                        u8"  local sum = 0.0\n"
@@ -541,11 +540,10 @@ TEST_CASE("script.luau: native-vector construct+access throughput (perf case)")
 
 TEST_CASE("script.luau: resumable-thread call throughput (perf case - the executor cost)")
 {
-    // Every script CALL runs on a POOLED lua thread via lua_resume (never lua_pcall on the
-    // main state) so the debugger's lua_break can suspend it and production runs share ONE
-    // executor with debugging. This records the per-CALL cost of that executor - each
-    // Call is a full thread acquire (pooled, no alloc after warmup) + xmove + resume + xmove-back.
-    // The claim ("resume-vs-pcall entry, no allocation") is a number, not a hope.
+    // Every script call runs on a pooled lua thread via lua_resume (never lua_pcall on the
+    // main state) so the debugger's lua_break can suspend it and shipping runs share one
+    // executor with debugging. This records the per-call cost of that executor: each Call is a
+    // thread acquire (pooled, no allocation after warmup), an xmove, a resume and an xmove back.
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     REQUIRE(scriptContext->Load(u8"function noop(x) return x + 1 end\n", u8"luau.callperf").IsOk());
@@ -664,8 +662,8 @@ TEST_CASE("script.luau: LoadBehaviorModule loads each class as its OWN chunk (pe
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     scriptContext->SetErrorHandler(&capture);
 
-    // Two classes; the SECOND has a syntax error on its OWN line 2. Loaded as separate chunks
-    // (not concatenated), the error keys on "Bad.luau" (that class's sourceName) at its own line -
+    // Two classes; the second has a syntax error on its own line 2. Loaded as separate chunks
+    // (not concatenated), the error keys on "Bad.luau" (that class's sourceName) at its own line,
     // the (file, line) identity an editor breakpoint needs, not a merged module.
     const BehaviorModuleClass classes[] = {
         {u8"Good.luau", u8"Good = {}\nfunction Good.new() return setmetatable({}, Good) end\n", {}},
@@ -674,8 +672,8 @@ TEST_CASE("script.luau: LoadBehaviorModule loads each class as its OWN chunk (pe
     const Status status =
         scriptContext->LoadBehaviorModule(Span<const BehaviorModuleClass>{classes, 2}, u8"behaviors#1");
     CHECK_FALSE(status.IsOk());
-    CHECK(capture.module == StringView(u8"Bad.luau")); // the class file, NOT "behaviors#1"
-    CHECK(capture.line == 2);                          // its OWN line, not an offset in a merge
+    CHECK(capture.module == StringView(u8"Bad.luau")); // the class file, not "behaviors#1"
+    CHECK(capture.line == 2);                          // its own line, not an offset in a merge
 }
 
 TEST_CASE("script.luau: step debugger breaks on a breakpoint, captures, and continues")
@@ -723,7 +721,7 @@ TEST_CASE("script.luau: step debugger breaks on a breakpoint, captures, and cont
     Result<Variant> ran = scriptContext->Call(u8"run", Span<Variant>{args, 1});
     REQUIRE(ran.HasValue()); // the break is a void-complete return, never a fault
 
-    // Paused at the breakpoint, BEFORE the marker assignment ran.
+    // Paused at the breakpoint, before the marker assignment ran.
     CHECK(listener.paused == 1);
     CHECK(listener.last == ScriptDebuggerState::Breakpoint);
     CHECK(scriptContext->GetGlobal(u8"marker").TryGet<f64>() == nullptr);
@@ -752,17 +750,17 @@ TEST_CASE("script.luau: step debugger breaks on a breakpoint, captures, and cont
     CHECK(sawDoubled); // local bound on line 2, live at the pause
     CHECK(sawExtra);   // local bound on line 3, live at the pause
 
-    // Continue runs to completion; lines 5-6 execute, so marker == 143. Exactly ONE break total.
+    // Continue runs to completion; lines 5-6 execute, so marker == 143. Exactly one break in all.
     debugger->Continue();
     CHECK(listener.running >= 1);
-    CHECK(listener.paused == 1); // did NOT re-break on the same line while resuming
+    CHECK(listener.paused == 1); // did not break again on the same line while resuming
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(143.0));
 
     debugger->SetListener(nullptr);
 }
 
-// A minimal listener that just counts paused/running transitions (shared shape across the
-// step + coroutine tests).
+// A minimal listener that just counts paused and running transitions (shared by the
+// step and coroutine tests).
 namespace
 {
     struct DebuggerStateCounter final : IScriptDebuggerListener
@@ -816,14 +814,14 @@ TEST_CASE("script.luau: step debugger StepOver stays at the caller depth over a 
         CHECK(frames[0].line == 6);
     }
 
-    // Step OVER the helper() call: it must NOT descend into helper, and lands on the next line of
-    // run at the SAME depth. The call still executes (marker gets helper()'s result).
+    // Step over the helper() call: it must not descend into helper, and lands on the next line of
+    // run at the same depth. The call still executes (marker gets helper()'s result).
     debugger->StepOver();
     REQUIRE(listener.paused == 2);
     CHECK(listener.last == ScriptDebuggerState::Stepped);
     {
         Array<ScriptStackFrame> frames = debugger->CaptureStackFrames();
-        REQUIRE(frames.Size() == 1); // stayed at the caller depth - helper never held
+        REQUIRE(frames.Size() == 1); // stayed at the caller depth; helper never held
         CHECK(frames[0].line == 7);  // advanced past the call
     }
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(7.0)); // the call ran
@@ -865,7 +863,7 @@ TEST_CASE("script.luau: step debugger StepInto descends into the callee")
         CHECK(frames[0].line == 6);
     }
 
-    // StepInto from a NON-call line advances to the next line at the same depth (line 7, the call).
+    // StepInto from a line with no call advances to the next line at the same depth (line 7, the call).
     debugger->StepInto();
     REQUIRE(listener.paused == 2);
     CHECK(listener.last == ScriptDebuggerState::Stepped);
@@ -875,18 +873,18 @@ TEST_CASE("script.luau: step debugger StepInto descends into the callee")
         CHECK(frames[0].line == 7);
     }
 
-    // StepInto AT the call descends a frame; the pause lands on helper's first line.
+    // StepInto at the call descends a frame; the pause lands on helper's first line.
     debugger->StepInto();
     REQUIRE(listener.paused == 3);
     {
         Array<ScriptStackFrame> frames = debugger->CaptureStackFrames();
-        REQUIRE(frames.Size() == 2); // descended: helper + run
+        REQUIRE(frames.Size() == 2); // descended: helper and run
         CHECK(frames[0].file == StringView(u8"into.luau"));
         CHECK(frames[0].line == 2); // first line inside helper
     }
 
     debugger->Continue();
-    CHECK(listener.paused == 3); // helper returns to line 7 (no breakpoint there) - runs to the end
+    CHECK(listener.paused == 3); // helper returns to line 7 (no breakpoint there) and runs to the end
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(7.0));
     debugger->SetListener(nullptr);
 }
@@ -914,7 +912,7 @@ TEST_CASE("script.luau: step debugger breaks inside a coroutine body, then Conti
                        u8"co.luau")
                 .IsOk());
 
-    // run() only SCHEDULES the coroutine - it does not run the body, so no break yet.
+    // run() only schedules the coroutine; it does not run the body, so no break yet.
     Span<Variant> noArgs{};
     REQUIRE(scriptContext->Call(u8"run", noArgs).HasValue());
     CHECK(listener.paused == 0);
@@ -933,18 +931,18 @@ TEST_CASE("script.luau: step debugger breaks inside a coroutine body, then Conti
         CHECK(frames[0].line == 6);
     }
 
-    // The scheduler MUST NOT resume the debugger-held coroutine thread (Fable Q5).
+    // The scheduler must not resume the debugger-held coroutine thread.
     manager->AdvanceCoroutines(0.016);
     CHECK(listener.paused == 1);
     CHECK(scriptContext->GetGlobal(u8"finished").Get<f64>() == doctest::Approx(0.0));
 
     // Continue finishes the body (lines 6-7) and drops the coroutine from the schedule.
     debugger->Continue();
-    CHECK(listener.paused == 1); // no re-break on the resumed line
+    CHECK(listener.paused == 1); // no second break on the resumed line
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(42.0));
     CHECK(scriptContext->GetGlobal(u8"finished").Get<f64>() == doctest::Approx(1.0));
 
-    // The coroutine is gone; further advances are no-ops.
+    // The coroutine is gone; further advances do nothing.
     manager->AdvanceCoroutines(0.016);
     CHECK(listener.paused == 1);
     debugger->SetListener(nullptr);
@@ -974,7 +972,7 @@ TEST_CASE("script.luau: a breakpoint keyed on (file, line) survives a module rel
     debugger->Continue();
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(1.0));
 
-    // Hot-reload the SAME source file (a changed body, same chunk name). The breakpoint is stored
+    // Hot-reload the same source file (a changed body, same chunk name). The breakpoint is stored
     // on (file, line) in the debugger, not tied to the module, so it fires again after the reload.
     REQUIRE(scriptContext
                 ->Load(u8"function run()\n"   // 1
@@ -1015,12 +1013,12 @@ TEST_CASE("script.luau: break in a coroutine, Continue to a wait, the wait still
 
     Span<Variant> noArgs{};
     REQUIRE(scriptContext->Call(u8"run", noArgs).HasValue());
-    manager->AdvanceCoroutines(0.1); // resumes the body -> breaks at line 5, before the wait
+    manager->AdvanceCoroutines(0.1); // resumes the body and breaks at line 5, before the wait
     REQUIRE(listener.paused == 1);
     CHECK(scriptContext->GetGlobal(u8"marker").TryGet<f64>() == nullptr);
 
-    // Continue runs marker=step and then waitSeconds(1.0), which yields back to the scheduler -
-    // the coroutine is NOT done, it is now waiting.
+    // Continue runs marker=step and then waitSeconds(1.0), which yields back to the scheduler:
+    // the coroutine is not done, it is now waiting.
     debugger->Continue();
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(1.0));
     CHECK(scriptContext->GetGlobal(u8"done").Get<f64>() == doctest::Approx(0.0));
@@ -1040,13 +1038,13 @@ TEST_CASE("script.luau: LoadBehaviorModule consumes cooked bytecode with NO sour
 {
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
 
-    // COOK: compile the class to a blob and serialize it exactly as the cook stores
-    // ScriptClass::bytecode (CompileToBlob -> Serialize -> the pack bytes).
+    // Cook: compile the class to a blob and serialize it as the cook stores
+    // ScriptClass::bytecode (CompileToBlob, then Serialize, gives the pack bytes).
     Result<RefPtr<IScriptBlob>> blob = manager->CompileToBlob(
         u8"Widget = {}\n"
         u8"Widget.__index = Widget\n"
         u8"function Widget.new() return setmetatable({ v = 41 }, Widget) end\n"
-        u8"loaded = Widget.new().v + 1\n", // top-level runs at load -> 42
+        u8"loaded = Widget.new().v + 1\n", // top level runs at load: 42
         u8"Widget.luau");
     REQUIRE(blob.HasValue());
     MemoryStream cooked;
@@ -1062,7 +1060,7 @@ TEST_CASE("script.luau: LoadBehaviorModule consumes cooked bytecode with NO sour
         bytecode.PushBack(cookedBytes[i]);
     }
 
-    // PLAYER: no source at all - the class must load + run from bytecode alone (no luau_compile).
+    // Player: no source at all; the class must load and run from bytecode alone (no luau_compile).
     RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     const BehaviorModuleClass classes[] = {
         {u8"Widget.luau", StringView{}, Span<const byte>{bytecode.Data(), bytecode.Size()}},
@@ -1078,8 +1076,8 @@ TEST_CASE("script.luau: cooked bytecode stays debuggable - breakpoint + local ca
     DebuggerStateCounter listener;
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
 
-    // COOK the debug class to bytecode. CompileToBlob uses debugLevel 2 (matching the runtime
-    // source path), so local NAMES survive the cook - consuming bytecode never degrades debugging.
+    // Cook the debug class to bytecode. CompileToBlob uses debugLevel 2 (matching the runtime
+    // source path), so local names survive the cook and consuming bytecode never degrades debugging.
     Result<RefPtr<IScriptBlob>> blob = manager->CompileToBlob(u8"function widgetRun()\n"    // 1
                                                               u8"    local tag = \"hit\"\n" // 2
                                                               u8"    local pad = 1\n"       // 3
@@ -1130,7 +1128,7 @@ TEST_CASE("script.luau: cooked bytecode stays debuggable - breakpoint + local ca
             CHECK(v.value == StringView(u8"hit"));
         }
     }
-    CHECK(sawTag); // local names survived the cook -> the consumed bytecode is debuggable
+    CHECK(sawTag); // local names survived the cook, so the consumed bytecode is debuggable
     debugger->Continue();
     CHECK(scriptContext->GetGlobal(u8"marker").Get<f64>() == doctest::Approx(1.0));
     debugger->SetListener(nullptr);
@@ -1142,12 +1140,12 @@ TEST_CASE("script.luau: bytecode capability - compile at cook, serialize, load i
     // Luau ships bytecode (the cook path): the Bytecode capability is declared.
     CHECK(HasScriptCapability(manager->Capabilities(), ScriptCapabilities::Bytecode));
 
-    // COOK side: compile source to an opaque blob (luau_compile + a validating load).
+    // Cook side: compile source to an opaque blob (luau_compile and a validating load).
     Result<RefPtr<IScriptBlob>> compiled = manager->CompileToBlob(kFunctions, u8"luau.blob");
     REQUIRE(compiled.HasValue());
     REQUIRE(compiled.Value().Get() != nullptr);
 
-    // STORE: the blob serializes to the bytes a cook writes into the pack.
+    // Store: the blob serializes to the bytes a cook writes into the pack.
     MemoryStream stream;
     {
         BinarySerializer writer(stream, SerializeMode::Write);
@@ -1155,7 +1153,7 @@ TEST_CASE("script.luau: bytecode capability - compile at cook, serialize, load i
     }
     (void)stream.Seek(0, SeekOrigin::Begin);
 
-    // PLAYER side: reconstruct a blob from the stored bytes with NO compiler present ...
+    // Player side: reconstruct a blob from the stored bytes with no compiler present ...
     RefPtr<IScriptBlob> reloaded = manager->CreateBlob();
     REQUIRE(reloaded.Get() != nullptr);
     {
@@ -1219,7 +1217,7 @@ TEST_CASE("script.luau: reflected enums - named tables + number marshalling both
     // Setting the property via the named table round-trips back through the getter.
     CHECK(probe->Invoke(u8"setAndRead", Span<Variant>{}).Value().Get<f64>() ==
           doctest::Approx(5.0));
-    // An enum argument AND an enum return marshal through a method (opposite(West) = East = 1).
+    // An enum argument and an enum return marshal through a method (opposite(West) = East = 1).
     CHECK(probe->Invoke(u8"oppositeOfWest", Span<Variant>{}).Value().Get<f64>() ==
           doctest::Approx(1.0));
 }
@@ -1239,7 +1237,7 @@ TEST_CASE("script.luau: a read-only property reads, and an assignment raises ins
     REQUIRE(probe.Get() != nullptr);
 
     CHECK(probe->Invoke(u8"readHeading", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(90.0));
-    // 1 = the assignment raised naming the property read-only (0 = silently accepted, 2 = another error).
+    // 1: the assignment raised an error naming the property read-only (0: silently accepted, 2: another error).
     CHECK(probe->Invoke(u8"writeHeading", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(1.0));
     CHECK(probe->Invoke(u8"readHeading", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(90.0));
 }
@@ -1289,7 +1287,7 @@ TEST_CASE("script.luau: backend conformance battery")
 
 TEST_CASE("script.luau: .d.luau declaration emitter - typed surface for luau-analyze")
 {
-    RegisterCoreTypes();       // Float3 (-> native vector)
+    RegisterCoreTypes();       // Float3 (a native vector)
     RttiRegisterEnum_Facing(); // the Facing enum
 
     const TypeInfo* types[] = {&TypeOf<Float3>(), &VecHolder::StaticType(), &TypeOf<Facing>(),
@@ -1313,16 +1311,16 @@ TEST_CASE("script.luau: .d.luau declaration emitter - typed surface for luau-ana
         return false;
     };
 
-    // Float3: an instance class + a value table; its constructors emit as an overload intersection
+    // Float3: an instance class and a value table; its constructors emit as an overload intersection
     // so both Float3.new() and Float3.new(x, y, z) type-check; a static reads the native vector.
     CHECK(has(u8"declare class Float3"));
     CHECK(has(u8"declare Float3: {"));
-    CHECK(has(u8"new: (() -> Float3) & ("));    // >1 constructor -> intersection of overloads
+    CHECK(has(u8"new: (() -> Float3) & ("));    // several constructors: an intersection of overloads
     CHECK(has(u8"Dot: (arg0: vector, arg1: vector) -> number")); // static over native vectors
-    // VecHolder: a Float3 property maps to `vector`; scaledBy(f32)->Float3 typed self+param+ret.
+    // VecHolder: a Float3 property maps to `vector`; scaledBy(f32) types self, the param and the return.
     CHECK(has(u8"declare class VecHolder"));
     CHECK(has(u8"pos: vector"));
-    CHECK(has(u8"function scaledBy(self, arg0: number): vector")); // param name unreflected -> arg0
+    CHECK(has(u8"function scaledBy(self, arg0: number): vector")); // param name not reflected: arg0
     CHECK(has(u8"new: () -> VecHolder"));
     // The enum surfaces as a named number table (non-contiguous West present by name).
     CHECK(has(u8"declare Facing: {"));
@@ -1374,7 +1372,7 @@ function Ids:differ() return Guid.new("6b0a7709-5169-4a0e-8077-c78b87a132e6") ~=
     CHECK(ids->Invoke(u8"differ", Span<Variant>{}).Value().Get<bool>());
 }
 
-// Sedulous 22a73e31: the reflected operators bind as metamethods on the reflected value types
+// The reflected operators bind as metamethods on the reflected value types
 // (Float3 is Luau's native vector, which has its own): a + b, v * 2, -v, a == b, q * r, and
 // Luau's a += b through __add.
 TEST_CASE("script.luau: reflected operators bind as metamethods")

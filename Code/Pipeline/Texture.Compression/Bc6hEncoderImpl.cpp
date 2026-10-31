@@ -3,12 +3,12 @@
 
 // texture.compression - the BC6H (unsigned half float) encoder.
 //
-// In-house rather than vendored: the plan assumed a bc6h_enc pair in richgel999's bc7enc_rdo,
-// and there is none (the repository is BC1-7). Basis carries a BC6H encoder only inside its
-// UASTC-HDR transcoder, and DirectXTex's is a 3000-line DirectXMath dependency. What HDR skies
-// and IBL sources need is the mode real-time encoders use: MODE 11 - one region, two 10-bit
-// endpoints per channel, 4-bit interpolation weights, no delta coding. Two-region partitioned
-// modes buy quality on hard edges that radiance maps rarely have; they are the deferred step.
+// In-house rather than vendored: richgel999's bc7enc_rdo covers BC1-7 but not BC6H, Basis
+// carries a BC6H encoder only inside its UASTC-HDR transcoder, and DirectXTex's is a 3000-line
+// DirectXMath dependency. What HDR skies and IBL sources need is the mode real-time encoders
+// use, mode 11: one region, two 10-bit endpoints per channel, 4-bit interpolation weights, no
+// delta coding. The two-region partitioned modes buy quality on hard edges that radiance maps
+// rarely have, and are not implemented.
 //
 // The decoder's arithmetic (D3D11.3 spec, section 19.5) drives every choice here:
 //   unquantize(q, 10 bits, unsigned): q == 0 -> 0; q == 1023 -> 0xFFFF; else (q << 6) + 32
@@ -305,10 +305,10 @@ namespace texcomp
             }
 
             // 2. Flat and near-flat blocks (most of a sky). One shared weight per texel cannot
-            //    satisfy three channels whose quantization residues differ, so instead fix EVERY
+            //    satisfy three channels whose quantization residues differ, so instead fix every
             //    weight at the table's first step (w = 4) and give each channel its own second
             //    endpoint: interpolate(a, b, 4) = 60a/64 + 4b/64, so with a = 64q + 32 and
-            //    b = a + 64d the reconstruction is 64q + 32 + 4d - a 4-unit grid the 10-bit
+            //    b = a + 64d the reconstruction is 64q + 32 + 4d, a 4-unit grid the 10-bit
             //    endpoints alone (a 64-unit grid) cannot reach. Considered whenever the block's
             //    range fits inside one quantization step; the error check keeps it only if it wins.
             bool narrow = true;

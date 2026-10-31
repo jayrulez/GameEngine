@@ -3,9 +3,9 @@
 
 // Core - :core_reflection implementation unit
 //
-// The reflection bodies for Core's value types. Kept OUT of the :core_reflection
+// The reflection bodies for Core's value types. Kept out of the :core_reflection
 // interface partition: REFLECT_* bodies in a partition interface make GCC
-// emit an unreadable gcm cluster for consumers (see gcc-module-interface-hygiene).
+// emit an unreadable gcm cluster for consumers.
 // The interface (CoreReflection.cppm) only declares RegisterCoreTypes(); this unit
 // defines it plus every RttiRegisterValue_/RttiRegisterEnum_ body.
 //
@@ -147,8 +147,8 @@ namespace foundation::core
             // Two same-named overloads, resolved by parameter type at lookup.
             .Method<static_cast<Float3 (*)(Float3, Float3)>(&operator*)>("Mul")
             .Operator(MethodOperator::Multiply)
-            // Same arity as Mul, genuinely type-overloaded (vec*vec vs vec*scalar) - a distinct
-            // script name, since a dynamically-typed surface cannot pick between them by value.
+            // Same arity as Mul but a different operand type (vector times scalar), so it takes a
+            // distinct script name: a dynamically-typed surface cannot pick between them by value.
             .Method<static_cast<Float3 (*)(Float3, f32)>(&operator*)>("Mul").OverloadedName("MulScalar")
             .Operator(MethodOperator::Multiply)
             .Method<static_cast<Float3 (*)(Float3, Float3)>(&operator/)>("Div")
@@ -262,7 +262,7 @@ namespace foundation::core
             .Method<static_cast<Float3x3 (*)(const Float3x3&)>(&Inverse)>("Inverse");
     }
 
-    // Scalar math: the free functions in foundation::core reflected as STATICS on the empty `Math`
+    // Scalar math: the free functions in foundation::core reflected as statics on the empty `Math`
     // anchor type, so scripts reach trig/roots/interpolation as `Math.Sin(x)` etc. There is no
     // reflecting a namespace, hence the anchor. Constants ride along as reflected constants.
     REFLECT_VALUE(Math, "rtti::core")
@@ -341,7 +341,7 @@ namespace foundation::core
     }
 
     // Public Core enums (scripting-relevant). Internal enums (PropertyFlags,
-    // HashMap::State, BufferedStream::Mode) are deliberately not reflected.
+    // HashMap::State, BufferedStream::Mode) are not reflected.
     // A curve's keys and a gradient's stops: Core's, so every tool that edits a curve or a gradient
     // (a particle effect's, a clip's, an editor's) reads them by reflection without the runtime
     // that holds them.
@@ -452,11 +452,10 @@ namespace foundation::core
     // Registers all Core value types for reflection (patches each TypeOf<T>())
     // and adds them to the GlobalTypeRegistry. Idempotent; call once at startup.
     // Declared (exported) in the :core_reflection interface partition.
-    // ONCE and thread-safe (a function-local static's initializer runs exactly once and blocks
-    // concurrent callers until it finishes). Every cook worker calls this per script build: two
-    // builds in flight rebuilt the enum tables at once (EnumBuilder::Build moves a fresh array
-    // over the live one) and double-freed them - Tools.Cook aborted on any project with two
-    // script assets. Same idiom as RegisterScriptFacadeReflection.
+    // Runs once and is thread-safe (a function-local static's initializer runs exactly once and
+    // blocks concurrent callers until it finishes). Every cook worker calls this per script build,
+    // and two builds rebuilding the enum tables at once would double-free them (EnumBuilder::Build
+    // moves a fresh array over the live one). Same idiom as RegisterScriptFacadeReflection.
     void RegisterCoreTypes()
     {
         static const bool once = []()

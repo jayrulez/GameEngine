@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The inspector's asset reference on the property grid: a Reference row is an asset slot taking
-// the types its services name for what the reference points at, showing the asset's name and
-// glyph (None for nothing, "(missing)" for a dangling id, Mixed over objects that differ); a pick,
-// a drop and a clear are one write each; open and reveal name the asset; a read-only one only
-// opens; and the context's table asks the builders' join (else takes the type itself) and routes
-// open and reveal.
+// The inspector's asset reference on the property grid. A Reference row is an asset slot that takes
+// the types its services name for the referenced type, and shows the asset's name and glyph (None
+// for nothing, "(missing)" for a dangling id, Mixed over objects that differ). A pick, a drop and a
+// clear are one write each; open and reveal name the asset; a read-only slot only opens. The
+// context's table asks the builders which asset types produce the referenced type (or else takes
+// the type itself) and routes open and reveal.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -33,7 +33,7 @@ namespace
     {
         int payload = 0;
     };
-    // The source assets a project of the test holds.
+    // The source assets the test's project holds.
     class RefMeshAsset : public ISerializable
     {
         RTTI_OBJECT(RefMeshAsset, ISerializable)
@@ -68,7 +68,7 @@ namespace
         Array<String> pickedFrom;
         Guid pickedOver;
         int commits = 0;
-        RefPtr<gui::Drawable> woodPicture; // its thumbnail, once "generated"
+        RefPtr<gui::Drawable> woodPicture; // the wood asset's thumbnail, once "generated"
 
         explicit Bed(usize objects = 1) : bag(DefaultAllocator(), objects)
         {
@@ -150,10 +150,10 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     CHECK(slot.ShownName() == StringView(u8"Not set"));
     CHECK(slot.PickButton()->IsDisplayed());
     CHECK_FALSE(slot.ClearButton()->IsDisplayed());
-    CHECK(bed.Editor(u8"other").Slot()->ShownName() == editor::app::kResourceRefEditorMissingText); // dangling: still cleared
+    CHECK(bed.Editor(u8"other").Slot()->ShownName() == editor::app::kResourceRefEditorMissingText); // dangling: it can still be cleared
     CHECK(bed.Editor(u8"other").Slot()->ClearButton()->IsDisplayed());
 
-    // A pick: over the row's types, one write, the slot showing the asset.
+    // A pick offers the row's types, makes one write, and the slot then shows the asset.
     slot.Pick();
     REQUIRE(bed.chosen);
     CHECK(bed.pickedFrom.Size() == 2u);
@@ -165,7 +165,7 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     CHECK(mesh.Current() == bed.wood);
     CHECK(slot.ShownName() == StringView(u8"Wood"));
 
-    // Open and reveal name it; a clear is one write to nothing.
+    // Open and reveal name the asset; a clear is one write that sets nothing.
     CHECK(slot.OpenButton()->HandleActivate());
     CHECK(slot.RevealButton()->HandleActivate());
     REQUIRE(bed.opened.Size() == 1u);
@@ -184,7 +184,7 @@ TEST_CASE("resource-ref: the slot draws the asset's thumbnail in its glyph's pla
     bed.Add(u8"mesh", bed.wood);
     bed.Show();
     editor::app::AssetPickerSlot& slot = *bed.Editor(u8"mesh").Slot();
-    CHECK(slot.Picture() == nullptr); // none generated yet: the type's glyph
+    CHECK(slot.Picture() == nullptr); // no thumbnail yet: the type's glyph
     bed.woodPicture = RefPtr<gui::Drawable>(gui::SvgDrawable::FromText(DefaultAllocator(), u8"<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8'/></svg>").Get());
     bed.grid->SetSource(nullptr);
     bed.Show();
@@ -221,7 +221,7 @@ TEST_CASE("resource-ref: a dropped asset of a type it takes is one write; a read
     d.InjectMouseUp(over, gui::MouseButton::Left);
     (void)bed.root->UpdateLayout();
     CHECK(bed.commits == 1);
-    CHECK(bed.bag.GetValue(StringView(u8"mesh"), 1).AsString() == Text(bed.wood).AsView()); // each object
+    CHECK(bed.bag.GetValue(StringView(u8"mesh"), 1).AsString() == Text(bed.wood).AsView()); // written to each object
 
     editor::app::AssetPickerSlot& fixed = *bed.Editor(u8"fixed").Slot();
     CHECK(fixed.ShownName() == StringView(u8"Wood"));
@@ -231,7 +231,7 @@ TEST_CASE("resource-ref: a dropped asset of a type it takes is one write; a read
 
     editor::app::AssetPickerSlot& both = *bed.Editor(u8"both").Slot();
     CHECK(both.ShownName() == gui::MixedValueText());
-    CHECK_FALSE(both.OpenButton()->IsDisplayed()); // which one?
+    CHECK_FALSE(both.OpenButton()->IsDisplayed()); // the objects differ, so there is nothing to open
     CHECK(both.ClearButton()->IsDisplayed());
 }
 
@@ -243,7 +243,7 @@ TEST_CASE("resource-ref: the context's table asks the builders' join for the typ
     {
         Array<const TypeInfo*> assets;
         if (&product == &TypeOf<TestMesh>())
-            assets.PushBack(&TypeOf<int>()); // any type stands for an asset type here: its name is what is asked
+            assets.PushBack(&TypeOf<int>()); // any type can stand in for an asset type here: only its name is asked for
         return assets;
     };
     Array<Guid> opened;
@@ -254,7 +254,7 @@ TEST_CASE("resource-ref: the context's table asks the builders' join for the typ
     const Array<String> types = services.AcceptedTypes(TypeOf<TestMesh>());
     REQUIRE(types.Size() == 1u);
     CHECK(types[0] == String(StringView(reinterpret_cast<const utf8char*>(TypeOf<int>().name))));
-    const Array<String> itself = services.AcceptedTypes(TypeOf<float>()); // no builder makes it: a source type named itself
+    const Array<String> itself = services.AcceptedTypes(TypeOf<float>()); // no builder makes it, so it is a source type that names itself
     REQUIRE(itself.Size() == 1u);
     CHECK(itself[0] == String(StringView(reinterpret_cast<const utf8char*>(TypeOf<float>().name))));
     ResourceRefShown shown;

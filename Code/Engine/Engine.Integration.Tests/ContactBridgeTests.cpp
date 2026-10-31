@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.integration tests: the physics-contact -> script bridge in isolation.
-// The kind mapping is pure (no subsystems needed); the full contact->behavior delivery through
-// this SAME bridge is covered end-to-end by the ContactWorld battery in the script scene tests.
+// engine.integration tests: the physics-contact-to-script bridge in isolation. The kind mapping is
+// pure (no subsystems needed); the full contact-to-behavior delivery through this same bridge is
+// covered end to end by the ContactWorld tests in the script scene tests.
 
 #include <doctest/doctest.h>
 
@@ -34,6 +34,6 @@ TEST_CASE("integration: a fresh bridge is not installed and Uninstall is a safe 
     CHECK_FALSE(bridge.Installed());
     bridge.Uninstall(); // idempotent when never installed
     CHECK_FALSE(bridge.Installed());
-    // Destructor of an un-installed bridge must not touch a (null) physics subsystem - it just
-    // goes out of scope here without a crash.
+    // Destroying an uninstalled bridge must not touch a (null) physics subsystem; it goes out of
+    // scope here without a crash.
 }

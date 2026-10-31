@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The popup stack, a top layer on the retained tree (E5 of Specs/gui-lab-evolution.md): a popup
-// stays in its owner's subtree yet draws and takes the pointer above everything, unclipped; nesting
-// comes from the tree; a press that closes an auto popup is consumed; Escape reaches the focused
-// widget first; a modal popup makes what is below it inert, bindings included, while popups opened
-// inside it work; focus comes back to what it was taken from, or the nearest holder still there;
-// placement flips, shrinks and clamps, and follows a scrolled anchor; every close says why; input in
-// another root closes this one's light popups.
+// The popup stack, a top layer on the retained tree. A popup stays in its owner's subtree, yet
+// draws and takes the pointer above everything, unclipped, and nesting comes from the tree. A press
+// that closes an auto popup is consumed. Escape reaches the focused widget first. A modal popup
+// makes what is below it inert, bindings included, while popups opened inside it still work. Focus
+// comes back to the node it was taken from, or to the nearest holder still there. Placement flips,
+// shrinks and clamps, and follows a scrolled anchor. Every close reports why. Input in another root
+// closes this root's light popups.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -32,7 +32,7 @@ namespace
         static core::Array<core::String> log;
         return log;
     }
-    // Records that it drew.
+    // A widget that records that it drew.
     class Probe : public UIWidget
     {
     public:
@@ -108,7 +108,7 @@ TEST_CASE("popups: an open popup draws after the whole tree and takes the pointe
     REQUIRE(DrawLog().Size() == 2u);
     CHECK(DrawLog()[0] == SV(u8"later"));
     CHECK(DrawLog()[1] == SV(u8"popup")); // last, over the later sibling
-    // Outside its clipping owner, over the later sibling: the pointer finds it.
+    // Outside its clipping owner and over the later sibling, the pointer still finds it.
     int pressed = 0;
     (void)popup->AddEventListener(EventType::MouseDown, [&](const Event&) { ++pressed; });
     bed.d().InjectMouseDown(core::Float2{120.0f, 100.0f}, MouseButton::Left);
@@ -160,9 +160,9 @@ TEST_CASE("popups: nesting comes from the tree; opening another closes what does
         return o;
     };
     bed.d().OpenPopup(*bed.root, *a, watch(At(core::Float2{10.0f, 10.0f}), u8"a"));
-    bed.d().OpenPopup(*item, *b, watch(At(core::Float2{110.0f, 10.0f}), u8"b")); // inside a: a stays
+    bed.d().OpenPopup(*item, *b, watch(At(core::Float2{110.0f, 10.0f}), u8"b")); // opened inside a, so a stays
     CHECK(bed.d().PopupCount() == 2u);
-    bed.d().OpenPopup(*bed.root, *c, watch(At(core::Float2{200.0f, 150.0f}), u8"c")); // holds neither: both go
+    bed.d().OpenPopup(*bed.root, *c, watch(At(core::Float2{200.0f, 150.0f}), u8"c")); // opened inside neither popup, so both close
     REQUIRE(closed.Size() == 2u);
     CHECK(closed[0] == SV(u8"b:replaced")); // the inner first
     CHECK(closed[1] == SV(u8"a:replaced"));
@@ -193,7 +193,7 @@ TEST_CASE("popups: a press outside closes those above the one it is in, and is c
     b->SetSize(core::Float2{50.0f, 50.0f});
     bed.d().OpenPopup(*opener, *a, At(core::Float2{10.0f, 10.0f}));
     bed.d().OpenPopup(*inner, *b, At(core::Float2{150.0f, 10.0f}));
-    // A press in a closes b only, and goes on to a.
+    // A press in a closes only b, and goes on to a.
     int pressedA = 0;
     (void)a->AddEventListener(EventType::MouseDown, [&](const Event&) { ++pressedA; });
     bed.d().InjectMouseDown(core::Float2{50.0f, 80.0f}, MouseButton::Left);
@@ -201,7 +201,7 @@ TEST_CASE("popups: a press outside closes those above the one it is in, and is c
     CHECK_FALSE(bed.d().IsPopupOpen(*b));
     CHECK(bed.d().IsPopupOpen(*a));
     bed.d().InjectMouseUp(core::Float2{50.0f, 80.0f}, MouseButton::Left);
-    // The opener pressed again: a closes, and the press does nothing more (no reopening click).
+    // Pressing the opener again closes a, and the press does nothing more (no click reopens it).
     CHECK(clicks == 0); // the click in a, bubbling to its opener, is not a click on the opener
     bed.Click(core::Float2{310.0f, 260.0f});
     CHECK_FALSE(bed.d().IsPopupOpen(*a));
@@ -306,14 +306,14 @@ TEST_CASE("popups: focus comes back to what it was taken from, else the nearest 
     CHECK(start->IsFocused());
 
     openFocusing(*popup);
-    start->SetEnabled(false); // what it came from is disabled meanwhile
+    start->SetEnabled(false); // the node it came from is disabled meanwhile
     (void)bed.d().ClosePopup(*popup);
     CHECK(holder->IsFocused()); // the nearest holder that can take it
     start->SetEnabled(true);
 
     bed.d().SetFocusNode(start.Get());
     openFocusing(*popup);
-    holder->RemoveChild(start.Get()); // gone meanwhile
+    holder->RemoveChild(start.Get()); // removed meanwhile
     (void)bed.d().ClosePopup(*popup);
     CHECK(holder->IsFocused());
 
@@ -329,20 +329,20 @@ TEST_CASE("popups: focus comes back to what it was taken from, else the nearest 
 TEST_CASE("popups: placement flips, shrinks and clamps at every edge")
 {
     const Rect bounds{0.0f, 0.0f, 400.0f, 300.0f};
-    // Below fits.
+    // Below the anchor fits.
     PlacedPopup p = PlacePopup(Rect{10.0f, 10.0f, 50.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Side == PopupSide::Below);
     CHECK(p.Position.y == doctest::Approx(30.0f));
-    // Near the bottom: flipped above.
+    // Near the bottom, it flips above.
     p = PlacePopup(Rect{10.0f, 260.0f, 50.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Side == PopupSide::Above);
     CHECK(p.Position.y == doctest::Approx(180.0f));
-    // Too tall for either side: the larger side, shrunk to it.
+    // Too tall for either side, it goes on the larger side and shrinks to fit.
     p = PlacePopup(Rect{10.0f, 100.0f, 50.0f, 20.0f}, core::Float2{100.0f, 400.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Side == PopupSide::Below);
     CHECK(p.Size.y == doctest::Approx(180.0f));
     CHECK(p.Position.y + p.Size.y <= 300.0f + 0.01f);
-    // Past the right edge: slid back in.
+    // Past the right edge, it slides back in.
     p = PlacePopup(Rect{380.0f, 10.0f, 20.0f, 20.0f}, core::Float2{100.0f, 50.0f}, bounds, PopupPlacement{}, false);
     CHECK(p.Position.x == doctest::Approx(300.0f));
     // A submenu at the right edge flips to its item's inline start; at the bottom it slides up.
@@ -351,7 +351,7 @@ TEST_CASE("popups: placement flips, shrinks and clamps at every edge")
     CHECK(p.Side == PopupSide::InlineStart);
     CHECK(p.Position.x == doctest::Approx(180.0f));
     CHECK(p.Position.y == doctest::Approx(200.0f));
-    // Centred under its anchor, past the left edge: clamped to it.
+    // Centred under its anchor and past the left edge, it is clamped to the edge.
     p = PlacePopup(Rect{0.0f, 10.0f, 20.0f, 20.0f}, core::Float2{100.0f, 50.0f}, bounds,
                    PopupPlacement{PopupSide::Below, PopupAlign::Center, 4.0f, true}, false);
     CHECK(p.Position.x == doctest::Approx(0.0f));
@@ -361,25 +361,26 @@ TEST_CASE("popups: placement flips, shrinks and clamps at every edge")
 TEST_CASE("popups: in right to left the inline sides and the start alignment mirror")
 {
     const Rect bounds{0.0f, 0.0f, 400.0f, 300.0f};
-    // A dropdown's start is the right: the right edges line up.
+    // A dropdown's start is the right side, so the right edges line up.
     PlacedPopup p = PlacePopup(Rect{200.0f, 10.0f, 150.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds,
                                PopupPlacement{}, true);
     CHECK(p.Side == PopupSide::Below);
     CHECK(p.Position.x == doctest::Approx(250.0f));
-    // End lines up the left edges; centred is the same either way.
+    // End lines up the left edges; centred is the same in either direction.
     p = PlacePopup(Rect{200.0f, 10.0f, 150.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds,
                    PopupPlacement{PopupSide::Below, PopupAlign::End, 0.0f, true}, true);
     CHECK(p.Position.x == doctest::Approx(200.0f));
     p = PlacePopup(Rect{200.0f, 10.0f, 150.0f, 20.0f}, core::Float2{100.0f, 80.0f}, bounds,
                    PopupPlacement{PopupSide::Below, PopupAlign::Center, 0.0f, true}, true);
     CHECK(p.Position.x == doctest::Approx(225.0f));
-    // A submenu goes to its item's inline end, the left, its top with the item's.
+    // A submenu goes to its item's inline end, which is the left, with its top level with the
+    // item's.
     p = PlacePopup(Rect{200.0f, 40.0f, 80.0f, 20.0f}, core::Float2{120.0f, 100.0f}, bounds,
                    PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true}, true);
     CHECK(p.Side == PopupSide::InlineEnd);
     CHECK(p.Position.x == doctest::Approx(80.0f));
     CHECK(p.Position.y == doctest::Approx(40.0f));
-    // At the left edge it flips to the inline start, the right.
+    // At the left edge it flips to the inline start, which is the right.
     p = PlacePopup(Rect{20.0f, 40.0f, 80.0f, 20.0f}, core::Float2{120.0f, 100.0f}, bounds,
                    PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true}, true);
     CHECK(p.Side == PopupSide::InlineStart);
@@ -401,7 +402,7 @@ TEST_CASE("popups: one opened in a right-to-left part of a page places itself in
     (void)bed.root->UpdateLayout();
     const core::Float2 fieldAt = field->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
 
-    // Below its anchor, the right edges lined up (a combo box's list).
+    // Below its anchor with the right edges lined up, as a combo box's list is.
     auto list = Make<Probe>(u8"list");
     list->SetSize(core::Float2{100.0f, 80.0f});
     PopupOptions below;
@@ -413,7 +414,7 @@ TEST_CASE("popups: one opened in a right-to-left part of a page places itself in
     CHECK(listAt.y == doctest::Approx(fieldAt.y + 20.0f));
     (void)bed.d().ClosePopup(*list);
 
-    // At a point, owned there: toward the left of it (a context menu).
+    // At a point and owned there, it opens toward the left of the point, as a context menu does.
     auto menu = Make<Probe>(u8"menu");
     menu->SetSize(core::Float2{100.0f, 80.0f});
     bed.d().OpenPopup(*part, *menu, At(core::Float2{300.0f, 50.0f}));
@@ -477,10 +478,10 @@ TEST_CASE("popups: a hint never takes the pointer and closes on any press or key
     auto tip = Make<Probe>(u8"tip");
     tip->SetSize(core::Float2{100.0f, 100.0f});
     bed.d().OpenPopup(*bed.root, *tip, At(core::Float2{0.0f, 0.0f}, PopupKind::Hint));
-    CHECK(bed.d().IsPopupOpen(*menu)); // a hint closes no one
+    CHECK(bed.d().IsPopupOpen(*menu)); // a hint closes no other popup
     int menuPresses = 0;
     (void)menu->AddEventListener(EventType::MouseDown, [&](const Event&) { ++menuPresses; });
-    bed.d().InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left); // through the hint
+    bed.d().InjectMouseDown(core::Float2{50.0f, 50.0f}, MouseButton::Left); // the press goes through the hint
     CHECK(menuPresses == 1);
     CHECK_FALSE(bed.d().IsPopupOpen(*tip));
     CHECK(bed.d().IsPopupOpen(*menu));
@@ -504,9 +505,9 @@ TEST_CASE("popups: input in another root of the GUI closes this root's light pop
     menu2->SetSize(core::Float2{50.0f, 50.0f});
     a->GetEventDispatcher()->OpenPopup(*a, *menu2, At(core::Float2{60.0f, 10.0f}));
     b->GetEventDispatcher()->InjectMouseDown(core::Float2{5.0f, 5.0f}, MouseButton::Left);
-    CHECK_FALSE(a->GetEventDispatcher()->IsPopupOpen(*menu2)); // above the dialog: closed
+    CHECK_FALSE(a->GetEventDispatcher()->IsPopupOpen(*menu2)); // above the dialog, so closed
     CHECK(a->GetEventDispatcher()->IsPopupOpen(*dialog));
-    CHECK(a->GetEventDispatcher()->IsPopupOpen(*menu)); // below the dialog: kept
+    CHECK(a->GetEventDispatcher()->IsPopupOpen(*menu)); // below the dialog, so kept
 }
 
 TEST_CASE("popups: a popup whose old parent held the only reference to it survives the move to its owner")
@@ -552,7 +553,7 @@ TEST_CASE("popups: one sized by its content grows when its content does (a toolt
     d.OpenPopup(*root, *popup, core::Move(options));
     (void)root->UpdateLayout();
     CHECK(popup->GetSize().x == doctest::Approx(20.0f));
-    content->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(150.0f); }); // what it shows grew
+    content->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(150.0f); }); // its content grew
     (void)root->UpdateLayout();
     CHECK(popup->GetSize().x == doctest::Approx(150.0f));
 }
@@ -565,7 +566,7 @@ TEST_CASE("popups: one placed against a rectangle follows it when its owner move
     PopupOptions options = At(core::Float2{50.0f, 50.0f}, PopupKind::Manual);
     bed.d().OpenPopup(*bed.root, *popup, core::Move(options));
     CHECK(popup->GetPosition().x == doctest::Approx(50.0f));
-    // A code editor's caret, scrolled: its list goes with it.
+    // When a code editor's caret scrolls, its completion list goes with it.
     CHECK(bed.d().SetPopupAnchorRect(*popup, Rect{120.0f, 80.0f, 0.0f, 16.0f}));
     CHECK(popup->GetPosition().x == doctest::Approx(120.0f));
     CHECK(popup->GetPosition().y == doctest::Approx(96.0f)); // below it
@@ -575,8 +576,9 @@ TEST_CASE("popups: one placed against a rectangle follows it when its owner move
 
 TEST_CASE("popups: one open that goes back home on close does not keep its root alive")
 {
-    // Its home is the root itself, which owns the dispatcher holding the entry: a strong reference
-    // there would make a cycle, and a GUI closed with the popup open would never be freed.
+    // The popup's home is the root itself, which owns the dispatcher holding the entry. A strong
+    // reference there would make a cycle, and a GUI closed with the popup open would never be
+    // freed.
     auto root = Make<SceneRoot>(Make<GUIContext>());
     const core::WeakRefPtr<SceneRoot> weak(root);
     auto screen = Make<Panel>();

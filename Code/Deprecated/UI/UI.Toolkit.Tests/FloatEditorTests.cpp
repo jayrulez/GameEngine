@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit FloatEditor: value round-trip + NumericField change drives the setter.
+// Smoke test for the toolkit FloatEditor: the value round-trips, and a NumericField change drives the setter.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

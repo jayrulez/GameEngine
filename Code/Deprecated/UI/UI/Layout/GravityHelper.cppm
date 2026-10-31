@@ -3,8 +3,7 @@
 
 // UI - :gravity_helper partition
 //
-// Applies Gravity flags to position a child within a container. Ported from
-// Sedulous.UI/src/Layout/GravityHelper.bf (Beef static class -> struct with a static method).
+// Applies Gravity flags to position a child within a container.
 
 module;
 #include "Core/Prelude.h"
@@ -21,8 +20,8 @@ export namespace foundation::ui
 {
     struct GravityHelper
     {
-        /// Positions a child's MARGIN BOX of (boxW, boxH) inside a container of (containerW,
-        /// containerH). Returns the margin-box (x, y, w, h) - View::Layout insets to the border
+        /// Positions a child's margin box of (boxW, boxH) inside a container of (containerW,
+        /// containerH). Returns the margin-box (x, y, w, h); View::Layout insets to the border
         /// box, so gravity math does not need the margin itself (a margin-aware form would
         /// produce identical border-box results).
         [[nodiscard]] static Rectangle Apply(Gravity gravity, f32 containerW, f32 containerH,

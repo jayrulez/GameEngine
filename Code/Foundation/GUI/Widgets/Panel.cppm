@@ -4,9 +4,9 @@
 // GUI - :panel partition
 //
 // Panel: the plain container element (`<Panel>` in markup, `add("Panel")` in a script). It lays
-// out its children by its display kind (a flex column unless its sheet or markup says otherwise:
-// `display`, `flex-direction`, `grid-template-columns`, ...); everything it does is the base
-// node's (E2 of Specs/gui-lab-evolution.md).
+// out its children according to its display kind, a flex column unless its style sheet or markup
+// sets otherwise (`display`, `flex-direction`, `grid-template-columns`, ...). All its behaviour
+// comes from the base node.
 
 module;
 #include "Core/Prelude.h"

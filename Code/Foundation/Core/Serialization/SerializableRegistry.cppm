@@ -9,7 +9,7 @@
 // this registry to create the object before running Serialize() on it.
 //
 // Registration is explicit (RegisterSerializable<T>()), matching the reflection
-// registration convention - no static-init-order reliance.
+// registration convention; nothing relies on static-init order.
 
 module;
 #include "Core/Prelude.h"
@@ -40,12 +40,12 @@ export namespace foundation::core
             m_factories.InsertOrAssign(id, factory);
             if (inserted && m_observer != nullptr)
             {
-                m_observer(m_observerContext, id); // fires only on a REAL insert
+                m_observer(m_observerContext, id); // fires only on a real insert
             }
         }
 
         // Remove a factory (hot reload: a plugin's recorded registrations reverse before
-        // its library closes - a factory pointer into an unloaded module is a dangling
+        // its library closes, since a factory pointer into an unloaded module is a dangling
         // call). No-op for unknown ids; the rebuilt module re-registers into the slot.
         void Unregister(TypeId id)
         {
@@ -53,7 +53,7 @@ export namespace foundation::core
             m_factories.Remove(id);
         }
 
-        // Registration observer (one at a time) - the PluginHost recording hook; see
+        // Registration observer (one at a time): the PluginHost recording hook; see
         // TypeRegistry::SetRegistrationObserver for the contract.
         void SetRegistrationObserver(void (*observer)(void*, TypeId), void* context) noexcept
         {
@@ -93,9 +93,9 @@ export namespace foundation::core
     }
 
     // The standard create-by-type adapter for a polymorphic reflected container of `Base` elements:
-    // wraps this registry so reflection's RegisterPolymorphicArrayType<Base> can create + eligibility-
-    // check by type WITHOUT importing serialization (capability flows into reflection as function
-    // pointers). Registrants pass &CreateSerializableElement<Base> +
+    // wraps this registry so reflection's RegisterPolymorphicArrayType<Base> can create and
+    // eligibility-check by type without importing serialization (the capability reaches reflection
+    // as function pointers). Registrants pass &CreateSerializableElement<Base> and
     // &CanCreateSerializableElement<Base>. Create returns null when `concrete` is unregistered or not
     // a `Base` (the reflection side then reports a clean failure).
     template <typename Base>

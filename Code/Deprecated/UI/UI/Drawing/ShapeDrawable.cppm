@@ -3,8 +3,7 @@
 
 // UI - :shape_drawable partition
 //
-// Delegate-based custom drawing without subclassing. Ported from
-// Sedulous.UI/src/Drawing/ShapeDrawable.bf (Beef delegate -> core::Function).
+// Delegate-based custom drawing without subclassing: the delegate is a core::Function.
 
 module;
 #include "Core/Prelude.h"

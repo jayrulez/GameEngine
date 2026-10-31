@@ -9,14 +9,14 @@
 ///   * m_dense  - a truly contiguous Array<T> (no holes), for cache-friendly ForEach /
 ///                Dense() iteration and direct GPU/system extraction.
 ///   * m_owners - the owning EntityHandle per dense slot (parallel to m_dense).
-///   * m_sparse - entity-index -> dense-index, for O(1) Has/Get/Remove by entity.
+///   * m_sparse - entity index to dense index, for O(1) Has/Get/Remove by entity.
 /// Removal is swap-with-last (keeps m_dense packed). Components are referenced by their
-/// owning entity (the EntityHandle's generation is the staleness check) - never by a
+/// owning entity (the EntityHandle's generation is the staleness check), never by a
 /// stashed pointer (the pools move). At most one component of type T per entity.
 ///
 /// A specific manager that needs stable addresses or in-pool polymorphism can swap its
-/// internal storage (e.g. to UniquePtr<T> slots) behind this same API - the escape
-/// hatch from the storage decision - with no consumer impact.
+/// internal storage (e.g. to UniquePtr<T> slots) behind this same API with no consumer
+/// impact.
 
 module;
 #include "Core/Prelude.h"
@@ -49,7 +49,7 @@ export namespace foundation::scene
         // Owning entity of each stored component (parallel to the pool).
         [[nodiscard]] virtual Span<const EntityHandle> OwnerHandles() const noexcept = 0;
 
-        // --- reflection access (tools: the editor inspector edits components generically) ---
+        // --- reflection access (tools such as the editor inspector edit components generically) ---
         // The entity's component as a typed reflection Instance (empty when absent).
         [[nodiscard]] virtual Instance GetComponentInstance(EntityHandle /*entity*/) { return {}; }
         // Adds a default-constructed component (false if the entity already has one).
@@ -77,7 +77,7 @@ export namespace foundation::scene
     class ComponentManager : public ComponentManagerBase
     {
     public:
-        // Adds a component for `entity` (one per type per entity - asserts otherwise) and
+        // Adds a component for `entity` (one per type per entity; asserts otherwise) and
         // returns a transient reference. Do not stash the reference across structural
         // changes; re-resolve via Get(entity). Initialization is deferred to the next
         // InitializePendingComponents (so sibling components can be set up first).
@@ -154,7 +154,7 @@ export namespace foundation::scene
         }
         [[nodiscard]] u32 Count() const { return static_cast<u32>(m_dense.Size()); }
 
-        // Contiguous fast-path: the packed component array + the parallel owner handles.
+        // Contiguous fast path: the packed component array and the parallel owner handles.
         [[nodiscard]] Span<T> Dense() noexcept { return {m_dense.Data(), m_dense.Size()}; }
         [[nodiscard]] Span<const T> Dense() const noexcept
         {
@@ -215,7 +215,7 @@ export namespace foundation::scene
                 return kInvalid;
             }
             const u32 dense = *found;
-            // The stored owner carries the full handle - a stale (reused-slot) entity
+            // The stored owner carries the full handle: a stale (reused-slot) entity
             // handle won't match its generation, so it reads as absent.
             return (m_owners[dense] == entity) ? dense : kInvalid;
         }
@@ -239,7 +239,7 @@ export namespace foundation::scene
     // `Serialize(ISerializer&, T&)` overload (found by ADL); the manager drives it per
     // component. Construct with a stable on-disk type id (used to route records to this
     // manager on load). Subclass this (instead of ComponentManager<T>) for serializable
-    // components - keeping serialization opt-in. Components with resource::Ref fields
+    // components, which keeps serialization opt-in. Components with resource::Ref fields
     // additionally define `ResolveResources(ResourceManager&, T&)` (ADL, like Serialize).
     template <typename T>
     class SerializableComponentManager : public ComponentManager<T>
@@ -257,7 +257,7 @@ export namespace foundation::scene
         {
             if (T* c = this->Get(entity))
             {
-                // Records carry the component type's data version (TypeOf<T> - the reflected
+                // Records carry the component type's data version (TypeOf<T>, the reflected
                 // TypeInfo, patched by REFLECT_VALUE's builder.DataVersion), so
                 // component Serialize bodies can migrate old scenes/blobs.
                 BeginVersionedPayload(ar, TypeOf<T>());

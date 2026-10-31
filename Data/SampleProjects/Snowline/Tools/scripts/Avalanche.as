@@ -1,16 +1,18 @@
-// Avalanche - chases the rider down the last stretch. On an entity following the course line (a
-// path_follow on the Course spline, stopped), with the Avalanche particle effect under it ("Front")
-// and a looping Rumble source ("Rumble"). Placed by Tools/course.py on a course that has one.
+// Avalanche: chases the rider down the last stretch. The script sits on an entity that follows the
+// course line (a path_follow on the Course spline, initially stopped), with the Avalanche particle
+// effect under it ("Front") and a looping Rumble sound source ("Rumble"). Tools/course.py places
+// it on the courses that have one.
 //
 // When the rider passes `release` metres down the line, the snow breaks loose `lead` metres behind
-// it ("AvalancheReleased") and runs down the line, gathering speed from `startSpeed` at `gather`
-// m/s each second up to `topSpeed`: a rider riding clean stays ahead; one who crashes loses it. The
-// gap is announced as it changes ("AvalancheGap", whole metres) for the HUD, the rumble grows as it
-// closes, and so does the pad's. Within `reach` of the rider it catches it ("AvalancheCaught": the
-// board crashes) and is spent: it rolls on over the rider and past for `passSeconds`, then settles.
-// (Coming on again, it caught a crashed rider over and over: low on Ridge the slope is gentle, so a
-// rider down in the snow never gets back the speed to outrun it.) It stops at the finish
-// ("RunFinished"), and a new run ("RunRestart") puts it back to wait.
+// ("AvalancheReleased") and runs down the line, gathering speed from `startSpeed` by `gather` m/s
+// each second up to `topSpeed`. A rider riding clean stays ahead; one who crashes loses the lead.
+// The gap is announced as it changes ("AvalancheGap", whole metres) for the HUD, and the rumble
+// and the pad's vibration grow as it closes. Within `reach` of the rider it catches them
+// ("AvalancheCaught", and the board crashes) and is spent: it rolls on over the rider and past for
+// `passSeconds`, then settles. It does not come on again after a catch: low on Ridge the slope is
+// gentle, so a rider down in the snow could never regain the speed to outrun it, and would be
+// caught over and over. It stops at the finish ("RunFinished"), and a new run ("RunRestart") puts
+// it back to wait.
 
 class Avalanche
 {
@@ -33,7 +35,7 @@ class Avalanche
     private float m_speed = 0.0f;
     private int m_lastGap = -1;
     private float m_padTimer = 0.0f;
-    private float m_passing = -1.0f; // after a catch, how long it rolls on yet (s); -1 before one
+    private float m_passing = -1.0f; // after a catch, how much longer it rolls on (s); -1 before a catch
 
     Avalanche(Entity@ entity) { @self = entity; }
 
@@ -51,7 +53,8 @@ class Avalanche
         }
         float d = float(dt);
         SceneSplines@ splines = SceneSplines::of(self.scene);
-        // The rider is top-level: position() is this frame's pose (worldPosition() was last frame's).
+        // The rider is a root entity, so position() holds this frame's pose; worldPosition() still
+        // holds last frame's.
         SplineHit@ here = splines.closestPoint(course, m_rider.position());
         if (here is null || !here.valid)
         {
@@ -82,7 +85,7 @@ class Avalanche
         }
         if (m_passing >= 0.0f)
         {
-            // Spent: over the rider and on, then settled.
+            // Spent: roll on over the rider, then settle.
             m_passing -= d;
             if (m_passing < 0.0f)
             {
@@ -121,14 +124,14 @@ class Avalanche
         }
     }
 
-    // Over the line: the snow settles behind the rider.
+    // The rider crossed the finish line, so the snow settles behind them.
     void onRunFinished(int unused)
     {
         m_finished = true;
         quiet();
     }
 
-    // A new run: back to waiting, still and silent.
+    // A new run: go back to waiting, still and silent.
     void onRunRestart(int unused)
     {
         park();

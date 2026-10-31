@@ -1,6 +1,6 @@
-# Engine::Terrain - `engine.terrain`. PHASE A: the TerrainComponent (references a cooked TerrainResource)
-# + scene integration. PHASE B/C: the GPU height-texture cache + the chunked geo-mipmap TerrainRenderer
-# and its application-level subsystem (registered into RenderSubsystem via the generic seam, like particles).
+# Engine::Terrain - `engine.terrain`: the TerrainComponent (which references a cooked TerrainResource)
+# and its scene integration, the GPU height-texture cache, the chunked geo-mipmap TerrainRenderer, and
+# its application-level subsystem (registered into RenderSubsystem the same way particles are).
 util_add_engine_library(Engine.Terrain ALIAS Engine::Terrain)
 target_link_libraries(Engine.Terrain
     PUBLIC

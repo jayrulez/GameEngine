@@ -19,13 +19,13 @@
 
 #include <vulkan/vulkan.h>
 
-// AFTER both includes, so it holds even if vulkan_win32.h (or anything added later) pulls
-// <windows.h> back in: winnt.h defines MemoryBarrier as an object-like macro
-// (__faststorefence on x64), which eats the RHI's `MemoryBarrier` struct
-// (RHI/Descriptors.cppm) in any TU that includes both - "expected ';' after expression",
-// then "unknown type name '__faststorefence'". Same reason WIN32_LEAN_AND_MEAN and NOMINMAX
-// are set above: this header's job is to make <windows.h> safe for the rest of the build.
-// Nothing here wants the fence intrinsic - Core's :atomic owns memory ordering.
+// After both includes, so it holds even if vulkan_win32.h (or anything added later) pulls
+// <windows.h> back in. winnt.h defines MemoryBarrier as an object-like macro (__faststorefence
+// on x64), which eats the RHI's `MemoryBarrier` struct (RHI/Descriptors.cppm) in any TU that
+// includes both: "expected ';' after expression", then "unknown type name '__faststorefence'".
+// WIN32_LEAN_AND_MEAN and NOMINMAX are set above for the same reason: this header makes
+// <windows.h> safe for the rest of the build. Nothing here wants the fence intrinsic; Core's
+// :atomic owns memory ordering.
 #ifdef _WIN32
 #undef MemoryBarrier
 #endif

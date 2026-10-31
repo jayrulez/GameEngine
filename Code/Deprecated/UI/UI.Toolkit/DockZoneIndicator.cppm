@@ -4,9 +4,7 @@
 // UI Toolkit - :dock_zone_indicator partition
 //
 // Overlay showing dock drop zones during drag operations. Hit-test transparent; drawn manually by
-// DockManager. Ported from Sedulous.UI.Toolkit/src/Docking/DockZoneIndicator.bf. Beef `List<DockTarget>`
-// -> Array<DockTarget>; Beef nullable `DockTarget? HoveredTarget` -> Optional<DockTarget> HoveredTarget();
-// `RectangleF` -> Rectangle; byte `Color(...)` -> private static Rgb().
+// DockManager.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +29,7 @@ export namespace foundation::ui::toolkit
         View* RelativeTo = nullptr; // the view this zone docks relative to
         /// The region the panel would occupy after the drop (DockManager coords). Drawn as a
         /// translucent overlay while this zone is hovered so the drop outcome is visible before
-        /// committing. Zero-area = no preview.
+        /// committing. A zero-area rect means no preview.
         Rectangle PreviewRect{};
     };
 
@@ -41,7 +39,7 @@ export namespace foundation::ui::toolkit
         RTTI_OBJECT(DockZoneIndicator, View)
     public:
         /// Accent color for the drop zones. Set by the owning DockManager from its resolved theme
-        /// AccentColor (the indicator is drawn manually and never in the styled tree, so it can't
+        /// AccentColor (the indicator is drawn manually and never in the styled tree, so it cannot
         /// resolve styles itself). Defaults to the classic blue.
         Color Accent{80.0f / 255.0f, 150.0f / 255.0f, 240.0f / 255.0f, 1.0f};
 
@@ -58,7 +56,7 @@ export namespace foundation::ui::toolkit
         }
 
         /// Add a dock zone target. `previewRect` is the region the panel would occupy after the
-        /// drop (zero-area = no hover preview).
+        /// drop (a zero-area rect means no hover preview).
         void AddTarget(DockPosition position, Rectangle rect, View* relativeTo,
                        Rectangle previewRect = {})
         {
@@ -97,7 +95,7 @@ export namespace foundation::ui::toolkit
 
         void OnDraw(UIDrawContext& ctx) override
         {
-            // Use the accent handed down by the DockManager (this overlay isn't in the styled tree),
+            // Use the accent handed down by the DockManager (this overlay is not in the styled tree),
             // so the drop zones follow the active theme instead of being hardcoded blue.
             const Color zoneColor = Color{Accent.r, Accent.g, Accent.b, 80.0f / 255.0f};
             const Color zoneBorder = Color{Accent.r, Accent.g, Accent.b, 200.0f / 255.0f};

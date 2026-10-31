@@ -2,12 +2,12 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Sandbox - the running dev harness. It extends DefaultApplication (which registers
-// the SceneSubsystem + RenderSubsystem and renders active scenes each frame), creates a
-// scene with two spinning cube grids (instanced + distinct), and lets the engine draw it.
+// the SceneSubsystem and RenderSubsystem and renders active scenes each frame), creates a
+// scene with two spinning cube grids (instanced and distinct), and lets the engine draw it.
 // As the renderer grows, this is where we exercise it.
 
 #include "Core/Prelude.h"
-#include "imgui.h" // Dear ImGui (debug UI) - used directly; the engine integration is extensions.imgui
+#include "imgui.h" // Dear ImGui (debug UI), used directly; extensions.imgui does the engine integration
 
 import foundation.core;
 import foundation.rhi; // offscreen render target (Texture / ResourceState / Blit)
@@ -18,21 +18,21 @@ import foundation.runtime.desktop;
 import foundation.shell.desktop;
 import foundation.graphics;
 import foundation.graphics.gpu;
-import engine.defaultapp; // DefaultApplication (scene + render subsystems)
+import engine.defaultapp; // DefaultApplication (scene and render subsystems)
 import engine.composition; // FullComposition: the factory set every host composes from
 import foundation.scene;
 import engine.scene;
-import engine.render; // MeshComponent / CameraComponent + their managers
+import engine.render; // MeshComponent / CameraComponent and their managers
 import engine.model;  // InstantiateModel: a cooked model's nodes as entities
 import engine.animation; // SkeletalAnimation/AnimationGraph components (engine-driven skinning)
 import extensions.imgui;               // ImguiSubsystem (debug UI)
-import foundation.particles;           // ParticleEffect + the CPU sim (the campfire demo)
-import engine.particles;    // ParticleEffectComponent + the subsystem
+import foundation.particles;           // ParticleEffect and the CPU sim (the campfire demo)
+import engine.particles;    // ParticleEffectComponent and the subsystem
 import foundation.image;               // Image (HDR equirect pixels)
 import foundation.image.io;            // LoadImage
 import foundation.render;              // ViewCamera / ViewportRect (split-screen overrides)
 import foundation.geometry;
-import foundation.geometry.resource; // StaticMeshFactory + StaticMesh product
+import foundation.geometry.resource; // StaticMeshFactory and the StaticMesh product
 import foundation.materials;
 import foundation.materials.resource; // MaterialFactory (cooked materials)
 import foundation.texture.resource;   // TextureFactory (cooked textures)
@@ -41,9 +41,9 @@ import pipeline.core;             // AssetBuildContext (cook an asset into a con
 import foundation.animation.resource; // Skeleton/AnimationClip factories
 import foundation.vfs;                // NativeFileSystem mount for the content DB
 import foundation.content;            // ContentDatabase (cooked-resource output)
-import foundation.resource;           // ResourceManager + Proxy
+import foundation.resource;           // ResourceManager and Proxy
 import foundation.model;              // ModelLoadResult
-import modelimporter;      // LoadAndCook + ImportedModel manifest
+import modelimporter;      // LoadAndCook and the ImportedModel manifest
 import foundation.animation;          // AnimationPlayer (drives GPU skinning)
 
 #include "../Common/FlyCamera.h" // shared free-fly camera (uses the imported runtime/core types)
@@ -71,7 +71,7 @@ namespace particles = foundation::particles;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -87,7 +87,7 @@ namespace
     {
     public:
         // Run uncapped (vsync off) so the FPS/frame-ms readout reflects real CPU+GPU cost, not the
-        // display refresh - matches AnimStressTest. The image may tear; fine for a dev sandbox.
+        // display refresh, as AnimStressTest does. The image may tear, which is fine for a dev sandbox.
         graphics::RenderWindowDesc MainRenderWindow() const override
         {
             graphics::RenderWindowDesc d;
@@ -95,7 +95,7 @@ namespace
             return d;
         }
 
-        // Register the standard subsystems (DefaultApplication) + the ImGui debug UI on top.
+        // Register the standard subsystems (DefaultApplication) and the ImGui debug UI on top.
         void Configure(runtime::IApplicationHost& host) override
         {
             engine::runtime::DefaultApplication::Configure(host);
@@ -112,15 +112,15 @@ namespace
             // on the primary instance's group (the app renders instance scenes; there is no default).
             m_scene = PrimaryScenes().CreateScene(u8"sandbox");
 
-            // Per-scene environment: drives IBL (split-sum ambient from a procedural sky) + the flat
-            // fallback. The procedural sky's gradient + sun feed the SH9 diffuse + prefiltered specular.
+            // Per-scene environment: drives IBL (split-sum ambient from a procedural sky) and the flat
+            // fallback. The procedural sky's gradient and sun feed the SH9 diffuse and prefiltered specular.
             if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
             {
                 engine::render::EnvironmentSettings& e = env->Environment();
                 e.ambientColor = core::Color{0.12f, 0.16f, 0.28f, 1.0f}; // flat fallback (IBL off)
                 e.ambientIntensity = 0.35f;
                 e.skyMode = render::SkyMode::Procedural;
-                e.skyIntensity = 0.7f; // dimmer sky -> less washed-out IBL ambient
+                e.skyIntensity = 0.7f; // a dimmer sky gives a less washed-out IBL ambient
                 e.skyHorizon = core::Color{0.62f, 0.70f, 0.85f, 1.0f};
                 e.skyZenith = core::Color{0.18f, 0.34f, 0.68f, 1.0f};
                 e.skyGround = core::Color{0.28f, 0.26f, 0.24f, 1.0f};
@@ -130,7 +130,7 @@ namespace
             // Load an HDR equirectangular environment so F5 can cycle to it (mode starts Procedural).
             if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
-                // Default exposure below 1.0 - the procedural sky + IBL ambient are bright, so the AgX
+                // Default exposure below 1.0: the procedural sky and IBL ambient are bright, so the AgX
                 // tonemap washes out at 1.0. Tune live via the Environment window's Exposure slider.
                 render->SetExposure(0.5f);
                 core::String hdrPath =
@@ -157,8 +157,8 @@ namespace
                                            .AsView());
                 }
 
-                // Cubemap source: point at ONE face; the importer detects the other 5 (px/nx/...) and
-                // loads + combines them. (Explicit 6-path LoadCubemap also works.)
+                // Cubemap source: point at one face; the importer detects the other 5 (px/nx/...) and
+                // loads and combines them. (Explicit 6-path LoadCubemap also works.)
                 core::String oneFace = foundation::vfs::DataPath(
                     DataRoot(), u8"Samples/Environment/cube_sky/px.png");
                 core::Array<core::String> facePaths;
@@ -186,10 +186,9 @@ namespace
                 }
             }
 
-            // camera, pulled back along +Z looking at the origin (down -Z by default)
-            // Raised + pitched down so the horizontal floor (lights above it) is clearly in view,
-            // with the cube grids standing on it. Pitch ~28 deg below horizontal (looks toward the
-            // scene center). Default camera looks down -Z; rotating about +X by -pitch tilts it down.
+            // The camera, pulled back along +Z, raised and pitched about 28 degrees down toward the scene
+            // center so the floor (with the lights above it) and the cube grids are in view. The default
+            // camera looks down -Z; rotating about +X by -pitch tilts it down.
             m_camera = m_scene->CreateEntity(u8"camera");
             m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 21.0f, 30.0f});
             core::Transform camT = m_scene->GetLocalTransform(m_camera);
@@ -202,7 +201,7 @@ namespace
                     core::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
             }
 
-            // A large horizontal floor (Plane normal = +Y) under the scene - the point lights hover
+            // A large horizontal floor (Plane normal = +Y) under the scene. The point lights hover
             // above it and cast visible pools on it. The two cube grids stand on the floor.
             if (auto* meshes = m_scene->GetSystem<engine::render::MeshComponentManager>())
             {
@@ -210,17 +209,17 @@ namespace
                 m_scene->SetLocalPosition(m_floorEntity, core::Float3{0.0f, 0.0f, 0.0f});
                 engine::render::MeshComponent& fmc = meshes->Add(m_floorEntity);
                 fmc.mesh = geometry::Primitives::Plane(AppRoot(), 120.0f, 120.0f);
-                // Semi-glossy DIELECTRIC green floor (non-metallic, moderate roughness): shadows read
+                // Semi-glossy dielectric green floor (non-metallic, moderate roughness): shadows read
                 // clearly (not washed out by a mirror-metal reflection) while SSR still shows softly.
-                // Metallic/roughness are LIVE-tweakable from the Environment window (SSR eye test).
+                // Metallic and roughness can be tweaked live from the Environment window (SSR eye test).
                 ApplyFloorMaterial();
 
                 core::RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(AppRoot(), 0.35f);
                 BuildGrid(*meshes, cube, /*originX*/ -8.0f, /*instanced*/ true);
                 BuildGrid(*meshes, cube, /*originX*/ 8.0f, /*instanced*/ false);
 
-                // A row of cubes resting EXACTLY on the floor (bottom face flush at y=-7) - a static
-                // reference for judging shadow contact / peter-panning (the grids float in the air).
+                // A row of cubes resting exactly on the floor (bottom face flush at y=0), a static
+                // reference for judging shadow contact and peter-panning (the grids float in the air).
                 constexpr core::f32 kBoxSize = 2.5f, kFloorY = 0.0f;
                 core::RefPtr<geometry::StaticMesh> box = geometry::Primitives::Cube(AppRoot(), kBoxSize);
                 core::RefPtr<materials::Material> boxMat = materials::CreatePBR(
@@ -236,14 +235,14 @@ namespace
                     bmc.SetMaterial(boxMat);
                 }
 
-                // Spheres resting ON the floor (bottom flush) - their contact shadow is mostly hidden
-                // under the sphere, so you see only the "half" extending away from the sun (vs the
+                // Spheres resting on the floor (bottom flush). Their contact shadow is mostly hidden
+                // under the sphere, so only the "half" extending away from the sun shows (unlike the
                 // floating grids, whose full shadow ellipse is visible on the ground).
                 constexpr core::f32 kBallR = 1.25f;
                 core::RefPtr<geometry::StaticMesh> ball =
                     geometry::Primitives::Sphere(AppRoot(), kBallR, 24, 12);
-                // Metal spheres with INCREASING roughness across the row (0.05 -> 0.59), all fully metallic,
-                // so the probe reflection goes mirror-sharp -> blurry - showcasing the GGX roughness prefilter.
+                // Metal spheres with increasing roughness across the row (0.05 to 0.59), all fully metallic,
+                // so the probe reflection goes from mirror-sharp to blurry, showing the GGX roughness prefilter.
                 for (int k = 0; k < 4; ++k)
                 {
                     core::RefPtr<materials::Material> ballMat =
@@ -258,9 +257,9 @@ namespace
                     smc.SetMaterial(ballMat);
                 }
 
-                // Transparent (alpha-blended) spheres hovering in front of the opaque row - exercises the
-                // transparent path: routed to the Transparent category (blend mode), sorted back-to-front,
-                // blended with depth-test/no-write. Base-color alpha (<1) makes them see-through.
+                // Transparent (alpha-blended) spheres hovering in front of the opaque row, exercising the
+                // transparent path: routed to the Transparent category (blend mode), sorted back to front,
+                // blended with depth test and no depth write. Base-color alpha (<1) makes them see-through.
                 core::RefPtr<materials::Material> glassMat = materials::CreatePBR(
                     u8"lit", core::Float4{0.35f, 0.6f, 0.95f, 0.4f}, 0.0f, 0.12f);
                 glassMat->pipeline.blendMode = materials::BlendMode::AlphaBlend;
@@ -269,8 +268,8 @@ namespace
                 for (int k = 0; k < 3; ++k)
                 {
                     scene::EntityHandle g = m_scene->CreateEntity(u8"glassBall");
-                    // Moved well off to the left (x ~ -26, outside the probe box) + higher, to isolate them
-                    // from the chrome spheres while inspecting reflections.
+                    // Moved well off to the left (x ~ -26, outside the probe box) and higher, to isolate
+                    // them from the chrome spheres while inspecting reflections.
                     m_scene->SetLocalPosition(
                         g, core::Float3{-26.0f, kFloorY + 6.0f + 3.0f * static_cast<core::f32>(k),
                                         16.0f});
@@ -289,7 +288,7 @@ namespace
                         core::RefPtr<materials::Material> maskMat = materials::CreatePBR(
                             u8"lit", core::Float4{0.95f, 0.8f, 0.3f, 1.0f}, 0.0f, 0.45f);
                         maskMat->pipeline.blendMode = materials::BlendMode::Masked;
-                        maskMat->SetDefaultTexture(u8"AlbedoMap", cutout); // alpha holes -> discard
+                        maskMat->SetDefaultTexture(u8"AlbedoMap", cutout); // alpha holes are discarded
                         for (int k = 0; k < 3; ++k)
                         {
                             scene::EntityHandle m = m_scene->CreateEntity(u8"maskedBall");
@@ -304,20 +303,20 @@ namespace
                 }
             }
 
-            // Lights: a dim directional key (down-forward) + a bright point light that orbits the
-            // grid in OnUpdate, so the per-light forward shade is visible (moving highlight).
+            // Lights: a dim directional key (down-forward) and a field of point lights that
+            // OnUpdate moves, so the per-light forward shading is visible (moving highlights).
             if (auto* lights = m_scene->GetSystem<engine::render::LightComponentManager>())
             {
                 scene::EntityHandle key = m_scene->CreateEntity(u8"keyLight");
                 m_keyLight = key;
-                ApplyKeyLightDir(); // pitch/yaw -> entity rotation (steeper downward tilt by default)
+                ApplyKeyLightDir(); // pitch and yaw to entity rotation (steeper downward tilt by default)
                 engine::render::LightComponent& kl = lights->Add(key);
                 kl.type = engine::render::LightType::Directional;
                 kl.color = core::Color{0.4f, 0.5f, 0.7f, 1.0f};
                 kl.intensity = 0.5f;    // key light: bright enough that its shadow reads
-                kl.castsShadows = true; // directional CSM (5.2) + spot (5.3a) + point cube (5.3b)
+                kl.castsShadows = true; // directional CSM
 
-                // A field of point lights hovering above the floor (X-Z grid) - the clustered
+                // A field of point lights hovering above the floor (X-Z grid): the clustered
                 // light-culling demo. Each fragment only evaluates the lights in its froxel, so this
                 // scales far better than an all-lights loop. Each casts a colored pool on the floor.
                 constexpr int kCols = 6, kRows = 3; // 18 point lights over the floor
@@ -342,7 +341,7 @@ namespace
                     }
                 }
 
-                // A bright spot light overhead, aimed down at the floor boxes/spheres - the
+                // A bright spot light overhead, aimed down at the floor boxes and spheres: the
                 // atlas spot-shadow demo. Its cone casts sharp shadows of the resting boxes onto the
                 // floor (distinct from the directional CSM), packed into the local-shadow atlas.
                 scene::EntityHandle spot = m_scene->CreateEntity(u8"spotLight");
@@ -359,13 +358,13 @@ namespace
                 sl.intensity = 120.0f; // inverse-square over ~14u to the floor
                 sl.range = 30.0f;
                 sl.innerAngle = 0.55f;
-                sl.outerAngle = 0.75f;  // wide cone: cover both the box + sphere rows
+                sl.outerAngle = 0.75f;  // wide cone: cover both the box and sphere rows
                 sl.castsShadows = true; // spot atlas shadow caster
                 sl.shadowUpdate =
-                    engine::render::ShadowUpdateMode::Static; // static scene -> cached atlas layer
+                    engine::render::ShadowUpdateMode::Static; // a static scene, so a cached atlas layer
 
-                // A shadow-casting POINT light hovering among the floor boxes/spheres - the
-                // cube-shadow demo. Its 6 atlas faces cast shadows radially (onto the floor + box sides).
+                // A shadow-casting point light hovering among the floor boxes and spheres: the
+                // cube-shadow demo. Its 6 atlas faces cast shadows radially (onto the floor and box sides).
                 scene::EntityHandle pt = m_scene->CreateEntity(u8"shadowPoint");
                 m_scene->SetLocalPosition(pt, core::Float3{4.0f, 5.0f, 13.0f});
                 engine::render::LightComponent& pls = lights->Add(pt);
@@ -374,12 +373,12 @@ namespace
                     core::Color{0.5f, 1.0f, 0.6f, 1.0f}; // green, distinct from the warm spot
                 pls.intensity = 28.0f;
                 pls.range = 16.0f;
-                pls.castsShadows = true; // point cube atlas caster (5.3b)
+                pls.castsShadows = true; // point cube atlas caster
             }
 
-            // TWO reflection probes, side by side with an overlap in the middle, to show multi-probe blending:
+            // Two reflection probes, side by side with an overlap in the middle, to show multi-probe blending:
             // each captures from its own center (so their local reflections differ), and fragments in the
-            // overlap blend the two by influence weight. Realtime -> round-robin re-captures one per frame.
+            // overlap blend the two by influence weight. Realtime probes re-capture round-robin, one per frame.
             if (auto* probes = m_scene->GetSystem<engine::render::ReflectionProbeComponentManager>())
             {
                 m_probeEntity = m_scene->CreateEntity(
@@ -395,14 +394,14 @@ namespace
                 m_scene->SetLocalPosition(probeR, core::Float3{8.0f, 6.0f, 16.0f});
                 engine::render::ReflectionProbeComponent& rpR = probes->Add(probeR);
                 rpR.halfExtents =
-                    core::Float3{12.0f, 12.0f, 14.0f}; // covers x[-4,20] -> overlap x[-4,4]
+                    core::Float3{12.0f, 12.0f, 14.0f}; // covers x[-4,20], overlapping x[-4,4]
                 rpR.blendDistance = 4.0f;
                 rpR.update = render::ProbeUpdateMode::Realtime;
             }
 
-            LoadImportedModel(host); // cook + spawn a glTF model through the resource pipeline
+            LoadImportedModel(host); // cook and spawn glTF models through the resource pipeline
 
-            BuildParticleDemo(); // campfire + sparks: the particle path in the full-scene mix
+            BuildParticleDemo(); // campfire and sparks: the particle path in the full-scene mix
 
             core::ConsoleWrite(
                 u8"Sandbox: split-screen - click a half to fly its camera (WASD/QE, Shift fast); "
@@ -410,10 +409,9 @@ namespace
                 u8"exit.\n");
         }
 
-        // Particles in the full-scene mix (the renderer-exercise gap Sandbox had): a campfire
-        // (additive billboards + color/size-over-life) with spark TRAILS (the ribbon path),
-        // sharing the frame with meshes/shadows/AO/TAA/probes - so particle regressions show
-        // up here, not only in the dedicated ParticleFX showcase.
+        // Particles in the full-scene mix: a campfire (additive billboards with color and size over
+        // life) with spark trails (the ribbon path), sharing the frame with meshes, shadows, AO, TAA
+        // and probes, so particle regressions show up here, not only in the ParticleFX showcase.
         void BuildParticleDemo()
         {
             auto* pmgr = m_scene->GetSystem<engine::particles::ParticleEffectComponentManager>();
@@ -476,11 +474,10 @@ namespace
             pmgr->Add(m_campfireEntity).SetEffect(m_campfire);
         }
 
-        // The model-import seam: open the cooked-resource output DB, register the geometry factory,
-        // load+cook a glTF file through the importer, then spawn its node hierarchy as entities whose
-        // MeshComponents reference the cooked StaticMesh resources. This is the clean runtime cook seam
-        // the design calls for - an editor would cook offline and the runtime would only Bind, but the
-        // wiring (factory -> Bind -> render) is identical.
+        // Model import at runtime: open the cooked-resource output DB, register the factories, load and
+        // cook glTF files through the importer, then spawn their node hierarchies as entities whose
+        // MeshComponents reference the cooked StaticMesh resources. An editor would cook offline and the
+        // runtime would only Bind, but the wiring (factory, then Bind, then render) is the same.
         void LoadImportedModel(runtime::IApplicationHost& host)
         {
             const core::String outputDirStorage =
@@ -494,7 +491,7 @@ namespace
                 return;
             }
 
-            // Output DB (cooked resources) + resource manager + the factories. ModelFactory builds the
+            // Output DB (cooked resources), resource manager and factories. ModelFactory builds the
             // manifest into a ModelResource, resolving its meshes/materials/textures (dependency edges).
             m_contentFs =
                 core::MakeUnique<vfs::NativeFileSystem>(AppRoot(), outputDir, AppRoot());
@@ -514,19 +511,19 @@ namespace
             m_factories.Register(*m_resources);
             engine::RegisterAllResourceTypes(); // make the cooked types deserializable
 
-            // A few imported models side by side (runtime cook seam; an editor would cook offline + Bind).
+            // A few imported models side by side (cooked at runtime; an editor would cook offline and Bind).
             SpawnModel(u8"Duck", core::Format(u8"{}/Duck/glTF/Duck.gltf", modelDir).AsView(),
                        core::Float3{-5.0f, 3.0f, 6.0f});
             SpawnModel(u8"Fox", core::Format(u8"{}/Fox/glTF/Fox.gltf", modelDir).AsView(),
                        core::Float3{5.0f, 0.0f, 6.0f});
             // The Character is driven by an AnimationGraph (a state machine over its clips) rather than a
-            // single clip - press G to fire the graph's "Next" trigger and cross-fade to the next state.
+            // single clip; press G to fire the graph's "Next" trigger and cross-fade to the next state.
             SpawnModel(
                 u8"Char",
                 core::Format(u8"{}/QuaterniusCharacter/glTF/Character.gltf", modelDir).AsView(),
                 core::Float3{0.0f, 0.0f, 12.0f}, /*useGraph=*/true);
 
-            SpawnSpriteDemo(); // billboards (all orientation + blend modes) using the imported logo
+            SpawnSpriteDemo(); // billboards (all orientation and blend modes) using the imported logo
             SpawnDecalDemo();  // project the same logo onto the floor (screen-space decal)
         }
 
@@ -556,7 +553,7 @@ namespace
             dc.size =
                 core::Float3{8.0f, 8.0f, 6.0f}; // 8x8 floor footprint; 6-unit box depth spans y=0
             dc.fadeStart = 0.0f;
-            dc.fadeEnd = 1.4f; // ~80deg - fully faded on near-vertical surfaces
+            dc.fadeEnd = 1.4f; // ~80deg: fully faded on near-vertical surfaces
             // Sit on a clear patch of floor (props start at z>=6) and rotate so +Z projects down.
             core::Transform t;
             t.position = core::Float3{0.0f, 0.0f, -3.0f};
@@ -565,8 +562,8 @@ namespace
             m_scene->SetLocalTransform(e, t);
         }
 
-        // Import the logo PNG through the asset pipeline (TextureImporter -> cook into the content
-        // DB -> Bind the runtime Texture) and return its GPU view. The Proxy is stored to keep it alive.
+        // Import the logo PNG through the asset pipeline (TextureImporter, cooked into the content DB,
+        // then Bind the runtime Texture) and return its GPU view. The Proxy is stored to keep it alive.
         [[nodiscard]] rhi::TextureView* LoadLogoTexture()
         {
             if (m_resources.Get() == nullptr ||
@@ -608,7 +605,7 @@ namespace
 
         // One textured billboard per (orientation, blend) combination, in a row, so the modes are easy to
         // compare by flying the camera around (click a split half to fly its camera):
-        //   0 camera-facing (full), 1 camera-facing about world-Y, 2 world-aligned (fixed XY); + additive.
+        //   0 camera-facing (full), 1 camera-facing about world-Y, 2 world-aligned (fixed XY), and additive.
         void SpawnSpriteDemo()
         {
             if (m_scene == nullptr)
@@ -669,9 +666,9 @@ namespace
             }
         }
 
-        // Cook + bind + spawn one model, placed at `position` and auto-fit to a target size. Each model
-        // spawns its node hierarchy (local TRS + parent links) under a scaled model-root entity; mesh
-        // nodes get a MeshComponent referencing the cooked StaticMesh + material.
+        // Cook, bind and spawn one model, placed at `position` and auto-fit to a target size. Each model
+        // spawns its node hierarchy (local TRS and parent links) under a scaled model-root entity; mesh
+        // nodes get a MeshComponent referencing the cooked StaticMesh and material.
         void SpawnModel(core::StringView prefix, core::StringView path, core::Float3 position,
                         bool useGraph = false)
         {
@@ -699,7 +696,7 @@ namespace
             }
 
             // Auto-fit: the model-root scales the model's largest extent to a target size (models come in
-            // wildly different unit scales - the Duck is ~100 units, the Fox ~150).
+            // wildly different unit scales: the Duck is ~100 units, the Fox ~150).
             constexpr core::f32 kTargetSize = 6.0f;
             const core::Float3 extent = model->boundsMax - model->boundsMin;
             const core::f32 maxExtent = core::Max(extent.x, core::Max(extent.y, extent.z));
@@ -774,7 +771,7 @@ namespace
         }
 
         // Fire the Character graph's "Next" trigger, advancing its state machine to the next clip. The
-        // player is owned + created lazily by the AnimationGraphComponentManager, so reach it through the
+        // player is owned and created lazily by the AnimationGraphComponentManager, so reach it through the
         // component (it exists once the subsystem has ticked at least once).
         void FireGraphNext()
         {
@@ -796,7 +793,7 @@ namespace
             }
         }
 
-        // Aim the directional key light from pitch (downward tilt) + yaw (compass) angles. The light
+        // Aim the directional key light from pitch (downward tilt) and yaw (compass) angles. The light
         // shines along the entity's forward (-Z), so rotation = yaw(Y) * pitch(X); the sky sun tracks it.
         void ApplyKeyLightDir()
         {
@@ -811,7 +808,7 @@ namespace
             m_scene->SetLocalTransform(m_keyLight, t);
         }
 
-        // Cycle the sky source (Procedural -> Analytic -> HDR Equirect -> Cubemap -> ...). Changing
+        // Cycle the sky source (Procedural, Analytic, HDR Equirect, Cubemap, and around again). Changing
         // skyMode re-runs the IBL precompute from the new source next frame.
         void CycleSkyMode()
         {
@@ -830,7 +827,7 @@ namespace
             }
         }
 
-        // Flip the reflection probe's box-parallax on/off (F6) to compare parallax-corrected vs infinite-env.
+        // Flip the reflection probe's box parallax on or off (F6) to compare parallax-corrected and infinite-environment reflections.
         void ToggleProbeParallax()
         {
             if (m_scene == nullptr)
@@ -846,7 +843,7 @@ namespace
             }
         }
 
-        // Live debug UI (ImGui): scene environment tweakables wired straight to EnvironmentSettings -
+        // Live debug UI (ImGui): scene environment tweakables wired straight to EnvironmentSettings;
         // editing these re-runs the IBL precompute next frame, so the ambient updates live.
         void BuildDebugUI(engine::render::RenderSubsystem* render)
         {
@@ -864,13 +861,13 @@ namespace
                 }
                 bool instShare =
                     render
-                        ->InstanceSharing(); // prepass->forward instance-data sharing (A/B / regression)
+                        ->InstanceSharing(); // instance data shared between prepass and forward (A/B for regressions)
                 if (ImGui::Checkbox("Instance Sharing", &instShare))
                 {
                     render->SetInstanceSharing(instShare);
                 }
                 {
-                    // Ambient occlusion mode (Off/GTAO/SSAO, mutually exclusive) + shared knobs.
+                    // Ambient occlusion mode (Off/GTAO/SSAO, mutually exclusive) and shared knobs.
                     const char* aoItems[] = {"Off", "GTAO", "SSAO"};
                     int aoMode = static_cast<int>(render->GetAoMode());
                     if (ImGui::Combo("AO Mode", &aoMode, aoItems, 3))
@@ -1049,8 +1046,9 @@ namespace
                     }
                 }
             }
-            // Directional (key) light - the actual scene illumination + sky sun direction. Distinct from
-            // "Sun Intensity" above (that's the sky's sun disc brightness, not the light that shades surfaces).
+            // Directional (key) light: the actual scene illumination and the sky's sun direction. Distinct
+            // from "Sun Intensity" above, which is the sky's sun disc brightness, not the light that shades
+            // surfaces.
             if (auto* lights = m_scene->GetSystem<engine::render::LightComponentManager>())
             {
                 if (engine::render::LightComponent* kl =
@@ -1073,7 +1071,7 @@ namespace
                     }
                 }
             }
-            // Reflection probe: toggle box parallax (also F6) to compare parallax-corrected vs infinite-env.
+            // Reflection probe: toggle box parallax (also F6) to compare parallax-corrected and infinite-environment.
             if (auto* probes = m_scene->GetSystem<engine::render::ReflectionProbeComponentManager>())
             {
                 if (engine::render::ReflectionProbeComponent* rp =
@@ -1118,7 +1116,7 @@ namespace
             }
         }
 
-        // Build (lazily) the input router + one surface per split half, then refit each surface's region
+        // Build (lazily) the input router and one surface per split half, then refit each surface's region
         // to the current window split. Each half's content-space equals its own pixel rect (region ==
         // contentSize, Stretch), so a viewport mouse reads [0..halfW]x[0..H] local to that view.
         void UpdateInputRouting(shell::IInputManager& input, shell::IWindow& win)
@@ -1144,7 +1142,7 @@ namespace
                 m_inputRouter->AddSurface(m_surfaceL.Get());
                 m_inputRouter->AddSurface(m_surfaceR.Get());
                 // Click-to-focus (router default): a click sets keyboard focus to that half, so WASD/QE
-                // drive it; mouse-look (RMB drag) still follows the hovered half via pointer capture.
+                // drive it; mouse-look (RMB drag) still follows the hovered half through pointer capture.
             }
 
             // Keep regions in sync with the live window size (resize/DPI).
@@ -1163,9 +1161,9 @@ namespace
             m_inputRouter->Update();
         }
 
-        // Split-screen rendered into an OFFSCREEN texture, then blitted to the backbuffer - the
-        // editor-shaped path (a view renders to a sampleable/copyable target, not straight to the
-        // swapchain). Exercises the full multi-view path + the configurable target final state.
+        // Split-screen rendered into an offscreen texture, then blitted to the backbuffer: the path an
+        // editor takes (a view renders to a sampleable, copyable target, not straight to the
+        // swapchain). Exercises the full multi-view path and the configurable target final state.
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
         {
             auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
@@ -1200,7 +1198,7 @@ namespace
                 vc.farZ = 1000.0f;
                 return vc;
             };
-            // Each half is driven by its own fly camera (hover a half to control it - see UpdateInputRouting).
+            // Each half is driven by its own fly camera (see UpdateInputRouting for how input reaches it).
             render::CameraOverride camL;
             camL.camera = makeCam(m_flyL.position, m_flyL.position + m_flyL.Forward());
             camL.clearColor = core::Color{0.02f, 0.02f, 0.03f, 1.0f};
@@ -1227,7 +1225,7 @@ namespace
             frame.encoder->TransitionTexture(frame.backbuffer, rhi::ResourceState::CopyDst,
                                              rhi::ResourceState::RenderTarget);
 
-            // Debug UI on top of the scene (backbuffer is RenderTarget again; ImGui loads + draws over it).
+            // Debug UI on top of the scene (the backbuffer is RenderTarget again; ImGui loads and draws over it).
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
@@ -1286,7 +1284,7 @@ namespace
         {
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime); // keep the P-key profiling dump
 
-            // ImGui debug UI: open the frame (feed input + size) then build the tweakables. The draw
+            // ImGui debug UI: open the frame (feed input and size), then build the tweakables. The draw
             // data is rendered over the scene in OnRenderWindow.
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
@@ -1294,7 +1292,7 @@ namespace
                 BuildDebugUI(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
             }
 
-            // Viewport-input routing. Build the router + one surface per split half once the shell
+            // Viewport-input routing. Build the router and one surface per split half once the shell
             // and window exist, then keep each surface's region in sync with the live split so a resize
             // (or DPI change) just re-fits. The router resolves the hovered surface and gates input.
             auto* input = host.Shell() != nullptr ? host.Shell()->Input() : nullptr;
@@ -1304,8 +1302,8 @@ namespace
                 UpdateInputRouting(*input, *win);
             }
 
-            // Per-view fly camera: each is driven by its surface's gated devices, so it only responds
-            // while the pointer is over that half. WASD/QE move, RMB/Tab look, Shift fast.
+            // Per-view fly camera: each is driven by its surface's gated devices, so it responds only to
+            // the input the router gives its half. WASD/QE move, RMB/Tab look, Shift fast.
             if (m_surfaceL)
             {
                 m_flyL.Update(m_surfaceL->Keyboard(), m_surfaceL->Mouse(), deltaTime);
@@ -1325,17 +1323,17 @@ namespace
                         host.RequestExit(0);
                         return;
                     }
-                    // G fires the Character graph's "Next" trigger -> cross-fade to its next clip state.
+                    // G fires the Character graph's "Next" trigger, cross-fading to its next clip state.
                     if (kb->IsKeyPressed(shell::KeyCode::G))
                     {
                         FireGraphNext();
                     }
-                    // F5 cycles the sky source (procedural <-> HDR equirectangular).
+                    // F5 cycles the sky source.
                     if (kb->IsKeyPressed(shell::KeyCode::F5))
                     {
                         CycleSkyMode();
                     }
-                    // F6 toggles reflection-probe box parallax (compare parallax vs infinite-env reflection).
+                    // F6 toggles reflection-probe box parallax (compare parallax and infinite-environment reflection).
                     if (kb->IsKeyPressed(shell::KeyCode::F6))
                     {
                         ToggleProbeParallax();
@@ -1349,7 +1347,7 @@ namespace
             }
 
             // Skinned models are advanced by the animation subsystem (SkeletalAnimation/AnimationGraph
-            // components ticked on the scene's PostUpdate phase) - no per-frame driving here anymore.
+            // components ticked on the scene's PostUpdate phase), not here.
 
             m_angle += deltaTime;
             const core::Quaternion spin =
@@ -1361,9 +1359,9 @@ namespace
                 m_scene->SetLocalTransform(cube, t);
             }
             // Bob each point light in Z (depth) on its own phase, so the lights cross froxel depth
-            // slices every frame - exercising the per-frame cluster rebuild, not a static binning.
-            // Sweep the whole light field left/right (so the colored pools clearly slide as a
-            // group - easy confirmation that pools exist and track the lights) + a gentle Z-bob.
+            // slices every frame, exercising the per-frame cluster rebuild rather than a static binning.
+            // Sweep the whole light field left and right as well, so the colored pools visibly slide as
+            // a group and track the lights.
             const core::f32 sweep = 5.0f * core::Sin(m_angle * 0.6f);
             for (core::usize k = 0; k < m_pointLights.Size(); ++k)
             {
@@ -1373,10 +1371,10 @@ namespace
                 m_scene->SetLocalPosition(m_pointLights[k], p);
             }
 
-            // Debug-draw demo: per-scene gizmos (wire boxes/spheres on the resting props, origin axes,
-            // a ground grid, an arrow from the spot, 3D + screen text). Both split-screen views render
-            // these, each projected through its OWN camera - and they're keyed to this scene, so a second
-            // scene's gizmos would never bleed in.
+            // Debug-draw demo: per-scene gizmos (wire boxes and spheres on the resting props, origin axes,
+            // a ground grid, an arrow from the spot, 3D and screen text). Both split-screen views render
+            // these, each projected through its own camera, and they are keyed to this scene, so a second
+            // scene's gizmos never bleed in.
             if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 // Debug gizmos toggle (ImGui "Debug Draw" checkbox). The FPS readout below stays on.
@@ -1456,9 +1454,9 @@ namespace
             core::ConsoleWrite(u8"Sandbox: shutting down.\n");
         }
 
-        // Build a small procedural alpha-cutout texture (checkerboard: opaque cells + fully-transparent
-        // holes) and upload it synchronously via an RHI transfer batch. Feeds the masked-material demo,
-        // whose alpha-test discard cuts the holes. Stores the texture/view for shutdown cleanup.
+        // Build a small procedural alpha-cutout texture (checkerboard: opaque cells and fully transparent
+        // holes) and upload it synchronously through an RHI transfer batch. Feeds the masked-material demo,
+        // whose alpha-test discard cuts the holes. Stores the texture and view for shutdown cleanup.
         rhi::TextureView* CreateCutoutTexture(rhi::Device& device)
         {
             constexpr core::u32 N = 64, cell = 8;
@@ -1521,23 +1519,23 @@ namespace
             return m_cutoutView;
         }
 
-        // Builds one kGrid×kGrid spinning cube grid centered at (originX, 0). When `instanced`,
-        // every cube shares one material (-> a single instanced draw; the per-instance color
+        // Builds one kGrid x kGrid spinning cube grid centered at (originX, 0). When `instanced`,
+        // every cube shares one material, giving a single instanced draw (the per-instance color
         // supplies each cube's hue). Otherwise each cube gets its own material with a per-cube PBR
-        // matrix (roughness sweeps smooth→rough across X, top half metallic) -> many distinct
-        // draws -> parallel command recording. Both grids run every frame.
+        // matrix (roughness sweeps smooth to rough across X, top half metallic), giving many distinct
+        // draws and so parallel command recording. Both grids run every frame.
         void BuildGrid(engine::render::MeshComponentManager& meshes,
                        const core::RefPtr<geometry::StaticMesh>& cube, core::f32 originX,
                        bool instanced)
         {
             constexpr int kGrid =
-                16; // 256 cubes -> the distinct grid trips the parallel-emit threshold
+                16; // 256 cubes, so the distinct grid trips the parallel-emit threshold
             constexpr core::f32 kSpacing = 0.8f;
 
             core::RefPtr<materials::Material> shared;
             if (instanced)
             {
-                // White base + middling PBR; the per-instance color supplies each cube's hue.
+                // White base and middling PBR; the per-instance color supplies each cube's hue.
                 shared =
                     materials::CreatePBR(u8"lit", core::Float4{1.0f, 1.0f, 1.0f, 1.0f}, 0.0f, 0.4f);
             }
@@ -1597,10 +1595,10 @@ namespace
         scene::EntityHandle m_floorEntity{};
         core::f32 m_floorMetallic = 0.0f;  // floor material tweakables (SSR eye test)
         core::f32 m_floorRoughness = 0.45f;
-        particles::ParticleEffect m_campfire; // the particle demo (billboards + trail sparks)
+        particles::ParticleEffect m_campfire; // the particle demo (billboards and trail sparks)
         scene::EntityHandle m_campfireEntity{};
         scene::EntityHandle m_camera{};
-        // Offscreen render target, double-buffered per frame-in-flight (each slot tracks its own size).
+        // Offscreen render targets, one per frame in flight (each slot tracks its own size).
         static constexpr core::u32 kOffscreenSlots = 3;
         rhi::Texture* m_offscreenTex[kOffscreenSlots] = {};
         rhi::TextureView* m_offscreenView[kOffscreenSlots] = {};
@@ -1619,27 +1617,27 @@ namespace
         core::Array<scene::EntityHandle> m_cubes;
         core::f32 m_angle = 0.0f;
         core::f32 m_fpsSmoothed = 0.0f; // exponential moving average of 1/deltaTime
-        // One fly camera per split view; hovering a view routes input to its camera (no V toggle).
+        // One fly camera per split view; the input router sends each view's input to its camera.
         samples::FlyCamera m_flyL{.position = core::Float3{-6.0f, 21.0f, 30.0f}, .pitch = -0.45f};
         samples::FlyCamera m_flyR{.position = core::Float3{6.0f, 21.0f, 30.0f}, .pitch = -0.45f};
 
         // Viewport-input routing: each split half is an InputSurface (a ContentFit slice of the window);
-        // the router picks the hovered surface and gates/transforms input into it. Created lazily once
-        // the shell + window exist. focus-follows-hover so the pointer alone selects the active view.
+        // the router picks the hovered surface and gates and transforms input into it. Created lazily
+        // once the shell and window exist. Keyboard focus is click-to-focus (the router default).
         core::UniquePtr<shell::InputRouter> m_inputRouter;
         core::UniquePtr<shell::InputSurface> m_surfaceL;
         core::UniquePtr<shell::InputSurface> m_surfaceR;
 
-        // Model-import pipeline state (must outlive the spawned entities - the resource manager owns
-        // the cooked products' handles; the content DB + its filesystem mount back the manager).
+        // Model-import pipeline state. It must outlive the spawned entities: the resource manager owns
+        // the cooked products' handles, and the content DB and its filesystem mount back the manager.
         core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
         core::UniquePtr<content::ContentDatabase> m_contentDb;
         core::UniquePtr<resource::ResourceManager> m_resources;
-        resource::ResourceFactorySet m_factories; // the engine composition's set, this host's services
+        resource::ResourceFactorySet m_factories; // the engine composition's factories, built with this host's services
         resource::Proxy<texture::Texture>
             m_logoTex; // sprite-demo logo (kept alive for its GPU view)
         core::Array<resource::Proxy<model::ModelResource>>
-            m_models; // keep cooked models + their resources alive
+            m_models; // keep cooked models and their resources alive
 
         // Animation graphs owned by the demo (the AnimationGraphComponents borrow them); the entity whose
         // graph the G key advances (the Character). Skinned models are otherwise driven by the subsystem.
@@ -1659,6 +1657,6 @@ int main(int argc, char** argv)
     graphics::GraphicsDevice* device = gpu.HasValue() ? gpu.Value().Get() : nullptr;
 
     SandboxApp app;
-    app.OnCommandLine(argc, argv); // --screenshot ... (a capture without a hand on F11)
+    app.OnCommandLine(argc, argv); // --screenshot and whatever else the base app reads
     return runtime::RunApplication(app, *shell, device);
 }

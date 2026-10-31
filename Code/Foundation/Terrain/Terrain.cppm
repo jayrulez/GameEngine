@@ -3,9 +3,9 @@
 
 /// Foundation::Terrain - `foundation.terrain`.
 ///
-/// The terrain MODEL over a heightfield (foundation.heightfield): the chunk grid + quadtree the
+/// The terrain model over a heightfield (foundation.heightfield): the chunk grid and quadtree the
 /// chunked geo-mipmap renderer draws, per-chunk LOD selection given a camera, and the splat layer
-/// descriptors. Pure data + math, NO RHI - every function here is unit-testable without a device.
+/// descriptors. Pure data and math with no RHI: every function here is unit-testable without a device.
 /// A heightfield of side S = 64k+1 tiles into k x k chunks of 64 quads (65 verts) sharing edges.
 
 module;
@@ -15,15 +15,15 @@ export module foundation.terrain;
 
 import foundation.core;
 import foundation.heightfield;
-import foundation.lod; // the shared LOD selection math (coverage + threshold walk), one formula
+import foundation.lod; // the shared LOD selection math (coverage and threshold walk), one formula
 
 using namespace foundation::core;
 namespace lod = foundation::lod;
 
 export namespace foundation::terrain
 {
-    /// One splat layer's PURE parameters (the material/texture refs live in foundation.terrain.
-    /// resource). tileScale = how many times the layer texture repeats across the whole terrain.
+    /// One splat layer's pure parameters (the material and texture refs live in foundation.terrain.
+    /// resource). tileScale is how many times the layer texture repeats across the whole terrain.
     struct SplatLayer
     {
         f32 tileScale = 1.0f;
@@ -40,15 +40,15 @@ export namespace foundation::terrain
     }
 
     // ---- Shared chunk grid mesh (chunked geo-mipmapping) ----
-    // ONE 65x65 vertex grid is uploaded once and drawn for EVERY chunk; per-chunk instance data
+    // One 65x65 vertex grid is uploaded once and drawn for every chunk; per-chunk instance data
     // places it in the world and the VS fetches height from the terrain texture. Each LOD reuses the
-    // SAME vertices through a stride-2^lod index buffer (finest = lod 0). RHI-free generation - the
-    // renderer just uploads these arrays.
+    // same vertices through a stride-2^lod index buffer (finest is lod 0). Generation is RHI-free;
+    // the renderer just uploads these arrays.
 
-    /// Grid vertices of the shared chunk mesh, TWO copies stacked: first the 65x65 SURFACE grid
-    /// (skirt flag 0), then a 65x65 SKIRT copy (skirt flag 1) the VS drops below the surface to hide
+    /// Grid vertices of the shared chunk mesh, two copies stacked: first the 65x65 surface grid
+    /// (skirt flag 0), then a 65x65 skirt copy (skirt flag 1) the VS drops below the surface to hide
     /// LOD-seam cracks. Each vertex is (u, v, skirtFlag): u,v in [0,1] row-major (v-major); the
-    /// renderer maps u,v to world XZ + the height sample coordinate per chunk. The skirt copy shares
+    /// renderer maps u,v to world XZ and the height sample coordinate per chunk. The skirt copy shares
     /// the border u,v so a skirt vertex sits directly under its surface twin; interior skirt vertices
     /// are never indexed (only the border ring is). One VB, uploaded once, drawn for every chunk.
     inline void BuildChunkGridVertices(Array<Float3>& out)
@@ -56,7 +56,7 @@ export namespace foundation::terrain
         out.Clear();
         out.Reserve(static_cast<usize>(kChunkVerts) * kChunkVerts * 2);
         const f32 span = static_cast<f32>(kChunkQuads);
-        for (i32 pass = 0; pass < 2; ++pass) // 0 = surface, 1 = skirt copy
+        for (i32 pass = 0; pass < 2; ++pass) // 0 surface, 1 skirt copy
         {
             const f32 flag = static_cast<f32>(pass);
             for (i32 z = 0; z < kChunkVerts; ++z)
@@ -80,8 +80,8 @@ export namespace foundation::terrain
         return lod > kMaxChunkLod ? 0u : (static_cast<u32>(kChunkQuads) >> lod);
     }
 
-    /// The count of SURFACE indices at LOD `lod` (the prefix of BuildChunkGridIndices before the skirt
-    /// walls) - the draw range for a skirtless pass. Skirt indices follow (the rest of the buffer).
+    /// The count of surface indices at LOD `lod` (the prefix of BuildChunkGridIndices before the skirt
+    /// walls): the draw range for a skirtless pass. Skirt indices follow (the rest of the buffer).
     [[nodiscard]] constexpr u32 ChunkLodSurfaceIndexCount(u32 lod) noexcept
     {
         const u32 q = ChunkLodQuadsPerSide(lod);
@@ -89,7 +89,7 @@ export namespace foundation::terrain
     }
 
     /// The 32-bit triangle indices for LOD `lod` (stride 2^lod) over the shared grid: the surface
-    /// (two tris per quad, wound CCW seen from +Y) FOLLOWED BY a skirt wall around the 4 chunk edges
+    /// (two tris per quad, wound CCW seen from +Y) followed by a skirt wall around the 4 chunk edges
     /// (each border segment lifted to a quad joining the surface border verts to their dropped skirt
     /// twins), so a coarser neighbour's lower edge can never open a see-through crack. A lod past
     /// kMaxChunkLod yields none.
@@ -124,8 +124,8 @@ export namespace foundation::terrain
             }
         }
 
-        // Skirt walls: one quad per border segment, top = surface border vert, bottom = its skirt
-        // twin (surfaceIndex + kChunkSurfaceVertexCount). Emitted for BOTH windings (double-sided) so
+        // Skirt walls: one quad per border segment, its top the surface border vert, its bottom the
+        // skirt twin (surfaceIndex + kChunkSurfaceVertexCount). Emitted for both windings (double-sided) so
         // the wall plugs the seam regardless of view angle. The four edges walk the border at `stride`.
         const auto surf = [](i32 x, i32 z) { return static_cast<u32>(z * kChunkVerts + x); };
         const auto skirt = [&surf](i32 x, i32 z) { return surf(x, z) + kChunkSurfaceVertexCount; };
@@ -149,14 +149,14 @@ export namespace foundation::terrain
         }
     }
 
-    /// The indices of ONE holed chunk at `lod` (Specs/terrain-holes.md): the same walk as
-    /// BuildChunkGridIndices with quads dropped by their sample block (the stride-square they
-    /// span, interior included) and every skirt segment dropped whose border quad was, so no
-    /// wall hangs under a cut rim. Two rules: `dropWhenAnyCut` drops a quad holding ANY cut
-    /// sample (the strict rule every non-GPU consumer applies - a hole never shrinks with
-    /// distance); otherwise a quad is dropped only when EVERY sample in its block is cut (the
-    /// render rule: the pixel shaders' bilinear hole mask then shapes the rim inside the quads
-    /// that remain, at every LOD). The surface prefix count (the depth / pick draw range) comes
+    /// The indices of one holed chunk at `lod`: the same walk as BuildChunkGridIndices with
+    /// quads dropped by their sample block (the stride-square they span, interior included) and
+    /// every skirt segment dropped whose border quad was, so no wall hangs under a cut rim. Two
+    /// rules: `dropWhenAnyCut` drops a quad holding any cut sample (the strict rule every non-GPU
+    /// consumer applies, so a hole never shrinks with distance); otherwise a quad is dropped only
+    /// when every sample in its block is cut (the render rule: the pixel shaders' bilinear hole
+    /// mask then shapes the rim inside the quads that remain, at every LOD). The surface prefix
+    /// count (the depth and pick draw range) comes
     /// back in `outSurfaceIndexCount`. Neighbours share the edge samples: both sides agree.
     inline void BuildHoledChunkIndices(const heightfield::Heightfield& hf, i32 gridX0, i32 gridZ0,
                                        u32 lod, Array<u32>& out, u32& outSurfaceIndexCount,
@@ -252,7 +252,7 @@ export namespace foundation::terrain
     }
 
     /// One terrain chunk: its position in the chunk grid, the grid origin of its sample block, and
-    /// its LOCAL-space bounds (the renderer/physics apply the entity transform).
+    /// its local-space bounds (the renderer and physics apply the entity transform).
     struct TerrainChunk
     {
         i32 chunkX = 0;
@@ -261,7 +261,7 @@ export namespace foundation::terrain
         i32 gridZ0 = 0;
         AABB bounds = AABB::Empty();
         // A cut sample in the chunk's block (edges shared with the neighbours): this chunk draws
-        // its OWN index buffers (BuildHoledChunkIndices) instead of the shared grid's. When every
+        // its own index buffers (BuildHoledChunkIndices) instead of the shared grid's. When every
         // sample is cut the chunk has no surface at all (allCut) and is not drawn.
         bool hasHoles = false;
         bool allCut = false;
@@ -315,7 +315,7 @@ export namespace foundation::terrain
         }
     }
 
-    /// A chunk's LOCAL-space bounding sphere, the bridge to the shared LOD coverage metric.
+    /// A chunk's local-space bounding sphere, the bridge to the shared LOD coverage metric.
     [[nodiscard]] inline BoundingSphere ChunkBoundingSphere(const TerrainChunk& chunk) noexcept
     {
         BoundingSphere sphere;
@@ -324,11 +324,11 @@ export namespace foundation::terrain
         return sphere;
     }
 
-    /// Per-chunk LOD via the SHARED coverage metric (foundation.lod - ONE formula for meshes AND
+    /// Per-chunk LOD through the shared coverage metric (foundation.lod: one formula for meshes and
     /// terrain). The chunk's local bounding sphere is placed in the world by `chunkToWorld`
-    /// (translation + Y-rotation per the terrain instance model, so the radius is preserved),
-    /// projected to screen coverage, then walked against the DESCENDING `coverageThresholds`
-    /// (thresholds[0] = 1.0 by convention, level 0 = fallback). Pure - unit-testable headless.
+    /// (translation and Y-rotation per the terrain instance model, so the radius is preserved),
+    /// projected to screen coverage, then walked against the descending `coverageThresholds`
+    /// (thresholds[0] = 1.0 by convention, level 0 the fallback). Pure, so unit-testable headless.
     [[nodiscard]] inline u32 SelectChunkLod(const TerrainChunk& chunk, const Float4x4& chunkToWorld,
                                             const Float4x4& view, const Float4x4& projection,
                                             Span<const f32> coverageThresholds,
@@ -374,14 +374,14 @@ export namespace foundation::terrain
             }
         }
 
-        /// Quadtree node (public + trivially-destructible: the render extraction snapshots the
-        /// node ARRAY into its frame arena - see Nodes()/CullNodes - because a pointer to this
-        /// quadtree object is only as stable as its owner, and the PIE-start UAF proved owners
-        /// mutate mid-frame; the snapshot must be self-contained).
+        /// Quadtree node. Public and trivially destructible: the render extraction snapshots the
+        /// node array into its frame arena (see Nodes() and CullNodes), because a pointer to this
+        /// quadtree object is only as stable as its owner, and owners can mutate mid-frame; the
+        /// snapshot must be self-contained.
         struct Node
         {
             AABB bounds = AABB::Empty();
-            i32 chunkIndex = -1; // >= 0 = leaf
+            i32 chunkIndex = -1; // >= 0 for a leaf
             i32 childCount = 0;
             i32 children[4] = {-1, -1, -1, -1};
         };
@@ -389,7 +389,7 @@ export namespace foundation::terrain
         [[nodiscard]] bool IsEmpty() const noexcept { return m_nodes.IsEmpty(); }
         [[nodiscard]] usize NodeCount() const noexcept { return m_nodes.Size(); }
         /// The flat node storage (root = index 0). Snapshot-friendly: a copied node span culls
-        /// identically via CullNodes with NO reference back to this object or its chunk span.
+        /// identically through CullNodes with no reference back to this object or its chunk span.
         [[nodiscard]] Span<const Node> Nodes() const noexcept
         {
             return Span<const Node>{m_nodes.Data(), m_nodes.Size()};
@@ -401,8 +401,8 @@ export namespace foundation::terrain
             CullNodes(Nodes(), frustum, outVisible);
         }
 
-        /// Cull over a bare node span (root = index 0) - the form the renderer uses against its
-        /// frame-arena COPY of the nodes, so no live quadtree object is dereferenced at draw time.
+        /// Cull over a bare node span (root = index 0): the form the renderer uses against its
+        /// frame-arena copy of the nodes, so no live quadtree object is dereferenced at draw time.
         static void CullNodes(Span<const Node> nodes, const BoundingFrustum& frustum,
                               Array<i32>& outVisible)
         {
@@ -474,7 +474,7 @@ export namespace foundation::terrain
         i32 m_side = 0;
     };
 
-    /// One chunk to draw this frame: which chunk + its selected LOD (the index buffer to bind).
+    /// One chunk to draw this frame: which chunk and its selected LOD (the index buffer to bind).
     struct ChunkDraw
     {
         i32 chunkIndex = 0;
@@ -482,8 +482,9 @@ export namespace foundation::terrain
     };
 
     /// The renderer's per-frame CPU extract: frustum-cull the chunk quadtree, then LOD each visible
-    /// chunk by the shared coverage metric - the {chunk, lod} draw list the GPU renderer consumes.
-    /// Pure (no RHI): view/projection are plain matrices, chunkToWorld places the terrain entity.
+    /// chunk by the shared coverage metric, giving the {chunk, lod} draw list the GPU renderer
+    /// consumes. Pure (no RHI): view and projection are plain matrices, chunkToWorld places the
+    /// terrain entity.
     inline void ExtractVisibleChunkDraws(Span<const TerrainQuadtree::Node> nodes,
                                          Span<const TerrainChunk> chunks,
                                          const Float4x4& chunkToWorld, const Float4x4& view,
@@ -504,7 +505,7 @@ export namespace foundation::terrain
         }
     }
 
-    /// Convenience over a live quadtree (tests / CPU callers that OWN the tree).
+    /// Convenience over a live quadtree (tests and CPU callers that own the tree).
     inline void ExtractVisibleChunkDraws(const TerrainQuadtree& tree, Span<const TerrainChunk> chunks,
                                          const Float4x4& chunkToWorld, const Float4x4& view,
                                          const Float4x4& projection, const BoundingFrustum& frustum,

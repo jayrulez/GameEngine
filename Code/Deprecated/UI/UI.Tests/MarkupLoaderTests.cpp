@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/MarkupLoaderTests.bf (faithful). Beef `as X` -> Cast<X>; `scope`/
-// `new`+delete -> RefPtr (RAII); property .Value -> .Value(); Color byte-literal -> float(/255). The
-// static ctor (MarkupLoader.Initialize + StyleSheetLoader.InitializeGlobals) -> an idempotent EnsureInit()
-// called per test.
+// MarkupLoader tests. Each test calls EnsureInit(), which runs MarkupLoader::Initialize and
+// StyleSheetLoader::InitializeGlobals and is safe to call repeatedly.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -295,8 +293,9 @@ TEST_CASE("markup: Grid_And_Absolute_LayoutStyle")
 
 TEST_CASE("markup: LayoutAttributes_ApplyRegardlessOfParent")
 {
-    // The vocabulary is the same on every element: a Frame child may carry flex-grow and
-    // dock (they wait for a Flex/Dock parent), and width/height/margin apply even at the root.
+    // The vocabulary is the same on every element: a Frame child may carry flex-grow and dock
+    // (they take effect under a Flex or Dock parent), and width, height and margin apply even
+    // at the root.
     EnsureInit();
     auto view = MarkupLoader::LoadFromString(
         DefaultAllocator(), u8"<Frame width=\"300\" margin=\"4\">\n"
@@ -315,8 +314,8 @@ TEST_CASE("markup: LayoutAttributes_ApplyRegardlessOfParent")
 
 TEST_CASE("markup: OldParentTypedAttributes_AreUnknown")
 {
-    // No aliases: the pre-LayoutStyle `grow=` spelling is an unknown attribute (surfaced as
-    // a diagnostic), not silently mapped.
+    // No aliases: the `grow=` spelling is an unknown attribute (reported as a diagnostic), not
+    // silently mapped to flex-grow.
     EnsureInit();
     Array<String> warnings;
     auto view = MarkupLoader::LoadFromString(DefaultAllocator(),
@@ -330,8 +329,8 @@ TEST_CASE("markup: OldParentTypedAttributes_AreUnknown")
 
 TEST_CASE("markup: an unknown gravity name is surfaced, the known ones still apply")
 {
-    // Gravity names are PascalCase and matched exactly: `top|right` places nothing, which used
-    // to pass in silence (a HUD panel left in the wrong corner).
+    // Gravity names are PascalCase and matched exactly: `top` places nothing and is reported,
+    // so a panel does not end up in the wrong corner without a warning.
     EnsureInit();
     Array<String> warnings;
     auto view = MarkupLoader::LoadFromString(
@@ -493,7 +492,7 @@ TEST_CASE("markup: Style_BeatsContextSheetRule")
     root->AddView(view.Get());
 
     Label* label = Cast<Label>(view.Get());
-    // Inline (green) wins over context-sheet (blue).
+    // Inline (green) wins over the context sheet (blue).
     const Color c = label->ResolveStyleColor(StyleProperty::TextColor);
     CHECK(c.g == 1.0f);
     CHECK(c.b == 0);
@@ -603,9 +602,10 @@ TEST_CASE("markup: StyleClass_ResolvesTheme")
 
 TEST_CASE("markup: MarkupLoader::Initialize is safe to call from many threads at once")
 {
-    // The UI document cook initializes the markup registry per build on job workers; a plain
-    // static bool let two of them rehash the builtin maps under each other (a use-after-free
-    // in Tools.Cook). Hammer it, then the registry must still resolve a builtin.
+    // The UI document cook initializes the markup registry per build on job workers, so two
+    // workers can initialize at once; the initialization has to be safe against that, or one
+    // would rehash the builtin maps under the other. Run it concurrently many times, then check
+    // that the registry still resolves a builtin.
     JobSystem jobs(DefaultAllocator(), 4);
     jobs.ParallelFor(64, [](u32) { MarkupLoader::Initialize(); }, 1);
     auto view = MarkupLoader::LoadFromString(DefaultAllocator(), u8"<Label text=\"Hello\"/>");
@@ -695,8 +695,8 @@ TEST_CASE("markup: an ImageView's corner-radius takes one value or four")
     CHECK(root->FindByName<ImageView>(u8"none")->CornerRadius.Value().IsZero());
 }
 
-// padding on a control (not a ViewGroup) was dropped, so a card kept the button's own 12 by 8 and
-// its picture sat off-centre. The attribute now sets the control's padding style.
+// padding on a control (not a ViewGroup) sets the control's padding style, so a card's picture
+// is inset evenly instead of keeping the button's own 12 by 8.
 TEST_CASE("markup: padding on a control sets its padding, the content inset evenly")
 {
     EnsureInit();

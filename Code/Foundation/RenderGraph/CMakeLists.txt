@@ -1,6 +1,5 @@
 # Foundation::RenderGraph - `foundation.rendergraph` (render graph over the RHI:
 # pass dependency resolution, transient resource aliasing, automatic barriers).
-# Ported from Sedulous.RenderGraph.
 
 util_add_engine_library(RenderGraph ALIAS Foundation::RenderGraph)
 target_link_libraries(RenderGraph PUBLIC Foundation::Core Foundation::RHI Foundation::Profiler Foundation::Policy)

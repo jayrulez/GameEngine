@@ -7,7 +7,7 @@
 #include "depth.hlsli"
 #include "debug_grid.hlsli"
 
-static const float kDepthBias = 0.0005; // as debug_geom: beat TAA-jitter depth noise
+static const float kDepthBias = 0.0005; // as in debug_geom: beats TAA-jitter depth noise
 
 GridVSOut main(uint id : SV_VertexID)
 {

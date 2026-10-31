@@ -12,18 +12,17 @@ target_link_libraries(Core PUBLIC Foundation::Policy)
 target_sources(Core PRIVATE
     Debug/Debug.cpp)
 
-# Module IMPLEMENTATION units (`module foundation.core;`): definitions kept out of the
-# interface partitions. Listed as regular sources, NOT in the CXX_MODULES file set.
+# Module implementation units (`module foundation.core;`): definitions kept out of the
+# interface partitions. Listed as regular sources, not in the CXX_MODULES file set.
 target_sources(Core PRIVATE
     RefCountedImpl.cpp                   # MakeRef handshake slot (one per process, not per library)
     RTTI/TypeInfoImpl.cpp                # TypeOf<T>() slot table (one TypeInfo per process)
-    Threading/JobSystemImpl.cpp          # global JobSystem pointer + worker slot (one per process)
+    Threading/JobSystemImpl.cpp          # global JobSystem pointer and worker slot (one per process)
     Threading/ThreadImpl.cpp             # the calling thread's name (one per process)
     Text/TextImpl.cpp                    # float to_chars (STL tables must not reach consumers)
     Reflection/CoreReflectionImpl.cpp)   # REFLECT_* bodies (see CoreReflection.cppm)
 
-# Module interface units. The primary unit (CoreModule.cppm) must be listed;
-# partitions are added here as subsystems land.
+# Module interface units: the primary unit (CoreModule.cppm) and every partition.
 target_sources(Core
     PUBLIC
         FILE_SET core_modules TYPE CXX_MODULES FILES
@@ -111,9 +110,9 @@ target_sources(Core
             Threading/JobSystem.cppm
             Library/DynamicLibrary.cppm)
 
-# Per-platform backends (classic TUs). Emscripten is POSIX-shaped: it reuses the Linux
-# backend (pthread API present; actual thread spawning arrives with the wasm-pthreads
-# opt-in - web v1 is single-threaded and the JobSystem's caller-participation covers it).
+# Per-platform backends (classic TUs). Emscripten is POSIX-shaped, so it reuses the Linux
+# backend (the pthread API is present). The web build is single-threaded: spawning threads
+# needs the wasm-pthreads opt-in, and the JobSystem's calling thread runs the jobs itself.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR EMSCRIPTEN)
     target_sources(Core PRIVATE
         System/Linux/LinuxSystem.cpp

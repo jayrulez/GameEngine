@@ -3,19 +3,19 @@
 
 // Foundation::Fonts.Resource - the `foundation.fonts.resource` module (runtime).
 //
-// The FONT as a runtime resource - the runtime-resource tier of the font triad.
-// Same model-A shape as foundation.texture.resource:
+// The font as a runtime resource, in the same record-and-product shape as
+// foundation.texture.resource:
 //
-//   * FontResource (ISerializable): the cooked *record* loaded from the output DB - the
-//     family, the atlas pixel mode (Alpha8 coverage or RGBA MSDF), and one ENTRY per baked
-//     pixel size (metrics + glyph/kerning/region tables + atlas metadata). The atlas pixel
-//     payloads live concatenated in the "data" stream, per-entry offset+size recorded.
-//   * Font (Object): the runtime product - owns, per entry, a rasterizer-free BakedFont,
+//   * FontResource (ISerializable): the cooked record loaded from the output DB: the
+//     family, the atlas pixel mode (Alpha8 coverage or RGBA MSDF), and one entry per baked
+//     pixel size (metrics, glyph, kerning and region tables, atlas metadata). The atlas pixel
+//     payloads live concatenated in the "data" stream, with each entry's offset and size recorded.
+//   * Font (Object): the runtime product. It owns, per entry, a rasterizer-free BakedFont,
 //     its IFontAtlas (BakedFontAtlas for coverage, DistanceFieldFontAtlas for MSDF), and the atlas as
 //     an image::OwnedImageData ready for a renderer to upload (the same RGBA expansion the
-//     TTF service performs). A packaged game loads THIS and never touches stb_truetype.
-//   * FontFactory (IResourceFactory): cooked record + stream -> Font. DEVICE-FREE - the VG
-//     layer uploads atlas images itself, so fonts bind headlessly.
+//     TTF service performs). A packaged game loads this and never touches stb_truetype.
+//   * FontFactory (IResourceFactory): cooked record and stream -> Font. It needs no device:
+//     the VG layer uploads atlas images itself, so fonts bind headlessly.
 //
 // The runtime never links the editor/source side; it loads only cooked resources.
 
@@ -45,7 +45,7 @@ export namespace foundation::fonts
     enum class FontResourcePixels : u32
     {
         Coverage,      // single-channel Alpha8 coverage (expanded to RGBA8 at load, like the TTF path)
-        DistanceField, // RGBA8 MSDF channels, linear (no sRGB decode - geometric data)
+        DistanceField, // RGBA8 MSDF channels, linear (no sRGB decode: geometric data)
     };
 
     // -- serialized table rows ----------------------------------------------------------
@@ -124,7 +124,7 @@ export namespace foundation::fonts
         ar.EndObject();
     }
 
-    // One baked pixel size: metrics + tables + atlas metadata; pixels are the
+    // One baked pixel size: metrics, tables and atlas metadata; pixels are the
     // [pixelOffset, pixelOffset + pixelBytes) slice of the resource's "data" stream.
     struct FontResourceEntry
     {
@@ -146,10 +146,8 @@ export namespace foundation::fonts
         f32 whitePixelV = 0.0f;
         f32 distanceFieldPixelRange = 4.0f; // DistanceField mode only
 
-        // Pack-time oversampling (v1+): region spans are RAW atlas pixels at oversample times
-        // the logical glyph size; the runtime atlas divides screen quads back down. v0 cooked
-        // fonts lack the field and default to 1 - they draw oversized until re-cooked (the
-        // builder version bump forces that re-cook).
+        // Pack-time oversampling: region spans are raw atlas pixels at oversample times the
+        // logical glyph size; the runtime atlas divides screen quads back down.
         f32 oversampleX = 1.0f;
         f32 oversampleY = 1.0f;
 
@@ -185,7 +183,7 @@ export namespace foundation::fonts
     }
 
     // Cooked font record (output DB). Atlas pixels are the "data" stream; the font file itself is the
-    // "font" stream, for a shaper that reads its tables (absent in fonts cooked before it was kept).
+    // "font" stream, for a shaper that reads its tables (absent when the cook did not keep it).
     class FontResource final : public ISerializable
     {
         RTTI_OBJECT(FontResource, ISerializable)
@@ -204,7 +202,7 @@ export namespace foundation::fonts
         }
     };
 
-    // Runtime product: rasterizer-free font + atlas + uploadable atlas image, per entry.
+    // Runtime product: a rasterizer-free font, its atlas and an uploadable atlas image, per entry.
     class Font final : public Object
     {
         RTTI_OBJECT(Font, Object)
@@ -265,7 +263,7 @@ export namespace foundation::fonts
     class FontFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every font product this factory creates (required -
+        // The allocator backs every font product this factory creates (required;
         // the application that registers the factory decides).
         explicit FontFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -284,11 +282,11 @@ export namespace foundation::fonts
             return BuildFont(instance);
         }
 
-        // Async (task #123): the Font is a pure-CPU product (rasterizer-free glyph/kerning tables +
-        // CPU atlas images the renderer uploads itself), so the whole build - including the heavy
-        // atlas pixel read and per-entry slice copies - runs on a JobSystem worker via DecodeStage
-        // and FinalizeStage is a no-op. Safe: content-DB reads open independent streams and the
-        // FontResource + Font types are registered on the main thread at startup.
+        // Async: the Font is a pure-CPU product (rasterizer-free glyph and kerning tables, and
+        // CPU atlas images the renderer uploads itself), so the whole build, including the heavy
+        // atlas pixel read and per-entry slice copies, runs on a JobSystem worker via DecodeStage
+        // and FinalizeStage is a no-op. This is safe because content-DB reads open independent
+        // streams and the FontResource and Font types are registered on the main thread at startup.
         [[nodiscard]] bool SupportsAsync() const override { return true; }
         [[nodiscard]] RefPtr<Object> DecodeStage(foundation::content::Instance& instance) override
         {
@@ -388,7 +386,7 @@ export namespace foundation::fonts
                             atlas->SetGlyphFor(g.codepoint, g.info.glyphIndex);
                         }
                     }
-                    // RGBA8 MSDF channels, LINEAR (geometric data, not color).
+                    // RGBA8 MSDF channels, linear (geometric data, not color).
                     entry.atlasImage = MakeUnique<image::OwnedImageData>(
                         *m_allocator, e.atlasWidth, e.atlasHeight,
                         image::PixelFormat::RGBA8,
@@ -437,20 +435,20 @@ export namespace foundation::fonts
         IAllocator* m_allocator;
     };
 
-    // IFontService over bound Font PRODUCTS - the GUID-addressable runtime font path
-    // (fonts are GUID-addressable through the content DB/ResourceManager).
+    // IFontService over bound Font products: the runtime font path, where fonts are
+    // addressed by GUID through the content DB and ResourceManager.
     // The host binds Font products by guid (the ResourceManager keeps them cached) and
     // registers them here; the UI resolves (family, size) against the products' entries.
     //
-    // CachedFont OWNERSHIP: CachedFont's destructor deletes its font/atlas/shaper. The
-    // font+atlas here belong to the PRODUCT, so Clear() nulls those two before deleting
+    // CachedFont ownership: CachedFont's destructor deletes its font, atlas and shaper. The
+    // font and atlas here belong to the product, so Clear() nulls those two before deleting
     // the CachedFont; the per-entry shaper is service-created (TrueTypeTextShaper is
-    // IFont-generic - it only reads GetGlyphInfo/Metrics) and stays owned by the
+    // IFont-generic: it only reads GetGlyphInfo and Metrics) and stays owned by the
     // CachedFont for normal deletion.
     class ResourceFontService final : public IFontService
     {
     public:
-        // The allocator (required - the owner decides) backs cache aggregates,
+        // The allocator (required; the owner decides) backs cache aggregates,
         // shapers, and scaled views this service creates.
         explicit ResourceFontService(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
         ~ResourceFontService() override { Clear(); }
@@ -468,20 +466,19 @@ export namespace foundation::fonts
                         entry.cached->font = nullptr;  // product-owned
                         entry.cached->atlas = nullptr; // product-owned
                     }
-                    m_allocator->Delete(entry.cached); // frees shaper (+ owned views)
+                    m_allocator->Delete(entry.cached); // frees shaper (and owned views)
                 }
             }
             m_entries.Clear();
             m_defaultFamily.Clear();
         }
 
-        // Register a bound product (must be HEAP-allocated/refcounted - a resource product;
-        // never a stack Font). The service takes a STRONG ref: a mid-session re-cook
+        // Register a bound product (heap-allocated and ref-counted, a resource product;
+        // never a stack Font). The service takes a strong ref: a mid-session re-cook
         // replaces the manager's product (the old one is parked briefly, then freed), and a
-        // borrowed pointer here kept serving freed glyph tables - the one-shot editor segfault
-        // right after "cook finished" (2026-08-12). The ref keeps the OLD product alive (and
-        // stale) until a new default font is bound; live REBIND on resource reload is the
-        // follow-up that makes it also fresh.
+        // borrowed pointer here would serve freed glyph tables. The ref keeps the old product
+        // alive (and stale) until a new default font is bound.
+        // TODO: rebind on resource reload so the served font is also fresh.
         void AddFont(const Font* font)
         {
             if (font == nullptr)
@@ -621,9 +618,9 @@ export namespace foundation::fonts
 
         // A scaled per-size entry over a DF base. The views borrow the base's product-owned
         // font/atlas (products outlive this service's entries via the ResourceManager cache);
-        // the CachedFont owns the view wrappers + shaper (ownsViews). Cached in m_entries so
-        // the next request for this size hits FindExact. NOTE: PushBack may reallocate
-        // m_entries, so everything needed from `base` is copied out first.
+        // the CachedFont owns the view wrappers and shaper (ownsViews). Cached in m_entries so
+        // the next request for this size hits FindExact. PushBack may reallocate m_entries,
+        // so everything needed from `base` is copied out first.
         [[nodiscard]] CachedFont* SynthesizeScaled(const Entry& base, f32 pixelHeight)
         {
             Entry entry;
@@ -679,15 +676,15 @@ export namespace foundation::fonts
     }
 
     // 2: glyph bounds keys use full names. 3: regions key by glyph index ("glyph"), the codepoint ->
-    // glyph map coming from the glyph rows (F3 of vg-and-gui-lab.md; re-cooked by the builder bump).
+    // glyph map coming from the glyph rows.
     RTTI_DEFINE_OBJECT_VERSIONED(FontResource, "rtti::fonts", 3)
     RTTI_DEFINE_OBJECT(Font, "rtti::fonts")
 }
 
 export namespace foundation::fonts
 {
-    /// The fonts resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The fonts resource module: the module the engine composition composes this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kFontsResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<Font, FontResource, FontFactory>(),
     };

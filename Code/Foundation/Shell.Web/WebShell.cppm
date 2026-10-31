@@ -3,10 +3,10 @@
 
 // Foundation::Shell.Web - the `foundation.shell.web` module (primary interface unit).
 //
-// A self-contained IShell backed by a single HTML <canvas> under Emscripten - the web counterpart
+// A self-contained IShell backed by a single HTML <canvas> under Emscripten: the web counterpart
 // of the SDL3 desktop backend. The pieces live in partitions: :window (the canvas window),
 // :window_manager (the single-window host + resize pump), :input (the input devices), :dialogs (the
-// file-dialog service). This unit re-exports them and composes WebShell. The frame cadence is NOT
+// file-dialog service). This unit re-exports them and composes WebShell. The frame cadence is not
 // here: the browser drives it through foundation.runtime.web (emscripten_set_main_loop).
 
 module;
@@ -47,8 +47,8 @@ export namespace foundation::shell
         [[nodiscard]] IDialogService* Dialogs() noexcept override { return &m_dialogs; }
         void ProcessEvents() override
         {
-            m_input.Update();  // roll the input frame + drain the async HTML5 event queue
-            m_windows.Pump();  // canvas-size poll -> Resized events
+            m_input.Update();  // roll the input frame and drain the async HTML5 event queue
+            m_windows.Pump();  // poll the canvas size and emit Resized events
         }
         [[nodiscard]] bool IsRunning() const noexcept override
         {

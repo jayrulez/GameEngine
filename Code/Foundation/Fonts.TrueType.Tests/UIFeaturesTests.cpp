@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Fonts.Tests/UIFeaturesTests.bf - the font-driven shaper
-// UI helpers (hit testing, cursor position, selection rects, font decoration
-// metrics) over the bundled Roboto asset. The pure value-type cases live in
+// The font-driven shaper UI helpers (hit testing, cursor position, selection
+// rects, font decoration metrics) over the bundled Roboto asset. The pure value-type cases live in
 // the core types suite.
 #include <doctest/doctest.h>
 
@@ -20,7 +19,7 @@ using namespace foundation::fonts;
 namespace
 {
     // "<data root>" + rel (rel starts with '/'): the bundled fonts are found the way
-    // every executable finds engine data - the Data/.dataroot walk from the test binary.
+    // every executable finds engine data: the Data/.dataroot walk from the test binary.
     String AssetPath(const char* rel)
     {
         String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there
@@ -73,8 +72,8 @@ TEST_CASE("ttf.ui: TruncateToWidth ellipsizes overflow, keeps fitting text")
     // Comfortably wide: returned unchanged.
     CHECK(TruncateToWidth(*font, text, fullW + 20.0f).AsView() == text);
 
-    // Sub-pixel overflow (within the 1px tolerance) is NOT truncated - a control sized to exactly fit
-    // its text can measure a hair short after layout rounding; it must not collapse (e.g. "OK" -> "...").
+    // Sub-pixel overflow (within the 1px tolerance) is not truncated: a control sized to exactly fit
+    // its text can measure a hair short after layout rounding, and must not collapse ("OK" to "...").
     CHECK(TruncateToWidth(*font, text, fullW - 0.5f).AsView() == text);
 
     // Too narrow: truncated, ends with the ellipsis, and fits the budget.
@@ -85,8 +84,8 @@ TEST_CASE("ttf.ui: TruncateToWidth ellipsizes overflow, keeps fitting text")
     CHECK(StringView(cut.Data() + cut.Size() - 3, 3) == StringView(u8"..."));
     CHECK(font->MeasureString(cut.AsView()) <= budget);
 
-    // A short label no wider than the ellipsis is left alone even in a too-small box - truncating
-    // "+" to "..." would be WIDER, not narrower.
+    // A short label no wider than the ellipsis is left alone even in a too-small box: truncating
+    // "+" to "..." would make it wider, not narrower.
     const f32 plusW = font->MeasureString(u8"+");
     CHECK(TruncateToWidth(*font, u8"+", plusW * 0.4f).AsView() == StringView(u8"+"));
 
@@ -269,9 +268,9 @@ TEST_CASE("ttf.ui: font metrics carry decoration metrics")
 }
 
 // ============================================================================================
-// Clusters (F1 of Specs/vg-and-gui-lab.md): the shaper's UI helpers work in characters through
-// GlyphPosition::cluster, written down here under the one-to-one stb shaper before a shaper can
-// map characters to glyphs any other way.
+// Clusters: the shaper's UI helpers work in characters through GlyphPosition::cluster, checked
+// here under the one-to-one stb shaper and over hand-built positions that map characters to
+// glyphs N to M.
 // ============================================================================================
 
 TEST_CASE("ttf.ui: clusters count characters, not bytes, and a line break has no glyph")

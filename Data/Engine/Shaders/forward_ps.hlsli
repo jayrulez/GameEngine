@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The forward pixel stage's contract, beside the lighting: the screen-door fade (DITHER), under
-// GBUFFER the five targets the post stack reads (colour, view normal, motion vector,
-// roughness/metallic, albedo), and the editor's semantic debug views. The engine's forward pass writes them so, and so must a custom
-// shader that draws in it.
+// The forward pixel stage's contract, beside the lighting: the screen-door fade (DITHER), the five
+// targets the post stack reads under GBUFFER (colour, view normal, motion vector,
+// roughness/metallic, albedo), and the editor's semantic debug views. The engine's forward pass
+// writes these targets this way, and so must a custom shader that draws in it.
 #ifndef FORWARD_PS_HLSLI
 #define FORWARD_PS_HLSLI
 
@@ -28,7 +28,7 @@ void ScreenDoorFade(float2 screenPos, float fade) {
     if (fade > (kBayer[cell.y * 4u + cell.x] + 0.5) / 16.0) { discard; }
 }
 
-// Octahedral encode a unit vector -> [-1,1]^2 (full sphere, no sign ambiguity). Used to pack the
+// Octahedral-encodes a unit vector into [-1,1]^2 (full sphere, no sign ambiguity). Used to pack the
 // view-space normal into the RG16F G-buffer target for the post stack (GTAO/TAA).
 float2 OctEncode(float3 n) {
     n /= (abs(n.x) + abs(n.y) + abs(n.z));
@@ -37,21 +37,21 @@ float2 OctEncode(float3 n) {
     return e;
 }
 
-// Motion vector: current vs previous screen position, both UNJITTERED so only geometric motion
-// remains (else the TAA reprojection wobbles with the jitter). The jitter added to projection(2,0/1)
-// shifts NDC by -Jitter (RH: clip.w = -viewZ), so we ADD Jitter back to recover the geometric NDC.
-// NDC.y is flipped vs UV.y, hence the (0.5, -0.5) scale. `curClip` and `prevClip` are the vertex
-// stage's (VSOutput).
+// Motion vector: the current against the previous screen position, both unjittered so that only
+// geometric motion remains (otherwise the TAA reprojection wobbles with the jitter). The jitter
+// added to projection(2,0/1) shifts NDC by -Jitter (RH: clip.w = -viewZ), so adding Jitter back
+// recovers the geometric NDC. NDC.y is flipped relative to UV.y, hence the (0.5, -0.5) scale.
+// `curClip` and `prevClip` come from the vertex stage's VSOutput.
 float2 MotionVector(float4 curClip, float4 prevClip) {
     float2 curNDC  = curClip.xy  / curClip.w  + Jitter;
     float2 prevNDC = prevClip.xy / prevClip.w + PrevJitter;
     return (curNDC - prevNDC) * float2(0.5, -0.5);
 }
 
-// Editor semantic debug views (DebugMode, ViewDebugSemantic; 0 = off). A uniform
-// branch - every lane takes the same path, free when off; kept out of Material/variant
-// space on purpose (the drift lint never sees it). Values are meant to reach the screen
-// RAW (the compose blits scene color past tonemap when a semantic mode is active).
+// Editor semantic debug views (DebugMode, ViewDebugSemantic; 0 = off). The branch is uniform:
+// every lane takes the same path, so it costs nothing when off. It stays out of the Material and
+// variant space, so the drift lint never sees it. The values reach the screen raw (the compose
+// blits scene colour past the tonemap when a semantic mode is active).
 float3 DebugSemanticColor(uint mode, float3 albedo, float3 N, float roughness, float metallic,
                           float viewDepth, uint lightCount, float3 lit) {
     if (mode == 1u) { return albedo; }
@@ -59,7 +59,7 @@ float3 DebugSemanticColor(uint mode, float3 albedo, float3 N, float roughness, f
     if (mode == 3u) { return roughness.xxx; }
     if (mode == 4u) { return metallic.xxx; }
     if (mode == 5u) {
-        // CSM cascade selection tinted over albedo luma (red/green/blue/yellow, grey = no shadow).
+        // CSM cascade selection tinted over the albedo's luma (red, green, blue, yellow; grey = no shadow).
         float luma = dot(albedo, float3(0.299, 0.587, 0.114));
         int count = (int)ShadowCascadeCount;
         float3 tint = float3(0.55, 0.55, 0.55);

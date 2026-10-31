@@ -3,20 +3,21 @@
 
 // Foundation::Profiler.GUI - :timeline partition
 //
-// The frames chosen on one time axis (X7 of Specs/editor-gui.md): a lane per thread with its
-// scopes stacked by depth, the GPU's passes in a lane of their own drawn as the scopes are; the
-// ruler (the time from the first frame's start) and the frames' row pinned on top; the lanes'
-// names in a column at the start, as wide as the frame strip's gutter. A scope keeps its name's
-// colour in every lane. Scopes too narrow to draw are kept, side by side as one hatched block
-// with their count, never dropped.
+// The chosen frames on one time axis. Each thread has a lane with its scopes stacked by depth, and
+// the GPU's passes get a lane of their own, drawn the same way. The ruler (time since the first
+// frame's start) and the row of frames are pinned on top. The lane names sit in a column at the
+// start, as wide as the frame strip's gutter. A scope keeps its name's colour in every lane.
+// Scopes too narrow to draw are never dropped: adjacent ones are drawn as one hatched block that
+// shows their count.
 //
-// Mouse first: the wheel zooms about the pointer (Shift and the wheel scroll the lanes), a drag
-// pans (a middle drag too), a double click zooms to what is under the pointer (a scope; nothing:
-// the frames again; a lane's name: the lane's span), Fit in the corner fits the frames. A click on
-// a scope chooses its name (on nothing, none): its every instance lit and the rest dimmed, the
-// page's other views told. A drag on the ruler marks a span (its length read out), a click there
-// lets it go. A click on a lane's arrow folds it to one row. The hover outlines the name's other
-// instances and names the scope with its duration.
+// The mouse: the wheel zooms about the pointer (Shift with the wheel scrolls the lanes), and a
+// left or middle drag pans. A double click zooms to what is under the pointer: a scope, or a
+// lane's name (zooming to the lane's span); on empty space it shows the frames again. Fit in the
+// corner fits the frames. A click on a scope chooses its name, which lights every instance of it,
+// dims the rest and tells the page's other views; a click on empty space clears the choice. A
+// drag on the ruler marks a span and reads out its length, and a click on the ruler clears it. A
+// click on a lane's arrow folds the lane to one row. Hovering outlines the name's other instances
+// and shows the scope's name and duration.
 
 module;
 #include "Core/Prelude.h"
@@ -36,34 +37,34 @@ using namespace foundation::gui;
 
 export namespace foundation::profiler::gui
 {
-    /// ProfileTimeline::kRowHeight, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ProfileTimeline::kRowHeight, at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr f32 kProfileTimelineRowHeight = 18.0f;
 
     class ProfileTimeline final : public ProfilerWidget
     {
         RTTI_OBJECT(ProfileTimeline, ProfilerWidget)
     public:
-        static constexpr f32 kHeaderWidth = 128.0f; // the lanes' names; the frame strip's gutter
+        static constexpr f32 kHeaderWidth = 128.0f; // the lane names' column, as wide as the frame strip's gutter
         static constexpr f32 kTickHeight = 20.0f;   // the ruler's ticks and times
-        static constexpr f32 kFramesHeight = 16.0f; // the frames' row under it
+        static constexpr f32 kFramesHeight = 16.0f; // the row of frames under the ticks
         static constexpr f32 kRulerHeight = kTickHeight + kFramesHeight;
-        static constexpr f32 kRowHeight = kProfileTimelineRowHeight; // a depth of scopes
+        static constexpr f32 kRowHeight = kProfileTimelineRowHeight; // the height of one depth of scopes
         static constexpr f32 kLaneGap = 6.0f;
         static constexpr f32 kMinBarWidth = 3.0f; // narrower scopes join a hatched block
-        static constexpr f32 kFoldWidth = 18.0f;  // a lane's arrow, at its name's start
+        static constexpr f32 kFoldWidth = 18.0f;  // the width of a lane's fold arrow, before its name
         static constexpr f32 kMinLabelSpacing = 72.0f;
         static constexpr f32 kDragThreshold = 3.0f;
-        static constexpr u32 kGpuLane = ~0u; // the GPU's lane, among the threads' indices
+        static constexpr u32 kGpuLane = ~0u; // stands for the GPU's lane among the thread indices
 
         struct Lane
         {
             String name;
             bool gpu = false;
-            u32 thread = 0; // the thread's index; kGpuLane for the GPU's
+            u32 thread = 0; // the thread's index, or kGpuLane for the GPU lane
             u32 depths = 1;
             bool folded = false;
-            f32 y = 0.0f; // its top in the view, after the lanes' scroll
+            f32 y = 0.0f; // the lane's top in the view, after the lane scroll
             f32 height = 0.0f;
         };
 
@@ -75,7 +76,7 @@ export namespace foundation::profiler::gui
             bool gpu = false;
             u64 beginTick = 0;
             u64 endTick = 0;
-            u32 merged = 0; // 0: one scope; else the scopes a hatched block holds
+            u32 merged = 0; // 0 for a single scope; otherwise how many scopes a hatched block holds
             Rect rect{};
         };
 
@@ -86,11 +87,11 @@ export namespace foundation::profiler::gui
         }
 
         // === The view ===
-        /// The time shown at the plot's start and end, in the source's ticks.
+        /// Returns the time shown at the plot's start (ViewEnd: at its end), in the source's ticks.
         [[nodiscard]] f64 ViewBegin() const noexcept { return m_viewBegin; }
         [[nodiscard]] f64 ViewEnd() const noexcept { return m_viewEnd; }
-        /// The view back to the frames chosen: the first's start to the last's end or its last GPU
-        /// pass's, whichever is later.
+        /// Resets the view to the chosen frames: from the first frame's start to the last frame's
+        /// end or its last GPU pass's end, whichever is later.
         void FitView()
         {
             m_scrollY = 0.0f;
@@ -105,7 +106,7 @@ export namespace foundation::profiler::gui
                 Invalidate();
             }
         }
-        /// Shows [begin, end] (ticks), with a sliver of room either side.
+        /// Shows [begin, end] in ticks, with a little room on either side.
         void ZoomTo(f64 begin, f64 end)
         {
             const f64 span = Max(end - begin, MinSpan());
@@ -114,8 +115,8 @@ export namespace foundation::profiler::gui
             m_viewEnd = begin + span + room;
             Invalidate();
         }
-        /// Zooms by `factor` (above 1 in) about `x` (its own space): the time under it stays. No
-        /// closer than a microsecond across the plot.
+        /// Zooms by `factor` (above 1 zooms in) about `x`, in the view's own space, keeping the time
+        /// under `x` in place. The plot never spans less than a microsecond.
         void ZoomAt(f32 x, f32 factor)
         {
             if (factor <= 0.0f)
@@ -128,7 +129,7 @@ export namespace foundation::profiler::gui
             m_viewEnd = m_viewBegin + span;
             Invalidate();
         }
-        /// Moves the view by `dx` pixels (positive shows earlier time) and the lanes by `dy`.
+        /// Pans the view by `dx` pixels (positive shows earlier time) and scrolls the lanes by `dy`.
         void PanBy(f32 dx, f32 dy)
         {
             const f64 shift = static_cast<f64>(dx / Max(PlotBounds().width, 1.0f)) * (m_viewEnd - m_viewBegin);
@@ -137,7 +138,7 @@ export namespace foundation::profiler::gui
             ScrollLanes(-dy);
             Invalidate();
         }
-        /// Scrolls the lanes by `dy` pixels (positive shows later lanes), kept over them.
+        /// Scrolls the lanes by `dy` pixels (positive shows later lanes), staying within them.
         void ScrollLanes(f32 dy)
         {
             m_scrollY = Clamp(m_scrollY + dy, 0.0f, Max(LanesHeight() - (PlotBounds().height - kRulerHeight), 0.0f));
@@ -145,14 +146,14 @@ export namespace foundation::profiler::gui
         }
         [[nodiscard]] f32 LaneScroll() const noexcept { return m_scrollY; }
 
-        /// The plot (its own space): the content less the names' column.
+        /// Returns the plot's bounds in the view's own space: the content box less the names' column.
         [[nodiscard]] Rect PlotBounds() const
         {
             const Rect box = GetContentBounds();
             const f32 header = Min(kHeaderWidth, box.width);
             return Rect{box.x + header, box.y, Max(box.width - header, 0.0f), box.height};
         }
-        /// The time at `x` (its own space) and where a time is drawn.
+        /// Returns the time at `x` in the view's own space; XAt returns where a time is drawn.
         [[nodiscard]] f64 TickAt(f32 x) const noexcept
         {
             const Rect plot = PlotBounds();
@@ -165,7 +166,7 @@ export namespace foundation::profiler::gui
         }
 
         // === Lanes ===
-        /// Folds a lane to one row (its top scopes as plain activity), or opens it.
+        /// Folds a lane to one row, showing its top-level scopes as plain activity, or opens it.
         void SetFolded(u32 thread, bool folded)
         {
             for (usize i = 0; i < m_folded.Size(); ++i)
@@ -190,7 +191,7 @@ export namespace foundation::profiler::gui
             return false;
         }
 
-        // === The model (the draw and the tests read it) ===
+        // === The model, which the draw and the tests read ===
         [[nodiscard]] Span<const Lane> Lanes() const
         {
             Compute();
@@ -201,7 +202,7 @@ export namespace foundation::profiler::gui
             Compute();
             return m_bars.AsSpan();
         }
-        /// The bar at a point (its own space), or null.
+        /// Returns the bar at a point in the view's own space, or null.
         [[nodiscard]] const Bar* BarAt(core::Float2 point) const
         {
             Compute();
@@ -215,7 +216,7 @@ export namespace foundation::profiler::gui
             }
             return nullptr;
         }
-        /// The lane whose name is at a point (its own space), or -1.
+        /// Returns the lane whose name is at a point in the view's own space, or -1.
         [[nodiscard]] i32 LaneAt(core::Float2 point) const
         {
             Compute();
@@ -224,19 +225,20 @@ export namespace foundation::profiler::gui
                     return static_cast<i32>(i);
             return -1;
         }
-        /// The scope under the pointer (null: none).
+        /// Returns the scope under the pointer, or null.
         [[nodiscard]] const Bar* Hovered() const
         {
             Compute();
             return m_hovered >= 0 && static_cast<usize>(m_hovered) < m_bars.Size() ? &m_bars[static_cast<usize>(m_hovered)] : nullptr;
         }
-        /// Whether a bar is the name chosen's.
+        /// Returns whether a bar belongs to the chosen name.
         [[nodiscard]] bool IsChosen(const Bar& bar) const noexcept
         {
             return bar.merged == 0 && m_focus && m_focus->Name().Is(bar.name, bar.gpu);
         }
 
-        /// The scope under the pointer named with its duration, else its own tooltip.
+        /// Returns the name and duration of the scope under the pointer, or else the widget's own
+        /// tooltip.
         [[nodiscard]] core::StringView GetTooltipText() const override
         {
             m_tip.Clear();
@@ -253,7 +255,7 @@ export namespace foundation::profiler::gui
             return UIWidget::GetTooltipText();
         }
 
-        /// The parts it draws, which the sheet styles as `tag::part`.
+        /// Lists the parts it draws, which the sheet styles as `tag::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             ProfilerWidget::CollectStyleParts(out);
@@ -305,7 +307,7 @@ export namespace foundation::profiler::gui
             event.Handled = true;
             if (at.x < plot.x)
             {
-                // The corner's Fit, a lane's arrow, a lane's name.
+                // A press in the names' column: the Fit corner, a lane's arrow, or a lane's name.
                 if (at.y < plot.y + kRulerHeight)
                 {
                     FitView();
@@ -353,7 +355,7 @@ export namespace foundation::profiler::gui
             }
             else if (m_drag == Drag::Span && m_focus)
             {
-                // To the nearest tick on either side.
+                // Round both ends to the nearest whole tick.
                 const f64 from = Max(TickAt(m_pressAt.x), 0.0) + 0.5;
                 const f64 to = Max(TickAt(at.x), 0.0) + 0.5;
                 m_focus->SetSpan(static_cast<u64>(from), static_cast<u64>(to));
@@ -366,7 +368,8 @@ export namespace foundation::profiler::gui
             {
                 if (m_drag == Drag::PendingPan && m_focus)
                 {
-                    // A click: the name of the scope under it chosen, or none.
+                    // A click chooses the name of the scope under it, or clears the choice on empty
+                    // space.
                     const Bar* bar = BarAt(m_pressAt);
                     if (bar != nullptr && bar->merged == 0)
                         m_focus->ChooseName(bar->name, bar->gpu);
@@ -417,7 +420,7 @@ export namespace foundation::profiler::gui
             const bool choosing = m_focus && m_focus->Name().any;
             const Bar* hovered = Hovered();
 
-            // The lanes: their separators, then their scopes.
+            // Draw the lanes: their separators, then their scopes.
             const Rect lanesClip{plot.x, plot.y + kRulerHeight, plot.width, Max(plot.height - kRulerHeight, 0.0f)};
             ctx.PushClip(lanesClip);
             for (const Lane& lane : m_lanes)
@@ -455,7 +458,7 @@ export namespace foundation::profiler::gui
             }
             ctx.PopClip();
 
-            // The frames' edges, down the ruler's foot and the lanes; the span marked.
+            // Draw the frame edges down through the ruler's foot and the lanes, and the marked span.
             ctx.PushClip(Rect{plot.x, plot.y + kTickHeight, plot.width, Max(plot.height - kTickHeight, 0.0f)});
             for (const FrameEdge& edge : m_edges)
                 ctx.VG().FillRect(Rectangle{Floor(edge.x), plot.y + kTickHeight, 1.0f, plot.height - kTickHeight}, edgeColor);
@@ -473,7 +476,7 @@ export namespace foundation::profiler::gui
             }
             ctx.PopClip();
 
-            // The ruler: its ticks and times, the span's length, the frames' numbers.
+            // Draw the ruler: its ticks and times, the span's length, and the frame numbers.
             ctx.VG().FillRect(Rectangle{plot.x, plot.y, plot.width, kRulerHeight}, PartColor(u8"ruler", Color{0.0f, 0.0f, 0.0f, 0.15f}));
             ctx.PushClip(Rect{plot.x, plot.y, plot.width, kRulerHeight});
             DrawTicks(ctx, plot, dimText);
@@ -500,7 +503,7 @@ export namespace foundation::profiler::gui
             }
             ctx.PopClip();
 
-            // The names' column over everything: the corner's Fit, then each lane's arrow and name.
+            // Draw the names' column over everything: the Fit corner, then each lane's arrow and name.
             const Rect header{box.x, box.y, plot.x - box.x, box.height};
             ctx.VG().FillRect(header.ToRectangle(), PartColor(u8"header", Color{0.0f, 0.0f, 0.0f, 0.1f}));
             ctx.VG().FillRect(Rectangle{plot.x - 1.0f, box.y, 1.0f, box.height}, separator);
@@ -521,17 +524,17 @@ export namespace foundation::profiler::gui
         enum class Drag : u8
         {
             None,
-            PendingPan,  // pressed in the lanes, not yet past the threshold: a click
+            PendingPan,  // pressed in the lanes and not yet past the threshold, so still a click
             Pan,
-            PendingSpan, // pressed on the ruler: a click lets the span go
+            PendingSpan, // pressed on the ruler; released as a click, it clears the span
             Span,
         };
 
         struct FrameEdge
         {
             u64 frame = 0;
-            f32 x = 0.0f;    // its start
-            f32 next = 0.0f; // its end
+            f32 x = 0.0f;    // the frame's start
+            f32 next = 0.0f; // the frame's end
             f32 ms = 0.0f;
         };
 
@@ -541,7 +544,7 @@ export namespace foundation::profiler::gui
             return Max(source != nullptr ? static_cast<f64>(source->TickFrequency()) / 1.0e6 : 1.0, 1.0e-9);
         }
 
-        // The frames chosen's span in ticks; false when none has a record.
+        // Gets the chosen frames' span in ticks. Returns false when none of them has a record.
         bool FramesSpan(u64& begin, u64& end) const
         {
             const IProfileSource* source = Source();
@@ -574,7 +577,7 @@ export namespace foundation::profiler::gui
             if (any)
                 ZoomTo(begin, end);
         }
-        // Every scope of a lane in the frames chosen, in view or not.
+        // Returns every scope of a lane in the chosen frames, whether in view or not.
         [[nodiscard]] Array<Bar> AllBarsOf(const Lane& lane) const
         {
             Array<Bar> out;
@@ -622,7 +625,7 @@ export namespace foundation::profiler::gui
             return height;
         }
 
-        // The lanes, their scopes in view and the frames' edges, from the frames chosen.
+        // Computes the lanes, their scopes in view and the frame edges from the chosen frames.
         void Compute() const
         {
             const Rect plot = PlotBounds();
@@ -647,7 +650,7 @@ export namespace foundation::profiler::gui
                 m_hovered = -1;
                 return;
             }
-            // The lanes: each thread with a scope in the frames, in the threads' order, then the GPU.
+            // One lane for each thread with a scope in the frames, in thread order, then the GPU lane.
             u32 gpuDepths = 0;
             bool anyGpu = false;
             for (u64 n = frames.first; n <= frames.last; ++n)
@@ -683,7 +686,8 @@ export namespace foundation::profiler::gui
                 lane.height = static_cast<f32>(lane.folded ? 1 : lane.depths) * kRowHeight;
                 y += lane.height + kLaneGap;
             }
-            // The scopes in view, a lane and a depth at a time so narrow ones join their neighbours.
+            // Collect the scopes in view one lane and depth at a time, so narrow ones join their
+            // neighbours.
             Pending pending;
             for (u32 l = 0; l < m_lanes.Size(); ++l)
             {
@@ -723,7 +727,7 @@ export namespace foundation::profiler::gui
                     if (edge.next >= plot.x && edge.x <= plot.Right())
                         m_edges.PushBack(edge);
                 }
-            // The bars are new: the one under the pointer is found again.
+            // The bars were rebuilt, so find the one under the pointer again.
             m_hovered = -1;
             if (m_pointerIn)
             {
@@ -739,7 +743,7 @@ export namespace foundation::profiler::gui
             }
         }
 
-        // Narrow scopes side by side, gathered into one block.
+        // Adjacent narrow scopes, gathered into one block.
         struct Pending
         {
             Bar block;
@@ -780,7 +784,7 @@ export namespace foundation::profiler::gui
             Bar block = pending.block;
             block.rect.width = Max(block.rect.width, 1.0f);
             if (block.merged == 1)
-                block.merged = 0; // one narrow scope alone: a thin bar of its own
+                block.merged = 0; // a single narrow scope gets a thin bar of its own
             m_bars.PushBack(block);
         }
 
@@ -801,8 +805,8 @@ export namespace foundation::profiler::gui
             return m_lanes.Insert(at, core::Move(lane));
         }
 
-        // The ruler's ticks: a step of 1, 2 or 5 times a power of ten of ms, at least the label
-        // spacing apart, labelled from the first frame's start.
+        // Draws the ruler's ticks. The step is 1, 2 or 5 times a power of ten ms, at least the
+        // label spacing apart, and the labels count from the first frame's start.
         void DrawTicks(DrawContext& ctx, const Rect& plot, Color text) const
         {
             const IProfileSource* source = Source();
@@ -837,7 +841,7 @@ export namespace foundation::profiler::gui
                     return m * magnitude;
             return 10.0f * magnitude;
         }
-        // `ms` to the decimals of `step`.
+        // Formats `ms` with as many decimals as `step` needs.
         [[nodiscard]] static String FormatStep(f32 ms, f32 step)
         {
             i32 decimals = 0;
@@ -846,7 +850,7 @@ export namespace foundation::profiler::gui
             return FormatFixed(ms, decimals);
         }
 
-        // A block of scopes too narrow to draw: diagonal strokes over a faint fill.
+        // Draws a block of scopes too narrow to draw: diagonal strokes over a faint fill.
         static void DrawHatch(DrawContext& ctx, const Rect& r, Color color)
         {
             ctx.VG().FillRect(r.ToRectangle(), color);
@@ -857,7 +861,7 @@ export namespace foundation::profiler::gui
                 ctx.VG().DrawLine(core::Float2{x, r.Bottom()}, core::Float2{x + r.height, r.y}, stroke, 1.0f);
             ctx.PopClip();
         }
-        // A lane's arrow: down when open, toward the name when folded.
+        // Draws a lane's arrow: down when open, pointing toward the name when folded.
         static void DrawArrow(DrawContext& ctx, core::Float2 at, bool folded, Color color)
         {
             vg::PathBuilder arrow;
@@ -888,7 +892,7 @@ export namespace foundation::profiler::gui
         bool m_pointerIn = false;
         mutable String m_tip;
 
-        // What Compute made, and what it made it from.
+        // What Compute built, and the inputs it built it from.
         mutable Array<Lane> m_lanes;
         mutable Array<Bar> m_bars;
         mutable Array<FrameEdge> m_edges;

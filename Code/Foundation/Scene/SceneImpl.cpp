@@ -3,8 +3,8 @@
 
 // Scene - foundation.scene:scene implementation unit.
 //
-// Out-of-line definitions for Scene's non-trivial member functions (sec 3.2 / sec 10.6).
-// The class declaration + trivial inline accessors stay in Scene.cppm; the substantial
+// Out-of-line definitions for Scene's non-trivial member functions.
+// The class declaration and trivial inline accessors stay in Scene.cppm; the substantial
 // method bodies live here so the interface partition stays small.
 
 module;
@@ -22,9 +22,9 @@ namespace foundation::scene
 {
     EntityHandle Scene::CreateEntity(StringView name)
     {
-        // The RNG is deterministic and loading a scene does NOT advance it past the loaded
-        // entities, so a fresh id can reproduce a loaded one - re-roll until free (the same
-        // collision the content DB re-rolls; three entities sharing a guid corrupts saves).
+        // The RNG is deterministic and loading a scene does not advance it past the loaded
+        // entities, so a fresh id can reproduce a loaded one: re-roll until free (the content
+        // DB re-rolls the same collision; entities sharing a guid corrupt saves).
         Guid id = Guid::Generate(m_rng);
         while (FindEntity(id).IsAssigned())
         {
@@ -118,10 +118,10 @@ namespace foundation::scene
             return;
         }
         m_entities[entity.index].active = active;
-        // Settle the effective cache BEFORE notifying, so a listener that queries
-        // IsEffectivelyActive from the hook sees the new truth. The hook itself remains an
-        // own-flag change notification only (it is NOT the gating mechanism - consumers poll
-        // IsEffectivelyActive in their own loops).
+        // Settle the effective cache before notifying, so a listener that queries
+        // IsEffectivelyActive from the hook sees the new state. The hook itself is an own-flag
+        // change notification only, not the gating mechanism: consumers poll
+        // IsEffectivelyActive in their own loops.
         RefreshEffectiveActive(entity);
         ++m_revision;
         for (SceneSystem* s : m_sortedSystems)
@@ -157,7 +157,7 @@ namespace foundation::scene
             if (slot.effectiveActive == effective && !slot.active)
             {
                 // Own flag false and already cached false: every descendant is false too
-                // (their chain runs through this node) - nothing below can change.
+                // (their chain runs through this node), so nothing below can change.
                 continue;
             }
             slot.effectiveActive = effective;
@@ -265,8 +265,8 @@ namespace foundation::scene
         }
         // Moved since the last UpdateTransforms (it, or an ancestor: MarkDirty cascades down), the
         // cache is a frame old: compose it fresh. Read mid-update (a script's onUpdate, after
-        // physics has written this frame's pose), the cached matrix answered where the entity was
-        // last frame, and a camera following it shook.
+        // physics has written this frame's pose), the cached matrix would say where the entity was
+        // last frame, and a camera following it would shake.
         const TransformData& t = m_transforms[entity.index];
         return t.dirty ? ComposeWorldMatrix(entity) : t.worldMatrix;
     }
@@ -402,7 +402,7 @@ namespace foundation::scene
             AppendToList(child, m_firstRoot, m_lastRoot);
         }
         MarkDirty(child);
-        RefreshEffectiveActive(child); // the ancestor chain changed - resettle the subtree
+        RefreshEffectiveActive(child); // the ancestor chain changed; resettle the subtree
         ++m_revision;
     }
 
@@ -523,11 +523,10 @@ namespace foundation::scene
         }
         m_transformsUpdatedThisFrame.Clear();
 
-        // Recurse from every dirty-subtree TOP: a dirty entity whose parent is clean (or who
+        // Recurse from every dirty-subtree top: a dirty entity whose parent is clean (or who
         // has none). MarkDirty propagates down, so interior dirty nodes always have a dirty
-        // parent - but a freshly REPARENTED entity under a clean parent is a top that the old
-        // roots-only scan missed (its world matrix stayed stale until something moved the
-        // parent; pasted/duplicated children rendered at the origin).
+        // parent, but a freshly reparented entity under a clean parent is also a top, and a
+        // roots-only scan would leave its world matrix stale until something moved the parent.
         for (u32 i = 0; i < count; ++i)
         {
             const TransformData& d = m_transforms[i];
@@ -555,7 +554,7 @@ namespace foundation::scene
     // ---- SceneModuleContributions (declared in :composition) --------------------------------------
     SceneModuleContributions& SceneModuleContributions::Global() noexcept
     {
-        static SceneModuleContributions instance; // one per process (rendezvous rule)
+        static SceneModuleContributions instance; // one per process, across shared libraries
         return instance;
     }
 
@@ -688,8 +687,8 @@ namespace foundation::scene
 
     namespace
     {
-        // Inline resolve context for a component ref - fits Variant's 24-byte inline storage. The
-        // manager pointer is scene-owned and pool-stable; the component itself is NEVER cached here
+        // Inline resolve context for a component ref; fits Variant's 24-byte inline storage. The
+        // manager pointer is scene-owned and pool-stable; the component itself is never cached here
         // (the sparse-set pool swap-removes), only re-looked-up per access.
         struct ComponentRefCtx
         {
@@ -698,8 +697,8 @@ namespace foundation::scene
             ComponentManagerBase* manager;
         };
 
-        // The resolver a RESOLVE-mode Variant calls each deref: the CURRENT component address, or
-        // null (component absent / entity stale - the manager's generation check handles staleness).
+        // The resolver a resolve-mode Variant calls each deref: the current component address, or
+        // null (component absent or entity stale; the manager's generation check handles staleness).
         void* ResolveComponent(const Variant& value)
         {
             const auto* ctx = static_cast<const ComponentRefCtx*>(value.ResolveContext());
@@ -743,7 +742,7 @@ namespace foundation::scene
         {
             return;
         }
-        // Authored locals -> world matrices BEFORE systems hear OnSceneStarted: world
+        // Turn authored locals into world matrices before systems hear OnSceneStarted: world
         // matrices are Identity until the first update, and start callbacks that sample
         // them (physics body building, spawn points) must see the authored layout.
         UpdateTransforms();
@@ -776,8 +775,8 @@ namespace foundation::scene
         RunPhase(ScenePhase::Update, deltaTime);
         RunPhase(ScenePhase::AsyncUpdate, deltaTime);
         RunPhase(ScenePhase::PostUpdate, deltaTime);
-        // NOTE: the scene does NOT drain any event bus: only the owning RUN SCOPE drains
-        // - GameInstance / the editor page / a test fixture; Scene has no owned bus at all.
+        // The scene does not drain any event bus: only the owning run scope does (a GameInstance,
+        // an editor page, a test fixture). Scene has no bus of its own.
         UpdateTransforms(); // ScenePhase::TransformUpdate (internal)
         RunPhase(ScenePhase::PostTransform, deltaTime);
         m_isUpdating = false;
@@ -826,7 +825,7 @@ namespace foundation::scene
         ++slot.generation;
         slot.alive = true;
         slot.active = true;
-        slot.effectiveActive = true; // created as an active ROOT (no ancestors yet)
+        slot.effectiveActive = true; // created as an active root (no ancestors yet)
         slot.persistentId = id;
         slot.name = name.IsEmpty() ? String{} : String(name);
 

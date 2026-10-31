@@ -3,12 +3,12 @@
 
 // Editor::Input - :input_capture_editor partition.
 //
-// InputCaptureEditor: a binding's input on the grid (hint "inputCode": a key, a mouse button, a
-// gamepad's button or stick): a key capture showing the input it is, which, clicked, listens for the
-// next one pressed on any device the action takes, as the old page's key caps did. The page listens
-// (it reads the devices each frame); while it does the button reads so and its focus takes every
-// key, so no shortcut runs the key pressed. Escape is an input a game binds, so it does not cancel:
-// clicking again does, or the focus leaving.
+// InputCaptureEditor: the grid's editor for a binding's input (hint "inputCode": a key, a mouse
+// button, a gamepad's button or stick). It is a capture button that shows the current input; when
+// clicked, it listens for the next input pressed on any device the action takes. The page does the
+// listening (it reads the devices each frame). While it listens the button says so and its focus
+// takes every key, so the pressed key runs no shortcut. Escape is an input a game can bind, so it
+// does not cancel; clicking again cancels, as does the focus leaving.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,7 @@ export namespace editor
     {
         /// The input the row holds, as the page names it ("W", "Gamepad A", "Left Stick").
         Function<String(StringView path)> describe;
-        /// Listens for the row's input, or (listening already) stops.
+        /// Starts listening for the row's input, or stops if it is listening already.
         Function<void(StringView path)> toggle;
         /// Whether the page listens for the row's input now.
         Function<bool(StringView path)> listening;
@@ -54,7 +54,7 @@ export namespace editor
             m_button->SetOnClick([self]() { self->Toggle(); });
             Hold(*m_button);
         }
-        InputCaptureEditor() : InputCaptureEditor(m_none) {} // what RTTI makes (its own empty services)
+        InputCaptureEditor() : InputCaptureEditor(m_none) {} // the form RTTI constructs (with its own empty services)
 
         /// The editor for every input row `registry` shows; `services` outlives it.
         static void Register(gui::PropertyEditorRegistry& registry, const InputCaptureServices& services)
@@ -74,9 +74,9 @@ export namespace editor
         }
 
     private:
-        // The button as the listen stands: it says so and takes every key while it listens. The
-        // editor shows itself when it starts or stops one, not the grid: a refresh of the rows
-        // could take its focus, and its focus leaving stops the listen.
+        // Updates the button to the listen state: while listening it says so and takes every key.
+        // The editor refreshes itself when a listen starts or stops, rather than the grid doing it,
+        // because a refresh of the rows could take its focus and its focus leaving stops the listen.
         void Show()
         {
             const bool listening = IsListening();
@@ -85,7 +85,7 @@ export namespace editor
                 m_button->AddClass(u8"capturing");
             else
                 m_button->RemoveClass(u8"capturing");
-            // While it listens its focus takes every key (none runs a shortcut instead).
+            // While it listens its focus takes every key, so no key runs a shortcut.
             m_button->SetCapturesAllKeys(listening);
             if (listening)
                 m_button->RequestFocus();
@@ -100,8 +100,8 @@ export namespace editor
             explicit CaptureButton(InputCaptureEditor& owner) : m_owner(&owner) {}
 
         protected:
-            // The press is the button's: the grid's row would take the focus on it, and the focus
-            // leaving would stop the listen before this click could.
+            // The button handles the press itself: otherwise the grid's row would take the focus,
+            // and the focus leaving would stop the listen before this click could.
             void OnMouseDown(const gui::MouseEvent& event) override
             {
                 if (event.Button == gui::MouseButton::Left)
@@ -131,7 +131,7 @@ export namespace editor
         }
 
         bool m_mixed = false; // the objects' inputs differ
-        InputCaptureServices m_none; // an editor RTTI made has no services: its own, empty
+        InputCaptureServices m_none; // an editor RTTI constructs has no services, so it uses this empty set
         const InputCaptureServices* m_services;
         RefPtr<CaptureButton> m_button;
     };

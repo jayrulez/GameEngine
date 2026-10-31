@@ -3,11 +3,9 @@
 
 // UI - :itooltip_provider partition
 //
-// Implement on a View to provide custom tooltip content instead of plain text. TooltipManager checks
-// for this interface first (via View::AsTooltipProvider()); if absent, falls back to View.TooltipText.
-// Ported from Sedulous.UI/src/Overlay/ITooltipProvider.bf. Pattern A (tree-queried) - the interface is
-// a plain abstract base; a View exposes it via a virtual AsTooltipProvider() capability query. Beef
-// `View CreateTooltipContent()` transfers ownership to the TooltipView -> returns RefPtr<View> (RAII).
+// Implement on a View to provide custom tooltip content instead of plain text. TooltipManager asks
+// for this interface first, through the virtual View::AsTooltipProvider(), and falls back to
+// View.TooltipText when the view has none.
 
 module;
 #include "Core/Prelude.h"

@@ -3,14 +3,14 @@
 
 // Foundation::RHI.TestSupport - `foundation.rhi.testsupport`.
 //
-// A tiny, backend-agnostic substrate for offscreen render tests: create a device, and read a
-// rendered color target back to a CPU-side image you can probe. Extracted from the inline copies in
-// VG.Backend.Tests and Render.Backend.Tests (each rolled its own make-device + copy-to-buffer + map).
+// A small, backend-agnostic base for offscreen render tests: create a device, and read a rendered
+// color target back to a CPU-side image you can probe.
 //
-// STRUCTURAL probes only: callers assert PROPERTIES of the pixels (edge coverage, luma splits, color
-// agreement), never diff against stored golden images - so there is no cross-driver/GPU drift. This
-// module owns only the reusable plumbing (device, readback, pixel access); each test keeps its own
-// render setup (VG builds a pass; the 3D tests drive RenderFrame) and its own per-feature assertions.
+// Structural probes only: callers assert properties of the pixels (edge coverage, luma splits,
+// color agreement) and never diff against stored golden images, so there is no drift across
+// drivers or GPUs. This module owns only the reusable plumbing (device, readback, pixel access);
+// each test keeps its own render setup (VG builds a pass; the 3D tests drive RenderFrame) and its
+// own per-feature assertions.
 
 module;
 #include "Core/Prelude.h"
@@ -28,14 +28,14 @@ export namespace foundation::rhi::testsupport
     namespace rhi = foundation::rhi;
 
     // The engine data root, found the way every executable finds it (the Data/.dataroot walk
-    // from the test binary under Bin/). Empty = not found (the caller REQUIREs or skips).
+    // from the test binary under Bin/). Empty when not found (the caller REQUIREs or skips).
     [[nodiscard]] inline StringView DataRoot()
     {
         static const String root = foundation::vfs::FindDataRoot();
         return root.AsView();
     }
 
-    // A process-wide mount over the data root - what a ShaderSystemHost or a file provider reads
+    // A process-wide mount over the data root: what a ShaderSystemHost or a file provider reads
     // engine shaders through in a test, exactly as the application's subsystems do.
     [[nodiscard]] inline foundation::vfs::IFileSystem& DataFileSystem()
     {
@@ -50,7 +50,7 @@ export namespace foundation::rhi::testsupport
     }
 
     // Create a device from a backend's first adapter. Returns null (test should skip) when the
-    // backend has no adapter or device creation fails - e.g. no GPU in a headless CI box.
+    // backend has no adapter or device creation fails, e.g. no GPU in a headless CI box.
     [[nodiscard]] inline rhi::Device* MakeTestDevice(rhi::Backend* backend)
     {
         if (backend == nullptr || backend->EnumerateAdapters().IsEmpty())
@@ -78,7 +78,7 @@ export namespace foundation::rhi::testsupport
         {
             return rgba.Data() + (static_cast<usize>(y) * width + x) * 4;
         }
-        // A cheap luma proxy in [0, 765]: r + g + b. Enough to separate dark/mid/bright for the
+        // A cheap luma proxy in [0, 765]: r + g + b. Enough to separate dark, mid and bright for the
         // structural probes; not a perceptual metric.
         [[nodiscard]] u32 Luma(u32 x, u32 y) const
         {
@@ -104,8 +104,8 @@ export namespace foundation::rhi::testsupport
         }
     };
 
-    // Read back a color target that has ALREADY been rendered and left in ResourceState::CopySrc.
-    // Owns a fresh command buffer for the copy + a GpuToCpu staging buffer, blocks on a fence, and
+    // Read back a color target that has already been rendered and left in ResourceState::CopySrc.
+    // Owns a fresh command buffer for the copy and a GpuToCpu staging buffer, blocks on a fence, and
     // unpacks the 256-aligned rows into a tightly-packed CapturedImage. Decoupled from the render
     // command stream (the target is a persistent texture), so a caller renders however it likes and
     // then calls this. Returns {valid=false} on any failure.
@@ -117,7 +117,7 @@ export namespace foundation::rhi::testsupport
         {
             return out;
         }
-        const u32 bytesPerRow = (width * 4u + 255u) & ~255u; // WebGPU/Vulkan require 256-byte rows
+        const u32 bytesPerRow = (width * 4u + 255u) & ~255u; // WebGPU and Vulkan require 256-byte rows
 
         rhi::BufferDesc rb{};
         rb.size = static_cast<u64>(bytesPerRow) * height;

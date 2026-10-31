@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.particles.editor - the edit-time ParticleEffectAsset + its builder (the bake). Tooling
-// only; the runtime/app never links this. Unlike an imported asset (e.g. a texture importing an
-// external .png), a particle effect is AUTHORED - so the asset embeds the effect itself and Build()
-// cooks it into a ParticleEffectResource with no source-file load. Ref resolution + curve->LUT baking
-// are later transforms; v1 is a straight pass-through of the authored effect.
+// foundation.particles.editor - the edit-time ParticleEffectAsset and its builder (the bake).
+// Tooling only; the runtime and apps never link this. Unlike an imported asset (a texture importing
+// an external .png, say), a particle effect is authored, so the asset embeds the effect itself and
+// Build() cooks it into a ParticleEffectResource with no source-file load. Build resolves each
+// system's texture path to its cooked guid; the rest of the effect passes through as authored.
 
 module;
 #include "Core/Prelude.h"
@@ -26,10 +26,10 @@ namespace core = foundation::core;
 namespace content = foundation::content;
 
 export namespace pipeline{
-    // Edit-time asset: the authored effect (embedded, since there is no external source file - unlike an
-    // imported texture). Serialized to a readable .particlefx (XmlSerializer) as fileName + the effect
-    // graph. This is a distinct type from the cooked ParticleEffectResource; Build() transforms one into
-    // the other.
+    // Edit-time asset: the authored effect (embedded, since unlike an imported texture there is no
+    // external source file). Serialized to a readable .particlefx (XmlSerializer) as fileName and the
+    // effect graph. This is a distinct type from the cooked ParticleEffectResource; Build() transforms
+    // one into the other.
     class ParticleEffectAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(ParticleEffectAsset, pipeline::Asset)
@@ -37,8 +37,8 @@ export namespace pipeline{
         [[nodiscard]] ParticleEffect& Effect() noexcept { return m_effect; }
         [[nodiscard]] const ParticleEffect& Effect() const noexcept { return m_effect; }
 
-        // Edit-time texture reference per system, as an asset PATH (soft ref). Build() resolves each to
-        // the referenced cooked texture's GUID. Empty = untextured.
+        // Edit-time texture reference per system, as an asset path (soft ref). Build() resolves each to
+        // the referenced cooked texture's GUID. Empty means untextured.
         void SetSystemTexturePath(i32 systemIndex, StringView path)
         {
             if (systemIndex < 0)
@@ -83,18 +83,18 @@ export namespace pipeline{
         {
             return &ParticleEffectResource::StaticType();
         }
-        // v2 (2026-08-17): the cooked resource carries per-system meshRef + meshScale (Mesh render mode).
-        // v3 (2026-08-18): + per-system materialRef (the effect-level material for Mesh render mode).
-        // v4 (2026-08-18): materialRef -> materialRefs list (per-submesh, slot 0 = whole-mesh material).
-        // v5 (2026-10-21): curves of Core's keys and gradients; size over lifetime is `size`,
-        // `separateAxes` and `sizeY` (the cooked resource's data version 1).
-        // v6 (2026-10-27): each system its sub-emitters (the cooked resource's data version 2).
-        // Bumped so stale products re-cook with the new format (the strict reader needs the new keys).
+        // v2: the cooked resource carries per-system meshRef and meshScale (Mesh render mode).
+        // v3: per-system materialRef (the effect-level material for Mesh render mode).
+        // v4: materialRef became the materialRefs list (per submesh; slot 0 is the whole-mesh material).
+        // v5: curves of Core's keys and gradients; size over lifetime is `size`, `separateAxes` and
+        // `sizeY` (the cooked resource's data version 1).
+        // v6: each system its sub-emitters (the cooked resource's data version 2).
+        // Each bump makes stale products re-cook in the new format (the strict reader needs the new keys).
         [[nodiscard]] u32 Version() const override { return 6; }
-        // What each system draws with is a runtime REFERENCE (the factory binds it at load): its
+        // What each system draws with is a runtime reference (the factory binds it at load): its
         // texture, its mesh and its materials, by id, or a texture by its edit-time path. Declared
-        // so a cook of the effect cooks them too (a scene's first cook reached the effect but not
-        // its texture), and asset_uses and the export's reach see them.
+        // so a cook of the effect cooks them too (otherwise a scene's first cook would reach the
+        // effect but not its texture), and so asset_uses and the export's reach see them.
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext& ctx, pipeline::AssetDependencies& out) override
         {
             const ParticleEffectAsset& pa = static_cast<const ParticleEffectAsset&>(asset);
@@ -127,10 +127,10 @@ export namespace pipeline{
                 return Status{ErrorCode::InvalidArgument};
             }
             const ParticleEffectAsset& pa = static_cast<const ParticleEffectAsset&>(asset);
-            // Bake: build a fresh cooked resource from the authored effect (faithful deep copy)...
+            // Bake: build a fresh cooked resource from the authored effect (a faithful deep copy),
             ParticleEffectResource cooked;
             CloneEffect(pa.Effect(), cooked.Effect());
-            // ...then RESOLVE refs: each system's edit-time texture PATH -> the referenced cooked
+            // then resolve refs: each system's edit-time texture path becomes the referenced cooked
             // resource's GUID (written into the cooked system's textureRef; the factory binds it at load).
             ParticleEffect& fx = cooked.Effect();
             for (i32 s = 0; s < fx.SystemCount(); ++s)
@@ -151,7 +151,7 @@ export namespace pipeline{
         }
     };
 
-    // Register the asset type (+ the cooked resource + modules it depends on). Tooling-side.
+    // Register the asset type, the cooked resource, and the modules it depends on. Tooling side.
     inline void RegisterParticleEffectAsset()
     {
         RegisterParticleEffectResource();
@@ -159,10 +159,9 @@ export namespace pipeline{
         RegisterSerializable<ParticleEffectAsset>();
     }
 
-    // Data version 0: the curve layout of 2026-10-21 (Core's keys, gradients, size as one curve)
-    // moved by re-saving every sample through Tools.Mcp, version 0 having no legacy floor to keep.
-    // Data version 1 (2026-10-27): each system owns its sub-emitters; version 0's effect-level
-    // links are read onto the systems (the legacy reader, SerializeEffect's effectLinks).
+    // Data version 0 holds curves of Core's keys and gradients, with size as one curve. Data
+    // version 1: each system owns its sub-emitters; version 0's effect-level links are read onto
+    // the systems (the legacy reader, SerializeEffect's effectLinks).
 
     /// A new effect's content: one continuous fountain system.
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& effect);

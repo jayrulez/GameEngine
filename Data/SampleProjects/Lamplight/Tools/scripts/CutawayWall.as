@@ -1,8 +1,9 @@
-// CutawayWall - a wall piece that gets out of the camera's way: it fades while the line from the
-// camera to the thief crosses it (along the floor, the piece widened by `margin` either side so the
-// thief's shoulders and a step ahead show too), and comes back when it no longer does. The fade is
-// the renderer's screen-door dither (MeshComponent.fade), eased in and out; the piece keeps casting
-// its whole shadow, so what is behind it stays as dark as it was.
+// CutawayWall: a wall piece that gets out of the camera's way. It fades while the line from the
+// camera to the thief crosses it, measured along the floor, and comes back when the line no longer
+// does. The piece counts as `margin` wider on either side so that the thief's shoulders and the
+// ground a step ahead stay visible. The fade uses the renderer's screen-door dither
+// (MeshComponent.fade), eased in and out. The piece keeps casting its whole shadow, so the area
+// behind it stays as dark as before.
 class CutawayWall
 {
     private Entity@ self;
@@ -37,8 +38,9 @@ class CutawayWall
         }
     }
 
-    // Whether the camera-to-thief line crosses the piece (in the floor's plane): the two ends lie on
-    // opposite sides of its face, and where the line crosses the face is within its widened length.
+    // Whether the line from the camera to the thief crosses the piece, in the plane of the floor.
+    // It does when the two ends lie on opposite sides of the face and the crossing point lies within
+    // the widened length of the piece.
     private bool inTheWay()
     {
         Float3 at = self.worldPosition();
@@ -50,10 +52,10 @@ class CutawayWall
         {
             return false;
         }
-        float k = cameraSide / (cameraSide - thiefSide); // where along camera-to-thief it crosses
+        float k = cameraSide / (cameraSide - thiefSide); // how far along the line it crosses
         float x = c.x + (t.x - c.x) * k - at.x;
         float z = c.z + (t.z - c.z) * k - at.z;
-        float along = x * -normalZ + z * normalX; // the face's own direction
+        float along = x * -normalZ + z * normalX; // distance along the face
         return along >= -(halfLength + margin) && along <= halfLength + margin;
     }
 }

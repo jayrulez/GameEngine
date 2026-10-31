@@ -3,12 +3,12 @@
 
 // GUI - :separator partition
 //
-// Separator and Spacer (E6 of Specs/gui-lab-evolution.md): the two pieces a row or a column of
-// controls is spaced with. Each takes its orientation from its parent's flex direction, so the
-// same element is a vertical rule in a toolbar's row and a horizontal one in a menu's column.
-// A separator is a line as thick as its `thickness` and the colour of its background (a sheet's
-// `separator { background-color }`, else a quiet grey of its own), stretched across the line it
-// is in. A spacer takes the room left (flexible, the default) or a fixed `size` along the line.
+// Separator and Spacer: the two pieces used to space a row or a column of controls. Each takes
+// its orientation from its parent's flex direction, so the same element is a vertical rule in a
+// toolbar's row and a horizontal one in a menu's column. A separator is a line `thickness` thick
+// in its background colour (a sheet's `separator { background-color }`, else a quiet grey of its
+// own), stretched across the line it is in. A spacer takes the room left over (flexible, the
+// default) or a fixed `size` along the line.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +30,8 @@ export namespace foundation::gui
 {
     namespace detail
     {
-        // Along a row (its parent lays out across): a separator stands up, a spacer runs across.
+        // Returns whether the node is in a row (its parent lays out horizontally). There a separator
+        // is vertical and a spacer extends horizontally.
         [[nodiscard]] inline bool InRow(const Node& node) noexcept
         {
             const Node* parent = node.GetParent();
@@ -49,22 +50,22 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"separator"));
             SetHitTestVisible(false);
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             EditLayoutStyle([](LayoutStyle& s)
             {
-                s.AlignSelf = Align::Stretch; // across the whole line, even in a centred row
+                s.AlignSelf = Align::Stretch; // spans the whole line, even in a centred row
                 s.Shrink = 0.0f;
             });
         }
 
-        /// How thick its line is (the sheet's `thickness`).
+        /// Sets the line's thickness (the sheet's `thickness`).
         void SetThickness(f32 thickness)
         {
             m_thickness = core::Max(0.0f, thickness);
             RequestLayout();
         }
         [[nodiscard]] f32 GetThickness() const noexcept { return m_thickness; }
-        /// Whether it stands up (in a row) or lies across (in a column).
+        /// Returns whether the separator is vertical (in a row) rather than horizontal (in a column).
         [[nodiscard]] bool IsVertical() const noexcept { return detail::InRow(*this); }
 
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
@@ -77,7 +78,7 @@ export namespace foundation::gui
         {
             (void)localBounds;
             if (GetBox().BackgroundColor.a > 0.0f || !GetBox().Layers.IsEmpty())
-                return; // the sheet's background is the line, drawn as its box
+                return; // the sheet's background is the line, already drawn as the box
             const Rect line = GetContentBounds();
             FilledBox(m_color).DrawUnder(ctx, line);
         }
@@ -99,7 +100,7 @@ export namespace foundation::gui
             ApplySize();
         }
 
-        /// A fixed length along the line (0: it takes the room left).
+        /// Sets a fixed length along the line; 0 makes the spacer take the room left over.
         void SetSpace(f32 size)
         {
             m_size = core::Max(0.0f, size);

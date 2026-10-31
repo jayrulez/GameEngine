@@ -1,4 +1,4 @@
-# Foundation::Model.Resource - `foundation.model.resource` (cooked model manifest + runtime composite + factory).
+# Foundation::Model.Resource - `foundation.model.resource` (cooked model manifest, runtime composite and factory).
 util_add_engine_library(Model.Resource ALIAS Foundation::Model.Resource)
 target_link_libraries(Model.Resource PUBLIC
     Foundation::Core Foundation::Geometry Foundation::Geometry.Resource Foundation::Materials Foundation::Materials.Resource

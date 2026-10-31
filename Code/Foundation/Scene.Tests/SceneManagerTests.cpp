@@ -3,7 +3,7 @@
 
 // foundation.scene :manager - SceneManager owns a group of scenes, assembles them through a
 // type-erased installer, tears them down through a type-erased uninstaller, and ticks its own group
-// (the linchpin of the GameInstance model).
+// (what a GameInstance owns).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -56,7 +56,7 @@ TEST_CASE("scene-manager: fans install/uninstall hooks around each scene")
 {
     Recording rec;
     SceneManager mgr{DefaultAllocator()};
-    // Type-erased: the caller owns whatever the hooks close over (a composition / observer list).
+    // Type-erased: the caller owns whatever the hooks close over (a composition, an observer list).
     mgr.SetSceneInstaller([&rec](Scene&) { ++rec.installed; });
     mgr.SetSceneUninstaller([&rec](Scene&) { ++rec.removed; });
 
@@ -76,11 +76,11 @@ TEST_CASE("scene-manager: group time scale folds into the tick (identity at 1.0)
     s->SetSimulationEnabled(true);
     REQUIRE(mgr.TimeScale() == doctest::Approx(1.0f));
 
-    // Default group scale = 1.0: BeginFrame/Update tick without faulting (identity path).
+    // Default group scale is 1.0: BeginFrame/Update tick without faulting (identity path).
     mgr.BeginFrame(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
     mgr.Update(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
 
-    // A 0 group scale freezes the group (dt reaching scenes is 0) - still must not fault.
+    // A 0 group scale freezes the group (dt reaching scenes is 0); still must not fault.
     mgr.SetTimeScale(0.0f);
     mgr.BeginFrame(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
     mgr.Update(FrameTime(0.016f, 1.0f, 1.0f, 1.0f, 0.0f));
@@ -89,7 +89,7 @@ TEST_CASE("scene-manager: group time scale folds into the tick (identity at 1.0)
     // A negative scale clamps to 0 (a group never ticks backwards): -2 lands as pause, not rewind.
     mgr.SetTimeScale(-2.0f);
     CHECK(mgr.TimeScale() == doctest::Approx(0.0f));
-    mgr.SetTimeScale(0.5f); // and the clamp does not stick - a valid scale still lands
+    mgr.SetTimeScale(0.5f); // and the clamp does not stick: a valid scale still lands
     CHECK(mgr.TimeScale() == doctest::Approx(0.5f));
 }
 
@@ -122,17 +122,17 @@ TEST_CASE("scene-manager: inactive create + activate/deactivate gate (task #123 
     CHECK_FALSE(mgr.IsActive(s));
     CHECK(mgr.CurrentScene() == nullptr);
 
-    // Activate once resources are ready: now active + current (none was).
+    // Activate once resources are ready: now active and current (none was).
     mgr.ActivateScene(s);
     CHECK(mgr.ActiveScenes().Size() == 1u);
     CHECK(mgr.IsActive(s));
     CHECK(mgr.CurrentScene() == s);
 
-    // Idempotent - a second activate does not double-add.
+    // Idempotent: a second activate does not double-add.
     mgr.ActivateScene(s);
     CHECK(mgr.ActiveScenes().Size() == 1u);
 
-    // Deactivate: dropped from the active/render set + current cleared, but NOT destroyed.
+    // Deactivate: dropped from the active/render set and current cleared, but not destroyed.
     mgr.DeactivateScene(s);
     CHECK(mgr.ActiveScenes().Size() == 0u);
     CHECK_FALSE(mgr.IsActive(s));
@@ -143,7 +143,7 @@ TEST_CASE("scene-manager: inactive create + activate/deactivate gate (task #123 
     mgr.ActivateScene(s);
     CHECK(mgr.IsActive(s));
 
-    // Default create still auto-activates (unchanged behavior).
+    // Default create auto-activates.
     Scene* d = mgr.CreateScene(u8"default");
     CHECK(mgr.IsActive(d));
     CHECK(mgr.ActiveScenes().Size() == 2u);
@@ -169,7 +169,7 @@ TEST_CASE("scene-manager: a running scene is stopped before it is destroyed")
 {
     // A scene system unhooks itself from what outlives the scene in its stop hook (a script
     // system's handlers on a run's event bus). A running scene destroyed without a stop (a run
-    // loading the scene it is already in) left those handlers pointing at freed memory.
+    // loading the scene it is already in) would leave those handlers pointing at freed memory.
     SceneManager mgr{DefaultAllocator()};
     int stops = 0;
     Scene* running = mgr.CreateScene(u8"running");

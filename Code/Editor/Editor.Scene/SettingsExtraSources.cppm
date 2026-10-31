@@ -4,16 +4,15 @@
 // Editor::Scene - :settings_extra_sources partition.
 //
 // Rows of a scene settings block that reflection does not show, each a source under its block's
-// section while the scene is selected (Documentation/Specs/editor-gui.md, 5.3, layer 4, part 4),
-// registered by the block's type as inspector extras:
-//   - the physics block's collision groups: a list of groups, each its name and the groups it
+// section while the scene is selected, registered by the block's type as inspector extras:
+//   - the physics block's collision groups: a list of groups, each with its name and the groups it
 //     collides with (flags named by the groups). A pair collides both ways or neither, so a toggle
-//     writes both; a new group collides with every group; only the last group is removed, as a
-//     body keeps its group by index (removing another renumbers the ones after it, a remap of
-//     every body this does not make). A scene without groups shows one, Default.
+//     writes both; a new group collides with every group; and only the last group can be removed,
+//     since a body keeps its group by index (removing another would renumber the ones after it, a
+//     remap of every body this source does not make). A scene without groups shows one, Default.
 //   - the scene script block's level properties: its Level class's properties by their kinds, as
 //     a behaviour's are (ScriptPropertyRows), each an override on the block while it differs.
-// Every edit is the edit context's MutateSceneSettings: one undo step.
+// Every edit is the edit context's MutateSceneSettings, so one undo step.
 
 module;
 #include "Core/Prelude.h"

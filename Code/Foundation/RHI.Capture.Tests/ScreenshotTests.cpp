@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ScreenshotCapture: the flags, the row unpack, and the whole path on real GPUs - a texture
+// ScreenshotCapture: the flags, the row unpack, and the whole path on real GPUs. A texture is
 // cleared to a known colour in RGBA8 and BGRA8, recorded the way DefaultApplication::FinishFrame
-// records the backbuffer, completed, written as a PNG and read back through the image loader.
-// Legacy Sedulous stopped at the GPU copy; this pins that the file exists and is right.
+// records the backbuffer, completed, written as a PNG and read back through the image loader, so
+// the tests pin that the file exists and holds the right pixels.
 #include <doctest/doctest.h>
 #include <cstring>
 #include <filesystem>
@@ -71,7 +71,7 @@ TEST_CASE("screenshot: the flags parse, default to frame 30, and ignore what is 
     CHECK_FALSE(Parse({"--screenshot"}).Requested()); // a dangling flag asks for nothing
 }
 
-// Consecutive frames (frame-to-frame change in an exported build: TAA's jitter in PaperKid's player):
+// Consecutive frames (to measure frame-to-frame change in an exported build, such as TAA's jitter):
 // one file each, numbered before the extension; one frame keeps the path as given.
 TEST_CASE("screenshot: a count takes that many consecutive frames, one numbered file each")
 {
@@ -131,7 +131,7 @@ TEST_CASE("screenshot: rows unpack from the aligned pitch, and BGRA swizzles to 
     // A 16-bit float row: linear values, clamped and sRGB encoded to bytes (alpha stays linear);
     // the pitch holds 8-byte texels.
     const u16 halves[2][4] = {{0x3C00, 0x3800, 0x0000, 0x3C00},  // 1.0, 0.5, 0.0, 1.0
-                              {0x4400, 0xBC00, 0x3555, 0x3C00}}; // 4.0 -> 1, -1 -> 0, 1/3, 1.0
+                              {0x4400, 0xBC00, 0x3555, 0x3C00}}; // 4.0 (to 1), -1 (to 0), 1/3, 1.0
     u8 halfRow[pitch];
     for (u8& b : halfRow)
     {
@@ -237,7 +237,7 @@ namespace
         REQUIRE(loaded.Format() == image::PixelFormat::RGBA8);
         const u8* p = loaded.PixelData().Data() + (5 * w + 5) * 4;
         INFO(doctest::String(name) << ": " << int(p[0]) << "," << int(p[1]) << "," << int(p[2]) << "," << int(p[3]));
-        // 0.2 / 0.6 / 1.0: a UNORM probe stores the plain values; the float target holds
+        // 0.2, 0.6, 1.0: a UNORM probe stores the plain values; the float target holds
         // linear values, which the capture sRGB encodes (0.2 is 124, 0.6 is 203).
         const int wantRed = format == rhi::TextureFormat::RGBA16Float ? 124 : 51;
         const int wantGreen = format == rhi::TextureFormat::RGBA16Float ? 203 : 153;

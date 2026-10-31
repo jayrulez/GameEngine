@@ -3,18 +3,18 @@
 
 /// Foundation::Profiler - `foundation.profiler`, :store partition.
 ///
-/// The capture store every profiler view reads (Specs/profiler.md). Threads record the scopes they
-/// finish into rings of their own, without a lock; at the end of each frame the frame thread
-/// gathers them into a FRAME RECORD and keeps the last few seconds of records. A record refers to
+/// The capture store every profiler view reads. Threads record the scopes they finish into rings
+/// of their own, without a lock; at the end of each frame the frame thread gathers them into a
+/// frame record and keeps the last few seconds of records. A record refers to
 /// nothing in the process (names are ids into a table, threads are indices), so the same record
 /// can be saved to a capture file or sent to another process and mean the same there.
 ///
-/// Recording costs a branch until something ARMS the profiler (a view, a capture, the P key); arms
+/// Recording costs a branch until something arms the profiler (a view, a capture, the P key); arms
 /// are counted, so two watchers keep it on until both let go. Instrument with PROFILE_SCOPE
 /// (Profiler.h), which compiles to nothing when BUILD_PROFILING is off (Shipping).
 ///
 /// Threads: any thread may record scopes and intern names. Everything else (frames, counters, GPU
-/// passes, reading records and tables) belongs to the FRAME THREAD, the one calling BeginFrame.
+/// passes, reading records and tables) belongs to the frame thread, the one calling BeginFrame.
 
 module;
 #include "Core/Prelude.h"
@@ -129,8 +129,8 @@ export namespace foundation::profiler
         static constexpr u32 kDefaultFrameThreadRing = 65536; // scopes a frame thread can hold unread
         static constexpr u32 kDefaultThreadRing = 16384;      // and any other thread
 
-        /// The process's profiler, which PROFILE_SCOPE records into. NON-inline (ProfilerImpl.cpp):
-        /// an in-class body would give each shared library its own (shared-libraries.md).
+        /// The process's profiler, which PROFILE_SCOPE records into. Defined out of line
+        /// (ProfilerImpl.cpp): an in-class body would give each shared library its own.
         [[nodiscard]] static Profiler& Get() noexcept;
 
         /// A profiler of its own (tests). Its memory comes from `allocator`.
@@ -549,7 +549,7 @@ export namespace foundation::profiler
             }
         };
 
-        // The calling thread's data for THIS profiler: a per-thread cache of the last profiler it
+        // The calling thread's data for this profiler: a per-thread cache of the last profiler it
         // recorded into (by serial, so a profiler made where an old one was is not mistaken for
         // it), else found or made under the lock.
         struct LocalCache

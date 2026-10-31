@@ -4,8 +4,8 @@
 // Foundation::RenderGraph - :descriptors partition
 //
 // Render-graph resource descriptors (transient texture/buffer) and pass target
-// attachments. Ported from Sedulous.RenderGraph (Descriptors.bf). RGTextureDesc
-// resolves size-relative-to-output and converts to an RHI TextureDesc.
+// attachments. RGTextureDesc resolves size-relative-to-output and converts to an RHI
+// TextureDesc.
 
 module;
 #include "Core/Prelude.h"
@@ -98,10 +98,10 @@ export namespace foundation::rendergraph
         rhi::StoreOp storeOp = rhi::StoreOp::Store;
         rhi::ClearColor clearValue = rhi::ClearColor::Black();
         RGSubresourceRange subresource;
-        // MSAA resolve: when valid, the multisampled `handle` resolves into `resolveHandle`
-        // at pass end (hardware resolve attachment; averaged - the correct scene-color resolve).
-        // The MSAA attachment's storeOp is set DontCare by the setter (samples not needed after
-        // resolve). Invalid = no resolve (single-sample path, unchanged).
+        // MSAA resolve: when valid, the multisampled `handle` resolves into `resolveHandle` at pass
+        // end (a hardware resolve attachment, averaged: the correct scene-color resolve). The
+        // setter sets the MSAA attachment's storeOp to DontCare (the samples are not needed after
+        // the resolve). Invalid means no resolve (the single-sample path).
         RGHandle resolveHandle = RGHandle::Invalid();
     };
 

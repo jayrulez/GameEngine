@@ -3,15 +3,15 @@
 
 // Editor::Fonts - the `editor.fonts` module.
 //
-// FontEditorPage: the bespoke authoring page for FontAsset (the fonts-triad source asset). On the
-// GUI from the image pages' markup (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md,
-// 5.4, layer 2): the atlas the cook would produce at the preview size, baked live (coverage as
-// white over alpha; a distance field decoded at its edge, where its raw channels read as noise),
-// rebaked on every edit and its undo, to zoom, pan and read in; beside the authored surface:
-// family, bake mode, the distance field's size and range, the codepoint range, the atlas size, and
-// the raster ramp's sizes, a row of the page's own ("12, 16, 24") as reflection does not show
-// them. Its facts read only: the glyphs baked and the atlas. Each edit is one undo step;
-// Save writes the asset back and asks for a cook so bound products hot-swap.
+// FontEditorPage: the authoring page for FontAsset, built from the image pages' markup
+// (Data/Editor/ImagePage.xml). The preview shows the atlas the cook would produce at the preview
+// size, baked live and rebaked on every edit and undo, and can be zoomed and panned. Coverage
+// shows as white over alpha; a distance field is decoded at its edge, because its raw channels
+// read as noise. Beside the preview are the authored fields: family, bake mode, the distance
+// field's size and range, the codepoint range, the atlas size, and the raster ramp's sizes.
+// Reflection does not show the sizes, so the page adds its own row for them ("12, 16, 24"). The
+// glyph count and the atlas are read only. Each edit is one undo step; Save writes the asset back
+// and requests a cook so bound products hot-swap.
 
 module;
 #include "Core/Prelude.h"
@@ -43,10 +43,11 @@ export namespace editor
         FontEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~FontEditorPage() override;
 
-        /// Sets the raster ramp's sizes from text ("10, 12.5 24"), one undo step; false, with the
-        /// row put back and a notice saying why, when it is not a list of sizes from 1 to 512.
+        /// Sets the raster ramp's sizes from text ("10, 12.5 24") as one undo step. Returns false,
+        /// restores the row and posts a notice saying why, when the text is not a list of sizes
+        /// from 1 to 512.
         bool SetSizes(StringView text);
-        /// A font's source relinks to another font file of the project's (Browse on its row).
+        /// A font's source can be relinked to another font file in the project (Browse on its row).
         [[nodiscard]] Span<const String> SourceExtensions() const override;
 
         // === For tests ===
@@ -58,13 +59,14 @@ export namespace editor
         void OnObjectChanged() override;
 
     private:
-        // The preview bake runs OFF the UI thread (msdfgen over the full codepoint range
-        // takes long enough to hitch a mode switch), on the EditorJobService LIGHT lane
-        // (concurrent with the build lane; never trips the cook mutation lock). The work
-        // closure writes a heap slot; the completion fires on the main thread and applies
-        // it. LATEST-WINS: edits during a bake stash the newest request; a stale outcome
-        // is discarded and the stash re-bakes. The old preview stays on screen until its
-        // replacement is ready. No job service (tests) = synchronous fallback.
+        // The preview bake runs off the UI thread (msdfgen over the full codepoint range
+        // takes long enough to hitch a mode switch), on the EditorJobService light lane
+        // (concurrent with the build lane, so it never trips the cook mutation lock). The work
+        // closure writes a heap slot; the completion fires on the main thread and applies it.
+        // The latest request wins: edits during a bake stash the newest request, a stale
+        // outcome is discarded, and the stashed request is baked next. The old preview stays on
+        // screen until its replacement is ready. Without a job service (in tests) the bake runs
+        // synchronously.
         struct BakeRequest
         {
             bool valid = false;
@@ -99,11 +101,11 @@ export namespace editor
         void ApplyBakeOutcome(BakeOutcome outcome);
         [[nodiscard]] BakeRequest CaptureBakeRequest();
         static void RunBake(const BakeRequest& request, BakeOutcome& outcome);
-        // The ramp's row as the asset has it, shown only for a raster ramp.
+        // Shows the ramp's row with the asset's sizes, only for a raster ramp.
         void ShowRamp();
 
         UniquePtr<app::ImagePreview> m_preview;
-        UniquePtr<foundation::gui::PropertyBag> m_ramp; // the page's own rows: the sizes
+        UniquePtr<foundation::gui::PropertyBag> m_ramp; // the row the page adds: the ramp's sizes
         usize m_previewGlyphs = 0;
         f32 m_previewSize = 0.0f;
 
@@ -126,7 +128,8 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The page (asking for its services when it is made) and the font thumbnails.
+    /// Registers the font page (which asks for its services when it is made) and the font
+    /// thumbnails.
     inline void RegisterFontEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

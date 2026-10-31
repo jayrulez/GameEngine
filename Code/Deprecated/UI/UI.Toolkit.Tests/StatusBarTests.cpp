@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit skeleton: StatusBar constructs, adds sections, measures with a min height.
+// Smoke test for StatusBar: it constructs, adds sections, and measures with a minimum height.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -21,6 +21,6 @@ TEST_CASE("toolkit-statusbar: DefaultsAndSections")
     bar->SetText(u8"Ready");
     Label* sec = bar->AddSection(u8"Ln 1, Col 1");
     REQUIRE(sec != nullptr);
-    // default text + one section = 2 children
+    // the default text and one section make 2 children
     CHECK(bar->ChildCount() == 2u);
 }

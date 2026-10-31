@@ -1,5 +1,5 @@
-# Editor::Generic - `editor.generic`: the serialize-driven FALLBACK asset
-# page (every asset without a bespoke page), on the GUI. Linked by the editor EXECUTABLE only.
+# Editor::Generic - `editor.generic`: the serialize-driven fallback asset page (every asset
+# without a bespoke page), on the GUI. Linked by the editor executable only.
 util_add_engine_library(Editor.Generic ALIAS Editor::Generic)
 target_link_libraries(Editor.Generic
     PUBLIC

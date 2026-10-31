@@ -1,5 +1,5 @@
 # Foundation::Xml.Serialization - `foundation.xml.serialization`.
-# An XML backend for Core's ISerializer contract. Depends on Core + Xml.
+# An XML backend for Core's ISerializer contract. Depends on Core and Xml.
 
 util_add_engine_library(Xml.Serialization ALIAS Foundation::Xml.Serialization)
 target_link_libraries(Xml.Serialization PUBLIC Foundation::Core Foundation::Xml Foundation::Policy)

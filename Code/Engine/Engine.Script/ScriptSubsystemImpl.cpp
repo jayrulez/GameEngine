@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Script - implementation unit: the reflection bodies + the
-// component-destroy hook. They live OUTSIDE the interface for GCC: REFLECT_*
+// Engine::Script - implementation unit: the reflection bodies and the
+// component-destroy hook. They live outside the interface for GCC: REFLECT_*
 // bodies in a module interface make GCC emit an unreadable gcm cluster for
 // -fno-module-lazy consumers (and a cross-partition inline virtual is not reliably
 // emitted by either compiler).
@@ -21,7 +21,7 @@ import foundation.script;
 import foundation.script.resource;
 
 using namespace foundation::core;
-using namespace foundation::script; // ScriptPropertyDesc / ScriptPropertyValue / ScriptClass (the replicated state)
+using namespace foundation::script; // ScriptPropertyDesc, ScriptPropertyValue, ScriptClass (the replicated state)
 
 namespace engine::script
 {
@@ -45,7 +45,7 @@ namespace engine::script
     }
 
     // The component itself carries no inspector-editable reflected properties (its
-    // behavior array renders through the bespoke inspector section), but it MUST be
+    // behavior array renders through the bespoke inspector section), but it must be
     // reflected so the Add Component menu lists it and versioned payloads carry a
     // data version.
     REFLECT_VALUE(ScriptComponent, "rtti::engine::script")
@@ -59,7 +59,7 @@ namespace engine::script
     }
 
     // The scene-root script block (one per scene). Reflected so the scene-settings inspector renders
-    // its Level-script Ref picker + enable toggle, and so versioned payloads carry a data version.
+    // its Level-script Ref picker and enable toggle, and so versioned payloads carry a data version.
     REFLECT_VALUE(SceneScriptSettings, "rtti::engine::script")
     {
         builder.Attribute("displayName", String(u8"Scene Script"))
@@ -277,7 +277,7 @@ namespace engine::script
     {
         builder.Method<&SceneScripts::deltaTime>("deltaTime");
         builder.Method<&SceneScripts::elapsed>("elapsed");
-        // send and emit - ARITY FAMILIES with a Variant payload, as entity.send / scene.events.emit.
+        // send and emit: arity families with a Variant payload, as entity.send and scene.events.emit.
         builder.Method<static_cast<void (SceneScripts::*)(foundation::script::Entity, String) const>(&SceneScripts::send)>(
             "send", {"target", "message"});
         builder.Method<static_cast<void (SceneScripts::*)(foundation::script::Entity, String, Variant) const>(

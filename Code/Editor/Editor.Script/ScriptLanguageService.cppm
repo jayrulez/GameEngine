@@ -3,14 +3,13 @@
 
 // Editor::Script - :script_language_service partition.
 //
-// ScriptLanguageService: a script page's completion and hover for its code editor
-// (Documentation/Specs/editor-gui.md, 5.4, layer 6, part 3), over the page's API surface (what the
-// runtime binds for its language) and its language's words. After `x.` or `x::` it offers the
-// members of what x is (a type or namespace by name, or the type a variable named x is declared
-// with in the script); elsewhere the language's words, the bound types and namespaces (an
-// editor-only one marked) and the script's own names. Hover says what a name is, or, while a Game
-// run is paused in this script, its value (the page's probe). Adapted from the GUISandbox's Code
-// page, which proved it; that copy stays the sandbox's.
+// ScriptLanguageService: a script page's completion and hover for its code editor, over the
+// page's API surface (what the runtime binds for its language) and the language's keywords.
+// After `x.` or `x::` it offers the members of x, which is a type or namespace by name or the
+// type a variable named x is declared with in the script. Elsewhere it offers the language's
+// keywords, the bound types and namespaces (editor-only ones marked) and the script's own names.
+// Hover says what a name is or, while a Game run is paused in this script, its value (from the
+// page's probe). The GUISandbox's Code page keeps its own copy of this logic.
 
 module;
 #include "Core/Prelude.h"
@@ -32,10 +31,12 @@ export namespace editor
     class ScriptLanguageService final : public gui::ICodeLanguageService
     {
     public:
-        /// Over `surface` (the page's, outliving this) and the words of `language` (may be null).
+        /// Reads `surface` (the page's, which outlives this) and the keywords of `language` (may
+        /// be null).
         ScriptLanguageService(const ScriptApiSurface& surface, const gui::CodeLanguage* language) : m_surface(&surface), m_language(language) {}
 
-        /// While a run is paused in the page's script, the value of a name (empty: none); the page's.
+        /// Sets the page's probe, which returns the value of a name while a run is paused in the
+        /// page's script (empty when there is none).
         void SetValueProbe(Function<String(StringView name)> probe) { m_probe = Move(probe); }
 
         [[nodiscard]] StringView CompletionTriggers() const override { return u8".:"; }
@@ -44,10 +45,10 @@ export namespace editor
         {
             const StringView line = document.LineText(request.WordStart.Line);
             const u32 start = request.WordStart.Column;
-            // After `x.`, `x:` or `x::`, the members of what x is: a type's (or a namespace's)
-            // statics after its name, a value's own after a variable's (as every language reads
-            // it: AngelScript's `Float3::Dot`, Luau's `Float3.Dot`, both a value's `v.x`); else the
-            // words a script may begin with.
+            // After `x.`, `x:` or `x::`, offer the members of x: a type's or namespace's statics
+            // after its name, or a value's members after a variable's name. Every language reads
+            // it this way: AngelScript's `Float3::Dot`, Luau's `Float3.Dot`, and `v.x` for a value
+            // in both. Anywhere else, offer the words a script may begin with.
             const StringView qualifier = QualifierBefore(line, start);
             if (!qualifier.IsEmpty())
             {
@@ -80,7 +81,7 @@ export namespace editor
             if (begin == end)
                 return false;
             const StringView word = line.SubStr(begin, end - begin);
-            // Paused in this script: what the name holds.
+            // While paused in this script, show what the name holds.
             if (m_probe)
             {
                 out = m_probe(word);
@@ -154,7 +155,8 @@ export namespace editor
                     if (text.SubStr(at, name.Size()) != name || (at > 0 && IsWordByte(text[at - 1])) ||
                         (at + name.Size() < text.Size() && IsWordByte(text[at + name.Size()])))
                         continue;
-                    // Back over spaces, a handle or reference mark, and spaces, to the type's name.
+                    // Step back over spaces, a handle or reference mark and more spaces to reach
+                    // the type's name.
                     usize p = at;
                     while (p > 0 && text[p - 1] == u8' ')
                         --p;
@@ -219,8 +221,9 @@ export namespace editor
             }
         }
 
-        /// The script's own names (its functions, variables), as an editor offers the words of the
-        /// file: each once, not the word being typed, not what the list holds already.
+        /// Adds the script's own names (its functions and variables), as an editor offers the
+        /// words of the file: each once, skipping the word being typed and anything already in
+        /// the list.
         static void AddDocumentWords(const gui::CodeDocument& document, const gui::CodeCompletionRequest& request, Array<gui::CodeCompletionItem>& out)
         {
             for (u32 l = 0; l < document.LineCount(); ++l)

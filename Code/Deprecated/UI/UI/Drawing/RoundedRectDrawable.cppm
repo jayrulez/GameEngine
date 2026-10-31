@@ -5,7 +5,6 @@
 //
 // Filled rounded rectangle with optional border; per-corner radii via vg::CornerRadii, and a
 // width and colour per side when SideWidths or SideColors is set.
-// Ported from Sedulous.UI/src/Drawing/RoundedRectDrawable.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -82,10 +81,10 @@ export namespace foundation::ui
         {
             const core::Color fill = ctx.ColorOf(FillColor, FillVariable.AsView());
             const core::Color border = ctx.ColorOf(BorderColor, BorderVariable.AsView());
-            // Border strokes are INSET (stroke center pulled in by half the width) so the whole
-            // border lies INSIDE bounds - border-box painting. VG strokes are
-            // centered on the path, so an un-inset stroke would hang half outside the view,
-            // where ClipsContent would amputate it and adjacent siblings' borders would overlap.
+            // Border strokes are inset (stroke center pulled in by half the width) so the whole
+            // border lies inside the bounds (border-box painting). VG strokes are centered on
+            // the path, so an un-inset stroke would hang half outside the view, where
+            // ClipsContent would cut it off and adjacent siblings' borders would overlap.
             if (SideWidths.HasValue() || SideColors.HasValue())
             {
                 // Sides that differ: VG's box draws them, analytically or tessellated.
@@ -99,7 +98,7 @@ export namespace foundation::ui
             }
             if (ctx.VG().AnalyticBoxes())
             {
-                // Fill and border as ONE box: one signed distance gives both, so they cannot
+                // Fill and border as one box: one signed distance gives both, so they cannot
                 // disagree at the corners, and the border lies inside bounds (border-box).
                 const bool bordered = border.a > 0.0f && BorderWidth > 0.0f;
                 if (fill.a > 0.0f || bordered)

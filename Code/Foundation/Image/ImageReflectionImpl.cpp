@@ -3,9 +3,9 @@
 
 // Foundation::Image - reflection implementation unit: enum reflection bodies.
 //
-// Kept OUT of the :image_data interface partition (REFLECT_* bodies make GCC emit a gcm
-// cluster). ImageData.cppm declares RegisterImageReflection();
-// this unit defines it + the RttiRegisterEnum_ImageColorSpace body.
+// Kept out of the :image_data interface partition (REFLECT_* bodies make GCC emit a gcm
+// cluster). ImageData.cppm declares RegisterImageReflection(); this unit defines it and the
+// RttiRegisterEnum_ImageColorSpace body.
 
 module;
 #include "Core/Prelude.h"

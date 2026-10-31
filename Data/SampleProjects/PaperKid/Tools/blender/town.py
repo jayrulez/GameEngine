@@ -1,13 +1,13 @@
-"""PaperKid's town: the houses, the cars and the street furniture, modelled in Blender to replace the
-blockout's primitives.
+"""PaperKid's town: the houses, the cars and the street furniture, modelled in Blender over the
+blockout's colliders.
 
     blender --background --factory-startup --python town.py -- <out dir> [preview] [Name ...]
 
 Writes <out dir>/<Name>Model.glb for every model (or the ones named) and, with `preview`, a PNG of
-each. Each model stands where its blockout piece stood and fills the same collider (kit.py keeps the
-colliders and the behaviours; only the visible shapes are these): a house's walls are the 6 m cube of
-its collider with the porch in front (+Z in the engine), a car is 1.9 m by 4.2 m with its wheels where
-they were, and the street furniture fills its little box.
+each. Each model fills its blockout piece's collider (kit.py keeps the colliders and the
+behaviours; only the visible shapes come from here): a house's walls are the 6 m cube of its
+collider with the porch in front (+Z in the engine), a car is 1.9 m by 4.2 m, and the street
+furniture fills its little box.
 """
 import math, os, sys
 import bmesh
@@ -115,8 +115,8 @@ def house(wall, roof_colour, door, ridge_along_x, chimney_x):
             box("Corner", (0.16, 0.16, 3.85), P(x, f, 0.3 + 3.85 / 2), "Trim")
     box("Eave", (6.2, 6.2, 0.14), P(0, 0, 4.12), "Trim")
     # The roof sits a little above the walls' 4.15 m (half its slab): the walls, the eave band and
-    # the gables then end inside the slab. Level with its top surface, their edges shared its depth
-    # and flickered through it as a light line along the eaves and the gable slopes.
+    # the gables then end inside the slab. Level with its top surface, their edges would share its
+    # depth and flicker through it as a light line along the eaves and the gable slopes.
     roof("Roof", 6.0, 6.0, 2.1, 4.15 + 0.08, "Roof", ridge_along_x)
     if ridge_along_x:  # the gables at the sides
         for x in (-3.0, 3.0):
@@ -142,7 +142,7 @@ def house(wall, roof_colour, door, ridge_along_x, chimney_x):
         window(-3.02, 2.4, f, 1.0, 0.9, facing_x=True)
     for x in (-1.6, 1.6):
         window(x, 2.4, -3.02, 1.0, 0.9)
-    # The porch: a deck as wide as the old one, two steps down to the path, posts and a roof.
+    # The porch: a 3 m deck, two steps down to the path, posts and a roof.
     box("Deck", (3.0, 1.6, 0.3), P(0, 3.8, 0.15), "PorchWood", bevel=0.02)
     box("Step", (1.4, 0.35, 0.15), P(0, 4.78, 0.075), "PorchWood", bevel=0.015)
     for x in (-1.35, 1.35):

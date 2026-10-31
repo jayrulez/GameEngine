@@ -3,19 +3,19 @@
 
 // GUI.Gamekit - :prompt partition
 //
-// Button prompts (K6 of Specs/gui-lab-evolution-3.md). A `prompt` element names an action (and,
-// if it likes, its set) of the game's InputMap and shows the control that does it for the input
-// kind in use: a pad's button while a pad plays, a key or a mouse button under the keyboard or the
-// pointer, else any binding the action has, else nothing. It reads the map the game runs, after
-// the player's rebinding, through the host's InputPrompts (an ActionRuntime: its map and its
-// enabled sets, the highest priority first), labels the binding with foundation.input's
-// BindingNames, and follows the input kind and the bindings as they change. Every reference names
-// an action's first binding whatever the device; this one asks the device.
+// Button prompts. A `prompt` element names an action of the game's InputMap (and optionally its
+// set) and shows the control that does it for the input kind in use: a pad's button while a pad is
+// in use, a key or mouse button for the keyboard or the pointer, else any binding the action has,
+// else nothing. It reads the map the game runs, after the player's rebinding, through the host's
+// InputPrompts (an ActionRuntime: its map and its enabled sets, highest priority first). It labels
+// the binding with foundation.input's BindingNames, and follows the input kind and the bindings as
+// they change.
 //
-// No glyph table in code (ruling 2): a prompt shows its binding to the sheet as attributes,
+// There is no glyph table in code. A prompt exposes its binding to the sheet as attributes:
 // `binding` (the label's words, lower case, joined by dashes: `pad-south`, `space`, `mouse-left`)
-// and `kind` (`pad`, `keyboard`, `pointer`), so a game's sheet draws its own glyphs
-// (`prompt[binding="pad-south"] { background-image: url(...) }`), the text label its fallback.
+// and `kind` (`pad`, `keyboard`, `pointer`). A game's sheet draws its own glyphs
+// (`prompt[binding="pad-south"] { background-image: url(...) }`), and the text label is the
+// fallback.
 
 module;
 #include "Core/Prelude.h"
@@ -36,8 +36,8 @@ export namespace foundation::gui
     /// The key a GUI's InputPrompts is found under (GUIContext::GetService).
     inline constexpr core::StringView kInputPromptsService = u8"gamekit.input-prompts";
 
-    /// The kind of input a binding is for: a pad's sources the pad, touch the pointer, the rest
-    /// (keys, the mouse) the keyboard and the pointer alike.
+    /// Returns the kind of input a binding is for: a pad's sources are for the pad, touch is for the
+    /// pointer, and the rest (keys, the mouse) are for the keyboard and the pointer alike.
     [[nodiscard]] inline InputKind BindingInputKind(const input::Binding& binding) noexcept
     {
         switch (binding.source)
@@ -50,8 +50,8 @@ export namespace foundation::gui
         default: return InputKind::Keyboard;
         }
     }
-    /// A binding as a sheet names it: its label's words, lower case, joined by dashes ("Pad South":
-    /// `pad-south`).
+    /// Returns a binding as a sheet names it: its label's words, lower case, joined by dashes
+    /// ("Pad South" becomes `pad-south`).
     [[nodiscard]] inline core::String BindingToken(const input::Binding& binding)
     {
         const core::String label = input::DescribeBinding(binding);
@@ -62,8 +62,8 @@ export namespace foundation::gui
     }
 
     /// What a GUI's prompts read the game's bindings through: the host's ActionRuntime (its map
-    /// after the player's rebinding, its enabled sets). The host installs it on the GUI and tells
-    /// it when the bindings change (a rebinding saved).
+    /// after the player's rebinding, and its enabled sets). The host installs it on the GUI and tells
+    /// it when the bindings change, such as when a rebinding is saved.
     class InputPrompts
     {
     public:
@@ -76,15 +76,17 @@ export namespace foundation::gui
             m_runtime = runtime;
             m_changed.Notify();
         }
-        /// The runtime's map or enabled sets changed: every prompt reads them again.
+        /// Called when the runtime's map or enabled sets change: every prompt reads them again.
         void NotifyBindingsChanged() { m_changed.Notify(); }
-        /// Makes it the one `gui`'s prompts read (null: none). It must outlive that.
+        /// Makes this the InputPrompts that `gui`'s prompts read. It must stay alive while it is
+        /// installed.
         void Install(GUIContext& gui) { gui.SetService(kInputPromptsService, this); }
         static void Uninstall(GUIContext& gui) { gui.SetService(kInputPromptsService, nullptr); }
 
-        /// The binding to show for `action`, in `set` (empty: the highest-priority enabled set that
-        /// has it), for input of `kind`: its first of that kind, else its first, else none. A read a
-        /// binding follows.
+        /// Returns the binding to show for `action` in `set` (empty: the highest-priority enabled set
+        /// that has the action), for input of `kind`: the action's first binding of that kind, else
+        /// its first binding, else none. The read is tracked, so a reactive binding that calls this
+        /// updates when the result changes.
         [[nodiscard]] Optional<input::Binding> Find(core::StringView action, core::StringView set, InputKind kind) const
         {
             m_changed.Track();
@@ -128,7 +130,7 @@ export namespace foundation::gui
         Prompt()
         {
             SetTag(core::StringView(u8"prompt"));
-            Bind([this]() { Refresh(); }); // the GUI it is in, its action, the input kind, the bindings
+            Bind([this]() { Refresh(); }); // re-runs when its GUI, its action, the input kind or the bindings change
         }
 
         [[nodiscard]] core::String GetAction() const { return m_action; }
@@ -137,7 +139,8 @@ export namespace foundation::gui
             m_action = action;
             m_inputs.Notify();
         }
-        /// The set it reads the action in (empty: the highest-priority enabled set that has it).
+        /// The set the prompt reads the action in (empty: the highest-priority enabled set that has
+        /// it).
         [[nodiscard]] core::String GetSet() const { return m_set; }
         void SetSet(const core::String& set)
         {
@@ -145,7 +148,7 @@ export namespace foundation::gui
             m_inputs.Notify();
         }
         /// The binding shown, as a sheet names it (`pad-south`), and its kind (`pad`, `keyboard`,
-        /// `pointer`): empty when none is shown.
+        /// `pointer`). Both are empty when no binding is shown.
         [[nodiscard]] core::String GetBinding() const { return m_binding; }
         [[nodiscard]] core::String GetBindingKind() const { return m_kind; }
 
@@ -180,6 +183,6 @@ export namespace foundation::gui
         core::String m_set;
         core::String m_binding;
         core::String m_kind;
-        Observable m_inputs; // its action or set changed
+        Observable m_inputs; // notified when its action or set changes
     };
 }

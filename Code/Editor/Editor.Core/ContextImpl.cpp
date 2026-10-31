@@ -3,11 +3,11 @@
 
 // Editor::Core - :context partition.
 //
-// EditorContext: the central service object handed to every page/panel/plugin (Sedulous's
-// EditorContext, Traktor's IEditor). Holds the open project, the registries, the open pages +
-// active page, the global asset selection, and the status sink. Per-subsystem editor modules
-// register their factories here from RegisterEditor(EditorContext&);
-// the statically-assembled editor executable calls those entry points.
+// EditorContext: the central service object handed to every page, panel and plugin. It holds the
+// open project, the registries, the open pages and the active page, the global asset selection,
+// and the status sink. Per-subsystem editor modules register their factories here from
+// RegisterEditor(EditorContext&), and the statically assembled editor executable calls those entry
+// points.
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +43,7 @@ namespace editor
     {
         if (assetId.IsNil() || !persist)
         {
-            return; // in-memory / unresolved assets have no source to persist to (edit-live-only)
+            return; // in-memory or unresolved assets have no source to persist to (the edit stays live only)
         }
         for (PendingAssetEdit& e : m_pendingAssetEdits)
         {
@@ -75,7 +75,7 @@ namespace editor
             }
             else if (result.IsOk())
             {
-                result = s; // report the first failure (all others still attempted)
+                result = s; // report the first failure (the others are still attempted)
             }
         }
         if (anyOk)
@@ -103,9 +103,9 @@ namespace editor
 
     void EditorContext::Notify(NoticeKind kind, StringView message)
     {
-        // Errors and warnings ALWAYS reach the console log too: a toast is transient,
-        // and a failure a user reports from memory ("an error flashed") must be
-        // reconstructable from the log (user ruling 2026-09-03).
+        // Errors and warnings always reach the console log too: a toast is transient, and a
+        // failure a user reports from memory ("an error flashed") must be reconstructable from
+        // the log.
         if (kind == NoticeKind::Error)
         {
             LOG_ERROR(u8"Editor", u8"{}", message);
@@ -240,8 +240,9 @@ namespace editor
         {
             return nullptr;
         }
-        // The number that must stay small: a page's constructor runs on the UI thread (a
-        // Bistro-sized prefab: the document parse; its resources bind async and pop in).
+        // This number must stay small: a page's constructor runs on the UI thread. For a large
+        // prefab that time is the document parse; its resources bind asynchronously and appear
+        // later.
         LOG_INFO(u8"Editor", u8"page '{}' ({}) opened in {} ms", instance.Name(),
                  instance.TypeName(), static_cast<i64>(openClock.Elapsed().AsMilliseconds()));
         page->SetInstanceId(instance.Id());

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Engine::DefaultApp - the `engine.defaultapp:profiler_overlay` partition: an application's
-// profiler overlay (Specs/profiler.md, P4; on the GUI since Specs/engine-ui-removal.md, layer 1).
+// profiler overlay, drawn on the GUI.
 // Whether an app has one, and what turns it on, is the app's to decide; the GUI only gives it a
 // place to draw, its overlay layer (GuiSubsystem::PushOverlay), above every screen and run, where
 // a tree that takes no pointer leaves the game playable under it. DefaultApplication owns one (F3,

@@ -3,13 +3,13 @@
 
 /// Abstract Backend, Adapter, and Device interfaces.
 ///
-/// Backend is the entry point - it enumerates GPU adapters and creates
+/// Backend is the entry point: it enumerates GPU adapters and creates
 /// presentation surfaces. Adapter represents a physical GPU. Device is
 /// the central factory for all GPU resources.
 ///
 /// Mesh shader and ray tracing creation methods are on Device directly
 /// (virtual no-ops returning ErrorCode::NotSupported when not supported).
-/// Callers check device->features.meshShaders / .rayTracing before use.
+/// Callers check device->features.meshShaders or .rayTracing before use.
 
 module;
 
@@ -35,9 +35,10 @@ export namespace foundation::rhi
     // ---- Backend ----
 
     /// The windowing system that produced a native window's handles. Passed to CreateSurface so the backend
-    /// creates exactly the matching platform surface (feeding an X11 Display* to the Wayland WSI segfaults).
-    /// The neutral RHI counterpart of shell::WindowSystem (the RHI must not depend on the shell); the graphics
-    /// / sample layer maps one to the other. Unknown = the backend falls back to its best guess.
+    /// creates the matching platform surface (feeding an X11 Display* to the Wayland WSI segfaults).
+    /// The neutral RHI counterpart of shell::WindowSystem (the RHI must not depend on the shell); the
+    /// graphics and sample layers map one to the other. With Unknown the backend falls back to its
+    /// best guess.
     enum class SurfacePlatform
     {
         Unknown,
@@ -56,13 +57,13 @@ export namespace foundation::rhi
         bool isInitialized = false;
 
         /// Returns all available GPU adapters in preference order, most
-        /// preferred first (discrete > integrated > unknown > CPU). Backends
-        /// guarantee this ordering via sortAdaptersByPreference(), so callers
+        /// preferred first (discrete, then integrated, then unknown, then CPU). Backends
+        /// guarantee this ordering through SortAdaptersByPreference(), so callers
         /// that just want "the best available GPU" can take element [0].
         [[nodiscard]] virtual Span<Adapter* const> EnumerateAdapters() = 0;
 
         /// Creates a presentation surface from a native window handle. `platform` tells the backend which WSI
-        /// produced the handles so it selects the matching surface type instead of guessing (Unknown = guess).
+        /// produced the handles so it selects the matching surface type instead of guessing (Unknown guesses).
         /// On Win32: windowHandle = HWND, displayHandle = nullptr.
         /// On X11: windowHandle = XID (as void*), displayHandle = Display*.
         /// On Wayland: windowHandle = wl_surface*, displayHandle = wl_display*.
@@ -101,7 +102,7 @@ export namespace foundation::rhi
         virtual Status CreateDevice(const DeviceDesc& desc, Device*& out) = 0;
     };
 
-    /// Selection preference for an adapter type - lower is more preferred.
+    /// Selection preference for an adapter type; lower is more preferred.
     /// Defines the single source of truth for "best GPU first" ordering.
     [[nodiscard]] inline int AdapterPreferenceRank(AdapterType type)
     {
@@ -120,8 +121,8 @@ export namespace foundation::rhi
     }
 
     /// Reorder adapters so the most preferred GPU is first (see
-    /// adapterPreferenceRank). Backends call this after enumeration so that
-    /// enumerateAdapters()[0] is the recommended default. The sort is stable,
+    /// AdapterPreferenceRank). Backends call this after enumeration so that
+    /// EnumerateAdapters()[0] is the recommended default. The sort is stable,
     /// preserving the driver's native order among adapters of equal type.
     inline void SortAdaptersByPreference(Array<Adapter*>& adapters)
     {
@@ -156,7 +157,7 @@ export namespace foundation::rhi
         // the cooked-blob format from this.
         [[nodiscard]] virtual ShaderFormat PreferredShaderFormat() const noexcept = 0;
 
-        // True when this backend does NOT flip clip-space Y in its viewport. Vulkan/DX12 use a
+        // True when this backend does not flip clip-space Y in its viewport. Vulkan and DX12 use a
         // negative-height viewport (which also inverts front-face winding); WebGPU's setViewport
         // cannot take a negative height, so it gets no such flip. Screen-space reconstruction passes
         // (sky ray, shadows, SSAO/SSR) that unproject NDC via invViewProj must negate the NDC Y (or,
@@ -168,16 +169,16 @@ export namespace foundation::rhi
         [[nodiscard]] virtual u32 GetQueueCount(QueueType type) = 0;
         /// Query hardware format support for a given texture format.
         [[nodiscard]] virtual FormatSupport GetFormatSupport(TextureFormat format) = 0;
-        /// The maximum MSAA sample count supported for BOTH color and depth framebuffer attachments
-        /// (scene-pass MSAA). Capped at 4 by the engine (8x is out of scope).
-        /// Default 1 = a backend that has not implemented the query reports "no MSAA" (safe: views
-        /// clamp to single-sample). Overridden by backends that support it.
+        /// The maximum MSAA sample count supported for both color and depth framebuffer attachments
+        /// (scene-pass MSAA). The engine caps it at 4 (8x is not supported).
+        /// The default of 1 means a backend that does not implement the query reports no MSAA,
+        /// which is safe: views clamp to single-sample. Backends that support MSAA override it.
         [[nodiscard]] virtual u32 MaxColorDepthSampleCount() const noexcept { return 1; }
-        /// Whether this EXACT sample count is usable for BOTH color and depth render targets. The set
-        /// of valid counts is not simply [1 .. MaxColorDepthSampleCount()]: WebGPU, for instance,
-        /// guarantees only {1, 4} - never 2 - so a caller must snap an unsupported count rather than
-        /// assume every count up to the ceiling works (an unsupported count aborts texture/pipeline
-        /// creation). Default: only 1 (no MSAA). Overridden by backends that support it.
+        /// Whether this sample count is usable for both color and depth render targets. The set of
+        /// valid counts is not simply [1 .. MaxColorDepthSampleCount()]: WebGPU, for instance,
+        /// guarantees only {1, 4} and never 2, so a caller must snap an unsupported count rather than
+        /// assume every count up to the ceiling works (an unsupported count aborts texture or pipeline
+        /// creation). The default accepts only 1 (no MSAA); backends that support MSAA override it.
         [[nodiscard]] virtual bool SupportsSampleCount(u32 count) const noexcept { return count <= 1; }
 
         /// What this device has recorded since it was made and the memory it holds now (the
@@ -238,7 +239,7 @@ export namespace foundation::rhi
         virtual void DestroySurface(Surface*& surface) = 0;
 
         // ---- Mesh shader extension (folded into Device) ----
-        /// Create a mesh shader pipeline. Returns Unsupported if mesh shaders
+        /// Create a mesh shader pipeline. Returns NotSupported if mesh shaders
         /// are not enabled on this device.
         virtual Status CreateMeshPipeline(const MeshPipelineDesc& desc, MeshPipeline*& out)
         {
@@ -255,7 +256,7 @@ export namespace foundation::rhi
         u32 shaderGroupHandleAlignment = 0;
         u32 shaderGroupBaseAlignment = 0;
 
-        /// Create an acceleration structure. Returns Unsupported if ray tracing
+        /// Create an acceleration structure. Returns NotSupported if ray tracing
         /// is not enabled on this device.
         virtual Status CreateAccelStruct(const AccelStructDesc& desc, AccelStruct*& out)
         {
@@ -287,9 +288,9 @@ export namespace foundation::rhi
 
         // ---- Lifecycle ----
         /// Whether the device has been lost (GPU hang/TDR, driver reset, removal).
-        /// Sticky: once lost, the device cannot recover - stop submitting work and
-        /// destroy/recreate it. DX12 queries the device directly; Vulkan latches
-        /// VK_ERROR_DEVICE_LOST from queue submit/present/wait results.
+        /// Sticky: once lost, the device cannot recover; stop submitting work and
+        /// destroy and recreate it. DX12 queries the device directly; Vulkan latches
+        /// VK_ERROR_DEVICE_LOST from queue submit, present and wait results.
         [[nodiscard]] virtual bool IsLost() = 0;
         virtual void WaitIdle() = 0;
         virtual void Destroy() = 0;

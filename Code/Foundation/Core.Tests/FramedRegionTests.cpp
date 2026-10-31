@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Framed-region capability on the Serializer contract: binary length-frames a self-delimiting region
-// so a payload can be SKIPPED or CAPTURED without knowing its type, and RawRemainder moves the framed
-// bytes verbatim. This is the mechanism the settings unknown-section passthrough builds on. (XML is
-// self-describing, so its BeginFramedRegion/EndFramedRegion are no-ops - covered in the XML tests.)
+// Framed regions on the Serializer contract: binary length-frames a self-delimiting region so a
+// payload can be skipped or captured without knowing its type, and RawRemainder moves the framed
+// bytes verbatim. The settings passthrough of unknown sections builds on this. XML is
+// self-describing, so its BeginFramedRegion/EndFramedRegion are no-ops (covered in the XML tests).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -31,15 +31,15 @@ TEST_CASE("framed-region (binary): a frame is skippable by length")
         WriteU32(ar, 111);
         WriteU32(ar, 222);
         ar.EndFramedRegion();
-        WriteU32(ar, 999); // trailing marker AFTER the frame
+        WriteU32(ar, 999); // trailing marker after the frame
         CHECK(ar.IsOk());
     }
     REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
     {
         BinarySerializer ar(stream, SerializeMode::Read);
         ar.BeginFramedRegion();
-        ar.EndFramedRegion();       // SKIP the frame without reading its contents
-        CHECK(ReadU32(ar) == 999u); // the marker is found -> the frame length was honored
+        ar.EndFramedRegion();       // skip the frame without reading its contents
+        CHECK(ReadU32(ar) == 999u); // the marker is found: the frame length was honored
         CHECK(ar.IsOk());
     }
 }
@@ -133,7 +133,7 @@ TEST_CASE("framed-region (binary): nested regions")
         ar.EndFramedRegion();
         CHECK(ReadU32(ar) == 4u);
     }
-    // Skipping the OUTER frame jumps the whole nested structure; the trailing 4 is still found.
+    // Skipping the outer frame jumps the whole nested structure; the trailing 4 is still found.
     REQUIRE(stream.Seek(0, SeekOrigin::Begin) == 0);
     {
         BinarySerializer ar(stream, SerializeMode::Read);
@@ -172,8 +172,8 @@ TEST_CASE("framed-region (binary): RawRemainder without an active frame is unsup
     CHECK_FALSE(ar.RawRemainder(blob)); // no frame -> false (caller drops the section with a warning)
 }
 
-// A frame length read out of another layout is garbage: it used to be allocated whole (up to 4 GB)
-// before the short read failed.
+// A frame length read out of another layout is garbage, so it must not be allocated whole (up to
+// 4 GB) before the short read fails.
 TEST_CASE("framed-region (binary): a frame longer than the data left fails without reading it")
 {
     MemoryStream stream;

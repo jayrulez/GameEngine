@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for CommandPool.
-/// Ported from Sedulous.RHI.Validation/ValidatedCommandPool.bf.
 
 module;
 #include "Core/Prelude.h"

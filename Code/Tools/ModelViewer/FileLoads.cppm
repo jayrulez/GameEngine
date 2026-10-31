@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:loads`: model files read on a thread of their own
-// (Documentation/Specs/model-viewer.md, P10). Reading a file is most of an open (a large FBX
-// takes a tenth of a second or more; the cook and the bind after it a few milliseconds), so the
-// window asks for the read here and goes on drawing; the main thread takes what has been read
-// and finishes the open (OpenModel::Finish), the content database and the resources staying on
-// it. Requests are read in order; a path asked again while queued is not read twice; Cancel drops
-// what is queued, and a read already under way is let finish and dropped, so nothing cancelled is
-// handed over.
+// ModelViewer - `modelviewer:loads`: model files read on a worker thread. Reading the file is
+// most of the cost of opening a model (a large FBX can take a tenth of a second or more, while the
+// cook and bind after it take a few milliseconds), so the window requests the read here and keeps
+// drawing. The main thread takes each finished read and completes the open (OpenModel::Finish),
+// since the content database and the resources belong to it. Requests are read in order, and a
+// path requested again while still queued is read once. Cancel drops the queue; a read already
+// under way runs to completion and is then discarded, so nothing cancelled is handed over.
 
 module;
 #include "Core/Prelude.h"
@@ -23,7 +22,8 @@ using namespace foundation::core;
 
 export namespace modelviewer
 {
-    /// One file read: its model and numbers, or why not (outcome other than Opened).
+    /// The result of one file read: the model and its stats, or an outcome other than Opened
+    /// saying why the read failed.
     struct FileRead
     {
         String path;
@@ -53,7 +53,7 @@ export namespace modelviewer
             m_thread.Join();
         }
 
-        /// `path` read next after what is queued (once: asked again while queued, it stays where it is).
+        /// Queues `path` behind what is already queued. A path that is already queued keeps its place.
         void Request(StringView path, bool looseTextures)
         {
             {
@@ -66,8 +66,8 @@ export namespace modelviewer
             m_wake.NotifyOne();
         }
 
-        /// Everything queued dropped, and the read under way (if any) dropped when it ends; what
-        /// was read already and not taken is dropped too.
+        /// Drops everything queued, the finished reads not yet taken, and the read under way (if
+        /// any) once it ends.
         void Cancel()
         {
             ScopedLock lock(m_mutex);
@@ -76,7 +76,7 @@ export namespace modelviewer
             ++m_generation;
         }
 
-        /// A finished read into `out` (oldest first); false when none is waiting.
+        /// Moves the oldest finished read into `out`; returns false when none is waiting.
         bool Take(FileRead& out)
         {
             ScopedLock lock(m_mutex);
@@ -87,7 +87,7 @@ export namespace modelviewer
             return true;
         }
 
-        /// Reads queued or under way (not counting those finished and waiting to be taken).
+        /// The number of reads queued or under way, not counting finished reads waiting to be taken.
         [[nodiscard]] usize Pending() const
         {
             ScopedLock lock(m_mutex);
@@ -150,6 +150,6 @@ export namespace modelviewer
         String m_readingPath;
         u64 m_generation = 0;
         bool m_stopping = false;
-        Thread m_thread; // last: it starts once the rest is made
+        Thread m_thread; // declared last so the thread starts after the other members are constructed
     };
 }

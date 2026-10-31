@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Fonts.Tests: Rectangle/AtlasRegion/GlyphInfo/FontMetrics/
-// FontLoadOptions tests (the GPU/TTF-free type coverage).
+// Rectangle, AtlasRegion, GlyphInfo, FontMetrics and FontLoadOptions tests (the type
+// coverage that needs no GPU or TTF).
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -128,7 +128,7 @@ TEST_CASE("fonts.loadOptions: presets + character count")
     CHECK(large.atlasWidth >= 1024);
 }
 
-// --- UI value types (ported from UIFeaturesTests.bf) ----------------------
+// --- UI value types ---------------------------------------------------------
 
 TEST_CASE("fonts.hitTestResult: insertion index")
 {

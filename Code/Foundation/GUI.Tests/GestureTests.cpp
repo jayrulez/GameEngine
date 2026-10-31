@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - multi-touch (E17c of Specs/gui-lab-evolution-2.md): touch-action names what a finger may do
-// that the GUI does itself, as CSS's does, each ancestor narrowing it; two fingers over a node that
-// leaves pinch-zoom out make one gesture from the second's landing (scale, rotation and translation,
-// totals and deltas), cancelling the first finger's press; a one-finger move along an axis a node
-// keeps does not pan, and goes on as the pointer.
+// GUI - multi-touch. touch-action names what a finger may do that the GUI handles itself, as in
+// CSS, and each ancestor narrows it. Two fingers over a node that leaves pinch-zoom out make one
+// gesture from the moment the second lands (scale, rotation and translation, as totals and
+// deltas), and the first finger's press is cancelled. A one-finger move along an axis the node
+// keeps for itself does not pan, and goes on as the pointer.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -81,14 +81,14 @@ TEST_CASE("gestures: touch-action from a sheet, a list of its keywords, narrowed
     styles.ApplyTree(*root.Get());
     CHECK(outer->GetTouchActions() == (kTouchPanY | kTouchPinchZoom));
     CHECK(inner->GetTouchActions() == (kTouchPanX | kTouchPanY));
-    CHECK(inner->EffectiveTouchActions() == kTouchPanY); // the outer keeps pan-x, the inner pinch-zoom
+    CHECK(inner->EffectiveTouchActions() == kTouchPanY); // the outer leaves out pan-x and the inner pinch-zoom
     CHECK(plain->GetTouchActions() == kTouchAuto);       // not inherited
     CHECK(plain->EffectiveTouchActions() == (kTouchPanY | kTouchPinchZoom));
 
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".outer { touch-action: none; } .inner { touch-action: pan-x sideways; }")));
     styles.ApplyTree(*root.Get());
     CHECK(outer->GetTouchActions() == 0);
-    CHECK(inner->GetTouchActions() == kTouchAuto); // a word it does not know: the declaration dropped
+    CHECK(inner->GetTouchActions() == kTouchAuto); // an unknown word, so the declaration is dropped
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".outer { touch-action: manipulation; }")));
     styles.ApplyTree(*root.Get());
     CHECK(outer->GetTouchActions() == kTouchAuto);
@@ -96,16 +96,16 @@ TEST_CASE("gestures: touch-action from a sheet, a list of its keywords, narrowed
 
 TEST_CASE("gestures: two fingers over a node that keeps pinch-zoom pinch, turn and pan it as one")
 {
-    Bed bed(kTouchPanX | kTouchPanY); // pinch-zoom left out: two fingers are the node's
+    Bed bed(kTouchPanX | kTouchPanY); // pinch-zoom left out, so two fingers belong to the node
     EventDispatcher& d = bed.d();
     d.InjectTouchDown(1u, core::Float2{150.0f, 200.0f});
     CHECK(d.InjectTouchDown(2u, core::Float2{250.0f, 200.0f}));
     CHECK(d.IsGesturing());
     REQUIRE(bed.seen.Size() >= 2u);
-    CHECK(bed.Saw(u8"pointercancel")); // the first finger's press: a gesture, not a tap
+    CHECK(bed.Saw(u8"pointercancel")); // the first finger's press is cancelled: a gesture, not a tap
     CHECK(bed.seen.Back() == core::String(u8"gesturestart"));
 
-    // Spread from 100 apart to 200: twice the scale, about the same middle.
+    // Spreading from 100 apart to 200 doubles the scale, about the same middle.
     d.InjectTouchMove(1u, core::Float2{100.0f, 200.0f});
     d.InjectTouchMove(2u, core::Float2{300.0f, 200.0f});
     CHECK(bed.last.Scale == doctest::Approx(2.0f));
@@ -116,7 +116,7 @@ TEST_CASE("gestures: two fingers over a node that keeps pinch-zoom pinch, turn a
         product *= e.ScaleDelta;
     CHECK(product == doctest::Approx(2.0f));
 
-    // Turned a quarter, clockwise (y runs down): the second finger below the middle.
+    // Turned a quarter clockwise (y runs down), with the second finger below the middle.
     d.InjectTouchMove(1u, core::Float2{200.0f, 100.0f});
     d.InjectTouchMove(2u, core::Float2{200.0f, 300.0f});
     CHECK(bed.last.Rotation == doctest::Approx(core::kPi * 0.5f).epsilon(0.01));
@@ -146,8 +146,9 @@ TEST_CASE("gestures: a two-finger pan's translation is in the GUI's units, at an
     d.InjectTouchUp(2u, core::Float2{440.0f, 260.0f});
     d.InjectTouchUp(1u, core::Float2{340.0f, 260.0f});
 
-    // Turned a quarter by its last gesture, as a viewer turns its picture: a move across is still across.
-    bed.pad->SetRotationOrigin(core::Float2{150.0f, 150.0f}); // about its middle: still under the fingers
+    // The pad is turned a quarter by its last gesture, as a viewer turns its picture, yet a move
+    // across the screen still reads as across.
+    bed.pad->SetRotationOrigin(core::Float2{150.0f, 150.0f}); // about its middle, so it stays under the fingers
     bed.pad->SetRotation(core::kPi * 0.5f);
     (void)bed.root->UpdateLayout();
     d.InjectTouchDown(1u, core::Float2{300.0f, 300.0f});
@@ -192,7 +193,7 @@ TEST_CASE("gestures: one cancelled, or whose node leaves the tree, ends as cance
         const usize before = bed.seen.Size();
         d.InjectTouchMove(1u, core::Float2{140.0f, 200.0f});
         CHECK_FALSE(d.IsGesturing());
-        CHECK(bed.seen.Size() == before); // gone: it hears nothing more
+        CHECK(bed.seen.Size() == before); // destroyed, so it hears nothing more
     }
 }
 
@@ -204,7 +205,7 @@ TEST_CASE("gestures: a finger moving along an axis its node keeps does not pan, 
     view->SetSize(core::Float2{200.0f, 200.0f});
     view->EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Scroll; });
     root->AddChild(view.Get());
-    auto slider = Make<UIWidget>(); // a horizontal drag of its own: pans up and down only
+    auto slider = Make<UIWidget>(); // it handles horizontal drags itself, so it pans up and down only
     slider->SetSize(core::Float2{200.0f, 600.0f});
     slider->SetTouchActions(kTouchPanY);
     view->AddChild(slider.Get());

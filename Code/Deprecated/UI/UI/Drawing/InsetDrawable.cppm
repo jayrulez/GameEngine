@@ -4,8 +4,7 @@
 // UI - :inset_drawable partition
 //
 // Wraps a drawable and insets its draw bounds; advertises the inset as DrawablePadding
-// so layout can query it. Ported from Sedulous.UI/src/Drawing/InsetDrawable.bf.
-// Beef "consumes the caller's ref" -> RefPtr<Drawable> held by value (auto-released).
+// so layout can query it. The inner drawable is held as a RefPtr<Drawable>.
 
 module;
 #include "Core/Prelude.h"

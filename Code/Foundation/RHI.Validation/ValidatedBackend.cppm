@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for Backend.
-/// Ported from Sedulous.RHI.Validation/ValidatedBackend.bf.
 
 module;
 #include "Core/Prelude.h"

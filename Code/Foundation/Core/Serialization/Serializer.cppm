@@ -95,33 +95,33 @@ export namespace foundation::core
         [[nodiscard]] bool IsReading() const noexcept { return m_mode == SerializeMode::Read; }
         [[nodiscard]] bool IsWriting() const noexcept { return m_mode == SerializeMode::Write; }
 
-        // True for backends whose structure is discoverable from the data (keyed/text - XML, JSON),
-        // false for POSITIONAL backends (binary) that need explicit framing/versioning. A store can
+        // True for backends whose structure is discoverable from the data (keyed/text: XML, JSON),
+        // false for positional backends (binary) that need explicit framing/versioning. A store can
         // use this to add a format-version field only where the layout is positional and not
         // otherwise self-describing (so a self-describing file stays readable across format changes).
         [[nodiscard]] virtual bool IsSelfDescribing() const noexcept { return false; }
 
         // Naming and object/array scopes carry no information in unkeyed formats;
         // default them to no-ops. Keyed/text backends override what they need.
-        // (BeginArray/Scalar/Text/Blob stay pure - every backend must move data.)
+        // (BeginArray/Scalar/Text/Blob stay pure: every backend must move data.)
         void Key(const char* name) noexcept override { (void)name; }
         void BeginObject() override {}
         void EndObject() override {}
         void EndArray() override {}
 
         // === Framed regions (unknown-section passthrough) ===
-        // Bracket a SELF-DELIMITING sub-region so a payload whose type the running build cannot
-        // instantiate can be captured or SKIPPED uniformly across backends. Binary length-prefixes the
-        // enclosed bytes (a sub-stream + u32 length - the Scene blob pattern); self-describing formats
-        // (XML) rely on element boundaries and no-op. Default = no-op, so positional backends that never
-        // frame keep today's behavior; a store that wants skippable sections (Settings) frames EVERY
-        // section between these. Regions may nest.
+        // Bracket a self-delimiting sub-region so a payload whose type the running build cannot
+        // instantiate can be captured or skipped uniformly across backends. Binary length-prefixes the
+        // enclosed bytes (a sub-stream and a u32 length); self-describing formats (XML) rely on element
+        // boundaries and no-op. The default is a no-op, so positional backends that never frame are
+        // unaffected; a store that wants skippable sections (Settings) frames every section between
+        // these. Regions may nest.
         virtual void BeginFramedRegion() {}
         virtual void EndFramedRegion() {}
 
-        // Capture (READ) / re-inject (WRITE) the CURRENT framed region's remaining content as raw bytes,
-        // for a section whose type the build cannot instantiate. READ consumes the rest of the region
-        // into `blob`; WRITE emits `blob` back verbatim so a later build that DOES know the type reads
+        // Capture (read) or re-inject (write) the current framed region's remaining content as raw bytes,
+        // for a section whose type the build cannot instantiate. Read consumes the rest of the region
+        // into `blob`; write emits `blob` back verbatim so a later build that does know the type reads
         // it unchanged. XML moves the remaining child subtree; binary moves the framed bytes. Returns
         // false where an unknown region cannot be preserved (a positional backend with no active frame),
         // so the caller can drop it with a warning. Default: unsupported.

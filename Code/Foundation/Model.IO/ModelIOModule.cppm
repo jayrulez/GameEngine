@@ -51,9 +51,9 @@ export namespace foundation::model::io
 
     namespace detail
     {
-        // NON-inline (ModelIOImpl.cpp): loader libraries (GLTF/FBX) register here and
-        // Model.IO dispatches - per-library copies would mean "no loader for extension"
-        // (shared-libraries.md rendezvous rule).
+        // Not inline (defined in ModelIOImpl.cpp): loader libraries (GLTF, FBX) register here and
+        // Model.IO dispatches from it, so per-library copies would mean "no loader for extension"
+        // in a shared-library build.
         [[nodiscard]] Array<ModelLoader*>& loaders();
 
         inline StringView getExtension(StringView path)

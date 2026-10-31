@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Root motion walking a physics character (root-motion.md P2): an animator in Character mode on
-// the character's model walks it by the clip's travel through the scene's character capability
-// (animation and physics never link each other), so it collides: into a wall, it stops at the
-// wall instead of walking through it; and when the clip stops, the character stops.
+// Root motion walking a physics character. An animator in Character mode on the character's model
+// moves the character by the clip's travel, through the scene's character capability (animation
+// and physics never link each other), so the character collides: walking into a wall, it stops at
+// the wall instead of passing through, and when the clip stops, the character stops.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -84,7 +84,8 @@ TEST_CASE("root motion: a character walked by its clip stops at a wall, and when
     {
         frame();
     }
-    // Where the controller has it (the entity's transform is written by the render-time interpolation).
+    // The controller's position; the entity's transform is written by the render-time
+    // interpolation, so it is not used here.
     const auto heroZ = [&]() { return characters->Get(hero)->currPosition.z; };
     const f32 afterOne = heroZ();
     CHECK(afterOne == doctest::Approx(2.0f).epsilon(0.1));
@@ -96,7 +97,8 @@ TEST_CASE("root motion: a character walked by its clip stops at a wall, and when
     CHECK(atWall < 3.75f);                   // stopped by the wall
     CHECK(atWall > 3.75f - 0.35f - 0.1f);    // against it (its radius from the face)
 
-    // The clip stops: one zero move, and the character stands (no walking on by the last one).
+    // The clip stops: one zero move, and the character stands instead of carrying on with the
+    // last move.
     animator.player->Stop();
     for (i32 i = 0; i < 30; ++i)
     {

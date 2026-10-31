@@ -6,8 +6,7 @@
 // The DOM node hierarchy: XmlNode (intrusive tree) and its concrete kinds
 // (Element, Attribute, Text, CData, Comment, Declaration, ProcessingInstruction).
 // Nodes are heap objects; a node owns its children (its destructor deletes them
-// recursively) and an element owns its attributes + local namespace map. Ported
-// from Sedulous.Xml node classes.
+// recursively) and an element owns its attributes and local namespace map.
 
 module;
 #include "Core/Prelude.h"
@@ -54,8 +53,8 @@ export namespace foundation::xml
             }
         }
 
-        // The allocator this node was created from - the whole tree shares the
-        // document's decision; detached subtrees keep their creator's.
+        // The allocator this node was created from. The whole tree shares the
+        // document's; detached subtrees keep their creator's.
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
         XmlNode(const XmlNode&) = delete;
@@ -173,7 +172,7 @@ export namespace foundation::xml
             refChild->m_nextSibling = newChild;
         }
 
-        // Detaches a child (does NOT delete it).
+        // Detaches a child (does not delete it).
         void RemoveChild(XmlNode* child)
         {
             DIAGNOSTIC_ASSERT_MSG(child->m_parent == this, "Node is not a child of this node");
@@ -206,7 +205,7 @@ export namespace foundation::xml
             }
         }
 
-        // Detaches AND deletes all children.
+        // Detaches and deletes all children.
         void ClearChildren()
         {
             XmlNode* child = m_firstChild;
@@ -757,7 +756,7 @@ export namespace foundation::xml
                 }
             }
         }
-        // Detaches (does NOT delete) the attribute node.
+        // Detaches (does not delete) the attribute node.
         void RemoveAttributeNode(XmlAttribute* attr)
         {
             for (usize i = 0; i < m_attributes.Size(); ++i)

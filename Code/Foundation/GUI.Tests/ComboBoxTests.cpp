@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - ComboBox tests: item management, opening/closing the dropdown popup, picking
-// an item through the dropdown, and dismissal (outside click / Escape) via the dispatcher's
+// GUI - ComboBox tests: item management, opening and closing the dropdown popup, picking
+// an item through the dropdown, and dismissal (outside click or Escape) through the dispatcher's
 // popup support.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -65,7 +65,7 @@ TEST_CASE("combobox: -1 selects none, and its placeholder shows")
     CHECK(cb->GetSelectedText().Size() == 0u);
     CHECK(changes == 1);
     CHECK(last == -1);
-    cb->SetSelectedIndex(-2); // not an index: nothing
+    cb->SetSelectedIndex(-2); // not an index, so nothing happens
     CHECK(changes == 1);
 }
 
@@ -79,7 +79,7 @@ TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher po
     CHECK_FALSE(cb->IsOpen());
     CHECK(d->PopupCount() == 0u);
 
-    // Click the combo (a press+release on it).
+    // Click the combo (a press and release on it).
     d->InjectMouseDown(core::Float2{20.0f, 13.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left);
     CHECK(cb->IsOpen());
@@ -119,7 +119,7 @@ TEST_CASE("combobox: clicking outside dismisses the dropdown")
     d->InjectMouseUp(core::Float2{20.0f, 13.0f}, MouseButton::Left); // open
     REQUIRE(cb->IsOpen());
 
-    // Press far away from the combo and its dropdown -> dismissed.
+    // Press far away from the combo and its dropdown: dismissed.
     d->InjectMouseDown(core::Float2{350.0f, 350.0f}, MouseButton::Left);
     CHECK_FALSE(cb->IsOpen());
     CHECK(d->PopupCount() == 0u);
@@ -174,7 +174,7 @@ TEST_CASE("combobox: new items drop the old selection's text; the selection bind
     data.Set(core::StringView(u8"pick"), core::Variant::From<core::i32>(1));
     REQUIRE(combo->BindData(core::StringView(u8"selected"), root->GetContext().GetDataRef(), core::StringView(u8"pick")));
     root->GetContext().Update(core::Duration::FromSeconds(1.0 / 60.0));
-    CHECK(combo->GetSelectedIndex() == 1); // the data's
+    CHECK(combo->GetSelectedIndex() == 1); // the value from the data
     int changes = 0;
     (void)combo->AddEventListener(EventType::Changed, [&changes](const Event&) { ++changes; });
     combo->SelectByUser(2);
@@ -184,7 +184,7 @@ TEST_CASE("combobox: new items drop the old selection's text; the selection bind
     REQUIRE(back.TryGet<core::i32>() != nullptr);
     CHECK(*back.TryGet<core::i32>() == 2); // written back
     combo->SetSelectedIndex(0);
-    CHECK(changes == 1); // code's change is no user's
+    CHECK(changes == 1); // a change from code is not reported as the user's
 }
 
 TEST_CASE("combobox: the dropdown is as tall as its rows with its own padding and border, so it does not scroll")

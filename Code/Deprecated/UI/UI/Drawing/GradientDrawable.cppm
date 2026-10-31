@@ -5,7 +5,6 @@
 //
 // A gradient fill of the view's box, rounded by Radii: linear (two colours and a direction, or
 // colour stops along a CSS angle) or radial (stops from the centre out to the farthest corner).
-// Ported from Sedulous.UI/src/Drawing/GradientDrawable.bf (VGLinearGradientFill + a rect Path).
 
 module;
 #include "Core/Prelude.h"

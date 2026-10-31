@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - overflow-wrap (E11 of Specs/gui-lab-evolution-2.md): a word wider than its whole line
-// breaks where the line ends, between graphemes, instead of running out of its box; a word that
-// fits a line of its own goes to the next line first, as before. Over DejaVu Sans Mono, every
-// character as wide as the next.
+// GUI - overflow-wrap: a word wider than its whole line breaks where the line ends, between
+// graphemes, instead of running out of its box. A word that fits on a line of its own moves to the
+// next line first, as usual. The tests use DejaVu Sans Mono, where every character has the same
+// width.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -47,7 +47,8 @@ namespace
         document.Runs.PushBack(Move(run));
         return LayOutText(document, style);
     }
-    // Every line within `width`, and together they cover the text, each starting where the last ended.
+    // Checks that every line fits within `width` and that together the lines cover the text, each
+    // starting where the last ended.
     void CheckCovers(const TextLayout& layout, usize size, f32 width)
     {
         REQUIRE(!layout.Lines.IsEmpty());

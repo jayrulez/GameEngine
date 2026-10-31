@@ -1,11 +1,11 @@
-// Hazard - spikes and the like: the player touching one is hurt (sent "Hurt"), walking into it or
-// landing on it.
+// Hazard: spikes and the like. A player who touches one, by walking into it or landing on it, is
+// hurt (sent "Hurt").
 //
 // Touching is a box, not a sphere: within `radius` across the ground and with the player's centre
 // no higher than `touchHeight` above the hazard's origin. A sphere could never be reached: the
 // hazard's own collider stops the player at its side, with the player's centre a metre above the
-// ground, and stood on top the centre is higher still (the spikes are 1.5 m tall: their centre
-// stands 2.5 m above their origin).
+// ground, and standing on top puts the centre higher still (the spikes are 1.5 m tall, and their
+// centre stands 2.5 m above their origin).
 class Hazard
 {
     private Entity@ self;

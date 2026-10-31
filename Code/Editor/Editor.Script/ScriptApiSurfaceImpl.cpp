@@ -3,10 +3,10 @@
 
 // Editor::Script - the `editor.script` module.
 //
-// ScriptApiSurface implementation: the ONE bound-API build for a page. Replays the
-// runtime's exact registration sequence (ScriptSubsystem) against a throwaway manager -
-// idempotent registries + a manager that dies right after DescribeBoundApi - and caches
-// the result for the page's lifetime. Completion and the API browser both read this.
+// ScriptApiSurface implementation: the single bound-API build for a page. It replays the
+// runtime's registration sequence (as ScriptSubsystem runs it) against a throwaway manager. The
+// registries are idempotent and the manager is destroyed right after DescribeBoundApi; the result
+// is cached for the page's lifetime. Completion and the API browser both read it.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +30,7 @@ namespace editor
         {
             return m_types;
         }
-        m_built = true; // one attempt; a language without a backend just stays empty
+        m_built = true; // one attempt; a language without a backend stays empty
 
         core::RegisterCoreTypes();
         foundation::script::RegisterScriptFacadeReflection();

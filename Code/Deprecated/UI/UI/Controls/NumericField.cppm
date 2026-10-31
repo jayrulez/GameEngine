@@ -5,13 +5,11 @@
 //
 // Numeric input field with optional integrated up/down spin buttons. Self-contained: owns its own
 // TextEditingBehavior and implements ITextEditHost (like EditText, but the text mirrors a clamped f64
-// value + a digits/'-'/'.' input filter). Ported from Sedulous.UI/src/Controls/NumericField.bf.
+// value, and an input filter admits only digits, '-' and '.').
 //
-// Port taxes: Beef `double` -> f64; get/set properties -> Value()/SetValue()/... methods; `double.Parse`
-// -> core::ParseFloat, `text.Trim()` -> core::Trimmed, `{0:F2}`/round formatting -> core::FormatFixed
-// (uniform: FormatFixed(v, 0) already yields the rounded integer). Min()/Max() member getters shadow
-// core::Min/Max, so the two-arg clamps call them qualified (core::Min/core::Max/core::Clamp). Beef
-// [Friend]mText/[Friend]mBehavior test access -> public Text()/Behavior().
+// Formatting uses core::FormatFixed throughout; FormatFixed(v, 0) yields the rounded integer. The
+// Min() and Max() member getters shadow core::Min and core::Max, so the two-argument clamps call
+// them qualified (core::Min, core::Max, core::Clamp).
 
 module;
 #include "Core/Prelude.h"
@@ -73,7 +71,7 @@ export namespace foundation::ui
             UpdateText();
         }
 
-        // === Value / range (Beef get/set properties -> methods) ===
+        // === Value / range ===
         [[nodiscard]] f64 Value() const noexcept { return m_value; }
         void SetValue(f64 value)
         {
@@ -123,7 +121,7 @@ export namespace foundation::ui
         void Increment() { SetValue(m_value + m_step); }
         void Decrement() { SetValue(m_value - m_step); }
 
-        // Test/host access (Beef [Friend]).
+        // Test and host access.
         [[nodiscard]] TextEditingBehavior& Behavior() noexcept { return m_behavior; }
 
         /// Wants platform text input (IME) while focused - it edits its value as text.
@@ -271,8 +269,9 @@ export namespace foundation::ui
                     return;
                 }
             }
-            // The click that FOCUSED the field keeps the select-all from OnFocusGained (type-to-
-            // replace, the DCC-standard numeric UX); caret placement starts from the next click.
+            // The click that focuses the field keeps the select-all from OnFocusGained, so typing
+            // replaces the value as numeric fields in DCC tools do; caret placement starts from
+            // the next click.
             if (m_selectAllClick && e.ClickCount <= 1)
             {
                 m_selectAllClick = false;
@@ -518,7 +517,7 @@ export namespace foundation::ui
             DrawTextContent(ctx, textAreaX, textAreaW, fontSize);
             ctx.VG().PopClip();
 
-            // Repeat timer for a held spin button (frame-approximated, faithful to Sedulous).
+            // Repeat timer for a held spin button, approximated per frame.
             if (m_pressedButton != 0)
             {
                 m_repeatTimer += 1.0f / 60.0f;
@@ -844,8 +843,8 @@ export namespace foundation::ui
             }
         }
 
-        // A prefix/suffix View is not in the child tree, so it has no Context - give it the field's so
-        // it can resolve fonts (else it measures to 0 and the value text overlaps it).
+        // A prefix/suffix View is not in the child tree, so it has no Context. Give it the field's so
+        // it can resolve fonts; otherwise it measures to 0 and the value text overlaps it.
         void SyncDecoContext(View* v)
         {
             if (v != nullptr && v->Context != Context)

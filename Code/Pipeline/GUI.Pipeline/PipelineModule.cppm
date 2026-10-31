@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Pipeline - `gui.pipeline` (tooling; E3 of Specs/gui-lab-evolution-3.md).
-// foundation.ui's counterpart: UI.Pipeline.
+// GUI.Pipeline - `gui.pipeline` (tooling).
 //
 // The GUI's sources, cooked:
-//   * GuiDocumentAsset (`.xml` markup) and GuiStyleSheetAsset (`.css`): a LINKED source file in the
+//   * GuiDocumentAsset (`.xml` markup) and GuiStyleSheetAsset (`.css`): a linked source file in the
 //     project's Sources/ tree (Asset::fileName), as a script's; an asset with no linked file fails
 //     the cook.
-//   * The builders VALIDATE: a document through the GUI's markup loader with every element type the
+//   * The builders validate: a document through the GUI's markup loader with every element type the
 //     tools register (the core's, the gamekit's, the toolkit's, the code editor's), a sheet through
 //     the CSS parser and the check of its property names. What cannot be read fails the cook (markup
 //     that does not parse); what was dropped (an unknown element or attribute, an at-rule, a
@@ -55,7 +54,7 @@ export namespace pipeline
         u8":root { --accent: #f3a047; }\n"
         u8".page { background-color: var(--surface); }\n";
 
-    /// A GUI document: a LINKED `.xml` in Sources/.
+    /// A GUI document: a linked `.xml` in Sources/.
     class GuiDocumentAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(GuiDocumentAsset, pipeline::Asset)
@@ -63,7 +62,7 @@ export namespace pipeline
         void Serialize(ISerializer& ar) override { pipeline::Asset::Serialize(ar); }
     };
 
-    /// A GUI style sheet: a LINKED `.css` in Sources/, and the markup its editor page previews it
+    /// A GUI style sheet: a linked `.css` in Sources/, and the markup its editor page previews it
     /// against (editor-only: never cooked).
     class GuiStyleSheetAsset final : public pipeline::Asset
     {
@@ -232,7 +231,7 @@ export namespace pipeline
         }
     };
 
-    /// Drag-drop importer for `.xml` and `.css` files: STAGED into Sources/ and LINKED, as a
+    /// Drag-drop importer for `.xml` and `.css` files: staged into Sources/ and linked, as a
     /// document or a sheet by the extension.
     class GuiFileImporter final : public pipeline::IFileImporter
     {
@@ -306,5 +305,5 @@ export namespace pipeline
     /// written from starter text. Defined in GuiCreatorsImpl.cpp.
     void RegisterGuiCreators(AssetCreatorRegistry& registry);
 
-    // The assets' StaticType() are defined WITH their reflected attributes in GuiAssetImpl.cpp.
+    // The assets' StaticType() bodies are defined with their reflected attributes in GuiAssetImpl.cpp.
 }

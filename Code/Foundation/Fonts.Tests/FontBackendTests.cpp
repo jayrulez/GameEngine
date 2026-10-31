@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Validates the font backend seam (foundation.fonts:backend_interfaces/:factories/:font_manager, folded in from Fonts.IO): extension-routed parser/baker factories
-// and the FontManager cache. Sedulous exercised this path through its TTF
-// backend; here we drive it with fake parser/baker built on the baked types so
-// the IO layer is tested in isolation (no stb_truetype).
+// Validates the font backend interfaces (foundation.fonts:backend_interfaces, :factories and
+// :font_manager): the extension-routed parser and baker factories and the FontManager cache. A
+// fake parser and baker built on the baked types drive them, so the IO layer is tested in
+// isolation (no stb_truetype).
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

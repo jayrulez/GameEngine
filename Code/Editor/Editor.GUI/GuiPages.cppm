@@ -3,17 +3,17 @@
 
 // Editor::GUI - the `editor.gui` module: the editor's pages for the engine GUI's assets.
 //
-// GuiAssetEditorPage edits a `.xml` document or a `.css` sheet on the GUI from its markup
-// (Data/Editor/GuiPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 6, part 5), on the code
-// pages' base (the source file, the shared XML or CSS colours, one history, the problems list): its
-// check is what the cook would report (the loader's and the parser's diagnostics), and beside the
-// code a live preview the RUNTIME context's GuiSubsystem draws into a viewport of the page
-// (GuiSubsystem::CreatePreview / RenderPreview): the game's fonts, theme and sheets, so what shows is
-// what the game will show. A sheet is previewed over markup of the page's own (edited above the
-// preview, "Preview Over a Document" copying a document's in), kept for the sheet in the project's
-// editor settings: never an edit of the asset (the old page wrote it into the asset and dirtied it),
-// its problems in the list under its own name. Markup that does not build keeps the last good
-// preview, and says so.
+// GuiAssetEditorPage edits a `.xml` document or a `.css` sheet, built from its markup
+// (Data/Editor/GuiPage.xml) on the code pages' base (the source file, the shared XML or CSS
+// colours, one history, the problems list). Its check reports what the cook would report (the
+// loader's and the parser's diagnostics). Beside the code, the runtime context's GuiSubsystem
+// draws a live preview into a viewport on the page (GuiSubsystem::CreatePreview and
+// RenderPreview) with the game's fonts, theme and sheets, so the preview matches what the game
+// shows. A sheet is previewed over markup that belongs to the page: it is edited above the
+// preview, can start as a copy of a document's markup ("Preview Over a Document"), and is kept
+// for the sheet in the project's editor settings. It is never written into the asset, and its
+// problems are listed under their own name. Markup that does not build keeps the last good
+// preview and says so.
 
 module;
 #include "Core/Prelude.h"
@@ -52,7 +52,8 @@ export namespace editor
         /// How the problems list names the preview markup's problems (a sheet's page).
         inline constexpr StringView kPreviewMarkupName = u8"preview markup";
 
-        /// The cook's diagnostics as the page's problems, `file` the code they are in (empty: the page's own).
+        /// Adds the cook's diagnostics to the page's problems; `file` names the code they are in
+        /// (empty for the page's own code).
         inline void AddProblems(Span<const foundation::gui::GuiDiagnostic> found, StringView file, Array<app::CodeProblem>& out)
         {
             for (const foundation::gui::GuiDiagnostic& d : found)
@@ -102,7 +103,7 @@ export namespace editor
         static constexpr StringView kPath = u8"Editor/GuiPage.xml";
 
         /// What the page edits: a document (its markup, previewed as it is) or a sheet (its CSS,
-        /// previewed over markup of the page's own).
+        /// previewed over markup the page keeps).
         enum class Kind : u8
         {
             Document,
@@ -114,7 +115,8 @@ export namespace editor
 
         void OnClose() override;
 
-        /// A sheet's preview over a copy of document `id`'s markup (the page's from then on).
+        /// Previews a sheet over a copy of document `id`'s markup, which the page then keeps and
+        /// edits as its own.
         void PreviewOverDocument(const Guid& id);
 
         // === For tests ===
@@ -136,10 +138,10 @@ export namespace editor
         void KeepPreviewMarkup();
 
         Kind m_kind;
-        engine::gui::GuiSubsystem* m_gui = nullptr; // the RUNTIME context's
+        engine::gui::GuiSubsystem* m_gui = nullptr; // the runtime context's GUI
         RefPtr<foundation::gui::Viewport> m_viewport;
-        RefPtr<foundation::gui::SceneRoot> m_previewRoot; // in the RUNTIME context's GUI
-        foundation::gui::CodeEditor* m_markup = nullptr;  // a sheet's preview markup (the markup's)
+        RefPtr<foundation::gui::SceneRoot> m_previewRoot; // in the runtime context's GUI
+        foundation::gui::CodeEditor* m_markup = nullptr;  // a sheet's preview markup (owned by the page markup)
         u32 m_markupListener = 0;
         bool m_stale = false;
     };
@@ -157,8 +159,8 @@ export namespace editor
         GuiAssetEditorPage::Kind m_kind;
     };
 
-    /// The GUI's pages (from the editor's assembly), and the section a sheet's preview markup is
-    /// kept in (registered before the app loads the per-project store).
+    /// Registers the GUI's pages (called from the editor's assembly) and the settings section that
+    /// keeps a sheet's preview markup (registered before the app loads the per-project store).
     inline void RegisterGuiEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         GlobalTypeRegistry().Register(GuiSheetPreviewSettings::StaticType(), TypeDomain(u8"Editor"));

@@ -3,12 +3,12 @@
 
 // Editor App - :asset_operations partition
 //
-// What can be done to the project's assets and groups (Documentation/Specs/editor-gui.md, 5.2,
-// layer 7): rename, duplicate, delete, a new group, the export flag, cook. One place for each, so
-// the assets browser's menus and keys and an agent's delete over MCP do the same thing: an
-// asset's pages close before it goes, the default scene is let go when it does, the cooked
-// mirror follows a rename, and nothing changes the databases while a cook reads them (it waits
-// for the cook, saying so). A name is checked by AssetNames, Create Asset's and Save As's rule.
+// What can be done to the project's assets and groups: rename, duplicate, delete, create a group,
+// set the export flag, cook. Each has one implementation, so the assets browser's menus and keys
+// and an agent's delete over MCP do the same thing: an asset's pages close before it is deleted,
+// the default scene is cleared when it is deleted, the cooked mirror follows a rename, and nothing
+// changes the databases while a cook reads them (the operation waits for the cook and says so).
+// Names are checked by AssetNames, the rule Create Asset and Save As use.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -44,7 +44,8 @@ export namespace editor::app
         explicit AssetOperations(Services services) : m_services(Move(services)) {}
 
         // === Renaming ===
-        /// Renames an asset; empty when it was (or will be, after a cook), else why not.
+        /// Renames an asset; returns empty when it was renamed (or will be, after a cook), else
+        /// the reason it was not.
         String Rename(const Guid& id, StringView name)
         {
             content::Instance* instance = Find(id);
@@ -60,17 +61,17 @@ export namespace editor::app
             const String oldPath = instance->Path();
             if (const Status renamed = project.SourceDb().RenameInstance(id, name); !renamed.IsOk())
                 return String(u8"The rename failed (see the Console).");
-            (void)project.CookedDb().RenameInstance(id, name); // its product's name in step (all binds by guid)
+            (void)project.CookedDb().RenameInstance(id, name); // keep its product's name in step (everything binds by guid)
             if (project.Settings().defaultSceneId == id || project.Settings().defaultScene == oldPath)
             {
                 project.Settings().defaultSceneId = id;
-                project.Settings().defaultScene = instance->Path(); // the path mirror
+                project.Settings().defaultScene = instance->Path(); // keep the path mirror in step
                 (void)project.SaveSettings();
             }
             LOG_INFO(u8"Assets", u8"renamed '{}' -> '{}'", oldPath, instance->Path());
             return String{};
         }
-        /// Renames a group (not the top one); empty when it was, else why not.
+        /// Renames a group (not the top one); returns empty on success, else the reason.
         String RenameGroup(content::Group& group, StringView name)
         {
             if (group.Parent() == nullptr)
@@ -94,7 +95,8 @@ export namespace editor::app
         }
 
         // === Making ===
-        /// A copy of an asset beside it ("Crate.2"); null when it could not be made (said).
+        /// Makes a copy of an asset beside it ("Crate.2"); null (and reported) when it could not
+        /// be made.
         content::Instance* Duplicate(const Guid& id)
         {
             content::Instance* source = Find(id);
@@ -110,11 +112,11 @@ export namespace editor::app
             LOG_INFO(u8"Assets", u8"duplicated '{}' -> '{}'", source->Path(), copy->Path());
             Context().SetStatus(Format(u8"Duplicated as {}.", copy->Name()).AsView());
             if (m_services.cook != nullptr)
-                m_services.cook->RequestCook(false); // a builder's copy pickable at once
+                m_services.cook->RequestCook(false); // makes a builder's copy pickable at once
             return copy;
         }
-        /// A new group in `parent` ("Group", "Group.2"), a folder on disk at once so it stays
-        /// while empty; null when it could not be made.
+        /// Makes a new group in `parent` ("Group", "Group.2") and its folder on disk at once, so
+        /// the group persists while empty; null when it could not be made.
         content::Group* CreateGroup(content::Group& parent)
         {
             content::Group* in = &parent;
@@ -132,7 +134,8 @@ export namespace editor::app
         }
 
         // === Moving ===
-        /// Whether `ids` can move into `to`, and when not, why (all there already, a name taken).
+        /// Whether `ids` can move into `to`, and when not, why (all are there already, a name is
+        /// taken).
         [[nodiscard]] bool CanMove(Span<const Guid> ids, const content::Group& to, String& why) const
         {
             usize moving = 0;
@@ -152,8 +155,8 @@ export namespace editor::app
                 why = Format(u8"Already in {}", GroupPicker::ShownName(to));
             return moving > 0;
         }
-        /// Moves assets into `to` (their files with them, the cooked mirror following); one
-        /// whose name is taken there stays, said.
+        /// Moves assets into `to`, with their files, and the cooked mirror follows. An asset whose
+        /// name is taken there stays where it is, and this is reported.
         void MoveTo(Array<Guid> ids, content::Group& to)
         {
             content::Group* target = &to;
@@ -180,7 +183,8 @@ export namespace editor::app
                 }
                 ++moved;
                 LOG_INFO(u8"Assets", u8"moved '{}' -> '{}'", from, instance->Path());
-                // The cooked product's place in step (all binds by guid; the mirror only reads true).
+                // Move the cooked product too. Everything binds by guid, so this only keeps the
+                // mirror accurate.
                 if (project.CookedDb().GetInstance(id) != nullptr)
                     if (content::Group* cooked = MakeGroupAt(project.CookedDb(), to.Path().AsView()))
                         (void)project.CookedDb().MoveInstance(id, *cooked);
@@ -192,7 +196,7 @@ export namespace editor::app
         }
 
         // === Deleting ===
-        /// What a confirmation names for `ids`: "Crate", "Crate and Barrel", "Crate, Barrel and 3 more".
+        /// The names a confirmation shows for `ids`: "Crate", "Crate and Barrel", "Crate, Barrel and 3 more".
         [[nodiscard]] String Names(Span<const Guid> ids) const
         {
             Array<StringView> names;
@@ -209,15 +213,15 @@ export namespace editor::app
                 return Format(u8"{}, {} and {}", names[0], names[1], names[2]);
             return Format(u8"{}, {} and {} more", names[0], names[1], names.Size() - 2);
         }
-        /// Deletes assets after the event that asked (their pages closed first), waiting for a
-        /// cook; how many went is said.
+        /// Deletes assets after the event that asked (closing their pages first), waiting for a
+        /// running cook; reports how many were deleted.
         void Delete(Array<Guid> ids)
         {
             AssetOperations* self = this;
             Later([self, pendingIds = Move(ids)]() mutable { self->DeleteNow(Move(pendingIds)); });
         }
-        /// One asset, now (an agent's delete, gated by its own wait): false when it is not there
-        /// or did not go.
+        /// Deletes one asset now (an agent's delete, which does its own waiting); false when it is
+        /// not there or was not deleted.
         bool DeleteOne(const Guid& id)
         {
             const bool gone = Remove(id);
@@ -225,8 +229,8 @@ export namespace editor::app
                 ClearDefaultSceneIfGone();
             return gone;
         }
-        /// Deletes a group and all it holds after the event that asked, its assets' pages closed
-        /// first; `whereNext` hears the group to show if the one shown was inside it.
+        /// Deletes a group and all it holds after the event that asked, closing its assets' pages
+        /// first; `whereNext` gets the group to show if the one shown was inside it.
         void DeleteGroup(content::Group& group, Function<void(content::Group&)> whereNext = {})
         {
             if (group.Parent() == nullptr)
@@ -235,7 +239,7 @@ export namespace editor::app
             content::Group* target = &group;
             Later([self, target, pendingWhereNext = Move(whereNext)]() mutable { self->DeleteGroupNow(*target, Move(pendingWhereNext)); });
         }
-        /// The assets a group holds, all the way down.
+        /// Counts the assets a group holds, all the way down.
         [[nodiscard]] static usize CountAssets(const content::Group& group)
         {
             usize count = group.Instances().Size();
@@ -252,7 +256,8 @@ export namespace editor::app
         }
 
         // === Exporting and cooking ===
-        /// Whether an export takes the asset whatever reaches it ("Always Export").
+        /// Whether an export always includes the asset, whether or not anything references it
+        /// ("Always Export").
         [[nodiscard]] bool IsAlwaysExported(const Guid& id) const { return Project() != nullptr && Project()->ExportRoots().HasInstance(id); }
         [[nodiscard]] bool IsAlwaysExported(const content::Group& group) const { return Project() != nullptr && Project()->ExportRoots().HasGroup(group.Path().AsView()); }
         void ToggleAlwaysExport(const Guid& id)
@@ -300,7 +305,8 @@ export namespace editor::app
             else
                 work();
         }
-        // While a cook reads the databases: `work` again once it is idle, said; true then.
+        // While a cook reads the databases, schedules `work` for when the cook is idle, reports
+        // the wait and returns true.
         bool Waits(Function<void()> work, StringView what)
         {
             if (m_services.cook == nullptr || !m_services.cook->MutationLocked())
@@ -378,7 +384,7 @@ export namespace editor::app
                 if (m_services.closePages)
                     m_services.closePages(id);
             if (whereNext)
-                whereNext(*group.Parent()); // away before the group's pointers go
+                whereNext(*group.Parent()); // move away before the group's pointers are freed
             const String path = group.Path();
             if (Project()->SourceDb().DeleteGroup(group).IsOk())
             {

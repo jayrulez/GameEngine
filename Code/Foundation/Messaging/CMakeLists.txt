@@ -1,6 +1,6 @@
 # Foundation::Messaging - `foundation.messaging`: a native, name-keyed, deferred EventBus (over Core).
 # Separate from foundation.scene so a run scope (a scene, or a whole run) can own one
-# and share it. A LEAF under Core - no scene/script dependency.
+# and share it. A leaf under Core, with no scene or script dependency.
 
 util_add_engine_library(Messaging ALIAS Foundation::Messaging)
 target_link_libraries(Messaging PUBLIC Foundation::Core Foundation::Policy)

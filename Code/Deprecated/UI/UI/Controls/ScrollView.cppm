@@ -4,12 +4,11 @@
 // UI - :scroll_view partition
 //
 // Scrollable container: content can exceed the viewport, with optional scroll bars and momentum-based
-// kinetic scrolling. Ported from Sedulous.UI/src/Controls/ScrollView.bf. The two ScrollBars are VISUAL
-// children (not in m_children): VisualChildCount = ChildCount + 2, appended after logical children so
-// they draw/hit-test on top but don't affect content measure/layout. Owned as RefPtr members (RAII) -
-// UIContext::AttachView/DetachView already recurses VisualChildCount, so they attach/detach with the
-// view (no manual dtor detach like Beef needs). ScrollX/ScrollY/MaxScroll*/Viewport*/Needs*Bar get/set
-// properties -> methods; the `ScrollBarMode` Property field shadows its enum type -> aliased.
+// kinetic scrolling. The two ScrollBars are visual children, not in m_children: VisualChildCount is
+// ChildCount + 2, with the bars after the logical children so they draw and hit-test on top but do
+// not affect content measure and layout. They are owned as RefPtr members, and
+// UIContext::AttachView/DetachView recurse through VisualChildCount, so they attach and detach with
+// the view. The `ScrollBarMode` Property field shadows its enum type, so the enum has an alias.
 
 module;
 #include "Core/Prelude.h"
@@ -49,7 +48,7 @@ export namespace foundation::ui
         Overlay, ///< Scrollbar overlays content (content uses full width/height).
         Reserved ///< Space is reserved for the scrollbar (content shrinks to make room).
     };
-    // Alias so the faithful `ScrollBarMode` Property field can still name the enum type.
+    // Alias so code can still name the enum type where the `ScrollBarMode` Property field shadows it.
     using ScrollBarModeValue = ScrollBarMode;
 
     class ScrollView : public ViewGroup
@@ -85,7 +84,7 @@ export namespace foundation::ui
                 [self](ScrollBar*, f32 val) { self->SetScrollX(val); }});
         }
 
-        // === Scroll offsets (Beef properties -> methods) ===
+        // === Scroll offsets ===
         [[nodiscard]] f32 ScrollX() const noexcept { return m_scrollX; }
         void SetScrollX(f32 value)
         {
@@ -465,8 +464,8 @@ export namespace foundation::ui
                 {
                     continue;
                 }
-                // MARGIN-box rect (base insets by margin): at least the viewport wide, the
-                // measured margin-box tall, offset by scroll.
+                // The child's margin-box rect (the base class insets it by the margin): at least
+                // as wide as the viewport, as tall as the measured margin box, offset by the scroll.
                 const Float2 mb = child->MarginBoxSize();
                 const f32 childW = core::Max(mb.x, ViewportWidth());
                 child->Layout(Padding.Left - m_scrollX, Padding.Top - m_scrollY, childW, mb.y);
@@ -528,7 +527,7 @@ export namespace foundation::ui
                 {
                     continue;
                 }
-                // Margin is base-handled; aggregate margin boxes.
+                // The base class handles margins; size to the children's margin boxes.
                 child->Measure(childConstraints);
                 const Float2 mb = child->MarginBoxSize();
                 maxW = core::Max(maxW, mb.x);

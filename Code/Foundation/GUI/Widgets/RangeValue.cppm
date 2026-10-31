@@ -3,13 +3,14 @@
 
 // GUI - :range_value partition
 //
-// RangeValue: the value of a slider, a scroll bar, a progress bar or a number field (E6 of
-// Specs/gui-lab-evolution.md), after Godot's Range: a value between a minimum and a maximum,
-// snapped to a step, a page (a scroll bar's visible part, PageShown: the value goes no further
-// than the maximum less it; a slider's and a number field's page-key step), optionally exponential (its
-// place along the track by logarithm, for a frequency or a zoom) and optionally allowed past either
-// end (a number field typed beyond its range). The controls derive from RangeWidget, which holds
-// one and reflects its properties (so a progress bar carries a page it hides).
+// RangeValue: the value behind a slider, a scroll bar, a progress bar or a number field. It is a
+// value between a minimum and a maximum, snapped to a step, with a page. For a scroll bar the page
+// is the visible part (PageShown), and the value goes no further than the maximum less the page;
+// for a slider or a number field the page is the Page Up and Page Down step. The value can be
+// exponential, placed along the track by logarithm (for a frequency or a zoom), and it can be
+// allowed past either end (a number typed beyond its range). The controls derive from
+// RangeWidget, which holds a RangeValue and reflects its properties; that is why a progress bar
+// carries a page it keeps hidden.
 
 module;
 #include "Core/Prelude.h"
@@ -27,25 +28,26 @@ export namespace foundation::gui
     {
         f64 Min = 0.0;
         f64 Max = 1.0;
-        f64 Step = 0.0; ///< what the value snaps to, from Min; 0: continuous
-        f64 Page = 0.0; ///< a scroll bar's visible part; a page key's step elsewhere (0: a tenth)
+        f64 Step = 0.0; ///< the increment the value snaps to, counted from Min; 0 means continuous
+        f64 Page = 0.0; ///< a scroll bar's visible part, elsewhere the page key step (0 means a tenth of the range)
         f64 Value = 0.0;
-        bool Exponential = false; ///< its place along the track by logarithm (with Min above 0)
+        bool Exponential = false; ///< places the value along the track by logarithm (requires Min above 0)
         bool AllowGreater = false;
         bool AllowLesser = false;
-        bool PageShown = false; ///< the page is a visible part (a scroll bar's), not just a key's step
+        bool PageShown = false; ///< the page is a visible part (as in a scroll bar), not just a key step
 
-        /// The largest value: the maximum, less the page when the page is shown past it.
+        /// Returns the largest value: the maximum, less the page when the page is shown.
         [[nodiscard]] f64 Upper() const noexcept { return core::Max(Min, PageShown ? Max - Page : Max); }
 
-        /// `v` as the range takes it: snapped to the step, kept within the range unless allowed past it.
+        /// Returns `v` snapped to the step and kept within the range, unless the range allows
+        /// values past it.
         [[nodiscard]] f64 Constrain(f64 v) const noexcept
         {
             if (Step > 0.0)
             {
-                // Snapped, then rounded to the step's decimals: a step that came from a float
-                // (0.1f is 0.100000001) would otherwise leave its error in the value (12 snapped to
-                // it is 12.0000001788).
+                // Snap, then round to the step's decimals. Otherwise a step that came from a float
+                // (0.1f is 0.100000001) leaves its error in the value: 12 snapped to it gives
+                // 12.0000001788.
                 v = Min + RoundHalfAway((v - Min) / Step) * Step;
                 f64 scale = 1.0;
                 for (i32 d = Decimals(); d > 0; --d)
@@ -59,7 +61,8 @@ export namespace foundation::gui
             return v;
         }
 
-        /// Where the value lies along [Min, Upper], 0 to 1 (by logarithm when exponential).
+        /// Returns where the value lies along [Min, Upper], from 0 to 1 (by logarithm when
+        /// exponential).
         [[nodiscard]] f64 Ratio() const noexcept { return RatioOf(Value); }
         [[nodiscard]] f64 RatioOf(f64 v) const noexcept
         {
@@ -75,7 +78,7 @@ export namespace foundation::gui
             }
             return Clamp01((v - lo) / (hi - lo));
         }
-        /// The value at `ratio` along [Min, Upper] (not yet snapped: Constrain does).
+        /// Returns the value at `ratio` along [Min, Upper]. It is not snapped; Constrain does that.
         [[nodiscard]] f64 FromRatio(f64 ratio) const noexcept
         {
             const f64 lo = Min, hi = Upper();
@@ -89,18 +92,19 @@ export namespace foundation::gui
             return lo + (hi - lo) * ratio;
         }
 
-        /// An arrow key's step: the step, else a twentieth of the range.
+        /// Returns the arrow key step: the step, or a twentieth of the range when continuous.
         [[nodiscard]] f64 KeyStep() const noexcept { return Step > 0.0 ? Step : (Max - Min) / 20.0; }
-        /// A page key's step: the page, else a tenth of the range (never less than a key step).
+        /// Returns the page key step: the page, or a tenth of the range when it has none, but never
+        /// less than the arrow key step.
         [[nodiscard]] f64 PageStep() const noexcept { return core::Max(Page > 0.0 ? Page : (Max - Min) / 10.0, KeyStep()); }
 
-        /// How many decimals the step shows (0.25: 2; 1: 0; continuous: 3).
+        /// Returns how many decimals the step needs: 2 for 0.25, 0 for 1, and 3 when continuous.
         [[nodiscard]] i32 Decimals() const noexcept
         {
             if (Step <= 0.0)
                 return 3;
-            // Whole once within a float's precision of a whole number: a step read from a float
-            // (0.1f is 0.100000001) shows its own decimals, not eight.
+            // Count a value within float precision of a whole number as whole, so a step read from
+            // a float (0.1f is 0.100000001) gets one decimal rather than eight.
             i32 decimals = 0;
             f64 s = Step;
             while (decimals < 8 && core::Abs(s - RoundHalfAway(s)) > 1e-6 * core::Max(1.0, core::Abs(s)))

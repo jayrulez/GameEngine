@@ -3,8 +3,8 @@
 
 /// Foundation::Net - `foundation.net:tcp_socket` partition.
 ///
-/// RAII TCP stream sockets over the Core/System TCP primitive, for
-/// the foundation.http / WebSocket / script-debugger transports - NOT the UDP game transport.
+/// RAII TCP stream sockets over the Core/System TCP primitive, for the foundation.http, WebSocket
+/// and script-debugger transports, not the UDP game transport.
 /// Each socket holds one WSA refcount (a no-op on POSIX), transferred on move. IPv4 only.
 
 module;
@@ -51,7 +51,7 @@ export namespace foundation::net
         TcpSocket(const TcpSocket&) = delete;
         TcpSocket& operator=(const TcpSocket&) = delete;
 
-        // Begin a NON-BLOCKING connect to (host, port) - a dotted-quad literal or a DNS name (the
+        // Begin a non-blocking connect to (host, port), a dotted-quad literal or a DNS name (the
         // name lookup itself blocks; the connect does not). Poll ConnectStatus() until 1 (connected)
         // or -1 (failed). !IsOpen() if the address was unparseable.
         [[nodiscard]] static TcpSocket Connect(StringView host, u16 port)
@@ -72,12 +72,12 @@ export namespace foundation::net
         {
             return core::TcpConnectStatus(m_handle);
         }
-        // Bytes sent (may be partial), 0 = would-block (retry), -1 = closed/error.
+        // Bytes sent (may be partial), 0 = would block (retry), -1 = closed or error.
         [[nodiscard]] i64 Send(Span<const byte> data) noexcept
         {
             return core::TcpSend(m_handle, data.Data(), data.Size());
         }
-        // Bytes read (>0), 0 = would-block (no data yet), -1 = closed/error.
+        // Bytes read (>0), 0 = would block (no data yet), -1 = closed or error.
         [[nodiscard]] i64 Receive(Span<byte> out) noexcept
         {
             return core::TcpRecv(m_handle, out.Data(), out.Size());

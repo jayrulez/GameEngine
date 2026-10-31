@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the toolkit's sheet reaches the parts its widgets draw: a sheet styles a widget's
-// `tag::part` only for the parts its CollectStyleParts names, and the ruler, the dopesheet, the
-// curve view, the graph view, the gradient strip and a property's preview named none, so each
-// drew its colours from code whatever the theme said.
+// GUI.Toolkit - the toolkit's sheet reaches the parts its widgets draw. A sheet styles a widget's
+// `tag::part` only for the parts its CollectStyleParts names. The ruler, the dopesheet, the curve
+// view, the graph view, the gradient strip and a property's preview must each name theirs, or they
+// would draw their colours from code whatever the theme says.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -55,7 +55,7 @@ TEST_CASE("toolkit parts: the sheet reaches every part the timeline, curve, grap
     for (Node* node : {static_cast<Node*>(ruler.Get()), static_cast<Node*>(sheet.Get()), static_cast<Node*>(curves.Get()),
                        static_cast<Node*>(graph.Get()), static_cast<Node*>(gradient.Get()), static_cast<Node*>(preview.Get())})
         root->AddChild(node);
-    const core::String theme = core::Format(u8"{}\n{}", DefaultThemeCSS(), ToolkitSheetCSS()); // its tokens under it, as an application puts them
+    const core::String theme = core::Format(u8"{}\n{}", DefaultThemeCSS(), ToolkitSheetCSS()); // the toolkit sheet after the theme, as an application puts it
     StyleManager styles;
     styles.SetUserAgentSheet(CSSParser::Parse(theme.AsView()));
     styles.ApplyTree(*root.Get());

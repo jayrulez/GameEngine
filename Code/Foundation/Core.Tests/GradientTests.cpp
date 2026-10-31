@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Gradient (foundation.core:gradient) - colour stops and alpha stops apart, blended in sRGB values,
+// Gradient (foundation.core:gradient): colour stops and alpha stops apart, blended in sRGB values,
 // as light, in OKLab, or held; the ends clamped; empty stops white and opaque.
 
 #include <doctest/doctest.h>

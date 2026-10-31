@@ -3,15 +3,16 @@
 
 // GUI.Toolkit - :property_grid partition
 //
-// The property grid (T1 of Specs/gui-lab-evolution-3.md): a source's properties as rows, a label
-// beside an editor, on the core's item view, so only the rows in view exist and each kind of row
-// has a pool (a category's header, a group's, one per editor). What the grid keeps is outside the
-// rows (zed's way): the properties read once into a tree when the source says they changed, which
-// paths are folded (categories start open, groups closed), the search, and one label split for
-// every row, dragged at any row's boundary. A search keeps what matches by its shown name or its
-// path, with what holds it, opened while it searches; the folding is left as it was. The wheel
-// scrolls the grid and never changes a value (ezEngine's rule). An edit is the source's gesture;
-// while it goes, its row is not rebound from the values it previews.
+// The property grid shows a source's properties as rows, each a label beside an editor. It is built
+// on the core GUI's item view, so only the rows in view exist, and each kind of row has its own pool
+// (a category's header, a group's row, and one per editor). The grid keeps its state outside the
+// rows: the properties, read once into a tree whenever the source reports a change; which paths
+// are folded (categories start open, groups closed); the search; and one label split shared by
+// every row, which can be dragged at any row's boundary. A search keeps the properties whose shown
+// name or path matches, together with their ancestors, and opens those ancestors while the search
+// is active; the folding state is left unchanged. The wheel scrolls the grid and never changes a
+// value. An edit is a gesture on the source; while it runs, its row is not rebound from the values
+// it previews.
 
 module;
 #include "Core/Prelude.h"
@@ -35,24 +36,24 @@ export namespace foundation::gui
     /// One row of a grid: a category's header, or a property (a group, or a value with its editor).
     struct PropertyRow
     {
-        core::String Path; ///< a category's: `#` and its name
-        PropertyInfo Info; ///< a category's: its name as Name
+        core::String Path; ///< for a category, `#` and its name
+        PropertyInfo Info; ///< for a category, its name is in Name
         bool Category = false;
         bool HasChildren = false;
         bool Open = false;
         i32 Depth = 0;
-        u32 Type = 0; ///< its pool: an editor's type, or a header's
+        u32 Type = 0; ///< its pool: an editor's type, or the header's
         ItemId Id = kNoItem;
-        bool Element = false; ///< an element of a list: its index, and what its list allows
+        bool Element = false; ///< a list element; the fields below say its index and what its list allows
         usize Index = 0;
         u8 ListOps = 0;
-        usize Count = 0; ///< an element's: how many its list shows
+        usize Count = 0; ///< for an element, how many elements its list shows
         usize Node = ~usize{0}; ///< the property it shows, in the grid's tree
     };
 
     namespace detail
     {
-        // The grid's rows as the item view's flat model.
+        // Presents the grid's rows to the item view as a flat model.
         class PropertyRowModel : public IModel
         {
         public:
@@ -95,7 +96,7 @@ export namespace foundation::gui
         };
     }
 
-    /// The thin strip at a row's label boundary: dragged, it moves every row's split.
+    /// The thin strip at a row's label boundary. Dragging it moves the split of every row.
     class PropertySplitHandle : public UIWidget
     {
         RTTI_OBJECT(PropertySplitHandle, UIWidget)
@@ -121,7 +122,7 @@ export namespace foundation::gui
         bool m_dragging = false;
     };
 
-    /// A list element's grip: dragged, it moves the element to another place in its list.
+    /// A list element's grip. Dragging it moves the element to another place in its list.
     class PropertyGrip : public UIWidget
     {
         RTTI_OBJECT(PropertyGrip, UIWidget)
@@ -184,8 +185,8 @@ export namespace foundation::gui
         core::String m_path;
     };
 
-    /// A property's row: indented by its depth, a group's chevron, its name (its description the
-    /// tooltip), the split, and its editor (none for a group).
+    /// A property's row, indented by its depth. It holds a group's chevron, the property's name (with
+    /// its description as the tooltip), the split, and its editor (none for a group).
     class PropertyRowContent : public UIWidget
     {
         RTTI_OBJECT(PropertyRowContent, UIWidget)
@@ -198,7 +199,7 @@ export namespace foundation::gui
         [[nodiscard]] Label* GetSummary() const noexcept { return m_summary.Get(); }
         [[nodiscard]] PropertySplitHandle* GetSplitHandle() const noexcept { return m_split.Get(); }
         [[nodiscard]] PropertyGrip* GetGrip() const noexcept { return m_grip.Get(); }
-        /// Marked: an object's value here, or under here, differs from its default.
+        /// Marks the row when an object's value here, or under here, differs from its default.
         void SetChanged(bool changed)
         {
             if (changed == m_changed)
@@ -216,7 +217,7 @@ export namespace foundation::gui
 
     protected:
         void OnLayout() override;
-        // The changed marker: a bar at the row's inline start, `::marker`'s colour.
+        // Draws the changed marker: a bar at the row's inline start, in `::marker`'s colour.
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             UIWidget::OnDraw(ctx, localBounds);
@@ -241,14 +242,14 @@ export namespace foundation::gui
         PropertyGrid& m_grid;
         core::RefPtr<TreeArrow> m_arrow;
         core::RefPtr<Label> m_label;
-        core::RefPtr<Label> m_summary; // a closed group's line
+        core::RefPtr<Label> m_summary; // the summary line of a closed group
         core::RefPtr<PropertySplitHandle> m_split;
         core::RefPtr<PropertyGrip> m_grip;
         core::RefPtr<PropertyEditor> m_editor;
         core::String m_path;
         core::String m_description;
         i32 m_depth = 0;
-        bool m_movable = false; // an element its list lets move: its grip shows
+        bool m_movable = false; // an element its list lets move, so its grip shows
         bool m_changed = false;
     };
 
@@ -256,7 +257,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(PropertyGrid, ItemView)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             ItemView::CollectStyleParts(out);
@@ -273,7 +274,8 @@ export namespace foundation::gui
                 m_source->SetClient(nullptr);
         }
 
-        /// The source it shows (not owned; it outlives the grid or is set to null first).
+        /// Sets the source it shows. The source is not owned: it must outlive the grid, or be set to
+        /// null first.
         void SetSource(IPropertySource* source)
         {
             if (m_source == source)
@@ -291,22 +293,24 @@ export namespace foundation::gui
         }
         [[nodiscard]] IPropertySource* GetSource() const noexcept { return m_source; }
 
-        /// The editors it chooses from: an application registers its own here, then Refresh.
+        /// Returns the editors it chooses from. An application registers its own here, then calls
+        /// Refresh.
         [[nodiscard]] PropertyEditorRegistry& GetEditors() noexcept { return m_editors; }
-        /// Reads the properties again (an editor registered, a source's change it did not say).
+        /// Reads the properties again, for example after an editor is registered or after a change the
+        /// source did not report.
         void Refresh()
         {
             if (m_editorGeneration != m_editors.GetGeneration())
             {
                 m_editorGeneration = m_editors.GetGeneration();
-                SetRowFactory(MakeFactory()); // the pools start again
+                SetRowFactory(MakeFactory()); // rebuild the pools
             }
             ReadProperties();
         }
 
         // === Folding ===
-        /// Whether `path` (a group's, or a category's `#Name`) is open: categories start open,
-        /// groups closed.
+        /// Returns whether `path` (a group's, or a category's `#Name`) is open. Categories start open
+        /// and groups closed.
         [[nodiscard]] bool IsOpen(core::StringView path) const
         {
             const bool byDefault = path.Size() != 0 && path[0] == u8'#';
@@ -326,8 +330,8 @@ export namespace foundation::gui
         void ToggleOpen(core::StringView path) { SetOpen(path, !IsOpen(path)); }
 
         // === Search ===
-        /// Shows only what matches `filter` by its shown name or its path (letters in either case
-        /// alike), with what holds it; empty shows everything.
+        /// Shows only the properties whose shown name or path matches `filter`, ignoring letter case,
+        /// together with their ancestors. An empty filter shows everything.
         void SetFilter(core::StringView filter)
         {
             if (m_filter.AsView() == filter)
@@ -338,7 +342,7 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView GetFilter() const noexcept { return m_filter.AsView(); }
 
         // === The label split ===
-        /// The labels' share of a row's width (`label-ratio`), kept between 0.1 and 0.9.
+        /// Sets the labels' share of a row's width (`label-ratio`), clamped between 0.1 and 0.9.
         void SetLabelRatio(f32 ratio)
         {
             ratio = core::Clamp(ratio, 0.1f, 0.9f);
@@ -353,14 +357,14 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] f32 GetLabelRatio() const noexcept { return m_labelRatio; }
-        /// A nested property's indent per level (`indent-width`).
+        /// Sets a nested property's indent per level (`indent-width`).
         void SetIndentWidth(f32 width)
         {
             m_indentWidth = core::Max(0.0f, width);
             ItemsChanged();
         }
         [[nodiscard]] f32 GetIndentWidth() const noexcept { return m_indentWidth; }
-        /// The column a row keeps for a group's arrow (`arrow-size`), the arrow drawn to fit it.
+        /// Sets the column a row keeps for a group's arrow (`arrow-size`); the arrow is drawn to fit.
         void SetArrowSize(f32 size)
         {
             m_arrowSize = core::Max(0.0f, size);
@@ -369,7 +373,8 @@ export namespace foundation::gui
         [[nodiscard]] f32 GetArrowSize() const noexcept { return m_arrowSize; }
 
         // === Lists ===
-        /// Changes the list `path` through the source (an open edit ends first); an insert opens it.
+        /// Changes the list `path` through the source, ending any open edit first. An insert also
+        /// opens the list.
         bool EditPropertyList(core::StringView path, const ListEdit& edit) override
         {
             if (m_source == nullptr)
@@ -382,19 +387,22 @@ export namespace foundation::gui
                 SetOpen(list.AsView(), true);
             return true;
         }
-        /// A grip's drag: the element at `path` picked up, moved over the rows, let go (or given up).
+        /// A grip's drag: picks up the element at `path`, moves it over the rows, then drops it or
+        /// cancels.
         void BeginReorder(core::StringView path);
         void MoveReorder(core::Float2 screen);
         void EndReorder(bool drop);
-        /// The place the element would go now (its index after the move), or -1.
+        /// Returns where the element would go now (its index after the move), or -1.
         [[nodiscard]] i32 GetReorderTarget() const noexcept { return m_reorderTo; }
-        /// The row's menu, while it is open.
+        /// Returns the row's menu while it is open, else null.
         [[nodiscard]] Menu* GetRowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
-        /// What the application adds to a row's menu, after the grid's own items: a header's menu is
-        /// the application's alone (a component's verbs on its section), and shows only when it adds
-        /// something. `row` is the row the menu is for (a header's path is `#` and its name).
+        /// Sets a callback that adds the application's items to a row's menu, after the grid's own
+        /// items. A header's menu holds only the application's items (a component's verbs on its
+        /// section) and shows only when the callback adds something. `row` is the row the menu is
+        /// for; a header's path is `#` and its name.
         void SetOnRowMenu(core::Function<void(Menu& menu, const PropertyRow& row)> extend) { m_onRowMenu = core::Move(extend); }
-        /// Opens the menu of the row `item` at `position` (in the root's space); false when it has none.
+        /// Opens the menu of row `item` at `position` (in the root's space). Returns false when the row
+        /// has no menu.
         bool OpenRowMenu(i32 item, core::Float2 position);
 
         // === The rows ===
@@ -403,7 +411,7 @@ export namespace foundation::gui
         {
             return item >= 0 && static_cast<usize>(item) < m_rows.Rows().Size() ? &m_rows.Rows()[static_cast<usize>(item)] : nullptr;
         }
-        /// The row of `path` shown now, or -1.
+        /// Returns the index of the row showing `path` now, or -1.
         [[nodiscard]] i32 FindRow(core::StringView path) const
         {
             for (usize i = 0; i < m_rows.Rows().Size(); ++i)
@@ -411,13 +419,13 @@ export namespace foundation::gui
                     return static_cast<i32>(i);
             return -1;
         }
-        /// The editor showing `path` now (its row realised), or null.
+        /// Returns the editor showing `path` now (when its row is realised), or null.
         [[nodiscard]] PropertyEditor* FindEditor(core::StringView path) const
         {
             PropertyRowContent* content = FindRowContent(path);
             return content != nullptr ? content->GetEditor() : nullptr;
         }
-        /// The row showing `path` (null when it is not in view).
+        /// Returns the row content showing `path`, or null when it is not in view.
         [[nodiscard]] PropertyRowContent* FindRowContent(core::StringView path) const
         {
             const i32 item = FindRow(path);
@@ -425,13 +433,14 @@ export namespace foundation::gui
             return row != nullptr ? core::Cast<PropertyRowContent>(row->GetContent()) : nullptr;
         }
         // === Defaults ===
-        /// Whether `path`'s row shows: an object differs from its default there, or under there.
+        /// Returns whether `path`'s row shows the changed marker, which it does when an object
+        /// differs from its default there or under there.
         [[nodiscard]] bool IsRowChanged(core::StringView path) const
         {
             const PropertyRow* row = GetRow(FindRow(path));
             return row != nullptr && row->Node < m_nodes.Size() && IsChanged(row->Node);
         }
-        /// Puts each object's default back at `path` and under it, through the source.
+        /// Restores each object's default at `path` and under it, through the source.
         bool RevertProperty(core::StringView path)
         {
             if (m_source == nullptr)
@@ -442,8 +451,8 @@ export namespace foundation::gui
         }
 
         // === Copying ===
-        /// Copies `path` (and what is under it) to the clipboard through the source; false when
-        /// the source cannot.
+        /// Copies `path`, with what is under it, to the clipboard through the source. Returns false
+        /// when the source cannot.
         bool CopyProperty(core::StringView path)
         {
             EventDispatcher* dispatcher = GetEventDispatcher();
@@ -456,8 +465,8 @@ export namespace foundation::gui
             clipboard->SetText(text.AsView());
             return true;
         }
-        /// Pastes the clipboard's text into `path` through the source; refused, the reason goes to
-        /// SetOnMessage's callback.
+        /// Pastes the clipboard's text into `path` through the source. When the source refuses, the
+        /// reason goes to SetOnMessage's callback.
         bool PasteProperty(core::StringView path)
         {
             EventDispatcher* dispatcher = GetEventDispatcher();
@@ -474,10 +483,10 @@ export namespace foundation::gui
                 m_onMessage(reason.Size() != 0 ? reason.AsView() : core::StringView(u8"Cannot paste that here"));
             return false;
         }
-        /// Told what the grid has to say: why a paste was refused (for a status bar).
+        /// Called with the grid's messages, such as why a paste was refused (for a status bar).
         void SetOnMessage(core::Function<void(core::StringView)> onMessage) { m_onMessage = core::Move(onMessage); }
 
-        /// The path an edit is open on (empty: none).
+        /// Returns the path an edit is open on, or empty when there is none.
         [[nodiscard]] core::StringView GetEditPath() const noexcept { return m_editPath.AsView(); }
 
         // === IPropertyEditHost's reads ===
@@ -518,7 +527,7 @@ export namespace foundation::gui
                 return;
             m_editPath.Clear();
             m_source->CommitEdit(path, write);
-            m_rows.ValuesChanged(); // its own row too, now the gesture is over
+            m_rows.ValuesChanged(); // refresh its own row too, now the gesture is over
         }
         void CancelPropertyEdit(core::StringView path) override
         {
@@ -530,8 +539,9 @@ export namespace foundation::gui
         }
 
     protected:
-        // The row whose editor took the focus is the current one, however it took it (a click, Tab,
-        // code): every editor alike, quietly marked, and where the arrow keys go on from.
+        // The row whose editor took focus becomes the current row, however the focus came (a click,
+        // Tab or code). This works the same for every editor, selects the row without notice, and
+        // sets where the arrow keys continue from.
         void OnDescendantFocused(Node& focused) override
         {
             ItemView::OnDescendantFocused(focused);
@@ -548,14 +558,14 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"propertyrow"); }
         void OnContextMenu(const MouseEvent& event) override
         {
-            ItemView::OnContextMenu(event); // the row selected
+            ItemView::OnContextMenu(event); // the base selects the row
             const i32 item = ItemAt(event.Position);
             Node* top = GetRootNode();
             if (item >= 0 && top != nullptr && OpenRowMenu(item, top->ConvertToNodeSpace(event.Position)))
                 event.Handled = true;
         }
         void OnDrawAbove(DrawContext& ctx) override;
-        // Right opens a category or a group, Left closes it (mirrored right to left).
+        // Right opens a category or a group and Left closes it (swapped in right to left).
         bool OnExtraKey(KeyCode key, u32 modifiers) override
         {
             if (modifiers == KeyModCtrl && (key == KeyCode::C || key == KeyCode::V))
@@ -580,7 +590,7 @@ export namespace foundation::gui
         friend class PropertyRowContent;
         friend class PropertyCategoryContent;
 
-        // The properties as read from the source: a tree, each node's children by index.
+        // The properties as read from the source, as a tree whose nodes list their children by index.
         struct PropertyNode
         {
             core::String Path;
@@ -597,7 +607,7 @@ export namespace foundation::gui
         bool IsChanged(usize node) const;
         void AddRows(core::Array<PropertyRow>& rows, usize node, i32 depth, bool filtered, const PropertyNode* parent = nullptr) const;
         void BindRow(Node& content, const ModelIndex& index);
-        // An edit is open on `path` or on a part of it (a Float3's field).
+        // Returns whether an edit is open on `path` or on a part of it (a Float3's field).
         [[nodiscard]] bool IsUnderEdit(core::StringView path) const
         {
             const core::StringView edit = m_editPath.AsView();
@@ -620,13 +630,14 @@ export namespace foundation::gui
         u32 m_editorGeneration = 0;
         core::Array<PropertyNode> m_nodes;
         core::Array<usize> m_top;
-        core::HashSet<core::String> m_toggled; // paths folded unlike their default
+        core::HashSet<core::String> m_toggled; // paths whose folding differs from their default
         core::String m_filter;
         core::String m_editPath;
         core::RefPtr<Menu> m_menu;
         core::Function<void(core::StringView)> m_onMessage;
         core::Function<void(Menu&, const PropertyRow&)> m_onRowMenu;
-        // A grip's drag: the list, the element's index, where it would go, and the line's row.
+        // A grip's drag: the list, the element's index, where it would go, and the row the drop line
+        // is drawn at.
         core::String m_reorderList;
         i32 m_reorderFrom = -1;
         i32 m_reorderTo = -1;
@@ -653,7 +664,7 @@ namespace foundation::gui
     {
         if (!m_dragging)
             return;
-        // The pointer's place across the grid's rows, from their inline start.
+        // The pointer's position across the grid's rows, measured from their inline start.
         const Rect rows = m_grid.GetContentBounds();
         const core::Float2 at = m_grid.ConvertToNodeSpace(event.Position); // events come in screen space
         f32 x = at.x - rows.x;
@@ -704,13 +715,13 @@ namespace foundation::gui
         m_label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         {
             // A name longer than its column ends in an ellipsis rather than running under the
-            // editor (a default: a sheet's text-overflow wins).
+            // editor. This is only a default; a sheet's text-overflow overrides it.
             StyleWriteScope defaults(*m_label);
             m_label->SetTextOverflow(TextOverflow::Ellipsis);
         }
         m_label->SetHitTestVisible(false);
         AddChild(m_label.Get());
-        // A closed group's line (its info's Summary), where an editor would be.
+        // A closed group's summary line (its info's Summary), shown where an editor would be.
         m_summary = core::MakeRef<Label>(MemoryAllocator());
         m_summary->SetTag(core::StringView(u8"propertysummary"));
         m_summary->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
@@ -726,7 +737,7 @@ namespace foundation::gui
         m_grip = core::MakeRef<PropertyGrip>(MemoryAllocator(), grid);
         AddChild(m_grip.Get());
         m_split = core::MakeRef<PropertySplitHandle>(MemoryAllocator(), grid);
-        AddChild(m_split.Get()); // last: over the editor's edge
+        AddChild(m_split.Get()); // added last, so it lies over the editor's edge
     }
     inline void PropertyRowContent::Show(const PropertyRow& row)
     {
@@ -753,7 +764,7 @@ namespace foundation::gui
         const f32 indent = static_cast<f32>(m_depth) * m_grid.GetIndentWidth();
         const f32 arrow = m_grid.GetArrowSize();
         m_arrow->Arrange(MirroredIn(Rect{box.x + indent, box.y, arrow, box.height}, box, rtl));
-        if (m_movable) // in the indent before the element
+        if (m_movable) // the grip sits in the indent before the element
             m_grip->Arrange(MirroredIn(Rect{box.x + core::Max(0.0f, indent - kGrip), box.y, kGrip, box.height}, box, rtl));
         const f32 textX = indent + arrow + 2.0f;
         m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), box.height}, box, rtl));
@@ -845,9 +856,10 @@ namespace foundation::gui
         PropertyRowContent* property = core::Cast<PropertyRowContent>(&content);
         if (property == nullptr)
             return;
-        // The row an edit is open on keeps what its editor shows: the source's values are its
-        // previews, and the editor is mid-gesture. So does one being typed into: the text is the
-        // edit's until it commits (the values refresh each frame; typed text went back at once).
+        // The row an edit is open on keeps what its editor shows, because the source's values are
+        // its previews and the editor is mid-gesture. So does a row being typed into: the text
+        // belongs to the edit until it commits, and the values, refreshed each frame, would
+        // overwrite it.
         const bool same = property->GetPath() == row->Path.AsView();
         const bool editing = same && (IsUnderEdit(row->Path.AsView()) || (property->GetEditor() != nullptr && property->GetEditor()->IsTyping()));
         property->Show(*row);
@@ -876,7 +888,7 @@ namespace foundation::gui
             m_nodes.PushBack(core::Move(node));
             into.PushBack(at);
             const PropertyKind kind = m_nodes[at].Info.Kind;
-            if ((kind == PropertyKind::Group || kind == PropertyKind::List) && depth < 32) // a cycle in a source stops here
+            if ((kind == PropertyKind::Group || kind == PropertyKind::List) && depth < 32) // the depth limit stops a cycle in a source
             {
                 core::Array<usize> children(MemoryAllocator());
                 const core::String path = m_nodes[at].Path;
@@ -894,7 +906,7 @@ namespace foundation::gui
             for (usize i = 0; i + filter.Size() <= text.Size(); ++i)
             {
                 if (i > 0 && (text[i] & 0xC0u) == 0x80u)
-                    continue; // inside a character
+                    continue; // skip offsets inside a character
                 if (StartsWithIgnoringCase(text.SubStr(i, text.Size() - i), filter))
                     return true;
             }
@@ -902,7 +914,8 @@ namespace foundation::gui
         };
         return contains(node.Info.ShownName()) || contains(node.Path.AsView());
     }
-    // An object differs from its default here (a value, a list's count), or under here.
+    // Returns whether an object differs from its default here (a value, a list's count), or under
+    // here.
     inline bool PropertyGrid::IsChanged(usize node) const
     {
         if (m_source == nullptr)
@@ -914,7 +927,7 @@ namespace foundation::gui
                 const Variant byDefault = m_source->GetDefault(at.Path.AsView(), i);
                 if (byDefault.IsEmpty())
                     continue;
-                if (m_source->GetValue(at.Path.AsView(), i).Compare(byDefault) != 0) // an int and a float by value
+                if (m_source->GetValue(at.Path.AsView(), i).Compare(byDefault) != 0) // compares an int and a float by value
                     return true;
             }
         for (const usize child : at.Children)
@@ -935,7 +948,8 @@ namespace foundation::gui
         return false;
     }
 
-    // `filtered`: only what matches, and what holds it, shows (an ancestor matched clears it).
+    // With `filtered`, only matching properties and their ancestors are added. The children of a
+    // property that matched are added with it cleared.
     inline void PropertyGrid::AddRows(core::Array<PropertyRow>& rows, usize index, i32 depth, bool filtered, const PropertyNode* parent) const
     {
         const PropertyNode& node = m_nodes[index];
@@ -948,11 +962,11 @@ namespace foundation::gui
         row.Path = node.Path;
         row.Info = node.Info;
         row.Depth = depth;
-        // A group has no editor unless a hint asks for one (a Float3), which may be none; an
-        // editor covering the children shows them on this row, so none go under it.
+        // A group has no editor unless a hint asks for one (a Float3), and no editor may take the
+        // hint. An editor that covers the children shows them on this row, so no rows go under it.
         row.Type = node.Info.Kind == PropertyKind::Group && node.Info.Hint.Size() == 0 ? kGroupRow : m_editors.Choose(node.Info);
         if (row.Type == PropertyEditorRegistry::kNoEditor && node.Info.Kind == PropertyKind::Group && !node.Children.IsEmpty())
-            row.Type = kGroupRow; // a hint no editor takes: its own rows, if it has any
+            row.Type = kGroupRow; // no editor takes the hint, so the group shows its own rows, if it has any
         const bool covered = m_editors.CoversChildren(row.Type);
         const bool holds = node.Info.Kind == PropertyKind::Group || node.Info.Kind == PropertyKind::List;
         row.HasChildren = holds && !node.Children.IsEmpty() && !covered;
@@ -978,7 +992,8 @@ namespace foundation::gui
     {
         core::Array<PropertyRow> rows(MemoryAllocator());
         const bool filtered = m_filter.Size() != 0;
-        // The categories in the order they first come; what has none comes first, without a header.
+        // List the categories in the order they first appear. Properties with no category come
+        // first, without a header.
         core::Array<core::String> categories(MemoryAllocator());
         for (const usize top : m_top)
         {
@@ -1003,7 +1018,7 @@ namespace foundation::gui
             header.Category = true;
             header.Type = kCategoryRow;
             header.Id = core::HashBytes(header.Path.Data(), header.Path.Size());
-            // A header over nothing shown (each of its rows hidden, or none matching) is left out.
+            // Leave out a header with nothing shown under it (every row hidden, or none matching).
             bool any = false;
             for (const usize top : m_top)
                 if (m_nodes[top].Info.Category == category && (filtered ? SubtreeMatches(top) : m_nodes[top].Info.Visible))
@@ -1035,7 +1050,8 @@ namespace foundation::gui
         m_reorderTo = -1;
         m_reorderLine = -1;
     }
-    // Over an element of the same list: before it or after it, by its halves.
+    // Over an element of the same list, the drop goes before or after it, depending on which half
+    // the pointer is over.
     inline void PropertyGrid::MoveReorder(core::Float2 screen)
     {
         if (m_reorderFrom < 0)
@@ -1072,7 +1088,7 @@ namespace foundation::gui
         }
     }
 
-    // The line where a dragged element would go.
+    // Draws the line where a dragged element would go.
     inline void PropertyGrid::OnDrawAbove(DrawContext& ctx)
     {
         ItemView::OnDrawAbove(ctx);
@@ -1090,13 +1106,14 @@ namespace foundation::gui
         ctx.PopClip();
     }
 
-    // A row's menu: an element's insert before it, remove it, move it up or down; any row's revert.
+    // A row's menu. An element's menu inserts before it, removes it, or moves it up or down; every
+    // row's menu can revert.
     inline bool PropertyGrid::OpenRowMenu(i32 item, core::Float2 position)
     {
         const PropertyRow* found = GetRow(item);
         if (found == nullptr || (found->Category && !m_onRowMenu))
             return false;
-        const PropertyRow row = *found; // the rows change under the menu's actions
+        const PropertyRow row = *found; // copied, because the menu's actions change the rows
         m_menu = core::MakeRef<Menu>(MemoryAllocator());
         ShareTextStyle(*m_menu, false);
         m_menu->SetAutoWidth(true);

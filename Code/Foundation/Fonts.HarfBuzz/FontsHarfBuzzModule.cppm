@@ -3,7 +3,7 @@
 
 // Foundation::Fonts.HarfBuzz - the `foundation.fonts.harfbuzz` module.
 //
-// Real text shaping behind the engine's ITextShaper (F3 of Specs/vg-and-gui-lab.md): ligatures,
+// Real text shaping behind the engine's ITextShaper: ligatures,
 // Arabic joining, Indic reordering, marks placed by the font's own tables. Install() makes it the
 // shaper every font service hands out (TextShaperFactory); a font whose file is not at hand (a
 // hand-built table) is shaped by the basic shaper instead. HarfBuzz itself never crosses this

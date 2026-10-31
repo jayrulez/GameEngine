@@ -3,7 +3,6 @@
 
 /// GPU-visible descriptor heap with contiguous block allocation.
 /// Used for CBV/SRV/UAV and Sampler heaps that are shader-visible.
-/// Ported from Sedulous.RHI.DX12/DX12GpuDescriptorHeap.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -47,9 +46,9 @@ export namespace foundation::rhi::dx12
 
         /// Allocate a contiguous block. Returns offset or -1.
         /// Thread-safe: called concurrently by per-pool descriptor staging when
-        /// render bundles are recorded on job-system workers (parallel emit) -
-        /// an unsynchronized bump/free-list here hands two workers overlapping
-        /// blocks, corrupting live shader-visible descriptors (GPU hang on DX12).
+        /// render bundles are recorded on job-system workers (parallel emit). An
+        /// unsynchronized bump or free list here would hand two workers overlapping
+        /// blocks, corrupting live shader-visible descriptors (a GPU hang on DX12).
         i32 allocate(u32 count)
         {
             if (count == 0)
@@ -144,7 +143,7 @@ export namespace foundation::rhi::dx12
         u32 m_capacity = 0;
         u32 m_nextFree = 0;
         Array<FreeBlock> m_freeBlocks;
-        Mutex m_mutex; // guards m_nextFree + m_freeBlocks (see allocate)
+        Mutex m_mutex; // guards m_nextFree and m_freeBlocks (see allocate)
     };
 
 } // namespace foundation::rhi::dx12

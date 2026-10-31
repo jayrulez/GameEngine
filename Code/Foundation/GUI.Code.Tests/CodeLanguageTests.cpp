@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - a language's definition and its tokenizer (C2 of Specs/gui-lab-evolution-3.md): rules in
-// contexts give runs their tokens, words name identifiers, a state carries a block comment and a
-// long bracket from line to line; a definition read back from the engine's XML tokenizes alike; the
-// editor keeps each line's tokens, tokenizing again only what changed or what a change reaches.
+// GUI.Code - tests of a language's definition and its tokenizer. Rules in contexts give runs their
+// tokens, words name identifiers, and the state carries a block comment or a long bracket from
+// line to line. A definition read back from the engine's XML tokenizes the same way. The editor
+// keeps each line's tokens and tokenizes again only what changed or what a change reaches.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <fstream>
@@ -91,7 +91,7 @@ namespace
         return lang;
     }
 
-    // "token:text" for each run, space-separated: what a line tokenized to.
+    // Returns what a line tokenized to, as "token:text" for each run, separated by spaces.
     core::String Runs(const CodeLanguage& lang, core::StringView line, CodeLexState& state)
     {
         core::Array<CodeSpan> spans{core::DefaultAllocator()};
@@ -113,7 +113,8 @@ namespace
                 add(CodeTokenName(span.Token), text);
                 continue;
             }
-            // Plain text's runs join (the spaces between names too): each word apart here.
+            // Plain text runs are joined (along with the spaces between names); split each word apart
+            // here.
             usize at = 0;
             while (at < text.Size())
             {
@@ -186,7 +187,7 @@ TEST_CASE("code language: a definition written by the engine's XML and read back
     core::String text;
     writer.GetOutput(text);
     REQUIRE(writer.IsOk());
-    MESSAGE(doctest::String(reinterpret_cast<const char*>(text.CStr()))); // the file a definition's owner keeps
+    MESSAGE(doctest::String(reinterpret_cast<const char*>(text.CStr()))); // the file that a definition's owner keeps
 
     xml::XmlDocument doc(core::DefaultAllocator());
     REQUIRE(doc.Parse(text.AsView()) == xml::XmlResult::Ok);
@@ -215,16 +216,16 @@ TEST_CASE("code editor: keeps each line's tokens, tokenizing again only what cha
     REQUIRE(editor.TokensOf(10).Size() > 0);
     CHECK(editor.TokensOf(10)[0].Token == CodeToken::Type);
     const core::u64 first = editor.TokenizedCount();
-    CHECK(first == 11u); // lines 0 to 10, as far as asked
-    // An edit that leaves the state as it was: that line alone.
+    CHECK(first == 11u); // lines 0 to 10, as far as was asked
+    // An edit that leaves the state as it was retokenizes that line alone.
     editor.GetDocument().Replace(CodeRange{CodePosition{3, 8}, CodePosition{3, 9}}, SV(u8"2"));
     (void)editor.TokensOf(10);
     CHECK(editor.TokenizedCount() == first + 1);
-    // Opening a block comment: the lines after it, as they are asked for, change their tokens.
+    // Opening a block comment changes the tokens of the lines after it, as they are asked for.
     editor.GetDocument().Insert(CodePosition{5, 0}, SV(u8"/*"));
     CHECK(editor.TokensOf(8)[0].Token == CodeToken::Comment);
     CHECK(editor.TokenizedCount() == first + 1 + 4); // 5 to 8
-    // Closing it: back as they were.
+    // Closing it puts them back as they were.
     editor.GetDocument().Insert(CodePosition{5, 2}, SV(u8"*/"));
     CHECK(editor.TokensOf(8)[0].Token == CodeToken::Type);
 }
@@ -264,7 +265,7 @@ TEST_CASE("code language: the shared definitions read, each tokenizing its langu
     CHECK_RUNS(Runs(as, SV(u8"int x = 3; // set"), state), u8"type:int text:x operator:= number:3 punctuation:; comment:// set");
     CHECK_RUNS(Runs(as, SV(u8"string s = \"a\\\"b\";"), state), u8"type:string text:s operator:= string:\"a escape:\\\" string:b\" punctuation:;");
     CHECK_RUNS(Runs(as, SV(u8"x = \"\"\"long"), state), u8"text:x operator:= string:\"\"\"long");
-    CHECK(state.Depth == 1); // a triple-quoted string goes on
+    CHECK(state.Depth == 1); // a triple-quoted string continues
     CHECK_RUNS(Runs(as, SV(u8"text\"\"\" + y"), state), u8"string:text\"\"\" operator:+ text:y");
 
     state = CodeLexState{};

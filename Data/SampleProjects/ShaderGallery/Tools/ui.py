@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""ui.py: the lesson list on the engine GUI (ui/Gallery.xml, styled by ui/GallerySheet.css; an asset's name is its file's, so the two may not
-share one) and the camera's
-script (scripts/Gallery.as), written from the lessons table (lessons.py): a row per lesson in the
+"""ui.py: the lesson list on the engine GUI (ui/Gallery.xml, styled by ui/GallerySheet.css; an
+asset's name is its file's, so the two may not share one) and the camera's script
+(scripts/Gallery.as), written from the lessons table (lessons.py): a row per lesson in the
 list, a click handler per row in the script (AngelScript makes a handler from a method, not from a
 number, so each row has its own).
 

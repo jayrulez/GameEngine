@@ -2,8 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample003 - Rotating Cube with Uniform Buffers + Push Constants.
-/// Ported from Sedulous Sample003_UniformBuffers.
+/// Sample003 - Rotating Cube with Uniform Buffers and Push Constants.
 
 #include <cmath>
 #include <cstdint>
@@ -121,7 +120,7 @@ foundation::core::Status UniformBufferSample::OnInit()
     batch->Submit();
     m_graphicsQueue->DestroyTransferBatch(batch);
 
-    // Bind group layout + group.
+    // Bind group layout and group.
     rhi::BindGroupLayoutEntry bglE[1] = {rhi::BindGroupLayoutEntry::UniformBuffer(
         0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment)};
     rhi::BindGroupLayoutDesc bgld{};

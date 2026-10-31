@@ -7,7 +7,7 @@
 // capability interfaces a backend implements only if it can (enumerate, write,
 // watch). C++ has no real interfaces and we build -fno-rtti, so capability
 // discovery is done with virtual As*() query methods that return the interface
-// pointer or null - the same idiom the RHI uses (see RHI/Commands.cppm). The
+// pointer or null, the same idiom the RHI uses (see RHI/Commands.cppm). The
 // capability interfaces are independent bases (not derived from IFileSystem), so
 // there is no diamond; the As*() override returns `this` (a correct compile-time
 // upcast).
@@ -46,7 +46,7 @@ export namespace foundation::vfs
         [[nodiscard]] virtual UniquePtr<IStream> Open(StringView path, FileMode mode) = 0;
         [[nodiscard]] virtual bool Exists(StringView path) = 0;
 
-        // Capability queries - default null; capable backends override to return
+        // Capability queries: default null; capable backends override to return
         // `this`. Consumers do `if (auto* w = fs.AsWritable())` rather than cast.
         [[nodiscard]] virtual IEnumerableFileSystem* AsEnumerable() noexcept { return nullptr; }
         [[nodiscard]] virtual IWritableFileSystem* AsWritable() noexcept { return nullptr; }
@@ -73,15 +73,15 @@ export namespace foundation::vfs
 
         [[nodiscard]] virtual Status Save(StringView path, Span<const byte> data) = 0;
         [[nodiscard]] virtual Status Delete(StringView path) = 0;
-        /// Create a directory and any missing ancestors (idempotent). For persisting an EMPTY
-        /// directory - writing a file makes its parents implicitly, but an empty folder (e.g. a
-        /// freshly-created, still-empty content group) needs this. Default: unsupported.
+        /// Create a directory and any missing ancestors (idempotent). For persisting an empty
+        /// directory: writing a file makes its parents implicitly, but an empty folder (e.g. a
+        /// freshly created, still-empty content group) needs this. Default: unsupported.
         [[nodiscard]] virtual Status CreateDirectory(StringView path)
         {
             (void)path;
             return Status{ErrorCode::NotSupported};
         }
-        /// Rename/move a file OR directory within the mount. Default: unsupported (archive
+        /// Rename or move a file or directory within the mount. Default: unsupported (archive
         /// and read-only backends).
         [[nodiscard]] virtual Status Move(StringView from, StringView to)
         {
@@ -89,8 +89,8 @@ export namespace foundation::vfs
             (void)to;
             return Status{ErrorCode::NotSupported};
         }
-        /// Remove an EMPTY directory (callers empty it first - deleting a directory tree is
-        /// a policy decision that belongs above the mount). Default: unsupported.
+        /// Remove an empty directory. Callers empty it first: deleting a directory tree is a
+        /// policy decision that belongs above the mount. Default: unsupported.
         [[nodiscard]] virtual Status DeleteDirectory(StringView path)
         {
             (void)path;
@@ -98,7 +98,7 @@ export namespace foundation::vfs
         }
     };
 
-    // Size + last-write time of one entry.
+    // Size and last-write time of one entry.
     struct FileStatInfo
     {
         u64 size = 0;
@@ -106,7 +106,7 @@ export namespace foundation::vfs
     };
 
     // Capability: cheap file metadata (the cook pipeline's file-hash memo key). Backends whose
-    // content is immutable (pak) simply don't implement it - consumers fall back to hashing.
+    // content is immutable (pak) don't implement it; consumers fall back to hashing.
     class IStatFileSystem
     {
     public:
@@ -128,8 +128,7 @@ export namespace foundation::vfs
         [[nodiscard]] virtual bool Poll(Array<String>& outChanged) = 0;
     };
 
-    // Capability: expose a change source for hot reload. (Seam - no backend
-    // implements this yet; lands with the hot-reload pass.)
+    // Capability: expose a change source for hot reload.
     class IWatchableFileSystem
     {
     public:

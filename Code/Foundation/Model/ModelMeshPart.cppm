@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Defines a portion of a mesh that uses a specific material.
-/// Ported from Sedulous.Models/ModelMeshPart.bf.
 
 export module foundation.model:mesh_part;
 

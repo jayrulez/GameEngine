@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Core tests - the action registry on a real EditorContext: declarations bound
+// Editor::Core tests: the action registry on a real EditorContext. Covers declarations bound
 // through the active page and the interface it publishes, the pulled enabled and checked
-// states, Execute as the one funnel with its refusals, the shortcut table (defaults,
-// overrides, collisions, reset) and the change notification; the refusals of a bad or
+// states, Execute as the single entry point and its refusals, the shortcut table (defaults,
+// overrides, collisions, reset), the change notification, and the refusal of a bad or
 // duplicate registration.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -88,7 +88,7 @@ TEST_CASE("actions: declarations bind through the active page and its published 
     EditorActionRegistry& actions = context.Actions();
     u32 changes = 0;
     gui::Effect watch([&]() { actions.TrackChanges(); ++changes; }); // a surface following the actions
-    changes = 0; // its first run reads them; the changes are what follow
+    changes = 0; // the effect's first run reads the actions; count only the changes after it
 
     // Editor-wide, always enabled.
     u32 exits = 0;
@@ -146,8 +146,8 @@ TEST_CASE("actions: declarations bind through the active page and its published 
     CHECK(actions.Execute(u8"page.save").Code() == ErrorCode::NotSupported);
     CHECK(actions.Execute(u8"nobody.home").Code() == ErrorCode::NotFound);
 
-    // A plain page, dirty: save is enabled and saves IT; simulate stays disabled (it is not
-    // that kind of page).
+    // A plain page, dirty: save is enabled and saves that page; simulate stays disabled (it is
+    // not that kind of page).
     auto* plain = static_cast<PlainPage*>(context.AdoptPage(
         UniquePtr<EditorPage>(DefaultAllocator().New<PlainPage>(), DefaultAllocator())));
     CHECK_FALSE(actions.IsEnabled(u8"page.save")); // clean
@@ -171,9 +171,9 @@ TEST_CASE("actions: declarations bind through the active page and its published 
     CHECK(actions.Execute(u8"sim.run").IsOk());
     CHECK_FALSE(sim->running);
     CHECK_FALSE(actions.IsChecked(u8"file.exit")); // a Command is never checked
-    // Back on the plain page, the toggle is out of reach again through the active subject;
-    // a surface that names the sim page as its subject still reaches it (a page's own
-    // toolbar in a split layout), and a named subject answers about ITSELF.
+    // Back on the plain page, the toggle is out of reach again through the active subject.
+    // A surface that names the sim page as its subject still reaches it (for example a page's
+    // toolbar in a split layout), and a named subject answers about itself.
     context.SetActivePage(plain);
     CHECK_FALSE(actions.IsEnabled(u8"sim.run"));
     CHECK(actions.IsEnabled(u8"sim.run", sim));
@@ -221,7 +221,7 @@ TEST_CASE("actions: the shortcut table - the default chord, the user's override,
     REQUIRE(actions.Register(Move(bare)));
     u32 changes = 0;
     gui::Effect watch([&]() { actions.TrackChanges(); ++changes; }); // a surface following the actions
-    changes = 0; // its first run reads them; the changes are what follow
+    changes = 0; // the effect's first run reads the actions; count only the changes after it
 
     CHECK(actions.Shortcut(u8"page.save") == CtrlS);
     CHECK_FALSE(actions.Shortcut(u8"view.reset").IsSet());
@@ -229,7 +229,7 @@ TEST_CASE("actions: the shortcut table - the default chord, the user's override,
     CHECK(actions.HolderOf(CtrlS) == actions.Find(u8"page.save"));
     CHECK(actions.HolderOf(EditorShortcut{}) == nullptr); // the unset chord is nobody's
     CHECK_FALSE(actions.HasOverride(u8"page.save"));
-    // The alternate is the action's too: taken, reported, never rebound.
+    // The alternate chord also belongs to the action: HolderOf reports it and Rebind refuses it.
     const EditorShortcut f6 = EditorShortcut::Of(u8"f6");
     CHECK(actions.AlternateShortcut(u8"sim.run") == f6);
     CHECK_FALSE(actions.AlternateShortcut(u8"page.save").IsSet());
@@ -259,7 +259,7 @@ TEST_CASE("actions: the shortcut table - the default chord, the user's override,
     REQUIRE(actions.Rebind(u8"view.reset", CtrlS).IsOk());
     CHECK(actions.HolderOf(CtrlS) == actions.Find(u8"view.reset"));
 
-    // Clearing = an override that is unset: "no shortcut", on purpose, distinct from the default.
+    // Clearing is an override that is unset: "no shortcut" on purpose, distinct from the default.
     REQUIRE(actions.Rebind(u8"sim.run", EditorShortcut{}).IsOk());
     CHECK_FALSE(actions.Shortcut(u8"sim.run").IsSet());
     CHECK(actions.HasOverride(u8"sim.run"));
@@ -412,7 +412,7 @@ TEST_CASE("actions: shortcut overrides persist - captured from the registry into
         d.execute = [](EditorPage*) {};
         REQUIRE(fresh.Register(Move(d)));
         EditorActionDeclaration taken = Declare(u8"edit.other", u8"Other");
-        taken.shortcut = ctrlShiftS; // holds the chord the override wants? no - page.save's own
+        taken.shortcut = ctrlShiftS; // the chord page.save's override wants
         taken.execute = [](EditorPage*) {};
         REQUIRE(fresh.Register(Move(taken)));
     }
@@ -464,9 +464,9 @@ TEST_CASE("actions: ShortcutEdits apply together - a chosen chord, a swap betwee
     REQUIRE(edits.Pending(u8"sim.run") != nullptr);
     CHECK(edits.Pending(u8"sim.run")->reset);
     edits.Set(u8"page.save", CtrlS);        // its own chord: fine
-    edits.Discard(u8"page.save");           // changed my mind
-    edits.Set(u8"page.save", F5);           // ... no: sim.run's DEFAULT comes back through the reset, so
-                                            // F5 collides with it (sim.run is staged as a reset, not freed)
+    edits.Discard(u8"page.save");           // staged, then discarded
+    edits.Set(u8"page.save", F5);           // collides: the reset brings back sim.run's default, F5
+                                            // (sim.run is staged as a reset, so F5 is not freed)
     CHECK(edits.Count() == 5u);
 
     Array<String> collisions;
@@ -496,8 +496,8 @@ TEST_CASE("actions: ShortcutEdits apply together - a chosen chord, a swap betwee
 
 TEST_CASE("actions: a shortcut override kept as a key code before chords were text reads as its keys")
 {
-    // foundation.ui's codes were USB HID usages with its modifier bits: T is 23, F5 is 62, Ctrl
-    // the bits 0x00C0, Shift 0x0003.
+    // Legacy chords hold foundation.ui's codes: USB HID usages with its modifier bits. T is 23,
+    // F5 is 62, Ctrl is the bits 0x00C0 and Shift 0x0003.
     CHECK(editor::detail::LegacyChordKeys(23u, 0x0040u) == String(u8"ctrl-t"));
     CHECK(editor::detail::LegacyChordKeys(62u, 0u) == String(u8"f5"));
     CHECK(editor::detail::LegacyChordKeys(76u, 0x0001u) == String(u8"shift-delete"));

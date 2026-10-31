@@ -3,9 +3,9 @@
 
 // Pipeline::Script - reflection implementation unit: ScriptClassAsset's reflected surface.
 //
-// Kept OUT of the ScriptAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
-// ScriptClassAsset::StaticType() gains its `language` property
-// here. No enums, so the reflection rides StaticType() with no registrar change.
+// Kept out of the ScriptAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
+// ScriptClassAsset::StaticType() gains its `language` property here. There are no enums, so the
+// reflection comes with StaticType() and needs no registrar.
 
 module;
 #include "Core/Prelude.h"

@@ -5,8 +5,7 @@
 //
 // XmlDocument: the DOM root, recursive-descent parser, node factory, and query
 // methods. Also supplies the out-of-line definitions of XmlNode::OwnerDocument
-// and XmlWriter::WriteDocument (both need XmlDocument complete). Ported from
-// Sedulous.Xml/XmlDocument.bf.
+// and XmlWriter::WriteDocument (both need XmlDocument complete).
 
 module;
 #include "Core/Prelude.h"
@@ -37,10 +36,10 @@ export namespace foundation::xml
     class XmlDocument final : public XmlNode
     {
     public:
-        // The allocator (required - the owner decides) backs every node in this tree.
+        // The allocator (required: the owner decides) backs every node in this tree.
         explicit XmlDocument(IAllocator& allocator) : XmlNode(allocator, XmlNodeType::Document) {}
 
-        // Tracks declaration + root element as children are appended.
+        // Tracks the declaration and root element as children are appended.
         void AppendChild(XmlNode* child) override
         {
             XmlNode::AppendChild(child);
@@ -232,7 +231,7 @@ export namespace foundation::xml
                 SkipWhitespace(text);
             }
 
-            // Misc (comments/PIs) before the root element.
+            // Misc (comments, PIs) before the root element.
             const XmlResult before = ParseMisc(text);
             if (before != XmlResult::Ok)
             {
@@ -279,7 +278,7 @@ export namespace foundation::xml
             return XmlResult::Ok;
         }
 
-        // Parses leading comments/PIs until a non-misc token; returns Ok at that point.
+        // Parses leading comments and PIs until a non-misc token; returns Ok at that point.
         XmlResult ParseMisc(StringView& text)
         {
             while (!text.IsEmpty())
@@ -801,11 +800,9 @@ export namespace foundation::xml
             return m_lineAt;
         }
 
-        // The parsers thread ONE `remaining` view by reference, so where it stands when a
-        // parse function fails is where the error is. Line/column are 1-based; a column
+        // The parsers thread one `remaining` view by reference, so where it stands when a
+        // parse function fails is where the error is. Line and column are 1-based; a column
         // counts code points, not bytes (UTF-8 continuation bytes do not advance it).
-        // Before 2026-09-07 these were set to 1 at the top of Parse and never touched,
-        // so every XML diagnostic in the editor pointed at line 0.
         void RecordErrorPosition(StringView whole, StringView remaining) noexcept
         {
             const utf8char* begin = whole.Data();

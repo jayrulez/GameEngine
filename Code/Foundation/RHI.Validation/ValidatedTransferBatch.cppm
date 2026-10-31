@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for TransferBatch.
-/// Ported from Sedulous.RHI.Validation/ValidatedTransferBatch.bf.
 
 module;
 #include "Core/Prelude.h"

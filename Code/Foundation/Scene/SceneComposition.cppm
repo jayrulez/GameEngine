@@ -7,14 +7,13 @@
 /// (a static blueprint, `SceneModule` + `SceneComposition`) from "who reacts to a scene's lifecycle"
 /// (`ISceneObserver` + `SceneLifecycleStage`), and centralizes the per-scene time-scale chain in
 /// `FrameTime`. `SceneRegistry` is the pure, non-Subsystem state that a thin `SceneSubsystem`
-/// drives - the app-wide observer list + the registered `SceneManager` list + the cross-scene
-/// sweeps, testable with no `Context`.
+/// drives: the app-wide observer list, the registered `SceneManager` list and the cross-scene
+/// sweeps, testable with no `SubsystemManager`.
 ///
 /// All types are runtime-free (foundation.scene never reaches up to the runtime layer) and are built
 /// on `foundation.core` value types only. `SceneModule` and `SceneComposition` are the single source of
-/// truth that both the runtime path and headless scene consumers (Engine.Composition transcode / MCP
-/// validate) instantiate scenes from, replacing the imperative, duplicated `AddAllSceneManagers` list
-/// and its `kSceneSystemCount` count tripwire.
+/// truth that both the runtime path and headless scene consumers (Engine.Composition transcode, MCP
+/// validate) instantiate scenes from.
 
 module;
 #include "Core/Prelude.h"
@@ -33,13 +32,11 @@ export namespace foundation::scene
 {
 
     // ---- Lifecycle stage + observer -----------------------------------------------------------------
-    // The explicit, ordered lifecycle a scene walks. Assembly no longer happens through observation:
+    // The explicit, ordered lifecycle a scene walks. Assembly does not happen through observation:
     // a module installs systems (SceneComposition), and an observer reacts at one of these stages.
-    // NOTE deliberately NO Started/Stopped stages: they were declared in the first cut and
-    // never fired anywhere (Scene::Start/Stop are invoked directly on the Scene, out of the
-    // registry's sight), and domain logic already has SceneSystem::OnSceneStarted/Stopped.
-    // Re-add WITH wiring if an app-level observer ever genuinely needs them (2026-08-19
-    // review: ship only stages that fire).
+    // There are no Started/Stopped stages: Scene::Start/Stop are invoked directly on the Scene,
+    // out of the registry's sight, and domain logic has SceneSystem::OnSceneStarted/Stopped.
+    // Add them only together with the wiring that fires them.
     enum class SceneLifecycleStage : u8
     {
         Composing = 0, // a scene object exists; systems are being installed into it
@@ -50,9 +47,8 @@ export namespace foundation::scene
 
     class Scene; // defined in :scene (same module)
 
-    // An observer reacts to ONE stage of a scene's lifecycle. Register it on a SceneRegistry with
-    // AddObserver(observer, stage). Order() (lower first) breaks ties within a stage - the replacement
-    // the explicit, data-driven replacement for the old injection flow.
+    // An observer reacts to one stage of a scene's lifecycle. Register it on a SceneRegistry with
+    // AddObserver(observer, stage). Order() (lower first) breaks ties within a stage.
     class ISceneObserver
     {
     public:
@@ -66,7 +62,7 @@ export namespace foundation::scene
     };
 
     // ---- SceneModule: one domain's declarative "how to build a scene" -------------------------------
-    // Replaces the free Add<Domain>SceneManagers + Register<Domain>ComponentReflection pair. `dependsOn`
+    // Installs a domain's scene systems and registers its component reflection. `dependsOn`
     // (pointers to sibling modules) declares cross-domain construction order as data, not tick order.
     class SceneModule
     {
@@ -114,14 +110,14 @@ export namespace foundation::scene
         Span<const SceneModule*> m_dependsOn;
     };
 
-    // ---- SceneModuleContributions: modules added at RUNTIME (game-native-code.md S1) ---------------
-    // A game's native plugin contributes its component managers here from OnLoad; EVERY
+    // ---- SceneModuleContributions: modules added at runtime -----------------------------------------
+    // A game's native plugin contributes its component managers here from OnLoad; every
     // SceneComposition::Instantiate appends the contributed modules after its own order (so the
     // runtime SceneSubsystem path and the headless AddAllSceneManagers path both see them), and
     // scenes already alive get them applied through the live-scene sink the SceneSubsystem
     // installs. Keyed by the installed system's TypeId (one manager type per contribution) so
     // removal can find it in live scenes. Process-single: the accessor is defined in the
-    // implementation unit (shared-libraries.md rendezvous rule), and PluginHost records
+    // implementation unit so every shared library reaches one instance, and PluginHost records
     // contributions through the observer so unload reverses them.
     class SceneModuleContributions
     {
@@ -131,13 +127,13 @@ export namespace foundation::scene
             StringView id;        // borrowed literal (the plugin's)
             SceneModule::InstallFn install = nullptr;
             SceneModule::RegisterReflectionFn registerReflection = nullptr;
-            TypeId systemType = 0; // TypeOf<TheManager>().id - the live-removal key
+            TypeId systemType = 0; // TypeOf<TheManager>().id, the live-removal key
         };
 
         [[nodiscard]] static SceneModuleContributions& Global() noexcept;
 
         // Idempotent by systemType. Applies to live scenes (when a sink is installed) and
-        // fires the observer only on a REAL insert.
+        // fires the observer only on a real insert.
         void Add(const Contribution& contribution);
         // Removes from live scenes first (the manager dies while its code is mapped), then
         // forgets the contribution. No-op when absent.
@@ -159,7 +155,7 @@ export namespace foundation::scene
             m_liveVisitor = visitor;
             m_liveContext = context;
         }
-        // After a contribution installs into a LIVE scene: the owner's chance to resolve
+        // After a contribution installs into a live scene: the owner's chance to resolve
         // preserved component records into the new manager (Scene.Resource does that; this
         // partition is runtime- and resource-free, so it is a hook).
         using LiveInstallHook = void (*)(void* context, Scene& scene);
@@ -200,17 +196,15 @@ export namespace foundation::scene
     public:
         SceneComposition() = default;
 
-        // Builds the topologically sorted module order from `modules`. The composition COPIES each
-        // module BY VALUE (a SceneModule is a StringView id + two function pointers) and drops its
-        // `dependsOn` span - dependency pointers are BUILD-TIME data only, consulted here and never
-        // retained. That makes the composition self-contained: callers may build from stack-local /
-        // temporary module objects (the 2026-08-19 review found the pointer-retaining version
-        // dereferencing a dead stack module - the exact dangling-pointer strain #5 this redesign set
-        // out to remove, reintroduced; GCC caught it, clang passed on stack-layout luck).
+        // Builds the topologically sorted module order from `modules`. The composition copies each
+        // module by value (a SceneModule is a StringView id and two function pointers) and drops its
+        // `dependsOn` span: dependency pointers are build-time data only, consulted here and never
+        // retained. That makes the composition self-contained, so callers may build from stack-local
+        // or temporary module objects.
         // A module whose dependency is absent from `modules` treats that dependency as satisfied (it
-        // is out of scope for this composition). A dependency CYCLE is broken LOUDLY: the first
+        // is out of scope for this composition). A dependency cycle is broken with an error: the first
         // remaining module is emitted with an error log naming it, so Build always terminates and
-        // contains every module exactly once - and the authoring mistake is visible, not silent.
+        // contains every module exactly once, and the authoring mistake is visible.
         static SceneComposition Build(Span<const SceneModule*> modules)
         {
             SceneComposition comp;
@@ -268,7 +262,7 @@ export namespace foundation::scene
                 }
                 if (pick == remaining.Size())
                 {
-                    pick = 0; // cycle: make progress - but never silently (house rule)
+                    pick = 0; // cycle: make progress, but never silently
                     LOG_ERROR(u8"Scene",
                               u8"scene-module dependency CYCLE - emitting '{}' out of order; fix "
                               u8"the dependsOn declarations",
@@ -276,8 +270,8 @@ export namespace foundation::scene
                 }
                 const SceneModule* src = remaining[pick];
                 placedPtrs.PushBack(src);
-                // Stored copy: id + the two functions. dependsOn is deliberately NOT carried
-                // (build-time-only; a retained span would dangle exactly like the module ptr did).
+                // Stored copy: id and the two functions. dependsOn is not carried (build-time
+                // only; a retained span could dangle once the caller's modules are gone).
                 comp.m_order.PushBack(SceneModule{src->Id(), src->InstallFunction(),
                                                   src->RegisterReflectionFunction()});
                 remaining.RemoveAt(pick);
@@ -285,8 +279,8 @@ export namespace foundation::scene
             return comp;
         }
 
-        // Adds every module's declared systems to `scene`, in dependency order - then every
-        // runtime CONTRIBUTION (a game's native managers; game-native-code.md S1).
+        // Adds every module's declared systems to `scene`, in dependency order, then every
+        // runtime contribution (a game's native managers).
         void Instantiate(Scene& scene) const
         {
             for (const SceneModule& m : m_order)
@@ -297,7 +291,7 @@ export namespace foundation::scene
         }
 
         // Registers every module's component reflection (idempotent aggregate; call once at
-        // startup) - contributions included.
+        // startup), contributions included.
         void RegisterReflection() const
         {
             for (const SceneModule& m : m_order)
@@ -310,12 +304,12 @@ export namespace foundation::scene
         [[nodiscard]] usize ModuleCount() const noexcept { return m_order.Size(); }
 
     private:
-        Array<SceneModule> m_order; // topologically sorted; OWNED copies (self-contained)
+        Array<SceneModule> m_order; // topologically sorted; owned copies (self-contained)
     };
 
-    // ---- SceneRegistry: the pure scene-hardware state (testable with no Context) --------------------
-    // Holds the composition + observer list + the registered SceneManager list + the cross-scene
-    // sweeps. A future thin SceneSubsystem will own one and just fan the Context lanes over it.
+    // ---- SceneRegistry: the pure scene state (testable with no SubsystemManager) --------------------
+    // Holds the composition, the observer list, the registered SceneManager list and the cross-scene
+    // sweeps. Engine.Scene's SceneSubsystem owns one and fans the frame phases over it.
     class SceneRegistry
     {
     public:
@@ -384,7 +378,7 @@ export namespace foundation::scene
             }
         }
 
-        // ---- manager registry (every SceneManager ticks on the Context-driven lane) ----
+        // ---- manager registry (every SceneManager ticks on the subsystem-driven lane) ----
         void RegisterManager(SceneManager* manager)
         {
             if (manager == nullptr)
@@ -434,7 +428,7 @@ export namespace foundation::scene
         }
 
         // ---- lane drive (the fan-out a thin SceneSubsystem performs each frame) ----
-        // The bridge builds ONE FrameTime (raw dt + context scale + fixed step); each manager
+        // The bridge builds one FrameTime (raw dt, context scale, fixed step); each manager
         // folds in its group term and each scene its own term (the chain in :frame_time).
         void BeginFrame(const FrameTime& time)
         {

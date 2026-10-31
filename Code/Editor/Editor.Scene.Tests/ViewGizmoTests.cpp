@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the orientation gizmo's pure parts: where the knobs sit for a camera (and
-// in which order they draw), which knob a click lands on, and the camera a click snaps to.
+// Editor::Scene tests: the pure parts of the orientation gizmo. They cover where the knobs sit for
+// a camera (and the order they draw in), which knob a click lands on, and the camera a click
+// snaps to.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -115,7 +116,7 @@ TEST_CASE("view gizmo: a knob snaps the camera to look along its axis, about the
         CHECK(Near(after.z, pivot.z));
     }
 
-    // Top: straight down, keeping the yaw; bottom: straight up.
+    // Top looks straight down, keeping the yaw; bottom looks straight up.
     f32 yaw = 0.0f;
     f32 pitch = 0.0f;
     editor::ViewGizmo::SnapAngles(Float3{0, 1, 0}, 0.7f, yaw, pitch);
@@ -141,7 +142,7 @@ TEST_CASE("view gizmo: knobs are labelled by axis, coloured by axis, the negativ
     CHECK(dimGreen.g > dimGreen.r);
     const editor::ViewGizmoPole y{Float3{0, 1, 0}, true, {}, 0.0f};
     CHECK(dimGreen.g < editor::ViewGizmo::ColorOf(y, false).g);
-    CHECK(editor::ViewGizmo::ColorOf(x, true).r >= red.r); // hovered: no dimmer
+    CHECK(editor::ViewGizmo::ColorOf(x, true).r >= red.r); // hovered is no dimmer
 }
 
 TEST_CASE("view gizmo: the centre switches the projection, unless a knob covers it")

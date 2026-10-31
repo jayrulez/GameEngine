@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Phase 5 - whole-scene serialization round-trip: serialize a scene (entities +
-// transform hierarchy + components) to bytes and deserialize into a fresh scene,
+// Whole-scene serialization round-trip: serialize a scene (entities, transform
+// hierarchy, components) to bytes and deserialize into a fresh scene,
 // preserving Guids, names, parent links, transforms, and component data.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -102,14 +102,14 @@ TEST_CASE("scene round-trips through SerializeScene (entities, hierarchy, transf
 TEST_CASE("scene load: an entity saved INACTIVE (incl. inactive parent / active child) starts dark")
 {
     // The scene-starts-inactive requirement: the loader calls
-    // SetActive during the entities block and relinks parents AFTER - the reparent choke
-    // point must settle effective state, so a child that is own-active under a saved-inactive
+    // SetActive during the entities block and relinks parents after, so the reparent
+    // must settle effective state: a child that is own-active under a saved-inactive
     // parent loads effectively inactive with its own flag intact.
     Scene a(DefaultAllocator(), u8"start-inactive");
     EntityHandle parent = a.CreateEntity(u8"parent");
     EntityHandle child = a.CreateEntity(u8"child");
     a.SetParent(child, parent);
-    a.SetActive(parent, false); // child's OWN flag stays true
+    a.SetActive(parent, false); // child's own flag stays true
 
     const Guid parentId = a.GetEntityId(parent);
     const Guid childId = a.GetEntityId(child);
@@ -160,9 +160,9 @@ TEST_CASE("empty scene round-trips")
     CHECK(b.EntityCount() == 0);
 }
 
-// Sibling ORDER round-trips: entities are written in TREE order (roots in list order,
-// depth-first children), so load's create+relink sequence reproduces the reordered lists -
-// the editor hierarchy is reorderable and saves must preserve it.
+// Sibling order round-trips: entities are written in tree order (roots in list order,
+// depth-first children), so load's create-then-relink sequence reproduces the reordered
+// lists. The editor hierarchy is reorderable and saves must preserve it.
 TEST_CASE("scene-serialize: sibling order round-trips after reorders")
 {
     Scene scene(DefaultAllocator(), u8"ordered");
@@ -206,14 +206,13 @@ TEST_CASE("scene-serialize: sibling order round-trips after reorders")
     CHECK(loaded.GetEntityName(k2) == u8"b");
 }
 
-// Regression (user-hit, corrupted a real save): the scene's guid RNG is deterministic and a
-// LOAD does not advance it, so entities created after a load reproduced loaded guids - and
-// since editor commands route BY GUID, edits landed on the wrong entity. CreateEntity
-// re-rolls on collision; loading a save that already contains duplicates recovers by
-// reassigning fresh ids (warning) instead of asserting.
+// The scene's guid RNG is deterministic and a load does not advance it, so entities created
+// after a load could reproduce loaded guids, and since editor commands route by guid, edits
+// would land on the wrong entity. CreateEntity re-rolls on collision; loading a save that
+// already contains duplicates recovers by reassigning fresh ids (warning) instead of asserting.
 TEST_CASE("scene-serialize: fresh guids never collide with loaded entities")
 {
-    // Session 1: create + save.
+    // Session 1: create and save.
     MemoryStream blob;
     Guid firstId;
     {
@@ -224,7 +223,7 @@ TEST_CASE("scene-serialize: fresh guids never collide with loaded entities")
         REQUIRE(ar.IsOk());
     }
 
-    // Session 2 (fresh scene = fresh deterministic RNG): load, then create MORE entities.
+    // Session 2 (fresh scene, fresh deterministic RNG): load, then create more entities.
     Scene loaded{DefaultAllocator()};
     REQUIRE(blob.Seek(0, SeekOrigin::Begin) == 0);
     {
@@ -245,13 +244,13 @@ TEST_CASE("scene-serialize: fresh guids never collide with loaded entities")
 
 TEST_CASE("scene-serialize: a save with duplicate entity guids loads with recovery")
 {
-    // Forge a corrupt save: two entities sharing one guid (the pre-fix bug's output).
+    // Forge a corrupt save: two entities sharing one guid.
     MemoryStream blob;
     Guid shared;
     {
         Scene scene{DefaultAllocator()};
         shared = scene.GetEntityId(scene.CreateEntity(u8"Original"));
-        (void)scene.CreateEntity(shared, u8"Impostor"); // explicit-guid create = the corruption
+        (void)scene.CreateEntity(shared, u8"Impostor"); // explicit-guid create makes the corruption
         BinarySerializer ar(blob, SerializeMode::Write);
         SerializeScene(ar, scene);
         REQUIRE(ar.IsOk());
@@ -289,7 +288,7 @@ TEST_CASE("scene-snapshot: capture -> simulate-style mutations -> restore into t
     UniquePtr<SceneSnapshot> snapshot = SceneSnapshot::Capture(scene);
     REQUIRE(snapshot);
 
-    // "Runtime" mutations: move + damage the hero, destroy the prop, spawn a projectile.
+    // "Runtime" mutations: move and damage the hero, destroy the prop, spawn a projectile.
     scene.SetLocalPosition(hero, Float3{9, 9, 9});
     mgr->Get(hero)->value = 1.0f;
     scene.DestroyEntity(prop);
@@ -299,7 +298,7 @@ TEST_CASE("scene-snapshot: capture -> simulate-style mutations -> restore into t
     REQUIRE(snapshot->Restore(scene).IsOk());
 
     // The exact pre-play world: hero back at its pose/value, the prop resurrected under its
-    // ORIGINAL guid, the runtime spawn gone.
+    // original guid, the runtime spawn gone.
     const EntityHandle heroRestored = scene.FindEntity(heroId);
     REQUIRE(heroRestored.IsAssigned());
     CHECK(Near(scene.GetLocalTransform(heroRestored).position.x, 1.0f));
@@ -332,7 +331,7 @@ namespace
         TurretManager() : SerializableComponentManager<Turret>(u8"demo.Turret") {}
     };
 
-    // A component that REFERENCES another entity (via EntityRef) - the prefab-remap subject.
+    // A component that references another entity (via EntityRef): the prefab-remap subject.
     struct Link
     {
         foundation::scene::EntityRef target;
@@ -361,7 +360,7 @@ REFLECT_VALUE(Link, "demo")
 
 TEST_CASE("scene-serialize: component records carry the reflected type's data version")
 {
-    RttiRegisterValue_Turret(); // patches TypeOf<Turret> (name + dataVersion 3)
+    RttiRegisterValue_Turret(); // patches TypeOf<Turret> (name and dataVersion 3)
     REQUIRE(TypeOf<Turret>().dataVersion == 3u);
 
     Scene a(DefaultAllocator(), u8"level");
@@ -386,15 +385,15 @@ TEST_CASE("scene-serialize: component records carry the reflected type's data ve
     mgr->ForEach([&](Turret& t, EntityHandle) { loaded = &t; });
     REQUIRE(loaded != nullptr);
     CHECK(loaded->range == doctest::Approx(9.0f));
-    // The record's stored version was active while the component deserialized - the seam a
+    // The record's stored version was active while the component deserialized: the hook a
     // component's Serialize migrates through when its layout changes.
     CHECK(loaded->seenVersion == 3u);
 }
 
 namespace
 {
-    // A scene system with a scene-LEVEL settings block (the Sedulous scene-modules pattern:
-    // environment/sky-style state, one per scene, shown in the inspector when no entity is
+    // A scene system with a scene-level settings block (environment/sky-style state, one per
+    // scene, shown in the inspector when no entity is
     // selected and persisted with the scene).
     struct FogSettings
     {
@@ -447,7 +446,7 @@ TEST_CASE("scene-serialize: scene-system settings round-trip; short or stale str
     }
 
     // --- a stream cut short (the shape of a save from before the settings / prefab sections
-    // existed) FAILS the read: sections are required, never probed for ---
+    // existed) fails the read: sections are required, never probed for ---
     Scene old(DefaultAllocator(), u8"old");
     (void)old.CreateEntity(u8"e");
     MemoryStream full;
@@ -469,7 +468,7 @@ TEST_CASE("scene-serialize: scene-system settings round-trip; short or stale str
         CHECK_FALSE(reader.IsOk());
     }
 
-    // --- a stream stamped with another format version is REFUSED at the header ---
+    // --- a stream stamped with another format version is refused at the header ---
     MemoryStream stale;
     (void)stale.Write(full.Bytes().Data(), full.Bytes().Size());
     {
@@ -506,7 +505,7 @@ TEST_CASE("prefab: capture -> spawn twice (fresh guids, hierarchy, components, b
     EntityHandle barrel = author.CreateEntity(u8"Barrel");
     author.SetParent(barrel, root);
     author.SetLocalPosition(
-        root, Float3{9, 9, 9}); // authoring placement - NOT part of the payload semantics
+        root, Float3{9, 9, 9}); // authoring placement, not part of the payload semantics
     author.SetLocalPosition(barrel, Float3{0, 1, 0});
     authorHealth->Add(root).value = 40.0f;
     authorHealth->Add(barrel).value = 10.0f;
@@ -576,19 +575,19 @@ TEST_CASE("prefab: an intra-prefab EntityRef remaps to the instance's own copy")
     REQUIRE(links->Has(inst1));
     REQUIRE(links->Has(inst2));
 
-    // Each instance's link points at THAT instance's Other - remapped, not the author's source guid
+    // Each instance's link points at that instance's Other: remapped, not the author's source guid
     // and not the sibling instance's copy.
     CHECK(links->Get(inst1)->target.id == target.GetEntityId(other1));
     CHECK(links->Get(inst2)->target.id == target.GetEntityId(other2));
     CHECK(links->Get(inst1)->target.id != links->Get(inst2)->target.id);
-    // (Deliberately no "!= author's guid" check: two fresh scenes mint guids from the same
-    // deterministic sequence, so inst1's copy can share a guid VALUE with the author's - harmless,
-    // since it still resolves to inst1's own child. Pointing at the OWN copy is the real invariant.)
+    // No "!= author's guid" check: two fresh scenes mint guids from the same deterministic
+    // sequence, so inst1's copy can share a guid value with the author's. That is harmless,
+    // since it still resolves to inst1's own child; pointing at its own copy is the invariant.
 }
 
 TEST_CASE("prefab: an EntityRef pointing OUTSIDE the prefab is left unchanged")
 {
-    const Guid external{0x1234, 0x5678}; // an entity that is NOT part of the prefab
+    const Guid external{0x1234, 0x5678}; // an entity that is not part of the prefab
 
     Scene author(DefaultAllocator(), u8"author");
     RttiRegisterValue_Link(); // build Link's reflection (Properties) so the prefab remap sees `target`
@@ -610,7 +609,7 @@ TEST_CASE("prefab: an EntityRef pointing OUTSIDE the prefab is left unchanged")
 
 TEST_CASE("prefab: scenes save instances as ref+deltas and restore them (overrides survive)")
 {
-    // Author + capture the payload.
+    // Author and capture the payload.
     Scene author(DefaultAllocator(), u8"author");
     HealthManager* authorHealth = author.AddSystem<HealthManager>();
     EntityHandle root = author.CreateEntity(u8"Tower");
@@ -623,7 +622,7 @@ TEST_CASE("prefab: scenes save instances as ref+deltas and restore them (overrid
     MemoryStream payload;
     REQUIRE(CapturePrefab(author, root, payload).IsOk());
 
-    // Level: one plain entity + one instance with EVERY delta kind.
+    // Level: one plain entity and one instance with every delta kind.
     Scene level(DefaultAllocator(), u8"level");
     HealthManager* health = level.AddSystem<HealthManager>();
     EntityHandle plain = level.CreateEntity(u8"Plain");
@@ -644,7 +643,7 @@ TEST_CASE("prefab: scenes save instances as ref+deltas and restore them (overrid
     const Guid instId = level.GetEntityId(inst);
     const Guid instTopId = level.GetEntityId(instTop);
 
-    // Save (Referenced) -> the instance's members are NOT plain records.
+    // Save (Referenced): the instance's members are not plain records.
     MemoryStream saved;
     {
         BinarySerializer w(saved, SerializeMode::Write);
@@ -652,7 +651,7 @@ TEST_CASE("prefab: scenes save instances as ref+deltas and restore them (overrid
         REQUIRE(w.IsOk());
     }
 
-    // Load into a fresh scene + resolve prefabs with a payload resolver.
+    // Load into a fresh scene and resolve prefabs with a payload resolver.
     Scene loaded(DefaultAllocator(), u8"loaded");
     HealthManager* loadedHealth = loaded.AddSystem<HealthManager>();
     (void)saved.Seek(0, SeekOrigin::Begin);
@@ -678,14 +677,14 @@ TEST_CASE("prefab: scenes save instances as ref+deltas and restore them (overrid
                                 return UniquePtr<IStream>(stream.Release(), DefaultAllocator());
                             }});
 
-    // Identity: the instance respawned with its SAVED guids.
+    // Identity: the instance respawned with its saved guids.
     EntityHandle lInst = loaded.FindEntity(instId);
     EntityHandle lTop = loaded.FindEntity(instTopId);
     REQUIRE(lInst.IsAssigned());
     REQUIRE(lTop.IsAssigned());
     CHECK(loaded.PrefabInstanceCount() == 1u);
 
-    // Placement + every delta kind survived.
+    // Placement and every delta kind survived.
     CHECK(Near(loaded.GetLocalTransform(lInst).position.x, 5.0f));
     CHECK(Near(loaded.GetLocalTransform(lTop).position.y, 2.0f)); // transform override
     REQUIRE(loadedHealth->Has(lTop));
@@ -742,7 +741,7 @@ TEST_CASE("prefab: destroyed members stay destroyed across save/load")
                                 return UniquePtr<IStream>(stream.Release(), DefaultAllocator());
                             }});
 
-    // Root + ONE surviving child (the destroyed member did not respawn).
+    // Root and one surviving child (the destroyed member did not respawn).
     EntityHandle lRoot = loaded.GetFirstRoot();
     REQUIRE(lRoot.IsAssigned());
     u32 childCount = 0;
@@ -783,7 +782,7 @@ TEST_CASE("prefab: snapshots expand instances and restore their state resolver-f
     REQUIRE(restored.IsAssigned());
     REQUIRE(health->Has(restored));
     CHECK(Near(health->Get(restored)->value, 34.0f));
-    CHECK(level.PrefabInstanceCount() == 1u); // bookkeeping restored WITHOUT a resolver
+    CHECK(level.PrefabInstanceCount() == 1u); // bookkeeping restored without a resolver
     Scene::PrefabInstanceState* state = level.FindPrefabInstanceByRoot(instId);
     REQUIRE(state != nullptr);
     CHECK(state->prefabId == prefabId);
@@ -812,7 +811,7 @@ TEST_CASE("prefab: template rebuild preserves deltas and picks up new members")
     health->Get(instDoor)->value = 21.0f;          // user override
     level.SetLocalPosition(inst, Float3{3, 0, 0}); // placement
 
-    // Template v2: door healthier + a brand-new window member.
+    // Template v2: door healthier, and a brand-new window member.
     authorHealth->Get(door)->value = 25.0f;
     EntityHandle window = author.CreateEntity(u8"Window");
     author.SetParent(window, root);
@@ -864,7 +863,7 @@ TEST_CASE("prefab: apply-as-template keeps source ids; revert discards deltas")
     REQUIRE(inst.IsAssigned());
     EntityHandle instWheel = level.GetFirstChild(inst);
 
-    // Member queries + override detection.
+    // Member queries and override detection.
     PrefabMemberInfo member;
     REQUIRE(FindPrefabMember(level, level.GetEntityId(instWheel), member));
     CHECK(member.state->sourceIds[member.memberIndex] == wheelSourceId);
@@ -874,7 +873,7 @@ TEST_CASE("prefab: apply-as-template keeps source ids; revert discards deltas")
     health->Get(instWheel)->value = 11.0f;
     CHECK(IsPrefabComponentOverridden(level, member, *mgr));
 
-    // Apply-as-template: edits + a user-added child become the template, keyed by SOURCE ids.
+    // Apply-as-template: edits and a user-added child become the template, keyed by source ids.
     EntityHandle lamp = level.CreateEntity(u8"Lamp");
     level.SetParent(lamp, inst);
     MemoryStream applied;
@@ -883,11 +882,11 @@ TEST_CASE("prefab: apply-as-template keeps source ids; revert discards deltas")
     Scene check(DefaultAllocator(), u8"check");
     HealthManager* checkHealth = check.AddSystem<HealthManager>();
     (void)applied.Seek(0, SeekOrigin::Begin);
-    HashMap<Guid, Guid> pin; // spawn with source ids AS live ids to inspect the template
+    HashMap<Guid, Guid> pin; // spawn with source ids as live ids to inspect the template
     pin.InsertOrAssign(wheelSourceId, wheelSourceId);
     EntityHandle tRoot = SpawnPrefab(check, applied, prefabId, EntityHandle::Invalid(), &pin);
     REQUIRE(tRoot.IsAssigned());
-    EntityHandle tWheel = check.FindEntity(wheelSourceId); // SOURCE id preserved
+    EntityHandle tWheel = check.FindEntity(wheelSourceId); // source id preserved
     REQUIRE(tWheel.IsAssigned());
     CHECK(Near(checkHealth->Get(tWheel)->value, 11.0f)); // the applied override
     u32 kids = 0;
@@ -895,12 +894,12 @@ TEST_CASE("prefab: apply-as-template keeps source ids; revert discards deltas")
     {
         ++kids;
     }
-    CHECK(kids == 2u); // wheel + the applied lamp
+    CHECK(kids == 2u); // wheel and the applied lamp
 
-    // Revert: back to the ORIGINAL template, same guids, deltas gone.
+    // Revert: back to the original template, same guids, deltas gone.
     const Guid instId = level.GetEntityId(inst);
     const Guid instWheelId = level.GetEntityId(instWheel);
-    level.SetLocalPosition(inst, Float3{7, 0, 0}); // placement must SURVIVE revert
+    level.SetLocalPosition(inst, Float3{7, 0, 0}); // placement must survive revert
     const Span<const byte> original = payload.Bytes();
     REQUIRE(RevertPrefabInstance(level, instId, original));
     EntityHandle rInst = level.FindEntity(instId);
@@ -914,15 +913,15 @@ TEST_CASE("prefab: apply-as-template keeps source ids; revert discards deltas")
     {
         ++rKids;
     }
-    CHECK(rKids == 1u); // the user-added lamp is gone? NO -
-    // the lamp was parented under the instance but is NOT a member; destroying the root took
-    // it with the subtree. That is the documented revert semantic: non-member children die
-    // with the instance they live under.
+    CHECK(rKids == 1u); // the user-added lamp is gone:
+    // the lamp was parented under the instance but is not a member; destroying the root took
+    // it with the subtree. That is the revert semantic: non-member children die with the
+    // instance they live under.
 }
 
 TEST_CASE("prefab: a multi-root payload is REFUSED on spawn (nothing left behind)")
 {
-    // Author TWO root entities and serialize the whole scene: not a prefab payload (a prefab is
+    // Author two root entities and serialize the whole scene: not a prefab payload (a prefab is
     // one root's subtree). Spawn refuses it instead of guessing where the extra root belongs,
     // and tears down what it had created.
     Scene author(DefaultAllocator(), u8"author");
@@ -973,7 +972,7 @@ TEST_CASE("prefab: apply-as-template keeps the template root transform, not the 
     EntityHandle inst = SpawnPrefab(level, payload, Guid{0x77, 0x3});
     REQUIRE(inst.IsAssigned());
 
-    // Move the instance root - that's PLACEMENT, not template content.
+    // Move the instance root: that is placement, not template content.
     Transform placed;
     placed.position = Float3{50.0f, 0.0f, -9.0f};
     level.SetLocalTransform(inst, placed);
@@ -983,7 +982,7 @@ TEST_CASE("prefab: apply-as-template keeps the template root transform, not the 
     MemoryStream captured;
     REQUIRE(CaptureInstanceAsTemplate(level, *state, captured).IsOk());
 
-    // Respawn the captured template elsewhere: the root sits at the AUTHORED transform.
+    // Respawn the captured template elsewhere: the root sits at the authored transform.
     Scene other(DefaultAllocator(), u8"other");
     (void)captured.Seek(0, SeekOrigin::Begin);
     EntityHandle fresh = SpawnPrefab(other, captured, Guid{0x77, 0x3});
@@ -998,7 +997,7 @@ TEST_CASE("prefab: apply-as-template keeps the template root transform, not the 
 
 namespace
 {
-    // Author a Q template: root "Wheel" (health 10) + child "Hub" (health 5).
+    // Author the inner template: root "Wheel" (health 10) and child "Hub" (health 5).
     Array<byte> AuthorInnerTemplate()
     {
         Scene author(DefaultAllocator(), u8"author");
@@ -1018,9 +1017,9 @@ namespace
         return bytes;
     }
 
-    // Author the OUTER template "Cart" in an edit scene: own entity "Body" (health 40) + an
+    // Author the outer template "Cart" in an edit scene: own entity "Body" (health 40) and an
     // instance of the inner template whose Wheel is customized to 11. Saved via the
-    // SavePrefab path (Referenced, no settings) so nesting persists as a RECORD.
+    // SavePrefab path (Referenced, no settings) so nesting persists as a record.
     struct OuterAuthoring
     {
         Array<byte> payload;
@@ -1038,7 +1037,7 @@ namespace
         (void)innerStream.Seek(0, SeekOrigin::Begin);
         EntityHandle wheel = SpawnPrefab(edit, innerStream, innerId, body);
         REQUIRE(wheel.IsAssigned());
-        // Owner customization: the Wheel's health becomes 11 INSIDE the Cart template.
+        // Owner customization: the Wheel's health becomes 11 inside the Cart template.
         health->Get(wheel)->value = 11.0f;
 
         MemoryStream out;
@@ -1099,11 +1098,11 @@ TEST_CASE("prefab: nested instance spawns linked, owner customization is BASELIN
         SpawnPrefab(level, outerStream, outerId, EntityHandle::Invalid(), nullptr, &resolver);
     REQUIRE(cart.IsAssigned());
 
-    // Two states: the Cart (top-level) + the nested Wheel instance linked to it.
+    // Two states: the Cart (top-level) and the nested Wheel instance linked to it.
     Scene::PrefabInstanceState* cartState = level.FindPrefabInstanceByRoot(level.GetEntityId(cart));
     REQUIRE(cartState != nullptr);
     CHECK(cartState->ownerRootEntityId.IsNil());
-    REQUIRE(cartState->referencedPrefabIds.Size() == 2u); // own + inner
+    REQUIRE(cartState->referencedPrefabIds.Size() == 2u); // own and inner
     Scene::PrefabInstanceState* wheelState = nullptr;
     level.ForEachPrefabInstance(
         [&](Scene::PrefabInstanceState& s)
@@ -1117,7 +1116,7 @@ TEST_CASE("prefab: nested instance spawns linked, owner customization is BASELIN
     CHECK(wheelState->ownerRootEntityId == cartState->rootEntityId);
     CHECK(wheelState->nestedRootSourceId == outer.innerRootSource);
 
-    // The owner's customization (11) applied AND became the baseline: no override reads.
+    // The owner's customization (11) applied and became the baseline: no override reads.
     EntityHandle wheel = level.FindEntity(wheelState->rootEntityId);
     REQUIRE(wheel.IsAssigned());
     CHECK(health->Get(wheel)->value == doctest::Approx(11.0f));
@@ -1162,7 +1161,7 @@ TEST_CASE("prefab: scene round-trip preserves nesting links, guids, and scene ov
     EntityHandle hub = level.GetFirstChild(wheel);
     const Guid hubGuid = level.GetEntityId(hub);
 
-    // SCENE-level override on the nested Hub (owner baseline is 5).
+    // Scene-level override on the nested Hub (owner baseline is 5).
     health->Get(hub)->value = 7.0f;
 
     MemoryStream saved;
@@ -1181,7 +1180,7 @@ TEST_CASE("prefab: scene round-trip preserves nesting links, guids, and scene ov
     }
     ResolveScenePrefabs(loaded, resolver);
 
-    // Guids preserved through the nested merge; owner customization + scene override layered.
+    // Guids preserved through the nested merge; owner customization and scene override layered.
     EntityHandle loadedWheel = loaded.FindEntity(wheelGuid);
     EntityHandle loadedHub = loaded.FindEntity(hubGuid);
     REQUIRE(loadedWheel.IsAssigned());
@@ -1234,11 +1233,11 @@ TEST_CASE("prefab: inner-template edits propagate THROUGH the outer instance")
     REQUIRE(cart.IsAssigned());
     const Guid cartGuid = level.GetEntityId(cart);
 
-    // Rebuild with the NEW inner template: the resolver serves innerV2 now.
+    // Rebuild with the new inner template: the resolver serves innerV2 now.
     PrefabPayloadResolver resolverV2 = MakeResolver(innerId, &innerV2, outerId, &outer.payload);
     const u32 rebuilt = RebuildPrefabInstances(
         level, innerId, Span<const byte>{innerV2.Data(), innerV2.Size()}, &resolverV2);
-    CHECK(rebuilt == 1u); // the CART rebuilt (it references the inner prefab)
+    CHECK(rebuilt == 1u); // the cart rebuilt (it references the inner prefab)
 
     Scene::PrefabInstanceState* wheelState = nullptr;
     level.ForEachPrefabInstance(
@@ -1254,7 +1253,7 @@ TEST_CASE("prefab: inner-template edits propagate THROUGH the outer instance")
     REQUIRE(wheel.IsAssigned());
     EntityHandle hub = level.GetFirstChild(wheel);
     REQUIRE(hub.IsAssigned());
-    CHECK(health->Get(wheel)->value == doctest::Approx(11.0f)); // owner custom STILL wins
+    CHECK(health->Get(wheel)->value == doctest::Approx(11.0f)); // owner custom still wins
     CHECK(health->Get(hub)->value == doctest::Approx(50.0f));   // template edit propagated
     CHECK(level.FindPrefabInstanceByRoot(cartGuid) != nullptr); // cart intact
 }
@@ -1278,7 +1277,7 @@ TEST_CASE("prefab: apply-to-prefab keeps nested records with owner customization
     Scene::PrefabInstanceState* cartState = level.FindPrefabInstanceByRoot(level.GetEntityId(cart));
     REQUIRE(cartState != nullptr);
 
-    // Scene tweak: Wheel 11 -> 13, then apply the CART as the new template.
+    // Scene tweak: Wheel 11 -> 13, then apply the cart as the new template.
     Scene::PrefabInstanceState* wheelState = nullptr;
     level.ForEachPrefabInstance(
         [&](Scene::PrefabInstanceState& s)
@@ -1295,7 +1294,7 @@ TEST_CASE("prefab: apply-to-prefab keeps nested records with owner customization
     MemoryStream captured;
     REQUIRE(CaptureInstanceAsTemplate(level, *cartState, captured, &resolver).IsOk());
 
-    // Fresh spawn of the captured template elsewhere: nested link + the 13 travel.
+    // Fresh spawn of the captured template elsewhere: the nested link and the 13 travel.
     Scene other(DefaultAllocator(), u8"other");
     HealthManager* otherHealth = other.AddSystem<HealthManager>();
     (void)captured.Seek(0, SeekOrigin::Begin);
@@ -1336,7 +1335,7 @@ TEST_CASE(
     REQUIRE(wheel.IsAssigned());
     const Guid wheelGuid = level.GetEntityId(wheel);
 
-    // A plain USER entity parented under a member, and a USER-SPAWNED instance inside.
+    // A plain user entity parented under a member, and a user-spawned instance inside.
     EntityHandle userChild = level.CreateEntity(u8"Sticker");
     level.SetParent(userChild, wheel);
     const Guid userChildGuid = level.GetEntityId(userChild);
@@ -1353,7 +1352,7 @@ TEST_CASE(
     CHECK(rebuilt >= 1u);
 
     // Everything survives: the user child re-attached, the user-spawned instance respawned
-    // standalone with its guid + delta.
+    // standalone with its guid and delta.
     EntityHandle survivedChild = level.FindEntity(userChildGuid);
     REQUIRE(survivedChild.IsAssigned());
     CHECK(level.GetParent(survivedChild).IsAssigned());
@@ -1380,7 +1379,7 @@ TEST_CASE("prefab: rebuild preserves user entities under NESTED sub-instance mem
         SpawnPrefab(level, outerStream, outerId, EntityHandle::Invalid(), nullptr, &resolver);
     REQUIRE(cart.IsAssigned());
 
-    // The nested inner sub-instance's root (the Wheel) - a NESTED member: a rescue that
+    // The nested inner sub-instance's root (the Wheel), a nested member: a rescue that
     // maps only the owner's own members skips children parented here, so they die with the
     // teardown; this guards against that.
     Guid wheelLive{};
@@ -1400,8 +1399,7 @@ TEST_CASE("prefab: rebuild preserves user entities under NESTED sub-instance mem
     level.SetParent(sticker, wheel);
     const Guid stickerGuid = level.GetEntityId(sticker);
 
-    // Rebuild triggered by the OUTER template (the user's failing flow: edit Outer's
-    // page + save).
+    // Rebuild triggered by the outer template (edit Outer's page, then save).
     u32 rebuilt = RebuildPrefabInstances(
         level, outerId, Span<const byte>{outer.payload.Data(), outer.payload.Size()}, &resolver);
     CHECK(rebuilt == 1u);
@@ -1410,7 +1408,7 @@ TEST_CASE("prefab: rebuild preserves user entities under NESTED sub-instance mem
     REQUIRE(level.GetParent(survived).IsAssigned());
     CHECK(level.GetEntityId(level.GetParent(survived)) == wheelLive);
 
-    // And again through the INNER template (rebuild via referencedPrefabIds).
+    // And again through the inner template (rebuild via referencedPrefabIds).
     rebuilt = RebuildPrefabInstances(level, innerId, Span<const byte>{inner.Data(), inner.Size()},
                                      &resolver);
     CHECK(rebuilt == 1u);
@@ -1426,7 +1424,7 @@ TEST_CASE("prefab: nested instances keep their captured sibling order")
     const Guid outerId{0xBB, 0x61};
     Array<byte> inner = AuthorInnerTemplate();
 
-    // Outer authored as: Body > [ Inner instance, Cone ] - the nested instance FIRST.
+    // Outer authored as: Body > [ Inner instance, Cone ], the nested instance first.
     Array<byte> outerPayload;
     Guid wheelNs{};
     {
@@ -1547,7 +1545,7 @@ TEST_CASE("prefab: un-overridden nested placement follows the outer template")
     REQUIRE(!wheelLive.IsNil());
     CHECK(level.GetLocalTransform(level.FindEntity(wheelLive)).position.x == doctest::Approx(1.0f));
 
-    // Template moves the inner instance; the scene never touched it -> it follows.
+    // Template moves the inner instance; the scene never touched it, so it follows.
     Array<byte> outerV2 = authorOuter(placementV2);
     PrefabPayloadResolver resolver2 = MakeResolver(innerId, &inner, outerId, &outerV2);
     u32 rebuilt = RebuildPrefabInstances(
@@ -1558,7 +1556,7 @@ TEST_CASE("prefab: un-overridden nested placement follows the outer template")
     CHECK(level.GetLocalTransform(wheel).position.y == doctest::Approx(5.0f));
     CHECK(level.GetLocalTransform(wheel).position.x == doctest::Approx(0.0f));
 
-    // Now the SCENE moves it (an override) - a further template change must NOT clobber it.
+    // Now the scene moves it (an override); a further template change must not clobber it.
     Transform sceneOverride{};
     sceneOverride.position = Float3{9.0f, 9.0f, 9.0f};
     level.SetLocalTransform(wheel, sceneOverride);
@@ -1578,10 +1576,9 @@ TEST_CASE("prefab: un-overridden nested placement follows the outer template")
 TEST_CASE("prefab wire: a retired section layout FAILS the read, never misparses")
 {
     // A mode-2 (pre-order/placement) prefab section misreads as garbage array counts
-    // under the current record layout - the reader must fail at the mode byte instead of
-    // looping on a bogus count (the old behavior was an effective OOM/hang on project
-    // open). Forge one: serialize a scene, then stamp the retired mode over the section
-    // byte and garbage over the instance count.
+    // under the current record layout, so the reader must fail at the mode byte instead of
+    // looping on a bogus count. Forge one: serialize a scene, then stamp the retired mode
+    // over the section byte and garbage over the instance count.
     Scene author(DefaultAllocator(), u8"author");
     author.AddSystem<HealthManager>();
     (void)author.CreateEntity(u8"Plain");
@@ -1610,7 +1607,7 @@ TEST_CASE("prefab wire: a retired section layout FAILS the read, never misparses
     Scene loaded(DefaultAllocator(), u8"loaded");
     loaded.AddSystem<HealthManager>();
     BinarySerializer read(in, SerializeMode::Read);
-    SerializeScene(read, loaded); // must return promptly: entities in, the payload FAILED
+    SerializeScene(read, loaded); // must return promptly: entities in, the payload failed
     CHECK_FALSE(read.IsOk());
 
     bool foundPlain = false;
@@ -1654,8 +1651,8 @@ TEST_CASE("text scenes: XML save -> load -> binary -> load is EQUIVALENT and sta
     xmlOut.GetOutput(text1);
     REQUIRE(text1.Size() > 0);
     CHECK(text1[0] == utf8char('<'));
-    // The override is REAL text - the component op's type and its field VALUE appear
-    // verbatim (no hex blob): the diffability the whole format exists for.
+    // The override is real text: the component op's type and its field value appear
+    // verbatim (no hex blob), which is what makes the format diffable.
     auto contains = [](const String& hay, StringView needle)
     {
         if (needle.Size() > hay.Size())
@@ -1690,7 +1687,7 @@ TEST_CASE("text scenes: XML save -> load -> binary -> load is EQUIVALENT and sta
     }
     ResolveScenePrefabs(loaded, resolver);
 
-    // Hop 3: binary out of the loaded scene, load THAT, compare against the original.
+    // Hop 3: binary out of the loaded scene, load that, compare against the original.
     MemoryStream binary;
     {
         BinarySerializer ar(binary, SerializeMode::Write);
@@ -1713,7 +1710,7 @@ TEST_CASE("text scenes: XML save -> load -> binary -> load is EQUIVALENT and sta
     EntityHandle lastHero = last.FindEntity(scene.GetEntityId(hero));
     REQUIRE(lastHero.IsAssigned());
     const Transform ft = last.GetLocalTransform(lastHero);
-    CHECK(ft.position.x == t.position.x); // EXACT float round-trip, not Approx
+    CHECK(ft.position.x == t.position.x); // exact float round-trip, not Approx
     CHECK(ft.position.y == t.position.y);
     CHECK(ft.position.z == t.position.z);
     REQUIRE(lastHealth->Get(lastHero) != nullptr);
@@ -1723,7 +1720,7 @@ TEST_CASE("text scenes: XML save -> load -> binary -> load is EQUIVALENT and sta
     REQUIRE(lastHealth->Get(lastWheel) != nullptr);
     CHECK(lastHealth->Get(lastWheel)->value == 77.0f);
 
-    // Stability: re-saving the loaded scene as XML reproduces the SAME text - saves can
+    // Stability: re-saving the loaded scene as XML reproduces the same text, so saves
     // never generate noise diffs.
     foundation::xml::XmlSerializer xmlAgain(foundation::core::DefaultAllocator());
     SerializeScene(xmlAgain, loaded, ScenePrefabMode::Referenced, true,
@@ -1748,7 +1745,7 @@ TEST_CASE("text scenes: unknown component types SKIP; later records still load")
     String text;
     xmlOut.GetOutput(text);
 
-    // Corrupt the FIRST health record's type only (the id is "demo.Health").
+    // Corrupt the first health record's type only (the id is "demo.Health").
     String mutated;
     bool replaced = false;
     const StringView typeId(u8"demo.Health");
@@ -1776,7 +1773,7 @@ TEST_CASE("text scenes: unknown component types SKIP; later records still load")
     REQUIRE(ar != nullptr);
     SerializeScene(*ar, loaded, ScenePrefabMode::Referenced, true, reader.Encoding());
 
-    // A's record was the bogus one - skipped; B's still loads.
+    // A's record was the bogus one and is skipped; B's still loads.
     EntityHandle loadedA = loaded.FindEntity(scene.GetEntityId(a));
     EntityHandle loadedB = loaded.FindEntity(scene.GetEntityId(b));
     REQUIRE(loadedA.IsAssigned());
@@ -1806,7 +1803,7 @@ TEST_CASE("text scenes: transcode to binary preserves parked prefab pendings")
     String text;
     xmlOut.GetOutput(text);
 
-    // Transcode WITHOUT a resolver: pendings park and must re-emit verbatim.
+    // Transcode without a resolver: pendings park and must re-emit verbatim.
     Scene scratch(DefaultAllocator(), u8"scratch");
     scratch.AddSystem<HealthManager>();
     MemoryStream in;
@@ -1838,9 +1835,9 @@ TEST_CASE("text scenes: transcode to binary preserves parked prefab pendings")
 
 TEST_CASE("scene v2: unknown component and settings records SKIP instead of aborting")
 {
-    // Save with health components; load into a scene WITHOUT the manager: entities +
+    // Save with health components; load into a scene without the manager: entities and
     // hierarchy load, records skip with a warning, and the stream stays consumable to the
-    // END (the prefab section after them still parses).
+    // end (the prefab section after them still parses).
     Scene a(DefaultAllocator(), u8"level");
     HealthManager* mgr = a.AddSystem<HealthManager>();
     EntityHandle hero = a.CreateEntity(u8"Hero");
@@ -1853,7 +1850,7 @@ TEST_CASE("scene v2: unknown component and settings records SKIP instead of abor
         REQUIRE(w.IsOk());
     }
     (void)saved.Seek(0, SeekOrigin::Begin);
-    Scene b(DefaultAllocator(), u8"loaded"); // NO HealthManager
+    Scene b(DefaultAllocator(), u8"loaded"); // no HealthManager
     {
         BinarySerializer r(saved, SerializeMode::Read);
         SerializeScene(r, b);
@@ -1868,7 +1865,7 @@ TEST_CASE("scene-snapshot: a scene WITH a prefab instance restores aligned (Simu
 {
     // The writer emits owner/nestedSrcRoot unconditionally in the Expanded section; a
     // reader that gates them on a Referenced-only flag misaligns on any snapshot of a
-    // scene holding a prefab instance - the next count read is garbage in the billions and
+    // scene holding a prefab instance: the next count read is garbage in the billions and
     // the member loop allocates until the OS kills the editor. This guards against that.
     Scene scene(DefaultAllocator(), u8"level");
     EntityHandle root = scene.CreateEntity(u8"outer-root");
@@ -1895,7 +1892,7 @@ TEST_CASE("scene-snapshot: a scene WITH a prefab instance restores aligned (Simu
     REQUIRE(snapshot);
     REQUIRE(snapshot->Restore(scene).IsOk()); // must not spin here allocating gigabytes
 
-    // The instance state round-tripped verbatim - including the nesting links.
+    // The instance state round-tripped verbatim, including the nesting links.
     Scene::PrefabInstanceState* restored = scene.FindPrefabInstanceByRoot(rootId);
     REQUIRE(restored != nullptr);
     CHECK(restored->prefabId == Guid{0xAA, 0x01});
@@ -1908,7 +1905,7 @@ TEST_CASE("scene-snapshot: a scene WITH a prefab instance restores aligned (Simu
     REQUIRE(restored->componentBaselines[0].blob.Size() == 1u);
     CHECK(restored->componentBaselines[0].blob[0] == 42);
 
-    // Second cycle (the user's repro was play/stop repeatedly): still aligned.
+    // Second cycle (play and stop repeatedly): still aligned.
     UniquePtr<SceneSnapshot> second = SceneSnapshot::Capture(scene);
     REQUIRE(second);
     REQUIRE(second->Restore(scene).IsOk());
@@ -1916,7 +1913,7 @@ TEST_CASE("scene-snapshot: a scene WITH a prefab instance restores aligned (Simu
 
 TEST_CASE("text scenes: proper guid + full transform names; a v2 save is refused")
 {
-    // Reference scene: hierarchy + transform + a component.
+    // Reference scene: hierarchy, transform and a component.
     Scene author(DefaultAllocator(), u8"legacy");
     HealthManager* health = author.AddSystem<HealthManager>();
     EntityHandle hero = author.CreateEntity(u8"Hero");
@@ -1944,7 +1941,7 @@ TEST_CASE("text scenes: proper guid + full transform names; a v2 save is refused
         return false;
     };
 
-    // --- 1) a fresh save uses the proper forms: full transform names + canonical guids ---
+    // --- 1) a fresh save uses the proper forms: full transform names and canonical guids ---
     {
         foundation::xml::XmlSerializer xmlOut(foundation::core::DefaultAllocator());
         SerializeScene(xmlOut, author, ScenePrefabMode::Referenced, true,
@@ -1964,7 +1961,7 @@ TEST_CASE("text scenes: proper guid + full transform names; a v2 save is refused
         CHECK(contains(text, StringView{guidChars, 36}));
     }
 
-    // --- 2) a v2 XML stream (the retired hi/lo guid + pos/rot/scl shape) is REFUSED at the
+    // --- 2) a v2 XML stream (the retired hi/lo guid and pos/rot/scl shape) is refused at the
     // header: nothing is read past it, no entity appears ---
     foundation::xml::XmlSerializer staleOut(foundation::core::DefaultAllocator());
     u32 magic = foundation::scene::detail::kSceneStreamMagic;
@@ -2015,7 +2012,7 @@ TEST_CASE("text scenes: proper guid + full transform names; a v2 save is refused
     CHECK(loaded.EntityCount() == 0u);
 }
 
-// --- Unresolved records (game-native-code.md S3): a plugin's components + settings survive a
+// --- Unresolved records: a plugin's components and settings survive a
 // --- load/save round-trip in a build that lacks the plugin, and resolve when it arrives. ----
 namespace
 {
@@ -2025,7 +2022,7 @@ namespace
     };
     void Serialize(ISerializer& ar, PluginSettings& s) { foundation::core::Serialize(ar, "level", s.level); }
 
-    // A system with a settings block - the shape a plugin-contributed system has.
+    // A system with a settings block, the shape a plugin-contributed system has.
     class PluginSettingsSystem final : public SceneSystem
     {
     public:
@@ -2039,7 +2036,7 @@ namespace
         void SerializeSettings(ISerializer& ar) override { Serialize(ar, settings); }
     };
 
-    // Author a scene WITH the plugin's manager + system, serialize it in `text` encoding.
+    // Author a scene with the plugin's manager and system, serialize it in `text` encoding.
     void WriteScene(MemoryStream& stream, Scene& scene, bool text)
     {
         if (text)
@@ -2099,7 +2096,7 @@ namespace
         MemoryStream authored;
         WriteAuthoredScene(authored, text);
 
-        // A build WITHOUT the plugin: nothing to route the records to - they are kept.
+        // A build without the plugin: nothing to route the records to, so they are kept.
         Scene bare(DefaultAllocator(), u8"bare");
         ReadInto(authored, bare, text);
         CHECK(bare.EntityCount() == 1u);
@@ -2113,7 +2110,7 @@ namespace
         MemoryStream resaved;
         WriteBack(resaved, bare, text);
 
-        // ...so a build WITH the plugin reads the authored values out of the re-save.
+        // ...so a build with the plugin reads the authored values out of the re-save.
         Scene full(DefaultAllocator(), u8"full");
         HealthManager* hm = full.AddSystem<HealthManager>();
         PluginSettingsSystem* ps = full.AddSystem<PluginSettingsSystem>();
@@ -2126,7 +2123,7 @@ namespace
         CHECK(hm->Get(hero)->value == doctest::Approx(64.0f));
         CHECK(ps->settings.level == 42);
 
-        // And the plugin ARRIVING on the bare scene (a contribution to a live scene) resolves
+        // And the plugin arriving on the bare scene (a contribution to a live scene) resolves
         // the kept records in place - components and settings.
         HealthManager* lateHm = bare.AddSystem<HealthManager>();
         PluginSettingsSystem* latePs = bare.AddSystem<PluginSettingsSystem>();
@@ -2152,7 +2149,7 @@ TEST_CASE("unresolved: a plugin's components + settings survive load/save withou
 
 TEST_CASE("unresolved: prefab-instance overrides of an absent plugin type survive a save without it")
 {
-    // Author + capture the prefab (the "plugin" type = Health here).
+    // Author and capture the prefab (the "plugin" type is Health here).
     Scene author(DefaultAllocator(), u8"author");
     HealthManager* authorHealth = author.AddSystem<HealthManager>();
     EntityHandle root = author.CreateEntity(u8"Tower");
@@ -2177,7 +2174,7 @@ TEST_CASE("unresolved: prefab-instance overrides of an absent plugin type surviv
             return UniquePtr<IStream>(stream.Release(), DefaultAllocator());
         }};
 
-    // Level WITH the plugin: an instance with a component MODIFY override.
+    // Level with the plugin: an instance with a component modify override.
     Scene level(DefaultAllocator(), u8"level");
     HealthManager* health = level.AddSystem<HealthManager>();
     (void)payload.Seek(0, SeekOrigin::Begin);
@@ -2192,7 +2189,7 @@ TEST_CASE("unresolved: prefab-instance overrides of an absent plugin type surviv
         SerializeScene(w, level);
     }
 
-    // A build WITHOUT the plugin opens it, resolves prefabs (the override op has no manager:
+    // A build without the plugin opens it, resolves prefabs (the override op has no manager:
     // stashed, not dropped), and saves it back.
     Scene bare(DefaultAllocator(), u8"bare");
     (void)saved.Seek(0, SeekOrigin::Begin);
@@ -2226,7 +2223,7 @@ TEST_CASE("unresolved: prefab-instance overrides of an absent plugin type surviv
     REQUIRE(fullHealth->Has(fTop));
     CHECK(Near(fullHealth->Get(fTop)->value, 51.0f));
 
-    // And the plugin ARRIVING on the bare scene applies the stashed op in place.
+    // And the plugin arriving on the bare scene applies the stashed op in place.
     HealthManager* lateHealth = bare.AddSystem<HealthManager>();
     ResolveAllUnresolvedRecords(bare);
     EntityHandle bTop = bare.FindEntity(instTopId);
@@ -2241,10 +2238,10 @@ TEST_CASE("unresolved: prefab-instance overrides of an absent plugin type surviv
 
 TEST_CASE("prefab: an override naming a prefab member by its source id points at the instance's copy")
 {
-    // A tool that writes scenes (PaperKid's pkgen) overrides an instance's component with the
-    // prefab's own data, its EntityRefs in the prefab's id space. Applied, they must name THIS
-    // instance's members, as a spawned component's do: left as source ids they resolved to
-    // whatever else held that id (a road's asphalt, which then gave a pet's root motion its frame).
+    // A tool that writes scenes overrides an instance's component with the prefab's own data,
+    // its EntityRefs in the prefab's id space. Applied, they must name this instance's members,
+    // as a spawned component's do: left as source ids they would resolve to whatever else held
+    // that id.
     Scene author(DefaultAllocator(), u8"author");
     RttiRegisterValue_Link();
     LinkManager* authorLinks = author.AddSystem<LinkManager>();

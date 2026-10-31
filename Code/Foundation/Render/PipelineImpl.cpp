@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Render - foundation.render:pipeline implementation unit (sec 3.2 / sec 10.6).
+// Render - foundation.render:pipeline implementation unit.
 module;
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h"
@@ -154,10 +154,10 @@ namespace foundation::render
              ibl, depthLoad, colorSub, probeHandle, probeValid, probeBase,
              probeCount](rendergraph::PassBuilder& b)
             {
-                // colorSub targets a single layer when capturing into a cube-array face (default {} = whole target).
+                // colorSub targets a single layer when capturing into a cube-array face (the default {} is the whole target).
                 b.SetColorTarget(0, colorH, colorLoad, rhi::StoreOp::Store, view.Settings().clear,
                                  colorSub);
-                // MRT G-buffer aux (cleared each view): view-space normal + motion vector + roughness/metallic (SSR).
+                // MRT G-buffer aux (cleared each view): view-space normal, motion vector, roughness and metallic (SSR).
                 b.SetColorTarget(1, normalH, rhi::LoadOp::Clear, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
                 b.SetColorTarget(2, velocityH, rhi::LoadOp::Clear, rhi::StoreOp::Store,
@@ -172,36 +172,37 @@ namespace foundation::render
                 // Render into this view's viewport sub-rect of the target (split-screen).
                 b.SetViewport(view.ViewportX(), view.ViewportY(), view.ViewportWidth(),
                               view.ViewportHeight());
-                // Read the cluster lists the build compute pass wrote (orders compute -> this pass).
+                // Read the cluster lists the build compute pass wrote (orders the compute before this pass).
                 if (cluster.Valid())
                 {
                     b.ReadBuffer(cluster.offsetsHandle);
                     b.ReadBuffer(cluster.indicesHandle);
                 }
-                // Read the WHOLE cascade array (orders all cascade passes -> this pass + barriers every
+                // Read the whole cascade array (orders all cascade passes before this pass and makes every
                 // layer readable). The forward shader binds the full-array sample view, so the descriptor
-                // spans all layers - every one must be in DepthStencilRead when this pass's secondary CB
+                // spans all layers, and every one must be in DepthStencilRead when this pass's secondary CB
                 // samples it, even layers belonging to other views (VUID-vkCmdExecuteCommands depth-layout).
                 // All cascade passes are declared up front, so depending on the whole array is correctly ordered.
                 if (shadow.MapBound())
                 {
                     b.SampleDepth(shadow.handle);
                 }
-                // Read the whole local-shadow atlas (orders the atlas depth pass -> this pass + barriers
-                // it readable). One atlas shared by all views, so the whole texture is the dependency.
+                // Read the whole local-shadow atlas (orders the atlas depth pass before this pass and makes
+                // it readable). One atlas is shared by all views, so the whole texture is the dependency.
                 if (shadow.atlasValid)
                 {
                     b.SampleDepth(shadow.atlasHandle);
                 }
-                // Read the IBL products (orders any precompute writes -> this pass + barriers them readable).
+                // Read the IBL products (orders any precompute writes before this pass and makes them readable).
                 if (ibl.Valid())
                 {
                     b.ReadTexture(ibl.prefilterHandle);
                     b.ReadTexture(ibl.brdfHandle);
                     b.ReadBuffer(ibl.shHandle);
                 }
-                // Read the probe captured cube-array (orders probe capture -> this forward + barriers the whole
-                // array to ShaderRead, incl. uncaptured slices) - the forward samples it (t8) for local reflections.
+                // Read the probe's captured cube array (orders probe capture before this forward and moves the
+                // whole array to ShaderRead, uncaptured slices included); the forward samples it (t8) for local
+                // reflections.
                 if (probeValid)
                 {
                     b.ReadTexture(probeHandle);
@@ -269,8 +270,8 @@ namespace foundation::render
                      probeBase,
                      probeCount](rhi::CommandEncoder& enc, Array<rhi::RenderBundle*>& out)
                     {
-                        // The opaque depth is now DepthStencilRead (read-only depth target) - resolve its sampleable
-                        // view and hand it to the renderers for soft particles. No render-graph change; already in state.
+                        // The opaque depth is in DepthStencilRead here (read-only depth target): resolve its sampleable
+                        // view and hand it to the renderers for soft particles. It is already in that state.
                         rhi::TextureView* sceneDepth = graph.GetTextureView(depth);
                         ResolveAndEmit(view, registry, enc, frameIndex, viewIndex, colorFormat,
                                        drawViewProj, prevViewProj, jitter, prevJitter,
@@ -332,13 +333,13 @@ namespace foundation::render
     {
         RenderRecordContext ctx{};
         ctx.view = &view;
-        // The camera's matrix and position: per-view LOD selection reads the matrix (an identity
-        // one in the prepass picked the finest LODs while the forward picked by distance, and the
-        // two surfaces z-fought in row bands), and the vegetation fade measures from the position.
+        // The camera's matrix and position: per-view LOD selection reads the matrix (a prepass and
+        // forward that pick different levels z-fight), and the vegetation fade measures from the
+        // position.
         // Every camera pass must agree on both, or its depth and its colour draw different things.
         ctx.viewMatrix = view.Camera().view;
         ctx.cameraPos = view.Camera().position;
-        // The WIND clock: the view's SCENE clock (scaled, pausable), else the frame's fallback.
+        // The WIND clock: the view's scene clock (scaled, pausable), else the frame's fallback.
         ctx.timeSeconds = frameTime;
         ctx.prevTimeSeconds = prevFrameTime;
         if (view.Scene() != nullptr && view.Scene()->HasTime())
@@ -361,7 +362,7 @@ namespace foundation::render
     {
         RenderRecordContext ctx = CameraRecordContext(view, m_timeSeconds, m_prevTimeSeconds);
         ctx.viewProj =
-            drawViewProj; // opaque = jittered (TAA), transparent = unjittered (drawn post-TAA)
+            drawViewProj; // opaque is jittered (TAA), transparent unjittered (drawn after TAA)
         ctx.prevViewProj = prevViewProj;
         ctx.jitter = jitter;
         ctx.prevJitter = prevJitter;
@@ -381,11 +382,10 @@ namespace foundation::render
         ctx.viewIndex = viewIndex;
         ctx.colorFormat = colorFormat;
         ctx.depthFormat = m_depthFormat;
-        // Scene-pass MSAA: only the OPAQUE pass renders into the MSAA scene target - it and
-        // the mesh/sprite/particle renderers it dispatches build MSAA PSOs + bundle. Transparent
+        // Scene-pass MSAA: only the opaque pass renders into the MSAA scene target; it and the mesh,
+        // sprite and particle renderers it dispatches build MSAA PSOs and bundles. Transparent
         // (Blended) and world UI (PostTonemap) run on the resolved 1x color, so they stay single-sample.
-        // Derived from the view (already capability-clamped upstream), so MSAA-off leaves this 1 =
-        // byte-identical.
+        // Derived from the view (already capability-clamped upstream), so with MSAA off this is 1.
         const u8 passSamples =
             (passAffinity == PassAffinity::Opaque && view.Settings().post.msaaSamples > 1)
                 ? view.Settings().post.msaaSamples
@@ -396,17 +396,17 @@ namespace foundation::render
         ctx.probesEnabled = probesEnabled;
         ctx.probeBase = probeBase; // this view's scene's record range (multi-scene frames)
         ctx.probeCount = probeCount;
-        ctx.ibl = ibl; // this view's SCENE's IBL products (per-scene contexts)
+        ctx.ibl = ibl; // this view's scene's IBL products (per-scene contexts)
         ctx.needsMotion =
             view.Settings()
                 .post
                 .needsMotion; // per-view: skip prev-world when no temporal effect reads velocity
         ctx.debugSemantic = static_cast<u8>(view.Settings().debug.semantic);
 
-        // RESOLVE (single-threaded): sorted draw list -> ResolvedDraws (PSO build, mesh upload,
+        // Resolve (single-threaded): the sorted draw list becomes ResolvedDraws (PSO build, mesh upload,
         // ring allocation). Split by the category's pass affinity (which pass draws it), then walk
-        // runs of the SAME renderer within this pass and hand each to its owner (dispatched by
-        // rendererId, not category - so blended meshes + sprites interleave by depth yet each run
+        // runs of the same renderer within this pass and hand each to its owner (dispatched by
+        // rendererId, not category, so blended meshes and sprites interleave by depth yet each run
         // still batches within one renderer). The list is category-sorted, so this-pass items are
         // contiguous; within the blended span, depth order mixes renderers as needed.
         const auto inThisPass = [&](const DrawItem& it) noexcept
@@ -434,33 +434,32 @@ namespace foundation::render
             i = j;
         }
 
-        // EMIT into bundles. The bundle records its viewport up front (Vulkan secondaries / DX12
-        // bundles can't inherit it) - this view's sub-rect of the target, not the full target.
+        // Emit into bundles. The bundle records its viewport up front (Vulkan secondaries and DX12
+        // bundles can't inherit it): this view's sub-rect of the target, not the full target.
         rhi::RenderBundleDesc bd{};
         bd.colorFormats[0] = colorFormat;
         if (passAffinity != PassAffinity::Opaque)
         {
-            bd.colorFormatCount = 1; // color-only pass (blended / post-tonemap)
+            bd.colorFormatCount = 1; // color-only pass (blended, post-tonemap)
         }
         else
         {
             bd.colorFormats[1] = kGNormalFormat;   // MRT: view-space normal
             bd.colorFormats[2] = kGVelocityFormat; // MRT: motion vector
-            bd.colorFormats[3] = kGMaterialFormat; // MRT: roughness/metallic (SSR)
+            bd.colorFormats[3] = kGMaterialFormat; // MRT: roughness and metallic (SSR)
             bd.colorFormats[4] = kGAlbedoFormat;   // MRT: diffuse albedo (SSGI)
             bd.colorFormatCount = 5;
         }
         bd.depthStencilFormat = m_depthFormat;
-        // A bundle's read-only flags MUST match the render pass that executes it - the browser's
+        // A bundle's read-only flags must match the render pass that executes it: the browser's
         // WebGPU (Dawn) rejects a mismatch (native wgpu is lenient). Depth: only the opaque pass
-        // writes depth (blended/overlay passes run over the prepass depth read-only), which matches
-        // the passes' SetDepthTarget vs SetReadOnlyDepthTarget. Stencil: the engine depth format is
-        // depth-only (no stencil aspect), so the render graph never marks stencil read-only - the
-        // pass ships stencilReadOnly=false, so the bundle must too (a hardcoded `true` here is what
-        // tripped Dawn's execute-bundle validation on WebScene).
+        // writes depth (blended and overlay passes run over the prepass depth read-only), which
+        // matches the passes' SetDepthTarget and SetReadOnlyDepthTarget. Stencil: the engine depth
+        // format is depth-only (no stencil aspect), so the render graph never marks stencil
+        // read-only; the pass has stencilReadOnly=false, so the bundle must too.
         bd.depthReadOnly = passAffinity != PassAffinity::Opaque;
         bd.stencilReadOnly = false;
-        bd.sampleCount = passSamples; // MSAA: opaque bundle matches the MSAA attachments; 1 otherwise
+        bd.sampleCount = passSamples; // MSAA: the opaque bundle matches the MSAA attachments; 1 otherwise
         bd.viewportX = view.ViewportX();
         bd.viewportY = view.ViewportY();
         bd.width = view.ViewportWidth();
@@ -516,8 +515,8 @@ namespace foundation::render
                              {
                                  return;
                              }
-                             // Bundles are minted straight from the pool - no command
-                             // encoder needed, so the pool never has an open primary
+                             // Bundles are minted straight from the pool with no command
+                             // encoder, so the pool never has an open primary
                              // list and its per-frame Reset is legal on DX12.
                              rhi::RenderBundleEncoder* be = pool->CreateRenderBundleEncoder(bd);
                              if (be == nullptr)
@@ -584,7 +583,7 @@ namespace foundation::render
     u32 RenderFrame::HistorySlotFor(u64 historyKey, u32 viewIndex, bool& fresh) noexcept
     {
         fresh = false;
-        // An unkeyed view is known by its place in the list, as before keys (tests, samples): a key
+        // An unkeyed view is known by its place in the list (tests, samples): a key
         // of its own that no real key (a hash) is expected to meet.
         const u64 key = (historyKey != 0) ? historyKey : (0xFFFF'FFFF'0000'0000ull | viewIndex);
         for (u32 s = 0; s < kHistorySlots; ++s)
@@ -614,7 +613,7 @@ namespace foundation::render
         }
         if (pick == kHistorySlots)
         {
-            pick = viewIndex % kHistorySlots; // more views this frame than slots: share, as before
+            pick = viewIndex % kHistorySlots; // more views this frame than slots: share by index
         }
         m_historySlots[pick] = HistorySlot{key, m_noiseFrame, true};
         fresh = true;
@@ -627,14 +626,14 @@ namespace foundation::render
         m_frameIndex = frameIndex;
         ++m_noiseFrame;
         m_views.Begin();
-        // Motion vectors are only consumed by TAA + SSR-temporal; when neither is active, the forward skips
-        // the per-instance prev-world lookup (a full-scene hashmap rebuild/frame at stress scale).
+        // Motion vectors are consumed only by TAA and temporal SSR; when neither is active, the forward skips
+        // the per-instance prev-world lookup.
         m_pass.SetMotionNeeded(m_taaEnabled ||
                                (m_ssr != nullptr && m_ssrEnabled && m_ssrParams.temporal));
         m_pass.SetTime(m_timeSeconds, m_prevTimeSeconds);
         if (m_pick != nullptr)
         {
-            m_pick->BeginFrame(frameIndex); // retire + decode completed pick readbacks
+            m_pick->BeginFrame(frameIndex); // retire and decode completed pick readbacks
         }
         m_graph.BeginFrame(
             static_cast<i32>(frameIndex)); // one graph composes all this frame's views
@@ -725,29 +724,28 @@ namespace foundation::render
         ctx.depthFormat = m_pass.DepthFormat();
         ctx.depthPrepass = true;
         // Scene-pass MSAA: the depth prepass runs at the view's sample count so
-        // early-Z matches the MSAA forward exactly. 1 (off) = the single-sample prepass.
+        // early-Z matches the MSAA forward exactly. 1 (off) is the single-sample prepass.
         ctx.sampleCount = (view.Settings().post.msaaSamples > 1) ? view.Settings().post.msaaSamples
                                                                  : static_cast<u8>(1);
         ctx.frameIndex = m_frameIndex;
         ctx.viewIndex = viewIndex;
-        // Build the FULL per-instance data here (once) and cache each opaque group's range so the forward
-        // reuses it instead of re-filling (matches Sedulous's build-instance-offsets-once). Needs the same
-        // prevWorld the forward would use, so mirror the motion-needed condition.
+        // Build the full per-instance data here (once) and cache each opaque group's range so the forward
+        // reuses it instead of filling it again. It needs the same prevWorld the forward would use, so it
+        // follows the same motion-needed condition.
         ctx.fillInstanceCache =
-            m_instanceSharing; // toggleable: off => forward re-fills (old double-build), for A/B
+            m_instanceSharing; // toggleable: off makes the forward fill again, for A/B
         ctx.needsMotion =
-            view.Settings().post.needsMotion; // per-view (resolved: TAA || SSR-temporal)
+            view.Settings().post.needsMotion; // per view (resolved: TAA or temporal SSR)
 
         m_prepassResolved.Clear();
         const Span<const DrawItem> items = view.DrawList();
         usize i = 0;
         while (i < items.Size())
         {
-            // Group by (category, RENDERER): an Opaque run can interleave renderers (meshes +
-            // terrain in one scene), and handing a whole category run to the FIRST item's
-            // renderer makes it blind-cast foreign RenderData - the PIE-start terrain crash
-            // (type confusion, the same class the shadow-caster path already fixed; the color
-            // path below has always grouped by rendererId).
+            // Group by (category, renderer): an Opaque run can interleave renderers (meshes and
+            // terrain in one scene), and handing a whole category run to the first item's
+            // renderer would make it cast foreign RenderData to its own type. The shadow-caster
+            // and color paths group by rendererId too.
             const RenderCategory cat = items[i].data->category;
             const u16 rid = items[i].data->rendererId;
             usize j = i + 1;
@@ -800,7 +798,7 @@ namespace foundation::render
                                     const Float4x4& viewProj)
     {
         RenderRecordContext ctx = CameraRecordContext(view, m_timeSeconds, m_prevTimeSeconds);
-        ctx.viewProj = viewProj; // the CROPPED camera projection (PickSystem)
+        ctx.viewProj = viewProj; // the cropped camera projection (PickSystem)
         ctx.colorFormat = kPickIdFormat;
         ctx.depthFormat = m_pass.DepthFormat();
         ctx.sampleCount = 1;
@@ -815,7 +813,7 @@ namespace foundation::render
         usize i = 0;
         while (i < items.Size())
         {
-            // Group by (category, RENDERER) - the prepass rule (a run never crosses renderers).
+            // Group by (category, renderer), as the prepass does (a run never crosses renderers).
             const RenderCategory cat = items[i].data->category;
             const u16 rid = items[i].data->rendererId;
             usize j = i + 1;
@@ -852,13 +850,13 @@ namespace foundation::render
             ctx.timeSeconds = scene->TimeSeconds();
             ctx.prevTimeSeconds = scene->PrevTimeSeconds();
         }
-        ctx.view = lodView; // LOD coupling only (null = coarsest); light matrices come below
+        ctx.view = lodView; // LOD coupling only (null for coarsest); light matrices come below
         if (lodView != nullptr)
         {
-            // The owning camera's matrices, for LOD-coverage math ONLY (terrain chunk
-            // selection reads viewMatrix + the view's projection; without these a cascade
-            // pass would compute coverage against Identity - an arbitrary world-z metric).
-            // The LIGHT's viewProj below still drives culling and the actual draw.
+            // The owning camera's matrices, for LOD-coverage math only (terrain chunk
+            // selection reads viewMatrix and the view's projection; without these a cascade
+            // pass would compute coverage against Identity, an arbitrary world-z metric).
+            // The light's viewProj below still drives culling and the actual draw.
             ctx.viewMatrix = lodView->Camera().view;
             ctx.cameraPos = lodView->Camera().position;
         }
@@ -869,11 +867,11 @@ namespace foundation::render
         ctx.viewIndex = 0;
 
         // Optional cull into a scratch list (keeps the category-run batching below intact).
-        // - frustum cull: CSM cascades - reject casters whose world sphere doesn't intersect THIS
+        // - frustum cull, for CSM cascades: reject casters whose world sphere doesn't intersect this
         //   cascade's ortho frustum. The cascade VP already extends toward the light (see
-        //   ComputeCascades), so its frustum is the correct assignment volume - each caster lands in
-        //   ~1 cascade instead of all 4 (was Sedulous's compiled-out !FRUSTUM_CULL_SHADOWS fallback).
-        // - sphere cull (cullRadius > 0): local point/spot lights vs the light's reach.
+        //   ComputeCascades), so its frustum is the correct assignment volume, and each caster lands
+        //   in about one cascade instead of all 4.
+        // - sphere cull (cullRadius > 0): local point and spot lights against the light's reach.
         Span<const DrawItem> items = casters;
         if (frustumCull)
         {
@@ -888,8 +886,8 @@ namespace foundation::render
                     const Float4 b = cullBounds[k];
                     const Float3 c{b.x, b.y, b.z};
                     // Inline sphere-vs-frustum with early-out: reject if the sphere is fully outside any
-                    // plane (outward normals). Avoids BoundingSphere construction + the enum/switch
-                    // Intersects() runs per plane - this is the hot path (~448k tests/frame at 112k casters).
+                    // plane (outward normals). Avoids BoundingSphere construction and the enum switch
+                    // Intersects() runs per plane, since this is the hot path (every caster, every cascade).
                     bool inside = true;
                     for (i32 p = 0; p < kBoundingFrustumPlaneCount; ++p)
                     {
@@ -934,12 +932,12 @@ namespace foundation::render
             items = Span<const DrawItem>{m_shadowCullScratch.Data(), m_shadowCullScratch.Size()};
         }
 
-        // Group by RENDERER (not category): the caster list is the view's draw list, whose blended span
-        // now mixes transparent meshes (id 0) and sprites (id 1) interleaved by depth. Dispatching a
+        // Group by renderer, not category: the caster list can be the view's draw list, whose blended
+        // span mixes transparent meshes (id 0) and sprites (id 1) interleaved by depth. Dispatching a
         // whole category run to the first item's renderer would hand sprite data to the mesh renderer
-        // (read as MeshRenderData -> garbage/UAF). Same-renderer runs route correctly; sprites' depth-only
-        // resolve is a no-op (they don't cast shadows).
-        PROFILE_SCOPE("shadow.resolve"); // per-survivor instance resolve + emit
+        // (read as MeshRenderData). Same-renderer runs route correctly; sprites' depth-only resolve is
+        // a no-op (they don't cast shadows).
+        PROFILE_SCOPE("shadow.resolve"); // per-survivor instance resolve and emit
         m_shadowResolved.Clear();
         usize i = 0;
         while (i < items.Size())
@@ -993,14 +991,13 @@ namespace foundation::render
             {
                 continue; // the producer opted out (vegetation fillers)
             }
-            // The caster list is heterogeneous: any renderer - terrain, an external one - can produce
-            // Opaque/Masked casters. Read only the GENERIC base fields (worldCenter/worldRadius +
+            // The caster list is heterogeneous: any renderer (terrain, an external one) can produce
+            // Opaque or Masked casters. Read only the generic base fields (worldCenter, worldRadius and
             // sortBatchKey, which every producer sets at extraction with the same BatchKey the
-            // draw-list builder sorts by - no recompute). The one mesh-specific need, skinned-caster
-            // spheres (per-tile static-atlas invalidation), asks the data what it IS: `kind`, stamped
-            // by MeshRenderData's constructor. It used to gate on rendererId == 0, which is only the
-            // first-REGISTERED renderer - the terrain probe registers terrain alone, so that read
-            // bones out of terrain fields (found by the Beef port's checked downcast).
+            // draw-list builder sorts by, so nothing is recomputed). The one mesh-specific need,
+            // skinned-caster spheres (per-tile static-atlas invalidation), asks the data what it is:
+            // `kind`, stamped by MeshRenderData's constructor. rendererId cannot tell, since id 0 is
+            // only the first registered renderer, which need not be the mesh renderer.
             const u32 stateBits = data->sortBatchKey & ((1u << kSortStateBits) - 1);
             if (data->kind == RenderDataKind::Mesh)
             {
@@ -1049,14 +1046,14 @@ namespace foundation::render
             }
         }
         RadixSortDrawItems(ctx.casters, m_sortScratch);
-        // Compact bounds SoA (xyz = worldCenter, w = worldRadius) aligned to the SORTED caster order, so the
-        // per-cascade frustum cull streams 16B/item linearly (4 per cache line) instead of chasing
-        // it.data->worldCenter into scattered ~200B MeshRenderData - the dominant shadow-record cost at scale.
+        // Compact bounds SoA (xyz worldCenter, w worldRadius) aligned to the sorted caster order, so the
+        // per-cascade frustum cull streams 16B per item linearly (4 per cache line) instead of chasing
+        // it.data->worldCenter into scattered ~200B MeshRenderData, the dominant shadow-record cost at scale.
         ctx.casterBounds.Clear();
         ctx.casterBounds.Reserve(ctx.casters.Size());
         for (const DrawItem& it : ctx.casters)
         {
-            // Generic base fields only (any renderer's caster) - no MeshRenderData downcast.
+            // Generic base fields only (any renderer's caster), no MeshRenderData downcast.
             ctx.casterBounds.PushBack(Float4{it.data->worldCenter.x, it.data->worldCenter.y,
                                              it.data->worldCenter.z, it.data->worldRadius});
         }
@@ -1132,15 +1129,14 @@ namespace foundation::render
         }
 
         // ---- Per-scene shadow composition -------------------------------------------------------
-        // Views can show DIFFERENT scenes in one frame (editor pages side-by-side; the Sandbox's
-        // multi-view-of-one-scene shape never exercised this). Every shadow input - caster list,
-        // light direction, atlas tiles, static-cache signature - is sourced from the VIEW'S OWN
-        // scene via these contexts; the old primary-scene sourcing bled scene A's shadows into
-        // scene B and never rendered B's own.
+        // Views can show different scenes in one frame (editor pages side by side). Every shadow
+        // input (caster list, light direction, atlas tiles, static-cache signature) is sourced from
+        // the view's own scene through these contexts, so one scene's shadows never bleed into
+        // another's.
         const u32 viewCount = static_cast<u32>(m_views.ActiveCount());
 
-        // Distinct scenes in order of first appearance + each view's index into them. Contexts are
-        // pooled UniquePtrs: stable addresses (graph-execute lambdas capture them), reused arrays.
+        // Distinct scenes in order of first appearance, and each view's index into them. Contexts are
+        // pooled UniquePtrs: stable addresses (graph-execute lambdas capture them) and reused arrays.
         m_viewSceneIndex.Resize(m_views.ActiveCount());
         usize sceneCount = 0;
         for (usize i = 0; i < m_views.ActiveCount(); ++i)
@@ -1190,8 +1186,8 @@ namespace foundation::render
             m_sceneShadowPool[k]->scene = nullptr;
         }
 
-        // One shadow ARRAY shared by all views, sized for per-view cascades (viewCount * cascades
-        // layers). Each view fits + renders its OWN cascades into its layer range, and samples them.
+        // One shadow array shared by all views, sized for per-view cascades (viewCount * cascades
+        // layers). Each view fits and renders its own cascades into its layer range, and samples them.
         bool anyDirectional = false, anyLocalCasters = false;
         for (usize k = 0; k < sceneCount; ++k)
         {
@@ -1204,10 +1200,10 @@ namespace foundation::render
             hasShadow ? m_shadows->PrepareFrame(m_frameIndex, viewCount) : nullptr;
         const u64 shadowGen = (m_shadows != nullptr) ? m_shadows->Generation() : 0;
 
-        // Camera-INDEPENDENT caster lists (opaque+masked, off-camera casters included), one per scene.
-        // Shared by BOTH that scene's directional cascades and its local-light atlas tiles: sourcing
-        // shadows from these - not the per-view camera draw lists - means view-frustum culling the
-        // camera never drops a shadow caster (Sedulous: transparent + sprites don't cast).
+        // Camera-independent caster lists (opaque and masked, off-camera casters included), one per
+        // scene, shared by that scene's directional cascades and its local-light atlas tiles. Sourcing
+        // shadows from these rather than the per-view camera draw lists means view-frustum culling
+        // never drops a shadow caster. Transparent meshes and sprites don't cast.
         for (usize k = 0; k < sceneCount; ++k)
         {
             SceneShadowCtx& ctx = *m_sceneShadowPool[k];
@@ -1218,10 +1214,11 @@ namespace foundation::render
             }
         }
 
-        // Local-light (spot/point) shadows (5.3): build the per-caster perspective matrices + atlas
-        // tiles up front. ONE physical atlas; its per-layer tile space is handed out across scenes by
-        // GLOBAL counters, and the flat GpuLocalShadow buffer is the scenes' entries CONCATENATED -
-        // each view offsets its scene-relative shadowIndex by its scene's entryBase (ShadowBinding).
+        // Local-light (spot and point) shadows: build the per-caster perspective matrices and atlas
+        // tiles up front. There is one physical atlas; its per-layer tile space is handed out across
+        // scenes by global counters, and the flat GpuLocalShadow buffer is the scenes' entries
+        // concatenated. Each view offsets its scene-relative shadowIndex by its scene's entryBase
+        // (ShadowBinding).
         // Doing it here lets the renderers size their per-object rings (SetShadowAtlas passCount) and
         // upload the data before the forward.
         m_localShadows.Clear();
@@ -1236,7 +1233,7 @@ namespace foundation::render
         if (atlasView != nullptr)
         {
             const u32 capacity =
-                m_shadows->AtlasTileCapacity(); // per layer, WHOLE frame (all scenes)
+                m_shadows->AtlasTileCapacity(); // per layer, whole frame (all scenes)
             const u32 atlasRes = m_shadows->AtlasResolution();
             const u32 tileRes = m_shadows->AtlasTileResolution();
             const u32 fif = m_shadows->FramesInFlight();
@@ -1251,9 +1248,9 @@ namespace foundation::render
                     const u32 need = (c.type == 1u /*point*/) ? 6u : 1u;
                     u32& tileCtr = c.isStatic ? stTile : rtTile;
                     // Extraction assigned this caster a shadowIndex (scene-relative, per-scene caps);
-                    // whether it fits HERE depends on the whole frame's tile budget. A caster that
-                    // doesn't fit still consumes its entry slots - as DEGENERATE entries the shader
-                    // treats as unshadowed - so every later caster's shadowIndex stays aligned.
+                    // whether it fits here depends on the whole frame's tile budget. A caster that
+                    // doesn't fit still consumes its entry slots, as degenerate entries the shader
+                    // treats as unshadowed, so every later caster's shadowIndex stays aligned.
                     const bool fits = tileCtr + need <= capacity &&
                                       m_localShadows.Size() + need <= kMaxLocalShadowEntries;
                     if (!fits)
@@ -1262,7 +1259,7 @@ namespace foundation::render
                              ++f)
                         {
                             GpuLocalShadow dead;
-                            dead.atlasScaleBias = Float4{0, 0, 0, 0}; // shader guard -> unshadowed
+                            dead.atlasScaleBias = Float4{0, 0, 0, 0}; // the shader guard treats it as unshadowed
                             m_localShadows.PushBack(dead);
                         }
                         continue;
@@ -1270,13 +1267,13 @@ namespace foundation::render
                     Array<AtlasDraw>& dst = c.isStatic ? m_staticAtlasDraws : m_rtAtlasDraws;
                     for (u32 f = 0; f < need; ++f)
                     {
-                        const u32 ti = tileCtr + f; // tile index WITHIN the layer
+                        const u32 ti = tileCtr + f; // tile index within the layer
                         GpuLocalShadow entry =
                             (need == 6u) ? BuildPointShadowFace(c, f, ti, atlasRes, tileRes)
                                          : BuildSpotShadow(c, ti, atlasRes, tileRes);
                         entry.atlasSelect = c.isStatic ? 1.0f : 0.0f; // sampled atlas array layer
                         const AtlasTile t = AtlasTileRect(ti, atlasRes, tileRes);
-                        // Cull casters to the light's bounding sphere (point/spot share pos + range).
+                        // Cull casters to the light's bounding sphere (point and spot share position and range).
                         dst.PushBack(AtlasDraw{LocalShadowTile{entry.viewProj, t.x, t.y, t.w, t.h,
                                                                c.positionWS, Max(0.1f, c.range)},
                                                &ctx});
@@ -1285,10 +1282,10 @@ namespace foundation::render
                     tileCtr += need;
                 }
 
-                // Static atlas layer, PER SCENE: each tile is cached and re-rendered only when needed,
-                // tracked by a per-tile dirty COUNTDOWN (a tile re-renders for FramesInFlight frames to
-                // refresh every in-flight slot's copy). Dirtied by: the scene's static caster set
-                // changing (signature), the scene landing on a different pool slot / tile range (atlas
+                // Static atlas layer, per scene: each tile is cached and re-rendered only when needed,
+                // tracked by a per-tile dirty countdown (a tile re-renders for FramesInFlight frames to
+                // refresh every in-flight slot's copy). A tile is dirtied by the scene's static caster set
+                // changing (signature), the scene landing on a different pool slot or tile range (the atlas
                 // layout shifted under it), or an animated caster's sphere overlapping the tile.
                 ctx.staticTiles.Clear();
                 for (const AtlasDraw& d : m_staticAtlasDraws)
@@ -1350,7 +1347,7 @@ namespace foundation::render
             static_cast<u32>(m_rtAtlasDraws.Size()) + static_cast<u32>(m_staticRenderDraws.Size());
 
         {
-            PROFILE_SCOPE("Compose.Prepare"); // per-frame GPU buffer sizing + pool resets
+            PROFILE_SCOPE("Compose.Prepare"); // per-frame GPU buffer sizing and pool resets
             for (Renderer* r : m_registry->Unique())
             {
                 r->SetShadowMap(shadowMap, shadowGen);
@@ -1359,8 +1356,8 @@ namespace foundation::render
             {
                 r->SetShadowAtlas(atlasView, atlasGen, localPassCount);
             }
-            // Probe capture re-emits the draws once per face (P1b caps at 1 probe/frame = 6 forward passes);
-            // count them into the per-object rings or the extra passes would starve the forward (silent drops).
+            // Probe capture re-emits the draws once per face (capture is capped at one probe a frame, 6 forward
+            // passes); count them into the per-object rings, or the extra passes would starve the forward.
             const u32 captureFaces =
                 (m_probeSystem != nullptr && !m_probeSystem->Captures().IsEmpty()) ? 6u : 0u;
             for (Renderer* r : m_registry->Unique())
@@ -1386,8 +1383,8 @@ namespace foundation::render
             {
                 r->SetShadowCasterDraws(casterDraws);
             }
-            // Reflection probes (multi-probe): upload this frame's records + bind the prefiltered cube-
-            // array (t8) + the probe-metadata SRV (t9) + count. The forward loops + blends them. 0 -> no probe.
+            // Reflection probes: upload this frame's records and bind the prefiltered cube array (t8),
+            // the probe-metadata SRV (t9) and the count. The forward loops over and blends them. 0 means no probe.
             if (m_probeSystem != nullptr && m_probeSystem->ActiveCount() > 0)
             {
                 m_probeSystem->Upload();
@@ -1407,10 +1404,10 @@ namespace foundation::render
             if (m_ibl != nullptr && m_ibl->Ready())
             {
                 m_ibl->Upload(
-                    *m_encoder); // pending equirect/cubemap uploads, before the graph executes
+                    *m_encoder); // pending equirect and cubemap uploads, before the graph executes
             }
-            // (IBL products are PER SCENE now - each view's binding rides ResolveAndEmit's
-            // RenderRecordContext instead of a frame-global renderer setting.)
+            // IBL products are per scene: each view's binding rides ResolveAndEmit's
+            // RenderRecordContext rather than a frame-global renderer setting.
             for (Renderer* r : m_registry->Unique())
             {
                 r->PrepareFrame(totalDraws, m_frameIndex);
@@ -1421,10 +1418,10 @@ namespace foundation::render
                     Span<const GpuLocalShadow>{m_localShadows.Data(), m_localShadows.Size()},
                     m_frameIndex);
             }
-            // Skinning bone upload: write each distinct skeleton instance's matrices ONCE into the bone
-            // pool + copy staging->device, before any pass reads them. Every distinct scene at once (a
-            // scene's instances cover every view of it): uploaded one scene at a time, each upload lost
-            // the one before it, and every page but the last drew its skinned meshes in their bind pose.
+            // Skinning bone upload: write each distinct skeleton instance's matrices once into the bone
+            // pool and copy staging to device, before any pass reads them. Every distinct scene goes in
+            // one call (a scene's instances cover every view of it), since uploading one scene at a time
+            // would overwrite the previous scene's upload.
             if (m_encoder != nullptr)
             {
                 m_frameScenes.Clear();
@@ -1443,10 +1440,10 @@ namespace foundation::render
         }
 
         // Declare every view's forward pass into the one frame graph, then let the graph compile
-        // (barriers + transient depth allocation/aliasing) + execute. (One graph, all views.)
+        // (barriers, transient depth allocation and aliasing) and execute. One graph serves all views.
         {
             PROFILE_SCOPE(
-                "Compose.Declare"); // build the frame graph (pass/resource declarations)
+                "Compose.Declare"); // build the frame graph (pass and resource declarations)
             if (m_views.ActiveCount() > 0)
             {
                 m_graph.SetOutputSize(m_views.At(0)->Width(), m_views.At(0)->Height());
@@ -1459,9 +1456,9 @@ namespace foundation::render
             const u32 cascadeCount = (m_shadows != nullptr) ? m_shadows->CascadeCount() : 4u;
             const u32 shadowRes = (m_shadows != nullptr) ? m_shadows->Resolution() : 1024u;
 
-            // IBL precompute, PER SCENE: each scene's authored sky builds into ITS context's persistent
-            // products (env/SH/prefilter; BRDF LUT shared) when dirty; each view samples its own scene's
-            // set below. The procedural sky tracks the scene's key light (sun disc + ambient match).
+            // IBL precompute, per scene: each scene's authored sky builds into its context's persistent
+            // products (env, SH, prefilter; the BRDF LUT is shared) when dirty; each view samples its own
+            // scene's set below. The procedural sky tracks the scene's key light (sun disc and ambient).
             if (m_ibl != nullptr && m_ibl->Ready())
             {
                 m_ibl->BeginFrame(m_graph);
@@ -1474,10 +1471,10 @@ namespace foundation::render
                 }
             }
 
-            // Local-light shadow atlas (5.3/5.4): a 2-layer array. Layer 0 (realtime) re-renders every
-            // frame; layer 1 (static) only when the static set changed (renderStatic). Each pass targets
-            // its layer (subresource), clears it, and renders its tiles (per-tile viewport+scissor). Every
-            // forward pass ReadTextures the array, ordering both passes ahead + barriering it readable.
+            // Local-light shadow atlas: a 2-layer array. Layer 0 (realtime) re-renders every frame;
+            // layer 1 (static) only when the static set changed (renderStatic). Each pass targets its
+            // layer (subresource), clears it, and renders its tiles (per-tile viewport and scissor). Every
+            // forward pass reads the array, which orders both passes ahead and makes it readable.
             rendergraph::RGHandle atlasH;
             const bool atlasActive =
                 atlasView != nullptr && (!m_rtAtlasDraws.IsEmpty() || staticTileCount > 0);
@@ -1486,9 +1483,9 @@ namespace foundation::render
                 atlasH = m_shadows->ImportAtlas(m_graph, m_frameIndex);
                 RendererRegistry* reg = m_registry;
                 const u32 atlasRes = m_shadows->AtlasResolution();
-                // Declare one layer's depth pass over a draw list (tiles across ALL scenes; each draw
-                // records ITS scene's casters). (Lambda-per-pass; the graph runs them at execute time,
-                // ordered before the forward by its ReadTexture of atlasH.)
+                // Declare one layer's depth pass over a draw list (tiles across all scenes; each draw
+                // records its own scene's casters). The graph runs each pass's lambda at execute time,
+                // ordered before the forward by its ReadTexture of atlasH.
                 const auto declareLayer = [&](u32 layer, Array<AtlasDraw>* draws)
                 {
                     if (draws->IsEmpty())
@@ -1527,29 +1524,29 @@ namespace foundation::render
                                 });
                         });
                 };
-                declareLayer(0u, &m_rtAtlasDraws); // realtime layer - every frame
+                declareLayer(0u, &m_rtAtlasDraws); // realtime layer, every frame
                 if (renderStatic)
                 {
                     declareLayer(1u, &m_staticRenderDraws);
-                } // static layer - only dirty tiles
+                } // static layer, only dirty tiles
             }
             if (shadowActive)
             {
                 shadowH = m_shadows->ImportTarget(m_graph, m_frameIndex);
             }
 
-            // Declare EVERY view's cascade depth passes up front - before any forward pass. The cascade
+            // Declare every view's cascade depth passes up front, before any forward pass. The cascade
             // array is one imported resource: if a forward pass sampling the whole array were declared
             // before a later view's cascade writes, those layers would still be in DepthStencilAttachment
             // (not Read) when sampled (VUID-vkCmdExecuteCommands depth-layout). Fitting all cascades first
-            // means every layer is written + barriered to Read before the first forward sample.
+            // means every layer is written and moved to Read before the first forward sample.
             Array<ShadowBinding> viewShadows;
             viewShadows.Resize(m_views.ActiveCount());
             m_viewShadowDebug.Clear();
             m_viewShadowDebug.Resize(m_views.ActiveCount());
             for (usize i = 0; i < m_views.ActiveCount(); ++i)
             {
-                // Every view (shadowed or not) carries its scene's local-shadow entry base - its lights'
+                // Every view (shadowed or not) carries its scene's local-shadow entry base: its lights'
                 // scene-relative shadowIndex values offset into the frame's concatenated entry buffer.
                 SceneShadowCtx* sctx = (m_viewSceneIndex[i] != ~0u)
                                            ? m_sceneShadowPool[m_viewSceneIndex[i]].Get()
@@ -1561,8 +1558,8 @@ namespace foundation::render
                 {
                     continue;
                 }
-                // The map exists this frame: EVERY view (caster-less scenes + views beyond the
-                // cascade budget included) must bind + DECLARE it - see ShadowBinding::MapBound.
+                // The map exists this frame: every view (caster-less scenes and views beyond the
+                // cascade budget included) must bind and declare it; see ShadowBinding::MapBound.
                 viewShadows[i].sampleView = shadowMap;
                 viewShadows[i].handle = shadowH;
                 m_viewShadowDebug[i].mapBound = true;
@@ -1570,8 +1567,8 @@ namespace foundation::render
                 {
                     continue;
                 }
-                // Per-view directional: THIS view's scene must have a caster (another scene's key light
-                // must never shadow - or light-leak into - this one).
+                // Per-view directional: this view's scene must have a caster (another scene's key light
+                // must never shadow, or leak light into, this one).
                 if (sctx == nullptr || !sctx->scene->DirectionalShadowData().valid)
                 {
                     continue;
@@ -1600,9 +1597,10 @@ namespace foundation::render
                 {
                     const Float4x4 cascadeVP = cascades.viewProj[c];
                     const u32 layer = layerBase + c;
-                    // Casters come from the view's SCENE's camera-independent list (built above), not this
-                    // view's culled draw list - so view-frustum culling can't drop an off-camera caster
-                    // whose shadow is visible. Per-cascade frustum cull then keeps each caster to ~1 cascade.
+                    // Casters come from the view's scene's camera-independent list (built above), not this
+                    // view's culled draw list, so view-frustum culling can't drop an off-camera caster
+                    // whose shadow is visible. Per-cascade frustum culling then keeps each caster to about
+                    // one cascade.
                     m_graph.AddRenderPass(
                         u8"shadow.cascade",
                         [this, shadowH, cascadeVP, shadowRes, layer, reg, sctx,
@@ -1621,8 +1619,8 @@ namespace foundation::render
                                                                        sctx->casters.Size()};
                                     const Span<const Float4> bounds{sctx->casterBounds.Data(),
                                                                     sctx->casterBounds.Size()};
-                                    // Cascades follow their OWNING view's LOD selection:
-                                    // shadow matches what the view draws.
+                                    // Cascades follow their owning view's LOD selection, so
+                                    // the shadow matches what the view draws.
                                     RecordShadowCasters(rp, casters, *reg, cascadeVP, {}, 0.0f,
                                                         /*frustumCull*/ true, bounds, v,
                                                         sctx->scene);
@@ -1636,9 +1634,9 @@ namespace foundation::render
                 m_viewShadowDebug[i].directional = true;
             }
 
-            // Reflection probe: init the captured-cube layout once (so uncaptured slices are ShaderRead, not
-            // UNDEFINED, under the whole-array SRV) + import it ONCE so both the capture passes AND the main
-            // forward's ReadTexture share one imported resource (which orders capture->forward + barriers it).
+            // Reflection probe: initialize the captured-cube layout once (so uncaptured slices are ShaderRead,
+            // not UNDEFINED, under the whole-array SRV) and import it once, so the capture passes and the main
+            // forward's ReadTexture share one imported resource (which orders capture before forward).
             rendergraph::RGHandle probeCapturedH, probePrefilteredH;
             bool probeActive = false;
             if (m_probeSystem != nullptr && m_probeSystem->ActiveCount() > 0 &&
@@ -1647,14 +1645,14 @@ namespace foundation::render
                 m_probeSystem->InitLayouts(*m_encoder);
                 probeCapturedH = m_probeSystem->ImportCaptured(m_graph);
                 probePrefilteredH = m_probeSystem->ImportPrefiltered(
-                    m_graph); // the SEPARATE texture the forward samples
+                    m_graph); // the separate texture the forward samples
                 probeActive = true;
             }
 
-            // ---- Reflection probe capture (P1b) --------------------------------------------------------
-            // Render each dirty probe's 6 faces (lit forward + sky, HDR) into its captured-cube slices, BEFORE
-            // the main views (which sample the result). Feedback-safe: the capture forward samples its
-            // scene's IBL only, never the probe array. Capped at one probe/frame for P1b.
+            // ---- Reflection probe capture -------------------------------------------------------------
+            // Render each dirty probe's 6 faces (lit forward and sky, HDR) into its captured-cube slices before
+            // the main views, which sample the result. Feedback-safe: the capture forward samples only its
+            // scene's IBL, never the probe array. Capped at one probe a frame.
             if (probeActive && m_ibl != nullptr && m_ibl->Ready() &&
                 !m_probeSystem->Captures().IsEmpty())
             {
@@ -1662,15 +1660,15 @@ namespace foundation::render
                 const u32 res = ReflectionProbeSystem::kCaptureRes;
                 const f32 nearZ = ReflectionProbeSystem::kCaptureNear;
                 const f32 farZ = ReflectionProbeSystem::kCaptureFar;
-                // Round-robin: capture ONE dirty probe per frame, cycling through them. Keeps the capture to 6
-                // faces/frame (fits the sky-uniform slots 2..7) and amortizes multi-probe / Realtime re-capture.
+                // Round-robin: capture one dirty probe per frame, cycling through them. Keeps the capture to 6
+                // faces a frame (fits the sky-uniform slots 2..7) and spreads multi-probe and Realtime re-capture.
                 const Span<const ReflectionProbeSystem::CaptureTask> captures =
                     m_probeSystem->Captures();
                 const ReflectionProbeSystem::CaptureTask task =
                     captures[m_probeCaptureCursor % captures.Size()];
                 ++m_probeCaptureCursor;
-                // The capture renders the probe's OWNING scene (a probe in scene B must never bake
-                // scene A's geometry) and lights with ITS scene's IBL context - never another sky's.
+                // The capture renders the probe's owning scene (a probe in scene B must never bake
+                // scene A's geometry) and lights with its own scene's IBL context, never another sky's.
                 const ExtractedScene* captureScene = task.scene;
                 IBLSystem::Context* capCtx = nullptr;
                 for (usize k = 0; k < sceneCount; ++k)
@@ -1693,10 +1691,10 @@ namespace foundation::render
                     capIbl.maxLod = m_ibl->MaxLod();
                     capIbl.generation = capCtx->Generation();
                     capIbl.valid = true;
-                    // Reuse the primary view's CSM binding (handle + cascades) + the local atlas. The capture
-                    // forward's shader statically samples both depth textures, so the binding MUST be valid or the
-                    // graph won't barrier them to DEPTH_STENCIL_READ_ONLY (they'd still be in ATTACHMENT layout).
-                    // The cascades are geometrically the primary camera's (approximate for a face) - fine for P1b.
+                    // Reuse the primary view's CSM binding (handle and cascades) and the local atlas. The capture
+                    // forward's shader statically samples both depth textures, so the binding must be valid or the
+                    // graph won't move them to DEPTH_STENCIL_READ_ONLY (they'd still be in ATTACHMENT layout).
+                    // The cascades are geometrically the primary camera's, an approximation for a face.
                     ShadowBinding capShadow =
                         viewShadows.IsEmpty() ? ShadowBinding{} : viewShadows[0];
                     capShadow.atlasHandle = atlasH;
@@ -1730,8 +1728,9 @@ namespace foundation::render
                         sub.arrayLayerCount = 1;
 
                         const Float4x4 faceVP = fc.ViewProjection();
-                        // Lit forward: cluster {} -> dummy cluster -> all-lights fallback (no per-face build);
-                        // clear depth (no prepass); write only color slot 0 into this cube face.
+                        // Lit forward: cluster {} binds the dummy cluster, so the all-lights fallback
+                        // runs (no per-face build); clear depth (no prepass); write only color slot 0
+                        // into this cube face.
                         m_pass.DeclarePass(
                             cv, *m_registry, m_graph, m_frameIndex,
                             /*viewIndex*/ kCaptureViewIndexBase + face, capturedH, capDepth,
@@ -1740,8 +1739,8 @@ namespace foundation::render
                             ClusterBinding{}, capShadow, capIbl, rhi::LoadOp::Clear, sub);
                         // Sky into the same face, after the forward (loads the captured depth).
                         // Distinct sky uniform slot per capture face (2..7), so the capture never shares SkyPass's
-                        // per-view slot with a main view (0,1) or with another face - otherwise the last recorder
-                        // wins the shared slot and the captured sky reads a main view's camera (cross-view leak).
+                        // per-view slot with a main view (0, 1) or with another face; otherwise the last recorder
+                        // wins the shared slot and the captured sky reads a main view's camera.
                         m_sky->DeclareSky(m_graph, capturedH, capVel, capDepth, capCtx->EnvHandle(),
                                           capCtx->EnvView(), ReflectionProbeSystem::kCubeFormat,
                                           m_pass.DepthFormat(), Inverse(faceVP), faceVP,
@@ -1752,18 +1751,18 @@ namespace foundation::render
                                           /*viewIndex*/ 10u + face, capCtx->Uid(),
                                           /*samples*/ 1u, sub); // probe capture is single-sample
                     }
-                    // Bridge captured -> prefiltered mip 0 (flip blit - corrects the RH-LookAt mirror) so the forward
-                    // samples a SEPARATE texture, never the captured cube it just wrote; then GGX-convolve mip 0 into
-                    // the rougher mips (roughness reflections).
+                    // Blit captured into prefiltered mip 0 (a flip that corrects the RH-LookAt mirror) so the
+                    // forward samples a separate texture, never the captured cube it just wrote; then
+                    // GGX-convolve mip 0 into the rougher mips (roughness reflections).
                     m_probeSystem->DeclareBlit(m_graph, capturedH, probePrefilteredH, task.slot);
                     m_probeSystem->DeclarePrefilter(m_graph, probePrefilteredH, task.slot);
                     m_probeSystem->MarkCaptured(task.slot);
-                } // captureScene + capCtx valid
+                } // captureScene and capCtx valid
             }
 
-            // Import each distinct target ONCE (so the graph orders/barriers all views writing it as one
+            // Import each distinct target once (so the graph orders all views writing it as one
             // resource). The first view to a target clears it; later views into the same target Load,
-            // preserving earlier views' regions (split-screen). Targets are few - a linear scan is fine.
+            // preserving earlier views' regions (split-screen). Targets are few, so a linear scan is fine.
             struct TargetImport
             {
                 rhi::TextureView* target;
@@ -1773,12 +1772,12 @@ namespace foundation::render
                 rhi::TextureFormat fmt;
             };
             Array<TargetImport> imported;
-            // Bracket the decal ring ONCE for the whole per-view loop (each view accumulates its own slots).
+            // Bracket the decal ring once for the whole per-view loop (each view accumulates its own slots).
             if (m_decalPass != nullptr)
             {
                 m_decalPass->BeginFrame(m_frameIndex);
             }
-            // Resources declared BEFORE the per-view loop (shadow atlas, IBL, cluster data)
+            // Resources declared before the per-view loop (shadow atlas, IBL, cluster data)
             // are frame-global; the debug-view lookup below searches this view's own range
             // first (names repeat per view: every view has a "forward.depth"), then falls
             // back to the frame-global prefix.
@@ -1787,8 +1786,8 @@ namespace foundation::render
             {
                 RenderView* v = m_views.At(i);
                 const usize viewResourceBase = m_graph.Resources().Size();
-                // Semantic debug views blit the scene HDR RAW (tonemap would grade the
-                // encoded terms); set on the tonemap path, invalid = no blit needed.
+                // Semantic debug views blit the scene HDR raw (tonemap would grade the
+                // encoded terms); set on the tonemap path, invalid when no blit is needed.
                 rendergraph::RGHandle debugSemanticSrc{};
                 rhi::TextureView* tgt = v->Target();
                 if (tgt == nullptr)
@@ -1809,10 +1808,10 @@ namespace foundation::render
                 }
                 if (!found)
                 {
-                    // Backbuffer (targetTexture null): current==final==RenderTarget - the host did
-                    // Undefined->RenderTarget and will Present, so the graph touches no barrier. Offscreen
-                    // (targetTexture set): the graph barriers it current -> RenderTarget -> final (e.g.
-                    // ShaderRead/CopySrc so the caller can sample/blit the result).
+                    // Backbuffer (targetTexture null): current and final are both RenderTarget; the host did
+                    // Undefined to RenderTarget and will Present, so the graph adds no barrier. Offscreen
+                    // (targetTexture set): the graph moves it from current to RenderTarget to final (ShaderRead
+                    // or CopySrc, say, so the caller can sample or blit the result).
                     const ViewSettings& s = v->Settings();
                     colorH = m_graph.ImportTarget(u8"forward.color", s.targetTexture, tgt,
                                                   s.targetFinalState, s.targetCurrentState);
@@ -1866,14 +1865,14 @@ namespace foundation::render
                     cluster = m_clusters->DeclareBuild(m_graph, *v, m_frameIndex, viewIndex);
                 }
 
-                // This view's CSM cascades (fit + declared up front, above). Cascades stay on the view's
-                // camera-culled draw list - they're already camera-coupled (refit per frame).
+                // This view's CSM cascades (fit and declared up front, above). Cascades stay on the view's
+                // camera-culled draw list; they're already camera-coupled (refit per frame).
                 ShadowBinding shadow = viewShadows[i];
-                // The local-light atlas is scene-global (one pass for all views) - every view depends on it.
+                // The local-light atlas is scene-global (one pass for all views); every view depends on it.
                 shadow.atlasHandle = atlasH;
                 shadow.atlasValid = atlasActive;
 
-                // This view's scene context (shadow/probe/IBL composition all key off it).
+                // This view's scene context (shadow, probe and IBL composition all key off it).
                 SceneShadowCtx* viewScene = (m_viewSceneIndex[i] != ~0u)
                                                 ? m_sceneShadowPool[m_viewSceneIndex[i]].Get()
                                                 : nullptr;
@@ -1886,7 +1885,7 @@ namespace foundation::render
                     probeRange = m_probeSystem->RangeFor(v->Scene());
                 }
 
-                // This view's SCENE's IBL products for the forward to sample + barrier-order this
+                // This view's scene's IBL products for the forward to sample and order against this
                 // frame (per-scene contexts; the BRDF LUT is the shared piece).
                 IblBinding ibl;
                 IBLSystem::Context* viewIblCtx = (viewScene != nullptr) ? viewScene->ibl : nullptr;
@@ -1903,13 +1902,13 @@ namespace foundation::render
                     ibl.valid = true;
                 }
 
-                // Scene-pass MSAA: the opaque G-buffer (depth + aux + hdr) renders
-                // multisampled at the view's count, then resolves to 1x after opaque/sky/decals for the
+                // Scene-pass MSAA: the opaque G-buffer (depth, aux and HDR) renders
+                // multisampled at the view's count, then resolves to 1x after opaque, sky and decals for the
                 // 1x post stack. msaaSamples == 1 (off, or no resolve pass) leaves every desc single-
-                // sample = byte-identical to the single-sample path.
+                // sample, the same as the single-sample path.
                 // MSAA engages only in the HDR (tonemap) path: it resolves into a 1x HDR the post stack
                 // consumes. The no-tonemap fallback renders forward straight into the 1x target, where an
-                // MSAA depth/aux would mismatch - so it stays single-sample.
+                // MSAA depth and aux would mismatch, so it stays single-sample.
                 const u8 msaaSamples = (m_msaaResolve != nullptr && m_tonemap != nullptr &&
                                         v->Settings().post.msaaSamples > 1)
                                            ? v->Settings().post.msaaSamples
@@ -1920,32 +1919,32 @@ namespace foundation::render
                     d.sampleCount = msaaSamples;
                     return d;
                 };
-                // Per-view depth, shared by the forward pass + the sky pass (sky depth-tests against it).
+                // Per-view depth, shared by the forward pass and the sky pass (sky depth-tests against it).
                 const rendergraph::RGHandle depth = m_graph.CreateTransient(
                     u8"forward.depth", msaaDesc(m_pass.DepthFormat(), v->Width(), v->Height()));
-                // Per-view MRT G-buffer aux targets (view-space normal + motion vector) - written by the
-                // forward pass, consumed by the post stack (TAA/GTAO). Unused this phase; transients free after.
+                // Per-view MRT G-buffer aux targets (view-space normal and motion vector), written by the
+                // forward pass and consumed by the post stack (TAA, GTAO).
                 const rendergraph::RGHandle normalT = m_graph.CreateTransient(
                     u8"forward.normal", msaaDesc(kGNormalFormat, v->Width(), v->Height()));
                 const rendergraph::RGHandle velocityT = m_graph.CreateTransient(
                     u8"forward.velocity", msaaDesc(kGVelocityFormat, v->Width(), v->Height()));
-                // Roughness/metallic G-buffer - consumed by the SSR pass (roughness gates/fades reflections).
+                // Roughness and metallic G-buffer, consumed by the SSR pass (roughness gates and fades reflections).
                 const rendergraph::RGHandle materialT = m_graph.CreateTransient(
                     u8"forward.material", msaaDesc(kGMaterialFormat, v->Width(), v->Height()));
-                // Diffuse albedo G-buffer - consumed by SSGI (the bounce it gathers is tinted by it).
+                // Diffuse albedo G-buffer, consumed by SSGI (the bounce it gathers is tinted by it).
                 const rendergraph::RGHandle albedoT = m_graph.CreateTransient(
                     u8"forward.albedo", msaaDesc(kGAlbedoFormat, v->Width(), v->Height()));
-                // Depth for 1x OVERLAY passes that render into the final LDR after post (debug draw): the
-                // scene `depth` when off, but the RESOLVED 1x depth under MSAA (a 1x overlay can't depth-
+                // Depth for 1x overlay passes that render into the final LDR after post (debug draw): the
+                // scene `depth` when off, but the resolved 1x depth under MSAA (a 1x overlay can't depth-
                 // test a 4x attachment). Set to postDepth inside the HDR MSAA block below.
                 rendergraph::RGHandle overlayDepth = depth;
 
-                // Per-view authored post (exposure/tonemap/bloom/AO/AA/SSR), resolved by the RenderSubsystem
+                // Per-view authored post (exposure, tonemap, bloom, AO, AA, SSR), resolved by the RenderSubsystem
                 // from the scene's PostProcessSettings (or the legacy global override). Read per view here.
                 const ViewPostConfig& post = v->Settings().post;
 
                 // GPU picking: a view whose viewport has pending pick requests re-emits its draws
-                // as id writers into per-request rect-sized targets. Declared BEFORE the TAA jitter
+                // as id writers into per-request rect-sized targets. Declared before the TAA jitter
                 // below mutates the camera: a pick must see the unjittered pixel grid (a 1x1 crop
                 // would otherwise slide up to half a pixel).
                 if (m_pick != nullptr && v->Settings().viewportKey != nullptr &&
@@ -1958,15 +1957,15 @@ namespace foundation::render
                 }
 
                 // TAA jitter: sub-pixel-offset the projection so the resolve accumulates supersamples. Applied
-                // BEFORE reading the view-proj, so the prepass + forward + sky all use the SAME jittered matrix
+                // before reading the view-proj, so the prepass, forward and sky all use the same jittered matrix
                 // (mismatched depth would break the prepass early-Z). Off when TAA is disabled (per view).
                 const Float4x4 unjitteredVP =
                     v->Camera()
-                        .ViewProjection(); // captured BEFORE jitter (transparent draws with this, post-TAA)
+                        .ViewProjection(); // captured before jitter (transparent draws with this, after TAA)
                 // The sky's own view-projection. A perspective view's is the view's; an orthographic
                 // view's rays are parallel, which would paint the whole background one colour, so the
                 // sky draws as a 60 degree perspective with the same view would see it, and its motion
-                // comes from that stand-in turning (Specs/orthographic-views.md).
+                // comes from that stand-in turning.
                 const Float4x4 skyViewProj = SkyViewProjection(v->Camera());
                 Float2 jitter{0.0f, 0.0f};
                 if (post.taaEnabled && m_taa != nullptr)
@@ -1976,9 +1975,9 @@ namespace foundation::render
                     m_anyViewTaa =
                         true; // advance the Halton phase once this frame (any view used TAA)
                 }
-                // Motion vectors: this view's previous-frame (jittered) view-proj + jitter (no motion on first
+                // Motion vectors: this view's previous-frame (jittered) view-proj and jitter (no motion on first
                 // sight). Record this frame's for next frame.
-                const Float4x4 curViewProj = v->Camera().ViewProjection(); // jittered when TAA on
+                const Float4x4 curViewProj = v->Camera().ViewProjection(); // jittered when TAA is on
                 const Float4x4 prevViewProj = (!historyFresh && historySlot < m_prevViewProj.Size())
                                                   ? m_prevViewProj[historySlot]
                                                   : curViewProj;
@@ -2005,7 +2004,7 @@ namespace foundation::render
                 }
                 m_curSkyViewProj[historySlot] = skyViewProj;
 
-                // Depth prepass: opaque-only, clears + writes the camera depth so the forward pass shades
+                // Depth prepass: opaque only, clears and writes the camera depth so the forward pass shades
                 // each opaque pixel once (early-Z via LessEqual). Declared before the forward, which Loads it.
                 {
                     RenderView* pv = v;
@@ -2024,7 +2023,7 @@ namespace foundation::render
                         });
                 }
 
-                // Declare the visible sky into `colorTarget` after the forward pass (if IBL + sky active).
+                // Declare the visible sky into `colorTarget` after the forward pass (if IBL and sky are active).
                 const auto declareSky = [&](rendergraph::RGHandle colorTarget,
                                             rendergraph::RGHandle velocityTarget,
                                             rhi::TextureFormat colorFmt)
@@ -2033,9 +2032,9 @@ namespace foundation::render
                     {
                         return;
                     }
-                    // Reconstruct the sky ray from the UNJITTERED view-proj: the background is at infinity, so
-                    // jittering its sampling buys ~no AA but makes it oscillate sub-pixel each frame - which TAA
-                    // can only partly cancel, i.e. the wobble. Unjittered => temporally invariant sky under a
+                    // Reconstruct the sky ray from the unjittered view-proj: the background is at infinity, so
+                    // jittering its sampling buys almost no AA but makes it oscillate sub-pixel each frame, a
+                    // wobble TAA can only partly cancel. Unjittered, the sky is temporally invariant under a
                     // static camera; the sky pass still writes a geometric motion vector so rotation reprojects.
                     // An orthographic view's stand-in is unjittered both frames: no jitter to remove.
                     const bool standIn = v->Camera().IsOrthographic();
@@ -2058,7 +2057,7 @@ namespace foundation::render
                 if (m_tonemap != nullptr)
                 {
                     // HDR path: forward renders linear HDR into a transient, then the tonemap pass
-                    // resolves it (exposure + tonemap + OETF) into the LDR target.
+                    // resolves it (exposure, tonemap, OETF) into the LDR target.
                     const rendergraph::RGHandle hdr = m_graph.CreateTransient(
                         u8"forward.hdr", msaaDesc(m_tonemap->HdrFormat(), v->Width(), v->Height()));
                     m_pass.DeclarePass(*v, *m_registry, m_graph, m_frameIndex, viewIndex, hdr,
@@ -2070,14 +2069,14 @@ namespace foundation::render
                     declareSky(
                         hdr, velocityT,
                         m_tonemap
-                            ->HdrFormat()); // sky into HDR (+ camera-motion velocity), before TAA
+                            ->HdrFormat()); // sky into HDR (and camera-motion velocity), before TAA
                     // Scene-pass MSAA resolve:
-                    // opaque + sky wrote the MSAA G-buffer; resolve the scene COLOR (hardware
-                    // averaged resolve attachment) and the DEPTH + AUX (first-sample shader resolve) to
-                    // 1x here, so the whole post stack (SSR/AO/TAA) and transparent run on 1x exactly as
-                    // the single-sample path. The graph schedules the resolves by dependency, after the
-                    // last G-buffer writer and before the first 1x consumer (Fable pin 3). When
-                    // msaaSamples == 1 the post* handles alias the originals - no resolve passes emitted.
+                    // opaque and sky wrote the MSAA G-buffer; resolve the scene color (hardware
+                    // averaged resolve attachment) and the depth and aux (first-sample shader resolve) to
+                    // 1x here, so the whole post stack (SSR, AO, TAA) and transparent run on 1x exactly as
+                    // in the single-sample path. The graph schedules the resolves by dependency, after the
+                    // last G-buffer writer and before the first 1x consumer. When msaaSamples == 1 the
+                    // post* handles alias the originals and no resolve passes are emitted.
                     rendergraph::RGHandle postHdr = hdr, postDepth = depth, postNormal = normalT,
                                           postVelocity = velocityT, postMaterial = materialT,
                                           postAlbedo = albedoT;
@@ -2091,7 +2090,7 @@ namespace foundation::render
                         const rendergraph::RGHandle msaaHdr = hdr;
                         const rendergraph::RGHandle resolvedHdr = postHdr;
                         // Empty pass: the MSAA color loads and resolves to 1x at pass end (fixed-function
-                        // resolve attachment on both backends - no draws, never a blit).
+                        // resolve attachment on both backends: no draws, never a blit).
                         m_graph.AddRenderPass(u8"msaa.colorResolve",
                                               [msaaHdr, resolvedHdr](rendergraph::PassBuilder& b)
                                               {
@@ -2113,12 +2112,12 @@ namespace foundation::render
                         debugSemanticSrc = postHdr;
                     }
                     // Screen-space decals: reconstruct world position from the scene depth and blend the decal
-                    // texture into the lit HDR. Placed AFTER the resolve so - like AO/SSR - decals SAMPLE the
-                    // 1x resolved depth, never the MSAA attachment (WebGPU forbids sampling a multisampled
-                    // texture through a Texture2D + sampler; sample 0 of the MSAA depth == the resolved depth,
-                    // so reconstruction is identical). Still BEFORE SSR/AO/TAA, so decals feed SSR and get
-                    // TAA-resolved. Under MSAA-off postHdr/postDepth alias hdr/depth, so this is byte-identical
-                    // to the pre-MSAA placement. Uses the jittered view-proj (matches the depth).
+                    // texture into the lit HDR. Placed after the resolve so that, like AO and SSR, decals sample
+                    // the 1x resolved depth, never the MSAA attachment (WebGPU forbids sampling a multisampled
+                    // texture through a Texture2D and sampler; sample 0 of the MSAA depth is the resolved depth,
+                    // so reconstruction is identical). Still before SSR, AO and TAA, so decals feed SSR and are
+                    // TAA-resolved. With MSAA off, postHdr and postDepth alias hdr and depth. Uses the jittered
+                    // view-proj (it matches the depth).
                     if (m_decalPass != nullptr && v->Scene() != nullptr)
                     {
                         m_decalPass->DeclareDecals(m_graph, postHdr, postDepth, v->Scene()->Decals(),
@@ -2127,7 +2126,7 @@ namespace foundation::render
                                                    v->ViewportWidth(), v->ViewportHeight(),
                                                    /*samples*/ 1u);
                     }
-                    // Screen-space GI (tier 1): one diffuse bounce gathered from the lit HDR, BEFORE
+                    // Screen-space GI: one diffuse bounce gathered from the lit HDR, before
                     // SSR so reflections see the bounce. Where a ray hits, the bounce (tinted by the
                     // albedo G-buffer) replaces the ambient the forward lit with, so the composite is
                     // given that ambient: the same SH sky, dimmer and flat fill (see :ssgi). Produces
@@ -2158,12 +2157,12 @@ namespace foundation::render
                             v->ViewportWidth(), v->ViewportHeight(), Inverse(v->Camera().projection),
                             v->Camera().projection, ssgiParams, historySlot, m_noiseFrame);
                     }
-                    // Screen-space reflections: reflect the lit HDR (sky + opaque + decals) into itself, AFTER
-                    // decals and BEFORE AO/TAA (pre-TAA so the resolve stabilizes the march). Reads the roughness
-                    // G-buffer to gate/fade; LERP-replaces the IBL specular where it hits. Produces a fresh HDR.
+                    // Screen-space reflections: reflect the lit HDR (sky, opaque, decals) into itself, after
+                    // decals and before AO and TAA (so the resolve stabilizes the march). Reads the roughness
+                    // G-buffer to gate and fade; lerps over the IBL specular where it hits. Produces a fresh HDR.
                     if (m_ssr != nullptr && post.ssrEnabled)
                     {
-                        // Per-view enable + intensity over the frame-global SSR config.
+                        // Per-view enable and intensity over the frame-global SSR config.
                         SsrPass::Params ssrParams = m_ssrParams;
                         ssrParams.intensity = post.ssrIntensity;
                         sceneHdr = m_ssr->DeclareSsr(
@@ -2172,8 +2171,8 @@ namespace foundation::render
                             v->ViewportHeight(), Inverse(v->Camera().projection),
                             v->Camera().projection, ssrParams, historySlot, m_frameIndex);
                     }
-                    // AO (GTAO or SSAO) from the opaque depth+normal G-buffer, computed BEFORE the TAA resolve
-                    // and multiplied into the HDR pre-TAA, so TAA stabilizes it (applying AO post-TAA wobbles,
+                    // AO (GTAO or SSAO) from the opaque depth and normal G-buffer, computed before the TAA resolve
+                    // and multiplied into the HDR before TAA, so TAA stabilizes it (applying AO after TAA wobbles,
                     // since the AO is computed from the jittered G-buffer and shifts sub-pixel each frame).
                     // AO debug stays a frame-global renderer toggle (not authored content).
                     const AoMode viewAoMode = static_cast<AoMode>(post.aoMode);
@@ -2190,16 +2189,16 @@ namespace foundation::render
                                               post.aoIntensity, m_frameIndex, aoMode, m_aoDebug);
                     }
                     const bool showAo =
-                        aoH.IsValid() && m_aoDebug != 0; // debug: AO/channel straight to screen
+                        aoH.IsValid() && m_aoDebug != 0; // debug: AO or channel straight to screen
                     rendergraph::RGHandle litHdr = sceneHdr;
                     if (aoH.IsValid() && viewAoMode != AoMode::Off && m_aoDebug == 0)
                     {
                         litHdr = m_ao->DeclareApply(m_graph, sceneHdr, aoH, v->Width(), v->Height(),
                                                     post.aoStrength);
                     }
-                    // TAA resolve on the opaque+sky+AO HDR (jittered) -> stable HDR. Then transparent composites
-                    // on the RESOLVED image (see below), so it's never temporally accumulated (no ghost) or
-                    // jittered (no wobble). Bloom + tonemap run on the resolved color.
+                    // TAA resolves the jittered opaque, sky and AO HDR into a stable HDR. Transparent then
+                    // composites on the resolved image (see below), so it's never temporally accumulated (no
+                    // ghost) or jittered (no wobble). Bloom and tonemap run on the resolved color.
                     rendergraph::RGHandle sceneColor = litHdr;
                     if (post.taaEnabled && m_taa != nullptr)
                     {
@@ -2209,11 +2208,11 @@ namespace foundation::render
                             v->Camera().NearZ(), v->Camera().FarZ(),
                             v->Camera().IsOrthographic());
                     }
-                    // Transparent (blended) AFTER TAA, into the resolved image, with the UNJITTERED projection:
-                    // color-only, depth read-only against the opaque depth, back-to-front. Under MSAA it
-                    // tests against the SAMPLE-0-resolved 1x depth:
+                    // Transparent (blended) after TAA, into the resolved image, with the unjittered projection:
+                    // color-only, depth read-only against the opaque depth, back to front. Under MSAA it
+                    // tests against the sample-0-resolved 1x depth:
                     // along an opaque silhouette the averaged color says "edge" where sample-0 depth may
-                    // say "empty", so a transparent crossing an opaque edge can show <=1px acne/halo.
+                    // say "empty", so a transparent crossing an opaque edge can show a halo of up to 1px.
                     // A transparent-MSAA path that resolves edge AA would fix this.
                     m_pass.DeclareTransparent(
                         *v, *m_registry, m_graph, m_frameIndex, viewIndex, sceneColor, postDepth,
@@ -2233,7 +2232,7 @@ namespace foundation::render
                     const f32 aoStrength = 0.0f;
                     const rendergraph::RGHandle aoTex =
                         aoH.IsValid() ? aoH : sceneColor; // valid binding when off
-                    // Map the tonemap's fullscreen uv to this view's sub-rect of the (full-size) HDR/bloom,
+                    // Map the tonemap's fullscreen uv to this view's sub-rect of the full-size HDR and bloom,
                     // so split-screen views resolve their own region (the forward renders into the sub-rect).
                     const f32 fullW = static_cast<f32>(v->Width()),
                               fullH = static_cast<f32>(v->Height());
@@ -2241,15 +2240,16 @@ namespace foundation::render
                                          static_cast<f32>(v->ViewportHeight()) / fullH};
                     const Float2 uvOffset{static_cast<f32>(v->ViewportX()) / fullW,
                                           static_cast<f32>(v->ViewportY()) / fullH};
-                    // FXAA (TAA-off fallback) runs AFTER tonemap: tonemap -> LDR intermediate, FXAA -> final.
-                    // Never stacked with TAA (TAA already resolves aliasing). Off/TAA-on -> tonemap writes final.
+                    // FXAA (the fallback when TAA is off) runs after tonemap: tonemap writes an LDR intermediate,
+                    // FXAA the final. Never stacked with TAA, which already resolves aliasing. With FXAA off or
+                    // TAA on, tonemap writes the final.
                     const bool fxaa = m_fxaa != nullptr && post.fxaaEnabled && !post.taaEnabled;
                     const rendergraph::RGHandle tonemapOut =
                         fxaa ? m_graph.CreateTransient(
                                    u8"post.ldr", rendergraph::RGTextureDesc(
                                                      v->TargetFormat(), v->Width(), v->Height()))
                              : colorH;
-                    // Auto-exposure: measure+adapt the pre-tonemap HDR into the view's 1x1,
+                    // Auto-exposure: measure and adapt the pre-tonemap HDR into the view's 1x1,
                     // then hand the tonemap the adapted binding (a graph edge orders them).
                     TonemapAutoExposure autoExposure;
                     if (post.autoExposure && m_exposurePass != nullptr)
@@ -2278,12 +2278,12 @@ namespace foundation::render
                         m_frameIndex, viewIndex, post.exposure, bloomStrength, uvScale, uvOffset,
                         aoStrength, showAo, post.agxTonemap,
                         /*sceneYFlipped*/ !post.taaEnabled, autoExposure, grading);
-                    // World-space UI draws BETWEEN tonemap and FXAA: authored colors survive
+                    // World-space UI draws between tonemap and FXAA: authored colors survive
                     // (FXAA doesn't grade) and the quad silhouettes get antialiased. With
-                    // FXAA off the pass lands directly on the final LDR (TAA never touched
-                    // transparents, so edge AA there matches the old transparent-pass look).
-                    // World UI renders into the 1x LDR, so it depth-tests the RESOLVED 1x depth (postDepth)
-                    // - the MSAA depth would mismatch the single-sample color target.
+                    // FXAA off the pass lands directly on the final LDR (TAA never touches
+                    // transparents either). World UI renders into the 1x LDR, so it depth-tests
+                    // the resolved 1x depth (postDepth); the MSAA depth would mismatch the
+                    // single-sample color target.
                     m_pass.DeclarePostTonemapUI(*v, *m_registry, m_graph, m_frameIndex, viewIndex,
                                                 fxaa ? tonemapOut : colorH, postDepth,
                                                 v->TargetFormat(), unjitteredVP, prevViewProj);
@@ -2319,9 +2319,9 @@ namespace foundation::render
                 }
 
                 // Editor debug view: overwrite this view's sub-rect with the selected graph
-                // texture (channel/range remap in the blit shader). Declared BEFORE overlays,
+                // texture (channel and range remap in the blit shader). Declared before overlays,
                 // so gizmos and HUD stay on top of the visualization. The read is a real graph
-                // dependency - transient aliasing keeps the source alive to this pass.
+                // dependency, so transient aliasing keeps the source alive to this pass.
                 if (m_debugBlit != nullptr && v->Settings().debug.resource.IsEmpty() &&
                     v->Settings().debug.semantic != ViewDebugSemantic::Off &&
                     debugSemanticSrc.IsValid())
@@ -2383,9 +2383,9 @@ namespace foundation::render
                 }
 
                 // Scene-tier overlays (game UI: HUD canvases, billboards): one shared Load-op pass on the
-                // view's final LDR output, after post (never TAA-smeared / tonemapped over), BEFORE debug
-                // draw so gizmos and diagnostic text stay on top (the Sedulous OverlayPass ordering).
-                // Sources match views by SceneKey and draw with the view's REAL camera.
+                // view's final LDR output, after post (never smeared by TAA or tonemapped over), before
+                // debug draw so gizmos and diagnostic text stay on top. Sources match views by SceneKey
+                // and draw with the view's real camera.
                 if (m_sceneOverlays != nullptr && !m_sceneOverlays->IsEmpty() &&
                     v->Settings().sceneOverlays)
                 {
@@ -2444,11 +2444,11 @@ namespace foundation::render
                         });
                 }
 
-                // Debug draw (per view): global + this view's SCENE list + this view's OWN list,
-                // projected by the UNJITTERED VP into the final LDR (geometry depth-tested against
+                // Debug draw (per view): the global list, this view's scene list and this view's own
+                // list, projected by the unjittered VP into the final LDR (geometry depth-tested against
                 // the scene depth; screen text on top). The scene list draws in every view of the
-                // scene (physics/nav debug); the view list only here (editor chrome - the #118
-                // camera-preview contract).
+                // scene (physics and nav debug); the view list only here (editor chrome, which must not
+                // show in a camera preview of the same scene).
                 if (m_debugPass != nullptr)
                 {
                     const debug::DebugDraw* sceneDbg =
@@ -2488,7 +2488,7 @@ namespace foundation::render
                 }
             }
 
-            // View-independent screen HUD: drawn ONCE per distinct target at that target's full extent
+            // View-independent screen HUD: drawn once per distinct target at that target's full extent
             // (not per viewport), so a whole-window overlay isn't duplicated across split-screen views.
             // Declared after every view's passes so it composites on top. Screen-space only (identity VP;
             // 3D calls need a camera and are ignored here). Each target gets its own buffer slot.
@@ -2511,13 +2511,12 @@ namespace foundation::render
         } // unmap the decal ring before execute
         {
             PROFILE_SCOPE(
-                "Compose.Execute"); // graph compile (barriers/transients) + record all passes
+                "Compose.Execute"); // graph compile (barriers, transients) and record all passes
             (void)m_graph.Execute(m_encoder);
-            // Age out the transient texture pool. Execute() only RETURNS transients to the pool; EndFrame()
+            // Age out the transient texture pool. Execute() only returns transients to the pool; EndFrame()
             // is the sole caller of TransientTexturePool::EndFrame(), which destroys entries unused for
-            // maxUnusedFrames. Without this, the pool keeps every size ever seen alive forever - invisible
-            // in steady state (one size recurs) but an unbounded VkDeviceMemory leak under viewport-resize
-            // churn (each new size adds a never-evicted set), exhausting VRAM -> clear-color viewports.
+            // maxUnusedFrames. Without it the pool would keep every size ever seen alive, which is invisible
+            // in steady state (one size recurs) but leaks device memory without bound as viewports resize.
             m_graph.EndFrame();
         }
 
@@ -2532,7 +2531,7 @@ namespace foundation::render
         {
             m_jitterIndex = (m_jitterIndex + 1u) % 8u;
         } // Halton phase advances per frame (any view used TAA)
-        m_anyViewTaa = false; // reset for next frame (re-accumulated during the view loop)
+        m_anyViewTaa = false; // reset for next frame (accumulated again during the view loop)
         m_encoder = nullptr;
     }
 
@@ -2545,14 +2544,14 @@ namespace foundation::render
                 res->lifetime != rendergraph::RGResourceLifetime::Transient ||
                 res->textureDesc.width == 0 || res->textureDesc.height == 0)
             {
-                // Transients only: the view's IMPORTED color target is the blit's own
-                // write target (reading it deadlocks the layout tracking - the
-                // forward.color 0x0 bug), and persistent registrations carry no desc,
+                // Transients only: the view's imported color target is the blit's own
+                // write target (reading it deadlocks the layout tracking), and
+                // persistent registrations carry no desc,
                 // so there are no dimensions to sample by. Both list as 0x0 otherwise.
                 continue;
             }
             // Names repeat per view (every view declares its own "forward.depth"); the picker
-            // wants the SET of names, so dedupe - the blit resolves per view at declare time.
+            // wants the set of names, so dedupe; the blit resolves per view at declare time.
             bool seen = false;
             for (const DebugResourceInfo& row : out)
             {

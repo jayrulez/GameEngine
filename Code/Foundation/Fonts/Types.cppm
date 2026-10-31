@@ -3,10 +3,7 @@
 
 // Foundation::Fonts - :types partition
 //
-// Value types for font/glyph/text-layout data. Ported from Sedulous.Fonts
-// (Rectangle/GlyphInfo/GlyphQuad/GlyphPosition/AtlasRegion/FontMetrics/
-// TextDecorationMetrics/SelectionRange/HitTestResult/FontLoadOptions/
-// FontLoadResult/FontCacheKey + alignment enums).
+// Value types for font, glyph and text-layout data, and the alignment enums.
 
 module;
 #include "Core/Prelude.h"
@@ -54,7 +51,7 @@ export namespace foundation::fonts
         bool hasBitmap = false;
     };
 
-    // UV + screen positioning for rendering a glyph from an atlas.
+    // UV and screen positioning for rendering a glyph from an atlas.
     struct GlyphQuad
     {
         f32 x0 = 0, y0 = 0, x1 = 0, y1 = 0;
@@ -181,7 +178,6 @@ export namespace foundation::fonts
         }
     };
 
-    // Result of a hit test on text.
     /// The direction a run of text reads in. Auto: from its script (Arabic and Hebrew right to
     /// left, the rest left to right).
     enum class TextDirection : u8
@@ -337,9 +333,9 @@ export namespace foundation::fonts
 
 export namespace foundation::core
 {
-    // Hash for FontCacheKey, mirroring Sedulous: path hash combined with the
-    // pixel height quantized to hundredths. Equality (operator==) uses a 0.001
-    // tolerance - fine for the discrete font sizes a cache ever sees.
+    // Hash for FontCacheKey: the path hash combined with the pixel height
+    // quantized to hundredths. Equality (operator==) uses a 0.001 tolerance,
+    // which is fine for the discrete font sizes a cache ever sees.
     template <>
     struct Hash<foundation::fonts::FontCacheKey>
     {

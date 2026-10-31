@@ -1,29 +1,32 @@
-// Ball - the round. Four hunters, the player and three bots, each hunting another and hunted by a
-// third, among guests who dress as they do. A hunter knows only its target's costume, and several
-// guests wear each one.
+// Ball: runs the round. There are four hunters, the player and three bots, each hunting one other
+// and hunted by a third, among guests who dress the same way. A hunter knows only its target's
+// costume, and several guests wear each costume.
 //
-// - The round: each hunter gets a costume (one of its six looks shown) and a target, the others in
-//   a ring; `roundSeconds` later the most points wins.
-// - A tag ("Tag" from Player.as, or a bot's, here): the nearest person within `tagReach` in front
-//   of the tagger. The target: points, and the target respawns elsewhere in a new costume. Anyone
-//   else: points lost, and the tagger's mask flares (its Flare light) for `revealSeconds`, there for
-//   everyone to see.
-// - The bots: guests (Guest.as) that this hunts for. A bot grows suspicious of its target when the
-//   target stands out near it (sprinting, its mask flaring, not dancing when the music calls, still
-//   walking when everyone gathers) and, sure enough, walks up to it and tags it. Now and then it
-//   guesses instead: someone in its target's costume, often wrong, and its mask flares.
-// - The game (Masquerade.as) hears what the player needs: "Hud" each quarter second (score,
-//   seconds left, the target's costume, the hunter's rank), "Note" when something happens to the
-//   player, "RoundOver" with the scores, and "RoundStart" when the host starts another.
+// - The round: each hunter gets a costume (one of its six looks is shown) and a target, with the
+//   targets forming a ring. After `roundSeconds` the hunter with the most points wins.
+// - A tag ("Tag" from Player.as, or a bot's tag decided here) reaches the nearest person within
+//   `tagReach` in front of the tagger. Tagging the target scores points, and the target respawns
+//   elsewhere in a new costume. Tagging anyone else loses points, and the tagger's mask flares (its
+//   Flare light) for `revealSeconds` for everyone to see.
+// - The bots are guests (Guest.as), and this script does their hunting. A bot grows suspicious of
+//   its target when the target stands out nearby: sprinting, its mask flaring, not dancing when
+//   the music calls, or still walking when everyone gathers. Once sure, the bot walks up to the
+//   target and tags it. Now and then it guesses instead, tagging someone in its target's costume;
+//   it is often wrong, and then its mask flares.
+// - The game script (Masquerade.as) receives what the player needs to know: "Hud" each quarter
+//   second (score, seconds left, the target's costume, the hunter's rank), "Note" when something
+//   happens to the player, "RoundOver" with the scores, and "RoundStart" when the host starts
+//   another round.
 //
-// Over the network the host decides, and every peer's Ball follows its replicated state: each
-// seat's owner (a player id, or -1 for a bot), costume and target, the scores, the time, which masks
-// flare. A joining player takes a bot's seat (the host spawns them a hunter, `hunterPrefab`, where
-// the bot stands; the bot wanders on as a plain guest) and gives it back on leaving. A client's
-// input and tags come by RPC ("input", "tag"); notes go to one player ("note"). Entity active flags
-// do not replicate, so every peer shows each hunter's look from the replicated costumes itself.
+// Over the network the host decides everything, and the Ball on every peer follows its replicated
+// state: each seat's owner (a player id, or -1 for a bot), costume and target, the scores, the time
+// and which masks flare. A joining player takes over a bot's seat: the host spawns a hunter for
+// them (`hunterPrefab`) where the bot stands, and the bot wanders on as a plain guest. The seat goes
+// back to the bot when the player leaves. A client's input and tags arrive by RPC ("input", "tag"),
+// and notes go to a single player ("note"). Entity active flags do not replicate, so every peer
+// shows each hunter's look itself from the replicated costumes.
 
-const float kNearMetres = 6.0f;  // the hunter whose mark you are, nearer than this: you hear of it
+const float kNearMetres = 6.0f;  // the player is warned when their hunter is nearer than this
 const int kHunters = 4;
 const int kCostumes = 6;
 const int kDanceClip = 3;
@@ -31,12 +34,12 @@ const int kWalkClip = 1;
 const int kGather = 1;
 const int kDanceCue = 2;
 
-// Notes for the game (Masquerade.as): what happened, from the player's side.
+// Notes for the game script (Masquerade.as): what happened, from the player's point of view.
 const int kNoteGotTarget = 1;  // you tagged your target
-const int kNoteMissed = 2;     // you tagged the wrong person: your mask flares
-const int kNoteTagged = 3;     // your hunter tagged you: a new costume, somewhere else
-const int kNoteFlare = 4;      // someone's mask flares: a hunter, there
-const int kNoteFull = 6;       // every seat is a player's: you watch
+const int kNoteMissed = 2;     // you tagged the wrong person, so your mask flares
+const int kNoteTagged = 3;     // your hunter tagged you; you respawn elsewhere in a new costume
+const int kNoteFlare = 4;      // someone's mask flares, revealing a hunter
+const int kNoteFull = 6;       // every seat is taken by a player, so you watch
 
 class Ball
 {
@@ -82,28 +85,28 @@ class Ball
     [0, "Which seats' masks flare (a bit a seat)", replicated] int flaring;
 
     private array<Entity@> m_hunters;
-    private array<Entity@> m_bots;     // each seat's own body when no player has it (seat 0: the host's player)
-    private array<int> m_dressed;      // the costume each seat's body shows now (-1 not yet)
-    private array<Entity@> m_known;    // players' hunters, as they announce themselves ("Hunter")
+    private array<Entity@> m_bots;     // each seat's bot, used while no player holds it (seat 0: the host's player)
+    private array<int> m_dressed;      // the costume each seat's body currently shows (-1 for none yet)
+    private array<Entity@> m_known;    // players' hunters, collected as they announce themselves ("Hunter")
     private bool m_overTold = false;
     private array<array<Entity@>> m_groups; // the guests in each costume
     private array<Entity@> m_spots;
-    private array<int> m_costume;   // each hunter's
+    private array<int> m_costume;   // each hunter's costume
     private array<int> m_target;    // each hunter's target seat
-    private array<float> m_reveal;  // seconds its mask still flares
+    private array<float> m_reveal;  // seconds each hunter's mask keeps flaring
     private array<Float3> m_lastPos;
     private array<float> m_speed;   // measured over the last half second
-    private array<float> m_suspicion; // a bot's, of its target
+    private array<float> m_suspicion; // how suspicious each bot is of its target
     private array<float> m_guessIn;
     private array<Entity@> m_chasing; // whom a bot is walking up to
     private array<float> m_chaseFor;
-    private array<float> m_orderIn; // until a bot's approach order is refreshed
+    private array<float> m_orderIn; // time until a bot's approach order is refreshed
     private float m_sample = 0.0f;
     private float m_hud = 0.0f;
-    private bool m_reachTold = false; // the "InReach" last sent
-    private bool m_nearTold = false;  // the "HunterNear" last sent
+    private bool m_reachTold = false; // the "InReach" value last sent
+    private bool m_nearTold = false;  // the "HunterNear" value last sent
     private int m_cue = 0;
-    private Entity@ m_best;         // a tag's search: the nearest in reach so far
+    private Entity@ m_best;         // during a tag's search, the nearest person in reach so far
     private float m_bestDistance = 0.0f;
 
     Ball(Entity@ entity) { @self = entity; }
@@ -119,9 +122,9 @@ class Ball
             m_bots.insertLast(m_hunters[h]);
             m_dressed.insertLast(-1);
         }
-        // The network's half: the host hears input, tags, joins and leaves; a client its notes (the
-        // host's map is the game's: Masquerade.as). Registered on every peer (a handler that never
-        // fires costs nothing).
+        // Network handlers. The host receives input, tags, joins and leaves; a client receives its
+        // notes. (The game script, Masquerade.as, handles the host's map.) They are registered on
+        // every peer, since a handler that never fires costs nothing.
         NetNumberHandler@ input = NetNumberHandler(this.onNetInput);
         Net::on("input", input);
         NetHandler@ tag = NetHandler(this.onNetTag);
@@ -170,7 +173,7 @@ class Ball
 
     private void startRound()
     {
-        // The targets: a ring through the seats in a random order.
+        // The targets form a ring through the seats in a random order.
         array<int> order = {0, 1, 2, 3};
         for (int i = kHunters - 1; i > 0; --i)
         {
@@ -198,7 +201,7 @@ class Ball
         publish();
     }
 
-    // The host's seat state into the replicated properties every peer reads.
+    // Copies the host's seat state into the replicated properties that every peer reads.
     private void publish()
     {
         costume0 = m_costume[0];
@@ -247,15 +250,16 @@ class Ball
         return -1;
     }
 
-    // The player this peer plays as: 0 the host (and offline), else the id the host gave it.
+    // The player this peer plays as: 0 for the host (and offline), otherwise the id the host gave
+    // it.
     private int localPlayer()
     {
         int me = Net::localPlayer();
         return me < 0 ? 0 : me;
     }
 
-    // Every peer: each seat's body (its bot, or the hunter of the player who holds it), dressed in
-    // the seat's replicated costume.
+    // Runs on every peer. Dresses each seat's body (its bot, or the hunter of the player who holds
+    // the seat) in the seat's replicated costume.
     private void follow()
     {
         for (int h = 0; h < kHunters; ++h)
@@ -290,7 +294,7 @@ class Ball
         }
     }
 
-    // A player's hunter announcing itself (Player.as, on every peer), so the seats can find it.
+    // A player's hunter announces itself (Player.as, on every peer) so the seats can find it.
     void onHunter(Entity@ hunter)
     {
         m_known.insertLast(hunter);
@@ -298,7 +302,8 @@ class Ball
 
     void onCue(int cue) { m_cue = cue; }
 
-    // The host: another round in the same scene (Masquerade.as, hosting), the players kept.
+    // Host only: starts another round in the same scene (sent by Masquerade.as when hosting),
+    // keeping the players.
     void onRestart(int unused)
     {
         if (!Net::isClient())
@@ -307,7 +312,7 @@ class Ball
         }
     }
 
-    // A tag by a player (the host's own Player.as sends its player id; a client's comes by RPC).
+    // A tag by a player. The host's own Player.as sends its player id; a client's tag comes by RPC.
     void onTag(int player)
     {
         int seat = seatOfPlayer(player);
@@ -322,7 +327,7 @@ class Ball
         }
     }
 
-    // Whether the hunter whose target `seat` is stands within kNearMetres of it.
+    // Whether the hunter whose target is `seat` stands within kNearMetres of it.
     private bool hunterNear(int seat)
     {
         Float3 p = m_hunters[seat].worldPosition();
@@ -344,7 +349,8 @@ class Ball
     }
 
     // Whom a tag by `seat` would reach: the nearest person within tagReach in front of its hunter
-    // (or right beside it), else null. A tag's search, and the HUD's Tag prompt while it finds one.
+    // (or right beside it), or null. Tags use it, and so does the HUD's Tag prompt, which shows
+    // while it finds someone.
     private Entity@ inReach(int seat)
     {
         Entity@ tagger = m_hunters[seat];
@@ -369,7 +375,8 @@ class Ball
         return m_best;
     }
 
-    // Someone in reach and in front (or right beside), nearer than the best so far (m_best).
+    // Keeps `person` as m_best if they are in reach, in front (or right beside), and nearer than
+    // the best so far.
     private void consider(Entity@ person, Float3 p, Float3 ahead)
     {
         Float3 q = person.worldPosition();
@@ -411,8 +418,8 @@ class Ball
         }
     }
 
-    // A note to the player at a seat: the host's own as an event here, a client's by RPC, a bot's
-    // nowhere.
+    // Sends a note to the player at a seat: an event here for the host's own player, an RPC for a
+    // client, and nothing for a bot.
     private void note(int seat, int what)
     {
         int owner = ownerOf(seat);
@@ -428,7 +435,7 @@ class Ball
 
     private void respawn(int seat)
     {
-        // Somewhere well away from whoever hunts it, in a costume it was not wearing.
+        // Respawn well away from whoever hunts it, in a costume it was not wearing.
         Entity@ hunter = m_hunters[hunterOf(seat)];
         Float3 at = m_hunters[seat].worldPosition();
         for (int tries = 0; tries < 12 && m_spots.length() > 0; ++tries)
@@ -442,7 +449,7 @@ class Ball
         }
         NavAgentComponent::of(m_hunters[seat]).warp(at.x, at.y, at.z);
         m_costume[seat] = (m_costume[seat] + Random::intRange(1, kCostumes - 1)) % kCostumes;
-        publish(); // every peer dresses it (follow)
+        publish(); // every peer dresses it in follow()
         m_reveal[seat] = 0.0f;
         m_lastPos[seat] = at;
         int hunterSeat = hunterOf(seat);
@@ -454,7 +461,8 @@ class Ball
         }
     }
 
-    // A hunter's costume: the one look of its six shown (on this peer: active flags do not replicate).
+    // Shows the one look of a hunter's six that matches its costume. This runs on each peer,
+    // because active flags do not replicate.
     private void dress(int seat, int costume)
     {
         m_dressed[seat] = costume;
@@ -489,7 +497,7 @@ class Ball
         if (timeLeft <= 0.0f)
         {
             timeLeft = 0.0f;
-            over = true; // every peer tells its game (tell)
+            over = true; // every peer tells its game in tell()
             return;
         }
         m_sample -= d;
@@ -522,19 +530,20 @@ class Ball
         flaring = mask;
     }
 
-    // Every peer: the game hears this peer's player's seat (the HUD four times a second) and the
-    // round's end, from the replicated state.
+    // Runs on every peer. From the replicated state, tells the game about this peer's player's seat
+    // (the HUD, four times a second) and about the end of the round.
     private void tell(float d)
     {
         int seat = seatOfPlayer(localPlayer());
-        // Someone to tag in front of this peer's hunter: the game shows Tag's prompt while there is.
+        // Whether someone is in front of this peer's hunter to tag; the game shows the Tag prompt
+        // while there is.
         bool reach = !over && seat >= 0 && inReach(seat) !is null;
         if (reach != m_reachTold)
         {
             m_reachTold = reach;
             self.scene.events.emit("InReach", reach ? 1 : 0);
         }
-        // The hunter whose mark you are, near: the game says so, quietly.
+        // Whether the player's own hunter is near; the game shows a quiet warning.
         bool near = !over && seat >= 0 && hunterNear(seat);
         if (near != m_nearTold)
         {
@@ -551,7 +560,7 @@ class Ball
         if (!over && m_overTold)
         {
             m_overTold = false;
-            self.scene.events.emit("RoundStart", 0); // a new round: the host started another
+            self.scene.events.emit("RoundStart", 0); // the host started a new round
         }
         if (over && !m_overTold)
         {
@@ -570,7 +579,7 @@ class Ball
         }
     }
 
-    // A flaring mask: its light pulses while the seat's flare bit is set, on every peer.
+    // A flaring mask's light pulses on every peer while the seat's flare bit is set.
     private float m_pulse = 0.0f;
     private void flares(float d)
     {
@@ -595,8 +604,9 @@ class Ball
         }
     }
 
-    // A flaring mask glows (Mask.hlsl: the instance's tint alpha below 1 is the glow; the cloth,
-    // drawn with the same tint, keeps its colour). Every look of the hunter, so the one shown does.
+    // Makes a flaring mask glow. In Mask.hlsl a tint alpha below 1 on the instance means glow,
+    // while the cloth, drawn with the same tint, keeps its colour. Every look of the hunter is set,
+    // so whichever one is shown glows.
     private void glow(Entity@ hunter, bool on)
     {
         Entity@ child = hunter.firstChild();
@@ -613,8 +623,8 @@ class Ball
 
     // ---- the network ----
 
-    // The host: a client's stick, sprint and dance (Player.as packs them in one number), to the
-    // hunter that player holds.
+    // Host only: passes a client's stick, sprint and dance (Player.as packs them in one number) to
+    // the hunter that player holds.
     void onNetInput(int sender, double packed)
     {
         int seat = seatOfPlayer(sender);
@@ -638,7 +648,7 @@ class Ball
         }
     }
 
-    // A client: a note for its player, from the host.
+    // Client only: a note for this peer's player, from the host.
     void onNetNote(int sender, double what)
     {
         if (Net::isClient())
@@ -647,8 +657,9 @@ class Ball
         }
     }
 
-    // The host: a player has joined. They take a bot's seat: a hunter spawned for them where the
-    // bot stands, in its costume; the bot wanders on as a plain guest. No bot seat left: they watch.
+    // Host only: a player has joined. They take a bot's seat: a hunter is spawned for them where
+    // the bot stands, in its costume, and the bot wanders on as a plain guest. If no bot seat is
+    // left, they watch.
     void onJoined(int player)
     {
         if (Net::isClient())
@@ -680,7 +691,7 @@ class Ball
         Net::rpcNumberTo(player, "note", double(kNoteFull));
     }
 
-    // The host: a player has left. Their seat goes back to its bot, and their hunter goes.
+    // Host only: a player has left. Their seat goes back to its bot, and their hunter is removed.
     void onLeft(int player)
     {
         if (Net::isClient())
@@ -704,7 +715,7 @@ class Ball
         }
     }
 
-    // One bot's hunt: watch its target for standing out, walk up to it when sure, or guess.
+    // One bot's hunt: watch the target for standing out, walk up to it when sure, or guess.
     private void hunt(int b, float d)
     {
         int t = m_target[b];
@@ -756,8 +767,8 @@ class Ball
         }
     }
 
-    // How much a hunter stands out right now (suspicion a second): sprinting, its mask flaring,
-    // not dancing when the music calls, walking when everyone gathers.
+    // How much a hunter stands out right now, in suspicion per second: sprinting, its mask
+    // flaring, not dancing when the music calls, or walking when everyone gathers.
     private float standingOut(int seat)
     {
         float amount = 0.0f;
@@ -781,7 +792,7 @@ class Ball
         return amount;
     }
 
-    // A guess: someone near the bot in the costume, a guest or a hunter (not the bot itself).
+    // A guess: someone near the bot wearing the costume, guest or hunter, but not the bot itself.
     private Entity@ someoneDressedAs(int costume, int b)
     {
         Float3 p = m_hunters[b].worldPosition();
@@ -820,7 +831,7 @@ class Ball
         m_hunters[b].send("Resume", 0);
     }
 
-    // The clip the hunter's shown look plays.
+    // The clip that the hunter's visible look plays.
     private int clipOf(int seat)
     {
         Entity@ child = m_hunters[seat].firstChild();
@@ -876,7 +887,7 @@ class Ball
         return seat == 0 ? score0 : (seat == 1 ? score1 : (seat == 2 ? score2 : score3));
     }
 
-    // 1 for the lead (ties share it).
+    // The seat's place by score: 1 for the lead, with ties sharing a place.
     private int rank(int seat)
     {
         int r = 1;

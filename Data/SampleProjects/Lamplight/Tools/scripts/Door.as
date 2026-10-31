@@ -1,8 +1,9 @@
-// Door - a door on its hinge (this entity, at the hinge edge; the leaf and its kinematic collider
-// are children, so they swing with it). Locked, it is picked by holding Interact at it: the thief's
-// hand goes to the lock (two-bone IK on the thief, TwoBoneIkComponent), a bar fills on the HUD,
-// and letting go starts the pick over. Unlocked, Interact opens it away from the thief and closes
-// it again. A guard who comes to it (Knock) opens it, locked or not: guards have the keys.
+// Door: a door that swings on its hinge. This entity sits at the hinge edge; the leaf and its
+// kinematic collider are children, so they swing with it. A locked door is picked by holding
+// Interact at it: the thief's hand reaches for the lock (two-bone IK through TwoBoneIkComponent), a
+// bar fills on the HUD, and letting go starts the pick over. An unlocked door opens away from the
+// thief on Interact and closes on the next press. A guard who reaches the door (the Knock event)
+// opens it whether it is locked or not, because guards have the keys.
 
 const float kDoorPi = 3.14159265f;
 
@@ -42,11 +43,11 @@ class Door
         float d = float(dt);
         float yaw = shutYaw * kDoorPi / 180.0f;
         Float3 hinge = self.worldPosition();
-        Float3 along = Float3(Math::Cos(yaw), 0.0f, -Math::Sin(yaw)); // the shut leaf, hinge to lock
-        Float3 normal = Float3(Math::Sin(yaw), 0.0f, Math::Cos(yaw)); // its face
+        Float3 along = Float3(Math::Cos(yaw), 0.0f, -Math::Sin(yaw)); // along the shut leaf, from hinge to lock
+        Float3 normal = Float3(Math::Sin(yaw), 0.0f, Math::Cos(yaw)); // normal of the leaf
         Float3 t = thief.worldPosition();
         float side = (t.x - hinge.x) * normal.x + (t.z - hinge.z) * normal.z >= 0.0f ? 1.0f : -1.0f;
-        // The lock on the thief's face of the shut leaf.
+        // The lock, on the side of the shut leaf that faces the thief.
         Float3 lock = Float3(hinge.x + along.x * lockAlong + normal.x * side * 0.05f, hinge.y + lockHeight,
                              hinge.z + along.z * lockAlong + normal.z * side * 0.05f);
         float dx = lock.x - t.x;
@@ -76,8 +77,9 @@ class Door
         }
         if (!locked && Input::wasPressed("Interact") && (near || m_target != 0.0f))
         {
-            // Open away from the thief (turned by a, the leaf points along (cos a, 0, -sin a), so
-            // away from the thief's side is a = side x the angle); shut again from either side.
+            // Open away from the thief: turned by angle a, the leaf points along (cos a, 0, -sin a),
+            // so opening away from the thief's side means a = side * openAngle. A second press
+            // shuts it from either side.
             m_target = m_target != 0.0f ? 0.0f : side * openAngle;
         }
         float step = swingSpeed * d;
@@ -87,8 +89,8 @@ class Door
         prompt(near || (!locked && m_target != 0.0f && dx * dx + dz * dz <= 4.0f * reach * reach));
     }
 
-    // A guard at the door (Guard.as knocks): he has the keys, so a shut door opens away from him,
-    // locked or not, and stays open behind him.
+    // A guard at the door (Guard.as sends Knock). He has the keys, so a shut door opens away from
+    // him whether it is locked or not, and stays open behind him.
     void onKnock(Float3 at)
     {
         if (m_target != 0.0f || m_angle != 0.0f)
@@ -102,8 +104,8 @@ class Door
         m_target = side * openAngle;
     }
 
-    // The HUD's prompt and the pick's progress while in reach; cleared on leaving, only by the door
-    // that set it.
+    // Shows the HUD prompt and the progress of the pick while the thief is in reach. On leaving,
+    // only the door that set the prompt clears it.
     private void prompt(bool show)
     {
         if (show)

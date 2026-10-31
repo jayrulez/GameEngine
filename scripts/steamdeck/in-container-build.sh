@@ -3,21 +3,21 @@
 # Copyright (c) 2026-Present Robert Campbell
 
 #
-# Runs INSIDE the scripts/steamdeck/Dockerfile container (repo bind-mounted at /work). Configures
+# Runs inside the scripts/steamdeck/Dockerfile container (repo bind-mounted at /work). Configures
 # a Release build with Clang 21 + GCC 14's libstdc++, links libstdc++/libgcc statically, builds
 # everything, then stages runnable Steam Deck bundles and verifies the glibc floor of every shipped
-# file. Do not run this on the host - run scripts/build-steamdeck.sh, which builds the image and
+# file. Do not run this on the host; run scripts/build-steamdeck.sh, which builds the image and
 # invokes this inside it.
 set -euo pipefail
 
 JOBS="${JOBS:-4}"
 BUILD="build/steamdeck"                 # separate binary dir so it never mixes with a host build
-# The Bin/ deliverables get their OWN suffix too: without it the container build clobbers (and
+# The Bin/ deliverables get their own suffix too: without it the container build clobbers (and
 # is clobbered by) the host clang-release binaries in Bin/Release/Linux64-Clang.
 BIN="Bin/Release/Linux64-Clang-SteamDeck"
 GCC14="/usr/lib/gcc/x86_64-linux-gnu/14" # the libstdc++ Clang should use (std::print)
 DIST="dist/SteamDeck"
-FORMATS="${FORMATS:-spirv}"             # the Deck renders via wgpu-native -> Vulkan
+FORMATS="${FORMATS:-spirv}"             # the Deck renders through wgpu-native on Vulkan
 MAX_GLIBC="2.35"                        # Ubuntu 22.04 floor; <= Steam Deck host (~2.37)
 
 log() { printf '\n== %s ==\n' "$*"; }
@@ -45,7 +45,7 @@ cmake --build "$BUILD" -j"$JOBS"
 
 # --- 3. cook the engine shader pack ----------------------------------------------------------
 # The pack is platform-independent SPIR-V, but DXC (the compiler it cooks with) needs glibc 2.38,
-# which this 22.04 container does not have - so build-steamdeck.sh cooks it on the HOST into
+# which this 22.04 container does not have, so build-steamdeck.sh cooks it on the host into
 # build/steamdeck-shaders.dpak, and this stages that. Cooked here only when that is absent.
 if [ -f "build/steamdeck-shaders.dpak" ]; then
     log "Shaders: the host-cooked build/steamdeck-shaders.dpak"
@@ -56,10 +56,10 @@ else
 fi
 
 # --- 4. stage runnable bundles ---------------------------------------------------------------
-# SDL3 is linked statically (vendored source), so there is no libSDL3.so to bundle - it lives inside
-# the executables. wgpu is still a runtime .so needed by both. DXC is EDITOR-ONLY (shader authoring)
-# and its glibc floor (2.38) exceeds the Deck host, so it is bundled with the editor but flagged
-# in the glibc check below - the editor still launches in pack mode without it.
+# SDL3 is linked statically (vendored source), so there is no libSDL3.so to bundle: it lives inside
+# the executables. wgpu is a runtime .so both need. DXC is for the editor only (shader authoring)
+# and its glibc floor (2.38) exceeds the Deck host's, so it is bundled with the editor but flagged
+# in the glibc check below; the editor still launches in pack mode without it.
 WGPU="ThirdParty/WgpuNative/lib/linux-x86_64/libwgpu_native.so"
 DXC1="ThirdParty/DXC/lib/linux-x86_64/libdxcompiler.so"
 DXC2="ThirdParty/DXC/lib/linux-x86_64/libdxil.so"
@@ -71,8 +71,8 @@ log "Stage $DIST/Editor"
 cp "$BIN/Tools.Editor" "$DIST/Editor/"
 cp "$WGPU" "$DIST/Editor/"
 cp "$DXC1" "$DXC2" "$DIST/Editor/"           # editor cooks shaders (see glibc note below)
-# The data the editor reads, as the desktop distribution stages it (Specs/data-layout.md): Engine,
-# Editor (less the sandbox's mock), Branding and Templates; the pack INTO Data/Engine/Shaders, the one
+# The data the editor reads, as the desktop distribution stages it: Engine, Editor (less the
+# sandbox's mock), Branding and Templates; the pack into Data/Engine/Shaders, the one
 # path the runtime opens, with the marker that makes the editor start from it.
 for folder in Engine Editor Branding Templates; do
     cp -r "Data/$folder" "$DIST/Editor/Data/$folder"

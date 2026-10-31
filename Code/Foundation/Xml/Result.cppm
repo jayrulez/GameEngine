@@ -3,9 +3,9 @@
 
 // Foundation::Xml - :result partition
 //
-// XmlResult: the parse/lex outcome. Success is Ok; every other value is a
-// specific (FourCC-coded) error. No exceptions - all XML operations return
-// this. Ported from Sedulous.Xml/XmlResult.bf.
+// XmlResult: the parse and lex outcome. Success is Ok; every other value is a
+// specific (FourCC-coded) error. No exceptions: all XML operations return
+// this.
 
 module;
 #include "Core/Prelude.h"
@@ -44,7 +44,7 @@ export namespace foundation::xml
         AttributeMissingEquals = 0x41544D45, // 'ATME'
         AttributeMissingQuote = 0x41544D51,  // 'ATMQ'
 
-        // Entities / character references
+        // Entities and character references
         EntityUnknown = 0x454E554B,     // 'ENUK'
         EntityMalformed = 0x454E4D46,   // 'ENMF'
         CharRefInvalid = 0x43524956,    // 'CRIV'

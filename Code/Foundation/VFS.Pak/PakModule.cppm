@@ -5,9 +5,9 @@
 //
 // A packed, read-only archive backend for the VFS (the shipping counterpart to
 // the disk backend). PakFileSystem implements read + enumerate over a single
-// .pak file; it is immutable at runtime (no write/watch). PakBuilder is the
-// offline writer. Lives in its own module so future compression codecs never
-// pull into the core VFS.
+// .pak file; it is immutable at runtime (no write or watch). PakBuilder is the
+// offline writer. It lives in its own module so compression codecs never pull
+// into the core VFS.
 //
 // File format (little-endian as stored):
 //   [Header, 32 bytes]
@@ -38,7 +38,7 @@ export namespace foundation::vfs
     inline constexpr u16 kCompressionNone = 0u;
 
     // =======================================================================
-    // PakFileSystem - read + enumerate over a .pak archive. Immutable.
+    // PakFileSystem: read and enumerate over a .pak archive. Immutable.
     // =======================================================================
     class PakFileSystem final : public IFileSystem, public IEnumerableFileSystem
     {
@@ -180,9 +180,8 @@ export namespace foundation::vfs
             }
 
             // The header is the least trustworthy part of a corrupt or truncated file, and
-            // everything below is sized from it (the Beef port's reading of this code): the
-            // table must lie inside the file, past the header, and the count must be one the
-            // table can actually hold.
+            // everything below is sized from it: the table must lie inside the file, past the
+            // header, and the count must be one the table can actually hold.
             const i64 fileSizeSigned = file.Size();
             const u64 fileSize = fileSizeSigned > 0 ? static_cast<u64>(fileSizeSigned) : 0u;
             constexpr u64 kHeaderBytes = 4 + 4 + 8 + 8 + 8;
@@ -288,7 +287,7 @@ export namespace foundation::vfs
     };
 
     // =======================================================================
-    // PakBuilder - offline writer. Add entries, then Write the archive.
+    // PakBuilder: offline writer. Add entries, then Write the archive.
     // =======================================================================
     class PakBuilder
     {

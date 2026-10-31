@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The TLS seam over its Mbed TLS backend (Documentation/Specs/tls-http-wss.md, P0), headless: a
-// client and a server session wired by an in-memory pipe, the server's certificate made by the
-// test. A handshake and data both ways (TLS 1.3, and 1.2 when asked), ALPN agreed, plaintext
-// written before the handshake held and delivered; the client refusing a certificate for another
-// name, one it does not trust, and an expired one, each saying why; a close seen by the peer; a
-// configuration that cannot work failing with its reason; the system's roots read where the box
-// has them. P1: a TLS server and client over loopback sockets (TlsStream), and the plain stream.
+// The TLS interface over its Mbed TLS backend, headless: a client and a server session wired by an
+// in-memory pipe, the server's certificate made by the test. A handshake and data both ways (TLS
+// 1.3, and 1.2 when asked), ALPN agreed, plaintext written before the handshake held and delivered;
+// the client refusing a certificate for another name, one it does not trust, and an expired one,
+// each saying why; a close seen by the peer; a configuration that cannot work failing with its
+// reason; the system's roots read where the box has them. Then a TLS server and client over
+// loopback sockets (TlsStream), and the plain stream.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

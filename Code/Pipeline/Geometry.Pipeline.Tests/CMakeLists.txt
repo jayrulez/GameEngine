@@ -1,4 +1,4 @@
-# Pipeline::Geometry unit tests (doctest; content DB - no GPU).
+# Pipeline::Geometry unit tests (doctest; content DB, no GPU).
 
 add_executable(Geometry.Pipeline.Tests
     TestsMain.cpp

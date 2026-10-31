@@ -1,6 +1,6 @@
-// PlatformerGame - the run's orchestrator (the reserved class Game): the title screen, the
-// levels in order with an intro and a clear tally each, the pause menu, the fades between them,
-// the HUD, and the stakes.
+// PlatformerGame: the run's orchestrator (the reserved class Game). It runs the title screen, the
+// levels in order (each with an intro and a tally when cleared), the pause menu, the fades between
+// them, the HUD, and the stakes.
 //
 // The stakes: a run has three lives. A fall or a hit costs one; a heart found in a level gives
 // one back, and so does every 50th coin. The last life lost is the game over, and trying again
@@ -11,16 +11,16 @@
 // up to three stars: all the coins, no falls, under par. A level's best score, stars and time,
 // and the best run, are saved (the Save facade) and shown on the title.
 //
-// The flow is one state machine on the run's REAL clock (run::realDeltaTime), because the
-// game sits at time scale 0 on every screen but play: the title, an intro, a pause, a clear.
+// The flow is one state machine on the run's real clock (run::realDeltaTime), because the game
+// sits at time scale 0 on every screen except play: the title, an intro, a pause, a clear.
 //
 // A level's coins announce themselves ("CoinRegistered") and report pickups
 // ("CoinCollected"), enemies report stomps ("EnemyDefeated"), pickups report hearts and gems
 // ("LifeCollected", "GemCollected"), the player reports falls ("PlayerDied"), and the goal flag
-// ends the level ("GoalReached"). In a run the scene bus IS the run bus, so all of them reach
-// this class.
+// ends the level ("GoalReached"). In a run the scene's event bus is also the run's, so all of
+// them reach this class.
 
-// The screens, on the engine GUI (Tools/ui, imported by Tools/importui.py).
+// The screens, shown on the engine GUI (Tools/ui, imported by Tools/importui.py).
 const string kHudDoc = "{9d00988e-9dd5-4b2e-9200-28ca795f3298}";
 const string kTitleDoc = "{6aba15c4-48fd-49a0-9995-327c7a40a194}";
 const string kIntroDoc = "{7d2fca4e-b704-45fb-aba7-54c05893a8c0}";
@@ -69,16 +69,17 @@ const float kClearHoldSeconds = 4.0f;
 funcdef bool EventHandler(GuiEvent e);
 
 ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
-// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
-// with the same ids, and would be found first. Null when there is none: a level's coins and
-// enemies report while the title is up, before there is a HUD.
+// Searches the top screen first. A screen just cleared or popped stays in the tree while its exit
+// animation plays, with the same ids, and would otherwise be found first. Returns null when there
+// is no such node: a level's coins and enemies report while the title is up, before there is a
+// HUD.
 Node@ find(string id)
 {
     Screen@ top = screens().top();
     Node@ n = top !is null ? top.find(id) : null;
     return n !is null ? n : gui::root().find(id);
 }
-void wire(string id, string event, EventHandler@ handler) { find(id).on(event, handler); } // `on*` names are the engine's handlers
+void wire(string id, string event, EventHandler@ handler) { find(id).on(event, handler); } // handlers are named on*, like the engine's event handlers
 void setText(string id, string text)
 {
     Node@ n = find(id);
@@ -87,16 +88,17 @@ void setText(string id, string text)
         Label::of(n).text = text;
     }
 }
-// Shown or hidden at once (the sheet starts what waits for its moment at opacity 0).
+// Shows or hides a node at once. (The style sheet starts elements that wait for their moment at
+// opacity 0.)
 void show(string id, bool shown)
 {
     Node@ n = find(id);
     if (n !is null)
     {
-        n.tween("opacity", shown ? "1" : "0", 0.0f, "linear"); // a tween of no length replaces the last
+        n.tween("opacity", shown ? "1" : "0", 0.0f, "linear"); // a zero-length tween replaces the previous one
     }
 }
-// Grows to `scale` and back over `seconds`: a counter that just changed.
+// Grows to `scale` and back over `seconds`, to mark a counter that just changed.
 void pulse(string id, float scale, float seconds)
 {
     Node@ n = find(id);
@@ -176,14 +178,14 @@ class Game
     private Phase m_phase = Phase::Title;
     /// Real seconds in the current phase.
     private float m_timer = 0.0f;
-    /// Where a fade out lands: the title, or level m_nextLevel.
+    /// Where a fade out leads: the title, or level m_nextLevel.
     private bool m_toTitle = false;
     private int m_nextLevel = 0;
     /// The phase a fade in reveals.
     private Phase m_afterFade = Phase::Intro;
     private Node@ m_fade;
-    /// The track playing: 0 none, 1 the menu's, 2 + n level n's. A track asked for again keeps
-    /// playing rather than restarting.
+    /// The track playing: 0 for none, 1 for the menu's, 2 + n for level n's. Asking for the track
+    /// already playing keeps it going rather than restarting it.
     private int m_track = 0;
 
     // ---- the run ----
@@ -241,7 +243,7 @@ class Game
         case Phase::FadingIn:
             if (m_timer >= kFadeSeconds)
             {
-                screens().pop(); // the fade layer, on top since the fade began
+                screens().pop(); // the fade layer, which has been on top since the fade began
                 enter(m_afterFade);
                 if (m_afterFade == Phase::Intro)
                 {
@@ -253,8 +255,8 @@ class Game
             }
             break;
         case Phase::Intro:
-            // On the RELEASE: the press lands while the level is still frozen, so the player
-            // never sees it and does not jump the moment play starts.
+            // Start on the release: the press lands while the level is still frozen, so the player
+            // does not jump the moment play starts.
             if (Input::wasReleased("Jump"))
             {
                 screens().pop(); // the intro banner
@@ -291,7 +293,7 @@ class Game
             }
             break;
         case Phase::Cleared:
-            rollScore(real, m_score); // the clear's points are banked: the HUD catches up under the card
+            rollScore(real, m_score); // the clear's points are banked, and the HUD catches up under the card
             updateTally();
             break;
         default:
@@ -373,7 +375,7 @@ class Game
         }
         m_falls += 1;
         m_lives -= 1;
-        pulse("hud-heart", 0.6f, 0.35f); // the heart shrinks and comes back: a life gone
+        pulse("hud-heart", 0.6f, 0.35f); // the heart shrinks and comes back to show a life lost
         refreshHud();
         if (m_lives <= 0)
         {
@@ -427,7 +429,7 @@ class Game
         enter(Phase::Cleared);
     }
 
-    // ---- buttons (a GUI event's handlers; what they do, the flow below runs too) ----
+    // ---- buttons (GUI event handlers; the flow below also uses what they call) ----
     bool onPlay(GuiEvent e)
     {
         click();
@@ -435,8 +437,8 @@ class Game
         return true;
     }
 
-    /// The volumes, on the audio buses the player saves when it exits, so a change made
-    /// here is there next time without the game storing anything itself.
+    /// The volumes, set on the audio buses, which the player saves on exit; a change made here
+    /// persists without the game storing anything itself.
     bool onSettings(GuiEvent e)
     {
         click();
@@ -487,8 +489,8 @@ class Game
         return true;
     }
 
-    /// From the pause menu: the level again from its start, with the score it started with and
-    /// the lives left now (a restart is no way to win lives back).
+    /// From the pause menu: restarts the level with the score it started with and the lives left
+    /// now, so a restart cannot win lives back.
     bool onRestart(GuiEvent e)
     {
         click();
@@ -546,13 +548,13 @@ class Game
         fadeToLevel(0);
     }
 
-    /// A bound volume row: its slider at the bus's level, its readout, and the handler.
+    /// Sets up a volume row: its slider at the bus's level, its readout, and the handler.
     private void bindVolume(string row, AudioBus bus, EventHandler@ handler)
     {
         Slider@ slider = Slider::of(find(row + "-slider"));
         slider.value = Audio::busVolume(bus);
         showVolume(row, float(slider.value));
-        wire(row + "-slider", "input", handler); // each step as the slider moves
+        wire(row + "-slider", "input", handler); // fires on each step as the slider moves
     }
 
     private void volumeChanged(string row, AudioBus bus)
@@ -633,7 +635,7 @@ class Game
         fadeOut();
     }
 
-    /// Black over everything, then arrive() swaps what is under it.
+    /// Fades to black over everything; arrive() then swaps what is underneath.
     private void fadeOut()
     {
         if (m_phase == Phase::FadingOut || m_phase == Phase::FadingIn)
@@ -646,7 +648,7 @@ class Game
         enter(Phase::FadingOut);
     }
 
-    /// Under the black: the new scene and its screens, then the black fades away.
+    /// Under the black, loads the new scene and its screens, then fades the black away.
     private void arrive()
     {
         screens().clear();
@@ -667,7 +669,7 @@ class Game
             m_gem = false;
             m_time = 0.0f;
             run::loadScene(levelScene(m_level));
-            m_track = 0; // the level's music from its start, at full volume after a game over
+            m_track = 0; // restart the level's music from the beginning, at full volume after a game over
             music(2 + m_level);
             screens().push(kHudDoc);
             m_shownScore = float(m_score);
@@ -675,7 +677,7 @@ class Game
             screens().push(kIntroDoc);
             setText("intro-number", "Level " + (m_level + 1));
             setText("intro-name", levelName(m_level));
-            show("intro-card", false); // waiting above for the fade to clear
+            show("intro-card", false); // waits above until the fade clears
             m_afterFade = Phase::Intro;
         }
         screens().push(kFadeDoc);
@@ -814,10 +816,10 @@ class Game
         {
             setText("clear-best", "Best " + points(Save::getInt("best.score." + m_level, 0)));
         }
-        enter(Phase::Cleared); // the hold before the next level starts now
+        enter(Phase::Cleared); // start the hold before the next level
     }
 
-    // ---- the save: per level its best score, stars and time; the best run ----
+    // ---- the save: each level's best score, stars and time, and the best run ----
     /// Bit 0 all coins, bit 1 no falls, bit 2 under par: the stars this clear earned.
     private int starMask()
     {
@@ -837,8 +839,8 @@ class Game
         return mask;
     }
 
-    /// Keeps the level's best score, every star ever earned there and its best time; true when
-    /// the score is a new best.
+    /// Keeps the level's best score, every star ever earned there and its best time. Returns true
+    /// when the score is a new best.
     private bool saveLevel(int level, int score, int stars, float seconds)
     {
         string suffix = "." + level;

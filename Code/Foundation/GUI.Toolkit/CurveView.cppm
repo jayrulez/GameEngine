@@ -3,20 +3,23 @@
 
 // GUI.Toolkit - :curve_view partition
 //
-// The curve view (T5 of Specs/gui-lab-evolution-3.md): a source's curves on one canvas, time across
-// on a shared TimeAxis and value up on a range of its own, drawn with Core's EvaluateCurve so what is
-// edited is what plays. Mouse first, as ezEngine's:
-//   - a click selects a key (Shift or Ctrl adds or takes it away), a drag from nothing selects by a box;
-//   - a drag moves the selected keys (Shift locks it to the axis it moved along most), their times on
-//     frames with a frame rate, their values in a curve's range, the keys sorted again as they pass
-//     and their tangents set by their modes, so auto and smooth keys follow;
-//   - a selected key's handles (where a cubic segment meets it) set its tangents; dragging an auto
-//     or a flat key's handle makes it smooth;
-//   - a double click on a curve adds a key there, on the curve;
-//   - a key's menu sets the interpolation and the tangent mode of the selected keys, or deletes them
-//     (Delete does too); the menu over nothing frames every curve or the selection;
-//   - the wheel zooms about the pointer (Ctrl only time, Shift only value), a middle drag pans.
-// Each gesture is one edit through the source (one undo entry, the application's).
+// The curve view draws a source's curves on one canvas, with time running across on a shared
+// TimeAxis and value running up on a range of the view's own. It draws with Core's EvaluateCurve,
+// so what is edited is what plays. It is driven mostly by the mouse:
+//   - A click selects a key (Shift or Ctrl adds it or takes it away); a drag from empty space
+//     selects with a box.
+//   - A drag moves the selected keys (Shift locks the move to the axis it moved along most). Times
+//     snap to frames when there is a frame rate, and values stay in a curve's range. The keys are
+//     sorted again as they pass each other, and their tangents are set by their modes, so auto and
+//     smooth keys follow.
+//   - A selected key's handles (where a cubic segment meets it) set its tangents. Dragging the
+//     handle of an auto or a flat key makes the key smooth.
+//   - A double click on a curve adds a key there, on the curve.
+//   - A key's menu sets the interpolation and the tangent mode of the selected keys, or deletes
+//     them (Delete does too). The menu over empty space frames every curve or the selection.
+//   - The wheel zooms about the pointer (with Ctrl only time, with Shift only value), and a middle
+//     drag pans.
+// Each gesture is one edit through the source, which makes it one undo entry for the application.
 
 module;
 #include "Core/Prelude.h"
@@ -48,14 +51,14 @@ export namespace foundation::gui
             Curve,
         };
         Kind What = Kind::None;
-        CurveKeyRef Key; ///< a key's, a handle's key; a curve's index in Key.Curve
+        CurveKeyRef Key; ///< the key hit or the handle's key; a curve hit's index is Key.Curve
     };
 
     class CurveView : public UIWidget, public ITimeAxisClient, public ICurveSourceClient
     {
         RTTI_OBJECT(CurveView, UIWidget)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"grid"));
@@ -91,7 +94,8 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] TimeAxis* GetTimeAxis() const noexcept { return m_axis.Get(); }
-        /// The curves it edits (not owned: the source outlives the view or is set to null first).
+        /// Sets the curves it edits. The source is not owned: it must outlive the view, or be set to
+        /// null first.
         void SetSource(ICurveSource* source)
         {
             if (m_source)
@@ -104,7 +108,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] ICurveSource* GetSource() const noexcept { return m_source; }
 
-        /// The values from its bottom to its top.
+        /// Sets the values shown from the view's bottom to its top.
         void SetValueRange(f32 low, f32 high)
         {
             if (high - low < 1e-6f)
@@ -116,9 +120,10 @@ export namespace foundation::gui
         [[nodiscard]] f32 ValueLow() const noexcept { return m_valueLow; }
         [[nodiscard]] f32 ValueHigh() const noexcept { return m_valueHigh; }
 
-        /// Fits the time axis and the values to every curve's keys (and its range, where it has one).
+        /// Fits the time axis and the values to every curve's keys, and to its range where it has one.
         void FrameAll() { Frame(false); }
-        /// Fits them to the selected keys; to every curve with none selected.
+        /// Fits the time axis and the values to the selected keys, or to every curve when none is
+        /// selected.
         void FrameSelection() { Frame(!m_selection.IsEmpty()); }
 
         // === The selection ===
@@ -138,7 +143,7 @@ export namespace foundation::gui
             return false;
         }
 
-        // === Edits of the selection (one each, through the source) ===
+        // === Edits of the selection (each one edit through the source) ===
         void SetInterpolation(CurveKeyInterpolation interpolation)
         {
             EditSelected([interpolation](CurveKey& key) { key.interpolation = interpolation; });
@@ -147,7 +152,7 @@ export namespace foundation::gui
         {
             EditSelected([mode](CurveKey& key) { key.tangentMode = mode; });
         }
-        /// Deletes the selected keys; false when none were.
+        /// Deletes the selected keys. Returns false when none were selected.
         bool DeleteSelected()
         {
             if (!m_source || m_selection.IsEmpty())
@@ -170,8 +175,8 @@ export namespace foundation::gui
             Invalidate();
             return true;
         }
-        /// Adds a key to `curve` at `time`, on the curve (its interpolation the segment's it splits);
-        /// false when the curve is full or locked.
+        /// Adds a key to `curve` at `time`, on the curve, taking the interpolation of the segment it
+        /// splits. Returns false when the curve is full or locked.
         bool InsertKey(usize curve, f32 time)
         {
             if (!m_source || curve >= m_source->CurveCount())
@@ -211,7 +216,7 @@ export namespace foundation::gui
             return true;
         }
 
-        // === Where things are (in its own space) ===
+        // === Where things are (in the view's own space) ===
         [[nodiscard]] core::Float2 KeyPoint(f32 time, f32 value) const
         {
             const Rect box = GetContentBounds();
@@ -225,7 +230,7 @@ export namespace foundation::gui
             const Rect box = GetContentBounds();
             return box.height > 0.0f ? m_valueLow + (box.Bottom() - y) / box.height * (m_valueHigh - m_valueLow) : m_valueLow;
         }
-        /// Where a key's handle is drawn (`out`: the one leaving it).
+        /// Returns where a key's handle is drawn; `out` picks the handle leaving the key.
         [[nodiscard]] core::Float2 HandlePoint(const CurveKey& key, bool out) const
         {
             const Rect box = GetContentBounds();
@@ -240,7 +245,8 @@ export namespace foundation::gui
             const core::Float2 at = KeyPoint(key.time, key.value);
             return core::Float2{at.x + sign * direction.x / length * kHandleLength, at.y + sign * direction.y / length * kHandleLength};
         }
-        /// What is at `local` (its own space): a selected key's handle first, then a key, then a curve.
+        /// Returns what is at `local` (in the view's space), checking a selected key's handle first,
+        /// then a key, then a curve.
         [[nodiscard]] CurveHit HitTest(core::Float2 local) const
         {
             CurveHit hit;
@@ -276,7 +282,8 @@ export namespace foundation::gui
             }
             return hit;
         }
-        /// Whether a key shows a handle on that side: a cubic segment meets it there.
+        /// Returns whether a key shows a handle on that side, which it does where a cubic segment
+        /// meets it.
         [[nodiscard]] static bool HasHandle(core::Span<const CurveKey> keys, usize index, bool out) noexcept
         {
             if (out)
@@ -383,8 +390,8 @@ export namespace foundation::gui
         core::Array<CurveKeyRef> m_selection;
 
         Drag m_drag = Drag::None;
-        core::Float2 m_pressAt{};       // where the gesture began, its own space
-        CurveKeyRef m_pressed;          // the key pressed (a move's or a handle's)
+        core::Float2 m_pressAt{};       // where the gesture began, in the view's space
+        CurveKeyRef m_pressed;          // the key pressed, for a move or a handle drag
         bool m_handleOut = false;
         bool m_additive = false;        // Shift or Ctrl held at the press
         core::Array<core::Array<CurveKey>> m_original; // each curve's keys at the gesture's start
@@ -394,7 +401,7 @@ export namespace foundation::gui
         f32 m_panHigh = 1.0f;
         core::Float2 m_boxTo{};
         core::RefPtr<Menu> m_menu;
-        mutable Text m_text; // each value label in turn
+        mutable Text m_text; // reused for each value label in turn
     };
 
     // === Gestures ===
@@ -422,8 +429,8 @@ export namespace foundation::gui
         m_boxTo = local;
         m_additive = (event.Modifiers & (KeyModShift | KeyModCtrl)) != 0;
         const CurveHit hit = HitTest(local);
-        // A double click on the curve adds a key; on a key it is a click (a Shift+click soon after
-        // selecting a key takes it away again).
+        // A double click on the curve adds a key. On a key it counts as a click, so a Shift+click
+        // soon after selecting a key takes it away again.
         if (event.ClickCount == 2 && hit.What == CurveHit::Kind::Curve)
         {
             (void)InsertKey(hit.Key.Curve, TimeAtX(local.x));
@@ -530,7 +537,7 @@ export namespace foundation::gui
         }
         if (m_drag == Drag::Pending && !m_additive)
         {
-            // A click on a key of several selected selects it alone.
+            // A click on one of several selected keys selects it alone.
             m_selection.Clear();
             m_selection.PushBack(m_pressed);
             Invalidate();
@@ -608,7 +615,7 @@ export namespace foundation::gui
             else
                 dt = 0.0f;
         }
-        dt = m_axis->Snap(anchor.time + dt) - anchor.time; // the pressed key lands on a frame; the rest keep their spacing
+        dt = m_axis->Snap(anchor.time + dt) - anchor.time; // the pressed key snaps to a frame; the rest keep their spacing
         core::Array<CurveKeyRef> selection;
         for (usize c = 0; c < m_original.Size(); ++c)
         {
@@ -636,7 +643,8 @@ export namespace foundation::gui
                 keys.PushBack(key);
                 moved.PushBack(selected);
             }
-            // Sorted by time again, stably: a moved key passes the others, ties keep their order.
+            // Sort by time again, stably, so a moved key can pass the others and ties keep their
+            // order.
             for (usize i = 1; i < keys.Size(); ++i)
                 for (usize j = i; j > 0 && keys[j].time < keys[j - 1].time; --j)
                 {
@@ -654,7 +662,8 @@ export namespace foundation::gui
                 selection.PushBack(CurveKeyRef{c, n});
             }
         }
-        // The selection follows its keys to their places; each step starts again from the originals.
+        // The selection follows its keys to their new places. Each drag step starts again from the
+        // original keys.
         m_selection = core::Move(selection);
         Invalidate();
     }
@@ -668,7 +677,7 @@ export namespace foundation::gui
         CurveKey& key = keys[m_pressed.Index];
         f32 dt = TimeAtX(local.x) - key.time;
         const f32 dv = ValueAtY(local.y) - key.value;
-        // A handle stays on its side of its key: past it, nearly upright.
+        // A handle stays on its side of its key; dragged past the key, it stands nearly upright.
         const f32 least = 1e-4f;
         if (m_handleOut)
             dt = core::Max(dt, least);
@@ -741,7 +750,7 @@ export namespace foundation::gui
             const CurveInfo info = m_source->GetCurveInfo(c);
             for (const CurveKey& key : keys)
                 take(key.time, key.value);
-            if (keys.Size() > 1) // the curve between its keys, an overshoot seen
+            if (keys.Size() > 1) // sample the curve between its keys, so an overshoot is included
                 for (i32 s = 0; s <= 64; ++s)
                 {
                     const f32 t = keys[0].time + (keys[keys.Size() - 1].time - keys[0].time) * static_cast<f32>(s) / 64.0f;
@@ -756,7 +765,7 @@ export namespace foundation::gui
         }
         if (!any)
             return;
-        if (rangedAny) // a framing shows at least the ranges
+        if (rangedAny) // framing shows at least the ranges
         {
             v0 = core::Min(v0, ranged);
             v1 = core::Max(v1, rangedHigh);
@@ -795,7 +804,7 @@ export namespace foundation::gui
         CurveView* self = this;
         if (hit.What == CurveHit::Kind::Key)
         {
-            // Checked where every selected key agrees.
+            // A menu item is checked only where every selected key agrees.
             bool sameInterp = true, sameMode = true;
             CurveKeyInterpolation interp = CurveKeyInterpolation::Cubic;
             CurveTangentMode mode = CurveTangentMode::Auto;
@@ -859,7 +868,7 @@ export namespace foundation::gui
             color.a *= part.Opacity;
             return color;
         };
-        // The grid: a line at each labelled time, and at each value step, labelled.
+        // The grid: a line at each labelled time, and a labelled line at each value step.
         const Color grid = partColor(u8"grid", Color{1.0f, 1.0f, 1.0f, 0.08f});
         const f32 timeStep = m_axis->TickStep(TimeRuler::kMinLabelSpacing);
         for (i64 i = static_cast<i64>(core::Ceil(m_axis->Scroll() / timeStep));; ++i)

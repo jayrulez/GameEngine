@@ -2,9 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI - actions on a SceneRoot's clock: tweens of a plain node's reflected properties (x, y,
-// opacity), a sequence of them, waits and calls, a run on a node in no GUI, and a target
-// destroyed before its action ends. They moved here from eepp's Move, Fade, Delay, Runnable and
-// Sequence actions, which the tweens took the place of (E14).
+// opacity), a sequence of them, waits and calls, an action run on a node in no GUI, and a target
+// destroyed before its action ends.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -36,7 +35,7 @@ TEST_CASE("action: a tween moves a plain node's position and is dropped once don
     CHECK(node->GetPosition().x == doctest::Approx(50.0f));
     root->GetContext().Update(Sec(0.5));
     CHECK(node->GetPosition().x == doctest::Approx(100.0f));
-    CHECK(root->GetActionManager()->IsEmpty()); // finished: dropped (a reflected property keeps its value)
+    CHECK(root->GetActionManager()->IsEmpty()); // the finished tween is dropped; the reflected property keeps its value
 }
 
 TEST_CASE("action: a plain node's opacity is its reflected one")
@@ -93,7 +92,7 @@ TEST_CASE("action: a run on a node in no GUI does nothing")
 {
     auto node = MakeNode();
     core::RefPtr<Tween> tween = node->Animate(SV(u8"x"), SV(u8"100"), 1.0f);
-    CHECK(tween); // shaped like any, inert
+    CHECK(tween); // it can be shaped like any tween, but it does nothing
     CHECK(node->GetActionManager() == nullptr);
     CHECK(node->GetPosition().x == doctest::Approx(0.0f));
 }

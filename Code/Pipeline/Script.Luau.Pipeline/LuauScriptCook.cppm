@@ -3,16 +3,14 @@
 
 // Pipeline::Script.Luau - the `script.luau.pipeline` module (tooling).
 //
-// The Luau cook service: compile-checks a Luau
-// behavior in a cooker-owned Luau VM (resolved through the backend registry by language),
-// harvests editor properties by CONSTRUCTING the class and walking the instance's fields
-// (the Luau harvest model - table-walk), compiles the
-// source to a bytecode blob for the pack, and supplies the New-Asset starters. ALL
-// Luau-specific cook syntax lives HERE, not in the neutral foundation.script.editor.
+// The Luau cook service: compile-checks a Luau behavior in a cooker-owned Luau VM (resolved
+// through the backend registry by language), harvests editor properties by constructing the
+// class and walking the instance's fields, compiles the source to a bytecode blob for the pack,
+// and supplies the New-Asset starters. All Luau-specific cook syntax lives here, not in the
+// neutral script.pipeline.
 //
-// Plain module interface unit: it spins up the cook VM through the NEUTRAL IScriptContext
-// surface (CreateScriptManagerForLanguage), so no Luau C header appears here - the GCC
-// module-hygiene rule (backend headers out of interface units) holds by construction.
+// The cook VM is created through the neutral IScriptContext surface
+// (CreateScriptManagerForLanguage), so no Luau C header appears in this interface unit.
 
 module;
 #include "Core/Prelude.h"
@@ -21,21 +19,21 @@ module;
 export module script.luau.pipeline;
 
 import foundation.core;
-import foundation.script;         // registry + IScriptManager/IScriptContext + RegisterReflectedTypes
-import foundation.script.resource; // ScriptClassSource + ScriptPropertyDesc
+import foundation.script;         // registry, IScriptManager/IScriptContext, RegisterReflectedTypes
+import foundation.script.resource; // ScriptClassSource and ScriptPropertyDesc
 import foundation.script.facades;  // RegisterScriptFacadeReflection (the cook VM's global surface)
-import script.pipeline;   // IScriptLanguageCook + registry + shared cook helpers
+import script.pipeline;   // IScriptLanguageCook, registry, shared cook helpers
 import foundation.script.luau;     // ensures the Luau backend is available to the registry
 
 using namespace foundation::core;
 using namespace foundation::script;
 
 export namespace pipeline{
-    // The New Asset starter (the behavior convention pre-filled). Luau OOP is a GLOBAL class
-    // table + metatable; the engine instantiates via `<Class>.new(entity)`. Editor properties
-    // are plain fields set in the constructor - the cook harvests them by walking the built
-    // instance. Reflected instance methods use COLON (self.entity:position()); static facades
-    // use DOT (Log.info, Time.delta); Float3 is Luau's native vector (v.x, arithmetic).
+    // The New Asset starter (the behavior convention pre-filled). Luau OOP is a global class
+    // table and metatable; the engine instantiates via `<Class>.new(entity)`. Editor properties
+    // are plain fields set in the constructor, which the cook harvests by walking the built
+    // instance. Reflected instance methods use a colon (self.entity:position()); static facades
+    // use a dot (Log.info, Time.delta); Float3 is Luau's native vector (v.x, arithmetic).
     inline constexpr StringView kLuauBehaviorStarter =
         u8"-- Behavior class - attach via a ScriptComponent behavior slot.\n"
         u8"-- Luau OOP: a GLOBAL class table + metatable; the engine calls {ClassName}.new(entity).\n"
@@ -70,7 +68,7 @@ export namespace pipeline{
 
     // The New Asset starter for a Level (the scene-scripting tier): one object per scene,
     // constructed with the scene's bound handle. All handlers optional (dispatch by presence).
-    // onUpdate/onFixedUpdate run ONLY while the scene simulates.
+    // onUpdate/onFixedUpdate run only while the scene simulates.
     inline constexpr StringView kLuauLevelStarter =
         u8"-- Level class - the per-scene script. Set it on the scene's Scene Script settings.\n"
         u8"-- One instance per scene, constructed with the scene handle (reserved name `Level`).\n"
@@ -94,7 +92,7 @@ export namespace pipeline{
         u8"function Level:onStop()\n"
         u8"end\n";
 
-    // The New Asset starter for the game orchestrator: the MANDATORY class `Game`. One per
+    // The New Asset starter for the game orchestrator: the mandatory class `Game`. One per
     // run; drives scene loading (through the run facade) and the game-wide update.
     inline constexpr StringView kLuauGameStarter =
         u8"-- Game class - the game orchestrator (mandatory name `Game`). One per run.\n"

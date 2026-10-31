@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.input tests: binding + enum -> human labels (the :binding_names helpers, relocated
-// out of the editor's InputMapPage so runtime UI can render bindings the same way).
+// foundation.input tests: bindings and enums as human labels (the :binding_names helpers, which
+// runtime UI and the editor share).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -32,8 +32,8 @@ TEST_CASE("binding names: PadButtonName maps the face + dpad + shoulder buttons"
           StringView(u8"Pad LB"));
 }
 
-// Every button its own name (a prompt's sheet draws a glyph per name): the stick presses read
-// "Pad Button" once, so Sprint on the left stick could not be told from any other.
+// Every button its own name (a prompt's sheet draws a glyph per name), the stick presses
+// included, so Sprint on the left stick is told apart from any other.
 TEST_CASE("binding names: every pad button has a name of its own")
 {
     CHECK(PadButtonName(static_cast<u32>(shell::GamepadButton::LeftStick)) == StringView(u8"Pad LS"));

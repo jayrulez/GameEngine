@@ -3,21 +3,20 @@
 
 // Editor App - :asset_object_page partition
 //
-// AssetObjectPage: what a page over one reflected asset does whatever its asset is
-// (Documentation/Specs/editor-gui.md, 5.4), so a page adds only what is its own (a picture, a
-// preview). It reads the asset when it opens; its markup (the page's) has the kit's bar, whose
-// `page-save`, `page-undo`, `page-redo`, `page-discard`, `page-cook` and `page-rebuild` it binds to the actions
-// over the page, a grid (`page-grid`) and the state a page shows when its asset did not read
-// (`page-state`, in place of the grid), and names its asset's kind in `page-kind`. The grid holds
-// the asset's reflected properties under its type's name and, under "Source", what the page says
-// of it as read-only rows (a file, a size), never as fields that do nothing when typed into (the
-// catalog's inconsistency 8). Every edit is one undo step on the page's stack
-// (ReflectedEditCommand), after which, and after its undo and redo, the page is told
-// (OnObjectChanged) so its preview follows; an edit made by code (a preset) is one step too
-// (EditWhole), and so is an edit a page follows with more (FollowEdit: a texture's usage sets its
-// colour space). What a page warns of (a texture's data stored as sRGB) is a notice row over the
-// rest, shown while it has something to say (SetNotice). Save writes the asset and asks for a
-// cook, so what uses it takes the new one.
+// AssetObjectPage: the behaviour every page over one reflected asset shares, so a derived page
+// adds only what is specific to it (a picture, a preview). It reads the asset when it opens. The
+// page's markup has the kit's bar, whose `page-save`, `page-undo`, `page-redo`, `page-discard`,
+// `page-cook` and `page-rebuild` buttons it binds to the page's actions; a grid (`page-grid`); the
+// state shown in place of the grid when the asset fails to read (`page-state`); and `page-kind`,
+// where it names the asset's kind. The grid holds the asset's reflected properties under its
+// type's name and, under "Source", read-only rows the page supplies (a file, a size), never fields
+// that do nothing when typed into. Every edit is one undo step on the page's stack
+// (ReflectedEditCommand). After an edit, and after its undo or redo, the page gets
+// OnObjectChanged so its preview can follow. An edit made by code (a preset) is also one step
+// (EditWhole), and so is an edit the page extends with more changes (FollowEdit: a texture's usage
+// sets its colour space). A page's warnings (a texture's data stored as sRGB) are notice rows above
+// the rest, shown while they have something to say (SetNotice). Save writes the asset and requests
+// a cook, so whatever uses the asset picks up the new version.
 
 module;
 #include "Core/Prelude.h"
@@ -47,10 +46,10 @@ using namespace foundation::core;
 
 export namespace editor::app
 {
-    /// An asset's source file as its row shows it: the path as the asset names it (reflection has
-    /// no text for a SourcePath, so the page that holds the asset says it), never typed (a typo
-    /// would cook a dangling reference); with `browse`, a Browse button picking another file of
-    /// the project's (a font's source, relinked).
+    /// The row for an asset's source file. It shows the path as the asset names it (reflection has
+    /// no text for a SourcePath, so the page that holds the asset supplies it) and cannot be typed
+    /// into, since a typo would cook a dangling reference. With `browse`, a Browse button picks
+    /// another file from the project (to relink a font's source).
     class SourcePathEditor final : public gui::PropertyEditor
     {
         RTTI_OBJECT(SourcePathEditor, gui::PropertyEditor)
@@ -58,7 +57,7 @@ export namespace editor::app
         static constexpr StringView kHint = u8"SourcePath";
 
         explicit SourcePathEditor(Function<String()> path, Function<void()> browse = {})
-            : m_path(foundation::core::Move(path)), m_browse(foundation::core::Move(browse)) // a widget's own Move would move it
+            : m_path(foundation::core::Move(path)), m_browse(foundation::core::Move(browse)) // qualified: an unqualified Move would find the widget's own Move
         {
             AddClass(u8"source-path");
             EditLayoutStyle([](gui::LayoutStyle& s)
@@ -183,8 +182,8 @@ export namespace editor::app
         {
             if (m_grid != nullptr)
                 m_grid->SetSource(nullptr);
-            // The page's own sections' sources died with the derived page, before this runs: forget
-            // every section unasked (each source dies with the page, so none keeps a client in use).
+            // The derived page's section sources were destroyed with it before this destructor
+            // runs, so abandon every section without calling into its source.
             if (m_sections)
                 m_sections->Abandon();
         }
@@ -194,9 +193,9 @@ export namespace editor::app
         [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
         [[nodiscard]] RefPtr<gui::Node> Content() override { return m_content; }
         void OnUpdate(foundation::runtime::IApplicationHost&, f32) override { Refresh(); }
-        /// The asset written outside the page (an agent's asset_data_write, page_reload): a clean
-        /// page shows what is stored now, its undo let go; one with unsaved edits keeps them and
-        /// says so, as the scene page does.
+        /// Called when the asset is written outside the page (an agent's asset_data_write,
+        /// page_reload). A clean page shows what is stored now and clears its undo history; a page
+        /// with unsaved edits keeps them and warns, as the scene page does.
         void OnAssetExternallyModified() override
         {
             if (IsDirty())
@@ -224,7 +223,7 @@ export namespace editor::app
             return saved;
         }
 
-        /// Once a frame: the bar as the actions are over the page.
+        /// Called once a frame: syncs the bar with the state of the page's actions.
         virtual void Refresh()
         {
             if (m_bar)
@@ -238,17 +237,17 @@ export namespace editor::app
         [[nodiscard]] gui::ReflectedPropertySource& Properties() noexcept { return *m_properties; }
         [[nodiscard]] gui::PropertyBag& Facts() noexcept { return *m_facts; }
         [[nodiscard]] PropertySections& Sections() noexcept { return *m_sections; }
-        /// The asset's source file as its row says it ("Not set": embedded, or not a source asset).
+        /// The asset's source file as its row shows it ("Not set" when embedded, or not a source asset).
         [[nodiscard]] String SourceFile() const
         {
             const auto* asset = Cast<pipeline::Asset>(m_object.Get());
             return asset != nullptr && !asset->fileName.IsEmpty() ? String(asset->fileName.View()) : String(u8"Not set");
         }
-        /// The kinds of file its source may be relinked to (".ttf"); none: its source row only says
-        /// it (the default).
+        /// The file extensions the source may be relinked to (".ttf"). Empty, the default, makes
+        /// the source row display only.
         [[nodiscard]] virtual Span<const String> SourceExtensions() const { return {}; }
-        /// The source row's Browse: the files under the project's sources of those kinds, the
-        /// current one checked; a pick relinks it.
+        /// The source row's Browse button: lists the files of those kinds under the project's
+        /// sources, with the current one checked; picking one relinks the source.
         void BrowseSource()
         {
             const auto* asset = Cast<pipeline::Asset>(m_object.Get());
@@ -259,7 +258,7 @@ export namespace editor::app
             request.OnPicked = [self](StringView picked) { self->RelinkSource(picked); };
             m_services.pick(Move(request));
         }
-        /// Names `path` (under the project's sources) as the asset's source, one undo step; the
+        /// Sets `path` (under the project's sources) as the asset's source in one undo step; the
         /// page's rows read it again.
         void RelinkSource(StringView path)
         {
@@ -284,7 +283,7 @@ export namespace editor::app
             const gui::Variant value = m_facts->GetValue(FactPath(name).AsView(), 0);
             return String(value.AsString());
         }
-        /// An edit of the asset's property `path` to `write`, as the grid commits one.
+        /// Edits the asset's property `path` with `write`, as the grid commits an edit.
         void Edit(StringView path, const gui::PropertyWrite& write)
         {
             m_properties->BeginEdit(path);
@@ -299,9 +298,9 @@ export namespace editor::app
         }
         [[nodiscard]] EditorContext& Context() const noexcept { return *m_context; }
         [[nodiscard]] const AssetPageServices& Services() const noexcept { return m_services; }
-        /// A button of the page's own bound to the action `id` over the page, as the kit's bar's
-        /// are (a clip's transport to the playback actions): enabled, checked and its tooltip
-        /// following the action each frame.
+        /// Binds a button of the page's own to the action `id`, as the kit's bar buttons are bound
+        /// (a clip's transport to the playback actions). Its enabled and checked states and its
+        /// tooltip follow the action each frame.
         void BindAction(gui::ButtonBase* button, StringView id)
         {
             if (m_bar)
@@ -322,15 +321,16 @@ export namespace editor::app
                 gui::PropertyInfo& info = m_facts->Add(path.AsView(), gui::PropertyKind::String, gui::Variant(value));
                 info.DisplayName = String(name);
                 info.ReadOnly = true;
-                m_facts->PropertiesChanged(); // Add told the grid before its name was set
+                m_facts->PropertiesChanged(); // Add notified the grid before the name was set
                 return;
             }
             if (m_facts->GetValue(path.AsView(), 0).AsString() != value)
                 m_facts->SetValue(path.AsView(), 0, gui::Variant(value));
         }
 
-        /// A section of the page's own (rows reflection does not show: a font's size ramp) after
-        /// the asset's and before the facts; `source` is the page's, dying with it.
+        /// Adds a section of the page's own (rows reflection does not show, such as a font's size
+        /// ramp) after the asset's rows and before the facts. `source` belongs to the page and
+        /// dies with it.
         void AddSection(StringView key, StringView title, gui::IPropertySource& source)
         {
             m_own.PushBack(OwnSection{String(key), String(title), &source});
@@ -338,9 +338,9 @@ export namespace editor::app
                 StackSections();
         }
 
-        /// The asset read again from its source (something else wrote it: a scene's save writing a
-        /// profile's values); its undo let go, as the steps named the asset it had. False when it
-        /// did not read, the page keeping what it had.
+        /// Reads the asset again from its source after something else wrote it (a scene's save
+        /// writing a profile's values). The undo history is cleared because its steps refer to the
+        /// previous object. Returns false when the read fails; the page then keeps what it had.
         bool ReadAgain()
         {
             foundation::content::Instance* instance = m_context->Project() != nullptr ? m_context->Project()->SourceDb().GetInstance(InstanceId()) : nullptr;
@@ -357,15 +357,15 @@ export namespace editor::app
             return true;
         }
 
-        /// The page's own sections let go (they are rebuilt: a material's rows follow its shader).
+        /// Drops the page's own sections so they can be rebuilt (a material's rows follow its shader).
         void ClearSections()
         {
             m_own.Clear();
             if (m_object.Get() != nullptr)
                 StackSections();
         }
-        /// The asset's reflected rows left out: a page whose asset reflects what no row should show
-        /// (a material's source, a property table in parallel arrays) gives the grid its own.
+        /// Leaves out the asset's reflected rows. A page whose asset reflects what no row should
+        /// show (a material's source, a property table in parallel arrays) gives the grid its own.
         void HideAssetRows()
         {
             m_showsAssetRows = false;
@@ -384,7 +384,7 @@ export namespace editor::app
                 added.Hint = String(NoticePropertyEditor::kHint);
                 added.ReadOnly = true;
                 added.Visible = !text.IsEmpty();
-                m_notices->PropertiesChanged(); // Add told the grid before the rest was set
+                m_notices->PropertiesChanged(); // Add notified the grid before the rest was set
                 return;
             }
             if (info->Visible != !text.IsEmpty())
@@ -396,9 +396,9 @@ export namespace editor::app
                 m_notices->SetValue(path.AsView(), 0, gui::Variant(text));
         }
 
-        /// An edit of `path` (the grid's) has just landed in `object`: a page that follows it with
-        /// more (a texture's usage setting its colour space) does so here and says true, and the
-        /// whole of it is one undo step.
+        /// Called when an edit of `path` from the grid has just been applied to `object`. A page
+        /// that extends the edit (a texture's usage setting its colour space) does so here and
+        /// returns true; the whole change is then one undo step.
         virtual bool FollowEdit(StringView path, ISerializable& object)
         {
             (void)path;
@@ -406,13 +406,14 @@ export namespace editor::app
             return false;
         }
 
-        /// An edit made by code that moves many values at once (a preset): `mutate` changes the
-        /// asset, the whole of it before and after kept as one undo step.
+        /// Applies an edit made by code that changes many values at once (a preset): `mutate`
+        /// changes the asset, and its state before and after is kept as one undo step.
         void EditWhole(StringView typeId, const Function<void(ISerializable&)>& mutate)
         {
             if (m_object.Get() == nullptr)
                 return;
-            // The asset as it is (not the last step of the base's own: a page's own rows edit it too).
+            // Snapshot the asset as it is now, not as the last step left it: the page's own rows
+            // edit it too.
             Array<byte> before = SnapshotObject(*m_object);
             mutate(*m_object);
             Array<byte> after = SnapshotObject(*m_object);
@@ -423,11 +424,11 @@ export namespace editor::app
                 EditorRootAllocator()));
         }
 
-        /// The asset changed: an edit, its undo or redo. The page's preview follows it.
+        /// Called when the asset changes (an edit, its undo or redo) so the page's preview can follow.
         virtual void OnObjectChanged() {}
 
     private:
-        // A row's path: its name without what a path may not hold.
+        // A row's path: its name without the characters a path may not hold.
         [[nodiscard]] static String FactPath(StringView name)
         {
             String path;
@@ -442,7 +443,8 @@ export namespace editor::app
             AssetObjectPage* self = this;
             if (FollowEdit(change.Path.AsView(), *m_object))
             {
-                // Followed by more than the source wrote: the whole asset before and after.
+                // The page extended the edit beyond what the source wrote: record the whole asset
+                // before and after.
                 (void)Commands().Execute(UniquePtr<editor::IEditorCommand>(
                     EditorRootAllocator().New<ObjectSnapshotCommand>(
                         [self]() { return self->m_object.Get(); }, m_baseline, SnapshotObject(*m_object), u8"asset_properties", [self]() { self->Applied(); }),
@@ -456,7 +458,8 @@ export namespace editor::app
                 EditorRootAllocator()));
         }
 
-        // The sections in their order: the notices, the asset's, the page's own, the facts.
+        // Stacks the sections in order: the notices, the asset's rows, the page's own sections,
+        // the facts.
         void StackSections()
         {
             m_sections->Clear();
@@ -470,8 +473,8 @@ export namespace editor::app
 
         void Applied()
         {
-            m_baseline = SnapshotObject(*m_object); // what the next edit made by code starts from
-            m_properties->Refresh(); // an undo or a preset wrote it behind the source
+            m_baseline = SnapshotObject(*m_object); // the starting state for the next edit made by code
+            m_properties->Refresh(); // an undo or a preset wrote it without going through the source
             OnObjectChanged();
         }
 
@@ -483,7 +486,7 @@ export namespace editor::app
         UniquePtr<gui::ReflectedPropertySource> m_properties;
         UniquePtr<gui::PropertyBag> m_facts;
         UniquePtr<gui::PropertyBag> m_notices;
-        Array<byte> m_baseline; // the asset as the last step left it: a followed edit's before
+        Array<byte> m_baseline; // the asset as the last step left it: the before state of a followed edit
         UniquePtr<PropertySections> m_sections;
         struct OwnSection
         {
@@ -495,7 +498,7 @@ export namespace editor::app
         String m_assetTitle;
         bool m_showsAssetRows = true; // HideAssetRows
         RefPtr<gui::Node> m_content;
-        gui::PropertyGrid* m_grid = nullptr; // the markup's
+        gui::PropertyGrid* m_grid = nullptr; // owned by the markup
         UniquePtr<PageActionBar> m_bar;
     };
 }

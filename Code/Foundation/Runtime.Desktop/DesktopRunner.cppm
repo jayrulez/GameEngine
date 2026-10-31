@@ -3,12 +3,12 @@
 
 // foundation.runtime.desktop - the desktop application runner.
 //
-// RunApplication is the DESKTOP execution model: a blocking wall-clock loop that drives an
-// IApplication (via ApplicationHost) against an IShell until either stops. It lives here -
+// RunApplication is the desktop execution model: a blocking wall-clock loop that drives an
+// IApplication (via ApplicationHost) against an IShell until either stops. It lives here,
 // separate from the shell backend (foundation.shell.desktop) and from the execution-model-agnostic
-// client (foundation.runtime.client) - precisely BECAUSE the loop is execution-model-specific:
+// client (foundation.runtime.client), because the loop is execution-model-specific:
 // desktop blocks in a while-loop, whereas Emscripten must yield to the browser via a callback
-// (its runner will be this module's sibling). The loop works entirely through the abstract IShell
+// (foundation.runtime.web, this module's sibling). The loop works entirely through the abstract IShell
 // interface, so it is windowing-backend agnostic; the concrete shell is constructed by the entry
 // point and passed in.
 module;
@@ -17,13 +17,13 @@ module;
 export module foundation.runtime.desktop;
 
 import foundation.core;
-import foundation.shell;          // IShell (interface only - the concrete shell is handed in)
+import foundation.shell;          // IShell (interface only; the concrete shell is handed in)
 import foundation.graphics;       // GraphicsDevice (handed to the app)
-import foundation.runtime.client; // IApplication + ApplicationHost (the runner drives these)
+import foundation.runtime.client; // IApplication and ApplicationHost (the runner drives these)
 namespace shell = foundation::shell;
 
 namespace core = foundation::core;
-using namespace foundation::graphics; // GraphicsDevice (moved from foundation::runtime)
+using namespace foundation::graphics; // GraphicsDevice
 
 export namespace foundation::runtime
 {

@@ -3,16 +3,16 @@
 
 // Foundation::Audio - :clip partition.
 //
-// AudioClip: the RUNTIME clip object - metadata plus the
-// ORIGINAL compressed container bytes (wav/ogg/mp3/flac; Traktor's compressed-in-memory
-// model, never PCM sidecars). Streamed clips carry a re-openable byte source instead of
-// bytes, so the engine can page-decode them straight out of the cooked content mount
-// (pak included) through the ma_vfs bridge. The cooked record + factory live in
-// foundation.audio.resource; this type stays content-DB-agnostic.
+// AudioClip: the runtime clip object, holding metadata and the original compressed
+// container bytes (wav, ogg, mp3 or flac; compressed in memory, never decoded PCM sidecars).
+// Streamed clips carry a re-openable byte source instead of bytes, so the engine can
+// page-decode them straight out of the cooked content mount (pak included) through the ma_vfs
+// bridge. The cooked record and its factory live in foundation.audio.resource; this type knows
+// nothing of the content database.
 //
-// The codec helpers (probe/decode/encode) are the editor/builder seam: declared here,
-// implemented in EngineImpl.cpp (the module implementation unit that talks to miniaudio),
-// so tooling modules never include miniaudio themselves.
+// The codec helpers (probe, decode, encode) serve the editor and the builders. They are
+// declared here and implemented in AudioEngineImpl.cpp, the module implementation unit that
+// talks to miniaudio, so tooling modules never include miniaudio themselves.
 
 module;
 #include "Core/Prelude.h"
@@ -35,7 +35,7 @@ export namespace foundation::audio
         f32 durationSeconds = 0.0f;
     };
 
-    /// A re-openable byte source for a STREAMED clip. Each open returns an independent
+    /// A re-openable byte source for a streamed clip. Each open returns an independent
     /// seekable stream over the same encoded container bytes (miniaudio's resource
     /// manager opens one per playing stream voice and pages through it on job threads).
     class IAudioStreamSource
@@ -46,7 +46,7 @@ export namespace foundation::audio
     };
 
     // The runtime clip. In-memory clips hold the encoded container bytes; streamed clips
-    // hold a stream source. `keepCompressed` (open question 2): in-memory clips decode
+    // hold a stream source. `keepCompressed`: in-memory clips decode
     // once at first play by default (decode-on-load); flagged clips stay compressed in
     // memory and decode on the fly while playing (large-but-latency-tolerant sounds).
     class AudioClip : public Object
@@ -72,7 +72,7 @@ export namespace foundation::audio
         }
     };
 
-    // ---- codec helpers (implemented over miniaudio in EngineImpl.cpp) ----
+    // ---- codec helpers (implemented over miniaudio in AudioEngineImpl.cpp) ----
 
     /// Probes channels/rate/length of an encoded container (wav/ogg/mp3/flac).
     /// False when the bytes are not decodable audio.
@@ -85,8 +85,8 @@ export namespace foundation::audio
                                               Array<i16>& outInterleavedSamples,
                                               AudioClipMetadata& outMetadata);
 
-    /// Encodes interleaved 16-bit PCM as a WAV container (the write-back half of the
-    /// import transforms - trim/normalize/force-mono re-encode losslessly to WAV).
+    /// Encodes interleaved 16-bit PCM as a WAV container. The import transforms (trim,
+    /// normalize, force-mono) write their result back through it, losslessly.
     [[nodiscard]] bool EncodeWavFromPcm16(Span<const i16> interleavedSamples, u32 channels,
                                           u32 sampleRate, Array<byte>& outWavBytes);
 

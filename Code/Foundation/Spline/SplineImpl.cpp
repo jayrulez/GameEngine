@@ -63,7 +63,7 @@ namespace foundation::spline
                 continue;
             }
             // Catmull-Rom rule: the tangent is the chord between the neighbors; each handle
-            // is a sixth of it (matches the standard Bezier<->Catmull-Rom conversion). Open
+            // is a sixth of it (the standard conversion between Bezier and Catmull-Rom). Open
             // endpoints fall back to the single adjacent chord.
             const bool hasPrev = closed || i > 0;
             const bool hasNext = closed || i + 1 < n;
@@ -138,7 +138,7 @@ namespace foundation::spline
         {
             return;
         }
-        // One cumulative entry per table sample: segment * kSamplesPerSegment chords + the
+        // One cumulative entry per table sample: segment * kSamplesPerSegment chords and the
         // leading zero.
         m_arcLength.Reserve(static_cast<usize>(segments) * kSamplesPerSegment + 1);
         m_arcLength.PushBack(0.0f);

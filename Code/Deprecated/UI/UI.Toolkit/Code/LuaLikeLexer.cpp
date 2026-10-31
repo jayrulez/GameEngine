@@ -3,8 +3,8 @@
 
 // UI Toolkit - LuaLikeLexer implementation (declared in :code_lexer).
 //
-// The Lua-family scanner (Luau). Language identity - keyword/type tables - lives in the
-// LuaLikeLexerSpec the OWNER supplies; the toolkit ships no tables (see CodeLexer.cppm). What
+// The Lua-family scanner (Luau). Language identity (the keyword and type tables) lives in the
+// LuaLikeLexerSpec the owner supplies; the toolkit ships no tables (see CodeLexer.cppm). What
 // the C-like scanner cannot express and this one adds: `--` line comments, level-bracketed long
 // comments `--[[ ]]` / `--[=[ ]=]`, long strings `[[ ]]` / `[=[ ]=]`, and backtick interpolated
 // strings. Long brackets are multi-line; the carry state encodes (mode | level << 8) so an
@@ -159,7 +159,7 @@ namespace foundation::ui::toolkit
                     }
                     continue;
                 }
-                // Not a long bracket - fall through to punctuation.
+                // Not a long bracket: fall through to punctuation.
             }
             if (character == u8'"')
             {

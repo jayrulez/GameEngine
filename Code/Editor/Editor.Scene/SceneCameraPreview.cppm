@@ -3,14 +3,13 @@
 
 // Editor::Scene - :scene_camera_preview partition.
 //
-// The camera preview in the HUD's bottom end (Documentation/Specs/editor-gui.md, 5.3, layer 6;
-// the mock's scene.xml): what a scene camera sees while the scene is edited from elsewhere. It
-// shows the selected camera, or the one pinned (a pin wins while its entity is alive and still a
-// camera; a stale pin clears itself, :camera_preview's decision), titled with that camera's name
-// and icon, its picture at the camera's own aspect. The picture is a second view of the scene
-// through the camera, keyed by the preview's own viewport, so the editor's grid, gizmos and
-// markers (the main view's debug list) never show in it, nor the main view's shading override.
-// It takes no input: the main view keeps the pointer under it.
+// The camera preview in the HUD's bottom end: what a scene camera sees while the scene is edited
+// from elsewhere. It shows the selected camera, or the pinned one (a pin wins while its entity is
+// alive and still a camera; a stale pin clears itself, as :camera_preview decides), titled with
+// that camera's name and icon, with its picture at the camera's own aspect. The picture is a second
+// view of the scene through the camera, keyed by the preview's own viewport, so neither the
+// editor's grid, gizmos and markers (the main view's debug list) nor the main view's shading
+// override show in it. It takes no input: the main view keeps the pointer under it.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +30,8 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// SceneCameraPreview::kPictureWidth, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// SceneCameraPreview::kPictureWidth, at namespace scope for another library to read (MSVC
+    /// exports no class's static constexpr member from a shared library).
     inline constexpr f32 kSceneCameraPreviewPictureWidth = 194.0f;
 
     class SceneCameraPreview
@@ -48,18 +47,18 @@ export namespace editor
             engine::render::RenderSubsystem* render = nullptr; // null: nothing renders (a test)
         };
 
-        /// The preview over `edit`'s scene in `pane` (the markup's `camera-preview`,
-        /// `camera-preview-view`, `camera-preview-icon`, `camera-preview-name` and
-        /// `camera-preview-pin`, by id).
+        /// The preview over `edit`'s scene in `pane` (found in the markup by id: `camera-preview`,
+        /// `camera-preview-view`, `camera-preview-icon`, `camera-preview-name`,
+        /// `camera-preview-pin`).
         SceneCameraPreview(IAllocator& allocator, Services services, foundation::gui::Node& pane);
         SceneCameraPreview(const SceneCameraPreview&) = delete;
         SceneCameraPreview& operator=(const SceneCameraPreview&) = delete;
 
-        /// Drawn by `host` from now on (null: not hosted, a test).
+        /// Sets the host that draws it from now on (null: not hosted, as in a test).
         void HostIn(foundation::gui::GuiHost* host);
-        /// Once a frame: which camera, its title and aspect, shown or hidden.
+        /// Once a frame: picks the camera, its title and aspect, and shows or hides the preview.
         void Update();
-        /// This frame's picture (inside the renderer's bracket): nothing while hidden.
+        /// Renders this frame's picture (inside the renderer's bracket); nothing while hidden.
         void Render(foundation::graphics::FrameContext& frame);
         /// Pins the camera shown, or unpins it when it is the pinned one.
         void TogglePin();

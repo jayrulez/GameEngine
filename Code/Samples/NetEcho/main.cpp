@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// NetEcho - a console proof of the foundation.net stack end to end: a reliable-UDP server + client
-// over real localhost sockets exchange a few chat lines (client sends, server echoes), then exit.
-// Demonstrates wire -> INetTransport -> reliable-UDP -> real UDP sockets with no graphics.
+// NetEcho - a console check of the foundation.net stack end to end: a reliable-UDP server and
+// client over real localhost sockets exchange a few chat lines (the client sends, the server
+// echoes), then exit. It exercises the wire format, INetTransport, reliable UDP and real UDP sockets,
+// with no graphics.
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 

@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ScriptPlayground - the foundation.script entity-behaviors consumer proof: a scene of
-// cubes carrying SCRIPT BEHAVIORS (AngelScript or Luau, chosen with --script=<lang>) ticked by
-// the ScriptSubsystem under simulation. Both behaviors ship a source in EACH language; the run
-// resolves the context by the ScriptClass language, proving the model is backend-neutral. Two
-// behaviors demonstrate the model end-to-end:
-//   * Mover  - reads a `speed` float property + a `target` entity property; walks toward
-//              the target (or drifts +X when unset), using the `entity` facade's
-//              transform get/set and worldPosition().
+// ScriptPlayground - a foundation.script entity-behaviors consumer: a scene of cubes carrying
+// script behaviors (AngelScript or Luau, chosen with --script=<lang>) ticked by the ScriptSubsystem
+// under simulation. Both behaviors ship a source in each language, and the run resolves the context
+// by the ScriptClass language, so the model is backend-neutral. Two behaviors demonstrate the model
+// end to end:
+//   * Mover - reads a `speed` float property and a `target` entity property; walks toward the
+//     target (or drifts +X when unset), using the `entity` facade's transform get/set and
+//     worldPosition().
 //   * Spinner - reads a `speed` float; rotates about Y every frame (Time.delta()).
-// Behavior instances are created in the run's ONE gameplay context, defaults applied
-// then per-behavior OVERRIDES, and lifecycle handlers (onStart/onUpdate) dispatched -
-// exactly the runtime a cooked ScriptClass drives; here the ScriptClass products are
-// built in code (the cook path is proven by the pipeline tests).
+// Behavior instances are created in the run's one gameplay context, defaults applied and then
+// per-behavior overrides, and lifecycle handlers (onStart/onUpdate) dispatched, as for a cooked
+// ScriptClass; here the ScriptClass products are built in code (the pipeline tests cover the cook
+// path).
 //
-// The same behaviors run in Engine.Player: point a project's scene at a ScriptComponent
-// with these classes and it ticks identically (the player and this sample share the
-// DefaultApplication ScriptSubsystem).
+// The same behaviors run in Engine.Player: point a project's scene at a ScriptComponent with these
+// classes and it ticks identically (the player and this sample share the DefaultApplication
+// ScriptSubsystem).
 //
-// Fly with WASD / hold RMB to look. No input needed - the cubes move themselves.
+// Fly with WASD and hold RMB to look. No input is needed: the cubes move themselves.
 
 #include <cstring>
 
@@ -59,7 +59,7 @@ namespace script = foundation::script;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -79,7 +79,7 @@ namespace
     // AngelScript behaviors. The harvested editor properties are plain public member fields (the
     // neutral property-apply writes `speed`/`target` by name); handlers are onStart/onUpdate. The
     // engine registers no sqrt, so the target-follow eases toward the goal (step scaled by distance)
-    // rather than moving at a normalized constant speed - visually a smooth approach either way.
+    // rather than moving at a normalized constant speed; either way it reads as a smooth approach.
     constexpr core::StringView kMoverSource =
         u8"class Mover {\n"
         u8"    Entity@ self;\n"
@@ -111,9 +111,9 @@ namespace
         u8"    }\n"
         u8"}\n";
 
-    // The SAME two behaviors in Luau (statics/methods via `:`, the entity facade is the shared
+    // The same two behaviors in Luau (methods called with `:`; the entity facade is the shared
     // reflected surface). The neutral property-apply writes `speed`/`target` into the instance
-    // table after construction, exactly as the AngelScript members are written by name.
+    // table after construction, as it writes the AngelScript members by name.
     constexpr core::StringView kMoverSourceLuau =
         u8"Mover = {}\n"
         u8"Mover.__index = Mover\n"
@@ -265,8 +265,8 @@ namespace
                     }
                 }
             }
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
     private:
@@ -296,7 +296,7 @@ namespace
                 m_scene->SetLocalTransform(g, t);
             }
 
-            // The Mover's TARGET (a spinning beacon the movers chase).
+            // The Mover's target (a spinning beacon the movers chase).
             m_beacon = m_scene->CreateEntity(u8"beacon");
             m_scene->SetLocalPosition(m_beacon, core::Float3{0.0f, 0.5f, 0.0f});
             {
@@ -305,7 +305,7 @@ namespace
                 mc.SetMaterial(materials::CreatePBR(u8"lit", core::Float4{1.0f, 0.85f, 0.2f, 1.0f},
                                                     0.0f, 0.3f));
                 mc.color = core::Color{1.0f, 0.85f, 0.2f, 1.0f};
-                // The beacon SPINS (Spinner behavior, default 90 deg/s).
+                // The beacon spins (Spinner behavior, default 90 deg/s).
                 engine::script::ScriptComponent& sc = scripts->Add(m_beacon);
                 engine::script::ScriptBehavior spin;
                 spin.script.SetDirect(m_spinner);
@@ -328,7 +328,7 @@ namespace
                     0.4f));
 
                 engine::script::ScriptComponent& sc = scripts->Add(e);
-                // Behavior 1: Mover with a per-instance speed OVERRIDE + the target entity.
+                // Behavior 1: Mover with a per-instance speed override and the target entity.
                 engine::script::ScriptBehavior mover;
                 mover.script.SetDirect(m_mover);
                 script::ScriptPropertyValue speed;
@@ -374,7 +374,7 @@ namespace
 }
 
 // A custom entry (not APP_MAIN) so the sample can read --script=<lang> before the app runs; the
-// rest mirrors the desktop APP_MAIN body. The web build has no argv, so it keeps APP_MAIN + the
+// rest follows the desktop APP_MAIN body. The web build has no argv, so it keeps APP_MAIN and the
 // default (angelscript) backend.
 #ifdef PLATFORM_WEB
 APP_MAIN(ScriptApp)

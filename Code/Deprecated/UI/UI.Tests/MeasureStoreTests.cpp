@@ -3,11 +3,10 @@
 
 // The measure store (View::Measure): within one layout pass a repeat request with the same
 // constraints is answered from the view's last answers, not by measuring its subtree again.
-// Nested flex containers measure a child more than once, and without the store that doubled at
-// every level: the editor's input map page measured its deepest views 206 times a pass (85,588
-// measures for 628 views, 0.78 s a layout in Debug). A stored answer leaves the subtree as its
-// last real measure left it, so Layout measures it again first when that was for other
-// constraints: what a stack of requests lays out is the last one's, as before.
+// Nested flex containers measure a child more than once, and without the store the count would
+// double at every level. A stored answer leaves the subtree as its last real measure left it, so
+// when that measure was for other constraints, Layout measures it again first: a stack of
+// requests lays out by the last one.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -39,8 +38,8 @@ namespace
         }
     };
 
-    // A container that asks its one child three times, 100 wide, then 60, then 100 again, and lays
-    // it out by the last answer: the case a stored answer must not get wrong.
+    // A container that asks its one child three times (100 wide, then 60, then 100 again) and lays
+    // it out by the last answer: the case a stored answer has to get right.
     class AskThrice final : public ViewGroup
     {
     protected:
@@ -63,7 +62,7 @@ namespace
 TEST_CASE("measure store: deep nested flex columns measure a leaf a few times a pass, not hundreds")
 {
     // Eight nested columns, each holding a leaf and the next column, every child stretched across
-    // (a cross-axis Match: the re-measure that doubled per level).
+    // (a cross-axis Match, the re-measure that would double per level).
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get(), 400, 600);
@@ -89,8 +88,8 @@ TEST_CASE("measure store: deep nested flex columns measure a leaf a few times a 
         leaf->measures = 0;
     }
     LayoutPass(ctx, root.Get()); // one pass, counted
-    // One more a level (each level's measured height is a new constraint below it: 2, 4, 5, 6,
-    // ... 10 at eight levels) where it doubled (2, 4, 8, ... 256).
+    // One more per level (each level's measured height is a new constraint below it: 2, 4, 5, 6,
+    // ... 10 at eight levels) rather than doubling (2, 4, 8, ... 256).
     const u32 deepest = leaves[leaves.Size() - 1]->measures;
     MESSAGE("measures of the deepest leaf in one pass: " << deepest);
     CHECK(deepest <= 12u);
@@ -105,7 +104,7 @@ TEST_CASE("measure store: a view laid out by a stored answer lays its subtree ou
 {
     // The child is asked for 100, then 60, then 100 again: the third is answered from the store,
     // while the child's own row still holds what the 60 gave it. Laid out at 100, the row's
-    // stretching leaf must be 100 wide too, not 60.
+    // stretching leaf is 100 wide too, not 60.
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get(), 400, 600);

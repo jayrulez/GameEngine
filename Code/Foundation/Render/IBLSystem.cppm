@@ -3,23 +3,24 @@
 
 /// Foundation::Render - the `:ibl` partition.
 ///
-/// Image-Based Lighting: the split-sum environment pipeline (ported from Sedulous.Renderer/IBL with
-/// improvements), PER SCENE. A frame can render several scenes side-by-side (editor pages), each
-/// with its own authored sky - so the products live in per-scene CONTEXTS pooled by scene identity,
-/// and every view binds ITS scene's products (the set-0 bind group is per-view downstream):
+/// Image-Based Lighting: the split-sum environment pipeline, per scene. A frame can render several
+/// scenes side by side (editor pages), each with its own authored sky, so the products live in
+/// per-scene contexts pooled by scene identity, and every view binds its own scene's products (the
+/// set-0 bind group is per view downstream):
 ///   - env cubemap (256², RGBA16F)        : the source radiance, written from the scene's sky source
-///                                          (procedural gradient / analytic / HDR equirect / cubemap).
-///   - SH9 diffuse irradiance (buffer)    : 9 RGB spherical-harmonic coeffs projected from the env
-///                                          cube (REPLACES Sedulous's 32² irradiance cube - cheaper,
-///                                          smoother, seamless). Improvement over Sedulous.
-///   - GGX prefiltered specular (cube+mips): Karis split-sum, importance-sampled per roughness mip.
-/// Shared across scenes: the BRDF integration LUT (sky-independent), all pipelines/layouts/samplers,
-/// and the PROGRAMMATIC equirect/cubemap pixel sources (SetEquirect/SetCubemap - tools/samples).
+///                                          (procedural gradient, analytic, HDR equirect or cubemap).
+///   - SH9 diffuse irradiance (buffer)    : 9 RGB spherical-harmonic coefficients projected from the
+///                                          env cube (cheaper and smoother than an irradiance cube,
+///                                          with no seams).
+///   - GGX prefiltered specular (cube, mips): Karis split-sum, importance-sampled per roughness mip.
+/// Shared across scenes: the BRDF integration LUT (sky-independent), all pipelines, layouts and
+/// samplers, and the programmatic equirect and cubemap pixel sources (SetEquirect, SetCubemap; for
+/// tools and samples).
 ///
-/// Precompute runs only when a context's source is dirty; products are persistent, imported every
-/// frame so the forward pass orders after + samples them (set 0). Context generations come from ONE
-/// system-wide counter, so a generation value never collides across contexts - downstream bind-group
-/// caches can key on it alone ([[bind-group-cache-versioning]]).
+/// Precompute runs only when a context's source is dirty; products are persistent and imported every
+/// frame so the forward pass orders after them and samples them (set 0). Context generations come
+/// from one system-wide counter, so a generation value never collides across contexts and downstream
+/// bind-group caches can key on it alone.
 
 module;
 #include "Core/Prelude.h"
@@ -32,7 +33,7 @@ import foundation.rhi;
 import foundation.rendergraph;
 import foundation.shaders;
 import foundation.shaders.system;
-import :data;        // SkySnapshot / SkyMode / ExtractedScene (context identity)
+import :data;        // SkySnapshot, SkyMode, ExtractedScene (context identity)
 
 using namespace foundation::core;
 namespace rendergraph = foundation::rendergraph;
@@ -68,7 +69,7 @@ export namespace foundation::render
     static_assert(offsetof(GpuIblPush, ground) == 64);
     static_assert(offsetof(GpuIblPush, turbidity) == 76);
 
-    // Owns the per-scene IBL contexts + the passes that build their products. One per renderer.
+    // Owns the per-scene IBL contexts and the passes that build their products. One per renderer.
     class IBLSystem
     {
     public:
@@ -82,7 +83,7 @@ export namespace foundation::render
         // that nothing in flight can still reference the products.
         static constexpr u64 kEvictAfterFrames = 600;
 
-        // ---- Per-scene context: products + sky state for ONE scene ---------------------------------
+        // ---- Per-scene context: products and sky state for one scene -------------------------------
         class Context
         {
         public:
@@ -92,20 +93,21 @@ export namespace foundation::render
                 return m_prefilterView;
             }
             [[nodiscard]] rhi::Buffer* ShBuffer() const noexcept { return m_shBuffer; }
-            // Unique ACROSS contexts (one system-wide counter) - safe as a sole cache key.
+            // Unique across contexts (one system-wide counter), so safe as a sole cache key.
             [[nodiscard]] u64 Generation() const noexcept { return m_generation; }
-            // Stable per-context identity (creation-stamped, never reused) - downstream caches
-            // that key on the env VIEW pair it with this (pointer reuse after eviction).
+            // Stable per-context identity (stamped at creation, never reused). Downstream caches
+            // that key on the env view pair it with this, since pointers are reused after eviction.
             [[nodiscard]] u64 Uid() const noexcept { return m_uid; }
 
-            // This frame's graph handles (valid after Prepare). The forward ReadTexture/ReadBuffer's
-            // these so the graph orders any precompute writes -> forward and barriers the products.
+            // This frame's graph handles (valid after Prepare). The forward pass reads them with
+            // ReadTexture and ReadBuffer, so the graph orders any precompute writes before the forward
+            // pass and places barriers on the products.
             [[nodiscard]] rendergraph::RGHandle PrefilterHandle() const noexcept
             {
                 return m_prefilterH;
             }
             [[nodiscard]] rendergraph::RGHandle ShHandle() const noexcept { return m_shH; }
-            // The full-radiance environment cube - sampled by the sky pass (background) at full detail.
+            // The full-radiance environment cube, sampled by the sky pass (background) at full detail.
             [[nodiscard]] rendergraph::RGHandle EnvHandle() const noexcept { return m_envH; }
             [[nodiscard]] rhi::TextureView* EnvView() const noexcept { return m_envSampleView; }
             [[nodiscard]] f32 SkyIntensity() const noexcept { return m_sky.intensity; }
@@ -118,8 +120,8 @@ export namespace foundation::render
             [[nodiscard]] Float3 SunDir() const noexcept { return m_sunDir; }
             [[nodiscard]] f32 SunIntensity() const noexcept { return m_sky.sunIntensity; }
             [[nodiscard]] f32 SunAngularSize() const noexcept { return m_sky.sunAngularSize; }
-            // The sky pass draws a crisp analytic sun disc for the untextured skies (procedural +
-            // Preetham); textured envs (HDR/cubemap) carry their own sun, so it's suppressed there.
+            // The sky pass draws a crisp analytic sun disc for the untextured skies (procedural and
+            // Preetham); textured environments (HDR, cubemap) carry their own sun, so it is suppressed.
             [[nodiscard]] bool HasSunDisc() const noexcept
             {
                 return m_sky.mode != SkyMode::HDREquirect && m_sky.mode != SkyMode::Cubemap;
@@ -139,8 +141,8 @@ export namespace foundation::render
             rhi::Buffer* m_shBuffer = nullptr;
             rhi::BindGroup* m_envBindGroup = nullptr;  // env full-chain sample (prefilter input)
             rhi::BindGroup* m_envMipBG[kEnvMips] = {}; // mip m as the downsample source
-            rhi::BindGroup* m_shBindGroup = nullptr;   // env + SH output buffer (compute)
-            // Asset-driven sky texture (external product view - NOT owned): bind groups only.
+            rhi::BindGroup* m_shBindGroup = nullptr;   // env and SH output buffer (compute)
+            // Asset-driven sky texture (an external product view, not owned): bind groups only.
             rhi::BindGroup* m_externalEquirectBG = nullptr;
             rhi::BindGroup* m_externalCubeBG = nullptr;
             u64 m_externalUid = 0;
@@ -156,8 +158,8 @@ export namespace foundation::render
             bool m_dirty = true;
             // Startup re-bake window. The env cube is a one-shot bake, but a frame's submit can be
             // dropped during startup (web: the swapchain surface texture expires before the browser
-            // processes the submit). Re-baking for the first frames guarantees the cube lands on a
-            // frame whose submit survives, instead of being lost forever to a single bad frame.
+            // processes the submit). Re-baking for the first frames makes sure the cube lands on a
+            // frame whose submit survives, instead of being lost to a single bad frame.
             u32 m_bakeWarmup = 20;
             u64 m_generation = 0;
             u64 m_sourceStamp = 0; // programmatic SetEquirect/SetCubemap change tick
@@ -185,42 +187,42 @@ export namespace foundation::render
         // advance the LRU clock, and evict contexts whose scene hasn't rendered in a long time.
         void BeginFrame(rendergraph::RenderGraph& graph);
 
-        // Get-or-create the SCENE's context, apply its authored sky + sun, import its products into
+        // Get or create the scene's context, apply its authored sky and sun, import its products into
         // this frame's graph, and declare the precompute passes when dirty. Null when unavailable.
         Context* Prepare(const void* scene, const SkySnapshot& sky, const Float3& sunDir,
                          rendergraph::RenderGraph& graph);
 
-        // Set the shared PROGRAMMATIC HDR equirectangular source (RGBA32F, w*h*4 floats) - the
-        // tools/samples pixel path; a scene's ASSET sky texture takes precedence per context.
+        // Set the shared programmatic HDR equirectangular source (RGBA32F, w*h*4 floats), the pixel
+        // path for tools and samples; a scene's asset sky texture takes precedence per context.
         void SetEquirect(u32 w, u32 h, Span<const f32> rgba);
 
-        // Set the shared PROGRAMMATIC cubemap source: 6 RGBA8 faces (+X,-X,+Y,-Y,+Z,-Z) concatenated,
+        // Set the shared programmatic cubemap source: 6 RGBA8 faces (+X,-X,+Y,-Y,+Z,-Z) concatenated,
         // each faceSize*faceSize*4 bytes. Same precedence note as SetEquirect.
         void SetCubemap(u32 faceSize, Span<const u8> sixFaces);
 
-        // Pending texture uploads (equirect/cubemap staging -> texture) on the frame's encoder, BEFORE the
-        // graph executes - so the env-build passes sample an already-uploaded, shader-readable source.
+        // Record pending texture uploads (equirect or cubemap staging to texture) on the frame's encoder
+        // before the graph executes, so the env-build passes sample an uploaded, shader-readable source.
         void Upload(rhi::CommandEncoder& enc);
 
     private:
-        // Declare one context's precompute into this frame's graph. Products are imported EVERY frame
-        // (so the forward can read this frame's handles); the write passes only run when dirty.
+        // Declare one context's precompute into this frame's graph. Products are imported every frame
+        // (so the forward pass can read this frame's handles); the write passes run only when dirty.
         void ProcessContext(Context& ctx, rendergraph::RenderGraph& graph);
 
-        // Build the procedural-env push for one cube face from the context's sky + sun direction.
+        // Build the procedural-env push for one cube face from the context's sky and sun direction.
         [[nodiscard]] static GpuIblPush MakeSkyPush(const Context& ctx, i32 face);
 
         void DestroyExternalBindGroups(Context& ctx);
 
-        // Equal w.r.t. the fields baked into the env cube (drives the precompute-rebuild decision).
-        // sunAngularSize is EXCLUDED - it only affects the analytic sky-pass sun, not the cube.
+        // Equal in the fields baked into the env cube (drives the precompute-rebuild decision).
+        // sunAngularSize is excluded: it affects only the analytic sky-pass sun, not the cube.
         [[nodiscard]] static bool PrecomputeEqual(const SkySnapshot& a, const SkySnapshot& b);
 
         void DeclareShProjection(Context& ctx, rendergraph::RenderGraph& graph,
                                  rendergraph::RGHandle envH, rendergraph::RGHandle shH);
 
         // Box-downsample the env cube's mip pyramid: mip m from mip m-1 (per face). Each pass reads only the
-        // finer mip (a single-mip source view/bind-group) and renders the coarser one, so read + write never
+        // finer mip (a single-mip source view and bind group) and renders the coarser one, so reads and writes never
         // touch the same subresource; the graph's per-subresource barriers serialize the chain by mip.
         void DeclareEnvMips(Context& ctx, rendergraph::RenderGraph& graph,
                             rendergraph::RGHandle envH);
@@ -233,16 +235,16 @@ export namespace foundation::render
         static constexpr rhi::TextureFormat kCubeFormat = rhi::TextureFormat::RGBA16Float;
         static constexpr rhi::TextureFormat kBrdfFormat = rhi::TextureFormat::RG16Float;
 
-        // Shared, sky-independent: the BRDF LUT + the env/cube sampler.
+        // Shared, sky-independent: the BRDF LUT and the env and cube sampler.
         bool CreateSharedResources();
 
-        // One scene's products + the bind groups referencing them.
+        // One scene's products and the bind groups referencing them.
         bool CreateContextResources(Context& ctx);
 
         void DestroyContext(Context& ctx);
 
         bool CreatePipelines();
-        // Hot reload: destroy + recreate every pipeline against the reloaded shaders
+        // Hot reload: destroy and recreate every pipeline against the reloaded shaders
         // (layouts survive). False when a shader no longer compiles.
         bool RebuildPipelinesForReload();
 
@@ -250,18 +252,18 @@ export namespace foundation::render
                                                     rhi::PipelineLayout* layout,
                                                     rhi::TextureFormat fmt);
 
-        // Lazily create the equirect->cube pipeline (2D source tex + sampler + push) - only when an HDR
-        // equirect is first set, since most scenes are procedural.
+        // Lazily create the equirect-to-cube pipeline (2D source texture, sampler and push), only when an
+        // HDR equirect is first set, since most scenes are procedural.
         bool EnsureEquirectPipeline();
 
-        // Lazily create the cubemap->cube pipeline (samples the source cube; reuses the prefilter's cube
-        // bind-group + pipeline layout - cube tex + sampler + push).
+        // Lazily create the cubemap-to-cube pipeline (samples the source cube; reuses the prefilter's cube
+        // bind-group and pipeline layout: cube texture, sampler and push).
         bool EnsureCubemapPipeline();
 
         void DestroyCubemap();
 
-        // Free the per-source equirect texture/staging/view/bind-group (the pipeline + layout + sampler
-        // persist, recreated lazily once).
+        // Free the per-source equirect texture, staging, view and bind group (the pipeline, layout and
+        // sampler persist, created lazily once).
         void DestroyEquirect();
 
         void Shutdown();
@@ -269,7 +271,7 @@ export namespace foundation::render
         rhi::Device* m_device;
         shaders::ShaderSystem* m_shaders;
 
-        // Per-scene contexts (UniquePtr = stable addresses; frame lambdas capture their bind groups).
+        // Per-scene contexts (UniquePtr for stable addresses; frame lambdas capture their bind groups).
         Array<UniquePtr<Context>> m_contexts;
         u64 m_frame = 0;
         u64 m_nextGeneration = 0; // system-wide: context generations never collide
@@ -277,7 +279,7 @@ export namespace foundation::render
         u64 m_sourceStamp =
             1; // programmatic SetEquirect/SetCubemap change tick (contexts start at 0)
 
-        // Shared PROGRAMMATIC HDR equirect source: uploaded 2D texture sampled by the equirect->cube pass.
+        // Shared programmatic HDR equirect source: an uploaded 2D texture sampled by the equirect pass.
         rhi::Texture* m_equirectTex = nullptr;
         rhi::TextureView* m_equirectView = nullptr;
         rhi::Buffer* m_equirectStaging = nullptr;
@@ -289,24 +291,24 @@ export namespace foundation::render
         u32 m_equirectW = 0, m_equirectH = 0;
         bool m_equirectPending = false;
 
-        // Shared PROGRAMMATIC cubemap source.
+        // Shared programmatic cubemap source.
         rhi::Texture* m_srcCube = nullptr;
         rhi::TextureView* m_srcCubeView = nullptr;
         rhi::Buffer* m_cubemapStaging = nullptr;
-        rhi::RenderPipeline* m_cubemapPipeline = nullptr; // reuses m_prefilterLayout + m_envLayout
+        rhi::RenderPipeline* m_cubemapPipeline = nullptr; // reuses m_prefilterLayout and m_envLayout
         rhi::BindGroup* m_cubemapBindGroup = nullptr;
         u32 m_cubemapFaceSize = 0;
         bool m_cubemapPending = false;
 
-        // Shared products + machinery.
+        // Shared products and machinery.
         rhi::Texture* m_brdfLut = nullptr;
         rhi::TextureView* m_brdfView = nullptr;
         rhi::Sampler* m_sampler = nullptr;
 
         rhi::BindGroupLayout* m_envLayout = nullptr;
-        // A 1x1 cube + sampler bound when a pipeline's layout declares the env group
-        // but the mode has no env source (procedural/analytic): WebGPU requires every
-        // declared group bound; Vulkan/DX12 simply never sample it.
+        // A 1x1 cube and sampler bound when a pipeline's layout declares the env group
+        // but the mode has no env source (procedural, analytic): WebGPU requires every
+        // declared group bound; Vulkan and DX12 simply never sample it.
         rhi::Texture* m_dummyEnvCube = nullptr;
         rhi::TextureView* m_dummyEnvView = nullptr;
         rhi::BindGroup* m_dummyEnvBindGroup = nullptr;
@@ -328,7 +330,7 @@ export namespace foundation::render
         rendergraph::RGHandle m_brdfH = {};
 
         bool m_ready = false;
-        bool m_brdfDone = false; // the BRDF LUT is constant - generated once, not per sky change
+        bool m_brdfDone = false; // the BRDF LUT is constant: generated once, not per sky change
         u64 m_pipelineShaderVersion = 0; // summed ShaderSystem::Version at build (hot reload)
     };
 

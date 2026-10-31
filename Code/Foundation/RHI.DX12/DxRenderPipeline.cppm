@@ -3,7 +3,6 @@
 
 /// DX12 implementation of RenderPipeline.
 /// Wraps a D3D12 graphics pipeline state object.
-/// Ported from Sedulous.RHI.DX12/DX12RenderPipeline.bf.
 
 module;
 #include "Core/Prelude.h"

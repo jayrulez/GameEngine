@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Hosting - the atlas's shelf packer: pictures in rows across a page, each row as tall as the
-// first it took; a picture on the shortest row it fits wasting no more than a third, else a new
-// row under the last; none when the page is full; emptied by a reset.
+// GUI.Hosting - the atlas's shelf packer. Pictures go in rows across a page, each row as tall as the
+// first picture it took. A picture goes on the shortest row it fits that wastes no more than a
+// third, else on a new row under the last. There is no place when the page is full, and a reset
+// empties the page.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -27,12 +28,12 @@ TEST_CASE("gui.hosting.packer: pictures go across a row, a taller one on a new r
     REQUIRE(tall.HasValue());
     CHECK(tall.Value().Y == 18u);
     CHECK(tall.Value().X == 0u);
-    // A small one goes on the row it wastes least of: the 18 high, not the 34.
+    // A small picture goes on the row where it wastes least: the 18 high row, not the 34.
     const Optional<PackedPlace> small = packer.Place(10, 16);
     REQUIRE(small.HasValue());
     CHECK(small.Value().Y == 0u);
     CHECK(small.Value().X == 36u);
-    // A short one would waste more than a third of either: a row of its own.
+    // A short picture would waste more than a third of either row, so it gets a row of its own.
     const Optional<PackedPlace> flat = packer.Place(10, 6);
     REQUIRE(flat.HasValue());
     CHECK(flat.Value().Y == 52u);

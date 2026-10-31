@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The skeleton page over its markup (Data/Editor/SkeletonPage.xml) and a scratch project, without a
-// host (no preview): the bones a tree under their parents, read from the asset (no cook); a search
-// keeping a bone found and the bones above it; the chosen bone's facts and the skeleton's read only;
-// a rotation said in degrees about an axis.
+// The skeleton page over its markup (Data/Editor/SkeletonPage.xml) and a scratch project, without
+// a host, so there is no preview. Covers: the bones as a tree under their parents, read from the
+// asset without a cook; a search keeping each bone found and the bones above it; the chosen bone's
+// facts and the skeleton's, all read-only; a rotation described in degrees about an axis.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -101,7 +101,7 @@ TEST_CASE("skeleton page: the bones a tree under their parents, read from the as
     CHECK(bed.page->Fact(u8"Roots") == String(u8"2"));
     CHECK(bed.page->Fact(u8"Deepest chain") == String(u8"2 below its root"));
 
-    // The first bone chosen to start; another chosen, its facts follow.
+    // The first bone is chosen at the start; choosing another updates the facts.
     CHECK(bed.page->ChosenBone() == 0);
     CHECK(bed.Row(u8"parent") == String(u8"None: a root"));
     CHECK(bed.Row(u8"children") == String(u8"3"));
@@ -116,7 +116,7 @@ TEST_CASE("skeleton page: the bones a tree under their parents, read from the as
     CHECK(bed.Row(u8"name") == String(u8"None chosen"));
     CHECK(bed.Row(u8"parent").IsEmpty());
 
-    // Read only, every one of them.
+    // Every row is read-only.
     Array<gui::PropertyInfo> rows;
     bed.page->BoneRows().GetProperties(StringView{}, rows);
     REQUIRE(rows.Size() == 7u);

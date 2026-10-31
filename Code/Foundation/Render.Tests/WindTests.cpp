@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Effects (Specs/wind-for-every-shader.md): which materials select an effect's variant (an
-// effect group whose gate is above zero turns its flag on), the flag's name in the variant table,
-// and PBR's buffer, which no longer carries the wind (the block stays 64 bytes, its former wind
-// lanes padding).
+// Effects: which materials select an effect's variant (an effect group whose gate is above zero
+// turns its flag on), the flag's name in the variant table, and PBR's buffer, which does not carry
+// the wind (the block is 64 bytes, with padding lanes).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -54,7 +53,7 @@ TEST_CASE("effects: a material turns an effect's variant on through its group's 
     CHECK(MeshRenderer::MaterialEffectFlags(card.Get()) == shaders::ShaderFlags::None);
 
     // A material without the group (built without the table, or on a shader that cannot sway)
-    // never sways, and the old property name reaches nothing.
+    // never sways, and the flat name `WindStrength` reaches nothing.
     RefPtr<materials::Material> unlit = materials::CreateUnlit(u8"unlit");
     unlit->SetDefaultFloat(u8"WindStrength", 1.0f);
     unlit->SetDefaultFloat(u8"Wind.Strength", 1.0f);

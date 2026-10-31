@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Scene-pass MSAA first-sample resolve - fullscreen triangle VS.
-// Standard SV_VertexID fullscreen triangle; the PS does the sample-0 loads.
+// Scene-pass MSAA first-sample resolve: the fullscreen-triangle vertex stage.
+// A standard SV_VertexID fullscreen triangle; the pixel stage does the sample-0 loads.
 struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 VSOut main(uint vid : SV_VertexID) {
     VSOut o;

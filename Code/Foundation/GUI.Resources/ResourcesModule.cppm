@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Resources - `foundation.gui.resources`: cooked GUI documents and style sheets (E2 of
-// Specs/gui-lab-evolution-3.md). foundation.ui's counterpart: UI.Resource.
+// GUI.Resources - `foundation.gui.resources`: cooked GUI documents and style sheets.
 //
-// Each payload is VALIDATED TEXT: the cook (GUI.Pipeline) parses a `.xml` document with the GUI's
-// markup loader and a `.css` sheet with its CSS parser, fails on what cannot be read, and ships the
-// source text; whatever hosts the GUI parses it again (a document is a template: each use builds its
-// own tree from it). Free of the GUI framework, so a headless tool reads them. Nothing is embedded:
-// a sheet or a document names an image, a vector image, a font or another document by its asset
-// guid, which the host's resource provider answers, so an icon is cooked once however many sheets
-// draw it.
+// Each payload is validated text. The cook (GUI.Pipeline) parses a `.xml` document with the GUI's
+// markup loader and a `.css` sheet with its CSS parser, fails when either cannot be read, and ships
+// the source text. The host of the GUI parses the text again: a document is a template, and each
+// use builds its own tree from it. This library does not depend on the GUI framework, so a
+// headless tool can read these resources. Nothing is embedded: a sheet or a document names an
+// image, a vector image, a font or another document by its asset guid, which the host's resource
+// provider resolves, so an icon is cooked once however many sheets draw it.
 
 module;
 #include "Core/Prelude.h"
@@ -37,7 +36,7 @@ export namespace foundation::gui
         void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "markup", markup); }
     };
 
-    /// The runtime product: the document's markup, a template each use builds a tree from.
+    /// The runtime product: the document's markup, a template from which each use builds a tree.
     class GuiDocument : public Object
     {
         RTTI_OBJECT(GuiDocument, Object)
@@ -55,7 +54,7 @@ export namespace foundation::gui
         void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "css", css); }
     };
 
-    /// The runtime product: the sheet's CSS, for whatever styles a GUI with it.
+    /// The runtime product: the sheet's CSS, for a host to style a GUI with.
     class GuiStyleSheet : public Object
     {
         RTTI_OBJECT(GuiStyleSheet, Object)
@@ -63,7 +62,8 @@ export namespace foundation::gui
         String css;
     };
 
-    /// Makes a product from its cooked text: `Product::*field` from `Cooked::*field`.
+    /// Makes a product from its cooked text by copying `Cooked::*CookedText` into
+    /// `Product::*ProductText`.
     template <typename Product, typename Cooked, String Product::* ProductText, String Cooked::* CookedText>
     class GuiTextFactory final : public IResourceFactory
     {
@@ -107,8 +107,7 @@ export namespace foundation::gui
 
 export namespace foundation::gui
 {
-    /// The GUI resource module (engine-composition.md D1): the module the engine composition takes
-    /// this library's factories from.
+    /// This library's resource factories, which the engine composition registers.
     inline constexpr foundation::resource::ResourceFactoryDesc kGuiResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<GuiDocument, GuiDocumentSource, GuiDocumentFactory>(),
         foundation::resource::FactoryWithAllocator<GuiStyleSheet, GuiStyleSheetSource, GuiStyleSheetFactory>(),

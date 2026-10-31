@@ -3,11 +3,10 @@
 
 // Foundation::Script - the `:backend_registry` partition.
 //
-// The backend registry: a language backend is a LIBRARY that
-// registers itself here - {languageId, extensions, factory} - and every consumer
-// resolves through the registry by language or by the script file's extension. No
-// consumer names a backend type: adding AngelScript = link its library + one
-// registration call, exactly how a script backend is added.
+// The backend registry. A language backend is a library that registers itself here
+// ({languageId, extensions, factory}), and every consumer resolves through the registry by
+// language or by the script file's extension. No consumer names a backend type: adding a
+// language means linking its library and making one registration call.
 
 module;
 #include "Core/Prelude.h"
@@ -35,12 +34,12 @@ export namespace foundation::script
     class ScriptBackendRegistry
     {
     public:
-        // NON-inline, defined in ScriptContextImpl.cpp: backends register from their
-        // own libraries and hosts resolve from others - per-library copies would mean
-        // "no script backend found" (shared-libraries.md rendezvous rule).
+        // Not inline; defined in ScriptContextImpl.cpp. Backends register from their own
+        // libraries and hosts resolve from others, so a per-library copy of the registry would
+        // leave a host with "no script backend found".
         [[nodiscard]] static ScriptBackendRegistry& Get();
 
-        /// Idempotent by languageId (a re-register replaces - hot-reload friendly).
+        /// Idempotent by languageId: registering again replaces the entry, which suits hot reload.
         void Register(ScriptBackendDesc desc)
         {
             for (ScriptBackendDesc& existing : m_backends)
@@ -105,7 +104,7 @@ export namespace foundation::script
         return backend->create(allocator);
     }
 
-    /// Create a manager for a script FILE by its extension. A path with an unknown or
+    /// Create a manager for a script file by its extension. A path with an unknown or
     /// missing extension falls back to the sole registered backend (the common
     /// one-language project); ambiguity (several backends, no match) warns and fails.
     [[nodiscard]] inline RefPtr<IScriptManager> CreateScriptManagerForFile(StringView path,

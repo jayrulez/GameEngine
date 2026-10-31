@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ControlTests.bf - the Button/RepeatButton/CheckBox subset
-// + the Button/CheckBox OnActivate cases from DirectionalFocusTests. Text rendering is not
-// exercised in the controls, but every tested behavior (state/events/toggle/measure fallback)
-// is exercised here.
+// Control tests: state, events, toggling and measuring for the basic controls, including the
+// OnActivate and arrow-key behavior that directional focus relies on. Text rendering is not
+// exercised.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -119,8 +118,8 @@ TEST_CASE("control: Button_OnActivate_FiresClick")
 
 TEST_CASE("control: IconButton_MeasuresIconPlusChrome")
 {
-    // The size is the ICON (content); measure adds the default {3,3} padding. A flat-size
-    // measure would inset the draw by padding that measure never reserved, shrinking the icon.
+    // The size is the icon (the content), and measure adds the default {3,3} padding. A measure
+    // that ignored padding would inset the draw by padding it never reserved, shrinking the icon.
     auto btn = core::MakeRef<IconButton>(core::DefaultAllocator(), nullptr, 24.0f);
     btn->Measure(BoxConstraints(0, 100, 0, 100));
     CHECK(btn->MeasuredSize.x == doctest::Approx(30.0f)); // 24 + 3 + 3
@@ -377,7 +376,7 @@ namespace
 
 TEST_CASE("control: ProgressBar_IndeterminateDrawsAndAsksForFrames")
 {
-    // Declared and themed, the indeterminate state drew nothing and asked for no frames.
+    // The indeterminate state draws its sliding segment and keeps asking for frames while it shows.
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get(), 300, 100);
@@ -516,7 +515,6 @@ TEST_CASE("control: ImageView without a provider keeps the image SetImage gave")
 }
 
 // === ToggleButton ===
-// === ToggleButton ===
 
 TEST_CASE("control: ToggleButton_Toggle")
 {
@@ -535,7 +533,7 @@ TEST_CASE("control: ToggleButton_Toggle")
     CHECK(fired);
 }
 
-// === RadioButton + RadioGroup ===
+// === RadioButton and RadioGroup ===
 
 TEST_CASE("control: RadioButton_CannotUncheckByClick")
 {
@@ -688,8 +686,8 @@ TEST_CASE("control: Slider_KeyboardControl")
 
 TEST_CASE("control: Slider_TakesOnlyTheArrowsAlongItsAxis")
 {
-    // Sedulous 8c8c0bd4: a horizontal slider leaves up and down unhandled, so a menu of sliders
-    // still navigates; a vertical one is the other way round.
+    // A horizontal slider leaves up and down unhandled, so a menu of sliders still navigates; a
+    // vertical one is the other way round.
     auto slider = core::MakeRef<Slider>(core::DefaultAllocator(), 0.0f, 100.0f, 50.0f);
     slider->Step.SetValue(5.0f);
     KeyEventArgs down;
@@ -760,8 +758,8 @@ TEST_CASE("control: Expander_CollapsedMeasure")
     CHECK(collapsedH == doctest::Approx(expander->HeaderHeight.Value()).epsilon(0.02));
 }
 
-// A themed border and padding inset the BODY (sides and bottom) and leave the band full width: the
-// section reads as one outlined box (Sedulous 766bf314). Unstyled, the body stays flush.
+// A themed border and padding inset the body (sides and bottom) and leave the band full width, so
+// the section reads as one outlined box. Unstyled, the body stays flush.
 TEST_CASE("control: Expander_BorderedInsetsItsBodyNotItsBand")
 {
     UIContext ctx{core::DefaultAllocator()};
@@ -796,8 +794,8 @@ TEST_CASE("control: Expander_BorderedInsetsItsBodyNotItsBand")
 
 TEST_CASE("control: Expander_HeaderBandGrowsForOversizedActions")
 {
-    // Actions taller than HeaderHeight must not overflow the fixed band (and clip when
-    // collapsed). The structured band grows to fit them instead.
+    // Actions taller than HeaderHeight would overflow a fixed band (and clip when collapsed),
+    // so the structured band grows to fit them.
     auto expander = core::MakeRef<Expander>(core::DefaultAllocator(), StringView(u8"Header"));
     auto actions = core::MakeRef<TestView>(core::DefaultAllocator(), 44.0f, 40.0f);
     expander->SetHeaderActions(actions.Get());
@@ -853,7 +851,7 @@ TEST_CASE("control: Expander_HeaderTitleViewSitsBetweenTheChevronAndTheActions")
     CHECK(expander->HeaderTitle() == nullptr);
 }
 
-// === WantsArrowKeys (from DirectionalFocusTests: arrow keys go to the focused control, not focus-nav) ===
+// === WantsArrowKeys (arrow keys go to the focused control instead of moving focus) ===
 
 TEST_CASE("control: WantsArrowKeys_ButtonFalse")
 {
@@ -883,8 +881,8 @@ TEST_CASE("control: WantsArrowKeys_NumericFieldTrue")
 
 TEST_CASE("control: DebugOverlay_ContextSettingsReachTheDraw_AndEveryFlagDraws")
 {
-    // DrawRootView built its draw context without the debug settings, so no overlay could be
-    // turned on through it; ShowZOrder and ShowTabOrder drew nothing even when passed directly.
+    // DrawRootView passes the context's debug settings into its draw context, so each overlay can
+    // be turned on through it, ShowZOrder and ShowTabOrder included.
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get(), 300, 100);

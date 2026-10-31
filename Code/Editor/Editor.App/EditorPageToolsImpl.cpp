@@ -21,7 +21,8 @@ namespace editor::app
 {
     namespace
     {
-        // The seams outlive the server through the handlers' shared ref (Function is move-only).
+        // The handlers share a reference to this state, so it outlives the server (Function is
+        // move-only, so the handlers cannot each hold a copy).
         class PageToolState final : public RefCounted
         {
         public:
@@ -121,7 +122,7 @@ namespace editor::app
                                           args.Get(u8"guid").AsString().AsView()));
                     }
                 }
-                context.RevealPage(page); // to front: a background tab's viewport never renders
+                context.RevealPage(page); // bring it to the front: a background tab's viewport never renders
                 return PageIdentity(context, *page);
             });
 
@@ -157,9 +158,9 @@ namespace editor::app
                     {
                         return Err(UnsavedChangesRefusal(*page, u8"force"));
                     }
-                    // The page's own discard, then the refresh a clean page takes: a page
-                    // refreshes only when clean (an apply-to-prefab or a re-import leaves a
-                    // dirty page alone with a warning), so the discard comes first.
+                    // Discard through the page itself, then refresh. A page refreshes only when
+                    // clean (an apply-to-prefab or a re-import leaves a dirty page alone with a
+                    // warning), so the discard must come first.
                     page->DiscardChanges();
                 }
                 page->OnAssetExternallyModified();

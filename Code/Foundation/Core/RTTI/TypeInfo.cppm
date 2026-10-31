@@ -46,8 +46,8 @@ export namespace foundation::core
         void (*SetId)(void* value, const Guid& id);
         void (*ClearBinding)(void* value);
         /// The type the reference points at (a resource's runtime type for Ref<T>): what a
-        /// schema or a picker needs to say WHAT kind of thing the guid names, without naming
-        /// the reference template. Capability flowing into reflection at registration.
+        /// schema or a picker needs to say what kind of thing the guid names, without naming
+        /// the reference template. Filled in at registration.
         const TypeInfo* (*Target)();
     };
 
@@ -76,27 +76,27 @@ export namespace foundation::core
         // Object type created by name (a GUI element from markup); null when the type declares
         // none. Not a constructor: script binders never bind it.
         const CreatorInfo* creator = nullptr;
-        // DATA version of the serialized layout: bump when it changes. The reader accepts the
+        // Data version of the serialized layout: bump when it changes. The reader accepts the
         // current version (BeginVersionedPayload), and older ones only down to
         // `minReadDataVersion` when a type keeps a legacy reader (its Serialize body branches
         // on ar.Version() for those). 0 = never versioned. Set via RTTI_DEFINE_OBJECT_VERSIONED
         // or TypeBuilder::DataVersion.
         u32 dataVersion = 0;
         // The oldest stored data version the reader still accepts, when `readsLegacyData` (else
-        // the current one only; a floor of 0 is a reader of never-versioned data).
-        // TypeBuilder::ReadsDataVersionsFrom; a legacy reader is one version back, named in its
-        // commit and removed once the data has moved (Process/CONVENTIONS.md).
+        // the current one only; a floor of 0 is a reader of never-versioned data). Set via
+        // TypeBuilder::ReadsDataVersionsFrom.
         u32 minReadDataVersion = 0;
         bool readsLegacyData = false;
         // A reference-shaped value (a resource::Ref<T>, whatever T): its identity is a Guid,
-        // and generic tooling reads and writes THAT instead of the value. The ops come from
+        // and generic tooling reads and writes that instead of the value. The ops come from
         // ReferenceTraits<T> when the type's TypeInfo is made; null for every other type.
         const ReferenceOps* reference = nullptr;
     };
 
-    /// `type` keeps a legacy reader for data stored under `oldest` up to its current version (a
-    /// type no REFLECT block owns, patched on its TypeInfo; TypeBuilder::ReadsDataVersionsFrom
-    /// for the rest). The floor and the flag together: 0 is a floor too.
+    /// `type` keeps a legacy reader for data stored under `oldest` up to its current version.
+    /// For a type no REFLECT block owns, patched on its TypeInfo; other types use
+    /// TypeBuilder::ReadsDataVersionsFrom. Sets the floor and the flag together, since 0 is a
+    /// floor too.
     inline void KeepLegacyReader(TypeInfo& type, u32 oldest) noexcept
     {
         type.minReadDataVersion = oldest;
@@ -145,10 +145,10 @@ export namespace foundation::core
     namespace detail
     {
         // FNV-1a over the compiler's signature string for this instantiation: distinct
-        // per T, and - unlike an address - identical in every translation unit AND every
-        // shared library produced by one toolchain. This is the RUNTIME identity for
+        // per T and, unlike an address, identical in every translation unit and every
+        // shared library produced by one toolchain. This is the runtime identity for
         // unregistered value types; it is never serialized (disk formats go through
-        // authored names). See Documentation/Specs/shared-libraries.md.
+        // authored names).
         template <typename T>
         [[nodiscard]] consteval TypeId SignatureTypeId() noexcept
         {
@@ -168,22 +168,21 @@ export namespace foundation::core
 
     namespace detail
     {
-        // The process-single storage behind TypeOf<T>(): ONE TypeInfo per signature id,
+        // The process-single storage behind TypeOf<T>(): one TypeInfo per signature id,
         // owned by Core's implementation unit (RTTI/TypeInfoImpl.cpp) in static storage
         // (usable from the first call in static init; nothing to tear down). A
-        // template's function-local static is one instance PER IMAGE (PE always; ELF
-        // once the template is hidden), so if the TypeInfo itself lived there the
-        // metadata REFLECT_VALUE / EnumBuilder / container registrars patch inside one
-        // library would be invisible to every other library - the W1 finding in
-        // shared-libraries.md. Routing every image's first use through here makes
-        // &TypeOf<T>() one address per process again. `prototype` supplies the layout
+        // template's function-local static is one instance per image (PE always; ELF
+        // once the template is hidden), so if the TypeInfo itself lived there, the
+        // metadata that REFLECT_VALUE, EnumBuilder and container registrars patch inside
+        // one library would be invisible to every other library. Routing every image's
+        // first use through here makes &TypeOf<T>() one address per process. `prototype` supplies the layout
         // facts on first sight and refreshes them for a rebuilt module (hot reload);
         // patched metadata is never touched here (last registrar wins).
         [[nodiscard]] TypeInfo& TypeInfoSlot(TypeId signatureId,
                                              const TypeInfo& prototype) noexcept;
 
         // What TypeOf<T>() hands the slot on first use in an image: the layout facts
-        // plus the signature id (the RUNTIME identity for unregistered value types).
+        // plus the signature id (the runtime identity for unregistered value types).
         template <typename T>
         [[nodiscard]] TypeInfo ValuePrototype() noexcept
         {
@@ -197,11 +196,11 @@ export namespace foundation::core
     // REFLECT_ENUM; used by Variant/Instance for type checks. Object-derived types
     // should prefer their StaticType() instead. The id is the compile-time signature
     // hash above, so identity survives shared-library boundaries. Registration
-    // (REFLECT_VALUE/EnumBuilder) still overwrites id + name with the authored ones -
+    // (REFLECT_VALUE/EnumBuilder) still overwrites id and name with the authored ones,
     // and because the TypeInfo is process-single (detail::TypeInfoSlot), that patch is
-    // what every library sees. Only the cached REFERENCE below is per image, which is
-    // why the template is COMPILER_ATTR_HIDDEN: duplicating it is the design, and
-    // hiding it makes the Linux shared lane prove the rendezvous the way PE does.
+    // what every library sees. Only the cached reference below is per image, which is
+    // why the template is COMPILER_ATTR_HIDDEN: the duplication is intended, and hiding
+    // it makes the Linux shared build exercise the same rendezvous PE needs.
     template <typename T>
     [[nodiscard]] COMPILER_ATTR_HIDDEN const TypeInfo& TypeOf() noexcept
     {

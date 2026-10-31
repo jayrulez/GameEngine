@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of AccelStruct (acceleration structure).
-/// Ported from Sedulous.RHI.Vulkan/VulkanAccelStruct.bf.
 
 module;
 #include "Core/Prelude.h"

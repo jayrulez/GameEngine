@@ -4,12 +4,9 @@
 // UI - :undo_stack partition
 //
 // Fixed-capacity undo/redo stack for text editing. Stores full text snapshots (not deltas).
-// Ported from Sedulous.UI/src/Editing/UndoStack.bf. Self-contained (no View dependency).
-//
-// Port taxes: Beef's `List<UndoEntry*>` + manual `delete`/`DeleteContainerAndItems!` becomes
-// Array<UndoEntry> BY VALUE (RAII - entries are owned by the array, no manual lifetime). The
-// Beef `out int32` parameters on Undo/Redo become out-reference (`i32&`) parameters, and the
-// `String outText` accumulator becomes a `String&` we assign into.
+// Self-contained (no View dependency). Entries are held by value in an Array<UndoEntry>, which
+// owns them. Undo/Redo return the restored text and positions through `String&` and `i32&` out
+// parameters.
 
 module;
 #include "Core/Prelude.h"

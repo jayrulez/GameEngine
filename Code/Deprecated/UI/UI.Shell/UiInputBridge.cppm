@@ -3,13 +3,12 @@
 
 // UI - `foundation.ui.shell`: the platform input bridge for foundation.ui.
 //
-// Keeps the core foundation.ui platform-agnostic: it exposes UIContext's InputManager (physical-pixel
-// Process* API) and this bridge is the only place that knows foundation.shell. It translates a stream of
-// shell::InputEvent (already gated/transformed by InputSurface/InputRouter, see [[viewport-input]]) into
-// InputManager calls, and drives the window's text input (IME) from focus via UIContext::WantsTextInput()
-// - the mechanism Sedulous shell never finished. Reimplemented for us (NOT ported from Sedulous.
-// UI.Shell), mirroring the foundation.gui GuiInputBridge, per the port plan: InputSurface consumption lives
-// here, never in the core.
+// Keeps the core foundation.ui platform-agnostic: the core exposes UIContext's InputManager (a
+// Process* API in physical pixels), and this bridge is the only place that knows foundation.shell.
+// It translates a stream of shell::InputEvent (already gated and transformed by InputSurface and
+// InputRouter) into InputManager calls, and drives the window's text input (IME) from focus via
+// UIContext::WantsTextInput(). It has the same shape as the foundation.gui GuiInputBridge; the
+// core never consumes an InputSurface itself.
 
 module;
 #include "Core/Prelude.h"
@@ -25,8 +24,8 @@ namespace shell = foundation::shell;
 
 export namespace foundation::ui
 {
-    /// Bridges the platform (shell) clipboard into the UI's abstract IClipboard seam, so text controls'
-    /// Cut/Copy/Paste work. The app sets it via UIContext::SetClipboard. Borrows the shell (non-owning).
+    /// Bridges the platform (shell) clipboard into the UI's abstract IClipboard, so Cut, Copy and Paste
+    /// work in text controls. The app installs it via UIContext::SetClipboard. Borrows the shell.
     class ShellClipboard final : public IClipboard
     {
     public:
@@ -66,8 +65,8 @@ export namespace foundation::ui
         explicit UiInputBridge(UIContext* context) noexcept : m_context(context) {}
 
         /// The window whose platform text input (IME) follows UI focus. Once set, the bridge starts text
-        /// input while a text-editing view holds focus and stops it otherwise - reconciled after each
-        /// Dispatch()/PumpFromSurface(). Pass nullptr to disable.
+        /// input while a text-editing view holds focus and stops it otherwise, reconciling after each
+        /// Dispatch() and PumpFromSurface(). Pass nullptr to disable.
         void SetTextInputTarget(shell::IWindow* window) noexcept { m_textInputTarget = window; }
         [[nodiscard]] shell::IWindow* TextInputTarget() const noexcept { return m_textInputTarget; }
         /// A window going away: if it is the text-input target, the bridge lets go of it (the
@@ -101,7 +100,8 @@ export namespace foundation::ui
         }
 
         /// Translate one platform input event into an InputManager call. Returns true if routed, false if
-        /// ignored (gamepad/touch/unknown). Reconciles text-input afterwards (a click/Tab can move focus).
+        /// ignored (gamepad, touch, unknown). Reconciles text input afterwards, since a click or Tab can
+        /// move focus.
         bool Dispatch(const shell::InputEvent& event)
         {
             if (m_context == nullptr)
@@ -152,16 +152,16 @@ export namespace foundation::ui
                 break;
             }
             default:
-                routed = false; // gamepad / touch not routed to the UI
+                routed = false; // gamepad and touch are not routed to the UI
                 break;
             }
             SyncTextInput();
             return routed;
         }
 
-        /// Poll a gated InputSurface (its mouse is already content-space) and drive the InputManager:
-        /// hover from the cursor, click from press/release edges, plus wheel. Keyboard/text still come
-        /// through Dispatch().
+        /// Poll a gated InputSurface (its mouse is already in content space) and drive the InputManager:
+        /// hover from the cursor, clicks from press and release edges, and the wheel. Keyboard and text
+        /// still come through Dispatch().
         void PumpFromSurface(shell::InputSurface& surface)
         {
             if (m_context == nullptr)
@@ -199,7 +199,7 @@ export namespace foundation::ui
             const f32 scrollY = mouse->ScrollY();
             if (scrollX != 0.0f || scrollY != 0.0f)
             {
-                // Carry the live keyboard modifiers so Shift+wheel scrolls horizontally, etc.
+                // Carry the live keyboard modifiers, so that Shift with the wheel scrolls horizontally.
                 shell::IKeyboard* keyboard = surface.Keyboard();
                 const KeyModifiers mods = (keyboard != nullptr)
                                               ? MapModifiers(keyboard->Modifiers())
@@ -210,11 +210,12 @@ export namespace foundation::ui
             SyncTextInput();
         }
 
-        /// Feed the InputManager a mouse update at EXPLICIT content coords (not the surface's own cursor
-        /// position). Used for cross-window drag routing: while a floating window is dragged, the desktop
-        /// cursor sits over THAT window, but the drag must be delivered to ANOTHER window (the main one) at
-        /// global-mouse-relative coords so its drop targets see it. Button state still comes from the raw
-        /// mouse, so the held drag and its release (the drop) register. (No wheel during a drag.)
+        /// Feed the InputManager a mouse update at explicit content coordinates rather than the surface's
+        /// own cursor position. Used for cross-window drag routing: while a floating window is dragged,
+        /// the desktop cursor sits over that window, but the drag goes to another window (the main one)
+        /// at coordinates relative to the global mouse, so its drop targets see it. Button state still
+        /// comes from the raw mouse, so the held drag and its release (the drop) register. The wheel is
+        /// not fed during a drag.
         void PumpMouseAt(f32 x, f32 y, shell::IMouse* mouse)
         {
             if (m_context == nullptr || mouse == nullptr)
@@ -244,7 +245,7 @@ export namespace foundation::ui
 
         /// Push the hovered view's cursor (InputManager::CurrentCursor, the EffectiveCursor of the view
         /// under the pointer) to the OS mouse, mapping the UI CursorType to the shell's. Borderless windows
-        /// (e.g. floating dock panels) have no WM to draw resize grips, so the app drives the OS cursor.
+        /// (such as floating dock panels) have no WM to draw resize grips, so the app drives the OS cursor.
         void SyncCursor(shell::IMouse& mouse)
         {
             if (m_context == nullptr)
@@ -255,7 +256,7 @@ export namespace foundation::ui
         }
 
     private:
-        // UI CursorType -> shell CursorType (the two enums differ in values and names).
+        // Maps a UI CursorType to the shell's CursorType (the two enums differ in values and names).
         [[nodiscard]] static shell::CursorType MapCursor(CursorType c) noexcept
         {
             switch (c)
@@ -281,7 +282,7 @@ export namespace foundation::ui
             case CursorType::Wait:
                 return shell::CursorType::Wait;
             default:
-                return shell::CursorType::Default; // Default / Arrow
+                return shell::CursorType::Default; // Default and Arrow
             }
         }
 
@@ -315,7 +316,7 @@ export namespace foundation::ui
                 return static_cast<KeyCode>(static_cast<u32>(KeyCode::A) +
                                             (kv - static_cast<u32>(SK::A)));
             }
-            // Function keys (both sides contiguous per dozen) - editors use F2 (rename) etc.
+            // Function keys (contiguous in both enums, per dozen); editors use F2 (rename) and others.
             if (kv >= static_cast<u32>(SK::F1) && kv <= static_cast<u32>(SK::F12))
             {
                 return static_cast<KeyCode>(static_cast<u32>(KeyCode::F1) +
@@ -326,7 +327,7 @@ export namespace foundation::ui
                 return static_cast<KeyCode>(static_cast<u32>(KeyCode::F13) +
                                             (kv - static_cast<u32>(SK::F13)));
             }
-            // Digit row (shell counts 0..9, ui counts 1..9 then 0 - SDL layout).
+            // Digit row (the shell counts 0..9, the UI counts 1..9 then 0, as SDL does).
             if (kv >= static_cast<u32>(SK::Num1) && kv <= static_cast<u32>(SK::Num9))
             {
                 return static_cast<KeyCode>(static_cast<u32>(KeyCode::Num1) +
@@ -336,9 +337,8 @@ export namespace foundation::ui
             {
                 return KeyCode::Num0;
             }
-            // Keypad digits (the shell counts 0..9, ui 1..9 then 0): an editor binds them (Numpad 5
-            // switches a scene view's projection), and without them a keypad press reached the UI
-            // as Unknown.
+            // Keypad digits (the shell counts 0..9, the UI 1..9 then 0). Editors bind them: Numpad 5
+            // switches a scene view's projection.
             if (kv >= static_cast<u32>(SK::Keypad1) && kv <= static_cast<u32>(SK::Keypad9))
             {
                 return static_cast<KeyCode>(static_cast<u32>(KeyCode::Keypad1) +
@@ -390,7 +390,7 @@ export namespace foundation::ui
                 return KeyCode::Up;
             case SK::Down:
                 return KeyCode::Down;
-            // Punctuation row - editors bind chords on these (Ctrl+/ = comment toggle).
+            // Punctuation row. Editors bind chords on these (Ctrl+/ toggles a comment).
             case SK::Minus:
                 return KeyCode::Minus;
             case SK::Equals:
@@ -413,8 +413,8 @@ export namespace foundation::ui
                 return KeyCode::Period;
             case SK::Slash:
                 return KeyCode::Slash;
-            // The modifier keys as KEYS: a chord capture (Preferences > Shortcuts) must see a
-            // modifier go down and keep waiting, not take an unknown key for the chord.
+            // The modifier keys as keys: a chord capture (Preferences > Shortcuts) has to see a
+            // modifier go down and keep waiting, rather than take an unknown key for the chord.
             case SK::LeftCtrl:
                 return KeyCode::LeftCtrl;
             case SK::LeftShift:

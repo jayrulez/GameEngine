@@ -3,11 +3,9 @@
 
 // UI - :label partition
 //
-// Text display view with alignment, word wrap, and ellipsis. Ported from Sedulous.UI/src/Controls/
-// Label.bf. Now that the Fonts service is wired into UIContext (Context->FontService()) and VG has
-// text drawing, measuring/drawing are LIVE (font-size fallbacks remain for the no-service path).
-// Uses fonts::TextAlignment / VerticalAlignment. Beef String.Split('\n') -> a local line splitter
-// (StringView slices into the stable Text string); String.RawChars ellipsis loop -> byte scan.
+// Text display view with alignment, word wrap, and ellipsis. Measuring and drawing go through the
+// context's font service (Context->FontService()) and VG; without a font service, sizes fall back
+// to estimates from the font size. Uses fonts::TextAlignment and VerticalAlignment.
 
 module;
 #include "Core/Prelude.h"
@@ -64,9 +62,10 @@ export namespace foundation::ui
             return this;
         }
 
-        /// The first line's baseline from the top, at the measured height (where a baseline-aligned
-        /// row places it): a single line sits as OnDraw's VAlign puts it; wrapped or several
-        /// lines hug their text, so the first line's ascent.
+        /// The first line's baseline, measured from the top at the measured height; a
+        /// baseline-aligned row places the label by it. A single line sits where OnDraw's VAlign
+        /// puts it. Wrapped or multiple lines hug their text, so the baseline is the first line's
+        /// ascent.
         [[nodiscard]] f32 GetBaseline() const override
         {
             if (Context != nullptr && Context->FontService() != nullptr)
@@ -108,7 +107,7 @@ export namespace foundation::ui
         }
 
         /// The colour the text draws in: the label's own TextColor when set, else the style's
-        /// text-color (the one place both drawing and a script's read take it from). A disabled
+        /// text-color. Drawing and script reads both take the colour from here. A disabled
         /// label dims it when it draws.
         [[nodiscard]] Color ResolvedTextColor()
         {
@@ -141,10 +140,9 @@ export namespace foundation::ui
             {
                 if (fonts::CachedFont* font = ResolveFont())
                 {
-                    // Measure runs every frame today (no layout dirty flags yet) - shaping /
-                    // per-line measuring on every pass was the UI's biggest steady-state text
-                    // cost. All results are cached in m_measureCache, value-keyed (the EditText
-                    // m_glyphsDirty pattern, generalized).
+                    // Measure runs every frame (there are no layout dirty flags), and shaping and
+                    // measuring each line on every pass is costly, so all results are cached in
+                    // m_measureCache, keyed by value.
                     const String family = ResolveStyleFontFamily(FontFamily.Value());
                     if (IsWordWrapped() && font->shaper != nullptr)
                     {
@@ -176,7 +174,8 @@ export namespace foundation::ui
                         {
                             m_measureCache.Rekey(text, family, fontSize, -1.0f, false);
                             const f32 lineHeight = font->font->Metrics().lineHeight;
-                            // Slices borrow the CACHE'S OWN copy - stable until rekeyed.
+                            // The slices borrow the cache's own copy of the text, which stays
+                            // stable until the cache is rekeyed.
                             SplitLines(m_measureCache.text.AsView(), m_measureCache.lines);
                             f32 maxW = 0;
                             for (const StringView& line : m_measureCache.lines)
@@ -231,10 +230,10 @@ export namespace foundation::ui
             const fonts::TextAlignment h = HAlign.Value();
             const fonts::VerticalAlignment v = VAlign.Value();
 
-            // Draw-side results cache against the ARRANGED width (which can differ from the
-            // measure constraint) - a separate entry from m_measureCache so alternating
-            // measure/draw widths never ping-pong one slot. (DrawTextWrapped still shapes
-            // internally in VG; there is no shared shaped-text cache.)
+            // Draw-side results are cached against the arranged width, which can differ from the
+            // measure constraint. They use an entry separate from m_measureCache so alternating
+            // measure and draw widths never thrash one slot. DrawTextWrapped shapes internally
+            // in VG; there is no shared shaped-text cache.
             const String family = ResolveStyleFontFamily(FontFamily.Value());
             const f32 fontSize = ResolveFontSize();
 
@@ -303,8 +302,9 @@ export namespace foundation::ui
         }
 
     private:
-        /// Value-keyed shaped-text cache (never keyed on font pointers - the freed-then-reused
-        /// address rule). Holds its OWN text copy so the line slices stay stable until rekeyed.
+        /// Shaped-text cache keyed by value, never by font pointer, since a freed font's address
+        /// can be reused. It holds its own copy of the text so the line slices stay stable until
+        /// it is rekeyed.
         struct ShapedCache
         {
             String text;

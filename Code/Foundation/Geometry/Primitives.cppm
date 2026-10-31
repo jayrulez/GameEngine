@@ -3,10 +3,10 @@
 
 /// Foundation::Geometry - the `:primitives` partition.
 ///
-/// Procedural primitive meshes (debug shapes / placeholders / tests). Each returns a
-/// fully-formed StaticMesh - static vertex stream + 32-bit indices + one submesh +
-/// generated tangents + bounds. These build the typed StaticMesh directly (no generic
-/// untyped vertex-buffer indirection).
+/// Procedural primitive meshes (debug shapes, placeholders, tests). Each returns a
+/// fully formed StaticMesh: the static vertex stream, 32-bit indices, one submesh,
+/// generated tangents and bounds. They build the typed StaticMesh directly, with no
+/// untyped vertex-buffer indirection.
 
 module;
 #include "Core/Prelude.h"
@@ -133,9 +133,8 @@ export namespace foundation::geometry
                 for (u32 s = 0; s < seg; ++s)
                 {
                     const u32 i0 = r * rowStride + s, i1 = i0 + 1, i2 = i0 + rowStride, i3 = i2 + 1;
-                    // CCW-from-outside winding (matches SedulousEngine CreateSphere: (a,b,c),(b,d,c) with
-                    // a=i0,b=i1,c=i2,d=i3). The port had (i0,i2,i1)/(i1,i2,i3) - last two swapped - which
-                    // reversed the front face to inward, so back-face culling hid the outer shell.
+                    // Counter-clockwise seen from outside, so back-face culling keeps the outer
+                    // shell: (i0, i1, i2) and (i1, i3, i2).
                     mesh->indices.AddTriangle(i0, i1, i2);
                     mesh->indices.AddTriangle(i1, i3, i2);
                 }
@@ -144,9 +143,9 @@ export namespace foundation::geometry
             return mesh;
         }
 
-        // A capped cylinder of `radius` x `height` about the Y axis. Ported from SedulousEngine
-        // MeshBuilder.CreateCylinder: caps have hard axial normals (own vertex rings), the side wall
-        // has radial normals (duplicated seam column at u=0/1 for clean UVs).
+        // A capped cylinder of `radius` x `height` about the Y axis. The caps have hard axial
+        // normals (their own vertex rings); the side wall has radial normals (a duplicated seam
+        // column at u = 0 and 1 for clean UVs).
         [[nodiscard]] static RefPtr<StaticMesh> Cylinder(IAllocator& allocator, f32 radius = 0.5f, f32 height = 1.0f,
                                                          u32 segments = 32)
         {
@@ -155,7 +154,7 @@ export namespace foundation::geometry
             const u32 white = 0xFFFFFFFFu;
             const f32 hh = height * 0.5f;
 
-            // Top center + top cap ring.
+            // Top center and top cap ring.
             const u32 topCenter = 0;
             mesh->vertices.PushBack(StaticMeshVertex{Float3{0, hh, 0}, Float3{0, 1, 0},
                                                      Float2{0.5f, 0.5f}, white, Float3{1, 0, 0}});
@@ -169,7 +168,7 @@ export namespace foundation::geometry
                                      Float2{x / radius * 0.5f + 0.5f, z / radius * 0.5f + 0.5f},
                                      white, Float3{1, 0, 0}});
             }
-            // Bottom center + bottom cap ring.
+            // Bottom center and bottom cap ring.
             const u32 bottomCenter = mesh->VertexCount();
             mesh->vertices.PushBack(StaticMeshVertex{Float3{0, -hh, 0}, Float3{0, -1, 0},
                                                      Float2{0.5f, 0.5f}, white, Float3{1, 0, 0}});
@@ -217,8 +216,8 @@ export namespace foundation::geometry
             return mesh;
         }
 
-        // A cone of `radius` x `height` about the Y axis (apex at +Y). Ported from SedulousEngine
-        // MeshBuilder.CreateCone (slanted side normals; separate flat-normal ring for the base cap).
+        // A cone of `radius` x `height` about the Y axis (apex at +Y): slanted side normals, and a
+        // separate flat-normal ring for the base cap.
         [[nodiscard]] static RefPtr<StaticMesh> Cone(IAllocator& allocator, f32 radius = 0.5f, f32 height = 1.0f,
                                                      u32 segments = 32)
         {
@@ -240,7 +239,7 @@ export namespace foundation::geometry
                     Float3{x, -hh, z}, n, Float2{static_cast<f32>(i) / static_cast<f32>(seg), 1},
                     white, Float3{1, 0, 0}});
             }
-            // Base center + flat-normal base ring.
+            // Base center and flat-normal base ring.
             const u32 baseCenter = mesh->VertexCount();
             mesh->vertices.PushBack(StaticMeshVertex{Float3{0, -hh, 0}, Float3{0, -1, 0},
                                                      Float2{0.5f, 0.5f}, white, Float3{1, 0, 0}});
@@ -268,8 +267,7 @@ export namespace foundation::geometry
             return mesh;
         }
 
-        // A torus about the Y axis: ring `radius`, tube `tubeRadius`. Ported from SedulousEngine
-        // MeshBuilder.CreateTorus (same (a,b,c)/(b,d,c) outward winding as Sphere).
+        // A torus about the Y axis: ring `radius`, tube `tubeRadius`, wound outward as Sphere is.
         [[nodiscard]] static RefPtr<StaticMesh> Torus(IAllocator& allocator, f32 radius = 1.0f, f32 tubeRadius = 0.3f,
                                                       u32 segments = 32, u32 tubeSegments = 16)
         {

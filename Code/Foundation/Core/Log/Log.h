@@ -4,8 +4,8 @@
 // Core - logging macros (classic header).
 //
 // Convenience front-end over foundation::core::Logf. Include this and `import
-// foundation.core;`. The macros are stripped at LogLevel::Fatal+ granularity in
-// shipping builds.
+// foundation.core;`. In shipping builds LOG_TRACE, LOG_DEBUG and LOG_INFO compile to
+// nothing; Warning and above stay.
 //
 //   LOG(level, category, "fmt {} {}", a, b);
 //   LOG_INFO("Renderer", "loaded {} meshes", count);
@@ -19,8 +19,8 @@
 
 #if BUILD_SHIPPING
 // Strip verbose levels in shipping; keep Warning and above. The dead ternary arm keeps
-// the arguments REFERENCED (type-checked, never evaluated, constant-folded to nothing) -
-// otherwise every log-only parameter breaks the shipping build under -Werror=unused.
+// the arguments referenced (type-checked, never evaluated, constant-folded to nothing).
+// Otherwise every log-only parameter breaks the shipping build under -Werror=unused.
 #define LOG_TRACE(category, ...)                                                          \
     (true ? (void)0 : LOG(::foundation::core::LogLevel::Trace, (category), __VA_ARGS__))
 #define LOG_DEBUG(category, ...)                                                          \

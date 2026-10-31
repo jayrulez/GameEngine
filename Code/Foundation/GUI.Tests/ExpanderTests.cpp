@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Expander (E6): HTML's <details>. Its header toggles `open` and reports `toggle`; one of a
-// name per GUI open at a time; content built on first open; an optional eased height.
+// GUI - Expander, the GUI's version of HTML's <details>. Its header toggles `open` and reports
+// `toggle`. Among expanders sharing a name in one GUI, only one is open at a time. Content is
+// built on the first open, and the height can optionally ease.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -66,7 +67,7 @@ TEST_CASE("expander: its header toggles it, reporting toggle; closed it takes on
     (void)root->UpdateLayout();
     CHECK(e->GetSize().y == doctest::Approx(closed + 80.0f));
 
-    // The keyboard: the header is a button.
+    // From the keyboard: the header is a button.
     e->GetHeader()->RequestFocus();
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
     CHECK_FALSE(e->IsOpen());
@@ -89,7 +90,7 @@ TEST_CASE("expander: one of a name in a GUI open at a time; content built on fir
     b->SetOpen(true);
     CHECK_FALSE(a->IsOpen());
     CHECK(b->IsOpen());
-    CHECK(elsewhere->IsOpen()); // another GUI
+    CHECK(elsewhere->IsOpen()); // it is in another GUI
 
     int built = 0;
     auto lazy = AddExpander(*root, 10.0f);

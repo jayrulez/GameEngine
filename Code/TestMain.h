@@ -3,10 +3,11 @@
 
 // Shared doctest entry point for all test binaries.
 //
-// Redirects test-written scratch data (content DBs, cooked projects, temp files - all created
-// via CWD-relative paths like "scratch_xxx_db") into a single gitignored ".test-scratch"
-// directory, so test runs never litter the repo root (or the build dir). Fixture READS are
-// unaffected: they use absolute ${CMAKE_SOURCE_DIR} compile-definition paths.
+// Redirects scratch data that tests write (content DBs, cooked projects, temp files, all created
+// through paths relative to the working directory, like "scratch_xxx_db") into a single
+// gitignored ".test-scratch" directory, so test runs never litter the repo root or the build
+// directory. Fixture reads are unaffected: they use absolute ${CMAKE_SOURCE_DIR} paths from
+// compile definitions.
 #pragma once
 
 #define DOCTEST_CONFIG_IMPLEMENT
@@ -15,7 +16,7 @@
 #include <filesystem>
 
 // ASAN detection, spelled so MSVC can parse it. `defined(__has_feature) && __has_feature(x)`
-// in ONE expression is not portable: MSVC has no __has_feature, and its preprocessor still has
+// in one expression is not portable: MSVC has no __has_feature, and its preprocessor still has
 // to parse the call rather than short-circuiting past it, which it reports as
 // "C1012: unmatched parenthesis: missing ')'". Nesting the test means the inner line is only
 // ever lexed, never evaluated, on compilers without __has_feature.

@@ -3,9 +3,9 @@
 
 // GUI.Toolkit - :sheet partition
 //
-// The toolkit's default sheet (round three's ruling 4): its widgets styled through the theme's
-// tokens, so they follow dark, light and contrast; a theme or an application restyles them by
-// setting `--toolbar-*` and the rest, over this sheet, not a fork of it.
+// The toolkit's default sheet styles its widgets through the theme's tokens, so they follow the
+// dark, light and contrast themes. A theme or an application restyles them by setting `--toolbar-*`
+// and the other tokens over this sheet, rather than by forking it.
 
 module;
 #include "Core/Prelude.h"
@@ -18,8 +18,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// The toolkit's default sheet, written against the theme's tokens (an application puts it after
-    /// the theme in its user agent sheet).
+    /// Returns the toolkit's default sheet, written against the theme's tokens. An application puts
+    /// it after the theme in its user agent sheet.
     [[nodiscard]] inline core::StringView ToolkitSheetCSS() noexcept
     {
         return core::StringView(u8R"(

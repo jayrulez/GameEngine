@@ -3,15 +3,11 @@
 
 // UI Toolkit - :node_graph_types partition
 //
-// Plain data types describing a node graph: ports (typed, colored), nodes (title / position / ports),
-// and connections between ports. Model-agnostic - the NodeGraphCanvas renders these and callers push
-// their own data in. Ported 1:1 from Sedulous.UI.Toolkit/src/NodeGraph/NodeGraphTypes.bf.
-//
-// Port taxes: Beef `Vector2` -> Float2; byte `Color(r,g,b,a)` -> float core::Color{...}; Beef heap
-// `List<NodeGraphPort>` (owned) -> Array<NodeGraphPort> BY VALUE (ports are index-accessed, never held
-// by stable pointer); Beef `String Label = new .() ~ delete _` -> value `String Label`. The member
-// named `Color` is declared with the qualified type `core::Color` to stay clear of gcc's
-// -Werror=changes-meaning (field name == unqualified type name).
+// Plain data types describing a node graph: ports (typed, colored), nodes (title, position, ports),
+// and connections between ports. Model-agnostic: the NodeGraphCanvas renders these and callers push
+// their own data in. Ports are stored by value, since they are accessed by index and never held by a
+// stable pointer. The member named `Color` is declared with the qualified type `core::Color` to stay
+// clear of gcc's -Werror=changes-meaning (a field with the same name as an unqualified type).
 
 module;
 #include "Core/Prelude.h"
@@ -46,7 +42,7 @@ export namespace foundation::ui::toolkit
         NodeGraphPortType() = default;
         NodeGraphPortType(i32 typeId, core::Color color) : TypeId(typeId), Color(color) {}
 
-        /// Untyped port - connects to anything.
+        /// Untyped port: connects to anything.
         [[nodiscard]] static NodeGraphPortType Untyped()
         {
             return NodeGraphPortType(
@@ -92,8 +88,8 @@ export namespace foundation::ui::toolkit
         /// Whether this node is selected.
         bool IsSelected = false;
 
-        /// Extra emphasis ring drawn OUTSIDE the selection outline in HighlightColor - e.g. the
-        /// ACTIVE state while a live animation-graph preview runs. Caller-driven; never set by
+        /// Extra emphasis ring drawn outside the selection outline in HighlightColor, for example
+        /// the active state while a live animation-graph preview runs. Caller-driven; never set by
         /// the canvas itself.
         bool IsHighlighted = false;
         core::Color HighlightColor{255.0f / 255.0f, 170.0f / 255.0f, 60.0f / 255.0f,

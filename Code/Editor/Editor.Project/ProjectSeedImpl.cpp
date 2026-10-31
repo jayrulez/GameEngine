@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// editor.project - the starter content a new project is seeded with, the one function both the
-// editor's New Project and the MCP project_create run (a project made over MCP had none, so its
-// exported game showed no text: the engine's built-in font is not in a dist).
+// editor.project - the starter content a new project is seeded with. The editor's New Project and
+// the MCP project_create both run this one function, so every new project ships a font (the
+// engine's built-in font is not in a dist).
 
 module;
 #include "Core/Prelude.h"
@@ -40,7 +40,7 @@ namespace editor
         foundation::content::Group* root = project.SourceDb().RootGroup();
         const pipeline::ImportContext import{allocator, project.SourcesRoot()};
 
-        // 1) The UI font: Roboto as a font asset, set as the manifest's default (the font a
+        // 1. The UI font: Roboto as a font asset, set as the manifest's default (the font a
         //    shipped game binds; the built-in one is not in a dist). A distance-field font, so a
         //    72 px title and a 14 px caption both draw clean from its one bake.
         {
@@ -69,9 +69,9 @@ namespace editor
             }
         }
 
-        // 2) The default sky: Poly Haven's Kloofendal 48d Partly Cloudy (Pure Sky) at 1K, CC0 (its
-        //    licence beside it), an equirectangular skybox texture. A 1024 x 512 HDR of 1.4 MB: the
-        //    4096 x 2048 BlueSky (10 MB, nearly 3 s to cook) was more than a starting sky needs.
+        // 2. The default sky: Poly Haven's Kloofendal 48d Partly Cloudy (Pure Sky) at 1K, CC0 (its
+        //    licence beside it), an equirectangular skybox texture. It is a 1024 x 512 HDR of 1.4 MB,
+        //    small enough to cook quickly, which is all a starting sky needs.
         {
             const String source = foundation::vfs::DataPath(
                 dataRoot, u8"Templates/kloofendal_48d_partly_cloudy_puresky/kloofendal_48d_partly_cloudy_puresky_1k.hdr");
@@ -89,7 +89,7 @@ namespace editor
             }
         }
 
-        // 3) Primitive meshes: the creators File > New > Primitives runs (the cube, sphere and
+        // 3. Primitive meshes: the creators File > New > Primitives runs (the cube, sphere and
         //    plane; every one with allPrimitives).
         const String sourcesRoot(project.SourcesRoot().AsView());
         for (const pipeline::AssetCreator& creator : creators.All())

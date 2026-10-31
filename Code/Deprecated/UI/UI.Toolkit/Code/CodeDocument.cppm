@@ -6,10 +6,10 @@
 /// The UI-free core of CodeEditView: a line-array text buffer with
 /// (line, column) addressing, delta-based undo with typing coalescing, per-line markers
 /// (breakpoints, diagnostics, execution line) that track edits, and the identifier harvest that
-/// backs the document-word completion provider. Columns are CODEPOINT indices (the widget's
-/// monospace fast path multiplies them by one advance); byte offsets appear only at the
-/// column<->byte conversion helpers. The document never touches views, fonts, or the clipboard -
-/// everything here is headless-testable.
+/// backs the document-word completion provider. Columns are codepoint indices (the widget's
+/// monospace fast path multiplies them by one advance); byte offsets appear only in the helpers
+/// that convert between columns and bytes. The document never touches views, fonts, or the
+/// clipboard, so everything here is testable headless.
 
 module;
 #include "Core/Prelude.h"
@@ -108,7 +108,7 @@ export namespace foundation::ui::toolkit
 
     /// Classifies an edit for undo coalescing: consecutive edits of the same kind within
     /// kUndoCoalesceSeconds that are spatially contiguous merge into one undo entry
-    /// (the EditText/TextEditingBehavior policy, kept identical on purpose).
+    /// (the same policy as EditText and TextEditingBehavior).
     enum class CodeEditKind : u8
     {
         None,
@@ -120,7 +120,7 @@ export namespace foundation::ui::toolkit
         Other,
     };
 
-    /// Cursor + anchor snapshot stored with undo entries so undo/redo restores selection.
+    /// Cursor and anchor snapshot stored with undo entries so undo/redo restores selection.
     struct CodeCursorState
     {
         CodePosition cursor{};
@@ -169,8 +169,8 @@ export namespace foundation::ui::toolkit
         }
 
         /// Replaces the whole buffer (splits on '\n', drops '\r'). Clears undo history and
-        /// version-derived caches; markers/diagnostics are cleared too - a full reload is a new
-        /// document as far as line anchors are concerned.
+        /// version-derived caches; markers and diagnostics are cleared too, since a full reload is
+        /// a new document as far as line anchors are concerned.
         void SetText(StringView text)
         {
             m_lines.Clear();
@@ -378,7 +378,7 @@ export namespace foundation::ui::toolkit
 
         /// The single undoable mutation: replaces `span` with `text`, records/coalesces the undo
         /// entry, and returns the position just past the inserted text (the caller's new cursor;
-        /// the entry's after-state is that position with no selection). `time` feeds coalescing -
+        /// the entry's after-state is that position with no selection). `time` feeds coalescing:
         /// pass the UI clock, or synthetic times in tests.
         CodePosition Edit(const CodeSpan& span, StringView text, CodeEditKind kind,
                           const CodeCursorState& before, f64 time)
@@ -392,7 +392,7 @@ export namespace foundation::ui::toolkit
             m_redo.Clear();
             if (m_compoundOpen)
             {
-                // Compound bracket: every edit inside lands in ONE undo entry (replace-all,
+                // Compound bracket: every edit inside lands in one undo entry (replace-all,
                 // multi-cursor style operations). Coalescing state is untouched.
                 if (!m_compoundEntryStarted)
                 {
@@ -482,7 +482,7 @@ export namespace foundation::ui::toolkit
         /// Splits the coalescing chain (call on cursor navigation, focus loss, save).
         void BreakUndoChain() noexcept { m_lastEditKind = CodeEditKind::None; }
 
-        /// Groups every Edit() until EndCompoundEdit into ONE undo entry (replace-all). The
+        /// Groups every Edit() until EndCompoundEdit into one undo entry (replace-all). The
         /// entry's before-state comes from the first edit; no entry is pushed if none happen.
         void BeginCompoundEdit() noexcept
         {
@@ -535,7 +535,7 @@ export namespace foundation::ui::toolkit
 
         // ---- brackets ----
 
-        /// Codepoint at `pos` (0 at/past the end of the line - callers treat that as none).
+        /// Codepoint at `pos` (0 at or past the end of the line, which callers treat as none).
         [[nodiscard]] u32 CodepointAt(CodePosition pos) const
         {
             if (pos.line < 0 || pos.line >= LineCount())
@@ -551,8 +551,8 @@ export namespace foundation::ui::toolkit
             return DecodeUtf8(text, index);
         }
 
-        /// For a bracket at `bracketPos`, finds its partner (nesting-aware, whole document;
-        /// lexer-blind - brackets inside strings/comments count too). False when the
+        /// For a bracket at `bracketPos`, finds its partner (nesting-aware, whole document).
+        /// It ignores the lexer, so brackets inside strings and comments count too. False when the
         /// character is not a bracket or the partner is missing.
         [[nodiscard]] bool FindMatchingBracket(CodePosition bracketPos,
                                                CodePosition& outMatch) const
@@ -736,7 +736,7 @@ export namespace foundation::ui::toolkit
         }
 
         /// Fires after any line mutation: (firstLine, removedCount, addedCount). SetText reports
-        /// (0, -1, LineCount()) - a full reload.
+        /// (0, -1, LineCount()) for a full reload.
         Function<void(i32, i32, i32)> OnLinesChanged;
 
     private:
@@ -749,7 +749,7 @@ export namespace foundation::ui::toolkit
 
         struct EditOp
         {
-            CodePosition pos{};         // where removed+inserted both start
+            CodePosition pos{};         // where the removed and inserted text both start
             CodePosition insertedEnd{}; // end of `inserted` after apply (undo removes this span)
             String removed;
             String inserted;
@@ -901,7 +901,7 @@ export namespace foundation::ui::toolkit
         {
             String removed = TextInSpan(span);
 
-            // Stitch: prefix of the first line + text + suffix of the last line.
+            // Stitch the first line's prefix, the text and the last line's suffix together.
             const usize prefixBytes = ColumnToByte(span.begin.line, span.begin.column);
             const usize suffixByte = ColumnToByte(span.end.line, span.end.column);
             const StringView firstLine = Line(span.begin.line);

@@ -4,10 +4,10 @@
 // UI - :animation partition
 //
 // Abstract base class for all property animations: manages elapsed time, easing, delay, repeat, and
-// auto-reverse. Ported from Sedulous.UI/src/Animation/Animation.bf. Animations are single-owner (Beef
-// `delete` -> UniquePtr held by AnimationManager / parent Storyboard); this base is a plain polymorphic
-// class (not an Object - not scripted, no Cast). EasingFunction + the easing functions come from
-// foundation.core (:easings). Target is a borrowed View* (forward-declared; only pointer-compared).
+// auto-reverse. Each animation has a single owner (a UniquePtr held by AnimationManager or a parent
+// Storyboard). This base is a plain polymorphic class, not an Object: it is not scripted and has no
+// Cast. EasingFunction and the easing functions come from foundation.core (:easings). Target is a
+// borrowed View* (forward-declared; only pointer-compared).
 
 module;
 #include "Core/Prelude.h"
@@ -67,7 +67,7 @@ export namespace foundation::ui
         [[nodiscard]] f32 Delay() const noexcept { return m_delay; }
         void SetDelay(f32 value) noexcept { m_delay = Max(value, 0.0f); }
 
-        /// Easing function applied to progress. Null = linear.
+        /// Easing function applied to progress. Null means linear.
         [[nodiscard]] EasingFunction Easing() const noexcept { return m_easing; }
         void SetEasing(EasingFunction value) noexcept { m_easing = value; }
 

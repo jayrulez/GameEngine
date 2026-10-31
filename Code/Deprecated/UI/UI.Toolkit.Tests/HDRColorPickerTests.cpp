@@ -16,7 +16,7 @@ namespace core = foundation::core;
 TEST_CASE("toolkit-hdrcolorpicker: ConstructAndRoundTrip")
 {
     auto picker = core::MakeRef<HDRColorPicker>(core::DefaultAllocator());
-    // 10 children: SV square, hue strip, alpha strip, 2 previews, intensity, R/G/B/A.
+    // 10 children: the SV square, hue strip, alpha strip, 2 previews, intensity, and R, G, B and A.
     CHECK(picker->ChildCount() == 10u);
 
     // An HDR color: green at intensity 4.
@@ -33,7 +33,7 @@ TEST_CASE("toolkit-hdrcolorpicker: ConstructAndRoundTrip")
 
 TEST_CASE("toolkit-hdrcolorpicker: IntensityDecomposition")
 {
-    // Vec4ToHSVI takes intensity = max channel; normalized color is RGB/intensity.
+    // Vec4ToHSVI takes the maximum channel as the intensity; the normalized color is RGB divided by it.
     f32 h = 0, s = 0, v = 0, i = 0, a = 0;
     HDRColorPicker::Vec4ToHSVI(Float4{2.0f, 0.0f, 0.0f, 0.5f}, h, s, v, i, a);
     CHECK(i == doctest::Approx(2.0f));

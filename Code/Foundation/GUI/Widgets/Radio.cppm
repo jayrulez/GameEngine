@@ -3,10 +3,10 @@
 
 // GUI - :radio partition
 //
-// RadioButton: the button core (E6 of Specs/gui-lab-evolution.md) as a toggle with a ring for its
-// indicator, its text beside it. A click checks it and never unchecks it; the radios of one group
-// (a `name` in markup, or a ButtonGroup from code) are exclusive, and the arrows move round them.
-// Its parts: radio::ring (the outline) and ::dot (the choice).
+// RadioButton: a ButtonBase toggle with a ring as its indicator and its text beside it. A click
+// checks it and never unchecks it. The radios of one group (a `name` in markup, or a ButtonGroup
+// from code) are exclusive, and the arrow keys move round them. Its parts are radio::ring (the
+// outline) and ::dot (the mark of the chosen one).
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +36,7 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"radio"));
             {
                 StyleWriteScope defaults(*this);
-                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // its text beside its indicator
+                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // the text sits beside the indicator
             }
             SetToggle(true);
             SetKeepsChecked(true);
@@ -54,7 +54,7 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Theming parts: radio::ring (outline) / ::dot (inner fill).
+        // Style parts: radio::ring (the outline) and ::dot (the inner fill).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"ring"));

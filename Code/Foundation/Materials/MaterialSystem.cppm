@@ -3,13 +3,12 @@
 
 /// Foundation::Materials - the `:system` partition.
 ///
-/// MaterialSystem: owns material instances' GPU resources and - the key idea -
-/// INFERS the bind-group layout from a material's declared property list (uniforms
-/// -> one uniform buffer at binding 0; each effect group -> its own uniform buffer from
-/// binding 1; each texture/sampler -> its own entry). A new
-/// material or custom shader therefore needs no renderer changes. Layouts are cached
-/// by content hash; instance uniform buffers + bind groups are (re)built lazily, and
-/// instances notify the system on dirty so PrepareDirtyInstances is O(dirty).
+/// MaterialSystem: owns material instances' GPU resources and infers the bind-group layout
+/// from a material's declared property list. The uniforms share one uniform buffer at binding
+/// 0, each effect group gets its own uniform buffer from binding 1, and each texture or sampler
+/// gets its own entry. A new material or custom shader therefore needs no renderer changes.
+/// Layouts are cached by content hash; instance uniform buffers and bind groups are (re)built
+/// lazily, and instances notify the system when dirty so PrepareDirtyInstances is O(dirty).
 
 module;
 #include "Core/Prelude.h"
@@ -38,8 +37,8 @@ export namespace foundation::materials
         MaterialSystem(const MaterialSystem&) = delete;
         MaterialSystem& operator=(const MaterialSystem&) = delete;
 
-        // Binds the system to a device + creates default GPU resources (sampler + white
-        // and flat-normal 1x1 fallback textures used when a texture slot is unbound).
+        // Binds the system to a device and creates default GPU resources: a sampler, and white
+        // and flat-normal 1x1 fallback textures used when a texture slot is unbound.
         Status Initialize(rhi::Device& device)
         {
             m_device = &device;
@@ -58,7 +57,7 @@ export namespace foundation::materials
         [[nodiscard]] rhi::TextureView* BlackTexture() const noexcept { return m_blackView; }
 
         // Ensures the instance's uniform buffer is up to date and returns it (null if the material
-        // declares no uniforms). Lets a renderer assemble its own fixed set-2 layout (UBO + textures)
+        // declares no uniforms). Lets a renderer assemble its own fixed set-2 layout (UBO and textures)
         // while still sourcing the packed uniform data from the material system.
         [[nodiscard]] rhi::Buffer* EnsureUniformBuffer(MaterialInstance& instance)
         {
@@ -108,10 +107,10 @@ export namespace foundation::materials
             }
             // Each effect group's buffer, right after the material's (the bind group pushes them at
             // the same positions: WebGPU matches entries by position). An effect block binds at
-            // b1 of the material's set (kShaderEffectRegister); the engine declares one effect per
-            // flag and its shaders one (Wind), so a second group would take b2, which no shader
-            // declares until effects get registers of their own. Vertex: the effects are vertex
-            // effects (the sway).
+            // b1 of the material's set (kShaderEffectRegister). The engine declares one effect per
+            // flag and its shaders declare one (Wind), so a second group would take b2, which no
+            // shader declares; effects would need registers of their own first. The stage is
+            // Vertex because the effects are vertex effects (the sway).
             u32 effectBinding = kFirstEffectBinding;
             for (const MaterialEffectGroup& group : material.EffectGroups())
             {
@@ -160,7 +159,7 @@ export namespace foundation::materials
             return layout;
         }
 
-        // (Re)builds an instance's uniform buffer + bind group if dirty. Returns its
+        // (Re)builds an instance's uniform buffer and bind group if dirty. Returns its
         // bind group, ready to bind for rendering.
         [[nodiscard]] rhi::BindGroup* PrepareInstance(MaterialInstance& instance,
                                                       rhi::BindGroupLayout* layout = nullptr)
@@ -210,7 +209,7 @@ export namespace foundation::materials
             return (bg != nullptr) ? *bg : nullptr;
         }
 
-        // --- IMaterialInstanceSink: dirty notification + cleanup ---
+        // --- IMaterialInstanceSink: dirty notification and cleanup ---
         void MarkInstanceDirty(MaterialInstance* instance) override
         {
             if (instance == nullptr || instance->IsInDirtyList())
@@ -242,7 +241,7 @@ export namespace foundation::materials
             m_retiredBindGroups.Resize(w);
         }
 
-        // Re-preps every instance dirtied since the last drain (O(dirty)).
+        // Re-prepares every instance dirtied since the last drain (O(dirty)).
         void PrepareDirtyInstances()
         {
             for (usize i = 0; i < m_dirty.Size(); ++i)
@@ -261,12 +260,11 @@ export namespace foundation::materials
             m_dirty.Clear();
         }
 
-        // Hand the instance's uniform buffer to the caller (removed from the system) WITHOUT
-        // destroying it - the DetachBindGroup twin. ReleaseInstance frees IMMEDIATELY, so any
-        // instance that may still be referenced by in-flight frames must have BOTH its bind
-        // group AND its uniform buffer detached for deferred retirement before it dies
-        // (destroying only the bind group left vkFreeMemory-in-use validation errors on every
-        // material hot-reload).
+        // Hands the instance's uniform buffer to the caller (removed from the system) without
+        // destroying it, like DetachBindGroup. ReleaseInstance frees immediately, so an instance
+        // that in-flight frames may still reference must have both its bind group and its
+        // uniform buffer detached for deferred retirement before it dies; detaching only the
+        // bind group frees memory the GPU is still using.
         [[nodiscard]] rhi::Buffer* DetachUniformBuffer(MaterialInstance* instance)
         {
             if (instance == nullptr)
@@ -282,8 +280,8 @@ export namespace foundation::materials
             return nullptr;
         }
 
-        // Hand the instance's effect buffers to the caller (removed from the system) WITHOUT
-        // destroying them, appended to `out`: the DetachUniformBuffer twin for the effect groups'
+        // Hands the instance's effect buffers to the caller (removed from the system) without
+        // destroying them, appended to `out`: DetachUniformBuffer for the effect groups'
         // buffers, retired the same way.
         void DetachEffectBuffers(MaterialInstance* instance, Array<rhi::Buffer*>& out)
         {
@@ -304,8 +302,8 @@ export namespace foundation::materials
             }
         }
 
-        // Hand the instance's bind group to the caller (removed from the system) WITHOUT
-        // destroying it - for deferred retirement while in-flight frames may still bind it.
+        // Hands the instance's bind group to the caller (removed from the system) without
+        // destroying it, for deferred retirement while in-flight frames may still bind it.
         [[nodiscard]] rhi::BindGroup* DetachBindGroup(MaterialInstance* instance)
         {
             if (instance == nullptr)
@@ -391,10 +389,10 @@ export namespace foundation::materials
     private:
         Status CreateDefaultResources()
         {
-            // Default material sampler wraps (REPEAT) - the glTF spec default. Assets rely on
-            // it: DamagedHelmet's V coords live in [1,2] and clamp smeared the whole texture
-            // into edge rows ("colors in the wrong places"). Materials wanting clamp get it
-            // per-sampler via GetOrCreateSampler.
+            // The default material sampler repeats, the glTF default. Assets rely on it: UVs may
+            // lie outside [0,1] (DamagedHelmet's V coordinates are in [1,2]), and clamping smears
+            // them into the edge texels. Materials that want clamp get it per sampler through
+            // GetOrCreateSampler.
             rhi::SamplerDesc sd{};
             sd.addressU = rhi::AddressMode::Repeat;
             sd.addressV = rhi::AddressMode::Repeat;
@@ -540,9 +538,9 @@ export namespace foundation::materials
             else
             {
                 rhi::BufferDesc bd{};
-                // Round up to 16: an HLSL cbuffer is std140-padded to a 16-byte multiple, so the
-                // bound range must cover that even when the declared props sum to less (e.g. a
-                // {float4,float,float} PBR block is 24B of data but a 32B cbuffer).
+                // Round up to 16: an HLSL cbuffer is padded to a 16-byte multiple, so the bound
+                // range must cover that even when the declared properties sum to less (a
+                // {float4, float, float} block is 24 bytes of data but a 32-byte cbuffer).
                 bd.size = (material->UniformDataSize() + 15u) & ~15u;
                 bd.usage = rhi::BufferUsage::Uniform;
                 bd.memory = rhi::MemoryLocation::CpuToGpu;
@@ -602,11 +600,12 @@ export namespace foundation::materials
                     rhi::TextureView* view = instance.GetTexture(propIndex);
                     if (view == nullptr)
                     {
-                        // Unbound-slot neutrals by intent: normal maps decode to (0,0,1) = geometric
-                        // normal; everything else (albedo/MR/AO/emissive) multiplies its factor, so
-                        // white = identity. An emissive map too (glTF: emission = factor x texture, the
-                        // texture white when absent): a glow authored as a colour alone shows, and a
-                        // material that does not glow has a black EmissiveColor.
+                        // Neutral textures for unbound slots: a normal map decodes to (0,0,1), the
+                        // geometric normal; every other map (albedo, metallic-roughness, occlusion,
+                        // emissive) multiplies its factor, so white is the identity. For emission
+                        // glTF defines factor x texture with the texture white when absent, so a glow
+                        // authored as a colour alone shows, and a material that does not glow has a
+                        // black EmissiveColor.
                         view = Contains(p.name, u8"ormal") ? m_normalView : m_whiteView;
                     }
                     if (view != nullptr)
@@ -639,8 +638,8 @@ export namespace foundation::materials
 
             if (rhi::BindGroup** old = m_bindGroups.Find(&instance))
             {
-                // Defer-free: the replaced group may still be bound by an in-flight frame
-                // (immediate destroy here produced invalid-descriptor draws on hot reload).
+                // Deferred free: the replaced group may still be bound by an in-flight frame,
+                // and destroying it now would leave that frame drawing with invalid descriptors.
                 m_retiredBindGroups.PushBack(RetiredBindGroup{*old, kRetireFrames});
                 m_bindGroups.Remove(&instance);
             }
@@ -676,7 +675,7 @@ export namespace foundation::materials
             return h;
         }
 
-        // Case-insensitive-ish substring check (matches "normal"/"Normal" via "ormal").
+        // Plain substring check; callers search for "ormal" to match "normal" and "Normal".
         static bool Contains(StringView haystack, StringView needle)
         {
             if (needle.Size() == 0 || haystack.Size() < needle.Size())

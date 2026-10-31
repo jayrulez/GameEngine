@@ -5,14 +5,10 @@
 //
 // Level-of-detail selection math, shared by every LOD system in the engine: mesh chains
 // (foundation.render's per-view selection) and terrain chunk geo-mipmapping
-// (foundation.terrain) both delegate HERE, so there is exactly one coverage
-// formula, one threshold walk, and one hysteresis rule. Pure functions over Core math -
-// no RHI, no render types (cameras arrive as plain matrices), unit-testable headless.
-//
-// Placement history: this briefly lived in core's :bounds partition (the terrain layering
-// ruling's first cut); the user ruled LOD is a DOMAIN concept core must not know about,
-// so it is a dedicated leaf instead - the designated home for LOD-flavored math that
-// would otherwise accrete into core.
+// (foundation.terrain) both delegate here, so there is exactly one coverage formula,
+// one threshold walk, and one hysteresis rule. Pure functions over Core math: no RHI,
+// no render types (cameras arrive as plain matrices), unit-testable headless. LOD is a
+// domain concept, so it lives in this leaf module rather than in core.
 
 module;
 #include "Core/Prelude.h"
@@ -26,8 +22,8 @@ using namespace foundation::core;
 export namespace foundation::lod
 {
     /// The fraction of the viewport half-height a bounding sphere's radius spans under
-    /// `view` + `projection`. projection[1][1] scales both projection kinds (cot(fovY/2)
-    /// perspective, 2/height ortho); m[3][3] discriminates them - perspective divides by
+    /// `view` and `projection`. projection[1][1] scales both projection kinds (cot(fovY/2)
+    /// perspective, 2/height ortho); m[3][3] discriminates them: perspective divides by
     /// the view-space depth (forward = -z, clamped away from zero), ortho is depth-free.
     /// `bias` halves the result per unit (LOD-bias semantics; 0 = none).
     [[nodiscard]] inline f32 ProjectedSphereCoverage(const Float4x4& view,
@@ -55,8 +51,8 @@ export namespace foundation::lod
     }
 
     /// Descending-threshold LOD walk: level l takes over while coverage < thresholds[l]
-    /// (thresholds[0] is 1.0 by convention and unused - level 0 is the fallback). A
-    /// malformed (non-descending) tail stops the walk; empty/1-entry always answers 0.
+    /// (thresholds[0] is 1.0 by convention and unused; level 0 is the fallback). A
+    /// malformed (non-descending) tail stops the walk; an empty or 1-entry list answers 0.
     [[nodiscard]] inline u32 SelectLevelByCoverage(Span<const f32> thresholds,
                                                    f32 coverage) noexcept
     {
@@ -77,7 +73,7 @@ export namespace foundation::lod
 
     /// Hysteresis: keep `last` while it is still selectable inside the +-`band` coverage
     /// window (an item hovering exactly on a threshold never flickers); otherwise the raw
-    /// selection wins - a stale level is never pinned.
+    /// selection wins, so a stale level is never pinned.
     [[nodiscard]] inline u32 ApplyCoverageHysteresis(Span<const f32> thresholds, f32 coverage,
                                                      u32 rawSelection, u32 last,
                                                      f32 band = 0.05f) noexcept

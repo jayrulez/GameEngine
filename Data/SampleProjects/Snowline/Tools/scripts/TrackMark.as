@@ -1,6 +1,6 @@
-// TrackMark - one stretch of the board's track in the snow (Prefabs/TrackMark, effects.py): it
-// lies as it was dropped, fades over the end of its life and removes itself, so the track behind
-// the rider stays a few seconds long.
+// TrackMark: one stretch of the board's track in the snow (Prefabs/TrackMark, from effects.py). It
+// lies where it was dropped, fades out toward the end of its life and removes itself, so the track
+// behind the rider stays only a few seconds long.
 class TrackMark
 {
     private Entity@ self;
@@ -9,7 +9,7 @@ class TrackMark
     [2.0, "How long it takes to fade, at the end (s)"] float fade;
 
     private float m_age = 0.0f;
-    private float m_alpha = -1.0f; // the decal's alpha as authored, read at the first update
+    private float m_alpha = -1.0f; // the decal's authored alpha, read on the first update
 
     TrackMark(Entity@ entity) { @self = entity; }
 

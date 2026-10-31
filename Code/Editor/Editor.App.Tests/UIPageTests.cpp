@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - UIEditorPage: a page's content is a GUI node the shell docks, the same node each
-// time it is asked; its frame hooks do nothing unless the page has work of its own.
+// Editor::App: UIEditorPage. A page's content is a GUI node the shell docks, and the same node is
+// returned each time it is asked for. Its frame hooks do nothing unless the page has work of its own.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

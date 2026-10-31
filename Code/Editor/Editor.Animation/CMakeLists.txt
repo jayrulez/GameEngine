@@ -1,6 +1,5 @@
-# Editor::Animation - `editor.animation`: the animation pages on the GUI (Documentation/Specs/
-# editor-gui.md, 5.4, layer 10): the clip, skeleton and graph pages, what their previews share, and
-# the graph as a graph view reads it.
+# Editor::Animation - `editor.animation`: the animation pages on the GUI: the clip, skeleton and
+# graph pages, what their previews share, and the animation graph as a source for the graph view.
 util_add_engine_library(Editor.Animation ALIAS Editor::Animation)
 target_link_libraries(Editor.Animation PUBLIC
     Foundation::Core Foundation::Content Foundation::Resource Foundation::Settings

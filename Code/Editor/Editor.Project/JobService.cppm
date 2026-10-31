@@ -3,13 +3,13 @@
 
 // Editor::Project - :job_service partition.
 //
-// A GENERIC background-job runner with progress + step reporting for the editor domain's hosts
-// (the pattern EditorCookService hand-rolls, generalized): submit a unit of work, it runs on a
-// worker thread so the host's main loop stays live, reports progress/steps through a JobContext,
-// and its completion fires on the MAIN thread from Update(). Jobs run ONE AT A TIME (a submit
-// while busy queues) - the build-lock model, so a cook/export/import never race the DBs. The
-// host pumps Update() each frame and reads Progress() for whatever it shows (the editor
-// application's status bar; a tool's log line).
+// A generic background-job runner with progress and step reporting for the editor domain's hosts,
+// a generalized form of what EditorCookService does by hand. A submitted unit of work runs on a
+// worker thread so the host's main loop stays live, reports progress and steps through a
+// JobContext, and its completion fires on the main thread from Update(). Jobs run one at a time
+// (a submit while busy queues), so a cook, export or import never races the DBs. The host pumps
+// Update() each frame and reads Progress() for whatever it shows (the editor application's status
+// bar; a tool's log line).
 
 module;
 #include "Core/Prelude.h"
@@ -22,8 +22,8 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    // Handed to a job's worker function; thread-safe progress reporting back to the host. One mutex
-    // guards the whole snapshot (fraction/step/log); cancellation is a lock-free flag.
+    // Handed to a job's worker function for thread-safe progress reporting back to the host. One
+    // mutex guards the whole snapshot (fraction, step, log); cancellation is a lock-free flag.
     class JobContext
     {
     public:
@@ -34,7 +34,7 @@ export namespace editor
             m_fraction = (fraction < 0.0f) ? 0.0f : (fraction > 1.0f ? 1.0f : fraction);
         }
 
-        // Named step "index/count: label" (index 1-based for display; 0/0 = no step breakdown).
+        // A named step, "index/count: label" (index is 1-based for display; 0/0 means no step breakdown).
         void SetStep(StringView label, usize index = 0, usize count = 0)
         {
             ScopedLock lock(m_mutex);
@@ -43,14 +43,14 @@ export namespace editor
             m_stepCount = count;
         }
 
-        // Queue a line for the app's log/console (drained on the main thread by Update).
+        // Queues a line for the app's log or console (drained on the main thread by Update).
         void Log(StringView message)
         {
             ScopedLock lock(m_mutex);
             m_log.PushBack(String(message));
         }
 
-        // Cooperative cancellation: a long worker polls this and bails early if set.
+        // Cooperative cancellation: a long worker polls this and stops early if it is set.
         [[nodiscard]] bool CancelRequested() const noexcept { return m_cancel.load(); }
 
     private:
@@ -68,14 +68,14 @@ export namespace editor
     class EditorJobService
     {
     public:
-        // The allocator (required - the host decides) backs worker threads + jobs.
+        // The allocator (required; the host decides) backs the worker threads and jobs.
         explicit EditorJobService(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         ~EditorJobService() { Shutdown(); }
 
-        // Submit a job. `work` runs on a worker thread (reports via its JobContext) and returns a
-        // Status; `onDone` fires on the MAIN thread (from Update) with that Status. Runs immediately
-        // when idle, else queues behind the running job.
+        // Submits a job. `work` runs on a worker thread (reporting through its JobContext) and
+        // returns a Status; `onDone` fires on the main thread (from Update) with that Status. Runs
+        // immediately when idle, else queues behind the running job.
         void Submit(StringView title, Function<Status(JobContext&)> work,
                     Function<void(Status)> onDone = {})
         {
@@ -94,13 +94,13 @@ export namespace editor
         }
 
         // --- light lane ---------------------------------------------------------------
-        // Short CPU-only side work (editor preview bakes) on its OWN worker, concurrent
-        // with the build lane. Deliberately outside IsBusy(): that flag gates cook
-        // mutations, and a preview must never lock the build. No progress reporting, no
-        // cancellation - light work finishes in fractions of a second. `work` runs on the
-        // light worker; `onDone` fires on the MAIN thread from Update(). Results travel
-        // through state captured by both closures (work writes before onDone reads -
-        // the completion flag publishes them).
+        // Short CPU-only side work (editor preview bakes) on its own worker, concurrent with the
+        // build lane. It stays outside IsBusy(), because that flag gates cook mutations and a
+        // preview must never lock the build. There is no progress reporting and no cancellation,
+        // since light work finishes in fractions of a second. `work` runs on the light worker;
+        // `onDone` fires on the main thread from Update(). Results travel through state captured
+        // by both closures (work writes before onDone reads; the completion flag publishes the
+        // writes).
         void SubmitLight(Function<void()> work, Function<void()> onDone = {})
         {
             m_lightQueue.PushBack(PendingLight{static_cast<Function<void()>&&>(work),
@@ -113,7 +113,7 @@ export namespace editor
             return m_lightRunning.load() || !m_lightQueue.IsEmpty();
         }
 
-        // Request the running job stop (cooperative; the worker must poll CancelRequested()).
+        // Asks the running job to stop (cooperative; the worker must poll CancelRequested()).
         void CancelActive()
         {
             if (m_ctx)
@@ -122,8 +122,8 @@ export namespace editor
             }
         }
 
-        // Main-thread pump: drain the active job's log to `log`, and on completion fire its onDone +
-        // start the next queued job. Call once per frame.
+        // Main-thread pump: drains the active job's log to `log`, and on completion fires its
+        // onDone and starts the next queued job. Call once per frame.
         void Update(const Function<void(StringView)>& log = {})
         {
             if (m_ctx)
@@ -158,11 +158,9 @@ export namespace editor
             if (m_finished.exchange(false))
             {
                 JoinWorker();
-                // Final drain (worker is now joined, so no more appends): flush any log
-                // lines the worker wrote AFTER the drain above but before it finished.
-                // Without this, m_ctx.Reset() below discards a job's last log lines - a
-                // real race (fast jobs drop logs) and the source of the intermittent
-                // JobService `sawLog` test flake.
+                // Final drain (the worker is joined now, so nothing more is appended): flush any
+                // log lines the worker wrote after the drain above but before it finished.
+                // Without this, m_ctx.Reset() below would discard a fast job's last log lines.
                 if (m_ctx)
                 {
                     Array<String> tail = static_cast<Array<String>&&>(m_ctx->m_log);
@@ -187,7 +185,7 @@ export namespace editor
             }
         }
 
-        // Snapshot of the running job for whoever shows it (active=false when idle). Main-thread only.
+        // Snapshot of the running job for whoever shows it (active=false when idle). Main thread only.
         struct ProgressView
         {
             bool active = false;
@@ -217,7 +215,7 @@ export namespace editor
 
         void Shutdown()
         {
-            CancelActive(); // cooperative - a polling job bails early instead of blocking exit
+            CancelActive(); // cooperative: a polling job stops early instead of blocking exit
             JoinWorker();
             JoinLightWorker();
         }
@@ -245,7 +243,7 @@ export namespace editor
             }
         }
 
-        // Main thread: dequeue and launch the next light job (no-op if busy or empty).
+        // Main thread: dequeues and launches the next light job (does nothing if busy or empty).
         void StartNextLight()
         {
             if (m_lightRunning.load() || m_lightQueue.IsEmpty())
@@ -281,7 +279,7 @@ export namespace editor
             }
         }
 
-        // Main thread: dequeue and launch the next job (no-op if busy or empty).
+        // Main thread: dequeues and launches the next job (does nothing if busy or empty).
         void StartNext()
         {
             if (m_running.load() || m_queue.IsEmpty())
@@ -312,12 +310,12 @@ export namespace editor
         }
 
         UniquePtr<Thread> m_worker;
-        UniquePtr<JobContext> m_ctx;     // active job's context (worker writes, main reads)
+        UniquePtr<JobContext> m_ctx;     // the active job's context (the worker writes, the main thread reads)
         Function<void(Status)> m_onDone; // active job's completion (main thread)
         String m_title;                  // active job title (main thread)
         Atomic<bool> m_running{false};
         Atomic<bool> m_finished{false};
-        Status m_result{};      // worker-written, main-read after m_finished (release/acquire)
+        Status m_result{};      // worker writes; main thread reads after m_finished (release/acquire)
         Array<Pending> m_queue; // main-thread only
 
         // Light lane (see SubmitLight).

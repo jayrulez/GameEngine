@@ -3,19 +3,20 @@
 
 // UI.Toolkit - :floating_panel partition.
 //
-// A floating panel that hosts arbitrary content OVER another view (NOT an OS window and NOT
-// docking-managed - that is the DockableWindow / IDockableWindowHost world). A self-contained tool
-// window: a themed title bar (an Expander-style collapse chevron + title + a DockablePanel-style
-// close X, all hand-drawn for consistency with those controls - no IconButtons), a content region,
+// A floating panel that hosts arbitrary content over another view. It is not an OS window and
+// docking does not manage it (that is DockableWindow and IDockableWindowHost). A self-contained tool
+// window: a themed title bar (an Expander-style collapse chevron, the title, and a DockablePanel-style
+// close X, all drawn by hand to match those controls rather than with IconButtons), a content region,
 // and a bottom-right resize grip. Corners follow the theme's CornerRadius (rounded in the editor's
-// rounded theme, square in flat themes). Resize follows SplitView's pattern: the size is one
-// authoritative field mapped ABSOLUTELY from the pointer (no delta accumulation / no measured-size
-// read-back), so there is no jitter. Content fills the body, so resizing resizes the content.
+// rounded theme, square in flat themes). Resize works as in SplitView: the size is one
+// authoritative field mapped absolutely from the pointer, with no delta accumulation and no read-back
+// of the measured size, so there is no jitter. Content fills the body, so resizing resizes the content.
 //
-// Positioning: the panel must be hosted in an AbsoluteLayout; a header drag moves it by setting its
-// LayoutStyle Left/Top (NOT a render transform - ScreenToLocal ignores transforms, which would
-// offset every later hit-test; and NOT a margin - a margin box inflates the parent's measure).
-// Clamped to the parent so it can't leave it (a sibling pane would draw over it and steal input).
+// Positioning: the panel must be hosted in an AbsoluteLayout. A header drag moves it by setting its
+// LayoutStyle Left/Top. A render transform would not do, since ScreenToLocal ignores transforms and
+// every later hit-test would be offset; nor would a margin, since a margin box inflates the parent's
+// measure. The panel is clamped to the parent so it cannot leave it (a sibling pane would draw over
+// it and steal input).
 
 module;
 #include "Core/Prelude.h"
@@ -60,7 +61,7 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
-        /// The panel's initial/target size expressed as the desired CONTENT size (title bar and insets
+        /// The panel's initial or target size, expressed as the desired content size (title bar and insets
         /// are added). Clamped to the panel minimum. Resizing overrides this afterward.
         void SetPreferredContentSize(f32 width, f32 height)
         {
@@ -89,7 +90,7 @@ export namespace foundation::ui::toolkit
 
     protected:
         // Authoritative size = m_userW/m_userH (clamped to the panel min and the parent's available
-        // room). Content is a consequence of that size, never an input to it - the one-way flow that
+        // room). Content is a consequence of that size, never an input to it; this one-way flow
         // keeps resize stable.
         void OnMeasure(BoxConstraints constraints) override
         {
@@ -108,8 +109,8 @@ export namespace foundation::ui::toolkit
         {
             (void)left;
             (void)top;
-            // Re-clamp against the CURRENT parent size (available here). If the viewport shrank - the
-            // bottom dock expanded upward - pull the panel back inside; a changed X/Y needs another
+            // Re-clamp against the current parent size (available here). If the viewport shrank (the
+            // bottom dock expanded upward), pull the panel back inside; a changed X/Y needs another
             // layout pass to reposition it.
             ClampToParent(); // SetLayout marks layout damage when the position changed
             if (m_content && !m_collapsed)
@@ -125,7 +126,7 @@ export namespace foundation::ui::toolkit
             const f32 h = Height();
             const f32 radius = ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f);
 
-            // Body: themed rounded fill + border (theme CornerRadius; square in flat themes).
+            // Body: themed rounded fill and border (theme CornerRadius; square in flat themes).
             const Color fill =
                 ResolveStyleColor(StyleProperty::Background, Color{0.149f, 0.157f, 0.196f, 1.0f});
             const Color border =
@@ -160,7 +161,7 @@ export namespace foundation::ui::toolkit
                 }
             }
 
-            // Close X (DockablePanel idiom): two strokes; hover -> error color.
+            // Close X (DockablePanel idiom): two strokes, in the error color while hovered.
             const Color closeColor = ResolvePartColor(
                 u8"close-button", StyleProperty::TextColor,
                 m_closeHover ? ControlState::Hover : ControlState::Normal, chevronColor);
@@ -171,7 +172,7 @@ export namespace foundation::ui::toolkit
             ctx.VG().DrawLine(Float2{ccx + cs, ccy - cs}, Float2{ccx - cs, ccy + cs}, closeColor, 1.5f);
 
             // Clip the content to the body so it never spills past the panel (a narrow resize keeps
-            // the content inside the frame rather than drawing over the border / outside the panel).
+            // the content inside the frame rather than drawing over the border or outside the panel).
             if (!m_collapsed)
             {
                 ctx.PushClip(Rectangle{kContentInset, kHeaderHeight, Max(0.0f, w - 2.0f * kContentInset),
@@ -291,9 +292,10 @@ export namespace foundation::ui::toolkit
             }
             if (m_dragging)
             {
-                // Absolute mapping keeps the grabbed point under the cursor: new X = (mouse-in-parent)
-                // - grab = (e.X + Bounds.x) - grabLocal. Using X/Y (not a margin or a render transform)
-                // keeps Bounds - and thus every later hit-test coordinate - exact.
+                // Absolute mapping keeps the grabbed point under the cursor: the new X is the mouse
+                // position in the parent minus the grab point, (e.X + Bounds.x) - grabLocal. Using
+                // X/Y (not a margin or a render transform) keeps Bounds, and so every later hit-test
+                // coordinate, exact.
                 LayoutStyle placement = Layout();
                 placement.Left = e.X + Bounds.x - m_grabLocalX;
                 placement.Top = e.Y + Bounds.y - m_grabLocalY;
@@ -344,7 +346,7 @@ export namespace foundation::ui::toolkit
         static constexpr f32 kChevronX = 8.0f;
         static constexpr f32 kChevronSize = 8.0f;
         static constexpr f32 kCloseBoxW = 24.0f;
-        static constexpr f32 kMinWidth = 240.0f; // wide enough for a small tool row + property fields
+        static constexpr f32 kMinWidth = 240.0f; // wide enough for a small tool row and property fields
         static constexpr f32 kMinHeight = kHeaderHeight + 60.0f;
 
         void Capture()
@@ -396,11 +398,11 @@ export namespace foundation::ui::toolkit
         }
         [[nodiscard]] bool InResizeBand(Float2 p, bool& right, bool& bottom) const
         {
-            // The EDGE bands live in the content inset (the border area OUTSIDE the hosted
-            // content), so they never eat the content's own edge - otherwise a 9px band would claim
-            // the outer ~3px of a hosted PropertyGrid's scrollbar. The bottom-right
-            // CORNER keeps a larger grab square (the OS-window resize-grip convention; the
-            // corner of a scrollable area is dead space).
+            // The edge bands live in the content inset (the border area outside the hosted
+            // content), so they never take the content's own edge; otherwise a 9px band would
+            // claim the outer ~3px of a hosted PropertyGrid's scrollbar. The bottom-right corner
+            // keeps a larger grab square (the OS-window resize-grip convention; the corner of a
+            // scrollable area is dead space).
             const bool inCorner =
                 p.x >= Width() - kResizeCorner && p.y >= Height() - kResizeCorner;
             right = inCorner || p.x >= Width() - kContentInset;
@@ -408,7 +410,7 @@ export namespace foundation::ui::toolkit
             return (right || bottom) && p.y > kHeaderHeight;
         }
 
-        // Resize can't push the panel past the parent's right/bottom edge (Bounds.x/y track the
+        // Resize cannot push the panel past the parent's right/bottom edge (Bounds.x/y track the
         // LayoutStyle Left/Top).
         [[nodiscard]] f32 MaxWidthInParent() const
         {
@@ -427,8 +429,8 @@ export namespace foundation::ui::toolkit
             return Max(kMinHeight, Parent->Bounds.height - Bounds.y);
         }
 
-        // Keep the WHOLE panel inside its parent by clamping its LayoutStyle Left/Top
-        // (Bounds.x/y track them). Clamp against the INTENDED size (not the laid-out
+        // Keep the whole panel inside its parent by clamping its LayoutStyle Left/Top
+        // (Bounds.x/y track them). Clamp against the intended size (not the laid-out
         // Height()/Width(), which lags a frame). AbsoluteLayout does not clamp an overflowing
         // child, so this is the only guard; run it on every layout so the panel follows a
         // shrinking viewport (e.g. the bottom dock expanding upward) instead of sliding behind it.

@@ -5,8 +5,7 @@
 //
 // Visual state of a control as bit flags (combinable, e.g. Checked | Hover).
 // StateListDrawable uses these for drawable lookup with fallback; .sss selectors match
-// compound states. Ported from Sedulous.UI/src/Drawing/ControlState.bf (Beef flags enum
-// -> C++ enum class + bitwise operators).
+// compound states. An enum class with bitwise operators.
 
 module;
 #include "Core/Prelude.h"
@@ -58,7 +57,7 @@ export namespace foundation::ui
     {
         return (static_cast<u32>(value) & static_cast<u32>(flag)) != 0u;
     }
-    /// True when EVERY bit of `flags` is set in `value` (a compound selector `:hover:checked`
+    /// True when every bit of `flags` is set in `value` (a compound selector `:hover:checked`
     /// needs both; HasFlag answers for any one of them).
     [[nodiscard]] constexpr bool HasAllFlags(ControlState value, ControlState flags) noexcept
     {

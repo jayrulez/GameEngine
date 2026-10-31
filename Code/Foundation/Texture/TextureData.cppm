@@ -3,9 +3,8 @@
 
 // Foundation::Texture - :data partition
 //
-// TextureData: a CPU-side descriptor of pixel data staged for GPU upload (it
-// owns no GPU handle - the consumer creates the rhi::Texture from this). Ported
-// from Sedulous.Textures/TextureData.bf.
+// TextureData: a CPU-side descriptor of pixel data staged for GPU upload. It
+// owns no GPU handle; the consumer creates the rhi::Texture from it.
 
 module;
 #include "Core/Prelude.h"
@@ -86,11 +85,8 @@ export namespace foundation::texture
                             TextureFormatUtils::Convert(image.Format(), colorSpace));
         }
 
-        // Bytes per pixel for an RHI format (uncompressed formats; default 4).
-        // ONE table: rhi::BytesPerPixel (this used to carry its own copy, which defaulted
-        // unknown formats to 4 - wrong for RGBA16Unorm and Stencil8 - while the RHI's omitted
-        // sixteen formats entirely). 0 for block-compressed formats; CalculateMipSize sizes
-        // those by block.
+        // Bytes per pixel for an RHI format, read from rhi::BytesPerPixel so there is one
+        // table. 0 for block-compressed formats; CalculateMipSize sizes those by block.
         [[nodiscard]] static u32 GetBytesPerPixel(rhi::TextureFormat format)
         {
             return rhi::BytesPerPixel(format);

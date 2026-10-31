@@ -15,24 +15,25 @@ struct GpuLight {                            // matches render::GpuLight (64 byt
     float3 positionWS; float range;
     float3 color;      float intensity;
     float3 directionWS;float type;           // 0=Directional, 1=Point, 2=Spot
-    float innerCos; float outerCos; float shadowIndex;   // shadowIndex >= 0 -> casts shadow
+    float innerCos; float outerCos; float shadowIndex;   // shadowIndex >= 0: casts a shadow
     float shadowStrength;                              // 1 = full shadow, 0 = none
 };
 StructuredBuffer<GpuLight> Lights : register(t0, space0);
-// CSM cascade depth ARRAY (t1, one layer per cascade) + a comparison sampler (s0) for hardware PCF.
+// CSM cascade depth array (t1, one layer per cascade) and a comparison sampler (s0) for hardware PCF.
 Texture2DArray         ShadowMap     : register(t1, space0);
 SamplerComparisonState ShadowSampler : register(s0, space0);
 
-// IBL: SH9 diffuse irradiance coeffs (t5), prefiltered specular cube (t6), BRDF LUT (t7),
-// + a linear env sampler (s1). Diffuse uses spherical harmonics (no irradiance cube). Active only
+// IBL: SH9 diffuse irradiance coefficients (t5), prefiltered specular cube (t6), BRDF LUT (t7)
+// and a linear env sampler (s1). Diffuse uses spherical harmonics (no irradiance cube). Active only
 // when IBLMaxLod >= 0 (else the neutral dummies are bound and the flat-ambient path runs).
 StructuredBuffer<float4> IblSH       : register(t5, space0);
 TextureCube              PrefilterMap : register(t6, space0);
 Texture2D                BRDFLut      : register(t7, space0);
 SamplerState             EnvSampler   : register(s1, space0);
-// Reflection probes: a cube-ARRAY of prefiltered probe radiance (t8) + a probe metadata buffer
-// (t9). The view's ProbeBase and ProbeCount pick this scene's records; the forward loops them, box-tests +
-// parallax-projects + blends each by an influence weight (blendDistance falloff) over the global IBL.
+// Reflection probes: a cube array of prefiltered probe radiance (t8) and a probe metadata buffer
+// (t9). The view's ProbeBase and ProbeCount pick this scene's records. The forward pass loops over
+// them, box-tests and parallax-projects each, and blends it over the global IBL by an influence
+// weight (blendDistance falloff).
 TextureCubeArray         ProbeArray   : register(t8, space0);
 struct GpuProbe {                 // render::GpuProbe (64 bytes)
     float3 center;  float intensity;     // the capture centre (world) and the reflection's strength
@@ -59,12 +60,13 @@ float3 EvalSH9(float3 n) {
 static const float kShadowTexel = 1.0 / 1024.0;   // 1 / shadow resolution
 
 // Sample one cascade with a normal-offset bias (scaled by the cascade's world texel size, fading at
-// grazing angles) + 3x3 hardware PCF on its array layer. 1 = lit, 0 = fully shadowed.
+// grazing angles) and 3x3 hardware PCF on its array layer. 1 = lit, 0 = fully shadowed.
 float SampleCascade(int cascade, float3 worldPos, float3 N, float NdotL) {
     float texelWorld = CascadeTexelSize[cascade];
     // Normal-offset bias: push along the surface normal, scaled by the cascade's world texel size and
-    // FADING TO ZERO as the surface faces the light (1 - NdotL). Face-on receivers get ~no offset (so
-    // no visible gap at contacts); only grazing surfaces, where acne is worst, get the full push.
+    // fading to zero as the surface faces the light (1 - NdotL). Face-on receivers get almost no
+    // offset (so no visible gap at contacts); only grazing surfaces, where acne is worst, get the full
+    // push.
     float3 biasedPos = worldPos + N * (ShadowNormalBias * texelWorld * (1.0 - NdotL));
     float4 lc  = mul(float4(biasedPos, 1.0), CascadeViewProj[cascade]);
     if (lc.w <= 0.0) { return 1.0; }
@@ -105,9 +107,9 @@ float SampleCSM(float3 worldPos, float3 N, float NdotL, float viewDepth) {
     }
 
     // Far fade: dissolve shadow toward fully-lit as viewDepth approaches the last cascade's far edge
-    // (the shadow distance). Without this the coverage boundary is a hard line -- on a tilted camera
-    // it reads as a diagonal where directional shadows pop in/out while rotating. ShadowFarFade is a
-    // fixed fade WIDTH in world units (distance-independent), so the soft edge is the same physical
+    // (the shadow distance). Without it the coverage boundary is a hard line; on a tilted camera it
+    // reads as a diagonal where directional shadows pop in and out while rotating. ShadowFarFade is a
+    // fixed fade width in world units (distance-independent), so the soft edge has the same physical
     // thickness whatever the reach.
     float shadowFar = CascadeSplitFar[count - 1];
     float fadeBand  = max(ShadowFarFade, 0.5);
@@ -116,9 +118,10 @@ float SampleCSM(float3 worldPos, float3 N, float NdotL, float viewDepth) {
     return shadow;
 }
 
-// Local-light (spot/point) shadows: a shared 2D depth ATLAS (t2) + per-light entries (t3). Each entry
-// is a perspective world->light-clip matrix + the uv scale/bias of its tile in the atlas. Reuses the
-// comparison sampler. GpuLight.shadowIndex selects the entry (point lights use 6 faces in 5.3b).
+// Local-light (spot and point) shadows: a shared 2D depth atlas (t2) and per-light entries (t3).
+// Each entry is a perspective world->light-clip matrix and the uv scale and bias of its tile in the
+// atlas. Reuses the comparison sampler. GpuLight.shadowIndex selects the entry (a point light uses
+// six consecutive entries, one per cube face).
 Texture2DArray ShadowAtlas : register(t2, space0);   // layer 0 = realtime, layer 1 = static (cached)
 struct GpuLocalShadow {
     row_major float4x4 viewProj;
@@ -157,8 +160,8 @@ float SampleLocalShadow(int idx, float3 worldPos, float3 N, float3 lightPos) {
     return sum * (1.0 / 9.0);
 }
 
-// Pick a point light's cube face (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z) from the light->fragment direction
-// - the dominant axis. Matches BuildPointShadowFace's face ordering.
+// Pick a point light's cube face (0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z) from the light-to-fragment
+// direction by its dominant axis. Matches BuildPointShadowFace's face ordering.
 int CubeFace(float3 dir) {
     float3 a = abs(dir);
     if (a.x >= a.y && a.x >= a.z) { return dir.x > 0.0 ? 0 : 1; }
@@ -180,12 +183,12 @@ float ShadowFactor(GpuLight L, float3 worldPos, float3 N, float viewDepth) {
     return lerp(1.0, shadow, saturate(L.shadowStrength));
 }
 
-// Clustered light culling (set 3): per-cluster (offset,count) + the flat light-index list. When
+// Clustered light culling (set 3): per-cluster (offset, count) and the flat light-index list. When
 // ClusterGridX == 0 (clustering unavailable) the shader falls back to looping all lights.
 StructuredBuffer<uint2> ClusterOffsets      : register(t0, space3);
 StructuredBuffer<uint>  ClusterLightIndices : register(t1, space3);
 
-// Maps a fragment's screen position + positive view-space depth to a linear cluster index.
+// Maps a fragment's screen position and positive view-space depth to a linear cluster index.
 uint ClusterIndex(float2 screenPos, float viewDepth) {
     // SV_Position is in full-target pixels; the grid is viewport-local, so subtract the offset.
     float2 local = screenPos - float2((float)ClusterVpX, (float)ClusterVpY);
@@ -209,7 +212,7 @@ float DistributionGGX(float NdotH, float roughness) {
     float d  = (NdotH * a2 - NdotH) * NdotH + 1.0;
     return a2 / (PI * d * d);
 }
-// Height-correlated Smith GGX visibility (Karis 2013) - folds in 1/(4*NdotV*NdotL).
+// Height-correlated Smith GGX visibility (Karis 2013); folds in 1/(4*NdotV*NdotL).
 float VisibilitySmithGGX(float NdotV, float NdotL, float roughness) {
     float a = roughness * roughness;
     float lambdaV = NdotL * (NdotV * (1.0 - a) + a);
@@ -289,7 +292,7 @@ float3 DirectLight(float2 screenPos, float3 worldPos, float viewDepth, float3 N,
     float3 Lo = float3(0.0, 0.0, 0.0);
     lightCount = (uint)LightCount;
     if (ClusterGridX == 0) {
-        // Clustering unavailable - evaluate every light.
+        // Clustering unavailable: evaluate every light.
         uint count = (uint)LightCount;
         for (uint i = 0; i < count; ++i) {
             GpuLight L = Lights[LightOffset + i];
@@ -298,7 +301,7 @@ float3 DirectLight(float2 screenPos, float3 worldPos, float viewDepth, float3 N,
             Lo += c;
         }
     } else {
-        // Clustered - evaluate only the lights binned into this fragment's cluster.
+        // Clustered: evaluate only the lights binned into this fragment's cluster.
         uint   cluster = ClusterIndex(screenPos, viewDepth);
         uint2  oc = ClusterOffsets[cluster];
         lightCount = oc.y;
@@ -320,20 +323,21 @@ float3 AmbientLight(float3 worldPos, float3 N, float3 V, float3 albedo, float ro
                     float metallic, float3 F0, float ao) {
     float3 ambient;
     if (IBLMaxLod >= 0.0) {
-        // Image-based ambient: SH9 diffuse irradiance + split-sum prefiltered specular.
+        // Image-based ambient: SH9 diffuse irradiance and split-sum prefiltered specular.
         float  NdotV = max(dot(N, V), 1e-4);
         float3 Fr    = max(float3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0) - F0;
         float3 F_ibl = F0 + Fr * pow(1.0 - NdotV, 5.0);          // roughness-aware indirect Fresnel
         float3 kD    = (1.0 - F_ibl) * (1.0 - metallic);
-        // IblDiffuse: the sky-LIGHTING dimmer (authored; visible sky untouched).
+        // IblDiffuse: the sky-lighting dimmer (authored; the visible sky is untouched).
         float3 diffuseIBL = kD * albedo * (EvalSH9(N) / PI) * IblDiffuse;
         float3 R     = reflect(-V, N);
         float3 prefiltered = PrefilterMap.SampleLevel(EnvSampler, R, roughness * IBLMaxLod).rgb;
         // Reflection probes: loop the active probes, and for each whose box contains the fragment,
-        // box-project the reflection ray (parallax) + sample its prefiltered cube at roughness*maxLod, then
-        // blend all by an influence weight that fades to 0 over blendDistance near the box edge (soft seam).
-        // The accumulated probe reflection blends over the global IBL by the total weight (parallax = Lagarde
-        // box-projected cubemap; a cube captured from a point tracks geometry only after this projection).
+        // box-project the reflection ray (parallax) and sample its prefiltered cube at roughness*maxLod,
+        // then blend all by an influence weight that fades to 0 over blendDistance near the box edge,
+        // so probes meet softly. The accumulated probe reflection blends over the global IBL by the total
+        // weight. The parallax is Lagarde's box-projected cubemap: a cube captured from a point tracks
+        // geometry only after this projection.
         uint probeBase  = ProbeBase;    // this view's scene's records (multi-scene frames)
         uint probeCount = ProbeCount;
         float3 probeAccum = float3(0, 0, 0);
@@ -341,7 +345,7 @@ float3 AmbientLight(float3 worldPos, float3 N, float3 V, float3 albedo, float ro
         for (uint pi = 0u; pi < probeCount; ++pi) {
             GpuProbe pr = Probes[probeBase + pi];
             float3 bmin = pr.boxMin, bmax = pr.boxMax;
-            // Influence: distance to the nearest box face (negative outside) -> fade over blendDistance.
+            // Influence: the distance to the nearest box face (negative outside), faded over blendDistance.
             float3 d = min(worldPos - bmin, bmax - worldPos);
             float  edge = min(min(d.x, d.y), d.z);
             float  w = saturate(edge / max(pr.blendDistance, 1e-3));
@@ -367,8 +371,8 @@ float3 AmbientLight(float3 worldPos, float3 N, float3 V, float3 albedo, float ro
         float  Ess   = brdf.x + brdf.y;                          // multi-scatter energy compensation
         specularIBL *= 1.0 + F0 * (1.0 / max(Ess, 1e-3) - 1.0);  // (Kulla-Conty) restore single-scatter's lost energy
         specularIBL *= IblSpecular;                              // authored sky-reflection dimmer
-        // The authored flat ambient ADDS as a fill term in every sky mode (intensity 0 = pure
-        // IBL) - it is not an either/or with the environment.
+        // The authored flat ambient adds as a fill term in every sky mode (intensity 0 = pure
+        // IBL); it is not an alternative to the environment.
         ambient = (diffuseIBL + specularIBL + albedo * Ambient) * ao;
     } else {
         ambient = albedo * Ambient * ao;                         // flat-only fallback (no IBL available)

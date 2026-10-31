@@ -4,9 +4,8 @@
 // UI Toolkit - :dock_layout_node partition
 //
 // Serializable snapshot of a dock tree node, used by DockManager.ExportLayout/ApplyLayout for layout
-// persistence. Ported from Sedulous.UI.Toolkit/src/Docking/DockLayoutNode.bf. A PLAIN value struct
-// (NOT a View/Object). Beef owned children `First/Second ~ delete _` -> UniquePtr<DockLayoutNode>;
-// Beef `List<String> PanelIds` -> Array<String>.
+// persistence. A plain value struct
+// (not a View or Object) that owns its children.
 
 module;
 #include "Core/Prelude.h"

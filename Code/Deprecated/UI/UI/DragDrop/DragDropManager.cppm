@@ -4,11 +4,11 @@
 // UI - :drag_drop_manager partition
 //
 // Drag-and-drop state machine within a UIContext, driven by the InputManager at the mouse-event points.
-// Ported from Sedulous.UI/src/DragDrop/DragDropManager.bf. Like the Input/Tooltip managers this is a
-// by-value member of UIContext; all View-touching bodies live in the module impl unit (DragDrop/DragImpl.cpp),
-// so View/UIContext/RootView/PopupLayer/DragAdorner/IDragSource/IDropTarget are only forward-declared here.
-// Ownership: Beef `DragData ~ delete _` -> RefPtr<DragData>; the adorner is a raw pointer (PopupLayer owns
-// it, ownsView:true); source/drop-target views are borrowed raw pointers cleared by OnViewDeleted.
+// Like the Input/Tooltip managers this is a by-value member of UIContext; all View-touching bodies live
+// in the module impl unit (DragDrop/DragImpl.cpp), so View/UIContext/RootView/PopupLayer/DragAdorner/
+// IDragSource/IDropTarget are only forward-declared here. Ownership: the drag data is a
+// RefPtr<DragData>; the adorner is a raw pointer (PopupLayer owns it, ownsView:true); source and
+// drop-target views are borrowed raw pointers cleared by OnViewDeleted.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +17,7 @@ export module foundation.ui:drag_drop_manager;
 
 import foundation.core;
 import :drag_drop_effects;
-import :drag_data;   // RefPtr<DragData> member (complete type -> no incomplete-RefPtr gcc issue)
+import :drag_data;   // RefPtr<DragData> member (a complete type avoids gcc's incomplete-RefPtr issue)
 import :input_enums; // MouseButton
 import :enums;       // CursorType
 

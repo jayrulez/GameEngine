@@ -3,10 +3,10 @@
 
 // GUI - :drag_preview partition
 //
-// DragPreview: what follows the pointer while something is dragged and its source gave no preview
-// of its own (E7): the payload's label (`dragpreview`), with a badge (`dragpreview::effect`) saying
-// what a drop would do now: a plus for a copy, an arrow for a link, a barred circle where nothing
-// takes it, nothing for a move.
+// DragPreview follows the pointer during a drag whose source supplied no preview of its own. It
+// shows the payload's label (`dragpreview`) with a badge (`dragpreview::effect`) that says what a
+// drop would do at the current position: a plus for a copy, an arrow for a link, a barred circle
+// where no target accepts the drop, and no badge for a move.
 
 module;
 #include "Core/Prelude.h"
@@ -78,7 +78,7 @@ export namespace foundation::gui
                 pb.LineTo(cx + r, cy - r);
                 pb.LineTo(cx + r, cy - r + 5.0f);
             }
-            else // none takes it
+            else // no target accepts the drop
             {
                 pb.MoveTo(cx - r * 0.7f, cy - r * 0.7f);
                 pb.LineTo(cx + r * 0.7f, cy + r * 0.7f);

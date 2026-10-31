@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Shader properties - the `properties { ... }` block a custom shader declares its material
-// parameters in, and the HLSL the engine generates from it (Specs/custom-shaders.md, decided
-// 2026-10-12). The block is the ONE declaration of a shader's material layout, in both kinds of
+// Shader properties: the `properties { ... }` block a custom shader declares its material
+// parameters in, and the HLSL the engine generates from it. The block is the one declaration of
+// a shader's material layout, in both kinds of
 // custom shader: the engine replaces it with the set-2 declarations (the `Material` cbuffer, the
 // textures and the samplers), so the layout a material is cooked with and the one the shader
 // reads cannot disagree.
@@ -20,7 +20,7 @@
 // optional [min, max] range (the editor's slider). The cbuffer follows HLSL's packing rules,
 // through PackCbufferMember, which MaterialBuilder uses too.
 //
-// An effect block (Specs/wind-for-every-shader.md, ruled 2026-10-29) is the same grammar in an
+// An effect block is the same grammar in an
 // include, for a vertex effect's own parameters rather than a shader's:
 //
 //     effect Wind : WIND
@@ -116,8 +116,7 @@ export namespace foundation::shaders
     };
 
     // Where every effect's cbuffer binds: binding 1 of the material's set (the material's own
-    // buffer is b0, its textures and samplers sit at the +100 and +300 shifts), ruled in
-    // Specs/wind-for-every-shader.md, "Where the block binds".
+    // buffer is b0, and its textures and samplers sit at the +100 and +300 shifts).
     inline constexpr StringView kShaderEffectRegister = u8"register(b1, space2)";
     inline constexpr u32 kNoShaderEffectGate = ~0u;
 
@@ -510,7 +509,7 @@ export namespace foundation::shaders
             }
 
             // An effect's switch: `(gate)` after the default and range. Only an effect's grammar
-            // reads it; in a properties block the `(` stays the missing-`;` error it always was.
+            // reads it; in a properties block the `(` is a missing-`;` error.
             bool gate = false;
             if (grammar.gates && r.Take(u8'('))
             {
@@ -948,8 +947,8 @@ export namespace foundation::shaders
     // ConstantBuffer of it named for the effect, at the effect binding, so the effect's code reads
     // `Wind.Strength`, as a material and a script address the value. Not a plain cbuffer: its
     // members would be global names, and a shader that declares the effect's variant would then
-    // refuse a property of its own named `Speed` or `Height` (ruled in 2b-2: every custom shader
-    // may opt in, rule 4). A ConstantBuffer<T> packs its struct by the cbuffer rules, so the
+    // refuse a property of its own named `Speed` or `Height` (any custom shader may opt in to an
+    // effect). A ConstantBuffer<T> packs its struct by the cbuffer rules, so the
     // offsets are PackCbufferMember's.
     [[nodiscard]] inline String EffectStructName(StringView effectName)
     {

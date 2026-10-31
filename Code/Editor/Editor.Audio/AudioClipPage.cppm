@@ -3,18 +3,17 @@
 
 // Editor::Audio - the `editor.audio` module.
 //
-// AudioClipEditorPage: the audition page of an AudioClipAsset, on the GUI from its markup
-// (Data/Editor/AudioClipPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The clip's
-// peak waveform (decoded from its source file, the bytes the cook writes through) with the kit's
-// transport over it: Play, Stop and Restart are the playback actions over the page, auditioned
-// through the RUNTIME context's AudioSubsystem (the game's engine, buses and voices, so what is
-// heard is what the game plays), honouring the clip's loop, a playhead following the voice. Beside
-// it the clip's options on the grid, each edit one undo step, the audition following them (a loop
-// turned on loops the next play), and its source's facts read only (channels, rate, length). The
-// old page edited nothing itself; its options were the inspector's.
+// AudioClipEditorPage: the audition page of an AudioClipAsset, built on the GUI from its markup
+// (Data/Editor/AudioClipPage.xml). It shows the clip's peak waveform, decoded from its source file
+// (the same bytes the cook reads), with the kit's transport over it. Play, Stop and Restart are the
+// playback actions for the page. They audition through the runtime context's AudioSubsystem (the
+// game's engine, buses and voices, so what is heard is what the game plays), honour the clip's
+// loop, and move a playhead with the voice. Beside the waveform, the grid shows the clip's options,
+// where each edit is one undo step and the audition follows it (turning on loop loops the next
+// play), and the source's facts, read only (channels, rate, length).
 //
-// The sound cue page is its :sound_cue_page partition, the bus layout page its :bus_layout_page
-// (the rules it edits by its :bus_layout_model).
+// The sound cue page is the :sound_cue_page partition, and the bus layout page is :bus_layout_page,
+// with the rules it edits by in :bus_layout_model.
 
 module;
 #include "Core/Prelude.h"
@@ -46,8 +45,8 @@ export namespace editor
     namespace runtime = foundation::runtime;
     namespace audio = foundation::audio;
 
-    /// AudioClipEditorPage::kPeakBuckets, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// AudioClipEditorPage::kPeakBuckets, at namespace scope so another library can read it (MSVC does
+    /// not export a class's static constexpr member from a shared library).
     inline constexpr usize kAudioClipEditorPagePeakBuckets = 256;
 
     class AudioClipEditorPage final : public app::AssetObjectPage, public IPlaybackPage
@@ -83,10 +82,11 @@ export namespace editor
         void OnObjectChanged() override;
 
     private:
-        /// Reads the source file named by the asset: the clip to audition, its peaks and its facts;
-        /// the waveform's place says why when there is none.
+        /// Reads the source file the asset names: the clip to audition, its peaks and its facts.
+        /// When there is no clip, the waveform's area says why.
         void LoadClip();
-        /// The clip's options as the asset has them now (an edit, an undo): the next play takes them.
+        /// Applies the clip's options as the asset now has them (after an edit or an undo); the next
+        /// play uses them.
         void ApplyOptions();
         void Audition();
         void StopAudition();
@@ -95,7 +95,7 @@ export namespace editor
 
         UniquePtr<AuditionVoice> m_voice; // through the runtime context's audio (none in a test)
         RefPtr<audio::AudioClip> m_clip;
-        String m_loadedFile; // the source the clip was read from (a new one reads it again)
+        String m_loadedFile; // the source the clip was read from (a different source is read again)
         RefPtr<WaveformView> m_waveform;
         foundation::gui::Node* m_stage = nullptr;
         foundation::gui::Node* m_empty = nullptr;
@@ -115,8 +115,8 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The audio pages' registration (from the editor's assembly), each page asking for its
-    /// services when it is made; the clip thumbnails with them.
+    /// Registers the audio pages (called from the editor's assembly), each asking for its services
+    /// when it is made, and the audio clip thumbnail generator.
     inline void RegisterAudioClipEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

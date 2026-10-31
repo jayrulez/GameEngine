@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the live editing tools (Sedulous fb32ee69) over a real EditorContext
-// holding a headless scene page: building a level entity by entity, each call one undo step;
-// components added and removed; a prefab placed and linked; a behaviour listed; the refusals.
+// Editor::Scene tests: the live editing tools over a real EditorContext holding a headless scene
+// page. They build a level entity by entity, with each call one undo step; add and remove
+// components; place and link a prefab; list a behaviour; and check the refusals.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -28,8 +28,8 @@ using json::JsonValue;
 
 namespace
 {
-    // A scene page to the editor: a real edit context over a scene with the managers the test
-    // edits, and a prefab resolver answering one prefab.
+    // A page the editor treats as a scene page: a real edit context over a scene with the
+    // managers the test edits, and a prefab resolver that knows one prefab.
     class EditablePage final : public EditorPage, public ISceneEditorPage
     {
     public:
@@ -173,7 +173,7 @@ TEST_CASE("scene-edit-tools: an agent builds a level one undo step at a time")
     EditorCommandStack& commands = page->Commands();
     scene::Scene& level = page->EditContext().Scene();
 
-    // An entity, placed: one undo step for the create and its transform together.
+    // Create and place an entity: the create and its transform are one undo step together.
     Answer made = Call(server, u8"entity_create",
                        u8"{\"name\":\"Platform\",\"position\":[1,2,3],\"yawDegrees\":90,\"scale\":[2,1,2]}");
     REQUIRE(made.ok);
@@ -183,13 +183,13 @@ TEST_CASE("scene-edit-tools: an agent builds a level one undo step at a time")
     CHECK(transform.Get(u8"scale").At(0).AsNumber() == doctest::Approx(2.0));
     CHECK(transform.Get(u8"rotation").At(1).AsNumber() == doctest::Approx(0.70710678)); // a quarter turn
     commands.Undo();
-    CHECK_FALSE(level.FindEntityByName(u8"Platform").IsAssigned()); // create and placement, one step
+    CHECK_FALSE(level.FindEntityByName(u8"Platform").IsAssigned()); // create and placement undo together
     commands.Redo();
     const scene::EntityHandle redone = level.FindEntityByName(u8"Platform");
     REQUIRE(redone.IsAssigned());
     CHECK(level.GetLocalTransform(redone).position.y == doctest::Approx(2.0f));
 
-    // Components by wire name, added once; removed by name.
+    // Components are added by wire name, only once, and removed by name.
     Answer added = Call(server, u8"component_add", u8"{\"entity\":\"Platform\",\"component\":\"light\"}");
     REQUIRE(added.ok);
     CHECK(HasComponent(added.payload.Get(u8"entity"), u8"light"));
@@ -201,8 +201,8 @@ TEST_CASE("scene-edit-tools: an agent builds a level one undo step at a time")
     REQUIRE(removed.ok);
     CHECK_FALSE(HasComponent(removed.payload.Get(u8"entity"), u8"light"));
 
-    // A child made under the platform, then renamed, switched off and moved to the root in one
-    // step; a parent loop is refused.
+    // Create a child under the platform, then rename it, switch it off and move it to the root in
+    // one step. A parent loop is refused.
     Answer child = Call(server, u8"entity_create", u8"{\"name\":\"Lamp\",\"parent\":\"Platform\"}");
     REQUIRE(child.ok);
     CHECK(child.payload.Get(u8"entity").Get(u8"parent").AsString() == platformId.AsView());
@@ -224,7 +224,7 @@ TEST_CASE("scene-edit-tools: an agent builds a level one undo step at a time")
     CHECK(level.GetParent(lamp) == level.FindEntityByName(u8"Platform"));
     commands.Redo();
 
-    // A prefab placed and linked to its prefab, at its position; an unknown one refused.
+    // A prefab is placed at its position and linked to its prefab; an unknown prefab is refused.
     Answer spawned = Call(server, u8"prefab_spawn",
                           Format(u8"{{\"prefab\":\"{}\",\"position\":[4,0,-2]}}",
                                  GuidText(page->prefabId).AsView())
@@ -240,7 +240,8 @@ TEST_CASE("scene-edit-tools: an agent builds a level one undo step at a time")
                           Format(u8"{{\"prefab\":\"{}\"}}", GuidText(Guid::Generate(rng)).AsView()).AsView());
     CHECK(missing.error.AsView().StartsWith(u8"no prefab"));
 
-    // A script on an entity: entity_inspect lists the behaviour; one not cooked is refused.
+    // A script on an entity: entity_inspect lists the behaviour, and one that is not cooked is
+    // refused.
     const Guid script = Guid::Generate(rng);
     Guid platform;
     REQUIRE(Guid::TryParse(platformId.AsView(), platform));
@@ -276,7 +277,7 @@ TEST_CASE("scene-edit-tools: an agent builds a level one undo step at a time")
     Answer noBehaviour = Call(server, u8"behavior_set", u8"{\"entity\":\"Platform\",\"index\":3}");
     CHECK(noBehaviour.error.AsView().StartsWith(u8"'Platform' has no behaviour 3"));
 
-    // A deletion takes the subtree; while simulating, every edit is refused.
+    // A deletion removes the subtree; while simulating, every edit is refused.
     Answer deleted = Call(server, u8"entity_delete", u8"{\"entity\":\"Platform\"}");
     REQUIRE(deleted.ok);
     CHECK_FALSE(level.FindEntityByName(u8"Platform").IsAssigned());

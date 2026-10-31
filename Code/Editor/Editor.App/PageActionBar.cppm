@@ -3,12 +3,12 @@
 
 // Editor App - :page_action_bar partition
 //
-// PageActionBar: a page's bar bound to the editor's actions over THAT page (Documentation/Specs/
-// editor-gui.md, 5.3, layer 2). The GUI's commands keep one state each for the whole window, but a
-// page's Save, Undo or Simulate acts on and shows its own page: two pages side by side each have
-// theirs. So each button is bound to an action id; a click executes the action with the page as its
-// subject, and Sync, once a frame, gives the button the action's label and keys (its tooltip),
-// whether it is enabled and checked over the page and why it is disabled, each only when it changed.
+// PageActionBar: a page's bar bound to the editor's actions over that page. The GUI's commands keep
+// one state each for the whole window, but a page's Save, Undo or Simulate acts on and shows its
+// own page, so two pages side by side each have their own. Each button is therefore bound to an
+// action id: a click executes the action with the page as its subject, and Sync, once a frame,
+// gives the button the action's label and keys (its tooltip), whether it is enabled and checked
+// over the page, and why it is disabled, each only when it changed.
 module;
 #include "Core/Prelude.h"
 
@@ -34,8 +34,8 @@ export namespace editor::app
         PageActionBar(const PageActionBar&) = delete;
         PageActionBar& operator=(const PageActionBar&) = delete;
 
-        /// `button` runs action `id` over the page from now on; Sync shows the action on it. Null
-        /// binds nothing (a bar's markup without that button).
+        /// `button` runs action `id` over the page from now on, and Sync shows the action's state on
+        /// it. Null binds nothing (a bar's markup without that button).
         void Bind(gui::ButtonBase* button, StringView id)
         {
             if (button == nullptr)
@@ -50,7 +50,7 @@ export namespace editor::app
             m_bound.PushBack(Move(bound));
             Show(m_bound.Back());
         }
-        /// Each bound button as its action is now over the page.
+        /// Updates each bound button to its action's current state over the page.
         void Sync()
         {
             for (Bound& bound : m_bound)

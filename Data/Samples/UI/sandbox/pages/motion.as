@@ -1,7 +1,7 @@
-// Motion: a level's end, played with tweens (E14). The card fades in and springs from small to
-// its size; a sequence waits, pops each gem (a fade beside an ease-out-back scale, together),
-// fills the score bar while a label bound to it counts, then slides a toast in, waits and slides
-// it out. Every tween gives its start, so playing again starts over from the same place.
+// Motion: a level's end screen, played with tweens. The card fades in and springs from small to
+// its full size. A sequence waits, pops each gem (a fade and an ease-out-back scale together),
+// fills the score bar while a label bound to it counts up, then slides a toast in, waits and
+// slides it out. Every tween states its start value, so playing again starts from the same place.
 
 funcdef bool EventHandler(GuiEvent e);
 funcdef string TextExpression();

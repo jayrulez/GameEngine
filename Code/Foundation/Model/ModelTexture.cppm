@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Texture-related enums and the ModelTexture class.
-/// Ported from Sedulous.Models/ModelTexture.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -116,7 +115,7 @@ export namespace foundation::model
         void setName(StringView n) { m_name = String(n); }
         void setUri(StringView u) { m_uri = String(u); }
 
-        /// The resolved on-disk file when the loader left the texture UNDECODED because it is a
+        /// The resolved on-disk file when the loader left the texture undecoded because it is a
         /// GPU-ready container (a DDS: block-compressed levels a pipeline passes through rather
         /// than re-encodes); empty when the loader decoded the pixels (or found nothing). A
         /// consumer that needs pixels loads this file through the generic image loader.

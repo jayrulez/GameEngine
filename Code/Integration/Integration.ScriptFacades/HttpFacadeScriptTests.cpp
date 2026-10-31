@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.http.script - the Http facade on both script backends (Documentation/Specs/
-// tls-http-wss.md, P5). A stand-in client records what the scripts send and answers when the test
-// says, so the facade is checked without a network: get, post, and send with its headers reach
-// the client as asked; handlers hear (status, body, error) on the pump; a cancelled request is
-// never answered; the client is made only on the first request; a context with no Http service
-// gets 0 back.
+// foundation.http.script: the Http facade on both script backends. A stand-in client records what
+// the scripts send and answers when the test says, so the facade is checked without a network.
+// get, post, and send with its headers reach the client as asked; handlers receive (status, body,
+// error) on the pump; a cancelled request is never answered; the client is made only on the first
+// request; and a context with no Http service gets 0 back.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -130,7 +129,7 @@ namespace
         REQUIRE(fx.log[2].request.headers.Size() == 2);
         CHECK(http::FindHeader(fx.log[2].request.headers, u8"X-Token") == StringView(u8"abc"));
         CHECK(http::FindHeader(fx.log[2].request.headers, u8"Accept") == StringView(u8"text/plain"));
-        CHECK(fx.log[3].cancelled); // the script cancelled its fourth at once
+        CHECK(fx.log[3].cancelled); // the script cancelled its fourth request at once
 
         fx.client->Answer(0, Fixture::Response(200, u8"top: 42"));
         fx.client->Answer(1, Fixture::Response(404, u8"no"));

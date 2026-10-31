@@ -3,11 +3,11 @@
 
 /// Foundation::Render - the `:bloom` partition.
 ///
-/// HDR bloom via a downsample/upsample pyramid (Jimenez "Next Generation Post Processing in Call of
-/// Duty" - 13-tap downsample + 9-tap tent upsample, additive). The first downsample soft-knee-
-/// thresholds + Karis-averages to keep fireflies out. The pyramid is built from render-graph
-/// transients (sized per view, so no resize handling); the result is composited additively by the
-/// tonemap pass. Runs on the linear HDR scene, before tonemap.
+/// HDR bloom via a downsample/upsample pyramid (Jimenez, "Next Generation Post Processing in Call of
+/// Duty": a 13-tap downsample and a 9-tap tent upsample, additive). The first downsample applies a
+/// soft-knee threshold and a Karis average to keep fireflies out. The pyramid is built from
+/// render-graph transients (sized per view, so no resize handling); the tonemap pass composites the
+/// result additively. Runs on the linear HDR scene, before tonemap.
 
 module;
 #include "Core/Prelude.h"
@@ -40,8 +40,9 @@ export namespace foundation::render
     };
     static_assert(sizeof(GpuBloomPush) == 32, "push BloomPush layout drift");
 
-    // Builds the bloom pyramid from an HDR input; returns the mip-0 (half-res) accumulated bloom handle,
-    // which the tonemap composites. Owns the down/up pipelines + sampler; the pyramid is graph transients.
+    // Builds the bloom pyramid from an HDR input and returns the mip-0 (half-res) accumulated bloom
+    // handle, which the tonemap composites. Owns the down and up pipelines and the sampler; the pyramid
+    // is graph transients.
     class BloomPass
     {
     public:
@@ -61,7 +62,8 @@ export namespace foundation::render
         [[nodiscard]] rhi::TextureFormat Format() const noexcept { return kBloomFormat; }
 
         // Declare the pyramid for one view's HDR input. Returns the accumulated bloom (mip 0, half-res), or
-        // an invalid handle if the view is too small. threshold/knee gate what blooms (soft-knee prefilter).
+        // an invalid handle if the view is too small. threshold and knee gate what blooms (soft-knee
+        // prefilter).
         [[nodiscard]] rendergraph::RGHandle DeclareBloom(rendergraph::RenderGraph& graph,
                                                          rendergraph::RGHandle hdr, u32 vpW,
                                                          u32 vpH, f32 threshold, f32 knee);
@@ -69,8 +71,8 @@ export namespace foundation::render
     private:
         rhi::RenderPipeline* MakePipeline(StringView name, bool additive);
 
-        // Bind group over a (transient) source view, cached by view pointer + generation. Transients are
-        // pooled with stable generations across frames, so this stabilizes; a resize bumps the generation.
+        // Bind group over a transient source view, cached by view pointer and generation. Transients are
+        // pooled with stable generations across frames, so the cache settles; a resize bumps the generation.
         rhi::BindGroup* EnsureBindGroup(rhi::TextureView* view, u64 generation);
 
         void Shutdown();

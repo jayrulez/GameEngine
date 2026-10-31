@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the splash the editor shows while it starts (drawn on the CPU: its logo, its
-// status line and its progress bar), the logo the Project panel and the project manager show, and
-// the window icon, all from the repository's branding files.
+// Editor::App tests: the splash the editor shows while it starts (its logo, status line and progress
+// bar, drawn on the CPU), the logo the Project panel and the project manager show, and the window
+// icon, all from the repository's branding files.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -108,7 +108,7 @@ TEST_CASE("splash: the logo, the status line and the progress bar, drawn on the 
     splash.Step(u8"Opening Level1", 0.5f);
     CHECK(splash.Status() == StringView(u8"Opening Level1"));
     CHECK(splash.Progress() == doctest::Approx(0.5f));
-    // The bar: filled (the accent) up to half its width, the track after.
+    // The bar is filled with the accent up to half its width, with the track after it.
     const u32 barY = 255;
     const Pixel filled = At(splash, 40 + 120, barY);
     const Pixel track = At(splash, 40 + 360, barY);
@@ -131,8 +131,8 @@ TEST_CASE("splash: the logo, the status line and the progress bar, drawn on the 
     CHECK(At(splash, 40 + 470, barY).r == 0xF5);
 }
 
-// On a scaled display the splash is drawn at the scale (the user's 175% monitor showed it small):
-// twice the size at 200%, its layout and its text with it.
+// On a scaled display the splash is drawn at that scale: twice the size at 200%, with its layout and
+// its text scaled too.
 TEST_CASE("splash: at a display scale it is that much larger, its layout and text with it")
 {
     Array<u8> logo; // the logo at the scale's size: an opaque red block, 40 x 20
@@ -155,8 +155,8 @@ TEST_CASE("splash: at a display scale it is that much larger, its layout and tex
     const u32 barY = 255 * 2;
     CHECK(At(splash, 80 + 240, barY).r == 0xF5); // filled to half of the doubled bar
     CHECK(At(splash, 80 + 720, barY).r == 0x2E); // the track after
-    // The status text drew on its doubled line, and its glyphs are the larger face's: ink reaches
-    // higher above the baseline than the 100% face's 15 px could.
+    // The status text drew on its doubled line in the larger face: its ink reaches higher above the
+    // baseline than the 15 px of the 100% face could.
     i32 top = -1;
     for (u32 y = 440; y < 480 && top < 0; ++y)
         for (u32 x = 80; x < 400 && top < 0; ++x)
@@ -166,7 +166,7 @@ TEST_CASE("splash: at a display scale it is that much larger, its layout and tex
     CHECK(472 - top > 15);
 }
 
-// The logo for a scale: the 1x picture at 100%, the 2x one resampled above it.
+// The logo for a scale: the 1x picture at 100%, and the 2x picture resampled above that.
 TEST_CASE("splash: its logo loads at the size the scale asks for")
 {
     foundation::image::Image one;
@@ -181,7 +181,7 @@ TEST_CASE("splash: its logo loads at the size the scale asks for")
     REQUIRE(app::LoadEditorSplashLogo(DataRoot().AsView(), 1.75f, between));
     CHECK(between.Width() == 770u);
     CHECK(between.Height() == 166u);
-    // Resampled, not emptied: the mark's ink is still there, opaque somewhere.
+    // Resampling keeps the mark: some of its pixels are still opaque.
     bool opaque = false;
     for (usize i = 3; i < between.PixelData().Size() && !opaque; i += 4)
         opaque = between.PixelData()[i] == 255;
@@ -197,7 +197,7 @@ TEST_CASE("splash: the editor's logo and window icon load from the branding file
     IconWindow window;
     REQUIRE(app::ApplyEditorWindowIcon(window, DataRoot().AsView()));
     REQUIRE(window.sizes.Size() == 4u);
-    CHECK(window.sizes[0] == 32u); // the normal scale's first
+    CHECK(window.sizes[0] == 32u); // the size for the normal scale comes first
     CHECK(window.sizes[3] == 256u);
     IconWindow none;
     CHECK_FALSE(app::ApplyEditorWindowIcon(none, u8"/nowhere"));

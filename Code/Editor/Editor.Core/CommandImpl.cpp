@@ -3,14 +3,13 @@
 
 // Editor::Core - :command partition.
 //
-// The editor undo/redo spine: IEditorCommand + EditorCommandStack. Lumix WorldEditor
-// semantics:
-//   * every mutation is a command - a failed Execute() means the command is DROPPED, not pushed;
-//   * same-type merge against the stack top (a slider drag coalesces into one undo entry);
-//   * Begin/EndGroup transactions undo/redo atomically, consecutive same-type groups coalesce
-//     unless locked (LockGroup after e.g. "create entity + add component" keeps later identical
-//     actions separate).
-// Each editor page owns its own stack (see :page); the context routes Edit>Undo/Redo to the
+// The editor's undo and redo: IEditorCommand and EditorCommandStack.
+//   * Every mutation is a command; a command whose Execute() fails is dropped, not pushed.
+//   * A command merges into the stack top of the same type (a slider drag becomes one undo entry).
+//   * Begin/EndGroup transactions undo and redo atomically, and consecutive groups of the same
+//     type coalesce unless locked (LockGroup after, say, creating an entity and adding a component
+//     keeps later identical actions separate).
+// Each editor page owns its own stack (see :page); the context routes Edit > Undo and Redo to the
 // active page's stack.
 
 module;
@@ -107,7 +106,7 @@ namespace editor
                    m_stack[static_cast<usize>(i)]->TypeId() != detail::kEndGroupTypeId)
             {
                 const bool ok = m_stack[static_cast<usize>(i)]->Execute();
-                DIAGNOSTIC_ASSERT(ok); // replaying a previously-successful command must not fail
+                DIAGNOSTIC_ASSERT(ok); // replaying a command that succeeded before must not fail
                 (void)ok;
                 ++i;
             }
@@ -159,8 +158,9 @@ namespace editor
     {
         DIAGNOSTIC_ASSERT(m_inGroup);
         m_inGroup = false;
-        // Nothing ran inside: no undo step for the user to hit and see nothing happen. The
-        // begin marker goes (it is the undo top), and nobody is notified - nothing changed.
+        // Nothing ran inside the group, so it must not leave an undo step that does nothing. The
+        // begin marker is removed (it is the undo top), and nobody is notified, since nothing
+        // changed.
         if (m_undoIndex >= 0 &&
             m_stack[static_cast<usize>(m_undoIndex)]->TypeId() == detail::kBeginGroupTypeId)
         {

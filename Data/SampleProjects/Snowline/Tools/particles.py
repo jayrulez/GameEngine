@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Snowline's particle effects, written through the editor's MCP tools (PaperKid's fx.py, its
-helpers kept): a soft round sprite (a texture made here) and the board's snow:
+"""Snowline's particle effects, written through the editor's MCP tools with the helpers from
+PaperKid's fx.py: a soft round sprite (a texture made here) and the board's snow:
 - Spray: powder thrown off the board's edge while it carves hard (continuous; Board.as plays and
   stops it on the rider's Spray entity).
 - Powder: a burst of snow as the board lands (Board.as restarts it on the rider's Powder entity).

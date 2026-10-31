@@ -5,11 +5,11 @@
 //
 // Holds the View-touching bodies of FocusManager / InputManager / ShortcutManager and View's
 // manager-querying methods (IsHovered/IsFocused/IsFocusWithin). These call across the whole View
-// cluster, so - like UIClusterImpl.cpp - they live in an implementation unit (outside the interface
+// cluster, so, like UIClusterImpl.cpp, they live in an implementation unit (outside the interface
 // partition dependency graph) rather than in the manager partitions (which only forward-declare the
-// view types). All subsystem hooks are now wired: DragDrop (UpdateDrag/BeginPotentialDrag/EndDrag/
-// Escape-cancel), Tooltip (OnHoverChanged/OnMouseDown), PopupLayer (HandleClickOutside), Shortcuts,
-// and accelerator search.
+// view types). Input also drives the other subsystems' hooks: DragDrop (UpdateDrag/BeginPotentialDrag/
+// EndDrag/Escape-cancel), Tooltip (OnHoverChanged/OnMouseDown), PopupLayer (HandleClickOutside),
+// Shortcuts, and accelerator search.
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +38,7 @@ namespace foundation::ui
         {
             return false;
         }
-        // Text-editing views always show their focus visual (border + caret) - you need to see
+        // Text-editing views always show their focus visual (border and caret): you need to see
         // where typing goes regardless of how focus arrived. Everything else draws the ring only
         // for keyboard-acquired focus (the :focus-visible split; see FocusSource).
         if (WantsTextInput())
@@ -96,7 +96,7 @@ namespace foundation::ui
             if (m_focusSource != source)
             {
                 m_focusSource = source;
-                view->InvalidateVisual(); // focus ring only - geometry unchanged
+                view->InvalidateVisual(); // focus ring only; geometry unchanged
             }
             return;
         }
@@ -167,7 +167,7 @@ namespace foundation::ui
         View* view = m_context->GetViewById(saved.id);
         if (view == nullptr)
         {
-            return; // destroyed while the popup was open (ids never recycle - resolve is safe)
+            return; // destroyed while the popup was open (ids never recycle, so resolving is safe)
         }
         // The view may have been disabled, hidden, or made non-focusable while the popup was open;
         // restoring focus onto it would strand the keyboard. Leave focus cleared instead.
@@ -399,10 +399,9 @@ namespace foundation::ui
         {
             output.PushBack(view);
         }
-        // The VISUAL children, as drawing and hit testing walk them: a dialog holds its content
-        // in an internal layout that is not a ViewGroup child, and its buttons were unreachable
-        // (Tab did nothing inside a dialog; FocusFirstIn found nothing, so Show fell back to
-        // focusing the dialog itself).
+        // The visual children, as drawing and hit testing walk them: a dialog holds its content
+        // in an internal layout that is not a ViewGroup child, so a walk of the logical children
+        // alone would never reach its buttons.
         if (ViewGroup* group = Cast<ViewGroup>(view))
         {
             for (usize i = 0; i < group->VisualChildCount(); ++i)
@@ -464,7 +463,7 @@ namespace foundation::ui
     {
         // Scope keyboard traversal to the topmost focus-taking popup when one is open: modals trap
         // Tab/arrows (no activating background buttons through a backdrop), and popup content is
-        // keyboard-reachable at all (popups are NOT ViewGroup children of the PopupLayer, so the
+        // keyboard-reachable at all (popups are not ViewGroup children of the PopupLayer, so the
         // full-root walk never finds them). Falls back to the window root otherwise.
         RootView* root = m_context->ActiveInputRoot();
         if (root != nullptr)
@@ -584,8 +583,9 @@ namespace foundation::ui
         View* hitView = m_context->GetViewById(m_hoveredId);
 
         // Popup click-outside detection: hand the hit view to the layer so it can close the popups the
-        // click landed outside of (inside the topmost popup = no-op; a lower popup = close those above;
-        // completely outside = close every close-on-click-outside popup). LMB outside consumes the click.
+        // click landed outside of: inside the topmost popup does nothing, inside a lower popup closes
+        // those above it, and completely outside closes every close-on-click-outside popup. A left
+        // click outside is consumed.
         if (RootView* root = m_context->ActiveInputRoot())
         {
             PopupLayer* popupLayer = root->GetPopupLayer();
@@ -765,7 +765,7 @@ namespace foundation::ui
         FocusManager* focus = m_context->GetFocusManager();
         View* focused = focus->FocusedView();
 
-        // Tab drives focus traversal - except when the focused view opts in via WantsTabKey
+        // Tab drives focus traversal, except when the focused view opts in via WantsTabKey
         // (code editors inserting indentation): those views get Tab through normal dispatch
         // first, and traversal runs as the fallback below when they leave it unhandled (the
         // same dispatch-first shape as the Return/OnActivate fallback).
@@ -802,11 +802,10 @@ namespace foundation::ui
             return true;
         }
 
-        // Return ACTIVATES the focused view - but only as a fallback AFTER normal dispatch
-        // (deliberate deviation from Sedulous, which converted Return pre-dispatch: that locked
-        // text controls out of ever seeing Return in OnKeyDown - commit-on-Enter, multiline
-        // newlines - and swallowed it even when OnActivate was a no-op). Buttons and other
-        // activatables don't handle Return in OnKeyDown, so they activate exactly as before.
+        // Return activates the focused view, but only as a fallback after normal dispatch, so
+        // text controls see Return in OnKeyDown (commit on Enter, multiline newlines) and a
+        // Return that OnActivate would ignore is not swallowed. Buttons and other activatables
+        // do not handle Return in OnKeyDown, so they still activate.
         if (focused != nullptr && !isRepeat && key == KeyCode::Return)
         {
             focused->OnActivate();
@@ -926,13 +925,13 @@ namespace foundation::ui
             if (View* oldHovered = m_context->GetViewById(m_hoveredId))
             {
                 oldHovered->OnMouseLeave();
-                oldHovered->InvalidateVisual(); // hover tint OFF (visual: no relayout)
+                oldHovered->InvalidateVisual(); // hover tint off (visual: no relayout)
             }
             m_hoveredId = newHoverId;
             if (hitView != nullptr)
             {
                 hitView->OnMouseEnter();
-                hitView->InvalidateVisual(); // hover tint ON (visual: no relayout)
+                hitView->InvalidateVisual(); // hover tint on (visual: no relayout)
             }
             // Notify tooltip manager of hover change.
             m_context->Tooltips()->OnHoverChanged(hitView);

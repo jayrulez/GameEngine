@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// RHI logging shim. The ported backends use printf-style char* logging
-// (logError / logWarning / logErrorf / logWarningf); this routes those to
-// the console. A thin compatibility layer so the large backend bodies
-// port unchanged.
+// RHI logging. The backends log printf-style char* messages (LogError, LogWarning, LogErrorf,
+// LogWarningf and the Info forms); these route them to the console, through an optional sink.
 
 module;
 #include "Core/Prelude.h"
@@ -21,8 +19,9 @@ export namespace foundation::rhi
 {
     /// Optional sink every RHI log line passes through before the console: the validation
     /// layer's diagnostics are observable in tests this way (its Submit reports return void).
-    /// Return true to swallow the line. Process-wide state, so the slot lives in an impl unit
-    /// (LogImpl.cpp), never inline here (shared-libraries.md rendezvous rule).
+    /// Return true to swallow the line. This is process-wide state, so the slot lives in an
+    /// implementation unit (LogImpl.cpp) rather than inline here, where each shared library
+    /// would get its own copy.
     using LogSink = bool (*)(void* context, bool error, const char* utf8);
     void SetLogSink(LogSink sink, void* context) noexcept;
     [[nodiscard]] bool DispatchToLogSink(bool error, const char* utf8) noexcept;

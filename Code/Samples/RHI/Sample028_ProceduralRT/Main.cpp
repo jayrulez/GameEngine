@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample028 -- Procedural RT (AABB Spheres). Ported from Sedulous Sample028_ProceduralRT.
+/// Sample028 -- Procedural RT (AABB Spheres).
 /// Demonstrates procedural ray tracing geometry using AABBs.
 /// Renders spheres via intersection shaders inside axis-aligned bounding boxes.
 /// Tests GeometryType.AABBs, ProceduralHitGroup, IntersectionShaderIndex.
@@ -217,7 +217,7 @@ foundation::core::Status ProceduralRTSample::OnInit()
     if (m_device->CreateFence(0, m_fence) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // ---- Create RT output texture (storage + copy source) ----
+    // ---- Create RT output texture (storage and copy source) ----
     {
         rhi::TextureDesc td{};
         td.dimension = rhi::TextureDimension::Texture2D;
@@ -240,7 +240,7 @@ foundation::core::Status ProceduralRTSample::OnInit()
     }
 
     // ---- AABB buffer: one AABB per sphere (6 floats: minX, minY, minZ, maxX, maxY, maxZ) ----
-    // All AABBs are unit cubes [-0.5, 0.5] centered at origin - instance transforms position them
+    // All AABBs are unit cubes [-0.5, 0.5] centered at the origin; instance transforms position them
     {
         float aabbs[6] = {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f};
         foundation::core::u32 aabbSize = sizeof(aabbs);
@@ -420,7 +420,7 @@ foundation::core::Status ProceduralRTSample::OnInit()
             foundation::core::ErrorCode::Ok)
             return foundation::core::ErrorCode::Unknown;
 
-        // Create bind group with output texture + TLAS.
+        // Create bind group with the output texture and TLAS.
         rhi::BindGroupEntry bgEntries[2]{};
         bgEntries[0] = rhi::BindGroupEntry::TextureEntry(m_outputTextureView);
         bgEntries[1] = rhi::BindGroupEntry::AccelStructEntry(m_tlas);
@@ -444,14 +444,14 @@ foundation::core::Status ProceduralRTSample::OnInit()
             foundation::core::ErrorCode::Ok)
             return foundation::core::ErrorCode::Unknown;
 
-        // 4 stages: RayGen, Intersection, ClosestHit, Miss - all from the same shader module.
+        // 4 stages: RayGen, Intersection, ClosestHit, Miss, all from the same shader module.
         rhi::ProgrammableStage stages[4]{};
         stages[0] = {m_rtShaderModule, u8"RayGen", rhi::ShaderStage::RayGen};
         stages[1] = {m_rtShaderModule, u8"SphereIntersection", rhi::ShaderStage::Intersection};
         stages[2] = {m_rtShaderModule, u8"ClosestHit", rhi::ShaderStage::ClosestHit};
         stages[3] = {m_rtShaderModule, u8"Miss", rhi::ShaderStage::Miss};
 
-        // 3 groups: raygen (general), procedural hit group (intersection + closest hit), miss (general).
+        // 3 groups: raygen (general), procedural hit group (intersection and closest hit), miss (general).
         rhi::RayTracingShaderGroup groups[3]{};
         groups[0].type = rhi::RayTracingShaderGroup::Type::General;
         groups[0].generalShaderIndex = 0;

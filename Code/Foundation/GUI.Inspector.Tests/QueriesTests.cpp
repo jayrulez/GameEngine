@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Inspector - the queries (E8e of Specs/gui-lab-evolution.md): the tree in order with depths
-// and labels, a node described, a selector query, a property set through markup's path.
+// GUI.Inspector - the queries: the tree in order with depths and labels, describing a node, a
+// selector query, and setting a property through markup's path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -132,7 +132,7 @@ TEST_CASE("inspector: what a screen reader is told of a node, and what in the GU
         activates = activates || a == core::String(u8"activate");
     CHECK(activates);
     const inspector::AccessDescription page = inspector::DescribeAccess(*bed.page.Get());
-    CHECK_FALSE(page.Own); // a panel has no role: what it holds is the window's
+    CHECK_FALSE(page.Own); // a panel has no role: what it holds reads as part of the window
     CHECK(page.ReadAs.Size() != 0);
     CHECK_FALSE(inspector::DescribeAccess(*bed.note.Get()).Own); // hidden
 

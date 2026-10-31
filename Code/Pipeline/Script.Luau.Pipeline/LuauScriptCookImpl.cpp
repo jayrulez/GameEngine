@@ -3,11 +3,11 @@
 
 // Pipeline::Script.Luau - implementation unit for the Luau cook service.
 //
-// The Luau-specific cook: the compile check (Load the raw source - Luau classes are plain
+// The Luau-specific cook: the compile check (Load the raw source; Luau classes are plain
 // global tables and facades are globals, so no behavior-module framing is needed), the
-// construct-and-walk property harvest (CONSTRUCT the class with a nil owner and read the
-// instance's scalar fields - the Luau harvest model), and the cook registration. No Luau C
-// header here - the cook VM is reached through the neutral IScriptContext surface.
+// construct-and-walk property harvest (construct the class with a nil owner and read the
+// instance's scalar fields), and the cook registration. No Luau C header here: the cook VM is
+// reached through the neutral IScriptContext surface.
 
 module;
 #include "Core/Prelude.h"
@@ -29,12 +29,12 @@ using namespace foundation::script;
 namespace pipeline{
     namespace
     {
-        // The Luau property probe, Loaded INTO the same context as the class (globals persist
+        // The Luau property probe, loaded into the same context as the class (globals persist
         // across chunks in one lua_State, so `<Class>` resolves). It constructs the class with
-        // a nil owner and serializes each SCALAR instance field into the SHARED harvest-record
+        // a nil owner and serializes each scalar instance field into the shared harvest-record
         // format (name \031 type \031 payload, records joined by \030) that ParseHarvestRecord
         // reads. Handles/tables/functions (the entity, the scene, methods) are not scalars, so
-        // they are skipped. Uses \031 / \030 DECIMAL escapes (universal Lua) for the delimiters.
+        // they are skipped. The delimiters use the decimal escapes \031 and \030, which every Lua reads.
         [[nodiscard]] String BuildLuauPropertyProbe(StringView className)
         {
             String cls(className);
@@ -89,7 +89,7 @@ namespace pipeline{
         }
 
         // Luau has no `class` keyword (so the shared FindScriptClassName does not apply): the
-        // class is a GLOBAL table with a `function <Name>.new(...)` constructor - the exact table
+        // class is a global table with a `function <Name>.new(...)` constructor, the same table
         // the runtime instantiates. Find that name; prefer the one matching the file stem, else
         // the first constructor declared. Comments are stripped first.
         [[nodiscard]] String FindLuauClassName(StringView source, StringView preferredName)
@@ -165,9 +165,6 @@ namespace pipeline{
             }
         }
 
-        // Constructs the class in the cook VM and harvests its scalar fields. A probe fault or a
-        // constructor that faults on the nil owner is NOT a cook error (the class is valid at
-        // runtime with a real owner) - it just yields no editor properties, with a note.
         // Marks the properties the class's `replicated` list names. False, with the problem in
         // `error`, for a name that is not one of its properties (a typo must not do nothing).
         [[nodiscard]] bool MarkLuauReplicated(IScriptContext& scriptContext, Array<ScriptPropertyDesc>& properties,
@@ -207,6 +204,9 @@ namespace pipeline{
             return true;
         }
 
+        // Constructs the class in the cook VM and harvests its scalar fields. A probe fault or a
+        // constructor that faults on the nil owner is not a cook error (the class is valid at
+        // runtime with a real owner); it just yields no editor properties, with a note.
         void HarvestLuauProperties(IScriptContext& scriptContext, StringView fileName,
                                    StringView className, Array<ScriptPropertyDesc>& outProperties)
         {
@@ -264,8 +264,8 @@ namespace pipeline{
         class LuauScriptCook final : public IScriptLanguageCook
         {
         private:
-            // The cook VM, from the registry by LANGUAGE, carrying the SAME global surface the
-            // runtime registers (core math + the behavior facades) so top-level facade references
+            // The cook VM, from the registry by language, carrying the same global surface the
+            // runtime registers (core math and the behavior facades) so top-level facade references
             // compile identically. Idempotent. Null (logged) when the backend is absent.
             [[nodiscard]] static RefPtr<IScriptManager> CreateCookManager(StringView assetName)
             {
@@ -350,8 +350,8 @@ namespace pipeline{
 
                 // Bytecode into the pack: the player loads bytecode only; it has no compiler.
                 // The source already compiled (Load above), so this succeeds; store the serialized
-                // blob so the runtime reconstructs it via IScriptManager::CreateBlob + LoadBlob.
-                // (The source stays on the record for dev-mode hot reload.)
+                // blob so the runtime reconstructs it via IScriptManager::CreateBlob and LoadBlob.
+                // The source stays on the record for dev-mode hot reload.
                 Result<RefPtr<IScriptBlob>> blob = manager->CompileToBlob(source, assetName);
                 if (blob.HasValue() && blob.Value().Get() != nullptr)
                 {
@@ -368,8 +368,8 @@ namespace pipeline{
                     }
                 }
 
-                // Editor properties: construct the class and walk its scalar fields (the Luau
-                // harvest model). Only when the source declares a class.
+                // Editor properties: construct the class and walk its scalar fields. Only when the
+                // source declares a class.
                 if (!out.className.IsEmpty())
                 {
                     HarvestLuauProperties(*scriptContext, assetName, out.className.AsView(),

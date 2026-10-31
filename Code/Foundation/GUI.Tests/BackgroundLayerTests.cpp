@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - background-size and background-position (E13 of Specs/gui-lab-evolution-2.md): an image
-// layer fills its box unless sized (cover, contain, lengths, auto), and is placed by percentages of
-// the room left over or by lengths from the box's edge.
+// GUI - background-size and background-position: an image layer fills its box unless sized (cover,
+// contain, lengths, auto), and is placed by percentages of the room left over or by lengths from
+// the box's edge.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -51,7 +51,7 @@ TEST_CASE("background: an image layer sized and placed in its box")
     CheckRect(PlaceImageLayer(layer, box, 40.0f, 20.0f), 10.0f, 10.0f, 100.0f, 100.0f); // no size: filled
     layer.Size = LayerSize::Cover; // 5x: 200 by 100, from the top left
     CheckRect(PlaceImageLayer(layer, box, 40.0f, 20.0f), 10.0f, 10.0f, 200.0f, 100.0f);
-    layer.X = LayerLength{0.0f, 50.0f, false}; // centred: half the room (-100) left over
+    layer.X = LayerLength{0.0f, 50.0f, false}; // centred: moved by half the room left over (-100)
     CheckRect(PlaceImageLayer(layer, box, 40.0f, 20.0f), -40.0f, 10.0f, 200.0f, 100.0f);
     layer.Size = LayerSize::Contain; // 2.5x: 100 by 50
     layer.Y = LayerLength{0.0f, 100.0f, false};
@@ -88,7 +88,7 @@ TEST_CASE("background: background-size and background-position from a sheet, a c
     CHECK(layers[1].Height.Auto);
     CHECK(layers[1].X.Px == doctest::Approx(10.0f));
     CHECK(layers[1].Y.Percent == doctest::Approx(50.0f));
-    CHECK(layers[2].Size == LayerSize::Lengths); // past the list: the last again
+    CHECK(layers[2].Size == LayerSize::Lengths); // past the end of the list, the last value applies again
     CHECK(layers[2].X.Px == doctest::Approx(10.0f));
 }
 

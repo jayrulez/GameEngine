@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.spline implementation: reflection + the composition install (heavy REFLECT bodies
-// out of the interface).
+// engine.spline implementation: reflection and the composition install (heavy REFLECT bodies
+// kept out of the interface).
 
 module;
 #include "Core/Prelude.h"
@@ -89,8 +89,8 @@ namespace engine::spline
                 const Float4x4 splineWorld = m_scene->GetWorldMatrix(splineEntity);
                 const Float3 world = TransformPoint(curve.Evaluate(t), splineWorld);
 
-                // NOTE: assumes an unparented follower (local == world), the NavAgent
-                // moveEntity convention; a parented follower would need world->parent-local.
+                // Assumes an unparented follower (local == world), as NavAgent's moveEntity does;
+                // a parented follower would need a world-to-parent-local conversion.
                 Transform transform = m_scene->GetLocalTransform(owner);
                 transform.position = world;
                 if (follow.alignToTangent)

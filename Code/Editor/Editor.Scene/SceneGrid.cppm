@@ -3,10 +3,10 @@
 
 // Editor::Scene - :scene_grid partition.
 //
-// The scene view's grid: which plane it lies on, how far apart its lines are for where the
-// camera is, and how far it reaches. One answer for everything that shows the grid - the shader
-// grid (DebugDraw::DrawGridPlane), the line grid kept to compare it with, and the zoom readout's
-// "grid cell" - so they always agree. Pure, so it is tested without a viewport.
+// The scene view's grid: which plane it lies on, how far apart its lines are for where the camera
+// is, and how far it reaches. Everything that shows the grid (the shader grid,
+// DebugDraw::DrawGridPlane; the line grid kept to compare it with; and the zoom readout's "grid
+// cell") uses this one answer, so they always agree. Pure, so it is tested without a viewport.
 
 module;
 #include "Core/Prelude.h"

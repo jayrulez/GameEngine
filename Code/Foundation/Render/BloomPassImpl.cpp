@@ -3,11 +3,11 @@
 
 /// Foundation::Render - the `:bloom` partition.
 ///
-/// HDR bloom via a downsample/upsample pyramid (Jimenez "Next Generation Post Processing in Call of
-/// Duty" - 13-tap downsample + 9-tap tent upsample, additive). The first downsample soft-knee-
-/// thresholds + Karis-averages to keep fireflies out. The pyramid is built from render-graph
-/// transients (sized per view, so no resize handling); the result is composited additively by the
-/// tonemap pass. Runs on the linear HDR scene, before tonemap.
+/// HDR bloom via a downsample/upsample pyramid (Jimenez, "Next Generation Post Processing in Call of
+/// Duty": a 13-tap downsample and a 9-tap tent upsample, additive). The first downsample applies a
+/// soft-knee threshold and a Karis average to keep fireflies out. The pyramid is built from
+/// render-graph transients (sized per view, so no resize handling); the tonemap pass composites the
+/// result additively. Runs on the linear HDR scene, before tonemap.
 
 module;
 #include "Core/Prelude.h"
@@ -126,7 +126,7 @@ namespace foundation::render
                                              rendergraph::RGTextureDesc(kBloomFormat, w, h));
         }
 
-        // Downsample: hdr -> mip0 (threshold), mip(i-1) -> mip(i).
+        // Downsample: hdr into mip0 (thresholded), then mip(i-1) into mip(i).
         for (u32 i = 0; i < levels; ++i)
         {
             const rendergraph::RGHandle src = (i == 0) ? hdr : chain[i - 1];
@@ -166,7 +166,7 @@ namespace foundation::render
                                 });
         }
 
-        // Upsample (additive): mip(i+1) -> add into mip(i), coarsest to finest.
+        // Upsample (additive): add mip(i+1) into mip(i), coarsest to finest.
         for (i32 i = static_cast<i32>(levels) - 2; i >= 0; --i)
         {
             const rendergraph::RGHandle src = chain[i + 1];

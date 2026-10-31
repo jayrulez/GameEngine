@@ -4,8 +4,8 @@
 // UI - :icommand partition
 //
 // ICommand: MVVM-style command binding on controls. ButtonBase.Command executes this
-// when clicked if CanExecute() is true. Ported from Sedulous.UI/src/Core/ICommand.bf.
-// Injected/held-by-reference (pattern B) - implemented by non-View app command objects.
+// when clicked if CanExecute() is true. Injected and held by reference; implemented by
+// app command objects that are not Views.
 
 export module foundation.ui:icommand;
 

@@ -3,11 +3,12 @@
 
 // Editor::Mcp - :gui_validate partition
 //
-// gui_validate: check the engine GUI's markup (a `.xml` document) or a sheet (`.css`) WITHOUT saving
-// it, through the check its cook runs (the markup loader's or the CSS parser's diagnostics: what was
-// dropped a warning, markup that does not build an error), so an agent writing a game's screens
-// loops on it as on script_validate and shader_validate. Returns each diagnostic with its line, and
-// the asset guids the text names (`{guid}`), each a dependency of its cook.
+// gui_validate: check the engine GUI's markup (a `.xml` document) or a sheet (`.css`) without
+// saving it, through the check its cook runs (the markup loader's or the CSS parser's diagnostics:
+// anything dropped is a warning, and markup that does not build is an error), so an agent writing
+// a game's screens can iterate on it as on script_validate and shader_validate. It returns each
+// diagnostic with its line, and the asset guids the text names (`{guid}`), each a dependency of
+// its cook.
 
 module;
 #include "Core/Prelude.h"

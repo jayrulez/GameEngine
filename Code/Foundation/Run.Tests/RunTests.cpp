@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.run (Documentation/Specs/run-context.md, P1): a run's services (owned, borrowed,
+// foundation.run: a run's services (owned, borrowed,
 // replaced, per session), its sessions and their hooks, its id never reused, and the registry
 // announcing each transition once to every listener, clearing the focus with a destroyed run,
 // and letting a late listener catch up.

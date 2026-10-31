@@ -3,10 +3,9 @@
 
 // GUI - :parse_util partition
 //
-// CSS-specific identifier scanning for the styling parsers. The generic helpers
-// (IsWhiteSpace / IsDigit / IsHexDigit / HexValue / Trim) now live in foundation.core
-// (:string_util); what remains here is the CSS identifier grammar ([A-Za-z0-9_-], which
-// includes '-' for kebab-case names), which is CSS-flavored rather than generic.
+// CSS-specific identifier scanning for the styling parsers. The generic helpers (IsWhiteSpace,
+// IsDigit, IsHexDigit, HexValue, Trim) live in foundation.core (:string_util); this holds the CSS
+// identifier grammar ([A-Za-z0-9_-], which includes '-' for kebab-case names).
 
 module;
 #include "Core/Prelude.h"
@@ -27,7 +26,7 @@ export namespace foundation::gui
                (c >= u8'0' && c <= u8'9') || c == u8'-' || c == u8'_';
     }
 
-    // Read an identifier starting at i, advancing i past it.
+    // Reads an identifier starting at i, advancing i past it.
     [[nodiscard]] inline core::StringView ReadIdent(core::StringView s, usize& i) noexcept
     {
         const usize start = i;

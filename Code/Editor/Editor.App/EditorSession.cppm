@@ -3,15 +3,15 @@
 
 // Editor::App - :session partition.
 //
-// EditorSession: the project the editor has open, out of the application
-// (Documentation/Specs/editor-gui.md, 5.1, layer 3). Opening one (or, from the command line,
-// scaffolding a bare folder into one) sets up what lives as long as it does: the context's
-// project, the per-project editor store (dock layout, favorites, open pages), the resources over
-// its cooked database attached to the embedded runtime, its native module, the cook service and
-// the hooks the context runs it through, the thumbnails, and the game UI's defaults; it records
-// the open in the user's project registry and seeds a new project's starter content. Closing
-// takes them down in the reverse order. What the views do at those moments (the pages, the
-// layout, the MCP host) goes through the hooks the application gives it.
+// EditorSession: the project the editor has open, kept out of the application. Opening one (or,
+// from the command line, scaffolding a bare folder into one) sets up what lives as long as the
+// project: the context's project, the per-project editor store (dock layout, favorites, open
+// pages), the resources over its cooked database attached to the embedded runtime, its native
+// module, the cook service and the hooks the context reaches it through, the thumbnails, and the
+// game UI's defaults. It also records the open in the user's project registry and seeds a new
+// project's starter content. Closing takes these down in reverse order. What the views do at
+// those moments (the pages, the layout, the MCP host) goes through the hooks the application
+// gives it.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -43,7 +43,7 @@ export namespace editor::app
     class EditorSession
     {
     public:
-        /// What it works over: the application's services, the embedded runtime the project's
+        /// The services it works with: the application's services, the embedded runtime the project's
         /// resources attach to, and what the application does when a project opens or closes.
         struct Services
         {
@@ -60,14 +60,16 @@ export namespace editor::app
             EditorNativeModule* native = nullptr;
             /// Seeds a new project's starter content (the executable composes it); null: none.
             Function<void(editor::EditorContext&, editor::EditorProject&)> seedNewProject;
-            /// The project opened, its services up: the application brings its views up (the
-            /// MCP host, the pages, the layout).
+            /// Called when the project has opened and its services are up: the application brings
+            /// up its views (the MCP host, the pages, the layout).
             Function<void(editor::EditorProject&)> opened;
-            /// The project is about to close, its services still up: the views go first.
+            /// Called when the project is about to close, with its services still up, so the views
+            /// close first.
             Function<void()> closing;
-            /// A cook finished (its summary on the cook service): the views refresh, the user hears.
+            /// Called when a cook finishes (its summary is on the cook service), so the views
+            /// refresh and the user is told.
             Function<void()> cookFinished;
-            /// The views' state into the store before it is written (the dock's layout).
+            /// Captures the views' state into the store before it is written (the dock's layout).
             Function<void(foundation::settings::Settings&)> captureState;
         };
 
@@ -82,12 +84,12 @@ export namespace editor::app
             /// scaffolds only through its New Project flow).
             bool scaffold = false;
             String scaffoldName{u8"Untitled"};
-            /// Seed the starter content into a project this open created.
+            /// Seeds the starter content into a project this open created.
             bool seed = false;
         };
 
-        /// Opens the project in `directory`: false (said on the status line) when there is none
-        /// there and none may be made.
+        /// Opens the project in `directory`; false (reported on the status line) when there is
+        /// none there and none may be made.
         bool Open(StringView directory, const OpenOptions& options)
         {
             editor::EditorContext& context = *m_services.context;
@@ -114,7 +116,7 @@ export namespace editor::app
             context.SetProject(&project);
             ConfigureThumbnails(directory);
             {
-                // What the open-time header scans cost (the parse volume decides the partial-parse work).
+                // Log what the open-time header scans cost (the parse volume informs the partial-parse work).
                 const auto& source = project.SourceDb().LastScanStats();
                 const auto& cooked = project.CookedDb().LastScanStats();
                 LOG_INFO(u8"Editor", u8"project open scan: sources {} envelopes / {} KB parsed, cooked {} envelopes / {} KB parsed",
@@ -123,9 +125,10 @@ export namespace editor::app
             }
             OpenProjectStore();
             AttachResources();
-            // The GPU half of the thumbnails, once the resources exist (the stage keeps them: a null
-            // one stalls every queued job), on the embedded host whose context holds the scene and
-            // render subsystems. It goes before the service resets, so a job in flight unstages.
+            // The GPU half of the thumbnails, made once the resources exist (the stage keeps them; a
+            // null one stalls every queued job), on the embedded host whose context holds the scene
+            // and render subsystems. It is torn down before the service resets, so a job in flight
+            // unstages.
             if (m_services.embeddedHost != nullptr && m_services.thumbnails != nullptr)
                 m_thumbnailStage = MakeUnique<editor::ThumbnailStage>(m_allocator, *m_services.embeddedHost, *m_services.thumbnails, m_resources.Get());
             if (m_services.native != nullptr)
@@ -171,9 +174,10 @@ export namespace editor::app
                 return;
             editor::EditorContext& context = *m_services.context;
             SaveStore(); // the views' state, while they are up
-            // The pages close next, and a page saves its own state as it goes (a scene its view),
-            // which asks for a save: that writes what they add without capturing the views again,
-            // or the open pages would be written as they close, the last leaving none to reopen.
+            // The pages close next, and a page saves its own state as it closes (a scene saves its
+            // view), which requests a save. That save writes what the pages add without capturing
+            // the views again; otherwise the open pages would be recorded as they close, and the
+            // last one would leave none to reopen.
             m_closingViews = true;
             if (m_services.closing)
                 m_services.closing();
@@ -202,8 +206,8 @@ export namespace editor::app
             context.SetStatus(u8"Project closed.");
         }
 
-        /// The embedded runtime's host and application, once they are up (the application starts
-        /// them after this is made).
+        /// Sets the embedded runtime's host and application once they are up (the application
+        /// starts them after this object is made).
         void SetEmbedded(foundation::runtime::IApplicationHost* host, engine::runtime::DefaultApplication* app) noexcept
         {
             m_services.embeddedHost = host;
@@ -218,8 +222,8 @@ export namespace editor::app
         /// application stages a job each frame and renders it in the scene renderer's bracket.
         [[nodiscard]] editor::ThumbnailStage* Stage() const noexcept { return m_thumbnailStage.Get(); }
 
-        /// Writes the per-project store, the views' state captured into it first (not while they
-        /// close: what they were is already in it).
+        /// Writes the per-project store, capturing the views' state into it first (except while
+        /// they close, since their state is already in it).
         void SaveStore()
         {
             if (!m_project || !m_store)
@@ -229,15 +233,15 @@ export namespace editor::app
             (void)SaveProjectEditorSettings(*m_store, m_project->EditorStateRoot().AsView());
         }
 
-        /// The game UI's defaults from the project's settings: its theme, its default and other
-        /// fonts, the engine GUI's sheets. Again after every cook and settings save: a bind that
-        /// misses (a fresh checkout, nothing cooked yet) heals then.
+        /// Applies the game UI's defaults from the project's settings: its theme, its default and
+        /// other fonts, the engine GUI's sheets. It runs again after every cook and settings save,
+        /// so a bind that misses (a fresh checkout, nothing cooked yet) recovers then.
         void ApplyGameUiDefaults()
         {
             engine::runtime::DefaultApplication* app = m_services.embeddedApp;
             if (!m_project || !m_resources || app == nullptr)
                 return;
-            // Bound only once cooked: a bind of a product not there yet warns of a broken reference.
+            // Bind only once cooked: binding a product that is not there yet warns of a broken reference.
             foundation::content::ContentDatabase& cooked = m_project->CookedDb();
             const auto ready = [&cooked](const Guid& id) { return !id.IsNil() && cooked.GetInstance(id) != nullptr; };
             const Guid fontId = m_project->Settings().defaultUiFontId;
@@ -245,8 +249,8 @@ export namespace editor::app
             if (ready(fontId))
                 if (auto font = m_resources->Bind<foundation::fonts::Font>(fontId))
                     defaultFont = font.Get();
-            // The other UI fonts, each a family beside the default; always set, so one taken off the
-            // list leaves the game UI too.
+            // The other UI fonts, each a family beside the default. Always set, so a font removed
+            // from the list leaves the game UI too.
             Array<const foundation::fonts::Font*> extras;
             for (const Guid& id : m_project->Settings().uiFontIds)
                 if (ready(id))
@@ -289,7 +293,8 @@ export namespace editor::app
                 m_project->SourcesRoot().AsView());
         }
 
-        // The per-project store: absent on a fresh project, its sections then read as defaults.
+        // Opens the per-project store; it is absent on a fresh project, whose sections then read
+        // as defaults.
         void OpenProjectStore()
         {
             editor::EditorContext& context = *m_services.context;
@@ -315,7 +320,7 @@ export namespace editor::app
             };
         }
 
-        // The project's resources over its cooked database, attached to the embedded runtime (which
+        // Attaches the project's resources over its cooked database to the embedded runtime (which
         // registers the engine's factories into it), decoding on the global job system when there is one.
         void AttachResources()
         {
@@ -326,7 +331,7 @@ export namespace editor::app
                 m_services.embeddedApp->AttachResourceManager(m_resources.Get(), *m_services.embeddedHost);
         }
 
-        // The cook over the project, and how the context reaches it.
+        // Starts the cook over the project and wires how the context reaches it.
         void StartCook()
         {
             editor::EditorContext& context = *m_services.context;
@@ -335,7 +340,7 @@ export namespace editor::app
             pipeline::BuilderRegistry* builders = m_services.builders;
             cook->Initialize(*m_project, *builders);
             context.OnCookRequested = [cook](bool rebuild) { cook->RequestCook(rebuild); };
-            // Cook-gated starts (play waits for the cook): anything in flight, or a request still waiting.
+            // Cook-gated starts (play waits for the cook) wait for anything in flight or a request still waiting.
             context.CookBusy = [cook]() { return cook->IsReady() && !cook->IsIdle(); };
             context.SourceAssetTypesOf = [builders](const TypeInfo& product) { return editor::mcp::SourceAssetTypesFor(*builders, product); };
             // A background job (an export) reads the databases: mutations and new cooks wait, as during a cook.
@@ -345,12 +350,13 @@ export namespace editor::app
             cook->OnCookFinished = [self]() { self->CookFinished(); };
         }
 
-        // Rebuilt products swap in behind their handles (live scenes see them, no reopen), then the
-        // game UI binds again (a fresh checkout's first cook makes what the open-time bind missed;
-        // after the reload, since the game UI borrows the font product itself).
+        // Rebuilt products swap in behind their handles (live scenes see them without reopening),
+        // then the game UI binds again. A fresh checkout's first cook makes what the open-time bind
+        // missed, and the bind comes after the reload because the game UI borrows the font product
+        // itself.
         void CookFinished()
         {
-            m_services.thumbnails->InvalidateAll(); // recipe hashes moved; unchanged ones load from disk
+            m_services.thumbnails->InvalidateAll(); // recipe hashes changed; unchanged thumbnails load from disk
             if (m_resources)
                 for (const Guid& product : m_services.cook->LastCookedProducts())
                     (void)m_resources->Reload(product);
@@ -363,7 +369,7 @@ export namespace editor::app
         Services m_services;
         UniquePtr<editor::EditorProject> m_project;
         UniquePtr<foundation::settings::Settings> m_store;
-        bool m_closingViews = false; // Close is closing the views: a save writes, captures nothing
+        bool m_closingViews = false; // Close is closing the views: a save writes the store without capturing them
         UniquePtr<foundation::resource::ResourceManager> m_resources;
         UniquePtr<editor::ThumbnailStage> m_thumbnailStage;
     };

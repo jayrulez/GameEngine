@@ -4,8 +4,7 @@
 #pragma once
 
 // A spinning cube for the dev samples' viewports: drawn through raw RHI into a viewport's offscreen
-// colour and depth targets, the content a viewport widget shows (foundation.ui's UISandbox, the
-// GUI's GUISandbox). The including translation unit must have imported foundation.core,
+// colour and depth targets, as the content a viewport widget shows (GUISandbox's Viewport page). The including translation unit must have imported foundation.core,
 // foundation.rhi and foundation.shaders.
 
 namespace samples
@@ -14,9 +13,9 @@ namespace samples
     namespace rhi = foundation::rhi;
     namespace shaders = foundation::shaders;
 
-    // A minimal, self-contained spinning cube rendered via raw RHI into a viewport's offscreen
-    // RGBA16Float color + Depth32Float depth targets - the payload for the Viewport tab. It only
-    // exercises the OnRender(encoder) contract; the real renderer would slot in here instead.
+    // A minimal, self-contained spinning cube rendered through raw RHI into a viewport's offscreen
+    // RGBA16Float color and Depth32Float depth targets. It only exercises the OnRender(encoder)
+    // contract; a real renderer would take its place.
     struct SpinningCube
     {
         static constexpr const char8_t kShader[] = u8R"(
@@ -27,7 +26,7 @@ struct PSIn { float4 Position : SV_POSITION; float3 Color : COLOR0; };
 PSIn VSMain(VSIn i) { PSIn o; o.Position = mul(float4(i.Position, 1.0), MVP); o.Color = i.Color; return o; }
 float4 PSMain(PSIn i) : SV_TARGET { return float4(i.Color, 1.0); }
 )";
-        // 8 corners, each a distinct color; stride = 6 floats (pos3 + color3).
+        // 8 corners, each a distinct color; the stride is 6 floats (pos3, color3).
         static constexpr float kVerts[] = {
             -1, -1, -1, 0, 0, 0, 1, -1, -1, 1, 0, 0, 1, 1, -1, 1, 1, 0, -1, 1, -1, 0, 1, 0,
             -1, -1, 1,  0, 0, 1, 1, -1, 1,  1, 0, 1, 1, 1, 1,  1, 1, 1, -1, 1, 1,  0, 1, 1,

@@ -3,11 +3,11 @@
 
 // Foundation::Image.Resource - the `foundation.image.resource` module.
 //
-// Runtime CPU-image resource (model B): the cooked, device-free pixel data a
-// runtime consumer (e.g. the VG renderer) loads through the resource manager and
-// uploads itself. Loaded from the OUTPUT content DB; never references the source
-// ImageAsset or the builder. Header (dims/format/colorspace) is the serialized
-// object; pixels are the heavy "pixels" data stream.
+// Runtime CPU-image resource: the cooked, device-free pixel data a runtime
+// consumer (e.g. the VG renderer) loads through the resource manager and uploads
+// itself. Loaded from the output content DB; never references the source
+// ImageAsset or the builder. The header (dimensions, format, colour space) is the
+// serialized object; the pixels are the heavy "pixels" data stream.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +25,7 @@ using namespace foundation::resource;
 
 export namespace foundation::image
 {
-    // Cooked CPU image: dims/format/colorspace + owned pixels. The runtime product.
+    // Cooked CPU image: dimensions, format, colour space and owned pixels. The runtime product.
     class ImageResource final : public ISerializable
     {
         RTTI_OBJECT(ImageResource, ISerializable)
@@ -60,7 +60,7 @@ export namespace foundation::image
         Array<u8> m_pixels;
     };
 
-    // Loads a cooked ImageResource (header + "pixels" stream) from the output DB.
+    // Loads a cooked ImageResource (header and "pixels" stream) from the output DB.
     class ImageFactory final : public IResourceFactory
     {
     public:
@@ -103,7 +103,7 @@ export namespace foundation::image
         }
     };
 
-    // Registers ImageResource for content-DB construction + deserialization.
+    // Registers ImageResource for content-DB construction and deserialization.
     inline void RegisterImageResource()
     {
         GlobalTypeRegistry().Register(ImageResource::StaticType());
@@ -115,8 +115,8 @@ export namespace foundation::image
 
 export namespace foundation::image
 {
-    /// The image resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The image resource module: the module the engine composition composes this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kImageResourceFactories[] = {
         foundation::resource::FactoryByDefault<ImageResource, ImageResource, ImageFactory>(),
     };

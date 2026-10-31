@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/UIContextTests.bf (faithful; RefPtr views, `===` -> pointer ==).
-// All managers (Input/Focus/DragDrop/Animation/Shortcut/Tooltip) are owned by-value on UIContext, so
-// Managers_CreatedByDefault just checks the accessors return non-null (they point at the value members).
+// UIContext tests. The managers (input, focus, drag and drop, animation, shortcut, tooltip) are
+// value members of UIContext, so Managers_CreatedByDefault only checks that the accessors return
+// non-null.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -125,7 +125,7 @@ TEST_CASE("uicontext: AttachView_RegistersSubtree")
     core::RefPtr<TestGroup> group = MakeTestGroup();
     core::RefPtr<TestView> child = MakeTestView();
     group->AddView(child.Get()); // build subtree before attaching
-    root->AddView(group.Get());  // attach to root - registers both
+    root->AddView(group.Get());  // attach to the root, which registers both
 
     CHECK(ctx.GetViewById(group->Id) == group.Get());
     CHECK(ctx.GetViewById(child->Id) == child.Get());

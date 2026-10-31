@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Xml.Tests/ParserTests.bf
+// XmlDocument::Parse: elements, attributes, content, errors and their positions.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -249,9 +249,8 @@ TEST_CASE("xml.parse: complex document")
 
 TEST_CASE("xml.parse: a failed parse reports the line and column where it stopped")
 {
-    // Before 2026-09-07 ErrorLine/ErrorColumn were reset to 1 in Parse and never written
-    // again, so the editor's XML diagnostics (which subtract 1 for buffer lines) all
-    // pointed at line 0.
+    // ErrorLine and ErrorColumn are written where the parse stopped. The editor's XML
+    // diagnostics subtract 1 for buffer lines, so values left at 1 would all point at line 0.
     XmlDocument d(DefaultAllocator());
 
     // A mismatched close tag on the third line.

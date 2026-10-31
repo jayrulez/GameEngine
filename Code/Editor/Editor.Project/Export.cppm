@@ -3,17 +3,17 @@
 
 // Editor::Project - :export partition.
 //
-// The export pipeline as a LIBRARY (the Tools.Export CLI and the editor's Export menu are
-// thin callers; tests drive it headlessly): cook -> stage scenes as binary envelopes ->
-// pack Content.pak -> write the dist manifest. The caller stages the player executable
-// (an exe-location concern, not a pipeline one).
+// The export pipeline as a library (the Tools.Export CLI and the editor's Export menu are thin
+// callers; tests drive it headlessly): cook, stage scenes as binary envelopes, pack Content.pak,
+// then write the dist manifest. The caller stages the player executable, since where it lives is
+// the caller's concern rather than the pipeline's.
 //
-//   dist layout:  <out>/Content.pak   products + scenes (one binary DB) + game script (raw)
+//   dist layout:  <out>/Content.pak   cooked products and scenes (one binary DB)
 //                 <out>/player.xml    dist manifest (ProjectSettings shape)
 //
-// Scenes are builder-less by design (their cooked form IS the authored form), so export
-// re-encodes each XML envelope to binary and copies the "scene" stream - SAME guids, so
-// resource refs and the manifest's defaultScene path keep working in the pak.
+// Scenes have no builder because their cooked form is the authored form, so export re-encodes
+// each XML envelope to binary and copies the "scene" stream under the same guids; resource refs
+// and the manifest's defaultScene path keep working in the pak.
 
 module;
 #include "Core/Prelude.h"
@@ -53,28 +53,27 @@ export namespace editor
 
     // === Reachability pruning ===
     //
-    // Opt-in per preset (ExportPreset::pruneToReachable): a dist ships only the CLOSURE of its
-    // entry points instead of the whole cooked dir. The closure reuses the cook's dependency graph
-    // (CookDriver::PlanFor) for asset->asset edges; a caller-supplied SceneReferenceScanner bridges
-    // the scene-graph edges the cook doesn't model (a scene's component resource Refs + its prefab
-    // instances), because scenes/prefabs are builder-less and thus outside PlanFor's read-dep walk.
+    // Opt-in per preset (ExportPreset::pruneToReachable): a dist ships only the closure of its
+    // entry points instead of the whole cooked directory. The closure reuses the cook's dependency
+    // graph (CookDriver::PlanFor) for asset-to-asset edges. A caller-supplied SceneReferenceScanner
+    // supplies the scene-graph edges the cook does not model (a scene's component resource Refs and
+    // its prefab instances), because scenes and prefabs have no builder and so fall outside
+    // PlanFor's read-dependency walk.
 
-    // Why a root is in the dist. Phase 1 seeds DefaultScene + StartupScript; Phase 2 ("Always
-    // Export") adds Flag / Group; Phase 4 adds ScriptLiteral. Keep the enum stable for the report.
+    // Why a root is in the dist. Keep the enum stable for the report.
     enum class ExportRootReason
     {
         DefaultScene,  // ProjectSettings::defaultSceneId
-        StartupScript, // the startup script's own imported asset (the script FILE ships regardless)
+        StartupScript, // the startup script's own imported asset (the script file ships regardless)
         Flag,          // an instance flagged "Always Export" (ExportRoots::instances)
         Group, // an instance under a group flagged "Always export contents" (ExportRoots::groups)
-        ManifestDefault, // a manifest default reference (input map / bus layout / UI theme / UI font
-                         // / the loading document)
+        ManifestDefault, // a manifest default reference (input map, bus layout, UI theme, UI font,
+                         // the loading document)
     };
 
     [[nodiscard]] StringView ExportRootReasonName(ExportRootReason r);
 
-    // A seed entry point: the dist is the closure of these. The Array<ExportRoot> the seeding
-    // function returns is the SEAM Phase 2 extends (it just appends Flag/Group roots).
+    // A seed entry point: the dist is the closure of these.
     struct ExportRoot
     {
         Guid id;
@@ -82,41 +81,43 @@ export namespace editor
         ExportRootReason reason = ExportRootReason::DefaultScene;
     };
 
-    // What a scan of one scene/prefab instance yields: the guids it references directly. Resources
-    // feed PlanFor (which then closes asset->asset); prefabs are staged AND rescanned for their own
-    // references (the scene->prefab->asset chain).
+    // What a scan of one scene or prefab instance yields: the guids it references directly.
+    // Resources feed PlanFor, which then closes the asset-to-asset edges; prefabs are staged and
+    // also rescanned for their own references (a scene references a prefab, which references assets).
     struct SceneReferences
     {
-        Array<Guid> resources; // component resource Ref ids (mesh/material/texture/... instances)
-        Array<Guid> prefabs;   // prefab-instance ids nested in this scene/prefab
+        Array<Guid> resources; // component resource Ref ids (mesh, material, texture, ... instances)
+        Array<Guid> prefabs;   // prefab-instance ids nested in this scene or prefab
     };
 
-    // Caller hook: collect one scene/prefab instance's direct references (see SceneReferences).
-    // The export LIBRARY stays subsystem-agnostic, so the driving tool - which owns the full
-    // component-manager set (render/physics/animation/...) - supplies this. The canonical
-    // implementation loads the instance (LoadScene over all managers), resolves its Refs through a
-    // factory-less ResourceManager and reads back ResourceManager::CollectUnresolved (every bound
-    // id, since nothing built), plus each parked prefab instance's prefabId. Same reason the
-    // scene-stream transcode (sceneStreams) is a caller hook.
+    // Caller hook: collects one scene or prefab instance's direct references (see
+    // SceneReferences). The export library stays independent of subsystems, so the driving tool,
+    // which owns the full component-manager set (render, physics, animation, ...), supplies this.
+    // The usual implementation loads the instance (LoadScene over all managers), resolves its Refs
+    // through a ResourceManager with no factories and reads back
+    // ResourceManager::CollectUnresolved (every bound id, since nothing was built), plus each
+    // parked prefab instance's prefabId. The scene-stream transcode (sceneStreams) is a caller
+    // hook for the same reason.
     using SceneReferenceScanner = Function<void(
         foundation::content::Instance&, foundation::content::ContentDatabase&, SceneReferences&)>;
 
-    // The loud, auditable record of a pruned export: which roots were kept and WHY, plus what was
-    // dropped. Lives on ExportResult (CLI prints it, editor Console shows it) and is written beside
-    // the dist as export-report.txt. Empty/pruned=false for a pack-everything export.
+    // The record of a pruned export, kept loud and auditable: which roots were kept and why, and
+    // what was dropped. It lives on ExportResult (the CLI prints it, the editor Console shows it)
+    // and is written beside the dist as export-report.txt. Empty, with pruned=false, for an export
+    // that packs everything.
     struct PruningReport
     {
         bool pruned = false;
-        Array<ExportRoot> roots; // the seed entry points + their reasons
-        usize keptCount = 0;     // scenes + cooked products included (closure size on disk)
+        Array<ExportRoot> roots; // the seed entry points and their reasons
+        usize keptCount = 0;     // scenes and cooked products included (the closure's size on disk)
         Array<String> dropped;   // instance paths excluded from the dist (unreferenced or unfinished)
     };
 
     namespace detail
     {
-        // The game native target name from the manifest's dev-module path:
-        // "Native/libScratchGame.so" -> "ScratchGame" (also handles .dll / no-lib-prefix).
-        // Empty when the shape is unrecognizable - callers treat that as "no native ship".
+        // The game's native target name from the manifest's dev-module path:
+        // "Native/libScratchGame.so" gives "ScratchGame" (.dll and names without the lib prefix
+        // too). Empty when the shape is not recognized; callers treat that as no native module.
         [[nodiscard]] inline foundation::core::String
         NativeTargetFromModulePath(foundation::core::StringView nativeModule)
         {
@@ -145,8 +146,9 @@ export namespace editor
             return core::String(name);
         }
 
-        // The ship build's Bin suffix: "-Ship-<sanitized project name>" - per-project so two
-        // games' ship outputs never collide in the checkout's Bin (the -Shared/-ASAN precedent).
+        // The ship build's Bin suffix, "-Ship-<sanitized project name>". It is per project so two
+        // games' ship outputs never collide in the checkout's Bin, as the -Shared and -ASAN
+        // suffixes keep their builds apart.
         [[nodiscard]] inline foundation::core::String
         ShipOutputSuffix(foundation::core::StringView projectName)
         {
@@ -162,9 +164,9 @@ export namespace editor
         }
 
         // The staged player filename: the chosen name (preset.playerName, else the template's player
-        // binary) with the TARGET platform's executable extension ensured. Windows executables must end
-        // in .exe or the OS will not launch them ("MyGame" -> "MyGame.exe"); other platforms carry no
-        // suffix. Idempotent - a name that already ends in .exe is left alone.
+        // binary) with the target platform's executable extension ensured. Windows executables must end
+        // in .exe or the OS will not launch them ("MyGame" becomes "MyGame.exe"); other platforms have
+        // no suffix. Idempotent: a name that already ends in .exe is left alone.
         [[nodiscard]] inline foundation::core::String PlayerOutputName(
             foundation::core::StringView platform, foundation::core::StringView playerName,
             foundation::core::StringView templateBinary)
@@ -176,7 +178,8 @@ export namespace editor
             {
                 name += u8".exe";
             }
-            // The web player is its page: renamed, it stays a page, or the browser downloads it.
+            // The web player is its page: a new name must still end in .html, or the browser
+            // downloads it.
             if (templateBinary.EndsWith(u8".html") && !name.AsView().EndsWith(u8".html"))
             {
                 name += u8".html";
@@ -184,11 +187,11 @@ export namespace editor
             return name;
         }
 
-        // A cooked file's owning instance is reachable: the owning instance path is `file` up to a
-        // '.' in its NAME region (envelope "<path>.<ext>" and stream "<path>.<stream>.bin"/".data"
-        // both begin with "<path>."). Tests each '.' boundary against the reachable-instance-path
-        // set; the '.' delimiter makes prefix matching collision-safe (a peer "CubeBig" never
-        // matches "Cube.").
+        // Whether a cooked file's owning instance is reachable. The owning instance path is `file`
+        // up to a '.' in its name region (envelope "<path>.<ext>" and stream "<path>.<stream>.bin"
+        // or ".data" both begin with "<path>."). Each '.' boundary is tested against the set of
+        // reachable instance paths; the '.' delimiter makes prefix matching collision-safe (a peer
+        // "CubeBig" never matches "Cube.").
         [[nodiscard]] inline bool FileOwnerReachable(StringView file,
                                                      const HashMap<String, u8>& reachablePaths)
         {
@@ -213,10 +216,11 @@ export namespace editor
             return false;
         }
 
-        // Recursively add every file under `folder` to the pak (locator = mount-relative path).
-        // When `reachablePaths` is non-null, packs ONLY files whose owning instance path is in the
-        // set (closure pruning); null packs the whole tree (the default "export everything").
-        // `excludedPaths`: instances whose files are left out (a stripped copy is staged instead).
+        // Recursively adds every file under `folder` to the pak (locator = mount-relative path).
+        // When `reachablePaths` is non-null, packs only files whose owning instance path is in the
+        // set (closure pruning); null packs the whole tree (the default, export everything).
+        // `excludedPaths` names instances whose files are left out (a stripped copy is staged
+        // instead).
         bool PackTree(foundation::vfs::IFileSystem& mount,
                       foundation::vfs::IEnumerableFileSystem& enumerable, StringView folder,
                       foundation::vfs::PakBuilder& pak, usize& fileCount,
@@ -290,9 +294,9 @@ export namespace editor
             return group;
         }
 
-        // A custom shader's cooked product, staged without its HLSL (SAME guid/path): the dist's
-        // pack carries the shader as bytecode; the entries, lattices and property table stay, so
-        // materials and the runtime still resolve it.
+        // A custom shader's cooked product, staged without its HLSL under the same guid and path.
+        // The dist's pack carries the shader as bytecode; the entries, lattices and property table
+        // stay, so materials and the runtime still resolve it.
         bool StageStrippedShader(foundation::content::Instance& product,
                                  foundation::content::ContentDatabase& staging)
         {
@@ -310,7 +314,8 @@ export namespace editor
             return staged != nullptr && staged->WriteObject(*shader).IsOk();
         }
 
-        // Re-encode a scene instance into a binary envelope in the staging DB - SAME guid/path.
+        // Re-encodes a scene instance into a binary envelope in the staging DB, with the same guid
+        // and path.
         bool StageScene(foundation::content::Instance& scene,
                         foundation::content::ContentDatabase& staging,
                         const HashMap<Guid, Array<byte>>* sceneStreams)
@@ -335,8 +340,8 @@ export namespace editor
                 }
             }
 
-            // Scenes AND prefabs stage the same way (runtime scenes keep prefab instances as
-            // ref+deltas, so the prefab payloads must ship in the pak for the load-time respawn).
+            // Scenes and prefabs stage the same way (runtime scenes keep prefab instances as a ref
+            // plus deltas, so the prefab payloads must ship in the pak for the respawn at load time).
             RefPtr<ISerializable> object = scene.ReadObject();
             foundation::content::Instance* staged = nullptr;
             if (auto* doc = Cast<foundation::scene::SceneDocument>(object.Get()))
@@ -362,10 +367,10 @@ export namespace editor
                 return false;
             }
 
-            // Pre-transcoded BINARY stream (editor's main-thread pass) when available; else
-            // the source stream verbatim - the runtime SNIFFS the encoding, so an XML source
-            // staged as-is (headless CLI, no engine subsystems to transcode with) still
-            // loads, just with text-parse cost.
+            // Use the pre-transcoded binary stream (the editor's main-thread pass) when available,
+            // else the source stream as it is. The runtime detects the encoding, so an XML source
+            // staged as is (the headless CLI, with no engine subsystems to transcode with) still
+            // loads, only with the cost of parsing text.
             if (sceneStreams != nullptr)
             {
                 if (const Array<byte>* pre = sceneStreams->Find(scene.Id()))
@@ -423,7 +428,7 @@ export namespace editor
         }
 
         // The source instance whose asset imports `fileName` (the startup script's own asset, if the
-        // project imported the script). Nil when none - the script FILE still ships either way.
+        // project imported the script). Nil when none; the script file still ships either way.
         [[nodiscard]] inline Guid FindAssetByFileName(foundation::content::ContentDatabase& db,
                                                       StringView fileName)
         {
@@ -464,15 +469,15 @@ export namespace editor
             (void)RemoveDirectory(root);
         }
 
-        // Copy srcDir/srcName -> dstDir/dstName, PRESERVING permissions (staged executables need the
-        // +x bit, which a VFS read+write would drop). True on success.
+        // Copies srcDir/srcName to dstDir/dstName, preserving permissions (staged executables need
+        // the +x bit, which a VFS read and write would drop). True on success.
         bool CopyFilePreserving(StringView srcDir, StringView srcName, StringView dstDir,
                                 StringView dstName)
         {
-            // Core/System backend (POSIX re-applies the source mode; Windows CopyFile preserves
-            // natively). std::filesystem is deliberately NOT used in this module: referencing it
-            // from exported inline code broke GCC's module serialization for importers
-            // ("failed to load pendings for __gnu_cxx::__concurrence_unlock_error").
+            // Core/System backend (POSIX re-applies the source mode; Windows CopyFile preserves it
+            // natively). std::filesystem is not used in this module: referencing it from exported
+            // inline code breaks GCC's module serialization for importers ("failed to load
+            // pendings for __gnu_cxx::__concurrence_unlock_error").
             return FileCopyPreserving(PathJoin(srcDir, srcName).AsView(),
                                       PathJoin(dstDir, dstName).AsView());
         }
@@ -491,7 +496,8 @@ export namespace editor
             return path.SubStr(start, path.Size() - start);
         }
 
-        // A filesystem-safe output subdir from a preset name (alnum / - _ . kept, else '-').
+        // A filesystem-safe output subdirectory from a preset name (letters, digits, '-', '_' and
+        // '.' are kept; anything else becomes '-').
         [[nodiscard]] inline String SanitizeName(StringView name)
         {
             String out;
@@ -508,67 +514,70 @@ export namespace editor
         }
     }
 
-    // A step/progress sink: `onProgress(stepLabel, fraction[0..1])`. Optional (the CLI passes none;
-    // the editor's background job wires it to a JobContext for the status-bar progress bar).
+    // A step and progress sink: `onProgress(stepLabel, fraction[0..1])`. Optional: the CLI passes
+    // none, and the editor's background job wires it to a JobContext for the status-bar progress bar.
     using ExportProgress = Function<void(StringView, f32)>;
 
     // === Reachability pruning helpers ===
 
-    /// Seed export roots: the entry points whose closure the dist ships. Phase 1 = defaultSceneId
-    /// (+ the startup script's own imported asset, if any); Phase 2 = the project's explicit
-    /// "Always Export" set (ExportRoots) - flagged instances (Flag) and every instance under a
-    /// flagged group subtree (Group). Deduped by guid, keeping the FIRST (highest-priority) reason,
-    /// so the pruning report lists each root once with a stable why.
+    /// Seeds the export roots, the entry points whose closure the dist ships: the default scene,
+    /// the startup script's own imported asset (if any), every asset the manifest's settings name,
+    /// and the project's explicit "Always Export" set (ExportRoots), which is flagged instances
+    /// (Flag) and every instance under a flagged group subtree (Group). Deduplicated by guid,
+    /// keeping the first (highest-priority) reason, so the pruning report lists each root once
+    /// with a stable reason.
     [[nodiscard]] Array<ExportRoot> CollectExportRoots(EditorProject& project);
 
-    /// Expand seed roots across the scene-graph edges the cook does not model: scan each scene/prefab
-    /// root for its component resource Refs (feed PlanFor) and its prefab instances (staged AND
-    /// rescanned), transitively. Returns the deduped guid set to seed CookDriver::PlanFor with -
-    /// PlanFor then closes the asset->asset edges. `scanner` bridges scene->asset; without it the
-    /// scene contents can't be discovered (caller must supply it when pruning).
+    /// Expands seed roots across the scene-graph edges the cook does not model: scans each scene or
+    /// prefab root for its component resource Refs (fed to PlanFor) and its prefab instances
+    /// (staged and rescanned), transitively. Returns the deduplicated guid set to seed
+    /// CookDriver::PlanFor with; PlanFor then closes the asset-to-asset edges. `scanner` supplies
+    /// the scene-to-asset edges. Without it the scene contents cannot be discovered, so the caller
+    /// must supply it when pruning.
     [[nodiscard]] Array<Guid> ExpandReachableRoots(EditorProject& project,
                                                    const Array<ExportRoot>& seeds,
                                                    const SceneReferenceScanner& scanner);
 
-    /// Cook + compute the reachable closure with ONE CookDriver: PlanFor(planRoots) yields the
-    /// closure (asset->asset), and - when `cook` - Execute cooks ONLY that set (cook only what
-    /// ships). Fills stats.cooked / stats.cookFailed and `outReachable` (the full closure guids).
+    /// Cooks and computes the reachable closure with one CookDriver: PlanFor(planRoots) yields the
+    /// closure (asset to asset), and when `cook` is set, Execute cooks only that set, so only what
+    /// ships is cooked. Fills stats.cooked, stats.cookFailed and `outReachable` (the full closure's
+    /// guids).
     [[nodiscard]] Status CookReachable(EditorProject& project, BuilderRegistry& builders,
                                        Span<const Guid> planRoots, bool cook, bool rebuild,
                                        ExportStats& stats, Array<Guid>& outReachable,
                                        const ExportProgress& onProgress = {});
 
-    /// Render a pruning report as human-readable text (the on-disk export-report.txt + Console dump).
+    /// Renders a pruning report as readable text (the export-report.txt on disk and the Console dump).
     [[nodiscard]] String FormatPruningReport(const PruningReport& report);
 
-    /// One packed content variant in the dist. Desktop dists have exactly one
-    /// with an EMPTY key + "Content.pak" packed from the host `Cooked/`; the web dist has "bc" and
-    /// "astc", each a COMPLETE pak from its per-target cooked DB (Cooked-web-bc/ , Cooked-web-astc/).
-    /// `key` is the CAPABILITY FAMILY the wasm boot matches an adapter feature against (never a
-    /// platform name). `cookedDir` is the absolute cooked-DB directory this pak is packed from.
+    /// One packed content variant in the dist. Desktop dists have exactly one, with an empty key
+    /// and "Content.pak" packed from the host `Cooked/`. The web dist has "bc" and "astc", each a
+    /// complete pak from its per-target cooked DB (Cooked-web-bc/, Cooked-web-astc/). `key` is the
+    /// capability family the wasm boot matches an adapter feature against, never a platform name.
+    /// `cookedDir` is the absolute cooked-DB directory this pak is packed from.
     struct ContentVariant
     {
-        String key;       // "" (single desktop pak) | "bc" | "astc"
-        String pakName;   // dist pak filename ("Content.pak" | "Content-bc.pak" | "Content-astc.pak")
-        String cookedDir; // absolute cooked-DB dir to pack from
+        String key;       // "" (the single desktop pak), "bc" or "astc"
+        String pakName;   // dist pak filename ("Content.pak", "Content-bc.pak" or "Content-astc.pak")
+        String cookedDir; // absolute cooked-DB directory to pack from
     };
 
-    /// The content variants a preset ships: desktop platforms -> the single host pak; "Web"/"Wasm" ->
-    /// the BC + ASTC variant paks. The cookedDir paths are siblings of
-    /// the host Cooked/ so the desktop pack never sees them.
+    /// The content variants a preset ships: desktop platforms get the single host pak, and "Web"
+    /// and "Wasm" get the BC and ASTC variant paks. The cookedDir paths are siblings of the host
+    /// Cooked/, so the desktop pack never sees them.
     [[nodiscard]] Array<ContentVariant> VariantsForPlatform(EditorProject& project,
                                                             StringView platform);
 
-    /// Stage scenes + pack the content pak(s) + write the dist manifest into `outDir`. Does NOT cook -
-    /// it assumes the cooked dir(s) are already up to date (ExportProject / CookVariantTargets run
-    /// first). Fills stats.scenesStaged / stats.filesPacked.
-    // `reachable` (opt-in closure pruning): when non-null, stage ONLY reachable scenes and pack ONLY
-    // cooked products whose source guid is in the set - the whole cooked dir + every scene otherwise.
-    // `roots` + `outReport` feed the pruning report (kept roots + reasons, dropped list), written
-    // beside the dist as export-report.txt and returned to the caller.
-    // `variants`: the content variants to pack. Empty => a single
-    // Content.pak from the host Cooked/, byte-for-byte. Reachability is scanned ONCE (host DB) and
-    // applied to every variant pak (the closure guid-set is identical across variants).
+    /// Stages scenes, packs the content pak or paks and writes the dist manifest into `outDir`. It
+    /// does not cook; it assumes the cooked directories are up to date (ExportProject or
+    /// CookVariantTargets run first). Fills stats.scenesStaged and stats.filesPacked.
+    // `reachable` (opt-in closure pruning): when non-null, stage only reachable scenes and pack only
+    // cooked products whose source guid is in the set; otherwise the whole cooked directory and
+    // every scene. `roots` and `outReport` feed the pruning report (kept roots and reasons, the
+    // dropped list), written beside the dist as export-report.txt and returned to the caller.
+    // `variants`: the content variants to pack. Empty gives a single Content.pak from the host
+    // Cooked/. Reachability is scanned once (host DB) and applied to every variant pak, since the
+    // closure's guid set is the same across variants.
     [[nodiscard]] Status ExportContent(EditorProject& project, StringView outDir,
                                        ExportStats& stats, const ExportProgress& onProgress = {},
                                        const HashMap<Guid, Array<byte>>* sceneStreams = nullptr,
@@ -578,19 +587,19 @@ export namespace editor
                                        Span<const ContentVariant> variants = {},
                                        bool includeShaderSource = false);
 
-    /// Cook the per-target variant DBs: for each variant with a non-empty key,
-    /// run CookForTarget into its cookedDir, carrying platform-invariant products forward from the
-    /// already-cooked host DB (records loaded from the host .cache) and recooking only variant
-    /// products (textures) for the target. Empty-key (desktop) variants are no-ops. Call AFTER the
-    /// host cook, BEFORE ExportContent. Returns the summed cook failures.
+    /// Cooks the per-target variant DBs: for each variant with a non-empty key, runs CookForTarget
+    /// into its cookedDir, carrying platform-invariant products forward from the already-cooked
+    /// host DB (records loaded from the host .cache) and recooking only the variant products
+    /// (textures) for the target. Empty-key (desktop) variants do nothing. Call after the host
+    /// cook and before ExportContent. Returns the summed cook failures.
     [[nodiscard]] Status CookVariantTargets(EditorProject& project, BuilderRegistry& builders,
                                             Span<const ContentVariant> variants, bool rebuild,
                                             const ExportProgress& onProgress = {});
 
-    /// The scene/prefab TEXT sources under `group`, pre-transcoded to the binary wire by
-    /// `stager` (the editor's SceneStreamStager: main-thread only) and keyed by instance for
+    /// The scene and prefab text sources under `group`, pre-transcoded to the binary wire format
+    /// by `stager` (the editor's SceneStreamStager, main thread only) and keyed by instance for
     /// the export's packer. An instance the stager declines (not a scene, or a failure) is left
-    /// out; the exporter then stages its source verbatim.
+    /// out, and the exporter then stages its source as it is.
     inline void CollectSceneStreams(
         foundation::content::Group& group,
         const Function<bool(foundation::content::Instance&, Array<byte>&)>& stager,
@@ -610,10 +619,11 @@ export namespace editor
         }
     }
 
-    /// Cook + ExportContent (the all-in-one; the CLI / one-shot path). The builder registry is the
-    /// exe's full set (kept in lockstep across cook/editor/export). `rebuild` forces a clean cook.
-    /// `variants`: when non-empty (a web preset), the host cook is followed by
-    /// CookVariantTargets and ExportContent packs one pak per variant. Empty = a single pak.
+    /// Cooks, then runs ExportContent, all in one (the CLI's one-shot path). The builder registry
+    /// is the executable's full set (kept the same across the cook, editor and export tools).
+    /// `rebuild` forces a clean cook. `variants`: when non-empty (a web preset), the host cook is
+    /// followed by CookVariantTargets and ExportContent packs one pak per variant. Empty gives a
+    /// single pak.
     [[nodiscard]] Status ExportProject(EditorProject& project, StringView outDir,
                                        BuilderRegistry& builders, bool rebuild,
                                        ExportStats* outStats = nullptr,
@@ -624,38 +634,38 @@ export namespace editor
 
     struct ExportResult
     {
-        ExportStats content;         // cook/stage/pack totals
-        usize filesStaged = 0;       // player + template sidecars + preset additionalFiles copied
+        ExportStats content;         // cook, stage and pack totals
+        usize filesStaged = 0;       // the player, template sidecars and preset additionalFiles copied
         String outputDir;            // where the dist was written
         String engineVersionWarning; // set when the resolved template was built against a different
                                      // engine version (soft mismatch); empty otherwise. The export
                                      // still runs; callers may surface this to the user.
-        PruningReport pruning; // closure-pruning report (roots + reasons, kept/dropped counts).
-                               // pruned=false for a pack-everything (non-pruned) export.
+        PruningReport pruning; // closure-pruning report (roots and reasons, kept and dropped
+                               // counts); pruned=false for an export that packs everything
     };
 
-    /// Build the project's native module for the DEV loop (game-native-code.md N4): a
-    /// persistent per-project SHARED-engine build (<project>/.cache/native-dev) over the
-    /// engine checkout, building just the game target - whose .so lands at the manifest's
-    /// nativeModule path (the Native/CMakeLists output-dir rule). Pair with the editor's
-    /// Reload Native Module action for the full in-editor loop. Blocking; run off-UI.
+    /// Builds the project's native module for the development loop: a persistent per-project
+    /// shared-engine build (<project>/.cache/native-dev) over the engine checkout, building only
+    /// the game target, whose .so lands at the manifest's nativeModule path (the Native/CMakeLists
+    /// output-directory rule). Pair it with the editor's Reload Native Module action for the full
+    /// in-editor loop. Blocking; run it off the UI thread.
     [[nodiscard]] Status BuildDevNativeModule(EditorProject& project);
 
-    /// A preset's own render resolution or window, over what the project's dist manifest
-    /// (player.xml in `outDir`) says: the platform's values ship. Nothing to do when the preset
-    /// overrides neither.
+    /// Writes a preset's own render resolution, window or orientation over what the project's
+    /// dist manifest (player.xml in `outDir`) says, so the platform's values ship. Does nothing
+    /// when the preset overrides none of them.
     [[nodiscard]] Status ApplyPresetDisplay(StringView outDir, const ExportPreset& preset);
 
-    /// Produce ONE preset's dist under `outRoot`: resolve its template, export the content
-    /// (ExportProject), then stage the template's player + sidecars and the preset's additionalFiles.
-    /// The whole dist from one entry point - the CLI and the editor call this identically (the cook
-    /// uniformity extended to the player, replacing the old exe-location walk in the CLI).
-    // `cook` = false skips the cook and only packs/stages (ExportContent) - the editor uses this AFTER
-    // cooking through its CookService (so the cook, which mutates the DB the UI reads, never runs on a
-    // background job). The CLI leaves it true (cook + content in one shot).
-    // `dataRoot` = the engine data root (the caller's resolved one): the engine shaders are cooked
-    // from <dataRoot>/Shaders into the dist's own Data/Engine/Shaders/shaders.dpak (+ Data/.dataroot),
-    // so the player finds them with the same discovery walk every executable uses.
+    /// Produces one preset's dist under `outRoot`: resolves its template, exports the content
+    /// (ExportProject), then stages the template's player and sidecars and the preset's
+    /// additionalFiles. The CLI and the editor both produce the whole dist through this one entry
+    /// point.
+    // `cook` = false skips the cook and only packs and stages (ExportContent). The editor uses this
+    // after cooking through its CookService, so the cook, which changes the DB the UI reads, never
+    // runs on a background job. The CLI leaves it true (cook and content in one go).
+    // `dataRoot` is the engine data root (the caller's resolved one): the engine shaders are cooked
+    // from <dataRoot>/Shaders into the dist's own Data/Engine/Shaders/shaders.dpak (and
+    // Data/.dataroot), so the player finds them with the same discovery walk every executable uses.
     [[nodiscard]] Status ExportOne(EditorProject& project, const ExportPreset& preset,
                                    const TemplateRegistry& templates, BuilderRegistry& builders,
                                    StringView outRoot, StringView dataRoot, bool rebuild,
@@ -665,8 +675,8 @@ export namespace editor
                                    const SceneReferenceScanner* scanner = nullptr,
                                    const Array<Guid>* precomputedReachableRoots = nullptr);
 
-    /// Produce EVERY preset's dist under `outRoot` (a failing preset is logged and skipped; the others
-    /// continue). Returns Ok only when all presets succeeded.
+    /// Produces every preset's dist under `outRoot` (a failing preset is logged and skipped; the
+    /// others continue). Returns Ok only when all presets succeeded.
     [[nodiscard]] Status ExportAll(EditorProject& project, Span<const ExportPreset> presets,
                                    const TemplateRegistry& templates, BuilderRegistry& builders,
                                    StringView outRoot, StringView dataRoot, bool rebuild,

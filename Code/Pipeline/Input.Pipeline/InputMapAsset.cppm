@@ -3,9 +3,9 @@
 
 // Pipeline::Input - the `foundation.input.editor` module.
 //
-// The authored input-map asset (source, XML envelope like every authored asset) + its
-// builder. Cook = VALIDATE + write-through: the model is pure data, so the bake's whole
-// job is refusing kind-mismatched or nameless entries before they reach the runtime.
+// The authored input-map asset (a source with an XML envelope, like every authored asset) and
+// its builder. The cook validates and writes through: the model is pure data, so the bake's
+// only job is refusing kind-mismatched or nameless entries before they reach the runtime.
 
 module;
 #include "Core/Prelude.h"
@@ -33,12 +33,12 @@ export namespace pipeline{
 
         void Serialize(ISerializer& ar) override
         {
-            pipeline::Asset::Serialize(ar); // fileName (unused - authored in-editor)
+            pipeline::Asset::Serialize(ar); // fileName (unused; authored in the editor)
             SerializeInputMap(ar, m_map);
         }
 
         /// A fresh asset seeds the conventional starter set so the editor page never opens
-        /// on a void: Gameplay with Move/Look/Jump/Fire skeletons (bindings left empty).
+        /// empty: Gameplay with Move, Look, Jump and Fire actions (bindings left empty).
         void SeedDefaultContent()
         {
             ActionSet gameplay;
@@ -92,7 +92,7 @@ export namespace pipeline{
         }
     };
 
-    // Register asset + cooked types (tooling-side).
+    // Registers the asset and cooked types (tooling side).
     inline void RegisterInputMapAsset()
     {
         RegisterInputMapResource();
@@ -101,8 +101,8 @@ export namespace pipeline{
         RegisterSerializable<InputMapAsset>();
     }
 
-    // InputMapAsset::StaticType() is defined WITH its reflected surface (a Nested `map` property)
-    // in InputMapAssetImpl.cpp - GCC module hygiene: REFLECT_MEMBERS out of interfaces.
+    // InputMapAsset::StaticType() is defined with its reflected surface (a Nested `map` property)
+    // in InputMapAssetImpl.cpp, keeping REFLECT_MEMBERS out of the interface for GCC.
 
     /// File > New's input creators (pipeline.registration composes every domain's).
     void RegisterInputCreators(AssetCreatorRegistry& registry);

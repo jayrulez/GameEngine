@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // HelloWindow - the minimal app: opens a window and runs the frame loop
-// until the window is closed. Demonstrates the full path Core -> Runtime
-// (Context/Subsystem) -> Shell (SDL3) -> ApplicationHost driving an
+// until the window is closed. Demonstrates the full path from Core through
+// Runtime (Context/Subsystem) and Shell (SDL3) to an ApplicationHost driving an
 // IApplication, wired by APP_MAIN. Run it directly; close the window to exit.
 
 #include "Core/Prelude.h"
@@ -15,7 +15,7 @@ import foundation.runtime.client;
 import foundation.shell;
 import foundation.runtime.desktop;
 import foundation.shell.desktop;
-import foundation.graphics; // GraphicsDevice + FrameContext (APP_MAIN sets up the device)
+import foundation.graphics; // GraphicsDevice and FrameContext (APP_MAIN sets up the device)
 import foundation.graphics.gpu; // CreateGraphicsDevice
 
 namespace core = foundation::core;

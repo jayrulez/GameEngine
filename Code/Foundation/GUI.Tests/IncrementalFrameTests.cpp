@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - incremental frames (G4 of Specs/vg-and-gui-lab.md): a frame restyles only the widgets
-// that changed and their subtrees, lays out only the containers that asked, once per frame, and
-// an idle GUI needs no frame at all.
+// GUI - incremental frames: a frame restyles only the widgets that changed and their subtrees, lays
+// out only the containers that asked, once per frame, and an idle GUI needs no frame at all.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -16,7 +15,7 @@ namespace vg = foundation::vg;
 
 namespace
 {
-    // A node whose drawing marks another node (one drawn before it) dirty, once.
+    // A node whose drawing marks another node, one drawn before it, dirty once.
     class Toucher : public Node
     {
     public:
@@ -97,7 +96,7 @@ TEST_CASE("incremental: a class change restyles only that widget's subtree")
 
     left->AddClass(SV(u8"on"));
     Frame(*root.Get(), styles);
-    CHECK(styles.LastRestyleCount() == 2u); // left and its child; right's side untouched
+    CHECK(styles.LastRestyleCount() == 2u); // left and its child; the right side is untouched
     CHECK(leftChild->GetAlpha() == doctest::Approx(0.25f));
     CHECK(rightChild->GetAlpha() == doctest::Approx(1.0f));
 }
@@ -123,7 +122,7 @@ TEST_CASE("incremental: hover restyles the hovered widget alone")
     CHECK(styles.LastRestyleCount() == 1u);
     CHECK(a->GetAlpha() == doctest::Approx(0.5f));
 
-    d->InjectMouseMove(core::Float2{12.0f, 12.0f}); // still over it: nothing to do
+    d->InjectMouseMove(core::Float2{12.0f, 12.0f}); // still over it, so there is nothing to do
     CHECK_FALSE(root->NeedsFrame());
 }
 
@@ -174,7 +173,7 @@ TEST_CASE("incremental: a state restyles the subtree, or the later siblings, onl
         StyleManager styles(CSSParser::Parse(SV(css)));
         root->GetEventDispatcher()->InjectMouseMove(core::Float2{390.0f, 390.0f}); // in the window, over nothing
         Frame(*root.Get(), styles);
-        root->GetEventDispatcher()->InjectMouseMove(core::Float2{10.0f, 10.0f}); // the panel's hover alone changes
+        root->GetEventDispatcher()->InjectMouseMove(core::Float2{10.0f, 10.0f}); // only the panel's hover changes
         Frame(*root.Get(), styles);
         return styles.LastRestyleCount();
     };
@@ -183,17 +182,19 @@ TEST_CASE("incremental: a state restyles the subtree, or the later siblings, onl
     CHECK(run(u8"panel:hover + note { opacity: 0.5; }") == 2u);            // and the note after it
     CHECK(run(u8":is(panel:hover) > label { opacity: 0.5; }") == 5u);      // read inside :is() too
     CHECK(run(u8"label:not(:hover) { opacity: 0.5; }") == 1u);             // a subject's own state
-    // Read through an ancestor the panel cannot be: its subtree stays (a hover moves through every
-    // ancestor of the pointer, so `button:hover > icon` once restyled whole pages at every move).
+    // A state read through an ancestor that the panel cannot match leaves the panel's subtree
+    // alone. A hover moves through every ancestor of the pointer, so restyling for
+    // `button:hover > icon` would restyle whole pages at every move.
     CHECK(run(u8"button:hover > label { opacity: 0.5; }") == 1u);          // another tag
     CHECK(run(u8"panel.open:hover label { opacity: 0.5; }") == 1u);        // a class it lacks
     CHECK(run(u8"#menu:hover label { opacity: 0.5; }") == 1u);             // an id it lacks
     CHECK(run(u8"panel:focus label { opacity: 0.5; }") == 1u);             // another state
 }
 
-// A popup, tooltip or window joining the root rearranges its children. Restyling each child's
-// whole subtree for it restyled the whole page each time (a second in Debug); a child's subtree
-// restyles only when a rule reads siblings in a compound that child can match, with a step below.
+// A popup, tooltip or window joining the root rearranges the root's children. Restyling each
+// child's whole subtree for that would restyle the whole page each time (a second in Debug), so a
+// child's subtree restyles only when a rule reads siblings in a compound that child can match, with
+// a step below it.
 TEST_CASE("incremental: a child joining restyles its siblings, and what they hold only when a rule reads siblings there")
 {
     struct Run
@@ -232,9 +233,9 @@ TEST_CASE("incremental: a child joining restyles its siblings, and what they hol
         return Run{static_cast<core::u32>(styles.LastRestyleCount()), oldLast->GetAlpha(), labels.Back()->GetAlpha()};
     };
     CHECK(run(u8"label { opacity: 0.9; }").restyled == 3u);         // the list (its children changed), the new row, its label
-    CHECK(run(u8"row:last-child { opacity: 0.5; }").restyled == 7u); // and the four children before it themselves
+    CHECK(run(u8"row:last-child { opacity: 0.5; }").restyled == 7u); // plus the four children before it, but not what they hold
     const Run through = run(u8"row:last-child label { opacity: 0.5; }");
-    CHECK(through.restyled == 10u); // and the old rows' labels; not the other's two
+    CHECK(through.restyled == 10u); // plus the old rows' labels, but not the two inside `other`
     CHECK(through.oldLastLabel == doctest::Approx(1.0f));
     CHECK(through.newLabel == doctest::Approx(0.5f));
     CHECK(run(u8"row + row label { opacity: 0.5; }").restyled == 10u);
@@ -272,7 +273,7 @@ TEST_CASE("incremental: many adds to a layout in a scene lay it out once, at the
         column->AddChild(row.Get());
         rows.PushBack(row);
     }
-    CHECK(rows[9]->GetPosition().y == doctest::Approx(0.0f)); // deferred: not yet placed
+    CHECK(rows[9]->GetPosition().y == doctest::Approx(0.0f)); // deferred, so not yet placed
     CHECK(root->NeedsFrame());
 
     root->UpdateLayout();
@@ -349,21 +350,21 @@ TEST_CASE("incremental: a child resized after a layout lays its container out ag
     root->UpdateLayout();
     CHECK(b->GetPosition().y == doctest::Approx(0.0f)); // both empty, stacked at the top
 
-    // The sheet sizes them afterwards (a frame's restyle): the flex takes the new basis.
+    // The sheet sizes them afterwards, in a frame's restyle, and the flex takes the new basis.
     StyleManager styles(CSSParser::Parse(SV(u8"item { width: 100px; height: 40px; }")));
     styles.ApplyTree(*root.Get());
     root->UpdateLayout();
     CHECK(b->GetPosition().y == doctest::Approx(40.0f));
     CHECK(b->GetSize().y == doctest::Approx(40.0f));
 
-    root->UpdateLayout(); // its own writes asked for nothing more
+    root->UpdateLayout(); // the layout's own writes asked for nothing more
     CHECK(root->LastLayoutCount() == 0u);
 }
 
 TEST_CASE("incremental: a child displayed or not lays its container out again")
 {
-    // The showcase's panels: one shown in place of another after the first layout lands in the
-    // slot the other had, not wherever it was left.
+    // Like the showcase's panels: a panel shown in place of another after the first layout lands
+    // in the slot the other had, not wherever it was left.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto column = Make<Panel>();
     column->SetSize(core::Float2{200.0f, 400.0f});
@@ -390,7 +391,8 @@ TEST_CASE("incremental: a child displayed or not lays its container out again")
 TEST_CASE("incremental: a change under a node that was hidden through a frame still asks for a frame")
 {
     // A hidden node is not drawn, so it keeps its invalidation: a change under it later must still
-    // reach the root (pooled item rows are hidden and shown again; their changes went unseen).
+    // reach the root (pooled item rows are hidden and shown again, and their changes must not go
+    // unseen).
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 200.0f});
     auto row = Widget(u8"panel");
@@ -431,7 +433,7 @@ TEST_CASE("incremental: a list's insert above and a click's selection each ask f
     Frame(*root.Get(), styles);
     list->ScrollTo(core::Float2{0.0f, 400.0f}, ScrollBehavior::Instant);
     Frame(*root.Get(), styles);
-    list->ScrollTo(core::Float2{0.0f, 0.0f}, ScrollBehavior::Instant); // rows released and taken again
+    list->ScrollTo(core::Float2{0.0f, 0.0f}, ScrollBehavior::Instant); // rows are released and taken again
     Frame(*root.Get(), styles);
     Frame(*root.Get(), styles);
     CHECK_FALSE(root->NeedsFrame());
@@ -487,14 +489,14 @@ TEST_CASE("incremental: an animation on a page out of view asks for no frames; o
     Frame(*root.Get(), styles);
     Frame(*root.Get(), styles);
     (void)root->UpdateLayout();
-    CHECK(root->NeedsFrame()); // shown: its sweep moves
+    CHECK(root->NeedsFrame()); // shown, so its sweep moves
 
     page->SetDisplayed(false);
     (void)root->UpdateLayout();
     Frame(*root.Get(), styles);
     Frame(*root.Get(), styles);
     (void)root->UpdateLayout();
-    CHECK_FALSE(root->NeedsFrame()); // out of view: nothing on screen moves
+    CHECK_FALSE(root->NeedsFrame()); // out of view, so nothing on screen moves
 
     page->SetDisplayed(true);
     (void)root->UpdateLayout();
@@ -509,6 +511,6 @@ TEST_CASE("incremental: an animation on a page out of view asks for no frames; o
     Frame(*root.Get(), styles);
     (void)root->UpdateLayout();
     REQUIRE_FALSE(root->NeedsFrame());
-    still->SetVisible(false); // what drew it must draw again
+    still->SetVisible(false); // the area it drew must be drawn again
     CHECK(root->NeedsFrame());
 }

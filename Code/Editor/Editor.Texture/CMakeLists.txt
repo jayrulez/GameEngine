@@ -1,5 +1,5 @@
-# Editor::Texture - `editor.texture`: the TextureAsset import-settings +
-# preview page + factory, on the GUI. Linked by the editor EXECUTABLE only.
+# Editor::Texture - `editor.texture`: the TextureAsset page (import settings and preview) and its
+# factory, on the GUI. Linked by the editor executable only.
 util_add_engine_library(Editor.Texture ALIAS Editor::Texture)
 target_link_libraries(Editor.Texture
     PUBLIC

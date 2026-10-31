@@ -1,5 +1,5 @@
-# Editor::Image - `editor.image`: the ImageAsset inspect + color-space
-# page + factory (the Texture page's source-side sibling), on the GUI. Linked by the editor EXECUTABLE only.
+# Editor::Image - `editor.image`: the ImageAsset page (inspection and color space) and its factory,
+# the source-side sibling of the Texture page, on the GUI. Linked by the editor executable only.
 util_add_engine_library(Editor.Image ALIAS Editor::Image)
 target_link_libraries(Editor.Image
     PUBLIC

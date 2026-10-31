@@ -3,11 +3,11 @@
 
 /// Foundation::Profiler - :recording partition.
 ///
-/// A viewer's own copy of frames (Specs/profiler.md, P5): the editor's panel records what the
-/// store keeps into one of these, so its pause, its longer history and its selection never touch
-/// the store another viewer reads (a game's overlay). Frames are copied once their GPU passes
-/// have had time to arrive (`settleFrames` behind the newest), with the name, thread and counter
-/// tables they point into; the oldest go when it is full. It is a source, so the views read it
+/// A viewer's own copy of frames: the editor's panel records what the store keeps into one of
+/// these, so its pause, its longer history and its selection never touch the store another viewer
+/// reads (a game's overlay). Frames are copied once their GPU passes have had time to arrive
+/// (`settleFrames` behind the newest), with the name, thread and counter tables they point into;
+/// the oldest go when it is full. It is a source, so the views read it
 /// and a capture file is written from it like any other.
 
 module;

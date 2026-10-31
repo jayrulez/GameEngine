@@ -4,12 +4,12 @@
 // Editor::Scene - :registration partition.
 //
 // RegisterSceneEditor, the module's entry point the executable calls (the editor's core and app
-// never link this module): the scene editor's services (the document types, the export's seams, a
-// model import's prefab), its thumbnail generators, a page factory for scenes and one for prefabs (a prefab's payload is a
-// scene stream, so the same page edits it), the scene editor's actions and its MCP live tools. A
-// page gets from the editor what draws its viewport, its markup and the asset picker, asked when it
-// is made (the window's GUI host exists once the window is open). Out of the page's partition
-// (Documentation/Specs/editor-gui.md, 5.3, layer 2).
+// never link this module). It registers the scene editor's services (the document types, the
+// export's extension points, a model import's prefab), its thumbnail generators, a page factory for
+// scenes and one for prefabs (a prefab's payload is a scene stream, so the same page edits it), the
+// scene editor's actions and its MCP live tools. A page gets from the editor what draws its
+// viewport, its markup and the asset picker, asked for when it is made (the window's GUI host
+// exists once the window is open).
 
 module;
 #include "Core/Prelude.h"
@@ -53,8 +53,8 @@ export namespace editor
     inline void RegisterSceneEditor(EditorContext& context, foundation::runtime::IApplicationHost& host, app::EditorApplication& app)
     {
         RegisterSceneEditorServices(context, host);
-        // The pictures of meshes, materials, prefabs, scenes and effects: the generators queue,
-        // the application's thumbnail stage renders.
+        // The pictures of meshes, materials, prefabs, scenes and effects: the generators queue them
+        // and the application's thumbnail stage renders them.
         if (context.Thumbnails() != nullptr)
             RegisterSceneThumbnailGenerators(*context.Thumbnails(), context);
 

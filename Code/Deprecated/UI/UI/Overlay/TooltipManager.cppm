@@ -4,12 +4,12 @@
 // UI - :tooltip_manager partition
 //
 // Manages tooltip display timing. Owns a single reusable TooltipView; ticked by UIContext each frame
-// (Update), notified of hover/press by the InputManager and of deletions by UIContext. Ported from
-// Sedulous.UI/src/Overlay/TooltipManager.bf. Like the Input managers, this is a by-value member of
-// UIContext; all View-touching bodies live in the module impl unit (Overlay/TooltipImpl.cpp), so View/
-// UIContext/RootView/TooltipView are only forward-declared here (the TooltipView is held as a RefPtr).
-// Beef `new/delete` of the TooltipView -> RefPtr (RAII); the dtor still nulls the view's Parent/Context
-// because the PopupLayer may outlive this manager (the view is shown ownsView:false).
+// (Update), notified of hover and press by the InputManager and of deletions by UIContext. Like the
+// Input managers, this is a by-value member of UIContext. All View-touching bodies live in the module
+// implementation unit (Overlay/TooltipImpl.cpp), so View, UIContext, RootView and TooltipView are only
+// forward-declared here. The TooltipView is held by RefPtr; the destructor still clears the view's
+// Parent and Context because the PopupLayer may outlive this manager (the view is shown with
+// ownsView:false).
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +50,8 @@ export namespace foundation::ui
         /// Called when the hover target changes.
         void OnHoverChanged(View* newTarget);
 
-        /// Called when the mouse is pressed - hide tooltip unless interactive and click is on the tooltip.
+        /// Called when the mouse is pressed. Hides the tooltip unless it is interactive and the
+        /// click is on it.
         void OnMouseDown();
 
         /// Tick each frame. Shows the tooltip after the delay, auto-hides after the timeout.

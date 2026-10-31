@@ -3,14 +3,13 @@
 
 // Foundation::UI.Toolkit - the `foundation.ui.toolkit:timeline` partition.
 //
-// Timeline: a time RULER + draggable PLAYHEAD scrubber over a SECONDS axis.
-// Domain-agnostic - it knows a duration, a
-// playhead time, and the shared time<->pixel transform (pixelsPerSecond / scrollSeconds /
-// labelColumnWidth); the ruler itself knows NOTHING about clips or keyframes (lanes + keys +
-// selection layer on as this widget grows, so consumers stay decoupled and it is headlessly
-// testable). SECONDS are the only currency; the frame display is a label format only. Scrubbing
-// fires OnPlayheadMoved. All chrome resolves from the theme with fallbacks; no hand-picked hex in
-// draw code.
+// Timeline: a time ruler and draggable playhead scrubber over a seconds axis, with optional
+// dopesheet lanes. It is domain-agnostic: it knows a duration, a playhead time and the shared
+// time-to-pixel transform (pixelsPerSecond, scrollSeconds, labelColumnWidth), and lanes carry only
+// key times, so it knows nothing about clips or keyframes. Consumers stay decoupled and the widget
+// is testable headless. Seconds are the only unit; the frame display is only a label format.
+// Scrubbing fires OnPlayheadMoved. All chrome resolves from the theme with fallbacks; draw code
+// uses no hand-picked colors.
 
 module;
 #include <cmath>
@@ -32,8 +31,9 @@ export namespace foundation::ui::toolkit
     namespace core = foundation::core;
     namespace fonts = foundation::fonts;
 
-    // One dopesheet row: a fixed height + the key TIMES on it (seconds, host-sorted). The widget draws
-    // a marker per key and handles selection/drag; the host owns what a key MEANS (which track/channel).
+    // One dopesheet row: a fixed height and the key times on it (seconds, sorted by the host). The widget
+    // draws a marker per key and handles selection and drag; the host owns what a key means (which
+    // track or channel).
     struct DopesheetLane
     {
         f32 height = 22.0f;
@@ -41,8 +41,8 @@ export namespace foundation::ui::toolkit
         Array<f32> keyTimes;
     };
 
-    // A key address within the lane model: (lane, index-in-lane). Selection + the drag event speak
-    // these; the host maps them back to clip tracks/keys (no id on the key - Fable D3 ruling).
+    // A key address within the lane model: (lane, index in lane). Selection and the drag event use
+    // these; the host maps them back to clip tracks and keys (keys carry no id).
     struct DopesheetKeyRef
     {
         u32 lane = 0;
@@ -53,7 +53,7 @@ export namespace foundation::ui::toolkit
     {
         RTTI_OBJECT(Timeline, View)
     public:
-        // The clip length (seconds): the ruler extent + the playhead clamp bound.
+        // The clip length (seconds): the ruler extent and the playhead clamp bound.
         [[nodiscard]] f32 Duration() const noexcept { return m_duration; }
         void SetDuration(f32 seconds)
         {
@@ -77,14 +77,14 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
-        // The shared time<->pixel transform. Lanes + the curve view READ these; none caches
+        // The shared time-to-pixel transform. Lanes and the curve view read these; none caches
         // its own copy (a per-row cache here would be a bug).
         [[nodiscard]] f32 PixelsPerSecond() const noexcept { return m_pixelsPerSecond; }
         void SetPixelsPerSecond(f32 pps)
         {
             m_pixelsPerSecond = Clamp(pps, kMinPps, kMaxPps);
             m_scrollSeconds = ClampScroll(m_scrollSeconds); // zooming out shrinks the max scroll
-            OnViewChanged.Invoke(); // a consumer (the curve canvas) shares this transform (D1)
+            OnViewChanged.Invoke(); // a consumer (the curve canvas) shares this transform
             Invalidate();
         }
         [[nodiscard]] f32 ScrollSeconds() const noexcept { return m_scrollSeconds; }
@@ -103,7 +103,7 @@ export namespace foundation::ui::toolkit
         }
 
         f32 LabelColumnWidth = 0.0f; // left gutter reserved for track labels (0 when unused)
-        i32 DisplayFps = 0;          // 0 = seconds labels; >0 = frame-number labels (display only, A3)
+        i32 DisplayFps = 0;          // 0 = seconds labels; >0 = frame-number labels (display only)
 
         [[nodiscard]] f32 TimeToX(f32 t) const noexcept
         {
@@ -117,8 +117,8 @@ export namespace foundation::ui::toolkit
         }
 
         // Pick the ruler label step (seconds) from the {1,2,5}x10^n sequence: the smallest such step
-        // whose on-screen width is at least `minLabelPx`, so labels never collide at any zoom (Godot's
-        // ruler algorithm). Pure + headlessly testable (A8).
+        // whose on-screen width is at least `minLabelPx`, so labels never collide at any zoom. Pure, so
+        // it is testable headless.
         [[nodiscard]] static f32 PickTickStep(f32 pixelsPerSecond, f32 minLabelPx) noexcept
         {
             if (pixelsPerSecond <= 0.0f || minLabelPx <= 0.0f)
@@ -141,9 +141,9 @@ export namespace foundation::ui::toolkit
         Event<void(f32)> OnPlayheadMoved;
 
         // === dopesheet lanes ===
-        // The host sets the lane model (rebuilt from the clip); the widget renders keys + handles
-        // selection + drag. It NEVER mutates the model - a key drag is purely visual and, on release,
-        // emits OnKeysMoved(deltaSeconds) for the host to apply + re-sort + re-select (D4/D5).
+        // The host sets the lane model (rebuilt from the clip); the widget renders keys and handles
+        // selection and drag. It never mutates the model: a key drag is purely visual and, on release,
+        // emits OnKeysMoved(deltaSeconds) for the host to apply, re-sort and re-select.
         void SetLanes(Array<DopesheetLane> lanes)
         {
             m_lanes = Move(lanes);
@@ -155,9 +155,9 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
-        // The SELECTED LANE (track): set by a label-column click or a key pick; -1 = none. The
-        // Sedulous shape - the dopesheet IS the track list, and the host shows the selected
-        // track's strip/canvas from this.
+        // The selected lane (track): set by a label-column click or a key pick; -1 means none. The
+        // dopesheet is the track list, and the host shows the selected track's strip or canvas
+        // from this.
         [[nodiscard]] i32 SelectedLane() const noexcept { return m_selectedLane; }
         /// Programmatic set (host-driven): clamps, no OnLaneSelected (no feedback loops).
         void SetSelectedLane(i32 lane)
@@ -181,7 +181,7 @@ export namespace foundation::ui::toolkit
                 Invalidate();
             }
         }
-        // Replace the selection wholesale (the host re-selects by time after a commit-remap - D3/D4).
+        // Replace the selection wholesale (the host re-selects by time after a commit remaps the keys).
         void SetSelection(const Array<DopesheetKeyRef>& keys)
         {
             m_selection.Clear();
@@ -204,8 +204,8 @@ export namespace foundation::ui::toolkit
 
         Event<void()> OnSelectionChanged;
         Event<void(f32)> OnKeysMoved; // a key drag committed: move all selected keys by this delta (s)
-        Event<void(i32)> OnLaneSelected; // the USER picked a lane (label click or key pick); -1 never fires
-        Event<void()> OnViewChanged; // the time transform (zoom/scroll) changed - shared consumers re-sync (D1)
+        Event<void(i32)> OnLaneSelected; // the user picked a lane (label click or key pick); -1 never fires
+        Event<void()> OnViewChanged; // the time transform (zoom/scroll) changed; shared consumers re-sync
 
         void OnMeasure(BoxConstraints constraints) override
         {
@@ -218,10 +218,10 @@ export namespace foundation::ui::toolkit
             const f32 w = Width();
             const f32 h = Height();
             // Everything clips to the widget: tick labels near the right edge and long lane
-            // labels must never paint outside the timeline (UAT: label overflow).
+            // labels must never paint outside the timeline.
             ctx.VG().PushClipRect(Rectangle{0.0f, 0.0f, w, h});
-            // Resolve the ruler band ONCE; the gutter is derived from it (F2 - a single themed
-            // Background rule, not a second token with its own hand-picked fallback).
+            // Resolve the ruler band once and derive the gutter from it, so one themed Background
+            // rule drives both rather than a second token with its own hand-picked fallback.
             const core::Color band =
                 ResolveStyleColor(StyleProperty::Background, core::Color::Rgb(24, 25, 30, 255));
             ctx.VG().FillRect(Rectangle{0.0f, 0.0f, w, h}, band);
@@ -268,13 +268,13 @@ export namespace foundation::ui::toolkit
             }
 
             // Left label gutter: the band darkened, so a themed Background keeps the gutter distinct
-            // without a second token (F2).
+            // without a second token.
             if (LabelColumnWidth > 0.0f)
             {
                 const core::Color gutter{band.r * 0.82f, band.g * 0.82f, band.b * 0.82f, band.a};
                 ctx.VG().FillRect(Rectangle{0.0f, 0.0f, LabelColumnWidth, h}, gutter);
-                // Track labels, one per lane (the dopesheet IS the track list - Sedulous
-                // shape). Larger than the ruler digits (9pt read as fine print) and clipped
+                // Track labels, one per lane (the dopesheet is the track list). Larger than the
+                // ruler digits (9pt reads as fine print) and clipped
                 // to the gutter so a long path never bleeds into the key grid.
                 const core::Color laneLabelSel = ResolveStyleColor(
                     StyleProperty::AccentColor, core::Color::Rgb(90, 150, 235, 255));
@@ -304,8 +304,8 @@ export namespace foundation::ui::toolkit
                 ctx.VG().PopClip();
             }
 
-            // Dopesheet lanes below the ruler: an alternating row per lane + a marker per key. Selected
-            // keys use the accent; a live key-drag offsets the selected markers visually (D4).
+            // Dopesheet lanes below the ruler: an alternating row per lane and a marker per key. Selected
+            // keys use the accent; a live key drag offsets the selected markers visually.
             const core::Color rowEven{band.r * 1.12f, band.g * 1.12f, band.b * 1.12f, band.a};
             const core::Color rowOdd{band.r * 1.24f, band.g * 1.24f, band.b * 1.24f, band.a};
             const core::Color keyColor =
@@ -341,8 +341,8 @@ export namespace foundation::ui::toolkit
                 laneY += lane.height;
             }
 
-            // Playhead: a vertical line + a small head flag at the top (theme error-red). Snap x to a
-            // whole pixel + draw a fixed 2px width so a fractional scrub/advance stays crisp and does
+            // Playhead: a vertical line and a small head flag at the top (theme error red). Snap x to a
+            // whole pixel and draw a fixed 2px width so a fractional scrub/advance stays crisp and does
             // not shimmer between 1 and 2 px each frame (a sub-pixel anti-aliasing artifact).
             const f32 px = TimeToX(m_playhead);
             if (px >= LabelColumnWidth - 0.5f && px <= w)
@@ -354,7 +354,7 @@ export namespace foundation::ui::toolkit
                 ctx.VG().FillRect(Rectangle{lx - 4.0f, 0.0f, 8.0f, 5.0f}, playhead);
             }
 
-            // Box-select overlay (drawn last, over the lanes + playhead).
+            // Box-select overlay (drawn last, over the lanes and playhead).
             if (m_boxSelecting)
             {
                 const f32 bx = Min(m_boxStart.x, m_boxEnd.x);
@@ -370,7 +370,7 @@ export namespace foundation::ui::toolkit
 
         void OnMouseDown(MouseEventArgs& e) override
         {
-            // Middle button pans (the DCC standard - drag left/right to reach any section).
+            // Middle button pans (the DCC standard: drag left or right to reach any section).
             if (e.Button == MouseButton::Middle)
             {
                 m_panning = true;
@@ -421,7 +421,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Lane area: hit a key -> select + begin a (visual) drag; empty -> box-select.
+            // Lane area: a key hit selects and begins a (visual) drag; empty space box-selects.
             const bool ctrl = HasFlag(e.Modifiers, KeyModifiers::Ctrl);
             u32 lane = 0, index = 0;
             if (HitTestKey(e.X, e.Y, lane, index))
@@ -445,7 +445,7 @@ export namespace foundation::ui::toolkit
             }
             else if (Abs(e.X - TimeToX(m_playhead)) <= kPlayheadGrabPx)
             {
-                // Clicked ON the playhead line (down in the lanes): grab + scrub it, not box-select.
+                // Clicked on the playhead line (down in the lanes): grab and scrub it rather than box-select.
                 m_dragging = true;
                 SetPlayheadTime(XToTime(e.X));
             }
@@ -516,10 +516,10 @@ export namespace foundation::ui::toolkit
                 const f32 dx = m_dragDeltaX;
                 m_keyDragging = false;
                 m_dragDeltaX = 0.0f;
-                // Epsilon gate: a small move is a click (select only), not a drag (D4).
+                // Epsilon gate: a small move is a click (select only), not a drag.
                 if (Abs(dx) >= kDragEpsilonPx && m_pixelsPerSecond > 0.0f)
                 {
-                    OnKeysMoved.Invoke(dx / m_pixelsPerSecond); // host applies + re-sorts + re-selects
+                    OnKeysMoved.Invoke(dx / m_pixelsPerSecond); // the host applies, re-sorts and re-selects
                 }
                 Invalidate();
             }
@@ -540,7 +540,7 @@ export namespace foundation::ui::toolkit
 
         void OnMouseWheel(MouseWheelEventArgs& e) override
         {
-            // Horizontal wheel (trackpads) or Shift+wheel PANS; plain vertical wheel zooms.
+            // Horizontal wheel (trackpads) or Shift+wheel pans; plain vertical wheel zooms.
             const bool shift = HasFlag(e.Modifiers, KeyModifiers::Shift);
             const f32 panDelta = (e.DeltaX != 0.0f) ? e.DeltaX : (shift ? e.DeltaY : 0.0f);
             if (panDelta != 0.0f)
@@ -557,7 +557,7 @@ export namespace foundation::ui::toolkit
             {
                 return;
             }
-            // Zoom anchored at the cursor: keep the time under the cursor fixed (Godot).
+            // Zoom anchored at the cursor: keep the time under the cursor fixed.
             const f32 timeAtCursor = XToTime(e.X);
             SetPixelsPerSecond(m_pixelsPerSecond * (e.DeltaY > 0.0f ? kZoomStep : 1.0f / kZoomStep));
             SetScrollSeconds(timeAtCursor - (e.X - LabelColumnWidth) / m_pixelsPerSecond);
@@ -578,8 +578,8 @@ export namespace foundation::ui::toolkit
         }
 
         // Clamp a scroll offset to the content extent: the view never scrolls before 0, and
-        // never past the point where the clip END sits at the right edge (with a small tail so
-        // end keys stay grabbable). When the whole clip fits (or before layout), scroll is 0 -
+        // never past the point where the clip end sits at the right edge (with a small tail so
+        // end keys stay grabbable). When the whole clip fits (or before layout), scroll is 0, so
         // zooming out cannot push both ends away from the content.
         [[nodiscard]] f32 ClampScroll(f32 seconds) const noexcept
         {

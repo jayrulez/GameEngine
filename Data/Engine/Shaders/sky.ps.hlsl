@@ -9,9 +9,9 @@ struct PSIn { float4 pos : SV_Position; float3 dir : TEXCOORD0; float2 ndc : TEX
 struct PSOut { float4 color : SV_Target0; float2 velocity : SV_Target1; };
 PSOut main(PSIn i) {
     float3 dir = normalize(i.dir);
-    // The env cube already carries skyIntensity (baked once; drives IBL too). BackgroundIntensity is
-    // the SEPARATE display-only backdrop multiplier - it dims the VISIBLE sky without touching the
-    // IBL lighting derived from the cube. (skyIntensity is never re-applied here - that squared it.)
+    // The env cube already carries skyIntensity (baked once; it drives IBL too), so it is not applied
+    // again here. BackgroundIntensity is a separate, display-only backdrop multiplier: it dims the
+    // visible sky without touching the IBL lighting derived from the cube.
     float3 c = EnvMap.SampleLevel(EnvSamp, dir, 0.0).rgb * BackgroundIntensity;
     // Crisp analytic sun disc (screen resolution, round) toward the light, with a soft ~1.5deg edge.
     float3 L     = normalize(-SunDirection);
@@ -21,10 +21,11 @@ PSOut main(PSIn i) {
     c += smoothstep(outer, inner, cd) * SunColor * SunIntensity;
 
     // Camera-motion velocity: reproject the (infinite) view ray through last frame's view-proj (w=0, a
-    // direction) and take the UV delta, in UNJITTERED NDC. The ray is reconstructed through the UNJITTERED
-    // InvViewProj (so the background is temporally invariant under a static camera - no per-pixel jitter
-    // oscillation for TAA to chase), which makes i.ndc the geometric current NDC directly. The previous
-    // term still unjitters (PrevViewProj carries last frame's jitter; +PrevJitter removes it).
+    // direction) and take the UV delta, in unjittered NDC. The ray is reconstructed through the
+    // unjittered InvViewProj, so the background is temporally invariant under a static camera (no
+    // per-pixel jitter oscillation for TAA to chase), which makes i.ndc the geometric current NDC
+    // directly. The previous term still unjitters: PrevViewProj carries last frame's jitter, and
+    // adding PrevJitter removes it.
     float4 prevClip = mul(float4(dir, 0.0), PrevViewProj);
     float2 curNDC   = i.ndc;
     float2 prevNDC  = prevClip.xy / prevClip.w + PrevJitter;

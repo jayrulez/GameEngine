@@ -3,14 +3,14 @@
 
 // Editor::Scene - :entity_picker_window partition.
 //
-// An entity slot's pick (Documentation/Specs/editor-gui.md, ruling 25; the mock's
-// entity-picker.xml): the scene as its hierarchy shows it, the hierarchy's own tree model
-// (SceneTreeModel) in a picker's frame. The scene is its top row (open, and no pick); each entity
-// by its type's icon in its category's colour, opened and closed by its arrow; the way to the
-// current entity open and its row lit. The search keeps each match with what holds it and opens
-// every way to them. Up and Down move the light from the search, Enter or a double click picks,
-// Esc or its close keeps the value (a slot's own clear sets nothing). It opens in the window's
-// middle, as every picker does.
+// The picker an entity slot opens (its markup is Data/Editor/EntityPicker.xml): the scene as the
+// hierarchy shows it, through the hierarchy's own tree model (SceneTreeModel) in a picker's frame.
+// The scene is the top row, open and not pickable. Each entity shows its type's icon in its
+// category's colour and opens and closes by its arrow. The path to the current entity is open and
+// its row highlighted. The search keeps each match together with its ancestors and opens the path
+// to every match. Up and Down move the highlight from the search field, Enter or a double click
+// picks, and Esc or the close button keeps the value and sets nothing. Like every picker, it opens
+// in the middle of the window.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +31,8 @@ export namespace editor
     /// What an entity slot asks the picker for.
     struct EntityPickRequest
     {
-        Guid current;                       // its value now (nil: none)
-        Function<void(const Guid&)> chosen; // a pick (nil: None)
+        Guid current;                       // the slot's current value (nil: none)
+        Function<void(const Guid&)> chosen; // called with the pick (nil for None)
     };
 
     class EntityPickerWindow
@@ -41,11 +41,11 @@ export namespace editor
         /// Its markup, under the data root.
         static constexpr const char8_t* kPath = u8"Editor/EntityPicker.xml";
 
-        /// What it shows the scene by, as the page's hierarchy does.
+        /// What the picker draws the scene with, as the page's hierarchy does.
         struct Services
         {
             EditorIcons* icons = nullptr;     // the entities' type icons (null: none)
-            StringView sceneIcon;             // the top row's
+            StringView sceneIcon;             // the top row's icon
             Function<StringView()> sceneName; // the top row's text (unset: the scene's name)
         };
 
@@ -72,7 +72,7 @@ export namespace editor
             }
             if (auto* close = Find<gui::Button>(u8"entity-picker-close"))
                 close->SetOnClick([self]() { self->Close(); });
-            // Up, Down and Enter before the search takes them.
+            // Handle Up, Down and Enter before the search field takes them.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
                                                   const auto& key = static_cast<const gui::KeyEvent&>(e);
@@ -101,9 +101,10 @@ export namespace editor
                 m_tree->SetModel(nullptr);
         }
 
-        /// Opens it over `root` for `request`, in the window's middle: the scene's tree, the way to
-        /// the current entity open and its row lit, the search empty and focused. False with no
-        /// frame, a root in no GUI, or one open already.
+        /// Opens the picker over `root` for `request`, in the middle of the window: the scene's
+        /// tree with the path to the current entity open and its row highlighted, and the search
+        /// empty and focused. False with no frame, with a root in no GUI, or when one is already
+        /// open.
         bool Open(foundation::gui::SceneRoot& root, EntityPickRequest request)
         {
             namespace gui = foundation::gui;
@@ -146,7 +147,7 @@ export namespace editor
             return m_root != nullptr && m_content && m_root->GetEventDispatcher() != nullptr && m_root->GetEventDispatcher()->IsPopupOpen(*m_content);
         }
 
-        /// Searches the scene for `text` (as typing it): a match kept with what holds it.
+        /// Searches the scene for `text`, as typing it does: each match is kept with its ancestors.
         void Search(StringView text)
         {
             if (m_query.AsView() == text)
@@ -156,7 +157,7 @@ export namespace editor
                 m_search->SetText(text);
             Build();
         }
-        /// Moves the light `by` rows (the scene's own row among them).
+        /// Moves the highlight by `by` rows (the scene's own row counts among them).
         void Step(i32 by)
         {
             if (m_tree == nullptr || m_tree->GetItemCount() == 0)
@@ -165,7 +166,7 @@ export namespace editor
             const i32 last = static_cast<i32>(m_tree->GetItemCount()) - 1;
             m_tree->SetSelectedItem(lit < 0 ? 0 : Clamp(lit + by, 0, last));
         }
-        /// Picks the lit entity; the scene's row, or none lit, picks nothing.
+        /// Picks the highlighted entity; the scene's row, or no highlight, picks nothing.
         void PickLit()
         {
             if (m_tree != nullptr && m_tree->GetSelectedItem() >= 0)
@@ -217,14 +218,15 @@ export namespace editor
             return nullptr;
         }
 
-        // The tree from the scene as it is now: the scene's row open; with a search every way to a
-        // match open, else the way to the current entity; the current entity lit when shown.
+        // Builds the tree from the scene as it is now. The scene's row is open; with a search, the
+        // path to every match is open, otherwise the path to the current entity. The current entity
+        // is highlighted when shown.
         void Build()
         {
             foundation::scene::Scene& sc = m_edit->Scene();
             const String name = m_services.sceneName ? String(m_services.sceneName()) : String(sc.Name());
             m_model.Build(sc, name.AsView(), m_services.sceneIcon, m_services.icons, m_query.AsView());
-            const bool empty = m_model.Rows().Size() <= 1; // the scene's row alone
+            const bool empty = m_model.Rows().Size() <= 1; // only the scene's row
             if (m_tree != nullptr)
             {
                 m_tree->SetIdExpanded(SceneTreeModel::kSceneRowId, true);
@@ -252,7 +254,8 @@ export namespace editor
                                                      : StringView(u8"The scene has no entity to point at."));
             }
         }
-        // The current entity lit; not shown (or none), the first match with a search, else nothing.
+        // Highlights the current entity. When it is not shown (or there is none), highlights the
+        // first match of a search, otherwise nothing.
         void Light()
         {
             const foundation::gui::ItemId current = m_request.current.IsNil() ? foundation::gui::kNoItem : SceneTreeModel::IdOfEntity(m_request.current);
@@ -286,7 +289,7 @@ export namespace editor
             return Guid{};
         }
 
-        // The scene's own row is no pick.
+        // Picks `entity`; the scene's own row (nil) is not a pick.
         void PickEntity(const Guid& entity)
         {
             if (!entity.IsNil())

@@ -1,6 +1,6 @@
 # ModelViewer - `modelviewer`: the model viewer tool's headless half (opening a model file into the
 # viewer's cache and binding it, its numbers), tested by ModelViewer.Tests; Tools.ModelViewer is
-# the window over it (Documentation/Specs/model-viewer.md).
+# the window over it.
 
 util_add_engine_library(ModelViewer ALIAS Tools::ModelViewer)
 target_link_libraries(ModelViewer

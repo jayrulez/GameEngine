@@ -3,11 +3,11 @@
 
 // GUI - :text_field partition
 //
-// TextField: a single-line, editable text control (E4 of Specs/gui-lab-evolution.md), over the
-// editing model and keys TextEditBase gives it. Modeled on eepp's UITextInput (role only). Its text
-// sits on one line, centred down its height, and scrolls across to keep the caret in view; Return
-// submits it (the `submit` event, its value committing as `change`). It may mask its text as a
-// password: a bullet for each character, copying and cutting taking nothing out, no IME composition.
+// TextField: a single-line editable text control, using the editing model and keys from
+// TextEditBase. The text sits on one line, centred vertically, and scrolls horizontally to keep the
+// caret in view. Return submits it: the field sends `submit`, and its value commits as `change`.
+// It can mask its text as a password: each character shows as a bullet, copy and cut take nothing
+// out, and there is no IME composition.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +34,7 @@ export namespace foundation::gui
         TextField()
         {
             SetTag(core::StringView(u8"textfield"));
-            ShownText().SetWhiteSpace(TextWhiteSpace::Pre); // its spaces as typed, on one line
+            ShownText().SetWhiteSpace(TextWhiteSpace::Pre); // keep spaces as typed, on one line
             ShownText().SetAlignment(TextHAlign::Start, TextVAlign::Middle);
             HintText().SetAlignment(TextHAlign::Start, TextVAlign::Middle);
             {
@@ -44,7 +44,8 @@ export namespace foundation::gui
             (void)OnCommand(core::StringView(kTextSubmitCommand), [this](CommandEvent&) { Submit(); });
         }
 
-        /// A password field draws a bullet for each character and lets nothing out by copy or cut.
+        /// Makes it a password field, which draws a bullet for each character and lets nothing out
+        /// by copy or cut.
         void SetPassword(bool password)
         {
             if (password == m_password)
@@ -55,16 +56,17 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsPassword() const noexcept { return m_password; }
 
-        /// How far its text is scrolled across from its inline start (to keep the caret in view):
+        /// Returns how far the text is scrolled from its inline start to keep the caret in view:
         /// from the left in a left-to-right line, from the right in a right-to-left one.
         [[nodiscard]] f32 GetScrollX() const noexcept { return m_scrollX; }
 
-        /// One line of its font, a field's usual width, when nothing sizes it (E2).
+        /// Measures one line of the font at a field's usual width, used when nothing else sizes it.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
             return core::Float2{160.0f, (ShownText().GetFont() != nullptr) ? ShownText().GetLineHeight() : 20.0f};
         }
-        /// Its line's baseline, where it draws its value (and its placeholder, in the same font).
+        /// Returns the line's baseline, where the value is drawn (and the placeholder, in the same
+        /// font).
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
         {
             const Thickness c = GetChrome();
@@ -75,9 +77,9 @@ export namespace foundation::gui
     protected:
         [[nodiscard]] bool IsMasked() const override { return m_password; }
         [[nodiscard]] const TextLayout& EditLayout() const override { return ShownText().LayoutFor(Rect{}); } // one line, unbounded
-        // The layout's origin (E17a): a line shorter than the field where its alignment puts it,
-        // resolved against the line's own direction (start is the right in a right-to-left one); a
-        // longer one scrolled from its inline start. Its line is centred down it.
+        // Returns the layout's origin. A line shorter than the field sits where its alignment puts
+        // it, resolved against the line's own direction (start is the right in a right-to-left
+        // line). A longer line is scrolled from its inline start. The line is centred vertically.
         [[nodiscard]] core::Float2 TextOrigin(const Rect& content) const override
         {
             const core::Float2 origin = ShownText().Origin(Rect{content.x, content.y, 0.0f, content.height});
@@ -87,9 +89,9 @@ export namespace foundation::gui
                 return core::Float2{origin.x + Slack(layout, view - layout.Width), origin.y};
             return core::Float2{origin.x - ScrollFromLeft(layout, view), origin.y};
         }
-        // Scrolls by the least that shows the caret, and no further than the text needs. Not
-        // focused, a line too long for the field rests on its start: a value shows its beginning
-        // (-9.81, not 81), wherever its caret was left.
+        // Scrolls the least amount that shows the caret, and no further than the text needs. When
+        // the field is not focused, a line too long for it rests at its start, so a value shows its
+        // beginning (-9.81, not 81) wherever the caret was left.
         void KeepCaretInView() override
         {
             if (!IsFocused())
@@ -119,19 +121,20 @@ export namespace foundation::gui
 
     private:
         [[nodiscard]] static f32 View(const Rect& content) { return core::Max(0.0f, content.width - kCaretWidth); }
-        // The line's paragraph runs right to left (the field's own way while it is empty).
+        // Returns whether the line's paragraph runs right to left; while the text is empty, the
+        // field's own direction decides.
         [[nodiscard]] bool RunsRightToLeft(const TextLayout& layout) const
         {
             return layout.Lines.IsEmpty() ? IsRightToLeft() : layout.Lines[0].RightToLeft;
         }
-        // The scroll as the layout moves left, from the inline-start scroll it keeps.
+        // Converts the kept inline-start scroll into how far the layout moves left.
         [[nodiscard]] f32 ScrollFromLeft(const TextLayout& layout, f32 view) const
         {
             const f32 range = core::Max(0.0f, layout.Width - view);
             const f32 fromStart = core::Clamp(m_scrollX, 0.0f, range);
             return RunsRightToLeft(layout) ? range - fromStart : fromStart;
         }
-        // How far a short line sits from the left, of the `slack` it leaves.
+        // Returns how far a short line sits from the left, out of the `slack` it leaves.
         [[nodiscard]] f32 Slack(const TextLayout& layout, f32 slack) const
         {
             TextHAlign align = ShownText().GetHAlign();

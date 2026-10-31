@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Profiler.GUI - the scope table and the scope's detail (X7 of Specs/editor-gui.md): the call tree
-// of the frames chosen (each thread a group, the GPU's passes one, a scope's runs in one place
-// one row, self time its children's taken out); sorted by another heading a flat list of names;
-// a filter showing the names holding its text and the rows they hang from; a span cutting the
-// scopes to it; a click choosing a row's name, a click on an arrow folding it, on a heading
-// sorting. The detail: the name's calls and times, its callers, its children by name with its own
-// time last, its calls' spread over every frame held and its longest call in the frames chosen.
+// Profiler.GUI - the scope table and the scope detail. The table covers the call tree of the
+// chosen frames (each thread a group, the GPU's passes another, a scope's runs in one place as one
+// row, and self time as the total less the children's); a flat list of names when sorted by
+// another heading; a filter showing the names that contain its text and the rows they hang from;
+// a span cutting the scopes to it; and clicks choosing a row's name, folding a row by its arrow,
+// and sorting by a heading. The detail covers the name's calls and times, its callers, its
+// children by name with its self time last, the spread of its calls over every frame held, and
+// its longest call in the chosen frames.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -26,8 +27,8 @@ namespace fgui = foundation::gui;
 
 namespace
 {
-    // A table 600 by 300 (headings 24 high, rows 22; the six number columns 72 wide from the end)
-    // and a detail beside it, over frames 0 (20 ms) and 1 (10 ms), both chosen.
+    // A table 600 by 300 (headings 24 high, rows 22, and six number columns 72 wide counted from
+    // the end) with a detail beside it, over frames 0 (20 ms) and 1 (10 ms), both chosen.
     struct Bed
     {
         KnownSource source;
@@ -134,7 +135,7 @@ TEST_CASE("ScopeTable: the call tree of the frames chosen, a scope's runs in one
     CHECK(bed.table->CellText(*physics, ScopeColumn::Mean) == String(u8"5.00"));
     CHECK(bed.table->CellText(*physics, ScopeColumn::Max) == String(u8"8.00"));
     CHECK(bed.table->CellText(*physics, ScopeColumn::Share) == String(u8"50.0%"));
-    CHECK(bed.table->CellText(*bed.RowOf(u8"Main"), ScopeColumn::Total).IsEmpty()); // a group: no numbers
+    CHECK(bed.table->CellText(*bed.RowOf(u8"Main"), ScopeColumn::Total).IsEmpty()); // a group has no numbers
 }
 
 TEST_CASE("ScopeTable: another heading sorts a flat list of names, again the other way")
@@ -147,7 +148,7 @@ TEST_CASE("ScopeTable: another heading sorts a flat list of names, again the oth
     bed.table->SortBy(ScopeColumn::Calls);
     CHECK(bed.table->Rows()[0].label == String(u8"Physics")); // three calls
 
-    // By a click on the headings: Self (from the end, the fourth), then again the other way.
+    // Sort by clicking the headings: Self (fourth from the end), then again to reverse the order.
     bed.table->SortBy(ScopeColumn::Name);
     bed.Click(Float2{350.0f, 12.0f});
     CHECK(bed.table->SortColumn() == ScopeColumn::Self);
@@ -190,12 +191,12 @@ TEST_CASE("ScopeTable: a click on a row chooses its name, on its arrow folds it"
     bed.Click(Bed::RowAt(3)); // Physics
     CHECK(bed.focus->Name().Is(bed.physics, false));
     bed.Pause();
-    bed.Click(Bed::RowAt(8)); // Shadows, the GPU's
+    bed.Click(Bed::RowAt(8)); // Shadows, in the GPU group
     CHECK(bed.focus->Name().Is(bed.shadows, true));
     bed.Pause();
     bed.Click(Bed::RowAt(1, 30.0f)); // Frame's arrow
     CHECK(bed.Labels() == String(u8"Main Frame Worker Job GPU Shadows"));
-    CHECK(bed.focus->Name().Is(bed.shadows, true)); // folding chooses nothing
+    CHECK(bed.focus->Name().Is(bed.shadows, true)); // folding does not change the chosen name
     bed.Pause();
     bed.Click(Bed::RowAt(1, 30.0f));
     CHECK(bed.table->Rows().Size() == 9);
@@ -233,7 +234,7 @@ TEST_CASE("ScopeDetail: the name chosen's calls, callers, children and spread; i
     CHECK(job.callers[0] == String(u8"The top of Worker"));
     CHECK(job.lanes == String(u8"Worker"));
 
-    // Its spread covers every frame held; only the frames chosen's calls are lit.
+    // The spread covers every frame held; only the calls from the chosen frames are lit.
     bed.focus->ChooseName(bed.physics, false);
     bed.focus->SetFrame(1);
     const ScopeDetail::Summary& physics = bed.detail->Describe();

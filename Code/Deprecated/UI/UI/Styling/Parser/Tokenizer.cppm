@@ -3,10 +3,7 @@
 
 // UI - :sss_tokenizer partition
 //
-// Lexer for .sss stylesheet files. Ported from Sedulous.UI/src/Styling/Parser/Tokenizer.bf.
-//
-// Divergences (language): Beef char8 classifier methods (.IsDigit/.IsLetter/.IsLetterOrDigit) become
-// local ASCII helpers over utf8char; StringView.Substring -> SubStr; float.Parse -> StrToF32.
+// Lexer for .sss stylesheet files. Character classes are local ASCII helpers over utf8char.
 
 module;
 #include "Core/Prelude.h"
@@ -14,7 +11,7 @@ module;
 
 export module foundation.ui:sss_tokenizer;
 
-import foundation.core; // StringView, Array
+import foundation.core;
 import :sss_token;
 
 using namespace foundation::core;
@@ -34,7 +31,7 @@ namespace foundation::ui::detail
     [[nodiscard]] inline bool IsIdentStartC(utf8char c) { return IsLetterC(c) || c == u8'_'; }
     [[nodiscard]] inline bool IsIdentCharC(utf8char c) { return IsLetterOrDigitC(c) || c == u8'_'; }
 
-    // Parse an already-scanned numeric substring to f32 via strtof (empty/invalid -> 0).
+    // Parse an already-scanned numeric substring to f32 with strtof (0 when empty or invalid).
     [[nodiscard]] inline f32 StrToF32(StringView s)
     {
         if (s.Size() == 0)
@@ -110,8 +107,8 @@ export namespace foundation::ui
                 break;
             }
 
-            // `#name`: a hex color in a value (#rrggbb / #rrggbbaa) or an id in a selector -
-            // the PARSER decides by position; the token carries the whole name.
+            // `#name`: a hex color in a value (#rrggbb or #rrggbbaa) or an id in a selector.
+            // The parser decides by position; the token carries the whole name.
             if (ch == u8'#')
                 return ReadHexColor(startLine, startCol);
 
@@ -174,7 +171,7 @@ export namespace foundation::ui
                 return Token(TokenKind::Minus, u8"-", startLine, startCol);
             }
 
-            // Unknown - skip
+            // Unknown: skip
             Advance();
             return Token(TokenKind::EndOfInput, u8"", startLine, startCol);
         }

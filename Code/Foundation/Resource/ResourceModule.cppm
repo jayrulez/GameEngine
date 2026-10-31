@@ -11,7 +11,7 @@
 // data (node positions, comments) lives on the source and never reaches the
 // product.
 //
-// Sits at the top of the asset stack: Core/VFS -> content -> resource.
+// Sits at the top of the asset stack: Core and VFS, then content, then resource.
 
 module;
 #include "Core/Debug/Assert.h"
@@ -38,10 +38,10 @@ export namespace foundation::resource
         [[nodiscard]] bool IsNull() const noexcept { return id.IsNil(); }
     };
 
-    // Load state of a ResourceHandle (async loading, task #123). Unloaded = never built;
-    // Pending = an async decode is in flight (Proxy Get() is null; poll State() or set OnReady);
-    // Ready = product available; Failed = missing instance/factory or a build/decode/finalize
-    // failure. Sync builds settle to Ready/Failed immediately.
+    // Load state of a ResourceHandle. Unloaded: never built. Pending: an async decode is in flight
+    // (Proxy Get() is null; poll State() or set OnReady). Ready: the product is available. Failed:
+    // a missing instance or factory, or a build, decode or finalize failure. Sync builds settle to
+    // Ready or Failed immediately.
     enum class ResourceState : u8
     {
         Unloaded,
@@ -69,7 +69,7 @@ export namespace foundation::resource
         [[nodiscard]] ResourceState State() const noexcept { return m_state; }
         void SetState(ResourceState state) noexcept { m_state = state; }
 
-        // Fired ONCE on the main thread when an async load reaches Ready (during Pump), then
+        // Fired once on the main thread when an async load reaches Ready (during Pump), then
         // cleared. Set before or during Pending; a load that is already Ready fires nothing.
         void SetOnReady(Function<void()> callback) noexcept { m_onReady = Move(callback); }
         void FireOnReady()
@@ -115,13 +115,13 @@ export namespace foundation::resource
     };
 
     // =======================================================================
-    // Ref<T> - the SERIALIZABLE resource reference components hold (the asset
+    // Ref<T> - the serializable resource reference components hold (the asset
     // pipeline's layer). Identity is a Guid (written by Serialize); at runtime
     // Bind() attaches a Proxy so hot reload's handle Replace() is visible to every
     // holder. Code-created resources (samples, procedural) assign a RefPtr<T>
-    // directly - the direct object wins over the proxy and is never serialized.
+    // directly; the direct object wins over the proxy and is never serialized.
     // =======================================================================
-    class ResourceManager; // forward - Ref::Bind resolves through it
+    class ResourceManager; // forward: Ref::Bind resolves through it
 
     template <typename T>
     class Ref
@@ -160,7 +160,7 @@ export namespace foundation::resource
             m_direct = nullptr;
         }
 
-        /// Re-point at `id` (editor pickers): drops the direct override AND the previous
+        /// Re-point at `id` (editor pickers): drops the direct override and the previous
         /// proxy, then binds the new id (nil = cleared reference).
         void Rebind(ResourceManager* manager)
         {
@@ -173,8 +173,8 @@ export namespace foundation::resource
         }
         [[nodiscard]] bool IsBound() const noexcept { return m_proxy.Handle() != nullptr; }
 
-        /// Drop any runtime binding (proxy AND direct override). Deserialization calls this
-        /// when the incoming identity REPLACES a different one - the old binding must not
+        /// Drop any runtime binding (proxy and direct override). Deserialization calls this
+        /// when the incoming identity replaces a different one, so the old binding does not
         /// keep rendering the previous resource.
         void ClearBinding() noexcept
         {
@@ -218,10 +218,10 @@ export namespace foundation::core
 }
 export namespace foundation::resource
 {
-    // Serialization: identity only (found by ADL from component Serialize bodies). On READ,
-    // blobs replay over LIVE components (paste / prefab revert / undo): when the incoming id
-    // differs from the current one, the stale proxy/direct binding is dropped - critically,
-    // reading a NIL id actually unbinds instead of leaving the old resource rendering.
+    // Serialization: identity only (found by ADL from component Serialize bodies). On read,
+    // blobs replay over live components (paste, prefab revert, undo): when the incoming id
+    // differs from the current one, the stale proxy/direct binding is dropped, so reading a nil
+    // id unbinds instead of leaving the old resource rendering.
     template <typename T>
     void Serialize(ISerializer& ar, Ref<T>& ref)
     {
@@ -235,9 +235,9 @@ export namespace foundation::resource
 
     // =======================================================================
     // IResourceFactory - builds a runtime product from a content instance (its
-    // source object + data streams). One factory per product type.
+    // source object and data streams). One factory per product type.
     // =======================================================================
-    class ResourceManager; // forward - factories receive it to resolve child resources
+    class ResourceManager; // forward: factories receive it to resolve child resources
 
     class IResourceFactory
     {
@@ -245,25 +245,25 @@ export namespace foundation::resource
         virtual ~IResourceFactory() = default;
 
         [[nodiscard]] virtual const TypeInfo* ProductType() const = 0;
-        /// The SERIALISED cooked form this factory reads out of the instance (the type the
-        /// cook stamped: StaticMeshSource for a StaticMesh, TextureResource for a Texture) -
-        /// the one link from a runtime type back to the builder that made it, which the scene
-        /// format reference joins to the builder's product to name the asset type. A factory
-        /// that reads the product type itself returns that.
+        /// The serialised cooked form this factory reads out of the instance (the type the
+        /// cook stamped: StaticMeshSource for a StaticMesh, TextureResource for a Texture).
+        /// It is the one link from a runtime type back to the builder that made it, which the
+        /// scene format reference joins to the builder's product to name the asset type. A
+        /// factory that reads the product type itself returns that.
         [[nodiscard]] virtual const TypeInfo* CookedType() const = 0;
         // Build the runtime product. `manager` lets a composite resource resolve its
-        // child resources via manager.Bind<…>(childId) - and doing so AUTOMATICALLY
-        // records a dependency edge, so reloading a child reloads this resource too.
+        // child resources via manager.Bind<…>(childId), and doing so records a dependency
+        // edge automatically, so reloading a child reloads this resource too.
         [[nodiscard]] virtual RefPtr<Object> Create(ResourceManager& manager,
                                                     foundation::content::Instance& instance) = 0;
 
-        // --- Optional async two-stage path (task #123). Default: SupportsAsync() == false, so the
-        //     manager builds synchronously via Create() (unchanged). A factory opts in by
-        //     overriding all three. DecodeStage is a PURE function of the instance's (cheap,
-        //     pak-backed) source bytes; it runs on a JobSystem worker and MUST NOT touch the
-        //     ResourceManager, the GPU, or global mutable state. FinalizeStage runs on the MAIN
-        //     thread and turns the decoded intermediate into the product (GPU upload, child
-        //     manager.Bind()s, registry writes); a null return signals failure.
+        // --- Optional async two-stage path. By default SupportsAsync() is false and the manager
+        //     builds synchronously via Create(). A factory opts in by overriding all three.
+        //     DecodeStage is a pure function of the instance's (cheap, pak-backed) source bytes;
+        //     it runs on a JobSystem worker and must not touch the ResourceManager, the GPU, or
+        //     global mutable state. FinalizeStage runs on the main thread and turns the decoded
+        //     intermediate into the product (GPU upload, child manager.Bind()s, registry writes);
+        //     a null return signals failure.
         [[nodiscard]] virtual bool SupportsAsync() const { return false; }
         [[nodiscard]] virtual RefPtr<Object> DecodeStage(foundation::content::Instance& instance)
         {
@@ -287,10 +287,10 @@ export namespace foundation::resource
     class ResourceManager
     {
     public:
-        // `jobs` is the shared JobSystem used for async decode (BindAsync). Null = async degrades
-        // to a synchronous Bind, so every existing caller keeps working unchanged. The constructing
-        // thread is recorded as the main thread (async finalize / Pump must run on it).
-        // The allocator (required - the owner decides) backs resource handles and
+        // `jobs` is the shared JobSystem used for async decode (BindAsync). Null makes async
+        // degrade to a synchronous Bind. The constructing thread is recorded as the main thread
+        // (async finalize and Pump must run on it).
+        // The allocator (required; the owner decides) backs resource handles and
         // pending async loads.
         ResourceManager(IAllocator& allocator, foundation::content::IContentDatabase& database,
                         JobSystem* jobs = nullptr) noexcept
@@ -301,8 +301,8 @@ export namespace foundation::resource
 
         // Drain outstanding decode jobs so none references this manager after destruction. Wait
         // participates in the pool, so a queued-but-unstarted decode still runs to completion; the
-        // results are simply discarded (never finalized). Not finalizing here is deliberate -
-        // FinalizeStage would touch factories/GPU, unsafe during teardown.
+        // results are discarded (never finalized), since FinalizeStage would touch factories and
+        // the GPU, which is unsafe during teardown.
         ~ResourceManager()
         {
             if (m_jobs != nullptr)
@@ -325,20 +325,20 @@ export namespace foundation::resource
         // === Diagnostics ===================================================================
 
         /// One row of the live-product report: everything the cache currently holds for one
-        /// product type. `unreferenced` = handles whose product exists but has NO outside
-        /// Proxy refs (cache-only - what a "purge unused" would release). Sizes arrive with
-        /// the I5 allocator tagging; counts already answer "what is holding memory".
+        /// product type. `unreferenced` counts handles whose product exists but has no outside
+        /// Proxy refs (cache-only: what a "purge unused" would release). The rows carry counts,
+        /// not sizes; counts already answer "what is holding memory".
         struct LiveProductRow
         {
             const TypeInfo* type = nullptr; // null = handles whose type never resolved
             usize live = 0;                 // product present
             usize pending = 0;              // async decode in flight
             usize failed = 0;               // failed/empty handles still cached
-            usize unreferenced = 0;         // live AND cache-only (evictable candidates)
+            usize unreferenced = 0;         // live and cache-only (evictable candidates)
         };
 
-        /// Snapshot the cache into per-type rows (unsorted). The I4 instrumentation step:
-        /// run it before designing eviction so "what is resident" is measured, not guessed.
+        /// Snapshot the cache into per-type rows (unsorted), so what is resident can be measured
+        /// rather than guessed.
         void ReportLiveProducts(Array<LiveProductRow>& outRows) const
         {
             outRows.Clear();
@@ -372,8 +372,8 @@ export namespace foundation::resource
                 else if (handle->Get() != nullptr)
                 {
                     ++row->live;
-                    // RefCount 2 = the cache map's ref + the report's iteration copy... the map
-                    // stores RefPtr directly, so cache-only means EXACTLY one strong ref.
+                    // The map stores RefPtr directly and the loop does not copy it, so a
+                    // cache-only handle holds exactly one strong ref.
                     if (handle->RefCount() == 1)
                     {
                         ++row->unreferenced;
@@ -386,8 +386,8 @@ export namespace foundation::resource
             }
         }
 
-        /// Diagnostics/tripwires: is a factory registered for this product type? (The silent
-        /// missing-factory class - the 2026-08-12 font incident - is what these guard.)
+        /// Diagnostics/tripwires: is a factory registered for this product type? A missing
+        /// factory otherwise fails silently.
         [[nodiscard]] bool HasFactory(TypeId productTypeId) const noexcept
         {
             return m_factories.Find(productTypeId) != nullptr;
@@ -416,7 +416,7 @@ export namespace foundation::resource
         // flushed handle is rebuilt in place so existing proxies recover.
         [[nodiscard]] RefPtr<ResourceHandle> Bind(const TypeInfo& productType, const Guid& id)
         {
-            // If a factory is mid-build and Binds this id, it's a dependency of the
+            // If a factory is mid-build and Binds this id, it is a dependency of the
             // resource currently building: record the edge so a reload propagates.
             if (!m_buildStack.IsEmpty())
             {
@@ -425,12 +425,12 @@ export namespace foundation::resource
 
             if (RefPtr<ResourceHandle>* cached = m_handles.Find(id))
             {
-                // COPY the ref out of the map slot BEFORE building: the factory Binds child
-                // resources, growing the handle map - a rehash dangles the slot pointer.
-                // (The handle OBJECT itself is heap-stable; only the slot moves.)
+                // Copy the ref out of the map slot before building: the factory Binds child
+                // resources, growing the handle map, and a rehash dangles the slot pointer.
+                // (The handle object itself is heap-stable; only the slot moves.)
                 RefPtr<ResourceHandle> handle = *cached;
-                // A sync Bind of a PENDING (async in-flight) id must return it READY: block-
-                // complete the decode (participating in the pool) and finalize inline.
+                // A sync Bind of a pending (async in-flight) id must return it ready: complete
+                // the decode by blocking (participating in the pool) and finalize inline.
                 if (handle->State() == ResourceState::Pending)
                 {
                     CompletePending(id);
@@ -466,11 +466,11 @@ export namespace foundation::resource
             return Bind<T>(rid.id);
         }
 
-        // Asynchronous bind (task #123): returns the same handle/Proxy IMMEDIATELY with State()
-        // == Pending (Get() null) and decodes on a JobSystem worker; Pump() finalizes it on the
-        // main thread a frame or two later. Falls back to a synchronous, immediately-Ready build
-        // when there is no JobSystem, no instance/factory, or the factory has not migrated
-        // (SupportsAsync() == false). Concurrent BindAsync of the same id share the one handle.
+        // Asynchronous bind: returns the same handle/Proxy immediately with State() == Pending
+        // (Get() null) and decodes on a JobSystem worker; Pump() finalizes it on the main thread
+        // a frame or two later. Falls back to a synchronous, immediately-Ready build when there is
+        // no JobSystem, no instance or factory, or the factory does not support async
+        // (SupportsAsync() == false). Concurrent BindAsync calls for the same id share one handle.
         [[nodiscard]] RefPtr<ResourceHandle> BindAsync(const TypeInfo& productType, const Guid& id)
         {
             if (!m_buildStack.IsEmpty())
@@ -506,8 +506,8 @@ export namespace foundation::resource
             return BindAsync<T>(rid.id);
         }
 
-        // Finalize completed async decodes on the MAIN thread, FIFO, until `budgetSeconds` is
-        // spent (default ~2ms). Tick once per frame BEFORE subsystem update so this-frame spawns
+        // Finalize completed async decodes on the main thread, FIFO, until `budgetSeconds` is
+        // spent (default ~2ms). Tick once per frame before subsystem update so this frame's spawns
         // see ready resources. On a 0-worker (web) JobSystem it also drives queued decodes inline
         // within the budget (the pool has no threads to run them otherwise).
         void Pump(f64 budgetSeconds = 0.002)
@@ -529,7 +529,7 @@ export namespace foundation::resource
                 }
                 if (!have)
                 {
-                    // 0-worker fallback: nothing has run the decode yet - drive one inline.
+                    // 0-worker fallback: nothing has run the decode yet, so drive one inline.
                     if (m_jobs != nullptr && m_jobs->WorkerCount() == 0 &&
                         stopwatch.Elapsed().AsSeconds() < budgetSeconds && DriveOneInlineDecode())
                     {
@@ -544,7 +544,7 @@ export namespace foundation::resource
                 if (finalizeMs >= 50.0)
                 {
                     // One finalize past a frame, by type and id: a large GPU upload, a
-                    // nested SYNC bind inside it, or (Debug, expected) a shader compile /
+                    // nested sync bind inside it, or (Debug, expected) a shader compile or
                     // pipeline creation under validation.
                     const TypeInfo* productType =
                         entry.factory != nullptr ? entry.factory->ProductType() : nullptr;
@@ -564,7 +564,7 @@ export namespace foundation::resource
         }
 
         // Block the main thread until every pending async load has finalized (participating in the
-        // pool). For loading screens and tests only - never call from the per-frame path.
+        // pool). For loading screens and tests only; never call it from the per-frame path.
         void WaitAll()
         {
             AssertMainThread();
@@ -598,19 +598,19 @@ export namespace foundation::resource
         // When enabled, Ref<T>::Bind routes through BindAsync instead of Bind. A scene load flips
         // this on around ResolveSceneResources (see AsyncBindScope) so the whole scene's resource
         // set decodes on workers; the caller then Pumps to completion (AsyncLoadBatch / a loading
-        // screen). Default off = every existing Ref bind stays synchronous.
+        // screen). Off by default: Ref binds are synchronous.
         void SetAsyncBinds(bool enabled) noexcept { m_asyncBinds = enabled; }
         [[nodiscard]] bool AsyncBindsEnabled() const noexcept { return m_asyncBinds; }
 
         // Whether a bind of a product type no factory builds is logged, as a host wiring error.
         // Off for a manager that only collects references (a scene's reference scan): it has no
-        // factories by design, and every bind landing unresolved is the answer it wants, not a
-        // fault to report.
+        // factories, and every bind landing unresolved is the answer it wants, not a fault to
+        // report.
         void SetReportsMissingFactories(bool enabled) noexcept { m_reportsMissingFactories = enabled; }
         [[nodiscard]] bool ReportsMissingFactories() const noexcept { return m_reportsMissingFactories; }
 
         // Rebuilds the product for an already-bound id (e.g. after the source
-        // changed on disk) AND, transitively, every resource that depends on it.
+        // changed on disk) and, transitively, every resource that depends on it.
         // All proxies see the new products. False if `id` is unbound.
         bool Reload(const Guid& id)
         {
@@ -620,27 +620,26 @@ export namespace foundation::resource
             }
             Array<Guid> visited;
             ReloadRecursive(id, visited);
-            // RE-find: the recursive rebuild binds children, growing the handle map - the
-            // pre-reload slot pointer dangles after a rehash. (This was the Sponza crash:
-            // the post-cook mass reload of 167 products rehashed mid-cascade.)
+            // Find it again: the recursive rebuild binds children, growing the handle map, so the
+            // pre-reload slot pointer dangles after a rehash.
             RefPtr<ResourceHandle>* handle = m_handles.Find(id);
             return handle != nullptr && (*handle)->Get() != nullptr;
         }
 
         // The ids that directly depend on `id` (introspection/tooling). Empty if none.
-        // (Edges are recorded automatically when a factory Binds a child mid-build;
-        // explicit declaration isn't exposed yet - every planned dependency, incl.
-        // include resources, resolves through Bind.)
+        // (Edges are recorded automatically when a factory Binds a child mid-build; there is no
+        // explicit declaration, since every dependency, include resources too, resolves through
+        // Bind.)
         [[nodiscard]] Span<const Guid> Dependents(const Guid& id) noexcept
         {
             Array<Guid>* d = m_dependents.Find(id);
             return (d != nullptr) ? Span<const Guid>(d->Data(), d->Size()) : Span<const Guid>{};
         }
 
-        /// Appends every id that was requested (Bind) but has no product - the backing
+        /// Appends every id that was requested (Bind) but has no product: the backing
         /// instance was missing or its factory failed. Editor tooling cooks exactly this
         /// set when a page opens over uncooked content (product guid == source guid, so
-        /// an unresolved id IS a valid cook root).
+        /// an unresolved id is a valid cook root).
         void CollectUnresolved(Array<Guid>& out)
         {
             for (auto& [id, handle] : m_handles)
@@ -656,11 +655,10 @@ export namespace foundation::resource
         /// ones old enough that no in-flight frame can still reference their GPU objects.
         void CollectGarbage()
         {
-            // Take the graveyard OUT of the member first: releasing a product runs its
-            // destructor, which can RE-ENTER the manager (a dying composite drops child
-            // proxies; bookkeeping may push new graves) - mutating m_graveyard while a loop
-            // walks it is a use-after-free (the Sponza mass-reload crash: hundreds of
-            // products landing in one cook aged out together).
+            // Take the graveyard out of the member first: releasing a product runs its
+            // destructor, which can re-enter the manager (a dying composite drops child
+            // proxies; bookkeeping may push new graves), and mutating m_graveyard while a loop
+            // walks it is a use-after-free.
             Array<Grave> graves = Move(m_graveyard);
             m_graveyard = Array<Grave>{};
 
@@ -675,7 +673,7 @@ export namespace foundation::resource
                 grave.framesLeft -= 1;
                 m_graveyard.PushBack(Move(grave));
             }
-            // Destructors run HERE, with m_graveyard consistent; re-entrant pushes append
+            // Destructors run here, with m_graveyard consistent; re-entrant pushes append
             // to the fresh member array safely.
             dropped.Clear();
         }
@@ -694,9 +692,9 @@ export namespace foundation::resource
         }
 
     private:
-        // Async-load records (task #123). PendingLoad holds a non-movable Counter, so it lives in a
-        // UniquePtr slot (heap-stable address the JobSystem signals). CompletedDecode is the
-        // self-contained result a worker pushes and Pump finalizes - it carries its own handle +
+        // Async-load records. PendingLoad holds a non-movable Counter, so it lives in a
+        // UniquePtr slot (a heap-stable address the JobSystem signals). CompletedDecode is the
+        // self-contained result a worker pushes and Pump finalizes; it carries its own handle and
         // factory, so finalize never has to touch the pending map.
         struct PendingLoad
         {
@@ -717,12 +715,12 @@ export namespace foundation::resource
         void BuildInto(ResourceHandle& handle, TypeId productTypeId, const Guid& id)
         {
             // A rebuild may resolve different children than before; drop the old
-            // forward edges so they're re-recorded fresh during this build.
+            // forward edges so they are re-recorded fresh during this build.
             ClearForwardDeps(id);
 
             handle.SetProductTypeId(productTypeId);
             // Park the outgoing product instead of destroying it now: GPU products own
-            // views/buffers that in-flight frames may still reference - CollectGarbage
+            // views/buffers that in-flight frames may still reference. CollectGarbage
             // (ticked by the host once per frame) releases them a few frames later.
             if (Object* old = handle.Get())
             {
@@ -733,8 +731,8 @@ export namespace foundation::resource
             foundation::content::Instance* instance = m_database->GetInstance(id);
             if (instance == nullptr)
             {
-                // A broken reference (the id is not in the content DB) - name it; a silent
-                // null handle cost a live-repro session to diagnose (2026-08-12).
+                // A broken reference (the id is not in the content DB): name it, since a silent
+                // null handle is hard to diagnose.
                 LOG_WARNING(u8"Resource", u8"bind failed: no content instance for id {}", id);
                 return;
             }
@@ -742,7 +740,7 @@ export namespace foundation::resource
             IResourceFactory* const* factory = m_factories.Find(productTypeId);
             if (factory == nullptr)
             {
-                // A HOST WIRING error, not a data error: the product type has no registered
+                // A host wiring error, not a data error: the product type has no registered
                 // IResourceFactory (RegisterStandardFactories or the host forgot AddFactory).
                 if (m_reportsMissingFactories)
                 {
@@ -764,7 +762,7 @@ export namespace foundation::resource
 
         // Kick off an async build: park any old product, mark Pending, submit the pure decode to a
         // worker. Degrades to a synchronous, immediately-settled BuildInto when async is impossible
-        // (no job system / instance / factory, or a factory that has not migrated).
+        // (no job system, instance or factory, or a factory that does not support async).
         void StartAsyncBuild(const RefPtr<ResourceHandle>& handle, TypeId productTypeId,
                              const Guid& id)
         {
@@ -801,8 +799,8 @@ export namespace foundation::resource
 
             // The job captures only thread-safe data: the factory/instance pointers (stable for the
             // load's lifetime), a RefPtr copy of the handle (atomic refcount), and the id by value.
-            // It NEVER touches the handle or pending maps - those stay main-thread. The counter
-            // 1 -> 0 on completion lets WaitAll / the sync-upgrade path wait on this decode.
+            // It never touches the handle or pending maps, which stay main-thread. The counter
+            // going 1 -> 0 on completion lets WaitAll and the sync-upgrade path wait on this decode.
             m_jobs->Submit(
                 [this, id, jobHandle = handle, factory, instance]() mutable
                 {
@@ -837,16 +835,16 @@ export namespace foundation::resource
             if (ready)
             {
                 entry.handle->FireOnReady();
-                // A settling child revives its dependents through the SAME edge a hot reload
+                // A settling child revives its dependents through the same edge a hot reload
                 // uses (recorded when their factory bound this id mid-build): a material built
-                // while its textures were still Pending skipped those slots - the reload
-                // rebuilds it now that the child is live, and pop-in composes transitively.
-                // COPY the list: Reload binds children, growing maps (the rehash lesson).
-                // The rebuild runs with async binds ON whatever the caller's mode: a material
-                // reloading for its first texture must NOT block-complete its other, still
-                // pending textures - a sync Bind of a pending id waits out the decode and
-                // finalized EVERYTHING decoded so far, nested, one 8 s stall on the Bistro
-                // prefab open (2026-09-23). Pending slots stay skipped; each settle reloads.
+                // while its textures were still Pending skipped those slots, and the reload
+                // rebuilds it now that the child is live, so pop-in composes transitively.
+                // Copy the list: Reload binds children, growing maps, which can rehash.
+                // The rebuild runs with async binds on whatever the caller's mode: a material
+                // reloading for its first texture must not block-complete its other, still
+                // pending textures, since a sync Bind of a pending id waits out the decode and
+                // finalizes everything decoded so far, nested, stalling for seconds on a large
+                // prefab. Pending slots stay skipped; each settle reloads.
                 const Span<const Guid> dependentsView = Dependents(entry.id);
                 if (!dependentsView.IsEmpty())
                 {
@@ -876,9 +874,9 @@ export namespace foundation::resource
                     m_jobs->Wait((*record)->counter); // runs the decode inline if not yet done
                 }
             }
-            // Finalize THIS id only. Draining every decoded entry here (the old unbounded
-            // Pump) made one sync Bind pay for the whole burst's finalizes - GPU uploads
-            // included - on the caller's thread; the rest keep their FIFO turn in Pump.
+            // Finalize this id only. Draining every decoded entry here would make one sync Bind pay
+            // for the whole burst's finalizes, GPU uploads included, on the caller's thread; the
+            // rest keep their FIFO turn in Pump.
             CompletedDecode entry;
             bool have = false;
             {
@@ -925,15 +923,9 @@ export namespace foundation::resource
             return false;
         }
 
-        // Free finalized pending records. Freeing must go through the JobSystem's lifetime fence
-        // (Wait), NOT a bare counter.Value()==0 check: the count is set to 0 INSIDE the JobSystem's
-        // Counter lock (see RunJob), so a value of 0 is observable while the signaling worker is
-        // still touching the Counter - destroying it then is a data race (TSAN-confirmed). Wait
-        // returns only after that critical section is released; for a finalized record the decode
-        // body is already done, so Wait is effectively non-blocking here.
-        // A burst = the span from the first async bind while none was in flight to the Pump
+        // A burst is the span from the first async bind while none was in flight to the Pump
         // that drains the last one: a scene open queues hundreds of binds in one frame and they
-        // settle over the next seconds. The peak is sampled at BIND time (a pump may finalize
+        // settle over the next seconds. The peak is sampled at bind time (a pump may finalize
         // and reap part of a burst before it looks) and reported once, when the set empties.
         void NoteBurstGrowth()
         {
@@ -957,6 +949,12 @@ export namespace foundation::resource
                          m_burstPeak, static_cast<i64>(m_burstClock.Elapsed().AsMilliseconds()));
             }
         }
+        // Free finalized pending records. Freeing must go through the JobSystem's lifetime fence
+        // (Wait), not a bare counter.Value()==0 check: the count is set to 0 inside the JobSystem's
+        // Counter lock (see RunJob), so a value of 0 is observable while the signaling worker is
+        // still touching the Counter, and destroying it then is a data race (TSAN-confirmed). Wait
+        // returns only after that critical section is released; for a finalized record the decode
+        // body is already done, so Wait is effectively non-blocking here.
         void ReapPending()
         {
             Array<Guid> reap;
@@ -988,7 +986,7 @@ export namespace foundation::resource
 
         // Rebuild `id`, then transitively every resource that depends on it. The
         // visited list guards against cycles; dependents are snapshotted because a
-        // dependent's rebuild mutates m_dependents[id] (clear+re-record its edges).
+        // dependent's rebuild mutates m_dependents[id] (it clears and re-records its edges).
         void ReloadRecursive(const Guid& id, Array<Guid>& visited)
         {
             for (const Guid& v : visited)
@@ -1081,7 +1079,7 @@ export namespace foundation::resource
         HashMap<Guid, Array<Guid>> m_dependents;   // id -> resources that depend on it
         Array<Guid> m_buildStack;                  // ids currently building (auto-edge source)
 
-        // --- async load bookkeeping (task #123); PendingLoad/CompletedDecode declared above ---
+        // --- async load bookkeeping; PendingLoad/CompletedDecode declared above ---
         JobSystem* m_jobs = nullptr; // shared decode pool (null = sync-only)
         u64 m_mainThreadId = 0;      // thread that constructs/pumps; async finalize must run here
         bool m_asyncBinds = false;   // Ref<T>::Bind routes through BindAsync while set
@@ -1108,7 +1106,7 @@ export namespace foundation::resource
         if (!id.IsNil())
         {
             // Route through BindAsync when the manager is in async-bind mode (scene load); the
-            // proxy is null (Pending) until Pump finalizes it - Proxy already tolerates that.
+            // proxy is null (Pending) until Pump finalizes it, which Proxy already tolerates.
             m_proxy = manager.AsyncBindsEnabled() ? manager.BindAsync<T>(id) : manager.Bind<T>(id);
         }
         else
@@ -1140,9 +1138,9 @@ export namespace foundation::resource
     // Loading-screen helper: after issuing a batch of async binds (e.g. a scene resolve under an
     // AsyncBindScope), Snapshot() records the outstanding count as the batch total, then Progress()
     // reports 0..1 as loads finalize. Step() pumps within a per-frame budget; WaitComplete() blocks
-    // to the end (non-interactive loading screen / tests). NOTE: Remaining() reads the manager's
-    // TOTAL pending, so for accurate progress the manager should be dedicated to this batch (the
-    // usual scene-load case); unrelated concurrent async loads would skew it.
+    // to the end (non-interactive loading screen, tests). Remaining() reads the manager's total
+    // pending, so for accurate progress the manager should be dedicated to this batch (the usual
+    // scene-load case); unrelated concurrent async loads would skew it.
     class AsyncLoadBatch
     {
     public:
@@ -1181,16 +1179,16 @@ export namespace foundation::resource
     };
 
     // =======================================================================
-    // Resource composition (Documentation/Specs/engine-composition.md, D1-D3). A resource
-    // library DECLARES its module: its type registration and, per factory, a description -
-    // product, cooked form, the service it needs beyond an allocator, and how to create it.
-    // A composition creates the factories it can, OWNS them (ResourceFactorySet) and registers
-    // them into a manager. Nobody collects factories by hand; a factory belongs to the
-    // resource it produces, and a domain that names the resource module brings the factory.
+    // Resource composition. A resource library declares its module: its type registration and,
+    // per factory, a description (product, cooked form, the service it needs beyond an allocator,
+    // and how to create it). A composition creates the factories it can, owns them
+    // (ResourceFactorySet) and registers them into a manager. Nobody collects factories by hand; a
+    // factory belongs to the resource it produces, and a domain that names the resource module
+    // brings the factory.
     // =======================================================================
 
-    /// What a factory may need beyond an allocator - a GPU device, a shader system - asked for
-    /// BY TYPE: TypeOf<T>().id, process-single and stable across shared libraries. The host
+    /// What a factory may need beyond an allocator (a GPU device, a shader system), asked for
+    /// by type: TypeOf<T>().id, process-single and stable across shared libraries. The host
     /// answers what it has; a factory whose service is absent is not created, and the set says so.
     class IResourceServices
     {
@@ -1246,7 +1244,7 @@ export namespace foundation::resource
         Array<Entry> m_services;
     };
 
-    /// What a factory IS before one exists: a constant, readable without constructing anything
+    /// What a factory is before one exists: a constant, readable without constructing anything
     /// (the scene format reference joins on `product` and `cooked`). `service` names the type
     /// the factory needs beyond an allocator (null for most); `create` returns null when that
     /// service is absent from the host.
@@ -1320,7 +1318,7 @@ export namespace foundation::resource
             }};
     }
 
-    /// A description for a factory that USES a host `Service` when there is one but works without
+    /// A description for a factory that uses a host `Service` when there is one but works without
     /// (`Factory(IAllocator&, Service*)`, the pointer null in a host without it): created in every
     /// host, so not gated (`service` null).
     template <typename Product, typename Cooked, typename Factory, typename Service>

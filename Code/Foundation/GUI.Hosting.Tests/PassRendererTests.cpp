@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Hosting - GuiPassRenderer on the Null RHI backend (E4 of Specs/gui-lab-evolution-3.md): a root
-// drawn into a pass its caller opened, at a region of the target; a renderer per kind of pass,
-// rewound once a frame so a frame's roots keep their slices; the bakes recorded once a frame and
-// learned by renderers made later, as the images registered by key are.
+// GUI.Hosting - GuiPassRenderer on the Null RHI backend. A root is drawn into a pass its caller
+// opened, at a region of the target. There is a renderer per kind of pass, rewound once a frame so
+// a frame's roots keep their slices. The bakes are recorded once a frame, and renderers made later
+// learn them, as they learn the images registered by key.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -78,8 +78,8 @@ namespace
             root->AddChild(box.Get());
             return root;
         }
-        // The caller's pass on its target, as an engine's overlay pass is: already open, loading
-        // what the frame drew before.
+        // Opens the caller's pass on its target, as an engine's overlay pass is: already open, and
+        // loading what the frame drew before.
         template <typename DrawFn>
         void InPass(rhi::CommandEncoder& encoder, DrawFn&& draw)
         {
@@ -154,7 +154,7 @@ TEST_CASE("gui.hosting.pass: a renderer per kind of pass, rewound once a frame, 
     const GuiPassRenderer::Prepared b = bed.renderer->Prepare(*second, ViewOf(0));
     REQUIRE(a.Renderer != nullptr);
     CHECK(a.Renderer == b.Renderer); // the same kind of pass: one renderer
-    CHECK(b.Slice.drawCommandStart >= a.Slice.drawCommandStart + a.Slice.drawCommandCount); // the first's draws kept
+    CHECK(b.Slice.drawCommandStart >= a.Slice.drawCommandStart + a.Slice.drawCommandCount); // the first root's draws are kept
     CHECK(b.Slice.uniformByteOffset > a.Slice.uniformByteOffset);
     bed.InPass(*encoder,
                [&](rhi::RenderPassEncoder& pass)
@@ -184,7 +184,7 @@ TEST_CASE("gui.hosting.pass: the bakes record once a frame, and a renderer made 
     REQUIRE(baker != nullptr);
     RefPtr<SceneRoot> root = bed.MakeRoot();
 
-    // The first kind of pass, then a picture asked for and baked on the frame's encoder.
+    // Draw with the first kind of pass, then ask for a picture and bake it on the frame's encoder.
     bed.renderer->BeginFrame();
     (void)bed.renderer->Prepare(*root, ViewOf(0));
     const foundation::vg::svg::SVGDocument document =
@@ -211,7 +211,7 @@ TEST_CASE("gui.hosting.pass: the bakes record once a frame, and a renderer made 
     CHECK(later->IsExternalTextureRegistered(key));
     CHECK(later->IsExternalTextureRegistered(&picture));
 
-    // Let go: every renderer forgets the image.
+    // Once unregistered, every renderer forgets the image.
     bed.renderer->UnregisterTexture(&picture);
     CHECK_FALSE(later->IsExternalTextureRegistered(&picture));
     CHECK_FALSE(bed.renderer->FindRenderer(ViewOf(0))->IsExternalTextureRegistered(&picture));

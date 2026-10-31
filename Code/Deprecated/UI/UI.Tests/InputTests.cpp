@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests Input suites: FocusManagerTests, CapturePhaseTests, ShortcutManagerTests,
-// and the control-independent subset of DirectionalFocusTests (MoveFocus + OnCancel). Deferred: the
-// OnActivate/WantsArrowKeys cases (need Button/CheckBox/EditText controls) and InputFilterTests (the
-// InputFilter class is an Editing/text-field concern, not yet ported). Directional MoveFocus tests use
-// a focusable TestView in place of Beef's Button (which is only used there as a default-focusable view).
+// Input tests: the FocusManager, the capture phase, the ShortcutManager, directional focus
+// (MoveFocus and OnCancel) and key dispatch. The OnActivate and WantsArrowKeys cases that need
+// controls are in ControlTests.cpp, and the InputFilter cases in EditingTests.cpp. The directional
+// MoveFocus tests use a focusable TestView where a default-focusable control would do.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -156,9 +155,9 @@ namespace
     };
     RTTI_DEFINE_OBJECT(CancelTrackingGroup, "rtti::ui::tests")
 
-    // Reproduces the self-destroying-button UAF: on MouseUp it detaches itself from its parent,
-    // dropping the tree's last strong ref. Without DispatchMouseUp pinning the target, the
-    // dispatcher's post-invoke reads (target->Bounds / target->Parent) would touch freed memory.
+    // A view that destroys itself on MouseUp: it detaches itself from its parent, dropping the
+    // tree's last strong ref. Without DispatchMouseUp pinning the target, the dispatcher's reads
+    // after the handler (target->Bounds, target->Parent) would touch freed memory.
     class SelfRemovingView : public View
     {
         RTTI_OBJECT(SelfRemovingView, View)
@@ -247,7 +246,7 @@ TEST_CASE("focus: SaveRestore_RestoresFocusWithSource")
     CHECK(fm->FocusedView() == nullptr);
     fm->RestoreFocus(saved);
     CHECK(fm->FocusedView() == view.Get());
-    CHECK(fm->Source() == FocusSource::Keyboard); // the ORIGINAL modality comes back
+    CHECK(fm->Source() == FocusSource::Keyboard); // the original modality comes back
 }
 
 TEST_CASE("focus: SaveRestore_EachEntryIndependent_OutOfOrderCloseCannotCrossRestore")
@@ -268,7 +267,7 @@ TEST_CASE("focus: SaveRestore_EachEntryIndependent_OutOfOrderCloseCannotCrossRes
     fm->SetFocus(b.Get());
     const FocusManager::SavedFocus second = fm->SaveAndClearFocus(); // popup 2 saved {b}
     CHECK(fm->FocusStackDepth() == 2u);
-    // Popup 1 closes FIRST (out of LIFO order): it restores only what IT saved.
+    // Popup 1 closes first (out of LIFO order): it restores only what it saved.
     fm->RestoreFocus(first);
     CHECK(fm->FocusStackDepth() == 1u);
     CHECK(fm->FocusedView() == a.Get());
@@ -338,7 +337,7 @@ TEST_CASE("focus-visible: modal restore brings a pointer-focused view back RINGL
     const FocusManager::SavedFocus saved = fm->SaveAndClearFocus();
     fm->RestoreFocus(saved);
     CHECK(view->IsFocused());            // focus is retained across the modal
-    CHECK_FALSE(view->IsFocusVisible()); // the ring does NOT relight - the original complaint
+    CHECK_FALSE(view->IsFocusVisible()); // the ring does not light up again
 }
 
 TEST_CASE("focus: Capture_SetAndRelease")
@@ -366,7 +365,7 @@ TEST_CASE("focus: OnViewDeleted_ClearsFocusAndCapture")
     auto* fm = ctx.GetFocusManager();
     fm->SetFocus(view.Get());
     fm->SetCapture(view.Get());
-    root->RemoveView(view.Get(), true); // -> Unregister -> OnViewDeleted
+    root->RemoveView(view.Get(), true); // unregisters, which calls OnViewDeleted
     CHECK(fm->FocusedView() == nullptr);
     CHECK(!fm->HasCapture());
 }
@@ -494,9 +493,9 @@ TEST_CASE("capture: MouseDown_PhaseFieldSet")
 
 TEST_CASE("dispatch: target that frees itself during MouseUp does not UAF the dispatcher")
 {
-    // Regression for the Input Map "Listen" crash: a click handler destroyed the clicked button
-    // in-line, then FireClick/DispatchMouseUp dereferenced the freed view. DispatchMouseUp now pins
-    // the target for the whole capture/target/bubble sequence, so a self-freeing handler is safe.
+    // A click handler that destroys the clicked button in place is safe: DispatchMouseUp pins the
+    // target for the whole capture, target and bubble sequence, so FireClick never touches a
+    // freed view.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
     Init(ctx, root.Get());
@@ -509,13 +508,13 @@ TEST_CASE("dispatch: target that frees itself during MouseUp does not UAF the di
     root->AddView(parent.Get());
     LayoutPass(ctx, root.Get());
 
-    child = nullptr; // parent's m_children now holds the ONLY strong ref to the child
+    child = nullptr; // the parent's m_children now holds the only strong ref to the child
 
     ctx.GetInputManager()->ProcessMouseDown(MouseButton::Left, 10, 10, 0);
     ctx.GetInputManager()->ProcessMouseUp(MouseButton::Left, 10, 10);
 
-    // Reaching here without a crash (and with the handler having run) is the assertion: pre-fix this
-    // read freed memory in DispatchMouseUp right after target->OnMouseUp returned.
+    // Reaching here without a crash, with the handler having run, is the check: otherwise
+    // DispatchMouseUp would read freed memory right after target->OnMouseUp returned.
     CHECK(handlerRan);
     CHECK(parent->ChildCount() == 0);
 }
@@ -849,9 +848,9 @@ TEST_CASE("directional: OnCancel_BubblesToParent")
     CHECK(parentCancelCalled);
 }
 
-// Return dispatch order (deliberate deviation from Sedulous): the focused view gets Return in
-// OnKeyDown FIRST; only an UNHANDLED Return activates (OnActivate). Text controls can consume
-// Enter (commit-on-Enter, multiline newlines) while buttons keep Enter-to-activate.
+// Return dispatch order: the focused view gets Return in OnKeyDown first, and only an unhandled
+// Return activates (OnActivate). Text controls can consume Enter (commit on Enter, newlines in
+// multiline text) while buttons still activate on Enter.
 TEST_CASE("keys: Return_DispatchesBeforeActivation")
 {
     class ReturnProbe final : public View
@@ -884,7 +883,7 @@ TEST_CASE("keys: Return_DispatchesBeforeActivation")
     CHECK(probe->keyDowns == 1);
     CHECK(probe->activations == 1);
 
-    // Handled Return: NO activation (text-control behavior - commit consumed the key).
+    // Handled Return: no activation (text-control behavior, where the commit consumed the key).
     probe->consumeReturn = true;
     CHECK(ctx.GetInputManager()->ProcessKeyDown(KeyCode::Return, KeyModifiers::None, false));
     CHECK(probe->keyDowns == 2);
@@ -927,7 +926,7 @@ TEST_CASE("keys: Tab_DispatchesToWantsTabKeyViews")
     CHECK(editor->tabDowns == 0);
     CHECK(ctx.GetFocusManager()->FocusedView() == next.Get());
 
-    // Opted in + handled: the view consumes Tab and keeps focus (indent behavior).
+    // Opted in and handled: the view consumes Tab and keeps focus (indent behavior).
     ctx.GetFocusManager()->SetFocus(editor.Get());
     editor->WantsTabKey = true;
     editor->consumeTab = true;
@@ -935,7 +934,7 @@ TEST_CASE("keys: Tab_DispatchesToWantsTabKeyViews")
     CHECK(editor->tabDowns == 1);
     CHECK(ctx.GetFocusManager()->FocusedView() == editor.Get());
 
-    // Opted in but UNHANDLED: traversal is still the fallback.
+    // Opted in but unhandled: traversal is still the fallback.
     editor->consumeTab = false;
     CHECK(ctx.GetInputManager()->ProcessKeyDown(KeyCode::Tab, KeyModifiers::None, false));
     CHECK(editor->tabDowns == 2);
@@ -944,9 +943,8 @@ TEST_CASE("keys: Tab_DispatchesToWantsTabKeyViews")
 
 TEST_CASE("keycode: every function key F1 to F24 has a display name, distinct, and Unknown has none")
 {
-    // The enum declares the function keys in two contiguous runs (F1..F12, F13..F24); the name
-    // table must keep up with both (F17 to F24 once returned the empty string, so a chord on
-    // them showed no key).
+    // The enum declares the function keys in two contiguous runs (F1..F12, F13..F24), and the name
+    // table covers both, so a chord on any of them shows its key.
     const struct
     {
         KeyCode first;

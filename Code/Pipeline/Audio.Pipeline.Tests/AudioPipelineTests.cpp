@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full audio pipeline: author a wav (sources mount) -> AudioClipAsset -> cook via the
-// builder into an output db -> load the AudioClip product through the factory. Covers
-// write-through byte identity (NO PCM sidecars - the container bytes ARE the cook), the
+// Full audio pipeline: author a wav in the sources mount, wrap it in an AudioClipAsset, cook it
+// through the builder into an output db, and load the AudioClip product through the factory.
+// Covers write-through byte identity (no PCM sidecars: the container bytes are the cook), the
 // stream flag's ContentInstanceStreamSource wiring, cook validation, the destructive
-// transforms (force-mono / trim / normalize), the Stream auto-default, the WAV `smpl`
-// loop-point parser, and the importer's asset fan-out through a real EditorProject.
+// transforms (force mono, trim, normalize), the Stream default, the WAV `smpl` loop-point
+// parser, and the importer's asset fan-out through a real EditorProject.
 
 #include <doctest/doctest.h>
 
@@ -79,7 +79,7 @@ namespace
             }
         };
         pushTag("smpl");
-        pushU32(36 + 24); // chunk size: sampler fields + one loop record
+        pushU32(36 + 24); // chunk size: sampler fields and one loop record
         for (int i = 0; i < 7; ++i)
         {
             pushU32(0);
@@ -270,7 +270,7 @@ TEST_CASE("audio.pipeline: async clip load matches the synchronous product byte-
 
 TEST_CASE("audio.pipeline: many concurrent async clip decodes run on workers without a race")
 {
-    // N clips bound async at once means N DecodeStages reading the content DB + registries
+    // N clips bound async at once means N DecodeStages reading the content DB and registries
     // concurrently on workers. Run under TSAN to validate the concurrent-read safety.
     RegisterAudioResource();
     RegisterAudioAssets();
@@ -477,7 +477,7 @@ TEST_CASE("audio.pipeline: destructive options - force-mono downmixes, trim drop
             peak = magnitude;
         }
     }
-    CHECK(peak > 27000); // ~-1 dBFS (was ~3200)
+    CHECK(peak > 27000); // about -1 dBFS (the 0.1-amplitude source peaks near 3300)
 
     RemoveDbTree(u8"scratch_audiopipe_fx_src");
     RemoveDbTree(u8"scratch_audiopipe_fx_out");
@@ -529,7 +529,7 @@ TEST_CASE("audio.pipeline: the file importer creates an AudioClipAsset with prob
         RefPtr<ISerializable> object = shortImport.Value()->ReadObject();
         auto* imported = Cast<AudioClipAsset>(object.Get());
         REQUIRE(imported != nullptr);
-        CHECK_FALSE(imported->stream); // small + short = in-memory
+        CHECK_FALSE(imported->stream); // small and short: in-memory
         CHECK(imported->loop);         // smpl chunk detected
         CHECK(imported->loopStartFrame == 50u);
         CHECK(imported->loopEndFrame == 1900u);
@@ -593,7 +593,7 @@ TEST_CASE("audio.pipeline: bus layout asset cooks flat fields into the effect-ch
     AudioBusLayoutAsset asset;
     asset.music.volume = 0.5f;
     asset.ui.muted = true;
-    asset.effects.lowpassHz = 3000.0f; // slot order: lowpass -> highpass -> delay
+    asset.effects.lowpassHz = 3000.0f; // slot order: lowpass, highpass, delay
     asset.effects.delaySeconds = 0.2f;
     asset.effects.delayDecay = 1.5f; // out of range: the builder clamps to 0.99
 
@@ -715,7 +715,7 @@ TEST_CASE("audio.pipeline: a custom-bus parent CYCLE fails the cook")
     selfish.custom[0].parent = String(u8"a");
     CHECK_FALSE(builder.Build(selfish, ctx).IsOk());
 
-    // An UNKNOWN parent is not a cycle - it cooks (falls back to Master at apply).
+    // An unknown parent is not a cycle: it cooks, and falls back to Master at apply.
     AudioBusLayoutAsset orphan;
     orphan.custom[0].name = String(u8"a");
     orphan.custom[0].parent = String(u8"ghost");
@@ -728,8 +728,8 @@ TEST_CASE("audio.pipeline: a bus layout cooked under another data version is REF
           "current version round-trips the custom buses")
 {
     // A cook stamped with another data version (0 = the layout before the named section) is
-    // refused by the versioned-payload reader before a field is read - no migration; the
-    // asset re-cooks.
+    // refused by the versioned-payload reader before a field is read; there is no migration, and
+    // the asset re-cooks.
     MemoryStream oldStream;
     {
         BinarySerializer ar(oldStream, SerializeMode::Write);
@@ -816,7 +816,7 @@ TEST_CASE("audio.pipeline: sound cue cooks slots -> variants and resolves clip r
     asset.clipIds[3] = clipIds[1]; // sparse slots fold down
     asset.weights[3] = 1.0f;
     asset.clipIds[5] = clipIds[1];
-    asset.weights[5] = 0.0f; // weighted-out slot: warned + dropped
+    asset.weights[5] = 0.0f; // weighted-out slot: warned and dropped
     asset.pitchMin = 1.2f;
     asset.pitchMax = 0.8f; // reversed range: builder normalizes
 
@@ -842,8 +842,8 @@ TEST_CASE("audio.pipeline: sound cue cooks slots -> variants and resolves clip r
     CHECK(cue->pitchMin == doctest::Approx(0.8f));
     CHECK(cue->pitchMax == doctest::Approx(1.2f));
 
-    // An empty (draft) cue cooks to a VALID zero-variant product - never a cook failure (a draft
-    // cue must not poison Cook All / export; the runtime plays it as a silent no-op).
+    // An empty (draft) cue cooks to a valid zero-variant product, not a cook failure, so a draft
+    // cue cannot break Cook All or export; the runtime plays it as a silent no-op.
     SoundCueAsset empty;
     auto* emptyInstance =
         outputDb.RootGroup()->CreateInstance(u8"empty", SoundCueSource::StaticType());

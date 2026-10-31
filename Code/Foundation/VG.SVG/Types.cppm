@@ -3,11 +3,10 @@
 
 // Foundation::VG.SVG::SVG - :types partition.
 //
-// SVG element/document model: SVGElementType, SVGTextAnchor, SVGElement (a parsed
-// shape/group/text node with a tessellated Path + style), SVGDocument. Ported
-// from Sedulous.VG.SVG (SVGElementType/SVGElement/SVGDocument). Element trees are
-// value types (children owned by value); the transform is a Float4x4 (mirroring
-// Sedulous's Matrix); colors are float Color.
+// SVG element and document model: SVGElementType, SVGTextAnchor, SVGElement (a parsed
+// shape, group or text node with a tessellated Path and style), SVGDocument. Element
+// trees are value types (children owned by value); the transform is a Float4x4; colors
+// are float Color.
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +42,7 @@ export namespace foundation::vg::svg
         End
     };
 
-    /// A parsed <linearGradient>/<radialGradient>: geometry + stops + spread, resolved
+    /// A parsed <linearGradient> or <radialGradient>: geometry, stops and spread, resolved
     /// by the renderer against the referencing element's bounds (objectBoundingBox, the
     /// SVG default) or used as document coordinates (userSpaceOnUse).
     struct SVGGradient
@@ -51,7 +50,7 @@ export namespace foundation::vg::svg
         bool radial = false;
         // Linear geometry (fractions in objectBoundingBox units, else user units).
         f32 x1 = 0.0f, y1 = 0.0f, x2 = 1.0f, y2 = 0.0f;
-        // Radial geometry (focal point unsupported - center-only, like the VG fill).
+        // Radial geometry (focal point unsupported: center only, like the VG fill).
         f32 cx = 0.5f, cy = 0.5f, r = 0.5f;
         bool userSpace = false; // gradientUnits="userSpaceOnUse"
         foundation::vg::VGGradientSpread spread = foundation::vg::VGGradientSpread::Pad;
@@ -63,11 +62,11 @@ export namespace foundation::vg::svg
     {
     public:
         SVGElementType type = SVGElementType::Path;
-        Optional<foundation::vg::Path> path;         ///< Tessellatable geometry (shapes/paths).
+        Optional<foundation::vg::Path> path;         ///< Tessellatable geometry (shapes and paths).
         Float4x4 transform = Float4x4::Identity(); ///< Element transform.
-        Optional<Color> fillColor;                 ///< Fill color (empty = none/inherit).
-        String fillGradientId; ///< Set when fill="url(#id)" - resolved via the document.
-        Optional<Color> strokeColor;               ///< Stroke color (empty = none).
+        Optional<Color> fillColor;                 ///< Fill color (empty: none or inherit).
+        String fillGradientId; ///< Set when fill="url(#id)"; resolved through the document.
+        Optional<Color> strokeColor;               ///< Stroke color (empty: none).
         f32 strokeWidth = 1.0f;
         foundation::vg::VGLineCap strokeCap = foundation::vg::VGLineCap::Butt;    ///< stroke-linecap
         foundation::vg::VGLineJoin strokeJoin = foundation::vg::VGLineJoin::Miter; ///< stroke-linejoin

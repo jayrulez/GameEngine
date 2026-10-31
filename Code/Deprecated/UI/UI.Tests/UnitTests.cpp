@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/UnitTests.bf, for LOGICAL unit semantics:
-// layout runs in logical space and the root applies DpiScale once at draw.
-// Dp is identity at resolve (a value*scale here would DOUBLE-scale), Px divides by the scale so it
-// lands on exact device pixels, Pt is 96/72 logical.
+// Unit tests for logical unit semantics: layout runs in logical space and the root applies
+// DpiScale once at draw. Dp is the identity at resolve (multiplying by the scale here would scale
+// twice), Px divides by the scale so it lands on exact device pixels, and Pt is 96/72 logical.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -21,7 +20,7 @@ TEST_CASE("unit: Dp_IsLogicalIdentityAtAnyScale")
 
 TEST_CASE("unit: Px_MeansPhysicalPixels")
 {
-    // 50 physical px = 25 logical at 2x (draw scales x2 back to exactly 50 device px).
+    // 50 physical px is 25 logical at 2x (the draw scales by 2 back to exactly 50 device px).
     Unit u = Unit::Px(50.0f);
     CHECK(u.Resolve(1.0f) == 50.0f);
     CHECK(u.Resolve(2.0f) == 25.0f);

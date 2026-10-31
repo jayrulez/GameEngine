@@ -4,8 +4,7 @@
 // UI - :debug_settings partition
 //
 // Flags controlling which debug overlays are drawn after the normal render pass.
-// Zero overhead when all flags are false (AnyEnabled() gates the work). Ported from
-// Sedulous.UI/src/Debug/UIDebugDrawSettings.bf.
+// Zero overhead when all flags are false (AnyEnabled() gates the work).
 
 export module foundation.ui:debug_settings;
 
@@ -17,7 +16,7 @@ export namespace foundation::ui
         bool ShowBounds = false;
         /// Green fill for ViewGroup padding regions.
         bool ShowPadding = false;
-        /// Orange fill for LayoutParams margin regions.
+        /// Orange fill for margin regions (LayoutStyle::Margin).
         bool ShowMargin = false;
         /// Numbered overlay showing draw order within parent.
         bool ShowZOrder = false;

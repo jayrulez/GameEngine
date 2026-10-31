@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - Preferences over its own markup (Data/Editor/Preferences.xml): its controls as the
-// user's store has the look; each change shown at once; Save into the store and persisted; Cancel
-// or closing putting the look back as it was; the Shortcuts tab's edits staged, applied on Save
-// (a chord another action holds refused, named), Reset going back to the declaration's; the
-// orthographic check, the templates' folder, the MCP host's fields, the preview resolutions and
-// a contributed category's tab.
+// Editor::App: Preferences over its markup (Data/Editor/Preferences.xml). The controls start from the
+// look in the user's store, each change shows at once, and Save writes the store and persists it,
+// while Cancel or closing puts the look back as it was. The Shortcuts tab stages its edits and
+// applies them on Save (a chord another action holds is refused, naming that action), and Reset
+// returns to the declared chord. Also covers the orthographic check, the templates folder, the MCP
+// host's fields, the preview resolutions and a contributed category's tab.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -137,7 +137,7 @@ TEST_CASE("preferences: its controls as the store has the look; a change shown a
     CHECK(light->HandleActivate());
     REQUIRE(bed.shown.Size() == 1u);
     CHECK_FALSE(bed.shown.Back().dark);
-    CHECK_FALSE(dark->IsChecked()); // one of the two
+    CHECK_FALSE(dark->IsChecked()); // only one of the two is checked
     CHECK(ButtonText(window, u8"Teal")->HandleActivate());
     CHECK(bed.shown.Back().accent == String(u8"#0f8a7e"));
     CHECK(accent->GetText() == StringView(u8"#0f8a7e"));
@@ -154,7 +154,7 @@ TEST_CASE("preferences: its controls as the store has the look; a change shown a
     CHECK(ui.accent == String(u8"#0f8a7e"));
     CHECK(ui.density == String(u8"comfortable"));
     CHECK(ui.reduceMotion);
-    CHECK_FALSE(bed.shown.Back().dark); // saved: nothing put back
+    CHECK_FALSE(bed.shown.Back().dark); // saved: nothing is put back
 }
 
 TEST_CASE("preferences: Cancel, or closing the window, puts the look back as it was; the store unchanged")
@@ -165,14 +165,14 @@ TEST_CASE("preferences: Cancel, or closing the window, puts the look back as it 
     CHECK_FALSE(bed.shown.Back().dark);
     bed.dialog->Cancel();
     CHECK_FALSE(bed.dialog->IsOpen());
-    CHECK(bed.shown.Back().dark); // back
+    CHECK(bed.shown.Back().dark); // put back
     CHECK(bed.store.Find<editor::EditorUiSettings>()->scheme == String(u8"dark"));
     CHECK(bed.persisted == 0);
 
     REQUIRE(bed.dialog->Open(*bed.root)); // opened again: as the store has it
     CHECK(FindId<gui::Button>(bed.Window(), u8"pref-dark")->IsChecked());
     CHECK(FindId<gui::Button>(bed.Window(), u8"pref-density-default")->HandleActivate());
-    bed.Window().RequestClose(); // its close button, Escape
+    bed.Window().RequestClose(); // as its close button or Escape does
     CHECK_FALSE(bed.dialog->IsOpen());
     CHECK(bed.shown.Back().density == String(u8"compact"));
 }
@@ -203,8 +203,8 @@ TEST_CASE("preferences: Shortcuts lists every action; an edit is staged and appl
     CHECK(captures[0]->HandleActivate());
     d.InjectKeyDown(static_cast<u32>(gui::KeyCode::F2));
     CHECK(captures[1]->HandleActivate());
-    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::F2)); // the one Save now holds
-    CHECK(bed.actions.Shortcut(u8"file.save") == editor::EditorShortcut::Of(u8"ctrl-s")); // staged, not yet
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::F2)); // the chord Save now holds
+    CHECK(bed.actions.Shortcut(u8"file.save") == editor::EditorShortcut::Of(u8"ctrl-s")); // staged, not applied yet
     CHECK(bed.dialog->Save());
     CHECK(bed.actions.Shortcut(u8"file.save") == editor::EditorShortcut::Of(u8"f2"));
     CHECK(bed.actions.Shortcut(u8"file.open") == editor::EditorShortcut::Of(u8"ctrl-o")); // refused
@@ -282,7 +282,7 @@ TEST_CASE("preferences: the other tabs - axis views, templates, the MCP host (a 
     CHECK(bed.mcpChanged == 1);
     const editor::GamePreviewSettings* sizes = bed.store.Find<editor::GamePreviewSettings>();
     REQUIRE(sizes != nullptr);
-    CHECK(sizes->presets.Size() == 6u); // six, less one, plus the new one
+    CHECK(sizes->presets.Size() == 6u); // six, less the one removed, plus the new one
     CHECK(sizes->presets[0].name != String(u8"HD"));
     CHECK(sizes->presets.Back().name == String(u8"Custom"));
 }

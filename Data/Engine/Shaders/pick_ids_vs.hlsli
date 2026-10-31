@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The pick vertex stage as a library: pick_ids.vs.hlsl is it under `main`; a surface shader's pick
-// program includes it under its own entry (PICK_IDS_VS_ENTRY) with SURFACE_PROGRAM, which runs its
-// Vertex() and, under ALPHA_TEST, hands its Surface() everything it reads.
+// The pick vertex stage as a library. pick_ids.vs.hlsl includes it under `main`; a surface shader's
+// pick program includes it under its own entry (PICK_IDS_VS_ENTRY) with SURFACE_PROGRAM, which runs
+// the shader's Vertex() and, under ALPHA_TEST, hands its Surface() everything it reads.
 #ifndef PICK_IDS_VS_ENTRY
 #define PICK_IDS_VS_ENTRY main
 #endif
@@ -42,7 +42,8 @@ StructuredBuffer<InstanceData> Instances : register(t0, space1);
 #include "object_block.hlsli"
 #endif
 // Every input pins its location (SPIR-V; the semantics give DXIL the same): without them DXC numbers
-// them in order, and a non-instanced skinned variant's joints would take pickOffsets' 5.
+// them in order, and a non-instanced skinned variant's joints would take location 5, which
+// belongs to pickOffsets.
 struct VSInput {
     [[vk::location(0)]] float3 position : TEXCOORD0;
     [[vk::location(1)]] float3 normal   : TEXCOORD1;
@@ -51,8 +52,8 @@ struct VSInput {
     [[vk::location(4)]] float4 tangent  : TEXCOORD4;
 #ifdef INSTANCED
     // Instance-stepped (render::GpuPickDrawOffsets): x = index into Instances[], y = the bone base,
-    // z = the entity's generation, w = the entity's index + 1 (0 for a MultiMesh set, whose id is
-    // its InstanceSet's).
+    // z = the entity's generation, w = the entity's index + 1 (0 for a MultiMesh set, whose id
+    // comes from its InstanceSet).
     [[vk::location(5)]] uint4  pickOffsets : TEXCOORD5;
 #endif
 #ifdef SKINNED

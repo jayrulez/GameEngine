@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Engine::Render tests - the meshes answer rays against what they draw (ISceneSurfaceQuery): the
+// Engine::Render tests: the meshes answer rays against what they draw (ISceneSurfaceQuery): the
 // nearest hit among them, the hit triangle's nearest corner in world space (scaled and moved),
 // the entities a caller turns away, and inactive ones never.
 #include <doctest/doctest.h>

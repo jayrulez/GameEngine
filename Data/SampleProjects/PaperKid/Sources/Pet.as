@@ -1,14 +1,15 @@
-// Pet - a dog or a cat on a lawn of the title backdrop. It trots to a spot on its lawn (the
-// rectangle xMin..xMax by zMin..zMax), does something there (stands about, sits, lies down, or
-// its own thing: the dog sniffs the grass, the cat grooms), then trots to another spot.
+// Pet: a dog or a cat on a lawn of the title backdrop. It trots to a spot on its lawn (the
+// rectangle xMin..xMax by zMin..zMax), does something there (stands about, sits, lies down, or its
+// own special action: the dog sniffs the grass, the cat grooms), then trots to another spot.
 //
 // Its model is its first child, with the clips the slots name (Tools/blender/animals.py). Every
 // clip starts and ends in the same standing pose, so a switch at a clip's end does not snap; the
 // held actions last their clip's length, and standing about loops Idle for a while.
 //
-// It walks by the Walk clip's own travel: the model's animator moves this entity by the clip's
-// root motion (Entity mode, aimed here), so the feet never slide. Pet.as only steers (it turns the
-// way it wants to go) and sets the pace (the clip's speed), slower while still turning.
+// It walks by the Walk clip's own travel: the model's animator moves this entity by the clip's root
+// motion (Entity mode, targeting this entity), so the feet never slide. This script only steers,
+// turning the way it wants to go, and sets the pace through the clip's speed, slower while still
+// turning.
 
 
 class Pet
@@ -35,7 +36,7 @@ class Pet
     private float m_toX = 0.0f;
     private float m_toZ = 0.0f;
     private float m_yaw = 0.0f; // radians; 0 faces +Z
-    private float m_left = 0.0f; // seconds left of what it is doing where it stands
+    private float m_left = 0.0f; // seconds left of the current action where it stands
 
     Pet(Entity@ entity) { @self = entity; }
 

@@ -3,13 +3,12 @@
 
 // Editor::App - :editor_dock partition.
 //
-// EditorDock: the editor's dock (Documentation/Specs/editor-gui.md, 5.1, layer 4). A GUI.Docking
-// controller with its area in the frame's `frame-dock`, its floats in OS windows of their own where
-// the GUI's host opens them (else over the main window), and the panels every project shares: the
-// Project panel (the open project's page, or the welcome without one), Assets, Console and the
-// Profiler (X7: a tab in the page area, not in the default layout until shown). Their ids are the
-// ones saved layouts and the MCP layout tools name: `welcome` (the Project panel kept the id it had
-// as the Welcome panel), `assets`, `console`, `profiler`. Pages come through it in layer 6.
+// EditorDock: the editor's dock. A GUI.Docking controller with its area in the frame's
+// `frame-dock`, its floating panels in OS windows of their own where the GUI's host can open them
+// (else over the main window), and the panels every project shares: the Project panel (the open
+// project's page, or the welcome without one), Assets, Console and the Profiler (a tab in the page
+// area, absent from the default layout until shown). Their ids are the ones saved layouts and the
+// MCP layout tools use: `welcome` for the Project panel, `assets`, `console`, `profiler`.
 module;
 #include "Core/Prelude.h"
 
@@ -34,7 +33,7 @@ export namespace editor::app
     class EditorDock
     {
     public:
-        /// What it is given to make its panels' contents (the window's markup, say).
+        /// The factories for its panels' contents (built from the window's markup, for example).
         struct Contents
         {
             Function<RefPtr<gui::Node>()> welcome; ///< the Project panel without a project
@@ -49,7 +48,7 @@ export namespace editor::app
         ~EditorDock() { Close(); }
 
         /// Registers the shared panels, takes the default layout and shows it in `into` (the
-        /// frame's dock node). `host` (nullable) opens the floats' windows when it can.
+        /// frame's dock node). `host` (nullable) opens the floating panels' windows when it can.
         void Open(gui::Node& into, gui::GuiHost* host, Contents contents)
         {
             Close();
@@ -68,11 +67,11 @@ export namespace editor::app
                 m_windows = MakeUnique<gui::DockHostWindows>(m_allocator, m_allocator, *host, *m_area);
                 m_area->SetWindows(m_windows.Get());
                 if (m_area->GetWindows() == nullptr)
-                    m_windows.Reset(); // a window would not open: the floats stay over the main window
+                    m_windows.Reset(); // a window failed to open: floating panels stay over the main window
             }
         }
 
-        /// The area and its windows taken down (before the GUI's host goes).
+        /// Takes down the area and its windows (before the GUI's host goes away).
         void Close()
         {
             if (m_area)
@@ -95,17 +94,18 @@ export namespace editor::app
             (void)layout.InsertBeside(kPanelConsole, layout.StackOf(kPanelAssets), gui::DockSide::End, kConsoleShare);
             return layout;
         }
-        /// The default layout taken again (View > Reset Layout).
+        /// Adopts the default layout again (View > Reset Layout).
         void ResetLayout() { AdoptDefault(); }
-        /// A panel to the front: shown at its default place when it is closed, else its tab chosen.
+        /// Brings a panel to the front: shows it at its default place when it is closed, else
+        /// selects its tab.
         void Present(StringView panel)
         {
             if (!m_controller.Show(panel).Ok())
                 (void)m_controller.Edit([panel](gui::DockLayout& layout) { return layout.Activate(panel); });
         }
 
-        /// The Project panel's content: the open project's page, or the welcome when null. The
-        /// panel's own content is a holder of it, so it shows wherever the panel is docked.
+        /// Sets the Project panel's content: the open project's page, or the welcome when null. The
+        /// panel's own content is a holder for it, so it shows wherever the panel is docked.
         void SetProjectContent(RefPtr<gui::Node> content)
         {
             m_project = Move(content);
@@ -115,14 +115,14 @@ export namespace editor::app
 
         [[nodiscard]] gui::DockController& Controller() noexcept { return m_controller; }
         [[nodiscard]] gui::DockArea* Area() const noexcept { return m_area.Get(); }
-        /// Whether its floats open as OS windows (else over the main window).
+        /// Whether its floating panels open as OS windows (else over the main window).
         [[nodiscard]] bool FloatsInWindows() const noexcept { return m_windows.Get() != nullptr; }
 
     private:
         static constexpr f32 kPaneShare = 0.3f;
 
-        // The default layout, the Profiler closed in it: adopting places every registered panel,
-        // and the Profiler is a page shown when asked (View > Profiler), where it was last.
+        // Adopts the default layout with the Profiler closed. Adopting places every registered
+        // panel; the Profiler is a page, shown when asked for (View > Profiler) where it was last.
         void AdoptDefault()
         {
             (void)m_controller.Adopt(DefaultLayout());
@@ -133,7 +133,7 @@ export namespace editor::app
         void RegisterPanel(StringView id, StringView title, bool closable, Function<RefPtr<gui::Node>()> factory)
         {
             if (m_controller.Describe(id) != nullptr)
-                return; // opened before: registered then
+                return; // already registered when the dock was opened before
             gui::DockPanelDescription description;
             description.Id = String(id);
             description.Title = String(title);

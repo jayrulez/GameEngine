@@ -4,10 +4,10 @@
 /// Foundation::Heightfield.Resource - the `foundation.heightfield.resource` module.
 ///
 /// The heightfield as a referenceable, cooked resource. HeightfieldSource is the small serialized
-/// METADATA (size + world footprint + Y range); the u16 sample bulk rides a separate "heights" data
-/// stream (bulk-data sidecar rule - never inline in the serialized object, the ImageResource "pixels"
-/// precedent). HeightfieldFactory reads the metadata + the stream and builds the runtime Heightfield
-/// (foundation.heightfield). Terrain, the physics collider, and the nav bake all resolve
+/// metadata (size, world footprint, Y range); the u16 sample bulk rides a separate "heights" data
+/// stream rather than inline in the serialized object, as ImageResource's "pixels" does.
+/// HeightfieldFactory reads the metadata and the stream and builds the runtime Heightfield
+/// (foundation.heightfield). Terrain, the physics collider and the nav bake all resolve
 /// Ref<Heightfield> to this product.
 
 module;
@@ -28,11 +28,11 @@ export namespace foundation::heightfield
 {
     /// The name of the sidecar stream carrying the raw u16 samples.
     inline constexpr StringView kHeightStream = u8"heights";
-    /// The per-sample hole plane (one byte per sample, 0 solid / 255 cut), ALWAYS written beside
+    /// The per-sample hole plane (one byte per sample, 0 solid, 255 cut), always written beside
     /// the heights (an all-zero plane is the common file; one layout, never optional).
     inline constexpr StringView kHoleStream = u8"holes";
 
-    /// Cooked heightfield METADATA: the grid parameters. The u16 sample bulk is NOT here - it rides
+    /// Cooked heightfield metadata: the grid parameters. The u16 sample bulk is not here; it rides
     /// the `kHeightStream` data stream (see the module doc).
     class HeightfieldSource final : public ISerializable
     {
@@ -51,8 +51,8 @@ export namespace foundation::heightfield
             foundation::core::Serialize(ar, "maxY", maxY);
         }
 
-        /// Capture a runtime Heightfield's METADATA into this source (for cooking). The samples are
-        /// written separately via HeightBlob + WriteData(kHeightStream, ...).
+        /// Capture a runtime Heightfield's metadata into this source (for cooking). The samples are
+        /// written separately via HeightBlob and WriteData(kHeightStream, ...).
         static void FromHeightfield(const Heightfield& hf, HeightfieldSource& out)
         {
             out.size = hf.Size();
@@ -76,7 +76,7 @@ export namespace foundation::heightfield
             return Span<const byte>(reinterpret_cast<const byte*>(holes.Data()), holes.Size());
         }
 
-        /// Build the runtime product from this metadata + the two sidecar streams. Returns an
+        /// Build the runtime product from this metadata and the two sidecar streams. Returns an
         /// empty grid if the cooked data is inconsistent (invalid size, a height blob that does
         /// not match size*size*2, a hole blob that does not match size*size) rather than a
         /// malformed grid. The runtime product is allocated from `allocator` (caller-owned).
@@ -100,13 +100,13 @@ export namespace foundation::heightfield
         }
     };
 
-    /// Builds a cooked heightfield (metadata object + "heights" stream) into a runtime Heightfield.
-    /// Pure-CPU (no GPU state - the terrain renderer owns the height texture, cached per resource), so
+    /// Builds a cooked heightfield (metadata object and "heights" stream) into a runtime Heightfield.
+    /// Pure CPU (no GPU state: the terrain renderer owns the height texture, cached per resource), so
     /// the whole build runs on a worker.
     class HeightfieldFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
+        // The allocator backs every product this factory creates (required:
         // the application that registers the factory decides).
         explicit HeightfieldFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -171,7 +171,7 @@ export namespace foundation::heightfield
         IAllocator* m_allocator;
     };
 
-    /// Register the heightfield resource types (product + cooked source) so the content DB can
+    /// Register the heightfield resource types (product and cooked source) so the content DB can
     /// deserialize a cooked heightfield and the factory can produce it.
     inline void RegisterHeightfieldResourceTypes()
     {
@@ -180,15 +180,15 @@ export namespace foundation::heightfield
         RegisterSerializable<HeightfieldSource>();
     }
 
-    // v2 (2026-09-23): the "holes" stream beside "heights" (the one-layout rule: every cooked
-    // heightfield carries both; a v1 product is refused and re-cooked, never migrated).
+    // v2: the "holes" stream beside "heights". Every cooked heightfield carries both; a v1
+    // product is refused and re-cooked, never migrated.
     RTTI_DEFINE_OBJECT_VERSIONED(HeightfieldSource, "rtti::heightfield", 2)
 }
 
 export namespace foundation::heightfield
 {
-    /// The heightfield resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The heightfield resource module: the module the engine composition composes this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kHeightfieldResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<Heightfield, HeightfieldSource, HeightfieldFactory>(),
     };

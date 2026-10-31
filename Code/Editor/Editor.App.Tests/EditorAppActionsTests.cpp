@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - the editor-wide actions: each menu registers what the application can run, with
-// its id, menu path and keys; one it gives nothing for is left out; one that needs a project is
-// off without one.
+// Editor::App: the editor-wide actions. Each menu registers what the application can run, with its
+// id, menu path and keys. An action the application provides no handler for is left out, and one
+// that needs a project is disabled without one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -54,7 +54,7 @@ TEST_CASE("app actions: a menu registers what can run, with its keys; what needs
 
 namespace
 {
-    // A page that saves into a count, as a page writes its asset.
+    // A page whose save increments a count, standing in for writing its asset.
     class CookedPage final : public EditorPage
     {
     public:

@@ -3,13 +3,12 @@
 
 /// foundation.rhi.webgpu:shader_module - ShaderModule over WGPUShaderModule.
 ///
-/// Desktop dev loop: the ShaderModuleDesc carries the SAME DXC-produced SPIR-V the
-/// Vulkan backend consumes, ingested through the STANDARD WGPUShaderSourceSPIRV
-/// chained struct (gated on the ShaderSourceSPIRV instance feature the backend
-/// requests at creation; browsers never expose it).
-/// The browser path arrives with the shaders track's cook-time WGSL: same desc, the
-/// bytes are WGSL text, ingested through the standard WGSL chained struct. The
-/// discriminator is the SPIR-V magic in the first word.
+/// Desktop dev loop: the ShaderModuleDesc carries the same DXC-produced SPIR-V the
+/// Vulkan backend consumes, ingested through the standard WGPUShaderSourceSPIRV chained
+/// struct (gated on the ShaderSourceSPIRV instance feature the backend requests at
+/// creation; browsers never expose it). The browser path uses the cook-time WGSL: same
+/// desc, but the bytes are WGSL text, ingested through the standard WGSL chained
+/// struct. The discriminator is the SPIR-V magic in the first word.
 
 module;
 #include "Core/Prelude.h"
@@ -51,7 +50,7 @@ export namespace foundation::rhi::webgpu
             }
             else
             {
-                // WGSL text (cook-time output once the shaders track lands).
+                // WGSL text (the shader cook's browser output).
                 WGPUShaderSourceWGSL wgsl = WGPU_SHADER_SOURCE_WGSL_INIT;
                 wgsl.code = WGPUStringView{reinterpret_cast<const char*>(desc.code.Data()),
                                            desc.code.Size()};

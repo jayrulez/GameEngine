@@ -3,8 +3,8 @@
 
 // foundation.scene :composition - declarative assembly (SceneModule/SceneComposition), ordered
 // observation (ISceneObserver/SceneLifecycleStage), the FrameTime time-scale chain, and the pure
-// SceneRegistry. No Context needed anywhere here - the registry is testable
-// standalone, which is the point of the design.
+// SceneRegistry. No SubsystemManager is needed anywhere here: the registry is testable
+// standalone.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -16,8 +16,8 @@ using namespace foundation::scene;
 
 namespace
 {
-    // Install/reflection hooks record shared state (function pointers carry no capture, so a file-
-    // local counter + order string are the canonical test vehicles).
+    // Install/reflection hooks record shared state (function pointers carry no capture, so a
+    // file-local counter and order string carry what they saw).
     String g_installOrder;
     String g_obsOrder;
     int g_reflections = 0;
@@ -90,7 +90,7 @@ TEST_CASE("composition: Build topologically sorts modules by dependsOn")
 {
     ResetProbes();
 
-    // Input order is deliberately reversed: B depends on A, so A must come first.
+    // Input order is reversed on purpose: B depends on A, so A must come first.
     const SceneModule* modules[] = {&kModuleBDependsOnA, &kModuleA};
     SceneComposition comp = SceneComposition::Build(modules);
     REQUIRE(comp.ModuleCount() == 2u);
@@ -235,10 +235,9 @@ TEST_CASE("scene-registry: lane fan-out ticks every registered manager's scenes"
 }
 TEST_CASE("composition: OWNS its module copies - source modules may die after Build")
 {
-    // The 2026-08-19 review regression: the pointer-retaining first version stored the
-    // caller's SceneModule* and dereferenced a DEAD stack module at Instantiate time
-    // (GCC caught it in the UI subsystem tests; clang passed on stack-layout luck).
-    // Build must copy by value so block-scoped/temporary modules are legal callers.
+    // A composition that kept the caller's SceneModule* would dereference a dead stack
+    // module at Instantiate time. Build must copy by value so block-scoped or temporary
+    // modules are legal callers.
     ResetProbes();
     SceneComposition comp;
     {
@@ -247,7 +246,7 @@ TEST_CASE("composition: OWNS its module copies - source modules may die after Bu
         const SceneModule localB{u8"b", &InstallB, &ReflectB, deps};
         const SceneModule* modules[] = {&localB, &localA};
         comp = SceneComposition::Build(modules);
-    } // both modules + the deps array are DEAD here
+    } // both modules and the deps array are dead here
 
     CHECK(comp.ModuleCount() == 2u);
     Scene scene(DefaultAllocator(), u8"lifetime");
@@ -259,8 +258,8 @@ TEST_CASE("composition: OWNS its module copies - source modules may die after Bu
 
 TEST_CASE("frame-time cutover: the manager lanes fold the FULL chain from one FrameTime")
 {
-    // The strain-#4 unification: the bridge builds ONE FrameTime (host x context + step);
-    // the manager contributes the GROUP term, the scene its own term. Assert the composed
+    // The bridge builds one FrameTime (host x context, and the step); the manager
+    // contributes the group term, the scene its own term. Assert the composed
     // dt reaching a scene's variable lane equals raw x context x group x scene, and the
     // fixed lane steps at the configured step under the same chain.
     SceneManager mgr{DefaultAllocator()};
@@ -272,7 +271,7 @@ TEST_CASE("frame-time cutover: the manager lanes fold the FULL chain from one Fr
     DeltaProbeSystem* probe = s->AddSystem<DeltaProbeSystem>();
 
     const FrameTime time(/*raw*/ 0.032f, /*context*/ 0.5f, 1.0f, 1.0f, /*step*/ 1.0f / 250.0f);
-    mgr.BeginFrame(time); // seeds the scene stepper to the lane step + advances fixed time
+    mgr.BeginFrame(time); // seeds the scene stepper to the lane step and advances fixed time
     mgr.Update(time);
 
     // 0.032 x 0.5 (context) x 0.5 (group) x 0.5 (scene) = 0.004
@@ -282,7 +281,7 @@ TEST_CASE("frame-time cutover: the manager lanes fold the FULL chain from one Fr
     CHECK(s->FixedTimeStep() == doctest::Approx(1.0f / 250.0f)); // seeded from the lane config
 }
 
-// --- Runtime contributions (game-native-code.md S1): a plugin's managers/systems -------------
+// --- Runtime contributions: a plugin's managers/systems ----------------------------------------
 namespace
 {
     // A contributed system with a settings block (managers and plain systems alike).
@@ -337,7 +336,7 @@ TEST_CASE("contributions: Instantiate appends contributed systems; Remove withdr
     CHECK(recorded[0] == TypeOf<ContribSystem>().id);
     CHECK(reg.Contains(TypeOf<ContribSystem>().id));
 
-    // A scene composed AFTER the contribution gets the system through Instantiate's tail.
+    // A scene composed after the contribution gets the system through Instantiate's tail.
     const SceneModule* none[] = {&kModuleA};
     SceneComposition comp = SceneComposition::Build(Span<const SceneModule*>{none, 1});
     Scene scene(DefaultAllocator(), u8"contrib-new");

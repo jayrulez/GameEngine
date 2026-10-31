@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Shader feature flags + variant key. Flags are compile-time permutation bits:
+/// Shader feature flags and the variant key. Flags are compile-time permutation bits:
 /// each set flag becomes a `#define` prepended before compilation, so shaders
 /// #ifdef-gate features into specialized, branch-free permutations. Render state
-/// (blend/cull/depth) is NOT here - that's PipelineConfig in the material layer.
+/// (blend, cull, depth) is not here; that is PipelineConfig in the material layer.
 
 module;
 #include "Core/Prelude.h" // <new> for placement-new at GCC container instantiation sites
@@ -31,8 +31,8 @@ export namespace foundation::shaders
         ReceiveShadows = 1u << 6, // -> #define RECEIVE_SHADOWS
         GBuffer = 1u << 7, // -> #define GBUFFER (forward MRT: also output view-normal + motion)
         Wind = 1u << 8,    // -> #define WIND (vertex sway from the material's Wind effect group)
-        Holes = 1u << 9,   // -> #define HOLES (terrain: discard by the bilinear hole mask - a holed chunk's rim)
-        Dither = 1u << 10, // -> #define DITHER (a faded mesh: discard by a screen-door pattern; a cutaway)
+        Holes = 1u << 9,   // -> #define HOLES (terrain: a holed chunk's rim, discarded by the bilinear hole mask)
+        Dither = 1u << 10, // -> #define DITHER (a faded mesh or cutaway: discard by a screen-door pattern)
     };
 
     [[nodiscard]] constexpr ShaderFlags operator|(ShaderFlags a, ShaderFlags b) noexcept
@@ -53,9 +53,9 @@ export namespace foundation::shaders
         return (static_cast<u32>(v) & static_cast<u32>(f)) != 0u;
     }
 
-    // The one flag <-> #define-name table. AppendDefines, the variant-directive parser, the
-    // drift-lint, and power-set enumeration (see :variants) all derive from this - add a flag here
-    // and every consumer picks it up. Order is the #define emission order (preprocessor-irrelevant).
+    // The one table mapping each flag to its #define name. AppendDefines, the variant-directive
+    // parser, the drift-lint and power-set enumeration (see :variants) all derive from it, so a
+    // flag added here reaches every consumer. Order is the #define emission order (preprocessor-irrelevant).
     struct ShaderFlagName
     {
         ShaderFlags flag;
@@ -75,8 +75,8 @@ export namespace foundation::shaders
         {ShaderFlags::Dither, u8"DITHER"},
     };
 
-    // Append a `#define NAME 1` for each set flag (static-literal names - safe to
-    // reference for the duration of a compile).
+    // Append a `#define NAME 1` for each set flag. The names are static literals, so they are
+    // safe to reference for the duration of a compile.
     inline void AppendDefines(ShaderFlags flags, Array<ShaderDefine>& out)
     {
         for (const ShaderFlagName& entry : kShaderFlagNames)
@@ -88,7 +88,7 @@ export namespace foundation::shaders
         }
     }
 
-    // Stable hash of a shader name (used to key sources + variants without storing
+    // Stable hash of a shader name (used to key sources and variants without storing
     // the name string in every key).
     [[nodiscard]] inline u64 ShaderNameHash(StringView name) noexcept
     {

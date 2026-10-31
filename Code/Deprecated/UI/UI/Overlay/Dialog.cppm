@@ -3,12 +3,11 @@
 
 // UI - :dialog partition
 //
-// Modal dialog with title, content, and a right-aligned button row. Shown via PopupLayer as a centered
-// modal popup. Ported from Sedulous.UI/src/Overlay/Dialog.bf. Ownership: Beef `new FlexLayout` + manual
-// delete -> RefPtr<FlexLayout> m_layout (VisualChild); the title Label / button-row FlexLayout / content
-// View are owned by m_layout (AddView), held here as borrowed raw pointers. Beef get/set Property<float>
-// -> Value()/SetValue(); `delegate void(Dialog, DialogResult)` OnClosed event -> Event<void(Dialog*,
-// DialogResult)>. The dialog is one VisualChild (m_layout); measure/layout/draw delegate to it.
+// Modal dialog with title, content, and a right-aligned button row, shown through PopupLayer as a
+// centered modal popup. The dialog owns one visual child, the FlexLayout m_layout, and delegates
+// measure, layout and draw to it. The title Label, the button row and the content view are owned
+// by m_layout and held here as borrowed pointers (the button row is also held by reference; see
+// m_buttonRow).
 
 module;
 #include "Core/Prelude.h"
@@ -70,7 +69,7 @@ export namespace foundation::ui
         {
             ClipsContent = true;
             // Focusable (not a tab stop) so a dialog with no focusable content can still hold
-            // keyboard focus - Escape-to-close works the moment it opens (see Show).
+            // keyboard focus, and Escape closes it the moment it opens (see Show).
             IsFocusable = true;
             MinWidth.SetOwner(this);
             MinHeight.SetOwner(this);
@@ -131,8 +130,8 @@ export namespace foundation::ui
             }
         }
 
-        /// Add a button to the button row. A result of None makes the button CALLER-MANAGED:
-        /// its click does NOT auto-close - wire OnClick and call Close() yourself, so a
+        /// Add a button to the button row. A result of None makes the button caller-managed:
+        /// its click does not close the dialog, so wire OnClick and call Close() yourself, and a
         /// validation failure can keep the dialog up. Any other result closes with it.
         Button* AddButton(StringView text, DialogResult result)
         {
@@ -165,11 +164,12 @@ export namespace foundation::ui
                 return;
             }
 
-            // Show at (0,0) first so dialog gets context-attached for measurement. AttachView recurses
-            // through VisualChildren, so the internal FlexLayout and its buttons attach automatically.
+            // Show at (0,0) first so the dialog is attached to the context for measurement.
+            // AttachView recurses through VisualChildren, so the internal FlexLayout and its
+            // buttons attach automatically.
             root->GetPopupLayer()->ShowPopup(this, nullptr, 0, 0, false, true, ownsView);
 
-            // Now measure with context available, then reposition to center. Use logical coordinates
+            // Measure with the context available, then reposition to center. Use logical coordinates
             // (physical / DpiScale) to match layout space.
             const f32 dpi = Max(root->DpiScale, 0.01f);
             const f32 viewportW = root->ViewportSize.x / dpi;
@@ -187,13 +187,13 @@ export namespace foundation::ui
             Layout(x, y, finalW, finalH);
             root->GetPopupLayer()->UpdatePopupPosition(this, x, y);
 
-            // Initial keyboard focus: the first focusable child (usually the first button), else
-            // the dialog itself - so Escape/Return work immediately without a click, and Tab
-            // starts inside the dialog (the focus root is scoped to it while it is open).
+            // Initial keyboard focus goes to the first focusable child (usually the first button),
+            // else the dialog itself, so Escape and Return work without a click and Tab starts
+            // inside the dialog (the focus root is scoped to it while it is open).
             FocusManager* fm = ctx->GetFocusManager();
             if (!fm->FocusFirstIn(this))
             {
-                fm->SetFocus(this); // Programmatic - holds focus, draws no ring
+                fm->SetFocus(this); // programmatic focus draws no ring
             }
         }
 
@@ -327,9 +327,8 @@ export namespace foundation::ui
     private:
         RefPtr<FlexLayout> m_layout;
         Label* m_titleLabel = nullptr;
-        // The button row is detached (RemoveView) then re-added in SetContent; our RemoveView drops the
-        // tree's ref, so an independent RefPtr keeps it alive across that window (Beef's raw field relied
-        // on detach-not-delete semantics).
+        // SetContent detaches the button row (RemoveView) and adds it back. RemoveView drops the tree's
+        // reference, so this RefPtr keeps the row alive in between.
         RefPtr<FlexLayout> m_buttonRow;
         View* m_content = nullptr;
     };

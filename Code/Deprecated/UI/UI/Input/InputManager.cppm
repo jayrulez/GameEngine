@@ -4,9 +4,8 @@
 // UI - :input_manager partition
 //
 // Routes input events to views (hover/pressed/capture tracked by ViewId), with three-phase
-// capture->target->bubble dispatch and pooled event args. Ported from Sedulous.UI/src/Input/InputManager.bf.
-// All View-touching bodies live in the module impl unit. DEFERRED (guarded/omitted until their
-// subsystems land): drag-drop priority + IDragSource init, tooltip hide/hover, popup click-outside.
+// dispatch (capture, then target, then bubble) and pooled event args. All View-touching bodies live in
+// the module impl unit.
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +42,7 @@ export namespace foundation::ui
                                KeyModifiers modifiers = KeyModifiers::None);
 
         // === Keyboard ===
-        /// The modifier state from the most recent key event - stamped into mouse events so
+        /// The modifier state from the most recent key event, stamped into mouse events so
         /// Ctrl/Shift+click behaviors (multi-select) work.
         [[nodiscard]] KeyModifiers CurrentModifiers() const noexcept { return m_currentModifiers; }
 
@@ -52,9 +51,9 @@ export namespace foundation::ui
         bool ProcessKeyUp(KeyCode key, KeyModifiers modifiers, f32 timestamp = 0.0f);
         bool ProcessTextInput(char32_t character);
 
-        // Nothing is under the pointer any more: what was hovered is told it lost it. For a pointer
-        // that is not in use - a hidden cursor parked over a button while a pad drives the menu,
-        // which must not light that button up.
+        // Treat the pointer as over nothing: the hovered view is told it lost the hover. For a
+        // pointer that is not in use, such as a hidden cursor parked over a button while a pad
+        // drives the menu, which should not light that button up.
         void ClearHover();
 
         // === Deletion safety ===

@@ -3,9 +3,9 @@
 
 // Particles - particles.subsystem implementation unit: the component reflection body.
 //
-// Kept OUT of the :components interface partition: REFLECT_* bodies in an interface
-// unit make GCC emit an unreadable gcm cluster for consumers (see gcc-module-interface-hygiene).
-// ParticleComponents.cppm declares RegisterParticleComponentReflection(); this unit defines it.
+// Kept out of the :components interface partition: REFLECT_* bodies in an interface unit make GCC
+// emit an unreadable gcm cluster for consumers. ParticleComponents.cppm declares
+// RegisterParticleComponentReflection(); this unit defines it.
 
 module;
 #include "Core/Prelude.h"
@@ -16,7 +16,7 @@ import engine.domain;
 import foundation.particles.resource;
 
 import foundation.core;
-import foundation.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
+import foundation.script.facades; // ComponentOf<T>, RegisterExtra* (the script `.of` surface)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -30,8 +30,9 @@ namespace engine::particles
             .Attribute("description",
                        String(u8"Plays a particle effect at the entity: billboards, trails, meshes "
                               u8"or lights."))
-            // Script (Track A): ParticleEffectComponent.of(entity) -> live visible/meshScale/light*.
-            // play/stop/setEffect are instance ops -> SceneParticles.of(scene) (world ops keyed by entity).
+            // Script: ParticleEffectComponent.of(entity) reaches the live visible/meshScale/light*
+            // data. play/stop/setEffect are instance operations, on SceneParticles.of(scene) (keyed
+            // by entity).
             .Method<&foundation::script::ComponentOf<ParticleEffectComponent>, ParticleEffectComponent>(
                 "of")
             .Property<&ParticleEffectComponent::effectAsset>("effect")
@@ -69,13 +70,15 @@ namespace engine::particles
 
     void RegisterParticleScriptFacade()
     {
-        RegisterParticleComponentReflection(); // ensure component TypeData (incl `of`) is built first
-        // Surface the particle component (ParticleEffectComponent.of(entity)): register + seed root + name.
+        RegisterParticleComponentReflection(); // ensure component TypeData (including `of`) is built first
+        // Surface the particle component (ParticleEffectComponent.of(entity)): register, seed root,
+        // name.
         GlobalTypeRegistry().Register(core::TypeOf<ParticleEffectComponent>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<ParticleEffectComponent>());
         foundation::script::RegisterExtraFacadeName(u8"ParticleEffectComponent");
 
-        // The scene-bound particles handle (SceneParticles.of(scene)): reflect + register + seed + name.
+        // The scene-bound particles handle (SceneParticles.of(scene)): reflect, register, seed,
+        // name.
         RttiRegisterValue_SceneParticles();
         GlobalTypeRegistry().Register(core::TypeOf<SceneParticles>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<SceneParticles>());

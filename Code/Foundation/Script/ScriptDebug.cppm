@@ -7,12 +7,11 @@
 // Both backends implement the debugger and the bytecode blob and declare those
 // ScriptCapabilities flags; neither implements the profiler yet, so its flag stays absent and
 // its factory returns null. The conformance battery certifies each capability a backend
-// declares and skips the ones it lacks. Modelled (trimmed) on Traktor's script debug stack.
+// declares and skips the ones it lacks.
 //
-// The debugger SNAPSHOT value types (ScriptStackFrame / ScriptVariable /
-// ScriptValueObject) are plain data and WIRE-SYMMETRIC: they carry a Serialize() that
-// runs identically in both directions, because a remote debug transport must move
-// them across a socket. Every one has a round-trip test in the Script test suite.
+// The debugger snapshot value types (ScriptStackFrame, ScriptVariable,
+// ScriptValueObject) are plain data with a Serialize() that runs identically in both
+// directions, so a remote debug transport can move them across a socket.
 
 module;
 #include "Core/Prelude.h"
@@ -101,10 +100,9 @@ export namespace foundation::script
         virtual void OnDebuggerStateChanged(ScriptDebuggerState state) = 0;
     };
 
-    /// Step-debug seam. AngelScript implements it (suspension-based - see the
-    /// AngelScriptDebugger in the backend impl unit; ScriptCapabilities::Debugger declared
-    /// and battery-certified). The editor UI
-    /// and the future remote transport drive only this contract.
+    /// A step debugger. Both backends implement it and declare ScriptCapabilities::Debugger
+    /// (AngelScript's suspends the executing context at a breakpoint). The editor drives
+    /// the debugger only through this interface.
     class IScriptDebugger
     {
     public:
@@ -148,7 +146,7 @@ export namespace foundation::script
         virtual void OnCallMeasured(const ScriptCallMeasurement& measurement) = 0;
     };
 
-    /// VM profiling seam. No backend implements it yet (ScriptCapabilities::Profiler is
+    /// A VM profiler. No backend implements it yet (ScriptCapabilities::Profiler is
     /// absent everywhere and CreateProfiler returns null).
     class IScriptProfiler
     {
@@ -161,10 +159,10 @@ export namespace foundation::script
 
     // ---- cook-to-bytecode blob ---------------------------------------------------
 
-    /// An opaque, serializable compiled script unit (e.g. AngelScript SaveByteCode). No
-    /// backend produces one yet (ScriptCapabilities::Bytecode is absent everywhere;
-    /// IScriptManager::CompileToBlob returns an error and IScriptContext::LoadBlob returns
-    /// NotSupported). The blob serializes so a cook can store it and the runtime load it.
+    /// An opaque, serializable compiled script unit (AngelScript SaveByteCode output, Luau
+    /// bytecode). A backend with ScriptCapabilities::Bytecode produces it from
+    /// IScriptManager::CompileToBlob and consumes it in IScriptContext::LoadBlob. The blob
+    /// serializes so a cook can store it and the runtime load it.
     class IScriptBlob : public core::Object
     {
         // Object-derived only for RefPtr lifetime; it is never a registry type, so it

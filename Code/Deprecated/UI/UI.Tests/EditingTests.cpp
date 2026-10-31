@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editing subsystem tests. InputFilter cases are a faithful port of Sedulous.UI.Tests/src/
-// InputFilterTests.bf (Beef `scope`/`new` -> value, delegate -> lambda; char literals are char32_t
-// U'...'). UndoStack has no upstream test file (Sedulous exercises it only through EditText), so its
-// cases below are direct unit coverage for the ported primitive.
+// Editing subsystem tests: the InputFilter cases (character literals are char32_t, U'...') and
+// direct unit coverage of UndoStack.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -58,9 +56,8 @@ TEST_CASE("input-filter: Custom_UsesDelegate")
     CHECK(!filter.Accept(U'a'));
 }
 
-// === UndoStack (consolidated coverage of upstream UndoStackTests.bf's 8 cases; each case here bundles
-//     several upstream assertions - e.g. the first covers Empty_CannotUndo + PushState_CanUndo +
-//     Undo_RestoresState + Undo_PushesToRedo) ===
+// === UndoStack (each case bundles several checks; the first covers an empty stack, a push, an
+//     undo that restores the state, and the state moving onto redo) ===
 
 TEST_CASE("undo-stack: PushState then Undo restores the pushed snapshot")
 {
@@ -92,7 +89,7 @@ TEST_CASE("undo-stack: Redo restores the state undone away")
     core::i32 cursor = 0, anchor = 0;
     stack.Undo(u8"ab", 2, 2, out, cursor, anchor);
 
-    // Redo should give back "ab" (the state that was current at Undo time).
+    // Redo gives back "ab" (the state that was current at Undo time).
     core::String redoOut;
     core::i32 rc = 0, ra = 0;
     const bool ok = stack.Redo(out.AsView(), cursor, anchor, redoOut, rc, ra);

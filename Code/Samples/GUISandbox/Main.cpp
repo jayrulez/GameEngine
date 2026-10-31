@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI Sandbox - foundation.gui's demo (Documentation/Specs/vg-and-gui-lab.md), built from the GUI
-// itself. A shell (Data/Samples/UI/sandbox/shell.xml: a header, a sidebar of pages, the page on
-// show) whose sidebar buttons run page.<id> commands; each page is pages/<id>.xml with an optional
-// pages/<id>.css and pages/<id>.as, so a new page is a button and its files. This host only sizes
-// the shell, fills the few hosts that need native models or widgets (the data views, the menu bar,
-// the context menu, the floating window, the message box, an image, anchors), and
-// switches the theme. The game menu (Data/Samples/UI/showcase) is a second root of the same GUI:
-// it shares the data, and its Leave brings the player back here.
+// GUI Sandbox - foundation.gui's demo, built from the GUI itself. A shell
+// (Data/Samples/UI/sandbox/shell.xml: a header, a sidebar of pages, the page on show) whose sidebar
+// buttons run page.<id> commands; each page is pages/<id>.xml with an optional pages/<id>.css and
+// pages/<id>.as, so a new page is a button and its files. This host only sizes the shell, fills the
+// few hosts that need native models or widgets (the data views, the menu bar, the context menu, the
+// floating window, the message box, an image, anchors), and switches the theme. The game menu
+// (Data/Samples/UI/showcase) is a second root of the same GUI: it shares the data, and its Leave
+// brings the player back here.
 //
 // Drawn through VG with everything it has (analytic boxes, layers and blurs, the MSAA and stencil
 // pass), only on frames that need it. Input reaches the root on show through GuiInputBridge.
@@ -33,32 +33,32 @@ import foundation.image.io; // the resource provider's pictures
 import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.fonts.bidi;
-import foundation.fonts.harfbuzz; // joined Arabic (E9e)
-import foundation.i18n;           // the Language and direction page's table (E9e)
+import foundation.fonts.harfbuzz; // joined Arabic
+import foundation.i18n;           // the Language and direction page's table
 import foundation.xml;
 import foundation.xml.serialization;
 import foundation.fonts.distancefield.baker; // the Lilita distance-field face
 import foundation.vg;
 import foundation.vg.renderer;
-import foundation.vg.svg; // the resource provider's SVG pictures (E13)
+import foundation.vg.svg; // the resource provider's SVG pictures
 import foundation.gui;
 import foundation.gui.shell;
-import foundation.gui.inspector; // Ctrl+Shift+I (E8e)
-import foundation.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
+import foundation.gui.inspector; // Ctrl+Shift+I
+import foundation.gui.testing;   // --keys targets by selector or text, the image tests' match
 import foundation.gui.hosting;   // the host: the window's GUI, offscreen pictures, the picture baker
 import foundation.gui.viewport;  // the Viewport page's widget
 import foundation.gui.docking;   // the Docking page's dock space
 import foundation.gui.toolkit;   // the Toolkit page's tool and status bars
-import foundation.gui.code;      // the Code page's editors (C8)
-import foundation.gui.gamekit;   // the game menu's screens and prompts (K7)
+import foundation.gui.code;      // the Code page's editors
+import foundation.gui.gamekit;   // the game menu's screens and prompts
 import foundation.input;           // the game menu's actions, which its prompts show
 import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
-import gui.sandbox.stress; // the Stress page (E8a)
-import gui.sandbox.lamps;  // the Toolkit page's property source (T1)
-import gui.sandbox.camera; // the Toolkit page's reflected object (T3)
-import gui.sandbox.code;   // the Code page (C8)
-import gui.sandbox.editor_mock; // --editor-mock: the editor's design (X0 of Specs/editor-gui.md)
+import gui.sandbox.stress; // the Stress page
+import gui.sandbox.lamps;  // the Toolkit page's property source
+import gui.sandbox.camera; // the Toolkit page's reflected object
+import gui.sandbox.code;   // the Code page
+import gui.sandbox.editor_mock; // --editor-mock: the editor's design
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -81,8 +81,9 @@ namespace script = foundation::script;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here. It counts what is
-    // live (--soak reports it); built in place and never destroyed, so frees at exit still find it.
+    // This binary's composition root, where its one ambient allocator is chosen. It counts live
+    // allocations (--soak reports them), and it is built in place and never destroyed, so frees at
+    // exit still find it.
     [[nodiscard]] TrackingAllocator& AppRoot() noexcept
     {
         alignas(TrackingAllocator) static unsigned char storage[sizeof(TrackingAllocator)];
@@ -110,7 +111,7 @@ namespace
 
     constexpr StringView kRoboto = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
     constexpr StringView kLilita = u8"Samples/Fonts/lilita-one/LilitaOne-Regular.ttf";
-    constexpr StringView kDejaVu = u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf"; // Arabic, which Roboto has not
+    constexpr StringView kDejaVu = u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf"; // for Arabic, which Roboto lacks
     constexpr StringView kStrings = u8"Samples/UI/sandbox/i18n/sandbox.strings.xml";
     constexpr StringView kSandboxDir = u8"Samples/UI/sandbox/";
     constexpr StringView kMenuDir = u8"Samples/UI/showcase/";
@@ -153,11 +154,11 @@ namespace
                     return e.Picture.Get();
             UniquePtr<image::Image> picture = MakeUnique<image::Image>(AppRoot());
             if (!image::io::LoadImage(m_resolve(path).AsView(), *picture).IsOk())
-                picture = UniquePtr<image::Image>{}; // missing: remembered as such
+                picture = UniquePtr<image::Image>{}; // a missing picture is remembered as missing
             m_images.PushBack(Entry{String(path), Move(picture)});
             return m_images[m_images.Size() - 1].Picture.Get();
         }
-        // A CSS SVG image (E13), parsed once and kept (missing: remembered as such).
+        // A CSS SVG image, parsed once and kept (a missing one is remembered as missing).
         const foundation::vg::svg::SVGDocument* LoadSvg(StringView path) override
         {
             for (const SvgEntry& e : m_svgs)
@@ -197,7 +198,7 @@ namespace
         Array<SvgEntry> m_svgs;
     };
 
-    // --narrate (E9e): a bridge that speaks to the console as a screen reader would aloud: each
+    // --narrate: a bridge that prints to the console what a screen reader would say aloud: each
     // focus change (what it reached, what it is, its value and states) and each announcement.
     class NarrateBridge final : public gui::IAccessibilityBridge
     {
@@ -224,7 +225,7 @@ namespace
                 line += StringView(u8", ");
                 line += focused->Value.AsView();
             }
-            if (focused->PositionInSet > 0 && focused->SetSize > 0) // "3 of 100000" (E17b)
+            if (focused->PositionInSet > 0 && focused->SetSize > 0) // "3 of 100000"
             {
                 char where[64];
                 std::snprintf(where, sizeof(where), ", %d of %d", focused->PositionInSet, focused->SetSize);
@@ -306,9 +307,9 @@ public:
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
     void SetFrameStats(bool stats) { m_frameStats = stats; }
     void SetSweep(bool sweep) { m_sweep = sweep; }
-    /// --mirror-audit (E17a): each page laid out left to right and then right to left, in one
+    /// --mirror-audit: each page laid out left to right and then right to left, in one
     /// language (its text measures the same both ways); every widget must stand at the mirror of its
-    /// left-to-right place within the page. Prints each that does not; exits 1 if any did.
+    /// left-to-right place within the page. Prints each widget that does not, and exits 1 if any.
     void SetMirrorAudit(bool on) { m_mirrorAudit = on; }
     /// --soak <minutes> [--soak-csv <path>]: the sweep's steps over and over for that long, a CSV
     /// row every ten seconds (frame time percentiles, live allocations and bytes, resident memory).
@@ -318,12 +319,12 @@ public:
     void SetLayoutOverlay(bool on) { m_layoutOverlay = on; }
     void SetInputOverlay(bool on) { m_inputOverlay = on; }
     void SetOpenInspector(bool on) { m_openInspector = on; }
-    // --image-tests (E8g): each page drawn offscreen at a fixed size on a fixed clock, compared
+    // --image-tests: each page drawn offscreen at a fixed size on a fixed clock, compared
     // with its reference; --approve-images writes the pictures as the references instead.
     void SetImageTests(bool on) { m_imageTests = on; }
     void SetApproveImages(StringView how) { m_imageTests = true; m_approve = String(how); }
     void SetImageOut(StringView dir) { m_imageOut = String(dir); }
-    // --bench <page> [frames] (E15): the page drawn offscreen at the image tests' size, its title's
+    // --bench <page> [frames]: the page drawn offscreen at the image tests' size, its title's
     // text changed each frame (the smallest change a frame can carry), and the frames' average
     // cost printed by stage: the GUI's draw, the renderer's prepare, the GPU's work.
     void SetBench(StringView page, u32 frames) { m_benchPage = String(page); m_benchFrames = Max(frames, 1u); }
@@ -349,7 +350,7 @@ public:
         return m_sweepLog.problems == 0 ? 0 : 1;
     }
     void SetInspectSelector(StringView selector) { m_openInspector = true; m_inspectSelector = String(selector); }
-    /// --lang <locale>: the GUI's language at start (E9e; "pseudo": English pseudolocalized).
+    /// --lang <locale>: the GUI's language at start ("pseudo": English pseudolocalized).
     void SetStartLanguage(StringView locale) { m_startLanguage = String(locale); }
     /// --narrate: a stand-in screen reader on the console.
     void SetNarrate(bool on) { m_narrate = on; }
@@ -363,7 +364,7 @@ public:
     void OnShutdown(runtime::IApplicationHost& host) override;
 
 private:
-    // === On the runtime host (H3 of Specs/gui-lab-evolution-3.md) ===
+    // === On the runtime host ===
     runtime::IApplicationHost* m_host = nullptr;
     shell::IShell* m_shell = nullptr;
     shell::IWindow* m_window = nullptr;
@@ -443,7 +444,7 @@ private:
     bool m_mockSideBySide = false; // --mock-side-by-side: its two scene pages side by side
     bool m_mockKit = false;        // --mock-kit: the kit page in front
     String m_mockPage;             // --mock-page: a page in front by its id
-    u32 m_mockWidth = 1920;        // a full HD display, the user's (2026-10-24)
+    u32 m_mockWidth = 1920;        // a full HD display
     u32 m_mockHeight = 1080;
     UniquePtr<sandbox::EditorMock> m_editorMock;
     void BuildEditorMock();
@@ -504,7 +505,7 @@ private:
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
 
-    // === The Viewport page (V2 of Specs/gui-lab-evolution-3.md) ===
+    // === The Viewport page ===
     RefPtr<gui::Viewport> m_viewport;
     samples::SpinningCube m_cube;
     samples::FlyCamera m_camera;
@@ -512,10 +513,10 @@ private:
     f32 m_spin = 0.0f;
     void ResetCamera();
 
-    // === The Docking page (D3 and D4 of Specs/gui-lab-evolution-3.md) ===
+    // === The Docking page ===
     UniquePtr<gui::DockController> m_dock;
     RefPtr<gui::DockArea> m_dockArea;
-    UniquePtr<gui::DockHostWindows> m_dockWindows; // the floats in OS windows (D6), while switched on
+    UniquePtr<gui::DockHostWindows> m_dockWindows; // the floats in OS windows, while switched on
     void SetDockWindows(bool own);
     Array<String> m_dockPanels; // the registered panels' ids, for "Show the closed panels"
     u32 m_dockMade[8]{};        // how often each panel's content was made (its close policy shows)
@@ -540,37 +541,37 @@ private:
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
     fonts::CachedFont* m_font = nullptr; // Roboto 16, for what native code builds
 
-    // The Stress page's builder and its views' models: before the GUI, so it outlives the views.
+    // The Stress page's builder and its views' models, declared before the GUI so they outlive the views.
     UniquePtr<sandbox::StressPage> m_stress;
-    // The Code page's host (C8): its languages and its service, before the GUI, so the editors
-    // that point at them go first.
+    // The Code page's host, with its languages and its service, declared before the GUI so the
+    // editors that point at them are destroyed first.
     UniquePtr<sandbox::CodePage> m_code;
-    // The Toolkit page's lamps (T1): before the GUI, so the grid lets go of them first.
+    // The Toolkit page's lamps, declared before the GUI so the grid releases them first.
     UniquePtr<sandbox::LampSource> m_lamps;
-    // The Toolkit page's clip (T5): tracks of the lamps' values, before the GUI too, its axis, and
-    // the page's history of its changes.
+    // The Toolkit page's clip (tracks of the lamps' values, declared before the GUI too), its
+    // axis, and the page's history of its changes.
     UniquePtr<gui::CurveSet> m_clip;
     RefPtr<gui::TimeAxis> m_clipAxis;
     Array<gui::CurveChange> m_clipUndo;
     Array<gui::CurveChange> m_clipRedo;
-    // The Toolkit page's node graphs (T6): a dataflow graph and a lamp's state machine, before the GUI
-    // too, the format their copies are written in, and the page's history of each one's changes.
+    // The Toolkit page's node graphs (a dataflow graph and a lamp's state machine, declared before
+    // the GUI too), the format their copies are written in, and the page's history of each graph.
     struct GraphHistory
     {
         UniquePtr<gui::GraphSet> Set;
         Array<gui::GraphChange> Undo;
         Array<gui::GraphChange> Redo;
-        Function<void()> Changed; // told each change and each step back or on
+        Function<void()> Changed; // called on each change and each undo or redo
     };
     GraphHistory m_flow;
     GraphHistory m_states;
     UniquePtr<sandbox::XmlTextFormat> m_graphFormat;
     gui::GraphId m_lampState = 0; // the state machine's active state
     RefPtr<gui::ToastHost> m_toasts; // over the whole window (the Toolkit page posts to it)
-    i32 m_cookPercent = 0;           // the Progress toast's
+    i32 m_cookPercent = 0;           // the Progress toast's percentage
     u32 m_toastsPosted = 0, m_toastsClosed = 0;
     void WireGraph(GraphHistory& graph, gui::Node& section, StringView prefix, Function<void()> changed);
-    // The Toolkit page's reflected cameras (T3), their source and its format, and the page's
+    // The Toolkit page's reflected cameras, their source and its format, and the page's
     // history of the source's changes (each with the cameras it was made on).
     RefPtr<sandbox::CameraRig> m_cameras[2];
     UniquePtr<sandbox::XmlTextFormat> m_cameraFormat;
@@ -587,8 +588,8 @@ private:
     gui::Button* m_cameraUndoButton = nullptr;
     gui::Button* m_cameraRedoButton = nullptr;
 
-    // The texts the Language and direction page shows (E9e), the GUI's localization: before the
-    // GUI, which lets go of it when it goes. The narrating bridge likewise.
+    // The texts the Language and direction page shows, which are the GUI's localization. Declared
+    // before the GUI, which releases them when it is destroyed; the narrating bridge likewise.
     foundation::i18n::StringTable m_strings;
     foundation::i18n::Localization m_localization;
     UniquePtr<NarrateBridge> m_narrator;
@@ -603,12 +604,12 @@ private:
     // opens as a modal layer over the shell, back in its place when it closes.
     RefPtr<gui::Node> m_menu;
     UniquePtr<SandboxResources> m_resources; // pictures by path, from the data folder
-    gui::StyleManager* m_styles = nullptr; // the host's: the sandbox's sheet
-    // The inspector (E8e): a pane of its own root on the right, Ctrl+Shift+I.
+    gui::StyleManager* m_styles = nullptr; // the host's style manager, holding the sandbox's sheet
+    // The inspector: a pane of its own root on the right, Ctrl+Shift+I.
     UniquePtr<gui::inspector::Inspector> m_inspector;
     bool m_inspectorOpen = false;
     bool m_openInspector = false; // --inspector
-    // The image tests (E8g).
+    // The image tests.
     static constexpr u32 kImageWidth = 960;
     static constexpr u32 kImageHeight = 720;
     static constexpr i32 kImageFrames = 40; // frames on the fixed clock before a page's picture
@@ -636,15 +637,15 @@ private:
     f32 m_inspectorWidth = 460.0f;  // logical units; the boundary drags it
     bool m_resizingInspector = false; // the boundary is held
     bool m_overInspectorEdge = false; // the pointer is on the boundary (or holds it)
-    // The boundary between the root on show and the pane: on it the cursor shows the resize
-    // arrows, pressed it drags the pane's width (neither root sees the pointer meanwhile).
-    // True while it has the pointer.
+    // The boundary between the root on show and the pane. Over it the cursor shows the resize
+    // arrows, and pressing it drags the pane's width (neither root sees the pointer meanwhile).
+    // Returns true while it has the pointer.
     bool ResizeInspector(shell::IInputManager& input);
     // The pointer as the host would give a pane: false when the sandbox takes it first (the
     // inspector picking, the boundary held, a --keys script driving the pointer).
     bool FilterPointer(gui::SceneRoot& pane, shell::InputSurface& surface);
     bool m_showingMenu = false;
-    f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded: back to the sandbox
+    f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded and the sandbox returns
 
     // The shell and its pages.
     RefPtr<gui::Node> m_shellNode;
@@ -672,7 +673,7 @@ private:
     ScriptErrors m_scriptErrors;
     RefPtr<script::IScriptContext> m_menuScript;
     bool m_menuWantsUpdate = false;
-    // The game menu's actions, which its prompts read (K7): a stand-in for a game's input map.
+    // The game menu's actions, which its prompts read: a stand-in for a game's input map.
     foundation::input::ActionRuntime m_menuInput;
     gui::InputPrompts m_menuPrompts;
 
@@ -703,8 +704,8 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     }
     m_window = &m_mainWindow->Window();
     m_device = host.Graphics()->Raw();
-    // A WebGPU sweep on a CPU adapter (Windows CI's WARP) takes past twenty minutes for what the
-    // other backend covers in one: skipped, said so, as a run with no device is.
+    // A WebGPU sweep on a CPU adapter (Windows CI's WARP) takes over twenty minutes for what the
+    // other backend covers in one, so it is skipped and reported, as a run with no device is.
     if (m_sweep && m_soakSeconds <= 0.0f && m_backendName == StringView(u8"webgpu") &&
         host.Graphics()->Adapter().type == rhi::AdapterType::Cpu)
     {
@@ -738,9 +739,9 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
         return;
     }
 
-    // Mixed-direction text reorders by the Unicode bidirectional algorithm (E9c).
+    // Mixed-direction text reorders by the Unicode bidirectional algorithm.
     fonts::BidiAlgorithm::Install();
-    // Shaped by HarfBuzz (E9e): Arabic joins its letters. Installed before any font loads, so each
+    // Shaped by HarfBuzz: Arabic joins its letters. Installed before any font loads, so each
     // one's atlas takes the joined forms its shaping reaches.
     fonts::HarfBuzzShaping::Install();
     m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(), AppRoot());
@@ -748,7 +749,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     // The window's GUI: its input, its frames, its renderer and the picture baker. The sandbox blends
     // in linear light, as its references were drawn.
     m_guiHost = MakeUnique<gui::GuiHost>(AppRoot(), AppRoot(), *host.Graphics(), *m_shell, m_fontService.Get(), m_shaders->Set());
-    if (!m_editorMockMode) // the mock blends as the editor will: the host's default, sRGB, as CSS does
+    if (!m_editorMockMode) // the mock blends as the editor does: in sRGB, the host's default, as CSS does
         m_guiHost->SetBlendSpace(vg::VGBlendSpace::Linear);
     m_styles = &m_guiHost->Styles();
     // The windows the host opens for a root (the Docking page's floats in OS windows) are the
@@ -801,8 +802,8 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
         m_cube.Init(m_device, m_cubeCompiler, static_cast<i32>(host.Graphics()->FramesInFlight()), m_viewport->ColorFormat(),
                     m_viewport->DepthFormat());
 
-    // What the sandbox does to the host's input and drawing: the inspector picks and draws over
-    // the page, its boundary takes the pointer, a desk test hears of the OS's drops.
+    // What the sandbox adds to the host's input and drawing: the inspector picks and draws over
+    // the page, its boundary takes the pointer, and a desk test is told of the OS's file drops.
     GUISandbox* self = this;
     m_guiHost->SetPointerFilter([self](gui::SceneRoot& pane, shell::InputSurface& surface) { return self->FilterPointer(pane, surface); });
     m_guiHost->SetOverlay(
@@ -819,7 +820,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
                                       Color{0.31f, 0.61f, 1.0f, 1.0f});
         });
     m_guiHost->SetDropObserver(
-        [self](const shell::DroppedFile& drop) // said, for a desk test of a desktop's drops
+        [self](const shell::DroppedFile& drop) // printed, for a desk test of the desktop's file drops
         {
             std::printf("GUISandbox: OS drop on window %u (this %u) at %.0f, %.0f: %s\n", drop.window, self->m_window->Id(), drop.x,
                         drop.y, reinterpret_cast<const char*>(drop.path.CStr()));
@@ -837,7 +838,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     }
 }
 
-// The Language and direction page's table (E9e): the serialized StringTable in the data folder,
+// The Language and direction page's table: the serialized StringTable in the data folder,
 // read through the XML serializer, given to the GUI as its localization in the start language.
 void GUISandbox::LoadStrings()
 {
@@ -884,8 +885,8 @@ void GUISandbox::SetPageDirection(gui::Node::LayoutDirection direction)
 void GUISandbox::LoadFonts()
 {
     // Roboto in coverage atlases (a size baked on first use), Lilita as one distance-field bake
-    // drawn crisp at any size, whose field text effects read (12 texels: effects reach 6 past the
-    // edge at the bake size).
+    // drawn crisp at any size, whose field the text effects read (12 texels, since effects reach 6
+    // past the edge at the bake size).
     fonts::FontLoadOptions roboto = fonts::FontLoadOptions::ExtendedLatin();
     roboto.pixelHeight = 16.0f;
     roboto.lastCodepoint = 0x17F; // Latin Extended-A too: European languages, and pseudolocalized text
@@ -897,7 +898,7 @@ void GUISandbox::LoadFonts()
     lilita.distanceFieldRange = 12.0f;
     if (m_fontService->LoadFont(u8"Lilita", DataPath(kLilita).AsView(), lilita) != fonts::FontLoadResult::Success)
         std::fprintf(stderr, "GUISandbox: the Lilita face did not load\n");
-    // DejaVu Sans Mono for Arabic (E9e): Latin, Greek, Cyrillic, Hebrew and Arabic, and the joined
+    // DejaVu Sans Mono for Arabic: Latin, Greek, Cyrillic, Hebrew and Arabic, and the joined
     // forms HarfBuzz reaches from them.
     fonts::FontLoadOptions dejavu = fonts::FontLoadOptions::ExtendedLatin();
     dejavu.pixelHeight = 16.0f;
@@ -908,8 +909,8 @@ void GUISandbox::LoadFonts()
         std::fprintf(stderr, "GUISandbox: the DejaVu face did not load\n");
 }
 
-// A sheet's @font-face (E11): the file under the data folder, into the font service under the
-// face's name, in coverage atlases as Roboto's are.
+// Loads a sheet's @font-face from the data folder into the font service under the face's name,
+// in coverage atlases as Roboto's are.
 bool GUISandbox::LoadFontFace(StringView face, StringView source)
 {
     fonts::FontLoadOptions options = fonts::FontLoadOptions::ExtendedLatin();
@@ -1003,7 +1004,7 @@ void GUISandbox::BuildSandbox()
     (void)m_gui->GetKeymap().Bind(u8"f9", u8"debug.layout");
     (void)m_gui->GetKeymap().Bind(u8"f8", u8"debug.input");
     (void)m_root->OnCommand(u8"inspector.toggle", [self](gui::CommandEvent&) { self->ToggleInspector(); });
-    // The Language and direction page's (E9e).
+    // The Language and direction page's commands.
     (void)m_root->OnCommand(u8"lang.en", [self](gui::CommandEvent&) { self->SetLanguage(u8"en"); });
     (void)m_root->OnCommand(u8"lang.pseudo", [self](gui::CommandEvent&) { self->SetLanguage(u8"pseudo"); });
     (void)m_root->OnCommand(u8"lang.ar", [self](gui::CommandEvent&) { self->SetLanguage(u8"ar"); });
@@ -1020,7 +1021,7 @@ void GUISandbox::BuildSandbox()
     (void)m_root->OnCommand(u8"files.more", [count](gui::CommandEvent&) { count(1); });
     (void)m_root->OnCommand(u8"files.fewer", [count](gui::CommandEvent&) { count(-1); });
     (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
-    gui::BindCodeEditorKeys(m_gui->GetKeymap()); // the Code page's editors: VS Code's keys (C8)
+    gui::BindCodeEditorKeys(m_gui->GetKeymap()); // the Code page's editors: VS Code's keys
     m_root->SetDebugFont(m_font);
     ApplyDebugOverlay();
 
@@ -1038,7 +1039,7 @@ void GUISandbox::BuildSandbox()
 
     if (m_openInspector)
         ToggleInspector();
-    m_root->GetEventDispatcher()->SetTooltipDelay(0.4f); // tooltips are the GUI's own (E5)
+    m_root->GetEventDispatcher()->SetTooltipDelay(0.4f); // tooltips are the GUI's own
 }
 
 // The editor's mock in place of the sandbox: the GUI's theme and its satellites' sheets as the
@@ -1151,29 +1152,29 @@ void GUISandbox::FillNativeHosts()
         host->AddChild(view.Get());
     }
 
-    // Docking: a dock space over a controller (D3, D4).
+    // Docking: a dock space over a controller.
     if (gui::Node* host = FindById(*m_shellNode, u8"docking-host"))
         FillDocking(*host);
-    // Toolkit: the tool bars' commands, their keys and the status bar's messages (T0).
+    // Toolkit: the tool bars' commands, their keys and the status bar's messages.
     if (gui::Node* frame = FindById(*m_shellNode, u8"toolkit-frame"))
         FillToolkit(*frame);
-    // Toolkit: the property grid over three lamps (T1).
+    // Toolkit: the property grid over three lamps.
     if (auto* grid = Cast<gui::PropertyGrid>(FindById(*m_shellNode, u8"props-grid")))
         FillProperties(*grid);
-    // Toolkit: a reflected object's grid (T3).
+    // Toolkit: a reflected object's grid.
     if (auto* grid = Cast<gui::PropertyGrid>(FindById(*m_shellNode, u8"reflected-grid")))
         FillReflected(*grid);
-    // Toolkit: a clip of the lamps' values in a dopesheet and a curve view (T5), after the lamps.
+    // Toolkit: a clip of the lamps' values in a dopesheet and a curve view, after the lamps.
     if (gui::Node* section = FindById(*m_shellNode, u8"clip-section"))
         FillClip(*section);
-    // Toolkit: a dataflow graph and a lamp's state machine (T6), after the clip.
+    // Toolkit: a dataflow graph and a lamp's state machine, after the clip.
     if (gui::Node* section = FindById(*m_shellNode, u8"graph-section"))
         FillGraphs(*section);
-    // Code: a script checked as it is typed and a shader, in the shared languages (C8).
+    // Code: a script checked as it is typed and a shader, in the shared languages.
     if (auto* editor = Cast<gui::CodeEditor>(FindById(*m_shellNode, u8"code-script")))
     {
         const String dir = Format(u8"{}code/", kSandboxDir); // the sandbox's samples
-        const StringView languages = u8"Editor/Code/";      // the languages, the editor's too
+        const StringView languages = u8"Editor/Code/";      // the language definitions, shared with the editor
         m_code = MakeUnique<sandbox::CodePage>(AppRoot(), AppRoot(), m_scripts.Get());
         m_code->AttachScript(*editor, ReadText(Format(u8"{}angelscript.xml", languages).AsView()).AsView(),
                              ReadText(Format(u8"{}sample.as", dir).AsView()).AsView(),
@@ -1187,7 +1188,7 @@ void GUISandbox::FillNativeHosts()
     if (gui::Node* section = FindById(*m_shellNode, u8"toasts-section"))
         FillToasts(*section);
 
-    // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
+    // Viewport: a cube drawn into the widget's targets, under the page's note.
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
     {
         m_viewport = MakeRef<gui::Viewport>(AppRoot());
@@ -1210,7 +1211,7 @@ void GUISandbox::FillNativeHosts()
         (void)m_root->OnCommand(u8"viewport.fit",
                                 [self](gui::CommandEvent&)
                                 {
-                                    // A fixed 16:9 picture letterboxed in the widget, or the widget's own pixels.
+                                    // Toggles between a fixed 16:9 picture letterboxed in the widget and the widget's own pixels.
                                     const bool fixed = self->m_viewport->GetFitMode() != FitMode::Letterbox;
                                     self->m_viewport->SetFixedResolution(fixed ? 1280u : 0u, fixed ? 720u : 0u);
                                     self->m_viewport->SetFitMode(fixed ? FitMode::Letterbox : FitMode::Stretch);
@@ -1221,7 +1222,7 @@ void GUISandbox::FillNativeHosts()
     }
 
     // Data views over native models.
-    // Drag and drop (E7): the cards are sources, the bins targets; the hand takes cards, the
+    // Drag and drop: the cards are sources, the bins targets; the hand takes cards, the
     // discard pile refuses aces with a reason; the chip goes nowhere.
     {
         auto* said = Cast<gui::Label>(FindById(*m_shellNode, u8"dnd-said"));
@@ -1271,8 +1272,8 @@ void GUISandbox::FillNativeHosts()
                 q.Accept();
                 q.Reason = Format(u8"{} it to the hand", q.Effect == gui::DropEffect::Copy ? u8"Copy" : u8"Move");
             });
-        // Files from the OS: the files pile takes them; dropped anywhere else, the GUI's own
-        // handler says so.
+        // Files from the OS: the files pile takes them, and the GUI's own handler reports files
+        // dropped anywhere else.
         if (gui::Node* files = FindById(*m_shellNode, u8"dnd-files"))
         {
             files->SetDropTypes(String(u8"files"));
@@ -1321,7 +1322,7 @@ void GUISandbox::FillNativeHosts()
         list->SetRowHeight(24.0f);
         list->SetModel(m_listModel.Get());
         m_listModel->SetEditable(true); // F2 renames a row
-        list->SetDragType(String(u8"row")); // rows drag to reorder (E7)
+        list->SetDragType(String(u8"row")); // rows drag to reorder
         auto* picked = Cast<gui::Label>(FindById(*m_shellNode, u8"views-picked"));
         gui::StringListModel* model = m_listModel.Get();
         list->SetOnSelectionChanged(
@@ -1386,7 +1387,7 @@ void GUISandbox::FillNativeHosts()
         tree->SetFont(m_font);
         tree->SetRowHeight(24.0f);
         tree->SetModel(m_treeModel.Get());
-        tree->SetDragType(String(u8"node")); // nodes drag onto and beside others (E7)
+        tree->SetDragType(String(u8"node")); // nodes drag onto and beside others
         tree->ExpandItem(0);
         host->AddChild(tree.Get());
     }
@@ -1430,7 +1431,7 @@ void GUISandbox::FillNativeHosts()
         more->SetWidth(140.0f);
         more->AddItem(u8"Rename", said(u8"context > More > Rename"));
         gui::Menu* menu = m_contextMenu.Get();
-        // A right release, a long press or Shift+F10 asks for it (E5).
+        // A right release, a long press or Shift+F10 asks for it.
         area->AddEventListener(gui::EventType::ContextMenu,
                                [menu, area](const gui::Event& e)
                                {
@@ -1558,7 +1559,7 @@ void GUISandbox::BuildMenu()
                        m_menuLeaveAt = m_totalTime + 0.7f;
                });
     // Its actions, as a game's input map would give them: its prompts show their controls for the
-    // device in hand (K6).
+    // device in hand.
     foundation::input::InputMap actions;
     foundation::input::ActionSet game;
     game.name = String(u8"Game");
@@ -1600,7 +1601,7 @@ void GUISandbox::ShowPage(StringView id)
     }
     m_current = String(id);
     if (m_stress && id == StringView(u8"stress") && !m_stress->IsBuilt())
-        m_stress->Build(m_stressLoad); // built when first shown: the other pages start fast
+        m_stress->Build(m_stressLoad); // built when first shown, so the other pages start fast
     if (m_content != nullptr)
     {
         m_content->SetScrollOffset(Float2{0.0f, 0.0f});
@@ -1619,7 +1620,7 @@ void GUISandbox::ToggleTheme()
     }
     if (m_themeToggle != nullptr)
         m_themeToggle->SetText(m_light ? StringView(u8"Dark theme") : StringView(u8"Light theme"));
-    // The theme's light tokens come from its own media query (E13): the GUI says the user's scheme.
+    // The theme's light tokens come from its own media query; the GUI passes on the user's scheme.
     m_gui->SetColorScheme(!m_light);
 }
 
@@ -1651,8 +1652,8 @@ void GUISandbox::OpenWindow()
             page->AddChild(body.Get());
         }
     }
-    // The button toggles it, opening it in the middle each time; closed (its close button, or this),
-    // it opens there again.
+    // The button toggles it. It opens in the middle each time, also after it was closed (by its
+    // close button or by this one).
     if (m_floating->GetParent() != nullptr)
         m_floating->Close();
     else
@@ -1678,8 +1679,8 @@ void GUISandbox::OpenMenu()
     m_showingMenu = true;
     m_menuLeaveAt = -1.0f;
     m_gui->GetData().Set(u8"quit", Variant::From<bool>(false));
-    // A modal layer over the shell: drawn over it, the shell inert below it, the focus inside it
-    // and given back on close; Escape is its own (a manual layer: nothing closes it but it).
+    // A modal layer over the shell: drawn over it, with the shell inert below it and the focus
+    // inside it, given back on close. It handles Escape itself (a manual layer, which only it closes).
     m_menu->SetDisplayed(true);
     gui::PopupOptions options;
     options.Kind = gui::PopupKind::Manual;
@@ -1739,7 +1740,7 @@ void GUISandbox::Layout()
     m_guiHost->SetPaneRegion(*m_root, Rectangle{0.0f, 0.0f, static_cast<f32>(m_width) - pane, static_cast<f32>(m_height)});
     if (m_inspectorOpen)
         m_guiHost->SetPaneRegion(m_inspector->GetRoot(), Rectangle{static_cast<f32>(m_width) - pane, 0.0f, pane, static_cast<f32>(m_height)});
-    m_guiHost->SizePanes(); // the roots at this frame's size: the shell is laid out from it
+    m_guiHost->SizePanes(); // sizes the roots for this frame; the shell is laid out from that
 }
 
 // Before the host routes the frame's input: the boundary between the root on show and the pane.
@@ -1829,7 +1830,7 @@ void GUISandbox::TypeKeys(gui::SceneRoot& root)
         }
         else if (verb == StringView(u8"pinch") || verb == StringView(u8"turn") || verb == StringView(u8"pan2"))
         {
-            // Two fingers about it (E17c): pinch spreads them from 100 to 200 apart, turn turns them a
+            // Two fingers about it: pinch spreads them from 100 to 200 apart, turn turns them a
             // quarter, pan2 moves them together 60 across and 30 down (logical units).
             const f32 half = 50.0f * scale;
             const f32 spread = verb == StringView(u8"pinch") ? 2.0f : 1.0f;
@@ -1927,11 +1928,11 @@ void GUISandbox::Settle()
 
 namespace
 {
-    // The widgets a mirror audit checks: shown and sized, outside what is placed physically on
-    // purpose (a dock's sides, a popup or a window at a point, a canvas's children at theirs; what
-    // a window or a canvas's child holds is checked), what runs one way whatever the page (a
-    // direction set on it) and an item view's rows, which it recycles from item to item (the unit
-    // tests check theirs).
+    // The widgets a mirror audit checks: shown and sized. It skips what is placed physically on
+    // purpose (a dock's sides, a popup or window at a point, a canvas's children at theirs, though
+    // what a window or a canvas's child holds is checked), what runs one way whatever the page does
+    // (a direction set on it), and an item view's rows, which it recycles from item to item (the
+    // unit tests check those).
     void CollectMirrored(gui::Node& node, Array<gui::Node*>& out, bool placed = false)
     {
         if (!node.IsVisible() || !node.IsDisplayed() || node.IsInTopLayer())
@@ -1944,7 +1945,7 @@ namespace
         for (usize i = 0; i < node.ChildCount(); ++i)
         {
             gui::Node& child = *node.GetChildAt(i);
-            const gui::Node::LayoutDirection direction = child.GetLayoutDirection(); // the page's own is the audit's
+            const gui::Node::LayoutDirection direction = child.GetLayoutDirection(); // the page's own direction is the one audited
             if (direction != gui::Node::LayoutDirection::LeftToRight && direction != gui::Node::LayoutDirection::RightToLeft)
                 CollectMirrored(child, out, node.GetPlacesChildren());
         }
@@ -1965,11 +1966,11 @@ void GUISandbox::MirrorAudit()
     for (const Page& page : m_pages)
     {
         if (page.id.AsView() == StringView(u8"stress") || page.id.AsView() == StringView(u8"motion"))
-            continue; // thousands of widgets all alike; things on the move
+            continue; // thousands of identical widgets, and content in motion
         ShowPage(page.id.AsView());
         page.node->SetLayoutDirection(gui::Node::LayoutDirection::LeftToRight);
         for (int i = 0; i < 3; ++i)
-            Settle(); // rows measured once styled, a frame on
+            Settle(); // rows are measured a frame after they are styled
         Array<gui::Node*> nodes;
         CollectMirrored(*page.node, nodes);
         Array<Placed> before;
@@ -2089,7 +2090,7 @@ void GUISandbox::Sweep()
 
 void GUISandbox::UpdateMenu()
 {
-    // --menu-call: once the menu has been up a few frames, as a click would come.
+    // --menu-call: once the menu has been up a few frames, call the function as a click would.
     if (m_menuScript && m_menuCall.Size() != 0 && m_frames == 10)
     {
         if (!m_menuScript->Call(m_menuCall.AsView(), Span<Variant>{}).HasValue())
@@ -2115,7 +2116,7 @@ void GUISandbox::OnUpdate(runtime::IApplicationHost&, f32 deltaTime)
         return;
     m_deltaTime = deltaTime;
     m_totalTime += deltaTime;
-    FinishScreenshot(); // last frame's, now the GPU has run it
+    FinishScreenshot(); // last frame's screenshot, now the GPU has run it
     m_width = m_window->Width();
     m_height = m_window->Height();
     if (!m_benchPage.IsEmpty())
@@ -2175,7 +2176,7 @@ void GUISandbox::OnUpdate(runtime::IApplicationHost&, f32 deltaTime)
     {
         std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_guiHost->FramesDrawn()),
                     static_cast<unsigned long long>(m_frames));
-        // The last drawn frame's costs and what asked for it (E8a).
+        // The last drawn frame's costs and what asked for it.
         std::printf("GUISandbox: last frame: %s\n", reinterpret_cast<const char*>(m_root->GetLastFrameStats().Describe().CStr()));
         std::fflush(stdout);
         m_nextStatsTime = m_totalTime + 1.0f;
@@ -2291,14 +2292,14 @@ void GUISandbox::FillDocking(gui::Node& host)
     (void)m_root->OnCommand(u8"docking.reset",
                             [self](gui::CommandEvent&)
                             {
-                                // The default layout's float stands in the area's units: adopted
-                                // there, then taken back to its own window when floats are.
+                                // The default layout's float is in the area's units: it is adopted
+                                // there, then moved to its own window when floats get OS windows.
                                 const bool own = self->m_dockWindows.Get() != nullptr;
                                 self->SetDockWindows(false);
                                 (void)self->m_dock->Adopt(DefaultDockLayout());
                                 self->SetDockWindows(own);
                             });
-    // The floats in the area or in OS windows of their own (D6), where the host opens windows.
+    // The floats in the area or in OS windows of their own, where the host opens windows.
     (void)m_root->OnCommand(u8"docking.os-windows", [self](gui::CommandEvent&) { self->SetDockWindows(self->m_dockWindows.Get() == nullptr); });
     (void)m_root->OnCommand(u8"docking.show-closed",
                             [self](gui::CommandEvent&)
@@ -2314,8 +2315,9 @@ void GUISandbox::FillDocking(gui::Node& host)
                                     self->RegisterDockPanel(u8"profiler", u8"Profiler", gui::DockClosePolicy::Hide,
                                                             u8"Registered late: it fills the place the layout kept for it.");
                             });
-    // What a torn tab leaves, both to try: its strip closing up, or it dimmed in place (the page's
-    // sheet, for every dock space in the area: the floats' too).
+    // What a torn-off tab leaves behind, with both options to try: its strip closes up, or the tab
+    // stays dimmed in place. The page's sheet sets it for every dock space in the area, the floats'
+    // included.
     (void)m_root->OnCommand(u8"docking.torn-tab",
                             [&host](gui::CommandEvent&)
                             {
@@ -2519,14 +2521,14 @@ void GUISandbox::FillReflected(gui::PropertyGrid& grid)
         m_cameras[i]->name = String(names[i]);
         m_cameras[i]->serial = 7001 + static_cast<u32>(i);
     }
-    // The second differs, so both show mixed.
+    // The second camera differs, so a selection of both shows mixed values.
     m_cameras[1]->fieldOfView = 45.0f;
     m_cameras[1]->position.x = 3.0f;
     m_cameras[1]->effects.PushBack(MakeRef<sandbox::BloomEffect>(AppRoot()));
     m_cameraFormat = MakeUnique<sandbox::XmlTextFormat>(AppRoot(), AppRoot());
     m_reflected = MakeUnique<gui::ReflectedPropertySource>(AppRoot(), AppRoot());
     m_reflected->SetTextFormat(m_cameraFormat.Get());
-    // The sky is a gradient: its stops and blend, as the application says (T5).
+    // The sky is a gradient, with its stops and blend named by the application.
     m_reflected->RegisterGradientType(u8"SkyGradient", gui::ReflectedGradientParts{String(u8"colors"), String(u8"alphas"), String(u8"interpolation")});
     SelectCameras(0);
     grid.SetSource(m_reflected.Get());
@@ -2589,8 +2591,9 @@ void GUISandbox::SelectCameras(usize which)
 }
 
 // The Toolkit page's clip: eight tracks of the lamps' values ("Lamp A.intensity", "Lamp A.position.y"
-// and the rest, the dopesheet folding them by lamp and property, more rows than it shows at once), a ruler, a dopesheet and a curve view on one axis. Scrubbing plays
-// the tracks into the lamps, so the grid above follows; each edit of the clip is a step of its Undo.
+// and the rest), with a ruler, a dopesheet and a curve view on one axis. The dopesheet folds the
+// tracks by lamp and property and has more rows than it shows at once. Scrubbing plays the tracks
+// into the lamps, so the grid above follows; each edit of the clip is one Undo step.
 void GUISandbox::FillClip(gui::Node& section)
 {
     if (!m_lamps)
@@ -2707,8 +2710,9 @@ void GUISandbox::FillClip(gui::Node& section)
     }
 }
 
-// A graph of the Toolkit page and its controls ("<prefix>-graph", "-undo", "-redo", "-frame", "-said"):
-// each change the graph tells goes on its Undo, and `changed` hears it and each step back or on.
+// A graph of the Toolkit page and its controls ("<prefix>-graph", "-undo", "-redo", "-frame", "-said").
+// Each change the graph reports goes on its Undo, and `changed` is called for it and for each undo or
+// redo.
 void GUISandbox::WireGraph(GraphHistory& graph, gui::Node& section, StringView prefix, Function<void()> changed)
 {
     const auto byId = [&section, prefix](const char8_t* suffix)
@@ -2776,12 +2780,7 @@ void GUISandbox::WireGraph(GraphHistory& graph, gui::Node& section, StringView p
         });
 }
 
-// The Toolkit page's graphs. A dataflow graph: two Numbers mixed into a lamp's intensity and a Colour
-// tinted into its colour, its kinds of node under Values, Maths, Colour and Output, a pin's colour its
-// type's (a float's green, a colour's amber), a link only between pins of one type. And the lamp's
-// state machine: Off, On and Flicker and the transitions between them (node links), a double click
-// making a state the lamp's, which it and its transitions out show highlighted.
-// T7: two breadcrumb bars over an invented asset tree, a path not in it answered by a toast.
+// Two breadcrumb bars over an invented asset tree; a path not in the tree is answered by a toast.
 void GUISandbox::FillCrumbs(gui::Node& section)
 {
     static constexpr const char8_t* kFolders[] = {
@@ -2885,7 +2884,7 @@ void GUISandbox::FillCrumbs(gui::Node& section)
         });
 }
 
-// T7: buttons posting each kind of toast to the shell's host (the core's, over the whole window).
+// Buttons posting each kind of toast to the shell's toast host, which covers the whole window.
 void GUISandbox::FillToasts(gui::Node& section)
 {
     GUISandbox* self = this;
@@ -3007,6 +3006,12 @@ void GUISandbox::FillToasts(gui::Node& section)
     button(u8"toast-clear", [self]() { self->m_toasts->DismissAll(); });
 }
 
+// The Toolkit page's graphs. A dataflow graph mixes two Numbers into a lamp's intensity and tints a
+// Colour into its colour; its node kinds are grouped under Values, Maths, Colour and Output, each pin
+// takes its type's colour (green for a float, amber for a colour), and links join only pins of one
+// type. The lamp's state machine has Off, On and Flicker and the transitions between them (node
+// links); a double click makes a state the lamp's, and that state and its outgoing transitions show
+// highlighted.
 void GUISandbox::FillGraphs(gui::Node& section)
 {
     m_graphFormat = MakeUnique<sandbox::XmlTextFormat>(AppRoot(), AppRoot());
@@ -3165,7 +3170,7 @@ void GUISandbox::PlayClip(f32 time)
     }
 }
 
-// A change back (undo) or again (redo), on the cameras it was made on.
+// Undoes or redoes a change, on the cameras it was made on.
 void GUISandbox::StepCameras(bool undo)
 {
     Array<CameraStep>& from = undo ? m_cameraUndo : m_cameraRedo;
@@ -3182,8 +3187,8 @@ void GUISandbox::StepCameras(bool undo)
     to.PushBack(Move(step));
 }
 
-// The Docking page's floats in OS windows of their own (`own`), or in the area. A window's root is
-// styled as the page is, its sheet scoped to the page reaching no other root.
+// Puts the Docking page's floats in OS windows of their own (`own`), or in the area. A window's root
+// is styled as the page is, with the page's scoped sheet, which reaches no other root.
 void GUISandbox::SetDockWindows(bool own)
 {
     if (!m_dockArea || own == (m_dockWindows.Get() != nullptr))
@@ -3202,7 +3207,7 @@ void GUISandbox::SetDockWindows(bool own)
         });
         m_dockArea->SetWindows(m_dockWindows.Get());
         if (m_dockArea->GetWindows() == nullptr)
-            m_dockWindows.Reset(); // a window would not open: the floats stayed in the area
+            m_dockWindows.Reset(); // a window did not open, so the floats stay in the area
     }
     else
     {
@@ -3249,12 +3254,12 @@ void GUISandbox::FinishScreenshot()
         Exit();
 }
 
-// The image tests (E8g): each page shown, run on a fixed clock at a fixed size and scale 1, drawn
+// The image tests: each page shown, run on a fixed clock at a fixed size and scale 1, drawn
 // offscreen and read back through the RHI, so the backend in use is the one tested; the picture
 // goes to --image-out, and is compared with its reference under Data/Tests/GUI/Images: its own
 // backend's when there is one, else the one the backends share. A miss writes a diff beside the
 // picture. --approve-images writes the shared reference (or, with "backend", this backend's own),
-// which is for after the user has looked at the pictures.
+// to use once someone has looked at the pictures.
 void GUISandbox::RunImageTests()
 {
     if (m_imagePages.IsEmpty() && m_imagePage == 0)
@@ -3264,7 +3269,7 @@ void GUISandbox::RunImageTests()
             {
                 m_imagePages.PushBack(page.id);
                 if (page.id.AsView() == StringView(u8"language"))
-                    m_imagePages.PushBack(String(u8"language@ar")); // and right to left, in Arabic (E9e)
+                    m_imagePages.PushBack(String(u8"language@ar")); // and right to left, in Arabic
             }
         if (!m_offscreen || !m_offscreen->IsReady())
         {
@@ -3371,7 +3376,7 @@ void GUISandbox::RunImageTests()
                 static_cast<unsigned long long>(result.Pixels), result.LargestDelta, reinterpret_cast<const char*>(diffPath.CStr()));
 }
 
-// The bench (E15): settle the page, then time frames that each change the page title's text.
+// The bench: settle the page, then time frames that each change the page title's text.
 void GUISandbox::RunBench()
 {
     constexpr u32 kSettle = 30;
@@ -3483,7 +3488,7 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     m_styles = nullptr;
     m_guiHost.Reset(); // the context, the baker
     m_fontService.Reset();
-    m_shaders.Reset(); // the shader modules are its, the host drew with them
+    m_shaders.Reset(); // it owns the shader modules the host drew with
 }
 
 int main(int argc, char** argv)
@@ -3508,9 +3513,8 @@ int main(int argc, char** argv)
     // 77 with no device); --approve-images [backend]: write them as the references instead, after
     // looking at them. --lang <locale>: start in that language (en, ar, or pseudo: English
     // pseudolocalized). --narrate: print what a screen reader would say (each focus change and
-    // announcement). --stress <n>: start on
-    // the Stress page, built at load n (1 to 20; measure in RelWithDebInfo). With the
-    // framework's --screenshot flags, a picture of any of it.
+    // announcement). --stress <n>: start on the Stress page, built at load n (1 to 20; measure in
+    // RelWithDebInfo). The framework's --screenshot flags take a picture of any of it.
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));

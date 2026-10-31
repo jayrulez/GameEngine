@@ -1,7 +1,7 @@
-// Enemy - a patroller: it walks back and forth along X between two points, facing the way it
+// Enemy: a patroller that walks back and forth along X between two points, facing the way it
 // walks. Touching it hurts the player, unless the player comes down on it from the air, which
-// defeats it ("EnemyDefeated") and bounces the player off it. On the enemy's entity, whose first
-// child is its model.
+// defeats it ("EnemyDefeated") and bounces the player off it. The script sits on the enemy's
+// entity, whose first child is its model.
 //
 // Touching is a box, not a sphere: within `radius` across the ground and with the player's centre
 // no higher than `touchHeight` above the enemy's origin (and not below it). Only a player in the

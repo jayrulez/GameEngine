@@ -92,7 +92,7 @@ TEST_CASE("guid: string constructor parses the canonical form; malformed yields 
 {
     CHECK(Guid(StringView(u8"00000000-0000-0055-0000-000000000066")) == Guid{0x55, 0x66});
 
-    // ToChars -> ctor round-trip.
+    // ToChars round-trips through the constructor.
     Random rng(77);
     const Guid src = Guid::Generate(rng);
     utf8char text[37];

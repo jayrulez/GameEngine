@@ -3,20 +3,20 @@
 
 // Editor::Preview - :thumbnail_stage partition.
 //
-// The GPU half of asset thumbnails: a persistent hidden preview scene plus an offscreen
-// render-and-readback pipeline that turns ThumbnailService's queued scene jobs into 128x128
-// pixels. The service owns generators, queueing and publication; this stage owns everything
-// GPU: the scene the generators populate, an ortho camera framed from the generator's bounds
-// (eye along (1,1,1), half-extent = radius * 1.1 - rotation-invariant framing), a 4x
-// supersampled target (512 -> 128 box downscale for free anti-aliasing), and a copy-to-buffer
-// readback retired by frame-ring round-trip (the copy rides the frame encoder, so it is
-// ordered after the render; when the same frame index comes around again the submission has
-// provably retired and the buffer maps without a stall).
+// The GPU half of asset thumbnails: a persistent hidden preview scene and an offscreen render and
+// readback pipeline that turn ThumbnailService's queued scene jobs into 128x128 pixels. The
+// service owns generators, queueing and publication; this stage owns all the GPU work: the scene
+// the generators populate, an orthographic camera framed from the generator's bounds (eye along
+// (1,1,1), half-extent radius * 1.1, so the framing does not depend on rotation), a 4x
+// supersampled target (a 512 to 128 box downscale gives anti-aliasing for free), and a
+// copy-to-buffer readback retired by the frame ring. The copy is recorded on the frame encoder,
+// so it is ordered after the render; when the same frame index comes around again the
+// submission has retired and the buffer maps without a stall.
 //
-// One job is in flight at a time (ThumbnailService::TakeSceneJob enforces it); a generator
-// whose resources are still resolving returns Pending and is retried each frame under a
-// bounded budget. The interface stays lean and PIMPL'd for the same reason PreviewViewport's
-// does: heavy page TUs import this module, so engine.render/engine.scene must not leak in.
+// One job is in flight at a time (ThumbnailService::TakeSceneJob enforces it); a generator whose
+// resources are still resolving returns Pending and is retried each frame within a bounded
+// budget. The interface stays lean and PIMPL'd for the same reason as PreviewViewport's: heavy
+// page translation units import this module, so engine.render and engine.scene must stay out.
 
 module;
 #include "Core/Prelude.h"
@@ -55,18 +55,18 @@ export namespace editor
         ThumbnailStage(const ThumbnailStage&) = delete;
         ThumbnailStage& operator=(const ThumbnailStage&) = delete;
 
-        /// Main thread, once per frame BEFORE rendering: take/stage the next job.
+        /// Main thread, once per frame before rendering: takes and stages the next job.
         void Update();
 
-        /// Inside the app's scene-render bracket (between BeginRendering and EndRendering,
-        /// main window frames): render a staged job, encode its readback, retire a pending
-        /// readback whose ring slot came back around.
+        /// Called inside the app's scene-render bracket (between BeginRendering and EndRendering,
+        /// on main window frames): renders a staged job, encodes its readback, and retires a
+        /// pending readback whose ring slot has come back around.
         void Render(foundation::graphics::FrameContext& frame);
 
-        /// Drop GPU objects + the preview scene. Also called by the destructor.
+        /// Drops the GPU objects and the preview scene. Also called by the destructor.
         void Shutdown();
 
-        /// True while a job is staged, rendering, or awaiting readback (test seam).
+        /// True while a job is staged, rendering, or awaiting readback (for tests).
         [[nodiscard]] bool IsBusy() const;
 
     private:

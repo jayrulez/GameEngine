@@ -107,8 +107,8 @@ namespace editor
             return;
         EditorActionRegistry& actions = m_services.context->Actions();
         EditorContext* context = m_services.context;
-        // Every tool but the default (Select is the bar's own choice), the first page to have it
-        // declaring it; the bindings name the tool by id, so they serve every page.
+        // Every tool but the default (Select is the bar's own choice); the first page to have a
+        // tool declares its action. The bindings name the tool by id, so they serve every page.
         for (usize i = 1; i < m_services.tools->Count(); ++i)
         {
             IViewportTool* tool = m_services.tools->ToolAt(i);
@@ -156,7 +156,7 @@ namespace editor
                 if (manager->ActiveTool() == found)
                     manager->ActivateDefault();
                 else if (!manager->ActivateById(id.AsView()))
-                    context->Notify(NoticeKind::Warning, found->UnavailableReason()); // said, not a silent snap-back
+                    context->Notify(NoticeKind::Warning, found->UnavailableReason()); // reported, rather than silently snapping back
             };
             (void)actions.Register(Move(d));
         }
@@ -197,7 +197,7 @@ namespace editor
                 }
                 continue;
             }
-            // A category: one menu by its first tool's icon, each tool an item.
+            // A category: one menu with its first tool's icon, each tool an item.
             auto menuButton = MakeRef<gui::ToolMenuButton>(m_allocator);
             menuButton->SetToggle(true); // lit while one of its tools is on
             IViewportTool* first = m_services.tools->FindById(group.toolIds[0].AsView());
@@ -316,8 +316,8 @@ namespace editor
         m_panelShown = false;
     }
 
-    // In the viewport's room (a stack), at its top start, its place its margins: always there, so a
-    // drag never takes it out of the tree under the pointer.
+    // In the viewport's room (a stack), at its top start, placed by its margins. It always stays
+    // there, so a drag never takes it out of the tree under the pointer.
     void SceneTools::Reparent()
     {
         if (!m_panelShown || m_services.pane == nullptr)
@@ -336,8 +336,8 @@ namespace editor
         Clamp();
     }
 
-    // Under the chips while it has not moved (the zone's content edge, below the zone); else its
-    // place, kept inside the viewport (which may have shrunk since).
+    // Under the chips while it has not moved (at the zone's content edge, below the zone);
+    // otherwise at its place, kept inside the viewport (which may have shrunk since).
     void SceneTools::Clamp()
     {
         if (m_services.pane == nullptr)
@@ -410,7 +410,7 @@ namespace editor
         }
         if (m_host)
             m_host->Sync();
-        // A panel made of the kit shows what the tool has now (its keys change it too).
+        // A panel built from the kit shows the tool's current state (its keys change it too).
         if (auto* body = m_body ? Cast<app::ToolPanelBody>(m_body.Get()) : nullptr)
             body->Sync();
         if (m_panelShown)

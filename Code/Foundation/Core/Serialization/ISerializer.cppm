@@ -5,7 +5,7 @@
 //
 // The serialization contract: a mode-aware, format-agnostic interface. One
 // Serialize() path runs either direction, and the interface speaks in *intent*
-// (typed scalars, named fields, structured scopes) rather than raw bytes - so a
+// (typed scalars, named fields, structured scopes) rather than raw bytes, so a
 // binary backend and a keyed/text backend (JSON, …) can both implement it.
 
 module;
@@ -44,11 +44,11 @@ export namespace foundation::core
     };
 
     // Format-agnostic pure interface. Backends extend Serializer, not this
-    // directly - Serializer supplies no-op defaults for the naming/scope ops
+    // directly: Serializer supplies no-op defaults for the naming/scope ops
     // that unkeyed formats (e.g. binary) ignore.
     //
     // Keyed/text backends use Key()/object scopes to produce `"name": value`.
-    // One entry of a data-version scope: the stable type id + the version the DATA carries
+    // One entry of a data-version scope: the stable type id and the version the data carries
     // (write: the type's current version; read: whatever the stream stored).
     struct SerializedDataVersion
     {
@@ -65,13 +65,13 @@ export namespace foundation::core
 
         // === Data-version scopes ===
         // A scope is pushed around each versioned payload (content envelopes, scene component
-        // records) with the version chain the data carries. BeginVersionedPayload REFUSES a
+        // records) with the version chain the data carries. BeginVersionedPayload refuses a
         // stored chain that differs from the type's current one, so inside a payload Version()
-        // reports the current data version and Serialize bodies read one layout - except for a
-        // type that keeps a legacy reader (TypeInfo::minReadDataVersion), whose scope carries
-        // the STORED version so the body can branch on it for the old layout. Version() = the
-        // payload's concrete type; Version(typeId) = a base class in the chain (0 when absent -
-        // unversioned data reads as version 0).
+        // reports the current data version and Serialize bodies read one layout. The exception is
+        // a type that keeps a legacy reader (TypeInfo::minReadDataVersion): its scope carries
+        // the stored version so the body can branch on it for the old layout. Version() is the
+        // payload's concrete type's; Version(typeId) is a base class's in the chain (0 when
+        // absent, since unversioned data reads as version 0).
         [[nodiscard]] virtual u32 Version() const noexcept = 0;
         [[nodiscard]] virtual u32 Version(u64 typeId) const noexcept = 0;
         virtual void PushVersionScope(const SerializedDataVersion* chain, usize count) = 0;
@@ -105,7 +105,7 @@ export namespace foundation::core
         // Moves an opaque byte blob (raw in binary; e.g. base64 in text).
         virtual void Blob(void* data, usize size) = 0;
 
-        // Moves a Guid as a backend-chosen primitive (Traktor-style): binary writes the raw 16
+        // Moves a Guid as a backend-chosen primitive: binary writes the raw 16
         // bytes (compact); text writes the canonical 36-char string (readable, one copyable value).
         // The Serializer base provides the text default; binary overrides for compactness.
         virtual void GuidValue(Guid& value) = 0;
@@ -117,11 +117,11 @@ export namespace foundation::core
         // the defaults keep bare mocks working.
         virtual void FailPayload(ErrorCode code) noexcept { (void)code; }
 
-        // Unknown-section passthrough (see Serializer for the contract): capture (READ) /
-        // re-inject (WRITE) the current region's remaining content verbatim, so a payload whose
+        // Unknown-section passthrough (see Serializer for the contract): capture (read) or
+        // re-inject (write) the current region's remaining content verbatim, so a payload whose
         // type this build cannot instantiate survives a round-trip. Declared on the interface
         // so consumers holding an ISerializer& (scene records) can preserve unknown types;
-        // default unsupported - Serializer's backends override.
+        // unsupported by default; Serializer's backends override.
         virtual bool RawRemainder(Array<u8>& blob)
         {
             (void)blob;
@@ -130,8 +130,8 @@ export namespace foundation::core
         [[nodiscard]] virtual bool IsPayloadOk() const noexcept { return true; }
         // True when a run of scalar elements is laid out exactly as its raw bytes (the binary
         // backend): Serialize(Array<scalar>) then moves the whole run through Blob in one call
-        // instead of one virtual Scalar per element - the same bytes, so no format changes.
-        // (2026-09-23: a cooked mesh's vertex blob read one virtual call per BYTE at -O0.)
+        // instead of one virtual Scalar per element. The bytes are the same, so the format does
+        // not change.
         [[nodiscard]] virtual bool BulkScalarArrays() const noexcept { return false; }
     };
 }

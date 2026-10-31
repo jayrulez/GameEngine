@@ -3,8 +3,8 @@
 
 // Editor::Navigation - implementation unit.
 //
-// The bake logic + its heavy imports (navigation.pipeline for the asset write) live HERE, out of
-// the interface (GCC gcm-cluster hygiene). See NavigationBake.cppm for the surface.
+// The bake logic and its heavy imports (navigation.pipeline for the asset write) live here, out of
+// the interface, to keep GCC's module build light. See NavigationBake.cppm for the surface.
 
 module;
 #include "Core/Prelude.h"
@@ -56,7 +56,7 @@ namespace editor::navigation
 
     void RegisterNavigationEditorSettings(editor::EditorContext& context)
     {
-        RegisterNavigationEditorSettingsTypes(); // idempotent belt for odd boot orders
+        RegisterNavigationEditorSettingsTypes(); // idempotent; covers boot orders that skipped it
 
         editor::EditorContext* ctx = &context;
         editor::EditorContext::EditorSettingsContribution contribution;
@@ -86,7 +86,7 @@ namespace editor::navigation
         foundation::settings::Settings* store = context.UserEditorSettings();
         if (store == nullptr)
         {
-            return true; // headless/tests: the default
+            return true; // headless or in tests: the default
         }
         const NavigationEditorSettings* section = store->Find<NavigationEditorSettings>();
         return section == nullptr || section->parallelBake;
@@ -109,7 +109,7 @@ namespace editor::navigation
         // The level geometry is what the scene's systems say is static and solid (physics: its
         // static, non-trigger bodies; terrain: its surface), never every mesh: an agent, a car or
         // a dropped prop moves, and baking it would leave a hole where it stood. Sampled surfaces
-        // come no finer than the cell size - Recast re-voxelizes to its own cells anyway.
+        // come no finer than the cell size, since Recast re-voxelizes to its own cells anyway.
         Array<Float3> world;
         scene.ForEachSystem(
             [&](scene::SceneSystem& system)
@@ -124,7 +124,7 @@ namespace editor::navigation
         for (const Float3& p : world)
         {
             outIndices.PushBack(static_cast<u32>(outVertices.Size()));
-            outVertices.PushBack(TransformPoint(p, zoneInv)); // -> zone-local
+            outVertices.PushBack(TransformPoint(p, zoneInv)); // to zone-local
         }
         return outIndices.Size() / 3u;
     }
@@ -181,11 +181,11 @@ namespace editor::navigation
             const nav::NavigationBakeParams params = ParamsFor(*zone, parallelBake);
 
             Array<byte> blob;
-            // TILED (the Lumix-parity build): small zones come out as one tile; large ones
-            // split, and the per-tile primitive can regenerate a single tile later. v1
-            // single-tile blobs still load (the reader sniffs the version). Stages are
-            // captured every editor bake and parked on the scene system - the
-            // debugDrawBakeStages overlay shows how THIS bake arrived at its mesh.
+            // Tiled: small zones come out as one tile, large ones split, and the per-tile
+            // primitive can regenerate a single tile later. v1 single-tile blobs still load (the
+            // reader sniffs the version). Stages are captured on every editor bake and parked on
+            // the scene system, so the debugDrawBakeStages overlay shows how this bake arrived
+            // at its mesh.
             nav::NavigationBakeStages stages;
             const Status baked = nav::NavigationMeshBuilder::BuildTiled(
                 Span<const Float3>{verts.Data(), verts.Size()},
@@ -228,8 +228,8 @@ namespace editor::navigation
             return result;
         }
 
-        // The existing blob's grid anchors the patch; no tiled blob = full-bake fallback
-        // (also the migration path for v1 assets).
+        // The existing blob's grid anchors the patch; with no tiled blob it falls back to a full
+        // bake (which is also the migration path for v1 assets).
         pipeline::NavigationZoneAsset asset;
         nav::NavigationTileGridDesc grid;
         const bool haveTiled =
@@ -253,12 +253,12 @@ namespace editor::navigation
         if (CollectNavigationGeometry(scene, zoneEntity, zone->extents, zone->cellSize, verts,
                                       indices) == 0)
         {
-            return result; // nothing to bake against - leave the asset alone
+            return result; // nothing to bake against: leave the asset alone
         }
 
         const nav::NavigationBakeParams params = ParamsFor(*zone, parallelBake);
 
-        // The edited region in ZONE-LOCAL space (the grid's frame), padded by the bake's
+        // The edited region in zone-local space (the grid's frame), padded by the bake's
         // border apron so tiles whose border overlapped the edit also refresh.
         const Float4x4 zoneInv = Inverse(RigidPart(scene.GetWorldMatrix(zoneEntity)));
         AABB region = AABB::Empty();
@@ -303,7 +303,7 @@ namespace editor::navigation
                 {
                     return result; // a hard bake failure leaves the asset untouched
                 }
-                // NotFound = the tile is now empty -> the patch REMOVES its record.
+                // NotFound means the tile is now empty, so the patch removes its record.
                 if (!nav::PatchTiledNavMeshBlob(
                         blob, tx, ty, Span<const byte>{tileData.Data(), tileData.Size()}))
                 {

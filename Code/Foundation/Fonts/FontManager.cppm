@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Fonts - foundation.fonts:font_manager partition (folded in from Fonts.IO 2026-09-05)
+// Foundation::Fonts - foundation.fonts:font_manager partition
 //
 // Thread-safe font cache keyed by (path, pixel height). Loads source-format
 // fonts through the parser/baker factories on a miss, caches the resulting
-// CachedFont, and hands out ref-counted shared instances. Ported from
-// Sedulous.Fonts.IO (FontManager.bf); Beef's Monitor + delegate become a
-// Mutex/ScopedLock + Function.
+// CachedFont, and hands out ref-counted shared instances.
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +26,7 @@ export namespace foundation::fonts
     class FontManager
     {
     public:
-        // The allocator (required - the owner decides) backs every loaded font,
+        // The allocator (required; the owner decides) backs every loaded font,
         // atlas, shaper aggregate, and the cache entries.
         explicit FontManager(IAllocator& allocator,
                              FontLoadOptions defaultOptions = FontLoadOptions::Default())
@@ -112,7 +110,7 @@ export namespace foundation::fonts
             font->refCount--;
         }
 
-        // Evict + free any cached fonts with no outstanding references.
+        // Evict and free any cached fonts with no outstanding references.
         void ClearUnused()
         {
             ScopedLock<Mutex> lock(m_lock);
@@ -129,7 +127,7 @@ export namespace foundation::fonts
             }
         }
 
-        // Evict + free everything (use with caution).
+        // Evict and free everything (use with caution).
         void ClearAll()
         {
             ScopedLock<Mutex> lock(m_lock);

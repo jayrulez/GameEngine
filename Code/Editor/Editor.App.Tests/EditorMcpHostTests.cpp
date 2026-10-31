@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the MCP host over REAL loopback against a scratch project: the token
-// file, host_info's editor state, project_info on the live project, the surface (the shared
-// engine tools plus host_info and nothing of the stdio host's), the bearer refusal, and the
-// finished-call report.
+// Editor::App tests: the MCP host over real loopback against a scratch project. Covers the token
+// file, host_info's editor state, project_info on the live project, the tool surface (the shared
+// engine tools and host_info, with none of the stdio host's own), the bearer token refusal, and
+// the report of finished calls.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <filesystem>
@@ -182,7 +182,7 @@ TEST_CASE("editor-mcp-host: serves the engine surface over the live project on l
     }
     client.Join();
 
-    // host_info: this host's identity + the live project.
+    // host_info: this host's identity and the live project.
     REQUIRE(outcome.info.IsObject());
     JsonValue info = Payload(outcome.info);
     CHECK(info.Get(u8"serverName").AsString() == StringView(u8"engine-editor-mcp"));
@@ -190,7 +190,7 @@ TEST_CASE("editor-mcp-host: serves the engine surface over the live project on l
     CHECK(info.Get(u8"host").Get(u8"kind").AsString() == StringView(u8"editor"));
     CHECK(info.Get(u8"host").Get(u8"projectOpen").AsBool());
     CHECK(info.Get(u8"host").Get(u8"projectName").AsString() == StringView(u8"Hosted"));
-    // project_info answers for the SAME project object the editor holds.
+    // project_info answers for the same project object the editor holds.
     REQUIRE(outcome.project.IsObject());
     CHECK(Payload(outcome.project).Get(u8"name").AsString() == StringView(u8"Hosted"));
     // The surface: the shared engine tools, host_info, and the domain's contribution; never
@@ -203,7 +203,7 @@ TEST_CASE("editor-mcp-host: serves the engine surface over the live project on l
     bool hasContributed = false;
     for (usize i = 0; i < static_cast<usize>(tools.Count()); ++i)
     {
-        const String name = tools.At(i).Get(u8"name").AsString(); // AsString returns BY VALUE
+        const String name = tools.At(i).Get(u8"name").AsString(); // AsString returns by value
         hasHostInfo = hasHostInfo || name == u8"host_info";
         hasProjectOpen = hasProjectOpen || name == u8"project_open";
         hasContributed = hasContributed || name == u8"contributed_tool";

@@ -3,10 +3,9 @@
 
 // Foundation::Fonts.TrueType - foundation.fonts.truetype:init partition
 //
-// Registers/unregisters the TTF parser + atlas baker with the IO factories.
-// Ported from Sedulous.Fonts.TTF/TrueTypeFonts.bf. Initialize news the parser
-// + baker and registers them; Shutdown unregisters (so the factory won't also
-// free them) and deletes them. Idempotent.
+// Registers and unregisters the TTF parser and atlas baker with the IO factories.
+// Initialize news the parser and baker and registers them; Shutdown unregisters
+// them (so the factory won't also free them) and deletes them. Idempotent.
 
 module;
 #include "Core/Prelude.h"
@@ -39,7 +38,7 @@ export namespace foundation::fonts
     class TrueTypeFonts
     {
     public:
-        // Register the TTF parser + atlas baker with their factories. Idempotent.
+        // Register the TTF parser and atlas baker with their factories. Idempotent.
         static void Initialize()
         {
             if (ParserSlot() == nullptr)
@@ -54,7 +53,7 @@ export namespace foundation::fonts
             }
         }
 
-        // Unregister + delete the TTF parser + baker.
+        // Unregister and delete the TTF parser and baker.
         static void Shutdown()
         {
             if (ParserSlot() != nullptr)

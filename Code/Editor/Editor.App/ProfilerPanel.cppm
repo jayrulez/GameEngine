@@ -2,19 +2,20 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :profiler_panel partition.
 //
-// ProfilerPanel: the editor's Profiler (X7 of Documentation/Specs/editor-gui.md), a tab in the
-// page area that floats as any page does. It records the editor process, every page, viewport
-// preview and Play-in-editor run in one frame, and says so: a game's own numbers come from its
-// player (the overlay, or a capture from it opened here). Its frame is markup
-// (Data/Editor/Profiler.xml); its views are Profiler.GUI's, all on one focus.
+// ProfilerPanel: the editor's Profiler, a tab in the page area that floats as any page does. It
+// records the editor process, where every page, viewport preview and Play-in-editor run shares one
+// frame, and says so: a game's own numbers come from its player (the overlay, or a capture from it
+// opened here). Its frame is markup (Data/Editor/Profiler.xml); its views are Profiler.GUI's, all
+// on one focus.
 //
 // Record starts copying the store's frames into the panel's own recording and Stop ends it, so
-// stopping, the choices and a longer history than the store keeps never touch the store another
-// viewer reads (a PIE game's overlay). While Live, the newest frame is chosen as it comes; a
-// choice on the strip stops that, and Live brings it back (from a capture, the editor's own
-// recording again). Stop on spike ends the recording at the first frame over its time, that frame
-// chosen. Save writes the recording as a capture (.aeprofile and its Chrome trace JSON) to
-// <user-data>/profiles; Open shows a capture from there, a player's from a Deck or a phone copied in.
+// stopping, the selections and a history longer than the store keeps never touch the store
+// another viewer reads (a PIE game's overlay). While Live, the newest frame is selected as it
+// arrives; selecting on the strip stops that, and Live brings it back (from a capture, it returns
+// to the editor's own recording). Stop on spike ends the recording at the first frame over its
+// threshold and selects that frame. Save writes the recording as a capture (.aeprofile and its
+// Chrome trace JSON) to <user-data>/profiles; Open shows a capture from there, such as a player's
+// copied in from a Deck or a phone.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -40,13 +41,13 @@ export namespace editor::app
     namespace pgui = foundation::profiler::gui;
 
     /// What the panel records and where its captures go: the process's store and recorder (a
-    /// test's own), the folder (made when missing), the picker it opens a capture through, and who
-    /// tells the user how a save or an open went (the editor's toasts; `folder`, when not empty, the
-    /// one a save went to, for the toast to open).
+    /// test's own), the folder (created when missing), the picker it opens a capture through, and
+    /// the callback that tells the user how a save or an open went (the editor's toasts; `folder`,
+    /// when not empty, is the one a save went to, for the toast to open).
     struct ProfilerPanelSeams
     {
         profiler::Profiler* store = nullptr;
-        profiler::CaptureRecorder* recorder = nullptr; // the platform and build a saved capture names
+        profiler::CaptureRecorder* recorder = nullptr; // names the platform and build in a saved capture
         Function<String()> folder;
         Function<void(PickerRequest)> pick;
         Function<void(editor::NoticeKind, StringView message, StringView folder)> notify;
@@ -59,11 +60,11 @@ export namespace editor::app
     class ProfilerPanel final : public pgui::IProfileFocusClient
     {
     public:
-        /// Its frame, under the data root.
+        /// Its frame's markup path, under the data root.
         static constexpr const char8_t* kPath = kProfilerPanelPath;
-        /// The budget's choices, the combo's order: 30, 60 and 120 fps, then none.
+        /// The budget's choices in ms, in the combo's order: 30, 60 and 120 fps, then none.
         static constexpr f32 kBudgets[] = {1000.0f / 30.0f, 1000.0f / 60.0f, 1000.0f / 120.0f, 0.0f};
-        /// Stop on spike's times, the combo's order.
+        /// Stop on spike's thresholds in ms, in the combo's order.
         static constexpr f32 kSpikes[] = {25.0f, 33.3f, 50.0f, 100.0f};
 
         ProfilerPanel(IAllocator& allocator, ProfilerPanelSeams seams, RefPtr<gui::Node> content)
@@ -148,7 +149,7 @@ export namespace editor::app
         [[nodiscard]] pgui::ProfileFocus& Focus() noexcept { return *m_focus; }
         [[nodiscard]] pgui::FrameAxis& Axis() noexcept { return *m_axis; }
 
-        /// Starts recording the editor process afresh (arming the store, counted).
+        /// Starts a fresh recording of the editor process, arming the store.
         void Start()
         {
             if (m_recordingNow)
@@ -157,24 +158,24 @@ export namespace editor::app
             m_recording.Begin(m_live);
             m_seams.store->Arm();
             m_recordingNow = true;
-            m_axis->Fit(0, 0); // fitting again: it follows the recording from here
+            m_axis->Fit(0, 0); // fit again, so the axis follows the recording from here
             SyncToggles();
             Refresh();
         }
-        /// Stops: the frames recorded stay to read and save; the store is let go.
+        /// Stops: the recorded frames stay to read and save, and the store is disarmed.
         void Stop()
         {
             if (!m_recordingNow)
                 return;
-            m_recording.Pull(m_live, 0); // the rest, as they are
+            m_recording.Pull(m_live, 0); // take the remaining frames as they are
             m_seams.store->Disarm();
             m_recordingNow = false;
             SyncToggles();
             Refresh();
         }
         [[nodiscard]] bool IsRecording() const noexcept { return m_recordingNow; }
-        /// Drops the frames recorded; a recording goes on from the next frame (the old panel's
-        /// Clear). The page shows the recording again, nothing chosen.
+        /// Drops the recorded frames; a running recording continues from the next frame. The page
+        /// shows the recording again with nothing selected.
         void Clear()
         {
             m_recording.Clear();
@@ -191,8 +192,8 @@ export namespace editor::app
         }
         [[nodiscard]] bool IsFollowing() const noexcept { return m_following; }
 
-        /// Each frame: the store's newly settled frames taken while recording; Stop on spike
-        /// stops at the first frame over its time.
+        /// Called each frame: takes the store's newly settled frames while recording; Stop on
+        /// spike stops at the first frame over its threshold.
         void Update()
         {
             if (!m_recordingNow)
@@ -220,8 +221,8 @@ export namespace editor::app
             Refresh();
         }
 
-        /// Writes the recording as a capture; answers the .aeprofile's path (empty: nothing to
-        /// save, or it could not be written, which the log says).
+        /// Writes the recording as a capture and returns the .aeprofile's path (empty when there is
+        /// nothing to save, or when it could not be written, which is logged).
         String SaveRecording()
         {
             if (m_capture.Get() != nullptr || !m_recording.HasFrames())
@@ -252,8 +253,8 @@ export namespace editor::app
             return path;
         }
 
-        /// Shows the capture file at `path` (recording stops), its newest frame chosen. False when
-        /// it cannot be read.
+        /// Shows the capture file at `path` (recording stops) with its newest frame selected. False
+        /// when it cannot be read.
         bool OpenCapture(StringView path)
         {
             FileStream file(path, FileMode::Read);
@@ -273,7 +274,7 @@ export namespace editor::app
             return true;
         }
 
-        /// The editor's own recording, following its newest frame.
+        /// Shows the editor's own recording, following its newest frame.
         void ShowLive()
         {
             if (m_capture.Get() != nullptr || m_focus->Source() == nullptr)
@@ -289,7 +290,7 @@ export namespace editor::app
         [[nodiscard]] const profiler::ProfileRecording& Recording() const noexcept { return m_recording; }
         [[nodiscard]] StringView StatusText() const noexcept { return m_statusText.AsView(); }
 
-        /// Follows the newest frame as it comes, or not (a choice on the strip stops it).
+        /// Sets whether the newest frame is followed as it arrives (selecting on the strip stops it).
         void SetFollowing(bool following)
         {
             m_following = following;
@@ -298,7 +299,8 @@ export namespace editor::app
                 Refresh();
         }
 
-        /// The budget in ms (0: none) and Stop on spike's time.
+        /// Sets the budget (in ms, 0: none) from its combo index; SetSpikeChoice does the same for
+        /// Stop on spike's threshold.
         void SetBudgetChoice(i32 index)
         {
             const usize at = index >= 0 && static_cast<usize>(index) < sizeof(kBudgets) / sizeof(kBudgets[0]) ? static_cast<usize>(index) : 1;
@@ -318,10 +320,10 @@ export namespace editor::app
         }
         [[nodiscard]] bool StopsOnSpike() const noexcept { return m_stopOnSpike; }
 
-        /// The longest and the median frame held, chosen.
+        /// Select the longest or the median frame held.
         void ChooseLongest() { ChooseFrame(pgui::LongestFrame(*m_focus->Source(), pgui::AllFrames(m_focus->Source()))); }
         void ChooseMedian() { ChooseFrame(pgui::MedianFrame(*m_focus->Source(), pgui::AllFrames(m_focus->Source()), m_allocator)); }
-        /// The chosen scope's longest call in the frames chosen, on the timeline.
+        /// Zooms the timeline to the selected scope's longest call within the selected frames.
         void ZoomToLongest()
         {
             u64 begin = 0;
@@ -354,7 +356,7 @@ export namespace editor::app
 
         void SetSource(const profiler::IProfileSource* source)
         {
-            m_axis->Fit(0, 0); // every frame of the new source, following it as it grows
+            m_axis->Fit(0, 0); // show every frame of the new source, following it as it grows
             m_focus->SetSource(source);
             SyncCounters();
             if (m_save != nullptr)
@@ -362,7 +364,7 @@ export namespace editor::app
             UpdateStatus();
         }
 
-        // New frames: every view reads them again; while following, the newest is chosen.
+        // On new frames every view reads them again; while following, the newest is selected.
         void Refresh()
         {
             m_focus->SourceGrew();
@@ -382,7 +384,7 @@ export namespace editor::app
             m_focus->SetFrames(frame);
         }
 
-        // A plot per counter the source has, under the strip.
+        // Keeps a plot per counter the source has, under the strip.
         void SyncCounters()
         {
             const profiler::IProfileSource* source = m_focus->Source();
@@ -433,8 +435,8 @@ export namespace editor::app
                 text = String(u8"The editor process (every page, preview and Play-in-editor run): Record to start");
             SetStatus(text.AsView());
         }
-        // How a save or an open went, said once (a toast), not left in the bar: the bar's label
-        // says what is shown, and stays short.
+        // Reports how a save or an open went once, as a toast, rather than leaving it in the bar:
+        // the bar's label says what is shown and stays short.
         void Notify(editor::NoticeKind kind, StringView message, StringView folder = {})
         {
             if (m_seams.notify)
@@ -447,7 +449,7 @@ export namespace editor::app
                 label->SetText(text);
         }
 
-        // The strip's bar: the frames chosen and their times.
+        // Updates the strip's bar: the selected frames and their times.
         void UpdateFrameText()
         {
             auto* frameLabel = Find<gui::Label>(u8"profiler-frame");
@@ -477,7 +479,7 @@ export namespace editor::app
                 timesLabel->SetText(times.AsView());
             UpdateScopeNote();
         }
-        // The table's bar: what it covers.
+        // Updates the table's bar: what it covers.
         void UpdateScopeNote()
         {
             auto* note = Find<gui::Label>(u8"profiler-scope-note");

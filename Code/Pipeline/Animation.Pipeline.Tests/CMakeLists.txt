@@ -1,4 +1,4 @@
-# Pipeline::Animation unit tests (doctest; cook -> load round-trip, no GPU).
+# Pipeline::Animation unit tests (doctest; a cook-and-load round trip, no GPU).
 
 add_executable(Animation.Pipeline.Tests
     TestsMain.cpp

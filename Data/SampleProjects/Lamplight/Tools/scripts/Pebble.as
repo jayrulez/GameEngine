@@ -1,5 +1,5 @@
-// Pebble - a thrown stone (Thief.as throws it). Its first hard landing clacks and makes a Noise
-// there, loud enough to draw a guard who hears it (Guard.as) away to look. Gone a while after.
+// Pebble: a stone thrown by Thief.as. Its first hard landing clacks and emits a Noise there, loud
+// enough to draw away a guard who hears it (Guard.as) to look. It disappears a while later.
 class Pebble
 {
     private Entity@ self;

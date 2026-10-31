@@ -4,7 +4,7 @@
 // Foundation::Fonts - :interfaces partition
 //
 // Abstract font interfaces (IFont, IFontAtlas, ITextShaper, IFontService) and
-// the CachedFont aggregate. Ported from Sedulous.Fonts. Backends (TTF, baked)
+// the CachedFont aggregate. Backends (TTF, baked)
 // implement these. Interfaces carry virtual destructors so CachedFont can own
 // and delete them.
 
@@ -21,7 +21,7 @@ using namespace foundation::core;
 
 export namespace foundation::fonts
 {
-    // Font data + metrics.
+    // Font data and metrics.
     class IFont
     {
     public:
@@ -70,8 +70,8 @@ export namespace foundation::fonts
         [[nodiscard]] virtual bool Contains(i32 glyphId) const = 0;
         [[nodiscard]] virtual Float2 WhitePixelUV() const = 0; // UV of a solid white texel
 
-        // Storage mode + the distance-field spread (in texels) for MSDF atlases. Default to a
-        // plain coverage atlas so every existing atlas keeps compiling unchanged.
+        // Storage mode and the distance-field spread (in texels) for MSDF atlases. They default
+        // to a plain coverage atlas, so a coverage backend need not override them.
         [[nodiscard]] virtual AtlasMode Mode() const { return AtlasMode::Coverage; }
         [[nodiscard]] virtual f32 DistanceFieldRange() const { return 0.0f; }
     };
@@ -101,7 +101,7 @@ export namespace foundation::fonts
                (static_cast<u32>(static_cast<u8>(letters[2])) << 8) | static_cast<u32>(static_cast<u8>(letters[3]));
     }
 
-    // Text shaping/layout + UI helpers.
+    // Text shaping and layout, and UI helpers.
     class ITextShaper
     {
     public:
@@ -138,7 +138,7 @@ export namespace foundation::fonts
                                             Array<i32>& outGlyphs) = 0;
     };
 
-    // Owning aggregate of a loaded font + its atlas (+ optional shaper).
+    // Owning aggregate of a loaded font, its atlas and an optional shaper.
     class CachedFont
     {
     public:
@@ -147,8 +147,8 @@ export namespace foundation::fonts
         ITextShaper* shaper = nullptr;
         i32 refCount = 1;
 
-        // `allocator` is the one font/atlas/shaper were allocated from (the parse/
-        // bake caller's decision) - the aggregate frees them through it.
+        // `allocator` is the one font, atlas and shaper were allocated from (the parse
+        // or bake caller's decision); the aggregate frees them through it.
         CachedFont(IAllocator& allocator, IFont* f, IFontAtlas* a,
                    ITextShaper* s = nullptr) noexcept
             : font(f), atlas(a), shaper(s), m_allocator(&allocator)

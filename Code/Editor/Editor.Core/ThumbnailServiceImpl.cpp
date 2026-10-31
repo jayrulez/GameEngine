@@ -3,12 +3,12 @@
 
 // Editor Core - ThumbnailService implementation.
 //
-// ScheduleLoad gathers everything on the MAIN thread (instance resolve, generator lookup, the
-// Prepare payload, the content-hash cache path), the light worker does disk-load-or-generate +
-// PNG write, and CompleteLoad publishes the drawable + fires OnThumbnailReady back on the main
-// thread. Failures cache a NEGATIVE entry so per-frame Get calls never re-schedule a known
-// miss - Invalidate clears it. Teardown ordering: the app Shutdowns the job service (joins the
-// light worker) BEFORE destroying this service - the worker borrows the generator.
+// ScheduleLoad gathers everything on the main thread (instance resolve, generator lookup, the
+// Prepare payload, the content-hash cache path); the light worker loads from disk or generates and
+// writes the PNG; and CompleteLoad publishes the drawable and fires OnThumbnailReady back on the
+// main thread. Failures cache a negative entry so per-frame Get calls never reschedule a known
+// miss; Invalidate clears it. Teardown order: the application shuts down the job service (joining
+// the light worker) before destroying this service, because the worker borrows the generator.
 
 module;
 #include "Core/Prelude.h"
@@ -42,7 +42,7 @@ namespace editor
         content::Instance* instance = m_resolve(id);
         if (instance == nullptr)
         {
-            m_entries.InsertOrAssign(id, Entry{}); // unknown id: negative (Invalidate clears)
+            m_entries.InsertOrAssign(id, Entry{}); // unknown id: negative entry (Invalidate clears it)
             return;
         }
         IThumbnailGenerator* generator = GeneratorFor(instance->TypeName());
@@ -57,9 +57,9 @@ namespace editor
         auto* slot = editor::EditorRootAllocator().New<JobSlot>();
         slot->id = id;
         slot->generator = generator;
-        // Unknown content hash (mid-cook, no record yet) = RAM-only: never write a cache file
-        // that can never match again. The cook-finished invalidation regenerates with the real
-        // hash and THEN persists.
+        // An unknown content hash (mid-cook, no record yet) means RAM only: never write a cache
+        // file that can never match again. The invalidation when the cook finishes regenerates
+        // with the real hash and then persists.
         const u64 hash = m_contentHash ? m_contentHash(id) : 0;
         if (hash != 0)
         {
@@ -77,9 +77,9 @@ namespace editor
                 editor::EditorRootAllocator().Delete(slot);
                 if (hash == 0)
                 {
-                    // Not cooked yet (a new project's first cook still running): the stage would
-                    // bind a product that is not there and fail. Wait quietly; the cook-finished
-                    // InvalidateAll drops this entry and the next Get queues the job.
+                    // Not cooked yet (a new project's first cook is still running): the stage would
+                    // bind a product that is not there and fail. Wait quietly; the InvalidateAll
+                    // when the cook finishes drops this entry, and the next Get queues the job.
                     m_entries.InsertOrAssign(id, Entry{});
                     return;
                 }
@@ -97,12 +97,13 @@ namespace editor
                 m_sceneQueue.PushBack(SceneThumbnailJob{id, sceneGenerator});
                 return;
             }
-            // Load-only slot: slot->generator stays null; the worker never generates. A stale
-            // file self-heals through the existing staleDiskFile path (delete + full retry,
-            // which then queues the GPU job).
+            // Load-only slot: slot->generator stays null and the worker never generates. A stale
+            // file corrects itself through the staleDiskFile path (delete and retry in full, which
+            // then queues the GPU job).
         }
-        // MAIN-thread Prepare: the worker never touches the content DB. A Prepare failure is a
-        // negative entry (bad/missing source stream) - logged once here, not every frame.
+        // Prepare runs on the main thread, so the worker never touches the content database. A
+        // Prepare failure (a bad or missing source stream) is a negative entry, logged once here
+        // rather than every frame.
         else if (!diskHit)
         {
             const Status prepared = generator->Prepare(*instance, *m_sources, slot->prepared);
@@ -122,7 +123,7 @@ namespace editor
         m_jobs->SubmitLight(
             Function<void()>{[slot]()
                              {
-                                 // LIGHT worker: disk cache first, else generate + persist.
+                                 // Light worker: disk cache first, else generate and persist.
                                  if (!slot->diskPath.IsEmpty() &&
                                      image::io::LoadImage(slot->diskPath.AsView(), slot->pixels)
                                          .IsOk())
@@ -135,12 +136,12 @@ namespace editor
                                  {
                                      // Either a load-only slot (GPU-generated type) whose file
                                      // would not load, or the cache file existed at schedule
-                                     // time (so Prepare was skipped) but is stale/corrupt.
-                                     // Self-heal: delete it and retry the FULL path next Get.
+                                     // time (so Prepare was skipped) but is stale or corrupt.
+                                     // Delete it and retry the full path on the next Get.
                                      slot->staleDiskFile = true;
                                      return;
                                  }
-                                 // The read happens HERE, on the worker: the header the
+                                 // The read happens here, on the worker: the header the
                                  // generator composed, then the stream it opened.
                                  slot->payload = Move(slot->prepared.header);
                                  if (slot->prepared.stream.Get() != nullptr)
@@ -210,8 +211,8 @@ namespace editor
             }
             else if (slot->staleDiskFile)
             {
-                // Delete the unloadable cache file and cache NOTHING - the next Get takes
-                // the full Prepare + Generate path and overwrites it.
+                // Delete the unloadable cache file and cache nothing; the next Get takes the
+                // full Prepare and Generate path and overwrites it.
                 LOG_WARNING(u8"Thumbnails", u8"stale cache file replaced for {}", slot->id);
                 (void)FileDelete(slot->diskPath.AsView());
             }
@@ -228,8 +229,8 @@ namespace editor
 
     void ThumbnailService::AcceptSceneResult(const Guid& id, image::Image pixels, bool ok)
     {
-        // Main thread (the stage runs on the frame loop). Only the ACTIVE job may complete;
-        // a Reset between Take and Accept cleared the flag, and the result is simply dropped.
+        // Main thread (the stage runs on the frame loop). Only the active job may complete; a
+        // Reset between Take and Accept clears the flag, and the result is dropped.
         if (!m_sceneJobActive || m_activeSceneJob != id)
         {
             return;
@@ -244,8 +245,8 @@ namespace editor
             return;
         }
 
-        // Persist on the light lane (PNG encode off the main thread), publish immediately -
-        // the drawable owns its pixels, so the UI can swap in before the file lands.
+        // Persist on the light lane (PNG encoding off the main thread) and publish immediately:
+        // the drawable owns its pixels, so the UI can swap it in before the file lands.
         const u64 hash = m_contentHash ? m_contentHash(id) : 0;
         if (hash != 0 && m_jobs != nullptr)
         {

@@ -4,12 +4,10 @@
 // Editor::Scene - :services partition.
 //
 // What the scene editor gives the editor besides its pages, none of it UI: the scene and prefab
-// document types; the export's seams (a scene's text source transcoded to the binary wire, the
-// assets a scene references for the export's closure); and a model import's prefab and scene,
-// generated once the import lands. RegisterSceneEditorServices is called by the executable
-// beside the pages' registration. Taken out of :page's RegisterSceneEditor as it was, so the
-// export and model imports work while the page moves onto the GUI
-// (Documentation/Specs/editor-gui.md, 5.3).
+// document types; the export's hooks (a scene's text source transcoded to the binary wire format,
+// and the assets a scene references, for the export's closure); and a model import's prefab and
+// scene, generated once the import lands. The executable calls RegisterSceneEditorServices beside
+// the pages' registration.
 
 module;
 #include "Core/Prelude.h"
@@ -45,17 +43,17 @@ export namespace editor
         GlobalTypeRegistry().Register(scene::PrefabDocument::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<scene::PrefabDocument>();
 
-        // Model imports: generate/refresh the hierarchy prefab beside the manifest (the
-        // "Generate prefab" import option). Lives here - not in the importer - because it
-        // needs scene machinery the importer library (linked by the headless cooker) never
-        // links. Re-import reuses the prefab's guid, so placed instances rebuild in every
-        // open scene and an open prefab page refreshes like any external asset change.
+        // Model imports: generate or refresh the hierarchy prefab beside the manifest (the
+        // "Generate prefab" import option). This lives here rather than in the importer because it
+        // needs scene machinery that the importer library (linked by the headless cooker) never
+        // links. A reimport reuses the prefab's guid, so placed instances rebuild in every open
+        // scene and an open prefab page refreshes as it does for any external asset change.
         EditorContext* editorContext = &context;
         runtime::IApplicationHost* appHost = &host;
 
-        // Export seam: scene/prefab TEXT sources transcode to the binary wire on the main
-        // thread before the pack job. The scratch scene is assembled from the full
-        // composition - a hand-listed set would silently drop component types.
+        // Export hook: scene and prefab text sources transcode to the binary wire format on the
+        // main thread before the pack job. The scratch scene is assembled from the full
+        // composition, since a hand-listed set would silently drop component types.
         context.SceneStreamStager = [](foundation::content::Instance& instance,
                                        Array<byte>& out) -> bool
         {
@@ -83,9 +81,9 @@ export namespace editor
             return true;
         };
 
-        // Export reachability seam: the assets a scene or prefab references, so the export
-        // closure can chase the scene->asset edges the cook's read-dep graph can't see. MAIN-THREAD
-        // only.
+        // Export reachability hook: the assets a scene or prefab references, so the export closure
+        // can follow the edges from scenes to assets that the cook's read-dependency graph cannot
+        // see. Main thread only.
         context.SceneRefScanner =
             [](foundation::content::Instance& instance, foundation::content::ContentDatabase& db,
                Array<Guid>& outResources, Array<Guid>& outPrefabs) -> bool
@@ -111,7 +109,8 @@ export namespace editor
                 {
                     return;
                 }
-                // No options object = the default fresh import, which generates the prefab only.
+                // No options object means the default fresh import, which generates the prefab
+                // only.
                 const auto* modelOptions =
                     Cast<pipeline::ModelImportOptions>(const_cast<pipeline::ImportOptions*>(options));
                 const bool wantPrefab = modelOptions == nullptr || modelOptions->generatePrefab;
@@ -187,7 +186,7 @@ export namespace editor
                     else
                     {
                         // A regenerated scene refreshes any open page editing it (scenes are
-                        // referenced/opened, not spawned as instances, so there is nothing to
+                        // referenced and opened, not spawned as instances, so there is nothing to
                         // rebuild in other scenes).
                         if (generatedScene.regenerated)
                         {

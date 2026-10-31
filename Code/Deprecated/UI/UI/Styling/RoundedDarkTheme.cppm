@@ -3,12 +3,10 @@
 
 // UI - :rounded_dark_theme partition
 //
-// Dark theme variant with consistent rounded corners everywhere - demonstrates that the drawable-based
-// styling system supports different visual styles from the same control set. Ported from
-// Sedulous.UI/src/Styling/RoundedDarkTheme.bf. Same structural pattern as :dark_theme (Beef `static class`
-// -> struct of static factories; `new StyleSheet` -> RefPtr<StyleSheet>; byte-literal Color(r,g,b,a) -> the
-// local C() helper; `typeof(T)` -> &T::StaticType()). Unlike DarkTheme this builds explicit rounded
-// StateListDrawables for the button backgrounds and uses per-corner radii for the spin buttons.
+// Dark theme variant with consistent rounded corners everywhere, showing that the drawable-based
+// styling system supports different visual styles from the same control set. It follows the structure
+// of :dark_theme. Unlike DarkTheme, it builds explicit rounded StateListDrawables for the button
+// backgrounds and uses per-corner radii for the spin buttons.
 
 module;
 #include "Core/Prelude.h"
@@ -74,13 +72,13 @@ export namespace foundation::ui
             RefPtr<StyleSheet> sheet = loader.Load(EmbeddedThemes::RoundedDark());
             if (!sheet)
             {
-                return CreateLegacyForParity(allocator, palette); // never ship unstyled (build defect)
+                return CreateLegacyForParity(allocator, palette); // a build defect; do not ship unstyled
             }
             ThemeRegistry::ApplyExtensions(*sheet, palette);
             return sheet;
         }
 
-        /// The former C++ rule builder - parity-test oracle ONLY.
+        /// The C++ rule builder, kept as the parity tests' reference.
         [[nodiscard]] static RefPtr<StyleSheet> CreateLegacyForParity(IAllocator& allocator, ThemePalette palette)
         {
             return BuildTheme(allocator, palette);
@@ -93,9 +91,9 @@ export namespace foundation::ui
             StyleSheet& sheet = *sheetRef;
             const f32 R = 6.0f; // consistent corner radius
 
-            // Palette-derived control colors: every surface/border/accent is computed from the palette
-            // so the whole theme follows it (no hardcoded cool-grey/blue literals) - a warm palette like
-            // GraphiteOrange then applies end-to-end, selection highlights included.
+            // Palette-derived control colors: every surface, border and accent is computed from the
+            // palette so the whole theme follows it, and a warm palette like GraphiteOrange applies
+            // throughout, selection highlights included.
             const auto A = [](Color c, f32 a255) { return Color{c.r, c.g, c.b, a255 / 255.0f}; };
             const Color inputBg = Palette::Darken(p.Surface, 0.25f); // sunken text-field background
             const Color trackBg = Palette::Lighten(p.Surface, 0.12f);   // slider / progress tracks
@@ -109,18 +107,18 @@ export namespace foundation::ui
 
             // === Global defaults ===
             // AccentColor as a global default: controls that ResolveStyleColor(AccentColor, <fallback>)
-            // without a type-specific rule (e.g. tree drop-indicators, node-graph links) then pick up the
+            // without a type-specific rule (tree drop indicators, node-graph links) pick up the
             // palette accent instead of their hardcoded fallback. Type-specific accent rules still win.
-            // Global CornerRadius = the theme's uniform R, so every control that resolves it (focus
-            // borders, self-drawing toolkit controls like DockTabGroup/ToastCard) rounds consistently.
-            // The flat DarkTheme leaves it at 0, so those same controls stay square there.
+            // The global CornerRadius is the theme's uniform R, so every control that resolves it (focus
+            // borders, self-drawing toolkit controls like DockTabGroup and ToastCard) rounds
+            // consistently. The flat DarkTheme leaves it at 0, so those controls stay square there.
             sheet.ForType(&View::StaticType())
                 .Set(StyleProperty::TextColor, p.Text)
                 .Set(StyleProperty::AccentColor, p.PrimaryAccent)
                 .Set(StyleProperty::CornerRadius, R)
                 .Set(StyleProperty::FontSize, 16.0f);
 
-            // === Button - rounded state drawables ===
+            // === Button: rounded state drawables ===
             RefPtr<StateListDrawable> btnBg = MakeRef<StateListDrawable>(allocator);
             btnBg->Set(ControlState::Normal,
                        MakeRef<RoundedRectDrawable>(allocator, p.SurfaceBright, R));
@@ -185,7 +183,7 @@ export namespace foundation::ui
                 .Set(StyleProperty::CursorColor, p.PrimaryAccent)
                 .Set(StyleProperty::SelectionColor, selection);
 
-            // === NumericField (shares EditText styling + rounded spin buttons) ===
+            // === NumericField (shares EditText styling, adds rounded spin buttons) ===
             {
                 const Color spinColor = p.SurfaceBright;
                 RefPtr<Drawable> spinUp =
@@ -208,7 +206,7 @@ export namespace foundation::ui
                     .Set(StyleProperty::Background, spinDown);
             }
 
-            // === CheckBox - rounded ===
+            // === CheckBox: rounded ===
             const Color cbBorder = ctrlBorder;
             RefPtr<Drawable> cbUnchecked =
                 MakeRef<RoundedRectDrawable>(allocator, inputBg, 3.0f, cbBorder, 1.0f);
@@ -223,7 +221,7 @@ export namespace foundation::ui
                 .Set(StyleProperty::Background, cbChecked);
             sheet.ForType(&CheckBox::StaticType()).Set(StyleProperty::Spacing, 6.0f);
 
-            // === RadioButton - circular ===
+            // === RadioButton: circular ===
             const Color rbBorder = ctrlBorder;
             RefPtr<Drawable> rbUnchecked =
                 MakeRef<RoundedRectDrawable>(allocator, inputBg, 9.0f, rbBorder, 1.0f);
@@ -236,7 +234,7 @@ export namespace foundation::ui
             sheet.ForTypePseudoState(&RadioButton::StaticType(), u8"box", ControlState::Checked)
                 .Set(StyleProperty::Background, rbChecked);
 
-            // === Slider - rounded track and thumb ===
+            // === Slider: rounded track and thumb ===
             RefPtr<Drawable> sliderTrack =
                 MakeRef<RoundedRectDrawable>(allocator, trackBg, 2.0f);
             RefPtr<Drawable> sliderFill =
@@ -255,7 +253,7 @@ export namespace foundation::ui
                 .Set(StyleProperty::Background, sliderThumb)
                 .Set(StyleProperty::Width, 16.0f);
 
-            // === ProgressBar - rounded ===
+            // === ProgressBar: rounded ===
             RefPtr<Drawable> progTrack =
                 MakeRef<RoundedRectDrawable>(allocator, trackBg, 4.0f);
             RefPtr<Drawable> progFill =
@@ -267,7 +265,7 @@ export namespace foundation::ui
             sheet.ForTypePseudo(&ProgressBar::StaticType(), u8"fill")
                 .Set(StyleProperty::Background, progFill);
 
-            // === ToggleSwitch - pill-shaped track (with border) and round knob ===
+            // === ToggleSwitch: pill-shaped track (with border) and round knob ===
             RefPtr<Drawable> switchTrackOff =
                 MakeRef<RoundedRectDrawable>(allocator, p.Surface, 12.0f, p.Border, 1.0f);
             RefPtr<Drawable> switchTrackOn = MakeRef<RoundedRectDrawable>(
@@ -296,7 +294,7 @@ export namespace foundation::ui
             sheet.ForTypePseudo(&ComboBox::StaticType(), u8"arrow")
                 .Set(StyleProperty::TextColor, iconDim);
 
-            // === ScrollBar - rounded ===
+            // === ScrollBar: rounded ===
             RefPtr<Drawable> scrollTrack = MakeRef<RoundedRectDrawable>(
                 allocator, A(Palette::Darken(p.Surface, 0.15f), 150.0f), 5.0f);
             RefPtr<Drawable> scrollThumb = MakeRef<RoundedRectDrawable>(
@@ -328,7 +326,7 @@ export namespace foundation::ui
             sheet.ForTypePseudo(&Expander::StaticType(), u8"chevron")
                 .Set(StyleProperty::TextColor, iconDim);
 
-            // === TabView - rounded tab backgrounds ===
+            // === TabView: rounded tab backgrounds ===
             {
                 const f32 tabR = 4.0f;
                 RefPtr<Drawable> stripBg = MakeRef<RoundedRectDrawable>(
@@ -382,7 +380,7 @@ export namespace foundation::ui
                 .Set(StyleProperty::AccentColor, menuHi);
 
             // === Dialog ===
-            // Dialog surface sits BELOW the button surface (SurfaceBright) so the dialog's buttons
+            // The dialog surface is darker than the button surface (SurfaceBright) so the dialog's buttons
             // stand out instead of blending into the background as flat text.
             RefPtr<Drawable> dialogBg =
                 MakeRef<RoundedRectDrawable>(allocator, p.Surface, R, dialogBorder, 1.0f);

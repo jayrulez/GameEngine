@@ -4,14 +4,14 @@
 /// Foundation::Render - the `:extract_ctx` partition.
 ///
 /// `RenderContext` provisions the per-worker scratch that parallel extraction writes into: one
-/// `FrameArena` + one item list per job-system slot (worker threads + the caller, == the job
-/// system's SlotCount). Each worker fills ONLY its own slot (indexed by JobSystem::CurrentSlot),
+/// `FrameArena` and one item list per job-system slot (the worker threads and the caller, the job
+/// system's SlotCount). Each worker fills only its own slot (indexed by JobSystem::CurrentSlot),
 /// so there is no contention and no locking; a single-threaded merge then gathers every slot's
-/// items into the immutable `ExtractedScene` (per-worker arenas, single-threaded merge).
+/// items into the immutable `ExtractedScene`.
 ///
 /// Arenas are reset once per frame (BeginFrame) and accumulate across the frame's scenes; the
-/// item lists are cleared per extraction (ResetItems). (Extraction is single-buffered;
-/// double-buffered extraction - extract N while submit N-1 - would slot in here.)
+/// item lists are cleared per extraction (ResetItems). Extraction is single-buffered; double
+/// buffering (extract frame N while submitting N-1) would go here.
 
 module;
 #include "Core/Prelude.h"
@@ -29,10 +29,10 @@ export namespace foundation::render
     class RenderContext
     {
     public:
-        // The allocator (required - the owner decides) backs the per-slot arenas + lists.
+        // The allocator (required; the owner decides) backs the per-slot arenas and lists.
         explicit RenderContext(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
-        // Ensure `slotCount` (>= 1) per-worker slots exist, then reset every arena + item list for a
+        // Ensure `slotCount` (>= 1) per-worker slots exist, then reset every arena and item list for a
         // new frame. Call once at frame start (before any extraction).
         void BeginFrame(u32 slotCount)
         {
@@ -79,7 +79,7 @@ export namespace foundation::render
         }
 
     private:
-        // UniquePtr slots so growing the pools never moves a live FrameArena / item list (the
+        // UniquePtr slots so growing the pools never moves a live FrameArena or item list (the
         // FrameArena is non-movable, and parallel writers hold references for the extraction).
         IAllocator* m_allocator;
         Array<UniquePtr<FrameArena>> m_arenas;

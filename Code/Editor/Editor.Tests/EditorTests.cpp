@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Basic checks for the asset-pipeline base (Asset serialize round-trip + builder dispatch shape).
+// Basic checks for the asset-pipeline base: the Asset serialize round-trip and the shape of
+// builder dispatch.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -14,7 +15,7 @@ using namespace foundation::core;
 
 namespace
 {
-    // A concrete asset: source file + one setting.
+    // A concrete asset: a source file and one setting.
     class WidgetAsset final : public Asset
     {
         RTTI_OBJECT(WidgetAsset, Asset)
@@ -92,7 +93,7 @@ TEST_CASE("editor: source files read through the VFS mount")
     REQUIRE(DefaultAssetBuilder::ReadSourceText(ctx, u8"editor_vfs_src.txt", text).IsOk());
     CHECK(text == StringView(u8"abc"));
 
-    // Missing file / missing mount are clean failures.
+    // A missing file or a missing mount fails cleanly.
     CHECK_FALSE(DefaultAssetBuilder::ReadSourceBytes(ctx, u8"editor_vfs_missing.txt").HasValue());
     AssetBuildContext empty{DefaultAllocator()};
     CHECK_FALSE(DefaultAssetBuilder::ReadSourceBytes(empty, u8"editor_vfs_src.txt").HasValue());

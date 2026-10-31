@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Core - the editor's own files and type icons (editor-gui X2): EditorResources reads
-// text fresh, keeps images and SVGs, and on a change sets the old aside, says which files changed
-// and runs what tracks them again; EditorIcons finds a type's icon up its bases, else a generic
-// one, and its tint from the nearest category it declares.
+// Editor::Core: the editor's own files and type icons. EditorResources reads text fresh each
+// time and caches images and SVGs; on a change it keeps the old copies alive, reports which files
+// changed and reruns what tracks them. EditorIcons finds a type's icon up its base chain, else a
+// generic one, and its tint from the nearest category the type declares.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"

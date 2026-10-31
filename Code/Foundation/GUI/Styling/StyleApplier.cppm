@@ -3,12 +3,12 @@
 
 // GUI - :style_applier partition
 //
-// ApplyStyle: writes a resolved style's typed values onto a node (G2 of Specs/vg-and-gui-lab.md).
-// Node and text properties go to their setters; the box properties (background colour and layers,
-// a border per side, radii, box shadows, filters, the backdrop filter, the blend mode) become the node's NodeBox and `transform` its style
-// transform, both owned by the sheet; a property the table (StyleProperties) does not name goes to
-// the widget's reflected property declaring it as its CSS name, so a library's widget is styled
-// with no applier code of its own.
+// ApplyStyle: writes a resolved style's typed values onto a node. Node and text properties go to
+// their setters. The box properties (background colour and layers, a border per side, radii, box
+// shadows, filters, the backdrop filter, the blend mode) become the node's NodeBox, and
+// `transform` becomes its style transform; the sheet owns both. A property that the table
+// (StyleProperties) does not name goes to the widget's reflected property that declares it as its
+// CSS name, so a library's widget can be styled without applier code of its own.
 
 module;
 #include "Core/Prelude.h"
@@ -36,18 +36,18 @@ import :data_model; // ConvertVariant (a reflected property of any convertible t
 
 using namespace foundation::core;
 namespace core = foundation::core;
-// Declared here, not inherited: a namespace alias is not an exported entity, so one written in
-// a sibling partition is not visible in this one. This file uses fonts::, image:: and vg:: but
-// declared none of them; clang happened to resolve them anyway, while MSVC (correctly) reported
-// "C2653: '<name>': is not a class or namespace name". Every other partition using these
-// declares its own aliases the same way. One per module imported above and referenced qualified.
+// These aliases are declared here because a namespace alias is not an exported entity, so one
+// written in a sibling partition is not visible in this one. Without them, MSVC correctly reports
+// "C2653: '<name>': is not a class or namespace name" even where clang resolves the names. Every
+// partition that uses them declares its own aliases the same way: one for each module imported
+// above and referred to by qualified name.
 namespace fonts = foundation::fonts;
 namespace image = foundation::image;
 namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    // Strip a CSS url(...) wrapper (and any quotes) to the inner resource name; returns the
+    // Strips a CSS url(...) wrapper (and any quotes) to the inner resource name; returns the
     // value unchanged if it is not a url() form.
     [[nodiscard]] inline core::StringView ParseUrl(core::StringView value)
     {
@@ -62,7 +62,7 @@ export namespace foundation::gui
 
     namespace detail
     {
-        // === Layout keywords and grid values (E2) ===
+        // === Layout keywords and grid values ===
         [[nodiscard]] inline LayoutLength LayoutKeyword(core::StringView k) noexcept
         {
             if (k == core::StringView(u8"fit-content"))
@@ -172,8 +172,8 @@ export namespace foundation::gui
             return Named(k, names, values);
         }
 
-        // A sheet's length as layout takes it: a percentage, pixels, or (a calc() with a percentage
-        // part, E13) both, the units other than % resolved now.
+        // Converts a sheet's length into the form layout takes: a percentage, pixels, or both (for
+        // a calc() with a percentage part), with the units other than % resolved now.
         [[nodiscard]] inline LayoutLength ToLayoutLength(const LengthValue& l, const LengthContext& lengths)
         {
             if (l.Unit == LengthUnit::Percent)
@@ -182,7 +182,7 @@ export namespace foundation::gui
             return l.PercentPart() != 0.0f ? LayoutLength::Calc(px, l.PercentPart()) : LayoutLength::Px(px);
         }
 
-        // One track size: a length or percentage, auto, min-content, max-content, <n>fr.
+        // Parses one track size: a length or percentage, auto, min-content, max-content, or <n>fr.
         [[nodiscard]] inline Optional<LayoutLength> TrackLength(core::StringView t, const LengthContext& lengths)
         {
             if (t == core::StringView(u8"auto"))
@@ -222,7 +222,7 @@ export namespace foundation::gui
                 return GridTrack{l.Value(), l.Value(), 0.0f};
             return {};
         }
-        // A track list: sizes separated by spaces, `repeat(<n>, <sizes>)` among them.
+        // Parses a track list: sizes separated by spaces, which may include `repeat(<n>, <sizes>)`.
         [[nodiscard]] inline Optional<Array<GridTrack>> ParseGridTracks(core::StringView text, const LengthContext& lengths)
         {
             Array<GridTrack> tracks;
@@ -328,7 +328,8 @@ export namespace foundation::gui
             return out;
         }
 
-        // mix-blend-mode: the blends VG composites (plus-lighter is additive); another is normal.
+        // mix-blend-mode: the blends VG composites (plus-lighter is additive). Any other value is
+        // normal.
         [[nodiscard]] inline vg::VGBlendMode BlendModeOf(core::StringView keyword)
         {
             if (keyword == core::StringView(u8"multiply"))
@@ -357,8 +358,9 @@ export namespace foundation::gui
             return false;
         }
 
-        // An image's path and, after `#xywh=`, the region of it to draw (a sprite of an atlas, as
-        // Media Fragments write one: `atlas.png#xywh=0,32,16,16`); no region: all of it.
+        // Returns an image's path and sets `region` from what follows `#xywh=`: the part of the
+        // image to draw (a sprite in an atlas, in Media Fragments syntax:
+        // `atlas.png#xywh=0,32,16,16`). With no region, the whole image is drawn.
         inline core::StringView ImagePath(core::StringView url, Rectangle& region)
         {
             region = Rectangle{};
@@ -378,13 +380,13 @@ export namespace foundation::gui
             return url;
         }
 
-        // border-image (E13): `url(skin.png) <slice>{1,4} [fill] [/ <width>{1,4} [/ <outset>]]
-        // [stretch | repeat | round | space]{1,2}`. A slice is image pixels or a percentage of
-        // the image; a width a length, or a number times the border's width.
+        // border-image: `url(skin.png) <slice>{1,4} [fill] [/ <width>{1,4} [/ <outset>]]
+        // [stretch | repeat | round | space]{1,2}`. A slice is in image pixels or a percentage of
+        // the image; a width is a length, or a number that multiplies the border's width.
         inline void ParseBorderImage(core::StringView value, IResourceProvider* resources, const LengthContext& lengths, const vg::BorderWidths& borders,
                                      BorderImage& out)
         {
-            core::String spaced; // a top-level '/' parted from what touches it (one in a url() is the path's)
+            core::String spaced; // the value with spaces around each top-level '/' (a '/' inside a url() belongs to the path)
             usize depth = 0;
             for (const char8_t c : value)
             {
@@ -438,11 +440,11 @@ export namespace foundation::gui
                 }
                 else if (section == 1 && widths < 4)
                 {
-                    bool plain = token.Size() != 0; // a bare number (ParseLength would read "6px" as 6 too)
+                    bool plain = token.Size() != 0; // a bare number (ParseLength would also read "6px" as 6)
                     for (const char8_t c : token)
                         plain = plain && (IsDigit(c) || c == u8'.' || c == u8'-' || c == u8'+');
                     if (const Optional<f32> n = plain ? ParseLength(token) : Optional<f32>{}; n.HasValue())
-                        width[widths] = -2.0f - n.Value(); // a multiple of the border's, settled below
+                        width[widths] = -2.0f - n.Value(); // a multiple of the border's width, resolved below
                     else if (const Optional<LengthValue> l = ParseLengthValue(token); l.HasValue())
                         width[widths] = ResolveLengthValue(l.Value(), lengths, 0.0f);
                     ++widths;
@@ -452,12 +454,12 @@ export namespace foundation::gui
                 return;
             Rectangle region;
             f32 iw = 0.0f, ih = 0.0f;
-            if (IsSvgSource(source)) // by its name or written inline: sliced in its own units
+            if (IsSvgSource(source)) // a named or inline SVG, sliced in its own units
             {
                 out.Svg = resources->Svg(source);
                 if (out.Svg == nullptr || out.Svg->width <= 0.0f || out.Svg->height <= 0.0f)
                 {
-                    out.Svg = nullptr; // a picture of no size has nothing to slice
+                    out.Svg = nullptr; // a picture with no size has nothing to slice
                     return;
                 }
                 iw = out.Svg->width;
@@ -472,7 +474,7 @@ export namespace foundation::gui
                 iw = region.width > 0.0f ? region.width : static_cast<f32>(out.Image->Width());
                 ih = region.width > 0.0f ? region.height : static_cast<f32>(out.Image->Height());
             }
-            // One to four values, as margins take them: top, right, bottom, left.
+            // Expands one to four values the way margins do: top, right, bottom, left.
             const auto spread = [](f32 (&v)[4], usize count)
             {
                 if (count == 1)
@@ -517,7 +519,8 @@ export namespace foundation::gui
             out.RepeatY = repeatCount > 1 ? repeats[1] : repeats[0];
         }
 
-        // One axis of a layer's size or position: a length, a percentage, or (`allowAuto`) auto.
+        // Parses one axis of a layer's size or position: a length, a percentage, or (when
+        // `allowAuto`) auto.
         [[nodiscard]] inline Optional<LayerLength> ParseLayerLength(core::StringView t, const LengthContext& lengths, bool allowAuto)
         {
             if (t == core::StringView(u8"auto"))
@@ -527,8 +530,8 @@ export namespace foundation::gui
                 return {};
             return LayerLength{ResolveLengthValue(l.Value(), lengths, 0.0f), l.Value().PercentPart(), false};
         }
-        // background-size for one layer: cover, contain, or one or two of a length, a percentage
-        // (of the box) and auto (one given: the height auto).
+        // background-size for one layer: cover, contain, or one or two values, each a length, a
+        // percentage (of the box) or auto. With one value, the height is auto.
         inline void ParseLayerSize(core::StringView t, const LengthContext& lengths, BoxLayer& out)
         {
             if (t == core::StringView(u8"cover") || t == core::StringView(u8"contain"))
@@ -547,8 +550,9 @@ export namespace foundation::gui
             out.Width = w.Value();
             out.Height = h.Value();
         }
-        // background-position for one layer: one or two of left, center, right, top, bottom, a
-        // length and a percentage (of the room left over); one given: the other centred.
+        // background-position for one layer: one or two values, each left, center, right, top,
+        // bottom, a length or a percentage (of the room left over). With one value, the other axis
+        // is centred.
         inline void ParseLayerPosition(core::StringView t, const LengthContext& lengths, BoxLayer& out)
         {
             const Array<core::StringView> parts = SplitTopLevel(t, u8' ');
@@ -588,7 +592,7 @@ export namespace foundation::gui
             out.Y = y;
         }
 
-        // The node's box from the sheet's box properties, in pixels.
+        // Builds the node's box from the sheet's box properties, in pixels.
         [[nodiscard]] inline NodeBox BuildBox(const UINode& node, const ResolvedStyle& style, IResourceProvider* resources,
                                               const LengthContext& lengths)
         {
@@ -597,8 +601,8 @@ export namespace foundation::gui
                 box.BackgroundColor = c->ColorValue;
             if (const StyleValue* layers = style.Value(u8"background-image"))
             {
-                // background-size and background-position (E13): a comma list, one per layer, the
-                // last repeated for layers past it (CSS's rule).
+                // background-size and background-position are comma lists with one item per layer;
+                // the last item repeats for any further layers (CSS's rule).
                 const Array<core::StringView> sizes = SplitTopLevel(style.Get(u8"background-size"), u8',');
                 const Array<core::StringView> positions = SplitTopLevel(style.Get(u8"background-position"), u8',');
                 usize index = 0;
@@ -609,13 +613,13 @@ export namespace foundation::gui
                     if (layer.Kind == BackgroundKind::Image)
                     {
                         out.IsImage = true;
-                        // An SVG by its name or written inline (E13): paths, drawn at the size it fills.
+                        // A named or inline SVG is drawn as paths at the size it fills.
                         const core::StringView path = layer.Image.AsView();
                         const bool svg = IsSvgSource(path);
                         if (resources != nullptr && svg)
                             out.Svg = resources->Svg(path);
                         else if (resources != nullptr)
-                            out.Image = resources->LoadImage(ImagePath(path, out.Source)); // a sprite's region too
+                            out.Image = resources->LoadImage(ImagePath(path, out.Source)); // also reads a sprite's region
                         if (out.Image == nullptr && out.Svg == nullptr)
                             continue; // not loaded (no provider, or no such image)
                         if (!sizes.IsEmpty())
@@ -629,12 +633,12 @@ export namespace foundation::gui
                     }
                     else
                     {
-                        continue; // a colour layer above the bottom is not CSS
+                        continue; // CSS allows a colour only in the bottom layer
                     }
                     box.Layers.PushBack(Move(out));
                 }
             }
-            // A border per side: its style none or hidden draws nothing, whatever its width.
+            // A border per side. A style of none or hidden draws nothing, whatever the width.
             const auto side = [&](const char8_t* name, f32& width, Color& color, BorderLine& line)
             {
                 core::String w(u8"border-");
@@ -650,7 +654,7 @@ export namespace foundation::gui
                 width = drawn ? Max(0.0f, PixelsOf(style.Value(w.AsView()), lengths, 0.0f, 3.0f)) : 0.0f;
                 line = lineStyle == core::StringView(u8"dashed")   ? BorderLine::Dashed
                        : lineStyle == core::StringView(u8"dotted") ? BorderLine::Dotted
-                                                                   : BorderLine::Solid; // double, groove and the rest: solid
+                                                                   : BorderLine::Solid; // double, groove and the rest draw as solid
                 if (const StyleValue* c = style.Value(colorName.AsView()))
                     color = c->ColorValue;
                 else
@@ -660,10 +664,10 @@ export namespace foundation::gui
             side(u8"right", box.BorderWidths.right, box.BorderColors.right, box.BorderLines[1]);
             side(u8"bottom", box.BorderWidths.bottom, box.BorderColors.bottom, box.BorderLines[2]);
             side(u8"left", box.BorderWidths.left, box.BorderColors.left, box.BorderLines[3]);
-            // A border image over the border's widths (E13).
+            // A border image over the border's widths.
             if (const core::StringView skin = style.Get(u8"border-image"); skin.Size() != 0 && skin != core::StringView(u8"none"))
                 ParseBorderImage(skin, resources, lengths, box.BorderWidths, box.Skin);
-            // Radii: a percentage of the box's smaller side.
+            // Radii: a percentage is of the box's smaller side.
             const core::Float2 size = node.GetSize();
             const f32 percentBase = Min(size.x, size.y);
             box.Radii = vg::CornerRadii(PixelsOf(style.Value(u8"border-top-left-radius"), lengths, percentBase, 0.0f),
@@ -683,8 +687,8 @@ export namespace foundation::gui
                     box.Shadows.PushBack(shadow);
                 }
             }
-            // Effects: blurs in sequence add as variances (a blur of a blur is one of the root of the
-            // squares' sum).
+            // Effects: blurs in sequence add as variances (a blur of a blur equals one blur whose
+            // radius is the square root of the sum of the squares).
             const auto blurOf = [&](const char8_t* name)
             {
                 f32 variance = 0.0f;
@@ -701,7 +705,7 @@ export namespace foundation::gui
             box.BackdropBlur = blurOf(u8"backdrop-filter");
             if (const StyleValue* blend = style.Value(u8"mix-blend-mode"))
                 box.BlendMode = BlendModeOf(blend->Keyword.AsView());
-            // Text effects: each set (none included) replaces the inherited one.
+            // Text effects: each one the sheet sets (including none) replaces the inherited one.
             if (const StyleValue* v = style.Value(u8"text-shadow"))
             {
                 box.TextEffectsSet |= NodeBox::kTextShadow;
@@ -735,8 +739,8 @@ export namespace foundation::gui
             return box;
         }
 
-        // The reflected property of the node's type (or a base's) that declares `name` as its CSS
-        // name (the `css` property attribute).
+        // Finds the reflected property of the node's type (or a base type) that declares `name` as
+        // its CSS name (through the `css` property attribute).
         [[nodiscard]] inline const PropertyInfo* FindCssProperty(const UINode& node, core::StringView name)
         {
             for (const TypeInfo* type = node.GetType(); type != nullptr; type = type->base)
@@ -750,7 +754,7 @@ export namespace foundation::gui
                 }
             return nullptr;
         }
-        // `text` as a value of the property's type (empty when it does not convert).
+        // Parses `text` as a value of the property's type (empty when it does not convert).
         [[nodiscard]] inline Variant ParseForProperty(const PropertyInfo& property, core::StringView text, const LengthContext& lengths)
         {
             text = Trim(text);
@@ -784,10 +788,11 @@ export namespace foundation::gui
             return s != nullptr ? *s : core::String{};
         }
 
-        // The reflected properties a sheet sets by their CSS names (a library's widget's own), each
-        // as a setter-applied property is: the sheet's while it sets it, the node's own value back
-        // when it stops, and code's once code changes it (seen as a value other than the one the
-        // sheet last wrote).
+        // Applies the reflected properties a sheet sets by their CSS names (such as a library
+        // widget's own properties), with the same ownership rules as setter-applied properties. The
+        // sheet's value applies while the sheet sets it, the node's own value comes back when the
+        // sheet stops, and once code changes the property (detected as a value other than the one
+        // the sheet last wrote), code owns it.
         inline void ApplyReflected(UINode& node, const ResolvedStyle& style, const LengthContext& lengths)
         {
             Array<UINode::StyledProperty>& records = node.StyledProperties();
@@ -812,15 +817,16 @@ export namespace foundation::gui
                     continue;
                 if (record->Written.Size() != 0 && ValueText(GetProperty(*property, instance)) != record->Written)
                 {
-                    record->Code = true; // code set it since: code's now
+                    record->Code = true; // code has set it since, so code owns it now
                     continue;
                 }
                 const Variant value = ParseForProperty(*property, p.Value.AsView(), lengths);
                 if (value.IsEmpty())
                     continue;
-                // A value it holds already is not written again: a restyle would otherwise run a
-                // setter each time (a list rebuilding its rows, which restyled it again, every frame).
-                // Compared as text, so a value with none (a colour) is written as before.
+                // A value the property already holds is not written again. Otherwise every restyle
+                // would run the setter (a list would rebuild its rows, which restyles it again, every
+                // frame). Values are compared as text, so one with no text form (a colour) is always
+                // written.
                 const core::String current = ValueText(GetProperty(*property, instance));
                 if (current.Size() != 0 && ValueText(value) == current)
                 {
@@ -830,7 +836,7 @@ export namespace foundation::gui
                 (void)SetProperty(*property, instance, value);
                 record->Written = ValueText(GetProperty(*property, instance));
             }
-            // What the sheet set and sets no more: back to the node's own value.
+            // A property the sheet set before but no longer sets returns to the node's own value.
             for (UINode::StyledProperty& r : records)
             {
                 if (r.Code || r.Written.Size() == 0 || style.Has(r.Name.AsView()))
@@ -847,7 +853,7 @@ export namespace foundation::gui
         }
     }
 
-    // Apply the supported declarations of `style` to `node`. `resources` (optional) loads
+    // Applies the supported declarations of `style` to `node`. `resources` (optional) loads
     // background-image; `fontService` (optional) resolves font-family/size. Missing either
     // just skips that property. The box properties (background, border, radius, box-shadow)
     // become the node's box, owned by the sheet: a restyle without any replaces it with none.
@@ -874,13 +880,14 @@ export namespace foundation::gui
                 return {};
             return ResolveLengthValue(v->Length, lengths, base);
         };
-        // A length given as a percentage, which layout resolves (a margin's, a padding's, a gap's).
+        // Returns the percentage of a length given as one, which layout resolves (for a margin, a
+        // padding or a gap).
         const auto percentOf = [&](const char8_t* name) -> Optional<f32>
         {
             const StyleValue* v = style.Value(name);
             if (v == nullptr || v->Kind != StyleValueKind::Length || v->Length.PercentPart() == 0.0f)
                 return {};
-            return v->Length.PercentPart(); // a calc()'s too: layout adds it to the pixels
+            return v->Length.PercentPart(); // a calc()'s too; layout adds it to the pixels
         };
         const auto keyword = [&](const char8_t* name) -> StringView
         {
@@ -888,8 +895,9 @@ export namespace foundation::gui
             return v != nullptr ? v->Keyword.AsView() : StringView{};
         };
 
-        // What the sheet sets through setters (E3): a property code pinned stays code's; one the
-        // sheet sets takes its value; one it does not returns to the node's own value.
+        // Properties the sheet sets through setters. A property that code pinned stays as code
+        // set it; one the sheet sets takes the sheet's value; one the sheet does not set returns to
+        // the node's own value.
         Node::StyleWriteScope writing(node);
         const Node::UnstyledValues& own = node.CaptureUnstyledValues();
         const auto free = [&](StyleSlot slot) { return !node.IsStylePinned(slot); };
@@ -902,9 +910,9 @@ export namespace foundation::gui
                 node.SetAlpha(alpha);
         }
 
-        // The direction (E9b): first, as the logical sides (inline start and end)
-        // and the text's start and end follow it. Not inherited
-        // through the style: a node with none runs as the first ancestor that says does.
+        // The direction comes first, since the logical sides (inline start and end) and the text's
+        // start and end depend on it. It is not inherited through the style: a node without one
+        // uses the direction of the first ancestor that sets one.
         if (free(SlotDirection))
         {
             const StringView v = keyword(u8"direction");
@@ -914,13 +922,14 @@ export namespace foundation::gui
                                                                 : Node::LayoutDirection::Inherit);
         }
 
-        // The logical sides (E9b) name the physical ones the node's direction puts them on; given
-        // beside a physical one for the same side, the logical one wins.
+        // Each logical side maps to the physical side the node's direction puts it on. When both a
+        // logical and a physical value are given for the same side, the logical one wins.
         const bool rtl = node.IsRightToLeft();
         const char8_t* const startSide = rtl ? u8"right" : u8"left";
         const auto logical = [&](const char8_t* prefix, const char8_t* side) -> const char8_t*
         {
-            // margin- / padding- / inset- with inline-start or inline-end, by which side `side` is.
+            // The margin-, padding- or inset- property with inline-start or inline-end that maps to
+            // `side`.
             const bool start = StringView(side) == StringView(startSide);
             if (StringView(prefix) == StringView(u8"margin-"))
                 return start ? u8"margin-inline-start" : u8"margin-inline-end";
@@ -936,8 +945,9 @@ export namespace foundation::gui
             {
                 if (!free(slot))
                     return;
-                // A percentage is of the containing box's width, which layout knows.
-                // A calc() has both: its percent part here, its pixels (base 0 drops the percent) there.
+                // A percentage is of the containing box's width, which layout knows. A calc() has
+                // both: its percent part goes here and its pixels (resolved at base 0, which drops
+                // the percent) go in the length field.
                 const Optional<f32> percent = percentOf(name);
                 percentField = percent.ValueOr(0.0f);
                 field = length(name, 0.0f).ValueOr(percent.HasValue() ? 0.0f : ownValue);
@@ -953,7 +963,7 @@ export namespace foundation::gui
                 if (const Optional<f32> percent = percentOf(name); percent.HasValue())
                 {
                     percentField = percent.Value();
-                    field = length(name, 0.0f).ValueOr(0.0f); // a calc()'s pixels beside its percent
+                    field = length(name, 0.0f).ValueOr(0.0f); // a calc()'s pixels, beside its percent
                 }
                 else if (const Optional<f32> v = length(name, 0.0f); v.HasValue())
                 {
@@ -968,8 +978,8 @@ export namespace foundation::gui
             node.SetPaddingPercent(paddingPercent);
         }
 
-        // Layout (E2): the sheet's values over the node's own, then each field code pinned as code
-        // left it. Percentages and auto wait for layout.
+        // Layout: the sheet's values over the node's own, then each field that code pinned
+        // restored as code left it. Percentages and auto are resolved by layout.
         {
             LayoutStyle ls = own.Layout;
             bool changed = false;
@@ -1005,7 +1015,8 @@ export namespace foundation::gui
             size(logical(u8"inset-", u8"right"), ls.Right);
             size(u8"flex-basis", ls.Basis);
             {
-                // A side as a length, or as a percentage of the containing box's width (layout's).
+                // Each side is a length, or a percentage of the containing box's width (resolved by
+                // layout).
                 Thickness margin = ls.Margin;
                 Thickness percent = ls.MarginPercent;
                 const auto marginSide = [&](const char8_t* name, f32& field, f32& percentField)
@@ -1013,7 +1024,7 @@ export namespace foundation::gui
                     if (const Optional<f32> p = percentOf(name); p.HasValue())
                     {
                         percentField = p.Value();
-                        field = length(name, 0.0f).ValueOr(0.0f); // a calc()'s pixels beside its percent
+                        field = length(name, 0.0f).ValueOr(0.0f); // a calc()'s pixels, beside its percent
                     }
                     else if (const Optional<f32> v = length(name, 0.0f); v.HasValue())
                     {
@@ -1040,7 +1051,8 @@ export namespace foundation::gui
             if (const Optional<f32> n = number(u8"flex-shrink"); n.HasValue()) assign(ls.Shrink, n.Value());
             if (const Optional<f32> n = number(u8"order"); n.HasValue()) assign(ls.Order, static_cast<i32>(n.Value()));
             if (const Optional<f32> n = number(u8"z-index"); n.HasValue()) assign(ls.ZIndex, static_cast<i32>(n.Value()));
-            // A gap as a length, or a percentage of the container's content size (layout's).
+            // A gap is a length, or a percentage of the container's content size (resolved by
+            // layout).
             if (const Optional<f32> p = percentOf(u8"row-gap"); p.HasValue())
             {
                 assign(ls.RowGapPercent, p.Value());
@@ -1119,9 +1131,9 @@ export namespace foundation::gui
             if (free(SlotColumnGap)) result.ColumnGapPercent = ls.ColumnGapPercent;
             if (ChangedLayoutSlots(result, node.GetLayoutStyle()).Any())
                 node.SetLayoutStyle(result);
-            // Anything but visible clips the children to the box (and scroll and auto scroll them);
-            // a widget that clips its own parts (an item view's rows) keeps doing so unless the
-            // sheet says.
+            // Any value but visible clips the children to the box (and scroll and auto also scroll
+            // them). A widget that clips its own parts (an item view's rows) keeps doing so unless
+            // the sheet sets overflow.
             if (free(SlotOverflowX) && free(SlotOverflowY))
             {
                 if (keyword(u8"overflow-x").Size() != 0 || keyword(u8"overflow-y").Size() != 0)
@@ -1148,9 +1160,9 @@ export namespace foundation::gui
                 node.SetVisible(visible);
         }
 
-        // Text (E3, E4): colour, the font, text-align, white-space, line-height and letter-spacing
-        // inherit (the sheet's value, else the parent's, else the node's own; `initial` is the
-        // node's own, or CSS's where the table names one); vertical-align does not.
+        // Text: colour, the font, text-align, white-space, line-height and letter-spacing inherit
+        // (the sheet's value, else the parent's, else the node's own; `initial` means the node's
+        // own, or CSS's initial value where the table names one). vertical-align does not inherit.
         {
             const UINode::TextStyle& ownText = node.CaptureUnstyledText();
             const UINode* parent = core::Cast<UINode>(node.GetParent());
@@ -1166,7 +1178,7 @@ export namespace foundation::gui
             }
             if (free(SlotTextAlign))
             {
-                // start and end are the line's (E9c): its paragraph's direction places them.
+                // start and end refer to the line, and the paragraph's direction places them.
                 const StringView v = keyword(u8"text-align");
                 if (v == StringView(u8"left") || v == StringView(u8"justify"))
                     text.HAlign = TextHAlign::Left;
@@ -1195,13 +1207,13 @@ export namespace foundation::gui
             }
             if (free(SlotFontFamily) || free(SlotFontSize))
             {
-                // The family and the size each from the sheet, the parent or the node itself; the
-                // font is the parent's or the node's own when both come from there, else the
-                // font service's for the pair.
-                // A list (E11 of Specs/gui-lab-evolution-2.md): the first family the service has is
-                // the font, the rest after it the faces a character it lacks falls back to. When it
-                // has none of them, the first is asked for all the same (a service may resolve a
-                // family it does not list, to its default).
+                // The family and the size each come from the sheet, the parent or the node itself.
+                // When both come from the parent, or both from the node, that font is used;
+                // otherwise the font service provides one for the pair.
+                // For a family list, the first family the service has becomes the font, and the
+                // families after it are the fallback faces for characters it lacks. When the service
+                // has none of them, the first is requested anyway (a service may resolve a family it
+                // does not list, to its default).
                 const StringView declaredList = initial(u8"font-family") ? StringView{} : keyword(u8"font-family");
                 StringView declaredFamily;
                 StringView firstFamily;
@@ -1223,7 +1235,8 @@ export namespace foundation::gui
                               });
                 if (declaredFamily.Size() == 0)
                     declaredFamily = firstFamily;
-                // font-size's em and percentages are of the parent's size, not its own.
+                // For font-size, em and percentages are relative to the parent's size, not the
+                // node's own.
                 LengthContext parentLengths = lengths;
                 parentLengths.ElementFontSize = parent != nullptr && parent->GetTextStyle().FontSize > 0.0f ? parent->GetTextStyle().FontSize
                                                                                                              : lengths.RootFontSize;
@@ -1256,7 +1269,7 @@ export namespace foundation::gui
                         }
                 }
             }
-            // white-space, line-height and letter-spacing inherit as the rest do (E4).
+            // white-space, line-height and letter-spacing inherit like the other text properties.
             if (free(SlotWhiteSpace))
             {
                 const StringView v = keyword(u8"white-space");
@@ -1273,8 +1286,8 @@ export namespace foundation::gui
             }
             if (free(SlotLineHeight))
             {
-                // normal; a bare number, a multiple of each node's own font size (inherited as the
-                // number); a length; a percentage of the font size (inherited as the pixels).
+                // normal; a bare number, which multiplies each node's own font size (inherited as the
+                // number); a length; or a percentage of the font size (inherited as pixels).
                 const StringView v = Trim(keyword(u8"line-height"));
                 const Optional<f64> number = v.Size() != 0 ? ParseFloat(v) : Optional<f64>{};
                 const UINode::TextStyle& from = inherits(u8"line-height") ? parent->GetTextStyle() : ownText;
@@ -1304,8 +1317,8 @@ export namespace foundation::gui
                     text.LineHeightFactor = from.LineHeightFactor;
                 }
             }
-            // font-weight and font-style (E11) inherit; a run's face is chosen from them as it lays
-            // out. bolder and lighter are of the parent's weight.
+            // font-weight and font-style inherit, and a text run's face is chosen from them during
+            // layout. bolder and lighter are relative to the parent's weight.
             if (free(SlotFontWeight))
             {
                 const StringView v = Trim(keyword(u8"font-weight"));
@@ -1357,13 +1370,14 @@ export namespace foundation::gui
             node.ApplyTextStyle(text);
         }
 
-        // The box: the sheet's, or none when a restyle drops every box property it had set.
+        // The box comes from the sheet, or is removed when a restyle drops every box property the
+        // sheet had set.
         if (detail::AnyBoxProperty(style))
             node.SetBox(detail::BuildBox(node, style, resources, lengths), true);
         else if (node.IsBoxFromStyle())
             node.SetBox(NodeBox{}, true);
 
-        // The transform about its origin; likewise owned by the sheet once it sets one.
+        // The transform, about its origin. The sheet likewise owns it once it sets one.
         const StyleValue* transform = style.Value(u8"transform");
         const StyleValue* origin = style.Value(u8"transform-origin");
         if (transform != nullptr || origin != nullptr)
@@ -1378,13 +1392,14 @@ export namespace foundation::gui
                                    LengthValue{50.0f, LengthUnit::Percent});
         }
 
-        // What the table does not name: a reflected property that takes it by its CSS name.
+        // Properties the table does not name go to reflected properties that take them by CSS
+        // name.
         detail::ApplyReflected(node, style, lengths);
     }
 
-    // Apply a resolved pseudo-element style to a widget part (slider::thumb, checkbox::box,
-    // window::title, ...): its box properties, opacity and colour (a part that is text), each
-    // aspect marked where the sheet gives it, so the widget's own look shows through the rest.
+    // Applies a resolved pseudo-element style to a widget part (slider::thumb, checkbox::box,
+    // window::title, ...): its box properties, opacity and colour (for a part that is text). Each
+    // aspect the sheet sets is marked, so the widget's own look shows through for the rest.
     inline void ApplyPartStyle(UINode& node, core::StringView part, const ResolvedStyle& input,
                                IResourceProvider* resources = nullptr, const LengthContext& lengths = {})
     {

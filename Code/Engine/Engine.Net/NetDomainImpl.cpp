@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Engine::Net - the net domain's declaration (engine-composition.md D4), in an implementation
-// unit so the module is one instance per process.
+// Engine::Net - the net domain's declaration, in an implementation unit so the module is one
+// instance per process.
 module;
 #include "Core/Prelude.h"
 

@@ -4,13 +4,12 @@
 /// Engine::Render - the `:extract` partition.
 ///
 /// Extraction: read a Scene's render components into a render::ExtractedScene (world-space
-/// RenderData) + a render::ViewCamera, both pushed to the (scene-agnostic) renderer. This is
-/// the one-way seam - this layer depends on both foundation.scene and foundation.render; the renderer
-/// depends on neither. Run after the scene's transforms are current (the tick).
+/// RenderData) and a render::ViewCamera, both pushed to the scene-agnostic renderer. The
+/// dependency runs one way: this layer depends on both foundation.scene and foundation.render;
+/// the renderer depends on neither. Run after the scene's transforms are current (the tick).
 ///
-/// These are the providers: a MeshComponent provider and the
-/// camera reader. Each additional component type (lights, probes) gets its own provider
-/// writing its own RenderData category into the snapshot.
+/// Each component type (meshes, sprites, decals, lights, probes, the camera) has its own
+/// extractor writing its own RenderData category into the snapshot.
 
 module;
 #include "Core/Prelude.h"
@@ -19,7 +18,7 @@ module engine.render;
 
 import foundation.core;
 import foundation.scene;
-import foundation.render;    // ExtractedScene / MeshRenderData / ViewCamera / categories
+import foundation.render;    // ExtractedScene, MeshRenderData, ViewCamera, categories
 import foundation.materials; // BlendMode (category mapping)
 import foundation.geometry;  // StaticMesh::bounds (world bounding sphere for shadow-caster culling)
 import foundation.texture.resource; // texture::Texture (cooked product behind sprite/decal refs)
@@ -73,8 +72,8 @@ namespace engine::render
     void FillMeshRenderData(scene::Scene& scene, MeshComponent& mc, scene::EntityHandle e,
                             MeshRenderData& rd)
     {
-        // Refresh the raw material cache from the ref proxies EVERY frame: a few pointer loads,
-        // and late cooks / hot reloads heal live instead of pinning resolve-time nulls.
+        // Refresh the raw material cache from the ref proxies every frame: a few pointer loads,
+        // and late cooks and hot reloads heal live instead of pinning resolve-time nulls.
         mc.materialCache.Resize(mc.materials.Size());
         for (usize i = 0; i < mc.materials.Size(); ++i)
         {
@@ -86,7 +85,7 @@ namespace engine::render
         rd.world = scene.GetWorldMatrix(e);
         const AABB lb =
             (mc.mesh.Get() != nullptr) ? mc.mesh->bounds : AABB{Float3{0, 0, 0}, Float3{0, 0, 0}};
-        rd.worldCenter = TransformPoint(lb.Center(), rd.world); // bounds center (cull + depth sort)
+        rd.worldCenter = TransformPoint(lb.Center(), rd.world); // bounds center (cull and depth sort)
         rd.worldRadius = WorldBoundsRadius(lb, rd.world);
         rd.color = ToLinear(mc.color); // authored sRGB -> linear render data
         rd.mesh = mc.mesh.Get();
@@ -99,20 +98,20 @@ namespace engine::render
             // Out of the depth prepass: its depth would hide what the dither lets through.
             rd.category = RenderCategories::Masked;
         }
-        // Batch-cluster key for the sort (opaque draws stay contiguous by mesh+material). rendererId keeps
-        // its default 0 - the MeshRenderer is the first-registered renderer, so mesh data routes to it.
+        // Batch-cluster key for the sort (opaque draws stay contiguous by mesh and material). rendererId
+        // keeps its default 0: the MeshRenderer is the first-registered renderer, so mesh data routes to it.
         rd.sortBatchKey = BatchKey(mc.mesh.Get(), primary);
-        rd.boneMatrices = mc.boneMatrices; // borrowed for the frame (GPU skinning); null => static
-        // Borrowed; null => reuse current (no motion). A scene that is not simulating (the Game tab's
-        // pause, a debugger break) runs no animation, so the pose holds still, but the animator's
-        // last two poses stay a step apart: drawn as motion, TAA dropped its history on every
-        // skinned character every frame and they shimmered.
+        rd.boneMatrices = mc.boneMatrices; // borrowed for the frame (GPU skinning); null means static
+        // Borrowed; null reuses the current pose (no motion). A scene that is not simulating (the Game
+        // tab's pause, a debugger break) runs no animation, so the pose holds still, but the animator's
+        // last two poses stay a step apart. Drawn as motion, they would make TAA drop its history on
+        // every skinned character every frame, and the characters would shimmer.
         rd.prevBoneMatrices = scene.SimulationEnabled() ? mc.prevBoneMatrices : nullptr;
         rd.boneCount = mc.boneCount;
         rd.lodBias = mc.lodBias; // per-view selection happens in the renderer (one snapshot, N views)
         rd.forceLod = mc.forceLod;
         // Submesh routing only when the mesh is genuinely multi-material; a single entry is the
-        // whole-mesh path (slot 0 IS rd.material), preserving batching.
+        // whole-mesh path (slot 0 is rd.material), preserving batching.
         rd.submeshMaterials = mc.materialCache.Size() > 1 ? mc.materialCache.Data() : nullptr;
         rd.submeshMaterialCount =
             mc.materialCache.Size() > 1 ? static_cast<u32>(mc.materialCache.Size()) : 0u;
@@ -167,7 +166,7 @@ namespace engine::render
                              [&](u32 i)
                              {
                                  // Non-const: the fill refreshes the component's per-frame material cache.
-                                 // Safe under ParallelFor - each component is touched by exactly one job.
+                                 // Safe under ParallelFor: each component is touched by exactly one job.
                                  MeshComponent& mc = const_cast<MeshComponent&>(comps[i]);
                                  if (!scene.IsEffectivelyActive(owners[i]) || !mc.visible ||
                                      mc.mesh.Get() == nullptr)
@@ -247,7 +246,7 @@ namespace engine::render
         mgr->ForEach(
             [&](InstancedMeshComponent& c, scene::EntityHandle e)
             {
-                // Gate BEFORE the compose/bounds caches: an inactive set is simply absent from
+                // Gate before the compose and bounds caches: an inactive set is simply absent from
                 // the snapshot (the renderer draws from the snapshot; the persistent GPU buffer
                 // is only a cache and revalidates by version when the set returns).
                 if (!scene.IsEffectivelyActive(e) || !c.visible || c.mesh.Get() == nullptr ||
@@ -257,7 +256,7 @@ namespace engine::render
                 }
 
                 // Compose entity-relative instances into world space, cached: rebuilt only when the
-                // authored set changed (version) OR the entity moved (world matrix compare). The renderer
+                // authored set changed (version) or the entity moved (world matrix compare). The renderer
                 // keys uploads on composedVersion, so both kinds of change re-upload the GPU buffer.
                 const Float4x4 entityWorld = scene.GetWorldMatrix(e);
                 if (c.composedFromVersion != c.version || !(c.composedEntityWorld == entityWorld))
@@ -362,17 +361,17 @@ namespace engine::render
                 rd->submeshMaterials = c.materialCache.Size() > 1 ? c.materialCache.Data() : nullptr;
                 rd->submeshMaterialCount = c.materialCache.Size() > 1 ? static_cast<u32>(c.materialCache.Size()) : 0u;
                 rd->color = ToLinear(c.color);
-                rd->worldCenter = c.cachedCenter; // merged bounds -> single-AABB cull + depth sort
+                rd->worldCenter = c.cachedCenter; // merged bounds: single-AABB cull and depth sort
                 rd->worldRadius = c.cachedRadius;
                 rd->entityId = PackEntity(e);
                 rd->category = CategoryForMaterial(primary);
                 rd->sortBatchKey = BatchKey(c.mesh.Get(), primary);
-                rd->posePool = c.posePool; // skinned crowds: shared pose pool (null => static)
+                rd->posePool = c.posePool; // skinned crowds: shared pose pool (null means static)
                 rd->prevPosePool = c.prevPosePool;
                 rd->poseCount = c.poseCount;
                 rd->boneCount = c.boneCount;
                 rd->poseAssignment = c.poseAssignment;
-                // Only borrow the explicit index array when the policy asks for it AND it's correctly sized;
+                // Only borrow the explicit index array when the policy asks for it and it's correctly sized;
                 // otherwise leave it null so the renderer falls back to the Hashed default.
                 rd->poseIndices = (c.poseAssignment == PoseAssignment::Explicit && !hasMembers &&
                                    c.poseIndices.Size() == c.instances.Size())
@@ -728,7 +727,7 @@ namespace engine::render
                 found.PushBack(g);
             });
 
-        // Local (spot/point) shadows (5.3) share an atlas of kMaxLocalShadowTiles per layer (realtime
+        // Local (spot and point) shadows share an atlas of kMaxLocalShadowTiles per layer (realtime
         // and static each have their own). More lights may ask than fit, so they are chosen by how
         // near the view is to each one's reach, nearest first (the order they come in breaks ties, and
         // is all there is without a view): a light far off gives its tiles to one beside the camera.
@@ -746,7 +745,7 @@ namespace engine::render
                 return x.nearness != y.nearness ? x.nearness < y.nearness : x.distance < y.distance;
             });
         u32 rtTiles = 0,
-            stTiles = 0; // tiles used per atlas layer (realtime / static)
+            stTiles = 0; // tiles used per atlas layer (realtime, static)
         for (u32 i : ranked)
         {
             ShadowCandidate& c = candidates[i];
@@ -759,7 +758,7 @@ namespace engine::render
         }
         // The chosen register in the order they came in, not the ranking's: tiles follow that order,
         // so moving the camera reshuffles nothing (the static layer's cached tiles stay valid) until
-        // the chosen set itself changes. Each one's shadowIndex is its BASE entry into the
+        // the chosen set itself changes. Each one's shadowIndex is its base entry into the
         // GpuLocalShadow buffer; the ShadowSystem builds the matrices at frame time.
         u32 flatEntries = 0;
         for (const ShadowCandidate& c : candidates)
@@ -782,7 +781,7 @@ namespace engine::render
         if (auto* env = scene.GetSystem<EnvironmentSystem>())
         {
             const EnvironmentSettings& e = env->Effective(); // the scene's values, or its profile's
-            out.SetTime(env->TimeSeconds(), env->PrevTimeSeconds()); // the scene clock (WIND)
+            out.SetTime(env->TimeSeconds(), env->PrevTimeSeconds()); // the scene clock (wind)
             // The environment's colours are authored sRGB, like every colour; the sky and
             // ambient snapshots carry them decoded.
             const auto linear3 = [](Color c)
@@ -806,7 +805,7 @@ namespace engine::render
             s.turbidity = e.turbidity;
             s.iblDiffuseIntensity = e.iblDiffuseIntensity;
             s.iblSpecularIntensity = e.iblSpecularIntensity;
-            // Resolved sky-texture product (textured modes). Uid = change detection; the IBL
+            // Resolved sky-texture product (textured modes). Its Uid detects changes; the IBL
             // rebuilds its env products when it swaps (pick, hot-reload).
             if (texture::Texture* skyTex = e.skyTexture.Get())
             {

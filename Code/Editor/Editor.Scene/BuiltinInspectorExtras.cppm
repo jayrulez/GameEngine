@@ -3,17 +3,17 @@
 
 // Editor::Scene - :builtin_inspector_extras partition.
 //
-// The inspector's extras for the engine's own components and settings blocks
-// (Documentation/Specs/editor-gui.md, 5.3, layer 4, parts 3 and 4), registered by type into the
-// inspector's registry by RegisterSceneEditor:
-//   - a rigid body whose shape is Cooked with no collision shape set has no collider: said under
-//     its header while it is so (it follows an edit, not only a rebuild);
-//   - a script component's behaviours, a source of their own (ScriptBehaviorsSource);
-//   - a navigation zone's Bake: the in-zone static geometry baked and written into the zone's
-//     asset, the outcome said. It runs at once on the main thread, as the bake's interface is one
-//     call; a bake as a job waits for that call to be split (collect here, bake on a worker);
-//   - the physics block's collision groups and the scene script block's level properties, sources
-//     of their own (SettingsExtraSources).
+// The inspector's extras for the engine's own components and settings blocks, registered by type
+// into the inspector's registry by RegisterSceneEditor:
+//   - a rigid body whose shape is Cooked with no collision shape set has no collider, and a note
+//     under its header says so while that holds (it follows an edit, not only a rebuild);
+//   - a script component's behaviours, as a source of their own (ScriptBehaviorsSource);
+//   - a navigation zone's Bake, which bakes the static geometry inside the zone, writes it into
+//     the zone's asset and reports the outcome. It runs at once on the main thread, as the bake's
+//     interface is one call; running it as a job needs that call split (collect here, bake on a
+//     worker);
+//   - the physics block's collision groups and the scene script block's level properties, as
+//     sources of their own (SettingsExtraSources).
 
 module;
 #include "Core/Prelude.h"
@@ -40,8 +40,8 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// BuiltinInspectorExtras::kNoColliderText, at namespace scope for another library to read (MSVC
-    /// exports no class's static constexpr member from a shared library).
+    /// BuiltinInspectorExtras::kNoColliderText, at namespace scope for another library to read
+    /// (MSVC exports no class's static constexpr member from a shared library).
     inline constexpr StringView kBuiltinInspectorExtrasNoColliderText =
         u8"Shape is Cooked but no collision shape is set - this body has no collider. Assign one (import a mesh with Generate "
         u8"collision, or create a Collision Shape asset).";
@@ -84,8 +84,8 @@ export namespace editor
             LevelScriptSource* raw = source.Get();
             extras.AddSection(Move(source), [raw]() { raw->Refresh(); });
         }
-        // An animator's clip in the page's animation panel, animating its entity (no clip: the panel
-        // bound to it, to make one).
+        // An animator's clip opens in the page's animation panel, animating its entity. With no
+        // clip, the panel is bound to the animator so one can be made.
         static void AddEditClip(InspectorExtras& extras)
         {
             InspectorExtras* at = &extras;

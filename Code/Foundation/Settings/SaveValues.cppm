@@ -7,7 +7,7 @@
 // score, an unlocked level, its own options), each a key and a typed value. A save file is then an
 // ordinary settings file holding one SaveValues section, with the store's envelope, versioning and
 // unknown-section passthrough. Kept sorted by key, so a saved file reads (and diffs) the same way
-// every time. See Documentation/Specs/save-data.md.
+// every time.
 
 module;
 #include "Core/Prelude.h"

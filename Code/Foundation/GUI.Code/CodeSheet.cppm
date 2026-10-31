@@ -3,10 +3,11 @@
 
 // GUI.Code - :code_sheet partition
 //
-// The code editor's default sheet (round three's ruling 4): its gutter, caret, selection and each
-// token's colour through tokens over the theme's (`--code-keyword`, `--code-gutter`), dark by
-// default and light where the scheme is, so a theme or an application recolours code by setting
-// them over this sheet, not a fork of it. The font is the application's (a monospace family).
+// The code editor's default sheet. It sets the gutter, caret, selection and each token's colour
+// through tokens layered over the theme's (`--code-keyword`, `--code-gutter`). The colours are dark
+// by default and light under a light scheme, so a theme or an application recolours code by setting
+// those tokens over this sheet rather than forking it. The font is the application's (a monospace
+// family).
 
 module;
 #include "Core/Prelude.h"
@@ -19,8 +20,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// The code editor's default sheet, written against the theme's tokens (an application puts it
-    /// after the theme in its user agent sheet).
+    /// Returns the code editor's default sheet, written against the theme's tokens. An application
+    /// puts it after the theme in its user agent sheet.
     [[nodiscard]] inline core::StringView CodeSheetCSS() noexcept
     {
         return core::StringView(u8R"(

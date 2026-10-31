@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - entering (K5 of Specs/gui-lab-evolution-3.md): Node::Enter puts a node in `:entering`
-// while the sheet's entrance plays (a keyframe animation, or values it starts from), then moves it
-// to its own style and tells `entered` once that has settled; a Leave cuts it short from where it
-// is; and the GUI's clock may be capped so a hitch slows motion rather than skipping it.
+// GUI - entering. Node::Enter puts a node in `:entering` while the sheet's entrance plays (a
+// keyframe animation, or values it starts from). Then the node moves to its own style, and
+// `entered` fires once that has settled. A Leave cuts the entrance short from where it is. The
+// GUI's clock may be capped, so a hitch slows motion rather than skipping it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -38,7 +38,7 @@ namespace
             root->GetContext().Update(core::Duration::FromSeconds(seconds));
             styles.ApplyTree(*root);
         }
-        // The card arrives: added and entering before its first style.
+        // The card arrives: it is added and entering before its first style pass.
         void Arrive()
         {
             root->AddChild(card.Get());
@@ -58,11 +58,11 @@ TEST_CASE("enter: a keyframe entrance plays under :entering, then the node hears
     bed.Frame(0.2);
     CHECK(bed.card->GetAlpha() == doctest::Approx(0.5f));
     CHECK(bed.card->IsEntering());
-    bed.Frame(0.2); // it ends: :entering goes
+    bed.Frame(0.2); // the entrance ends and :entering is cleared
     CHECK_FALSE(bed.card->IsEntering());
     CHECK(bed.card->IsArriving());
     CHECK(bed.entered == 0);
-    bed.Frame(0.0); // its own style moved nothing: settled
+    bed.Frame(0.0); // its own style moved nothing, so it has settled
     CHECK(bed.entered == 1);
     CHECK_FALSE(bed.card->IsArriving());
     CHECK(bed.card->GetAlpha() == doctest::Approx(1.0f));
@@ -72,9 +72,9 @@ TEST_CASE("enter: values :entering starts from move to the node's own through it
 {
     EnterBed bed(u8".card { opacity: 1; transition: opacity 0.4s linear; } .card:entering { opacity: 0; }");
     bed.Arrive();
-    bed.Frame(0.0); // its first style: where it starts, with nothing to move from
+    bed.Frame(0.0); // its first style pass sets where it starts, with nothing to move from
     CHECK(bed.card->GetAlpha() == doctest::Approx(0.0f));
-    bed.Frame(0.0); // :entering goes: toward its own
+    bed.Frame(0.0); // :entering is cleared, so it moves toward its own style
     CHECK_FALSE(bed.card->IsEntering());
     bed.Frame(0.2);
     CHECK(bed.card->GetAlpha() == doctest::Approx(0.5f));
@@ -137,7 +137,7 @@ TEST_CASE("enter: a capped clock slows a hitch's motion rather than skipping it"
 TEST_CASE("enter: a popup enters each time it opens")
 {
     // A menu, a combo box's list, a tooltip or a dialog plays the sheet's entrance when it opens,
-    // and again when it opens the next time (it left the tree between).
+    // and again the next time it opens, since it left the tree in between.
     EnterBed bed(u8".card { opacity: 1; transition: opacity 0.2s linear; } .card:entering { opacity: 0; }");
     EventDispatcher& d = *bed.root->GetEventDispatcher();
     for (int open = 0; open < 2; ++open)
@@ -162,8 +162,9 @@ TEST_CASE("enter: a popup enters each time it opens")
 
 TEST_CASE("leave: a dialog closed plays its exit on top, then goes; opened again meanwhile it is whole")
 {
-    // Closed, a modal window is out of the popups at once (input and IsOpen move on) and fades on
-    // top, taking no input, until its exit ends; then it goes and hears it has. Menus close at once.
+    // A closed modal window leaves the popups at once, so input and IsOpen move on. It keeps
+    // fading on top, taking no input, until its exit ends; then it is removed and told so. Menus
+    // close at once.
     EnterBed bed(u8".card { opacity: 1; transition: opacity 0.2s linear; } .card:leaving { opacity: 0; }");
     auto dialog = core::MakeRef<Window>(core::DefaultAllocator());
     dialog->AddClass(core::StringView(u8"card"));
@@ -187,12 +188,12 @@ TEST_CASE("leave: a dialog closed plays its exit on top, then goes; opened again
     bed.Frame(0.1);
     CHECK(dialog->GetAlpha() == doctest::Approx(0.5f));
     bed.Frame(0.1);
-    bed.Frame(0.0); // the exit ended: it goes at the next drain
+    bed.Frame(0.0); // the exit ended, so it is removed at the next drain
     bed.Frame(0.0);
     CHECK(dialog->GetParent() == nullptr);
     CHECK_FALSE(dialog->IsInTopLayer());
 
-    // Opened again halfway through its exit: whole and open, and it does not go.
+    // Opened again halfway through its exit, it is whole and open, and it is not removed.
     dialog->OpenModal(*bed.root);
     bed.Frame(0.0);
     bed.Frame(0.0);
@@ -226,6 +227,6 @@ TEST_CASE("leave: a message box shown from a page goes back there once its exit 
     CHECK(box->GetParent() == bed.root.Get()); // fading over the root
     for (int i = 0; i < 5; ++i)
         bed.Frame(0.1);
-    CHECK(box->GetParent() == page.Get()); // home, unseen
+    CHECK(box->GetParent() == page.Get()); // back in its home parent, not displayed
     CHECK_FALSE(box->IsDisplayed());
 }

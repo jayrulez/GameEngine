@@ -1,7 +1,8 @@
-// Menus and windows: the menus written in markup say what was picked. An item's `activate`
-// bubbles, through its menu to what opened it, so one listener on the section hears them all;
-// the event's id names the item. And what the script builds itself (E16): a menu of sixty items,
-// longer than the window, which scrolls, and a window of its own; and a toast it fills in and posts.
+// Menus and windows: the menus written in markup report what was picked. An item's `activate`
+// event bubbles through its menu to whatever opened it, so one listener on the section hears them
+// all; the event's id names the item. The script also builds some things itself: a menu of sixty
+// items, longer than the window, which scrolls; a window of its own; and a toast it fills in and
+// posts.
 
 funcdef bool EventHandler(GuiEvent e);
 
@@ -26,12 +27,12 @@ bool openLong(GuiEvent e)
     return true;
 }
 
-// A window of the script's own, built when asked (a window closed by its button is gone).
+// Builds the script's own window on request (a window closed by its button is destroyed).
 bool openWindow(GuiEvent e)
 {
     if (scriptWindow is null || !scriptWindow.isValid())
     {
-        @scriptWindow = gui::root().add("Window"); // over the whole GUI, centred in it
+        @scriptWindow = gui::root().add("Window"); // over the whole GUI, centred
         scriptWindow.width = 320;
         scriptWindow.height = 160;
         Window::of(scriptWindow).title = "From menus.as";
@@ -44,7 +45,7 @@ bool openWindow(GuiEvent e)
     return true;
 }
 
-// A toast the script fills in and posts (T7 of round three), its action heard as an `activate`.
+// Fills in and posts a toast; its action button is heard as an `activate`.
 bool postToast(GuiEvent e)
 {
     ToastRequest request;

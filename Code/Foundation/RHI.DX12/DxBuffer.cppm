@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of Buffer.
-/// Ported from Sedulous.RHI.DX12/DX12Buffer.bf.
 
 module;
 #include "Core/Prelude.h"

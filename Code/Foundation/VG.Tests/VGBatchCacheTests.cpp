@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VG batch/cache/clip: VGBatch bookkeeping, PathCache reuse + LRU, ClipPathManager.
+// VG batch, cache and clip: VGBatch bookkeeping, PathCache reuse and LRU, ClipPathManager.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -38,7 +38,7 @@ TEST_CASE("vg.batch: command/texture bookkeeping")
 
     CHECK_FALSE(batch.IsEmpty());
     CHECK(batch.CommandCount() == 1u);
-    CHECK(batch.GetTextureForCommand(0) == nullptr); // -1 => no texture
+    CHECK(batch.GetTextureForCommand(0) == nullptr); // -1 means no texture
 
     batch.Clear();
     CHECK(batch.VertexCount() == 0u);
@@ -56,7 +56,7 @@ TEST_CASE("vg.cache: fill is tessellated once then reused")
     REQUIRE(v1.Size() == 4u);
     REQUIRE(i1.Size() == 6u);
 
-    // Same path+style: identical mesh appended again (served from cache).
+    // Same path and style: identical mesh appended again (served from cache).
     Array<VGVertex> v2;
     Array<u32> i2;
     cache.GetOrTessellateFill(square, Color::Red, FillRule::NonZero, false, v2, i2);

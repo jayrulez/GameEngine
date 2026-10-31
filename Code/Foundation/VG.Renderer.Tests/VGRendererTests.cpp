@@ -3,8 +3,8 @@
 
 // Headless VGRenderer test via the Null RHI backend: initialize the pipeline,
 // build a VGBatch with VGContext, Prepare it into the frame buffers, and check
-// the returned slice. (Render needs a live RenderPassEncoder, exercised by the
-// real backends; this covers init + the upload/slice path device-agnostically.)
+// the returned slice. Render needs a live RenderPassEncoder, exercised by the
+// real backends; this covers init and the upload and slice path device-agnostically.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <new>
@@ -45,9 +45,9 @@ TEST_CASE("vg.renderer: render-vertex passes color through RAW (the shader owns 
     CHECK(v.color[3] == doctest::Approx(1.0f));
     CHECK(v.coverage == doctest::Approx(1.0f));
 
-    // A mid-grey sRGB byte (188) stays 188/255 - the SINGLE sRGB->linear decode
-    // happens in vg.vs, never CPU-side (a decode here too was the 16107056 double-
-    // decode bug: solids rendered enc(dec^2(authored)) while gradients were right).
+    // A mid-grey sRGB byte (188) stays 188/255: the single sRGB-to-linear decode
+    // happens in vg.vs, never CPU-side (a decode here too would render solids as
+    // enc(dec^2(authored)) while gradients stayed right).
     const VGRenderVertex g(VGVertex::Solid(Float2{}, ToColor(Color32{188, 188, 188, 255})));
     CHECK(g.color[0] == doctest::Approx(188.0f / 255.0f));
 }
@@ -119,8 +119,8 @@ TEST_CASE("vg.renderer: external texture register / rebind / unregister")
     renderer.RegisterExternalTexture(&key, view);
     CHECK(renderer.IsExternalTextureRegistered(&key));
 
-    // DrawImage(key) now Prepares without trying to upload CPU pixels (the ref
-    // has none) - the pre-registered external view is used instead.
+    // DrawImage(key) Prepares without trying to upload CPU pixels (the ref
+    // has none); the pre-registered external view is used instead.
     VGContext ctx;
     ctx.DrawImage(&key, Rectangle{0, 0, 64, 48});
     renderer.BeginFrame(0);
@@ -133,12 +133,12 @@ TEST_CASE("vg.renderer: external texture register / rebind / unregister")
     renderer.RegisterExternalTexture(&key, view2);
     CHECK(renderer.IsExternalTextureRegistered(&key));
 
-    // Unregister drops it (without destroying the caller-owned view/texture).
+    // Unregister drops it (without destroying the caller-owned view or texture).
     renderer.UnregisterExternalTexture(&key);
     CHECK_FALSE(renderer.IsExternalTextureRegistered(&key));
-    renderer.UnregisterExternalTexture(&key); // unknown key -> no-op, no crash
+    renderer.UnregisterExternalTexture(&key); // unknown key: no-op, no crash
 
-    // The views/texture are still ours to destroy.
+    // The views and texture are still ours to destroy.
     device.DestroyTextureView(view);
     device.DestroyTextureView(view2);
     device.DestroyTexture(tex);
@@ -165,7 +165,7 @@ TEST_CASE("vg.renderer: Dispose leaves a still-registered external view intact")
         REQUIRE(renderer.Initialize(device, *vs, *fs, rhi::TextureFormat::RGBA16Float, 1).IsOk());
         image::ImageDataRef key(32, 32);
         renderer.RegisterExternalTexture(&key, view);
-        // Dispose() -> ClearTextureCache() must NOT destroy the external view.
+        // Dispose(), through ClearTextureCache(), must not destroy the external view.
     }
 
     // Still valid: we can destroy it ourselves (a double-free would trip ASAN).
@@ -208,7 +208,7 @@ TEST_CASE("vg.renderer: ComputeScissor clamps to content then offsets to the vie
         CHECK(s.width == 100u);
         CHECK(s.height == 50u);
     }
-    // Overhanging the content box: clamped to (0..w, 0..h) BEFORE the offset - a clip
+    // Overhanging the content box: clamped to (0..w, 0..h) before the offset, so a clip
     // rect can never reach outside its view's rect (split-screen halves stay sealed).
     {
         const auto s =
@@ -267,7 +267,7 @@ TEST_CASE("vg.renderer: batch eviction retires cached textures until frames age 
     CHECK(cachedAfterDraw >= 2u); // white + the LUT
 
     // The producer announces the LUT's death through the batch's eviction list: the
-    // entry must leave the cache IMMEDIATELY (the address may be recycled this frame)
+    // entry must leave the cache immediately (the address may be recycled this frame)
     // but its GPU resources retire until every in-flight frame has aged past them.
     const foundation::image::ImageData* lut = ctx.GetBatch().textures[1];
     VGBatch evictionBatch;
@@ -297,8 +297,8 @@ TEST_CASE("vg.renderer: texture cache detects address reuse via ImageData::Insta
     VGRenderer renderer{DefaultAllocator()};
     REQUIRE(renderer.Initialize(device, *vs, *fs, rhi::TextureFormat::BGRA8UnormSrgb, 1).IsOk());
 
-    // Two DIFFERENT images constructed at the SAME address (placement new models the
-    // allocator recycling a freed image's storage - the editor's stale rainbow previews).
+    // Two different images constructed at the same address (placement new models the
+    // allocator recycling a freed image's storage).
     alignas(image::OwnedImageData) u8 storage[sizeof(image::OwnedImageData)];
     Array<u8> pixelsA(16 * 16 * 4);
     auto* first = new (storage)
@@ -322,7 +322,7 @@ TEST_CASE("vg.renderer: texture cache detects address reuse via ImageData::Insta
     ctx.DrawImage(second, Float2{0, 0});
     renderer.BeginFrame(0);
     (void)renderer.Prepare(ctx.GetBatch(), 0, 100, 100);
-    // The stale entry was retired and the new identity REPLACED it (count unchanged) -
+    // The stale entry was retired and the new identity replaced it (count unchanged);
     // a pointer-only key would have served the dead image's texture instead.
     CHECK(renderer.CachedTextureCount() == baseline);
 
@@ -349,7 +349,7 @@ TEST_CASE("vg.renderer: stencil target config builds the stencil-then-cover pipe
         renderer.Dispose();
     }
 
-    // With MSAA + a stencil format: the cover pipelines exist and a stencil batch prepares.
+    // With MSAA and a stencil format: the cover pipelines exist and a stencil batch prepares.
     {
         VGRenderer renderer{DefaultAllocator()};
         VGTargetConfig config;
@@ -363,7 +363,7 @@ TEST_CASE("vg.renderer: stencil target config builds the stencil-then-cover pipe
 
         VGContext ctx;
         ctx.SetStencilFills(true);
-        PathBuilder pb; // donut -> one write + one cover command
+        PathBuilder pb; // donut: one write and one cover command
         pb.MoveTo(0, 0);
         pb.LineTo(100, 0);
         pb.LineTo(100, 100);
@@ -557,7 +557,7 @@ TEST_CASE("vg.renderer: every blend x draw mode, stencil phase x rule x clip, an
     REQUIRE(shadowCommands == 4); // one per blend mode
     REQUIRE(boxCommands == 8);    // plain and clipped, per blend mode
 
-    // With stencil pipelines + gradient shaders: NOTHING is skipped - every variant is built
+    // With stencil pipelines and gradient shaders nothing is skipped: every variant is built
     // (the blend variants lazily, on first use) and every command dispatches.
     {
         VGRenderer renderer{DefaultAllocator()};
@@ -582,7 +582,7 @@ TEST_CASE("vg.renderer: every blend x draw mode, stencil phase x rule x clip, an
     }
 
     // Without stencil pipelines, the shadow shader or the box shaders: the stencil-phase, box-shadow
-    // and box commands are SKIPPED, never drawn with a substitute (winding fans and shadow quadrants
+    // and box commands are skipped, never drawn with a substitute (winding fans and shadow quadrants
     // would show as flat colour, box vertices are not VG vertices); everything else dispatches.
     {
         VGRenderer renderer{DefaultAllocator()};

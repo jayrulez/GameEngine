@@ -30,7 +30,7 @@ namespace modelviewer
             c.run = foundation::core::Move(run);
             (void)set.Register(foundation::core::Move(c));
         };
-        // A change: its label, the library kept for undo, the file written (LibrarySession::Change).
+        // Runs a body as an undoable change (LibrarySession::Change).
         auto change = [s](StringView label, Function<CommandResult()> body) { return s->Change(label, body); };
 
         // --- entries ---

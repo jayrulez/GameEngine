@@ -1,5 +1,5 @@
 # Foundation::Audio - `foundation.audio`: the miniaudio-backed audio engine core.
-# miniaudio is PRIVATE: ma_* types never cross the module surface.
+# miniaudio is private: ma_* types never cross the module surface.
 util_add_engine_library(Audio ALIAS Foundation::Audio)
 target_link_libraries(Audio
     PUBLIC Foundation::Core Foundation::VFS Foundation::Policy
@@ -7,8 +7,8 @@ target_link_libraries(Audio
 
 target_sources(Audio
     PRIVATE
-        AudioEngineImpl.cpp      # module IMPLEMENTATION unit: all miniaudio contact (see AudioEngine.cppm)
-        MiniaudioImpl.cpp   # plain TU: MINIAUDIO_IMPLEMENTATION + stb_vorbis (exactly once)
+        AudioEngineImpl.cpp      # module implementation unit: all miniaudio contact (see AudioEngine.cppm)
+        MiniaudioImpl.cpp   # plain TU: MINIAUDIO_IMPLEMENTATION and stb_vorbis, compiled once
     PUBLIC
         FILE_SET audio_modules TYPE CXX_MODULES FILES
             AudioModule.cppm

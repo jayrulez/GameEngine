@@ -3,9 +3,9 @@
 
 // MaterialEditorPage tests: which row a property gets is a pure function of its declared type;
 // then the page from the preview pages' markup over a PBR material in a project, without a host
-// (no preview): its rows laid out from its shader's table (the material's, its properties, its
-// textures, a section per effect group), an edit one undo step, and the preview's shape kept per
-// material.
+// (no preview). Its rows are laid out from its shader's table (the material section, its
+// properties, its textures, a section per effect group), an edit is one undo step, and the
+// preview's shape is kept per material.
 
 #include <doctest/doctest.h>
 
@@ -105,7 +105,7 @@ namespace
         String dir = String(u8"scratch_material_page_project");
         UniquePtr<editor::EditorProject> project;
         foundation::settings::Settings store{DefaultAllocator()};
-        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
+        editor::app::AssetPageServicesSource none; // for the registration: no services; it outlives the context below
         editor::EditorContext context{DefaultAllocator()};
         foundation::content::Instance* wood = nullptr;
 
@@ -234,7 +234,7 @@ TEST_CASE("material page: an edit is one undo step, the row following, Discard t
     page->Refresh();
     CHECK(page->MaterialRows().GetValue(u8"cull", 0).AsInt() != 0);
 
-    // Discard Changes (the bar's, as the old toolbar had it) takes every unsaved edit back.
+    // Discard Changes (on the bar) takes every unsaved edit back.
     page->EditRow(properties, u8"Metallic", gui::Variant(0.25));
     page->EditRow(page->MaterialRows(), u8"cull", gui::Variant(static_cast<i64>(0)));
     page->DiscardChanges();
@@ -249,8 +249,8 @@ TEST_CASE("material page: an edit is one undo step, the row following, Discard t
     UniquePtr<editor::MaterialEditorPage> again = bed.Open();
     CHECK(again->PreviewShape() == 2u);
 
-    // A mesh picked is kept too: the page showing the kept choice on its bar (the shape box set
-    // from code) is no shape picked, which would put the mesh away.
+    // A picked mesh is kept too: showing the kept choice on the bar sets the shape box from code,
+    // which must not count as picking a shape and drop the mesh.
     const Guid mesh{0x1234u, 0x5678u};
     again->SetPreviewMesh(mesh);
     again.Reset();
@@ -273,10 +273,10 @@ TEST_CASE("material page: a gesture's previews reach the source as they go, one 
     CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.3f)); // live: the preview built from it
     properties.PreviewEdit(u8"Roughness", gui::PropertyWrite{gui::Variant(0.4)});
     CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.4f));
-    CHECK_FALSE(page->Commands().CanUndo()); // no step while it goes
+    CHECK_FALSE(page->Commands().CanUndo()); // no undo step while it is under way
     properties.CommitEdit(u8"Roughness", gui::PropertyWrite{gui::Variant(0.4)});
     CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.4f));
-    page->Commands().Undo(); // the gesture's one step, back to before it
+    page->Commands().Undo(); // the gesture's single step, back to before it
     CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(before));
     CHECK_FALSE(page->Commands().CanUndo());
 
@@ -309,10 +309,10 @@ TEST_CASE("material page: a shader that has not cooked is refused, saying so; th
     bed.context.OnNotice = {};
 }
 
-// A material's effect groups (Specs/wind-for-every-shader.md): a section each, titled by the
-// effect, its rows from the group's parameters, its values the group's, edited through the same
-// undo as every other row. Without a host the page has no shader system, so the rows are the
-// group's own layout (no ranges) and no group is added for a material that lacks one.
+// A material's effect groups each get a section titled by the effect, with rows from the group's
+// parameters and values from the group, edited through the same undo as every other row. Without
+// a host the page has no shader system, so the rows are the group's own layout (no ranges) and no
+// group is added for a material that lacks one.
 namespace
 {
     foundation::shaders::ShaderEffect WindTable()
@@ -384,7 +384,7 @@ TEST_CASE("material page: a material carrying the Wind group has a Wind section;
     CHECK(wind->FindInfo(u8"Height") != nullptr);
     CHECK(wind->GetValue(u8"Strength", 0).AsFloat() == doctest::Approx(0.25));
     CHECK(wind->GetValue(u8"Speed", 0).AsFloat() == doctest::Approx(1.0));
-    // The shader's own rows keep no wind of theirs.
+    // The shader's rows hold no wind values.
     CHECK(page->PropertyRows().FindInfo(u8"WindStrength") == nullptr);
 }
 
@@ -410,9 +410,9 @@ TEST_CASE("material page: an edit of Wind Strength lands in the source's Wind gr
 }
 
 // The section follows the group across a shader switch: a built-in that declares WIND (all three
-// do) keeps the group, values and all, and the rows laid out again for the new shader keep its
-// section; the undo too. (A shader that does not declare WIND drops the group: the pipeline's
-// KeepDeclaredEffects, tested in Materials.Pipeline.Tests.)
+// do) keeps the group and its values, the rows laid out again for the new shader keep its
+// section, and so does the undo. (A shader that does not declare WIND drops the group; that is the
+// pipeline's KeepDeclaredEffects, tested in Materials.Pipeline.Tests.)
 TEST_CASE("material page: a built-in switched keeps the Wind group and its section, and its undo too")
 {
     Bed bed;

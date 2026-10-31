@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.RenderGraph.Tests/DependencyTests.bf
+// Pass dependencies and the execution order they produce.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WIND vertex probe on REAL devices: a tall card whose material's Wind group is on renders at two
+// Wind vertex probe on real devices: a tall card whose material's Wind group is on renders at two
 // frame times; its top rows (height mask 1) shift sideways between them while its bottom rows
 // (below the root, mask 0) do not, on PBR and on Phong (the wind is an effect with a block of its
-// own, so any shader that declares WIND sways: Specs/wind-for-every-shader.md), and the same card
-// whose group's Strength is 0 renders byte-identical at both times (the variant is never
-// selected). The card's shadow on a plane sways with it, through the built-in shadow program
-// reading the same block. Vulkan + WebGPU.
+// own, so any shader that declares WIND sways), and the same card whose group's Strength is 0
+// renders byte-identical at both times (the variant is never selected). The card's shadow on a
+// plane sways with it, through the built-in shadow program reading the same block. Vulkan and
+// WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -37,8 +37,8 @@ namespace
     constexpr u32 kSize = 128;
 
     // A 1 x 4 m card in the XY plane with `rows` vertex rows (local y from -2 to +2): the height
-    // mask is per VERTEX, so the rows below y = 0 carry a zero mask and stay put while the rows
-    // above sway - a two-triangle quad would interpolate the top vertices' sway down every row.
+    // mask is per vertex, so the rows below y = 0 carry a zero mask and stay put while the rows
+    // above sway. A two-triangle quad would interpolate the top vertices' sway down every row.
     RefPtr<geometry::StaticMesh> SegmentedCard(u32 rows)
     {
         RefPtr<geometry::StaticMesh> mesh = MakeRef<geometry::StaticMesh>(DefaultAllocator());
@@ -99,7 +99,7 @@ namespace
     }
 
     // `shadowScene`: the card stands on a lit plane, seen from above, its shadow cast by a sun
-    // behind it (the leftmost DARK column per row is then the shadow's edge); else the card faces
+    // behind it (the leftmost dark column per row is then the shadow's edge); else the card faces
     // the camera under ambient light (the leftmost lit column is the card's edge).
     Capture RenderCard(rhi::Device& device, materials::Material* material, f32 time, bool shadowScene = false)
     {

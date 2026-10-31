@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// FBX/OBJ loader: vertex welding and OBJ material sidecars. Both cases came from the Beef
-// port, which found them by porting rather than reading: the welder keyed on the hash
-// alone (a collision merged two different vertices into a pulled seam), and OBJ files
-// never had their .mtl read (every material arrived named but white).
+// FBX/OBJ loader: vertex welding and OBJ material sidecars. The welder has to compare bytes,
+// not only hashes (a collision would merge two different vertices into a pulled seam), and an
+// OBJ file has to have its .mtl read (or every material arrives named but white).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -162,7 +161,7 @@ TEST_CASE("fbx.obj: a missing .mtl is not an error")
     std::remove("scratch_fbx_nomtl.obj");
 }
 
-// Imported as authored (Specs/phong-material.md): an FBX Phong material keeps its highlight (its
+// Imported as authored: an FBX Phong material keeps its highlight (its
 // specular colour times its factor, as sRGB, and its exponent), a Lambert one has none; both are
 // told apart from PBR by the shading model the file names.
 TEST_CASE("fbx: a Phong material keeps its highlight, a Lambert one is diffuse alone")
@@ -276,8 +275,8 @@ Connections:  {
     std::remove("scratch_fbx_blender.fbx");
 }
 
-// A limb node is a bone of the file's skeleton, an empty (null) node is not: what tells 3ds Max's
-// Dummy helper bone, animated with the pose, from Blender's armature object.
+// A limb node is a bone of the file's skeleton, an empty (null) node is not. That is what tells
+// 3ds Max's Dummy helper bone, animated with the pose, from Blender's armature object.
 TEST_CASE("fbx: a limb node is a skeleton bone, a null node is not")
 {
     constexpr const char* kFbx = R"(; FBX 7.4.0 project file
@@ -327,8 +326,8 @@ Connections:  {
 }
 
 // A take that holds a bone somewhere other than its default pose for the whole clip (3ds Max poses a
-// head and leaves it there) keeps that as a channel: skipped as constant, the bone played its default
-// pose and the head never turned. One held at its default still says nothing.
+// head and leaves it there) keeps that as a channel: skipped as constant, the bone would play its
+// default pose and the head would never turn. One held at its default is still left out.
 TEST_CASE("fbx: a channel the take holds constant away from the default pose is kept")
 {
     constexpr const char* kFbx = R"(; FBX 7.4.0 project file

@@ -1,8 +1,8 @@
-# Engine::Terrain backend pixel probe: render a lit terrain through the full RenderFrame chain on REAL
-# devices and read the pixels back - the pixel-level ground truth for the terrain shaders (the Null
-# test proves they compile; this proves they draw correct, shaded terrain) AND cross-backend parity:
-# Vulkan is the reference, WebGPU (desktop + web WGSL cook) and DX12 (Windows DXIL) must match it. GPUs
-# checked at runtime; each backend skips cleanly when unavailable.
+# Engine::Terrain backend pixel probe: render a lit terrain through the full RenderFrame chain on real
+# devices and read the pixels back. The Null test proves the terrain shaders compile; this proves they
+# draw correct, shaded terrain, and that the backends agree: Vulkan is the reference, and WebGPU
+# (desktop and the web WGSL cook) and DX12 (Windows DXIL) must match it. GPUs are checked at runtime;
+# each backend skips cleanly when unavailable.
 add_executable(Engine.Terrain.Backend.Tests
     TestsMain.cpp
     TerrainPixelProbeTests.cpp)
@@ -16,7 +16,7 @@ target_link_libraries(Engine.Terrain.Backend.Tests PRIVATE
 target_compile_definitions(Engine.Terrain.Backend.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 
-# DX12 backend - Windows only. Cross-check the terrain shaders' DXIL cook too.
+# DX12 backend, Windows only. Cross-check the terrain shaders' DXIL cook too.
 if(TARGET Foundation::RHI.DX12)
     target_link_libraries(Engine.Terrain.Backend.Tests PRIVATE Foundation::RHI.DX12)
     target_compile_definitions(Engine.Terrain.Backend.Tests PRIVATE OPTION_HAS_DX12)

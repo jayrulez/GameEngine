@@ -1,8 +1,9 @@
-// Thief - the player: moves on the floor relative to where the camera looks (up on the stick is
-// away from the camera, whichever quarter it has turned to), at a sneak (crouched), a walk or a
-// run, and turns to face where it goes. The character controller keeps it on the floor and out of
-// the walls; the model's graph (graph.py) follows by Speed and Crouched. Caught (Guard.as), it goes
-// back to the last checkpoint. Throw lobs a pebble ahead (Pebble.as), to draw a guard away.
+// Thief: the player. He moves on the floor relative to where the camera looks (up on the stick is
+// away from the camera, whichever quarter it has turned to), at a crouched sneak, a walk or a run,
+// and turns to face where he goes. The character controller keeps him on the floor and out of the
+// walls; the model's animation graph (graph.py) follows through Speed and Crouched. When a guard
+// catches him (Guard.as) he goes back to the last checkpoint. Throw lobs a pebble ahead
+// (Pebble.as) to draw a guard away.
 
 const float kPi = 3.14159265f;
 
@@ -27,7 +28,8 @@ class Thief
 
     Thief(Entity@ entity) { @self = entity; }
 
-    // The model's skinned mesh, which carries the graph: Thief (the instance) / ThiefRig / Thief.
+    // The model's skinned mesh, which carries the graph, at the path Thief (the instance) /
+    // ThiefRig / Thief.
     private Entity@ figure()
     {
         if (m_figure is null || !m_figure.isValid())
@@ -62,7 +64,7 @@ class Thief
         {
             stick = Float2(stick.x / amount, stick.y / amount);
         }
-        // The camera's facing along the floor: forward, and right of it.
+        // The camera's facing projected onto the floor: forward, and right of it.
         Float3 look = Quaternion::RotateVector(camera.rotation(), Float3(0.0f, 0.0f, -1.0f));
         float flat = Math::Sqrt(look.x * look.x + look.z * look.z);
         if (flat < 0.0001f)
@@ -116,7 +118,7 @@ class Thief
         self.setRotationEuler(0.0f, Math::RadiansToDegrees(m_yaw), 0.0f);
     }
 
-    // A pebble from the hand, ahead and up, the way the thief faces.
+    // Throws a pebble from the hand, ahead and upward in the direction the thief faces.
     private void throwPebble()
     {
         if (pebble is null)
@@ -138,8 +140,8 @@ class Thief
         ScenePhysics::of(self.scene).applyImpulse(stone, Float3(ahead.x * v * 0.82f, v * 0.57f, ahead.z * v * 0.82f));
     }
 
-    // The graph by what the body did: its speed along the floor (so a thief pressed against a wall
-    // stands rather than runs on the spot), and crouched while sneaking.
+    // Drives the graph from what the body actually did: its speed along the floor (so a thief
+    // pressed against a wall stands rather than runs on the spot), and Crouched while sneaking.
     private void animate(CharacterComponent@ body, bool crouched)
     {
         Entity@ fig = figure();

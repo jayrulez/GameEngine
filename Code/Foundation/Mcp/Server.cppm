@@ -3,16 +3,16 @@
 
 // Foundation::Mcp - :server partition
 //
-// The JSON-RPC 2.0 dispatcher + MCP lifecycle + tool/resource registry. HandleLine takes ONE
+// The JSON-RPC 2.0 dispatcher, MCP lifecycle and tool and resource registry. HandleLine takes one
 // newline-delimited message and says how it went: the response line to write, nothing (a
-// notification), or NOT FINISHED - the tool asked to be re-entered, so the transport keeps the
-// caller waiting and hands the same line in again on its next pump. It always survives bad input.
-// Two error layers, never conflated: PROTOCOL failures are JSON-RPC error responses; TOOL
-// failures are SUCCESSFUL responses whose result carries isError:true + the real error text (an
-// agent must see the underlying cook/import message, not a protocol failure).
+// notification), or not finished (the tool asked to be re-entered, so the transport keeps the
+// caller waiting and hands the same line in again on its next pump). It always survives bad input.
+// The two error layers stay apart: protocol failures are JSON-RPC error responses, and tool
+// failures are successful responses whose result carries isError:true and the real error text,
+// so an agent sees the underlying cook or import message rather than a protocol failure.
 //
-// v1 subset only: initialize / notifications/initialized / tools.list / tools.call /
-// resources.list / resources.read / ping. Capabilities advertise exactly {tools, resources}.
+// Supported methods: initialize, notifications/initialized, tools/list, tools/call,
+// resources/list, resources/read and ping. Capabilities advertise only {tools, resources}.
 
 module;
 #include "Core/Prelude.h"
@@ -43,13 +43,13 @@ export namespace foundation::mcp
         InternalError = -32603,
     };
 
-    // A tool turns validated args into a JSON result, or an error MESSAGE. The error channel is a
-    // String (not a bare ErrorCode) precisely so agents receive the real underlying text.
+    // A tool turns validated args into a JSON result, or an error message. The error channel is a
+    // String rather than a bare ErrorCode so agents receive the real underlying text.
     using ToolResult = Result<JsonValue, String>;
 
-    /// What a handler hands back: its answer, or NOT FINISHED - the host keeps the caller
-    /// waiting and re-enters the handler with the SAME arguments on its next pump, until a call
-    /// answers. For a tool that must let its host make progress in between (a cook running on
+    /// What a handler hands back: its answer, or not finished, in which case the host keeps the
+    /// caller waiting and re-enters the handler with the same arguments on its next pump, until a
+    /// call answers. For a tool that must let its host make progress in between (a cook running on
     /// a background thread, a simulation that has to advance frames). Such a handler keeps its
     /// own progress state across the re-entries and gives up on its own timeout: a host that
     /// stopped pumping and a handler that never answers look the same to the caller. A handler
@@ -108,7 +108,7 @@ export namespace foundation::mcp
     {
         Answered,     ///< `response` is the line to write back
         Notification, ///< no response, by protocol
-        NotFinished,  ///< the tool asked to be re-entered: hand the SAME line in again next pump
+        NotFinished,  ///< the tool asked to be re-entered: hand the same line in again next pump
     };
     struct LineOutcome
     {
@@ -119,7 +119,7 @@ export namespace foundation::mcp
     /// What a tool does to the world, as MCP's tool annotations say it (tools/list emits them
     /// under `annotations`): a client uses them to run reads freely and confirm writes, and
     /// the editor host to decide what a call may do unattended. Every registration states its
-    /// class - there is no default, because an unannotated write reads as a read.
+    /// class; there is no default, because an unannotated write reads as a read.
     struct ToolAnnotations
     {
         bool readOnly = false;   ///< readOnlyHint: changes nothing
@@ -137,7 +137,7 @@ export namespace foundation::mcp
         [[nodiscard]] static ToolAnnotations Deletes() { return {false, true, true, false}; }
         /// Regenerates derived output (a cook, a dist, the open project); nothing authored is lost.
         [[nodiscard]] static ToolAnnotations Rebuilds() { return {false, false, true, false}; }
-        /// Changes the editor's SESSION (a page opened, a selection) and no authored data.
+        /// Changes the editor's session (a page opened, a selection) and no authored data.
         [[nodiscard]] static ToolAnnotations Adjusts() { return {false, false, true, false}; }
     };
 
@@ -162,11 +162,11 @@ export namespace foundation::mcp
         ResourceReader reader;
     };
 
-    // A DYNAMIC resource set (e.g. the open project's scene sources - entries appear and
-    // disappear as the project changes, so they cannot be registered statically). `list`
-    // appends the CURRENT entries (their `reader` fields may be empty - reads go through
-    // `read`); `read` answers a uri or returns an empty Optional when the uri is not this
-    // provider's (the server then tries the next provider).
+    // A dynamic resource set, such as the open project's scene sources, whose entries appear and
+    // disappear as the project changes, so they cannot be registered statically. `list` appends
+    // the current entries (their `reader` fields may be empty, since reads go through `read`);
+    // `read` answers a uri or returns an empty Optional when the uri is not this provider's (the
+    // server then tries the next provider).
     struct ResourceProvider
     {
         Function<void(Array<Resource>&)> list;
@@ -180,7 +180,7 @@ namespace foundation::mcp::detail
     {
         JsonValue r = JsonValue::MakeObject();
         r.Set(u8"jsonrpc", JsonValue::MakeString(u8"2.0"));
-        r.Set(u8"id", id); // echoed verbatim - string OR number type is preserved by JsonValue
+        r.Set(u8"id", id); // echoed verbatim; JsonValue keeps a string id a string and a number a number
         return r;
     }
     inline JsonValue MakeResult(const JsonValue& id, JsonValue result)
@@ -241,8 +241,8 @@ export namespace foundation::mcp
             m_serverVersion = Move(version);
         }
 
-        /// Told `(toolName, isError)` after every FINISHED tools/call, on the dispatching
-        /// thread - a host refreshes what a write tool changed, or logs the agent's activity.
+        /// Told `(toolName, isError)` after every finished tools/call, on the dispatching
+        /// thread, so a host can refresh what a write tool changed or log the agent's activity.
         /// Not-finished attempts and protocol failures (no tool ran) are not reported.
         void SetToolObserver(Function<void(StringView, bool)> observer)
         {
@@ -294,7 +294,7 @@ export namespace foundation::mcp
         [[nodiscard]] usize ToolCount() const noexcept { return m_tools.Size(); }
         [[nodiscard]] usize ResourceCount() const noexcept { return m_resources.Size(); }
 
-        // Handle ONE JSON-RPC message: the response line to write, a notification (nothing to
+        // Handles one JSON-RPC message: the response line to write, a notification (nothing to
         // write), or NotFinished (re-enter with the same line next pump). Never throws;
         // malformed input yields a protocol error line. `callId` is the transport's identity for
         // the message, the same every time it hands an unfinished call back in (the HTTP host
@@ -310,7 +310,7 @@ export namespace foundation::mcp
                     JsonValue::MakeNull(), RpcError::ParseError, String(u8"Parse error")));
             }
             const JsonValue& msg = parsed.value;
-            // Top-level arrays are batch requests - not supported (later MCP revisions dropped them).
+            // Top-level arrays are batch requests, which are not supported (later MCP revisions dropped them).
             if (msg.IsArray())
             {
                 return detail::Answered(
@@ -333,10 +333,10 @@ export namespace foundation::mcp
                         msg.Get(u8"id"), RpcError::InvalidRequest,
                         String(u8"Invalid Request: 'method' must be a string")));
                 }
-                return {}; // malformed notification - ignored, per JSON-RPC
+                return {}; // malformed notification: ignored, per JSON-RPC
             }
-            // No id member => notification. Unknown notifications (incl. notifications/cancelled) and
-            // notifications/initialized are all accepted SILENTLY: never a response.
+            // No id member means a notification. Unknown notifications (including
+            // notifications/cancelled) and notifications/initialized are accepted without a response.
             if (!hasId)
             {
                 return {};
@@ -400,7 +400,7 @@ export namespace foundation::mcp
             if (method == StringView(u8"initialize"))
             {
                 JsonValue result = JsonValue::MakeObject();
-                // We support exactly our pinned revision; echo it (equals the client's when supported).
+                // We support only our pinned revision; echo it (it equals the client's when supported).
                 result.Set(u8"protocolVersion", JsonValue::MakeString(kProtocolVersion));
                 JsonValue caps = JsonValue::MakeObject();
                 caps.Set(u8"tools", JsonValue::MakeObject());
@@ -465,7 +465,7 @@ export namespace foundation::mcp
                         Format(u8"{}: {}", tool->name.AsView(), schemaError.Value().AsView())));
                 }
                 // Run the tool. A tool that is not finished is asked again next pump (same
-                // line, same args). BOTH finished outcomes are successful JSON-RPC responses;
+                // line, same args). Both finished outcomes are successful JSON-RPC responses;
                 // a tool failure is reported as isError content, not a protocol error.
                 // The call this is: the one in flight under this identity, or a new one.
                 const usize callIndex = FindOrStartCall();
@@ -503,7 +503,7 @@ export namespace foundation::mcp
             }
             if (method == StringView(u8"resources/list"))
             {
-                // Static registrations + every provider's CURRENT entries (dynamic sets).
+                // Static registrations, then every provider's current entries (dynamic sets).
                 Array<Resource> dynamic;
                 for (usize p = 0; p < m_resourceProviders.Size(); ++p)
                 {
@@ -539,14 +539,14 @@ export namespace foundation::mcp
                     return detail::Answered(detail::MakeError(id, RpcError::InvalidParams,
                                              String(u8"resources/read requires a string 'uri'")));
                 }
-                const String uriText = uriVal.AsString(); // AsString returns BY VALUE - keep it
+                const String uriText = uriVal.AsString(); // AsString returns by value: keep it alive
                 const StringView uri = uriText.AsView();
                 const Resource* res = FindResource(uri);
                 Optional<Result<String, String>> dynamicContent;
                 String mimeType;
                 if (res == nullptr)
                 {
-                    // Not a static registration - offer the uri to each provider in turn.
+                    // Not a static registration: offer the uri to each provider in turn.
                     for (usize p = 0; p < m_resourceProviders.Size() && !dynamicContent.HasValue();
                          ++p)
                     {
@@ -598,11 +598,10 @@ export namespace foundation::mcp
         }
     };
 
-    /// host_info - the ops-hygiene tool EVERY host registers (from ezEngine's app_info):
-    /// pid (a hung host is killed by pid), the build stamp
-    /// (stale-binary detection), server + protocol versions, and whatever host-specific state
-    /// the host supplies (the stdio host reports its open project). `buildStamp` is the host
-    /// executable's BuildStamp() text; `hostState` may be empty.
+    /// host_info: the tool every host registers, reporting the pid (a hung host is killed by
+    /// pid), the build stamp (to detect a stale binary), the server and protocol versions, and
+    /// whatever host-specific state the host supplies (the stdio host reports its open project).
+    /// `buildStamp` is the host executable's BuildStamp() text; `hostState` may be empty.
     inline void RegisterHostInfoTool(McpServer& server, String buildStamp,
                                      Function<JsonValue()> hostState = {})
     {

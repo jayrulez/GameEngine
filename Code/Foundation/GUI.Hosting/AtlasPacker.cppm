@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Hosting - :atlas_packer partition: ShelfPacker, where the picture baker's atlas puts each
-// picture on a page. Rows (shelves) across the page, each as tall as the first picture it took;
-// a picture goes on the lowest shelf it fits that wastes the least height (at most a third more
-// than it needs), else on a new shelf under the last. A page only fills: what goes leaves its
-// place empty until the atlas packs its page anew (Reset), as a font atlas does. Pure arithmetic,
-// no device.
+// GUI.Hosting - :atlas_packer partition: ShelfPacker, which decides where the picture baker's atlas
+// puts each picture on a page. Rows (shelves) run across the page, each as tall as the first
+// picture it took. A picture goes on the lowest shelf it fits that wastes the least height (at most
+// a third more than it needs), else on a new shelf under the last. A page only fills up: a picture
+// that is removed leaves its place empty until the atlas packs its page anew (Reset), as a font
+// atlas does. Pure arithmetic, with no device.
 
 module;
 #include "Core/Prelude.h"
@@ -38,8 +38,8 @@ export namespace foundation::gui
         [[nodiscard]] u32 Width() const noexcept { return m_width; }
         [[nodiscard]] u32 Height() const noexcept { return m_height; }
 
-        /// A place for `width` by `height` pixels (the caller's gutter included): its top-left
-        /// corner, or nothing when the page has no room left for it.
+        /// Returns a place for `width` by `height` pixels (including the caller's gutter): its
+        /// top-left corner, or nothing when the page has no room left for it.
         [[nodiscard]] Optional<PackedPlace> Place(u32 width, u32 height)
         {
             if (width == 0 || height == 0 || width > m_width || height > m_height)
@@ -63,7 +63,7 @@ export namespace foundation::gui
             return at;
         }
 
-        /// Empties the page: every place free again.
+        /// Empties the page, so every place is free again.
         void Reset() noexcept
         {
             m_shelves.Clear();
@@ -79,13 +79,13 @@ export namespace foundation::gui
         {
             u32 Top = 0;
             u32 Height = 0;
-            u32 Used = 0; // across, from the left
+            u32 Used = 0; // width used, from the left
         };
 
         u32 m_width = 0;
         u32 m_height = 0;
         Array<Shelf> m_shelves;
-        u32 m_top = 0; // under the last shelf
+        u32 m_top = 0; // where the next shelf starts, under the last one
         u64 m_area = 0;
     };
 }

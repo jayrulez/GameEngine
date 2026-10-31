@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.animation property animator: scene integration - a clip drives a reflected property on the
+// engine.animation property animator: scene integration. A clip drives a reflected property on the
 // owning entity's component over a simulated tick sequence; loop wrapping; failed-track disable.
 
 #include <doctest/doctest.h>
@@ -24,7 +24,7 @@ void RttiRegisterValue_AnimTarget();
 
 namespace
 {
-    // A target component the clip animates: a Float3 position + a scalar. Reflected so the binding
+    // A target component the clip animates: a Float3 position and a scalar. Reflected so the binding
     // resolver can walk "position" / "value"; its manager is added to the scene under this type name.
     struct AnimTarget
     {
@@ -44,7 +44,7 @@ namespace
         AnimTargetManager() : scene::SerializableComponentManager<AnimTarget>(u8"anim_target") {}
     };
 
-    // Build a runtime clip driving AnimTarget.position over 1s (0 -> (10,0,0)), loop.
+    // Build a runtime clip driving AnimTarget.position over 1s (0 to (10,0,0)), loop.
     RefPtr<PropertyAnimationClipResource> MakePositionClip()
     {
         RefPtr<PropertyAnimationClipResource> res =
@@ -75,7 +75,7 @@ namespace
         }
         done = true;
         RegisterCoreTypes();
-        RegisterAnimationComponentReflection(); // PropertyAnimatorComponent + others
+        RegisterAnimationComponentReflection(); // PropertyAnimatorComponent and the others
         RttiRegisterValue_AnimTarget(); // apply AnimTarget's REFLECT_VALUE body (sets the type name)
         GlobalTypeRegistry().Register(TypeOf<AnimTarget>());
     }
@@ -90,9 +90,9 @@ TEST_CASE("property animator: the script surface is REFLECTED (methods on the ty
 {
     EnsureReflected(); // RegisterAnimationComponentReflection built the method table
 
-    // These are the Phase G script surface (animator.of(entity).play()/stop()/...). Asserting the
-    // REFLECTED methods (not calling C++ directly) is what fails if a `.Method<>` line is dropped or
-    // the type is never registered.
+    // The script surface (animator.of(entity).play()/stop()/...). Asserting the reflected methods,
+    // rather than calling C++ directly, is what fails if a `.Method<>` line is dropped or the type
+    // is never registered.
     const TypeInfo& type = TypeOf<PropertyAnimatorComponent>();
     const char* expected[] = {"of",     "play", "stop",      "pause",
                               "resume", "time", "isPlaying", "setTime"};
@@ -115,14 +115,14 @@ TEST_CASE("property animator: a kind/type mismatch disables the track (not a sil
     AnimTarget& target = targets->Add(e);
     target.value = 42.0f; // AnimTarget::value is an f32
 
-    // A Float3 track pointing at the scalar "value" (f32) - the kind mismatches the leaf type.
+    // A Float3 track pointing at the scalar "value" (f32): the kind mismatches the leaf type.
     RefPtr<PropertyAnimationClipResource> res =
         MakeRef<PropertyAnimationClipResource>(DefaultAllocator());
     {
         PropertyTrack t;
         t.componentType = String(u8"AnimTarget");
         t.propertyPath = String(u8"value");
-        t.kind = TrackValueKind::Float3; // WRONG: value is f32
+        t.kind = TrackValueKind::Float3; // wrong: value is f32
         CurveKey k0;
         k0.time = 0.0f;
         k0.value = 0.0f;
@@ -138,7 +138,7 @@ TEST_CASE("property animator: a kind/type mismatch disables the track (not a sil
     anim.clip = res.Get();
     anim.autoplay = true;
 
-    sceneObj.Update(0.0f); // binds - the mismatch is caught here
+    sceneObj.Update(0.0f); // binds; the mismatch is caught here
     REQUIRE(anim.bindings.Size() == 1);
     CHECK(anim.bindings[0].disabled); // disabled once, not retried every frame
 
@@ -148,16 +148,16 @@ TEST_CASE("property animator: a kind/type mismatch disables the track (not a sil
 
 TEST_CASE("property animator: a Transform track drives the entity's baked scene transform")
 {
-    EnsureReflected(); // includes RegisterCoreTypes -> reflects core::Transform
+    EnsureReflected(); // includes RegisterCoreTypes, which reflects core::Transform
 
     scene::Scene sceneObj{DefaultAllocator()};
-    sceneObj.AddSystem<PropertyAnimatorComponentManager>(); // Transform is built-in - no target manager
+    sceneObj.AddSystem<PropertyAnimatorComponentManager>(); // Transform is built in: no target manager
 
     auto* animators = sceneObj.GetSystem<PropertyAnimatorComponentManager>();
     REQUIRE(animators != nullptr);
     const scene::EntityHandle e = sceneObj.CreateEntity(u8"Mover");
 
-    // A clip animating Transform.position.x from 0 -> 10 over 1s.
+    // A clip animating Transform.position.x from 0 to 10 over 1s.
     RefPtr<PropertyAnimationClipResource> res =
         MakeRef<PropertyAnimationClipResource>(DefaultAllocator());
     {
@@ -213,19 +213,19 @@ TEST_CASE("property animator: a Float3 clip drives the owning component's positi
     anim.clip = clip.Get(); // direct runtime object (no resource manager in this test)
     anim.autoplay = true;
 
-    // First tick binds + autostarts at t=0 (position ~ 0).
+    // First tick binds and autostarts at t=0 (position ~ 0).
     sceneObj.Update(0.0f);
     CHECK(target.position.x == doctest::Approx(0.0f));
 
-    // Advance to ~0.5s -> midpoint (5,0,0).
+    // Advance to ~0.5s: the midpoint (5,0,0).
     sceneObj.Update(0.5f);
     CHECK(target.position.x == doctest::Approx(5.0f));
 
-    // Advance to ~0.9s -> near the end (9,0,0).
+    // Advance to ~0.9s: near the end (9,0,0).
     sceneObj.Update(0.4f);
     CHECK(target.position.x == doctest::Approx(9.0f));
 
-    // Past the end (t=1.1) it LOOPS back to ~0.1 (x ~ 1).
+    // Past the end (t=1.1) it loops back to ~0.1 (x ~ 1).
     sceneObj.Update(0.2f);
     CHECK(target.position.x == doctest::Approx(1.0f).epsilon(0.05));
 }
@@ -267,7 +267,7 @@ TEST_CASE("property animator: a track to a missing component/property is disable
     const scene::EntityHandle e = sceneObj.CreateEntity(u8"Mixed");
     AnimTarget& target = targets->Add(e);
 
-    // One good track (value) + one bad (unknown property) + one bad (unknown component).
+    // One good track (value), one bad (unknown property) and one bad (unknown component).
     RefPtr<PropertyAnimationClipResource> clip =
         MakeRef<PropertyAnimationClipResource>(DefaultAllocator());
     {
@@ -324,7 +324,7 @@ TEST_CASE("property animator: reflected play/pause/stop/setTime drive the clock"
     CHECK_FALSE(anim.isPlaying());
     CHECK(target.position.x == doctest::Approx(0.0f));
 
-    // play() -> starts from 0; a half-second tick reaches the midpoint.
+    // play() starts from 0; a half-second tick reaches the midpoint.
     anim.play();
     CHECK(anim.isPlaying());
     sceneObj.Update(0.5f);
@@ -336,7 +336,7 @@ TEST_CASE("property animator: reflected play/pause/stop/setTime drive the clock"
     sceneObj.Update(0.5f);
     CHECK(target.position.x == doctest::Approx(5.0f));
 
-    // setTime + resume jump the clock.
+    // setTime and resume jump the clock.
     anim.setTime(0.8f);
     anim.resume();
     sceneObj.Update(0.0f);
@@ -370,27 +370,27 @@ TEST_CASE("property animator: entity-active - starts-inactive never advances; to
     sceneObj.Update(0.5f);
     CHECK(target.position.x == doctest::Approx(0.0f));
 
-    // Activation: binds + autoplays from t=0 (nothing pre-advanced while dark).
+    // Activation: binds and autoplays from t=0 (nothing pre-advanced while dark).
     sceneObj.SetActive(e, true);
     sceneObj.Update(0.0f);
     sceneObj.Update(0.5f); // midpoint of the 0..10 ramp
     CHECK(target.position.x == doctest::Approx(5.0f));
 
-    // Deactivate mid-clip: time FREEZES.
+    // Deactivate mid-clip: time freezes.
     sceneObj.SetActive(e, false);
     sceneObj.Update(0.3f);
     CHECK(target.position.x == doctest::Approx(5.0f));
 
     // Reactivate: resumes from where it froze.
     sceneObj.SetActive(e, true);
-    sceneObj.Update(0.4f); // 0.5 + 0.4 = 0.9 -> x ~ 9
+    sceneObj.Update(0.4f); // 0.5 + 0.4 = 0.9, so x ~ 9
     CHECK(target.position.x == doctest::Approx(9.0f));
 }
 
 TEST_CASE("property animator: SIMULATION-GATED - a non-simulating scene freezes; enabling resumes")
 {
-    // User ruling 2026-08-18: animation must not advance in the editor's edit mode (scene
-    // simulation disabled). Scenes default to simulating, so this is opt-out only.
+    // Animation does not advance in the editor's edit mode (scene simulation disabled). Scenes
+    // default to simulating, so this is opt-out only.
     EnsureReflected();
     scene::Scene sceneObj{DefaultAllocator()};
     sceneObj.AddSystem<AnimTargetManager>();
@@ -405,13 +405,13 @@ TEST_CASE("property animator: SIMULATION-GATED - a non-simulating scene freezes;
     anim.clip = clip.Get();
     anim.autoplay = true;
 
-    // Edit mode: simulation off -> the manager never binds, never advances, never writes.
+    // Edit mode: simulation off, so the manager never binds, advances or writes.
     sceneObj.SetSimulationEnabled(false);
     sceneObj.Update(0.5f);
     sceneObj.Update(0.5f);
     CHECK(target.position.x == doctest::Approx(0.0f));
 
-    // Simulate: binds + autoplays from t=0.
+    // Simulate: binds and autoplays from t=0.
     sceneObj.SetSimulationEnabled(true);
     sceneObj.Update(0.0f);
     sceneObj.Update(0.5f);

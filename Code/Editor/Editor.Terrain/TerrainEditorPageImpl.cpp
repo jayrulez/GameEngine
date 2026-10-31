@@ -4,7 +4,7 @@
 // Editor::Terrain - the `:page` partition (implementation).
 //
 // The heavy engine imports (the terrain component, the lights, the scene) live here, out of the
-// interface (GCC module hygiene).
+// interface, for GCC module hygiene.
 
 module;
 #include "Core/Prelude.h"
@@ -62,8 +62,8 @@ namespace editor
             return id;
         }
 
-        // A layer's maps: the row's name and what it says, and the array that keeps it (each
-        // parallel to the albedos; an older terrain's may be shorter, nil past its end).
+        // A layer map: the row's name and description, and the array that holds it. Each array
+        // is parallel to the albedos; an older terrain's may be shorter, with nil past its end.
         struct LayerMap
         {
             StringView path;
@@ -96,8 +96,8 @@ namespace editor
 
         constexpr f32 kNewLayerTile = 32.0f;
 
-        // Every layer array as long as the albedos, so a layer's maps line up whatever the asset
-        // kept (an older terrain has fewer maps).
+        // Pads every layer array to the length of the albedos, so a layer's maps line up whatever
+        // the asset stored (an older terrain has fewer maps).
         void Square(pipeline::TerrainAsset& asset)
         {
             const usize layers = asset.paletteAlbedoIds.Size();
@@ -172,8 +172,9 @@ namespace editor
     TerrainEditorPage::TerrainEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::TerrainAsset::StaticType(), kPath)
     {
-        // Its layers live in parallel arrays no one edits by hand: the rows are the page's own.
-        HideAssetRows(); // an older terrain's shorter arrays are squared by its first edit, not by opening it
+        // The layers live in parallel arrays that no one edits by hand, so the page builds its own
+        // rows.
+        HideAssetRows(); // an older terrain's shorter arrays are padded by its first edit, not by opening it
         if (Content())
         {
             m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"terrain.preview");
@@ -226,8 +227,9 @@ namespace editor
             AddReference(*m_baseRows, map.path, map.shown, map.about, foundation::texture::Texture::StaticType());
         AddTile(m_baseRows->Add(u8"tile", gui::PropertyKind::Float, gui::Variant(1.0)), u8"How many metres its textures repeat over");
 
-        // The layers as every page's lists: the count with Add, each a group of its maps and its
-        // tiling. A layer's place is its channel in the splat weights: added and removed, never moved.
+        // The layers, shown like every page's lists: the count with Add, then each layer as a group
+        // of its maps and its tiling. A layer's position is its channel in the splat weights, so
+        // layers are added and removed but never moved.
         gui::PropertyInfo& list = m_layerRows->AddList(u8"layers", gui::PropertyKind::Group, gui::Variant{});
         list.DisplayName = String(u8"Paint layers");
         list.Description = String(u8"What the splat weights paint over the base layer, each in its own channel");
@@ -254,8 +256,8 @@ namespace editor
                               });
         }
         m_layerRows->SetOnListEdited([self](StringView, const gui::ListEdit& edit) { self->EditLayers(edit); });
-        // Each layer by its channel, numbered from 1 as the paint tool's keys are, and closed, by
-        // the albedo it shows.
+        // Names each layer by its channel, numbered from 1 like the paint tool's keys, and when
+        // collapsed by the albedo it shows.
         m_layerRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
                                    {
                                        if (gui::ParentPropertyPath(path) != StringView(u8"layers"))
@@ -321,7 +323,7 @@ namespace editor
 
     void TerrainEditorPage::AddSplatButton()
     {
-        // After the bar's own separator, as every page's own controls.
+        // After the bar's separator, like every page's own controls.
         gui::Node* own = Find<gui::Node>(u8"page-own");
         gui::Node* bar = own != nullptr ? own->GetParent() : nullptr;
         if (bar == nullptr || LoadFailed())
@@ -344,7 +346,7 @@ namespace editor
 
     void TerrainEditorPage::EditRow(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
     {
-        rows.SetValue(path, 0, value); // as the grid's commit leaves it
+        rows.SetValue(path, 0, value); // as the grid's commit would leave it
         Committed(rows, path, value);
     }
 
@@ -431,7 +433,8 @@ namespace editor
             return;
         if (edit.Kind == gui::ListEdit::Op::Insert)
         {
-            // At the end, its maps unset: the next channel of the weights.
+            // A new layer goes at the end with its maps unset, taking the next channel of the
+            // weights.
             EditWhole(u8"edit_terrain", [](ISerializable& object)
                       {
                           auto& terrainAsset = static_cast<pipeline::TerrainAsset&>(object);
@@ -444,7 +447,8 @@ namespace editor
         else if (edit.Kind == gui::ListEdit::Op::Remove && edit.Index < asset->paletteAlbedoIds.Size())
         {
             const usize index = edit.Index;
-            // Its weights freed and those above it moved down, in the live weights and their files.
+            // Free the layer's weights and move those above it down, in the live weights and in
+            // their files.
             RemapWeightsOnRemove(static_cast<u32>(index));
             EditWhole(u8"edit_terrain", [index](ISerializable& object)
                       {
@@ -455,7 +459,7 @@ namespace editor
                           terrainAsset.paletteTileScales.RemoveAt(index);
                       });
         }
-        ShowRows(); // the list as the terrain holds it (a move, which the list does not offer, goes back)
+        ShowRows(); // show the list as the terrain holds it (a move, which the list does not offer, is undone)
     }
 
     void TerrainEditorPage::RemapWeightsOnRemove(u32 removed)
@@ -463,10 +467,10 @@ namespace editor
         terrain::TerrainResource* product = m_product ? m_product.Get() : nullptr;
         terrain::SplatWeights* weights = product != nullptr ? product->weights.Get() : nullptr;
         if (weights == nullptr || weights->IsEmpty() || !terrain::RemapOnPaletteRemove(*weights, removed))
-            return; // no live weights (not cooked yet): nothing names the layers by channel
+            return; // no live weights (not cooked yet), so nothing refers to the layers by channel
         if (product->weights.id.IsNil())
             return;
-        // Written with the next save, as a brush's strokes are.
+        // Written with the next save, as brush strokes are.
         RefPtr<terrain::SplatWeights> kept(weights);
         const Guid id = product->weights.id;
         Context().RegisterAssetEdit(id,
@@ -492,8 +496,8 @@ namespace editor
 
     bool TerrainEditorPage::CreateSplatWeights(i32 size)
     {
-        // Made here, not by a stroke: the paint tool edits weights that exist, so no stroke ever
-        // makes an asset and its undo stays the stroke's.
+        // Created here, not by a stroke: the paint tool edits only weights that exist, so a stroke
+        // never creates an asset and its undo covers only the stroke.
         const pipeline::TerrainAsset* asset = Asset();
         if (asset == nullptr || !asset->weightsId.IsNil() || Context().Project() == nullptr)
             return false;
@@ -512,7 +516,7 @@ namespace editor
         pipeline::SplatmapAsset splat;
         splat.width = size > 0 ? size : 1024;
         splat.height = splat.width;
-        (void)made->WriteObject(splat); // all zero: the base layer everywhere, as its cook makes it
+        (void)made->WriteObject(splat); // all zero, so the base layer shows everywhere, as its cook makes it
         const Guid id = made->Id();
         EditWhole(u8"edit_terrain", [id](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).weightsId = id; });
         Context().RequestCook(false);
@@ -529,7 +533,7 @@ namespace editor
             return;
         m_entity = scenePtr->CreateEntity(u8"PreviewTerrain");
         if (auto* terrains = scenePtr->GetSystem<engine::terrain::TerrainComponentManager>())
-            terrains->Add(m_entity); // given its terrain once the product resolves
+            terrains->Add(m_entity); // assigned its terrain once the product resolves
         const scene::EntityHandle sun = scenePtr->CreateEntity(u8"Sun");
         Transform t;
         t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.5f) * Quaternion::FromAxisAngle(Float3{1, 0, 0}, -0.9f);
@@ -538,7 +542,7 @@ namespace editor
         {
             engine::render::LightComponent& light = lights->Add(sun);
             light.type = engine::render::LightType::Directional;
-            light.castsShadows = true; // the terrain's own shadows show
+            light.castsShadows = true; // so the terrain's own shadows show
         }
     }
 
@@ -573,8 +577,8 @@ namespace editor
         const f32 middle = hf != nullptr ? 0.5f * (hf->MinY() + hf->MaxY()) : 0.0f;
         const f32 size = Max(world.x, world.y);
         PreviewViewport* preview = m_pane->Viewport();
-        // From above a corner, far enough that the whole of it is in view (the terrain is centred on
-        // its origin), and its far side within the camera's reach.
+        // View from above a corner, far enough that the whole terrain is in view (it is centred on
+        // its origin) and its far side is within the camera's reach.
         const Float3 away = Normalized(Float3{1.0f, 0.85f, 1.0f});
         const f32 distance = size * 1.25f;
         preview->Camera().position = Float3{0.0f, middle, 0.0f} + away * distance;
@@ -587,7 +591,8 @@ namespace editor
         app::AssetObjectPage::OnUpdate(host, dt);
         if (m_pane)
             m_pane->Update(dt);
-        // The cooked terrain came, or a cook replaced it: the preview, its framing and the facts follow.
+        // When the cooked terrain arrives, or a cook replaces it, the preview, its framing and the
+        // facts update.
         terrain::TerrainResource* product = m_product ? m_product.Get() : nullptr;
         if (product != m_shownProduct)
         {

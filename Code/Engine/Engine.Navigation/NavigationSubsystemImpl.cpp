@@ -3,9 +3,9 @@
 
 // Engine::Navigation - implementation unit.
 //
-// The component reflection (REFLECT_VALUE bodies) lives here, out of the interface units (GCC
-// module hygiene). Surfaces the zone + agent components to the editor inspector (displayName/
-// category, the zone Ref picker) and the agent's runtime API to script
+// The component reflection (REFLECT_VALUE bodies) lives here, out of the interface units, for GCC's
+// module handling. Surfaces the zone and agent components to the editor inspector
+// (displayName/category, the zone Ref picker) and the agent's runtime API to script
 // (NavAgent.of(entity).navigate(x,y,z) / .stop() / .finished() / .remaining() / .velocity*()).
 
 module;
@@ -33,9 +33,9 @@ namespace engine::navigation
 {
     namespace
     {
-        // Draw a scene's loaded navmesh (+ agent target lines when enabled) into the debug scene.
-        // Reads the LIVE navmesh via NavigationMesh::DebugTriangles, transformed by each zone
-        // entity's world matrix - so it shows exactly what agents path on, at the current placement.
+        // Draw a scene's loaded navmesh (and agent target lines when enabled) into the debug scene.
+        // Reads the live navmesh through NavigationMesh::DebugTriangles, transformed by each zone
+        // entity's world matrix, so it shows exactly what agents path on, at the current placement.
         void DrawNavigationDebug(foundation::scene::Scene& scene,
                                  const NavigationSceneSettings& settings,
                                  foundation::render::debug::DebugDraw& draw)
@@ -77,8 +77,8 @@ namespace engine::navigation
                     const NavigationSceneSystem::BakeStageCache& stages = system->BakeStages();
                     if (!stages.contourLines.IsEmpty() || !stages.walkableSamples.IsEmpty())
                     {
-                        // Placed by the zone entity's RIGID frame - the same frame the bake
-                        // captured in (zone-local), so stages overlay the mesh exactly.
+                        // Placed by the zone entity's rigid frame, the same frame the bake captured
+                        // in (zone-local), so the stages overlay the mesh exactly.
                         const Float4x4 world =
                             scene.FindEntity(scene.GetEntityId(stages.zoneEntity))
                                     .IsAssigned()
@@ -121,9 +121,9 @@ namespace engine::navigation
                             {
                                 return;
                             }
-                            // The introspection overlay: crowd state + move-request stage +
-                            // live speed intent, floating above the agent - the "why is it
-                            // not moving" answer without opening anything.
+                            // The introspection overlay: crowd state, move-request stage and live
+                            // speed intent, floating above the agent, to show why it is not moving
+                            // without opening anything.
                             static constexpr StringView kStates[] = {u8"invalid", u8"walking",
                                                                      u8"offmesh"};
                             static constexpr StringView kTargets[] = {
@@ -220,7 +220,7 @@ namespace engine::navigation
                            String(u8"Steer round other agents. Off, it goes straight where it is sent "
                                   u8"and shoulders past anyone in its way (a player's character)"))
             .Property<&NavAgentComponent::moveEntity>("moveEntity")
-            // Runtime API (Track A): NavAgent.of(entity) -> a re-resolving handle.
+            // Runtime API: NavAgent.of(entity) -> a re-resolving handle.
             .Method<&foundation::script::ComponentOf<NavAgentComponent>, NavAgentComponent>("of")
             .Method<&NavAgentComponent::navigate>("navigate", {"x", "y", "z"})
             .Method<&NavAgentComponent::navigateAt>("navigateAt",
@@ -265,7 +265,7 @@ namespace engine::navigation
 
     void RegisterNavigationScriptFacade()
     {
-        RegisterNavigationComponentReflection(); // component TypeData (incl `of`) built first
+        RegisterNavigationComponentReflection(); // component TypeData (including `of`) built first
 
         // Surface NavAgentComponent to script (NavAgent.of(entity).navigate(...)): register it,
         // seed the emission root (reachability), and make the class name prelude-visible.

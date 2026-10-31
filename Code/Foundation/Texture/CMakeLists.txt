@@ -1,5 +1,4 @@
-# Foundation::Texture - `foundation.texture` (texture descriptors + image->RHI format map).
-# Ported from Sedulous.Textures (deps: RHI, Images).
+# Foundation::Texture - `foundation.texture` (texture descriptors and the image-to-RHI format map).
 
 util_add_engine_library(Texture ALIAS Foundation::Texture)
 target_link_libraries(Texture PUBLIC Foundation::Core Foundation::RHI Foundation::Image Foundation::Policy)

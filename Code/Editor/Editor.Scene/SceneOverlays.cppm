@@ -3,13 +3,12 @@
 
 // Editor::Scene - :scene_overlays partition.
 //
-// What the scene page draws into its scene, into its viewport's own debug list (so never into a
+// What the scene page draws into its scene, through its viewport's own debug list (so never into a
 // second view of the same scene): the grid on its plane and the origin's axes, a marker at each
-// entity and a box round each selected one, the tools' and the components' gizmos. Its toggles are
-// SceneOverlaySettings, which the page keeps per scene. Out of the page's class as it was
-// (Documentation/Specs/editor-gui.md, 5.3, layer 2); what it reads each frame is handed in. What
-// is written rather than drawn in the scene (the stats, the tool's status, the zoom readout, the
-// view gizmo) is the HUD's, on the GUI (layer 5).
+// entity and a box round each selected one, and the tools' and the components' gizmos. Its toggles
+// are SceneOverlaySettings, which the page keeps per scene. It lives outside the page's class, and
+// what it reads each frame is handed in. What is written rather than drawn in the scene (the stats,
+// the tool's status, the zoom readout, the view gizmo) belongs to the HUD, on the GUI.
 
 module;
 #include "Core/Prelude.h"
@@ -77,7 +76,8 @@ export namespace editor
             DrawPreviewMarker(dd, frame);
         }
 
-        /// The grid's spacing where the camera is now: what the grid draws and the zoom readout says.
+        /// The grid's spacing where the camera is now: what the grid draws and the zoom readout
+        /// says.
         [[nodiscard]] GridSpacing CurrentGridSpacing(const EditorCamera& camera) const { return GridSpacingFor(GridViewHeight(camera)); }
 
     private:
@@ -112,9 +112,9 @@ export namespace editor
                 dd.DrawGridPlane(grid);
                 return;
             }
-            // The line grid, to compare: the same spacing, every tenth line brighter, a square 100
-            // cells each way snapped to the coarse spacing under the camera (so it does not swim), no
-            // fade and no blend between decades.
+            // The line grid, to compare with: the same spacing, every tenth line brighter, a square
+            // 100 cells each way snapped to the coarse spacing under the camera (so it does not
+            // swim), and no fade or blend between decades.
             constexpr i32 kHalfCells = 100;
             const f32 coarse = step.spacing * 10.0f;
             const f32 cu = Floor(Dot(foot, axes.u) / coarse) * coarse;
@@ -134,10 +134,6 @@ export namespace editor
             }
         }
 
-        // Position markers for every entity (small cross; selected = brighter + boxed): empty
-        // entities have no renderable, so the editor gives them a visual anchor. The selection box
-        // is what the scene's systems measure the entity as (meshes, colliders), the box F frames;
-        // a small cube at its origin when nothing does.
         // The entity the animation panel poses: a sphere and "preview" over it, drawn over the
         // scene so it reads through what stands in front.
         void DrawPreviewMarker(foundation::render::debug::DebugDraw& dd, const SceneOverlayFrame& frame) const
@@ -153,6 +149,10 @@ export namespace editor
             dd.DrawWireSphereOverlay(at, 0.35f, marker);
             dd.DrawText3D(at, u8"preview", marker);
         }
+        // Position markers for every entity (a small cross; a selected one is brighter and boxed):
+        // empty entities have no renderable, so the editor gives them a visual anchor. The
+        // selection box is what the scene's systems measure the entity as (meshes, colliders), the
+        // box F frames, or a small cube at its origin when nothing does.
         void DrawEntityMarkers(foundation::render::debug::DebugDraw& dd, const SceneOverlayFrame& frame) const
         {
             if (frame.selection == nullptr)

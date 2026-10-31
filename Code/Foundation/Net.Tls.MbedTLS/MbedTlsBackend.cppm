@@ -3,7 +3,7 @@
 
 /// Foundation::Net.Tls.MbedTLS - the `foundation.net.tls.mbedtls` module.
 ///
-/// The Mbed TLS backend of the TLS seam (foundation.net.tls): TLS 1.2 and 1.3, the client checking
+/// The Mbed TLS backend of the TLS interface (foundation.net.tls): TLS 1.2 and 1.3, the client checking
 /// the server's name and chain against its TlsTrust, the server presenting its chain. The only
 /// module that links ThirdParty::MbedTLS; its headers stay in the implementation unit, so nothing
 /// that imports this sees them. Desktop and the Deck compose it; a web build has none (the browser

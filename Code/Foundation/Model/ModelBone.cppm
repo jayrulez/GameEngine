@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// A bone/node in the model hierarchy with TRS decomposition.
-/// Ported from Sedulous.Models/ModelBone.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -33,7 +32,7 @@ export namespace foundation::model
         /// Add a child bone (non-owning pointer).
         void addChild(ModelBone* child) { m_children.PushBack(child); }
 
-        /// Remove all children (does not delete -- children are non-owning).
+        /// Remove all children (does not delete them; children are non-owning).
         void clearChildren() { m_children.Clear(); }
 
         /// Non-owning child pointers (owned by Model::m_bones).
@@ -46,12 +45,11 @@ export namespace foundation::model
             return Span<ModelBone*>(m_children.Data(), m_children.Size());
         }
 
-        /// Update localTransform from translation/rotation/scale (TRS) - the same
+        /// Update localTransform from translation, rotation and scale (TRS), with the same
         /// composition as Transform::ToMatrix (row-vector convention: Scale * Rotation with
-        /// the translation in the LAST ROW), so it agrees with Float4x4::TransformPoint and
-        /// with a glTF node matrix read into row-major storage. The hand-built version this
-        /// replaced put the translation in the last column and composed T * (R * S) - the
-        /// column-vector convention - which TransformPoint never reads.
+        /// the translation in the last row), so it agrees with Float4x4::TransformPoint and
+        /// with a glTF node matrix read into row-major storage. A column-vector matrix
+        /// (translation in the last column, T * (R * S)) would not.
         void updateLocalTransform()
         {
             localTransform = Transform{translation, rotation, scale}.ToMatrix();

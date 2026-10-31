@@ -3,17 +3,17 @@
 
 // GUI - :color_picker partition
 //
-// Colour widgets (T4 of Specs/gui-lab-evolution-3.md). They edit the values an authored Color holds,
-// which are sRGB (the engine's rule: what a picker and a hex code show; the renderer decodes to
-// linear), so HSV here is over sRGB values and linear is never stored.
-//   - ColorSwatch: a colour over a checkerboard (its alpha seen), or hatched when mixed (several
-//     objects' colours differing); a click, Return or Space reports it.
-//   - ColorPicker: a saturation and value plane, a hue strip, an alpha strip, a hex field (any CSS
-//     colour typed: #rgb, #rrggbb, #rrggbbaa, rgb(), a name) and, on the row below it, 0-255 fields
-//     for each channel; given the colour it opened with, that beside the new one over the plane,
-//     a click on it putting it back. A drag
-//     reports each step (`input`) and its end (`change`); a field reports its commit. The hue is kept
-//     where a grey or black has none, so dragging back out of the corner keeps it.
+// Colour widgets. They edit the values an authored Color holds, which are sRGB. That is the
+// engine's rule: a picker and a hex code show sRGB, and the renderer decodes to linear. So HSV here
+// is computed over sRGB values, and linear values are never stored.
+//   - ColorSwatch: a colour over a checkerboard (so its alpha shows), or hatched when mixed (when
+//     several objects' colours differ). A click, Return or Space reports it.
+//   - ColorPicker: a saturation and value plane, a hue strip, an alpha strip, a hex field (accepting
+//     any CSS colour: #rgb, #rrggbb, #rrggbbaa, rgb(), a name) and, on the row below, 0-255 fields
+//     for each channel. When given the colour it opened with, it shows that colour beside the new
+//     one over the plane, and a click on it restores it. A drag reports each step (`input`) and its
+//     end (`change`); a field reports its commit. The hue is kept where a grey or black has none,
+//     so dragging back out of the corner keeps it.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,7 @@ import :ui_widget;
 import :text_field;
 import :number_field;
 import :label;
-import :css_values; // ParseColor (the hex field)
+import :css_values; // ParseColor, for the hex field
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -39,7 +39,7 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// A colour as hue (0-360), saturation, value and alpha, each of 0-1 but the hue.
+    /// A colour as hue (0-360), saturation, value and alpha; all but the hue are in 0-1.
     struct ColorHsv
     {
         f32 H = 0.0f;
@@ -48,7 +48,7 @@ export namespace foundation::gui
         f32 A = 1.0f;
     };
 
-    /// `color` as HSV of its (sRGB) values; `hue` is kept where it has none (a grey).
+    /// Returns `color` as HSV of its sRGB values; `hue` is kept where the colour has none (a grey).
     [[nodiscard]] inline ColorHsv ToHsv(Color color, f32 hue = 0.0f) noexcept
     {
         const f32 r = core::Clamp(color.r, 0.0f, 1.0f), g = core::Clamp(color.g, 0.0f, 1.0f), b = core::Clamp(color.b, 0.0f, 1.0f);
@@ -100,7 +100,8 @@ export namespace foundation::gui
         }
         return Color{r + m, g + m, b + m, hsv.A};
     }
-    /// "#RRGGBB", with "AA" after when `alpha` and it is not opaque.
+    /// Formats `color` as "#RRGGBB", followed by "AA" when `alpha` is set and the colour is not
+    /// opaque.
     [[nodiscard]] inline core::String FormatHexColor(Color color, bool alpha)
     {
         const u32 packed = color.ToRGBA8();
@@ -117,7 +118,7 @@ export namespace foundation::gui
 
     namespace detail
     {
-        // A checkerboard behind a colour with alpha.
+        // Draws a checkerboard behind a colour with alpha.
         inline void DrawChecker(DrawContext& ctx, const Rect& box, f32 cell = 6.0f)
         {
             ctx.VG().FillRect(box.ToRectangle(), Color{0.85f, 0.85f, 0.85f, 1.0f});
@@ -138,7 +139,7 @@ export namespace foundation::gui
         }
     }
 
-    /// A colour shown: over a checkerboard, or hatched when mixed. Clicked, it says so.
+    /// Shows a colour over a checkerboard, or hatching when mixed. It reports a click.
     class ColorSwatch : public UIWidget
     {
         RTTI_OBJECT(ColorSwatch, UIWidget)
@@ -154,14 +155,14 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] Color GetColor() const noexcept { return m_color; }
-        /// Several colours stand behind it that differ: hatched, no colour shown.
+        /// Marks it as standing for several colours that differ: it shows hatching and no colour.
         void SetMixed(bool mixed)
         {
             m_mixed = mixed;
             Invalidate();
         }
         [[nodiscard]] bool IsMixed() const noexcept { return m_mixed; }
-        /// Whether its alpha shows (else drawn opaque).
+        /// Sets whether its alpha shows; otherwise it is drawn opaque.
         void SetShowsAlpha(bool shows)
         {
             m_showsAlpha = shows;
@@ -271,7 +272,7 @@ export namespace foundation::gui
                 s.Direction = FlexDirection::Column;
                 s.RowGap = 8.0f;
             });
-            // The colour it opened with beside the new one (shown once an owner gives it).
+            // The colour it opened with, beside the new one (shown once an owner gives it).
             ColorPicker* owner = this;
             m_compare = core::MakeRef<UIWidget>(MemoryAllocator());
             m_compare->AddClass(core::StringView(u8"compare"));
@@ -308,8 +309,8 @@ export namespace foundation::gui
             m_alpha->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(14.0f); });
             AddChild(m_alpha.Get());
 
-            // The hex code on a row of its own, the channels on the next: each field wide enough to
-            // show its number beside its arrows.
+            // The hex code goes on a row of its own and the channels on the next, each field wide
+            // enough to show its number beside its arrows.
             ColorPicker* self = this;
             m_hex = core::MakeRef<TextField>(MemoryAllocator());
             m_hex->AddClass(core::StringView(u8"hex"));
@@ -351,7 +352,7 @@ export namespace foundation::gui
         }
 
         // === The colour ===
-        /// Sets the colour from code: shown, nothing reported.
+        /// Sets the colour from code. The picker shows it, but reports nothing.
         void SetColor(Color color)
         {
             m_hsv = ToHsv(color, m_hsv.H);
@@ -360,7 +361,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] Color GetColor() const noexcept { return FromHsv(m_hsv); }
         [[nodiscard]] const ColorHsv& GetHsv() const noexcept { return m_hsv; }
-        /// The colour it opened with, shown beside the new one (a click on it puts it back).
+        /// Sets the colour it opened with, shown beside the new one; a click on it restores it.
         void SetOriginal(Color color)
         {
             m_original = color;
@@ -368,7 +369,7 @@ export namespace foundation::gui
             m_compare->SetDisplayed(true);
         }
         [[nodiscard]] ColorSwatch* GetOriginalSwatch() const noexcept { return m_compare->IsDisplayed() ? m_was.Get() : nullptr; }
-        /// Back to the colour it opened with, reported as a change.
+        /// Returns to the colour it opened with, and reports that as a change.
         void Revert()
         {
             if (!m_compare->IsDisplayed())
@@ -378,7 +379,7 @@ export namespace foundation::gui
             Invalidate();
             Report(true);
         }
-        /// Whether it edits alpha (its strip and field show).
+        /// Sets whether it edits alpha, which shows the alpha strip and field.
         void SetShowsAlpha(bool shows)
         {
             m_showsAlpha = shows;
@@ -393,9 +394,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool ShowsAlpha() const noexcept { return m_showsAlpha; }
 
-        /// Each step of a drag (or a field's scrub), as it goes.
+        /// Called with each step of a drag (or a field's scrub) as it goes.
         void SetOnColorChanging(core::Function<void(Color)> callback) { m_onChanging = core::Move(callback); }
-        /// A change made: a drag let go, a field committed.
+        /// Called when a change is made: a drag is released or a field commits.
         void SetOnColorChanged(core::Function<void(Color)> callback) { m_onChanged = core::Move(callback); }
 
         [[nodiscard]] ColorPickerArea* GetPlane() const noexcept { return m_plane.Get(); }
@@ -407,7 +408,7 @@ export namespace foundation::gui
     private:
         friend class ColorPickerArea;
 
-        // A drag's step in an area: `x` and `y` across it, 0-1.
+        // Handles a drag's step in an area, with `x` and `y` across it in 0-1.
         void Dragged(ColorPickerArea::Kind kind, f32 x, f32 y, bool done)
         {
             x = core::Clamp(x, 0.0f, 1.0f);
@@ -430,7 +431,7 @@ export namespace foundation::gui
             const Optional<Color> parsed = ParseColor(core::Trim(text));
             if (!parsed.HasValue())
             {
-                ShowFields(); // not a colour: what it was
+                ShowFields(); // not a colour, so show the old value again
                 return;
             }
             Color color = parsed.Value();
@@ -469,7 +470,7 @@ export namespace foundation::gui
                 SendEvent(Event(EventType::Input, this));
             }
         }
-        // The fields show the colour (all but `except`, being typed into).
+        // Updates the fields to show the colour, except field `except`, which is being typed into.
         void ShowFields(i32 except = -1)
         {
             m_showing = true;
@@ -488,7 +489,7 @@ export namespace foundation::gui
 
         ColorHsv m_hsv{0.0f, 0.0f, 1.0f, 1.0f};
         bool m_showsAlpha = true;
-        bool m_showing = false; // the fields are being set from the colour
+        bool m_showing = false; // set while the fields are updated from the colour
         core::RefPtr<UIWidget> m_compare; // the colour it opened with beside the new one
         core::RefPtr<ColorSwatch> m_was;
         core::RefPtr<ColorSwatch> m_now;
@@ -551,7 +552,8 @@ export namespace foundation::gui
         const Color edge{0.0f, 0.0f, 0.0f, 0.6f};
         if (m_kind == Kind::Plane)
         {
-            // The hue at full, white across from the left, black up from the bottom.
+            // Draw the hue at full saturation and value, shading to white toward the left and to
+            // black toward the bottom.
             ctx.VG().FillRect(box.ToRectangle(), FromHsv(ColorHsv{hsv.H, 1.0f, 1.0f, 1.0f}));
             vg::VGLinearGradientFill white{core::Float2{box.x, box.y}, core::Float2{box.Right(), box.y}};
             white.AddStop(0.0f, Color{1.0f, 1.0f, 1.0f, 1.0f});

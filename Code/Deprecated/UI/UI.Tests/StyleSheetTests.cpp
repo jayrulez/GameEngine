@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/StyleSheetTests.bf (faithful, full file). Pure-data cases (StyleValue
-// accessors, StyleRule fluent + string lifecycle, StyleSelector specificity, ForAll empty-selector) plus
-// the integration cases (Resolve_*/Specificity cascade/Inheritance_*/RefCounted_*/TypeMatch/ForAll rules)
-// that drive View.ResolveStyle over the UIContext/RootView/TestGroup tree - now that that cluster + the
-// TestHelpers doubles exist. Beef `SetupSheet(ctx)` (`ctx.StyleSheet = new; ReleaseRef`) -> a RefPtr held
-// by ctx via SetStyleSheet (helper returns a borrowed ptr for adding rules); `view.IsEnabled = false`
-// sets the field; `=== drawable` -> pointer ==.
+// StyleSheet tests. Pure-data cases (StyleValue accessors, StyleRule's fluent setters and string
+// lifetime, StyleSelector specificity, the empty ForAll selector), then integration cases
+// (resolution, the specificity cascade, inheritance, reference counting, type matching, ForAll
+// rules) that drive View::ResolveStyle over a UIContext, RootView and TestGroup tree. SetupSheet
+// hands the sheet to the context via SetStyleSheet and returns a borrowed pointer for adding rules.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -88,7 +86,7 @@ TEST_CASE("stylesheet: StringValue_RoundTrip")
 
 TEST_CASE("stylesheet: StringValue_OverwriteFreesPrevious")
 {
-    // RAII: overwriting an entry drops the previous StyleValue (its owned String). No leak.
+    // Overwriting an entry frees the previous StyleValue and its owned String.
     StyleRule rule;
     rule.Set(StyleProperty::FontFamily, StringView{u8"Roboto"});
     rule.Set(StyleProperty::FontFamily, StringView{u8"Chewy"});
@@ -109,7 +107,7 @@ TEST_CASE("stylesheet: StringValue_RemoveFreesString")
 
 TEST_CASE("stylesheet: StringValue_DestructorFrees")
 {
-    // Construct/destroy many string-holding rules; RAII frees each (no leak).
+    // Create and destroy many rules that hold strings; each is freed without a leak.
     for (int i = 0; i < 16; ++i)
     {
         StyleRule rule;
@@ -225,8 +223,7 @@ TEST_CASE("stylesheet: ForAll_HasEmptySelector_SpecificityZero")
 }
 
 // ===========================================================================================
-// Integration cases (View.ResolveStyle over the UIContext/RootView/TestGroup tree). Ported from
-// Sedulous.UI.Tests/src/StyleSheetTests.bf now that the View cluster + TestHelpers doubles exist.
+// Integration cases (View::ResolveStyle over a UIContext, RootView and TestGroup tree).
 // ===========================================================================================
 
 namespace

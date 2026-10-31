@@ -4,12 +4,11 @@
 // Core - :library partition
 //
 // DynamicLibrary: an RAII handle over the System raw dynamic-library calls,
-// with typed symbol resolution. Foundation for the future plugin/module system
-// (discover, load, init/shutdown lifecycle, hot-reload) - S4.9.
+// with typed symbol resolution. The runtime's PluginHost loads plugins through it.
 
 module;
 #include "Core/Prelude.h"
-#include <cstring> // memcpy (avoids the pedantic void*->function-pointer cast)
+#include <cstring> // memcpy (avoids the pedantic void* to function-pointer cast)
 
 export module foundation.core:library;
 
@@ -62,11 +61,11 @@ export namespace foundation::core
             }
         }
 
-        // Forget the handle WITHOUT closing the library - it stays mapped for the process
-        // lifetime. Hot reload leaks the OLD module on purpose: unreachable stale code is
-        // harmless, but freeing pages under any pointer the teardown missed is a crash;
-        // the rebuilt module loads from a fresh versioned COPY, so the leaked mapping is
-        // never resolved again (game-native-code.md N6).
+        // Forget the handle without closing the library, which stays mapped for the process
+        // lifetime. Hot reload leaks the old module on purpose: unreachable stale code is
+        // harmless, but freeing pages under any pointer the teardown missed is a crash. The
+        // rebuilt module loads from a fresh versioned copy, so the leaked mapping is never
+        // resolved again.
         void Detach() noexcept { m_handle = nullptr; }
 
         [[nodiscard]] bool IsLoaded() const noexcept { return m_handle != nullptr; }

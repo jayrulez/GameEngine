@@ -6,7 +6,7 @@
 /// Draws the environment as the visible background: a fullscreen triangle at the far plane, depth-
 /// tested (LessEqual, no write) against the forward depth so it only fills pixels no geometry covered,
 /// reconstructing a world-space view ray per pixel (inverse view-proj) and sampling the env cubemap.
-/// Runs after the forward pass, into the same (HDR) color target, before tonemap - so the sky is in
+/// Runs after the forward pass, into the same (HDR) color target, before tonemap, so the sky is in
 /// the linear working space and gets tonemapped with the scene.
 
 module;
@@ -33,7 +33,7 @@ export namespace foundation::render
     // the compiled shader, member by member.
     struct GpuSky
     {
-        Float4x4 invViewProj;  // inverse of the UNJITTERED view-proj (a stable sky ray under TAA)
+        Float4x4 invViewProj;  // inverse of the unjittered view-proj (a stable sky ray under TAA)
         Float4x4 prevViewProj; // last frame's view-proj (motion vectors)
         Float3 cameraPos;            // camera world position
         f32 backgroundIntensity = 1; // the sky background's display multiplier (not IBL)
@@ -71,8 +71,8 @@ export namespace foundation::render
         Status Initialize();
 
         // Declare the sky pass: load `color`, depth-test (read-only) against `depth`, read `envH`, draw a
-        // fullscreen triangle sampling the env cube along the per-pixel world ray. `invViewProj` = inverse
-        // of this view's view*proj; `camPos`/`intensity` scale the result.
+        // fullscreen triangle sampling the env cube along the per-pixel world ray. `invViewProj` is the
+        // inverse of this view's view*proj; `camPos` and `intensity` scale the result.
         void DeclareSky(rendergraph::RenderGraph& graph, rendergraph::RGHandle color,
                         rendergraph::RGHandle velocity, rendergraph::RGHandle depth,
                         rendergraph::RGHandle envH, rhi::TextureView* envView,
@@ -86,13 +86,13 @@ export namespace foundation::render
 
     private:
         static constexpr u32 kMaxFIF = 4;
-        static constexpr u32 kMaxViews = 16; // mains 0..9, probe-capture faces 10..15
+        static constexpr u32 kMaxViews = 16; // main views 0..9, probe-capture faces 10..15
         static constexpr u32 kMaxSlots = kMaxViews * kMaxFIF;
         rhi::RenderPipeline* EnsurePipeline(rhi::TextureFormat colorFmt,
                                             rhi::TextureFormat depthFmt, u32 samples);
 
-        // Env identity = (view pointer, context uid): the uid catches pointer REUSE after an IBL
-        // context eviction, per the versioned-cache rule.
+        // Env identity is (view pointer, context uid): the uid catches pointer reuse after an IBL
+        // context eviction.
         rhi::BindGroup* EnsureBindGroup(u32 slot, rhi::TextureView* envView, u64 envUid,
                                         const GpuSky& u);
 
@@ -116,7 +116,7 @@ export namespace foundation::render
         rhi::TextureFormat m_depthFormat = rhi::TextureFormat::Undefined;
         u32 m_pipelineSampleCount = 1; // scene-pass MSAA count the cached pipeline was built for
         u64 m_pipelineShaderVersion = 0; // ShaderSystem::Version at build (hot reload)
-        // Deferred pipeline free: a rebuild (shader reload / MSAA-count toggle) retires the old pipeline
+        // Deferred pipeline free: a rebuild (shader reload or MSAA-count toggle) retires the old pipeline
         // here and DeclareSky drains it after kRetireFrames, never freeing one still in-flight.
         struct RetiredPipe
         {

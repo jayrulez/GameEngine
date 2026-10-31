@@ -25,8 +25,8 @@ export namespace foundation::core
         Array() noexcept : m_allocator(&DefaultAllocator()) {}
         explicit Array(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
-        // The allocator backing this array - owners thread it into work done ON
-        // the array's behalf (scratch, workers) so those allocations share the decision.
+        // The allocator backing this array. Owners thread it into work done on the array's
+        // behalf (scratch, workers) so those allocations come from the same place.
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
         // Sized construction: `count` value-initialized elements.
@@ -111,9 +111,9 @@ export namespace foundation::core
                 static_cast<T*>(m_allocator->Allocate(newCapacity * sizeof(T), alignof(T)));
             DIAGNOSTIC_ASSERT_MSG(newData != nullptr, "Array allocation failed");
 
-            // A trivially copyable T relocates as one block: the per-element move + destruct
-            // loop was the cost of every growth of a byte buffer (2026-09-23: a 4k texture's
-            // 85 MB mip chain, reallocated per level at -O0, was 6 s of its cook).
+            // A trivially copyable T relocates as one block. A per-element move and destruct
+            // loop on every growth of a byte buffer is slow at -O0 (a large texture's mip chain,
+            // reallocated per level, costs seconds of its cook).
             if constexpr (std::is_trivially_copyable_v<T>)
             {
                 if (m_size > 0)
@@ -328,7 +328,7 @@ export namespace foundation::core
         }
 
         // Stable in-place sort by `less(a, b)` (returns true if a should come before b). Insertion
-        // sort - fine for the small collections this is used on (focus lists, tracks, ...).
+        // sort, fine for the small collections this is used on (focus lists, tracks, ...).
         template <typename Compare>
         void Sort(Compare less)
         {
@@ -366,9 +366,9 @@ export namespace foundation::core
             }
         }
 
-        // A Resize that GROWS an array already holding data reserves geometrically (1.5x),
+        // A Resize that grows an array already holding data reserves geometrically (1.5x),
         // like PushBack: a buffer built up step by step (a mip chain) reallocates a few times,
-        // not once per step. A first Resize from empty stays exact - it is usually the final
+        // not once per step. A first Resize from empty stays exact: it is usually the final
         // size (a decoded image), and doubling it would waste half the buffer.
         void ReserveForGrowth(usize needed)
         {

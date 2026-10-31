@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Shader variant model - declared masks + canonicalization.
+// Shader variant model: declared masks and canonicalization.
 //
-// A dist has NO compiler, so every variant the runtime can request must exist in the cooked
-// pack BY CONSTRUCTION. The mechanism:
+// A dist has no compiler, so every variant the runtime can request must exist in the cooked
+// pack by construction. The mechanism:
 //
 //   - Authoring: one directive line per stage file, `// variants: SKINNED INSTANCED`, names
-//     the flags this stage actually branches on. Absent => single-variant (mask None) - most shaders.
-//   - Canonicalization: GetVariant intersects every request with the declared mask, dev AND dist
-//     identically, so a request for a flag the stage ignores collapses onto a variant that exists.
-//   - Cook: build the POWER SET of the declared mask -> any canonicalized request lands in the
+//     the flags this stage actually branches on. Without one the stage is single-variant (mask
+//     None), as most shaders are.
+//   - Canonicalization: GetVariant intersects every request with the declared mask, identically
+//     in dev and dist, so a request for a flag the stage ignores collapses onto a variant that
+//     exists.
+//   - Cook: build the power set of the declared mask, so any canonicalized request lands in the
 //     prebuilt lattice; a dist miss is impossible, not merely loud.
-//   - Drift-lint: a stage that #ifdef's a flag it did NOT declare is a bug (canonicalization would
-//     silently strip it -> wrong visuals), so the cook fails on used-but-undeclared.
+//   - Drift-lint: a stage that #ifdef's a flag it did not declare is a bug (canonicalization would
+//     silently strip it, giving wrong visuals), so the cook fails on a flag used but undeclared.
 //
 // All of it derives from the single kShaderFlagNames table in :flags.
 
@@ -51,8 +53,8 @@ export namespace foundation::shaders
 
     // Parse the `// variants: A B C` directive from a stage's HLSL source. The tag may sit
     // anywhere on a line (after `//`); tokens are whitespace-separated flag #define names. Unknown
-    // tokens are ignored (a shader may name a not-yet-defined flag without breaking the cook). Absent
-    // directive => {None, present=false} = single-variant. `tag` is the directive's text
+    // tokens are ignored (a shader may name a not-yet-defined flag without breaking the cook). An
+    // absent directive gives {None, present=false}: single-variant. `tag` is the directive's text
     // (ParseStageVariantDirective passes a stage's tagged form).
     [[nodiscard]] inline VariantDirective ParseVariantDirective(StringView source,
                                                                 StringView tag = u8"variants:")
@@ -126,11 +128,11 @@ export namespace foundation::shaders
         return ParseVariantDirective(source);
     }
 
-    // `// preserve-interface`: the stage keeps EVERY declared stage-input / output in its SPIR-V
+    // `// preserve-interface`: the stage keeps every declared stage input and output in its SPIR-V
     // interface even when unused (DXC's -fspv-preserve-interface; -O3 otherwise strips unused
-    // inputs). For a fragment stage that declares another shader family's full VSOut and reads one
-    // member - terrain_depth.ps under HOLES - so the pairing is exact and Vulkan's interface
-    // validation sees a match, not a shorter input list. Absent = the default (strip).
+    // inputs). It is for a fragment stage that declares another shader family's full VSOut and
+    // reads one member (terrain_depth.ps under HOLES), so the pairing is exact and Vulkan's
+    // interface validation sees a match, not a shorter input list. Absent = the default (strip).
     [[nodiscard]] inline bool ParsePreserveInterfaceDirective(StringView source)
     {
         constexpr StringView kTag = u8"preserve-interface";
@@ -145,17 +147,17 @@ export namespace foundation::shaders
         return false;
     }
 
-    // The canonical variant for a request: only the bits the stage declared survive. Applied in dev
-    // AND dist identically, so runtime dedupes (a PS that ignores SKINNED stops recompiling per skin)
-    // and dev == dist behaviour.
+    // The canonical variant for a request: only the bits the stage declared survive. Applied
+    // identically in dev and dist, so the runtime dedupes (a PS that ignores SKINNED is not
+    // recompiled per skin) and dev behaves as dist does.
     [[nodiscard]] constexpr ShaderFlags CanonicalizeFlags(ShaderFlags requested,
                                                           ShaderFlags declared) noexcept
     {
         return requested & declared;
     }
 
-    // Power set of the declared mask -> every variant the cook must build. Always includes None.
-    // A mask with k set bits yields 2^k entries (k <= 8, so <= 256).
+    // The power set of the declared mask: every variant the cook must build. Always includes None.
+    // A mask with k set bits yields 2^k entries; at most 8 bits are taken, so at most 256.
     inline void EnumerateVariants(ShaderFlags declared, Array<ShaderFlags>& out)
     {
         // Collect the set bits.
@@ -183,10 +185,10 @@ export namespace foundation::shaders
         }
     }
 
-    // Flag names that appear in a preprocessor conditional in the source but are NOT in `declared`.
+    // Flag names that appear in a preprocessor conditional in the source but are not in `declared`.
     // These are the drift bugs canonicalization would silently strip. Scans lines that begin (after
     // whitespace) with a #if / #ifdef / #ifndef / #elif directive, matching whole-word flag names
-    // (which also covers `defined(FLAG)` operands on those lines). Empty => clean.
+    // (which also covers `defined(FLAG)` operands on those lines). Empty means clean.
     inline void FindUndeclaredFlagUses(StringView source, ShaderFlags declared,
                                        Array<StringView>& out)
     {
@@ -209,9 +211,9 @@ export namespace foundation::shaders
             }
             const StringView line = source.SubStr(lineStart, lineEnd - lineStart);
 
-            // Is this a preprocessor conditional line? Only lines that BEGIN (after whitespace)
-            // with a '#' directive count - a bare substring test for "defined" would fail the
-            // cook on comments like "user-defined" that merely mention a flag name. Whitespace
+            // Only lines that begin (after whitespace) with a '#' conditional directive count: a
+            // bare substring test for "defined" would fail the cook on comments like
+            // "user-defined" that merely mention a flag name. Whitespace
             // between '#' and the keyword ("#  if") is legal preprocessor syntax and accepted.
             usize k = 0;
             while (k < line.Size() && (line.Data()[k] == u8' ' || line.Data()[k] == u8'\t'))
@@ -235,7 +237,7 @@ export namespace foundation::shaders
                 {
                     if (HasFlag(declared, e.flag))
                     {
-                        continue; // declared - fine
+                        continue; // declared
                     }
                     // Whole-word match of the flag name on this line.
                     const usize ln = line.Size();

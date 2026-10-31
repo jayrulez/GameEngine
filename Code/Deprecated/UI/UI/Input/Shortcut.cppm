@@ -3,8 +3,8 @@
 
 // UI - :shortcut partition
 //
-// A keyboard shortcut binding: key + modifiers -> action. Ported from Sedulous.UI/src/Input/Shortcut.bf.
-// Object (RefCounted) so ShortcutManager can own them via RefPtr and hand back stable pointers.
+// A keyboard shortcut binding: a key and modifiers mapped to an action. Derives Object (reference
+// counted) so ShortcutManager can own shortcuts via RefPtr and hand back stable pointers.
 
 module;
 #include "Core/Prelude.h"
@@ -51,7 +51,7 @@ export namespace foundation::ui
 
         /// Collapse Left/Right modifier variants into combined flags; strip lock keys. Public:
         /// the chord a key event carries and the chord a declaration spells (Ctrl, not LeftCtrl)
-        /// compare equal only through this - a capture control normalises what it records.
+        /// compare equal only through this, so a capture control normalises what it records.
         [[nodiscard]] static KeyModifiers Normalize(KeyModifiers m)
         {
             KeyModifiers r = m;

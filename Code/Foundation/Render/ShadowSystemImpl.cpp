@@ -6,7 +6,7 @@
 /// Shadow mapping, sampled with PCF in the forward shader. The directional light renders
 /// kShadowCascadesCount (4) cascades into a depth array with a layer per view's cascade; spot and
 /// point lights render into a 2048 depth atlas of 512 tiles with two layers, a realtime one redrawn
-/// every frame and a static one redrawn only when its casters change. This partition OWNS the depth
+/// every frame and a static one redrawn only when its casters change. This partition owns the depth
 /// textures (one set per frame-in-flight) and imports them into the frame graph; RenderFrame
 /// (:pipeline, which has the renderer registry) declares the depth passes that re-emit the casters
 /// and threads the bindings into the forward pass.
@@ -84,9 +84,9 @@ namespace foundation::render
             return true;
         }
         if (m_textures[slot] != nullptr)
-        { // grow: replace the old array + its views. In-flight frames may still sample
-          // them - RETIRE via the queue when wired (web-safe: no mid-frame WaitIdle
-          // pumping the browser event loop), else drain.
+        { // grow: replace the old array and its views. In-flight frames may still sample
+          // them, so retire them through the queue when wired (web-safe: no mid-frame
+          // WaitIdle pumping the browser event loop), otherwise drain.
             if (m_retire != nullptr)
             {
                 m_retire->Retire(m_sampleViews[slot]);
@@ -126,7 +126,7 @@ namespace foundation::render
             return false;
         }
 
-        // Whole-array views (the import's attachment fallback + the forward's Texture2DArray sample).
+        // Whole-array views (the import's attachment fallback and the forward's Texture2DArray sample).
         rhi::TextureViewDesc av{};
         av.format = kShadowFormat;
         av.aspect = rhi::TextureAspect::DepthOnly;
@@ -147,7 +147,7 @@ namespace foundation::render
         }
         m_layerCounts[slot] = layerCount;
         m_states[slot] = rhi::ResourceState::Undefined;
-        ++m_generation; // a new physical shadow texture exists -> invalidate consumer bind-group caches
+        ++m_generation; // a new physical shadow texture exists: invalidate consumer bind-group caches
         return true;
     }
 

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:window`: the window's commands (Documentation/Specs/model-viewer.md,
-// P8): the models open in tabs, the view, the clip, the browser, the thumbnails. One table names
-// them, their arguments and kinds; the window registers each with what it does (a button, a menu
-// item, a drop, a shortcut, or an agent, all through these), and a viewer without a window
-// (`--headless`) registers the same names answering that there is no window, so an agent sees one
-// command list either way.
+// ModelViewer - `modelviewer:window`: the window's commands for the open tabs, the view, the clip,
+// the browser and the thumbnails. One table lists their names, arguments and kinds. The window
+// registers each with its implementation, and buttons, menu items, drops, shortcuts and agents
+// all go through them. A viewer without a window (`--headless`) registers the same names with
+// handlers that report there is no window, so an agent sees one command list either way.
 
 module;
 #include "Core/Prelude.h"
@@ -31,10 +30,10 @@ export namespace modelviewer
 
     /// The window's commands, in order.
     // Defined in WindowCommandsImpl.cpp: as an inline `const` table in this interface (dynamically
-    // initialized), MSVC emitted no definition of it and the viewer did not link.
+    // initialized), MSVC emits no definition of it and the viewer fails to link.
     [[nodiscard]] Span<const WindowCommandSpec> WindowCommandSpecs();
 
-    /// A command from the table, run by `run`.
+    /// Builds a command from a table entry, implemented by `run`.
     [[nodiscard]] inline Command MakeWindowCommand(const WindowCommandSpec& spec, Function<CommandResult(const JsonValue&)> run)
     {
         Command c;
@@ -46,7 +45,8 @@ export namespace modelviewer
         return c;
     }
 
-    /// The window's commands with no window to run them (`--headless`): each says so.
+    /// Registers the window's commands for a viewer with no window (`--headless`); each one
+    /// returns an error saying there is no window.
     inline void RegisterWindowlessCommands(CommandSet& set)
     {
         for (const WindowCommandSpec& spec : WindowCommandSpecs())

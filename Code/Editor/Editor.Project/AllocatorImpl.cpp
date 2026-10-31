@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// The editor-binary root-allocator seam's one slot (declared in Allocator.cppm): one per
+// The single slot for the editor binary's root allocator (declared in Allocator.cppm): one per
 // process, so every editor library allocates from the same root the app installed.
 module;
 #include "Core/Prelude.h"

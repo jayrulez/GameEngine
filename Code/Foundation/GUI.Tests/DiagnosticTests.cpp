@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - what the loaders say (E1 of Specs/gui-lab-evolution-3.md): the markup loader's and the CSS
-// parser's diagnostics, with lines where they are known, and the check of a sheet's property names
-// against the style table and the registered element types: what a cook warns of or fails on.
+// GUI - loader diagnostics: what the markup loader and the CSS parser report, with line numbers
+// where they are known, and the check of a sheet's property names against the style table and the
+// registered element types, which a cook warns about or fails on.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -50,8 +50,9 @@ TEST_CASE("diagnostics: markup that does not parse is an error with its line; an
     CHECK_FALSE(loader.LoadFromString(SV(u8"<?xml version=\"1.0\"?>")));
     CHECK(said.Size() == 1);
 
-    // Each warning names its line: the dropped element's, the unknown attribute's own (on a line
-    // of its own here), so an editor marks it and a cook's warning says where.
+    // Each warning names its line: the line of the dropped element, and the line of the unknown
+    // attribute itself (on a line of its own here). An editor can then mark it, and a cook's
+    // warning says where it is.
     said.Clear();
     REQUIRE(loader.LoadFromString(SV(u8"<Panel>\n  <Lable text=\"typo\"/>\n  <Label text=\"ok\"\n         txet=\"x\"/>\n</Panel>")));
     REQUIRE(said.Size() == 2);
@@ -104,5 +105,5 @@ TEST_CASE("diagnostics: a sheet's property names are checked against the style t
     CHECK(Says(said, u8"'colour'"));
     CHECK(said[0].Line == 1u);
     CHECK(Says(said, u8"'opactiy'"));
-    CHECK_FALSE(Says(said, u8"nav-up")); // an element type takes it by its CSS name
+    CHECK_FALSE(Says(said, u8"nav-up")); // an element type accepts it by its CSS name
 }

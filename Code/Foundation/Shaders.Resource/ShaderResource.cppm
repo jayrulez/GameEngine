@@ -3,13 +3,13 @@
 
 /// Foundation::Shaders.Resource - the `foundation.shaders.resource` module.
 ///
-/// Shaders as resources: a `ShaderSource` (authored content: name + per-stage HLSL)
+/// Shaders as resources: a `ShaderSource` (authored content: a name and per-stage HLSL)
 /// is built by `ShaderFactory` into a runtime `ShaderResource`. The factory
 /// registers the sources with the ShaderSystem and bumps the shader's version, so
-/// a reload (via the resource manager) propagates: PSO caches see the version
-/// change and rebuild, and a material that depends on this ShaderResource is a
-/// normal resource→resource edge. Variants themselves live in the (shared)
-/// ShaderSystem; this product is the resource-system handle + version accessor.
+/// a reload through the resource manager propagates: PSO caches see the version
+/// change and rebuild, and a material that depends on this ShaderResource is an
+/// ordinary edge between resources. Variants themselves live in the shared
+/// ShaderSystem; this product is the resource-system handle and version accessor.
 
 module;
 #include "Core/Prelude.h"
@@ -48,7 +48,7 @@ export namespace foundation::shaders
     inline constexpr StringView kDepthProgramSuffix = u8".depth";
     inline constexpr StringView kPickProgramSuffix = u8".pick";
 
-    // A cooked shader: a name + per-stage HLSL (the cook's expanded source: a properties block
+    // A cooked shader: a name and per-stage HLSL (the cook's expanded source: a properties block
     // already replaced by its set-2 declarations), the entry point each stage's function is called
     // in it, each stage's declared variant lattice, and the material property table the properties
     // block declared (the layout every material on this shader is cooked with). A surface shader
@@ -253,8 +253,8 @@ export namespace foundation::shaders
         }
     };
 
-    // Runtime handle for a shader: its name + the ShaderSystem it lives in. Version()
-    // is the reload signal (bumped each rebuild); GetVariant compiles-on-demand.
+    // Runtime handle for a shader: its name and the ShaderSystem it lives in. Version()
+    // is the reload signal (bumped each rebuild); GetVariant compiles on demand.
     class ShaderResource final : public Object
     {
         RTTI_OBJECT(ShaderResource, Object)
@@ -298,7 +298,7 @@ export namespace foundation::shaders
 
         // The variant flags the shader's main vertex stage declares (its cooked lattice): what a
         // material on it may turn on, so which effect groups it carries (an effect's flag here,
-        // `WIND`, gives the material the effect's group; Specs/wind-for-every-shader.md).
+        // `WIND`, gives the material the effect's group).
         void SetVertexVariants(ShaderFlags mask) noexcept { m_vertexVariants = mask; }
         [[nodiscard]] ShaderFlags VertexVariants() const noexcept { return m_vertexVariants; }
         // The shader system the shader lives in (borrowed; null for a handle never initialised):
@@ -326,12 +326,12 @@ export namespace foundation::shaders
     };
 
     // Builds a ShaderResource from a ShaderSource: registers the sources with the
-    // ShaderSystem and invalidates (clears stale variants + bumps version) so a reload
+    // ShaderSystem and invalidates (clears stale variants and bumps the version) so a reload
     // is observable. Constructed with the ShaderSystem the shaders live in.
     class ShaderFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required - the composition
+        // The allocator backs every product this factory creates (required; the composition
         // that creates the factory decides); the shader system is borrowed from the host.
         ShaderFactory(IAllocator& allocator, ShaderSystem& system) noexcept
             : m_allocator(&allocator), m_system(&system)
@@ -360,7 +360,7 @@ export namespace foundation::shaders
 
             // Each program, each stage with its entry point and the variant lattice the cook
             // compiled, so a request canonicalizes onto a variant the cook proved (as the corpus's
-            // do).
+            // requests do).
             for (const ShaderProgram& program : source->Programs())
             {
                 m_system->RegisterSource(program.name.AsView(), ShaderStage::Vertex,
@@ -369,7 +369,7 @@ export namespace foundation::shaders
                 m_system->RegisterSource(program.name.AsView(), ShaderStage::Fragment,
                                          program.fragmentSource, program.fragmentEntryPoint,
                                          program.fragmentVariantMask);
-                m_system->InvalidateShader(program.name.AsView()); // drop stale variants, bump version
+                m_system->InvalidateShader(program.name.AsView()); // drop stale variants, bump the version
             }
 
             RefPtr<ShaderResource> res = MakeRef<ShaderResource>(*m_allocator);
@@ -393,7 +393,7 @@ export namespace foundation::shaders
 
 export namespace foundation::shaders
 {
-    /// Registers the cooked record + product (content-DB construction by type name). Idempotent.
+    /// Registers the cooked record and product (content-DB construction by type name). Idempotent.
     inline void RegisterShaderResourceTypes()
     {
         GlobalTypeRegistry().Register(ShaderSource::StaticType());
@@ -401,8 +401,8 @@ export namespace foundation::shaders
         GlobalTypeRegistry().Register(ShaderResource::StaticType());
     }
 
-    /// The shaders resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The shaders resource module: what the engine composition composes this library's
+    /// factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kShadersResourceFactories[] = {
         foundation::resource::FactoryWithService<ShaderResource, ShaderSource, ShaderFactory, ShaderSystem>(),
     };

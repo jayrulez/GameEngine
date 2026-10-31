@@ -4,16 +4,17 @@
 // GUI - :svg_drawable partition
 //
 // SvgDrawable: an SVG picture as image content (an Image widget's picture, a menu item's or a
-// button's icon), at the size it lands in device pixels, crisp at any size. Its intrinsic size is
-// the document's. A tint other than white recolours it whole, as VG's SVG renderer does (an icon
-// taking its colour); white draws it as authored. With a picture baker it is baked once per size
-// into the baker's atlas (white, when tinted: one bake for every tint) and drawn as one textured
-// quad, pictures one after another one draw; as VG paths without one, until the bake lands, or
-// when it is larger than an atlas keeps.
+// button's icon), drawn at the size it lands in device pixels so it is crisp at any size. Its
+// intrinsic size is the document's. A tint other than white recolours the whole picture, as VG's
+// SVG renderer does (an icon taking its colour); white draws it as authored. With a picture baker,
+// it is baked once per size into the baker's atlas (in white when tinted, so one bake serves every
+// tint) and drawn as one textured quad, and pictures drawn one after another become one draw. It is
+// drawn as VG paths when there is no baker, until the bake finishes, or when it is larger than an
+// atlas keeps.
 // It owns its document when made from SVG text (FromText: an icon set compiled into the binary,
-// as the editor's are) and borrows the resource provider's for a source (PictureDrawable, which
-// picks the kind by the source: an SVG by a .svg ending or a data:image/svg+xml URL, a raster
-// otherwise).
+// as the editor's are) and borrows the resource provider's document for a source. PictureDrawable
+// picks the kind by the source: SVG for a .svg ending or a data:image/svg+xml URL, raster
+// otherwise.
 
 module;
 #include "Core/Prelude.h"
@@ -21,8 +22,8 @@ module;
 
 export module foundation.gui:svg_drawable;
 
-import foundation.core;   // Color, Rectangle, Float2, Optional, RefPtr, Result
-import foundation.vg.svg; // SVGDocument, SVGLoader, SVGRenderer
+import foundation.core;
+import foundation.vg.svg;
 import :rect;
 import :draw_context;
 import :drawable;
@@ -46,7 +47,7 @@ export namespace foundation::gui
         SvgDrawable(const SvgDrawable&) = delete; // m_document may point at m_owned
         SvgDrawable& operator=(const SvgDrawable&) = delete;
 
-        /// An SVG from its markup; null when it does not parse.
+        /// Parses an SVG from its markup; returns null when it does not parse.
         [[nodiscard]] static RefPtr<SvgDrawable> FromText(IAllocator& allocator, core::StringView svg)
         {
             Result<foundation::vg::svg::SVGDocument> parsed = foundation::vg::svg::SVGLoader::Load(svg);
@@ -97,7 +98,8 @@ export namespace foundation::gui
 
     RTTI_DEFINE_OBJECT(SvgDrawable, "rtti::gui")
 
-    /// Whether a source's last name has an ending (".png", ".svg"): a file's, not an id's.
+    /// Whether the last segment of a source path has a file ending (".png", ".svg"), which marks a
+    /// file rather than an id.
     [[nodiscard]] inline bool HasFileEnding(core::StringView path) noexcept
     {
         for (usize i = path.Size(); i-- > 0;)
@@ -110,9 +112,10 @@ export namespace foundation::gui
         return false;
     }
 
-    /// A picture by its source, as a resource provider has it: an SvgDrawable for an SVG source
-    /// (IsSvgSource: a .svg path or one written inline), an ImageDrawable otherwise, or for a source
-    /// with no file ending (an id) whichever of the two the provider has; null when it has none.
+    /// Returns a picture for a source, as a resource provider has it: an SvgDrawable for an SVG
+    /// source (IsSvgSource: a .svg path or inline SVG), and an ImageDrawable otherwise. For a source
+    /// with no file ending (an id), it returns whichever of the two the provider has. Returns null
+    /// when the provider has neither.
     [[nodiscard]] inline RefPtr<Drawable> PictureDrawable(IResourceProvider& resources, core::StringView path, IAllocator& allocator)
     {
         if (IsSvgSource(path))
@@ -123,8 +126,8 @@ export namespace foundation::gui
         }
         if (const foundation::image::ImageData* image = resources.LoadImage(path))
             return core::MakeRef<ImageDrawable>(allocator, image);
-        // A source with no file ending (a resource id, an engine's "{guid}") says nothing of its
-        // kind: the provider knows, so a vector image named so is asked for as one.
+        // A source with no file ending (a resource id, an engine's "{guid}") does not tell its kind,
+        // but the provider knows it, so a vector image named that way is requested as one.
         if (!HasFileEnding(path))
             if (const foundation::vg::svg::SVGDocument* document = resources.Svg(path))
                 return core::MakeRef<SvgDrawable>(allocator, document);

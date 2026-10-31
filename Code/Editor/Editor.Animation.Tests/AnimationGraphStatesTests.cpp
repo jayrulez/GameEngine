@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// An animation graph as a graph source (Editor.Animation's AnimationGraphStates), no widgets: a
-// layer's states and Any State its nodes, its transitions node links; a transition into Any State
-// or into its own state refused; each change one edit; a state deleted taking its transitions and
-// moving the indices after it down while every other id stays; a layer keeping one state; a move
-// one step, a cancelled one none; and the graph edits the page's lists share (a parameter removed,
-// a layer added and removed).
+// An animation graph as a graph source (Editor.Animation's AnimationGraphStates), with no widgets.
+// Covers: a layer's states and Any State as its nodes and its transitions as node links; a
+// transition into Any State or into its own source state is refused; each change is one edit;
+// deleting a state removes its transitions and shifts down the indices after it while every other
+// id stays; a layer keeps one state; a move is one undo step and a cancelled move none; and the
+// graph edits the page's lists share (removing a parameter, adding and removing a layer).
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -132,7 +132,7 @@ TEST_CASE("graph states: a transition into Any State or into its own state is re
     CHECK(bed.Layer().transitions[3].dst == 2);
     CHECK(bed.states->TransitionOf(made) == 3);
 
-    // Taken away: the others keep their ids.
+    // Removed: the other transitions keep their ids.
     const gui::GraphId first = bed.states->TransitionId(0);
     const gui::GraphId gone = bed.states->TransitionId(1);
     CHECK(bed.states->Disconnect(Span<const gui::GraphId>(&gone, 1u)));
@@ -153,7 +153,7 @@ TEST_CASE("graph states: a state deleted takes its transitions and moves those a
     CHECK(bed.edits == 1);
     REQUIRE(bed.Layer().states.Size() == 2u);
     CHECK(bed.Layer().states[1].name == String(u8"Die"));
-    REQUIRE(bed.Layer().transitions.Size() == 1u); // both of Attack's went
+    REQUIRE(bed.Layer().transitions.Size() == 1u); // both of Attack's transitions were removed
     CHECK(bed.Layer().transitions[0].src == -1);
     CHECK(bed.Layer().transitions[0].dst == 1); // Die moved down
     CHECK(bed.states->StateOf(die) == 1);       // its id stayed with it
@@ -180,7 +180,7 @@ TEST_CASE("graph states: a move is one step, a cancelled one none; a new state n
     bed.states->BeginMove();
     bed.states->PreviewMove(Span<const gui::GraphId>(moving, 2u), Span<const gui::GraphId>{}, Float2{10.0f, 5.0f});
     bed.states->PreviewMove(Span<const gui::GraphId>(moving, 2u), Span<const gui::GraphId>{}, Float2{20.0f, 15.0f});
-    CHECK(bed.states->GetNode(attack)->Position.x == doctest::Approx(620.0f)); // live
+    CHECK(bed.states->GetNode(attack)->Position.x == doctest::Approx(620.0f)); // moved live, before any undo step
     CHECK(bed.edits == 0);
     bed.states->CommitMove();
     CHECK(bed.edits == 1);
@@ -230,5 +230,5 @@ TEST_CASE("graph edits: a parameter removed takes its conditions and drivers; la
     CHECK(bed.asset.layerAnyStatePositions.Size() == 2u);
     CHECK(animgraph::RemoveLayer(bed.asset, 0));
     CHECK(bed.asset.source.layers[0].name == String(u8"Base 2"));
-    CHECK_FALSE(animgraph::RemoveLayer(bed.asset, 0)); // the last stays
+    CHECK_FALSE(animgraph::RemoveLayer(bed.asset, 0)); // the last layer cannot be removed
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The scene editor's services, registered without a page: the export's seams set (a scene's text
-// source transcoded to the binary wire, its references scanned), and an import that is not a
-// model passing the model-prefab listener by.
+// The scene editor's services, registered without a page. The export hooks are set (a scene's
+// text source is transcoded to the binary format and its references are scanned), and an import
+// that is not a model is ignored by the model-prefab listener.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -26,7 +26,7 @@ namespace scene = foundation::scene;
 
 namespace
 {
-    // Headless host stub: the listener only keeps it.
+    // Headless host stub; the listener only stores it.
     class StubHost final : public runtime::IApplicationHost
     {
     public:
@@ -82,14 +82,14 @@ TEST_CASE("scene services: the export's seams set; a scene's text source staged 
         bool verbatim = wire.Size() == text.Size();
         for (usize i = 0; verbatim && i < wire.Size(); ++i)
             verbatim = wire[i] == text[i];
-        CHECK_FALSE(verbatim); // transcoded, not the source as it is
+        CHECK_FALSE(verbatim); // transcoded, not the source copied as is
 
         Array<Guid> resources;
         Array<Guid> prefabs;
         CHECK(context.SceneRefScanner(*level, project->SourceDb(), resources, prefabs));
         CHECK(prefabs.IsEmpty());
 
-        // Not a model's import: the prefab listener lets it by, saying nothing.
+        // Not a model's import: the prefab listener ignores it and reports nothing.
         context.NotifyImported(*level, nullptr);
         CHECK(project->SourceDb().RootGroup()->GetInstance(u8"Level") == level);
     }

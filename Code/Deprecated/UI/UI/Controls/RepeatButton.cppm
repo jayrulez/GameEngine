@@ -4,7 +4,6 @@
 // UI - :repeat_button partition
 //
 // Button that fires OnClick repeatedly while held down (scroll arrows, numeric steppers, ...).
-// Ported from Sedulous.UI/src/Controls/RepeatButton.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::GameInstance - the script-bracket bodies (moved verbatim from DefaultApplication's
-// former StartGameScript/StopGameScript/TickGameScript, now per-instance).
+// Engine::GameInstance - the script-bracket bodies.
 
 module;
 #include "Core/Prelude.h"
@@ -16,7 +15,7 @@ import foundation.core;
 import foundation.scene;
 import foundation.scene.resource; // LoadScene / ResolveSceneResources / ResolveScenePrefabs
 import foundation.content;        // content::Instance
-import foundation.resource;       // ResourceManager + AsyncBindScope (async level load, task #123)
+import foundation.resource;       // ResourceManager and AsyncBindScope (async level load)
 import foundation.script;
 import engine.script;
 import foundation.script.facades; // RegisterExtraFacadeName (run behavior-prelude hook)
@@ -39,9 +38,9 @@ namespace script = foundation::script;
 
 namespace engine::runtime
 {
-    // ---- run.* facade: reflection bodies + registration (kept
-    // out of the interface unit to keep GCC's gcm cluster small). Bound to scripts LOWERCASE as `run` via
-    // ScriptName; includes the running instance's level-load control.
+    // ---- run.* facade: reflection bodies and registration, kept out of the interface unit to keep
+    // GCC's gcm cluster small. Bound to scripts in lowercase as `run` through ScriptName; includes
+    // the running instance's level-load control.
     void RunEvents::emit(core::String name) const
     {
         if (bus != nullptr)
@@ -59,7 +58,7 @@ namespace engine::runtime
 
     REFLECT_VALUE(RunEvents, "rtti::engine::runtime")
     {
-        // emit as an ARITY FAMILY (mirrors SceneEvents): emit(name) + emit(name, payload:Variant).
+        // emit as an arity family, as SceneEvents does: emit(name) and emit(name, payload:Variant).
         builder.Method<static_cast<void (RunEvents::*)(core::String) const>(&RunEvents::emit)>("emit");
         builder.Method<static_cast<void (RunEvents::*)(core::String, core::Variant) const>(
             &RunEvents::emit)>("emit", {"name", "payload"});
@@ -77,7 +76,7 @@ namespace engine::runtime
         builder.Method<&Run::loadScene>("loadScene");
         builder.Method<&Run::sceneReady>("sceneReady");
         builder.Method<&Run::currentScene>("currentScene"); // -> bound Scene (orchestrator)
-        // requestExit as an ARITY FAMILY (mirrors emit): requestExit() + requestExit(code:int).
+        // requestExit as an arity family, like emit: requestExit() and requestExit(code:int).
         builder.Method<static_cast<void (*)()>(&Run::requestExit)>("requestExit");
         builder.Method<static_cast<void (*)(i32)>(&Run::requestExit)>("requestExit", {"code"});
         builder.Method<&Run::setTimeScale>("setTimeScale", {"scale"}); // 0 = pause gameplay, 0.5 slow-mo
@@ -96,7 +95,7 @@ namespace engine::runtime
             RttiRegisterValue_RunEvents(); // the run.events() handle (a bound value type)
             GlobalTypeRegistry().Register(TypeOf<RunEvents>());
             GlobalTypeRegistry().Register(Run::StaticType()); // binds as `run` (its scriptName alias)
-            foundation::script::RegisterExtraFacadeName(u8"run"); // prelude imports the ALIAS, not Run
+            foundation::script::RegisterExtraFacadeName(u8"run"); // the prelude imports the alias, not Run
             return true;
         }();
         (void)once;
@@ -104,10 +103,11 @@ namespace engine::runtime
 
     void GameInstance::InstallRunServices(script::IScriptContext& scriptContext)
     {
-        m_runBinding.runEvents = &Events();            // run.events() -> THIS run's bus
+        m_runBinding.runEvents = &Events();            // run.events() -> this run's bus
         InstallRunScriptService(scriptContext, m_runBinding);   // run.* -> this instance's registry
-        // THIS instance's input runtime as the context's Input service (overriding the shared editor
-        // runtime the run-host configurator installed), so the run reads only ITS own source.
+        // This instance's input runtime as the context's Input service (overriding the shared
+        // editor runtime the run-host configurator installed), so the run reads only its own
+        // source.
         scriptContext.SetService(input::kInputScriptService, &m_inputRuntime);
         InstallSaveScriptService(scriptContext, m_save); // Save.* -> this run's save
         foundation::http::InstallHttpScriptService(scriptContext, m_http); // Http.* -> this run's client
@@ -129,8 +129,8 @@ namespace engine::runtime
     {
         StopScript();
         m_scriptFault = core::String{};
-        // THIS instance's run host is the game's context. The host was
-        // configured by the app (ConfigureRunHost) with the facades + Scene.spawn + entity.send routing.
+        // This instance's run host is the game's context. The app configured the host
+        // (ConfigureRunHost) with the facades and the Scene.spawn and entity.send routing.
         m_runHost.SetExternalErrorSink(m_errorHandler); // before the context is created
         script::IScriptContext* scriptContext = m_runHost.EnsureContextForFile(name);
         if (scriptContext == nullptr)
@@ -141,7 +141,7 @@ namespace engine::runtime
         }
         m_scriptContext = core::RefPtr<script::IScriptContext>(scriptContext);
         m_runHost.SetGameScriptHold(true);
-        // The game script (its menu) can now call Net.startServer()/connect() - resolve the controller.
+        // The game script (its menu) can now call Net.startServer()/connect(); they resolve the controller.
         m_network.InstallScriptBinding(m_scriptContext.Get());
         InstallRunServices(*scriptContext); // the host's owner services did this at creation; idempotent
 
@@ -169,9 +169,10 @@ namespace engine::runtime
                                    name);
             return false;
         }
-        // Wire the Game tier's on<Event> inbox to THIS run's bus: the shared
-        // bridge subscribes the run bus to the Game class's declared handlers (threaded in from the cooked
-        // ScriptClass), fanning each to DispatchGameEvent -> the Game object. No implicit scene->run relay.
+        // Wire the Game tier's on<Event> inbox to this run's bus: the shared bridge subscribes the
+        // run bus to the Game class's declared handlers (threaded in from the cooked ScriptClass),
+        // fanning each through DispatchGameEvent to the Game object. There is no implicit
+        // scene-to-run relay.
         m_gameEventSubs.Bind(&Events(),
                              core::Function<void(core::StringView, const core::Variant&)>{
                                  [this](core::StringView eventName, const core::Variant& payload)
@@ -194,7 +195,7 @@ namespace engine::runtime
         m_scriptContext = nullptr; // drop the game script's ref; the run host owns the context
         m_runHost.SetGameScriptHold(false);
         m_runHost.SetExternalErrorSink(nullptr);
-        StopNetworking(); // networking belongs to the run - the endpoint drops with it
+        StopNetworking(); // networking belongs to the run; the endpoint drops with it
         m_http.Reset();   // so do its HTTP requests: no answer reaches a script that has stopped
         // What the game saved and did not write yet is kept: the run writes it as it ends.
         (void)m_save.Flush();
@@ -203,12 +204,13 @@ namespace engine::runtime
         {
             input::StopRumble(*m_inputSource);
         }
-        // The run host tears down when nothing else pins it - driven by the scene-stop observer
-        // (ScriptSubsystem::MaybeTeardownRunHost). A bare instance (no scenes) keeps it until destruction.
+        // The run host tears down when nothing else pins it, driven by the scene-stop observer
+        // (ScriptSubsystem::MaybeTeardownRunHost). A bare instance (no scenes) keeps it until
+        // destruction.
     }
 
-    // Networking role bodies (StartServer/Connect/StopNetworking/DriveNetwork) + the script binding
-    // live on NetworkController (NetworkControllerImpl.cpp); GameInstance forwards inline.
+    // Networking role bodies (StartServer/Connect/StopNetworking) and the script binding live on
+    // NetworkController (NetworkControllerImpl.cpp); GameInstance forwards inline.
 
     void GameInstance::DriveInput(f32 deltaTime, f32 contextTimeScale)
     {
@@ -223,9 +225,9 @@ namespace engine::runtime
 
     void GameInstance::TraceInput()
     {
-        // ENV_INPUT_TRACE set: twice a second, what the input path saw (each pad's left stick and
-        // south button as the device reports them) and what the actions made of it. For a device
-        // where input misbehaves and no debugger reaches, a handheld say.
+        // ENV_INPUT_TRACE set: twice a second, log what the input path saw (each pad's left stick
+        // and south button as the device reports them) and what the actions made of it. For a
+        // device where input misbehaves and no debugger reaches, such as a handheld.
         static const bool tracing = []
         {
             const Optional<core::String> value = core::GetEnvironmentVariable(u8"ENV_INPUT_TRACE");
@@ -260,8 +262,9 @@ namespace engine::runtime
         scene::Scene* scene = m_sceneManager.CreateScene(name, activate);
         if (scene != nullptr)
         {
-            // OnSceneCreated (the ScriptSubsystem) added the behavior + level script systems bound to
-            // the DEFAULT host; re-bind BOTH to THIS instance's host so they share the game's context.
+            // OnSceneCreated (the ScriptSubsystem) added the behavior and level script systems
+            // bound to the default host; re-bind both to this instance's host so they share the
+            // game's context.
             if (auto* system = scene->GetSystem<engine::script::ScriptSceneSystem>())
             {
                 system->SetRunHost(&m_runHost);
@@ -270,8 +273,8 @@ namespace engine::runtime
             {
                 level->SetRunHost(&m_runHost);
             }
-            // (The run bus is already injected by m_sceneManager before assembly, so
-            // scene.events and the run bus are one object and the script systems bound to the right bus.)
+            // The run bus is already injected by m_sceneManager before assembly, so scene.events
+            // and the run bus are one object and the script systems are bound to the right bus.
         }
         return scene;
     }
@@ -280,7 +283,7 @@ namespace engine::runtime
         content::Instance& sceneInstance, resource::ResourceManager& resources,
         Function<UniquePtr<IStream>(const Guid&)> prefabProvider)
     {
-        scene::Scene* scene = CreateScene(sceneInstance.Name()); // active (sync path unchanged)
+        scene::Scene* scene = CreateScene(sceneInstance.Name()); // active (the sync path)
         if (scene == nullptr || !scene::LoadScene(sceneInstance, *scene).IsOk())
         {
             if (scene != nullptr)
@@ -330,7 +333,7 @@ namespace engine::runtime
         }
 
         handle.m_scene = scene;
-        handle.m_total = resources.PendingCount(); // snapshot AFTER all async binds are issued
+        handle.m_total = resources.PendingCount(); // snapshot after all async binds are issued
         return handle;
     }
 
@@ -356,9 +359,8 @@ namespace engine::runtime
 
     void GameInstance::PumpScriptLoads()
     {
-        // Index walk (not range-for): a successful activation RETIRES its entry in place, so the
-        // array shrinks mid-loop (Fable review: was monotonic growth). Failed / in-flight entries
-        // stay and we advance past them.
+        // Index walk, not range-for: a successful activation retires its entry in place, so the
+        // array shrinks mid-loop. Failed and in-flight entries stay and we advance past them.
         for (core::usize i = 0; i < m_scriptLoads.Size();)
         {
             TrackedScriptLoad& load = m_scriptLoads[i];
@@ -416,10 +418,10 @@ namespace engine::runtime
         {
             if (load.ticket == ticket)
             {
-                return load.handle.Failed(); // a retained entry is terminal only when it FAILED
+                return load.handle.Failed(); // a retained entry is terminal only when it failed
             }
         }
-        return true; // retired-on-activation (success) OR a bad/expired ticket -> never hang the yield loop
+        return true; // retired on activation (success) or a bad/expired ticket: never hang the yield loop
     }
 
     bool GameInstance::ScriptLoadFailed(i32 ticket) const
@@ -447,9 +449,9 @@ namespace engine::runtime
 
     void GameInstance::TickScript(f32 hostDeltaTime, f32 contextTimeScale)
     {
-        // Debug-paused: the debugger holds a suspended update mid-call. Starting a NEW
-        // update each frame would re-hit the breakpoint per frame (pause-event spam, locals
-        // flicker) and orphan the held context. Hold script time still, like the scene sim.
+        // Debug-paused: the debugger holds a suspended update mid-call. Starting a new update each
+        // frame would hit the breakpoint again every frame (pause-event spam, flickering locals)
+        // and orphan the held context. Hold script time still, like the scene simulation.
         if (m_runHost.IsDebugPaused())
         {
             return;
@@ -474,9 +476,9 @@ namespace engine::runtime
         if (auto result = m_game->Invoke(u8"update", core::Span<core::Variant>{&dt, 1});
             !result.HasValue())
         {
-            // A DEBUGGER SUSPENSION surfaces as an error result too (the suspended call
-            // unwinds to here) - same distinction the behavior path's InvokeHandler makes:
-            // paused is not a fault. The debugger completes the held call on Continue.
+            // A debugger suspension surfaces as an error result too (the suspended call unwinds to
+            // here), the same distinction the behavior path's InvokeHandler makes: paused is not a
+            // fault. The debugger completes the held call on Continue.
             if (m_runHost.IsDebugPaused())
             {
                 return;

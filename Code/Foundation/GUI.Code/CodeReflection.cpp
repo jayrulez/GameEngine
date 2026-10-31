@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - its widgets' reflection: the code editor an element markup places, its text and
-// settings given in code or markup.
+// GUI.Code - the widgets' reflection: the code editor as an element that markup can place, with its
+// text and settings given in code or markup.
 
 module;
 #include "Core/Prelude.h"

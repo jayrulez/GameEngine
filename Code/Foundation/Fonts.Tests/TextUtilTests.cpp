@@ -90,7 +90,7 @@ TEST_CASE("fonts.truncate: the prefix is codepoint-aligned and short text stays 
     const String out = TruncateToWidth(font, text, 100.0f); // 100 - 60 = 40 -> two codepoints + ...
     CHECK(out.AsView() == StringView(u8"éé..."));
     CHECK(font.MeasureString(out.AsView()) == doctest::Approx(100.0f));
-    // Narrower than the ellipsis itself: replacing "ab" with "..." would widen it - unchanged.
+    // Narrower than the ellipsis itself: replacing "ab" with "..." would widen it, so unchanged.
     CHECK(TruncateToWidth(font, u8"ab", 10.0f).AsView() == StringView(u8"ab"));
     CHECK(TruncateToWidth(font, u8"", 10.0f).AsView() == StringView(u8""));
 }

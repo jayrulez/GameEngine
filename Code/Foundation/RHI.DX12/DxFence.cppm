@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of Fence using ID3D12Fence.
-/// Ported from Sedulous.RHI.DX12/DX12Fence.bf.
 
 module;
 #include "Core/Prelude.h"

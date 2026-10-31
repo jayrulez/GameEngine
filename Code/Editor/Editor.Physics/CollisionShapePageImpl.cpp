@@ -58,7 +58,7 @@ namespace editor
             CollisionShapeEditorPage* self = this;
             m_pane->OnFrame = [self]() { self->FrameOutline(); };
         }
-        // Bind the cooked product (auto-follows re-cooks); DrawOutline reads it each frame.
+        // Bind the cooked product, which follows re-cooks; DrawOutline reads it each frame.
         if (Context().Resources() != nullptr)
             m_shape = Context().Resources()->Bind<physics::CollisionShape>(InstanceId());
         ShowStatus();

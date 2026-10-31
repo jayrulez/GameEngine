@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The cook-time optimization pass. Everything is a pure REORDER -
-// these tests pin the invariants (triangle set / vertex values / submesh ranges /
-// non-triangle index streams survive as sets or position-sequences), the wins (ACMR
-// improves on a cache-hostile fixture; unused vertices compact away), and the guards
-// (malformed input passes through untouched; the pass is idempotent).
+// The cook-time optimization pass. Everything is a pure reorder, so these tests pin the
+// invariants (triangle set, vertex values, submesh ranges and non-triangle index streams
+// survive as sets or position sequences), the wins (ACMR improves on a cache-hostile
+// fixture; unused vertices compact away), and the guards (malformed input passes through
+// untouched; the pass is idempotent).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -24,9 +24,9 @@ using namespace pipeline;
 
 namespace
 {
-    // A deliberately cache-hostile grid: (n+1)^2 vertices, triangles emitted
-    // COLUMN-major over a ROW-major vertex layout, so consecutive triangles jump
-    // n+1 vertices apart - a worst case the optimizer must visibly improve.
+    // A cache-hostile grid: (n+1)^2 vertices, triangles emitted column-major over a
+    // row-major vertex layout, so consecutive triangles jump n+1 vertices apart: a worst
+    // case the optimizer must visibly improve.
     void BuildHostileGrid(u32 n, StaticMeshSource& out)
     {
         const u32 side = n + 1;
@@ -44,7 +44,7 @@ namespace
         out.vertexBlob.Resize(vertices.Size() * sizeof(StaticMeshVertex));
         MemCopy(out.vertexBlob.Data(), vertices.Data(), out.vertexBlob.Size());
         out.indexData.Clear();
-        for (u32 x = 0; x < n; ++x) // column-major emission = hostile
+        for (u32 x = 0; x < n; ++x) // column-major emission: hostile
         {
             for (u32 z = 0; z < n; ++z)
             {
@@ -105,7 +105,7 @@ namespace
         }
         return t;
     }
-    // The triangle SET of a submesh range, as position triples (index values may be
+    // The triangle set of a submesh range, as position triples (index values may be
     // remapped freely; geometry and winding may not change).
     [[nodiscard]] std::vector<Tri> TriangleSet(const StaticMeshSource& s, usize submesh)
     {
@@ -161,7 +161,7 @@ TEST_CASE("mesh optimize: reorder preserves triangles/ranges/vertices and improv
     pipeline::MeshOptimizeStats stats;
     pipeline::OptimizeStaticMeshSource(source, &stats);
 
-    // Ranges and sizes are untouched (every vertex is referenced - no compaction).
+    // Ranges and sizes are untouched (every vertex is referenced, so nothing compacts).
     CHECK(source.subStart[0] == 0);
     CHECK(source.subCount[0] == static_cast<i32>(indexCount));
     CHECK(source.indexData.Size() == indexCount);
@@ -169,10 +169,10 @@ TEST_CASE("mesh optimize: reorder preserves triangles/ranges/vertices and improv
     CHECK(stats.triangleSubmeshes == 1);
     CHECK(stats.verticesBefore == stats.verticesAfter);
 
-    // Same triangles (as position triples, winding preserved) - just a better order.
+    // Same triangles (as position triples, winding preserved), in a better order.
     CHECK(SameTriangles(before, TriangleSet(source, 0)));
 
-    // The point of the pass: the hostile order must measurably improve.
+    // The hostile order must measurably improve.
     CHECK(stats.acmrAfter < stats.acmrBefore);
 
     // Idempotent: a second pass keeps the triangle set and does not regress ACMR.
@@ -184,7 +184,7 @@ TEST_CASE("mesh optimize: reorder preserves triangles/ranges/vertices and improv
 
 TEST_CASE("mesh optimize: non-triangle submeshes keep their order; unused vertices compact")
 {
-    // Two submeshes: a triangle pair + a LINES range, plus one vertex nothing references.
+    // Two submeshes, a triangle pair and a lines range, and one vertex nothing references.
     StaticMeshSource source;
     Array<StaticMeshVertex> vertices;
     for (u32 i = 0; i < 6; ++i)
@@ -193,7 +193,7 @@ TEST_CASE("mesh optimize: non-triangle submeshes keep their order; unused vertic
         v.position = Float3{static_cast<f32>(i), static_cast<f32>(i * 2), 0.0f};
         vertices.PushBack(v);
     }
-    // vertex 5 is UNUSED - the fetch remap must compact it away.
+    // vertex 5 is unused: the fetch remap must compact it away.
     source.vertexBlob.Resize(vertices.Size() * sizeof(StaticMeshVertex));
     MemCopy(source.vertexBlob.Data(), vertices.Data(), source.vertexBlob.Size());
     const u32 triangleIndices[] = {0, 1, 2, 2, 1, 3};
@@ -230,8 +230,8 @@ TEST_CASE("mesh optimize: non-triangle submeshes keep their order; unused vertic
     CHECK(stats.verticesAfter == 5);          // the unused vertex is gone
     CHECK(source.vertexBlob.Size() == 5 * sizeof(StaticMeshVertex));
     CHECK(SameTriangles(before, TriangleSet(source, 0)));
-    // The lines range: index VALUES were remapped, but the position SEQUENCE (order
-    // included - line segments are order-sensitive) is identical.
+    // The lines range: index values were remapped, but the position sequence (order
+    // included, since line segments are order-sensitive) is identical.
     for (u32 i = 0; i < 4; ++i)
     {
         CHECK(PositionOf(source, source.indexData[6 + i]) == linePositionsBefore[i]);
@@ -284,8 +284,8 @@ TEST_CASE("mesh optimize: malformed input passes through untouched")
 
 TEST_CASE("mesh optimize: the builder runs the pass (cooked cube stays a cube)")
 {
-    // The builder-level guarantee: counts survive (the existing cook test pins them),
-    // and the cooked triangle set equals the source's - through the REAL Build path.
+    // The builder-level guarantee: counts survive (the cook test pins them), and the cooked
+    // triangle set equals the source's, through the real Build path.
     RegisterMeshAssets();
     RefPtr<StaticMesh> cube = Primitives::Cube(DefaultAllocator(), 1.0f);
     StaticMeshAsset asset;
@@ -293,7 +293,7 @@ TEST_CASE("mesh optimize: the builder runs the pass (cooked cube stays a cube)")
     const std::vector<Tri> before = TriangleSet(asset.source, 0);
 
     // Sources are Object-derived (no copy): import the same cube again and optimize
-    // that instance - what Build writes is exactly the optimized source.
+    // that instance: what Build writes is exactly the optimized source.
     StaticMeshAsset cookedAsset;
     MeshImporter::Import(*cube, cookedAsset);
     pipeline::OptimizeStaticMeshSource(cookedAsset.source);
@@ -305,7 +305,7 @@ TEST_CASE("mesh optimize: the builder runs the pass (cooked cube stays a cube)")
 TEST_CASE("mesh lod generate: a dense grid grows a halving chain; small/authored meshes do not")
 {
     StaticMeshSource source;
-    BuildHostileGrid(48, source); // 4608 triangles - room for three halvings above the floor
+    BuildHostileGrid(48, source); // 4608 triangles: room for three halvings above the floor
     const usize lod0Indices = source.indexData.Size();
 
     const u32 added = GenerateLodChain(source);
@@ -331,17 +331,17 @@ TEST_CASE("mesh lod generate: a dense grid grows a halving chain; small/authored
     {
         CHECK(index < vertexCount);
     }
-    // The chain survives the runtime fill + the optimizer pass.
+    // The chain survives the runtime fill and the optimizer pass.
     pipeline::MeshOptimizeStats stats;
     pipeline::OptimizeStaticMeshSource(source, &stats);
     foundation::geometry::StaticMesh mesh;
     source.FillStatic(mesh);
     CHECK(mesh.lodCount == source.lodCount);
 
-    // Authored/existing chains are never regenerated over.
+    // Authored or existing chains are never regenerated over.
     CHECK(GenerateLodChain(source) == 0);
 
-    // A tiny mesh (two triangles) stays chainless - below any sensible floor.
+    // A tiny mesh (two triangles) stays chainless: it is below any sensible floor.
     StaticMeshSource tiny;
     BuildHostileGrid(1, tiny);
     CHECK(GenerateLodChain(tiny) == 0);
@@ -350,7 +350,7 @@ TEST_CASE("mesh lod generate: a dense grid grows a halving chain; small/authored
 
 TEST_CASE("mesh optimize: a skinned source's parallel stream follows the vertex permutation")
 {
-    // Vertex i sits at x = i and carries joints[0] = i: after the fetch remap + compaction
+    // Vertex i sits at x = i and carries joints[0] = i: after the fetch remap and compaction
     // the pairing must survive for every vertex, however the permutation shuffled them.
     SkinnedMeshSource source;
     Array<StaticMeshVertex> vertices;
@@ -368,7 +368,7 @@ TEST_CASE("mesh optimize: a skinned source's parallel stream follows the vertex 
     MemCopy(source.vertexBlob.Data(), vertices.Data(), source.vertexBlob.Size());
     source.skinningBlob.Resize(skinning.Size() * sizeof(VertexSkinning));
     MemCopy(source.skinningBlob.Data(), skinning.Data(), source.skinningBlob.Size());
-    // Two triangles; vertex 5 is dead and must compact away from BOTH streams.
+    // Two triangles; vertex 5 is dead and must compact away from both streams.
     const u32 indices[] = {0, 1, 2, 2, 1, 3, 0, 3, 4};
     for (u32 i : indices)
     {

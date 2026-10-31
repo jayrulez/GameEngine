@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// foundation.rhi.webgpu:render_bundle_encoder - RenderBundle(+Encoder) over WGPU.
+/// foundation.rhi.webgpu:render_bundle_encoder - RenderBundle and RenderBundleEncoder over WGPU.
 ///
-/// Bundles are a native WebGPU concept (the RHI's bundle-safe command subset is
-/// DEFINED as "valid inside a WebGPU render bundle") - a direct mapping. The
+/// Bundles are a native WebGPU concept (the RHI's bundle-safe command subset is defined
+/// as "valid inside a WebGPU render bundle"), so this is a direct mapping. The
 /// RenderBundleDesc viewport extent is for backends that cannot inherit pass state;
 /// WebGPU bundles inherit, so it is ignored here.
 
@@ -196,7 +196,7 @@ export namespace foundation::rhi::webgpu
     private:
         RecordedCounts m_recorded;
 
-        /// Upload + bind any pending emulated push-constant block before a bundle draw. The
+        /// Upload and bind any pending emulated push-constant block before a bundle draw. The
         /// value is captured once here at record time (bundles are static). No-op for pipelines
         /// that use native immediates.
         void FlushPushConstants()

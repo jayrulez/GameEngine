@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Particle curves on Core's types (ruling 2 of Specs/gui-lab-evolution-3.md): float curves of
-// CurveKeys sampled by EvaluateCurve, colour curves as gradients, size over lifetime as `size` with
-// `separateAxes` and `sizeY`; the layout round-tripped through text.
+// Particle curves on Core's types: float curves of CurveKeys sampled by EvaluateCurve, colour
+// curves as gradients, size over lifetime as `size` with `separateAxes` and `sizeY`; the layout
+// round-tripped through text.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -66,7 +66,7 @@ TEST_CASE("particle curves: a colour curve is a gradient, its alpha stops apart"
     particles::ParticleCurveColor ramp;
     ramp.AddKey(0.0f, Float4{0.0f, 0.0f, 0.0f, 1.0f});
     ramp.AddKey(1.0f, Float4{1.0f, 1.0f, 1.0f, 0.0f});
-    CHECK(ramp.Evaluate(0.5f).x == doctest::Approx(0.5f)); // sRGB values, straight (as before)
+    CHECK(ramp.Evaluate(0.5f).x == doctest::Approx(0.5f)); // sRGB values, straight
     CHECK(ramp.Evaluate(0.5f).w == doctest::Approx(0.5f));
     ramp.interpolation = GradientInterpolation::LinearLight;
     CHECK(ramp.Evaluate(0.5f).x > 0.5f);

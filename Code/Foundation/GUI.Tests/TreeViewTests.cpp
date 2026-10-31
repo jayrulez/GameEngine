@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - TreeModel + TreeView tests: hierarchical navigation (RowCount(parent)/Index/
-// ParentIndex/HasChildren), and a TreeView that flattens visible nodes, expands/collapses (arrow
-// click + keyboard), and remaps selection by node id across re-flattening.
+// GUI - TreeModel and TreeView tests: hierarchical navigation (RowCount(parent), Index,
+// ParentIndex, HasChildren), and a TreeView that flattens visible nodes, expands and collapses
+// (arrow click and keyboard), and remaps selection by node id across re-flattening.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -101,7 +101,7 @@ TEST_CASE("tree-view: clicking the arrow toggles expansion")
     auto tree = MountTree(root, &t.model);
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Root A's arrow: row 0 (y in [0,20]), depth 0 -> arrow at x in [0,16].
+    // Root A's arrow: row 0 (y in [0,20]), depth 0: the arrow at x in [0,16].
     d->InjectMouseDown(core::Float2{8.0f, 10.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{8.0f, 10.0f}, MouseButton::Left);
     CHECK(tree->VisibleRowCount() == 4); // expanded
@@ -122,7 +122,7 @@ TEST_CASE("tree-view: selection is remapped by node id across expand/collapse")
     tree->SetSelectedItem(3); // select B
     const core::i64 selId = tree->GetSelectedIndex().InternalId;
 
-    tree->CollapseItem(0);                               // flat: A(0), B(1) - B moved
+    tree->CollapseItem(0);                               // flat: A(0), B(1); B moved
     CHECK(tree->GetSelectedItem() == 1);                 // remapped to B's new row
     CHECK(tree->GetSelectedIndex().InternalId == selId); // same node
 }
@@ -155,9 +155,9 @@ TEST_CASE("tree-view: in right to left Left expands and Right collapses, toward 
 
     tree->SetSelectedItem(0);
     const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
-    d->InjectKeyDown(key(KeyCode::Left)); // toward the inline end: expand
+    d->InjectKeyDown(key(KeyCode::Left)); // toward the inline end, so expand
     CHECK(tree->IsItemExpanded(0));
-    d->InjectKeyDown(key(KeyCode::Right)); // toward the start: collapse
+    d->InjectKeyDown(key(KeyCode::Right)); // toward the start, so collapse
     CHECK_FALSE(tree->IsItemExpanded(0));
 }
 
@@ -174,7 +174,7 @@ TEST_CASE("tree-view: a sheet sets its arrow's column and its indent")
     CHECK(tree->GetArrowSize() == doctest::Approx(10.0f));
     CHECK(tree->GetIndentWidth() == doctest::Approx(8.0f));
     EventDispatcher* d = root->GetEventDispatcher();
-    // Past the 10 px arrow (inside the default 16): the row, not its arrow.
+    // Past the 10 px arrow (inside the default 16), a press hits the row, not its arrow.
     d->InjectMouseDown(core::Float2{13.0f, 10.0f}, MouseButton::Left);
     d->InjectMouseUp(core::Float2{13.0f, 10.0f}, MouseButton::Left);
     CHECK_FALSE(tree->IsItemExpanded(0));
@@ -200,7 +200,8 @@ TEST_CASE("tree-view: a row shows the model's icon, with its class, between the 
     CHECK(withIcon->GetIcon()->GetSource() == core::String(u8"Icons/folder.svg"));
     CHECK(withIcon->GetIcon()->HasClass(SV(u8"cat-rendering")));
     CHECK(withIcon->GetIcon()->GetSize().x == doctest::Approx(14.0f));
-    // The icon after the arrow's column, the text after the icon; a row with none starts its text earlier.
+    // The icon comes after the arrow's column and the text after the icon; a row with no icon
+    // starts its text earlier.
     CHECK(withIcon->GetIcon()->GetPosition().x >= withIcon->GetArrow()->GetPosition().x + withIcon->GetArrow()->GetSize().x);
     CHECK(withIcon->GetLabel()->GetPosition().x >= withIcon->GetIcon()->GetPosition().x + 14.0f);
     CHECK(without->GetLabel()->GetPosition().x < withIcon->GetLabel()->GetPosition().x);
@@ -215,7 +216,7 @@ TEST_CASE("tree-view: a row shows the model's icon, with its class, between the 
 
 namespace
 {
-    // A tree whose rows' classes come from the model: what each node is now.
+    // A tree whose rows take their classes from the model, describing each node's current state.
     class StatedTree final : public TreeModel
     {
     public:
@@ -306,7 +307,7 @@ TEST_CASE("tree-view: its model taken away, scrolled or not, it shows nothing an
     auto tree = MountTree(root, &t.model);
     tree->ExpandItem(0);
     tree->ExpandItem(1);
-    tree->SetSize(core::Float2{260.0f, 40.0f}); // two rows of five: it scrolls
+    tree->SetSize(core::Float2{260.0f, 40.0f}); // two rows of five, so it scrolls
     (void)root->UpdateLayout();
     tree->SetScrollOffset(core::Float2{0.0f, 40.0f});
     (void)root->UpdateLayout();
@@ -318,8 +319,8 @@ TEST_CASE("tree-view: its model taken away, scrolled or not, it shows nothing an
 
 TEST_CASE("tree-view: a row deeper than the view is wide makes the rows that wide, so the view scrolls sideways")
 {
-    // A chain twenty levels deep at 32 px a level: the rows in view (about fifteen of 20 px in
-    // 300) pass the view's 260 px by their indent alone.
+    // A chain twenty levels deep at 32 px per level: the rows in view (about fifteen of 20 px in
+    // 300) reach past the view's 260 px by their indent alone.
     TreeModel model;
     core::i32 parent = kTreeModelRoot;
     for (int depth = 0; depth < 20; ++depth)
@@ -328,11 +329,11 @@ TEST_CASE("tree-view: a row deeper than the view is wide makes the rows that wid
     auto tree = MountTree(root, &model);
     tree->SetIndentWidth(32.0f);
     (void)root->UpdateLayout();
-    CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // collapsed: nothing passes the edge
+    CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // collapsed, so nothing passes the edge
     for (core::i32 item = 0; item < 20; ++item)
         tree->ExpandItem(item);
     (void)root->UpdateLayout();
-    (void)root->UpdateLayout(); // the widest row measured as it binds; the rows take it next
+    (void)root->UpdateLayout(); // the widest row is measured as it binds, and the rows take that width next
     CHECK(tree->GetContentExtent().x > 10.0f * 32.0f);
     CHECK(tree->GetScrollRange().x > 0.0f); // and it scrolls across them, not only cut at its edge
     REQUIRE(tree->RowForItem(10) != nullptr);
@@ -341,13 +342,13 @@ TEST_CASE("tree-view: a row deeper than the view is wide makes the rows that wid
 
 TEST_CASE("tree-view: a long name bound before the row had a font widens the rows once it has one")
 {
-    // A row just made has no font until the sheet reaches it (the editor's hierarchy), so its name
-    // measured nothing as it bound; placed with its font, it is measured again.
+    // A row just made has no font until the sheet reaches it (as in the editor's hierarchy), so
+    // its name measured nothing as it bound. Once it is placed with its font, it is measured again.
     TreeModel model;
     (void)model.AddNode(kTreeModelRoot, SV(u8"An entity whose name runs far past the edge of a view two hundred and sixty wide"));
     core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &model);
-    CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // no font: no width to its name
+    CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // no font, so its name has no width
     namespace fonts = foundation::fonts;
     fonts::TrueTypeFonts::Initialize();
     fonts::TrueTypeFontService service{core::DefaultAllocator()};
@@ -356,7 +357,7 @@ TEST_CASE("tree-view: a long name bound before the row had a font widens the row
             fonts::FontLoadResult::Success);
     tree->SetFont(service.GetFont(u8"DejaVu", 13.0f)); // as the sheet gives it, after the bind
     (void)root->UpdateLayout();
-    (void)root->UpdateLayout(); // measured as placed; the rows take it next
+    (void)root->UpdateLayout(); // measured as placed, and the rows take the width next
     CHECK(tree->GetContentExtent().x > 400.0f);
     CHECK(tree->GetScrollRange().x > 140.0f); // scrolled across to see the rest of the name
 }

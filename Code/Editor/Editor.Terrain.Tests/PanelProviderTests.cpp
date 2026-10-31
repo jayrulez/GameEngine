@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Terrain tool-panel providers: after RegisterTerrainToolPanels, the registry resolves a provider
-// for each brush tool id, and each builds its panel of the kit for its concrete tool, which shows
-// what the tool has and sets it. Headless - the panel is just a node tree.
+// for each brush tool id, and each builds its panel from the kit for its concrete tool, showing the
+// tool's settings and setting them. Headless; the panel is just a node tree.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -25,7 +25,7 @@ namespace hf = foundation::heightfield;
 
 TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the tool and sets it, the keys' changes too")
 {
-    editor::RegisterTerrainToolPanels(); // idempotent (first-wins per tool id)
+    editor::RegisterTerrainToolPanels(); // idempotent (the first registration per tool id wins)
 
     editor::ViewportToolPanelRegistry& reg = editor::ViewportToolPanelRegistry::Get();
     editor::IViewportToolPanelProvider* sculptP = reg.FindByToolId(u8"terrain.sculpt");
@@ -36,9 +36,9 @@ TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the 
     REQUIRE(holeP != nullptr);
     CHECK(reg.FindByToolId(u8"select") == nullptr); // the default tool has no panel
 
-    // Build the tools the panels drive - over an in-memory terrain with a SIX-layer palette +
-    // weights, so the splat panel's base + unbounded-swatch path actually runs past the old
-    // 4-layer cap (top-K model).
+    // Build the tools the panels drive, over an in-memory terrain with a six-layer palette and
+    // weights, so the splat panel's base and unbounded swatch list run with more layers than the
+    // four slots per texel (top-K model).
     scene::Scene sceneObj{DefaultAllocator()};
     engine::terrain::AddTerrainSceneManagers(sceneObj);
     auto* mgr = sceneObj.GetSystem<engine::terrain::TerrainComponentManager>();
@@ -59,7 +59,7 @@ TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the 
     editor::EditorCommandStack commands;
     editor::TerrainSculptTool sculpt(sceneObj, commands, nullptr);
     editor::TerrainSplatTool splat(sceneObj, commands, nullptr);
-    splat.SetPaletteIndex(5); // a slot past the retired 4-layer cap
+    splat.SetPaletteIndex(5); // an index past the first four layers
     CHECK(splat.PaletteIndex() == 5u);
 
     editor::ViewportToolHostContext ctx;
@@ -77,7 +77,8 @@ TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the 
     REQUIRE(splatPanel != nullptr);
     REQUIRE(holePanel != nullptr);
 
-    // Sculpt: its four modes by word, the chosen one checked; a key's change shows after a Sync.
+    // Sculpt: its four modes as words, with the chosen one checked; a change from a key shows
+    // after a Sync.
     REQUIRE(sculptPanel->ChoiceCount(0) == 4u);
     CHECK(sculptPanel->ChoiceAt(0, 0)->GetText() == StringView(u8"Raise"));
     CHECK(sculptPanel->ChoiceAt(0, 0)->IsChecked());
@@ -87,17 +88,18 @@ TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the 
     CHECK(sculptPanel->ChoiceAt(0, 3)->IsChecked());
     CHECK_FALSE(sculptPanel->ChoiceAt(0, 0)->IsChecked());
     CHECK(sculptPanel->NumberAt(0)->GetValue() == doctest::Approx(20.0));
-    sculptPanel->ChoiceAt(0, 1)->HandleActivate(); // Lower, as a click
+    sculptPanel->ChoiceAt(0, 1)->HandleActivate(); // Lower, as a click would
     CHECK(sculpt.GetMode() == editor::TerrainSculptTool::Mode::Lower);
 
-    // Paint Layers: the six layers numbered from 1 (as their keys), each named in its tooltip,
-    // the fifth index checked; its mode a row of words (they were letters on the layer row).
+    // Paint Layers: the six layers numbered from 1 (like their keys), each named in its tooltip,
+    // with index five checked; the mode is a row of words.
     REQUIRE(splatPanel->ChoiceCount(0) == 6u);
     CHECK(splatPanel->ChoiceAt(0, 0)->GetText() == StringView(u8"1"));
     CHECK(splatPanel->ChoiceAt(0, 5)->IsChecked());
     for (usize i = 0; i < 6; ++i)
         CHECK_FALSE(splatPanel->ChoiceAt(0, i)->GetTooltipText().IsEmpty());
-    // The base above them, shown and not chosen (erasing reveals it); its tooltip names it.
+    // The base is shown above them but cannot be chosen (erasing reveals it); its tooltip names
+    // it.
     foundation::gui::Image* base = splatPanel->PictureAt(0);
     REQUIRE(base != nullptr);
     REQUIRE(base->GetParent() != nullptr);
@@ -110,7 +112,7 @@ TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the 
     splatPanel->ChoiceAt(1, 2)->HandleActivate();   // Smooth
     CHECK(splat.IsSmooth());
     CHECK_FALSE(splat.IsEraser());
-    splatPanel->ChoiceAt(1, 0)->HandleActivate();   // back to painting, the layer kept
+    splatPanel->ChoiceAt(1, 0)->HandleActivate();   // back to painting the same layer
     CHECK_FALSE(splat.IsSmooth());
     CHECK(splat.PaletteIndex() == 5u);
     splatPanel->CheckAt(0)->HandleActivate();       // Airbrush

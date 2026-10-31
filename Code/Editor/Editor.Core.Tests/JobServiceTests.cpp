@@ -57,7 +57,7 @@ TEST_CASE("jobs: a submitted job runs on a worker, reports, and completes on Upd
     CHECK(doneFired);
     CHECK(okStatus);
     CHECK_FALSE(jobs.IsBusy());
-    CHECK_FALSE(jobs.Progress().active); // idle => no active progress
+    CHECK_FALSE(jobs.Progress().active); // idle: no active progress
 
     bool sawLog = false;
     for (const String& l : logs)
@@ -102,7 +102,7 @@ TEST_CASE("jobs: submissions run one at a time, in order")
 TEST_CASE("cook service: external mutation lock defers RunWhenIdle until released")
 {
     // The app wires ExternalMutationLock to the job service (a background export reads the
-    // DBs from its worker) - structural mutations must defer exactly like during a cook.
+    // DBs from its worker), so structural mutations defer just as they do during a cook.
     editor::EditorCookService cook;
     bool busy = false;
     cook.ExternalMutationLock = [&busy]() { return busy; };
@@ -110,26 +110,26 @@ TEST_CASE("cook service: external mutation lock defers RunWhenIdle until release
 
     int ran = 0;
     cook.RunWhenIdle(Function<void()>{[&ran]() { ++ran; }});
-    CHECK(ran == 1); // unlocked -> runs immediately
+    CHECK(ran == 1); // unlocked: runs immediately
 
     busy = true;
     CHECK(cook.MutationLocked());
     cook.RunWhenIdle(Function<void()>{[&ran]() { ++ran; }});
-    CHECK(ran == 1); // locked -> deferred
+    CHECK(ran == 1); // locked: deferred
     cook.Update({});
     CHECK(ran == 1); // still locked
 
     busy = false;
     cook.Update({});
-    CHECK(ran == 2); // released -> the deferred action replays
+    CHECK(ran == 2); // released: the deferred action replays
 }
 
 TEST_CASE("jobs: light lane runs concurrently and never trips IsBusy")
 {
     editor::EditorJobService jobs{DefaultAllocator()};
 
-    // Light work completes on Update without ever making the BUILD lane busy
-    // (IsBusy gates cook mutations - previews must not lock the build).
+    // Light work completes on Update without ever making the build lane busy
+    // (IsBusy gates cook mutations, and previews must not lock the build).
     int value = 0;
     bool lightDone = false;
     jobs.SubmitLight(Function<void()>{[&value]() { value = 42; }},

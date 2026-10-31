@@ -2,10 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GPU picking, the device-free half: the entity tag layout, the rect clamp, the projection crop
-// (a pixel of the full view maps to the centre of the cropped clip space - the whole reason a
-// click can render a 1x1 target), the readback decode (unique hits, background skipped, padded
-// rows), and the PickSystem's request state machine on the Null device: request -> declared ->
-// retired on the ring's round trip -> taken once; expiry when no view renders; cancel.
+// (a pixel of the full view maps to the centre of the cropped clip space, which is what lets a
+// click render a 1x1 target), the readback decode (unique hits, background skipped, padded
+// rows), and the PickSystem's request state machine on the Null device: a request is declared,
+// retired on the ring's round trip and taken once; it expires when no view renders; it can be
+// cancelled.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -87,7 +88,7 @@ TEST_CASE("picking: CropProjectionToRect maps the rect to the whole clip space, 
     REQUIRE(py < static_cast<f32>(kH));
 
     // Crop to the 1x1 rect of that pixel: the point lands at the centre of the 1x1 target
-    // (NDC (0,0) up to sub-pixel: the pixel's centre vs the point's exact position).
+    // (NDC (0,0) up to sub-pixel: the pixel's centre against the point's exact position).
     const PickRect one{static_cast<i32>(px), static_cast<i32>(py), 1, 1};
     const Float4x4 cropped = view * CropProjectionToRect(proj, one, kW, kH);
     f32 cx = 0.0f, cy = 0.0f;
@@ -97,7 +98,7 @@ TEST_CASE("picking: CropProjectionToRect maps the rect to the whole clip space, 
     CHECK(cy >= 0.0f);
     CHECK(cy < 1.0f);
 
-    // A wider rect: the point keeps its offset INSIDE the rect (pixel-exact remap).
+    // A wider rect: the point keeps its offset inside the rect (pixel-exact remap).
     const PickRect rect{static_cast<i32>(px) - 7, static_cast<i32>(py) - 3, 20, 12};
     const Float4x4 croppedRect = view * CropProjectionToRect(proj, rect, kW, kH);
     f32 rx = 0.0f, ry = 0.0f;
@@ -143,7 +144,7 @@ TEST_CASE("picking: DecodePickTexels dedupes, skips background, honours the row 
     put(1, 0, 0, 9);  // background (index 0), whatever y says
     put(2, 0, 5, 1);  // entity 4 again -> deduped
     put(0, 1, 1, 0);  // entity 0 gen 0
-    put(1, 1, 5, 2);  // entity 4 but a DIFFERENT generation -> distinct hit
+    put(1, 1, 5, 2);  // entity 4 but a different generation -> distinct hit
     put(2, 1, 0, 0);
 
     Array<PickHit> hits;
@@ -176,7 +177,7 @@ TEST_CASE("picking: PickSystem request -> declared -> retired on the ring round 
     PickResult result;
     CHECK_FALSE(pick.TryTakeResult(id, result));
 
-    // Frame 0: the view declares -> a pick pass + a copy pass in the graph, slot AwaitReadback.
+    // Frame 0: the view declares a pick pass and a copy pass in the graph; slot AwaitReadback.
     rendergraph::RenderGraph graph(DefaultAllocator(), &device);
     graph.BeginFrame(0);
     u32 recorded = 0;
@@ -186,20 +187,20 @@ TEST_CASE("picking: PickSystem request -> declared -> retired on the ring round 
     const Float4x4 view = Float4x4::Identity();
     const Float4x4 proj = Float4x4::PerspectiveFovRH(1.0f, 1.0f, 0.1f, 100.0f);
     pick.BeginFrame(0);
-    // A view with ANOTHER key answers nothing.
+    // A view with another key answers nothing.
     CHECK(pick.DeclarePasses(graph, &otherKey, view, proj, 100, 100, rhi::TextureFormat::Depth32Float,
                              0, record, &recorded, nullptr) == 0u);
     CHECK(pick.PendingCount(&viewportKey) == 1u);
     CHECK(pick.DeclarePasses(graph, &viewportKey, view, proj, 100, 100,
                              rhi::TextureFormat::Depth32Float, 0, record, &recorded, nullptr) == 1u);
     CHECK(recorded == 0u); // declared, not executed (the graph never ran)
-    CHECK(pick.PendingCount(&viewportKey) == 0u); // no longer waiting for a render
+    CHECK(pick.PendingCount(&viewportKey) == 0u); // not waiting for a render
     CHECK(pick.IsPending(id));                    // ...but not answered yet either
-    CHECK(graph.PassCount() >= 2u);               // the id pass + the readback copy
+    CHECK(graph.PassCount() >= 2u);               // the id pass and the readback copy
     graph.EndFrame();
 
-    // Frame 1 (other ring slot): still in flight. Frame 0 again: retired + decoded (the Null
-    // device's buffer maps to zeros = no hits), rendered = true.
+    // Frame 1 (the other ring slot): still in flight. Frame 0 again: retired and decoded (the Null
+    // device's buffer maps to zeros, so no hits), rendered = true.
     pick.BeginFrame(1);
     CHECK(pick.IsPending(id));
     CHECK_FALSE(pick.TryTakeResult(id, result));
@@ -236,7 +237,7 @@ TEST_CASE("picking: a rect fully outside the view answers at once with no pass; 
     CHECK(result.rendered);
     CHECK(result.hits.IsEmpty());
 
-    // Expiry: a request whose view never renders completes as NOT rendered after the window.
+    // Expiry: a request whose view never renders completes as not rendered after the window.
     const PickRequestId orphan = pick.Request(&viewportKey, PickRect{1, 1, 1, 1});
     for (u32 f = 0; f <= kPickSystemExpireFrames; ++f)
     {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Input - :scripted_input partition (agent-playtesting-and-asset-creation.md P4)
+// Input - :scripted_input partition
 //
-// ScriptedInputSource: an input source driven by a timeline instead of devices - a virtual
+// ScriptedInputSource: an input source driven by a timeline instead of devices: a virtual
 // keyboard, mouse and gamepads, and the event stream their changes make, for a playtest no one
 // plays by hand. Device level on purpose: a playtest goes through the project's input map the way
 // a player does. Advance once per frame with the time since the script started: every entry due by

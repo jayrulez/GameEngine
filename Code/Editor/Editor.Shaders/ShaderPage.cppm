@@ -3,16 +3,16 @@
 
 // Editor::Shaders - the `:shader_page` partition: a custom shader's page.
 //
-// The shader's .hlsl on the GUI from its markup (Data/Editor/ShaderPage.xml;
-// Documentation/Specs/editor-gui.md, 5.4, layer 6, part 4), on the code pages' base (the source
-// file, the shared HLSL colours, one history, the problems list): checked a moment after each edit
-// (CheckShaderSource on each stage's base variant), its file's errors on their lines and an
-// include's in the list; beside it a sphere drawn with the code being edited, its material laid out
-// by the properties block exactly as a cooked material is, over the asset's grid (its name and entry
-// points, each edit one undo step with the code's). While the code does not compile the preview
-// keeps the last version that did, and says so. Save writes the file and the asset and recooks,
-// which compiles every variant; the preview draws under a name of its own, so a scene keeps the
-// last cooked shader until then.
+// The shader's .hlsl on the GUI, built from its markup (Data/Editor/ShaderPage.xml) on the code
+// pages' base: the source file, the shared HLSL colours, one undo history and the problems list.
+// The code is checked shortly after each edit (CheckShaderSource on each stage's base variant);
+// errors in the file show on their lines and errors in an include show in the list. Beside the
+// code is a sphere drawn with the shader being edited, its material laid out by the properties
+// block exactly as a cooked material is, above the asset's grid (its name and entry points, where
+// each edit shares the code's undo history). While the code does not compile, the preview keeps
+// the last version that did and says so. Save writes the file and the asset and recooks, which
+// compiles every variant. The preview draws under a name of its own, so a scene keeps the last
+// cooked shader until then.
 
 module;
 #include "Core/Prelude.h"
@@ -42,11 +42,11 @@ export namespace editor
 {
     namespace runtime = foundation::runtime;
 
-    // A page's preview shader in the renderer's shader system, under the page's own name:
-    // registered each time the text checks, removed once when the page closes. Released, it
-    // forgets the system: at editor exit a page outlives the renderer (OnClose runs, the runtime
-    // context shuts the renderer down, then the pages are destroyed), so whatever releases again
-    // must not reach it.
+    // A page's preview shader in the renderer's shader system, under the page's own name. It is
+    // registered each time the text checks and removed once when the page closes. Once released,
+    // the slot forgets the system: at editor exit a page outlives the renderer (OnClose runs, the
+    // runtime context shuts the renderer down, then the pages are destroyed), so a later release
+    // must not reach the system.
     class PreviewShaderSlot
     {
     public:
@@ -59,15 +59,16 @@ export namespace editor
         [[nodiscard]] bool IsHeld() const noexcept { return m_shaders != nullptr; }
         [[nodiscard]] StringView Name() const noexcept { return m_name.AsView(); }
 
-        // The system to register in (null: none, the slot does nothing) and the name to use.
+        // The system to register in (null for none, and the slot then does nothing) and the name
+        // to use.
         void Attach(foundation::shaders::ShaderSystem* shaders, String name)
         {
             Release();
             m_shaders = shaders;
             m_name = Move(name);
         }
-        // One program's text for both stages, with their entry points and lattices; a draw on
-        // the name compiles it anew.
+        // One program's text for both stages, with their entry points and lattices. The next draw
+        // under the name compiles it again.
         void Register(StringView hlsl, StringView vertexEntry,
                       foundation::shaders::ShaderFlags vertexMask, StringView fragmentEntry,
                       foundation::shaders::ShaderFlags fragmentMask);
@@ -75,7 +76,7 @@ export namespace editor
         void Release();
 
     private:
-        foundation::shaders::ShaderSystem* m_shaders = nullptr; // the renderer's; borrowed
+        foundation::shaders::ShaderSystem* m_shaders = nullptr; // borrowed from the renderer
         String m_name;
     };
 
@@ -84,7 +85,7 @@ export namespace editor
     public:
         static constexpr StringView kPath = u8"Editor/ShaderPage.xml";
 
-        /// `shaderLibrary`: the engine's Shaders/ folder, the include path a check compiles with.
+        /// `shaderLibrary` is the engine's Shaders/ folder, the include path a check compiles with.
         ShaderEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance, StringView shaderLibrary);
         ~ShaderEditorPage() override;
 
@@ -95,7 +96,7 @@ export namespace editor
         // === For tests ===
         /// What the last check said the shader is ("Lit surface shader", "Low-level shader"), empty while it does not compile.
         [[nodiscard]] StringView Kind() const noexcept { return m_kind.AsView(); }
-        /// The properties block's count, as the last check that compiled read it.
+        /// The number of entries in the properties block, as read by the last check that compiled.
         [[nodiscard]] usize PropertyCount() const noexcept { return m_properties; }
         /// Whether the preview shows an older version than the code (the code does not compile).
         [[nodiscard]] bool PreviewStale() const noexcept { return m_stale; }
@@ -109,7 +110,7 @@ export namespace editor
         void UpdatePreview(const pipeline::ShaderCheck& check);
         void FramePreview();
 
-        PreviewShaderSlot m_previewShader; // what the sphere draws with
+        PreviewShaderSlot m_previewShader; // the shader the sphere draws with
         String m_shaderLibrary;
         foundation::shaders::Compiler* m_compiler = nullptr; // reused by every check
         UniquePtr<app::PreviewPane> m_pane;
@@ -135,8 +136,8 @@ export namespace editor
         String m_shaderLibrary;
     };
 
-    /// The shader page's registration (from the editor's assembly). `shaderLibrary`: the engine's
-    /// Shaders/ folder under the data root.
+    /// Registers the shader page; called from the editor's assembly. `shaderLibrary` is the
+    /// engine's Shaders/ folder under the data root.
     inline void RegisterShaderEditor(EditorContext& context, const app::AssetPageServicesSource& services, StringView shaderLibrary)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

@@ -3,17 +3,17 @@
 
 // Foundation::Script.Facades - the `foundation.script.facades` module.
 //
-// The curated behavior facades: the per-entity
-// `Entity` handle behaviors receive as their constructor argument, plus Log/Time/
-// Random. A SEPARATE library (below the subsystem) so the COOK's harvest VM and the
-// RUNTIME register the SAME "main"-module surface - a facade-using behavior that
-// compiles at cook compiles at runtime and vice versa.
+// The curated behavior facades: the per-entity `Entity` handle behaviors receive as
+// their constructor argument, plus Log, Time, Random and the scene handles. A separate
+// library (below the subsystem) so the cook's harvest VM and the runtime register the
+// same "main"-module surface: a facade-using behavior that compiles at cook compiles at
+// runtime, and the other way round.
 //
-// Module-visibility rule (language-specific, so it lives in the BACKENDS): a backend
-// whose reflected classes live in a separate module frames each behavior module with a
-// prelude that imports the facade names. To keep that framing OUT of this neutral lib,
-// the facade name list is exposed here as data (BehaviorFacadeNames) and each backend's
-// AssembleBehaviorModuleSource builds its own prelude from it - so adding a facade never
+// Module visibility is language-specific, so it lives in the backends: a backend whose
+// reflected classes live in a separate module frames each behavior module with a prelude
+// that imports the facade names. To keep that framing out of this neutral library, the
+// facade name list is exposed here as data (BehaviorFacadeNames) and each backend's
+// AssembleBehaviorModuleSource builds its own prelude from it, so adding a facade never
 // edits a backend.
 
 module;
@@ -25,10 +25,10 @@ export module foundation.script.facades;
 
 import foundation.core;
 import foundation.scene;
-import foundation.scene.resource; // PrefabSpawnSystem - what scene.spawn reaches
+import foundation.scene.resource; // PrefabSpawnSystem, what scene.spawn reaches
 import foundation.run;            // IRun: the run a script context belongs to
 import foundation.script;
-import foundation.resource; // ResourceManager - the run's resource-swap seam (Track A resource refs)
+import foundation.resource; // ResourceManager, for binding resource ids at runtime
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -37,30 +37,30 @@ export namespace foundation::script
 {
     namespace scene = foundation::scene;
 
-    /// The service key the gameplay facades (Time/Random) resolve per context.
+    /// The service key the gameplay facades (Time, Random) resolve per context.
     inline constexpr StringView kScriptRuntimeService = u8"script.runtime";
 
     /// The reflected behavior-facade names a backend's behavior-module prelude must make
-    /// visible (the classes RegisterScriptFacadeReflection installs). Exposed as DATA so
+    /// visible (the classes RegisterScriptFacadeReflection installs). Exposed as data so
     /// the language framing stays in the backends: a backend builds its import line
-    /// from this list, and adding a facade here reaches every backend for free. Order is
-    /// the authored order. Kept in sync with RegisterScriptFacadeReflection below.
+    /// from this list, and a facade added here reaches every backend. Order is the
+    /// authored order. Keep it in sync with RegisterScriptFacadeReflection below.
     [[nodiscard]] core::Span<const core::StringView> BehaviorFacadeNames();
 
-    /// Register an ADDITIONAL facade name from an out-of-tree module (e.g. foundation.net's `Net`),
-    /// so the behavior prelude imports it too - without this base lib depending on that module.
+    /// Register an additional facade name from another module (such as foundation.net's `Net`),
+    /// so the behavior prelude imports it too, without this base library depending on that module.
     /// Idempotent; call alongside the module's own reflection registration. Names are borrowed as
     /// interned copies. See ExtraFacadeNames.
     void RegisterExtraFacadeName(core::StringView name);
     /// The extra facade names registered by other modules (appended to the prelude after the built-ins).
     [[nodiscard]] core::Span<const core::StringView> ExtraFacadeNames();
 
-    /// Register an ADDITIONAL emission root: a reflected type the collector should emit as a
-    /// script class even when no facade signature statically reaches it (e.g. a component type
-    /// returned only via a factory whose declared return IS that type - `RigidBody.of(entity)`).
-    /// GENERAL, not component-specific (the UI View reflection follow-on wants the same door).
-    /// AngelScript already emits every registry type, so this is consumed by the collector.
-    /// Idempotent; the type is borrowed (its TypeInfo has static lifetime).
+    /// Register an additional emission root: a reflected type the collector should emit as a
+    /// script class even when no facade signature statically reaches it (such as a component type
+    /// returned only via a factory whose declared return is that type, `RigidBody.of(entity)`).
+    /// It is not specific to components. AngelScript already emits every registry type, so this
+    /// is consumed by the collector. Idempotent; the type is borrowed (its TypeInfo has static
+    /// lifetime).
     void RegisterExtraScriptRootType(const core::TypeInfo* type);
     /// The additional emission roots registered by other modules (extra seeds for the reachability closure).
     [[nodiscard]] core::Span<const core::TypeInfo* const> ExtraScriptRootTypes();
@@ -69,13 +69,14 @@ export namespace foundation::script
     /// containers, and pure-primitive types never qualify).
     [[nodiscard]] bool HasBindableSurface(const core::TypeInfo& type) noexcept;
 
-    /// The REACHABILITY CLOSURE: the object types a script can actually receive a handle to, in
-    /// emit order (seeds first). Seeds = every constructor-having type in `allTypes` + the registered
-    /// ExtraScriptRootTypes (constructor-less factory returns like `RigidBody.of(entity)`), then
-    /// closes over the reflected graph - each bound method's return/param types, each property's
-    /// type, and each container element's base type plus its derived types. This bounds the emitted
-    /// surface to what is reachable from the facades, NOT the whole registry. The ONE policy every
-    /// binding backend uses, so their surfaces (and script_api) match.
+    /// The reachability closure: the object types a script can actually receive a handle to, in
+    /// emit order (seeds first). The seeds are every constructor-having type in `allTypes` and the
+    /// registered ExtraScriptRootTypes (constructor-less factory returns like
+    /// `RigidBody.of(entity)`); it then closes over the reflected graph: each bound method's return
+    /// and param types, each property's type, and each container element's base type with its
+    /// derived types. This bounds the emitted surface to what is reachable from the facades, not
+    /// the whole registry. Every binding backend uses this one policy, so their surfaces (and
+    /// script_api) match.
     void CollectEmittableTypes(core::Span<const core::TypeInfo* const> allTypes,
                                core::Array<const core::TypeInfo*>& out);
 
@@ -83,38 +84,39 @@ export namespace foundation::script
     {
         f64 timeSeconds = 0.0;   // seconds since the run context was created
         f32 deltaSeconds = 0.0f; // last frame's dt
-        core::Random random;     // the run's RNG (per-run determinism seam)
+        core::Random random;     // the run's RNG, per run so a seed reproduces its draws
 
         // Behavior-to-behavior messaging: `entity.send("heal", amount)` routes here.
         // The subsystem installs this; it invokes `on<Heal>(amount)` on every behavior of
         // the target entity that declares the handler. Args are already marshalled. Null
-        // when no subsystem is driving the run (a bare cook VM) - send becomes a no-op.
+        // when no subsystem is driving the run (a bare cook VM), and send then does nothing.
         core::Function<void(scene::Scene*, scene::EntityHandle, StringView,
                             core::Span<const core::Variant>)>
             dispatchMessage;
 
-        // Resource swaps (Track A): the run's resource manager, for binding a resource id (a Guid)
-        // onto a component's resource::Ref at runtime - e.g. `sceneRender.setMesh(entity, id)`.
-        // LATE-BOUND (a getter, not a stored ptr) so it is correct regardless of the order the host
-        // wires things: the composition root owns the manager (DefaultApplication::Resources()) and
-        // installs this. Null / returns null on a bare cook VM => the swap sets the id only (unbound).
+        // Resource swaps: the run's resource manager, for binding a resource id (a Guid) onto a
+        // component's resource::Ref at runtime, as `sceneRender.setMesh(entity, id)` does. It is
+        // late-bound (a getter, not a stored pointer) so it is correct whatever order the host
+        // wires things in: the composition root owns the manager (DefaultApplication::Resources())
+        // and installs this. When it is null or returns null (a bare cook VM), the swap sets the id
+        // only, unbound.
         core::Function<foundation::resource::ResourceManager*()> resolveResources;
 
         // The run this context's scripts belong to: the run its scenes belong to (Scene::Run), so
         // a run-scoped service (the Audio facade's music and one-shots) plays into the run's own
-        // group. Null = outside every run (an editor tool, a bare cook VM).
+        // group. Null outside every run (an editor tool, a bare cook VM).
         foundation::run::IRun* run = nullptr;
     };
 
-    // ---- the curated behavior facades (camelCase = the script-visible names, the
-    // Audio/Input facade precedent) ----
+    // ---- the curated behavior facades (camelCase names are the script-visible names, as
+    // in the Audio and Input facades) ----
 
     struct Scene;        // bound scene handle (defined below); Entity.scene returns one
     struct SceneEvents;  // the scene event-bus handle (defined below); Scene.events returns one
 
     /// The per-entity handle behaviors receive as their constructor argument: transform
-    /// get/set, name, destroy. A value type - the VM instance carries a copy; a stale
-    /// handle (entity destroyed) turns every call into a safe no-op.
+    /// get and set, name, destroy. A value type, so the VM instance carries a copy; on a stale
+    /// handle (entity destroyed) every call safely does nothing.
     struct Entity
     {
         scene::Scene* scene = nullptr;
@@ -131,7 +133,7 @@ export namespace foundation::script
         }
 
         [[nodiscard]] bool isValid() const { return Live(); }
-        /// The entity's OWN active flag.
+        /// The entity's own active flag.
         [[nodiscard]] bool active() const { return Live() && scene->IsActive(Handle()); }
         void setActive(bool value)
         {
@@ -140,7 +142,7 @@ export namespace foundation::script
                 scene->SetActive(Handle(), value);
             }
         }
-        /// EFFECTIVE state: own flag AND every ancestor's (what the runtime gates on).
+        /// The effective state: its own flag and every ancestor's (what the runtime gates on).
         [[nodiscard]] bool activeInHierarchy() const
         {
             return Live() && scene->IsEffectivelyActive(Handle());
@@ -175,7 +177,7 @@ export namespace foundation::script
             }
             return TransformPoint(Float3{0.0f, 0.0f, 0.0f}, scene->GetWorldMatrix(Handle()));
         }
-        /// Absolute local rotation from Euler DEGREES (x = pitch, y = yaw, z = roll).
+        /// Absolute local rotation from Euler degrees (x = pitch, y = yaw, z = roll).
         void setRotationEuler(f32 xDegrees, f32 yDegrees, f32 zDegrees)
         {
             if (!Live())
@@ -205,7 +207,7 @@ export namespace foundation::script
             }
         }
 
-        // ---- as Sedulous's Entity: identity, the local transform by value, the hierarchy ----
+        // ---- identity, the local transform by value, the hierarchy ----
         /// The entity's stable id (what an EntityRef stores); nil when stale.
         [[nodiscard]] Guid id() const { return Live() ? scene->GetEntityId(Handle()) : Guid{}; }
         void setPosition(Float3 position)
@@ -296,19 +298,19 @@ export namespace foundation::script
         void moveBefore(Entity sibling) const;
         void moveBefore(Entity sibling, bool keepWorldTransform) const;
 
-        /// The BOUND scene this entity belongs to (reflected as `.scene`). Operating through it
-        /// (`entity.scene.spawn/find/...`) always targets THIS entity's scene - correct from any
-        /// call site (update, onDestroy, a physics event, a stored callback), no ambient state.
+        /// The bound scene this entity belongs to (reflected as `.scene`). Operating through it
+        /// (`entity.scene.spawn`, `find` and the rest) always targets this entity's scene, from any
+        /// call site (update, onDestroy, a physics event, a stored callback), with no ambient state.
         /// Named `sceneHandle()` in C++ to avoid clashing with the `scene` data member; the script
-        /// name is `scene`. Defined out-of-line (Scene is completed below).
+        /// name is `scene`. Defined out of line (Scene is completed below).
         [[nodiscard]] Scene sceneHandle() const;
 
         // ---- behavior messaging: entity.send(name[, payload]) invokes
-        // `on<Name>(payload)` on EVERY behavior of this entity that declares it (the target
-        // is this handle's entity - typically self or a resolved sibling). ONE conceptual method,
-        // an ARITY FAMILY on the script surface: the event bus is StringHash + Variant underneath,
-        // so the payload is a single Variant that carries any script value (number/string/entity/
-        // ...) - the honest type, not the three a typed overload set would spell out.
+        // `on<Name>(payload)` on every behavior of this entity that declares it (the target
+        // is this handle's entity, typically self or a resolved sibling). One method, an arity
+        // family on the script surface: the event bus is StringHash and Variant underneath, so
+        // the payload is a single Variant that carries any script value (number, string, entity
+        // and so on) rather than the few types a typed overload set would spell out.
         void send(String message) const { Dispatch(message.AsView(), {}); }
         void send(String message, Variant payload) const
         {
@@ -333,7 +335,7 @@ export namespace foundation::script
         }
     };
 
-    /// Log.info/warn/error -> the engine log, Script category.
+    /// Log.info, warn and error write to the engine log, Script category.
     class Log final : public Object
     {
         RTTI_OBJECT(Log, Object)
@@ -343,7 +345,7 @@ export namespace foundation::script
         static void error(String message) { LOG_ERROR(u8"Script", u8"{}", message); }
     };
 
-    /// Time.now() (seconds since the run started) / Time.delta() (last frame dt).
+    /// Time.now() (seconds since the run started) and Time.delta() (last frame dt).
     class Time final : public Object
     {
         RTTI_OBJECT(Time, Object)
@@ -367,7 +369,7 @@ export namespace foundation::script
         }
     };
 
-    /// Random.value() in [0,1) / Random.range(min,max) / Random.intRange(min,max).
+    /// Random.value() in [0,1), Random.range(min,max) and Random.intRange(min,max).
     class Random final : public Object
     {
         RTTI_OBJECT(Random, Object)
@@ -402,29 +404,29 @@ export namespace foundation::script
         }
     };
 
-    /// A BOUND scene handle. `scene.spawn(prefab,x,y,z)` / `scene.find(name)` /
-    /// `scene.findByPath(path)` all operate on THIS scene (the ptr the value carries), so there is
-    /// no ambient "current scene" to keep correct - a call from any site (update, onDestroy, a
+    /// A bound scene handle. `scene.spawn(prefab,x,y,z)`, `scene.find(name)` and
+    /// `scene.findByPath(path)` all operate on this scene (the pointer the value carries), so there
+    /// is no ambient "current scene" to keep correct: a call from any site (update, onDestroy, a
     /// physics contact, a resumed coroutine, a stored callback) always targets the right scene.
     /// Behaviors reach it via `entity.scene`; the Level tier receives one as its constructor
     /// argument; the orchestrator queries `run.currentScene()`. A value type (the VM carries
-    /// a copy); a null/stale scene makes every call a safe no-op returning an invalid Entity.
+    /// a copy); on a null or stale scene every call does nothing and returns an invalid Entity.
     struct Scene
     {
         scene::Scene* scene = nullptr;
 
-        /// Instantiate a prefab into THIS scene at a position (the root's local position under
+        /// Instantiate a prefab into this scene at a position (the root's local position under
         /// the scene root); invalid Entity if the scene is null, has no PrefabSpawnSystem or the
-        /// system has no content source (a bare cook VM), or the prefab id is nil / unknown. The
+        /// system has no content source (a bare cook VM), or the prefab id is nil or unknown. The
         /// id comes from an `asset:Prefab` behavior property (marshalled as a Guid). Reaches the
-        /// scene's OWN spawn system - no ambient current-scene state, no host callback.
+        /// scene's own spawn system, with no ambient current-scene state and no host callback.
         [[nodiscard]] Entity spawn(Guid prefab, f32 x, f32 y, f32 z) const;
-        /// First entity in THIS scene with this name (invalid if none).
+        /// First entity in this scene with this name (invalid if none).
         [[nodiscard]] Entity find(String name) const;
-        /// Resolve a '/'-separated hierarchy path from THIS scene's roots, e.g.
+        /// Resolve a '/'-separated hierarchy path from this scene's roots, for example
         /// "Player/Weapon/Muzzle" (invalid if any segment misses).
         [[nodiscard]] Entity findByPath(String path) const;
-        // ---- as Sedulous's Scene: entities made, ended and found by id; the scene's name ----
+        // ---- entities made, ended and found by id; the scene's name ----
         [[nodiscard]] Entity createEntity() const;
         [[nodiscard]] Entity createEntity(String name) const;
         /// Ends the entity and everything under it (as entity.destroy()).
@@ -438,32 +440,32 @@ export namespace foundation::script
         [[nodiscard]] u32 entityCount() const { return scene != nullptr ? scene->EntityCount() : 0u; }
         /// This scene's event-bus handle: `scene.events.emit(name, payload)`. A computed property
         /// (parens-less), so scripts write `scene.events.emit(...)` without call parens. Defined
-        /// out-of-line (SceneEvents is completed below).
+        /// out of line (SceneEvents is completed below).
         [[nodiscard]] SceneEvents eventsHandle() const;
     };
 
-    /// A BOUND scene event-bus handle: `scene.events.emit("OrbCollected", 1)`. Publishes a NAMED
-    /// event onto THIS scene's native EventBus (deferred; delivered at the scene tick's top level).
+    /// A bound scene event-bus handle: `scene.events.emit("OrbCollected", 1)`. Publishes a named
+    /// event onto this scene's native EventBus (deferred; delivered at the scene tick's top level).
     /// A C++ system Subscribe()s natively; a script behavior or the Level receives it as
-    /// `on<Name>(payload)` through the engine's script event bridge. emit is overloaded by payload
-    /// type - one reflected name, resolved by arg type, exactly like `entity.send`. A value type
-    /// (the VM carries a copy); a null/stale scene makes emit a safe no-op. Grouping event ops under
-    /// `.events` leaves room for `subscribe`/`unsubscribe` to join it.
+    /// `on<Name>(payload)` through the engine's script event bridge. emit is an arity family, as
+    /// `entity.send` is. A value type (the VM carries a copy); on a null or stale scene emit does
+    /// nothing. Grouping event operations under `.events` leaves room for `subscribe` and
+    /// `unsubscribe` to join it.
     struct SceneEvents
     {
         scene::Scene* scene = nullptr;
 
-        // ONE conceptual method, an ARITY FAMILY on the script surface: the bus is StringHash +
-        // Variant underneath, so the payload is a single Variant carrying any script value.
+        // One method, an arity family on the script surface: the bus is StringHash and Variant
+        // underneath, so the payload is a single Variant carrying any script value.
         void emit(String name) const;
         void emit(String name, Variant payload) const;
     };
 
-    /// The scene's prefab spawning (Sedulous's `scene.Prefabs`): `ScenePrefabs.of(scene)`. An
-    /// authored prefab instantiated by asset id, its root at `position` (and `rotation`) under
-    /// `parent` (none: a scene root), in the parent's space. Invalid Entity when the scene has no
-    /// spawn system or content source, or the prefab is nil / unknown - never a partial spawn. A
-    /// value type; a null scene makes every call a safe no-op.
+    /// The scene's prefab spawning: `ScenePrefabs.of(scene)`. An authored prefab instantiated by
+    /// asset id, its root at `position` (and `rotation`) under `parent` (none: a scene root), in
+    /// the parent's space. Invalid Entity when the scene has no spawn system or content source, or
+    /// the prefab is nil or unknown; never a partial spawn. A value type; on a null scene every
+    /// call does nothing.
     struct ScenePrefabs
     {
         scene::Scene* scene = nullptr;
@@ -481,7 +483,7 @@ export namespace foundation::script
         }
     };
 
-    /// Wrap a (scene, handle) pair into an Entity value (invalid handle -> invalid Entity).
+    /// Wrap a (scene, handle) pair into an Entity value (an invalid handle gives an invalid Entity).
     [[nodiscard]] inline Entity WrapEntity(scene::Scene* scene, scene::EntityHandle handle)
     {
         Entity result;
@@ -533,7 +535,7 @@ export namespace foundation::script
     inline Scene Entity::sceneHandle() const
     {
         Scene handle;
-        handle.scene = scene; // the entity's own scene - never ambient
+        handle.scene = scene; // the entity's own scene, never ambient
         return handle;
     }
 
@@ -609,7 +611,7 @@ export namespace foundation::script
     inline SceneEvents Scene::eventsHandle() const
     {
         SceneEvents handle;
-        handle.scene = scene; // this scene's bus - never ambient
+        handle.scene = scene; // this scene's bus, never ambient
         return handle;
     }
 
@@ -617,7 +619,7 @@ export namespace foundation::script
     // foundation.scene are Foundation, so no ScriptRuntimeBinding hook is needed (unlike spawn, which
     // reaches an Engine-owned content DB): the call is a direct, host-independent Publish. Delivery
     // to scripts is the engine's job (the script event bridge drains the bus and dispatches
-    // on<Name>). A null/empty name or null scene is a safe no-op.
+    // on<Name>). An empty name or a null scene does nothing.
     inline void SceneEvents::emit(String name) const
     {
         if (scene != nullptr && !name.IsEmpty())
@@ -640,14 +642,14 @@ export namespace foundation::script
         }
     }
 
-    /// The `Component.of(entity)` factory body (OPTION 1, spec Section 12): a re-resolving handle
-    /// of component type T for `entity`, as a RESOLVE-mode Variant. Reflect it on T with the
-    /// ReturnType-override so the declared script return IS T:
+    /// The `Component.of(entity)` factory body: a re-resolving handle of component type T for
+    /// `entity`, as a resolve-mode Variant. Reflect it on T with the ReturnType override so the
+    /// declared script return is T:
     ///     builder.Method<&foundation::script::ComponentOf<T>, T>("of");
-    /// GENERIC - every component-owning module reuses this one body; empty (a clean null in script)
-    /// when the entity has no T (or its scene no manager for T), so `if (c !is null)` / `if c then`
-    /// is the test it reads as. The type must also be registered
-    /// (GlobalTypeRegistry) + seeded as an emission root + given an extra facade name.
+    /// Every component-owning module reuses this one body. It is empty (null in script) when the
+    /// entity has no T (or its scene no manager for T), so `if (c !is null)` or `if c then` is the
+    /// test. The type must also be registered (GlobalTypeRegistry), seeded as an emission root
+    /// and given an extra facade name.
     template <typename T>
     [[nodiscard]] Variant ComponentOf(Entity entity)
     {
@@ -660,9 +662,9 @@ export namespace foundation::script
     }
 
     /// The current run's resource manager (via the run binding's resolveResources getter), or null
-    /// on a bare cook VM / when no host wired it. The one place Track A resource-swap ops (a
-    /// SceneRender.setMesh, an AudioSource.setClip, ...) reach the manager to Bind a resource id
-    /// onto a component's resource::Ref. No ambient scene state - the binding is per-run.
+    /// on a bare cook VM or when no host wired it. The one place resource-swap operations (a
+    /// SceneRender.setMesh, an AudioSource.setClip) reach the manager to Bind a resource id
+    /// onto a component's resource::Ref. No ambient scene state; the binding is per run.
     [[nodiscard]] inline foundation::resource::ResourceManager* CurrentRunResources()
     {
         IScriptContext* scriptContext = CurrentScriptContext();
@@ -685,8 +687,8 @@ export namespace foundation::script
         return binding != nullptr ? binding->run : nullptr;
     }
 
-    /// Registers the behavior facade types (Entity/Log/Time/Random/Scene) with the
-    /// registry - call BEFORE a script manager is created (the run host and the cook's
-    /// builder both do). Idempotent.
+    /// Registers the behavior facade types (Entity, Log, Time, Random, Scene and the scene
+    /// handles) with the registry. Call it before a script manager is created (the run host
+    /// and the cook's builder both do). Idempotent.
     void RegisterScriptFacadeReflection();
 }

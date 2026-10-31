@@ -3,12 +3,12 @@
 
 // Editor App - :preview_pane partition
 //
-// PreviewPane: the 3D preview of a preview page's markup (Data/Editor/PreviewPage.xml;
-// Documentation/Specs/editor-gui.md, 5.4, layer 3), bound: Editor.Preview's PreviewViewport in
-// `preview-stage`, Frame (`preview-frame`, and F over the preview) telling the page to frame what
-// it shows, the page's own choices placed after `preview-own`, and what shows while there is
-// nothing to preview (`preview-empty`, its words `preview-empty-title` and `preview-empty-text`).
-// Without a host (a test) it has no viewport: the page still builds, and shows the empty state.
+// PreviewPane: binds the 3D preview of a preview page's markup (Data/Editor/PreviewPage.xml):
+// Editor.Preview's PreviewViewport in `preview-stage`; Frame (`preview-frame`, and F over the
+// preview), which tells the page to frame what it shows; the page's own controls, placed after
+// `preview-own`; and what shows while there is nothing to preview (`preview-empty`, with its text
+// in `preview-empty-title` and `preview-empty-text`). Without a host (a test) it has no viewport:
+// the page still builds and shows the empty state.
 
 module;
 #include "Core/Prelude.h"
@@ -57,10 +57,10 @@ export namespace editor::app
 
         /// The preview (null without a host).
         [[nodiscard]] PreviewViewport* Viewport() const noexcept { return m_viewport.Get(); }
-        /// Told when Frame is clicked or F pressed over the preview: the page frames what it shows.
+        /// Called when Frame is clicked or F pressed over the preview, so the page frames what it shows.
         Function<void()> OnFrame;
 
-        /// The preview shown (its stage), the empty state hidden.
+        /// Shows the preview (its stage) and hides the empty state.
         void Show()
         {
             m_showing = true;
@@ -69,7 +69,7 @@ export namespace editor::app
             if (m_empty != nullptr)
                 m_empty->SetDisplayed(m_viewport.Get() == nullptr);
         }
-        /// Nothing to preview: `title` and `why` in its place (empty: the markup's words).
+        /// Shows the empty state: `title` and `why` in place of the preview (empty: the markup's text).
         void ShowEmpty(StringView title, StringView why)
         {
             m_showing = false;
@@ -84,7 +84,7 @@ export namespace editor::app
         }
         [[nodiscard]] bool Showing() const noexcept { return m_showing; }
 
-        /// Puts `control` among the preview's own choices, after those placed before it.
+        /// Adds `control` to the preview's own controls, after those added before it.
         void AddControl(gui::Node& control)
         {
             gui::Node* bar = m_own != nullptr ? m_own->GetParent() : nullptr;
@@ -94,19 +94,19 @@ export namespace editor::app
             ++m_controls;
         }
 
-        /// Once a frame, from the page's OnUpdate: the camera, and F.
+        /// Called once a frame from the page's OnUpdate: updates the camera and handles F.
         void Update(f32 dt)
         {
             if (m_viewport && m_viewport->Update(dt) && OnFrame)
                 OnFrame();
         }
-        /// From the page's OnRenderWindow.
+        /// Called from the page's OnRenderWindow.
         void Render(foundation::graphics::FrameContext& frame)
         {
             if (m_viewport && m_showing)
                 m_viewport->RenderFrame(frame);
         }
-        /// From the page's OnClose: the preview's scene goes while the device lives.
+        /// Called from the page's OnClose: the preview's scene is released while the device lives.
         void Close()
         {
             if (m_viewport)

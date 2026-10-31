@@ -3,16 +3,16 @@
 
 // Engine::Terrain - the `:splattexture` partition.
 //
-// The GPU splat textures for the top-K blend: the CPU SplatWeights (the
-// painted source of truth) derives TWO textures per resource -
-//   - weights: RGBA8Unorm (the 4 slot weights; filterable, though the top-K PS Loads it for the
+// The GPU splat textures for the top-K blend: the CPU SplatWeights (the painted source of truth)
+// derives two textures per resource:
+//   - weights: RGBA8Unorm (the 4 slot weights; filterable, though the top-K PS loads it for its
 //     manual bilinear),
-//   - indices: RGBA8Uint (the 4 palette indices; INTEGER + non-filterable BY DESIGN - filtering
-//     indices interpolates layer ids into garbage; Load-only in the shader).
-// CACHED by the resource UID + version, exactly like the height-texture cache: two terrains
-// sharing one weights raster share ONE texture pair, and a paint (a version bump) RETIRES the old
-// pair and re-uploads - the new view ids make the set-3 bind cache rebuild for free (the live-
-// repaint path). Single-mip both.
+//   - indices: RGBA8Uint (the 4 palette indices; integer and non-filterable, because filtering
+//     indices interpolates layer ids into garbage; load-only in the shader).
+// Cached by the resource uid and version, as the height-texture cache is: two terrains sharing one
+// weights raster share one texture pair, and a paint (a version bump) retires the old pair and
+// re-uploads. The new view ids make the set-3 bind cache rebuild with no extra work (the live
+// repaint path). Both are single-mip.
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +38,7 @@ export namespace engine::terrain
         rhi::TextureView* indexView = nullptr;  // RGBA8Uint (Load-only)
     };
 
-    /// Owns + caches the per-resource GPU texture pairs, keyed by resource UID + version.
+    /// Owns and caches the per-resource GPU texture pairs, keyed by resource uid and version.
     class TerrainSplatTextureCache
     {
     public:
@@ -47,16 +47,15 @@ export namespace engine::terrain
         TerrainSplatTextureCache& operator=(const TerrainSplatTextureCache&) = delete;
 
         /// In-flight-safe destruction (wired by the subsystem): a paint's version-bump rebuild
-        /// RETIRES the old textures/views through the frame-aged queue - a submitted frame still
-        /// samples the old views through the renderer's set-3 bind group. Unwired (headless / Null
-        /// device) falls back to direct destroy.
+        /// retires the old textures and views through the frame-aged queue, because a submitted
+        /// frame still samples the old views through the renderer's set-3 bind group. Unwired
+        /// (headless, Null device), it destroys directly.
         void SetRetireQueue(render::GpuRetireQueue* retire) noexcept { m_retire = retire; }
 
-        /// The texture pair for `sw` at `version`. Keyed by the resource's UID (never its pointer
-        /// - a freed raster's address can be reused by a fresh one at an equal version; the
-        /// bind-group-cache versioning rule). Creates + uploads + caches on a miss; a stale
-        /// version for the same resource rebuilds in place (the paint re-upload path). Null views
-        /// on a device failure or an empty raster.
+        /// The texture pair for `sw` at `version`. Keyed by the resource's uid, never its pointer:
+        /// a freed raster's address can be reused by a fresh one at an equal version. Creates,
+        /// uploads and caches on a miss; a stale version for the same resource rebuilds in place
+        /// (the paint re-upload path). Null views on a device failure or an empty raster.
         [[nodiscard]] SplatTextureViews GetOrCreate(rhi::Device& device,
                                                     const foundation::terrain::SplatWeights& sw,
                                                     u64 version)
@@ -94,8 +93,7 @@ export namespace engine::terrain
             return SplatTextureViews{stored.weightView, stored.indexView};
         }
 
-        /// Destroy every cached texture/view (call before the device dies).
-        /// Drop every entry. Runs at SCENE DESTROY as well as at shutdown (stopping
+        /// Drops every entry. This runs at scene destroy as well as at shutdown (stopping
         /// play-in-editor destroys the run's scenes mid frame loop), so a live entry may still
         /// sit in a submitted frame's descriptor set: with a retire queue wired the GPU objects
         /// age past every in-flight frame before they are freed (VUID 01026); without one
@@ -114,7 +112,7 @@ export namespace engine::terrain
     private:
         struct Entry
         {
-            u64 key = 0; // SplatWeights::uid - never a pointer (address reuse aliases)
+            u64 key = 0; // SplatWeights::uid, never a pointer (address reuse aliases)
             u64 version = 0;
             rhi::Texture* weightTexture = nullptr;
             rhi::TextureView* weightView = nullptr;
@@ -226,13 +224,13 @@ export namespace engine::terrain
         }
 
         Array<Entry> m_entries;
-        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns + ticks it)
+        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns and ticks it)
     };
 
-    /// The palette-array GPU views + the per-layer tileScale buffer for one terrain.
+    /// The palette-array GPU views and the per-layer tileScale buffer for one terrain.
     struct PaletteGpu
     {
-        rhi::TextureView* arrayView = nullptr;  // ALBEDO Texture2DArray, one slice per palette layer
+        rhi::TextureView* arrayView = nullptr;  // albedo Texture2DArray, one slice per palette layer
         rhi::TextureView* normalArrayView = nullptr; // null = no layer used a normal map (dummy binds)
         rhi::TextureView* ormArrayView = nullptr;    // null = no layer used an ORM map
         rhi::TextureView* heightArrayView = nullptr; // null = no layer used a height map (dummy binds)
@@ -241,10 +239,10 @@ export namespace engine::terrain
         u64 generation = 0;                     // part of the set-3 cache key
     };
 
-    /// Owns + caches the palette Texture2DArray + tileScale storage buffer per terrain resource,
-    /// keyed by TerrainPaletteData::uid + a tile-scale hash (never pointers). A palette edit
-    /// re-cooks the terrain -> a NEW TerrainPaletteData (new uid) -> rebuild; the OLD array is
-    /// RETIRED (in-flight frames still sample it through the old set-3 group).
+    /// Owns and caches the palette Texture2DArray and tileScale storage buffer per terrain
+    /// resource, keyed by TerrainPaletteData::uid and a tile-scale hash (never pointers). A palette
+    /// edit re-cooks the terrain into a new TerrainPaletteData (a new uid), which rebuilds; the old
+    /// array is retired (in-flight frames still sample it through the old set-3 group).
     class TerrainPaletteTextureCache
     {
     public:
@@ -293,7 +291,7 @@ export namespace engine::terrain
             return MakeGpu(m_entries[m_entries.Size() - 1]);
         }
 
-        /// Drop every entry. Runs at SCENE DESTROY as well as at shutdown (stopping
+        /// Drops every entry. This runs at scene destroy as well as at shutdown (stopping
         /// play-in-editor destroys the run's scenes mid frame loop), so a live entry may still
         /// sit in a submitted frame's descriptor set: with a retire queue wired the GPU objects
         /// age past every in-flight frame before they are freed (VUID 01026); without one
@@ -312,7 +310,7 @@ export namespace engine::terrain
     private:
         struct Entry
         {
-            u64 key = 0; // TerrainPaletteData::uid - never a pointer
+            u64 key = 0; // TerrainPaletteData::uid, never a pointer
             u64 scaleHash = 0;
             u64 generation = 0;
             rhi::Texture* arrayTexture = nullptr;       // albedo (sRGB)
@@ -350,7 +348,7 @@ export namespace engine::terrain
             return h;
         }
 
-        // Create + upload ONE RGBA8 Texture2DArray (slice-major mip chain) at `format`.
+        // Creates and uploads one RGBA8 Texture2DArray (slice-major mip chain) at `format`.
         [[nodiscard]] static bool BuildArray(rhi::Device& device, rhi::TextureFormat format,
                                              Span<const u8> texels, u32 sliceSize, u32 mipCount,
                                              u32 sliceCount, StringView label, rhi::Texture*& outTex,
@@ -414,9 +412,9 @@ export namespace engine::terrain
                                         const foundation::terrain::TerrainPaletteData& data,
                                         Span<const f32> paletteTileScales, Entry& out)
         {
-            // Albedo is sRGB (fixes the base-vs-palette brightness gap);
-            // normal + ORM are linear and built ONLY when a layer supplied them (else the renderer
-            // binds a 1x1 dummy).
+            // Albedo is sRGB, so the palette matches the base's brightness; normal and ORM are
+            // linear and built only when a layer supplied them (otherwise the renderer binds a 1x1
+            // dummy).
             if (!BuildArray(device, rhi::TextureFormat::RGBA8UnormSrgb,
                             Span<const u8>{data.texels.Data(), data.texels.Size()}, data.sliceSize,
                             data.mipCount, data.sliceCount, u8"terrain.palette", out.arrayTexture,
@@ -470,8 +468,8 @@ export namespace engine::terrain
             }
             rhi::BufferDesc bd{};
             bd.size = scales.Size() * sizeof(f32);
-            // StorageRead, not Storage: the shader only reads it, and CpuToGpu (upload-heap)
-            // memory cannot carry UAV/Storage usage (DX12 UPLOAD heap rule; RHI validation).
+            // StorageRead, not Storage: the shader only reads it, and CpuToGpu (upload-heap) memory
+            // cannot carry UAV/Storage usage (the DX12 UPLOAD heap rule, which RHI validation checks).
             bd.usage = rhi::BufferUsage::StorageRead | rhi::BufferUsage::CopyDst;
             bd.memory = rhi::MemoryLocation::CpuToGpu;
             bd.label = u8"terrain.tileScales";
@@ -556,6 +554,6 @@ export namespace engine::terrain
         }
 
         Array<Entry> m_entries;
-        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns + ticks it)
+        render::GpuRetireQueue* m_retire = nullptr; // borrowed (RenderSubsystem owns and ticks it)
     };
 }

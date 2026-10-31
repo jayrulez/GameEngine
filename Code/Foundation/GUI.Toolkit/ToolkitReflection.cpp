@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the toolkit widgets' reflection: what markup, sheets and scripts set on them, and
-// their registration as elements.
+// GUI.Toolkit - the toolkit widgets' reflection, which defines what markup, sheets and scripts can
+// set on them, and their registration as elements.
 
 module;
 #include "Core/Prelude.h"
@@ -80,7 +80,8 @@ namespace foundation::gui
     RTTI_DEFINE_OBJECT(StopsPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(HdrColorPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyGrip, "rtti::gui::toolkit")
-    // T5's views: elements markup places, whose axis and source the application gives in code.
+    // The timeline views: markup places these elements, and the application gives them their axis
+    // and source in code.
     REFLECT_MEMBERS(TimeRuler, "rtti::gui::toolkit")
     {
         builder.Creator();
@@ -99,7 +100,7 @@ namespace foundation::gui
         builder.AccessorProperty<&Dopesheet::GetLabelWidth, &Dopesheet::SetLabelWidth>("labelWidth").PropAttribute("css", core::String(u8"label-width"));
         builder.Creator();
     }
-    // T6's view: an element markup places, whose source the application gives in code.
+    // The graph view: markup places the element, and the application gives it its source in code.
     RTTI_DEFINE_OBJECT(GraphPinRow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodeHeader, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodeWidget, "rtti::gui::toolkit")
@@ -111,7 +112,7 @@ namespace foundation::gui
         builder.AccessorProperty<&GraphView::GetGridSize, &GraphView::SetGridSize>("gridSize").PropAttribute("css", core::String(u8"grid-size"));
         builder.Creator();
     }
-    // T7's bar: an element markup places, whose items the application gives in code.
+    // The breadcrumb bar: markup places the element, and the application gives it its items in code.
     REFLECT_MEMBERS(BreadcrumbSegment, "rtti::gui::toolkit")
     {
         builder.ComputedProperty<&BreadcrumbSegment::GetAccessDescription>("description")

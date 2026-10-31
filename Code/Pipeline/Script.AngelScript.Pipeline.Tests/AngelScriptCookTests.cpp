@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.script.angelscript.editor tests: the AngelScript cook - compile-check in a
-// cooker-owned AngelScript VM (resolved by language), the SHARED handler scan, the starter
-// template, and [metadata] PROPERTY HARVEST (typed member field + `[default, "desc"]`).
+// script.angelscript.pipeline tests: the AngelScript cook. A compile-check in a
+// cooker-owned AngelScript VM (resolved by language), the shared handler scan, the starter
+// template, and the [metadata] property harvest (typed member field and `[default, "desc"]`).
 
 #include <doctest/doctest.h>
 
@@ -12,11 +12,11 @@
 import foundation.core;
 import foundation.script;
 import foundation.script.resource;
-import foundation.script.angelscript; // CreateScriptManager + AngelScriptBytecodeVersion (player path)
+import foundation.script.angelscript; // CreateScriptManager and AngelScriptBytecodeVersion (player path)
 import foundation.script.facades;      // RegisterScriptFacadeReflection (match the cook's surface)
 import script.pipeline;
 import script.angelscript.pipeline;
-import engine.composition;            // RegisterAllScriptFacades (the COMPLETE engine facade surface)
+import engine.composition;            // RegisterAllScriptFacades (the complete engine facade surface)
 
 using namespace foundation::core;
 using namespace pipeline;
@@ -26,7 +26,7 @@ namespace
 {
     [[nodiscard]] IScriptLanguageCook* AngelScriptCook()
     {
-        RegisterAngelScriptScriptCook(); // registers the AS backend + cook (idempotent)
+        RegisterAngelScriptScriptCook(); // registers the AS backend and cook (idempotent)
         return ScriptLanguageCookRegistry::Get().FindByLanguage(u8"angelscript");
     }
 }
@@ -101,7 +101,7 @@ TEST_CASE("as.cook: an AngelScript behavior compile-checks, scans its on<Upper>(
     CHECK(scanned(u8"onUpdate"));
     CHECK(scanned(u8"onHeal"));
     CHECK(out.handlers.Size() == 3u);
-    CHECK(out.properties.IsEmpty()); // no metadata anywhere -> no inspector properties
+    CHECK(out.properties.IsEmpty()); // no metadata anywhere, so no inspector properties
 }
 
 namespace
@@ -266,16 +266,16 @@ TEST_CASE("as.cook: a `replicated` word marks a property; a stray word or a repl
     }
 }
 
-// A reflected/resource property is a
-// reference type; declared as a VALUE member it silently drops its value at runtime, so the cook
-// REJECTS it with the exact fix ("declare it 'Guid@ mesh'"). The idiomatic handle form cooks fine.
+// A reflected/resource property is a reference type; declared as a value member it silently
+// drops its value at runtime, so the cook rejects it and names the fix ("declare it 'Guid@ mesh'").
+// The idiomatic handle form cooks fine.
 TEST_CASE("as.cook: a reflected/resource property declared as a VALUE member FAILS the cook")
 {
     IScriptLanguageCook* cook = AngelScriptCook();
     REQUIRE(cook != nullptr);
     CookScriptErrorSink sink;
     ScriptClassSource out;
-    // asset:Mesh on a VALUE Guid (no @): a reference type the runtime can't fill - rejected.
+    // asset:Mesh on a value Guid (no @): a reference type the runtime can't fill, so rejected.
     CHECK_FALSE(cook->Cook(u8"class B1 { [\"asset:Mesh\"] Guid mesh; void onUpdate(double dt){} }\n",
                            u8"b1.as", sink, out));
     // A value Color / Entity member is equally rejected.
@@ -317,7 +317,7 @@ TEST_CASE("as.cook: the New-Asset starter template compiles clean (its example c
     CookScriptErrorSink sink;
     ScriptClassSource out;
     const bool ok = cook->Cook(cook->NewAssetTemplate(ScriptTier::Behavior, {}), u8"NewBehavior.as", sink, out);
-    REQUIRE(ok); // the starter MUST compile - it teaches the API by example
+    REQUIRE(ok); // the starter has to compile: it teaches the API by example
     CHECK(out.className == u8"NewBehavior");
 }
 
@@ -333,7 +333,7 @@ TEST_CASE("as.cook: the cook stores loadable bytecode in the pack (the player pa
     REQUIRE_FALSE(out.bytecode.IsEmpty());
     CHECK_FALSE(out.source.IsEmpty());
 
-    // Player path: a fresh AngelScript VM (SAME reflected registration - the shared registry)
+    // Player path: a fresh AngelScript VM (the same reflected registration, the shared registry)
     // reconstructs the blob from the stored bytes and LoadByteCodes it, no recompile.
     RefPtr<IScriptManager> manager = foundation::script::angelscript::CreateScriptManager(DefaultAllocator());
     RegisterCoreTypes();
@@ -355,19 +355,17 @@ TEST_CASE("as.cook: the cook stores loadable bytecode in the pack (the player pa
           doctest::Approx(42.0));
 }
 
-// Regression (facade-surface completeness - the cook/validation "No matching symbol" bug): the cook
-// compiles a script against whatever sits in the GLOBAL type registry (RegisterReflectedTypes copies
-// it into the cook's fresh compile manager). The cook's own registration installs ONLY the
-// foundation facades (Log/Time/Entity/Scene), so a script that calls an ENGINE-level facade (run::,
-// gui::, physics::, ...) would fail to cook. The cooking TOOLS cure this by calling
-// engine::RegisterAllScriptFacades() ONCE at startup, completing the global registry before any cook
-// runs (metadata-only, no device/GPU/world, idempotent). This test mirrors that startup step: with
-// the full surface registered, a Game class driving run:: and gui:: cooks clean. WITHOUT the call the
-// global registry lacks run/gui and this same cook FAILS with "No matching symbol" - which is exactly
-// what games hit at cook/live-validation time before the tool fix.
+// The cook compiles a script against whatever sits in the global type registry
+// (RegisterReflectedTypes copies it into the cook's fresh compile manager). The cook's own
+// registration installs only the foundation facades (Log, Time, Entity, Scene), so a script that
+// calls an engine-level facade (run::, gui::, physics::, ...) fails to cook with "No matching
+// symbol" unless the host has completed the registry. The cooking tools do that by calling
+// engine::RegisterAllScriptFacades() once at startup, before any cook runs (metadata only, no
+// device, GPU or world, idempotent). This test repeats that startup step: with the full surface
+// registered, a Game class driving run:: and gui:: cooks clean.
 TEST_CASE("as.cook: with the full engine surface registered, a Game using run:: / gui:: cooks clean")
 {
-    engine::RegisterAllScriptFacades(); // the tools' one-time startup registration - the whole fix
+    engine::RegisterAllScriptFacades(); // the tools' one-time startup registration
     IScriptLanguageCook* cook = AngelScriptCook();
     REQUIRE(cook != nullptr);
 
@@ -384,12 +382,12 @@ TEST_CASE("as.cook: with the full engine surface registered, a Game using run:: 
                                u8"    void exit() {}\n"
                                u8"}\n",
                                u8"Game.as", sink, out);
-    REQUIRE(ok); // an Engine-level facade resolves ONLY because the global registry is complete
+    REQUIRE(ok); // an engine-level facade resolves only because the global registry is complete
     CHECK(out.className == u8"Game");
 }
 
 // The PaperKid driving-slice behaviors (Sources/Bike.as, Sources/FollowCamera.as) cook against the
-// FULL engine surface: Bike drives a CharacterComponent from the Input axis and the reflected
+// full engine surface: Bike drives a CharacterComponent from the Input axis and the reflected
 // Quaternion/Math ops; FollowCamera targets another entity through an [null] Entity@ picker property
 // and aims with atan2/asin. Kept faithful to the sample scripts so a facade/spelling regression that
 // would break the game at live-validation is caught here at build time.

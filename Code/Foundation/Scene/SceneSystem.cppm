@@ -3,17 +3,17 @@
 
 /// Foundation::Scene - the `:system` partition.
 ///
-/// SceneSystem: the base for a per-scene system - the unit a Scene owns, ticks per
+/// SceneSystem: the base for a per-scene system, the unit a Scene owns, ticks per
 /// phase, and notifies of entity lifecycle. A ComponentManager is the most common
-/// SceneSystem (it stores + drives components), but a system need not own components
+/// SceneSystem (it stores and drives components), but a system need not own components
 /// (a spatial index, a physics world, an audio listener could be plain systems).
 ///
-/// Behavior lives here (and in scripts), not on the components themselves - which is
+/// Behavior lives here (and in scripts), not on the components themselves, which is
 /// what lets components be plain value data in contiguous pools (see :component).
 ///
 /// `Scene` is forward-declared (defined in :scene): a system only needs the incomplete
 /// type for its reference-parameter hooks, so :system does not import :scene and the
-/// partitions stay acyclic (:scene -> :component -> :system).
+/// partitions stay acyclic (:scene imports :component, which imports :system).
 
 module;
 #include "Core/Prelude.h"
@@ -62,7 +62,7 @@ export namespace foundation::scene
 
     // A system whose static content should be solid without an entity per piece (vegetation: a
     // forest's trunks): physics asks it for capsules when it builds its bodies, so neither domain
-    // links the other. Specs/vegetation-colliders.md.
+    // links the other.
     class IStaticColliderSource
     {
     public:
@@ -154,7 +154,7 @@ export namespace foundation::scene
     // describe (a script behaviour's properties, declared by the script). Replication sends the bytes
     // it writes for a networked entity, compares them with what each peer last had, and hands them
     // back on every peer; the bytes are the manager's own format. Replication lives above the scene
-    // and does not depend on it: a manager that keeps its own networked state.
+    // and reaches such a manager through this interface without depending on it.
     class IReplicatedStateSource
     {
     public:
@@ -209,8 +209,8 @@ export namespace foundation::scene
         virtual void OnUpdate(ScenePhase /*phase*/, f32 /*deltaTime*/) {}
         virtual void OnFixedUpdate(f32 /*fixedDeltaTime*/) {}
 
-        // --- scene-level settings (the Sedulous scene-modules pattern) ---
-        // A system with ONE per-scene settings block (not per-entity state) exposes it here:
+        // --- scene-level settings ---
+        // A system with one per-scene settings block (not per-entity state) exposes it here:
         // the editor inspects it when no entity is selected, and SerializeScene persists it
         // with the scene. All four override together or not at all.
         //   SettingsType():      the settings struct's reflected TypeInfo (null = no settings)
@@ -238,10 +238,10 @@ export namespace foundation::scene
         virtual void CopySettingsProfileIntoScene() {}
 
         // Bind every resource::Ref this system holds (settings blocks included) through the
-        // manager - the post-load resolve pass. ComponentManagerBase overrides it for component
+        // manager: the post-load resolve pass. ComponentManagerBase overrides it for component
         // pools; plain systems with resource-bearing settings override it too. Default: nothing.
         virtual void ResolveResources(foundation::resource::ResourceManager& /*manager*/) {}
-        // Bind the resource::Refs ONE entity's data in this system holds - for a subtree that
+        // Bind the resource::Refs one entity's data in this system holds, for a subtree that
         // arrived after the scene was resolved (a runtime prefab spawn), so the spawn binds what
         // it added rather than re-walking the scene. A system with no per-entity data does
         // nothing; SerializableComponentManager resolves that entity's component.

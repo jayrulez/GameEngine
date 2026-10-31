@@ -3,16 +3,14 @@
 
 // GUI - :popup_placement partition
 //
-// Where a popup goes (E5 of Specs/gui-lab-evolution.md): one helper every popup places itself with,
-// a combo box's list, a menu and its submenus, a tooltip and a context menu. A size goes against an
+// Where a popup goes: one helper that every popup uses to place itself (a combo box's list, a
+// menu and its submenus, a tooltip, a context menu). A popup of a given size is placed against an
 // anchor rectangle on a preferred side (below, above, or at the anchor's inline end or start),
-// aligned along that side (start, centre or end) and a gap away; when it does not fit there it flips to the other side if
-// that side has more room, shrinks to the room on the side it goes (a list then scrolls), and is
-// clamped into the bounds (the root's), all in the root's units. The sides across the line and the
-// alignment along it are logical (E17a): in right to left the inline end is the left, and a
-// dropdown's start lines up the right edges, as CSS's logical properties and Godot's and eepp's
-// right-to-left menus place them.
-// After Godot's popup clamping, GPUI's `anchored` and foundation.ui's PopupPositioner.
+// aligned along that side (start, centre or end), at a gap from it. When it does not fit there, it
+// flips to the opposite side if that side has more room, shrinks to the room on the chosen side (a
+// list then scrolls), and is clamped into the bounds (the root's), all in the root's units. The
+// sides and the alignment are logical: in right-to-left text the inline end is the left, and a
+// dropdown aligned to its start lines up the right edges, as CSS logical properties do.
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +26,7 @@ namespace core = foundation::core;
 export namespace foundation::gui
 {
     /// The side of the anchor a popup goes on: below or above it, or at its inline end or start
-    /// (right or left in left to right, left or right in right to left).
+    /// (right or left in left-to-right text, left or right in right-to-left text).
     enum class PopupSide : u8
     {
         Below,
@@ -36,8 +34,8 @@ export namespace foundation::gui
         InlineEnd,
         InlineStart,
     };
-    /// How a popup lines up along the side it goes on: its start with the anchor's start (a
-    /// dropdown's inline-start edges, a submenu's tops), centred on it, or its end with the
+    /// How a popup lines up along its side: its start with the anchor's start (a dropdown's
+    /// inline-start edges, a submenu's top edges), centred on the anchor, or its end with the
     /// anchor's end.
     enum class PopupAlign : u8
     {
@@ -51,21 +49,21 @@ export namespace foundation::gui
         PopupSide Side = PopupSide::Below;
         PopupAlign Align = PopupAlign::Start;
         f32 Gap = 0.0f;      ///< between the anchor and the popup
-        bool Shrink = true;  ///< made smaller to fit the room on its side, rather than covering the anchor
-        /// Along its side's line, from where its alignment puts it, toward the line's end (down
-        /// beside a side, toward the inline end below or above).
+        bool Shrink = true;  ///< shrink to fit the room on its side, rather than covering the anchor
+        /// An offset along the side, from where the alignment puts the popup, toward the end of
+        /// that side (downward beside the anchor, toward the inline end below or above it).
         f32 Shift = 0.0f;
-        /// Lined up by its content's edge rather than its box's: moved back along the line by its
-        /// own padding and border as they are when it is placed (a submenu's first row level with
-        /// the row that opened it).
+        /// Aligns the popup by its content's edge rather than its box's, moving it back along the
+        /// side by its padding and border as they are when it is placed (so a submenu's first row
+        /// is level with the row that opened it).
         bool AlignContent = false;
     };
 
-    /// Where it went, and on which side (after a flip, the other one).
+    /// Where the popup was placed, and on which side (the opposite one after a flip).
     struct PlacedPopup
     {
         core::Float2 Position{0.0f, 0.0f};
-        core::Float2 Size{0.0f, 0.0f}; ///< what it was given, its own or shrunk to fit
+        core::Float2 Size{0.0f, 0.0f}; ///< the size it was given: its own, or shrunk to fit
         PopupSide Side = PopupSide::Below;
     };
 
@@ -82,7 +80,7 @@ export namespace foundation::gui
 
     namespace detail
     {
-        // The sides as they fall on the screen.
+        // The sides as they appear on the screen.
         enum class ScreenSide : u8
         {
             Below,
@@ -111,7 +109,8 @@ export namespace foundation::gui
             default: return anchor.x - bounds.x - gap;
             }
         }
-        // Lined up along a side: from `start` (the anchor's) over `length`, a popup `extent` long.
+        // Where a popup `extent` long starts when aligned along an anchor that starts at `start`
+        // and is `length` long.
         [[nodiscard]] constexpr f32 Aligned(PopupAlign align, f32 start, f32 length, f32 extent) noexcept
         {
             switch (align)
@@ -121,7 +120,7 @@ export namespace foundation::gui
             default: return start;
             }
         }
-        // Into [low, low + room]: a popup longer than the room starts at its low edge.
+        // Clamps a popup into [low, low + room]; a popup longer than the room starts at `low`.
         [[nodiscard]] constexpr f32 Clamped(f32 at, f32 extent, f32 low, f32 room) noexcept
         {
             if (at + extent > low + room)
@@ -130,8 +129,8 @@ export namespace foundation::gui
         }
     }
 
-    /// Places `size` against `anchor` within `bounds` as `placement` prefers, its logical side and
-    /// alignment taken in the direction `rightToLeft` says (the anchor's).
+    /// Places a popup of `size` against `anchor` within `bounds` as `placement` prefers, reading
+    /// the logical side and alignment in the direction `rightToLeft` gives (the anchor's).
     [[nodiscard]] constexpr PlacedPopup PlacePopup(const Rect& anchor, core::Float2 size, const Rect& bounds,
                                                    const PopupPlacement& placement, bool rightToLeft) noexcept
     {
@@ -147,7 +146,8 @@ export namespace foundation::gui
 
         PlacedPopup out;
         out.Side = side;
-        // Shrunk to the room on its side (along it) and to the bounds (across).
+        // Shrink to the room on the chosen side (along the placement axis) and to the bounds
+        // (across it).
         if (placement.Shrink)
         {
             const f32 sideRoom = core::Max(0.0f, detail::RoomOn(screen, anchor, bounds, placement.Gap));
@@ -173,7 +173,7 @@ export namespace foundation::gui
         }
         if (vertical)
         {
-            // Along the line: the start is the right in right to left.
+            // Along the side, the start is the right edge in right-to-left text.
             PopupAlign align = placement.Align;
             if (rightToLeft && align != PopupAlign::Center)
                 align = align == PopupAlign::Start ? PopupAlign::End : PopupAlign::Start;
@@ -186,8 +186,8 @@ export namespace foundation::gui
         return out;
     }
 
-    /// A popup at a point (a context menu at the pointer): below it and toward the inline end,
-    /// above it where it does not fit below, slid back in from the edges.
+    /// Places a popup at a point (a context menu at the pointer): below it and toward the inline
+    /// end, or above it when it does not fit below, and slid back inside the edges.
     [[nodiscard]] constexpr PlacedPopup PlaceAtPoint(core::Float2 point, core::Float2 size, const Rect& bounds,
                                                      bool rightToLeft) noexcept
     {

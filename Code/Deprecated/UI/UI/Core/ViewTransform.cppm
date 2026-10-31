@@ -3,9 +3,8 @@
 
 // UI - :view_transform partition
 //
-// Post-layout transform applied during drawing and hit testing (does NOT affect layout).
+// Post-layout transform applied during drawing and hit testing (it does not affect layout).
 // Applied in order: translate to origin, scale, rotate, translate back, then translate.
-// Ported from Sedulous.UI/src/Core/ViewTransform.bf; Sedulous Vector2 -> core::Float2.
 
 module;
 #include "Core/Prelude.h"
@@ -20,7 +19,7 @@ namespace core = foundation::core;
 export namespace foundation::ui
 {
     // ENGINE_EXPORT_DATA for ViewTransform::Identity: a static data member read from
-    // another library needs the annotation (shared-libraries.md P5/W1).
+    // another library needs the annotation.
     struct ENGINE_EXPORT_DATA ViewTransform
     {
         /// Translation offset (pixels).

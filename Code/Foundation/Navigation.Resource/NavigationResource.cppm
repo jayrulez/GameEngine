@@ -3,14 +3,13 @@
 
 // Foundation::Navigation.Resource - the `foundation.navigation.resource` module.
 //
-// Cooked navigation content, mirroring the collision-shape
-// split:
-//   * NavigationZoneSource - the cooked record: the serialized single-tile navmesh blob a bake
+// Cooked navigation content, split as collision shapes are:
+//   * NavigationZoneSource: the cooked record, the serialized tiled navmesh blob a bake
 //     action produced (NavigationMeshBuilder::Build output).
-//   * NavigationZoneResource       - the runtime product a NavMeshZoneComponent's Ref<> binds: the blob
-//     loaded into a live NavigationMesh, ready for query/crowd construction.
+//   * NavigationZoneResource: the runtime product a NavMeshZoneComponent's Ref<> binds, the blob
+//     loaded into a live NavigationMesh, ready for query and crowd construction.
 //
-// A zone's navmesh is baked in ZONE-LOCAL space (relative to the zone entity's transform at bake
+// A zone's navmesh is baked in zone-local space (relative to the zone entity's transform at bake
 // time); the engine transforms queries through the current transform, so the cooked data is
 // placement-independent and rides a prefab to any location without a rebake.
 
@@ -46,7 +45,7 @@ export namespace foundation::navigation
     };
 
     // Runtime product: the loaded navmesh a zone component binds. Invalid (IsValid()==false) when
-    // the blob was empty or malformed - the subsystem skips such a zone.
+    // the blob was empty or malformed; the subsystem skips such a zone.
     class NavigationZoneResource : public Object
     {
         RTTI_OBJECT(NavigationZoneResource, Object)
@@ -61,7 +60,7 @@ export namespace foundation::navigation
     class NavigationZoneFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every zone product this factory creates (required - the
+        // The allocator backs every zone product this factory creates (required; the
         // application that registers the factory decides).
         explicit NavigationZoneFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -99,7 +98,7 @@ export namespace foundation::navigation
         IAllocator* m_allocator;
     };
 
-    // Registers the cooked record + product types (content-DB construction by type name).
+    // Registers the cooked record and product types (content-DB construction by type name).
     inline void RegisterNavigationResource()
     {
         GlobalTypeRegistry().Register(NavigationZoneSource::StaticType());
@@ -107,14 +106,14 @@ export namespace foundation::navigation
         GlobalTypeRegistry().Register(NavigationZoneResource::StaticType());
     }
 
-    RTTI_DEFINE_OBJECT_VERSIONED(NavigationZoneSource, "rtti::navigation", 2) // 2: the frame stamp left
+    RTTI_DEFINE_OBJECT_VERSIONED(NavigationZoneSource, "rtti::navigation", 2) // 2: drops the frame stamp
     RTTI_DEFINE_OBJECT(NavigationZoneResource, "rtti::navigation")
 }
 
 export namespace foundation::navigation
 {
-    /// The navigation resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The navigation resource module: the engine composition composes this library's factories
+    /// from it.
     inline constexpr foundation::resource::ResourceFactoryDesc kNavigationResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<NavigationZoneResource, NavigationZoneSource, NavigationZoneFactory>(),
     };

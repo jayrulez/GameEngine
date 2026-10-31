@@ -3,48 +3,51 @@
 
 // GUI.Toolkit - :reflected_source partition
 //
-// The property source over core reflection (T3 of Specs/gui-lab-evolution-3.md, ruling 1: the
-// toolkit's): one reflected instance or several of one type, their properties as the grid's paths.
-//   - bool, every integer width, f32, f64 and String are values; an enum is choices from its
-//     enumerators, or flags with a `flags` attribute (read and written as an integer through the
-//     property's address); a ReadOnly property is read only.
-//   - A Color is a colour (T4), its alpha hidden with `noAlpha`; a Float4 with `hdrColor` (sRGB
-//     rgb, a linear intensity in w) is an HDR colour, hinted "ColorHdr", its parts `color` and
-//     `intensity` (shown in stops); a Float4 with `color` is a colour as a Color is (four floats a
-//     runtime keeps its tints in), `noAlpha` hiding its alpha.
-//   - Float2, Float3 and Float4 are groups hinted with their names, their parts x, y, z, w; a
-//     Quaternion is a Float3 group of Euler degrees (pitch, yaw, roll) the source converts, as the
-//     editor's Transform row does; a Nested struct, or a reflected value struct, is a group.
-//   - Array<T> and a BoundedArray are lists (reflection's emplaceDefault, removeAt, moveElement),
-//     their elements by index; an Array<RefPtr<Base>> adds by type, the types that derive from
-//     its base and its factory can make, by their displayName.
-//   - A reference-shaped type (Core's TypeInfo::reference: a Ref<T>) is one value of kind
-//     Reference, its Guid as text (empty: none), naming the type it points at; a write drops its
-//     binding, so the next resolve binds the new id. The toolkit has no slot: the application
-//     registers one for the kind. A bare Guid is a reference too, to the type its property's
-//     `referenceType` attribute names (by the type's name), else to nothing in particular; a list
-//     of bare Guids names its elements' by its own property's.
-//   - A struct's group carries its type's name as its hint, and so does any other type, for an
-//     application's editor (a Color until T4, an EntityRef); a struct no editor takes shows its own
-//     rows, anything else the grid's row saying no editor fits.
-//   - A struct the application registers as a reference (its Guid property, by name) is one value
-//     of kind Reference as Core's reference-shaped types are, naming itself as what it points at
-//     and hinted with its name, so the application's editor for it (an editor's entity reference)
-//     is chosen before the one for asset references.
-//   - A type the application registers as a curve (its keys property, a list of Core's CurveKey)
-//     is one value of kind Curve, its keys whole; one registered as a gradient (its colour stops,
-//     alpha stops and blend properties) is one value of kind Gradient (T5): the toolkit names no
-//     runtime type, the application says which of its types these are and where their parts are.
-//   - The attributes the editor's inspector reads: `displayName` (else the name made readable),
-//     `description`, `range` (a Float4 of min, max, step), `visibleWhen` ("prop", or "prop=1,2" of
-//     its raw integer, a sibling's; shown when it holds for every object), and `flags`.
-// Defaults: the type's, read from an instance its creator makes, under any an application stacks
-// over it (a prefab's, by path and object); a revert puts each object's own back, a list whole
-// from the type's instance.
-// Writes go through the property's address, or its setter for a computed one. Each commit is told
-// to the application as one change: what, where, and each object's value there before and after as
-// text, written with the text format the application gives (its serializer), which Restore reads
-// back for an undo; the undo is the application's.
+// The property source over core reflection. It covers one reflected instance or several of one
+// type, and exposes their properties as the grid's paths.
+//   - bool, every integer width, f32, f64 and String are values. An enum is a choice of its
+//     enumerators, or flags when it has a `flags` attribute; either is read and written as an
+//     integer through the property's address. A ReadOnly property is read only.
+//   - A Color is a colour, with its alpha hidden by `noAlpha`. A Float4 with `hdrColor` (sRGB rgb
+//     and a linear intensity in w) is an HDR colour, hinted "ColorHdr", with the parts `color` and
+//     `intensity` (shown in stops). A Float4 with `color` is a colour just as a Color is (the four
+//     floats a runtime keeps its tints in), and `noAlpha` hides its alpha.
+//   - Float2, Float3 and Float4 are groups hinted with their type names, with parts x, y, z and w.
+//     A Quaternion is shown as a Float3 group of Euler degrees (pitch, yaw, roll), which the source
+//     converts, as the editor's Transform row does. A Nested struct, or a reflected value struct,
+//     is a group.
+//   - Array<T> and BoundedArray are lists (through reflection's emplaceDefault, removeAt and
+//     moveElement), with their elements by index. An Array<RefPtr<Base>> adds by type: it offers
+//     the types that derive from its base and that its factory can make, by their displayName.
+//   - A reference-shaped type (Core's TypeInfo::reference, such as a Ref<T>) is one value of kind
+//     Reference: its Guid as text (empty for none), naming the type it points at. A write drops
+//     the reference's binding, so the next resolve binds the new id. The toolkit has no slot editor
+//     for it; the application registers one for the kind. A bare Guid is a reference too: to the
+//     type named by its property's `referenceType` attribute, or else to nothing in particular. A
+//     list of bare Guids takes its elements' target type from its own property's attribute.
+//   - A struct's group carries its type's name as its hint, and so does any other type, so an
+//     application can register an editor for it (an EntityRef, say). A struct that no editor takes
+//     shows its own rows; any other type shows the grid's row saying that no editor fits.
+//   - A struct the application registers as a reference (naming its Guid property) is one value of
+//     kind Reference, like Core's reference-shaped types. It names itself as the type it points at
+//     and is hinted with its own name, so the application's editor for it (the editor's entity
+//     reference field) is chosen before the editor for asset references.
+//   - A type the application registers as a curve (naming its keys property, a list of Core's
+//     CurveKey) is one value of kind Curve, holding its keys whole. A type registered as a gradient
+//     (naming its colour stops, alpha stops and blend properties) is one value of kind Gradient.
+//     The toolkit names no runtime type itself; the application says which of its types these are
+//     and where their parts are.
+//   - The attributes read are those the editor's inspector reads: `displayName` (else the name
+//     made readable), `description`, `range` (a Float4 of min, max and step), `visibleWhen`
+//     ("prop", or "prop=1,2" tested against the raw integer of a sibling; the row shows when the
+//     condition holds for every object), and `flags`.
+// Defaults come from the type, read from an instance its creator makes, with any providers the
+// application stacks over it (a prefab's, by path and object) asked first. A revert restores each
+// object's own default; a list is restored whole from the type's instance.
+// Writes go through the property's address, or through its setter for a computed property. Each
+// commit is reported to the application as one change: what changed, where, and each object's value
+// there before and after as text. The text is written with the text format the application gives
+// (its serializer), and Restore reads it back for an undo. The undo belongs to the application.
 
 module;
 #include "Core/Prelude.h"
@@ -62,19 +65,20 @@ namespace core = foundation::core;
 export namespace foundation::gui
 {
     /// What the application gives a reflected source to write text with: its serializer (the
-    /// engine's XmlSerializer, say), so the toolkit takes on no format.
+    /// engine's XmlSerializer, say), so the toolkit depends on no format.
     class IPropertyTextFormat
     {
     public:
         virtual ~IPropertyTextFormat() = default;
-        /// Text written by `write`; empty when it failed.
+        /// Returns the text written by `write`, or empty when it failed.
         [[nodiscard]] virtual core::String Write(core::Function<void(core::ISerializer&)> write) = 0;
-        /// Reads `text` with `read`; false when it is not the format's or the read failed.
+        /// Reads `text` with `read`. Returns false when the text is not in this format or the read
+        /// failed.
         virtual bool Read(core::StringView text, core::Function<void(core::ISerializer&)> read) = 0;
     };
 
-    /// A change a reflected source made: what (in words), where, and each object's value there
-    /// before and after as the text format's text (empty without one).
+    /// A change a reflected source made: what changed (in words), where, and each object's value
+    /// there before and after, as text in the text format (empty when there is no format).
     struct ReflectedChange
     {
         core::String Words;
@@ -83,21 +87,20 @@ export namespace foundation::gui
         core::Array<core::String> After;
     };
 
-    /// Where a struct registered as a reference keeps what it is known by: a Guid property, by its
-    /// name.
+    /// Names the Guid property that identifies a struct registered as a reference.
     struct ReflectedReferenceParts
     {
         core::String Id;
     };
-    /// Where a type registered as a curve keeps its keys: a list (an Array or a BoundedArray) of
-    /// Core's CurveKey, by its property's name (the most it holds is the list's capacity).
+    /// Names the property where a type registered as a curve keeps its keys: a list (an Array or a
+    /// BoundedArray) of Core's CurveKey. The most keys it holds is the list's capacity.
     struct ReflectedCurveParts
     {
         core::String Keys;
     };
-    /// Where a type registered as a gradient keeps its parts: its lists of Core's GradientColorStop
-    /// and GradientAlphaStop and its GradientInterpolation, by their properties' names (the most
-    /// stops of a kind is the smaller list's capacity).
+    /// Names the properties where a type registered as a gradient keeps its parts: its lists of
+    /// Core's GradientColorStop and GradientAlphaStop, and its GradientInterpolation. The most stops
+    /// of each kind is the smaller list's capacity.
     struct ReflectedGradientParts
     {
         core::String Colors;
@@ -105,8 +108,8 @@ export namespace foundation::gui
         core::String Interpolation;
     };
 
-    /// "castsShadows" -> "Casts Shadows", "fovYRadians" -> "Fov Y Radians", "IBL" -> "IBL": a
-    /// reflected name as a row says it (the editor's convention).
+    /// Returns a reflected name as a row shows it, following the editor's convention:
+    /// "castsShadows" -> "Casts Shadows", "fovYRadians" -> "Fov Y Radians", "IBL" -> "IBL".
     [[nodiscard]] inline core::String ReadablePropertyName(core::StringView name)
     {
         core::String out;
@@ -140,7 +143,8 @@ export namespace foundation::gui
         {
         }
 
-        /// The instances it stands for, all of one type (several components: several objects).
+        /// Sets the instances it stands for, all of one type (several components make several
+        /// objects).
         void SetObjects(core::Span<const core::Instance> objects)
         {
             m_objects.Clear();
@@ -148,17 +152,18 @@ export namespace foundation::gui
                 if (!object.IsEmpty())
                     m_objects.PushBack(object);
             m_originals.Clear();
-            // The type's defaults: an instance its creator makes (none for a type without one).
+            // The type's defaults come from an instance its creator makes (none for a type without
+            // a creator).
             m_typeDefault = m_objects.IsEmpty() ? core::RefPtr<core::Object>{} : core::CreateObject(*m_objects[0].Type(), m_allocator);
             NotifyPropertiesChanged();
         }
         [[nodiscard]] core::Span<const core::Instance> GetObjects() const noexcept { return m_objects.AsSpan(); }
-        /// The text format changes and copies are written in (not owned; null: none).
+        /// Sets the text format that changes and copies are written in (not owned; null for none).
         void SetTextFormat(IPropertyTextFormat* format) noexcept { m_format = format; }
-        /// Told each change made, to keep for undo.
+        /// Called with each change made, so it can be kept for undo.
         void SetOnChange(core::Function<void(const ReflectedChange&)> onChange) { m_onChange = core::Move(onChange); }
-        /// Puts `change`'s values back, those before it (an undo) or after it (a redo); false
-        /// without a text format or when the objects no longer take it.
+        /// Restores `change`'s values from before it (an undo, with `before`) or after it (a redo).
+        /// Returns false without a text format or when the objects no longer accept the values.
         bool Restore(const ReflectedChange& change, bool before)
         {
             const core::Array<core::String>& states = before ? change.Before : change.After;
@@ -170,10 +175,11 @@ export namespace foundation::gui
             NotifyPropertiesChanged(); // a list's count may have changed back
             return ok;
         }
-        /// A default for a path and an object (empty: it has none there), over the type's own.
+        /// Returns a default for a path and an object, or empty when it has none there; it takes
+        /// precedence over the type's own default.
         using DefaultProvider = core::Function<Variant(core::StringView path, usize object)>;
-        /// Stacks `provider` over the defaults (the last stacked asks first); a revert is then
-        /// called `revertText` ("Revert to prefab").
+        /// Stacks `provider` over the defaults; the last one stacked is asked first. A revert is then
+        /// labelled `revertText` ("Revert to prefab").
         void PushDefaults(DefaultProvider provider, core::StringView revertText)
         {
             m_providers.PushBack(Provider{core::Move(provider), core::String(revertText)});
@@ -185,30 +191,30 @@ export namespace foundation::gui
             NotifyValuesChanged();
         }
 
-        /// Tells the grid the objects changed from outside it (an undo the application made).
+        /// Tells the grid that the objects changed from outside it (an undo the application made).
         void Refresh() { NotifyPropertiesChanged(); }
 
-        /// Takes the struct named `typeName` as a reference: one value, its Guid at `parts.Id`, the
-        /// struct itself what it points at.
+        /// Treats the struct named `typeName` as a reference: one value, with its Guid at `parts.Id`,
+        /// pointing at the struct type itself.
         void RegisterReferenceType(core::StringView typeName, ReflectedReferenceParts parts)
         {
             m_referenceTypes.PushBack(ReferenceType{core::String(typeName), core::Move(parts)});
             NotifyPropertiesChanged();
         }
-        /// Hints a property carrying the attribute `attribute` with the attribute's name, for the
-        /// application's editor of what that attribute says (a string naming a bone of a skeleton).
+        /// Hints a property that carries `attribute` with the attribute's name, so the application's
+        /// editor for that attribute is chosen (a string naming a bone of a skeleton, say).
         void RegisterHintAttribute(core::StringView attribute)
         {
             m_hintAttributes.PushBack(core::String(attribute));
             NotifyPropertiesChanged();
         }
-        /// Takes the type named `typeName` as a curve: one value, its keys at `parts.Keys`.
+        /// Treats the type named `typeName` as a curve: one value, with its keys at `parts.Keys`.
         void RegisterCurveType(core::StringView typeName, ReflectedCurveParts parts)
         {
             m_curveTypes.PushBack(CurveType{core::String(typeName), core::Move(parts)});
             NotifyPropertiesChanged();
         }
-        /// Takes the type named `typeName` as a gradient: one value of its stops and blend.
+        /// Treats the type named `typeName` as a gradient: one value holding its stops and blend.
         void RegisterGradientType(core::StringView typeName, ReflectedGradientParts parts)
         {
             m_gradientTypes.PushBack(GradientType{core::String(typeName), core::Move(parts)});
@@ -222,15 +228,15 @@ export namespace foundation::gui
         {
             const usize first = out.Size();
             ListProperties(parent, out);
-            // What the application says of each (a list element named by a field of its own, a
-            // group's line, a row shown only when another holds): its describe hook, last.
+            // Let the application's describe hook adjust each row last (a list element named by
+            // one of its fields, a group's summary line, a row shown only when another value holds).
             if (m_onDescribe)
                 for (usize i = first; i < out.Size(); ++i)
                     m_onDescribe(JoinPropertyPath(parent, out[i].Name.AsView()).AsView(), out[i]);
         }
-        /// Told of each row as it is described, its info to change: what reflection cannot say of it
-        /// (an element's name from a field of its own, a closed group's line, a row shown or not by
-        /// another's value). The hook reads the objects through GetValue.
+        /// Called for each row as it is described, with its info to change. It supplies what
+        /// reflection cannot (an element's name from one of its fields, a closed group's summary
+        /// line, a row shown or hidden by another value), and reads the objects through GetValue.
         void SetOnDescribe(core::Function<void(core::StringView path, PropertyInfo& info)> onDescribe) { m_onDescribe = core::Move(onDescribe); }
 
     private:
@@ -292,7 +298,7 @@ export namespace foundation::gui
                 {
                     Target target;
                     if (Resolve(i, path, target))
-                        WriteTarget(target, original->Values[i]); // the original back, then the one change
+                        WriteTarget(target, original->Values[i]); // restore the original, then apply the one change
                     change.Before.PushBack(original->States[i]);
                 }
                 else
@@ -341,7 +347,7 @@ export namespace foundation::gui
         {
             Target target;
             if (!Resolve(object, path, target) || target.ReadOnly)
-                return Variant{}; // nothing to put back where nothing is written
+                return Variant{}; // a place that cannot be written has no default to restore
             for (usize i = m_providers.Size(); i > 0; --i)
                 if (const Variant value = m_providers[i - 1].Default(path, object); !value.IsEmpty())
                     return value;
@@ -370,7 +376,8 @@ export namespace foundation::gui
         {
             return m_providers.IsEmpty() ? core::String(u8"Revert to default") : m_providers.Back().RevertText;
         }
-        // The first object's value at `path` in the text format: its shape, then the value.
+        // Writes the first object's value at `path` in the text format: its shape tag, then the
+        // value.
         [[nodiscard]] core::String CopyValue(core::StringView path) const override
         {
             Target target;
@@ -386,7 +393,8 @@ export namespace foundation::gui
                 self->SerializeTarget(ar, "value", target);
             });
         }
-        // Into each object, one change; refused when the shape differs or nothing can be written.
+        // Pastes into each object as one change. Refuses when the shape differs or nothing can be
+        // written.
         bool PasteValue(core::StringView path, core::StringView text, core::String& reason) override
         {
             Target target;
@@ -438,7 +446,7 @@ export namespace foundation::gui
         }
 
     protected:
-        // What reflection holds, as the grid sees it.
+        // How the grid sees a reflected type.
         enum class Shape : u8
         {
             Bool,
@@ -453,19 +461,19 @@ export namespace foundation::gui
             Color,
             Curve,    // a type registered as a curve
             Gradient, // a type registered as a gradient
-            Reference, // a reference-shaped type (core::TypeInfo::reference): its Guid
+            Reference, // a reference-shaped type (core::TypeInfo::reference), shown as its Guid
             Group, // a nested or value struct, an object
             List,
             Other,
         };
 
-        // A place a path names in one object: a property of an owner, an element of a list, a part
-        // of a Float or a Quaternion, or an object (the root, a nested struct, an element).
+        // The place a path names in one object: a property of an owner, an element of a list, a
+        // part of a Float or a Quaternion, or an object (the root, a nested struct, an element).
         struct Target
         {
             const core::TypeInfo* Type = nullptr;
             void* Address = nullptr;
-            core::Instance Owner;                       // a property's
+            core::Instance Owner;                       // the owner of a property
             const core::PropertyInfo* Property = nullptr;
             core::Instance List;                        // an element's list
             usize Index = 0;
@@ -476,7 +484,8 @@ export namespace foundation::gui
             bool ReadOnly = false;
         };
 
-        // A type's shape: one the application registered (a curve, a gradient), else what it is.
+        // Returns a type's shape: the one the application registered (a curve, a gradient), else
+        // the shape its reflection gives.
         [[nodiscard]] Shape ShapeOf(const core::TypeInfo& type) const
         {
             const core::StringView name(reinterpret_cast<const char8_t*>(type.name));
@@ -502,8 +511,8 @@ export namespace foundation::gui
                     return &entry.Parts;
             return nullptr;
         }
-        // A reference's Guid at `address`: through Core's reference ops, or the registered struct's
-        // Guid property. Null when there is none.
+        // Returns a reference's Guid at `address`, through Core's reference ops or the registered
+        // struct's Guid property, or null when there is none.
         [[nodiscard]] const Guid* ReferenceIdAt(const core::TypeInfo& type, const void* address) const
         {
             if (type.reference != nullptr)
@@ -516,13 +525,14 @@ export namespace foundation::gui
                 return nullptr;
             return static_cast<const Guid*>(id->address(core::Instance(const_cast<void*>(address), &type)));
         }
-        // What a reference points at: Core's reference's target, a registered struct itself.
+        // Returns what a reference points at: the target of Core's reference, or a registered
+        // struct itself.
         [[nodiscard]] const core::TypeInfo* ReferenceTargetOf(const core::TypeInfo& type) const
         {
             if (type.reference != nullptr)
                 return type.reference->Target != nullptr ? type.reference->Target() : nullptr;
             if (&type == &core::TypeOf<Guid>() || type.id == core::TypeOf<Guid>().id)
-                return nullptr; // a bare Guid says not what it points at; its property may (`referenceType`)
+                return nullptr; // a bare Guid does not say what it points at, though its property may (`referenceType`)
             return &type;
         }
         [[nodiscard]] const ReflectedGradientParts* FindGradientType(core::StringView name) const
@@ -557,7 +567,7 @@ export namespace foundation::gui
             if (core::IsEnum(type))
                 return Shape::Enum;
             if (type.reference != nullptr || is.template operator()<Guid>())
-                return Shape::Reference; // a bare Guid: what something is known by, as a Ref<T>'s id
+                return Shape::Reference; // a bare Guid identifies something, as a Ref<T>'s id does
             if (type.container != nullptr)
                 return Shape::List;
             for (const core::TypeInfo* t = &type; t != nullptr; t = t->base)
@@ -570,7 +580,7 @@ export namespace foundation::gui
             return target.Part < 0 && target.Type != nullptr && ShapeOf(*target.Type) == Shape::Group;
         }
 
-        // The place `path` names in object `object`.
+        // Resolves the place `path` names in object `object`.
         bool Resolve(usize object, core::StringView path, Target& out) const
         {
             return object < m_objects.Size() && ResolveIn(m_objects[object], path, out);
@@ -594,7 +604,7 @@ export namespace foundation::gui
             out = at;
             return true;
         }
-        // One segment further from `at`: a property of a group, an element of a list, a part.
+        // Moves `at` one segment further: to a property of a group, an element of a list, or a part.
         bool Step(Target& at, core::StringView segment) const
         {
             if (at.Part >= 0 || at.Type == nullptr)
@@ -662,7 +672,7 @@ export namespace foundation::gui
                         return &t->properties[i];
             return nullptr;
         }
-        // An HDR colour's parts: its colour (rgb), its intensity (w).
+        // An HDR colour's parts: its colour (rgb) and its intensity (w).
         static constexpr i32 kHdrColorPart = 10;
         [[nodiscard]] static i32 HdrPartIndex(core::StringView segment)
         {
@@ -688,7 +698,7 @@ export namespace foundation::gui
             return -1;
         }
 
-        // A group's properties, its type's bases first, as rows.
+        // Lists a group's properties as rows, its type's bases first.
         void ListPropertiesOf(core::StringView path, const Target& group, core::Array<PropertyInfo>& out) const
         {
             if (group.Type == nullptr || group.Address == nullptr)
@@ -704,7 +714,7 @@ export namespace foundation::gui
                         out.PushBack(core::Move(info));
                 }
         }
-        // A property as a row: its kind, hint, names and the attributes it carries.
+        // Describes a property as a row: its kind, hint, names and the attributes it carries.
         bool Describe(core::StringView path, const Target& group, const core::PropertyInfo& property, PropertyInfo& info) const
         {
             const core::StringView name(reinterpret_cast<const char8_t*>(property.name));
@@ -721,7 +731,7 @@ export namespace foundation::gui
                 info.Hint = core::String(u8"ColorHdr");
             else if (ShapeOf(*property.type) == Shape::Float4 && core::FindAttribute(property, core::StringView(u8"color")) != nullptr)
             {
-                // Four floats kept as a colour (a particle's tint): one colour, as a Color is.
+                // Four floats kept as a colour (a particle's tint) are one colour, as a Color is.
                 info.Kind = PropertyKind::Color;
                 info.Hint = core::String{};
                 info.ShowsAlpha = core::FindAttribute(property, core::StringView(u8"noAlpha")) == nullptr;
@@ -748,7 +758,8 @@ export namespace foundation::gui
                 info.Visible = Holds(path, condition->AsView());
             return true;
         }
-        // A type's kind as a row (flags: an enum read as flags), what a property or an element is.
+        // Describes a type's kind for a row, for a property or an element; `flags` reads an enum as
+        // flags.
         void DescribeType(const core::TypeInfo& type, bool flags, PropertyInfo& info) const
         {
             switch (ShapeOf(type))
@@ -799,18 +810,18 @@ export namespace foundation::gui
                 const ReflectedGradientParts& parts = *FindGradientType(core::StringView(reinterpret_cast<const char8_t*>(type.name)));
                 const u32 colors = PartCapacity(type, parts.Colors.AsView());
                 const u32 alphas = PartCapacity(type, parts.Alphas.AsView());
-                info.MaxCount = colors == 0 ? alphas : (alphas == 0 ? colors : core::Min(colors, alphas)); // one most for both kinds
+                info.MaxCount = colors == 0 ? alphas : (alphas == 0 ? colors : core::Min(colors, alphas)); // one limit for both kinds
                 break;
             }
             case Shape::Reference:
             {
                 info.Kind = PropertyKind::Reference;
                 info.ReferenceType = ReferenceTargetOf(type);
-                if (type.reference == nullptr && info.ReferenceType != nullptr) // a registered one: its type's name, for the application's editor
+                if (type.reference == nullptr && info.ReferenceType != nullptr) // a registered struct is hinted with its type's name, for the application's editor
                     info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
                 break;
             }
-            case Shape::Group: // its type's name, for an editor of its own (a Color in T4); else its rows
+            case Shape::Group: // hinted with its type's name for an editor of its own; else it shows its rows
                 info.Kind = PropertyKind::Group;
                 info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
                 break;
@@ -835,7 +846,8 @@ export namespace foundation::gui
                 break;
             }
         }
-        // A polymorphic list's types an add makes: those deriving from its base its factory takes.
+        // Returns the types an add to a polymorphic list can make: those that derive from its base
+        // and that its factory accepts.
         [[nodiscard]] core::Array<const core::TypeInfo*> CreatableTypes(const core::ContainerInfo& container) const
         {
             core::Array<const core::TypeInfo*> derived(m_allocator);
@@ -852,8 +864,8 @@ export namespace foundation::gui
         {
             return core::TypeAttrString(type, "displayName", core::StringView(reinterpret_cast<const char8_t*>(type.name)));
         }
-        // A list's elements, the fewest any object has, each named by its index (and an object's
-        // by its type's name).
+        // Lists a list's elements, as many as the object with the fewest has. Each is named by its
+        // index, and an object element also by its type's name.
         void ListElements(core::StringView path, core::Array<PropertyInfo>& out) const
         {
             usize count = ~usize{0};
@@ -861,8 +873,8 @@ export namespace foundation::gui
                 count = core::Min(count, static_cast<usize>(GetValue(path, o).AsInt()));
             if (m_objects.IsEmpty())
                 return;
-            // A list of bare ids names what its elements point at as a bare id does, by its own
-            // property's `referenceType`.
+            // A list of bare ids gets its elements' target type the way a bare id does, from its
+            // own property's `referenceType`.
             Target list;
             const core::String* named = Resolve(0, path, list) && list.Property != nullptr ? StringAttribute(*list.Property, u8"referenceType") : nullptr;
             for (usize i = 0; i < count; ++i)
@@ -894,8 +906,9 @@ export namespace foundation::gui
             const core::Attribute* attribute = core::FindAttribute(property, core::StringView(key));
             return attribute != nullptr ? attribute->value.TryGet<core::String>() : nullptr;
         }
-        // `visibleWhen` ("prop", or "prop=1,2" of its raw integer): a sibling's value, in every object.
-        // A condition that does not read so (no name, an empty or non-integer value) hides nothing.
+        // Tests a `visibleWhen` condition ("prop", or "prop=1,2" against its raw integer) on a
+        // sibling's value, in every object. A condition that does not parse (no name, an empty or
+        // non-integer value) hides nothing.
         bool Holds(core::StringView group, core::StringView condition) const
         {
             usize eq = 0;
@@ -962,8 +975,8 @@ export namespace foundation::gui
             const char8_t* const floats[] = {u8"x", u8"y", u8"z", u8"w"};
             const char8_t* const shownFloats[] = {u8"X", u8"Y", u8"Z", u8"W"};
             const char8_t* const angles[] = {u8"pitch", u8"yaw", u8"roll"};
-            // Shown as the axes they turn about (pitch about X, yaw about Y, roll about Z), so a
-            // rotation reads like the position and scale beside it.
+            // Name the angles after the axes they turn about (pitch about X, yaw about Y, roll about
+            // Z), so a rotation reads like the position and scale beside it.
             const char8_t* const shownAngles[] = {u8"X", u8"Y", u8"Z"};
             const usize count = shape == Shape::Float2 ? 2 : (shape == Shape::Float4 ? 4 : 3);
             for (usize i = 0; i < count; ++i)
@@ -980,7 +993,7 @@ export namespace foundation::gui
 
         // === Values ===
 
-        // A value at a place: through its address, else its property's getter.
+        // Reads the value at a place, through its address or else its property's getter.
         [[nodiscard]] Variant Read(const Target& target) const
         {
             if (target.Type == nullptr)
@@ -1013,7 +1026,7 @@ export namespace foundation::gui
                 return FromCore(target.Property->get(target.Owner), shape, *target.Type);
             return Variant{};
         }
-        // Writes `value` to a place; false when it cannot be written.
+        // Writes `value` to a place. Returns false when it cannot be written.
         bool WriteTarget(const Target& target, const Variant& value) const
         {
             if (target.Type == nullptr || target.ReadOnly || value.IsEmpty())
@@ -1149,7 +1162,7 @@ export namespace foundation::gui
                 return true;
             case Shape::Reference:
             {
-                // Its Guid's text; empty clears it (a nil Guid).
+                // The value is its Guid's text; empty clears it to a nil Guid.
                 const core::StringView text = core::Trim(value.AsString());
                 Guid id;
                 if (!text.IsEmpty() && !Guid::TryParse(text, id))
@@ -1170,7 +1183,7 @@ export namespace foundation::gui
                 return false;
             }
         }
-        // A computed property's core value as the grid's, and back.
+        // Converts a computed property's core value to the grid's value, and back.
         [[nodiscard]] Variant FromCore(const core::Variant& value, Shape shape, const core::TypeInfo& type) const
         {
             if (value.Type() == nullptr || value.ValuePointer() == nullptr)
@@ -1203,11 +1216,11 @@ export namespace foundation::gui
             case Shape::Color:
                 return core::Variant::From<core::Color>(value.AsColor());
             default:
-                return core::Variant{}; // an enum or a compound: through its address alone
+                return core::Variant{}; // an enum or a compound is written through its address only
             }
         }
 
-        // A Float's part, or a Quaternion's Euler angle in degrees.
+        // Returns a Float's part, or a Quaternion's Euler angle in degrees.
         [[nodiscard]] f64 PartOf(const Target& target, Shape shape) const
         {
             core::Float4 parts{};
@@ -1225,7 +1238,7 @@ export namespace foundation::gui
             *slots[target.Part] = static_cast<f32>(value);
             return WriteCompound(target, shape, parts);
         }
-        // A Float2/3/4 as x, y, z, w; a Quaternion as its Euler degrees (pitch, yaw, roll).
+        // Reads a Float2/3/4 as x, y, z, w, or a Quaternion as its Euler degrees (pitch, yaw, roll).
         bool ReadCompound(const Target& target, Shape shape, core::Float4& out) const
         {
             Target whole = target;
@@ -1318,8 +1331,8 @@ export namespace foundation::gui
             const ReflectedPropertySource* self = this;
             return m_format->Read(text, [self, target](core::ISerializer& ar) mutable { self->SerializeTarget(ar, "value", target); });
         }
-        // A place either way under `key`: a value as its type, a Float or a Quaternion as Core's
-        // own, a group as an object of its properties by name.
+        // Writes or reads a place under `key`: a value as its type, a Float or a Quaternion as Core
+        // serializes it, and a group as an object of its properties by name.
         void SerializeTarget(core::ISerializer& ar, const char* key, const Target& target) const
         {
             if (target.Type == nullptr)
@@ -1418,7 +1431,7 @@ export namespace foundation::gui
                 SerializeList(ar, key, target);
                 return;
             }
-            case Shape::Curve: // written as the struct it is: Core reflects its keys and stops
+            case Shape::Curve: // written as its struct, since Core reflects its keys and stops
             case Shape::Gradient:
             case Shape::Group:
             {
@@ -1451,8 +1464,9 @@ export namespace foundation::gui
             }
         }
 
-        // A list either way: its count, each polymorphic element's type, then each element. Read,
-        // the list takes the count (made or removed at its end) before its elements are read.
+        // Writes or reads a list: its count, each polymorphic element's type, then each element.
+        // When reading, the list is resized to the count (elements made or removed at its end)
+        // before its elements are read.
         void SerializeList(core::ISerializer& ar, const char* key, const Target& target) const
         {
             const bool reading = ar.Mode() == core::SerializeMode::Read;
@@ -1465,7 +1479,8 @@ export namespace foundation::gui
             core::Serialize(ar, "count", count);
             if (reading && !target.ReadOnly)
             {
-                // Polymorphic: rebuilt from the types written; homogeneous: grown or cut to the count.
+                // A polymorphic list is rebuilt from the types written; a homogeneous one is grown or
+                // cut to the count.
                 if (polymorphic)
                 {
                     while (core::ContainerSize(container, list) != 0)
@@ -1489,7 +1504,7 @@ export namespace foundation::gui
                         (void)core::ContainerRemoveAt(container, list, core::ContainerSize(container, list) - 1);
                     while (static_cast<i64>(core::ContainerSize(container, list)) < count)
                         if (core::ContainerEmplaceDefault(container, list, core::ContainerSize(container, list)).IsEmpty())
-                            break; // a bounded array at its most
+                            break; // a bounded array is full
                 }
             }
             else if (polymorphic)
@@ -1520,8 +1535,8 @@ export namespace foundation::gui
                     continue;
                 if (element.Address == nullptr && element.Type != nullptr && ShapeOf(*element.Type) == Shape::Group)
                 {
-                    // A struct element with no address (a BoundedArray's): a copy written, or read
-                    // and set back.
+                    // A struct element with no address (a BoundedArray's) is copied: the copy is
+                    // written, or read and then set back.
                     core::Variant copy = core::ContainerGetAt(container, list, i);
                     if (copy.ValuePointer() == nullptr)
                         continue;
@@ -1545,12 +1560,12 @@ export namespace foundation::gui
             const core::String digits = core::Format(u8"{}", index);
             for (usize i = 0; i < digits.Size() && key.Size() + 1 < key.CapacityValue(); ++i)
                 key.Add(static_cast<char>(digits[i]));
-            key.Add('\0'); // read as a C string (items)
+            key.Add('\0'); // the serializer reads item keys as C strings
             return key;
         }
 
-        // Each value at `path` and under it in object `object` given its default; a list whole, as
-        // the type's instance has it. Whether anything changed.
+        // Restores each value at `path` and under it in object `object` to its default; a list is
+        // restored whole, as the type's instance has it. Returns whether anything changed.
         bool RevertUnder(core::StringView path, usize object)
         {
             Target target;
@@ -1586,9 +1601,9 @@ export namespace foundation::gui
             return WriteTarget(target, byDefault);
         }
 
-        // What a copy is, so a paste takes only its like: a Float's name (a Quaternion's Euler
-        // degrees a Float3, as the grid shows it), a struct's type, a list of its elements' type,
-        // a value's kind.
+        // Returns a tag for what a copy holds, so a paste accepts only the same shape: a Float's
+        // name (a Quaternion's Euler degrees count as a Float3, as the grid shows them), a struct's
+        // type, a list's element type, or a value's kind.
         [[nodiscard]] core::String ShapeTag(const Target& target) const
         {
             if (target.Part == kHdrColorPart || target.AsColor)
@@ -1617,7 +1632,7 @@ export namespace foundation::gui
                 return core::String(u8"Float4");
             case Shape::Color:
                 return core::String(u8"Color");
-            case Shape::Reference: // only a reference to its like
+            case Shape::Reference: // a reference pastes only into a reference of the same type
             {
                 const core::TypeInfo* to = ReferenceTargetOf(*target.Type);
                 return core::Format(u8"reference to {}", to != nullptr ? core::StringView(reinterpret_cast<const char8_t*>(to->name)) : core::StringView(u8"?"));
@@ -1636,7 +1651,7 @@ export namespace foundation::gui
             }
         }
 
-        // One object's list changed as `edit` asks.
+        // Changes one object's list as `edit` asks.
         bool ChangeList(const Target& target, const ListEdit& edit) const
         {
             const core::ContainerInfo& container = *target.Type->container;
@@ -1678,7 +1693,8 @@ export namespace foundation::gui
 
         // === Curves and gradients: the parts the application named, read and written whole ===
 
-        // The capacity of the list property `name` of `type` (0: no limit, or no such list).
+        // Returns the capacity of the list property `name` of `type` (0 for no limit, or no such
+        // list).
         [[nodiscard]] static u32 PartCapacity(const core::TypeInfo& type, core::StringView name)
         {
             const core::PropertyInfo* property = FindPropertyNamed(type, name);
@@ -1686,7 +1702,8 @@ export namespace foundation::gui
                        ? static_cast<u32>(core::ContainerCapacity(*property->type->container))
                        : 0u;
         }
-        // The list property `name` of the struct at `target`, as a list instance; empty when absent.
+        // Returns the list property `name` of the struct at `target` as a list instance, or empty
+        // when there is none.
         [[nodiscard]] core::Instance PartList(const Target& target, core::StringView name) const
         {
             if (target.Address == nullptr || target.Type == nullptr)
@@ -1697,7 +1714,7 @@ export namespace foundation::gui
             void* address = property->address(core::Instance(target.Address, target.Type));
             return address != nullptr ? core::Instance(address, property->type) : core::Instance{};
         }
-        // The list's elements as `T` (Core's key or stop), by value.
+        // Returns the list's elements as `T` (Core's key or stop), by value.
         template <typename T>
         static void ReadElements(const core::Instance& list, core::Array<T>& out)
         {
@@ -1711,8 +1728,8 @@ export namespace foundation::gui
                     out.PushBack(*typed);
             }
         }
-        // The list made `values`: grown or cut to their count (a bounded array to its most), then
-        // each set. False when it could not hold them all.
+        // Sets the list to `values`: grows or cuts it to their count (a bounded array up to its
+        // capacity), then sets each element. Returns false when it could not hold them all.
         template <typename T>
         static bool WriteElements(const core::Instance& list, core::Span<const T> values)
         {
@@ -1724,7 +1741,7 @@ export namespace foundation::gui
                     return false;
             while (core::ContainerSize(container, list) < values.Size())
                 if (core::ContainerEmplaceDefault(container, list, core::ContainerSize(container, list)).IsEmpty())
-                    break; // at its most
+                    break; // the list is full
             bool all = core::ContainerSize(container, list) == values.Size();
             for (usize i = 0; i < core::ContainerSize(container, list); ++i)
                 all = core::ContainerSetAt(container, list, i, core::Variant::From<T>(values[i])).IsOk() && all;
@@ -1770,13 +1787,14 @@ export namespace foundation::gui
                     core::WriteEnumValue(address, *blend->type, static_cast<i64>(gradient.Interpolation));
             return ok;
         }
-        // A property's change may show or hide others (visibleWhen): the properties changed.
+        // A property's change may show or hide others (visibleWhen), so report the properties as
+        // changed.
         void Changed(core::StringView) { NotifyPropertiesChanged(); }
 
         struct Original
         {
             core::String Path;
-            core::Array<Variant> Values;     // each object's, for a cancel
+            core::Array<Variant> Values;     // each object's value, for a cancel
             core::Array<core::String> States; // each object's text, for the change
         };
         const Original* FindOriginal(core::StringView path) const

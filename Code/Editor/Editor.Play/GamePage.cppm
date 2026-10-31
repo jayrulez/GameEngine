@@ -3,19 +3,19 @@
 
 // Editor::Play - :game_page partition.
 //
-// GameEditorPage: a singleton
-// "Game" dock tab hosting the PLAYER behavior - a FRESH run of the project's default scene,
-// exactly what Engine.Player does, in-process. Distinct from the ScenePage's Simulate
-// (in-place snapshot -> run -> restore): nothing here is edited, so Play builds everything
-// from scratch (fresh Scene + resolve + Start) and Stop tears it all down - total cleanup IS
-// the restore. Renders through the scene's own primary camera (RenderScene with no override;
-// EnsureCamera frames the origin when the scene ships none, like the player).
+// GameEditorPage is a "Game" dock tab that runs the project as the player does: a fresh run of
+// the project's default scene, in-process, exactly as Engine.Player runs it. This differs from the
+// scene page's Simulate, which snapshots the scene in place, runs it and restores it. Nothing here
+// is edited, so Play builds everything from scratch (a new Scene, resolved and started) and Stop
+// tears it all down; that teardown is the restore. It renders through the scene's own primary
+// camera (RenderScene with no override), and EnsureCamera frames the origin when the scene has no
+// camera, as the player does.
 //
-// On the GUI (Documentation/Specs/editor-gui.md, 5.3, layer 7, part 3), from its markup
-// (Data/Editor/Game.xml): the kit's transport (Restart, Play, Pause, Stop, the state named beside
-// them and the scene it runs, a Play waiting for the cook said so), the resolution and the phone,
-// the debugger's toggle; the game on GUI.Viewport, which keeps every key while it runs and has
-// the focus (Shift+F1 gives them back), the script debugger beside it.
+// The tab is built from its markup (Data/Editor/Game.xml). Its bar holds the kit's transport
+// (Restart, Play, Pause and Stop, with the run's state and scene named beside them and a badge while
+// Play waits for the cook), the resolution and phone preview, and the debugger's toggle. The game
+// runs on a GUI Viewport, which takes every key while the game runs and has the focus (Shift+F1
+// gives the keys back), with the script debugger beside it.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +41,7 @@ import foundation.gui.hosting;
 import foundation.gui.viewport;
 import foundation.script;
 import foundation.script.resource;  // ScriptClass (the cooked game script, bound from the content DB)
-import engine.script; // ScriptSubsystem / ScriptRunHost (debugger wiring)
+import engine.script; // ScriptSubsystem and ScriptRunHost (debugger wiring)
 import foundation.shell;
 import foundation.input;
 import foundation.input.resource;
@@ -51,7 +51,7 @@ import foundation.audio;
 import foundation.audio.resource;
 import engine.audio;
 import engine.defaultapp;
-import engine.gameinstance; // GameInstance - this tab drives its OWN run (multi-instance PIE)
+import engine.gameinstance; // GameInstance: each tab drives its own run (several PIE instances)
 import editor.core;
 import :game_resolution;
 import editor.app;
@@ -80,9 +80,10 @@ export namespace editor
 
     RTTI_DEFINE_OBJECT(GameAudioEditorSettings, "rtti::editor")
 
-    /// TYPE registration, before the app constructs (the user settings file loads during boot).
+    /// Registers the settings type before the app is constructed (the user settings file loads
+    /// during boot).
     void RegisterGameAudioEditorSettingsTypes();
-    /// The Preferences contribution (needs the live context).
+    /// Registers the Preferences contribution (needs the live context).
     void RegisterGameAudioEditorSettings(EditorContext& context);
     /// The preference's value (the default when no store or section exists).
     [[nodiscard]] bool HearAllGameInstances(const EditorContext& context);
@@ -92,10 +93,11 @@ export namespace editor
     namespace render = foundation::render;
     namespace script = foundation::script;
 
-    // The debugger panel beside the game (its markup in Game.xml): Continue, Step Into, Step
-    // Over and Break; the call stack; the locals, an object's members one level under it. It
-    // consumes ONLY the neutral IScriptDebugger and its snapshot types, so the same panel would
-    // drive a remote debugger. The Game page rebuilds it from OnUpdate, never mid-script-dispatch.
+    // The debugger panel beside the game (its markup is in Game.xml): Continue, Step Into, Step
+    // Over and Break; the call stack; and the locals, with an object's members one level under it.
+    // It uses only the neutral IScriptDebugger and its snapshot types, so the same panel could
+    // drive a remote debugger. The Game page rebuilds it from OnUpdate, never during a script
+    // dispatch.
     class DebuggerPanel
     {
     public:
@@ -104,8 +106,8 @@ export namespace editor
         DebuggerPanel& operator=(const DebuggerPanel&) = delete;
         ~DebuggerPanel();
 
-        /// Over `pane` (the markup's `game-debugger-continue`, `-step-into`, `-step-over`,
-        /// `-break`, `-state`, `-stack` and `-locals`, by id).
+        /// Binds to the controls under `pane`, by id: the markup's `game-debugger-continue`,
+        /// `-step-into`, `-step-over`, `-break`, `-state`, `-stack` and `-locals`.
         void Bind(foundation::gui::Node& pane);
 
         /// The active debugger for the run (null when not debugging). Clears the panel.
@@ -131,8 +133,8 @@ export namespace editor
         script::IScriptDebugger* m_debugger = nullptr; // borrowed (owned by the run host)
     };
 
-    // The Game page's debugger sink: it never touches views (that would be mid-script-dispatch);
-    // it only records the latest state + a dirty flag the page drains from OnUpdate.
+    // The Game page's debugger sink. It is called during a script dispatch, so it never touches
+    // views; it only records the latest state and a dirty flag that the page drains from OnUpdate.
     class GameDebugListener final : public script::IScriptDebuggerListener
     {
     public:
@@ -141,14 +143,13 @@ export namespace editor
         void OnDebuggerStateChanged(script::ScriptDebuggerState newState) override;
     };
 
-    // The play-in-editor device seam: keyboard/mouse come from the Game
-    // viewport's GATED InputSurface facades (hover = mouse, focus = keyboard - click the
-    // viewport to play), gamepads pass through from the shell only while the viewport has
-    // focus. This is the by-construction fix for "the editor viewport forwards nothing".
-    // Pure forwarding: EVERY facade comes from the viewport's InputSurface, which owns all
-    // gating and transformation (mouse hover+transform, keyboard focus, gamepads gated on
-    // focus via SurfaceGamepad, touch transformed + spatially gated). This class only
-    // adapts the surface to the input runtime's provider seam - no gating logic here.
+    // The play-in-editor input source. Keyboard and mouse come from the Game viewport's gated
+    // InputSurface facades (the mouse while it hovers, the keyboard while the viewport has focus,
+    // so the user clicks the viewport to play); gamepads pass through from the shell only while the
+    // viewport has focus. Every facade comes from the viewport's InputSurface, which owns all gating
+    // and transformation (mouse hover and transform, keyboard focus, gamepads gated on focus
+    // through SurfaceGamepad, touch transformed and gated by position). This class only adapts the
+    // surface to the input runtime's provider interface and holds no gating logic.
     class GameViewportInputSource final : public foundation::input::IInputSourceProvider
     {
     public:
@@ -181,8 +182,8 @@ export namespace editor
         /// What the tab asks of the editor.
         struct Services
         {
-            foundation::gui::GuiHost* gui = nullptr; // hosts its viewport (null: none, a test)
-            /// Its markup by its path under the data root (unset: a bare panel, a test).
+            foundation::gui::GuiHost* gui = nullptr; // hosts its viewport (null in a test)
+            /// Loads its markup by its path under the data root (unset in a test, which gets a bare panel).
             Function<RefPtr<foundation::gui::Node>(StringView path)> loadMarkup;
         };
 
@@ -192,24 +193,24 @@ export namespace editor
                        engine::runtime::GameInstance* instance, StringView pieId);
 
         [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        /// A Game tab's name from its play id: the first "Game", Play New Instance's "Game 2",
-        /// "Game 3" (its id's number and one), so tabs side by side are told apart.
+        /// A Game tab's title from its play id: "Game" for the first, then "Game 2", "Game 3" for
+        /// Play New Instance's tabs (the id's number plus one), so tabs side by side can be told apart.
         [[nodiscard]] static String TitleFor(StringView pieId);
         [[nodiscard]] Status Save() override { return Status{}; } // nothing here is a document
         [[nodiscard]] RefPtr<foundation::gui::Node> Content() override { return m_content; }
 
-        // The scene group this tab's game scene belongs to: the embedded app's GameInstance manager
-        // so the game scene groups + ticks + is bound to the instance's run
-        // host. Falls back to THIS page's own (unregistered) manager if there's no embedded app - a
-        // defensive placeholder, since without a runtime there is no game to run anyway.
+        // The scene group this tab's game scene belongs to: the embedded app's GameInstance manager,
+        // so the game scene is grouped, ticked and bound to the instance's run host. Without an
+        // embedded app it falls back to this page's own unregistered manager, a placeholder, since
+        // without a runtime there is no game to run.
         [[nodiscard]] scene::SceneManager& SceneGroup() noexcept;
 
-        /// Fresh player run, cook-gated: kicks an incremental cook and latches the start;
-        /// OnUpdate runs StartRunNow on the first frame the cook service is idle, so the
-        /// run never binds against a half-written cooked DB.
+        /// Starts a fresh player run after a cook: kicks an incremental cook and latches the
+        /// start, and OnUpdate runs StartRunNow on the first frame the cook service is idle, so
+        /// the run never binds against a half-written cooked DB.
         void Play() override;
 
-        /// Total teardown - the fresh-run model's whole cleanup story. Also cancels a
+        /// Tears the whole run down, which is all the cleanup a fresh run needs. Also cancels a
         /// Play still waiting on the cook.
         void Stop() override;
         void StopRun() override { Stop(); }
@@ -274,7 +275,7 @@ export namespace editor
         [[nodiscard]] bool PhonePreview() const noexcept override { return m_phonePreview; }
         /// The game's view (for tests: its focus and capture).
         [[nodiscard]] foundation::gui::Viewport* View() const noexcept { return m_viewport.Get(); }
-        /// Whether the script debugger is beside the game now.
+        /// Whether the script debugger is shown beside the game.
         [[nodiscard]] bool DebuggerShown() const;
         void SelectPhonePreview(bool on) override;
 
@@ -289,59 +290,62 @@ export namespace editor
         void OnClose() override;
 
     private:
-        // Follow the instance's CURRENT scene: when a scripted switch (run.loadScene / an async load
-        // that just activated) repoints m_gameInstance->GetScene(), adopt it as this tab's borrowed
-        // render/input pointer and retire the scene(s) we were leaving. Polled once per OnUpdate.
+        // Follows the instance's current scene. When a scripted switch (run.loadScene, or an async
+        // load that just activated) repoints m_gameInstance->GetScene(), adopt it as this tab's
+        // borrowed render and input pointer and retire the scenes being left. Polled once per OnUpdate.
         void FollowInstanceScene();
 
-        // Authored game scenes should carry a camera; a bare scene shouldn't play as a black
-        // screen - frame the origin like Engine.Player does.
+        // Authored game scenes should carry a camera, but a bare scene should not play as a black
+        // screen, so frame the origin as Engine.Player does.
         void EnsureCamera(scene::Scene& scene);
 
-        // Play-in-editor input: the project's default map into the shared InputSubsystem,
-        // devices swapped to the Game viewport's gated facades. Stop restores the shell.
+        // Play-in-editor input: the project's default map goes into the shared InputSubsystem, with
+        // the devices swapped to the Game viewport's gated facades. Stop restores the shell's.
         void BindInput();
 
-        // The project's default audio bus layout into the embedded engine (the player's
-        // startup twin) - nil/unresolved = the built-in neutral layout stays.
+        // Applies the project's default audio bus layout to the embedded engine, as the player does
+        // at startup. With none set, or one that does not resolve, the built-in neutral layout stays.
         void BindBusLayout(runtime::IApplicationHost& host);
 
-        // Resolves the startup script's SOURCE (editor project layout); the lifecycle -
-        // facades, services, launch/update/exit, fault handling - is the embedded app's.
+        // Resolves the startup script's source from the editor project layout. The lifecycle
+        // (facades, services, launch, update and exit, fault handling) belongs to the embedded app.
         void StartGameScriptFromProject();
 
-        // Make this run debuggable: request a debugger on the run's script manager and, once it
-        // exists, apply the editor's breakpoints + hand it to the panel. Lazy - the debugger is
-        // created when the script context is (first behavior / game script).
+        // Makes this run debuggable: requests a debugger on the run's script manager and, once it
+        // exists, applies the editor's breakpoints and hands it to the panel. The debugger is
+        // created lazily, with the script context (the first behavior or game script).
         void EnableDebugging();
 
-        // Drain the debugger's state changes at the top level (never mid-script-dispatch): on a
-        // break, freeze the whole scene simulation (physics + behaviors) and populate the panel;
-        // on resume, thaw and clear it. A locals-expand click also rebuilds here.
+        // Drains the debugger's state changes at the top level, never during a script dispatch. On
+        // a break it freezes the whole scene simulation (physics and behaviors) and fills the panel;
+        // on resume it thaws the simulation and clears the panel. A click expanding a local also
+        // rebuilds here.
         void DrainDebuggerState();
 
-        // Diff-apply the shared breakpoint store onto the live run's debugger (gutter
-        // toggles during a run take effect without a restart).
+        // Applies the differences between the shared breakpoint store and the live run's debugger,
+        // so gutter toggles during a run take effect without a restart.
         void SyncBreakpointsToDebugger();
         // The run's sound follows the tab: the host pause, the focus, the hear-all preference.
         void SyncRunAudio();
 
-        // The resolution dropdown (:game_resolution): built once, its choices refreshed when
-        // what they come from changes (looked at once a second), the choice kept per project.
-        // The bar from the markup: the transport, the resolutions and the phone, the debugger.
+        // The resolution dropdown (:game_resolution) is built once. Its choices refresh when what
+        // they come from changes (checked once a second), and the choice is kept per project.
+        // BindBar binds the bar from the markup: the transport, the resolutions, the phone preview
+        // and the debugger toggle.
         void BindBar();
         void BindResolution();
         [[nodiscard]] i32 SelectedResolution() const;
         void TickResolution(f32 dt);
         void RefreshResolutionChoices(bool force);
-        // The chosen size, fitted by the project's render fit; the panel's own size stretches,
-        // there being nothing to fit.
+        // Applies the chosen size, fitted by the project's render fit. The panel's own size
+        // stretches, since there is nothing to fit.
         void ApplyResolution();
         void LoadResolutionKey();
-        // The game on a `width` x `height` target (the panel, or the previewed phone's screen), as
-        // the player puts it in its window: its render resolution fitted by its render fit, turned
-        // a quarter when its orientation is not the target's shape (then at the target's pixels
-        // turned when it has no resolution). Plain (none of that) draws straight at the target.
+        // How the game sits on a `width` x `height` target (the panel, or the previewed phone's
+        // screen), as the player puts it in its window: its render resolution fitted by its render
+        // fit, and turned a quarter when its orientation does not match the target's shape (with no
+        // render resolution, it is drawn turned at the target's pixels). When GameFitted is false,
+        // the game draws straight at the target.
         [[nodiscard]] ContentFit GameFitIn(u32 width, u32 height) const noexcept
         {
             return GameFitOn(width, height, m_renderWidth, m_renderHeight, m_renderFit, m_orientation);
@@ -352,37 +356,38 @@ export namespace editor
         }
         // The input surface's content follows the game's fit on the tab's current target.
         void SyncGameFit();
-        // The phone preview: the tab's screen becomes a portrait phone's, or the panel again.
+        // The phone preview: the tab's screen becomes a portrait phone's, or the whole panel again.
         void SetPhonePreview(bool on);
         void SaveResolutionKey();
 
-        // The transport as the run is now: what is enabled, the state named, the scene beside it.
+        // Updates the transport for the run's current state: what is enabled, the state's name and
+        // the scene beside it.
         void RefreshToolbar();
         void ShowDebugger(bool shown);
         template <typename T>
         [[nodiscard]] T* Find(StringView id) const;
 
-        // The deferred half of Play(): the actual boot (script launch + default scene),
-        // run by OnUpdate once the cook is idle.
+        // The deferred half of Play(): the actual boot (script launch and default scene), run by
+        // OnUpdate once the cook is idle.
         void StartRunNow();
 
-        // Scripted input (pie_run): a timeline source in place of the viewport's, on this tab's
-        // game instance and, while this tab holds it, the input subsystem, so the other tabs
-        // keep their own. What this tab's game reads: the script while one runs, else the
-        // viewport.
+        // Scripted input (pie_run) installs a timeline source in place of the viewport's, on this
+        // tab's game instance and, while this tab holds it, on the input subsystem, so the other
+        // tabs keep their own. ActiveSource is what this tab's game reads: the script while one
+        // runs, otherwise the viewport.
         [[nodiscard]] foundation::input::IInputSourceProvider* ActiveSource() noexcept;
-        // Once per frame from OnUpdate: the script advances by the run's time; an ended one
-        // lets go of everything for a frame, then the viewport's input returns.
+        // Called once per frame from OnUpdate: the script advances by the run's time. When it has
+        // ended, everything is released for one frame, then the viewport's input returns.
         void AdvanceScriptedInput();
-        // The viewport source back where the script was installed, and the script gone.
+        // Puts the viewport source back where the script was installed and drops the script.
         void DropScriptedInput();
 
         EditorContext* m_context = nullptr;
         runtime::IApplicationHost* m_host = nullptr;
         Services m_services;
-        engine::runtime::DefaultApplication* m_app = nullptr; // the embedded game application (v3)
+        engine::runtime::DefaultApplication* m_app = nullptr; // the embedded game application
         engine::runtime::GameInstance* m_gameInstance =
-            nullptr; // THIS tab's running game (its own run host + scenes)
+            nullptr; // this tab's running game (its own run host and scenes)
         engine::scene::SceneSubsystem* m_scenes = nullptr;
         engine::render::RenderSubsystem* m_render = nullptr;
         engine::audio::AudioSubsystem* m_audio = nullptr; // the run's sound: stop, pause, focus
@@ -400,31 +405,31 @@ export namespace editor
         foundation::gui::Label* m_sceneLabel = nullptr; // the scene it runs
         foundation::gui::Label* m_cookBadge = nullptr;  // while a Play waits for the cook
         foundation::gui::ButtonBase* m_debuggerToggle = nullptr; // shows the script debugger
-        RefPtr<foundation::gui::Node> m_debuggerPane; // held while it is out of the split
-        foundation::gui::Splitter* m_stage = nullptr;  // the game beside the debugger (the markup's)
-        f32 m_debuggerShare = 0.22f;                    // its share of the split, kept while it is off
+        RefPtr<foundation::gui::Node> m_debuggerPane; // kept alive while it is out of the split
+        foundation::gui::Splitter* m_stage = nullptr;  // the game beside the debugger, from the markup
+        f32 m_debuggerShare = 0.22f;                    // the debugger's share of the split, kept while hidden
         foundation::gui::ComboBox* m_resolutionCombo = nullptr;
         Array<GameResolutionChoice> m_resolutionChoices;
         String m_resolutionSignature; // what the choices were built from
         String m_resolutionKey;       // the chosen entry, kept across rebuilds, saved per project
         f32 m_resolutionRefresh = 0.0f;
-        bool m_resolutionRebuilding = false; // the rebuild's own selection is not a user's
-        // What the game draws at, fitted into the panel by m_renderFit; nought draws at the panel's.
+        bool m_resolutionRebuilding = false; // set during a rebuild, whose selection is not the user's
+        // The size the game draws at, fitted into the panel by m_renderFit; nought draws at the panel's size.
         u32 m_renderWidth = 0;
         u32 m_renderHeight = 0;
         FitMode m_renderFit = FitMode::Letterbox;
-        // How the game is held (the chosen preset's, else the project's), and whether the tab
-        // previews a phone held upright (Specs/present-transform.md).
+        // How the game is held (the chosen preset's orientation, else the project's), and whether
+        // the tab previews a phone held upright.
         ScreenOrientation m_orientation = ScreenOrientation::Any;
         bool m_phonePreview = false;
         foundation::gui::ButtonBase* m_phoneToggle = nullptr;
         GameScriptErrorSink m_scriptErrors;
-        DebuggerPanel m_debuggerPanel;      // the debugger UI (contract-only)
+        DebuggerPanel m_debuggerPanel;      // the debugger UI (uses only the debugger interface)
         GameDebugListener m_debugListener;  // debugger state sink (drained in OnUpdate)
-        bool m_simPausedByDebugger = false; // we disabled sim for a breakpoint
-        Array<EditorContext::ScriptBreakpoint> m_appliedBreakpoints; // mirror on the debugger
+        bool m_simPausedByDebugger = false; // the simulation was disabled for a breakpoint
+        Array<EditorContext::ScriptBreakpoint> m_appliedBreakpoints; // as last applied to the debugger
         RefPtr<foundation::gui::Viewport> m_viewport;
-        scene::SceneManager m_fallbackScenes{Allocator()}; // no-embedded-app placeholder group (see SceneGroup)
+        scene::SceneManager m_fallbackScenes{Allocator()}; // placeholder with no embedded app (see SceneGroup)
 
         String m_sceneTitle;
         String m_pieId;                // IPieInstancePage::PieId
@@ -433,12 +438,12 @@ export namespace editor
         f64 m_stoppedRunTime = 0.0;    // the run time a stopped run ended at
         UniquePtr<foundation::input::ScriptedInputSource> m_scripted; // while a run scripts this tab
         f64 m_scriptedStart = 0.0;     // the run time the script's zero is
-        bool m_scriptedEnding = false; // end asked: a release frame, then the viewport returns
+        bool m_scriptedEnding = false; // an end was asked: one release frame, then the viewport returns
         bool m_scriptedReleased = false;
         // The PIE capture (pie_screenshot): armed by RequestViewportCapture, recorded in
         // OnAfterSceneRender after the overlays, completed in the next OnUpdate.
         ViewportCaptureRecorder m_capture;
-        bool m_renderedThisFrame = false; // the scene rendered into the viewport this frame, at:
+        bool m_renderedThisFrame = false; // the scene rendered into the viewport this frame, at the place below
         u32 m_captureX = 0; // where in the target the capture starts: the fitted image's corner
         u32 m_captureY = 0;
         u32 m_captureWidth = 0;

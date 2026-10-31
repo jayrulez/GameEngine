@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net.manager - the Net facade PROVEN end-to-end on both script backends.
+// foundation.net.manager: the Net facade end to end on both script backends.
 //
-// ManagerTests.cpp checks the facade TYPE registers; this drives a real AngelScript
-// VM: a server manager installs its net.runtime service into the context, then a script calls
-// Net.isServer()/isClient()/peerCount() and we read the results back. This is the acceptance test
-// for the extensibility hook (registry -> AngelScript).
+// ManagerTests.cpp checks that the facade type registers; this drives real script VMs. A server
+// manager installs its net.runtime service into the context, then a script calls Net.isServer(),
+// isClient() and peerCount() and the test reads the results back. It also covers RPCs, spawning
+// over the network, and joins and leaves.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <utility>
@@ -35,9 +35,9 @@ namespace net = foundation::net;
 
 namespace
 {
-    // A server endpoint over the sim network + a controller the Net facade resolves through. The
-    // endpoint is already live here, so the runtime role hooks are no-ops (they are exercised
-    // per-instance in the runtime tests); NetEndpoint() hands the facade the live server.
+    // A server endpoint over the simulated network, and a controller the Net facade resolves
+    // through. The endpoint is already live here, so the runtime role hooks are no-ops (the
+    // runtime tests exercise them per instance); NetEndpoint() hands the facade the live server.
     struct ServerFixture final : net::INetworkController
     {
         net::SimDatagramNetwork network{foundation::core::DefaultAllocator(),
@@ -74,8 +74,8 @@ namespace
         [[nodiscard]] net::NetworkManager* NetEndpoint() const override { return endpoint; }
     };
 
-    // A host and a client over the sim network, each with its own controller (and so its own
-    // script context's binding). The host's controller has no endpoint until Open: its script
+    // A host and a client over the simulated network, each with its own controller and so its
+    // own script context binding. The host's controller has no endpoint until Open: its script
     // registers Net.on first, as a game does before it hosts.
     struct HostAndClient
     {
@@ -200,7 +200,7 @@ namespace
 namespace
 {
     // The host and two clients, each with a scene, a controller and a script context, and the
-    // Guest prefab to spawn: what slice 3 (owners, one-player sends, joins and leaves) needs.
+    // Guest prefab to spawn: what the tests of owners, sends to one player, joins and leaves need.
     struct Players
     {
         GuestPrefab prefab;
@@ -296,9 +296,9 @@ namespace
         p.Pump(30);
         CHECK(p.aCtx->GetGlobal(u8"Told").Get<f64>() == doctest::Approx(7.0));
         CHECK(p.aCtx->GetGlobal(u8"From").Get<f64>() == doctest::Approx(0.0));
-        CHECK(p.bCtx->GetGlobal(u8"Told").Get<f64>() == doctest::Approx(0.0)); // not b's
+        CHECK(p.bCtx->GetGlobal(u8"Told").Get<f64>() == doctest::Approx(0.0)); // b was not sent it
 
-        // A Guest for client a: a's, on every peer; neither the host's nor b's.
+        // A Guest spawned for client a is owned by a on every peer, not by the host or by b.
         foundation::script::Entity onHost;
         {
             ScriptCallScope scope(p.hostCtx.Get());
@@ -545,7 +545,8 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
     ServerFixture fx;
     net::InstallNetScriptService(*scriptContext, fx.binding);
 
-    // AngelScript: statics live in the type's namespace (Net::isServer()); logic in main().
+    // AngelScript: statics live in the type's namespace (Net::isServer()), and the logic runs in
+    // main().
     const Status status = scriptContext->Load(u8"bool IsServer;\n"
                                     u8"bool IsClient;\n"
                                     u8"int Peers;\n"
@@ -563,7 +564,7 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
     CHECK(scriptContext->GetGlobal(u8"IsClient").Get<bool>() == false);
     CHECK(scriptContext->GetGlobal(u8"Peers").Get<f64>() ==
           0.0); // the AS backend unifies integer globals to f64
-    CHECK(scriptContext->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost()); // the build's, not the session's
+    CHECK(scriptContext->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost()); // whether this build can host, not the session's state
 }
 #endif // OPTION_HAS_ANGELSCRIPT
 
@@ -580,7 +581,8 @@ TEST_CASE("net-facade: Luau reads the live session through the Net facade")
     ServerFixture fx;
     net::InstallNetScriptService(*scriptContext, fx.binding);
 
-    // Luau: statics via `.`; the chunk runs at top level, so the globals it assigns are readable.
+    // Luau calls statics with `.`; the chunk runs at top level, so the globals it assigns are
+    // readable.
     const Status status = scriptContext->Load(u8"IsServer = Net.isServer()\n"
                                     u8"IsClient = Net.isClient()\n"
                                     u8"Peers = Net.peerCount()\n"

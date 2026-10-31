@@ -3,27 +3,28 @@
 
 // GUI - :menu partition
 //
-// Menu (PopupMenu): a floating vertical list of rows - a context menu or a menu dropped from a
-// menu bar. Modeled on eepp's UIMenu/UIPopUpMenu family (role only). Open() shows it as an auto
-// popup (E5), a child of what opened it, in the top layer, so a press outside or Escape closes it.
-// Rows come in a small hierarchy mirroring eepp:
-//   MenuRow          - base row (height + hover-notify hook)
-//     MenuSeparator  - a non-interactive divider line
-//     MenuItem       - an activatable row: text + optional check mark / icon / shortcut column
-//       MenuSubItem  - an item that opens a nested submenu on hover or click
+// Menu (PopupMenu): a floating vertical list of rows, used as a context menu or dropped from a
+// menu bar. Open() shows it as an auto popup in the top layer, as a child of what opened it, so a
+// press outside or Escape closes it. Rows come in a small hierarchy:
+//   MenuRow          base row: its height, and a hook that tells the menu it is hovered
+//     MenuSeparator  a non-interactive divider line
+//     MenuItem       an activatable row: text, and an optional check mark, icon and shortcut
+//       MenuSubItem  an item that opens a nested submenu on hover or click
 //
-// A submenu is a popup of its item: open, it is the item's child, so the menus holding it are its
-// ancestors and the popup stack's nesting rules give the chain for free (a press inside any open
-// menu of the chain closes only the menus deeper than it; opening another item's submenu closes
-// the open one; closing a menu closes what it holds). It is placed right of its item, flipped
-// left at the root's edge. Activating a leaf item closes the whole chain from its root menu.
-// While the pointer heads for an open submenu across other rows (inside the triangle from where
-// it was to the submenu's near edge, Godot's safe area), the submenu stays open; if the pointer
-// rests there a moment, the row under it takes over.
+// A submenu is a popup of its item. While open it is the item's child, so the menus that hold it
+// are its ancestors, and the popup stack's nesting rules handle the chain: a press inside any open
+// menu of the chain closes only the menus deeper than that one, opening another item's submenu
+// closes the open one, and closing a menu closes the menus it holds. A submenu is placed to the
+// right of its item, flipped to the left at the root's edge. Activating a leaf item closes the
+// whole chain from its root menu. While the pointer crosses other rows on its way to an open
+// submenu (inside the safe area, the triangle from where the pointer was to the submenu's near
+// edge), the submenu stays open. If the pointer rests on a row there for a moment, that row takes
+// over.
 //
-// In markup a Menu holds MenuItems (`text`, `shortcut`, `checkable`, `checked`, a `command`),
-// MenuSeparators and nested Menus (its `text` the submenu item's); an item reports `activate`.
-// A menu is not shown until opened: one in a page waits there for a `context-menu` naming it.
+// In markup a Menu holds MenuItems (`text`, `shortcut`, `checkable`, `checked`, `command`),
+// MenuSeparators and nested Menus, whose `text` becomes the submenu item's text. An item sends
+// `activate`. A menu is not shown until it is opened: one placed in a page waits there until a
+// `context-menu` attribute names it.
 
 module;
 #include "Core/Prelude.h"
@@ -41,14 +42,14 @@ import :drawable;
 import :text;
 import :node;
 import :ui_widget;
-import :event_dispatcher; // the popup stack (E5)
-import :actions;          // TickAction (the safe area's grace)
+import :event_dispatcher; // the popup stack
+import :actions;          // TickAction, for the safe area's grace period
 import :image_drawable;   // a command's icon
-import :svg_drawable;     // PictureDrawable: an icon an SVG
+import :svg_drawable;     // PictureDrawable, for SVG icons
 import :resource_provider;
 import foundation.image;  // ImageData
 import :popup_placement;
-import :model_index; // ItemEvent (an item's `activate`)
+import :model_index; // ItemEvent, for an item's `activate`
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -59,9 +60,9 @@ namespace image = foundation::image;
 export namespace foundation::gui
 {
     // === Row base ===============================================================
-    // A row in a menu. Reports its preferred height and, on hover, notifies the owning menu
-    // (which uses it to open/close submenus). Selectable rows are the ones keyboard navigation
-    // and activation consider.
+    // A row in a menu. It reports its preferred height and, on hover, notifies the owning menu,
+    // which uses that to open and close submenus. Keyboard navigation and activation consider only
+    // selectable rows.
     class MenuRow : public UIWidget
     {
         RTTI_OBJECT(MenuRow, UIWidget)
@@ -69,7 +70,7 @@ export namespace foundation::gui
         [[nodiscard]] virtual f32 RowHeight() const = 0;
         [[nodiscard]] virtual bool IsSelectable() const { return false; }
 
-        // Called (with this row) whenever the pointer enters it - the menu wires this.
+        // Sets the callback run whenever the pointer enters the row; the menu installs it.
         void SetOnHovered(core::Function<void()> callback) { m_onHovered = core::Move(callback); }
 
     protected:
@@ -98,7 +99,7 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Theming part: menuseparator::line.
+        // Style part: menuseparator::line.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"line"));
@@ -126,13 +127,13 @@ export namespace foundation::gui
         MenuItem()
         {
             SetTag(core::StringView(u8"menuitem"));
-            SetTabFocusable(true); // the keyboard and the pad walk the items (a disabled one is skipped)
+            SetTabFocusable(true); // the keyboard and the pad move through the items, skipping disabled ones
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
             m_shortcut.SetAlignment(TextHAlign::End, TextVAlign::Middle);
         }
 
-        // Content.
-        /// Its text; an `&` marks its access key (`&Open`: O, E12), `&&` an ampersand.
+        /// Sets the text. An `&` marks the access key (`&Open` makes O the key), and `&&` is a
+        /// literal ampersand.
         void SetText(core::StringView text)
         {
             const Mnemonic mnemonic = ParseMnemonic(text);
@@ -143,10 +144,11 @@ export namespace foundation::gui
             Invalidate();
             WidthMayHaveChanged();
         }
-        /// Its text as it shows (the `&` taken out).
+        /// Returns the text as shown, with the `&` removed.
         [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
         [[nodiscard]] char32_t GetMnemonic() const override { return m_mnemonic; }
-        // Focused, it takes typed text for its menu (type-ahead and access keys, Menu::OnTextInput).
+        // While focused, the item asks for typed text on behalf of its menu, which uses it for
+        // type-ahead and access keys (Menu::OnTextInput).
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled(); }
         void SetShortcut(core::StringView text)
         {
@@ -190,7 +192,7 @@ export namespace foundation::gui
                 MarkStyleStateDirty(StateChecked);
             m_checked = checked;
             Invalidate();
-        } // no callback (init)
+        } // sets the state without calling the toggle callback, for initialisation
         void OnBoundCommandState(const BoundCommandState& state) override
         {
             SetEnabled(state.Available);
@@ -201,8 +203,8 @@ export namespace foundation::gui
         {
             m_onToggled = core::Move(callback);
         }
-        // An item bound to a command shows its label where it has no text of its own, its keys
-        // where it has no shortcut of its own, and its icon.
+        // An item bound to a command shows the command's label when it has no text of its own, the
+        // command's keys when it has no shortcut of its own, and the command's icon.
         void OnBoundCommandText(core::StringView label, core::StringView icon, core::StringView shortcut) override
         {
             if (GetText().Size() == 0 || m_textFromCommand)
@@ -221,7 +223,7 @@ export namespace foundation::gui
                         SetIcon(core::Move(picture)); // an SVG drawn as paths, at any size
         }
 
-        // Markup: its text and shortcut exactly as written.
+        // Markup sets the text and shortcut as written.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
             if (name == core::StringView(u8"text"))
@@ -235,10 +237,11 @@ export namespace foundation::gui
         [[nodiscard]] core::String GetTextString() const { return core::String(GetText()); }
         void SetTextString(const core::String& text) { SetText(text.AsView()); }
 
-        // The user's action (run before the menu closes).
+        // Sets the user's action, which runs before the menu closes.
         void SetOnPicked(core::Function<void()> callback) { m_onPicked = core::Move(callback); }
-        // The menu installs this: its text, shortcut or text style changed, so its width may have
-        // (a shortcut an action menu fills in as it opens, a font that arrives).
+        // The menu installs this callback. It runs when the item's text, shortcut or text style
+        // changed, so its width may have changed too (an action menu fills in shortcuts as it
+        // opens, or a font arrives).
         void SetOnWidthChanged(core::Function<void()> callback) { m_onWidthChanged = core::Move(callback); }
         // The menu installs this to close the whole chain after activation.
         void SetOnActivated(core::Function<void()> callback)
@@ -249,7 +252,7 @@ export namespace foundation::gui
         [[nodiscard]] f32 RowHeight() const override { return m_rowHeight; }
         [[nodiscard]] bool IsSelectable() const override { return true; }
 
-        // Preferred width for auto-sizing: gutter + text + shortcut column + right pad.
+        // Preferred width for auto-sizing: gutter, text, shortcut column and right pad.
         [[nodiscard]] f32 PreferredWidth() const
         {
             const f32 textW = m_text.Measure().x;
@@ -258,18 +261,19 @@ export namespace foundation::gui
             return kGutter + textW + shortcutW + kRightPad;
         }
 
-        // Theming: menuitem::highlight (the lit row's background); text via the hook below.
+        // Style part: menuitem::highlight, the lit row's background. Text style comes through the
+        // hook below.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"highlight"));
         }
-        /// Lit: focused, or (a submenu item) with its submenu open. Not hovered as such: the pointer
-        /// moves the focus to the row it enters, so the pointer and the keys share one highlight
-        /// (two rows lit at once, the keys' and the pointer's, was ambiguous).
+        /// Returns whether the row is lit: focused, or for a submenu item, with its submenu open.
+        /// Hover alone does not light a row. The pointer moves focus to the row it enters, so the
+        /// pointer and the keys share one highlight; two lit rows, one for each, would be ambiguous.
         [[nodiscard]] virtual bool IsLit() const { return IsFocused(); }
 
     protected:
-        // Its label and shortcut draw in its text style.
+        // The label and shortcut are drawn in the item's text style.
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());
@@ -280,7 +284,7 @@ export namespace foundation::gui
             m_shortcut.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_shortcut.SetColor(GetTextColor());
-            WidthMayHaveChanged(); // a font that arrives widens it
+            WidthMayHaveChanged(); // a font that arrives can widen the item
         }
 
         void OnMouseClick(const MouseEvent& event) override
@@ -288,29 +292,29 @@ export namespace foundation::gui
             event.Handled = true;
             Activate();
         }
-        // Return, Space, a pad's South: as a click.
+        // Return, Space and the pad's South button act as a click.
         bool OnActivate() override
         {
             Activate();
             return true;
         }
 
-        // Run the item: toggle (if checkable), fire the user's action, then close the chain.
+        // Runs the item: toggles it if checkable, calls the user's action, then closes the chain.
         virtual void Activate()
         {
-            // Its action may end the menu and what holds it (the menu's own close runs after it):
-            // they live until it is done.
+            // The action may destroy the menu and the nodes that hold it, and the menu's own close
+            // runs afterwards, so keep every ancestor alive until this returns.
             core::Array<core::RefPtr<Node>> keep(MemoryAllocator());
             for (Node* n = this; n != nullptr; n = n->GetParent())
                 keep.PushBack(core::RefPtr<Node>(n));
             if (HasCommand())
-                (void)RunBoundCommand(); // a bound command decides its own checked state (G7)
+                (void)RunBoundCommand(); // a bound command decides its own checked state
             else if (m_checkable)
                 SetChecked(!m_checked);
             if (m_onPicked)
                 m_onPicked();
-            // A script's `activate`: it bubbles (through the menu to what opened it), so one
-            // listener hears a whole menu's items, the event's id saying which.
+            // Send the `activate` event for scripts. It bubbles through the menu to whatever opened
+            // it, so one listener hears every item of a menu, and the event's id says which item.
             ItemEvent activated(EventType::ItemActivate, this, -1, ModelIndex{});
             (void)RouteEvent(activated);
             if (m_onActivated)
@@ -323,9 +327,9 @@ export namespace foundation::gui
             const Rect b = GetLocalBounds();
             if (IsLit())
                 GetPartStyle(u8"highlight").Draw(ctx, b, FilledBox(m_highlight));
-            const bool rtl = IsRightToLeft(); // the gutter at the inline start, the pad at the end
+            const bool rtl = IsRightToLeft(); // the gutter is at the inline start and the pad at the end
 
-            // The gutter: a check mark (if checked) else an icon (if set).
+            // The gutter shows a check mark when checked, otherwise the icon if one is set.
             if (m_checkable && m_checked)
             {
                 DrawCheck(ctx, b, rtl);
@@ -336,16 +340,17 @@ export namespace foundation::gui
                 m_icon->Draw(ctx, MirroredIn(Rect{b.x + 4.0f, b.y + (b.height - s) * 0.5f, s, s}, b, rtl));
             }
 
-            // Text + shortcut share the inner rect (opposite alignments, which follow the direction).
+            // Text and shortcut share the inner rect with opposite alignments, which follow the
+            // text direction.
             const Rect inner = MirroredIn(Rect{b.x + kGutter, b.y, core::Max(0.0f, b.width - kGutter - kRightPad),
                                                b.height},
                                           b, rtl);
-            if (m_mnemonicEnd > m_mnemonicStart) // its access key underlined while access keys show
+            if (m_mnemonicEnd > m_mnemonicStart) // underline the access key while access keys are shown
             {
                 const bool shown = AreMnemonicsShown();
                 m_text.SetUnderline(shown ? m_mnemonicStart : 0, shown ? m_mnemonicEnd : 0);
             }
-            // The label keeps out of the shortcut's column: squeezed, it ends in an ellipsis
+            // The label stays out of the shortcut's column. When squeezed, it ends in an ellipsis
             // before the shortcut rather than running under it.
             Rect label = inner;
             if (m_shortcut.GetString().Size() > 0)
@@ -360,7 +365,8 @@ export namespace foundation::gui
                 m_shortcut.Draw(ctx, inner);
         }
 
-        // Draw a check mark stroked inside the gutter (a check is not mirrored, only placed).
+        // Draws a check mark stroked inside the gutter. Right to left moves the check but does not
+        // mirror it.
         void DrawCheck(DrawContext& ctx, const Rect& b, bool rtl) const
         {
             const f32 cx = MirroredX(b.x + kGutter * 0.5f, b, rtl);
@@ -372,18 +378,18 @@ export namespace foundation::gui
             ctx.VG().StrokePath(pb.ToPath(), m_checkColor, vg::StrokeStyle(1.6f));
         }
 
-        static constexpr f32 kGutter = 22.0f;   // inline-start column (check / icon)
-        static constexpr f32 kRightPad = 14.0f; // inline-end column (shortcut end / submenu arrow)
-        static constexpr f32 kShortcutGap = 24.0f; // between a label and its shortcut
+        static constexpr f32 kGutter = 22.0f;   // inline-start column (check or icon)
+        static constexpr f32 kRightPad = 14.0f; // inline-end column (shortcut end or submenu arrow)
+        static constexpr f32 kShortcutGap = 24.0f; // gap between a label and its shortcut
         void WidthMayHaveChanged()
         {
             if (m_onWidthChanged)
-                m_onWidthChanged(); // its menu measures again
+                m_onWidthChanged(); // the menu measures again
         }
 
     private:
         Text m_text;
-        char32_t m_mnemonic = 0; // its access key (E12)
+        char32_t m_mnemonic = 0; // the access key
         usize m_mnemonicStart = 0;
         usize m_mnemonicEnd = 0;
         Text m_shortcut;
@@ -397,7 +403,7 @@ export namespace foundation::gui
         core::Function<void()> m_onActivated;
         core::Function<void(bool)> m_onToggled;
         core::Function<void()> m_onWidthChanged;
-        bool m_textFromCommand = false;     // its text, its shortcut: its command's (OnBoundCommandText)
+        bool m_textFromCommand = false;     // the text and shortcut came from the bound command (OnBoundCommandText)
         bool m_shortcutFromCommand = false;
     };
 
@@ -405,8 +411,8 @@ export namespace foundation::gui
 
     // === Submenu item ==========================================================
     // An item that owns a nested Menu, shown to its right on hover or click. It never closes the
-    // chain itself; hovering/clicking it asks the owning menu to open the submenu (wired by the
-    // menu when the item is added).
+    // chain itself. Hovering or clicking it asks the owning menu to open the submenu, through
+    // callbacks the menu installs when the item is added.
     class MenuSubItem : public MenuItem
     {
         RTTI_OBJECT(MenuSubItem, MenuItem)
@@ -414,8 +420,8 @@ export namespace foundation::gui
         MenuSubItem()
         {
             SetTag(core::StringView(u8"menusubmenu"));
-            // The arrow toward where its submenu opens, the inline end (menu.right in the menu key
-            // context, E12, or menu.left in right to left), opens it and goes in.
+            // The arrow toward the inline end, where the submenu opens (menu.right in the menu key
+            // context, or menu.left in right to left), opens the submenu and focuses its first item.
             MenuSubItem* self = this;
             (void)OnCommand(core::StringView(kMenuRightCommand), [self](CommandEvent& e) { self->Across(true, e); });
             (void)OnCommand(core::StringView(kMenuLeftCommand), [self](CommandEvent& e) { self->Across(false, e); });
@@ -431,20 +437,21 @@ export namespace foundation::gui
         }
         [[nodiscard]] Menu* GetSubMenu() const noexcept { return m_subMenu; }
 
-        // The menu installs this to open the submenu; true from the keys (its first item then takes focus).
+        // The menu installs this to open the submenu. The argument is true when opened from the
+        // keys, in which case the submenu's first item takes focus.
         void SetOnOpenSubMenu(core::Function<void(bool)> callback) { m_onOpen = core::Move(callback); }
 
         [[nodiscard]] Color ArrowColor() const noexcept { return m_arrowColor; }
-        /// Lit while its submenu is open too (focus has gone into it).
+        /// The item is also lit while its submenu is open and focus has moved into it.
         [[nodiscard]] bool IsLit() const override;
 
     protected:
-        // A click opens it; Return, Space or Right open it and go in (its first item takes focus).
+        // A click opens the submenu. Return, Space or Right open it and focus its first item.
         void Activate() override
         {
             if (m_onOpen)
                 m_onOpen(false);
-        } // open, never close
+        } // only opens; never closes the chain
         bool OnActivate() override
         {
             if (m_onOpen)
@@ -470,13 +477,13 @@ export namespace foundation::gui
         }
 
     private:
-        Menu* m_subMenu = nullptr; // non-owning; owned as a RefPtr by the Menu
+        Menu* m_subMenu = nullptr; // non-owning; the parent Menu holds it in a RefPtr
         core::Function<void(bool)> m_onOpen;
         Color m_arrowColor{0.80f, 0.84f, 0.90f, 1.0f};
     };
 
-    // A menu's scroll arrow (E16): at its top or its bottom while its items do not fit the window;
-    // the pointer resting on it scrolls them at a steady speed (Windows's and macOS's menus).
+    // A menu's scroll arrow, shown at its top and bottom while the items do not fit the window.
+    // While the pointer rests on it, the items scroll at a steady speed, as in Windows and macOS menus.
     class MenuScrollArrow : public UIWidget
     {
         RTTI_OBJECT(MenuScrollArrow, UIWidget)
@@ -485,7 +492,7 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"menuscroll"));
             SetTabFocusable(false);
-            SetAccessHidden(true); // a screen reader's keys scroll the menu as they move
+            SetAccessHidden(true); // hidden from screen readers, whose focus moves scroll the menu anyway
         }
         void SetOnScroll(core::Function<void(f32)> scroll) { m_onScroll = core::Move(scroll); }
         void SetColors(Color face, Color arrow)
@@ -494,7 +501,8 @@ export namespace foundation::gui
             m_arrow = arrow;
             Invalidate();
         }
-        /// Whether it can scroll further its way (dimmed at the end).
+        /// Sets whether the menu can scroll further in this arrow's direction; the arrow dims at
+        /// the end.
         void SetLive(bool live)
         {
             if (live == m_live)
@@ -518,7 +526,7 @@ export namespace foundation::gui
                     self->m_ticking = false;
                     return false;
                 }
-                constexpr f32 kSpeed = 360.0f; // points a second
+                constexpr f32 kSpeed = 360.0f; // points per second
                 if (self->m_onScroll)
                     self->m_onScroll((self->m_up ? -kSpeed : kSpeed) * static_cast<f32>(elapsed.AsSecondsF()));
                 return true;
@@ -556,26 +564,27 @@ export namespace foundation::gui
         Menu()
         {
             SetTag(core::StringView(u8"menu"));
-            // Open, it takes focus (itself: no item lit until a key or the pointer picks one), and
-            // up and down go round its items.
+            // When open, the menu itself takes focus, so no item is lit until a key or the pointer
+            // picks one. Up and down wrap round the items.
             SetTabFocusable(true);
             SetNavScope(NavScope::Wrap);
-            SetDisplayed(false); // shown when opened (one in a page waits there, unseen)
-            // Its keys are bindings in the menu key context (E12): a game remaps them like any.
+            SetDisplayed(false); // shown when opened; a menu placed in a page stays hidden until then
+            // The menu's keys are bindings in the menu key context, which a game can remap like any
+            // other.
             SetKeyContext(core::StringView(kMenuKeyContext));
             Menu* self = this;
             (void)OnCommand(core::StringView(kMenuDownCommand), [self](CommandEvent&) { self->Step(1); });
             (void)OnCommand(core::StringView(kMenuUpCommand), [self](CommandEvent&) { self->Step(-1); });
-            // Return and Space by default: the focused item runs (or its submenu opens).
+            // By default Return and Space run the focused item, or open its submenu.
             (void)OnCommand(core::StringView(kMenuActivateCommand), [self](CommandEvent& e)
             {
                 Node* focus = self->GetEventDispatcher() != nullptr ? self->GetEventDispatcher()->GetFocusNode() : nullptr;
                 if (focus == nullptr || !self->HoldsRow(focus) || !focus->IsTreeEnabled() || !focus->HandleActivate())
                     e.Propagate = true;
             });
-            // The arrow toward the inline start (Left, Right in right to left) in a submenu closes it,
-            // focus going back to its item; in a menu of a bar, either goes on to the bar (which
-            // moves along it).
+            // In a submenu, the arrow toward the inline start (Left, or Right in right to left)
+            // closes it and focus returns to its item. Otherwise the arrow propagates, so in a menu
+            // bar's menu the bar receives it and moves along.
             const auto across = [self](bool right, CommandEvent& e)
             {
                 if (right == self->IsRightToLeft() && core::Cast<MenuSubItem>(self->GetParent()) != nullptr)
@@ -585,8 +594,8 @@ export namespace foundation::gui
             };
             (void)OnCommand(core::StringView(kMenuLeftCommand), [across](CommandEvent& e) { across(false, e); });
             (void)OnCommand(core::StringView(kMenuRightCommand), [across](CommandEvent& e) { across(true, e); });
-            SetBox(FilledBox(m_panelColor)); // its own face, which a sheet's (a theme's) replaces
-            // Taller than the window, its items scroll (E16): the wheel turns them.
+            SetBox(FilledBox(m_panelColor)); // the default face; a style sheet's box replaces it
+            // When the menu is taller than the window its items scroll, and the wheel scrolls them.
             (void)AddEventListener(EventType::MouseWheel, [self](const Event& e)
                                    {
                                        if (!self->m_scrolls)
@@ -594,13 +603,13 @@ export namespace foundation::gui
                                        self->ScrollBy(-static_cast<const WheelEvent&>(e).Delta.y * kWheelStep);
                                        e.Handled = true;
                                    });
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
 
-        /// Whether its items are taller than the window holds, so they scroll (E16).
+        /// Returns whether the items are taller than the window can hold, so they scroll.
         [[nodiscard]] bool Scrolls() const noexcept { return m_scrolls; }
-        /// How far its items are scrolled, in points (0: the first at the top).
+        /// Returns how far the items are scrolled, in points; 0 means the first item is at the top.
         [[nodiscard]] f32 GetItemScroll() const noexcept { return m_scroll; }
         void ScrollBy(f32 delta)
         {
@@ -624,15 +633,15 @@ export namespace foundation::gui
             Relayout();
         }
 
-        // Sizes the menu to its widest item, its label and its shortcut both (the default; SetWidth
-        // gives it a width of its own instead).
+        // Sizes the menu to its widest item, label and shortcut included. This is the default;
+        // SetWidth gives the menu a fixed width instead.
         void SetAutoWidth(bool enabled)
         {
             m_autoWidth = enabled;
             Relayout();
         }
 
-        // Add a plain activatable item. Activating runs `action`, then closes the whole chain.
+        // Adds a plain activatable item. Activating it runs `action`, then closes the whole chain.
         MenuItem* AddItem(core::StringView text, core::Function<void()> action)
         {
             auto item = core::MakeRef<MenuItem>(MemoryAllocator());
@@ -649,7 +658,7 @@ export namespace foundation::gui
             return raw;
         }
 
-        // Add a checkable item. Activating toggles it (firing `onToggled`) and closes the chain.
+        // Adds a checkable item. Activating it toggles it (calling `onToggled`) and closes the chain.
         MenuItem* AddCheckItem(core::StringView text, bool checked,
                                core::Function<void(bool)> onToggled)
         {
@@ -663,7 +672,7 @@ export namespace foundation::gui
             return raw;
         }
 
-        // Add a horizontal separator (a non-interactive divider).
+        // Adds a horizontal separator, a non-interactive divider.
         void AddSeparator() { AdoptSeparator(core::MakeRef<MenuSeparator>(MemoryAllocator())); }
         void AdoptSeparator(core::RefPtr<MenuSeparator> sep)
         {
@@ -675,10 +684,10 @@ export namespace foundation::gui
             Relayout();
         }
 
-        // Add a submenu item; returns the (empty) child Menu to populate. The child is owned by
-        // this menu and shown to the item's right on hover/click.
+        // Adds a submenu item and returns the empty child Menu to fill. This menu owns the child,
+        // which shows to the item's right on hover or click.
         Menu* AddSubMenu(core::StringView text) { return AdoptSubMenu(core::MakeRef<Menu>(MemoryAllocator()), text); }
-        /// Takes `sub` as the submenu of a new item titled `text` (markup's nested Menu).
+        /// Adds `sub` as the submenu of a new item titled `text`; markup uses this for a nested Menu.
         Menu* AdoptSubMenu(core::RefPtr<Menu> sub, core::StringView text)
         {
             auto item = core::MakeRef<MenuSubItem>(MemoryAllocator());
@@ -686,7 +695,7 @@ export namespace foundation::gui
             ShareTextStyle(*sub, false);
             sub->SetItemHeight(m_itemHeight);
             item->SetSubMenu(sub.Get());
-            sub->m_row = item.Get(); // its title, set later (a script's `add` then `title`), names the row
+            sub->m_row = item.Get(); // a title set later (a script's `add`, then `title`) renames this row
 
             MenuSubItem* rawItem = item.Get();
             Menu* rawSub = sub.Get();
@@ -694,19 +703,20 @@ export namespace foundation::gui
             item->SetOnOpenSubMenu([self, rawItem](bool fromKeys) { self->OpenSubMenuFor(rawItem, fromKeys); });
 
             AddItemNode(item.Get(), rawItem);
-            m_ownedSubMenus.PushBack(core::Move(sub)); // keep the submenu alive
+            m_ownedSubMenus.PushBack(core::Move(sub)); // keeps the submenu alive
             return rawSub;
         }
 
-        /// Takes an item made elsewhere (markup's MenuItem).
+        /// Adds an item made elsewhere, such as a MenuItem from markup.
         void AdoptItem(MenuItem& item) { AddItemNode(&item, &item); }
 
-        /// Its title: a menu bar's button, or a submenu's item (markup's `text`).
+        /// Sets the title, which a menu bar shows on its button, or a parent menu on the submenu
+        /// item (markup's `text`).
         void SetTitle(core::StringView title)
         {
             m_title = core::String(title);
             if (m_row != nullptr)
-                m_row->SetText(title); // the row in the menu that holds it
+                m_row->SetText(title); // the submenu item in the parent menu
         }
         [[nodiscard]] core::StringView GetTitle() const noexcept { return m_title.AsView(); }
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
@@ -716,9 +726,10 @@ export namespace foundation::gui
             SetTitle(value);
             return true;
         }
-        /// Markup's children are its items; a menu given items there sizes to its widest.
+        /// Returns the host for markup's children, which become the items. A menu whose items come
+        /// from markup sizes to the widest.
         [[nodiscard]] Node* GetChildHost() override;
-        /// The rows markup gave it, taken in (its MarkupChildHost calls it).
+        /// Adopts the rows markup put in `host`. The menu's MarkupChildHost calls this.
         void AdoptMarkupChildren(Node& host);
 
         [[nodiscard]] usize ItemCount() const noexcept
@@ -735,7 +746,7 @@ export namespace foundation::gui
             const EventDispatcher* d = GetEventDispatcher();
             return d != nullptr && d->IsPopupOpen(*this);
         }
-        /// The open submenu of one of its items, or null.
+        /// Returns the open submenu of one of the items, or null.
         [[nodiscard]] Menu* CurrentSubMenu() const
         {
             for (MenuRow* row : m_rows)
@@ -745,33 +756,34 @@ export namespace foundation::gui
             return nullptr;
         }
 
-        // Notified when this menu closes, and why. A MenuBar uses it to clear its "open menu" state.
+        // Sets the callback told when this menu closes, and why. A MenuBar uses it to clear its
+        // open-menu state.
         void SetOnClosed(core::Function<void(PopupCloseReason)> callback) { m_onClosed = core::Move(callback); }
-        /// Told each time just before it opens (a submenu too): an owner refreshes its items then,
-        /// so what they show (enabled, checked) is true as the user sees them.
+        /// Sets the callback run just before each opening, for submenus too. An owner refreshes the
+        /// items there, so their enabled and checked states are current when the user sees them.
         void SetOnOpening(core::Function<void(Menu&)> callback) { m_onOpening = core::Move(callback); }
 
-        // Close this menu (and the submenus it holds) if it is open.
+        // Closes this menu, and the submenus it holds, if it is open.
         void Close()
         {
             if (EventDispatcher* d = GetEventDispatcher())
                 (void)d->ClosePopup(*this);
         }
 
-        /// Shows the menu as a popup of `owner` at `position` (in the root's space): a context
-        /// menu at the pointer, below it and toward the owner's inline end, above it where it does
-        /// not fit, slid back in from the edges.
+        /// Shows the menu as a popup of `owner` at `position`, in the root's space, as for a context
+        /// menu at the pointer. It opens below the point and toward the owner's inline end, above
+        /// the point where it does not fit, and is moved back inside the edges.
         void Open(Node& owner, core::Float2 position)
         {
             PopupOptions options;
             options.AnchorRect = Rect{position.x, position.y, 0.0f, 0.0f};
             options.HasAnchorRect = true;
-            options.TakesFocus = true; // the keyboard and the pad work in it; focus comes back on close
+            options.TakesFocus = true; // the keyboard and the pad work in the menu; focus returns on close
             OpenAs(owner, core::Move(options));
         }
-        // === The script surface (E16; reflected in GUIReflectionImpl.cpp) ===
-        /// Opens it at a point in the root's space, as a popup of what holds it (a menu a script
-        /// added); whether it opened.
+        // === The script surface (reflected in GUIReflectionImpl.cpp) ===
+        /// Opens the menu at a point in the root's space, as a popup of its parent; this is for a
+        /// menu a script added. Returns whether it opened.
         bool OpenAtPoint(f32 x, f32 y)
         {
             Node* owner = GetParent() != nullptr ? GetParent() : GetRootNode();
@@ -781,11 +793,12 @@ export namespace foundation::gui
             options.AnchorRect = Rect{x, y, 0.0f, 0.0f};
             options.HasAnchorRect = true;
             options.TakesFocus = true;
-            options.ReturnHome = true; // a script's menu: back where it waits, to open again
+            options.ReturnHome = true; // a script's menu goes back to its place when closed, to open again
             OpenAs(*owner, core::Move(options));
             return IsOpen();
         }
-        /// Opens it below `anchor` (a node's handle), as that node's popup; whether it opened.
+        /// Opens the menu below `anchor` (a node's handle) as that node's popup. Returns whether it
+        /// opened.
         [[nodiscard]] core::Variant OpenBelowNode(core::Variant anchor)
         {
             Node* node = Node::FromHandle(anchor);
@@ -795,15 +808,16 @@ export namespace foundation::gui
                 options.Anchor = node;
                 options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
                 options.TakesFocus = true;
-                options.ReturnHome = true; // a script's menu: back where it waits, to open again
+                options.ReturnHome = true; // a script's menu goes back to its place when closed, to open again
                 OpenAs(*node, core::Move(options));
             }
             return core::Variant::From<bool>(node != nullptr && IsOpen());
         }
 
-        /// Focuses its first item that can take it (a menu opened from the keyboard or the pad).
+        /// Focuses the first item that can take focus, as for a menu opened from the keyboard or
+        /// the pad.
         void FocusFirstItem() { FocusItem(0, 1); }
-        /// Shows the menu as a popup of `owner`, against `anchor` (a menu bar's button: below it).
+        /// Shows the menu as a popup of `owner`, placed below `anchor` (a menu bar's button).
         void OpenBelow(Node& owner, Node& anchor)
         {
             PopupOptions options;
@@ -814,7 +828,7 @@ export namespace foundation::gui
         }
 
     protected:
-        // Its items take its font and colour.
+        // The items use the menu's font and colour.
         void OnTextStyleChange() override
         {
             for (MenuRow* row : m_rows)
@@ -823,9 +837,9 @@ export namespace foundation::gui
         }
 
         void OnSizeChange() override { Relayout(); }
-        // Typed text in it (E12; its items ask for it while focused): a character that is one
-        // item's access key runs that item, as a desktop's menus do; else the focus goes to the
-        // next item whose text starts with what was typed (TypeAheadSearch).
+        // Typed text reaches the menu because its focused item asks for text input. A character
+        // that is an item's access key runs that item, as desktop menus do. Otherwise focus moves to
+        // the next item whose text starts with what was typed (TypeAheadSearch).
         void OnTextInput(const TextInputEvent& event) override
         {
             if (!HoldsRow(event.Target) || event.Text.Size() == 0)
@@ -861,8 +875,9 @@ export namespace foundation::gui
             if (found >= 0)
                 (void)FocusItem(found, 1);
         }
-        // Measured as it lays itself out: its rows' width, and the height it keeps (a popup fitting
-        // its content asks this, so a menu that scrolls is placed at the height it shows).
+        // Measures the menu the same way it lays itself out: the rows' width, and the height it
+        // keeps. A popup that fits its content asks this, so a scrolling menu is placed at the
+        // height it shows.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
             const Extent extent = MeasureItems();
@@ -870,7 +885,7 @@ export namespace foundation::gui
         }
 
     private:
-        // Whether `node` is one of its rows.
+        // Returns whether `node` is one of the menu's rows.
         [[nodiscard]] bool HoldsRow(const Node* node) const noexcept
         {
             for (const MenuRow* row : m_rows)
@@ -878,7 +893,8 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        // Up and down go round the items (from the menu itself: the first or the last).
+        // Moves focus up or down, wrapping round the items. When the menu itself has focus, Down
+        // goes to the first item and Up to the last.
         void Step(i32 step)
         {
             i32 at = -1;
@@ -888,7 +904,8 @@ export namespace foundation::gui
             (void)FocusItem(at < 0 ? (step > 0 ? 0 : static_cast<i32>(m_rows.Size()) - 1) : at + step, step);
         }
 
-        // Focuses the first item from `start` going `step` (round the end) that can take focus.
+        // Focuses the first item that can take focus, starting at `start` and moving by `step`,
+        // wrapping round the end.
         bool FocusItem(i32 start, i32 step)
         {
             const i32 count = static_cast<i32>(m_rows.Size());
@@ -918,7 +935,7 @@ export namespace foundation::gui
             }
             Menu* self = this;
             row->SetOnHovered([self, row]() { self->OnRowHovered(row); });
-            if (m_scrollUp) // before the scroll arrows, which stay over the items
+            if (m_scrollUp) // insert before the scroll arrows, which stay drawn over the items
                 (void)AddChildAt(node, GetChildIndex(m_scrollUp.Get()));
             else
                 AddChild(node);
@@ -933,9 +950,9 @@ export namespace foundation::gui
                     it->SetRowHeight(m_itemHeight);
         }
 
-        // Its width, its items' height, and the height it keeps: taller than the window holds (less
-        // a margin), it keeps to the window and scrolls its items between two arrows (E16), rather
-        // than running off the window's edge.
+        // The menu's width, its items' total height, and the height it keeps. When the items are
+        // taller than the window (less a margin), the menu keeps to the window's height and
+        // scrolls its items between two arrows rather than running off the window's edge.
         struct Extent
         {
             f32 Width = 0.0f, Content = 0.0f, Height = 0.0f;
@@ -964,8 +981,9 @@ export namespace foundation::gui
             return e;
         }
 
-        // Its padding and border: its rows and arrows inside them, its size theirs added (a sheet's
-        // padding insets a lit row from the menu's rounded edge).
+        // Returns the padding plus the border. Rows and arrows sit inside this inset, and the menu's
+        // size adds it to theirs; a style sheet's padding keeps a lit row clear of the menu's
+        // rounded edge.
         [[nodiscard]] Thickness Inset() const
         {
             const Thickness p = GetPadding();
@@ -977,8 +995,8 @@ export namespace foundation::gui
         {
             const Extent extent = MeasureItems();
             const Thickness inset = Inset();
-            // Being placed (a popup shrunk to the room beside its anchor), it keeps the height it was
-            // given and scrolls within it; else the height it measures.
+            // While being placed (a popup shrunk to the room beside its anchor), the menu keeps the
+            // height it was given and scrolls within it. Otherwise it takes the height it measures.
             const bool placed = IsBeingPlaced() && GetSize().y > 0.0f;
             const f32 width = extent.Width, content = extent.Content;
             const f32 height = placed ? core::Min(core::Max(0.0f, GetSize().y - inset.TotalVertical()), extent.Content) : extent.Height;
@@ -1001,7 +1019,7 @@ export namespace foundation::gui
                 m_scrollDown = core::MakeRef<MenuScrollArrow>(MemoryAllocator(), false);
                 m_scrollUp->SetOnScroll([self](f32 d) { self->ScrollBy(d); });
                 m_scrollDown->SetOnScroll([self](f32 d) { self->ScrollBy(d); });
-                AddChild(m_scrollUp.Get()); // last: over the items, hit before them
+                AddChild(m_scrollUp.Get()); // added last so they draw over the items and are hit first
                 AddChild(m_scrollDown.Get());
             }
             if (m_scrollUp)
@@ -1020,13 +1038,14 @@ export namespace foundation::gui
                 m_scrollDown->SetLive(m_scroll < content - view);
             }
             SetClipChildren(m_scrolls);
-            // Sized by its items without pinning the size (as SetSize does): a popup that fits its
-            // content measures it again each pass, and a pinned size would hold a stale height.
+            // Size the menu with Arrange rather than SetSize, which would pin the size. A popup that
+            // fits its content measures it again each pass, and a pinned size would keep a stale
+            // height.
             const f32 outerWidth = width + inset.TotalHorizontal(), outerHeight = height + inset.TotalVertical();
             if (GetSize().x != outerWidth || GetSize().y != outerHeight)
                 Arrange(Rect{GetPosition().x, GetPosition().y, outerWidth, outerHeight});
         }
-        // Scrolls so `row` shows whole between the arrows (a key moved to it).
+        // Scrolls so `row` is fully shown between the arrows, after a key moved focus to it.
         void ScrollRowIntoView(const MenuRow& row)
         {
             if (!m_scrolls)
@@ -1058,11 +1077,11 @@ export namespace foundation::gui
                 m_onOpening(*this);
             SetDisplayed(true);
             Relayout();
-            options.FitContent = true; // sized as it measures, again when a font arrives
+            options.FitContent = true; // sized as it measures, and re-measured when a font arrives
             Menu* self = this;
             options.OnClosed = [self](PopupCloseReason reason)
             {
-                self->SetDisplayed(false); // one gone back to where it waits is unseen there
+                self->SetDisplayed(false); // a menu returned to its place in a page stays hidden there
                 if (self->m_onClosed)
                     self->m_onClosed(reason);
             };
@@ -1070,9 +1089,10 @@ export namespace foundation::gui
         }
 
         // === Submenus ===
-        // Opens `item`'s submenu as its popup, right of it (left at the root's edge); the stack
-        // closes another item's open submenu, which this one's owner is not inside. It takes focus
-        // (given back to the item when it closes); from the keys its first item is lit.
+        // Opens `item`'s submenu as the item's popup, to its right (to the left at the root's edge).
+        // The popup stack closes any other item's open submenu, since this item is not inside it.
+        // The submenu takes focus and gives it back to the item when it closes; opened from the
+        // keys, its first item is lit.
         void OpenSubMenuFor(MenuSubItem* item, bool fromKeys)
         {
             Menu* sub = item->GetSubMenu();
@@ -1084,8 +1104,8 @@ export namespace foundation::gui
                     sub->FocusFirstItem();
                 return;
             }
-            // Just outside this menu (past its padding and border on that side, which hold the row
-            // in), its first row level with the row (lined up by its content).
+            // Place the submenu just outside this menu, past the padding and border on that side,
+            // with its first row level with the item (aligned by content).
             const Thickness inset = Inset();
             PopupOptions options;
             options.Anchor = item;
@@ -1097,7 +1117,7 @@ export namespace foundation::gui
                 sub->FocusFirstItem();
         }
 
-        // The pointer over it, in the root's space: where it was is the safe area's apex.
+        // Records the pointer position in the root's space; it becomes the safe area's apex.
         void OnMouseMove(const MouseEvent& event) override
         {
             Node* root = GetRootNode();
@@ -1105,10 +1125,11 @@ export namespace foundation::gui
             m_pointerKnown = true;
         }
 
-        // A row was hovered: an open submenu of another row closes (unless the pointer is heading
-        // for it: then a moment later, if it rests on this row); a submenu row opens its own; an
-        // item takes focus, so the keys go on from where the pointer is, and a row that cannot (a
-        // separator, a disabled item) gives it to the menu, lighting none.
+        // Handles a row being hovered. An open submenu of another row closes, unless the pointer
+        // is heading for it; then the hover is deferred and applies a moment later if the pointer
+        // rests on this row. A submenu row opens its own submenu. An item takes focus, so the keys
+        // continue from where the pointer is. A row that cannot take focus (a separator, a disabled
+        // item) gives focus to the menu, so no row is lit.
         void OnRowHovered(MenuRow* row)
         {
             Menu* open = CurrentSubMenu();
@@ -1128,9 +1149,9 @@ export namespace foundation::gui
                 OpenSubMenuFor(sub, false);
         }
 
-        // Whether the pointer, from where this menu last saw it to where it is now (the hover comes
-        // before the move reaches the menu), is inside the triangle from there to the open
-        // submenu's near edge.
+        // Returns whether the pointer is inside the triangle from where this menu last saw it to
+        // the open submenu's near edge. The hover arrives before the move reaches the menu, so the
+        // apex is the previous position.
         [[nodiscard]] bool HeadingFor(const Menu& sub) const
         {
             const EventDispatcher* d = GetEventDispatcher();
@@ -1143,7 +1164,7 @@ export namespace foundation::gui
             const core::Float2 p = root->ConvertToNodeSpace(d->GetMousePosition());
             const core::Float2 sp = sub.GetPosition();
             const core::Float2 ss = sub.GetSize();
-            const f32 edgeX = sp.x >= GetPosition().x + GetSize().x * 0.5f ? sp.x : sp.x + ss.x; // the side facing this menu
+            const f32 edgeX = sp.x >= GetPosition().x + GetSize().x * 0.5f ? sp.x : sp.x + ss.x; // the submenu's side facing this menu
             const core::Float2 b{edgeX, sp.y};
             const core::Float2 c{edgeX, sp.y + ss.y};
             const auto side = [](core::Float2 start, core::Float2 end, core::Float2 point) { return (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x); };
@@ -1152,8 +1173,8 @@ export namespace foundation::gui
             const bool positive = d1 > 0.0f || d2 > 0.0f || d3 > 0.0f;
             return !(negative && positive) && (p.x != apex.x || p.y != apex.y);
         }
-        // The hover on `row` counts after a moment, if the pointer is still on it and has not
-        // reached the submenu.
+        // Defers the hover on `row`. It applies after a moment if the pointer is still on the row
+        // and has not reached the submenu.
         void DeferHover(MenuRow* row)
         {
             m_deferredRow = row;
@@ -1177,14 +1198,14 @@ export namespace foundation::gui
                 self->m_deferring = false;
                 if (deferred->IsHovered())
                 {
-                    self->m_pointerKnown = false; // resting: no heading
+                    self->m_pointerKnown = false; // the pointer rested, so it is not heading anywhere
                     self->OnRowHovered(deferred);
                 }
                 return false;
             }));
         }
 
-        // The outermost menu holding this one (a submenu's parents up the tree).
+        // Returns the outermost menu holding this one, walking up a submenu's parents.
         Menu* RootMenu()
         {
             Menu* root = this;
@@ -1195,26 +1216,26 @@ export namespace foundation::gui
         }
 
         core::String m_title;
-        MenuSubItem* m_row = nullptr; // its row in the menu holding it (not owned), when a submenu
-        core::RefPtr<Node> m_markupHost;           // where markup's children land, then taken in
+        MenuSubItem* m_row = nullptr; // for a submenu, its item in the parent menu (not owned)
+        core::RefPtr<Node> m_markupHost;           // receives markup's children before they are adopted
         bool m_adopting = false;
         Array<MenuRow*> m_rows;                    // rows, owned as children
-        TypeAheadSearch m_typeAhead;               // typed text (E12)
-        Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (their items' children only while open)
-        bool m_autoWidth = true; // a fixed default cut long items and ran labels under shortcuts
-        // The safe area toward an open submenu: the pointer's last two places, a hover deferred.
+        TypeAheadSearch m_typeAhead;               // type-ahead over the items
+        Array<core::RefPtr<Menu>> m_ownedSubMenus; // keeps submenus alive; they are their items' children only while open
+        bool m_autoWidth = true; // sized to the widest item, so a long item is not cut off or run under its shortcut
+        // The safe area toward an open submenu: the pointer's last position, and a deferred hover.
         core::Float2 m_pointerAt{0.0f, 0.0f};
         bool m_pointerKnown = false;
-        MenuRow* m_deferredRow = nullptr; // non-owning: one of its rows
+        MenuRow* m_deferredRow = nullptr; // non-owning; one of this menu's rows
         f64 m_deferredFor = 0.0;
         bool m_deferring = false;
         static constexpr f64 kSafeAreaGrace = 0.3; // seconds a resting pointer waits before switching
-        f32 m_width = 160.0f; // SetWidth's
+        f32 m_width = 160.0f; // the width SetWidth sets
         f32 m_itemHeight = 26.0f;
-        // Scrolling, when its items do not fit the window (E16).
+        // Scrolling, used when the items do not fit the window.
         static constexpr f32 kArrowHeight = 16.0f;
-        static constexpr f32 kScreenMargin = 8.0f; // kept from the window's top and bottom
-        static constexpr f32 kWheelStep = 40.0f;   // points a wheel notch turns
+        static constexpr f32 kScreenMargin = 8.0f; // space kept clear at the window's top and bottom
+        static constexpr f32 kWheelStep = 40.0f;   // points scrolled per wheel notch
         bool m_scrolls = false;
         f32 m_scroll = 0.0f;
         core::RefPtr<MenuScrollArrow> m_scrollUp, m_scrollDown;

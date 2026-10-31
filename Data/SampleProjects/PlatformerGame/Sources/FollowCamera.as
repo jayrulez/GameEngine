@@ -1,5 +1,5 @@
-// FollowCamera - a platformer camera: behind and above the player at a fixed offset, springing
-// after it and aiming just above it. The offset never turns, so the controls stay world
+// FollowCamera: a platformer camera that sits behind and above the player at a fixed offset,
+// springing after it and aiming just above it. The offset never turns, so the controls stay world
 // relative: forward is always away from the camera.
 class FollowCamera
 {
@@ -12,14 +12,14 @@ class FollowCamera
     [5.0, "Position spring rate (higher = snappier)"] float positionSmoothing;
     [6.0, "How fast a shake dies away (per second)"] float shakeDecay;
 
-    /// The shake's strength now (m), set by "Shake" and decaying to nothing.
+    /// The current shake strength (m), set by "Shake" and decaying to nothing.
     private float m_shake = 0.0f;
-    /// Where the follow has the camera, before any shake.
+    /// The camera position the follow computes, before any shake.
     private Float3 m_followPos = Float3(0.0f, 0.0f, 0.0f);
 
     FollowCamera(Entity@ entity) { @self = entity; }
 
-    // Something jolted the view: a hit, a landing from high up. Strength in metres.
+    // Something jolted the view, such as a hit or a landing from high up. Strength in metres.
     void onShake(float strength)
     {
         if (strength > m_shake)

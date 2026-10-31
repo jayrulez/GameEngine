@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WebTriangle - the first app that runs in a browser.
+// WebTriangle: a minimal app that runs in a browser.
 //
-// It uses the RUNTIME framework (APP_MAIN -> IApplication driven by an ApplicationHost),
-// NOT the Vulkan/SDL3 SampleApp framework: a WebShell hands the host an HTML <canvas>, the WebGPU
+// It uses the runtime framework (APP_MAIN, with an IApplication driven by an ApplicationHost),
+// not the Vulkan/SDL3 SampleApp framework: a WebShell hands the host an HTML <canvas>, the WebGPU
 // graphics factory brings a device up on that canvas, and the web runner drives frames through
 // requestAnimationFrame. The app records a single WGSL triangle each frame. Shaders are WGSL
 // directly (browsers ingest WGSL; there is no runtime HLSL compiler on web), and the triangle is
 // generated from the vertex index, so no vertex buffer or bind groups are needed.
 //
-// Build (wasm preset) emits WebTriangle.html + .js + .wasm; open the .html in a WebGPU browser.
+// The wasm preset build emits WebTriangle.html, .js and .wasm; open the .html in a WebGPU browser.
 
 #include "Core/Prelude.h"
 
@@ -18,9 +18,9 @@ import foundation.core;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.shell;
-import foundation.runtime.web;  // RunApplication (browser runner) - required by APP_MAIN
-import foundation.shell.web;    // WebShell - required by APP_MAIN
-import foundation.graphics;     // GraphicsDevice + FrameContext
+import foundation.runtime.web;  // RunApplication (the browser runner), required by APP_MAIN
+import foundation.shell.web;    // WebShell, required by APP_MAIN
+import foundation.graphics;     // GraphicsDevice and FrameContext
 import foundation.graphics.gpu; // CreateGraphicsDevice
 import foundation.rhi;
 
@@ -33,8 +33,9 @@ namespace rhi = foundation::rhi;
 
 namespace
 {
-    // Position + color per vertex baked into the shader, selected by vertex_index -> no vertex
-    // buffer. Color target format is the swapchain default (BGRA8UnormSrgb, see RenderWindowDesc).
+    // Position and color per vertex are baked into the shader and selected by vertex_index, so
+    // there is no vertex buffer. The color target format is the swapchain default
+    // (BGRA8UnormSrgb, see RenderWindowDesc).
     constexpr const char8_t kTriangleWgsl[] = u8R"(
         struct VSOut {
             @builtin(position) position : vec4f,

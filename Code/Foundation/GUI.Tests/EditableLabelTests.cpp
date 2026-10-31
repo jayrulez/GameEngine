@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - EditableLabel (E6): a double-click or F2 edits it in place; Return and focus leaving
-// commit, Escape cancels; a validator keeps it editing or puts the old text back.
+// GUI - EditableLabel: a double-click or F2 edits it in place. Return or the focus leaving commits,
+// and Escape cancels. A validator keeps it editing or puts the old text back.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -17,7 +17,7 @@ namespace
 {
     namespace fonts = foundation::fonts;
 
-    // A mock font: 6px a byte, 12px a line.
+    // A mock font: 6px per byte, 12px per line.
     class SixFont : public fonts::IFont
     {
     public:
@@ -86,7 +86,7 @@ TEST_CASE("editable label: a double-click edits it in place, all selected; Retur
     Bed b;
     b.D().InjectMouseDown(core::Float2{20.0f, 12.0f}, MouseButton::Left);
     b.D().InjectMouseUp(core::Float2{20.0f, 12.0f}, MouseButton::Left);
-    CHECK_FALSE(b.label->IsEditing()); // one click: no
+    CHECK_FALSE(b.label->IsEditing()); // one click does not edit
     b.D().InjectMouseDown(core::Float2{20.0f, 12.0f}, MouseButton::Left);
     b.D().InjectMouseUp(core::Float2{20.0f, 12.0f}, MouseButton::Left);
     REQUIRE(b.label->IsEditing());
@@ -96,7 +96,7 @@ TEST_CASE("editable label: a double-click edits it in place, all selected; Retur
     (void)b.root->UpdateLayout();
     CHECK(editor->GetSize().x == doctest::Approx(120.0f)); // over its whole box
 
-    b.D().InjectText(core::StringView(u8"sky")); // all selected: replaced
+    b.D().InjectText(core::StringView(u8"sky")); // all the text is selected, so it is replaced
     b.Key(KeyCode::Return);
     CHECK_FALSE(b.label->IsEditing());
     CHECK(b.label->GetText() == core::StringView(u8"sky"));
@@ -114,7 +114,8 @@ TEST_CASE("editable label: its field's text lies where the label's was, the fiel
     REQUIRE(editor != nullptr);
     editor->SetPadding(Thickness{6.0f, 6.0f, 6.0f, 6.0f});
     (void)b.root->UpdateLayout();
-    // A label 24 tall, its content 18: the field's content as tall, not 24 less its padding.
+    // A label 24 tall with content 18 tall: the field's content is as tall as the label's
+    // content, not 24 less the field's padding.
     const Rect content = b.label->GetContentBounds();
     const Rect field = editor->GetContentBounds();
     CHECK(editor->GetPosition().x + field.x == doctest::Approx(content.x));
@@ -138,7 +139,7 @@ TEST_CASE("editable label: its field's context menu keeps it editing, the select
     CHECK(b.label->IsEditing());
     CHECK(editor->SelectedText() == core::StringView(u8"layer"));
     CHECK(b.commits == 0);
-    // Cut, from the menu: the field has the focus back, still editing.
+    // Cut from the menu: the field gets the focus back and is still editing.
     MenuItem* cut = core::Cast<MenuItem>(editor->GetContextMenu()->GetChildAt(0));
     REQUIRE(cut != nullptr);
     (void)cut->HandleActivate();
@@ -215,7 +216,7 @@ TEST_CASE("editable label: multiline, it edits in a text area; Return breaks a l
     CHECK(label->IsEditing());
     CHECK(label->GetText() == core::StringView(u8"note")); // the label's text until it commits
     (void)root->UpdateLayout();
-    // Three lines typed (the last empty), the box and the area's text as tall.
+    // Three lines typed (the last empty): the box and the area's text are as tall.
     CHECK(label->GetSize().y == doctest::Approx(36.0f));
     CHECK(label->GetEditor()->GetContentBounds().height == doctest::Approx(36.0f));
 
@@ -226,7 +227,7 @@ TEST_CASE("editable label: multiline, it edits in a text area; Return breaks a l
     (void)root->UpdateLayout();
     CHECK(label->GetSize().y == doctest::Approx(36.0f));
 
-    // Escape puts it back, the box shrinking to the old lines.
+    // Escape puts the old text back, and the box shrinks to the old lines.
     label->BeginEdit();
     label->GetEditor()->SetText(core::StringView(u8"a\nb\nc\nd"));
     (void)root->UpdateLayout();
@@ -236,7 +237,7 @@ TEST_CASE("editable label: multiline, it edits in a text area; Return breaks a l
     (void)root->UpdateLayout();
     CHECK(label->GetSize().y == doctest::Approx(36.0f));
 
-    // A text area alone submits on Ctrl+Return too.
+    // A text area on its own also submits on Ctrl+Return.
     core::RefPtr<TextArea> area = core::MakeRef<TextArea>(core::DefaultAllocator());
     root->AddChild(area.Get());
     int submits = 0;

@@ -3,8 +3,7 @@
 
 // UI - :drag_drop_effects partition
 //
-// Describes the type of operation a drag-and-drop will perform. Ported verbatim from
-// Sedulous.UI/src/DragDrop/DragDropEffects.bf (Beef `: int32` -> `: i32`).
+// Describes the type of operation a drag-and-drop will perform.
 
 module;
 #include "Core/Prelude.h"

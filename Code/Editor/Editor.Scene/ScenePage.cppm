@@ -3,16 +3,16 @@
 
 // Editor::Scene - :page partition.
 //
-// SceneEditorPage: the scene (and prefab) document editor, on the GUI from markup
-// (Data/Editor/Scene.xml; Documentation/Specs/editor-gui.md, 5.3, layer 2). Each page owns its own
-// live scene, in its own scene manager (several pages are open at once; everything scene-scoped is
-// per page), and is made of parts: its viewport (the renderer drawing the scene into it, the
-// camera, picking, the capture), its overlays, Simulate, the prefab flows and the view state kept
-// per scene, each a partition of its own. The page holds them together: it loads the scene, edits
-// it through its edit context and its tools, saves it, follows a change made elsewhere, and says
-// on the page when the scene did not load (and then refuses to save over it). Its bar's Save, Undo
-// and Redo act on this page; its hierarchy (layer 3) is the scene's tree in its left pane, its
-// inspector (layer 4) the selection's components in its right.
+// SceneEditorPage: the scene (and prefab) document editor, built from markup
+// (Data/Editor/Scene.xml). Each page owns its own live scene, in its own scene manager (several
+// pages are open at once, and everything scene-scoped is per page). It is made of parts, each a
+// partition of its own: its viewport (the renderer drawing the scene into it, the camera, picking,
+// the capture), its overlays, Simulate, the prefab flows and the view state kept per scene. The
+// page holds them together: it loads the scene, edits it through its edit context and its tools,
+// saves it, follows a change made elsewhere, and says on the page when the scene did not load (and
+// then refuses to save over it). Its bar's Save, Undo and Redo act on this page; its hierarchy is
+// the scene's tree in its left pane, and its inspector shows the selection's components in its
+// right.
 
 module;
 #include "Core/Prelude.h"
@@ -79,8 +79,9 @@ export namespace editor
             EditorIcons* icons = nullptr;
             /// Opens the picker for a request (the inspector's Add Component).
             Function<void(app::PickerRequest request)> pick;
-            /// Opens Create Asset (a title, a suggested name, a group to start; null: the top),
-            /// told the group and the name chosen (the animation panel's New Clip). Null: none.
+            /// Opens Create Asset (with a title, a suggested name, and a group to start in, null
+            /// for the top) and reports the group and the name chosen (the animation panel's New
+            /// Clip). Null: none.
             Function<void(StringView title, StringView suggested, foundation::content::Group* group,
                           Function<void(foundation::content::Group&, StringView)> create)>
                 createAsset;
@@ -101,12 +102,14 @@ export namespace editor
 
         // === EditorPage ===
         [[nodiscard]] Status Save() override;
-        /// The clip its animation panel edits, while unsaved: asked about beside the scene.
+        /// The clip its animation panel edits, while unsaved, so it is asked about beside the
+        /// scene.
         void ListUnsavedBesides(Array<String>& out) const override;
         Status SaveBesides() override;
         void OnSavedAs(foundation::content::Instance& instance) override;
-        /// The asset changed under this page (apply-to-prefab from another page): read again, its
-        /// history gone; unsaved edits are never clobbered, the page warns instead.
+        /// The asset changed under this page (an apply-to-prefab from another page): it is read
+        /// again and its history dropped. Unsaved edits are never clobbered; the page warns
+        /// instead.
         void OnAssetExternallyModified() override;
 
         // === ISceneEditorPage ===
@@ -121,8 +124,8 @@ export namespace editor
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return m_viewport->CameraOwnsInput(); }
         [[nodiscard]] bool MarkersShown() const noexcept override { return m_overlays.settings.showMarkers; }
         void SetMarkersShown(bool shown) override;
-        /// The property animation panel under the viewport (X6 layer 9): a clip of its own, never
-        /// the scene's history or its unsaved mark.
+        /// The property animation panel under the viewport: it edits a clip of its own, never
+        /// touching the scene's history or its unsaved mark.
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return m_animationShown; }
         void SetAnimationPanelShown(bool shown) override;
         void EditAnimationClip(const Guid& clip, const Guid& entity) override;
@@ -172,10 +175,10 @@ export namespace editor
     private:
         void Build(foundation::content::Instance& instance);
         void BuildTools(EditorContext& context);
-        // The viewport tools' frame of input (picking lives in the select tool). Runs every frame so
-        // the active tool follows selections and undo while the mouse is elsewhere (the pointer then
-        // flagged invalid). The page keeps the camera's policy: no buttons and no keyboard for the
-        // tools while the camera has the mouse; Simulate is editing locked.
+        // The viewport tools' frame of input (picking lives in the select tool). Runs every frame
+        // so the active tool follows selections and undo while the mouse is elsewhere (with the
+        // pointer flagged invalid). The page keeps the camera's policy: the tools get no buttons
+        // and no keyboard while the camera has the mouse, and edits are locked during Simulate.
         void UpdateTools(bool viewportActive, f32 deltaSeconds);
         void SaveViewState();
         void RestoreViewState();
@@ -185,8 +188,8 @@ export namespace editor
         void BuildAnimationPanel(EditorContext& context);
         // The page's prompt for the panel's unsaved clip: Save, Discard (as saved) or Cancel.
         void AskAboutClip(Function<void()> proceed);
-        // New Clip: named and placed (Create Asset), opened, given to the entity's animator when it
-        // has none.
+        // New Clip: the clip is named and placed (Create Asset), opened, and given to the entity's
+        // animator when it has none.
         void NewClip();
         void GiveClipToAnimator(const Guid& entity, const Guid& clip);
         template <typename T>
@@ -198,10 +201,10 @@ export namespace editor
         foundation::scene::SceneManager m_sceneManager{Allocator()}; // this page's own scene group
         foundation::messaging::EventBus m_pageEvents; // the page's run scope (edit-mode Simulate)
         String m_title;
-        foundation::scene::Scene* m_scene = nullptr; // the scene manager's
+        foundation::scene::Scene* m_scene = nullptr; // owned by the scene manager
         bool m_loadFailed = false;
         bool m_isPrefab = false;
-        UniquePtr<SceneEditContext> m_editContext; // every edit, as this page's commands
+        UniquePtr<SceneEditContext> m_editContext; // every edit goes through it as this page's commands
         UniquePtr<SceneViewport> m_viewport;
         SceneOverlays m_overlays;
         SceneSimulation m_simulation;
@@ -221,12 +224,12 @@ export namespace editor
         UniquePtr<SceneCameraPreview> m_cameraPreview; // the HUD's bottom end: what a camera sees
         UniquePtr<SceneTools> m_tools; // the viewport tools on the bar, the active one's panel
         UniquePtr<PropertyAnimationPanel> m_animation; // under the viewport (null: no markup)
-        RefPtr<foundation::gui::Node> m_animationPane; // held: out of the splitter while hidden, nothing else holds it
+        RefPtr<foundation::gui::Node> m_animationPane; // held here: while hidden it is out of the splitter
         bool m_animationShown = false;
         u64 m_openClipInterceptor = 0; // takes a clip's open into the panel while on screen
         RefPtr<foundation::gui::MessageBox> m_confirm;
-        // The launcher's picture of the project: the default scene's view, taken once it settled
-        // when there is none yet, and on every save of it.
+        // The launcher's picture of the project: the default scene's view, taken once the scene has
+        // settled when there is no picture yet, and on every save of it.
         bool m_thumbnailChecked = false;
         f32 m_thumbnailWait = 0.0f;
     };

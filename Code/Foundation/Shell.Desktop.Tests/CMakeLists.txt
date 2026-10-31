@@ -19,7 +19,7 @@ target_compile_options(Shell.Desktop.Tests PRIVATE
 add_test(NAME Shell.Desktop.Tests COMMAND Shell.Desktop.Tests)
 
 # Copy SDL3.dll next to the test executable on Windows. Nothing to stage in a static
-# engine build (SDL is a vendored archive there); under ENGINE_SHARED_LIBS SDL is shared -
-# one runtime for this exe AND Shell.Desktop.dll, so the events pushed below reach the
-# shell - and TARGET_RUNTIME_DLLS picks it up.
+# engine build (SDL is a vendored archive there). Under ENGINE_SHARED_LIBS SDL is shared, one
+# runtime for this exe and Shell.Desktop.dll, so the events the tests push reach the shell, and
+# TARGET_RUNTIME_DLLS picks it up.
 util_copy_runtime_deps(Shell.Desktop.Tests)

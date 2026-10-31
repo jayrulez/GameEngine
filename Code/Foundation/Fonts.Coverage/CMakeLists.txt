@@ -1,5 +1,4 @@
 # Foundation::Fonts.Coverage - `foundation.fonts.coverage` (rasterizer-free IFont/IFontAtlas).
-# Ported from Sedulous.Fonts.Baked (deps: Sedulous.Fonts).
 
 util_add_engine_library(Fonts.Coverage ALIAS Foundation::Fonts.Coverage)
 target_link_libraries(Fonts.Coverage PUBLIC Foundation::Core Foundation::Fonts Foundation::Policy)

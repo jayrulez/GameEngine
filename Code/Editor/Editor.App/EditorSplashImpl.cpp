@@ -202,7 +202,7 @@ namespace editor::app
             {
                 const u32 width = static_cast<u32>(static_cast<f32>(EditorSplash::kWidth) * units + 0.5f);
                 const u32 height = static_cast<u32>(static_cast<f32>(EditorSplash::kHeight) * units + 0.5f);
-                // Grown about its middle, so it stays where the shell centred it.
+                // Grow about its middle, so it stays where the shell centred it.
                 window->SetPosition(window->X() - static_cast<i32>(width - window->Width()) / 2,
                                     window->Y() - static_cast<i32>(height - window->Height()) / 2);
                 window->SetSize(width, height);

@@ -1,5 +1,5 @@
-# Foundation::Shell - `foundation.shell` (IShell/IWindow, the raw OS/windowing service - what
-# Sedulous calls the "shell"). Interfaces only; native + null backends implement them.
+# Foundation::Shell - `foundation.shell` (IShell/IWindow, the raw OS and windowing service).
+# Interfaces only; the native and null backends implement them.
 
 util_add_engine_library(Shell ALIAS Foundation::Shell)
 target_link_libraries(Shell PUBLIC Foundation::Core Foundation::Policy)

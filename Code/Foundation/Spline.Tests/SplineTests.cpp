@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // SplineCurve math: knot interpolation, auto handles, arc length, distance param,
-// closest point, closed loops - all headless.
+// closest point and closed loops, all headless.
 
 #include <doctest/doctest.h>
 
@@ -65,7 +65,7 @@ TEST_CASE("spline: auto handles follow the neighbor chord")
     // Middle point: chord (10,0,0)-(0,0,0) = (10,0,0); handles are a sixth of it.
     CHECK(Near(curve.points[1].outHandle, Float3{10.0f / 6.0f, 0, 0}));
     CHECK(Near(curve.points[1].inHandle, Float3{-10.0f / 6.0f, 0, 0}));
-    // Collinear points -> the whole curve stays on the line.
+    // Collinear points: the whole curve stays on the line.
     curve.RebuildArcLength();
     CHECK(curve.Length() == doctest::Approx(10.0f).epsilon(0.001));
 }

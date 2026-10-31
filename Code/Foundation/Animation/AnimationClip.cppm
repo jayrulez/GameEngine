@@ -3,10 +3,9 @@
 
 /// Foundation::Animation - the `:clip` partition.
 ///
-/// Animation data: keyframed tracks (position/rotation/scale per bone) + timed events, grouped into
-/// an AnimationClip. Ported faithfully from Sedulous.Animation.AnimationClip / AnimationTrack /
-/// Keyframe / AnimationEvent. Tracks are heap-owned (UniquePtr) so GetOrCreate*Track pointers stay
-/// valid as more tracks are added (matching the Beef List<AnimationTrack<T>> of references).
+/// Animation data: keyframed tracks (position, rotation and scale per bone) and timed events,
+/// grouped into an AnimationClip. Tracks are heap-owned (UniquePtr) so the pointers
+/// GetOrCreate*Track returns stay valid as more tracks are added.
 
 module;
 #include "Core/Prelude.h"
@@ -51,7 +50,7 @@ export namespace foundation::animation
         }
     };
 
-    // The keyframe interval surrounding a sample time + the interpolation factor.
+    // The keyframe interval surrounding a sample time, and the interpolation factor.
     struct KeyframeLookup
     {
         i32 prev = -1;
@@ -95,7 +94,7 @@ export namespace foundation::animation
             }
         }
 
-        // Find the keyframe interval (prev,next) + factor t for `time`. Clamps to ends.
+        // Find the keyframe interval (prev, next) and the factor t for `time`. Clamps to the ends.
         [[nodiscard]] KeyframeLookup FindKeyframes(f32 time) const
         {
             const i32 count = static_cast<i32>(m_keyframes.Size());
@@ -150,7 +149,7 @@ export namespace foundation::animation
         AnimationEvent(f32 t, StringView n) : time(t), name(n) {}
     };
 
-    // The travel a clip carries for root motion (root-motion.md), baked at cook: the root's position
+    // The travel a clip carries for root motion, baked at cook: the root's position
     // and its turn about +Y at each time, in the space the motion is applied in (model space for a
     // skeleton root or the armature's own channels). Empty when the clip extracts none.
     struct RootMotionCurve
@@ -172,8 +171,8 @@ export namespace foundation::animation
         }
     };
 
-    // All tracks + events for one animation. A resource product (Object) so a cooked AnimationClipSource
-    // can build into it via the resource system.
+    // All tracks and events for one animation. A resource product (Object), so a cooked
+    // AnimationClipSource can build into it via the resource system.
     class AnimationClip : public Object
     {
         RTTI_OBJECT(AnimationClip, Object)
@@ -268,7 +267,7 @@ export namespace foundation::animation
         }
 
         // Fire events crossed in (prevTime, currentTime]. currentTime may exceed Duration when looping.
-        // `handler` is any callable (StringView name, f32 time). Faithful to Sedulous FireEvents.
+        // `handler` is any callable (StringView name, f32 time).
         template <typename Handler>
         void FireEvents(f32 prevTime, f32 currentTime, Handler&& handler) const
         {
@@ -324,7 +323,7 @@ export namespace foundation::animation
             }
         }
 
-        // Duration = latest keyframe time across all tracks.
+        // Sets duration to the latest keyframe time across all tracks.
         void ComputeDuration()
         {
             duration = 0.0f;

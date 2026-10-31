@@ -3,12 +3,12 @@
 
 // Editor::Scene - :bone_name_editor partition.
 //
-// The inspector's bone name (Documentation/Specs/editor-gui.md, 5.6, gap 1): a string with the
-// `boneName` attribute (an IK chain's bones, an aim's) picked from the bones of the animator at or
-// above the entity shown, so a chain is chosen, not typed. "(none)" first, then the bones in the
-// skeleton's order; a name the skeleton does not have stays listed and says so (the component
-// turns itself off for it while the scene runs). With no animator, or its skeleton not loaded, the
-// plain text field. A pick is one write through the grid, so one undo step.
+// The inspector's bone name editor. A string with the `boneName` attribute (an IK chain's bones, an
+// aim's bone) is picked from the bones of the animator at or above the entity shown, so a chain is
+// chosen rather than typed. The list starts with "(none)", then the bones in the skeleton's order.
+// A name the skeleton does not have stays listed, marked "(not in the skeleton)"; the component
+// turns itself off for it while the scene runs. With no animator, or with its skeleton not loaded,
+// the editor is the plain text field. A pick is one write through the grid, so one undo step.
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +36,7 @@ export namespace editor
         static constexpr StringView kHint = u8"boneName";
         static constexpr StringView kNoneText = u8"(none)";
 
-        /// `edit` outlives the editor (the registrar's).
+        /// `edit` belongs to the registrar and outlives the editor.
         explicit BoneNameEditor(SceneEditContext* edit) : m_edit(edit), m_names(MemoryAllocator())
         {
             AddClass(u8"bone-name");
@@ -54,7 +54,7 @@ export namespace editor
             AddChild(m_combo.Get());
             AddChild(m_field.Get());
         }
-        BoneNameEditor() : BoneNameEditor(nullptr) {} // what RTTI makes: the text field alone
+        BoneNameEditor() : BoneNameEditor(nullptr) {} // the form RTTI constructs: the text field only
 
         /// The editor for every `boneName` row `registry` shows, over `edit`'s scene.
         static void Register(foundation::gui::PropertyEditorRegistry& registry, SceneEditContext* edit)

@@ -22,10 +22,10 @@ export namespace foundation::fonts
     class DistanceFieldFonts
     {
     public:
-        // Idempotent AND thread-safe: the font cook calls this per build on job workers, and
-        // a plain null check let two of them each register a baker (the second leaked and the
-        // factory list held both). The initializer runs once and blocks concurrent callers;
-        // Shutdown re-arms it for the next Initialize.
+        // Idempotent and thread-safe: the font cook calls this per build on job workers, and
+        // a plain null check would let two of them each register a baker (the second leaking
+        // and the factory list holding both). The initializer runs once and blocks concurrent
+        // callers; Shutdown re-arms it for the next Initialize.
         static void Initialize()
         {
             static bool armed = false; // set once the baker exists; cleared by Shutdown

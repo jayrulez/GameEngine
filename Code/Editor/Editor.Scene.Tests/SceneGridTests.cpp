@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the scene grid's pure parts: the planes' axes, the spacing stepping a
-// decade at a time with the camera's distance (and the blend across each step), and the reach.
+// Editor::Scene tests: the pure parts of the scene grid. They cover the planes' axes, the spacing
+// that steps a decade at a time with the camera's distance (and the blend across each step), and
+// the grid's reach.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -32,18 +33,18 @@ TEST_CASE("scene grid: each plane's axes are unit, at right angles, and turn int
 
 TEST_CASE("scene grid: the spacing steps a decade at a time, blending across each step")
 {
-    // 10 m up: metre cells, at the start of their decade.
+    // At 10 m up the cells are metres, at the start of their decade.
     editor::GridSpacing s = editor::GridSpacingFor(10.0f);
     CHECK(s.spacing == doctest::Approx(1.0f));
     CHECK(s.blend == doctest::Approx(0.0f).epsilon(1e-4));
-    // Half way (in decades) to 100 m: still metres, half blended toward ten.
+    // Half way (in decades) to 100 m the cells are still metres, half blended toward ten.
     s = editor::GridSpacingFor(31.6228f);
     CHECK(s.spacing == doctest::Approx(1.0f));
     CHECK(s.blend == doctest::Approx(0.5f).epsilon(1e-3));
-    // 100 m up: ten-metre cells; 1 m up: ten-centimetre cells.
+    // At 100 m up the cells are ten metres; at 1 m up they are ten centimetres.
     CHECK(editor::GridSpacingFor(100.0f).spacing == doctest::Approx(10.0f));
     CHECK(editor::GridSpacingFor(1.0f).spacing == doctest::Approx(0.1f));
-    // On the plane, or below it: never finer than a centimetre.
+    // On the plane, or below it, the cells are never finer than a centimetre.
     CHECK(editor::GridSpacingFor(0.0f).spacing == doctest::Approx(0.01f));
     CHECK(editor::GridSpacingFor(-5.0f).spacing == doctest::Approx(0.01f));
 

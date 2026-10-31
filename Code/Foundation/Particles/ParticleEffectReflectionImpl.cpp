@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Particles - effect-graph reflection (out of the interface: GCC module hygiene keeps
-// REFLECT_MEMBERS bodies in an impl unit). Reflects the value types that make up an authored effect
+// Particles - effect-graph reflection (REFLECT_MEMBERS bodies live in an implementation unit,
+// out of the module interface). Reflects the value types that make up an authored effect
 // so tooling and scripting can traverse it end to end:
 //
 //     ParticleEffectAsset --Nested--> ParticleEffect
@@ -31,7 +31,7 @@ using namespace foundation::core;
 
 namespace foundation::particles
 {
-    // A system's modes, so a row names them (they were reflected as bare values, no row could).
+    // A system's modes, so a row names them.
     REFLECT_ENUM(SimulationMode, "rtti::particles")
     {
         builder.Value("CPU", SimulationMode::CPU);
@@ -159,7 +159,7 @@ namespace foundation::particles
             .Property<&FlipbookSettings::startFrame>("startFrame");
     }
 
-    // Member hook: has private access to m_initializers / m_behaviors.
+    // Member hook: has private access to m_initializers and m_behaviors.
     // Every authored field, each row where it does something (`visibleWhen` of the render mode's
     // raw value: 0 to 3 the billboards, 4 a mesh, 5 a trail, 6 a light): a texture for the
     // billboards and the trail, a flipbook for the billboards, a mesh and its materials for a mesh.
@@ -260,9 +260,10 @@ namespace foundation::particles
         // containers already registered by RegisterParticleModuleReflection().
         RegisterUniquePtrArrayType<ParticleSystem>();
         // Publish the effect-graph value types to the global type registry so the script harvest sees
-        // them: a facade returning a ParticleEffect / ParticleSystem handle makes the reachability
-        // closure emit the whole graph (systems -> modules -> ranges/curves) as scriptable surface.
-        // Inert until such a facade exists (no constructor -> never a script-emit seed on its own).
+        // them: a facade returning a ParticleEffect or ParticleSystem handle makes the reachability
+        // closure emit the whole graph (systems, then modules, then ranges and curves) to scripts.
+        // Without such a facade it has no effect: with no constructor, a type is never an emission seed
+        // on its own.
         GlobalTypeRegistry().Register(TypeOf<ParticleEmitter>());
         GlobalTypeRegistry().Register(TypeOf<ParticleSystem>());
         GlobalTypeRegistry().Register(TypeOf<ParticleEffect>());

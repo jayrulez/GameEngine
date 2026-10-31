@@ -1,5 +1,5 @@
 # Foundation::Terrain.Resource - `foundation.terrain.resource`: the cooked terrain resource (a bundle
-# of references - heightfield + splatmap + per-layer albedo - resolved through the manager). What
+# of references to a heightfield, a splatmap and per-layer albedo, resolved through the manager). What
 # Ref<Terrain> resolves to for the TerrainComponent.
 util_add_engine_library(Terrain.Resource ALIAS Foundation::Terrain.Resource)
 target_link_libraries(Terrain.Resource

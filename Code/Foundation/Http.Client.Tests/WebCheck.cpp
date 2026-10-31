@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Http.Client.WebCheck - the browser HTTP client checked by hand (Documentation/Specs/tls-http-wss.md,
-// P3): a wasm build runs no tests, so this page sends a few requests through the fetch backend and
-// prints what came back. Serve its folder (python3 -m http.server) and open the page:
+// Http.Client.WebCheck - the browser HTTP client checked by hand: a wasm build runs no tests, so
+// this page sends a few requests through the fetch backend and prints what came back. Serve its
+// folder (python3 -m http.server) and open the page:
 //   1. this page itself: 200, its body's size and Content-Type
 //   2. a file that is not there: 404 (a response, not an error)
 //   3. a POST to the page: the server's answer (python's http.server says 501)

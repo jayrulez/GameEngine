@@ -220,8 +220,6 @@ namespace editor
         return out;
     }
 
-    /// The entity as the agent sees it: identity, hierarchy, transform, and every
-    /// component the scene holds for it with its reflected properties.
     namespace
     {
         JsonValue ScriptValueJson(const foundation::script::ScriptPropertyValue& value)
@@ -327,6 +325,8 @@ namespace editor
         return false;
     }
 
+    /// The entity as the agent sees it: identity, hierarchy, transform, and every component the
+    /// scene holds for it with its reflected properties.
     JsonValue EntityJson(scene::Scene& scene, scene::EntityHandle handle,
                          foundation::resource::ResourceManager* resources)
     {

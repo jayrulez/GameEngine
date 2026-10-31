@@ -13,13 +13,13 @@ import foundation.core;
 
 using namespace foundation::core;
 
-// Web has no dynamic linking (dlopen'd sidecars are a DESKTOP concept - web ships
+// Web has no dynamic linking (dlopen'd sidecars exist only on desktop; web ships
 // everything linked in), so the plugin-loading cases sit out; the missing-file
 // error path still runs everywhere.
 #if !PLATFORM_WEB
 
 // The plugin path is injected as a narrow build-system literal; the library API
-// is now UTF-8, so wrap in a StringView directly.
+// is UTF-8, so wrap it in a StringView directly.
 static StringView PluginPath()
 {
     return StringView{reinterpret_cast<const utf8char*>(TEST_PLUGIN_PATH)};

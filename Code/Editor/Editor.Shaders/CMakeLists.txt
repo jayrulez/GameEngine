@@ -1,4 +1,4 @@
-# Editor::Shaders - `editor.shaders`: the custom shader's page on the GUI's code pages. Editor exe
+# Editor::Shaders - `editor.shaders`: the custom shader page, built on the code pages. Editor exe
 # only; the cook (Pipeline::Shaders) stays UI-free.
 util_add_engine_library(Editor.Shaders ALIAS Editor::Shaders)
 target_link_libraries(Editor.Shaders PUBLIC

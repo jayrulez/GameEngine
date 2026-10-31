@@ -3,19 +3,19 @@
 
 // Editor::Project - :project partition.
 //
-// The project model: a project is a
-// self-contained directory with a fixed layout + an XML manifest:
+// The project model: a project is a self-contained directory with a fixed layout and an XML
+// manifest:
 //
-//   <root>/Project.xml   shared manifest (committed) - ProjectSettings via the XML serializer
-//   <root>/Content/      SOURCE content DB (XML factory, .xasset) - authored, committed
-//   <root>/Sources/      raw import sources (.fbx/.png/...) referenced by Asset::fileName
-//                        (mounted as AssetBuildContext.sources at cook time) - committed
-//   <root>/Cooked/       cooked content DB (binary factory, .rasset) - generated, gitignored
-//   <root>/Editor/       per-user editor state (dock layout, open pages) - gitignored
-//   <root>/.cache/       thumbnails + incremental-cook hash db - gitignored
+//   <root>/Project.xml   shared manifest (committed): ProjectSettings through the XML serializer
+//   <root>/Content/      source content DB (XML factory, .xasset): authored, committed
+//   <root>/Sources/      raw import sources (.fbx, .png, ...) referenced by Asset::fileName
+//                        (mounted as AssetBuildContext.sources at cook time): committed
+//   <root>/Cooked/       cooked content DB (binary factory, .rasset): generated, gitignored
+//   <root>/Editor/       per-user editor state (dock layout, open pages): gitignored
+//   <root>/.cache/       thumbnails and the incremental-cook hash DB: gitignored
 //
-// EditorProject::Open mounts Content/ + Cooked/ and opens both ContentDatabases (Traktor's
-// source-db / output-db split). The manifest reserves `nativeModule` for an optional
+// EditorProject::Open mounts Content/ and Cooked/ and opens both ContentDatabases, keeping source
+// and output in separate databases. The manifest reserves `nativeModule` for an optional
 // per-project native game module.
 
 module;
@@ -39,8 +39,8 @@ namespace vfs = foundation::vfs;
 
 export namespace editor
 {
-    // The manifest payload + directory layout live in engine.project (runtime-side,
-    // editor-free - the player/dist builds read the same manifest without editor code).
+    // The manifest payload and directory layout live in engine.project, on the runtime side with
+    // no editor code, so the player and dist builds read the same manifest without the editor.
     using engine::project::kCookedAssetExtension;
     using engine::project::kEngineVersionString;
     using engine::project::kProjectCacheDir;
@@ -60,14 +60,14 @@ export namespace editor
     using engine::project::kSourceAssetExtension;
     using engine::project::ProjectSettings;
 
-    // An opened project: the manifest + the mounted source and cooked content databases.
+    // An opened project: the manifest and the mounted source and cooked content databases.
     class EditorProject
     {
     public:
         EditorProject(const EditorProject&) = delete;
         EditorProject& operator=(const EditorProject&) = delete;
 
-        // Scaffold a new project at `directory` (created if absent; its PARENT must exist):
+        // Scaffolds a new project at `directory` (created if absent; its parent must exist):
         // writes the manifest and creates the fixed subdirectories. Fails with AlreadyExists
         // if a manifest is already present.
         [[nodiscard]] static Status Create(IAllocator& allocator, StringView directory,
@@ -98,8 +98,8 @@ export namespace editor
             return WriteManifest(root, settings);
         }
 
-        // Open an existing project: read the manifest, ensure the fixed subdirectories exist,
-        // mount Content/ + Cooked/, and scan both content databases.
+        // Opens an existing project: reads the manifest, ensures the fixed subdirectories exist,
+        // mounts Content/ and Cooked/, and scans both content databases.
         [[nodiscard]] static UniquePtr<EditorProject> Open(IAllocator& allocator,
                                                            StringView directory)
         {
@@ -107,8 +107,8 @@ export namespace editor
             ProjectSettings settings;
             if (!engine::project::LoadProjectSettings(root, settings).IsOk())
             {
-                // A present-but-unreadable manifest is an ERROR the user must see (the app
-                // shell only reflects failure in the status bar); absent = the scaffold path.
+                // A manifest that is present but unreadable is an error the user must see (the app
+                // shell only reflects failure in the status bar); an absent one is the scaffold path.
                 if (root.Exists(kProjectManifestFile))
                 {
                     LOG_ERROR(u8"Project",
@@ -119,8 +119,8 @@ export namespace editor
                 return UniquePtr<EditorProject>{};
             }
 
-            // Generated dirs may be missing on a fresh checkout (Cooked/Editor/.cache are
-            // gitignored) - recreate them so mounts and state saves always have a target.
+            // Generated directories may be missing on a fresh checkout (Cooked/, Editor/ and .cache/
+            // are gitignored); recreate them so mounts and state saves always have a target.
             const StringView dirs[] = {kProjectContentDir, kProjectSourcesDir, kProjectCookedDir,
                                        kProjectEditorDir, kProjectCacheDir};
             for (StringView dir : dirs)
@@ -134,8 +134,8 @@ export namespace editor
             if (!settings.engineVersion.IsEmpty() &&
                 settings.engineVersion != engine::project::kEngineVersionString)
             {
-                // Today: informational. The launcher/project-manager (planned) routes projects
-                // to their engine version and drives migration on upgrade.
+                // Informational only here; the project manager's open gate
+                // (ProjectManager::DecideOpen) is where the user is asked before an upgrade.
                 LOG_WARNING(
                     u8"Project", u8"project was last saved by engine {} (this editor is {})",
                     settings.engineVersion, engine::project::kEngineVersionString);
@@ -149,12 +149,12 @@ export namespace editor
         [[nodiscard]] ProjectSettings& Settings() noexcept { return m_settings; }
         [[nodiscard]] const ProjectSettings& Settings() const noexcept { return m_settings; }
 
-        /// The authored source database (XML envelopes) - what the editor edits.
+        /// The authored source database (XML envelopes), which the editor edits.
         [[nodiscard]] foundation::content::ContentDatabase& SourceDb() noexcept
         {
             return *m_sourceDb;
         }
-        /// The cooked output database (binary envelopes) - what the runtime loads.
+        /// The cooked output database (binary envelopes), which the runtime loads.
         [[nodiscard]] foundation::content::ContentDatabase& CookedDb() noexcept
         {
             return *m_cookedDb;
@@ -176,7 +176,7 @@ export namespace editor
             return PathJoin(m_directory.AsView(), kProjectCacheDir);
         }
 
-        // Persist the manifest (settings changed in the editor).
+        // Saves the manifest (settings changed in the editor).
         [[nodiscard]] Status SaveSettings()
         {
             vfs::NativeFileSystem root(m_directory.AsView(), *m_allocator);
@@ -184,12 +184,12 @@ export namespace editor
         }
 
         /// The project's explicit "Always Export" roots (export_roots.xml). Loaded on Open; the
-        /// export driver seeds these as Flag/Group roots.
+        /// export driver seeds these as Flag and Group roots.
         [[nodiscard]] ExportRootsSet& ExportRoots() noexcept { return m_exportRoots; }
         [[nodiscard]] const ExportRootsSet& ExportRoots() const noexcept { return m_exportRoots; }
 
-        // Persist the export roots to <project>/export_roots.xml (the editor calls this after a
-        // right-click "Always Export" toggle mutates the set).
+        // Saves the export roots to <project>/export_roots.xml (the editor calls this after a
+        // right-click "Always Export" toggle changes the set).
         [[nodiscard]] Status SaveExportRoots()
         {
             vfs::NativeFileSystem root(m_directory.AsView(), *m_allocator);
@@ -218,15 +218,15 @@ export namespace editor
                   (*m_allocator), (*m_allocator), *m_cookedMount,
                   BinarySerializerFactory(), kCookedAssetExtension))
         {
-            // The manifest's one copy (ISerializable deletes copy/move): through its Serialize
-            // body, so no field can be left behind. A hand list here dropped the input map, the
-            // bus layout, then the loading document and the MSAA, each in turn.
+            // The manifest's one copy (ISerializable deletes copy and move) goes through its
+            // Serialize body, so no field can be left behind.
             (void)engine::project::CopyProjectSettings(settings, m_settings);
 
-            // The "Always Export" set is a separate committed sidecar (export_roots.xml). Absent =
-            // no explicit roots (the empty set), which is the common case; only a project that has
-            // flagged assets carries the file. A present-but-unreadable file leaves the set empty
-            // (never blocks Open) - the export then over-includes (safe), never mis-prunes.
+            // The "Always Export" set is a separate committed sidecar (export_roots.xml). Absent
+            // means no explicit roots (the empty set), the common case; only a project that has
+            // flagged assets carries the file. A file that is present but unreadable leaves the set
+            // empty and never blocks Open; the export then includes too much, which is safe, rather
+            // than pruning wrongly.
             {
                 vfs::NativeFileSystem root(directory, (*m_allocator));
                 (void)LoadExportRoots(root, m_exportRoots);
@@ -242,8 +242,8 @@ export namespace editor
             {
                 return Status{ErrorCode::NotSupported};
             }
-            // One manifest format: the lean lib's helpers (versioned payload included) - the
-            // player reads the same file with zero editor code.
+            // One manifest format through engine.project's helpers (versioned payload included),
+            // so the player reads the same file with no editor code.
             return engine::project::SaveProjectSettings(*writable, settings);
         }
         IAllocator* m_allocator;
@@ -257,27 +257,27 @@ export namespace editor
         UniquePtr<foundation::content::ContentDatabase> m_cookedDb;
     };
 
-    // --- Native-code scaffolding (game-native-code.md N4) --------------------------------
+    // --- Native-code scaffolding --------------------------------
 
-    // A CMake-safe target name from the project name ("My Game 2!" -> "MyGame2";
-    // "Native" fallback when nothing survives).
+    // A CMake-safe target name from the project name ("My Game 2!" gives "MyGame2"; "Native" when
+    // nothing survives).
     [[nodiscard]] String NativeTargetNameFromProjectName(StringView projectName);
 
-    // "Add Native Code": generate <project>/Native (CMakeLists + <Target>Plugin.cpp -
-    // the NativeSample reference shape, parameterized), point the manifest's
-    // nativeModule at the platform's dev-module path (Native/<Target>.dll on Windows,
-    // Native/lib<Target>.so elsewhere - it is what gets loaded), and save it.
-    // Fails with AlreadyExists
-    // when the project already declares a module or Native/ exists - never overwrites
-    // user code. Defined in ProjectScaffoldImpl.cpp.
+    // "Add Native Code": generates <project>/Native (CMakeLists and <Target>Plugin.cpp, the
+    // NativeSample shape with the target's name filled in), points the manifest's nativeModule at
+    // the platform's dev-module path (Native/<Target>.dll on Windows, Native/lib<Target>.so
+    // elsewhere; that is what gets loaded), and saves it. Fails with AlreadyExists when the project
+    // already declares a module or Native/ exists, so it never overwrites user code. Defined in
+    // ProjectScaffoldImpl.cpp.
     [[nodiscard]] Status ScaffoldNativeModule(EditorProject& project);
 
     // The starter content a new project is seeded with, whether made by the editor's New Project
     // or the MCP project_create: Roboto as a distance-field font set as the manifest's default UI
-    // font (what a shipped game's text draws with), a 1K Poly Haven sky (CC0) as the default sky, and the cube,
-    // sphere and plane primitives (every primitive with `allPrimitives`) through `creators`.
-    // Payload files come from `dataRoot`'s Assets/. The caller saves the settings and the source
-    // database. Defined in ProjectSeedImpl.cpp.
+    // font (what a shipped game's text draws with), a 1K Poly Haven sky (CC0) as the default sky,
+    // and the cube, sphere and plane primitives (every primitive with `allPrimitives`) through
+    // `creators`. Payload files come from `dataRoot` (the font under Engine/, the sky under
+    // Templates/). The caller saves the settings and the source database. Defined in
+    // ProjectSeedImpl.cpp.
     void SeedStarterContent(IAllocator& allocator, EditorProject& project,
                             const pipeline::AssetCreatorRegistry& creators, StringView dataRoot,
                             bool allPrimitives = false);

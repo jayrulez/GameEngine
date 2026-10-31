@@ -3,11 +3,12 @@
 
 // Editor App - :group_picker_dialog partition
 //
-// The group picker (Documentation/Specs/editor-gui.md, 5.2, layer 5): the picker over the
-// project's groups, where an import or a new asset goes. The groups are a tree: each a row by its
-// name, indented under what holds it, in the tree's order (a group, then what is under it), the top
-// one "Content"; the current group is checked and lit, and the search finds a group by its name,
-// keeping the groups above it so two of one name read apart. Its key is the group's place: "Content", or "Content/" and its path.
+// The group picker: the picker over the project's groups, used to choose where an import or a new
+// asset goes. The groups form a tree: each is a row with its name, indented under its parent, in
+// tree order (a group, then what is under it), with the top one shown as "Content". The current
+// group is checked and highlighted. The search finds a group by name and keeps the groups above
+// it, so two groups with the same name can be told apart. A group's key is its place: "Content",
+// or "Content/" followed by its path.
 module;
 #include "Core/Prelude.h"
 
@@ -27,7 +28,7 @@ export namespace editor::app
     {
         static constexpr StringView kTop = u8"Content";
 
-        /// The picker's request over `sources`' groups, `current` checked.
+        /// The picker's request over `sources`' groups, with `current` checked.
         [[nodiscard]] static PickerRequest Request(foundation::content::ContentDatabase& sources, const foundation::content::Group* current)
         {
             PickerRequest request;
@@ -40,12 +41,12 @@ export namespace editor::app
             return request;
         }
 
-        /// A group's key: where it is, from the top.
+        /// A group's key: its place, from the top.
         [[nodiscard]] static String KeyOf(const foundation::content::Group& group)
         {
             return group.Parent() == nullptr ? String(kTop) : Format(u8"{}/{}", kTop, group.Path());
         }
-        /// How a group is named to the user: "Content", or its path.
+        /// How a group is named in the UI: "Content", or its path.
         [[nodiscard]] static String ShownName(const foundation::content::Group& group)
         {
             return group.Parent() == nullptr ? String(kTop) : group.Path();

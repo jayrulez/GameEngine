@@ -1,4 +1,4 @@
-# Foundation::GUI fuzz targets (E10 of Specs/gui-lab-evolution-2.md): in ctest, every seed and a
+# Foundation::GUI fuzz targets: in ctest, every seed and a
 # seeded run of mutations through each target; with OPTION_GUI_LIBFUZZER under clang, a libFuzzer
 # executable per target for long runs.
 add_executable(GUI.Fuzz.Tests

@@ -1,5 +1,5 @@
 # Foundation::Vegetation.Resource unit tests (doctest; the mask raster, its brush cores and the
-# cooked source round trip - no GPU).
+# cooked source round trip; no GPU).
 
 add_executable(Vegetation.Resource.Tests TestsMain.cpp VegetationMaskTests.cpp)
 target_link_libraries(Vegetation.Resource.Tests PRIVATE Foundation::Vegetation.Resource

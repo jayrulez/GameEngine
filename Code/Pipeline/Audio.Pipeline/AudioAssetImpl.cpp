@@ -3,11 +3,10 @@
 
 // Pipeline::Audio - reflection implementation unit: AudioClipAsset's reflected surface.
 //
-// Kept OUT of the AudioAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster;
-// see gcc-module-interface-hygiene). The class declares identity via RTTI_OBJECT in the
-// interface; this unit defines AudioClipAsset::StaticType() WITH properties + tooling attributes.
-// No enums here, so no registrar is needed - the type reflection rides StaticType(), registered by
-// the existing RegisterAudioAssets().
+// Kept out of the AudioAsset.cppm interface, because REFLECT_MEMBERS bodies there make GCC emit a
+// gcm cluster. The classes declare identity with RTTI_OBJECT in the interface; this unit defines
+// their StaticType() with properties and tooling attributes. There are no enums, so no registrar
+// is needed: the reflection comes with StaticType(), registered by RegisterAudioAssets().
 
 module;
 #include "Core/Prelude.h"

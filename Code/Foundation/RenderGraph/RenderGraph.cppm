@@ -7,9 +7,8 @@
 // graph builds dependencies, culls unused work, topologically sorts, allocates
 // transient resources (from a pool that reuses textures across frames; two
 // transients in one frame never share memory), inserts barriers (via BarrierSolver), and runs
-// the pass callbacks into a command encoder. Ported from Sedulous.RenderGraph
-// (RenderGraph.bf). Compile() works without an encoder so graph logic is
-// testable headless.
+// the pass callbacks into a command encoder. Compile() works without an encoder so graph logic
+// is testable headless.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +40,7 @@ export namespace foundation::rendergraph
     class RenderGraph
     {
     public:
-        // The allocator (required - the owner decides) backs passes, resources,
+        // The allocator (required; the owner decides) backs passes, resources,
         // the transient texture pool, and the GPU profiler.
         RenderGraph(IAllocator& allocator, rhi::Device* device, RenderGraphConfig config = {})
             : m_allocator(&allocator), m_device(device), m_config(config)
@@ -180,7 +179,7 @@ export namespace foundation::rendergraph
                     continue;
                 }
 
-                // A pass's CPU cost (barriers + record/execute, incl. any bundle build/wait) as a
+                // A pass's CPU cost (barriers and record/execute, including any bundle build/wait) as a
                 // scope under its name: the graph's execute is often CPU-bound while the GPU is idle.
 #if BUILD_PROFILING
                 bool passScope = false;
@@ -410,8 +409,8 @@ export namespace foundation::rendergraph
         }
 
         // A stable id for the GPU texture currently backing `handle`. For a transient it changes when
-        // the graph (re)allocates a different physical texture (e.g. on resize) - even if the new view
-        // happens to reuse a freed address. A bind-group cache over GetTextureView MUST also key on
+        // the graph (re)allocates a different physical texture (e.g. on resize), even if the new view
+        // happens to reuse a freed address. A bind-group cache over GetTextureView must also key on
         // this to stay correct across resizes. 0 when unresolved.
         [[nodiscard]] u64 GetTextureGeneration(RGHandle handle)
         {
@@ -569,7 +568,7 @@ export namespace foundation::rendergraph
             deletions.Clear();
         }
 
-        // Validate a handle (bounds + generation); null on mismatch.
+        // Validate a handle (bounds and generation); null on mismatch.
         [[nodiscard]] RenderGraphResource* ResolveChecked(RGHandle handle)
         {
             if (!handle.IsValid() || handle.index >= m_resources.Size())
@@ -583,7 +582,7 @@ export namespace foundation::rendergraph
             }
             return res;
         }
-        // Validate a handle (bounds only; ignores generation) - for mutators.
+        // Validate a handle (bounds only; ignores generation), for mutators.
         [[nodiscard]] RenderGraphResource* Resolve(RGHandle handle)
         {
             if (!handle.IsValid() || handle.index >= m_resources.Size())
@@ -950,9 +949,10 @@ export namespace foundation::rendergraph
 
         void AllocateTransientResources()
         {
-            // Tally transient texture allocations this frame so a failure (GPU out of memory / too many
-            // allocations) surfaces with graph context: how many were freshly allocated vs served from
-            // the pool, and the first resource + size that failed. See the per-frame warning below.
+            // Tally transient texture allocations this frame so a failure (GPU out of memory, too many
+            // allocations) surfaces with graph context: how many were freshly allocated and how many
+            // served from the pool, and the first resource and size that failed. See the per-frame
+            // warning below.
             u32 freshAllocs = 0, allocFails = 0, poolHits = 0;
             StringView firstFailName;
             u32 firstFailW = 0, firstFailH = 0;
@@ -1005,7 +1005,7 @@ export namespace foundation::rendergraph
                             }
                         }
                         res->textureGeneration =
-                            ++m_nextTransientGeneration; // freshly created -> new id
+                            ++m_nextTransientGeneration; // freshly created: a new id
                     }
                 }
                 else if (res->resourceType == RGResourceType::Buffer && m_device != nullptr)
@@ -1015,8 +1015,8 @@ export namespace foundation::rendergraph
             }
 
             // One warning per frame that had any transient-texture allocation failure (GPU resource
-            // exhaustion). `fresh` = new allocations attempted this frame (pool misses), `poolHit` =
-            // reused from the transient pool. Sustained firing indicates a GPU-memory leak somewhere.
+            // exhaustion). `fresh` counts new allocations attempted this frame (pool misses), `poolHit`
+            // those reused from the transient pool. Sustained firing indicates a GPU-memory leak.
             if (allocFails > 0)
             {
                 LOG_WARNING(
@@ -1038,10 +1038,10 @@ export namespace foundation::rendergraph
 
                 if (res->resourceType == RGResourceType::Texture && res->texture != nullptr)
                 {
-                    // Only pool a fully-valid texture. A texture with a NULL view (a partial/failed
+                    // Only pool a fully valid texture. A texture with a null view (a partial or failed
                     // allocation) must never re-enter the pool: a later TryAcquire would hand it back and
                     // ExecuteRenderPass would drop that attachment, desyncing the render-pass signature
-                    // from the pipelines/bundles - permanently, keyed by size. Destroy it instead.
+                    // from the pipelines and bundles permanently, keyed by size. Destroy it instead.
                     if (m_texturePool.Get() != nullptr && res->textureView != nullptr)
                     {
                         const rhi::TextureDesc rhiDesc =
@@ -1110,9 +1110,9 @@ export namespace foundation::rendergraph
         }
 
         // The full-target render area for a pass, from an attachment's resolved dimensions (the
-        // transient desc, else the backing texture). Used to set the parent pass's viewport +
-        // scissor before ExecuteBundles: render bundles INHERIT viewport/scissor from the parent
-        // pass (WebGPU + DX12 bundles cannot set them), so the parent must. Returns false if no
+        // transient desc, else the backing texture). Used to set the parent pass's viewport and
+        // scissor before ExecuteBundles: render bundles inherit viewport/scissor from the parent
+        // pass (WebGPU and DX12 bundles cannot set them), so the parent must. Returns false if no
         // attachment yields dimensions.
         [[nodiscard]] bool PassRenderArea(RenderGraphPass& pass, u32& outW, u32& outH)
         {
@@ -1164,12 +1164,13 @@ export namespace foundation::rendergraph
                 return;
             }
 
-            // If any DECLARED color/depth attachment failed to resolve to a view (a transient
-            // allocation failure during a rapid viewport resize, or an unready imported target), SKIP
-            // the whole pass. Beginning it with only the surviving attachments would shift/reduce the
-            // color-attachment count and formats away from the fixed signature the pipelines and
-            // secondary bundles were recorded for - the vkCmdExecuteCommands / colorAttachmentCount /
-            // renderArea-zero validation cascade and corrupt output. Better to drop one frame's pass.
+            // If any declared color/depth attachment failed to resolve to a view (a transient
+            // allocation failure during a rapid viewport resize, or an unready imported target), skip
+            // the whole pass. Beginning it with only the surviving attachments would shift or reduce
+            // the color-attachment count and formats away from the fixed signature the pipelines and
+            // secondary bundles were recorded for, causing validation errors (vkCmdExecuteCommands,
+            // colorAttachmentCount, a zero renderArea) and corrupt output. Dropping one frame's pass
+            // is better.
             for (const RGColorTarget& ct : pass.colorTargets)
             {
                 if (GetTextureView(ct.handle) == nullptr)
@@ -1183,8 +1184,8 @@ export namespace foundation::rendergraph
                 return;
             }
 
-            // A bundle pass records its bundles NOW (encoder in recording state, before the pass
-            // begins); the graph then begins with secondary contents + replays them. Done before
+            // A bundle pass records its bundles now (encoder in recording state, before the pass
+            // begins); the graph then begins with secondary contents and replays them. Done before
             // building the pass desc so the encoder is still recording.
             Array<rhi::RenderBundle*> bundles;
             if (hasBundles)
@@ -1262,8 +1263,8 @@ export namespace foundation::rendergraph
 
             rhi::RenderPassEncoder* rp = encoder.BeginRenderPass(rpDesc);
             // Viewport/scissor: a per-pass override (split-screen sub-rect) if set, else the full
-            // attachment. Set here for bundle passes (bundles inherit it from the parent - WebGPU/
-            // DX12 can't set it inside a bundle); a plain execute callback may also rely on it.
+            // attachment. Set here for bundle passes (bundles inherit it from the parent, since
+            // WebGPU and DX12 cannot set it inside a bundle); a plain execute callback may rely on it.
             i32 vpX = 0, vpY = 0;
             u32 vpW = 0, vpH = 0;
             if (pass.hasViewport)
@@ -1327,7 +1328,7 @@ export namespace foundation::rendergraph
         Array<i32> m_executionOrder;
         Array<i32> m_finalAfter; // per resource: the execution position it takes its final state after
         bool m_isCompiled = false;
-        // The profiler's half in the graph (Specs/profiler.md): made the first frame the
+        // The profiler's half in the graph: made the first frame the
         // profiler is armed, where the device has timestamps.
         UniquePtr<GraphProfiler> m_gpuProfiler;
         bool m_gpuProfilerUnavailable = false;

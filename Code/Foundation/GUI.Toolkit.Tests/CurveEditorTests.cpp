@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the property grid's curve and gradient editors (T5 of Specs/gui-lab-evolution-3.md): a
-// row's preview (hatched when mixed) opens the full view as a popup; every edit in it previews on the
-// objects, the edit begun at the first; closing it commits once, Escape gives the whole of it up; a
-// read-only row opens nothing. The grid chooses them by kind.
+// GUI.Toolkit - the property grid's curve and gradient editors. A row's preview (hatched when
+// mixed) opens the full view as a popup. Every edit in the popup previews on the objects, and the
+// first one begins the property edit. Closing the popup commits once, and Escape cancels the whole
+// edit. A read-only row opens nothing. The grid chooses these editors by kind.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -129,14 +129,14 @@ TEST_CASE("curve editors: a curve's preview opens its view; its edits preview, c
     CHECK(editor->GetTimeAxis()->Duration() == doctest::Approx(1.0f));
     REQUIRE(editor->GetView()->GetSource()->GetKeys(0).Size() == 2);
 
-    // Two edits in the view: begun once, previewed each.
+    // Two edits in the view: the edit begins once, and each is previewed.
     REQUIRE(editor->GetView()->InsertKey(0, 0.5f));
     REQUIRE(editor->GetView()->InsertKey(0, 0.25f));
     REQUIRE(bed.host.calls.Size() == 3);
     CHECK(bed.host.calls[0] == core::String(u8"begin p"));
     CHECK(bed.host.calls[1] == core::String(u8"preview p=3 keys"));
     CHECK(bed.host.Last() == SV(u8"preview p=4 keys"));
-    CHECK(editor->GetPreview()->GetValue().AsCurve().Size() == 4); // the row shows it as it goes
+    CHECK(editor->GetPreview()->GetValue().AsCurve().Size() == 4); // the row shows the curve as it changes
 
     bed.D().ClosePopup(*editor->GetView()->GetParent());
     CHECK(bed.host.Last() == SV(u8"commit p=4 keys"));
@@ -157,7 +157,7 @@ TEST_CASE("curve editors: Escape gives the whole of an open view up; closing it 
     bed.host.calls.Clear();
     bed.Click(*editor->GetPreview());
     REQUIRE(editor->IsViewOpen());
-    CHECK(editor->GetView()->GetSource()->GetKeys(0).Size() == 2); // the value bound, not the given-up edit
+    CHECK(editor->GetView()->GetSource()->GetKeys(0).Size() == 2); // the bound value, not the cancelled edit
     bed.D().ClosePopup(*editor->GetView()->GetParent());
     CHECK(bed.host.calls.IsEmpty());
 }
@@ -185,7 +185,7 @@ TEST_CASE("curve editors: a gradient's bar opens its view; its edits preview, cl
     REQUIRE(editor->IsViewOpen());
     CHECK(bed.host.calls.IsEmpty());
     REQUIRE(editor->GetView()->AddStop(false, 0.5f));
-    CHECK_FALSE(editor->GetView()->AddStop(false, 0.25f)); // its most: three
+    CHECK_FALSE(editor->GetView()->AddStop(false, 0.25f)); // the limit is three stops
     REQUIRE(bed.host.calls.Size() == 2);
     CHECK(bed.host.calls[0] == core::String(u8"begin p"));
     CHECK(bed.host.Last() == SV(u8"preview p=3 colours, 1 alphas"));
@@ -208,7 +208,7 @@ TEST_CASE("curve editors: a row's curve stays in its box, a steep tangent's over
     keys[0] = core::CurveKey{0.0f, 0.0f, 0.0f, 40.0f, core::CurveKeyInterpolation::Cubic, core::CurveTangentMode::Broken};
     keys[1] = core::CurveKey{1.0f, 1.0f, -40.0f, 0.0f, core::CurveKeyInterpolation::Cubic, core::CurveTangentMode::Broken};
     PropertyInfo info = Info(PropertyKind::Curve);
-    info.HasRange = true; // a range the curve leaves by far
+    info.HasRange = true; // a range the curve goes far outside
     info.Min = 0.0;
     info.Max = 1.0;
     PropertyValue value;
@@ -217,7 +217,7 @@ TEST_CASE("curve editors: a row's curve stays in its box, a steep tangent's over
     const Rect box = editor->GetPreview()->GetScreenBounds();
     REQUIRE(box.width > 0.0f);
 
-    // The preview alone: what it draws, less what a clip cuts away, spans no more than its box.
+    // Draw the preview alone: what it draws, minus what a clip cuts away, stays inside its box.
     foundation::vg::VGContext vg;
     DrawContext ctx{vg};
     editor->GetPreview()->Draw(ctx);

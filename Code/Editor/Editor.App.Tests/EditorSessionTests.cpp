@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The editor session's close: the views' state written once, while they are up, and kept as they
-// close (a page saving its own state as it goes must not write the open pages again, the last one
-// leaving none to reopen: the user's report, a project closed with a scene open opening with none).
+// Closing the editor session: the views' state is written once, while the views are still up, and
+// kept as they close. A page that saves its own state as it closes must not cause the open pages to
+// be written again, or the last page to close would leave none to reopen, and a project closed with
+// a scene open would reopen with none.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -41,7 +42,7 @@ TEST_CASE("editor session: a project closed with a page open writes that page; a
     services.jobs = &jobs;
     services.builders = &builders;
     services.thumbnails = &thumbnails;
-    // The views' state: the page while it is up, none once it closed.
+    // The views' state: the page while it is up, and nothing once it has closed.
     services.captureState = [&](foundation::settings::Settings& store)
     {
         Array<Guid> pages;

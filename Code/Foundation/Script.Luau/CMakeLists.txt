@@ -1,7 +1,7 @@
 # Foundation::Script.Luau - the Luau VM backend for Foundation::Script.
 #
-# Builds the C++-module backend over the vendored Luau interpreter + compiler
-# (ThirdParty::Luau - full-tree vendor, interpreter-only targets, LUA_USE_LONGJMP=1
+# Builds the C++-module backend over the vendored Luau interpreter and compiler
+# (ThirdParty::Luau: the full tree vendored, interpreter-only targets, LUA_USE_LONGJMP=1
 # for the -fno-exceptions engine). Consumers see only the foundation.script.luau
 # module (the factory), never the Luau C API (the lib link is PRIVATE).
 

@@ -3,19 +3,22 @@
 
 /// Foundation::Render - the `:ssr` partition.
 ///
-/// Screen-space reflections. A single fullscreen pass that reflects the lit HDR scene into itself:
-/// reconstruct view-space position + normal from the G-buffer, reflect the view ray, march it against
-/// the depth buffer, and - on a hit - sample the scene color at the hit and composite it back into the
-/// HDR (LERP by a reflectivity weight, so SSR *replaces* the surface's IBL/probe specular rather than
-/// adding to it, which avoids double-counting the reflection).
+/// Screen-space reflections, reflecting the lit HDR scene into itself. A fullscreen trace pass
+/// reconstructs view-space position and normal from the G-buffer, reflects the view ray, marches it
+/// against the depth buffer and, on a hit, samples the scene color there; a resolve pass accumulates
+/// that temporally and composites it into the HDR. The composite lerps by a reflectivity weight, so
+/// SSR *replaces* the surface's IBL or probe specular rather than adding to it, which avoids counting
+/// the reflection twice.
 ///
 /// Inputs (all render-graph transients from the forward G-buffer): scene HDR (t0), depth (t1),
-/// octahedral view-normal (t2), material = roughness/metallic (t3). Runs AFTER sky/decals and BEFORE
-/// AO + the TAA resolve, so TAA temporally stabilizes the (necessarily noisy) march. Everything is done
-/// in view space - the normal is already view-space, so no world round-trip is needed.
+/// octahedral view normal (t2), material roughness and metallic (t3). Runs after sky and decals and
+/// before AO and the TAA resolve, so TAA temporally stabilizes the (necessarily noisy) march.
+/// Everything is done in view space: the normal is already view-space, so no world round trip is
+/// needed.
 ///
-/// Structurally a sibling of `:ao` (same fullscreen VS, same view reconstruction, same generation-keyed
-/// bind-group cache + deferred free), but with a 4-texture bind group and its own march shader.
+/// Structurally a sibling of `:ao` (same fullscreen VS, same view reconstruction, same
+/// generation-keyed bind-group cache and deferred free), but with a 4-texture bind group and its own
+/// march shader.
 
 module;
 #include "Core/Prelude.h"
@@ -39,8 +42,8 @@ namespace foundation::render
     Status SsrPass::Initialize()
     {
 
-        // Bind-group layout: scene(t0) + depth(t1) + normal(t2) + material(t3) + point sampler(s0) for
-        // depth/reconstruction + linear sampler(s1) for the glossy color cone-gather.
+        // Bind-group layout: scene (t0), depth (t1), normal (t2), material (t3), a point sampler (s0) for
+        // depth and reconstruction, and a linear sampler (s1) for the glossy color cone gather.
         rhi::BindGroupLayoutEntry ge[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
@@ -49,9 +52,9 @@ namespace foundation::render
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(1, rhi::ShaderStage::Fragment),
         };
-        // WebGPU annotations (Vulkan/DX12 ignore): t1 receives the DEPTH view and is
-        // sampled only through the point sampler s0 - UnfilterableFloat +
-        // non-filtering, per the depth-as-data rule.
+        // WebGPU annotations (Vulkan and DX12 ignore them): t1 receives the depth view and
+        // is sampled only through the point sampler s0, so UnfilterableFloat and
+        // non-filtering, as for any depth read as data.
         ge[1].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         ge[4].samplerNonFiltering = true;
         rhi::BindGroupLayoutDesc gld{};
@@ -77,7 +80,7 @@ namespace foundation::render
         rhi::SamplerDesc ss{};
         ss.minFilter = rhi::FilterMode::Nearest;
         ss.magFilter = rhi::FilterMode::Nearest;
-        ss.mipmapFilter = rhi::MipmapFilterMode::Nearest; // all-nearest (see AO note)
+        ss.mipmapFilter = rhi::MipmapFilterMode::Nearest; // all nearest (see AoPass's sampler)
         ss.addressU = rhi::AddressMode::ClampToEdge;
         ss.addressV = rhi::AddressMode::ClampToEdge;
         ss.addressW = rhi::AddressMode::ClampToEdge;
@@ -104,8 +107,9 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // --- Resolve pipeline (temporal accumulate + composite): reflection(t0) history(t1) velocity(t2)
-        //     hdr(t3) + point(s0) linear(s1). MRT out = composited HDR + next-frame reflection history. ---
+        // --- Resolve pipeline (temporal accumulate and composite): reflection (t0), history (t1), velocity
+        //     (t2), hdr (t3), point (s0), linear (s1). MRT out: the composited HDR and the next frame's
+        //     reflection history. ---
         rhi::BindGroupLayoutEntry re[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
@@ -211,7 +215,7 @@ namespace foundation::render
         {
             return hdr;
         }
-        // Hot reload: rebuild both pipelines when the shaders changed (GPU idled on reload).
+        // Hot reload: rebuild both pipelines when the shaders changed (the GPU is idle on reload).
         const u64 shaderVersion =
             m_shaders->Version(u8"ssr") + m_shaders->Version(u8"ssr_resolve");
         if (shaderVersion != m_pipelineShaderVersion)
@@ -231,9 +235,9 @@ namespace foundation::render
             m_pipelineShaderVersion = shaderVersion;
             if (m_pipeline == nullptr || m_resolvePipeline == nullptr)
             {
-                // A hot-reloaded shader that no longer matches this binary (e.g. its push
-                // block grew) fails pipeline creation and the pass silently skips - say so
-                // once per version instead of leaving only the validation spam.
+                // A hot-reloaded shader that no longer matches this binary (its push block
+                // grew, say) fails pipeline creation and the pass silently skips; say so
+                // once per version instead of leaving only the validation messages.
                 LOG_WARNING(u8"Render",
                             u8"SSR pipelines failed to rebuild after shader reload - the "
                             u8"pass is OFF (shader/binary mismatch? restart with a rebuilt "
@@ -250,7 +254,7 @@ namespace foundation::render
         const Float2 vpSize{static_cast<f32>(vw) / fw, static_cast<f32>(vh) / fh};
         const bool temporalOn = p.temporal;
 
-        // --- Trace: reflection buffer (rgb reflected radiance, a = confidence) ---
+        // --- Trace: reflection buffer (rgb reflected radiance, a the confidence) ---
         const rendergraph::RGHandle refl =
             graph.CreateTransient(u8"ssr.refl", rendergraph::RGTextureDesc(kHdrFormat, w, h));
         GpuSsrPush pc{};
@@ -265,8 +269,8 @@ namespace foundation::render
         pc.edgeFade = (p.edgeFade > 1e-4f) ? p.edgeFade : 1e-4f;
         pc.roughCutoff = p.roughnessCutoff;
         pc.maxSteps = (p.maxSteps > 1) ? p.maxSteps : 1;
-        // The dither is STATIC per pixel (see the shader comment - the old frameMod slot now
-        // carries the uv<->ndc Y convention).
+        // The dither is static per pixel (see the shader); ySign carries the uv<->ndc Y
+        // convention.
         pc.ySign = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
         pc.debug = p.debug;
         pc.glossy = (p.glossy >= 0.0f) ? p.glossy : 0.0f;
@@ -301,7 +305,7 @@ namespace foundation::render
                     });
             });
 
-        // --- Resolve: reproject + variance-clip + accumulate history, then composite into the HDR ---
+        // --- Resolve: reproject, variance-clip and accumulate history, then composite into the HDR ---
         ViewHistory& hist = m_views[viewIndex];
         if (!EnsureHistory(hist, w, h))
         {

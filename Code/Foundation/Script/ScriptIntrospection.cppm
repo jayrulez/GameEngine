@@ -3,13 +3,12 @@
 
 // Script - :script_introspection partition
 //
-// The accurate data source for a future ScriptClassesView / autocomplete: what is
-// callable in THIS backend's language and how it is spelled. The reflection registry
-// says what types EXIST; DescribeBoundApi (on IScriptManager) says what a backend
-// actually BOUND and under what script-visible names (they differ per language:
-// AngelScript spells a static as `Float3::Dot`, and a
-// backend may silently fail to bind a type at all). A conformance diff against the
-// reflection registry catches exactly that silent gap.
+// What is callable in a backend's language and how it is spelled, the accurate source
+// for autocomplete. The reflection registry says what types exist; DescribeBoundApi (on
+// IScriptManager) says what a backend actually bound and under what script-visible names.
+// They differ per language (AngelScript spells a static as `Float3::Dot`), and a backend
+// may silently fail to bind a type at all, which a conformance diff against the
+// reflection registry catches.
 
 module;
 #include "Core/Prelude.h"
@@ -25,8 +24,8 @@ export namespace foundation::script
     /// What kind of member a bound API entry is, in the language's own terms.
     enum class ScriptApiMemberKind : core::u8
     {
-        Method,   // callable member / free function
-        Property, // field-like accessor (get / get+set)
+        Method,   // callable member or free function
+        Property, // field-like accessor (get, or get and set)
         Constant, // named constant value
         Operator, // an operator the type takes (a + b), bound from a reflected one (MethodOperator)
     };
@@ -75,7 +74,7 @@ export namespace foundation::script
     {
         core::String scriptName;
         // The reflected identity behind the binding (0 = none). Tooling maps it back to
-        // registry metadata - e.g. TypeRegistry::DomainOf marks editor-only bindings.
+        // registry metadata; for example, TypeRegistry::DomainOf marks editor-only bindings.
         core::TypeId typeId = 0;
         bool isNamespace = false;
         core::Array<ScriptApiMember> members;

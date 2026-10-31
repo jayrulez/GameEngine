@@ -2,15 +2,15 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The depth convention (reverse-Z: core::projection / rhi::depth / depth.hlsli) proven at the
-// pixel: three scenes through the FULL RenderFrame chain on real Vulkan and WebGPU devices, read
+// pixel: three scenes through the full RenderFrame chain on real Vulkan and WebGPU devices, read
 // back and asserted.
-//  - ordering: a near cube over a far cube - the nearer wins the centre, drawn in either order, and
+//  - ordering: a near cube over a far cube. The nearer wins the centre, drawn in either order, and
 //    a pixel nothing touched keeps the clear (the far plane stays the far plane);
-//  - precision: a red face 0.02 units in front of a grey wall NINE HUNDRED units away, with a 0.1
-//    near plane. Under standard-Z that gap is ~1/25 of a float ulp at depth ~1.0 and the two
-//    z-fight into speckle; under reverse-Z it is ~2500 ulps and the face is solid red. This is
-//    the whole reason for the convention, so it is the test that must never go green by accident;
-//  - shadows: a sun over a cube on a plane - the cascade's ortho projection, the caster-side
+//  - precision: a red face 0.02 units in front of a grey wall nine hundred units away, with a 0.1
+//    near plane. Under standard-Z that gap is about 1/25 of a float ulp at depth ~1.0 and the two
+//    z-fight into speckle; under reverse-Z it is about 2500 ulps and the face is solid red. This
+//    is the reason for the convention, so this test must not pass by accident;
+//  - shadows: a sun over a cube on a plane. The cascade's ortho projection, the caster-side
 //    hardware bias (sign flipped with the convention), the sampler compare and the receiver-side
 //    bias all have to agree for the plane to read lit beside the cube and dark in its shadow.
 // Run it on the cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
@@ -244,8 +244,8 @@ namespace
 
     // ---- the three scenes ----
 
-    // Near red cube, far blue cube, the far one ADDED after the near one (a renderer that lost its
-    // depth test - or compares the wrong way - shows blue at the centre).
+    // Near red cube, far blue cube, the far one added after the near one (a renderer that lost its
+    // depth test, or compares the wrong way, shows blue at the centre).
     SceneSpec OrderingScene()
     {
         SceneSpec spec;
@@ -261,7 +261,7 @@ namespace
         return spec;
     }
 
-    // A grey wall 900 units out, a red cube whose FRONT face sits 0.02 units in front of it (the
+    // A grey wall 900 units out, a red cube whose front face sits 0.02 units in front of it (the
     // rest of the cube is behind the wall). The centre of the view is that face.
     SceneSpec PrecisionScene()
     {

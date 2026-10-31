@@ -2,18 +2,18 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Scene - :scene_page_interface partition.
 //
-// ISceneEditorPage: what a scene (or prefab) page lets the rest of the editor act through,
-// page by page - the multi-scene rule makes everything here THIS page's. Published on the page
-// (EditorPage::Provide) and found from any EditorPage* through EditorPage::Service, so a
-// module that holds a page needs no cast and no knowledge of the page class.
+// ISceneEditorPage: what a scene (or prefab) page lets the rest of the editor act through, page by
+// page; with several scenes open, everything here belongs to this page. It is published on the page
+// (EditorPage::Provide) and found from any EditorPage* through EditorPage::Service, so a module
+// that holds a page needs no cast and no knowledge of the page class.
 //
-// Two surfaces exist for acting on a scene page, and this is the page-level one: the same the
-// page gives its OWN tools (its SceneEditContext, with the typed command vocabulary every edit
+// There are two surfaces for acting on a scene page, and this is the page-level one: the same one
+// the page gives its own tools (its SceneEditContext, with the typed command vocabulary every edit
 // goes through). The framework-level one, ViewportToolHostContext, is what a domain's provider
-// tools receive at creation, limited to framework types; it is not reachable from here on
-// purpose. Simulation, the gizmo, the markers overlay and the prefab flows are page concerns
-// (they lock the command stack, drive the toolbar, open the page's dialogs), so their control
-// is part of this surface, not of the edit context; the scene editor's actions bind through it.
+// tools receive at creation, limited to framework types, and it is not reachable from here.
+// Simulation, the gizmo, the markers overlay and the prefab flows are page concerns (they lock the
+// command stack, drive the toolbar and open the page's dialogs), so their control is part of this
+// surface rather than the edit context; the scene editor's actions bind through it.
 module;
 #include "Core/Prelude.h"
 
@@ -50,7 +50,7 @@ export namespace editor
         u32 width = 0;  // the written PNG: the pixels the viewport drew
         u32 height = 0;
         // The game's render resolution, when the view drew it scaled (a Game tab smaller than the
-        // resolution it plays at); 0 = the written size is the render size.
+        // resolution it plays at); 0 means the written size is the render size.
         u32 renderWidth = 0;
         u32 renderHeight = 0;
     };
@@ -65,7 +65,7 @@ export namespace editor
         /// `game-page-2`, ... for the instances Play New Instance opens. The dock persists the tab
         /// under it too.
         [[nodiscard]] virtual StringView PieId() const noexcept = 0;
-        /// A run is going.
+        /// Whether a run is in progress.
         [[nodiscard]] virtual bool IsRunning() const noexcept = 0;
         /// The scene the run is in now; null when it has none.
         [[nodiscard]] virtual foundation::scene::Scene* RunningScene() noexcept = 0;
@@ -107,22 +107,22 @@ export namespace editor
         [[nodiscard]] virtual bool MarkersShown() const noexcept = 0;
         virtual void SetMarkersShown(bool shown) = 0;
 
-        /// The property animation panel under the viewport. Hidden, with no other tab open, the
-        /// bottom dock takes no space at all.
+        /// The property animation panel under the viewport. When it is hidden and no other tab is
+        /// open, the bottom dock takes no space at all.
         [[nodiscard]] virtual bool AnimationPanelShown() const noexcept = 0;
         virtual void SetAnimationPanelShown(bool shown) = 0;
-        /// The panel shown editing the clip `clip` (nil: the one it has) and animating `entity`
-        /// (nil: the one it binds), an unsaved clip asked about first (an animator's Edit Clip).
+        /// Shows the panel editing the clip `clip` (nil: the one it has) and animating `entity`
+        /// (nil: the one it binds), asking first about an unsaved clip (an animator's Edit Clip).
         virtual void EditAnimationClip(const Guid& clip, const Guid& entity) = 0;
 
-        /// The viewport's free-fly camera - the pose the scene is looked at from, which an agent
+        /// The viewport's free-fly camera: the pose the scene is looked at from, which an agent
         /// moves to look from somewhere specific; null on a page without a viewport.
         [[nodiscard]] virtual EditorCamera* ViewportCamera() noexcept = 0;
-        /// Frame entities in the viewport: the camera stands back along its view so the box
-        /// holding them all, each with everything under it, fits, and pivots its orbit on its centre. The box is what the
-        /// scene's systems measure (ISceneEntityBounds: meshes, colliders), or a small one at an
-        /// entity's position when none does. Eases there when `ease`. False when no entity
-        /// resolves or the page has no viewport.
+        /// Frame entities in the viewport: the camera stands back along its view until the box
+        /// holding them all, each with everything under it, fits, and pivots its orbit on the box's
+        /// centre. The box is what the scene's systems measure (ISceneEntityBounds: meshes,
+        /// colliders), or a small one at an entity's position when none does. Eases there when
+        /// `ease`. False when no entity resolves or the page has no viewport.
         virtual bool FrameEntities(Span<const Guid> entities, bool ease) = 0;
 
         /// Ask for the viewport's next rendered frame as a PNG at `path` (the directory must
@@ -135,21 +135,22 @@ export namespace editor
         /// The latest request's state, as it advances frame by frame.
         [[nodiscard]] virtual const ViewportCapture& LastViewportCapture() const noexcept = 0;
 
-        /// A playtest of the viewport (viewport_run): `source` stands for the devices over it from
-        /// now (its mouse in the viewport's render pixels, its keys as if the viewport had the
-        /// focus), advanced by each frame's time. False on a page without a viewport.
+        /// A playtest of the viewport (viewport_run): from now on `source` stands in for the
+        /// devices over it (its mouse in the viewport's render pixels, its keys as if the viewport
+        /// had the focus), advanced by each frame's time. False on a page without a viewport.
         virtual bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) = 0;
-        /// Ends it: what is held is let go for a frame, then the devices are the viewport's again.
+        /// Ends it: whatever is held is released for a frame, then the devices are the viewport's
+        /// again.
         virtual void EndScriptedInput() = 0;
         /// Seconds the playtest has run; negative when none does.
         [[nodiscard]] virtual f64 ScriptedInputTime() const noexcept = 0;
         /// The viewport's render size in pixels, the scripted mouse's space (0 x 0 without one).
         [[nodiscard]] virtual Float2 ViewportPixels() const noexcept = 0;
 
-        /// The prefab flows the page owns (they open the page's dialogs and write assets):
-        /// a prefab asset from an entity subtree; an instance spawned under `parent` (nil =
-        /// the scene root) via the asset picker; an instance's deltas written back to its
-        /// prefab; an instance's deltas discarded.
+        /// The prefab flows the page owns (they open the page's dialogs and write assets): a prefab
+        /// asset from an entity subtree; an instance spawned under `parent` (nil: the scene root)
+        /// through the asset picker; an instance's deltas written back to its prefab; an instance's
+        /// deltas discarded.
         virtual void CreatePrefabFromEntity(const Guid& entity) = 0;
         virtual void PickAndSpawnPrefab(const Guid& parent) = 0;
         virtual void ApplyInstanceToPrefab(const Guid& root) = 0;

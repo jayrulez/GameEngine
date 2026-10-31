@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - floating surfaces in one window (D5 of Specs/gui-lab-evolution-3.md): a DockArea
-// shows the main surface and each floating one as a window over it, holding a dock space of its
-// own; the windows follow the layout (made, placed, titled, ended) and the layout follows what the
-// user does to them (moved or resized, closed); a float is docked into like the main surface; a tab
-// dragged with Shift, Move to's Float and dock.float float a panel; a float dragged by its title
-// docks whole over a target, is only moved with Shift, and goes back on Escape; the dock keys reach
-// across the surfaces (past a float's edge, the surface cycle) and so does the Move to menu; a
-// stack's grip dragged with Shift floats the whole stack. Floats as windows of their own (D6): each
-// floating surface a dock space in its window, titled and placed on the screen, its moves and close
-// heard back; a tab let go outside every window floats there; a window that cannot open takes the
-// area back to floats in it.
+// GUI.Docking - floating surfaces in one window. A DockArea shows the main surface, and shows each
+// floating surface as a window over it that holds its own dock space. These tests check that:
+// - the windows follow the layout (made, placed, titled, ended), and the layout follows what the
+//   user does to them (moving, resizing, closing);
+// - panels dock into a float as they dock into the main surface;
+// - a tab dragged with Shift, Move to's Float and `dock.float` each float a panel;
+// - a float dragged by its title bar docks whole over a target, is only moved with Shift held, and
+//   goes back on Escape;
+// - the dock keys and the Move to menu reach across the surfaces (past a float's edge, and through
+//   the surface cycle);
+// - a stack's grip dragged with Shift floats the whole stack.
+// With floats as windows of their own, each floating surface is a dock space in its own window,
+// titled and placed on the screen, and its moves and close are reported back. A tab let go outside
+// every window floats there, and a window that cannot open takes the area back to floats inside it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -59,7 +62,7 @@ namespace
         void Lay()
         {
             root->UpdateLayout();
-            // The tabs a size of their own: with no font their text measures nothing.
+            // Give the tabs a size of their own: with no font, their text measures nothing.
             const char8_t* const ids[] = {u8"scene", u8"profiler", u8"memory", u8"console"};
             for (const char8_t* id : ids)
                 if (Tab* tab = TabOf(id))
@@ -69,7 +72,7 @@ namespace
                     });
             root->UpdateLayout();
         }
-        // The dock space showing a panel: the main one or a float's.
+        // Returns the dock space showing a panel: the main one or a float's.
         DockSpace* SpaceOf(const char8_t* panel) const
         {
             if (area->GetMainSpace()->PageOf(SV(panel)) != nullptr)
@@ -122,14 +125,15 @@ TEST_CASE("dock area: a floating surface is a window over the main one, at its b
     CHECK(bed.area->GetMainSpace()->PageOf(SV(u8"profiler")) == nullptr);
     CHECK(bed.area->GetMainSpace()->GetSize().x == doctest::Approx(800.0f)); // the main surface fills the area
 
-    // Docked into like the main one: a tab, then the title counts it.
+    // Dock into the float as into the main surface: add a tab, then check the title counts it.
     const DockNodeId stack = bed.controller.GetLayout().StackOf(SV(u8"profiler"));
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"memory"), stack); }).Ok());
     bed.Lay();
     CHECK(window->GetSpace()->PageOf(SV(u8"memory")) != nullptr);
     CHECK(window->GetTitle() == SV(u8"Memory +1")); // the shown one first
 
-    // Docked away whole: the window ends, its panels' contents kept and shown in the main surface.
+    // Dock the float away whole: the window ends, and its panels' contents are kept and shown in
+    // the main surface.
     const core::RefPtr<Node> content = bed.controller.Content(SV(u8"profiler"));
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.DockSurfaceInto(floating, l.CentralStack()); }).Ok());
     bed.Lay();
@@ -155,8 +159,8 @@ TEST_CASE("dock area: a float moved (Shift on its title) or resized by the user 
     CHECK(moved.y == doctest::Approx(110.0f));
     CHECK(moved.width == doctest::Approx(300.0f));
 
-    // Far off the area: its title bar kept in reach, and that is what is noted.
-    // Its grip: the size noted too.
+    // Moved far off the area, the window is brought back so its title bar is in reach, and that
+    // position is what the layout notes. Resized by its grip, the size is noted too.
     const Rect box = window->GetScreenBounds();
     const core::Float2 grip{box.x + box.width - 7.0f, box.y + box.height - 7.0f};
     bed.D().InjectMouseDown(grip, MouseButton::Left);
@@ -197,7 +201,7 @@ TEST_CASE("dock area: closing a float closes its panels as their policies say; o
     bed.Lay();
     bed.area->FloatOf(other)->RequestClose();
     bed.Lay();
-    REQUIRE(bed.area->FloatOf(other) != nullptr); // the console stays, and its window
+    REQUIRE(bed.area->FloatOf(other) != nullptr); // the console cannot close, so it stays, and so does its window
     CHECK(bed.controller.GetLayout().StackOf(SV(u8"console")) != kNoDock);
     CHECK(bed.controller.GetLayout().StackOf(SV(u8"memory")) == kNoDock);
 }
@@ -214,7 +218,7 @@ TEST_CASE("dock area: floats with no bounds of their own cascade, and a restored
     CHECK(bed.area->GetFloat(0)->GetSize().x == doctest::Approx(kDockAreaFloatSize.x));
     CHECK(bed.controller.GetLayout().FindSurface(bed.area->GetFloat(0)->GetSurface())->Bounds.width == doctest::Approx(kDockAreaFloatSize.x));
 
-    // The same layout adopted again (a restore): the windows stay one per float.
+    // Adopting the same layout again (a restore) still leaves one window per float.
     const DockLayout saved = bed.controller.GetLayout();
     REQUIRE(bed.controller.Adopt(saved).Ok());
     bed.Lay();
@@ -235,18 +239,18 @@ TEST_CASE("dock area: a tab dragged with Shift held floats at the pointer: the d
     bed.D().InjectMouseMove(core::Float2{press.x + 10.0f, press.y});
     bed.D().InjectMouseMove(over);
     REQUIRE(bed.D().IsDragging());
-    CHECK(bed.D().GetDropTarget() != bed.area.Get()); // docking: into the stack
+    CHECK(bed.D().GetDropTarget() != bed.area.Get()); // without Shift it docks into the stack
     core::Rectangle preview;
     CHECK_FALSE(bed.area->GetFloatPreview(preview));
 
-    bed.D().InjectMouseMove(over, KeyModShift); // Shift: a float
+    bed.D().InjectMouseMove(over, KeyModShift); // with Shift it asks for a float
     CHECK(bed.D().GetDropTarget() == bed.area.Get());
     REQUIRE(bed.area->GetFloatPreview(preview));
     CHECK(preview.x < over.x);
     CHECK(preview.x + preview.width > over.x);
     CHECK(preview.y == doctest::Approx(over.y - 14.0f)); // its title bar under the pointer
     Rect docked;
-    CHECK_FALSE(bed.area->GetMainSpace()->GetPreviewBounds(docked)); // the dock's preview gone
+    CHECK_FALSE(bed.area->GetMainSpace()->GetPreviewBounds(docked)); // the dock preview is gone
 
     bed.D().InjectMouseUp(over, MouseButton::Left, KeyModShift); // let go with Shift still held
     bed.Lay();
@@ -282,10 +286,10 @@ TEST_CASE("dock area: Move to's Float and dock.float float a panel over its stac
     REQUIRE(bed.area->GetFloatCount() == 1u);
     const DockFloat* window = bed.area->GetFloat(0);
     CHECK(window->GetSpace()->PageOf(SV(u8"memory")) != nullptr);
-    CHECK(window->GetPosition().x == doctest::Approx(stack.x + 24.0f).epsilon(0.01)); // over its stack, a little in
+    CHECK(window->GetPosition().x == doctest::Approx(stack.x + 24.0f).epsilon(0.01)); // over its stack, inset a little
     CHECK(window->GetPosition().y == doctest::Approx(stack.y + 24.0f).epsilon(0.01));
 
-    // From the keys: the focused stack's panel.
+    // From the keys, `dock.float` floats the focused stack's panel.
     bed.TabOf(u8"profiler")->RequestFocus();
     CHECK(bed.root->RunCommand(SV(u8"dock.float")));
     bed.Lay();
@@ -295,7 +299,7 @@ TEST_CASE("dock area: Move to's Float and dock.float float a panel over its stac
 
 namespace
 {
-    // A float's title bar pressed and dragged to `to` (in steps), the window following.
+    // Presses a float's title bar and drags it to `to` in steps; the window follows.
     void DragTitle(Bed& bed, DockFloat& window, core::Float2 to, core::u32 modifiers = 0)
     {
         const Rect at = window.GetScreenBounds();
@@ -317,19 +321,19 @@ TEST_CASE("dock area: a float dragged by its title follows the pointer and docks
     const core::Float2 middle{300.0f, 250.0f}; // the central stack's middle
     DragTitle(bed, *window, middle);
     REQUIRE(bed.D().IsDragging());
-    CHECK(bed.D().GetDragPreview() == nullptr); // the window is what follows
+    CHECK(bed.D().GetDragPreview() == nullptr); // the window itself follows, so there is no drag preview
     CHECK(window->IsBeingDragged());
     CHECK(window->HasClass(SV(u8"dock-dragging")));
-    CHECK(window->GetPosition().x == doctest::Approx(middle.x - 60.0f)); // held where it was taken
+    CHECK(window->GetPosition().x == doctest::Approx(middle.x - 60.0f)); // held at the point where it was grabbed
     CHECK(window->GetPosition().y == doctest::Approx(middle.y - 10.0f));
     Rect preview;
-    REQUIRE(bed.area->GetMainSpace()->GetPreviewBounds(preview)); // the target under it answered
-    CHECK(preview.width == doctest::Approx(800.0f).epsilon(0.02)); // into the central stack: all of it
+    REQUIRE(bed.area->GetMainSpace()->GetPreviewBounds(preview)); // the target under the window answered
+    CHECK(preview.width == doctest::Approx(800.0f).epsilon(0.02)); // into the central stack, so the preview covers all of it
     bed.D().InjectMouseUp(middle, MouseButton::Left);
     bed.Lay();
     CHECK(bed.area->GetFloatCount() == 0u);
     const DockNode& central = *bed.controller.GetLayout().FindNode(bed.controller.GetLayout().CentralStack());
-    CHECK(central.Panels.Size() == 3u); // scene, then the float's two
+    CHECK(central.Panels.Size() == 3u); // the scene, then the float's two panels
     CHECK(bed.area->GetMainSpace()->PageOf(SV(u8"memory")) != nullptr);
 }
 
@@ -343,7 +347,7 @@ TEST_CASE("dock area: a float let go in a stack's edge band docks beside it, its
     DragTitle(bed, *bed.area->FloatOf(floating), right);
     Rect preview;
     REQUIRE(bed.area->GetMainSpace()->GetPreviewBounds(preview));
-    CHECK(preview.x == doctest::Approx(400.0f).epsilon(0.03)); // its half
+    CHECK(preview.x == doctest::Approx(400.0f).epsilon(0.03)); // the right half
     bed.D().InjectMouseUp(right, MouseButton::Left);
     bed.Lay();
     const DockLayout& layout = bed.controller.GetLayout();
@@ -351,7 +355,7 @@ TEST_CASE("dock area: a float let go in a stack's edge band docks beside it, its
     REQUIRE(root.Axis == DockAxis::Horizontal);
     REQUIRE(root.Children.Size() == 2u);
     const DockNode& moved = *layout.FindNode(root.Children[1]);
-    CHECK(moved.Axis == DockAxis::Vertical); // the float's split, kept
+    CHECK(moved.Axis == DockAxis::Vertical); // the float's split is kept
     CHECK(layout.SurfaceOf(layout.StackOf(SV(u8"memory"))) == layout.MainSurface());
 }
 
@@ -390,7 +394,7 @@ TEST_CASE("dock area: a float laid out before the area has its size stands at it
         s.Width = LayoutLength::Px(0.0f);
         s.Height = LayoutLength::Px(0.0f);
     });
-    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{350.0f, 70.0f, 220.0f, 160.0f}); // kept in an area of none
+    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{350.0f, 70.0f, 220.0f, 160.0f}); // kept, although the area has no size
     bed.area->EditLayoutStyle([](LayoutStyle& s) {
         s.Width = LayoutLength::Px(800.0f);
         s.Height = LayoutLength::Px(600.0f);
@@ -404,7 +408,7 @@ TEST_CASE("dock area: a float laid out before the area has its size stands at it
 
 namespace
 {
-    // The dock space whose stack the focus is in; null when none.
+    // Returns the dock space whose stack the focus is in, or null when there is none.
     DockSpace* FocusedSpace(Bed& bed)
     {
         if (bed.area->GetMainSpace()->FocusedStack() != kNoDock)
@@ -431,22 +435,23 @@ TEST_CASE("dock area: an arrow past a float's edge focuses what lies beyond it: 
     const DockSurfaceId second = bed.Float(u8"memory", core::Rectangle{280.0f, 100.0f, 300.0f, 120.0f}); // over the first's right edge
     DockLayout const& layout = bed.controller.GetLayout();
 
-    // Left of the first float: the main surface's stack there (the scene's).
+    // Left of the first float lies the main surface's stack there (the scene's).
     bed.TabOf(u8"profiler")->RequestFocus();
     CHECK(bed.root->RunCommand(SV(u8"dock.focus-left")));
     CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"scene")));
 
-    // Right of the first float: the second, over the main surface there.
+    // Right of the first float lies the second float, over the main surface there.
     bed.TabOf(u8"profiler")->RequestFocus();
     CHECK(bed.root->RunCommand(SV(u8"dock.focus-right")));
     CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"memory")));
     CHECK(Cast<DockFloat>(bed.area->GetChildAt(bed.area->ChildCount() - 1)) == nullptr); // the preview stays on top
 
-    // Right of the second: the main surface's stack there (the console's, along the right).
+    // Right of the second float lies the main surface's stack there (the console's, along the
+    // right).
     CHECK(bed.root->RunCommand(SV(u8"dock.focus-right")));
     CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console")));
 
-    // Past the main surface's own edge is outside the area: nothing.
+    // Past the main surface's own edge is outside the area, where there is nothing.
     (void)bed.root->RunCommand(SV(u8"dock.focus-right"));
     CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console")));
     (void)first;
@@ -470,8 +475,8 @@ TEST_CASE("dock area: a panel moved past a float's edge goes into the stack beyo
     CHECK(FocusedStackOf(bed) == scene);
     CHECK(bed.area->GetFloatCount() == 1u);
 
-    // The float's last panel: the float ends with the move (its dock space with it), the focus
-    // following the panel into the main surface.
+    // Moving the float's last panel ends the float (and its dock space), and the focus follows the
+    // panel into the main surface.
     bed.TabOf(u8"profiler")->RequestFocus();
     CHECK(bed.root->RunCommand(SV(u8"dock.move-up")));
     bed.Lay();
@@ -500,7 +505,7 @@ TEST_CASE("dock area: dock.next-surface and dock.previous-surface go around the 
     CHECK(bed.root->RunCommand(SV(u8"dock.next-surface")));
     CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"memory")));
     CHECK(bed.root->RunCommand(SV(u8"dock.next-surface")));
-    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console"))); // around, to where it was
+    CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"console"))); // wrapped around to where it started
     CHECK(bed.root->RunCommand(SV(u8"dock.previous-surface")));
     CHECK(FocusedStackOf(bed) == layout.StackOf(SV(u8"memory")));
 }
@@ -530,7 +535,7 @@ TEST_CASE("dock area: a float's Move to menu lists the other surfaces' stacks, n
         }
     CHECK(memory);
     REQUIRE(scene != nullptr);
-    scene->HandleActivate(); // the float's only panel: the float ends with it
+    scene->HandleActivate(); // the float's only panel, so the float ends with it
     bed.Lay();
     CHECK(bed.controller.GetLayout().StackOf(SV(u8"profiler")) == bed.controller.GetLayout().StackOf(SV(u8"scene")));
     CHECK(bed.area->GetFloatCount() == 1u);
@@ -564,11 +569,11 @@ TEST_CASE("dock area: a stack's grip dragged with Shift floats the whole stack a
     REQUIRE(bed.area->GetFloatCount() == 1u);
     DockFloat* window = bed.area->GetFloat(0);
     const DockLayout& layout = bed.controller.GetLayout();
-    CHECK(layout.FindSurface(window->GetSurface())->Root == stack); // the stack itself, floated
+    CHECK(layout.FindSurface(window->GetSurface())->Root == stack); // the stack itself was floated
     CHECK(layout.FindNode(stack)->Panels.Size() == 2u);
     CHECK(window->GetPosition().x == doctest::Approx(preview.x));
 
-    // Its strip's cross closes both, and the float with them.
+    // The cross on its strip closes both panels, and the float with them.
     TabView* floated = Cast<TabView>(window->GetSpace()->WidgetOf(stack));
     REQUIRE(floated != nullptr);
     floated->GetBar()->CloseAll();
@@ -580,8 +585,9 @@ TEST_CASE("dock area: a stack's grip dragged with Shift floats the whole stack a
 
 namespace
 {
-    // Windows of their own for the floats, each a root of the bed's GUI at a place on a screen, the
-    // area's root at 1000,500 on it; the GUI's root places as a host that places windows tells them.
+    // Fake OS windows for the floats. Each window is a root of the bed's GUI at a place on a screen,
+    // with the area's root at 1000,500 on it. It reports the roots' places to the GUI as a host that
+    // places windows does.
     struct FakeWindows final : IDockWindows, IRootPlaces
     {
         struct Shown
@@ -666,7 +672,7 @@ namespace
                 }
             return false;
         }
-        // IRootPlaces: the area's root and each window's.
+        // IRootPlaces: finds the area's root or a window's root at a screen point.
         EventDispatcher* DispatcherAt(core::Float2 screen, core::Float2& local) override
         {
             for (const Shown& each : shown)
@@ -703,7 +709,8 @@ namespace
 
 namespace
 {
-    // The area and the GUI let go of the windows however the test ends (before the windows go).
+    // Makes the area and the GUI release the windows however the test ends, before the windows
+    // are destroyed.
     struct Unhook
     {
         Bed& bed;
@@ -728,7 +735,7 @@ TEST_CASE("dock area: given windows of their own, a float opens in one, titled a
     REQUIRE(windows.shown.Size() == 1u);
     CHECK(windows.shown[0].Surface == floating);
     CHECK(windows.shown[0].Title == SV(u8"Profiler"));
-    CHECK(windows.shown[0].Bounds.x == doctest::Approx(1100.0f)); // the area's 100, on the screen
+    CHECK(windows.shown[0].Bounds.x == doctest::Approx(1100.0f)); // the area's x of 100, in screen units
     CHECK(windows.shown[0].Bounds.y == doctest::Approx(580.0f));
     CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.x == doctest::Approx(1100.0f));
     DockSpace* space = bed.area->WindowSpaceOf(floating);
@@ -736,26 +743,27 @@ TEST_CASE("dock area: given windows of their own, a float opens in one, titled a
     CHECK(space->PageOf(SV(u8"profiler")) != nullptr);
     CHECK(space->GetRootNode() == windows.shown[0].Root.Get());
 
-    // Moved by the user: the layout follows, and the window is not placed again.
+    // When the user moves the window, the layout follows and the window is not placed again.
     bed.area->NoteWindowBounds(floating, core::Rectangle{1200.0f, 600.0f, 320.0f, 210.0f});
     CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.x == doctest::Approx(1200.0f));
     REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.StackOf(SV(u8"profiler"))); }).Ok());
-    CHECK(windows.shown[0].Title == SV(u8"Memory +1")); // the chosen panel's, and how many more
+    CHECK(windows.shown[0].Title == SV(u8"Memory +1")); // the chosen panel's title, and how many more panels
     CHECK(windows.places == 0);
-    // A layout that places it, the window placed there.
+    // When the layout places the surface, the window is placed there.
     bed.controller.NoteSurfaceBounds(floating, core::Rectangle{1300.0f, 650.0f, 320.0f, 210.0f});
     bed.area->ShowLayout();
     CHECK(windows.places == 1);
     CHECK(windows.shown[0].Bounds.x == doctest::Approx(1300.0f));
 
-    // Floats in the area again: the window closes, the float comes back at the area's 300,150.
+    // With floats in the area again, the window closes and the float comes back at the area's
+    // 300,150.
     bed.area->SetWindows(nullptr);
     CHECK(windows.closes == 1);
     REQUIRE(bed.area->GetFloatCount() == 1u);
     CHECK(bed.area->GetFloat(0)->GetPosition().x == doctest::Approx(300.0f));
     CHECK(bed.area->GetFloat(0)->GetPosition().y == doctest::Approx(150.0f));
 
-    // In its own window again, closed by its window's close: its panels close, and the window.
+    // In its own window again, the window's close closes its panels and then the window.
     bed.area->SetWindows(&windows);
     REQUIRE(windows.shown.Size() == 1u);
     bed.area->CloseFloat(floating);
@@ -775,7 +783,7 @@ TEST_CASE("dock area: in windows of their own, a tab let go outside every window
     bed.area->SetWindows(&windows);
     bed.root->GetContext().SetRootPlaces(&windows);
 
-    // Past the area's left edge: outside every window, at the screen's 970,600.
+    // Drag past the area's left edge, outside every window, to the screen's 970,600.
     Tab* tab = bed.TabOf(u8"profiler");
     REQUIRE(tab != nullptr);
     const Rect from = tab->GetScreenBounds();
@@ -793,12 +801,13 @@ TEST_CASE("dock area: in windows of their own, a tab let go outside every window
     CHECK(windows.shown[0].Bounds.x < 970.0f);
     CHECK(windows.shown[0].Bounds.x + windows.shown[0].Bounds.width > 970.0f);
 
-    // Its window moved off the area by the user (the system moves it), out of the way.
+    // The user moves the window off the area, out of the way (the system moves it).
     windows.shown[0].Bounds.x = 3000.0f;
     windows.shown[0].Bounds.y = 3000.0f;
     bed.area->NoteWindowBounds(out, windows.shown[0].Bounds);
 
-    // With Shift over the area: the preview in the area, the window where it was, on the screen.
+    // With Shift held over the area, the preview shows in the area and the window stays where it
+    // was on the screen.
     bed.Lay();
     tab = bed.TabOf(u8"memory");
     REQUIRE(tab != nullptr);
@@ -835,5 +844,5 @@ TEST_CASE("dock area: a window that cannot be opened takes the area back to floa
     bed.area->SetWindows(&windows);
     CHECK(bed.area->GetWindows() == nullptr);
     REQUIRE(bed.area->GetFloatCount() == 1u);
-    CHECK(bed.area->GetFloat(0)->GetPosition().x == doctest::Approx(100.0f)); // its place back in the area's units
+    CHECK(bed.area->GetFloat(0)->GetPosition().x == doctest::Approx(100.0f)); // its position converted back to the area's units
 }

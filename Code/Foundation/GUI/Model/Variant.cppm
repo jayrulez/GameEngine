@@ -3,20 +3,20 @@
 
 // GUI - :variant partition
 //
-// Variant: a small tagged value a Model hands to a view for a cell - the currency of the MVC
-// layer. Modeled on eepp's Models::Variant (role only, common subset): empty / bool / int /
-// float / string / color, and Core's curve keys and colour gradient (T5: what a property grid's
-// curve and gradient rows carry, one value each, as a colour is). Stored as a plain struct (no
-// union) for simplicity and safety; ToString renders it for display (a colour as #RRGGBBAA, a
-// curve as its count of keys) and Compare orders it for sorting (a colour channel by channel, a
-// curve and a gradient field by field, so differing values never compare equal).
+// Variant: a small tagged value that a Model hands to a view for a cell. It is the value type of
+// the MVC layer: empty, bool, int, float, string or colour, plus Core's curve keys and a colour
+// gradient, which a property grid's curve and gradient rows carry as single values, the way a
+// colour row carries a colour. It is stored as a plain struct (no union) for simplicity and
+// safety. ToString renders it for display (a colour as #RRGGBBAA, a curve as its count of keys).
+// Compare orders it for sorting: colours channel by channel, and curves and gradients field by
+// field, so two different values never compare equal.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:variant;
 
-import foundation.core; // String, StringView, Color, i64, f64
+import foundation.core;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -24,7 +24,7 @@ namespace core = foundation::core;
 export namespace foundation::gui
 {
     /// A colour gradient as one value: Core's colour stops and alpha stops, sorted by time, and the
-    /// space they blend in (ruling 2: Core's gradient, no model of the GUI's own).
+    /// space they blend in.
     struct ColorGradient
     {
         core::Array<core::GradientColorStop> Colors;
@@ -73,7 +73,8 @@ export namespace foundation::gui
         Variant(const core::String& value) : m_type(Type::String), m_string(value) {}
         Variant(core::Color value) : m_type(Type::Color), m_color(value) {}
         Variant(const ColorGradient& value) : m_type(Type::Gradient), m_gradient(value) {}
-        /// A curve's keys (a constructor of its own: a span of keys is no other value).
+        /// Makes a curve value from its keys. It is a named constructor because a span of keys
+        /// does not convert to any other value.
         [[nodiscard]] static Variant FromCurve(core::Span<const core::CurveKey> keys)
         {
             Variant out;
@@ -102,9 +103,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::StringView AsString() const noexcept { return m_string.AsView(); }
         [[nodiscard]] core::Color AsColor() const noexcept { return m_color; }
-        /// A curve's keys; none for another type.
+        /// Returns the curve's keys, or none for another type.
         [[nodiscard]] core::Span<const core::CurveKey> AsCurve() const noexcept { return m_keys.AsSpan(); }
-        /// A gradient; an empty one for another type.
+        /// Returns the gradient, or an empty one for another type.
         [[nodiscard]] const ColorGradient& AsGradient() const noexcept { return m_gradient; }
 
         // A display string for any type (numbers rendered simply; string returned as-is).
@@ -125,7 +126,7 @@ export namespace foundation::gui
                 return m_string;
             case Type::Color:
             {
-                // #RRGGBBAA, as a hex code writes it.
+                // Written as a #RRGGBBAA hex code.
                 const u32 packed = m_color.ToRGBA8();
                 char8_t text[9] = {u8'#'};
                 for (i32 i = 0; i < 8; ++i)
@@ -143,8 +144,8 @@ export namespace foundation::gui
             return core::String{};
         }
 
-        // Order two variants: numbers by value (an int against a float too, so a column mixing
-        // them sorts as numbers), strings lexicographically, bools false<true. Other mixed and
+        // Order two variants: numbers by value (an int against a float too, so a column mixing them
+        // sorts as numbers), strings lexicographically, bools false before true. Other mixed and
         // empty types compare by their Type ordinal (a stable, if arbitrary, total order).
         [[nodiscard]] i32 Compare(const Variant& other) const
         {
@@ -181,7 +182,7 @@ export namespace foundation::gui
             }
             case Type::Curve:
             {
-                // Its count, then key by key, field by field.
+                // Compares the key counts first, then the keys one by one, field by field.
                 if (m_keys.Size() != other.m_keys.Size())
                     return m_keys.Size() < other.m_keys.Size() ? -1 : 1;
                 for (usize k = 0; k < m_keys.Size(); ++k)
@@ -264,7 +265,7 @@ export namespace foundation::gui
             return core::String(core::StringView(buf + pos, 24 - pos));
         }
 
-        // Compact fixed-ish float rendering (integer part + up to 3 decimals, trailing zeros trimmed).
+        // Compact float rendering (the integer part and up to 3 decimals, trailing zeros trimmed).
         [[nodiscard]] static core::String FloatToString(f64 value)
         {
             const bool neg = value < 0.0;

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample006 - Alpha Blending. Ported from Sedulous Sample006_Blending.
+/// Sample006 - Alpha Blending.
 /// Renders overlapping semi-transparent colored quads.
 
 #include <cstdint>
@@ -33,7 +33,7 @@ private:
         PSInput VSMain(VSInput i) { PSInput o; o.Position = float4(i.Position, 1.0); o.Color = i.Color; return o; }
         float4 PSMain(PSInput i) : SV_TARGET { return i.Color; }
     )";
-    // 4 quads: background opaque + 3 overlapping translucent.
+    // 4 quads: an opaque background and 3 overlapping translucent quads.
     static constexpr float kVerts[] = {
         -.9f, -.9f, .5f,  .15f, .15f, .2f,  1,   .9f, -.9f, .5f,  .15f, .15f, .2f,  1,    .9f, .9f,
         .5f,  .15f, .15f, .2f,  1,    -.9f, .9f, .5f, .15f, .15f, .2f,  1,    -.6f, -.4f, .3f, 1,

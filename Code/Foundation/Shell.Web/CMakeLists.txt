@@ -1,5 +1,5 @@
 # Foundation::Shell.Web - `foundation.shell.web` (a single-canvas IShell over Emscripten's HTML5 API).
-# The web counterpart of the SDL3 desktop backend; Emscripten-only. Self-contained - it does not
+# The web counterpart of the SDL3 desktop backend; Emscripten-only. Self-contained: it does not
 # borrow the Null shell's stubs, so the HTML5 input/dialog wiring has a home here. One partition per
 # component: window, window manager, input devices, dialogs, and the composing shell.
 util_add_engine_library(Shell.Web ALIAS Foundation::Shell.Web)

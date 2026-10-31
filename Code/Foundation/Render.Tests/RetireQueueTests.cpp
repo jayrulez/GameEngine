@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GpuRetireQueue: frames-in-flight deferred GPU destruction (the web-safe replacement
-// for grow-path WaitIdle). Null-RHI: verifies aging (freed only after framesInFlight+1
-// ticks), typed retire, and Flush.
+// GpuRetireQueue: frames-in-flight deferred GPU destruction, which is safe on the web where a
+// WaitIdle on the grow path is not. On the Null RHI: verifies aging (freed only after
+// framesInFlight+1 ticks), typed retire, and Flush.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -38,7 +38,7 @@ TEST_CASE("render.retire: entries age out after framesInFlight + 1 ticks")
     queue.Retire(buffer);
     CHECK(queue.PendingCount() == 3u);
 
-    // framesInFlight=2 -> age 3: two ticks keep everything, the third frees.
+    // framesInFlight=2 gives age 3: two ticks keep everything, the third frees.
     queue.Tick();
     CHECK(queue.PendingCount() == 3u);
     queue.Tick();

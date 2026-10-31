@@ -3,13 +3,11 @@
 
 // Foundation::VG - :tessellation partition.
 //
-// Converts paths/polylines into triangle meshes:
-//   * Triangulator    - ear-clipping fill triangulation (+ holes), winding helpers
-//   * FillTessellator - filled paths, with an analytical-AA fringe ring
-//   * StrokeTessellator - stroked polylines with joins, caps, dashing, AA fringe
-// Ported from Sedulous.VG (Triangulator/FillTessellator/StrokeTessellator). The
-// colors are the engine's float Color throughout; packing to the vertex's
-// Color32 happens only in the VGVertex constructor.
+// Converts paths and polylines into triangle meshes:
+//   * Triangulator: ear-clipping fill triangulation (with holes), winding helpers
+//   * FillTessellator: filled paths, with an analytical-AA fringe ring
+//   * StrokeTessellator: stroked polylines with joins, caps, dashing, AA fringe
+// Colors are the engine's float Color throughout, vertices included.
 
 module;
 #include "Core/Prelude.h"
@@ -86,7 +84,7 @@ export namespace foundation::vg
                         indices.PushBack(baseIndex + static_cast<u32>(i + 1));
                     }
                 }
-                else // CW - reverse winding
+                else // CW: reverse winding
                 {
                     for (i32 i = 1; i < n - 1; ++i)
                     {
@@ -101,12 +99,12 @@ export namespace foundation::vg
             // Ear-clipping for concave polygons. Build a mutable index list.
             Array<i32> idxList;
             const f32 area = PolygonArea(contour);
-            if (area > 0.0f) // CCW - keep order
+            if (area > 0.0f) // CCW: keep order
             {
                 for (i32 i = 0; i < n; ++i)
                     idxList.PushBack(i);
             }
-            else // CW - reverse to CCW
+            else // CW: reverse to CCW
             {
                 for (i32 i = n - 1; i >= 0; --i)
                     idxList.PushBack(i);
@@ -120,7 +118,7 @@ export namespace foundation::vg
                 const i32 listCount = static_cast<i32>(idxList.Size());
                 if (failCount >= listCount)
                 {
-                    // Degenerate - fallback to fan triangulation for remaining vertices.
+                    // Degenerate: fall back to fan triangulation for the remaining vertices.
                     for (i32 k = 1; k < listCount - 1; ++k)
                     {
                         indices.PushBack(baseIndex + static_cast<u32>(idxList[0]));
@@ -316,14 +314,14 @@ export namespace foundation::vg
             const usize insertPos = bestOuterIdx + 1;
             const Float2 bridgePoint = outer[bestOuterIdx];
 
-            // Build the bridged hole vertex run: hole (from rightmost, wrapping) + closing
-            // hole point + bridge back to the outer vertex.
+            // Build the bridged hole vertex run: the hole (from its rightmost point, wrapping),
+            // the closing hole point, and the bridge back to the outer vertex.
             Array<Float2> holeVerts;
             for (usize i = 0; i <= hole.Size(); ++i)
                 holeVerts.PushBack(hole[(rightmostIdx + i) % hole.Size()]);
             holeVerts.PushBack(bridgePoint);
 
-            // Insert holeVerts into outer at insertPos (rebuild - Array has no range insert).
+            // Insert holeVerts into outer at insertPos (rebuilt: Array has no range insert).
             Array<Float2> rebuilt;
             for (usize i = 0; i < insertPos; ++i)
                 rebuilt.PushBack(outer[i]);
@@ -379,8 +377,8 @@ export namespace foundation::vg
         }
 
         /// Tessellate a filled path with an IVGFill style.
-        // gradientTess: emit per-vertex gradient texcoords + white color (the caller has baked +
-        // bound a ramp LUT as the active texture). Gouraud = legacy per-vertex fill.GetColorAt.
+        // gradientTess: emit per-vertex gradient texcoords and white color (the caller has baked
+        // and bound a ramp LUT as the active texture). Gouraud is per-vertex fill.GetColorAt.
         static void TessellateWithFill(const Path& path, FillRule fillRule, const IVGFill& fill,
                                        bool antiAlias, Array<VGVertex>& vertices,
                                        Array<u32>& indices, f32 tolerance = 0.25f,
@@ -449,8 +447,8 @@ export namespace foundation::vg
 
     public:
         /// Width of the baked gradient LUT (matches VGContext's bake). Kept here so the
-        /// PAD texcoord maps to texel CENTERS: exact endpoint stops under the renderer's
-        /// clamp sampler. Repeat/Reflect emit the raw parameter instead (see above).
+        /// Pad texcoord maps to texel centers: exact endpoint stops under the renderer's
+        /// clamp sampler. Repeat and Reflect emit the raw parameter instead (see above).
         static constexpr f32 GradientLutWidth = 256.0f;
 
         /// Map a raw gradient parameter t to a LUT u-coordinate at a texel center.
@@ -461,7 +459,7 @@ export namespace foundation::vg
 
         /// The per-vertex texcoord to emit for a gradient point: the LUT u for the affine linear
         /// path (shared shader samples it directly), or the gradient-space coordinate for the
-        /// radial/conic paths (their dedicated shader derives t per pixel from it).
+        /// radial and conic paths (their dedicated shader derives t per pixel from it).
         [[nodiscard]] static Float2 GradientTexCoord(VGGradientTess mode, const IVGFill& fill,
                                                      Float2 pt, Rectangle bounds)
         {
@@ -469,8 +467,8 @@ export namespace foundation::vg
             {
             case VGGradientTess::LinearLut:
                 // Pad compresses to texel centers (clamp sampler; exact endpoint stops).
-                // Repeat/Reflect emit the RAW parameter: u interpolates affinely across
-                // the triangle and the command's wrap/mirror sampler applies the spread
+                // Repeat and Reflect emit the raw parameter: u interpolates affinely across
+                // the triangle and the command's wrap or mirror sampler applies the spread
                 // per pixel (a per-vertex clamp would break the tiling).
                 if (fill.Spread() != VGGradientSpread::Pad)
                 {
@@ -532,7 +530,7 @@ export namespace foundation::vg
             }
         }
 
-        /// Emit the inner-fill triangulation + the inner/outer fringe quad strip.
+        /// Emit the inner-fill triangulation and the inner-to-outer fringe quad strip.
         // When texCoords is non-null the fill is gradient-LUT driven: the per-vertex texcoord
         // (gradient parameter mapped to a LUT texel) is emitted and the colors carry white,
         // so the fragment shader samples the ramp per pixel instead of Gouraud-interpolating it.
@@ -629,7 +627,7 @@ export namespace foundation::vg
 
             if (gradientTess != VGGradientTess::Gouraud)
             {
-                // Gradient LUT/coord path: emit per-vertex gradient data as a texcoord and carry
+                // Gradient LUT or coordinate path: emit per-vertex gradient data as a texcoord and carry
                 // white in the colors (the outer fringe fades via coverage=0, set in EmitFringeRing).
                 Array<Float2> texCoords;
                 texCoords.Resize(n);
@@ -729,7 +727,7 @@ export namespace foundation::vg
                 }
             }
 
-            // Per-vertex miter-scaled normals + unit normals (for fringe).
+            // Per-vertex miter-scaled normals and unit normals (for the fringe).
             Array<Float2> vertNormals;
             vertNormals.Resize(static_cast<usize>(n));
             Array<Float2> unitNormals;
@@ -770,7 +768,7 @@ export namespace foundation::vg
                 }
             }
 
-            // Determine which vertices need bevel/round joins.
+            // Determine which vertices need bevel or round joins.
             Array<bool> needsJoin;
             needsJoin.Resize(static_cast<usize>(n));
             if (style.join != VGLineJoin::Miter)
@@ -798,7 +796,7 @@ export namespace foundation::vg
             // The fringe straddles the stroke's edge, so the stroke covers its own width: solid to
             // half a fringe inside the edge, nothing half a fringe outside it. The fringe keeps the
             // colour's alpha and fades by coverage alone (the shader multiplies the two; fading
-            // both squared the ramp to a stepped edge). A stroke thinner than the fringe is solid
+            // both would square the ramp to a stepped edge). A stroke thinner than the fringe is solid
             // nowhere: it is drawn as wide as its fringe, at the alpha that covers its own width.
             const f32 innerHalf = Max(halfWidth - fringeWidth * 0.5f, 0.0f);
             const f32 outerHalf = halfWidth + fringeWidth * 0.5f;
@@ -874,7 +872,7 @@ export namespace foundation::vg
             }
             else
             {
-                // Without AA: simple left/right quad strip.
+                // Without AA: a simple left-to-right quad strip.
                 const u32 strokeBase = static_cast<u32>(vertices.Size());
                 for (i32 i = 0; i < n; ++i)
                 {

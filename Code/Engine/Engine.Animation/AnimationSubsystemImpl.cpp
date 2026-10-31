@@ -3,10 +3,9 @@
 
 // Animation - animation.subsystem implementation unit: the component reflection bodies.
 //
-// Kept OUT of the :components interface partition: REFLECT_* bodies in an interface
-// unit make GCC emit an unreadable gcm cluster for consumers (see gcc-module-interface-hygiene).
-// Components.cppm declares RegisterAnimationComponentReflection(); this unit defines it and the
-// RttiRegisterValue_* bodies.
+// Kept out of the :components interface partition: REFLECT_* bodies in an interface unit make
+// GCC emit an unreadable gcm cluster for consumers. Components.cppm declares
+// RegisterAnimationComponentReflection(); this unit defines it and the RttiRegisterValue_* bodies.
 
 module;
 #include "Core/Prelude.h"
@@ -19,7 +18,7 @@ import foundation.propertyanimation.resource;
 
 import foundation.core;
 import foundation.script;
-import foundation.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
+import foundation.script.facades; // ComponentOf<T> and RegisterExtra* (the script `.of` surface)
 import foundation.runtime;
 import engine.render; // RenderSubsystem::DebugScene (the IK components' debugDraw)
 
@@ -39,8 +38,8 @@ namespace engine::animation
                               u8"skinned meshes with it."))
             .DataVersion(2) // v1: meshEntities persist; v2: rootMotion
             .ReadsDataVersionsFrom(1) // a v1 record reads with root motion off
-            // Script (Track A): SkeletalAnimationComponent.of(entity) -> live speed/startTime/autoPlay.
-            // play/stop/setClip are player ops -> SceneAnimation.of(scene) (world ops keyed by entity).
+            // Scripts: SkeletalAnimationComponent.of(entity) gives live speed/startTime/autoPlay.
+            // play/stop/setClip are player ops on SceneAnimation.of(scene) (world ops keyed by entity).
             .Method<&foundation::script::ComponentOf<SkeletalAnimationComponent>,
                     SkeletalAnimationComponent>("of")
             .Property<&SkeletalAnimationComponent::skeleton>("skeleton")
@@ -69,8 +68,8 @@ namespace engine::animation
                               u8"blends, posing its skinned meshes."))
             .DataVersion(2) // v1: meshEntities persist; v2: rootMotion
             .ReadsDataVersionsFrom(1) // a v1 record reads with root motion off
-            // Script (Track A): AnimationGraphComponent.of(entity) -> live `active`; graph params
-            // (setFloat/setInt/setBool/setTrigger) are player ops -> SceneAnimation.of(scene).
+            // Scripts: AnimationGraphComponent.of(entity) gives live `active`; graph params
+            // (setFloat/setInt/setBool/setTrigger) are player ops on SceneAnimation.of(scene).
             .Method<&foundation::script::ComponentOf<AnimationGraphComponent>, AnimationGraphComponent>(
                 "of")
             .Property<&AnimationGraphComponent::skeleton>("skeleton")
@@ -88,10 +87,10 @@ namespace engine::animation
                                   u8"or above it, or a script's reading."));
     }
 
-    // The scene-bound animation handle: SceneAnimation.of(scene).play/stop/setClip (single clip) +
+    // The scene-bound animation handle: SceneAnimation.of(scene).play/stop/setClip (single clip) and
     // setFloat/setInt/setBool/setTrigger (graph params). `of` returns SceneAnimation by value
-    // (concrete cross-backend return), like ScenePhysics. All world ops keyed by entity - they reach
-    // the manager-owned runtime player.
+    // (a concrete cross-backend return), like ScenePhysics. All world ops are keyed by entity, since
+    // they reach the manager-owned runtime player.
     REFLECT_VALUE(SceneAnimation, "rtti::engine::animation")
     {
         builder.Method<&SceneAnimation::play>("play", {"entity"});
@@ -115,8 +114,8 @@ namespace engine::animation
         builder.Constructor(); // some backends only materialize constructible foreign classes
     }
 
-    // Inverse kinematics (inverse-kinematics.md P2). The bone fields carry `boneName` (the same
-    // attribute in both engines): the inspector offers the animator's bones for them.
+    // Inverse kinematics. The bone fields carry the `boneName` attribute: the inspector offers the
+    // animator's bones for them.
     REFLECT_VALUE(TwoBoneIkComponent, "rtti::engine::animation")
     {
         builder.Attribute("displayName", String(u8"Two Bone IK"))
@@ -276,7 +275,7 @@ namespace engine::animation
 
     REFLECT_VALUE(InstancedSkinningComponent, "rtti::engine::animation")
     {
-        // Script (Track A): InstancedSkinningComponent.of(entity) -> live poseCount/speed (the crowd
+        // Scripts: InstancedSkinningComponent.of(entity) gives live poseCount/speed (the crowd
         // skinning tunables). Pure data; the manager reads them each frame.
         builder
             .Attribute("displayName", String(u8"Instanced Skinning"))
@@ -320,9 +319,9 @@ namespace engine::animation
 
     REFLECT_VALUE(PropertyAnimatorComponent, "rtti::engine::animation")
     {
-        // Reflected property-curve animation: the clip Ref needs its InspectorView ref-picker dispatch
-        // entry or no picker renders (known trap). Script (Track A): .of(entity) -> live tunables +
-        // (Phase G) play/stop methods.
+        // Reflected property-curve animation: the clip Ref needs its InspectorView ref-picker
+        // dispatch entry or no picker renders. Scripts: .of(entity) gives the live tunables and the
+        // play/stop methods.
         builder.Attribute("displayName", String(u8"Property Animator"))
             .Attribute("category", String(u8"Animation"))
             .Attribute("description",
@@ -330,7 +329,7 @@ namespace engine::animation
                               u8"transform and component values."))
             .Method<&foundation::script::ComponentOf<PropertyAnimatorComponent>,
                     PropertyAnimatorComponent>("of")
-            // Playback ops for scripts: animator.of(entity).play()/stop()/pause()/... (no facade lib).
+            // Playback ops for scripts: animator.of(entity).play()/stop()/pause()/... (no facade library).
             .Method<&PropertyAnimatorComponent::play>("play")
             .Method<&PropertyAnimatorComponent::stop>("stop")
             .Method<&PropertyAnimatorComponent::pause>("pause")
@@ -352,8 +351,8 @@ namespace engine::animation
     {
         static const bool once = []()
         {
-            // The meshEntities lists reflect as containers (inspector list editor + the prefab
-            // spawn's EntityRef remap walker both introspect through ContainerInfo).
+            // The meshEntities lists reflect as containers (the inspector's list editor and the
+            // prefab spawn's EntityRef remap walker both introspect through ContainerInfo).
             core::RegisterArrayType<foundation::scene::EntityRef>();
             RttiRegisterEnum_RootMotionMode();
             RttiRegisterEnum_AimBeyondLimits();
@@ -362,7 +361,7 @@ namespace engine::animation
             RttiRegisterValue_InstancedSkinningComponent();
             RttiRegisterValue_TwoBoneIkComponent();
             RttiRegisterValue_AimIkBone();
-            core::RegisterArrayType<AimIkBone>(); // the bone list (list editor + scripts)
+            core::RegisterArrayType<AimIkBone>(); // the bone list (list editor and scripts)
             RttiRegisterValue_AimIkComponent();
             RttiRegisterValue_FootIkLegBones();
             core::RegisterArrayType<FootIkLegBones>();
@@ -401,7 +400,7 @@ namespace engine::animation
             foundation::script::RegisterExtraFacadeName(component.name);
         }
 
-        // The scene-bound animation handle (SceneAnimation.of(scene)): reflect + register + seed + name.
+        // The scene-bound animation handle (SceneAnimation.of(scene)): reflect, register, seed and name it.
         RttiRegisterValue_SceneAnimation();
         GlobalTypeRegistry().Register(core::TypeOf<SceneAnimation>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<SceneAnimation>());

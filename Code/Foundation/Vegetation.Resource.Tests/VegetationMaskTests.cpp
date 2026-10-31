@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.vegetation.resource - the mask raster: planes start empty, paint raises toward 255
+// foundation.vegetation.resource: the mask raster: planes start empty, paint raises toward 255
 // and converges, erase fades to 0, smooth feathers a seam, planes are independent, a brush op
 // reports its region and bumps the version, and the cooked source round-trips the blob.
 #include <doctest/doctest.h>
@@ -144,7 +144,7 @@ TEST_CASE("vegetation mask: the cooked source round-trips every plane; a bad blo
     }
     CHECK(loaded->uid != authored.uid); // a fresh object
 
-    // A size mismatch or bad dims give an EMPTY mask, never a malformed one.
+    // A size mismatch or bad dims give an empty mask, never a malformed one.
     CHECK(src.Build(Span<const byte>{blob.Data(), blob.Size() - 1}, DefaultAllocator())->IsEmpty());
     VegetationMaskSource bad;
     VegetationMaskSource::FromMask(authored, bad);

@@ -1,13 +1,13 @@
-// Ghost - a medal's ghost rider: it rides the course line at the pace that crosses the finish at its
-// medal's time, so a rider racing it knows where that medal stands. On the ghost's entity, which
-// follows the line (a path_follow on the Course spline); its first child is the rider model,
-// tinted and see-through. Placed by Tools/course.py, one per medal.
+// Ghost: a medal's ghost rider. It rides the course line at the pace that crosses the finish at its
+// medal's time, so a rider racing it can see where that medal stands. The script sits on the
+// ghost's entity, which follows the line (a path_follow on the Course spline); its first child is
+// the rider model, tinted and see-through. Tools/course.py places one per medal.
 //
 // Its time comes from the finish line ("MedalGold", "MedalSilver", "MedalBronze", in hundredths).
 // The pace eases in over `rampSeconds`, as a rider gathers speed off the start, then holds: the
 // distance at time t is v t^2 / 2r while ramping, then v (t - r/2), and v is chosen so that the
-// distance reaches `finishDistance` at the medal's time. It sets off with the rider ("RunStarted"),
-// and a new run ("RunRestart") starts it over.
+// distance reaches `finishDistance` at the medal's time. It sets off with the rider
+// ("RunStarted"), and a new run ("RunRestart") starts it over.
 
 class Ghost
 {
@@ -19,7 +19,7 @@ class Ghost
 
     private float m_seconds = 0.0f; // the medal's time
     private float m_time = 0.0f;    // run time
-    private bool m_started = false; // the rider has set off
+    private bool m_started = false; // whether the rider has set off
     private Entity@ m_model;
 
     Ghost(Entity@ entity) { @self = entity; }
@@ -47,7 +47,7 @@ class Ghost
         settle();
     }
 
-    // A new run: back to the top, off again.
+    // A new run: back to the top and off again.
     void onRunRestart(int unused)
     {
         m_time = 0.0f;
@@ -68,15 +68,16 @@ class Ghost
         }
     }
 
-    // The line is a smooth curve through points on the snow, so between them it can run above or
-    // below it: the model sits on the snow found under the line, not on the line.
+    // The line is a smooth curve through points on the snow, so between those points it can run
+    // above or below the snow. The model sits on the snow found under the line, not on the line.
     private void settle()
     {
         if (m_model is null || !m_model.isValid())
         {
             return;
         }
-        // A top-level entity: this frame's pose (worldPosition() read last frame's).
+        // A root entity, so position() holds this frame's pose; worldPosition() still holds last
+        // frame's.
         Float3 at = self.position();
         RayCastHit@ hit = ScenePhysics::of(self.scene).rayCast(Float3(at.x, at.y + 4.0f, at.z),
                                                                 Float3(0.0f, -1.0f, 0.0f), 10.0f, 1);

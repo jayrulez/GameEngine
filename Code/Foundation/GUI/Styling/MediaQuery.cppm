@@ -3,14 +3,15 @@
 
 // GUI - :media_query partition
 //
-// MediaQuery + MediaContext: `@media` condition evaluation. Ported from eepp's css/MediaQuery
-// (common subset), then widened (E13 of Specs/gui-lab-evolution-2.md): a comma list of queries
-// (any one matching), each optionally `not`, a media type (`all`, `screen`; `print` never) and
-// feature tests joined by `and`: width, height and resolution (min-, max-, exact), orientation,
-// and the host's preferences, prefers-color-scheme, prefers-contrast and prefers-reduced-motion, and
-// `input` (K2b: pointer, keyboard or pad, the kind in use). A rule carries an (optional) MediaQuery; StyleSheet::Resolve skips rules whose query does not match
-// the MediaContext; a query naming any other feature matches nothing. Deferred: aspect-ratio,
-// range syntax (`width >= 600px`), `or` inside a query.
+// MediaQuery and MediaContext: `@media` condition evaluation. Ported from eepp's css/MediaQuery
+// (common subset), then extended. A query list is comma-separated and matches when any query
+// matches. Each query may start with `not`, may name a media type (`all`, `screen`; `print` never
+// matches), and has feature tests joined by `and`: width, height and resolution (min-, max- and
+// exact), orientation, the host's preferences (prefers-color-scheme, prefers-contrast and
+// prefers-reduced-motion), and `input` (pointer, keyboard or pad: the kind in use). A rule carries
+// an optional MediaQuery, and StyleSheet::Resolve skips rules whose query does not match the
+// MediaContext. A query naming any other feature matches nothing. Not yet supported:
+// aspect-ratio, range syntax (`width >= 600px`), and `or` inside a query.
 
 module;
 #include "Core/Prelude.h"
@@ -34,8 +35,8 @@ export namespace foundation::gui
         Less,
     };
 
-    // The environment a media query is evaluated against: the viewport, and what the host knows of
-    // the user's preferences (its platform's dark mode, contrast and reduced-motion settings).
+    // The environment a media query is evaluated against: the viewport, and the user's preferences
+    // as the host knows them (the platform's dark mode, contrast and reduced-motion settings).
     struct MediaContext
     {
         f32 Width = 0.0f;
@@ -44,7 +45,7 @@ export namespace foundation::gui
         bool DarkScheme = true; ///< prefers-color-scheme: dark (else light)
         ContrastPreference Contrast = ContrastPreference::NoPreference;
         bool ReducedMotion = false; ///< prefers-reduced-motion: reduce
-        InputKind Input = InputKind::Pointer; ///< `input`: what drives the GUI now (K2b)
+        InputKind Input = InputKind::Pointer; ///< `input`: what is driving the GUI now
         [[nodiscard]] bool operator==(const MediaContext&) const noexcept = default;
     };
 
@@ -69,7 +70,7 @@ export namespace foundation::gui
         ContrastAny,   ///< (prefers-contrast): any preference
         ReduceMotion,  ///< prefers-reduced-motion: reduce
         NoMotionPreference,
-        InputPointer,  ///< input: pointer (K2b: the input kind in use, not a device's presence)
+        InputPointer,  ///< input: pointer (the input kind in use, not a device's presence)
         InputKeyboard,
         InputPad,
     };
@@ -80,10 +81,10 @@ export namespace foundation::gui
         f32 Value = 0.0f;
     };
 
-    // A list of queries, any one of which matching matches; each a conjunction of feature tests,
-    // perhaps negated. An empty list always matches; a query with a feature the GUI does not know
-    // never does (CSS's "not all"), so a rule written for a feature it cannot test is not applied
-    // everywhere.
+    // A list of queries that matches when any one of them matches. Each query is a conjunction of
+    // feature tests, possibly negated. An empty list always matches. A query with a feature the GUI
+    // does not know never matches (CSS's "not all"), so a rule written for a feature it cannot test
+    // is not applied everywhere.
     class MediaQuery
     {
     public:
@@ -115,7 +116,7 @@ export namespace foundation::gui
         {
             Array<MediaFeature> Features;
             bool Not = false;
-            bool Never = false; // a feature it cannot test, or a type it is not (print): false, and `not` does not save it
+            bool Never = false; // an untestable feature or a non-matching type (print): always false, even under `not`
         };
 
         [[nodiscard]] static bool EvaluateQuery(const Query& q, const MediaContext& c)
@@ -183,7 +184,8 @@ export namespace foundation::gui
 
         void Parse(core::StringView text)
         {
-            // A comma list: each part a query (commas inside parentheses are the feature's own).
+            // A comma list in which each part is a query (commas inside parentheses belong to the
+            // feature).
             usize start = 0;
             usize depth = 0;
             for (usize i = 0; i <= text.Size(); ++i)
@@ -216,7 +218,7 @@ export namespace foundation::gui
                     q.Never = true;
                 else if (w != core::StringView(u8"and") && w != core::StringView(u8"only") && w != core::StringView(u8"all") &&
                          w != core::StringView(u8"screen"))
-                    q.Never = true; // a type or a keyword it does not know
+                    q.Never = true; // an unknown type or keyword
             };
             while (i < n)
             {
@@ -244,7 +246,8 @@ export namespace foundation::gui
             return q;
         }
 
-        // One "(feature: value)" or "(feature)" group; false for one it cannot test.
+        // Parses one "(feature: value)" or "(feature)" group. Returns false for a feature it cannot
+        // test.
         [[nodiscard]] static bool ParseFeature(core::StringView group, Array<MediaFeature>& out)
         {
             usize colon = group.Size();
@@ -308,7 +311,7 @@ export namespace foundation::gui
                 return false;
             }
             if (colon >= group.Size())
-                return false; // another boolean feature: none is known
+                return false; // no other boolean feature is known
 
             const bool resolution = name == core::StringView(u8"min-resolution") ||
                                     name == core::StringView(u8"max-resolution") ||
@@ -337,13 +340,13 @@ export namespace foundation::gui
             else if (name == core::StringView(u8"resolution"))
                 type = MediaFeatureType::Resolution;
             else
-                return false; // a feature it does not know
+                return false; // an unknown feature
 
             out.PushBack(MediaFeature{type, value.Value()});
             return true;
         }
 
-        // `2dppx`, `2x` or `192dpi`, in dpi.
+        // Parses `2dppx`, `2x` or `192dpi`, returning dpi.
         [[nodiscard]] static Optional<f32> ParseResolution(core::StringView text)
         {
             const auto number = [&](usize suffix) { return ParseLength(text.SubStr(0, text.Size() - suffix)); };

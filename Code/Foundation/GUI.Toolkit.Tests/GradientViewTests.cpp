@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the gradient view (T5 of Specs/gui-lab-evolution-3.md): one of Core's gradients edited
-// as a value, each gesture reported as it goes and once at its end, or given up: a click adds a stop
-// of what is there (alpha above, colour below), a drag moves one (sorted again as it passes) or
-// pulls it off (never a kind's last); the picker edits a colour stop, the fields an alpha and a
-// place, the drop-down the blend.
+// GUI.Toolkit - the gradient view. It edits one of Core's gradients as a value, and reports each
+// gesture as it goes and once at its end, or as cancelled. A click adds a stop with the gradient's
+// value at that place (alpha above, colour below). A drag moves a stop (sorting again as it passes
+// others) or pulls it off, though never a kind's last stop. The picker edits a colour stop, the
+// fields edit an alpha and a position, and the drop-down sets the blend.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -18,8 +18,8 @@ using core::f32;
 
 namespace
 {
-    // A 300 px wide view at the root's corner: its strip's alpha stops on y 0 to 12, the bar on 12
-    // to 36, its colour stops on 36 to 48; time t at x = 300 t.
+    // A 300 px wide view at the root's corner. The strip's alpha stops lie on y 0 to 12, the bar on
+    // 12 to 36, and the colour stops on 36 to 48; time t is at x = 300 t.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -100,7 +100,7 @@ TEST_CASE("GradientView: a click on the strip adds a stop of what the gradient h
     CHECK(bed.view->GetSelected() == GradientStopRef{true, 1});
     CHECK(bed.changed.Size() == 2);
 
-    // Full: nothing added.
+    // When the kind is full, nothing is added.
     bed.view->SetMaxStops(3);
     bed.Pause();
     bed.Click(Bed::Alpha(0.75f));
@@ -115,10 +115,10 @@ TEST_CASE("GradientView: a drag moves a stop, sorted again as it passes; a press
     CHECK(bed.view->GetSelected() == GradientStopRef{false, 0});
     CHECK(bed.changed.IsEmpty());
     bed.Pause();
-    bed.Drag(Bed::Colour(0.0f), Bed::Colour(1.0f) + core::Float2{40.0f, 0.0f}); // past the other, past the end
+    bed.Drag(Bed::Colour(0.0f), Bed::Colour(1.0f) + core::Float2{40.0f, 0.0f}); // past the other stop and past the end
     REQUIRE(bed.V().Colors.Size() == 2);
     CHECK(bed.V().Colors[1].time == doctest::Approx(1.0f));
-    CHECK(bed.V().Colors[1].color.r == doctest::Approx(1.0f)); // red, now second
+    CHECK(bed.V().Colors[1].color.r == doctest::Approx(1.0f)); // red, which is now second
     CHECK(bed.view->GetSelected() == GradientStopRef{false, 1});
     CHECK(bed.changing >= 1);
     CHECK(bed.changed.Size() == 1);
@@ -153,7 +153,7 @@ TEST_CASE("GradientView: a stop pulled off the strip goes, back on it returns; a
     bed.D().InjectMouseUp(Bed::Colour(0.5f), MouseButton::Left);
     CHECK(bed.V().Colors[1].time == doctest::Approx(1.0f));
     const core::usize before = bed.changed.Size();
-    CHECK(before == 2); // the last-stop attempt moved it, so it changed once
+    CHECK(before == 2); // the attempt to pull off the last stop still moved it, so it changed once
 }
 
 TEST_CASE("GradientView: the selected stop's place and an alpha stop's alpha are fields; the blend a drop-down")

@@ -3,9 +3,8 @@
 
 // Foundation::VG - :style partition.
 //
-// Geometry/stroke style descriptors: CornerRadii (rounded rects) and
-// StrokeStyle (width/cap/join/miter/dash). Ported from Sedulous.VG. TextEffects (an outline, a
-// shadow and a glow drawn under text) is ours (F4 of Specs/vg-and-gui-lab.md).
+// Geometry and stroke style descriptors: CornerRadii (rounded rects), StrokeStyle (width, cap,
+// join, miter, dash) and TextEffects (an outline, a shadow and a glow drawn under text).
 
 module;
 #include "Core/Prelude.h"

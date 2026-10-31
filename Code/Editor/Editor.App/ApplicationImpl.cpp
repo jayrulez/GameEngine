@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorApplication's lifecycle (Documentation/Specs/editor-gui.md, 5.1, layer 3):
-// configure, start the parts in order, hand each frame to them, shut them down in reverse. What
+// Editor::App - EditorApplication's lifecycle: configure, start the parts in order, hand each
+// frame to them, shut them down in reverse. What
 // each part does is its own file; what is here is the order and the wiring between them.
 module;
 #include "Core/Prelude.h"
@@ -48,7 +48,7 @@ namespace editor::app
     {
         editor::SetEditorRootAllocator(m_editorAllocator);
         m_context.SetThumbnails(&m_thumbnailService);
-        // A thumbnail ready is told to the views showing thumbnails (the assets browser).
+        // When a thumbnail is ready, tell the views that show thumbnails (the assets browser).
         m_thumbnailService.OnThumbnailReady = [self = this](const Guid& id) { self->m_context.NotifyThumbnailReady(id); };
     }
 
@@ -85,18 +85,19 @@ namespace editor::app
         };
         services.opened = [self](editor::EditorProject& project)
         {
-            // The project's layout, else the default (the one before was another project's).
+            // Restore the project's layout, else the default; the layout in place belonged to the
+            // previous project.
             foundation::settings::Settings* store = self->m_session.Store();
             if (store == nullptr || !ApplyDockLayout(self->m_dock.Controller(), *store).IsOk())
                 self->m_dock.ResetLayout();
-            // The pages from the last session (a restored layout kept their places), else the
-            // project's default scene.
+            // Reopen the pages from the last session (a restored layout keeps their places), else
+            // open the project's default scene.
             const auto progress = [self](StringView name, f32 done)
             { self->ReportStartup(Format(u8"Opening {}", name).AsView(), 0.72f + 0.26f * done); };
             if (store == nullptr || !self->m_pages->Restore(*store, progress))
                 self->OpenDefaultScene(project);
-            // What the layout names and nothing reopened (a Game tab, a page whose asset is gone)
-            // goes, rather than staying a placeholder.
+            // Panels the layout names but nothing reopened (a Game tab, a page whose asset is
+            // gone) are removed rather than left as placeholders.
             ForgetUnprovidedPanels(self->m_dock.Controller());
             // The Project panel shows the project's page; its links open assets as the pages do.
             if (self->m_window.IsOpen())
@@ -114,9 +115,9 @@ namespace editor::app
         };
         services.closing = [self]()
         {
-            self->m_dock.SetProjectContent({}); // the welcome again
+            self->m_dock.SetProjectContent({}); // show the welcome again
             self->m_home.Reset();
-            self->m_pages->CloseAll(); // their resources while the project's services live
+            self->m_pages->CloseAll(); // close them while the project's services still live
             if (self->m_mcp)
                 self->m_mcp->Stop(); // no agent call may run against services that are going away
             if (self->m_export)
@@ -170,7 +171,7 @@ namespace editor::app
     void EditorApplication::OnStartup(runtime::IApplicationHost& host)
     {
         m_host = &host;
-        OpenPages(); // first: every frame hands them its hooks
+        OpenPages(); // first, because every frame calls their hooks
         if (host.MainRenderWindow() == nullptr)
             return;
         m_starting = true; // the splash hears startup's steps until the editor is ready
@@ -178,7 +179,8 @@ namespace editor::app
         LoadEditorSettings();
         m_context.SetUserEditorSettings(&m_editorSettings);
 
-        // What the asset browser and an agent do to assets: before the dock, whose browser uses it.
+        // The asset operations shared by the asset browser and the MCP tools, made before the dock
+        // because its browser uses them.
         EditorApplication* self = this;
         {
             AssetOperations::Services ops;
@@ -225,7 +227,7 @@ namespace editor::app
         exportServices.builders = &m_builders;
         exportServices.userSettings = &m_editorSettings;
         exportServices.dataRoot = m_config.dataRoot;
-        // It stays, its button showing the build in the system's file manager (the old editor's).
+        // The toast stays, its button showing the build in the system's file manager.
         exportServices.onExported = [self](StringView folder)
         {
             const String where(folder);
@@ -251,7 +253,7 @@ namespace editor::app
         mcp.deleteAsset = [self](const Guid& id) { return self->m_assetOps->DeleteOne(id); }; // the browser's own delete
         mcp.created = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         { self->m_creation.AfterCreate(creator, instance); };
-        // What follows an import, as the Import dialog's: the editor told (a model's prefab made).
+        // After an import, notify the editor as the Import dialog does (so a model's prefab is made).
         mcp.imported = [self](foundation::content::Instance& primary, const pipeline::ImportOptions* options)
         { self->m_context.NotifyImported(primary, options); };
         mcp.addTools = [self](foundation::mcp::McpServer& server)
@@ -270,7 +272,7 @@ namespace editor::app
         mcp.guiRoot = [self]() { return self->m_window.Root(); };
         m_mcp = MakeUnique<EditorMcpService>(m_editorAllocator, m_editorAllocator, Move(mcp));
 
-        // Per-subsystem editor plugins register here with the EMBEDDED host (every page's scenes
+        // Per-subsystem editor plugins register here with the embedded host (every page's scenes
         // live there); once per run, since what they register outlives a project.
         ReportStartup(u8"Loading the editors", 0.62f);
         RegisterActions(); // the editor-wide set first: the menu bar follows registration order
@@ -301,7 +303,7 @@ namespace editor::app
             m_config.startupFinished();
     }
 
-    // The editor owns a second, persistent subsystem manager populated by the SAME DefaultApplication
+    // The editor owns a second, persistent subsystem manager populated by the same DefaultApplication
     // the player runs: gameplay subsystems live there, and every scene (editing pages, Simulate,
     // previews, the Game tab) is hosted there. It starts with no resource manager: projects open
     // and close at runtime, so each project's manager attaches and detaches (EditorSession).
@@ -315,10 +317,10 @@ namespace editor::app
                                                                LOG_INFO(u8"Editor", u8"embedded app requested exit({}) with no Game tab playing it", code);
                                                            }});
         m_embeddedApp = MakeUnique<engine::runtime::DefaultApplication>(m_editorAllocator);
-        m_embeddedApp->SetDataRoot(m_config.dataRoot.AsView()); // the editor's root, not a re-walk
+        m_embeddedApp->SetDataRoot(m_config.dataRoot.AsView()); // the editor's data root, rather than searching for it again
         m_embeddedApp->Configure(*m_embeddedHost);
-        // Un-bound input never reaches scene-tier game UI here: editing and Simulate HUDs render as
-        // they will but do not take input; the Game tab is the interactive surface.
+        // Unbound input does not reach scene-tier game UI here: editing and Simulate HUDs render as
+        // they will in the game but take no input. The Game tab is where the game is played.
         if (m_embeddedApp->Input() != nullptr)
             m_embeddedApp->Input()->SetUnboundScenePolicy(engine::input::UnboundInputScenePolicy::ScreenTierOnly);
         // Each Game tab runs its own game in this one application, with screens of its own.
@@ -328,8 +330,7 @@ namespace editor::app
         m_embeddedApp->OnStartup(*m_embeddedHost);
     }
 
-    // The dock in the frame: the shared panels, their contents the window's markup (Assets and
-    // Console a line each until their contents port, X4).
+    // The dock in the frame: the shared panels, their contents the window's markup.
     void EditorApplication::OpenDock()
     {
         gui::Node* into = m_window.FindById(u8"frame-dock");
@@ -365,7 +366,8 @@ namespace editor::app
             };
             assets.create = [self](const pipeline::AssetCreator& creator, foundation::content::Group* group) { self->m_creation.CreateAndOpen(creator, group); };
             m_assets = MakeUnique<AssetsView>(m_editorAllocator, m_editorAllocator, Move(assets), m_window.LoadMarkup(AssetsView::kPath));
-            // A slot's reveal (and any other) shows the asset where it lives, the panel to the front.
+            // Revealing an asset (from a slot or anywhere else) shows it at its location in the
+            // Assets panel and brings the panel to the front.
             m_context.RevealAsset = [self](const Guid& id)
             {
                 if (self->m_assets && self->m_assets->Reveal(id))
@@ -388,7 +390,7 @@ namespace editor::app
             seams.recorder = &foundation::profiler::CaptureRecorder::Get();
             seams.folder = []() { return PathJoin(GetUserDataDirectory().AsView(), u8"profiles"); };
             seams.pick = [self](PickerRequest request) { self->ShowPicker(Move(request)); };
-            // A save's toast stays with Open Folder, as an export's does.
+            // A save's toast stays up with an Open Folder button, as an export's does.
             seams.notify = [self](editor::NoticeKind kind, StringView message, StringView folder)
             {
                 if (folder.IsEmpty())
@@ -409,7 +411,7 @@ namespace editor::app
         m_dock.Open(*into, m_window.Host(), Move(contents));
     }
 
-    // The pages in the dock; their dialogs over the main window.
+    // Opens the pages in the dock; their dialogs open over the main window.
     void EditorApplication::OpenPages()
     {
         EditorPages::Services services;
@@ -482,7 +484,8 @@ namespace editor::app
         });
     }
 
-    // The palette over the main window, its frame the editor's markup (made the first time).
+    // Opens the command palette over the main window, framed by the editor's markup (created on
+    // first use).
     void EditorApplication::OpenCommandPalette()
     {
         gui::SceneRoot* root = m_window.Root();
@@ -493,7 +496,8 @@ namespace editor::app
         (void)m_palette->Open(*root);
     }
 
-    // Preferences over the main window (made the first time), the look shown live in the window.
+    // Opens Preferences over the main window (created on first use); appearance changes show live
+    // in the window.
     void EditorApplication::OpenPreferences()
     {
         gui::SceneRoot* root = m_window.Root();
@@ -509,7 +513,7 @@ namespace editor::app
             services.contributions = &m_context.EditorSettingsContributions();
             services.mcpChanged = [self]()
             {
-                // The host follows the saved section over the open project.
+                // The MCP host follows the saved settings for the open project.
                 if (!self->m_mcp || self->m_session.Project() == nullptr)
                     return;
                 self->m_mcp->Stop();
@@ -523,7 +527,8 @@ namespace editor::app
         (void)m_preferences->Open(*root);
     }
 
-    // Project Settings over the main window (made the first time), the manifest as it is now.
+    // Opens Project Settings over the main window (created on first use), showing the manifest as
+    // it is now.
     void EditorApplication::OpenProjectSettings()
     {
         gui::SceneRoot* root = m_window.Root();
@@ -535,7 +540,8 @@ namespace editor::app
         (void)m_projectSettings->Open(*root);
     }
 
-    // Export Templates over the main window (made the first time), the templates read again.
+    // Opens Export Templates over the main window (created on first use) and reads the templates
+    // again.
     void EditorApplication::OpenTemplates(Function<void()> closed)
     {
         gui::SceneRoot* root = m_window.Root();
@@ -569,8 +575,8 @@ namespace editor::app
         return m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
     }
 
-    // Export over the main window, for the open project (made again for each project: it edits
-    // that project's presets).
+    // Opens Export over the main window for the open project. It is made again for each project
+    // because it edits that project's presets.
     void EditorApplication::OpenExport()
     {
         gui::SceneRoot* root = m_window.Root();
@@ -610,7 +616,8 @@ namespace editor::app
         (void)m_exportDialog->Open(*root);
     }
 
-    // One import of `paths` into `group`: at once when nothing needs review, else the window.
+    // Imports `paths` into `group`: at once when nothing needs review, else through the import
+    // window.
     void EditorApplication::ImportFiles(Span<const String> paths, foundation::content::Group& group)
     {
         RefPtr<AssetImport::Session> session = m_assetImport->Begin(paths, group);
@@ -686,7 +693,8 @@ namespace editor::app
         (void)m_assetPicker->Open(*root, Move(request));
     }
 
-    // The slots' table, from the context, the type icons and the picker (made the first time).
+    // Builds the slots' table from the context, the type icons and the picker (created on first
+    // use).
     const ResourceRefServices& EditorApplication::RefServices()
     {
         if (!m_typeIcons)
@@ -700,7 +708,7 @@ namespace editor::app
         return m_refs;
     }
 
-    // The log's new lines into the Console.
+    // Moves the log's new lines into the Console.
     void EditorApplication::DrainLog()
     {
         if (!m_console || m_config.logBuffer == nullptr)
@@ -711,8 +719,8 @@ namespace editor::app
             m_console->AddEntry(entry.level, entry.category.AsView(), entry.message.AsView(), entry.time);
     }
 
-    // `work` at the GUI's next drain: never inside the click that asked (a screen swap takes away
-    // the button that was clicked); at once with no GUI.
+    // Runs `work` at the GUI's next drain, never inside the click that asked for it (a screen swap
+    // removes the button that was clicked). With no GUI it runs at once.
     void EditorApplication::Later(Function<void()> work)
     {
         gui::MutationQueue* queue = m_window.Root() != nullptr ? m_window.Root()->GetMutationQueue() : nullptr;
@@ -722,7 +730,8 @@ namespace editor::app
             queue->Enqueue(Move(work));
     }
 
-    // The project manager over the whole window (made the first time, its list probed again after).
+    // Shows the project manager over the whole window. It is created on first use; on later visits
+    // its list is probed again.
     void EditorApplication::EnterManagerMode()
     {
         if (!m_window.IsOpen())
@@ -749,13 +758,13 @@ namespace editor::app
             m_manager = MakeUnique<ProjectManagerView>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ProjectManagerView::kPath));
         }
         else
-            m_manager->Rebuild(); // back from a project: probed again
+            m_manager->Rebuild(); // returning from a project: probe the list again
         m_manager->SetStatus({});
         m_window.ShowScreen(m_manager->Content());
     }
 
-    // Opens a project from the manager: one saved by another engine version asks first (the
-    // controller decides and words it; a backup of its manifest is offered for an older one).
+    // Opens a project from the manager. A project saved by another engine version asks first: the
+    // controller decides and words the question, and offers to back up an older project's manifest.
     void EditorApplication::OpenFromManager(StringView directory)
     {
         editor::ProjectManagerController::OpenDecision decision;
@@ -782,7 +791,7 @@ namespace editor::app
             (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
             (void)box->AddButton(u8"Open Anyway", u8"open", gui::DialogRole::Normal);
         }
-        else // an older engine's: back its manifest up first, or not
+        else // a project from an older engine: offer to back up its manifest first
         {
             (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
             (void)box->AddButton(u8"Open Without Backup", u8"open", gui::DialogRole::Normal);
@@ -806,8 +815,8 @@ namespace editor::app
                                                                 self->m_manager->SetStatus(u8"The backup FAILED: not opening.");
                                                             return;
                                                         }
-                                                        // An older engine's project is stamped with this one at once; a
-                                                        // newer engine's (Open Anyway) keeps its stamp.
+                                                        // A project from an older engine is stamped with this version at
+                                                        // once; one from a newer engine (Open Anyway) keeps its stamp.
                                                         if (self->OpenProject(path.AsView(), false) && restamp && self->m_session.Project() != nullptr)
                                                             (void)self->m_session.Project()->SaveSettings();
                                                     });
@@ -815,7 +824,7 @@ namespace editor::app
         box->OpenModal(*root);
     }
 
-    // New Project from the manager: a folder that holds a project already is refused; else the
+    // New Project from the manager: a folder that already holds a project is refused; otherwise the
     // project is made there with the starter content and opened.
     void EditorApplication::CreateFromManager(StringView directory, StringView name)
     {
@@ -839,7 +848,7 @@ namespace editor::app
         }
     }
 
-    // The frame back and the project open; on failure the manager again, saying so.
+    // Restores the frame and opens the project; on failure, shows the manager again with the error.
     bool EditorApplication::OpenProject(StringView directory, bool seed)
     {
         EditorSession::OpenOptions options;
@@ -853,8 +862,8 @@ namespace editor::app
         return false;
     }
 
-    // File > Close Project: the unsaved pages asked about, then the project closed and the
-    // manager shown.
+    // File > Close Project: asks about unsaved pages, then closes the project and shows the
+    // manager.
     void EditorApplication::CloseProjectToManager()
     {
         if (m_session.Project() == nullptr)
@@ -915,7 +924,7 @@ namespace editor::app
         build.context = &m_context;
         build.cookAll = [self]() { self->m_cookService.RequestCook(false); };
         build.rebuildAll = [self]() { self->m_cookService.RequestCook(true); };
-        // One page's asset: its changes saved first, so what cooks is what it shows.
+        // Cooks one page's asset, saving its changes first so the cook matches what the page shows.
         const auto cookPage = [self](editor::EditorPage& page, bool force)
         {
             if (page.IsDirty())
@@ -997,7 +1006,7 @@ namespace editor::app
                             });
     }
 
-    // The version, in a message box over the editor.
+    // Shows the version in a message box over the editor.
     void EditorApplication::ShowAbout()
     {
         foundation::gui::SceneRoot* root = m_window.Root();
@@ -1027,7 +1036,8 @@ namespace editor::app
         UpdateCaptures(host, dt);
         if (editor::ThumbnailStage* stage = m_session.Stage())
             stage->Update(); // take and stage the next queued GPU thumbnail
-        // The cook's and the jobs' progress to the status line; an export waiting on its cook starts.
+        // Report cook and job progress on the status line, and start an export that was waiting on
+        // its cook.
         EditorApplication* self = this;
         m_cookService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
         m_jobService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
@@ -1041,7 +1051,7 @@ namespace editor::app
         }
         DrainLog();
         if (m_profiler)
-            m_profiler->Update(); // the frames recorded since, while recording
+            m_profiler->Update(); // take the frames recorded since the last update, while recording
         if (m_assets)
             m_assets->Refresh();
         // Files dropped on the window: imported into the group the Assets panel shows.
@@ -1065,8 +1075,8 @@ namespace editor::app
             m_home->Refresh();
     }
 
-    // The status bar's job (a job's title, how far, its step of how many; else a cook, of unknown
-    // length) and agent (the MCP host while it listens).
+    // Updates the status bar: the running job (its title, progress and step count), else a cook
+    // (of unknown length), and the agent indicator while the MCP host listens.
     void EditorApplication::UpdateStatusBar()
     {
         EditorStatusBar* status = m_window.StatusBar();
@@ -1087,8 +1097,8 @@ namespace editor::app
         status->SetAgent(host != nullptr && host->IsRunning() ? Format(u8"MCP on 127.0.0.1:{}", host->BoundPort()).AsView() : StringView{});
     }
 
-    // Window screenshots: last frame's written, missing windows failed, the user told, and the
-    // command line's timed shot, rebuild and exit.
+    // Window screenshots: writes the last frame's captures, fails those for windows that are gone
+    // and tells the user; also runs the command line's timed screenshot, rebuild and exit.
     void EditorApplication::UpdateCaptures(runtime::IApplicationHost& host, f32 dt)
     {
         if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
@@ -1141,7 +1151,7 @@ namespace editor::app
 
     void EditorApplication::OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame)
     {
-        // Every page's viewport content renders in the MAIN window's frame, inside one
+        // Every page's viewport content renders in the main window's frame, inside one
         // scene-renderer bracket, before the GUI draws: floats' windows sample what it made.
         if (frame.valid && frame.window == host.MainRenderWindow())
         {
@@ -1217,7 +1227,7 @@ namespace editor::app
         m_palette.Reset();
         m_menus.Reset();
         m_shortcuts.Reset();
-        m_dock.Close(); // its floats' windows, then the GUI before the device goes
+        m_dock.Close(); // its floating windows, then the GUI, before the device goes away
         m_console.Reset();
         m_profiler.Reset();
         m_window.Close();

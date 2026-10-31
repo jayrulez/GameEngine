@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The model viewer's library (Documentation/Specs/model-viewer.md, P6), worked through its
-// commands as the window and an agent work it: the round trip of the file; names unique across a
-// top-level collection; deleting a collection keeps its models; the search's terms and scopes;
-// undo; the shortlist brought in once; a moved file noticed and relinked; a second opener
-// read-only.
+// The model viewer's library, driven through its commands as the window and an agent drive it:
+// the file's round trip, member names unique across a top-level collection, deleting a collection
+// keeping its models, search terms and scopes, undo, a one-time shortlist import, a moved file
+// detected and relinked, and a second opener getting read-only access.
 #include <doctest/doctest.h>
 #include <initializer_list>
 
@@ -57,7 +56,7 @@ namespace
     }
     String Field(const JsonValue& v, StringView key) { return v.Get(String(key)).AsString(); }
 
-    // A session opened on `folder`, the library's commands registered.
+    // A session opened on `folder`, with the library's commands registered.
     struct Session
     {
         modelviewer::LibrarySession session{DefaultAllocator()};
@@ -72,7 +71,7 @@ namespace
         {
             return session.Commands().Execute(name, args);
         }
-        // Runs a command that must go through; its result.
+        // Runs a command that must succeed and returns its result.
         JsonValue Ok(StringView name, JsonValue args = JsonValue::MakeObject())
         {
             modelviewer::CommandResult r = Run(name, foundation::core::Move(args));
@@ -136,7 +135,7 @@ TEST_CASE("model viewer library: entries, nested collections, names, tags and no
         a.Tag(k.AsView(), u8"Boss");
         (void)a.Ok(u8"entry.note.set", Args({{u8"id", k.AsView()}, {u8"note", u8"the one with the cape"}}));
     }
-    Session b(folder.AsView()); // the first closed and its lock gone: this one writes
+    Session b(folder.AsView()); // the first session closed and released its lock, so this one can write
     CHECK_FALSE(b.session.ReadOnly());
     const JsonValue entry = b.Ok(u8"entry.get", Args({{u8"id", k.AsView()}}));
     CHECK(Field(entry, u8"note") == u8"the one with the cape");
@@ -146,7 +145,7 @@ TEST_CASE("model viewer library: entries, nested collections, names, tags and no
     REQUIRE(tree.Count() == 1);
     CHECK(Field(tree.At(0), u8"name") == u8"Moonfall");
     CHECK(Field(tree.At(0).Get(String(u8"children")).At(0), u8"name") == u8"Act 1");
-    CHECK(b.Members(game.AsView()) == 2u); // with Act 1's
+    CHECK(b.Members(game.AsView()) == 2u); // including Act 1's members
 }
 
 TEST_CASE("model viewer library: a name is unique across a top-level collection, and two games may share one")
@@ -164,13 +163,13 @@ TEST_CASE("model viewer library: a name is unique across a top-level collection,
     s.Join(other.AsView(), Span<const String>(&rogue, 1));
 
     CHECK(s.Name(act1.AsView(), knight.AsView(), u8"hero").ok);
-    const modelviewer::CommandResult clash = s.Name(act2.AsView(), rogue.AsView(), u8"HERO"); // any case, another act
+    const modelviewer::CommandResult clash = s.Name(act2.AsView(), rogue.AsView(), u8"HERO"); // ignoring case, in another act
     CHECK_FALSE(clash.ok);
-    CHECK(clash.error.AsView().ContainsIgnoreCase(u8"Knight.fbx")); // says who holds it
+    CHECK(clash.error.AsView().ContainsIgnoreCase(u8"Knight.fbx")); // names the file that holds the name
     CHECK(s.Name(other.AsView(), rogue.AsView(), u8"hero").ok);   // another game: free
     CHECK(s.Name(act1.AsView(), knight.AsView(), u8"hero").ok);   // its own name again: fine
 
-    // Ember Road moved under Moonfall would bring a second hero: refused, nothing moved.
+    // Moving Ember Road under Moonfall would bring a second hero, so it is refused.
     CHECK_FALSE(s.Run(u8"collection.move", Args({{u8"id", other.AsView()}, {u8"parent", moonfall.AsView()}})).ok);
     CHECK(s.Ok(u8"collection.tree").Count() == 2);
     // A collection cannot go inside itself.
@@ -251,9 +250,9 @@ TEST_CASE("model viewer library: undo steps back over each change, whoever made 
         CHECK(s.Ok(u8"collection.tree").Count() == 0);
         // A refused change leaves nothing new to undo, and nothing changed.
         CHECK_FALSE(s.Run(u8"collection.create", Args({{u8"name", u8""}})).ok);
-        CHECK(s.Ok(u8"history.list").Count() == 1); // the model's add, still there
+        CHECK(s.Ok(u8"history.list").Count() == 1); // the model's add is still there
     }
-    Session reopened(folder.AsView()); // the undone state is what was written
+    Session reopened(folder.AsView()); // the file holds the undone state
     CHECK(reopened.Ok(u8"collection.tree").Count() == 0);
     CHECK(reopened.Found(u8"") == 1u);
 }
@@ -266,7 +265,7 @@ TEST_CASE("model viewer library: the P4 shortlist comes in once, as the Shortlis
     modelviewer::Shortlist old(DefaultAllocator());
     old.SetNote(knight.AsView(), u8"cape\tand sword");
     old.SetStarred(crate.AsView(), true);
-    old.SetStarred(u8"/no/such/model.fbx", true); // gone since: not brought in
+    old.SetStarred(u8"/no/such/model.fbx", true); // the file no longer exists, so it is not imported
     const String text = old.Write();
     REQUIRE(WriteFile(PathJoin(folder.AsView(), u8"shortlist.txt").AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())));
     {
@@ -308,7 +307,7 @@ TEST_CASE("model viewer library: a second opener is read-only while the first ho
     {
         Session first(folder.AsView());
         CHECK_FALSE(first.session.ReadOnly());
-        // The system's lock is per open file: a second opener, even in this process, finds it held.
+        // The system's lock is per open file, so a second opener finds it held even in this process.
         Session second(folder.AsView());
         CHECK(second.session.ReadOnly());
         CHECK(second.session.File().LockHolder() == ProcessId()); // the lock file names the holder
@@ -318,7 +317,7 @@ TEST_CASE("model viewer library: a second opener is read-only while the first ho
         CHECK(second.Found(u8"") == 0u); // reading still works
         first.Add(knight.AsView());
     }
-    // The first closed (as a viewer ending, or crashing, releases it): the next one writes.
+    // Once the first closes (as when a viewer ends or crashes), the next one can write.
     Session third(folder.AsView());
     CHECK_FALSE(third.session.ReadOnly());
     CHECK(third.Found(u8"") == 1u);
@@ -334,7 +333,7 @@ TEST_CASE("model viewer library: a selection added at once lands in order, at th
     const String game = s.Collection(u8"Moonfall");
     s.Join(game.AsView(), Span<const String>(&a, 1));
     JsonValue add = Args({{u8"collection", game.AsView()}});
-    const String selection[] = {b, c, a}; // a is in already: it stays where it is
+    const String selection[] = {b, c, a}; // a is already a member and keeps its place
     add.Set(String(u8"entries"), List(Span<const String>(selection, 3)));
     add.Set(String(u8"at"), JsonValue::MakeNumber(0));
     (void)s.Ok(u8"member.add", add);
@@ -385,8 +384,8 @@ TEST_CASE("model viewer library: a change is announced to the views; a read or a
     CHECK(heard[1] == u8"collection.rename");
 }
 
-// The Library tab's tag chips: each tag that is on adds its models (any of them, in any case),
-// in the order the models came; none on keeps them all.
+// The Library tab's tag chips: each active tag adds the models that carry it (ignoring case), in
+// the models' order; with no tag active, every model is shown.
 TEST_CASE("model viewer library: the tags that are on show the models with any of them")
 {
     const String folder = Folder(u8"scratch_library_any_tag");

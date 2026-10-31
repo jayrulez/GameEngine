@@ -3,12 +3,9 @@
 
 // UI - :property partition
 //
-// Property<T>: observable value wrapper with change notification + owner invalidation.
-// Ported from Sedulous.UI/src/Core/Property.bf.
-//
-// Divergences (language): Beef `Value` property -> Value() getter + SetValue() setter;
-// Beef `Event` -> our Event<void(T)>; owner is IPropertyOwner* (see :property_owner).
-// Requires T to be equality-comparable (Beef's `where bool : operator T == T`).
+// Property<T>: observable value wrapper with change notification and owner invalidation.
+// Read it with Value() and write it with SetValue(); the owner is an IPropertyOwner* (see
+// :property_owner). T must be equality-comparable.
 
 module;
 #include "Core/Prelude.h"

@@ -1,5 +1,5 @@
-# Foundation::Profiler.Capture - `foundation.profiler.capture` (Specs/profiler.md, P3): what a
-# capture becomes outside the process: a Chrome trace JSON export of any profile source (for
+# Foundation::Profiler.Capture - `foundation.profiler.capture`: what a capture becomes outside
+# the process: a Chrome trace JSON export of any profile source (for
 # Perfetto and chrome://tracing) and the recorder that writes capture files, apart from the
 # profiler itself so the store every library links stays on Core alone.
 

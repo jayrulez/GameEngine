@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:debug_draw` partition (Debug layer).
 ///
-/// Instance-based immediate-mode debug drawing, ported from SedulousEngine's Sedulous.Renderer.Debug
-/// DebugDraw. Game code accumulates world-space lines/triangles/wireframes + screen/3D text over a
-/// frame; the debug passes flush them. Each `DebugDraw` is one accumulator - the RenderSubsystem owns a
-/// GLOBAL one (drawn in every view) + one per SCENE (drawn only when that scene renders), which is what
-/// keeps side-by-side scenes from bleeding. Every 3D method takes `overlay`: false = depth-tested,
-/// true = always-on-top. Immediate-mode: Clear() once per frame.
+/// Instance-based immediate-mode debug drawing. Game code accumulates world-space lines, triangles
+/// and wireframes, and screen or 3D text, over a frame; the debug passes flush them. Each
+/// `DebugDraw` is one accumulator. The RenderSubsystem owns a global one (drawn in every view) and
+/// one per scene (drawn only when that scene renders), which keeps side-by-side scenes from bleeding
+/// into each other. Every 3D method takes `overlay`: false is depth-tested, true is always on top.
+/// Call Clear() once per frame.
 
 module;
 #include "Core/Prelude.h"
@@ -217,7 +217,7 @@ namespace foundation::render::debug
                      bottom = center - Float3{0, halfHeight, 0};
         const f32 step = kPi * 2.0f / static_cast<f32>(segments);
         for (i32 i = 0; i < segments; ++i)
-        { // vertical lines + the two end circles
+        { // vertical lines and the two end circles
             const f32 a0 = static_cast<f32>(i) * step, a1 = static_cast<f32>(i + 1) * step;
             const Float3 o0{Cos(a0) * radius, 0, Sin(a0) * radius},
                 o1{Cos(a1) * radius, 0, Sin(a1) * radius};
@@ -228,7 +228,7 @@ namespace foundation::render::debug
         const i32 halfSeg = segments / 2;
         const f32 halfStep = kPi / static_cast<f32>(halfSeg);
         for (i32 i = 0; i < halfSeg; ++i)
-        { // hemisphere arcs (XY + ZY planes, top + bottom)
+        { // hemisphere arcs (XY and ZY planes, top and bottom)
             const f32 a0 = static_cast<f32>(i) * halfStep, a1 = static_cast<f32>(i + 1) * halfStep;
             DrawLine(top + Float3{Sin(a0) * radius, Cos(a0) * radius, 0},
                      top + Float3{Sin(a1) * radius, Cos(a1) * radius, 0}, color, overlay);

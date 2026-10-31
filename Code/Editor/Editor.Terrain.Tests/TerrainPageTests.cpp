@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The terrain page over its markup (Data/Editor/PreviewPage.xml) and a scratch project, without a
-// host (no preview): its rows from the asset (the terrain's, the base layer's, the paint layers a
-// list of groups that adds and removes but does not reorder), each edit one undo step, a layer
-// added and removed with every array kept in line, new splat weights made beside the terrain, and
-// a terrain with no heightfield said so.
+// host (no preview). Its rows come from the asset: the terrain's, the base layer's, and the paint
+// layers as a list of groups that adds and removes but does not reorder. Each edit is one undo
+// step; a layer is added and removed with every array kept in line; new splat weights are created
+// beside the terrain; and a terrain with no heightfield says so.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -55,8 +55,8 @@ namespace
         return edit;
     }
 
-    // A project with a terrain ("Hills": a heightfield, two layers, only the first with a normal
-    // map, as an older terrain keeps them) and one with nothing ("Bare").
+    // A project with a terrain ("Hills": a heightfield and two layers, only the first with a
+    // normal map, as an older terrain stores them) and one with nothing ("Bare").
     struct Bed
     {
         String dir = String(u8"scratch_terrain_page_project");
@@ -128,7 +128,7 @@ TEST_CASE("terrain page: the terrain's rows, its base layer's, and its paint lay
     gui::PropertyInfo* list = page->LayerRows().FindInfo(u8"layers");
     REQUIRE(list != nullptr);
     CHECK(list->Kind == gui::PropertyKind::List);
-    CHECK((list->ListOps & gui::PropertyListMove) == 0); // a layer's place is its weight channel
+    CHECK((list->ListOps & gui::PropertyListMove) == 0); // a layer's position is its weight channel
     CHECK((list->ListOps & gui::PropertyListAdd) != 0);
     REQUIRE(page->LayerRows().ElementCount(u8"layers", 0) == 2u);
     Array<gui::PropertyInfo> fields;
@@ -145,12 +145,13 @@ TEST_CASE("terrain page: the terrain's rows, its base layer's, and its paint lay
     CHECK(Value(page->LayerRows(), u8"layers.0.albedo") == Text(bed.grass));
     CHECK(Value(page->LayerRows(), u8"layers.0.normal") == Text(bed.grassNormal));
     CHECK(Value(page->LayerRows(), u8"layers.1.albedo") == Text(bed.rock));
-    CHECK(Value(page->LayerRows(), u8"layers.1.normal").IsEmpty()); // past the short array: none
+    CHECK(Value(page->LayerRows(), u8"layers.1.normal").IsEmpty()); // past the end of the short array
     CHECK(page->LayerRows().GetValue(u8"layers.1.tile", 0).AsFloat() == doctest::Approx(48.0));
     CHECK(page->Notice(u8"heightfield").IsEmpty());
     CHECK(page->Fact(u8"Grid") == String(u8"Not cooked yet: Save to cook it"));
 
-    // Opening it changes nothing; its first edit makes every layer array as long as the albedos.
+    // Opening the page changes nothing; the first edit pads every layer array to the length of
+    // the albedos.
     const pipeline::TerrainAsset* asset = page->Asset();
     REQUIRE(asset != nullptr);
     CHECK(asset->paletteNormalIds.Size() == 1u);
@@ -188,7 +189,7 @@ TEST_CASE("terrain page: a map picked, a tiling and a switch, each one undo step
     page->Commands().Undo();
     CHECK(asset->paletteTileScales[0] == doctest::Approx(16.0f));
     page->Commands().Undo();
-    CHECK(asset->paletteNormalIds.Size() == 1u); // as it was read: the short array back
+    CHECK(asset->paletteNormalIds.Size() == 1u); // as it was read: the short array is back
     CHECK(Value(page->LayerRows(), u8"layers.1.normal").IsEmpty());
 }
 
@@ -205,7 +206,7 @@ TEST_CASE("terrain page: a layer added at the end and one removed keep every arr
     CHECK(asset->paletteTileScales.Size() == 3u);
     CHECK(page->LayerRows().ElementCount(u8"layers", 0) == 3u);
 
-    // The first removed: those after it move down, their maps with them.
+    // Removing the first layer moves those after it down, with their maps.
     REQUIRE(page->LayerRows().EditList(u8"layers", ListEditOf(gui::ListEdit::Op::Remove, 0)));
     REQUIRE(asset->paletteAlbedoIds.Size() == 2u);
     CHECK(asset->paletteAlbedoIds[0] == bed.rock);
@@ -241,10 +242,10 @@ TEST_CASE("terrain page: New Splat Weights makes them beside the terrain and giv
     REQUIRE(splat != nullptr);
     CHECK(splat->width == 512);
     CHECK(Value(page->TerrainRows(), u8"weights") == Text(asset->weightsId));
-    CHECK_FALSE(page->SplatButton()->IsEnabled()); // it has some now
+    CHECK_FALSE(page->SplatButton()->IsEnabled()); // the terrain has splat weights now
     CHECK_FALSE(page->CreateSplatWeights(1024));
 
-    page->Commands().Undo(); // the terrain lets them go; the asset made stays
+    page->Commands().Undo(); // the terrain drops them, but the created asset remains
     CHECK(asset->weightsId.IsNil());
     CHECK(page->SplatButton()->IsEnabled());
 }

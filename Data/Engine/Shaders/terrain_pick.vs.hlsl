@@ -4,10 +4,10 @@
 #pragma pack_matrix(row_major)
 // variants: HOLES
 
-// Terrain GPU-pick VS: terrain_depth.vs's exact displacement + placement, plus the terrain
-// entity's id for the fragment. The renderer writes this pass's own block (TerrainPickView: ChunkToWorld,
-// the CROPPED ViewProj, then the id) into the slot the colour pass's TerrainView uses. Surface
-// indices only, like the depth pass.
+// Terrain GPU-pick vertex stage: terrain_depth.vs's displacement and placement, plus the terrain
+// entity's id for the fragment. The renderer writes this pass's own block (TerrainPickView:
+// ChunkToWorld, the cropped ViewProj, then the id) into the slot the colour pass's TerrainView
+// uses. Surface indices only, like the depth pass.
 
 cbuffer TerrainPickView : register(b0, space0) {
     float4x4 ChunkToWorld; // heightfield-local -> world

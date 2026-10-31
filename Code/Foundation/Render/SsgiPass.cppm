@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Foundation::Render - the `:ssgi` partition (GI tier 1).
+/// Foundation::Render - the `:ssgi` partition.
 ///
-/// Screen-space global illumination - SsrPass's DIFFUSE twin. A trace pass marches a few
+/// Screen-space global illumination, SsrPass's diffuse twin. A trace pass marches a few
 /// cosine-weighted hemisphere rays per pixel against the depth buffer and gathers the lit HDR
 /// at each hit as one-bounce radiance; a resolve pass temporally accumulates the (necessarily
 /// noisy) trace against a per-view ping-pong history and composites into the HDR. The forward
@@ -12,10 +12,10 @@
 /// for the bounce there: out = hdr + albedo * (bounce - hitWeight * skyRadiance) * intensity,
 /// skyRadiance being the pixel's own ambient (the scene's SH sky over its normal, plus the flat
 /// fill). The bounce is tinted by the G-buffer's diffuse albedo, and occluded corners darken
-/// instead of lifting. (A unit-albedo, purely additive v1 washed colours out and erased contact
-/// shadows, counting the sky twice.)
+/// instead of lifting; a purely additive bounce at unit albedo would wash colours out and erase
+/// contact shadows, counting the sky twice.
 ///
-/// Declared AFTER decals and BEFORE SSR (reflections then see the bounce), same slot rules as
+/// Declared after decals and before SSR (so reflections see the bounce), with the same slot rules as
 /// :ssr: per-view history, generation-keyed bind-group caches with deferred frees, trace noise
 /// rotated per frame so a still camera converges under the temporal blend.
 
@@ -42,7 +42,7 @@ export namespace foundation::render
 
     // The SSGI passes' push blocks (ssgi, ssgi_down, ssgi_blur and ssgi_resolve .ps.hlsl);
     // Integration.ShaderBlocks checks each against the compiled shader, member by member.
-    // Byte-identical to the HLSL SsgiPush.
+    // Laid out byte for byte as the HLSL SsgiPush.
     struct GpuSsgiPush
     {
         Float4x4 invProj{};
@@ -64,7 +64,7 @@ export namespace foundation::render
                   "SSGI push exceeds the portable 128-byte push-constant limit");
     static_assert(sizeof(GpuSsgiPush) == 128, "push SsgiPush layout drift");
 
-    // Byte-identical to the HLSL SsgiDownPush.
+    // Laid out byte for byte as the HLSL SsgiDownPush.
     struct GpuSsgiDownPush
     {
         Float2 srcTexelSize{};
@@ -74,12 +74,12 @@ export namespace foundation::render
                   "SSGI downsample push exceeds the portable 128-byte limit");
     static_assert(sizeof(GpuSsgiDownPush) == 16, "push SsgiDownPush layout drift");
 
-    // Byte-identical to the HLSL SsgiBlurPush.
+    // Laid out byte for byte as the HLSL SsgiBlurPush.
     struct GpuSsgiBlurPush
     {
         Float2 texelSize{};
         f32 depthSigma = 0.05f;
-        f32 step = 1.0f; // tap spacing in pixels: 1 before the accumulate, 1/2/4/8 after it
+        f32 step = 1.0f; // tap spacing in pixels: 1 before the accumulate, 1, 2, 4 or 8 after it
         Float4x4 invProj{};
         Float2 vpMin{0.0f, 0.0f};
         Float2 vpSize{1.0f, 1.0f};
@@ -90,7 +90,7 @@ export namespace foundation::render
                   "SSGI blur push exceeds the portable 128-byte limit");
     static_assert(sizeof(GpuSsgiBlurPush) == 104, "push SsgiBlurPush layout drift");
 
-    // Byte-identical to the HLSL SsgiResolvePush.
+    // Laid out byte for byte as the HLSL SsgiResolvePush.
     struct GpuSsgiResolvePush
     {
         Float2 vpMin{0.0f, 0.0f};
@@ -105,11 +105,11 @@ export namespace foundation::render
         i32 outputAccum = 0; // 1: write the accumulated bounce, not the composite (the denoise's input)
         f32 intensity = 1.0f;
         // HLSL starts a float4 on a 16-byte boundary; Float4 here is only 4-byte aligned, so
-        // the pad keeps the C++ offsets the shader's (a shifted read scrambled the sky term). The
+        // the pad keeps the C++ offsets the shader's (a shifted read would scramble the sky term). The
         // shader declares the same two pads (_pad0, _pad1), so both sides list each member.
         f32 pad0 = 0.0f;
         f32 pad1 = 0.0f;
-        Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view -> world normal)
+        Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view to world normal)
         Float3 skyAmbient{};           // the flat ambient fill
         // The SH sky's multiplier (the view's IBL diffuse). 0 is the rule for "no SH sky bound":
         // the shader then adds the flat fill alone, as the forward does.
@@ -123,7 +123,7 @@ export namespace foundation::render
                   "SSGI resolve push exceeds the portable 128-byte limit");
     static_assert(sizeof(GpuSsgiResolvePush) == 128, "push SsgiResolvePush layout drift");
 
-    // Owns the SSGI pipelines. Produces a fresh HDR transient (scene + one screen-space bounce).
+    // Owns the SSGI pipelines. Produces a fresh HDR transient (the scene and one screen-space bounce).
     class SsgiPass
     {
     public:
@@ -145,20 +145,20 @@ export namespace foundation::render
             f32 radius = 3.0f;        // view-space gather radius (world units)
             f32 thickness = 0.6f;     // hit acceptance band (view-space linear depth)
             // Four rays of 12 steps, the same 48 depth taps a pixel as two of 24: with the history
-            // held close to the frame (varianceGamma), two rays left a wall beside a bright patch
-            // flickering (Lamplight's guard by a wall, 0.77 a pixel a frame against 0.11).
-            i32 maxSteps = 12;        // march budget PER RAY
+            // held close to the frame (varianceGamma), two rays leave a wall beside a bright patch
+            // flickering.
+            i32 maxSteps = 12;        // march budget per ray
             i32 rayCount = 4;         // hemisphere rays per pixel (1..4)
-            bool temporal = true;     // temporal accumulate (reproject + variance-clip history)
-            f32 historyBlend = 0.95f; // max history weight (GI is noisier than SSR - lean on it)
+            bool temporal = true;     // temporal accumulate (reproject and variance-clip history)
+            f32 historyBlend = 0.95f; // max history weight (GI is noisier than SSR, so lean on it)
             // The history's clip box half-width in stddevs of the wide neighbourhood (ssgi_resolve):
-            // tight, as the box's mean is the steady estimate of a sparse trace; 2.5 let a moving
-            // light's bounce trail it, 0 let the trace's noise through.
+            // tight, as the box's mean is the steady estimate of a sparse trace. A wide box (2.5) lets a
+            // moving light's bounce trail it; 0 lets the trace's noise through.
             f32 varianceGamma = 0.25f;
             f32 depthSigma = 0.05f;   // spatial-denoise depth tolerance (relative)
             f32 motionScale = 24.0f;  // how fast history drops with motion
-            i32 debug = 0;            // >0 = show the accumulated GI raw (no composite)
-            // A-trous passes over the accumulated bounce before the composite (0 = none, at most
+            i32 debug = 0;            // > 0 shows the accumulated GI raw (no composite)
+            // A-trous passes over the accumulated bounce before the composite (0 for none, at most
             // 4: taps 1, 2, 4, 8 pixels apart), so a history held close to the frame (no trail)
             // does not show the trace's noise as blotches.
             u32 denoisePasses = 4;
@@ -169,7 +169,7 @@ export namespace foundation::render
         // and the camera's world matrix to take the G-buffer's view-space normal to world space.
         struct Sky
         {
-            rhi::Buffer* shBuffer = nullptr;   // the scene's SH9 irradiance (null = none)
+            rhi::Buffer* shBuffer = nullptr;   // the scene's SH9 irradiance (null for none)
             rendergraph::RGHandle shHandle{};  // read by the composite (orders the SH bake first)
             u64 generation = 0;                // the IBL context's (bind group key)
             f32 iblDiffuse = 1.0f;             // EnvironmentSettings' sky-lighting dimmer
@@ -177,7 +177,7 @@ export namespace foundation::render
             Float4x4 viewToWorld = Float4x4::Identity();
         };
 
-        // Declare trace + resolve for one view; returns the composited HDR handle
+        // Declare trace and resolve for one view; returns the composited HDR handle
         // ("ssgi.scene"), or `hdr` unchanged when the pass cannot run.
         [[nodiscard]] rendergraph::RGHandle
         DeclareSsgi(rendergraph::RenderGraph& graph, rendergraph::RGHandle hdr,
@@ -227,26 +227,26 @@ export namespace foundation::render
                            rendergraph::RGHandle b, rendergraph::RGHandle c);
 
         // Advance the deferred-free list once per frame (replaced sets must outlive
-        // in-flight frames - the :ssr discipline).
+        // in-flight frames, as in :ssr).
         void Tick(u32 frameIndex);
 
-        // Downsample bind group (full-res hdr + linear sampler), cached by (hdr view, gen).
+        // Downsample bind group (full-res hdr and linear sampler), cached by (hdr view, gen).
         rhi::BindGroup* EnsureDownBindGroup(rhi::TextureView* hdr, u64 generation);
 
-        // Trace bind group (scene, depth, normal + 2 samplers), cached by (scene view, gen).
+        // Trace bind group (scene, depth, normal and 2 samplers), cached by (scene view, gen).
         rhi::BindGroup* EnsureBindGroup(rhi::TextureView* scene, rhi::TextureView* depth,
                                         rhi::TextureView* normal, u64 generation);
 
-        // Blur bind group (raw gi + depth + point sampler), cached by (gi view, gen).
+        // Blur bind group (raw gi, depth and point sampler), cached by (gi view, gen).
         rhi::BindGroup* EnsureBlurBindGroup(rhi::TextureView* gi, rhi::TextureView* depth,
                                             u64 generation);
 
-        // Resolve bind group (gi, history, velocity, hdr, albedo, normal, sky SH + 2 samplers), one
+        // Resolve bind group (gi, history, velocity, hdr, albedo, normal, sky SH and 2 samplers), one
         // per history view in `cache`, kept only while its transient inputs (gi, velocity, hdr,
         // albedo, normal: views and generations; the SH buffer and its context's generation) are the
         // ones it was built from (BindGroupCache). The accumulate and the composite each keep their
         // own: the composite binds this frame's history view, which the next frame's accumulate
-        // binds with other inputs, so in one cache each threw the other's group away every frame.
+        // binds with other inputs, so in one cache each would throw the other's group away every frame.
         using ResolveInputs = BindGroupInputs<5>;
         rhi::BindGroup* EnsureResolveBindGroup(BindGroupCache<5>& cache, rhi::TextureView* histPrev,
                                                const ResolveInputs& inputs);
@@ -288,12 +288,12 @@ export namespace foundation::render
         rhi::RenderPipeline* m_downPipeline = nullptr; // radiance prefilter (quarter-res)
         rhi::BindGroupLayout* m_blurLayout = nullptr;
         rhi::PipelineLayout* m_blurPipelineLayout = nullptr;
-        rhi::RenderPipeline* m_blurPipeline = nullptr; // spatial denoise (trace -> resolve)
+        rhi::RenderPipeline* m_blurPipeline = nullptr; // spatial denoise (between trace and resolve)
         rhi::BindGroupLayout* m_resolveLayout = nullptr;
         rhi::PipelineLayout* m_resolvePipelineLayout = nullptr;
-        rhi::RenderPipeline* m_resolvePipeline = nullptr; // temporal resolve + composite
+        rhi::RenderPipeline* m_resolvePipeline = nullptr; // temporal resolve and composite
         u64 m_pipelineShaderVersion = 0; // ShaderSystem::Version at build (hot reload)
-        rhi::Sampler* m_sampler = nullptr;       // point: depth/reconstruction
+        rhi::Sampler* m_sampler = nullptr;       // point: depth and reconstruction
         rhi::Sampler* m_linearSampler = nullptr; // linear: radiance gather
         ViewHistory m_views[kMaxViews];
         HashMap<rhi::TextureView*, Entry> m_bindGroups;

@@ -3,15 +3,13 @@
 
 // UI - :context_menu partition
 //
-// Popup context menu with themed items, submenus, separators, and full keyboard navigation. Shown via
-// PopupLayer. Ported from Sedulous.UI/src/Overlay/ContextMenu.bf + MenuItem.bf. MenuItem + ContextMenu
-// share this ONE partition because they are mutually recursive (MenuItem owns a submenu ContextMenu;
-// ContextMenu owns MenuItems) - a cycle C++ module partitions cannot express as a DAG (same precedent as
-// ComboBox+ComboBoxDropdown). OWNERSHIP: Beef `List<MenuItem>` of heap ptrs + manual delete -> Array<
-// UniquePtr<MenuItem>> (stable element pointers for AddSubmenu's return, RAII cleanup); MenuItem.Action
-// `delegate void()` -> Function<void()> (captures own their state, so Beef's mOwnedObjects is unnecessary
-// and dropped); MenuItem.Submenu owned as RefPtr<ContextMenu>. Menus are shown ownsView:true so the
-// PopupLayer holds the only surviving ref; submenus are shown ownsView:false (parent MenuItem owns them).
+// Popup context menu with themed items, submenus, separators, and full keyboard navigation, shown
+// through PopupLayer. MenuItem and ContextMenu share this partition because they are mutually
+// recursive (a MenuItem owns a submenu ContextMenu, and a ContextMenu owns MenuItems), a cycle that
+// module partitions cannot express. Items are held as Array<UniquePtr<MenuItem>>, which keeps element
+// pointers stable for AddSubmenu's return value. A MenuItem's Action is a Function<void()> whose
+// captures own their state. Menus are shown with ownsView:true, so the PopupLayer holds the only
+// surviving reference; submenus are shown with ownsView:false because their parent MenuItem owns them.
 
 module;
 #include "Core/Prelude.h"
@@ -50,10 +48,10 @@ export namespace foundation::ui
         Function<void()> Action;
         bool Enabled = true;
         bool IsSeparator = false;
-        // Submenu is a ContextMenu, but held as RefPtr<View> (its base): a RefPtr specialization of the
-        // still-incomplete ContextMenu here, combined with importing :popup_layer, trips a gcc-15 modules
-        // bug ("failed to load pendings for RefPtr" reading the :popup_layer cluster). RefPtr<View> is an
-        // already-materialized specialization, so it sidesteps the bug; ContextMenu recovers it via Cast.
+        // Submenu is a ContextMenu, but held as RefPtr<View> (its base). A RefPtr specialization of the
+        // still-incomplete ContextMenu here, combined with importing :popup_layer, trips a gcc 15 modules
+        // bug ("failed to load pendings for RefPtr" when reading the :popup_layer cluster). RefPtr<View>
+        // is already instantiated, so it avoids the bug; ContextMenu recovers the type with Cast.
         RefPtr<View> Submenu;
 
         MenuItem() = default;
@@ -92,8 +90,8 @@ export namespace foundation::ui
         /// built from live state (an action registry's enabled flags) rebuilds them here, so
         /// what the user sees is the state at the moment the menu opens.
         Function<void(ContextMenu&)> OnOpening;
-        /// Remove every item (a submenu goes with its item - an open one closes first, or its
-        /// popup would outlive the item that owns it).
+        /// Remove every item. A submenu goes with its item; an open one closes first, or its
+        /// popup would outlive the item that owns it.
         void ClearItems()
         {
             CloseOpenSubmenu();
@@ -125,12 +123,11 @@ export namespace foundation::ui
         /// Index of the item currently rendered highlighted (-1 = none).
         [[nodiscard]] i32 HoveredIndex() const { return m_hoveredIndex; }
 
-        /// What every opening does before the menu measures, whoever shows it (Show here, a
-        /// menu bar through its own popup): menus are RETAINED views (a menu bar reuses its
-        /// ContextMenu instances), so the previous session's hover would survive the close -
-        /// reopening after "Close Project" showed that item still highlighted until the mouse
-        /// first moved. Every opening starts unhighlighted, scrolled to the top, and rebuilt by
-        /// OnOpening.
+        /// Resets the menu before it measures, on every opening, whoever shows it (Show here,
+        /// or a menu bar through its own popup). Menus are retained views (a menu bar reuses its
+        /// ContextMenu instances), so without this the previous hover would survive the close
+        /// and the reopened menu would show that item highlighted until the mouse moved. Every
+        /// opening starts unhighlighted, scrolled to the top, and rebuilt by OnOpening.
         void PrepareToOpen()
         {
             m_hoveredIndex = -1;
@@ -169,7 +166,6 @@ export namespace foundation::ui
 
             root->GetPopupLayer()->ShowPopup(this, owner, px, py, true, false, true);
 
-            // Request focus for keyboard navigation.
             ctx->GetFocusManager()->SetFocus(this);
         }
 
@@ -235,7 +231,6 @@ export namespace foundation::ui
             const f32 h = Height();
             const Rectangle menuBounds{0, 0, w, h};
 
-            // Background from theme.
             Drawable* bg = ResolveStyleDrawable(StyleProperty::Background);
             if (bg != nullptr)
             {
@@ -333,8 +328,8 @@ export namespace foundation::ui
             }
             ctx.VG().PopClip();
 
-            // Overflow hints: a small chevron at the clipped edge(s) so a scrollable menu
-            // reads as "there is more" instead of silently cut off.
+            // Overflow hints: a small chevron at each clipped edge shows that a scrollable menu
+            // has more items, instead of looking cut off.
             if (MaxScrollY() > 0)
             {
                 const f32 cx = w * 0.5f;
@@ -541,7 +536,7 @@ export namespace foundation::ui
             totalH += 4; // bottom padding
 
             // Content taller than the constraint (a long menu near the screen edge) clamps to
-            // it and becomes SCROLLABLE - every item stays reachable via wheel/keyboard.
+            // it and becomes scrollable, so every item stays reachable by wheel or keyboard.
             m_contentHeight = totalH;
             MeasuredSize =
                 Float2{constraints.ConstrainWidth(maxW), constraints.ConstrainHeight(totalH)};
@@ -594,7 +589,7 @@ export namespace foundation::ui
         void EnsureItemVisible(i32 index)
         {
             const f32 top = GetItemY(index);
-            const f32 bottom = top + m_itemHeight + 4; // + bottom padding
+            const f32 bottom = top + m_itemHeight + 4; // and the bottom padding
             if (top - m_scrollY < 0)
             {
                 m_scrollY = Max(0.0f, top - 4);
@@ -653,9 +648,9 @@ export namespace foundation::ui
             }
 
             const Float2 logical = root->LogicalSize();
-            // Position with the submenu's REAL measured size (a fixed guess let tall submenus
-            // open downward and run off screen; the positioner slides/clamps correctly once it
-            // knows the height, and taller-than-screen content scrolls).
+            // Position with the submenu's measured size: the positioner can only slide and clamp
+            // a tall submenu correctly once it knows the height, and content taller than the
+            // screen scrolls.
             submenu->m_scrollY = 0;
             submenu->Measure(BoxConstraints::Loose(logical.x, logical.y));
             const Float2 pos = PopupPositioner::Submenu(
@@ -701,7 +696,7 @@ export namespace foundation::ui
         f32 m_itemHeight = 28;
         f32 m_separatorHeight = 8;
         f32 m_minWidth = 150;
-        f32 m_contentHeight = 0; // unclamped measure; > Height() = scrollable
+        f32 m_contentHeight = 0; // unclamped measure; scrollable when larger than Height()
         f32 m_scrollY = 0;
     };
 

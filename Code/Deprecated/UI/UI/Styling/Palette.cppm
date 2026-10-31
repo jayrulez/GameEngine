@@ -4,16 +4,15 @@
 // UI - :palette partition
 //
 // Generates derived colors (hover/pressed/disabled/focused) from seed colors, and builds
-// StateListDrawables from them. Ported from Sedulous.UI/src/Styling/Palette.bf. Static class ->
-// struct with static methods; Color fields R/G/B/A -> r/g/b/a; returns RefPtr<StateListDrawable>.
+// StateListDrawables from them.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:palette;
 
-import foundation.core; // Color, Min, Max, RefPtr
-import foundation.vg;   // CornerRadii
+import foundation.core;
+import foundation.vg;
 import :control_state;
 import :color_drawable;
 import :rounded_rect_drawable;
@@ -51,7 +50,7 @@ export namespace foundation::ui
             return Darken(baseColor, 0.1f);
         }
 
-        /// Desaturated + faded variant.
+        /// Desaturated and faded variant.
         [[nodiscard]] static Color ComputeDisabled(Color baseColor) noexcept
         {
             const f32 gray = baseColor.r * 0.30f + baseColor.g * 0.59f + baseColor.b * 0.11f;

@@ -3,8 +3,8 @@
 
 /// Foundation::Animation - the `:ik` partition.
 ///
-/// Inverse kinematics solvers (inverse-kinematics.md P1): pure functions over a skeleton, a LOCAL
-/// pose and its model-space matrices (ModelPoseCache), with no physics and no scene. A solve writes
+/// Inverse kinematics solvers: pure functions over a skeleton, a local pose and its model-space
+/// matrices (ModelPoseCache), with no physics and no scene. A solve writes
 /// local rotations and keeps the cache current by rebuilding from the highest bone it changed down,
 /// so bones above the chain never move. Targets are in the skeleton's model space; the caller owns
 /// time (fades) and order. Nothing here allocates: the only buffer is the cache's, sized once.
@@ -57,17 +57,18 @@ export namespace foundation::animation
         // The bend plane, first that applies: a pole (the mid joint bends toward it), the
         // animated chain's own bend, the bind pose's bend, then hingeAxis. A knee and an elbow
         // bend opposite ways, so the hinge has no default: it is the mid joint's rotation axis in
-        // the START bone's local space (the mid moves toward cross(hinge, chain direction)).
+        // the start bone's local space (the mid moves toward cross(hinge, chain direction)).
         bool hasPole = false;
         Float3 pole = Float3::Zero; // model space
         Float3 hingeAxis = Float3::Zero;
         f32 weight = 1.0f; // 0 leaves the pose as it was, byte for byte
-        // A DETACHED end (an end bone not below the mid: asset-pack rigs export feet and hands as
-        // IK-target bones off the root, the shin or forearm with no child) is moved to the target
-        // itself (blended by the weight, turned with matchRotation), and the chain bends all the way
-        // to meet it with its tip: the point of the mid bone that met the end, by default where the
-        // pose this solve receives has them (keeping any gap the baked rig left), or `tip` (in the
-        // mid bone's space) with useTip. With no end bone (-1) and useTip, the tip is the end.
+        // A detached end is an end bone not below the mid (asset-pack rigs export feet and hands as
+        // IK-target bones off the root, leaving the shin or forearm with no child). It is moved to
+        // the target itself (blended by the weight, turned with matchRotation), and the chain bends
+        // all the way to meet it with its tip. The tip is by default the point of the mid bone
+        // that met the end in the pose this solve receives (keeping any gap the baked rig left),
+        // or `tip` (in the mid bone's space) with useTip. With no end bone (-1) and useTip, the
+        // tip is the end.
         bool useTip = false;
         Float3 tip = Float3::Zero;
     };
@@ -303,11 +304,11 @@ export namespace foundation::animation
     }
 
     /// Bends a two-bone chain so its end reaches `settings.target`: exactly when the target is in
-    /// reach, else stopped at kTwoBoneMaxReach of full reach (or the span the pose already has, if
-    /// the animation holds it straighter; or the chain's shortest fold) and pointed at it. Bone lengths are the pose's own (a rotation keeps them; the bind pose's would
-    /// miss when an animation moved a bone). The mid joint stays in the bend plane, so it never
-    /// rolls or flips between frames. Writes the start and mid local rotations, and the end's with
-    /// matchRotation.
+    /// reach, else stopped at kTwoBoneMaxReach of full reach (or at the span the pose already has,
+    /// if the animation holds it straighter, or at the chain's shortest fold) and pointed at it.
+    /// Bone lengths are the pose's own: a rotation keeps them, and the bind pose's would miss when
+    /// an animation moved a bone. The mid joint stays in the bend plane, so it never rolls or flips
+    /// between frames. Writes the start and mid local rotations, and the end's with matchRotation.
     inline IkResult SolveTwoBone(const Skeleton& skeleton, Span<BoneTransform> local, ModelPoseCache& model,
                                  const TwoBoneIkChain& chain, const TwoBoneIkSettings& settings)
     {
@@ -511,7 +512,7 @@ export namespace foundation::animation
             {
                 continue;
             }
-            // The target direction from where the last bone is NOW (a turn above it moved it).
+            // The target direction from where the last bone is now (a turn above it moved it).
             const Float3 direction = wanted(ik::Position(model.At(last)), nullptr);
             const Quaternion turn = Slerp(Quaternion::Identity, ik::FromTo(aimNow(), direction), share);
             ik::TurnInModel(skeleton, local, model, bones[i], turn);
@@ -604,12 +605,12 @@ export namespace foundation::animation
         }
     }
 
-    /// Feet that stand on the ground under them (inverse-kinematics.md P3): each planted foot rises
-    /// or falls by the ground's height under it (measured from the animation's ground, groundHeight
-    /// along up) and turns to the slope within maxTilt; the pelvis lowers by the deepest
-    /// correction, clamped, so the lower foot can reach; a foot the animation lifts above
-    /// liftHeight is swinging and is left to the animation. In order: the pelvis, its rebuild, then
-    /// each leg. The corrections ease by `deltaSeconds` through `state`.
+    /// Feet that stand on the ground under them. Each planted foot rises or falls by the ground's
+    /// height under it (measured from the animation's ground, groundHeight along up) and turns to
+    /// the slope within maxTilt; the pelvis lowers by the deepest correction, clamped, so the lower
+    /// foot can reach; a foot the animation lifts above liftHeight is swinging and is left to the
+    /// animation. In order: the pelvis, its rebuild, then each leg. The corrections ease by
+    /// `deltaSeconds` through `state`.
     inline FootIkResult SolveFootIk(const Skeleton& skeleton, Span<BoneTransform> local, ModelPoseCache& model,
                                     i32 pelvis, Span<const FootIkLeg> legs, Span<const FootGround> grounds,
                                     const FootIkSettings& settings, FootIkState& state, f32 deltaSeconds)
@@ -621,7 +622,7 @@ export namespace foundation::animation
             return result;
         }
         // A foot below its shin is the chain's end; a foot elsewhere (an IK-target bone off the
-        // root, as asset-pack rigs export it) is DETACHED: it is moved itself and the leg bent to
+        // root, as asset-pack rigs export it) is detached: it is moved itself and the leg bent to
         // meet it with the point of the shin that met it in the animated pose.
         bool detached[kMaxFootIkLegs] = {};
         for (usize i = 0; i < legs.Size(); ++i)

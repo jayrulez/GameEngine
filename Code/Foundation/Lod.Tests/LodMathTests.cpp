@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Lod - the shared LOD selection math (mesh chains + terrain chunks both
+// Foundation::Lod - the shared LOD selection math (mesh chains and terrain chunks both
 // delegate here; one coverage formula, one walk, one hysteresis rule).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

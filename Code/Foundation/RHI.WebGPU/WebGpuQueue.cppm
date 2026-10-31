@@ -3,10 +3,10 @@
 
 /// foundation.rhi.webgpu:queue - Queue over the device's single WGPUQueue.
 ///
-/// WebGPU exposes exactly ONE queue per device. The RHI models Graphics/Compute/
-/// Transfer queues, so the device hands out three thin wrappers that all funnel into
-/// the same WGPUQueue - correct by construction (one timeline) and shape-compatible
-/// with callers that ask for a specific queue type. Fence signaling rides
+/// WebGPU exposes one queue per device. The RHI models Graphics, Compute and Transfer
+/// queues, so the device hands out three thin wrappers that all funnel into the same
+/// WGPUQueue: correct by construction (one timeline) and shape-compatible with callers
+/// that ask for a specific queue type. Fence signaling uses
 /// wgpuQueueOnSubmittedWorkDone (see :fence for the timeline emulation).
 
 module;
@@ -67,8 +67,8 @@ export namespace foundation::rhi::webgpu
         {
             // One queue, one timeline: anything previously submitted here is already
             // ordered before this submission, so same-queue waits are satisfied by
-            // construction. Cross-queue waits cannot exist (there is only one queue) -
-            // waiting CPU-side would deadlock nothing but adds latency; the values are
+            // construction. Cross-queue waits cannot exist (there is only one queue);
+            // waiting CPU-side would deadlock nothing but add latency. The values are
             // still honored for fences signaled by earlier submissions.
             for (usize i = 0; i < waitFences.Size() && i < waitValues.Size(); ++i)
             {
@@ -83,8 +83,8 @@ export namespace foundation::rhi::webgpu
 
         void WaitIdle() override
         {
-            // Heap record + orphan-on-timeout (the fence-fix pattern): if the pump gives up,
-            // the still-registered callback must not write through a dead stack frame.
+            // A heap record, orphaned on timeout: if the pump gives up, the still-registered
+            // callback must not write through a dead stack frame.
             struct Result
             {
                 IAllocator* allocator = nullptr;
@@ -116,11 +116,11 @@ export namespace foundation::rhi::webgpu
             m_allocator->Delete(result);
         }
 
-        // Release `texture` only once every submission queued SO FAR has been consumed -
-        // fire-and-forget (the heap record owns itself, the fence-fix lifetime pattern). The web
-        // swapchain releases its borrowed surface texture through this: on web wgpuQueueSubmit
-        // validates asynchronously, so releasing the borrow on any fixed frame boundary races the
-        // drain - under startup load or a resize the not-yet-consumed submit loses its texture
+        // Release `texture` only once every submission queued so far has been consumed,
+        // fire-and-forget (the heap record owns itself). The web swapchain releases its
+        // borrowed surface texture through this: on web wgpuQueueSubmit validates
+        // asynchronously, so releasing the borrow on any fixed frame boundary races the drain.
+        // Under startup load or a resize the not-yet-consumed submit loses its texture
         // ("Destroyed texture used in a submit") and Dawn drops the whole command buffer.
         void ReleaseTextureWhenConsumed(WGPUTexture texture)
         {
@@ -179,8 +179,8 @@ export namespace foundation::rhi::webgpu
     private:
         WGPUSubmissionIndex SubmitInternal(Span<CommandBuffer* const> commandBuffers)
         {
-            // Persistent-map coherence: flush every OPEN shadow first (queue-ordered,
-            // so the writes land before this submission reads them).
+            // Persistent-map coherence: flush every open shadow first (queue-ordered, so
+            // the writes land before this submission reads them).
             m_bufferRegistry->FlushOutstanding();
 
             WGPUCommandBuffer handles[16];
@@ -211,8 +211,8 @@ export namespace foundation::rhi::webgpu
 
         WGPUSubmissionIndex SubmitAndRelease(WGPUCommandBuffer* handles, usize count)
         {
-            // SubmitForIndex (wgpu extension) hands back the submission's index so
-            // fences can wait on EXACTLY this submission; plain Submit on web.
+            // SubmitForIndex (a wgpu extension) hands back the submission's index so fences
+            // can wait on this submission alone; plain Submit on web.
             WGPUSubmissionIndex index{};
             if (m_api->wgpuQueueSubmitForIndex != nullptr)
             {
@@ -254,7 +254,7 @@ export namespace foundation::rhi::webgpu
             info.callback = [](WGPUQueueWorkDoneStatus, WGPUStringView, void* userdata1, void*)
             {
                 auto* p = static_cast<WebGpuPendingSignal*>(userdata1);
-                if (p->fence != nullptr) // still alive - it detaches us on destruction
+                if (p->fence != nullptr) // still alive; it detaches us on destruction
                 {
                     p->fence->DetachPending(p);
                     p->fence->SignalFromCallback(p->value);

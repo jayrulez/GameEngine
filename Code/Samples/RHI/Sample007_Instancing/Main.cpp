@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample007 - Instanced Rendering. Ported from Sedulous Sample007_Instancing.
-/// Renders 64 small quads in a grid using instanced draw with per-instance offset + color.
+/// Sample007 - Instanced Rendering.
+/// Renders 64 small quads in a grid using an instanced draw with per-instance offset and color.
 /// Instance buffer is CpuToGpu with per-frame wobble animation.
 
 #include <cmath>
@@ -100,7 +100,7 @@ foundation::core::Status InstancingSample::OnInit()
                                             m_ps) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Vertex + index buffers (GpuOnly, static quad geometry).
+    // Vertex and index buffers (GpuOnly, static quad geometry).
     rhi::BufferDesc vbd{};
     vbd.size = sizeof(kQuadVerts);
     vbd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
@@ -134,12 +134,12 @@ foundation::core::Status InstancingSample::OnInit()
     if (!m_instMapped)
         return foundation::core::ErrorCode::Unknown;
 
-    // Pipeline layout (empty - no bind groups needed).
+    // Pipeline layout (empty: no bind groups needed).
     rhi::PipelineLayoutDesc pld{};
     if (m_device->CreatePipelineLayout(pld, m_pl) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Two vertex buffer layouts: slot 0 = per-vertex, slot 1 = per-instance.
+    // Two vertex buffer layouts: slot 0 is per-vertex, slot 1 per-instance.
     rhi::VertexAttribute vtxAttrs[1] = {{rhi::VertexFormat::Float32x3, 0, 0}};
     rhi::VertexBufferLayout vtxLayout{};
     vtxLayout.stride = 12;

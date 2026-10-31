@@ -3,11 +3,11 @@
 
 /// foundation.rhi.webgpu:swapchain - SwapChain over the configured WGPUSurface.
 ///
-/// WebGPU has no swapchain object: the surface is CONFIGURED (format/size/present
+/// WebGPU has no swapchain object: the surface is configured (format, size, present
 /// mode) and each frame borrows the current texture. AcquireNextImage wraps the
-/// borrowed WGPUTexture (WrapExternal - the surface owns it) + creates its view;
-/// Present hands it to the compositor and drops the borrow. There is no image
-/// index in the API - a frame counter modulo bufferCount satisfies the RHI shape.
+/// borrowed WGPUTexture (WrapExternal; the surface owns it) and creates its view;
+/// Present hands it to the compositor and drops the borrow. There is no image index in
+/// the API; a frame counter modulo bufferCount satisfies the RHI shape.
 
 module;
 #include "Core/Prelude.h"
@@ -86,9 +86,9 @@ export namespace foundation::rhi::webgpu
     /// The requested format when the surface offers it, else the closest thing it does: the
     /// requested format's sibling in the other channel order (sRGB-ness is what the renderer's
     /// output depends on; channel order is the pipeline's business and it reads Format() back),
-    /// else the surface's first ADOPTABLE choice, else the request unchanged. `offered` is the
+    /// else the surface's first adoptable choice, else the request unchanged. `offered` is the
     /// surface's capability list in RHI terms, Undefined for entries the swap chain cannot adopt
-    /// (see FromWgpuSurfaceColorFormat) - pure, so a test can hand it any list.
+    /// (see FromWgpuSurfaceColorFormat). Pure, so a test can hand it any list.
     [[nodiscard]] inline TextureFormat NegotiateSurfaceFormat(TextureFormat requested,
                                                               Span<const TextureFormat> offered) noexcept
     {
@@ -158,15 +158,15 @@ export namespace foundation::rhi::webgpu
                 {
                     m_api->wgpuTextureRelease(surfaceTexture.texture);
                 }
-                return ErrorCode::Unknown; // lost/outdated: host resizes + retries
+                return ErrorCode::Unknown; // lost/outdated: the host resizes and retries
             }
 
-            // Size the frame from the TEXTURE WE GOT, not the size we configured: on the
+            // Size the frame from the texture we got, not the size we configured: on the
             // browser the canvas can resize between configure and acquire, and Chrome hands
-            // back the canvas's CURRENT backing texture - rendering with the configured size
-            // then fails validation ("Scissor rect ... not contained in the render area")
-            // and the whole frame drops. Width()/Height() feed FrameContext AFTER acquire,
-            // so every downstream viewport/scissor agrees with the real attachment.
+            // back the canvas's current backing texture. Rendering with the configured size
+            // then fails validation ("Scissor rect ... not contained in the render area") and
+            // the whole frame drops. Width()/Height() feed FrameContext after acquire, so every
+            // downstream viewport and scissor agrees with the real attachment.
             const u32 acquiredWidth = m_api->wgpuTextureGetWidth(surfaceTexture.texture);
             const u32 acquiredHeight = m_api->wgpuTextureGetHeight(surfaceTexture.texture);
             if (acquiredWidth != 0 && acquiredHeight != 0 &&
@@ -246,17 +246,18 @@ export namespace foundation::rhi::webgpu
             }
 #if PLATFORM_WEB
             // The browser presents the canvas automatically once the requestAnimationFrame
-            // callback (the web runner's frame) returns; emdawnwebgpu ABORTS on an explicit
+            // callback (the web runner's frame) returns; emdawnwebgpu aborts on an explicit
             // wgpuSurfacePresent.
             //
-            // Do NOT release the borrowed surface texture here (or on any fixed frame boundary).
-            // On web wgpuQueueSubmit validates and executes ASYNCHRONOUSLY (the browser drains the
-            // queue after the rAF returns), so releasing our only reference before this frame's
-            // submit has been consumed destroys the texture out from under it: "Destroyed texture
-            // used in a submit", and Dawn drops the whole command buffer (the startup race that
-            // silently killed the one-shot IBL env bake, and every resize's reconfigure). Hand the
-            // borrow to the queue, which releases it from a wgpuQueueOnSubmittedWorkDone callback -
-            // provably after the submit has been consumed, whatever the drain latency.
+            // Do not release the borrowed surface texture here (or on any fixed frame
+            // boundary). On web wgpuQueueSubmit validates and executes asynchronously (the
+            // browser drains the queue after the rAF returns), so releasing our only reference
+            // before this frame's submit has been consumed destroys the texture out from under
+            // it: "Destroyed texture used in a submit", and Dawn drops the whole command buffer
+            // (losing one-shot work such as the IBL env bake, and every resize's reconfigure).
+            // Hand the borrow to the queue, which releases it from a
+            // wgpuQueueOnSubmittedWorkDone callback, after the submit has been consumed
+            // whatever the drain latency.
             if (m_queue != nullptr && m_ownedHandle != nullptr)
             {
                 m_queue->ReleaseTextureWhenConsumed(m_ownedHandle);
@@ -305,8 +306,9 @@ export namespace foundation::rhi::webgpu
             }
         }
 
-        // The sRGB companion of a non-sRGB 8-bit color format (identity otherwise) - the inverse of
-        // BaseColorFormat, for adopting the browser's preferred canvas format as an sRGB backbuffer.
+        // The sRGB companion of a non-sRGB 8-bit color format (identity otherwise), the inverse of
+        // BaseColorFormat, for adopting the browser's preferred canvas format as an sRGB
+        // backbuffer.
         static TextureFormat SrgbColorFormat(TextureFormat format)
         {
             switch (format)
@@ -323,7 +325,7 @@ export namespace foundation::rhi::webgpu
 #if PLATFORM_WEB
         // The browser's preferred canvas base format (formats[0] of the surface caps). Configuring
         // the canvas with anything else forces an extra copy at present. Falls back to the engine
-        // default if caps are unavailable / not an 8-bit unorm format we understand.
+        // default if caps are unavailable or not an 8-bit unorm format we understand.
         TextureFormat PreferredBaseFormat(TextureFormat fallback)
         {
             WGPUSurfaceCapabilities caps = WGPU_SURFACE_CAPABILITIES_INIT;
@@ -334,7 +336,7 @@ export namespace foundation::rhi::webgpu
             }
             if (caps.formatCount == 0)
             {
-                // A successful query still allocated the caps members - free before bailing.
+                // A successful query still allocated the caps members: free them before bailing.
                 m_api->wgpuSurfaceCapabilitiesFreeMembers(caps);
                 return fallback;
             }
@@ -359,15 +361,15 @@ export namespace foundation::rhi::webgpu
             if (width == 0 || height == 0)
             {
                 // A zero-size surface is illegal (WebGPU errors "size is zero"); a canvas hits this
-                // transiently across a fullscreen/minimize transition. Skip configuring - the last
-                // valid configuration stays, AcquireNextImage fails, the host skips the frame, and
-                // the resize pump reconfigures once a real size arrives.
+                // transiently across a fullscreen or minimize transition. Skip configuring: the
+                // last valid configuration stays, AcquireNextImage fails, the host skips the frame,
+                // and the resize pump reconfigures once a real size arrives.
                 return ErrorCode::Ok;
             }
 
             WGPUSurfaceConfiguration config = WGPU_SURFACE_CONFIGURATION_INIT;
             config.device = m_device;
-            // The pipeline's final hop COPIES the tonemapped output into the
+            // The pipeline's final hop copies the tonemapped output into the
             // backbuffer, so the surface needs CopyDst alongside RenderAttachment
             // (universally supported by wgpu surfaces).
             config.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopyDst;
@@ -386,13 +388,14 @@ export namespace foundation::rhi::webgpu
             // base format and expose the sRGB format as a viewFormat. AcquireNextImage then creates
             // the per-frame view in m_format (the sRGB format), so the engine's default sRGB
             // swapchain renders correctly with no app-side change. Desktop wgpu-native accepts sRGB
-            // config formats directly, so it is left exactly as before.
+            // config formats directly, so it is configured with the format as asked.
             //
-            // ADOPT THE BROWSER'S PREFERRED base format (rgba8unorm vs bgra8unorm varies by device):
-            // configuring the canvas with a non-preferred format forces the browser to copy the whole
-            // frame at every present ("configured with a different format than preferred" warning).
-            // Take the preferred base + retarget the engine to its sRGB companion so the renderer
-            // still produces an sRGB backbuffer, just in the format the compositor wants.
+            // Adopt the browser's preferred base format (rgba8unorm or bgra8unorm, depending on the
+            // device): configuring the canvas with a non-preferred format forces the browser to
+            // copy the whole frame at every present ("configured with a different format than
+            // preferred" warning). Take the preferred base and retarget the engine to its sRGB
+            // companion so the renderer still produces an sRGB backbuffer, in the format the
+            // compositor wants.
             const TextureFormat baseFormat = PreferredBaseFormat(BaseColorFormat(m_format));
             m_format = SrgbColorFormat(baseFormat);
             config.format = ToWgpuTextureFormat(baseFormat);
@@ -403,19 +406,19 @@ export namespace foundation::rhi::webgpu
                 config.viewFormats = &viewFormat;
             }
 #else
-            // Refuse CLEANLY when this adapter cannot present to the surface - wgpu-native
-            // PANICS inside configure otherwise ("Surface does not support the adapter's
-            // queue family", seen on Windows hybrid/multi-adapter machines). Zero supported
-            // formats = no present support for this (surface, adapter) pair; the backend logs
-            // the adapter list at startup and ENV_WEBGPU_ADAPTER=<index> overrides the pick.
+            // Refuse cleanly when this adapter cannot present to the surface; wgpu-native
+            // panics inside configure otherwise ("Surface does not support the adapter's queue
+            // family", seen on Windows hybrid and multi-adapter machines). Zero supported
+            // formats means no present support for this (surface, adapter) pair; the backend
+            // logs the adapter list at startup and ENV_WEBGPU_ADAPTER=<index> overrides the
+            // pick.
             //
-            // And NEGOTIATE the format from what the surface offers, the way the Vulkan swap
-            // chain does: wgpu-native also panics inside configure when the format is not one
-            // the surface lists. A Windows surface offers both channel orders and a Wayland one
-            // RGBA, so the engine's RGBA8UnormSrgb default passed straight through; an X11
-            // surface through wgpu's Vulkan backend offers only the BGRA pair and killed every
-            // sample at startup (found by the Beef port). Callers read Format() back for their
-            // colour targets, so the negotiated format follows through.
+            // Also negotiate the format from what the surface offers, as the Vulkan swap chain
+            // does: wgpu-native also panics inside configure when the format is not one the
+            // surface lists. A Windows surface offers both channel orders and a Wayland one
+            // RGBA, so the engine's RGBA8UnormSrgb default passes straight through, but an X11
+            // surface through wgpu's Vulkan backend offers only the BGRA pair. Callers read
+            // Format() back for their colour targets, so the negotiated format follows through.
             {
                 WGPUSurfaceCapabilities caps = WGPU_SURFACE_CAPABILITIES_INIT;
                 if (m_api->wgpuSurfaceGetCapabilities(m_surface->Handle(), m_adapter, &caps) ==
@@ -462,9 +465,6 @@ export namespace foundation::rhi::webgpu
             return ErrorCode::Ok;
         }
 
-        /// The requested mode when the surface offers it, else the closest match
-        /// (Immediate/Mailbox degrade toward each other, everything else to Fifo -
-        /// the only mode WebGPU guarantees).
         /// Whether the surface's capabilities include `usage` (false when the query fails).
         bool SupportsUsage(WGPUTextureUsage usage)
         {
@@ -479,6 +479,8 @@ export namespace foundation::rhi::webgpu
             return supported;
         }
 
+        /// The requested mode when the surface offers it, else the closest match (Immediate
+        /// degrades to Mailbox, everything else to Fifo, the only mode WebGPU guarantees).
         WGPUPresentMode SupportedPresentMode(WGPUPresentMode requested)
         {
             WGPUSurfaceCapabilities capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
@@ -514,10 +516,9 @@ export namespace foundation::rhi::webgpu
         }
 
         // Releases whatever of the current image exists: the view when it was built, and the
-        // borrowed surface texture whenever one is held. NOT gated on m_haveImage - that flag
-        // is set only after the view succeeds, and gating on it stranded the surface texture
-        // when the view failed to build (the Beef port's swap chain frees it inline; this is
-        // the same fix from the other side).
+        // borrowed surface texture whenever one is held. Not gated on m_haveImage: that flag is
+        // set only after the view succeeds, so gating on it would strand the surface texture
+        // when the view fails to build.
         void DropCurrent()
         {
             if (m_haveImage)

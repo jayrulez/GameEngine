@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for BreadcrumbBar: SetPath split, SetSegments, GetSegment / GetPathUpTo round-trips.
+// Smoke test for BreadcrumbBar: SetPath splitting, SetSegments, and GetSegment and GetPathUpTo round trips.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -30,7 +30,7 @@ TEST_CASE("toolkit-breadcrumb: PathSplitAndQueries")
     bar->GetPathUpTo(1, upTo);
     CHECK(upTo == StringView{u8"home/robert"});
 
-    // Replace via explicit segment list.
+    // Replace via an explicit segment list.
     core::Array<StringView> segs;
     segs.PushBack(StringView{u8"A"});
     segs.PushBack(StringView{u8"B"});

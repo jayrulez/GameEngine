@@ -1,6 +1,6 @@
 # Foundation::Mcp.Script - `foundation.mcp.script`: the scripting MCP tools (script_api). A module's
 # own tool contribution against foundation.mcp; resolves backends live from the ScriptBackendRegistry
-# (does NOT link any backend - the host registers those).
+# (it links no backend; the host registers those).
 
 util_add_engine_library(Mcp.Script ALIAS Foundation::Mcp.Script)
 target_link_libraries(Mcp.Script PUBLIC

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// MeshEditorPage tests: the viewer's stat-line readout, a free, pure function; then the page from
-// the preview pages' markup over a mesh in a project, without a host (so no viewport, no cooked
-// product): the preview's place says the mesh is not cooked, the preview's own choices sit on its
-// bar, and the preview's material is kept for the mesh with the project.
+// MeshEditorPage tests: the viewer's stat-line readout (a free, pure function), then the page from
+// the preview pages' markup over a mesh in a project, without a host (so no viewport and no cooked
+// product). The preview's place says the mesh is not cooked, the preview's choices sit on its bar,
+// and the preview's material is kept for the mesh with the project.
 
 #include <doctest/doctest.h>
 
@@ -31,7 +31,7 @@ TEST_CASE("MeshStatLines reports counts, bounds, skinning, and per-submesh rows"
 
     Array<String> lines = editor::MeshStatLines(*cube);
 
-    // Header block: name, vertices, indices, submeshes, bounds, skinned - then one line per submesh.
+    // Header block: name, vertices, indices, submeshes, bounds, skinned; then one line per submesh.
     REQUIRE(lines.Size() >= 6 + cube->subMeshes.Size());
 
     auto hasPrefix = [&](StringView prefix) -> bool
@@ -157,7 +157,7 @@ namespace
         String dir = String(u8"scratch_mesh_page_project");
         UniquePtr<editor::EditorProject> project;
         foundation::settings::Settings store{DefaultAllocator()};
-        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
+        editor::app::AssetPageServicesSource none; // for the registration: no services; it outlives the context below
         editor::EditorContext context{DefaultAllocator()};
         foundation::content::Instance* crate = nullptr;
 
@@ -207,8 +207,8 @@ TEST_CASE("mesh page: not cooked, said in the preview's place; its choices on th
     CHECK(editor::app::FindById<gui::Label>(*page->Content(), u8"preview-empty-title")->GetText() == StringView(u8"Not cooked yet"));
     CHECK(page->Fact(u8"Status") == StringView(u8"Not cooked yet"));
 
-    // The material slot and the LOD choice follow the bar's own separator, the LOD hidden for a
-    // mesh with no chain.
+    // The material slot and the LOD choice come after the bar's separator; the LOD choice is
+    // hidden for a mesh with no chain.
     REQUIRE(page->MaterialSlot() != nullptr);
     gui::Node* own = editor::app::FindById<gui::Node>(*page->Content(), u8"preview-own");
     REQUIRE(own != nullptr);

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Direct unit tests for pieces without a dedicated Sedulous test file
-// (SubresourceStateTracker, PersistentResource ping-pong, resource tracking).
-// The Sedulous suite is ported in Type/Descriptor/PassBuilder/Dependency/
-// Culling/GraphCore/Barrier Tests.
+// Direct unit tests for pieces the other suites do not cover: SubresourceStateTracker,
+// PersistentResource ping-pong and resource tracking.
 
 #include <doctest/doctest.h>
 
@@ -47,7 +45,7 @@ TEST_CASE("rg.resource: tracking + totals from descriptor")
     res.textureDesc.mipLevelCount = 4;
     res.textureDesc.arrayLayerCount = 6;
 
-    CHECK(res.TotalMipLevels() == 4u); // no GPU texture -> from descriptor
+    CHECK(res.TotalMipLevels() == 4u); // no GPU texture: from the descriptor
     CHECK(res.TotalArrayLayers() == 6u);
 
     res.refCount = 3;

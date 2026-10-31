@@ -3,7 +3,7 @@
 
 // Scene - foundation.scene.resource implementation unit.
 //
-// Out-of-line definitions for SceneResource's public serialization API (sec 3.2 / sec 10.6):
+// Out-of-line definitions for SceneResource's public serialization API:
 // the free-function bodies (SerializeScene, CapturePrefab, SpawnPrefab, LoadScene, ...) and the
 // RTTI_DEFINE_OBJECT reflection bodies. SceneResource.cppm keeps the declarations, the
 // detail-namespace helpers, and the document classes.
@@ -33,8 +33,8 @@ namespace foundation::scene
         const bool text = encoding == detail::SceneStreamEncoding::Text;
         (void)text;
 
-        // Stream header: writers emit the current one; readers REQUIRE it (magic + the current
-        // version) - any other stream fails here, before a single record is read.
+        // Stream header: writers emit the current one; readers require it (magic and the current
+        // version), so any other stream fails here, before a single record is read.
         if (writing)
         {
             detail::WriteSceneStreamHeader(ar);
@@ -84,8 +84,8 @@ namespace foundation::scene
         Array<EntityHandle> handles;
         if (writing)
         {
-            // TREE order (roots in list order, depth-first children): load recreates entities and
-            // relinks parents in FILE order, so sibling ORDER round-trips (the editor hierarchy is
+            // Tree order (roots in list order, depth-first children): load recreates entities and
+            // relinks parents in file order, so sibling order round-trips (the editor hierarchy is
             // reorderable; pool order would shuffle siblings back to creation order).
             Array<EntityHandle> stack;
             for (EntityHandle r = scene.GetFirstRoot(); r.IsAssigned(); r = scene.GetNextSibling(r))
@@ -95,15 +95,15 @@ namespace foundation::scene
                 {
                     EntityHandle e = stack.Back();
                     stack.PopBack();
-                    // Prefab-instance members persist as ref+deltas, never as plain records.
-                    // Their non-member children (user entities parented INTO an instance) still
-                    // serialize - their saved parent guid stays valid because instances respawn
-                    // with their SAVED member guids.
+                    // Prefab-instance members persist as ref and deltas, never as plain records.
+                    // Their non-member children (user entities parented into an instance) still
+                    // serialize; their saved parent guid stays valid because instances respawn
+                    // with their saved member guids.
                     if (prefabMembers.Find(scene.GetEntityId(e)) == nullptr)
                     {
                         handles.PushBack(e);
                     }
-                    // Push children reversed so they POP in list order.
+                    // Push children reversed so they pop in list order.
                     Array<EntityHandle> kids;
                     for (EntityHandle c = scene.GetFirstChild(e); c.IsAssigned();
                          c = scene.GetNextSibling(c))
@@ -153,9 +153,9 @@ namespace foundation::scene
                 foundation::core::Serialize(ar, "active", active);
                 detail::SerializeGuid(ar, "parent", parentId);
                 detail::SerializeTransform(ar, t);
-                // Corrupt-save recovery: a duplicate entity guid (the pre-fix RNG-collision bug)
-                // gets a FRESH id so every entity stays uniquely addressable. Records addressed
-                // to the shared guid (components, parent links) route to its FIRST holder.
+                // Corrupt-save recovery: a duplicate entity guid (a save with colliding ids)
+                // gets a fresh id so every entity stays uniquely addressable. Records addressed
+                // to the shared guid (components, parent links) route to its first holder.
                 EntityHandle h;
                 if (scene.FindEntity(id).IsAssigned())
                 {
@@ -163,7 +163,7 @@ namespace foundation::scene
                         u8"Scene",
                         u8"duplicate entity guid in save for '{}' - assigning a fresh id", ename);
                     h = scene.CreateEntity(ename.AsView());
-                    ids.PushBack(scene.GetEntityId(h)); // parent RELINK by the fresh id
+                    ids.PushBack(scene.GetEntityId(h)); // parent relink by the fresh id
                 }
                 else
                 {
@@ -191,9 +191,8 @@ namespace foundation::scene
         ar.EndArray();
 
         // --- components (owner-id, type-id, data) ---
-        // NOTE: records are written inline; load requires the owning manager to be present
-        // on `scene` (the normal case - managers are injected before load). Skipping an
-        // unknown component type (length-prefixed records) is a future robustness item.
+        // A record routes into its owning manager on `scene` (managers are installed before
+        // load); a record whose manager is absent is preserved as unresolved (below).
         u32 componentCount = 0;
         struct Record
         {
@@ -220,10 +219,10 @@ namespace foundation::scene
                     }
                 });
             componentCount = static_cast<u32>(records.Size());
-            // Unresolved records (their manager was absent at load) write back VERBATIM in the
-            // encoding they were captured in - a save never drops a plugin's components
-            // (game-native-code.md S3). A cross-encoding write cannot re-encode an unknown
-            // type: those are dropped LOUDLY.
+            // Unresolved records (their manager was absent at load) write back verbatim in the
+            // encoding they were captured in, so a save never drops a plugin's components.
+            // A cross-encoding write cannot re-encode an unknown type: those are dropped with
+            // an error.
             u32 dropped = 0;
             for (const Scene::UnresolvedComponent& u : scene.UnresolvedComponents())
             {
@@ -249,7 +248,7 @@ namespace foundation::scene
         ar.BeginArray(componentCount);
         if (writing)
         {
-            // TEXT: records inline in object scopes (diffable, skip-by-scope); BINARY v2:
+            // Text: records inline in object scopes (diffable, skip-by-scope); binary v2:
             // length-prefixed blobs so readers can skip types this build doesn't know.
             for (Record& r : records)
             {
@@ -304,7 +303,7 @@ namespace foundation::scene
                     }
                     else if (manager == nullptr)
                     {
-                        // Preserve verbatim (S3): the record's remaining element (<data>) is
+                        // Preserve verbatim: the record's remaining element (<data>) is
                         // captured raw and written back untouched on save; it resolves into a
                         // real component the moment its manager arrives.
                         Scene::UnresolvedComponent record;
@@ -342,7 +341,7 @@ namespace foundation::scene
                 }
                 else if (manager == nullptr)
                 {
-                    Scene::UnresolvedComponent record; // preserved verbatim (S3)
+                    Scene::UnresolvedComponent record; // preserved verbatim
                     record.owner = ownerId;
                     record.typeId = typeId;
                     record.payload = Move(blob);
@@ -377,7 +376,7 @@ namespace foundation::scene
         ar.Key("systemSettings");
         if (writing)
         {
-            // Preserved settings of absent systems write back verbatim in their encoding (S3).
+            // Preserved settings of absent systems write back verbatim in their encoding.
             u32 droppedSettings = 0;
             for (const Scene::UnresolvedSettings& u : scene.UnresolvedSettingsRecords())
             {
@@ -401,9 +400,9 @@ namespace foundation::scene
         ar.BeginArray(settingsCount);
         if (writing)
         {
-            // v2 binary: each system's settings serialize into a length-prefixed blob - readers
-            // skip systems this build doesn't have instead of aborting the section. TEXT gets
-            // the same skippability from per-record object scopes with the payload INLINE.
+            // v2 binary: each system's settings serialize into a length-prefixed blob, so readers
+            // skip systems this build doesn't have instead of aborting the section. Text gets
+            // the same skippability from per-record object scopes with the payload inline.
             scene.ForEachSystem(
                 [&](SceneSystem& s)
                 {
@@ -497,7 +496,7 @@ namespace foundation::scene
                     }
                     else
                     {
-                        Scene::UnresolvedSettings record; // preserved verbatim (S3)
+                        Scene::UnresolvedSettings record; // preserved verbatim
                         record.systemId = id;
                         record.text = true;
                         if (ar.RawRemainder(record.payload))
@@ -528,7 +527,7 @@ namespace foundation::scene
                 foundation::core::Serialize(ar, "data", blob);
                 if (target == nullptr)
                 {
-                    Scene::UnresolvedSettings record; // preserved verbatim (S3)
+                    Scene::UnresolvedSettings record; // preserved verbatim
                     record.systemId = id;
                     record.payload = Move(blob);
                     record.text = false;
@@ -571,14 +570,14 @@ namespace foundation::scene
 
         if (wireReferenced)
         {
-            // Ref + deltas: prefab id, placement, the SAVED member guid map (respawn preserves
-            // entity identity across load), and overrides DERIVED right here by comparing live
+            // Ref and deltas: prefab id, placement, the saved member guid map (respawn preserves
+            // entity identity across load), and overrides derived right here by comparing live
             // state against the spawn-time baselines.
             u32 instanceCount = 0;
             if (writing)
             {
                 scene.ForEachPrefabInstance([&](Scene::PrefabInstanceState&) { ++instanceCount; });
-                // Parked pendings re-emit VERBATIM: a load->save cycle that never ran
+                // Parked pendings re-emit verbatim: a load and save cycle that never ran
                 // ResolveScenePrefabs (the export transcode) must not lose the section.
                 instanceCount += static_cast<u32>(scene.PendingPrefabInstanceCount());
             }
@@ -589,7 +588,7 @@ namespace foundation::scene
                 scene.ForEachPrefabInstance(
                     [&](Scene::PrefabInstanceState& state)
                     {
-                        // Overrides are DERIVED here: live state vs the spawn-time baselines.
+                        // Overrides are derived here: live state against the spawn-time baselines.
                         UniquePtr<Scene::PendingPrefabInstance> d =
                             detail::ComputeInstanceDeltas(scene, state);
                         detail::WritePrefabRecord(ar, scene, *d, text);
@@ -612,7 +611,7 @@ namespace foundation::scene
         }
         else
         {
-            // Expanded (snapshots): members serialized flat above; persist the instance STATE
+            // Expanded (snapshots): members serialized flat above; persist the instance state
             // verbatim (member map + baselines) so restore rebuilds bookkeeping resolver-free.
             u32 instanceCount = 0;
             if (writing)
@@ -654,10 +653,9 @@ namespace foundation::scene
             }
             else
             {
-                // The reader mirrors the writer above field for field (the Simulate-stop hang
-                // was a reader that skipped 32 bytes the writer produced: the next count read
-                // was mid-guid garbage and the member loop allocated until the OS killed the
-                // editor - wire symmetry is the rule).
+                // The reader mirrors the writer above field for field: a reader that skips bytes
+                // the writer produced reads the next count from mid-guid garbage, and the member
+                // loop then allocates without bound.
                 if (instanceCount > detail::kMaxPrefabRecordEntries)
                 {
                     return;
@@ -715,7 +713,7 @@ namespace foundation::scene
 
     void ResolveSceneResources(Scene& scene, foundation::resource::ResourceManager& resources)
     {
-        // ALL systems, not just component managers: plain systems' settings blocks can hold
+        // All systems, not just component managers: plain systems' settings blocks can hold
         // resource::Refs too (the environment's sky texture).
         scene.ForEachSystem([&](SceneSystem& system) { system.ResolveResources(resources); });
     }
@@ -822,13 +820,13 @@ namespace foundation::scene
                    : Status{ErrorCode::Unknown};
     }
 
-    // Prefab instancing remaps entity OWNERS through `liveBySource` (source guid -> this instance's
-    // fresh guid). A component may ALSO reference entities INSIDE its fields via scene::EntityRef -
-    // walk the freshly-read component's reflected EntityRef properties and remap any that point INTO
-    // the prefab to the instance's copy. References resolving OUTSIDE the prefab (not in the map) are
+    // Prefab instancing remaps entity owners through `liveBySource` (source guid to this instance's
+    // fresh guid). A component may also reference entities inside its fields via scene::EntityRef:
+    // walk the freshly-read component's reflected EntityRef properties and remap any that point into
+    // the prefab to the instance's copy. References resolving outside the prefab (not in the map) are
     // left untouched: they point at the wider scene, not the template. Reflection-driven, so every
     // component with an EntityRef field is covered without per-type code. Called after each component
-    // read and BEFORE the baseline blob is captured, so the baseline reflects the remapped value.
+    // read and before the baseline blob is captured, so the baseline reflects the remapped value.
     static void RemapPrefabEntityRefs(ComponentManagerBase& manager, EntityHandle owner,
                                       const HashMap<Guid, Guid>& liveBySource)
     {
@@ -980,7 +978,7 @@ namespace foundation::scene
             return EntityHandle::Invalid();
         }
 
-        // A prefab is SINGLE-rooted (capture, tinting, and apply-to-prefab all walk one root's
+        // A prefab is single-rooted (capture, tinting, and apply-to-prefab all walk one root's
         // subtree). A payload with more than one root is not the current format: refuse it
         // (the spawned entities are torn down) rather than guess where the extras belong.
         for (usize i = 0; i < sourceParents.Size(); ++i)
@@ -1027,8 +1025,8 @@ namespace foundation::scene
         }
 
         // Components: route to remapped owners, then capture each as a spawn-time baseline.
-        // Binary payloads carry BLOB records: the blob applies to the live component and
-        // unknown types SKIP instead of failing.
+        // Binary payloads carry blob records: the blob applies to the live component and
+        // unknown types are skipped instead of failing.
         u32 componentCount = 0;
         ar.Key("components");
         ar.BeginArray(componentCount);
@@ -1088,7 +1086,7 @@ namespace foundation::scene
             detail::ComponentFromBlob(*manager, owner,
                                       Span<const u8>{blob.Data(), blob.Size()});
             RemapPrefabEntityRefs(*manager, owner, liveBySource);
-            // Baseline = RE-serialized from the live component, NOT the payload bytes: a
+            // The baseline is re-serialized from the live component, not the payload bytes: a
             // component data-version bump would otherwise read as a phantom override on
             // every instance (old-version blob != current-version blob for equal state).
             Scene::PrefabComponentBaseline baseline;
@@ -1111,9 +1109,9 @@ namespace foundation::scene
         scene.AddPrefabInstance(static_cast<UniquePtr<Scene::PrefabInstanceState>&&>(state));
 
         // ---- nested records ----
-        // The trailing section: an EMPTY settings section (a prefab is a subtree template, not
+        // The trailing section: an empty settings section (a prefab is a subtree template, not
         // a world), the Referenced3 mode tag, then the nested-instance records. Anything else
-        // is not the current payload shape: the nested instances are skipped LOUDLY (the root
+        // is not the current payload shape: the nested instances are skipped with an error (the root
         // subtree above is already live).
         if (!spawnNested)
         {
@@ -1148,7 +1146,7 @@ namespace foundation::scene
             return firstRoot;
         }
 
-        // Owner-namespace id -> live guid: the payload's own entities, then each spawned
+        // Owner-namespace id to live guid: the payload's own entities, then each spawned
         // record's members (records were saved in registration order, so parents precede).
         HashMap<Guid, Guid> ownerNsToLive;
         for (const auto& kv : liveBySource)
@@ -1169,7 +1167,7 @@ namespace foundation::scene
                 continue;
             }
 
-            // The scene's saved sub-record for THIS nested instance, if any.
+            // The scene's saved sub-record for this nested instance, if any.
             const Scene::PendingPrefabInstance* sub = nullptr;
             if (nestedSceneDeltas != nullptr)
             {
@@ -1218,7 +1216,7 @@ namespace foundation::scene
             childState->ownerRootEntityId = rootGuid;
             childState->nestedRootSourceId = r.rootLiveId;
 
-            // Owner customization -> then it BECOMES the baseline; scene-level deltas stay
+            // Apply the owner customization, which then becomes the baseline; scene-level deltas stay
             // overrides on top.
             scene.SetLocalTransform(child, r.rootTransform);
             detail::ApplyPendingDeltas(scene, childState, r);
@@ -1255,7 +1253,7 @@ namespace foundation::scene
             }
         }
 
-        // Records spawned APPENDED after the plain members - restore the captured sibling
+        // Records spawned appended after the plain members; restore the captured sibling
         // order (targets resolve through the owner-namespace map, which is complete now).
         for (detail::SiblingOrderFix& fix : recordOrder)
         {
@@ -1590,7 +1588,7 @@ namespace foundation::scene
         }
         Array<Guid> liveIds = state->liveIds;
 
-        // Nested instances revert with the owner: keep their member GUIDS (cross-references
+        // Nested instances revert with the owner: keep their member guids (cross-references
         // stay valid) but none of their deltas, and let the template's placement win.
         Array<Scene::PrefabInstanceState*> contained;
         HashMap<Guid, u8> nestedMembers;
@@ -1663,8 +1661,8 @@ namespace foundation::scene
             scene.TakePendingPrefabInstances();
         Array<detail::SiblingOrderFix> sceneOrder; // targets are live scene guids
 
-        // Nested records (owner set) don't spawn on their own - their OWNER's spawn consumes
-        // them (preserved guids + scene-level deltas layered over the owner customization).
+        // Nested records (owner set) don't spawn on their own; their owner's spawn consumes
+        // them (preserved guids and scene-level deltas layered over the owner customization).
         for (auto& p : pendings)
         {
             if (!p->ownerRootEntityId.IsNil())
@@ -1711,7 +1709,7 @@ namespace foundation::scene
         detail::RestoreSiblingOrder(scene, sceneOrder);
 
         // Orphaned nested records (their owner record vanished): spawn standalone so the
-        // entities aren't silently lost - they become plain top-level instances.
+        // entities aren't silently lost; they become plain top-level instances.
         for (auto& p : pendings)
         {
             if (p->ownerRootEntityId.IsNil())
@@ -1818,11 +1816,10 @@ namespace foundation::scene
                 }
 
                 // Plain user entities parented under members: detach now, re-attach post-respawn
-                // (destroying a member destroys its whole subtree). Keyed by the member's LIVE
-                // guid - preassignment preserves member guids through the respawn for OWN and
-                // NESTED members alike, so one path rescues children of both. (The old
-                // source-id mapping only covered the owner's members; a child under a nested
-                // sub-instance member was skipped and died with the teardown.)
+                // (destroying a member destroys its whole subtree). Keyed by the member's live
+                // guid: preassignment preserves member guids through the respawn for own and
+                // nested members alike, so one path rescues children of both (a source-id key
+                // would cover only the owner's members).
                 HashMap<Guid, u8> allMembers;
                 for (const Guid& live : state.liveIds)
                 {
@@ -1889,7 +1886,7 @@ namespace foundation::scene
             }
             scene.RemovePrefabInstance(item.root);
 
-            // This instance's template bytes: the changed payload when it IS the changed prefab,
+            // This instance's template bytes: the changed payload when it is the changed prefab,
             // else its own template via the resolver.
             MemoryStream stream;
             if (p.prefabId == prefabId)
@@ -1941,7 +1938,7 @@ namespace foundation::scene
                 scene.FindPrefabInstanceByRoot(scene.GetEntityId(root));
             detail::ApplyPendingDeltas(scene, newState, p);
 
-            // Contained instances the template does NOT record (user-spawned inside): respawn
+            // Contained instances the template does not record (user-spawned inside): respawn
             // standalone so a template edit never eats user content.
             for (auto& sub : item.subs)
             {
@@ -1979,8 +1976,8 @@ namespace foundation::scene
 
             // Re-attach rescued user children: the member guid survived the respawn
             // (preassigned), so a plain lookup finds the new parent. A member the template
-            // no longer has falls back to the instance root - the child stays with the
-            // instance instead of being orphaned at scene root (or destroyed, pre-fix).
+            // no longer has falls back to the instance root, so the child stays with the
+            // instance instead of being orphaned at scene root or destroyed.
             for (const RescuedChild& rescue : item.rescued)
             {
                 EntityHandle child = scene.FindEntity(rescue.child);
@@ -2055,7 +2052,7 @@ namespace foundation::scene
             return Status{ErrorCode::Internal};
         } // unparseable text stream
         SerializeScene(*ar, scene, ScenePrefabMode::Referenced, true, reader.Encoding());
-        // The reader's verdict IS the load's: a refused payload (a stale data version, a retired
+        // The reader's verdict is the load's: a refused payload (a stale data version, a retired
         // section layout, a short stream) leaves the scene partially filled, and every caller
         // treats not-ok as "did not load" rather than showing that partial scene as the asset.
         return ar->IsOk() ? Status{} : ar->GetStatus();
@@ -2081,7 +2078,7 @@ namespace foundation::scene
             const EntityHandle owner = scene.FindEntity(record.owner);
             if (!owner.IsAssigned())
             {
-                continue; // its entity is gone - nothing to attach to
+                continue; // its entity is gone; nothing to attach to
             }
             if (!record.text)
             {
@@ -2090,7 +2087,7 @@ namespace foundation::scene
                                                          record.payload.Size()});
                 continue;
             }
-            // TEXT: the captured <data> element, replayed through the XML serializer.
+            // Text: the captured <data> element, replayed through the XML serializer.
             String wrapped;
             wrapped += StringView(u8"<root>");
             wrapped += StringView(reinterpret_cast<const utf8char*>(record.payload.Data()),
@@ -2175,7 +2172,7 @@ namespace foundation::scene
         {
             scene.ForEachSystem([&](SceneSystem& sys) { ResolveUnresolvedSettings(scene, sys); });
         }
-        // Prefab-instance ops of types that now have a manager: apply + drop.
+        // Prefab-instance ops of types that now have a manager: apply, then drop.
         scene.ForEachPrefabInstance(
             [&](Scene::PrefabInstanceState& state)
             {

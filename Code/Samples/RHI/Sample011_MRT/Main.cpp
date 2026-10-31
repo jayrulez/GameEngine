@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample011 - Multiple Render Targets. Ported from Sedulous Sample011_MRT.
-/// Pass 1: Renders triangles to 2 render targets (color + brightness).
+/// Sample011 - Multiple Render Targets.
+/// Pass 1: Renders triangles to 2 render targets (color and brightness).
 /// Pass 2: Composites both side-by-side via fullscreen triangle.
 
 #include <cstdint>
@@ -206,7 +206,7 @@ foundation::core::Status MRTSample::OnInit()
     if (m_device->CreateRenderPipeline(grpd, m_gbPipe) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Composite BGL + pipeline (3 bindings: 2 textures + 1 sampler).
+    // Composite bind group layout and pipeline (3 bindings: 2 textures and 1 sampler).
     rhi::BindGroupLayoutEntry cE[3] = {
         rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
         rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),

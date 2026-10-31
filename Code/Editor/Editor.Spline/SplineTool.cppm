@@ -3,12 +3,12 @@
 
 /// Editor::Spline - `editor.spline`: the interactive spline viewport tool.
 ///
-/// Control-point editing for SplineComponent on the IViewportTool framework: drag points on a
-/// camera-facing plane, Ctrl+click a segment to insert at the closest curve position, Delete/X
-/// removes the hovered point (two-point floor). Every gesture is one undo command (a
-/// before/after snapshot of the point set, keyed by entity guid). Points live in ENTITY-LOCAL
-/// space - the entity transform places the whole curve. Auto handles + the arc-length table
-/// rebuild after every mutation, so consumers always see a coherent curve.
+/// Control-point editing for SplineComponent on the IViewportTool framework. Points drag on a
+/// camera-facing plane, Ctrl+click on a segment inserts at the closest curve position, and Delete
+/// or X removes the hovered point (never going below two points). Every gesture is one undo
+/// command holding before and after snapshots of the point set, keyed by entity guid. Points are
+/// in entity-local space; the entity transform places the whole curve. The auto handles and the
+/// arc-length table are rebuilt after every change, so consumers always see a coherent curve.
 
 module;
 #include "Core/Prelude.h"
@@ -22,8 +22,8 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// The provider contributing the spline tool to every scene viewport (explicit
-    /// registration from Tools.Editor, never discovery).
+    /// The provider that adds the spline tool to every scene viewport. Tools.Editor registers it
+    /// explicitly; it is not discovered.
     class SplineViewportToolProvider final : public IViewportToolProvider
     {
     public:
@@ -34,20 +34,20 @@ export namespace editor
     /// Register the spline viewport tool (call once at editor start, from Tools.Editor).
     void RegisterSplineViewportTools();
 
-    /// The spline tool for one host (what the provider adds to a viewport's manager), for a
-    /// host that drives it directly - a headless test.
+    /// Creates the spline tool for one host (what the provider adds to a viewport's manager), for
+    /// a host that drives it directly, such as a headless test.
     [[nodiscard]] UniquePtr<IViewportTool> CreateSplineEditTool(const ViewportToolHostContext& context);
 
-    /// What the spline tool is doing, read off its Id-checked instance: the hovered and
-    /// selected point (-1 = none), whether a drag is live, whether Ctrl shows an insert
-    /// preview. All defaults for a tool that is not the spline tool.
+    /// What the spline tool is doing, read from an instance whose Id identifies it: the hovered
+    /// and selected point (-1 for none), whether a drag is in progress, and whether Ctrl shows an
+    /// insert preview. A tool that is not the spline tool reads as all defaults.
     struct SplineEditToolState
     {
         i32 hoverPoint = -1;
         i32 selectedPoint = -1;
         bool dragging = false;
         bool insertPreview = false;
-        bool placePreview = false; // Ctrl over a curve with no segment: a click appends here
+        bool placePreview = false; // Ctrl over a curve with no segment, where a click appends a point
     };
     [[nodiscard]] SplineEditToolState SplineEditToolStateOf(const IViewportTool& tool);
 }

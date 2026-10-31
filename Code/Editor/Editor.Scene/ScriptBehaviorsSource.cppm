@@ -3,15 +3,15 @@
 
 // Editor::Scene - :script_behaviors_source partition.
 //
-// A script component's behaviours as a property source, under its header in the inspector
-// (Documentation/Specs/editor-gui.md, 5.3, layer 4, part 3): reflection does not show them (a
-// behaviour's properties are its script's, from the cooked class), so this source does. A list of
-// behaviours, each its script (an asset slot taking script classes), Enabled, its update interval
-// and its script's properties by their kinds (a vector its three parts, an entity a slot over the
-// scene, an asset a slot of its type); a property differs from its script's default while the
-// behaviour overrides it, and a revert drops the override. Every edit is the edit context's
-// MutateComponent per entity, grouped: one undo step for the selection. A behaviour whose script
-// has no cooked class says so in its name; one with no script shows only its own rows.
+// A script component's behaviours as a property source, under its header in the inspector.
+// Reflection does not show them (a behaviour's properties belong to its script, from the cooked
+// class), so this source does. It is a list of behaviours, each with its script (an asset slot
+// taking script classes), Enabled, its update interval and its script's properties by their kinds
+// (a vector as its three parts, an entity as a slot over the scene, an asset as a slot of its
+// type). A property differs from its script's default while the behaviour overrides it, and a
+// revert drops the override. Every edit is the edit context's MutateComponent per entity, grouped
+// into one undo step for the selection. A behaviour whose script has no cooked class says so in its
+// name; one with no script shows only its own rows.
 
 module;
 #include "Core/Prelude.h"
@@ -32,9 +32,9 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// A script class's properties as a grid's rows (a behaviour's, a level's): each row named
-    /// `p<hash>`, its kind from the property's, a vector its three parts; values to and from the
-    /// grid's.
+    /// A script class's properties as a grid's rows (for a behaviour or a level): each row is named
+    /// `p<hash>` and takes its kind from the property's, a vector shows as its three parts, and
+    /// values convert to and from the grid's.
     struct ScriptPropertyRows
     {
         /// The rows of `type`'s properties.
@@ -43,12 +43,13 @@ export namespace editor
         static void Parts(const foundation::script::ScriptPropertyDesc& property, Array<foundation::gui::PropertyInfo>& out);
         /// The property a row names (`p<hash>`); null when none.
         [[nodiscard]] static const foundation::script::ScriptPropertyDesc* Find(const foundation::script::ScriptClass& type, StringView row);
-        /// A row's value: `value` as the property's kind (`part` a vector's, else -1).
+        /// A row's value: `value` as the property's kind (`part` is the vector part, or -1).
         [[nodiscard]] static foundation::gui::Variant ToGrid(const foundation::script::ScriptPropertyValue& value, foundation::script::ScriptPropertyType type, i32 part);
-        /// `write` over `old` as the property's kind.
+        /// `write` applied over `old`, as the property's kind.
         [[nodiscard]] static foundation::script::ScriptPropertyValue FromGrid(foundation::script::ScriptPropertyValue old, foundation::script::ScriptPropertyType type, i32 part,
                                                                               const foundation::gui::Variant& write);
-        /// A row's name (`p<hash>`) and a part's index (`x`: 0) parsed from what follows a source's own path.
+        /// A row's name (`p<hash>`) and a part's index (`x`: 0) parsed from what follows a source's
+        /// own path.
         static void ParseRow(StringView rest, String& row, i32& part);
     };
 

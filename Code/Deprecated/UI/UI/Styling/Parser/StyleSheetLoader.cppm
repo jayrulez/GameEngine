@@ -3,21 +3,16 @@
 
 // UI - :style_sheet_loader partition
 //
-// Entry point for loading .sss stylesheet files. Ported from
-// Sedulous.UI/src/Styling/Parser/StyleSheetLoader.bf.
-//
-// Divergences (language): Beef Dictionaries with manual key/value deletes -> HashMap (RAII); Load
-// returns RefPtr<StyleSheet>; images are borrowed pointers (loader does not own them). InitializeGlobals
-// registers the drawable factories; UITypeRegistry::RegisterBuiltins is DEFERRED until the control
-// classes land, so it is not called yet.
+// Entry point for loading .sss stylesheet files. Images are borrowed pointers; the loader does not own
+// them. InitializeGlobals registers the drawable factories and the built-in UI type names.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:style_sheet_loader;
 
-import foundation.core;  // HashMap, String, StringView, Color, RefPtr
-import foundation.image; // ImageData
+import foundation.core;
+import foundation.image;
 import :style_sheet;
 import :style_rule;
 import :style_value;
@@ -36,11 +31,11 @@ export namespace foundation::ui
     class StyleSheetLoader
     {
     public:
-        // The allocator (required - the owner decides) backs every sheet/rule/drawable
-        // the loader parses.
+        // The owner's allocator (required) backs every sheet, rule and drawable the loader
+        // parses.
         explicit StyleSheetLoader(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
-        /// Resource provider for @import, @icon file loading, image() factory (non-owning).
+        /// Resource provider for @import, @icon file loading and the image() factory (non-owning).
         IResourceProvider* ResourceProvider = nullptr;
 
         /// Register an SVG by name from inline text. Available to svg(name) in .sss.
@@ -50,7 +45,7 @@ export namespace foundation::ui
         }
 
         /// Register an image by name from pre-built data. Available to image(name) in .sss. The loader
-        /// does NOT own the image data - caller is responsible for lifetime.
+        /// does not own the image data; the caller is responsible for its lifetime.
         void RegisterImage(StringView name, const image::ImageData* imageData)
         {
             m_imageRegistry.InsertOrAssign(String(name), imageData);
@@ -81,10 +76,10 @@ export namespace foundation::ui
         /// Load a StyleSheet from .sss text content.
         RefPtr<StyleSheet> Load(StringView source, StringView basePath = {})
         {
-            // Self-sufficient: hosts that skip the
-            // InitializeGlobals startup call would get TYPE selectors that silently resolve
-            // to null and match nothing (the parser then eats the first declaration during
-            // recovery). Registration is idempotent - always ensure it here.
+            // Registration is idempotent, so Load always ensures it. A host that skipped the
+            // InitializeGlobals startup call would otherwise get type selectors that resolve to
+            // null and match nothing (and the parser would eat the first declaration during
+            // recovery).
             InitializeGlobals();
 
             // Copy palette so the parser can mutate it without affecting the loader.
@@ -102,10 +97,10 @@ export namespace foundation::ui
                              &m_imageRegistry, ResourceProvider, String(basePath));
             RefPtr<StyleSheet> sheet = parser.Parse();
 
-            // The palette (base + the sheet's @palette blocks) ALSO becomes a root rule of
-            // custom properties - `$primary` at parse time and `var(--primary)` /
-            // View::CustomProperty(u8"--primary") at compute time read the same colors.
-            // Prepended, so any `--name` the sheet declares on View wins over it.
+            // The palette (the base and the sheet's @palette blocks) also becomes a root rule of
+            // custom properties, so `$primary` at parse time and `var(--primary)` or
+            // View::CustomProperty(u8"--primary") at compute time read the same colors. The rule
+            // is prepended, so any `--name` the sheet declares on View wins over it.
             if (!palette.IsEmpty())
             {
                 RefPtr<StyleRule> variables = MakeRef<StyleRule>(*m_allocator);

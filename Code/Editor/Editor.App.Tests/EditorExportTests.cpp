@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorExport: an export asks for a project and runs one at a time; the templates'
-// folder is the user's override when there is one; a resource report with no project is a line
-// in the log, not a crash; a project's presets saved are read back when it opens again.
+// Editor::App: EditorExport. An export needs a project and only one runs at a time. The templates
+// folder is the user's override when there is one. A resource report with no project writes a line
+// to the log rather than crashing. A project's saved presets are read back when it opens again.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

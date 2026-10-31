@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the Splitter (D0 of Specs/gui-lab-evolution-3.md): panes laid out by their weights with a
-// handle between each two; minimums held (a sheet's, never the content's), the rest shared again;
-// when even the minimums do not fit, each has its own and the end is clipped; a handle moves the two
-// panes beside it alone, by the pointer and the keys; a pane that goes gives its share to its
-// neighbours; vertical, right to left, markup, and a handle read as a separator.
+// GUI - the Splitter. Panes are laid out by their weights, with a handle between each two. Minimums
+// are held (a sheet's, never the content's) and the rest is shared again; when even the minimums do
+// not fit, each pane keeps its own and the end is clipped. A handle moves only the two panes beside
+// it, by the pointer and the keys. A pane that is removed gives its share to its neighbours. Also
+// covers vertical splitters, right to left, markup, and a handle read as a separator.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -26,7 +26,7 @@ namespace
         return pane;
     }
 
-    // A root with a splitter 300 by 100 in it, its panes added.
+    // A root holding a splitter 300 by 100, with its panes added.
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -63,7 +63,7 @@ TEST_CASE("splitter: panes by their weights, a handle between each two, in that 
     CHECK(bed.splitter->GetChildAt(0) == bed.panes[0].Get());
     CHECK(Cast<SplitterHandle>(bed.splitter->GetChildAt(1)) != nullptr);
     CHECK(bed.splitter->GetChildAt(2) == bed.panes[1].Get());
-    // 300 less two handles of 6: 96 each.
+    // 300 less two handles of 6 leaves 96 each.
     CHECK(bed.W(0) == doctest::Approx(96.0f));
     CHECK(bed.W(1) == doctest::Approx(96.0f));
     CHECK(bed.X(1) == doctest::Approx(102.0f));
@@ -86,8 +86,8 @@ TEST_CASE("splitter: a pane below its minimum holds it and the others share the 
     CHECK(bed.W(0) == doctest::Approx(150.0f));
     CHECK(bed.W(1) == doctest::Approx(69.0f)); // (288 - 150) / 2
     CHECK(bed.W(2) == doctest::Approx(69.0f));
-    // Content wider than its share is no minimum: the user alone moves a handle (the pane wraps or
-    // clips it where it stands).
+    // Content wider than its share is not a minimum: only the user moves a handle, and the pane
+    // wraps or clips the content where it stands.
     core::RefPtr<Panel> wide = core::MakeRef<Panel>(core::DefaultAllocator());
     wide->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(120.0f); });
     bed.panes[2]->AddChild(wide.Get());
@@ -98,7 +98,8 @@ TEST_CASE("splitter: a pane below its minimum holds it and the others share the 
     bed.Lay();
     CHECK(bed.W(2) == doctest::Approx(120.0f));
     CHECK(bed.W(1) == doctest::Approx(18.0f)); // what is left
-    // Minimums past the room: each has its own; what passes the end is clipped, never squeezed.
+    // Minimums beyond the room: each pane keeps its own, and what passes the end is clipped,
+    // never squeezed.
     bed.panes[1]->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength::Px(100.0f); });
     bed.Lay();
     CHECK(bed.W(0) == doctest::Approx(150.0f));
@@ -120,7 +121,7 @@ TEST_CASE("splitter: a handle moves the two panes beside it alone, as far as the
     CHECK(bed.W(1) == doctest::Approx(72.0f));
     CHECK(bed.W(2) == doctest::Approx(96.0f)); // untouched
     CHECK(resized == 1);
-    bed.splitter->MoveHandleTo(0, 400.0f); // as far as the middle pane's minimum
+    bed.splitter->MoveHandleTo(0, 400.0f); // only as far as the middle pane's minimum allows
     bed.Lay();
     CHECK(bed.W(1) == doctest::Approx(40.0f));
     CHECK(bed.W(0) == doctest::Approx(152.0f));
@@ -133,7 +134,7 @@ TEST_CASE("splitter: a pane that goes gives its share to its neighbours; one tha
     const f32 shares[3] = {1.0f, 2.0f, 3.0f};
     bed.splitter->SetWeights(core::Span<const f32>(shares, 3));
     bed.Lay();
-    bed.panes[1]->RemoveFromParent(); // its 2 goes to the 1 and the 3, a quarter and three quarters
+    bed.panes[1]->RemoveFromParent(); // its weight of 2 goes to the panes of 1 and 3, a quarter and three quarters
     bed.Lay();
     REQUIRE(bed.splitter->GetPaneCount() == 2u);
     CHECK(bed.splitter->ChildCount() == 3u);
@@ -146,7 +147,7 @@ TEST_CASE("splitter: a pane that goes gives its share to its neighbours; one tha
     CHECK(bed.splitter->ChildCount() == 5u);
     CHECK(Cast<SplitterHandle>(bed.splitter->GetChildAt(3)) != nullptr); // before the new pane
     CHECK(bed.splitter->GetChildAt(4) == more.Get());
-    // The newcomer's share is its given one (the third, 3) when it has one.
+    // A new pane's share is the weight it was given, when it has one (the third, 3).
     CHECK(bed.splitter->GetWeights()[2] == doctest::Approx(3.0f / 9.0f));
 }
 
@@ -165,7 +166,7 @@ TEST_CASE("splitter: vertical, and right to left from the right")
     rtl.Lay();
     CHECK(rtl.X(0) == doctest::Approx(153.0f)); // the first pane at the right
     CHECK(rtl.X(1) == doctest::Approx(0.0f));
-    rtl.splitter->MoveHandleTo(0, 100.0f); // the handle dragged left: the first (right) pane grows
+    rtl.splitter->MoveHandleTo(0, 100.0f); // the handle dragged left, so the first (right) pane grows
     rtl.Lay();
     CHECK(rtl.W(0) == doctest::Approx(194.0f));
     CHECK(rtl.W(1) == doctest::Approx(100.0f));
@@ -188,7 +189,7 @@ TEST_CASE("splitter: a handle moves by the keys and the pointer, and a double cl
     bed.Lay();
     CHECK(bed.W(0) == doctest::Approx(0.0f));
 
-    // A drag: pressed in its middle, moved 50 to the right of where it now is.
+    // A drag: pressed in the handle's middle and moved 50 to the right of where it now is.
     const Rect at = handle->GetScreenBounds();
     const core::Float2 middle{at.x + at.width * 0.5f, at.y + at.height * 0.5f};
     d.InjectMouseMove(middle);
@@ -197,7 +198,8 @@ TEST_CASE("splitter: a handle moves by the keys and the pointer, and a double cl
     d.InjectMouseUp(core::Float2{middle.x + 50.0f, middle.y}, MouseButton::Left);
     bed.Lay();
     CHECK(bed.W(0) == doctest::Approx(50.0f));
-    // It keeps under the pointer through many moves, wherever the splitter stands on the screen.
+    // The handle stays under the pointer through many moves, wherever the splitter is on the
+    // screen.
     bed.root->SetPadding(Thickness{40.0f, 30.0f, 0.0f, 0.0f});
     bed.Lay();
     const Rect from = handle->GetScreenBounds();
@@ -214,7 +216,7 @@ TEST_CASE("splitter: a handle moves by the keys and the pointer, and a double cl
     d.InjectMouseUp(pointer, MouseButton::Left);
     CHECK(bed.W(0) == doctest::Approx(120.0f)); // 50 + 70
 
-    bed.splitter->ResetWeights(); // what a double click does
+    bed.splitter->ResetWeights(); // as a double click does
     bed.Lay();
     CHECK(bed.W(0) == doctest::Approx(147.0f));
 }
@@ -237,7 +239,7 @@ TEST_CASE("splitter: from markup, and each handle read as a separator with where
     root->SetSize(core::Float2{400.0f, 406.0f});
     splitter->EditLayoutStyle([](LayoutStyle& s) {
         s.Width = LayoutLength::Px(400.0f);
-        s.Height = LayoutLength::Px(406.0f); // 400 for the panes, a quarter above the handle
+        s.Height = LayoutLength::Px(406.0f); // 400 for the panes, a quarter of them above the handle
     });
     root->AddChild(loaded.Get());
     root->UpdateLayout();

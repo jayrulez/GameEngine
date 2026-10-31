@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample026 - Dynamic Offsets & Blend Constants. Ported from Sedulous Sample026_DynamicOffsets.
+/// Sample026 - Dynamic Offsets & Blend Constants.
 /// Demonstrates dynamic uniform buffer offsets and blend constants.
 /// Draws 4 quads, each reading from a different offset in one shared UBO.
 /// Uses setBlendConstant with BlendFactor::Constant for per-frame color modulation.

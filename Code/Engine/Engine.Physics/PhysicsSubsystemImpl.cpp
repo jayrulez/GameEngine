@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Physics - implementation unit: the render-frame drive (interpolation
-// + debug wireframes) and the component reflection bodies. Both live OUTSIDE the interface
-// for GCC: heavy render imports stay out of the interface's module graph, and the
-// REFLECT_* macros in the :components partition made GCC emit a gcm with an
-// unreadable cluster (every -fno-module-lazy consumer then failed to import the module).
+// Engine::Physics - implementation unit: the render-frame drive (interpolation and debug
+// wireframes) and the component reflection bodies. Both live outside the interface for GCC: heavy
+// render imports stay out of the interface's module graph, and REFLECT_* macros in the :components
+// partition make GCC emit a gcm with an unreadable cluster (every -fno-module-lazy consumer then
+// fails to import the module).
 
 module;
 #include "Core/Prelude.h"
@@ -39,8 +39,8 @@ namespace engine::physics
 {
     namespace
     {
-        // Body wireframes: green = awake dynamic, grey = sleeping, blue = static/kinematic,
-        // yellow = trigger.
+        // Body wireframes: green for awake dynamic, grey for sleeping, blue for static or
+        // kinematic, yellow for a trigger.
         void DrawPhysicsDebug(PhysicsSceneSystem& system, foundation::render::debug::DebugDraw& draw)
         {
             PhysicsWorld* world = system.World();
@@ -107,8 +107,8 @@ namespace engine::physics
                         break;
                     }
                     case ShapeKind::Heightfield:
-                        // Bounding box of the footprint x [minY, maxY] - honest without walking
-                        // every sample (per-cell wireframe is a phase-2 editor nicety).
+                        // Bounding box of the footprint x [minY, maxY]: honest without walking
+                        // every sample (no per-cell wireframe).
                         if (const Heightfield* hf = c.heightfield.Get())
                         {
                             const Float2 ws = hf->WorldSize();
@@ -183,8 +183,8 @@ namespace engine::physics
         out.massOverride = c.mass;
         out.group = c.collisionGroup;
 
-        // Reverse map: the owning entity handle, packed losslessly into the body user
-        // word (see PackEntity - unique by construction, unlike the guid's low bits).
+        // Reverse map: the owning entity handle, packed losslessly into the body user word (see
+        // PackEntity: unique by construction, unlike the guid's low bits).
         out.userData = PackEntity(e);
 
         Float3 position, scale;
@@ -250,10 +250,10 @@ namespace engine::physics
                 return false;
             }
         }
-        // A shape that can only be static (Jolt's MustBeStatic: plane, heightfield,
-        // a cooked triangle mesh) under a moving body: the world demotes it to
-        // static rather than tripping Jolt's mass assert; named HERE, where the
-        // entity is known, so the author can find the component.
+        // A shape that can only be static (Jolt's MustBeStatic: plane, heightfield, a cooked
+        // triangle mesh) under a moving body: the world demotes it to static rather than tripping
+        // Jolt's mass assert. Named here, where the entity is known, so the author can find the
+        // component.
         const bool staticOnly =
             c.shape == ShapeKind::Plane || c.shape == ShapeKind::Heightfield ||
             (c.shape == ShapeKind::Cooked && c.collisionShape.Get() != nullptr &&
@@ -271,11 +271,11 @@ namespace engine::physics
         }
         out.shapes.PushBack(own);
 
-        // Hierarchy compounding: descendant ColliderComponents fold in at their
-        // offset relative to THIS entity (captured at start). The physics body has no scale
-        // (only its position and rotation), so a child's place is measured in world units from
-        // the body and a cooked child keeps its WORLD scale: relative to a scaled body (a
-        // prefab scaled down) both would come out unscaled, the shape full size and off place.
+        // Hierarchy compounding: descendant ColliderComponents fold in at their offset relative to
+        // this entity (captured at start). The physics body has no scale (only its position and
+        // rotation), so a child's place is measured in world units from the body and a cooked child
+        // keeps its world scale; measured relative to a scaled body (a prefab scaled down), both
+        // would come out unscaled, the shape full size and out of place.
         if (colliders != nullptr)
         {
             const Quaternion bodyInverse = Inverse(rotation);
@@ -443,7 +443,7 @@ namespace engine::physics
         PROFILE_SCOPE("Physics.Interpolate");
         for (const SceneEntry& entry : Systems())
         {
-            // Per-scene alpha: each scene steps on its OWN accumulator/time scale.
+            // Per-scene alpha: each scene steps on its own accumulator and time scale.
             entry.system->ApplyInterpolation(entry.scene->FixedAlpha());
             if (render != nullptr && entry.system->Settings().debugDraw)
             {
@@ -497,13 +497,12 @@ namespace engine::physics
             .Attribute("description",
                        String(u8"Makes the entity a physics body, static, kinematic or dynamic, "
                               u8"with a collision shape."))
-            .DataVersion(3); // v3: continuous collision + explicit mass
+            .DataVersion(3); // v3: continuous collision and explicit mass
         builder.Property<&RigidBodyComponent::motion>("motion");
         builder.Property<&RigidBodyComponent::layer>("layer");
         builder.Property<&RigidBodyComponent::shape>("shape");
-        // Shape-conditional rows (the LightComponent pattern): the inspector shows a
-        // dimension only for the ShapeKind that uses it (Box=0 Sphere=1 Capsule=2
-        // Cooked=3 Plane=4).
+        // Shape-conditional rows (as LightComponent does): the inspector shows a dimension only for
+        // the ShapeKind that uses it (Box=0 Sphere=1 Capsule=2 Cooked=3 Plane=4).
         builder.Property<&RigidBodyComponent::halfExtents>("halfExtents")
             .PropAttribute("visibleWhen", String(u8"shape=0"));
         builder.Property<&RigidBodyComponent::radius>("radius")
@@ -524,7 +523,7 @@ namespace engine::physics
         builder.Property<&RigidBodyComponent::collisionGroup>("collisionGroup");
         builder.Property<&RigidBodyComponent::collisionShape>("collisionShape");
         builder.Property<&RigidBodyComponent::material>("material");
-        // OPTION 1 (spec Section 12): RigidBodyComponent.of(entity) -> a re-resolving handle.
+        // RigidBodyComponent.of(entity) -> a re-resolving handle.
         builder.Method<&foundation::script::ComponentOf<RigidBodyComponent>, RigidBodyComponent>("of");
     }
 
@@ -566,10 +565,10 @@ namespace engine::physics
         builder.Property<&CharacterComponent::maxStrength>("maxStrength");
         builder.Property<&CharacterComponent::stepUp>("stepUp");
         builder.Property<&CharacterComponent::stepDown>("stepDown");
-        // OPTION 1 (spec Section 12): CharacterComponent.of(entity) -> a re-resolving handle.
+        // CharacterComponent.of(entity) -> a re-resolving handle.
         builder.Method<&foundation::script::ComponentOf<CharacterComponent>, CharacterComponent>("of");
-        // Per-entity character control (component-data ops - fixes the static facade's first-character
-        // limitation): Character.of(entity).move(x, z) / .jump(speed) / .grounded() / .positionY().
+        // Per-entity character control through component-data operations:
+        // Character.of(entity).move(x, z) / .jump(speed) / .grounded() / .positionY().
         builder.Method<&CharacterComponent::move>("move", {"velocityX", "velocityZ"});
         builder.Method<static_cast<void (CharacterComponent::*)(f32, f32, f32)>(&CharacterComponent::drive)>(
             "drive", {"x", "y", "z"});
@@ -593,9 +592,10 @@ namespace engine::physics
     REFLECT_VALUE(JointComponent, "rtti::engine::physics")
     {
         // Kind-conditional rows (visibleWhen, evaluated live by InspectorView): JointKind is
-        // Fixed=0, Point=1, Hinge=2, Slider=3, Distance=4. The axis + limits + motor are hinge/slider
-        // (2,3) concepts; min/max separation is Distance (4); the motor drive params nest under the
-        // motor checkbox. kind/targetEntity/localAnchor apply to every kind, so stay unconditional.
+        // Fixed=0, Point=1, Hinge=2, Slider=3, Distance=4. The axis, limits and motor are
+        // hinge/slider (2,3) concepts; min/max separation is Distance (4); the motor drive
+        // parameters nest under the motor checkbox. kind/targetEntity/localAnchor apply to every
+        // kind, so they stay unconditional.
         builder.Attribute("displayName", String(u8"Joint"))
             .Attribute("category", String(u8"Physics"))
             .Attribute("description",
@@ -633,11 +633,10 @@ namespace engine::physics
     }
 
     // The scene-bound physics handle: `ScenePhysics.of(scene).rayCast/gravityY/setGravity/...` on
-    // THAT scene's world (the explicit-scene replacement for the retired static Physics facade).
-    // Reflected with authored parameter names (A6). The `of` factory returns ScenePhysics by value
-    // (concrete return type - cross-backend, no ReturnType-override needed).
-    // The explicit ray-hit result: value handle carrying the whole
-    // answer; entity()/impulse() resolve live state at call time.
+    // that scene's world. Reflected with authored parameter names. The `of` factory returns
+    // ScenePhysics by value (a concrete return type: cross-backend, no ReturnType override needed).
+    // The ray-hit result is a value handle carrying the whole answer; entity()/impulse() resolve
+    // live state at call time.
     REFLECT_VALUE(RayCastHit, "rtti::engine::physics")
     {
         builder.Property<&RayCastHit::hit>("hit");
@@ -654,8 +653,8 @@ namespace engine::physics
     {
         using Entity = foundation::script::Entity;
         using Entities = Array<Entity>;
-        // Each query an ARITY FAMILY: Sedulous's Float3 forms (with an optional group mask), and
-        // ours by the numbers.
+        // Each query is an arity family: the Float3 forms (with an optional group mask), and the
+        // forms taking separate numbers.
         builder.Method<static_cast<RayCastHit (ScenePhysics::*)(Float3, Float3, f32) const>(
             &ScenePhysics::rayCast)>("rayCast", {"from", "direction", "maxDistance"});
         builder.Method<static_cast<RayCastHit (ScenePhysics::*)(Float3, Float3, f32, u32) const>(
@@ -704,7 +703,7 @@ namespace engine::physics
             "setForce", {"entity", "force"});
         builder.Method<static_cast<void (ScenePhysics::*)(Entity, f32, f32, f32)>(
             &ScenePhysics::setForce)>("setForce", {"entity", "x", "y", "z"});
-        // The entity's character, as Sedulous's PhysicsFacade.
+        // The entity's character operations (the same as CharacterComponent.of(entity)).
         builder.Method<&ScenePhysics::moveCharacter>("moveCharacter",
                                                      {"entity", "velocityX", "velocityZ"});
         builder.Method<&ScenePhysics::jumpCharacter>("jumpCharacter", {"entity", "speed"});
@@ -717,11 +716,11 @@ namespace engine::physics
 
     void RegisterPhysicsScriptFacade()
     {
-        RegisterPhysicsComponentReflection(); // ensure component TypeData (incl `of`) is built first
+        RegisterPhysicsComponentReflection(); // ensure component TypeData (including `of`) is built first
 
-        // Surface the physics COMPONENTS to script (OPTION 1: RigidBodyComponent.of(entity), ...):
-        // register them (both backends emit registry types), seed emission roots (reachability),
-        // and make their class names import-visible in behavior preludes.
+        // Surface the physics components to script (RigidBodyComponent.of(entity), ...): register
+        // them (both backends emit registry types), seed emission roots (reachability), and make
+        // their class names import-visible in behavior preludes.
         const core::TypeInfo* components[] = {&core::TypeOf<RigidBodyComponent>(),
                                               &core::TypeOf<CharacterComponent>()};
         for (const core::TypeInfo* component : components)
@@ -732,15 +731,15 @@ namespace engine::physics
         foundation::script::RegisterExtraFacadeName(u8"RigidBodyComponent");
         foundation::script::RegisterExtraFacadeName(u8"CharacterComponent");
 
-        // The scene-bound physics handle (ScenePhysics.of(scene)) + its explicit ray-hit
-        // result: reflect, register, seed the emission roots, prelude-visible class names.
+        // The scene-bound physics handle (ScenePhysics.of(scene)) and its ray-hit result: reflect,
+        // register, seed the emission roots, make the class names prelude-visible.
         RttiRegisterValue_RayCastHit();
         GlobalTypeRegistry().Register(core::TypeOf<RayCastHit>());
         foundation::script::RegisterExtraScriptRootType(&core::TypeOf<RayCastHit>());
         foundation::script::RegisterExtraFacadeName(u8"RayCastHit");
-        // ScenePhysics.overlapSphere returns Array<Entity>, which crosses as a native array<Entity> /
-        // Lua table. Patch the container TypeInfo so the backend renders it;
-        // no script root / facade name - a native array is not a boxed handle type.
+        // ScenePhysics.overlapSphere returns Array<Entity>, which crosses as a native array<Entity>
+        // or a Lua table. Patch the container TypeInfo so the backend renders it; no script root or
+        // facade name, since a native array is not a boxed handle type.
         core::RegisterArrayType<foundation::script::Entity>();
         RttiRegisterValue_ScenePhysics();
         GlobalTypeRegistry().Register(core::TypeOf<ScenePhysics>());

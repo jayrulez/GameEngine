@@ -4,7 +4,7 @@
 // Editor::Animation - the `:skeleton_page` partition (implementation).
 
 module;
-#include <cmath> // std::acos (a rotation's angle)
+#include <cmath> // std::acos, for a rotation's angle
 #include "Core/Prelude.h"
 
 module editor.animation;
@@ -31,7 +31,7 @@ namespace editor
 
     namespace
     {
-        // Three decimals, a trailing zero dropped: what a bind pose's numbers need, and no more.
+        // Three decimals with trailing zeros dropped: enough precision for a bind pose's numbers.
         [[nodiscard]] String Short(f32 value)
         {
             const f64 rounded = static_cast<f64>(static_cast<i64>(static_cast<f64>(value) * 1000.0 + (value < 0.0f ? -0.5 : 0.5))) / 1000.0;
@@ -77,7 +77,7 @@ namespace editor
         if (length < 1e-6f)
             return String(u8"None");
         q = Quaternion{q.x / length, q.y / length, q.z / length, q.w / length};
-        if (q.w < -1e-5f) // the shorter way round (a half turn, w about 0, either way)
+        if (q.w < -1e-5f) // take the shorter way round (for a half turn, w is about 0 and either way works)
             q = Quaternion{-q.x, -q.y, -q.z, -q.w};
         const f32 angle = 2.0f * static_cast<f32>(std::acos(static_cast<f64>(Clamp(q.w, -1.0f, 1.0f))));
         const f32 degrees = angle * 180.0f / kPi;
@@ -90,7 +90,7 @@ namespace editor
     SkeletonEditorPage::SkeletonEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::SkeletonAsset::StaticType(), kPath)
     {
-        HideAssetRows(); // its source is its import's: the rows are what it is, read only
+        HideAssetRows(); // the skeleton comes from its import, so the rows only describe it
         SkeletonEditorPage* self = this;
         m_model = MakeUnique<gui::TreeModel>(Allocator());
         m_tree = Find<gui::TreeView>(u8"skeleton-tree");
@@ -147,7 +147,7 @@ namespace editor
 
     void SkeletonEditorPage::OnObjectChanged()
     {
-        // Read again from its source (a page_reload, a re-import): its bones may be others now.
+        // Rebuild from the source after a page_reload or a re-import, which may change the bones.
         BuildSkeleton();
         ChooseBone(m_chosen < (m_skeleton ? m_skeleton->BoneCount() : 0) ? m_chosen : -1);
     }
@@ -174,13 +174,14 @@ namespace editor
             return;
         m_showing = true;
         const i32 count = m_skeleton->BoneCount();
-        // A bone the user folded stays folded through the rebuild (a search, a reload).
+        // A bone the user folded stays folded through a rebuild (after a search or a reload).
         Array<i32> folded(Allocator());
         if (m_tree != nullptr)
             for (usize node = 0; node < m_rows.Size(); ++node)
                 if (!m_tree->IsIdExpanded(static_cast<gui::ItemId>(node)))
                     folded.PushBack(m_rows[node]);
-        // A search keeps the bones whose names hold it, and every bone above one (where it hangs).
+        // A search keeps the bones whose names contain it, and every bone above a kept one, so its place
+        // in the hierarchy shows.
         Array<bool> kept;
         kept.Resize(static_cast<usize>(count), m_search.IsEmpty());
         if (!m_search.IsEmpty())
@@ -217,7 +218,7 @@ namespace editor
                 bool wasFolded = false;
                 for (const i32 bone : folded)
                     wasFolded = wasFolded || bone == m_rows[node];
-                m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), !wasFolded || !m_search.IsEmpty()); // a search opens what it found
+                m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), !wasFolded || !m_search.IsEmpty()); // a search expands what it found
             }
             if (chosen >= 0)
             {

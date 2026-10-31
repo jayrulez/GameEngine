@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - theme + resource-backed CSS props: text color, font-family/size and
-// background-image resolve through the StyleManager (with an IResourceProvider), and the
-// built-in default theme restyles the standard widgets.
+// GUI - theme and resource-backed CSS properties: text color, font-family and size, and
+// background-image resolve through the StyleManager (with an IResourceProvider), and the built-in
+// default theme restyles the standard widgets.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -85,7 +85,7 @@ namespace
         const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView) override { return nullptr; }
     };
 
-    // A font service that hands out one font, recording the requested family + size.
+    // A font service that hands out one font, recording the requested family and size.
     class MockFontService : public fonts::IFontService
     {
     public:
@@ -162,8 +162,8 @@ TEST_CASE("theme: font-family + font-size resolve a font via the font service")
 
 TEST_CASE("theme: every widget with text takes the sheet's font")
 {
-    // A widget that keeps its text in parts (rows, a title, tab buttons) still takes font-family:
-    // the sandbox's list showed empty rows when its ListBox did not.
+    // A widget that keeps its text in parts (rows, a title, tab buttons) still takes font-family;
+    // otherwise a ListBox shows empty rows.
     MockFontService fs;
     StyleManager mgr;
     mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
@@ -192,7 +192,7 @@ TEST_CASE("theme: without providers, resource props are skipped (no crash)")
 {
     auto label =
         ApplyCSS(u8"label { background-image: url(panel); font-family: Roboto; color: #ffffff; }");
-    CHECK(label->GetBox().Layers.IsEmpty()); // no provider -> background-image ignored
+    CHECK(label->GetBox().Layers.IsEmpty()); // no provider, so background-image is ignored
     CHECK(label->GetTextColor().r == doctest::Approx(1.0f)); // color still applied
 }
 
@@ -215,13 +215,14 @@ TEST_CASE("theme: the built-in default theme restyles the standard widgets")
     mgr.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
     mgr.ApplyTree(*root.Get());
 
-    // The theme gives the button a background + padding and the textfield padding.
+    // The theme gives the button a background and padding and the textfield padding.
     CHECK(button->GetBox().BackgroundColor.a > 0.0f);
     CHECK(button->GetPadding().Left == doctest::Approx(9.0f));
     CHECK(textfield->GetBox().BackgroundColor.a > 0.0f);
     CHECK(textfield->GetPadding().Left == doctest::Approx(6.0f));
 
-    // Its tokens: the dark accent, then (the user's scheme light) the light one, from the same sheet.
+    // Its tokens: the dark accent, then the light one when the user's scheme is light, from the
+    // same sheet.
     CHECK(button->GetBox().BackgroundColor.r == doctest::Approx(0x33 / 255.0f).epsilon(0.01));
     MediaContext light;
     light.DarkScheme = false;
@@ -257,7 +258,7 @@ TEST_CASE("theme: pseudo-element (::part) rules resolve separately from the elem
 
 TEST_CASE("theme: the default theme carries pseudo-element part rules")
 {
-    // Sanity: the built-in themes actually contain ::part rules a Slider/Window can pick up.
+    // The built-in themes contain ::part rules a Slider and a Window can pick up.
     // A part inherits its widget's style (its tokens, from :root).
     StyleSheet dark = CSSParser::Parse(DefaultThemeCSS());
     auto slider = Make<UIWidget>();
@@ -289,11 +290,11 @@ TEST_CASE("theme: tokens retint everything, a subtree overrides them, and a widg
     page->AddClass(core::StringView(u8"special"));
     StyleManager mgr;
     mgr.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
-    // A game's sheet: the base accent retinted, a subtree's own accent, and one widget token.
+    // A game's sheet sets a new base accent, a subtree's own accent, and one widget token.
     mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8":root { --accent: #ff0000; --slider-fill: #00ff00; } .special { --accent: #0000ff; }")));
     mgr.ApplyTree(*root.Get());
     CHECK(outside->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
-    CHECK(inside->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // the subtree's
+    CHECK(inside->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // the subtree's accent
     CHECK(slider->GetPartStyle(core::StringView(u8"fill")).Box.BackgroundColor.g == doctest::Approx(1.0f)); // one control's token
     // A part with no override reads its widget token through to the base one.
     CHECK(slider->GetPartStyle(core::StringView(u8"track")).HasBackground);
@@ -351,7 +352,8 @@ namespace
 
 TEST_CASE("theme: a list's rows show the pointer over them (a combo box's popup is a list box)")
 {
-    // The model first: the view unregisters from it when the tree lets the view go.
+    // The model is declared first, because the view unregisters from it when the tree lets the
+    // view go.
     core::Array<core::String> rows;
     rows.PushBack(core::String(u8"a"));
     rows.PushBack(core::String(u8"b"));
@@ -386,7 +388,7 @@ TEST_CASE("theme: a list's rows show the pointer over them (a combo box's popup 
     CHECK(row->GetBox().BackgroundColor.a > 0.0f);
     CHECK(item->GetTextColor().a > 0.0f); // still the label's text colour
 
-    // A sheet retints the hover with one token.
+    // A sheet changes the hover colour with one token.
     mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8":root { --list-hover: #ff0000; }")));
     mgr.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
     mgr.ApplyTree(*root.Get());
@@ -395,8 +397,8 @@ TEST_CASE("theme: a list's rows show the pointer over them (a combo box's popup 
 
 TEST_CASE("theme: a widget's own face gives way to a sheet's: menus, their bar, tooltips, scrollbars, a table's header")
 {
-    // Their faces were drawings over the box, so a theme's colour (the light theme's) lay beneath
-    // them unseen; each is now its own box, which a sheet's replaces.
+    // Each face is its own box, which a sheet's box replaces. If the face were drawn over the box
+    // instead, a theme's colour (the light theme's) would lie unseen beneath it.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     auto menu = Make<Menu>();
@@ -407,7 +409,7 @@ TEST_CASE("theme: a widget's own face gives way to a sheet's: menus, their bar, 
     for (UIWidget* w : widgets)
     {
         root->AddChild(w);
-        CHECK(w->BoxFills()); // its own face, unstyled
+        CHECK(w->BoxFills()); // its own face while unstyled
     }
     StyleManager mgr;
     mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8"menu, menubar, tooltip, scrollbar { background-color: #ff0000; }")));
@@ -422,7 +424,8 @@ TEST_CASE("theme: a widget's own face gives way to a sheet's: menus, their bar, 
 
 TEST_CASE("theme: a disabled control fades, an enabled one beside it does not")
 {
-    // Only menu items and tool buttons faded: a disabled button, check or field looked usable.
+    // Every disabled control fades, not only menu items and tool buttons: a disabled button, check
+    // or field must not look usable.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto button = Make<Button>();
     auto check = Make<CheckBox>();

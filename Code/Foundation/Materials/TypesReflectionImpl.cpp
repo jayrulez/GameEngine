@@ -3,12 +3,12 @@
 
 // Foundation::Materials - reflection implementation unit: the material render-state enums.
 //
-// Reflected in their OWNING module (foundation.materials) so any consumer of a reflected
-// MaterialSource property whose type is one of these (blendMode/depthMode/cullMode/vertexLayout,
-// retyped from u8) sees a proper enum - IsEnum + named values, so tooling can render a name
-// dropdown instead of a raw integer. REFLECT_ENUM bodies live out of the interface
-// (GCC module hygiene). RegisterMaterialsTypeReflection() is idempotent; wire it from a startup
-// registrar (RegisterMaterialAsset does).
+// Reflected in their owning module (foundation.materials) so any consumer of a reflected
+// MaterialSource property of one of these types (blendMode, depthMode, cullMode, vertexLayout)
+// sees a proper enum with named values, and tooling can show a name dropdown instead of a raw
+// integer. REFLECT_ENUM bodies live outside the interface for GCC's module handling.
+// RegisterMaterialsTypeReflection() is idempotent; call it from a startup registrar
+// (RegisterMaterialAsset does).
 
 module;
 #include "Core/Prelude.h"

@@ -6,9 +6,6 @@
 // String types. `String` is the primary type (UTF-8 / char8_t);
 // `WideString` is the secondary UTF-16 type (Win32 edge). Both are aliases of one
 // allocator-backed BasicString<CharT>, each with a matching view.
-//
-// NOTE: cross-encoding transcoding (UTF-16 <-> UTF-8) and small-string
-// optimization are not implemented.
 
 module;
 #include "Core/Prelude.h"
@@ -27,22 +24,22 @@ export namespace foundation::core
     namespace detail
     {
         /// Format a double as ASCII (shortest round-trip), returning the byte count written.
-        /// Declared here, DEFINED in Text/TextImpl.cpp, and that placement is load-bearing on
-        /// Windows: std::to_chars' floating-point path instantiates STL tables
-        /// (std::_General_precision_tables_2<double>::_Max_P and friends) whose static DATA
+        /// Declared here and defined in Text/TextImpl.cpp, which matters on Windows:
+        /// std::to_chars' floating-point path instantiates STL tables
+        /// (std::_General_precision_tables_2<double>::_Max_P and friends) whose static data
         /// members MSVC will not let a consumer emit for itself once the instantiation is
-        /// reachable through a module interface - the consumer references them and expects the
-        /// producing DLL to own them, which a .def cannot deliver (exported DATA needs
+        /// reachable through a module interface. The consumer references them and expects the
+        /// producing DLL to own them, which a .def cannot deliver (exported data needs
         /// dllimport at the use site). Keeping the instantiation inside Core means no consumer
         /// ever needs those symbols. Integral to_chars is unaffected (no such tables), so only
-        /// the float path routes through here. See shared-libraries.md section 5 (P5).
+        /// the float path routes through here.
         [[nodiscard]] usize FloatToChars(char* buffer, usize capacity, f64 value) noexcept;
         /// The shortest text that reads back as the same f32: 0.1f is "0.1", where widening it
         /// to f64 first prints its binary expansion, "0.10000000149011612".
         [[nodiscard]] usize FloatToChars(char* buffer, usize capacity, f32 value) noexcept;
 
         /// The parse direction, out of line for the same reason: std::from_chars' float path
-        /// instantiates the same STL tables. Returns false unless the WHOLE [begin, end) is a
+        /// instantiates the same STL tables. Returns false unless the whole [begin, end) is a
         /// valid number, so callers keep their all-or-nothing contract.
         [[nodiscard]] bool FloatFromChars(const char* begin, const char* end, f64& out) noexcept;
 
@@ -293,7 +290,7 @@ export namespace foundation::core
             data[m_size] = CharT(0);
         }
 
-        // Single-character append (alias for PushBack) - lets WideString serve as a
+        // Single-character append (alias for PushBack): lets WideString serve as a
         // format sink alongside its Append(view)/Append(ptr,len) overloads.
         void Append(CharT ch) { PushBack(ch); }
 
@@ -353,7 +350,7 @@ export namespace foundation::core
         }
 
         // In-place replace of every code unit equal to `from` with `to` (size-preserving; no realloc).
-        // Returns the number replaced. Code-unit granular - intended for ASCII/separator characters.
+        // Returns the number replaced. Code-unit granular, intended for ASCII/separator characters.
         usize Replace(CharT from, CharT to)
         {
             CharT* data = Data();
@@ -731,14 +728,13 @@ export namespace foundation::core
     }
     // =======================================================================
     // UTF-8 codepoint iteration & encoding. String is UTF-8, and text
-    // editing / shaping walks Unicode codepoints (char32_t). Mirrors Beef's
-    // `StringView.DecodedChars` iteration. Invalid/truncated sequences decode to
-    // U+FFFD (consuming one byte).
+    // editing / shaping walks Unicode codepoints (char32_t). Invalid/truncated
+    // sequences decode to U+FFFD (consuming one byte).
     // =======================================================================
 
     /// Decodes the codepoint starting at `text[index]`, advancing `index` past the
     /// consumed byte(s). After the call `index` is the byte offset of the next
-    /// codepoint (Beef's `@c.NextIndex`). Caller guarantees `index < text.Size()`.
+    /// codepoint. Caller guarantees `index < text.Size()`.
     [[nodiscard]] inline u32 DecodeUtf8(StringView text, usize& index) noexcept
     {
         const u8 lead = static_cast<u8>(text[index]);
@@ -852,7 +848,7 @@ export namespace foundation::core
     }
 
     /// Parse a base-10 floating value from a UTF-8 view. None unless the whole
-    /// trimmed view is a valid number (Beef `double.Parse` semantics).
+    /// trimmed view is a valid number.
     [[nodiscard]] inline Optional<f64> ParseFloat(StringView s) noexcept
     {
         const StringView t = Trimmed(s);
@@ -901,7 +897,7 @@ export namespace foundation::core
     }
 
     // Hash specializations so the string types work as hashed-container keys.
-    // (The Hash<T> primary template + HashBytes live in :hash.)
+    // (The Hash<T> primary template and HashBytes live in :hash.)
     template <typename CharT>
     struct Hash<BasicStringView<CharT>>
     {

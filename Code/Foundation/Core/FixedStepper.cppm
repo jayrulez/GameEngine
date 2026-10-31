@@ -3,12 +3,12 @@
 
 // Core - :fixed_stepper partition.
 //
-// FixedStepper: the fixed-timestep accumulator (pure, no clock - callers feed dt).
+// FixedStepper: the fixed-timestep accumulator (pure, no clock: callers feed dt).
 // Advance() drains whole steps from the accumulator, clamped to maxSteps per call
-// (spiral-of-death guard: the EXCESS TIME IS DROPPED, not deferred). Alpha() is the
-// leftover fraction of a step - the interpolation weight for consumers blending
-// fixed-rate state (physics poses). Used per-SCENE (each scene owns its stepper and
-// time scale - the simulatable unit) and by the application host's app-level lane.
+// as a spiral-of-death guard: the excess time is dropped, not deferred. Alpha() is the
+// leftover fraction of a step, the interpolation weight for consumers blending
+// fixed-rate state (physics poses). Each scene owns a stepper and its time scale, and
+// the application host uses one for its app-level lane.
 
 module;
 #include "Core/Prelude.h"

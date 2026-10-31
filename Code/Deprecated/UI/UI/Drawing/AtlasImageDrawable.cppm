@@ -4,7 +4,6 @@
 // UI - :atlas_image_drawable partition
 //
 // Draws a sub-region of a shared atlas image (single-texture batching for themed UI).
-// Ported from Sedulous.UI/src/Drawing/AtlasImageDrawable.bf.
 
 module;
 #include "Core/Prelude.h"

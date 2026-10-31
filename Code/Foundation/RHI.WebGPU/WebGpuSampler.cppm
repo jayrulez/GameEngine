@@ -3,10 +3,10 @@
 
 /// foundation.rhi.webgpu:sampler - Sampler over WGPUSampler.
 ///
-/// Two narrowings vs the RHI desc (both logged nowhere - they are static, documented
-/// facts of the platform): ClampToBorder becomes ClampToEdge (no border sampling in
-/// core WebGPU; borderColor is ignored with it), and mipLodBias does not exist (bias
-/// belongs to the shader sample instruction in WGSL).
+/// Two narrowings against the RHI desc, not logged because they are fixed facts of the
+/// platform: ClampToBorder becomes ClampToEdge (no border sampling in core WebGPU;
+/// borderColor is ignored with it), and mipLodBias does not exist (bias belongs to the
+/// shader sample instruction in WGSL).
 
 module;
 #include "Core/Prelude.h"

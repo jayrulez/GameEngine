@@ -3,9 +3,7 @@
 
 // UI - :float_animation partition
 //
-// Animates a float value from a start to an end value via a setter delegate. Ported from
-// Sedulous.UI/src/Animation/FloatAnimation.bf. Beef owned `delegate void(float) ~ delete _` ->
-// Function<void(f32)> (value type, RAII).
+// Animates a float value from a start to an end value via a setter delegate.
 
 module;
 #include "Core/Prelude.h"

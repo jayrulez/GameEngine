@@ -3,8 +3,8 @@
 
 // Core - :string_hash partition
 //
-// StringHash: a string's identity as a 64-bit FNV-1a hash - cheap to store, compare, and
-// key on, constexpr to build from a literal. The text itself is NOT retained (this is an
+// StringHash: a string's identity as a 64-bit FNV-1a hash: cheap to store, compare, and
+// key on, constexpr to build from a literal. The text itself is not retained (this is an
 // identity, not a name); zero is reserved as "no value". HashText is the constexpr twin
 // of HashBytes (same constants, same result over the same bytes).
 

@@ -1,6 +1,6 @@
-// CameraRig - the camera above and behind the thief, turned a quarter at a time (TurnLeft and
-// TurnRight), swinging round to the new quarter rather than cutting to it, and following the thief
-// with a little lag so a step does not jolt the view.
+// CameraRig: the camera above and behind the thief. TurnLeft and TurnRight turn it a quarter at a
+// time, and it swings round to the new quarter rather than cutting to it. It follows the thief with
+// a little lag so that a single step does not jolt the view.
 const float kPi = 3.14159265f;
 
 class CameraRig
@@ -15,7 +15,7 @@ class CameraRig
     [7.0, "How quickly it swings to a new quarter"] float swing;
 
     private int m_quarter = 0;    // 0 = looking north (-Z), then quarters clockwise
-    private float m_yaw = 0.0f;   // the swing's current angle (radians)
+    private float m_yaw = 0.0f;   // current angle of the swing (radians)
     private Float3 m_focus = Float3(0.0f, 0.0f, 0.0f);
 
     CameraRig(Entity@ entity) { @self = entity; }
@@ -55,7 +55,8 @@ class CameraRig
         place();
     }
 
-    // Behind the focus for the current angle: yaw 0 sits south of it (+Z) looking north.
+    // Places the camera behind the focus for the current angle: at yaw 0 it sits south of the
+    // focus (+Z), looking north.
     private void place()
     {
         Float3 seat = Float3(m_focus.x - Math::Sin(m_yaw) * distance, m_focus.y + height,

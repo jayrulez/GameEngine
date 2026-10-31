@@ -3,14 +3,14 @@
 
 // Foundation::Texture.Resource - the `foundation.texture.resource` module (runtime).
 //
-// The GPU texture as a runtime resource (model A, Traktor-style):
-//   * TextureResource (ISerializable): the cooked *record* loaded from the output
-//     DB - dims/RHI-format/mips/shape + sampler state. Cooked pixels live in the
-//     "data" stream. This is what the factory reads (not bound directly).
-//   * Texture (Object): the runtime product - owns the live rhi::Texture +
-//     rhi::Sampler (created from the record + uploaded "data"). What a renderer
-//     binds.
-//   * TextureFactory (IResourceFactory): device-backed; cooked resource -> GPU
+// The GPU texture as a runtime resource:
+//   * TextureResource (ISerializable): the cooked record loaded from the output
+//     DB: dimensions, RHI format, mips, shape and sampler state. Cooked pixels live
+//     in the "data" stream. The factory reads this; nothing binds it directly.
+//   * Texture (Object): the runtime product. It owns the live rhi::Texture and
+//     rhi::Sampler, created from the record and the uploaded "data". A renderer
+//     binds this.
+//   * TextureFactory (IResourceFactory): turns a cooked resource into a GPU
 //     texture. Needs an rhi::Device (headless tests use the Null backend).
 //
 // The runtime never links the editor/source side; it loads only cooked resources.
@@ -103,7 +103,7 @@ export namespace foundation::texture
         }
     };
 
-    // Runtime product: owns the live GPU texture + sampler.
+    // Runtime product: owns the live GPU texture and sampler.
     class Texture final : public Object
     {
         RTTI_OBJECT(Texture, Object)
@@ -145,9 +145,9 @@ export namespace foundation::texture
             m_uid = NextUid(); // consumers key caches/dirty checks on this, never the pointer
         }
 
-        /// Monotonic identity: a reloaded product is a NEW uid at (possibly) a reused address.
+        /// Monotonic identity: a reloaded product gets a new uid, possibly at a reused address.
         [[nodiscard]] u64 Uid() const noexcept { return m_uid; }
-        /// True when the default view is a cube (shape Cubemap - 6 faces).
+        /// True when the default view is a cube (shape Cubemap, six faces).
         [[nodiscard]] bool IsCube() const noexcept { return m_isCube; }
 
         [[nodiscard]] rhi::Texture* GpuTexture() const noexcept { return m_texture; }
@@ -178,10 +178,10 @@ export namespace foundation::texture
         u64 m_uid = 0;
     };
 
-    // Off-thread decode result for the async path (task #123): the parsed record + the raw cooked
-    // pixel bytes, both read on a JobSystem worker (content-DB reads open independent streams and
-    // the type/serializable registries are read-only during load, so this is concurrent-safe).
-    // FinalizeStage turns it into the live GPU Texture on the main thread.
+    // Off-thread decode result for the async path: the parsed record and the raw cooked pixel
+    // bytes, both read on a JobSystem worker. This is safe concurrently because content-DB reads
+    // open independent streams and the type and serializable registries are read-only during
+    // load. FinalizeStage turns it into the live GPU Texture on the main thread.
     class DecodedTexture final : public Object
     {
         RTTI_OBJECT(DecodedTexture, Object)
@@ -190,7 +190,6 @@ export namespace foundation::texture
         Array<u8> pixels;             // cooked "data" stream bytes
     };
 
-    // Cooked TextureResource -> live GPU Texture (model A). Device-backed.
     /// One WriteTexture call of a cooked payload: the payload slice plus its layout, extent
     /// and target subresource.
     struct TextureWrite
@@ -203,13 +202,12 @@ export namespace foundation::texture
         u32 arrayLayer = 0;
     };
 
-    /// Which slice of the payload goes to which mip level or cube face - the arithmetic that
-    /// decides how far into a buffer to read, kept PURE so it is testable without a device.
+    /// Which slice of the payload goes to which mip level or cube face: the arithmetic that
+    /// decides how far into a buffer to read, kept pure so it is testable without a device.
     /// Cubemaps: six level-0 faces concatenated +X,-X,+Y,-Y,+Z,-Z (one layer write each).
-    /// Otherwise: the concatenated mip chain, level sizes derived from the dims progression.
-    /// Block-compressed formats measure by 4x4 block footprint, never per texel (there is no
-    /// per-texel size; a per-texel face of 0 bytes silently uploaded nothing - the bug this
-    /// fixes). A truncated payload yields only the writes that fit, never an overread.
+    /// Otherwise: the concatenated mip chain, level sizes derived from the dimensions.
+    /// Block-compressed formats are measured by 4x4 block footprint, since they have no
+    /// per-texel size. A truncated payload yields only the writes that fit, never an overread.
     inline void EnumerateTextureWrites(const TextureResource& res, usize payloadBytes,
                                        Array<TextureWrite>& out)
     {
@@ -275,11 +273,12 @@ export namespace foundation::texture
         }
     }
 
+    // Cooked TextureResource to live GPU Texture. Device-backed.
     class TextureFactory final : public IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates. It is required:
+        // the application that registers the factory decides it.
         TextureFactory(IAllocator& allocator, rhi::Device& device) noexcept
             : m_allocator(&allocator), m_device(&device)
         {
@@ -312,7 +311,7 @@ export namespace foundation::texture
             return BuildTexture(*res, pixels);
         }
 
-        // --- async path (task #123): decode (record + pixel bytes) on a worker, upload on main ---
+        // --- async path: decode (record and pixel bytes) on a worker, upload on main ---
         [[nodiscard]] bool SupportsAsync() const override { return true; }
 
         [[nodiscard]] RefPtr<Object> DecodeStage(foundation::content::Instance& instance) override
@@ -325,7 +324,7 @@ export namespace foundation::texture
             }
             if (Cast<TextureResource>(decoded->record.Get()) == nullptr)
             {
-                return RefPtr<Object>{}; // not a texture record -> decode failure
+                return RefPtr<Object>{}; // not a texture record: decode failure
             }
             decoded->pixels = ReadCookedPixels(instance);
             return decoded;
@@ -374,7 +373,7 @@ export namespace foundation::texture
             return pixels;
         }
 
-        // Create the live GPU texture/view/sampler and upload the pixels. MAIN THREAD ONLY (RHI).
+        // Create the live GPU texture, view and sampler and upload the pixels. Main thread only (RHI).
         [[nodiscard]] RefPtr<Object> BuildTexture(const TextureResource& record,
                                                   const Array<u8>& pixels)
         {
@@ -397,7 +396,7 @@ export namespace foundation::texture
                 return RefPtr<Object>{};
             }
 
-            // Default sampled view spanning all mips/layers - the currency the material/renderer bind.
+            // Default sampled view spanning all mips and layers: what materials and renderers bind.
             // Cube-shaped assets (skyboxes) get a real TextureCube view so consumers can sample it as one.
             rhi::TextureViewDesc vd{};
             vd.format = res->format;
@@ -412,8 +411,8 @@ export namespace foundation::texture
                 return RefPtr<Object>{};
             }
 
-            // Upload mip 0 via a transfer batch (cubes: the cooked stream is the 6 faces
-            // concatenated +X,-X,+Y,-Y,+Z,-Z - one layer write each).
+            // Upload through a transfer batch (cubes: the cooked stream is the six faces
+            // concatenated +X,-X,+Y,-Y,+Z,-Z, one layer write each).
             if (!pixels.IsEmpty())
             {
                 rhi::Queue* queue = m_device->GetQueue(rhi::QueueType::Graphics, 0);
@@ -457,7 +456,7 @@ export namespace foundation::texture
         // A texture a camera renders into and anything samples: render-target and sampled, plus
         // CopySrc so a capture can read it out. It starts cleared to transparent black through
         // an upload, which also leaves it in the shader-read state, so a texture sampled before
-        // its camera has drawn (an inactive camera, the first frame) is defined. MAIN THREAD ONLY.
+        // its camera has drawn (an inactive camera, the first frame) is defined. Main thread only.
         [[nodiscard]] RefPtr<Object> BuildRenderTexture(const RenderTextureResource& record)
         {
             if (!record.IsValid())
@@ -547,7 +546,7 @@ export namespace foundation::texture
         RegisterSerializable<TextureResource>();
         GlobalTypeRegistry().Register(RenderTextureResource::StaticType());
         RegisterSerializable<RenderTextureResource>();
-        // Force the async intermediate's type to initialize on the MAIN thread; DecodeStage
+        // Force the async intermediate's type to initialize on the main thread; DecodeStage
         // MakeRef<DecodedTexture>()s it on a worker, which must only ever read the type.
         (void)DecodedTexture::StaticType();
     }
@@ -560,8 +559,6 @@ export namespace foundation::texture
 
 export namespace foundation::texture
 {
-    /// The texture resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
     /// What the texture factory reads beside a TextureResource: a render texture's record.
     [[nodiscard]] inline const TypeInfo* TextureAlsoCooked(usize index)
     {
@@ -578,6 +575,8 @@ export namespace foundation::texture
             return desc;
         }(),
     };
+    /// The texture resource module: what the engine composition composes this library's
+    /// factories from.
     inline constexpr foundation::resource::ResourceModule kTextureResourceModule{
         u8"texture", &RegisterTextureResource, kTextureResourceFactories,
         sizeof(kTextureResourceFactories) / sizeof(kTextureResourceFactories[0])};

@@ -4,9 +4,8 @@
 // Foundation::RenderGraph - :persistent_resource partition
 //
 // A persistent resource that survives across frames with tracked state.
-// Externally owned - the graph never creates or destroys these. The ping-pong
-// variant carries two slots (current + previous frame) for temporal effects.
-// Ported from Sedulous.RenderGraph (PersistentResource.bf).
+// Externally owned: the graph never creates or destroys these. The ping-pong
+// variant carries two slots (current and previous frame) for temporal effects.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +24,7 @@ export namespace foundation::rendergraph
     class PersistentResource
     {
     public:
-        static constexpr i32 kSlotCount = 2; // current + one previous
+        static constexpr i32 kSlotCount = 2; // current and one previous
 
         PersistentResource(rhi::Texture* texture, rhi::TextureView* view) noexcept
         {

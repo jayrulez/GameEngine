@@ -18,9 +18,9 @@ cbuffer Material : register(b0, space2) {    // data-driven PBR material (inferr
     float  NormalScale;        // scales the tangent-space XY perturbation (glTF normalScale)
     float  AlphaCutoff;        // ALPHA_TEST threshold (glTF alphaCutoff; 0.5 = the spec default)
     float  _materialPad2;      // padding (offset 60): the block stays 64 bytes
-    // (pre-straggler materials upgrade at load: emissive black, strength/scale 1, cutoff 0.5)
+    // (older materials upgrade at load: emissive black, strength and scale 1, cutoff 0.5)
 };
-// Standard PBR material maps (the fixed forward set-2 contract, Sedulous-aligned). Unset maps bind a
+// Standard PBR material maps (the fixed forward set-2 contract). Unset maps bind a
 // neutral default (white for albedo/MR/AO/emissive, flat normal for NormalMap) so untextured
 // materials are unaffected (an emissive map multiplies EmissiveColor, black unless authored). All
 // five are sampled: albedo, normal (tangent-space), metallic-roughness (glTF: G=roughness,
@@ -44,8 +44,9 @@ struct PSInput {
 };
 
 
-// Forward outputs. GBUFFER (opaque/masked MRT pass): shaded color + view-normal + motion vector.
-// Otherwise (the color-only transparent pass): just the blended color.
+// Forward outputs. Under GBUFFER (the opaque and masked MRT pass): the shaded colour, view normal,
+// motion vector and the rest of GBufferOutput. Otherwise (the colour-only transparent pass): just
+// the blended colour.
 
 #ifdef GBUFFER
 GBufferOutput main(PSInput input) {
@@ -61,11 +62,11 @@ float4 main(PSInput input) : SV_Target0 {
     // tangents fall back to the geometric normal.
     float3 N = normalize(input.normalWS);
     {
-        // Sample the normal map in UNIFORM control flow (hoisted out of the tangent-validity branch
-        // below). WGSL/Chrome make an implicit-derivative sample inside a per-pixel branch a hard error;
-        // sampling unconditionally keeps the mip-selecting derivatives (a material texture, unlike the
-        // full-screen post taps) and is harmless when the tangent is degenerate - the flat default map
-        // decodes to (0,0,1) and the result is simply unused (N stays the geometric normal).
+        // Sample the normal map in uniform control flow, hoisted out of the tangent-validity branch
+        // below. WGSL (and Chrome) treat an implicit-derivative sample inside a per-pixel branch as a
+        // hard error. Sampling unconditionally keeps the mip-selecting derivatives (this is a material
+        // texture, unlike the full-screen post taps) and is harmless when the tangent is degenerate:
+        // the result is unused and N stays the geometric normal.
         float3 nTex = NormalMap.Sample(MainSampler, input.uv).xyz * 2.0 - 1.0;
         float3 T = input.tangentWS.xyz - N * dot(input.tangentWS.xyz, N);   // Gram-Schmidt re-orthogonalize
         float  tLen = length(T);
@@ -82,8 +83,8 @@ float4 main(PSInput input) : SV_Target0 {
     float3 albedo    = input.color.rgb * BaseColor.rgb * albedoTex.rgb;
     float  alpha     = saturate(input.color.a * BaseColor.a * albedoTex.a);   // surface opacity (alpha blend)
 #ifdef ALPHA_TEST
-    // Masked geometry: cut out sub-cutoff fragments before shading (skips lighting + writes no depth/
-    // G-buffer for the hole). The cutoff is authored (glTF alphaCutoff; 0.5 default).
+    // Masked geometry: cut out fragments below the cutoff before shading, so the hole skips lighting
+    // and writes no depth or G-buffer. The cutoff is authored (glTF alphaCutoff; 0.5 default).
     if (alpha < AlphaCutoff) { discard; }
 #endif
     float2 mr        = MetallicRoughnessMap.Sample(MainSampler, input.uv).gb;   // glTF: G=roughness, B=metallic
@@ -92,7 +93,7 @@ float4 main(PSInput input) : SV_Target0 {
     float3 F0        = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
 
     float3 viewPos   = mul(float4(input.worldPos, 1.0), View).xyz;
-    float  viewDepth = -viewPos.z;                             // cascade selection + cluster lookup
+    float  viewDepth = -viewPos.z;                             // cascade selection and cluster lookup
 
     uint debugLightCount;   // ClusterHeat: the lights evaluated here
     float3 Lo = DirectLight(input.clip.xy, input.worldPos, viewDepth, N, V, albedo, roughness,
@@ -101,7 +102,7 @@ float4 main(PSInput input) : SV_Target0 {
     float  ao = lerp(1.0, OcclusionMap.Sample(MainSampler, input.uv).r, OcclusionStrength);
     float3 ambient = AmbientLight(input.worldPos, N, V, albedo, roughness, metallic, F0, ao);
 #ifdef GBUFFER
-    // Emitted radiance: factor x map, added unlit on top (HDR - feeds bloom). The factor defaults
+    // Emitted radiance: factor x map, added unlit on top (HDR, so it feeds bloom). The factor defaults
     // to black (no glow) and an unbound map to white (glTF), so a colour alone glows.
     float3 emissive = EmissiveColor.rgb * EmissiveMap.Sample(MainSampler, input.uv).rgb;
     float2 velocity = MotionVector(input.curClip, input.prevClip);
@@ -115,9 +116,9 @@ float4 main(PSInput input) : SV_Target0 {
         alpha = 1.0;
     }
     o.color    = float4(litColor, alpha);
-    o.normal   = OctEncode(normalize(mul(float4(N, 0.0), View).xyz));   // view-space MAPPED normal (octahedral)
+    o.normal   = OctEncode(normalize(mul(float4(N, 0.0), View).xyz));   // view-space normal after normal mapping (octahedral)
     o.velocity = velocity;
-    o.material = float2(roughness, metallic);   // SSR reads these to gate/fade reflections
+    o.material = float2(roughness, metallic);   // SSR reads these to gate and fade reflections
     // The diffuse albedo the ambient term used (a metal reflects no diffuse light): SSGI's bounce
     // is light arriving at the surface, and what leaves it is that times this.
     o.albedo   = float4(albedo * (1.0 - metallic), 1.0);

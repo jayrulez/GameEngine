@@ -3,7 +3,7 @@
 
 // foundation.script.resource tests: the tagged property-value wire (every kind, symmetric
 // writer/reader), harvested-metadata round-trip through the cooked record, and the
-// ScriptClassFactory (cooked record -> runtime product; metadata parse only, no VM).
+// ScriptClassFactory (cooked record to runtime product; metadata parse only, no VM).
 
 #include <doctest/doctest.h>
 
@@ -133,10 +133,11 @@ TEST_CASE("script.resource: the type-string parser covers the v1 set (+ asset:<T
 
 namespace
 {
-    // The ScriptClassFactory is backend-NEUTRAL: it reconstructs a runtime ScriptClass from the
-    // cooked ScriptClassSource METADATA and never compiles the source (no backend is linked here),
-    // so the same record->factory->product round-trip holds for a record of EITHER language. Driven
-    // once per backend label to prove the resource layer carries no backend assumption.
+    // The ScriptClassFactory is backend-neutral: it reconstructs a runtime ScriptClass from the
+    // cooked ScriptClassSource metadata and never compiles the source (no backend is linked here),
+    // so the same round-trip from record through factory to product holds for a record of either
+    // language. Driven once per backend label to show the resource layer makes no backend
+    // assumption.
     void DriveFactoryRoundTrip(StringView language, StringView sourceName, StringView source)
     {
         RegisterScriptResource();
@@ -208,7 +209,7 @@ namespace
     }
 }
 
-// The one table of authored spellings reads both ways (taken from Sedulous's port, d4e76331):
+// The one table of authored spellings reads both ways:
 // every kind's spelling names that kind, every spelling parses back to it, and None has none.
 TEST_CASE("script.resource: the property type table reads both ways")
 {
@@ -249,8 +250,7 @@ TEST_CASE("script.resource: cooked record -> factory -> runtime product, luau la
 }
 
 // A record cooked before each property carried its replicated flag is in another layout. Read as
-// this one it misread its counts and held the editor for minutes opening a scene; the data
-// version refuses it, and the script recooks.
+// this one it would misread its counts; the data version refuses it, and the script recooks.
 TEST_CASE("script.resource: a record cooked before the replicated flag is refused")
 {
     RegisterScriptResource();

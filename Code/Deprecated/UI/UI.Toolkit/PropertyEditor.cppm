@@ -3,17 +3,14 @@
 
 // UI Toolkit - :property_editor partition
 //
-// Abstract base for the typed property editors used by PropertyGrid (label + editing-control row).
-// Ported from Sedulous.UI.Toolkit/src/PropertyGrid/PropertyEditor.bf. Supports transactional editing for
-// undo/redo integration: OnEditBegin / OnValueChanged (may fire many times) / OnEditEnd / OnEditCancelled.
+// Abstract base for the typed property editors used by PropertyGrid (a label and editing-control row).
+// Supports transactional editing for undo and redo: OnEditBegin, OnValueChanged (which may fire many
+// times), then OnEditEnd or OnEditCancelled.
 //
-// Beef `abstract class PropertyEditor` (implicitly Object-derived) -> `Object` + RTTI_OBJECT (abstract:
-// pure-virtual CreateEditorView/RefreshView, but still carries a type identity like the core abstract
-// Drawable). Beef owned `View mEditorView` (owned by the view tree once added) -> a RefPtr<View> the editor
-// holds so its borrowed child pointers stay valid across PropertyGrid rebuilds. `Event<delegate
-// void(PropertyEditor)>` -> Event<void(PropertyEditor*)>; `delegate void(StringView) OnLabelRenamed` ->
-// Function<void(StringView)>. Beef `String` fields with "null == unset" -> core::String with "empty ==
-// unset".
+// PropertyEditor is an Object with RTTI_OBJECT: abstract (CreateEditorView and RefreshView are pure
+// virtual) but still carrying a type identity, like the core abstract Drawable. The editor holds its
+// view as a RefPtr<View> so its borrowed child pointers stay valid across PropertyGrid rebuilds. Empty
+// String fields mean unset.
 
 module;
 #include "Core/Prelude.h"
@@ -70,8 +67,8 @@ export namespace foundation::ui::toolkit
             return m_displayName.IsEmpty() ? StringView(m_name) : StringView(m_displayName);
         }
 
-        /// Sets the display label (for pretty names like "Casts Shadows"). Live: a built
-        /// row's label follows (PropertyGrid binds the sink like it binds row visibility).
+        /// Sets the display label (for pretty names like "Casts Shadows"). It applies
+        /// live: a built row's label follows it (PropertyGrid binds the sink as it binds row visibility).
         void SetDisplayName(StringView displayName)
         {
             m_displayName = String(displayName);
@@ -81,14 +78,14 @@ export namespace foundation::ui::toolkit
             }
         }
 
-        /// Called by PropertyGrid each time it (re)builds this editor's row: keeps the row's
+        /// Called by PropertyGrid each time it (re)builds this editor's row, to keep the row's
         /// label view in sync with later SetDisplayName calls.
         void BindDisplayNameSink(Function<void(StringView)> sink)
         {
             m_displayNameSink = static_cast<Function<void(StringView)>&&>(sink);
         }
 
-        /// Plain-text tooltip for the whole row (empty = none). PropertyGrid copies it onto
+        /// Plain-text tooltip for the whole row (empty for none). PropertyGrid copies it onto
         /// the row view's TooltipText when it builds the row.
         [[nodiscard]] StringView Tooltip() const { return m_tooltip; }
         void SetTooltip(StringView tooltip) { m_tooltip = String(tooltip); }
@@ -181,9 +178,9 @@ export namespace foundation::ui::toolkit
         }
 
         String m_name; // machine-readable identity
-        String m_displayName;
+        String m_displayName; // empty means use Name
         Function<void(StringView)>
-            m_displayNameSink;     // row label binding (PropertyGrid)      // empty == "use Name"
+            m_displayNameSink;     // row label binding (PropertyGrid)
         String m_category;         // empty == uncategorized
         String m_tooltip;          // empty == none
         RefPtr<View> m_editorView; // owned; the view tree also refs it once added

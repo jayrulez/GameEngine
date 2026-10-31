@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""render.py <Name>...: scripts/<Name>.as with {{Asset}} placeholders -> PaperKid's Sources/<Name>.as
-with the asset ids, then script_validate over the editor's MCP."""
+"""render.py <Name>...: scripts/<Name>.as with its {{Asset}} placeholders filled with the asset ids,
+written to PaperKid's Sources/<Name>.as, then script_validate over the editor's MCP."""
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pkgen import mcp

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // texture.compression tests - the policy table (pure logic), exact block sizes, and a real
-// encode->decode round-trip whose PSNR proves the encoders actually run and reconstruct. Decoding
+// encode and decode round-trip whose PSNR shows the encoders actually run and reconstruct. Decoding
 // uses the vendored bc7enc/rgbcx decoders directly (test-only; the module itself only encodes).
 
 #include <doctest/doctest.h>
@@ -146,39 +146,39 @@ TEST_CASE("ResolveCompressedFormat - Decision 5 policy table (BC profile)")
     const TargetProfile bc = DesktopProfile();
     const auto uncompressed = rhi::TextureFormat::RGBA8Unorm;
 
-    // Color: opaque Default -> BC1; alpha -> BC7; Quality forces BC7 even opaque; sRGB variants.
+    // Color: opaque Default is BC1; alpha is BC7; Quality forces BC7 even opaque; sRGB variants.
     CHECK(ResolveCompressedFormat(TextureUsage::Color, false, false, false, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC1RGBAUnorm);
     CHECK(ResolveCompressedFormat(TextureUsage::Color, true, false, false, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC1RGBAUnormSrgb);
     CHECK(ResolveCompressedFormat(TextureUsage::Color, false, true, false, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC7RGBAUnorm);
     CHECK(ResolveCompressedFormat(TextureUsage::Color, true, true, false, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC7RGBAUnormSrgb);
     CHECK(ResolveCompressedFormat(TextureUsage::Color, false, false, false, CompressionChoice::Quality, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC7RGBAUnorm);
 
-    // Normal -> BC5, Mask -> BC4 (both linear, ignore sRGB).
+    // Normal is BC7-linear, Mask is BC4 (both linear, ignore sRGB).
     CHECK(ResolveCompressedFormat(TextureUsage::Normal, false, false, false, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC7RGBAUnorm);
     CHECK(ResolveCompressedFormat(TextureUsage::Mask, false, false, false, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC4RUnorm);
-    // Packed ORM/ARM authored as Mask: distinct channels -> BC7-linear, never channel-dropping BC4.
+    // Packed ORM/ARM authored as Mask: distinct channels give BC7-linear, never channel-dropping BC4.
     CHECK(ResolveCompressedFormat(TextureUsage::Mask, false, false, true, CompressionChoice::Default, 256, 256, bc, uncompressed) == rhi::TextureFormat::BC7RGBAUnorm);
 
-    // Escape hatches -> uncompressed: authored None, small (<=64px). HDR has its own row (BC6H).
+    // Escape hatches to uncompressed: authored None, small (<=64px). HDR has its own row (BC6H).
     CHECK(ResolveCompressedFormat(TextureUsage::Color, true, true, false, CompressionChoice::None, 256, 256, bc, uncompressed) == uncompressed);
     CHECK(ResolveCompressedFormat(TextureUsage::Color, true, false, false, CompressionChoice::Default, 64, 64, bc, uncompressed) == uncompressed);
     CHECK(ResolveCompressedFormat(TextureUsage::HDR, false, false, false,
                                   CompressionChoice::Default, 256, 256, bc, uncompressed) ==
-          rhi::TextureFormat::BC6HRGBUfloat); // HDR row: BC6H since 2026-09-07
+          rhi::TextureFormat::BC6HRGBUfloat); // HDR row: BC6H
 
-    // No supported family -> uncompressed regardless of usage.
+    // No supported family: uncompressed regardless of usage.
     const TargetProfile none{false, false, false};
     CHECK(ResolveCompressedFormat(TextureUsage::Color, false, true, false, CompressionChoice::Default, 256, 256, none, uncompressed) == uncompressed);
 }
 
 TEST_CASE("BlockCompressedSize - exact 4x4 block-ceil bytes")
 {
-    // 256x256 = 64x64 blocks = 4096 blocks. BC1/BC4 = 8B/block, BC7/BC5/BC3 = 16B/block.
+    // 256x256 is 64x64 blocks, 4096 blocks. BC1/BC4 take 8B/block, BC7/BC5/BC3 16B/block.
     CHECK(BlockCompressedSize(rhi::TextureFormat::BC1RGBAUnorm, 256, 256) == 4096u * 8u);
     CHECK(BlockCompressedSize(rhi::TextureFormat::BC4RUnorm, 256, 256) == 4096u * 8u);
     CHECK(BlockCompressedSize(rhi::TextureFormat::BC7RGBAUnorm, 256, 256) == 4096u * 16u);
     CHECK(BlockCompressedSize(rhi::TextureFormat::BC5RGUnorm, 256, 256) == 4096u * 16u);
-    // NPOT / sub-block rounds UP: 65x65 -> 17x17 blocks.
+    // NPOT / sub-block rounds up: 65x65 is 17x17 blocks.
     CHECK(BlockCompressedSize(rhi::TextureFormat::BC7RGBAUnorm, 65, 65) == 17u * 17u * 16u);
 }
 
@@ -224,7 +224,7 @@ TEST_CASE("ResolveCompressedFormat - ASTC (mobile) profile")
     CHECK(ResolveCompressedFormat(TextureUsage::Color, true, false, false, CompressionChoice::Default, 64, 64, astc, uncompressed) == uncompressed);
     CHECK(ResolveCompressedFormat(TextureUsage::HDR, false, false, false, CompressionChoice::Default, 256, 256, astc, uncompressed) == uncompressed);
 
-    // A profile that supports BOTH families prefers BC (desktop-first).
+    // A profile that supports both families prefers BC (desktop-first).
     const TargetProfile both{true, true, false};
     CHECK(ResolveCompressedFormat(TextureUsage::Color, false, false, false, CompressionChoice::Default, 256, 256, both, uncompressed) == rhi::TextureFormat::BC1RGBAUnorm);
 }
@@ -237,7 +237,7 @@ TEST_CASE("EncodeBlockCompressed - ASTC 4x4 round-trip PSNR + exact size")
     const Array<byte> enc =
         EncodeBlockCompressed(img.Data(), w, h, rhi::TextureFormat::ASTC4x4Unorm, 200);
     REQUIRE(enc.Size() == BlockCompressedSize(rhi::TextureFormat::ASTC4x4Unorm, w, h));
-    // ASTC 4x4 = 16 bytes per 4x4 block = 8 bpp, same footprint as BC7.
+    // ASTC 4x4 is 16 bytes per 4x4 block (8 bpp), the same footprint as BC7.
     CHECK(enc.Size() == static_cast<usize>((w / 4) * (h / 4)) * 16u);
 
     const Array<u8> dec = DecodeAstc(enc, w, h, /*srgb*/ false);
@@ -369,10 +369,10 @@ TEST_CASE("EncodeBlockCompressedHdr - unsigned clamps negatives, NaN and beyond-
     const u32 w = 4, h = 4;
     Array<f32> src;
     src.Resize(w * h * 4, 1.0f);
-    src[0] = -5.0f;                 // negative -> 0
-    src[4] = std::nanf("");        // NaN -> 0 (guarded: never poisons the block); a constant
+    src[0] = -5.0f;                 // negative clamps to 0
+    src[4] = std::nanf("");        // NaN becomes 0 (guarded: never poisons the block); a constant
                                    // 0.0f / 0.0f is a hard error under MSVC (C2124)
-    src[8] = 1.0e9f;                // beyond half -> the largest finite half
+    src[8] = 1.0e9f;                // beyond half clamps to the largest finite half
     const Array<byte> enc = EncodeBlockCompressedHdr(src.Data(), w, h, 128);
     const Array<f32> dec = DecodeBc6h(enc, w, h);
     CHECK(dec[0] >= 0.0f);
@@ -390,7 +390,7 @@ TEST_CASE("ResolveCompressedFormat - the HDR row is BC6H on BC targets, uncompre
     using F = rhi::TextureFormat;
     CHECK(ResolveCompressedFormat(TextureUsage::HDR, false, false, false, CompressionChoice::Default,
                                   512, 256, DesktopProfile(), F::RGBA32Float) == F::BC6HRGBUfloat);
-    // Mobile (ASTC) has no BC6H; the ASTC-HDR profile is the asset-variants follow-up.
+    // Mobile (ASTC) has no BC6H, and there is no ASTC-HDR path, so HDR stays uncompressed there.
     CHECK(ResolveCompressedFormat(TextureUsage::HDR, false, false, false, CompressionChoice::Default,
                                   512, 256, MobileProfile(), F::RGBA32Float) == F::RGBA32Float);
     // The authored escape and the small-texture escape still apply.
@@ -403,9 +403,9 @@ TEST_CASE("ResolveCompressedFormat - the HDR row is BC6H on BC targets, uncompre
 
 TEST_CASE("EncodeBlockCompressed - the job-system fan-out is byte-identical to the inline encode")
 {
-    // A 4k texture's BC7 encode took 84 s on one core (2026-09-23); the cook now fans the block
-    // rows out over its job system. Every block is encoded on its own, so the bytes must not
-    // depend on how the rows were split across workers - for every BC format.
+    // The cook fans the block rows out over its job system (a 4k texture's BC7 encode is slow on one
+    // core). Every block is encoded on its own, so the bytes must not depend on how
+    // the rows were split across workers, for every BC format.
     const u32 w = 96, h = 64; // 24 x 16 blocks: more rows than workers, uneven chunks
     const Array<u8> img = MakeImage(w, h, /*alpha*/ true);
     JobSystem jobs(DefaultAllocator(), 3);

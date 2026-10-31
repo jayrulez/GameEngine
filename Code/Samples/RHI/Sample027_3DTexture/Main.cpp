@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample027 -- 3D Texture & 1D LUT. Ported from Sedulous Sample027_3DTexture.
+/// Sample027 -- 3D Texture & 1D LUT.
 /// Demonstrates 3D textures and 1D textures.
 /// Generates a 3D noise volume, renders slices animated over time.
 /// Uses a 1D gradient LUT for color mapping.
@@ -253,7 +253,7 @@ foundation::core::Status Texture3DSample::createVolumeTexture()
                 float fy = static_cast<float>(y) / static_cast<float>(kVolumeSize);
                 float fz = static_cast<float>(z) / static_cast<float>(kVolumeSize);
 
-                // Simple 3D pattern: spherical blobs + frequency pattern
+                // Simple 3D pattern: spherical blobs and a frequency pattern
                 float cx = fx - 0.5f, cy = fy - 0.5f, cz = fz - 0.5f;
                 float dist = std::sqrt(cx * cx + cy * cy + cz * cz);
                 float sphere = std::max(0.0f, 1.0f - dist * 3.0f);
@@ -302,7 +302,7 @@ foundation::core::Status Texture3DSample::createLUTTexture()
     if (m_device->CreateTextureView(m_lutTexture, tvd, m_lutView) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Generate gradient LUT: dark blue -> cyan -> green -> yellow -> red -> white
+    // Generate gradient LUT: dark blue, cyan, green, yellow, red, white
     u8 data[kLUTSize * 4];
     for (u32 i = 0; i < kLUTSize; i++)
     {

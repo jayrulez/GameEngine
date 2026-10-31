@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// WGSL cook - translate one HLSL shader stage to browser-conformant WGSL.
+// WGSL cook: translates one HLSL shader stage to browser-conformant WGSL.
 //
 //   HLSL --DXC--> SPIR-V (vulkan1.1 + engine Standard binding shifts)
 //        --naga--> WGSL
 //        --tint--> validated (Chrome/Dawn conformance oracle)
 //
-// COOK-TIME ONLY (export path), never a runtime path: it shells out to the vendored naga + tint
-// executables via core::RunProcess (paths baked in as BUILDSYSTEM_NAGA_PATH / BUILDSYSTEM_TINT_PATH by
-// ThirdParty/CMakeLists.txt -> ThirdParty::ShaderCookTools). naga is the version-matched translator
-// (its naga == wgpu-native's WGSL validator); tint errors on WGSL uniformity violations naga only
-// warns on, so it is the second gate that catches browser-incompatible shaders at cook time.
+// Cook time only (the export path), never at runtime: it shells out to the vendored naga and tint
+// executables through core::RunProcess (paths baked in as BUILDSYSTEM_NAGA_PATH and
+// BUILDSYSTEM_TINT_PATH by ThirdParty::ShaderCookTools in ThirdParty/CMakeLists.txt). naga is the
+// version-matched translator (the same naga is wgpu-native's WGSL validator); tint errors on WGSL
+// uniformity violations naga only warns on, so it is the second gate that catches
+// browser-incompatible shaders at cook time.
 //
 // The intermediate SPIR-V and WGSL are written to a caller-provided scratch directory, since naga
 // reads an input file and writes an output file (no stdin/stdout streaming for the emit path).
@@ -49,10 +50,11 @@ export namespace foundation::shaders
     };
 
     // Translates HLSL shader stages to WGSL at cook time. Borrows a DXC Compiler (the SPIR-V front
-    // end) and writes intermediates into `scratchDir` (must exist and be writable). naga/tint default
-    // to the vendored binaries; a host with no vendored binary for its platform leaves the path
-    // empty and Translate reports the tool missing (Translate stage for naga; Validate stage for
-    // tint when validation is requested - skipping validation is an explicit opt-out, never silent).
+    // end) and writes intermediates into `scratchDir` (must exist and be writable). naga and tint
+    // default to the vendored binaries; a host with no vendored binary for its platform leaves the
+    // path empty and Translate reports the tool missing (at the Translate stage for naga, at the
+    // Validate stage for tint when validation is requested). Skipping validation is an explicit
+    // opt-out, never silent.
     class WgslTranslator
     {
     public:
@@ -69,7 +71,7 @@ export namespace foundation::shaders
 
         void SetNagaPath(StringView p) { m_naga = String(p); }
         void SetTintPath(StringView p) { m_tint = String(p); }
-        // Run tint over naga's output (default true). Off = translate only (naga), no conformance gate.
+        // Run tint over naga's output (default true). Off translates only, with no conformance gate.
         void SetValidateWithTint(bool v) { m_validate = v; }
 
         [[nodiscard]] bool HasNaga() const noexcept { return !m_naga.IsEmpty(); }
@@ -92,14 +94,14 @@ export namespace foundation::shaders
                 return result;
             }
 
-            // 1. DXC: HLSL -> SPIR-V with the WebGPU compile settings (vulkan1.1 target env + the
-            //    engine-wide Standard binding shifts), exactly as ShaderSystem feeds the WebGPU backend.
+            // 1. DXC: HLSL -> SPIR-V with the WebGPU compile settings (the vulkan1.1 target env and
+            //    the engine-wide Standard binding shifts), as ShaderSystem feeds the WebGPU backend.
             Array<ShaderDefine> defines;
             AppendDefines(flags, defines);
-            // Browsers have no push constants and REJECT WGSL var<push_constant>. Compile the
+            // Browsers have no push constants and reject WGSL var<push_constant>. Compile the
             // PUSH_CONSTANT blocks as ordinary cbuffers (register(b0, spaceN)) so naga emits a
             // @group(spaceN) @binding(0) var<uniform> the browser accepts; the WebGPU backend feeds
-            // it per-draw via its push-constant emulation (see Data/Engine/Shaders/push_constant.hlsli).
+            // it per draw through its push-constant emulation (see push_constant.hlsli).
             defines.PushBack(ShaderDefine{u8"PUSH_CONSTANT_AS_CBUFFER", u8"1"});
             CompileOptions opts{};
             opts.shaderModel = u8"6_0";
@@ -141,12 +143,12 @@ export namespace foundation::shaders
                 return result;
             }
 
-            // 2. naga: SPIR-V -> WGSL (writes wgslPath). --keep-coordinate-space is LOAD-BEARING:
-            // without it naga bakes a clip-space Y adjustment into the WGSL that wgpu's RUNTIME
-            // SPIR-V frontend does NOT apply, so the cooked-WGSL path rendered MIRRORED relative
-            // to both the SPIR-V path and Vulkan (probe-proven in Render.Backend.Tests).
-            // With the flag, every WebGPU shader path shares Vulkan's raster orientation and the
-            // renderer needs no Y-flip compensations at all (NeedsClipSpaceYFlip == false).
+            // 2. naga: SPIR-V -> WGSL (writes wgslPath). --keep-coordinate-space is required:
+            // without it naga bakes a clip-space Y adjustment into the WGSL that wgpu's runtime
+            // SPIR-V frontend does not apply, so the cooked-WGSL path renders mirrored relative to
+            // both the SPIR-V path and Vulkan (Render.Backend.Tests probes this). With the flag,
+            // every WebGPU shader path shares Vulkan's raster orientation and the renderer needs
+            // no Y-flip compensation (NeedsClipSpaceYFlip is false).
             const StringView nagaArgs[] = {u8"--keep-coordinate-space", spvPath.AsView(),
                                            wgslPath.AsView()};
             const ProcessResult np =
@@ -178,12 +180,12 @@ export namespace foundation::shaders
             const Array<byte>& wb = wgslBytes.Value();
             result.wgsl = String(StringView(reinterpret_cast<const char8_t*>(wb.Data()), wb.Size()));
 
-            // 3. tint: validate the WGSL against the Chrome/Dawn frontend (uniformity et al.).
-            // Validation requested but no tint vendored for this host: FAIL, do not silently
-            // skip - unvalidated WGSL is exactly the class of output the browser rejects at
-            // runtime, and tint is vendored to gate it at cook time. A host that genuinely
-            // has no tint opts out explicitly (SetValidateWithTint(false) /
-            // ShaderCookOptions::validateWgsl = false) and owns the risk.
+            // 3. tint: validate the WGSL against the Chrome/Dawn frontend (uniformity and the
+            // rest). When validation is requested but no tint is vendored for this host, fail
+            // rather than skip: unvalidated WGSL is the class of output the browser rejects at
+            // runtime, and tint is vendored to gate it at cook time. A host that has no tint opts
+            // out explicitly (SetValidateWithTint(false) or ShaderCookOptions::validateWgsl =
+            // false) and owns the risk.
             if (m_validate && m_tint.IsEmpty())
             {
                 result.failedStage = WgslCookStage::Validate;

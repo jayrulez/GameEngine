@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample018 -- Bindless Textures. Ported from Sedulous Sample018_Bindless.
+/// Sample018 -- Bindless Textures.
 /// Demonstrates bindless texture arrays with material index via push constants.
 /// Creates 4 procedural textures, binds them in a bindless array, and renders
 /// 4 quads each selecting a different texture via push constant index.
@@ -167,7 +167,7 @@ foundation::core::Status BindlessSample::OnInit()
     if (m_device->CreateBindGroupLayout(blBgld, m_bindlessBgl) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Create bindless bind group (no entries at creation - populated via updateBindless)
+    // Create bindless bind group (no entries at creation; UpdateBindless populates it)
     rhi::BindGroupDesc blBgd{};
     blBgd.layout = m_bindlessBgl;
     blBgd.label = u8"BindlessBG";
@@ -204,7 +204,7 @@ foundation::core::Status BindlessSample::OnInit()
     if (m_device->CreateBindGroup(sBgd, m_samplerBg) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Pipeline layout: group 0 = bindless textures, group 1 = sampler, push constants
+    // Pipeline layout: group 0 holds the bindless textures, group 1 the sampler, plus push constants
     rhi::BindGroupLayout* sets[2] = {m_bindlessBgl, m_samplerBgl};
     rhi::PushConstantRange pcr{};
     pcr.stages = rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment;
@@ -218,7 +218,7 @@ foundation::core::Status BindlessSample::OnInit()
     if (m_device->CreatePipelineLayout(pld, m_pl) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Render pipeline (no vertex buffers - SV_VertexID driven)
+    // Render pipeline (no vertex buffers; driven by SV_VertexID)
     rhi::ColorTargetState ct{};
     ct.format = m_swapChain->Format();
     rhi::RenderPipelineDesc rpd{};

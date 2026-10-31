@@ -3,20 +3,19 @@
 
 // Editor::Scene - :edit partition.
 //
-// SceneEditContext: the per-page scene mutation mediator (the Lumix
-// WorldEditor role, but PER PAGE, never global: multi-scene). Every mutation is an
-// IEditorCommand on the page's stack; nothing edits the scene directly. Commands reference
-// entities by persistent Guid (stable across destroy/undo - handles are generation-guarded
-// pool slots and die with the entity), resolving through the scene at execute time.
+// SceneEditContext: the scene mutation mediator for one page. There is one per page, never a global
+// one, so several scenes can be edited at once. Every mutation is an IEditorCommand on the page's
+// stack; nothing edits the scene directly. Commands reference entities by persistent Guid, which is
+// stable across destroy and undo (handles are generation-guarded pool slots and die with the
+// entity), and resolve them through the scene at execute time.
 //
-// DestroyEntity's undo restores the FULL serialized subtree - names, transforms, active flags,
-// hierarchy, and every serializable component (via the managers' WriteComponent/ReadComponent,
-// the same per-entity routing SerializeScene uses). This is the fix for Sedulous's lossy
-// "TODO: Restore components and children".
+// DestroyEntity's undo restores the full serialized subtree: names, transforms, active flags,
+// hierarchy, and every serializable component (through the managers' WriteComponent and
+// ReadComponent, the same per-entity routing SerializeScene uses).
 //
-// Reparents preserve the WORLD transform (Scene keep-world overloads + TRS decompose); undo
-// restores the captured local exactly (no decompose round-trip drift). Same-parent reorders
-// keep the local untouched.
+// Reparenting preserves the world transform (Scene's keep-world overloads and a TRS decompose);
+// undo restores the captured local transform exactly, with no drift from a decompose round trip.
+// Reordering under the same parent leaves the local transform untouched.
 
 module;
 #include "Core/Prelude.h"
@@ -121,8 +120,8 @@ namespace editor
             return Guid{};
         }
         const Guid parent = m_scene->GetEntityId(m_scene->GetParent(root));
-        // "Box" -> "Box (2)" (first free counter among the copy's future siblings), so
-        // original and copy are distinguishable at a glance.
+        // "Box" becomes "Box (2)" (the first free counter among the copy's future siblings), so the
+        // original and the copy are distinguishable at a glance.
         records[0].name = UniqueSiblingName(records[0].name.AsView(), m_scene->GetParent(root));
         return RunPasteCommand(Move(records), parent);
     }
@@ -542,7 +541,7 @@ namespace editor
         }
         mutate(manager->GetComponentInstance(e));
         Array<byte> after = CopyComponent(entity, componentType);
-        // Restore the live value (a non-undoable read), then PASTE the mutated one: the paste
+        // Restore the live value (a non-undoable read), then paste the mutated one: the paste
         // command captures the value before, so the whole mutation is one undo step.
         {
             MemoryStream buffer;
@@ -706,8 +705,8 @@ namespace editor
         const Transform placement = m_scene->GetLocalTransform(live);
 
         m_commands->BeginGroup(u8"prefab_replace");
-        // placeBefore = the original itself: the instance takes its exact sibling slot
-        // (spawn otherwise appends, dropping the replaced entity to the hierarchy's end).
+        // placeBefore is the original itself, so the instance takes its exact sibling slot
+        // (spawning otherwise appends, dropping the replaced entity to the end of the hierarchy).
         const Guid root = SpawnPrefabInstance(prefabId, Move(payload), parent, &placement, entity);
         if (!root.IsNil())
         {
@@ -739,7 +738,7 @@ namespace editor
             scene::FindPrefabBaseline(*member.state, sourceId, manager->SerializationTypeId());
         if (baseline == nullptr)
         {
-            // Added by the user: revert = remove (undoable through the existing command).
+            // Added by the user: reverting removes it (undoable through the existing command).
             const scene::EntityHandle live = Resolve(entity);
             if (live.IsAssigned() && manager->HasComponent(live))
             {
@@ -747,7 +746,7 @@ namespace editor
             }
             return true;
         }
-        // The clipboard blob format (typeId + payload) rides the undoable paste path.
+        // The clipboard blob format (typeId and payload) goes through the undoable paste path.
         MemoryStream buffer;
         BinarySerializer ar(buffer, SerializeMode::Write);
         String typeId = String(manager->SerializationTypeId());

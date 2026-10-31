@@ -7,7 +7,7 @@
 // user presses as the new one, with the modifiers held. While it waits its focus captures every
 // key (Node::SetCapturesAllKeys), so no binding runs the chord instead. Escape cancels the
 // capture, Backspace or Delete chooses "no shortcut", a modifier alone is not a chord, and losing
-// focus cancels. What Preferences > Shortcuts puts in every row.
+// focus cancels. Preferences > Shortcuts puts one in every row.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -36,7 +36,7 @@ export namespace editor::app
             SetOnClick([self]() { self->BeginCapture(); });
         }
 
-        /// Told the chord the user chose (unset: no shortcut). The button shows it.
+        /// Called with the chord the user chose (unset: no shortcut); the button shows it.
         void SetOnChordChosen(Function<void(EditorShortcut)> chosen) { m_onChosen = foundation::core::Move(chosen); }
 
         [[nodiscard]] EditorShortcut Chord() const noexcept { return m_chord; }
@@ -71,7 +71,7 @@ export namespace editor::app
         {
             if (!m_capturing)
             {
-                gui::Button::OnKeyDown(event); // Return or Space click it, which begins a capture
+                gui::Button::OnKeyDown(event); // Return or Space clicks it, which begins a capture
                 return;
             }
             event.Handled = true;
@@ -86,7 +86,7 @@ export namespace editor::app
                 chord.stroke = gui::Keystroke{event.KeyCode, event.Modifiers & (gui::KeyModShift | gui::KeyModCtrl | gui::KeyModAlt | gui::KeyModSuper), false};
                 Choose(chord);
             }
-            // a modifier alone, or a key the shell could not name, is no chord: it keeps waiting
+            // a modifier alone, or a key the shell could not name, is not a chord: it keeps waiting
         }
         void OnFocusLost() override
         {

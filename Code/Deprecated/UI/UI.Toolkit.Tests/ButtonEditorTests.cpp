@@ -25,7 +25,7 @@ TEST_CASE("toolkit-buttoneditor: ClickInvokesAction")
     btn->OnClick.Invoke(btn);
     CHECK(clicks == 1);
 
-    ed->RefreshView(); // no-op
+    ed->RefreshView(); // does nothing
 }
 
 TEST_CASE("toolkit-buttoneditor: SetButtonEnabled applies before and after view creation")
@@ -34,7 +34,7 @@ TEST_CASE("toolkit-buttoneditor: SetButtonEnabled applies before and after view 
                                               core::Function<void()>{});
     CHECK(editor->ButtonEnabled());
 
-    // Set BEFORE the lazy view exists: the created button starts disabled.
+    // Set before the lazy view exists: the created button starts disabled.
     editor->SetButtonEnabled(false);
     View* view = editor->EditorView();
     REQUIRE(view != nullptr);

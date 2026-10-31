@@ -5,7 +5,7 @@
 //
 // Unique identifier for a view. Used by managers (Input, Focus, DragDrop) to track
 // views safely without raw pointers: if a view is deleted, lookups by its ViewId
-// return null. Ported from Sedulous.UI/src/Core/ViewId.bf.
+// return null.
 
 module;
 #include "Core/Prelude.h"
@@ -20,13 +20,13 @@ namespace core = foundation::core;
 export namespace foundation::ui
 {
     // ENGINE_EXPORT_DATA for ViewId::Invalid: a static data member crossing a
-    // shared-library boundary needs the annotation (a .def entry is not enough -
-    // only a dllimport declaration changes the use site). shared-libraries.md P5/W1.
+    // shared-library boundary needs the annotation (a .def entry is not enough;
+    // only a dllimport declaration changes the use site).
     struct ENGINE_EXPORT_DATA ViewId
     {
-        /// Creates a new unique ViewId. NON-inline (UITypeRegistryImpl.cpp): a
-        /// per-library counter would mint duplicate ids across shared-library
-        /// boundaries (shared-libraries.md rendezvous rule).
+        /// Creates a new unique ViewId. Defined out of line (UITypeRegistryImpl.cpp)
+        /// because a per-library counter would mint duplicate ids across
+        /// shared-library boundaries.
         [[nodiscard]] static ViewId Create() noexcept;
 
         [[nodiscard]] constexpr bool IsValid() const noexcept { return m_value != 0u; }
@@ -46,7 +46,7 @@ export namespace foundation::ui
             return m_value == other.m_value;
         }
 
-        /// Append a debug string "ViewId(<value>)" (Sedulous ViewId.ToString).
+        /// Append a debug string "ViewId(<value>)".
         void ToString(core::String& out) const { core::AppendFormat(out, u8"ViewId({})", m_value); }
 
         static const ViewId Invalid;

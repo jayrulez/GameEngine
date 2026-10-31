@@ -3,13 +3,14 @@
 
 // Foundation::Profiler.GUI - :focus partition
 //
-// What a profiler page looks at, held once and read by every view on it (X7 of
-// Specs/editor-gui.md): the source, the frames chosen (one or a range, from the frame strip), the
-// name chosen (a scope or a GPU pass, from the timeline or the table) and a span marked on the
-// timeline. A view sets them through the focus and draws what it says; none keeps a copy, so the
-// strip, the counters, the timeline, the table and the detail stay in step, as TimeAxis keeps a
-// ruler and its views. Nothing here draws: the questions the views ask of the frames (a name's
-// time in a frame, the longest and the median frame) are answered here, where tests ask them too.
+// What a profiler page is looking at, held in one place and read by every view on the page: the
+// source, the chosen frames (one or a range, from the frame strip), the chosen name (a scope or a
+// GPU pass, from the timeline or the table) and a span marked on the timeline. A view sets these
+// through the focus and draws what the focus holds. No view keeps a copy, so the strip, the
+// counters, the timeline, the table and the detail stay in step, the way TimeAxis keeps a ruler
+// and its views in step. Nothing here draws. The questions the views ask about the frames (a
+// name's time in a frame, the longest and the median frame) are answered here, where tests can
+// ask them too.
 
 module;
 #include "Core/Prelude.h"
@@ -23,7 +24,7 @@ using namespace foundation::core;
 
 export namespace foundation::profiler::gui
 {
-    /// A name chosen: a CPU scope's or a GPU pass's (the same id may name both).
+    /// A chosen name: a CPU scope or a GPU pass (the same id may name both).
     struct ChosenName
     {
         NameId name = 0;
@@ -44,16 +45,16 @@ export namespace foundation::profiler::gui
         friend bool operator==(const MarkedSpan&, const MarkedSpan&) = default;
     };
 
-    /// What a focus tells the views on it.
+    /// The notifications a focus sends to the views on it.
     class IProfileFocusClient
     {
     public:
         virtual ~IProfileFocusClient() = default;
-        /// The source or its frames changed (new frames recorded, another capture shown).
+        /// Called when the source or its frames changed (new frames recorded, another capture shown).
         virtual void OnProfileSourceChanged() {}
-        /// The frames chosen changed.
+        /// Called when the chosen frames changed.
         virtual void OnProfileFramesChanged() {}
-        /// The name chosen or the span marked changed.
+        /// Called when the chosen name or the marked span changed.
         virtual void OnProfileChoiceChanged() {}
     };
 
@@ -63,8 +64,9 @@ export namespace foundation::profiler::gui
         explicit ProfileFocus(IAllocator& allocator) : m_clients(allocator) {}
 
         // === The source ===
-        /// What the views read (not owned: it outlives the focus or is set to null first). The
-        /// choices are let go: the frames and names they name belong to the old source.
+        /// Sets the source the views read. It is not owned: it must outlive the focus or be set to
+        /// null first. The choices are cleared, because their frames and names belong to the old
+        /// source.
         void SetSource(const IProfileSource* source)
         {
             m_source = source;
@@ -79,7 +81,7 @@ export namespace foundation::profiler::gui
                 m_clients[i]->OnProfileChoiceChanged();
         }
         [[nodiscard]] const IProfileSource* Source() const noexcept { return m_source; }
-        /// The source has new frames (or dropped old ones): the views read it again.
+        /// Tells the views the source has new frames (or dropped old ones), so they read it again.
         void SourceGrew()
         {
             for (usize i = 0; i < m_clients.Size(); ++i)
@@ -88,7 +90,8 @@ export namespace foundation::profiler::gui
 
         // === The frames ===
         [[nodiscard]] FrameRange Frames() const noexcept { return m_frames; }
-        /// Chooses frames (empty: none). The marked span goes: it was a part of the frames before.
+        /// Chooses frames; an empty range chooses none. The marked span is cleared, since it lay
+        /// within the previous frames.
         void SetFrames(FrameRange frames)
         {
             if (frames.empty)
@@ -103,7 +106,7 @@ export namespace foundation::profiler::gui
             if (hadSpan)
                 Chosen();
         }
-        /// One frame chosen.
+        /// Chooses a single frame.
         void SetFrame(u64 frame)
         {
             FrameRange range;
@@ -127,7 +130,7 @@ export namespace foundation::profiler::gui
         void ClearName() { SetName(ChosenName{}); }
 
         [[nodiscard]] MarkedSpan Span() const noexcept { return m_span; }
-        /// Marks [begin, end] (in either order; an empty one clears it).
+        /// Marks the span [begin, end], given in either order; an empty span clears the mark.
         void SetSpan(u64 beginTick, u64 endTick)
         {
             MarkedSpan span;
@@ -167,11 +170,11 @@ export namespace foundation::profiler::gui
         FrameRange m_frames;
         ChosenName m_chosen;
         MarkedSpan m_span;
-        Array<IProfileFocusClient*> m_clients; // non-owning: each view leaves as it goes
+        Array<IProfileFocusClient*> m_clients; // non-owning; each view leaves when it is destroyed
     };
 
-    /// The ticks `name` took in `frame`: its CPU scopes on every thread (a scope inside another of
-    /// the same name counted once, by the outer) or its GPU passes.
+    /// Returns the ticks `name` took in `frame`: its CPU scopes on every thread, or its GPU passes.
+    /// A scope nested inside another of the same name is counted once, through the outer one.
     [[nodiscard]] inline u64 NameTicksInFrame(const FrameRecord& frame, ChosenName name)
     {
         if (!name.any)
@@ -186,9 +189,9 @@ export namespace foundation::profiler::gui
         }
         for (const ThreadFrame& thread : frame.threads)
         {
-            // Scopes are in the order they ended, so an outer one of the name comes after the
-            // inner ones it holds (a recursive scope): each is counted unless one of the name
-            // ended later at a lesser depth around it.
+            // Scopes are stored in the order they ended, so an outer scope of the name comes after
+            // the inner ones it holds (a recursive scope). Each scope is counted unless a scope of
+            // the same name ended later at a lesser depth around it.
             const Span<const ScopeEvent> scopes = thread.scopes.AsSpan();
             for (usize i = 0; i < scopes.Size(); ++i)
             {
@@ -206,7 +209,7 @@ export namespace foundation::profiler::gui
         return ticks;
     }
 
-    /// The frame in `range` that took longest (its CPU time), or none.
+    /// Returns the frame in `range` with the longest CPU time, or an empty range.
     [[nodiscard]] inline FrameRange LongestFrame(const IProfileSource& source, FrameRange range)
     {
         FrameRange longest;
@@ -225,8 +228,8 @@ export namespace foundation::profiler::gui
         return longest;
     }
 
-    /// The frame in `range` whose CPU time is the median (of an even count, the shorter of the
-    /// middle two), or none.
+    /// Returns the frame in `range` whose CPU time is the median, or an empty range. For an even
+    /// count it is the shorter of the middle two.
     [[nodiscard]] inline FrameRange MedianFrame(const IProfileSource& source, FrameRange range, IAllocator& allocator)
     {
         struct Timed
@@ -247,7 +250,7 @@ export namespace foundation::profiler::gui
         return median;
     }
 
-    /// Every frame the source holds, or none.
+    /// Returns every frame the source holds, or an empty range.
     [[nodiscard]] inline FrameRange AllFrames(const IProfileSource* source) noexcept
     {
         FrameRange all;

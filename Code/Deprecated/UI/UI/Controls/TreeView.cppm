@@ -3,11 +3,11 @@
 
 // UI - :tree_view partition
 //
-// Tree view built on a FlattenedTreeAdapter + an internal ListView for virtualization; draws indent +
-// expand/collapse chevrons and toggles expansion on arrow-zone clicks / Left-Right keys. Ported from
-// Sedulous.UI/src/Controls/TreeView.bf. The internal ListView is a VISUAL child (VisualChildCount()==1)
-// held as a RefPtr member; the FlattenedTreeAdapter is owned via UniquePtr (a non-Object); TreeAdapter
-// is BORROWED. Beef Selection/ItemHeight passthrough props -> methods.
+// Tree view built on a FlattenedTreeAdapter and an internal ListView for virtualization. It draws
+// indents and expand/collapse chevrons, and toggles expansion on clicks in the arrow zone and on
+// Left/Right keys. The internal ListView is a visual child (VisualChildCount() == 1) held in a RefPtr
+// member; the FlattenedTreeAdapter is owned through a UniquePtr (it is not an Object); TreeAdapter
+// is borrowed.
 
 module;
 #include "Core/Prelude.h"
@@ -52,14 +52,13 @@ export namespace foundation::ui
         Property<f32> IndentWidth{20.0f};
         Property<f32> ArrowSize{8.0f};
 
-        // The x-pixel where a row at `depth` should start its CONTENT (text/icons) so it clears the
+        // The x-pixel where a row at `depth` should start its content (text/icons) so it clears the
         // expander-chevron column. The chevron is drawn in [depth*IndentWidth, (depth+1)*IndentWidth],
         // so content begins one indent level further, at (depth+1)*IndentWidth.
         //
-        // Tree adapters MUST derive their row indent from this - via TextOffsetX on a label row, or a
-        // left Padding/Margin on a container row - and NEVER hardcode a pixel constant. A literal that
-        // drifts from IndentWidth is exactly how the chevron ends up overlapping the row text (it has
-        // bitten the hierarchy, asset-picker, and particle trees). This is the single source of truth.
+        // Tree adapters derive their row indent from this, through TextOffsetX on a label row or a
+        // left Padding/Margin on a container row, rather than from a hard-coded pixel constant. A
+        // literal that drifts from IndentWidth makes the chevron overlap the row text.
         [[nodiscard]] f32 ContentInset(i32 depth) const noexcept
         {
             return static_cast<f32>(depth + 1) * IndentWidth.Value();
@@ -112,13 +111,13 @@ export namespace foundation::ui
         [[nodiscard]] ListView* InternalListView() const noexcept { return m_listView.Get(); }
 
         /// Set the tree adapter and build the flat list. Safe to call repeatedly (rebuild);
-        /// null DETACHES (owners call SetAdapter(nullptr) in their destructors so the view
+        /// null detaches it (owners call SetAdapter(nullptr) in their destructors so the view
         /// never outlives an adapter it doesn't own).
         void SetAdapter(ITreeAdapter* adapter)
         {
             TreeAdapter = adapter;
-            // Detach the list from the old flat adapter BEFORE the UniquePtr reassignment
-            // destroys it - ListView::SetAdapter calls SetObserver on its previous adapter,
+            // Detach the list from the old flat adapter before the UniquePtr reassignment
+            // destroys it: ListView::SetAdapter calls SetObserver on its previous adapter,
             // which would be a use-after-free otherwise.
             m_listView->SetAdapter(nullptr);
             if (adapter == nullptr)
@@ -215,13 +214,13 @@ export namespace foundation::ui
         }
 
     private:
-        /// Toggle a node's expansion, remapping the POSITIONAL selection by nodeId across the
-        /// visible-list rebuild - without this, collapsing a node above the selection shifts every
+        /// Toggle a node's expansion, remapping the positional selection by nodeId across the
+        /// visible-list rebuild. Without this, collapsing a node above the selection shifts every
         /// flat index and the highlight jumps to whichever row inherits the old index. Selected
         /// nodes hidden by the collapse drop out of the selection.
         void ToggleNodePreservingSelection(i32 nodeId)
         {
-            // Capture the selection as NODE ids (stable across rebuilds).
+            // Capture the selection as node ids (stable across rebuilds).
             Array<i32> selectedNodes;
             SelectionModel& selection = m_listView->Selection;
             const i32 countBefore = m_flatAdapter->ItemCount();

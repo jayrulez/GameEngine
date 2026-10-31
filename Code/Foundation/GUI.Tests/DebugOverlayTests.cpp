@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - debug overlay tests (E8c of Specs/gui-lab-evolution.md): what the input half reads (the
-// tab stops in Tab's order, the focus, the node under the pointer) and that it draws each part
-// only when asked.
+// GUI - debug overlay tests: what the input half reads (the tab stops in Tab's order, the focus,
+// the node under the pointer) and that it draws each part only when asked.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -46,7 +45,7 @@ namespace
             }
             root->UpdateLayout();
         }
-        // The vertices a draw makes with `overlay` on.
+        // Returns the vertex count a draw makes with `overlay` on.
         usize Draw(const DebugOverlay& overlay)
         {
             root->SetDebugOverlay(overlay);
@@ -67,7 +66,7 @@ TEST_CASE("debug-overlay: the tab stops come in Tab's order, and the overlay num
     REQUIRE(stops.Size() == 3u);
     for (usize i = 0; i < 3; ++i)
         CHECK(stops[i] == bed.stops[i].Get());
-    bed.stops[1]->SetTabFocusable(false); // a stop no longer: not numbered
+    bed.stops[1]->SetTabFocusable(false); // no longer a tab stop, so not numbered
     CHECK(d.TabStops().Size() == 2u);
     bed.stops[1]->SetTabFocusable(true);
 
@@ -118,7 +117,7 @@ TEST_CASE("debug-overlay: a widget under a node out of the layout is no tab stop
     CHECK(stops[1] == bed.stops[2].Get());
     d.SetFocusNode(bed.stops[0].Get());
     CHECK(d.MoveFocus(NavDirection::Right));
-    CHECK(d.GetFocusNode() == bed.stops[2].Get()); // past the one out of the layout
+    CHECK(d.GetFocusNode() == bed.stops[2].Get()); // skipping the stop that is out of the layout
     bed.panel->SetDisplayed(false);
     CHECK(d.TabStops().IsEmpty());
 }
@@ -146,7 +145,7 @@ TEST_CASE("debug-overlay: an arrow move keeps what it weighed: the one chosen, t
     CHECK(chosen == 1);
     CHECK(beaten == 1);
 
-    // Back left from the second: the first chosen, the third behind.
+    // Moving left from the second stop chooses the first; the third lies behind.
     REQUIRE(d.MoveFocus(NavDirection::Left));
     int behind = 0;
     for (const NavCandidate& c : d.GetLastNavigation().Candidates)
@@ -169,7 +168,7 @@ TEST_CASE("debug-overlay: a node that invalidated itself flashes once, and the f
 
     (void)bed.Draw(flash); // turning it on invalidates the root, which never flashes
     CHECK(bed.root->RedrawFlashCount() == 0u);
-    bed.stops[1]->SetAlpha(0.5f); // it alone, not the panel holding it
+    bed.stops[1]->SetAlpha(0.5f); // only this stop flashes, not the panel holding it
     (void)bed.Draw(flash);
     CHECK(bed.root->RedrawFlashCount() == 1u);
     CHECK(bed.root->NeedsFrame());

@@ -1,11 +1,11 @@
 """Lamplight's manor kit: the modular pieces a level is built from on a 2 m grid, and the furniture
-P0's room needs, modelled in Blender.
+its rooms need, modelled in Blender.
 
     blender --background --factory-startup --python manor.py -- <out dir> [preview] [Name ...]
 
 Writes <out dir>/<Name>.glb for every piece (or the ones named) and, with `preview`, a PNG of each.
 Every piece stands on the floor (y = 0) at its own origin, its colliders placed by the level
-generator from the same sizes (room.py):
+generator from the same sizes (level.py):
 
 - Wall: one 2 m grid edge, 3 m high and 0.2 m thick, centred on the edge (x -1..1, z -0.1..0.1),
   plaster with a dark skirting and a picture rail on both faces.

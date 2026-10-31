@@ -1,8 +1,8 @@
-# Headless behaviors battery: a real script VM (registered by the TEST - the library
-# stays backend-neutral), a real Scene, NO device/window dependencies.
-# ScriptSceneTests.cpp interleaves AngelScript AND Luau cases (each drives its own real VM), so it
-# builds only when BOTH backends are on. Splitting it into per-backend files would let it
-# run in a single-backend config; without that split it is gated to the both-backends configuration.
+# Headless behavior tests: a real script VM (registered by the test, so the library stays
+# backend-neutral), a real Scene, no device or window dependencies.
+# ScriptSceneTests.cpp interleaves AngelScript and Luau cases (each drives its own real VM), so it
+# builds only when both backends are on. Splitting it into per-backend files would let it run in a
+# single-backend configuration.
 if(OPTION_ENABLE_ANGELSCRIPT AND OPTION_ENABLE_LUAU)
 add_executable(Engine.Script.Tests TestsMain.cpp ScriptSceneTests.cpp)
 target_link_libraries(Engine.Script.Tests PRIVATE

@@ -16,8 +16,8 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     } else {                                         // Procedural gradient (also HDR/cubemap fallback)
         sky = (dir.y >= 0.0) ? lerp(pc.Horizon, pc.Zenith, pow(saturate(dir.y), 0.5))
                              : lerp(pc.Horizon, pc.Ground, pow(saturate(-dir.y), 0.8));
-        // A soft, broad sun GLOW only (no sharp disc) - the crisp sun is drawn analytically at screen
-        // resolution by the sky pass; baking a sub-texel disc into the 256^2 cube would alias to a square.
+        // Only a soft, broad sun glow, with no sharp disc: the sky pass draws the crisp sun analytically
+        // at screen resolution, and a sub-texel disc baked into the 256^2 cube would alias to a square.
         float3 sunDir = normalize(-pc.SunDirection);
         float  d      = max(dot(dir, sunDir), 0.0);
         sky += pow(d, 64.0) * max(pc.SunIntensity, 0.0) * 0.3;

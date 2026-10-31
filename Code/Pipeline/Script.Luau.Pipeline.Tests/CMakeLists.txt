@@ -1,6 +1,6 @@
-# The tests REGISTER the Luau cook (an entry point's job) - the library under test stays
-# backend-neutral and resolves through the registry (B3). Cook-only suite (no editor-UI dep).
-# The Luau cook's OWN suite, so it builds only when Luau is on.
+# The tests register the Luau cook, as an entry point does; the library under test stays
+# backend-neutral and resolves through the registry. A cook-only suite (no editor UI dependency)
+# and the Luau cook's own, so it builds only when Luau is on.
 if(OPTION_ENABLE_LUAU)
     add_executable(Script.Luau.Pipeline.Tests TestsMain.cpp LuauCookTests.cpp)
     target_link_libraries(Script.Luau.Pipeline.Tests PRIVATE

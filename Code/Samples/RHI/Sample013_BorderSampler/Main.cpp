@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample013 - Border Sampler. Ported from Sedulous Sample013_BorderSampler.
+/// Sample013 - Border Sampler.
 /// Demonstrates sampler border colors: TransparentBlack, OpaqueBlack, OpaqueWhite.
 /// Three quads with UVs extending beyond [0,1] to show the border region.
 
@@ -189,7 +189,7 @@ foundation::core::Status BorderSamplerSample::OnInit()
         foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Bind group layout: set 0 = texture + sampler.
+    // Bind group layout: set 0 holds the texture and sampler.
     rhi::BindGroupLayoutEntry tE[2] = {
         rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
         rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment)};
@@ -215,7 +215,7 @@ foundation::core::Status BorderSamplerSample::OnInit()
     if (makeBG(m_sampOpaqueWhite, m_bgOpaqueWhite) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Bind group layout: set 1 = uniform buffer with dynamic offset.
+    // Bind group layout: set 1 holds the uniform buffer with a dynamic offset.
     rhi::BindGroupLayoutEntry uEntry =
         rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex);
     uEntry.hasDynamicOffset = true;

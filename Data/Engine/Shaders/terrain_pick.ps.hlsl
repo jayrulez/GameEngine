@@ -2,7 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 // variants: HOLES
 
-// Terrain GPU-pick PS: the terrain entity's id into the RG32Uint id target (see pick_ids.ps).
+// Terrain GPU-pick pixel stage: writes the terrain entity's id into the RG32Uint id target (see
+// pick_ids.ps).
 // Under HOLES a fragment inside a cut (the bilinear hole mask above one half) is discarded, so
 // a click through a hole picks what lies below rather than the missing surface.
 struct PickVSOut {

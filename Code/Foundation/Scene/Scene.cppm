@@ -3,11 +3,11 @@
 
 /// Foundation::Scene - the `:scene` partition.
 ///
-/// Scene: an isolated world of entities with a transform hierarchy (and, in later
-/// phases, per-scene systems). Two parallel pools indexed by entity slot:
-///   * the entity table - generation-guarded, free-list reuse, persistent-Guid <->
-///     handle map, active/name state.
-///   * the transform hierarchy - local TRS + cached world matrix per entity, in a
+/// Scene: an isolated world of entities with a transform hierarchy and per-scene
+/// systems. Two parallel pools indexed by entity slot:
+///   * the entity table: generation-guarded, free-list reuse, a map between persistent
+///     Guids and handles, active/name state.
+///   * the transform hierarchy: local TRS and a cached world matrix per entity, in a
 ///     doubly-linked parent/child/sibling tree with O(1) splice (head+tail+back
 ///     pointers), a dirty-flag cascade, and a two-pass UpdateTransforms that snapshots
 ///     the previous world matrix (for motion vectors) and recomputes only dirty
@@ -38,7 +38,7 @@ export namespace foundation::scene
     class Scene
     {
     public:
-        // The allocator (required - the owner decides; SceneManager threads its own) is
+        // The allocator (required; the owner decides, and SceneManager threads its own) is
         // the per-scene authority every scene system builds on (Allocator() below).
         explicit Scene(IAllocator& allocator, StringView name = {})
             : m_allocator(&allocator), m_name(name, allocator)
@@ -48,7 +48,7 @@ export namespace foundation::scene
         Scene(const Scene&) = delete;
         Scene& operator=(const Scene&) = delete;
 
-        // The scene's allocator authority: scene systems thread THIS (usually wrapped
+        // The scene's allocator authority: scene systems thread this one (usually wrapped
         // in a per-system TaggedAllocator) instead of reaching for the ambient default.
         [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
 
@@ -84,12 +84,12 @@ export namespace foundation::scene
 
         [[nodiscard]] bool IsActive(EntityHandle entity) const noexcept;
         void SetActive(EntityHandle entity, bool active);
-        /// EFFECTIVE active state: this entity's own flag AND every ancestor's own flag
-        /// O(1) - the bit is cached on the slot and recomputed by
-        /// subtree walk at the only choke points that can change it (SetActive / reparent /
-        /// creation). ALL runtime gating (render extraction + every sim system) reads THIS,
-        /// never IsActive: deactivating a parent must dark the whole subtree without touching
-        /// the children's own flags.
+        /// Effective active state: this entity's own flag and every ancestor's own flag.
+        /// O(1): the bit is cached on the slot and recomputed by subtree walk at the only
+        /// points that can change it (SetActive, reparent, creation). All runtime gating
+        /// (render extraction and every simulation system) reads this, never IsActive:
+        /// deactivating a parent must disable the whole subtree without touching the
+        /// children's own flags.
         [[nodiscard]] bool IsEffectivelyActive(EntityHandle entity) const noexcept;
 
         template <typename Fn>
@@ -109,12 +109,12 @@ export namespace foundation::scene
         // ---- prefab instances (runtime-only bookkeeping; scene.resource drives it) ----
         //
         // One state record per spawned prefab instance. `sourceIds[i]` is the member's guid in
-        // the PREFAB PAYLOAD (the stable delta key), `liveIds[i]` its guid in THIS scene.
-        // Baselines capture the template state as of spawn (per-member local transform +
+        // the prefab payload (the stable delta key), `liveIds[i]` its guid in this scene.
+        // Baselines capture the template state as of spawn (per-member local transform and
         // per-component serialized blob); the scene serializer diffs live state against them at
-        // save time, so overrides are DERIVED - nothing tracks edits, and undo/redo can never
+        // save time, so overrides are derived: nothing tracks edits, and undo/redo can never
         // desynchronize the override set. Never serialized as-is: the scene serializer persists
-        // instances as ref+deltas (or expanded, for snapshots) and rebuilds this state on load.
+        // instances as a ref plus deltas (or expanded, for snapshots) and rebuilds this state on load.
         struct PrefabComponentBaseline
         {
             Guid sourceEntity;
@@ -138,17 +138,17 @@ export namespace foundation::scene
                 baselineTransforms; // parallel to sourceIds (template local transforms)
             Array<PrefabComponentBaseline> componentBaselines;
             // Instance component ops whose manager was absent when the instance spawned (a
-            // plugin's types; game-native-code.md S3): kept verbatim so the next save
+            // plugin's types): kept verbatim so the next save
             // re-emits them, and applied the moment the manager arrives.
             Array<PendingPrefabComponentOp> unresolvedComponentOps;
 
-            // NESTING: an instance spawned BY another instance's payload record links to its
+            // Nesting: an instance spawned by another instance's payload record links to its
             // owner; nestedRootSourceId is this instance's stable identity in the owner's
-            // namespace (the payload record's root id) - rebuilds match on it. Nil = top-level.
+            // namespace (the payload record's root id), and rebuilds match on it. Nil = top-level.
             Guid ownerRootEntityId{};
             Guid nestedRootSourceId{};
-            // Top-level only, TRANSIENT (recomputed at spawn): every prefab id this instance's
-            // payload consumed (own + nested records) - template edits to any of them rebuild
+            // Top-level only, transient (recomputed at spawn): every prefab id this instance's
+            // payload consumed (own and nested records); template edits to any of them rebuild
             // this instance through its owner payload.
             Array<Guid> referencedPrefabIds;
         };
@@ -160,7 +160,7 @@ export namespace foundation::scene
         /// Removes the state whose root is `rootEntityId` (the entities are the caller's business).
         void RemovePrefabInstance(const Guid& rootEntityId);
 
-        /// Visits every instance whose ROOT still resolves; states whose root entity was
+        /// Visits every instance whose root still resolves; states whose root entity was
         /// destroyed are pruned lazily here (no destroy-hook bookkeeping).
         template <typename Fn>
         void ForEachPrefabInstance(Fn&& fn)
@@ -185,13 +185,13 @@ export namespace foundation::scene
 
         [[nodiscard]] usize PrefabInstanceCount() const noexcept;
 
-        /// Drops ALL prefab-instance bookkeeping (snapshot restore repopulates from the stream).
+        /// Drops all prefab-instance bookkeeping (snapshot restore repopulates from the stream).
         void ClearPrefabInstances() { m_prefabInstances.Clear(); }
 
-        // A prefab instance READ from a scene stream, awaiting its payload: the scene serializer
+        // A prefab instance read from a scene stream, awaiting its payload: the scene serializer
         // can't resolve prefab assets itself (no DB access), so it parks descriptors here and
-        // ResolveScenePrefabs (scene.resource) respawns them with a caller-supplied resolver -
-        // the same two-phase shape as component resource Refs + ResolveSceneResources.
+        // ResolveScenePrefabs (scene.resource) respawns them with a caller-supplied resolver,
+        // the same two-phase shape as component resource Refs and ResolveSceneResources.
         struct PendingPrefabInstance
         {
             Guid prefabId;
@@ -203,21 +203,20 @@ export namespace foundation::scene
             Array<Guid> overrideTransformIds; // source ids with transform overrides
             Array<Transform> overrideTransforms;
             Array<PendingPrefabComponentOp> componentOps;
-            // NESTING: mirror of PrefabInstanceState's links (see there). rootLiveId is the
-            // instance root's live id (in a PAYLOAD record: the owner-namespace id nested scene
+            // Nesting: mirror of PrefabInstanceState's links (see there). rootLiveId is the
+            // instance root's live id (in a payload record: the owner-namespace id nested scene
             // records match against).
             Guid rootLiveId{};
             Guid ownerRootEntityId{};
             Guid nestedRootSourceId{};
-            // The sibling immediately AFTER the root at capture time (nil = it was the last
+            // The sibling immediately after the root at capture time (nil = it was the last
             // child): spawn appends records after the plain members, then restores list order
             // from this link. Namespace follows the record's (owner template / live scene).
             Guid nextSiblingId{};
             // False = the root transform matched its baseline at capture: the scene never moved
-            // this NESTED instance, so on respawn the owner TEMPLATE's placement wins (a moved
+            // this nested instance, so on respawn the owner template's placement wins (a moved
             // root is a scene override and re-applies). Top-level placements always apply.
-            // Revert forces it false. Serialized with the record since the order/placement wire
-            // change (no pre-change compat).
+            // Revert forces it false. Serialized with the record.
             bool applyPlacement = true;
         };
 
@@ -225,7 +224,7 @@ export namespace foundation::scene
         [[nodiscard]] Array<UniquePtr<PendingPrefabInstance>> TakePendingPrefabInstances();
         [[nodiscard]] usize PendingPrefabInstanceCount() const noexcept;
         /// Non-consuming walk of the parked pendings (transcode re-emits them verbatim so a
-        /// load->save cycle without ResolveScenePrefabs stays lossless).
+        /// load and save cycle without ResolveScenePrefabs stays lossless).
         void ForEachPendingPrefabInstance(const Function<void(PendingPrefabInstance&)>& fn);
 
         // ---- transform hierarchy ----
@@ -245,7 +244,7 @@ export namespace foundation::scene
         [[nodiscard]] bool IsTransformUpdatedThisFrame(EntityHandle entity) const;
 
         [[nodiscard]] EntityHandle GetParent(EntityHandle entity) const;
-        /// First entity in the ROOT sibling list (walk with GetNextSibling for list order - the
+        /// First entity in the root sibling list (walk with GetNextSibling for list order, the
         /// order the hierarchy displays and serialization preserves).
         [[nodiscard]] EntityHandle GetFirstRoot() const noexcept { return m_firstRoot; }
         [[nodiscard]] EntityHandle GetFirstChild(EntityHandle entity) const;
@@ -254,11 +253,11 @@ export namespace foundation::scene
 
         [[nodiscard]] u32 GetChildCount(EntityHandle entity) const;
 
-        /// First alive entity with this exact name (names are NOT unique - first in slot
+        /// First alive entity with this exact name (names are not unique; first in slot
         /// order wins), invalid if none. Linear scan; prefer FindEntity(Guid) for identity.
         [[nodiscard]] EntityHandle FindEntityByName(StringView name) const;
 
-        /// Direct child of `parent` (or a scene ROOT when `parent` is invalid) with this
+        /// Direct child of `parent` (or a scene root when `parent` is invalid) with this
         /// name, in sibling order; invalid if none.
         [[nodiscard]] EntityHandle FindChildByName(EntityHandle parent, StringView name) const;
 
@@ -271,7 +270,7 @@ export namespace foundation::scene
         // that would form a cycle (parent is `child` or a descendant of it).
         void SetParent(EntityHandle child, EntityHandle parent);
 
-        // World-preserving reparent (editor semantics: the entity stays put in the world; its LOCAL
+        // World-preserving reparent (editor semantics: the entity stays put in the world; its local
         // transform is recomputed relative to the new parent via TRS decompose). World matrices are
         // composed fresh from the local chain, so this is correct even with dirty cached transforms.
         // No-op when the underlying move is refused (cycle etc.).
@@ -283,26 +282,26 @@ export namespace foundation::scene
         // which is only current after UpdateTransforms).
         [[nodiscard]] Float4x4 ComposeWorldMatrix(EntityHandle entity) const;
 
-        // Sibling ORDERING: moves `child` under `sibling`'s parent, immediately BEFORE `sibling`
+        // Sibling ordering: moves `child` under `sibling`'s parent, immediately before `sibling`
         // (into the root list when `sibling` is a root). Same guards as SetParent: both must be
         // valid, and moving an entity below its own subtree (cycle) is refused. O(1).
-        // (SetParent(child, parent) is the companion "append at END of parent" operation - it
-        // re-appends even when the parent is unchanged, i.e. it doubles as move-to-end.)
+        // SetParent(child, parent) is the companion "append at the end of parent" operation; it
+        // re-appends even when the parent is unchanged, so it doubles as move-to-end.
         void MoveBefore(EntityHandle child, EntityHandle sibling);
 
-        // Two-pass world-matrix update: clear last frame's "updated" flags + snapshot the
+        // Two-pass world-matrix update: clear last frame's "updated" flags and snapshot the
         // previous world matrix for entities that stopped moving, then recompute only the
         // dirty roots and their subtrees (depth-first, parent before child).
         void UpdateTransforms();
 
         // Entity indices whose world matrix was recomputed in the most recent UpdateTransforms.
-        // Lifetime hazard: an index here may belong to an entity destroyed afterwards - gate
+        // Lifetime hazard: an index here may belong to an entity destroyed afterwards; gate
         // reads on IsValid(handle). Rewritten each UpdateTransforms.
         [[nodiscard]] Span<const u32> TransformsUpdatedThisFrame() const noexcept;
 
         // ---- per-scene systems ----
 
-        // Constructs + adds a system of type T (one per type); the Scene owns it. Returns a
+        // Constructs and adds a system of type T (one per type); the Scene owns it. Returns a
         // borrowed pointer. Runs OnSceneCreate immediately.
         template <typename T, typename... Args>
         T* AddSystem(Args&&... args)
@@ -341,7 +340,7 @@ export namespace foundation::scene
                 }
             }
         }
-        // Visits every system (managers AND plain systems), in UpdateOrder - the editor's
+        // Visits every system (managers and plain systems), in UpdateOrder. The editor's
         // scene-settings inspector and SerializeScene walk systems with settings blocks.
         template <typename Fn>
         void ForEachSystem(Fn&& fn)
@@ -355,19 +354,19 @@ export namespace foundation::scene
         // to route a component record to its pool).
         [[nodiscard]] ComponentManagerBase* FindManagerBySerializationId(StringView typeId);
 
-        // Removes (and destroys) the system registered under `systemType` - a manager's pool
-        // dies with it. The hot-reload seam (game-native-code.md N6): a plugin-contributed
-        // manager leaves live scenes BEFORE its module's registrations reverse, while the
-        // code that built it is still mapped. No-op when absent. Returns whether removed.
+        // Removes (and destroys) the system registered under `systemType`; a manager's pool
+        // dies with it. Hot reload uses this: a plugin-contributed manager leaves live scenes
+        // before its module's registrations reverse, while the code that built it is still
+        // mapped. No-op when absent. Returns whether removed.
         bool RemoveSystem(TypeId systemType);
 
-        // ---- unresolved components (game-native-code.md S3) ----
+        // ---- unresolved components ----
         // A component record whose manager was not present at load (its plugin did not
-        // load, or has not loaded YET). Kept verbatim so a save writes it back untouched -
-        // never dropped - and resolved into a real component the moment its manager
+        // load, or has not loaded yet). Kept verbatim so a save writes it back untouched,
+        // never dropped, and resolved into a real component the moment its manager
         // arrives (Scene.Resource's ResolveUnresolvedComponents). `text` says which
-        // serializer captured `payload` (the XML element children vs the binary blob);
-        // it is written back through the SAME encoding only.
+        // serializer captured `payload` (the XML element children or the binary blob);
+        // it is written back through the same encoding only.
         struct UnresolvedComponent
         {
             Guid owner;
@@ -397,7 +396,7 @@ export namespace foundation::scene
         }
         void ClearUnresolvedComponents() { m_unresolvedComponents.Clear(); }
 
-        // Same for a scene SYSTEM's settings block (managers and plain systems alike carry
+        // Same for a scene system's settings block (managers and plain systems alike carry
         // one via SettingsType/SettingsId): preserved verbatim while the system is absent,
         // replayed into it when its plugin arrives.
         struct UnresolvedSettings
@@ -430,9 +429,9 @@ export namespace foundation::scene
 
         // The component manager whose component type is `componentType`, or null. This is the
         // scene-side resolve for `entity.get(Type)`: callers hold {scene, entity, manager} and
-        // re-resolve the LIVE component via manager->GetComponentInstance(entity) on every access
-        // - never a stashed component pointer (the sparse-set pool swap-removes, so an address can
-        // move or, worse, point at a different entity's component). The manager pointer itself is
+        // re-resolve the live component via manager->GetComponentInstance(entity) on every access,
+        // never a stashed component pointer (the sparse-set pool swap-removes, so an address can
+        // move or even point at a different entity's component). The manager pointer itself is
         // scene-owned and stable for the scene's lifetime, so this lookup runs once per get().
         [[nodiscard]] ComponentManagerBase* FindManagerByComponentType(const TypeInfo& componentType)
         {
@@ -441,7 +440,7 @@ export namespace foundation::scene
                 [&](ComponentManagerBase& m)
                 {
                     // Id compare, not pointer: the caller's TypeInfo may be another shared
-                    // library's copy (shared-libraries.md identity rule).
+                    // library's copy.
                     if (found == nullptr && m.ComponentType() != nullptr &&
                         m.ComponentType()->id == componentType.id)
                     {
@@ -451,32 +450,30 @@ export namespace foundation::scene
             return found;
         }
 
-        // The re-resolving component handle for `entity.get(Type)`: a RESOLVE-mode Variant that
-        // recomputes the LIVE component address on every access (FindManagerByComponentType, then
+        // The re-resolving component handle for `entity.get(Type)`: a resolve-mode Variant that
+        // recomputes the live component address on every access (FindManagerByComponentType, then
         // GetComponentInstance per deref). Empty when no manager handles `componentType`. A dead
         // entity or removed component resolves to null, so a script get/set/call over it is a clean
-        // no-op - never a stale/cross-entity pointer (Fable Correction 1). Defined in SceneImpl.cpp.
+        // no-op, never a stale or cross-entity pointer. Defined in SceneImpl.cpp.
         [[nodiscard]] Variant MakeComponentRef(EntityHandle entity, const TypeInfo& componentType);
 
         // ---- events ----
-        // This scene's native event bus: C++ systems Publish/Subscribe directly (a C++-only game is
-        // first-class); script reaches it through a bridge. Drained at the scene tick's top level
-        // (Scene::Update), so a handler runs with no VM call active. See foundation.messaging.
-        /// This scene's event bus: the BORROWED scope bus a run scope injected (a GameInstance's
-        /// run bus, or an editor page's), so `scene.events.emit` and the run bus are the SAME
-        /// object in an instance - no relay to cross. There is NO owned fallback: the scope injects
-        /// before assembly, so systems binding at OnSceneCreate see the bus their emits land on.
-        /// Null on scenes with no scope (headless scratch: transcode/validate) - those never emit;
-        /// script handles no-op safely on null, native emitters treat null as a contract violation.
+        /// This scene's event bus: the borrowed bus a run scope injected (a GameInstance's run bus,
+        /// or an editor page's), so `scene.events.emit` and the run bus are the same object in an
+        /// instance. C++ systems Publish/Subscribe directly; script reaches it through a bridge.
+        /// There is no owned fallback: the scope injects before assembly, so systems binding at
+        /// OnSceneCreate see the bus their emits land on. Null on scenes with no scope (headless
+        /// scratch: transcode, validate), which never emit; script handles no-op safely on null,
+        /// native emitters treat null as a contract violation.
         [[nodiscard]] messaging::EventBus* Events() noexcept { return m_eventBus; }
 
-        /// Borrow a scope's bus: the owning scope (GameInstance / editor page) injects
-        /// THE bus for its run and drains it itself; this scene then stops draining (see Scene::Update).
-        /// Null clears the borrowed bus - the scene has no bus of its own. Set before the scene ticks.
+        /// Borrow a scope's bus: the owning scope (GameInstance, editor page) injects the bus for
+        /// its run and drains it itself; the scene never drains it (see Scene::Update).
+        /// Null clears the borrowed bus; the scene has no bus of its own. Set before the scene ticks.
         void SetEventBus(messaging::EventBus* bus) noexcept { m_eventBus = bus; }
 
-        // The run that owns this scene (Documentation/Specs/run-context.md): run-scoped systems
-        // group the scene by it - its audio nests under the run's, so the run's stop, pause and
+        // The run that owns this scene: run-scoped systems group the scene by it (its audio
+        // nests under the run's), so the run's stop, pause and
         // mute reach it. Null = outside every run (an editor page's scene, a test's).
         [[nodiscard]] foundation::run::IRun* Run() const noexcept { return m_run; }
         void SetRun(foundation::run::IRun* run) noexcept { m_run = run; }
@@ -487,17 +484,17 @@ export namespace foundation::scene
         [[nodiscard]] bool SimulationEnabled() const noexcept { return m_simulationEnabled; }
         void SetSimulationEnabled(bool enabled) noexcept { m_simulationEnabled = enabled; }
 
-        // ---- per-scene time (the scene IS the simulatable unit) ----
-        // Each scene owns its time scale and fixed-step accumulator, so pausing/slowing one
+        // ---- per-scene time (the scene is the simulatable unit) ----
+        // Each scene owns its time scale and fixed-step accumulator, so pausing or slowing one
         // scene (the Game tab) never affects another (a Simulate page beside it). The
-        // effective frame dt a scene sees = host dt x context TimeScale x scene TimeScale
+        // effective frame dt a scene sees is host dt x context TimeScale x scene TimeScale
         // (the SceneSubsystem applies the scene factor; the context factor is already in
         // the dt it receives).
 
         void SetTimeScale(f32 scale) noexcept { m_timeScale = scale < 0.0f ? 0.0f : scale; }
         [[nodiscard]] f32 TimeScale() const noexcept { return m_timeScale; }
 
-        /// Fixed-lane configuration (step seconds + spiral-of-death clamp).
+        /// Fixed-lane configuration (step seconds and spiral-of-death clamp).
         void SetFixedTiming(f32 step, u32 maxSteps) noexcept;
         [[nodiscard]] f32 FixedTimeStep() const noexcept { return m_stepper.step; }
         /// Interpolation weight for fixed-rate consumers (physics pose smoothing);
@@ -505,7 +502,7 @@ export namespace foundation::scene
         [[nodiscard]] f32 FixedAlpha() const noexcept { return m_fixedAlpha; }
 
         /// The frame drive (SceneSubsystem::BeginFrame): accumulates `scaledDelta` (already
-        /// context- AND scene-scaled), runs FixedUpdate for each whole step, publishes the
+        /// context- and scene-scaled), runs FixedUpdate for each whole step, publishes the
         /// leftover as FixedAlpha. Tests wanting exact-step control call FixedUpdate directly.
         u32 AdvanceTime(f32 scaledDelta);
 
@@ -531,13 +528,13 @@ export namespace foundation::scene
         {
             u32 generation = 0;
             bool active = false;
-            bool effectiveActive = false; // cached: active AND all ancestors' active
+            bool effectiveActive = false; // cached: active and all ancestors active
             bool alive = false;
             Guid persistentId;
             String name;
         };
 
-        // Per-entity transform node: local TRS + cached world/prev-world matrices, and the
+        // Per-entity transform node: local TRS, cached world/prev-world matrices, and the
         // doubly-linked parent/child/sibling pointers (head+tail+back for O(1) splice).
         struct TransformData
         {
@@ -556,24 +553,24 @@ export namespace foundation::scene
         EntityHandle CreateEntityInternal(const Guid& id, StringView name);
 
         // Recompute the cached effectiveActive bit for `entity`'s whole subtree against its
-        // CURRENT parent chain. A branch whose own flag is false is not descended into: its
+        // current parent chain. A branch whose own flag is false is not descended into: its
         // descendants' cached values are already false regardless of anything above (the
         // inductive invariant that keeps the walk cheap).
         void RefreshEffectiveActive(EntityHandle entity);
 
         void DestroyEntityImmediate(EntityHandle entity);
 
-        // Marks an entity dirty, cascading to its whole subtree AND up to its ancestors
+        // Marks an entity dirty, cascading to its whole subtree and up to its ancestors
         // (UpdateTransforms only walks dirty *roots*, so a dirty child needs a dirty root).
         void MarkDirty(EntityHandle entity);
 
-        // Rewrite `child`'s LOCAL transform so its world matrix equals `childWorld` under its
-        // CURRENT parent (the keep-world half of a reparent). Row-vector: local = world * parent⁻¹.
+        // Rewrite `child`'s local transform so its world matrix equals `childWorld` under its
+        // current parent (the keep-world half of a reparent). Row-vector: local = world * parent⁻¹.
         void ApplyWorldAsLocal(EntityHandle child, const Float4x4& childWorld);
 
         void UpdateTransformRecursive(u32 index, const Float4x4& parentWorld);
 
-        // O(1) append to a (head, tail) sibling list - tail pointer avoids an O(n) walk.
+        // O(1) append to a (head, tail) sibling list; the tail pointer avoids an O(n) walk.
         void AppendToList(EntityHandle entity, EntityHandle& head, EntityHandle& tail);
 
         // O(1) splice-out using the back pointer (no walk to find the predecessor).

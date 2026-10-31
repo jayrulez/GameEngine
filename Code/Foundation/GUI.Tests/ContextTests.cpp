@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - GUIContext: one GUI of several roots (windows, render targets). Its roots share the clock
-// (each may pause or slow its own time), the deferred edits, one bindings flush a frame, the data,
-// the commands and keymap, and the element table; the active root (the one last given input) takes
-// keystrokes and decides command availability; every root is made in one.
+// GUI - GUIContext: one GUI with several roots (windows, render targets). Its roots share the
+// clock (each may pause or slow its own time), the deferred edits, one bindings flush per frame,
+// the data, the commands and keymap, and the element table. The active root, the one that last got
+// input, takes keystrokes and decides command availability. Every root is made in a context.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -43,7 +43,7 @@ TEST_CASE("context: a GUI of one root is a context with one")
     CHECK(gui->GetActiveRoot() == nullptr);
     auto root = Make<SceneRoot>(gui);
     CHECK(gui->RootCount() == 1u);
-    CHECK(gui->GetActiveRoot() == root.Get()); // the first, until input picks another
+    CHECK(gui->GetActiveRoot() == root.Get()); // the first root, until input picks another
     CHECK(&root->GetContext() == gui.Get());
 }
 
@@ -104,7 +104,7 @@ TEST_CASE("context: a root's animations pause or slow on the shared clock")
     t.menu->AddChild(b.Get());
     a->Animate(core::StringView(u8"x"), core::StringView(u8"100"), 1.0f, core::StringView(u8"linear"));
     b->Animate(core::StringView(u8"x"), core::StringView(u8"100"), 1.0f, core::StringView(u8"linear"));
-    t.menu->SetPaused(true); // the game paused under its menu: the menu's own root keeps going
+    t.menu->SetPaused(true); // the game is paused under its menu, and the menu's own root keeps going
     t.gui->Update(core::Duration::FromSeconds(0.5));
     CHECK(a->GetPosition().x == doctest::Approx(50.0f));
     CHECK(b->GetPosition().x == doctest::Approx(0.0f));
@@ -145,7 +145,7 @@ TEST_CASE("context: the active root follows input, and takes commands and keystr
     CHECK(t.gui->GetActiveRoot() == t.hud.Get());
     CHECK(hudBacks == 1);
 
-    // A root going away leaves the context; the active root falls back to the first.
+    // A root that is destroyed leaves the context, and the active root falls back to the first.
     t.hud.Reset();
     CHECK(t.gui->RootCount() == 1u);
     CHECK(t.gui->GetActiveRoot() == t.menu.Get());

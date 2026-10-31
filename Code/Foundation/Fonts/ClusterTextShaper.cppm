@@ -5,8 +5,7 @@
 //
 // ClusterTextShaper: the shaper UI helpers (hit testing, caret positions, selection rectangles)
 // over GlyphPosition clusters, shared by every shaper backend. Clusters count characters, so they
-// hold for any N to M mapping a shaper makes; a backend implements only the shaping. Moved out of
-// the stb shaper (Fonts.TrueType) when the HarfBuzz backend joined it (F3 of vg-and-gui-lab.md).
+// hold for any N to M mapping a shaper makes; a backend implements only the shaping.
 
 module;
 #include "Core/Prelude.h"

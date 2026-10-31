@@ -3,12 +3,12 @@
 
 // GUI.Toolkit - :timeline_source partition
 //
-// What a dopesheet reads (T5 of Specs/gui-lab-evolution-3.md): channels named by paths ("Lamp.color.r"),
-// the dopesheet folding them into rows by their segments (component, property, channel), and each
-// channel's key times. A key is (channel, index); an edit through the source returns the keys' new
-// addresses, so a selection survives the source sorting its keys again. Edits are gestures as the
-// other sources' are (a move begun, previewed from where the keys were, committed once or
-// cancelled) or one change each (a deletion, an insertion); the undo is the source's.
+// What a dopesheet reads: channels named by paths ("Lamp.color.r"), which the dopesheet folds into
+// rows by their segments (component, property, channel), and each channel's key times. A key is
+// identified by (channel, index). An edit through the source returns the keys' new references, so a
+// selection survives the source sorting its keys again. A move is a gesture, as in the other
+// sources: it begins, previews from where the keys were, and then commits once or cancels. A
+// deletion or an insertion is one change each. The undo belongs to the source.
 
 module;
 #include "Core/Prelude.h"
@@ -23,7 +23,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// A key of a timeline: its channel and its place among that channel's keys (sorted by time).
+    /// Identifies a key of a timeline by its channel and its index among that channel's keys
+    /// (sorted by time).
     struct TimelineKeyRef
     {
         usize Channel = 0;
@@ -31,12 +32,12 @@ export namespace foundation::gui
         [[nodiscard]] bool operator==(const TimelineKeyRef&) const noexcept = default;
     };
 
-    /// What a timeline source tells its views.
+    /// The notifications a timeline source sends its views.
     class ITimelineSourceClient
     {
     public:
         virtual ~ITimelineSourceClient() = default;
-        /// The channels or their keys changed: read them again.
+        /// Called when the channels or their keys changed; the view reads them again.
         virtual void OnTimelineChanged() = 0;
     };
 
@@ -46,23 +47,27 @@ export namespace foundation::gui
         virtual ~ITimelineSource() = default;
 
         [[nodiscard]] virtual usize ChannelCount() const = 0;
-        /// Its path, its segments split by '.': the rows it folds into.
+        /// Returns the channel's path, with segments split by '.', which decides the rows it folds
+        /// into.
         [[nodiscard]] virtual core::String GetChannelPath(usize channel) const = 0;
-        /// Its key times, sorted.
+        /// Fills `out` with the channel's key times, sorted.
         virtual void GetKeyTimes(usize channel, core::Array<f32>& out) const = 0;
 
-        /// A move begins: where the keys are now is what a preview moves from and a cancel puts back.
+        /// Begins a move. Each preview moves the keys from where they are now, and a cancel restores
+        /// them there.
         virtual void BeginKeysMove() = 0;
-        /// `keys` (as they were at the beginning) moved by `delta` seconds, live; `moved` their places now.
+        /// Moves `keys` (as they were when the move began) by `delta` seconds, live, and fills `moved`
+        /// with where they are now.
         virtual void PreviewKeysMove(core::Span<const TimelineKeyRef> keys, f32 delta, core::Array<TimelineKeyRef>& moved) = 0;
-        /// The move ends as last previewed: one change.
+        /// Ends the move as last previewed, as one change.
         virtual void CommitKeysMove() = 0;
-        /// The move is given up: the keys as they were.
+        /// Cancels the move and puts the keys back as they were.
         virtual void CancelKeysMove() = 0;
-        /// Deletes `keys`, one change; false when none went.
+        /// Deletes `keys` as one change. Returns false when none was deleted.
         virtual bool DeleteKeys(core::Span<const TimelineKeyRef> keys) = 0;
-        /// Adds a key to `channel` at `time` (its value the source's: the channel's there, as a
-        /// rule), one change; false when it cannot (full, locked). `made` is where it went.
+        /// Adds a key to `channel` at `time` as one change. The source picks its value, usually the
+        /// channel's value there. Sets `made` to where the key went, and returns false when it
+        /// cannot add one (the channel is full or locked).
         virtual bool InsertKey(usize channel, f32 time, TimelineKeyRef& made) = 0;
 
         void AddTimelineClient(ITimelineSourceClient* client) { m_timelineClients.PushBack(client); }
@@ -84,6 +89,6 @@ export namespace foundation::gui
         }
 
     private:
-        core::Array<ITimelineSourceClient*> m_timelineClients; // non-owning: each view leaves as it goes
+        core::Array<ITimelineSourceClient*> m_timelineClients; // non-owning: each view leaves before it goes away
     };
 }

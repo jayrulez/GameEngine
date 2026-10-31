@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - StyleManager tests: a StyleSheet applied live to a widget tree, including
-// the end-to-end showcase where hovering re-resolves :hover rules and drives a CSS
-// transition through the ActionManager.
+// GUI - StyleManager tests: a StyleSheet applied live to a widget tree, including the end-to-end
+// case where hovering re-resolves :hover rules and drives a CSS transition through the
+// ActionManager.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -65,7 +65,7 @@ TEST_CASE("style-manager: hover re-resolve drives a live transition")
     d->InjectMouseMove(core::Float2{50.0f, 50.0f}); // hover the button
     CHECK(btn->IsHovered());
 
-    mgr.ApplyTree(*root.Get()); // re-resolve: :hover now matches -> transition animates
+    mgr.ApplyTree(*root.Get()); // re-resolve: :hover matches and the transition animates
     CHECK(root->GetActionManager()->Count() == 1);
     CHECK(btn->GetAlpha() == doctest::Approx(1.0f)); // starts where it was
 
@@ -111,7 +111,7 @@ TEST_CASE("style-manager: SetStyleSheet swaps styles (hot-reload)")
     CHECK(btn->GetAlpha() == doctest::Approx(0.3f));
 }
 
-// ===================== E3: origins =====================
+// ===================== Origins =====================
 
 namespace
 {
@@ -141,8 +141,8 @@ TEST_CASE("style-manager: the GUI's sheet outranks the user agent's at any speci
     styles.SetUserAgentSheet(CSSParser::Parse(SV(u8"#ok { opacity: 0.2; } button { padding: 9px; }")));
     styles.SetStyleSheet(CSSParser::Parse(SV(u8"* { opacity: 0.7; }")));
     styles.ApplyTree(*root.Get());
-    CHECK(button->GetAlpha() == doctest::Approx(0.7f)); // a universal rule over an id one
-    CHECK(button->GetPadding().Left == doctest::Approx(9.0f)); // what the GUI's sheet does not say
+    CHECK(button->GetAlpha() == doctest::Approx(0.7f)); // the GUI sheet's universal rule beats the user agent's id rule
+    CHECK(button->GetPadding().Left == doctest::Approx(9.0f)); // set by the user agent sheet, since the GUI's sheet does not set it
 }
 
 TEST_CASE("style-manager: a subtree's sheet applies inside it alone, over the GUI's; an inner one over an outer")
@@ -158,14 +158,14 @@ TEST_CASE("style-manager: a subtree's sheet applies inside it alone, over the GU
     REQUIRE(styles.SetSubtreeSheet(*page.Get(), CSSParser::Parse(SV(u8".note { opacity: 0.5; } @keyframes fade { from { opacity: 0; } to { opacity: 1; } }"))));
     REQUIRE(styles.SetSubtreeSheet(*inner.Get(), CSSParser::Parse(SV(u8"* { opacity: 0.3; }"))));
     styles.ApplyTree(*root.Get());
-    CHECK(inside->GetAlpha() == doctest::Approx(0.5f));  // the page's, though less specific
-    CHECK(deep->GetAlpha() == doctest::Approx(0.3f));    // the inner card's
-    CHECK(outside->GetAlpha() == doctest::Approx(0.9f)); // outside the page: the GUI's alone
+    CHECK(inside->GetAlpha() == doctest::Approx(0.5f));  // the page's sheet wins, though its rule is less specific
+    CHECK(deep->GetAlpha() == doctest::Approx(0.3f));    // the inner card's sheet
+    CHECK(outside->GetAlpha() == doctest::Approx(0.9f)); // outside the page, only the GUI's sheet applies
 
     styles.RemoveSubtreeSheet(*inner.Get());
     styles.ApplyTree(*root.Get());
     CHECK(deep->GetAlpha() == doctest::Approx(0.5f));
-    // A node in no GUI cannot hold a subtree sheet.
+    // A node outside any GUI cannot hold a subtree sheet.
     auto loose = Make<UIWidget>();
     CHECK_FALSE(styles.SetSubtreeSheet(*loose.Get(), StyleSheet{}));
 }
@@ -208,11 +208,11 @@ TEST_CASE("style-manager: a markup property a restyle meets again is not written
     Node* firstRow = list->GetChildAt(0);
     styles.ApplyTree(*root.Get());
     styles.ApplyTree(*root.Get());
-    CHECK(styles.LastRestyleCount() == 0u); // a list rebuilding its rows restyled itself every frame
-    CHECK(list->GetChildAt(0) == firstRow);  // its rows were not made again
+    CHECK(styles.LastRestyleCount() == 0u); // nothing restyled, though a list rebuilds its rows
+    CHECK(list->GetChildAt(0) == firstRow);  // its rows are not made again
 }
 
-// ===================== E3: computed style =====================
+// ===================== Computed style =====================
 
 TEST_CASE("style-manager: a rule that stops matching gives back everything it set")
 {
@@ -253,7 +253,7 @@ TEST_CASE("style-manager: a widget's own defaults are what a rule gives back to"
     const Thickness own = tip->GetPadding();
     StyleManager styles(CSSParser::Parse(SV(u8"tooltip.big { padding: 20px; }")));
     styles.ApplyTree(*root.Get());
-    CHECK(tip->GetPadding() == own); // no rule: its own, not CSS's initial 0
+    CHECK(tip->GetPadding() == own); // no rule, so its own padding, not CSS's initial 0
     tip->AddClass(SV(u8"big"));
     styles.ApplyTree(*root.Get());
     CHECK(tip->GetPadding().Left == doctest::Approx(20.0f));
@@ -280,9 +280,9 @@ TEST_CASE("style-manager: what code sets is code's, over the sheet, before or af
     CHECK(late->GetAlpha() == doctest::Approx(0.6f));
     CHECK(late->GetLayoutStyle().Width == LayoutLength::Px(70.0f));
     CHECK(late->IsStylePinned(SlotWidth));
-    CHECK_FALSE(late->IsStylePinned(SlotHeight)); // only what code changed
+    CHECK_FALSE(late->IsStylePinned(SlotHeight)); // only what code changed is pinned
 
-    // Given back, the sheet's value returns.
+    // Once unpinned, the sheet's value returns.
     late->UnpinStyle(SlotBit(SlotOpacity) | SlotBit(SlotWidth));
     styles.ApplyTree(*root.Get());
     CHECK(late->GetAlpha() == doctest::Approx(0.8f));
@@ -307,7 +307,7 @@ TEST_CASE("style-manager: a reflected property the sheet set returns to its own 
 
     field->AddClass(SV(u8"hint"));
     styles.ApplyTree(*root.Get());
-    field->SetPlaceholder(SV(u8"code's")); // code takes it
+    field->SetPlaceholder(SV(u8"code's")); // code takes the property over
     field->RemoveClass(SV(u8"hint"));
     styles.ApplyTree(*root.Get());
     CHECK(field->GetPlaceholder() == SV(u8"code's"));
@@ -334,7 +334,7 @@ TEST_CASE("style-manager: a hover rule ends, and what it set returns")
     CHECK(w->GetPadding().Left == doctest::Approx(0.0f));
 }
 
-// ===================== E3: parts take the box properties =====================
+// ===================== Parts take the box properties =====================
 
 
 TEST_CASE("style-manager: a part takes a box: background, border, radii, shadow and opacity")
@@ -358,7 +358,7 @@ TEST_CASE("style-manager: a part takes a box: background, border, radii, shadow 
 
 TEST_CASE("style-manager: a slider's track takes the sheet's height and its thumb the sheet's width")
 {
-    // A game's groove thicker than the 4 px line, its thumb smaller than the slider is tall.
+    // A game's groove, thicker than the 4 px line, and a thumb smaller than the slider is tall.
     auto root = NewRoot();
     auto slider = Make<Slider>();
     slider->SetSize(core::Float2{160.0f, 24.0f});
@@ -370,7 +370,7 @@ TEST_CASE("style-manager: a slider's track takes the sheet's height and its thum
     CHECK(track.Height == doctest::Approx(10.0f));
     CHECK_FALSE(track.HasWidth);
     CHECK(slider->GetPartStyle(u8"thumb").Width == doctest::Approx(16.0f));
-    CHECK_FALSE(slider->GetPartStyle(u8"fill").HasHeight); // auto is no size
+    CHECK_FALSE(slider->GetPartStyle(u8"fill").HasHeight); // auto is not a size
 
     foundation::vg::VGContext canvas;
     canvas.SetAnalyticBoxes(true);
@@ -438,7 +438,7 @@ TEST_CASE("style-manager: a forced state reads as set, restyling the node, and i
     CHECK(label->GetAlpha() == doctest::Approx(0.75f)); // read through its ancestor
     CHECK_FALSE(btn->IsHovered());                      // only the style pass sees it
 
-    btn->SetForcedStyleStates(Node::StateDisabled); // forced disabled is not enabled
+    btn->SetForcedStyleStates(Node::StateDisabled); // a widget forced disabled does not match :enabled
     mgr.ApplyTree(*root.Get());
     CHECK(btn->GetAlpha() == doctest::Approx(0.25f));
     CHECK(label->GetAlpha() == doctest::Approx(1.0f)); // neither label rule matches now
@@ -467,7 +467,7 @@ TEST_CASE("style-manager: a node says where each property's value came from: a r
         u8"#ok { opacity: 0.3; margin: 2px; height: 30px; }\n"), // line 4
         SV(u8"app.css")));
     btn->SetInlineStyle(SV(u8"margin-left"), SV(u8"9px")); // markup's attribute
-    btn->SetPadding(Thickness{1.0f});                      // code: the padding is its own now
+    btn->SetPadding(Thickness{1.0f});                      // set from code, so the padding is the button's own now
     mgr.ApplyTree(*root.Get());
 
     const StyleExplanation opacity = mgr.ExplainProperty(*btn.Get(), SV(u8"opacity"));
@@ -490,7 +490,7 @@ TEST_CASE("style-manager: a node says where each property's value came from: a r
     CHECK(marginLeft.Declarations[1].Value == SV(u8"2px"));
 
     const StyleExplanation paddingTop = mgr.ExplainProperty(*btn.Get(), SV(u8"padding-top"));
-    CHECK(paddingTop.Origin == StyleOrigin::Code); // the sheet's padding is overridden
+    CHECK(paddingTop.Origin == StyleOrigin::Code); // the sheet's padding is overridden by code
     REQUIRE(paddingTop.Declarations.Size() == 1u);
     CHECK(paddingTop.Declarations[0].Selector == SV(u8"button"));
 
@@ -522,7 +522,8 @@ TEST_CASE("style-manager: a child added restyles its siblings only when a rule r
             column->AddChild(Widget(u8"row", core::Float2{0.0f, 0.0f}, core::Float2{200.0f, 10.0f}).Get());
     };
     {
-        // No rule reads siblings: the new row and its column restyle, the other twenty do not.
+        // No rule reads siblings, so the new row and its column restyle and the other twenty do
+        // not.
         core::RefPtr<SceneRoot> root;
         core::RefPtr<UIWidget> column;
         build(root, column);
@@ -533,7 +534,7 @@ TEST_CASE("style-manager: a child added restyles its siblings only when a rule r
         CHECK(mgr.LastRestyleCount() == 2u);
     }
     {
-        // :nth-child reads them: taking the first row away flips every other row's match.
+        // :nth-child reads siblings, so removing the first row flips every other row's match.
         core::RefPtr<SceneRoot> root;
         core::RefPtr<UIWidget> column;
         build(root, column);
@@ -544,7 +545,7 @@ TEST_CASE("style-manager: a child added restyles its siblings only when a rule r
         column->RemoveChild(column->GetChildAt(0));
         mgr.ApplyTree(*root.Get());
         CHECK(mgr.LastRestyleCount() >= 19u);
-        CHECK(second->GetAlpha() == doctest::Approx(0.5f)); // first now: odd
+        CHECK(second->GetAlpha() == doctest::Approx(0.5f)); // now first, so odd
     }
 }
 
@@ -562,11 +563,11 @@ TEST_CASE("style-manager: a declaration edited in its rule restyles every node t
     REQUIRE(opacity.Declarations.Size() == 1u);
     REQUIRE(opacity.Declarations[0].Rule != nullptr);
     CHECK(mgr.EditDeclaration(opacity.Declarations[0].Rule, SV(u8"opacity"), SV(u8"0.4")));
-    // A longhand of the rule's shorthand: that side alone.
+    // Editing a longhand of the rule's shorthand changes only that side.
     CHECK(mgr.EditDeclaration(opacity.Declarations[0].Rule, SV(u8"padding-left"), SV(u8"9px")));
     mgr.ApplyTree(*root.Get());
     CHECK(a->GetAlpha() == doctest::Approx(0.4f));
-    CHECK(b->GetAlpha() == doctest::Approx(0.4f)); // the rule's every node
+    CHECK(b->GetAlpha() == doctest::Approx(0.4f)); // every node the rule matches
     CHECK(a->GetPadding().Left == doctest::Approx(9.0f));
     CHECK(a->GetPadding().Top == doctest::Approx(4.0f));
     const StyleRule stranger(SV(u8"button"));
@@ -600,5 +601,5 @@ TEST_CASE("style: a number property takes a percentage as a fraction and refuses
     StyleManager styles(CSSParser::Parse(core::StringView(u8".half { opacity: 50%; } .junk { opacity: 0.3px; }")));
     styles.ApplyTree(*root.Get());
     CHECK(half->GetAlpha() == doctest::Approx(0.5f)); // not 50
-    CHECK(junk->GetAlpha() == doctest::Approx(1.0f)); // not a number: its own value
+    CHECK(junk->GetAlpha() == doctest::Approx(1.0f)); // not a number, so it keeps its own value
 }

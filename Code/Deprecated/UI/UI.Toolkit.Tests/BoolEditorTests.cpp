@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit BoolEditor: value round-trip + CheckBox toggle drives the setter.
+// Smoke test for the toolkit BoolEditor: the value round-trips, and toggling the CheckBox drives the setter.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -26,7 +26,7 @@ TEST_CASE("toolkit-booleditor: RoundTripAndToggle")
     auto* cb = core::Cast<CheckBox>(ed->EditorView());
     REQUIRE(cb != nullptr);
 
-    // Toggling the checkbox flows through the editor -> setter + value update.
+    // Toggling the checkbox flows through the editor to the setter and updates the value.
     cb->IsChecked.SetValue(true);
     CHECK(ed->Value() == true);
     CHECK(observed == true);

@@ -3,17 +3,18 @@
 
 /// Foundation::Render - the `:taa` partition.
 ///
-/// Temporal anti-aliasing resolve (ported from Sedulous taa.frag.hlsl). Blends the current jittered
-/// HDR frame with the reprojected history: closest-depth motion selection, a YCoCg variance clip, a
-/// Catmull-Rom history sample, a luma/motion-adaptive blend, and a depth-disocclusion reject. Runs in
-/// linear HDR after the scene is composed (opaque+sky+transparent) and before bloom/tonemap. Per-view
-/// color-history ping-pong (persistent), managed here; jitter is applied to the projection by the caller.
+/// Temporal anti-aliasing resolve. Blends the current jittered HDR frame with the reprojected
+/// history: closest-depth motion selection, a YCoCg variance clip, a Catmull-Rom history sample, a
+/// luma- and motion-adaptive blend, and a depth-disocclusion reject. Runs in linear HDR after the
+/// opaque scene and sky (and AO) and before transparent, bloom and tonemap. The per-view color-history
+/// ping-pong (persistent) is managed here; the caller applies jitter to the projection.
 ///
-/// Depth-disocclusion (ported from Sedulous, hardens ghost-on-reveal): compares this frame's linearized
-/// depth against the previous frame's depth at the reprojected historyUV, rejecting history on a large
-/// relative mismatch (a surface revealed/occluded). We avoid a separate prev-depth ping-pong by carrying
-/// the previous frame's LINEAR depth in the color-history texture's alpha channel (unused downstream);
-/// linear depth in half-float keeps ~0.05% relative precision everywhere vs the 10% reject threshold.
+/// Depth disocclusion (against ghosting where a surface is revealed): compares this frame's
+/// linearized depth with the previous frame's depth at the reprojected historyUV, rejecting history
+/// on a large relative mismatch (a surface revealed or occluded). Rather than a separate prev-depth
+/// ping-pong, the previous frame's linear depth rides in the color-history texture's alpha channel
+/// (unused downstream); linear depth in half-float keeps ~0.05% relative precision everywhere, well
+/// inside the 10% reject threshold.
 
 module;
 #include "Core/Prelude.h"
@@ -51,7 +52,7 @@ export namespace foundation::render
     };
     static_assert(sizeof(GpuTaaPush) == 48, "push TaaPush layout drift");
 
-    // Owns the TAA resolve pipeline + per-view color-history ping-pong. One per renderer.
+    // Owns the TAA resolve pipeline and the per-view color-history ping-pong. One per renderer.
     class TaaPass
     {
     public:
@@ -70,9 +71,10 @@ export namespace foundation::render
 
         [[nodiscard]] rhi::TextureFormat HistoryFormat() const noexcept { return kHistoryFormat; }
 
-        // Resolve TAA for one view: reads the jittered HDR (`current`), the previous history, the motion +
-        // depth targets; writes the resolved HDR (a new transient, returned) and the next-frame history.
-        // `blendFactor` ~0.95; the planes and the projection's kind linearize its depth. Returns the resolved handle, or `current` unchanged if the view is invalid.
+        // Resolve TAA for one view: reads the jittered HDR (`current`), the previous history, and the motion
+        // and depth targets; writes the resolved HDR (a new transient, returned) and the next-frame history.
+        // `blendFactor` is about 0.95; the planes and the projection's kind linearize its depth. Returns the
+        // resolved handle, or `current` unchanged if the view is invalid.
         [[nodiscard]] rendergraph::RGHandle
         DeclareTaa(rendergraph::RenderGraph& graph, rendergraph::RGHandle current,
                    rendergraph::RGHandle motion, rendergraph::RGHandle depth, u32 viewIndex, u32 w,
@@ -107,7 +109,7 @@ export namespace foundation::render
 
         rhi::RenderPipeline* MakePipeline();
 
-        // One bind group per history view, rebuilt when ANY of the frame's transient inputs (the
+        // One bind group per history view, rebuilt when any of the frame's transient inputs (the
         // jittered colour, motion, depth; BindGroupCache) is a different view or texture.
         using BindInputs = BindGroupInputs<3>;
         rhi::BindGroup* EnsureBindGroup(rhi::TextureView* histPrev, const BindInputs& inputs);

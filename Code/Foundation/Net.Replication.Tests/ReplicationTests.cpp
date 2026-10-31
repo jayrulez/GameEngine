@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net.replication - NetworkId, the replicated-field layout harvest, and the reflection-
-// driven Variant<->wire codec. The central bet: a component marks fields Replicated and the wire
-// format is GENERATED from reflection - no hand-written per-component net code.
+// foundation.net.replication - NetworkId, the replicated-field layout harvest, and the
+// reflection-driven codec between Variant and the wire. A component marks fields as replicated and
+// the wire format comes from reflection, with no hand-written per-component network code.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 
 import foundation.core;
-import foundation.net; // BitWriter / BitReader
+import foundation.net; // BitWriter, BitReader
 import foundation.net.replication;
-import foundation.scene; // Scene / EntityHandle / SerializableComponentManager
+import foundation.scene; // Scene, EntityHandle, SerializableComponentManager
 
 using namespace foundation::core;
 namespace net = foundation::net;
@@ -19,7 +19,7 @@ namespace scene = foundation::scene;
 
 namespace
 {
-    // A stand-in networked component: a transform-like mix of replicated + local-only fields, plus a
+    // A stand-in networked component: a transform-like mix of replicated and local-only fields, plus a
     // marked-but-unsupported field (String) to exercise layout exclusion.
     struct Mover
     {
@@ -28,8 +28,8 @@ namespace
         f32 speed = 0.0f;                            // replicated
         bool grounded = false;                       // replicated
         i32 health = 0;                              // replicated
-        f32 localOnly = 0.0f;                        // NOT replicated (no marker)
-        String label; // marked replicated but unsupported type -> excluded
+        f32 localOnly = 0.0f;                        // not replicated (no marker)
+        String label; // marked replicated but of an unsupported type: excluded
     };
 
     // ADL serialization (required to instantiate SerializableComponentManager<Mover>).
@@ -44,7 +44,7 @@ namespace
         foundation::core::Serialize(ar, "label", m.label);
     }
 
-    // A serializable pool so Mover can live in a scene + carry the wire type tag "test.Mover".
+    // A serializable pool so Mover can live in a scene and carry the wire type tag "test.Mover".
     class MoverManager final : public scene::SerializableComponentManager<Mover>
     {
     public:
@@ -112,7 +112,7 @@ REFLECT_VALUE(Mover, "rtti::net::test")
     builder.Property<&Mover::speed>("speed").PropAttribute(net::kReplicatedAttribute, true);
     builder.Property<&Mover::grounded>("grounded").PropAttribute(net::kReplicatedAttribute, true);
     builder.Property<&Mover::health>("health").PropAttribute(net::kReplicatedAttribute, true);
-    builder.Property<&Mover::localOnly>("localOnly"); // no marker -> local
+    builder.Property<&Mover::localOnly>("localOnly"); // no marker: local
     builder.Property<&Mover::label>("label").PropAttribute(net::kReplicatedAttribute,
                                                            true); // unsupported
 }
@@ -129,7 +129,7 @@ TEST_CASE("replication: layout harvest picks marked + supported fields only")
 {
     RttiRegisterValue_Mover();
     const Span<const PropertyInfo* const> layout = net::ReplicatedProperties(TypeOf<Mover>());
-    // position, rotation, speed, grounded, health = 5. localOnly (unmarked) + label (unsupported) out.
+    // position, rotation, speed, grounded, health: 5. localOnly (unmarked) and label (unsupported) are out.
     REQUIRE(layout.Size() == 5u);
     CHECK(StringView(reinterpret_cast<const char8_t*>(layout[0]->name)) == u8"position");
     CHECK(StringView(reinterpret_cast<const char8_t*>(layout[4]->name)) == u8"health");
@@ -145,7 +145,7 @@ TEST_CASE("replication: a component round-trips its replicated fields through th
     source.speed = 12.5f;
     source.grounded = true;
     source.health = 77;
-    source.localOnly = 999.0f; // must NOT cross the wire
+    source.localOnly = 999.0f; // must not cross the wire
     source.label = String(u8"ignored");
 
     net::BitWriter writer;
@@ -175,7 +175,7 @@ TEST_CASE("replication: field codec round-trips supported scalars + rejects unsu
     CHECK(net::WriteFieldValue(writer, Variant::From<f64>(3.141592653589793)));
     CHECK(net::WriteFieldValue(writer, Variant::From<Float3>(Float3{4.0f, 5.0f, 6.0f})));
     CHECK(net::WriteFieldValue(writer, Variant::From<i32>(-42)));
-    // A String value has no codec support -> false, nothing written.
+    // A String value has no codec support: false, nothing written.
     CHECK_FALSE(net::WriteFieldValue(writer, Variant::From<String>(String(u8"nope"))));
 
     net::BitReader reader(writer.Data());
@@ -226,7 +226,7 @@ TEST_CASE("replication: a full snapshot round-trips networked entities server ->
     net::BitWriter writer;
     serverRep.CaptureSnapshot(server, writer);
 
-    // --- apply into a fresh client scene with the SAME managers ---
+    // --- apply into a fresh client scene with the same managers ---
     scene::Scene client{DefaultAllocator()};
     client.AddSystem<net::NetworkComponentManager>();
     MoverManager* clientMovers = client.AddSystem<MoverManager>();
@@ -320,7 +320,7 @@ TEST_CASE(
     netMgr->Add(a);
     const scene::EntityHandle b = scene.CreateEntity(u8"B");
     netMgr->Add(b);
-    scene.CreateEntity(u8"plain"); // no NetworkComponent -> never assigned
+    scene.CreateEntity(u8"plain"); // no NetworkComponent: never assigned
 
     CHECK_FALSE(netMgr->Get(a)->id.IsValid());
     rep.AssignSceneNetworkIds(scene);
@@ -362,7 +362,7 @@ TEST_CASE("replication: per-peer delta sends only what changed since the peer's 
     MoverManager* cmovers = client.AddSystem<MoverManager>();
     net::StateReplication crep;
 
-    // First delta: everything new for this peer -> 2 entries, and the client mirrors it.
+    // First delta: everything is new for this peer, so 2 entries, and the client mirrors it.
     {
         net::BitWriter w;
         const usize n = rep.CaptureDelta(server, peer, w);
@@ -375,14 +375,14 @@ TEST_CASE("replication: per-peer delta sends only what changed since the peer's 
     CHECK(cmovers->Get(crep.FindEntity(idA))->health == 10);
     CHECK(cmovers->Get(crep.FindEntity(idB))->health == 20);
 
-    // Nothing changed -> empty delta.
+    // Nothing changed: an empty delta.
     {
         net::BitWriter w;
         const usize n = rep.CaptureDelta(server, peer, w);
         CHECK(n == 0u);
     }
 
-    // Change only A -> the delta carries just A.
+    // Change only A: the delta carries just A.
     ma.health = 99;
     {
         net::BitWriter w;
@@ -394,7 +394,7 @@ TEST_CASE("replication: per-peer delta sends only what changed since the peer's 
     CHECK(cmovers->Get(crep.FindEntity(idA))->health == 99);
     CHECK(cmovers->Get(crep.FindEntity(idB))->health == 20); // B untouched by A's delta
 
-    // Despawn B on the server -> the delta marks it removed -> the client destroys it.
+    // Despawn B on the server: the delta marks it removed and the client destroys it.
     const scene::EntityHandle cb = crep.FindEntity(idB);
     server.DestroyEntity(b);
     {
@@ -406,7 +406,7 @@ TEST_CASE("replication: per-peer delta sends only what changed since the peer's 
     }
     CHECK_FALSE(client.IsValid(cb));
 
-    // ForgetPeer (disconnect) -> the next delta re-sends everything (only A remains -> 1 new entry).
+    // ForgetPeer (disconnect): the next delta re-sends everything (only A remains, so 1 new entry).
     rep.ForgetPeer(peer);
     {
         net::BitWriter w;
@@ -475,7 +475,7 @@ TEST_CASE("replication: late-join full snapshot spawns prefabs via the spawn han
     CHECK(haveB);
     CHECK(cmovers->Get(crep.FindEntity(idA))->health == 7);
     CHECK(cmovers->Get(crep.FindEntity(idB))->health == 8);
-    // The client recorded the source prefab on the tag (host-migration / re-spawn use it later).
+    // The client recorded the source prefab on the tag (for host migration or a re-spawn).
     net::NetworkComponentManager* cnet = client.GetSystem<net::NetworkComponentManager>();
     CHECK(cnet->Get(crep.FindEntity(idA))->prefab == pfxA);
 }
@@ -519,7 +519,7 @@ TEST_CASE("replication: a delta spawns a newly-added networked entity via its pr
     REQUIRE(spawned.Size() == 1u);
     CHECK(spawned[0] == pfx1);
 
-    // A second entity added later -> the next delta carries just its spawn.
+    // A second entity added later: the next delta carries just its spawn.
     const Guid pfx2{3, 4};
     const scene::EntityHandle b = server.CreateEntity();
     movers->Add(b).health = 2;
@@ -669,7 +669,7 @@ TEST_CASE("replication: LerpFieldValue interpolates floats/vectors and snaps dis
     const Variant v = net::LerpFieldValue(Variant::From<Float3>(Float3{0, 0, 0}),
                                           Variant::From<Float3>(Float3{2, 4, 6}), 0.25f);
     CHECK(*v.TryGet<Float3>() == Float3{0.5f, 1.0f, 1.5f});
-    // bool is discrete -> snaps to `a`.
+    // bool is discrete: it snaps to `a`.
     CHECK(*net::LerpFieldValue(Variant::From<bool>(false), Variant::From<bool>(true), 0.9f)
                .TryGet<bool>() == false);
     CHECK(net::IsInterpolatableType(&TypeOf<Float3>()));
@@ -699,17 +699,17 @@ TEST_CASE(
     CHECK(buf.TrackedEntities() == 1u);
 
     Mover out;
-    // Midway: position + speed lerp; health (discrete) holds the earlier bracket's value.
+    // Midway: position and speed lerp; health (discrete) holds the earlier bracket's value.
     REQUIRE(buf.Sample(id, typeHash, 50.0, Instance::From(&out)));
     CHECK(out.position.x == doctest::Approx(5.0f));
     CHECK(out.speed == doctest::Approx(2.5f));
     CHECK(out.health == 10);
 
-    // At the newer sample's time -> its value.
+    // At the newer sample's time: its value.
     buf.Sample(id, typeHash, 100.0, Instance::From(&out));
     CHECK(out.position.x == doctest::Approx(10.0f));
 
-    // Before the window -> clamp to earliest (no extrapolation).
+    // Before the window: clamp to the earliest (no extrapolation).
     buf.Sample(id, typeHash, -30.0, Instance::From(&out));
     CHECK(out.position.x == doctest::Approx(0.0f));
 
@@ -785,7 +785,7 @@ TEST_CASE("replication: per-peer relevancy hides non-relevant entities and remov
     }
     CHECK(crep2.NetworkedCount() == 2u);
 
-    // A leaves peer 1's relevance -> peer 1's next delta REMOVES A (client destroys it).
+    // A leaves peer 1's relevance: peer 1's next delta removes A (the client destroys it).
     const scene::EntityHandle localA = crep1.FindEntity(idA);
     REQUIRE(c1.IsValid(localA));
     peer1SeesA = false;
@@ -799,14 +799,14 @@ TEST_CASE("replication: per-peer relevancy hides non-relevant entities and remov
     CHECK_FALSE(c1.IsValid(localA)); // hidden state actively destroyed on the client
     CHECK(crep1.NetworkedCount() == 0u);
 
-    // Peer 2 is unaffected by peer 1's relevance and sees no change -> empty delta.
+    // Peer 2 is unaffected by peer 1's relevance and sees no change: an empty delta.
     {
         net::BitWriter w;
         const usize n = rep.CaptureDelta(server, 2u, w);
         CHECK(n == 0u);
     }
 
-    // A re-enters peer 1's relevance -> it re-spawns as a fresh entry.
+    // A re-enters peer 1's relevance: it re-spawns as a fresh entry.
     peer1SeesA = true;
     {
         net::BitWriter w;
@@ -859,13 +859,13 @@ TEST_CASE("replication: ApplyDelta records interpolatable state, SampleInterpola
 
     const scene::EntityHandle ce = crep.FindEntity(id);
     REQUIRE(client.IsValid(ce));
-    CHECK(cmovers->Get(ce)->position.x == doctest::Approx(10.0f)); // direct apply = latest
+    CHECK(cmovers->Get(ce)->position.x == doctest::Approx(10.0f)); // direct apply holds the latest
 
-    // Render halfway between the two samples -> interpolated to the midpoint.
+    // Render halfway between the two samples: interpolated to the midpoint.
     crep.SampleInterpolation(client, buf, 50.0);
     CHECK(cmovers->Get(ce)->position.x == doctest::Approx(5.0f));
 
-    // Render at the earliest sample time -> the earliest value.
+    // Render at the earliest sample time: the earliest value.
     crep.SampleInterpolation(client, buf, 0.0);
     CHECK(cmovers->Get(ce)->position.x == doctest::Approx(0.0f));
 }
@@ -943,8 +943,8 @@ TEST_CASE("replication: an effectively-inactive entity's transform state FREEZES
     REQUIRE(id.IsValid());
     net::CaptureEntityTransforms(server);
 
-    // Deactivate, then move the entity: the replicated component keeps the LAST captured
-    // value (frozen; existence/identity stay on the wire).
+    // Deactivate, then move the entity: the replicated component keeps the last captured
+    // value (frozen; existence and identity stay on the wire).
     server.SetActive(e, false);
     t.position = Float3{9.0f, 0.0f, 0.0f};
     server.SetLocalTransform(e, t);
@@ -952,7 +952,7 @@ TEST_CASE("replication: an effectively-inactive entity's transform state FREEZES
     CHECK(server.GetSystem<net::NetworkedTransformComponentManager>()->Get(e)->position ==
           Float3{1.0f, 0.0f, 0.0f});
 
-    // The entity is still IN the snapshot (a client spawns it - the flag is scene data).
+    // The entity is still in the snapshot (a client spawns it; the flag is scene data).
     net::BitWriter writer;
     serverRep.CaptureSnapshot(server, writer);
     scene::Scene client{DefaultAllocator()};

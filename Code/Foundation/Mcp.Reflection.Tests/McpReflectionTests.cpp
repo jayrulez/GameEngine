@@ -17,7 +17,7 @@ namespace json = foundation::json;
 
 namespace
 {
-    // Build + send a tools/call and return the parsed response (through the real JSON-RPC path).
+    // Build and send a tools/call and return the parsed response (through the real JSON-RPC path).
     JsonValue CallResponse(McpServer& s, StringView tool, JsonValue arguments)
     {
         JsonValue params = JsonValue::MakeObject();

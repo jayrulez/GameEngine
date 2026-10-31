@@ -59,8 +59,8 @@ namespace editor
                                           });
         }
 
-        // The capture's questions, answered by the page. The editor asks by the grid's path, the
-        // set's section's ("set/actions.0.bindings.0.code"): the page's are the set's own.
+        // The page answers the capture editor's questions. The editor asks by the grid's path in
+        // the set's section ("set/actions.0.bindings.0.code"); the page works in the set's own paths.
         m_capture.describe = [self](StringView path) -> String
         {
             usize action = 0, binding = 0;
@@ -79,7 +79,8 @@ namespace editor
         if (Grid() != nullptr)
             InputCaptureEditor::Register(Grid()->GetEditors(), m_capture);
 
-        // The chosen set's rows: reflection's, said as the page says them, each edit one undo step.
+        // The chosen set's rows come from reflection, described in the page's words, and each edit
+        // is one undo step.
         m_values = MakeUnique<gui::ReflectedPropertySource>(Allocator(), Allocator());
         m_values->SetTextFormat(&m_format);
         m_values->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
@@ -102,7 +103,7 @@ namespace editor
                                           change, self->m_format, u8"edit_input",
                                           [self]()
                                           {
-                                              // A name, a kind, a binding: the tree, the rows' words, the map's verdict.
+                                              // After an edit (a name, a kind, a binding): the rows' words, the tree, the map's verdict.
                                               self->m_values->Refresh();
                                               self->ShowTree();
                                               self->ShowValidity();
@@ -161,7 +162,8 @@ namespace editor
             m_values->SetObjects(Span<const Instance>{});
             return;
         }
-        // The set's address: read again each time, the sets' array moving as sets come and go.
+        // The set's address is read again each time, because the sets' array moves as sets are
+        // added and removed.
         const Instance set(&map->sets[static_cast<usize>(m_set)], &TypeOf<input::ActionSet>());
         m_values->SetObjects(Span<const Instance>(&set, 1u));
     }
@@ -180,7 +182,7 @@ namespace editor
         if (set != m_set)
             ChooseSet(set);
         m_chosen = TreeRow{set, action};
-        // Opened in place: its list, then it, brought into view.
+        // Open in place: its list, then the action, brought into view.
         if (gui::PropertyGrid* grid = Grid())
         {
             grid->SetOpen(Sections().PathIn(kSetSection, u8"actions").AsView(), true);
@@ -264,7 +266,7 @@ namespace editor
         String error;
         const bool valid = map == nullptr || input::ValidateInputMap(*map, &error);
         SetNotice(u8"invalid", valid ? StringView{} : Format(u8"The game cannot read this map yet: {}", error).AsView());
-        // What it holds, in a line (the old page's totals).
+        // What it holds, summed up in a line.
         if (map != nullptr)
         {
             usize actions = 0;
@@ -284,7 +286,7 @@ namespace editor
 
     void InputMapEditorPage::OnObjectChanged()
     {
-        // A whole edit, or its undo: the set may be gone, and its address moved.
+        // A whole edit, or its undo: the set may be gone, or its address may have moved.
         const input::InputMap* map = Map();
         if (map != nullptr && (m_set < 0 || static_cast<usize>(m_set) >= map->sets.Size()))
             m_set = map->sets.IsEmpty() ? -1 : static_cast<i32>(map->sets.Size()) - 1;
@@ -377,7 +379,7 @@ namespace editor
         // What the action's kind takes (one key for a four-key binding's direction).
         m_listenFilter = input_map_edit::FilterFor(Map()->sets[static_cast<usize>(m_set)].actions[action].kind, direction >= 0);
         Context().SetStatus(u8"Listening: press the input to bind (click its button again to stop)");
-        // The row's editor shows that it listens itself (a refresh here could take its focus).
+        // The row's editor shows the listen itself (a refresh here could take its focus).
     }
 
     void InputMapEditorPage::StopListen()
@@ -385,7 +387,8 @@ namespace editor
         if (m_listenPath.IsEmpty())
             return;
         m_listenPath.Clear();
-        // A values' refresh: the rows stay, their editors shown again (the one that listened too).
+        // Refresh the values: the rows stay and their editors are shown again (including the one
+        // that was listening).
         if (Grid() != nullptr)
             Grid()->OnValuesChanged();
     }
@@ -409,7 +412,8 @@ namespace editor
         app::AssetObjectPage::OnUpdate(host, dt);
         if (m_listenPath.IsEmpty())
             return;
-        // The devices read as the game reads them (Escape is a key a game binds: not a cancel).
+        // The devices are read as the game reads them (Escape is a key a game can bind, so it does
+        // not cancel).
         auto* shellInput = host.Shell() != nullptr ? host.Shell()->Input() : nullptr;
         if (shellInput == nullptr)
             return;

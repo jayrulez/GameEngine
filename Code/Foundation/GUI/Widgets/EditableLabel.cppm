@@ -3,14 +3,14 @@
 
 // GUI - :editable_label partition
 //
-// EditableLabel: a label that becomes a field in place (E6 of Specs/gui-lab-evolution.md), a
-// layer's name or a file's in a list. A double-click, or F2 while it is focused, edits it: a text
-// field over its text, all of it selected. Return commits, as does focus leaving; Escape cancels.
-// A multiline one (a comment) edits in a text area, where Return breaks a line and Ctrl+Return
-// commits, its box growing and shrinking with the lines typed. Its field's context menu (cut, copy,
-// paste) keeps it editing. A validator may refuse what was typed: Return then keeps it editing (the
-// field marked `.invalid`), and focus leaving puts the old text back. A committed change reports
-// `change`.
+// EditableLabel: a label that turns into a text field in place, such as a layer name or a file
+// name in a list. A double-click, or F2 while the label is focused, starts editing: a text field
+// covers the text with all of it selected. Return or moving focus away commits; Escape cancels.
+// A multiline label (a comment, say) edits in a text area instead. There Return breaks a line,
+// Ctrl+Return commits, and the label's box grows and shrinks with the lines typed. Opening the
+// field's context menu (cut, copy, paste) does not end the edit. A validator may refuse the typed
+// text: Return then leaves the label editing with the field marked `.invalid`, and moving focus
+// away restores the old text. A committed change sends a `change` event.
 
 module;
 #include "Core/Prelude.h"
@@ -44,10 +44,11 @@ export namespace foundation::gui
             SetTabFocusable(true);
         }
 
-        /// Whether it edits in a text area (Return breaks a line, Ctrl+Return commits) rather than a
-        /// field; its text keeps its line breaks and wraps (white-space: pre-wrap, unless a sheet says),
-        /// read from its top, where the text area puts it: a box shorter than its text cuts its end.
-        /// Set while it is not editing.
+        /// Chooses whether the label edits in a text area (Return breaks a line, Ctrl+Return
+        /// commits) rather than a single-line field. A multiline label keeps its line breaks and
+        /// wraps (white-space: pre-wrap, unless a style sheet sets otherwise) and aligns its text to
+        /// the top, where the text area puts it, so a box shorter than the text cuts off the end.
+        /// Ignored while the label is editing.
         void SetMultiline(bool multiline)
         {
             if (multiline == m_multiline || m_editing)
@@ -66,7 +67,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsMultiline() const noexcept { return m_multiline; }
 
-        /// Starts editing (as a double-click or F2 does).
+        /// Starts editing, as a double-click or F2 does.
         void BeginEdit()
         {
             if (m_editing || !IsTreeEnabled())
@@ -81,8 +82,9 @@ export namespace foundation::gui
             RequestLayout();
             Invalidate();
         }
-        /// Ends editing: commits what was typed (if the validator takes it) or puts it back.
-        /// False when the validator refused and it is still editing.
+        /// Ends editing. With `commit`, the typed text replaces the label's text if the validator
+        /// accepts it; without, the old text stays. Returns false when the validator refused the
+        /// text, in which case the label is still editing.
         bool EndEdit(bool commit)
         {
             if (!m_editing)
@@ -97,8 +99,8 @@ export namespace foundation::gui
             const bool hadFocus = m_editor->IsFocused();
             m_editor->SetDisplayed(false);
             if (hadFocus)
-                RequestFocus(); // the label keeps the focus the field had
-            RequestLayout(); // its box is its own text's again
+                RequestFocus(); // the label takes over the focus the field had
+            RequestLayout(); // the box is sized by the label's own text again
             if (commit && typed.AsView() != GetText())
             {
                 SetText(typed.AsView());
@@ -110,12 +112,13 @@ export namespace foundation::gui
             return true;
         }
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
-        /// The field it edits in, a text area when multiline (null until it first edits).
+        /// Returns the field it edits in (a text area when multiline), or null before the first edit.
         [[nodiscard]] TextEditBase* GetEditor() const noexcept { return m_editor.Get(); }
 
-        /// Decides whether typed text may be committed (false: it stays editing).
+        /// Sets the check that decides whether typed text may be committed. When it returns false
+        /// the label stays editing.
         void SetValidator(core::Function<bool(core::StringView)> validator) { m_validator = core::Move(validator); }
-        /// A change the user committed.
+        /// Sets the callback that receives each change the user commits.
         void SetOnTextCommitted(core::Function<void(core::StringView)> callback) { m_onCommitted = core::Move(callback); }
 
     protected:
@@ -141,29 +144,30 @@ export namespace foundation::gui
                 event.Handled = true;
             }
         }
-        // While it edits, the field draws the text; the label draws its box alone.
+        // While editing, the field draws the text and the label draws nothing of its own.
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             if (!m_editing)
                 Label::OnDraw(ctx, localBounds);
         }
-        // Its field writes in its font and colour.
+        // The field uses the label's font and colour.
         void OnTextStyleChange() override
         {
             Label::OnTextStyleChange();
             if (m_editor)
                 ShareTextStyle(*m_editor);
         }
-        // While a text area edits it, its box is the typed text's, so it grows with the lines.
+        // While a text area is editing, the label measures the typed text, so it grows with the lines.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
         {
             if (m_editing && m_multiline)
                 return static_cast<const TextArea*>(m_editor.Get())->MeasureText(available.x);
             return Label::MeasureContent(available);
         }
-        // The field's text lies where the label's was: its content box on the label's, its padding
-        // and border reaching past the label's box. Over the whole box alone, a field's padding
-        // would leave a label one line tall no room to show what is typed.
+        // The field is placed so its text lies where the label's text was: the field's content box
+        // matches the label's, and the field's padding and border extend past the label's box.
+        // Fitting the whole field inside the label's box would leave a one-line label no room for
+        // the typed text once the field's padding is taken.
         void OnLayout() override
         {
             if (!m_editor)
@@ -193,8 +197,9 @@ export namespace foundation::gui
             m_editor->SetOnSubmit([self](core::StringView) { (void)self->EndEdit(true); });
             (void)m_editor->AddEventListener(EventType::FocusLost, [self](const Event&)
             {
-                // Focus went elsewhere: committed if it may be, else put back. Not to the field's own
-                // context menu, which gives it back when it closes (a cut of what was selected).
+                // Focus went elsewhere: commit if the validator allows, otherwise restore the old
+                // text. Focus moving to the field's own context menu does not count, since the menu
+                // gives focus back when it closes (after a cut, for example).
                 if (const Menu* menu = self->m_editor->GetContextMenu(); menu != nullptr && menu->IsOpen())
                     return;
                 if (self->m_editing && !self->EndEdit(true))

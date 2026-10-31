@@ -3,10 +3,10 @@
 
 /// foundation.rhi.webgpu:command_pool - CommandPool over per-encoder allocation.
 ///
-/// WebGPU has no pool object - encoders come straight from the device and are
-/// one-shot. The pool is ownership bookkeeping: it allocates encoder wrappers and
-/// deletes them at destruction; Reset is a no-op because each wrapper already opens
-/// a fresh WGPUCommandEncoder after Finish (see :command_encoder).
+/// WebGPU has no pool object: encoders come straight from the device and are one-shot.
+/// The pool is ownership bookkeeping. It allocates encoder wrappers and deletes them at
+/// destruction; Reset is a no-op because each wrapper already opens a fresh
+/// WGPUCommandEncoder after Finish (see :command_encoder).
 
 module;
 #include "Core/Prelude.h"

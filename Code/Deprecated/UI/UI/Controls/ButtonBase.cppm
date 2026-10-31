@@ -4,9 +4,8 @@
 // UI - :button_base partition
 //
 // Abstract base for button types: click event, pressed state, ICommand binding, focus/keyboard
-// handling, button-chrome drawing. Ported from Sedulous.UI/src/Controls/ButtonBase.bf.
-// (Text measuring/drawing lives in subclasses like Button and is now live - the Fonts service is
-// wired into UIContext; this base provides the button background chrome.)
+// handling, button-chrome drawing. Text measuring and drawing live in subclasses such as Button; this
+// base provides the button background chrome.
 
 module;
 #include "Core/Prelude.h"
@@ -52,7 +51,7 @@ export namespace foundation::ui
             {
                 state |= ControlState::Pressed;
             }
-            if (IsFocusVisible()) // keyboard-acquired only - a clicked button holds focus ringless
+            if (IsFocusVisible()) // keyboard-acquired focus only; a clicked button holds focus without a ring
             {
                 state |= ControlState::Focused;
             }
@@ -89,7 +88,7 @@ export namespace foundation::ui
             if (e.Button == MouseButton::Left)
             {
                 m_isPressed = true;
-                InvalidateVisual(); // press tint - geometry unchanged
+                InvalidateVisual(); // press tint; geometry unchanged
                 e.Handled = true;
             }
         }

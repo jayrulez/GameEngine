@@ -1,6 +1,6 @@
 # Integration.Script - scripting backends exercising reflected engine/foundation types end-to-end
-# (currently: JSON parse/build/query/stringify from AngelScript + Luau). Cross-collection flow
-# (foundation.json x foundation.script.<backend>), so it lives in Code/Integration, not Json.Tests.
+# (JSON parse/build/query/stringify from AngelScript and Luau). It crosses collections
+# (foundation.json and foundation.script.<backend>), so it lives in Code/Integration, not Json.Tests.
 
 add_executable(Integration.Script TestsMain.cpp JsonScriptTests.cpp)
 target_link_libraries(Integration.Script PRIVATE

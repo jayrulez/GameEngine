@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample023 -- Cube Map & Comparison Sampler. Ported from Sedulous Sample023_CubeMap.
+/// Sample023 -- Cube Map & Comparison Sampler.
 /// Demonstrates cube map textures and comparison samplers.
 /// Renders a fullscreen quad that samples a procedural cube map (skybox),
 /// plus a second pass with a depth texture sampled via comparison sampler
@@ -39,7 +39,7 @@ private:
     foundation::core::Status createCubeMap();
     foundation::core::Status createDepthTexture();
 
-    // Skybox shader: fullscreen quad -> ray direction -> cube map lookup
+    // Skybox shader: a fullscreen quad whose UV gives a ray direction for the cube map lookup
     static constexpr const char8_t kSkyboxShader[] = u8R"(
         TextureCube<float4> gCubeMap : register(t0, space0);
         SamplerState gSampler : register(s0, space0);
@@ -203,7 +203,7 @@ foundation::core::Status CubeMapSample::OnInit()
     if (createCubeMap() != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Create depth texture for comparison sampler (gradient)
+    // Create depth texture for the comparison sampler
     if (createDepthTexture() != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
@@ -226,7 +226,7 @@ foundation::core::Status CubeMapSample::OnInit()
             return foundation::core::ErrorCode::Unknown;
     }
 
-    // Skybox bind group layout: cube texture + sampler
+    // Skybox bind group layout: cube texture and sampler
     {
         rhi::BindGroupLayoutEntry entries[2] = {
             rhi::BindGroupLayoutEntry::SampledTexture(
@@ -308,7 +308,7 @@ foundation::core::Status CubeMapSample::OnInit()
         m_graphicsQueue->DestroyTransferBatch(batch);
     }
 
-    // Shadow bind group layout: depth texture + comparison sampler
+    // Shadow bind group layout: depth texture and comparison sampler
     {
         rhi::BindGroupLayoutEntry entries[2];
         entries[0] = rhi::BindGroupLayoutEntry::SampledTexture(
@@ -491,9 +491,8 @@ foundation::core::Status CubeMapSample::createDepthTexture()
         foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // We'll render a gradient depth in a render pass
-    // For simplicity, just clear to 0.5 so the comparison sampler has something to compare against
-    // (A real sample would render shadow casters here)
+    // Nothing is drawn into it: OnRender clears it to 0.5 each frame so the comparison sampler has
+    // something to compare against (a real renderer would draw shadow casters).
 
     return foundation::core::ErrorCode::Ok;
 }
@@ -514,7 +513,7 @@ void CubeMapSample::OnRender()
 
     f32 aspect = static_cast<f32>(m_width) / static_cast<f32>(m_height);
 
-    // Render a depth value into the shadow depth texture
+    // Clear the shadow depth texture to 0.5 (a render pass with no draws)
     enc->TransitionTexture(m_depthTexture, rhi::ResourceState::Undefined,
                            rhi::ResourceState::DepthStencilWrite);
     {
@@ -549,7 +548,7 @@ void CubeMapSample::OnRender()
     rp->SetViewport(0, 0, static_cast<f32>(m_width), static_cast<f32>(m_height), 0.0f, 1.0f);
     rp->SetScissor(0, 0, m_width, m_height);
 
-    // Draw skybox (fullscreen triangle, no VB needed - SV_VertexID)
+    // Draw skybox (fullscreen triangle from SV_VertexID, no VB needed)
     rp->SetPipeline(m_skyboxPipeline);
     rp->SetBindGroup(0, m_skyboxBg);
     PushData pc{};

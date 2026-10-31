@@ -3,9 +3,8 @@
 
 // GUI - :actions partition
 //
-// The action a widget times itself with: TickAction, a function called each frame on its
-// target's clock. What moves properties is the tweens' (Styling/Tween.cppm, E14), which took
-// the place of eepp's Move, Fade, Scale, Delay, Runnable and Sequence actions.
+// TickAction, the action a widget uses for its own timing: a function called each frame on the
+// target's clock. Animating properties is done by the tweens (Styling/Tween.cppm).
 
 module;
 #include "Core/Prelude.h"
@@ -13,7 +12,7 @@ module;
 
 export module foundation.gui:actions;
 
-import foundation.core; // Duration, Function, Move
+import foundation.core;
 import :action;
 
 using namespace foundation::core;
@@ -22,8 +21,8 @@ namespace core = foundation::core;
 export namespace foundation::gui
 {
     // Calls a function with each frame's elapsed time on its target's clock until the function
-    // returns false (or the action is stopped): a widget's own timing with nothing to animate, a
-    // caret's blink.
+    // returns false or the action is stopped. A widget uses it for timing that animates no
+    // property, such as a caret's blink.
     class TickAction : public Action
     {
         RTTI_OBJECT(TickAction, Action)

@@ -3,13 +3,13 @@
 
 // engine.animation:propertyanimator
 //
-// PropertyAnimatorComponent + its per-scene manager (Engine side). One animator
-// per entity plays ONE clip whose tracks drive reflected properties on the OWNING entity's components.
-// The manager ticks in PostUpdate (before render extraction, the skeletal phase): advance the play
-// clock (Once/Loop/PingPong), then for each track re-resolve the LIVE target component via the scene's
-// component-by-type lookup (never a cached pointer - the sparse-set swap-remove lesson) and write the
-// sampled Variant through the reflection binding. A track that fails to resolve is disabled with ONE
-// warning; the clip keeps playing its other tracks.
+// PropertyAnimatorComponent and its per-scene manager. One animator per entity plays one clip
+// whose tracks drive reflected properties on the owning entity's components. The manager ticks in
+// PostUpdate (before render extraction, the skeletal phase): it advances the play clock
+// (Once/Loop/PingPong), then for each track re-resolves the live target component through the
+// scene's component-by-type lookup and writes the sampled Variant through the reflection binding.
+// It never caches a component pointer, since a sparse-set swap-remove moves components. A track
+// that fails to resolve is disabled with one warning; the clip keeps playing its other tracks.
 
 module;
 #include "Core/Prelude.h"
@@ -40,9 +40,9 @@ export namespace engine::animation
     };
 
     // Per-track runtime binding: the target component's manager (found by type name, stable for the
-    // scene) + the resolved PropertyInfo chain (stable static metadata). The component INSTANCE is
-    // re-resolved every write via the manager - never cached here. `disabled` = a failed resolve
-    // (warned once); the track is skipped, the rest of the clip plays on.
+    // scene) and the resolved PropertyInfo chain (stable static metadata). The component instance is
+    // re-resolved through the manager on every write, never cached here. `disabled` marks a failed
+    // resolve (warned once); the track is skipped and the rest of the clip plays on.
     struct PropertyTrackBinding
     {
         scene::ComponentManagerBase* manager = nullptr; // null for the built-in Transform target
@@ -51,21 +51,20 @@ export namespace engine::animation
         bool isTransform = false; // targets the entity's scene transform (no component manager)
     };
 
-    // The entity's local transform (position/rotation/scale) is not a reflected COMPONENT - it is
-    // baked into the scene - so tracks name it with this reserved component type and the manager
-    // binds it to core::Transform, writing through Set/GetLocalTransform (which flags the world
-    // matrix dirty). Reserved: a real component may not take this name.
+    // The entity's local transform (position/rotation/scale) is not a reflected component (it is
+    // part of the scene), so tracks name it with this reserved component type and the manager binds
+    // it to core::Transform, writing through Set/GetLocalTransform (which flags the world matrix
+    // dirty). Reserved: a real component may not take this name.
     inline constexpr StringView kTransformComponentName = u8"Transform";
 
-    // PHYSICS RULE: the animator writes the transform like any other property.
-    // On an entity with a DYNAMIC rigid body, physics is authoritative - its per-frame pose sync
-    // overwrites the animated transform (they run in different scene phases and the body integrates
-    // independently). Animate the transform only of KINEMATIC (or non-physics) entities; a dynamic
-    // body's non-transform properties animate fine. (The cross-subsystem test proving this rides the
-    // physics manager, not this engine module's own suite.)
+    // Physics: the animator writes the transform like any other property. On an entity with a
+    // dynamic rigid body, physics is authoritative: its per-frame pose sync overwrites the animated
+    // transform (they run in different scene phases and the body integrates independently).
+    // Animate the transform only of kinematic or non-physics entities; a dynamic body's
+    // non-transform properties animate fine. The test for this lives with the physics manager.
 
-    // Plays one property-animation clip on the owning entity. Serialized fields = the clip ref +
-    // playback tunables; the play clock, bindings, and cached clip are runtime-only.
+    // Plays one property-animation clip on the owning entity. Serialized fields are the clip ref and
+    // the playback tunables; the play clock, bindings and cached clip are runtime-only.
     struct PropertyAnimatorComponent
     {
         foundation::resource::Ref<propanim::PropertyAnimationClipResource> clip;
@@ -80,9 +79,9 @@ export namespace engine::animation
         propanim::PropertyAnimationClipResource* boundClip = nullptr; // bindings built for this clip
         Array<PropertyTrackBinding> bindings;
 
-        // Reflected playback ops for scripting (NO new facade lib - these reach
-        // scripts through the existing reflected-component `.of(entity)` surface, with natural
-        // numeric types). They mutate only the runtime clock/state; the manager tick applies it.
+        // Reflected playback ops for scripting. They reach scripts through the reflected-component
+        // `.of(entity)` surface, with natural numeric types, so no facade library is needed. They
+        // mutate only the runtime clock and state; the manager tick applies it.
         void play()
         {
             playing = true;
@@ -126,13 +125,11 @@ export namespace engine::animation
 
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
 
-        // SIMULATION-GATED (user ruling 2026-08-18, reversing the earlier always-on choice):
-        // autoplay clips visibly animating in the editor's NON-simulating edit mode was
-        // distracting and semantically wrong. This does NOT affect the in-scene animation
-        // panel - its preview/transport write property values DIRECTLY (ReadTrackTarget/
-        // WriteTrackTarget), never through this manager's tick. Scenes default to simulating,
-        // so players/PIE/tests are unaffected; only a scene that explicitly disables
-        // simulation (the editor's edit mode) freezes.
+        // Simulation-gated: autoplay clips do not animate in the editor's non-simulating edit mode.
+        // This does not affect the in-scene animation panel, whose preview and transport write
+        // property values directly (ReadTrackTarget/WriteTrackTarget), never through this manager's
+        // tick. Scenes default to simulating, so players, play in editor and tests are unaffected;
+        // only a scene that disables simulation (the editor's edit mode) freezes.
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
 
         void OnUpdate(scene::ScenePhase phase, f32 deltaTime) override
@@ -154,7 +151,7 @@ export namespace engine::animation
                     {
                         return;
                     }
-                    // (Re)build the bindings when the clip object changes (first tick, editor pick,
+                    // Rebuild the bindings when the clip object changes (first tick, editor pick,
                     // hot reload). autoplay starts the new clip from t=0.
                     if (clipRes != a.boundClip)
                     {
@@ -204,11 +201,11 @@ export namespace engine::animation
                         {
                             continue;
                         }
-                        // Re-resolve the LIVE component every write (structural-change safe).
+                        // Re-resolve the live component every write (safe across structural changes).
                         const Instance inst = tb.manager->GetComponentInstance(owner);
                         if (inst.IsEmpty())
                         {
-                            continue; // component removed this frame - skip, keep the binding
+                            continue; // component removed this frame: skip it, keep the binding
                         }
                         const Variant value =
                             track.SampleMerged(evalTime, propanim::ReadBinding(tb.binding, inst));
@@ -218,7 +215,7 @@ export namespace engine::animation
         }
 
     private:
-        // Resolve each track's target component manager (by type name) + property binding once. A
+        // Resolve each track's target component manager (by type name) and property binding once. A
         // track whose component type or property path can't resolve is disabled with one warning.
         void BuildBindings(PropertyAnimatorComponent& a, const propanim::PropertyAnimationClip& clip,
                            scene::EntityHandle owner)
@@ -272,8 +269,8 @@ export namespace engine::animation
         }
 
         // The kind a TrackValueKind writes as, as a reflected leaf type. A track whose kind does not
-        // match its resolved leaf property is a silent every-frame WriteBinding failure - disable it
-        // (once, with a warning) instead, matching the resolve-failure policy.
+        // match its resolved leaf property would fail WriteBinding silently every frame, so it is
+        // disabled once with a warning instead, matching the resolve-failure policy.
         [[nodiscard]] static const TypeInfo* ExpectedLeafType(propanim::TrackValueKind kind) noexcept
         {
             switch (kind)

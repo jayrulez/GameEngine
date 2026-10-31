@@ -11,7 +11,7 @@ import foundation.core;
 import foundation.content;
 import foundation.scene;
 import pipeline.core;
-import render.pipeline; // SettingsProfileAsset (the values seam every profile asset has)
+import render.pipeline; // SettingsProfileAsset (the values interface every profile asset has)
 import editor.core;
 
 using namespace foundation::core;

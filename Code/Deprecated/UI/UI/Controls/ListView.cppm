@@ -3,16 +3,15 @@
 
 // UI - :list_view partition
 //
-// Virtualized list: only creates/binds views for the visible range, recycling views that scroll out.
-// Uses IListAdapter for data + view creation and ViewRecycler for pooling; supports fixed item height
-// (O(1)) and variable height (binary search over a cumulative-offset cache). Ported from Sedulous.UI/
-// src/Controls/ListView.bf.
+// Virtualized list: views are created and bound only for the visible range, and views that scroll
+// out are recycled. Uses IListAdapter for data and view creation and ViewRecycler for pooling;
+// supports fixed item height (O(1)) and variable height (binary search over a cumulative-offset
+// cache).
 //
-// Ownership: mActiveViews is a HashMap<i32, RefPtr<View>> (the active item views, RAII); views move
-// between it and the ViewRecycler pool. The single vertical ScrollBar is a VISUAL child held as a
-// RefPtr member (UIContext::Attach/DetachView recurse VisualChildCount, so it attaches with the view).
-// mAdapter is BORROWED (pattern-B injected; owned by the caller). Beef get/set props -> methods; the
-// (_, dy) momentum tuple -> Float2; Dictionary+manual delete -> RefPtr map (no manual delete).
+// Ownership: m_activeViews maps positions to RefPtr<View> for the active item views; views move
+// between it and the ViewRecycler pool. The vertical ScrollBar is a visual child held in a RefPtr
+// member (UIContext::Attach/DetachView recurse through VisualChildCount, so it attaches with the
+// view). m_adapter is borrowed: the caller injects and owns it.
 
 module;
 #include "Core/Prelude.h"
@@ -506,8 +505,8 @@ export namespace foundation::ui
                     ? m_totalContentHeight
                     : ((m_adapter != nullptr) ? m_adapter->ItemCount() * ItemHeight.Value() : 0.0f);
             const f32 desiredH = contentH + Padding.TotalVertical();
-            // Bounded fill (P2c): a list under an unbounded parent gets a default width
-            // instead of kFloatMax (it scrolls its own content - it never needs infinity).
+            // Bounded fill: a list under an unbounded parent gets a default width instead of
+            // kFloatMax. It scrolls its own content, so it never needs an infinite size.
             MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(300.0f)),
                                   constraints.ConstrainHeight(desiredH)};
 
@@ -582,16 +581,16 @@ export namespace foundation::ui
                     }
                     m_activeViews.InsertOrAssign(pos, Move(view));
                 }
-                // Already-active rows are NOT rebound here: GetOrCreate bound them on acquire and
-                // every data-change path rebinds (OnItemRangeChanged in-place; OnDataSetChanged
-                // recycles all actives). Rebinding per layout pass meant every visible row was
-                // rebound every frame.
+                // Already-active rows are not rebound here: GetOrCreate binds them on acquire and
+                // every data-change path rebinds (OnItemRangeChanged in place; OnDataSetChanged
+                // recycles all active views). Rebinding on every layout pass would rebind every
+                // visible row every frame.
 
             }
 
             // Sideways: the rows are as wide as the widest visible one wants (never narrower than
-            // the list), scrolled by m_scrollX. Only the visible rows are asked - a virtualised
-            // list knows no others - so the reach follows what is on screen.
+            // the list), scrolled by m_scrollX. Only the visible rows are asked, since a
+            // virtualised list has no others, so the width follows what is on screen.
             f32 rowW = viewportW;
             if (ScrollsHorizontally.Value())
             {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - UINode / UIWidget tests: padding + content bounds, input-driven control
-// state (hover/press/focus/disabled), and the CSS identity surface (tag/id/classes).
+// GUI - UINode and UIWidget tests: padding and content bounds, input-driven control state (hover,
+// press, focus, disabled), and the CSS identity surface (tag, id, classes).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -63,7 +63,7 @@ TEST_CASE("uinode: its states follow the pointer, the focus, and being enabled")
     CHECK_FALSE(w->IsPressed());
     CHECK(w->IsHovered());
 
-    // Leave while focused, from the click.
+    // Leave while focused by the click.
     d->InjectMouseMove(core::Float2{150.0f, 150.0f});
     CHECK_FALSE(w->IsHovered());
     CHECK(w->IsFocused());

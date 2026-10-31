@@ -3,16 +3,17 @@
 
 // GUI - :tree_view partition
 //
-// TreeView: a virtualised tree over a model (eepp's UITreeView in role). It flattens the open
-// nodes into the items ItemView realises, so a huge tree costs only the rows in view. A row shows
-// its indent, a disclosure chevron (the expander's) that opens and closes it, its icon where the
-// model gives one (ModelRole::Icon, with ModelRole::IconClass a class on it, as a type's category
-// tints it), and its text.
-// Expansion is a set of node ids, as the selection is, so both survive the flattening; closing a
-// node that holds the selection selects the node. Right opens a node (or goes to its first
-// child), Left closes it (or goes to its parent). In markup its children are nested
-// `<TreeItem text="..." expanded="true" icon="..." icon-class="...">`s, which become a model of
-// its own.
+// TreeView: a virtualised tree over a model. It flattens the open nodes into the items that
+// ItemView realises, so a huge tree costs only the rows in view. A row shows its indent, a
+// disclosure chevron (the same one an Expander draws) that opens and closes it, an icon where the
+// model gives one (ModelRole::Icon, with ModelRole::IconClass as a class on the icon, used for
+// example to tint it by a type's category), and its text.
+//
+// Expansion is a set of node ids, like the selection, so both survive the flattening. Closing a
+// node that contains the current row selects that node. Right opens a node, or moves to its first
+// child when already open; Left closes it, or moves to its parent when already closed. In markup
+// the view's children are nested `<TreeItem text="..." expanded="true" icon="..."
+// icon-class="...">` elements, which become the view's own model.
 
 module;
 #include "Core/Prelude.h"
@@ -24,13 +25,13 @@ import foundation.core; // RefPtr, MakeRef, Array, HashSet, HashMap, Function, M
 import :rect;
 import :event;
 import :draw_context;
-import :disclosure; // the chevron an expander draws too
+import :disclosure; // the chevron, shared with Expander
 import :node;
 import :label;
 import :text; // TextHAlign
 import :ui_widget;
 import :layout_style;
-import :image; // a row's icon
+import :image; // Image, for a row's icon
 import :model_index;
 import :model;
 import :item_view;
@@ -41,7 +42,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    // A node's chevron: right when closed, down when open; a click opens or closes the node.
+    // A node's chevron, pointing right when closed and down when open. A click opens or closes the
+    // node.
     class TreeArrow : public UIWidget
     {
         RTTI_OBJECT(TreeArrow, UIWidget)
@@ -58,7 +60,8 @@ export namespace foundation::gui
         void SetOnClicked(core::Function<void()> callback) { m_onClicked = core::Move(callback); }
 
     protected:
-        // On the press (as a row selects on it), and taken: the row under it does not select.
+        // Acts on the press, as a row selects on press, and handles it so the row underneath does
+        // not select.
         void OnMouseDown(const MouseEvent& event) override
         {
             if (event.Button != MouseButton::Left)
@@ -67,8 +70,8 @@ export namespace foundation::gui
             if (m_onClicked)
                 m_onClicked();
         }
-        // The click after the press is the chevron's too: a row that folds on a click of its own
-        // (a property grid's header) would fold back what the press folded.
+        // The click that follows the press is handled here too. Otherwise a row that folds on a
+        // click of its own (a property grid's header) would undo what the press just did.
         void OnMouseClick(const MouseEvent& event) override
         {
             if (event.Button == MouseButton::Left)
@@ -82,8 +85,8 @@ export namespace foundation::gui
         core::Function<void()> m_onClicked;
     };
 
-    // A tree row's content: its indent, its chevron, its icon (`treeicon`, when it has one) and its
-    // text (`treecell`).
+    // A tree row's content: the indent, the chevron, the icon (`treeicon`, when there is one) and
+    // the text (`treecell`).
     class TreeRowContent : public UIWidget
     {
         RTTI_OBJECT(TreeRowContent, UIWidget)
@@ -95,14 +98,14 @@ export namespace foundation::gui
             AddChild(m_arrow.Get());
             m_label = core::MakeRef<Label>(MemoryAllocator());
             m_label->SetTag(core::StringView(u8"treecell"));
-            StyleWriteScope defaults(*m_label); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*m_label); // defaults: a style sheet overrides them and falls back to them
             m_label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
             m_label->SetHitTestVisible(false);
             AddChild(m_label.Get());
         }
         [[nodiscard]] Label* GetLabel() const noexcept { return m_label.Get(); }
         [[nodiscard]] TreeArrow* GetArrow() const noexcept { return m_arrow.Get(); }
-        /// Its icon, made when it first has one (none: null).
+        /// Returns the icon, created the first time the row has one; null before that.
         [[nodiscard]] Image* GetIcon() const noexcept { return m_icon.Get(); }
         void Configure(f32 indent, f32 arrowSize, bool hasChildren, bool expanded)
         {
@@ -112,7 +115,8 @@ export namespace foundation::gui
             m_arrow->SetExpanded(expanded);
             RequestLayout();
         }
-        /// Its icon: `source` an image's (empty: none), `iconClass` a class on it, `size` its square.
+        /// Sets the icon. `source` is an image source (empty for none), `iconClass` a class put on
+        /// the icon, and `size` the side of its square.
         void SetIcon(core::StringView source, core::StringView iconClass, f32 size)
         {
             m_iconSize = source.IsEmpty() ? 0.0f : size;
@@ -128,7 +132,7 @@ export namespace foundation::gui
                 m_icon = core::MakeRef<Image>(MemoryAllocator());
                 m_icon->SetTag(core::StringView(u8"treeicon"));
                 m_icon->SetHitTestVisible(false);
-                AddChildAt(m_icon.Get(), 1); // after the arrow, before the text
+                AddChildAt(m_icon.Get(), 1); // between the arrow and the text
             }
             m_icon->SetDisplayed(true);
             if (m_icon->GetSource().AsView() != source)
@@ -159,8 +163,8 @@ export namespace foundation::gui
                 at = end;
             }
         }
-        /// Classes the model gives the row (space separated; empty: none), in place of those it gave
-        /// before: a state a sheet styles (dimmed, a member of something).
+        /// Sets the classes the model gives the row, separated by spaces (empty for none), replacing
+        /// those it gave before. They mark a state a sheet styles, such as dimmed or a member of a set.
         void SetRowClasses(core::StringView classes)
         {
             if (m_rowClasses.AsView() == classes)
@@ -180,7 +184,7 @@ export namespace foundation::gui
     protected:
         void OnLayout() override
         {
-            // Indented from the inline start, the arrow before the text.
+            // Indent from the inline start, and place the arrow before the text.
             const Rect box = GetContentBounds();
             const bool rtl = IsRightToLeft();
             m_arrow->Arrange(MirroredIn(Rect{box.x + m_indent, box.y, m_arrowSize, box.height}, box, rtl));
@@ -195,7 +199,7 @@ export namespace foundation::gui
         void OnTextStyleChange() override { ShareTextStyle(*m_label); }
 
     private:
-        // Where its text starts: after the indent, the arrow's column and its icon with a gap.
+        // Returns where the text starts: after the indent, the arrow's column, and the icon plus a gap.
         [[nodiscard]] f32 TextStart() const noexcept
         {
             const f32 icon = m_iconSize > 0.0f ? m_iconSize + kIconGap : 0.0f;
@@ -206,14 +210,14 @@ export namespace foundation::gui
         core::RefPtr<Image> m_icon;
         core::RefPtr<Label> m_label;
         core::String m_iconClass;
-        core::String m_rowClasses; // the model's (RowClass)
+        core::String m_rowClasses; // classes from the model (ModelRole::RowClass)
         f32 m_indent = 0.0f;
         f32 m_arrowSize = 16.0f;
-        f32 m_iconSize = 0.0f; // none shown
+        f32 m_iconSize = 0.0f; // 0 while no icon is shown
         static constexpr f32 kIconGap = 4.0f;
     };
 
-    /// A node of a tree written in markup: its text, whether it starts open, and its children.
+    /// A tree node written in markup: its text, whether it starts open, and its children.
     class TreeItem : public UIWidget
     {
         RTTI_OBJECT(TreeItem, UIWidget)
@@ -221,7 +225,7 @@ export namespace foundation::gui
         TreeItem()
         {
             SetTag(core::StringView(u8"treeitem"));
-            SetDisplayed(false); // data, not drawn
+            SetDisplayed(false); // only data; never drawn
         }
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
@@ -232,7 +236,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetText() const { return m_text; }
         void SetText(const core::String& text) { m_text = text; }
-        /// Its icon: an image's source, and a class on it a sheet styles.
+        /// Returns the icon's image source; the icon class is a class a sheet styles.
         [[nodiscard]] core::String GetIcon() const { return m_icon; }
         void SetIcon(const core::String& source) { m_icon = source; }
         [[nodiscard]] core::String GetIconClass() const { return m_iconClass; }
@@ -254,17 +258,19 @@ export namespace foundation::gui
         TreeView() : m_expanded(MemoryAllocator()), m_itemOfId(MemoryAllocator())
         {
             SetTag(core::StringView(u8"treeview"));
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
-            // Sideways too, as a table across its columns: its rows are as wide as its widest
-            // (RowWidth), and without it a row wider than the view was only cut at its edge.
+            // Scroll horizontally too, as a table does across its columns. Rows are as wide as the
+            // widest one (RowWidth), so a row wider than the view scrolls instead of being cut off.
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowX = Overflow::Auto; });
         }
-        // Its own model goes before the view's base would let go of it: let go first.
+        // The tree's own model is destroyed before the ItemView base releases it, so detach the
+        // model first.
         ~TreeView() override { SetModel(nullptr); }
 
-        /// A level's indent (`indent-width`) and the column a row keeps for its arrow (`arrow-size`),
-        /// the arrow drawn to fit it: a sheet sets them (an editor's density).
+        /// Sets the indent per level (`indent-width`). SetArrowSize sets the column each row keeps for
+        /// its arrow (`arrow-size`), which the arrow is drawn to fit. A sheet sets both, for an
+        /// editor's density, say.
         void SetIndentWidth(f32 width)
         {
             m_indentWidth = core::Max(0.0f, width);
@@ -277,7 +283,7 @@ export namespace foundation::gui
             ItemsChanged();
         }
         [[nodiscard]] f32 GetArrowSize() const noexcept { return m_arrowSize; }
-        /// A row's icon's square (`icon-size`), where the model gives one.
+        /// Sets the side of a row icon's square (`icon-size`), used where the model gives an icon.
         void SetIconSize(f32 size)
         {
             m_iconSize = core::Max(0.0f, size);
@@ -285,7 +291,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] f32 GetIconSize() const noexcept { return m_iconSize; }
 
-        // Expansion by item (a visible row).
+        // Expansion by item, meaning a visible row.
         void ExpandItem(i32 item) { SetExpanded(item, true); }
         void CollapseItem(i32 item) { SetExpanded(item, false); }
         void ToggleItem(i32 item) { SetExpanded(item, !IsItemExpanded(item)); }
@@ -297,7 +303,7 @@ export namespace foundation::gui
         {
             return item >= 0 && item < static_cast<i32>(m_flat.Size()) ? m_flat[static_cast<usize>(item)].Depth : 0;
         }
-        /// Expansion by node id (open or not, shown or not).
+        /// Expansion by node id, for any node, shown or not.
         [[nodiscard]] bool IsIdExpanded(ItemId id) const { return m_expanded.Contains(id); }
         void SetIdExpanded(ItemId id, bool expanded)
         {
@@ -309,7 +315,7 @@ export namespace foundation::gui
             ItemsChanged();
         }
 
-        /// Markup's children are its items (nested TreeItems), made into a model of its own.
+        /// Returns the host for markup's children, nested TreeItems that become the view's own model.
         [[nodiscard]] Node* GetChildHost() override
         {
             if (!m_markupHost)
@@ -336,7 +342,7 @@ export namespace foundation::gui
             return item != nullptr ? *item : -1;
         }
         [[nodiscard]] bool IsFlat() const override { return false; }
-        // A drag resting on a closed node opens it (E7).
+        // A drag that rests on a closed node opens it.
         bool OnDragHoverOpen(core::Float2 local) override
         {
             const i32 item = ItemAt(ConvertToWorldSpace(local));
@@ -371,19 +377,20 @@ export namespace foundation::gui
             row.Configure(static_cast<f32>(entry.Depth) * m_indentWidth, m_arrowSize, entry.HasChildren, m_expanded.Contains(entry.Id));
             NoteRowWidth(content);
         }
-        // Rows as wide as the widest one bound, or the view when it is wider: a deep level or a
-        // long name scrolls sideways, where it had been cut at the view's edge.
+        // Rows are as wide as the widest row bound so far, or the view when that is wider, so a deep
+        // level or a long name scrolls horizontally rather than being cut off at the view's edge.
         [[nodiscard]] f32 RowWidth(f32 width) const override { return core::Max(width, m_widest); }
-        // The rows in view measured again once placed: one bound before the sheet reached it (a
-        // row just made has no font yet, its name no width) is measured as it is drawn.
+        // Measures the rows in view again once they are placed. A row bound before the sheet
+        // reached it (a new row has no font yet, so its name has no width) is measured as drawn.
         void OnLayoutDecorations() override
         {
             for (const core::RefPtr<ItemRow>& row : LiveRows())
                 NoteRowWidth(*row);
         }
 
-        // The arrow toward the inline end (Right, Left in right to left) opens a node, or on an open
-        // one goes to its first child; toward the start closes an open one, or goes to its parent.
+        // The arrow toward the inline end (Right, or Left in right to left) opens a node, or moves to
+        // the first child of an open one. The arrow toward the start closes an open node, or moves
+        // to the parent.
         bool OnExtraKey(KeyCode key, u32 modifiers) override
         {
             const i32 item = GetCurrentItem();
@@ -468,7 +475,8 @@ export namespace foundation::gui
                 (void)m_expanded.Insert(id);
             else
             {
-                // Closing a node that holds the keyboard's row moves it, selected, to the node.
+                // Closing a node that contains the current row moves the current row to the node
+                // and selects it.
                 const i32 current = GetCurrentItem();
                 const bool holdsCurrent = current > item && IsUnder(current, item);
                 (void)m_expanded.Remove(id);
@@ -478,7 +486,7 @@ export namespace foundation::gui
             Reflatten();
             ItemsChanged();
         }
-        // Whether flat item `item` lies under flat item `ancestor`.
+        // Returns whether flat item `item` lies under flat item `ancestor`.
         [[nodiscard]] bool IsUnder(i32 item, i32 ancestor) const
         {
             const i32 depth = m_flat[static_cast<usize>(ancestor)].Depth;
@@ -500,8 +508,9 @@ export namespace foundation::gui
             return -1;
         }
 
-        // The widest row bound so far, kept while the model is the same one (a model built again on
-        // each change, the hierarchy's, would else snap the sideways scroll back as rows rebind).
+        // Records the widest row bound so far. The value is kept as long as the model is the same
+        // object, so a model whose contents are rebuilt on every change (the hierarchy's) does not
+        // snap the horizontal scroll back as its rows are bound again.
         void NoteRowWidth(Node& content)
         {
             if (GetModel() != m_widestOf)
@@ -509,7 +518,7 @@ export namespace foundation::gui
                 m_widestOf = GetModel();
                 m_widest = 0.0f;
             }
-            Node* row = core::Cast<ItemRow>(&content) != nullptr ? &content : (content.GetParent() != nullptr ? content.GetParent() : &content); // the row's own padding too
+            Node* row = core::Cast<ItemRow>(&content) != nullptr ? &content : (content.GetParent() != nullptr ? content.GetParent() : &content); // measure the row so its own padding counts
             const f32 width = row->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{kUnbounded, kUnbounded}, core::Float2{-1.0f, -1.0f}}).x;
             if (width > m_widest + 0.5f)
             {
@@ -541,16 +550,16 @@ export namespace foundation::gui
             }
         }
 
-        Array<FlatEntry> m_flat;          // the open nodes, in display order
-        core::HashSet<ItemId> m_expanded; // the open nodes' ids
-        HashMap<ItemId, i32> m_itemOfId;  // an id's flat item
+        Array<FlatEntry> m_flat;          // the visible nodes, in display order
+        core::HashSet<ItemId> m_expanded; // ids of the open nodes
+        HashMap<ItemId, i32> m_itemOfId;  // flat item index by id
         f32 m_indentWidth = 16.0f;
         f32 m_arrowSize = 16.0f;
-        f32 m_iconSize = 16.0f; // a row's icon's square
-        f32 m_widest = 0.0f;              // the widest row bound (NoteRowWidth)
-        const IModel* m_widestOf = nullptr; // the model it was measured over
-        core::UniquePtr<TreeModel> m_ownModel; // markup's items
-        core::RefPtr<Node> m_markupHost;       // where markup's items land, then taken in
+        f32 m_iconSize = 16.0f; // side of a row icon's square
+        f32 m_widest = 0.0f;              // the widest row bound so far (NoteRowWidth)
+        const IModel* m_widestOf = nullptr; // the model m_widest was measured over
+        core::UniquePtr<TreeModel> m_ownModel; // built from markup's items
+        core::RefPtr<Node> m_markupHost;       // receives markup's items before they are adopted
     };
 
     RTTI_DEFINE_OBJECT(TreeArrow, "rtti::gui")

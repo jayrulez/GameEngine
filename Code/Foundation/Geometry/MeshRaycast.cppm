@@ -3,11 +3,11 @@
 
 /// Foundation::Geometry - the `:mesh_raycast` partition.
 ///
-/// A ray against a mesh's triangles on the CPU: the nearest hit on its base level (LOD 0, the
-/// shape every coarser level approximates), both faces counted, with the triangle's corners, so
-/// a caller can take the nearest corner (vertex snapping). The ray is in the mesh's own space; a
-/// caller with a world ray transforms it by the inverse world matrix WITHOUT normalizing the
-/// direction, so the hit's distance stays the world distance along the world ray.
+/// Casts a ray against a mesh's triangles on the CPU. It finds the nearest hit on the base level
+/// (LOD 0, the shape every coarser level approximates), counting both faces, and returns the hit
+/// triangle's corners so a caller can take the nearest corner (vertex snapping). The ray is in the
+/// mesh's own space. A caller with a world ray transforms it by the inverse world matrix without
+/// normalizing the direction, so the hit's distance stays the world distance along the world ray.
 
 module;
 #include "Core/Prelude.h"
@@ -27,12 +27,12 @@ export namespace foundation::geometry
     {
         f32 distance = 0.0f; ///< along the ray, in units of the ray's direction
         Float3 position;
-        Float3 normal;       ///< the triangle's, facing the ray
+        Float3 normal;       ///< the triangle's normal, turned to face the ray
         Float3 corners[3];   ///< the hit triangle's corners
     };
 
-    /// The ray's intersection with triangle (a, b, c), both faces; the distance in units of
-    /// `direction`, or a negative value when it misses (Moller-Trumbore).
+    /// Intersects the ray with triangle (a, b, c), counting both faces (Moller-Trumbore). Returns
+    /// the distance in units of `direction`, or a negative value when the ray misses.
     [[nodiscard]] inline f32 RayTriangle(Float3 origin, Float3 direction, Float3 a, Float3 b, Float3 c) noexcept
     {
         const Float3 ab = b - a;
@@ -59,8 +59,8 @@ export namespace foundation::geometry
         return Dot(ac, q) * inv;
     }
 
-    /// The nearest hit of the ray on `mesh`'s LOD 0 triangles within `maxDistance` (in units of
-    /// `direction`); false when it misses or the mesh has no triangles on the CPU.
+    /// Finds the nearest hit of the ray on `mesh`'s LOD 0 triangles within `maxDistance` (in units
+    /// of `direction`). Returns false when it misses or the mesh has no triangles on the CPU.
     [[nodiscard]] inline bool RaycastMesh(const StaticMesh& mesh, Float3 origin, Float3 direction, f32 maxDistance,
                                           MeshRayHit& out) noexcept
     {
@@ -114,7 +114,7 @@ export namespace foundation::geometry
         return hit;
     }
 
-    /// The corner of the hit triangle nearest the hit point.
+    /// Returns the corner of the hit triangle nearest the hit point.
     [[nodiscard]] inline Float3 NearestCorner(const MeshRayHit& hit) noexcept
     {
         Float3 nearest = hit.corners[0];

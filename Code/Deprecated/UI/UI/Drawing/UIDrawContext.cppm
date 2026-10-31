@@ -4,8 +4,7 @@
 // UI - :draw_context partition
 //
 // Drawing context passed to View.OnDraw(). Wraps a VGContext with clip stacking, plus
-// the font service and DPI scale. Ported from Sedulous.UI/src/Drawing/UIDrawContext.bf.
-// Beef `VGContext mVG` (class = by ref) -> stored VGContext* (VG() returns the ref).
+// the font service and DPI scale. Stores a VGContext* (VG() returns a reference).
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +27,7 @@ export namespace foundation::ui
 
     /// What a running transition asks the drawable draw path to blend, set per child by
     /// ViewGroup::DrawChildren from the child's active transitions (see View::CurrentDrawBlend).
-    /// Consumed ONCE by Drawable::Draw (cleared for the nested drawables it draws).
+    /// Consumed once by Drawable::Draw (cleared for the nested drawables it draws).
     struct DrawBlend
     {
         /// A `background` drawable change mid-flight: `From` is drawn under `To` at `DrawableT`.

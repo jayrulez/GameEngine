@@ -137,7 +137,7 @@ namespace editor::app
         // A failure or an answer ends the call, and its job state with it.
         const auto fail = [](String message) -> OperationStep<ImportOutcome>
         { return Err(Move(message)); };
-        // Every write has landed: the import is whole, so what follows an import runs now.
+        // Every write has landed and the import is complete, so the post-import effects run now.
         const auto finish = [this, &job, &request]() -> OperationStep<ImportOutcome>
         {
             ImportOutcome outcome = Move(job.outcome);
@@ -159,7 +159,7 @@ namespace editor::app
                 MakeUnique<Array<pipeline::DeferredImportWrite>>(*m_seams.allocator);
             if (request.importer->WantsWorkerPrepare())
             {
-                // Phase 1, the load, on the worker (the bulk of a mesh or texture import).
+                // Phase 1, the load, runs on the worker (the bulk of a mesh or texture import).
                 job.phase = ImportJob::Phase::Preparing;
                 RefPtr<ImportShared> shared = job.shared;
                 pipeline::IFileImporter* importer = request.importer;
@@ -210,7 +210,7 @@ namespace editor::app
         }
         if (job.phase == ImportJob::Phase::Placing)
         {
-            // Phase 2, the cheap main-thread fan-out - but never while a cook (or an export job)
+            // Phase 2, the cheap main-thread fan-out, never runs while a cook (or an export job)
             // reads the databases: the worker holds instance pointers snapshotted at plan time.
             if (m_seams.cook->MutationLocked())
             {
@@ -254,7 +254,7 @@ namespace editor::app
             {
                 return finish();
             }
-            // Phase 3, the bulk stream writes, on the worker.
+            // Phase 3, the bulk stream writes, runs on the worker.
             job.phase = ImportJob::Phase::Flushing;
             SubmitImportFlush(job, request);
             return Optional<ImportOutcome>{};
@@ -338,7 +338,7 @@ namespace editor::app
             job.shared = MakeRef<ExportShared>(*m_seams.allocator);
             job.shared->preset = request.preset;
             job.shared->outRoot = request.outRoot;
-            // Cook first, through the cook service - what the Export menu does before its job.
+            // Cook first, through the cook service, as the Export menu does before its job.
             job.phase = ExportJob::Phase::Cooking;
             BeginCook(job.cook, request.rebuild);
         }
@@ -355,7 +355,7 @@ namespace editor::app
             }
             // The main-thread pre-pass: scene streams over the full manager set, and the
             // reachable closure when the preset prunes (both need the scene machinery only the
-            // main thread may run). An unwired seam leaves that half out, as the menu does.
+            // main thread may run). An unwired hook leaves that half out, as the menu does.
             editor::EditorProject& project = *m_seams.project;
             ExportShared& shared = *job.shared;
             if (m_seams.context != nullptr && m_seams.context->SceneStreamStager)

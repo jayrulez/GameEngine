@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A tiny MCP client for Raptor's two hosts.
+"""A tiny MCP client for the engine's two hosts.
 
   mcp.py http <tool> [json-args]           one call to the editor (port $MCP_PORT, 7405)
   mcp.py http --list                       tools/list, names and first line

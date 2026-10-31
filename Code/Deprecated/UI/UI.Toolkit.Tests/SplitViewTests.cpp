@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for SplitView: panes, ratio clamp + event, and a basic horizontal layout split.
+// Smoke test for SplitView: panes, ratio clamping and its event, and a basic horizontal layout split.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -40,7 +40,7 @@ TEST_CASE("toolkit-splitview: PanesRatioAndLayout")
     CHECK(fired);
     CHECK(lastRatio == doctest::Approx(1.0f));
 
-    // Basic horizontal layout: available = 200 - DividerSize(6) = 194, ratio 0.5 -> 97 each.
+    // Basic horizontal layout: available = 200 - DividerSize(6) = 194, so ratio 0.5 gives 97 each.
     split->SetSplitRatio(0.5f);
     split->Measure(BoxConstraints::Tight(200.0f, 100.0f));
     split->Layout(0.0f, 0.0f, 200.0f, 100.0f);
@@ -55,7 +55,7 @@ TEST_CASE("toolkit-splitview: pane collapse shrinks to content, hides divider, p
     split->Orientation = Orientation::Vertical;
 
     auto first = core::MakeRef<Panel>(core::DefaultAllocator());
-    // Second pane = a "bar" whose content minimum height is 26px.
+    // The second pane is a "bar" whose content minimum height is 26px.
     auto second = core::MakeRef<FlexLayout>(core::DefaultAllocator());
     second->Direction = Orientation::Vertical;
     auto bar = core::MakeRef<Panel>(core::DefaultAllocator());
@@ -85,7 +85,7 @@ TEST_CASE("toolkit-splitview: pane collapse shrinks to content, hides divider, p
     CHECK(first->Height() == doctest::Approx(200.0f - 26.0f));
     CHECK(split->SplitRatio() == doctest::Approx(0.5f));
 
-    // Un-collapse restores the split at the preserved ratio.
+    // Expanding it again restores the split at the preserved ratio.
     split->SetPaneCollapsed(SplitPane::Second, false);
     CHECK_FALSE(split->AnyPaneCollapsed());
     split->Measure(BoxConstraints::Tight(300.0f, 200.0f));

@@ -4,7 +4,6 @@
 // UI - :frame_layout partition
 //
 // Stacks children on top of each other, each positioned independently by Gravity. Simplest ViewGroup.
-// Ported from Sedulous.UI/src/Layout/FrameLayout.bf.
 //
 // The child's anchor comes from its LayoutStyle::Gravity.
 
@@ -37,9 +36,9 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Margin + Fixed live in the base Measure; the parent's
-            // remaining decision is loose-vs-fill (AvailForChild). Chrome is the merged
-            // metrics, so stylesheet padding/borders count.
+            // Margins and Fixed sizes are handled in the base Measure; the parent's remaining
+            // decision is loose or fill (AvailForChild). Chrome is the merged metrics, so
+            // stylesheet padding and borders count.
             const Thickness chrome = ResolveBoxMetrics().Chrome();
             const BoxConstraints inner = constraints.Deflate(chrome);
             f32 maxW = 0, maxH = 0;
@@ -77,7 +76,7 @@ export namespace foundation::ui
 
                 const GravityValue gravity = child->Layout().Gravity;
 
-                // Gravity positions the MARGIN box; the base Layout insets to the border box.
+                // Gravity positions the margin box; the base Layout insets to the border box.
                 const Float2 mb = child->MarginBoxSize();
                 Rectangle rect = GravityHelper::Apply(gravity, contentW, contentH, mb.x, mb.y);
                 rect.x += chrome.Left;

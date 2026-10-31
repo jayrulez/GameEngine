@@ -3,19 +3,16 @@
 
 // UI - :theme_icons partition
 //
-// Built-in SVG icon definitions for theme drawable keys. These are string constants compiled into
-// the binary - no file loading needed. Themes register these as SVGDrawables for icon style
-// properties. Ported from Sedulous.UI/src/Styling/ThemeIcons.bf.
-//
-// Divergence (language): Beef static get-properties (`=>`) become static methods returning
-// StringView; the SVG payloads are UTF-8 raw string literals (char8_t).
+// Built-in SVG icon definitions for theme drawable keys. They are UTF-8 raw string constants
+// compiled into the binary, so no file loading is needed. Themes register them as SVGDrawables for
+// icon style properties.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:theme_icons;
 
-import foundation.core; // StringView
+import foundation.core;
 
 using namespace foundation::core;
 
@@ -72,7 +69,7 @@ export namespace foundation::ui
 </svg>)");
         }
 
-        /// Plus icon (for add buttons, etc.)
+        /// Plus icon (add buttons and the like).
         static StringView Plus()
         {
             return StringView(u8R"(<svg viewBox="0 0 12 12">
@@ -80,7 +77,7 @@ export namespace foundation::ui
 </svg>)");
         }
 
-        /// Minus icon (for remove buttons, etc.)
+        /// Minus icon (remove buttons and the like).
         static StringView Minus()
         {
             return StringView(u8R"(<svg viewBox="0 0 12 12">

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests layout suites: FrameLayoutTests, AbsoluteLayoutTests, FlowLayoutTests,
-// DockLayoutTests, GridLayoutTests, FlexLayoutTests (faithful; RefPtr views/params, Beef object-init
-// `new X() { F = v }` -> construct + set fields, Math.Abs(..) < eps -> doctest::Approx).
+// Layout tests: FrameLayout, AbsoluteLayout, FlowLayout, DockLayout, GridLayout and FlexLayout, a
+// custom container, flex shrink, sheet padding in every layout, and transformed coordinates.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -128,11 +127,11 @@ TEST_CASE("frame: MultipleChildren_Stacked")
     CHECK(b->Bounds.x == doctest::Approx(160).epsilon(0.01));
 }
 
-// Reproduces the scene editor's viewport pane (task #118 camera preview): a vertical FlexLayout
-// stacks a fixed-height toolbar over a grow FrameLayout whose Fill child is the 3D viewport and
-// whose bottom-right child is the preview overlay. The regression check is the FILL child's
-// SCREEN position - the input surface region is LocalToScreen(0,0) + Width/Height, so if the
-// nested Fill child's screen origin is off, viewport picking/gizmo input lands in the wrong place.
+// The scene editor's viewport pane with a camera preview: a vertical FlexLayout stacks a
+// fixed-height toolbar over a growing FrameLayout whose Fill child is the 3D viewport and whose
+// bottom-right child is the preview overlay. The check is the Fill child's screen position: the
+// input surface region is LocalToScreen(0,0) plus Width and Height, so if the nested Fill child's
+// screen origin is off, viewport picking and gizmo input land in the wrong place.
 TEST_CASE("frame: nested Fill child inside a grow FlexLayout keeps its screen origin (task #118)")
 {
     UIContext ctx{DefaultAllocator()};
@@ -178,8 +177,8 @@ TEST_CASE("frame: nested Fill child inside a grow FlexLayout keeps its screen or
     CHECK(viewport->Width() == doctest::Approx(400).epsilon(0.01));
     CHECK(viewport->Height() == doctest::Approx(270).epsilon(0.01));
 
-    // The load-bearing assertion: the viewport's content origin in SCREEN space is (0, 30), NOT
-    // (0, 0). This is exactly what SyncInputRegion feeds the input surface.
+    // The key check: the viewport's content origin in screen space is (0, 30), not (0, 0). This is
+    // what SyncInputRegion feeds the input surface.
     const Float2 origin = viewport->LocalToScreen(Float2{0.0f, 0.0f});
     CHECK(origin.x == doctest::Approx(0));
     CHECK(origin.y == doctest::Approx(30));
@@ -1037,7 +1036,7 @@ TEST_CASE("flow: Horizontal_Spacing")
     CHECK(b->Bounds.x == doctest::Approx(60)); // a width 50 + HSpacing 10
 }
 
-// === Custom container (spec P0: a ViewGroup subclass reads child.Layout() directly) ===
+// === Custom container (a ViewGroup subclass reads child.Layout() directly) ===
 
 namespace
 {
@@ -1143,8 +1142,8 @@ TEST_CASE("grid: AutoFlow_KeepsChildIntent")
 
 TEST_CASE("dock: a styled border is part of the measured size (chrome, not just padding)")
 {
-    // The measure deflated by the CHROME but added back only the padding, so a bordered dock
-    // measured short by the border (found by the Beef port).
+    // The measure deflates by the chrome and adds back the whole chrome, border included, so a
+    // bordered dock does not measure short by its border.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRoot();
     Init(ctx, root.Get(), 400, 300);
@@ -1204,7 +1203,7 @@ namespace
         lp.FlexShrink = shrink;
         return lp;
     }
-    // A 200 x 50 row holding two 150-wide children: 100 too many.
+    // A 200 x 50 row holding two 150-wide children: 100 too wide.
     struct OverfullRow
     {
         UIContext ctx{DefaultAllocator()};
@@ -1242,7 +1241,7 @@ TEST_CASE("flex: Shrink_OverflowSharedByShrinkTimesBase")
     CHECK(one.a->Width() == doctest::Approx(50.0f));
     CHECK(one.b->Width() == doctest::Approx(150.0f));
 
-    OverfullRow none(LayoutStyle{}, LayoutStyle{}); // nothing shrinks: the row overflows as before
+    OverfullRow none(LayoutStyle{}, LayoutStyle{}); // nothing shrinks: the row overflows
     CHECK(none.a->Width() == doctest::Approx(150.0f));
     CHECK(none.b->Width() == doctest::Approx(150.0f));
 }
@@ -1286,9 +1285,9 @@ TEST_CASE("layout: LocalToScreen and ScreenToLocal follow a view's transform, as
     const Float2 q = child->ScreenToLocal(p);
     CHECK(q.x == doctest::Approx(10.0f).epsilon(0.001));
     CHECK(q.y == doctest::Approx(5.0f).epsilon(0.001));
-    // And the order is the draw's, pinned by a point (a round trip alone only shows the two
-    // directions agree): about the top left, turned a quarter, (10, 0) is (0, 10), then scaled by
-    // (2, 0.5) it is (0, 5).
+    // The order matches the draw's, checked with a point (a round trip alone only shows that the
+    // two directions agree): about the top left, turned a quarter, (10, 0) becomes (0, 10), and
+    // scaled by (2, 0.5) it becomes (0, 5).
     child->Transform.Origin = Float2{0.0f, 0.0f};
     const Float2 turned = child->LocalToParent(Float2{10.0f, 0.0f});
     CHECK(turned.x - child->Bounds.x == doctest::Approx(0.0f).epsilon(0.001));

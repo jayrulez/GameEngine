@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Audio thumbnail generator: the worker half runs headless - an encoded WAV with a loud
-// middle and silent edges must produce tall center bars and midline-only edges.
+// Audio thumbnail generator: the worker half runs headless. An encoded WAV with a loud middle and
+// silent edges must produce tall center bars and midline-only edges.
 
 #include <doctest/doctest.h>
 
@@ -58,7 +58,7 @@ TEST_CASE("audio thumbnail waveform tracks the clip's envelope")
     REQUIRE(tile.Width() == editor::kThumbnailServiceThumbnailSize);
 
     CHECK(BarHeight(tile, 64) > 80);  // loud middle fills most of the strip
-    CHECK(BarHeight(tile, 4) <= 4);   // silent edges keep the survival midline only
+    CHECK(BarHeight(tile, 4) <= 4);   // silent edges keep only the 1px midline
     CHECK(BarHeight(tile, 124) <= 4);
 }
 

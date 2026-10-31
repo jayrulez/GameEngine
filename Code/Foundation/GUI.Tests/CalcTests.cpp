@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - calc() (E13 of Specs/gui-lab-evolution-2.md): a length as a sum of units, + and - between
-// terms, * and / by plain numbers, parentheses and nested calc(); resolved where its units are, and
-// a transition between a calc() and a plain length blending each unit.
+// GUI - calc(): a length as a sum of units, with + and - between terms, * and / by plain numbers,
+// parentheses and nested calc(). It is resolved where its units are known, and a transition between
+// a calc() and a plain length blends each unit.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

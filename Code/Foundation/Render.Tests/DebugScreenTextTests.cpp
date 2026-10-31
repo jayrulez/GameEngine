@@ -26,7 +26,7 @@ TEST_CASE("debug-draw: DrawScreenTextRight stores the margin as a negative x and
     CHECK(right.textLength == 15);
 
     const f32 glyph = static_cast<f32>(debug::kCharWidth);
-    // A left x passes through; a right x lands so the text ENDS 12 px in from the right edge.
+    // A left x passes through; a right x lands so the text ends 12 px in from the right edge.
     CHECK(debug::ResolveScreenTextX(left.position.x, left.textLength, glyph, 800) == 12.0f);
     const f32 x = debug::ResolveScreenTextX(right.position.x, right.textLength, glyph, 800);
     CHECK(x == doctest::Approx(800.0f - 12.0f - 15.0f * glyph));

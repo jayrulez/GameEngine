@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GPU picking VS: the depth-only caster path (shadow_depth.vs's layouts, bindings and skinning)
-// that also carries the draw's entity id to the fragment. The pass renders with a CROPPED camera
+// that also carries the draw's entity id to the fragment. The pass renders with a cropped camera
 // projection into a rect-sized RG32Uint target (PickSystem); the id is (entity index + 1,
-// generation) - 0 = nothing. Sources, by draw kind:
+// generation), with 0 meaning nothing. Sources, by draw kind:
 //   - single object:   cbuffer Object's PickIndex/PickGeneration (object_block.hlsli);
 //   - instanced run:   the instance-stepped pickOffsets (render::GpuPickDrawOffsets: .w = index + 1,
 //                      .z = generation; the pick pass fills its own stream, never the forward's);

@@ -3,15 +3,15 @@
 
 // Pipeline::Navigation - the `navigation.pipeline` module (tooling).
 //
-// Source-side navmesh authoring + cook:
+// Source-side navmesh authoring and cook:
 //   * NavigationZoneAsset (pipeline::Asset): carries the baked navmesh blob the editor's "Bake
-//     Navigation" action produced. The blob is machine-generated bulk, so it rides a SIDECAR
-//     stream (bulk-data-sidecar rule) rather than inline in the text envelope.
-//   * NavigationZoneAssetBuilder: cooks the blob through to a NavigationZoneSource product. A
-//     pure passthrough - the bake already ran in the editor (the cook has no scene geometry) -
-//     so this module never touches Recast/Detour.
+//     Navigation" action produced. The blob is machine-generated bulk, so it travels in a
+//     sidecar stream rather than inline in the text envelope, as all bulk data does.
+//   * NavigationZoneAssetBuilder: cooks the blob through to a NavigationZoneSource product. It
+//     is a pure passthrough (the bake already ran in the editor, and the cook has no scene
+//     geometry), so this module never touches Recast or Detour.
 //
-// There is NO OS-file importer: zones are authored in-scene (a NavMeshZoneComponent), never
+// There is no OS-file importer: zones are authored in the scene (a NavMeshZoneComponent), never
 // dropped as files. Never linked by the runtime.
 
 module;
@@ -33,22 +33,22 @@ export namespace pipeline
     inline constexpr StringView kNavMeshStreamName = u8"navmesh";
 
     // Source asset: the baked navmesh for one zone. `navMeshBlob` is filled from the sidecar on
-    // load (WriteNavigationZoneAsset / EnsureNavMeshLoaded) - it is NOT serialized inline.
+    // load (WriteNavigationZoneAsset, EnsureNavMeshLoaded); it is not serialized inline.
     class NavigationZoneAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(NavigationZoneAsset, pipeline::Asset)
     public:
-        Array<u8> navMeshBlob; // baked navmesh (header + Detour tiles); travels via the sidecar
+        Array<u8> navMeshBlob; // baked navmesh (header and Detour tiles); travels in the sidecar
 
         void Serialize(ISerializer& ar) override
         {
-            pipeline::Asset::Serialize(ar); // fileName (unused; zones are in-scene authored)
-            // navMeshBlob is intentionally NOT serialized here - it is bulk, so it lives in the
-            // `navmesh` sidecar stream, never inline in this (possibly text) envelope.
+            pipeline::Asset::Serialize(ar); // fileName (unused; zones are authored in the scene)
+            // navMeshBlob is not serialized here: it is bulk, so it lives in the `navmesh`
+            // sidecar stream, never inline in this (possibly text) envelope.
         }
     };
 
-    // Save an asset + its baked navmesh sidecar together. Every save path (editor bake action)
+    // Save an asset and its baked navmesh sidecar together. Every save path (the editor bake action)
     // uses this so the blob and envelope stay in sync.
     [[nodiscard]] inline Status WriteNavigationZoneAsset(foundation::content::Instance& instance,
                                                          NavigationZoneAsset& asset)
@@ -64,8 +64,8 @@ export namespace pipeline
                                                           asset.navMeshBlob.Size()});
     }
 
-    // After ReadObject: pull the sidecar into `asset.navMeshBlob`. A missing stream is an UNBAKED
-    // zone (empty blob) - valid, not an error; it cooks to an invalid navmesh the subsystem skips.
+    // After ReadObject: pull the sidecar into `asset.navMeshBlob`. A missing stream is an unbaked
+    // zone (empty blob), valid and not an error; it cooks to an invalid navmesh the subsystem skips.
     [[nodiscard]] inline Status EnsureNavMeshLoaded(const foundation::content::Instance& instance,
                                                     NavigationZoneAsset& asset)
     {
@@ -101,14 +101,14 @@ export namespace pipeline
         {
             return &foundation::navigation::NavigationZoneSource::StaticType();
         }
-        // 3: the product lost the frame-convention stamp (every bake is rigid-frame).
+        // 3: the product carries no frame-convention stamp (every bake is rigid-frame).
         [[nodiscard]] u32 Version() const override { return 3; }
 
         void ScanDependencies(const pipeline::Asset&, pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
         {
             // The baked navmesh sidecar is the build input: declare it so the recipe hash covers
-            // it (a rebake must dirty the cook - the envelope carries nothing).
+            // it (a rebake must dirty the cook, and the envelope carries nothing).
             out.sourceStreams.PushBack(String(kNavMeshStreamName));
         }
 
@@ -135,7 +135,7 @@ export namespace pipeline
         }
     };
 
-    // Registers the source asset type + serializer (content-DB construction by type name).
+    // Registers the source asset type and serializer (content-DB construction by type name).
     inline void RegisterNavigationZoneAsset()
     {
         GlobalTypeRegistry().Register(NavigationZoneAsset::StaticType());

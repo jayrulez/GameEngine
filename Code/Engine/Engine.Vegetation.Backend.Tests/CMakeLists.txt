@@ -1,7 +1,7 @@
-# Engine::Vegetation backend pixel probe: a splat-driven grass layer over a flat terrain rendered
-# through the full RenderFrame chain on REAL devices (Vulkan reference, WebGPU parity; DX12 where it
-# exists) and read back - the pixel-level ground truth that the per-chunk instanced sets DRAW where
-# the splat is painted and nowhere else, and that the fade prefix thins them with distance. GPUs
+# Engine::Vegetation backend pixel probe: a splat-driven grass layer over a flat terrain, rendered
+# through the full RenderFrame chain on real devices (Vulkan as the reference, WebGPU matching it,
+# DX12 where it exists) and read back. It checks that the per-chunk instanced sets draw where the
+# splat is painted and nowhere else, and that the fade prefix thins them with distance. GPUs are
 # checked at runtime; each backend skips cleanly when unavailable.
 add_executable(Engine.Vegetation.Backend.Tests
     TestsMain.cpp

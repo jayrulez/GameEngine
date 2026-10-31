@@ -19,7 +19,7 @@ namespace xml = foundation::xml;
 
 namespace
 {
-    // A test settings section (v1): plain String fields so it round-trips on any backend.
+    // A test settings section: plain String fields so it round-trips on any backend.
     class GameSettings : public ISerializable
     {
         RTTI_OBJECT(GameSettings, ISerializable)
@@ -35,7 +35,7 @@ namespace
     };
     RTTI_DEFINE_OBJECT_VERSIONED(GameSettings, "rtti::test", 1)
 
-    // Load needs the type resolvable by name + constructible by id (idempotent to call repeatedly).
+    // Load needs the type resolvable by name and constructible by id (idempotent to call repeatedly).
     void EnsureRegistered()
     {
         GlobalTypeRegistry().Register(GameSettings::StaticType());
@@ -108,7 +108,7 @@ TEST_CASE("core/system: GetEnvironmentVariable + UserDataDir")
 }
 
 // --- Unknown-section passthrough (both backends): a section whose type a build cannot instantiate is
-//     preserved verbatim across Load/Save instead of aborting the store (the 2026-08-01 data loss). ---
+//     preserved verbatim across Load and Save instead of aborting the store. ---
 namespace
 {
     class SecA : public ISerializable
@@ -151,9 +151,9 @@ namespace
         RegisterSerializable<SecB>(ser);
     }
 
-    // Author {A, X, B} -> load with only A+B registered (X unknown, preserved) -> re-save -> load with
-    // X now registered and confirm its data survived the round-trip through a build that did not know it.
-    // `make` yields a FRESH factory per call (SerializerFactory is a move-only Function).
+    // Author {A, X, B}, load with only A and B registered (X unknown, preserved), save again, then load
+    // with X registered and confirm its data survived the round-trip through a build that did not know
+    // it. `make` yields a fresh factory per call (SerializerFactory is a move-only Function).
     void RunPassthrough(SerializerFactory (*make)())
     {
         MemoryStream stored;
@@ -170,17 +170,17 @@ namespace
         {
             TypeRegistry types;
             SerializableRegistry ser;
-            RegisterAB(types, ser); // X is NOT registered here
+            RegisterAB(types, ser); // X is not registered here
 
             settings::Settings mid(foundation::core::DefaultAllocator());
             REQUIRE(stored.Seek(0, SeekOrigin::Begin) == 0);
-            REQUIRE(mid.Load(stored, make(), types, ser).IsOk()); // unknown X must NOT abort the store
-            CHECK(mid.SectionCount() == 2u);        // A + B loaded
+            REQUIRE(mid.Load(stored, make(), types, ser).IsOk()); // unknown X must not abort the store
+            CHECK(mid.SectionCount() == 2u);        // A and B loaded
             CHECK(mid.UnknownSectionCount() == 1u); // X preserved verbatim
             REQUIRE(mid.Find<SecA>() != nullptr);
             CHECK(mid.Find<SecA>()->a == 10);
             REQUIRE(mid.Find<SecB>() != nullptr);
-            CHECK(mid.Find<SecB>()->b == 20); // the regression: B is not dropped after the unknown X
+            CHECK(mid.Find<SecB>()->b == 20); // B is not dropped after the unknown X
 
             REQUIRE(mid.Save(resaved, make()).IsOk()); // re-emits A, B, and X
         }
@@ -226,7 +226,7 @@ TEST_CASE("settings: repeated Load/Save does not duplicate a preserved unknown s
         src.Section<SecX>().x = 7;
         REQUIRE(src.Save(stored, BinarySerializerFactory()).IsOk());
     }
-    // Cycle Load/Save three times with X unknown; the unknown count stays 1 (no growth/dup).
+    // Cycle Load and Save three times with X unknown; the unknown count stays 1 (no growth or duplicates).
     for (int cycle = 0; cycle < 3; ++cycle)
     {
         TypeRegistry types;

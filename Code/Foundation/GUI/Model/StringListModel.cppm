@@ -3,17 +3,17 @@
 
 // GUI - :string_list_model partition
 //
-// StringListModel: the simplest concrete Model - a single column of strings, one per row, each
-// with an id of its own (eepp's ItemListModel in role). Its edits tell its views the rows they
-// touch: an insert, a removal, a move or a change; SetItems and Clear reset them. Editable, a
-// view may edit its rows in place.
+// StringListModel: the simplest concrete Model, a single column of strings, one per row, each with
+// a stable id. Each edit tells the views which rows it touched, as an insert, a removal, a move or
+// a change; SetItems and Clear reset the views. When the model is editable, a view may edit its
+// rows in place.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:string_list_model;
 
-import foundation.core; // Array, String, StringView, Move
+import foundation.core;
 import :variant;
 import :model_index;
 import :model;
@@ -75,7 +75,7 @@ export namespace foundation::gui
             NotifyReset();
         }
 
-        /// Its rows may be edited in place.
+        /// Sets whether a view may edit the rows in place.
         void SetEditable(bool editable) noexcept { m_editable = editable; }
 
         [[nodiscard]] core::StringView ItemAt(usize row) const
@@ -115,13 +115,14 @@ export namespace foundation::gui
             return true;
         }
 
-        // === Drops (E7) ===
-        // Its own rows move or copy between rows (not onto one); another model's rows, or `text`,
-        // come in as text, copied or moved (the source removes what moved).
+        // === Drops ===
+        // This model's own rows move or copy to a place between rows, never onto a row. Rows from
+        // another model, or dropped `text`, come in as text, copied or moved; on a move the source
+        // model removes the rows.
         [[nodiscard]] DropEffect CanDrop(const ModelDrop& drop, core::String& reason) const override
         {
             if (drop.Place == DropPlace::On)
-                return DropEffect::None; // a list has nothing to drop onto: the view tries between
+                return DropEffect::None; // a list row cannot be dropped onto; the view tries between rows
             const bool rows = drop.Source != nullptr && !drop.Ids.IsEmpty();
             const bool text = drop.Payload != nullptr && drop.Payload->Type.AsView() == core::StringView(u8"text");
             if (!rows && !text)
@@ -150,7 +151,8 @@ export namespace foundation::gui
                 NotifyReset();
                 return true;
             }
-            // The rows, in their order, taken out (moving within) or read (copying, or from another model).
+            // Collects the rows' texts in row order: taken out when moving within this model, read when
+            // copying or when they come from another model.
             Array<core::String> texts;
             Array<ItemId> ids;
             const bool within = drop.Source == this && drop.Effect == DropEffect::Move;

@@ -3,17 +3,13 @@
 
 // Foundation::Fonts.Coverage.Baker - the `foundation.fonts.coverage.baker` module.
 //
-// Tooling-time baking: turns TTF/OTF/TTC bytes into pre-rasterized COVERAGE
-// atlases - BakedFont + BakedFontAtlas (Fonts.Coverage), the Alpha8 counterpart of
+// Tooling-time baking: turns TTF/OTF/TTC bytes into pre-rasterized coverage
+// atlases, a BakedFont and BakedFontAtlas (Fonts.Coverage), the Alpha8 counterpart of
 // what Fonts.DistanceField.Baker produces. The packaged game loads those and
-// never re-invokes the rasterizer. Ported from Sedulous.Fonts.Importer; renamed
-// 2026-09-05 (the font family is named by atlas pixel format + role: Fonts.Coverage /
-// Fonts.DistanceField are the runtime products, Fonts.Coverage.Baker /
-// Fonts.DistanceField.Baker the tooling bakers). "Importer" here would mean the
-// pipeline's IFileImporter, and this is not one: no Asset, no cook context, no
-// content DB. It stays in
-// Foundation (not Pipeline) because pipeline-free consumers bake with it - the
-// editor's live font preview and thumbnails, and the VG pixel-probe tests.
+// never re-invokes the rasterizer. This is not a pipeline IFileImporter (no Asset,
+// no cook context, no content DB), and it lives in Foundation rather than Pipeline
+// because pipeline-free consumers bake with it: the editor's live font preview and
+// thumbnails, and the VG pixel-probe tests.
 
 module;
 #include "Core/Prelude.h"
@@ -34,8 +30,8 @@ export namespace foundation::fonts
     class BakedFontData
     {
     public:
-        // `allocator` is the one font/atlas were allocated from (the Bake caller's
-        // decision) - the pair frees through it.
+        // `allocator` is the one font and atlas were allocated from (the Bake caller's
+        // decision); the pair frees through it.
         BakedFontData(IAllocator& allocator, BakedFont* font, BakedFontAtlas* atlas)
             : font(font), atlas(atlas), m_allocator(&allocator)
         {

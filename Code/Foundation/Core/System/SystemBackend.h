@@ -33,20 +33,20 @@ namespace foundation::core::sys
     int WriteBacktrace(int fd) noexcept;
 
     // Install fatal-signal handlers (SIGSEGV/SIGBUS/SIGILL/SIGFPE/SIGABRT on POSIX) that write
-    // the signal name + WriteBacktrace to stderr, then re-raise with the default action so the
+    // the signal name and WriteBacktrace to stderr, then re-raise with the default action so the
     // exit status / core dump behavior is unchanged. Makes a crash in the wild actionable from
-    // console output alone (the assert path already prints one; raw segfaults printed NOTHING).
-    // Best-effort by design: backtrace() in a signal handler is not strictly async-signal-safe,
-    // the accepted trade for a dying process. Idempotent; no-op where unsupported.
+    // console output alone (the assert path already prints one; raw segfaults otherwise print
+    // nothing). Best-effort: backtrace() in a signal handler is not strictly async-signal-safe, a
+    // trade accepted for a dying process. Idempotent; no-op where unsupported.
     void InstallCrashBacktrace() noexcept;
 
     // --- Environment -------------------------------------------------------
     // Copy environment variable `name` into `out` (truncated to outSize-1, always null-terminated
-    // when out/outSize are valid). Returns the value's FULL length excluding the null - so a return
-    // >= outSize signals truncation - or 0 when the variable is unset.
+    // when out/outSize are valid). Returns the value's full length excluding the null (so a return
+    // >= outSize signals truncation), or 0 when the variable is unset.
     std::size_t GetEnvironmentVariable(const char* name, char* out, std::size_t outSize) noexcept;
 
-    // Platform user-data BASE directory (NO app name appended): $XDG_DATA_HOME or ~/.local/share
+    // Platform user-data base directory (no app name appended): $XDG_DATA_HOME or ~/.local/share
     // (Linux), %LOCALAPPDATA% (Windows), ~/Library/Application Support (macOS). Same truncation /
     // return contract as GetEnvironmentVariable; 0 when it cannot be resolved. The :system module
     // wrapper appends the application name.
@@ -58,7 +58,7 @@ namespace foundation::core::sys
     // --- Platform identity -------------------------------------------------
     // Host platform tag ("Win64" / "Linux64" / "Mac64"), matching the Bin/<Config>/<Platform> layout.
     const char* GetHostPlatformName() noexcept;
-    // Executable filename extension for this platform, WITH the dot (".exe" on Windows, "" elsewhere).
+    // Executable filename extension for this platform, with the dot (".exe" on Windows, "" elsewhere).
     const char* ExecutableExtension() noexcept;
     // Absolute path of the running executable (readlink /proc/self/exe, GetModuleFileNameA). Same
     // truncation / return contract as GetEnvironmentVariable; 0 on failure.
@@ -70,26 +70,26 @@ namespace foundation::core::sys
 
     // --- OS integration ----------------------------------------------------
     // Open `path` (a directory) in the OS file manager: Explorer via CreateProcess on Windows,
-    // xdg-open (double-forked) on Linux. NON-BLOCKING - launches detached and returns immediately;
+    // xdg-open (double-forked) on Linux. Non-blocking: launches detached and returns immediately;
     // true once the launch was initiated (not that the manager finished opening), false if it could
     // not be started or `path` is empty. Must never block the caller (it runs on the UI thread).
     bool OpenPathInFileManager(const char* path) noexcept;
 
     // Normalize directory separators to the OS-native form: '/' -> '\' on Windows, '\' -> '/' on
     // POSIX. Copies `path` into `out` (capacity `cap`, NUL-terminated) and returns true; returns
-    // false WITHOUT writing if `path` is null/empty or would not fit with its terminator - rejecting
-    // an overlong path rather than truncating it mid-path (a truncation could point at a wrong-but-
-    // valid parent). Fanned out to the platform backends (Win32 flips one way, Linux the other) like
+    // false without writing if `path` is null/empty or would not fit with its terminator. An
+    // overlong path is rejected rather than truncated mid-path, since a truncation could point at a
+    // wrong but valid parent. Fanned out to the platform backends (Win32 flips one way, Linux the other) like
     // the other OS services here; the :system module re-exports a StringView wrapper for callers.
     bool NormalizePathSeparators(const char* path, char* out, std::size_t cap) noexcept;
 
-    // Run `exe` with arguments argv[0..argc-1] (WITHOUT the program name - the backend prepends `exe`
-    // as argv[0]). No shell, no PATH search - `exe` is an explicit path. BLOCKS until the child exits.
-    // Returns the exit code (0..255), or -1 if the process could not be spawned OR was killed by a
-    // signal. The child's combined stdout+stderr is captured into `out` (truncated to outCap-1, always
-    // null-terminated when out/outCap are valid; pass out=nullptr/outCap=0 to discard) and its stdin is
-    // empty (NUL). For cook-time tool shell-outs (the WGSL cook's naga + tint). WAITS, unlike
-    // OpenPathInFileManager, so it must not run on the UI thread.
+    // Run `exe` with arguments argv[0..argc-1] (without the program name; the backend prepends `exe`
+    // as argv[0]). No shell, no PATH search: `exe` is an explicit path. Blocks until the child exits.
+    // Returns the exit code (0..255), or -1 if the process could not be spawned or was killed by a
+    // signal. The child's combined stdout and stderr is captured into `out` (truncated to outCap-1,
+    // always null-terminated when out/outCap are valid; pass out=nullptr/outCap=0 to discard) and its
+    // stdin is empty (NUL). For cook-time tool shell-outs (the WGSL cook's naga and tint). Unlike
+    // OpenPathInFileManager it waits, so it must not run on the UI thread.
     int RunProcess(const char* exe, const char* const* argv, int argc, char* out,
                    std::size_t outCap) noexcept;
 
@@ -106,7 +106,7 @@ namespace foundation::core::sys
     {
         Read,      // existing file, read-only
         Write,     // create/truncate, write-only
-        ReadWrite, // create if needed, read+write
+        ReadWrite, // create if needed, read and write
         Append,    // create if needed, write at end
     };
 
@@ -141,16 +141,16 @@ namespace foundation::core::sys
     // secrets and unpredictable ids, never for reproducible generation. False when the OS
     // refused; the buffer is then unspecified.
     bool FillEntropy(void* buffer, std::size_t bytes) noexcept;
-    // Absolute path of the RUNNING executable (not argv[0], which can be bare/relative),
+    // Absolute path of the running executable (not argv[0], which can be bare/relative),
     // written into `buffer` (UTF-8, null-terminated). Returns the length written, 0 on
     // failure or when `capacity` is too small.
     std::size_t ExecutablePath(char* buffer, std::size_t capacity) noexcept;
-    // Rename/move a file OR directory (same volume). True on success.
+    // Rename or move a file or directory (same volume). True on success.
     bool FileMove(const char* from, const char* to) noexcept;
-    // Copy PRESERVING permissions (staged executables keep +x; Windows CopyFileW does this
+    // Copy preserving permissions (staged executables keep +x; Windows CopyFileW does this
     // natively, POSIX re-applies the source mode). True on success; overwrites dst.
     bool FileCopyPreserving(const char* from, const char* to) noexcept;
-    // File size + last-write time (seconds since epoch). False if the file doesn't exist.
+    // File size and last-write time (seconds since epoch). False if the file doesn't exist.
     bool FileStat(const char* path, unsigned long long& outSize,
                   long long& outModifiedTime) noexcept;
     bool DirectoryExists(const char* path) noexcept;
@@ -180,25 +180,25 @@ namespace foundation::core::sys
     constexpr SocketHandle kInvalidSocket = ~static_cast<SocketHandle>(0);
 
     // Bring up / tear down the platform networking layer (WSAStartup on Win32; no-op elsewhere).
-    // Reference-counted + idempotent: call once per socket user, ShutdownNetworking when done.
+    // Reference-counted and idempotent: call once per socket user, ShutdownNetworking when done.
     bool InitializeNetworking() noexcept;
     void ShutdownNetworking() noexcept;
 
-    // Open a NON-BLOCKING UDP socket bound to `port` (0 = OS-assigned). Returns kInvalidSocket on
+    // Open a non-blocking UDP socket bound to `port` (0 = OS-assigned). Returns kInvalidSocket on
     // failure; *outBoundPort (if non-null) receives the actual bound port (host order).
     SocketHandle UdpOpen(std::uint16_t port, std::uint16_t* outBoundPort) noexcept;
     void SocketClose(SocketHandle socket) noexcept;
 
-    // Parse "a.b.c.d" into a HOST-order IPv4 address. false on malformed input.
+    // Parse "a.b.c.d" into a host-order IPv4 address. false on malformed input.
     bool ParseIPv4(const char* dottedQuad, std::uint32_t* outIp) noexcept;
-    // Resolve a host to a HOST-order IPv4 address: a dotted-quad literal parses directly (no
-    // lookup); anything else goes through the resolver (getaddrinfo, first A record). BLOCKING
-    // for the lookup's duration - a connect is a one-time action, so callers make it at that
-    // edge, never per frame. false when the name does not resolve (or resolves to no IPv4).
+    // Resolve a host to a host-order IPv4 address: a dotted-quad literal parses directly (no
+    // lookup); anything else goes through the resolver (getaddrinfo, first A record). Blocks
+    // for the lookup's duration; a connect is a one-time action, so callers resolve at connect
+    // time, never per frame. false when the name does not resolve (or resolves to no IPv4).
     bool ResolveHostIPv4(const char* host, std::uint32_t* outIp) noexcept;
 
     // Send `size` bytes to (ip host-order, port host-order). Returns bytes sent (>=0), or -1 on a
-    // real error (a would-block on a full send buffer returns 0 - the caller may retry).
+    // real error (a would-block on a full send buffer returns 0; the caller may retry).
     std::int64_t UdpSendTo(SocketHandle socket, std::uint32_t ip, std::uint16_t port,
                            const void* data, std::size_t size) noexcept;
     // Receive one datagram into `out` (capacity outCap). Returns bytes read (>0), 0 when none are
@@ -207,12 +207,12 @@ namespace foundation::core::sys
                              std::uint32_t* fromIp, std::uint16_t* fromPort) noexcept;
 
     // --- TCP (stream) sockets (the foundation.http / websocket transports wrap these) --
-    // All non-blocking. Consumers: HTTP client (foundation.http), a P5 WebSocket transport, and the
-    // script debugger's remote transport. Not used by the UDP game networking.
+    // All non-blocking. Consumers: the HTTP client (foundation.http), the WebSocket transport, and
+    // the script debugger's remote transport. Not used by the UDP game networking.
     //
     // Open a listening socket on `port` (0 = OS-assigned); *outBoundPort gets the actual port and
     // *outBoundIp the bound IPv4 address (host order; 0 = every interface). `loopbackOnly` binds
-    // 127.0.0.1 alone, so nothing off this machine can connect - what a local tool's server wants.
+    // 127.0.0.1 alone, so nothing off this machine can connect, which is what a local tool's server wants.
     // Off Windows the port is reusable at once (SO_REUSEADDR: a restarted server does not wait out
     // its previous run's TIME_WAIT); not on Windows, where that option lets a second socket take a
     // live port and a closing one never blocks a bind.
@@ -223,12 +223,12 @@ namespace foundation::core::sys
     // non-blocking.
     SocketHandle TcpAccept(SocketHandle listener, std::uint32_t* fromIp,
                            std::uint16_t* fromPort) noexcept;
-    // Begin a NON-BLOCKING connect to (ip,port host-order). Returns a handle immediately (poll
+    // Begin a non-blocking connect to (ip,port host-order). Returns a handle immediately (poll
     // readiness with TcpConnectStatus) or kInvalidSocket if the socket could not be created.
     SocketHandle TcpConnect(std::uint32_t ip, std::uint16_t port) noexcept;
     // Non-blocking connect progress: 1 = connected, 0 = still in progress, -1 = failed.
     int TcpConnectStatus(SocketHandle socket) noexcept;
-    // Send on a connected stream. Returns bytes sent (may be < size - a partial write on a full send
+    // Send on a connected stream. Returns bytes sent (may be < size: a partial write on a full send
     // buffer), 0 on would-block, -1 on error/closed.
     std::int64_t TcpSend(SocketHandle socket, const void* data, std::size_t size) noexcept;
     // Receive on a connected stream into `out`. Returns bytes read (>0), 0 on would-block (no data

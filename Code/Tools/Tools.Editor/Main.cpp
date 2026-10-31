@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor - the editor executable (the ASSEMBLY point).
-// Creates the OS shell + graphics device and runs EditorApplication. Per-subsystem editor
-// modules get linked HERE and their RegisterEditor(EditorContext&)
-// called on the app's context - the editor core/app libraries never link engine subsystems.
+// Editor - the editor executable, where the editor is assembled.
+// Creates the OS shell and graphics device and runs EditorApplication. The per-subsystem editor
+// modules are linked here and registered on the app's context, so the editor core and app
+// libraries never link engine subsystems.
 //
 // Usage: Tools.Editor [projectDirectory] [--project <dir>]
-//   With a project (positional or --project): opens it directly (scaffolding Project.xml +
-//   Content/Sources/Cooked/Editor/.cache on first run) - the single-project lifecycle.
-//   With NO project: starts on the built-in PROJECT MANAGER (recent projects from the
-//   per-user registry, open/create/remove); File > Close Project returns to it.
+//   With a project (positional or --project): opens it directly, scaffolding Project.xml and
+//   Content/Sources/Cooked/Editor/.cache on first run.
+//   With no project: starts on the built-in project manager (recent projects from the per-user
+//   registry; open, create, remove); File > Close Project returns to it.
 //   Smoke-test aids: [--exit-after <s>] [--rebuild-after <s>]
-//   [--mcp] [--mcp-port <n>] (the MCP host for this run: agent access to the open project over
-//     127.0.0.1; the persisted preference is in Preferences)
-//   [--screenshot <png> [--screenshot-after <s>] [--screenshot-exit]] (the main window, UI
-//   included, as a PNG - a run proves what it drew; --screenshot-exit quits once it is written)
+//   [--mcp] [--mcp-port <n>] (serve MCP for this run, giving agents access to the open project
+//     over 127.0.0.1; the persistent setting is in Preferences)
+//   [--screenshot <png> [--screenshot-after <s>] [--screenshot-exit]] (writes the main window,
+//   UI included, as a PNG; --screenshot-exit quits once it is written)
 //   [--seed] [--seed-primitives] [--version].
 //   GPU: [--vulkan|--dx12|--webgpu|--null-gpu] [--gpu-validation|--no-gpu-validation]
-//   (validation defaults ON in Debug, OFF in RelWithDebInfo / Release).
+//   (validation defaults to on in Debug, off in RelWithDebInfo and Release).
 
 #include <cstdio>
 #include <cstring>
@@ -53,8 +53,8 @@ import foundation.materials.resource;
 import foundation.texture.resource;
 import pipeline.core;
 import pipeline.registration;
-import pipeline.importer; // the import framework (a consumer imports it itself)
-import engine.composition; // RegisterAllScriptFacades - the COMPLETE engine facade surface
+import pipeline.importer; // the import framework, which consumers import directly
+import engine.composition; // RegisterAllScriptFacades: the complete engine facade surface
 import editor.core;
 import editor.app;
 import editor.scene; // RegisterSceneEditor
@@ -98,7 +98,7 @@ import foundation.physics;
 import foundation.physics.resource;
 import physics.pipeline;
 import navigation.pipeline;
-import editor.navigation; // RegisterNavigationEditorSettings* (domain-contributed prefs)
+import editor.navigation; // RegisterNavigationEditorSettings* (the navigation domain's preferences)
 import engine.physics;
 import modelimporter;
 import foundation.audio;
@@ -120,7 +120,7 @@ namespace shell = foundation::shell;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: the one place it chooses the ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -130,47 +130,46 @@ namespace
 
 namespace
 {
-    // The builder + type registration set lives in Pipeline::Registration (the composition root):
-    // RegisterPipelineTypes() + RegisterAllBuilders() below assemble the same set the CLI cooker
-    // and export packager use. The editor ADDS its per-language editor-UI services (CodeEditView
-    // lexers) on top - those are editor-only and stay host-side.
+    // The builder and type registrations live in Pipeline::Registration (the composition root):
+    // RegisterPipelineTypes() and RegisterAllBuilders() below assemble the same set the CLI cooker
+    // and export packager use.
     void RegisterEditorBuilders(pipeline::BuilderRegistry& registry, StringView dataRoot)
     {
-        // Core reflection FIRST: property bindings (property-animation capture/preview) walk
-        // TypeOf<Transform>()'s PATCHED properties. Without this the patch only happened
-        // lazily when a script manager spun up - a scriptless session never resolved
+        // Core reflection first: property bindings (property-animation capture and preview) walk
+        // the patched properties of TypeOf<Transform>(). Otherwise the patch happens lazily when a
+        // script manager starts, and a session without scripts never resolves
         // 'Transform.position'. Idempotent.
         foundation::core::RegisterCoreTypes();
         pipeline::RegisterPipelineTypes();
-        // Domain editor-settings SECTIONS register before the app boots (the user settings
-        // file loads in the app ctor; see RegisterNavigationEditorSettingsTypes).
+        // Domain editor-settings sections register before the app starts, because the user
+        // settings file loads in the app's constructor (see RegisterNavigationEditorSettingsTypes).
         editor::navigation::RegisterNavigationEditorSettingsTypes();
         editor::RegisterGameAudioEditorSettingsTypes();
         pipeline::RegisterAllBuilders(registry, dataRoot);
-        // The COMPLETE engine script surface into the global registry (run/ui/physics/audio/...
-        // facades), so BOTH the editor's cook AND its live script validation (ScriptApiSurface
-        // reads the same global registry) compile against the surface a running game has. The
-        // foundation-only registration above is missing every Engine-level facade. Metadata only
-        // (no device/GPU/world), idempotent.
+        // The complete engine script surface (the run, ui, physics, audio and other facades) goes
+        // into the global registry, so both the editor's cook and its live script validation
+        // (ScriptApiSurface reads the same registry) compile against the surface a running game
+        // has. The foundation-level registration above lacks the Engine-level facades. This
+        // registers metadata only (no device, GPU or world) and is idempotent.
         engine::RegisterAllScriptFacades();
     }
 
-    // `--seed-primitives`: the headless seed also creates EVERY primitive the creator table
-    // offers (Cylinder/Cone/Torus beyond the starter three) - regenerating a project's
-    // primitive meshes at the current source version without opening the editor UI.
+    // `--seed-primitives`: the headless seed also creates every primitive the creator table offers
+    // (Cylinder, Cone and Torus beyond the starter three), which regenerates a project's primitive
+    // meshes at the current source version without opening the editor UI.
     bool g_seedAllPrimitives = false;
 
-    // Starter content for a manager-created project: editor::SeedStarterContent (the baseline
-    // font set as the manifest default, the sky, the primitives), from the data root's Assets/.
-    // THE data root for this process: resolved once in main (an explicit --data-root, else the
-    // Data/.dataroot walk from the executable) - the same mechanism every executable uses. The
+    // The data root for this process, resolved once in main (an explicit --data-root, else the
+    // Data/.dataroot walk up from the executable), the same way every executable finds it. The
     // editor refuses to start without one; there is no compile-time path fallback.
     String g_dataRoot;
     [[nodiscard]] StringView EditorDataRoot() { return g_dataRoot.AsView(); }
 
+    // Starter content for a project created in the project manager: the baseline font set as
+    // the manifest default, the sky and the primitives, from the data root.
     void SeedNewProject(editor::EditorContext& ctx, editor::EditorProject& project)
     {
-        // The one seeding function the MCP project_create runs too (editor.project).
+        // The same seeding function MCP's project_create runs (editor.project).
         editor::SeedStarterContent(AppRoot(), project, ctx.Creators(), EditorDataRoot(), g_seedAllPrimitives);
     }
 }
@@ -185,7 +184,7 @@ extern "C" const char* BuildStamp();
 
 int main(int argc, char** argv)
 {
-    // --version: report engine version + build identity and exit, before any startup work.
+    // --version: print the engine version and build identity and exit, before any startup work.
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--version") == 0)
@@ -198,8 +197,8 @@ int main(int argc, char** argv)
         }
     }
 
-    // Log capture FIRST: the editor buffer + console output go on the global
-    // logger before shell/device creation, so early startup logs reach the Console panel.
+    // Log capture first: the editor buffer and console output attach to the global logger before
+    // the shell and device are created, so early startup logs reach the Console panel.
     editor::EditorLogBuffer logBuffer{AppRoot()};
     ConsoleSink consoleSink;
     GlobalLogger().AddSink(&logBuffer);
@@ -220,9 +219,9 @@ int main(int argc, char** argv)
 
     editor::app::EditorAppConfig config;
     config.dataRoot = g_dataRoot;
-    // Project selection: an explicit project (positional arg or --project <dir>) opens
-    // directly, Godot-style single-project lifecycle. NO project => the built-in PROJECT
-    // MANAGER screen (recent projects, open/create), and File > Close Project returns there.
+    // Project selection: an explicit project (positional argument or --project <dir>) opens
+    // directly. Without one the editor starts on the built-in project manager (recent projects,
+    // open, create), and File > Close Project returns there.
     if (argc > 1 && argv[1][0] != '-')
     {
         config.projectDirectory = String(StringView(reinterpret_cast<const utf8char*>(argv[1])));
@@ -273,42 +272,42 @@ int main(int argc, char** argv)
         if (std::strcmp(argv[i], "--seed-primitives") == 0)
         {
             config.seedOnScaffold = true;
-            g_seedAllPrimitives = true; // ...plus every primitive creator, not just the three
+            g_seedAllPrimitives = true; // and every primitive creator, not just the three
         }
     }
     config.startInProjectManager = config.projectDirectory.IsEmpty();
-    // The splash's face, from the data root, with an embedded twin as the last resort (the editor's
-    // own faces are its sheet's, through its resources).
+    // The splash screen's font, from the data root, with an embedded copy as the last resort. The
+    // editor's own fonts come from its style sheet, through its resources.
     const String splashFontPath = foundation::vfs::DataPath(EditorDataRoot(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
     const Span<const u8> embeddedFont(reinterpret_cast<const u8*>(g_embeddedEditorFont), static_cast<usize>(g_embeddedEditorFontSize));
     config.logBuffer = &logBuffer;
 
-    // Assembly: THIS is where the engine subsystems and per-subsystem editor
-    // plugins are chosen - the editor core/app libraries never link engine modules; the app
-    // drives scene rendering only through the ISceneRenderer interface injected below.
-    // Gameplay subsystems are registered by the embedded DefaultApplication against the
-    // editor's runtime context - the editor registers NONE itself.
+    // Assembly: this is where the engine subsystems and per-subsystem editor plugins are chosen.
+    // The editor core and app libraries never link engine modules; the app drives scene rendering
+    // only through the ISceneRenderer interface injected below. The embedded DefaultApplication
+    // registers the gameplay subsystems against the editor's runtime context; the editor
+    // registers none itself.
     config.seedNewProject = [](editor::EditorContext& ctx, editor::EditorProject& project)
     { SeedNewProject(ctx, project); };
-    // The pages are parked while the editor moves onto the GUI (Documentation/Specs/editor-gui.md,
-    // 4.1): each one's RegisterEditor comes back here with its port.
+    // Each editor domain registers its pages, tools and services here.
     config.registerEditors = [](editor::app::EditorApplication& app, foundation::runtime::IApplicationHost& host)
     {
         app.SetSceneRenderer(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
         editor::navigation::RegisterNavigationEditorSettings(app.Context());
-        // The scene editor: its pages, its actions, its MCP live tools, and its services (the
-        // document types, the export's scene seams, a model import's prefab and scene).
+        // The scene editor: its pages, actions, live MCP tools and services (the document types,
+        // the export's scene hooks, and the prefab and scene a model import makes).
         editor::RegisterSceneEditor(app.Context(), host, app);
-        // Play in editor: the Game tabs (Play, Play New Instance), the game-audio preference, the
-        // PIE tools (layer 7, part 3).
+        // Play in editor: the Game tabs (Play, Play New Instance), the game-audio preference and
+        // the PIE tools.
         editor::RegisterPlayInEditor(app.Context(), host, app);
-        // The scene view's tools by domain; the bar shows them in this order (layer 5, part 3).
+        // The scene view's tools by domain; the toolbar shows them in this order.
         editor::RegisterTerrainSceneTools(app.Context()); // sculpt, paint layers, cut holes; their panels; splatmap thumbnails
         editor::RegisterVegetationViewportTools(); // paint vegetation, paint props
         editor::RegisterVegetationToolPanels();
         editor::RegisterSplineViewportTools(); // the spline control-point editor
-        // The asset pages (X6), each asking the application's one source for its services when it
-        // is made; the fallback catches an asset with no page of its own, the bespoke ones win by type.
+        // The asset pages. Each asks the application's page services source for its services when
+        // it is created. The generic page is the fallback for an asset with no page of its own;
+        // a type-specific page wins over it.
         const editor::app::AssetPageServicesSource& pageServices = app.PageServicesSource();
         editor::RegisterImageEditor(app.Context(), pageServices);
         editor::RegisterHeightfieldEditor(app.Context(), pageServices); // and its thumbnails
@@ -324,17 +323,17 @@ int main(int argc, char** argv)
         editor::RegisterInputMapEditor(app.Context(), pageServices);
         editor::RegisterScriptEditor(app.Context(), pageServices);
         editor::RegisterShaderEditor(app.Context(), pageServices,
-                                     foundation::vfs::DataPath(g_dataRoot.AsView(), foundation::shaders::kShaderFolder).AsView()); // a check's include path
+                                     foundation::vfs::DataPath(g_dataRoot.AsView(), foundation::shaders::kShaderFolder).AsView()); // the include path for the shader page's check
         editor::RegisterGuiEditor(app.Context(), pageServices); // the GUI's documents and sheets
         editor::RegisterParticleEditor(app.Context(), pageServices);
         editor::RegisterAnimationClipEditor(app.Context(), pageServices);
         editor::RegisterSkeletonEditor(app.Context(), pageServices);
         editor::RegisterAnimationGraphEditor(app.Context(), pageServices);
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
-        // The thumbnail generators' tripwire (the old editor's): each domain's registration above
-        // registers its generators too; bump a count when a domain gains one, so one that stops
-        // registering fails here rather than as icons where pictures were. Five drawn from an
-        // image (texture, font, heightfield, audio clip, splat map), eight staged in a scene (mesh,
+        // A tripwire on the thumbnail generators: each domain's registration above registers its
+        // generators too. Bump a count when a domain gains one, so a generator that stops
+        // registering fails here rather than showing as icons where pictures were. Five draw from
+        // an image (texture, font, heightfield, audio clip, splat map); eight stage a scene (mesh,
         // material, prefab, scene, particle effect, skeleton, model manifest, collision shape).
         DIAGNOSTIC_ASSERT(app.Context().Thumbnails() != nullptr && app.Context().Thumbnails()->GeneratorCount() == 5);
         DIAGNOSTIC_ASSERT(app.Context().Thumbnails() != nullptr && app.Context().Thumbnails()->SceneGeneratorCount() == 8);
@@ -350,12 +349,12 @@ int main(int argc, char** argv)
         (void)pipeline::RegisterAllCreators(app.Context().Creators());
         RegisterEditorBuilders(app.Builders(), g_dataRoot.AsView()); // the cook service's set
 
-        // OS-file importers (drag-drop onto the editor) - the same set the MCP asset_import tool
+        // Importers for OS files dropped onto the editor: the same set the MCP asset_import tool
         // uses, from the composition root.
         pipeline::RegisterAllImporters(app.Context().Importers());
 
-        // Resource factories come from the embedded DefaultApplication (registered into
-        // the editor's preset ResourceManager at its OnStartup) - none registered here.
+        // Resource factories come from the embedded DefaultApplication, which registers them into
+        // the editor's preset ResourceManager in its OnStartup; none are registered here.
     };
 
     LOG_INFO(u8"Editor", u8"starting (project: {})", config.projectDirectory);
@@ -387,7 +386,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        mainWindow->Show(); // no splash: show the window now, as before
+        mainWindow->Show(); // no splash: show the window now
     }
     config.startupProgress = [&splash](StringView status, f32 progress)
     {
@@ -405,8 +404,9 @@ int main(int argc, char** argv)
         }
     };
 
-    // Validation follows the build config (Debug ON, optimized OFF) unless the command line
-    // says otherwise - a RelWithDebInfo editor is for measuring, not for the layer's overhead.
+    // Validation follows the build configuration (on in Debug, off in optimized builds) unless the
+    // command line says otherwise: a RelWithDebInfo editor is for measuring, so it skips the
+    // validation layer's overhead.
     graphics::GraphicsDeviceDesc gdd = graphics::DeviceDescFromArguments(argc, argv);
     auto gpu = graphics::CreateGraphicsDevice(gdd);
     if (!gpu.HasValue())

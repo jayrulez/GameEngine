@@ -3,20 +3,21 @@
 
 // GUI - :navigation partition
 //
-// Directional focus navigation (G7 of Specs/vg-and-gui-lab.md), automatic by default: a geometric
-// picker takes the best focusable widget in the pressed direction, so most screens need no
-// authoring. A candidate must lie beyond the focused widget in that direction; those overlapping
-// it on the cross axis come first (a row's neighbour before a widget diagonally nearer), then the
+// Directional focus navigation, automatic by default: a geometric picker chooses the best
+// focusable widget in the pressed direction, so most screens need no authoring. A candidate must
+// lie beyond the focused widget in that direction. Candidates that overlap it on the cross axis
+// come first (a neighbour in the same row beats a widget that is diagonally nearer), then the
 // nearest along the axis, then the nearest across it. Hidden, disabled and clipped-away widgets
 // are skipped.
 //
-// Where the geometry is wrong, a widget says where a direction goes (nav-up and the rest: an id,
-// or none to stop), which is followed first.
+// Where the geometry gives the wrong answer, a widget can name where a direction goes (nav-up,
+// nav-down, nav-left, nav-right: an id, or none to stop there). Such an override is followed
+// first.
 //
-// Focus scopes (Node::SetNavScope) bound the search: navigation stays inside the focused widget's
-// scope, and at its edge passes to the scope around it, wraps to the scope's other side, or stays
-// (contain, for a dialog). Entering a scope from outside lands on what was last focused in it, else
-// on its default focus, else on the picked widget.
+// Focus scopes (Node::SetNavScope) bound the search. Navigation stays inside the focused widget's
+// scope, and at its edge it passes to the enclosing scope, wraps to the scope's other side, or
+// stays put (contain, for a dialog). Entering a scope from outside lands on the widget last
+// focused in it, else on its default focus, else on the picked widget.
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +27,7 @@ export module foundation.gui:navigation;
 import foundation.core; // Array, Max, Min, Abs
 import :rect;
 import :node;
-import :ui_widget; // ids (a scope's default focus)
+import :ui_widget; // ids (for a scope's default focus)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -41,17 +42,17 @@ export namespace foundation::gui
         Right,
     };
 
-    /// What became of one candidate of a directional move.
+    /// The outcome for one candidate of a directional move.
     enum class NavVerdict : u8
     {
-        Chosen,  ///< the best: focus went there (or into the scope holding it)
-        Beaten,  ///< beyond the focused widget that way, with a worse score
-        Behind,  ///< not beyond it that way
+        Chosen,  ///< the best: focus went there (or into the scope containing it)
+        Beaten,  ///< beyond the focused widget in that direction, but with a worse score
+        Behind,  ///< not beyond the focused widget in that direction
         Clipped, ///< hidden by a clipping ancestor
     };
-    /// One candidate a directional move weighed: where it was (in the GUI's world), its name, its
-    /// score (lower is better; at 1e6 and over, one not overlapping the focused widget across the
-    /// move) and what became of it.
+    /// One candidate a directional move weighed: its bounds (in the GUI's world space), its name,
+    /// its score (lower is better; 1e6 and above means it does not overlap the focused widget
+    /// across the move) and its outcome.
     struct NavCandidate
     {
         Rect Bounds;
@@ -59,31 +60,32 @@ export namespace foundation::gui
         f32 Score = -1.0f;
         NavVerdict Verdict = NavVerdict::Behind;
     };
-    /// What the last directional move weighed (E8c: the debug overlay draws it, the inspector
-    /// lists it): from where, which way, every candidate of the last search, and whether an
-    /// override decided it or the search wrapped round its scope.
+    /// What the last directional move weighed, which the debug overlay draws and the inspector
+    /// lists: where it started, which direction, every candidate of the last search, and whether
+    /// an override decided it or the search wrapped around its scope.
     struct NavTrace
     {
         NavDirection Direction = NavDirection::Down;
         Rect From;
         Array<NavCandidate> Candidates;
-        bool Overridden = false; ///< a nav-up (and the rest) said where it went
-        bool Wrapped = false;    ///< it measured again from the scope's other side
-        bool Any = false;        ///< a move happened since the GUI began
+        bool Overridden = false; ///< a nav-up (or nav-down, nav-left, nav-right) override decided it
+        bool Wrapped = false;    ///< the search started again from the scope's other side
+        bool Any = false;        ///< a move has happened since the GUI started
         static constexpr f32 kNoOverlapTier = 1.0e6f;
     };
 
     namespace detail
     {
-        // Whether `node` can take focus from navigation: tab-focusable, enabled, and shown with all
-        // its ancestors (visible, and in the layout: not under a page switched away), and not leaving or inert.
+        // Whether `node` can take focus from navigation: it is tab-focusable and enabled, it and all
+        // its ancestors are shown (visible, and in the layout, so not under a page switched away),
+        // and it is neither leaving nor inert.
         [[nodiscard]] inline bool IsNavigable(const Node& node)
         {
             return node.IsTabFocusable() && node.IsTreeEnabled() && node.IsTreeVisible() && !node.IsTreeInert();
         }
 
-        // Whether a clipping ancestor hides `node` (a scroller's clip does not count: it scrolls a
-        // focused widget into view).
+        // Whether a clipping ancestor hides `node`. A scroller's clip does not count, since the
+        // scroller brings a focused widget into view.
         [[nodiscard]] inline bool IsClippedAway(const Node& node, const Rect& bounds)
         {
             for (const Node* n = node.GetParent(); n != nullptr; n = n->GetParent())
@@ -126,8 +128,9 @@ export namespace foundation::gui
             return false;
         }
 
-        // The score of moving from `from` to `to` in `direction`: lower is better; negative when
-        // `to` is not beyond `from` that way. Overlap on the cross axis is a tier of its own.
+        // The score of moving from `from` to `to` in `direction`. Lower is better, and it is
+        // negative when `to` is not beyond `from` in that direction. Candidates that overlap on the
+        // cross axis form their own, better tier.
         [[nodiscard]] inline f32 Score(const Rect& from, const Rect& to, NavDirection direction)
         {
             const bool vertical = direction == NavDirection::Up || direction == NavDirection::Down;
@@ -142,10 +145,11 @@ export namespace foundation::gui
             const f32 toCenter = vertical ? to.y + to.height * 0.5f : to.x + to.width * 0.5f;
             const f32 fromCenter = vertical ? from.y + from.height * 0.5f : from.x + from.width * 0.5f;
             const bool forward = direction == NavDirection::Down || direction == NavDirection::Right;
-            // Beyond: its centre past ours, and its near edge at or past our leading edge, give or
-            // take a quarter of the smaller one's size (neighbours that touch or overlap a little).
-            // A wide field in the row above is not to the right of a button under it, though its
-            // centre is (user report: Back, then right, took the settings' text field).
+            // Beyond means the candidate's centre is past ours and its near edge is at or past our
+            // leading edge, give or take a quarter of the smaller box's size (so neighbours that
+            // touch or overlap a little count). A wide field in the row above is therefore not to
+            // the right of a button under it, even though its centre is; otherwise Right from a
+            // Back button would jump up to a text field above it.
             if (forward ? toCenter <= fromCenter : toCenter >= fromCenter)
                 return -1.0f;
             const f32 slack = 0.25f * Min(vertical ? from.height : from.width, vertical ? to.height : to.width);
@@ -158,14 +162,15 @@ export namespace foundation::gui
             const f32 crossToHi = vertical ? to.x + to.width : to.y + to.height;
             const f32 overlap = Min(crossFromHi, crossToHi) - Max(crossFromLo, crossToLo);
             const f32 crossCenterGap = Abs((crossFromLo + crossFromHi) * 0.5f - (crossToLo + crossToHi) * 0.5f);
-            constexpr f32 kNoOverlapTier = NavTrace::kNoOverlapTier; // every overlapping candidate beats every other
+            constexpr f32 kNoOverlapTier = NavTrace::kNoOverlapTier; // every overlapping candidate beats every non-overlapping one
             if (overlap > 0.0f)
                 return along + crossCenterGap * 0.01f;
             const f32 crossGap = -overlap;
             return kNoOverlapTier + along + crossGap * 2.0f;
         }
 
-        // The innermost scope holding `node` (null when none: the whole GUI is the scope).
+        // The innermost scope containing `node`, or null when there is none and the whole GUI is
+        // the scope.
         [[nodiscard]] inline Node* ScopeOf(Node* node)
         {
             for (Node* n = node != nullptr ? node->GetParent() : nullptr; n != nullptr; n = n->GetParent())
@@ -175,23 +180,24 @@ export namespace foundation::gui
         }
     }
 
-    /// The best focusable widget from `from` in `direction` among the navigable widgets under
-    /// `within`, or null. Wrapping (true) measures from just outside `within`'s opposite edge, so
-    /// the first widget on that side is picked. `trace`, when given, gets every candidate weighed.
+    /// Returns the best focusable widget from `from` in `direction` among the navigable widgets
+    /// under `within`, or null. When wrapping, the caller passes a `fromBounds` just outside
+    /// `within`'s opposite edge, so the first widget on that side is picked. `trace`, when given,
+    /// receives every candidate weighed.
     [[nodiscard]] inline Node* PickInDirection(Node& within, const Node* from, const Rect& fromBounds, NavDirection direction,
                                                NavTrace* trace = nullptr)
     {
         Array<Node*> candidates;
         detail::CollectNavigable(within, candidates);
         if (trace != nullptr)
-            trace->Candidates.Clear(); // the last search is the one that decided
+            trace->Candidates.Clear(); // keep only the last search, which made the decision
         Node* best = nullptr;
         f32 bestScore = 0.0f;
         usize bestEntry = 0;
         for (Node* candidate : candidates)
         {
             if (candidate == from || (from != nullptr && detail::IsInside(from, *candidate)))
-                continue; // not itself, nor what holds it (a focusable scroller around it)
+                continue; // skip the focused widget and its ancestors (a focusable scroller around it)
             const Rect bounds = candidate->GetScreenBounds();
             const bool clipped = detail::IsClippedAway(*candidate, bounds);
             const f32 score = clipped ? -1.0f : detail::Score(fromBounds, bounds, direction);
@@ -212,8 +218,8 @@ export namespace foundation::gui
         return best;
     }
 
-    /// Where focus lands entering `scope` (the outermost scope a move crosses into): what was last
-    /// focused in it, else its default focus, else `picked`.
+    /// Returns where focus lands on entering `scope` (the outermost scope a move crosses into):
+    /// the widget last focused in it, else its default focus, else `picked`.
     [[nodiscard]] inline Node* EntryInto(Node& scope, Node* picked)
     {
         if (Node* remembered = scope.GetRememberedFocus();
@@ -223,7 +229,8 @@ export namespace foundation::gui
             if (Node* fallback = detail::FindWidgetById(scope, scope.GetDefaultFocusId());
                 fallback != nullptr && detail::IsNavigable(*fallback))
                 return fallback;
-        // A focus group no one has focused in yet: its current member (a checked radio).
+        // A focus group in which nothing has been focused yet enters at its current member (a
+        // checked radio button).
         if (scope.IsFocusGroup())
         {
             Array<Node*> members;
@@ -235,8 +242,9 @@ export namespace foundation::gui
         return picked;
     }
 
-    /// What `focused`'s override `which` says (nav-up and the rest): `stop` set for `none`, the
-    /// widget for an id found navigable under `root`, else null (auto, empty, or an id not there).
+    /// Follows `focused`'s override `which` (nav-up and the others). Sets `stop` for `none`;
+    /// returns the widget for an id that is found and navigable under `root`; otherwise returns
+    /// null (auto, empty, or an id that is not there).
     [[nodiscard]] inline Node* FollowOverride(Node& root, const Node& focused, Node::NavOverride which, bool& stop)
     {
         stop = false;
@@ -252,9 +260,9 @@ export namespace foundation::gui
         return found != nullptr && detail::IsNavigable(*found) ? found : nullptr;
     }
 
-    /// The widget directional navigation moves focus to from `focused` (under `root`, the GUI or a
-    /// modal), or null to stay. With nothing focused, the root's entry (its remembered or default
-    /// focus, else the first navigable widget).
+    /// Returns the widget directional navigation moves focus to from `focused` (under `root`,
+    /// which is the GUI or a modal), or null to stay. With nothing focused, it returns the root's
+    /// entry (its remembered or default focus, else the first navigable widget).
     [[nodiscard]] inline Node* NavigateFrom(Node& root, Node* focused, NavDirection direction, NavTrace* trace = nullptr)
     {
         if (trace != nullptr)
@@ -265,14 +273,15 @@ export namespace foundation::gui
             if (focused != nullptr)
                 trace->From = focused->GetScreenBounds();
         }
-        // Nothing focused, focus outside `root`, or on something that does not take focus: the entry.
+        // With nothing focused, focus outside `root`, or focus on something that does not take
+        // focus, go to the entry.
         if (focused == nullptr || !detail::IsInside(focused, root) || !detail::IsNavigable(*focused))
         {
             Array<Node*> all;
             detail::CollectNavigable(root, all);
             return EntryInto(root, all.IsEmpty() ? nullptr : all[0]);
         }
-        // An override where the geometry is wrong comes first.
+        // An override, for where the geometry gives the wrong answer, comes first.
         const Node::NavOverride which = direction == NavDirection::Up     ? Node::NavOverrideUp
                                         : direction == NavDirection::Down ? Node::NavOverrideDown
                                         : direction == NavDirection::Left ? Node::NavOverrideLeft
@@ -287,13 +296,15 @@ export namespace foundation::gui
         if (stop)
             return nullptr;
         const Rect from = focused->GetScreenBounds();
-        // Search the focused widget's scope, then outward while a scope passes its edge on.
+        // Search the focused widget's scope, then move outward while each scope passes the move on
+        // at its edge.
         for (Node* scope = detail::ScopeOf(focused);; scope = detail::ScopeOf(scope))
         {
             Node& within = (scope != nullptr && detail::IsInside(scope, root)) ? *scope : root;
             if (Node* picked = PickInDirection(within, focused, from, direction, trace))
             {
-                // Crossing into a scope (one holding the pick but not the focused widget): its entry.
+                // When the move crosses into a scope (one containing the pick but not the focused
+                // widget), focus goes to that scope's entry.
                 Node* entered = nullptr;
                 for (Node* s = detail::ScopeOf(picked); s != nullptr && s != &within; s = detail::ScopeOf(s))
                     if (!detail::IsInside(focused, *s))
@@ -302,7 +313,7 @@ export namespace foundation::gui
             }
             if (within.GetNavScope() == NavScope::Wrap)
             {
-                // From just past the scope's opposite edge, along the same line.
+                // Search again from just past the scope's opposite edge, along the same line.
                 const Rect edge = within.GetScreenBounds();
                 Rect outside = from;
                 switch (direction)
@@ -317,13 +328,14 @@ export namespace foundation::gui
                 return PickInDirection(within, nullptr, outside, direction, trace);
             }
             if (within.GetNavScope() == NavScope::Contain || &within == &root)
-                return nullptr; // a dialog's edge, or the GUI's
-            // Pass: on to the scope around this one.
+                return nullptr; // the edge of a dialog, or of the GUI
+            // Pass: continue with the enclosing scope.
         }
     }
 
-    /// Where focus goes when `node` is focused by a program: itself when it takes focus, else its
-    /// entry (remembered, default, or first focusable widget under it); null when nothing does.
+    /// Returns where focus goes when a program focuses `node`: the node itself when it takes
+    /// focus, else its entry (remembered, default, or first focusable widget under it), or null
+    /// when nothing takes focus.
     [[nodiscard]] inline Node* FocusTargetOf(Node& node)
     {
         if (detail::IsNavigable(node))
@@ -333,7 +345,8 @@ export namespace foundation::gui
         return EntryInto(node, all.IsEmpty() ? nullptr : all[0]);
     }
 
-    /// The innermost containing scope holding `node` (a dialog's: Tab stays inside it), or null.
+    /// Returns the innermost scope of kind contain around `node` (a dialog's, inside which Tab
+    /// stays), or null.
     [[nodiscard]] inline Node* ContainingScopeOf(Node* node)
     {
         for (Node* scope = detail::ScopeOf(node); scope != nullptr; scope = detail::ScopeOf(scope))
@@ -342,7 +355,7 @@ export namespace foundation::gui
         return nullptr;
     }
 
-    /// Records `focused` as the remembered focus of every scope holding it.
+    /// Records `focused` as the remembered focus of every scope containing it.
     inline void RememberInScopes(Node& focused)
     {
         for (Node* scope = detail::ScopeOf(&focused); scope != nullptr; scope = detail::ScopeOf(scope))

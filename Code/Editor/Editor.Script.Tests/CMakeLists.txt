@@ -1,5 +1,5 @@
 # Editor::Script tests: the API browser's tree, the language service (completion and hover) on each
-# backend, and the script page over its markup. They REGISTER a backend (an entry point's job); the
+# backend, and the script page over its markup. The tests register a backend, as an entry point does; the
 # page and the service stay backend-neutral and resolve through the registries, as the editor does.
 add_executable(Editor.Script.Tests TestsMain.cpp ScriptApiBrowserTests.cpp ScriptLanguageServiceTests.cpp ScriptPageTests.cpp)
 target_link_libraries(Editor.Script.Tests PRIVATE

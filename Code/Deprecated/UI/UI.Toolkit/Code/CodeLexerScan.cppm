@@ -4,9 +4,10 @@
 // UI Toolkit - :code_lexer_scan partition (module-internal).
 //
 // Shared scanning primitives for the concrete lexers (CLikeLexer.cpp, XmlLexer.cpp): a
-// byte+codepoint cursor, character classes, and the token emitter. An INTERNAL partition
-// (partition implementation unit): importable by this module's other units, invisible to
-// toolkit consumers - GCC rejects the not-re-exported interface-partition alternative.
+// cursor over bytes and codepoints, character classes, and the token emitter. It is an internal
+// partition (a partition implementation unit): this module's other units can import it, and
+// toolkit consumers cannot see it. GCC rejects the alternative, an interface partition that is
+// not re-exported.
 
 module;
 #include "Core/Prelude.h"
@@ -118,8 +119,8 @@ namespace foundation::ui::toolkit::lexer_scan
         Emit(out, begin, cursor.i, column, CodeTokenKind::String);
     }
 
-    /// Loose number scan (ints, floats, hex, exponents, suffixes) - built for coloring,
-    /// not validation.
+    /// Loose number scan (ints, floats, hex, exponents, suffixes), built for coloring
+    /// rather than validation.
     inline void ScanNumber(Cursor& cursor, Array<CodeToken>& out)
     {
         const usize begin = cursor.i;

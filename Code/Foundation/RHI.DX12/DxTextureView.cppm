@@ -2,8 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of TextureView.
-/// Lazily creates SRV/RTV/DSV/UAV CPU descriptor handles on demand.
-/// Ported from Sedulous.RHI.DX12/DX12TextureView.bf.
+/// Creates SRV, RTV, DSV and UAV CPU descriptor handles lazily, on demand.
 
 module;
 #include "Core/Prelude.h"
@@ -346,8 +345,8 @@ export namespace foundation::rhi::dx12
                                                                    : m_viewDesc.format;
         }
         // Base-mip extent (a view onto mip N is half-sized per level). DX12 has no Vulkan-style renderArea
-        // validation so a stale base size here wouldn't fault, but callers (e.g. the render graph's
-        // viewport default) expect the view's true dimensions - keep it correct + consistent with Vulkan.
+        // validation so a stale base size here would not fault, but callers (e.g. the render graph's
+        // viewport default) expect the view's true dimensions, as Vulkan reports them.
         [[nodiscard]] u32 Width() const
         {
             u32 w = m_texture->desc.width >> m_viewDesc.baseMipLevel;

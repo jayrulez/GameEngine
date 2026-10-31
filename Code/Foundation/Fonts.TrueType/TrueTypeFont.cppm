@@ -5,7 +5,7 @@
 //
 // TrueType/OpenType IFont backed by stb_truetype. Owns the raw font bytes and
 // an stbtt_fontinfo, caches per-codepoint GlyphInfo, and extracts the family
-// name from the name table. Ported from Sedulous.Fonts.TTF/TrueTypeFont.bf.
+// name from the name table.
 
 module;
 #include "Core/Prelude.h"
@@ -62,7 +62,7 @@ export namespace foundation::fonts
             return FontLoadResult::Success;
         }
 
-        // Raw font bytes - the atlas baker needs these for stb's pack API.
+        // Raw font bytes: the atlas baker needs these for stb's pack API.
         [[nodiscard]] const unsigned char* RawData() const { return m_fontData.Data(); }
         // Byte length of the raw font data (the MSDF baker inits stb_truetype directly from it).
         [[nodiscard]] usize RawDataSize() const { return m_fontData.Size(); }

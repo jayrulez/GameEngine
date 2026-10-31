@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ScriptedInputSource (agent-playtesting-and-asset-creation.md P4): a timeline plays a virtual
-// keyboard, mouse and gamepads in time order, each frame's edges and events its own, a press and
-// its release in one frame still a press, a release-all frame at the end, and the cases parsed by
-// their reflected names; an action map reads it as it reads a player's devices.
+// ScriptedInputSource: a timeline plays a virtual keyboard, mouse and gamepads in time order,
+// each frame's edges and events its own, a press and its release in one frame still a press, a
+// release-all frame at the end, and the cases parsed by their reflected names; an action map
+// reads it as it reads a player's devices.
 
 #include <doctest/doctest.h>
 

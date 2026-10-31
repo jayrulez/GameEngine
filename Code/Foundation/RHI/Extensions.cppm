@@ -3,13 +3,14 @@
 
 /// Extension base classes for multiple inheritance.
 ///
-/// VK backend encoders inherit these alongside their core base classes:
+/// Backend encoders that support an extension inherit it alongside their core base class:
 ///   class VkRenderPassEncoder : public RenderPassEncoder, public MeshShaderPassExt { ... };
 ///   class VkCommandEncoder : public CommandEncoder, public RayTracingEncoderExt { ... };
 ///
-/// Callers probe for support via dynamic_cast (equivalent to Beef's `as`):
-///   if (auto* mp = dynamic_cast<MeshShaderPassExt*>(renderPass)) { ... }
-///   if (auto* rt = dynamic_cast<RayTracingEncoderExt*>(encoder)) { ... }
+/// The engine builds without RTTI, so callers probe for support through the cross-queries on the
+/// core classes rather than a dynamic_cast:
+///   if (auto* mp = renderPass->AsMeshShaderExt()) { ... }
+///   if (auto* rt = encoder->AsRayTracingExt()) { ... }
 
 export module foundation.rhi:extensions;
 
@@ -51,7 +52,7 @@ export namespace foundation::rhi
     public:
         virtual ~RayTracingEncoderExt() = default;
 
-        /// Build a bottom-level acceleration structure from triangle and/or AABB geometry.
+        /// Build a bottom-level acceleration structure from triangle or AABB geometry, or both.
         virtual void BuildBottomLevelAccelStruct(AccelStruct* dst, Buffer* scratchBuffer,
                                                  u64 scratchOffset,
                                                  Span<const AccelStructGeometryTriangles> triangles,

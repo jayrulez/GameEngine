@@ -1,7 +1,7 @@
-// Input: the clickable card counts the clicks that reach it (the button's stop at the button);
-// the pad shows where it was pressed and how many presses of a run that was; the glass over a
-// button lets clicks through (pointer-events: none); the canvas says what was dropped on it; the
-// viewer turns two fingers' gestures into its picture's transform.
+// Input: the clickable card counts the clicks that reach it (clicks on its button stop at the
+// button). The pad shows where it was pressed and the click count of that press (double, triple).
+// The glass over a button lets clicks through (pointer-events: none). The canvas says what was
+// dropped on it. The viewer turns two-finger gestures into its picture's transform.
 funcdef bool EventHandler(GuiEvent e);
 bool onCard(GuiEvent e) { gui::set("cardClicks", gui::getNumber("cardClicks") + 1); return false; }
 bool onCardButton(GuiEvent e) { gui::set("buttonClicks", gui::getNumber("buttonClicks") + 1); return false; }
@@ -15,7 +15,7 @@ bool onPad(GuiEvent e)
 bool onGlass(GuiEvent e) { gui::set("glassClicks", gui::getNumber("glassClicks") + 1); return false; }
 bool onPaint(GuiEvent e) { gui::set("paint", e.text + " (" + e.effect + ")"); return true; }
 
-// The viewer (E17c): where the last gesture left the picture, and each gesture on top of it.
+// The viewer: where the last gesture left the picture, with each new gesture applied on top.
 double viewX = 0; double viewY = 0; double viewScale = 1; double viewTurn = 0; // degrees
 void showView(double x, double y, double scale, double turn)
 {
@@ -36,7 +36,7 @@ bool onGestureEnd(GuiEvent e)
     showView(viewX, viewY, viewScale, viewTurn);
     return true;
 }
-bool onGestureCancel(GuiEvent e) { showView(viewX, viewY, viewScale, viewTurn); return true; } // back where it was
+bool onGestureCancel(GuiEvent e) { showView(viewX, viewY, viewScale, viewTurn); return true; } // restore the picture to where it was
 bool onViewReset(GuiEvent e)
 {
     viewX = 0; viewY = 0; viewScale = 1; viewTurn = 0;

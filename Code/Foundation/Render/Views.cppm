@@ -4,12 +4,12 @@
 /// Foundation::Render - the `:views` partition.
 ///
 /// `RenderView` is the renderer's unit of work *and* its isolation boundary: render one
-/// scene's extracted data, from one camera, into one target. A frame renders a SET of
-/// views - primary cameras, plus derived shadow/probe views - and `RenderView`
-/// owning all per-frame-mutable state (the culled+sorted draw list, the view
-/// UBO, cluster grid, shadow slots, HDR/depth targets) is what guarantees views don't
-/// trash each other. The only state shared across views is the immutable `ExtractedScene`
-/// and shared GPU resources.
+/// scene's extracted data, from one camera, into one target. A frame renders a set of
+/// views (primary cameras, plus derived shadow and probe views), and because each
+/// `RenderView` owns its per-frame mutable state (the culled and sorted draw list, the
+/// view UBO, cluster grid, shadow slots, HDR and depth targets), views don't overwrite
+/// each other. The only state shared across views is the immutable `ExtractedScene` and
+/// shared GPU resources.
 ///
 /// Views are pooled per frame from a `RenderViewPool` (reset, not freed, each frame).
 
@@ -18,8 +18,8 @@ module;
 
 export module foundation.render:views;
 
-// ViewCamera + ViewportRect live in the light `foundation.render.api` module (with
-// ISceneRenderer); re-exported here so foundation.render importers see them unchanged.
+// ViewCamera and ViewportRect live in the light `foundation.render.api` module (with
+// ISceneRenderer); re-exported here so foundation.render importers see them.
 export import foundation.render.api;
 
 import foundation.core;
@@ -32,11 +32,11 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
-    // Per-view settings (post config, layer mask, etc.).
+    // Per-view settings (post config, layer mask and the rest).
     struct ViewSettings
     {
         rhi::ClearColor clear = rhi::ClearColor::CornflowerBlue();
-        // Viewport sub-rect within the target, in pixels (split-screen). Width 0 => the full target.
+        // Viewport sub-rect within the target, in pixels (split-screen). Width 0 means the full target.
         i32 viewportX = 0, viewportY = 0;
         u32 viewportWidth = 0, viewportHeight = 0;
         // The size the scene draws at, when it is not the viewport's: the whole scene chain runs
@@ -44,25 +44,25 @@ export namespace foundation::render
         // viewport. Unset draws at the viewport's own size.
         SceneSize scene{};
         // Target resource-state handling for the imported color target. `targetTexture` is the backing
-        // texture the graph barriers (null => host-managed backbuffer; the graph touches no barrier).
-        // `targetFinalState` is where the graph leaves it - RenderTarget for present, or ShaderRead /
-        // CopySrc for an offscreen target the caller then samples / blits.
+        // texture the graph transitions (null for a host-managed backbuffer; the graph adds no barrier).
+        // `targetFinalState` is where the graph leaves it: RenderTarget for present, or ShaderRead or
+        // CopySrc for an offscreen target the caller then samples or blits.
         rhi::Texture* targetTexture = nullptr;
         rhi::ResourceState targetCurrentState = rhi::ResourceState::RenderTarget;
         rhi::ResourceState targetFinalState = rhi::ResourceState::RenderTarget;
-        // Resolved per-view post-processing (exposure/bloom/AO). The RenderSubsystem fills this from
+        // Resolved per-view post-processing (exposure, bloom, AO). The RenderSubsystem fills this from
         // the scene's authored PostProcessSettings; the compose passes read it per view.
         ViewPostConfig post{};
-        // Debug-view selection (editor "show me this texture"); resource empty = off.
+        // Debug-view selection (editor "show me this texture"); an empty resource is off.
         ViewDebugView debug{};
-        // The opaque per-viewport key the RenderScene call carried (null = unkeyed). Pick
+        // The opaque per-viewport key the RenderScene call carried (null when unkeyed). Pick
         // requests bind to it: only the view rendered with a matching key answers them.
         const void* viewportKey = nullptr;
-        // Which view this is from frame to frame (0 = by its place in the frame's list). The state a
-        // view carries between frames (its previous camera for motion vectors, the TAA, SSR, SSGI
+        // Which view this is from frame to frame (0 means by its place in the frame's list). The state
+        // a view carries between frames (its previous camera for motion vectors, the TAA, SSR, SSGI
         // and exposure histories) follows this key, not the view's position: a render texture drawn
-        // on alternate frames before the main view shifted the main view's position every other
-        // frame, so it read the other view's history (PaperKid's minimap: TAA jitter in the player).
+        // on some frames before the main view shifts the main view's position, which would then read
+        // the other view's history.
         u64 historyKey = 0;
         // This view may frustum-cull its draw list (the frame's global switch still gates it).
         // A per-view override (ViewPostOverride::disableCulling) clears it for an A/B.
@@ -73,12 +73,12 @@ export namespace foundation::render
     };
 
     // A single view: what to draw (a shared ExtractedScene), from where (camera), into what
-    // (target). Owns the per-view draw list. Pooled - `Reset` rebinds it for a new use without
+    // (target). Owns the per-view draw list. Pooled: `Reset` rebinds it for a new use without
     // freeing the draw-list storage.
     class RenderView
     {
     public:
-        // Bind this view to a scene snapshot + camera + target for the current frame.
+        // Bind this view to a scene snapshot, camera and target for the current frame.
         void Bind(const ExtractedScene& scene, const ViewCamera& camera,
                   const ViewSettings& settings, rhi::TextureView* target,
                   rhi::TextureFormat targetFormat, u32 width, u32 height) noexcept
@@ -88,7 +88,7 @@ export namespace foundation::render
             m_settings = settings;
             m_target = target;
             m_targetFormat = targetFormat;
-            m_width = width; // full target (color import + transient depth size)
+            m_width = width; // full target (color import and transient depth size)
             m_height = height;
             // Viewport sub-rect within the target (defaults to the whole target).
             m_viewportX = (settings.viewportWidth > 0) ? settings.viewportX : 0;
@@ -118,8 +118,8 @@ export namespace foundation::render
             m_drawList.Clear();
         }
 
-        // Build the per-view draw list from the bound scene: assign each renderable a category +
-        // a view-dependent sort key (state bits + view-space depth), then radix-sort. When `cull` is set,
+        // Build the per-view draw list from the bound scene: assign each renderable a category and
+        // a view-dependent sort key (state bits and view-space depth), then radix-sort. When `cull` is set,
         // reject renderables whose world bounding sphere falls entirely outside the camera frustum first.
         void BuildDrawList(Array<DrawItem>& sortScratch, bool cull = false)
         {
@@ -149,15 +149,15 @@ export namespace foundation::render
                 }
                 ++m_sceneItemCount;
                 // View-frustum cull (category-generic): reject when the world bounding sphere is fully
-                // outside the frustum. Every producer sets worldCenter/worldRadius on the RenderData base.
+                // outside the frustum. Every producer sets worldCenter and worldRadius on the RenderData base.
                 if (cull &&
                     !Intersects(frustum, BoundingSphere{data->worldCenter, data->worldRadius}))
                 {
                     ++m_culledCount;
                     continue;
                 }
-                // Category-generic: read the base sort fields (worldCenter/sortBatchKey the producer set)
-                // + the category's sort mode from the dynamic registry - no downcast to a concrete type,
+                // Category-generic: read the base sort fields (worldCenter and sortBatchKey, set by the
+                // producer) and the category's sort mode from the dynamic registry, with no downcast,
                 // so any renderer's data (mesh, sprite, particle) sorts through this one path.
                 // view-space depth: forward is -z in RH view space, so distance ~ -z_view.
                 const Float3 vc = TransformPoint(data->worldCenter, viewMat);
@@ -166,7 +166,7 @@ export namespace foundation::render
                 const bool backToFront =
                     (Categories().Sort(data->category) == SortMode::BackToFront);
                 // Front-to-back categories cluster by the producer's batch key so identical draws stay
-                // contiguous (fusable); back-to-front zeroes it so depth dominates (blend order intact).
+                // contiguous (fusable); back-to-front zeroes it so depth wins (blend order intact).
                 const u32 stateBits = backToFront ? 0u : data->sortBatchKey;
                 const u32 depthBits = QuantizeDepth(depth01, /*invert*/ backToFront);
                 const u64 key = MakeSortKey(data->category, stateBits, depthBits);
@@ -211,16 +211,16 @@ export namespace foundation::render
         {
             return Span<const DrawItem>{m_drawList.Data(), m_drawList.Size()};
         }
-        // Cull stats for the last BuildDrawList (0/0 when culling was off - nothing tested).
+        // Cull stats for the last BuildDrawList (0/0 when culling was off: nothing tested).
         [[nodiscard]] u32 SceneItemCount() const noexcept { return m_sceneItemCount; }
         [[nodiscard]] u32 CulledCount() const noexcept { return m_culledCount; }
         // Opaque per-scene debug-draw list for this view (set by the subsystem; cast back in RenderFrame).
         // Stored as void* to keep Views decoupled from the :debug_draw partition.
         void SetDebugScene(const void* d) noexcept { m_debugScene = d; }
         [[nodiscard]] const void* DebugScene() const noexcept { return m_debugScene; }
-        // Opaque per-VIEW debug-draw list (editor chrome: grid/selection gizmos). Drawn ONLY in
-        // this view - never in other views of the same scene (the task-#118 camera-preview
-        // contract). Scene-level debug (physics/nav) rides m_debugScene and draws in EVERY view.
+        // Opaque per-view debug-draw list (editor chrome: grid and selection gizmos). Drawn only in
+        // this view, never in other views of the same scene (such as a camera preview). Scene-level
+        // debug (physics, nav) rides m_debugScene and draws in every view.
         void SetDebugView(const void* d) noexcept { m_debugView = d; }
         [[nodiscard]] const void* DebugViewList() const noexcept { return m_debugView; }
         // Opaque scene identity for this view (set by the subsystem), handed to ISceneOverlay
@@ -248,14 +248,14 @@ export namespace foundation::render
         u32 m_outputViewportH = 0;
         bool m_scaled = false;
         const void* m_debugScene = nullptr; // opaque debug::DebugDraw* for this view's scene
-        const void* m_debugView = nullptr;  // opaque debug::DebugDraw* for THIS view only
+        const void* m_debugView = nullptr;  // opaque debug::DebugDraw* for this view only
         const void* m_sceneKey = nullptr;   // opaque scene identity (overlay matching)
         Array<DrawItem> m_drawList;         // per-view, owned (pooled storage)
         u32 m_sceneItemCount = 0;           // items considered by the last BuildDrawList
         u32 m_culledCount = 0;              // of those, rejected by the view-frustum cull
     };
 
-    // A per-frame pool of views. `Begin` rewinds it (keeping the RenderView storage + their
+    // A per-frame pool of views. `Begin` rewinds it (keeping the RenderView storage and their
     // draw-list buffers); `Acquire` hands out the next view. Views stay valid until the next
     // Begin. Stable addresses: views live in UniquePtr slots so growing the pool never moves
     // an already-acquired view.

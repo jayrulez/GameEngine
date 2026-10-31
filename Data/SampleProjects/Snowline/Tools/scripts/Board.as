@@ -1,11 +1,12 @@
-// Board - the rider on the snow.
+// Board: the rider on the snow.
 //
 // A grounded character moves only by its input, so the board drives the whole velocity
-// (CharacterComponent.drive): each frame, gravity less its part along the ground's normal is added
-// to the velocity the rider has, kept along the ground; snow friction and air drag take some back.
-// The stick turns that velocity (a carve), at a rate, keeping its speed but for what a hard carve
-// scrubs off; a tuck cuts the drag and the turning; a jump pops the rider off the snow. In the air,
-// gravity alone: the stick spins the rider instead of carving, and the grab button holds a grab.
+// (CharacterComponent.drive). Each frame, gravity minus its component along the ground's normal is
+// added to the rider's velocity, which is kept along the ground; snow friction and air drag take
+// some back. The stick turns that velocity at a limited rate (a carve), keeping its speed except
+// for what a hard carve scrubs off. A tuck cuts the drag and the turning, and a jump pops the rider
+// off the snow. In the air only gravity acts: the stick spins the rider instead of carving, and
+// the grab button holds a grab.
 //
 // A landing after real air (`minAir`) is judged against the path: the board within
 // `landTolerance` of the way the rider is travelling, forward or switch (backward), is clean and
@@ -14,8 +15,8 @@
 // air), "TrickSpin" (degrees, in half turns), "TrickGrab" (centiseconds grabbed), then
 // "TrickLanded" (1 clean, 0 crashed); a crash is "RiderCrashed" too.
 //
-// Riding into something solid at speed (a tree, a rock: what took the speed did not go into the
-// snow) is a crash too. Riding past a trunk close and fast without touching it is a near miss
+// Riding into something solid at speed (a tree or a rock, meaning the lost speed did not go into
+// the snow) is a crash too. Riding past a trunk close and fast without touching it is a near miss
 // ("NearMiss", once per trunk): an overlap in the trees' collision group around the rider.
 //
 // A kicker launches the rider itself ("KickerAngle", then "KickerLaunch", from Kicker.as): the
@@ -23,18 +24,18 @@
 // ("GapShort", from Gap.as) is a crash, and so is the avalanche catching the rider
 // ("AvalancheCaught").
 //
-// The rider's animation graph (graph.py) follows by parameters: Lean (heel -1 to toe +1), Tuck,
-// Airborne, Grab and Crashed. The lean is the turn the board makes, not the stick: as a rider leans
-// into a turn by its speed times how fast it turns (the lean that balances the turn's pull,
-// atan(v w / g)), full at `fullLean` degrees. Riding straight is upright whatever the stick says,
-// and a tuck, turning half as hard, leans less. The rider stands left foot forward facing the
-// board's right side, so a right turn is on the toe edge.
+// The rider's animation graph (graph.py) follows through parameters: Lean (heel -1 to toe +1),
+// Tuck, Airborne, Grab and Crashed. The lean follows the turn the board actually makes, not the
+// stick: a rider leans into a turn by the angle that balances its pull, atan(v w / g) for speed v
+// and turn rate w, reaching full lean at `fullLean` degrees. Riding straight is upright whatever
+// the stick says, and a tuck, which turns half as hard, leans less. The rider stands left foot
+// forward, facing the board's right side, so a right turn is on the toe edge.
 //
-// With `autopilot`, the board steers itself down the course line (playtests, the measurements).
+// With `autopilot`, the board steers itself down the course line, for playtests and measurements.
 const float kStep = 1.0f / 60.0f; // the longest step the board integrates at once (s)
 
-// The board's sounds (sounds.py, Kenney's Impact Sounds): the pop of a jump or a kicker's lip, a
-// clean landing, a crash into the snow and a hit on a tree or rock.
+// The board's sounds (sounds.py, from Kenney's Impact Sounds): the pop of a jump or a kicker's lip,
+// a clean landing, a crash into the snow, and a hit on a tree or rock.
 Guid kPopSound = Guid("5abbb76b-6d21-4ca0-8d9f-988b1c4c6369");     // Audio/Pop
 Guid kLandSound = Guid("73acb3f2-1241-47c2-9101-5680a9f40548");    // Audio/Land
 Guid kCrashSound = Guid("d03eb225-103d-4ba3-bd28-e0fde147e313");   // Audio/Crash
@@ -80,8 +81,8 @@ class Board
 
     private Float3 m_start;
     private float m_yaw = 0.0f;   // radians; 0 faces +Z
-    private float m_lean = 0.0f;  // the eased lean into the turn, -1 heel .. +1 toe
-    private float m_lastHeading = 0.0f; // the travel's heading last frame (radians), for the turn rate
+    private float m_lean = 0.0f;  // eased lean into the turn, -1 heel .. +1 toe
+    private float m_lastHeading = 0.0f; // heading of travel last frame (radians), for the turn rate
     private bool m_headingKnown = false;
     private Float3 m_lookAt = Float3(0.0f, 0.0f, 0.0f); // where the head looks (eased)
     private bool m_lookKnown = false;
@@ -89,19 +90,19 @@ class Board
     private Entity@ m_figure;     // the skinned mesh the graph drives
     private float m_sinceMark = 0.0f; // metres ridden since the last mark of the track
     private bool m_spraying = false;
-    private int m_nextGate = 0;   // the gate the rider looks at next
+    private int m_nextGate = 0;   // the next gate, which the rider looks at
     private Quaternion m_startRotation;
-    private bool m_fromRest = true; // a run begins: the next update starts from rest
+    private bool m_fromRest = true; // a run is beginning, so the next update starts from rest
     private bool m_inAir = false;   // off the snow since the last landing
-    private float m_air = 0.0f;     // how long this time in the air has lasted (s)
-    private float m_spin = 0.0f;    // how far the rider has spun in it (radians, signed)
-    private float m_grabbed = 0.0f; // how long it has held a grab in it (s)
-    private float m_crash = 0.0f;   // how long the crash still holds (s)
+    private float m_air = 0.0f;     // how long the current spell in the air has lasted (s)
+    private float m_spin = 0.0f;    // how far the rider has spun during it (radians, signed)
+    private float m_grabbed = 0.0f; // how long a grab has been held during it (s)
+    private float m_crash = 0.0f;   // how much longer the crash lasts (s)
     private Float3 m_driven = Float3(0.0f, 0.0f, 0.0f); // the velocity the board drove last frame
     private float m_launchAngle = 0.0f; // the next kicker launch's angle above level (degrees)
-    private float m_launchSpeed = 0.0f; // its speed (m/s); 0 when none is due
-    private Float3 m_lastTrunk = Float3(1.0e9f, 0.0f, 0.0f); // the last trunk passed close (its centre)
-    private bool m_crashDue = false; // a crash told to the board (a short gap), taken next update
+    private float m_launchSpeed = 0.0f; // the next kicker launch's speed (m/s); 0 when none is due
+    private Float3 m_lastTrunk = Float3(1.0e9f, 0.0f, 0.0f); // centre of the last trunk passed close
+    private bool m_crashDue = false; // a crash reported to the board (a short gap), applied next update
 
     Board(Entity@ entity) { @self = entity; }
 
@@ -110,13 +111,13 @@ class Board
         m_start = self.position();
         m_startRotation = self.rotation();
         m_yaw = startYaw();
-        // The run starts with the rider's first frame: the clock (Snowline.as) and the medal ghosts
-        // count from here, so a rider level with a ghost crosses the line on its medal's time.
+        // The run starts on the rider's first frame. The clock (Snowline.as) and the medal ghosts
+        // count from here, so a rider level with a ghost crosses the line at that medal's time.
         self.scene.events.emit("RunStarted", 0);
     }
 
-    // The skinned mesh the graph sits on: the model's root, its rig, the mesh under it. Found on
-    // first use, not at start (the model's instance may not have its children yet then).
+    // The skinned mesh that carries the graph: under the model's root, then its rig. It is found on
+    // first use rather than at start, because the model's instance may not have its children yet.
     private Entity@ figure()
     {
         if (m_figure is null || !m_figure.isValid())
@@ -140,11 +141,11 @@ class Board
         Float3 v = alongTheSnow(c);
         if (m_fromRest)
         {
-            // Every run starts from rest, and on the frame after it begins: the clock (Snowline.as)
-            // hears "RunStarted" or restarts on this frame and counts from the next, so the board
-            // waits for it. Integrating this frame (the long first one after the scene loads) gave
-            // the first run a head start the clock never saw, and a restarted one would carry the
-            // last run's speed.
+            // Every run starts from rest, on the frame after it begins. The clock (Snowline.as)
+            // receives "RunStarted" or restarts on this frame and counts from the next, so the
+            // board waits for it. Integrating this frame (the long first one after the scene loads)
+            // would give the first run a head start the clock never saw, and a restarted run would
+            // carry the last run's speed.
             c.drive(Float3(0.0f, 0.0f, 0.0f));
             m_driven = Float3(0.0f, 0.0f, 0.0f);
             m_fromRest = false;
@@ -153,7 +154,7 @@ class Board
         Float3 at = self.position();
         float down = travelled(at);
 
-        // What the rider asks for: the carve (-1 left .. +1 right), a tuck, a jump, a grab.
+        // Read the rider's input: the carve (-1 left .. +1 right), tuck, jump and grab.
         float steer = 0.0f;
         bool tuck = false;
         bool jump = false;
@@ -181,7 +182,7 @@ class Board
         bool grounded = c.grounded();
         if (m_launchSpeed > 0.0f)
         {
-            // Off a kicker's lip: along the heading, up at the lip's angle, and into the air.
+            // Launch off a kicker's lip: along the heading, up at the lip's angle, into the air.
             float heading = (v.x * v.x + v.z * v.z > 0.04f) ? Math::Atan2(v.x, v.z) : m_yaw;
             float up = Math::DegreesToRadians(m_launchAngle);
             v = Float3(Math::Sin(heading) * Math::Cos(up) * m_launchSpeed, Math::Sin(up) * m_launchSpeed,
@@ -208,14 +209,14 @@ class Board
             }
             m_inAir = true;
         }
-        // The frame in steps of at most kStep: a long frame (the first after the scene loads, a
-        // hitch) is integrated as the short ones it stands for, so the speed a run gathers does not
-        // hang on the frame rate. One long step had given a first run a 0.4 m/s head start.
+        // Integrate the frame in steps of at most kStep. A long frame (the first after the scene
+        // loads, or a hitch) is integrated as the short frames it stands for, so the speed a run
+        // gathers does not depend on the frame rate. A single long step can add about 0.4 m/s.
         int steps = int(Math::Ceil(d / kStep));
         float h = d / float(steps);
-        // A jump pops the rider off the snow in the first step; the rest of the frame is in the
-        // air. (Integrated as still on the snow, each later step laid the velocity back along the
-        // slope and took the jump away: no jump at all whenever a frame ran longer than kStep.)
+        // A jump pops the rider off the snow in the first step, and the rest of the frame is in the
+        // air. If the later steps treated the rider as still on the snow, each would lay the
+        // velocity back along the slope and cancel the jump whenever a frame ran longer than kStep.
         bool onSnow = grounded;
         for (int i = 0; i < steps; ++i)
         {
@@ -250,8 +251,8 @@ class Board
         look(at, v, d);
     }
 
-    // One step of the board's motion: on the snow, gravity along the slope, friction, a carve's
-    // scrub, drag and the carve's turn (and a jump's pop); in the air, gravity.
+    // One step of the board's motion. On the snow: gravity along the slope, friction, a carve's
+    // scrub, drag, the carve's turn and a jump's pop. In the air: gravity only.
     private Float3 integrate(CharacterComponent@ c, Float3 v, bool grounded, float steer, bool tuck,
                              bool jump, float d)
     {
@@ -262,13 +263,15 @@ class Board
             // Keep the velocity along the ground, then add gravity's pull along it.
             float vn = v.x * n.x + v.y * n.y + v.z * n.z;
             v = Float3(v.x - n.x * vn, v.y - n.y * vn, v.z - n.z * vn);
-            float gn = -g * n.y; // gravity (0, -g, 0) along the normal
+            float gn = -g * n.y; // component of gravity (0, -g, 0) along the normal
             v = Float3(v.x - n.x * gn * d, v.y + (-g - n.y * gn) * d, v.z - n.z * gn * d);
-            // Friction and a carve's scrub (from the press into the slope) and drag, against the motion.
+            // Friction, a carve's scrub (from the press into the slope) and drag, all against the
+            // motion.
             float speed = Math::Sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
             if (speed > 0.01f)
             {
-                // A carve's scrub grows with speed (the turn's sideways push), nothing at a crawl.
+                // A carve's scrub grows with speed (the turn's sideways push), and is nothing at a
+                // crawl.
                 float bite = (speed < scrubSpeed) ? speed / scrubSpeed : 1.0f;
                 float grip = (friction + carveScrub * Math::Abs(steer) * bite) * g * n.y;
                 float air = drag * (tuck ? tuckDrag : 1.0f) * speed * speed;
@@ -286,8 +289,8 @@ class Board
         return Float3(v.x, v.y - g * d, v.z);
     }
 
-    // Snowline.as starts the next run (the finish card's Jump): back to the top, at rest, facing
-    // down the course as at the start, the first gate next.
+    // Snowline.as starts the next run (Jump on the finish card): back to the top, at rest, facing
+    // down the course as at the start, with the first gate next.
     void onRunRestart(int unused)
     {
         CharacterComponent::of(self).setPosition(m_start);
@@ -307,15 +310,16 @@ class Board
         m_lookKnown = false;
     }
 
-    // The facing the scene started the rider with (radians; 0 faces +Z): the board turns from it,
-    // not from +Z, so the rider sets off without swinging round first.
+    // The facing the scene gave the rider at the start (radians; 0 faces +Z). The board turns from
+    // it, not from +Z, so the rider sets off without swinging round first.
     private float startYaw()
     {
         Float3 forward = Quaternion::RotateVector(m_startRotation, Float3(0.0f, 0.0f, 1.0f));
         return Math::Atan2(forward.x, forward.z);
     }
 
-    // A kicker's launch (Kicker.as): its angle comes first, then its speed, applied next update.
+    // A kicker's launch (Kicker.as): the angle arrives first, then the speed, and the launch is
+    // applied on the next update.
     void onKickerAngle(int tenths) { m_launchAngle = float(tenths) / 10.0f; }
     void onKickerLaunch(int centimetres) { m_launchSpeed = float(centimetres) / 100.0f; }
 
@@ -323,12 +327,12 @@ class Board
     void onGapShort(int unused) { m_crashDue = true; }
     void onAvalancheCaught(int unused) { m_crashDue = true; }
 
-    // The gate the rider looks at next is the one after the last crossed (passed or missed).
+    // The rider looks next at the gate after the last one crossed (passed or missed).
     void onGatePassed(int index) { m_nextGate = index + 1; }
     void onGateMissed(int index) { m_nextGate = index + 1; }
 
-    // Turns the velocity's ground direction by the carve, keeping its speed. A right turn (steer
-    // > 0) turns the heading toward -X when going +Z: the yaw (atan2(x, z)) falls.
+    // Turns the velocity's direction along the ground by the carve, keeping its speed. A right turn
+    // (steer > 0) turns the heading toward -X when going +Z, so the yaw (atan2(x, z)) falls.
     private Float3 carve(Float3 v, float steer, float d)
     {
         float flat = Math::Sqrt(v.x * v.x + v.z * v.z);
@@ -357,16 +361,16 @@ class Board
         float turn = want - have;
         while (turn > 3.14159f) { turn -= 6.28318f; }
         while (turn < -3.14159f) { turn += 6.28318f; }
-        // A turn to the left (the yaw rising) is a negative steer; full lock past 35 degrees off.
+        // A turn to the left (yaw rising) is a negative steer, at full lock past 35 degrees off.
         float steer = -turn / Math::DegreesToRadians(35.0f);
         return (steer > 1.0f) ? 1.0f : ((steer < -1.0f) ? -1.0f : steer);
     }
 
-    // The rider's head looks at the next gate (an AimIkComponent on the board's entity), then the
-    // finish, while it lies ahead; once it is behind (the finish crossed, a gate gone by), down the
-    // way the rider is travelling instead. The point eases from one target to the next, so the head
-    // turns rather than snaps. (Looking at the finish after crossing it, the head swung round to
-    // look back at it.) About eye height above the snow.
+    // The rider's head looks at the next gate (through an AimIkComponent on the board's entity), and
+    // then at the finish, while the target lies ahead. Once the target is behind (the finish
+    // crossed, a gate gone by), the head looks along the way the rider travels instead, so it never
+    // swings round to look back. The look point eases from one target to the next, so the head turns
+    // rather than snaps. It sits at about eye height above the snow.
     private void look(Float3 at, Float3 v, float d)
     {
         AimIkComponent@ aim = AimIkComponent::of(self);
@@ -389,7 +393,7 @@ class Board
             float tx = p.x - at.x;
             float tz = p.z - at.z;
             float dist = Math::Sqrt(tx * tx + tz * tz);
-            // Ahead: within about 60 degrees of the travel.
+            // Ahead means within about 60 degrees of the direction of travel.
             if (dist > 1.0f && (tx * dx + tz * dz) > 0.5f * dist)
             {
                 want = p + Float3(0.0f, 1.2f, 0.0f);
@@ -417,14 +421,14 @@ class Board
         return (here !is null && here.valid) ? here.distance : 0.0f;
     }
 
-    // The board's track: a mark every `trackSpacing` metres on the snow, under the board, along the
-    // heading. None in the air, nor at a crawl.
+    // Leaves the board's track: a mark every `trackSpacing` metres on the snow, under the board,
+    // along the heading. No marks are left in the air or at a crawl.
     private void track(Float3 at, Float3 v, bool grounded, float d)
     {
         float speed = Math::Sqrt(v.x * v.x + v.z * v.z);
         if (!grounded || speed < trackSpeed || trackMark is null || trackMark.IsNil())
         {
-            m_sinceMark = trackSpacing; // the first mark on touching down lands at once
+            m_sinceMark = trackSpacing; // so the first mark after touching down comes at once
             return;
         }
         m_sinceMark += speed * d;
@@ -441,8 +445,9 @@ class Board
         }
     }
 
-    // The board's snow: spray off its edge while it carves hard and fast (the Spray child, played
-    // and stopped only on a change), and a burst of powder as it lands (the Powder child).
+    // The board's snow effects: spray off its edge while it carves hard and fast (the Spray child,
+    // played and stopped only when that changes), and a burst of powder on landing (the Powder
+    // child).
     private void snow(Float3 v, float steer, bool grounded)
     {
         SceneParticles@ particles = SceneParticles::of(self.scene);
@@ -474,7 +479,7 @@ class Board
         }
     }
 
-    // The wind in the rider's ears: silent standing, rising with the speed to its loudest at
+    // The wind in the rider's ears: silent when standing, rising with speed to its loudest at
     // `windSpeed`, and a little higher in pitch the faster it blows.
     private void wind(Float3 v)
     {
@@ -491,14 +496,13 @@ class Board
         audio.setPitch(source, 0.8f + 0.5f * k, 0.15f);
     }
 
-    // The rider faces where it goes, easing round.
-    // The velocity to carry on from. The character's own step takes away whatever went into a
-    // surface; the snow under the board only turns it, though (its push is square to the motion
-    // along it). So when what was lost since the last drive went into the ground:
-    // - riding (or after a hop too short to be a trick, as over a kicker's curve), the board turns
-    //   its own velocity along the snow and keeps its speed: the lost part had taken a rider from
-    //   17 to 7 m/s up a kicker;
-    // - landing from real air, it keeps what lies along the snow and loses what went into it.
+    // The velocity to carry on from. The character's own step removes whatever velocity went into
+    // a surface, but the snow under the board should only turn it, since its push is perpendicular
+    // to the motion along it. So when the velocity lost since the last drive went into the ground:
+    // - while riding (or after a hop too short to be a trick, as over a kicker's curve), the board
+    //   turns its own velocity along the snow and keeps its speed; otherwise a rider going up a
+    //   kicker can drop from 17 to 7 m/s;
+    // - when landing from real air, it keeps what lies along the snow and loses what went into it.
     // Speed lost to anything else (a rock, a tree) stays lost.
     private Float3 alongTheSnow(CharacterComponent@ c)
     {
@@ -530,9 +534,10 @@ class Board
         return Float3(along.x * k, along.y * k, along.z * k);
     }
 
-    // Judges a landing: the board along the path (forward or switch) is clean, a burst of speed
-    // along it; across it is a crash. Short hops (under minAir) are neither. The trick's parts are
-    // announced for the game to score. Returns the velocity the rider rides on with.
+    // Judges a landing. The board along the path (forward or switch) is clean and gives a burst of
+    // speed along it; across the path is a crash. Short hops (under minAir) are neither. The
+    // trick's parts are announced for the game to score. Returns the velocity the rider rides on
+    // with.
     private Float3 land(Float3 v)
     {
         m_inAir = false;
@@ -550,7 +555,7 @@ class Board
         float off = wrap(m_yaw - Math::Atan2(v.x, v.z));
         if (Math::Abs(off) > 1.5708f)
         {
-            off = wrap(off - 3.14159f); // landing switch: judged against riding backward
+            off = wrap(off - 3.14159f); // landing switch, so judge against riding backward
         }
         bool clean = Math::Abs(off) <= Math::DegreesToRadians(landTolerance);
         int halfTurns = int(Math::Abs(spun) / 3.14159f + 0.5f);
@@ -567,7 +572,7 @@ class Board
         return crash(v);
     }
 
-    // Down: most of the speed gone, the control for crashTime.
+    // A crash: most of the speed is lost, and control is lost for crashTime.
     private Float3 crash(Float3 v)
     {
         Audio::playOneShot(kCrashSound, AudioBus::Effects, 1.0f);
@@ -576,8 +581,9 @@ class Board
         return Float3(v.x * crashKeep, v.y, v.z * crashKeep);
     }
 
-    // Whether the character's step took a lot of speed into something that is not the snow: a
-    // tree, a rock. (Speed the snow takes goes along its normal, and alongTheSnow gives it back.)
+    // Whether the character's step lost a lot of speed into something that is not the snow, such as
+    // a tree or a rock. (Speed the snow takes goes along its normal, and alongTheSnow gives it
+    // back.)
     private bool hitSomething(CharacterComponent@ c)
     {
         if (m_crash > 0.0f)
@@ -601,10 +607,10 @@ class Board
                 return false; // into the snow, not into something on it
             }
         }
-        // Thrown upward by what it met: a slope under it, not an obstacle. A hop on a kicker's
-        // curve came back down onto the steeper ramp still counted as in the air, and the ramp
-        // turning it upward (20 m/s ahead to 14 ahead and 11 up) read as a crash into something.
-        // A tree or a rock takes the speed back along the travel and pushes nothing up.
+        // Thrown upward by what it met means a slope under it, not an obstacle. A hop on a
+        // kicker's curve can land on the steeper ramp while still counted as in the air, and the
+        // ramp turning it upward (from 20 m/s ahead to 14 ahead and 11 up) would otherwise read as
+        // a crash. A tree or a rock takes the speed back along the travel and pushes nothing up.
         if (v.y - m_driven.y > 0.5f * lostLength)
         {
             return false;
@@ -612,7 +618,7 @@ class Board
         return true;
     }
 
-    // A trunk passing within reach at speed, not touched: a near miss, once for each trunk.
+    // A trunk passed within reach at speed without touching it: a near miss, once for each trunk.
     private void nearMiss(Float3 at, Float3 v)
     {
         if (m_crash > 0.0f || v.x * v.x + v.z * v.z < nearMissSpeed * nearMissSpeed)
@@ -630,7 +636,7 @@ class Board
         float dz = p.z - m_lastTrunk.z;
         if (dx * dx + dz * dz < 0.25f)
         {
-            return; // this one again
+            return; // the same trunk as last time
         }
         m_lastTrunk = p;
         self.scene.events.emit("NearMiss", 1);
@@ -643,7 +649,8 @@ class Board
         return a;
     }
 
-    // On the snow the rider turns to its travel (easing); in the air it holds the facing it spun to.
+    // On the snow the rider eases round to face its travel; in the air it keeps the facing it
+    // spun to.
     private void face(Float3 v, float d, bool grounded)
     {
         if (!grounded || v.x * v.x + v.z * v.z < 0.04f)
@@ -659,10 +666,9 @@ class Board
         self.setRotationEuler(0.0f, Math::RadiansToDegrees(m_yaw), 0.0f);
     }
 
-    // The graph's parameters: the lean eases toward the carve (a right turn is the toe edge).
     // How far the rider leans into the turn the board is making, -1 (heel) .. +1 (toe): the angle
-    // that balances the turn, atan(speed x turn rate / g), against fullLean. A right turn (the
-    // heading falling) is on the toe edge.
+    // that balances the turn, atan(speed * turn rate / g), as a fraction of fullLean. A right turn
+    // (heading falling) is on the toe edge.
     private float turnLean(Float3 v, float d)
     {
         float speed = Math::Sqrt(v.x * v.x + v.z * v.z);
@@ -681,6 +687,7 @@ class Board
         return (rate < 0.0f) ? lean : -lean;
     }
 
+    // Sets the graph's parameters; the lean eases toward the value from turnLean.
     private void animate(float steer, bool tuck, bool airborne, bool grab, float d)
     {
         Entity@ figureNow = figure();

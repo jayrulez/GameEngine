@@ -5,7 +5,7 @@
 //
 // SVGRenderer: draws an SVGDocument to a VGContext (standalone, no UI framework).
 // Scales the document to fit a bounds rect; an optional tint overrides all
-// fill/stroke colors. Ported from Sedulous.VG.SVG/SVGRenderer.bf.
+// fill and stroke colors.
 
 module;
 #include "Core/Prelude.h"
@@ -154,7 +154,7 @@ export namespace foundation::vg::svg
             if (element.textContent.AsView().IsEmpty() || vg.FontService() == nullptr)
                 return;
 
-            // The current VG transform scales SVG units -> screen pixels. Glyphs are
+            // The current VG transform scales SVG units to screen pixels. Glyphs are
             // rasterized at a fixed pixel size, so: compute the effective pixel font
             // size, convert position to screen space, and draw without the SVG scale.
             const Float4x4 transform = vg.GetTransform();
@@ -171,7 +171,7 @@ export namespace foundation::vg::svg
                     ? tint.Value()
                     : (element.fillColor.HasValue() ? element.fillColor.Value() : Color::Black);
 
-            // SVG position -> screen pixels via the current transform.
+            // SVG position to screen pixels through the current transform.
             const f32 screenX = transform.m[0][0] * element.textX +
                                 transform.m[1][0] * element.textY + transform.m[3][0];
             const f32 screenY = transform.m[0][1] * element.textX +

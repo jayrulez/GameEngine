@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Foundation::Spline - `foundation.spline`: authorable 3D spline math over Core. A LEAF
-/// under Core (the Foundation::Lod precedent - domain math never lands in core itself).
+/// Foundation::Spline - `foundation.spline`: authorable 3D spline math over Core. A leaf
+/// library under Core, as Foundation::Lod is, so domain math stays out of core itself.
 ///
-/// The curve is CUBIC BEZIER NATIVE: every point carries an in/out handle (relative
-/// offsets) plus a mode - Auto derives Catmull-Rom-style handles from the neighbors (drop
+/// The curve is natively cubic Bezier: every point carries an in and out handle (relative
+/// offsets) and a mode. Auto derives Catmull-Rom-style handles from the neighbors (drop
 /// points, get a smooth curve through them), Smooth keeps user handles collinear, Broken
-/// frees them (sharp corners, road-grade arcs). Handles are STORED, never derived at eval:
+/// frees them (sharp corners, road-grade arcs). Handles are stored, never derived at eval:
 /// UpdateAutoHandles() resolves Auto points after an edit, so evaluation and serialization
-/// are deterministic. Arc length rides a per-segment lookup table (RebuildArcLength after
+/// are deterministic. Arc length uses a per-segment lookup table (RebuildArcLength after
 /// edits) for even spacing and distance-parameterized queries; closest-point is a coarse
-/// sample + Newton refine. Open and closed loops.
+/// sample and a refinement. Curves are open or closed loops.
 
 module;
 #include "Core/Prelude.h"
@@ -34,8 +34,8 @@ export namespace foundation::spline
     struct SplinePoint
     {
         Float3 position{};
-        Float3 inHandle{};  // RELATIVE to position; toward the previous point
-        Float3 outHandle{}; // RELATIVE to position; toward the next point
+        Float3 inHandle{};  // relative to position; toward the previous point
+        Float3 outHandle{}; // relative to position; toward the next point
         SplineHandleMode mode = SplineHandleMode::Auto;
     };
 
@@ -49,11 +49,11 @@ export namespace foundation::spline
         p.mode = static_cast<SplineHandleMode>(mode);
     }
 
-    /// A sampled position + parameter pair (closest-point / distance queries).
+    /// A sampled position and parameter pair (closest-point and distance queries).
     struct SplineSample
     {
         Float3 position{};
-        f32 t = 0.0f; // global parameter: segment index + local [0,1)
+        f32 t = 0.0f; // global parameter: segment index plus local [0,1)
     };
 
     /// SplineCurve::kSamplesPerSegment, at namespace scope for another library to read (MSVC exports no class's
@@ -66,7 +66,7 @@ export namespace foundation::spline
         Array<SplinePoint> points;
         bool closed = false;
 
-        /// Segments: open = points-1, closed = points (the wrap segment).
+        /// Segments: points-1 when open, points when closed (the wrap segment).
         [[nodiscard]] u32 SegmentCount() const noexcept
         {
             const usize n = points.Size();
@@ -81,10 +81,10 @@ export namespace foundation::spline
         [[nodiscard]] f32 MaxT() const noexcept { return static_cast<f32>(SegmentCount()); }
 
         /// Recompute the handles of every Auto point from its neighbors (call after any
-        /// point edit). Smooth/Broken handles are untouched.
+        /// point edit). Smooth and Broken handles are untouched.
         void UpdateAutoHandles();
 
-        /// Position at global t (clamped open / wrapped closed).
+        /// Position at global t (clamped when open, wrapped when closed).
         [[nodiscard]] Float3 Evaluate(f32 t) const;
 
         /// Unit tangent at global t (zero vector on a degenerate segment).

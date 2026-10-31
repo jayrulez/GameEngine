@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The capture recorder (Specs/profiler.md, P3): arms the profiler for the time asked, waits for
+// The capture recorder: arms the profiler for the time asked, waits for
 // the last frames' GPU passes, then writes a profile stream file and Chrome trace JSON beside it,
 // and lets the profiler go.
 #include <doctest/doctest.h>

@@ -3,9 +3,10 @@
 
 // Foundation::Profiler.GUI - :sheet partition
 //
-// The profiler views' default sheet, written against the theme's tokens as the toolkit's is, so
-// they follow dark, light and contrast; a theme restyles them by setting `--profiler-*` over it.
-// A name's eight hues are light enough for dark text on them in either scheme.
+// The profiler views' default style sheet. Like the toolkit's, it is written against the theme's
+// tokens, so the views follow the dark, light and contrast themes; a theme restyles them by
+// setting `--profiler-*` on top. The eight name hues are light enough for dark text on them in
+// either scheme.
 
 module;
 #include "Core/Prelude.h"
@@ -18,7 +19,7 @@ namespace core = foundation::core;
 
 export namespace foundation::profiler::gui
 {
-    /// The views' sheet (an application puts it after the theme in its user agent sheet).
+    /// Returns the views' style sheet; an application puts it after the theme in its user agent sheet.
     [[nodiscard]] inline core::StringView ProfilerSheetCSS() noexcept
     {
         return core::StringView(u8R"(

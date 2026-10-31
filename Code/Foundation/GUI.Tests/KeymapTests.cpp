@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - bindings (G7 of Specs/vg-and-gui-lab.md): keystrokes and gamepad buttons bound to commands,
-// scoped by context predicates over the focus path (the deepest match winning, then the later
-// binding), unbinding, chords, and the order keys take (the widget, then bindings, then navigation).
+// GUI - bindings: keystrokes and gamepad buttons bound to commands, scoped by context predicates
+// over the focus path (the deepest match winning, then the later binding), unbinding, chords, and
+// the order keys take (the widget, then bindings, then navigation).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -76,16 +76,16 @@ TEST_CASE("keymap: the deepest matching context wins, then the later binding")
     bed.Handle(u8"close");
     Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"quit")));                   // everywhere
-    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"back"), SV(u8"menu")));     // in the menu: deeper
+    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"back"), SV(u8"menu")));     // in the menu, a deeper context
     bed.Key(KeyCode::Escape);
     REQUIRE(bed.ran.Size() == 1u);
     CHECK(bed.ran[0] == core::String(u8"back"));
 
-    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"close"), SV(u8"mode == main"))); // as deep, later: wins
+    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"close"), SV(u8"mode == main"))); // as deep and later, so it wins
     bed.Key(KeyCode::Escape);
     CHECK(bed.ran[1] == core::String(u8"close"));
 
-    // Focus outside the menu: only the context-free binding holds.
+    // With the focus outside the menu, only the binding with no context applies.
     auto outside = Make<Button>();
     outside->SetTabFocusable(true);
     bed.root->AddChild(outside.Get());
@@ -109,12 +109,12 @@ TEST_CASE("keymap: an outer node's context does not outrank the focused one's")
     bed.root->GetEventDispatcher()->SetFocusNode(bed.item.Get());
     Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"close"), SV(u8"menu")));
-    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"pause"), SV(u8"game"))); // later, but outer
+    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"pause"), SV(u8"game"))); // later, but in an outer context
     bed.Key(KeyCode::Escape);
     REQUIRE(bed.ran.Size() == 1u);
     CHECK(bed.ran[0] == core::String(u8"close"));
 
-    // "not in a menu" holds only outside it.
+    // "not in a menu" applies only outside the menu.
     REQUIRE(keys.Bind(SV(u8"f1"), SV(u8"pause"), SV(u8"game && !menu")));
     bed.Key(KeyCode::F1);
     CHECK(bed.ran.Size() == 1u);
@@ -125,7 +125,7 @@ TEST_CASE("keymap: an outer node's context does not outrank the focused one's")
     bed.Key(KeyCode::F1);
     REQUIRE(bed.ran.Size() == 2u);
     CHECK(bed.ran[1] == core::String(u8"pause"));
-    bed.Key(KeyCode::Escape); // outside the menu: the game's binding
+    bed.Key(KeyCode::Escape); // outside the menu, so the game's binding runs
     REQUIRE(bed.ran.Size() == 3u);
     CHECK(bed.ran[2] == core::String(u8"pause"));
 }
@@ -136,7 +136,7 @@ TEST_CASE("keymap: a binding to nothing unbinds a key there")
     bed.Handle(u8"quit");
     Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"escape"), SV(u8"quit")));
-    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8""), SV(u8"menu"))); // not in the menu
+    REQUIRE(keys.Bind(SV(u8"escape"), SV(u8""), SV(u8"menu"))); // unbound in the menu
     bed.Key(KeyCode::Escape);
     CHECK(bed.ran.IsEmpty());
 }
@@ -156,12 +156,12 @@ TEST_CASE("keymap: a chord waits for its next keystroke, and lapses")
     CHECK(bed.ran[0] == core::String(u8"comment"));
 
     bed.Key(KeyCode::X, KeyModCtrl);
-    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // too slow: dropped
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // too slow, so the chord is dropped
     bed.Key(KeyCode::C, KeyModCtrl);
     CHECK(bed.ran.Size() == 1u);
 
     bed.Key(KeyCode::X, KeyModCtrl);
-    bed.Key(KeyCode::A, KeyModCtrl); // broken off: the keystroke alone
+    bed.Key(KeyCode::A, KeyModCtrl); // the chord is broken off, so the keystroke runs alone
     REQUIRE(bed.ran.Size() == 2u);
     CHECK(bed.ran[1] == core::String(u8"select-all"));
 }
@@ -185,7 +185,7 @@ TEST_CASE("keymap: a text field keeps its keys, and leaves a shortcut to the bin
     Bed bed;
     bed.Handle(u8"save");
     REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-s"), SV(u8"save")));
-    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-a"), SV(u8"save"))); // the field's own: it keeps it
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-a"), SV(u8"save"))); // the field has its own ctrl-a and keeps it
     auto field = Make<TextField>();
     bed.screen->AddChild(field.Get());
     bed.root->GetEventDispatcher()->SetFocusNode(field.Get());
@@ -211,11 +211,11 @@ TEST_CASE("keymap: `>` holds for a context inside another")
     CHECK(p.Eval(core::Span<const KeyContextLayer>(nested, 2), 1));
     CHECK_FALSE(p.Eval(core::Span<const KeyContextLayer>(nested, 2), 0)); // the menu itself
     CHECK_FALSE(p.Eval(core::Span<const KeyContextLayer>(alone, 1), 0)); // a field in no menu
-    REQUIRE(p.Parse(SV(u8"menu > textinput && !multiline || game"))); // `>` binds loosest
+    REQUIRE(p.Parse(SV(u8"menu > textinput && !multiline || game"))); // `>` binds the loosest
     CHECK(p.Eval(core::Span<const KeyContextLayer>(nested, 2), 1));
     CHECK_FALSE(p.Parse(SV(u8"menu >")));
 
-    // A binding for fields inside a menu beats the fields' own.
+    // A binding for fields inside a menu beats the fields' own bindings.
     Bed bed;
     bed.Handle(u8"menu.field-escape");
     auto field = Make<TextField>();
@@ -302,14 +302,14 @@ TEST_CASE("keymap: a chord cut short runs what its first key binds alone: timed 
     REQUIRE(keys.Bind(SV(u8"ctrl-k"), SV(u8"kill")));
     REQUIRE(keys.Bind(SV(u8"ctrl-k ctrl-a"), SV(u8"kill-all")));
     REQUIRE(keys.Bind(SV(u8"ctrl-a"), SV(u8"select-all")));
-    bed.Key(KeyCode::K, KeyModCtrl); // waits: a chord may follow
+    bed.Key(KeyCode::K, KeyModCtrl); // waits, since a chord may follow
     CHECK(bed.ran.IsEmpty());
-    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // none did
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // no chord followed
     REQUIRE(bed.ran.Size() == 1u);
     CHECK(bed.ran[0] == core::String(u8"kill"));
 
     bed.Key(KeyCode::K, KeyModCtrl);
-    bed.Key(KeyCode::Z, KeyModCtrl); // continues no binding: ctrl-k alone, then ctrl-z (unbound)
+    bed.Key(KeyCode::Z, KeyModCtrl); // continues no binding, so ctrl-k runs alone, then ctrl-z (unbound)
     REQUIRE(bed.ran.Size() == 2u);
     CHECK(bed.ran[1] == core::String(u8"kill"));
 }
@@ -319,7 +319,7 @@ TEST_CASE("keymap: a command's keys as text are those bound where the control is
     Bed bed;
     Keymap& keys = bed.root->GetContext().GetKeymap();
     REQUIRE(keys.Bind(SV(u8"ctrl-s"), SV(u8"save"), SV(u8"menu")));
-    REQUIRE(keys.Bind(SV(u8"ctrl-shift-s"), SV(u8"save"), SV(u8"editor"))); // later, but elsewhere
+    REQUIRE(keys.Bind(SV(u8"ctrl-shift-s"), SV(u8"save"), SV(u8"editor"))); // later, but in another context
     const core::Array<KeyContextLayer> here = bed.root->KeyContextsAt(bed.item.Get());
     CHECK(keys.ShortcutText(SV(u8"save"), here.AsSpan()) == core::String(u8"Ctrl+S"));
 }
@@ -360,7 +360,7 @@ TEST_CASE("keymap: a modifier key binds alone, though pressing it sets its own m
     REQUIRE(bed.ran.Size() == 2u);
     CHECK(bed.ran[1] == SV(u8"zoom"));
     bed.Key(KeyCode::Keypad5);
-    CHECK(bed.ran.Size() == 2u); // unbound: Numpad 5 is not 5
+    CHECK(bed.ran.Size() == 2u); // unbound, since Numpad 5 is not 5
 }
 
 TEST_CASE("keymap: a keystroke's name reads back as the same keystroke")
@@ -390,24 +390,24 @@ TEST_CASE("keymap: a rebinding replaces the command's keys where it was bound; a
     };
     REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"save")));
     REQUIRE(keymap.Bind(SV(u8"ctrl-shift-s"), SV(u8"save-all")));
-    REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"menu.save"), SV(u8"menu"))); // another context's
+    REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"menu.save"), SV(u8"menu"))); // a binding in another context
 
-    // Rebound, the old key is free: it no longer saves, and the new one does.
+    // After a rebind the old key is free: it no longer saves, and the new one does.
     REQUIRE(keymap.Rebind(SV(u8"f2"), SV(u8"save")));
     CHECK(runs(u8"f2") == core::String(u8"save"));
     CHECK(runs(u8"ctrl-s").Size() == 0u);
     CHECK(keymap.ShortcutText(SV(u8"save")) == SV(u8"F2"));
     CHECK(runs(u8"ctrl-shift-s") == core::String(u8"save-all")); // another command keeps its keys
-    CHECK(keymap.ShortcutText(SV(u8"menu.save")) == SV(u8"Ctrl+S")); // and another context its own
+    CHECK(keymap.ShortcutText(SV(u8"menu.save")) == SV(u8"Ctrl+S")); // and another context keeps its own
 
-    // A bind adds: both keys work. Keys that do not parse change nothing.
+    // Bind adds a key, so both keys work. Keys that do not parse change nothing.
     REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"save")));
     CHECK(runs(u8"f2") == core::String(u8"save"));
     CHECK(runs(u8"ctrl-s") == core::String(u8"save"));
     CHECK_FALSE(keymap.Rebind(SV(u8"ctrl-nokey"), SV(u8"save")));
     CHECK(runs(u8"ctrl-s") == core::String(u8"save"));
 
-    // Unbound, it has no keys there.
+    // After UnbindCommand, the command has no keys there.
     CHECK(keymap.UnbindCommand(SV(u8"save")) == 2u);
     CHECK(runs(u8"f2").Size() == 0u);
     CHECK(keymap.ShortcutText(SV(u8"save")).Size() == 0u);

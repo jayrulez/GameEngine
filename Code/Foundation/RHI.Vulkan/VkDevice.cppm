@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of Device.
-/// Ported from Sedulous.RHI.Vulkan/VulkanDevice.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -331,8 +330,9 @@ export namespace foundation::rhi::vk
             return ShaderFormat::SpirV;
         }
 
-        // Vulkan flips clip-space Y via a negative-height viewport (VkRenderPassEncoder::SetViewport),
-        // so screen-space reconstruction is already consistent - no compensation needed.
+        // Vulkan flips clip-space Y via a negative-height viewport
+        // (VkRenderPassEncoder::SetViewport), so screen-space reconstruction is already consistent
+        // and needs no compensation.
         [[nodiscard]] bool NeedsClipSpaceYFlip() const noexcept override { return false; }
 
         Queue* GetQueue(QueueType t, u32 index) override
@@ -393,7 +393,7 @@ export namespace foundation::rhi::vk
 
         u32 MaxColorDepthSampleCount() const noexcept override
         {
-            // Scene-pass MSAA needs BOTH color and depth attachments at the same count.
+            // Scene-pass MSAA needs both color and depth attachments at the same count.
             VkPhysicalDeviceProperties props{};
             vkGetPhysicalDeviceProperties(m_adapter->physicalDevice(), &props);
             const VkSampleCountFlags both = props.limits.framebufferColorSampleCounts &
@@ -1101,7 +1101,7 @@ export namespace foundation::rhi::vk
         return m_device->calibrateTimestamps(gpuTimestamp, cpuTicks);
     }
 
-    // ---- Queue submits (out-of-line: report device loss + swap chain sync need Device) ----
+    // ---- Queue submits (out of line: device-loss reports and swap chain sync need Device) ----
 
     void VkQueueImpl::Submit(Span<CommandBuffer* const> cmdBufs)
     {
@@ -1132,11 +1132,10 @@ export namespace foundation::rhi::vk
         if (!vkFence)
             return;
 
-        // The swap chain's acquire/present semaphores are latched on the device by
-        // AcquireNextImage and belong to the submission that renders the swap-chain image -
-        // the GRAPHICS queue's. Before this gate whichever queue submitted first took them:
-        // in the MultiQueue sample the async-compute submit ran first, waited on acquire for
-        // nothing, and signalled "present" before the frame was drawn. Found by the Beef port.
+        // The swap chain's acquire/present semaphores are latched on the device by AcquireNextImage
+        // and belong to the submission that renders the swap-chain image, which is the graphics
+        // queue's. Another queue must not take them: an async-compute submit that ran first would
+        // wait on acquire for nothing and signal "present" before the frame was drawn.
         VkSemaphore acquireSem = VK_NULL_HANDLE, presentSem = VK_NULL_HANDLE;
         const bool hasSync = (queueType == QueueType::Graphics) &&
                              m_device->consumePendingSwapChainSync(acquireSem, presentSem);
@@ -1183,19 +1182,16 @@ export namespace foundation::rhi::vk
         for (usize i = 0; i < cmdBufs.Size(); ++i)
             bufs[i] = static_cast<VkCommandBufferImpl*>(cmdBufs[i])->handle();
 
-        // A fenced overload without a fence is a contract violation (the validation layer
-        // reports it; the 2-arg overload is the fire-and-forget path). Reject it here exactly
-        // as the 3-arg overload does - and BEFORE consuming the swap-chain sync, so a rejected
-        // submit leaves the pair latched for the graphics submit that will honour it. Found by
-        // the Beef port, whose backend already rejected while this one submitted unsignalled.
+        // A fenced overload without a fence is a contract violation (the validation layer reports
+        // it; the 2-arg overload is the fire-and-forget path). Reject it here as the 3-arg overload
+        // does, and before consuming the swap-chain sync, so a rejected submit leaves the pair
+        // latched for the graphics submit that will honour it.
         if (signalFence == nullptr)
             return;
 
-        // The swap-chain sync is the GRAPHICS queue's, whichever fenced overload it submits
-        // with. This overload used to decline it, which was harmless only while the other
-        // queue's submit consumed it by accident; once that was gated (the Beef port's
-        // finding) a frame whose graphics submit waits on a compute fence - the MultiQueue
-        // sample - left the acquire semaphore with nothing to signal it, three errors a frame.
+        // The swap-chain sync belongs to the graphics queue, whichever fenced overload it submits
+        // with. Declining it here would leave a frame whose graphics submit waits on a compute
+        // fence with an acquire semaphore that nothing signals.
         VkSemaphore acquireSem = VK_NULL_HANDLE, presentSem = VK_NULL_HANDLE;
         const bool hasSync = (queueType == QueueType::Graphics) &&
                              m_device->consumePendingSwapChainSync(acquireSem, presentSem);

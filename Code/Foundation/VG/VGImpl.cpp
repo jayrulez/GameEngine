@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Process-wide VG state: the path instance-id counter. Lives in an implementation unit so
-// there is exactly ONE counter per process (a static in a module interface is instantiated
+// there is exactly one counter per process (a static in a module interface is instantiated
 // per shared library and would hand two libraries the same id).
 module;
 #include "Core/Prelude.h"

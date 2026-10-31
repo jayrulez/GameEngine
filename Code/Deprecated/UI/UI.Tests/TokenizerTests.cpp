@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/TokenizerTests.bf (faithful; Beef `scope Tokenizer` -> stack
-// value, List<Token> -> Array<Token>, Math.Abs(...) < eps -> doctest::Approx).
+// Tests for the .sss Tokenizer.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -188,7 +187,7 @@ TEST_CASE("tokenizer: FullSelector_Tokenizes")
     core::Array<Token> tokens;
     tok.TokenizeAll(tokens);
 
-    CHECK(tokens.Size() >= 4); // Ident, ClassSelector, PseudoState, EOF
+    CHECK(tokens.Size() >= 4); // Ident, ClassSelector, PseudoState and EOF
     CHECK((tokens[0].Kind == TokenKind::Ident && tokens[0].Text == StringView(u8"Button")));
     CHECK(
         (tokens[1].Kind == TokenKind::ClassSelector && tokens[1].Text == StringView(u8".primary")));

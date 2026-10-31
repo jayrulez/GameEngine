@@ -21,7 +21,7 @@ namespace propanim = foundation::propertyanimation;
 
 namespace editor
 {
-    // One step: the whole clip before and after.
+    // One undo step: the whole clip before and after.
     class ClipDocument::Step final : public IEditorCommand
     {
     public:
@@ -46,8 +46,8 @@ namespace editor
 
     ClipDocument::ClipDocument(EditorContext& context) : m_context(&context)
     {
-        // Told once the history has moved (a step, an undo, a redo), so the unsaved mark it shows
-        // is the history's new place, not the one it is leaving.
+        // Notified once the history has moved (a step, an undo, a redo), so the unsaved mark
+        // reflects the history's new position rather than the one it is leaving.
         ClipDocument* self = this;
         m_commands.OnChanged = [self]() { self->Changed(); };
     }
@@ -85,7 +85,7 @@ namespace editor
         }
         m_savedAt = m_commands.UndoIndex();
         m_context->RequestCook(false);
-        Changed(); // the unsaved mark
+        Changed(); // updates the unsaved mark
         return written;
     }
 
@@ -143,10 +143,11 @@ namespace editor
 
     void ClipDocument::Push(StringView typeId, propanim::PropertyAnimationClip before)
     {
-        // Its length never cuts a key off.
+        // The length never cuts a key off.
         m_clip.duration = Max(m_clip.duration, m_clip.ComputeDuration());
         propanim::PropertyAnimationClip after = m_clip;
-        // A step taken below the save leaves the save off the history: no place is saved now.
+        // A step taken below the saved position removes the save from the history, so no position
+        // counts as saved now.
         if (m_savedAt > m_commands.UndoIndex())
             m_savedAt = kNeverSaved;
         (void)m_commands.Execute(UniquePtr<IEditorCommand>(EditorRootAllocator().New<Step>(*this, typeId, Move(before), Move(after)), EditorRootAllocator()));
@@ -154,7 +155,7 @@ namespace editor
 
     void ClipDocument::Apply(const propanim::PropertyAnimationClip& state)
     {
-        m_clip = state; // the history tells, once it has moved
+        m_clip = state; // the history notifies once it has moved
     }
 
     void ClipDocument::Changed()

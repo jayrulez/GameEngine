@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - the golden agent-shaped tool-call flow.
+// Integration.Mcp: the golden tool-call flow an agent runs.
 //
-// SUBJECT is the flow crossing collections: an agent drives the MCP protocol (foundation.mcp) to
-// scaffold, open, and inspect a project on disk (editor.mcp -> the headless EditorProject over
-// VFS + the content databases), all through JSON-RPC lines. This is the collection's first MCP
-// resident; asset_import/asset_cook/scene_write extend it as those tools land.
+// The flow crosses collections: an agent drives the MCP protocol (foundation.mcp) to scaffold,
+// open and inspect a project on disk (editor.mcp over the headless EditorProject, which sits on
+// the VFS and the content databases), all through JSON-RPC lines.
 
 #include <doctest/doctest.h>
 
@@ -42,8 +41,9 @@ namespace json = foundation::json;
 
 namespace
 {
-    // Register the first available backend + its language id (pipeline.registration also registers
-    // the enabled backends; this makes the language the script_api assertion expects explicit).
+    // Register the first available backend and return its language id. pipeline.registration
+    // also registers the enabled backends; this makes explicit the language the script_api
+    // assertion expects.
     [[nodiscard]] StringView RegisterSomeBackend()
     {
 #if defined(OPTION_HAS_ANGELSCRIPT)
@@ -97,7 +97,7 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
     editor::mcp::ProjectOwner owner;
     editor::mcp::RegisterProjectOpenTools(server, session, owner);
     editor::mcp::RegisterProjectInfoTool(server, session);
-    RegisterReflectionTools(server); // the same host serves reflection + project tools
+    RegisterReflectionTools(server); // the same host serves reflection and project tools
 
     // list advertises both tool families
     JsonValue tools = json::Parse(server.HandleLine(
@@ -105,9 +105,9 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
                                        .AsView())
                           .value.Get(u8"result")
                           .Get(u8"tools");
-    CHECK(tools.Count() >= 5); // project_create/open/info + type_list/type_info
+    CHECK(tools.Count() >= 5); // project_create/open/info and type_list/type_info
 
-    // create -> open -> info
+    // Create, open, then read the info.
     JsonValue created = CallOk(server, u8"project_create",
                                With(With(Obj(), u8"directory", u8"mcp_fixture_project"), u8"name",
                                     u8"Fixture"));
@@ -122,8 +122,8 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
     CHECK(info.Get(u8"directory").AsString().Size() > 0u);
     CHECK(info.Get(u8"sourcesRoot").AsString().Size() > 0u);
 
-    // The settings group as the Project Settings dialog's tabs: every setting in one category,
-    // General first.
+    // The settings are grouped as the Project Settings dialog's tabs: every setting in exactly one
+    // category, General first.
     const JsonValue categories = info.Get(u8"settingCategories");
     REQUIRE(categories.Count() > 1);
     CHECK(categories.KeyAt(0) == StringView(u8"General"));
@@ -146,14 +146,15 @@ TEST_CASE("integration.mcp: an agent creates, opens, and inspects a project via 
     // The manifest is written to disk.
     CHECK(std::filesystem::exists("mcp_fixture_project/Project.xml"));
 
-    // Opening a nonexistent project is a TOOL error (real text), not a protocol fault.
+    // Opening a nonexistent project is a tool error with real text, not a protocol fault.
     JsonValue bad =
         CallResponse(server, u8"project_open", With(Obj(), u8"directory", u8"nope_not_a_project"));
     CHECK(bad.Get(u8"result").Get(u8"isError").AsBool() == true);
 }
 
-// project_create seeds the editor's starter content: Snowline, made over MCP, had no default UI
-// font, so its exported game showed no text (the engine's built-in font is not in a dist).
+// project_create seeds the editor's starter content. A project made over MCP needs the default UI
+// font as an asset: the engine's built-in font is not in a dist, so without it an exported game
+// shows no text.
 TEST_CASE("integration.mcp: project_create seeds the default UI font, the sky and the primitives")
 {
     pipeline::RegisterPipelineTypes();
@@ -188,7 +189,7 @@ TEST_CASE("integration.mcp: project_create seeds the default UI font, the sky an
     REQUIRE(root->GetGroup(u8"Environment") != nullptr);
     CHECK(root->GetGroup(u8"Environment")->GetInstance(u8"Sky") != nullptr);
     CHECK(std::filesystem::exists("mcp_seeded_project/Sources/kloofendal_48d_partly_cloudy_puresky_1k.hdr"));
-    CHECK_FALSE(std::filesystem::exists("mcp_seeded_project/Sources/BlueSky.hdr")); // the large one no more
+    CHECK_FALSE(std::filesystem::exists("mcp_seeded_project/Sources/BlueSky.hdr")); // the large sky is not seeded
     CHECK(std::filesystem::exists("mcp_seeded_project/Sources/Roboto-Regular.ttf"));
 }
 
@@ -228,7 +229,7 @@ TEST_CASE("integration.mcp: asset_list / asset_info read the open project's cont
     CHECK(seen.Get(u8"name").AsString() == StringView(u8"hero"));
     CHECK(seen.Get(u8"typeNamespace").AsString() == StringView(u8"rtti::test"));
 
-    // A well-formed but absent guid is a tool error (real text), not a protocol fault.
+    // A well-formed but absent guid is a tool error with real text, not a protocol fault.
     JsonValue missing = CallResponse(server, u8"asset_info",
                                      With(Obj(), u8"guid", u8"00000000-0000-0000-0000-000000000000"));
     CHECK(missing.Get(u8"result").Get(u8"isError").AsBool() == true);
@@ -247,9 +248,10 @@ namespace
         return std::string(reinterpret_cast<const char*>(String(s).CStr()));
     }
 
-    // The import->cook flow is backend-GENERIC: RegisterPipelineTypes registers every enabled cook,
-    // the ScriptFileImporter accepts each backend's extension, and the cook resolves by language.
-    // Only the source language + file extension differ, so drive the identical flow per backend.
+    // The import and cook flow is the same for every backend: RegisterPipelineTypes registers
+    // every enabled cook, the ScriptFileImporter accepts each backend's extension, and the cook
+    // resolves by language. Only the source language and file extension differ, so the same flow
+    // runs per backend.
     void DriveImportCookFlow(StringView projectDir, StringView sourceStem, StringView ext,
                              StringView sourceBody)
     {
@@ -260,8 +262,8 @@ namespace
         std::filesystem::remove_all(projStd, ec);
         std::filesystem::remove(srcFileStd, ec);
 
-        // The host assembles the pipeline registries once (as Tools.Mcp does), from the composition
-        // root - asset_cook/asset_import route through these.
+        // The host assembles the pipeline registries once from the composition root, as Tools.Mcp
+        // does; asset_cook and asset_import route through them.
         pipeline::RegisterPipelineTypes();
         pipeline::BuilderRegistry builders{DefaultAllocator()};
         pipeline::RegisterAllBuilders(builders, foundation::vfs::FindDataRoot());
@@ -281,7 +283,8 @@ namespace
                With(With(Obj(), u8"directory", projectDir), u8"name", u8"Write"));
         CallOk(server, u8"project_open", With(Obj(), u8"directory", projectDir));
 
-        // A real source file on disk (CWD is .test-scratch). A trivial class cooks clean.
+        // A real source file on disk (the working directory is .test-scratch). A trivial class
+        // cooks clean.
         {
             std::ofstream out(srcFileStd);
             out << Utf8(sourceBody);
@@ -307,20 +310,20 @@ namespace
         CHECK(std::filesystem::exists(projStd + "/Sources/" + srcFileStd));
         CHECK(std::filesystem::exists(projStd + "/Content/scripts/" + stemStd + ".xasset"));
 
-        // Cook builds it into the cooked DB (product guid == source guid).
+        // Cook builds it into the cooked DB, with the product guid equal to the source guid.
         JsonValue cooked = CallOk(server, u8"asset_cook", Obj());
         CHECK(cooked.Get(u8"planned").AsInt() == 1);
         CHECK(cooked.Get(u8"cooked").AsInt() == 1);
         CHECK(cooked.Get(u8"failed").AsInt() == 0);
         CHECK(std::filesystem::exists(projStd + "/Cooked/scripts/" + stemStd + ".rasset"));
 
-        // The cooked product is now visible via asset_info on the cooked DB, under the source guid.
+        // The cooked product is visible through asset_info on the cooked DB, under the source guid.
         JsonValue product =
             CallOk(server, u8"asset_info",
                    With(With(Obj(), u8"guid", guid.AsView()), u8"database", u8"cooked"));
         CHECK(product.Get(u8"guid").AsString() == guid);
 
-        // A second cook is a no-op (nothing dirtied).
+        // A second cook does nothing, since nothing is dirty.
         JsonValue again = CallOk(server, u8"asset_cook", Obj());
         CHECK(again.Get(u8"planned").AsInt() == 0);
         CHECK(again.Get(u8"upToDate").AsInt() == 1);
@@ -348,9 +351,9 @@ TEST_CASE("integration.mcp: an agent imports + cooks a Luau source via MCP tools
 
 TEST_CASE("integration.mcp: script_api reports the COMPLETE engine surface, headless, no device")
 {
-    // The surface-describing composition root: every subsystem facade, metadata only - no device,
-    // no subsystem instantiated. This is the whole point of Fable's ruling A: the headless MCP host
-    // reports the true engine script surface (RigidBody/Audio/Ui/run/...), not just core.
+    // The composition root that describes the surface: every subsystem facade, as metadata only,
+    // with no device and no subsystem instantiated. This lets the headless MCP host report the
+    // engine's full script surface (RigidBody, Audio, gui, run and the rest), not just the core.
     engine::RegisterAllScriptFacades();
     const StringView backend = RegisterSomeBackend();
 
@@ -380,14 +383,15 @@ TEST_CASE("integration.mcp: script_api reports the COMPLETE engine surface, head
         return false;
     };
 
-    // Core facades AND the gameplay-subsystem facades must all be present.
+    // The core facades and the gameplay subsystem facades must all be present.
     CHECK(has(u8"Entity"));
     CHECK(has(u8"RigidBodyComponent")); // physics
     CHECK(has(u8"Audio"));              // audio
     CHECK(has(u8"gui"));                // game GUI (scriptName alias, bound lowercase)
     CHECK(has(u8"run"));                // run/scene-load facade (GameInstance)
     CHECK(has(u8"Net"));                // networking
-    // The full surface is much larger than the core-only 17 (physics/audio/input/gui/... added).
+    // The full surface, with physics, audio, input, gui and the rest, is much larger than the
+    // core facades alone.
     CHECK(reported.Get(u8"typeCount").AsInt() > 30);
 }
 
@@ -426,9 +430,9 @@ TEST_CASE("integration.mcp: asset_import names the other claimants of an extensi
            With(With(Obj(), u8"directory", u8"mcp_import_claimants"), u8"name", u8"Claims"));
     CallOk(server, u8"project_open", With(Obj(), u8"directory", u8"mcp_import_claimants"));
 
-    // A real PNG from the engine's data; several importers claim the extension (texture, image,
-    // heightfield, the terrain masks). Two copies, since a re-import of the same source lands
-    // on the asset it already made.
+    // A real PNG from the engine's data, an extension several importers claim (texture, image,
+    // heightfield and the terrain masks). The test uses two copies, since a re-import of the same
+    // source lands on the asset it already made.
     const String dataRoot = foundation::vfs::FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
     const String png = PathJoin(dataRoot.AsView(), u8"Samples/Images/logo.png");

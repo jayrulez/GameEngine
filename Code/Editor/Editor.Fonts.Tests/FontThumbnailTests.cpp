@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Font thumbnail generator: the worker half runs headless against a real bundled face - the
-// glyph sample must land ink over the tile's ground.
+// Font thumbnail generator: the worker half runs headless against a real bundled face, and the
+// glyph sample must put ink over the tile's ground.
 
 #include <doctest/doctest.h>
 

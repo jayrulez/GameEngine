@@ -3,16 +3,16 @@
 
 // Editor App - :import_dialog partition
 //
-// The import window (Documentation/Specs/editor-gui.md, 5.2, layer 7), over its markup
-// (Data/Editor/Import.xml): one window for one file or many, where the old editor had two. Where
-// they go, a field that opens the group picker; the files, when there are several, each kept or
-// not, with its state (reading, ready, failed), one chosen; the chosen file's importer (a choice
-// when several take it), its options, and what it would create by kind, each kept or not and
-// named, a kind's box keeping or leaving all of it. A file still being read says so and shows when
-// it is ready. The line under it says what Import does, or why it waits, Import waiting with it.
-// A name another asset holds is said on the file (AssetImport::ClashOf): one of another type
-// waits for a rename; another file's of its type offers Replace or Keep both, Import waiting for
-// the choice. It is the view of an AssetImport session, which does the work.
+// The import window, over its markup (Data/Editor/Import.xml): one window for one file or many.
+// It shows where the files go, in a field that opens the group picker; the files, when there are
+// several, each kept or dropped, with its state (reading, ready, failed) and one selected; and the
+// selected file's importer (a choice when several accept it), its options, and what it would
+// create by kind, each item kept or dropped and named, with a kind's box keeping or dropping all of
+// that kind. A file still being read says so and shows its detail when it is ready. The line under
+// it says what Import will do, or why it waits, and Import is disabled while it waits. A name
+// another asset holds is reported on the file (AssetImport::ClashOf): an asset of another type
+// waits for a rename; one of the same type from another file offers Replace or Keep both, and
+// Import waits for the choice. It is the view of an AssetImport session, which does the work.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -40,13 +40,13 @@ export namespace editor::app
     class ImportWindow
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kImportWindowPath;
 
         struct Services
         {
             AssetImport* import = nullptr;
-            /// Opens the group picker, `current` checked; `picked` hears the choice.
+            /// Opens the group picker with `current` checked; `picked` gets the choice.
             Function<void(content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
         };
 
@@ -78,15 +78,15 @@ export namespace editor::app
                 run->SetOnClick([self]() { (void)self->Import(); });
             if (auto* cancel = Find<gui::Button>(u8"import-cancel"))
                 cancel->SetOnClick([self]() { self->Close(); });
-            // However it closes, the session lets go of it: a read that arrives after is dropped.
+            // However it closes, release the session: a read that arrives afterwards is dropped.
             m_window->SetOnClose([self]() { self->Release(); });
         }
         ImportWindow(const ImportWindow&) = delete;
         ImportWindow& operator=(const ImportWindow&) = delete;
         ~ImportWindow() { Close(); }
 
-        /// Opens it over `root` for `session`, its first file chosen; false with no markup, no
-        /// session or one open.
+        /// Opens the window over `root` for `session` with its first file selected; false with no
+        /// markup, no session, or when one is already open.
         bool Open(gui::Node& root, RefPtr<AssetImport::Session> session)
         {
             if (!m_window || !session || m_window->IsOpen())
@@ -112,7 +112,7 @@ export namespace editor::app
                 m_window->Close();
         }
 
-        /// Imports what is kept and closes; false (it stays, saying why) when it cannot yet.
+        /// Imports what is kept and closes; false (the window stays, saying why) when it cannot yet.
         bool Import()
         {
             if (!m_session || !m_services.import->Commit(*m_session))
@@ -130,7 +130,7 @@ export namespace editor::app
             ShowDetail();
         }
 
-        // For tests: the session, the window, the chosen file, the line, Import.
+        // For tests: the session, the window, the selected file, the line, the Import button.
         [[nodiscard]] AssetImport::Session* Session() const noexcept { return m_session.Get(); }
         [[nodiscard]] gui::Window* Window() const noexcept { return m_window.Get(); }
         [[nodiscard]] usize Selected() const noexcept { return m_selected; }
@@ -163,7 +163,7 @@ export namespace editor::app
             ShowWhy();
         }
 
-        // The files, when there are several: each kept or not, its state, the chosen one marked.
+        // Shows the files when there are several: each kept or not, its state, the selected one marked.
         void ShowFiles()
         {
             auto* scroll = Find<gui::UIWidget>(u8"import-files-scroll");
@@ -198,7 +198,7 @@ export namespace editor::app
                 name->AddClass(u8"import-file-name");
                 name->SetText(file.Name());
                 name->SetTooltip(file.path.AsView());
-                name->SetOnClick([self, i]() { self->Later([self, i]() { self->Select(i); }); }); // the rows rebuild: not under the click
+                name->SetOnClick([self, i]() { self->Later([self, i]() { self->Select(i); }); }); // the rows are rebuilt, so not inside the click
                 RefPtr<gui::Label> state = MakeRef<gui::Label>(m_allocator);
                 state->AddClass(u8"badge");
                 state->AddClass(file.state == AssetImport::File::State::Ready    ? StringView(u8"success")
@@ -214,7 +214,7 @@ export namespace editor::app
             }
         }
 
-        // The chosen file: its importer, its options, what it would create by kind.
+        // Shows the selected file: its importer, its options, what it would create by kind.
         void ShowDetail()
         {
             auto* detail = Find<gui::UIWidget>(u8"import-detail");
@@ -239,7 +239,7 @@ export namespace editor::app
                                                   if (!self->m_session || picked < 0)
                                                       return;
                                                   self->m_services.import->SetImporter(*self->m_session, index, static_cast<usize>(picked));
-                                                  self->Later([self]() { self->ShowAll(); }); // not under the combo's own event
+                                                  self->Later([self]() { self->ShowAll(); }); // not inside the combo's own event
                                               });
                 line->AddChild(choice.Get());
                 detail->AddChild(line.Get());
@@ -279,7 +279,7 @@ export namespace editor::app
                 detail->AddChild(Text(u8"It makes one asset, named after the file.", u8"form-help").Get());
                 return;
             }
-            // What it would create, by kind: a kind's box keeps or leaves all of it.
+            // What it would create, by kind: a kind's box keeps or drops all of that kind.
             static constexpr pipeline::ImportResourceKind kKinds[] = {
                 pipeline::ImportResourceKind::Mesh,          pipeline::ImportResourceKind::Material,  pipeline::ImportResourceKind::Texture,
                 pipeline::ImportResourceKind::Skeleton,      pipeline::ImportResourceKind::AnimationClip, pipeline::ImportResourceKind::Collision,
@@ -326,14 +326,15 @@ export namespace editor::app
                                      });
                     RefPtr<gui::TextField> name = MakeRef<gui::TextField>(m_allocator);
                     name->SetText(entry.targetName.AsView());
-                    name->SetPlaceholder(entry.sourceName.AsView()); // emptied, it keeps the importer's name
+                    name->SetPlaceholder(entry.sourceName.AsView()); // when emptied, it keeps the importer's name
                     name->SetOnTextChanging([self, index, e](StringView text)
                                             {
                                                 if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
                                                     self->m_session->files[index].plan.entries[e].targetName = String(text);
-                                                self->ShowWhy(); // a rename may free the name, or take one
+                                                self->ShowWhy(); // a rename may free a name, or take one
                                             });
-                    // Committed (Enter, or leaving it): the clash line says what the name meets now.
+                    // When the name is committed (Enter, or leaving the field), the clash line shows
+                    // what the name clashes with now.
                     (void)name->AddEventListener(gui::EventType::Changed, [self](const gui::Event&) { self->Later([self]() { self->ShowDetail(); }); });
                     line->AddChild(on.Get());
                     line->AddChild(name.Get());
@@ -342,9 +343,9 @@ export namespace editor::app
             }
         }
 
-        // What the file's name meets (AssetImport::ClashOf): nothing said when it is free or the
-        // file's own earlier import; another type's asset said, to rename; another file's of its
-        // type said, with Replace and Keep both.
+        // Shows what the file's name clashes with (AssetImport::ClashOf): nothing when the name is
+        // free or held by the file's own earlier import; an asset of another type, which must be
+        // renamed; or another file's asset of the same type, with Replace and Keep both.
         void ShowClash(gui::UIWidget& detail, const AssetImport::File& file, usize index)
         {
             const pipeline::ImportClash clash = AssetImport::ClashOf(*m_session, file);
@@ -381,7 +382,7 @@ export namespace editor::app
             detail.AddChild(choices.Get());
         }
 
-        // What Import does, or why it waits; Import with it.
+        // Shows what Import will do, or why it waits, and enables Import to match.
         void ShowWhy()
         {
             if (!m_session)
@@ -400,7 +401,8 @@ export namespace editor::app
                 run->SetEnabled(can);
         }
 
-        // After the event that asked (a control's own callback rebuilding the controls).
+        // Runs `work` after the event that asked for it (a control's own callback rebuilding the
+        // controls).
         void Later(Function<void()> work)
         {
             gui::MutationQueue* queue = m_body ? m_body->GetMutationQueue() : nullptr;

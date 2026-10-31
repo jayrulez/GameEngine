@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net:session - roles, peer registry, lifecycle, broadcast (over the sim).
+// foundation.net:session - roles, peer registry, lifecycle, broadcast (over the simulator).
 #include <doctest/doctest.h>
 #include <initializer_list>
 #include "Core/Prelude.h"
@@ -25,7 +25,7 @@ namespace
         }
         return out;
     }
-    // Collect Received first-bytes from a session.
+    // Collect the first bytes of Received events from a session.
     Array<u8> DrainReceived(net::NetSession& s)
     {
         Array<u8> out;

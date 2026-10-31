@@ -3,14 +3,14 @@
 
 // Editor::Scene - :scene_tools partition.
 //
-// The scene page's viewport tools (Documentation/Specs/editor-gui.md, 5.3, layer 5, part 3): each
-// an action, `scene.tool.<id>`, toggling it over the page (so the menu bar, the palette, a chord the
-// user binds and MCP reach it; it had only the bar), disabled where it has nothing to work on and
-// saying why. On the bar from the tool registry: a category of several tools one menu by its first
-// tool's icon, a lone tool a toggle. The active tool's panel in one place (ruling 23): the HUD's top
-// start under the chips, in a chrome of the tool's name, a fold and a close (Esc's Select); dragged
-// by its head anywhere in the viewport (kept inside it as it shrinks), its place kept per scene, a
-// double click on its head putting it back under the chips.
+// The scene page's viewport tools. Each is an action, `scene.tool.<id>`, that toggles it over the
+// page (so the menu bar, the palette, a chord the user binds and MCP can reach it), disabled where
+// it has nothing to work on and saying why. The bar shows them from the tool registry: a category
+// of several tools as one menu with its first tool's icon, a lone tool as a toggle. The active
+// tool's panel has one place: the HUD's top start under the chips, in a frame with the tool's name,
+// a fold and a close (Esc, which returns to Select). It can be dragged by its head anywhere in the
+// viewport (kept inside it as it shrinks), its place is kept per scene, and a double click on its
+// head puts it back under the chips.
 
 module;
 #include "Core/Prelude.h"
@@ -35,7 +35,7 @@ export namespace editor
         RTTI_OBJECT(ToolPanelHead, foundation::gui::UIWidget)
     public:
         ToolPanelHead() { AddClass(u8"hud-panel-head"); }
-        /// A drag by the head: `delta` since the press, in pixels.
+        /// A drag by the head; OnDrag's `delta` is measured from the press, in pixels.
         Function<void()> OnDragStart;
         Function<void(Float2 delta)> OnDrag;
         Function<void()> OnDragEnd;
@@ -66,7 +66,7 @@ export namespace editor
             /// until moved.
             foundation::gui::Node* pane = nullptr;
             foundation::gui::Node* zone = nullptr;
-            /// The panel was moved or put back: the page keeps its view state.
+            /// Called when the panel was moved or put back, so the page keeps its view state.
             Function<void()> placeChanged;
         };
 
@@ -76,16 +76,16 @@ export namespace editor
         SceneTools& operator=(const SceneTools&) = delete;
 
         /// The action that toggles tool `id` over a scene page (registered by the first page that
-        /// has it, each the same).
+        /// has the tool; every page's would be the same).
         [[nodiscard]] static String ActionOf(StringView id) { return Format(u8"scene.tool.{}", id); }
 
-        /// Once a frame: the buttons as their actions are, the panel as the active tool's.
+        /// Once a frame: syncs the buttons with their actions and the panel with the active tool.
         void Sync();
 
         /// Where the panel was moved to (its top start corner in the viewport); null while it sits
         /// under the chips.
         [[nodiscard]] const Float2* Place() const noexcept { return m_moved ? &m_place : nullptr; }
-        /// The panel moved to `place` (kept inside the viewport), or back under the chips (null).
+        /// Moves the panel to `place` (kept inside the viewport), or back under the chips (null).
         void SetPlace(const Float2* place);
         void SetFolded(bool folded);
 
@@ -124,7 +124,7 @@ export namespace editor
         foundation::gui::Image* m_icon = nullptr;
         foundation::gui::Label* m_title = nullptr;
         foundation::gui::Button* m_fold = nullptr;
-        RefPtr<foundation::gui::Node> m_body; // the tool's, while it is active
+        RefPtr<foundation::gui::Node> m_body; // the active tool's panel body
         bool m_panelShown = false;
         bool m_moved = false;
         bool m_folded = false;

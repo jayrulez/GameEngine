@@ -3,8 +3,8 @@
 
 // UI - :size_spec partition
 //
-// How a view should be sized along one axis (Fixed(Unit) / Match / Wrap). Stored on LayoutParams.
-// Ported from Sedulous.UI/src/Layout/SizeSpec.bf (discriminated union -> kind + payload struct).
+// How a view should be sized along one axis (Fixed(Unit) / Match / Wrap). Stored on LayoutStyle as
+// a kind and a payload.
 
 module;
 #include "Core/Prelude.h"
@@ -55,13 +55,13 @@ export namespace foundation::ui
             return s;
         }
 
-        /// For Fixed: resolves the ABSOLUTE unit components. For Match/Wrap: 0 (parent handles
+        /// For Fixed: resolves the absolute unit components. For Match/Wrap: 0 (parent handles
         /// these). Percent/em components need the three-argument overload.
         [[nodiscard]] constexpr f32 ResolveFixed(f32 dpiScale) const noexcept
         {
             return kind == Kind::Fixed ? fixedSize.Resolve(dpiScale) : 0.0f;
         }
-        /// For Fixed: resolves every component - `referenceSize` is the containing box on this
+        /// For Fixed: resolves every component; `referenceSize` is the containing box on this
         /// axis (0 when unbounded), `fontSize` the computed font size for em.
         [[nodiscard]] constexpr f32 ResolveFixed(f32 dpiScale, f32 referenceSize,
                                                  f32 fontSize) const noexcept

@@ -15,7 +15,7 @@ struct TaaPush {
     float  HistoryValid;   // 0 = first frame (no history)
     float  VarianceGamma;  // neighborhood clip box half-width in stddevs (~1.25; larger = softer/steadier)
     float  MotionScale;    // per pixel of motion a frame: history drops by half at 1/MotionScale px (0 = ignore)
-    float  NearPlane;      // camera near - linearize depth for the disocclusion test
+    float  NearPlane;      // camera near plane, to linearize depth for the disocclusion test
     float  FarPlane;       // camera far
     int    Orthographic;   // 1: an orthographic camera's depth is linear (projection.hlsli)
     int    _pad0; int _pad1; int _pad2;
@@ -40,7 +40,7 @@ float3 ClipToAABB(float3 color, float3 aabbMin, float3 aabbMax) {
     return maxUnit > 1.0 ? center + (shift / maxUnit) : color;
 }
 
-// 5-tap Catmull-Rom (Karis) - sharp bicubic history reconstruction from a bilinear sampler.
+// 5-tap Catmull-Rom (Karis): sharp bicubic history reconstruction from a bilinear sampler.
 float3 SampleHistoryCatmullRom(float2 uv, float2 texSize) {
     float2 samplePos = uv * texSize;
     float2 tc1 = floor(samplePos - 0.5) + 0.5;
@@ -68,15 +68,16 @@ struct PSOut { float4 Color : SV_Target0; float4 History : SV_Target1; };
 
 PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
     // Full-screen post pass: every texture here is a 1:1 single-mip target, so all taps use SampleLevel
-    // at mip 0. This is exact (no mip chain to select) AND keeps sampling out of the implicit-derivative
-    // path - WGSL/Chrome make textureSample in non-uniform control flow (the loops below) a hard error.
+    // at mip 0. This is exact (no mip chain to select) and keeps sampling out of the implicit-derivative
+    // path: WGSL (and Chrome) treat textureSample in non-uniform control flow (the loops below) as a
+    // hard error.
     float3 current = CurrentColor.SampleLevel(PointSamp, uv, 0).rgb;
 
-    // This pixel's surface depth (linear) - stored in the history alpha so next frame can compare against
+    // This pixel's surface depth (linear), stored in the history alpha so the next frame can compare against
     // it at the reprojected position (the disocclusion test below).
     float centerLin = LinearViewDepth(DepthTexture.SampleLevel(PointSamp, uv, 0).r, pc.NearPlane, pc.FarPlane, pc.Orthographic != 0);
 
-    // Closest depth in a 3x3 neighborhood -> stable motion-vector selection (reduces silhouette ghosting).
+    // The closest depth in a 3x3 neighbourhood picks a stable motion vector (less silhouette ghosting).
     float  closestDepth = FarthestDepth();
     float2 closestUV    = uv;
     for (int y = -1; y <= 1; ++y) {
@@ -96,14 +97,16 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
 
     // Depth-based disocclusion reject: the previous frame's linear depth at historyUV lives in the history
     // alpha. If it disagrees with this frame's (closest) linear depth beyond a relative threshold, the
-    // reprojected texel sampled a different surface (occluder revealed / geometry newly occluded) -> drop
-    // history to avoid a ghost-on-reveal. linPrev==0 only where no depth was ever stored -> skip the test.
+    // reprojected texel sampled a different surface (an occluder revealed or geometry newly occluded),
+    // so drop the history to avoid a ghost on reveal. linPrev is 0 only where no depth was ever stored,
+    // and then the test is skipped.
     //
-    // Gate it on real motion: disocclusion can only happen when something moves, but at a STATIC silhouette
-    // the TAA jitter flips each boundary pixel's coverage (near plane <-> far sky) every frame. That depth
-    // flip is not a reveal - it is the sub-pixel coverage we want history to ACCUMULATE into an AA'd edge.
-    // Without the gate the reject fires on every boundary pixel each frame, so the edge shows the raw
-    // jittered current and the jaggies crawl. Motion is geometric (jitter-free) so static == exactly 0.
+    // Gate it on real motion. Disocclusion only happens when something moves, but at a static silhouette
+    // the TAA jitter flips each boundary pixel's coverage between the near surface and the far sky every
+    // frame. That flip is not a reveal: it is the sub-pixel coverage the history should accumulate into
+    // an antialiased edge. Without the gate the reject fires on every boundary pixel each frame, so the
+    // edge shows the raw jittered current and the jaggies crawl. Motion is geometric (jitter-free), so a
+    // static pixel's motion is exactly 0.
     float linPrev  = HistoryColor.SampleLevel(PointSamp, historyUV, 0).a;
     float motionPx = length(motion / pc.TexelSize);   // motion-vector magnitude in pixels
     if (linPrev > 0.0 && motionPx > 0.5) {
@@ -112,7 +115,8 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         if (relDiff > 0.1) { o.Color = float4(current, 1.0); o.History = float4(current, centerLin); return o; }
     }
 
-    // YCoCg neighborhood statistics: mean (m1) + mean-of-squares (m2) over the 3x3 -> variance box.
+    // YCoCg neighbourhood statistics: the mean (m1) and mean of squares (m2) over the 3x3 give the
+    // variance box.
     float3 m1 = float3(0,0,0), m2 = float3(0,0,0);
     for (int ny = -1; ny <= 1; ++ny) {
         for (int nx = -1; nx <= 1; ++nx) {
@@ -131,12 +135,12 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
     float3 histY     = RGBToYCoCg(SampleHistoryCatmullRom(historyUV, texSize.xy));
     histY            = ClipToAABB(histY, boxMin, boxMax);
 
-    // Blend: fixed-high history weight for stability; the variance clip (above) already handles change
-    // and disocclusion, so we DON'T reduce blend on luma mismatch (that collapsed to the jittered current
-    // at edges -> wobble). Only FAST motion drops history (less smear when things fly past), and it is
-    // measured in pixels: as a UV delta times 32, one pixel a frame at 128 px (or a few at 1280) already
-    // cut the weight from 0.97 to 0.85, history then spanned fewer frames than the 8-tap jitter, and a
-    // camera that kept moving (a chase camera) showed the raw jitter and the AO noise.
+    // Blend: a fixed, high history weight for stability. The variance clip above already handles change
+    // and disocclusion, so the blend is not reduced on a luma mismatch (that would collapse to the
+    // jittered current at edges and wobble). Only fast motion drops history (less smear when things fly
+    // past), and motion is measured in pixels, not as a UV delta: a UV-based measure would cut the weight
+    // at even a pixel a frame on a small target, the history would span fewer frames than the 8-tap
+    // jitter, and a camera that keeps moving (a chase camera) would show the raw jitter and the AO noise.
     float motionMag = saturate(motionPx * pc.MotionScale);
     float blend     = pc.BlendFactor * (1.0 - 0.5 * motionMag);
 

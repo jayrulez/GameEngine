@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:debug_pass` partition (Debug layer).
 ///
-/// The GPU side of debug draw (SedulousEngine's DebugDrawSystem + DebugGeometryPass + DebugScreenPass,
-/// folded into one owner adapted to the render graph). Owns the font atlas + per-(view,frame) dynamic
-/// vertex buffers + the pipelines, and exposes DeclareGeometry / DeclareScreen - each declared PER VIEW
-/// in the frame, merging a GLOBAL + a per-SCENE DebugDraw and projecting through that view's ViewProj
-/// into the LDR target's sub-rect (so side-by-side scenes/views don't bleed). Geometry has depth-tested
-/// (LessEqual, read-only depth) + overlay (Always) buckets; screen text/rects are always-on-top.
+/// The GPU side of debug draw, in one owner on the render graph. Owns the font atlas, the
+/// per-(view, frame) dynamic vertex buffers and the pipelines, and exposes DeclareGeometry and
+/// DeclareScreen. Both are declared per view in the frame: they merge the global and the per-scene
+/// DebugDraw and project through that view's ViewProj into the LDR target's sub-rect, so
+/// side-by-side scenes and views don't bleed. Geometry has depth-tested (LessEqual, read-only depth)
+/// and overlay (Always) buckets; screen text and rects are always on top.
 
 module;
 #include "Core/Prelude.h"
@@ -38,9 +38,9 @@ namespace foundation::render
         gpc.stages = rhi::ShaderStage::Vertex;
         gpc.offset = 0;
         gpc.size = sizeof(GpuDebugGeomPush);
-        // No bind groups -> the push block lives at space0 (debug_geom.vs.hlsl), so the
+        // With no bind groups the push block lives at space0 (debug_geom.vs.hlsl), so the
         // browser push-constant emulation must synthesize its uniform at group 0 too. The
-        // range default (1) matches every OTHER shader's space1 convention; here it must be 0.
+        // range default (1) matches every other shader's space1 convention; here it must be 0.
         gpc.bindGroupIndex = 0;
         rhi::PipelineLayoutDesc gpld{};
         gpld.pushConstantRanges = Span<const rhi::PushConstantRange>{&gpc, 1};
@@ -49,7 +49,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // The shader grid: ViewProj + its parameters (debug_grid.*.hlsl, GridPush), read by both
+        // The shader grid: ViewProj and its parameters (debug_grid.*.hlsl, GridPush), read by both
         // stages, at space0 like the geometry pass's.
         rhi::PushConstantRange grc{};
         grc.stages = rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment;
@@ -63,7 +63,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Screen pipeline: font atlas (t0) + sampler (s0) + InvSize push.
+        // Screen pipeline: font atlas (t0), sampler (s0) and the InvSize push.
         rhi::BindGroupLayoutEntry se[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
@@ -110,7 +110,8 @@ namespace foundation::render
                                         rhi::TextureFormat depthFmt, i32 vpX, i32 vpY, u32 vpW,
                                         u32 vpH, u32 frameIndex, u32 viewIndex)
     {
-        // Pack the 4 streams (depth-lines, overlay-lines, depth-tris, overlay-tris) into one buffer.
+        // Pack the four streams (depth lines, overlay lines, depth triangles, overlay triangles) into one
+        // buffer.
         Array<debug::DebugVertex> verts;
         const u32 dl0 = 0;
         AppendVerts(verts, global ? &global->LineVertices() : nullptr,
@@ -179,7 +180,7 @@ namespace foundation::render
                 b.SetColorTarget(0, color, rhi::LoadOp::Load, rhi::StoreOp::Store,
                                  rhi::ClearColor::Black());
                 b.SetReadOnlyDepthTarget(
-                    depth); // depth-test only (no sampling) -> no ReadTexture (layout conflict)
+                    depth); // depth test only (no sampling), so no ReadTexture (it would conflict on layout)
                 b.SetViewport(vpX, vpY, vpW, vpH);
                 b.NeverCull();
                 b.SetExecute(
@@ -199,8 +200,8 @@ namespace foundation::render
                         {
                             return;
                         }
-                        // SetPipeline before SetPushConstants (push needs a bound layout); all 4 pipelines
-                        // share the geom layout so re-pushing the ViewProj per stream is fine.
+                        // SetPipeline before SetPushConstants (a push needs a bound layout); all four
+                        // pipelines share the geometry layout, so re-pushing the ViewProj per stream is fine.
                         rp.SetVertexBuffer(0, vb, 0);
                         const auto draw = [&](rhi::RenderPipeline* pipe, u32 count, u32 first)
                         {
@@ -339,8 +340,8 @@ namespace foundation::render
             {
                 const f32 cw = static_cast<f32>(debug::kCharWidth) * cmd.scale,
                           ch = static_cast<f32>(debug::kCharHeight) * cmd.scale;
-                // A negative x is DrawScreenTextRight's margin encoding (2026-09-24: the pass
-                // drew those at the raw negative x, i.e. on the left edge over the tool status).
+                // A negative x is DrawScreenTextRight's margin encoding; resolve it against the
+                // viewport width rather than drawing at the raw negative x.
                 f32 x = debug::ResolveScreenTextX(cmd.position.x, cmd.textLength, cw, vpW);
                 const f32 y = cmd.position.y;
                 for (i32 i = 0; i < cmd.textLength; ++i)
@@ -355,7 +356,7 @@ namespace foundation::render
                 }
             }
         }
-        // 3D text: project world -> pixel, then emit glyph quads.
+        // 3D text: project from world to pixel space, then emit glyph quads.
         for (const debug::Debug3DTextCommand& cmd : d->TextCommands3D())
         {
             const f32 cx = cmd.worldPos.x * viewProj(0, 0) + cmd.worldPos.y * viewProj(1, 0) +
@@ -474,7 +475,7 @@ namespace foundation::render
     DebugDrawPass::Pipelines* DebugDrawPass::EnsurePipelines(rhi::TextureFormat colorFmt,
                                                              rhi::TextureFormat depthFmt)
     {
-        // Hot reload rebuilds: either shader's change does.
+        // Hot reload: a change to either shader rebuilds.
         const u64 shaderVersion = m_shaders->Version(u8"debug_geom") + m_shaders->Version(u8"debug_grid");
         Pipelines* entry = nullptr;
         for (Pipelines& candidate : m_geom)
@@ -550,7 +551,7 @@ namespace foundation::render
         rhi::DepthStencilState ds{};
         ds.format = depthFmt;
         ds.depthWriteEnabled = false;
-        ds.depthCompare = rhi::depth::NearerOrEqual(); // the scene hides it, as the lines
+        ds.depthCompare = rhi::depth::NearerOrEqual(); // the scene hides it, as it does the lines
         rhi::RenderPipelineDesc pd{};
         pd.layout = m_gridLayout;
         pd.vertex.shader = rhi::StageOf(vs, rhi::ShaderStage::Vertex);

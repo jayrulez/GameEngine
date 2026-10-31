@@ -85,7 +85,7 @@ namespace editor
         if (signature != m_signature)
         {
             m_signature = signature;
-            NotifyPropertiesChanged(); // the flags' names are the groups'
+            NotifyPropertiesChanged(); // the flags are named by the groups
         }
         else
             NotifyValuesChanged();
@@ -155,7 +155,7 @@ namespace editor
             list.ListOps = gui::PropertyListAdd | gui::PropertyListRemove;
             list.MaxCount = foundation::physics::kCollisionGroupCount;
             out.PushBack(Move(list));
-            // Which pairs collide, a grid of the groups (the old editor's matrix).
+            // Which pairs collide, as a grid of the groups.
             gui::PropertyInfo matrix;
             matrix.Name = String(u8"matrix");
             matrix.DisplayName = String(u8"Collides");
@@ -248,7 +248,7 @@ namespace editor
         const usize count = Count();
         if (edit.Kind == gui::ListEdit::Op::Insert)
         {
-            // At the end whatever the place asked: a body's group is its index.
+            // At the end, whatever place was asked: a body's group is its index.
             if (count >= foundation::physics::kCollisionGroupCount)
                 return false;
             Mutate([count](PhysicsSceneSettings& settings)

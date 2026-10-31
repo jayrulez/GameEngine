@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Physics - PhysicsWorld implementation (module IMPLEMENTATION unit).
+// Foundation::Physics - PhysicsWorld implementation (a module implementation unit).
 //
-// ALL Jolt contact lives here: the interface stays JPH-free (API hygiene + GCC's module
-// serializer cannot digest Jolt's headers inside an interface unit's global fragment).
+// All Jolt code lives here. The interface stays JPH-free, both to keep the API clean and because
+// GCC's module serializer cannot digest Jolt's headers in an interface unit's global fragment.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +34,7 @@ module;
 #include <Jolt/Physics/Collision/CollisionCollectorImpl.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h> // CollideShape* (ShapeOverlap)
-#include <Jolt/Physics/Collision/ShapeCast.h>    // RShapeCast / ShapeCast* (ShapeCast)
+#include <Jolt/Physics/Collision/ShapeCast.h>    // RShapeCast, ShapeCast* (ShapeCast)
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
@@ -158,7 +158,7 @@ namespace foundation::physics
             }
         };
 
-        // Query-side filter: match bodies whose GROUP bit is in the mask.
+        // Query-side filter: match bodies whose group bit is in the mask.
         class GroupMaskFilter final : public JPH::ObjectLayerFilter
         {
         public:
@@ -212,14 +212,13 @@ namespace foundation::physics
             return Quaternion{q.GetX(), q.GetY(), q.GetZ(), q.GetW()};
         }
 
-        // Run `fn(const JPH::Shape&)` with a STACK-constructed convex query volume
-        // (sphere/box/capsule) for ShapeCast / ShapeOverlap - Jolt's transient-shape idiom
-        // (SetEmbedded marks the refcount so a query cannot delete a stack object), chosen over
-        // heap Refs because these queries run per projectile per frame (auto-aim). Other
-        // ShapeKinds are body shapes, not query shapes -> false (the query no-ops safely).
-        // Dimensions come straight off the script surface, so non-positive sizes are rejected
-        // here (false -> no-hit) instead of tripping Jolt's debug asserts / feeding the
-        // broadphase NaNs.
+        // Run `fn(const JPH::Shape&)` with a stack-constructed convex query volume (sphere, box,
+        // capsule) for ShapeCast and ShapeOverlap, using Jolt's transient-shape idiom (SetEmbedded
+        // marks the refcount so a query cannot delete a stack object). This avoids heap Refs because
+        // these queries can run per projectile per frame. Other ShapeKinds are body shapes, not
+        // query shapes, and return false (the query does nothing). Dimensions come straight from
+        // scripts, so non-positive sizes are rejected here (false, so no hit) instead of tripping
+        // Jolt's debug asserts or feeding the broadphase NaNs.
         template <typename Fn> [[nodiscard]] bool WithQueryShape(const QueryShape& q, Fn&& fn)
         {
             switch (q.kind)
@@ -267,10 +266,10 @@ namespace foundation::physics
             }
         }
 
-        // Process-wide Jolt bring-up (allocator/factory/types), refcounted across worlds and
-        // cooks. Under a lock, not a bare counter: parallel cooks (the cook driver builds on job
+        // Process-wide Jolt start-up (allocator, factory, types), refcounted across worlds and
+        // cooks. It takes a lock, not a bare counter: parallel cooks (the cook driver builds on job
         // workers) each acquire, and a second caller must not use Jolt before the first has
-        // finished registering it - nor a release tear it down under a caller still acquiring.
+        // finished registering it, nor may a release tear it down under a caller still acquiring.
         Mutex g_joltMutex;
         i32 g_joltUsers = 0;
         void AcquireJolt()
@@ -324,7 +323,7 @@ namespace foundation::physics
                 std::memcpy(out, blob.Data() + cursor, count);
                 cursor += count;
             }
-            // istream semantics: EOF only trips when a read runs PAST the end - Jolt
+            // istream semantics: EOF only trips when a read runs past the end; Jolt
             // checks IsEOF() after a fully-consumed successful restore.
             [[nodiscard]] bool IsEOF() const override { return failed; }
             [[nodiscard]] bool IsFailed() const override { return failed; }
@@ -332,8 +331,8 @@ namespace foundation::physics
 
         [[nodiscard]] JPH::Ref<JPH::Shape> RestoreCooked(Span<const byte> blob)
         {
-            // Jolt indexes its construct table with the leading subtype byte UNVALIDATED -
-            // reject out-of-range values before handing over a corrupt/foreign blob.
+            // Jolt indexes its construct table with the leading subtype byte unvalidated, so
+            // reject out-of-range values before handing over a corrupt or foreign blob.
             if (blob.IsEmpty() || static_cast<JPH::uint>(blob[0]) >= JPH::NumSubShapeTypes)
             {
                 return {};
@@ -351,7 +350,7 @@ namespace foundation::physics
         // sample (x, z) to world = offset + scale * (x, height, z); we centre the footprint on the
         // shape origin (offset.xz = -worldSize/2, scale.xz = worldSize/(n-1), scale.y = 1, height =
         // the world-Y value). Jolt itself rounds the sample count up to its block size and fills the
-        // padding with cNoCollisionValue, so we pass the grid straight through - never hand-padded.
+        // padding with cNoCollisionValue, so we pass the grid straight through without padding it.
         [[nodiscard]] JPH::Ref<JPH::Shape> BuildHeightfield(const ShapeDesc& desc)
         {
             const u32 n = desc.heightSampleCount;
@@ -425,8 +424,8 @@ namespace foundation::physics
             {
                 return nullptr;
             }
-            // One shape at the origin with no local rotation is used AS IS; any placement (offset
-            // OR rotation) goes through a compound, which is the only thing that applies it.
+            // One shape at the origin with no local rotation is used as is; any placement (offset
+            // or rotation) goes through a compound, which is the only thing that applies it.
             const Quaternion& lone = desc.shapes[0].localRotation;
             const bool loneRotated = lone.x != 0.0f || lone.y != 0.0f || lone.z != 0.0f;
             if (desc.shapes.Size() == 1 && desc.shapes[0].localPosition.x == 0.0f &&
@@ -473,9 +472,9 @@ namespace foundation::physics
                 {
                     e.point = FromJph(manifold.GetWorldSpaceContactPointOn1(0));
                 }
-                // Approach speed, NOT a solver impulse (see ContactEvent::speed): Jolt does
+                // Approach speed, not a solver impulse (see ContactEvent::speed): Jolt does
                 // not expose the true impulse cleanly here, so we report the magnitude of the
-                // relative velocity along the contact normal - a physically-meaningful measure
+                // relative velocity along the contact normal, a physically meaningful measure
                 // of how hard the two bodies met.
                 const JPH::Vec3 relative = a.GetLinearVelocity() - b.GetLinearVelocity();
                 e.speed = std::fabs(relative.Dot(manifold.mWorldSpaceNormal));
@@ -489,7 +488,7 @@ namespace foundation::physics
                 e.bodyA = BodyId{pair.GetBody1ID().GetIndexAndSequenceNumber()};
                 e.bodyB = BodyId{pair.GetBody2ID().GetIndexAndSequenceNumber()};
                 // Resolve the user words by body ID if the body still exists (the callback can
-                // fire for an already-destroyed body - leave that side 0 so the subsystem skips
+                // fire for an already-destroyed body; leave that side 0 so the subsystem skips
                 // it). NoLock interface: contact callbacks run with bodies already locked.
                 if (system != nullptr)
                 {
@@ -521,7 +520,7 @@ namespace foundation::physics
         {
             return false;
         }
-        AcquireJolt(); // Factory/type registry must exist for shape construction
+        AcquireJolt(); // the factory and type registry must exist for shape construction
         JPH::Array<JPH::Vec3> hull;
         hull.reserve(points.Size());
         for (const Float3& p : points)
@@ -565,8 +564,8 @@ namespace foundation::physics
         triangles.reserve(triangleCount);
         for (usize t = 0; t < triangleCount; ++t)
         {
-            // Material slot rides in the per-triangle USER DATA (RayHit::surface); Jolt's
-            // own material index stays 0 (we don't use JPH::PhysicsMaterial).
+            // The material slot is stored in the per-triangle user data (RayHit::surface); Jolt's
+            // own material index stays 0 (we do not use JPH::PhysicsMaterial).
             triangles.push_back(JPH::IndexedTriangle(
                 indices[t * 3 + 0], indices[t * 3 + 1], indices[t * 3 + 2], 0,
                 triangleMaterialSlots.IsEmpty() ? 0 : triangleMaterialSlots[t]));
@@ -688,11 +687,10 @@ namespace foundation::physics
         UniquePtr<JPH::TempAllocatorImpl> tempAllocator;
         UniquePtr<JPH::JobSystemThreadPool> jobSystem;
         UniquePtr<JPH::PhysicsSystem> system;
-        // JointId = slot index; null joint = freed. The two body IDs ride the slot so
-        // DestroyJoint can wake the SURVIVING bodies BY ID through the body manager - the
-        // constraint's raw Body pointers dangle if a connected body was destroyed first
-        // (heap-use-after-free found by ASAN 2026-08-19: entity-active reconcile destroyed a
-        // deactivated target's body, then the joint teardown read the corpse via GetBody1/2).
+        // JointId = slot index; null joint = freed. The two body IDs are kept in the slot so
+        // DestroyJoint can wake the surviving bodies by ID through the body manager: the
+        // constraint's raw Body pointers dangle if a connected body was destroyed first (as when
+        // deactivating an entity destroys a joint target's body before the joint is torn down).
         struct JointSlot
         {
             JPH::Ref<JPH::Constraint> joint;
@@ -754,10 +752,10 @@ namespace foundation::physics
         {
             // Jolt's own rule (Shape::MustBeStatic: mesh, heightfield, plane, and any compound
             // or decorated shape holding one): such a shape derives no mass, and Jolt sets mass
-            // properties for EVERY non-static body - dynamic or kinematic - so it asserts
-            // "Invalid mass" at creation (the editor's Simulate crash, 2026-09-21; a release
-            // build instead gets a body with no inertia). A data error, not a crash: the body
-            // simulates as static, and the scene system names the entity.
+            // properties for every non-static body, dynamic or kinematic, so it asserts
+            // "Invalid mass" at creation (a release build instead gets a body with no inertia).
+            // Treat it as a data error, not a crash: the body simulates as static, and the scene
+            // system names the entity.
             LOG_ERROR(u8"Physics",
                       u8"{} body over a mesh/plane/heightfield shape: such a shape can only be "
                       u8"static (a moving body needs a convex shape: box, sphere, capsule, convex "
@@ -784,7 +782,7 @@ namespace foundation::physics
             {
                 settings.mMotionQuality = JPH::EMotionQuality::LinearCast;
             }
-            // A convex shape degenerate to zero volume (a hull cooked from a flat quad - Jolt
+            // A convex shape degenerate to zero volume (a hull cooked from a flat quad; Jolt
             // refuses a zero scale at shape creation, so the flat hull is the reachable case)
             // derives no mass and would trip the same "Invalid mass" assert. It still collides
             // correctly, so it gets the mass and inertia of a solid box filling its local bounds
@@ -986,7 +984,7 @@ namespace foundation::physics
                 m_impl->system->GetNarrowPhaseQuery().CollideShape(
                     &js, JPH::Vec3::sReplicate(1.0f), com, settings, JPH::RVec3::sZero(), collector,
                     {}, filter);
-                // A compound/multi-shape body can report several sub-shape hits; each body ONCE.
+                // A compound or multi-shape body can report several sub-shape hits; report each body once.
                 for (const JPH::CollideShapeResult& r : collector.mHits)
                 {
                     const BodyId id{r.mBodyID2.GetIndexAndSequenceNumber()};
@@ -1032,7 +1030,7 @@ namespace foundation::physics
                 out.body = BodyId{hit.mBodyID2.GetIndexAndSequenceNumber()};
                 out.fraction = hit.mFraction;
                 out.position = FromJph(hit.mContactPointOn2);
-                // mPenetrationAxis points from the query shape INTO the hit body; the outward
+                // mPenetrationAxis points from the query shape into the hit body; the outward
                 // surface normal is its negation. Guard the (rare) zero-penetration touch.
                 out.normal = hit.mPenetrationAxis.IsNearZero()
                                  ? Float3{0, 0, 0}
@@ -1069,8 +1067,8 @@ namespace foundation::physics
         JPH::Ref<JPH::CharacterVirtual> character =
             new JPH::CharacterVirtual(&settings, ToJph(desc.position), JPH::Quat::sIdentity(),
                                       desc.userData, m_impl->system.Get());
-        // Stash the step settings per character (uniform across the world would also do,
-        // but they're authored per character).
+        // Keep the step settings per character (one value for the world would also work,
+        // but they are authored per character).
         character->SetUserData(desc.userData);
 
         for (usize i = 0; i < m_impl->characters.Size(); ++i)
@@ -1384,10 +1382,10 @@ namespace foundation::physics
         }
         Impl::JointSlot& slot = m_impl->joints[id.value];
         // Wake the connected bodies: a body held asleep by the joint must respond to gravity
-        // again once released (RemoveConstraint alone leaves it sleeping). BY ID through the
-        // body manager - NEVER via the constraint's Body pointers, which dangle if a connected
-        // body was destroyed before the joint (the ASAN-found UAF; IsAdded rejects dead IDs,
-        // GetMotionType goes through the manager, both safe on any ID).
+        // again once released (RemoveConstraint alone leaves it sleeping). Wake them by ID through
+        // the body manager, never through the constraint's Body pointers, which dangle if a
+        // connected body was destroyed before the joint (IsAdded rejects dead IDs and
+        // GetMotionType goes through the manager, so both are safe on any ID).
         JPH::BodyInterface& bodies = m_impl->system->GetBodyInterface();
         for (const JPH::BodyID bodyId : {slot.bodyA, slot.bodyB})
         {
@@ -1428,14 +1426,14 @@ namespace foundation::physics
         {
             return; // no motor on this joint kind
         }
-        // A motor with real drive must keep its bodies AWAKE: a body that slept while the target was 0
-        // (or before the motor was enabled) would otherwise ignore the constraint, so a live edit to
-        // motorTargetVelocity does nothing. Only force-wake when actually driving, so a settled/zero
-        // motor can still sleep. (Hinge/Slider are TwoBodyConstraints; no RTTI - cast off GetSubType.)
-        // BY ID through the body manager (the slot's IDs), never via the constraint's Body
-        // pointers: the subsystem syncs motors EVERY fixed step, and those pointers dangle once a
-        // connected body was destroyed before the joint (the same use-after-free DestroyJoint
-        // guards against).
+        // A motor with real drive must keep its bodies awake: a body that slept while the target was
+        // 0 (or before the motor was enabled) would otherwise ignore the constraint, so a live edit to
+        // motorTargetVelocity would do nothing. Only force-wake when actually driving, so a settled or
+        // zero motor can still sleep. (Hinge and Slider are TwoBodyConstraints; with no RTTI, cast by
+        // GetSubType.) Wake by ID through the body manager (the slot's IDs), never through the
+        // constraint's Body pointers: the subsystem syncs motors every fixed step, and those pointers
+        // dangle once a connected body was destroyed before the joint (the same use-after-free
+        // DestroyJoint guards against).
         if (enabled && targetVelocity != 0.0f)
         {
             const Impl::JointSlot& slot = m_impl->joints[id.value];

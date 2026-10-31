@@ -108,7 +108,7 @@ TEST_CASE("spline facade: world-space queries through SceneSplines")
     component.curve.UpdateAutoHandles();
     component.curve.RebuildArcLength();
 
-    // Place the entity: the facade must answer in WORLD space.
+    // Place the entity: the facade answers in world space.
     Transform t;
     t.position = Float3{0, 5, 0};
     sceneObj.SetLocalTransform(entity, t);
@@ -127,7 +127,7 @@ TEST_CASE("spline facade: world-space queries through SceneSplines")
     CHECK(Length(mid.tangent - Float3{1, 0, 0}) < 0.01f);
 
     const engine::spline::SplineHit nearest = splines.closestPoint(scriptEntity, 3.0f, 9.0f, 0.0f);
-    // The Float3 form (Sedulous's ClosestPoint) answers the same.
+    // The Float3 form answers the same.
     const engine::spline::SplineHit byFloat3 =
         splines.closestPoint(scriptEntity, Float3{3.0f, 9.0f, 0.0f});
     CHECK(byFloat3.valid == nearest.valid);
@@ -138,7 +138,7 @@ TEST_CASE("spline facade: world-space queries through SceneSplines")
     CHECK(nearest.distance == doctest::Approx(3.0f).epsilon(0.02));
     CHECK(mid.distance == doctest::Approx(5.0f).epsilon(0.001));
 
-    // No spline on the entity -> the invalid hit, zeroed.
+    // No spline on the entity: the invalid hit, zeroed.
     const foundation::scene::EntityHandle bare = sceneObj.CreateEntity(u8"bare");
     foundation::script::Entity bareEntity{&sceneObj, bare.index, bare.generation};
     CHECK(!splines.sampleAt(bareEntity, 0.5f).valid);

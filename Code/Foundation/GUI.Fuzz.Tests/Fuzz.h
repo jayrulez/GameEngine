@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Fuzz - the fuzz targets (E10 of Specs/gui-lab-evolution-2.md) and what feeds them: seeds from
-// the sandbox's own pages and string table, and a deterministic mutator. Shared by the ctest runner
-// (FuzzTests.cpp: every seed, then a seeded run of mutations of each) and the libFuzzer entries
-// (LibFuzzer.cpp, built with OPTION_GUI_LIBFUZZER under clang). A target takes any bytes and must
-// neither crash nor hang; what it builds is thrown away.
+// GUI.Fuzz - the fuzz targets and what feeds them: seeds from the sandbox's own pages and string
+// table, and a deterministic mutator. Shared by the ctest runner (FuzzTests.cpp: every seed, then a
+// seeded run of mutations of each) and the libFuzzer entries (LibFuzzer.cpp, built with
+// OPTION_GUI_LIBFUZZER under clang). A target takes any bytes and must neither crash nor hang; what
+// it builds is thrown away.
 
 #pragma once
 
@@ -113,8 +113,8 @@ namespace guifuzz
         return std::string(reinterpret_cast<const char*>(bytes.Value().Data()), bytes.Value().Size());
     }
 
-    /// The sandbox's pages with this extension (`.css`, `.xml`), its main sheet among them: real
-    /// input, every feature the GUI has written down once.
+    /// Returns the sandbox's pages with this extension (`.css`, `.xml`), including its main sheet:
+    /// real input that uses every feature the GUI has at least once.
     inline std::vector<std::string> SandboxSeeds(const char* extension)
     {
         std::vector<std::string> seeds;
@@ -132,7 +132,8 @@ namespace guifuzz
         return seeds;
     }
 
-    /// Inputs a fuzzer found once, kept to run every time: Data/Tests/GUI/Fuzz/<kind>/*.
+    /// Returns the inputs a fuzzer found once, kept so they run every time:
+    /// Data/Tests/GUI/Fuzz/<kind>/*.
     inline std::vector<std::string> FoundSeeds(const char* kind)
     {
         std::vector<std::string> seeds;
@@ -153,12 +154,12 @@ namespace guifuzz
 
     // === The targets ===
 
-    /// The tree a sheet is applied to: a small one of the common element kinds, by their tags.
+    /// The tree a sheet is applied to: a small tree of the common element kinds, by their tags.
     inline constexpr const char8_t* kCssTree =
         u8"<Panel><Button text=\"b\"/><Label class=\"note\" text=\"l\"/><TextField/><Slider/>"
         u8"<CheckBox/><ListBox/><ScrollView><Label text=\"in\"/></ScrollView></Panel>";
 
-    /// A sheet parsed, then applied to kCssTree.
+    /// Parses a sheet, then applies it to kCssTree.
     inline void FuzzCss(const std::string& text)
     {
         gui::RegisterGuiElements();
@@ -173,7 +174,7 @@ namespace guifuzz
         root->UpdateLayout();
     }
 
-    /// Markup loaded into a root, styled, laid out and drawn.
+    /// Loads markup into a root, then styles, lays out and draws it.
     inline void FuzzMarkup(const std::string& text)
     {
         gui::RegisterGuiElements();
@@ -193,8 +194,8 @@ namespace guifuzz
         root->Draw(dc);
     }
 
-    /// Lines of `keys|command|context` bound into a keymap, then keystrokes matched against it.
-    /// Binding lines (keys|command|context) bound; how many bound.
+    /// Binds lines of `keys|command|context` into a keymap, then matches keystrokes against it.
+    /// Returns how many lines bound.
     inline usize FuzzKeymap(const std::string& text)
     {
         gui::Keymap keymap;
@@ -217,7 +218,7 @@ namespace guifuzz
         return bound;
     }
 
-    /// A string table read from XML, then asked for its texts.
+    /// Reads a string table from XML, then asks it for its texts.
     inline void FuzzStringTable(const std::string& text)
     {
         foundation::i18n::RegisterStringTableType();
@@ -234,7 +235,7 @@ namespace guifuzz
         (void)localization.Text(core::StringView(u8"gui.ok"));
     }
 
-    /// A sandbox page under a stream of input the bytes decide: pointer, wheel, keys, text and
+    /// Runs a sandbox page under a stream of input the bytes decide: pointer, wheel, keys, text and
     /// composition (broken UTF-8 included), touch, pad, file drops, and frames between them.
     inline void FuzzInput(const std::string& markup, const std::string& sheet, const std::string& bytes)
     {

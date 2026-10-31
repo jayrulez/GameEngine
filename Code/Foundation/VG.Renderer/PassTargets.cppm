@@ -3,8 +3,8 @@
 
 // Foundation::VG.Renderer::PassTargets - :pass_targets partition.
 //
-// VGPassTargets: the targets VG's quality pass draws into, which the host provides (the
-// stencil-then-cover design): a multisampled colour target resolved into the backbuffer, for edge
+// VGPassTargets: the targets VG's quality pass draws into, which the host provides for
+// stencil-then-cover: a multisampled colour target resolved into the backbuffer, for edge
 // anti-aliasing, and a stencil attachment, for complex fills and clip paths. Every host drawing
 // VG with those features needs the same pair at its window's size, so they live here once: the
 // UI runtime's windows and the samples share it. A renderer meant for this pass is initialized

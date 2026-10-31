@@ -5,11 +5,12 @@
 ///
 /// Ambient occlusion. Two interchangeable generators feed one shared pipeline:
 ///   - GTAO: Ground-Truth AO (Jimenez horizon integration over screen-space slices).
-///   - SSAO: classic hemisphere-kernel occlusion (Crysis-style), ported from Sedulous.
-/// Both consume the opaque depth + octahedral view-normal (G-buffer), write an R8 AO transient,
-/// then share the SAME depth-aware bilateral blur, the SAME apply pass (multiply into the HDR before
-/// TAA so the resolve stabilizes it), the SAME bind-group cache, and the SAME debug channels. The two
-/// modes are mutually exclusive (AoMode). All targets are render-graph transients (sized per view).
+///   - SSAO: classic hemisphere-kernel occlusion (Crysis-style).
+/// Both read the opaque depth and the octahedral view normal (G-buffer) and write an R8 AO
+/// transient. They share one depth-aware bilateral blur, one apply pass (a multiply into the HDR
+/// before TAA, so the resolve stabilizes it), one bind-group cache and one set of debug channels.
+/// The two modes are mutually exclusive (AoMode). All targets are render-graph transients, sized
+/// per view.
 
 module;
 #include "Core/Prelude.h"
@@ -72,12 +73,12 @@ export namespace foundation::render
     struct GpuAoApplyPush
     {
         f32 strength = 1.0f;
-        f32 flipAoY = 0; // 1 = sample AO with flipped uv.y (Y-flip targets: WebGPU today)
+        f32 flipAoY = 0; // 1 = sample AO with flipped uv.y (on Y-flip targets such as WebGPU)
         f32 p1 = 0, p2 = 0;
     };
     static_assert(sizeof(GpuAoApplyPush) == 16, "push ApplyPush layout drift");
 
-    // Which AO generator to run (mutually exclusive - both write the same AO buffer).
+    // Which AO generator to run. The modes are exclusive: both write the same AO buffer.
     enum class AoMode : u32
     {
         Off = 0,
@@ -85,8 +86,8 @@ export namespace foundation::render
         SSAO = 2
     };
 
-    // Owns both AO generators + the shared blur/apply pipelines. Produces an AO transient (R8) applied to
-    // the HDR before TAA.
+    // Owns both AO generators and the shared blur and apply pipelines. Produces an AO transient (R8)
+    // applied to the HDR before TAA.
     class AoPass
     {
     public:
@@ -104,8 +105,9 @@ export namespace foundation::render
 
         [[nodiscard]] rhi::TextureFormat AoFormat() const noexcept { return kAoFormat; }
 
-        // Declare AO for one view; returns the (blurred) AO handle, or invalid if mode is Off. invProj =
-        // inverse camera projection, proj = camera projection (GTAO uses proj(1,1); SSAO uses proj(0,0)/(1,1)).
+        // Declare AO for one view; returns the blurred AO handle, or invalid if the mode is Off. invProj is
+        // the inverse camera projection and proj the camera projection (GTAO uses proj(1,1); SSAO uses
+        // proj(0,0) and proj(1,1)).
         [[nodiscard]] rendergraph::RGHandle DeclareAo(rendergraph::RenderGraph& graph,
                                                       rendergraph::RGHandle depth,
                                                       rendergraph::RGHandle normal, u32 w, u32 h,
@@ -113,8 +115,9 @@ export namespace foundation::render
                                                       f32 radius, f32 intensity, u32 frameIndex,
                                                       AoMode mode, i32 debugMode = 0);
 
-        // Multiply the AO into `hdr` (out = hdr * lerp(1, ao, strength)) into a fresh HDR transient, returned.
-        // Run BEFORE the TAA resolve so TAA stabilizes the AO (post-TAA application wobbles under jitter).
+        // Multiply the AO into `hdr` (out = hdr * lerp(1, ao, strength)), writing and returning a fresh HDR
+        // transient. Run it before the TAA resolve so TAA stabilizes the AO; applied after TAA, the AO
+        // wobbles under jitter.
         [[nodiscard]] rendergraph::RGHandle DeclareApply(rendergraph::RenderGraph& graph,
                                                          rendergraph::RGHandle hdr,
                                                          rendergraph::RGHandle ao, u32 w, u32 h,
@@ -153,13 +156,14 @@ export namespace foundation::render
         rhi::RenderPipeline* MakePipeline(StringView name, rhi::PipelineLayout* layout,
                                           rhi::TextureFormat fmt = kAoFormat);
 
-        // Advance the deferred-free list once per frame (frees bind groups retired long enough ago to be
-        // idle). The graph aliases transients, so a raw-pointer cache thrashes mid-frame - replaced sets go
-        // to the retire list (freed after kRetireFrames) instead of being freed while still in-flight.
+        // Advance the deferred-free list once per frame, freeing bind groups retired long enough ago to be
+        // idle. The graph aliases transients, so cached sets are replaced mid-frame; a replaced set goes to
+        // the retire list and is freed after kRetireFrames rather than while it may still be in flight.
         void Tick(u32 frameIndex);
 
-        // Two-texture bind group (t0, t1) + sampler, cached by (t0 view, combined generation). Shared by every
-        // AO pass (gen depth+normal, blur ao+depth, apply hdr+ao) - same layout.
+        // Two-texture bind group (t0, t1) and sampler, cached by the t0 view and the combined generation.
+        // Every AO pass shares the layout: generation binds depth and normal, blur binds AO and depth, apply
+        // binds HDR and AO.
         rhi::BindGroup* EnsureBindGroup(rhi::TextureView* a, rhi::TextureView* bView,
                                         u64 generation);
 

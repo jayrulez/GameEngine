@@ -3,19 +3,19 @@
 
 // Editor::Vegetation - the `:mask_page` partition.
 //
-// VegetationMaskPage: a vegetation mask on the GUI from the image pages' markup
-// (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 7, part 2), new: no
-// editor had one, a mask opened on the generic page. A mask is where each vegetation layer that
-// places by Mask may grow, a density plane per layer; the page shows one plane at a time (chosen
-// on the picture's bar, in the channel's place: a plane is one value, not colours), none to full
-// as black to white, the pointer's density read out, beside the mask's options on the grid, as the
-// heightfield page shows its heights. Painting stays the scene view's tool.
+// VegetationMaskPage: a vegetation mask on the GUI, built from the image pages' markup
+// (Data/Editor/ImagePage.xml). A mask says where each vegetation layer that places by Mask may
+// grow, with one density plane per layer. The page shows one plane at a time, chosen on the
+// picture's bar where the channel choice would be (a plane is a single value, not colours), from
+// none to full as black to white, with the density under the pointer read out. The mask's options
+// sit beside it on the grid, as the heightfield page shows its heights. Painting is a tool of the
+// scene view.
 //
-// Its size and plane count, as the cook reads them: a painted mask's planes are kept at its size,
-// so once anything is painted its width and height are read only (a notice says why); its plane
-// count may change (the cook keeps the planes that still exist, a new one empty). An imported mask
-// is decoded from its image at its own size, a plane per channel (red, green, blue, alpha): its
-// options are read only, its size a fact.
+// The size and plane count follow what the cook reads. A painted mask's planes are stored at its
+// size, so once anything is painted its width and height are read-only (a notice says why). Its
+// plane count may change: the cook keeps the planes that still exist and adds new ones empty. An
+// imported mask is decoded from its image at the image's size, one plane per channel (red, green,
+// blue, alpha), so its options are read-only and its size is a fact.
 
 module;
 #include "Core/Prelude.h"
@@ -40,9 +40,10 @@ export namespace editor
 
         VegetationMaskPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 
-        /// Shows plane `plane` (from 0), as its choice on the picture's bar does.
+        /// Shows plane `plane` (0-based), as choosing it on the picture's bar does.
         void ShowPlane(u32 plane);
-        /// The density at (x, y) of the plane shown, 0 to 255; false off the mask or with nothing read.
+        /// The density at (x, y) of the plane shown, 0 to 255; false outside the mask or when
+        /// nothing was read.
         bool DensityAt(i32 x, i32 y, u8& out) const;
 
         // === For tests ===
@@ -57,7 +58,7 @@ export namespace editor
         void OnObjectChanged() override;
 
     private:
-        // The planes as the cook would read them: the painted sidecar, or the imported image.
+        // Reads the planes as the cook would: from the painted sidecar, or from the imported image.
         void ReadPlanes();
         void ShowPlanePicture();
         void ShowChoices();
@@ -65,10 +66,10 @@ export namespace editor
 
         UniquePtr<app::ImagePreview> m_preview;
         RefPtr<foundation::gui::ComboBox> m_planeChoice;
-        Array<u8> m_densities; // every plane, plane after plane, row by row
+        Array<u8> m_densities; // all planes, one after another, each row by row
         i32 m_width = 0;
         i32 m_height = 0;
-        u32 m_planeCount = 0; // the planes read (an imported mask's four, a painted one's)
+        u32 m_planeCount = 0; // the number of planes read (four for an imported mask)
         u32 m_plane = 0;
         bool m_painted = false;
         bool m_imported = false;
@@ -85,6 +86,6 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The vegetation mask page (asking for its services when it is made).
+    /// Registers the vegetation mask page, which asks for its services when it is created.
     void RegisterVegetationMaskEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

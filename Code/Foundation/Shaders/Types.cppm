@@ -51,9 +51,9 @@ export namespace foundation::shaders
         u32 samplerShift = 0;
         u32 uavShift = 0;
 
-        /// THE register-space shift table, one value engine-wide: CBV=0, SRV=+100,
+        /// The register-space shift table, one value engine-wide: CBV=0, SRV=+100,
         /// UAV=+200, Sampler=+300. Compact so binding indices stay under WebGPU's
-        /// maxBindingsPerBindGroup (1000 in browsers, non-negotiable); Vulkan places
+        /// maxBindingsPerBindGroup (1000 in browsers, a hard limit); Vulkan places
         /// no constraint on binding indices, so the same table serves both SPIR-V
         /// backends. Must match rhi::vk::BindingShifts::standard() and the WebGPU
         /// backend's ShiftedBinding constants.
@@ -61,11 +61,11 @@ export namespace foundation::shaders
     };
 
     /// Serves `#include` requests during a compile from wherever the caller's shader sources
-    /// live (a VFS mount, memory, ...) - the compiler never touches the native filesystem for
+    /// live (a VFS mount, memory, ...); the compiler never touches the native filesystem for
     /// includes when one is set. `path` is the include path as the preprocessor formed it,
-    /// normalized to forward slashes with any leading "./" stripped: relative to the including
-    /// file's directory (the main source has none, so a first-level include arrives bare -
-    /// "common.hlsli"), and nested includes carry the includer's directory prefix. Return
+    /// normalized to forward slashes with any leading "./" stripped. It is relative to the
+    /// including file's directory: the main source has none, so a first-level include arrives
+    /// bare ("common.hlsli"), and nested includes carry the includer's directory prefix. Return
     /// false for "not found" (the preprocessor then reports the missing include).
     class IShaderIncludeResolver
     {
@@ -78,7 +78,7 @@ export namespace foundation::shaders
     {
         StringView shaderModel = u8"6_0";
         /// SPIR-V target environment (-fspv-target-env). vulkan1.3 for the Vulkan
-        /// backend; WebGPU compiles pass vulkan1.1 - naga's SPIR-V frontend rejects
+        /// backend; WebGPU compiles pass vulkan1.1, because naga's SPIR-V frontend rejects
         /// SPIR-V 1.4+ instructions (OpCopyLogical), which DXC emits above 1.1.
         StringView spirvTargetEnvironment = u8"vulkan1.3";
         i32 optimizationLevel = 3;
@@ -89,7 +89,7 @@ export namespace foundation::shaders
         /// first, then in each of these in order, and read from disk. Ignored when
         /// `includeResolver` is set.
         Span<const StringView> includePaths;
-        /// When set, EVERY include resolves through it (no disk access) - the dev shader
+        /// When set, every include resolves through it (no disk access); the dev shader
         /// provider serves includes from the data mount this way. Borrowed for the call.
         /// On both routes the compiler expands an include's `effect` blocks (:properties).
         IShaderIncludeResolver* includeResolver = nullptr;

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.navigation scene integration: a baked zone + a MoveEntity agent. At Start the subsystem
-// loads the zone and registers the agent; navigate() then steers it, and the Update tick writes
-// the steered position back to the entity transform until it arrives.
+// engine.navigation scene integration: a baked zone and a MoveEntity agent. At Start the subsystem
+// loads the zone and registers the agent; navigate() then steers it, and the Update tick writes the
+// steered position back to the entity transform until it arrives.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -91,11 +91,11 @@ TEST_CASE("navigation.scene: a MoveEntity agent navigates across a zone to its t
     ResourceManager manager(DefaultAllocator(), db);
     manager.AddFactory(&factory);
 
-    // Scene: nav managers + subsystem, a zone entity at the origin, an agent at (-5,0,0).
+    // Scene: nav managers and subsystem, a zone entity at the origin, an agent at (-5,0,0).
     scene::Scene scene(DefaultAllocator(), u8"nav");
     AddNavigationSceneManagers(scene);
 
-    // The scene system carries the debug-draw settings block (physics precedent), default off.
+    // The scene system carries the debug-draw settings block (as physics does), default off.
     auto* navSystem = scene.GetSystem<NavigationSceneSystem>();
     REQUIRE(navSystem != nullptr);
     CHECK(navSystem->SettingsType() != nullptr);
@@ -127,7 +127,7 @@ TEST_CASE("navigation.scene: a MoveEntity agent navigates across a zone to its t
     CHECK(MemoryTagBytes(RegisterMemoryTag("Navigation")) > 0u);
     CHECK(MemoryTagAllocations(RegisterMemoryTag("Navigation")) > 0u);
 
-    // Steer to the far side and step until arrival (12s @ 30 Hz).
+    // Steer to the far side and step until arrival (12 s at 30 Hz).
     agent->navigate(5.0f, 0.0f, 0.0f);
     CHECK_FALSE(agent->finished);
 
@@ -149,9 +149,9 @@ TEST_CASE("navigation.scene: a MoveEntity agent navigates across a zone to its t
 }
 
 // A zone re-baked while the scene runs (the editor cooks the new navmesh and reloads it under a
-// playing scene): the crowd was built over the old navmesh, which the reload parks and later
-// frees. The zone rebuilds its crowd over the new one and its agents carry on to where they were
-// going. It used to keep stepping the old crowd over the freed navmesh (an editor crash).
+// playing scene): the crowd was built over the old navmesh, which the reload parks and later frees.
+// The zone must rebuild its crowd over the new one, not keep stepping the old crowd over freed
+// memory, and its agents carry on to where they were going.
 TEST_CASE("navigation.scene: a zone's navmesh reloaded mid-run: the agent carries on over the new one")
 {
     RegisterNavigationResource();
@@ -227,9 +227,9 @@ TEST_CASE("navigation.scene: a zone's navmesh reloaded mid-run: the agent carrie
 
 TEST_CASE("navigation.scene: a SCALED zone entity places the navmesh rigidly (no double-scale)")
 {
-    // The bake and the runtime both use the scale-free RigidPart frame, so a zone on a
-    // scaled entity behaves exactly like the unscaled one - the navmesh's world-unit geometry is
-    // PLACED, never warped.
+    // The bake and the runtime both use the scale-free RigidPart frame, so a zone on a scaled
+    // entity behaves exactly like the unscaled one: the navmesh's world-unit geometry is placed,
+    // never warped.
     RegisterNavigationResource();
     RegisterNavigationComponentReflection();
     RemoveTree(u8"scratch_navscene_scaled_db");
@@ -257,7 +257,7 @@ TEST_CASE("navigation.scene: a SCALED zone entity places the navmesh rigidly (no
     scene::EntityHandle zoneEntity = scene.CreateEntity(u8"zone");
     {
         Transform t;
-        t.scale = Float3{2.0f, 2.0f, 2.0f}; // the desync trigger before the rigid frame
+        t.scale = Float3{2.0f, 2.0f, 2.0f}; // a scaled zone entity
         scene.SetLocalTransform(zoneEntity, t);
     }
     NavMeshZoneComponent& zoneComp = scene.GetSystem<NavMeshZoneComponentManager>()->Add(zoneEntity);
@@ -283,8 +283,8 @@ TEST_CASE("navigation.scene: a SCALED zone entity places the navmesh rigidly (no
     }
     const Float3 end = scene.GetWorldPosition(agentEntity);
     CHECK(agent->finished);
-    CHECK(std::abs(end.x - 5.0f) < 1.5f); // same arrival as the unscaled zone - no double-scale
-    CHECK(std::abs(end.y) < 0.5f);        // ...and ON the ground plane, not floated/sunk
+    CHECK(std::abs(end.x - 5.0f) < 1.5f); // same arrival as the unscaled zone: no double scale
+    CHECK(std::abs(end.y) < 0.5f);        // ...and on the ground plane, not floating or sunk
 
     scene.SetSimulationEnabled(false);
     scene.Stop();
@@ -324,12 +324,12 @@ TEST_CASE("navigation.scene: per-agent speed applies live and stopDistance arriv
     zoneComp.zone.Bind(manager);
     REQUIRE(zoneComp.zone.Get() != nullptr);
 
-    // SLOW agent: a lower per-call speed covers less ground in the same steps.
+    // Slow agent: a lower per-call speed covers less ground in the same steps.
     scene::EntityHandle slowEntity = scene.CreateEntity(u8"slow");
     scene.SetLocalPosition(slowEntity, Float3{-5, 0, -2});
     NavAgentComponent* slow = &scene.GetSystem<NavAgentComponentManager>()->Add(slowEntity);
 
-    // ARRIVE agent: navigateAt with a stop distance parks on the ring, not the point.
+    // Arrive agent: navigateAt with a stop distance parks on the ring, not the point.
     scene::EntityHandle arriveEntity = scene.CreateEntity(u8"arrive");
     scene.SetLocalPosition(arriveEntity, Float3{-5, 0, 2});
     NavAgentComponent* arrive = &scene.GetSystem<NavAgentComponentManager>()->Add(arriveEntity);
@@ -340,7 +340,7 @@ TEST_CASE("navigation.scene: per-agent speed applies live and stopDistance arriv
     REQUIRE(slow->agentId >= 0);
     REQUIRE(arrive->agentId >= 0);
 
-    slow->setSpeed(0.8f); // live change - the tick pushes it into the crowd
+    slow->setSpeed(0.8f); // live change: the tick pushes it into the crowd
     slow->navigate(5.0f, 0.0f, -2.0f);
     arrive->navigateAt(5.0f, 0.0f, 2.0f, 3.5f, 2.5f);
 
@@ -361,12 +361,12 @@ TEST_CASE("navigation.scene: per-agent speed applies live and stopDistance arriv
     const f32 dx = arrivePos.x - 5.0f;
     const f32 dz = arrivePos.z - 2.0f;
     const f32 distance = Sqrt(dx * dx + dz * dz);
-    CHECK(distance > 1.2f); // parked on the ring, NOT on the point
+    CHECK(distance > 1.2f); // parked on the ring, not on the point
     CHECK(distance < 3.5f);
     CHECK(arrive->remaining() > 1.2f);
 
-    // Introspection (Lumix parity): the still-moving agent reads as WALKING on a VALID
-    // move request with a live speed intent; the parked one has released its target.
+    // Introspection: the still-moving agent reads as walking on a valid move request with a live
+    // speed intent; the parked one has released its target.
     CHECK(slow->state() == 1);       // NavAgentCrowdState::Walking
     CHECK(slow->targetState() == 2); // NavAgentTargetState::Valid
     CHECK(slow->desiredSpeed() > 0.0f);
@@ -402,9 +402,8 @@ namespace
     };
 }
 
-// An agent that cannot join the navmesh never moves; it used to say nothing (a PaperKid car
-// placed where the bake had left a hole stood still with no clue why). Outside every zone, or
-// with no navmesh where it stands, it now warns; a well-placed agent says nothing.
+// An agent that cannot join the navmesh never moves, so it must say why: outside every zone, or
+// with no navmesh where it stands, it warns; a well-placed agent says nothing.
 TEST_CASE("navigation.scene: an agent that cannot join the navmesh says so")
 {
     RegisterNavigationResource();
@@ -467,8 +466,8 @@ TEST_CASE("navigation.scene: an agent that cannot join the navmesh says so")
     RemoveTree(u8"scratch_navwarn_db");
 }
 
-// A zone with no usable navmesh is skipped; it used to be silent, and every agent in it then
-// reported standing in no zone, which points the wrong way. The zone itself says so now.
+// A zone with no usable navmesh is skipped and says so itself; otherwise every agent in it would
+// only report standing in no zone, which points the wrong way.
 TEST_CASE("navigation.scene: a zone with no usable navmesh says so")
 {
     RegisterNavigationComponentReflection();
@@ -537,7 +536,7 @@ TEST_CASE("navigation.scene: a zone's maxAgents is how many agents its crowd mov
         scene.Stop();
         return n;
     };
-    CHECK(joined(200, 150) == 150); // Masquerade's crowd: past the old fixed 128
+    CHECK(joined(200, 150) == 150); // a large crowd, past the default 128
     CHECK(joined(3, 5) == 3);       // a small zone takes only what it was given
     RemoveTree(u8"scratch_navmax_db");
 }

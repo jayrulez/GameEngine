@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorPages over a real EditorContext and EditorDock with a test page factory: a
-// page docked by its asset's guid in the central stack (and brought forward when opened again),
-// its tab's name, unsaved mark and active mark; a close run at the next frame, a page with unsaved
-// changes asking first (Save, Discard, Cancel); the active page following the dock; the Game tabs;
-// the open pages through the store and back; the unsaved-pages gate before an exit; Save As.
+// Editor::App: EditorPages over a real EditorContext and EditorDock with a test page factory. A page
+// is docked in the central stack by its asset's guid and brought forward when opened again, and its
+// tab shows its name, an unsaved mark and an active mark. A close runs at the next frame, and a page
+// with unsaved changes asks first (Save, Discard, Cancel). Also covers the active page following the
+// dock, the Game tabs, saving the open pages to the store and restoring them, the check for unsaved
+// pages before an exit, and Save As.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -56,7 +57,7 @@ namespace
             if (closed != nullptr)
                 ++*closed;
         }
-        // Work it holds besides its asset (a scene page's clip).
+        // Unsaved work the page holds besides its asset (such as a scene page's clip).
         void ListUnsavedBesides(Array<String>& out) const override
         {
             if (!besides.IsEmpty())
@@ -212,7 +213,7 @@ TEST_CASE("editor pages: a page docks by its asset's guid in the central stack, 
 
     editor::app::UIEditorPage* two = bed.pages->Open(*bed.two);
     REQUIRE(two != nullptr);
-    CHECK(bed.pages->Open(*bed.one) == one); // open already: brought forward, not opened again
+    CHECK(bed.pages->Open(*bed.one) == one); // already open: brought forward, not opened again
     CHECK(bed.pages->Count() == 2u);
     CHECK(bed.context.ActivePage() == one);
 
@@ -224,7 +225,7 @@ TEST_CASE("editor pages: a page docks by its asset's guid in the central stack, 
     CHECK(described->TabClasses == String(u8"dirty active"));
     CHECK(bed.dock.Controller().Describe(bed.Panel(*bed.two).AsView())->TabClasses.IsEmpty());
 
-    REQUIRE(bed.project->SourceDb().RenameInstance(bed.one->Id(), u8"First").IsOk()); // the asset renamed: its tab follows
+    REQUIRE(bed.project->SourceDb().RenameInstance(bed.one->Id(), u8"First").IsOk()); // rename the asset: its tab follows
     one->ClearDirty();
     bed.Frame();
     CHECK(described->Title == String(u8"First"));
@@ -244,9 +245,9 @@ TEST_CASE("editor pages: a user's open goes first to an editor that claims the a
                                                                 });
     CHECK(bed.pages->OpenForUser(bed.two->Id()));
     REQUIRE(claimed.Size() == 1u);
-    CHECK(bed.pages->Count() == 0u); // taken: no page
+    CHECK(bed.pages->Count() == 0u); // claimed by the interceptor: no page
     CHECK(bed.pages->OpenForUser(bed.one->Id()));
-    CHECK(bed.pages->Count() == 1u); // not claimed: its page
+    CHECK(bed.pages->Count() == 1u); // not claimed: the page opens
     CHECK_FALSE(bed.pages->OpenForUser(Guid{7u, 7u})); // no such asset
     bed.context.RemoveOpenAssetInterceptor(interceptor);
     CHECK(bed.pages->Open(*bed.two) != nullptr); // a page open (MCP's page_open, a restore) is never claimed
@@ -258,8 +259,8 @@ TEST_CASE("editor pages: a clean page closes at the next frame with its panel; o
     editor::app::UIEditorPage* one = bed.pages->Open(*bed.one);
     REQUIRE(one != nullptr);
     const String panel = bed.Panel(*bed.one);
-    CHECK_FALSE(bed.dock.Controller().Close(panel.AsView()).Ok()); // its tab's close: the page decides
-    CHECK(bed.pages->Count() == 1u);                                  // not inside the event
+    CHECK_FALSE(bed.dock.Controller().Close(panel.AsView()).Ok()); // closing its tab leaves the decision to the page
+    CHECK(bed.pages->Count() == 1u);                                  // not closed inside the event
     bed.Frame();
     CHECK(bed.pages->Count() == 0u);
     CHECK(bed.closed == 1);
@@ -308,7 +309,7 @@ TEST_CASE("editor pages: a page holding unsaved work besides its asset is asked 
     auto* page = static_cast<TestPage*>(bed.pages->Open(*bed.one));
     REQUIRE(page != nullptr);
     page->besides = String(u8"The clip 'Bounce'");
-    CHECK_FALSE(page->IsDirty()); // its own mark says nothing of the clip
+    CHECK_FALSE(page->IsDirty()); // the page's own dirty mark does not cover the clip
     bed.pages->RequestClose(page);
     (void)bed.root->UpdateLayout();
     gui::MessageBox* box = FindBox(*bed.root);
@@ -330,7 +331,7 @@ TEST_CASE("editor pages: a page holding unsaved work besides its asset is asked 
     (void)bed.root->UpdateLayout();
     box = FindBox(*bed.root);
     REQUIRE(box != nullptr);
-    // Each named, the page's own changes and its clip: never a count of pages.
+    // Each item is named, the page's own changes and its clip, rather than given as a count of pages.
     CHECK(box->GetMessage() == StringView(u8"These have unsaved changes:\n    Two\n    The clip 'Spin', in Two"));
     CHECK(ButtonNamed(*box, u8"Save All and Exit")->HandleActivate());
     CHECK(page->besidesSaves == 1);
@@ -348,10 +349,10 @@ TEST_CASE("editor pages: the active page follows the dock's active panel; anothe
 
     gui::DockController& dock = bed.dock.Controller();
     const gui::DockNodeId central = bed.Layout().CentralStack();
-    dock.NoteFocused(central); // the focus into the documents: their chosen tab
+    dock.NoteFocused(central); // focus moves into the documents: their chosen tab becomes active
     dock.NoteActive(bed.Panel(*bed.one).AsView());
     CHECK(bed.context.ActivePage() == one);
-    dock.NoteFocused(bed.Layout().StackOf(editor::app::kPanelConsole)); // the Console: the page stays
+    dock.NoteFocused(bed.Layout().StackOf(editor::app::kPanelConsole)); // focus on the Console: the active page stays
     CHECK(bed.context.ActivePage() == one);
 
     bed.context.RevealPage(two);
@@ -469,7 +470,7 @@ TEST_CASE("editor pages: Save As names a new asset beside the page's; an empty o
 
     name->SetText(u8"One Again");
     CHECK(save->HandleActivate());
-    CHECK(FindWindow(*bed.root) == nullptr); // closed and let go: `window` no longer points at one
+    CHECK(FindWindow(*bed.root) == nullptr); // closed and released: `window` is dangling from here
     content::Instance* made = bed.project->SourceDb().RootGroup()->GetInstance(u8"One Again");
     REQUIRE(made != nullptr);
     CHECK(page->InstanceId() == made->Id());

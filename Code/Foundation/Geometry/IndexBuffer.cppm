@@ -5,7 +5,7 @@
 ///
 /// A format-tagged index buffer (16- or 32-bit), stored as raw bytes so it uploads
 /// straight to a GPU index buffer. An internal write cursor supports streaming
-/// append (Add/AddTriangle) for the primitive generators + importers.
+/// append (Add/AddTriangle) for the primitive generators and importers.
 
 module;
 #include "Core/Prelude.h"

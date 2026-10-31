@@ -3,15 +3,15 @@
 
 // UI Toolkit - :markup_completion partition
 //
-// Completion provider for foundation.ui MARKUP documents, fed by the MarkupRegistry's real
-// vocabulary (the same tables the loader validates against): element names right after
-// `<` / `</`, attribute names inside a tag (the element's registered properties + the
-// layout-param union - which layout params apply depends on the parent container, so the
-// union is offered). Line-local context; plain text between tags offers nothing.
+// Completion provider for foundation.ui markup documents, fed by the MarkupRegistry's vocabulary
+// (the same tables the loader validates against). It offers element names right after `<` or
+// `</`, and attribute names inside a tag: the element's registered properties plus the union of
+// all layout params, since which ones apply depends on the parent container. Context is
+// line-local; plain text between tags offers nothing.
 //
-// Lives in toolkit (not an editor page): MarkupRegistry is part of foundation.ui itself, the
-// same generic tier as the XmlLexer - unlike script-language providers, whose knowledge
-// belongs to the per-language editor-UI modules.
+// It lives in the toolkit rather than an editor page because MarkupRegistry is part of
+// foundation.ui itself, as generic as the XmlLexer. Script-language providers differ: their
+// knowledge belongs to the modules that own each language.
 
 module;
 #include "Core/Prelude.h"

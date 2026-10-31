@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full CPU-image asset pipeline: author an ImageAsset (image file) -> cook with
-// ImageAssetBuilder into an output content DB -> load the cooked ImageResource
-// through the ResourceManager (device-free, model B). PNG round-trips RGBA8.
+// Full CPU-image asset pipeline: author an ImageAsset (an image file), cook it with
+// ImageAssetBuilder into an output content DB, and load the cooked ImageResource
+// through the ResourceManager (device-free). PNG round-trips RGBA8.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -55,7 +55,7 @@ TEST_CASE("image.pipeline: ImageAsset -> cook -> ImageResource round-trips")
 
     NativeFileSystem outMount(u8"scratch_imgpipe_out_db", DefaultAllocator());
 
-    // --- cook (tooling): ImageAsset -> ImageResource in the output DB ---
+    // --- cook (tooling): ImageAsset into ImageResource in the output DB ---
     Guid id;
     {
         foundation::content::ContentDatabase outDb(foundation::core::DefaultAllocator(), 

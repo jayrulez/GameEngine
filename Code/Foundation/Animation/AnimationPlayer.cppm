@@ -3,9 +3,9 @@
 
 /// Foundation::Animation - the `:player` partition.
 ///
-/// AnimationPlayer: single-clip playback for one skeleton instance - time advance, looping/clamping,
-/// event firing, and evaluation into skinning matrices (+ previous frame for motion vectors). Ported
-/// faithfully from Sedulous.Animation.AnimationPlayer. The skeleton + clip are borrowed (not owned).
+/// AnimationPlayer: single-clip playback for one skeleton instance. It advances time, loops or
+/// clamps, fires events, and evaluates into skinning matrices (keeping the previous frame's for
+/// motion vectors). The skeleton and clip are borrowed, not owned.
 
 module;
 #include "Core/Prelude.h"
@@ -218,8 +218,8 @@ export namespace foundation::animation
         /// The pose modifiers run between the sample and the palette (inverse kinematics), borrowed.
         [[nodiscard]] PoseModifierStack& Modifiers() noexcept { return m_modifiers; }
 
-        /// The root motion the clip carried since the last call (root-motion.md P1), composed over
-        /// every Update between: zero when the clip extracts none. Reading it resets it.
+        /// The root motion the clip carried since the last call, composed over every Update
+        /// between: zero when the clip extracts none. Reading it resets it.
         [[nodiscard]] RootMotionDelta ConsumeRootMotion() noexcept
         {
             const RootMotionDelta delta = m_rootMotion;

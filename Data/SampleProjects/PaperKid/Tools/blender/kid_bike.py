@@ -3,13 +3,12 @@
     blender --background --factory-startup --python kid_bike.py -- <out dir> [preview]
 
 Writes <out dir>/KidBike.glb (one skinned mesh, its armature, and the clips Ride, ThrowLeft and
-ThrowRight) and,
-with `preview`, PNG renders to check by eye. Nothing here is hand-placed: rerun after a change.
+ThrowRight) and, with `preview`, PNG renders to check by eye. Nothing here is hand-placed: rerun
+after a change.
 
-The model sits where the old primitives did: its origin is the ground under the middle of the bike,
-the bike's front is +Z in the engine (Blender's -Y), the wheels are 0.35 m in radius and 1.1 m
-apart, and the kid's head is about 1.55 m up, so the Bike entity's capsule (its centre 0.9 m above
-the ground) still fits it.
+The model's origin is the ground under the middle of the bike, the bike's front is +Z in the engine
+(Blender's -Y), the wheels are 0.35 m in radius and 1.1 m apart, and the kid's head is about 1.55 m
+up, so the Bike entity's capsule (its centre 0.9 m above the ground) fits it.
 
 The rig: the bike's parts are rigid on their bones (the frame, both wheels, the crank and pedals);
 the kid's legs follow the pedals and his hands the grips through IK, baked to plain keyframes, so
@@ -128,7 +127,7 @@ def limb(name, a, b, radius, mat, bone, radius2=None):
 def build_kid(pose):
     """The kid at the rest pose: each part on its bone, placed by the joint positions in `pose`."""
     box("Pelvis", (0.30, 0.22, 0.16), P(0, -0.13, 0.95), "Shorts", "hips", bevel=0.04)
-    # The torso leans forward to the bars: a chunky shirt block along hips -> neck.
+    # The torso leans forward to the bars: a chunky shirt block from the hips to the neck.
     chest = (P(0, -0.11, 1.0) + NECK) / 2
     # Tipped forward along the spine: a positive turn about X takes the top toward -Y, forward.
     spine = NECK - P(0, -0.11, 1.0)

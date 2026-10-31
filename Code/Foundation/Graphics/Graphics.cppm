@@ -3,23 +3,22 @@
 
 // Foundation::Graphics - the `foundation.graphics` module.
 //
-// The RHI render host, promoted out of the per-sample bring-up code so samples,
-// the UI, and the renderer share one tested path. Two pieces:
+// The RHI render host that samples, the UI and the renderer share. Two pieces:
 //
-//   GraphicsDevice - the SHARED GPU: backend (validation-wrapped) + adapter +
-//     logical device + graphics queue, plus the CPU frame-in-flight ring index.
-//     Created once for the whole app. Hands out RenderWindows.
+//   GraphicsDevice: the shared GPU. Backend (validation-wrapped), adapter, logical
+//     device and graphics queue, plus the CPU frame-in-flight ring index. Created
+//     once for the whole app; hands out RenderWindows.
 //
-//   RenderWindow - a single window's PRESENTATION target: surface + swapchain +
-//     a per-window ring of command pools/fences. Created/destroyed at runtime
-//     (the basis for detachable UI windows). The main window is just the first.
+//   RenderWindow: one window's presentation target. Surface, swapchain and a
+//     per-window ring of command pools and fences. Created and destroyed at runtime
+//     (the basis for detachable UI windows); the main window is just the first.
 //
 // A FrameContext is the per-window, per-frame hand-off the host gives a consumer:
-// an acquired backbuffer + a host-created encoder. The host owns acquire / fence
-// sync / submit / present and the backbuffer state transitions; the consumer
-// records content (or calls BeginBackbufferPass for the common clear+pass case).
+// an acquired backbuffer and a host-created encoder. The host owns acquire, fence
+// sync, submit, present and the backbuffer state transitions; the consumer records
+// content (or calls BeginBackbufferPass for the common clear-and-pass case).
 //
-// Multi-window is uniform: there is no "main window" special case here - an app
+// Multi-window is uniform: there is no "main window" special case here. An app
 // renders a list of RenderWindows, each independent, sharing one GraphicsDevice.
 
 module;
@@ -33,18 +32,18 @@ import foundation.profiler;
 import foundation.rhi;
 import foundation.shell;
 // Backend factories live in sibling modules so this core host imports only the
-// base RHI (keeps it GPU-backend-agnostic and avoids importing heavy backend
-// modules into this interface - which GCC's module reader chokes on):
-//   foundation.graphics.null - CreateNullGraphicsDevice (headless)
-//   foundation.graphics.gpu  - CreateGraphicsDevice (Vulkan/DX12)
+// base RHI. That keeps it GPU-backend-agnostic and keeps heavy backend modules out
+// of this interface, which GCC's module reader chokes on:
+//   foundation.graphics.null: CreateNullGraphicsDevice (headless)
+//   foundation.graphics.gpu: CreateGraphicsDevice (Vulkan/DX12)
 
 namespace core = foundation::core;
-using namespace foundation::shell; // IShell + input/window types (moved from foundation::runtime)
+using namespace foundation::shell; // IShell and the input/window types
 namespace rhi = foundation::rhi;
 
 export namespace foundation::graphics
 {
-    // Null is a real headless option (CI / servers / tests) - no GPU required.
+    // Null is a real headless option (CI, servers, tests) that needs no GPU.
     enum class BackendType : core::u8
     {
         Vulkan,
@@ -94,12 +93,12 @@ export namespace foundation::graphics
     struct GraphicsDeviceDesc
     {
         BackendType backend = BackendType::Vulkan;
-        // Validation (our RHI-layer wrapper AND the backend's own layers, e.g. Vulkan validation)
-        // defaults ON for dev builds and OFF for optimized/shipping builds (BUILD_RELEASE - set for
-        // Release/RelWithDebInfo/MinSizeRel). A profiling run (RelWithDebInfo) therefore measures the
-        // real cost, not the validation overhead. Override explicitly to force either way.
-        // NB: BUILD_RELEASE is ALWAYS defined (0 in dev, 1 in optimized builds - see Core/Prelude.h),
-        // so this must be `#if`, not `#ifdef` (which would always take the release branch).
+        // Validation (our RHI-layer wrapper and the backend's own layers, e.g. Vulkan validation)
+        // defaults on for dev builds and off for optimized and shipping builds (BUILD_RELEASE, set
+        // for Release, RelWithDebInfo and MinSizeRel), so a profiling run (RelWithDebInfo) measures
+        // the real cost rather than the validation overhead. Override explicitly to force either way.
+        // BUILD_RELEASE is always defined (0 in dev, 1 in optimized builds; see Core/Prelude.h), so
+        // this must be `#if`, not `#ifdef` (which would always take the release branch).
 #if BUILD_RELEASE
         bool enableValidation = false;
 #else
@@ -110,11 +109,10 @@ export namespace foundation::graphics
     };
 
     /// The shared command-line validation override: `--gpu-validation` forces the API
-    /// validation layer ON, `--no-gpu-validation` forces it OFF; neither leaves the desc's
-    /// config default (ON in Debug, OFF in optimized builds). The last one given wins.
+    /// validation layer on, `--no-gpu-validation` forces it off; neither leaves the desc's
+    /// config default (on in Debug, off in optimized builds). The last one given wins.
     /// Every executable that creates a device through a desc should run its arguments
-    /// through this rather than assign enableValidation itself (the editor forced it ON for
-    /// every config until 2026-09-24, so a RelWithDebInfo editor ran the Vulkan layer).
+    /// through this rather than assign enableValidation itself.
     inline void ApplyValidationArguments(int argc, char** argv, GraphicsDeviceDesc& desc)
     {
         const auto matches = [](const char* argument, const char* flag)
@@ -161,7 +159,7 @@ export namespace foundation::graphics
     class RenderWindow;   // forward (FrameContext refs it)
 
     // Typed per-window payload. The UI layer stashes its {RootView, VGContext,
-    // VGRenderer} here without the host knowing the type - capability As*() idiom.
+    // VGRenderer} here without the host knowing the type (the capability As*() idiom).
     class IRenderWindowData
     {
     public:
@@ -172,7 +170,7 @@ export namespace foundation::graphics
     // passed to consumers (Subsystem::Render / IApplicationModule::OnRenderWindow).
     struct FrameContext
     {
-        bool valid = false;             // false => skip (minimized/acquire failed)
+        bool valid = false;             // false: skip (minimized, or acquire failed)
         RenderWindow* window = nullptr; // which window this frame targets
         core::u32 frameIndex = 0;       // device ring index (0..framesInFlight-1)
         core::u32 width = 0;
@@ -186,8 +184,8 @@ export namespace foundation::graphics
         rhi::TextureView* backbufferAlternateView = nullptr;
 
         // Convenience for the common 2D/UI case: open a render pass that clears
-        // and targets the backbuffer (the Undefined->RenderTarget transition was
-        // already done by the host in BeginFrame). A RenderGraph-driven renderer
+        // and targets the backbuffer (the host already made the Undefined to
+        // RenderTarget transition in BeginFrame). A RenderGraph-driven renderer
         // ignores this and records on `encoder` directly.
         rhi::RenderPassEncoder* BeginBackbufferPass(rhi::ClearColor clear)
         {
@@ -233,8 +231,8 @@ export namespace foundation::graphics
         rhi::RenderPassEncoder* m_pass = nullptr;
     };
 
-    // A window's presentation target. Owns its surface/swapchain and a per-frame
-    // ring of command pools + fences (per-window present sync). Destroyed via the
+    // A window's presentation target. Owns its surface and swapchain and a per-frame
+    // ring of command pools and fences (per-window present sync). Destroyed via the
     // GraphicsDevice that made it.
     class RenderWindow
     {
@@ -266,8 +264,8 @@ export namespace foundation::graphics
 
         // Acquire this window's backbuffer and open a host-created encoder from the
         // current frame's pool (after the per-window fence guards reuse). The
-        // returned FrameContext is invalid when the window is minimized/zero-sized
-        // or acquisition fails - the caller skips rendering it this frame.
+        // returned FrameContext is invalid when the window is minimized or zero-sized,
+        // or acquisition fails; the caller skips rendering it this frame.
         FrameContext BeginFrame();
 
         // Transition the backbuffer to Present, submit (signalling the per-window
@@ -297,8 +295,8 @@ export namespace foundation::graphics
     {
     public:
         // Build a GraphicsDevice from an already-created backend (takes
-        // ownership): enumerate adapters, create the logical device + graphics
-        // queue. Backend-agnostic - GPU backends (Vulkan/DX12) are built by the
+        // ownership): enumerate adapters, create the logical device and graphics
+        // queue. Backend-agnostic: GPU backends (Vulkan/DX12) are built by the
         // `foundation.graphics.gpu` factory, which then calls this. On failure
         // the backend is destroyed.
         static core::Result<core::UniquePtr<GraphicsDevice>>
@@ -340,13 +338,13 @@ export namespace foundation::graphics
             }
 
 #if PLATFORM_WEB
-            // Web (Emscripten/Dawn) surfaces hand out a SINGLE current texture, reused every frame,
-            // and wgpuQueueSubmit validates ASYNCHRONOUSLY. With more than one frame in flight, the
+            // Web (Emscripten/Dawn) surfaces hand out a single current texture, reused every frame,
+            // and wgpuQueueSubmit validates asynchronously. With more than one frame in flight, the
             // next frame's AcquireNextImage releases that shared surface texture while the prior
-            // frame's still-pending submit references it -> "Destroyed texture used in a submit", and
-            // Dawn drops that submit (which silently killed the one-shot IBL env bake -> black sky).
-            // Serialize to a single frame in flight: BeginFrame's fence wait then guarantees a frame's
-            // submit has completed before the next acquire releases the surface texture.
+            // frame's still-pending submit references it ("Destroyed texture used in a submit"), and
+            // Dawn silently drops that submit, one-shot work such as an IBL bake included. Serialize
+            // to a single frame in flight: BeginFrame's fence wait then guarantees a frame's submit
+            // has completed before the next acquire releases the surface texture.
             const core::u32 frames = 1u;
             (void)framesInFlight;
 #else
@@ -383,13 +381,13 @@ export namespace foundation::graphics
         GraphicsDevice(const GraphicsDevice&) = delete;
         GraphicsDevice& operator=(const GraphicsDevice&) = delete;
 
-        // Create a presentation target (surface + swapchain + per-frame pools/
+        // Create a presentation target (surface, swapchain, per-frame pools and
         // fences) for a window. The window must outlive the RenderWindow.
         core::Result<core::UniquePtr<RenderWindow>> CreateRenderWindow(IWindow& window,
                                                                        const RenderWindowDesc& desc)
         {
             const NativeWindow nw = window.Native();
-            // Tell the RHI which WSI the shell used so it creates the matching surface (no guessing -
+            // Tell the RHI which WSI the shell used so it creates the matching surface (no guessing:
             // feeding X11 handles to the Wayland WSI segfaults). The shell's WindowSystem maps 1:1.
             rhi::SurfacePlatform plat = rhi::SurfacePlatform::Unknown;
             switch (nw.system)
@@ -552,7 +550,7 @@ export namespace foundation::graphics
         }
         // After device loss (GPU hang / TDR, driver reset) stop rendering: continuing
         // spins through failing acquire/submit calls, flooding stderr and stalling the
-        // OS. The device is the authority (Device::IsLost) - loss is sticky, so the
+        // OS. The device is the authority (Device::IsLost); loss is sticky, so the
         // window stays dark until the app recreates the device.
         if (m_device->Raw() == nullptr || m_device->Raw()->IsLost())
         {
@@ -594,11 +592,11 @@ export namespace foundation::graphics
         f.valid = true;
         f.window = this;
         f.frameIndex = fi;
-        // The frame's dimensions are the BACKBUFFER's (the swapchain's configured size), not the
+        // The frame's dimensions are the backbuffer's (the swapchain's configured size), not the
         // live window size: on web the canvas can resize between SyncSize and here, and every
         // downstream consumer (viewports, scissors, post targets) must agree with the attachment
-        // this frame actually renders into - WebGPU validation rejects the whole command buffer
-        // on any out-of-attachment viewport/scissor.
+        // this frame actually renders into. WebGPU validation rejects the whole command buffer
+        // on any out-of-attachment viewport or scissor.
         f.width = m_swapChain->Width();
         f.height = m_swapChain->Height();
         f.encoder = enc;

@@ -3,13 +3,13 @@
 
 /// Foundation::Materials.Resource - the `foundation.materials.resource` module.
 ///
-/// Materials as resources: a `MaterialSource` (authored content - references a shader
-/// by Guid, plus declared properties + render-state presets + the default-uniform
-/// blob) is built by `MaterialFactory` into a runtime `Material`. The factory Binds
-/// the referenced `ShaderResource` mid-build, which AUTOMATICALLY records a
-/// material→shader dependency edge (see foundation.resource): reloading the shader
-/// transitively reloads the material. The product is the data-only `Material`; its
-/// GPU bind-group layout is still inferred later by the MaterialSystem.
+/// Materials as resources: a `MaterialSource` (authored content: a shader referenced
+/// by Guid, declared properties, render-state presets and the default-uniform
+/// blob) is built by `MaterialFactory` into a runtime `Material`. The factory binds
+/// the referenced `ShaderResource` mid-build, which records a material-to-shader
+/// dependency edge (see foundation.resource), so reloading the shader also reloads the
+/// material. The product is the data-only `Material`; the MaterialSystem infers its GPU
+/// bind-group layout later.
 
 module;
 #include "Core/Prelude.h"
@@ -38,8 +38,7 @@ namespace texture = foundation::texture;
 export namespace foundation::materials
 {
 
-    // One effect group of a material as stored (Specs/wind-for-every-shader.md): the effect's name
-    // and variant flag, its gate's index, its buffer's size, its parameters' names, types, offsets
+    // One effect group of a material as stored: the effect's name and variant flag, its gate's index, its buffer's size, its parameters' names, types, offsets
     // and sizes, and the material's values. Everything the group needs is here, so a material from
     // an asset draws its effect with nothing at runtime but its source.
     struct MaterialEffectGroupSource
@@ -71,10 +70,11 @@ export namespace foundation::materials
         ar.EndObject();
     }
 
-    // Authored material: a shader reference (by resource id) + declared properties (as
-    // parallel arrays so it serializes with the primitive Array<T> path) + render-state
-    // presets + the packed default-uniform blob. Texture/sampler defaults are resolved at
-    // runtime (white/normal fallbacks), so they are not stored.
+    // Authored material: a shader reference (by resource id), declared properties (as
+    // parallel arrays so it serializes with the primitive Array<T> path), render-state
+    // presets and the packed default-uniform blob. Default textures are stored by id
+    // (textureSlots); samplers and the fallbacks for unbound slots (white, flat normal) are
+    // resolved at runtime, so they are not stored.
     class MaterialSource final : public ISerializable
     {
         RTTI_OBJECT(MaterialSource, ISerializable)
@@ -88,7 +88,7 @@ export namespace foundation::materials
         CullModeConfig cullMode = CullModeConfig::Back;
         VertexLayoutType vertexLayout = VertexLayoutType::Mesh;
         // Sampler address modes (rhi::AddressMode values: 0 Repeat, 1 MirrorRepeat,
-        // 2 ClampToEdge) - wired from the source asset's sampler at import (v2).
+        // 2 ClampToEdge), wired from the source asset's sampler at import.
         u8 samplerU = 0;
         u8 samplerV = 0;
 
@@ -101,14 +101,13 @@ export namespace foundation::materials
 
         // Default texture bindings: slot name -> texture product guid (parallel arrays). The
         // factory resolves each through the manager (recording the dependency edge, so a texture
-        // hot reload cascades into this material) and sets it as the material's default texture.
-        // This makes a cooked material SELF-CONTAINED - previously only the model-spawn composite
-        // wired textures, so a directly-referenced material rendered untextured.
+        // hot reload cascades into this material) and sets it as the material's default texture,
+        // so a cooked material is self-contained and draws textured wherever it is referenced.
         Array<String> textureSlots;
         Array<Guid> textureIds;
 
         // The effect groups (data version 4): one per effect the material's shader declares the
-        // variant of, apart from the shader's properties (Specs/wind-for-every-shader.md).
+        // variant of, apart from the shader's properties.
         Array<MaterialEffectGroupSource> effects;
 
         void Serialize(ISerializer& ar) override
@@ -151,13 +150,13 @@ export namespace foundation::materials
 
         // Before effect groups (data version 3), a PBR material carried the wind in its buffer's
         // spare lanes as the properties WindStrength, WindSpeed and WindHeight (offsets 24, 28,
-        // 60). The wind is an effect now: the three properties go (their bytes stay, as the
-        // padding the buffer declares there) and the material gets a Wind group holding their
-        // values. The group's layout below is the effect's on the day of that change, frozen with
-        // the data it reads; the live table is wind.hlsli's effect block, onto which the factory
-        // re-lays the group, keeping these values, whenever it has the shader system. Only for a
-        // builtin shader's material whose template no longer declares the lanes: a custom shader
-        // may name properties of its own so. Idempotent: a migrated source has no lanes left.
+        // 60). Wind is an effect with its own group: the three properties go (their bytes stay, as
+        // the padding the buffer declares there) and the material gets a Wind group holding their
+        // values. The group's layout below is frozen with the data it reads; the live table is
+        // wind.hlsli's effect block, onto which the factory re-lays the group, keeping these
+        // values, whenever it has the shader system. This applies only to a builtin shader's
+        // material whose template does not declare the lanes, since a custom shader may name
+        // properties of its own that way. Idempotent: a migrated source has no lanes left.
         void MigrateWindLanes()
         {
             if (!shaderId.IsNil())
@@ -290,8 +289,8 @@ export namespace foundation::materials
             }
         }
 
-        // Captures a built Material's declared layout + defaults into an authorable source
-        // referencing `shaderId`. (Used by the editor cook and round-trip tests.)
+        // Captures a built Material's declared layout and defaults into an authorable source
+        // referencing `shaderId`. Used by the editor cook and round-trip tests.
         static void FromMaterial(const Material& material, const Guid& shaderId,
                                  MaterialSource& out)
         {
@@ -357,9 +356,9 @@ export namespace foundation::materials
     // resource (which records the dependency edge) to resolve its name.
     // A "forward" material source must carry the forward shader's full set-2 property table
     // (EmissiveColor @32, OcclusionStrength/NormalScale/AlphaCutoff @48/52/56): without them the
-    // uniform buffer is short and the shader reads past it. Sources are never upgraded in
-    // memory - a source missing one is stale and is refused (re-create the material). New
-    // CreatePBR sources carry them; unlit and custom shaders are untouched.
+    // uniform buffer is short and the shader reads past it. Sources are not upgraded in
+    // memory: a source missing one is stale and is refused (re-create the material). CreatePBR
+    // sources carry them; unlit and custom shaders are untouched.
     [[nodiscard]] inline bool ForwardMaterialSourceIsComplete(const MaterialSource& src,
                                                               StringView* outMissing = nullptr)
     {
@@ -419,13 +418,13 @@ export namespace foundation::materials
     }
 
     /// The source's effect groups laid on the effects' tables by what its shader's vertex stage
-    /// declares (Material::AdoptDeclaredEffects, on the stored form; Specs/wind-for-every-shader.md):
+    /// declares (Material::AdoptDeclaredEffects, on the stored form):
     /// a declared effect the source has no group for gains one at the effect's defaults, a group
     /// carried keeps the values whose name, type and size still fit, and a group whose effect is
     /// not declared goes. The factory does this to a runtime material; an authoring tool that has
     /// the tables (the material page, material_set_shader) does it to the source, so a material
-    /// made before it had a group (every new one: the builders know no effect's table) shows and
-    /// saves the group its shader draws. An empty library says nothing: the stored groups stand.
+    /// stored without a group (every new one, since the builders know no effect's table) shows and
+    /// saves the group its shader draws. An empty library changes nothing: the stored groups stand.
     inline void AdoptDeclaredEffects(IAllocator& allocator, MaterialSource& src,
                                      Span<const shaders::ShaderEffect> effects,
                                      shaders::ShaderFlags vertexVariants)
@@ -447,7 +446,7 @@ export namespace foundation::materials
     /// A runtime material from a cooked source, drawn with `shaderName`: its property layout,
     /// default values, render state and sampler addressing; its textures are left unbound (the
     /// factory resolves them through the resource manager, an editor preview through its own).
-    /// The one conversion, so a preview draws what a loaded material draws.
+    /// Both use this one conversion, so a preview draws what a loaded material draws.
     [[nodiscard]] inline RefPtr<Material> MaterialFromSource(IAllocator& allocator,
                                                              const MaterialSource& src,
                                                              StringView shaderName)
@@ -565,7 +564,7 @@ export namespace foundation::materials
             RefPtr<Material> material = MaterialFromSource(*m_allocator, *src, shaderName.AsView());
             material->depthShaderName = Move(depthName);
             material->pickShaderName = Move(pickName);
-            // An empty library says nothing (a shader system with no corpus): the stored groups stand.
+            // An empty library (a shader system with no corpus) changes nothing: the stored groups stand.
             if (effectSystem != nullptr && !effectSystem->Effects().IsEmpty())
             {
                 material->AdoptDeclaredEffects(effectSystem->Effects().All(), vertexVariants);
@@ -582,8 +581,8 @@ export namespace foundation::materials
                     continue;
                 }
                 // Route by the async flag (the scope the scene resolve sets): a direct
-                // manager.Bind never consults it, and THIS loop was the serial-load stall -
-                // 69 Sponza textures decoded on the UI thread inside material builds.
+                // manager.Bind never consults it, and binding synchronously here decodes every
+                // texture on the calling thread inside the material build.
                 Proxy<texture::Texture> tex =
                     manager.AsyncBindsEnabled()
                         ? manager.BindAsync<texture::Texture>(src->textureIds[i])
@@ -593,8 +592,8 @@ export namespace foundation::materials
                     if (tex.Handle() != nullptr &&
                         tex.Handle()->State() == ResourceState::Pending)
                     {
-                        // Decoding on a worker: the slot stays unbound QUIETLY - the settle
-                        // reloads this material through the recorded edge and fills it.
+                        // Decoding on a worker: the slot stays unbound without a warning, and the
+                        // settle reloads this material through the recorded edge and fills it.
                         continue;
                     }
                     LOG_WARNING(u8"Materials",
@@ -630,8 +629,8 @@ export namespace foundation::materials
         shaders::ShaderSystem* m_system = nullptr; // borrowed; null in a host without one
     };
 
-    // MaterialSource::StaticType() is defined WITH its reflected properties + data version (4)
-    // in MaterialResourceImpl.cpp (GCC module hygiene: REFLECT_MEMBERS bodies out of interfaces).
+    // MaterialSource::StaticType() is defined with its reflected properties and data version (4)
+    // in MaterialResourceImpl.cpp, since GCC needs REFLECT_MEMBERS bodies kept out of interfaces.
 
 } // namespace foundation::materials
 
@@ -645,8 +644,8 @@ export namespace foundation::materials
         GlobalTypeRegistry().Register(Material::StaticType());
     }
 
-    /// The materials resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The materials resource module: the engine composition composes this library's factories
+    /// from it.
     /// The material factory is created in every host and given the host's shader system when it
     /// has one (the effects' tables; MaterialFactory), not gated on it.
     inline constexpr foundation::resource::ResourceFactoryDesc kMaterialsResourceFactories[] = {

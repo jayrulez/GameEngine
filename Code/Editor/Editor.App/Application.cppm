@@ -3,12 +3,12 @@
 
 // Editor::App - :application partition.
 //
-// EditorApplication: the editor as a runtime IApplication. It keeps the lifecycle alone
-// (Documentation/Specs/editor-gui.md, 5.1, layer 3): it configures the engine, starts its parts
-// in order, hands each frame to them and shuts them down. The parts are its own files: the window
+// EditorApplication: the editor as a runtime IApplication. It keeps the lifecycle alone: it
+// configures the engine, starts its parts in order, hands each frame to them and shuts them
+// down. The parts are its own files: the window
 // and its GUI (EditorWindow), the open project (EditorSession), the native module, export, asset
 // creation, the MCP host, and the editor-wide actions. Underneath are the EditorContext and the
-// services from editor.core, and the EMBEDDED runtime every scene, preview and Game tab is hosted
+// services from editor.core, and the embedded runtime every scene, preview and Game tab is hosted
 // in: the same DefaultApplication the player runs.
 module;
 #include "Core/Prelude.h"
@@ -69,49 +69,49 @@ export namespace editor::app
 
     struct EditorAppConfig
     {
-        // THE data root (resolved by main - --data-root or the Data/.dataroot walk). The editor
+        // The data root (resolved by main from --data-root or the Data/.dataroot walk). The editor
         // mounts it once: the GUI's shaders and the editor's files, the embedded runtime, and the
         // export's shader cook all read from it. Required.
         String dataRoot;
         String projectDirectory; // opened on startup; scaffolded if no manifest yet
         String projectName = String(u8"Untitled"); // name used when scaffolding
 
-        // Log capture registered on GlobalLogger by main() BEFORE anything else runs, so early
+        // Log capture registered on GlobalLogger by main() before anything else runs, so early
         // startup logs reach the console. Borrowed; main owns it (outlives the app).
         editor::EditorLogBuffer* logBuffer = nullptr;
 
-        // Start on the PROJECT MANAGER screen instead of opening projectDirectory (set by
+        // Start on the project manager screen instead of opening projectDirectory (set by
         // main() when no project was given).
         bool startInProjectManager = false;
         // CLI: when the project directory has no manifest and gets scaffolded, also seed the
-        // starter content the manager's New Project flow seeds - `Tools.Editor <dir> --seed`.
+        // starter content the manager's New Project flow seeds (`Tools.Editor <dir> --seed`).
         bool seedOnScaffold = false;
 
-        // Smoke-test aid: request a CLEAN shutdown after this many seconds (0 = never).
+        // Smoke-test aid: request a clean shutdown after this many seconds (0 = never).
         f32 autoExitSeconds = 0.0f;
         // Smoke-test aid: trigger Build > Rebuild All after this many seconds (0 = never).
         f32 autoRebuildSeconds = 0.0f;
-        // Smoke-test aid: the MAIN window's backbuffer written as a PNG to this path (empty =
+        // Smoke-test aid: the main window's backbuffer written as a PNG to this path (empty =
         // never), once screenshotAfterSeconds have run, the GUI included (the capture records
         // after the GUI draws).
         String screenshotPath;
         f32 screenshotAfterSeconds = 0.0f;
-        // `--screenshot-exit`: the clean shutdown once that capture is written (or has failed).
+        // `--screenshot-exit`: shut down cleanly once that capture is written (or has failed).
         bool screenshotExit = false;
-        // The MCP host for THIS run: `--mcp` enables it whatever the preference says and
+        // The MCP host for this run: `--mcp` enables it whatever the preference says and
         // `--mcp-port <n>` picks its port (0 = the preference's).
         bool mcpEnabled = false;
         u32 mcpPort = 0;
 
-        // The assembly seams - editor.app never links engine modules or the editor plugin
-        // modules; the EXECUTABLE composes them here:
-        /// Called from IApplication::Configure - register engine subsystems (scene/render/...).
+        // Assembly hooks. editor.app never links engine modules or the editor plugin modules;
+        // the executable composes them through these.
+        /// Called from IApplication::Configure to register engine subsystems (scene, render, ...).
         Function<void(runtime::IApplicationHost&)> configureEngine;
-        /// Called during OnStartup - per-subsystem RegisterEditor entry points, plus wiring the
-        /// app to engine INTERFACES it drives (app.SetSceneRenderer(...)). The host is the
-        /// EMBEDDED one: every page's scenes live there.
+        /// Called during OnStartup: per-subsystem RegisterEditor entry points, plus wiring the
+        /// app to the engine interfaces it drives (app.SetSceneRenderer(...)). The host is the
+        /// embedded one: every page's scenes live there.
         Function<void(EditorApplication&, runtime::IApplicationHost&)> registerEditors;
-        /// Seeds STARTER CONTENT into a project the manager just created; null = new projects start empty.
+        /// Seeds starter content into a project the manager just created; null = new projects start empty.
         Function<void(editor::EditorContext&, editor::EditorProject&)> seedNewProject;
 
         Function<void(StringView, f32)> startupProgress;
@@ -131,25 +131,25 @@ export namespace editor::app
         [[nodiscard]] foundation::resource::ResourceManager* Resources() const noexcept { return m_session.Resources(); }
         [[nodiscard]] engine::runtime::DefaultApplication* EmbeddedApplication() const noexcept { return m_embeddedApp.Get(); }
         [[nodiscard]] EditorWindow& Window() noexcept { return m_window; }
-        /// What an asset slot or a page's picker asks of the editor: the accepted types, the
-        /// project's names, the picker (made the first time).
+        /// The services an asset slot or a page's picker needs from the editor: the accepted
+        /// types, the project's names and the picker (created on first use).
         [[nodiscard]] const ResourceRefServices& RefServices();
         /// Opens the picker over the window for `request`, in its middle.
         void ShowPicker(PickerRequest request);
-        /// Opens the asset picker (its groups beside what each holds) over the window for `request`.
+        /// Opens the asset picker (groups beside their contents) over the window for `request`.
         void ShowAssetPicker(AssetPickRequest request);
         /// Opens Create Asset over the window, titled `title` ("New Clip"), the group `group` (null:
         /// the project's top) and the name `suggested` to start; `create` is told the group and the
         /// name chosen (the caller makes the asset).
         void ShowCreateAsset(StringView title, StringView suggested, foundation::content::Group* group,
                              Function<void(foundation::content::Group&, StringView)> create);
-        /// A type's icon, asked of the type (made the first time, with the slots' table).
+        /// Icons for asset types, each asked of its type. Created on first use, with the slots' table.
         [[nodiscard]] editor::EditorIcons& TypeIcons()
         {
             (void)RefServices();
             return *m_typeIcons;
         }
-        /// What an asset page asks of the editor when it is made: its markup, the asset slots'
+        /// The services an asset page gets from the editor when it is made: its markup, the asset slots'
         /// table, the type icons, the host and the window's GUI a preview renders in.
         [[nodiscard]] AssetPageServices PageServices()
         {
@@ -158,15 +158,15 @@ export namespace editor::app
             services.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
             services.refs = &RefServices();
             services.icons = &TypeIcons();
-            services.host = m_embeddedHost.Get(); // the runtime's, with its scenes and renderer (the scene page's too)
+            services.host = m_embeddedHost.Get(); // the embedded runtime, which holds the scenes and renderer (the scene page uses it too)
             services.gui = m_window.Host();
             services.languages = &m_codeLanguages;
             EditorApplication* self = this;
             services.pick = [self](PickerRequest request) { self->ShowPicker(Move(request)); };
             return services;
         }
-        /// The one source every page factory asks for PageServices (the registrations take it by
-        /// reference; it lives as long as the editor).
+        /// The source every page factory gets PageServices from. Registrations hold it by
+        /// reference; it lives as long as the editor.
         [[nodiscard]] const AssetPageServicesSource& PageServicesSource() noexcept { return m_pageServices; }
         [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }
         [[nodiscard]] EditorPages& Pages() noexcept { return *m_pages; }
@@ -182,7 +182,7 @@ export namespace editor::app
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override;
         void OnShutdown(runtime::IApplicationHost& host) override;
 
-        /// A toast, as every notice and job result is said.
+        /// Shows a toast; every notice and job result is reported this way.
         void ShowToast(editor::NoticeKind kind, StringView message, StringView actionText = {}, Function<void()> action = {})
         {
             m_window.ShowToast(kind, message, actionText, Move(action));
@@ -205,11 +205,11 @@ export namespace editor::app
         void OpenProjectSettings();
         /// Imports files into a group: at once when nothing needs review, else through the window.
         void ImportFiles(Span<const String> paths, foundation::content::Group& group);
-        /// Export Templates over the main window; `closed` hears when it closes.
+        /// Opens Export Templates over the main window; `closed` is called when it closes.
         void OpenTemplates(Function<void()> closed = {});
         void OpenExport();
         [[nodiscard]] foundation::shell::IDialogService* ShellDialogs() const;
-        /// Shows a picker's request in the middle of the main window.
+        /// Shows the project manager over the whole window.
         void EnterManagerMode();
         void OpenFromManager(StringView directory);
         void CreateFromManager(StringView directory, StringView name);
@@ -234,7 +234,7 @@ export namespace editor::app
         UniquePtr<engine::runtime::DefaultApplication> m_embeddedApp;
 
         editor::EditorContext m_context{m_editorAllocator};
-        pipeline::BuilderRegistry m_builders{m_editorAllocator}; // exe-assembled (registerEditors)
+        pipeline::BuilderRegistry m_builders{m_editorAllocator}; // filled by the executable (registerEditors)
         editor::EditorCookService m_cookService;
         editor::EditorJobService m_jobService{m_editorAllocator}; // background jobs (export, ...)
         editor::ThumbnailService m_thumbnailService;               // per-project state
@@ -243,7 +243,7 @@ export namespace editor::app
 
         // The parts, in the order they start; they stop in reverse.
         EditorWindow m_window{m_editorAllocator};
-        AssetPageServicesSource m_pageServices; // the page factories', reading the window above (made in the constructor)
+        AssetPageServicesSource m_pageServices; // what the page factories read; uses the window above (set in the constructor)
         CodeLanguages m_codeLanguages;          // read through the window's resources (made in the constructor)
         EditorDock m_dock{m_editorAllocator};
         UniquePtr<EditorPages> m_pages; // made with the dock, in OnStartup
@@ -264,7 +264,7 @@ export namespace editor::app
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content
         UniquePtr<ProfilerPanel> m_profiler;     // the Profiler page's content
-        UniquePtr<AssetOperations> m_assetOps;   // rename, duplicate, delete, cook: the browser's and an agent's
+        UniquePtr<AssetOperations> m_assetOps;   // rename, duplicate, delete, cook; shared by the browser and the MCP tools
         UniquePtr<AssetsView> m_assets;          // the Assets panel's content
         UniquePtr<AssetImport> m_assetImport;    // files into the project (a drop, Import...)
         UniquePtr<ImportWindow> m_importWindow;  // the import's review, made the first time
@@ -273,7 +273,7 @@ export namespace editor::app
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;
         UniquePtr<EditorMcpService> m_mcp;
-        EditorSession m_session; // the open project (after the services it uses, before nothing it does)
+        EditorSession m_session; // the open project; declared after the services it uses, so it is destroyed before them
 
         EditorWindowCapture m_windowCapture{m_editorAllocator};
         f32 m_elapsed = 0.0f;            // autoExit, autoRebuild and screenshot accumulator

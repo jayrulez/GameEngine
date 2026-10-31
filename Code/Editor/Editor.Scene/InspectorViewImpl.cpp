@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :inspector partition, its body (Documentation/Specs/editor-gui.md, 5.3,
-// layer 4). See InspectorView.cppm.
+// Editor::Scene - :inspector partition, its body. See InspectorView.cppm.
 
 module;
 #include "Core/Prelude.h"
@@ -36,8 +35,8 @@ namespace editor
     {
         constexpr StringView kActiveKey = u8"e";
 
-        // A component's source as the inspector reads it, and an undo writes it back: its text
-        // format, EntityRef a reference by its id, a bone name its own row.
+        // A component's source as the inspector reads it and an undo writes it back: its text
+        // format, EntityRef as a reference by its id, and a bone name as its own row.
         void ConfigureComponentSource(gui::ReflectedPropertySource& source, gui::IPropertyTextFormat& format)
         {
             source.SetTextFormat(&format);
@@ -46,9 +45,10 @@ namespace editor
         }
         constexpr StringView kTransformKey = u8"t";
 
-        // A component edit as the reflected source told it: each entity's value before and after as
-        // text, restored on the components found again by entity and type (a pool may have moved
-        // them since). Its first Execute writes the after over what the edit already wrote.
+        // A component edit as the reflected source reports it: each entity's value before and after
+        // as text, restored onto the components found again by entity and type (a pool may have
+        // moved them since). Its first Execute writes the after values over what the edit already
+        // wrote.
         class InspectorEditCommand final : public IEditorCommand
         {
         public:
@@ -147,7 +147,7 @@ namespace editor
         [[nodiscard]] bool IsEmpty() const noexcept { return !HasRows() && m_sources.IsEmpty(); }
         [[nodiscard]] usize SourceCount() const noexcept { return m_sources.Size(); }
         [[nodiscard]] gui::IPropertySource& SourceAt(usize i) const { return *m_sources[i].source; }
-        /// Each notice as it says now; shown while it says something.
+        /// Asks each notice for its current text; a notice shows while the text is not empty.
         void Refresh()
         {
             for (const Section& section : m_sources)
@@ -265,7 +265,8 @@ namespace editor
         if (auto* add = Find<gui::Button>(u8"inspector-add"))
             add->SetOnClick([self]() { self->OpenAddComponent(); });
         if (auto* name = Find<gui::TextField>(u8"inspector-name"))
-            // Enter, or the focus leaving with a new name: one entity's rename (several name no one).
+            // Enter, or the focus leaving with a new name, renames the entity (only with one
+            // selected).
             name->SetOnTextChanged([self](StringView text)
                                    {
                                        if (self->m_entities.Size() == 1 && !text.IsEmpty())
@@ -321,9 +322,9 @@ namespace editor
             Build();
             return;
         }
-        // The values as they are now (a gizmo's drag, an undo): the transforms read again, the
-        // notices asked again, the grid told, except while it is editing one (its row is the
-        // gesture's).
+        // The values as they are now (after a gizmo's drag, an undo): the transforms are read
+        // again, the notices asked again and the grid told, except while it is editing one (that
+        // row belongs to the gesture).
         ShowPaste();
         PullTransforms();
         RefreshExtras();
@@ -402,7 +403,7 @@ namespace editor
             if (name != nullptr)
             {
                 name->SetText(m_services.sceneName ? m_services.sceneName() : scene.Name());
-                name->SetEnabled(false); // the asset's name: Save As names another
+                name->SetEnabled(false); // the name is the asset's; Save As gives another
             }
             if (kind != nullptr)
                 kind->SetText(u8"Scene");
@@ -469,7 +470,7 @@ namespace editor
         if (m_transforms.Size() != m_entities.Size())
             m_transforms.Resize(m_entities.Size());
         if (m_grid != nullptr && m_grid->IsEditing())
-            return; // the row being edited is the gesture's
+            return; // the row being edited belongs to the gesture
         for (usize i = 0; i < m_entities.Size(); ++i)
             m_transforms[i] = scene.GetLocalTransform(scene.FindEntity(m_entities[i]));
         if (m_transform)
@@ -667,7 +668,8 @@ namespace editor
 
     void SceneInspectorView::ComponentChanged(const TypeInfo* type, const gui::ReflectedChange& change)
     {
-        // The source wrote it already; the command keeps it, and puts each entity's back on undo.
+        // The source has already written the value; the command keeps it and restores each entity's
+        // on undo.
         Array<Guid> entities;
         for (const Guid& entity : m_entities)
             entities.PushBack(entity);
@@ -701,7 +703,7 @@ namespace editor
     {
         if (!CanPasteComponent())
             return false;
-        // Over a component an entity has, it overwrites it: asked first (the old inspector's).
+        // Pasting over a component an entity already has overwrites it, so it asks first.
         const Span<const byte> clip = m_services.context->ClipboardData(u8"component");
         scene::Scene& scene = m_edit->Scene();
         scene::ComponentManagerBase* manager = scene.FindManagerBySerializationId(SceneEditContext::PeekComponentTypeId(clip).AsView());
@@ -759,7 +761,7 @@ namespace editor
             return;
         SceneInspectorView* self = this;
         EditorContext* context = m_services.context;
-        // Copy: the first entity's; paste: over each selected entity's.
+        // Copy takes the first entity's component; paste goes over each selected entity's.
         if (context != nullptr)
         {
             (void)menu.AddItem(u8"Copy Component", [self, type, context]()
@@ -781,14 +783,14 @@ namespace editor
             paste->SetEnabled(!context->ClipboardData(u8"component").IsEmpty());
             menu.AddSeparator();
         }
-        // Reset: the type's defaults, one step.
+        // Reset: back to the type's defaults, one undo step.
         for (const UniquePtr<ComponentSection>& section : m_components)
             if (section->type == type)
             {
                 gui::ReflectedPropertySource* source = section->source.Get();
                 (void)menu.AddItem(u8"Reset", [source]() { (void)source->Revert(StringView{}); });
             }
-        // Revert to Prefab: while a prefab's member overrides it.
+        // Revert to Prefab: shown while a prefab's member overrides it.
         if (m_entities.Size() == 1)
         {
             scene::PrefabMemberInfo member;
@@ -863,8 +865,8 @@ namespace editor
             return;
         app::PickerRequest request;
         request.Placeholder = String(u8"Search components");
-        // By category (in their names' order), each component by its display name and described
-        // (one with no category is Other's).
+        // By category (in their names' order), each component by its display name with its
+        // description (one with no category goes under Other).
         Array<app::PickerItem> items;
         for (const TypeInfo* type : AddableTypes())
         {
@@ -872,7 +874,7 @@ namespace editor
             item.Key = String(StringView(reinterpret_cast<const utf8char*>(type->name)));
             item.Name = TitleOf(*type);
             item.Section = String(TypeAttrString(*type, "category", u8"Other"));
-            item.Description = String(TypeAttrString(*type, "description", StringView{})); // a sentence: the foot's, not the row's
+            item.Description = String(TypeAttrString(*type, "description", StringView{})); // a sentence, shown in the picker's foot rather than the row
             if (m_services.icons != nullptr)
             {
                 const TypeIcon icon = m_services.icons->For(*type, u8"Component");
@@ -881,7 +883,7 @@ namespace editor
             }
             items.PushBack(Move(item));
         }
-        // Sections show where their first item is: sorted, each category's rows together.
+        // A section shows where its first item is, so sort to keep each category's rows together.
         for (usize i = 1; i < items.Size(); ++i)
             for (usize j = i; j > 0; --j)
             {
@@ -941,7 +943,7 @@ namespace editor
         for (const UniquePtr<ComponentSection>& section : m_components)
             if (section->title.AsView() == title)
                 return m_sections.PathIn(section->key.AsView(), property);
-        // A settings block's: its own rows, else an extra source's (the collision groups).
+        // A settings block's own rows, or else an extra source's (the collision groups).
         const auto holds = [property](const gui::IPropertySource& source)
         {
             Array<gui::PropertyInfo> top;

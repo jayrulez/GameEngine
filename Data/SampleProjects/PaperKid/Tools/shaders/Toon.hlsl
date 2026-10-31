@@ -1,8 +1,9 @@
-// PaperKid's toon shading: the street as a printed comic, to go with the newsprint screens. A
-// low-level shader after the Shader Gallery's Toon lesson, as Sky Hopper's is, but its own take:
-// the light falls in hard steps, the dark side is the albedo in a warm paper shade, and an inked
-// edge where a surface turns from the eye. The engine's vertex stage, lights, shadows and deferred targets.
-// Every PBR material of the game is on it (Tools/toon.py), its colour and map carried over.
+// PaperKid's toon shading: the street as a printed comic, to go with the newsprint screens. Like
+// Sky Hopper's, it is a low-level shader based on the Shader Gallery's Toon lesson, with its own
+// look: the light falls in hard steps, the dark side is the albedo in a warm paper shade, and an
+// inked edge marks where a surface turns from the eye. It uses the engine's vertex stage, lights,
+// shadows and deferred targets. Every PBR material of the game uses it (Tools/toon.py), with its
+// colour and map carried over.
 
 // variants(vertex): SKINNED INSTANCED
 // variants(fragment): ALPHA_TEST GBUFFER DITHER
@@ -42,7 +43,7 @@ float InkLight(GpuLight light, float3 worldPos, float3 N, float shadow, out floa
     float atten;
     float3 L = LightDirection(light, worldPos, atten);
     // Divided by pi as the engine's diffuse is, so a light and the exposure tuned for PBR light
-    // the toon to the same brightness.
+    // the toon surface to the same brightness.
     radiance = light.color * light.intensity * saturate(atten) * (1.0 / 3.14159265);
     return InkBands(dot(N, L), Bands, BandSoftness) * smoothstep(0.4, 0.6, shadow);
 }

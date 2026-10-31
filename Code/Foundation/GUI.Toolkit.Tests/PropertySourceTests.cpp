@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the property source (T1 of Specs/gui-lab-evolution-3.md): properties by path, each
-// object's value and the mixed state read over them, flags mixed per bit, and an edit as a gesture
-// (previewed on every object, committed once from the originals, or cancelled back to them).
+// GUI.Toolkit - the property source. Properties are found by path; each object's value is read,
+// and the mixed state over them; flags are mixed per bit. An edit is a gesture: it previews on every
+// object, then commits once from the originals or cancels back to them.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -71,7 +71,7 @@ TEST_CASE("property source: a value over several objects is mixed when any diffe
     CHECK(layers.Mixed);
     CHECK(layers.MixedBits == u64{0b0010});
 
-    // A flag set on all of them leaves the bit they differ in as each had it.
+    // Setting a flag on all of them leaves the bit they differ in as each object had it.
     bag.BeginEdit(SV(u8"layers"));
     bag.CommitEdit(SV(u8"layers"), PropertyWrite{Variant(i64{0b1000}), u64{0b1000}});
     CHECK(bag.GetValue(SV(u8"layers"), 0).AsInt() == 0b1101);
@@ -112,7 +112,7 @@ TEST_CASE("property source: an edit previews on every object, commits once from 
     CHECK(bag.GetValue(SV(u8"size"), 0).AsFloat() == doctest::Approx(5.0));
     CHECK(commits.Size() == 1u);
 
-    // Read only: nothing written.
+    // Read only, so nothing is written.
     bag.FindInfo(SV(u8"size"))->ReadOnly = true;
     bag.BeginEdit(SV(u8"size"));
     bag.PreviewEdit(SV(u8"size"), PropertyWrite{Variant(7.0)});
@@ -134,7 +134,7 @@ TEST_CASE("property source: a list's elements are its children by index, saying 
     REQUIRE(elements.Size() == 2u);
     CHECK(elements[1].Name == core::String(u8"1"));
     CHECK(elements[1].Kind == PropertyKind::String);
-    // What each element says beyond its name and kind is the list's to give.
+    // The list provides each element's info beyond its name and kind.
     REQUIRE(bag.FindElementInfo(SV(u8"tags")) != nullptr);
     bag.FindElementInfo(SV(u8"tags"))->Description = core::String(u8"A tag");
     bag.FindElementInfo(SV(u8"tags"))->Name = core::String(u8"ignored"); // an element is named by its index
@@ -144,7 +144,7 @@ TEST_CASE("property source: a list's elements are its children by index, saying 
     CHECK(elements[0].Name == core::String(u8"0"));
     CHECK(bag.FindElementInfo(SV(u8"tags.0")) == nullptr); // no list
 
-    // An element edits as any property does.
+    // An element is edited as any property is.
     bag.BeginEdit(SV(u8"tags.1"));
     bag.CommitEdit(SV(u8"tags.1"), PropertyWrite{Variant(SV(u8"c"))});
     CHECK(bag.GetValue(SV(u8"tags.1"), 1).AsString() == SV(u8"c"));
@@ -157,10 +157,10 @@ TEST_CASE("property source: a list's elements are its children by index, saying 
     CHECK(bag.GetValue(SV(u8"tags.0"), 0).AsString() == SV(u8"c"));
     ListEdit insert;
     insert.Kind = ListEdit::Op::Insert;
-    insert.Index = 9; // past the end: at the end
+    insert.Index = 9; // past the end, so it goes at the end
     CHECK(bag.EditList(SV(u8"tags"), insert));
     CHECK(bag.GetValue(SV(u8"tags.2"), 1).AsString() == SV(u8"new"));
-    CHECK_FALSE(bag.EditList(SV(u8"tags"), insert)); // at its most
+    CHECK_FALSE(bag.EditList(SV(u8"tags"), insert)); // the list is full
     ListEdit remove;
     remove.Kind = ListEdit::Op::Remove;
     remove.Index = 0;
@@ -197,7 +197,7 @@ TEST_CASE("property source: a bag's describe hook names a list's elements and su
     core::Array<PropertyInfo> fields(core::DefaultAllocator());
     bag.GetProperties(SV(u8"layers.0"), fields);
     REQUIRE(fields.Size() == 1u);
-    CHECK(seen.Back() == core::String(u8"layers.0.albedo")); // every row it lists, by its full path
+    CHECK(seen.Back() == core::String(u8"layers.0.albedo")); // the hook sees every row the bag lists, by its full path
 }
 
 TEST_CASE("property source: each object's own default, and a revert of a path and what is under it")

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A viewer's own copy of frames (Specs/profiler.md, P5): the frames after it began, once their
+// A viewer's own copy of frames: the frames after it began, once their
 // GPU passes have had time to land, with the tables they lean on; the oldest dropped when full;
 // a source like any other, so it saves as a capture. The store it copies from is left alone.
 #include <doctest/doctest.h>

@@ -5,7 +5,7 @@
 //
 // `foundation.core` is one named module composed of partitions (one per subsystem).
 // This unit re-exports them so consumers write a single `import foundation.core;`.
-// As subsystems land, add an `export import :partition;` line here.
+// Each new partition adds an `export import :partition;` line here.
 
 export module foundation.core;
 

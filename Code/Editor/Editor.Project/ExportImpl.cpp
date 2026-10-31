@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Core - :export partition.
+// Editor::Project - :export partition.
 //
-// The export pipeline as a LIBRARY (the Tools.Export CLI and the editor's Export menu are
-// thin callers; tests drive it headlessly): cook -> stage scenes as binary envelopes ->
-// pack Content.pak -> write the dist manifest. The caller stages the player executable
-// (an exe-location concern, not a pipeline one).
+// The export pipeline as a library (the Tools.Export CLI and the editor's Export menu are thin
+// callers; tests drive it headlessly): cook, stage scenes as binary envelopes, pack Content.pak,
+// then write the dist manifest. The caller stages the player executable, since where it lives is
+// the caller's concern rather than the pipeline's.
 //
-//   dist layout:  <out>/Content.pak   products + scenes (one binary DB) + game script (raw)
+//   dist layout:  <out>/Content.pak   cooked products and scenes (one binary DB)
 //                 <out>/player.xml    dist manifest (ProjectSettings shape)
 //
-// Scenes are builder-less by design (their cooked form IS the authored form), so export
-// re-encodes each XML envelope to binary and copies the "scene" stream - SAME guids, so
-// resource refs and the manifest's defaultScene path keep working in the pak.
+// Scenes have no builder because their cooked form is the authored form, so export re-encodes
+// each XML envelope to binary and copies the "scene" stream under the same guids; resource refs
+// and the manifest's defaultScene path keep working in the pak.
 
 module;
 #include "Core/Prelude.h"
@@ -110,9 +110,9 @@ namespace editor
 
     namespace
     {
-        // The cooked-blob formats a target platform's runtime needs: web = WGSL, Windows = SPIR-V
-        // (Vulkan) + DXIL (DX12), other desktop = SPIR-V (Vulkan). Kept generous rather than guessing
-        // the backend a desktop dist will pick at runtime.
+        // The cooked-blob formats a target platform's runtime needs: WGSL for the web, SPIR-V (Vulkan)
+        // and DXIL (DX12) for Windows, SPIR-V (Vulkan) for other desktops. Kept generous rather than
+        // guessing the backend a desktop dist will pick at runtime.
         Array<shaders::CookedShaderFormat> FormatsForPlatform(StringView platform)
         {
             Array<shaders::CookedShaderFormat> formats;
@@ -132,8 +132,8 @@ namespace editor
             return formats;
         }
 
-        // The DXC runtime libs (dxcompiler / dxil), which a cooked dist no longer needs - the shader
-        // pack retires the runtime compiler. Matched by substring on the sidecar's file name.
+        // The DXC runtime libraries (dxcompiler, dxil), which a cooked dist does not need, since the
+        // shader pack replaces the runtime compiler. Matched by substring on the sidecar's file name.
         bool IsDxcRuntimeLib(StringView name)
         {
             const auto contains = [&](StringView needle)
@@ -156,10 +156,10 @@ namespace editor
 
         // Cook the built-in shaders (from <dataRoot>/Shaders) and the project's custom shaders the
         // dist ships (`projectShaders`, their cooked ShaderSource products) for `platform`, and
-        // write the dist's Data/Engine/Shaders/shaders.dpak plus its Data/.dataroot marker - the layout the
+        // write the dist's Data/Engine/Shaders/shaders.dpak plus its Data/.dataroot marker, the layout the
         // player's data-root discovery finds beside the executable. The dist renders from this pack
         // with no runtime compiler (see the ShaderSystem cooked path). Returns the variant count via
-        // `outVariants`; Status carries any cook/compile failure.
+        // `outVariants`; Status carries any cook or compile failure.
         Status StageShaderPack(StringView outputDir, StringView dataRoot, StringView platform,
                                EditorProject& project, Span<const Guid> projectShaders,
                                u32& outVariants)
@@ -308,20 +308,19 @@ namespace editor
 
         add(settings.defaultSceneId, ExportRootReason::DefaultScene);
 
-        // The startup game script is a cooked ScriptClass asset (guid-authoritative) - seed it as a
-        // reachability root so it (and the assets IT loads, via the normal AssetRef contract) ship.
+        // The startup game script is a cooked ScriptClass asset, identified by guid. Seed it as a
+        // reachability root so it, and the assets it loads through the normal AssetRef contract, ship.
         add(settings.startupScriptId, ExportRootReason::StartupScript);
 
-        // Every other asset the PLAYER binds at startup must ship, or the binding silently fails
-        // in a pruned dist (the theme/input-map/bus-layout gap existed before the font): each
-        // reflected asset setting, the lists too (the other UI fonts). The scene and the script
-        // above keep their own reasons (add keeps the first).
+        // Every other asset the player binds at startup must ship, or the binding fails silently
+        // in a pruned dist: each reflected asset setting, lists included (the other UI fonts). The
+        // scene and the script above keep their own reasons (add keeps the first).
         engine::project::ForEachSettingAsset(
             settings, [&add](const PropertyInfo&, const Guid& id) { add(id, ExportRootReason::ManifestDefault); });
 
-        // Phase 2 "Always Export": explicit instance flags, then group subtrees (dynamic membership -
-        // whatever is under the flagged folder now). A group that also contains the default scene /
-        // a directly-flagged instance is deduped above, keeping the earlier reason.
+        // "Always Export": explicit instance flags, then group subtrees (membership is dynamic:
+        // whatever is under the flagged folder now). A group that also contains the default scene
+        // or a directly flagged instance is deduplicated by add, keeping the earlier reason.
         const ExportRootsSet& always = project.ExportRoots();
         for (const Guid& id : always.instances)
         {
@@ -455,7 +454,7 @@ namespace editor
         return out;
     }
 
-    // Is this a web/wasm target (the only one that splits into BC + ASTC variants today)?
+    // Whether this is a web or wasm target, the only kind that splits into BC and ASTC variants.
     static bool IsWebPlatform(StringView platform)
     {
         return platform.StartsWith(u8"Web") || platform.StartsWith(u8"Wasm");
@@ -466,8 +465,8 @@ namespace editor
         Array<ContentVariant> out;
         if (IsWebPlatform(platform))
         {
-            // Two COMPLETE paks - one per compressed-family the browser might support (Decision 4).
-            // Cooked dirs are SIBLINGS of the host Cooked/ (Fable Q2), matching Tools.Cook --target.
+            // Two complete paks, one per compressed texture family the browser might support. The
+            // cooked directories are siblings of the host Cooked/, matching Tools.Cook --target.
             const StringView keys[] = {StringView(u8"bc"), StringView(u8"astc")};
             for (const StringView key : keys)
             {
@@ -497,8 +496,8 @@ namespace editor
                               Span<const ContentVariant> variants, bool rebuild,
                               const ExportProgress& onProgress)
     {
-        // The host cook already ran (ExportProject/CookReachable) and persisted its records to
-        // .cache/cook.db - load them once to gate copy-forward for every target.
+        // The host cook already ran (ExportProject or CookReachable) and saved its records to
+        // .cache/cook.db; load them once to gate the copy-forward for every target.
         foundation::vfs::NativeFileSystem cacheMount(project.CacheRoot().AsView(), editor::EditorRootAllocator());
         CookDb hostRecords{editor::EditorRootAllocator()};
         hostRecords.Load(cacheMount);
@@ -510,7 +509,7 @@ namespace editor
         {
             if (v.key.IsEmpty())
             {
-                continue; // desktop: the host DB already IS this variant
+                continue; // desktop: the host DB already is this variant
             }
             if (onProgress)
             {
@@ -518,11 +517,12 @@ namespace editor
                 step += v.key.AsView();
                 onProgress(step.AsView(), 0.6f);
             }
-            // Target id "web-<key>" resolves to the capability profile (web-astc -> ASTC, else BC).
+            // Target id "web-<key>" resolves to the capability profile (web-astc gives ASTC, else BC).
             String targetId(u8"web-");
             targetId += v.key.AsView();
 
-            // Materialize Cooked-web-<key>/ + .cache/web-<key>/ ; carry invariants forward from host.
+            // Create Cooked-web-<key>/ and .cache/web-<key>/, carrying invariant products forward
+            // from the host.
             const String cacheDir = PathJoin(
                 PathJoin(project.Directory(), engine::project::kProjectCacheDir), targetId.AsView());
             (void)CreateDirectory(v.cookedDir.AsView());
@@ -619,8 +619,8 @@ namespace editor
         }
 
         // --- 3. pack ---
-        // When pruning, resolve the reachable guids to their COOKED instance paths so the pack walk
-        // can filter cooked files (a file belongs to instance P iff it begins "P.").
+        // When pruning, resolve the reachable guids to their cooked instance paths so the pack walk
+        // can filter cooked files (a file belongs to instance P exactly when it begins with "P.").
         UniquePtr<HashMap<String, u8>> reachablePaths;
         usize keptProducts = 0;
         Array<String> droppedProducts;
@@ -637,10 +637,10 @@ namespace editor
                     ++keptProducts;
                 }
             }
-            // Dropped = the authored (non-scene) source assets excluded from the dist. Computed from
-            // the SOURCE db, not the cooked db: a scoped cook never PRODUCES the unreachable assets,
-            // so they wouldn't appear cooked - but they're exactly what pruning left out, so the
-            // report must name them (scenes are reported via droppedScenes above).
+            // Dropped means the authored (non-scene) source assets excluded from the dist. It is
+            // computed from the source DB, not the cooked DB: a scoped cook never produces the
+            // unreachable assets, so they would not appear cooked, but they are exactly what pruning
+            // left out, so the report must name them (scenes are reported through droppedScenes above).
             Array<foundation::content::Instance*> sources;
             detail::CollectAllInstances(*project.SourceDb().RootGroup(), sources);
             for (foundation::content::Instance* src : sources)
@@ -658,9 +658,9 @@ namespace editor
         {
             onProgress(u8"Packing content...", 0.78f);
         }
-        // The variants to pack: the caller's list, or - by default - the single host Content.pak.
-        // Each variant is a COMPLETE pak: its own cooked DB + the SAME
-        // staged scenes + the SAME reachable set (the closure guid-set is variant-invariant).
+        // The variants to pack: the caller's list, or by default the single host Content.pak. Each
+        // variant is a complete pak: its own cooked DB with the same staged scenes and the same
+        // reachable set (the closure's guid set does not vary by variant).
         Array<ContentVariant> effectiveVariants;
         if (variants.IsEmpty())
         {
@@ -680,8 +680,8 @@ namespace editor
                 effectiveVariants.PushBack(Move(copy));
             }
         }
-        // The startup game script needs no special staging - it is a cooked ScriptClass asset in the
-        // reachability closure, so it already rides in the content DB pak like every other asset. The
+        // The startup game script needs no special staging: it is a cooked ScriptClass asset in the
+        // reachability closure, so it is already in the content DB pak like every other asset. The
         // dist manifest carries its guid (below); the player binds it from the content DB.
         for (const ContentVariant& v : effectiveVariants)
         {
@@ -710,9 +710,8 @@ namespace editor
         }
         {
             foundation::vfs::NativeFileSystem outMount(outDir, editor::EditorRootAllocator());
-            // The player reads the same manifest the project writes: every default it binds at
-            // startup (theme, input map, bus layout, font, loading screen, MSAA) rides along. A
-            // hand list here once left the loading screen and the MSAA behind.
+            // The player reads the same manifest the project writes, so every default it binds at
+            // startup (theme, input map, bus layout, font, loading screen, MSAA) comes along.
             engine::project::ProjectSettings dist;
             if (!engine::project::CopyProjectSettings(project.Settings(), dist).IsOk())
             {
@@ -728,7 +727,7 @@ namespace editor
             }
         }
 
-        // --- 5. pruning report (loud + auditable: pruning can silently break an exported game) ---
+        // --- 5. pruning report (loud and auditable, since pruning can silently break an exported game) ---
         if (reachable != nullptr)
         {
             PruningReport report;
@@ -793,7 +792,7 @@ namespace editor
             }
             const f32 frac =
                 (total > 0) ? 0.05f + (static_cast<f32>(done) / static_cast<f32>(total)) * 0.55f
-                            : 0.6f; // cook occupies 0.05..0.60 of the export
+                            : 0.6f; // the cook takes 0.05..0.60 of the export's progress
             String step(u8"Cooking ");
             step += path;
             onProgress(step.AsView(), frac);
@@ -812,7 +811,7 @@ namespace editor
             return Status{ErrorCode::Internal};
         }
 
-        // --- variant target cooks (web: BC + ASTC) - after the host cook, before the pack ---
+        // --- variant target cooks (web: BC and ASTC), after the host cook and before the pack ---
         if (!variants.IsEmpty())
         {
             const Status vs = CookVariantTargets(project, builders, variants, rebuild, onProgress);
@@ -841,13 +840,13 @@ namespace editor
     namespace
     {
 #if PLATFORM_WINDOWS
-        // Windows hosts BOTH toolchains, and only one of them needs the developer environment
-        // pre-set in this process. cl.exe finds its headers/libs ONLY through the vcvars
-        // variables (INCLUDE/LIB/VCToolsInstallDir); clang and clang-cl locate an MSVC
-        // installation themselves (registry + Program Files probing), so demanding vcvars
-        // from a clang-built editor would block a setup that works. The pinned compiler is
-        // the one that built THIS editor, so this asks about that exact binary: basename
-        // minus .exe == "cl", which deliberately does NOT match "clang-cl" or "clang++".
+        // Windows hosts both toolchains, and only one of them needs the developer environment set
+        // in this process. cl.exe finds its headers and libraries only through the vcvars
+        // variables (INCLUDE, LIB, VCToolsInstallDir); clang and clang-cl locate an MSVC
+        // installation themselves (registry and Program Files probing), so demanding vcvars from a
+        // clang-built editor would block a setup that works. The pinned compiler is the one that
+        // built this editor, so this asks about that exact binary: its basename minus .exe is
+        // "cl", which does not match "clang-cl" or "clang++".
         [[nodiscard]] bool ShipCompilerIsMsvcCl()
         {
             StringView path =
@@ -871,17 +870,17 @@ namespace editor
             return path.Size() == 2 && (path.Data()[0] == 'c' || path.Data()[0] == 'C') &&
                    (path.Data()[1] == 'l' || path.Data()[1] == 'L');
         }
-#endif // PLATFORM_WINDOWS (both callers are Windows-only; unused elsewhere = -Werror)
+#endif // PLATFORM_WINDOWS (both callers are Windows-only; unused elsewhere it fails -Werror)
 
-        // Build Engine.GamePlayer for a native project (game-native-code.md N3): re-invoke
-        // cmake over the engine checkout with the game's native dir wired in
-        // (ENGINE_GAME_NATIVE_DIR/_TARGET), a persistent per-project build dir under the
-        // project's .cache (incremental relinks), and a per-project Bin suffix so ship
-        // outputs never collide with dev builds. Returns the built player's path.
-        // `web` = the wasm ship player (game-native-code.md N5): the same mechanism through
-        // the Emscripten toolchain ($EMSDK must be in the environment - launch the editor/CLI
-        // from a shell with emsdk_env.sh sourced), a lighter -j (wasm-ld + ASYNCIFY is
-        // memory-hungry), and the output is the html/js/wasm trio under the TEMPLATE basename.
+        // Builds Engine.GamePlayer for a native project: re-invokes cmake over the engine checkout
+        // with the game's native directory wired in (ENGINE_GAME_NATIVE_DIR and _TARGET), a
+        // persistent per-project build directory under the project's .cache (for incremental
+        // relinks), and a per-project Bin suffix so ship outputs never collide with development
+        // builds. Returns the built player's path. `web` builds the wasm ship player by the same
+        // mechanism through the Emscripten toolchain ($EMSDK must be in the environment, so launch
+        // the editor or CLI from a shell with emsdk_env.sh sourced), with a lower -j (wasm-ld with
+        // ASYNCIFY uses a lot of memory); the output is the html, js and wasm trio under the
+        // template basename.
         [[nodiscard]] Status BuildShipPlayer(EditorProject& project, StringView config, bool web,
                                              const ExportProgress& onProgress, String& outPlayer)
         {
@@ -906,17 +905,16 @@ namespace editor
                     emsdk.Value());
             }
 #if PLATFORM_WINDOWS
-            // RULING (shared-libraries.md W3): when the pinned toolchain is MSVC cl.exe, the
-            // desktop ship build REQUIRES the Visual Studio developer environment in this
-            // process, and we require it explicitly rather than trying to synthesize it.
-            // RunProcess takes an exe path with no shell, so the alternative is discovering
-            // vcvarsall.bat and running the whole configure/build through
-            // `cmd.exe /c "vcvarsall && cmake ..."` - which buys a guess at the VS install, a
-            // second quoting layer around every argument, and an exit code that can come from
-            // either command. Requiring a Developer Command Prompt is the same contract the
-            // web lane already has with EMSDK, and it fails here with one clear message
-            // instead of a compiler error 200 lines into a build. A clang/clang-cl editor
-            // skips this: clang finds MSVC itself.
+            // When the pinned toolchain is MSVC cl.exe, the desktop ship build requires the Visual
+            // Studio developer environment in this process, and it is required explicitly rather
+            // than synthesized. RunProcess takes an executable path with no shell, so the
+            // alternative would be discovering vcvarsall.bat and running the whole configure and
+            // build through `cmd.exe /c "vcvarsall && cmake ..."`, which means guessing the VS
+            // install, adding a second quoting layer around every argument, and getting an exit
+            // code that can come from either command. Requiring a Developer Command Prompt is the
+            // same contract the web build already has with EMSDK, and it fails here with one clear
+            // message instead of a compiler error 200 lines into a build. A clang or clang-cl
+            // editor skips this, since clang finds MSVC itself.
             if (!web && ShipCompilerIsMsvcCl() &&
                 !GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
             {
@@ -965,8 +963,8 @@ namespace editor
             {
                 onProgress(u8"Configuring native ship build...", 0.86f);
             }
-            // Pin the ship toolchain to the one that built THIS editor (the system default
-            // may be a different compiler; the checkout's lane conventions stay authoritative).
+            // Pin the ship toolchain to the one that built this editor (the system default may be
+            // a different compiler; the checkout's build conventions stay authoritative).
             const String defCompiler =
                 Format(u8"-DCMAKE_CXX_COMPILER={}",
                        StringView(reinterpret_cast<const char8_t*>(BUILDSYSTEM_CXX_COMPILER)));
@@ -1008,8 +1006,8 @@ namespace editor
                 return Status{ErrorCode::Internal};
             }
 
-            // The player lands under the CHECKOUT's suffixed Bin; the platform-compiler tag is
-            // the build's own concern, so find it rather than recompose it.
+            // The player lands under the checkout's suffixed Bin; the platform-compiler tag is the
+            // build's own concern, so search for it rather than rebuild the name.
             const String binRoot = Format(u8"{}/Bin/{}", engineRoot, buildType);
             vfs::NativeFileSystem bin(binRoot.AsView(), editor::EditorRootAllocator());
             if (vfs::IEnumerableFileSystem* enumerable = bin.AsEnumerable())
@@ -1021,7 +1019,7 @@ namespace editor
                     {
                         if (entry.isDirectory && entry.name.AsView().EndsWith(suffix.AsView()))
                         {
-                            // Web = the page of the html/js/wasm trio; desktop = the executable.
+                            // Web: the page of the html, js and wasm trio; desktop: the executable.
                             const String candidate =
                                 Format(u8"{}/{}/{}", binRoot, entry.name,
                                        web ? StringView(u8"Engine.GamePlayer.html")
@@ -1059,8 +1057,8 @@ namespace editor
             return Status{ErrorCode::NotFound};
         }
 #if PLATFORM_WINDOWS
-        // Same contract as the ship build (shared-libraries.md W3), and same narrow gate:
-        // only cl.exe needs vcvars pre-set in this process; clang/clang-cl find MSVC alone.
+        // The same contract as the ship build, with the same narrow gate: only cl.exe needs vcvars
+        // set in this process; clang and clang-cl find MSVC on their own.
         if (ShipCompilerIsMsvcCl() && !GetEnvironmentVariable(u8"VCToolsInstallDir").HasValue())
         {
             LOG_ERROR(u8"Export",
@@ -1120,7 +1118,7 @@ namespace editor
                       built.exitCode, built.output);
             return Status{ErrorCode::Internal};
         }
-        // Success = the .so is at the manifest path (the Native/CMakeLists output-dir rule).
+        // Success means the .so is at the manifest path (the Native/CMakeLists output-directory rule).
         const String modulePath =
             PathJoin(project.Directory(), project.Settings().nativeModule.AsView());
         return FileExists(modulePath.AsView()) ? Status{} : Status{ErrorCode::NotFound};
@@ -1184,10 +1182,10 @@ namespace editor
 
         ExportResult result;
 
-        // Soft engine-version match (mirrors EditorProject::Open's project-manifest check): a template
-        // built against a different engine version may be binary-incompatible with the cooked content,
-        // but we don't know that it is - so warn and keep going rather than block. Empty version = an
-        // older/hand-written template with no stamp; skip.
+        // Soft engine-version match, like EditorProject::Open's project-manifest check: a template
+        // built against a different engine version may be binary-incompatible with the cooked
+        // content, but that is not known, so warn and keep going rather than block. An empty version
+        // means an older or hand-written template with no stamp; skip the check.
         if (!tmpl->engineVersion.IsEmpty() &&
             tmpl->engineVersion != engine::project::kEngineVersionString)
         {
@@ -1213,11 +1211,12 @@ namespace editor
         // Ensure the output dir (and outRoot) exist before the content pipeline writes into it.
         (void)CreateDirectories(result.outputDir.AsView());
 
-        // Closure pruning is opt-in per preset. It needs the scene->asset edges discovered - EITHER
-        // by a live scene-reference scanner (the CLI, which loads scenes on its own single thread),
-        // OR by a precomputed reachable-root set (the editor, which pre-scans on the MAIN thread and
-        // passes the guids into this background job - scene loading is main-thread-only). Without
-        // either we must NOT silently drop content, so fall back to pack-everything with a warning.
+        // Closure pruning is opt-in per preset. It needs the scene-to-asset edges discovered, either
+        // by a live scene-reference scanner (the CLI, which loads scenes on its own single thread) or
+        // by a precomputed reachable-root set (the editor, which pre-scans on the main thread and
+        // passes the guids into this background job, since scene loading is main-thread only).
+        // Without either, content must not be dropped silently, so fall back to packing everything
+        // with a warning.
         const bool haveScanner = (scanner != nullptr && *scanner);
         const bool havePrecomputed = (precomputedReachableRoots != nullptr);
         bool prune = preset.pruneToReachable;
@@ -1231,8 +1230,8 @@ namespace editor
             prune = false;
         }
 
-        // The content variants this preset ships: desktop = the single host pak;
-        // Web = BC + ASTC. Threaded into every content path so the pack produces one pak per variant.
+        // The content variants this preset ships: the single host pak for desktop, BC and ASTC for
+        // Web. They are passed into every content path so the pack produces one pak per variant.
         const Array<ContentVariant> variants =
             VariantsForPlatform(project, preset.platform.AsView());
         const Span<const ContentVariant> variantSpan(variants.Data(), variants.Size());
@@ -1240,10 +1239,11 @@ namespace editor
         Status contentStatus;
         if (prune)
         {
-            // Seed roots -> expand scene-graph edges -> PlanFor closure -> cook + stage/pack only it.
-            // The scene-edge expansion is either precomputed (editor main-thread pre-scan) or run
-            // inline via the scanner (CLI). `seeds` is still recomputed here for the report (metadata
-            // only, background-safe); it drives display, while planRoots drives cook/pack.
+            // Seed the roots, expand the scene-graph edges, take the PlanFor closure, then cook,
+            // stage and pack only that. The scene-edge expansion is either precomputed (the editor's
+            // main-thread pre-scan) or run inline through the scanner (CLI). `seeds` is still
+            // recomputed here for the report (metadata only, safe in the background); it drives the
+            // display, while planRoots drives the cook and the pack.
             const Array<ExportRoot> seeds = CollectExportRoots(project);
             const Array<Guid> planRoots = havePrecomputed
                                               ? *precomputedReachableRoots
@@ -1279,7 +1279,8 @@ namespace editor
         }
         else
         {
-            // The editor already cooked the HOST via CookService; still cook the variant targets.
+            // The editor already cooked the host through CookService; the variant targets still
+            // need cooking.
             contentStatus = CookVariantTargets(project, builders, variantSpan, rebuild, onProgress);
             if (contentStatus.IsOk())
             {
@@ -1302,14 +1303,14 @@ namespace editor
         {
             onProgress(u8"Staging player...", 0.93f);
         }
-        // Player: <template dir>/<playerBinary> -> <outDir>/<name>. The name is the preset's playerName
-        // (else the template binary), with the target platform's executable extension ensured - Windows
-        // needs .exe or the OS will not launch it.
+        // Player: <template dir>/<playerBinary> is copied to <outDir>/<name>. The name is the
+        // preset's playerName (else the template binary), with the target platform's executable
+        // extension ensured, since Windows needs .exe or the OS will not launch it.
         //
-        // NATIVE projects (game-native-code.md N3): the player is not the template's - it is
-        // Engine.GamePlayer, freshly built with the game's native module statically linked.
-        // Web presets keep the template player (the wasm game build is N5); the manifest's
-        // dlopen module is ignored by ship players (the static plugin takes precedence).
+        // For native projects the player is not the template's: it is Engine.GamePlayer, freshly
+        // built with the game's native module statically linked (for Web presets too, as the wasm
+        // build). Ship players ignore the manifest's dlopen module, since the static plugin takes
+        // precedence.
         const bool nativeShip = !project.Settings().nativeModule.IsEmpty();
         const bool nativeWeb = nativeShip && (preset.platform.AsView().StartsWith(u8"Web") ||
                                               preset.platform.AsView().StartsWith(u8"Wasm"));
@@ -1372,7 +1373,7 @@ namespace editor
         ++result.filesStaged;
         if (nativeWeb)
         {
-            // The rest of the ship trio (the js glue + the wasm), same basenames.
+            // The rest of the ship trio (the js glue and the wasm), with the same basenames.
             const StringView trio[] = {StringView(u8"Engine.GamePlayer.js"),
                                        StringView(u8"Engine.GamePlayer.wasm")};
             for (StringView part : trio)
@@ -1392,9 +1393,10 @@ namespace editor
             }
         }
 
-        // Cooked engine shaders: Data/Engine/Shaders/shaders.dpak (+ Data/.dataroot) beside the player so
-        // the dist renders with no runtime compiler, found by the same data-root discovery every
-        // executable uses. A cook failure is fatal - a dist without shaders cannot render.
+        // Cooked engine shaders: Data/Engine/Shaders/shaders.dpak (and Data/.dataroot) beside the
+        // player, so the dist renders with no runtime compiler, found by the same data-root
+        // discovery every executable uses. A cook failure is fatal, since a dist without shaders
+        // cannot render.
         if (onProgress)
         {
             onProgress(u8"Cooking shaders...", 0.95f);
@@ -1413,7 +1415,7 @@ namespace editor
                 }
                 return Status{ErrorCode::Internal};
             }
-            result.filesStaged += 2; // the pack + the marker
+            result.filesStaged += 2; // the pack and the marker
             LOG_INFO(u8"Export", u8"staged Data/{} ({} variants)", shaders::kShaderPackPath,
                      shaderVariants);
         }
@@ -1422,16 +1424,16 @@ namespace editor
         {
             onProgress(u8"Staging runtime libs...", 0.96f);
         }
-        // Template sidecars (runtime libs) from the template dir. A dist renders from its cooked
-        // shader pack and never compiles; the player build no longer lists DXC at all, and a template
-        // made before that still might, so its libs are dropped here - the dist ships no
-        // dxcompiler/dxil.
+        // Template sidecars (runtime libraries) from the template directory. A dist renders from its
+        // cooked shader pack and never compiles shaders. The player build does not list DXC, but an
+        // older template still might, so DXC libraries are dropped here and the dist ships no
+        // dxcompiler or dxil.
         for (const String& sidecar : tmpl->sidecars)
         {
             if (nativeWeb && (sidecar.AsView().EndsWith(u8".js") ||
                               sidecar.AsView().EndsWith(u8".wasm")))
             {
-                continue; // the ship build provided the trio - never clobber it with the template's
+                continue; // the ship build provided the trio; never overwrite it with the template's
             }
             if (IsDxcRuntimeLib(sidecar.AsView()))
             {
@@ -1452,8 +1454,8 @@ namespace editor
             }
         }
 
-        // Symbols (PDB/DWARF) are stripped from the dist by default; stage them only when the preset
-        // opts in. sidecars[] always stage; symbols[] gate here.
+        // Symbols (PDB, DWARF) are left out of the dist by default; stage them only when the preset
+        // opts in. sidecars[] always stage; symbols[] are gated here.
         if (preset.stageSymbols)
         {
             for (const String& symbol : tmpl->symbols)
@@ -1472,7 +1474,7 @@ namespace editor
             }
         }
 
-        // Preset additionalFiles (game extras, project-relative) -> <outDir>/<basename>.
+        // Preset additionalFiles (game extras, relative to the project) go to <outDir>/<basename>.
         for (const String& extra : preset.additionalFiles)
         {
             const StringView base = detail::BaseName(extra.AsView());

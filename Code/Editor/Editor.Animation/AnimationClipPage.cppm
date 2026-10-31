@@ -4,21 +4,22 @@
 // Editor::Animation - the `:clip_page` partition.
 //
 // AnimationClipEditorPage: an animation clip on the GUI from its markup
-// (Data/Editor/AnimationClipPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 2). The
-// preview plays the cooked clip on a skeleton (the bones, and a skinned mesh over them when one is
-// picked), both chosen on the preview's bar and kept per clip with the project; the skeleton the
-// importer named is the one it starts on. Travel, the preview's own choice (it had been among the
-// clip's rows), walks it by the clip's root motion; off, it plays in place, as it is cooked, the
-// path drawn on the ground either way. The kit's transport plays it; under the preview, the ruler on
-// the clip's time scrubs it, and the clip's events are its markers: one chosen opens its rows, one
-// dragged moves its time, one step.
+// (Data/Editor/AnimationClipPage.xml). The preview plays the cooked clip on a skeleton (the bones,
+// and a skinned mesh over them when one is picked). Both are chosen on the preview's bar and kept
+// per clip with the project; the preview starts on the skeleton the importer named. Travel, a
+// preview setting rather than a clip row, walks the rig by the clip's root motion; with it off the
+// clip plays in place, as it is cooked. The root motion path is drawn on the ground either way. The
+// kit's transport plays the clip; under the preview, the ruler on the clip's time scrubs it, and
+// the clip's events are its markers: choosing one opens its rows, and dragging one moves its time
+// as one undo step.
 //
-// The clip's tracks and keys come from its import and nothing here edits them, so the rows are the
-// page's own, not its reflection's: under Clip whether it loops; under Root motion the bone it is
-// read from and what it extracts (travel, height, turning); under Events a list, each a time and a
-// name (a new one at the playhead), named by its name and summed up by its time while closed. Its
-// facts (its name, duration, tracks and keys) are read-only rows. Each edit is one undo step (the
-// whole asset before and after). Clips come from import: there is no creator.
+// The clip's tracks and keys come from its import and nothing here edits them, so the page builds
+// its own rows instead of reflecting the asset. The Clip section says whether it loops. The Root
+// motion section has the bone root motion is read from and what it extracts (travel, height,
+// turning). The Events section is a list where each event has a time and a name; a new event goes
+// at the playhead, and a closed event shows its name as its title and its time as its summary. The
+// clip's facts (its name, duration, tracks and keys) are read-only rows. Each edit is one undo step
+// holding the whole asset before and after. Clips come from import, so there is no creator.
 
 module;
 #include "Core/Prelude.h"
@@ -56,7 +57,7 @@ export namespace editor
         void OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
-        // === IPlaybackPage: the preview's clock, never the clip's ===
+        // === IPlaybackPage: drives the preview's clock; playing never changes the clip ===
         [[nodiscard]] bool CanPlay() const override;
         [[nodiscard]] bool IsPlaying() const override { return m_playing; }
         void Play() override;
@@ -75,10 +76,10 @@ export namespace editor
         /// Where the preview is in the clip (seconds); a scrub of the ruler moves it.
         [[nodiscard]] f32 Time() const noexcept { return m_time; }
         void SetTime(f32 seconds);
-        /// The preview walking by the clip's root motion (the bar's Travel).
+        /// Whether the preview walks the rig by the clip's root motion (the bar's Travel button).
         void SetTravel(bool travel);
         [[nodiscard]] bool Travels() const noexcept { return m_travel; }
-        /// The event `index` chosen: its rows opened in the grid, its marker the ruler's chosen one.
+        /// Chooses event `index`: opens its rows in the grid and makes its marker the ruler's choice.
         void ChooseEvent(i32 index);
 
         // === For tests ===
@@ -88,7 +89,7 @@ export namespace editor
         [[nodiscard]] foundation::gui::PropertyBag& EventRows() noexcept { return *m_eventRows; }
         [[nodiscard]] AnimationPreviewRig* Rig() const noexcept { return m_rig.Get(); }
         [[nodiscard]] foundation::gui::TimeRuler* Ruler() const noexcept { return m_ruler; }
-        /// The clip's length as the ruler and the clock take it: the cooked clip's, else the source's.
+        /// The clip's length as the ruler and the clock use it: the cooked clip's, else the source's.
         [[nodiscard]] f32 Length() const;
 
     protected:
@@ -107,12 +108,12 @@ export namespace editor
         void LoadPreviewPref();
         void SavePreviewPref();
 
-        UniquePtr<foundation::gui::PropertyBag> m_clipRows;  // Clip: looping
-        UniquePtr<foundation::gui::PropertyBag> m_rootRows;  // Root motion
-        UniquePtr<foundation::gui::PropertyBag> m_eventRows; // Events
+        UniquePtr<foundation::gui::PropertyBag> m_clipRows;  // the Clip section: looping
+        UniquePtr<foundation::gui::PropertyBag> m_rootRows;  // the Root motion section
+        UniquePtr<foundation::gui::PropertyBag> m_eventRows; // the Events section
         UniquePtr<app::PreviewPane> m_pane;
         UniquePtr<AnimationPreviewRig> m_rig;
-        foundation::resource::Proxy<foundation::animation::AnimationClip> m_clip; // the cooked product
+        foundation::resource::Proxy<foundation::animation::AnimationClip> m_clip; // the cooked clip
         RefPtr<foundation::gui::TimeAxis> m_axis;
         foundation::gui::TimeRuler* m_ruler = nullptr;
         foundation::gui::Label* m_state = nullptr;
@@ -121,8 +122,8 @@ export namespace editor
         f32 m_time = 0.0f;
         bool m_playing = true;
         bool m_travel = false;
-        bool m_moving = false;   // the clock moving the playhead: not a scrub
-        f32 m_rulerWidth = 0.0f; // the ruler's, as last fitted
+        bool m_moving = false;   // the clock is moving the playhead, not a scrub
+        f32 m_rulerWidth = 0.0f; // the ruler's width when last fitted
         f32 m_fittedLength = 0.0f;
         i32 m_markerMoving = -1; // the event a marker drag moves
         f32 m_markerFrom = 0.0f; // its time when the drag began
@@ -139,6 +140,7 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The clip page (asking for its services when it is made) and its preview prefs' section.
+    /// Registers the clip page (which asks for its services when it is made) and the settings
+    /// section that keeps its preview choices.
     void RegisterAnimationClipEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

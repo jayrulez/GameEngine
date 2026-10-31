@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A collection taken out of the model viewer's library (Documentation/Specs/model-viewer.md,
-// P11), through its commands: the CSV's rows with and without what is under the collection, its
-// fields quoted where they must be; the copy's layout (a subfolder per sub-collection), a model
-// renamed to its name there with its extension kept, a glTF's buffer and image beside it where
-// they were, a missing model reported, and a second copy over the first neither clashing nor
-// copying again, while a different file there already is left alone and said so.
+// Exporting a collection from the model viewer's library through its commands. The CSV has rows
+// with and without the sub-collections, with fields quoted where needed. The file copy lays out a
+// subfolder per sub-collection, renames a model to its member name keeping its extension, copies a
+// glTF's buffer and image to the same relative place, and reports a missing model. A second copy
+// over the first neither clashes nor copies again, and a different file already in place is left
+// alone and reported.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -45,8 +45,8 @@ namespace
     }
     JsonValue Str(StringView s) { return JsonValue::MakeString(String(s)); }
 
-    // A library of: Moonfall (the fox, named "hero", tagged and noted) and under it Act 1 (oozi,
-    // unnamed, and a model whose file has gone).
+    // A library with Moonfall (the fox, named "hero", tagged and noted) and under it Act 1 (oozi,
+    // unnamed, and a model whose file is missing).
     struct Fixture
     {
         modelviewer::LibrarySession session{DefaultAllocator()};
@@ -119,11 +119,11 @@ TEST_CASE("model viewer exports: a collection's CSV, with and without what is un
     const String csv = all.value.Get(String(u8"csv")).AsString();
     CHECK(Lines(csv.AsView()) == 4); // the header and three rows
     CHECK(csv.AsView().StartsWith(u8"collection,name,file,tags,note\n"));
-    // The fox's row: its name, its tag, its note quoted (a comma and quotes in it).
+    // The fox's row: its name, its tag, and its note quoted (it holds a comma and quotes).
     CHECK(csv.AsView().ContainsIgnoreCase(Format(u8"Moonfall,hero,{},boss,\"red, \"\"quick\"\"\"\n", f.fox.AsView()).AsView()));
     CHECK(csv.AsView().ContainsIgnoreCase(Format(u8"Moonfall/Act 1,,{},,\n", f.oozi.AsView()).AsView()));
 
-    // Without what is under it: the fox alone.
+    // Without sub-collections: only the fox.
     const modelviewer::CommandResult top =
         set.Execute(u8"export.csv", With(With(Obj(), u8"id", Str(f.moonfall.AsView())), u8"recursive", JsonValue::MakeBool(false)));
     CHECK(top.value.Get(String(u8"rows")).AsInt() == 1);
@@ -149,30 +149,30 @@ TEST_CASE("model viewer exports: files copied out, renamed, with what they need,
     const modelviewer::CommandResult copied = set.Execute(u8"export.copy_files", args);
     REQUIRE(copied.ok);
 
-    // The fox at the top, renamed, its buffer and its image where the glTF names them.
+    // The fox at the top, renamed, with its buffer and image where the glTF names them.
     CHECK(FileExists(PathJoin(out.AsView(), u8"hero.gltf").AsView()));
     CHECK(FileExists(PathJoin(out.AsView(), u8"Fox.bin").AsView()));
     CHECK(FileExists(PathJoin(out.AsView(), u8"textures/Texture.png").AsView()));
     CHECK_FALSE(FileExists(PathJoin(out.AsView(), u8"Fox.gltf").AsView()));
-    // Act 1's in a subfolder of its own, unnamed so its file's name.
+    // Act 1's model in its own subfolder, under its file's name since it has no member name.
     CHECK(FileExists(PathJoin(out.AsView(), u8"Act 1/character-oozi.glb").AsView()));
-    // Its texture is outside the GLB, under Textures beside it: taken along to the same place.
+    // Its texture is outside the GLB, under Textures beside it, and is copied to the same place.
     CHECK(FileExists(PathJoin(out.AsView(), u8"Act 1/Textures/colormap.png").AsView()));
     CHECK(copied.value.Get(String(u8"copied")).Count() == 5);
-    // The model whose file has gone: reported, nothing made for it.
+    // The model whose file is missing is reported, and nothing is written for it.
     REQUIRE(copied.value.Get(String(u8"missing")).Count() == 1);
     CHECK(copied.value.Get(String(u8"missing")).At(0).Get(String(u8"file")).AsString() == f.gone);
     CHECK_FALSE(FileExists(PathJoin(out.AsView(), u8"Act 1/gone.glb").AsView()));
     CHECK(copied.value.Get(String(u8"clashes")).Count() == 0);
 
-    // Again: the same files there already, nothing copied and nothing clashing.
+    // A second copy finds the same files already there: nothing copied, nothing clashing.
     const modelviewer::CommandResult again = set.Execute(u8"export.copy_files", args);
     REQUIRE(again.ok);
     CHECK(again.value.Get(String(u8"copied")).Count() == 0);
     CHECK(again.value.Get(String(u8"alreadyThere")).AsInt() == 5);
     CHECK(again.value.Get(String(u8"clashes")).Count() == 0);
 
-    // A different file where one would go: left as it was, and said so.
+    // A different file where one would go is left untouched and reported as a clash.
     const StringView other = u8"not the fox's buffer";
     REQUIRE(WriteFile(PathJoin(out.AsView(), u8"Fox.bin").AsView(), Span<const byte>(reinterpret_cast<const byte*>(other.Data()), other.Size())).IsOk());
     const modelviewer::CommandResult clashing = set.Execute(u8"export.copy_files", args);
@@ -183,7 +183,7 @@ TEST_CASE("model viewer exports: files copied out, renamed, with what they need,
     REQUIRE(kept.HasValue());
     CHECK(kept.Value().Size() == other.Size());
 
-    // Without what is under it: the top's files alone.
+    // Without sub-collections: only the top collection's files.
     const String topOnly = PathJoin(folder.AsView(), u8"TopOnly");
     const modelviewer::CommandResult top =
         set.Execute(u8"export.copy_files", With(With(args, u8"folder", Str(topOnly.AsView())), u8"recursive", JsonValue::MakeBool(false)));

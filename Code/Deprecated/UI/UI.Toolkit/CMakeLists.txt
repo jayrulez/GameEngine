@@ -1,6 +1,6 @@
 # Foundation::UI.Toolkit - `foundation.ui.toolkit`: the editor-grade widget set (docking, property grid,
-# node graph, color pickers, curve editor, menu/tool/status bars) layered on foundation.ui. Faithful port
-# of Sedulous.UI.Toolkit. A separate library/module so the core foundation.ui stays lean; consumers write
+# node graph, color pickers, curve editor, menu/tool/status bars) layered on foundation.ui. A separate
+# library and module so the core foundation.ui stays lean; consumers write
 # `import foundation.ui.toolkit;`.
 util_add_engine_library(UI.Toolkit ALIAS Foundation::UI.Toolkit)
 target_link_libraries(UI.Toolkit

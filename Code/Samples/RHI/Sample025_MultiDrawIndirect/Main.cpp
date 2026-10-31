@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample025 - Multi-Draw Indirect & Lines. Ported from Sedulous Sample025_MultiDrawIndirect.
+/// Sample025 - Multi-Draw Indirect & Lines.
 /// Renders 4 colored quads using a single drawIndexedIndirect call with drawCount=4,
 /// then overlays white line wireframes using LineList topology.
 
@@ -110,12 +110,12 @@ foundation::core::Status MultiDrawIndirectSample::OnInit()
     if (createLineGeometry() != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Pipeline layout (empty - no bind groups needed).
+    // Pipeline layout (empty: no bind groups needed).
     rhi::PipelineLayoutDesc pld{};
     if (m_device->CreatePipelineLayout(pld, m_pl) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Vertex layout: pos float3 + color float4, stride 28.
+    // Vertex layout: pos float3 and color float4, stride 28.
     rhi::VertexAttribute attrs[2] = {{rhi::VertexFormat::Float32x3, 0, 0},
                                      {rhi::VertexFormat::Float32x4, 12, 1}};
     rhi::VertexBufferLayout vbl{};
@@ -325,7 +325,7 @@ foundation::core::Status MultiDrawIndirectSample::createIndirectBuffer()
 {
     using foundation::core::Status, foundation::core::Span, foundation::core::u8;
 
-    // 4 indirect draw commands - one per quad.
+    // 4 indirect draw commands, one per quad.
     DrawIndexedIndirectArgs args[4] = {
         {6, 1, 0, 0, 0},
         {6, 1, 6, 0, 0},
@@ -354,7 +354,7 @@ foundation::core::Status MultiDrawIndirectSample::createLineGeometry()
 {
     using foundation::core::Status, foundation::core::Span, foundation::core::u8;
 
-    // Line wireframes for each quad: 4 edges per quad = 8 verts per quad, white lines.
+    // Line wireframes for each quad: 4 edges, so 8 verts per quad, white lines.
     static constexpr float lineVerts[] = {
         // Quad 0 edges
         -0.9f,

@@ -105,8 +105,8 @@ namespace editor
             }
 
         private:
-            // Persistent display entity + private sun, created once and toggled per job (the
-            // shared-stage contract: idle generators contribute nothing to other jobs).
+            // A persistent display entity and private sun, created once and toggled per job, because
+            // on the shared stage an idle generator must contribute nothing to other jobs.
             [[nodiscard]] engine::render::MeshComponent* Ensure(scene::Scene& stage)
             {
                 auto* meshes = stage.GetSystem<engine::render::MeshComponentManager>();

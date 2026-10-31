@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the style system's core (G2 of Specs/vg-and-gui-lab.md): declarations parsed once into
-// typed values, shorthands cascading as their longhands, var() substituted anywhere in a value and
-// custom properties inherited, and a widget's reflected property styled by its CSS name.
+// GUI - the style system's core: declarations parsed once into typed values, shorthands that
+// cascade as their longhands, var() substituted anywhere in a value with custom properties
+// inherited, and a widget's reflected property styled by its CSS name.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -61,8 +61,8 @@ TEST_CASE("style-core: var() resolves anywhere in a value, nested and with fallb
     const StyleValue* shadows = rs.Value(SV(u8"box-shadow"));
     REQUIRE(shadows != nullptr);
     REQUIRE(shadows->Shadows.Size() == 2u);
-    CHECK(shadows->Shadows[0].OffsetX.Value == doctest::Approx(3.0f)); // var() -> var() -> 3px
-    CHECK(shadows->Shadows[0].ShadowColor.a == doctest::Approx(0.5f));  // a var() inside rgba's place
+    CHECK(shadows->Shadows[0].OffsetX.Value == doctest::Approx(3.0f)); // a var() through a var() to 3px
+    CHECK(shadows->Shadows[0].ShadowColor.a == doctest::Approx(0.5f));  // a var() in place of an rgba() value
     CHECK(shadows->Shadows[1].Inset);
     CHECK(shadows->Shadows[1].ShadowColor.r == doctest::Approx(1.0f)); // the fallback
     // A shorthand built of var()s expands after they resolve.
@@ -80,7 +80,7 @@ TEST_CASE("style-core: custom properties inherit from the parent's style")
     auto panel = Widget(u8"panel");
     auto button = Widget(u8"button");
     const ResolvedStyle parent = sheet.Resolve(*panel.Get());
-    CHECK_FALSE(sheet.Resolve(*button.Get()).Has(SV(u8"color"))); // alone, --accent is unset
+    CHECK_FALSE(sheet.Resolve(*button.Get()).Has(SV(u8"color"))); // without the parent, --accent is unset
     const ResolvedStyle child = sheet.Resolve(*button.Get(), MediaContext{}, true, {}, &parent);
     REQUIRE(child.Value(SV(u8"color")) != nullptr);
     CHECK(child.Value(SV(u8"color"))->ColorValue.g == doctest::Approx(1.0f));
@@ -113,7 +113,7 @@ TEST_CASE("style-core: a declaration without var() is parsed once, and once more
     REQUIRE(declared.Longhands.Size() == 1u);
     CHECK(declared.Longhands[0].Value.Kind == StyleValueKind::Transforms);
     CHECK(declared.Longhands[0].Value.Transforms.Size() == 2u);
-    // A second cascade reads the cached value (the same parse, the same result).
+    // A second cascade reads the cached value: the same parse gives the same result.
     const ResolvedStyle second = sheet.Resolve(*w.Get());
     const StyleValue* again = second.Value(SV(u8"transform"));
     REQUIRE(again != nullptr);
@@ -150,7 +150,7 @@ TEST_CASE("style-core: the box belongs to the sheet: a restyle without box prope
     ApplyStyle(*w.Get(), sheet.Resolve(*w.Get()));
     CHECK(w->GetBox().IsEmpty());
 
-    // A box set natively is the node's own: a sheet with no box properties leaves it.
+    // A box set from native code is the node's own, and a sheet with no box properties leaves it.
     auto native = Widget(u8"box");
     NodeBox box;
     box.BackgroundColor = core::Color{0.0f, 0.0f, 1.0f, 1.0f};
@@ -161,8 +161,7 @@ TEST_CASE("style-core: the box belongs to the sheet: a restyle without box prope
 
 TEST_CASE("style-core: the style manager gives each widget its ancestors' custom properties")
 {
-    // A var() set on a row reaches its children through ApplyTree (it was dropped when the
-    // manager resolved each widget alone).
+    // A var() set on a row reaches its children through ApplyTree.
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto row = Widget(u8"row");
     auto card = Widget(u8"card");

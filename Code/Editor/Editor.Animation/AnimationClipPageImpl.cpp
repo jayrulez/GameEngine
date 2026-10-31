@@ -4,7 +4,7 @@
 // Editor::Animation - the `:clip_page` partition (implementation).
 
 module;
-#include <cmath> // std::fmod (a looping clip's clock)
+#include <cmath> // std::fmod, to wrap a looping clip's clock
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
@@ -12,7 +12,7 @@ module;
 module editor.animation;
 
 import foundation.core;
-import foundation.settings; // the per-project editor settings (the preview's rig, per clip)
+import foundation.settings; // per-project editor settings, which keep the preview's rig per clip
 import foundation.content;
 import foundation.graphics;
 import foundation.runtime;
@@ -33,8 +33,8 @@ namespace editor
     namespace gui = foundation::gui;
 
     // The preview's rig per clip ({clip -> skeleton, skinned mesh}), a section of the per-project
-    // editor settings, so a clip opened again plays on what it played on. Its type id is the old
-    // page's, so what that kept still reads.
+    // editor settings, so a clip opened again plays on the rig it used last. Its type id must not
+    // change, or settings already saved under it stop reading.
     struct ClipPreviewPref
     {
         Guid asset;
@@ -69,7 +69,7 @@ namespace editor
         constexpr StringView kEvents = u8"events";
         constexpr StringView kNewEventName = u8"Event";
 
-        // The event a row's path names ("events.2.time": 2), or -1.
+        // The index of the event a row's path names ("events.2.time" gives 2), or -1.
         [[nodiscard]] i32 EventOf(StringView path)
         {
             StringView element = path;
@@ -90,7 +90,7 @@ namespace editor
             return path;
         }
 
-        // The events' two arrays as long as each other, whatever an older clip kept.
+        // Makes the events' two arrays the same length, whatever an older clip saved.
         void Square(foundation::animation::AnimationClipSource& source)
         {
             while (source.eventNames.Size() < source.eventTimes.Size())
@@ -99,7 +99,7 @@ namespace editor
                 source.eventTimes.PushBack(0.0f);
         }
 
-        // Two decimals always, so a time running past ("0.90 s", "0.95 s") keeps its width.
+        // Always two decimals, so the text keeps its width while the time runs ("0.90 s", "0.95 s").
         [[nodiscard]] String Seconds(f32 seconds)
         {
             const i64 cents = static_cast<i64>(Max(seconds, 0.0f) * 100.0f + 0.5f);
@@ -110,7 +110,7 @@ namespace editor
     AnimationClipEditorPage::AnimationClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::AnimationClipAsset::StaticType(), kPath)
     {
-        // Its tracks and keys are its import's: the rows are the page's own.
+        // The tracks and keys come from the import, so the page builds its own rows.
         HideAssetRows();
         Provide<IPlaybackPage>(*this);
         AnimationClipEditorPage* self = this;
@@ -123,7 +123,7 @@ namespace editor
                                      {
                                          if (self->m_moving)
                                              return;
-                                         // A scrub: the preview holds where it is put.
+                                         // A scrub: the preview stays at the time it is moved to.
                                          self->m_time = time;
                                          self->m_playing = false;
                                      });
@@ -204,8 +204,9 @@ namespace editor
         axis(u8"vertical", u8"Height", u8"Its rise and fall taken out too (a jump that should lift the character)");
         axis(u8"yaw", u8"Turning", u8"Its turning about the vertical taken out, for the character to turn by");
 
-        // The events as every page's lists: each a group of its time and its name, a new one at
-        // the playhead. Their order means nothing (a time places each), so the list does not move them.
+        // The events are a list like the other pages' lists: each is a group of its time and its
+        // name, and a new one goes at the playhead. Their order carries no meaning (each event's time
+        // places it), so the list does not offer moving them.
         gui::PropertyInfo& list = m_eventRows->AddList(kEvents, gui::PropertyKind::Group, gui::Variant{});
         list.DisplayName = String(u8"Events");
         list.Description = String(u8"What the clip tells its listeners as it plays past each (a footstep, a hit); each a marker on the ruler");
@@ -234,7 +235,7 @@ namespace editor
                               });
         }
         m_eventRows->SetOnListEdited([self](StringView, const gui::ListEdit& edit) { self->EditEvents(edit); });
-        // Each event by its name, closed showing when it fires.
+        // Each event is titled by its name and, while closed, shows when it fires.
         m_eventRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
                                    {
                                        if (gui::ParentPropertyPath(path) != kEvents)
@@ -264,7 +265,7 @@ namespace editor
         m_rootRows->SetValue(u8"horizontal", 0, gui::Variant(source.rootMotion.horizontal));
         m_rootRows->SetValue(u8"vertical", 0, gui::Variant(source.rootMotion.vertical));
         m_rootRows->SetValue(u8"yaw", 0, gui::Variant(source.rootMotion.yaw));
-        const usize count = Max(source.eventTimes.Size(), source.eventNames.Size()); // an edit squares them
+        const usize count = Max(source.eventTimes.Size(), source.eventNames.Size()); // an edit makes both the same length
         m_eventRows->ResizeList(kEvents, 0, count);
         for (usize i = 0; i < count; ++i)
         {
@@ -274,7 +275,7 @@ namespace editor
             m_eventRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"time").AsView(), 0, gui::Variant(static_cast<f64>(time)));
             m_eventRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"name").AsView(), 0, gui::Variant(name));
         }
-        m_eventRows->PropertiesChanged(); // the names and summaries described again
+        m_eventRows->PropertiesChanged(); // describe the names and summaries again
     }
 
     void AnimationClipEditorPage::ShowFacts()
@@ -349,7 +350,7 @@ namespace editor
             return;
         if (edit.Kind == gui::ListEdit::Op::Insert)
         {
-            // At the playhead, at the end of the list: its place in the list means nothing.
+            // Added at the playhead, at the end of the list: its place in the list means nothing.
             const f32 time = Clamp(m_time, 0.0f, Length());
             EditWhole(u8"edit_animclip", [time](ISerializable& object)
                       {
@@ -370,7 +371,7 @@ namespace editor
                           source.eventNames.RemoveAt(index);
                       });
         }
-        ShowRows(); // the list as the clip holds it (a move, which the list does not offer, goes back)
+        ShowRows(); // show the list as the clip holds it, undoing any move (the list does not offer moves)
     }
 
     void AnimationClipEditorPage::OnObjectChanged()
@@ -386,7 +387,7 @@ namespace editor
         if (clip == nullptr || index < 0 || static_cast<usize>(index) >= clip->source.eventTimes.Size())
             return;
         if (m_ruler != nullptr && m_ruler->GetChosenMarker() != index)
-            m_ruler->ChooseMarker(index); // tells this again, which opens it below
+            m_ruler->ChooseMarker(index); // the ruler calls back into this, and the call below opens the rows
         gui::PropertyGrid* grid = Grid();
         if (grid == nullptr)
             return;
@@ -429,7 +430,7 @@ namespace editor
         pipeline::AnimationClipAsset* clip = Clip();
         if (clip == nullptr || static_cast<i32>(marker) != m_markerMoving || marker >= clip->source.eventTimes.Size())
             return;
-        // Live in the asset (the row follows), the step taken once the drag ends.
+        // Written into the asset live (the row follows); the undo step is taken when the drag ends.
         clip->source.eventTimes[marker] = Clamp(time, 0.0f, Length());
         m_eventRows->SetValue(gui::JoinPropertyPath(Format(u8"{}.{}", kEvents, marker).AsView(), u8"time").AsView(), 0,
                               gui::Variant(static_cast<f64>(clip->source.eventTimes[marker])));
@@ -444,7 +445,7 @@ namespace editor
             return;
         const usize at = static_cast<usize>(moving);
         const f32 time = clip->source.eventTimes[at];
-        clip->source.eventTimes[at] = m_markerFrom; // the step's before is where the drag began
+        clip->source.eventTimes[at] = m_markerFrom; // the undo step's before state is where the drag began
         if (time == m_markerFrom)
             return;
         EditWhole(u8"edit_animclip", [at, time](ISerializable& object)
@@ -481,7 +482,7 @@ namespace editor
                         m_rig->SetMesh(p.mesh);
                         return;
                     }
-        // Never shown before: on the skeleton its import names, the one its bones address.
+        // Never previewed before: use the skeleton its import names, whose bones its tracks address.
         if (const pipeline::AnimationClipAsset* clip = Clip())
             m_rig->SetSkeleton(clip->skeleton);
         m_rig->SetMesh(Guid{});
@@ -513,7 +514,7 @@ namespace editor
             return;
         if (m_rig && m_rig->Frame())
             return;
-        // Nothing shown yet: a character's height in view, from a little above its middle.
+        // Nothing shown yet: frame a character's height, looking from a little above its middle.
         PreviewViewport* preview = m_pane->Viewport();
         preview->Camera().position = Float3{0.0f, 1.4f, 3.2f};
         preview->Camera().LookAt(Float3{0.0f, 0.9f, 0.0f});
@@ -555,8 +556,9 @@ namespace editor
         const usize bones = static_cast<usize>(skeleton->BoneCount());
         m_pose.Resize(bones);
         foundation::animation::SampleClip(*clip, *skeleton, m_time, Span<foundation::animation::BoneTransform>{m_pose.Data(), bones});
-        // Under the armature's rest transform, as the model places it (a Z-up file's turn, its
-        // units); cooked, the pose plays in place, travelling, it goes where its root motion takes it.
+        // Placed under the armature's rest transform, as the model places it (the turn a Z-up file
+        // needs, and its units). The cooked pose plays in place; while travelling, the rig goes where
+        // its root motion takes it.
         const Float4x4 rest = Clip() != nullptr ? Clip()->modelRest.ToMatrix() : Float4x4::Identity();
         const Float4x4 base = m_travel ? rest * RootMotionPlacement(*clip, m_time) : rest;
         m_rig->Show(m_pose.AsSpan(), base);
@@ -584,7 +586,8 @@ namespace editor
         if (m_state == nullptr)
             return;
         const bool cooked = m_clip && m_clip.Get() != nullptr;
-        // Its width fixed by the sheet; paused says so by its colour, as the Play button does by its icon.
+        // The style sheet fixes its width. Its colour shows when the clock is paused, as the Play
+        // button's icon does.
         const String text = !cooked ? String(u8"Not cooked yet") : Format(u8"{} / {}", Seconds(m_time), Seconds(Length()));
         if (m_state->GetText() != text.AsView())
             m_state->SetText(text.AsView());
@@ -600,7 +603,7 @@ namespace editor
         }
     }
 
-    // === The transport: the preview's alone ===
+    // === The transport: it drives only the preview ===
 
     bool AnimationClipEditorPage::CanPlay() const
     {
@@ -609,7 +612,7 @@ namespace editor
 
     void AnimationClipEditorPage::Play()
     {
-        // Resumes; one that ran to its end starts over.
+        // Resumes; a clip that ran to its end starts over.
         if (m_time >= Length())
             SetTime(0.0f);
         m_playing = true;
@@ -681,7 +684,8 @@ namespace editor
 
     void RegisterAnimationClipEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        // The preview prefs' section, registered before the app reads the per-project store.
+        // The settings section for preview choices, registered before the app reads the per-project
+        // store.
         GlobalTypeRegistry().Register(ClipPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<ClipPreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<AnimationClipPageFactory>(services),

@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of RayTracingPipeline.
-/// Ported from Sedulous.RHI.Vulkan/VulkanRayTracingPipeline.bf.
 
 module;
 #include "Core/Prelude.h"

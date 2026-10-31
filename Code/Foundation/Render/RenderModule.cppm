@@ -4,14 +4,14 @@
 /// Foundation::Render - `foundation.render`, the renderer (scene-agnostic).
 ///
 /// The renderer consumes a per-scene `ExtractedScene` (world-space `RenderData`) and draws
-/// the views over it; it knows nothing about the scene/ECS world. The scene-integration
+/// the views over it; it knows nothing about the scene or ECS world. The scene-integration
 /// layer (components, extraction, the RenderSubsystem) lives in engine.render and
-/// depends on THIS - one-way.
+/// depends on this, never the reverse.
 ///
-/// Partitions: `:data` (the render-data contract + frame arena + radix sort), `:views`
-/// (RenderView isolation boundary + pool), `:pipeline` (the Renderer/Pass extension seam +
-/// the single per-frame RenderFrame driver), `:mesh_renderer` (the built-in mesh drawer),
-/// `:gpu_mesh` (mesh GPU upload cache).
+/// The core partitions are `:data` (the render-data contract, frame arena and radix sort),
+/// `:views` (the RenderView isolation boundary and pool), `:pipeline` (the Renderer extension
+/// point and the single per-frame RenderFrame driver), `:mesh_renderer` (the built-in mesh
+/// drawer) and `:gpu_mesh` (mesh GPU upload cache); the rest are one per pass or system.
 
 export module foundation.render;
 
@@ -44,6 +44,3 @@ export import :decal_pass;
 export import :debug_font;
 export import :debug_draw;
 export import :debug_pass;
-
-// Per-pass HLSL source partitions (split out of the pass files so shaders are easy to lift to .hlsl
-// later; pass-internal, but GCC requires every interface partition be exported by the primary interface).

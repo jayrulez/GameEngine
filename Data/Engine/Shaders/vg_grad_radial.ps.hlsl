@@ -2,11 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // VG radial-gradient fragment shader. The tessellator emits the gradient-space coordinate
-// (pos-center)/radius as TexCoord, so the parameter t = length(TexCoord) is computed PER PIXEL
-// (exact radial falloff) instead of Gouraud-interpolating it across triangles. The RAW t samples
-// the baked 256x1 ramp LUT and the bound SAMPLER's address mode applies the spread: clamp = pad,
+// (pos-center)/radius as TexCoord, so the parameter t = length(TexCoord) is computed per pixel
+// (an exact radial falloff) instead of Gouraud-interpolating it across triangles. The raw t samples
+// the baked 256x1 ramp LUT and the bound sampler's address mode applies the spread: clamp = pad,
 // wrap = repeat, mirror = reflect (the renderer picks the sampler from the command's
-// VGGradientSpread). Outputs PREMULTIPLIED-alpha color to pair with the PremultipliedAlpha blend.
+// VGGradientSpread). Outputs premultiplied-alpha colour to pair with the PremultipliedAlpha blend.
 // Resolved via ShaderSystem::GetVariant("vg_grad_radial", Fragment).
 #include "color.hlsli"
 cbuffer VGUniforms : register(b0) { float4x4 Projection; float DistanceFieldPixelRange; float DistanceFieldAtlasWidth; float DistanceFieldAtlasHeight; float BlendSpace; };

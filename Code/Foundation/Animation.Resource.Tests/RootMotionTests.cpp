@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Root motion's cook (root-motion.md P0): a root that walks bakes its travel into the clip's curve
+// Root motion's cook: a root that walks bakes its travel into the clip's curve
 // and plays in place; what is not extracted (a walk's bob) stays in the pose; a turn bakes as yaw
 // and is stripped; a step or cubic root keeps its shape through the fixed bake rate; the armature's
 // own channels (model tracks, bone -1) bake through the armature's rest and never reach the pose;

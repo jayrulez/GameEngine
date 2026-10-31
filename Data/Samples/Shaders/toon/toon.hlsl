@@ -3,17 +3,17 @@
 
 // The toon sample's shader (Code/Samples/CustomShader), both stages in one file: VSMain and PSMain,
 // each registered by name. Cel shading in hard bands, a shadow colour and a rim light, in place of
-// the engine's PBR. A LOW-LEVEL custom shader forks the whole lighting and keeps the frame's
+// the engine's PBR. A low-level custom shader replaces the whole lighting and keeps the frame's
 // contract:
-//   - the vertex stage: the mesh vertex in, VSOutput out, the SKINNED / INSTANCED variants.
-//     The engine's forward vertex library is exactly that, so VSMain is it, under its own name.
+//   - the vertex stage: the mesh vertex in, VSOutput out, the SKINNED and INSTANCED variants.
+//     The engine's forward vertex library provides exactly that, so VSMain is that library under
+//     its own name.
 //   - the pixel stage: the frame's lights, shadow maps and clusters (sets 0 and 3), which the
 //     engine's lighting library declares, its material parameters in a properties block (the
 //     engine generates set 2 from it), and under GBUFFER the five targets the post stack reads
 //     (colour, view normal, motion vector, roughness/metallic, albedo).
-// Ported from legacy Sedulous's RenderMaterialsCustom sample.
 
-// No wind sway: wind.hlsli reads the PBR material's layout, which a toon material does not have.
+// No wind sway: this shader declares no WIND variant.
 // variants(vertex): SKINNED INSTANCED
 // variants(fragment): ALPHA_TEST GBUFFER DITHER
 // preserve-interface (the pixel stage keeps VSOutput's fade input when DITHER is off)
@@ -51,10 +51,10 @@ float Quantize(float value, float bands) {
 // One light's toon contribution: the banded diffuse between the shadow colour and the albedo. The
 // light reaches as far as the engine's lights do (LightDirection); only the response is stylised.
 // Only the facing is banded; the shadow is one edge on its own. Banded together, the shadow map's
-// filtered edge became a band of its own (a pale ring around every shadow) and the core's edge
-// traced the shadow map's texels. The edge is a narrow smoothstep rather than a step, so it does
-// not alias; a width from fwidth(shadow) would need uniform control flow, which this per-pixel
-// light loop is not (WGSL refuses the derivative).
+// filtered edge would become a band of its own (a pale ring around every shadow) and the core's
+// edge would trace the shadow map's texels. The edge is a narrow smoothstep rather than a step, so
+// it does not alias; a width from fwidth(shadow) would need uniform control flow, which this
+// per-pixel light loop is not (WGSL refuses the derivative).
 float3 ToonLight(GpuLight light, float3 worldPos, float3 N, float3 albedo, float shadow) {
     float atten;
     float3 L = LightDirection(light, worldPos, atten);

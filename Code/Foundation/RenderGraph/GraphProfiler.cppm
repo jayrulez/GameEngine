@@ -3,7 +3,7 @@
 
 // Foundation::RenderGraph - :profiler partition
 //
-// The render graph's half of the profiler (Specs/profiler.md, P1). Each executed pass is timed by
+// The render graph's half of the profiler. Each executed pass is timed by
 // a pair of GPU timestamps and, where the device counts them, a pipeline-statistics query, into
 // query sets of the frame's slot; when the slot comes round (the GPU finished that frame), its
 // results are put on the CPU's clock and handed to the profiler as that frame's GPU passes.

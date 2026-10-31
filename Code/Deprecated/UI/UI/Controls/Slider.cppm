@@ -3,9 +3,9 @@
 
 // UI - :slider partition
 //
-// Value slider with track, fill, and draggable thumb. Ported from Sedulous.UI/src/Controls/Slider.bf.
-// (The Min/Max/Orientation properties shadow core::Min/Max and the Orientation type, so the core
-// functions are called qualified as core::Min/core::Max and the enum is fully qualified. Round -> std::round.)
+// Value slider with track, fill, and draggable thumb. The Min/Max/Orientation properties shadow
+// core::Min/Max and the Orientation type, so the core functions are called qualified as
+// core::Min/core::Max and the enum is fully qualified.
 
 module;
 #include "Core/Prelude.h"
@@ -55,7 +55,7 @@ export namespace foundation::ui
             Value.SetSilent(core::Max(minV, core::Min(value, maxV)));
         }
 
-        /// A press drags the thumb: never a drag of a source above it (a slider in a draggable row).
+        /// A press drags the thumb, never a drag source above it (a slider in a draggable row).
         [[nodiscard]] bool OwnsPressDrag() const override { return true; }
 
         void OnMouseDown(MouseEventArgs& e) override
@@ -141,7 +141,7 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Bounded fill (P2c): default length under an unbounded parent.
+            // Bounded fill: a default length under an unbounded parent.
             if (Orientation.Value() == ::foundation::ui::Orientation::Horizontal)
                 MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(160.0f)),
                                       constraints.ConstrainHeight(20.0f)};
@@ -198,7 +198,7 @@ export namespace foundation::ui
                 const f32 trackTop = thumbHalf;
                 const f32 trackH = (Height() - thumbHalf) - trackTop;
                 DrawPart(ctx, trackDrawable, Rectangle{trackX, trackTop, trackHeight, trackH}, trackCol, state);
-                // Vertical runs bottom to top: the fill grows UP from the low end, where a vertical
+                // Vertical runs bottom to top: the fill grows up from the low end, where a vertical
                 // slider's minimum sits.
                 const f32 fillH = trackH * progress;
                 if (fillH > 0)

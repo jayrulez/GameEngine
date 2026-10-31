@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample012 - Wireframe. Ported from Sedulous Sample012_Wireframe.
+/// Sample012 - Wireframe.
 /// Renders a rotating icosahedron in wireframe mode.
 
 #include <cmath>
@@ -152,7 +152,7 @@ foundation::core::Status WireframeSample::OnInit()
     rpd.fragment = rhi::FragmentState{};
     rpd.fragment->shader = {m_ps, u8"PSMain", rhi::ShaderStage::Fragment};
     rpd.fragment->targets = Span<const rhi::ColorTargetState>(&ct, 1);
-    // Backends enable what the adapter HAS, not what was requested, so the fill mode is gated on
+    // Backends enable what the adapter has, not what was requested, so the fill mode is gated on
     // the device: WebGPU has no polygon mode at all and refuses a wireframe pipeline outright.
     const bool wireframe = m_device->features.fillModeWireframe;
     if (!wireframe)
@@ -186,7 +186,7 @@ void WireframeSample::OnRender()
     f32 aspect = static_cast<f32>(m_width) / static_cast<f32>(m_height);
     Float4x4 model = Float4x4::RotationY(m_totalTime * 0.8f);
     // Row-vector view: identity rotation, camera 3 units along +Z (RH: looking toward -Z).
-    // The view is the inverse of the camera transform, so the translation is the NEGATED
+    // The view is the inverse of the camera transform, so the translation is the negated
     // eye position: m[3][2] = -3 (puts the object at view-space z=-3, in front of the camera).
     // PerspectiveFovRH gives clip.w = -viewZ, so geometry must have negative view z.
     f32 view[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -3, 1};

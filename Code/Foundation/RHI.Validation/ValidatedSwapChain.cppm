@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for SwapChain.
-/// Ported from Sedulous.RHI.Validation/ValidatedSwapChain.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -48,7 +47,7 @@ export namespace foundation::rhi::validation
             if (!m_imageAcquired)
                 LogWarning("[Validation] SwapChain::present: no image acquired");
             m_imageAcquired = false;
-            // Unwrap validated queue so the inner swap chain gets the raw VK queue.
+            // Unwrap the validated queue so the inner swap chain gets the backend's own queue.
             auto* vq = static_cast<ValidatedQueue*>(queue);
             return m_inner->Present(vq ? vq->inner() : queue);
         }

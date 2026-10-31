@@ -1,7 +1,6 @@
 # Foundation::Render - `foundation.render`, the renderer (scene-agnostic). Consumes extracted
-# render data (ExtractedView) and draws it; knows nothing about the scene. This phase
-# is the render-data contract; the GPU forward path lands later (adds the RHI dep).
-# Scene integration lives in the Subsystem sub-library (one-way dependency -> here).
+# render data (ExtractedView) and draws it with its GPU passes; it knows nothing about the
+# scene. Scene integration lives in Engine.Render, which depends on this one-way.
 util_add_engine_library(Render ALIAS Foundation::Render)
 target_link_libraries(Render
     PUBLIC Foundation::Core Foundation::RHI Foundation::Render.Api Foundation::RenderGraph Foundation::Geometry Foundation::Materials
@@ -61,5 +60,3 @@ target_sources(Render
             Debug/DebugDrawPass.cppm
             RenderModule.cppm)
 
-# Scene integration (engine.render): the resource- + scene-aware bridge. Links the base
-# Runtime + SceneSubsystem + the cook/material stack, all of which climb, so it climbs too - the

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - damage (E15 of Specs/gui-lab-evolution-2.md): a frame notes the area it changed, in device
-// pixels, for a host that presents part of a frame: all of it at first, nothing when nothing
-// changed, a label's box when its text changes, both places when a box moves, and where a box
-// showed when it is removed or hidden.
+// GUI - damage. A frame records the area it changed, in device pixels, for a host that presents
+// only part of a frame. The first frame damages everything and a frame with no change damages
+// nothing. A label's text change damages its box, a moved box damages both places, and a removed
+// or hidden box damages where it showed.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -59,7 +59,7 @@ TEST_CASE("damage: all at first, nothing when nothing changed, a box's area when
     w.Frame();
     CHECK(w.root->GetLastDamage().IsEmpty());
 
-    w.box->SetBox(FilledBox(core::Color{0.0f, 1.0f, 0.0f, 1.0f})); // a colour: its own box alone
+    w.box->SetBox(FilledBox(core::Color{0.0f, 1.0f, 0.0f, 1.0f})); // a colour change damages only its own box
     const Rect changed = w.Frame();
     CHECK(Covers(changed, Rect{20.0f, 30.0f, 50.0f, 40.0f}));
     CHECK(changed.width <= 51.0f);

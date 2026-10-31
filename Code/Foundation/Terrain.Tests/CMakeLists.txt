@@ -1,4 +1,4 @@
-# Foundation::Terrain unit tests (doctest; pure data + math, no GPU).
+# Foundation::Terrain unit tests (doctest; pure data and math, no GPU).
 
 add_executable(Terrain.Tests
     TestsMain.cpp

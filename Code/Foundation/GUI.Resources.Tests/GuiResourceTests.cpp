@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Resources (E2 of Specs/gui-lab-evolution-3.md): a cooked GUI document and style sheet read back
-// through their factories, their text intact, and the module the engine composition takes them from.
+// GUI.Resources: a cooked GUI document and style sheet read back through their factories with
+// their text intact, and the factory list the engine composition registers.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <filesystem>

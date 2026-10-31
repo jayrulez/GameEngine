@@ -4,8 +4,9 @@
 // Editor::App - :project_picture partition.
 //
 // A project's picture: the thumbnail the editor keeps in the project's editor folder
-// (ProjectThumbnailPath), else the project's initial on a quiet tile. Its size and corners are the
-// sheet's (`.project-picture`, and a class of the caller's: the home's header, a manager's row).
+// (ProjectThumbnailPath), else the project's initial on a quiet tile. Its size and corners come
+// from the sheet (`.project-picture`, plus a class the caller gives: the home's header, a
+// manager's row).
 module;
 #include "Core/Prelude.h"
 
@@ -28,8 +29,8 @@ export namespace editor::app
     struct ProjectPicture
     {
         /// The picture of the project named `name` in `projectDirectory`, with the class `size`
-        /// (the sheet's size for where it shows): its thumbnail when one reads (an empty directory
-        /// never does), else its initial. The image a thumbnail shows is moved into `keep`, which
+        /// (the sheet's size for where it shows): its thumbnail when one can be read (an empty
+        /// directory never has one), else its initial. The image a thumbnail shows is moved into `keep`, which
         /// must outlive the picture.
         [[nodiscard]] static RefPtr<gui::Node> Make(IAllocator& allocator, StringView projectDirectory, StringView name, StringView size,
                                                     Array<UniquePtr<foundation::image::Image>>& keep)

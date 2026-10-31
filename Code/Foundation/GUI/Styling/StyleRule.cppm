@@ -3,10 +3,11 @@
 
 // GUI - :style_rule partition
 //
-// StyleProperty + StyleRule: a CSS declaration block. Ported from eepp's
-// css/StyleSheetProperty + StyleSheetStyle. A StyleRule pairs one StyleSelector with a list
-// of name/value declarations: the value as written, and its longhands parsed into typed values
-// once, by the first cascade that reaches it (a value with var() is parsed at each).
+// StyleProperty and StyleRule: a CSS declaration block. Ported from eepp's
+// css/StyleSheetProperty and StyleSheetStyle. A StyleRule pairs one StyleSelector with a list
+// of name/value declarations. Each declaration keeps its value as written and its longhands
+// parsed into typed values. The first cascade that reaches a declaration parses it once; a value
+// that uses var() is parsed again at every cascade.
 
 module;
 #include "Core/Prelude.h"
@@ -36,8 +37,8 @@ export namespace foundation::gui
         core::String Name;
         core::String Value;
         bool Important = false;
-        // The longhands this declaration sets, parsed once (a declaration without var(): its
-        // value cannot change); filled by the first cascade that reaches it (StyleSheet).
+        // The longhands this declaration sets, parsed once, because a declaration without var()
+        // cannot change its value. StyleSheet fills them on the first cascade that reaches it.
         mutable bool Cached = false;
         mutable bool CacheValid = false;
         mutable Array<StyleLonghandValue> Longhands;
@@ -81,7 +82,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] usize PropertyCount() const noexcept { return m_properties.Size(); }
 
-        /// Where it was written: its selector as written and its line in its sheet (0: not from a sheet).
+        /// Records where the rule was written: its selector text and its line in the sheet (0 when
+        /// it did not come from a sheet).
         void SetSource(core::StringView selectorText, u32 line)
         {
             m_selectorText = core::String(selectorText);
@@ -90,7 +92,7 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView SelectorText() const noexcept { return m_selectorText.AsView(); }
         [[nodiscard]] u32 Line() const noexcept { return m_line; }
 
-        // The @media condition this rule is nested in (empty = always active).
+        // The @media condition this rule is nested in (empty: always active).
         void SetMedia(MediaQuery media) { m_media = core::Move(media); }
         [[nodiscard]] const MediaQuery& Media() const noexcept { return m_media; }
 

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Validation wrapper for RenderPassEncoder + MeshShaderPassExt.
-/// Ported from Sedulous.RHI.Validation/ValidatedRenderPassEncoder.bf.
+/// Validation wrapper for RenderPassEncoder and MeshShaderPassExt.
 
 module;
 #include "Core/Prelude.h"

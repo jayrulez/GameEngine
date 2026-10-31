@@ -1,5 +1,5 @@
-# Tools.Export - packages a project into a shippable dist (cook -> stage scenes -> Content.pak
-# + player.xml + Engine.Player).
+# Tools.Export - packages a project into a shippable dist: cook, stage the scenes, and write
+# Content.pak and player.xml beside Engine.Player.
 add_executable(Tools.Export Main.cpp)
 add_dependencies(Tools.Export Engine.Player)   # stages the player exe when present
 target_link_libraries(Tools.Export PRIVATE
@@ -9,13 +9,13 @@ target_link_libraries(Tools.Export PRIVATE
     Pipeline::Texture Pipeline::Fonts Pipeline::Image Foundation::Image.Resource Pipeline::Geometry
     Pipeline::Animation Pipeline::Materials Pipeline::Shaders
     Pipeline::Particles Foundation::Input Foundation::Input.Resource Pipeline::Input Pipeline::ModelImporter
-    Engine::Composition # the FULL manager set + component reflection for the transcode scratch
-    Engine::Composition # RegisterAllScriptFacades: the COMPLETE engine facade surface the
+    Engine::Composition # the full manager set and component reflection for the transcode scratch
+    Engine::Composition # RegisterAllScriptFacades: the complete engine facade surface the
                           # script cooks compile against (run/ui/physics/audio/... facades)
     Foundation::Physics Foundation::Physics.Resource Pipeline::Physics
     Foundation::Audio Foundation::Audio.Resource Pipeline::Audio
-    # Both script backends + their cooks come transitively from Pipeline::Registration (PUBLIC),
-    # so export cooks scripts of either language (angelscript | luau) without naming a backend here.
+    # Both script backends and their cooks come transitively from Pipeline::Registration (PUBLIC),
+    # so export cooks scripts of either language (AngelScript, Luau) without naming a backend here.
     Foundation::Script Foundation::Script.Resource Foundation::Script.Facades
     Pipeline::Script
 )

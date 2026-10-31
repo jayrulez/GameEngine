@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Audio script FACADE end-to-end: a script drives Audio.playOneShot/playCue/playMusic by asset id
-// (and controls a playing voice: the music's pitch and volume, a one-shot stopped early)
-// and the four buses by AudioBus (Sedulous's facade), and the *Path forms by content path, through
-// the resource seam. Cross-layer (scripting x audio), so it lives in Integration, not
-// in Engine.Audio.Tests (which stays backend-neutral). Driven on both surviving backends (AngelScript
-// + Luau) through a shared fixture; guarded so a build with neither compiles to an empty TU.
+// The Audio script facade end to end. A script drives Audio.playOneShot, playCue and playMusic by
+// asset id, controls a playing voice (the music's pitch and volume, a one-shot stopped early),
+// sets the four buses by AudioBus, and uses the *Path forms by content path through the resource
+// provider. It needs both scripting and audio, so it lives in Integration rather than in
+// Engine.Audio.Tests, which stays backend-neutral. It runs on both AngelScript and Luau through a
+// shared fixture, and a build with neither backend compiles it to an empty translation unit.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #if defined(OPTION_HAS_ANGELSCRIPT) || defined(OPTION_HAS_LUAU)
@@ -21,9 +21,9 @@ import foundation.vfs;
 import foundation.content;
 import foundation.resource;
 import foundation.script;
-import foundation.script.facades; // ScriptRuntimeBinding (the run a context belongs to)
+import foundation.script.facades; // ScriptRuntimeBinding, which names the run a context belongs to
 import foundation.run;
-import foundation.runtime; // SubsystemManager (the audio subsystem finds the runs on it)
+import foundation.runtime; // SubsystemManager, on which the audio subsystem finds the runs
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
@@ -65,8 +65,6 @@ namespace
         return clip;
     }
 
-    // The full facade drive, parameterized by the backend's manager + its two scripts (the main
-    // program + the null-binding probe). Shared so AngelScript and Luau prove identical behavior.
     // Keeps a script's errors, so a refused load says why.
     struct ErrorLog final : foundation::script::IScriptErrorHandler
     {
@@ -80,6 +78,9 @@ namespace
     // `idScript` spells the id-addressed program for the clip's and the cue's guids.
     using IdScript = Function<String(StringView beep, StringView steps)>;
 
+    // The full facade drive, parameterized by the backend's manager and its scripts (the main
+    // program, the probe with no binding, the id-addressed program and the named one). Shared so
+    // AngelScript and Luau are held to identical behavior.
     void DriveAudioFacade(RefPtr<foundation::script::IScriptManager> scripts,
                           foundation::core::StringView script,
                           foundation::core::StringView bareScript, const IdScript& idScript,
@@ -90,7 +91,7 @@ namespace
         RegisterAudioScriptFacade();
         RegisterAudioResource();
 
-        // A hand-cooked content DB: sfx/beep (clip) + sfx/steps (cue referencing it).
+        // A hand-cooked content DB: sfx/beep (a clip) and sfx/steps (a cue referencing it).
         const StringView dir = u8"scratch_audio_scriptdb";
         FileDelete(u8"scratch_audio_scriptdb/sfx/beep.rasset");
         FileDelete(u8"scratch_audio_scriptdb/sfx/beep.data.bin");
@@ -130,10 +131,10 @@ namespace
         manager.AddFactory(&clipFactory);
         manager.AddFactory(&cueFactory);
 
-        // A headless subsystem on a subsystem manager with the host's runs + the script binding.
+        // A headless subsystem on a subsystem manager with the host's runs and the script binding.
         AudioEngineSettings engineSettings;
         engineSettings.headless = true;
-        engineSettings.dedupeWindowSeconds = 0.0f; // each facade call = its own voice
+        engineSettings.dedupeWindowSeconds = 0.0f; // each facade call gets its own voice
         foundation::run::RunRegistry runs(DefaultAllocator());
         foundation::runtime::SubsystemManager subsystems(DefaultAllocator());
         AudioSubsystem& subsystem = *subsystems.AddSubsystem<AudioSubsystem>(engineSettings);
@@ -158,7 +159,7 @@ namespace
         REQUIRE(subsystem.Engine()->GetVoiceStatus(subsystem.Engine()->MusicVoice(), music));
         CHECK(music.bus == AudioBus::Music);
 
-        // By asset id (Sedulous's shape): a voice for the clip and the cue, plain and 3D, music,
+        // By asset id: a voice for the clip and the cue, plain and 3D, music,
         // an invalid voice for an id of the wrong type, and the buses by AudioBus.
         {
             utf8char beepText[37];
@@ -186,8 +187,8 @@ namespace
             CHECK(subsystem.Engine()->ActiveVoiceCount() >= before + 4u);
             CHECK(subsystem.Engine()->BusVolume(AudioBus::Music) == doctest::Approx(0.5f));
             CHECK(ids->GetGlobal(u8"MusicVolume").Get<f64>() == doctest::Approx(0.5));
-            // A playing voice from script: the music sped up at once and its volume easing down,
-            // a one-shot stopped early (fading, so no longer playing).
+            // A playing voice from script: the music sped up at once with its volume easing down,
+            // and a one-shot stopped early, which fades and so reports it is not playing.
             CHECK(ids->GetGlobal(u8"MusicHeld").Get<bool>());
             CHECK(ids->GetGlobal(u8"ShotPlaying").Get<bool>());
             CHECK(ids->GetGlobal(u8"ShotStopped").Get<bool>());
@@ -203,9 +204,9 @@ namespace
             CHECK(controlled.volume == doctest::Approx(0.3f));
         }
 
-        // In a run (the context's runtime binding names one, as a GameInstance's run host does):
-        // the script's music goes into the run's own group and its bus volumes are the run's, so
-        // the run's Stop ends the music and its sliders never move the editor's buses.
+        // In a run, named by the context's runtime binding as a GameInstance's run host does, the
+        // script's music goes into the run's own group and its bus volumes belong to the run. The
+        // run's Stop ends the music, and the run's sliders never move the editor's buses.
         {
             utf8char beepText[37];
             utf8char stepsText[37];
@@ -232,7 +233,7 @@ namespace
             CHECK(subsystem.Engine()->RunBusVolume(run, AudioBus::Music) == doctest::Approx(0.5f));
             CHECK(subsystem.Engine()->BusVolume(AudioBus::Music) == doctest::Approx(1.0f));
             CHECK(inRun->GetGlobal(u8"MusicVolume").Get<f64>() == doctest::Approx(0.5));
-            // A layout's custom bus, by name, in the run: the run's own gain and mute for it.
+            // A layout's custom bus, by name, in the run: the run keeps its own gain and mute for it.
             AudioBusLayout layout;
             AudioNamedBus drums;
             drums.name = String(u8"drums");
@@ -245,7 +246,7 @@ namespace
             CHECK_FALSE(subsystem.Engine()->NamedBusMuted(u8"drums"));
             CHECK(inRun->GetGlobal(u8"DrumsVolume").Get<f64>() == doctest::Approx(0.4));
 
-            runKey.Stop(); // the run's session ends: its music with it
+            runKey.Stop(); // the run's session ends, and its music with it
             for (int i = 0; i < 4; ++i)
             {
                 subsystem.Update(0.1f);

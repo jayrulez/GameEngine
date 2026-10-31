@@ -1,9 +1,10 @@
-// Sky Hopper's toon shading: a low-level shader that lights the world in soft bands, after the
-// Shader Gallery's Toon lesson. The engine's vertex stage, lights, shadows and deferred targets;
-// its own response to the light: the lit side the albedo, the dark side the albedo in a cool
-// shadow tint, the steps between them softened so the cartoon reads as painted rather than cut,
-// a soft rim where a surface turns from the eye, and a small highlight on what asks for one.
-// Every material of the game is on it (Tools/toon.py), its colour and map carried over from PBR.
+// Sky Hopper's toon shading: a low-level shader, based on the Shader Gallery's Toon lesson, that
+// lights the world in soft bands. It uses the engine's vertex stage, lights, shadows and deferred
+// targets, with its own response to the light: the lit side shows the albedo, the dark side the
+// albedo in a cool shadow tint, and the steps between them are softened so the cartoon reads as
+// painted rather than cut. A soft rim marks where a surface turns from the eye, and a material
+// can ask for a small highlight. Every material of the game uses it (Tools/toon.py), with its
+// colour and map carried over from PBR.
 
 // variants(vertex): SKINNED INSTANCED
 // variants(fragment): ALPHA_TEST GBUFFER DITHER
@@ -18,7 +19,7 @@
 properties
 {
     Color   BaseColor         = (1, 1, 1, 1);
-    Color   ShadowColor       = (0.62, 0.68, 0.92, 1); // the dark side's tint: cool, as a sunny cartoon's
+    Color   ShadowColor       = (0.62, 0.68, 0.92, 1); // the dark side's tint: cool, as in a sunny cartoon
     Color   RimColor          = (1, 1, 1, 1);
     float   Bands             = 2    [1, 6];           // how many steps the light falls into
     float   BandSoftness      = 0.12 [0, 0.5];         // 0 cuts each step hard; 0.5 is a smooth ramp
@@ -50,7 +51,7 @@ float3 ToonLight(GpuLight light, float3 worldPos, float3 N, float3 V, float3 alb
     float3 H = normalize(L + V);
     float highlight = smoothstep(0.45, 0.55, pow(saturate(dot(N, H)), SpecularPower)) * lit * SpecularIntensity;
     // Divided by pi as the engine's diffuse is, so a light and the exposure tuned for PBR
-    // light toon to the same brightness.
+    // light the toon surface to the same brightness.
     return (tone + highlight) * light.color * light.intensity * saturate(atten) * (1.0 / 3.14159265);
 }
 

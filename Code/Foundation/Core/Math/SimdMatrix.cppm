@@ -6,7 +6,7 @@
 // Matrix4: aligned (16-byte) SIMD 4x4 matrix, backed by four simd::f32x4 rows. Same convention as the
 // packed Float4x4 (row-major storage, row vectors: v' = v * M, left-to-right composition). Reach for
 // this in hot CPU paths (transform-hierarchy multiply, skinning palettes); store as Float4x4 and Load
-// to compute. Construction helpers (perspective/lookat/rotation) stay on the packed Float4x4 - build
+// to compute. Construction helpers (perspective/lookat/rotation) stay on the packed Float4x4: build
 // there and Load a Matrix4 when you need to multiply many.
 
 module;

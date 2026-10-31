@@ -6,15 +6,15 @@
 // A typed, versioned, backend-agnostic settings store. A "section" is
 // a reflected ISerializable struct; the store holds one instance per type, lazily created (so an
 // absent section reads as its struct defaults) and (de)serialized as a versioned payload keyed by the
-// type's namespace+name. Load/Save go through the ISerializer/SerializerFactory abstraction - the
-// CALLER picks the backend (XML for hand-editable files, binary for tests): the store is not tied to
-// any one. Streams only (no VFS): the caller opens the file (e.g. via VFS at
+// type's namespace and name. Load and Save go through the ISerializer/SerializerFactory abstraction:
+// the caller picks the backend (XML for hand-editable files, binary for tests), and the store is not
+// tied to any one. Streams only (no VFS): the caller opens the file (for example via VFS at
 // core::GetUserDataDirectory()) and hands over the stream. Sits just above Core so the runtime and
 // the editor can both use it.
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h" // warn on a preserved/dropped unknown section
+#include "Core/Log/Log.h" // warn on a preserved or dropped unknown section
 
 export module foundation.settings;
 
@@ -25,12 +25,12 @@ using namespace foundation::core;
 
 export namespace foundation::settings
 {
-    // A store of typed settings sections. One instance = one persisted file's worth (layering across
-    // user/project files composes multiple Settings). Not copyable (owns live sections).
+    // A store of typed settings sections. One instance holds one persisted file's worth (layering
+    // across user and project files composes several Settings). Not copyable (owns live sections).
     class Settings
     {
     public:
-        // The allocator (required - the owner decides) backs the lazily-created
+        // The allocator (required; the owner decides) backs the lazily-created
         // sections and the section map.
         explicit Settings(IAllocator& allocator) noexcept
             : m_allocator(&allocator), m_sections(allocator)
@@ -55,8 +55,8 @@ export namespace foundation::settings
             return ref;
         }
 
-        // The section of type T if present (loaded or previously accessed); null otherwise - a
-        // read-only peek that does NOT create the section.
+        // The section of type T if present (loaded or previously accessed); null otherwise. A
+        // read-only peek that does not create the section.
         template <typename T>
         [[nodiscard]] const T* Find() const
         {
@@ -83,15 +83,15 @@ export namespace foundation::settings
         [[nodiscard]] usize SectionCount() const noexcept { return m_sections.Size(); }
 
         // Sections whose type this build could not instantiate on the last Load, kept verbatim so the
-        // next Save re-emits them (unknown-section passthrough). Zero on a clean/all-known store.
+        // next Save re-emits them (unknown-section passthrough). Zero on a store with all types known.
         [[nodiscard]] usize UnknownSectionCount() const noexcept { return m_unknownSections.Size(); }
 
-        // Store format version, written into POSITIONAL (binary) streams only - self-describing
+        // Store format version, written into positional (binary) streams only; self-describing
         // backends (XML) rely on their structure. Bump when the binary section envelope changes.
         static constexpr u32 kFormatVersion = 2;
 
         // Serialize every live section to `out` through `factory` (envelope per section: type
-        // namespace + name + versioned payload). Backend chosen by the caller.
+        // namespace, name and versioned payload). Backend chosen by the caller.
         [[nodiscard]] Status Save(IStream& out, SerializerFactory factory) const
         {
             UniquePtr<SerializerContext> ctx = factory(out, SerializeMode::Write);
@@ -103,8 +103,7 @@ export namespace foundation::settings
                 *ctx->serializer; // concrete Serializer (has IsOk/GetStatus, not on ISerializer)
 
             // Positional backends (binary) carry a store format version so a future layout change is
-            // detectable; self-describing backends (XML) stay version-free, so files on disk are
-            // unchanged by this addition.
+            // detectable; self-describing backends (XML) stay version-free.
             if (!ar.IsSelfDescribing())
             {
                 u32 version = kFormatVersion;
@@ -112,7 +111,7 @@ export namespace foundation::settings
                 ar.Scalar(&version, ScalarKind::UInt32);
             }
 
-            // Known live sections + any preserved unknown ones (both framed, so a reader that cannot
+            // Known live sections and any preserved unknown ones (both framed, so a reader that cannot
             // instantiate a section can skip or capture it).
             u32 count = static_cast<u32>(m_sections.Size() + m_unknownSections.Size());
             ar.Key("sections");
@@ -138,8 +137,8 @@ export namespace foundation::settings
                 ar.EndFramedRegion();
                 ar.EndObject();
             }
-            // Re-emit unknown sections verbatim inside a frame (preserves a NEWER file's sections when
-            // an OLDER build round-trips it). Appended after the known ones (order within kind stable).
+            // Re-emit unknown sections verbatim inside a frame (preserves a newer file's sections when
+            // an older build round-trips it). Appended after the known ones (order within kind stable).
             for (const UnknownSection& section : m_unknownSections)
             {
                 ar.BeginObject();
@@ -164,11 +163,11 @@ export namespace foundation::settings
             return Status{};
         }
 
-        // Load sections from `in`. Each known+registered section type is instantiated and
-        // deserialized; the store replaces any existing instance of that type. NOTE (Phase 1): a
-        // section whose type is unknown to this build cannot be skipped on a positional backend, so
-        // it aborts the load (unknown-section passthrough is not implemented). Registered types
-        // must have called RegisterSerializable<T>().
+        // Load sections from `in`. Each known and registered section type is instantiated and
+        // deserialized; the store replaces any existing instance of that type. A section whose type
+        // is unknown to this build is kept verbatim for the next Save when the backend can capture
+        // its framed payload, and dropped with a warning when it cannot. Registered types must have
+        // called RegisterSerializable<T>().
         [[nodiscard]] Status
         Load(IStream& in, SerializerFactory factory, TypeRegistry& types = GlobalTypeRegistry(),
              SerializableRegistry& serializables = GlobalSerializableRegistry())
@@ -185,7 +184,7 @@ export namespace foundation::settings
 
             // Positional backends (binary) begin with the store format version; refuse a stream that
             // isn't the current version rather than misparsing it. Self-describing backends (XML) have
-            // no such field - older files (written before this change) load unchanged.
+            // no such field.
             if (!ar.IsSelfDescribing())
             {
                 u32 version = 0;
@@ -232,9 +231,9 @@ export namespace foundation::settings
                 }
                 else
                 {
-                    // Unknown/unregistered type: capture the framed payload verbatim so a later Save
-                    // preserves it (the 2026-08-01 data-loss fix) instead of aborting the whole store.
-                    // A backend that cannot preserve it (positional with no frame) drops it with a warn.
+                    // An unknown or unregistered type: capture the framed payload verbatim so a later
+                    // Save preserves it, rather than aborting the whole store. A backend that cannot
+                    // preserve it (positional with no frame) drops it with a warning.
                     Array<u8> payload;
                     if (ar.RawRemainder(payload))
                     {
@@ -267,7 +266,7 @@ export namespace foundation::settings
         }
 
         // A section kept verbatim because its type was unknown at Load. Re-emitted by Save inside a
-        // frame so a NEWER settings file survives an OLDER build's load/save round-trip intact.
+        // frame so a newer settings file survives an older build's load and save round-trip intact.
         struct UnknownSection
         {
             String typeNamespace;

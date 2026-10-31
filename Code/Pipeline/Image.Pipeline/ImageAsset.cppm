@@ -3,9 +3,9 @@
 
 // Pipeline::Image - the `foundation.image.editor` module.
 //
-// Tooling: the source ImageAsset (an image file + color-space intent) and the
+// Tooling: the source ImageAsset (an image file and its color space) and the
 // builder that cooks it into a runtime ImageResource (decode the file, write the
-// header + "pixels" stream into the output DB). Never linked by the runtime.
+// header and "pixels" stream into the output DB). Never linked by the runtime.
 
 module;
 #include <initializer_list>
@@ -17,7 +17,7 @@ export module image.pipeline;
 import foundation.core;
 import foundation.vfs; // SourcePath
 import pipeline.core;
-import pipeline.importer; // IFileImporter + ImportContext + CopyIntoSources
+import pipeline.importer; // IFileImporter, ImportContext, CopyIntoSources
 import foundation.image;
 import foundation.image.io;
 import foundation.image.resource;
@@ -42,7 +42,7 @@ export namespace pipeline{
         }
     };
 
-    // Cooks an ImageAsset -> ImageResource (decode file -> header + pixel stream).
+    // Cooks an ImageAsset into an ImageResource (decodes the file into a header and pixel stream).
     class ImageAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -97,9 +97,9 @@ export namespace pipeline{
         }
     };
 
-    // OS-file importer (editor drag-drop): imports an image file as an ImageAsset (a raw image +
-    // color-space intent), distinct from a cooked TextureAsset. Claims the SAME extensions as the
-    // texture importer, so dropping a .png offers the importer chooser (Image vs Texture).
+    // OS-file importer (editor drag-drop): imports an image file as an ImageAsset (a raw image and
+    // its color space), distinct from a cooked TextureAsset. Claims the same extensions as the
+    // texture importer, so dropping a .png offers the importer chooser (Image or Texture).
     class ImageFileImporter final : public pipeline::IFileImporter
     {
     public:
@@ -161,7 +161,7 @@ export namespace pipeline{
         }
     };
 
-    // Registers ImageAsset for content-DB construction + deserialization. ImageAsset's own
+    // Registers ImageAsset for content-DB construction and deserialization. ImageAsset's own
     // reflection body (colorSpace property) is its StaticType(), in ImageAssetImpl.cpp; the
     // ImageColorSpace enum reflection lives in foundation.image.
     inline void RegisterImageAsset()

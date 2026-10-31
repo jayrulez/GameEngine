@@ -3,9 +3,9 @@
 
 // Pipeline::Shaders - reflection implementation unit: ShaderAsset's reflected surface.
 //
-// Kept OUT of the ShaderAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster;
-// see gcc-module-interface-hygiene). ShaderAsset::StaticType() gains its authored string
-// properties (name, entry points) here. No enums, so the type reflection rides StaticType() with no registrar change.
+// Kept out of the ShaderAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
+// ShaderAsset::StaticType() gains its authored string properties (name, entry points) here. There
+// are no enums, so the reflection comes with StaticType() and needs no registrar.
 
 module;
 #include "Core/Prelude.h"

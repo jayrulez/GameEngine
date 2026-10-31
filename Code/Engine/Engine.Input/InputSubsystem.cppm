@@ -3,11 +3,11 @@
 
 // Engine::Input - the `engine.input` module.
 //
-// The runtime hookup: owns the ActionRuntime + the device provider and evaluates once per
-// frame in Update (before scenes tick - Subsystem registration order puts input ahead of
-// the scene subsystem in every assembly that adds it first). The provider seam is the
-// play-in-editor story: the player passes the shell's devices, the editor's Game tab will
-// pass its viewport's gated InputSurface facades.
+// The runtime hookup: owns the ActionRuntime and the device provider and evaluates once per frame
+// in Update (before scenes tick: subsystem registration order puts input ahead of the scene
+// subsystem in every assembly that adds it first). The provider is what makes play in editor work:
+// the player passes the shell's devices, and the editor's Game tab passes its viewport's gated
+// input facades.
 
 module;
 #include "Core/Prelude.h"
@@ -31,16 +31,15 @@ using namespace foundation::input;
 export namespace engine::input
 {
     /// The service key ExposeToScript binds and the scripting facade resolves.
-    // kInputScriptService now lives in foundation.input (:runtime) so per-instance owners (GameInstance)
-    // can install their own runtime under it without importing this subsystem.
+    // kInputScriptService lives in foundation.input (:runtime) so per-instance owners
+    // (GameInstance) can install their own runtime under it without importing this subsystem.
 
-    /// How game-UI input routing treats the active source when it carries NO scene
-    /// binding (see SetSourceProvider). The PLAYER's shell source owns the whole
-    /// window, so un-bound input reaches every scene's UI (AllScenes - the default).
-    /// An EDITOR-embedded runtime sets ScreenTierOnly: un-bound input (raw shell
-    /// keystrokes before the Game tab exists, or the Game viewport's source while
-    /// NOT playing) must never reach scene-tier game canvases in open editing pages -
-    /// their HUDs stay VISIBLE (WYSIWYG) but deliberately not interactive.
+    /// How game-UI input routing treats the active source when it carries no scene binding (see
+    /// SetSourceProvider). The player's shell source owns the whole window, so unbound input
+    /// reaches every scene's UI (AllScenes, the default). An editor-embedded runtime sets
+    /// ScreenTierOnly: unbound input (raw shell keystrokes before the Game tab exists, or the Game
+    /// viewport's source while not playing) must never reach scene-tier game canvases in open
+    /// editing pages, whose HUDs stay visible but not interactive.
     enum class UnboundInputScenePolicy : u8
     {
         AllScenes = 0,  // un-bound input reaches every scene's UI (player default)
@@ -50,15 +49,15 @@ export namespace engine::input
     class InputSubsystem final : public foundation::runtime::Subsystem
     {
     public:
-        /// `input` = the shell's device hub (null tolerated: headless runs read released).
+        /// `input` is the shell's device hub (null is tolerated: headless runs read released).
         explicit InputSubsystem(foundation::shell::IInputManager* input) : m_shellSource(input) {}
 
         [[nodiscard]] ActionRuntime& Runtime() noexcept { return m_runtime; }
 
         /// This subsystem's runtime, then each run's (the player's, the editor's Game tabs': the
-        /// ActionRuntime a run holds as a service, Documentation/Specs/run-context.md): the UI marks
-        /// what it takes on every one (else a tap on a menu also reached the game's actions) and
-        /// shows their touch controls. No runs here: this subsystem's runtime alone.
+        /// ActionRuntime a run holds as a service): the UI marks what it takes on every one, so a
+        /// tap on a menu does not also reach the game's actions, and shows their touch controls.
+        /// With no runs, only this subsystem's runtime.
         using ActionRuntimeVisitor = Function<void(ActionRuntime&)>;
         void ForEachActionRuntime(const ActionRuntimeVisitor& visit)
         {
@@ -77,25 +76,25 @@ export namespace engine::input
             }
         }
 
-        /// The raw shell devices as an input source - a host points a GameInstance's per-instance input
-        /// runtime here when there is no gated viewport (the standalone player reads the window directly).
+        /// The raw shell devices as an input source. A host points a GameInstance's per-instance
+        /// input runtime here when there is no gated viewport (the standalone player reads the
+        /// window directly).
         [[nodiscard]] IInputSourceProvider& ShellSource() noexcept { return m_shellSource; }
 
-        /// Installs (copies) a map - from the cooked resource, a test, or hand-authored.
+        /// Installs (copies) a map: from the cooked resource, a test, or hand-authored.
         void SetMap(const InputMap& map) { m_runtime.SetMap(map); }
 
-        /// Overrides the device source (play-in-editor: the Game viewport's gated facades).
-        /// Null restores the shell devices.
+        /// Overrides the device source (play in editor: the Game viewport's gated facades). Null
+        /// restores the shell devices.
         ///
-        /// `boundSceneKey` is the PER-SURFACE SCENE BINDING: the opaque
-        /// identity of the scene this source represents - a Scene* used only for
-        /// comparison, the render layer's SceneOverlayView::sceneKey convention, which
-        /// keeps this module scene-agnostic. When bound, the UI pump routes pointer
-        /// probing, keyboard/text, and gamepad navigation ONLY to that scene's UI root
-        /// (plus the scene-less screen tier, which is modal while occupied) and publishes
-        /// the consumption mask from that root alone - two interactive scenes visible at
-        /// once can no longer cross-route on overlapping coordinates. Null = un-bound:
-        /// UnboundScenePolicy() decides. The binding rides the override - clearing the
+        /// `boundSceneKey` is the per-surface scene binding: the opaque identity of the scene this
+        /// source represents, a Scene* used only for comparison (the render layer's
+        /// SceneOverlayView::sceneKey convention, which keeps this module scene-agnostic). When
+        /// bound, the UI pump routes pointer probing, keyboard and text, and gamepad navigation
+        /// only to that scene's UI root (plus the scene-less screen tier, which is modal while
+        /// occupied) and publishes the consumption mask from that root alone, so two interactive
+        /// scenes visible at once cannot cross-route on overlapping coordinates. Null means
+        /// unbound, and UnboundScenePolicy() decides. The binding rides the override: clearing the
         /// provider clears it.
         void SetSourceProvider(IInputSourceProvider* provider,
                                const void* boundSceneKey = nullptr) noexcept
@@ -104,9 +103,10 @@ export namespace engine::input
             m_boundSceneKey = (provider != nullptr) ? boundSceneKey : nullptr;
         }
 
-        /// Clear the override IFF it currently points at `source` - so a source about to be destroyed
-        /// (a closing editor Game tab's viewport source) can't leave `m_override` dangling for the next
-        /// PumpInput/Update. Guarded so it never clears a DIFFERENT still-open tab's active source.
+        /// Clear the override if and only if it points at `source`, so a source about to be
+        /// destroyed (a closing editor Game tab's viewport source) cannot leave `m_override`
+        /// dangling for the next PumpInput/Update. Guarded so it never clears a different
+        /// still-open tab's active source.
         void ClearSourceProviderIf(const IInputSourceProvider* source) noexcept
         {
             if (m_override == source)
@@ -116,12 +116,11 @@ export namespace engine::input
             }
         }
 
-        /// The active source's scene binding (null = un-bound; see SetSourceProvider).
+        /// The active source's scene binding (null when unbound; see SetSourceProvider).
         [[nodiscard]] const void* BoundSceneKey() const noexcept { return m_boundSceneKey; }
 
-        /// Routing for un-bound sources (see UnboundInputScenePolicy). The editor's
-        /// embedded runtime sets ScreenTierOnly once at startup; the player keeps the
-        /// AllScenes default.
+        /// Routing for unbound sources (see UnboundInputScenePolicy). The editor's embedded runtime
+        /// sets ScreenTierOnly once at startup; the player keeps the AllScenes default.
         void SetUnboundScenePolicy(UnboundInputScenePolicy policy) noexcept
         {
             m_unboundScenePolicy = policy;
@@ -131,18 +130,18 @@ export namespace engine::input
             return m_unboundScenePolicy;
         }
 
-        /// The device source actions currently evaluate against - the UI subsystem reads
-        /// the SAME facades (so game UI sees viewport-transformed coordinates in the Game
-        /// tab and window coordinates in the player, transparently).
+        /// The device source actions currently evaluate against. The UI subsystem reads the same
+        /// facades, so game UI sees viewport-transformed coordinates in the Game tab and window
+        /// coordinates in the player.
         [[nodiscard]] IInputSourceProvider& ActiveSource() noexcept
         {
             return (m_override != nullptr) ? *m_override
                                            : static_cast<IInputSourceProvider&>(m_shellSource);
         }
 
-        /// Binds THIS subsystem's runtime as `context`'s input service - the scripting
-        /// facade (class Input below) resolves it per context, so two contexts can read
-        /// two different runtimes (players; editor vs game). Call once per created context.
+        /// Binds this subsystem's runtime as `context`'s input service. The scripting facade (class
+        /// Input below) resolves it per context, so two contexts can read two different runtimes
+        /// (several players; the editor and the game). Call once per created context.
         void ExposeToScript(foundation::script::IScriptContext& scriptContext)
         {
             scriptContext.SetService(kInputScriptService, &m_runtime);
@@ -168,12 +167,12 @@ export namespace engine::input
         ActionRuntime m_runtime;
     };
 
-    // The scripting facade: a foreign class named `Input` whose STATIC methods resolve the
-    // CURRENT script context's bound runtime (foundation.script's CurrentScriptContext seam,
-    // pushed by the backend around every reflected dispatch). NO process globals: a context
-    // without the service - or a call from outside any script - reads released. Some
-    // backends cannot inject host objects as module globals, which is why the API is
-    // statics-on-a-foreign-class rather than a passed object.
+    // The scripting facade: a foreign class named `Input` whose static methods resolve the current
+    // script context's bound runtime (foundation.script's CurrentScriptContext, pushed by the
+    // backend around every reflected dispatch). There are no process globals: a context without the
+    // service, or a call from outside any script, reads released. Some backends cannot inject host
+    // objects as module globals, which is why the API is static methods on a foreign class rather
+    // than a passed object.
     class Input final : public Object
     {
         RTTI_OBJECT(Input, Object)
@@ -212,7 +211,7 @@ export namespace engine::input
             ActionRuntime* rt = Resolve();
             return rt != nullptr ? rt->Value2D(rt->Resolve(name.AsView())).y : 0.0f;
         }
-        /// A 2D action's value as one Float2 (Sedulous's Value2D): valueX and valueY together.
+        /// A 2D action's value as one Float2: valueX and valueY together.
         [[nodiscard]] static Float2 value2D(String name)
         {
             ActionRuntime* rt = Resolve();
@@ -266,13 +265,13 @@ export namespace engine::input
     void RegisterInputScriptFacade();
 }
 
-// Input::StaticType() reflection body + RegisterInputScriptFacade() live in
-// InputSubsystemImpl.cpp (kept out of this interface; see gcc-module-interface-hygiene).
+// Input::StaticType()'s reflection body and RegisterInputScriptFacade() live in
+// InputSubsystemImpl.cpp, kept out of this interface for GCC's module handling.
 
 export namespace engine::input
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection and to the script
+    /// surface, and which resource modules come with it. Defined in the implementation unit (one
+    /// instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& InputDomain() noexcept;
 }

@@ -29,7 +29,8 @@ namespace editor
 
     namespace
     {
-        // "Plane 1 (red)": an imported mask's planes are its image's channels.
+        // "Plane 1 (red)": an imported mask's planes are its image's channels, so they are named
+        // by channel.
         String PlaneName(u32 plane, bool imported)
         {
             static constexpr StringView kChannels[] = {u8"red", u8"green", u8"blue", u8"alpha"};
@@ -44,7 +45,8 @@ namespace editor
     {
         ReadPlanes();
         VegetationMaskPage* self = this;
-        // What the cook allows: a painted mask's size is its planes', an imported one's all its image's.
+        // Row states follow what the cook allows: a painted mask's size is fixed by its planes,
+        // and all of an imported mask's options come from its image.
         Properties().SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
                                    {
                                        const bool size = path == StringView(u8"width") || path == StringView(u8"height");
@@ -58,7 +60,7 @@ namespace editor
                                        }
                                    });
         if (gui::IPropertySourceClient* client = Properties().GetClient())
-            client->OnPropertiesChanged(); // the grid listed the rows before the hook was set
+            client->OnPropertiesChanged(); // the grid listed the rows before the hook was set, so relist
         if (Content())
         {
             m_preview = MakeUnique<app::ImagePreview>(Allocator(), *Content());
@@ -69,7 +71,7 @@ namespace editor
                                            return Format(u8"x {}  y {}", x, y);
                                        return Format(u8"x {}  y {}  ·  {}%", x, y, (static_cast<u32>(density) * 100u + 127u) / 255u);
                                    });
-            // The plane in the channel's place: a plane is one value, not colours.
+            // The plane choice replaces the channel choice, since a plane is one value, not colours.
             if (gui::Node* channel = Find<gui::Node>(u8"image-channel"))
             {
                 channel->SetDisplayed(false);
@@ -101,7 +103,7 @@ namespace editor
             return;
         if (!asset->fileName.IsEmpty())
         {
-            // Imported: its image at its own size, a plane per channel, as the cook decodes it.
+            // Imported: the image at its own size, one plane per channel, as the cook decodes it.
             m_imported = true;
             const String path = PathJoin(Context().Project()->SourcesRoot().AsView(), asset->fileName.View());
             image::Image source;
@@ -122,7 +124,8 @@ namespace editor
             m_painted = true;
             return;
         }
-        // Painted: its sidecar, at the asset's size (absent: never painted, nothing grows yet).
+        // Painted: the sidecar, at the asset's size. With no sidecar the mask was never painted
+        // and nothing grows yet.
         m_width = Max(asset->width, 1);
         m_height = Max(asset->height, 1);
         m_planeCount = Clamp<u32>(asset->planeCount, 1u, foundation::vegetation::kMaxMaskPlanes);
@@ -133,7 +136,8 @@ namespace editor
         const i64 size = stream ? stream->Size() : 0;
         if (size <= 0 || static_cast<usize>(size) % planeBytes != 0)
             return;
-        // The planes it has (the count may have changed since: the cook keeps those that remain).
+        // The planes the sidecar holds. The count may have changed since; the cook keeps the
+        // planes that remain.
         Array<u8> painted(Allocator());
         painted.Resize(static_cast<usize>(size));
         if (stream->Read(painted.Data(), static_cast<u64>(size)) != static_cast<u64>(size))
@@ -175,7 +179,7 @@ namespace editor
             m_preview->ShowNone(u8"Nothing painted yet: the scene view's Paint Vegetation tool paints it, over a terrain whose vegetation uses it.");
             return;
         }
-        // None to full as black to white.
+        // Density from none to full shows as black to white.
         const usize planeBytes = static_cast<usize>(m_width) * static_cast<usize>(m_height);
         image::Image grey(static_cast<u32>(m_width), static_cast<u32>(m_height), image::PixelFormat::RGBA8);
         Span<u8> rgba = grey.PixelDataMut();
@@ -212,7 +216,7 @@ namespace editor
         SetFact(u8"Painted", m_painted ? StringView(u8"Yes") : StringView(u8"Not yet"));
         if (m_painted && m_plane < m_planeCount)
         {
-            // How much of the plane shown lets anything grow.
+            // How much of the shown plane lets anything grow.
             const usize planeBytes = static_cast<usize>(m_width) * static_cast<usize>(m_height);
             const u8* plane = m_densities.Data() + m_plane * planeBytes;
             usize covered = 0;
@@ -228,7 +232,8 @@ namespace editor
 
     void VegetationMaskPage::OnObjectChanged()
     {
-        // A plane count changed (or its undo): the planes as the cook would now read them.
+        // When the plane count changes (or the change is undone), reread the planes as the cook
+        // would now read them.
         const u32 shown = m_plane;
         ReadPlanes();
         m_plane = m_planeCount > 0 ? Min(shown, m_planeCount - 1) : 0u;

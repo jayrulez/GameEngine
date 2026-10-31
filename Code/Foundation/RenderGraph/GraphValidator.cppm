@@ -5,8 +5,7 @@
 //
 // Validates a graph for common authoring errors: reads of never-written
 // resources (error), passes with no execute callback (warning), and redundant
-// writes with no read in between (warning). Ported from Sedulous.RenderGraph
-// (GraphValidator.bf).
+// writes with no read in between (warning).
 
 module;
 #include "Core/Prelude.h"
@@ -78,8 +77,8 @@ export namespace foundation::rendergraph
         }
 
     private:
-        // Reads of resources that no prior pass wrote (transient only - imported
-        // and persistent are considered externally initialized).
+        // Reads of resources that no prior pass wrote (transient only: imported
+        // and persistent resources are considered externally initialized).
         static void CheckUninitializedReads(RenderGraph& graph, Array<ValidationMessage>& out)
         {
             const Array<RenderGraphResource*>& resources = graph.Resources();

@@ -3,11 +3,11 @@
 
 // UI - module implementation unit for UITypeRegistry::RegisterBuiltins.
 //
-// Registers every built-in View/layout/control type name so .sss element selectors (View, ButtonBase,
-// ComboBox, EditText, ComboBox::arrow, ...) resolve to a concrete type. Kept in an impl unit because it
-// references the whole control set (reached via the module's primary interface), which the leaf
-// :ui_type_registry partition cannot import. Faithful port of Sedulous.UI/src/Styling/Parser/
-// UITypeRegistry.bf RegisterBuiltins (a `static class` method); run-once guarded (the map is global).
+// Registers every built-in view, layout and control type name so .sss element selectors (View,
+// ButtonBase, ComboBox, EditText, ComboBox::arrow, ...) resolve to a concrete type. It lives in an
+// implementation unit because it references the whole control set (reached through the module's
+// primary interface), which the leaf :ui_type_registry partition cannot import. It runs once per
+// process, since the map is global.
 
 module;
 #include "Core/Prelude.h"
@@ -31,10 +31,11 @@ namespace foundation::ui
 {
     void UITypeRegistry::RegisterBuiltins()
     {
-        // ONCE and thread-safe (a function-local static's initializer runs exactly once and blocks
-        // concurrent callers): the UI theme cook reaches this through StyleSheetLoader on job
-        // workers, and a plain flag let two builds rehash the type map under each other. One
-        // per process because this is an impl unit (the shared-library rendezvous rule).
+        // Runs once and is thread-safe: a function-local static's initializer runs exactly once and
+        // blocks concurrent callers. The UI theme cook reaches this through StyleSheetLoader on job
+        // workers, and with an unguarded flag two of them could rehash the type map under each
+        // other. Being in an implementation unit, the static is one per process rather than one per
+        // shared library.
         static const bool once = []()
         {
             RegisterBuiltinsBody();
@@ -51,7 +52,7 @@ namespace foundation::ui
         Register(u8"ViewGroup", &ViewGroup::StaticType());
         Register(u8"RootView", &RootView::StaticType());
 
-        // Layouts + aliases.
+        // Layouts and aliases.
         Register(u8"FlexLayout", &FlexLayout::StaticType());
         Register(u8"Flex", &FlexLayout::StaticType());
         Register(u8"GridLayout", &GridLayout::StaticType());

@@ -20,7 +20,7 @@ TEST_CASE("progressbar: a range's value, clamped, its fill the value's share; dr
     CHECK(p->GetValue() == doctest::Approx(1.0));
     p->SetValue(-1.0);
     CHECK(p->GetValue() == doctest::Approx(0.0));
-    p->SetMax(200.0); // files: 50 of 200
+    p->SetMax(200.0); // for example, 50 of 200 files
     p->SetValue(50.0);
     CHECK(p->GetRatio() == doctest::Approx(0.25));
 
@@ -41,7 +41,7 @@ TEST_CASE("progressbar: an indeterminate one sweeps on the GUI's clock")
     p->SetIndeterminate(true);
     foundation::vg::VGContext ctx;
     DrawContext dc{ctx};
-    root->Draw(dc); // shown: the sweep starts
+    root->Draw(dc); // once shown, the sweep starts
     const float start = p->GetSweepPhase();
     root->GetContext().Update(core::Duration::FromSeconds(0.35));
     CHECK(p->GetSweepPhase() > start);

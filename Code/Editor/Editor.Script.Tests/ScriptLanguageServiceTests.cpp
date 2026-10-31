@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The script page's completion and hover over the SHARED ScriptApiSurface (built once through a
-// throwaway backend manager, the runtime's registration sequence): the bound types at the top
-// level, a type's members after `Type.`, a variable's type's members after `name.`, nothing after
-// a name it cannot place; hover saying what a type is, or a paused run's value. Proven on both
-// backends (the surface resolves by language).
+// The script page's completion and hover over the shared ScriptApiSurface, which is built once
+// through a throwaway backend manager running the runtime's registration sequence. Completion
+// offers the bound types at the top level, a type's members after `Type.`, the members of a
+// variable's type after `name.`, and nothing after a name it cannot place. Hover says what a type
+// is, or a paused run's value. Both backends run the same checks, since the surface resolves by
+// language.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -57,21 +58,21 @@ namespace
 
         // Top level: the bound type names (the reflected Core math surface is always registered).
         CHECK(Contains(CompleteAtEnd(service, u8"Flo"), u8"Float3"));
-        // After the type's name, its statics (the binding's functions: `Float3::Dot`, `Float3.Dot`).
+        // After the type's name, its statics: the binding's functions (`Float3::Dot`, `Float3.Dot`).
         const Array<gui::CodeCompletionItem> statics = CompleteAtEnd(service, u8"Float3.");
         CHECK(Contains(statics, u8"Dot"));
         CHECK_FALSE(Contains(statics, u8"x"));
         CHECK_FALSE(Contains(statics, u8"Float3"));
         CHECK(Contains(CompleteAtEnd(service, u8"Float3::"), u8"Dot"));
-        // After a variable's name, the value's own members, of the type it is declared with (read
-        // from the text).
+        // After a variable's name, the members of the type it is declared with (read from the
+        // text).
         const Array<gui::CodeCompletionItem> own = CompleteAtEnd(service, u8"Float3 where; where.");
         CHECK(Contains(own, u8"x"));
         CHECK_FALSE(Contains(own, u8"Dot"));
-        // A name it cannot place: nothing.
+        // A name it cannot place offers nothing.
         CHECK(CompleteAtEnd(service, u8"nonsense.").IsEmpty());
 
-        // Hover: what a type is; while paused, what a name holds.
+        // Hover says what a type is and, while paused, what a name holds.
         gui::CodeDocument doc(DefaultAllocator());
         doc.SetText(u8"Float3");
         String said;
@@ -82,7 +83,7 @@ namespace
         REQUIRE(service.Hover(doc, gui::CodePosition{0, 2}, said));
         CHECK(said == StringView(u8"(1, 2, 3)"));
 
-        // An unknown language: nothing bound.
+        // An unknown language has nothing bound.
         ScriptApiSurface unknown;
         unknown.SetLanguage(u8"cobol");
         ScriptLanguageService none(unknown, nullptr);

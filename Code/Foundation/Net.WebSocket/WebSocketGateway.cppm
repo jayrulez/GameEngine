@@ -3,25 +3,24 @@
 
 /// Foundation::Net.WebSocket - the `foundation.net.websocket` module.
 ///
-/// The native WebSocket ACCEPT path: lets a desktop host accept BROWSER clients (browsers
-/// cannot open raw UDP - their only game-usable socket is a TCP-based WebSocket). A WS
-/// connection begins as an HTTP request, so the handshake parses through foundation.http
-/// (the recorded front-door design); after the 101 upgrade the connection speaks RFC 6455
-/// binary frames, which are message-oriented and map 1:1 onto the datagram seam the whole
-/// net stack rides (`IDatagramSocket`).
+/// The native WebSocket accept path: lets a desktop host accept browser clients (browsers
+/// cannot open raw UDP; their only socket a game can use is a TCP-based WebSocket). A
+/// WebSocket connection begins as an HTTP request, so the handshake parses through
+/// foundation.http; after the 101 upgrade the connection speaks RFC 6455 binary frames, which
+/// are message-oriented and map one to one onto the datagram interface the network stack runs
+/// on (`IDatagramSocket`).
 ///
-/// `WebSocketHybridSocket` is the drop-in: ONE IDatagramSocket wrapping the host's UDP
-/// socket AND a WS gateway - native peers arrive over UDP, browser peers over WS, and the
-/// session/reliability/replication layers cannot tell the difference. WS endpoints are
-/// synthetic (bit 63 set + client id; real UDP endpoints use only the low 48 bits).
+/// `WebSocketHybridSocket` is the drop-in: one IDatagramSocket wrapping the host's UDP socket
+/// and a WebSocket gateway. Native peers arrive over UDP, browser peers over WebSocket, and the
+/// session, reliability and replication layers cannot tell the difference. WebSocket endpoints
+/// are synthetic (bit 63 set, plus the client id; real UDP endpoints use only the low 48 bits).
 ///
-/// TLS (wss://) is the gateway's when the host hands it a backend and a certificate
+/// The gateway speaks TLS (wss://) when the host hands it a backend and a certificate
 /// (`WebSocketTls`): each connection then runs a TLS session before the upgrade, through
-/// foundation.net.tls's streams. Deliberate v1 bounds: no fragmented frames (FIN=0 is a protocol error; game packets are far below
-/// any fragmentation threshold), text frames rejected (the wire is binary), 1 MiB frame
-/// cap. The reliability layer runs UNCHANGED over WS: TCP already guarantees delivery, so
-/// resends simply never fire (acks flow; redundant but correct - the keep-v1-simple
-/// ruling).
+/// foundation.net.tls's streams. Limits: no fragmented frames (FIN=0 is a protocol error; game
+/// packets are far below any fragmentation threshold), text frames rejected (the wire is
+/// binary), and a 1 MiB frame cap. The reliability layer runs unchanged over WebSocket: TCP
+/// already guarantees delivery, so resends never fire; the acks are redundant but harmless.
 ///
 /// The module holds both halves: the native accept path, the client socket
 /// (`WebSocketClientSocket`: the browser's WebSocket in a web build, this module's own client
@@ -35,7 +34,7 @@ export module foundation.net.websocket;
 
 import foundation.core;
 import foundation.net;  // TcpListener/TcpSocket, IDatagramSocket, UdpSocket, endpoints
-import foundation.http; // HttpMessageParser - the upgrade request IS an HTTP request
+import foundation.http; // HttpMessageParser: the upgrade request is an HTTP request
 import foundation.net.tls; // the streams each connection rides, plain or TLS
 
 using namespace foundation::core;
@@ -44,11 +43,11 @@ export namespace foundation::net
 {
     // ==================================================================================
     // Handshake math (RFC 6455 4.2.2): Accept = Base64(SHA1(key + magic GUID)).
-    // Hand-rolled - tiny, RFC-fixed, and the no-new-third-party rule applies.
+    // Written here rather than taken from a library: it is small and fixed by the RFC.
     // ==================================================================================
 
-    /// SHA-1 of `data` into out20 (20 bytes). Handshake-sized inputs only - not a general
-    /// hashing service (and SHA-1 is fine here: the accept key is an echo, not security).
+    /// SHA-1 of `data` into out20 (20 bytes). For handshake-sized inputs, not a general hashing
+    /// service (SHA-1 is fine here: the accept key is an echo, not security).
     void Sha1(Span<const byte> data, byte* out20);
 
     [[nodiscard]] String Base64Encode(Span<const byte> data);
@@ -72,8 +71,9 @@ export namespace foundation::net
 
     inline constexpr usize kWsMaxFrameBytes = 1024 * 1024; // parser cap (protocol error above)
 
-    /// Append one FIN frame to `out`. `mask` = client->server direction (RFC: client frames
-    /// MUST be masked, server frames MUST NOT); the tests build client frames with it.
+    /// Append one FIN frame to `out`. `mask` selects the client-to-server direction (the RFC
+    /// requires client frames to be masked and server frames not to be); the tests build client
+    /// frames with it.
     void EncodeWebSocketFrame(WsOpcode opcode, Span<const byte> payload, bool mask,
                               u32 maskingKey, Array<byte>& out);
 
@@ -85,8 +85,8 @@ export namespace foundation::net
 
     /// Incremental frame decoder for one side of a connection. Push bytes as they arrive;
     /// drain complete frames via Next(). Enforces: the server reads masked frames (a client's)
-    /// and the client unmasked ones (a server's), FIN only (no fragmentation), size cap.
-    /// Failed() latches - close the connection.
+    /// and the client unmasked ones (a server's), FIN only (no fragmentation), and the size cap.
+    /// Failed() latches; close the connection then.
     class WebSocketFrameParser
     {
     public:
@@ -108,10 +108,10 @@ export namespace foundation::net
     };
 
     // ==================================================================================
-    // Handshake validation + responses
+    // Handshake validation and responses
     // ==================================================================================
 
-    /// True when the COMPLETE parsed request is a valid RFC 6455 upgrade (GET, Upgrade:
+    /// True when the complete parsed request is a valid RFC 6455 upgrade (GET, Upgrade:
     /// websocket, Connection contains the Upgrade token, version 13, a key present); fills
     /// `outKey` with the client's Sec-WebSocket-Key.
     [[nodiscard]] bool ValidateWebSocketUpgrade(const http::HttpMessageParser& request,
@@ -129,7 +129,7 @@ export namespace foundation::net
     enum class WsGatewayEventKind : u8
     {
         Connected,    // a client completed the upgrade
-        Disconnected, // a client closed / errored
+        Disconnected, // a client closed or failed
         Message,      // one binary frame arrived
     };
 
@@ -148,7 +148,7 @@ export namespace foundation::net
         TlsServerConfig config;
     };
 
-    /// The pump-model WS server: Pump() accepts pending TCP connections, progresses their
+    /// The pumped WebSocket server: Pump() accepts pending TCP connections, progresses their
     /// HTTP upgrade handshakes, decodes frames (answering pings), and queues events; drain
     /// with Poll(). Single-threaded, like HttpServer.
     class WebSocketServerGateway
@@ -157,8 +157,8 @@ export namespace foundation::net
         /// Bind the listener (port 0 = OS-assigned; read BoundPort()). Check IsOpen().
         /// With `tls`, every connection is TLS first (wss://); a certificate or key that does
         /// not load leaves the gateway closed, Failure() saying why.
-        // The allocator (required - the owner decides) backs the impl + per-client
-        // handshake parsers.
+        // The allocator (required; the owner chooses it) backs the implementation and the
+        // per-client handshake parsers.
         WebSocketServerGateway(IAllocator& allocator, u16 port, const WebSocketTls* tls = nullptr);
         ~WebSocketServerGateway();
         WebSocketServerGateway(const WebSocketServerGateway&) = delete;
@@ -173,7 +173,7 @@ export namespace foundation::net
         void Pump();
         [[nodiscard]] bool Poll(WsGatewayEvent& out);
 
-        /// Send one binary frame to an upgraded client (unknown/closed ids no-op).
+        /// Send one binary frame to an upgraded client (unknown or closed ids do nothing).
         void SendBinary(u32 client, Span<const byte> data);
         void DisconnectClient(u32 client);
 
@@ -185,10 +185,10 @@ export namespace foundation::net
     };
 
     // ==================================================================================
-    // The hybrid datagram socket: UDP natives + WS browsers behind ONE IDatagramSocket.
+    // The hybrid datagram socket: UDP natives and WebSocket browsers behind one IDatagramSocket.
     // ==================================================================================
 
-    /// WS client endpoints: bit 63 + the gateway client id (UDP endpoints pack
+    /// WebSocket client endpoints: bit 63 and the gateway client id (UDP endpoints pack
     /// (ip << 16) | port and never touch the high bits).
     inline constexpr u64 kWebSocketEndpointBit = 1ull << 63;
 
@@ -232,7 +232,7 @@ export namespace foundation::net
     /// binary frame = one datagram; the single remote is kWebSocketServerEndpoint). In a
     /// browser it is the browser's WebSocket; natively it is this module's own client over a
     /// plain or TLS stream, so a desktop or Deck client can join a host that only speaks
-    /// wss. The handshake is ASYNC either way - sends queue until the upgrade, so the
+    /// wss. The handshake is asynchronous either way: sends queue until the upgrade, so the
     /// session's immediate connect packet survives the open latency. Natively the name
     /// lookup in the constructor blocks, as a UDP join's does.
     class WebSocketClientSocket final : public IDatagramSocket
@@ -264,7 +264,7 @@ export namespace foundation::net
     class WebSocketHybridSocket final : public IDatagramSocket
     {
     public:
-        /// Bind the UDP socket on `udpPort` and the WS listener on `webSocketPort`
+        /// Bind the UDP socket on `udpPort` and the WebSocket listener on `webSocketPort`
         /// (either may be 0 = OS-assigned). Check IsOpen().
         WebSocketHybridSocket(IAllocator& allocator, u16 udpPort, u16 webSocketPort, const WebSocketTls* tls = nullptr)
             : m_udp(udpPort), m_gateway(allocator, webSocketPort, tls)
@@ -296,8 +296,8 @@ export namespace foundation::net
             {
                 return true;
             }
-            // The session drains Receive to exhaustion every frame - pumping here keeps the
-            // gateway serviced without a separate update hook on the datagram seam.
+            // The session drains Receive to exhaustion every frame, so pumping here keeps the
+            // gateway serviced without a separate update hook on the datagram interface.
             m_gateway.Pump();
             WsGatewayEvent event;
             while (m_gateway.Poll(event))

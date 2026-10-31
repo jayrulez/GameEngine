@@ -3,11 +3,11 @@
 
 // GUI - :check_box partition
 //
-// CheckBox: the button core (E6 of Specs/gui-lab-evolution.md) as a toggle with a box for its
-// indicator, its text beside it. It is tri-state: checked, unchecked, or indeterminate (a parent
-// of mixed children, CSS's :indeterminate), drawn as a dash until it is set or clicked; a click
-// on an indeterminate box checks it. Its parts: checkbox::box (the outline) and ::mark (the
-// dash, or the tick's colour).
+// CheckBox: the button core as a toggle, with a box as its indicator and its text beside it. It is
+// tri-state: checked, unchecked, or indeterminate (a parent of mixed children, CSS's
+// :indeterminate). The indeterminate state is drawn as a dash until the box is set or clicked, and
+// a click on an indeterminate box checks it. Its parts are checkbox::box (the outline) and ::mark
+// (the dash, or the tick's colour).
 
 module;
 #include "Core/Prelude.h"
@@ -44,7 +44,7 @@ export namespace foundation::gui
         }
 
         void Toggle() { SetChecked(!IsChecked()); }
-        /// Neither checked nor unchecked, until it is set or clicked.
+        /// Sets the indeterminate state, neither checked nor unchecked, until it is set or clicked.
         void SetIndeterminate(bool indeterminate) { SetIndeterminateState(indeterminate); }
         [[nodiscard]] bool IsIndeterminate() const noexcept { return IsIndeterminateState(); }
 
@@ -59,7 +59,7 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        // Theming parts: checkbox::box (outline) / ::mark (inner fill).
+        // Theming parts: checkbox::box (the outline) and ::mark (the inner fill).
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"box"));
@@ -79,7 +79,7 @@ export namespace foundation::gui
             else if (IsChecked())
             {
                 // A tick, not a filled square, so checked never reads as the mixed state's bar.
-                // Its colour is checkbox::mark's background, a sheet's or its own.
+                // Its colour is checkbox::mark's background, from a sheet or the box's own default.
                 const PartStyle& mark = GetPartStyle(u8"mark");
                 Color color = mark.HasBackground ? mark.Box.BackgroundColor : m_checkColor;
                 color.a *= mark.Opacity;

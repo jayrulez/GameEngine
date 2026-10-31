@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - commands (G7 of Specs/vg-and-gui-lab.md): one model controls bind to by id; running walks
-// the focus path (capture down, bubble up, a bubble handler stopping it unless it propagates); a
-// command is available when enabled with a handler on the focus path, and its state reaches a
-// button, a checkbox and a menu item with no bookkeeping; a handler may end the nodes on its path.
+// GUI - commands: one model that controls bind to by id. Running a command walks the focus path,
+// capturing down and bubbling up, and a bubble handler stops it unless it propagates. A command is
+// available when it is enabled and a handler is on the focus path, and its state reaches a button,
+// a checkbox and a menu item with no bookkeeping. A handler may destroy the nodes on its path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -54,7 +54,7 @@ TEST_CASE("command: running walks the focus path, capture down then bubble up")
     CHECK(root->RunCommand(SV(u8"open")));
     CHECK(reachedRoot);
 
-    // Disabled, it does not run; unhandled, it reports so.
+    // A disabled command does not run, and an unhandled one reports that it was not handled.
     root->GetContext().DefineCommand(SV(u8"save")).SetEnabled(false);
     order.Clear();
     CHECK_FALSE(root->RunCommand(SV(u8"save")));
@@ -71,7 +71,8 @@ TEST_CASE("command: a handler that ends the nodes on its path (the last hold on 
     root->AddChild(panel.Get());
     panel->AddChild(field.Get());
     root->GetEventDispatcher()->SetFocusNode(field.Get());
-    // The panel's handler takes it out of the tree and lets go of it: the walk still has it.
+    // The panel's handler removes the panel from the tree and drops the last reference to it.
+    // The walk still holds it and goes on to the root.
     bool reachedRoot = false;
     (void)panel->OnCommand(SV(u8"close"), [&](CommandEvent& e)
     {
@@ -157,7 +158,7 @@ TEST_CASE("command: markup binds a control to a command by id, before it is atta
     auto* play = core::Cast<Button>(tree.Get());
     REQUIRE(play != nullptr);
     CHECK(play->GetCommand() == SV(u8"play"));
-    root->AddChild(tree.Get()); // joining the GUI reaches its binding
+    root->AddChild(tree.Get()); // once the tree joins the GUI, the binding reaches it
     Frame(*root.Get());
     CHECK_FALSE(play->IsEnabled());
     root->GetContext().DefineCommand(SV(u8"play")).SetEnabled(true);
@@ -185,7 +186,7 @@ TEST_CASE("command: a capture handler that stops it takes it: nothing below runs
 
 namespace
 {
-    // A control that keeps the state its command's binding last told it.
+    // A control that records the state its command's binding last reported.
     class StateProbe : public UIWidget
     {
     public:
@@ -211,18 +212,18 @@ TEST_CASE("command: a bound control hears why its command is disabled, and only 
     probe->SetCommand(SV(u8"save"));
     Frame(*root.Get());
     CHECK(probe->Available);
-    CHECK(probe->Reason.Size() == 0u); // enabled: the reason is not said
+    CHECK(probe->Reason.Size() == 0u); // enabled, so no reason is given
 
     save.SetEnabled(false);
     Frame(*root.Get());
     CHECK_FALSE(probe->Available);
     CHECK(probe->Reason == core::String(u8"Nothing to save"));
 
-    save.SetDisabledReason(SV(u8"Read only")); // followed as it changes
+    save.SetDisabledReason(SV(u8"Read only")); // the control follows the reason as it changes
     Frame(*root.Get());
     CHECK(probe->Reason == core::String(u8"Read only"));
 
-    // Unavailable for want of a handler where the focus is: no reason.
+    // Unavailable because no handler is on the focus path: no reason is given.
     save.SetEnabled(true);
     probe->SetCommand(SV(u8"unhandled"));
     Frame(*root.Get());

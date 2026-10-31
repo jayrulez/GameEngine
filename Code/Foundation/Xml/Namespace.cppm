@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Xml - :namespace partition
+// Foundation::Xml - :ns partition
 //
-// Well-known XML namespace constants + namespace-declaration helpers. Ported
-// from Sedulous.Xml/XmlNamespace.bf.
+// Well-known XML namespace constants and namespace-declaration helpers.
 
 module;
 #include "Core/Prelude.h"

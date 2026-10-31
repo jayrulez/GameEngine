@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Importing files over a scratch project and importers of the test's own: a file no importer takes
-// left out, said; each file described with what it would create, a previous import's choices laid
-// over it; another importer chosen describing it again; the import waiting for a file kept, saying
-// why; the commit creating what is kept under the names chosen; and a file that needs no review.
-// A name another asset holds: one of another type waits for a rename, another file's of its type
-// for Replace or Keep both.
+// Importing files into a scratch project with importers the test defines. A file no importer
+// takes is left out and reported. Each file is described with what it would create, with a
+// previous import's choices laid over it, and choosing another importer describes it again. The
+// import waits, saying why, until some file is kept; the commit creates what is kept under the
+// chosen names; and some files need no review. When another asset already holds the name, an asset
+// of another type waits for a rename, and one of the same type from another file waits for
+// Replace or Keep both.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -87,7 +88,7 @@ namespace
         }
     };
 
-    // A single-asset importer of `extension` making a `typeName` asset (the clash check's input).
+    // A single-asset importer of `extension` making a `typeName` asset (input for the name clash checks).
     class SingleImporter final : public pipeline::IFileImporter
     {
     public:
@@ -134,7 +135,7 @@ namespace
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"thing", u8"ImportedThing"), DefaultAllocator()));
             top = project->SourceDb().RootGroup();
             AssetImport::Services services;
-            services.context = &context; // no cook, no jobs: at once
+            services.context = &context; // no cook and no jobs, so imports run at once
             import = MakeUnique<AssetImport>(DefaultAllocator(), Move(services));
         }
         ~Bed()
@@ -173,7 +174,7 @@ TEST_CASE("asset import: a file nothing takes is left out; each file described; 
     CHECK(bed.top->GetInstance(u8"Kept") != nullptr);
     CHECK(bed.top->GetInstance(u8"Paint") == nullptr);
 
-    // Again into the same group: the previous choice laid over the plan.
+    // Imported again into the same group: the previous choice is laid over the plan.
     RefPtr<AssetImport::Session> again = bed.import->Begin(Span<const String>(paths, 1u), *bed.top);
     REQUIRE(again);
     CHECK(again->files[0].plan.entries[0].targetName == String(u8"Hull"));
@@ -212,7 +213,8 @@ TEST_CASE("asset import: a name another asset holds waits: another type for a re
     REQUIRE(bed.top->CreateInstance(u8"menu", ImportedThing::StaticType()) != nullptr);
     String why;
 
-    // A "SheetThing" named menu over an ImportedThing: said, no import, and no import at once either.
+    // A SheetThing named menu where an ImportedThing holds that name: the clash is reported, and the
+    // file can neither be imported nor skip review.
     const String sheet[] = {String(u8"/somewhere/menu.sheet")};
     RefPtr<AssetImport::Session> other = bed.import->Begin(Span<const String>(sheet, 1u), *bed.top);
     REQUIRE(other);

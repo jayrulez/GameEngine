@@ -3,8 +3,8 @@
 
 // UI - :separator partition
 //
-// Horizontal or vertical divider line. Ported from Sedulous.UI/src/Controls/Separator.bf.
-// (The `Orientation` property shadows the enum type, so enum values are fully qualified.)
+// Horizontal or vertical divider line. The `Orientation` property shadows the enum type, so enum
+// values are fully qualified.
 
 module;
 #include "Core/Prelude.h"
@@ -45,8 +45,8 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Fill the axis when the parent bounded it; a sane default length otherwise
-            // (raw Max grabs measured kFloatMax under unbounded parents - P2c).
+            // Fill the axis when the parent bounded it, and use a sane default length otherwise
+            // (a plain Max would take kFloatMax under an unbounded parent).
             if (Orientation.Value() == ::foundation::ui::Orientation::Horizontal)
                 MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(100.0f)),
                                       constraints.ConstrainHeight(SeparatorThickness.Value())};

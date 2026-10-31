@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/EditTextTests.bf - the font-independent subset (cursor/selection/
-// insert/delete/undo/redo logic, all of which run through TextEditingBehavior on CHARACTER indices and
-// need no glyph shaping). Beef `[Friend]mBehavior` -> the public Behavior() accessor; `edit.Filter =`
-// -> SetFilter(); Beef property setters -> Set*/.SetValue(). The pixel/caret-position cases (which need
-// the not-yet-wired Fonts service) are not ported. Undo/Redo coverage is included here (Sedulous had
-// none - it exercised undo only interactively).
+// EditText tests that need no font: cursor, selection, insert, delete, undo and redo, all of which
+// run through TextEditingBehavior on character indices without glyph shaping. Cases that need
+// pixel or caret positions would need a font service and are not covered here.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -213,7 +210,7 @@ TEST_CASE("edit-text: DeleteForward")
     CHECK(edit->Text() == u8"ello");
 }
 
-// Undo/Redo (not in the upstream test file; consecutive inserts coalesce into one undo entry).
+// Undo and redo (consecutive inserts coalesce into one undo entry).
 TEST_CASE("edit-text: UndoRedo")
 {
     UIContext ctx{DefaultAllocator()};
@@ -237,7 +234,7 @@ TEST_CASE("edit-text: UndoRedo")
     CHECK(edit->Text() == u8"abc");
 }
 
-// OnEditingFinished fires on focus loss (the blur-commit hook); OnSubmit stays Enter/activate-only.
+// OnEditingFinished fires on focus loss (the blur-commit hook); OnSubmit fires only on Enter or activation.
 TEST_CASE("edit-text: OnEditingFinished_FiresOnceOnBlur_NoSubmit")
 {
     UIContext ctx{DefaultAllocator()};
@@ -257,12 +254,12 @@ TEST_CASE("edit-text: OnEditingFinished_FiresOnceOnBlur_NoSubmit")
 
     ctx.GetFocusManager()->SetFocus(edit.Get());
     edit->Behavior().HandleTextInput(U'x'); // an edit-in-progress to finish
-    CHECK(finished == 0);                   // gaining focus / typing is not an edit end
+    CHECK(finished == 0);                   // gaining focus or typing does not end an edit
 
     ctx.GetFocusManager()->SetFocus(other.Get()); // blur
 
     CHECK(finished == 1);  // exactly once
-    CHECK(submitted == 0); // blur does NOT submit
+    CHECK(submitted == 0); // blur does not submit
 }
 
 // OnCommit: Enter fires it; blur fires it only when the text changed since focus gain.
@@ -291,7 +288,7 @@ TEST_CASE("edit-text: OnCommit_FiresOnEnterAndChangedBlur_NotUntouchedBlur")
     ctx.GetFocusManager()->SetFocus(other.Get());
     CHECK(committed == 1);
 
-    // Enter commits; the following blur (no further change) must not re-commit.
+    // Enter commits; the following blur (with no further change) does not commit again.
     ctx.GetFocusManager()->SetFocus(edit.Get());
     edit->Behavior().HandleTextInput(U'y');
     edit->OnActivate();

@@ -1,39 +1,40 @@
-// Snowline - the game's orchestrator (the reserved class Game): the title and its courses, and in
-// a run the clock, the gates and their penalties, the gems, the tricks, the HUD, and the results.
+// Snowline: the game's orchestrator (the reserved class Game). It runs the title and its courses,
+// and during a run the clock, the gates and their penalties, the gems, the tricks, the HUD and the
+// results.
 //
-// The title lists the courses with the best medal and time won on each (from the save); a course
-// opens with a bronze on the one before it. Picking one loads its scene afresh. Pause (Escape or
-// Start) in a run holds it still under the pause menu: Resume (or Pause, or Grab, B on a pad) rides
-// on, Restart run starts it over, Courses goes back to the title. On the results, Pause goes back
-// to the title.
+// The title lists the courses with the best medal and time won on each, read from the save. A
+// course opens once the one before it has a bronze. Picking one loads its scene afresh. Pause
+// (Escape or Start) freezes a run under the pause menu: Resume (or Pause, or Grab, which is B on a
+// pad) rides on, Restart run starts it over, and Courses goes back to the title. On the results,
+// Pause goes back to the title.
 //
-// The gates announce themselves ("GateRegistered") and report each crossing ("GatePassed",
-// "GateMissed": round the outside costs kMissPenalty seconds); the finish line holds the course's
-// medal times ("MedalGold", "MedalSilver", "MedalBronze", in hundredths) and ends the run
-// ("RunFinished"). The clock starts when the rider does ("RunStarted", from Board.as), with the
-// medal ghosts, not while the scene is still coming in. The gems announce themselves too ("GemRegistered") and report being taken
-// ("GemCollected"), each with how many it counts for. The board announces each trick as it lands
-// ("TrickAir", "TrickSpin", "TrickGrab", then "TrickLanded"): a clean one scores its air, its half
-// turns and its grab, times the combo, which a clean landing or a near miss past a tree
-// ("NearMiss") raises and a crash ("RiderCrashed") or a missed gate ends. Clearing a crevasse
-// ("GapCleared", from Gap.as) scores too and raises the combo. On a course with an avalanche, the
-// HUD shows how far behind it is from the moment it breaks loose ("AvalancheReleased",
-// "AvalancheGap"); catching the rider ("AvalancheCaught") is a crash, and it is spent.
+// The gates announce themselves ("GateRegistered") and report each crossing ("GatePassed", or
+// "GateMissed" for going round the outside, which costs kMissPenalty seconds). The finish line
+// holds the course's medal times ("MedalGold", "MedalSilver", "MedalBronze", in hundredths) and
+// ends the run ("RunFinished"). The clock starts when the rider does ("RunStarted", from Board.as),
+// together with the medal ghosts, not while the scene is still loading. The gems also announce
+// themselves ("GemRegistered") and report being taken ("GemCollected"), each with how many it
+// counts for. The board announces each trick as it lands ("TrickAir", "TrickSpin", "TrickGrab",
+// then "TrickLanded"). A clean trick scores its air, its half turns and its grab, multiplied by
+// the combo; a clean landing or a near miss past a tree ("NearMiss") raises the combo, and a crash
+// ("RiderCrashed") or a missed gate ends it. Clearing a crevasse ("GapCleared", from Gap.as) also
+// scores and raises the combo. On a course with an avalanche, the HUD shows how far behind it is
+// from the moment it breaks loose ("AvalancheReleased", "AvalancheGap"); when it catches the rider
+// ("AvalancheCaught") that is a crash, and the avalanche is spent.
 //
 // The results tally the run a row at a time (the ride, the gates, the gems, the tricks, the time
-// bonus), then
-// land the final time with the medal it earned, the score and the course's best. The best time and
-// the best medal are kept in the save ("best.<scene>", "medal.<scene>"), and a run that beats the
-// best is announced ("NewBest", in hundredths) so PlayerGhost.as keeps it as the course's ghost. Jump
-// skips to the end, then starts the next run ("RunRestart" puts the rider back at the top, the
-// gates back to waiting and the gems back in place).
+// bonus), then show the final time with the medal it earned, the score and the course's best. The
+// best time and best medal are kept in the save ("best.<scene>", "medal.<scene>"), and a run that
+// beats the best is announced ("NewBest", in hundredths) so PlayerGhost.as keeps it as the course's
+// ghost. Jump skips to the end of the tally, then starts the next run ("RunRestart" puts the rider
+// back at the top, the gates back to waiting and the gems back in place).
 //
-// A run that wins a better medal on the last course (Ridge) than it had is followed by the ending:
-// the best medal and time on every course, their total and the medals won. Jump from it goes back
-// to the title.
+// A run that wins a better medal than before on the last course (Ridge) is followed by the ending:
+// the best medal and time on every course, their total and the medals won. Jump from there goes
+// back to the title.
 
-// The screens, on the engine GUI's screen stack: their documents by asset id (importscripts.py fills
-// these in).
+// The screens, shown on the engine GUI's screen stack, by the asset ids of their documents
+// (importscripts.py fills these in).
 const string kHudDoc = "{0f992d08-9ccb-4289-a1ca-7dea8d1e106e}";
 const string kFinishDoc = "{fcf23249-e50a-4394-af4c-2bc21ab39962}";
 const string kTitleDoc = "{8c593c33-05cf-465d-8184-a24dfbdb22a0}";
@@ -44,17 +45,17 @@ const string kPauseDoc = "{2c7a1bce-3e6e-4df7-b88b-bdfaade24b91}";
 funcdef bool EventHandler(GuiEvent e);
 
 ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
-// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
-// with the same ids, and would be found first.
+// Searches the top screen first. A screen just cleared or popped stays in the tree while its exit
+// animation plays, with the same ids, and would otherwise be found first.
 Node@ find(string id)
 {
     Screen@ top = screens().top();
     Node@ n = top !is null ? top.find(id) : null;
     return n !is null ? n : gui::root().find(id);
 }
-void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // `on*` names are the engine's handlers
-// These skip a node the screens up now do not have: a course's gates and gems announce themselves
-// behind the title, before the HUD is up.
+void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // handlers are named on*, like the engine's event handlers
+// These skip a node the current screens do not have: a course's gates and gems announce
+// themselves behind the title, before the HUD is up.
 void setText(string id, string text)
 {
     Node@ n = find(id);
@@ -63,7 +64,7 @@ void setText(string id, string text)
         Label::of(n).text = text;
     }
 }
-// Shown at once, or hidden (a sheet's opacity 0 keeps its place in the layout).
+// Shows or hides a node at once (opacity 0 from a style sheet keeps its place in the layout).
 void show(string id, bool shown)
 {
     Node@ n = find(id);
@@ -72,7 +73,7 @@ void show(string id, bool shown)
         n.tween("opacity", shown ? "1" : "0", 0.0f, "linear");
     }
 }
-// In the layout, or out of it.
+// Puts a node in the layout, or takes it out.
 void display(string id, bool shown)
 {
     Node@ n = find(id);
@@ -81,7 +82,7 @@ void display(string id, bool shown)
         n.visible = shown;
     }
 }
-// The medal's disc: its colour by class, rank 0 (none) to 3 (gold).
+// Colours the medal's disc by class, from rank 0 (none) to 3 (gold).
 void setMedal(string id, int rank)
 {
     UIWidget@ disc = UIWidget::of(find(id));
@@ -98,7 +99,7 @@ void setMedal(string id, int rank)
     }
 }
 
-// The courses, in order: each unlocked by a bronze on the one before it.
+// The courses, in order; each is unlocked by a bronze on the one before it.
 const int kCourseCount = 3;
 Guid kMeadow = Guid("c3ba9d83-5633-451c-a028-6beca57428fa"); // Scenes/Meadow
 Guid kForest = Guid("a6e8728b-4a6d-400b-a765-cec67a8fa222"); // Scenes/Forest
@@ -109,8 +110,8 @@ string courseName(int i) { return i == 2 ? "Ridge" : (i == 1 ? "Forest" : "Meado
 
 // Audio/GemChime (sounds.py): the tally's tick, pitched up row by row.
 Guid kChime = Guid("c47f1131-6df4-49ea-b2c7-6e3b3316a3ce");
-// The rest of the game's sounds (sounds.py; CREDITS.md): the music on the title and in a run, a gate
-// passed and missed, the menus' click and back, and the stings for a medal won or not.
+// The rest of the game's sounds (sounds.py; see CREDITS.md): the music on the title and in a run, a
+// gate passed and missed, the menus' click and back, and the stings for winning a medal or not.
 Guid kMusicTitle = Guid("6b0a7709-5169-4a0e-8077-c78b87a132e6"); // Audio/MusicTitle
 Guid kMusicRun = Guid("0758e8d2-c6cd-47a7-bce6-9728a9501018");   // Audio/MusicRun
 Guid kGatePass = Guid("62695db5-901a-4848-b930-48c4de71333e");   // Audio/GatePass
@@ -122,7 +123,7 @@ Guid kNoMedalSting = Guid("c3718ef9-fc5d-4d57-be4f-20c8251a5c13"); // Audio/NoMe
 const float kMusicVolume = 0.55f;
 
 const float kMissPenalty = 2.0f;
-const int kGemPoints = 100;       // a gem's worth
+const int kGemPoints = 100;       // points for a gem
 const int kBonusPerSecond = 100;  // each second under the bronze time
 const int kTallySteps = 7;        // the five rows, then the final time and medal, then the score
 const int kAirPoints = 200;       // a second in the air
@@ -132,37 +133,37 @@ const int kComboMost = 5;         // the highest combo multiplier
 const int kNearMissPoints = 100;  // a trunk passed close, fast
 const int kGapPoints = 500;       // a crevasse cleared
 const float kTrickShown = 1.6f;   // how long a landed trick shows (s)
-const float kTallyFirst = 0.5f;   // the first row's moment after the finish (s)
+const float kTallyFirst = 0.5f;   // when the first row shows after the finish (s)
 const float kTallyGap = 0.45f;    // between the rows (s)
 const float kControlsShown = 6.0f; // how long the controls show as a course starts (s)
 
 class Game
 {
-    private bool m_onTitle = false; // the title is up: nothing runs behind it
+    private bool m_onTitle = false; // the title is up, and nothing runs behind it
     private bool m_onEnding = false; // the ending is up
     private bool m_endingDue = false; // this run won a better medal on the last course
     private bool m_paused = false;    // the pause menu is up over the run
     private Guid m_music;             // the track playing (nil for none)
     private bool m_running = true;
-    private bool m_started = false; // the rider's first frame has come (the clock runs from it)
+    private bool m_started = false; // the rider's first frame has come; the clock runs from it
     private float m_time = 0.0f;    // seconds on the clock this run
     private float m_penalty = 0.0f; // seconds added for missed gates
-    private int m_gates = 0;        // how many the course has
+    private int m_gates = 0;        // how many gates the course has
     private int m_passed = 0;
     private int m_missed = 0;
-    private float m_flash = 0.0f;   // how long the "+2 s" shows yet
-    private int m_gems = 0;         // how many the course has
+    private float m_flash = 0.0f;   // how much longer the "+2 s" shows
+    private int m_gems = 0;         // how many gems the course has
     private int m_taken = 0;
 
-    // Tricks: the one landing now (its parts as the board reports them), the combo, the points.
+    // Tricks: the one landing now (its parts as the board reports them), the combo and the points.
     private float m_trickAir = 0.0f;
     private int m_trickSpin = 0;
     private float m_trickGrab = 0.0f;
     private int m_combo = 1;
     private int m_tricks = 0;        // trick points this run
-    private float m_trickShow = 0.0f; // how long the landed trick shows yet
-    private float m_controlsShow = 0.0f; // how long the controls panel shows yet
-    private bool m_caught = false;    // the avalanche has just caught the rider (its crash follows)
+    private float m_trickShow = 0.0f; // how much longer the landed trick shows
+    private float m_controlsShow = 0.0f; // how much longer the controls panel shows
+    private bool m_caught = false;    // the avalanche has just caught the rider (the crash follows)
 
     // The course's medal times (s, penalties included), from the finish line.
     private float m_gold = 0.0f;
@@ -180,7 +181,7 @@ class Game
         showTitle();
     }
 
-    // ---- the title: a course to ride, each with the best won on it, or what unlocks it ----
+    // ---- the title: the courses, each with the best result on it or what unlocks it ----
     private void showTitle()
     {
         m_onTitle = true;
@@ -200,7 +201,7 @@ class Game
         }
     }
 
-    // ---- the pause menu: the run holds still under it ----
+    // ---- the pause menu, which freezes the run under it ----
     private void pause()
     {
         m_paused = true;
@@ -276,8 +277,8 @@ class Game
         return medalTitle(Save::getInt("medal." + courseName(i), 0)) + "   best " + clock(best);
     }
 
-    // A course from its top: everything the last run counted starts over, and the scene loads afresh
-    // (its gates, gems and finish announce themselves again).
+    // Starts a course from the top: everything the last run counted is reset, and the scene loads
+    // afresh (its gates, gems and finish announce themselves again).
     private void startCourse(int i)
     {
         if (!unlocked(i))
@@ -296,8 +297,9 @@ class Game
         screens().clear();
         screens().push(kHudDoc);
         resetRun();
-        // The controls, keyboard and pad, along the bottom for the first seconds of the course
-        // (and always in the pause menu): faded in from the sheet's 0.
+        // Show the keyboard and pad controls along the bottom for the first seconds of the course
+        // (the pause menu always lists them), fading in from the opacity 0 the style sheet gives
+        // them.
         find("hud-controls").tween("opacity", "1", 0.3f, "ease");
         m_controlsShow = kControlsShown;
         run::setTimeScale(1.0f);
@@ -321,7 +323,7 @@ class Game
         }
         if (m_paused)
         {
-            // Back out of the menu the way it came in, or with B (the Grab button) on a pad.
+            // Leave the menu the way it was opened, or with B (the Grab button) on a pad.
             if (Input::wasPressed("Pause") || Input::wasPressed("Grab"))
             {
                 resume();
@@ -417,7 +419,7 @@ class Game
     void onTrickSpin(int degrees) { m_trickSpin = degrees; }
     void onTrickGrab(int centiseconds) { m_trickGrab = float(centiseconds) / 100.0f; }
 
-    // A trick landed: clean, it scores and the combo grows; crashed, the combo is gone.
+    // A trick landed. A clean landing scores and grows the combo; a crash loses the combo.
     void onTrickLanded(int clean)
     {
         if (!m_running)
@@ -436,7 +438,7 @@ class Game
         raiseCombo();
     }
 
-    // A trunk passed close and fast: points, and the combo grows, as a clean landing's does.
+    // A trunk passed close and fast scores points and grows the combo, as a clean landing does.
     void onNearMiss(int unused)
     {
         if (!m_running)
@@ -449,7 +451,7 @@ class Game
         raiseCombo();
     }
 
-    // The avalanche: its gap on the HUD, red and beating as it closes.
+    // The avalanche: its gap shows on the HUD, turning red and pulsing as it closes.
     void onAvalancheReleased(int metres)
     {
         if (m_running)
@@ -472,7 +474,7 @@ class Game
             gap.addClass("close");
             if (metres % 2 == 0)
             {
-                // A beat: up and back down.
+                // A pulse: scale up and back down.
                 find("hud-avalanche-panel").tween("transform", "scale(1.12)", 0.09f, "ease-out").from("scale(1)").repeats(2).pingPong(true);
             }
         }
@@ -482,7 +484,7 @@ class Game
         }
     }
 
-    // Caught: the board crashes (Board.as), and the avalanche, spent, rolls on past.
+    // Caught: the board crashes (Board.as), and the spent avalanche rolls on past.
     void onAvalancheCaught(int unused)
     {
         if (m_running)
@@ -493,7 +495,7 @@ class Game
         }
     }
 
-    // Over a crevasse and down past it: points, and the combo grows.
+    // Cleared a crevasse and landed past it: points, and the combo grows.
     void onGapCleared(int centimetres)
     {
         if (!m_running)
@@ -506,7 +508,7 @@ class Game
         raiseCombo();
     }
 
-    // Down in the snow off a landing or into a tree: the combo is gone.
+    // A crash on landing or into a tree loses the combo.
     void onRiderCrashed(int unused)
     {
         if (m_running)
@@ -530,7 +532,7 @@ class Game
         show("hud-combo", true);
     }
 
-    // "360 Grab", "180", "Air": the spin if any, then the grab if held a while, else just air.
+    // "360 Grab", "180", "Air": the spin if any, then the grab if held a while, otherwise just air.
     private string trickName()
     {
         string name = m_trickSpin > 0 ? "" + m_trickSpin : "";
@@ -578,7 +580,7 @@ class Game
         screens().push(kFinishDoc);
     }
 
-    // The course's best time and medal, kept in the save; a new best is announced at once, so the
+    // Keeps the course's best time and medal in the save. A new best is announced at once, so the
     // ghost keeps this run before the next one starts recording.
     private void keepBest(float total)
     {
@@ -620,7 +622,7 @@ class Game
         {
             if (Input::wasPressed("Jump"))
             {
-                // Skip to the end: everything at once, quietly.
+                // Skip to the end: show everything at once, without sounds.
                 while (m_tallyStep < kTallySteps)
                 {
                     tallyStep(m_tallyStep, true);
@@ -688,7 +690,8 @@ class Game
                                                      : "Thanks for riding. There is gold still out there.");
     }
 
-    // The music: switched only when the track changes, so the title's keeps playing across menus.
+    // Switches the music only when the track changes, so the title's track keeps playing across
+    // menus.
     private void music(Guid track)
     {
         if (m_music == track)
@@ -746,7 +749,7 @@ class Game
             }
             else
             {
-                // In from the left as it fades in.
+                // Slide in from the left while fading in.
                 row.tween("opacity", "1", 0.2f, "ease").from("0");
                 row.tween("transform", "translateX(0px)", 0.25f, "ease-out").from("translateX(-24px)");
                 Audio::playOneShot(kChime, AudioBus::Effects, 0.3f, 0.8f + 0.08f * float(step));
@@ -814,7 +817,7 @@ class Game
         return "";
     }
 
-    // The medal earned and the next one's time to beat.
+    // The medal earned, and the time to beat for the next one.
     private string medalLine(float total)
     {
         if (m_bronze <= 0.0f)
@@ -847,10 +850,10 @@ class Game
     private void restart()
     {
         resetRun();
-        run::events().emit("RunRestart", 0); // in a run the scene bus is the run bus
+        run::events().emit("RunRestart", 0); // in a run the scene's event bus is also the run's
     }
 
-    // What a run counts, back to its start (the course's own counts stay: its gates and gems).
+    // Resets what a run counts. The course's own counts (its gates and gems) stay.
     private void resetRun()
     {
         m_running = true;

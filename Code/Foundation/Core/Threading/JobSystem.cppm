@@ -5,17 +5,16 @@
 //
 // A stackless work-stealing job system: a fixed (pre-sized) worker pool with per-worker
 // deques, ParallelFor fan-out, and counter-based dependencies (Submit / SubmitAfter /
-// Wait). NO fibers - the renderer's parallelism is broad data-parallel fan-out plus a few
+// Wait). No fibers: the renderer's parallelism is broad data-parallel fan-out plus a few
 // dependent stages, and fibers don't translate to WASM (Asyncify-only).
 //
-// The load-bearing property is CALLER PARTICIPATION: a thread that Waits (on a Counter, a
-// ParallelFor, or all jobs) runs jobs itself instead of blocking. This (a) keeps the
-// calling thread busy, (b) is WASM-safe (the main thread never blocks indefinitely on a
-// condition variable - it works then returns), and (c) gives a correct single-threaded
-// fallback for free when worker count is 0 (the caller runs everything).
+// The key property is caller participation: a thread that Waits (on a Counter, a
+// ParallelFor, or all jobs) runs jobs itself instead of blocking. That keeps the calling
+// thread busy and is WASM-safe, since the main thread never blocks indefinitely on a
+// condition variable; it works, then returns. It also gives a correct single-threaded
+// fallback when the worker count is 0 (the caller runs everything).
 //
-// WASM constraints honored: the worker pool is pre-sized at construction (no spawn
-// mid-run), and waiting threads participate rather than block.
+// For WASM the worker pool is also pre-sized at construction, so no thread spawns mid-run.
 
 module;
 #include "Core/Prelude.h"
@@ -27,8 +26,8 @@ module;
 // imports it:
 //   stop_token(248): fatal error C1116: unrecoverable error importing module 'foundation.core'.
 //   Specialization of 'std::_Stop_callback_base::_Do_attach' with arguments 'false'
-// which took out the whole DX12 backend. The engine already owns a thread backend, so using it
-// costs nothing and keeps the STL's threading headers out of the interface entirely.
+// The engine already owns a thread backend, so using it costs nothing and keeps the STL's
+// threading headers out of the interface entirely.
 #include "Core/Threading/ThreadBackend.h"
 
 export module foundation.core:job_system;
@@ -59,7 +58,7 @@ export namespace foundation::core
         void (*end)() = nullptr;
     };
 
-    // Defined in JobSystemImpl.cpp, one per process (shared-libraries.md rendezvous rule).
+    // Defined in JobSystemImpl.cpp, so there is one per process across shared libraries.
     // `hooks` must outlive every JobSystem (static storage).
     void SetJobHooks(const JobHooks* hooks) noexcept;
     [[nodiscard]] const JobHooks* CurrentJobHooks() noexcept;
@@ -67,7 +66,7 @@ export namespace foundation::core
     namespace detail
     {
         // A type-erased unit of work. `data` is a heap-allocated callable; `signal` (if
-        // set) is decremented when the job completes (driving dependencies + waits).
+        // set) is decremented when the job completes (driving dependencies and waits).
         struct JobItem
         {
             void (*invoke)(void*) = nullptr;
@@ -77,8 +76,8 @@ export namespace foundation::core
         };
     }
 
-    // A completion counter: jobs SIGNAL it (decrement on completion) and may DEPEND on it
-    // (run only once it reaches 0). Caller-owned - keep it alive until it reaches 0 and all
+    // A completion counter: jobs signal it (decrement on completion) and may depend on it
+    // (run only once it reaches 0). Caller-owned: keep it alive until it reaches 0 and all
     // waits/continuations on it are done (typically a stack local in the frame loop). Not
     // copyable/movable (a stable address is referenced by in-flight jobs).
     class Counter
@@ -101,7 +100,7 @@ export namespace foundation::core
     class JobSystem
     {
     public:
-        // The allocator (required - the owner decides) backs the worker deques and the
+        // The allocator (required; the owner decides) backs the worker deques and the
         // per-job closure boxes. workerCount == 0 picks (logical cores - 1). A pool of 0
         // workers is valid: every Wait/ParallelFor then runs inline on the calling thread
         // (single-threaded fallback).
@@ -113,7 +112,7 @@ export namespace foundation::core
             if (count == 0)
             {
                 const u32 cores = LogicalCoreCount();
-                count = (cores > 1) ? (cores - 1) : 0; // 0 cores-extra => inline fallback
+                count = (cores > 1) ? (cores - 1) : 0; // no spare core: inline fallback
             }
             m_workerCount = count;
             for (u32 i = 0; i < count; ++i)
@@ -192,7 +191,7 @@ export namespace foundation::core
             }
         }
 
-        // Runs fn(u32 i) for i in [0, count), in parallel across the pool, BLOCKING (with
+        // Runs fn(u32 i) for i in [0, count), in parallel across the pool, blocking (with
         // caller participation) until all are done. `grainSize` items per chunk; 0 = auto.
         template <typename Fn>
         void ParallelFor(u32 count, Fn&& fn, u32 grainSize = 0)
@@ -246,7 +245,7 @@ export namespace foundation::core
                     YieldThread();
                 }
             }
-            // Lifetime fence: the thread that drove the count to 0 decremented it WHILE holding
+            // Lifetime fence: the thread that drove the count to 0 decremented it while holding
             // m_lock (see RunJob) and may still be inside that critical section. Acquiring the
             // lock here blocks until it has released it, so a caller that destroys `counter`
             // right after Wait returns (e.g. ParallelFor's stack `done`) can't free it out from
@@ -344,7 +343,7 @@ export namespace foundation::core
         {
             const i32 self = WorkerSlot();
 
-            // 1) own deque (LIFO - cache-friendly)
+            // 1) own deque (LIFO: cache-friendly)
             if (self >= 0)
             {
                 Deque& d = *m_deques[static_cast<u32>(self)];
@@ -357,7 +356,7 @@ export namespace foundation::core
                 }
             }
 
-            // 2) steal from other worker deques (FIFO - take the oldest, least contended)
+            // 2) steal from other worker deques (FIFO: take the oldest, least contended)
             for (u32 k = 0; k < m_workerCount; ++k)
             {
                 if (self >= 0 && k == static_cast<u32>(self))
@@ -398,16 +397,16 @@ export namespace foundation::core
                 hooks->end();
             }
 
-            // Handle the completion signal (and schedule its dependents) BEFORE dropping
-            // this job from m_pending - a continuation is added to m_pending before its
+            // Handle the completion signal (and schedule its dependents) before dropping
+            // this job from m_pending: a continuation is added to m_pending before its
             // predecessor leaves, so m_pending never momentarily hits 0 while a dependent is
             // still pending (which would let WaitForAll return early).
             if (Counter* signal = job.signal; signal != nullptr)
             {
-                // Decrement INSIDE the lock: this holds m_lock across the count's 1->0
+                // Decrement inside the lock: this holds m_lock across the count's 1->0
                 // transition, which (paired with the fence in Wait) stops a released waiter
                 // from destroying the Counter while we are still touching it. Once we leave
-                // this scope with the count at 0, `signal` may be freed - never touch it again.
+                // this scope with the count at 0, `signal` may be freed; never touch it again.
                 bool last = false;
                 Array<detail::JobItem> ready;
                 {
@@ -443,7 +442,7 @@ export namespace foundation::core
                     continue;
                 }
 
-                // No work found - sleep until notified or stopped (re-check under the lock
+                // No work found: sleep until notified or stopped (re-check under the lock
                 // to close the lost-wakeup window; Schedule fences on m_idleMutex).
                 ScopedLock lock(m_idleMutex);
                 if (m_stop)
@@ -479,10 +478,10 @@ export namespace foundation::core
         static void YieldThread() noexcept { sys::ThreadYield(); }
 
         // The calling thread's worker slot: a worker's index, or -1 for any non-worker thread.
-        // Defined OUT-OF-LINE in JobSystemImpl.cpp: an in-class body is implicitly inline, so
-        // each shared library would get its own thread_local copy - a worker calling an inline
+        // Defined out of line in JobSystemImpl.cpp: an in-class body is implicitly inline, so
+        // each shared library would get its own thread_local copy, and a worker calling an inline
         // JobSystem method instantiated in another library would then read -1 and corrupt the
-        // work-stealing deque indexing (shared-libraries.md rendezvous rule).
+        // work-stealing deque indexing.
         static i32& WorkerSlot() noexcept;
 
         IAllocator* m_allocator;
@@ -500,21 +499,19 @@ export namespace foundation::core
 
     // ---- process-global JobSystem -----------------------------------------------------------
     //
-    // The engine-wide JobSystem, mirroring DefaultAllocator()'s global-accessor shape (and
-    // Sedulous's static JobSystem). The client Application brackets its lifetime - init before
-    // any subsystem starts, shutdown after every subsystem + GPU teardown - so it outlives all
-    // users. Code that wants to parallelize must tolerate its absence (HasGlobalJobSystem()) and
+    // The engine-wide JobSystem, with the same global-accessor shape as DefaultAllocator(). The
+    // client Application brackets its lifetime (init before any subsystem starts, shutdown after
+    // every subsystem and GPU teardown), so it outlives all users. Code that wants to parallelize must tolerate its absence (HasGlobalJobSystem()) and
     // fall back to serial: in unit tests / headless tools that never start an Application it is
     // never initialized. The JobSystem class itself stays instance-constructible (tests build
     // their own); this is just a managed global instance.
 
-    // All four are defined in JobSystemImpl.cpp - NON-inline, so the pointer they manage
+    // All four are defined in JobSystemImpl.cpp, not inline, so the pointer they manage
     // exists exactly once in the process. Inline definitions would give each shared
     // library its own g_globalJobs: the app initializes copy A, a consumer in another
-    // library sees copy B as null and silently falls back to serial
-    // (shared-libraries.md rendezvous rule).
+    // library sees copy B as null and silently falls back to serial.
 
-    // Create the global JobSystem (no-op if already created). workerCount 0 => cores-1.
+    // Create the global JobSystem (no-op if already created). workerCount 0 means cores - 1.
     void InitGlobalJobSystem(u32 workerCount = 0);
 
     // Destroy the global JobSystem (joins its workers; no-op if absent).

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ViewIdTests.bf (faithful).
-// ViewId.ToString appends a debug string via core::AppendFormat (Sedulous ViewId.ToString).
+// ViewId tests. ViewId::ToString appends a debug string via core::AppendFormat.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

@@ -3,11 +3,10 @@
 
 // Editor::App - :status_bar partition.
 //
-// EditorStatusBar: what the frame's status bar says (Documentation/Specs/editor-gui.md, 5.1, layer
-// 9), over its items by id: the message (`status-message`: the context's status line), the job at
-// the end (`status-job`: its name, a progress bar, its count; a sweep when its length is unknown, as
-// a cook's) and the agent (`status-agent`: the MCP host while it listens). An item with nothing to
-// say is not shown.
+// EditorStatusBar: what the frame's status bar shows, through its items by id: the message
+// (`status-message`, the context's status line), the job at the end (`status-job`: its name, a
+// progress bar and its count, or a sweep when its length is unknown, as a cook's is) and the agent
+// (`status-agent`, shown while the MCP host listens). An item with nothing to show is hidden.
 module;
 #include "Core/Prelude.h"
 
@@ -25,7 +24,7 @@ export namespace editor::app
     class EditorStatusBar
     {
     public:
-        /// Over `frame`'s items; one it lacks is skipped.
+        /// Binds `frame`'s items; any it lacks is skipped.
         explicit EditorStatusBar(gui::Node& frame)
         {
             m_message = Cast<gui::Label>(Find(frame, u8"status-message"));
@@ -46,8 +45,8 @@ export namespace editor::app
         }
         [[nodiscard]] StringView Message() const { return m_message != nullptr ? m_message->GetText() : StringView{}; }
 
-        /// A job running: its name, how far (0 to 1; below 0 when its length is unknown) and its
-        /// count ("12 of 40"; empty: none).
+        /// Shows a running job: its name, its progress (0 to 1; below 0 when its length is unknown)
+        /// and its count ("12 of 40"; empty for none).
         void SetJob(StringView name, f32 fraction, StringView count)
         {
             if (m_job != nullptr)
@@ -66,13 +65,13 @@ export namespace editor::app
                 m_jobCount->SetDisplayed(!count.IsEmpty());
             }
         }
-        /// No job running.
+        /// Clears the job display: no job is running.
         void ClearJob()
         {
             if (m_job != nullptr)
                 m_job->SetDisplayed(false);
             if (m_jobProgress != nullptr)
-                m_jobProgress->SetIndeterminate(false); // no sweep animates unseen
+                m_jobProgress->SetIndeterminate(false); // so no sweep animates while hidden
         }
         [[nodiscard]] bool ShowsJob() const { return m_job != nullptr && m_job->IsDisplayed(); }
 

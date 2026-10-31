@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """materialvalues.py: a material's values, textures and modes written into its envelope by property
 name, through the editor's MCP (asset_data_read, asset_data_write): shaders.py sets the costumes'
-mask and fabric materials with it (the Shader Gallery's, shared).
+mask and fabric materials with it (the same writer as the Shader Gallery's).
 """
 import struct
 import xml.etree.ElementTree as ET

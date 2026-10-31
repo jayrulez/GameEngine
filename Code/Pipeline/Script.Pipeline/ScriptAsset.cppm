@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Pipeline::Script - the `foundation.script.editor` module (tooling).
+// Pipeline::Script - the `script.pipeline` module (tooling).
 //
-// Source-side script authoring + cook, fully
-// BACKEND-NEUTRAL - no language syntax lives here:
-//   * ScriptClassAsset (pipeline::Asset): the copied script file + its LANGUAGE id
-//     (defaulted from the imported file's extension). The asset
-//     is just source bytes + a language id + cooked metadata; nothing language-specific.
-//   * IScriptLanguageCook: the per-language cook SERVICE. Each language library provides
-//     one (AngelScript: foundation.script.angelscript.editor)
-//     and registers it into ScriptLanguageCookRegistry, keyed by languageId (mirroring the
-//     ScriptBackendRegistry). A cook compile-checks + harvests metadata; the New-Asset
-//     starter template is its NewAssetTemplate().
-//   * ScriptClassAssetBuilder: a THIN shell - resolves the cook by the asset's language
+// Source-side script authoring and cook, backend-neutral: no language syntax lives here.
+//   * ScriptClassAsset (pipeline::Asset): the copied script file and its language id
+//     (defaulted from the imported file's extension). The asset is just source bytes, a
+//     language id and cooked metadata; nothing language-specific.
+//   * IScriptLanguageCook: the per-language cook service. Each language library provides
+//     one (AngelScript: script.angelscript.pipeline) and registers it into
+//     ScriptLanguageCookRegistry, keyed by languageId (as ScriptBackendRegistry is). A cook
+//     compile-checks and harvests metadata; the New-Asset starter is its NewAssetTemplate().
+//   * ScriptClassAssetBuilder: a thin shell that resolves the cook by the asset's language
 //     and delegates NewAssetTemplate / Cook. It never names a language or a backend type.
 //   * ScriptFileImporter: drop-import for any extension a registered backend claims; no
 //     options dialog.
-//   * Shared cook conventions (NOT language syntax): the on<Upper>(...) handler scan
+//   * Shared cook conventions (not language syntax): the on<Upper>(...) handler scan
 //     (ScanScriptHandlers), the C-family comment stripper (StripScriptComments), the first
 //     top-level `class Name` scan (FindScriptClassName), and the shared `startCoroutine(`
 //     surface detection (ScriptReferencesCoroutineStart). Every cook reuses these.
@@ -44,7 +42,7 @@ using namespace foundation::script;
 export namespace pipeline{
     namespace content = foundation::content;
 
-    // Source asset: the script file + the backend that compiles it.
+    // Source asset: the script file and the backend that compiles it.
     class ScriptClassAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(ScriptClassAsset, pipeline::Asset)
@@ -58,12 +56,12 @@ export namespace pipeline{
         }
     };
 
-    // ---- shared cook helpers (unit-testable without a project; NOT language syntax) ----
+    // ---- shared cook helpers (unit-testable without a project; not language syntax) ----
 
     /// First top-level `class Name` whose name matches `preferredName` (the file stem),
-    /// else the FIRST top-level class; empty when the source declares none (a utility
-    /// module). Line comments / block comments are ignored. `class Name` is a C-family
-    /// convention shared by every language backend, so this stays neutral + shared.
+    /// else the first top-level class; empty when the source declares none (a utility
+    /// module). Line and block comments are ignored. `class Name` is a C-family
+    /// convention shared by every language backend, so this stays neutral and shared.
     [[nodiscard]] inline String FindScriptClassName(StringView source, StringView preferredName);
 
     /// The declared lifecycle/event/message handlers out of the `on<Upper>(...)` naming
@@ -76,8 +74,8 @@ export namespace pipeline{
     [[nodiscard]] inline String StripScriptComments(StringView source);
 
     /// True when the (comment-stripped) source references the shared `startCoroutine(`
-    /// coroutine surface. A convention shared by every backend's coroutine facade - not
-    /// language syntax. A language whose coroutine opt-in has ADDITIONAL markers layers
+    /// coroutine surface, a convention shared by every backend's coroutine facade rather than
+    /// language syntax. A language whose coroutine opt-in has additional markers layers
     /// them on top inside its own cook.
     [[nodiscard]] inline bool ScriptReferencesCoroutineStart(StringView source);
 
@@ -251,12 +249,12 @@ export namespace pipeline{
     {
         // Any method declared as `on<Upper>...(` is a dispatchable handler: the fixed
         // lifecycle set (onStart/onUpdate/...), the reserved event handlers
-        // (onContactBegin, onTriggerEnter, ...), AND user message handlers reached by
-        // `entity.send("heal", ...)` -> `onHeal(...)`. The runtime dispatch gate is
+        // (onContactBegin, onTriggerEnter, ...), and user message handlers reached by
+        // `entity.send("heal", ...)`, which calls `onHeal(...)`. The runtime dispatch gate is
         // ScriptClass::HasHandler, so harvesting the whole convention here is what makes
-        // custom messages and events cost nothing per frame. A leading lowercase after
-        // `on` (e.g. `onlyOnce`) is NOT a handler; a getter (`onFoo {`, no parens) is not
-        // either - handlers take an argument list.
+        // custom messages and events cost nothing per frame. A lowercase letter after
+        // `on` (e.g. `onlyOnce`) is not a handler; nor is a getter (`onFoo {`, no parens):
+        // handlers take an argument list.
         const String stripped = StripScriptComments(source);
         const StringView text = stripped.AsView();
         Array<String> found;
@@ -274,7 +272,7 @@ export namespace pipeline{
             if (third < u8'A' || third > u8'Z')
             {
                 continue;
-            } // on + UpperCase only
+            } // "on" then an uppercase letter only
             usize end = i + 2;
             while (end < text.Size() && detail::IsIdentChar(text[end]))
             {
@@ -313,13 +311,13 @@ export namespace pipeline{
         return detail::Contains(stripped.AsView(), u8"startCoroutine(");
     }
 
-    // ---- shared property-harvest record parsing (NOT language syntax) ----
+    // ---- shared property-harvest record parsing (not language syntax) ----
     //
     // Every cook that harvests inspector properties (AngelScript's declared-property probe,
-    // Luau's construct-and-walk probe) emits the SAME record string so the parse is shared:
+    // Luau's construct-and-walk probe) emits the same record string so the parse is shared:
     //   name \x1F typeString \x1F default \x1F description   (records joined by \x1E)
     // where default is "~" (none), "n:<num>", "b:true|false", "s:<text>" or "l:<a,b,c[,d]>".
-    // The language-specific part is only the PROBE that produces this string; the parse below
+    // The language-specific part is only the probe that produces this string; the parse below
     // is a shared cook convention, like ScanScriptHandlers.
 
     /// Parses "a,b,c[,d]" into up to 4 floats; returns the count parsed. Harvest payloads are
@@ -375,7 +373,7 @@ export namespace pipeline{
         return count;
     }
 
-    /// One harvest record -> a property desc. Record layout: name \x1F typeString \x1F default
+    /// One harvest record as a property desc. Record layout: name \x1F typeString \x1F default
     /// \x1F description. Returns false (with outError set) on a malformed record or unknown type.
     [[nodiscard]] inline bool ParseHarvestRecord(StringView record, ScriptPropertyDesc& out,
                                                  String& outError)
@@ -410,7 +408,7 @@ export namespace pipeline{
             return false;
         }
 
-        // Default value: typed from the serialized payload; "~" = the type's default.
+        // Default value: typed from the serialized payload; "~" is the type's default.
         ScriptPropertyValue& value = out.defaultValue;
         value.kind = out.type;
         const StringView payload = fieldCount > 2 ? fields[2] : StringView(u8"~");
@@ -481,8 +479,8 @@ export namespace pipeline{
 
     // ---- cook error plumbing (shared by every cook service) ----
 
-    // Captures compile/runtime errors during a cook's compile/harvest (file/line for the
-    // cook error report - ScriptError already carries them).
+    // Captures compile/runtime errors during a cook's compile/harvest (ScriptError already
+    // carries the file and line the cook error report needs).
     class CookScriptErrorSink final : public IScriptErrorHandler
     {
     public:
@@ -514,8 +512,8 @@ export namespace pipeline{
     }
 
     /// Logs a cook's captured compile/runtime errors as cook errors with the asset's
-    /// file/line. `preludeLines` is the line count any language framing injected AHEAD of
-    /// the user source - subtracted back so reported lines match the authored file. Shared
+    /// file/line. `preludeLines` is the line count any language framing injected ahead of
+    /// the user source, subtracted back so reported lines match the authored file. Shared
     /// by every cook (the reporting format is not language-specific).
     inline void ReportScriptCookErrors(StringView fileName, const CookScriptErrorSink& sink,
                                        i32 preludeLines = 0)
@@ -536,9 +534,9 @@ export namespace pipeline{
     // ---- the per-language cook service ----
 
     /// The scripting tier a New-Asset starter targets. The three contracts a script can
-    /// implement: a per-entity Behavior (class named freely, `construct new(entity)`), a
-    /// per-scene Level (`construct new(scene)`, one per scene), and the game orchestrator
-    /// (mandatory class `Game`, `construct new()`). Each cook seeds a starter per tier.
+    /// implement: a per-entity Behavior (class named freely, constructed with its entity), a
+    /// per-scene Level (constructed with its scene, one per scene), and the game orchestrator
+    /// (mandatory class `Game`, constructed with no arguments). Each cook seeds a starter per tier.
     enum class ScriptTier
     {
         Behavior,
@@ -546,10 +544,10 @@ export namespace pipeline{
         Game
     };
 
-    /// A language's cook: compile-check + metadata harvest + the New-Asset starter. The
+    /// A language's cook: the compile-check, the metadata harvest and the New-Asset starter. The
     /// only place a language's specifics live on the cook side; the neutral builder
     /// resolves one by languageId and delegates. Implemented per language in its own
-    /// library (foundation.script.<lang>.editor), registered via ScriptLanguageCookRegistry.
+    /// library (script.<lang>.pipeline), registered via ScriptLanguageCookRegistry.
     class IScriptLanguageCook
     {
     public:
@@ -561,36 +559,36 @@ export namespace pipeline{
         [[nodiscard]] virtual String NewAssetTemplate(ScriptTier tier, StringView className) const = 0;
 
         /// A cook-fingerprint contribution beyond the shared builder Version: a bytecode-emitting
-        /// cook returns its COMPILER version here so a vendor bump recooks (bytecode is
-        /// version-locked). Default 0 - a source-only cook contributes nothing.
+        /// cook returns its compiler version here so a vendor bump recooks (bytecode is
+        /// version-locked). Default 0: a source-only cook contributes nothing.
         [[nodiscard]] virtual u32 CookVersion() const { return 0; }
 
         /// Compile-check `source` (named `assetName` for error reporting) and harvest its
         /// metadata into `out` (language, className, handlers, usesCoroutines, and any
         /// property metadata the language supports); report cook errors through `sink`;
-        /// return success. On failure the builder does not write, so the LAST good cooked
+        /// return success. On failure the builder does not write, so the last good cooked
         /// record survives (live instances keep running the old class).
         [[nodiscard]] virtual bool Cook(StringView source, StringView assetName,
                                         CookScriptErrorSink& sink, ScriptClassSource& out) = 0;
 
-        /// Compile-check `source` as Cook would, WITHOUT running any of it and without the
+        /// Compile-check `source` as Cook would, without running any of it and without the
         /// harvest: errors to `sink`, the class name (empty when none is found) to `className`.
         /// For checking a script as it is typed. Returns whether it compiled.
         [[nodiscard]] virtual bool Check(StringView source, StringView assetName,
                                          CookScriptErrorSink& sink, String& className) = 0;
     };
 
-    /// The cook registry (mirrors ScriptBackendRegistry): a language library registers its
-    /// cook here, keyed by languageId; the builder resolves through it - never by type.
+    /// The cook registry (shaped like ScriptBackendRegistry): a language library registers its
+    /// cook here, keyed by languageId; the builder resolves through it, never by type.
     class ScriptLanguageCookRegistry
     {
     public:
-        // NON-inline (ScriptAssetImpl.cpp): language libraries register their cooks
-        // and the builder resolves from another - per-library copies would mean "no
-        // cook for language" (shared-libraries.md rendezvous rule).
+        // Not inline (defined in ScriptAssetImpl.cpp): language libraries register their cooks
+        // and the builder resolves from another library, so in a shared-library build a
+        // per-library copy of the registry would find no cook for the language.
         [[nodiscard]] static ScriptLanguageCookRegistry& Get();
 
-        /// Idempotent by languageId (a re-register replaces - hot-reload friendly).
+        /// Idempotent by languageId (a re-register replaces the cook, which suits hot reload).
         void Register(String languageId, UniquePtr<IScriptLanguageCook> cook)
         {
             for (Entry& existing : m_cooks)
@@ -619,8 +617,8 @@ export namespace pipeline{
             return nullptr;
         }
 
-        /// Sum of every registered cook's CookVersion() - folded into the ScriptClassAssetBuilder
-        /// fingerprint so a compiler/vendor bump in ANY bytecode language recooks the script
+        /// Sum of every registered cook's CookVersion(), folded into the ScriptClassAssetBuilder
+        /// fingerprint so a compiler/vendor bump in any bytecode language recooks the script
         /// packs. Order-independent (a sum), and 0 when every cook is source-only.
         [[nodiscard]] u32 CombinedCookVersion() const
         {
@@ -644,9 +642,9 @@ export namespace pipeline{
         Array<Entry> m_cooks;
     };
 
-    // Cooks a ScriptClassAsset -> ScriptClassSource by delegating to the language cook the
-    // asset's LANGUAGE resolves to. A THIN shell: it reads the source, resolves the
-    // cook, and delegates - no language syntax, no VM handling.
+    // Cooks a ScriptClassAsset to a ScriptClassSource by delegating to the language cook the
+    // asset's language resolves to. A thin shell: it reads the source, resolves the
+    // cook, and delegates, with no language syntax and no VM handling.
     class ScriptClassAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -662,7 +660,7 @@ export namespace pipeline{
         {
             // Base cook-logic version (2: the cooked record gained a bytecode field; 3: each
             // property a replicated flag; 4: the record carries data version 1, so the reader
-            // refuses one from before the flag) + every language cook's compiler version, so a
+            // refuses one from before the flag), plus every language cook's compiler version, so a
             // Luau (or other bytecode) vendor bump recooks every script pack automatically.
             return 4 + ScriptLanguageCookRegistry::Get().CombinedCookVersion();
         }
@@ -689,8 +687,8 @@ export namespace pipeline{
                                             ? StringView(u8"angelscript")
                                             : scriptAsset.language.AsView();
 
-            // The cook comes from the registry, by LANGUAGE - never a named cook type.
-            // No cook = a configuration error, surfaced as a cook error.
+            // The cook comes from the registry, by language, never a named cook type.
+            // No cook is a configuration error, surfaced as a cook error.
             IScriptLanguageCook* cook = ScriptLanguageCookRegistry::Get().FindByLanguage(language);
             if (cook == nullptr)
             {
@@ -710,7 +708,7 @@ export namespace pipeline{
         }
     };
 
-    // OS-file importer (editor drag-drop): accepts any extension a REGISTERED script
+    // OS-file importer (editor drag-drop): accepts any extension a registered script
     // backend claims (language-clean), copies the file into Sources/, and creates
     // a ScriptClassAsset whose language records the owning backend. No options dialog.
     class ScriptFileImporter final : public pipeline::IFileImporter
@@ -741,7 +739,7 @@ export namespace pipeline{
 
         [[nodiscard]] RefPtr<pipeline::ImportOptions> CreateOptions(IAllocator&) const override
         {
-            return {}; // no options dialog - the drop imports immediately
+            return {}; // no options dialog: the drop imports immediately
         }
 
         [[nodiscard]] Result<content::Instance*>
@@ -781,13 +779,14 @@ export namespace pipeline{
     // ---- ScriptPage editing model ----
 
     /// The headless half of the in-editor ScriptPage: the edit buffer for one script asset's
-    /// source file plus the save + compile-check loop, factored OUT of the UI so it is
-    /// unit-testable without a window. Save writes the source file (the recook + hot reload is
-    /// driven by the page through EditorContext::RequestCook - the SAME path an external edit
-    /// takes). Validate() compile-checks the CURRENT buffer through the language cook's Check,
+    /// source file plus the save and compile-check loop, factored out of the UI so it is
+    /// unit-testable without a window. Save writes the source file (the page drives the recook
+    /// and hot reload through EditorContext::RequestCook, the same path an external edit
+    /// takes). Validate() compile-checks the current buffer through the language cook's Check,
     /// which compiles as the product build does but runs none of the source: it captures the
-    /// ScriptError file/line/column + message for inline surfacing but NEVER writes a product, so a failing edit leaves the
-    /// last-good cooked ScriptClass untouched (live instances keep running the old class).
+    /// ScriptError file/line/column and message for inline surfacing but never writes a product,
+    /// so a failing edit leaves the last-good cooked ScriptClass untouched (live instances keep
+    /// running the old class).
     class ScriptSourceDocument
     {
     public:
@@ -795,7 +794,7 @@ export namespace pipeline{
         {
             ScriptErrorKind kind = ScriptErrorKind::Compile;
             String module; // reporting module/file (empty = the asset's own file)
-            i32 line = 0;  // NOTE: as the cook's error handler captured it (may include the
+            i32 line = 0;  // as the cook's error handler captured it (may include the
                            // backend's framing prelude offset; the message is authoritative)
             i32 column = -1; // 1-based, or -1 when the backend does not say
             String message;
@@ -834,7 +833,7 @@ export namespace pipeline{
         [[nodiscard]] bool IsModified() const { return m_source.AsView() != m_saved.AsView(); }
 
         /// Persist the edit buffer to the bound source file (clears IsModified on success).
-        /// The caller drives the recook + hot reload afterwards (EditorContext::RequestCook).
+        /// The caller drives the recook and hot reload afterwards (EditorContext::RequestCook).
         [[nodiscard]] Status Save()
         {
             const String path = PathJoin(m_sourcesRoot.AsView(), m_fileName.AsView());
@@ -848,7 +847,7 @@ export namespace pipeline{
             return written;
         }
 
-        /// Compile-check the CURRENT buffer through the language cook's Check (nothing runs, no
+        /// Compile-check the current buffer through the language cook's Check (nothing runs, no
         /// product write). Fills Errors() with the captured ScriptErrors and, on success, the
         /// class name. Returns whether it compiled. An unknown language surfaces one config error.
         [[nodiscard]] bool Validate()
@@ -906,14 +905,14 @@ export namespace pipeline{
         bool m_lastCompileOk = true;
     };
 
-    // Registers the asset type for content-DB construction + deserialization.
+    // Registers the asset type for content-DB construction and deserialization.
     inline void RegisterScriptAssets()
     {
         GlobalTypeRegistry().Register(ScriptClassAsset::StaticType(), TypeDomain(u8"Pipeline"));
         RegisterSerializable<ScriptClassAsset>();
     }
 
-    // ScriptClassAsset::StaticType() is defined WITH reflected properties in ScriptAssetImpl.cpp.
+    // ScriptClassAsset::StaticType() is defined with its reflected properties in ScriptAssetImpl.cpp.
 
     /// The placeholder a behaviour starter spells its class name with.
     inline constexpr StringView kStarterClassName = u8"{ClassName}";

@@ -5,7 +5,7 @@
 //
 // Disk-backed IFontAtlasCache for the editor's MSDF UI fonts. The startup bake (msdfgen
 // over two full families) dominates the launch-to-first-frame gap; this caches the baked
-// DistanceFieldFontAtlas keyed by the font's bytes + the bake options, so every launch after the
+// DistanceFieldFontAtlas keyed by the font's bytes and the bake options, so every launch after the
 // first loads the atlas in milliseconds. Coverage atlases and non-TTF fonts are declined
 // (they are cheap and/or have no stable byte identity here).
 
@@ -24,7 +24,7 @@ using namespace foundation::core;
 
 namespace
 {
-    // Bump on any layout change - old cache files then miss and rebake. 2: distance-field atlases
+    // Bump on any layout change; old cache files then miss and rebake. 2: distance-field atlases
     // are sized to their glyphs, so a cached full-size atlas is stale. 3: regions key by glyph
     // index, followed by the codepoint -> glyph map. 4: a distance-field atlas carries the true
     // distance in alpha (MTSDF).
@@ -228,7 +228,7 @@ export namespace editor
         }
 
     private:
-        // Key = font bytes + every option that shapes the bake + the format version.
+        // The key is the font's bytes, every option that shapes the bake, and the format version.
         // Only TTF distance-field bakes are cacheable (RawData is the byte identity).
         [[nodiscard]] bool KeyFor(const foundation::fonts::IFont& font,
                                          const foundation::fonts::FontLoadOptions& options,

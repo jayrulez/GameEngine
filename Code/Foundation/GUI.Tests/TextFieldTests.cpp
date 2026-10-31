@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - TextField tests: the keyboard/text-input path end-to-end. Text arrives via
-// the EventDispatcher's InjectText (routed to the focused node), editing keys via InjectKeyDown.
+// GUI - TextField tests: the keyboard and text-input path end to end. Text arrives through
+// the EventDispatcher's InjectText (routed to the focused node), editing keys through InjectKeyDown.
 // A mock font (6px/byte advance) drives caret-placement measurement.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -24,7 +24,7 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    // 6px advance per byte, 12px line height (mirrors the Text-test mock).
+    // 6px advance per byte, 12px line height (as the Text tests' mock).
     class MockFont : public fonts::IFont
     {
     public:
@@ -65,7 +65,7 @@ namespace
 
     MockFont* NewMock() { return core::DefaultAllocator().New<MockFont>(); }
 
-    // u32 view of a gui::KeyCode, since InjectKeyDown takes a raw code.
+    // Returns a gui::KeyCode as a u32, since InjectKeyDown takes a raw code.
     core::u32 Key(KeyCode k) { return static_cast<core::u32>(k); }
 
     // In-memory clipboard so the cut/copy/paste path is testable without a shell.
@@ -115,7 +115,7 @@ TEST_CASE("textfield: text only reaches a focused field")
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    d->InjectText(core::StringView(u8"nope")); // not focused -> dropped
+    d->InjectText(core::StringView(u8"nope")); // not focused, so dropped
     CHECK(f->GetText().Size() == 0);
 }
 
@@ -197,7 +197,7 @@ TEST_CASE("textfield: each edit is an input; Return and leaving commit a change;
     d->InjectKeyDown(Key(KeyCode::Backspace));
     CHECK(inputs == 2);
     CHECK(last.Size() == 0);
-    d->InjectKeyDown(Key(KeyCode::Home)); // a move is no edit
+    d->InjectKeyDown(Key(KeyCode::Home)); // a move is not an edit
     CHECK(inputs == 2);
     CHECK(inputEvents == 2);
     CHECK(changes == 0); // nothing committed yet (and the value is back where it was)
@@ -217,7 +217,7 @@ TEST_CASE("textfield: each edit is an input; Return and leaving commit a change;
     CHECK(changes == 2);
     CHECK(submits == 2);
 
-    f->SetText(core::StringView(u8"from code")); // code's value reports nothing
+    f->SetText(core::StringView(u8"from code")); // a value set from code reports nothing
     CHECK(inputs == 4);
     CHECK(changes == 2);
 }
@@ -234,16 +234,17 @@ TEST_CASE("textfield: mouse press focuses and places the caret at the nearest bo
     root->AddChild(f.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Click near x=13 (content x, no padding) -> closest boundary is offset 2 (width 12).
+    // A click near x=13 (content x, no padding) lands on the closest boundary, offset 2 (width
+    // 12).
     d->InjectMouseDown(core::Float2{13.0f, 12.0f}, MouseButton::Left);
     CHECK(f->IsFocused());
     CHECK(f->GetCaret() == 2);
 
-    // Click past the end -> caret at end.
+    // Click past the end: caret at the end.
     d->InjectMouseDown(core::Float2{90.0f, 12.0f}, MouseButton::Left);
     CHECK(f->GetCaret() == 4);
 
-    // Click at the far left -> caret at start.
+    // Click at the far left: caret at the start.
     d->InjectMouseDown(core::Float2{0.0f, 12.0f}, MouseButton::Left);
     CHECK(f->GetCaret() == 0);
 }
@@ -255,7 +256,7 @@ TEST_CASE("textfield: caret draws only while focused")
     f->SetSize(core::Float2{100.0f, 24.0f});
     f->SetFont(&cf);
 
-    // Not focused: no caret geometry (empty text, no font-service atlas -> no glyph geometry).
+    // Not focused: no caret geometry (empty text, and no font-service atlas, so no glyph geometry).
     {
         vg::VGContext ctx;
         DrawContext dc{ctx};
@@ -328,13 +329,13 @@ TEST_CASE("textfield: blink toggles the caret over time while focused")
     frames(5); // 1.1 s
     CHECK(f->IsCaretShown());
 
-    // Unfocused: no caret, and the blink stops asking for frames.
+    // Unfocused, it shows no caret, and the blink stops asking for frames.
     f->ReleaseFocus();
     frames(2);
     CHECK_FALSE(f->IsCaretShown());
     frames(1);
     CHECK_FALSE(root->GetContext().GetActionManager().AnyAction([&](const Action&, Node& n) { return &n == f.Get(); }));
-    // Focus again: it blinks again (a new tick), starting shown.
+    // Focused again, it blinks again (a new tick), starting shown.
     f->RequestFocus();
     CHECK(f->IsCaretShown());
     frames(6);
@@ -464,7 +465,7 @@ TEST_CASE("textfield: paste with no clipboard configured is a safe no-op")
 {
     Fixture fx(u8"hi");
     const core::u32 ctrl = static_cast<core::u32>(KeyModCtrl);
-    fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl); // no clipboard set -> nothing happens
+    fx.d()->InjectKeyDown(Key(KeyCode::V), ctrl); // no clipboard set: nothing happens
     CHECK(fx.field->GetText() == core::StringView(u8"hi"));
 }
 
@@ -526,7 +527,7 @@ TEST_CASE("textfield: max-length counts graphemes, not bytes or codepoints")
 TEST_CASE("textfield: a double-click selects the word under the cursor")
 {
     Fixture fx(u8"foo bar baz"); // words at 0-3, 4-7, 8-11 (6px/byte)
-    // Two presses at the same spot with no time advance = a double-click. x within "bar".
+    // Two presses at the same spot with no time advance: a double-click. x within "bar".
     const core::Float2 pos{5.0f * 6.0f + 3.0f, 12.0f}; // ~ byte 5, inside "bar"
     fx.d()->InjectMouseDown(pos, MouseButton::Left);
     fx.d()->InjectMouseUp(pos, MouseButton::Left);
@@ -544,7 +545,7 @@ TEST_CASE("textfield: dragging the mouse extends the selection")
     CHECK(fx.field->HasSelection());
     CHECK(fx.field->SelectedText() == core::StringView(u8"hel"));
     fx.d()->InjectMouseUp(core::Float2{3.0f * 6.0f, 12.0f}, MouseButton::Left);
-    // A move after release no longer extends.
+    // A move after release does not extend it.
     fx.d()->InjectMouseMove(core::Float2{5.0f * 6.0f, 12.0f});
     CHECK(fx.field->SelectedText() == core::StringView(u8"hel"));
 }
@@ -577,8 +578,8 @@ TEST_CASE("textfield: a right press keeps the caret and the selection")
 
 TEST_CASE("textfield: what it shows is cut at its padding, not drawn past its box")
 {
-    // 16 bytes at 6px is 96 wide, in a content box of 52 (60 less 4 each side): the selection
-    // drawn behind the whole value is clipped to the content box, with room for a caret.
+    // 16 bytes at 6px is 96 wide, in a content box of 52 (60 less 4 each side). The selection drawn
+    // behind the whole value is clipped to the content box, with room for a caret.
     fonts::CachedFont cf(core::DefaultAllocator(), NewMock(), nullptr, nullptr);
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{200.0f, 100.0f});
@@ -603,7 +604,7 @@ TEST_CASE("textfield: what it shows is cut at its padding, not drawn past its bo
     }
 }
 
-// ===================== The editing model's keys and rules (E4) =====================
+// ===================== The editing model's keys and rules =====================
 
 TEST_CASE("textfield: the editing keys are commands: word moves, undo, and a binding that overrides one")
 {
@@ -618,12 +619,12 @@ TEST_CASE("textfield: the editing keys are commands: word moves, undo, and a bin
     fx.d()->InjectKeyDown(Key(KeyCode::Y), ctrl);
     CHECK(fx.field->GetText() == core::StringView(u8"one three"));
 
-    // A screen unbinds Ctrl+A in fields: the keystroke does nothing there now.
+    // A screen unbinds Ctrl+A in fields, so the keystroke does nothing there now.
     fx.field->SetCaret(0);
     REQUIRE(fx.root->GetContext().GetKeymap().Bind(core::StringView(u8"ctrl-a"), core::StringView(), core::StringView(u8"textinput")));
     fx.d()->InjectKeyDown(Key(KeyCode::A), ctrl);
     CHECK_FALSE(fx.field->HasSelection());
-    // A menu runs the command by its name along the focus path all the same.
+    // A menu can still run the command by its name along the focus path.
     CHECK(fx.root->RunCommand(core::StringView(u8"text.select-all")));
     CHECK(fx.field->SelectedText() == core::StringView(u8"one three"));
     CHECK(fx.root->IsCommandAvailable(core::StringView(u8"text.paste")));
@@ -637,7 +638,7 @@ TEST_CASE("textfield: typing keys are the field's; up and down still move focus"
     below->SetSize(core::Float2{100.0f, 24.0f});
     fx.root->AddChild(below.Get());
     fx.root->UpdateLayout();
-    CHECK(fx.d()->InjectKeyDown(Key(KeyCode::Space))); // taken: no activation, the text comes as text input
+    CHECK(fx.d()->InjectKeyDown(Key(KeyCode::Space))); // taken: no activation, and the text arrives as text input
     CHECK(fx.field->IsFocused());
     fx.d()->InjectKeyDown(Key(KeyCode::Down));
     CHECK(below->IsFocused());
@@ -671,13 +672,14 @@ TEST_CASE("textfield: an input filter lets in only what it accepts")
 
 TEST_CASE("textfield: a long value scrolls to keep the caret in view")
 {
-    Fixture fx; // 200 wide, 6px a byte: 33 characters fit
+    Fixture fx; // 200 wide at 6px per byte, so 33 characters fit
     fx.d()->InjectText(core::StringView(u8"0123456789012345678901234567890123456789")); // 40: 240px
     CHECK(fx.field->GetScrollX() > 0.0f);
     CHECK(fx.field->GetScrollX() == doctest::Approx(240.0f - (200.0f - 1.5f)));
     fx.d()->InjectKeyDown(Key(KeyCode::Home));
     CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f));
-    // A click maps through the scroll: at the right edge after End, the caret is near the end.
+    // A click maps through the scroll: after End, a click at the right edge puts the caret near
+    // the end.
     fx.d()->InjectKeyDown(Key(KeyCode::End));
     fx.d()->InjectMouseDown(core::Float2{199.0f, 12.0f}, MouseButton::Left);
     CHECK(fx.field->GetCaret() >= 39u);
@@ -685,19 +687,20 @@ TEST_CASE("textfield: a long value scrolls to keep the caret in view")
 
 TEST_CASE("textfield: a short line sits where its alignment puts it, start being the right in right to left")
 {
-    // 200 wide, 6px a byte: "abcd" is 24px; the view is 198.5 (the caret's width kept clear).
+    // 200 wide at 6px per byte: "abcd" is 24px, and the view is 198.5 (the caret's width is kept
+    // clear).
     const auto at = [](TextField& f, core::f32 x) { return f.ConvertToRootSpace(core::Float2{x, 12.0f}); };
     {
         Fixture fx(u8"abcd");
         fx.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
         (void)fx.root->UpdateLayout();
-        // Against the right edge: the line spans 174.5 to 198.5.
+        // Against the right edge, the line spans 174.5 to 198.5.
         fx.d()->InjectMouseDown(at(*fx.field, 183.0f), MouseButton::Left);
         fx.d()->InjectMouseUp(at(*fx.field, 183.0f), MouseButton::Left);
         CHECK(fx.field->GetCaret() == 1u); // just past the a
         fx.d()->InjectMouseDown(at(*fx.field, 20.0f), MouseButton::Left);
         fx.d()->InjectMouseUp(at(*fx.field, 20.0f), MouseButton::Left);
-        CHECK(fx.field->GetCaret() == 0u); // left of this left-to-right run: its start
+        CHECK(fx.field->GetCaret() == 0u); // left of this left-to-right run, so its start
     }
     {
         Fixture fx(u8"abcd");
@@ -719,9 +722,9 @@ TEST_CASE("textfield: a long right-to-left line rests on its start, the right, a
     fx.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
     (void)fx.root->UpdateLayout();
     fx.d()->InjectText(core::StringView(u8"0123456789012345678901234567890123456789")); // 240px
-    // The caret at the end of this left-to-right run, its right: the right part shows.
+    // The caret is at the end of this left-to-right run, on its right, so the right part shows.
     CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f));
-    fx.d()->InjectKeyDown(Key(KeyCode::Home)); // the run's start, its left: scrolled from the right
+    fx.d()->InjectKeyDown(Key(KeyCode::Home)); // the run's start, on its left, so scrolled from the right
     CHECK(fx.field->GetScrollX() == doctest::Approx(240.0f - (200.0f - 1.5f)));
 }
 
@@ -733,7 +736,8 @@ TEST_CASE("textfield: a password shows a mask, keeps carets on its characters, a
     fx.field->SetPassword(true);
     fx.d()->InjectText(core::StringView(u8"s\u00e9cret"));
     CHECK(fx.field->GetText() == core::StringView(u8"s\u00e9cret"));
-    // A press after the third mask (each 6px a byte, three bytes a bullet: 18 a character).
+    // A press after the third mask character (6px per byte and three bytes per bullet, so 18
+    // per character).
     fx.d()->InjectMouseDown(core::Float2{3.0f * 18.0f + 1.0f, 12.0f}, MouseButton::Left);
     CHECK(fx.field->GetCaret() == 4u); // after "s\u00e9c": é is two bytes
     fx.field->SelectAll();
@@ -753,7 +757,8 @@ TEST_CASE("textfield: an IME's composition shows in place of the selection until
     CHECK(fx.d()->InjectComposition(core::StringView(u8"xyz"), 2));
     CHECK(fx.field->GetText() == core::StringView(u8"ab cd")); // not the value yet
     CHECK(inputs == 0);
-    // It types where the composition is, the caret two characters into it (6px a byte).
+    // It reports where the composition is, with the caret two characters into it (6px per
+    // byte).
     Rect area{};
     core::f32 caretX = 0.0f;
     REQUIRE(fx.d()->GetTextInputArea(area, caretX));
@@ -766,7 +771,8 @@ TEST_CASE("textfield: an IME's composition shows in place of the selection until
     CHECK(fx.field->GetText() == core::StringView(u8"ab XYcd"));
     CHECK(inputs == 1);
 
-    // Over a selection, the committed text replaces it; leaving drops an unfinished one.
+    // Over a selection, the committed text replaces it; leaving the field drops an unfinished
+    // composition.
     fx.field->SelectAll();
     fx.d()->InjectComposition(core::StringView(u8"q"), 1);
     fx.field->ReleaseFocus();
@@ -777,10 +783,10 @@ TEST_CASE("textfield: not focused, a line too long for the field rests on its st
 {
     Fixture fx;
     fx.d()->InjectText(core::StringView(u8"0123456789012345678901234567890123456789")); // 240px in 200
-    CHECK(fx.field->GetScrollX() > 0.0f); // focused: the caret, at the end, in view
+    CHECK(fx.field->GetScrollX() > 0.0f); // focused, so the caret at the end is in view
     fx.field->ReleaseFocus();
-    CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f)); // left: its start shows
-    // Set while not focused (a value shown by code): its start too.
+    CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f)); // after the focus leaves, its start shows
+    // Text set while the field is not focused (a value shown by code) also shows its start.
     core::RefPtr<TextField> other = Make<TextField>();
     other->SetSize(core::Float2{60.0f, 24.0f});
     other->SetFont(&fx.font);

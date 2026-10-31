@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The collision shape editor's labels, its outline mesh and its thumbnail generator, headless.
-// Ported back from the Beef port's Editor.Physics.Tests (2026-09-20); the page-factory routing
-// case is not here because the factory takes a UI host only a window can make.
+// The collision shape editor, headless: its cook labels, its outline mesh, its thumbnail generator,
+// and the page over a scratch project.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include "Core/Prelude.h"
@@ -73,8 +72,8 @@ TEST_CASE("collision editor: the thumbnail generator claims the asset type and s
 
 TEST_CASE("collision editor: staging without the render managers fails rather than crashes")
 {
-    // A resource manager over an empty scratch database: the stage never gets far enough to
-    // bind through it, which is the point.
+    // A resource manager over an empty scratch database. Staging should fail before it binds
+    // anything through it.
     const std::filesystem::path dir = "scratch_editor_physics_stage";
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
@@ -173,6 +172,6 @@ TEST_CASE("collision page: a collider cooked before its mesh was cleared is not 
     cooked->outline.PushBack(Float3{0, 1, 0});
     const Guid mesh{0x77, 0x1};
     CHECK(editor::CollisionShapeEditorPage::ShowsCollider(mesh, cooked.Get()));
-    CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(Guid{}, cooked.Get())); // cleared: the last cook's is not its
+    CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(Guid{}, cooked.Get())); // mesh cleared, so not shown
     CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(mesh, nullptr));    // named, not cooked yet
 }

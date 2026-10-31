@@ -4,10 +4,10 @@
 /// foundation.rhi.webgpu:fence - CPU-side timeline fence.
 ///
 /// WebGPU has no fence object. The RHI's timeline contract is emulated CPU-side:
-/// Queue::Submit(..., fence, value) registers a wgpuQueueOnSubmittedWorkDone
-/// callback that stores `value` here when the GPU passes that submission, and
-/// Wait() pumps ProcessEvents until the value arrives - single-threaded-safe,
-/// which is exactly the web v1 model.
+/// Queue::Submit(..., fence, value) registers a wgpuQueueOnSubmittedWorkDone callback
+/// that stores `value` here when the GPU passes that submission, and Wait() pumps
+/// ProcessEvents until the value arrives. This is safe single-threaded, which is the
+/// web threading model.
 
 module;
 #include "Core/Prelude.h"
@@ -27,10 +27,10 @@ export namespace foundation::rhi::webgpu
 
     /// One queued wgpuQueueOnSubmittedWorkDone signal, owned by the callback that frees it.
     ///
-    /// It can be delivered LONG after the fence already resolved by submission index (Wait's
-    /// fast path) - including during device teardown, after the fence itself was destroyed.
-    /// The record therefore outlives the fence: the fence detaches itself on destruction and
-    /// the callback only touches `fence` while it is still attached.
+    /// It can be delivered long after the fence already resolved by submission index (Wait's
+    /// fast path), including during device teardown, after the fence itself was destroyed. The
+    /// record therefore outlives the fence: the fence detaches itself on destruction and the
+    /// callback only touches `fence` while it is still attached.
     struct WebGpuPendingSignal
     {
         WebGpuFence* fence = nullptr;
@@ -38,7 +38,7 @@ export namespace foundation::rhi::webgpu
         IAllocator* allocator = nullptr;
     };
 
-    /// CompletedValue only advances when callbacks get delivered - Wait() pumps;
+    /// CompletedValue advances only when callbacks get delivered. Wait() pumps;
     /// passive observers see new values after any pump on the same instance.
     class WebGpuFence final : public Fence
     {
@@ -77,10 +77,10 @@ export namespace foundation::rhi::webgpu
 
         u64 CompletedValue() override { return m_completed; }
 
-        /// The queue records each fenced submission's wgpu SUBMISSION INDEX here.
-        /// Wait() prefers waiting on that exact index - DevicePoll(wait, &index)
-        /// returns when THAT submission retires, immune to unrelated queue state
-        /// (a presented frame in flight can starve blanket polls on Wayland/FIFO).
+        /// The queue records each fenced submission's wgpu submission index here.
+        /// Wait() prefers waiting on that index: DevicePoll(wait, &index) returns when
+        /// that submission retires, immune to unrelated queue state (a presented frame
+        /// in flight can starve blanket polls on Wayland/FIFO).
         void NoteSubmission(u64 value, WGPUSubmissionIndex submissionIndex)
         {
             // Monotonic values: the latest note supersedes for lower values too.
@@ -103,10 +103,9 @@ export namespace foundation::rhi::webgpu
                 m_hasNote = false;
                 return true;
             }
-            // Work-done callbacks fire on DEVICE polls. Polls are NON-blocking
-            // (wait=1 can block forever on an empty queue - see :api); the iteration
-            // guard is the timeout stand-in (wgpu-native's timed waits are
-            // unimplemented).
+            // Work-done callbacks fire on device polls. Polls are non-blocking (wait=1
+            // can block forever on an empty queue; see :api), and the iteration guard
+            // stands in for a timeout (wgpu-native's timed waits are unimplemented).
             for (u32 i = 0; i < 1000000 && m_completed < value; ++i)
             {
                 m_api->wgpuInstanceProcessEvents(m_instance);
@@ -121,9 +120,9 @@ export namespace foundation::rhi::webgpu
                 // On web the work-done callback resolves from a browser microtask that
                 // cannot run while this loop spins: without yielding, m_completed never
                 // advances and the loop burns the full iteration guard walking Dawn's
-                // event maps every frame (the dominant web-frame cost). Yield returns to
-                // the event loop so the callback fires; a no-op on desktop, where polls
-                // deliver synchronously and this loop keeps its old behavior.
+                // event maps every frame. Yielding returns to the event loop so the
+                // callback fires; it is a no-op on desktop, where polls deliver
+                // synchronously.
                 m_api->YieldToEventLoop();
             }
             return m_completed >= value;

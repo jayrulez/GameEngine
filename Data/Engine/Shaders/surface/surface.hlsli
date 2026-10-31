@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A surface shader's API (Specs/custom-shaders.md, phase 6): what its Surface() and Vertex() are
+// A surface shader's API: what its Surface() and Vertex() are
 // written against. The engine includes this before the author's text in each of the shader's
 // programs (forward, depth, pick), then its pass template after, which calls them. Only this API
 // reaches every pass: the frame's own constants differ by pass (the forward View, the shadow and

@@ -27,7 +27,7 @@ export namespace editor
     public:
         /// The latest request.
         [[nodiscard]] const ViewportCapture& State() const noexcept { return m_state; }
-        /// A request waits for the next rendered frame.
+        /// Whether a request is waiting for the next rendered frame.
         [[nodiscard]] bool Armed() const noexcept { return m_screenshot.Armed(); }
 
         /// Arms the next Record to write `path`, replacing a pending request.

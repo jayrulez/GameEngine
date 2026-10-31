@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.propertyanimation - the binding resolver implementation. Walks the reflected property
-// chain (FindProperty per dot-segment, Nested for intermediates) and writes the leaf via reflection
-// set. Kept out of the interface (uses the reflection header + is not header-inline hot).
+// foundation.propertyanimation - the binding resolver. Walks the reflected property chain
+// (FindProperty for each dot-separated segment, Nested for the intermediates) and writes the leaf
+// through reflection set. It lives outside the interface because it needs the reflection header
+// and is not hot enough to be worth inlining.
 
 module;
 #include "Core/Prelude.h"
@@ -76,8 +77,8 @@ namespace foundation::propertyanimation
         {
             return Status{ErrorCode::InvalidArgument};
         }
-        // Re-walk the nested sub-instances from the LIVE component instance every call (never cache
-        // sub-object pointers across structural changes - the entity.get lesson).
+        // Re-walk the nested sub-instances from the live component instance on every call: a
+        // sub-object pointer cached across a structural change would dangle.
         Instance current = componentInstance;
         const usize count = binding.chain.Size();
         for (usize i = 0; i + 1 < count; ++i)
@@ -85,7 +86,7 @@ namespace foundation::propertyanimation
             const PropertyInfo* prop = binding.chain[i];
             if (prop->address == nullptr)
             {
-                return Status{ErrorCode::NotFound}; // computed nested property - no address to walk
+                return Status{ErrorCode::NotFound}; // a computed nested property has no address to walk
             }
             void* sub = prop->address(current);
             if (sub == nullptr)
@@ -103,7 +104,8 @@ namespace foundation::propertyanimation
         {
             return Variant{};
         }
-        // Same live re-walk as WriteBinding (never cache sub-object pointers), reflection-get the leaf.
+        // The same live re-walk as WriteBinding (sub-object pointers are never cached), then a
+        // reflection get of the leaf.
         Instance current = componentInstance;
         const usize count = binding.chain.Size();
         for (usize i = 0; i + 1 < count; ++i)
@@ -111,7 +113,7 @@ namespace foundation::propertyanimation
             const PropertyInfo* prop = binding.chain[i];
             if (prop->address == nullptr)
             {
-                return Variant{}; // computed nested property - no address to walk
+                return Variant{}; // a computed nested property has no address to walk
             }
             void* sub = prop->address(current);
             if (sub == nullptr)

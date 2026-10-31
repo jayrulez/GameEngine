@@ -3,7 +3,6 @@
 
 /// Image - owns a CPU-side pixel buffer with manipulation methods.
 /// Implements ImageData so it can be passed to anything accepting the base type.
-/// Ported from Sedulous.Images.Image.
 
 module;
 #include "Core/Prelude.h"
@@ -96,7 +95,7 @@ export namespace foundation::image
         /// Clear the image to a specific color.
         void Clear(Color32 color) { FillColor(color); }
 
-        /// Bytes per pixel for a format (static helper mirroring Sedulous's API).
+        /// Bytes per pixel for a format (a static helper).
         [[nodiscard]] static i32 GetBytesPerPixel(PixelFormat format)
         {
             return static_cast<i32>(BytesPerPixel(format));
@@ -308,8 +307,8 @@ export namespace foundation::image
         }
 
         // ---- Normal-map factories ----
-        // Ported from Sedulous.Images.Image. Normals are encoded into RGB as
-        // (n*0.5+0.5)*255; the neutral up-normal (0,0,1) -> (128,128,255).
+        // Normals are encoded into RGB as (n*0.5+0.5)*255; the neutral up-normal
+        // (0,0,1) -> (128,128,255).
 
         static Image CreateFlatNormalMap(u32 width = 256, u32 height = 256,
                                          PixelFormat format = PixelFormat::RGBA8)
@@ -485,7 +484,7 @@ export namespace foundation::image
             {
                 for (u32 x = 0; x < width; ++x)
                 {
-                    // Edge-clamped neighbours (avoids the u32 underflow latent in the original).
+                    // Edge-clamped neighbours (no u32 underflow at x = 0 or y = 0).
                     const u32 xl = (x > 0) ? x - 1 : 0;
                     const u32 xr = (x + 1 < width) ? x + 1 : width - 1;
                     const u32 yu = (y > 0) ? y - 1 : 0;

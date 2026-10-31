@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - docking from the keyboard (D4 of Specs/gui-lab-evolution-3.md): a docked panel's
-// tab picked up (`drag.pick`) and dropped on another stack's tab; `dock.focus-*` and `dock.move-*`
-// by direction (into the stack that way, else along the surface's edge, the focus going with the
-// panel); `dock.maximize` and back; `dock.close`; none bound to a key, the keyboard's way in a tab's
-// context menu (Move to, Float, Close).
+// GUI.Docking - docking from the keyboard. A docked panel's tab is picked up (`drag.pick`) and
+// dropped on another stack's tab. `dock.focus-*` and `dock.move-*` work by direction: a move goes
+// into the stack that way, else along the surface's edge, and the focus goes with the panel.
+// `dock.maximize` maximizes and restores, and `dock.close` closes. No command is bound to a key; the
+// keyboard's way in is a tab's context menu (Move to, Float, Close).
 #include "DockingTestBed.h"
 
 using namespace foundation::gui;
@@ -46,15 +46,15 @@ TEST_CASE("dock keys: focus and move by direction; into the stack that way, else
     CHECK(bed.Focused() == console);
     CHECK(bed.Run(u8"dock.focus-left")); // the hierarchy spans the whole height
     CHECK(bed.Focused() == hierarchy);
-    (void)bed.Run(u8"dock.focus-left"); // nothing that way: it stays
+    (void)bed.Run(u8"dock.focus-left"); // there is nothing that way, so the focus stays
     CHECK(bed.Focused() == hierarchy);
 
     bed.TabOf(u8"inspector")->RequestFocus();
-    CHECK(bed.Run(u8"dock.move-left")); // into the hierarchy's stack, the focus with it
+    CHECK(bed.Run(u8"dock.move-left")); // into the hierarchy's stack, and the focus goes with it
     CHECK(bed.StackOf(u8"inspector") == hierarchy);
     CHECK(bed.Focused() == hierarchy);
     bed.Lay();
-    CHECK(bed.Run(u8"dock.move-up")); // nothing above: along the surface's top
+    CHECK(bed.Run(u8"dock.move-up")); // nothing is above, so it goes along the surface's top
     const DockLayout& layout = bed.controller.GetLayout();
     const DockNode* root = layout.FindNode(layout.FindSurface(layout.MainSurface())->Root);
     CHECK(root->Axis == DockAxis::Vertical);
@@ -76,7 +76,8 @@ TEST_CASE("dock keys: maximize and back, close; no key bound to them")
     CHECK(bed.Run(u8"dock.close"));
     CHECK(bed.StackOf(u8"inspector") == kNoDock);
 
-    // No key is bound to them: docking is the pointer's, and the keys a desktop leaves free differ.
+    // No key is bound to them: docking is driven by the pointer, and the keys a desktop leaves free
+    // differ.
     const char8_t* const commands[] = {u8"dock.focus-left", u8"dock.move-down", u8"dock.maximize", u8"dock.close",
                                        u8"dock.move-to", u8"dock.float", u8"dock.next-surface", u8"dock.previous-surface"};
     for (const char8_t* command : commands)
@@ -137,7 +138,7 @@ TEST_CASE("dock keys: the Move to menu, from a tab's context menu or dock.move-t
     Menu* besideConsole = Sub(*beside, u8"console");
     REQUIRE(besideConsole != nullptr);
     REQUIRE(Row(*besideConsole, u8"Right") != nullptr);
-    Row(*besideConsole, u8"Right")->HandleActivate(); // as Return on it
+    Row(*besideConsole, u8"Right")->HandleActivate(); // as pressing Return on it does
     CHECK_FALSE(menu->IsOpen());
     const DockNodeId inspector = bed.StackOf(u8"inspector");
     const DockNode* split = bed.controller.GetLayout().FindNode(bed.controller.GetLayout().FindNode(inspector)->Parent);

@@ -167,8 +167,8 @@ TEST_CASE("input map rows: an action by its name and a line, a binding by its so
     CHECK_FALSE(code.Visible);
     CHECK_FALSE(deadZone.Visible);
 
-    // When it fires, in the old page's words: closed, the choice and its time; its seconds only
-    // for a hold or a tap, named by which.
+    // When it fires: closed, the choice and its time; its seconds row only for a hold or a tap,
+    // named by which.
     gui::PropertyInfo fires, firesKind, seconds;
     for (i64 v = 0; v < 4; ++v)
         firesKind.Choices.PushBack(gui::PropertyChoice{String(u8"raw"), v});
@@ -190,7 +190,7 @@ TEST_CASE("input map rows: an action by its name and a line, a binding by its so
     CHECK(seconds.Visible);
     CHECK(seconds.DisplayName == StringView(u8"Hold For"));
 
-    // Processing in the old page's words and bounds.
+    // Processing fields, with their names and bounds.
     gui::PropertyInfo curve, snap;
     editor::DescribeInputRow(set, u8"actions.0.processors.responseExponent", curve);
     editor::DescribeInputRow(set, u8"actions.0.processors.snap", snap);
@@ -306,7 +306,7 @@ TEST_CASE("input map page: the sets and their actions a tree, the chosen set's r
     PageFixture f;
     REQUIRE_FALSE(f.page->LoadFailed());
     CHECK(f.page->Tree() == String(u8"Gameplay\n  Move\n  Jump\nMenu\n  Back"));
-    CHECK(f.page->Fact(u8"Holds").AsView().StartsWith(u8"2 sets, 3 actions, ")); // the old page's totals
+    CHECK(f.page->Fact(u8"Holds").AsView().StartsWith(u8"2 sets, 3 actions, ")); // the totals
     CHECK(f.page->ChosenSet() == 0);
     CHECK(f.page->SetRows().GetValue(u8"name", 0).AsString() == StringView(u8"Gameplay"));
     const Optional<gui::PropertyInfo> move = f.Info(u8"actions", u8"0");
@@ -325,8 +325,8 @@ TEST_CASE("input map page: the sets and their actions a tree, the chosen set's r
     f.page->ChooseAction(1, 0);
     CHECK(f.page->ChosenSet() == 1);
     CHECK(f.page->SetRows().GetValue(u8"name", 0).AsString() == StringView(u8"Menu"));
-    // The grid's own rows, by its paths (the set's section's: "set/..."): open, the action's
-    // bindings listed under it.
+    // The grid's rows, by their paths in the set's section ("set/..."): the action is open, with
+    // its bindings listed under it.
     gui::PropertyGrid* grid = f.page->Grid();
     REQUIRE(grid != nullptr);
     CHECK(grid->IsOpen(u8"set/actions"));
@@ -357,7 +357,7 @@ TEST_CASE("input map page: a row's edit, an added set and a removed action each 
     CHECK(f.page->ChosenSet() == 2);
     f.page->Commands().Undo();
     CHECK(f.Map().sets.Size() == 2u);
-    CHECK(f.page->ChosenSet() == 1); // the set shown gone: the last one
+    CHECK(f.page->ChosenSet() == 1); // the shown set is gone, so the last one is chosen
 
     f.page->ChooseAction(0, 0);
     REQUIRE(f.page->RemoveChosen());
@@ -382,7 +382,8 @@ TEST_CASE("input map page: a set folded in the tree stays folded when another is
 
 TEST_CASE("input map page: a set added and undone after a row's edit keeps that edit")
 {
-    // The whole edit's before is the map as it is, not as the base page's own last step left it.
+    // A whole edit's before state is the map as it is now, not as the base page's last step left
+    // it.
     PageFixture f;
     f.Edit(u8"actions.1.name", gui::Variant(StringView(u8"Leap")));
     f.page->AddSet();
@@ -457,7 +458,7 @@ TEST_CASE("input map page: a binding's gamepad is a choice, Any or a pad by its 
     CHECK(device.Choices[1].Name == StringView(u8"1"));
     CHECK(device.Choices[1].Value == 0);
 
-    // Chosen through the grid's rows: the binding's device its index.
+    // Chosen through the grid's rows: the binding's device is stored as its index.
     PageFixture f;
     f.page->ChooseAction(1, 0); // Menu's Back
     f.Map().sets[1].actions[0].bindings[0].source = input::BindingSource::GamepadButton;
@@ -482,7 +483,7 @@ TEST_CASE("input map page: a map the game cannot read says so, and Save refuses 
 
 // A touch stick's radius is normalised, as the runtime reads it (the touch's offset from its anchor,
 // a fraction of the screen, over the radius) and as the touch regions are: its row is bounded and
-// said the same way, not in pixels (a typed 100 saturated every touch).
+// described the same way, not in pixels (a value like 100 would saturate every touch).
 TEST_CASE("input map rows: a touch stick's radius is a fraction of the screen, as its area is")
 {
     input::Binding stick;

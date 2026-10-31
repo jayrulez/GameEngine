@@ -3,13 +3,12 @@
 
 // UI - primary module interface unit for `foundation.ui`.
 //
-// The retained-mode UI framework, a faithful port of Sedulous.UI onto the our
-// VG/Fonts stack. Platform-agnostic: the core knows nothing about the shell/input -
-// a separate foundation.ui.shell bridge feeds its abstract input/clipboard seams.
+// The retained-mode UI framework, built on the VG and Fonts stack. It is platform-agnostic: the
+// core knows nothing about the shell or input, and a separate foundation.ui.shell bridge feeds its
+// abstract input and clipboard interfaces.
 //
 // One named module composed of partitions (one per subsystem), re-exported here so
-// consumers write a single `import foundation.ui;`. Add `export import :partition;`
-// lines as the port progresses (bottom-up: Core -> Layout -> Drawing -> ...).
+// consumers write a single `import foundation.ui;`.
 
 export module foundation.ui;
 

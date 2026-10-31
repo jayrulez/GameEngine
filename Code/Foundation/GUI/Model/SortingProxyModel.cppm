@@ -3,11 +3,10 @@
 
 // GUI - :sorting_proxy_model partition
 //
-// SortingProxyModel: wraps a source Model and presents the same columns with the rows reordered
-// by a sort column. Modeled on eepp's Models::SortingProxyModel (role only). It is both an
-// IModel (what a view binds to) and an IModelClient of the source (so it re-sorts + re-notifies
-// when the source changes). Sorting uses Variant::Compare on the Sort role, so numeric columns
-// order by value. A stable sort keeps equal rows in source order.
+// SortingProxyModel: wraps a source Model and presents the same columns with the rows reordered by
+// a sort column. It is both an IModel (what a view binds to) and an IModelClient of the source (so
+// it re-sorts and notifies its own views when the source changes). Sorting uses Variant::Compare on
+// the Sort role, so numeric columns order by value. A stable sort keeps equal rows in source order.
 //
 // Because a TableView is a client of this proxy, its column-header click asks the model to Sort,
 // which re-sorts and refreshes the view with no view-side changes.
@@ -17,7 +16,7 @@ module;
 
 export module foundation.gui:sorting_proxy_model;
 
-import foundation.core; // Array, i32, usize
+import foundation.core;
 import :variant;
 import :model_index;
 import :model;
@@ -50,8 +49,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] IModel* GetSource() const noexcept { return m_source; }
 
-        // Sort by a column in a given order (None restores source order): the sort capability a
-        // view's header asks for.
+        // Sorts by a column in a given order (None restores source order). A view's header calls
+        // this when clicked.
         bool Sort(usize column, SortOrder order) override
         {
             m_sortColumn = static_cast<i32>(column);
@@ -61,8 +60,8 @@ export namespace foundation::gui
             return true;
         }
 
-        // Header-click behavior: a new column sorts ascending; the same column toggles
-        // ascending <-> descending.
+        // Header-click behavior: a new column sorts ascending; the same column toggles between
+        // ascending and descending.
         void ToggleSort(usize column)
         {
             if (m_sortColumn == static_cast<i32>(column))
@@ -88,8 +87,8 @@ export namespace foundation::gui
                        : -1;
         }
 
-        // The source changed, in any way: re-sort and reset our own views (a range in the source
-        // lands anywhere in the sorted order).
+        // The source changed in some way: re-sort and reset our own views, since a range of source
+        // rows can land anywhere in the sorted order.
         void OnModelReset() override
         {
             Rebuild();
@@ -162,7 +161,7 @@ export namespace foundation::gui
             }
         }
 
-        // True if source row `lhs` should sort before `rhs` (strictly; equal keeps order = stable).
+        // True if source row `lhs` should sort before `rhs` (strictly, so equal rows keep order).
         [[nodiscard]] bool ShouldPrecede(i32 lhs, i32 rhs, bool ascending) const
         {
             const Variant a = m_source->Data(MakeModelIndex(lhs, m_sortColumn), ModelRole::Sort);

@@ -3,26 +3,30 @@
 
 // GUI.Docking - :dock_area partition
 //
-// DockArea: floating surfaces within one window (D5 of Specs/gui-lab-evolution-3.md), the virtual
-// surface host for the web and one-window platforms. The main surface's DockSpace fills it; each
-// floating surface of the layout is a DockFloat over it, a Window holding a DockSpace of its own, so
-// a float is a whole dock tree that is docked into like the main one. The area keeps the floats
-// with the layout as it changes (one made for a surface that came, one ended for a surface that
-// went), each at its surface's bounds (this widget's space), and notes back what the user does to a
-// window: moved or resized, its bounds; closed, its panels closed as their policies say. A tab
-// dragged with Shift held floats: the dock spaces pass the drop on, and the area shows the window
-// at the pointer and makes it there. A float dragged by its title bar follows the pointer and docks
-// whole where it is let go over a target (the preview the area its content would take); with Shift
-// it is only moved; Escape puts it back. The dock keys reach across its surfaces: an arrow past a
-// float's edge goes on to the stack beyond it, `dock.next-surface` and `dock.previous-surface` take
-// the focus from one surface to the next, and the Move to menu lists every surface's stacks.
+// DockArea: floating surfaces within one window. It is the virtual surface host for the web and
+// for platforms with a single window. The main surface's DockSpace fills the area, and each
+// floating surface of the layout is a DockFloat over it: a Window holding its own DockSpace, so a
+// float is a whole dock tree that panels dock into just as they dock into the main one. As the
+// layout changes, the area makes a float for each surface that appears and ends the float of each
+// surface that goes, and places each float at its surface's bounds (in this widget's space). It
+// reports back what the user does to a window: a move or resize updates the surface's bounds, and
+// a close closes the window's panels as their policies say.
 //
-// Floats as OS windows (D6): given an IDockWindows (a host's), each floating surface is a dock space
-// in a window of its own instead, its bounds in screen units; the window's moves, resizes and close
-// come back through NoteWindowBounds and CloseFloat. A tab or stack let go outside every window
-// floats there; with Shift, at the pointer; Move to's Float, over its stack. No window follows the
-// pointer: the system moves a window by its own frame. Going from one to the other converts the
-// floats' bounds between the area's units and the screen's.
+// A tab dragged with Shift held floats: the dock spaces pass the drop on, and the area previews
+// the window at the pointer and makes it there. A float dragged by its title bar follows the
+// pointer and, when let go over a target, docks whole there; the preview shows the area its
+// content would take. With Shift held the float is only moved, and Escape puts it back. The dock
+// keys reach across surfaces: an arrow key past a float's edge moves on to the stack beyond it,
+// `dock.next-surface` and `dock.previous-surface` move the focus from one surface to the next, and
+// the Move to menu lists the stacks of every surface.
+//
+// Floats as OS windows: given an IDockWindows from a host, the area shows each floating surface as
+// a dock space in a window of its own instead, with its bounds in screen units. The window's moves,
+// resizes and close come back through NoteWindowBounds and CloseFloat. A tab or stack let go
+// outside every window floats where it was let go; with Shift held it floats at the pointer, and
+// the Move to menu's Float command floats it over its stack. No window follows the pointer during a
+// drag, because the system moves a window by its own frame. Switching between the two modes
+// converts the floats' bounds between the area's units and the screen's.
 
 module;
 #include "Core/Prelude.h"
@@ -43,28 +47,31 @@ export namespace foundation::gui
 {
     class DockArea;
 
-    /// Floats as windows of their own (D6): what a DockArea asks of the host that opens them (a
-    /// GuiHost's, DockHostWindows). Bounds are in screen units. The host tells the area what the user
-    /// does to a window: DockArea::NoteWindowBounds, DockArea::CloseFloat.
+    /// What a DockArea needs from a host to show its floats as windows of their own (for a
+    /// GuiHost, DockHostWindows implements it). Bounds are in screen units. The host reports what
+    /// the user does to a window through DockArea::NoteWindowBounds and DockArea::CloseFloat.
     class IDockWindows
     {
     public:
         virtual ~IDockWindows() = default;
-        /// Opens a window for `surface` showing `content` over all of it, at `bounds` where windows
-        /// hold the places given them (else of its size, where the system puts it); false when it
-        /// opened none.
+        /// Opens a window for `surface` with `content` filling it. Where the platform keeps windows
+        /// at the places they are given, the window opens at `bounds`; elsewhere it opens at the size
+        /// of `bounds` wherever the system puts it. Returns false when no window opened.
         virtual bool Open(DockSurfaceId surface, Node& content, const Rectangle& bounds, core::StringView title) = 0;
         virtual void Close(DockSurfaceId surface) = 0;
-        /// Moves and sizes its window (a layout adopted, not the user's move).
+        /// Moves and sizes the window of `surface`. Called when a layout is adopted, not when the
+        /// user moves the window.
         virtual void Place(DockSurfaceId surface, const Rectangle& bounds) = 0;
         virtual void SetTitle(DockSurfaceId surface, core::StringView title) = 0;
         virtual void Raise(DockSurfaceId surface) = 0;
-        /// Where `local` (in `node`'s space) is on the screen; false where that is not known (Wayland).
+        /// Converts `local`, in `node`'s space, to screen coordinates in `screen`. Returns false
+        /// where the screen position is not known (Wayland).
         virtual bool ToScreen(const Node& node, core::Float2 local, core::Float2& screen) = 0;
     };
 
-    /// A floating surface's window (`window.dock-float`): its title its panels', its content a
-    /// DockSpace showing the surface; closing it closes its panels as their policies say.
+    /// The window of a floating surface (`window.dock-float`). Its title names its panels and its
+    /// content is a DockSpace showing the surface. Closing it closes its panels as their policies
+    /// say.
     class DockFloat : public Window
     {
         RTTI_OBJECT(DockFloat, Window)
@@ -73,17 +80,19 @@ export namespace foundation::gui
         [[nodiscard]] DockSurfaceId GetSurface() const noexcept { return m_surface; }
         [[nodiscard]] DockSpace* GetSpace() const noexcept { return m_space.Get(); }
         [[nodiscard]] DockArea* GetArea() const noexcept { return m_area; }
-        /// Its close button's: its panels closed as their policies say.
+        /// Called by the close button: closes the window's panels as their policies say.
         void RequestClose() override;
-        /// Being dragged by its title bar (D5): it follows the pointer, out of hit tests with all it
-        /// holds so the targets under it answer (`.dock-dragging`).
+        /// Whether the window is being dragged by its title bar. While dragged it follows the
+        /// pointer, and it and everything it holds are left out of hit tests (`.dock-dragging`) so
+        /// the drop targets under it answer.
         [[nodiscard]] bool IsBeingDragged() const noexcept { return m_dragging; }
-        /// While it is dragged, nothing of it is under the pointer: the drop is asked of what is below.
+        /// While the window is dragged, no part of it is found under the pointer, so the drop goes
+        /// to what is below it.
         [[nodiscard]] Node* OverFind(core::Float2 worldPoint) override { return m_dragging ? nullptr : Window::OverFind(worldPoint); }
 
     private:
         friend class DockArea;
-        // Its title bar's drag: the whole surface, the window following the pointer.
+        // Starts a drag of the whole surface from the title bar; the window follows the pointer.
         bool StartTitleDrag(DragRequest& request);
         void FollowTo(core::Float2 rootAt);
         void EndTitleDrag(const DragResult& result);
@@ -92,16 +101,16 @@ export namespace foundation::gui
         DockSurfaceId m_surface;
         RefPtr<DockSpace> m_space;
         bool m_dragging = false;
-        core::Float2 m_grab{0.0f, 0.0f}; // where on it the press took it
-        core::Float2 m_dragFrom{0.0f, 0.0f}; // where it was (Escape puts it back)
+        core::Float2 m_grab{0.0f, 0.0f}; // where on the window the press grabbed it
+        core::Float2 m_dragFrom{0.0f, 0.0f}; // where it was before the drag (Escape puts it back)
     };
 
-    /// DockArea::kFloatSize, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// DockArea::kFloatSize, kept at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr core::Float2 kDockAreaFloatSize{360.0f, 260.0f};
 
-    /// DockArea::kKeepInView, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// DockArea::kKeepInView, kept at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr f32 kDockAreaKeepInView = 48.0f;
 
     class DockArea : public UIWidget, public IDockView, public IDockSurroundings
@@ -132,7 +141,7 @@ export namespace foundation::gui
         ~DockArea() override
         {
             if (m_windows != nullptr)
-                EndFloats(); // its windows close with it
+                EndFloats(); // the floats' windows close with the area
             if (m_controller != nullptr)
                 m_controller->RemoveView(*this);
         }
@@ -154,7 +163,7 @@ export namespace foundation::gui
         [[nodiscard]] DockSpace* GetMainSpace() const noexcept { return m_main.Get(); }
         [[nodiscard]] usize GetFloatCount() const noexcept { return m_floats.Size(); }
         [[nodiscard]] DockFloat* GetFloat(usize index) const noexcept { return index < m_floats.Size() ? m_floats[index].Get() : nullptr; }
-        /// The window of a floating surface; null for a surface it does not show.
+        /// Returns the window of a floating surface, or null for a surface this area does not show.
         [[nodiscard]] DockFloat* FloatOf(DockSurfaceId surface) const noexcept
         {
             for (const RefPtr<DockFloat>& window : m_floats)
@@ -163,9 +172,9 @@ export namespace foundation::gui
             return nullptr;
         }
 
-        /// Floats as windows of their own (D6) through `windows` (a host's, outliving the area or
-        /// taken back first), or in the area (null). The floats' bounds are converted between the
-        /// area's units and the screen's.
+        /// Shows the floats as windows of their own through `windows`, or inside the area when
+        /// `windows` is null. `windows` comes from a host and must outlive the area or be taken back
+        /// first. The floats' bounds are converted between the area's units and the screen's.
         void SetWindows(IDockWindows* windows)
         {
             if (windows == m_windows)
@@ -191,24 +200,25 @@ export namespace foundation::gui
                         bounds.y += sign * origin.y;
                     }
                     else
-                        bounds.x = bounds.y = 0.0f; // where the system puts it (its place unknown)
+                        bounds.x = bounds.y = 0.0f; // position unknown: the system places it
                     m_controller->NoteSurfaceBounds(surface.Id, bounds);
                 }
             }
             ShowLayout();
         }
         [[nodiscard]] IDockWindows* GetWindows() const noexcept { return m_windows; }
-        /// A floating surface's window was moved or resized by the user (its host's report, in
-        /// screen units).
+        /// Called by the host when the user moves or resizes a floating surface's window. `bounds`
+        /// is in screen units.
         void NoteWindowBounds(DockSurfaceId surface, const Rectangle& bounds)
         {
             if (m_controller == nullptr)
                 return;
             if (OsFloat* shown = OsFloatOf(surface))
-                shown->Placed = bounds; // where it is: not placed there again
+                shown->Placed = bounds; // the window is already there, so it is not placed again
             m_controller->NoteSurfaceBounds(surface, bounds);
         }
-        /// The dock space showing a floating surface in its own window; null when none does.
+        /// Returns the dock space showing a floating surface in its own window, or null when none
+        /// does.
         [[nodiscard]] DockSpace* WindowSpaceOf(DockSurfaceId surface) const noexcept
         {
             for (const OsFloat& shown : m_osFloats)
@@ -216,8 +226,8 @@ export namespace foundation::gui
                     return shown.Space.Get();
             return nullptr;
         }
-        /// Its panels closed as their policies say (one that may not close stays, and the window
-        /// with it): a float's close button, or its own window's.
+        /// Closes the panels of a floating surface as their policies say, for a float's close button
+        /// or for its own window's. A panel that may not close stays, and so does the window.
         void CloseFloat(DockSurfaceId surface)
         {
             if (m_controller == nullptr)
@@ -231,8 +241,8 @@ export namespace foundation::gui
                 (void)m_controller->Close(panel.AsView());
         }
 
-        /// Where a float of `size` let go at `at` (this widget's space) stands: its title bar under
-        /// the pointer, `grab` along it, kept in the area.
+        /// Returns the bounds of a float of `size` let go at `at` (in this widget's space). Its title
+        /// bar sits under the pointer, grabbed at `grab`, and the float is kept in the area.
         [[nodiscard]] Rectangle FloatBoundsAt(core::Float2 at, core::Float2 size, core::Float2 grab) const
         {
             const core::Float2 place = KeptInView(core::Float2{at.x - grab.x, at.y - grab.y}, size);
@@ -250,8 +260,8 @@ export namespace foundation::gui
                 ShowWindows(layout);
                 return;
             }
-            // The floats whose surfaces went (docked away, emptied) end; their dock spaces leave
-            // the controller's views as they do.
+            // End the floats whose surfaces are gone (docked away or emptied); their dock spaces
+            // leave the controller's views as they end.
             for (usize i = m_floats.Size(); i > 0; --i)
                 if (layout.FindSurface(m_floats[i - 1]->GetSurface()) == nullptr)
                 {
@@ -259,7 +269,7 @@ export namespace foundation::gui
                     m_floats.RemoveAt(i - 1);
                     gone->RemoveFromParent();
                 }
-            usize cascade = 0; // its place among the floats
+            usize cascade = 0; // the float's place in the cascade
             for (const DockSurface& surface : layout.Surfaces())
             {
                 if (surface.Kind != DockSurfaceKind::Floating)
@@ -282,7 +292,8 @@ export namespace foundation::gui
                 Rectangle bounds = surface.Bounds;
                 if (bounds.width <= 0.0f || bounds.height <= 0.0f)
                 {
-                    // None of its own: a cascade from the top left, noted as its own from then.
+                    // The surface has no bounds of its own: cascade it from the top left, and note
+                    // those bounds as its own from then on.
                     const f32 step = 28.0f * static_cast<f32>(cascade - 1);
                     bounds = Rectangle{40.0f + step, 40.0f + step, kFloatSize.x, kFloatSize.y};
                     m_controller->NoteSurfaceBounds(surface.Id, bounds);
@@ -295,13 +306,14 @@ export namespace foundation::gui
                 m_preview->ToFront(); // over the floats
             RequestLayout();
         }
-        [[nodiscard]] const String* PanelOf(const Node&) const override { return nullptr; } // its dock spaces answer
+        [[nodiscard]] const String* PanelOf(const Node&) const override { return nullptr; } // the dock spaces answer this
 
         // === IDockSurroundings ===
-        /// What is just past the surface's edge (its window's, for a float) the way `way` goes, level
-        /// with the middle of `stack`: the topmost other float there, else the main surface; of it,
-        /// the stack there or the one nearest. Past the main surface's edge is outside the area:
-        /// nothing (`dock.next-surface` reaches the floats from it).
+        /// Returns the stack just past the edge of `from`'s surface (its window, for a float) in
+        /// direction `way`, level with the middle of `stack`. The surface found there is the topmost
+        /// other float, else the main surface, and the result is its stack at that point or the
+        /// nearest one. Past the main surface's edge lies outside the area, so there is nothing
+        /// there; `dock.next-surface` reaches the floats from the main surface.
         [[nodiscard]] DockNodeId StackBeyond(const DockSpace& from, DockNodeId stack, DockDirection way) const override
         {
             const UIWidget* shown = from.WidgetOf(stack);
@@ -363,9 +375,11 @@ export namespace foundation::gui
             return false;
         }
 
-        /// The focus taken to the next surface (`backward`, the one before): the main one, then the
-        /// floats as they were made, around; to the stack last focused there, else its first. With
-        /// the focus in none of them, to the first (the last). False when there is no other surface.
+        /// Moves the focus to the next surface, or to the previous one when `backward`. The order is
+        /// the main surface, then the floats in the order they were made, wrapping around. The focus
+        /// goes to the stack last focused on that surface, else to its first stack. When no surface
+        /// has the focus, it goes to the first surface (the last, when `backward`). Returns false
+        /// when there is no other surface.
         bool FocusNextSurface(bool backward)
         {
             Array<DockSpace*> spaces;
@@ -382,7 +396,7 @@ export namespace foundation::gui
                 if (at == count)
                     next = backward ? count - step : step - 1;
                 else if (step == count)
-                    break; // round to where it is
+                    break; // wrapped round to the surface that has the focus
                 else
                     next = backward ? (at + count - step) % count : (at + step) % count;
                 DockSpace& space = *spaces[next];
@@ -399,7 +413,8 @@ export namespace foundation::gui
             return false;
         }
 
-        /// Where a float being asked for would stand (this widget's space); false when none is.
+        /// Gets where a requested float would stand, in this widget's space. Returns false when no
+        /// float is being requested.
         [[nodiscard]] bool GetFloatPreview(Rectangle& out) const
         {
             if (!m_preview->IsVisible())
@@ -407,22 +422,22 @@ export namespace foundation::gui
             out = m_previewBounds;
             return true;
         }
-        /// Where a panel floated from its stack stands: over the stack, a little in, at most the
-        /// stack's size (and at least a usable one).
+        /// Returns the bounds of a panel floated from its stack: over the stack, inset a little, no
+        /// larger than the stack and no smaller than a usable size.
         [[nodiscard]] Rectangle FloatBoundsFor(core::StringView panel) const
         {
             const DockSpace* space = SpaceOf(panel);
             const UIWidget* stack = space != nullptr ? space->WidgetOf(m_controller->GetLayout().StackOf(panel)) : nullptr;
             if (stack == nullptr)
-                return Rectangle{0.0f, 0.0f, 0.0f, 0.0f}; // cascaded
+                return Rectangle{0.0f, 0.0f, 0.0f, 0.0f}; // no bounds: the float is cascaded
             if (m_windows != nullptr)
             {
-                // Its own window over the stack, a little in, on the screen.
+                // In its own window: over the stack, inset a little, in screen units.
                 const core::Float2 size = FloatSizeOf(stack->GetSize());
                 core::Float2 screen;
                 if (m_windows->ToScreen(*stack, core::Float2{24.0f, 24.0f}, screen))
                     return Rectangle{screen.x, screen.y, size.x, size.y};
-                return Rectangle{0.0f, 0.0f, size.x, size.y}; // where the system puts it
+                return Rectangle{0.0f, 0.0f, size.x, size.y}; // position unknown: the system places it
             }
             const Rect at = stack->GetScreenBounds();
             const core::Float2 origin = ConvertToNodeSpace(core::Float2{at.x, at.y});
@@ -432,13 +447,13 @@ export namespace foundation::gui
         }
 
     protected:
-        // A float asked for (Shift held): the drop the dock spaces passed on lands here, the
-        // window at the pointer, its title bar under it.
+        // A float requested with Shift held: the dock spaces pass the drop on to the area, which
+        // places the window at the pointer with its title bar under it.
         void OnDragQuery(DropQuery& query) override
         {
             if (!DockSpace::AsksToFloat(query))
                 return;
-            // A float dragged by its title with Shift: only moved, where it is let go.
+            // A float dragged by its title bar with Shift held is only moved to where it is let go.
             if (const DockSurfaceId surface = m_main->DraggedSurface(query.Payload); surface != kNoDock)
             {
                 HidePreview();
@@ -446,7 +461,7 @@ export namespace foundation::gui
                 query.Accept(DropEffect::Move);
                 return;
             }
-            // A whole stack from its grip, floated as it is.
+            // A whole stack dragged by its grip floats as it is.
             if (const DockNodeId stack = m_main->DraggedStack(query.Payload); stack != kNoDock)
             {
                 const DockNode* node = m_controller->GetLayout().FindNode(stack);
@@ -497,7 +512,7 @@ export namespace foundation::gui
             }
             const String panel = core::Move(m_floatPanel);
             const DockNodeId stack = m_floatStack;
-            const Rectangle bounds = OnScreen(m_previewBounds); // its own window, where the preview was
+            const Rectangle bounds = OnScreen(m_previewBounds); // in its own window, where the preview was
             HidePreview();
             if (m_controller == nullptr)
                 return;
@@ -508,8 +523,8 @@ export namespace foundation::gui
         }
 
     protected:
-        // The main surface fills it; each float at its surface's place (where the pointer has it
-        // while it is dragged), kept in view.
+        // The main surface fills the area. Each float goes at its surface's place (or where the
+        // pointer has it while it is dragged) and is kept in view.
         void OnLayout() override
         {
             const Rect box = GetContentBounds();
@@ -530,7 +545,8 @@ export namespace foundation::gui
     private:
         friend class DockFloat;
 
-        // A dock space of the area places its floats as the area does.
+        // Hooks a dock space up to the area: the area places the space's floats, tells it what lies
+        // past its edges and floats what is dragged outside it.
         void Placing(DockSpace& space)
         {
             DockArea* self = this;
@@ -538,7 +554,8 @@ export namespace foundation::gui
             space.SetSurroundings(this);
             space.SetOnDraggedOutside([self](const DockDragged& dragged, const DragResult& result) { self->FloatOutside(dragged, result); });
         }
-        // The dock spaces of its floats, in the area or in windows of their own, as they were made.
+        // Collects the dock spaces of the floats, in the area or in their own windows, in the order
+        // they were made.
         void FloatSpaces(Array<DockSpace*>& out) const
         {
             for (const RefPtr<DockFloat>& window : m_floats)
@@ -549,10 +566,10 @@ export namespace foundation::gui
         struct OsFloat
         {
             DockSurfaceId Surface = kNoDock;
-            RefPtr<Panel> Content; // its window's root holds it
+            RefPtr<Panel> Content; // held by the window's root
             RefPtr<DockSpace> Space;
             String Title;
-            Rectangle Placed{0.0f, 0.0f, 0.0f, 0.0f}; // where its window was put or reported
+            Rectangle Placed{0.0f, 0.0f, 0.0f, 0.0f}; // where the window was placed or last reported
         };
         [[nodiscard]] OsFloat* OsFloatOf(DockSurfaceId surface) noexcept
         {
@@ -561,8 +578,9 @@ export namespace foundation::gui
                     return &shown;
             return nullptr;
         }
-        // Bounds in the area made the screen's when its floats are windows of their own (where the
-        // screen is not known, of their size where the system puts them).
+        // Converts bounds in the area to screen units when the floats are windows of their own.
+        // Where the screen position is not known, only the size is kept and the system places the
+        // window.
         [[nodiscard]] Rectangle OnScreen(const Rectangle& bounds) const
         {
             if (m_windows == nullptr)
@@ -572,7 +590,7 @@ export namespace foundation::gui
                 return Rectangle{screen.x, screen.y, bounds.width, bounds.height};
             return Rectangle{0.0f, 0.0f, bounds.width, bounds.height};
         }
-        // Every float ended, in the area or its window (the layout keeps the surfaces).
+        // Ends every float, in the area or in its own window; the layout keeps the surfaces.
         void EndFloats()
         {
             for (const RefPtr<DockFloat>& window : m_floats)
@@ -580,14 +598,15 @@ export namespace foundation::gui
             m_floats.Clear();
             while (!m_osFloats.IsEmpty())
             {
-                const OsFloat gone = m_osFloats.Back(); // held while its window closes
+                const OsFloat gone = m_osFloats.Back(); // kept alive while its window closes
                 m_osFloats.PopBack();
                 m_windows->Close(gone.Surface);
             }
         }
-        // Each floating surface in a window of its own: made for a surface that came, closed for one
-        // that went, retitled and placed as the layout has it. A window that cannot be opened takes
-        // the area back to floats in it.
+        // Shows each floating surface in a window of its own: opens a window for each new surface,
+        // closes the window of each surface that is gone, and retitles and places each window as the
+        // layout has it. When a window cannot be opened, the area goes back to showing all the
+        // floats inside itself.
         void ShowWindows(const DockLayout& layout)
         {
             for (usize i = m_osFloats.Size(); i > 0; --i)
@@ -608,7 +627,8 @@ export namespace foundation::gui
                 Rectangle bounds = surface.Bounds;
                 if (bounds.width <= 0.0f || bounds.height <= 0.0f)
                 {
-                    // None of its own: a cascade from the area's top left, on the screen.
+                    // The surface has no bounds of its own: cascade it from the area's top left, in
+                    // screen units.
                     const f32 step = 40.0f + 28.0f * static_cast<f32>(cascade - 1);
                     bounds = OnScreen(Rectangle{step, step, kFloatSize.x, kFloatSize.y});
                     m_controller->NoteSurfaceBounds(surface.Id, bounds);
@@ -653,17 +673,18 @@ export namespace foundation::gui
                 if (!m_windows->Open(surface.Id, *made.Content, bounds, title.AsView()))
                 {
                     m_osFloats.PopBack();
-                    SetWindows(nullptr); // no window of its own: the floats in the area, all of them
+                    SetWindows(nullptr); // a window failed to open: show all the floats in the area
                     return;
                 }
             }
         }
-        // A panel or a stack let go outside every window: floated there, in a window of its own,
-        // its title bar under the pointer (where the pointer is not known, where the system puts it).
+        // Floats a panel or a stack let go outside every window into a window of its own, with its
+        // title bar under the pointer. Where the pointer's screen position is not known, the system
+        // places the window.
         void FloatOutside(const DockDragged& dragged, const DragResult& result)
         {
             if (m_windows == nullptr || m_controller == nullptr || dragged.IsSurface())
-                return; // in the area, outside it is nowhere
+                return; // floats inside the area cannot go outside it
             const DockLayout& layout = m_controller->GetLayout();
             String first = dragged.Panel;
             if (dragged.IsStack())
@@ -685,7 +706,8 @@ export namespace foundation::gui
                     return window.Get();
             return nullptr;
         }
-        // The stack the focus is in noted as its surface's last, for the focus to come back to.
+        // Notes the stack that has the focus as its surface's last focused stack, for the focus to
+        // return to.
         void NoteFocusedStack()
         {
             DockSpace* focused = m_main->FocusedStack() != kNoDock ? m_main.Get() : nullptr;
@@ -723,8 +745,8 @@ export namespace foundation::gui
                     return space;
             return nullptr;
         }
-        // A float's size from what it came from: no larger than most of the area, no smaller than a
-        // window can be used at.
+        // Returns a float's size from the size of what it came from: no larger than most of the
+        // area, and no smaller than a usable window.
         [[nodiscard]] core::Float2 FloatSizeOf(core::Float2 from) const
         {
             const core::Float2 room = GetSize();
@@ -736,7 +758,7 @@ export namespace foundation::gui
             const UIWidget* stack = space != nullptr ? space->WidgetOf(m_controller->GetLayout().StackOf(panel)) : nullptr;
             return FloatSizeOf(stack != nullptr ? stack->GetSize() : kFloatSize);
         }
-        // The float's preview at `bounds`, over everything.
+        // Shows the float preview at `bounds`, above everything.
         void ShowFloatPreview(const Rectangle& bounds)
         {
             m_previewBounds = bounds;
@@ -751,14 +773,15 @@ export namespace foundation::gui
             if (m_preview->IsVisible())
                 m_preview->SetVisible(false);
         }
-        // A window's place moved so a part of its title bar stays in the area.
+        // Returns the window position `at`, moved so part of its title bar stays in the area.
         [[nodiscard]] core::Float2 KeptInView(core::Float2 at, core::Float2 size) const
         {
             const core::Float2 room = GetSize();
             const f32 keep = Min(kKeepInView, size.x);
             return core::Float2{Clamp(at.x, keep - size.x, Max(0.0f, room.x - keep)), Clamp(at.y, 0.0f, Max(0.0f, room.y - 28.0f))};
         }
-        // Its first stack's panel shown, and how many more it holds.
+        // Returns a float's title: the panel shown in its first stack, then how many more panels
+        // it holds.
         [[nodiscard]] String TitleOf(const DockLayout& layout, const DockSurface& surface) const
         {
             usize count = 0;
@@ -779,36 +802,36 @@ export namespace foundation::gui
             if (m_controller == nullptr)
                 return;
             const core::Float2 at = KeptInView(window.GetPosition(), window.GetSize());
-            window.SetPosition(at); // let go out of reach: back where its title can be taken
+            window.SetPosition(at); // let go out of reach: moved back to where its title bar can be grabbed
             m_controller->NoteSurfaceBounds(window.GetSurface(), Rectangle{at.x, at.y, window.GetSize().x, window.GetSize().y});
         }
         DockController* m_controller = nullptr;
         RefPtr<DockSpace> m_main;
         Array<RefPtr<DockFloat>> m_floats;
-        IDockWindows* m_windows = nullptr; // floats as windows of their own (D6); not owned
+        IDockWindows* m_windows = nullptr; // floats as windows of their own; not owned
         Array<OsFloat> m_osFloats;
-        RefPtr<Panel> m_preview; // where a float asked for would stand
+        RefPtr<Panel> m_preview; // where a requested float would stand
         Rectangle m_previewBounds{0.0f, 0.0f, 0.0f, 0.0f};
-        String m_floatPanel; // the panel it is for
-        DockNodeId m_floatStack = kNoDock; // or the stack
+        String m_floatPanel; // the panel the preview is for
+        DockNodeId m_floatStack = kNoDock; // or the stack it is for
         DockSurfaceId m_moving = kNoDock; // a float dragged with Shift: only moved
         struct LastFocused
         {
             DockSurfaceId Surface;
             DockNodeId Stack;
         };
-        Array<LastFocused> m_lastFocused; // each surface's stack the focus last left
+        Array<LastFocused> m_lastFocused; // the stack on each surface that last had the focus
     };
 
     inline DockFloat::DockFloat(DockArea& area, DockSurfaceId surface) : m_area(&area), m_surface(surface)
     {
-        // Its title bar's press is a dock drag of the whole surface.
+        // A press on the title bar starts a dock drag of the whole surface.
         DragHandle* bar = GetTitleBar();
         bar->SetDragsItself(false);
         DockFloat* self = this;
         bar->SetDragSource([self](DragRequest& request) { return self->StartTitleDrag(request); });
-        // When the drag ends the window may be gone (docked away): its title bar, which the drag
-        // holds, says whether it is still in one.
+        // When the drag ends the window may be gone (docked away). The drag holds the title bar, so
+        // the title bar tells whether it is still in a window.
         bar->SetOnDragEnd([bar](const DragResult& result)
         {
             if (DockFloat* window = Cast<DockFloat>(bar->GetParent()))
@@ -833,7 +856,7 @@ export namespace foundation::gui
         request.Payload.Value = core::Variant::From<u64>(static_cast<u64>(m_surface));
         request.Payload.Label = String(GetTitle());
         request.Payload.Allowed = DropEffectsMove;
-        m_grab = request.Press; // the title bar is at the window's top left: the same place
+        m_grab = request.Press; // the title bar is at the window's top left, so the grab point is the same on both
         m_dragFrom = GetPosition();
         DockFloat* self = this;
         request.Follow = [self](core::Float2 rootAt) { self->FollowTo(rootAt); };
@@ -861,6 +884,6 @@ export namespace foundation::gui
             m_area->RequestLayout();
         }
         else if (result.Target == nullptr)
-            m_area->NoteArranged(*this); // let go over nothing (off the area): left there, in reach
+            m_area->NoteArranged(*this); // let go over no target (off the area): left there, kept in reach
     }
 }

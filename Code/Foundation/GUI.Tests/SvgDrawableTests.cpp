@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the SVG drawable: an SVG picture as image content, from its markup (an icon set compiled
-// into the binary, owning its document) or by a path through the resource provider (borrowing
-// the provider's); its intrinsic size is the document's, it draws paths at the size it lands, and
-// a tint recolours it whole. PictureDrawable picks SVG or raster by the source (an SVG by a .svg
-// ending or written inline as a data: URL, which the provider parses once and keeps), and an
-// Image's src, a menu command's icon and a rich text's inline icon take either.
+// GUI - the SVG drawable: an SVG picture as image content, made from its markup (an icon set
+// compiled into the binary, which owns its document) or from a path through the resource provider
+// (borrowing the provider's document). Its intrinsic size is the document's, it draws paths at the
+// size it lands at, and a tint recolours all of it. PictureDrawable picks SVG or raster by the
+// source: an SVG has a .svg ending or is written inline as a data: URL, which the provider parses
+// once and keeps. An Image's src, a menu command's icon and a rich text's inline icon accept
+// either.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -29,7 +30,7 @@ namespace
     // A red 24 by 12 rectangle.
     constexpr const char8_t* kBar = u8R"(<svg width="24" height="12"><rect width="24" height="12" fill="#ff0000"/></svg>)";
 
-    // An SVG and a raster, each counted when asked for.
+    // A provider of an SVG and a raster, counting each request.
     class Pictures : public IResourceProvider
     {
     public:
@@ -117,7 +118,8 @@ TEST_CASE("svg-drawable: a picture by its path is an SVG by its ending, a raster
 
 TEST_CASE("svg-drawable: a picture by an id is whichever the provider has, a raster first")
 {
-    // An engine names its pictures by id ("{guid}"): no ending says the kind, the provider does.
+    // An engine names its pictures by id ("{guid}"), so no ending gives the kind; the provider
+    // decides.
     Pictures pictures;
     core::RefPtr<Drawable> vector = PictureDrawable(pictures, core::StringView(u8"{vector}"), core::DefaultAllocator());
     REQUIRE(vector.Get() != nullptr);
@@ -206,7 +208,7 @@ TEST_CASE("svg-drawable: an SVG written inline decodes from a data: URL, plain, 
     base64.Append(core::StringView(kBarBase64));
     REQUIRE(DecodeSvgDataUrl(base64.AsView(), out));
     CHECK(out.AsView() == core::StringView(kBar));
-    REQUIRE(DecodeSvgDataUrl(core::StringView(u8"DATA:image/SVG+xml;utf8,<svg/>"), out)); // the media type in any case
+    REQUIRE(DecodeSvgDataUrl(core::StringView(u8"DATA:image/SVG+xml;utf8,<svg/>"), out)); // the media type matches in any letter case
     CHECK(out.AsView() == core::StringView(u8"<svg/>"));
     CHECK_FALSE(DecodeSvgDataUrl(core::StringView(u8"data:image/svg+xml;base64,not*base64"), out));
     CHECK_FALSE(DecodeSvgDataUrl(core::StringView(u8"data:image/png;base64,AAAA"), out));
@@ -227,7 +229,7 @@ TEST_CASE("svg-drawable: the provider parses an inline SVG once and keeps it; a 
     CHECK(pictures.Svg(core::StringView(kBarPercent)) == first); // the same document, not parsed again
     CHECK(pictures.svgs == 0);
     CHECK(pictures.Svg(core::StringView(u8"data:image/svg+xml,not svg")) == nullptr);
-    CHECK(pictures.Svg(core::StringView(u8"data:image/svg+xml,not svg")) == nullptr); // remembered as none
+    CHECK(pictures.Svg(core::StringView(u8"data:image/svg+xml,not svg")) == nullptr); // remembered as having no document
     CHECK(pictures.Svg(core::StringView(u8"bar.svg")) == &pictures.svg);
     CHECK(pictures.svgs == 1);
 }
@@ -289,7 +291,8 @@ TEST_CASE("svg-drawable: an inline SVG as a sheet's background, an Image's src a
 
 namespace
 {
-    // An atlas that has a picture the second time it is asked for it, and says what it was asked.
+    // An atlas that has a picture the second time it is asked for it, and records what it was
+    // asked for.
     class AtlasBaker : public IPictureBaker
     {
     public:
@@ -322,7 +325,7 @@ TEST_CASE("svg drawable: with a baker it is asked for in its atlas at its device
     {
         DrawContext dc{ctx};
         dc.SetPictureBaker(&baker);
-        ctx.SetTransform(core::Float4x4::Scale(core::Float3{2.0f, 2.0f, 1.0f})); // two device pixels a unit
+        ctx.SetTransform(core::Float4x4::Scale(core::Float3{2.0f, 2.0f, 1.0f})); // two device pixels per unit
         icon->DrawTinted(dc, Rect{0.0f, 0.0f, 12.0f, 6.0f}, with);
     };
     {
@@ -331,9 +334,9 @@ TEST_CASE("svg drawable: with a baker it is asked for in its atlas at its device
         CHECK(baker.asked == 1);
         CHECK(baker.width == 24u); // its size on the device
         CHECK(baker.height == 12u);
-        CHECK(baker.mask); // tinted: baked white, to take the tint
+        CHECK(baker.mask); // tinted, so baked white to take the tint
         for (const vg::VGCommand& cmd : ctx.GetBatch().commands)
-            CHECK(cmd.drawMode != vg::VGDrawMode::Layer); // paths meanwhile
+            CHECK(cmd.drawMode != vg::VGDrawMode::Layer); // drawn as paths until the bake lands
     }
     {
         vg::VGContext ctx;
@@ -349,6 +352,6 @@ TEST_CASE("svg drawable: with a baker it is asked for in its atlas at its device
     {
         vg::VGContext ctx;
         draw(ctx, core::Color::White);
-        CHECK_FALSE(baker.mask); // white: as authored
+        CHECK_FALSE(baker.mask); // white, so baked as authored
     }
 }

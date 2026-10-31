@@ -3,17 +3,17 @@
 
 // GUI.Toolkit - :curve_source partition
 //
-// What a curve view reads (T5 of Specs/gui-lab-evolution-3.md): curves of Core's `CurveKey`s, ruling
-// 2's one model, so what is edited is what plays; the toolkit has no curve type of its own. A source
-// says which curves there are and each one's keys, and the view edits through it as gestures, as a
-// property grid does through a property source: begun, previewed live (each changed curve's keys
-// whole), then committed (one change, one undo entry) or cancelled (the keys as they were). The undo
-// is the source's, an application's (ruling 1).
+// What a curve view reads. Curves are made of Core's `CurveKey`s, the engine's one curve model, so
+// what is edited is what plays; the toolkit has no curve type of its own. A source says which
+// curves there are and gives each one's keys. The view edits through it in gestures, as a property
+// grid does through a property source: a gesture begins, previews live (sending each changed
+// curve's keys whole), and then either commits (one change, one undo entry) or cancels (the keys
+// go back as they were). The undo belongs to the source, that is, to the application.
 //
-// CurveSet is a source of its own curves in memory: what tests and a page without curves of its own
-// edit, its commits told to whoever keeps the undo, which hands them back to undo and redo. It is a
-// timeline source too, each curve a channel named by its path (its name), so a dopesheet and a curve
-// view stack over one clip.
+// CurveSet is a source that holds its own curves in memory. Tests use it, as does a page with no
+// curves of its own. It reports each commit to whoever keeps the undo, and that owner hands the
+// change back to undo or redo it. It is also a timeline source, with each curve a channel named by
+// its path (its name), so a dopesheet and a curve view can stack over one clip.
 
 module;
 #include "Core/Prelude.h"
@@ -29,19 +29,19 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// What a source says of one curve.
+    /// What a source reports about one curve.
     struct CurveInfo
     {
         core::String Name;
         Color StrokeColor{0.9f, 0.9f, 0.9f, 1.0f};
-        bool HasRange = false; ///< values kept between Min and Max, and a framing shows at least them
+        bool HasRange = false; ///< values are kept between Min and Max, and framing shows at least that range
         f32 Min = 0.0f;
         f32 Max = 0.0f;
-        u32 MaxKeys = 0;       ///< the most keys it holds (a particle curve's eight); 0: no limit
-        bool Locked = false;   ///< drawn, not edited
+        u32 MaxKeys = 0;       ///< the most keys it holds (a particle curve's eight); 0 for no limit
+        bool Locked = false;   ///< drawn but not editable
     };
 
-    /// A key: its curve and its place among that curve's keys (sorted by time).
+    /// Identifies a key by its curve and its index among that curve's keys (sorted by time).
     struct CurveKeyRef
     {
         usize Curve = 0;
@@ -49,12 +49,12 @@ export namespace foundation::gui
         [[nodiscard]] bool operator==(const CurveKeyRef&) const noexcept = default;
     };
 
-    /// What a source tells its views.
+    /// The notifications a source sends its views.
     class ICurveSourceClient
     {
     public:
         virtual ~ICurveSourceClient() = default;
-        /// The curves, what they say of themselves, or their keys changed: read them again.
+        /// Called when the curves, their info or their keys changed; the view reads them again.
         virtual void OnCurvesChanged() = 0;
     };
 
@@ -65,16 +65,17 @@ export namespace foundation::gui
 
         [[nodiscard]] virtual usize CurveCount() const = 0;
         [[nodiscard]] virtual CurveInfo GetCurveInfo(usize curve) const = 0;
-        /// Its keys, sorted by time.
+        /// Returns the keys of `curve`, sorted by time.
         [[nodiscard]] virtual core::Span<const CurveKey> GetKeys(usize curve) const = 0;
 
-        /// An edit begins: the keys now are what a cancel puts back.
+        /// Begins an edit. The keys as they are now are what a cancel restores.
         virtual void BeginKeysEdit() = 0;
-        /// A curve's keys as the edit goes (sorted, their tangents set by their modes), live.
+        /// Sets a curve's keys live while the edit goes on (sorted, with tangents set by their
+        /// modes).
         virtual void PreviewKeys(usize curve, core::Span<const CurveKey> keys) = 0;
-        /// The edit ends: what it previewed is one change.
+        /// Ends the edit, making everything it previewed one change.
         virtual void CommitKeysEdit() = 0;
-        /// The edit is given up: the keys as they were.
+        /// Cancels the edit and restores the keys as they were.
         virtual void CancelKeysEdit() = 0;
 
         void AddClient(ICurveSourceClient* client) { m_clients.PushBack(client); }
@@ -96,7 +97,7 @@ export namespace foundation::gui
         }
 
     private:
-        core::Array<ICurveSourceClient*> m_clients; // non-owning: each view leaves as it goes
+        core::Array<ICurveSourceClient*> m_clients; // non-owning: each view removes itself before it goes away
     };
 
     /// One curve's keys before and after a change.
@@ -106,17 +107,18 @@ export namespace foundation::gui
         core::Array<CurveKey> Before;
         core::Array<CurveKey> After;
     };
-    /// A committed change: the curves it touched.
+    /// A committed change: the edits to each curve it touched.
     struct CurveChange
     {
         core::Array<CurveEdit> Curves;
     };
 
-    /// Curves of its own, in memory; its curves the channels of a timeline, by their names.
+    /// A set of curves held in memory. As a timeline source, each curve is a channel named by its
+    /// name.
     class CurveSet : public ICurveSource, public ITimelineSource
     {
     public:
-        /// Adds a curve; its index.
+        /// Adds a curve and returns its index.
         usize AddCurve(const CurveInfo& info, core::Span<const CurveKey> keys = {})
         {
             Curve curve;
@@ -127,7 +129,7 @@ export namespace foundation::gui
             Changed();
             return m_curves.Size() - 1;
         }
-        /// Sets a curve's keys from code: shown, no change told.
+        /// Sets a curve's keys from code. The views show them, but no commit is reported.
         void SetKeys(usize curve, core::Span<const CurveKey> keys)
         {
             if (curve >= m_curves.Size())
@@ -136,12 +138,13 @@ export namespace foundation::gui
             Changed();
         }
         [[nodiscard]] CurveInfo& Info(usize curve) { return m_curves[curve].Info; }
-        /// Something changed an info: tell the views.
+        /// Tells the views that some curve's info changed.
         void InfoChanged() { Changed(); }
 
-        /// Each commit, for whoever keeps the undo.
+        /// Called with each commit, for whoever keeps the undo.
         void SetOnCommit(core::Function<void(const CurveChange&)> callback) { m_onCommit = core::Move(callback); }
-        /// Puts a change's keys back (`undo`: its befores; else its afters), no change told.
+        /// Restores a change's keys: its befores with `undo`, else its afters. The views are told,
+        /// but no commit is reported.
         void Apply(const CurveChange& change, bool undo)
         {
             for (const CurveEdit& edit : change.Curves)
@@ -246,7 +249,7 @@ export namespace foundation::gui
                     next.PushBack(key);
                     chosen.PushBack(selected);
                 }
-                // Sorted again, stably, the moved keys followed to their places.
+                // Sort the keys again, stably, and track where the moved keys end up.
                 for (usize i = 1; i < next.Size(); ++i)
                     for (usize j = i; j > 0 && next[j].time < next[j - 1].time; --j)
                     {
@@ -309,7 +312,7 @@ export namespace foundation::gui
             while (at < curve.Keys.Size() && curve.Keys[at].time <= time)
                 ++at;
             if (at > 0)
-                key.interpolation = curve.Keys[at - 1].interpolation; // the segment's it splits
+                key.interpolation = curve.Keys[at - 1].interpolation; // takes the interpolation of the segment it splits
             curve.Keys.Insert(at, key);
             ApplyTangentModes(curve.Keys.AsSpan());
             CommitKeysEdit();
@@ -317,7 +320,7 @@ export namespace foundation::gui
             return true;
         }
 
-        /// Whether two key lists are the same, key by key.
+        /// Returns whether two key lists are the same, key by key.
         [[nodiscard]] static bool Same(core::Span<const CurveKey> a, core::Span<const CurveKey> b) noexcept
         {
             if (a.Size() != b.Size())
@@ -330,7 +333,7 @@ export namespace foundation::gui
         }
 
     private:
-        // Its views told: the curve views and the dopesheets.
+        // Tells the views: the curve views and the dopesheets.
         void Changed()
         {
             NotifyCurvesChanged();

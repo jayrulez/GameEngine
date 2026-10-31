@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - the diagnostics tools: log_read / log_write /
-// known_issues. The agent-shaped loop: drop a marker, make the engine talk, read incrementally
-// from the marker's sequence and see exactly what happened after it - plus the filters and the
-// known-issues register read.
+// Integration.Mcp: the diagnostics tools log_read, log_write and known_issues. The loop an agent
+// runs: drop a marker, make the engine log, then read incrementally from the marker's sequence and
+// see exactly what happened after it. Also covers the filters and reading the known-issues
+// register.
 #include <doctest/doctest.h>
 // the known-issues fixture writes through Core::WriteFile, not <cstdio>
 #include <cstring>
@@ -73,15 +73,15 @@ namespace
 
 TEST_CASE("integration.mcp: log tools - markers, incremental reads, filters, known issues")
 {
-    // The host shape: ONE buffer sink on the global logger, registered for the test's scope.
+    // As a host does it: one buffer sink on the global logger, registered for the test's scope.
     editor::EditorLogBuffer buffer(DefaultAllocator());
     GlobalLogger().AddSink(&buffer);
 
     // A stand-in known-issues register on disk.
     const char* issuesPath = "mcp_known_issues.md";
     {
-        // Core's WriteFile, not stdio: the MSVC CRT marks fopen deprecated, so -Werror
-        // rejects it on Windows (it only builds on Linux because glibc does not).
+        // Core's WriteFile, not stdio: the MSVC CRT marks fopen deprecated, so -Werror rejects
+        // it on Windows. glibc does not deprecate it, which is why it builds on Linux.
         const char* text = "# Known Issues\n- I99: the teapot renders upside down\n";
         REQUIRE(WriteFile(StringView(reinterpret_cast<const utf8char*>(issuesPath)),
                           Span<const byte>(reinterpret_cast<const byte*>(text), std::strlen(text)))
@@ -103,7 +103,7 @@ TEST_CASE("integration.mcp: log tools - markers, incremental reads, filters, kno
     const f64 markerSeq = marker.Get(u8"sequence").AsNumber();
     CHECK(markerSeq > 0.0);
 
-    // The engine talks after the marker.
+    // The engine logs after the marker.
     LOG_WARNING(u8"Cook", u8"teapot failed to cook");
     LOG_INFO(u8"Scene", u8"loaded arena");
 
@@ -112,7 +112,7 @@ TEST_CASE("integration.mcp: log tools - markers, incremental reads, filters, kno
     CHECK(AnyEntryContains(all.Get(u8"entries"), u8"before-risky-op"));
     CHECK(all.Get(u8"lastSequence").AsNumber() >= markerSeq + 2.0);
 
-    // Incremental: from the marker forward, exactly the two engine lines (plus nothing stale).
+    // Incremental: from the marker forward, exactly the two engine lines and nothing stale.
     JsonValue after = LogCallOk(server, u8"log_read", [&]
     {
         JsonValue a = LogObj();
@@ -143,7 +143,7 @@ TEST_CASE("integration.mcp: log tools - markers, incremental reads, filters, kno
     CHECK(sceneOnly.Get(u8"entries").Count() == 1);
     CHECK(AnyEntryContains(sceneOnly.Get(u8"entries"), u8"loaded arena"));
 
-    // Nothing new past the high-water.
+    // Nothing new past the high-water mark.
     JsonValue quiet = LogCallOk(server, u8"log_read", [&]
     {
         JsonValue a = LogObj();

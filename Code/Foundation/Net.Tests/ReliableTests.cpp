@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.net:reliable - the reliable-UDP transport over the lossy datagram sim.
+// foundation.net:reliable - the reliable-UDP transport over the lossy datagram simulator.
 #include <doctest/doctest.h>
 #include <initializer_list>
 #include "Core/Prelude.h"
@@ -26,7 +26,7 @@ namespace
         return out;
     }
 
-    // A client+server pair over one sim network, with a step pump.
+    // A client and server pair over one simulated network, with a step pump.
     struct Fixture
     {
         net::SimDatagramNetwork net;
@@ -56,7 +56,7 @@ namespace
         }
     };
 
-    // Drain all Received first-bytes from a transport (call inside/after pumping).
+    // Drain the first bytes of all Received events from a transport (call while or after pumping).
     Array<u8> DrainReceived(net::INetTransport& t)
     {
         Array<u8> out;
@@ -193,12 +193,12 @@ TEST_CASE("reliable: unreliable messages can drop under loss (no resend)")
     fx.Pump(30);
     const usize delivered = DrainReceived(fx.server).Size();
     CHECK(delivered > 0u);
-    CHECK(delivered < 50u); // lossy + no resend => some are gone forever
+    CHECK(delivered < 50u); // lossy with no resend: some are gone for good
 }
 
-// More than a packet's worth due at once (a replication delta of a crowd) goes out the same update,
-// not a packet a tick: at one a tick a big delta drained over several ticks while the next ones
-// queued behind it, and the delay grew without end.
+// More than a packet's worth due at once (a replication delta of a crowd) goes out in the same
+// update, not one packet a tick: at one a tick, a big delta drains over several ticks while the next
+// ones queue behind it, and the delay grows without bound.
 TEST_CASE("reliable: a burst bigger than a packet goes out in one update")
 {
     net::SimConditions sim;
@@ -225,7 +225,7 @@ TEST_CASE("reliable: a burst bigger than a packet goes out in one update")
     }
 }
 
-// Unreliable messages that do not fit the packet wait for the next one; they used to be dropped.
+// Unreliable messages that do not fit the packet wait for the next one rather than being dropped.
 TEST_CASE("reliable: unreliable messages beyond one packet are sent, not dropped")
 {
     net::SimConditions sim;
@@ -278,7 +278,7 @@ TEST_CASE("reliable: a silent peer times out into Disconnected")
     fx.Pump(20);
     CHECK(AnyKind(fx.client, net::NetEventKind::Connected));
 
-    // Server goes dark: only tick the client + the network (client hears nothing).
+    // Server goes dark: only tick the client and the network (the client hears nothing).
     bool disconnected = false;
     for (int s = 0; s < 100; ++s)
     {
@@ -311,7 +311,7 @@ TEST_CASE("reliable: a large message fragments + reassembles intact over loss")
         }
     }
 
-    // 5000 bytes => several fragments (FragPayloadLimit ~1136).
+    // 5000 bytes make several fragments (FragPayloadLimit is about 1136).
     Array<byte> big;
     big.Resize(5000);
     for (usize i = 0; i < big.Size(); ++i)
@@ -352,7 +352,7 @@ TEST_CASE("reliable: a large message fragments + reassembles intact over loss")
 
 namespace
 {
-    // Decorator that counts datagrams sent (to prove resend timing isn't per-tick).
+    // Decorator that counts datagrams sent (to show resend timing is not per tick).
     struct CountingSocket final : net::IDatagramSocket
     {
         net::IDatagramSocket* inner;
@@ -393,8 +393,9 @@ TEST_CASE("reliable: resend is RTT-timed, not per-tick (no flooding for an unack
         server.Update(10.0f);
     }
 
-    // Send a reliable message, then let the server go DARK so it never acks. Over 200ms with a 50ms
-    // resend floor, the client should resend ~4 times (+ ~2 keepalives), NOT ~20 (once per 10ms tick).
+    // Send a reliable message, then let the server go dark so it never acks. Over 200ms with a 50ms
+    // resend floor, the client should resend about 4 times (plus about 2 keepalives), not about 20
+    // (once per 10ms tick).
     Array<byte> m = Bytes({0x42});
     client.Send(sp, 0, m.AsSpan(), net::Reliability::ReliableOrdered);
     const int before = counting.sends;
@@ -405,7 +406,7 @@ TEST_CASE("reliable: resend is RTT-timed, not per-tick (no flooding for an unack
     } // 200ms, server dark
     const int sent = counting.sends - before;
     CHECK(sent >= 2);  // it does keep retrying
-    CHECK(sent <= 10); // but RTT-timed (~4 resends + ~2 keepalives), not per-tick (~20)
+    CHECK(sent <= 10); // but RTT-timed (~4 resends and ~2 keepalives), not per tick (~20)
 }
 
 TEST_CASE("reliable: explicit Disconnect notifies the peer")

@@ -3,15 +3,15 @@
 
 // Editor::App - :pages partition.
 //
-// EditorPages: the open pages in the dock (Documentation/Specs/editor-gui.md, 5.1, layer 6). A page
-// is a panel of its own, by its asset's guid (a Game tab by its play id: `game-page`,
-// `game-page-1`, ...), the ids a saved layout and the MCP layout tools name; it opens in the central
-// stack, or where a restored layout kept its place. Its tab says its asset's name, a `*` and the
-// `dirty` class while it has unsaved changes, and the `active` class on the page the editor acts on
-// (Save, the inspector): the chosen tab of the stack the focus was last in. Closing a page with
-// unsaved changes asks first (Save, Discard, Cancel); a close always runs at the next frame, never
-// inside the event that asked for it, and takes the page's panel with it. The open pages and the
-// active one are saved with the project and reopen with it.
+// EditorPages: the open pages in the dock. Each page is a panel of its own, identified by its
+// asset's guid (a Game tab by its play id: `game-page`, `game-page-1`, ...), the ids a saved layout
+// and the MCP layout tools use. A page opens in the central stack, or where a restored layout kept
+// its place. Its tab shows its asset's name, plus a `*` and the `dirty` class while it has unsaved
+// changes. The page the editor acts on (Save, the inspector) has the `active` class: it is the
+// selected tab of the stack that last had focus. Closing a page with unsaved changes asks first
+// (Save, Discard, Cancel). A close always runs at the next frame, never inside the event that
+// asked for it, and removes the page's panel with it. The open pages and the active one are saved
+// with the project and reopen with it.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -30,7 +30,7 @@ import editor.core;
 import :ui_page;
 import :editor_dock;
 import :layout;
-import :asset_create_dialog; // AssetNames: the rule a new name keeps
+import :asset_create_dialog; // AssetNames: the naming rule for a new asset
 
 using namespace foundation::core;
 
@@ -41,10 +41,10 @@ export namespace editor::app
     class EditorPages
     {
     public:
-        /// Save As's dialog, under the data root.
+        /// Save As's dialog markup, under the data root.
         static constexpr const char8_t* kSaveAsPath = u8"Editor/SaveAs.xml";
 
-        /// What it works over.
+        /// The services it works with.
         struct Services
         {
             editor::EditorContext* context = nullptr;
@@ -54,9 +54,9 @@ export namespace editor::app
             Function<editor::EditorProject*()> project;
             /// The project's resources (unresolved references cook with the page); null: none.
             Function<foundation::resource::ResourceManager*()> resources;
-            /// Where its dialogs show; null: none shows (a dirty page then stays open).
+            /// Where its dialogs show; null: no dialog shows (a dirty page then stays open).
             Function<gui::SceneRoot*()> dialogRoot;
-            /// A dialog's markup by its path under the data root (Save As's); null: none.
+            /// Loads a dialog's markup by its path under the data root (Save As's); null: none.
             Function<RefPtr<gui::Node>(StringView)> loadMarkup;
         };
 
@@ -74,8 +74,8 @@ export namespace editor::app
             m_services.context->OnRevealPage = {};
         }
 
-        /// Opens (or brings forward) the page for `instance`; null, said to the user, when no page
-        /// edits its type.
+        /// Opens (or brings forward) the page for `instance`; null, with a message to the user,
+        /// when no page edits its type.
         UIEditorPage* Open(foundation::content::Instance& instance)
         {
             editor::EditorContext& context = *m_services.context;
@@ -92,16 +92,16 @@ export namespace editor::app
             auto* uiPage = static_cast<UIEditorPage*>(page);
             if (context.OpenPages().Size() == before)
             {
-                Reveal(uiPage); // open already: its tab to front
+                Reveal(uiPage); // already open: bring its tab to the front
                 return uiPage;
             }
             Dock(*uiPage, PanelIdOf(instance.Id()));
             CookMissing(instance);
             return uiPage;
         }
-        /// A user's open of the source asset `id` (the browser's, a slot's Open): an editor that
-        /// claims it takes it first (the scene page on screen takes a property animation clip into
-        /// its panel); else its page opens. False when nothing took it.
+        /// Opens the source asset `id` for the user (the browser's or a slot's Open). An editor that
+        /// claims it gets it first (the scene page on screen takes a property animation clip into
+        /// its panel); otherwise its page opens. False when nothing took it.
         bool OpenForUser(const Guid& id)
         {
             foundation::content::ContentDatabase* sources = Sources();
@@ -120,7 +120,7 @@ export namespace editor::app
             return instance != nullptr ? Open(*instance) : nullptr;
         }
 
-        /// The Game tab (`newInstance`: another one beside it, with a game instance of its own).
+        /// Opens the Game tab (`newInstance`: another one beside it, with a game instance of its own).
         void OpenGame(bool newInstance)
         {
             editor::EditorContext& context = *m_services.context;
@@ -154,13 +154,14 @@ export namespace editor::app
             if (const OpenPage* open = Find(page))
                 (void)m_services.dock->Controller().Close(open->panel.AsView());
         }
-        /// Closes a page for good at the next frame, without asking (a deleted asset's, an agent's).
+        /// Closes a page for good at the next frame, without asking (a deleted asset's page, or an
+        /// agent's close).
         void Close(editor::EditorPage* page)
         {
             if (Find(page) != nullptr && !IsClosing(page))
                 m_closing.PushBack(page);
         }
-        /// Closes every page editing `asset` now, without asking: what deletes the asset calls it
+        /// Closes every page editing `asset` now, without asking. The asset's delete calls it
         /// before the instance goes, outside an event's dispatch.
         void CloseAssetNow(const Guid& asset)
         {
@@ -179,7 +180,8 @@ export namespace editor::app
                 CloseNow(page);
             }
         }
-        /// Closes every page now (the project closing): their resources go while the device lives.
+        /// Closes every page now (the project is closing), so their resources are released while
+        /// the device lives.
         void CloseAll()
         {
             m_closing.Clear();
@@ -187,7 +189,8 @@ export namespace editor::app
                 CloseNow(m_open.Back().page);
         }
 
-        /// Saves a page, then what live tools edited in cooked products (any save flushes them).
+        /// Saves a page, then flushes what live tools edited in cooked products (any save flushes
+        /// them).
         void Save(editor::EditorPage& page)
         {
             foundation::content::ContentDatabase* sources = Sources();
@@ -205,10 +208,10 @@ export namespace editor::app
             }
         }
 
-        /// The unsaved pages, before `proceed` (an exit, a project's close): with none it runs now;
-        /// else the user is asked to save them all, keep working or go on without saving
-        /// (`discardVerb`: "Exit Without Saving"), and it runs only when they chose to go on or
-        /// every page saved. Answers whether it ran now.
+        /// Asks about the unsaved pages before `proceed` (an exit, a project's close). With none,
+        /// it runs now. Otherwise the user is asked to save them all, keep working, or go on
+        /// without saving (`discardVerb`: "Exit Without Saving"), and `proceed` runs only when they
+        /// chose to go on or every page saved. Returns whether it ran now.
         bool ConfirmUnsavedThen(StringView saveVerb, StringView discardVerb, Function<void()> proceed)
         {
             const usize dirty = DirtyCount();
@@ -219,8 +222,8 @@ export namespace editor::app
             }
             gui::SceneRoot* root = m_services.dialogRoot ? m_services.dialogRoot() : nullptr;
             if (root == nullptr)
-                return false; // nothing to ask over: the unsaved work stays
-            // Each named, as the page's tab and its panels name them (a count says nothing of where).
+                return false; // no dialog root to ask over: the unsaved work stays
+            // Name each one as the page's tab and its panels do (a count would not say where).
             Array<String> lines(m_allocator);
             for (const OpenPage& open : m_open)
                 UnsavedLines(*open.page, lines);
@@ -236,7 +239,7 @@ export namespace editor::app
             auto then = MakeRef<Pending>(m_allocator, foundation::core::Move(proceed));
             (void)box->AddEventListener(gui::EventType::Changed, [self, raw, then](const gui::Event&)
                                         {
-                                            const String answer = raw->GetResultName(); // by value: a view of the call would dangle
+                                            const String answer = raw->GetResultName(); // copied: a view into the call would dangle
                                             if (answer == StringView(u8"discard"))
                                                 then->proceed();
                                             else if (answer == StringView(u8"save"))
@@ -250,7 +253,7 @@ export namespace editor::app
             box->OpenModal(*root);
             return false;
         }
-        /// Saves every page with unsaved changes; false when one failed (the rest still tried).
+        /// Saves every page with unsaved changes; false when one failed (the rest are still tried).
         bool SaveAll()
         {
             bool all = true;
@@ -264,8 +267,9 @@ export namespace editor::app
             return all;
         }
 
-        /// Save As: the page's content into a new asset beside its own, named in a dialog (a name
-        /// empty or taken keeps the dialog open, saying why); the page edits the new asset after.
+        /// Save As: saves the page's content into a new asset beside its own, named in a dialog (an
+        /// empty or taken name keeps the dialog open with the reason). The page then edits the new
+        /// asset.
         void SaveAs(editor::EditorPage& page)
         {
             editor::EditorContext& context = *m_services.context;
@@ -305,12 +309,12 @@ export namespace editor::app
             const auto commit = [self, raw, name, error, pageId, group]()
             {
                 const StringView newName = name->GetText();
-                const String refused = AssetNames::Refusal(*group, newName); // the rule Create Asset keeps
+                const String refused = AssetNames::Refusal(*group, newName); // the same rule Create Asset uses
                 if (!refused.IsEmpty())
                 {
                     if (error != nullptr)
                         error->SetText(refused.AsView());
-                    return; // the dialog stays for the retry
+                    return; // the dialog stays open for a retry
                 }
                 self->SaveAsNamed(pageId, *group, newName);
                 raw->Close();
@@ -324,20 +328,20 @@ export namespace editor::app
             name->SelectAll();
         }
 
-        /// One frame, after the GUI laid out: Tick, then each page's frame hook.
+        /// Runs one frame, after the GUI has laid out: Tick, then each page's frame hook.
         void Update(foundation::runtime::IApplicationHost& host, f32 deltaTime)
         {
             Tick();
             for (const OpenPage& open : m_open)
                 open.page->OnUpdate(host, deltaTime);
         }
-        /// The closes asked for run, and the tabs say each page's name, unsaved mark and active mark.
+        /// Runs the requested closes and updates each tab's name, unsaved mark and active mark.
         void Tick()
         {
             RunCloses();
             SyncTabs();
         }
-        /// Each page's offscreen content (inside the scene renderer's bracket), then its overlays.
+        /// Renders each page's offscreen content (inside the scene renderer's bracket), then its overlays.
         void Render(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame)
         {
             for (const OpenPage& open : m_open)
@@ -349,7 +353,7 @@ export namespace editor::app
                 open.page->OnAfterSceneRender(host, frame);
         }
 
-        /// The open pages with an asset, and the active one, into the store.
+        /// Stores the open pages that have an asset, and the active one.
         void Capture(foundation::settings::Settings& store) const
         {
             Array<Guid> pages;
@@ -364,8 +368,8 @@ export namespace editor::app
             }
             CaptureOpenPages(store, pages, active);
         }
-        /// The store's open pages opened again (`progress` hears each: the splash), the active
-        /// one active. False when none were saved (a project's first open).
+        /// Reopens the store's pages (`progress` hears each one, for the splash) and makes the
+        /// saved active one active. False when none were saved (a project's first open).
         bool Restore(foundation::settings::Settings& store, const Function<void(StringView, f32)>& progress = {})
         {
             Array<Guid> pages;
@@ -414,8 +418,8 @@ export namespace editor::app
             id.ToChars(text);
             return String(StringView(text, 36));
         }
-        /// What is unsaved on `page`, a line each: its own changes by its name ("Level1"), the work
-        /// it holds besides with its name ("The clip 'Bounce', in Level1").
+        /// What is unsaved on `page`, one line each: its own changes by its name ("Level1"), and
+        /// other work it holds, by that work's name ("The clip 'Bounce', in Level1").
         static void UnsavedLines(const editor::EditorPage& page, Array<String>& out)
         {
             if (page.IsDirty())
@@ -425,7 +429,7 @@ export namespace editor::app
             for (const String& work : besides)
                 out.PushBack(Format(u8"{}, in {}", work, page.Title()));
         }
-        /// The prompt's words for `lines`: one in a sentence, several listed.
+        /// The prompt's text for `lines`: one in a sentence, several as a list.
         [[nodiscard]] static String UnsavedText(const Array<String>& lines)
         {
             if (lines.Size() == 1)
@@ -453,12 +457,12 @@ export namespace editor::app
             String panel;
         };
 
-        // A page's panel: its content the page's, closing it asks the page.
+        // Docks a page's panel: its content is the page's, and closing it asks the page.
         void Dock(UIEditorPage& page, const String& panel)
         {
             gui::DockController& dock = m_services.dock->Controller();
             if (dock.Describe(panel.AsView()) != nullptr)
-                (void)dock.Unregister(panel.AsView()); // a page closed this frame, open again
+                (void)dock.Unregister(panel.AsView()); // a page closed this frame and opened again
             m_open.PushBack(OpenPage{&page, panel});
             EditorPages* self = this;
             UIEditorPage* raw = &page;
@@ -468,8 +472,8 @@ export namespace editor::app
             description.Close = gui::DockClosePolicy::Destroy;
             description.Default.Central = true;
             description.Factory = [raw]() { return raw->Content(); };
-            // Closing always comes back here: the page asks (unsaved changes) and goes at the next
-            // frame, its panel with it.
+            // Every close comes back here: the page asks about unsaved changes and is removed at
+            // the next frame, with its panel.
             description.CanClose = [self, raw]()
             {
                 self->AskToClose(raw);
@@ -477,7 +481,7 @@ export namespace editor::app
             };
             (void)dock.Register(Move(description));
             if (dock.GetLayout().StackOf(panel.AsView()) == gui::kNoDock)
-                (void)dock.Show(panel.AsView()); // else a restored layout placed it
+                (void)dock.Show(panel.AsView()); // otherwise a restored layout already placed it
             Reveal(raw);
         }
 
@@ -490,9 +494,9 @@ export namespace editor::app
             }
             gui::SceneRoot* root = m_services.dialogRoot ? m_services.dialogRoot() : nullptr;
             if (root == nullptr)
-                return; // nothing to ask over: it stays open
+                return; // no dialog root to ask over: it stays open
             auto box = MakeRef<gui::MessageBox>(m_allocator);
-            // What is unsaved, each named: the page's own changes, the work it holds besides (a clip).
+            // List what is unsaved, each named: the page's own changes and other work it holds (a clip).
             Array<String> lines(m_allocator);
             UnsavedLines(*page, lines);
             box->Configure(u8"Unsaved changes", UnsavedText(lines).AsView(), gui::MessageBox::Buttons::Ok);
@@ -538,8 +542,8 @@ export namespace editor::app
                     m_open.RemoveAt(i);
                     if (page == m_gamePage)
                         m_gamePage = nullptr;
-                    (void)m_services.dock->Controller().Unregister(panel.AsView()); // its content out of the GUI first
-                    static_cast<UIEditorPage*>(page)->OnClose(); // its resources while the device and window live
+                    (void)m_services.dock->Controller().Unregister(panel.AsView()); // take its content out of the GUI first
+                    static_cast<UIEditorPage*>(page)->OnClose(); // release its resources while the device and window live
                     m_services.context->ClosePage(page);         // destroys it
                     return;
                 }
@@ -568,8 +572,8 @@ export namespace editor::app
             }
         }
 
-        // The dock's active panel changed: a page's makes it the active page; another panel's
-        // (Assets, the Console) leaves the active page as it was.
+        // Called when the dock's active panel changes: a page's panel makes that page active;
+        // another panel (Assets, the Console) leaves the active page as it was.
         void NoteActivePanel(StringView panel)
         {
             for (const OpenPage& open : m_open)
@@ -580,14 +584,14 @@ export namespace editor::app
                 }
         }
 
-        // What a confirmation goes on to, kept alive by the dialog's listener.
+        // What a confirmation goes on to do, kept alive by the dialog's listener.
         struct Pending final : RefCounted
         {
             explicit Pending(Function<void()> run) : proceed(foundation::core::Move(run)) {}
             Function<void()> proceed;
         };
 
-        // The page `pageId` (if still open) saved into a new asset `newName` in `group`.
+        // Saves the page `pageId` (if still open) into a new asset `newName` in `group`.
         void SaveAsNamed(const Guid& pageId, foundation::content::Group& group, StringView newName)
         {
             editor::EditorContext& context = *m_services.context;
@@ -608,7 +612,7 @@ export namespace editor::app
                 return;
             }
             target->OnSavedAs(*fresh);
-            // The page's panel follows its new asset.
+            // The page's panel now follows its new asset.
             for (OpenPage& open : m_open)
                 if (open.page == target)
                 {
@@ -633,7 +637,7 @@ export namespace editor::app
             return nullptr;
         }
 
-        // Its uncooked dependencies cook without a step of the user's.
+        // Cooks the asset's uncooked dependencies without the user having to.
         void CookMissing(foundation::content::Instance& instance)
         {
             if (m_services.cook == nullptr)
@@ -682,8 +686,8 @@ export namespace editor::app
         IAllocator& m_allocator;
         Services m_services;
         Array<OpenPage> m_open;
-        Array<editor::EditorPage*> m_closing; // closes asked for, run at the next frame
+        Array<editor::EditorPage*> m_closing; // closes requested, run at the next frame
         UIEditorPage* m_gamePage = nullptr;   // the primary Game tab
-        u32 m_gamePages = 0;                  // the Game tabs beside it, ever
+        u32 m_gamePages = 0;                  // how many Game tabs have been opened beside it
     };
 }

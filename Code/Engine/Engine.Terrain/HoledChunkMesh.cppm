@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The holed-chunk index buffers, cached per heightfield (Specs/terrain-holes.md): a chunk whose
+// The holed-chunk index buffers, cached per heightfield: a chunk whose
 // sample block holds a cut sample cannot draw the shared grid, so it gets its own index buffer
 // per LOD, built by foundation.terrain's BuildHoledChunkIndices and rebuilt in place when the
 // heightfield's version moves (a cut, a fill, a sculpt). Keyed by the heightfield's uid, never a
@@ -174,7 +174,7 @@ export namespace engine::terrain
         render::GpuRetireQueue* m_retire = nullptr;
     };
 
-    /// The R8Unorm hole MASK texture per heightfield (one texel per sample, 0 solid / 1 cut),
+    /// The R8Unorm hole mask texture per heightfield (one texel per sample, 0 solid / 1 cut),
     /// sampled bilinearly by the HOLES pixel shaders to shape a holed chunk's rim. The height
     /// texture cache's twin: keyed by uid, rebuilt in place on a version change, retired through
     /// the queue. Only a heightfield with holes gets one (the extract asks HasHoles first).

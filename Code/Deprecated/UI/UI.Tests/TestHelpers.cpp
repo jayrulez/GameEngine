@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Single definition point for the shared test doubles (TestView/TestGroup).
+// The single definition point for the shared test doubles (TestView, TestGroup).
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.ui;

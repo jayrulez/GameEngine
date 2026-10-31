@@ -3,14 +3,14 @@
 
 // GUI.Docking - :dock_host_windows partition
 //
-// DockHostWindows: a DockArea's floats as OS windows (D6 of Specs/gui-lab-evolution-3.md), on the
-// GUI's host. Each floating surface's content goes in a root of the host's GUI, in a window the host
-// opens for it (through the application's opener), with the platform's own frame (the user's
-// ruling): the system moves, sizes and snaps it. Where the shell's windows hold the places given
-// them, a window opens at its surface's bounds and is placed again when the layout moves it; where
-// they do not (Wayland), it opens of its size where the system puts it. What the user does to a
-// window comes back to the area: moved or resized, its bounds (on screen); its close button, its
-// panels closed as their policies say.
+// DockHostWindows: shows a DockArea's floats as OS windows on the GUI's host. Each floating
+// surface's content goes in a root of the host's GUI, inside a window the host opens for it
+// through the application's opener. The window has the platform's own frame, so the system moves,
+// sizes and snaps it. Where the shell keeps windows at the places they are given, a window opens at
+// its surface's bounds and is placed again when the layout moves it. Where it does not (Wayland),
+// the window opens at its size wherever the system puts it. What the user does to a window is
+// reported to the area: a move or resize sends its bounds (on screen), and the close button closes
+// its panels as their policies say.
 
 module;
 #include "Core/Prelude.h"
@@ -35,8 +35,9 @@ export namespace foundation::gui
     class DockHostWindows final : public IDockWindows
     {
     public:
-        /// The floats of `area` in windows `host` opens; both outlive it. Give it to the area with
-        /// DockArea::SetWindows, and take it back (SetWindows(nullptr)) before it goes.
+        /// Shows the floats of `area` in windows that `host` opens; both must outlive this object.
+        /// Give it to the area with DockArea::SetWindows, and take it back with
+        /// SetWindows(nullptr) before it is destroyed.
         DockHostWindows(IAllocator& allocator, GuiHost& host, DockArea& area)
             : m_allocator(allocator), m_host(host), m_area(area), m_windows(allocator)
         {
@@ -52,13 +53,14 @@ export namespace foundation::gui
         DockHostWindows(const DockHostWindows&) = delete;
         DockHostWindows& operator=(const DockHostWindows&) = delete;
 
-        /// Whether it opens windows at all (an opener, and a shell that opens more than one): an
-        /// application gives the area its floats as windows only then.
+        /// Whether this can open windows at all: it needs an opener and a shell that opens more than
+        /// one window. An application should give the area its floats as windows only then.
         [[nodiscard]] bool CanOpen() const noexcept { return m_host.CanOpenWindows(); }
-        /// Told of each window's root as it is made, before its window opens: an application styles
-        /// it as the page the area is on (a sheet scoped to that page reaches no other root).
+        /// Sets the handler told of each window's root as it is made, before its window opens. The
+        /// application styles the root like the page the area is on, because a sheet scoped to that
+        /// page reaches no other root.
         void SetOnRootMade(Function<void(SceneRoot& root)> made) { m_onRootMade = core::Move(made); }
-        /// The root a floating surface's window shows; null when it shows none.
+        /// Returns the root a floating surface's window shows, or null when there is none.
         [[nodiscard]] SceneRoot* RootOf(DockSurfaceId surface) const noexcept
         {
             for (const Shown& shown : m_windows)
@@ -139,7 +141,8 @@ export namespace foundation::gui
             graphics::RenderWindow* window = root != nullptr ? m_host.WindowFor(root) : nullptr;
             return window != nullptr ? &window->Window() : nullptr;
         }
-        // A window's event, by its root: a float's window moved or resized, or its close asked for.
+        // Handles a window event, found by the window's root: a float's window was moved or resized,
+        // or its close was requested.
         void Heard(SceneRoot& root, const shell::WindowEvent& event)
         {
             DockSurfaceId surface = kNoDock;
@@ -147,20 +150,20 @@ export namespace foundation::gui
                 if (shown.Root.Get() == &root)
                     surface = shown.Surface;
             if (surface == kNoDock)
-                return; // not a float's
+                return; // not a float's window
             switch (event.type)
             {
             case shell::WindowEventType::Moved:
             case shell::WindowEventType::Resized:
                 if (shell::IWindow* window = WindowOf(surface))
                 {
-                    const bool placed = m_host.PlacesWindows(); // else its place is not known
+                    const bool placed = m_host.PlacesWindows(); // otherwise its position is not known
                     m_area.NoteWindowBounds(surface, Rectangle{placed ? static_cast<f32>(window->X()) : 0.0f, placed ? static_cast<f32>(window->Y()) : 0.0f,
                                                                static_cast<f32>(window->Width()), static_cast<f32>(window->Height())});
                 }
                 break;
             case shell::WindowEventType::CloseRequested:
-                m_area.CloseFloat(surface); // its panels as their policies say; the window goes with the surface
+                m_area.CloseFloat(surface); // closes its panels as their policies say; the window goes with the surface
                 break;
             default:
                 break;

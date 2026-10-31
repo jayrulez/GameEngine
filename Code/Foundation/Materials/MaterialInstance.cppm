@@ -4,11 +4,11 @@
 /// Foundation::Materials - the `:instance` partition.
 ///
 /// MaterialInstance: a per-use copy of a Material's properties (and its effect groups'
-/// values) with overridable values and dirty tracking. Setters write into an override uniform buffer / texture
-/// maps and flip dirty flags; on a false->true transition the instance NOTIFIES its
-/// sink (the MaterialSystem) so re-prep is O(dirty), not O(all instances). The sink
-/// is an interface declared here so :system can depend on :instance (not vice-versa),
-/// breaking the partition cycle.
+/// values) with overridable values and dirty tracking. Setters write into an override uniform
+/// buffer or texture maps and set dirty flags; when a flag first goes dirty the instance notifies
+/// its sink (the MaterialSystem), so re-preparing costs O(dirty), not O(all instances). The sink
+/// is an interface declared here so :system can depend on :instance and not the reverse, which
+/// breaks the partition cycle.
 
 module;
 #include "Core/Prelude.h"
@@ -28,8 +28,8 @@ export namespace foundation::materials
 
     class MaterialInstance;
 
-    // What a MaterialInstance calls back into (implemented by MaterialSystem). Keeps the
-    // instance->system edge an interface so the partitions don't import each other.
+    // What a MaterialInstance calls back into (implemented by MaterialSystem). The instance
+    // reaches the system only through this interface, so the partitions don't import each other.
     class IMaterialInstanceSink
     {
     public:
@@ -72,7 +72,7 @@ export namespace foundation::materials
         [[nodiscard]] bool HasAny() const noexcept { return lo != 0 || hi != 0; }
     };
 
-    // Per-use material with overridable properties + dirty tracking.
+    // Per-use material with overridable properties and dirty tracking.
     class MaterialInstance
     {
     public:

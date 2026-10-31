@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine-shader cook - enumerate the built-in HLSL corpus and precompile it into a CookedShaderPack.
+// Engine-shader cook: enumerates the built-in HLSL corpus and precompiles it into a
+// CookedShaderPack.
 //
-// The EXPORT-time step that removes the runtime compiler from dists. For each stage file under
-// the shader dir it: parses the variant directive, drift-
-// lints (fails on a #ifdef'd-but-undeclared flag), enumerates the power set of the declared mask, and
-// for every (variant x requested backend format) emits a blob into the pack - SPIR-V / DXIL via DXC,
-// WGSL via the WgslTranslator. Runs on the dev/CI host only; the dist just reads the pack.
+// The export-time step that removes the runtime compiler from dists. For each stage file under
+// the shader dir it parses the variant directive, drift-lints (fails on a flag that is #ifdef'd
+// but undeclared), enumerates the power set of the declared mask, and for every variant and
+// requested backend format emits a blob into the pack: SPIR-V and DXIL through DXC, WGSL through
+// the WgslTranslator. Runs on the dev or CI host only; the dist just reads the pack.
 
 module;
 #include "Core/Prelude.h"
@@ -29,13 +30,13 @@ export namespace foundation::shaders
 {
     struct ShaderCookOptions
     {
-        StringView shaderDir;                    // source + #include root (e.g. Data/Engine/Shaders)
+        StringView shaderDir;                    // source and #include root (e.g. Data/Engine/Shaders)
         StringView scratchDir;                   // WgslTranslator intermediates (must exist)
         Span<const CookedShaderFormat> formats;  // which backend blobs to emit
         bool validateWgsl = true;                // run tint over the WGSL
-        // SPIR-V target for the SpirV blobs. vulkan1.1 by contract: the SpirV bucket serves
-        // BOTH Vulkan and native WebGPU (wgpu-native/naga), and naga rejects SPIR-V 1.4+
-        // instructions (OpCopyLogical) that vulkan1.3-targeted DXC emits - a 1.3 pack
+        // SPIR-V target for the SpirV blobs. It is vulkan1.1 because the SpirV bucket serves
+        // both Vulkan and native WebGPU (wgpu-native and naga), and naga rejects the SPIR-V 1.4+
+        // instructions (OpCopyLogical) that DXC emits when targeting vulkan1.3; a 1.3 pack
         // panics wgpu-native at pipeline creation. Matches the dev-mode WebGPU compile.
         StringView spirvTargetEnv = u8"vulkan1.1";
     };
@@ -44,8 +45,8 @@ export namespace foundation::shaders
     {
         bool success = false;
         usize filesCooked = 0;    // stage files processed
-        usize variantsCooked = 0; // (variant x format) blobs emitted
-        Array<String> errors;     // lint + compile diagnostics (each one line)
+        usize variantsCooked = 0; // blobs emitted, one per variant and format
+        Array<String> errors;     // lint and compile diagnostics (each one line)
     };
 
     // Forward declarations (definitions below CookEngineShaders).
@@ -58,8 +59,8 @@ export namespace foundation::shaders
                  Span<const StringView> includePaths, StringView stem, StringView fileName,
                  CookedShaderPack& pack, ShaderCookReport& report);
 
-    // Cook one shader stage into the pack: record its lattice and entry point, then emit every
-    // (declared variant x requested format) blob. What the corpus cook does per stage file, and
+    // Cook one shader stage into the pack: record its lattice and entry point, then emit a blob
+    // for every declared variant in every requested format. What the corpus cook does per stage file, and
     // what an export does per stage of a project's shader (its expanded source, VSMain/PSMain).
     // `sourceName` names the source in errors. Returns false (errors in the report) if any fails.
     bool CookShaderStage(Compiler& compiler, WgslTranslator& translator, StringView name,
@@ -69,11 +70,11 @@ export namespace foundation::shaders
                          ShaderCookReport& report);
 
     // Inline-expand `#include "file"` directives against the shader root, so the drift-lint
-    // sees the .hlsli bodies where the real flag #ifdefs live (a stage file is often just the
-    // directive + one include - linting only its own text would pass a cook that silently
-    // strips a used flag in dist). Quote-includes only (the corpus has no angle includes),
-    // depth-limited and de-duplicated; unreadable includes are skipped here - DXC reports
-    // them properly during the actual compile.
+    // sees the .hlsli bodies where the real flag #ifdefs live. A stage file is often just the
+    // directive and one include, so linting only its own text would pass a cook that silently
+    // strips a used flag in dist. Quoted includes only (the corpus has no angle includes),
+    // depth-limited and de-duplicated. Unreadable includes are skipped here; DXC reports them
+    // during the actual compile.
     inline void AppendExpandedSource(StringView shaderDir, StringView source, u32 depth,
                                      Array<String>& visited, String& out)
     {
@@ -151,7 +152,7 @@ export namespace foundation::shaders
                     }
                     else
                     {
-                        expanded = true; // already inlined once - don't re-scan or keep the line
+                        expanded = true; // already inlined once: don't re-scan or keep the line
                     }
                 }
             }
@@ -252,7 +253,7 @@ export namespace foundation::shaders
         }
     }
 
-    // Every effect block the library's includes declare (Specs/wind-for-every-shader.md), into
+    // Every effect block the library's includes declare, into
     // `out`: what the cook records in the pack, and where a tool with no shader system (the
     // headless MCP host's material_set_shader) reads the effects' tables from. A malformed block,
     // or two effects sharing a name or a flag, is left out with an error naming the file (and
@@ -308,7 +309,7 @@ export namespace foundation::shaders
     }
 
     // Record every effect block the corpus's includes declare into the pack, so a game reads the
-    // effects' tables without the sources (Specs/wind-for-every-shader.md, "How 2b is built").
+    // effects' tables without the sources.
     // A malformed block, or two effects sharing a name or a flag, is a cook error naming the
     // file (and line). Returns false when any is.
     inline bool CookShaderEffects(StringView shaderDir, CookedShaderPack& pack,
@@ -330,7 +331,7 @@ export namespace foundation::shaders
     }
 
     // Fill `pack` from every stage file under opts.shaderDir. On any error the pack is left partially
-    // filled and success=false - the caller decides whether to ship (a dist should not).
+    // filled and success is false; the caller decides whether to ship (a dist should not).
     inline ShaderCookReport CookEngineShaders(Compiler& compiler, const ShaderCookOptions& opts,
                                               CookedShaderPack& pack)
     {
@@ -387,9 +388,9 @@ export namespace foundation::shaders
             const Array<byte>& sb = srcBytes.Value();
             const StringView source(reinterpret_cast<const char8_t*>(sb.Data()), sb.Size());
 
-            // Variant model: declared mask + drift-lint (used-but-undeclared is a hard error).
-            // The directive comes from the STAGE FILE, but the lint runs over the
-            // include-EXPANDED text - the flag #ifdefs live in the shared .hlsli bodies.
+            // Variant model: the declared mask and the drift-lint (a flag used but undeclared is
+            // a hard error). The directive comes from the stage file, but the lint runs over the
+            // include-expanded text, since the flag #ifdefs live in the shared .hlsli bodies.
             const VariantDirective directive = ParseVariantDirective(source);
             Array<StringView> undeclared;
             String expandedSource;
@@ -492,8 +493,8 @@ export namespace foundation::shaders
         return ok;
     }
 
-    // Compile/translate one (variant, format) blob and Add it to the pack. Returns false + records an
-    // error on failure.
+    // Compile or translate the blob for one variant and format and Add it to the pack. On failure,
+    // records an error and returns false.
     inline bool CookOne(Compiler& compiler, WgslTranslator& translator, StringView source,
                         ShaderStage stage, StringView entryPoint, ShaderFlags flags,
                         CookedShaderFormat format, const ShaderCookOptions& opts,
@@ -515,7 +516,7 @@ export namespace foundation::shaders
             return true;
         }
 
-        // SPIR-V (Vulkan) or DXIL (DX12) via DXC.
+        // SPIR-V (Vulkan) or DXIL (DX12) through DXC.
         Array<ShaderDefine> defines;
         AppendDefines(flags, defines);
         CompileOptions co{};

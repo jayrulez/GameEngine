@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // MsaaResolvePass implementation. Fullscreen sample-0
-// resolve of the MSAA opaque depth + G-buffer aux into 1x targets. See MsaaResolvePass.cppm.
+// resolve of the MSAA opaque depth and G-buffer aux into 1x targets. See MsaaResolvePass.cppm.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +25,7 @@ namespace foundation::render
 
     Status MsaaResolvePass::Initialize()
     {
-        // 5 MULTISAMPLED sampled textures (no sampler - the shader uses .Load(coord, 0)): normal (t0),
+        // 5 multisampled sampled textures (no sampler; the shader uses .Load(coord, 0)): normal (t0),
         // velocity (t1), material (t2) are RG float aux; depth (t3) is read as unfilterable float;
         // albedo (t4) is the RGBA8 diffuse albedo SSGI reads.
         rhi::BindGroupLayoutEntry e[] = {
@@ -38,9 +38,9 @@ namespace foundation::render
         for (u32 i = 0; i < 5; ++i)
         {
             e[i].textureMultisampled = true; // Texture2DMS<...> inputs
-            // WebGPU forbids a filterable (Float) sample type on a multisampled texture binding; all
-            // four are read via .Load(coord, 0) (no sampler), so UnfilterableFloat is both required
-            // and correct. (Vulkan tolerated Float here; WebGPU strictly rejects it.)
+            // WebGPU forbids a filterable (Float) sample type on a multisampled texture binding
+            // (Vulkan tolerates it); all five are read via .Load(coord, 0) with no sampler, so
+            // UnfilterableFloat is both required and correct.
             e[i].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         }
         rhi::BindGroupLayoutDesc ld{};
@@ -58,7 +58,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
         // The pipeline is (re)built lazily in DeclareResolve, keyed on the scene depth format (so a
-        // host with a different depth format still gets a valid pipeline) + the shader version.
+        // host with a different depth format still gets a valid pipeline) and the shader version.
         return Status{};
     }
 
@@ -96,7 +96,7 @@ namespace foundation::render
         pd.depthStencil = ds;
         pd.primitive.topology = rhi::PrimitiveTopology::TriangleList;
         pd.primitive.cullMode = rhi::CullMode::None;
-        pd.multisample.count = 1; // the RESOLVE OUTPUT is single-sample
+        pd.multisample.count = 1; // the resolve output is single-sample
         pd.label = u8"msaa_resolve";
         rhi::RenderPipeline* p = nullptr;
         if (!m_device->CreateRenderPipeline(pd, p).IsOk())
@@ -152,8 +152,8 @@ namespace foundation::render
         {
             return out;
         }
-        // Hot reload / first use: (re)build the pipeline when the shader changed or the depth format
-        // differs from the cached one (GPU idled on shader reload by the caller).
+        // Hot reload or first use: (re)build the pipeline when the shader changed or the depth format
+        // differs from the cached one (the caller idles the GPU on shader reload).
         const u64 shaderVersion = m_shaders->Version(u8"msaa_resolve");
         if (m_pipeline == nullptr || shaderVersion != m_pipelineShaderVersion ||
             depthFormat != m_pipelineDepthFormat)

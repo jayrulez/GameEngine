@@ -3,15 +3,14 @@
 
 // UI - :sss_token partition
 //
-// Token kinds and the Token record produced by the .sss Tokenizer. Ported from
-// Sedulous.UI/src/Styling/Parser/Token.bf.
+// Token kinds and the Token record produced by the .sss Tokenizer.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:sss_token;
 
-import foundation.core; // StringView
+import foundation.core;
 
 using namespace foundation::core;
 

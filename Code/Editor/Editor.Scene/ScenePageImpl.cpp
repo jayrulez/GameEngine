@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :page partition, the page's body (Documentation/Specs/editor-gui.md, 5.3,
-// layer 2). See ScenePage.cppm.
+// Editor::Scene - :page partition, the page's body. See ScenePage.cppm.
 
 module;
 #include "Core/Prelude.h"
@@ -89,7 +88,7 @@ namespace editor
             // so systems binding as it is assembled see it; OnUpdate drains it once a frame.
             m_sceneManager.SetSceneEventBus(&m_pageEvents);
             m_scene = m_sceneManager.CreateScene(instance.Name());
-            m_scene->SetSimulationEnabled(false); // edit mode is frozen; Simulate un-freezes it
+            m_scene->SetSimulationEnabled(false); // edit mode is frozen; Simulate unfreezes it
             SceneLoadTimes times;
             const Status loaded = LoadEditorScene(context, instance, *m_scene, &times);
             if (loaded.IsOk())
@@ -154,7 +153,8 @@ namespace editor
         m_viewport->HostIn(m_services.gui);
         if (m_editContext)
         {
-            // The HUD over the viewport: the chips, the stats and the view gizmo, the tool's status.
+            // The HUD over the viewport: the chips, the stats, the view gizmo and the tool's
+            // status.
             SceneHud::Services hud;
             hud.context = &context;
             hud.edit = m_editContext.Get();
@@ -257,8 +257,8 @@ namespace editor
 
     void SceneEditorPage::BuildAnimationPanel(EditorContext& context)
     {
-        // Under the viewport, its pane out of the splitter until shown (a pane that goes gives its
-        // share to the viewport).
+        // Under the viewport; its pane stays out of the splitter until shown (a pane that goes
+        // gives its share to the viewport).
         m_animationPane = RefPtr<gui::Node>(Find<gui::Node>(u8"scene-animation"));
         if (!m_animationPane || m_scene == nullptr || !m_editContext || !m_services.loadMarkup)
             return;
@@ -274,7 +274,8 @@ namespace editor
             return primary != nullptr ? *primary : Guid{};
         };
         m_animation->GuardUnsaved = [self](Function<void()> proceed) { self->AskAboutClip(Move(proceed)); };
-        // Hidden: what it posed goes back, its clip stays open in it (unsaved or not) for next time.
+        // Hidden: what it posed goes back, and its clip stays open in it (unsaved or not) for next
+        // time.
         m_animation->RequestClose = [self]() { self->Later([self]() { self->SetAnimationPanelShown(false); }); };
         if (m_services.refs != nullptr && m_services.refs->Pick)
             m_animation->RequestOpenClip = [self]()
@@ -287,10 +288,10 @@ namespace editor
                                                     self->m_animation->RequestEditClip(picked, Guid{});
                                             });
             };
-        // New: the clip named and placed in Create Asset (Animations and the entity's name to
-        // start), then opened; an animator on the entity with no clip yet plays it.
+        // New: the clip is named and placed in Create Asset (starting in Animations with the
+        // entity's name), then opened; an animator on the entity with no clip yet plays it.
         m_animation->RequestNewClip = [self]() { self->AskAboutClip([self]() { self->NewClip(); }); };
-        // Pick: the page's entity picker, the bound entity lit.
+        // Pick: the page's entity picker, with the bound entity highlighted.
         m_animation->RequestPickEntity = [self](const Guid& current, Function<void(const Guid&)> chosen)
         {
             EntityPickRequest request;
@@ -298,8 +299,8 @@ namespace editor
             request.chosen = Move(chosen);
             (void)self->PickEntity(Move(request));
         };
-        // A clip opened from the browser or a slot while this page is on screen: into the panel,
-        // shown, bound to the selected entity (the old page's), not a page of its own.
+        // A clip opened from the browser or a slot while this page is on screen opens in the panel,
+        // shown and bound to the selected entity, rather than in a page of its own.
         m_openClipInterceptor = context.AddOpenAssetInterceptor([self](foundation::content::Instance& instance) -> bool
                                                                 {
                                                                     if (instance.TypeName() != StringView(u8"PropertyAnimationClipAsset") || !self->IsOnScreen())
@@ -323,7 +324,7 @@ namespace editor
                 animations = child;
         const Guid entity = m_animation->BoundEntity();
         const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : m_scene->FindEntity(entity);
-        // A name not taken where it starts.
+        // A name not already taken in the group it starts in.
         const String base = handle.IsAssigned() ? Format(u8"{} Clip", m_scene->GetEntityName(handle)) : String(u8"Clip");
         const String suggested = (animations != nullptr ? animations : top)->UniqueInstanceName(base.AsView());
         SceneEditorPage* self = this;
@@ -352,7 +353,7 @@ namespace editor
 
     void SceneEditorPage::GiveClipToAnimator(const Guid& entity, const Guid& clip)
     {
-        // Only an animator with no clip: one that plays another keeps it (this is another clip).
+        // Only an animator with no clip takes it: one that plays another clip keeps that one.
         auto* animators = m_scene->GetSystem<engine::animation::PropertyAnimatorComponentManager>();
         const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : m_scene->FindEntity(entity);
         engine::animation::PropertyAnimatorComponent* animator = animators != nullptr && handle.IsAssigned() ? animators->Get(handle) : nullptr;
@@ -384,7 +385,7 @@ namespace editor
                                     {
                                         const String answer = raw->GetResultName(); // by value: a view of the call would dangle
                                         if (answer == StringView(u8"save") && !self->m_animation->Save().IsOk())
-                                            return; // it said why
+                                            return; // it reported why
                                         if (answer == StringView(u8"save") || answer == StringView(u8"discard"))
                                             onProceed();
                                     });
@@ -455,8 +456,8 @@ namespace editor
     void SceneEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
     {
         m_viewport->CompleteCapture(host); // a capture recorded last frame: the GPU finished the copy
-        // A project with no launcher picture gets one from its default scene, once the view has been
-        // up a moment with nothing left loading (content pops in asynchronously).
+        // A project with no launcher picture gets one from its default scene, once the view has
+        // been up a moment with nothing left loading (content pops in asynchronously).
         if (!m_thumbnailChecked && IsProjectDefaultScene())
         {
             m_thumbnailWait += dt;
@@ -472,10 +473,10 @@ namespace editor
         if (m_animation && m_animationShown)
             m_animation->Update(dt, m_simulation.IsRunning());
         m_viewport->AdvanceScripted(dt); // a playtest's frame (viewport_run), before the view's input is read
-        // A modal tool (a brush) owns Shift + wheel to size itself, so the camera leaves that wheel
-        // to it; the bare wheel stays the camera's under a brush too.
+        // A modal tool (a brush) owns Shift and the wheel to size itself, so the camera leaves that
+        // wheel to it; the bare wheel stays the camera's under a brush too.
         const bool modalTool = m_viewportTools.ActiveTool() != nullptr && m_viewportTools.ActiveTool() != m_selectTool;
-        // Its Shift read with the pointer: the brush's panel, just used, may have the keys.
+        // Shift is read with the pointer, since the brush's panel, just used, may have the keys.
         const bool active = m_viewport->UpdateCamera(dt, !(modalTool && m_viewport->ShiftHeld()));
         if (active && m_viewport->ZoomedThisFrame() && m_hud)
             m_hud->Zoomed();
@@ -508,9 +509,9 @@ namespace editor
         if (m_cameraPreview)
             m_cameraPreview->Update();
         if (m_hierarchy)
-            m_hierarchy->Refresh(); // the scene changed: built again
+            m_hierarchy->Refresh(); // rebuilt when the scene changed
         if (m_inspector)
-            m_inspector->Refresh(); // the selection or its components changed: built again; else its values
+            m_inspector->Refresh(); // rebuilt when the selection or its components changed, else its values refresh
         // A move snapping by the grid's cell takes the cell where the camera is now.
         if (GizmoController* gizmos = Gizmos(); gizmos != nullptr && gizmos->MoveSnapsToGrid())
             gizmos->Gizmo().translateSnap = m_overlays.CurrentGridSpacing(m_viewport->Camera()).spacing;
@@ -523,8 +524,9 @@ namespace editor
         const EditorCamera& camera = m_viewport->Camera();
         ViewportToolInput in;
         in.deltaSeconds = deltaSeconds;
-        // The draw eye: under orthographic what lies behind the eye's own plane is in view too, and
-        // the gizmo's size and the marquee take a depth from here (the eye in perspective).
+        // The draw eye: under orthographic, what lies behind the eye's own plane is in view too,
+        // and the gizmo's size and the marquee take their depth from here (the eye itself in
+        // perspective).
         in.cameraPosition = camera.DrawEye();
         in.cameraForward = camera.Forward();
         in.cameraUp = camera.Up();
@@ -544,7 +546,8 @@ namespace editor
         }
         foundation::shell::IMouse* mouse = m_viewport->Mouse();
         foundation::shell::IKeyboard* keyboard = m_viewport->Keyboard();
-        // The pointer's pixel and the view's size: the GPU pick's input, in the render target's space.
+        // The pointer's pixel and the view's size: the GPU pick's input, in the render target's
+        // space.
         in.pointerX = static_cast<i32>(mouse->X());
         in.pointerY = static_cast<i32>(mouse->Y());
         in.viewportWidth = m_viewport->View().RenderWidth();
@@ -555,13 +558,14 @@ namespace editor
             in.leftPressed = mouse->IsButtonPressed(foundation::shell::MouseButton::Left);
             in.leftDown = mouse->IsButtonDown(foundation::shell::MouseButton::Left);
         }
-        // A release always reaches the tool, so a gesture can finish when a modifier goes down mid-drag.
+        // A release always reaches the tool, so a gesture can finish when a modifier goes down
+        // mid-drag.
         in.leftReleased = mouse->IsButtonReleased(foundation::shell::MouseButton::Left) || !mouse->IsButtonDown(foundation::shell::MouseButton::Left);
         if (keyboard != nullptr)
         {
             in.ctrl = keyboard->IsKeyDown(foundation::shell::KeyCode::LeftCtrl) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightCtrl);
         }
-        in.shift = m_viewport->ShiftHeld(); // with the pointer, focused or not (a brush's Shift + wheel)
+        in.shift = m_viewport->ShiftHeld(); // with the pointer, focused or not (a brush's Shift and wheel)
         in.wheelDelta = mouse->ScrollY();
         // The tools' keys (the select tool's W/E/R/X) belong to the camera while it owns the input.
         in.keyboard = cameraOwnsMouse ? nullptr : keyboard;
@@ -653,7 +657,8 @@ namespace editor
                 return Status{ErrorCode::InvalidArgument};
             }
         }
-        // What the animation panel posed is not the scene's: saved as it is, posed again after.
+        // What the animation panel posed is not part of the scene: save the scene as it is, then
+        // pose again.
         if (m_animation)
             m_animation->StopPreview();
         const Status saved = isPrefab ? scene::SavePrefab(*m_scene, *instance) : scene::SaveScene(*m_scene, *instance);
@@ -666,7 +671,8 @@ namespace editor
         // The launcher's picture of the project follows its default scene as it is saved.
         if (!isPrefab && IsProjectDefaultScene())
             (void)RequestProjectThumbnail();
-        // The template changed: its instances in every other open scene rebuild, their overrides kept.
+        // The template changed: its instances in every other open scene rebuild, their overrides
+        // kept.
         if (isPrefab && m_prefabs)
             m_prefabs->RebuildOtherInstances(*instance);
         return saved;

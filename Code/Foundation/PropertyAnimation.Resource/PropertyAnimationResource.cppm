@@ -3,15 +3,16 @@
 
 // Foundation::PropertyAnimation.Resource - `foundation.propertyanimation.resource`.
 //
-// The cooked runtime resource + loader (model-A, like Animation.Resource / Texture.Resource):
-//   * PropertyAnimationClipResource - the runtime product (a RefCounted Object wrapping the
-//     evaluate-ready PropertyAnimationClip); what a component's Ref<> binds and what ships.
-//   * PropertyAnimationClipSource - the cooked WIRE: flat SoA parallel arrays (the AnimationClipSource
-//     pattern), so the serializer never nests. FromClip/FillClip convert to/from the runtime clip.
-//   * PropertyAnimationClipFactory - IResourceFactory: reads the source object, fills a clip resource.
+// The cooked runtime resource and its loader, shaped like Animation.Resource and Texture.Resource:
+//   * PropertyAnimationClipResource: the runtime product (a RefCounted Object wrapping the
+//     evaluate-ready PropertyAnimationClip), what a component's Ref<> binds and what ships.
+//   * PropertyAnimationClipSource: the cooked wire, flat SoA parallel arrays as AnimationClipSource
+//     uses, so the serializer never nests. FromClip and FillClip convert to and from the runtime clip.
+//   * PropertyAnimationClipFactory: an IResourceFactory that reads the source object and fills a
+//     clip resource.
 //
-// Wire symmetry + count guards (the snapshot-prefab lesson): reconstruction walks the SAME
-// track-then-channel order the writer used, and FillClip bounds every index against the pools.
+// Reconstruction walks the same track-then-channel order the writer used, and FillClip bounds
+// every index against the pools, so a malformed wire cannot overread.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +31,7 @@ export namespace foundation::propertyanimation
 {
     namespace resource = foundation::resource;
 
-    // The runtime product: an evaluate-ready clip, RefCounted so the resource system + component Refs
+    // The runtime product: an evaluate-ready clip, RefCounted so the resource system and component Refs
     // hold it as shared immutable data.
     class PropertyAnimationClipResource final : public Object
     {
@@ -53,7 +54,7 @@ export namespace foundation::propertyanimation
         Array<String> trackPath;
         Array<u8> trackKind; // TrackValueKind
 
-        // Per scalar CHANNEL (sum over tracks of ChannelCount(kind), in track-then-channel order).
+        // Per scalar channel (the sum over tracks of ChannelCount(kind), in track-then-channel order).
         Array<u32> channelKeyStart; // first key index into the key pool
         Array<u32> channelKeyCount;
 
@@ -161,7 +162,8 @@ export namespace foundation::propertyanimation
                     (i < trackComponent.Size()) ? String(trackComponent[i].AsView()) : String();
                 t.propertyPath = (i < trackPath.Size()) ? String(trackPath[i].AsView()) : String();
                 // Range-guard the kind: an out-of-range byte would make ChannelCount desync every
-                // LATER track's channel cursor. Corrupt -> Float (a deterministic 1-channel walk).
+                // later track's channel cursor. A corrupt kind reads as Float (a deterministic
+                // one-channel walk).
                 const u8 rawKind = trackKind[i];
                 t.kind = (rawKind <= static_cast<u8>(TrackValueKind::Color))
                              ? static_cast<TrackValueKind>(rawKind)
@@ -185,8 +187,8 @@ export namespace foundation::propertyanimation
                         k.value = (idx < keyValue.Size()) ? keyValue[idx] : 0.0f;
                         k.tangentIn = (idx < keyTangentIn.Size()) ? keyTangentIn[idx] : 0.0f;
                         k.tangentOut = (idx < keyTangentOut.Size()) ? keyTangentOut[idx] : 0.0f;
-                        // Truncated/out-of-range interp keeps the CurveKey default (Linear), never
-                        // silently Constant (0).
+                        // A truncated or out-of-range interp keeps the CurveKey default (Linear),
+                        // rather than silently becoming Constant (0).
                         if (idx < keyInterp.Size() &&
                             keyInterp[idx] <= static_cast<u8>(CurveKeyInterpolation::Cubic))
                         {
@@ -255,7 +257,7 @@ export namespace foundation::propertyanimation
         }
     };
 
-    // Register the cooked source type for content-DB deserialization + the runtime resource type.
+    // Register the cooked source type for content-DB deserialization, and the runtime resource type.
     inline void RegisterPropertyAnimationResource()
     {
         GlobalTypeRegistry().Register(PropertyAnimationClipResource::StaticType());
@@ -263,15 +265,15 @@ export namespace foundation::propertyanimation
         RegisterSerializable<PropertyAnimationClipSource>();
     }
 
-    // Runtime domain (these SHIP in the player - unlike authoring assets).
+    // Runtime domain (these ship in the player, unlike authoring assets).
     RTTI_DEFINE_OBJECT(PropertyAnimationClipResource, "rtti::propertyanimation")
     RTTI_DEFINE_OBJECT(PropertyAnimationClipSource, "rtti::propertyanimation")
 }
 
 export namespace foundation::propertyanimation
 {
-    /// The property animation resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The property animation resource module: the module the engine composition composes this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kPropertyAnimationResourceFactories[] = {
         foundation::resource::FactoryByDefault<PropertyAnimationClipResource, PropertyAnimationClipSource, PropertyAnimationClipFactory>(),
     };

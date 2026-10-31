@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Animation graph stack: parameters, conditions, transitions, states, layers, blend trees, graph,
-// and a graph-player smoke test. Ports Sedulous.Animation.Tests (AnimationGraph*, BlendTree*,
-// BoneMask, AnimationLayer) + adds a state-machine integration check.
+// Animation graph stack: parameters, conditions, transitions, states, layers, blend trees, the
+// graph, and a graph-player state-machine check.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -46,7 +45,7 @@ TEST_CASE("graph: BoneMask SetBoneChainWeight follows hierarchy")
     s.FindRootBones();
     s.BuildChildIndices();
     BoneMask mask{3, 0.0f};
-    mask.SetBoneChainWeight(s, 0, 1.0f); // root + all descendants
+    mask.SetBoneChainWeight(s, 0, 1.0f); // root and all descendants
     CHECK(mask.GetWeight(0) == 1.0f);
     CHECK(mask.GetWeight(1) == 1.0f);
     CHECK(mask.GetWeight(2) == 1.0f);
@@ -112,7 +111,7 @@ TEST_CASE("graph: transition condition evaluation")
     AnimationGraphTransition t;
     CHECK(t.sourceStateIndex == -1); // defaults
     CHECK(t.duration == 0.25f);
-    CHECK(t.EvaluateConditions(pv) == true); // no conditions -> unconditional
+    CHECK(t.EvaluateConditions(pv) == true); // no conditions: unconditional
 
     t.AddFloatCondition(0, ComparisonOp::Greater, 0.1f);
     t.AddBoolCondition(1, true);
@@ -136,7 +135,7 @@ TEST_CASE("graph: state defaults + node ownership")
     CHECK(idle.OwnsNode() == false);
     CHECK(idle.Duration() == 0.0f);
 
-    // Owned node freed on destruction (UniquePtr) - no leak/crash.
+    // An owned node is freed on destruction (UniquePtr), with no leak or crash.
     {
         AnimationGraphState owned{
             u8"Owned",
@@ -200,7 +199,7 @@ TEST_CASE("graph: BlendTree1D sorts by threshold, duration, empty-safe")
     Skeleton empty{0};
     BoneTransform poses[4] = {};
     BlendTree1D blank;
-    blank.Evaluate(empty, 0.0f, Span<BoneTransform>{poses, 4}); // empty -> no crash
+    blank.Evaluate(empty, 0.0f, Span<BoneTransform>{poses, 4}); // empty: no crash
 }
 
 TEST_CASE("graph: BlendTree2D entries + positions + duration")
@@ -276,7 +275,7 @@ TEST_CASE("graph: player transitions states on a bool parameter")
     CHECK(player.GetCurrentStateIndex() == 0); // starts at default (Idle)
 
     player.Update(0.016f);
-    CHECK(player.GetCurrentStateIndex() == 0); // condition false -> stays
+    CHECK(player.GetCurrentStateIndex() == 0); // condition false: stays
 
     player.SetBool(pMoving, true);
     player.Update(0.016f);
@@ -285,7 +284,7 @@ TEST_CASE("graph: player transitions states on a bool parameter")
     CHECK(skin.Size() == 1);
 }
 
-// ---- blend-tree event firing (the dominant clip's events; empty no-op was a bug) ----
+// ---- blend-tree event firing (the dominant clip's events) ----
 TEST_CASE("graph: BlendTree1D fires the dominant clip's events once (incl. loop wrap)")
 {
     AnimationClip walk{u8"walk", 1.0f};
@@ -306,14 +305,14 @@ TEST_CASE("graph: BlendTree1D fires the dominant clip's events once (incl. loop 
     REQUIRE(fired.Size() == 1u);
     CHECK(fired[0] == u8"step.walk");
 
-    // The blend parameter decides WHICH clip's events fire.
+    // The blend parameter decides which clip's events fire.
     fired.Clear();
     tree.parameter = 0.9f;
     tree.FireEvents(0.4f, 0.6f, false, handler);
     REQUIRE(fired.Size() == 1u);
     CHECK(fired[0] == u8"step.run");
 
-    // Loop wrap fires the event that sits in the wrapped span - once.
+    // Loop wrap fires the event that sits in the wrapped span, once.
     fired.Clear();
     tree.FireEvents(0.9f, 0.1f, true, handler);
     CHECK(fired.Size() == 0u); // event at 0.5 is in neither (0.9,1.0] nor [0,0.1]
@@ -344,7 +343,7 @@ TEST_CASE("graph: BlendTree2D fires the nearest entry's events, never both")
     tree.parameterX = 0.1f;
     tree.parameterY = 0.0f;
     tree.FireEvents(0.2f, 0.3f, false, handler);
-    REQUIRE(fired.Size() == 1u); // dominant only - a shared-timing event cannot double-fire
+    REQUIRE(fired.Size() == 1u); // dominant only: a shared-timing event cannot fire twice
     CHECK(fired[0] == u8"breath");
 
     fired.Clear();

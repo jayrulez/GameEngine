@@ -3,7 +3,6 @@
 
 /// DX12 implementation of Backend.
 /// Creates DXGI factory, enumerates adapters, creates surfaces.
-/// Ported from Sedulous.RHI.DX12/DX12Backend.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -144,7 +143,7 @@ export namespace foundation::rhi::dx12
                 adapter.Reset();
             }
 
-            // Expose adapters best-GPU-first; callers take [0]. See Backend::enumerateAdapters.
+            // Expose adapters best GPU first; callers take [0]. See Backend::EnumerateAdapters.
             SortAdaptersByPreference(m_adapterPtrs);
         }
 
@@ -164,7 +163,7 @@ export namespace foundation::rhi::dx12
         Array<Adapter*> m_adapterPtrs;
     };
 
-    /// Creates a DX12 backend. Caller owns the returned pointer - dispose via Destroy().
+    /// Creates a DX12 backend. The caller owns the returned pointer and disposes of it with Destroy().
     [[nodiscard]] Status CreateDxBackend(const DxBackendDesc& desc, Backend*& out,
                                          IAllocator& allocator = DefaultAllocator())
     {

@@ -3,10 +3,10 @@
 
 // GUI.Hosting - :vg_shaders partition: the VG shaders a host draws the GUI with.
 //
-// VgShaderSet names them (the vertex and fragment shaders every draw needs, and those of the
-// gradients, the distance-field text, box shadows, analytic boxes, layers and blurs, each optional:
-// a missing one leaves its draws to a fallback, as VG's renderer has it). VgShaderLibrary resolves
-// them from an application's data mount through the shared shader host: cooked from
+// VgShaderSet names them: the vertex and fragment shaders every draw needs, and the optional ones
+// for gradients, distance-field text, box shadows, analytic boxes, layers and blurs. A missing
+// optional shader leaves its draws to a fallback, as VG's renderer provides. VgShaderLibrary
+// resolves them from an application's data mount through the shared shader host: cooked from
 // Shaders/shaders.dpak in a build that ships, compiled from Shaders/ in development. A test hands
 // GuiHost a set of its own instead.
 
@@ -42,19 +42,20 @@ export namespace foundation::gui
         rhi::ShaderModule* BlurVertex = nullptr;
         rhi::ShaderModule* BlurFragment = nullptr;
 
-        /// Whether anything can be drawn: the two every draw needs are there.
+        /// Whether anything can be drawn: the two shaders every draw needs are present.
         [[nodiscard]] bool IsUsable() const noexcept { return Vertex != nullptr && Fragment != nullptr; }
     };
 
-    /// The VG shaders from an application's data mount. Owns them: it outlives the hosts that draw
-    /// with them.
+    /// The VG shaders from an application's data mount. It owns them, and must outlive the hosts
+    /// that draw with them.
     class VgShaderLibrary
     {
     public:
         explicit VgShaderLibrary(IAllocator& allocator) noexcept : m_host(allocator) {}
 
-        /// Resolves the set for `device` from `data` (borrowed while the library lives); false when
-        /// neither a compiler with sources nor a cooked pack is there, or the two needed are not.
+        /// Resolves the set for `device` from `data`, which is borrowed while the library lives.
+        /// Returns false when there is neither a compiler with sources nor a cooked pack, or when the
+        /// two required shaders are missing.
         bool Load(rhi::Device& device, foundation::vfs::IFileSystem& data)
         {
             if (!m_host.Initialize(device, data))

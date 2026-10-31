@@ -3,11 +3,11 @@
 
 // GUI - :label partition
 //
-// Label: a UIWidget that displays text. It composes the Text primitive (drawn in the
-// padding-inset content bounds) onto the widget base; modeled on eepp's UITextView (role, not a
-// line-for-line port). Its text is shaped and laid out by :text_layout (E4): it wraps as its
-// white-space says, takes line-height and letter-spacing, ends an overflowing line as its
-// text-overflow says and clamps its lines; a rich label's text is markup, its links events.
+// Label: a UIWidget that displays text. It draws a Text primitive inside the content bounds (the
+// bounds inset by the padding). :text_layout shapes and lays out the text: it wraps according to
+// white-space, applies line-height and letter-spacing, ends an overflowing line according to
+// text-overflow, and clamps the number of lines. A rich label's text is markup, and a click on one
+// of its links sends an event.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +17,7 @@ export module foundation.gui:label;
 
 import foundation.core;  // StringView, Color, Float2
 import foundation.fonts; // CachedFont
-import :reactive; // Observable (what bindings follow)
+import :reactive; // Observable, which bindings follow
 import :rect;
 import :draw_context;
 import :text;
@@ -42,7 +42,7 @@ export namespace foundation::gui
         default: return core::StringView(u8"clip");
         }
     }
-    /// The overflow a keyword names (clip for one it does not know).
+    /// Returns the overflow a keyword names, or clip for an unknown keyword.
     [[nodiscard]] inline TextOverflow TextOverflowNamed(core::StringView name) noexcept
     {
         if (name == core::StringView(u8"ellipsis"))
@@ -61,13 +61,13 @@ export namespace foundation::gui
         Label()
         {
             SetTag(core::StringView(u8"label"));
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
-        /// Its text: plain, or a rich text's markup when it is rich (SetRich).
-        /// The bytes of its text an access key is (E12): underlined while access keys show; start ==
-        /// end for none. Its button sets it, having taken the `&` out.
+        /// Sets the byte range of the text that is the access key, underlined while access keys
+        /// are shown; start == end means none. A button sets this after removing the `&` from its
+        /// text.
         void SetMnemonicRange(usize start, usize end)
         {
             m_mnemonicStart = start;
@@ -76,11 +76,13 @@ export namespace foundation::gui
                 m_text.SetUnderline(0, 0);
             Invalidate();
         }
+        /// Sets the text: plain text, or markup when the label is rich (SetRich).
         void SetText(core::StringView text)
         {
             if (m_for.Size() != 0 && !m_rich)
             {
-                // A field's label (`for`): its `&` marks its access key, taken out of what shows.
+                // A label for a field (`for`): the `&` marks the access key and is removed from the
+                // shown text.
                 m_written = core::String(text);
                 const Mnemonic mnemonic = ParseMnemonic(text);
                 m_mnemonic = mnemonic.Key;
@@ -100,20 +102,21 @@ export namespace foundation::gui
                 m_text.SetMarkup(text);
             else
                 m_text.SetString(text);
-            RequestLayout(); // its size follows its text
+            RequestLayout(); // the label's size follows its text
             Invalidate();
             m_textChanged.Notify();
         }
-        /// The text (a read a binding records).
+        /// Returns the shown text. A binding that reads it follows later changes.
         [[nodiscard]] core::StringView GetText() const
         {
             m_textChanged.Track();
             return m_text.GetString();
         }
 
-        /// A rich label's text is markup: runs in their own colours, sizes, faces and effects,
-        /// underlines, inline icons and links (:text_runs), a click on a link reported as a `link`
-        /// event with its id. Markup's `rich="true"`, or the RichText element.
+        /// Makes the label rich: its text is then markup (:text_runs) with runs in their own
+        /// colours, sizes, faces and effects, underlines, inline icons and links. A click on a link
+        /// sends a `link` event with the link's id. Markup sets this with `rich="true"` or the
+        /// RichText element.
         void SetRich(bool rich)
         {
             if (rich == m_rich)
@@ -129,9 +132,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsRich() const noexcept { return m_rich; }
 
-        /// The field it labels, by id (HTML's `for`): its text's `&` marks an access key, and Alt
-        /// with it (or the key alone in an open menu's scope) focuses that field. Empty: none, its
-        /// text shown as written.
+        /// Sets the id of the field this label is for (HTML's `for`). The `&` in the text then marks
+        /// an access key, and Alt with that key (or the key alone inside an open menu) focuses the
+        /// field. An empty id means the label is for no field and its text is shown as written.
         void SetFor(const core::String& id)
         {
             if (id == m_for)
@@ -140,7 +143,7 @@ export namespace foundation::gui
             m_mnemonic = 0;
             SetMnemonicRange(0, 0);
             const core::String written = m_written;
-            m_text.SetString(core::StringView{}); // shown again from what was written
+            m_text.SetString(core::StringView{}); // so SetText below rebuilds the shown text from m_written
             SetText(written.AsView());
         }
         [[nodiscard]] core::String GetFor() const { return m_for; }
@@ -167,8 +170,8 @@ export namespace foundation::gui
             return UIWidget::SetMarkupAttribute(name, value);
         }
 
-        /// CSS's text-overflow: what shows where a line passes the label's width (clip, or an
-        /// ellipsis at its end, start or middle). Not inherited.
+        /// Sets CSS text-overflow: what shows where a line is wider than the label (clip, or an
+        /// ellipsis at the end, start or middle). Not inherited.
         void SetTextOverflow(TextOverflow overflow)
         {
             m_text.SetOverflow(overflow);
@@ -177,8 +180,8 @@ export namespace foundation::gui
         [[nodiscard]] TextOverflow GetTextOverflow() const noexcept { return m_text.GetOverflow(); }
         void SetTextOverflowName(const core::String& name) { SetTextOverflow(TextOverflowNamed(Trim(name.AsView()))); }
         [[nodiscard]] core::String GetTextOverflowName() const { return core::String(TextOverflowName(GetTextOverflow())); }
-        /// CSS's line-clamp: the most lines it shows, the last ending in an ellipsis when its
-        /// text-overflow has one (0: all). Not inherited.
+        /// Sets CSS line-clamp: the most lines shown, 0 for all. The last line ends in an ellipsis
+        /// when text-overflow uses one. Not inherited.
         void SetLineClamp(i32 lines)
         {
             m_text.SetMaxLines(static_cast<u32>(core::Max(0, lines)));
@@ -189,8 +192,9 @@ export namespace foundation::gui
 
         // The natural size of the text (for layout).
         [[nodiscard]] core::Float2 MeasureText() const { return m_text.Measure(); }
-        /// Its text's size (E2, E4): shaped, on one line, or wrapped to the width available where
-        /// its white-space wraps (its longest word when no width is given), clamped to its lines.
+        /// Measures the shaped text. It is one line unless white-space wraps, in which case it wraps
+        /// to the available width (to its longest word when no width is given). The line clamp
+        /// applies.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
         {
             SyncServices();
@@ -198,7 +202,7 @@ export namespace foundation::gui
                 return core::Float2{0.0f, (m_text.GetFont() != nullptr) ? m_text.GetLineHeight() : 0.0f};
             return m_text.MeasureWrapped(available.x);
         }
-        /// Its text's first baseline, where it draws it in the content box.
+        /// Returns the first baseline of the text as drawn in the content box.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override
         {
             const Thickness c = GetChrome();
@@ -207,11 +211,11 @@ export namespace foundation::gui
         }
         // The size wrapped text occupies at `maxWidth` (widest line x total height).
         [[nodiscard]] core::Float2 MeasureWrapped(f32 maxWidth) const { return m_text.MeasureWrapped(maxWidth); }
-        /// What it lays out and draws.
+        /// Returns the Text primitive the label lays out and draws.
         [[nodiscard]] const Text& GetTextLayout() const noexcept { return m_text; }
 
     protected:
-        // Its text draws in its text style (its own, a sheet's, or what it inherits).
+        // The text is drawn in the label's text style, whether set directly, by a sheet, or inherited.
         void OnTextStyleChange() override
         {
             const TextStyle& style = GetTextStyle();
@@ -226,7 +230,8 @@ export namespace foundation::gui
             m_text.SetBreakWords(style.BreakWords);
         }
 
-        /// Its box and, unless it clips it, its text where it is laid out (a line past the box).
+        /// Returns the box, extended by the laid-out text where a line passes the box, unless the
+        /// label clips its text.
         [[nodiscard]] Rect GetInkBounds() const override
         {
             const Rect ink = UIWidget::GetInkBounds();
@@ -242,13 +247,14 @@ export namespace foundation::gui
         {
             (void)localBounds;
             SyncServices();
-            // An access key underlined while access keys show (E12).
+            // Underline the access key while access keys are shown.
             if (m_mnemonicEnd > m_mnemonicStart)
             {
                 const bool shown = AreMnemonicsShown();
                 m_text.SetUnderline(shown ? m_mnemonicStart : 0, shown ? m_mnemonicEnd : 0);
             }
-            // Overflow other than visible clips its own text too, as CSS's does an element's content.
+            // Any overflow other than visible also clips the label's own text, as CSS clips an
+            // element's content.
             const bool clip = ClipsChildren();
             if (clip)
                 ctx.PushClip(GetLocalBounds());
@@ -257,7 +263,7 @@ export namespace foundation::gui
                 ctx.PopClip();
         }
 
-        // Over a rich text's link the pointer shows the hand (E11), as a browser's does.
+        // Over a link in rich text the pointer shows the hand, as in a browser.
         [[nodiscard]] Cursor GetCursorNow() const override { return m_overLink ? Cursor::Pointer : UIWidget::GetCursorNow(); }
         void OnMouseMove(const MouseEvent& event) override
         {
@@ -265,7 +271,7 @@ export namespace foundation::gui
         }
         void OnMouseLeave(const MouseEvent&) override { m_overLink = false; }
 
-        // A click on a rich text's link reports it.
+        // A click on a link in rich text sends a LinkEvent.
         void OnMouseClick(const MouseEvent& event) override
         {
             if (!m_rich)
@@ -274,11 +280,11 @@ export namespace foundation::gui
             if (link.Size() == 0)
                 return;
             event.Handled = true;
-            const core::String id(link); // the event outlives no relayout
+            const core::String id(link); // copied, since a relayout could invalidate the view
             SendEvent(LinkEvent(this, id.AsView()));
         }
 
-        // The GUI's fonts and resources, which a rich text's own faces and icons need.
+        // Gives rich text the GUI's font service and resource provider, which its faces and icons need.
         void SyncServices()
         {
             if (!m_rich)
@@ -287,7 +293,7 @@ export namespace foundation::gui
             m_text.SetResourceProvider(GetResourceProvider());
         }
 
-        // Its access key focuses the field it labels (a label is not a stop of its own).
+        // The access key focuses the labelled field; the label itself takes no focus.
         bool OnActivate() override
         {
             if (m_for.Size() == 0)
@@ -312,17 +318,17 @@ export namespace foundation::gui
         }
 
         Text m_text;
-        core::String m_written; // its text as written (a field's label shows it without its `&`)
-        core::String m_for;     // the field it labels, by id
+        core::String m_written; // the text as written; a label for a field shows it without the `&`
+        core::String m_for;     // id of the field this label is for
         char32_t m_mnemonic = 0;
         bool m_rich = false;
-        bool m_overLink = false; // the pointer is over one of its links
-        usize m_mnemonicStart = 0; // the access key's bytes, underlined while access keys show
+        bool m_overLink = false; // the pointer is over one of the label's links
+        usize m_mnemonicStart = 0; // byte range of the access key, underlined while access keys are shown
         usize m_mnemonicEnd = 0;
-        Observable m_textChanged; // what bindings reading the text follow
+        Observable m_textChanged; // notifies bindings that read the text
     };
 
-    /// A label whose text is markup (Label with rich on), for markup's <RichText text="...">.
+    /// A Label with rich text switched on, for markup's <RichText text="...">.
     class RichText : public Label
     {
         RTTI_OBJECT(RichText, Label)

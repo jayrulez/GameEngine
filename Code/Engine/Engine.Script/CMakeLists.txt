@@ -1,6 +1,6 @@
 # Engine::Script - `engine.script`: entity behaviors
-# (ScriptComponent + per-scene dispatch + the run's ONE gameplay script context).
-# Backend-neutral: links Foundation::Script for the REGISTRY only - entry points
+# (ScriptComponent, per-scene dispatch, the run's single gameplay script context).
+# Backend-neutral: links Foundation::Script only for the registry; entry points
 # register concrete backends.
 util_add_engine_library(Engine.Script ALIAS Engine::Script)
 target_link_libraries(Engine.Script

@@ -2,17 +2,18 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Scene - :mcp_tools partition.
 //
-// The scene editor's MCP tools - what only a live scene page can serve, registered as the
-// scene editor's contribution to the editor's MCP host (EditorContext::RegisterMcpToolContribution
-// from RegisterSceneEditor): selection_get / selection_set over a page's entity selection, and
-// simulate_start / simulate_stop over its edit-mode Simulate, entity_inspect over an entity's
-// reflected components and component_set writing one of them through the page's undo path
-// (one locked, labelled step per call). Every tool is PAGE-ADDRESSED
-// (`page` = the scene or prefab asset's guid, as page_list reports it), defaulting to the active
-// page when that is a scene page, and every result names the page it acted on - several scene
-// pages may be open, each with its own selection. The page is reached through the interface it
-// publishes (EditorPage::Service<ISceneEditorPage>), and the selection through its edit context,
-// so the hierarchy, the inspector and the gizmos follow an agent's selection exactly as a click.
+// The scene editor's MCP tools: what only a live scene page can serve, registered as the scene
+// editor's contribution to the editor's MCP host (EditorContext::RegisterMcpToolContribution, from
+// RegisterSceneEditor). They cover a page's entity selection (selection_get, selection_set), its
+// edit-mode Simulate (simulate_start, simulate_stop), an entity's reflected components
+// (entity_inspect, and component_set, which writes one through the page's undo path as one locked,
+// labelled step per call), the navigation bake, the viewport's camera, framing, screenshots and
+// playtests, and the editing tools. Every tool addresses a page (`page` is the scene or prefab
+// asset's guid, as page_list reports it), defaulting to the active page when that is a scene page,
+// and every result names the page it acted on, since several scene pages may be open, each with its
+// own selection. The page is reached through the interface it publishes
+// (EditorPage::Service<ISceneEditorPage>), and the selection through its edit context, so the
+// hierarchy, the inspector and the gizmos follow an agent's selection just as they follow a click.
 module;
 #include "Core/Prelude.h"
 
@@ -28,12 +29,12 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// The number of tools RegisterSceneLiveTools registers (selection_get / selection_set /
-    /// simulate_start / simulate_stop / navigation_bake / entity_inspect / component_set /
-    /// viewport_camera_get / viewport_camera_set / viewport_frame / viewport_screenshot /
-    /// viewport_run); a tripwire like kEngineToolCount.
-    /// The live editing tools (SceneMcpEditToolsImpl.cpp): entity_create, entity_update,
-    /// entity_delete, component_add, component_remove, prefab_spawn, behavior_add, behavior_set.
+    /// The live tools are twelve (selection_get, selection_set, simulate_start, simulate_stop,
+    /// navigation_bake, entity_inspect, component_set, viewport_camera_get, viewport_camera_set,
+    /// viewport_frame, viewport_screenshot, viewport_run) plus the eight editing tools of
+    /// SceneMcpEditToolsImpl.cpp (entity_create, entity_update, entity_delete, component_add,
+    /// component_remove, prefab_spawn, behavior_add, behavior_set). kSceneLiveToolCount, the number
+    /// RegisterSceneLiveTools registers, is a tripwire like kEngineToolCount.
     inline constexpr usize kSceneEditToolCount = 8;
     inline constexpr usize kSceneLiveToolCount = 12 + kSceneEditToolCount;
 

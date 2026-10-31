@@ -1,6 +1,7 @@
-# Texture.Compression.Tests - policy table, exact block sizes, encode->decode PSNR round-trip.
-# Links ThirdParty::Bc7enc directly for the decode side (the module only encodes; decoding is
-# test-only) - the one place outside Texture.Compression that touches the encoder headers.
+# Texture.Compression.Tests - the policy table, exact block sizes, and the PSNR of an encode and
+# decode round trip. Links ThirdParty::Bc7enc directly for the decode side (the module only
+# encodes; decoding is test-only), the one place outside Texture.Compression that touches the
+# encoder headers.
 add_executable(Texture.Compression.Tests TestsMain.cpp CompressionTests.cpp)
 target_link_libraries(Texture.Compression.Tests PRIVATE ThirdParty::Bcdec
     Pipeline::Texture.Compression Foundation::Core Foundation::RHI

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Validation wrappers for RenderBundleEncoder + RenderBundle.
-/// Mirrors ValidatedRenderPassEncoder's draw-recording checks for the bundle subset.
+/// Validation wrappers for RenderBundleEncoder and RenderBundle.
+/// Applies ValidatedRenderPassEncoder's draw-recording checks to the bundle subset.
 
 module;
 #include "Core/Prelude.h"

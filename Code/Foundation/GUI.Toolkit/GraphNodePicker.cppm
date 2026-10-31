@@ -3,10 +3,10 @@
 
 // GUI.Toolkit - :graph_node_picker partition
 //
-// The node picker of a graph view (T6 of Specs/gui-lab-evolution-3.md): the kinds of node a source
-// makes, under their categories, with a search over their names. A graph view opens it from its menu
-// over nothing and when a link is dropped on nothing (then only the kinds with a pin that fits). Typing
-// filters it; Up and Down move along it, Enter or a click chooses.
+// The node picker of a graph view lists the kinds of node a source makes, under their categories,
+// with a search over their names. A graph view opens it from its menu over empty canvas, and when a
+// link is dropped on empty canvas; then it lists only the kinds with a pin that fits. Typing filters
+// the list, Up and Down move along it, and Enter or a click chooses.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +41,7 @@ export namespace foundation::gui
             else
                 RemoveClass(core::StringView(u8"category"));
         }
-        /// Its place among the kinds shown; -1 for a heading.
+        /// Returns the row's index among the kinds shown, or -1 for a heading.
         [[nodiscard]] i32 GetShown() const noexcept { return m_shown; }
         [[nodiscard]] Label& GetLabel() noexcept { return *m_label; }
 
@@ -92,7 +92,7 @@ export namespace foundation::gui
                 });
             }
             AddChild(m_list.Get());
-            // Up, Down and Enter before the search field takes them.
+            // Handle Up, Down and Enter before the search field takes them.
             (void)AddEventListener(EventType::KeyDown, [self](const Event& e)
                                    {
                                        const KeyEvent& key = static_cast<const KeyEvent&>(e);
@@ -113,7 +113,7 @@ export namespace foundation::gui
                                    true);
         }
 
-        /// The kinds it offers, in the source's order (a category's kinds together under it).
+        /// Sets the kinds it offers, in the source's order; a category's kinds are grouped under it.
         void SetTypes(core::Span<const GraphNodeType> types)
         {
             m_types.Clear();
@@ -128,10 +128,11 @@ export namespace foundation::gui
             m_search->SetText(text);
             Filter(text);
         }
-        /// Told the kind chosen.
+        /// Called with the kind chosen.
         void SetOnChosen(core::Function<void(const GraphNodeType&)> callback) { m_onChosen = core::Move(callback); }
 
-        /// The kinds shown now, in their order, and which is current (lit; Enter's).
+        /// The kinds shown now, in their order, and which one is current (highlighted, and the one
+        /// Enter chooses).
         [[nodiscard]] usize ShownCount() const noexcept { return m_shown.Size(); }
         [[nodiscard]] const GraphNodeType& ShownAt(usize index) const noexcept { return m_types[m_shown[index]]; }
         [[nodiscard]] i32 GetCurrent() const noexcept { return m_current; }
@@ -154,7 +155,7 @@ export namespace foundation::gui
             }
         }
         void Step(i32 by) { SetCurrent(m_current + by); }
-        /// Chooses the current kind; false when none is shown.
+        /// Chooses the current kind. Returns false when none is shown.
         bool ChooseCurrent() { return Choose(m_current); }
         bool Choose(i32 shown)
         {
@@ -207,7 +208,8 @@ export namespace foundation::gui
             };
             if (query.Size() == 0)
             {
-                // Under their categories, each once, in the order they first come.
+                // Group the kinds under their categories, each category once, in the order the
+                // categories first appear.
                 core::Array<core::String> categories;
                 for (const GraphNodeType& type : m_types)
                 {
@@ -241,7 +243,7 @@ export namespace foundation::gui
                 m_list->RemoveChild(m_rows.Back().Get());
                 m_rows.RemoveAt(m_rows.Size() - 1);
             }
-            m_current = -2; // shown again below
+            m_current = -2; // cleared here; SetCurrent below sets it again
             SetCurrent(0);
         }
 
@@ -249,7 +251,7 @@ export namespace foundation::gui
         core::RefPtr<UIWidget> m_list;
         core::Array<core::RefPtr<GraphPickerRow>> m_rows;
         core::Array<GraphNodeType> m_types;
-        core::Array<usize> m_shown; // the kinds shown, by their place in m_types
+        core::Array<usize> m_shown; // the kinds shown, as indexes into m_types
         i32 m_current = -1;
         core::Function<void(const GraphNodeType&)> m_onChosen;
     };

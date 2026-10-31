@@ -3,32 +3,33 @@
 
 // GUI.Toolkit - :property_editors partition
 //
-// The property grid's T1 editors (Specs/gui-lab-evolution-3.md), each the core's control as a row's
-// value, mixed when the objects differ:
-//   - bool: a check box, mixed its indeterminate state;
-//   - integer and float: a number field, scrubbed (the scrub previewed, committed on release,
-//     cancelled by Escape), its range and step the property's (unbounded when it has no range; a
-//     float's step 0.01 when it has none), and the wheel left to the grid;
-//   - a number on a slider (hint "slider"): a slider over its range beside its number field, each
-//     the same gesture (a drag previewed, committed on release, Escape putting it back), the wheel
-//     left to the grid;
-//   - string: a one-line field, committed on Return or on leaving it; Escape puts back what it had;
-//   - enum: a combo box of its choices;
-//   - flags: a button naming the flags set, opening a list of check boxes, a flag that differs
-//     between the objects indeterminate; each one set or cleared alone;
-//   - Float2, Float3 and Float4 (T2): a group hinted with Core's type name, a number field per child
-//     on its one row, each labelled with its child's name and editing its child's path, so each is
-//     mixed and scrubbed on its own;
-//   - colours (T4): a swatch and a hex field; the swatch opens the core's picker as a popup, a
-//     drag previewing on every object and the picker's closing committing once (the originals
-//     put back first), Escape cancelling; the hex field commits what is typed;
-//   - an intensity in exposure stops (hint "stops", T4): a number field of log2 of the value, so
-//     0 stops is x1, writing 2^stops;
-//   - an HDR colour (hint "ColorHdr", T4): its `color` part's editor and its `intensity` part's
-//     stops on one row, each its own gesture;
-//   - lists (T2): the count (mixed when the objects' differ) and an Add button, a menu of the types
-//     when the list takes several; an element added at the end.
-// Mixed, a field shows the placeholder "Mixed" and a button says so.
+// The property grid's default editors. Each uses one of the core GUI's controls as a row's value,
+// and shows a mixed state when the objects' values differ:
+//   - bool: a check box, which shows mixed as its indeterminate state.
+//   - integer and float: a number field that can be scrubbed. The scrub previews, commits on
+//     release and cancels on Escape. Its range and step are the property's; with no range it is
+//     unbounded, and a float with no step uses 0.01. The wheel is left to the grid.
+//   - a number on a slider (hint "slider"): a slider over its range beside its number field. Each
+//     works the same way: a drag previews, commits on release, and Escape puts the value back. The
+//     wheel is left to the grid.
+//   - string: a one-line field that commits on Return or when focus leaves it. Escape restores
+//     what it had.
+//   - enum: a combo box of its choices.
+//   - flags: a button naming the flags set, which opens a list of check boxes. A flag that differs
+//     between the objects is indeterminate. Each flag is set or cleared on its own.
+//   - Float2, Float3 and Float4: a group hinted with Core's type name. Its row holds a number field
+//     per child, each labelled with the child's name and editing the child's path, so each one is
+//     mixed and scrubbed on its own.
+//   - colours: a swatch and a hex field. The swatch opens the core picker as a popup. A drag in it
+//     previews on every object, and closing the picker commits once (after putting the originals
+//     back); Escape cancels. The hex field commits what is typed.
+//   - an intensity in exposure stops (hint "stops"): a number field showing log2 of the value, so
+//     0 stops is x1; it writes 2^stops.
+//   - an HDR colour (hint "ColorHdr"): the editor for its `color` part and the stops for its
+//     `intensity` part on one row, each with its own gesture.
+//   - lists: the count (mixed when the objects' counts differ) and an Add button, which offers a
+//     menu of types when the list takes several. Add appends the element at the end.
+// When mixed, a field shows the placeholder "Mixed" and a button shows that text.
 
 module;
 #include "Core/Prelude.h"
@@ -46,10 +47,10 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// What a field or a button shows for values that differ.
+    /// Returns what a field or a button shows for values that differ.
     [[nodiscard]] inline core::StringView MixedValueText() noexcept { return core::StringView(u8"Mixed"); }
 
-    // An editor of one control filling it.
+    // An editor made of one control that fills it.
     class SingleControlEditor : public PropertyEditor
     {
         RTTI_OBJECT(SingleControlEditor, PropertyEditor)
@@ -71,7 +72,7 @@ export namespace foundation::gui
         }
 
     private:
-        Node* m_control = nullptr; // a child it holds
+        Node* m_control = nullptr; // the child control it holds
     };
 
     class BoolPropertyEditor : public SingleControlEditor
@@ -140,7 +141,8 @@ export namespace foundation::gui
             m_begun = false;
             m_integer = info.Kind == PropertyKind::Integer;
             m_field->SetInteger(m_integer);
-            // Unbounded, it snaps to its step from zero and goes past the field's own range.
+            // With no range, the value snaps to its step from zero and may go past the field's
+            // default range.
             m_field->SetMin(info.HasRange ? info.Min : 0.0);
             m_field->SetMax(info.HasRange ? info.Max : 100.0);
             m_field->SetAllowLesser(!info.HasRange);
@@ -166,11 +168,12 @@ export namespace foundation::gui
 
         core::RefPtr<NumberField> m_field;
         bool m_integer = false;
-        bool m_begun = false; // a gesture under way (a scrub's previews)
+        bool m_begun = false; // set while a gesture (a scrub's previews) is under way
     };
 
-    /// A number over its range: a slider beside its field. Either is one gesture: previewed as it
-    /// goes, committed on release (the field: on Return or leaving it), Escape putting it back.
+    /// A number over its range: a slider beside its field. Each control edits in one gesture: it
+    /// previews as it goes, commits on release (the field on Return or when focus leaves it), and
+    /// Escape puts the value back.
     class SliderPropertyEditor : public PropertyEditor
     {
         RTTI_OBJECT(SliderPropertyEditor, PropertyEditor)
@@ -202,7 +205,7 @@ export namespace foundation::gui
             m_slider->SetOnValueChanged([self](f64 value) { self->Commit(value); });
             m_slider->SetOnValueCancelled([self]()
             {
-                self->m_field->SetValue(self->m_slider->GetValue()); // back with it
+                self->m_field->SetValue(self->m_slider->GetValue()); // the field follows the slider back
                 self->Cancel();
             });
             AddChild(m_slider.Get());
@@ -223,7 +226,7 @@ export namespace foundation::gui
             m_field->SetOnValueChanged([self](f64 value) { self->Commit(value); });
             m_field->SetOnValueCancelled([self]()
             {
-                self->m_slider->SetValue(self->m_field->GetValue()); // back with it
+                self->m_slider->SetValue(self->m_field->GetValue()); // the slider follows the field back
                 self->Cancel();
             });
             AddChild(m_field.Get());
@@ -288,7 +291,7 @@ export namespace foundation::gui
         core::RefPtr<Slider> m_slider;
         core::RefPtr<NumberField> m_field;
         bool m_integer = false;
-        bool m_begun = false; // a gesture under way (a drag's or a scrub's previews)
+        bool m_begun = false; // set while a gesture (a drag's or a scrub's previews) is under way
     };
 
     class StringPropertyEditor : public SingleControlEditor
@@ -316,7 +319,7 @@ export namespace foundation::gui
             m_field->SetText(m_shown.AsView());
             m_field->SetReadOnly(IsReadOnly());
         }
-        // Escape puts back what it had (the field then has nothing new to commit).
+        // Escape restores what the field had, so it then has nothing new to commit.
         void OnKeyDown(const KeyEvent& event) override
         {
             if (static_cast<KeyCode>(event.KeyCode) == KeyCode::Escape && event.Modifiers == 0 && m_field->GetText() != m_shown.AsView())
@@ -385,7 +388,7 @@ export namespace foundation::gui
 
         core::RefPtr<ComboBox> m_combo;
         core::Array<PropertyChoice> m_choices;
-        bool m_binding = false; // showing a value, not the user picking one
+        bool m_binding = false; // set while showing a value, so the change is not the user's pick
     };
 
     /// The list a flags editor opens: a check box per flag.
@@ -427,13 +430,13 @@ export namespace foundation::gui
             m_list = core::MakeRef<PropertyFlagsList>(MemoryAllocator());
         }
         [[nodiscard]] Button* GetButton() const noexcept { return m_button.Get(); }
-        /// The list, while it is open.
+        /// Returns the list while it is open, else null.
         [[nodiscard]] PropertyFlagsList* GetList() const
         {
             const EventDispatcher* dispatcher = m_list->GetEventDispatcher();
             return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_list) ? m_list.Get() : nullptr;
         }
-        /// The list's check box for choice `index`, while it is open.
+        /// Returns the list's check box for choice `index` while the list is open, else null.
         [[nodiscard]] CheckBox* GetFlagBox(usize index) const { return GetList() != nullptr && index < m_boxes.Size() ? m_boxes[index].Get() : nullptr; }
         void OpenList()
         {
@@ -463,7 +466,8 @@ export namespace foundation::gui
         }
 
     private:
-        // The flags set (those that differ said to), "None" when none is.
+        // Returns the names of the flags set, "None" when none is, or "Mixed" when any flag differs
+        // between the objects.
         [[nodiscard]] core::String Summary() const
         {
             if (m_mixedBits != 0)
@@ -478,7 +482,7 @@ export namespace foundation::gui
                 }
             return text.Size() != 0 ? text : core::String(u8"None");
         }
-        // A check box per flag, made as the choices need them, each showing its bit.
+        // Shows a check box per flag, making boxes as the choices need them, each showing its bit.
         void ShowBoxes()
         {
             while (m_boxes.Size() < m_choices.Size())
@@ -518,8 +522,8 @@ export namespace foundation::gui
         u64 m_mixedBits = 0;
     };
 
-    /// A group's number children side by side on its row (Float2, Float3, Float4): each a number
-    /// editor of its own path after its name.
+    /// Shows a group's number children side by side on its row (Float2, Float3, Float4). Each is a
+    /// number editor for its own path, after a label with its name.
     class FloatsPropertyEditor : public PropertyEditor
     {
         RTTI_OBJECT(FloatsPropertyEditor, PropertyEditor)
@@ -609,7 +613,7 @@ export namespace foundation::gui
         usize m_shown = 0;
     };
 
-    /// The popup a colour editor opens: the core's picker on a panel.
+    /// The popup a colour editor opens: the core GUI's picker on a panel.
     class PropertyColorPopup : public UIWidget
     {
         RTTI_OBJECT(PropertyColorPopup, UIWidget)
@@ -674,13 +678,13 @@ export namespace foundation::gui
         }
         [[nodiscard]] ColorSwatch* GetSwatch() const noexcept { return m_swatch.Get(); }
         [[nodiscard]] TextField* GetHexField() const noexcept { return m_hex.Get(); }
-        /// The picker, while it is open.
+        /// Returns the picker while it is open, else null.
         [[nodiscard]] ColorPicker* GetPicker() const
         {
             const EventDispatcher* dispatcher = m_popup->GetEventDispatcher();
             return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_popup) ? &m_popup->GetPicker() : nullptr;
         }
-        /// Opens the picker on the colour shown; its drags preview, its closing commits.
+        /// Opens the picker on the colour shown. Its drags preview, and closing it commits.
         void OpenPicker()
         {
             EventDispatcher* dispatcher = GetEventDispatcher();
@@ -689,7 +693,7 @@ export namespace foundation::gui
             ShareTextStyle(*m_popup, false);
             m_popup->GetPicker().SetShowsAlpha(m_showsAlpha);
             m_popup->GetPicker().SetColor(m_color);
-            m_popup->GetPicker().SetOriginal(m_color); // beside the new one, a click putting it back
+            m_popup->GetPicker().SetOriginal(m_color); // shown beside the new colour; a click on it restores it
             m_picking = false;
             m_picked = m_color;
             PopupOptions options;
@@ -724,7 +728,7 @@ export namespace foundation::gui
         }
 
     private:
-        // A step of the picker: the gesture begun on the first, each previewed.
+        // Handles each step of the picker: the first step begins the gesture, and each is previewed.
         void Picked(Color color)
         {
             if (!m_showsAlpha)
@@ -738,10 +742,10 @@ export namespace foundation::gui
             m_swatch->SetColor(color);
             m_swatch->SetMixed(false);
             m_hex->SetPlaceholder(core::StringView{});
-            m_hex->SetText(FormatHexColor(color, m_showsAlpha).AsView()); // the row shows the pick as it goes
+            m_hex->SetText(FormatHexColor(color, m_showsAlpha).AsView()); // the row shows the picked colour as it changes
             PreviewEdit(PropertyWrite{Variant(color)});
         }
-        // The picker closed: what it picked committed once, or given up with Escape.
+        // Handles the picker closing: what it picked is committed once, or cancelled on Escape.
         void Closed(bool escaped)
         {
             if (!m_picking)
@@ -757,7 +761,7 @@ export namespace foundation::gui
             const Optional<Color> parsed = ParseColor(core::Trim(text));
             if (!parsed.HasValue())
             {
-                m_hex->SetText(FormatHexColor(m_color, m_showsAlpha).AsView()); // not a colour: what it was
+                m_hex->SetText(FormatHexColor(m_color, m_showsAlpha).AsView()); // not a colour, so show the old value again
                 return;
             }
             Color color = parsed.Value();
@@ -772,10 +776,11 @@ export namespace foundation::gui
         Color m_color{};
         Color m_picked{};
         bool m_showsAlpha = true;
-        bool m_picking = false; // a gesture under way in the open picker
+        bool m_picking = false; // set while a gesture is under way in the open picker
     };
 
-    /// An intensity shown in exposure stops: log2 of its value (0 stops: x1), 2^stops written.
+    /// Shows an intensity in exposure stops, the log2 of its value (0 stops is x1), and writes
+    /// 2^stops.
     class StopsPropertyEditor : public SingleControlEditor
     {
         RTTI_OBJECT(StopsPropertyEditor, SingleControlEditor)
@@ -837,7 +842,8 @@ export namespace foundation::gui
         bool m_begun = false;
     };
 
-    /// An HDR colour on one row: its `color` part's swatch and hex, its `intensity` part's stops.
+    /// An HDR colour on one row: the swatch and hex for its `color` part, and the stops for its
+    /// `intensity` part.
     class HdrColorPropertyEditor : public PropertyEditor
     {
         RTTI_OBJECT(HdrColorPropertyEditor, PropertyEditor)
@@ -901,7 +907,7 @@ export namespace foundation::gui
         core::RefPtr<StopsPropertyEditor> m_stops;
     };
 
-    /// A list's row: how many elements, and Add.
+    /// A list's row: the element count and an Add button.
     class ListPropertyEditor : public PropertyEditor
     {
         RTTI_OBJECT(ListPropertyEditor, PropertyEditor)
@@ -929,7 +935,7 @@ export namespace foundation::gui
         }
         [[nodiscard]] Label* GetCountLabel() const noexcept { return m_count.Get(); }
         [[nodiscard]] Button* GetAddButton() const noexcept { return m_add.Get(); }
-        /// The menu of the types an add chooses from, while it is open.
+        /// Returns the menu of types to add while it is open, else null.
         [[nodiscard]] Menu* GetTypeMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
 
     protected:
@@ -952,7 +958,7 @@ export namespace foundation::gui
         }
 
     private:
-        // At the end; of a type picked from a menu when the list takes several.
+        // Adds an element at the end. When the list takes several types, the type comes from a menu.
         void Add()
         {
             if (m_types.Size() <= 1)

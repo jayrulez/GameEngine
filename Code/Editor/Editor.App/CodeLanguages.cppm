@@ -3,12 +3,11 @@
 
 // Editor App - :code_languages partition
 //
-// CodeLanguages: the code editors' languages by id, for the code pages (Documentation/Specs/
-// editor-gui.md, 5.4, layer 6, part 1). A language is a data file of Data/Editor/Code, one for the
-// editor and the GUI sandbox alike (the user's choice, 2026-10-26), named by its id and read through
-// the XML serialization the first time a page asks for it (a script asset's language, "hlsl", "css");
-// so no list of languages is written anywhere, and one added is a file. The editor's application owns
-// one and hands it to the pages with their services.
+// CodeLanguages: the code editors' languages by id, for the code pages. A language is a data file
+// in Data/Editor/Code, shared by the editor and the GUI sandbox, named by its id and read through
+// the XML serialization the first time a page asks for it (a script asset's language, "hlsl",
+// "css"). No list of languages is written anywhere; adding one means adding a file. The editor's
+// application owns one instance and hands it to the pages with their services.
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +27,7 @@ export namespace editor::app
     class CodeLanguages
     {
     public:
-        /// Where the languages are, under the data root: <id>.xml each.
+        /// The folder of language files under the data root, one <id>.xml per language.
         static constexpr StringView kFolder = u8"Editor/Code/";
 
         /// `read` gives a file's text by its path under the data root (false: it is not there).
@@ -39,8 +38,8 @@ export namespace editor::app
         CodeLanguages(const CodeLanguages&) = delete;
         CodeLanguages& operator=(const CodeLanguages&) = delete;
 
-        /// The language `id` names, read the first time it is asked for and kept; null when it has
-        /// no file or the file does not read (logged once).
+        /// The language `id` names, read the first time it is asked for and then cached; null when
+        /// it has no file or the file fails to read (logged once).
         [[nodiscard]] const foundation::gui::CodeLanguage* Find(StringView id)
         {
             if (id.IsEmpty())
@@ -58,7 +57,7 @@ export namespace editor::app
         struct Entry
         {
             String id;
-            UniquePtr<foundation::gui::CodeLanguage> language; // null: not there, or did not read
+            UniquePtr<foundation::gui::CodeLanguage> language; // null: no file, or it failed to read
         };
 
         [[nodiscard]] UniquePtr<foundation::gui::CodeLanguage> Read(StringView id) const

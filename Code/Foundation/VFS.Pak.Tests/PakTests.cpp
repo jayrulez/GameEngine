@@ -40,7 +40,7 @@ TEST_CASE("vfs.pak: build, open, read, enumerate")
     REQUIRE(fs.IsValid());
     CHECK(fs.EntryCount() == 3u);
 
-    // Capabilities: read + enumerate, but not writable.
+    // Capabilities: read and enumerate, but not writable.
     CHECK(fs.AsEnumerable() != nullptr);
     CHECK(fs.AsWritable() == nullptr);
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The inverse kinematics solvers (inverse-kinematics.md P1, the tests the spec lists): a two-bone
+// The inverse kinematics solvers: a two-bone
 // chain reaches a reachable target exactly from every side, keeps its bone lengths and bends in
 // the pole's plane; an unreachable target is clamped short of straight with no NaN; a straight
 // chain bends the same way every frame; weight 0 is byte for byte and 0.5 between; an aim reaches
@@ -424,8 +424,8 @@ TEST_CASE("ik aim: reaches within its limits, holds beyond them, shares the swin
         AimIkSettings settings;
         settings.maxTurn = 60.0f * kDegToRad;
         settings.maxTilt = 30.0f * kDegToRad;
-        // Behind and a little to +x, level, then also high above: the old cone swung these over
-        // the top of the head; the limits hold them at the side.
+        // Behind and a little to +x, level, then also high above: the limits hold these at the
+        // side rather than swinging them over the top of the head.
         const Float3 behind[] = {Float3{1, 0, -10}, Float3{1, 9, -10}};
         const f32 rise[] = {0.0f, std::sin(30.0f * kDegToRad)};
         for (usize i = 0; i < 2; ++i)
@@ -733,7 +733,7 @@ TEST_CASE("ik two-bone: a tip in the mid bone's space ends a chain whose shin ha
 namespace
 {
     // The asset-pack shape: Root(0); Hips(1) at 1 under it; per side a Thigh under the hips and a
-    // Shin 0.45 below with no child; the Foot an IK-target bone under the ROOT, 0.1 up, where the
+    // Shin 0.45 below with no child; the Foot an IK-target bone under the root, 0.1 up, where the
     // shin's tip (0.45 below it) meets it.
     enum Detached : i32
     {

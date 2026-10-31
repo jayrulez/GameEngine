@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Input - :fitted_input partition (Sedulous f9b1feb7).
+// Engine::Input - :fitted_input partition.
 //
-// The devices of another source with the MOUSE and the TOUCHES mapped into a fitted content space:
+// The devices of another source with the mouse and the touches mapped into a fitted content space:
 // a game drawn at a fixed render resolution and fitted into its window reads its pointer in render
 // pixels, wherever the window puts the image, and a finger normalized over that image (where its
-// touch regions are). A turned present (Specs/present-transform.md) turns them back, so a game
-// reads them in its own frame. The keyboard, the pads and the event stream pass through.
+// touch regions are). A turned present turns them back, so a game reads them in its own frame. The
+// keyboard, the pads and the event stream pass through.
 //
-// The member functions are defined in FittedInputSourceImpl.cpp: a class whose virtuals are all
-// inline has no key function, so every importer generated its vtables, and clang 21 crashed doing
-// so (on CI, in a sample importing it; a vtable-layout crash in codegen). Out of line, the vtables are this
-// module's alone.
+// The member functions are defined in FittedInputSourceImpl.cpp. A class whose virtuals are all
+// inline has no key function, so every importer generates its vtables, and clang 21 crashes doing
+// so in codegen. Out of line, the vtables belong to this module alone.
 //
 // Ungated, unlike an editor viewport's surface: it is the whole window's input, so a player who
 // never moves the mouse still has the keyboard. Over a letterbox bar the pointer maps outside the
@@ -88,7 +87,7 @@ export namespace engine::input
     class FittedInputSource final : public foundation::input::IInputSourceProvider
     {
     public:
-        /// `inner` is BORROWED: the source whose devices this presents.
+        /// `inner` is borrowed: the source whose devices this presents.
         explicit FittedInputSource(foundation::input::IInputSourceProvider& inner) noexcept : m_inner(&inner) {}
 
         /// The window region (the region) and the render resolution (the content) with the fit.

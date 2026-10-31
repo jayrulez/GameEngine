@@ -92,10 +92,9 @@ export namespace foundation::core
         return Status{};
     }
 
-    // Removes a directory AND everything under it. `RemoveDirectory` is the raw backend
-    // primitive (rmdir - EMPTY directories only; it silently fails on a populated one,
-    // which is how test scratch dirs quietly accumulated stale state). This is the
-    // portable composition over the existing primitives - no per-platform code.
+    // Removes a directory and everything under it. `RemoveDirectory` is the raw backend
+    // primitive (rmdir), which removes only empty directories and silently fails on a
+    // populated one. This composes the portable primitives, with no per-platform code.
     // Returns true when the directory is gone afterwards (a missing dir counts as gone).
     inline bool RemoveDirectoryRecursive(StringView path) // NOLINT(misc-no-recursion)
     {

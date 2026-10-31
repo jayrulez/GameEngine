@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/TabViewTests.bf (faithful). Beef SelectedIndex/TabCount get/set ->
-// methods; `new TestView()` content -> a MakeRef<TestView> whose ref AddView adopts (kept as a local when
-// the test inspects its Visibility). KeyEventArgs.Set + OnKeyDown drive the keyboard case. No font needed.
+// TabView tests. Tab content is a MakeRef<TestView> that AddView adopts (kept as a local when the
+// test inspects its Visibility). KeyEventArgs.Set and OnKeyDown drive the keyboard case. No font
+// is needed.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -134,13 +134,12 @@ TEST_CASE("tab-view: KeyboardNavigation")
     tabs->OnKeyDown(left);
     CHECK(tabs->SelectedIndex() == 0);
 
-    tabs->OnKeyDown(left); // can't go below 0
+    tabs->OnKeyDown(left); // cannot go below 0
     CHECK(tabs->SelectedIndex() == 0);
 }
 
-// Our addition (not in Sedulous.UI.Tests): the TabView clears its hovered-tab highlight when the
-// cursor leaves the view. Sedulous' TabView has no OnMouseLeave, so a hovered tab stays stuck in the
-// Hover state after the mouse moves away; this verifies our OnMouseLeave fix.
+// The TabView clears its hovered-tab highlight in OnMouseLeave, so a tab does not stay in the
+// Hover state after the mouse moves away.
 TEST_CASE("tab-view: HoverClearsOnMouseLeave")
 {
     UIContext ctx{DefaultAllocator()};
@@ -161,10 +160,11 @@ TEST_CASE("tab-view: HoverClearsOnMouseLeave")
     CHECK(tabs->HoveredTabIndex() == -1);
 }
 
-// Our addition (not in Sedulous.UI.Tests): overflow scrolling of the tab strip, ported from the
-// dock tab strip. With no font service each tab uses the 80px fallback width, so six tabs (480px) overflow
-// a 400px view. The scroll shifts m_tabRects (reused for hit-testing), which we observe via HoveredTabIndex:
-// once the strip scrolls right, the leftmost tab moves off-screen and a later tab sits under x=10.
+// Overflow scrolling of the tab strip, which works as the dock tab strip's does. With no font
+// service each tab uses the 80px fallback width, so six tabs (480px) overflow a 400px view. The
+// scroll shifts m_tabRects (also used for hit-testing), which the test observes through
+// HoveredTabIndex: once the strip scrolls right, the leftmost tab moves off-screen and a later tab
+// sits under x=10.
 
 TEST_CASE("tab-view: SelectingHiddenTabScrollsItIntoView")
 {
@@ -183,7 +183,7 @@ TEST_CASE("tab-view: SelectingHiddenTabScrollsItIntoView")
     ctx.GetInputManager()->ProcessMouseMove(10, 10);
     CHECK(tabs->HoveredTabIndex() == 0);
 
-    // Select the last (hidden) tab -> the strip scrolls it into view; tab 0 slides off the left edge, so
+    // Select the last (hidden) tab: the strip scrolls it into view; tab 0 slides off the left edge, so
     // x=10 now lands on tab 1 and the last tab (index 5) becomes hittable near the right edge.
     tabs->SetSelectedIndex(5);
     LayoutPass(ctx, root.Get());
@@ -209,7 +209,7 @@ TEST_CASE("tab-view: WheelScrollsOverflowingStrip")
     ctx.GetInputManager()->ProcessMouseMove(10, 10);
     CHECK(tabs->HoveredTabIndex() == 0);
 
-    // Wheel down over the strip band scrolls the tabs right (delta * 40, clamped to the 80px overflow).
+    // Wheel down over the strip band scrolls the tabs right (delta times 40, clamped to the 80px overflow).
     MouseWheelEventArgs wheel;
     wheel.X = 10;
     wheel.Y = 10;
@@ -239,7 +239,7 @@ TEST_CASE("tab-view: WheelIgnoredWithoutOverflow")
     ctx.GetInputManager()->ProcessMouseMove(170, 10);
     CHECK(tabs->HoveredTabIndex() == 2);
 
-    // Wheel is a no-op when the strip doesn't overflow: not handled, and the hit-rects don't move.
+    // The wheel does nothing when the strip does not overflow: not handled, and the hit rects do not move.
     MouseWheelEventArgs wheel;
     wheel.X = 170;
     wheel.Y = 10;

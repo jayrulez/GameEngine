@@ -4,7 +4,7 @@
 #include "push_constant.hlsli"
 struct Push { int FaceIndex; float Roughness; float2 Pad; };
 PUSH_CONSTANT(Push, pc, space1);
-// Single-cube view of the prefiltered cube-ARRAY (this probe's 6 faces). A CUBE-ARRAY type is
+// Single-cube view of the prefiltered cube array (this probe's 6 faces). A cube-array type is
 // required: DX12's TEXTURECUBE SRV cannot address a non-zero first face (it always views cube 0),
 // so the bound view selects the probe and the shader samples cube 0 of it.
 TextureCubeArray<float4> Src  : register(t0, space0);
@@ -44,7 +44,7 @@ float3 ImportanceSampleGGX(float2 xi, float3 n, float roughness) {
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target0 {
     float3 N = DirForFace(pc.FaceIndex, uv);
     float3 V = N;
-    const uint SAMPLES = 128u;   // per-probe, may run every frame (Realtime) -> fewer than IBL's 1024
+    const uint SAMPLES = 128u;   // per probe; may run every frame (Realtime), so fewer than IBL's 1024
     float3 color = 0.0; float weight = 0.0;
     for (uint i = 0u; i < SAMPLES; ++i) {
         float2 xi = Hammersley(i, SAMPLES);

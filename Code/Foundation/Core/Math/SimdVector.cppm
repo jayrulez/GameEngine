@@ -4,10 +4,10 @@
 // Core - :simd_vector partition
 //
 // Vector2/3/4: aligned (16-byte) SIMD compute types, backed by simd::f32x4. These are the types to
-// reach for in hot CPU math (transforms, culling, animation). They are NOT storage types - store data
+// reach for in hot CPU math (transforms, culling, animation). They are not storage types: store data
 // in the packed Float2/3/4 (which match shader/vertex/cbuffer layout) and Load into a Vector* to
-// compute, then extract with ToFloatN(). Conversions are explicit on purpose: crossing packed<->simd
-// is a deliberate boundary, not an accident.
+// compute, then extract with ToFloatN(). Conversions are explicit so every crossing between packed
+// and SIMD types is visible in the code.
 //
 // API mirrors the packed types (arithmetic, Dot, Cross, Length, Normalized, Lerp, Min, Max) so a
 // hot-path migration is mostly a type swap plus Load/Store at the edges.

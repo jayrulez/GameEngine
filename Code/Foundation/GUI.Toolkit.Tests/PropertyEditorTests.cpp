@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the property grid's editors (T1 of Specs/gui-lab-evolution-3.md): chosen by hint, then
-// kind, else a row saying none fits; each shows a value or the mixed state, and edits as a gesture
-// (a scrub previewed and committed on release or cancelled by Escape; a click, a pick or a typed
-// value committed at once; a flag written alone, through its mask).
+// GUI.Toolkit - the property grid's editors. An editor is chosen by hint, then by kind, and
+// otherwise a row says that none fits. Each shows a value or the mixed state and edits in gestures:
+// a scrub previews and commits on release, or Escape cancels it; a click, a pick or a typed value
+// commits at once; and a flag is written on its own, through its mask.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -116,7 +116,7 @@ TEST_CASE("property editors: chosen by hint, then kind, else a row that says non
     info.Hint = core::String(u8"slider"); // a number over its range
     CHECK(core::Cast<SliderPropertyEditor>(registry.Create(registry.Choose(info), core::DefaultAllocator()).Get()) != nullptr);
 
-    info.Hint = core::String(u8"dial"); // no editor takes the hint: the kind's does
+    info.Hint = core::String(u8"dial"); // no editor takes the hint, so the kind's editor does
     CHECK(registry.Choose(info) == number);
     const core::u32 before = registry.GetGeneration();
     registry.RegisterHint(SV(u8"dial"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<BoolPropertyEditor>(a); });
@@ -150,7 +150,7 @@ TEST_CASE("property editors: a bool shows mixed as indeterminate, and a click co
     locked.ReadOnly = true;
     editor->Bind(bed.host, SV(u8"visible"), locked, Value(Variant(true)));
     bed.Click(Centre(*editor->GetCheckBox()));
-    CHECK(bed.host.calls.Size() == 2u); // read only: nothing
+    CHECK(bed.host.calls.Size() == 2u); // read only, so no calls
 }
 
 TEST_CASE("property editors: a number's scrub previews, commits on release, or cancels on Escape")
@@ -204,12 +204,12 @@ TEST_CASE("property editors: a slider's drag previews and commits on release, th
     CHECK_FALSE(slider.StepsOnWheel()); // the grid scrolls
     CHECK_FALSE(field.StepsOnWheel());
     const Rect track = slider.GetScreenBounds();
-    CHECK(track.width > 40.0f);                                           // the slider takes the room
-    CHECK(field.GetScreenBounds().x >= track.x + track.width - 0.5f);    // its value after it
+    CHECK(track.width > 40.0f);                                           // the slider takes the free room
+    CHECK(field.GetScreenBounds().x >= track.x + track.width - 0.5f);    // the value field comes after it
 
     const f32 y = track.y + track.height * 0.5f;
     const core::Float2 start{track.x + track.width * 0.5f, y};
-    const core::Float2 end{track.x + track.width + 50.0f, y}; // past its end: the top
+    const core::Float2 end{track.x + track.width + 50.0f, y}; // past its end, which gives the top value
     slider.RequestFocus();
     bed.D().InjectMouseDown(start, MouseButton::Left);
     bed.D().InjectMouseMove(end);
@@ -227,7 +227,7 @@ TEST_CASE("property editors: a slider's drag previews and commits on release, th
     bed.D().InjectMouseUp(start, MouseButton::Left);
     REQUIRE(bed.host.calls.Size() == 3u);
     CHECK(bed.host.Last() == SV(u8"cancel rough"));
-    CHECK(slider.GetValue() == doctest::Approx(1.0)); // back, both
+    CHECK(slider.GetValue() == doctest::Approx(1.0)); // both are back
     CHECK(field.GetValue() == doctest::Approx(1.0));
 }
 
@@ -315,7 +315,7 @@ TEST_CASE("property editors: flags name what is set and write one flag alone; a 
     bed.Click(Centre(*editor->GetFlagBox(2)));
     REQUIRE(bed.host.calls.Size() == 2u);
     CHECK(bed.host.calls[1] == core::String(u8"commit shadows=4&4"));
-    CHECK(editor->GetList() != nullptr); // open for the next
+    CHECK(editor->GetList() != nullptr); // still open for the next flag
 
     value.MixedBits = 0;
     value.Mixed = false;
@@ -337,7 +337,8 @@ TEST_CASE("property editors: a colour's picker previews its drags and commits on
     CHECK(picker->GetColor().r == doctest::Approx(1.0f));
     CHECK(bed.host.calls.IsEmpty()); // opening is not editing
 
-    // Two steps of the plane: begun, previewed twice; still open, nothing committed.
+    // Two steps on the plane: the edit begins and previews twice; the picker stays open and
+    // nothing is committed.
     ColorPickerArea& plane = *picker->GetPlane();
     const Rect r = plane.GetScreenBounds();
     bed.D().InjectMouseDown(core::Float2{r.x + r.width * 0.5f, r.y + r.height * 0.5f}, MouseButton::Left);
@@ -345,12 +346,12 @@ TEST_CASE("property editors: a colour's picker previews its drags and commits on
     REQUIRE(bed.host.calls.Size() == 3u);
     CHECK(bed.host.calls[0] == core::String(u8"begin tint"));
     CHECK(bed.host.calls[1].AsView().SubStr(0, 13) == SV(u8"preview tint="));
-    // Closed (a press elsewhere): committed once.
+    // Closing it (a press elsewhere) commits once.
     bed.D().ClosePopup(*editor->GetPicker()->GetParent());
     REQUIRE(bed.host.calls.Size() == 4u);
     CHECK(bed.host.Last().SubStr(0, 12) == SV(u8"commit tint="));
 
-    // Escape gives the pick up.
+    // Escape cancels the pick.
     bed.host.calls.Clear();
     bed.Click(Centre(*editor->GetSwatch()));
     REQUIRE(editor->GetPicker() != nullptr);
@@ -374,7 +375,7 @@ TEST_CASE("property editors: a colour's hex field commits what is typed; mixed i
     bed.D().InjectText(SV(u8"#00FF0080"));
     bed.D().InjectKeyDown(Bed::K(KeyCode::Return));
     REQUIRE(bed.host.calls.Size() == 2u);
-    CHECK(bed.host.calls[1] == core::String(u8"commit tint=#00FF00FF")); // its alpha left out
+    CHECK(bed.host.calls[1] == core::String(u8"commit tint=#00FF00FF")); // the alpha is left as it was
 
     editor->Bind(bed.host, SV(u8"tint"), info, Value(Variant(core::Color{}), true));
     CHECK(editor->GetSwatch()->IsMixed());

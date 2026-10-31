@@ -3,12 +3,10 @@
 
 // UI - :expander partition
 //
-// Collapsible container with a clickable header and expandable body. Ported from
-// Sedulous.UI/src/Controls/Expander.bf; the header is now a STRUCTURED band (ExpanderHeader child
-// view) instead of ad hoc draw + a manually-placed actions view: the band grows to fit oversized
-// action widgets so they do not overflow the fixed HeaderHeight and clip when collapsed, the
-// title reserves width so it cannot run under the actions,
-// and header hover is the band's own hover, not the whole expander's.
+// Collapsible container with a clickable header and expandable body. The header is a child view
+// (ExpanderHeader) laid out as a band. The band grows to fit oversized action widgets so they do
+// not overflow HeaderHeight and clip when collapsed, the title stops where the actions begin, and
+// the header's hover tracks the pointer over the band, not over the whole expander.
 
 module;
 #include "Core/Prelude.h"
@@ -39,10 +37,11 @@ export namespace foundation::ui
 {
     class Expander;
 
-    /// The Expander's header band: a real layout row (chevron + title drawn from the OWNER's
-    /// styling parts, actions as a right-aligned child). Height = max(owner HeaderHeight,
-    /// actions + padding) so oversized actions grow the band instead of overflowing it.
-    /// Clicking the band toggles the owner; clicks the actions handle never reach the toggle.
+    /// The Expander's header band, a layout row. The chevron and title are drawn from the owning
+    /// Expander's styling parts, and the actions sit in a right-aligned child. Its height is the
+    /// larger of the owner's HeaderHeight and the actions plus padding, so oversized actions grow
+    /// the band instead of overflowing it. Clicking the band toggles the owner; a click the
+    /// actions handle never reaches the toggle.
     class ExpanderHeader : public ViewGroup
     {
         RTTI_OBJECT(ExpanderHeader, ViewGroup)
@@ -72,9 +71,10 @@ export namespace foundation::ui
             }
         }
 
-        /// Replace the drawn title with a view (null goes back to the owner's HeaderText): an
-        /// editable label renames what the section is about in place. It sits after the chevron
-        /// and ends where the actions begin; a press it handles never toggles the section.
+        /// Replace the drawn title with a view; null draws the owner's HeaderText again. An
+        /// editable label here lets the user rename the section in place. The view sits after
+        /// the chevron and ends where the actions begin, and a press it handles never toggles
+        /// the section.
         void SetTitle(View* title)
         {
             if (m_title != nullptr)
@@ -126,7 +126,8 @@ export namespace foundation::ui
         /// Where the title begins: after the chevron.
         [[nodiscard]] static constexpr f32 TitleX() { return kChevronX + kChevronSize + kTextGap; }
 
-        /// Width the title must not paint into (actions block + its insets), 0 when none.
+        /// Width reserved for the actions block and its insets, which the title does not paint
+        /// into; 0 when there are no actions.
         [[nodiscard]] f32 ReservedActionsWidth() const
         {
             if (m_actions == nullptr || m_actions->Visibility == Visibility::Gone)
@@ -145,7 +146,7 @@ export namespace foundation::ui
     {
         RTTI_OBJECT(Expander, ViewGroup)
     public:
-        /// MINIMUM header band height - the band grows beyond it to fit oversized actions.
+        /// Minimum header band height; the band grows beyond it to fit oversized actions.
         Property<f32> HeaderHeight{28.0f};
         Property<f32> ContentSpacing{4.0f};
         Event<void(Expander*, bool)> OnExpandedChanged;
@@ -277,7 +278,7 @@ export namespace foundation::ui
                 contentH = ContentSpacing.Value() + m_content->MeasuredSize.y +
                            margin.TotalVertical() + inset.Bottom;
             }
-            // Bounded fill (P2c): default width under an unbounded parent.
+            // Bounded fill: a default width under an unbounded parent.
             MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(200.0f)),
                                   constraints.ConstrainHeight(bandH + contentH)};
         }
@@ -300,10 +301,10 @@ export namespace foundation::ui
             }
         }
 
-        /// A themed border-width and border-color outline the whole section, band and body,
-        /// drawn OVER the children so the band never covers it, stroked inside the bounds so a
-        /// neighbour never draws over it, and rounded at the theme's corner-radius like the band
-        /// it encloses (square in a flat theme).
+        /// Outlines the whole section, band and body, with the themed border-width and
+        /// border-color. The outline is drawn over the children so the band never covers it,
+        /// stroked inside the bounds so a neighbour never draws over it, and rounded at the
+        /// theme's corner-radius like the band it encloses (square in a flat theme).
         void OnDraw(UIDrawContext& ctx) override
         {
             DrawChildren(ctx);
@@ -327,8 +328,8 @@ export namespace foundation::ui
             }
         }
 
-        /// The body's inset: the padding plus the border on the sides and the bottom. The top is
-        /// the band's, which spans the full width.
+        /// The body's inset: the padding plus the border on the sides and the bottom. The top
+        /// inset is zero because the band above the body spans the full width.
         [[nodiscard]] Thickness BodyInset()
         {
             const Thickness chrome = ResolveBoxMetrics().Chrome();
@@ -374,16 +375,17 @@ export namespace foundation::ui
 
     inline void ExpanderHeader::OnDraw(UIDrawContext& ctx)
     {
-        // Band background from the OWNER's ::header part; hover is the band's own hover (the
-        // sheets' Expander::header:hover means "pointer over the header", not over the body).
+        // The band background comes from the owner's ::header part. Hover is the band's own
+        // hover, because a style sheet's Expander::header:hover means the pointer is over the
+        // header, not over the body.
         const Rectangle band{0, 0, Width(), Height()};
         ControlState bandState = GetControlState();
         if (!m_owner->IsEffectivelyEnabled())
         {
             bandState |= ControlState::Disabled;
         }
-        // Expanded reads as Checked, as the chevron already does: a theme can shape the band that
-        // tops an open section (its bottom meeting the body) apart from a closed one.
+        // An expanded section draws the band as Checked, as the chevron does, so a theme can
+        // style the band of an open section (whose bottom meets the body) apart from a closed one.
         if (m_owner->IsExpanded())
         {
             bandState |= ControlState::Checked;
@@ -441,8 +443,8 @@ export namespace foundation::ui
                 const Color textColor = m_owner->ResolveStyleColor(
                     StyleProperty::TextColor,
                     Color{220.0f / 255.0f, 225.0f / 255.0f, 235.0f / 255.0f, 1.0f});
-                // The title's rect ends where the actions block begins - it can no longer run
-                // underneath the buttons.
+                // The title's rect ends where the actions block begins, so it never runs under
+                // the buttons.
                 const f32 textX = TitleX();
                 const f32 textW = Max(0.0f, Width() - textX - ReservedActionsWidth() - 4.0f);
                 ctx.VG().DrawText(title, font, Rectangle{textX, 0, textW, Height()},

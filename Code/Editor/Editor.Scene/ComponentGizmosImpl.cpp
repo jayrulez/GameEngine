@@ -3,15 +3,12 @@
 
 // Editor::Scene - :component_gizmos partition.
 //
-// IGizmoRenderer + registry: per-component-type viewport gizmos drawn through debug-draw.
-// Ported from Sedulous.Editor (IGizmoRenderer/GizmoContext + the light and
-// reflection-probe renderers) with fixes for our components:
-//   - the probe gizmo draws a wire BOX from halfExtents (our probes are boxes; Sedulous drew an
-//     influence sphere);
-//   - DrawWhenUnselected defaults to false (Sedulous drew every light's range sphere always -
-//     noisy; entity markers already anchor unselected entities).
-// The interface is type-erased on reflection Instances (no Component base class here), so a
-// renderer looks its data up from the manager's GetComponentInstance.
+// IGizmoRenderer and its registry: per-component-type viewport gizmos drawn through debug-draw. The
+// reflection probe gizmo draws a wire box from halfExtents, as probes are boxes. DrawWhenUnselected
+// defaults to false, so unselected lights do not all draw their range spheres; entity markers
+// already anchor unselected entities. The interface is type-erased on reflection Instances (there
+// is no Component base class), so a renderer looks its data up from the manager's
+// GetComponentInstance.
 
 module;
 #include "Core/Prelude.h"
@@ -298,8 +295,8 @@ namespace editor
         {
             return;
         }
-        // World bounds the way extraction sees them: local AABB center through the entity
-        // world; radius = half the transformed box diagonal (conservative, close enough
+        // World bounds as extraction sees them: the local AABB center through the entity's world
+        // matrix, and a radius of half the transformed box diagonal (conservative, and close enough
         // for the same pick the renderer makes).
         const Float4x4 world = ctx.scene->GetWorldMatrix(owner);
         const Float3 center = TransformPoint(mesh->bounds.Center(), world);
@@ -336,9 +333,9 @@ namespace editor
 
     namespace
     {
-        // Shared shape-wireframe drawing for the body + child-collider gizmos: one shape at the
-        // entity's world transform (rigid frame for primitives, scaled for cooked outlines -
-        // matching how the runtime builds the Jolt shapes).
+        // Shape-wireframe drawing shared by the body and child-collider gizmos: one shape at the
+        // entity's world transform (a rigid frame for primitives, scaled for cooked outlines), as
+        // the runtime builds the Jolt shapes.
         struct ColliderShapeDraw
         {
             foundation::physics::ShapeKind shape = foundation::physics::ShapeKind::Box;
@@ -350,9 +347,8 @@ namespace editor
             const foundation::heightfield::Heightfield* heightfield = nullptr;
         };
 
-        // A capsule wireframe that READS as a capsule: cap spheres at +-halfHeight plus four
-        // side lines. (The old sphere-inside-a-bounding-box drawing read as a box collider with
-        // a sphere in it.)
+        // A capsule wireframe that reads as a capsule: cap spheres at +-halfHeight and four side
+        // lines. A sphere inside a bounding box would read as a box collider with a sphere in it.
         void DrawWireCapsule(render::debug::DebugDraw& dd, const Float4x4& frame, f32 radius,
                              f32 halfHeight, const Color& color)
         {
@@ -379,8 +375,8 @@ namespace editor
             {
                 return;
             }
-            // The rigid (unscaled) frame - primitive sizes are absolute half-extents/radii, like
-            // the runtime.
+            // The rigid (unscaled) frame: primitive sizes are absolute half-extents and radii, as
+            // in the runtime.
             const Float4x4 rigid = Transform{position, rotation, Float3{1, 1, 1}}.ToMatrix();
             switch (s.shape)
             {
@@ -419,7 +415,7 @@ namespace editor
             case ShapeKind::Cooked:
                 if (s.cooked != nullptr)
                 {
-                    // Outline is authored unit-scale; re-apply the entity's scale.
+                    // The outline is authored at unit scale; apply the entity's scale again.
                     const Float4x4 shapeMatrix = Transform{position, rotation, scale}.ToMatrix();
                     const Array<Float3>& outline = s.cooked->outline;
                     for (usize t = 0; t + 2 < outline.Size(); t += 3)
@@ -442,9 +438,10 @@ namespace editor
         return &TypeOf<engine::physics::RigidBodyComponent>();
     }
 
-    // Draw the collider's shape wireframe from the component data + the entity's world transform -
-    // no physics world, no Jolt body (edit time). Colours are STATIC (dynamic=green, static/
-    // kinematic=blue, trigger=yellow) since there is no live body to query awake/sleeping.
+    // Draws the collider's shape wireframe from the component data and the entity's world
+    // transform, with no physics world or Jolt body (edit time). Colours are static (dynamic green,
+    // static and kinematic blue, trigger yellow), since there is no live body to ask whether it is
+    // awake.
     void PhysicsColliderGizmoRenderer::Draw(const Instance& component, scene::EntityHandle owner,
                                             GizmoContext& ctx)
     {
@@ -492,9 +489,9 @@ namespace editor
         {
             return;
         }
-        // Compound teal: visually distinct from the body's own shape, so a rig reads as
-        // "one body + its folded children", not one anonymous pile of wireframes. Dimmed when
-        // the entity is effectively inactive (the sim never folds it in).
+        // Compound teal sets the children apart from the body's own shape, so a rig reads as one
+        // body and its folded children rather than a pile of wireframes. Dimmed when the entity is
+        // effectively inactive (the simulation never folds it in).
         const Color color = ctx.entityEffectivelyActive ? Color{0.25f, 0.85f, 0.8f, 1.0f}
                                                         : Color{0.45f, 0.45f, 0.45f, 1.0f};
         ColliderShapeDraw s;
@@ -513,8 +510,8 @@ namespace editor
         return &TypeOf<engine::physics::CharacterComponent>();
     }
 
-    // The character controller's capsule from radius/halfHeight at the entity position. A fixed
-    // colour (edit time has no live controller to query the on-ground state).
+    // The character controller's capsule from radius and halfHeight at the entity position, in a
+    // fixed colour (edit time has no live controller to ask for the on-ground state).
     void CharacterColliderGizmoRenderer::Draw(const Instance& component, scene::EntityHandle owner,
                                               GizmoContext& ctx)
     {
@@ -541,8 +538,9 @@ namespace editor
         return &TypeOf<engine::physics::JointComponent>();
     }
 
-    // The joint anchor (cross), a link line to the connected target (nil target = ancestor/world,
-    // not drawn), and the hinge/slider axis (arrow) - all from JointComponent data + the transform.
+    // The joint anchor (a cross), a link line to the connected target (a nil target means the
+    // ancestor or the world, and is not drawn), and the hinge or slider axis (an arrow), all from
+    // JointComponent data and the transform.
     void JointGizmoRenderer::Draw(const Instance& component, scene::EntityHandle owner,
                                   GizmoContext& ctx)
     {
@@ -563,7 +561,8 @@ namespace editor
                                 : Color{0.45f, 0.45f, 0.45f, 1.0f}; // dimmed: sim will skip it
         render::debug::DebugDraw& dd = *ctx.debug;
         dd.DrawCross(anchor, 0.25f, color);
-        // Link to the connected body (nil target = nearest ancestor / world; only drawn if resolved).
+        // Link to the connected body (a nil target means the nearest ancestor or the world; drawn
+        // only when resolved).
         if (!joint->targetEntity.id.IsNil())
         {
             const scene::EntityHandle target = ctx.scene->FindEntity(joint->targetEntity.id);
@@ -572,7 +571,8 @@ namespace editor
                 dd.DrawLine(anchor, detail::WorldPosition(ctx.scene->GetWorldMatrix(target)), color);
             }
         }
-        // Hinge = rotation axis; Slider = slide direction. A short arrow either side of the anchor.
+        // Hinge: the rotation axis; Slider: the slide direction. A short arrow either side of the
+        // anchor.
         if (joint->kind == JointKind::Hinge || joint->kind == JointKind::Slider)
         {
             const Float3 axisEnd = TransformPoint(joint->localAnchor + joint->localAxis, world);

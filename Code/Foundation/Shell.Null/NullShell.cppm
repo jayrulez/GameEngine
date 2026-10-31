@@ -8,7 +8,7 @@
 // backend must provide. ProcessEvents is a no-op; IsRunning stays true until
 // RequestExit (or the main window is closed), so the runner relies on the
 // Application requesting exit to terminate. The window manager is fully
-// functional headless (create/destroy/resize) so multi-window logic is testable
+// functional headless (create, destroy, resize) so multi-window logic is testable
 // without an OS.
 
 module;
@@ -144,7 +144,7 @@ export namespace foundation::shell
         }
         [[nodiscard]] IWindow* MainWindow() const noexcept override
         {
-            // Tracked by id, so destroying/flushing the main window never promotes another
+            // Tracked by id, so destroying or flushing the main window never promotes another
             // window into its place; returns null once the main window is gone.
             return GetWindow(m_mainWindowId);
         }
@@ -210,7 +210,7 @@ export namespace foundation::shell
 
     private:
         // True only for windows this manager owns (present in m_live). Rejects nullptr too, so
-        // DestroyWindow() is a no-op for null/unknown windows. Checked by pointer identity, NOT id:
+        // DestroyWindow() is a no-op for null or unknown windows. Checked by pointer identity, not id:
         // a window from another manager can share an id, and acting on it would corrupt bookkeeping.
         [[nodiscard]] bool Owns(IWindow* window) const noexcept
         {
@@ -231,7 +231,7 @@ export namespace foundation::shell
         core::Array<Screen> m_screens;
         WindowCapabilities m_capabilities{true, true};
         core::u32 m_nextId = 1;
-        core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
+        core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 is none
     };
 
     // No-op input devices: report nothing held/pressed so headless callers can
@@ -338,9 +338,9 @@ export namespace foundation::shell
         void ProcessEvents() override {} // no OS event source
         [[nodiscard]] bool IsRunning() const noexcept override
         {
-            // Running until RequestExit() or the main window is closed/destroyed.
+            // Running until RequestExit() or the main window is closed or destroyed.
             IWindow* main =
-                m_windows.MainWindow(); // MainWindow() is const now - no const_cast needed
+                m_windows.MainWindow();
             return m_running && main != nullptr && main->IsOpen();
         }
         void RequestExit() override { m_running = false; }

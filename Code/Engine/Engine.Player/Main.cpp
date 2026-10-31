@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine.Player - the dev/generic desktop entry point: the whole boot lives in
-// engine.player.main (PlayerMain.cpp, launcher-as-library - game-native-code.md N1);
-// a SHIP build replaces this stub with a generated one passing the game's
-// statically-linked native plugin.
+// Engine.Player: the dev and generic desktop entry point. The whole boot lives in
+// engine.player.main (PlayerMain.cpp, a launcher built as a library); a ship build uses
+// ShipMain.cpp instead, which passes the game's statically-linked native plugin.
 
 import engine.player.main;
 

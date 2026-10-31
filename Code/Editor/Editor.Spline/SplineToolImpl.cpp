@@ -31,8 +31,8 @@ namespace editor
         constexpr f32 kPickScale = 0.02f;  // screen-constant pick radius per unit of distance
         constexpr f32 kMarkerScale = 0.012f;
 
-        // One gesture = one command: the whole point set before/after (points are small; a
-        // positional diff would buy nothing).
+        // One gesture is one command holding the whole point set before and after. Points are
+        // small, so a positional diff would gain nothing.
         class SplineEditCommand final : public IEditorCommand
         {
         public:
@@ -94,7 +94,7 @@ namespace editor
             }
 
             [[nodiscard]] StringView Id() const override { return u8"spline.edit"; }
-            [[nodiscard]] StringView DisplayName() const override { return u8"Edit Spline"; } // as its refusal names it
+            [[nodiscard]] StringView DisplayName() const override { return u8"Edit Spline"; } // the name its refusal uses
             [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/SplineComponent.svg"; }
             [[nodiscard]] SplineEditToolState State() const noexcept
             {
@@ -133,8 +133,8 @@ namespace editor
                     return m_dragging;
                 }
 
-                // Hover: nearest control point within the screen-constant radius; the
-                // SELECTED point's tangent handles pick first (they sit near the point).
+                // Hover: the nearest control point within the screen-constant radius. The
+                // selected point's tangent handles pick first, since they sit near the point.
                 m_hoverHandle = -1;
                 f32 bestDistance = kFloatMax;
                 if (m_selectedPoint >= 0 &&
@@ -171,16 +171,16 @@ namespace editor
                     }
                 }
 
-                // Insert preview: closest curve position to the ray (only meaningful with Ctrl
-                // and no point under the pointer).
+                // Insert preview: the curve position closest to the ray, only meaningful with Ctrl
+                // held and no point under the pointer.
                 if (input.ctrl && m_hoverPoint < 0 && curve.SegmentCount() > 0)
                 {
                     FindRayClosest(curve, input.ray);
                 }
-                // Place preview: a curve with no segment yet (a component added bare, or cut
-                // down to one point) takes its points from Ctrl-clicks, on the camera-facing
-                // plane through the entity (through its last point once it has one), so a
-                // spline can be built from nothing.
+                // Place preview: a curve with no segment yet (a component added empty, or cut
+                // down to one point) takes its points from Ctrl-clicks on the camera-facing plane
+                // through the entity, or through its last point once it has one, so a spline can
+                // be built from nothing.
                 if (input.ctrl && m_hoverPoint < 0 && curve.SegmentCount() == 0 && !m_dragging)
                 {
                     const Float3 through =
@@ -264,7 +264,7 @@ namespace editor
                     return m_hoverPoint >= 0;
                 }
 
-                // Delete the hovered point (two-point floor keeps the curve a curve).
+                // Delete the hovered point, never going below the two points a curve needs.
                 if (m_hoverPoint >= 0 && input.keyboard != nullptr &&
                     (input.keyboard->IsKeyPressed(foundation::shell::KeyCode::Delete) ||
                      input.keyboard->IsKeyPressed(foundation::shell::KeyCode::X)) &&
@@ -299,7 +299,7 @@ namespace editor
                     }
                     if (m_hoverPoint >= 0)
                     {
-                        // Grab: gesture snapshot + a camera-facing drag plane.
+                        // Grab: snapshot the gesture and set up a camera-facing drag plane.
                         BeginSnapshot(curve);
                         m_dragging = true;
                         m_dragPoint = m_hoverPoint;
@@ -324,8 +324,8 @@ namespace editor
                     }
                     if (input.ctrl && m_hasPlacePreview)
                     {
-                        // Append (one undo step each): the first two clicks make the curve a
-                        // curve, after which Ctrl-click inserts on the segment under the pointer.
+                        // Append, one undo step each: the first two clicks make a curve, after
+                        // which Ctrl-click inserts on the segment under the pointer.
                         BeginSnapshot(curve);
                         fspline::SplinePoint point;
                         point.position = m_placeLocal;
@@ -495,7 +495,7 @@ namespace editor
                 }
                 else
                 {
-                    // Aborted (edit lock landed mid-drag): restore the snapshot.
+                    // Aborted (the edit lock was set mid-drag): restore the snapshot.
                     component->curve.points = Move(m_snapshotPoints);
                     component->curve.closed = m_snapshotClosed;
                     component->curve.UpdateAutoHandles();
@@ -513,14 +513,14 @@ namespace editor
 
             bool m_dragging = false;
             i32 m_dragPoint = -1;
-            i32 m_dragHandle = -1; // -1 = the point itself; 0 = inHandle, 1 = outHandle
+            i32 m_dragHandle = -1; // -1 for the point itself, 0 for inHandle, 1 for outHandle
             i32 m_selectedPoint = -1;
             i32 m_hoverHandle = -1;
             Float3 m_dragPlaneOrigin{};
             Float3 m_dragPlaneNormal{0, 0, 1};
 
             bool m_hasInsertPreview = false;
-            bool m_hasPlacePreview = false; // Ctrl over an empty curve: the next point's spot
+            bool m_hasPlacePreview = false; // Ctrl over an empty curve shows where the next point goes
             Float3 m_placeLocal{};
             f32 m_insertT = 0.0f;
             Float3 m_insertLocal{};
@@ -538,7 +538,8 @@ namespace editor
 
     SplineEditToolState SplineEditToolStateOf(const IViewportTool& tool)
     {
-        // The Id is the type check (no RTTI): only the spline tool answers "spline.edit".
+        // The Id serves as the type check (there is no RTTI): only the spline tool answers
+        // "spline.edit".
         if (tool.Id() != StringView(u8"spline.edit"))
         {
             return SplineEditToolState{};

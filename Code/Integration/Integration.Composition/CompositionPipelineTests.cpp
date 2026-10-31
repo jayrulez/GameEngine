@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Integration.Composition - the engine composition x the pipeline registration: the join the
-// scene format reference reads (a Ref<T>'s runtime type -> the factory description's cooked
-// form -> the builder that produces it -> the asset type an agent authors). Cross-collection
-// (Engine x Pipeline), so it lives here: the engine suites stay pipeline-free, and the web
-// build, which has no pipeline, never sees it.
+// Integration.Composition: the engine composition checked against the pipeline registration.
+// A Ref<T>'s runtime type leads to the factory description's cooked form, then to the builder
+// that produces it, then to the asset type an author creates; the scene format reference relies
+// on that chain. The test needs both Engine and Pipeline, so it lives here: the engine suites
+// stay free of the pipeline, and the web build, which has no pipeline, never sees it.
 
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.vfs; // FindDataRoot: the shader cook's engine library
+import foundation.vfs; // FindDataRoot, to find the engine library the shader cook reads
 import foundation.resource;
 import engine.composition;    // FullComposition: every factory description
 import pipeline.core;         // BuilderRegistry
-import pipeline.registration; // RegisterPipelineTypes + RegisterAllBuilders
+import pipeline.registration; // RegisterPipelineTypes and RegisterAllBuilders
 
 using namespace foundation::core;
 
@@ -41,9 +41,9 @@ TEST_CASE("integration.composition: every factory the composition describes read
                                              static_cast<unsigned>(module.id.Size())));
             INFO("factory for: ", doctest::String(product->name != nullptr ? product->name : "<unnamed>"));
             REQUIRE(cooked != nullptr);
-            // Every cooked form it reads (the further ones too: a render texture's record beside a
-            // texture's) is what the cook stamped and ReadObject reconstructs, registered, and some
-            // builder produces exactly it - the link from the runtime type to the asset.
+            // Every cooked form the factory reads, including the extra ones (a render texture
+            // reads its own record as well as a texture record), must be registered, and some
+            // builder must produce exactly that form. That links the runtime type to the asset.
             desc.ForEachCooked(
                 [&](const TypeInfo* form)
                 {

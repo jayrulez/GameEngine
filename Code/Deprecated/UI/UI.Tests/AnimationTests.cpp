@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/AnimationTests.bf (faithful). Beef owned setter delegates ->
-// Function<void(T)>; `scope`/`new` -> stack value or UniquePtr (manager takes ownership); Vector2 ->
-// Float2 (Vector2Animation -> Float2Animation); Color byte ctors -> float (/255); ctx.Animations ->
-// ctx.Animations().
+// Tests for the UI animations: the typed animations, delay, auto-reverse, repeat, storyboards and
+// the AnimationManager. Animations added to the manager are owned by it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -113,7 +111,7 @@ TEST_CASE("animation: AutoReverse_PlaysBackward")
     anim.SetRepeatCount(1);
     anim.Start();
 
-    anim.Update(1.0f); // completes cycle 0
+    anim.Update(1.0f); // completes the first cycle
     anim.Update(0.5f); // midpoint of reverse
     CHECK(result < 100);
 }

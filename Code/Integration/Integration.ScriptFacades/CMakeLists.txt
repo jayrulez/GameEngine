@@ -1,6 +1,6 @@
-# Integration.ScriptFacades - subsystem script FACADES exercised end-to-end on the script backends
-# (Net.* and Audio.* driven from AngelScript + Luau). These are cross-layer tests (scripting x a
-# subsystem), so they live here rather than in the subsystem's own unit-test suite - which stays
+# Integration.ScriptFacades - subsystem script facades exercised end-to-end on the script backends
+# (Net.* and Audio.* driven from AngelScript and Luau). These tests cross layers (scripting and a
+# subsystem), so they live here rather than in the subsystem's own unit-test suite, which stays
 # backend-neutral. Each backend leg is #ifdef OPTION_HAS_<backend>-guarded (the global presence
 # macros on policy); link only the enabled backends via the ${SCRIPTLIB_*} target-or-empty aliases.
 add_executable(Integration.ScriptFacades TestsMain.cpp

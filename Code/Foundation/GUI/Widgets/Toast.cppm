@@ -3,25 +3,29 @@
 
 // GUI - :toast partition
 //
-// Toasts (T7 of Specs/gui-lab-evolution-3.md): short notices that leave by themselves, one host for
-// a game and an editor alike (foundation.ui wrote the same toast twice, its toolkit's and a copy in
-// its gamekit, for a module rule; no reference keeps them apart). A ToastHost is a widget the
-// application places over a window: only its cards take the pointer, and a toast never takes the
-// focus. A request is a message (and a title), or a widget for its content in the host's card, or
-// `Bare`, the application's card alone; a severity (info, success, warning, error: colour and icon
-// the sheet's), up to two actions, a duration and a key. Info and success stay 5 s, a warning 8 s,
-// an error until closed, each the host's to change; hovering or focusing a toast pauses them all.
-// A post with the key of one shown replaces it and counts it ("×12": a burst of one error, or a
-// progress toast updated), four show at once and the rest wait. Posts may come from any thread:
-// they wait in the host until its next frame (Godot, zed, Zero), a widget made there by a function,
-// since widgets do not cross threads. A card enters and leaves through the core's Enter and Leave
-// (`:entering`, `:leaving`), so the sheet's transitions play and a dismissed card goes once its
-// exit has ended; a request's classes choose how (the theme's slide, `pop`, `still`, a game's own;
-// reduced motion only fades). Each shown toast is announced, an error interrupting. The
-// host keeps no history: it tells the application each toast posted and gone, for a log or a bell.
-// A request is a value (no callbacks in it), so a script fills one in as code does and posts it; an
-// action's button sends `activate` with the action's id, as a menu item does, beside the callback
-// code may pass with the post.
+// Toasts: short notices that go away by themselves, with one host serving games and the editor
+// alike. A ToastHost is a widget the application places over a window. Only its cards take the
+// pointer, and a toast never takes focus.
+//
+// A request carries the content: a message (and a title), a widget shown inside the host's card,
+// or, with `Bare`, the application's own widget with no card. It also carries a severity (info,
+// success, warning or error, whose colour and icon come from the style sheet), up to two actions,
+// a duration and a key. By default info and success toasts stay 5 s, a warning 8 s, and an error
+// until closed; the host can change each default. Hovering or focusing any toast pauses them all.
+// A post whose key matches a shown toast replaces it and increments its count ("×12"), as for a
+// burst of the same error or an updated progress toast. Four toasts show at once and the rest wait.
+//
+// Posts may come from any thread. They wait in the host until its next frame, and a content
+// widget is then made there by a function, since widgets do not cross threads. A card enters and
+// leaves through the widget's Enter and Leave (`:entering`, `:leaving`), so the sheet's
+// transitions play and a dismissed card is removed once its exit has ended. A request's classes
+// choose the transition (the theme's slide, `pop`, `still`, or a game's own); reduced motion only
+// fades. Each shown toast is announced to screen readers, and an error interrupts.
+//
+// The host keeps no history; instead it tells the application about each toast posted and gone,
+// for a log or a notification bell. A request is a plain value with no callbacks in it, so a
+// script fills one in the same way code does and posts it. An action's button sends `activate`
+// with the action's id, as a menu item does, in addition to any callback passed with the post.
 
 module;
 #include "Core/Prelude.h"
@@ -37,8 +41,8 @@ import :ui_widget;
 import :layout_style;
 import :label;
 import :button;
-import :model_index; // ModelIndex (an action's `activate`)
-import :actions;       // TickAction (the GUI's clock)
+import :model_index; // ModelIndex, for an action's `activate`
+import :actions;       // TickAction, which runs on the GUI's clock
 import :accessibility; // AnnouncePriority
 import :scene_root;    // GUIContext::Announce
 
@@ -66,8 +70,9 @@ export namespace foundation::gui
         }
     }
 
-    /// A button on a toast. Pressed, it closes the toast, runs its command (if it names one), calls
-    /// the post's callback with it, and sends `activate` with its id from its button (a script's).
+    /// A button on a toast. Pressing it closes the toast, runs its command if it names one, calls
+    /// the post's callback with the action, and sends `activate` with its id from the button, for
+    /// scripts.
     struct ToastAction
     {
         core::String Id;
@@ -77,44 +82,49 @@ export namespace foundation::gui
 
     using ToastId = u64;
 
-    /// What a toast shows and how long.
+    /// What a toast shows, and for how long.
     struct ToastRequest
     {
         core::String Title;
         core::String Message;
-        bool Rich = false; ///< the message is the core's rich text
-        /// Its content instead of the title and message, in the host's card (the GUI's thread only; a
-        /// post from another thread passes a function that makes it).
+        bool Rich = false; ///< the message is Label rich text (markup)
+        /// Content shown in the host's card instead of the title and message. Only usable on the
+        /// GUI's thread; a post from another thread passes a function that makes it instead.
         core::RefPtr<UIWidget> Content;
-        /// No card: the content alone, its lifetime and place still the host's (a game's banner).
+        /// Shows the content alone with no card, while the host still controls its lifetime and
+        /// place (a game's banner, say).
         bool Bare = false;
-        /// Said to a screen reader; empty: the title and message, else the content's name.
+        /// What a screen reader announces. When empty, the title and message are announced, or else
+        /// the content's accessible name.
         core::String Announcement;
         ToastSeverity Severity = ToastSeverity::Info;
-        core::Array<ToastAction> Actions; ///< two at most (the rest are not shown)
-        /// Seconds it stays; below 0: its severity's default; 0: until closed.
+        core::Array<ToastAction> Actions; ///< at most two are shown; the rest are ignored
+        /// How many seconds the toast stays. Below 0 means the severity's default; 0 means until
+        /// closed.
         f32 Duration = -1.0f;
-        /// A post with the key of one shown or waiting replaces it and counts it; empty: none.
+        /// A post with the same key as a shown or waiting toast replaces it and increments its
+        /// count. An empty key never matches.
         core::String Key;
-        /// Classes on its card (space-separated): how it comes and goes, as the sheet says (the
-        /// theme's `pop` and `still`, a game's own), or any look the sheet gives them.
+        /// Classes for the card, separated by spaces. They select how it enters and leaves, as the
+        /// sheet defines (the theme's `pop` and `still`, or a game's own), or any other look the
+        /// sheet gives them.
         core::String Classes;
 
-        /// Adds an action (a script's way: a list's element added there is a copy). An empty
-        /// command: none.
+        /// Adds an action. Scripts use this because an element added to a list there is a copy. An
+        /// empty command means the action runs no command.
         void AddAction(core::String id, core::String text, core::String command)
         {
             Actions.PushBack(ToastAction{core::Move(id), core::Move(text), core::Move(command)});
         }
     };
-    /// Told the action pressed on a toast.
+    /// Called with the action pressed on a toast.
     using ToastActionCallback = core::Function<void(const ToastAction&)>;
-    /// Makes a toast's content, on the GUI's thread.
+    /// Makes a toast's content; called on the GUI's thread.
     using ToastContentMaker = core::Function<core::RefPtr<UIWidget>()>;
 
     class ToastHost;
 
-    /// One toast (`toast`, with its severity's class): a card holding its parts, or bare.
+    /// One toast (`toast`, with its severity's class): a card holding its parts, or bare content.
     class ToastCard : public UIWidget
     {
         RTTI_OBJECT(ToastCard, UIWidget)
@@ -134,9 +144,11 @@ export namespace foundation::gui
         [[nodiscard]] ToastId GetToastId() const noexcept { return m_id; }
         [[nodiscard]] ToastSeverity GetSeverity() const noexcept { return m_severity; }
         [[nodiscard]] core::StringView GetKey() const noexcept { return m_key.AsView(); }
-        /// How many posts it stands for (1, then each one its key replaced).
+        /// Returns how many posts the toast stands for: 1, plus one for each post that replaced it
+        /// by key.
         [[nodiscard]] u32 GetCount() const noexcept { return m_count; }
-        /// Seconds left (0 or less with a duration: going; below 0 when it stays until closed).
+        /// Returns the seconds left. With a duration, 0 or less means it is going; without one
+        /// (until closed) the value stays below 0.
         [[nodiscard]] f32 GetRemaining() const noexcept { return m_remaining; }
         [[nodiscard]] Label* GetTitlePart() const noexcept { return m_title.Get(); }
         [[nodiscard]] Label* GetMessagePart() const noexcept { return m_message.Get(); }
@@ -145,7 +157,7 @@ export namespace foundation::gui
         [[nodiscard]] Button* GetCloseButton() const noexcept { return m_close.Get(); }
         [[nodiscard]] usize ActionCount() const noexcept { return m_actions.Size(); }
         [[nodiscard]] Button& ActionAt(usize index) const noexcept { return *m_actions[index]; }
-        /// What it says to a screen reader.
+        /// Returns what the toast announces to a screen reader.
         [[nodiscard]] core::StringView GetAnnouncement() const noexcept { return m_announcement.AsView(); }
 
     private:
@@ -157,8 +169,8 @@ export namespace foundation::gui
         core::String m_announcement;
         u32 m_count = 1;
         f32 m_remaining = 0.0f;
-        bool m_dismissed = false; // taken off the stack: leaving (the core's Leave), gone once its exit ends
-        core::String m_classes; // its request's
+        bool m_dismissed = false; // taken off the stack and leaving (Leave); removed once its exit ends
+        core::String m_classes; // the classes from the request
         core::RefPtr<UIWidget> m_body;
         core::RefPtr<Label> m_title;
         core::RefPtr<Label> m_message;
@@ -180,12 +192,12 @@ export namespace foundation::gui
         ToastHost()
         {
             SetTag(core::StringView(u8"toasthost"));
-            SetHitTestVisible(false); // only its cards take the pointer
+            SetHitTestVisible(false); // only the cards take the pointer
             {
                 StyleWriteScope defaults(*this);
                 EditLayoutStyle([](LayoutStyle& s)
                 {
-                    // Over what holds it, its toasts at the bottom end.
+                    // Cover the parent, with the toasts stacked at the bottom end.
                     s.Placement = Position::Absolute;
                     s.Left = LayoutLength::Px(0.0f);
                     s.Top = LayoutLength::Px(0.0f);
@@ -205,8 +217,8 @@ export namespace foundation::gui
             m_defaults[static_cast<usize>(ToastSeverity::Error)] = 0.0f;
         }
 
-        /// Shows a toast, or queues it while as many as it shows already do; the GUI's thread.
-        /// `onAction` hears the action pressed.
+        /// Shows a toast, or queues it while the maximum number are already shown. Call this on
+        /// the GUI's thread. `onAction` is called with the action pressed.
         ToastId Post(ToastRequest request, ToastActionCallback onAction = {})
         {
             ToastId id = 0;
@@ -218,8 +230,8 @@ export namespace foundation::gui
             Place(id, core::Move(request), core::Move(onAction));
             return id;
         }
-        /// Posts from any thread: it waits until the host's next frame. Its content, if any, comes
-        /// from `makeContent`, called then on the GUI's thread (the request's `Content` is not taken).
+        /// Posts from any thread; the toast waits until the host's next frame. Any content comes from
+        /// `makeContent`, which is called then on the GUI's thread; the request's `Content` is ignored.
         ToastId PostFromAnyThread(ToastRequest request, ToastContentMaker makeContent = {}, ToastActionCallback onAction = {})
         {
             request.Content = core::RefPtr<UIWidget>{};
@@ -228,9 +240,9 @@ export namespace foundation::gui
             m_incoming.PushBack(Incoming{id, core::Move(request), core::Move(makeContent), core::Move(onAction)});
             return id;
         }
-        /// Takes a toast away (shown or waiting); false when it is not there.
+        /// Removes a toast, shown or waiting. Returns false when there is no such toast.
         bool Dismiss(ToastId id) { return Remove(id, false); }
-        /// Takes every toast away.
+        /// Removes every toast.
         void DismissAll()
         {
             while (!m_waiting.IsEmpty())
@@ -240,7 +252,7 @@ export namespace foundation::gui
                     (void)Remove(m_cards[i]->m_id, false);
         }
 
-        // A script's (reflected): `host.post(request)`, `host.postContent(request, widget)`.
+        // Reflected for scripts as `host.post(request)` and `host.postContent(request, widget)`.
         ToastId PostScript(ToastRequest request) { return Post(core::Move(request)); }
         ToastId PostContentScript(ToastRequest request, core::Variant content)
         {
@@ -253,7 +265,8 @@ export namespace foundation::gui
         [[nodiscard]] i32 GetMaxShownScript() const noexcept { return static_cast<i32>(m_maxShown); }
         void SetMaxShownScript(i32 count) noexcept { SetMaxShown(static_cast<usize>(core::Max(1, count))); }
 
-        /// The toasts shown now, oldest first (one leaving not among them), and waiting.
+        /// Returns how many toasts are shown now, not counting those leaving. WaitingCount gives the
+        /// number queued.
         [[nodiscard]] usize ShownCount() const noexcept
         {
             usize count = 0;
@@ -262,7 +275,7 @@ export namespace foundation::gui
             return count;
         }
         [[nodiscard]] usize WaitingCount() const noexcept { return m_waiting.Size(); }
-        /// A shown toast's card (null when it is not shown).
+        /// Returns a shown toast's card, or null when it is not shown.
         [[nodiscard]] ToastCard* GetCard(ToastId id) const noexcept
         {
             for (const core::RefPtr<ToastCard>& card : m_cards)
@@ -278,7 +291,8 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        /// Whether their timers stand still now (the pointer or the focus on a toast).
+        /// Returns whether the timers are paused, which they are while the pointer or the focus is
+        /// on a toast.
         [[nodiscard]] bool IsPaused() const
         {
             for (const core::RefPtr<ToastCard>& card : m_cards)
@@ -287,22 +301,25 @@ export namespace foundation::gui
             return false;
         }
 
-        /// How many it shows at once (4); the rest wait.
+        /// Sets how many toasts show at once (4 by default); the rest wait.
         void SetMaxShown(usize count) noexcept { m_maxShown = core::Max<usize>(1, count); }
         [[nodiscard]] usize GetMaxShown() const noexcept { return m_maxShown; }
-        /// Seconds a severity's toasts stay when a request does not say (0: until closed).
+        /// Sets how many seconds a severity's toasts stay when a request does not say; 0 means
+        /// until closed.
         void SetDefaultDuration(ToastSeverity severity, f32 seconds) noexcept { m_defaults[static_cast<usize>(severity)] = core::Max(0.0f, seconds); }
         [[nodiscard]] f32 GetDefaultDuration(ToastSeverity severity) const noexcept { return m_defaults[static_cast<usize>(severity)]; }
 
-        /// Told each toast posted (once shown or queued; a replacement too), for a log.
+        /// Sets the callback told about each toast posted, for a log. It runs when a toast is shown
+        /// or replaces a shown one.
         void SetOnPosted(core::Function<void(ToastId, const ToastCard&)> callback) { m_onPosted = core::Move(callback); }
-        /// Told each toast gone: closed by the user (its close button or an action), or not.
+        /// Sets the callback told about each toast that goes, and whether the user closed it (with
+        /// its close button or an action).
         void SetOnDismissed(core::Function<void(ToastId, bool byUser)> callback) { m_onDismissed = core::Move(callback); }
 
-        /// Advances its toasts by `seconds` (the host's frame: the GUI's clock calls it).
+        /// Advances the toasts by `seconds`. The GUI's clock calls this once per host frame.
         void Tick(f32 seconds)
         {
-            // What other threads posted, here on the GUI's thread.
+            // Take in what other threads posted, now that this runs on the GUI's thread.
             core::Array<Incoming> incoming(MemoryAllocator());
             {
                 core::ScopedLock<core::Mutex> lock(m_lock);
@@ -321,7 +338,7 @@ export namespace foundation::gui
                 ToastCard& card = *m_cards[i];
                 if (card.m_dismissed)
                 {
-                    if (card.GetParent() != this) // its exit ended: the core's Leave took it off
+                    if (card.GetParent() != this) // its exit ended and Leave removed it
                         m_cards.RemoveAt(i);
                     continue;
                 }
@@ -335,7 +352,8 @@ export namespace foundation::gui
         }
 
     protected:
-        // Laid out once it is in a GUI: its clock starts there (an action runs only under a root).
+        // Layout happens once the host is in a GUI, so start its clock here; an action runs only
+        // under a root.
         void OnLayout() override
         {
             UIWidget::OnLayout();
@@ -373,9 +391,9 @@ export namespace foundation::gui
         [[nodiscard]] f32 DurationOf(const ToastRequest& request) const
         {
             const f32 seconds = request.Duration < 0.0f ? m_defaults[static_cast<usize>(request.Severity)] : request.Duration;
-            return seconds > 0.0f ? seconds : -1.0f; // below 0: until closed
+            return seconds > 0.0f ? seconds : -1.0f; // below 0 means until closed
         }
-        // Shows it, replaces the one with its key, or queues it.
+        // Shows the toast, replaces the one with the same key, or queues it.
         void Place(ToastId id, ToastRequest request, ToastActionCallback onAction)
         {
             if (!request.Key.IsEmpty())
@@ -411,7 +429,7 @@ export namespace foundation::gui
             core::RefPtr<ToastCard> card = core::MakeRef<ToastCard>(MemoryAllocator());
             Fill(*card, id, core::Move(request), count, core::Move(onAction));
             AddChild(card.Get());
-            card->Enter(); // `:entering` for the sheet's entrance
+            card->Enter(); // sets `:entering` so the sheet's entrance plays
             m_cards.PushBack(card);
             if (m_onPosted)
                 m_onPosted(id, *card);
@@ -426,7 +444,8 @@ export namespace foundation::gui
                 Show(next.Id, core::Move(next.Request), next.Count, core::Move(next.OnAction));
             }
         }
-        // Its parts from the request (a replacement's too, counted).
+        // Builds the card's parts from the request, including for a replacement, which carries its
+        // count.
         void Fill(ToastCard& card, ToastId id, ToastRequest request, u32 count, ToastActionCallback onAction)
         {
             card.m_id = id;
@@ -459,7 +478,8 @@ export namespace foundation::gui
                 card.m_announcement = request.Announcement.IsEmpty() ? card.m_content->GetAccessLabel() : request.Announcement;
                 return;
             }
-            // The card: its mark (the sheet's colour and icon), its body, its count and close.
+            // The card holds its mark (the sheet's colour and icon), its body, its count and its
+            // close button.
             auto mark = core::MakeRef<UIWidget>(MemoryAllocator());
             mark->SetTag(core::StringView(u8"toastmark"));
             mark->SetHitTestVisible(false);
@@ -495,7 +515,7 @@ export namespace foundation::gui
                 card.m_body->AddChild(card.m_message.Get());
                 if (!said.IsEmpty() && !request.Message.IsEmpty())
                     said.Append(core::StringView(u8": "));
-                said.Append(card.m_message->GetTextLayout().PlainText()); // a rich message without its markup
+                said.Append(card.m_message->GetTextLayout().PlainText()); // a rich message is announced without its markup
             }
             card.m_announcement = !request.Announcement.IsEmpty() ? request.Announcement
                                   : card.m_content                ? card.m_content->GetAccessLabel()
@@ -518,7 +538,7 @@ export namespace foundation::gui
                     core::RefPtr<Button> button = core::MakeRef<Button>(MemoryAllocator());
                     button->AddClass(core::StringView(u8"action"));
                     button->SetText(action.Text.AsView());
-                    button->SetId(action.Id.AsView()); // what its `activate` says
+                    button->SetId(action.Id.AsView()); // the id its `activate` event carries
                     card.m_actionItems.PushBack(action);
                     if (!action.Command.IsEmpty())
                         button->SetCommand(action.Command.AsView());
@@ -532,7 +552,8 @@ export namespace foundation::gui
                         core::RefPtr<Button> from = held->m_actions[i];
                         if (held->m_onAction)
                             held->m_onAction(pressed);
-                        // A script's `activate`, as a menu item's: it bubbles, its id the action's.
+                        // Send `activate` for scripts, as a menu item does. It bubbles and carries
+                        // the action's id.
                         ItemEvent activated(EventType::ItemActivate, from.Get(), static_cast<i32>(i), ModelIndex{});
                         (void)from->RouteEvent(activated);
                         (void)self->Remove(toast, true);
@@ -577,8 +598,9 @@ export namespace foundation::gui
                 scene->GetContext().Announce(card.m_announcement.AsView(),
                                              card.m_severity == ToastSeverity::Error ? AnnouncePriority::Assertive : AnnouncePriority::Polite);
         }
-        // Off the stack: a shown one leaves through the core's Leave (out of the pointer at once, a
-        // child until its exit has ended, never inside the event that closed it), a waiting one at once.
+        // Takes a toast off the stack. A waiting toast goes at once. A shown toast leaves through
+        // Leave: it stops taking the pointer at once, stays a child until its exit has ended, and is
+        // never removed inside the event that closed it.
         bool Remove(ToastId id, bool byUser)
         {
             for (usize i = 0; i < m_waiting.Size(); ++i)
@@ -601,14 +623,14 @@ export namespace foundation::gui
             return false;
         }
 
-        core::Array<core::RefPtr<ToastCard>> m_cards; // shown, oldest first (leaving ones among them)
+        core::Array<core::RefPtr<ToastCard>> m_cards; // shown cards, oldest first, including those leaving
         core::Array<Waiting> m_waiting;
         core::Array<Incoming> m_incoming; // posted from other threads, under m_lock
         core::Mutex m_lock;               // guards m_incoming and m_lastId
         ToastId m_lastId = 0;
         usize m_maxShown = 4;
         f32 m_defaults[4] = {};
-        bool m_ticking = false; // its clock's action runs
+        bool m_ticking = false; // the clock's tick action is running
         core::Function<void(ToastId, const ToastCard&)> m_onPosted;
         core::Function<void(ToastId, bool)> m_onDismissed;
     };

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Terrain - :sculpt implementation (TerrainSculptTool + provider + registrar).
+// Editor::Terrain - :sculpt implementation (TerrainSculptTool, its provider and the registrar).
 //
-// The heavy engine/resource imports the interface partition deliberately keeps out (GCC module
-// hygiene) live here: the terrain component + manager (to find the terrain in the scene and its
+// The heavy engine and resource imports that the interface partition keeps out (for GCC module
+// hygiene) live here: the terrain component and manager (to find the terrain in the scene and its
 // shared heightfield) and the heightfield source (to serialize the runtime grid back on save).
 
 module;
@@ -19,10 +19,10 @@ import foundation.shell;              // IKeyboard (mode hotkeys)
 import foundation.content;            // ContentDatabase, Instance (the persist closure)
 import foundation.resource;           // Ref<>
 import foundation.heightfield;        // Sculpt* brushes, HeightfieldRegion
-import foundation.heightfield.resource; // HeightfieldSource + kHeightStream (persist)
-import heightfield.pipeline;           // HeightfieldAsset (the SOURCE envelope the persist rewrites)
+import foundation.heightfield.resource; // HeightfieldSource, kHeightStream (the save path)
+import heightfield.pipeline;           // HeightfieldAsset (the source envelope the save rewrites)
 import foundation.terrain.resource;   // TerrainResource
-import engine.terrain;                // TerrainComponent + TerrainComponentManager
+import engine.terrain;                // TerrainComponent, TerrainComponentManager
 import editor.core;
 import editor.viewporttools;
 
@@ -45,8 +45,9 @@ namespace editor
             return static_cast<engine::terrain::TerrainComponentManager*>(base);
         }
 
-        // The region-delta stroke command: replays the touched grid RECTANGLE between its before /
-        // after sample blocks. One per stroke (press..release); never merges. Keeps the grid alive.
+        // The region-delta stroke command: replays the touched grid rectangle between its before
+        // and after sample blocks. One per stroke (press to release); it never merges and keeps
+        // the grid alive.
         class SculptStrokeCommand final : public IEditorCommand
         {
         public:
@@ -58,9 +59,10 @@ namespace editor
 
             [[nodiscard]] bool Execute() override
             {
-                // The live grid is already in the AFTER state when the command is first pushed (the
-                // stroke painted it), so writing AFTER here is a no-op on push and the correct
-                // replay on redo. Bump either way so the GPU height texture re-uploads.
+                // The live grid is already in the after state when the command is first pushed (the
+                // stroke painted it), so writing the after block here is a no-op on push and the
+                // correct replay on redo. Bump the version either way so the GPU height texture
+                // re-uploads.
                 Write(m_after);
                 return !m_region.IsEmpty();
             }
@@ -201,7 +203,7 @@ namespace editor
     {
         m_hasHover = false;
 
-        // Mode hotkeys (1..4) - a pressed key sets the mode (idempotent; the panel mirrors it).
+        // Mode hotkeys (1 to 4): a pressed key sets the mode (idempotent; the panel follows it).
         if (foundation::shell::IKeyboard* kb = input.keyboard; kb != nullptr && input.pointerValid)
         {
             using foundation::shell::KeyCode;
@@ -211,8 +213,8 @@ namespace editor
             if (kb->IsKeyPressed(KeyCode::Num4)) m_mode = Mode::Flatten;
         }
 
-        // Wheel resizes the brush (multiplicative so it feels even across scales).
-        // Shift + wheel resizes the brush; the bare wheel stays the camera's dolly (2026-09-23).
+        // Shift and the wheel resize the brush, multiplicatively so it feels even across scales;
+        // the wheel alone stays the camera's dolly.
         if (input.pointerOver && input.shift && input.wheelDelta != 0.0f)
         {
             SetRadius(m_radius * (1.0f + 0.12f * input.wheelDelta));
@@ -238,7 +240,7 @@ namespace editor
             return true;
         }
 
-        if (!input.editingLocked) // Simulate: the collider is shared - no edits
+        if (!input.editingLocked) // no edits while simulating, since the collider is shared
         {
             if (!m_stroking && pick.valid && input.pointerOver && input.leftPressed && !input.ctrl)
             {
@@ -258,7 +260,7 @@ namespace editor
         }
         else if (m_stroking)
         {
-            EndStroke(); // Simulate started mid-stroke: commit what was painted, then stop
+            EndStroke(); // Simulate started mid-stroke, so commit what was painted and stop
         }
 
         UpdateStatus();
@@ -277,7 +279,7 @@ namespace editor
             MemCopy(m_before.Data(), samples.Data(), samples.Size() * sizeof(hf::Height));
         }
         m_region = hf::HeightfieldRegion{};
-        ApplyDab(pick, 0.0f); // an instant single-click still deposits one dab (dt=0 -> min delta)
+        ApplyDab(pick, 0.0f); // a single click still deposits one dab (dt=0 gives the minimum delta)
     }
 
     void TerrainSculptTool::ApplyDab(const Pick& pick, f32 deltaSeconds)
@@ -299,8 +301,8 @@ namespace editor
             r = hf::SculptRaise(*m_strokeHf, pick.localX, pick.localZ, m_radius, -step);
             break;
         case Mode::Smooth:
-            // Smooth/flatten "amount" is a 0..1 blend; scale the per-second rate but cap so a slow
-            // frame cannot overshoot the target.
+            // The smooth and flatten "amount" is a 0..1 blend: scale the per-second rate, but cap
+            // it so a slow frame cannot overshoot the target.
             r = hf::SculptSmooth(*m_strokeHf, pick.localX, pick.localZ, m_radius,
                                  Clamp(step * 0.5f, 0.0f, 1.0f));
             break;
@@ -335,8 +337,9 @@ namespace editor
                                                             Move(after)),
                 editor::EditorRootAllocator()));
 
-            // Register the write-back-to-source persist closure (drained on Save). Captures a
-            // RefPtr to the grid (kept alive) + its source guid; the DB is handed in at drain time.
+            // Register the closure that writes back to the source (drained on Save). It captures a
+            // RefPtr to the grid (keeping it alive) and its source guid; the database is passed
+            // in when the closure is drained.
             if (m_assetEdits != nullptr && !m_strokeHeightfieldId.IsNil())
             {
                 RefPtr<hf::Heightfield> grid = m_strokeHf;
@@ -345,12 +348,12 @@ namespace editor
                     id,
                     [grid, id](content::ContentDatabase& db) -> Status
                     {
-                        // The SOURCE instance's envelope is a HeightfieldAsset (never write the
-                        // cooked HeightfieldSource type here - that clobbers the source asset).
-                        // Read-modify-write: sync the grid params, CLEAR fileName (the authored
-                        // "heights" sidecar becomes the truth - the editable-source convention;
-                        // the builder's embedded path cooks from it, and a re-import explicitly
-                        // resets by setting fileName again), then write the sidecar samples.
+                        // The source instance's envelope is a HeightfieldAsset. Never write the
+                        // cooked HeightfieldSource type here, since that clobbers the source asset.
+                        // Read, modify and write: sync the grid params and clear fileName, so the
+                        // authored "heights" sidecar becomes authoritative (the builder's embedded
+                        // path cooks from it, and a re-import resets by setting fileName again),
+                        // then write the sidecar samples.
                         content::Instance* inst = db.GetInstance(id);
                         if (inst == nullptr || grid.Get() == nullptr)
                         {
@@ -388,7 +391,7 @@ namespace editor
     {
         if (m_stroking)
         {
-            EndStroke(); // gesture-end guarantee: never leave a half-open stroke on a tool switch
+            EndStroke(); // a tool switch never leaves a stroke half open
         }
         m_hasHover = false;
     }
@@ -399,7 +402,8 @@ namespace editor
         {
             return;
         }
-        // A two-ring cursor on the surface: outer = radius, inner = the falloff half-power point.
+        // A two-ring cursor on the surface: the outer ring is the radius, the inner ring the
+        // falloff's half-power point.
         const Color ring = (m_mode == Mode::Lower) ? Color{1.0f, 0.55f, 0.2f, 1.0f}
                                                    : Color{0.3f, 0.9f, 1.0f, 1.0f};
         drawList.DrawCircleNormal(m_hoverWorld, m_radius, m_hoverNormal, ring, 40, true);

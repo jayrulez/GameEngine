@@ -3,7 +3,7 @@
 
 // Generic asset page tests (headless): the serialize-driven scan/patch machinery is pure over
 // any ISerializable, so it is covered with a synthetic asset exercising scalars, strings,
-// guids, blobs, arrays, and a version-gated + a value-conditional field. Then the page from its
+// guids, blobs, arrays, a version-gated field and a value-conditional one. Then the page from its
 // markup (Data/Editor/AssetForm.xml) over that asset in a project: its rows, an edit and its undo,
 // a change of shape, Save, and an asset that does not read.
 
@@ -113,9 +113,9 @@ TEST_CASE("asset form: scan records every field kind, incl. version-gated + arra
     CHECK(fields[static_cast<usize>(blob)].blobValue.Size() == 4u);
     CHECK_FALSE(fields[static_cast<usize>(blob)].Editable());
 
-    // The version-gated field appears (the scan pushes the CURRENT data version).
+    // The version-gated field appears (the scan pushes the current data version).
     CHECK(IndexOf(fields, u8"gated") >= 0);
-    // The value-conditional field does NOT (hasExtra is false).
+    // The value-conditional field does not (hasExtra is false).
     CHECK(IndexOf(fields, u8"extra") < 0);
 }
 
@@ -152,7 +152,7 @@ TEST_CASE("asset form: a conditional-branch patch changes the shape (rescan dete
     REQUIRE(hasExtra >= 0);
 
     AssetFormField patch = fields[static_cast<usize>(hasExtra)];
-    patch.intValue = 1; // true -> Serialize now includes `extra`
+    patch.intValue = 1; // true: Serialize then includes `extra`
     (void)ApplyAssetFormField(asset, fields, static_cast<usize>(hasExtra), patch);
     CHECK(asset.hasExtra);
 
@@ -164,7 +164,7 @@ TEST_CASE("asset form: a conditional-branch patch changes the shape (rescan dete
 
 TEST_CASE("asset form: the fallback factory routes ANY serializable; bespoke pages win")
 {
-    const editor::app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
+    const editor::app::AssetPageServicesSource none; // no services, only the registration; declared first so it outlives the context
     editor::EditorContext context{DefaultAllocator()};
     RegisterGenericAssetEditor(context, none);
     // The probe type routes to the fallback via its ISerializable base.
@@ -174,8 +174,8 @@ TEST_CASE("asset form: the fallback factory routes ANY serializable; bespoke pag
     CHECK(found->PrimaryType() == &ISerializable::StaticType());
 }
 
-// The ImportTest sluggish-form fix: fields inside an array carry the OUTERMOST array key as
-// their category (BuildGrid groups them under a default-collapsed expander); top-level fields
+// Fields inside an array carry the outermost array's key as their category, so the page groups
+// them under a collapsed group and a large array costs nothing until opened; top-level fields
 // carry none (they stay in the always-visible "Properties" section).
 TEST_CASE("asset form: array elements carry the array key as their category")
 {
@@ -306,7 +306,7 @@ TEST_CASE("generic page: the fields as rows by their keys, an array's folded und
     CHECK(bag.FindInfo(blob.AsView())->ReadOnly);
     CHECK(bag.GetValue(blob.AsView(), 0).AsString() == StringView(u8"4 bytes"));
 
-    // The array: its elements under one group named by its key, folded; its count no row.
+    // The array: its elements under one group named by its key, folded; its count has no row.
     const String first = PathOf(*page, u8"weights[0]");
     const String second = PathOf(*page, u8"weights[1]");
     const StringView parent = gui::ParentPropertyPath(first.AsView());

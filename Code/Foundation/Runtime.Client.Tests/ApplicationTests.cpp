@@ -16,7 +16,7 @@ import foundation.runtime.client;
 using namespace foundation::core;
 using namespace foundation::runtime;
 using namespace foundation::shell;
-using namespace foundation::graphics; // GraphicsDevice/RenderWindow/FrameContext (moved from foundation::runtime)
+using namespace foundation::graphics; // GraphicsDevice/RenderWindow/FrameContext
 
 namespace
 {
@@ -41,10 +41,9 @@ namespace
         String clipboard;
     };
 
-    // Counts the frame phases the host drives into the SubsystemManager. NOTE no FixedUpdate: the
-    // context-level fixed lane was deleted in the FrameTime cutover (zero overriders existed);
-    // the host's fixed accumulator now drives ONLY the app-level OnFixedUpdate hook (counted
-    // on the apps below) - fixed-rate engine work lives per scene.
+    // Counts the frame phases the host drives into the SubsystemManager. There is no FixedUpdate:
+    // the host's fixed accumulator drives only the app-level OnFixedUpdate hook (counted on the
+    // apps below); fixed-rate engine work lives per scene.
     class CountingSys final : public Subsystem
     {
     public:
@@ -67,7 +66,7 @@ namespace
     public:
         Array<int> order;
         CountingSys* sys = nullptr;
-        int fixed = 0; // OnFixedUpdate count (the app-level fixed hook - see CountingSys note)
+        int fixed = 0; // OnFixedUpdate count (the app-level fixed hook; see CountingSys)
         bool sysLiveAtStartup = false;
 
         ApplicationSettings Settings() const override
@@ -211,7 +210,7 @@ TEST_CASE("client: RequestExit stops a manual run loop")
 
 namespace
 {
-    // Requests exit from inside Configure - the "cannot start" shape (no data root, an
+    // Requests exit from inside Configure, the "cannot start" shape (no data root, an
     // unreadable dist): the run must end with that code, never run frames.
     class AbortingApp final : public IApplication
     {
@@ -313,7 +312,7 @@ TEST_CASE("client: with a graphics device, every window renders each Tick")
     host.Tick(0.016f);
     CHECK(app.renders == 2); // one per window
 
-    // Close is deferred to frame end: this Tick still renders BOTH (2 -> 4),
+    // Close is deferred to frame end: this Tick still renders both (2 becomes 4),
     // then flushes the window away.
     host.CloseWindow(app.second);
     host.Tick(0.016f);

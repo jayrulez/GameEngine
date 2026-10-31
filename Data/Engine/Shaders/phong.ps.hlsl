@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The builtin Phong material (Specs/phong-material.md): what a model authored with Phong or Lambert
-// is drawn with, so it looks as it was made. Each light that reaches the pixel (its cluster's, or
+// The built-in Phong material: what a model authored with Phong or Lambert is drawn with, so it
+// looks as it was made. Each light that reaches the pixel (its cluster's, or
 // every light) is shaded Blinn-Phong, in the units the PBR path uses so the two sit side by side:
 // the diffuse (BaseColor x AlbedoMap x the vertex colour) by N.L over pi, and the specular
 // (SpecularColor x SpecularMap) as a highlight normalised by its exponent, so a tight one is not
@@ -16,7 +16,7 @@
 #include "lighting.hlsli"
 #include "forward_ps.hlsli"
 cbuffer Material : register(b0, space2) {    // as CreatePhong lays it out (MaterialBuilder.cppm)
-    float4 BaseColor;          // the diffuse colour (PBR's and Unlit's name, so a switch keeps it)
+    float4 BaseColor;          // the diffuse colour (named as in PBR and Unlit, so switching keeps it)
     float4 SpecularColor;      // black: no highlight (a Lambert material)
     float4 EmissiveColor;      // rgb x EmissiveMap = emitted radiance, its intensity in w
     float  Shininess;          // the highlight's exponent (Phong's specular exponent)
@@ -91,7 +91,7 @@ float4 main(PSInput input) : SV_Target0 {
     float3 emissive = EmissiveColor.rgb * EmissiveMap.Sample(MainSampler, input.uv).rgb;
 
     float3 viewPos   = mul(float4(input.worldPos, 1.0), View).xyz;
-    float  viewDepth = -viewPos.z;   // cascade selection + cluster lookup
+    float  viewDepth = -viewPos.z;   // cascade selection and cluster lookup
 
     float3 Lo = float3(0.0, 0.0, 0.0);
     LightList lights = LightsAt(input.clip.xy, viewDepth);
@@ -106,8 +106,8 @@ float4 main(PSInput input) : SV_Target0 {
     }
     float3 litColor = ambient + Lo + emissive;
 
-    // For the views that look at the surface's makings: a Phong surface as the dielectric it is, as
-    // rough as its highlight is broad.
+    // For the debug views that show material properties: a Phong surface is a dielectric, as rough
+    // as its highlight is broad.
     const float roughness = saturate(sqrt(2.0 / (exponent + 2.0)));
     uint debugMode = DebugMode;
     if (debugMode != 0u) {
@@ -121,9 +121,9 @@ float4 main(PSInput input) : SV_Target0 {
     o.color    = float4(litColor, alpha);
     o.normal   = OctEncode(normalize(mul(float4(N, 0.0), View).xyz));
     o.velocity = MotionVector(input.curClip, input.prevClip);
-    // SSR reads these: Phong reflects nothing of its surroundings (its highlight is the lights'),
-    // so it is written fully rough and never metal, and SSR passes it by, as Unlit; SSGI's bounce
-    // lands on its diffuse.
+    // SSR reads these. Phong reflects nothing of its surroundings (its highlight comes from the
+    // lights), so it is written fully rough and never metal, and SSR skips it as it skips Unlit.
+    // SSGI's bounce lands on its diffuse.
     o.material = float2(1.0, 0.0);
     o.albedo   = float4(diffuse, 1.0);
     return o;

@@ -3,12 +3,12 @@
 
 /// Foundation::Animation - the `:rootmotion` partition.
 ///
-/// The travel a clip's baked root motion curve carries between two of its times (root-motion.md
-/// P1): a translation and a turn about +Y. A delta is expressed in the frame the character faces
-/// at its start, so applying deltas one after another (Compose) turns each by the turns before
-/// it, the way a character that already turned walks on in its new direction. A step that wraps
-/// a looping clip is split at the end, and a step spanning whole loops adds the full loop's delta
-/// once per loop (nothing is lost however far one step goes).
+/// The travel a clip's baked root motion curve carries between two of its times: a translation
+/// and a turn about +Y. A delta is expressed in the frame the character faces at its start, so
+/// applying deltas one after another (Compose) turns each by the turns before it, the way a
+/// character that already turned walks on in its new direction. A step that wraps a looping clip
+/// is split at the end, and a step spanning whole loops adds the full loop's delta once per loop
+/// (nothing is lost however far one step goes).
 
 module;
 #include "Core/Prelude.h"
@@ -116,7 +116,7 @@ export namespace foundation::animation
         }
     }
 
-    /// The root motion `clip` carries from `from` to `to`, seconds, UNWRAPPED: for a looping clip
+    /// The root motion `clip` carries from `from` to `to`, seconds, unwrapped: for a looping clip
     /// a time past the end is a later loop (0.9 to 2.1 in a one-second clip crosses the end twice),
     /// and a backward step (to < from) runs it in reverse. A clip that does not loop clamps both
     /// times to its length. Zero for a clip with no root motion.

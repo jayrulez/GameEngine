@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Heightfield as a resource: capture a grid -> HeightfieldSource, cook into a content DB, then build
-// it back through the ResourceManager via the factory and verify the runtime grid round-trips its
-// parameters + samples. Plus the direct source round-trip and the inconsistent-cook guards.
+// Heightfield as a resource: capture a grid into a HeightfieldSource, cook it into a content DB,
+// then build it back through the ResourceManager via the factory and verify the runtime grid
+// round-trips its parameters and samples. Also the direct source round-trip and the
+// inconsistent-cook guards.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -79,7 +80,7 @@ TEST_CASE("heightfield resource: cook round-trips through the resource manager")
     CHECK(hf->WorldSize().x == doctest::Approx(64.0f));
     CHECK(hf->MinY() == doctest::Approx(0.0f));
     CHECK(hf->MaxY() == doctest::Approx(10.0f));
-    // Samples + sampled height survive the cook.
+    // Samples and sampled height survive the cook.
     CHECK(hf->GetSample(0, 0) == 0);
     CHECK(hf->GetSample(64, 0) == 65535);
     CHECK(hf->GetHeightAt(0.0f, 0.0f) == doctest::Approx(5.0f).epsilon(0.01));

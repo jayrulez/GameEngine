@@ -3,7 +3,7 @@
 
 // Unit tests for the SIMD math types (:simd_vector, :simd_matrix).
 //
-// Strategy: the packed Float* types are the already-tested scalar reference. For each operation we
+// The packed Float* types are the already-tested scalar reference. For each operation we
 // compute it both ways (SIMD Vector*/Matrix4 vs packed Float*/Float4x4) over representative inputs and
 // assert they agree. This validates whichever backend is compiled (SSE2 here on x86; the scalar
 // fallback on other targets) against an independent implementation.

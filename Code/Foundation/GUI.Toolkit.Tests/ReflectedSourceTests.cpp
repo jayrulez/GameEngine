@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the reflected property source (T3 of Specs/gui-lab-evolution-3.md): a reflected type's
-// properties as rows (values, enums and flags, Float2/3/4, a Quaternion as Euler degrees, value
-// structs as groups, references as their Guids naming what they point at, other types hinted with
-// their names), the attributes the editor's inspector reads, writes through addresses and setters,
-// and each commit told as one change the text format writes and Restore reads back.
+// GUI.Toolkit - the reflected property source. A reflected type's properties become rows: values,
+// enums and flags, Float2/3/4, a Quaternion as Euler degrees, value structs as groups, references as
+// their Guids naming what they point at, and other types hinted with their names. The source reads
+// the attributes the editor's inspector reads, writes through addresses and setters, and reports
+// each commit as one change, which the text format writes and Restore reads back.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -155,8 +155,9 @@ namespace reflected
         builder.Creator();
     }
 
-    // A curve and a gradient of an application's own (as a particle module's are): fixed arrays
-    // of Core's keys and stops with their counts, registered with the source as one value each.
+    // A curve and a gradient type of an application's own (as a particle module's are): fixed
+    // arrays of Core's keys and stops with their counts, each registered with the source as one
+    // value.
     struct TestCurve
     {
         core::CurveKey keys[4]{};
@@ -218,7 +219,7 @@ namespace reflected
 
     void Register()
     {
-        core::RegisterCoreTypes(); // as an application does: Color, Float3 and the rest named
+        core::RegisterCoreTypes(); // as an application does, so Color, Float3 and the rest have names
         RttiRegisterEnum_LampKind();
         RttiRegisterEnum_LampLayers();
         RttiRegisterValue_LampShape();
@@ -236,7 +237,7 @@ namespace reflected
         (void)once;
     }
 
-    // A format of its own for the tests: Core's binary serializer, its bytes held as the text.
+    // The tests' own format: Core's binary serializer, with its bytes held as the text.
     class BlobFormat : public IPropertyTextFormat
     {
     public:
@@ -260,8 +261,8 @@ namespace reflected
     };
 }
 
-// A reference of the tests' own (as Ref<T> is): a Guid naming a TestTarget or a TestOther, and
-// a binding a write drops.
+// The tests' own reference type, shaped as Ref<T> is: a Guid naming a TestTarget or a TestOther,
+// and a binding that a write drops.
 namespace reflected
 {
     struct TestTarget
@@ -312,12 +313,12 @@ namespace reflected
         builder.Property<&TestSocket::spare>("spare");
         builder.Property<&TestSocket::other>("other");
     }
-    // Named, as the resource types a Ref points at are.
+    // Registered with a name, as the resource types a Ref points at are.
     REFLECT_VALUE(TestTarget, "rtti::tests::reflected") {}
     REFLECT_VALUE(TestOther, "rtti::tests::reflected") {}
 }
 
-// Bare Guids: one naming what it points at by its type's name, one naming nothing.
+// Bare Guids: one names what it points at by the type's name, and one names nothing.
 namespace reflected
 {
     class TestIds : public core::Object
@@ -333,7 +334,8 @@ namespace reflected
         builder.Property<&TestIds::anything>("anything");
     }
 
-    // A list of bare Guids naming what they point at, and tints a runtime keeps as four floats.
+    // A list of bare Guids that names what they point at, and tints kept as four floats, as a
+    // runtime keeps them.
     class TestIdList : public core::Object
     {
         RTTI_OBJECT(TestIdList, core::Object)
@@ -350,8 +352,8 @@ namespace reflected
     }
 }
 
-// A struct an application takes as a reference by its Guid (an editor's entity reference), and
-// something holding two.
+// A struct an application treats as a reference by its Guid (like the editor's entity reference),
+// and an object holding two of them.
 namespace reflected
 {
     struct TestLink
@@ -375,8 +377,8 @@ namespace reflected
         builder.Property<&TestLinks::up>("up");
     }
 
-    // A joint of an application's: a bone named by a string its editor offers from a skeleton,
-    // and rows whose conditions read or do not.
+    // An application's joint: a bone named by a string that its editor offers from a skeleton, and
+    // rows with visibleWhen conditions that parse and ones that do not.
     class TestJoint : public core::Object
     {
         RTTI_OBJECT(TestJoint, core::Object)
@@ -453,7 +455,7 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     CHECK(intensity.HasRange);
     CHECK(intensity.Max == doctest::Approx(100.0));
     CHECK(intensity.Step == doctest::Approx(0.5));
-    CHECK(intensity.Hint == core::String(u8"slider")); // a ranged float slides over its range
+    CHECK(intensity.Hint == core::String(u8"slider")); // a ranged float gets a slider over its range
     CHECK(bed.Find(rows, u8"range")->Hint.IsEmpty());  // an unranged one keeps its field
     CHECK(bed.Find(rows, u8"range")->DisplayName == core::String(u8"Reach"));
     const PropertyInfo& kind = *bed.Find(rows, u8"kind");
@@ -467,19 +469,19 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     CHECK(bed.Find(rows, u8"position")->Hint == core::String(u8"Float3"));
     CHECK(bed.Find(rows, u8"rotation")->Hint == core::String(u8"Float3")); // Euler degrees
     CHECK(bed.Find(rows, u8"shape")->Kind == PropertyKind::Group);
-    CHECK(bed.Find(rows, u8"shape")->Hint == core::String(u8"LampShape")); // no editor takes it: its rows
+    CHECK(bed.Find(rows, u8"shape")->Hint == core::String(u8"LampShape")); // no editor takes it, so it shows its rows
     CHECK(bed.Find(rows, u8"tint")->Kind == PropertyKind::Color);
     CHECK(bed.Find(rows, u8"tint")->ShowsAlpha);
     CHECK_FALSE(bed.Find(rows, u8"edge")->ShowsAlpha);
     CHECK(bed.Find(rows, u8"glow")->Hint == core::String(u8"ColorHdr"));
     CHECK(bed.Find(rows, u8"id")->ReadOnly);
-    CHECK(bed.Find(rows, u8"exposure")->Kind == PropertyKind::Float); // a setter's
+    CHECK(bed.Find(rows, u8"exposure")->Kind == PropertyKind::Float); // a property with a setter
 
     core::Array<PropertyInfo> parts(core::DefaultAllocator());
     bed.source.GetProperties(SV(u8"rotation"), parts);
     REQUIRE(parts.Size() == 3u);
     CHECK(parts[0].Name == core::String(u8"pitch"));
-    // Shown as their axes, as a position's parts are.
+    // The parts are named after their axes, as a position's are.
     CHECK(parts[0].DisplayName == core::String(u8"X"));
     CHECK(parts[1].DisplayName == core::String(u8"Y"));
     CHECK(parts[2].DisplayName == core::String(u8"Z"));
@@ -502,7 +504,7 @@ TEST_CASE("reflected source: an application describes each row as it is listed")
     {
         told.PushBack(core::String(path));
         if (path == SV(u8"intensity"))
-            info.DisplayName = core::String(u8"Brightness"); // what reflection could not say
+            info.DisplayName = core::String(u8"Brightness"); // something reflection cannot provide
         if (path == SV(u8"shape"))
             info.Summary = core::String(u8"a lamp shade");
     });
@@ -510,10 +512,10 @@ TEST_CASE("reflected source: an application describes each row as it is listed")
     bed.source.GetProperties(SV(u8""), rows);
     CHECK(bed.Find(rows, u8"intensity")->DisplayName == core::String(u8"Brightness"));
     CHECK(bed.Find(rows, u8"shape")->Summary == core::String(u8"a lamp shade"));
-    CHECK(told.Size() == rows.Size()); // each row, by its path
+    CHECK(told.Size() == rows.Size()); // the hook sees each row, by its path
     core::Array<PropertyInfo> parts(core::DefaultAllocator());
     bed.source.GetProperties(SV(u8"rotation"), parts);
-    CHECK(told.Back().AsView().StartsWith(SV(u8"rotation."))); // a group's parts by their paths
+    CHECK(told.Back().AsView().StartsWith(SV(u8"rotation."))); // and a group's parts by their paths
 }
 
 TEST_CASE("reflected source: values read and written through addresses and setters, parts and Euler degrees")
@@ -549,7 +551,7 @@ TEST_CASE("reflected source: values read and written through addresses and sette
     core::ToYawPitchRoll(bed.a->rotation, yaw, pitch, roll);
     CHECK(core::RadiansToDegrees(yaw) == doctest::Approx(90.0f).epsilon(0.001));
 
-    // Read only: refused.
+    // A read-only property refuses the write.
     bed.Commit(u8"id", Variant(i64{5}));
     CHECK(bed.a->id == 101);
 }
@@ -573,19 +575,19 @@ TEST_CASE("reflected source: several objects mixed, a preview on each, and a com
     CHECK(change.Path == core::String(u8"intensity"));
     REQUIRE(change.Before.Size() == 2u);
 
-    CHECK(bed.source.Restore(change, true)); // an undo: each its own value back
+    CHECK(bed.source.Restore(change, true)); // an undo gives each object its own value back
     CHECK(bed.a->intensity == doctest::Approx(5.0f));
     CHECK(bed.b->intensity == doctest::Approx(8.0f));
     CHECK(bed.source.Restore(change, false)); // a redo
     CHECK(bed.b->intensity == doctest::Approx(30.0f));
 
-    // A group's change is the whole group, so a revert or a paste undoes in one.
+    // A change to a group records the whole group, so a revert or a paste undoes in one step.
     bed.Commit(u8"shape.radius", Variant(6.0));
-    bed.a->shape.softness = 0.9f; // changed beside it, outside the source
+    bed.a->shape.softness = 0.9f; // a sibling field changed outside the source
     bed.source.Restore(bed.changes.Back(), true);
     CHECK(bed.a->shape.radius == doctest::Approx(1.0f));
 
-    // Cancelled: each back.
+    // A cancel restores each object's value.
     bed.source.BeginEdit(SV(u8"range"));
     bed.source.PreviewEdit(SV(u8"range"), PropertyWrite{Variant(99.0)});
     bed.source.CancelEdit(SV(u8"range"));
@@ -611,7 +613,7 @@ TEST_CASE("reflected source: the grid shows it")
     CHECK(core::Cast<FloatsPropertyEditor>(grid->FindEditor(SV(u8"rotation"))) != nullptr);
     CHECK(core::Cast<ColorPropertyEditor>(grid->FindEditor(SV(u8"tint"))) != nullptr);
     CHECK(core::Cast<HdrColorPropertyEditor>(grid->FindEditor(SV(u8"glow"))) != nullptr);
-    CHECK(grid->FindEditor(SV(u8"shape")) == nullptr); // a struct no editor takes: a group of its rows
+    CHECK(grid->FindEditor(SV(u8"shape")) == nullptr); // a struct no editor takes is a group of its rows
     CHECK(grid->GetRow(grid->FindRow(SV(u8"shape")))->HasChildren);
     CHECK(core::Cast<EnumPropertyEditor>(grid->FindEditor(SV(u8"kind"))) != nullptr);
     CHECK(core::Cast<FlagsPropertyEditor>(grid->FindEditor(SV(u8"layers"))) != nullptr);
@@ -637,7 +639,7 @@ TEST_CASE("reflected source: arrays and bounded arrays are lists, elements by in
     CHECK(ReadPropertyValue(bed.source, SV(u8"weights"), PropertyKind::List).Mixed); // two and three
     core::Array<PropertyInfo> elements(core::DefaultAllocator());
     bed.source.GetProperties(SV(u8"weights"), elements);
-    REQUIRE(elements.Size() == 2u); // the fewest
+    REQUIRE(elements.Size() == 2u); // as many as the object with the fewest has
     CHECK(elements[1].Kind == PropertyKind::Float);
     CHECK(elements[1].DisplayName == core::String(u8"Element 2"));
     CHECK(ReadPropertyValue(bed.source, SV(u8"weights.1"), PropertyKind::Float).Mixed);
@@ -664,7 +666,8 @@ TEST_CASE("reflected source: arrays and bounded arrays are lists, elements by in
     CHECK(bed.b->weights.Size() == 3u);
     CHECK(bed.b->weights[2] == doctest::Approx(1.0f));
 
-    // A bounded array: its count, at most its capacity, which its row says; an Array has no most.
+    // A bounded array's count is at most its capacity, which its row reports; an Array has no
+    // limit.
     core::Array<PropertyInfo> top(core::DefaultAllocator());
     bed.source.GetProperties(SV(u8""), top);
     CHECK(bed.Find(top, u8"steps")->MaxCount == 3u);
@@ -733,10 +736,10 @@ TEST_CASE("reflected source: the type's defaults from its creator, providers ove
     CHECK(bed.source.GetDefault(SV(u8"intensity"), 0).AsFloat() == doctest::Approx(5.0));
     CHECK(bed.source.GetDefault(SV(u8"position.z"), 1).AsFloat() == doctest::Approx(3.0));
     CHECK(bed.source.GetDefault(SV(u8"weights"), 0).AsInt() == 0);
-    CHECK(bed.source.GetDefault(SV(u8"id"), 0).IsEmpty()); // read only: nothing to put back
+    CHECK(bed.source.GetDefault(SV(u8"id"), 0).IsEmpty()); // read only, so there is no default to restore
     CHECK(bed.source.GetRevertText(SV(u8"intensity")) == core::String(u8"Revert to default"));
 
-    // A prefab for the second object: its intensity 9.
+    // A prefab for the second object, with an intensity of 9.
     bed.source.PushDefaults([](core::StringView path, usize object) -> Variant
                             { return object == 1 && path == core::StringView(u8"intensity") ? Variant(9.0) : Variant{}; },
                             SV(u8"Revert to prefab"));
@@ -751,7 +754,7 @@ TEST_CASE("reflected source: the type's defaults from its creator, providers ove
     bed.a->weights.PushBack(0.5f);
     REQUIRE(bed.source.Revert(SV(u8"intensity")));
     CHECK(bed.a->intensity == doctest::Approx(5.0f));
-    CHECK(bed.b->intensity == doctest::Approx(9.0f)); // each its own
+    CHECK(bed.b->intensity == doctest::Approx(9.0f)); // each object gets its own default
     REQUIRE(bed.source.Revert(SV(u8"shape")));
     CHECK(bed.a->shape.radius == doctest::Approx(1.0f));
     REQUIRE(bed.source.Revert(SV(u8"position")));
@@ -761,7 +764,7 @@ TEST_CASE("reflected source: the type's defaults from its creator, providers ove
     CHECK_FALSE(bed.source.Revert(SV(u8"weights"))); // nothing left
     CHECK(bed.changes.Size() == 4u); // one change each
 
-    // An undo of a revert puts the edit back.
+    // Undoing a revert restores the edit.
     CHECK(bed.source.Restore(bed.changes[0], true));
     CHECK(bed.b->intensity == doctest::Approx(1.0f));
 }
@@ -775,17 +778,17 @@ TEST_CASE("reflected source: copy and paste through the text format, one change,
     const core::String position = bed.source.CopyValue(SV(u8"position"));
     REQUIRE(position.Size() != 0);
 
-    // A Float3 onto a rotation's Euler degrees: each object turned the same.
+    // A Float3 pasted onto a rotation's Euler degrees turns each object the same way.
     core::String reason;
     REQUIRE(bed.source.PasteValue(SV(u8"rotation"), position.AsView(), reason));
     CHECK(bed.source.GetValue(SV(u8"rotation.pitch"), 1).AsFloat() == doctest::Approx(4.0).epsilon(0.001));
     CHECK(bed.changes.Size() == 1u);
-    // Onto a Float2: refused, saying why.
+    // Pasting onto a Float2 is refused, with a reason.
     CHECK_FALSE(bed.source.PasteValue(SV(u8"cone"), position.AsView(), reason));
     CHECK(reason == core::String(u8"A Float3 does not paste onto a Float2"));
     CHECK_FALSE(bed.source.PasteValue(SV(u8"id"), position.AsView(), reason));
 
-    // A struct whole, and a list with its elements.
+    // A whole struct, and a list with its elements.
     bed.a->shape.radius = 3.0f;
     const core::String shape = bed.source.CopyValue(SV(u8"shape"));
     REQUIRE(bed.source.PasteValue(SV(u8"shape"), shape.AsView(), reason));
@@ -797,7 +800,7 @@ TEST_CASE("reflected source: copy and paste through the text format, one change,
     REQUIRE(bed.b->weights.Size() == 2u);
     CHECK(bed.b->weights[1] == doctest::Approx(0.2f));
 
-    // A paste undoes in one.
+    // A paste undoes in one step.
     CHECK(bed.source.Restore(bed.changes.Back(), true));
     CHECK(bed.b->weights.IsEmpty());
 }
@@ -830,7 +833,8 @@ TEST_CASE("reflected source: a Color is a colour; an HDR colour its colour and i
     CHECK(bed.b->glow.w == doctest::Approx(8.0f));
     CHECK(bed.b->glow.z == doctest::Approx(1.0f));
 
-    // A colour copied pastes onto an HDR colour's colour part; reverted, the type's comes back.
+    // A copied colour pastes onto an HDR colour's colour part; a revert brings back the type's
+    // default.
     const core::String tint = bed.source.CopyValue(SV(u8"tint"));
     core::String reason;
     REQUIRE(bed.source.PasteValue(SV(u8"glow.color"), tint.AsView(), reason));
@@ -861,14 +865,14 @@ TEST_CASE("reflected source: the stops editor shows log2 of the intensity and wr
     CHECK(stops.GetValue() == doctest::Approx(2.0)); // 4 is two stops
     stops.RequestFocus();
     for (int i = 0; i < 10; ++i)
-        root->GetEventDispatcher()->InjectKeyDown(static_cast<core::u32>(KeyCode::Up)); // a stop more
+        root->GetEventDispatcher()->InjectKeyDown(static_cast<core::u32>(KeyCode::Up)); // one stop more
     CHECK(bed.a->glow.w == doctest::Approx(8.0f).epsilon(0.01));
     grid->SetSource(nullptr);
 }
 
 namespace
 {
-    // Two emitters, their curve and gradient registered as the application would.
+    // Two emitters, with their curve and gradient types registered as the application would.
     struct EmitterBed
     {
         core::RefPtr<reflected::TestEmitter> a = core::MakeRef<reflected::TestEmitter>(core::DefaultAllocator());
@@ -924,7 +928,7 @@ TEST_CASE("reflected source: a registered curve and gradient are one value each,
     CHECK(color.AsGradient().Colors.Size() == 1u);
     CHECK(color.AsGradient().Alphas.Size() == 2u);
 
-    // Unregistered, the same type is a struct of its own rows.
+    // When not registered, the same type is a struct with its own rows.
     ReflectedPropertySource plain{core::DefaultAllocator()};
     core::Instance one[] = {core::Instance(bed.a.Get(), bed.a->GetType())};
     plain.SetObjects(one);
@@ -946,19 +950,19 @@ TEST_CASE("reflected source: a curve written whole on each object, previewed, co
     REQUIRE(bed.changes.Size() == 1u);
     CHECK(bed.b->size.keyCount == 3);
 
-    // Its most: five keys keep four.
+    // The limit is four keys, so five keys keep four.
     const core::Array<core::CurveKey> five = EmitterBed::Keys({K(0.0f, 0.0f), K(0.2f, 1.0f), K(0.4f, 0.0f), K(0.6f, 1.0f), K(0.8f, 0.0f)});
     bed.source.BeginEdit(SV(u8"size"));
     bed.source.CommitEdit(SV(u8"size"), PropertyWrite{Variant::FromCurve(five.AsSpan())});
     CHECK(bed.a->size.keyCount == 4);
 
-    // A cancel puts each back.
+    // A cancel restores each object's keys.
     bed.source.BeginEdit(SV(u8"size"));
     bed.source.PreviewEdit(SV(u8"size"), PropertyWrite{Variant::FromCurve(three.AsSpan())});
     bed.source.CancelEdit(SV(u8"size"));
     CHECK(bed.a->size.keyCount == 4);
 
-    // Undo the first: the two keys each had.
+    // Undoing the first change restores the two keys each object had.
     REQUIRE(bed.source.Restore(bed.changes[0], true));
     CHECK(bed.a->size.keyCount == 2);
     CHECK(bed.b->size.keys[0].value == doctest::Approx(1.0f));
@@ -987,12 +991,12 @@ TEST_CASE("reflected source: a gradient written whole, its blend too; mixed, rev
     CHECK(ReadPropertyValue(bed.source, SV(u8"size"), PropertyKind::Curve).Mixed);
     CHECK_FALSE(ReadPropertyValue(bed.source, SV(u8"color"), PropertyKind::Gradient).Mixed);
 
-    // Reverted to the type's own.
+    // Revert to the type's own default.
     REQUIRE(bed.source.Revert(SV(u8"color")));
     CHECK(bed.a->color.colorCount == 1);
     CHECK(bed.b->color.interpolation == core::GradientInterpolation::Srgb);
 
-    // Copied from the first, pasted onto both: its like only.
+    // Copy from the first object and paste onto both; it pastes only onto the same shape.
     bed.a->size.keys[1].value = 2.5f;
     const core::String copied = bed.source.CopyValue(SV(u8"size"));
     REQUIRE(copied.Size() != 0);
@@ -1032,12 +1036,12 @@ TEST_CASE("reflected source: a reference is its Guid as text, naming what it poi
     CHECK(socket->plug.bound == 0); // the next resolve binds the new id
     CHECK(source.GetValue(SV(u8"plug"), 0).AsString() == woodText);
 
-    // Not a Guid: refused, the reference kept.
+    // Text that is not a Guid is refused, and the reference is kept.
     source.BeginEdit(SV(u8"plug"));
     source.CommitEdit(SV(u8"plug"), PropertyWrite{Variant(SV(u8"wood"))});
     CHECK(socket->plug.id == wood);
 
-    // Copied onto a reference to its like, refused onto another's.
+    // A copy pastes onto a reference to the same type, and is refused onto a reference to another.
     reflected::BlobFormat format;
     source.SetTextFormat(&format);
     const core::String copied = source.CopyValue(SV(u8"plug"));
@@ -1080,7 +1084,7 @@ TEST_CASE("reflected source: a bare Guid is a reference, to what its property's 
     CHECK(ids->mesh == crate);
     CHECK(source.GetValue(SV(u8"mesh"), 0).AsString() == core::StringView(text, 36));
     source.BeginEdit(SV(u8"mesh"));
-    source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(SV(u8"crate"))}); // not a Guid: refused
+    source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(SV(u8"crate"))}); // not a Guid, so refused
     CHECK(ids->mesh == crate);
     source.BeginEdit(SV(u8"mesh"));
     source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(core::StringView{})});
@@ -1143,7 +1147,7 @@ TEST_CASE("reflected source: a struct the application registers as a reference i
     core::Array<PropertyInfo> rows(core::DefaultAllocator());
     source.GetProperties(SV(u8""), rows);
     REQUIRE(rows.Size() == 2u);
-    CHECK(rows[0].Kind == PropertyKind::Group); // not registered: its own rows
+    CHECK(rows[0].Kind == PropertyKind::Group); // not registered, so it shows its own rows
 
     source.RegisterReferenceType(SV(u8"TestLink"), ReflectedReferenceParts{core::String(u8"id")});
     rows.Clear();
@@ -1151,7 +1155,7 @@ TEST_CASE("reflected source: a struct the application registers as a reference i
     REQUIRE(rows.Size() == 2u);
     CHECK(rows[0].Kind == PropertyKind::Reference);
     CHECK(rows[0].ReferenceType == &core::TypeOf<reflected::TestLink>());
-    CHECK(rows[0].Hint == core::String(u8"TestLink")); // its own editor, before the asset references'
+    CHECK(rows[0].Hint == core::String(u8"TestLink")); // its own editor is chosen before the asset reference editor
     CHECK(source.GetValue(SV(u8"target"), 0).AsString().IsEmpty());
 
     const core::Guid lamp{0x42u, 0x7u};
@@ -1176,7 +1180,7 @@ TEST_CASE("ReflectedPropertySource: an attribute the application registers hints
     core::Array<PropertyInfo> rows(core::DefaultAllocator());
     source.GetProperties(SV(u8""), rows);
     CHECK(rows[0].Kind == PropertyKind::String);
-    CHECK(rows[0].Hint.IsEmpty()); // not registered: a string's field
+    CHECK(rows[0].Hint.IsEmpty()); // not registered, so a plain string field
 
     source.RegisterHintAttribute(SV(u8"boneName"));
     rows.Clear();

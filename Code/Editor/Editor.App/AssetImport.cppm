@@ -3,17 +3,18 @@
 
 // Editor App - :asset_import partition
 //
-// Importing files into the project (Documentation/Specs/editor-gui.md, 5.2, layer 7): one import
-// of one file or many (a drop, Import...), into one group. Each file gets the importers that take
-// its extension (one no importer takes is said and left out), the first chosen; its options; and
-// its review plan, what the import would create, each resource kept or not and named (described
-// at once by a light importer, after reading the file on a worker by a heavy one, its previous
-// import's choices in that group laid over it). The import waits until every file kept is read
-// and described, saying why; then each is imported (its bulk writes flushed on a worker), the
-// editor is told, and the group's assets are cooked. Nothing changes the databases while a cook
-// reads them: an import waits for it, saying so. A name another asset holds (pipeline::
-// FindImportClash) is said on the file: one of another type must be renamed; another file's of its
-// type is replaced or kept beside as the user chooses. The import window is its view.
+// Importing files into the project: one import of one or many files (a drop, Import...) into one
+// group. Each file gets the importers that accept its extension, with the first selected; a file
+// no importer accepts is reported and left out. Each file also gets its options and a review plan:
+// what the import would create, with each resource kept or dropped and named. A light importer
+// describes the file at once; a heavy one reads it on a worker first. The previous import's
+// choices for the file in that group are laid over the plan. The import waits, saying why, until
+// every kept file is read and described; then each is imported (its bulk writes flushed on a
+// worker), the editor is notified, and the group's assets are cooked. Nothing changes the
+// databases while a cook reads them, so an import waits for a running cook and says so. A name
+// another asset holds (pipeline::FindImportClash) is reported on the file: an asset of another
+// type must be renamed, while one of the same type from another file is replaced or kept
+// alongside, as the user chooses. The import window is the view over this.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -48,42 +49,44 @@ export namespace editor::app
             enum class State : u8
             {
                 Reading, ///< a heavy importer reads it on a worker
-                Ready,   ///< described: its plan is what the import would create
+                Ready,   ///< described: its plan shows what the import would create
                 Failed,  ///< it could not be read
             };
             String path;
-            Array<pipeline::IFileImporter*> importers; ///< those that take its extension
+            Array<pipeline::IFileImporter*> importers; ///< the importers that accept its extension
             usize importer = 0;                        ///< the one chosen
             RefPtr<pipeline::ImportOptions> options;   ///< its options (a bare one when it has none)
             RefPtr<Object> prepared;                   ///< what a worker read, for the import
-            pipeline::ImportPlan plan;                 ///< what it would create, kept and named
-            bool kept = true;                          ///< in the import
-            /// What it does over another file's asset of its type under its name (ImportClash):
-            /// Refuse until the user chooses.
+            pipeline::ImportPlan plan;                 ///< what it would create, with what is kept and the names
+            bool kept = true;                          ///< included in the import
+            /// What the import does when another file's asset of the same type holds its name
+            /// (ImportClash); Refuse until the user chooses.
             pipeline::ImportConflictChoice onConflict = pipeline::ImportConflictChoice::Refuse;
             State state = State::Reading;
-            u64 generation = 0;                        ///< a read for an importer since replaced is let go
+            u64 generation = 0;                        ///< a read for an importer that has since been replaced is discarded
 
             [[nodiscard]] pipeline::IFileImporter* Importer() const { return importer < importers.Size() ? importers[importer] : nullptr; }
             [[nodiscard]] StringView Name() const { return pipeline::FileNameOf(path.AsView()); }
         };
 
-        /// One import: its files and the group they go in. The window holds it while it shows.
+        /// One import: its files and the group they go in. The window holds it while it is shown.
         class Session : public RefCounted
         {
         public:
             Array<File> files;
             content::Group* group = nullptr;
             String ledgerPath; ///< the project's import ledger (pipeline::ImportLedgerPath)
-            /// A file's state or plan changed (a worker's read arrived): its view shows it again.
+            /// Called when a file's state or plan changes (a worker's read arrived), so its view
+            /// can show it again.
             Function<void(usize)> onChanged;
-            bool closed = false; // the window went: a read that arrives after is let go
+            bool closed = false; // the window has closed: a read that arrives later is discarded
         };
 
         explicit AssetImport(Services services) : m_services(Move(services)) {}
 
-        /// An import of `paths` into `into`: each file with the importers that take it (one none
-        /// takes is said and left out), each described or being read. Null when none is left.
+        /// Starts an import of `paths` into `into`. Each file gets the importers that accept it (a
+        /// file none accepts is reported and left out) and is described or starts being read.
+        /// Null when no file is left.
         RefPtr<Session> Begin(Span<const String> paths, content::Group& into)
         {
             RefPtr<Session> session = MakeRef<Session>(Context().Importers().Allocator());
@@ -110,8 +113,8 @@ export namespace editor::app
             return session;
         }
 
-        /// Whether `session` needs no review: one file whose importer has no options and plans
-        /// nothing (a script, a UI document), imported at once.
+        /// Whether `session` needs no review: a single file whose importer has no options and
+        /// plans nothing (a script, a UI document), which is imported at once.
         [[nodiscard]] static bool NeedsNoReview(const Session& session)
         {
             if (session.files.Size() != 1)
@@ -130,7 +133,7 @@ export namespace editor::app
             return file.Importer()->FindClash(*session.group, file.path.AsView(), file.plan, session.ledgerPath.AsView());
         }
 
-        /// Chooses another importer for a file: its options anew, described again.
+        /// Chooses another importer for a file: its options start fresh and it is described again.
         void SetImporter(Session& session, usize file, usize importer)
         {
             if (file >= session.files.Size() || importer >= session.files[file].importers.Size() || session.files[file].importer == importer)
@@ -138,7 +141,7 @@ export namespace editor::app
             session.files[file].importer = importer;
             Describe(session, file);
         }
-        /// Moves the import to another group: a previous import's choices there laid over each plan.
+        /// Moves the import to another group, laying a previous import's choices there over each plan.
         void SetGroup(Session& session, content::Group& group)
         {
             session.group = &group;
@@ -183,7 +186,8 @@ export namespace editor::app
             return true;
         }
 
-        /// Imports every file kept, each with its plan as chosen; false (said) when it cannot yet.
+        /// Imports every kept file with its plan as chosen; false (with the reason reported) when
+        /// it cannot yet.
         bool Commit(Session& session)
         {
             String why;
@@ -203,7 +207,7 @@ export namespace editor::app
         [[nodiscard]] editor::EditorContext& Context() const { return *m_services.context; }
         [[nodiscard]] editor::EditorProject* Project() const { return m_services.context->Project(); }
 
-        // A file described at once (a light importer), or read on a worker first (a heavy one).
+        // Describes a file at once (a light importer), or reads it on a worker first (a heavy one).
         void Describe(Session& session, usize index)
         {
             File& file = session.files[index];
@@ -237,7 +241,7 @@ export namespace editor::app
                                         RefPtr<Object> prepared = *holder;
                                         allocator->Delete(holder);
                                         if (keep->closed || index >= keep->files.Size() || keep->files[index].generation != generation)
-                                            return; // the window went, or another importer was chosen meanwhile
+                                            return; // the window closed, or another importer was chosen meanwhile
                                         File& read = keep->files[index];
                                         if (!result.IsOk())
                                         {
@@ -257,7 +261,8 @@ export namespace editor::app
                                     });
         }
 
-        // One file into the group: waiting for a cook; its bulk writes flushed on a worker.
+        // Imports one file into the group, waiting for a running cook; its bulk writes are flushed
+        // on a worker.
         void ImportOne(String path, pipeline::IFileImporter* importer, RefPtr<pipeline::ImportOptions> options, RefPtr<Object> prepared, content::Group& group,
                        pipeline::ImportConflictChoice onConflict, String ledgerPath)
         {
@@ -294,8 +299,8 @@ export namespace editor::app
                 Finish(*primary, *importer, options);
                 return;
             }
-            // The bulk writes on a worker (pure file IO; the job keeps cooks out), the prepared
-            // payload kept alive for the writes that borrow from it.
+            // Run the bulk writes on a worker (pure file IO; the job keeps cooks out), keeping the
+            // prepared payload alive for the writes that borrow from it.
             auto* writes = deferred.Release();
             const Guid primaryId = primary->Id();
             m_services.jobs->Submit(Format(u8"Writing {}", pipeline::FileNameOf(path.AsView())).AsView(),
@@ -328,8 +333,8 @@ export namespace editor::app
                                         Finish(*written, *importer, options);
                                     });
         }
-        // Said, told to the editor (its pages, an agent), and the group's assets cooked: a
-        // re-import of the same bytes copies nothing a watcher would notice.
+        // Reports the import, notifies the editor (its pages, an agent) and cooks the group's
+        // assets. A re-import of the same bytes copies nothing a file watcher would notice.
         void Finish(content::Instance& primary, pipeline::IFileImporter& importer, const RefPtr<pipeline::ImportOptions>& options)
         {
             Context().Notify(editor::NoticeKind::Success, Format(u8"Imported {} ({}).", primary.Name(), importer.Label()).AsView());

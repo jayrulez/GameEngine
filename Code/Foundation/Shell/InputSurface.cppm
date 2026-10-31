@@ -7,21 +7,21 @@
 // shell devices.
 //
 //   InputSurface  - a rectangular slice of a window (a `ContentFit`) that presents
-//                   the SAME device interfaces (IMouse/IKeyboard/IGamepad/ITouch)
-//                   as the shell, but TRANSFORMED into the surface's content
-//                   space and GATED by whether the surface is hovered/focused.
-//                   Drop-in: any code written against IMouse works unchanged when
-//                   handed a surface's mouse instead of the shell's.
+//                   the same device interfaces (IMouse/IKeyboard/IGamepad/ITouch)
+//                   as the shell, but transformed into the surface's content
+//                   space and gated by whether the surface is hovered or focused.
+//                   Any code written against IMouse works unchanged when handed a
+//                   surface's mouse instead of the shell's.
 //
-//   InputRouter   - the single owner of hover/focus/capture across a set of
+//   InputRouter   - the single owner of hover, focus and capture across a set of
 //                   surfaces. Once per frame (after the shell pumps events) it
-//                   reads the raw pointer + event stream and updates every surface's
-//                   gate. Exactly one surface is hovered, one focused, one captures
-//                   the pointer while a button is held.
+//                   reads the raw pointer and event stream and updates every
+//                   surface's gate. One surface is hovered, one focused, and one
+//                   captures the pointer while a button is held.
 //
 // Event-first: the raw device snapshots the surface reads are themselves a fold
 // over IInputManager::Events(), so polling a surface is polling the
-// event stream through a transform. The router consults HoverWindow()/the event
+// event stream through a transform. The router consults HoverWindow() and the event
 // stream for its routing decisions.
 
 module;
@@ -40,7 +40,7 @@ export namespace foundation::shell
 {
     class InputSurface; // defined below; facades hold a back-pointer.
 
-    // --- transformed + gated device facades -------------------------------------
+    // --- transformed and gated device facades -------------------------------------
     // Each wraps its owning surface. Method bodies are defined out-of-line once
     // InputSurface is complete.
 
@@ -63,7 +63,7 @@ export namespace foundation::shell
         [[nodiscard]] bool IsButtonPressed(MouseButton b) const override;
         [[nodiscard]] bool IsButtonReleased(MouseButton b) const override;
 
-        // Cursor/relative state is global device state - pass through to the raw
+        // Cursor and relative state is global device state, so it passes through to the raw
         // mouse (the active surface drives it).
         [[nodiscard]] bool RelativeMode() const override;
         void SetRelativeMode(bool enabled) override;
@@ -118,14 +118,13 @@ export namespace foundation::shell
         core::i32 m_index = 0;
     };
 
-    // Touch, transformed + spatially gated: raw finger coords (NORMALIZED window space,
-    // SDL semantics) map through the surface's ContentFit into CONTENT-NORMALIZED [0,1]
+    // Touch, transformed and spatially gated: raw finger coords (normalized window space,
+    // SDL semantics) map through the surface's ContentFit into content-normalized [0,1]
     // points; fingers outside the drawn content (other panels, letterbox bars) are
-    // FILTERED OUT entirely. The REGION is the gate - unlike mouse/keyboard, touch does
+    // filtered out entirely. The region is the gate: unlike mouse and keyboard, touch does
     // not follow hover (a touch-only device never moves the hover pointer), so a finger
     // in the rect is the surface's regardless of pointer state. Needs SetWindowSize
-    // (pushed with the region each frame) to convert normalized->pixel space.
-    // is mouse/keyboard).
+    // (pushed with the region each frame) to convert normalized to pixel space.
     class SurfaceTouch final : public ITouch
     {
     public:
@@ -171,7 +170,7 @@ export namespace foundation::shell
         void SetWindowSize(core::Float2 size) noexcept { m_windowSize = size; }
         [[nodiscard]] core::Float2 WindowSize() const noexcept { return m_windowSize; }
         // Re-target the surface to a different window (e.g. a dockable panel hosting the surface is
-        // undocked into a floating OS window - the router hover-tests by window id).
+        // undocked into a floating OS window; the router hover-tests by window id).
         void SetWindow(core::u32 window) noexcept { m_window = window; }
         [[nodiscard]] const core::ContentFit& Fit() const noexcept { return m_fit; }
         [[nodiscard]] core::u32 Window() const noexcept { return m_window; }
@@ -193,7 +192,7 @@ export namespace foundation::shell
         [[nodiscard]] core::Float2 ContentMouse() const noexcept { return m_contentMouse; }
         [[nodiscard]] core::Float2 ContentDelta() const noexcept { return m_contentDelta; }
 
-        // --- transformed + gated device facades ---
+        // --- transformed and gated device facades ---
         [[nodiscard]] IMouse* Mouse() noexcept { return &m_mouse; }
         [[nodiscard]] IKeyboard* Keyboard() noexcept { return &m_keyboard; }
         [[nodiscard]] ITouch* Touch() noexcept { return &m_touch; }
@@ -202,7 +201,7 @@ export namespace foundation::shell
             return (index >= 0 && index < kMaxGamepads) ? &m_gamepads[index] : nullptr;
         }
 
-        // --- internals the facades / router use ---
+        // --- internals the facades and router use ---
         [[nodiscard]] IInputManager* Raw() const noexcept { return m_raw; }
 
         // Called by InputRouter once per frame with this surface's resolved gate.
@@ -335,7 +334,7 @@ export namespace foundation::shell
 
     namespace detail
     {
-        // Window-normalized -> content-normalized through the surface's fit; false when the
+        // Window-normalized to content-normalized through the surface's fit; false when the
         // finger is outside the drawn content (spatial gating).
         [[nodiscard]] inline bool TransformTouch(const InputSurface& s, const TouchPoint& raw,
                                                  TouchPoint& out)
@@ -455,9 +454,9 @@ export namespace foundation::shell
         // pointer). Off (default): focus changes on a click over a surface.
         void SetFocusFollowsHover(bool on) noexcept { m_focusFollowsHover = on; }
 
-        // Let an external overlay (e.g. ImGui, via io.WantCaptureMouse/WantCaptureKeyboard) swallow input:
-        // while set, no surface is hovered/focused, so the viewport cameras ignore the wheel/clicks/keys the
-        // overlay is using. Call each frame before Update() (after the overlay's NewFrame).
+        // Let an external overlay (e.g. ImGui, through io.WantCaptureMouse/WantCaptureKeyboard) swallow
+        // input: while set, no surface is hovered or focused, so the viewport cameras ignore the wheel,
+        // clicks and keys the overlay is using. Call each frame before Update() (after the overlay's NewFrame).
         void SetExternalCapture(bool mouse, bool keyboard) noexcept
         {
             m_extMouseCapture = mouse;
@@ -467,7 +466,7 @@ export namespace foundation::shell
         [[nodiscard]] InputSurface* Hovered() const noexcept { return m_hovered; }
         [[nodiscard]] InputSurface* Focused() const noexcept { return m_focused; }
 
-        // Once per frame, after the shell pumps OS events. Resolves hover/focus/
+        // Once per frame, after the shell pumps OS events. Resolves hover, focus and
         // capture and pushes each surface's gate.
         void Update()
         {
@@ -476,9 +475,9 @@ export namespace foundation::shell
             const core::Float2 delta{rawMouse->DeltaX(), rawMouse->DeltaY()};
             const core::u32 hoverWindow = m_raw->HoverWindow();
 
-            // Which surface is under the pointer? Last match wins (topmost added). When an external overlay
-            // (e.g. an ImGui window under the pointer) has captured the mouse this frame, NO surface is
-            // hovered - so the overlay swallows the wheel/clicks and the viewport cameras don't also react.
+            // The surface under the pointer: the last match wins (topmost added). When an external overlay
+            // (e.g. an ImGui window under the pointer) has captured the mouse this frame, no surface is
+            // hovered, so the overlay swallows the wheel and clicks and the viewport cameras don't react.
             m_hovered = nullptr;
             if (!m_extMouseCapture)
             {
@@ -530,9 +529,9 @@ export namespace foundation::shell
                 m_hovered = nullptr;
             }
 
-            // Capture-leak watchdog ("scene view mouse capture never released" was a real,
-            // hard-to-repro occurrence): the one-shot check below trips loudly if capture ever
-            // persists with no mouse button down - the leak signature.
+            // Capture-leak watchdog: the one-shot check below logs an error if capture ever
+            // persists with no mouse button down, the signature of a capture that is never
+            // released.
             if (m_captured != capturedBefore)
             {
                 m_captureNoButtonFrames = 0;
@@ -559,7 +558,7 @@ export namespace foundation::shell
             InputSurface* target = m_captured != nullptr ? m_captured : releasing != nullptr ? releasing : m_hovered;
 
             // Focus resolution. An external overlay capturing the keyboard (e.g. an ImGui text field) drops
-            // surface focus so typing doesn't also drive the viewport (WASD etc.).
+            // surface focus so typing doesn't also drive the viewport (WASD and the like).
             if (m_extKeyboardCapture)
             {
                 m_focused = nullptr;
@@ -651,10 +650,10 @@ export namespace foundation::shell
         bool m_extMouseCapture = false;    // external overlay (ImGui) owns the mouse this frame
         bool m_extKeyboardCapture = false; // external overlay owns the keyboard this frame
 
-        // I2 capture-leak watchdog (see Update): frames capture has been held with no button down,
+        // Capture-leak watchdog (see Update): frames capture has been held with no button down,
         // and a one-shot guard so the stuck-capture error logs once per episode, not every frame.
         core::u32 m_captureNoButtonFrames = 0;
         bool m_captureLeakLogged = false;
-        static constexpr core::u32 kCaptureLeakFrames = 30; // ~0.5s at 60fps before we shout
+        static constexpr core::u32 kCaptureLeakFrames = 30; // about 0.5s at 60fps before it logs
     };
 }

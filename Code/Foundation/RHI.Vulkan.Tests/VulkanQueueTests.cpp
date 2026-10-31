@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Vulkan backend: queue-family rules. Three findings from the Beef port's MultiQueue run:
-// barriers named graphics stages on a compute-only family, the sample framework never asked
-// for a compute queue, and the device-latched swap-chain semaphores went to whichever queue
-// submitted first. The stage rule is pure and pinned here; the device cases run on a real
-// adapter and skip without one.
+// Vulkan backend: queue-family rules. Barriers must not name graphics stages on a compute-only
+// family, a requested compute queue is granted when the adapter has a compute family, and the
+// device-latched swap-chain semaphores belong to the graphics queue's submit whichever queue
+// submits first. The stage rule is pure and pinned here; the device cases run on a real adapter and
+// skip without one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "RHI.Vulkan/VkIncludes.h"
@@ -28,8 +28,8 @@ TEST_CASE("vk.barrier: stage masks are cut to what the recording queue family ca
     // Transfer-only: no shader stage at all; a transfer stage survives.
     CHECK(maskStagesForQueue(shaderAccess | VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, QueueType::Transfer) ==
           VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT);
-    // A mask the cut would empty (a render-target state on a compute queue) becomes ALL_COMMANDS
-    // - valid on every family, merely stronger - never zero, which is invalid.
+    // A mask the cut would empty (a render-target state on a compute queue) becomes ALL_COMMANDS,
+    // valid on every family and merely stronger, never zero, which is invalid.
     CHECK(maskStagesForQueue(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, QueueType::Compute) ==
           VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
     // Zero in, zero out (the caller decides what an empty mask means).
@@ -41,9 +41,9 @@ TEST_CASE("vk.barrier: stage masks are cut to what the recording queue family ca
 
 TEST_CASE("vk.barrier: the access half is cut with the stage half, as one pair")
 {
-    // The Beef port's second finding: cutting stages alone left VERTEX_ATTRIBUTE_READ on a
-    // compute queue under ALL_COMMANDS - invalid, because ALL_COMMANDS expands per family and
-    // the compute expansion has no vertex-input stage. Stage and access must move together.
+    // Cutting stages alone leaves VERTEX_ATTRIBUTE_READ on a compute queue under ALL_COMMANDS,
+    // which is invalid because ALL_COMMANDS expands per family and the compute expansion has no
+    // vertex-input stage. Stage and access must move together.
     using vk::maskForQueue;
     using vk::getStageAccess;
     const vk::StageAccess vertex = getStageAccess(ResourceState::VertexBuffer);
@@ -115,8 +115,8 @@ TEST_CASE("vk.queues: a requested compute queue is granted exactly when the adap
         MemoryBarrier mb{};
         mb.oldState = ResourceState::ShaderWrite;
         mb.newState = ResourceState::ShaderRead;
-        // The MultiQueue sample's exact hand-over: a vertex buffer handed to compute as
-        // storage - the barrier that carried VERTEX_ATTRIBUTE_READ onto the compute family.
+        // The MultiQueue sample's hand-over: a vertex buffer handed to compute as storage, whose
+        // barrier would carry VERTEX_ATTRIBUTE_READ onto the compute family unmasked.
         BufferDesc bd{};
         bd.size = 256;
         bd.usage = BufferUsage::Vertex | BufferUsage::Storage;

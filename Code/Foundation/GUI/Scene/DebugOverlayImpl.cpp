@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - module implementation unit: the debug overlay's input half (E8c of
-// Specs/gui-lab-evolution.md), drawn by a root over its tree in its own space: the focus path,
-// the tab order, the last directional move, the node under the pointer. Hairlines are a device pixel; text is in the host's
-// debug font, and left out without one.
+// GUI - module implementation unit: the input part of the debug overlay, which a root draws over
+// its tree in its own space. It shows the focus path, the tab order, the last directional move and
+// the node under the pointer. Hairlines are one device pixel wide. Text uses the host's debug font
+// and is left out when there is none.
 
 module;
 #include "Core/Prelude.h"
@@ -71,7 +71,7 @@ namespace foundation::gui
 
         if (m_debugOverlay.TabOrder)
         {
-            // Each stop numbered at its top-left, joined centre to centre in the order Tab takes.
+            // Numbers each stop at its top-left and joins the stops centre to centre in Tab order.
             const core::Array<Node*> stops = m_eventDispatcher.TabStops();
             core::Float2 previous{};
             for (usize i = 0; i < stops.Size(); ++i)
@@ -95,8 +95,8 @@ namespace foundation::gui
         if (m_debugOverlay.Navigation)
             if (const NavTrace& trace = m_eventDispatcher.GetLastNavigation(); trace.Any)
             {
-                // Where it moved from, every candidate it weighed (scored; "~" for one not
-                // overlapping across the move), and an arrow to the one chosen.
+                // Draws where the move started, every candidate it weighed with its score ("~" for
+                // one that does not overlap across the move), and an arrow to the chosen one.
                 const Transform2D toRoot = GetTransform().GetInverse();
                 const Rect from = toRoot.TransformRect(trace.From);
                 const core::Float2 fromCentre{from.x + from.width * 0.5f, from.y + from.height * 0.5f};
@@ -127,8 +127,8 @@ namespace foundation::gui
         if (m_debugOverlay.FocusPath)
             if (const Node* focused = m_eventDispatcher.GetFocusNode())
             {
-                // The focused node strong, each node holding it fainter the further out, and the
-                // path named from the focused node outward.
+                // Draws the focused node strongly and each ancestor fainter the further out it is,
+                // and names the path from the focused node outward.
                 core::String path;
                 f32 alpha = 0.7f;
                 int depth = 0;

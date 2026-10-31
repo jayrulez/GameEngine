@@ -7,7 +7,7 @@ target_link_libraries(Materials
 
 target_sources(Materials
     PRIVATE
-        TypesReflectionImpl.cpp   # render-state enum reflection (GCC hygiene: out of the interface)
+        TypesReflectionImpl.cpp   # render-state enum reflection (kept out of the interface for GCC)
     PUBLIC
         FILE_SET materials_modules TYPE CXX_MODULES FILES
             Types.cppm

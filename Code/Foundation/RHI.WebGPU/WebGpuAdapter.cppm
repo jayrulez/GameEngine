@@ -3,10 +3,10 @@
 
 /// foundation.rhi.webgpu:adapter - Adapter over WGPUAdapter.
 ///
-/// GetInfo maps WGPUAdapterInfo/limits/features onto the RHI's AdapterInfo;
-/// CreateDevice performs the async wgpuAdapterRequestDevice through the
-/// ProcessEvents pump (see :api) and registers the device-lost + uncaptured-error
-/// callbacks before the WebGpuDevice wrapper exists to receive them.
+/// GetInfo maps WGPUAdapterInfo, limits and features onto the RHI's AdapterInfo;
+/// CreateDevice performs the async wgpuAdapterRequestDevice through the ProcessEvents
+/// pump (see :api) and registers the device-lost and uncaptured-error callbacks before
+/// the WebGpuDevice wrapper exists to receive them.
 
 module;
 #include "Core/Prelude.h"
@@ -34,9 +34,9 @@ export namespace foundation::rhi::webgpu
 
         [[nodiscard]] WGPUAdapter Handle() const { return m_adapter; }
 
-        // The wgpu backend this adapter drives (Vulkan/D3D12/...). One PHYSICAL GPU appears
+        // The wgpu backend this adapter drives (Vulkan/D3D12/...). One physical GPU appears
         // once per instance backend, so the enumeration ordering needs this to prefer the
-        // backend that can actually present on the platform.
+        // backend that can present on the platform.
         [[nodiscard]] WGPUBackendType WgpuBackendType() const
         {
             WGPUAdapterInfo info = WGPU_ADAPTER_INFO_INIT;
@@ -117,7 +117,7 @@ export namespace foundation::rhi::webgpu
             m_api->wgpuSupportedFeaturesFreeMembers(features);
 
             // WebGPU guarantees per-attachment blend state. Push-constant support
-            // (Immediates) is decided at CreateDevice - the device stamps its
+            // (Immediates) is decided at CreateDevice; the device stamps its
             // maxPushConstantSize accordingly. Occlusion works via the pass-begin
             // declaration (RenderPassDesc.occlusionQuerySet).
             out.supportedFeatures.independentBlend = true;
@@ -135,15 +135,15 @@ export namespace foundation::rhi::webgpu
                 WebGpuDevice* device = nullptr;
             };
             // Heap record handed to the wrapper below (AdoptLostRoute): WebGpuDevice::Destroy
-            // frees it after releasing the wgpu device + flushing pending callbacks, the one
+            // frees it after releasing the wgpu device and flushing pending callbacks, the one
             // point where the still-registered lost callback provably cannot fire again.
             auto* lostRoute = m_allocator.New<LostRoute>();
 
             Array<WGPUFeatureName> required;
             AdapterInfo info;
             GetInfo(info);
-            // Enable what the adapter has, like the Vulkan backend does - callers
-            // gate on device->features, not on what they requested.
+            // Enable what the adapter has, like the Vulkan backend does; callers gate on
+            // device->features, not on what they requested.
             if (info.supportedFeatures.timestampQueries)
             {
                 required.PushBack(WGPUFeatureName_TimestampQuery);
@@ -152,8 +152,8 @@ export namespace foundation::rhi::webgpu
             {
                 required.PushBack(WGPUFeatureName_TextureCompressionBC);
             }
-            // ASTC = the mobile-web compressed family (asset-variants Decision 4). Desktop browsers
-            // usually expose only -bc; mobile browsers expose -astc. Request whichever the adapter has.
+            // ASTC is the mobile-web compressed family. Desktop browsers usually expose only BC;
+            // mobile browsers expose ASTC. Request whichever the adapter has.
             if (info.supportedFeatures.textureCompressionASTC)
             {
                 required.PushBack(WGPUFeatureName_TextureCompressionASTC);
@@ -162,11 +162,11 @@ export namespace foundation::rhi::webgpu
             {
                 required.PushBack(WGPUFeatureName_DepthClipControl);
             }
-            // Push constants = WebGPU IMMEDIATES (wgpu-native feature today; the field
-            // is in the STANDARD pipeline-layout descriptor, so browsers follow). The
-            // feature ENUM is wgpu-native-only; Dawn/emdawnwebgpu has no immediates path,
-            // so web routes SetPushConstants through the UNIFORM-BUFFER emulation (the
-            // push_constant_emulator partition) - fully functional, just not Immediates.
+            // Push constants are WebGPU immediates (a wgpu-native feature; the field is in
+            // the standard pipeline-layout descriptor). The feature enum is
+            // wgpu-native-only and Dawn/emdawnwebgpu has no immediates path, so on web
+            // SetPushConstants goes through the uniform-buffer emulation (the
+            // push_constant_emulator partition), which is fully functional.
 #if PLATFORM_WEB
             const bool immediatesSupported = false;
 #else
@@ -188,9 +188,9 @@ export namespace foundation::rhi::webgpu
             }
             LogInfof("WebGpuAdapter: float32-filterable %s",
                      f32Filter ? "ENABLED" : "MISSING (rgba32f linear-sample will fail)");
-            // Encoder-level WriteTimestamp (the RHI's CommandEncoder::WriteTimestamp,
-            // used by the GPU GraphProfiler) is a separate wgpu feature from
-            // pass-boundary timestamps. The enum is wgpu-native-only - unavailable on web.
+            // Encoder-level WriteTimestamp (the RHI's CommandEncoder::WriteTimestamp, used
+            // by the GPU GraphProfiler) is a separate wgpu feature from pass-boundary
+            // timestamps. The enum is wgpu-native-only, so it is unavailable on web.
             bool encoderTimestampsEnabled = false;
 #if !PLATFORM_WEB
             const auto encoderTimestamps =
@@ -255,9 +255,9 @@ export namespace foundation::rhi::webgpu
                           reinterpret_cast<const char*>(message.data));
             };
 
-            // Heap record + orphan-on-timeout (the fence-fix pattern): a stack record would
-            // leave the still-registered callback writing through a dead frame if the pump
-            // gives up before the request resolves.
+            // A heap record, orphaned on timeout: a stack record would leave the
+            // still-registered callback writing through a dead frame if the pump gives up
+            // before the request resolves.
             struct Result
             {
                 IAllocator* allocator = nullptr;
@@ -325,10 +325,10 @@ export namespace foundation::rhi::webgpu
             // The RHI's timestamp feature is CommandEncoder::WriteTimestamp, which needs the
             // in-encoder feature; a browser's TimestampQuery alone writes nothing there.
             wrapper->features.timestampQueries = encoderTimestampsEnabled;
-            // SetPushConstants works EITHER way - native Immediates or the uniform-buffer
-            // emulation - so the budget is always advertised. Reporting 0 under emulation
-            // would make capability-checking callers disable the very paths the emulator
-            // exists to serve.
+            // SetPushConstants works either way (native immediates or the uniform-buffer
+            // emulation), so the budget is always advertised. Reporting 0 under emulation would
+            // make capability-checking callers disable the very paths the emulator exists to
+            // serve.
             wrapper->features.maxPushConstantSize = 128u;
             wrapper->SetImmediatesSupported(immediatesSupported);
             lostRoute->device = wrapper;

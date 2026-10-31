@@ -244,7 +244,7 @@ TEST_CASE("string: Replace swaps every matching code unit in place")
     CHECK(s.Size() == 8u);              // size-preserving
     CHECK(s.CStr()[s.Size()] == u'\0'); // still null-terminated
 
-    // No match => zero replaced, string untouched.
+    // No match: nothing replaced, string untouched.
     String t = u8"nothing";
     CHECK(t.Replace(u8'x', u8'y') == 0u);
     CHECK(t == u8"nothing");

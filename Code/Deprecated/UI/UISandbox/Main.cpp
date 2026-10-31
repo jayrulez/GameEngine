@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// UI Sandbox - the first on-screen test of foundation.ui (the Sedulous.UI port). Builds a small View tree
-// (a themed FlexLayout panel of controls), styles it with the ported DarkTheme StyleSheet, lays it out
-// with UIContext, and renders it through the same VG -> VGRenderer -> RHI path as VGSandbox/GUISandbox.
-// Input is driven by a fullscreen InputSurface (gated by an InputRouter) pumped into the UIContext's
-// InputManager via UiInputBridge; keyboard/text go through the bridge's event path, and the text field's
-// IME is driven from focus (WantsTextInput). A faithful-but-minimal analogue of Sedulous's UISandbox
-// (sans the Toolkit), to prove the port end-to-end.
+// UI Sandbox: an on-screen showcase of foundation.ui. It builds tabs of controls, layouts, overlays
+// and toolkit widgets, styles them with a switchable theme, lays them out with UIContext, and renders
+// through the same VG, VGRenderer and RHI path as VGSandbox and GUISandbox. Input comes from a
+// fullscreen InputSurface (gated by an InputRouter) pumped into the UIContext's InputManager through
+// UiInputBridge; keyboard and text go through the bridge's event path, and the text field's IME is
+// driven from focus (WantsTextInput).
 
 #include <new>
 #include <cstdio>
@@ -51,7 +50,7 @@ namespace vfs = foundation::vfs;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root: its single choice of ambient allocator.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -63,12 +62,11 @@ namespace
 
 namespace
 {
-    // VG shader source now lives in foundation.vg.renderer (VertexShaderSource/FragmentShaderSource),
-    // shared by every VG consumer instead of being copied into each sample.
 
 
-// Engine data under the data root (discovered at startup - the one mechanism every executable
-// uses; this sample has no argv, so there is no --data-root here).
+
+// Engine data under the data root, discovered at startup as every executable does. This sample has
+// no argv, so there is no --data-root here.
 constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
 
     // Appends "<n>" into buf (small values); caller supplies the prefix.
@@ -90,22 +88,21 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
             buf[pos++] = d[dc - 1 - k];
     }
 
-    // A byte RGBA color for procedural theme images (mirrors Sedulous Color32).
+    // A byte RGBA color for procedural theme images.
     struct Px
     {
         u8 r, g, b, a;
     };
 
-    // Byte -> float Color helper (Sedulous Color(r,g,b,a) literals).
+    // Builds a float Color from byte components.
     inline Color Rgb(f32 r, f32 g, f32 b, f32 a = 255.0f)
     {
         return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
-    // Generate a rounded-rectangle RGBA image with per-corner radii (faithful port of the Sedulous
-    // UISandbox MakeRoundedRectImage; the uniform-radius overload there is exactly this with all four
-    // radii equal, so it delegates). Corner pixels outside the arc are transparent; the 1px ring just
-    // inside the arc (and, for square corners, the outer edge) is drawn in the border color.
+    // Generate a rounded-rectangle RGBA image with per-corner radii (the uniform-radius overload below
+    // delegates here). Corner pixels outside the arc are transparent; the 1px ring just inside the arc
+    // (and, for square corners, the outer edge) is drawn in the border color.
     inline UniquePtr<image::OwnedImageData> MakeRoundedRectImage(u32 w, u32 h, Px fill, Px border,
                                                                  i32 rTL, i32 rTR, i32 rBR, i32 rBL)
     {
@@ -189,9 +186,9 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         return MakeRoundedRectImage(w, h, fill, border, radius, radius, radius, radius);
     }
 
-    // A tree row view: draws depth-indented text (TreeView overlays the expand arrows). No
-    // RTTI_OBJECT (this sample TU imports modules only, not the reflection header) - the adapter recovers it
-    // via static_cast since it created the view.
+    // A tree row view: draws depth-indented text (TreeView overlays the expand arrows). It has no
+    // RTTI_OBJECT, since this sample imports modules only, not the reflection header; the adapter
+    // recovers it with static_cast because it created the view.
     class TreeItemView final : public foundation::ui::View
     {
     public:
@@ -310,10 +307,10 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         }
     };
 
-    class DragChip; // fwd
+    class DragChip;
 
-    // Custom drag payload carrying the source chip. No RTTI_OBJECT (sample TU) - the drop targets
-    // guard on Format() == "demo/chip" and static_cast, since only chips produce that format.
+    // Custom drag payload carrying the source chip. It has no RTTI_OBJECT (see TreeItemView), so the
+    // drop targets check Format() == "demo/chip" and static_cast, since only chips produce that format.
     class ChipDragData final : public foundation::ui::DragData
     {
     public:
@@ -324,7 +321,7 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         }
     };
 
-    // A draggable coloured chip (ColorView + IDragSource).
+    // A draggable coloured chip (a ColorView and an IDragSource).
     class DragChip final : public foundation::ui::ColorView, public foundation::ui::IDragSource
     {
     public:
@@ -355,7 +352,7 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         }
     };
 
-    // A container that accepts chip drops and reorders by swapping colours (FlexLayout + IDropTarget).
+    // A container that accepts chip drops and reorders by swapping colours (a FlexLayout and an IDropTarget).
     class ChipReorderContainer final : public foundation::ui::FlexLayout,
                                        public foundation::ui::IDropTarget
     {
@@ -398,7 +395,7 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         }
     };
 
-    // A drop box that recolours to the dropped chip's colour (View + IDropTarget).
+    // A drop box that recolours to the dropped chip's colour (a View and an IDropTarget).
     class ColorDropBox final : public foundation::ui::View, public foundation::ui::IDropTarget
     {
     public:
@@ -601,9 +598,9 @@ constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         i32 m_count;
     };
 
-    // A flat drag-to-reorder list source for the Toolkit tab's DraggableTreeView (port of the Sedulous
-    // UISandbox ReorderableListAdapter). Implements the toolkit IReorderableTreeAdapter (ITreeAdapter +
-    // CanMove/MoveItem); the DraggableTreeView borrows it, so the app keeps it alive as a member.
+    // A flat drag-to-reorder list source for the Toolkit tab's DraggableTreeView. Implements the toolkit
+    // IReorderableTreeAdapter (ITreeAdapter plus CanMove and MoveItem); the DraggableTreeView borrows it,
+    // so the app keeps it alive as a member.
     class ReorderableListAdapter final : public ui::toolkit::IReorderableTreeAdapter
     {
     public:
@@ -722,26 +719,26 @@ private:
     void BuildLayersTab(ui::TabView* tabView); // VG layers: group opacity, filter, backdrop-filter
     void BuildRichTextTab(ui::TabView* tabView); // runs from markup: colour, weight, size, links, effects
     void BuildToolkitTab(
-        ui::TabView* tabView); // foundation.ui.toolkit: bars + split + tree + color picker
+        ui::TabView* tabView); // foundation.ui.toolkit: bars, split, tree, color picker
     void
-    BuildPropertyGridTab(ui::TabView* tabView); // foundation.ui.toolkit: PropertyGrid + all editors
+    BuildPropertyGridTab(ui::TabView* tabView); // foundation.ui.toolkit: PropertyGrid and all editors
     void
     BuildCurveEditorTab(ui::TabView* tabView); // foundation.ui.toolkit: CurveCanvas tangent editor
     void
     BuildNodeGraphTab(ui::TabView* tabView); // foundation.ui.toolkit: NodeGraphCanvas state machine
     void BuildDockingTab(
-        ui::TabView* tabView); // foundation.ui.application: DockManager + OS floating windows
+        ui::TabView* tabView); // foundation.ui.application: DockManager and OS floating windows
     void BuildPauseMenuTab(
         ui::TabView* tabView); // loads a .sml screen via a VFS-backed resource provider
 
-    // Window size (was provided by SampleApp; re-captured from the main window in OnStartup).
+    // Window size, captured from the main window in OnStartup.
     u32 m_width = 820;
     u32 m_height = 720;
 
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
 
     // VFS-backed resource provider for loading the pause-menu .sml (foundation.ui.vfs over a NativeFileSystem
-    // rooted at Data/Samples/UI). Kept alive for the app's lifetime (Sedulous keeps mGuiResourceProvider).
+    // rooted at Data/Samples/UI). Kept alive for the app's lifetime.
     UniquePtr<vfs::NativeFileSystem> m_uiFs;
     UniquePtr<ui::vfs::VfsResourceProvider> m_resProvider;
 
@@ -753,13 +750,13 @@ private:
     UniquePtr<image::OwnedImageData> m_testImage; // borrowed by the ImageView/DrawableView demos
     RefPtr<ui::RepeatButton> m_repeatBtn;         // ticked each frame (hold-to-repeat)
     i32 m_themeIndex =
-        0; // 0=Dark 1=Light 2=RoundedDark 3=Textured 4=Breeze(.sss) (Sedulous ApplyTheme)
+        0; // 0 Dark, 1 Light, 2 RoundedDark, 3 Textured, 4 Breeze (.sss); see ApplyTheme
     RefPtr<ui::Button> m_themeBtn; // shows the current theme name; cycles on click
     void ApplyTheme();
     [[nodiscard]] RefPtr<ui::StyleSheet> CreateTexturedTheme(); // procedurally-skinned image theme
     [[nodiscard]] RefPtr<ui::StyleSheet>
     LoadSSSTheme(StringView path, ui::ThemePalette palette); // .sss via provider
-    void EnsureResourceProvider(); // creates m_uiFs + m_resProvider once (rooted at <assets>/ui)
+    void EnsureResourceProvider(); // creates m_uiFs and m_resProvider once (<data root>/Samples/UI)
     i32 m_repeatCount = 0;
     UniquePtr<DemoListAdapter> m_listAdapter; // borrowed by the ListView (Data Controls tab)
     UniquePtr<DemoTreeAdapter> m_treeAdapter;
@@ -770,13 +767,14 @@ private:
     ui::toolkit::ToolkitThemeExtension m_toolkitThemeExt;
     UniquePtr<ReorderableListAdapter> m_reorderAdapter;
 
-    // Docking: the runtime docking host (floats panels into real OS windows) + a handle to the DockManager
-    // (the tab tree owns it via AddView; we keep a ref for lifetime clarity). Constructed in OnStartup.
+    // Docking: the runtime docking host (floats panels into real OS windows) and a handle to the
+    // DockManager (the tab tree owns it through AddView; we keep a reference for clarity about its
+    // lifetime). Constructed in OnStartup.
     UniquePtr<ui::application::RuntimeDockableWindowHost> m_dockHost;
     RefPtr<ui::toolkit::DockManager> m_dockManager;
 
-    // The reusable UI-on-runtime bridge (owns the UIContext, per-window VG + input). Declared LAST so it
-    // tears down first.
+    // The reusable UI-on-runtime bridge (owns the UIContext and the per-window VG and input).
+    // Declared last so it tears down first.
     UniquePtr<ui::runtime::UIHost> m_uiHost;
 };
 
@@ -790,7 +788,7 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
     m_width = mainRw->Window().Width();
     m_height = mainRw->Window().Height();
 
-    // THE data root: fonts, the .sss/.sml assets, and the UI host's shaders all read from it.
+    // The data root: fonts, the .sss and .sml assets, and the UI host's shaders all read from it.
     m_dataRoot = vfs::FindDataRoot();
     if (m_dataRoot.IsEmpty())
     {
@@ -841,13 +839,14 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
 
     m_uiHost = MakeUnique<ui::runtime::UIHost>(AppRoot(), AppRoot(), *host.Graphics(),
                                                *host.Shell(), *m_fontService, *m_dataFileSystem);
-    // Docking host needs the runtime host + UIHost; construct before BuildUI (the Docking tab uses it).
+    // The docking host needs the runtime host and UIHost; construct it before BuildUI, since the
+    // Docking tab uses it.
     m_dockHost =
         MakeUnique<ui::application::RuntimeDockableWindowHost>(AppRoot(), host, *m_uiHost);
 
     BuildUI(); // builds m_root, sets theme on m_uiHost->Context(), registers m_toolkitThemeExt
     m_uiHost->AttachWindow(mainRw,
-                           m_root); // adds the root to the context + wires per-window VG + input
+                           m_root); // adds the root to the context and wires per-window VG and input
 }
 
 void UISandbox::LoadFontSize(StringView family, StringView path, f32 pixelHeight)
@@ -859,17 +858,17 @@ void UISandbox::LoadFontSize(StringView family, StringView path, f32 pixelHeight
 
 void UISandbox::BuildUI()
 {
-    // Register the toolkit theme extension so foundation.ui.toolkit controls get styled. Must happen before
-    // the first theme is built (extensions only apply to themes created afterward).
+    // Register the toolkit theme extension so foundation.ui.toolkit controls get styled. This must
+    // happen before the first theme is built (extensions only apply to themes created afterward).
     ui::ThemeRegistry::RegisterExtension(&m_toolkitThemeExt);
-    ApplyTheme(); // Dark by default; the Theme button toggles Dark <-> Light
+    ApplyTheme(); // Dark by default; the Theme button cycles through the themes
 
     m_root = MakeRef<ui::RootView>(AppRoot());
     m_root->ViewportSize = Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)};
     m_root->DpiScale = 1.0f;
 
-    // A 64x64 RGBA checkerboard (8px cells) for the ImageView/DrawableView demos - two blues, matching
-    // Sedulous UISandbox's GenerateCheckerboard(64, 64, 8, (100,140,200), (40,50,70)).
+    // A 64x64 RGBA checkerboard (8px cells) in two blues, (100,140,200) and (40,50,70), for the
+    // ImageView and DrawableView demos.
     {
         constexpr i32 kSize = 64, kCell = 8;
         static u8 pixels[kSize * kSize * 4];
@@ -891,7 +890,7 @@ void UISandbox::BuildUI()
                                                         Span<const u8>(pixels, sizeof(pixels)));
     }
 
-    // Main vertical layout filling the window, with a TabView (mirrors Sedulous UISandbox).
+    // Main vertical layout filling the window, with a TabView.
     m_main = VFlex();
     m_root->AddView(m_main.Get());
 
@@ -899,7 +898,7 @@ void UISandbox::BuildUI()
     m_toastHost = MakeRef<ui::toolkit::ToastHost>(AppRoot());
     m_root->AddView(m_toastHost.Get());
 
-    // Theme button above the tabs - cycles Dark / Light / Rounded Dark / Textured / Breeze (Sedulous ApplyTheme).
+    // Theme button above the tabs: cycles Dark, Light, Rounded Dark, Textured and Breeze.
     {
         m_themeBtn = MakeRef<ui::Button>(AppRoot(), StringView(u8"Theme: Dark"));
         UISandbox* self = this;
@@ -933,11 +932,11 @@ void UISandbox::BuildUI()
     BuildCurveEditorTab(tabView.Get());
     BuildNodeGraphTab(tabView.Get());
     BuildDockingTab(
-        tabView.Get()); // foundation.ui.application: DockManager -> real OS floating windows (last)
+        tabView.Get()); // foundation.ui.application: DockManager with real OS floating windows
     BuildPauseMenuTab(tabView.Get());
 }
 
-// Apply the current theme by index and refresh the Theme button label (Sedulous ApplyTheme).
+// Apply the current theme by index and refresh the Theme button label.
 void UISandbox::ApplyTheme()
 {
     switch (m_themeIndex)
@@ -970,9 +969,6 @@ void UISandbox::ApplyTheme()
     }
 }
 
-// Load a .sss theme file through the VFS-backed resource provider (mirrors Sedulous LoadSSSTheme): a
-// StyleSheetLoader with the provider + palette + the built-in SVG icons registered, fed the .sss text.
-// Falls back to DarkTheme if the file can't be read.
 // Create the VFS-backed resource provider once, rooted at <data root>/Samples/UI (shared by the .sss
 // theme loader and the pause-menu .sml tab). No-op if already created or if there is no data root.
 void UISandbox::EnsureResourceProvider()
@@ -990,6 +986,9 @@ void UISandbox::EnsureResourceProvider()
     m_resProvider = MakeUnique<ui::vfs::VfsResourceProvider>(AppRoot(), m_uiFs.Get());
 }
 
+// Load a .sss theme file through the VFS-backed resource provider: a StyleSheetLoader with the
+// provider, the palette and the built-in SVG icons registered, fed the .sss text. Falls back to
+// DarkTheme if the file cannot be read.
 RefPtr<ui::StyleSheet> UISandbox::LoadSSSTheme(StringView path, ui::ThemePalette palette)
 {
     EnsureResourceProvider();
@@ -998,7 +997,7 @@ RefPtr<ui::StyleSheet> UISandbox::LoadSSSTheme(StringView path, ui::ThemePalette
         return ui::DarkTheme::Create(AppRoot());
     }
 
-    // Register the drawable factories + built-in type names so .sss element selectors resolve.
+    // Register the drawable factories and built-in type names so .sss element selectors resolve.
     ui::StyleSheetLoader::InitializeGlobals();
 
     ui::StyleSheetLoader loader(AppRoot());
@@ -1021,14 +1020,14 @@ RefPtr<ui::StyleSheet> UISandbox::LoadSSSTheme(StringView path, ui::ThemePalette
     return loader.Load(sss.AsView());
 }
 
-// Build a fully image-skinned StyleSheet from procedurally generated rounded-rect images (faithful port
-// of the Sedulous UISandbox CreateTexturedTheme). The source images only need to live through Create -
-// TexturedTheme::Create packs their pixels into its own atlas - so the keep-alive array drops afterward.
+// Build a fully image-skinned StyleSheet from procedurally generated rounded-rect images. The source
+// images only need to live through Create, since TexturedTheme::Create packs their pixels into its own
+// atlas, so the keep-alive array drops afterward.
 RefPtr<ui::StyleSheet> UISandbox::CreateTexturedTheme()
 {
     ui::ThemeImageSet images;
     Array<UniquePtr<image::OwnedImageData>>
-        keep; // hold the images alive across the Create/atlas-build call
+        keep; // hold the images alive across the Create and atlas-build call
     auto hold = [&](UniquePtr<image::OwnedImageData> img) -> const image::ImageData*
     {
         const image::ImageData* p = img.Get();
@@ -1188,14 +1187,11 @@ RefPtr<ui::StyleSheet> UISandbox::CreateTexturedTheme()
     return ui::TexturedTheme::Create(AppRoot(), images, ui::ThemePalette::Light());
 }
 
-// === Tab 10: Pause Menu (.sml) - loads a screen from disk through a VFS-backed resource provider ===
-// Faithful port of Sedulous UISandboxApp's pause-menu demo: a NativeFileSystem rooted at Data/Samples/UI is
-// wrapped in a VfsResourceProvider (foundation.ui.vfs); we read the .sml text through it and hand it to
 // === Docking demo (foundation.ui.application) ===
 // A DockManager wired to the RuntimeDockableWindowHost: 5 panels laid out IDE-style (Scene center,
 // Hierarchy left, Inspector right, Console+Assets bottom-tabbed). Docking/splitting/tabbing happen inside
-// this tab; dragging a panel OUT floats it into a real borderless OS window (host.OpenWindow), redockable
-// by double-clicking its title bar. Mirrors Sedulous UISandbox tab 9.
+// this tab; dragging a panel out floats it into a real borderless OS window (host.OpenWindow), redockable
+// by double-clicking its title bar.
 void UISandbox::BuildDockingTab(ui::TabView* tabView)
 {
     auto demo = VFlex(8.0f);
@@ -1228,9 +1224,12 @@ void UISandbox::BuildDockingTab(ui::TabView* tabView)
     dm->DockPanelRelativeTo(p5, ui::toolkit::DockPosition::Center, p4->Parent);
 }
 
-// MarkupLoader::LoadFromString. Then we wire button clicks + inline style overrides + a scoped
-// LocalStyleSheet (inline beats local beats theme). The two decorative FontFamilies were copied from
-// Sedulous; if they fail to load, GetFont falls back to Roboto and the screen still renders.
+// === Pause Menu (.sml): loads a screen from disk through a VFS-backed resource provider ===
+// A NativeFileSystem rooted at Data/Samples/UI is wrapped in a VfsResourceProvider (foundation.ui.vfs);
+// we read the .sml text through it and hand it to MarkupLoader::LoadFromString. Then we wire button
+// clicks, inline style overrides and a scoped LocalStyleSheet (inline beats local, which beats the
+// theme). If the two decorative FontFamilies fail to load, GetFont falls back to Roboto and the screen
+// still renders.
 void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
 {
     if (m_dataRoot.IsEmpty())
@@ -1261,14 +1260,14 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
 
     tabView->AddTab(u8"Pause (.sml)", pauseView.Get(), true);
 
-    // The root Flex is a ViewGroup - FindByName walks its subtree.
+    // The root Flex is a ViewGroup, so FindByName walks its subtree.
     ui::ViewGroup* pauseRoot = foundation::core::Cast<ui::ViewGroup>(pauseView.Get());
     if (pauseRoot == nullptr)
     {
         return;
     }
 
-    // Wire button clicks by name (Sedulous logs to Console; we print to stdout).
+    // Wire button clicks by name; they print to stdout.
     if (ui::Button* resumeBtn = pauseRoot->FindByName<ui::Button>(u8"resume-btn"))
     {
         resumeBtn->OnClick.Add(ui::Event<void(ui::ButtonBase*)>::Handler{
@@ -1296,7 +1295,7 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
                           ui::Palette::CreateStateRounded(AppRoot(), Rgb(150, 60, 60), vg::CornerRadii(6.0f)));
     }
 
-    // Inline style demo on the title: override TextColor + FontSize + FontFamily without touching the
+    // Inline style demo on the title: override TextColor, FontSize and FontFamily without touching the
     // theme. The inline FontFamily "LilitaOne" wins over the local sheet's "Chewy".
     if (ui::Label* title = pauseRoot->FindByName<ui::Label>(u8"title"))
     {
@@ -1305,8 +1304,8 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
         title->SetStyle(ui::StyleProperty::FontFamily, StringView(u8"LilitaOne"));
     }
 
-    // LocalStyleSheet demo: scope a theming change to the pause subtree. Every Label gets a size + soft
-    // text color; every Button gets padding + a rounded gray-blue state-list. Inline overrides above still
+    // LocalStyleSheet demo: scope a theming change to the pause subtree. Every Label gets a size and a soft
+    // text color; every Button gets padding and a rounded gray-blue state-list. Inline overrides above still
     // win (title FontSize 32 beats 14; resume/quit inline state-lists beat the gray-blue default).
     RefPtr<ui::StyleSheet> pauseLocal = MakeRef<ui::StyleSheet>(AppRoot());
     pauseLocal->ForAll().Set(ui::StyleProperty::FontFamily, StringView(u8"Chewy"));
@@ -1320,7 +1319,7 @@ void UISandbox::BuildPauseMenuTab(ui::TabView* tabView)
     pauseView->SetLocalStyleSheet(Move(pauseLocal));
 }
 
-// === Tab 9: Animations (ViewAnimator / Storyboard + static-transform hit-testing) ===
+// === Rich text (markup runs and text effects) ===
 void UISandbox::BuildRichTextTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -1457,6 +1456,7 @@ void UISandbox::BuildLayersTab(ui::TabView* tabView)
     demo->AddView(stage.Get(), LP(SizeSpec::Fixed(Unit::Px(240)), SizeSpec::Fixed(Unit::Px(100))));
 }
 
+// === Animations (ViewAnimator and Storyboard, static-transform hit-testing) ===
 void UISandbox::BuildAnimationsTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -1560,7 +1560,7 @@ void UISandbox::BuildAnimationsTab(ui::TabView* tabView)
     demo->AddView(clickLabel.Get());
 }
 
-// === Tab 10: Toolkit (MenuBar / Toolbar / BreadcrumbBar / SplitView / DraggableTreeView / ColorPicker / StatusBar) ===
+// === Toolkit (MenuBar, Toolbar, BreadcrumbBar, SplitView, DraggableTreeView, ColorPicker, StatusBar) ===
 void UISandbox::BuildToolkitTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -1648,7 +1648,7 @@ void UISandbox::BuildToolkitTab(ui::TabView* tabView)
     demo->AddView(statusBar.Get(), LP(SizeSpec::Match(), SizeSpec::Wrap()));
 }
 
-// === Tab 11: PropertyGrid (all editor kinds + a categorized Float3 group) ===
+// === PropertyGrid (all editor kinds and a categorized Float3 group) ===
 void UISandbox::BuildPropertyGridTab(ui::TabView* tabView)
 {
     auto demo = VFlex(8.0f);
@@ -1686,7 +1686,7 @@ void UISandbox::BuildPropertyGridTab(ui::TabView* tabView)
     demo->AddView(propGrid.Get(), Grow(1));
 }
 
-// === Tab 12: Curve Editor (CurveCanvas tangent editor, one channel seeded with an ease-in/out shape) ===
+// === Curve Editor (CurveCanvas tangent editor, one channel seeded with an ease-in/out shape) ===
 void UISandbox::BuildCurveEditorTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -1774,7 +1774,7 @@ void UISandbox::BuildCurveEditorTab(ui::TabView* tabView)
         ui::Event<void(i32, i32)>::Handler{[doRefresh](i32, i32) { doRefresh(); }});
 }
 
-// === Tab 13: Node Graph (4 nodes + 3 connections, console-logged interaction events) ===
+// === Node Graph (4 nodes and 3 connections, interaction events logged to stdout) ===
 void UISandbox::BuildNodeGraphTab(ui::TabView* tabView)
 {
     auto graph = MakeRef<ui::toolkit::NodeGraphCanvas>(AppRoot());
@@ -1818,7 +1818,7 @@ void UISandbox::BuildNodeGraphTab(ui::TabView* tabView)
     }
     graph->AddNode(Move(nodeB));
 
-    // Run (node 2) - has a typed "Speed" input port.
+    // Run (node 2), with a typed "Speed" input port.
     auto nodeC = MakeUnique<ui::toolkit::NodeGraphNode>(AppRoot());
     nodeC->Title = String(u8"Run");
     nodeC->Subtitle = String(u8"BlendTree1D");
@@ -1845,7 +1845,7 @@ void UISandbox::BuildNodeGraphTab(ui::TabView* tabView)
     }
     graph->AddNode(Move(nodeC));
 
-    // Any State (node 3) - not deletable.
+    // Any State (node 3), not deletable.
     auto nodeD = MakeUnique<ui::toolkit::NodeGraphNode>(AppRoot());
     nodeD->Title = String(u8"Any State");
     nodeD->Position = Float2{50, 200};
@@ -1859,7 +1859,7 @@ void UISandbox::BuildNodeGraphTab(ui::TabView* tabView)
     }
     graph->AddNode(Move(nodeD));
 
-    // Connections: Idle -> Walk, Idle -> Run, Any State -> Walk.
+    // Connections: Idle to Walk, Idle to Run, Any State to Walk.
     {
         ui::toolkit::NodeGraphConnection c;
         c.SourceNodeIndex = 0;
@@ -1885,7 +1885,7 @@ void UISandbox::BuildNodeGraphTab(ui::TabView* tabView)
         graph->AddConnection(c);
     }
 
-    // Wire interaction events to stdout (Sedulous logs to Console).
+    // Wire interaction events to stdout.
     graph->OnNodeMoved.Add(
         ui::Event<void(i32)>::Handler{[](i32 idx) { std::printf("Node moved: %d\n", idx); }});
     graph->OnConnectionCreated.Add(ui::Event<void(i32)>::Handler{
@@ -1908,7 +1908,7 @@ void UISandbox::BuildNodeGraphTab(ui::TabView* tabView)
     tabView->AddTab(u8"Node Graph", graph.Get());
 }
 
-// === Tab 8: Drag & Drop (reorderable chips + a colour drop box) ===
+// === Drag & Drop (reorderable chips and a colour drop box) ===
 void UISandbox::BuildDragDropTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -1948,7 +1948,7 @@ void UISandbox::BuildDragDropTab(ui::TabView* tabView)
     demo->AddView(row.Get());
 }
 
-// === Tab 7: Overlays (ComboBox / Dialog / ContextMenu / Tooltips) ===
+// === Overlays (ComboBox, Dialog, ContextMenu, Tooltips) ===
 void UISandbox::BuildOverlaysTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -2038,7 +2038,7 @@ void UISandbox::BuildOverlaysTab(ui::TabView* tabView)
         demo->AddView(row.Get());
     }
 
-    // Toasts (bottom-right overlay; timed severities + a sticky action toast).
+    // Toasts (bottom-right overlay; timed severities and a sticky action toast).
     spacer();
     section(u8"Toasts (bottom-right)");
     {
@@ -2092,7 +2092,7 @@ void UISandbox::BuildOverlaysTab(ui::TabView* tabView)
     }
 }
 
-// === Tab 6: Data Controls (virtualized ListView / TreeView / GridView + adapters) ===
+// === Data Controls (virtualized ListView, TreeView and GridView with adapters) ===
 void UISandbox::BuildDataControlsTab(ui::TabView* tabView)
 {
     auto dataDemo = HFlex(8.0f);
@@ -2135,7 +2135,7 @@ void UISandbox::BuildDataControlsTab(ui::TabView* tabView)
     }
 }
 
-// A themed labelled colour box (Sedulous UISandbox's MakeBox helper).
+// A themed labelled colour box.
 RefPtr<ui::Panel> UISandbox::MakeBox(Color color, StringView text)
 {
     auto panel = MakeRef<ui::Panel>(AppRoot());
@@ -2150,7 +2150,7 @@ RefPtr<ui::Panel> UISandbox::MakeBox(Color color, StringView text)
     return panel;
 }
 
-// === Tab 2: ScrollView (overlay / reserved / horizontal) ===
+// === ScrollView (overlay, reserved, horizontal) ===
 void UISandbox::BuildScrollViewTab(ui::TabView* tabView)
 {
     auto scrollDemo = HFlex(8.0f);
@@ -2219,7 +2219,7 @@ void UISandbox::BuildScrollViewTab(ui::TabView* tabView)
            ui::ScrollBarPolicy::Always, true, 20);
 }
 
-// === Tab 3: Layouts (Flex / Dock / Grid / Frame / Flow / Absolute) ===
+// === Layouts (Flex, Dock, Grid, Frame, Flow, Absolute) ===
 void UISandbox::BuildLayoutsTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -2470,7 +2470,7 @@ void UISandbox::BuildLayoutsTab(ui::TabView* tabView)
     }
 }
 
-// === Tab 4: Tab Placement (nested TabViews in a 2x2 grid, closable) ===
+// === Tab Placement (nested TabViews in a 2x2 grid, closable) ===
 void UISandbox::BuildTabPlacementTab(ui::TabView* tabView)
 {
     auto demo = MakeRef<ui::GridLayout>(AppRoot());
@@ -2490,7 +2490,7 @@ void UISandbox::BuildTabPlacementTab(ui::TabView* tabView)
         return p;
     };
     // Each mini TabView is packed with more tabs than its grid cell can show, so the strip overflows:
-    // Top/Bottom overflow HORIZONTALLY, Left/Right overflow VERTICALLY. Wheel over a strip scrolls it;
+    // Top and Bottom overflow horizontally, Left and Right vertically. The wheel over a strip scrolls it;
     // arrow-keying (or clicking) to an off-screen tab auto-scrolls it into view.
     auto placed =
         [&](ui::TabPlacement placement, const char8_t* prefix, i32 count, i32 row, i32 col)
@@ -2513,7 +2513,7 @@ void UISandbox::BuildTabPlacementTab(ui::TabView* tabView)
     placed(ui::TabPlacement::Right, u8"Right", 24, 1, 1); // vertical overflow
 }
 
-// === Tab 5: Text Input (EditText / PasswordBox / NumericField / EditableLabel) ===
+// === Text Input (EditText, PasswordBox, NumericField, EditableLabel) ===
 void UISandbox::BuildTextInputTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -2707,7 +2707,7 @@ void UISandbox::BuildTextInputTab(ui::TabView* tabView)
     }
 }
 
-// === Tab 1: Controls === (faithful port of Sedulous UISandbox's Controls tab)
+// === Controls ===
 void UISandbox::BuildControlsTab(ui::TabView* tabView)
 {
     using ui::SizeSpec;
@@ -2731,7 +2731,7 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
     btnRow->AddView(MakeRef<ui::ToggleButton>(AppRoot(), StringView(u8"Toggle")).Get());
     leftPanel->AddView(btnRow.Get());
 
-    // ContentButton (icon + text, and a two-line variant).
+    // ContentButton (icon and text, and a two-line variant).
     auto contentBtnRow = HFlex(6.0f);
     {
         auto iconText = HFlex(6.0f);
@@ -2757,7 +2757,7 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
     }
     leftPanel->AddView(contentBtnRow.Get());
 
-    // RepeatButton + a live count label.
+    // RepeatButton and a live count label.
     {
         auto repeatRow = HFlex(6.0f);
         auto repeatLabel = MakeRef<ui::Label>(AppRoot(), StringView(u8"Count: 0"));
@@ -2820,7 +2820,7 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
 
     leftPanel->AddView(MakeRef<ui::Separator>(AppRoot()).Get());
 
-    // Slider + progress bar.
+    // Slider and progress bar.
     leftPanel->AddView(MakeRef<ui::Label>(AppRoot(), StringView(u8"Volume")).Get());
     leftPanel->AddView(MakeRef<ui::Slider>(AppRoot(), 0.0f, 100.0f, 75.0f).Get());
     leftPanel->AddView(MakeRef<ui::Label>(AppRoot(), StringView(u8"Loading...")).Get());
@@ -2867,7 +2867,7 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
         settingsLayout->AddView(expander2.Get());
     }
 
-    // --- Right panel: ImageView scale modes + color swatches + SVG drawables ---
+    // --- Right panel: ImageView scale modes, color swatches and SVG drawables ---
     auto rightPanel = VFlex(4.0f);
     rightPanel->Padding = ui::Thickness{4};
     body->AddView(rightPanel.Get(), LP(SizeSpec::Fixed(Unit::Px(200)), SizeSpec::Wrap()));
@@ -2917,7 +2917,7 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
 
     rightPanel->AddView(MakeRef<ui::Separator>(AppRoot()).Get());
 
-    // DrawableView + SVG drawables.
+    // DrawableView and SVG drawables.
     rightPanel->AddView(
         MakeRef<ui::Label>(AppRoot(), StringView(u8"DrawableView + SVG")).Get());
     {
@@ -2959,7 +2959,7 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
 
 void UISandbox::OnUpdate(runtime::IApplicationHost&, f32 dt)
 {
-    // Hold-to-repeat: tick the RepeatButton each frame (mirrors Sedulous UISandbox).
+    // Hold-to-repeat: tick the RepeatButton each frame.
     if (m_repeatBtn)
     {
         m_repeatBtn->UpdateRepeat(dt);

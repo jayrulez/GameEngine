@@ -1,4 +1,4 @@
-# Foundation::Materials unit tests (doctest; Null RHI - no GPU/DXC).
+# Foundation::Materials unit tests (doctest; Null RHI, no GPU or DXC).
 
 add_executable(Materials.Tests
     TestsMain.cpp

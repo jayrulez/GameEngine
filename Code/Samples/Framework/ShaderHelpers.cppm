@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Shader compilation helpers - wraps DXC compile + createShaderModule into one call.
+/// Shader compilation helpers: wrap the DXC compile and createShaderModule into one call.
 /// Automatically selects SPIR-V (Vulkan) or DXIL (DX12) based on device type.
 /// Applies Vulkan binding shifts when targeting SPIR-V.
 
@@ -35,8 +35,8 @@ export namespace samples::framework
         opts.optimizationLevel = 3;
 
         // SPIR-V targets need binding shifts; DX12 uses register spaces natively.
-        // ONE engine-wide table (WebGPU-compatible compact values) serves Vulkan and
-        // WebGPU alike - see shaders::BindingShifts::Standard().
+        // One engine-wide table (WebGPU-compatible compact values) serves Vulkan and
+        // WebGPU alike; see shaders::BindingShifts::Standard().
         if (!isDX12)
         {
             opts.bindingShifts = shaders::BindingShifts::Standard();

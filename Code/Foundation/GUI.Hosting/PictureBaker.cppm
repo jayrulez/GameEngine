@@ -3,28 +3,29 @@
 
 // GUI.Hosting - :picture_baker partition: GpuPictureBaker, the GUI's IPictureBaker on the GPU.
 //
-// A picture the GUI asks for (an SVG at a size in device pixels) is queued; the host's frame
-// records the queue (Record, on the frame's own command encoder, before the passes that sample
-// it): each picture drawn through a VG renderer of its own into a texture of its own, which every
-// window's renderer (its targets) is told to sample under the picture's key
-// (RegisterExternalTexture), so a picture baked once shows in any window. Nothing is
-// read back, so nothing waits: the frame that asked draws the picture as paths, and the next one
-// draws it from the texture. The texture holds premultiplied colour in the canvas's blend space,
-// as a layer's target does, so the GUI draws it with VGContext::DrawImagePremultiplied.
+// A picture the GUI asks for (an SVG at a size in device pixels) is queued. The host's frame
+// records the queue (Record, on the frame's own command encoder, before the passes that sample it):
+// each picture is drawn through the baker's own VG renderer into a texture of its own. Every
+// window's renderer (the baker's targets) is told to sample that texture under the picture's key
+// (RegisterExternalTexture), so a picture baked once shows in any window. Nothing is read back, so
+// nothing waits: the frame that asked draws the picture as paths, and the next one draws it from
+// the texture. The texture holds premultiplied colour in the canvas's blend space, as a layer's
+// target does, so the GUI draws it with VGContext::DrawImagePremultiplied.
 //
-// A bake no draw has asked for in kKeepFrames frames goes (the GUI's renderer forgets it first):
-// that long unasked, no frame still in flight samples it. A window that goes takes its renderer
-// out of the targets first (RemoveTarget), which forgets every bake. Bakes draw without stencil fills (the
-// bake targets have no depth-stencil), as a context without a stencil-capable renderer does.
+// A bake that no draw has asked for in kKeepFrames frames is released, after the GUI's renderer
+// forgets it; after that long, no frame still in flight samples it. A window that is closing takes
+// its renderer out of the targets first (RemoveTarget), and the renderer forgets every bake. Bakes
+// draw without stencil fills (the bake targets have no depth-stencil), as a context without a
+// stencil-capable renderer does.
 //
 // Small pictures (icons) go into an atlas instead (AtlasRegion): pages of kAtlasPageSize pixels,
-// each picture in a place of its own with a transparent gutter round it, so pictures drawn one
-// after another from a page are one draw. The pictures asked for since the last frame are drawn
-// into their pages, one pass a page, each clipped to its place; a mask picture is drawn white, to
-// take its tint when it is drawn. A page only fills: when no page has room, the atlas is packed
-// anew from the pictures asked for in the last kRecentFrames frames, its pages cleared and those
-// pictures drawn again (meanwhile drawn as paths), and one more page is added while there are
-// fewer than kMostAtlasPages.
+// with each picture in its own place and a transparent gutter round it, so pictures drawn one after
+// another from a page are one draw. The pictures asked for since the last frame are drawn into
+// their pages, one pass per page, each clipped to its place. A mask picture is drawn white so it
+// takes its tint when drawn. A page only fills up. When no page has room, the atlas is packed anew
+// from the pictures asked for in the last kRecentFrames frames: its pages are cleared and those
+// pictures drawn again (as paths in the meantime), and one more page is added while there are fewer
+// than kMostAtlasPages.
 
 module;
 #include "Core/Prelude.h"
@@ -49,10 +50,9 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// What a baker's renderer draws with: the VG shaders the GUI's renderer has (gradients and
-    /// boxes as it draws them; none of them but the first two required), the format and blend
-    /// space of the GUI's target (a bake holds colour as that target's layers do), and the frames
-    /// in flight.
+    /// What a baker's renderer draws with: the VG shaders the GUI's renderer has (so gradients and
+    /// boxes look as it draws them; only the first two are required), the format and blend space of
+    /// the GUI's target (a bake holds colour as that target's layers do), and the frames in flight.
     struct PictureBakerSetup
     {
         rhi::ShaderModule* VertexShader = nullptr;
@@ -65,39 +65,39 @@ export namespace foundation::gui
         i32 FrameCount = 2;
     };
 
-    /// GpuPictureBaker::kAtlasGutter, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// GpuPictureBaker::kAtlasGutter, kept at namespace scope so another library can read it: MSVC
+    /// does not export a class's static constexpr member from a shared library.
     inline constexpr u32 kGpuPictureBakerAtlasGutter = 1;
 
-    /// GpuPictureBaker::kAtlasPageSize, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// GpuPictureBaker::kAtlasPageSize, kept at namespace scope so another library can read it: MSVC
+    /// does not export a class's static constexpr member from a shared library.
     inline constexpr u32 kGpuPictureBakerAtlasPageSize = 1024;
 
-    /// GpuPictureBaker::kKeepFrames, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// GpuPictureBaker::kKeepFrames, kept at namespace scope so another library can read it: MSVC
+    /// does not export a class's static constexpr member from a shared library.
     inline constexpr u64 kGpuPictureBakerKeepFrames = 600;
 
-    /// GpuPictureBaker::kMostAtlasPages, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// GpuPictureBaker::kMostAtlasPages, kept at namespace scope so another library can read it:
+    /// MSVC does not export a class's static constexpr member from a shared library.
     inline constexpr usize kGpuPictureBakerMostAtlasPages = 4;
 
-    /// GpuPictureBaker::kRecentFrames, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// GpuPictureBaker::kRecentFrames, kept at namespace scope so another library can read it: MSVC
+    /// does not export a class's static constexpr member from a shared library.
     inline constexpr u64 kGpuPictureBakerRecentFrames = 60;
 
     class GpuPictureBaker final : public IPictureBaker
     {
     public:
-        /// Frames a bake stays after a draw last asked for it.
+        /// How many frames a bake is kept after a draw last asked for it.
         static constexpr u64 kKeepFrames = kGpuPictureBakerKeepFrames;
-        /// An atlas page's side, the gutter round each picture on it, and the most pages.
+        /// An atlas page's side, the gutter round each picture on it, and the most pages there may be.
         static constexpr u32 kAtlasPageSize = kGpuPictureBakerAtlasPageSize;
         static constexpr u32 kAtlasGutter = kGpuPictureBakerAtlasGutter;
         static constexpr usize kMostAtlasPages = kGpuPictureBakerMostAtlasPages;
-        /// Packing a full atlas anew keeps the pictures asked for in this many frames.
+        /// Packing a full atlas anew keeps the pictures asked for within this many frames.
         static constexpr u64 kRecentFrames = kGpuPictureBakerRecentFrames;
 
-        /// `fonts` draws an SVG's text. The renderers that sample the bakes are its targets.
+        /// `fonts` draws an SVG's text. The renderers that sample the bakes are the baker's targets.
         GpuPictureBaker(IAllocator& allocator, rhi::Device& device, foundation::fonts::IFontService* fonts) noexcept
             : m_allocator(allocator), m_device(device), m_renderer(allocator), m_canvas(fonts), m_targets(allocator),
               m_entries(allocator), m_pages(allocator), m_atlas(allocator)
@@ -123,8 +123,8 @@ export namespace foundation::gui
             return Status{ErrorCode::Ok};
         }
 
-        /// Forgets every bake (its targets first) and releases the renderer. The GPU must be done
-        /// with them (a host disposes after its device is idle).
+        /// Forgets every bake (in its targets first) and releases the renderer. The GPU must be done
+        /// with them, so a host disposes after its device is idle.
         void Dispose()
         {
             for (const UniquePtr<Entry>& entry : m_entries)
@@ -139,11 +139,12 @@ export namespace foundation::gui
                 m_renderer.Dispose();
         }
 
-        /// A renderer that samples the bakes (a window's): every bake drawn is registered with it,
-        /// those drawn before too.
-        /// The fonts an SVG's text draws with from now on (the host's changed: a project's own).
+        /// Sets the fonts an SVG's text draws with from now on, for when the host's fonts change (to
+        /// a project's own).
         void SetFontService(foundation::fonts::IFontService* fonts) noexcept { m_canvas.SetFontService(fonts); }
 
+        /// Adds a renderer that samples the bakes (a window's). Every bake is registered with it,
+        /// including those drawn before.
         void AddTarget(vg::renderer::VGRenderer& target)
         {
             for (vg::renderer::VGRenderer* known : m_targets)
@@ -157,7 +158,8 @@ export namespace foundation::gui
                 if (page->View != nullptr)
                     target.RegisterExternalTexture(page->Key.Get(), page->View);
         }
-        /// A renderer that goes (its window's): it forgets every bake, and is told of no more.
+        /// Removes a renderer that is going away (with its window): it forgets every bake and is told
+        /// of no more.
         void RemoveTarget(vg::renderer::VGRenderer& target)
         {
             for (usize i = 0; i < m_targets.Size(); ++i)
@@ -213,7 +215,7 @@ export namespace foundation::gui
             entry->Mask = mask;
             entry->LastAsked = m_frame;
             if (!Place(*entry) && !(PackAnew() && Place(*entry)))
-                return {}; // no room even packed anew: drawn as paths
+                return {}; // no room even after packing anew, so it is drawn as paths
             m_atlas.PushBack(Move(entry));
             return {};
         }
@@ -221,9 +223,10 @@ export namespace foundation::gui
         [[nodiscard]] u64 Generation() const override { return m_generation; }
 
         /// Draws the pictures asked for since the last frame into textures, on `encoder` before the
-        /// frame's passes that sample them, after the host waited for `frameIndex`'s last use (as
-        /// it does before its own renderer's BeginFrame); and lets the bakes go that no draw has
-        /// asked for in kKeepFrames frames. True when any baked: the GUI redraws (Generation).
+        /// frame's passes that sample them. The host must have waited for `frameIndex`'s last use
+        /// first, as it does before its own renderer's BeginFrame. Also releases the bakes that no
+        /// draw has asked for in kKeepFrames frames. Returns true when anything was baked, so the GUI
+        /// redraws (Generation).
         bool Record(rhi::CommandEncoder& encoder, i32 frameIndex)
         {
             ++m_frame;
@@ -269,22 +272,22 @@ export namespace foundation::gui
             return baked;
         }
 
-        /// The bakes kept (drawn or waiting).
+        /// How many bakes are kept (drawn or waiting).
         [[nodiscard]] usize BakeCount() const noexcept { return m_entries.Size(); }
-        /// The atlas's pictures kept (drawn or waiting) and its pages.
+        /// How many pictures the atlas keeps (drawn or waiting), and how many pages it has.
         [[nodiscard]] usize AtlasPictureCount() const noexcept { return m_atlas.Size(); }
         [[nodiscard]] usize AtlasPageCount() const noexcept { return m_pages.Size(); }
 
     private:
         struct Entry
         {
-            const foundation::vg::svg::SVGDocument* Document = nullptr; // the key, with the size
+            const foundation::vg::svg::SVGDocument* Document = nullptr; // the key, together with the size
             u32 Width = 0;
             u32 Height = 0;
             u64 LastAsked = 0;
             UniquePtr<image::ImageDataRef> Key; // what the GUI's renderer knows the texture by
             rhi::Texture* Texture = nullptr;
-            rhi::TextureView* View = nullptr; // set once drawn
+            rhi::TextureView* View = nullptr; // set once the picture is drawn
         };
 
         struct AtlasPage
@@ -294,11 +297,11 @@ export namespace foundation::gui
             UniquePtr<image::ImageDataRef> Key; // what the GUI's renderer knows the page by
             rhi::Texture* Texture = nullptr;
             rhi::TextureView* View = nullptr;
-            bool Clear = true; // drawn into next with the page cleared first (new, or packed anew)
+            bool Clear = true; // clear the page before the next draw into it (new, or packed anew)
         };
         struct AtlasEntry
         {
-            const foundation::vg::svg::SVGDocument* Document = nullptr; // the key, with the size and mask
+            const foundation::vg::svg::SVGDocument* Document = nullptr; // the key, together with the size and mask
             u32 Width = 0;
             u32 Height = 0;
             bool Mask = false;
@@ -309,7 +312,8 @@ export namespace foundation::gui
             bool Baked = false;
         };
 
-        // A place on a page for `entry`, a page added when none has room and the atlas may grow.
+        // Finds a place on a page for `entry`, adding a page when none has room and the atlas may
+        // grow.
         bool Place(AtlasEntry& entry)
         {
             const u32 width = entry.Width + 2 * kAtlasGutter, height = entry.Height + 2 * kAtlasGutter;
@@ -335,8 +339,9 @@ export namespace foundation::gui
             return false;
         }
 
-        // The atlas full: its pages emptied, the pictures asked for lately placed again (to be
-        // drawn again), the rest forgotten. Once a frame at most; false when it already was.
+        // Packs a full atlas anew: its pages are emptied, the pictures asked for recently are placed
+        // again (to be drawn again), and the rest are forgotten. Runs once a frame at most; returns
+        // false when it already ran this frame.
         bool PackAnew()
         {
             if (m_packedThisFrame)
@@ -353,7 +358,7 @@ export namespace foundation::gui
             return true;
         }
 
-        // The pictures waiting on page `index`, drawn into it in one pass, each clipped to its place.
+        // Draws the pictures waiting on page `index` into it in one pass, each clipped to its place.
         bool BakePage(rhi::CommandEncoder& encoder, i32 frameIndex, usize index)
         {
             AtlasPage& page = *m_pages[index];
@@ -489,7 +494,7 @@ export namespace foundation::gui
 
         IAllocator& m_allocator;
         rhi::Device& m_device;
-        vg::renderer::VGRenderer m_renderer; // the bakes' own: its frame buffers are not the GUI's
+        vg::renderer::VGRenderer m_renderer; // the baker's own renderer, with frame buffers separate from the GUI's
         vg::VGContext m_canvas;
         rhi::TextureFormat m_format = rhi::TextureFormat::RGBA8UnormSrgb;
         Array<vg::renderer::VGRenderer*> m_targets; // the windows' renderers, which sample the bakes

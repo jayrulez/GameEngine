@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Heightfield thumbnail generator: the worker half runs headless on a crafted payload - a
+// Heightfield thumbnail generator: the worker half runs headless on a crafted payload, and a
 // vertical u16 gradient must normalize to a full black-to-white ramp in the tile.
 
 #include <doctest/doctest.h>

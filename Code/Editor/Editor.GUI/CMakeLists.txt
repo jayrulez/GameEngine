@@ -1,5 +1,6 @@
-# Editor::GUI - `editor.gui`: the editor's pages for the engine GUI's assets on the GUI's code pages:
-# a .xml document and a .css sheet, each its code with a live preview drawn by the runtime's GUI.
+# Editor::GUI - `editor.gui`: the editor's pages for the engine GUI's assets, built on the code
+# pages: a .xml document and a .css sheet, each shown as code beside a live preview drawn by the
+# runtime's GUI.
 util_add_engine_library(Editor.GUI ALIAS Editor::GUI)
 target_link_libraries(Editor.GUI PUBLIC
     Foundation::Core Foundation::Content Foundation::Runtime.Client Foundation::Settings Foundation::Graphics Foundation::RHI

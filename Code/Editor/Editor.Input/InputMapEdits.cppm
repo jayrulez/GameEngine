@@ -3,10 +3,9 @@
 
 // Editor::Input - :input_map_edits partition.
 //
-// The input map's edits without a page: what the page's rows and its input capture do to the map,
-// every lookup guarded (an out-of-range set, action or binding is a no-op or null, since a row can
-// outlive the map it was read from). Kept apart from the page (Documentation/Specs/editor-gui.md,
-// 5.4, layer 5) so its tests need no GUI.
+// The input map's edits without a page: what the page's rows and its input capture do to the map.
+// Every lookup is guarded (an out-of-range set, action or binding is a no-op or null, since a row
+// can outlive the map it was read from). It is kept apart from the page so its tests need no GUI.
 
 module;
 #include "Core/Prelude.h"
@@ -24,8 +23,8 @@ export namespace editor
 
     namespace detail
     {
-        // Binding + enum labels now live in foundation.input (:binding_names); re-exported here so
-        // this page and its impl keep calling them as detail::<name>.
+        // The binding and enum labels live in foundation.input (:binding_names); they are
+        // re-exported here so this page and its implementation call them as detail::<name>.
         using input::DescribeBinding;
         using input::InteractionName;
         using input::KeyName;
@@ -65,8 +64,8 @@ export namespace editor
             }
             return fresh;
         }
-        /// The next valid source for the kind after `current`'s (wrapping), on a FRESH binding:
-        /// a source change resets the source-specific fields.
+        /// The next valid source for the kind after `current`'s (wrapping), on a fresh binding,
+        /// because a source change resets the source-specific fields.
         [[nodiscard]] inline input::Binding CycleSource(input::ActionKind kind,
                                                         const input::Binding& current)
         {
@@ -135,7 +134,7 @@ export namespace editor
             return u8"?";
         }
 
-        /// When an action fires, as the page names it (the old page's words).
+        /// When an action fires, as the page names it.
         [[nodiscard]] inline StringView InteractionTitle(input::InteractionKind kind)
         {
             switch (kind)
@@ -153,7 +152,7 @@ export namespace editor
         }
 
         /// What a listen for an action of `kind` captures: a Button rebind ignores stick
-        /// noise, an Axis2D rebind captures sticks only; one Composite2D DIRECTION is always a
+        /// noise, an Axis2D rebind captures sticks only, and one Composite2D direction is always a
         /// single key.
         [[nodiscard]] inline input::CaptureFilter FilterFor(input::ActionKind kind,
                                                             bool compositeDirection)
@@ -168,7 +167,7 @@ export namespace editor
             switch (kind)
             {
             case input::ActionKind::Button:
-                break; // keys + mouse + pad buttons
+                break; // keys, mouse and pad buttons
             case input::ActionKind::Axis1D:
                 filter.gamepadAxes = true;
                 break;
@@ -181,8 +180,8 @@ export namespace editor
             }
             return filter;
         }
-        /// Lands a capture: the whole binding, or (direction 0..3 = -X +X -Y +Y) just the
-        /// captured KEY code into that Composite2D slot. Out-of-range targets are ignored.
+        /// Applies a capture: the whole binding or, for a direction (0..3 = -X +X -Y +Y), only the
+        /// captured key code into that Composite2D slot. Out-of-range targets are ignored.
         inline void ApplyCapture(input::InputMap& map, usize set, usize action, usize binding,
                                  i32 direction, const input::Binding& captured)
         {

@@ -21,7 +21,8 @@ namespace editor::app
 {
     namespace
     {
-        // The seams outlive the server through the handlers' shared ref (Function is move-only).
+        // The handlers share a reference to this state, so it outlives the server (Function is
+        // move-only, so the handlers cannot each hold a copy).
         class ActionToolState final : public RefCounted
         {
         public:
@@ -43,7 +44,7 @@ namespace editor::app
             }
         }
 
-        /// One action as the agent sees it, its state over the active page.
+        /// One action as the agent sees it, with its state over the active page.
         JsonValue ActionJson(const editor::EditorActionRegistry& actions,
                              const editor::EditorActionDeclaration& action)
         {
@@ -61,7 +62,8 @@ namespace editor::app
                     JsonValue::MakeBool(editor::EditorActionRegistry::IsEnabled(action, subject)));
             out.Set(u8"checked",
                     JsonValue::MakeBool(editor::EditorActionRegistry::IsChecked(action, subject)));
-            // Why it is disabled, when it says (a tool with nothing to work on): what to change.
+            // The reason it is disabled, when the action gives one (a tool with nothing to work
+            // on), which tells the agent what to change.
             const String reason = actions.DisabledReason(action.id.AsView(), subject);
             if (!reason.IsEmpty())
                 out.Set(u8"disabledReason", JsonValue::MakeString(reason));

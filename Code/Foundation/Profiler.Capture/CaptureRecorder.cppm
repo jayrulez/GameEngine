@@ -3,7 +3,7 @@
 
 /// Foundation::Profiler.Capture - :recorder partition.
 ///
-/// A capture of the next few seconds, written as a file (Specs/profiler.md, P3): started by a key
+/// A capture of the next few seconds, written as a file. Started by a key
 /// or a flag in any player (or by a tool), it arms the profiler, lets the time run, waits a few
 /// frames more for the last frames' GPU passes (they arrive when their frame slot comes round),
 /// then writes the frames as a profile stream (.aeprofile, which the editor's panel opens) and as
@@ -70,8 +70,8 @@ export namespace foundation::profiler
         /// Frames waited after the time is up, for the last frames' GPU passes (frames in flight).
         static constexpr u32 kGpuGraceFrames = kCaptureRecorderGpuGraceFrames;
 
-        /// The process's recorder (the key, the flag and the tools share it). NON-inline
-        /// (ProfilerCaptureImpl.cpp): one per process across shared libraries.
+        /// The process's recorder (the key, the flag and the tools share it). Defined out of line
+        /// in ProfilerCaptureImpl.cpp so there is one per process across shared libraries.
         [[nodiscard]] static CaptureRecorder& Get() noexcept;
 
         explicit CaptureRecorder(IAllocator& allocator) noexcept

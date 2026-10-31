@@ -4,8 +4,8 @@
 // VG analytic box vertex shader (VGDrawMode::Box, VGContext::DrawBox). Every vertex carries the
 // whole box: the device position goes through the projection, the box-local point is interpolated
 // (exact under any affine transform), and the box's size, radii, borders and colours (a border
-// colour per side) pass flat to
-// vg_box.ps. Colours are authored sRGB: decoded as vg.vs does, or kept for an Encoded canvas.
+// colour per side) pass flat to vg_box.ps. Colours are authored in sRGB: decoded as vg.vs does,
+// or kept as they are for an Encoded canvas.
 // Resolved via ShaderSystem::GetVariant("vg_box", Vertex).
 #pragma pack_matrix(row_major)
 #include "color.hlsli"

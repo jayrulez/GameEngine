@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The capture store (Specs/profiler.md, P0): threads record the scopes they finish into rings of
+// The capture store: threads record the scopes they finish into rings of
 // their own, the frame end gathers them into a frame record that refers to nothing in the process
 // (names are ids, threads indices), and the last few seconds of records are kept. Each test uses a
 // profiler of its own unless it is about the process's one (PROFILE_SCOPE, the job hooks).

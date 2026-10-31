@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.propertyanimation.resource - the cooked-clip wire: FromClip flatten -> binary
-// serialize -> deserialize -> FillClip, with count guards (wire-symmetry lesson) and sample-identity.
+// foundation.propertyanimation.resource - the cooked-clip wire: FromClip flattens, the clip is
+// serialized to binary and back, and FillClip rebuilds it; with count guards on the pools and the
+// same samples before and after.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -31,7 +32,7 @@ namespace
     }
 
     // A representative clip: a Float3 position track (3 channels), a Color track (4 channels), and a
-    // Quat rotation track - exercising every kind + the channel-cursor reconstruction.
+    // Quat rotation track, exercising every kind and the channel-cursor reconstruction.
     PropertyAnimationClip MakeClip()
     {
         PropertyAnimationClip clip;
@@ -79,7 +80,7 @@ TEST_CASE("propanim.resource: cooked-clip wire round-trips (counts + sample iden
 
     const PropertyAnimationClip original = MakeClip();
 
-    // Flatten -> binary serialize.
+    // Flatten, then serialize to binary.
     PropertyAnimationClipSource src;
     PropertyAnimationClipSource::FromClip(original, src);
     // Count guards: 3 tracks, channel entries = 3 (Float3) + 4 (Color) + 0 (Quat) = 7, key pool =
@@ -104,21 +105,21 @@ TEST_CASE("propanim.resource: cooked-clip wire round-trips (counts + sample iden
         restoredSrc.Serialize(reader);
     }
 
-    // Deserialize -> rebuild the runtime clip.
+    // Deserialize, then rebuild the runtime clip.
     PropertyAnimationClip rebuilt;
     restoredSrc.FillClip(rebuilt);
 
     REQUIRE(rebuilt.tracks.Size() == original.tracks.Size());
     CHECK(rebuilt.duration == doctest::Approx(original.duration));
 
-    // Track metadata + kinds survived.
+    // Track metadata and kinds survived.
     CHECK(rebuilt.tracks[0].componentType.AsView() == StringView(u8"Transform"));
     CHECK(rebuilt.tracks[0].propertyPath.AsView() == StringView(u8"position"));
     CHECK(rebuilt.tracks[0].kind == TrackValueKind::Float3);
     CHECK(rebuilt.tracks[1].propertyPath.AsView() == StringView(u8"light.color"));
     CHECK(rebuilt.tracks[2].kind == TrackValueKind::Quat);
 
-    // Sample identity at a few times across every kind (curves + tangents + quat all preserved).
+    // The same samples at a few times across every kind (curves, tangents and quats all preserved).
     for (const f32 t : {0.0f, 0.5f, 1.0f, 1.5f, 2.0f})
     {
         const Float3 a = original.tracks[0].Sample(t).Get<Float3>();
@@ -156,7 +157,7 @@ TEST_CASE("propanim.resource: a malformed wire yields a safe partial clip, never
     src.channelKeyCount.PushBack(99u);
 
     PropertyAnimationClip clip;
-    src.FillClip(clip); // must not crash / overread
+    src.FillClip(clip); // must not crash or overread
     REQUIRE(clip.tracks.Size() == 1u);
     CHECK(clip.tracks[0].channels[0].KeyCount() == 0u); // no keys materialized from the bad run
 }

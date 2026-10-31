@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the keys generated from the action registry: one binding per effective
-// chord and alternate, run by the root through the registry, bound again on a rebind and on a
-// registration; a focused widget's own binding of the same keys first; and a set that dies
-// leaving the keymap and the root as they were.
+// Editor::App tests: the key bindings generated from the action registry. There is one binding
+// per effective chord and alternate, run by the root through the registry, and the bindings are
+// rebuilt on a rebind and on a registration. A focused widget's own binding of the same keys wins,
+// and a destroyed set leaves the keymap and the root as they were.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -102,7 +102,7 @@ TEST_CASE("action-shortcuts: a focused widget's own binding of the same keys run
     REQUIRE(actions.Register(Move(undo)));
     Bed bed;
     app::ActionShortcuts shortcuts(DefaultAllocator(), bed.Keymap(), *bed.root, actions);
-    // A field of its own context with its own undo on the same keys.
+    // A field with its own context, which binds its own undo to the same keys.
     RefPtr<gui::Button> field = MakeRef<gui::Button>(DefaultAllocator());
     field->SetKeyContext(u8"field");
     u32 own = 0;
@@ -136,7 +136,7 @@ TEST_CASE("action-shortcuts: a set that dies takes its bindings and handlers; th
     CHECK_FALSE(bed.root->HandlesCommand(u8"file.save"));
     bed.Press(gui::KeyCode::S, gui::KeyModCtrl);
     CHECK(saves == 0u);
-    // A registration after it is gone reaches nobody.
+    // A registration after the set is destroyed reaches nothing.
     REQUIRE(actions.Register(Declare(u8"file.exit", u8"Exit", u8"ctrl-q")));
     CHECK(bed.Keymap().BindingCount() == before);
 }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Timeline widget tests (headless). The Timeline is
-// domain-agnostic (no clip), so these exercise the pure surface: the shared time<->pixel transform
-// round-trips through zoom + scroll, the ruler tick step follows {1,2,5}x10^n and never lets
-// labels collide, and the playhead clamps + fires OnPlayheadMoved only on a real change.
+// Timeline widget tests (headless). The Timeline knows nothing of clips, so these exercise its
+// own surface: the shared transform between time and pixels round-trips through zoom and scroll,
+// the ruler tick step follows {1,2,5}x10^n and never lets labels collide, and the playhead clamps
+// and fires OnPlayheadMoved only on a real change.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -49,7 +49,7 @@ TEST_CASE("timeline: PickTickStep follows {1,2,5}x10^n and never collides labels
         const f32 step = Timeline::PickTickStep(pps, 48.0f);
         CHECK(step * pps >= 48.0f);
     }
-    // Degenerate inputs never divide-by-zero.
+    // Degenerate inputs never divide by zero.
     CHECK(Timeline::PickTickStep(0.0f, 48.0f) == doctest::Approx(1.0f));
 }
 
@@ -71,7 +71,7 @@ TEST_CASE("timeline: time<->pixel transform round-trips through zoom + scroll (D
     }
 
     // Zoom is clamped (no runaway); the transform stays consistent after a clamp.
-    tl->SetPixelsPerSecond(1.0f); // below the min -> clamped
+    tl->SetPixelsPerSecond(1.0f); // below the minimum, so clamped
     CHECK(tl->PixelsPerSecond() >= 4.0f);
     CHECK(tl->XToTime(tl->TimeToX(2.0f)) == doctest::Approx(2.0f));
 }
@@ -95,7 +95,7 @@ TEST_CASE("timeline: playhead clamps to [0,duration] and fires only on change")
     CHECK(fires == 1);
     CHECK(last == doctest::Approx(1.0f));
 
-    tl->SetPlayheadTime(1.0f); // no change -> no event
+    tl->SetPlayheadTime(1.0f); // no change, no event
     CHECK(fires == 1);
 
     tl->SetPlayheadTime(5.0f); // clamp to duration
@@ -112,7 +112,7 @@ TEST_CASE("timeline: playhead clamps to [0,duration] and fires only on change")
     CHECK(tl->PlayheadTime() == doctest::Approx(1.0f));
 }
 
-// === dopesheet: lanes, selection, box-select, drag-is-visual ===
+// === dopesheet: lanes, selection, box select, and drags that only report ===
 // pps=100, scroll=0, labelCol=0 -> TimeToX(t)=t*100. kRulerHeight=24; lane height 22 -> lane0 cy=35.
 
 TEST_CASE("timeline dopesheet: click selects the nearest key on the lane + fires OnSelectionChanged")
@@ -142,7 +142,7 @@ TEST_CASE("timeline dopesheet: click selects the nearest key on the lane + fires
     int moves = 0;
     tl->OnKeysMoved.Add([&](f32) { ++moves; });
     auto up = Mouse(50.0f, 35.0f);
-    tl->OnMouseUp(up); // click, no move -> no drag
+    tl->OnMouseUp(up); // a click with no move is not a drag
     CHECK(moves == 0);
 }
 
@@ -172,7 +172,7 @@ TEST_CASE("timeline dopesheet: dragging a selected key emits OnKeysMoved(seconds
     CHECK(moves == 1);
     CHECK(moved == doctest::Approx(0.3f)); // 30px / 100pps
 
-    // Drags are visual: the widget never moved the key, so it is still hit at its ORIGINAL x=50.
+    // Drags only report: the widget never moved the key, so it is still hit at its original x=50.
     auto probe = Mouse(50.0f, 35.0f);
     tl->OnMouseDown(probe);
     CHECK(tl->IsKeySelected(0, 0));
@@ -223,7 +223,7 @@ TEST_CASE("timeline dopesheet: box-select picks the keys inside the rectangle")
 
     // Box from (10,26) to (60,60): lane0 both keys (x=20,50; cy=35) in; lane1 key x=80 out.
     auto down = Mouse(10.0f, 26.0f);
-    tl->OnMouseDown(down); // empty area -> begins box-select
+    tl->OnMouseDown(down); // an empty area begins a box select
     auto move = Mouse(60.0f, 60.0f);
     tl->OnMouseMove(move);
     auto up = Mouse(60.0f, 60.0f);
@@ -234,7 +234,7 @@ TEST_CASE("timeline dopesheet: box-select picks the keys inside the rectangle")
     CHECK_FALSE(tl->IsKeySelected(1, 0));
 }
 
-// === panning + scroll clamping (the "can't reach a section / ends drift past the clip" fixes) ===
+// === panning and scroll clamping (every section is reachable, and the ends stay at the clip) ===
 
 TEST_CASE("timeline: scroll clamps to the content extent at every zoom")
 {
@@ -244,8 +244,8 @@ TEST_CASE("timeline: scroll clamps to the content extent at every zoom")
     tl->Measure(BoxConstraints::Tight(400.0f, 60.0f));
     tl->Layout(0.0f, 0.0f, 400.0f, 60.0f);
 
-    // Whole clip fits (4 s visible > 3 s clip): scroll is pinned at 0 - zooming out can
-    // never push both ends away from the content.
+    // The whole clip fits (4 s visible, 3 s clip): scroll is pinned at 0, so zooming out never
+    // pushes both ends away from the content.
     tl->SetScrollSeconds(5.0f);
     CHECK(tl->ScrollSeconds() == doctest::Approx(0.0f));
 
@@ -281,12 +281,12 @@ TEST_CASE("timeline: middle-drag pans to any section and clamps at the edges")
     tl->OnMouseDown(down);
     CHECK(down.Handled);
 
-    // Drag 100 px left -> the view moves 1 s forward in time.
+    // Dragging 100 px left moves the view 1 s forward in time.
     foundation::ui::MouseEventArgs move = Mouse(100.0f, 10.0f);
     tl->OnMouseMove(move);
     CHECK(tl->ScrollSeconds() == doctest::Approx(1.0f));
 
-    // Drag far right -> clamped at 0 (never before the clip start).
+    // Dragging far right clamps at 0 (never before the clip start).
     foundation::ui::MouseEventArgs farRight = Mouse(4000.0f, 10.0f);
     tl->OnMouseMove(farRight);
     CHECK(tl->ScrollSeconds() == doctest::Approx(0.0f));
@@ -365,7 +365,7 @@ TEST_CASE("timeline: lane labels select the track - gutter click, key pick, prog
             ++fires;
         });
 
-    // Gutter click on the SECOND lane row (ruler 24 + lane0 22 -> lane1 spans y 46..68).
+    // Gutter click on the second lane row (ruler 24 plus lane0 22, so lane1 spans y 46..68).
     foundation::ui::MouseEventArgs down = Mouse(30.0f, 50.0f);
     tl->OnMouseDown(down);
     CHECK(down.Handled);
@@ -378,7 +378,7 @@ TEST_CASE("timeline: lane labels select the track - gutter click, key pick, prog
     tl->OnMouseDown(again);
     CHECK(fires == 1);
 
-    // Picking a KEY selects its lane too (lane 0's key at t=1 -> x = 120 + 1*100 = 220, cy=35).
+    // Picking a key selects its lane too (lane 0's key at t=1 is at x = 120 + 1*100 = 220, cy=35).
     foundation::ui::MouseEventArgs keyDown = Mouse(220.0f, 35.0f);
     tl->OnMouseDown(keyDown);
     foundation::ui::MouseEventArgs keyUp = keyDown;
@@ -418,7 +418,7 @@ TEST_CASE("timeline: OnViewChanged fires on zoom + scroll (the D1 shared-transfo
     CHECK(views >= 1);
 
     const int afterZoom = views;
-    tl->SetScrollSeconds(5.0f); // duration 100, width 800 @ 200px/s -> 5s scroll is in range
+    tl->SetScrollSeconds(5.0f); // duration 100, width 800 at 200px/s: a 5s scroll is in range
     CHECK(tl->ScrollSeconds() == doctest::Approx(5.0f));
     CHECK(views > afterZoom);
 }

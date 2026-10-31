@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/DrawableTests.bf (faithful; Beef `new X()/defer ReleaseRef` ->
-// stack values / MakeRef children, `===` reference-equality -> pointer ==).
-// NOTE: the two NineSlice_* tests are not ported; they require NineSliceDrawable.
+// Drawable tests: state lists, layers, insets, nine-slices, aspect fitting and rounded images.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -55,7 +53,7 @@ TEST_CASE("drawable: StateList_GetReturnsNullIfNoNormal")
 
 TEST_CASE("drawable: Layer_AddLayer_IncreasesCount")
 {
-    // Just verify it doesn't crash - drawing needs a VGContext. AddLayer consumes the ref.
+    // Only checks that adding layers works; drawing needs a VGContext. AddLayer consumes the ref.
     LayerDrawable layer;
     layer.AddLayer(core::MakeRef<ColorDrawable>(core::DefaultAllocator(), core::Color::Red));
     layer.AddLayer(core::MakeRef<ColorDrawable>(core::DefaultAllocator(), core::Color::Blue),
@@ -118,7 +116,7 @@ TEST_CASE("drawable: NineSlice_DrawablePadding_ClampsToZero")
 
 TEST_CASE("drawable: Drawable_StateAwareDraw_DelegatesToStateless")
 {
-    // ShapeDrawable has no state-aware override - should delegate. Creation must not invoke it.
+    // ShapeDrawable has no state-aware override, so it delegates. Creation does not invoke it.
     bool called = false;
     ShapeDrawable sd{
         ShapeDrawable::DrawFn{[&](UIDrawContext&, const core::Rectangle&) { called = true; }}};
@@ -127,8 +125,8 @@ TEST_CASE("drawable: Drawable_StateAwareDraw_DelegatesToStateless")
 
 TEST_CASE("drawable: statelist Disabled dominates interaction flags")
 {
-    // A disabled control under the mouse is Disabled|Hover: it must render DISABLED, not
-    // light up with the hover layer (the generic high->low flag stripping got this wrong).
+    // A disabled control under the mouse is Disabled|Hover: it renders disabled rather than
+    // lighting up with the hover layer.
     auto list = core::MakeRef<StateListDrawable>(core::DefaultAllocator());
     auto normal = core::MakeRef<ColorDrawable>(core::DefaultAllocator(), core::Color::Black);
     auto hover = core::MakeRef<ColorDrawable>(core::DefaultAllocator(), core::Color::Green);
@@ -158,7 +156,7 @@ namespace
 }
 
 // KeepAspect draws at the desired shape, as large as fits and centred: a 14 by 14 icon in a 40 by
-// 10 box is 10 by 10 in the middle, not 40 by 10. Without it the drawable fills (Sedulous eeaa5376).
+// 10 box is 10 by 10 in the middle, not 40 by 10. Without it the drawable fills.
 TEST_CASE("drawable: DrawableView KeepAspect fits and centres rather than stretching")
 {
     foundation::vg::VGContext vgContext;
@@ -216,9 +214,8 @@ TEST_CASE("drawable: an ImageView and an ImageDrawable round the picture's corne
 
 TEST_CASE("drawable: statelist picks the weightiest defined state - a pressed control under the pointer draws pressed")
 {
-    // A button is hovered whenever it is pressed by a pointer: Pressed|Hover, which a style
-    // rarely defines. Stripping flags by bit value dropped Pressed first and drew hover, so no
-    // pressed button ever showed it was pressed (Snowline's course cards, on a phone and a desktop).
+    // A button is hovered whenever a pointer presses it: Pressed|Hover, which a style rarely
+    // defines. The lookup keeps Pressed over Hover, so a pressed button shows that it is pressed.
     auto list = core::MakeRef<StateListDrawable>(core::DefaultAllocator());
     auto normal = core::MakeRef<ColorDrawable>(core::DefaultAllocator(), core::Color::Black);
     auto hover = core::MakeRef<ColorDrawable>(core::DefaultAllocator(), core::Color::Green);

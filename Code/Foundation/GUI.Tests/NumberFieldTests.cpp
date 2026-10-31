@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - NumberField (E6): expressions read on commit, snapped and kept in range, written with the
-// step's decimals between a prefix and a suffix; arrows, keys and the wheel step it; a press and
-// a drag scrubs it, a press let go starts editing.
+// GUI - NumberField. Expressions are read on commit, snapped and kept in range, and written with
+// the step's decimals between a prefix and a suffix. The arrows, keys and the wheel step the value.
+// A press and drag scrubs it, and a press released without a drag starts editing.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -41,7 +41,7 @@ namespace
         }
         EventDispatcher& D() { return *root->GetEventDispatcher(); }
         static core::u32 K(KeyCode k) { return static_cast<core::u32>(k); }
-        // A press let go on the field: editing, all of it selected.
+        // A press released on the field starts editing, with all the text selected.
         void ClickToEdit()
         {
             D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
@@ -74,7 +74,7 @@ TEST_CASE("number: written with the step's decimals between its prefix and suffi
     b.field->SetInteger(true);
     CHECK(b.field->GetValue() == doctest::Approx(2.0)); // whole numbers
     CHECK(b.field->GetText() == core::StringView(u8"$2 ea"));
-    CHECK(b.changes == 0); // code reports nothing
+    CHECK(b.changes == 0); // a change from code reports nothing
 }
 
 TEST_CASE("number: typed text commits on Return as its expression, snapped and kept in range")
@@ -85,7 +85,7 @@ TEST_CASE("number: typed text commits on Return as its expression, snapped and k
     CHECK(b.field->IsEditing());
     b.D().InjectText(core::StringView(u8"2*3.6"));
     b.D().InjectKeyDown(Bed::K(KeyCode::Return));
-    CHECK(b.field->GetValue() == doctest::Approx(7.0)); // 7.2 to the step
+    CHECK(b.field->GetValue() == doctest::Approx(7.0)); // 7.2 snapped to the step
     CHECK(b.field->GetText() == core::StringView(u8"7"));
     CHECK(b.changes == 1);
     CHECK(b.changeEvents == 1);
@@ -100,11 +100,11 @@ TEST_CASE("number: typed text commits on Return as its expression, snapped and k
     b.ClickToEdit();
     b.D().InjectText(core::StringView(u8"nonsense"));
     b.D().InjectKeyDown(Bed::K(KeyCode::Return));
-    CHECK(b.field->GetValue() == doctest::Approx(100.0)); // back as it was
+    CHECK(b.field->GetValue() == doctest::Approx(100.0)); // restored to its previous value
     CHECK(b.field->GetText() == core::StringView(u8"100"));
     CHECK(b.changes == 2);
 
-    // Its prefix and suffix may be typed or left out.
+    // The prefix and suffix may be typed or left out.
     b.field->SetSuffix(core::String(u8" px"));
     b.ClickToEdit();
     b.D().InjectText(core::StringView(u8"12 px"));
@@ -129,7 +129,7 @@ TEST_CASE("number: the arrows, the keys and the wheel step it, each a committed 
     b.D().InjectMouseWheel(core::Float2{30.0f, 12.0f}, core::Float2{0.0f, 1.0f});
     CHECK(b.field->GetValue() == doctest::Approx(12.0));
 
-    // The up arrow, held: once on the press, then repeating.
+    // The up arrow, held: it steps once on the press, then repeats.
     const Rect up = b.field->GetUpButton()->GetScreenBounds();
     const core::Float2 at{up.x + up.width * 0.5f, up.y + up.height * 0.5f};
     b.D().InjectMouseMove(at);
@@ -148,7 +148,7 @@ TEST_CASE("number: a press and a drag scrubs it; Shift fine, Ctrl coarse")
     b.D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
     b.D().InjectMouseMove(core::Float2{32.0f, 12.0f}); // within the threshold
     CHECK(b.field->GetValue() == doctest::Approx(0.0));
-    b.D().InjectMouseMove(core::Float2{50.0f, 12.0f}); // 20 px: five steps
+    b.D().InjectMouseMove(core::Float2{50.0f, 12.0f}); // 20 px gives five steps
     CHECK(b.field->GetValue() == doctest::Approx(5.0));
     CHECK(b.inputs == 1);
     CHECK(b.changes == 0);
@@ -156,9 +156,9 @@ TEST_CASE("number: a press and a drag scrubs it; Shift fine, Ctrl coarse")
     CHECK(b.changes == 1);
     CHECK_FALSE(b.field->IsEditing()); // a scrub, not a click
 
-    b.field->SetStep(0.0); // continuous: a two-hundredth of the range per four pixels
+    b.field->SetStep(0.0); // continuous: one two-hundredth of the range per four pixels
     b.D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
-    b.D().InjectMouseMove(core::Float2{70.0f, 12.0f}, KeyModShift); // a tenth: 40 px is 0.5
+    b.D().InjectMouseMove(core::Float2{70.0f, 12.0f}, KeyModShift); // Shift scrubs at a tenth, so 40 px is 0.5
     CHECK(b.field->GetValue() == doctest::Approx(5.5));
     b.D().InjectMouseUp(core::Float2{70.0f, 12.0f}, MouseButton::Left);
 }
@@ -182,7 +182,7 @@ TEST_CASE("number: Escape mid-scrub puts the value back and reports the cancel")
     CHECK(b.changes == 0);
     CHECK_FALSE(b.field->IsEditing());
 
-    // Escape on a press not yet a scrub cancels nothing that changed.
+    // Escape on a press that is not yet a scrub has nothing to cancel.
     b.D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
     b.D().InjectKeyDown(Bed::K(KeyCode::Escape));
     b.D().InjectMouseUp(core::Float2{30.0f, 12.0f}, MouseButton::Left);
@@ -198,20 +198,20 @@ TEST_CASE("number: mixed, no number shows, and the user's next change commits ev
     CHECK(b.field->IsMixed());
     CHECK(b.field->GetText().Size() == 0u);
 
-    // A press let go and Return with nothing typed: still mixed, nothing committed.
+    // A press released, then Return with nothing typed: still mixed, and nothing is committed.
     b.ClickToEdit();
     b.D().InjectKeyDown(Bed::K(KeyCode::Return));
     CHECK(b.field->IsMixed());
     CHECK(b.changes == 0);
 
-    // Typed: the value it already held is committed all the same.
+    // When the typed value is the one it already held, it is committed all the same.
     b.D().InjectText(core::StringView(u8"4"));
     b.D().InjectKeyDown(Bed::K(KeyCode::Return));
     CHECK_FALSE(b.field->IsMixed());
     CHECK(b.field->GetValue() == doctest::Approx(4.0));
     CHECK(b.changes == 1);
 
-    // A scrub from mixed, given up: mixed again.
+    // A scrub that starts from mixed and is given up leaves it mixed again.
     b.field->SetValue(4.0);
     b.field->SetMixed(true);
     b.other->RequestFocus();
@@ -223,7 +223,7 @@ TEST_CASE("number: mixed, no number shows, and the user's next change commits ev
     CHECK(b.field->GetText().Size() == 0u);
     b.D().InjectMouseUp(core::Float2{50.0f, 12.0f}, MouseButton::Left);
 
-    // SetValue clears it.
+    // SetValue clears the mixed state.
     b.field->SetValue(2.0);
     CHECK_FALSE(b.field->IsMixed());
     CHECK(b.field->GetText() == core::StringView(u8"2"));
@@ -249,21 +249,21 @@ TEST_CASE("number: markup sets its range, its form and its value")
     auto* f = core::Cast<NumberField>(tree.Get());
     REQUIRE(f != nullptr);
     CHECK(f->GetMin() == doctest::Approx(-10.0));
-    CHECK(f->GetValue() == doctest::Approx(2.3)); // to the step
+    CHECK(f->GetValue() == doctest::Approx(2.3)); // snapped to the step
     CHECK(f->GetText() == core::StringView(u8"2.3 m"));
 }
 
 TEST_CASE("number: a field too narrow for its number and its arrows gives the arrows' room to the number")
 {
     Bed bed;
-    CHECK(bed.field->ShowsArrows()); // 120 wide: both fit
+    CHECK(bed.field->ShowsArrows()); // 120 wide, so both arrows fit
     CHECK(bed.field->GetUpButton()->IsVisible());
     bed.field->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(40.0f); });
     (void)bed.root->UpdateLayout();
     CHECK_FALSE(bed.field->ShowsArrows());
     CHECK_FALSE(bed.field->GetUpButton()->IsVisible());
     CHECK_FALSE(bed.field->GetDownButton()->IsVisible());
-    // Its keys still step it.
+    // The keys still step it.
     bed.field->SetStep(1.0);
     bed.field->SetValue(5.0);
     bed.field->RequestFocus();

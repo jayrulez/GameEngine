@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The scene->render extraction bridge: spawn a camera + mesh entities in a scene and
-// verify ExtractSceneInto snapshots the per-mesh world matrices + mesh/material into an
+// The scene-to-render extraction bridge: spawn a camera and mesh entities in a scene and
+// verify ExtractSceneInto snapshots the per-mesh world matrices, mesh and material into an
 // ExtractedScene (the data the scene-agnostic renderer consumes), and ExtractPrimaryCamera
 // reads the camera view/projection.
 #include <doctest/doctest.h>
@@ -13,8 +13,8 @@ import foundation.vfs; // the data mount the subsystem reads engine data through
 import foundation.scene;
 import foundation.geometry;
 import foundation.materials;
-import foundation.render;           // ExtractedScene / MeshRenderData / ViewCamera (scene-agnostic)
-import engine.render; // components + ExtractSceneInto / ExtractPrimaryCamera
+import foundation.render;           // ExtractedScene, MeshRenderData, ViewCamera (scene-agnostic)
+import engine.render; // components, ExtractSceneInto, ExtractPrimaryCamera
 import foundation.scene.resource;   // SerializeScene (post-process settings round-trip)
 import foundation.resource;
 import foundation.rhi;
@@ -75,7 +75,7 @@ TEST_CASE("ExtractSceneInto builds the draw list; ExtractPrimaryCamera reads the
     CHECK(Near(vc.view.m[3][2], -5.0f));            // view = inverse(camera world)
     CHECK_FALSE(Near(vc.projection.m[2][3], 0.0f)); // a real perspective projection
     // The projection takes the shape the view draws into when given one, the authored aspect
-    // otherwise: x scale = y scale / aspect (Sedulous ebbf7a3b).
+    // otherwise: x scale = y scale / aspect.
     const f32 authored = vc.projection.m[1][1] / vc.projection.m[0][0];
     ViewCamera wide;
     REQUIRE(ExtractPrimaryCamera(scene, wide, nullptr, 3.0f));
@@ -91,7 +91,7 @@ TEST_CASE("ExtractSceneInto builds the draw list; ExtractPrimaryCamera reads the
     for (RenderData* rd : snapshot.Items())
     {
         const auto* m = static_cast<const MeshRenderData*>(rd);
-        CHECK(m->category == RenderCategories::Opaque); // opaque material -> opaque category
+        CHECK(m->category == RenderCategories::Opaque); // opaque material, opaque category
         CHECK(m->mesh == cube.Get());
         CHECK(m->material == material.Get());
         CHECK(m->entityId != 0); // tagged with a packed entity handle
@@ -160,7 +160,7 @@ TEST_CASE("ExtractSceneInto on a scene without render managers yields an empty s
 
 namespace
 {
-    // Builds a scene of `n` quad meshes at world x = 0..n-1; returns the mesh/material alive.
+    // Builds a scene of `n` quad meshes at world x = 0..n-1; returns the mesh and material alive.
     void BuildBigScene(scene::Scene& scene, int n, RefPtr<geometry::StaticMesh>& mesh,
                        RefPtr<materials::Material>& material)
     {
@@ -177,7 +177,7 @@ namespace
         }
         scene.UpdateTransforms();
     }
-    // The world-x sum is a drop/dup-proof invariant: each entity contributes its index exactly once.
+    // The world-x sum catches drops and duplicates: each entity contributes its index exactly once.
     f64 SumWorldX(const ExtractedScene& s)
     {
         f64 sum = 0;
@@ -286,7 +286,7 @@ TEST_CASE("ExtractSceneInto carries a mesh's fade, clamped, and draws a faded op
         }
         else if (md->fade == 0.0f)
         {
-            // Solid: the depth prepass draws it, as before.
+            // Solid: the depth prepass draws it.
             solid += md->category == RenderCategories::Opaque ? 1u : 0u;
         }
         else if (Near(md->fade, 0.5f))
@@ -308,7 +308,7 @@ TEST_CASE("ExtractSceneInto carries a mesh's fade, clamped, and draws a faded op
 TEST_CASE("extract: a skinned mesh in a scene that is not simulating reports no motion")
 {
     // The animator's last two poses stay a step apart while nothing advances them; drawn as
-    // motion, TAA kept dropping its history on a paused character.
+    // motion, they would make TAA drop its history on a paused character.
     scene::Scene scene{DefaultAllocator()};
     auto* meshes = scene.AddSystem<MeshComponentManager>();
     RefPtr<geometry::StaticMesh> mesh = geometry::Primitives::Quad(DefaultAllocator());
@@ -342,7 +342,7 @@ TEST_CASE("instanced-mesh: seeded identity instance + entity-relative compositio
     auto* mgr = scene.AddSystem<InstancedMeshComponentManager>();
     RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
 
-    // A fresh component is seeded with ONE identity instance (editor workflow: assign a mesh,
+    // A fresh component is seeded with one identity instance (editor workflow: assign a mesh,
     // see it render at the entity), and instances compose with the entity's world transform.
     scene::EntityHandle e = scene.CreateEntity(u8"scatter");
     scene.SetLocalPosition(e, Float3{5, 0, 0});
@@ -360,7 +360,7 @@ TEST_CASE("instanced-mesh: seeded identity instance + entity-relative compositio
     CHECK(Near(rd->worldCenter.x, 5.0f));
     const u32 firstVersion = rd->version;
 
-    // Moving the ENTITY moves the set: the composed transforms change and the renderer's upload
+    // Moving the entity moves the set: the composed transforms change and the renderer's upload
     // key (version) bumps even though the authored set didn't change.
     scene.SetLocalPosition(e, Float3{5, 7, 0});
     scene.UpdateTransforms();
@@ -370,7 +370,7 @@ TEST_CASE("instanced-mesh: seeded identity instance + entity-relative compositio
     CHECK(Near(rd2->transforms[0].m[3][1], 7.0f));
     CHECK(rd2->version != firstVersion);
 
-    // Unmoved + unchanged: no recompose, same version (static sets stay zero-cost).
+    // Unmoved and unchanged: no recompose, same version (static sets stay zero-cost).
     ExtractedScene out3{DefaultAllocator()};
     ExtractInstancedMeshesInto(scene, out3);
     const auto* rd3 = static_cast<const MultiMeshRenderData*>(out3.Items()[0]);
@@ -631,15 +631,15 @@ TEST_CASE("ExtractEnvironmentInto carries the sky texture product (uid identity,
     auto* env = scene.AddSystem<engine::render::EnvironmentSystem>();
     env->Environment().skyMode = foundation::render::SkyMode::Cubemap;
 
-    // A cube-shaped product (no GPU objects needed - identity/shape are what extraction reads).
+    // A cube-shaped product (no GPU objects needed: identity and shape are what extraction reads).
     RefPtr<foundation::texture::Texture> sky =
         MakeRef<foundation::texture::Texture>(DefaultAllocator());
     sky->Adopt(nullptr, nullptr, nullptr, nullptr, 64, 64, rhi::TextureFormat::RGBA8Unorm,
                /*isCube*/ true);
     env->Environment().skyTexture =
-        sky.Get(); // direct override (picker/serialized path binds by guid)
+        sky.Get(); // direct override (the picker and serialized path bind by guid)
 
-    // The IBL lighting dimmers ride the snapshot (defaults 1 = full physical strength).
+    // The IBL lighting dimmers ride the snapshot (default 1: full physical strength).
     env->Environment().iblDiffuseIntensity = 0.4f;
     env->Environment().iblSpecularIntensity = 0.7f;
 
@@ -652,7 +652,7 @@ TEST_CASE("ExtractEnvironmentInto carries the sky texture product (uid identity,
     CHECK(out.Sky().iblDiffuseIntensity == doctest::Approx(0.4f));
     CHECK(out.Sky().iblSpecularIntensity == doctest::Approx(0.7f));
 
-    // No texture -> no identity (the IBL keeps its programmatic/procedural source).
+    // No texture, no identity (the IBL keeps its programmatic or procedural source).
     env->Environment().skyTexture = foundation::resource::Ref<foundation::texture::Texture>{};
     foundation::render::ExtractedScene out2{DefaultAllocator()};
     engine::render::ExtractEnvironmentInto(scene, out2);
@@ -661,9 +661,9 @@ TEST_CASE("ExtractEnvironmentInto carries the sky texture product (uid identity,
 
 TEST_CASE("extraction refreshes the material cache from the refs EVERY frame (late binds heal)")
 {
-    // The Sponza symptom: multi-materials that resolve AFTER the first frame (cook finishing
-    // in the background) must not stay null - the cache is not a one-shot resolve-time
-    // snapshot. Extraction re-reads the refs per frame.
+    // Multi-materials that resolve after the first frame (a cook finishing in the background)
+    // must not stay null: the cache is not a one-shot resolve-time snapshot. Extraction
+    // re-reads the refs per frame.
     scene::Scene scene(DefaultAllocator(), u8"world");
     auto* meshes = scene.AddSystem<MeshComponentManager>();
 
@@ -676,7 +676,7 @@ TEST_CASE("extraction refreshes the material cache from the refs EVERY frame (la
     scene::EntityHandle e = scene.CreateEntity(u8"multi");
     MeshComponent& mc = meshes->Add(e);
     mc.mesh = cube;
-    // Two slots: slot 0 resolved, slot 1 UNRESOLVED (a bare guid - the pre-cook state).
+    // Two slots: slot 0 resolved, slot 1 unresolved (a bare guid: the pre-cook state).
     mc.materials.PushBack(foundation::resource::Ref<materials::Material>(matA));
     foundation::resource::Ref<materials::Material> late;
     late.SetId(Guid{0x1, 0x2});
@@ -687,7 +687,7 @@ TEST_CASE("extraction refreshes the material cache from the refs EVERY frame (la
     REQUIRE(first.Items().Size() == 1u);
     {
         const auto* rd = static_cast<const MeshRenderData*>(first.Items()[0]);
-        CHECK(rd->material == matA.Get()); // slot 0 = the whole-mesh primary
+        CHECK(rd->material == matA.Get()); // slot 0 is the whole-mesh primary
         REQUIRE(rd->submeshMaterialCount == 2u);
         CHECK(rd->submeshMaterials[1].Get() == nullptr); // not cooked yet
     }
@@ -700,11 +700,11 @@ TEST_CASE("extraction refreshes the material cache from the refs EVERY frame (la
     REQUIRE(second.Items().Size() == 1u);
     {
         const auto* rd = static_cast<const MeshRenderData*>(second.Items()[0]);
-        CHECK(rd->submeshMaterials[1].Get() == matB.Get()); // healed - no reopen needed
+        CHECK(rd->submeshMaterials[1].Get() == matB.Get()); // healed: no reopen needed
     }
 
-    // Single-entry list = whole-mesh path (no submesh routing), serving the old single-
-    // material setup through the same array.
+    // A single-entry list takes the whole-mesh path (no submesh routing), serving a
+    // single-material setup through the same array.
     mc.materials.Resize(1);
     ExtractedScene third{DefaultAllocator()};
     ExtractSceneInto(scene, third);
@@ -793,12 +793,12 @@ TEST_CASE("PostProcessSettings: defaults match today's look, and round-trip thro
 {
     RegisterRenderComponentReflection();
 
-    // Defaults MUST match the RenderSubsystem's current hardcoded values (Phase 1 changes nothing
-    // visually until the passes are wired to read these).
+    // The defaults match the RenderSubsystem's own values, so a default block changes nothing
+    // visually.
     {
         PostProcessSystem sys;
         const PostProcessSettings& d = sys.Post();
-        CHECK(d.exposureEV == 0.0f); // 2^0 = the old fixed 1.0 multiplier
+        CHECK(d.exposureEV == 0.0f); // 2^0: a 1.0 multiplier
         CHECK(d.tonemapOperator == TonemapOperator::AgX);
         CHECK(d.bloomEnabled);
         CHECK(Near(d.bloomIntensity, 0.05f));
@@ -814,7 +814,7 @@ TEST_CASE("PostProcessSettings: defaults match today's look, and round-trip thro
 
     // Reflected for the auto-generated inspector section: the type resolves with every property.
     const TypeInfo& ti = TypeOf<PostProcessSettings>();
-    CHECK(PropertyCount(ti) >= 15u); // exposure + tonemap + bloom(4) + ao(4) + ssr(2) + aa(4)
+    CHECK(PropertyCount(ti) >= 15u); // exposure, tonemap, bloom(4), ao(4), ssr(2), aa(4)
 
     // Edit a field of each kind (float, bool, all three enums), serialize the whole scene, reload:
     // the authored look survives (the "serialize with the scene, ship to the runtime" contract).
@@ -859,7 +859,7 @@ TEST_CASE("PostProcessSettings: defaults match today's look, and round-trip thro
 
 TEST_CASE("ResolveScenePost maps authored settings to the per-view ViewPostConfig (EV -> linear)")
 {
-    // A default block resolves to the historical renderer globals (no visual change).
+    // A default block resolves to the renderer's global defaults (no visual change).
     {
         PostProcessSettings d;
         const ViewPostConfig vp = ResolveScenePost(d);
@@ -869,7 +869,7 @@ TEST_CASE("ResolveScenePost maps authored settings to the per-view ViewPostConfi
         CHECK(vp.aoMode == 0u); // AoMode::Off
         CHECK(Near(vp.aoStrength, 0.6f));
     }
-    // Exposure is authored in stops: +2 EV = 4x, -1 EV = 0.5x. AO enum -> u32.
+    // Exposure is authored in stops: +2 EV is 4x, -1 EV 0.5x. The AO enum becomes a u32.
     {
         PostProcessSettings s;
         s.exposureEV = 2.0f;
@@ -886,7 +886,8 @@ TEST_CASE("ResolveScenePost maps authored settings to the per-view ViewPostConfi
         CHECK(vp.aoMode == 2u); // AoMode::SSAO
         CHECK_FALSE(vp.bloomEnabled);
     }
-    // AA-mode enum -> the mutually-exclusive TAA/FXAA flags; tonemap operator -> agx bool; SSR.
+    // The AA-mode enum becomes the mutually exclusive TAA and FXAA flags, the tonemap operator the
+    // agx bool; SSR.
     {
         PostProcessSettings taa;
         taa.aaMode = AaMode::TAA;
@@ -921,7 +922,7 @@ TEST_CASE("ResolveScenePost maps authored settings to the per-view ViewPostConfi
         CHECK(vp.ssrEnabled);
         CHECK(Near(vp.ssrIntensity, 0.7f));
     }
-    // SSGI: enable + intensity map straight through.
+    // SSGI: enable and intensity map straight through.
     {
         PostProcessSettings gi;
         gi.ssgiEnabled = true;
@@ -934,7 +935,7 @@ TEST_CASE("ResolveScenePost maps authored settings to the per-view ViewPostConfi
 
 TEST_CASE("ApplyViewPostOverride strips effects per view without touching the authored config")
 {
-    // Start from a fully-enabled config (exposure/tonemap preserved by every override).
+    // Start from a fully-enabled config (exposure and tonemap preserved by every override).
     const auto base = []()
     {
         ViewPostConfig vp;
@@ -958,7 +959,7 @@ TEST_CASE("ApplyViewPostOverride strips effects per view without touching the au
         CHECK(vp.autoExposure); // per-effect flags leave adaptation alone
     }
     {
-        // The master toggle also FREEZES auto exposure (editing clarity: the viewport must not
+        // The master toggle also freezes auto exposure (editing clarity: the viewport must not
         // shift brightness with the camera); the fixed authored EV survives.
         ViewPostConfig vp = base();
         ApplyViewPostOverride(vp, ViewPostOverride{.disablePost = true});
@@ -984,7 +985,7 @@ TEST_CASE("ApplyViewPostOverride strips effects per view without touching the au
         CHECK_FALSE(vp.fxaaEnabled);
     }
 
-    // The master "No Post" strips bloom/AO/SSR/AA but keeps exposure + tonemap (so it still displays).
+    // The master "No Post" strips bloom, AO, SSR and AA but keeps exposure and tonemap (so it still displays).
     {
         ViewPostConfig vp = base();
         ApplyViewPostOverride(vp, ViewPostOverride{.disablePost = true});
@@ -1007,7 +1008,7 @@ TEST_CASE("ApplyViewPostOverride strips effects per view without touching the au
 TEST_CASE("components: reflected types carry authored displayName + category attributes")
 {
     // The inspector's add-component menu and section headers resolve these; an annotated
-    // type must expose BOTH (authored intent, not name heuristics).
+    // type must expose both (authored intent, not name heuristics).
     RegisterRenderComponentReflection();
 
     const struct
@@ -1045,15 +1046,15 @@ TEST_CASE("render: DebugView isolates per-view gizmos (camera-preview fix, task 
     rhi::null::NullDevice device{DefaultAllocator()};
     foundation::vfs::NativeFileSystem dataFs(foundation::vfs::FindDataRoot(), DefaultAllocator());
     RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
-    // View-frustum culling is ON by default for every host of the subsystem (editor, player,
-    // samples) since 2026-09-24; a per-view ViewPostOverride::disableCulling is the A/B.
+    // View-frustum culling is on by default for every host of the subsystem (editor, player,
+    // samples); a per-view ViewPostOverride::disableCulling is the A/B.
     CHECK(sub.ViewCulling());
 
-    // Two distinct viewport keys (e.g. the main editor viewport + the camera-preview inset).
+    // Two distinct viewport keys (e.g. the main editor viewport and the camera-preview inset).
     int mainKey = 0;
     int previewKey = 0;
 
-    // Distinct keys -> distinct, STABLE buffers; the same key always returns the same buffer.
+    // Distinct keys give distinct, stable buffers; the same key always returns the same buffer.
     debug::DebugDraw& mainDbg = sub.DebugView(&mainKey);
     debug::DebugDraw& previewDbg = sub.DebugView(&previewKey);
     CHECK(&mainDbg != &previewDbg);
@@ -1063,16 +1064,15 @@ TEST_CASE("render: DebugView isolates per-view gizmos (camera-preview fix, task 
     // A per-view buffer is also distinct from the shared per-scene buffer path.
     CHECK(&sub.DebugView(&mainKey) != &sub.DebugGlobal());
 
-    // Draw into the MAIN view's buffer; the PREVIEW view's buffer stays empty - so an editor
-    // viewport's grid/gizmos can never bleed into a second view of the same scene.
+    // Draw into the main view's buffer; the preview view's buffer stays empty, so an editor
+    // viewport's grid and gizmos can never bleed into a second view of the same scene.
     mainDbg.DrawLine(Float3{0, 0, 0}, Float3{1, 0, 0}, Color{1, 1, 1, 1});
     CHECK(mainDbg.HasAnyDraws());
     CHECK_FALSE(previewDbg.HasAnyDraws());
 
-    // AND the per-scene list is a third, independent buffer: a keyed view draws BOTH its own
-    // list and the scene's (2026-08-18 fix: the original either/or made keyed views - the edit
-    // viewport - silently drop ALL scene-level debug draw: physics + navmesh invisible in the
-    // editor while PIE showed them). Isolation still holds: scene list != any view list.
+    // And the per-scene list is a third, independent buffer: a keyed view (the edit viewport)
+    // draws both its own list and the scene's, so physics and navmesh debug show in the editor as
+    // in play-in-editor. Isolation still holds: the scene list is no view's list.
     scene::Scene worldScene(DefaultAllocator(), u8"debug-scene");
     debug::DebugDraw& sceneDbg = sub.DebugScene(worldScene);
     CHECK(&sceneDbg != &mainDbg);
@@ -1084,8 +1084,8 @@ TEST_CASE("render: DebugView isolates per-view gizmos (camera-preview fix, task 
 
 TEST_CASE("render: a view carries the scene AND view debug lists independently (keyed-view fix)")
 {
-    // The RenderView plumbing behind the fix: AddView hands the frame BOTH lists; the debug
-    // pass merges global + scene + view per view. Pin the storage contract headlessly.
+    // The RenderView plumbing: AddView hands the frame both lists; the debug pass merges the
+    // global, scene and view lists per view. Pin the storage contract headlessly.
     RenderView view;
     int sceneList = 0;
     int viewList = 0;
@@ -1100,8 +1100,8 @@ TEST_CASE("render: a view carries the scene AND view debug lists independently (
 
 TEST_CASE("extract: effectively-inactive entities render NOTHING; toggling restores exactly")
 {
-    // One gate per extraction loop, driven by the effective-active cache - so an inactive
-    // PARENT hides a child's renderables without touching own flags.
+    // One gate per extraction loop, driven by the effective-active cache, so an inactive
+    // parent hides a child's renderables without touching their own flags.
     scene::Scene scene(DefaultAllocator(), u8"active-gate");
     auto* meshes = scene.AddSystem<MeshComponentManager>();
     auto* instanced = scene.AddSystem<InstancedMeshComponentManager>();
@@ -1142,12 +1142,12 @@ TEST_CASE("extract: effectively-inactive entities render NOTHING; toggling resto
     {
         ExtractedScene all{DefaultAllocator()};
         extractAll(all);
-        CHECK(all.Size() == 3);                        // parent mesh + child instanced + bystander
+        CHECK(all.Size() == 3);                        // parent mesh, child instanced, bystander
         CHECK(all.Lights().Size() == 1);
         CHECK(all.ReflectionProbes().Size() == 1);
     }
 
-    // Deactivate the PARENT: the whole subtree goes dark; own flags below are untouched.
+    // Deactivate the parent: the whole subtree goes dark; the flags below are untouched.
     scene.SetActive(parent, false);
     {
         ExtractedScene dark{DefaultAllocator()};
@@ -1632,7 +1632,7 @@ TEST_CASE("extract: an inactive primary camera falls through to the next primary
 
 TEST_CASE("ResolveScenePost: auto-exposure window resolves EV stops to linear clamps")
 {
-    // Defaults: off, and no grading (a default block stays byte-identical to the old config).
+    // Defaults: off, and no grading (a default block changes nothing).
     {
         PostProcessSettings d;
         const ViewPostConfig vp = ResolveScenePost(d);
@@ -1655,7 +1655,7 @@ TEST_CASE("ResolveScenePost: auto-exposure window resolves EV stops to linear cl
         CHECK(Near(vp.autoExposureMin, 0.25f)); // 2^-2
         CHECK(Near(vp.autoExposureMax, 8.0f));  // 2^3
     }
-    // A grading Ref with no resolved product (or no GPU view) resolves to no grading - the
+    // A grading Ref with no resolved product (or no GPU view) resolves to no grading; the
     // strip-shape guard (width == height^2) is only consulted on a live product.
     {
         PostProcessSettings s;
@@ -1669,8 +1669,8 @@ TEST_CASE("ResolveScenePost: auto-exposure window resolves EV stops to linear cl
 
 TEST_CASE("EnvironmentSettings: the IBL lighting dimmers serialize with the scene (v4)")
 {
-    // Mirror of the PostProcessSettings round-trip: author the v4 fields, serialize the
-    // whole scene, reload - the dimmers survive (and default to 1 = full strength).
+    // Like the PostProcessSettings round-trip: author the version 4 fields, serialize the
+    // whole scene and reload; the dimmers survive (and default to 1, full strength).
     {
         engine::render::EnvironmentSettings d;
         CHECK(d.iblDiffuseIntensity == doctest::Approx(1.0f));
@@ -1813,7 +1813,7 @@ TEST_CASE("render: a view's camera reads its kind, planes and height from its pr
 TEST_CASE("render: the shadow cascades start at the camera's own near plane")
 {
     // A camera whose near plane is 2 m: with uniform splits (lambda 0) over a 60 m reach the first
-    // cascade ends a quarter of the way from 2 m to 60 m, not from the 0.1 m once assumed.
+    // cascade ends a quarter of the way from 2 m to 60 m, not from 0.1 m.
     ViewCamera cam;
     cam.view = Float4x4::LookAtRH(Float3{0, 2, 0}, Float3{0, 2, -10}, Float3{0, 1, 0});
     cam.projection = Float4x4::PerspectiveFovRH(1.0472f, 16.0f / 9.0f, 2.0f, 400.0f);
@@ -1918,7 +1918,7 @@ TEST_CASE("render: RequestPick keys on the viewport, answers nothing without a k
     RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
 
     int viewportKey = 0;
-    // No key = no view could ever answer: refused up front (0), never pending.
+    // No key means no view could ever answer: refused up front (0), never pending.
     CHECK(sub.RequestPick(nullptr, 5, 5) == kInvalidPickRequest);
     CHECK_FALSE(sub.IsPickPending(kInvalidPickRequest));
 
@@ -1949,7 +1949,7 @@ TEST_CASE("EnvironmentSystem keeps the scene's render clock from the scene's own
     scene.Start();
     CHECK(env->TimeSeconds() == 0.0f);
 
-    // The scene's dt is what the scene manager composed (context x group x scene scales): the
+    // The scene's dt is what the scene manager composed (context, group and scene scales): the
     // clock adds exactly that, once per frame, keeping last frame's value for motion vectors.
     scene.Update(0.5f);
     CHECK(env->TimeSeconds() == 0.5f);
@@ -1957,11 +1957,11 @@ TEST_CASE("EnvironmentSystem keeps the scene's render clock from the scene's own
     scene.Update(0.25f);
     CHECK(env->TimeSeconds() == 0.75f);
     CHECK(env->PrevTimeSeconds() == 0.5f);
-    // A paused scene (scale 0 -> dt 0) holds still.
+    // A paused scene (scale 0, so dt 0) holds still.
     scene.Update(0.0f);
     CHECK(env->TimeSeconds() == 0.75f);
     CHECK(env->PrevTimeSeconds() == 0.75f);
-    // The editor's editing scene ticks with simulation DISABLED (Simulate enables it): the
+    // The editor's editing scene ticks with simulation disabled (Simulate enables it): the
     // clock does not advance there, so a frozen world's grass stands still.
     scene.SetSimulationEnabled(false);
     scene.Update(0.5f);
@@ -1988,8 +1988,7 @@ TEST_CASE("EnvironmentSystem keeps the scene's render clock from the scene's own
 
 TEST_CASE("EnvironmentSettings: the default colours are sRGB and render as they always have")
 {
-    // The defaults were picked while colours were read raw; written in sRGB, they decode to the
-    // same linear values, so a new scene looks as it did.
+    // The defaults are written in sRGB and decode to the linear values checked below.
     const EnvironmentSettings e;
     const auto decodesTo = [](Color c, f32 r, f32 g, f32 b)
     {
@@ -2068,8 +2067,8 @@ TEST_CASE("render: the debug lists empty at every iteration's end, a frame rende
     CHECK_FALSE(sub.DebugScreen().HasAnyDraws());
 }
 
-// The inspector offers an enum's REGISTERED values only: EntityOriented, the one orientation that
-// turns with its entity, was missing from the reflection, so no authored sprite could use it.
+// The inspector offers an enum's registered values only, so every sprite orientation must be
+// registered, EntityOriented (the one that turns with its entity) included.
 TEST_CASE("components: every sprite orientation is offered to the editor")
 {
     RegisterRenderComponentReflection();

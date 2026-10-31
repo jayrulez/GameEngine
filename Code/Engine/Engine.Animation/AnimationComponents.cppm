@@ -4,14 +4,13 @@
 /// Engine::Animation - the `:components` partition.
 ///
 /// The scene-facing side of skeletal animation. Two components, each with a manager that ticks its
-/// players every frame and feeds the resulting skinning matrices into the target MeshComponent(s)
+/// players every frame and feeds the resulting skinning matrices into the target MeshComponents
 /// for GPU skinning: SkeletalAnimationComponent (a single clip via AnimationPlayer) and
-/// AnimationGraphComponent (a state machine / blend trees via AnimationGraphPlayer). This is what
-/// replaces driving players by hand in app code - the engine now animates skinned meshes from the
-/// scene tick.
+/// AnimationGraphComponent (a state machine and blend trees via AnimationGraphPlayer). The engine
+/// animates skinned meshes from the scene tick, so app code does not drive players by hand.
 ///
-/// It sits at the animation<->render seam (depends on both foundation.animation and the render
-/// components); neither of those depends back on it.
+/// This partition depends on both foundation.animation and the render components; neither of
+/// those depends back on it.
 
 module;
 #include "Core/Prelude.h"
@@ -23,9 +22,9 @@ import foundation.core;
 import foundation.profiler;
 import foundation.resource;
 import foundation.scene;
-import foundation.animation; // Skeleton, AnimationClip, AnimationPlayer, AnimationGraph(+Player)
+import foundation.animation; // Skeleton, AnimationClip, AnimationPlayer, AnimationGraph, AnimationGraphPlayer
 import engine.render; // MeshComponentManager / MeshComponent (the feed target)
-import foundation.script.facades; // script::Entity/Scene + CurrentRunResources (the SceneAnimation handle)
+import foundation.script.facades; // script::Entity/Scene and CurrentRunResources (the SceneAnimation handle)
 
 using namespace foundation::core;
 
@@ -38,12 +37,12 @@ export namespace engine::animation
     using namespace foundation::animation; // bare foundation animation types (BoneTransform, ...)
 
 
-    // What an animator does with the root motion its clips carry (root-motion.md P2).
+    // What an animator does with the root motion its clips carry.
     enum class RootMotionMode : u8
     {
         Ignore,    // nothing: the character stays where its game puts it (the default)
         Entity,    // the animator's entity moves and turns by it (a non-physics actor)
-        Character, // the nearest character at or above it walks by it (it still collides) and turns
+        Character, // the nearest character at or above it walks by it (still colliding) and turns
         Script,    // held for SceneAnimation.rootMotionTranslation / rootMotionYaw
     };
 
@@ -115,9 +114,9 @@ export namespace engine::animation
             scene.SetLocalTransform(entity, t);
         }
 
-        /// An animator's tick of root motion, by its mode (root-motion.md P2). The delta is in the
-        /// skeleton's model space (the first mesh entity's world), so it is carried into the world
-        /// through that, whatever lies between the animator and its mesh (an armature at rest).
+        /// An animator's tick of root motion, by its mode. The delta is in the skeleton's model
+        /// space (the first mesh entity's world), so it is carried into the world through that,
+        /// whatever lies between the animator and its mesh (an armature at rest).
         inline void Apply(scene::Scene& scene, scene::EntityHandle owner, Span<const scene::EntityRef> meshes,
                           const scene::EntityRef& target, RootMotionMode mode, RootMotionRuntime& rt,
                           const animation::RootMotionDelta& delta, f32 deltaTime)
@@ -177,7 +176,7 @@ export namespace engine::animation
             {
                 Release(scene, rt);
             }
-            // A velocity for the next fixed step (the controller collides and slides; one step late).
+            // A velocity for the next fixed step. The controller collides and slides, one step late.
             Float3 velocity = deltaTime > 0.0f ? rt.worldTranslation * (1.0f / deltaTime) : Float3{};
             velocity.y = 0.0f;
             mover->MoveCharacter(e, velocity);
@@ -187,23 +186,23 @@ export namespace engine::animation
         }
     }
 
-    // Skeletal animation on an entity: a player over a (borrowed, shared) skeleton plays a clip and
-    // produces per-bone skinning matrices each frame. The manager owns the player's lifetime + tick.
-    // `meshEntities` are the entities whose MeshComponent receives the matrices (a character's skinned
-    // mesh nodes); empty => feed the component's own entity. All borrowed resources must outlive the
-    // component (the resource manager / model keeps the skeleton + clip alive).
+    // Skeletal animation on an entity: a player over a borrowed, shared skeleton plays a clip and
+    // produces per-bone skinning matrices each frame. The manager owns the player's lifetime and
+    // tick. `meshEntities` are the entities whose MeshComponent receives the matrices (a character's
+    // skinned mesh nodes); empty feeds the component's own entity. All borrowed resources must
+    // outlive the component (the resource manager or model keeps the skeleton and clip alive).
     struct SkeletalAnimationComponent
     {
-        // Resource refs: Guid-serialized + proxy-resolved (editor pickers/scene round-trip), or
-        // direct runtime objects (samples/spawn code). The manager rebuilds the player when the
-        // skeleton object changes (a pick or a hot reload).
+        // Resource refs: serialized by Guid and resolved through the proxy (editor pickers, scene
+        // round-trip), or direct runtime objects (samples, spawn code). The manager rebuilds the
+        // player when the skeleton object changes (a pick or a hot reload).
         foundation::resource::Ref<animation::Skeleton> skeleton;
         foundation::resource::Ref<animation::AnimationClip> clip;
         UniquePtr<animation::AnimationPlayer> player;   // created lazily by the manager
         animation::Skeleton* playerSkeleton = nullptr;  // the skeleton the player was built for
         animation::AnimationClip* playerClip = nullptr; // the clip last handed to the player
-        // Feed targets by stable guid (empty => own entity): serializable and prefab-remapped,
-        // so ONE animator can drive a multi-part character's skinned mesh nodes.
+        // Feed targets by stable guid (empty means the own entity): serializable and remapped by
+        // prefabs, so one animator can drive a multi-part character's skinned mesh nodes.
         Array<scene::EntityRef> meshEntities;
         f32 speed = 1.0f;
         f32 startTime = 0.0f; // initial clock (desync a herd); applied on first tick
@@ -213,7 +212,7 @@ export namespace engine::animation
         RootMotionRuntime rootMotionState; // runtime
     };
 
-    // Persist the refs + tunables; the player and per-frame feed state are runtime-only.
+    // Persist the refs and tunables; the player and per-frame feed state are runtime-only.
     inline void Serialize(ISerializer& ar, SkeletalAnimationComponent& c)
     {
         foundation::core::Serialize(ar, "skeleton", c.skeleton);
@@ -236,10 +235,10 @@ export namespace engine::animation
         c.clip.Bind(manager);
     }
 
-    // Ticks every SkeletalAnimationComponent in ScenePhase::PostUpdate (the "animation" phase, before
-    // render extraction): advance each player, then write its current + previous skinning matrices into
-    // the target MeshComponent(s) (borrowed for the frame - the player, owned by the component, keeps
-    // the matrix storage alive). Lazily creates each component's player on first tick.
+    // Ticks every SkeletalAnimationComponent in ScenePhase::PostUpdate (the animation phase, before
+    // render extraction): advances each player, then writes its current and previous skinning
+    // matrices into the target MeshComponents. They are borrowed for the frame; the player, owned by
+    // the component, keeps the matrix storage alive. Creates each component's player on first tick.
     class SkeletalAnimationComponentManager final
         : public scene::SerializableComponentManager<SkeletalAnimationComponent>
     {
@@ -263,15 +262,14 @@ export namespace engine::animation
         }
 
     public:
-        // Time is SIMULATION-GATED (user ruling 2026-08-18): animation is gameplay-side state and
-        // must not advance in a non-simulating scene - watching things animate in the editor's edit
-        // mode was distracting and wrong. Consumers that want live animation in a paused-looking
-        // context (the bespoke preview pages) enable simulation on their PRIVATE preview scene
-        // (PreviewViewport::SetSimulationEnabled) - scenes default to simulating, so players and
-        // headless tests are unaffected. The pose is not: in a non-simulating scene the manager
-        // still feeds its meshes the player's standing pose (the rig's rest pose before any clip),
-        // since a skinned mesh fed nothing draws its raw vertices, which an FBX file keeps lying in
-        // its authoring tool's axes.
+        // Time is simulation-gated: animation is gameplay state and does not advance in a
+        // non-simulating scene, such as the editor's edit mode. Consumers that want live animation
+        // in a paused-looking context (the preview pages) enable simulation on their private
+        // preview scene (PreviewViewport::SetSimulationEnabled). Scenes default to simulating, so
+        // players and headless tests are unaffected. The pose is not gated: in a non-simulating
+        // scene the manager still feeds its meshes the player's standing pose (the rig's rest pose
+        // before any clip), since a skinned mesh fed nothing draws its raw vertices, which an FBX
+        // file keeps lying in its authoring tool's axes.
 
         void OnUpdate(scene::ScenePhase phase, f32 deltaTime) override
         {
@@ -300,19 +298,19 @@ export namespace engine::animation
                         root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return;
                     }
-                    // (Re)build the player when the skeleton object changed - first tick, an editor
+                    // Rebuild the player when the skeleton object changed: the first tick, an editor
                     // pick, or a hot reload swapping the product behind the ref.
                     if (a.player.Get() == nullptr || a.playerSkeleton != skeleton)
                     {
                         a.player =
                             MakeUnique<animation::AnimationPlayer>(DefaultAllocator(), *skeleton);
                         a.playerSkeleton = skeleton;
-                        a.playerClip = nullptr; // (re)play below - the new player has no clip yet
+                        a.playerClip = nullptr; // replay below: the new player has no clip yet
                     }
-                    // React to the CLIP changing independently of the skeleton (editor picks land one at
-                    // a time; a hot reload swaps the product behind the ref mid-play). autoPlay starts the
-                    // new clip; manual users drive a.player->Play themselves. Not while the scene stands
-                    // still: the clip starts when the simulation does.
+                    // React to the clip changing independently of the skeleton (editor picks land one
+                    // at a time; a hot reload swaps the product behind the ref mid-play). autoPlay
+                    // starts the new clip; manual users drive a.player->Play themselves. Not while the
+                    // scene stands still: the clip starts when the simulation does.
                     animation::AnimationClip* clip = a.clip.Get();
                     if (!m_scene->SimulationEnabled())
                     {
@@ -367,12 +365,12 @@ export namespace engine::animation
         scene::Scene* m_scene = nullptr;
     };
 
-    // State-machine-driven skeletal animation: a graph player (over a borrowed, shared skeleton +
-    // AnimationGraph) evaluates the graph each frame - state transitions, blend trees, layer blending -
+    // State-machine-driven skeletal animation: a graph player over a borrowed, shared skeleton and
+    // AnimationGraph evaluates the graph each frame (state transitions, blend trees, layer blending)
     // and produces per-bone skinning matrices. The richer counterpart to SkeletalAnimationComponent
-    // (single clip); drive transitions via the player's parameters (SetFloat/SetBool/SetTrigger). Same
-    // feed contract: `meshEntities` are the MeshComponents that receive the matrices (empty => own
-    // entity). All borrowed resources must outlive the component.
+    // (single clip); drive transitions via the player's parameters (SetFloat/SetBool/SetTrigger).
+    // Same feed contract: `meshEntities` are the MeshComponents that receive the matrices (empty
+    // feeds the own entity). All borrowed resources must outlive the component.
     struct AnimationGraphComponent
     {
         foundation::resource::Ref<animation::Skeleton> skeleton;
@@ -380,7 +378,7 @@ export namespace engine::animation
         UniquePtr<animation::AnimationGraphPlayer> player; // created lazily by the manager
         animation::Skeleton* playerSkeleton = nullptr;     // what the player was built for
         animation::AnimationGraph* playerGraph = nullptr;
-        Array<scene::EntityRef> meshEntities; // feed targets by stable guid (empty => own entity)
+        Array<scene::EntityRef> meshEntities; // feed targets by stable guid (empty: own entity)
         bool active = true;                   // evaluate this frame?
         RootMotionMode rootMotion = RootMotionMode::Ignore; // v2
         scene::EntityRef rootMotionTarget; // v2: what Entity mode moves (empty: this entity)
@@ -407,10 +405,10 @@ export namespace engine::animation
         c.graph.Bind(manager);
     }
 
-    // Ticks every AnimationGraphComponent in ScenePhase::PostUpdate, same as the skeletal manager but
-    // evaluating an AnimationGraphPlayer. Runs at a LOWER UpdateOrder (before SkeletalAnimationComponent-
-    // Manager), mirroring Sedulous's graph-before-clip ordering; an entity is expected to use one or the
-    // other (mixing both pushes to the same MeshComponent - the later writer wins).
+    // Ticks every AnimationGraphComponent in ScenePhase::PostUpdate, as the skeletal manager does
+    // but evaluating an AnimationGraphPlayer. Runs at a lower UpdateOrder than
+    // SkeletalAnimationComponentManager, so the graph runs before the clip; an entity is expected to
+    // use one or the other (mixing both pushes to the same MeshComponent, and the later writer wins).
     class AnimationGraphComponentManager final
         : public scene::SerializableComponentManager<AnimationGraphComponent>
     {
@@ -465,7 +463,7 @@ export namespace engine::animation
                         root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return;
                     }
-                    // (Re)build the player when either object changed - first tick, a pick, a reload.
+                    // Rebuild the player when either object changed: the first tick, a pick, a reload.
                     if (a.player.Get() == nullptr || a.playerSkeleton != skeleton ||
                         a.playerGraph != graph)
                     {
@@ -519,26 +517,26 @@ export namespace engine::animation
         scene::Scene* m_scene = nullptr;
     };
 
-    // Instanced skinning for crowds: the companion to an engine::render::InstancedMeshComponent (a
-    // "MultiMesh") that makes its N instances animate from a few shared poses. Each frame the manager
-    // samples each of its clips at `poseCount` evenly spaced phases (each clip on its own clock) into
-    // one POSE POOL, a block of poseCount palettes per clip in list order, and feeds the pool to the
-    // target instanced meshes: an instance's clip index picks the block and the mesh's pose policy the
+    // Instanced skinning for crowds: the companion to an engine::render::InstancedMeshComponent that
+    // makes its N instances animate from a few shared poses. Each frame the manager samples each of
+    // its clips at `poseCount` evenly spaced phases (each clip on its own clock) into one pose pool,
+    // a block of poseCount palettes per clip in list order, and feeds the pool to the target
+    // instanced meshes: an instance's clip index picks the block and the mesh's pose policy the
     // phase (render::SelectPose). So a crowd of thousands costs clips x poseCount palette computes.
-    // Authored like SkeletalAnimationComponent: the skeleton and clips are asset references (or direct
-    // objects from native code), the targets entity references (empty = its own entity).
+    // Authored like SkeletalAnimationComponent: the skeleton and clips are asset references (or
+    // direct objects from native code), the targets entity references (empty: its own entity).
     struct InstancedSkinningComponent
     {
         foundation::resource::Ref<animation::Skeleton> skeleton;
         Array<foundation::resource::Ref<animation::AnimationClip>> clips; // an instance's clip index is its slot here
         u32 poseCount = 32; // phases per clip (more = smoother spread, more compute)
         f32 speed = 1.0f;
-        Array<scene::EntityRef> targets; // instanced meshes to feed (a multi-part character = one per
-                                         // skinned mesh); empty => its own entity
+        Array<scene::EntityRef> targets; // instanced meshes to feed (a multi-part character has one
+                                         // per skinned mesh); empty: its own entity
         // Manager-owned per-frame state (not authored).
         Array<Float4x4> posePool; // clips x poseCount x boneCount skinning matrices, recomputed each frame
         Array<Float4x4>
-            prevPosePool; // LAST frame's palettes (per-bone motion vectors); ping-ponged, not recomputed
+            prevPosePool; // last frame's palettes (per-bone motion vectors); ping-ponged, not recomputed
         Array<BoneTransform> scratch; // boneCount scratch for SampleClip
         Array<f32> times;             // each clip's clock (wrapped to its duration)
         u32 boneCount = 0;
@@ -563,8 +561,8 @@ export namespace engine::animation
         }
     }
 
-    // Ticks every InstancedSkinningComponent in PostUpdate (before render extraction): advance the shared clock, sample
-    // the clip at M phases into the pose pool, and hand the pool to the target InstancedMeshComponent.
+    // Ticks every InstancedSkinningComponent in PostUpdate (before render extraction): advances each clip's clock,
+    // samples each clip at poseCount phases into the pose pool, and hands the pool to the target InstancedMeshComponents.
     class InstancedSkinningComponentManager final : public scene::SerializableComponentManager<InstancedSkinningComponent>
     {
     public:
@@ -611,7 +609,7 @@ export namespace engine::animation
                     const u32 poses = clipCount * s.poseCount;
                     const usize poolSize = static_cast<usize>(poses) * boneCount;
 
-                    // Ping-pong: last frame's pool becomes this frame's PREV (per-bone motion vectors) - no re-sampling.
+                    // Ping-pong: last frame's pool becomes this frame's previous one (per-bone motion vectors), with no re-sampling.
                     {
                         Array<Float4x4> tmp = static_cast<Array<Float4x4>&&>(s.posePool);
                         s.posePool = static_cast<Array<Float4x4>&&>(s.prevPosePool);
@@ -659,7 +657,7 @@ export namespace engine::animation
                                 Span<Float4x4>{palette, boneCount});
                         }
                     }
-                    // First frame (or a pool size change): no prev yet -> prev = current (zero motion).
+                    // First frame or a pool size change: no previous pool yet, so it copies the current one (zero motion).
                     if (s.prevPosePool.Size() != poolSize)
                     {
                         s.prevPosePool.Resize(poolSize);
@@ -703,13 +701,13 @@ export namespace engine::animation
         scene::Scene* m_scene = nullptr;
     };
 
-    // A scene-bound ANIMATION handle (SceneAnimation.of(scene)): runtime WORLD ops on the animation
-    // components that need the manager-owned runtime player (which the component data cannot reach) -
-    // play/stop/pause a single-clip player, drive a graph's parameters, swap the clip by resource id.
-    // Keyed by entity, mirroring ScenePhysics / SceneRender / SceneAudio (component = auto-reflected
-    // DATA: speed/autoPlay/active; scene-handle = world ops). The players are built lazily by the
-    // managers in PostUpdate, so control from a behavior's onUpdate sees them; a call before the first
-    // animation tick (e.g. onStart) is a safe no-op.
+    // A scene-bound animation handle (SceneAnimation.of(scene)): runtime world ops on the animation
+    // components that need the manager-owned runtime player, which the component data cannot reach.
+    // It plays, stops and pauses a single-clip player, drives a graph's parameters and swaps the clip
+    // by resource id. Keyed by entity, like ScenePhysics, SceneRender and SceneAudio: the component
+    // is auto-reflected data (speed, autoPlay, active) and the scene handle carries the world ops.
+    // The managers build the players in PostUpdate, so control from a behavior's onUpdate sees them;
+    // a call before the first animation tick (e.g. onStart) is a safe no-op.
     struct SceneAnimation
     {
         scene::Scene* scene = nullptr;
@@ -881,16 +879,17 @@ export namespace engine::animation
 
 } // exported namespace
 
-// Reflection (tooling: the editor inspector). The REFLECT_VALUE bodies +
+// Reflection (tooling: the editor inspector). The REFLECT_VALUE bodies and
 // RegisterAnimationComponentReflection() live in AnimationSubsystemImpl.cpp, kept out of this
-// interface partition (see gcc-module-interface-hygiene).
+// interface partition because GCC cannot read the module interface otherwise.
 export namespace engine::animation
 {
     void RegisterAnimationComponentReflection();
 
-    // Surfaces the animation components to SCRIPT (Track A): SkeletalAnimationComponent.of(entity) /
-    // AnimationGraphComponent.of(entity) for the DATA (speed/autoPlay/active), plus SceneAnimation.of(
-    // scene) for the world ops (play/stop, graph params, clip swap). Registers + seeds + names them so
-    // both backends bind. Called by the composition root (like RegisterRenderScriptFacade).
+    // Surfaces the animation components to scripts: SkeletalAnimationComponent.of(entity) and
+    // AnimationGraphComponent.of(entity) for the data (speed, autoPlay, active), plus
+    // SceneAnimation.of(scene) for the world ops (play/stop, graph params, clip swap). Registers,
+    // seeds and names them so both backends bind. Called by the composition root (like
+    // RegisterRenderScriptFacade).
     void RegisterAnimationScriptFacade();
 }

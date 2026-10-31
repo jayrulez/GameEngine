@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the button core (E6): toggle, activation on the press, repeat on the GUI's clock, groups by
-// a name (per GUI) or a ButtonGroup, the arrows round a group, and the text, icon and indicator parts.
+// GUI - the button core: toggling, activation on the press, repeat on the GUI's clock, groups
+// formed by a name (per GUI) or a ButtonGroup, arrow keys moving round a group, and the text, icon
+// and indicator parts.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -59,7 +60,7 @@ TEST_CASE("button: a toggle reports the user's change, not code's")
     });
     b->AddEventListener(EventType::Changed, [&](const Event&) { ++changes; });
 
-    b->SetChecked(true); // not a toggle yet: no state to set
+    b->SetChecked(true); // not a toggle yet, so there is no state to set
     CHECK_FALSE(b->IsChecked());
 
     b->SetToggle(true);
@@ -70,7 +71,7 @@ TEST_CASE("button: a toggle reports the user's change, not code's")
     CHECK(changes == 1);
     CHECK((b->GetWidgetStates() & WidgetStateChecked) != 0);
 
-    b->SetChecked(false); // code: reported to bindings only
+    b->SetChecked(false); // a change from code is reported to bindings only
     CHECK_FALSE(b->IsChecked());
     CHECK(toggled == 1);
     CHECK(changes == 1);
@@ -124,7 +125,7 @@ TEST_CASE("button: a repeat button repeats after its delay while held and over i
     gui.Update(core::Duration::FromSeconds(0.1)); // 0.15 past: one interval
     CHECK(clicks == 2);
 
-    // Off it, it pauses; back over it, it goes on.
+    // With the pointer off the button the repeat pauses; back over it, the repeat goes on.
     d->InjectMouseMove(core::Float2{300.0f, 200.0f});
     gui.Update(core::Duration::FromSeconds(0.5));
     CHECK(clicks == 2);
@@ -132,7 +133,7 @@ TEST_CASE("button: a repeat button repeats after its delay while held and over i
     gui.Update(core::Duration::FromSeconds(0.1));
     CHECK(clicks == 3);
 
-    // Released: no second click from the release, and no more repeats.
+    // On release there is no second click from the release, and no more repeats.
     d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left);
     CHECK(clicks == 3);
     gui.Update(core::Duration::FromSeconds(1.0));
@@ -148,7 +149,7 @@ TEST_CASE("button: radios of one name are a group within their GUI only")
     RadioButton* const radios[] = {low.Get(), mid.Get(), high.Get()};
     for (RadioButton* r : radios)
         r->SetName(core::String(u8"quality"));
-    // Another GUI's radio of the same name is another group.
+    // A radio of the same name in another GUI belongs to a different group.
     auto otherRoot = MakeRoot();
     auto elsewhere = Place<RadioButton>(*otherRoot, core::Float2{0.0f, 0.0f});
     elsewhere->SetName(core::String(u8"quality"));
@@ -171,7 +172,7 @@ TEST_CASE("button: radios of one name are a group within their GUI only")
     CHECK(high->IsChecked());
     CHECK(elsewhere->IsChecked());
 
-    low->SetChecked(true); // code too keeps the group exclusive
+    low->SetChecked(true); // a change from code also keeps the group exclusive
     CHECK_FALSE(high->IsChecked());
 }
 
@@ -199,7 +200,7 @@ TEST_CASE("button: a ButtonGroup makes toggles exclusive, and may allow none")
     CHECK(b->IsChecked());
     CHECK_FALSE(a->IsChecked());
     CHECK(group->GetChecked() == b.Get());
-    Click(*d, core::Float2{110.0f, 10.0f}); // kept
+    Click(*d, core::Float2{110.0f, 10.0f}); // stays checked
     CHECK(b->IsChecked());
 
     group->SetAllowsNone(true);
@@ -207,7 +208,7 @@ TEST_CASE("button: a ButtonGroup makes toggles exclusive, and may allow none")
     CHECK_FALSE(b->IsChecked());
     CHECK(group->GetChecked() == nullptr);
 
-    // A button that goes leaves its group.
+    // A button removed from the tree leaves its group.
     b->RemoveFromParent();
     b = core::RefPtr<Button>{};
     CHECK(group->GetButtons().Size() == 1);
@@ -243,7 +244,7 @@ TEST_CASE("button: the arrows move round an exclusive group, checking as they go
     d->InjectKeyDown(static_cast<core::u32>(KeyCode::Up));
     CHECK(r0->IsChecked());
 
-    // An ungrouped toggle leaves the arrows to navigation.
+    // A toggle in no group leaves the arrow keys to navigation.
     auto lone = Place<CheckBox>(*root, core::Float2{200.0f, 0.0f});
     lone->RequestFocus();
     (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
@@ -343,7 +344,7 @@ TEST_CASE("button: its text part is aligned as the button is: centred on a butto
 
 TEST_CASE("button: a toggle shows its checked icon while checked, its own icon otherwise")
 {
-    // A play button showing pause while it plays: what a click does then.
+    // A play button shows pause while it plays; this checks what a click does then.
     auto root = MakeRoot();
     auto b = Place<Button>(*root, core::Float2{0.0f, 0.0f});
     b->SetToggle(true);
@@ -351,9 +352,9 @@ TEST_CASE("button: a toggle shows its checked icon while checked, its own icon o
     b->SetCheckedIconSource(core::String(u8"icons/pause.svg"));
     REQUIRE(b->GetIconPart() != nullptr);
     CHECK(b->GetIconPart()->GetSource() == core::StringView(u8"icons/play.svg"));
-    b->SetChecked(true); // from code (a bound action checked)
+    b->SetChecked(true); // from code, as when a bound action is checked
     CHECK(b->GetIconPart()->GetSource() == core::StringView(u8"icons/pause.svg"));
-    CHECK(b->GetIconSource() == core::StringView(u8"icons/play.svg")); // its own icon is still its own
+    CHECK(b->GetIconSource() == core::StringView(u8"icons/play.svg")); // its own icon setting is unchanged
     Click(*root->GetEventDispatcher(), core::Float2{10.0f, 10.0f}); // by the user
     CHECK_FALSE(b->IsChecked());
     CHECK(b->GetIconPart()->GetSource() == core::StringView(u8"icons/play.svg"));

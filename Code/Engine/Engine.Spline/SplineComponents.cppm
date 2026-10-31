@@ -3,11 +3,11 @@
 
 /// Engine::Spline - the `engine.spline` module.
 ///
-/// The authorable 3D spline as scene DATA: SplineComponent wraps a foundation.spline
-/// SplineCurve (cubic-Bezier points + closed flag) with no per-frame work - consumers
+/// The authorable 3D spline as scene data: SplineComponent wraps a foundation.spline
+/// SplineCurve (cubic-Bezier points and a closed flag) with no per-frame work. Consumers
 /// (path-follow, scatter, road extrusion, particles) evaluate it; the editor's spline tool
-/// authors it. Data-only on purpose: no subsystem, no tick - the manager exists so the
-/// component serializes, reflects into the component menu, and rides scene composition.
+/// authors it. It is data only, with no subsystem and no tick: the manager exists so the
+/// component serializes, reflects into the component menu, and takes part in scene composition.
 
 module;
 #include "Core/Prelude.h"
@@ -82,7 +82,7 @@ export namespace engine::spline
         {
         }
 
-        /// A component that reaches its first Initialize phase with NO points was added bare
+        /// A component that reaches its first Initialize phase with no points was added bare
         /// (the editor's Add Component, a script): it is seeded. A loaded or spawned one has its
         /// points by then and is left alone.
         void OnComponentInitialized(SplineComponent& component,
@@ -139,12 +139,12 @@ export namespace engine::spline
 
     /// Scene-composition install (the domain module entry; see Engine.Composition).
     void AddSplineSceneManagers(foundation::scene::Scene& scene);
-    /// Component reflection (component menu + inspector + data-version gate). Idempotent.
+    /// Component reflection (component menu, inspector, data-version gate). Idempotent.
     void RegisterSplineComponentReflection();
 
-    /// A sampled spline result for script - WORLD-space position + unit tangent, plus the
+    /// A sampled spline result for script: the world-space position and unit tangent, plus the
     /// curve parameter and the distance along the curve the sample answers for. `valid` is
-    /// false when the entity has no spline (fields zeroed) - the RayCastHit convention.
+    /// false when the entity has no spline (fields zeroed), as with RayCastHit.
     struct SplineHit
     {
         bool valid = false;
@@ -154,8 +154,8 @@ export namespace engine::spline
         Float3 tangent{};
     };
 
-    /// The scene-bound spline facade (SceneSplines.of(scene), the ScenePhysics idiom): all
-    /// queries take the entity CARRYING the SplineComponent and answer in WORLD space (the
+    /// The scene-bound spline facade (SceneSplines.of(scene), shaped like ScenePhysics): all
+    /// queries take the entity carrying the SplineComponent and answer in world space (the
     /// entity transform places the curve; points are stored entity-local).
     struct SceneSplines
     {
@@ -172,7 +172,7 @@ export namespace engine::spline
         /// The closest point on the curve to a world position.
         [[nodiscard]] SplineHit closestPoint(foundation::script::Entity entity, f32 x, f32 y,
                                              f32 z) const;
-        /// The same by a Float3 (Sedulous's ClosestPoint).
+        /// The same by a Float3.
         [[nodiscard]] SplineHit closestPoint(foundation::script::Entity entity, Float3 world) const
         {
             return closestPoint(entity, world.x, world.y, world.z);
@@ -193,8 +193,8 @@ export namespace engine::spline
 
 export namespace engine::spline
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection, to the script surface
+    /// and which resource modules come with it. Defined in the implementation unit (one instance
+    /// per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& SplineDomain() noexcept;
 }

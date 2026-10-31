@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // ImageEditorPage tests: the factory's type, then the page from the image pages' markup
-// (Data/Editor/ImagePage.xml) over an image in a project: its picture decoded from the source file
-// and its pixels read, its facts read only, an edit of its colour space one undo step, a source
-// file that is not there said in the picture's place, and an asset that did not read.
+// (Data/Editor/ImagePage.xml) over an image in a project. Its picture is decoded from the source
+// file and its pixels read, its facts are read only, an edit of its colour space is one undo step,
+// a missing source file is reported in the picture's place, and so is an asset that did not read.
 
 #include <doctest/doctest.h>
 
@@ -99,7 +99,7 @@ namespace
 
 TEST_CASE("ImageEditor registers a factory the registry routes for ImageAsset")
 {
-    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
+    const app::AssetPageServicesSource none; // no services, only the registration; declared first so it outlives the context
     EditorContext context{DefaultAllocator()};
     RegisterImageEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::ImageAsset::StaticType());
@@ -133,7 +133,7 @@ TEST_CASE("image page: the source decoded into the picture, its pixels read, its
     REQUIRE_FALSE(facts.IsEmpty());
     for (const gui::PropertyInfo& info : facts)
         CHECK(info.ReadOnly);
-    // The grid: the notices' section, the asset's, then the facts'.
+    // The grid's sections: the notices, the asset, then the facts.
     CHECK(page->Grid()->GetSource() == &page->Sections());
     CHECK(page->Sections().SectionCount() == 3u);
 }

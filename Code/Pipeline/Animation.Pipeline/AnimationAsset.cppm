@@ -3,10 +3,10 @@
 
 /// Pipeline::Animation - the `foundation.animation.editor` module.
 ///
-/// Authoring/cook side: a SkeletonAsset / AnimationClipAsset wraps the cooked source + the source
-/// file reference; the builders cook them into the content DB (Source -> product at load). Mirrors
-/// foundation.geometry.editor. (Sources are populated round-trip from the runtime types via the
-/// resource layer; the model importer - foundation.model IR -> these sources - is a later transform.)
+/// Authoring and cook side: a SkeletonAsset or AnimationClipAsset wraps the source data and the
+/// source file reference, and the builders cook them into the content DB, where the source becomes
+/// the product at load. Shaped like foundation.geometry.editor. The model importer fills these
+/// sources from an imported model.
 
 module;
 #include "Core/Prelude.h"
@@ -43,7 +43,7 @@ export namespace pipeline{
         RTTI_OBJECT(AnimationClipAsset, pipeline::Asset)
     public:
         AnimationClipSource source;
-        // Appended (root-motion.md P0), for the root motion cook: the skeleton the clip's bone
+        // For the root motion cook: the skeleton the clip's bone
         // indices address (a named root resolves against it), and the armature's rest transform
         // (its own channels, the clip's model tracks, are turned into model space by its inverse).
         // The importer sets both.
@@ -61,9 +61,9 @@ export namespace pipeline{
     };
 
     // The animation graph is authored directly into its source (state machine, blend trees, clip refs).
-    // Editor-only canvas layout rides on the ASSET (the builder cooks `source` alone, so none of it
-    // reaches the runtime wire): per layer, per state, the node position on the graph canvas -
-    // parallel to source.layers[i].states (the page keeps them in sync on add/remove).
+    // Editor-only canvas layout lives on the asset (the builder cooks `source` alone, so none of it
+    // reaches the runtime wire): per layer and per state, the node position on the graph canvas,
+    // parallel to source.layers[i].states (the page keeps them in sync on add and remove).
     class AnimationGraphAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(AnimationGraphAsset, pipeline::Asset)
@@ -110,7 +110,7 @@ export namespace pipeline{
         {
             return &AnimationClipSource::StaticType();
         }
-        // v2 (root-motion.md P0): the root motion bake and strip; every clip re-cooks.
+        // v2: the root motion bake and strip; every clip re-cooks.
         [[nodiscard]] u32 Version() const override { return 2; }
 
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
@@ -190,7 +190,7 @@ export namespace pipeline{
         }
     };
 
-    // Registers the animation asset types for content-DB construction + deserialization.
+    // Registers the animation asset types for content-DB construction and deserialization.
     inline void RegisterAnimationAssets()
     {
         GlobalTypeRegistry().Register(SkeletonAsset::StaticType(), TypeDomain(u8"Pipeline"));
@@ -199,9 +199,9 @@ export namespace pipeline{
         RegisterSerializable<SkeletonAsset>();
         RegisterSerializable<AnimationClipAsset>();
         RegisterSerializable<AnimationGraphAsset>();
-        // The graph's cooked PRODUCT: ReadObject constructs it by type name in cook hosts, so
-        // it must be registered here too (the clip/skeleton products ride
-        // RegisterModelResourceTypes; the graph source has no other registration site).
+        // The graph's cooked product: ReadObject constructs it by type name in cook hosts, so
+        // it is registered here too. The clip and skeleton products are registered by
+        // RegisterModelResourceTypes; the graph source has no other registration site.
         GlobalTypeRegistry().Register(foundation::animation::AnimationGraphSource::StaticType());
         RegisterSerializable<foundation::animation::AnimationGraphSource>();
     }

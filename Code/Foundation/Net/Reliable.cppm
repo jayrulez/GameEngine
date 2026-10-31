@@ -3,16 +3,16 @@
 
 /// Foundation::Net - `foundation.net:reliable` partition.
 ///
-/// Reliable-UDP over the unreliable datagram substrate. A
-/// `ReliableTransport` (an INetTransport) manages per-remote connections over an IDatagramSocket and
-/// layers on: a packet header (protocol id + type + seq/ack/ackBits), ack-driven RTT, RELIABLE
-/// messages (re-included in every packet until an acked packet carried them, then delivered IN ORDER
-/// by message id), UNRELIABLE pass-through, a connect/accept handshake, and keepalive/timeout. The
-/// model (include-all-unacked-reliables-per-packet) is Fiedler-style and ideal for the turn-based
-/// target's low message rate. Fragmentation (messages > one datagram) and congestion control are
-/// not implemented; a message that exceeds the per-packet budget is dropped with a warning.
+/// Reliable UDP over the unreliable datagram layer. A `ReliableTransport` (an INetTransport)
+/// manages per-remote connections over an IDatagramSocket and adds: a packet header (protocol id,
+/// type, seq, ack, ackBits), ack-driven RTT, reliable messages (resent on an RTT-scaled timer until
+/// an acked packet carried them, then delivered in order by message id), unreliable pass-through, a
+/// connect and accept handshake, and keepalive and timeout. The model follows Glenn Fiedler's
+/// reliable-UDP articles and suits a low message rate. A reliable message larger than one datagram
+/// is fragmented and reassembled; an unreliable one that large is dropped. There is no congestion
+/// control.
 ///
-/// Tested headlessly against SimDatagramNetwork's loss/reorder - no OS sockets.
+/// Tested headless against SimDatagramNetwork's loss and reordering, with no OS sockets.
 
 module;
 #include "Core/Prelude.h"
@@ -34,15 +34,15 @@ export namespace foundation::net
     // Tunables for a ReliableTransport (all times in ms).
     struct ReliableConfig
     {
-        u16 protocolId = 0xDCE7;  // reject foreign/mismatched-version packets
+        u16 protocolId = 0xDCE7;  // reject foreign or mismatched-version packets
         f32 keepAliveMs = 100.0f; // send an ack-only packet if idle this long (keeps acks flowing)
         f32 connectResendMs = 100.0f; // resend ConnectRequest until accepted
         f32 timeoutMs = 5000.0f;      // no packet received in this long => disconnect
         f32 minResendMs = 20.0f;   // reliable resend floor (a message resends no faster than this)
         f32 maxResendMs = 1000.0f; // reliable resend ceiling (caps the RTT-scaled backoff)
-        u32 maxMessageBytes = 256u * 1024u; // largest message (reassembled) - bigger is dropped
+        u32 maxMessageBytes = 256u * 1024u; // largest message (reassembled); bigger is dropped
         u32 maxPacketBytes = 1200; // soft budget per datagram (< typical MTU); large reliable
-                                   // messages fragment into this-sized pieces + reassemble
+                                   // messages fragment into this-sized pieces and reassemble
         u32 maxPacketsPerUpdate = 64; // most Data packets one update sends a connection (a burst cap)
     };
 
@@ -61,7 +61,7 @@ export namespace foundation::net
         {
         }
 
-        // --- connection establishment (driven by the session layer / tests; not part of INetTransport) ---
+        // --- connection establishment (driven by the session layer or tests; not part of INetTransport) ---
 
         // Client: begin connecting to `remote`. Returns the local PeerId (a Connected event fires later).
         PeerId Connect(const DatagramEndpoint& remote)
@@ -71,7 +71,7 @@ export namespace foundation::net
             SendConnectRequest(c);
             return c.peer;
         }
-        // Server: accept incoming ConnectRequests (default off - a listen server opts in).
+        // Server: accept incoming ConnectRequests (default off; a listen server opts in).
         void SetAccepting(bool accepting) noexcept { m_accepting = accepting; }
 
         // --- INetTransport ---
@@ -92,8 +92,8 @@ export namespace foundation::net
             const usize limit = FragPayloadLimit();
             if (reliability != Reliability::ReliableOrdered)
             {
-                // Unreliable messages are single-datagram (fragmenting fire-and-forget data makes no
-                // sense - a lost fragment orphans the rest). Too-big unreliable is dropped.
+                // Unreliable messages are single-datagram: fragmenting fire-and-forget data makes no
+                // sense, since a lost fragment orphans the rest. A too-big unreliable message is dropped.
                 if (data.Size() > limit)
                 {
                     LOG_WARNING(
@@ -225,14 +225,14 @@ export namespace foundation::net
             u8 channel = 0;
             bool reliable = false;
             u16 id = 0;
-            // Fragmentation of a large reliable message: fragments get consecutive ids + a shared group,
+            // Fragmentation of a large reliable message: fragments get consecutive ids and a shared group,
             // so ordered delivery releases them consecutively and the receiver reassembles by group.
             bool fragmented = false;
             u32 fragGroup = 0;
             u32 fragIndex = 0;
             u32 fragCount = 1;
             f64 lastSentMs =
-                -1.0e9; // RTT-based resend: only (re)sent once this + resend-timeout elapses
+                -1.0e9; // RTT-based resend: only (re)sent once this plus the resend timeout elapses
             Array<byte> data;
         };
         struct SentPacket
@@ -273,7 +273,7 @@ export namespace foundation::net
             u16 remoteSeq = 0;    // highest received Data seq
             u32 receivedBits = 0; // history of the 32 packets before remoteSeq
             bool anyReceived = false;
-            Array<SentPacket> sentWindow; // recent sent Data packets (for acks + RTT)
+            Array<SentPacket> sentWindow; // recent sent Data packets (for acks and RTT)
             // reliable messages
             u16 nextOutReliableId = 0;
             u32 nextFragGroup = 0;
@@ -287,7 +287,7 @@ export namespace foundation::net
             f64 lastRecvMs = 0.0;
             f64 lastSendMs = -1000.0;
             f64 lastConnectSendMs = -1000.0;
-            bool ackPending = false; // received data since our last send => ack promptly
+            bool ackPending = false; // received data since our last send, so ack promptly
             u32 sentBytes = 0, recvBytes = 0;
         };
 
@@ -409,7 +409,7 @@ export namespace foundation::net
             return false;
         }
 
-        // Build + send one Data packet: header + as many DUE reliable, then pending-unreliable, messages
+        // Build and send one Data packet: the header and as many due reliable, then pending unreliable, messages
         // as fit the byte budget. Records the sent packet for ack/RTT and stamps each reliable's resend time.
         void SendDataPacket(Connection& c)
         {
@@ -518,11 +518,12 @@ export namespace foundation::net
                 }
                 return;
             }
-            // Connected: send a Data packet when a reliable message is DUE for (re)send, an unreliable is
-            // queued, an ack is owed, or a keepalive is due. RTT-timed resend => no per-tick flooding.
-            // As many packets as the due work fills (a delta bigger than a packet, a burst), up to a
-            // cap: one a tick drained a big delta over several ticks while the next ones queued behind
-            // it, and the lag grew without end. Each reliable sent is stamped, so the loop ends.
+            // Connected: send a Data packet when a reliable message is due for (re)send, an unreliable is
+            // queued, an ack is owed, or a keepalive is due. The RTT-timed resend avoids per-tick flooding.
+            // Send as many packets as the due work fills (a delta bigger than a packet, a burst), up to a
+            // cap: at one packet a tick a big delta would drain over several ticks while the next ones
+            // queued behind it, and the lag would grow without end. Each reliable sent is stamped, so the
+            // loop ends.
             const bool keepAliveDue =
                 (m_nowMs - c.lastSendMs) >= static_cast<f64>(m_cfg.keepAliveMs);
             if (AnyReliableDue(c) || !c.pendingUnreliable.IsEmpty() || c.ackPending || keepAliveDue)
@@ -556,7 +557,7 @@ export namespace foundation::net
             if (!r.Ok() || protocol != m_cfg.protocolId)
             {
                 return;
-            } // foreign/corrupt
+            } // foreign or corrupt
             const PacketType type = static_cast<PacketType>(typeRaw);
 
             Connection* c = FindByRemote(from);
@@ -674,7 +675,7 @@ export namespace foundation::net
             }
         }
 
-        // Mark sent packets acked (by ack + the 32-bit history), ack their reliable messages, sample RTT.
+        // Mark sent packets acked (by ack and the 32-bit history), ack their reliable messages, sample RTT.
         void ProcessAcks(Connection& c, u16 ack, u32 ackBits)
         {
             AckOne(c, ack);
@@ -749,7 +750,7 @@ export namespace foundation::net
             if (SeqGreater(c.nextInReliableId, id) ||
                 id == static_cast<u16>(c.nextInReliableId - 1))
             {
-                return; // already delivered (id < nextIn) - a duplicate resend
+                return; // already delivered (id < nextIn): a duplicate resend
             }
             if (id == c.nextInReliableId)
             {
@@ -781,7 +782,7 @@ export namespace foundation::net
             }
             else
             {
-                // early arrival - buffer unless already buffered
+                // early arrival: buffer unless already buffered
                 for (const BufferedIn& b : c.reorderBuffer)
                 {
                     if (b.id == id)
@@ -801,7 +802,7 @@ export namespace foundation::net
             }
         }
 
-        // A reliable message, released in order. Non-fragmented => deliver as-is. Fragmented => append to
+        // A reliable message, released in order. A whole message is delivered as is; a fragment is appended to
         // the reassembly buffer (fragments arrive consecutively since delivery is ordered); deliver the
         // whole when the last fragment lands.
         void ReleaseMessage(Connection& c, u8 channel, bool fragmented, u32 fragGroup,
@@ -826,7 +827,7 @@ export namespace foundation::net
             if (!ra.active || ra.group != fragGroup || ra.nextIndex != fragIndex)
             {
                 ra.active =
-                    false; // out-of-sequence fragment (shouldn't happen under ordered delivery) - drop
+                    false; // out-of-sequence fragment (shouldn't happen under ordered delivery): drop
                 return;
             }
             const usize base = ra.data.Size();

@@ -3,14 +3,11 @@
 
 // UI Toolkit - :color_editor partition
 //
-// Color property editor - a ColorView swatch that opens a ColorPicker (the already-ported toolkit control)
-// inside a core Dialog on click. BeginEdit when the picker opens, EndEdit on OK, CancelEdit on Cancel.
-// Ported from Sedulous.UI.Toolkit/src/PropertyGrid/ColorEditor.bf. Beef `delegate void(Color) Setter` ->
-// Function<void(Color)>; `mSwatch.Color.Value = v` -> Color.SetValue(v). The private inner
-// `ClickableColorSwatch : ColorView` becomes a PUBLIC nested class (own RTTI_OBJECT identity) whose
-// OnMouseDown (references the enclosing editor + ColorPicker + Dialog) is defined out-of-line after
-// ColorEditor is complete. Beef `new Dialog`/`new ColorPicker` -> RefPtr; the popup layer takes ownership
-// of the shown dialog (ownsView), so the local RefPtrs may drop.
+// Color property editor: a ColorView swatch that opens a ColorPicker inside a core Dialog on click.
+// BeginEdit when the picker opens, EndEdit on OK, CancelEdit on Cancel. ClickableColorSwatch is a
+// public nested class so it has its own RTTI_OBJECT identity; its OnMouseDown uses the enclosing
+// editor, ColorPicker and Dialog, so it is defined out of line after ColorEditor is complete. The
+// popup layer takes ownership of the shown dialog (ownsView), so the local RefPtrs may drop.
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +26,7 @@ namespace core = foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Color property editor - ColorView swatch that opens a ColorPicker dialog on click.
+    /// Color property editor: a ColorView swatch that opens a ColorPicker dialog on click.
     class ColorEditor : public PropertyEditor
     {
         RTTI_OBJECT(ColorEditor, PropertyEditor)
@@ -89,7 +86,7 @@ export namespace foundation::ui::toolkit
         ColorView* m_swatch = nullptr; // borrowed; the editor view RefPtr owns it
     };
 
-    // === Inner-view out-of-line body (needs the complete ColorEditor + ColorPicker + Dialog types) ===
+    // === Inner-view out-of-line body (needs the complete ColorEditor, ColorPicker and Dialog types) ===
 
     inline void ColorEditor::ClickableColorSwatch::OnMouseDown(MouseEventArgs& e)
     {

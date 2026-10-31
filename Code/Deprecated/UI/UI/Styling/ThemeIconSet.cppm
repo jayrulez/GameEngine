@@ -3,18 +3,15 @@
 
 // UI - :theme_icon_set partition.
 //
-// The SHARED, bake-ready chrome glyph set behind the built-in themes. The audit found the
-// Godot-style crisp icons were EDITOR-ONLY by wiring, not by design: the editor baked its own
-// icon set into the pixel-snapped atlas while the themes' chrome glyphs (close/chevrons/
-// checkmark...) stayed live-vector renders - the editor's dock close button was crisp, the
-// same button in UISandbox was not.
+// The shared, bake-ready chrome glyph set (close, chevrons, checkmark, ...) behind the built-in
+// themes, so every host draws them pixel-snapped from the same baked atlas.
 //
-// Themes acquire glyphs through Acquire(): when a host has INITIALIZED the set (UIHost does,
-// in its constructor), every theme shares ONE BakedSVGDrawable per glyph and the host bakes
-// them (UIHost::BakeThemeIcons -> the supersample+downsample atlas recipe); until the bake
-// lands they draw as live vectors, so init/bake ordering is free. Headless and test contexts
-// never initialize the set - Acquire hands out fresh unbaked SVGDrawables, exactly the old
-// behavior, and no static-lifetime teardown games exist (Shutdown is explicit, from UIHost).
+// Themes get glyphs through Acquire(). When a host has initialized the set (UIHost does, in its
+// constructor), every theme shares one BakedSVGDrawable per glyph and the host bakes them
+// (UIHost::BakeThemeIcons, which supersamples and downsamples into an atlas). Until the bake
+// finishes they draw as live vectors, so initialization and baking can happen in any order.
+// Headless and test contexts never initialize the set; Acquire then hands out fresh unbaked
+// SVGDrawables. Shutdown is explicit, from UIHost, so nothing depends on static teardown order.
 
 module;
 #include "Core/Prelude.h"
@@ -44,8 +41,8 @@ export namespace foundation::ui
         RadioMarkRound,
     };
 
-    /// The builtin glyph's kebab-case stylesheet name -> enum (the `svg(name)` factory's
-    /// fallback vocabulary; also used by the UI cook to validate names). None = not builtin.
+    /// The built-in glyph for a kebab-case stylesheet name (the `svg(name)` factory's fallback
+    /// vocabulary, also used by the UI cook to validate names). None when it is not built in.
     [[nodiscard]] inline Optional<ThemeIcon> ThemeIconFromName(StringView name)
     {
         struct Entry
@@ -77,18 +74,18 @@ export namespace foundation::ui
 
     class ThemeIconSet
     {
-        // Process-global icon cache (explicit Shutdown from UIHost) - glyphs live on
-        // the process allocator by design, like the global job/parser slots.
+        // Process-global icon cache, shut down explicitly by UIHost. The glyphs live on the
+        // process allocator, like the global job and parser slots.
     public:
-        /// Tripwire: bump when ThemeIcon gains a glyph (Initialize materializes ALL of them).
+        /// Bump when ThemeIcon gains a glyph (Initialize materializes all of them).
         static constexpr usize kGlyphCount = 10;
 
-        // NON-inline (UiRegistryStateImpl.cpp): shared glyph RefPtrs, one set per
-        // process (shared-libraries.md rendezvous rule).
+        // Defined out of line in UiRegistryStateImpl.cpp, so there is one set of shared glyph
+        // RefPtrs per process rather than one per shared library.
         [[nodiscard]] static ThemeIconSet& Get();
 
-        /// Materialize the shared glyphs (idempotent). Called by UIHost's constructor - BEFORE
-        /// apps build their themes - so every theme references the shared instances.
+        /// Materialize the shared glyphs (idempotent). UIHost's constructor calls this before
+        /// apps build their themes, so every theme references the shared instances.
         void Initialize()
         {
             if (m_initialized)
@@ -102,8 +99,8 @@ export namespace foundation::ui
             m_initialized = true;
         }
 
-        /// Drop the shared refs (sheets holding their own refs keep instances alive). Baked
-        /// variants must be cleared FIRST when the atlas owner is going away - see UIHost.
+        /// Drop the shared references (sheets holding their own keep instances alive). Clear
+        /// baked variants first when the atlas owner is going away; see UIHost.
         void Shutdown()
         {
             for (RefPtr<BakedSVGDrawable>& glyph : m_glyphs)
@@ -117,7 +114,7 @@ export namespace foundation::ui
         [[nodiscard]] bool IsInitialized() const noexcept { return m_initialized; }
 
         /// The shared baked glyph when the set is live, else a fresh unbaked SVGDrawable
-        /// (headless/tests - unchanged behavior). Themes call this instead of
+        /// (headless runs and tests). Themes call this instead of
         /// SVGDrawable::FromString(DefaultAllocator(), ThemeIcons::...).
         [[nodiscard]] static RefPtr<Drawable> Acquire(ThemeIcon icon)
         {
@@ -133,9 +130,10 @@ export namespace foundation::ui
             return RefPtr<Drawable>(fallback.Get());
         }
 
-        /// The TINTED shared variant (LightTheme/TexturedTheme preset a tint color at parse).
-        /// One shared instance per (glyph, tint) - a handful per theme - materialized on first
-        /// acquire and included in the bake pass. Uninitialized set: fresh unbaked, as above.
+        /// The tinted shared variant (LightTheme and TexturedTheme preset a tint color at parse).
+        /// There is one shared instance per (glyph, tint), a handful per theme, materialized on
+        /// first acquire and included in the bake pass. An uninitialized set hands out a fresh
+        /// unbaked drawable, as above.
         [[nodiscard]] static RefPtr<Drawable> Acquire(ThemeIcon icon, Color tint)
         {
             ThemeIconSet& set = Get();
@@ -160,7 +158,7 @@ export namespace foundation::ui
             return RefPtr<Drawable>(fallback.Get());
         }
 
-        /// Every live glyph (base + tinted variants), for the host's bake pass.
+        /// Every live glyph (base and tinted variants), for the host's bake pass.
         void CollectBakeable(Array<BakedSVGDrawable*>& out)
         {
             for (const RefPtr<BakedSVGDrawable>& glyph : m_glyphs)
@@ -179,8 +177,8 @@ export namespace foundation::ui
             }
         }
 
-        /// Detach baked variants (they BORROW the baker's atlas - call before the atlas owner
-        /// dies or before a re-bake at a new scale; glyphs fall back to live vector meanwhile).
+        /// Detach baked variants. They borrow the baker's atlas, so call this before the atlas
+        /// owner dies or before a re-bake at a new scale; glyphs draw as live vectors meanwhile.
         void ClearBakedVariants()
         {
             for (const RefPtr<BakedSVGDrawable>& glyph : m_glyphs)

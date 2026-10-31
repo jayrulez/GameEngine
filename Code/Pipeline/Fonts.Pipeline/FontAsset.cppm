@@ -3,16 +3,16 @@
 
 // Pipeline::Fonts - the `foundation.fonts.editor` module (tooling).
 //
-// Source-side font authoring + cook (the editor tier of the fonts triad):
-//   * FontAsset (pipeline::Asset): references a TTF/OTF/TTC file in Sources/ + the bake
-//     intent - atlas mode (raster size ramp or one MSDF bake), pixel sizes, codepoint
+// Source-side font authoring and cook (the editor tier of the fonts modules):
+//   * FontAsset (pipeline::Asset): references a TTF/OTF/TTC file in Sources/ and the bake
+//     settings: atlas mode (raster size ramp or one MSDF bake), pixel sizes, codepoint
 //     range, atlas dimensions, and the runtime family name.
 //   * FontAssetBuilder (DefaultAssetBuilder): cooks a FontAsset into a runtime
-//     FontResource - parse the font bytes once per size, bake coverage atlases through
+//     FontResource: parse the font bytes once per size, bake coverage atlases through
 //     fonts::FontBaker (or the msdfgen MSDF baker for DistanceField mode), flatten the
 //     glyph/kerning/region tables into record entries, and concatenate the atlas pixel
 //     payloads into the "data" stream.
-//   * FontAssetImporter (IFileImporter): claims .ttf/.otf/.ttc - copies the file into
+//   * FontAssetImporter (IFileImporter): claims .ttf/.otf/.ttc, copies the file into
 //     Sources/ and creates the FontAsset with the default UI ramp.
 //
 // Never linked by the runtime.
@@ -43,14 +43,14 @@ export namespace pipeline{
     namespace content = foundation::content;
 
     // How the asset bakes: a ramp of coverage rasterizations (one atlas per size), or a
-    // single MSDF atlas (size-independent sampling once the UI's DF path is on).
+    // single MSDF atlas sampled at any size.
     enum class FontBakeMode : u32
     {
         RasterRamp,
         DistanceField,
     };
 
-    // Source asset: a font file + how it should become a cooked FontResource.
+    // Source asset: a font file and how it should become a cooked FontResource.
     class FontAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(FontAsset, pipeline::Asset)
@@ -99,13 +99,13 @@ export namespace pipeline{
         }
     };
 
-    // Cooks a FontAsset into a FontResource (record entries + concatenated "data" pixels).
+    // Cooks a FontAsset into a FontResource (record entries and concatenated "data" pixels).
     class FontAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
         // The bakers bake what HarfBuzz's substitutions reach. Installed here, on the thread that
         // registers builders, not in Build: builds run in parallel on job workers, and installing
-        // from each raced another worker's shaper lookup (a crash cooking PaperKid's two fonts).
+        // from each would race another worker's shaper lookup.
         FontAssetBuilder() { HarfBuzzShaping::Install(); }
 
         [[nodiscard]] const TypeInfo* AssetType() const override
@@ -117,26 +117,25 @@ export namespace pipeline{
             return &FontResource::StaticType();
         }
 
-        // v3 (2026-09-06): FontResourceEntry's "dfPixelRange" key became
-        // "distanceFieldPixelRange" (a keyed encoding of the product would miss the old key).
-        // v2 (2026-08-12): FontResourceEntry gained the oversample fields (the jumbled-text
-        // fix - baked screen quads must divide the pack-time oversampling back out). RULE: a
-        // product schema change bumps the builder Version() in the SAME commit - the bump IS
-        // the migration; it forces every stale cooked font to re-cook.
-        // 4 (2026-09-08): FontResource 2 - the glyph bounds keys use full names.
-        // 5 (2026-10-04): a distance-field atlas is sized to its glyphs (the asset's atlas size
-        // is a maximum), and a glyph that does not fit fails the bake instead of vanishing.
-        // 6 (2026-10-15): FontResource 3 - atlases key by glyph index, so a shaper's glyphs can
-        // draw; every codepoint the range maps to keeps its glyph row (a space's too).
-        // 7 (2026-10-15): the font file is kept as the product's "font" stream, for a shaper that
-        // reads its tables in a shipped game.
-        // 8 (2026-10-15): the atlas also holds the glyphs HarfBuzz's substitutions reach from the
-        // range (ligatures, joined forms); the cook installs HarfBuzz itself, so every cook bakes
-        // the same glyphs whichever host runs it.
-        // 9 (2026-10-15): a distance-field cook writes the region of every glyph the atlas holds,
-        // not only those the range's codepoints map to (8 baked the ligatures but dropped them).
-        // 10 (2026-10-16): a distance-field atlas carries the true signed distance in alpha
-        // (MTSDF), what outlines, glows and soft shadows read.
+        // A product schema change bumps the builder Version() with it: the bump is the migration,
+        // forcing every stale cooked font to re-cook.
+        // 2: FontResourceEntry gained the oversample fields (baked screen quads divide the
+        // pack-time oversampling back out).
+        // 3: FontResourceEntry's "dfPixelRange" key is "distanceFieldPixelRange".
+        // 4: FontResource 2; the glyph bounds keys use full names.
+        // 5: a distance-field atlas is sized to its glyphs (the asset's atlas size is a maximum),
+        // and a glyph that does not fit fails the bake.
+        // 6: FontResource 3; atlases key by glyph index, so a shaper's glyphs can draw, and every
+        // codepoint the range maps to keeps its glyph row (a space's too).
+        // 7: the font file is kept as the product's "font" stream, for a shaper that reads its
+        // tables in a shipped game.
+        // 8: the atlas also holds the glyphs HarfBuzz's substitutions reach from the range
+        // (ligatures, joined forms); the cook installs HarfBuzz itself, so every cook bakes the
+        // same glyphs whichever host runs it.
+        // 9: a distance-field cook writes the region of every glyph the atlas holds, not only
+        // those the range's codepoints map to.
+        // 10: a distance-field atlas carries the true signed distance in alpha (MTSDF), which
+        // outlines, glows and soft shadows read.
         [[nodiscard]] u32 Version() const override { return 10; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
@@ -448,7 +447,7 @@ export namespace pipeline{
     // its StaticType(), defined in FontAssetImpl.cpp.
     void RegisterFontAssetReflection();
 
-    // Registers FontAsset for content-DB construction + deserialization.
+    // Registers FontAsset for content-DB construction and deserialization.
     inline void RegisterFontAsset()
     {
         RegisterFontAssetReflection(); // FontBakeMode names for the property grid

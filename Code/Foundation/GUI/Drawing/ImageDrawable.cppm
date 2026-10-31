@@ -4,8 +4,8 @@
 // GUI - :image_drawable partition
 //
 // ImageDrawable: draws an image stretched to fill the destination rect, with a tint.
-// Derived from eepp's Texture/TextureRegion drawing (batched textured quad); maps to VG's
-// DrawImage. The image is owned elsewhere (theme/atlas) - held by non-owning pointer.
+// Derived from eepp's Texture/TextureRegion drawing (a batched textured quad); maps to VG's
+// DrawImage. The image is owned elsewhere (a theme, an atlas) and held by a non-owning pointer.
 
 module;
 #include "Core/Prelude.h"
@@ -13,8 +13,8 @@ module;
 
 export module foundation.gui:image_drawable;
 
-import foundation.core;  // Color, Rectangle, Float2, Optional
-import foundation.image; // ImageData
+import foundation.core;
+import foundation.image;
 import :rect;
 import :draw_context;
 import :drawable;

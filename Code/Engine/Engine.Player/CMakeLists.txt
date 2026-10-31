@@ -1,9 +1,10 @@
-# Engine.Player - the generic game runner (engine + project content + game script; no native
-# game code required).
+# Engine.Player - the generic game runner (the engine, the project's content and its game script;
+# no native game code required).
 #
-# One runner (PlayerApplication.h), two entry points: Main.cpp on desktop (SDL shell + a device +
-# the blocking runner + CLI args) and WebMain.cpp in the browser (web shell + WebGPU + the rAF
-# runner, dist PRELOADED into the virtual FS). The engine/resource/script libraries are shared.
+# One runner (PlayerApplication.h), two entry points: Main.cpp on desktop (SDL shell, a device,
+# the blocking runner, CLI args) and WebMain.cpp in the browser (web shell, WebGPU, the rAF
+# runner, the dist fetched into the virtual FS at startup). The engine, resource and script
+# libraries are shared.
 
 # The AssiduousEngine logo baked into every player as its SVG text (EmbeddedEngineLogo.h): the
 # default loading screen shows it when a game names no loading document.
@@ -21,11 +22,11 @@ add_custom_command(
 
 if(EMSCRIPTEN)
 
-    # --- Browser player: WebMain.cpp + the web platform trio + preloaded content ---
-    # One link list, two players: Engine.Player is the reusable TEMPLATE (no game code);
+    # --- Browser player: WebMain.cpp and the web platform trio ---
+    # One link list, two players: Engine.Player is the reusable template (no game code);
     # Engine.GamePlayer (below, only when a game is wired in) compiles the game's native
-    # module IN - browsers have no dlopen, so web native is ship-only by design
-    # (game-native-code.md N5).
+    # module in. Browsers have no dlopen, so native code on the web exists only in a
+    # shipping player.
     set(_web_player_libs
         Foundation::Core
         Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Web Engine::DefaultApp
@@ -44,11 +45,11 @@ if(EMSCRIPTEN)
     add_executable(Engine.Player WebMain.cpp "${_engine_logo_src}")
     target_link_libraries(Engine.Player PRIVATE ${_web_player_libs})
 
-    # NOTHING is baked into this binary: the player FETCHES player.xml + Content.pak (the export
-    # output) and shaders.dpak (the export-cooked WGSL engine pack) from the serving folder at
-    # startup (WebMain.cpp, synchronous under ASYNCIFY). That makes the build a reusable EXPORT
-    # TEMPLATE - export any project, drop its files beside the player, serve, browse - and the
-    # web build no longer needs a native cook tool or a pre-exported dist to CONFIGURE.
+    # No content is baked into this binary: the player fetches player.xml and Content.pak (the
+    # export output) and shaders.dpak (the export-cooked WGSL engine pack) from the serving folder
+    # at startup (WebMain.cpp, synchronous under ASYNCIFY). That makes the build a reusable export
+    # template (export any project, drop its files beside the player, serve, browse), and the web
+    # build needs neither a native cook tool nor a pre-exported dist to configure.
 
     # Full-window canvas shell, the player's own (shipping-facing: <title>Player</title>, its
     # <canvas id=canvas> matches WebShell's default selector; DPR-aware resize drives the swapchain).
@@ -56,15 +57,15 @@ if(EMSCRIPTEN)
     set_source_files_properties(WebMain.cpp PROPERTIES OBJECT_DEPENDS "${_web_shell}")
     target_link_options(Engine.Player PRIVATE
         "--shell-file=${_web_shell}"
-        "-sASYNCIFY"               # device bring-up + per-frame GPU fence waits yield to the browser
+        "-sASYNCIFY"               # device bring-up and per-frame GPU fence waits yield to the browser
         "-sASYNCIFY_STACK_SIZE=1048576" # the deep render-frame pump overflows the 4KB default
         "-lwebsocket.js"           # Net.WebSocket's INTERFACE option does not cross static
-                                   # private deps ($<LINK_ONLY>) - restate it (WebScene precedent)
+                                   # private deps ($<LINK_ONLY>), so restate it here
         "-lidbfs.js"               # saves outlive the page: IndexedDB under the user data directory
     )
     set_target_properties(Engine.Player PROPERTIES SUFFIX ".html")
 
-    # The web SHIP player: the game's native module statically compiled in.
+    # The web shipping player: the game's native module statically compiled in.
     if(ENGINE_GAME_NATIVE_TARGET)
         add_executable(Engine.GamePlayer WebMain.cpp "${_engine_logo_src}")
         target_link_libraries(Engine.GamePlayer PRIVATE
@@ -79,13 +80,13 @@ if(EMSCRIPTEN)
         set_source_files_properties(WebMain.cpp PROPERTIES OBJECT_DEPENDS "${_web_shell}")
         # Its own basename (emscripten bakes the .js name into the .html and the .wasm name
         # into the .js, so the trio stays self-consistent as Engine.GamePlayer.*; it cannot
-        # reuse the template's name - both targets live in one build).
+        # reuse the template's name, since both targets live in one build).
         set_target_properties(Engine.GamePlayer PROPERTIES SUFFIX ".html")
     endif()
 
-    # Stage serve.py (COOP/COEP + wasm MIME + no-store static server) beside the output, and emit
+    # Stage serve.py (a static server with COOP/COEP, the wasm MIME type and no-store) beside the output, and emit
     # the runtime-libs manifest the export template machinery reads: `--template create <this build
-    # dir> --install` packages the player page + these sidecars as an importable "Web" template.
+    # dir> --install` packages the player page and these sidecars as an importable "Web" template.
     set(_web_out_dir "$<TARGET_FILE_DIR:Engine.Player>")
     # The loading card's logo (shell.html) rides beside the page as well.
     add_custom_command(TARGET Engine.Player POST_BUILD
@@ -102,11 +103,11 @@ if(EMSCRIPTEN)
 
 else()
 
-    # --- Desktop player: launcher-as-library (game-native-code.md N1) ---
-    # The whole boot is Engine.Player.Main (a STATIC lib in every mode - it carries main
-    # logic, not engine state); the dev executable is a thin stub calling
-    # PlayerMain(nullptr), and the exporter's generated SHIP stub links this same library
-    # with the game's static plugin. Deliberately NOT util_add_engine_library.
+    # --- Desktop player: the launcher as a library ---
+    # The whole boot is Engine.Player.Main, a static lib in every mode because it carries the
+    # main logic, not engine state. The dev executable is a thin stub calling
+    # PlayerMain(nullptr), and the exporter's generated shipping stub links this same library
+    # with the game's static plugin. For that reason it is not a util_add_engine_library.
     add_library(Engine.Player.Main STATIC)
     target_sources(Engine.Player.Main
         PUBLIC FILE_SET player_main_modules TYPE CXX_MODULES FILES PlayerMain.cppm
@@ -129,10 +130,10 @@ else()
     add_executable(Engine.Player Main.cpp)
     target_link_libraries(Engine.Player PRIVATE Engine.Player.Main Foundation::Policy)
 
-    # The SHIP player (game-native-code.md N3): only when a game's native directory is
-    # wired into this build (ENGINE_GAME_NATIVE_DIR/_TARGET - the exporter's seam, also
-    # usable by hand). Links the game's plugin STATICALLY through the same launcher;
-    # ShipMain's CreatePlugin reference pulls the registration from the game archive.
+    # The shipping player, only when a game's native directory is wired into this build
+    # (ENGINE_GAME_NATIVE_DIR/_TARGET, which the exporter sets and which work by hand too).
+    # Links the game's plugin statically through the same launcher; ShipMain's
+    # CreatePlugin reference pulls the registration from the game archive.
     if(ENGINE_GAME_NATIVE_TARGET)
         add_executable(Engine.GamePlayer ShipMain.cpp)
         target_link_libraries(Engine.GamePlayer PRIVATE
@@ -144,14 +145,14 @@ else()
         endif()
     endif()
 
-    # Stage the player's runtime deps beside it + emit Engine.Player.runtime-libs (the export
+    # Stage the player's runtime deps beside it and emit Engine.Player.runtime-libs (the export
     # host-template reads that list for its sidecars). SDL3 links statically in a static engine
     # build (no DLL to stage) and shared under ENGINE_SHARED_LIBS, where TARGET_RUNTIME_DLLS
     # stages it like any other link dependency.
-    # wgpu-native is dlopen'd at runtime (--webgpu) and NOT a link dependency, so it is staged
+    # wgpu-native is dlopen'd at runtime (--webgpu) and is not a link dependency, so it is staged
     # explicitly; on Linux, $ORIGIN on the player's RUNPATH lets the loader find it beside the exe
     # (Windows searches the exe dir for a bare DLL by default).
-    # DXC is NOT staged: a player never compiles shaders. A dist renders from its cooked
+    # DXC is not staged: a player never compiles shaders. A dist renders from its cooked
     # shaders.dpak, and a dev player run from Bin/ finds the vendored compiler at
     # BUILDSYSTEM_DXC_PATH. Only the editor and the cook tools carry DXC (its glibc 2.38 floor would
     # also keep a template from ever running on an older system, the Steam Deck's).

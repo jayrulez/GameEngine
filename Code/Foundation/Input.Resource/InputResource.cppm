@@ -24,7 +24,7 @@ namespace resource = foundation::resource;
 
 export namespace foundation::input
 {
-    // Cooked record AND runtime product (data-only, no GPU transform - the particles model).
+    // Cooked record and runtime product (data only, no GPU transform, as particles are).
     class InputMapResource final : public ISerializable
     {
         RTTI_OBJECT(InputMapResource, ISerializable)
@@ -67,8 +67,8 @@ export namespace foundation::input
 
 export namespace foundation::input
 {
-    /// The input resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The input resource module: the module the engine composition composes this
+    /// library's factories from.
     inline constexpr foundation::resource::ResourceFactoryDesc kInputResourceFactories[] = {
         foundation::resource::FactoryByDefault<InputMapResource, InputMapResource, InputMapFactory>(),
     };

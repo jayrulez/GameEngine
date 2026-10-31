@@ -3,16 +3,15 @@
 
 // UI Toolkit - :color_picker partition
 //
-// Interactive HSV color picker: SV square + hue strip + alpha strip + RGB number fields + hex input +
-// current/original preview swatches. Ported from Sedulous.UI.Toolkit/src/ColorPicker.bf (a ViewGroup).
+// Interactive HSV color picker: an SV square, hue and alpha strips, RGB number fields, hex input,
+// and current and original preview swatches.
 //
-// The Beef private inner classes (SVSquare / HueStripView / AlphaStripView) become PUBLIC nested View
-// subclasses so each can carry its own RTTI_OBJECT identity (defined out-of-line at namespace scope).
-// Their OnDraw / UpdateFromMouse dereference the enclosing ColorPicker (incomplete inside the class body),
-// so those bodies are defined out-of-line after ColorPicker is complete - the same idiom Toolbar uses.
-// Beef `new`/owned children -> borrowed raw T* (the ViewGroup child tree owns the RefPtr). Beef byte
-// `Color(r,g,b,a)` literals -> a private static Rgb() helper; float `Color(r,g,b,a)` -> Color{...}.
-// `Math.Abs(hPrime % 2)` -> Abs(std::fmod(...)); hex format/parse ported inline (core has no hex helpers).
+// SVSquare, HueStripView and AlphaStripView are public nested View subclasses so each can carry
+// its own RTTI_OBJECT identity (defined out of line at namespace scope). Their OnDraw and
+// UpdateFromMouse dereference the enclosing ColorPicker, which is incomplete inside the class body,
+// so those bodies are defined out of line after ColorPicker is complete, as Toolbar does. The
+// picker holds borrowed pointers to its children; the ViewGroup child tree owns them. Hex
+// formatting and parsing are written inline because core has no hex helpers.
 
 module;
 #include <cmath>
@@ -80,7 +79,7 @@ export namespace foundation::ui::toolkit
             DrawChildren(ctx);
         }
 
-        // === HSV helpers (ported verbatim) ===
+        // === HSV helpers ===
 
         [[nodiscard]] static Color HSVToRGB(f32 h, f32 s, f32 v, f32 a = 1.0f)
         {
@@ -156,7 +155,7 @@ export namespace foundation::ui::toolkit
             }
         }
 
-        // === Inner views (public nested so each carries a RTTI_OBJECT identity) ===
+        // === Inner views (public and nested so each carries an RTTI_OBJECT identity) ===
 
         /// Saturation/Value square: S on X-axis, V on Y-axis (inverted).
         class SVSquare : public View
@@ -489,7 +488,7 @@ export namespace foundation::ui::toolkit
         Color m_originalColor = Color::White;
         bool m_syncing = false;
 
-        // Inner views - borrowed raw (the child tree owns the RefPtr).
+        // Inner views, borrowed (the child tree owns them).
         SVSquare* m_svSquare = nullptr;
         HueStripView* m_hueStrip = nullptr;
         AlphaStripView* m_alphaStrip = nullptr;
@@ -538,7 +537,7 @@ export namespace foundation::ui::toolkit
         m_hexInput = hex.Get();
         {
             ColorPicker* self = this;
-            // OnCommit: Enter AND typed-then-clicked-away both apply the hex value.
+            // OnCommit: both Enter and clicking away after typing apply the hex value.
             hex->OnCommit.Add([self](EditText*) { self->OnHexSubmit(); });
         }
         AddView(hex.Get());

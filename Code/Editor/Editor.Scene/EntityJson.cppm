@@ -59,11 +59,11 @@ export namespace editor
     [[nodiscard]] foundation::scene::EntityHandle FindEntity(foundation::scene::Scene& scene,
                                                              StringView text);
 
-    /// A field path's value: `worldPosition`, `position`, `rotation`, `scale`, `active`, or
-    /// `<component>.<property>` (the component as entity_inspect names it, which may hold dots),
-    /// or `<BehaviorClass>.<field>` of a behaviour running on it, then `.x`/`.y`/`.z`/`.w`, a key
-    /// or an index to go inside. The reason, naming
-    /// `entityText`, when the path reads nothing.
+    /// A field path's value: `worldPosition`, `position`, `rotation`, `scale`, `active`,
+    /// `<component>.<property>` (the component as entity_inspect names it, which may hold dots), or
+    /// `<BehaviorClass>.<field>` of a behaviour running on it, followed by `.x`/`.y`/`.z`/`.w`, a
+    /// key or an index to go inside. When the path reads nothing, the error is the reason, naming
+    /// `entityText`.
     [[nodiscard]] Result<foundation::json::JsonValue, String>
     EntityFieldJson(foundation::scene::Scene& scene, foundation::scene::EntityHandle handle,
                     StringView entityText, StringView path);

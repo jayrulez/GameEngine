@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026-Present Robert Campbell
 
-# Serve a web export from THIS folder. Python 3 stdlib only (and openssl for --https).
+# Serve a web export from this folder. Python 3 stdlib only (and openssl for --https).
 #
 #   python3 serve.py [port]                  (default 8000)  ->  http://localhost:8000/
 #   python3 serve.py [port] --https          the same over HTTPS, for another device on the network
@@ -12,7 +12,7 @@
 #   - .wasm needs the application/wasm MIME type (streaming compile),
 #   - COOP/COEP headers make the page cross-origin isolated (required whenever the build
 #     uses SharedArrayBuffer; harmless otherwise),
-#   - Cache-Control: no-store, because browsers cache the large .wasm/.pak HARD and a
+#   - Cache-Control: no-store, because browsers cache the large .wasm/.pak aggressively and a
 #     plain reload often serves a stale build.
 #
 # WebGPU exists only in a secure context: a page from localhost, or over HTTPS. Opened from

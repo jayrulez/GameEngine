@@ -1,5 +1,5 @@
-# Foundation::Render.Api - `foundation.render.api`: the scene-rendering interface (ISceneRenderer +
-# ViewCamera/ViewportRect/CameraOverride/TargetState) in a LIGHT module (core + rhi + scene only),
+# Foundation::Render.Api - `foundation.render.api`: the scene-rendering interface (ISceneRenderer,
+# ViewCamera/ViewportRect/CameraOverride/TargetState) in a light module (core, rhi and scene only),
 # so tools drive rendering through the interface without linking the renderer. foundation.render
 # re-exports it; RenderSubsystem implements it.
 

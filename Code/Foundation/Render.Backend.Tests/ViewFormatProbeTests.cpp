@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// VIEW FORMAT probe on REAL devices: an sRGB render target that declares its UNORM twin
+// View format probe on real devices: an sRGB render target that declares its UNORM twin
 // (TextureDesc::alternateViewFormat) is cleared to half grey through each view and read back. The
 // UNORM view stores the value as given (128), the sRGB view encodes it (188): the same texture,
 // written with or without the sRGB transfer, which is what lets VG blend encoded values into the
-// targets everything else draws linear light into. Vulkan + WebGPU.
+// targets everything else draws linear light into. Vulkan and WebGPU.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

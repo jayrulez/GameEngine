@@ -3,10 +3,10 @@
 
 // Foundation::VG - :cache partition.
 //
-// Pre-tessellated path reuse across frames: CachedPath (cached fill/stroke
-// meshes + the style they were tessellated for) and PathCache (an LRU map from
-// path identity to CachedPath). Ported from Sedulous.VG (CachedPath/PathCache).
-// Keyed by Path pointer identity - the caller keeps the Path objects alive.
+// Pre-tessellated path reuse across frames: CachedPath (cached fill and stroke
+// meshes and the style they were tessellated for) and PathCache (an LRU map from
+// path identity to CachedPath). Keyed by Path::InstanceId, so a freed path's entry
+// goes stale and ages out rather than being served to a new path at its address.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +34,7 @@ export namespace foundation::vg
         [[nodiscard]] bool IsFillValid() const { return m_fillValid; }
         [[nodiscard]] bool IsStrokeValid() const { return m_strokeValid; }
 
-        /// Whether the cached fill matches EVERY input of the fill tessellation.
+        /// Whether the cached fill matches every input of the fill tessellation.
         [[nodiscard]] bool FillMatches(Color color, FillRule fillRule, bool antiAlias,
                                        f32 tolerance) const
         {
@@ -42,10 +42,9 @@ export namespace foundation::vg
                    m_fillAA == antiAlias && m_fillTolerance == tolerance;
         }
 
-        /// Whether the cached stroke matches EVERY input of the stroke tessellation: the whole
-        /// style (miter limit and dash offset included), the dash pattern and the tolerance.
-        /// Matching on width/cap/join alone served the previous dashing to an animated dash
-        /// offset until something else invalidated the entry.
+        /// Whether the cached stroke matches every input of the stroke tessellation: the whole
+        /// style (miter limit and dash offset included), the dash pattern and the tolerance, so
+        /// an animated dash offset re-tessellates instead of reusing the previous dashing.
         [[nodiscard]] bool StrokeMatches(Color color, StrokeStyle style,
                                          Span<const f32> dashPattern, bool antiAlias,
                                          f32 tolerance) const
@@ -265,14 +264,14 @@ export namespace foundation::vg
                 outIndices.PushBack(baseIndex + idx[i]);
         }
 
-        // Keyed by the path's INSTANCE id, never its address: a freed path's entry simply goes
+        // Keyed by the path's instance id, never its address: a freed path's entry simply goes
         // stale and ages out by LRU instead of being served to whatever lands at its address.
         CachedPath& GetOrCreate(const Path& path)
         {
             if (CachedPath* existing = m_cache.Find(path.InstanceId()))
                 return *existing;
 
-            EvictDownTo(m_capacity - 1); // room for this one: a full cache settles AT capacity
+            EvictDownTo(m_capacity - 1); // room for this one: a full cache settles at capacity
             return m_cache.InsertOrAssign(path.InstanceId(), CachedPath());
         }
 

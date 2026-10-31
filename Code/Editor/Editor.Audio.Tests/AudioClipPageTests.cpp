@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The audio clip page over its markup (Data/Editor/AudioClipPage.xml) and a scratch project,
-// without a host (no audio engine: nothing plays): the source read into its waveform and facts,
-// the transport bound to the playback actions, an option an undo step the audition follows, and a
-// missing source said in the waveform's place.
+// The audio clip page over its markup (Data/Editor/AudioClipPage.xml) and a scratch project, without
+// a host (there is no audio engine, so nothing plays). Covers the source read into its waveform and
+// facts, the transport bound to the playback actions, an option edit as an undo step the audition
+// follows, and a missing source reported in the waveform's place.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -92,7 +92,7 @@ namespace
 
 TEST_CASE("audio clip page: registered for the clip, with the clip thumbnails")
 {
-    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
+    const app::AssetPageServicesSource none; // no services: only the registration, declared before the context, which it outlives
     EditorContext context{DefaultAllocator()};
     RegisterAudioClipEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::AudioClipAsset::StaticType());
@@ -118,7 +118,7 @@ TEST_CASE("audio clip page: the source read into its waveform and facts; the tra
     CHECK(page->State() == StringView(u8"Stopped"));
     CHECK_FALSE(page->CanPlay()); // no audio engine here
     CHECK_FALSE(page->IsPlaying());
-    CHECK(ServiceOf<IPlaybackPage>(page.Get()) == page.Get()); // what the playback actions run over
+    CHECK(ServiceOf<IPlaybackPage>(page.Get()) == page.Get()); // the page is what the playback actions run on
 
     page->SetAuditionVolume(2.0f);
     CHECK(page->AuditionVolume() == doctest::Approx(1.0f)); // 0 to 1

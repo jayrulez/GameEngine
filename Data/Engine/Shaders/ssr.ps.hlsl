@@ -4,12 +4,12 @@
 #include "push_constant.hlsli"
 #include "depth.hlsli"
 #include "projection.hlsli"
-Texture2D<float4> SceneTex    : register(t0, space0);   // lit HDR (reflected + composited into)
+Texture2D<float4> SceneTex    : register(t0, space0);   // lit HDR (reflected, and composited into)
 Texture2D         DepthTex    : register(t1, space0);
 Texture2D         NormalTex   : register(t2, space0);   // octahedral view-space normal
 Texture2D         MaterialTex : register(t3, space0);   // R=roughness, G=metallic
 SamplerState      PointSamp   : register(s0, space0);   // depth / reconstruction (exact)
-SamplerState      LinearSamp  : register(s1, space0);   // glossy color cone-gather
+SamplerState      LinearSamp  : register(s1, space0);   // glossy colour cone-gather
 
 // How far a reflection ray reaches in view space before the viewport clamp: far enough that the
 // screen edge always ends it first (metres; a reflection can only show what is on screen anyway).
@@ -25,8 +25,8 @@ static const float2 kPoisson12[12] = {
 
 struct SsrPush {
     row_major float4x4 InvProj;   // (viewport-local ndc, depth) -> view space
-    float2 VpMin;                 // this view's sub-rect origin in FULL-texture uv
-    float2 VpSize;                // this view's sub-rect size in FULL-texture uv
+    float2 VpMin;                 // this view's sub-rect origin in full-texture uv
+    float2 VpSize;                // this view's sub-rect size in full-texture uv
     float2 Jitter;                // this frame's projection jitter in NDC (projection::JitterOf)
     float  ProjXX;                // projection(0,0): view.x -> ndc.x
     float  ProjYY;                // projection(1,1): view.y -> ndc.y
@@ -41,7 +41,7 @@ struct SsrPush {
 };
 PUSH_CONSTANT(SsrPush, pc, space1);
 
-// Octahedral decode -> view-space normal (matches the forward's OctEncode).
+// Decodes an octahedral view-space normal (the inverse of the forward pass's OctEncode).
 float3 OctDecode(float2 e) {
     float3 n = float3(e.xy, 1.0 - abs(e.x) - abs(e.y));
     float  t = saturate(-n.z);
@@ -49,10 +49,10 @@ float3 OctDecode(float2 e) {
     n.y += n.y >= 0.0 ? -t : t;
     return normalize(n);
 }
-// viewport-LOCAL uv (0..1 within the view) + depth -> view-space position. The uv<->ndc Y
-// mapping is backend-driven (YSign, same convention as the view's ShadowUvYSign): Vulkan's negative
-// viewport gives uv.y = (1-ndc.y)/2, Y-flip targets (WebGPU) uv.y = (1+ndc.y)/2 - with the
-// wrong sign every reconstructed view position mirrors and reflections trace the wrong way.
+// Viewport-local uv (0..1 within the view) and depth to view-space position. The uv<->ndc Y
+// mapping is backend-driven (YSign, the same convention as the view's ShadowUvYSign): Vulkan's
+// negative viewport gives uv.y = (1-ndc.y)/2, Y-flip targets (WebGPU) uv.y = (1+ndc.y)/2. With
+// the wrong sign every reconstructed view position mirrors and reflections trace the wrong way.
 float3 ViewPos(float2 luv, float depth) {
     float2 ndc = float2(luv.x * 2.0 - 1.0, (luv.y * 2.0 - 1.0) * pc.YSign);
     float4 h = mul(float4(ndc, depth, 1.0), pc.InvProj);
@@ -60,7 +60,7 @@ float3 ViewPos(float2 luv, float depth) {
 }
 // Whether this view is orthographic (its rays parallel): read off the inverse projection.
 static bool g_ortho;
-// view-space position -> viewport-LOCAL uv (jitter-aware). Diagonal proj terms, divided by the
+// View-space position to viewport-local uv (jitter-aware). Diagonal proj terms, divided by the
 // depth under perspective.
 float2 ViewToLocal(float3 vp) {
     float2 ndc = ViewToNdcXY(vp, float2(pc.ProjXX, pc.ProjYY), g_ortho) - pc.Jitter;
@@ -71,8 +71,9 @@ float2 FullToLocal(float2 fuv) { return (fuv - pc.VpMin) / pc.VpSize; } // full-
 // Interleaved-gradient noise (denoises cleanly under TAA; frame-rotated so TAA averages it out).
 float Ign(float2 p) { return frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715)))); }
 
-// Trace outputs the REFLECTION buffer (rgb = reflected radiance, a = confidence/weight). Compositing
-// into the HDR happens in the resolve pass (after temporal accumulation). No reflection -> (0,0,0,0).
+// The trace outputs the reflection buffer (rgb = reflected radiance, a = confidence or weight).
+// Compositing into the HDR happens in the resolve pass, after temporal accumulation. No reflection
+// writes (0,0,0,0).
 float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float  depth = DepthTex.SampleLevel(PointSamp, uv, 0).r;
     if (IsBackgroundDepth(depth)) { return float4(0.0, 0.0, 0.0, 0.0); }   // background: no reflector
@@ -94,9 +95,9 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
 
     // Endpoint in view space, far along the ray: the segment is clamped to the viewport below, so the
     // screen edge (or the hit) ends the march, not an arbitrary length. A length tied to the pixel's
-    // own depth cut reflections short at grazing angles (a floor seen from low above it): the
+    // own depth would cut reflections short at grazing angles (a floor seen from low above it): the
     // reflected ray climbs only as steeply as the view ray came down, so a tall object's reflection
-    // stopped about a metre up. If the reflection points toward the camera (R.z > 0), clamp so the
+    // would stop about a metre up. If the reflection points toward the camera (R.z > 0), clamp so the
     // endpoint stays in front of the near plane.
     float rayLen = kMaxRayLength;
     if (R.z > 1e-4) { rayLen = min(rayLen, max((-0.05 - P.z) / R.z, 0.0)); }
@@ -130,8 +131,7 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float  jMin = 1.5 / max(length(segPx), 1e-3);
 
     // Static per-pixel dither: deterministic per (pixel, camera), so the temporal accumulation is
-    // stable under a still camera while ghost-reject handles moving reflected content. (The frame-
-    // rotated variant lived in this slot before it was repurposed for YSign; dither stays static.)
+    // stable under a still camera while ghost rejection handles moving reflected content.
     float jit = frac(Ign(pos.xy));
     bool  hit = false;
     float jHit = 0.0, jPrev = 0.0;
@@ -147,15 +147,15 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
         float  dif = rayLin - surfLin;                         // >0 once the ray passes behind the surface
         // The acceptance band is at least the depth the ray itself crossed since the last step: a
         // ray marching across the screen toward a distant surface moves metres in depth per step,
-        // and a fixed band let it step over the surface it should have hit (a far reflection broke
-        // into a sparse dither). The binary refine below finds the crossing inside the step.
+        // and a fixed band would let it step over the surface it should hit (a far reflection would
+        // break into a sparse dither). The binary refine below finds the crossing inside the step.
         float  band = max(pc.Thickness, abs(rayLin - KeyDepth(lerp(iz0, iz1, jPrev), g_ortho)));
         if (dif > 0.05 && dif < band) { hit = true; jHit = j; break; }
         jPrev = j;
     }
     if (!hit) { return float4(0.0, 0.0, 0.0, 0.0); }   // miss: no reflection (resolve keeps the HDR)
 
-    // Binary refine the crossing within [jPrev, jHit] for a sub-pixel-sharp hit (4 iters).
+    // Binary-refine the crossing within [jPrev, jHit] for a sub-pixel-sharp hit (4 iterations).
     float a = jPrev, b = jHit;
     [unroll] for (int r = 0; r < 4; ++r) {
         float  m = 0.5 * (a + b);
@@ -166,8 +166,8 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float2 hitLocal = lerp(luv0, luv1, b);
     float2 hitFull  = LocalToFull(hitLocal);
 
-    // Glossy cone-gather: average the reflected color over a disk whose radius grows with roughness and
-    // ray-travel distance (rougher / farther = blurrier). Near-mirror surfaces stay razor-sharp. Taps are
+    // Glossy cone-gather: average the reflected colour over a disk whose radius grows with roughness and
+    // ray-travel distance (rougher or farther is blurrier). Near-mirror surfaces stay razor-sharp. Taps are
     // clamped to this view's sub-rect so a rough reflection never bleeds in the other split-screen view.
     float  segLen = length(hitLocal - luv);
     float  coneR  = pc.Glossy * roughness * (0.015 + 0.18 * segLen);   // viewport-local blur radius (0 = sharp)
@@ -184,8 +184,9 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
         }
         refl *= (1.0 / 12.0);
     }
-    // Screen-edge fade (off-screen has no data) on the LOCAL uv + Fresnel + roughness gate. LERP-replace
-    // so the SSR term stands in for the IBL specular rather than adding to it.
+    // Screen-edge fade (off-screen has no data) on the local uv, times Fresnel and the roughness gate.
+    // The resolve lerps by this weight, so the SSR term stands in for the IBL specular rather than
+    // adding to it.
     float2 e = smoothstep(0.0, pc.EdgeFade, hitLocal) * smoothstep(0.0, pc.EdgeFade, 1.0 - hitLocal);
     float  edgeFade = e.x * e.y;
     float  NdotV = saturate(dot(N, V));

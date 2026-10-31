@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Standard and skinned vertex structs for model data.
-/// Ported from Sedulous.Models/ModelVertex.bf.
 
 export module foundation.model:model_vertex;
 

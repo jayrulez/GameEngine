@@ -1,4 +1,4 @@
-# Pipeline::Shaders unit tests (doctest; VFS + content DB + DXC; no GPU).
+# Pipeline::Shaders unit tests (doctest; VFS, content DB and DXC; no GPU).
 
 add_executable(Shaders.Pipeline.Tests
     TestsMain.cpp

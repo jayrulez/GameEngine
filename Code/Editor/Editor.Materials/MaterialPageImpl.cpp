@@ -136,7 +136,7 @@ namespace editor
     MaterialEditorPage::MaterialEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::MaterialAsset::StaticType(), kPath)
     {
-        // Its source reflects as arrays no one edits by hand: the rows are the material's own.
+        // Its source reflects as arrays no one edits by hand, so the page builds its own rows.
         HideAssetRows();
         m_materialRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
         m_propertyRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
@@ -194,13 +194,13 @@ namespace editor
             items.Append(shape);
         }
         m_shapeChoice->SetItemsText(items);
-        // The user's pick only: a selection set from code (the page showing the kept shape) must not
-        // count as a shape picked, which would put the kept mesh away.
+        // Only the user's pick counts: a selection set from code (the page showing the kept shape)
+        // must not count as picking a shape, which would drop the kept mesh.
         (void)m_shapeChoice->AddEventListener(gui::EventType::Changed, [self](const gui::Event&)
                                               { self->SetPreviewShape(static_cast<u32>(Max(0, self->m_shapeChoice->GetSelectedIndex()))); });
         m_pane->AddControl(*m_shapeChoice);
 
-        // Or a mesh from the project, its real UVs (an imported model), in place of the shape.
+        // Or a mesh from the project, with its real UVs (an imported model), in place of the shape.
         m_meshSlot = MakeRef<app::AssetPickerSlot>(Allocator());
         m_meshSlot->AddClass(u8"preview-slot");
         m_meshSlot->SetTooltip(u8"A mesh from the project to show the material on, in place of the shape");
@@ -251,7 +251,8 @@ namespace editor
                 break;
             }
         }
-        // The shader asset recooked (its properties may have changed): re-lay the material by it.
+        // The shader asset recooked (its properties may have changed): lay the material out again
+        // by it.
         if (m_shader && m_shader->Version() != m_shaderVersion)
         {
             BindShader();
@@ -388,8 +389,8 @@ namespace editor
                                   if (!commit.After.IsEmpty())
                                       self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
                               });
-            // A gesture's previews shown live, as the old page's were: written to the source, the
-            // preview material built again, no undo step until the commit.
+            // A gesture's previews show live: each is written to the source and the preview
+            // material built again, with no undo step until the commit.
             rows->SetOnPreview([self, rows](StringView path)
                                {
                                    self->m_previewing = true;
@@ -404,7 +405,7 @@ namespace editor
         AddSection(u8"material", u8"Material", *m_materialRows);
         AddSection(u8"properties", u8"Properties", *m_propertyRows);
         AddSection(u8"textures", u8"Textures", *m_textureRows);
-        // After the shader's own: an effect's values are the material's, not its shader's.
+        // After the shader's rows: an effect's values belong to the material, not its shader.
         for (usize g = 0; g < m_effectRows.Size(); ++g)
             AddSection(Format(u8"effect-{}", m_effectRowNames[g]).AsView(), m_effectRowNames[g].AsView(), *m_effectRows[g]);
     }
@@ -431,7 +432,7 @@ namespace editor
                 info.HasRange = true;
                 info.Min = declared->rangeMin;
                 info.Max = declared->rangeMax;
-                info.Hint = String(u8"slider"); // over its range, as the old page's were
+                info.Hint = String(u8"slider"); // over its range
             }
             info.Step = 0.01;
             break;
@@ -605,7 +606,7 @@ namespace editor
     {
         if (Asset() == nullptr)
             return;
-        m_reshow = true; // what the edit did, or did not, shown
+        m_reshow = true; // show what the edit did, or did not do
         if (&rows == m_materialRows.Get())
         {
             if (path == u8"shader")
@@ -809,7 +810,8 @@ namespace editor
             return;
         if (m_previewing)
         {
-            // A preview: written to the source and shown, the source before the gesture kept.
+            // A preview is written to the source and shown; the source from before the gesture is
+            // kept.
             if (!m_inGesture)
             {
                 m_gestureBefore = SnapshotSource();
@@ -819,7 +821,7 @@ namespace editor
             RebuildPreviewMaterial();
             return;
         }
-        // The gesture's one step starts from the source before its previews.
+        // The gesture's single undo step starts from the source before its previews.
         Array<byte> before = m_inGesture ? Move(m_gestureBefore) : SnapshotSource();
         m_inGesture = false;
         // The rows follow a change of what the material holds (a built-in switched): the command's
@@ -837,7 +839,7 @@ namespace editor
         if (!m_inGesture)
             return;
         m_inGesture = false;
-        ApplySourceBlob(m_gestureBefore); // the previews taken back, the preview with them
+        ApplySourceBlob(m_gestureBefore); // take the previews back, and the preview with them
         m_gestureBefore.Clear();
     }
 
@@ -898,10 +900,11 @@ namespace editor
                 }
                 foundation::resource::Proxy<foundation::texture::Texture> tex =
                     Context().Resources()->Bind<foundation::texture::Texture>(src.textureIds[i]);
-                // Track the proxy + the RAW view captured into the material: a texture
-                // hot-reload (cook) destroys that view under us, so OnUpdate watches for
+                // Track the proxy and the raw view captured into the material: a texture
+                // hot reload (a cook) destroys that view under us, so OnUpdate watches for
                 // the proxy's view changing and rebuilds the preview material (otherwise
-                // set-2 keeps a dangling descriptor - null-imageView validation errors).
+                // bind group set 2 keeps a dangling descriptor and validation reports a null
+                // imageView).
                 m_previewTextures.PushBack(tex);
                 m_previewTextureViews.PushBack(tex ? tex->View() : nullptr);
                 if (tex && tex->View() != nullptr)
@@ -1177,8 +1180,8 @@ namespace editor
         }
         if (Asset()->source.shaderId.IsNil())
         {
-            // A built-in: its effect groups laid on the effects' tables, not an edit, as a shader
-            // asset's layout below is.
+            // A built-in: lay its effect groups on the effects' tables. This is a layout, not an
+            // edit, as is a shader asset's layout below.
             const Array<String> before = RowLayoutOf(Asset()->source);
             AdoptEffects(Asset()->source, VertexVariantsOf(Asset()->source));
             m_rowsDirty = m_rowsDirty || !SameLayout(before, RowLayoutOf(Asset()->source));
@@ -1209,7 +1212,8 @@ namespace editor
 
     void MaterialEditorPage::AdoptEffects(materials::MaterialSource& source, foundation::shaders::ShaderFlags vertexVariants)
     {
-        // Without the shader system (no host: a test) the groups the source carries stand.
+        // Without the shader system (no host, as in a test) the groups the source carries are
+        // kept as they are.
         if (m_effectSystem == nullptr)
             return;
         materials::AdoptDeclaredEffects(Allocator(), source, m_effectSystem->Effects().All(), vertexVariants);

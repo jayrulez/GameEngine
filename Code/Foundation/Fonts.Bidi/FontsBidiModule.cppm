@@ -3,7 +3,7 @@
 
 // Foundation::Fonts.Bidi - the `foundation.fonts.bidi` module.
 //
-// Mixed-direction paragraphs (F3 of Specs/vg-and-gui-lab.md): Install() puts the Unicode
+// Mixed-direction paragraphs: Install() puts the Unicode
 // bidirectional algorithm behind BidiResolverFactory, so every shaper lays a line out in visual
 // order (Arabic or Hebrew with Latin inside, or the reverse). SheenBidi does the resolving and
 // never crosses this interface: the resolver is defined in the implementation unit.

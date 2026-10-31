@@ -1,5 +1,5 @@
-# Foundation::VG.SVG - `foundation.vg.svg` (SVG -> VG: parsers, loader, renderer).
-# Ported from Sedulous.VG.SVG. Standalone parsers (no XML lib); deps VG + Fonts.
+# Foundation::VG.SVG - `foundation.vg.svg` (SVG to VG: parsers, loader, renderer).
+# Standalone parsers (no XML lib); depends on VG and Fonts.
 
 util_add_engine_library(VG.SVG ALIAS Foundation::VG.SVG)
 target_link_libraries(VG.SVG PUBLIC Foundation::Core Foundation::VG Foundation::Fonts Foundation::Policy)

@@ -1,4 +1,4 @@
-# Pipeline::Cook - `pipeline.cook` (the incremental cook driver + pipeline DB).
+# Pipeline::Cook - `pipeline.cook` (the incremental cook driver and pipeline DB).
 # Tooling only; headless (no shell/GPU) so the CLI cooker can link it.
 
 util_add_engine_library(Pipeline.Cook ALIAS Pipeline::Cook)

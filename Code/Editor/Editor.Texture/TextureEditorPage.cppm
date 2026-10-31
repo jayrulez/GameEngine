@@ -3,17 +3,17 @@
 
 // Editor::Texture - the `editor.texture` module.
 //
-// TextureEditorPage: the import-settings surface over TextureAsset. On the GUI from the image
-// pages' markup (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 2): the
-// source image (decoded through the same stb path the cook rides, so what you see is what gets
-// cooked; a model's embedded texture from its "pixels" stream) to zoom, pan and read pixels in,
-// beside the GPU-texture intent: usage, colour space, compression, shape, sampler filters and
-// wraps, mipmaps, anisotropy. Usage sets the colour space with it (data is linear, colour sRGB),
-// one undo step; a texture whose two disagree says so in a notice. The presets (UI, Sprite, 3D
-// Surface, Normal Map, Data Mask, the skies) are actions in a menu on the page's bar, each one
-// undo step however many settings it moves. What it cooks to, its size and mips are read-only
-// facts. The authored TextureAsset IS the cook input, so Save writes it back and requests a
-// re-cook; every live proxy bound to the cooked product then hot-swaps.
+// TextureEditorPage: the import settings of a TextureAsset, on the GUI from the image pages'
+// markup (Data/Editor/ImagePage.xml). It shows the source image for zooming, panning and reading
+// pixels, decoded through the same stb path the cook uses so what you see is what gets cooked (a
+// model's embedded texture comes from its "pixels" stream). Beside it are the GPU texture
+// settings: usage, colour space, compression, shape, sampler filters and wraps, mipmaps and
+// anisotropy. Setting usage also sets the colour space (data is linear, colour is sRGB) in one undo
+// step, and a notice appears when the two disagree. The presets (UI, Sprite, 3D Surface, Normal
+// Map, Data Mask, the skies) are actions in a menu on the page's bar, each one undo step however
+// many settings it changes. The cooked format, size and mips are read-only facts. The authored
+// TextureAsset is the cook input, so Save writes it back and requests a re-cook, after which every
+// live proxy bound to the cooked product hot-swaps.
 
 module;
 #include "Core/Prelude.h"
@@ -42,18 +42,19 @@ export namespace editor
     public:
         static constexpr StringView kPath = u8"Editor/ImagePage.xml";
 
-        /// A preset: what its menu item says, and what it sets.
+        /// A preset: its menu item's label and the settings it applies.
         struct Preset
         {
             StringView label;
             void (pipeline::TextureAsset::*setup)();
         };
-        /// The presets, in their menu's order.
+        /// The presets, in menu order.
         [[nodiscard]] static Span<const Preset> Presets();
 
         TextureEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 
-        /// Applies the preset `label`, one undo step; false when there is none by that name.
+        /// Applies the preset `label` as one undo step; returns false when there is none by that
+        /// name.
         bool ApplyPreset(StringView label);
         /// "Cooks to": the compression policy for desktop (and mobile when it differs) from the
         /// asset's usage, colour space and compression and the source's facts.
@@ -75,7 +76,7 @@ export namespace editor
 
         UniquePtr<app::ImagePreview> m_preview;
         RefPtr<foundation::gui::ToolMenuButton> m_presets;
-        foundation::image::PixelFormat m_sourceFormat = foundation::image::PixelFormat::RGBA8; // before the preview's conversion
+        foundation::image::PixelFormat m_sourceFormat = foundation::image::PixelFormat::RGBA8; // the format before the preview converts it
     };
 
     class TextureEditorPageFactory final : public IEditorPageFactory
@@ -89,8 +90,9 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The page (asking for its services when it is made) and the texture thumbnails: one
-    /// composition entry point per domain, no pipeline links in Editor.App.
+    /// Registers the page (which asks for its services when it is created) and the texture
+    /// thumbnails. Each domain has one composition entry point, so Editor.App links no pipeline
+    /// libraries.
     inline void RegisterTextureEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

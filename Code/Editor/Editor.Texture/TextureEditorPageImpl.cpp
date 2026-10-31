@@ -48,8 +48,9 @@ namespace editor
             }
         }
 
-        // A decoded source as the picture shows it, RGBA8 (an HDR source clamped: a faithful
-        // preview would need an exposure, which this page does not have); empty when it cannot.
+        // A decoded source converted to RGBA8 for the picture, or empty when it cannot be. An HDR
+        // source is clamped, since a faithful preview would need an exposure control, which this
+        // page does not have.
         image::Image ToPreview(const image::Image& src)
         {
             const u32 w = src.Width();
@@ -104,7 +105,7 @@ namespace editor
 
     void TextureEditorPage::AddPresets()
     {
-        // After the bar's own separator: the page's own controls follow Save, Undo and Redo.
+        // After the bar's separator, the page's own controls follow Save, Undo and Redo.
         gui::Node* own = Find<gui::Node>(u8"page-own");
         gui::Node* bar = own != nullptr ? own->GetParent() : nullptr;
         if (bar == nullptr || LoadFailed())
@@ -137,8 +138,9 @@ namespace editor
 
     bool TextureEditorPage::FollowEdit(StringView path, ISerializable& object)
     {
-        // Usage is the question; the colour space follows it (data is linear, colour sRGB), so
-        // the two change as one step. Colour Space stays its own row for the rare override.
+        // Usage is the main choice and the colour space follows it (data is linear, colour is
+        // sRGB), so the two change as one step. Colour Space keeps its own row for the rare
+        // override.
         if (path != StringView(u8"usage"))
             return false;
         auto& asset = static_cast<pipeline::TextureAsset&>(object);
@@ -151,7 +153,8 @@ namespace editor
         const pipeline::TextureAsset* asset = ObjectAs<pipeline::TextureAsset>();
         if (asset == nullptr)
             return;
-        // Embedded (a model's import): the "pixels" stream, raw RGBA8 at embeddedWidth x Height.
+        // Embedded (from a model's import): the "pixels" stream, raw RGBA8 at embeddedWidth by
+        // embeddedHeight.
         if (asset->fileName.IsEmpty() && asset->embeddedWidth > 0 && asset->embeddedHeight > 0)
         {
             const usize expected = static_cast<usize>(asset->embeddedWidth) * asset->embeddedHeight * 4;
@@ -213,7 +216,7 @@ namespace editor
         SetFact(u8"Size", Format(u8"{} x {}  ({})", pixels->Width(), pixels->Height(),
                                  m_sourceFormat == image::PixelFormat::RGBA32F ? StringView(u8"HDR") : StringView(u8"LDR"))
                               .AsView());
-        // The mip chain the cook makes: down to 1x1 when it makes one.
+        // The mip chain the cook makes: down to 1x1 when it makes a chain at all.
         u32 mips = 1;
         if (asset->generateMipmaps)
             for (u32 w = pixels->Width(), h = pixels->Height(); w > 1 || h > 1; ++mips)
@@ -230,8 +233,9 @@ namespace editor
         const pipeline::TextureAsset* asset = ObjectAs<pipeline::TextureAsset>();
         if (asset == nullptr)
             return String(u8"-");
-        // The cook's own inputs, mirrored: sRGB flag, level-0 alpha scan, source size. An HDR
-        // source resolves through the policy's HDR branch (uncompressed until BC6H).
+        // The same inputs the cook uses: the sRGB flag, the level-0 alpha scan and the source
+        // size. An HDR source resolves through the policy's HDR branch, which stays uncompressed
+        // until BC6H is supported.
         const bool srgb = asset->colorSpace == image::ImageColorSpace::Srgb;
         const image::Image* pixels = m_preview && m_preview->View().HasImage() ? &m_preview->View().Pixels() : nullptr;
         const u32 width = pixels != nullptr ? pixels->Width() : 0;

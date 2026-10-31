@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The bus layout's rules (the cycle guard, the tree, adding, removing, renaming and moving a bus) as
-// pure functions over the asset, the asset round-tripping through the binary serializer, and the
-// page over its markup without a host: its tree, the chosen bus's rows, an edit one undo step.
+// pure functions over the asset; the asset round-tripping through the binary serializer; and the
+// page over its markup without a host: its tree, the chosen bus's rows, and an edit as one undo step.
 
 #include <doctest/doctest.h>
 
@@ -24,7 +24,7 @@ using namespace foundation::core;
 TEST_CASE("bus layout page: AudioBusWouldCycle catches direct + transitive cycles")
 {
     pipeline::AudioBusLayoutAsset asset;
-    // A -> B -> C (parents point UP the chain).
+    // A under B under C: each bus's parent is the next one up the chain.
     asset.custom[0].name = String(u8"A");
     asset.custom[0].parent = String(u8"B");
     asset.custom[1].name = String(u8"B");
@@ -38,9 +38,9 @@ TEST_CASE("bus layout page: AudioBusWouldCycle catches direct + transitive cycle
     CHECK(editor::AudioBusWouldCycle(asset, 2, u8"B"));
     CHECK_FALSE(editor::AudioBusWouldCycle(asset, 2, u8"Effects"));
     CHECK_FALSE(editor::AudioBusWouldCycle(asset, 2, u8"Master"));
-    // A under C is the DIRECT ancestor case.
+    // A under C is the direct ancestor case.
     CHECK(editor::AudioBusWouldCycle(asset, 0, u8"A"));
-    // A under an unused name: no slot resolves - no cycle.
+    // A under an unused name: no slot resolves, so there is no cycle.
     CHECK_FALSE(editor::AudioBusWouldCycle(asset, 0, u8"Nope"));
 }
 
@@ -54,8 +54,8 @@ TEST_CASE("bus layout page: asset round-trips buses + custom slots (undo blob pa
     a.custom[0].bus.lowpassHz = 1200.0f;
     a.custom[0].bus.reverbWet = 0.4f;
 
-    // The custom-slot bank is gated on ar.Version() >= 2: the blob must ride a versioned
-    // payload exactly like the page's undo snapshots (a raw serializer would DROP the bank).
+    // The custom slot bank is read only when ar.Version() >= 2, so the blob must go through a
+    // versioned payload, as the page's undo snapshots do (a raw serializer would drop the bank).
     MemoryStream stream;
     {
         BinarySerializer ar(stream, SerializeMode::Write);
@@ -94,7 +94,7 @@ TEST_CASE("sound cue page: asset round-trips slots + jitter (undo blob path)")
     a.volumeMin = 0.8f;
     a.volumeMax = 1.0f;
 
-    // The page's undo snapshots ride a versioned payload; the round-trip must preserve
+    // The page's undo snapshots go through a versioned payload; the round-trip must preserve
     // every field an undo restores.
     MemoryStream stream;
     {
@@ -125,7 +125,8 @@ TEST_CASE("sound cue page: asset round-trips slots + jitter (undo blob path)")
 
 namespace
 {
-    // Effects < Footsteps < Steps (a custom under a custom), and Music < Ambience.
+    // Footsteps under Effects and Steps under Footsteps (a custom bus under a custom one), and
+    // Ambience under Music.
     void FillLayout(pipeline::AudioBusLayoutAsset& asset)
     {
         asset.custom[0].name = String(u8"Footsteps");
@@ -159,7 +160,8 @@ TEST_CASE("bus layout model: the tree, each custom bus under its parent")
     // A parent no bus has is Master, as the cook takes it.
     asset.custom[1].parent = String(u8"Nowhere");
     CHECK(TreeOf(asset) == String(u8"Master | .Effects | ..Footsteps | ...Steps | .Music | .UI | .Ambience"));
-    // Buses under each other in a loop are reached from no fixed bus: shown under Master all the same.
+    // Buses under each other in a loop cannot be reached from a fixed bus, but are still shown
+    // under Master.
     asset.custom[0].parent = String(u8"Steps");
     CHECK(editor::HasBusCycle(asset));
     CHECK(TreeOf(asset) == String(u8"Master | .Effects | .Music | .UI | .Ambience | .Footsteps | .Steps"));
@@ -184,7 +186,8 @@ TEST_CASE("bus layout model: added in the first free slot, removed with its chil
     CHECK_FALSE(editor::ReparentBus(asset, 0, u8"Steps")); // its own child: a loop
     CHECK(editor::ReparentBus(asset, 2, u8"Ambience"));
     CHECK(asset.custom[2].parent == String(u8"Ambience"));
-    // Ambience may move under the four fixed buses, Feet and Bus 1: not itself, not Steps under it.
+    // Ambience may move under the four fixed buses, Feet and Bus 1, but not under itself or Steps,
+    // its child.
     CHECK(editor::BusParentChoices(asset, 1).Size() == 6u);
 
     editor::RemoveBus(asset, 1); // Ambience: Steps under it moves to Master
@@ -261,7 +264,7 @@ TEST_CASE("bus layout page: its tree, the chosen bus's rows: a fixed one's setti
     CHECK(page->BusRows().GetValue(u8"name", 0).AsString() == StringView(u8"Footsteps"));
     const gui::PropertyInfo* parent = page->BusRows().FindInfo(u8"parent");
     REQUIRE(parent != nullptr);
-    CHECK(parent->Choices.Size() == 5u); // the four fixed and Ambience: not itself, not Steps under it
+    CHECK(parent->Choices.Size() == 5u); // the four fixed buses and Ambience, but not itself or Steps, its child
     CHECK(parent->Choices[static_cast<usize>(page->BusRows().GetValue(u8"parent", 0).AsInt())].Name == StringView(u8"Effects"));
 }
 
@@ -282,7 +285,7 @@ TEST_CASE("bus layout page: a setting, a rename and a move each one undo step; a
     page->EditRow(page->BusRows(), u8"name", gui::Variant(StringView(u8"Music"))); // a fixed bus's: refused
     CHECK(layout->custom[0].name == String(u8"Feet"));
 
-    // Moved under Music (its index among the choices offered).
+    // Moved under Music (by its index among the choices offered).
     const gui::PropertyInfo* parent = page->BusRows().FindInfo(u8"parent");
     i64 music = -1;
     for (usize i = 0; i < parent->Choices.Size(); ++i)

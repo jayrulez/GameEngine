@@ -3,16 +3,16 @@
 
 // UI Toolkit - :draggable_tree_view partition
 //
-// A TreeView with drag-to-reorder support. Ported from Sedulous.UI.Toolkit/src/DraggableTreeView.bf.
-// Three public types in one partition (mirroring the Beef file): IReorderableTreeAdapter (extends
-// ITreeAdapter with CanMove/MoveItem), TreeDragData (DragData payload carrying the source flat position),
-// and DraggableTreeView (wraps an owned TreeView as a visual child and implements IDragSource/IDropTarget).
+// A TreeView with drag-to-reorder support. Three public types share the partition:
+// IReorderableTreeAdapter (an ITreeAdapter with CanMove and MoveItem), TreeDragData (the DragData
+// payload carrying the source flat position), and DraggableTreeView (which wraps an owned TreeView as
+// a visual child and implements IDragSource and IDropTarget).
 //
-// Ownership adaptation (Beef `TreeView mTreeView ~ delete _`, owned but NOT in the child list) -> hold
-// the TreeView as a RefPtr member exposed via VisualChildCount()/GetVisualChild() (the ScrollView/TreeView
-// visual-child pattern). UIContext::AttachView/DetachView recurses VisualChildCount, so the internal
-// TreeView attaches/detaches automatically; Parent is wired in the ctor. The adapter is BORROWED (raw
-// pattern-B pointer; the consumer owns it).
+// The TreeView is owned but not in the logical child list: it is a RefPtr member exposed through
+// VisualChildCount()/GetVisualChild(), as ScrollView and TreeView do with their children.
+// UIContext::AttachView/DetachView recurse through VisualChildCount, so the internal TreeView
+// attaches and detaches automatically; Parent is wired in the constructor. The adapter is borrowed;
+// the consumer owns it.
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +29,7 @@ using namespace foundation::core;
 export namespace foundation::ui::toolkit
 {
     // ============================================================================================
-    // IReorderableTreeAdapter - tree adapter that supports drag-to-reorder.
+    // IReorderableTreeAdapter: a tree adapter that supports drag-to-reorder.
     // ============================================================================================
     class IReorderableTreeAdapter : public ITreeAdapter
     {
@@ -40,20 +40,20 @@ export namespace foundation::ui::toolkit
         /// Move an item from one flat position to another.
         virtual void MoveItem(i32 fromPosition, i32 toPosition) = 0;
 
-        /// Whether the item at fromPosition may be dropped INTO the item at toPosition (the
-        /// middle drop-zone of a row - e.g. reparenting in a hierarchy). Default: unsupported,
-        /// preserving pure-reorder adapters unchanged.
+        /// Whether the item at fromPosition may be dropped into the item at toPosition (the
+        /// middle drop zone of a row, for example reparenting in a hierarchy). The default is
+        /// unsupported, so pure-reorder adapters need not override it.
         [[nodiscard]] virtual bool CanDropInto(i32 /*fromPosition*/, i32 /*toPosition*/)
         {
             return false;
         }
 
-        /// Drop the item at fromPosition INTO the item at toPosition.
+        /// Drop the item at fromPosition into the item at toPosition.
         virtual void DropInto(i32 /*fromPosition*/, i32 /*toPosition*/) {}
     };
 
     // ============================================================================================
-    // TreeDragData - drag data for tree item reordering.
+    // TreeDragData: drag data for tree item reordering.
     // ============================================================================================
     class TreeDragData : public DragData
     {
@@ -65,7 +65,7 @@ export namespace foundation::ui::toolkit
         }
 
         i32 SourcePosition = 0;
-        /// What the row IS, for a drop outside the tree, set by the tree's owner through
+        /// What the row is, for a drop outside the tree, set by the tree's owner through
         /// DraggableTreeView::OnDecorateDragData: a hierarchy row names its entity (the editor's
         /// entity kind, and the entity's id and name). Empty for a tree that names nothing.
         String ItemKind;
@@ -74,14 +74,14 @@ export namespace foundation::ui::toolkit
     };
 
     // ============================================================================================
-    // DraggableTreeView - TreeView with drag-to-reorder support (IDragSource + IDropTarget).
+    // DraggableTreeView: a TreeView with drag-to-reorder support (IDragSource and IDropTarget).
     // ============================================================================================
     class DraggableTreeView : public ViewGroup, public IDragSource, public IDropTarget
     {
         RTTI_OBJECT(DraggableTreeView, ViewGroup)
     public:
         Event<void(DraggableTreeView*, i32, i32)> OnItemReordered;
-        /// Fired when an item is dropped INTO another (the adapter's DropInto ran).
+        /// Fired when an item is dropped into another (the adapter's DropInto ran).
         Event<void(DraggableTreeView*, i32, i32)> OnItemDroppedInto;
         /// Names what a dragged row is, so a target outside the tree can take it (an entity slot
         /// takes a hierarchy row).
@@ -102,8 +102,8 @@ export namespace foundation::ui::toolkit
         [[nodiscard]] f32 ItemHeight() const { return m_treeView->ItemHeight(); }
         void SetItemHeight(f32 value) { m_treeView->SetItemHeight(value); }
 
-        // Row content-inset for a given depth (single source of truth for indentation; forwards to
-        // the internal TreeView - see TreeView::ContentInset). Adapters must use this, not a literal.
+        // Row content inset for a given depth (the single source of truth for indentation; forwards
+        // to the internal TreeView, see TreeView::ContentInset). Adapters must use this, not a literal.
         [[nodiscard]] f32 ContentInset(i32 depth) { return m_treeView->ContentInset(depth); }
 
         void SetAdapter(IReorderableTreeAdapter* adapter)
@@ -284,12 +284,13 @@ export namespace foundation::ui::toolkit
             return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
-        // Drop-zone resolution (scroll-corrected). Over a row, the middle band (25%..75%) is a
-        // drop-INTO zone (when the adapter supports it - e.g. reparenting); the edge bands are
-        // between-rows REORDER boundaries: top edge = insert before this row, bottom edge =
-        // before the next (so position ranges 0..count - count = end of list, also the result
-        // anywhere below the last row). Each zone falls back to the other's semantics when its
-        // own is unsupported, so pure-reorder and pure-reparent adapters work anywhere.
+        // Drop-zone resolution (scroll-corrected). Over a row, the middle band (25% to 75%) is a
+        // drop-into zone when the adapter supports it (for example reparenting); the edge bands
+        // are reorder boundaries between rows. The top edge inserts before this row and the bottom
+        // edge before the next, so positions range over 0..count, where count is the end of the
+        // list (also the result anywhere below the last row). Each zone falls back to the other's
+        // meaning when its own is unsupported, so pure-reorder and pure-reparent adapters work
+        // anywhere.
         struct DropResolution
         {
             i32 position =
@@ -365,7 +366,7 @@ export namespace foundation::ui::toolkit
         IReorderableTreeAdapter* m_adapter = nullptr; // borrowed (consumer owns)
         bool m_dragEnabled = true;
         i32 m_dropIndicatorPos = -1;
-        i32 m_dropIntoPos = -1; // row highlighted as a drop-INTO target
+        i32 m_dropIntoPos = -1; // row highlighted as a drop-into target
     };
 
     RTTI_DEFINE_OBJECT(TreeDragData, "rtti::ui::toolkit")

@@ -3,23 +3,15 @@
 
 // UI - :view partition (the mutually-recursive View cluster)
 //
-// View / ViewGroup / RootView / UIContext / MutationQueue. Ported from Sedulous.UI/src/Core/*.bf.
-// These classes reference one another cyclically (View<->ViewGroup<->UIContext<->MutationQueue) AND
-// View<->StyleSheet, which C++ module partitions cannot express as a DAG - so the whole cluster lives
-// in ONE partition, and the two styling methods that call into View (StyleSelector::Matches,
-// StyleSheet::Resolve) are declared in their styling partitions and DEFINED here (after View is
-// complete).
+// View / ViewGroup / RootView / UIContext / MutationQueue. These classes reference one another
+// cyclically (View, ViewGroup, UIContext and MutationQueue, and also View and StyleSheet), which C++
+// module partitions cannot express as a DAG, so the whole cluster lives in one partition. The two
+// styling methods that call into View (StyleSelector::Matches, StyleSheet::Resolve) are declared in
+// their styling partitions and defined in the implementation unit, after View is complete.
 //
-// OWNERSHIP: the view tree is RefPtr-owned (RAII). A ViewGroup keeps a RefPtr to each child;
-// AddView adds a ref, RemoveView drops it. This replaces Beef's raw-pointer-owned tree + manual
-// `delete`. Per-child placement is a LayoutStyle VALUE on the view (View::Layout / SetLayout).
-//
-// UNWIRED SEAMS (need not-yet-ported subsystems; documented seams, not bugs):
-//  - Input/Focus/DragDrop/Animation/Shortcut/Tooltip managers on UIContext (Input/Overlay/Animation
-//    subsystems). Kept as nullable seams; IsHovered/IsFocused therefore return false.
-//  - RootView's PopupLayer (Overlay subsystem) - omitted; RootView is a plain viewport ViewGroup.
-//  - Input-event virtuals (OnMouseDown/OnKeyDown/...), directional-focus + tooltip fields, font-family
-//    resolution via IFontService, ScrollIntoView (ScrollView), and UIContext::DrawRootView.
+// Ownership: the view tree is RefPtr-owned. A ViewGroup keeps a RefPtr to each child; AddView adds a
+// ref, RemoveView drops it. Per-child placement is a LayoutStyle value on the view (View::Layout /
+// SetLayout).
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +21,7 @@ export module foundation.ui:view;
 
 import foundation.core; // Object, RefPtr, Array, HashMap, String, StringView, Float2, Rectangle, Function, Cast, IsDerivedFrom, TypeInfo, Max, Min, Optional
 import foundation.vg;   // VGContext (child draw transforms)
-import foundation.fonts; // IFontService (UIContext seam + font-family resolution)
+import foundation.fonts; // IFontService (the UIContext's font service, font-family resolution)
 import :enums;         // Visibility, CursorType, InvalidationKind
 import :control_state;
 import :property_owner; // IPropertyOwner
@@ -51,15 +43,15 @@ import :style_sheet;
 import :event;      // OnAnimationEnd, OnAnimationIteration
 import :event_args; // MouseEventArgs/KeyEventArgs/MouseWheelEventArgs/TextInputEventArgs
 import :iaccelerator_handler;
-import :itooltip_provider; // pattern-A tooltip content provider (View::AsTooltipProvider())
+import :itooltip_provider; // tooltip content provider (View::AsTooltipProvider())
 import :tooltip_placement; // TooltipPlacement enum (View.TooltipPlacement field)
 import :tooltip_manager;   // by-value member of UIContext
-import :idrag_source;      // pattern-A drag source (View::AsDragSource())
-import :idrop_target;      // pattern-A drop target (View::AsDropTarget())
+import :idrag_source;      // drag source (View::AsDragSource())
+import :idrop_target;      // drop target (View::AsDropTarget())
 import :drag_drop_manager; // by-value member of UIContext
 import :animation_manager; // by-value member of UIContext
-import :iclipboard;        // clipboard seam (injected by the app; nullable)
-import :iresource_provider; // image/text seam (injected by the app; nullable)
+import :iclipboard;        // clipboard adapter (injected by the app; nullable)
+import :iresource_provider; // image/text provider (injected by the app; nullable)
 import :input_manager;
 import :focus_manager;
 import :shortcut_manager;
@@ -78,13 +70,13 @@ export namespace foundation::ui
     class
         PopupLayer; // defined in :popup_layer; RootView holds one (created lazily in the impl unit).
 
-    // Aliases so faithful field names such as `Visibility` (which shadow their own types
+    // Aliases so field names such as `Visibility` (which shadow their own types
     // inside the class) can still name those types elsewhere in the cluster.
     using VisibilityValue = Visibility;
     using TooltipPlacementValue = TooltipPlacement;
 
     // ===================================================================================
-    // MutationQueue - deferred tree changes drained at safe sync points.
+    // MutationQueue: deferred tree changes drained at safe sync points.
     // ===================================================================================
     class MutationQueue
     {
@@ -99,7 +91,7 @@ export namespace foundation::ui
         /// True if there are pending mutations.
         [[nodiscard]] bool HasPending() const noexcept { return m_queue.Size() > 0; }
 
-        /// Execute all pending mutations. Actions may enqueue more - loops until empty.
+        /// Execute all pending mutations. Actions may enqueue more; it loops until the queue is empty.
         void Drain()
         {
             while (m_queue.Size() > 0)
@@ -118,11 +110,11 @@ export namespace foundation::ui
     };
 
     // ===================================================================================
-    // BoxMetrics - the ONE resolved chrome of a view. Padding is the
-    // component-wise max of the three historical channels (ViewGroup field, style property,
-    // background DrawablePadding) so a padding declared through ANY of them takes effect.
-    // Border is layout-participating chrome (border-box): MeasuredSize = content + padding +
-    // border; margin stays the parent's aggregation concern.
+    // BoxMetrics: the resolved chrome of a view. Padding is the component-wise max of three
+    // sources (the ViewGroup field, the style property and the background's DrawablePadding),
+    // so a padding declared through any of them takes effect. Border is layout-participating
+    // chrome (border-box): MeasuredSize = content + padding + border; margin is left to the
+    // parent.
     // ===================================================================================
     struct BoxMetrics
     {
@@ -130,7 +122,7 @@ export namespace foundation::ui
         Thickness Padding{};
         Thickness Border{};
 
-        /// Padding + border - what deflates content constraints under border-box.
+        /// Padding plus border: what deflates content constraints under border-box.
         [[nodiscard]] Thickness Chrome() const noexcept
         {
             return Thickness{Padding.Left + Border.Left, Padding.Top + Border.Top,
@@ -139,7 +131,7 @@ export namespace foundation::ui
     };
 
     // ===================================================================================
-    // View - base of the retained-mode view hierarchy.
+    // View: base of the retained-mode view hierarchy.
     // ===================================================================================
     class View : public Object, public IPropertyOwner
     {
@@ -156,7 +148,7 @@ export namespace foundation::ui
         [[nodiscard]] f32 Width() const noexcept { return Bounds.width; }
         [[nodiscard]] f32 Height() const noexcept { return Bounds.height; }
 
-        /// This view's EFFECTIVE placement (size specs, margin, insets, and the per-container
+        /// This view's effective placement (size specs, margin, insets, and the per-container
         /// fields): every declared inline field, with the undeclared ones filled from the
         /// cascade (`width:`, `margin:`, `position:` ... in a sheet). Read by whichever
         /// container holds the view; the inline part survives reparenting unchanged. Refreshed
@@ -202,10 +194,10 @@ export namespace foundation::ui
         i32 TabIndex = 0;
         bool ClipsContent = false;
         bool WantsArrowKeys = false;
-        // Tab normally drives focus traversal BEFORE dispatch and never reaches a view. A view
+        // Tab normally drives focus traversal before dispatch and never reaches a view. A view
         // that edits tab characters (code editors) sets this to receive Tab in OnKeyDown first;
-        // traversal remains the fallback when the view leaves the event unhandled (the same
-        // dispatch-first shape as the Return/OnActivate deviation in InputManager).
+        // traversal remains the fallback when the view leaves the event unhandled (Return works
+        // the same way: InputManager dispatches it first and calls OnActivate only when unhandled).
         bool WantsTabKey = false;
         bool IsPendingDeletion = false;
 
@@ -253,7 +245,7 @@ export namespace foundation::ui
         }
 
         /// Walks the parent chain from the hit view, returning the first non-Default cursor
-        /// (each view judged at the SAME screen point via CursorAt).
+        /// (each view judged at the same screen point via CursorAt).
         [[nodiscard]] CursorType EffectiveCursor(Float2 screenPoint) const
         {
             const View* v = this;
@@ -342,17 +334,17 @@ export namespace foundation::ui
         }
 
         // === Draw invalidation ===
-        /// Layout-affecting change: the host re-measures + re-lays-out + redraws. The SAFE
-        /// default for any mutation (yesterday's only spelling).
+        /// Layout-affecting change: the host re-measures, re-lays-out and redraws. The safe
+        /// default for any mutation.
         void Invalidate(); // defined in the impl unit (touches Context)
-        /// Visual-only change (hover tint, press state, focus ring, caret): redraw WITHOUT
+        /// Visual-only change (hover tint, press state, focus ring, caret): redraw without
         /// the whole-tree relayout. Use only where geometry provably cannot change.
         void InvalidateVisual();
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }
         void ClearRedrawFlag() noexcept { m_needsRedraw = false; }
         void OnPropertyChanged(InvalidationKind kind) override
         {
-            // Properties DECLARE their damage: visual-only props (Opacity, TextColor, Cursor)
+            // Properties declare their damage: visual-only props (Opacity, TextColor, Cursor)
             // skip the relayout; everything else takes the safe layout path.
             if (kind == InvalidationKind::Visual)
             {
@@ -365,22 +357,20 @@ export namespace foundation::ui
         }
 
         // === Layout ===
-        /// Measure this view. The BASE owns two things uniformly:
-        /// MARGIN (deflated from the incoming constraints - parents do not) and the
-        /// FIXED size spec (resolved HERE ONCE, in logical units - no Dp double-scale;
-        /// Px means physical pixels). Match/Wrap remain parent-negotiated
-        /// looseness: a base-side Match would defeat FlexLayout's deliberate cross-axis
-        /// demotion. Controls implement OnMeasureContent (content-box in, content
-        /// size out); plain OnMeasure overrides receive the post-margin post-spec box.
+        /// Measure this view. The base handles two things uniformly: margin (deflated from the
+        /// incoming constraints; parents do not deflate it) and the fixed size spec (resolved
+        /// here once, in logical units, so Dp is not scaled twice; Px means physical pixels).
+        /// Match/Wrap remain parent-negotiated looseness, since a base-side Match would defeat
+        /// FlexLayout's cross-axis demotion. Controls implement OnMeasureContent (content box
+        /// in, content size out); plain OnMeasure overrides receive the post-margin post-spec box.
         ///
-        /// Within one layout pass a view answers a repeat request with the same constraints
-        /// from its last answers (up to eight) rather than measuring its subtree again: nested flex
-        /// containers measure each child more than once, and that doubled at every level (a deep
-        /// page measured its leaves hundreds of times a pass). The answer is the same; what a
-        /// stored answer cannot bring back is the subtree's own state (each child keeps what its
-        /// LAST real measure gave it), so Layout first measures the subtree again, once, when
-        /// the last request was answered from the store for other constraints than the subtree
-        /// holds. Invalidation (MarkNeedsLayout) and each layout pass start the store afresh.
+        /// Within one layout pass a view answers a repeated request with the same constraints
+        /// from its last answers (up to eight) rather than measuring its subtree again: nested
+        /// flex containers measure each child more than once, and the cost doubles at every
+        /// level. A stored answer cannot restore the subtree's own state (each child keeps what
+        /// its last real measure gave it), so Layout measures the subtree again, once, when the
+        /// last request was answered from the store for constraints other than those the subtree
+        /// holds. Invalidation (MarkNeedsLayout) and each layout pass clear the store.
         void Measure(BoxConstraints c); // impl unit (needs RootView complete for the dpi query)
 
         /// How wide this view's content is when nothing narrows it, at `height`: what a container
@@ -393,8 +383,8 @@ export namespace foundation::ui
             return MeasuredSize.x;
         }
 
-        /// MeasuredSize plus this view's margins - what parents aggregate and place (parents
-        /// hand Layout the MARGIN box; the base insets to the border box).
+        /// MeasuredSize plus this view's margins: what parents aggregate and place (parents
+        /// hand Layout the margin box; the base insets to the border box).
         [[nodiscard]] Float2 MarginBoxSize() const
         {
             const Thickness m = m_effectiveLayout.Margin;
@@ -402,20 +392,20 @@ export namespace foundation::ui
                           MeasuredSize.y + m.TotalVertical()};
         }
 
-        /// Arrange this view. `(x, y, width, height)` is the MARGIN BOX:
-        /// the base insets by margin once, so every container honors margins identically without
-        /// per-site margin arithmetic. Views without margins resolve to the same
-        /// border box as a direct border-box call. The final border box is ROUNDED to the
-        /// device grid - fractional centering does not land content on half-pixels
-        /// (the blurry-1px-border/soft-text class). Body in the impl unit (dpi query).
+        /// Arrange this view. `(x, y, width, height)` is the margin box: the base insets by
+        /// margin once, so every container honors margins identically without per-site margin
+        /// arithmetic. Views without margins resolve to the same border box as a direct
+        /// border-box call. The final border box is rounded to the device grid, so fractional
+        /// centering does not land content on half-pixels (which blurs 1px borders and softens
+        /// text). Body in the impl unit (dpi query).
         void Layout(f32 x, f32 y, f32 width, f32 height);
 
         // === Virtual methods ===
         [[nodiscard]] virtual f32 GetBaseline() const { return -1.0f; }
         virtual void OnDraw(UIDrawContext& ctx) { (void)ctx; }
 
-        /// Current visual state for drawable/theme lookups. Focused/Hover need input managers
-        /// (not yet wired), so they contribute nothing.
+        /// Current visual state for drawable/theme lookups: Disabled, Focused (when the focus
+        /// is visible) and Hover.
         [[nodiscard]] virtual ControlState GetControlState() const
         {
             ControlState state = ControlState::Normal;
@@ -423,9 +413,9 @@ export namespace foundation::ui
             {
                 state |= ControlState::Disabled;
             }
-            // Focused STATE (and thus the themed focus visual) only for focus that should be
-            // visible - keyboard-acquired, or a text-input view. Pointer-clicked controls hold
-            // focus without lighting up (:focus-visible semantics; see FocusSource).
+            // The Focused state (and so the themed focus visual) applies only to focus that
+            // should be visible: keyboard-acquired focus, or a text-input view. Pointer-clicked
+            // controls hold focus without lighting up (:focus-visible semantics; see FocusSource).
             if (IsFocusVisible())
             {
                 state |= ControlState::Focused;
@@ -437,7 +427,7 @@ export namespace foundation::ui
             return state;
         }
 
-        // === Input events (bubble phase - default) ===
+        // === Input events (bubble phase, the default) ===
         virtual void OnMouseDown(MouseEventArgs& e) { (void)e; }
         virtual void OnMouseUp(MouseEventArgs& e) { (void)e; }
         virtual void OnMouseMove(MouseEventArgs& e) { (void)e; }
@@ -453,7 +443,7 @@ export namespace foundation::ui
         /// scroller brings it into view. Called on each ancestor, nearest first.
         virtual void OnDescendantFocused(View& focused) { (void)focused; }
 
-        // === Input events (capture phase; root->target before the target sees it) ===
+        // === Input events (capture phase: root to target, before the target sees it) ===
         virtual void OnMouseDownCapture(MouseEventArgs& e) { (void)e; }
         virtual void OnMouseUpCapture(MouseEventArgs& e) { (void)e; }
         virtual void OnMouseMoveCapture(MouseEventArgs& e) { (void)e; }
@@ -496,7 +486,7 @@ export namespace foundation::ui
 
         /// Whether this view wants platform text input (IME) while it holds focus. Text-editing controls
         /// override to return true. The ui.shell bridge reads UIContext::WantsTextInput() (this view, if
-        /// focused) to start/stop the window's text input - the mechanism Sedulous shell never finished.
+        /// focused) to start/stop the window's text input.
         [[nodiscard]] virtual bool WantsTextInput() const { return false; }
         /// Whether what it takes is secret (a password): the platform's IME keeps out of it.
         [[nodiscard]] virtual bool IsTextInputSecret() const { return false; }
@@ -520,7 +510,7 @@ export namespace foundation::ui
         // Input-manager backed (defined in the impl unit; query Context's Input/Focus managers).
         [[nodiscard]] bool IsHovered() const;
         [[nodiscard]] bool IsFocused() const;
-        /// Whether this view's FOCUS VISUAL should draw: focused via keyboard, or a text-input
+        /// Whether this view's focus visual should draw: focused via keyboard, or a text-input
         /// view (which always shows its border + caret). Pointer/programmatic focus is held but
         /// not drawn. Draw sites use this; logic (typing, nav) keeps using IsFocused().
         [[nodiscard]] bool IsFocusVisible() const;
@@ -564,12 +554,12 @@ export namespace foundation::ui
         /// sheet) happened: flush every computed-style cache in the context and relayout.
         /// Class/sheet setters call this; a `Name` write after attach must call it itself.
         void InvalidateStyle(); // impl unit (touches Context)
-        /// As InvalidateStyle, for a change that REPLACES rule objects (a sheet swap): the
+        /// As InvalidateStyle, for a change that replaces rule objects (a sheet swap): the
         /// context's sheet epoch moves so no stale cache is ever read for a transition
         /// snapshot (its rule pointers may be gone). Impl unit.
         void InvalidateStyleSheets();
 
-        // === Transitions (P3; spec section 4) ===
+        // === Transitions ===
         /// Running style transitions on this view (for tests/tools).
         [[nodiscard]] usize ActiveTransitionCount() const noexcept;
         /// Animations running (not finished) on the view.
@@ -681,7 +671,7 @@ export namespace foundation::ui
                 }
             }
         }
-        /// Remove ALL inline overrides (element + part). Drops the whole inline sheet, releasing every rule
+        /// Remove all inline overrides (element + part). Drops the whole inline sheet, releasing every rule
         /// and every drawable those rules held; a fresh sheet is reallocated on the next SetStyle.
         void ClearInlineStyles()
         {
@@ -720,7 +710,7 @@ export namespace foundation::ui
             return rule != nullptr && rule->GetValue(prop).HasValue();
         }
 
-        // === Style resolution (orchestrators; defined below - need Context/StyleSheet/inheritance) ===
+        // === Style resolution (orchestrators; defined below, since they need Context/StyleSheet/inheritance) ===
         /// The computed value of `prop` for this view: the ordered cascade over the context
         /// sheet, the local sheets from the outermost ancestor inward, and the inline sheet
         /// (later wins); `inherit`/`initial`/`var()` resolved; text properties inherit from
@@ -745,8 +735,8 @@ export namespace foundation::ui
                                                   ControlState partState);
 
         /// Resolve the effective font family: the .FontFamily style cascade, falling back to the active
-        /// font service's default family. Returns by value (our ResolveStyle returns a StyleValue by value,
-        /// so a borrowed view would dangle). (Defined in the impl unit - needs Context.)
+        /// font service's default family. Returns by value (ResolveStyle returns a StyleValue by value,
+        /// so a borrowed view would dangle). Defined in the impl unit (needs Context).
         [[nodiscard]] String ResolveStyleFontFamily();
         /// As above, but a non-empty per-instance override wins (controls with a typed FontFamily property).
         [[nodiscard]] String ResolveStyleFontFamily(StringView instanceOverride);
@@ -759,9 +749,6 @@ export namespace foundation::ui
             }
             return defaultVal;
         }
-        /// A Float property; a Length value (em/px/pt/dp, calc) resolves too, against this
-        /// view's font size - so `font-size: 1.2em` or `corner-radius: 0.5em` in a theme reach
-        /// every control that reads floats. Percent has no reference box on this path (0).
         /// The corners of the view's box, which its shadow and its rounded clip follow: its
         /// corner-radius, or without one the corners its background rounds
         /// (rounded-rect(..., radius=24) sets no corner-radius).
@@ -781,6 +768,9 @@ export namespace foundation::ui
             return vg::CornerRadii{Max(0.0f, ResolveStyleFloat(StyleProperty::CornerRadius, 0.0f))};
         }
 
+        /// A Float property; a Length value (em/px/pt/dp, calc) resolves too, against this
+        /// view's font size, so `font-size: 1.2em` or `corner-radius: 0.5em` in a theme reach
+        /// every control that reads floats. Percent has no reference box on this path (0).
         [[nodiscard]] f32 ResolveStyleFloat(StyleProperty prop, f32 defaultVal = 0.0f)
         {
             const StyleValue value = ResolveStyle(prop);
@@ -807,11 +797,11 @@ export namespace foundation::ui
             return ResolveStyle(prop).AsDrawable();
         }
 
-        /// Resolve this view's chrome ONCE: margin from the LayoutStyle; padding
+        /// Resolve this view's chrome once: margin from the LayoutStyle; padding
         /// = max of the ViewGroup Padding field (via OwnPaddingField), the styled padding (or
         /// the control's DefaultStylePadding when no style sets one), and the background
-        /// drawable's DrawablePadding; border from StyleProperty::BorderWidth. The single
-        /// source every measure/arrange/content-bounds consumer converges on.
+        /// drawable's DrawablePadding; border from StyleProperty::BorderWidth. Every measure,
+        /// arrange and content-bounds consumer reads the chrome from here.
         [[nodiscard]] BoxMetrics ResolveBoxMetrics()
         {
             BoxMetrics m;
@@ -833,8 +823,8 @@ export namespace foundation::ui
             m.Border = Thickness{borderWidth, borderWidth, borderWidth, borderWidth};
             return m;
         }
-        /// A String property, returned by VALUE: ResolveStyle hands back a StyleValue temporary,
-        /// so a borrowed view would dangle (the ResolveStyleFontFamily lesson, caught by ASAN).
+        /// A String property, returned by value: ResolveStyle hands back a StyleValue temporary,
+        /// so a borrowed view would dangle.
         [[nodiscard]] String ResolveStyleString(StyleProperty prop, StringView defaultVal = {})
         {
             const StyleValue value = ResolveStyle(prop);
@@ -923,23 +913,23 @@ export namespace foundation::ui
         /// with its Padding field; leaf views have none).
         [[nodiscard]] virtual Thickness OwnPaddingField() const { return Thickness{}; }
 
-        /// The control's FALLBACK padding when no style sets StyleProperty::Padding - stated
+        /// The control's fallback padding when no style sets StyleProperty::Padding, stated
         /// once per control. A themed padding wins outright (fallback, not max-merge).
         [[nodiscard]] virtual Thickness DefaultStylePadding() const { return Thickness{}; }
 
-        /// Content-box measure seam: receives CONTENT-box constraints (margin,
-        /// spec, padding, and border already deflated by the base Measure) and returns the
-        /// content size; the base re-inflates by chrome and clamps. Return the {-1,-1} sentinel
-        /// (the default) to fall back to the OnMeasure seam. Controls that implement this seam
-        /// carry no hand-rolled padding math.
+        /// Content-box measure hook: receives content-box constraints (margin, spec, padding,
+        /// and border already deflated by the base Measure) and returns the content size; the
+        /// base re-inflates by chrome and clamps. Return the {-1,-1} sentinel (the default) to
+        /// fall back to OnMeasure. Controls that implement this hook carry no hand-rolled
+        /// padding math.
         [[nodiscard]] virtual Float2 OnMeasureContent(BoxConstraints contentConstraints)
         {
             (void)contentConstraints;
             return Float2{-1.0f, -1.0f};
         }
 
-        /// LEGACY measure seam - the control handles its own chrome. Receives the post-margin,
-        /// post-Fixed-spec box. Deleted when the last override migrates to OnMeasureContent.
+        /// The older measure hook, where the control handles its own chrome. Receives the
+        /// post-margin, post-Fixed-spec box. Prefer OnMeasureContent.
         virtual void OnMeasure(BoxConstraints constraints)
         {
             MeasuredSize =
@@ -965,7 +955,7 @@ export namespace foundation::ui
 
         // The computed-style cache: the matching rules in ascending cascade order and, per
         // property, the winning rule. Valid while the context's style generation, the summed
-        // versions of the sheets in THIS view's chain (context sheet, ancestors' local sheets,
+        // versions of the sheets in this view's chain (context sheet, ancestors' local sheets,
         // own inline sheet) and the control state are unchanged. Sheets in other contexts, or
         // on other branches, never invalidate it. Impl-unit methods.
         struct StyleCache
@@ -985,10 +975,10 @@ export namespace foundation::ui
         /// Turns Inherit/Initial/Variable into a concrete value (depth-limited for var chains).
         [[nodiscard]] StyleValue ResolveKeywords(StyleProperty prop, const StyleValue& raw, i32 depth);
         [[nodiscard]] StyleValue ResolveVariableValue(const StyleValue& reference, i32 depth);
-        /// The cascade's value with keywords/inheritance resolved and NO transition overlay:
+        /// The cascade's value with keywords/inheritance resolved and no transition overlay:
         /// what ResolveStyle returns once every transition on `prop` has finished.
         [[nodiscard]] StyleValue ComputeStyle(StyleProperty prop);
-        /// After a cache rebuild: for every listed animatable property whose WINNING RULE
+        /// After a cache rebuild: for every listed animatable property whose winning rule
         /// changed (`oldWinners` vs the new cache), start or retarget a transition from the
         /// value before the rebuild (a running entry's current value, mid-flight included) to
         /// the new computed value; and the state cross-fade when the control state moved.
@@ -1053,7 +1043,7 @@ export namespace foundation::ui
             Float2 size;
         };
         // Eight: each nesting level below brings a request of its own (its measured height), so
-        // a deep page needs a few; four evicted answers still wanted and measure counts grew again.
+        // a deep page needs several; fewer slots evict answers that are still wanted.
         static constexpr u32 kMeasureAnswers = 8;
         MeasureAnswer m_measureAnswers[kMeasureAnswers];
         u32 m_measureAnswerCount = 0;
@@ -1077,7 +1067,7 @@ export namespace foundation::ui
     };
 
     // ===================================================================================
-    // ViewGroup - container of child views.
+    // ViewGroup: container of child views.
     // ===================================================================================
     class ViewGroup : public View
     {
@@ -1128,7 +1118,7 @@ export namespace foundation::ui
             }
             InsertView(child, index);
         }
-        /// Moves an EXISTING child to `index` (clamped) - a pure reorder with NO
+        /// Moves an existing child to `index` (clamped): a pure reorder with no
         /// Detach/Attach round-trip, so focus/hover/registration survive. For z-order
         /// maintenance (e.g. canvas order-stacking). Defined in the impl unit.
         void MoveView(View* child, usize index);
@@ -1297,13 +1287,13 @@ export namespace foundation::ui
                     continue;
                 }
 
-                // Clip culling: under an active scissor (a ScrollView'd list, any ClipsContent
-                // ancestor), a child whose bounds cannot intersect the clip contributes nothing -
-                // skip its whole subtree so big scrolled content tessellates its VIEWPORT, not its
-                // row count (the ImportTest blank-UI lesson: a ~1300-row generic form blew past
-                // the VG per-frame vertex ceiling and blanked the window). Conservative: only
-                // identity render transforms (a transform can move content into view), and only
-                // under an active clip (unclipped layers keep out-of-bounds drawing freedom).
+                // Clip culling: under an active scissor (a list in a ScrollView, any ClipsContent
+                // ancestor), a child whose bounds cannot intersect the clip contributes nothing,
+                // so its whole subtree is skipped. Large scrolled content then tessellates only
+                // what is in the viewport, not every row, which keeps a long generated form under
+                // VG's per-frame vertex ceiling. This is conservative: it applies only to identity
+                // render transforms (a transform can move content into view) and only under an
+                // active clip (unclipped layers may still draw out of bounds).
                 child->RefreshStyleTransform();
                 const Transform2D transform = child->TransformMatrix();
                 if (transform.IsIdentity() && !ctx.IsRectVisible(child->Bounds))
@@ -1353,7 +1343,7 @@ export namespace foundation::ui
                 {
                     ctx.VG().PushOpacity(opacity);
                 }
-                // The outer box-shadow sits UNDER the child's own drawing and outside its
+                // The outer box-shadow sits under the child's own drawing and outside its
                 // clip; an inset shadow is drawn over the child (after OnDraw) inside it.
                 const StyleValue shadows = child->ResolveStyle(StyleProperty::BoxShadow);
                 DrawBoxShadows(ctx, *child, shadows.AsShadows(), false);
@@ -1538,7 +1528,7 @@ export namespace foundation::ui
                 }
                 const LayoutStyle& ls = child->Layout();
                 // CSS shrink-to-fit: the available box is the content box minus the declared
-                // insets on each axis; both insets declared pin BOTH edges (the margin box is
+                // insets on each axis; both insets declared pin both edges (the margin box is
                 // exactly the remainder).
                 const f32 availW = Max(0.0f, contentWidth - (ls.Left.IsDeclared() ? ls.Left.Value() : 0.0f) -
                                                  (ls.Right.IsDeclared() ? ls.Right.Value() : 0.0f));
@@ -1597,9 +1587,9 @@ export namespace foundation::ui
     };
 
     // ===================================================================================
-    // RootView - top-level viewport view. Owns a PopupLayer kept as the last child (topmost for draw +
-    // hit-test). The PopupLayer is created lazily in GetPopupLayer() (impl unit) - RootView lives in the
-    // :view partition and cannot name the :popup_layer type at construction (module cycle).
+    // RootView: top-level viewport view. Owns a PopupLayer kept as the last child (topmost for draw and
+    // hit-test). The PopupLayer is created lazily in GetPopupLayer() (impl unit), because RootView lives
+    // in the :view partition and cannot name the :popup_layer type at construction (module cycle).
     // ===================================================================================
     class RootView : public ViewGroup
     {
@@ -1620,8 +1610,8 @@ export namespace foundation::ui
         [[nodiscard]] PopupLayer*
         GetPopupLayer(); // defined in the impl unit (needs the complete type)
 
-        /// The popup layer if it exists, WITHOUT creating it (base-typed - this partition cannot
-        /// name PopupLayer; callers in impl units Cast). Used by focus-root scoping.
+        /// The popup layer if it exists, without creating it (typed as the base, since this
+        /// partition cannot name PopupLayer; callers in impl units Cast). Used by focus-root scoping.
         [[nodiscard]] ViewGroup* PeekPopupLayer() const noexcept { return m_popupLayer.Get(); }
 
         /// Adds a child, keeping the PopupLayer as the last child for z-order.
@@ -1685,7 +1675,7 @@ export namespace foundation::ui
     };
 
     // ===================================================================================
-    // UIContext - central coordinator (unwired managers held as nullable seams).
+    // UIContext: central coordinator.
     // ===================================================================================
     class UIContext
     {
@@ -1698,7 +1688,7 @@ export namespace foundation::ui
             Animating // ticking the AnimationManager; tree mutations from onComplete defer to the queue
         };
 
-        // The allocator (required - the host decides) is the whole UI tree's root:
+        // The allocator (required; the host decides) is the whole UI tree's root:
         // every view, drawable, and style object created under this context inherits
         // it (views via MemoryAllocator(), managers via Allocator()).
         explicit UIContext(IAllocator& allocator)
@@ -1715,7 +1705,7 @@ export namespace foundation::ui
         /// draw and tab order); all off by default, and free while off.
         UIDebugDrawSettings DebugDraw{};
 
-        // (m_animationManager is default-constructed - it holds no back-pointer to the context.)
+        // (m_animationManager is default-constructed; it holds no back-pointer to the context.)
         ~UIContext()
         {
             m_mutationQueue.Drain();
@@ -1732,9 +1722,9 @@ export namespace foundation::ui
 
         [[nodiscard]] Phase CurrentPhase() const noexcept { return m_phase; }
         [[nodiscard]] bool NeedsRedraw() const noexcept { return m_needsRedraw; }
-        /// Layout damage: some view's GEOMETRY may have changed since the last layout pass.
+        /// Layout damage: some view's geometry may have changed since the last layout pass.
         /// Visual-only damage (hover/caret/press) leaves this clear, so the host can redraw
-        /// without re-measuring the whole tree - the interaction-frame cost cut.
+        /// without re-measuring the whole tree.
         [[nodiscard]] bool NeedsLayout() const noexcept { return m_needsLayout; }
         void ClearLayoutDamage() noexcept { m_needsLayout = false; }
         [[nodiscard]] f32 DeltaTime() const noexcept { return m_deltaTime; }
@@ -1753,7 +1743,7 @@ export namespace foundation::ui
 
         [[nodiscard]] MutationQueue& MutationQueueRef() noexcept { return m_mutationQueue; }
 
-        // Owned managers (Input/Focus/Shortcut/Tooltip). DragDrop/Animation are not yet wired.
+        // Owned managers.
         [[nodiscard]] InputManager* GetInputManager() noexcept { return &m_inputManager; }
         [[nodiscard]] const InputManager* GetInputManager() const noexcept
         {
@@ -1777,10 +1767,10 @@ export namespace foundation::ui
         [[nodiscard]] bool IsTextInputSecret() const;
 
         [[nodiscard]] StyleSheet* GetStyleSheet() const noexcept { return m_styleSheet.Get(); }
-        /// Install the context sheet (the theme; its motion included - see the shipped
+        /// Install the context sheet (the theme, its motion included; see the shipped
         /// themes' `View { transition }` rule) and move the sheet epoch. Impl unit.
         void SetStyleSheet(RefPtr<StyleSheet> sheet);
-        /// Bumped whenever rule OBJECTS may have been replaced (context or local sheet swap):
+        /// Bumped whenever rule objects may have been replaced (context or local sheet swap):
         /// a View's style cache from another epoch is rebuilt without reading it.
         [[nodiscard]] u32 SheetEpoch() const noexcept { return m_sheetEpoch; }
         void BumpSheetEpoch() noexcept
@@ -1829,19 +1819,18 @@ export namespace foundation::ui
         }
 
         // Font service, set by the application (non-owning, nullable). Controls resolve fonts through it
-        // for measuring (Context->FontService()) and DrawRootView feeds it into the draw context + VG.
+        // for measuring (Context->FontService()) and DrawRootView feeds it into the draw context and VG.
         [[nodiscard]] fonts::IFontService* FontService() const noexcept { return m_fontService; }
         void SetFontService(fonts::IFontService* fontService) noexcept
         {
             m_fontService = fontService;
         }
 
-        /// Draw a root view's tree into `vg`. Builds a UIDrawContext over the (caller-supplied) VG and
-        /// the font service, then walks the tree via ViewGroup::OnDraw. The context's CURRENT font
-        /// service is pushed into the VG here, every draw - construction-time agreement is not
-        /// trusted, because a service swap after the VG was built (SetDefaultFont binding a cooked
-        /// font) would leave the VG resolving atlases against the stale service: silently invisible
-        /// text (the 2026-08-12 dist incident). Ported from Sedulous UIContext.DrawRootView.
+        /// Draw a root view's tree into `vg`. Builds a UIDrawContext over the caller-supplied VG and
+        /// the font service, then walks the tree via ViewGroup::OnDraw. The context's current font
+        /// service is pushed into the VG on every draw rather than trusted from construction: a
+        /// service swap after the VG was built (SetDefaultFont binding a cooked font) would leave
+        /// the VG resolving atlases against the stale service, and text would silently not draw.
         void DrawRootView(RootView* root, vg::VGContext& vg)
         {
             if (root == nullptr)
@@ -1963,16 +1952,16 @@ export namespace foundation::ui
             // Continuous-damage producers (the redraw gate has no free per-frame redraws):
             // live animations move things every tick, a focused text input needs its caret
             // blink serviced, and a view may have asked for this frame (RequestNextFrame). All
-            // mark BEFORE the host samples the damage state.
+            // mark before the host samples the damage state.
             if (m_animationManager.ActiveCount() > 0 || WantsTextInput() || m_nextFrameRequested)
             {
                 m_nextFrameRequested = false;
                 MarkNeedsRedraw();
             }
             // Animation onComplete callbacks may mutate the view tree (a screen transition that
-            // removes its screen on finish). Tick under a NON-Idle phase so those structural changes
-            // route through the mutation queue (drained next frame) instead of running inline -
-            // an inline RemoveView -> AnimationManager::CancelForView would re-enter this very loop.
+            // removes its screen on finish). Tick under a non-Idle phase so those structural changes
+            // route through the mutation queue (drained next frame) instead of running inline: an
+            // inline RemoveView calls AnimationManager::CancelForView, which would re-enter this loop.
             m_phase = Phase::Animating;
             m_animationManager.Update(deltaTime);
             m_phase = Phase::Idle;
@@ -2091,6 +2080,6 @@ export namespace foundation::ui
     // Out-of-line method definitions for the cluster (View::Invalidate/Root/ResolveStyle/...,
     // ViewGroup::AddView/RemoveView/..., MutationQueue::QueueDelete) live in the module implementation
     // unit Core/UIClusterImpl.cpp, together with StyleSelector::Matches / StyleSheet::Resolve. Keeping
-    // bodies out of this interface partition slims its BMI (and the styling two must be there anyway to
-    // avoid a :style_selector/:style_sheet -> :view module cycle).
+    // bodies out of this interface partition slims its BMI, and the two styling methods must live there
+    // anyway to avoid a module cycle from :style_selector/:style_sheet back to :view.
 }

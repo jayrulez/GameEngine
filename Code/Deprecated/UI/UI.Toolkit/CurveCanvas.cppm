@@ -5,15 +5,9 @@
 //
 // Multi-channel interactive curve editor canvas. Model-agnostic: callers describe their channels via
 // SetChannels, push initial keys via SetKeys(channelIdx, ...), and listen to OnKey* events to project
-// mutations back to their domain types. Reusable for any keyframe-based authoring - particle curves,
+// mutations back to their domain types. Reusable for any keyframe-based authoring: particle curves,
 // animation easing, audio envelopes, tone-mapping LUTs, post-FX over time, gameplay tuning curves.
-// Ported from Sedulous.UI.Toolkit/src/Controls/CurveCanvas.bf (a View).
-//
-// Port taxes: Beef `List<T>` -> Array<T>; the Beef private inner `Channel` heap class (List<Channel*> +
-// DeleteContainerAndItems) becomes a plain value struct holding Array<Key>, stored Array<Channel> BY VALUE
-// (RAII owns everything). `Event<delegate void(...)> ~ _.Dispose()` -> Event<void(...)>; byte
-// Color(r,g,b,a) -> private static Rgb(); `out` params -> reference out-params; `scope $"{v:0.##}"` ->
-// FormatShort (snprintf %.2f + trailing-zero trim). Immediate-path VG calls port 1:1.
+// Channels are plain value structs holding their keys, stored by value.
 
 module;
 #include <cstdio>
@@ -34,15 +28,15 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::ui::toolkit
 {
-    /// Interpolation modes available per-channel on CurveCanvas. Hermite is first (=0) so a
-    /// zero-initialized ChannelDescriptor defaults to Hermite, the right pick for particle / animation curves.
+    /// Interpolation modes available per-channel on CurveCanvas. Hermite is first (0) so a
+    /// zero-initialized ChannelDescriptor defaults to Hermite, the right choice for particle and animation curves.
     enum class CurveInterpolation : u8
     {
         /// Cubic Hermite using per-key TangentIn / TangentOut.
         Hermite,
         /// Linear between adjacent keys; tangents ignored.
         Linear,
-        /// Step / hold; value jumps to the next key's value at that key's Time.
+        /// Step (hold); the value jumps to the next key's value at that key's Time.
         Step
     };
 
@@ -53,7 +47,7 @@ export namespace foundation::ui::toolkit
         Mirrored,
         /// Handles move independently. Use for sharp corners or asymmetric ease in/out ("Broken" in some DCC tools).
         Free,
-        /// Both tangents pinned to zero - the curve flattens through the key. Handles are visible but ignore drag.
+        /// Both tangents pinned to zero; the curve flattens through the key. Handles are visible but ignore drag.
         Flat
     };
 
@@ -67,7 +61,7 @@ export namespace foundation::ui::toolkit
         core::Color StrokeColor{0, 0, 0, 0};
         /// Value used when a key is added to this channel implicitly (LinkedTime fallback value).
         f32 DefaultValue = 0.0f;
-        /// When true, the channel is hidden (not rendered or hit-tested). Inverted polarity: zero-init = visible.
+        /// When true, the channel is hidden (not rendered or hit-tested). Inverted polarity, so zero-init means visible.
         bool Hidden = false;
         /// When true, the channel rejects edits but still renders.
         bool Locked = false;
@@ -88,7 +82,7 @@ export namespace foundation::ui::toolkit
     {
         RTTI_OBJECT(CurveCanvas, View)
     public:
-        /// One keypoint. Time in [0, TimeSpan] (seconds; default span 1.0 = legacy normalized); Values in
+        /// One keypoint. Time in [0, TimeSpan] (seconds; the default span of 1.0 is a normalized axis); Values in
         /// user space. Tangents are slope (dy/dt) at the key.
         struct Key
         {
@@ -120,15 +114,14 @@ export namespace foundation::ui::toolkit
         f32 ValueMax = 1.0f;
 
         /// The time axis extent (seconds): the width maps to [0, TimeSpan], so Key.Time is in seconds.
-        /// Default 1.0 keeps the legacy normalized-0..1 behavior for callers that don't set it (ruling 2:
-        /// the property-animation editor sets it to the clip duration so the curve shares the dopesheet
-        /// time axis instead of a private normalized one).
+        /// The default of 1.0 gives a normalized 0..1 axis; an animation editor sets it to the clip
+        /// duration so the curve shares the dopesheet's time axis.
         f32 TimeSpan = 1.0f;
 
-        /// D1 shared time transform: when true the canvas maps time via PixelsPerSecond + ScrollSeconds
-        /// (canvas-local x, no gutter) EXACTLY like the Timeline widget, so the curve follows the
-        /// dopesheet's zoom/scroll and stays aligned with it. TimeSpan is ignored in this mode. When
-        /// false (default) the legacy fit-[0,TimeSpan]-to-width mapping applies (other callers).
+        /// Shared time transform: when true the canvas maps time through PixelsPerSecond and
+        /// ScrollSeconds (canvas-local x, no gutter) exactly as the Timeline widget does, so the curve
+        /// follows the dopesheet's zoom and scroll and stays aligned with it. TimeSpan is ignored in
+        /// this mode. When false (the default) [0, TimeSpan] is fitted to the width.
         bool UseSharedTimeTransform = false;
         f32 PixelsPerSecond = 100.0f;
         f32 ScrollSeconds = 0.0f;
@@ -141,9 +134,9 @@ export namespace foundation::ui::toolkit
         Event<void(i32, i32)> OnKeyChanged;
         /// Fired after a new key was inserted.
         Event<void(i32, i32)> OnKeyAdded;
-        /// Fired after an existing key was deleted; payload carries the OLD index (before removal).
+        /// Fired after an existing key was deleted; payload carries the old index (before removal).
         Event<void(i32, i32)> OnKeyRemoved;
-        /// Fired when the USER changes the selected (channel, key) - select-click, click-add, or a
+        /// Fired when the user changes the selected (channel, key): select-click, click-add, or a
         /// delete that clears the selection ((-1,-1)). Programmatic resets (SetChannels/SetKeys) do
         /// not fire, so hosts can rebuild without feedback loops.
         Event<void(i32, i32)> OnSelectionChanged;
@@ -230,13 +223,13 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Tangent handles take priority over key markers - they're only drawn for the selected key.
+            // Tangent handles take priority over key markers; they are only drawn for the selected key.
             bool handleOutgoing = false;
             if (e.Button == MouseButton::Left && HitHandle(e.X, e.Y, handleOutgoing))
             {
                 const Channel& ch = m_channels[static_cast<usize>(m_selectedChannelIdx)];
                 const Key& k = ch.Keys[static_cast<usize>(m_selectedKeyIdx)];
-                // Flat keys ignore drag - user must right-click to switch mode first.
+                // Flat keys ignore drag; the user must right-click to switch mode first.
                 if (k.Mode == TangentMode::Flat)
                 {
                     e.Handled = true;
@@ -301,7 +294,7 @@ export namespace foundation::ui::toolkit
                     return;
                 }
 
-                // Empty click - add a key.
+                // A click on empty space adds a key.
                 const i32 activeIdx = ResolveActiveChannel();
                 if (activeIdx < 0)
                 {
@@ -319,7 +312,7 @@ export namespace foundation::ui::toolkit
                 BeginGesture();
                 if (LinkedTime)
                 {
-                    // Update every channel BEFORE firing any events so listeners see consistent state.
+                    // Update every channel before firing any events so listeners see consistent state.
                     const i32 channelN = static_cast<i32>(m_channels.Size());
                     Array<i32> addedIndices;
                     addedIndices.Resize(static_cast<usize>(channelN));
@@ -578,12 +571,12 @@ export namespace foundation::ui::toolkit
         {
             UpdateAutoFit();
             // Everything clips to the canvas: cubic overshoot between keys and a user
-            // zoom/pan (the value frame is a viewport now) both produce off-frame polyline
+            // zoom or pan (the value frame is a viewport) both produce off-frame polyline
             // segments and handles that must never paint outside the widget.
             ctx.VG().PushClipRect(Rectangle{0.0f, 0.0f, Width(), Height()});
 
-            // Background / grid / labels from the theme (key + tangent handle colors stay
-            // semantic constants, like axis colors). background-color = raw-color resolve.
+            // Background, grid and labels come from the theme; key and tangent handle colors stay
+            // semantic constants, like axis colors. background-color resolves as a raw color.
             ctx.VG().FillRect(Rectangle{0, 0, Width(), Height()},
                               ResolveStyleColor(StyleProperty::Background, Rgb(28, 28, 33, 255)));
 
@@ -641,7 +634,7 @@ export namespace foundation::ui::toolkit
                 {
                     const f32 frac = i / static_cast<f32>(DIVS);
                     const f32 lineX = frac * Width();
-                    const String txt = FormatShort(XToTime(lineX)); // seconds at this x (shared or legacy)
+                    const String txt = FormatShort(XToTime(lineX)); // seconds at this x (shared or fitted)
                     if (i == 0)
                     {
                         ctx.VG().DrawText(txt, font, Rectangle{2, Height() - 13, 32, 12},
@@ -663,7 +656,7 @@ export namespace foundation::ui::toolkit
                 }
             }
 
-            // Draw each visible channel - polyline first, then markers.
+            // Draw each visible channel: polyline first, then markers.
             const i32 channelN = static_cast<i32>(m_channels.Size());
             for (i32 c = 0; c < channelN; c++)
             {
@@ -677,8 +670,8 @@ export namespace foundation::ui::toolkit
                 ctx.VG().BeginPath();
                 for (i32 i = 0; i <= SAMPLES; i++)
                 {
-                    // Sample in SCREEN x across the visible width; XToTime maps to seconds (shared or
-                    // legacy), so the polyline covers exactly what is on screen at any zoom/scroll.
+                    // Sample in screen x across the visible width; XToTime maps to seconds (shared or
+                    // fitted), so the polyline covers exactly what is on screen at any zoom/scroll.
                     const f32 x = (i / static_cast<f32>(SAMPLES)) * Width();
                     const f32 t = XToTime(x);
                     const f32 v = Evaluate(c, t);
@@ -723,7 +716,7 @@ export namespace foundation::ui::toolkit
                     }
                 }
 
-                // Tangent handles - drawn only on the selected key of a Hermite channel.
+                // Tangent handles, drawn only on the selected key of a Hermite channel.
                 if (c == m_selectedChannelIdx && m_selectedKeyIdx >= 0 &&
                     m_selectedKeyIdx < static_cast<i32>(ch.Keys.Size()) &&
                     ch.Descriptor.Interpolation == CurveInterpolation::Hermite)
@@ -776,8 +769,8 @@ export namespace foundation::ui::toolkit
             {
                 return;
             }
-            // Value-axis zoom anchored at the cursor's value (the time axis is the clip's -
-            // shared with the dopesheet - so the canvas zooms VALUES only).
+            // Value-axis zoom anchored at the cursor's value. The time axis belongs to the clip and
+            // is shared with the dopesheet, so the canvas zooms values only.
             const f32 anchor = YToValue(e.Y);
             const f32 factor = (e.DeltaY > 0.0f) ? (1.0f / kValueZoomStep) : kValueZoomStep;
             f32 lo = anchor + (ValueMin - anchor) * factor;
@@ -786,7 +779,7 @@ export namespace foundation::ui::toolkit
             {
                 return; // zoom limits
             }
-            AutoFitValueRange = false; // the user framed the view - keep it
+            AutoFitValueRange = false; // the user framed the view; keep it
             ValueMin = lo;
             ValueMax = hi;
             e.Handled = true;
@@ -819,8 +812,7 @@ export namespace foundation::ui::toolkit
             return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
-        // Format a float as up to 2 decimals with trailing zeros (and a trailing dot) trimmed - the Beef
-        // `{v:0.##}` interpolation.
+        // Format a float with up to 2 decimals, trimming trailing zeros and a trailing dot.
         [[nodiscard]] static String FormatShort(f32 v)
         {
             char buf[32];
@@ -1016,8 +1008,8 @@ export namespace foundation::ui::toolkit
 
         // === Coordinate transforms ===
 
-        // Pixels per second - the time scale. Shared mode uses the pushed PixelsPerSecond; legacy mode
-        // derives it from fitting [0,TimeSpan] to the width.
+        // Pixels per second, the time scale. Shared mode uses the pushed PixelsPerSecond; otherwise it
+        // comes from fitting [0,TimeSpan] to the width.
         [[nodiscard]] f32 PixelsPerTime() const
         {
             if (UseSharedTimeTransform)
@@ -1052,9 +1044,9 @@ export namespace foundation::ui::toolkit
         }
         [[nodiscard]] f32 YToValue(f32 y) const
         {
-            // UNCLAMPED: a drag past the top/bottom edge extrapolates beyond the framed range
-            // (the frame is a viewport, not a value limit - the old clamp made values outside
-            // the current auto-fit frame unreachable by direct manipulation). Per-channel
+            // Unclamped: a drag past the top or bottom edge extrapolates beyond the framed range.
+            // The frame is a viewport, not a value limit; clamping here would make values outside
+            // the current auto-fit frame unreachable by direct manipulation. Per-channel
             // Min/Max clamps still apply via ClampToChannel at the call sites.
             const f32 r = (Height() > 0.0f) ? y / Height() : 0.0f;
             return ValueMax - r * (ValueMax - ValueMin);
@@ -1078,9 +1070,9 @@ export namespace foundation::ui::toolkit
             const f32 pV =
                 (ValueMax > ValueMin + 0.0001f) ? Height() / (ValueMax - ValueMin) : 0.0f;
             const f32 slope = outgoing ? k.TangentOut : k.TangentIn;
-            // Pixels per SECOND, not per full width - slopes are dValue/dSECOND, so the
-            // screen direction must use the seconds scale or handles lie by TimeSpan x.
-            const f32 pT = PixelsPerTime(); // px per second (shared) or per fit-span (legacy)
+            // Pixels per second, not per full width: slopes are dValue/dSecond, so the screen
+            // direction must use the seconds scale or handles would be off by a factor of TimeSpan.
+            const f32 pT = PixelsPerTime(); // px per second (shared) or per fitted span
             const f32 dx = outgoing ? pT : -pT;
             const f32 dy = outgoing ? (-slope * pV) : (slope * pV);
             const f32 norm = Sqrt(dx * dx + dy * dy);
@@ -1108,8 +1100,8 @@ export namespace foundation::ui::toolkit
                 return 0.0f;
             }
             const f32 screenSlope = screenDy / screenDx;
-            // Inverse of ComputeHandlePos: screen slope back to dValue/dSECOND.
-            const f32 pT = PixelsPerTime(); // px per second (shared) or per fit-span (legacy)
+            // Inverse of ComputeHandlePos: screen slope back to dValue/dSecond.
+            const f32 pT = PixelsPerTime(); // px per second (shared) or per fitted span
             return -screenSlope * pT / pV;
         }
 
@@ -1160,7 +1152,7 @@ export namespace foundation::ui::toolkit
             return false;
         }
 
-        // Cycles the selected key's TangentMode: Mirrored -> Free -> Flat. Caller fires OnKeyChanged.
+        // Cycles the selected key's TangentMode: Mirrored, then Free, then Flat. Caller fires OnKeyChanged.
         void CycleSelectedTangentMode()
         {
             if (m_selectedChannelIdx < 0 || m_selectedKeyIdx < 0)

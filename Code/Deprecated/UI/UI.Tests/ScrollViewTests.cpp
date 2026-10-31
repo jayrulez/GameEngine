@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/ScrollViewTests.bf (faithful; includes its MomentumHelper +
-// ScrollBar cases). Beef get/set properties -> methods (scroll->SetScrollY / ScrollY()); the (dx,dy)
-// tuple -> Float2. Logic only - no font service needed.
+// ScrollView, MomentumHelper and ScrollBar tests. Logic only; no font service needed.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -121,7 +119,7 @@ TEST_CASE("scroll-view: NeverPolicy_NoBar")
     root->AddView(scroll.Get());
     LayoutPass(ctx, root.Get());
 
-    // ViewportHeight should be full height (no bar reserved).
+    // ViewportHeight is the full height (no bar reserved).
     CHECK(Abs(scroll->ViewportHeight() - 100) < 1.0f);
 }
 

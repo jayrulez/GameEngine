@@ -1,7 +1,7 @@
 # The library under test (Pipeline::Script) stays backend-neutral and resolves the per-language cook
-# through the registry (B3). The neutral text scanners (ScriptPipelineTests.cpp) + reflection
+# through the registry. The neutral text scanners (ScriptPipelineTests.cpp) and reflection
 # (ScriptReflectionTests.cpp) always build; each backend's neutral-builder cook round-trip lives in
-# its OWN file - no if-deffery - compiled only when that backend is on. They share CookBed.h.
+# its own file, without #ifdefs, compiled only when that backend is on. They share CookBed.h.
 set(_script_pipeline_backend_tests "")
 set(_script_pipeline_backend_libs "")
 if(OPTION_ENABLE_ANGELSCRIPT)

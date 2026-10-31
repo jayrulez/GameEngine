@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Converts ResourceState to Vulkan synchronization2 stage/access/layout.
-/// Ported from Sedulous.RHI.Vulkan/VulkanBarrierHelper.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -27,11 +26,10 @@ export namespace foundation::rhi::vk
 
     /// Restricts a synchronization-2 stage mask to what `queue`'s family can execute. The state
     /// mapping names ALL_GRAPHICS | COMPUTE_SHADER for shader access because it does not know the
-    /// queue; a barrier recorded on a compute-only or transfer-only family with a graphics stage
-    /// in it is invalid (VUID-vkCmdPipelineBarrier2-srcStageMask-03849 and friends). Graphics
+    /// queue, and a barrier recorded on a compute-only or transfer-only family with a graphics
+    /// stage in it is invalid (VUID-vkCmdPipelineBarrier2-srcStageMask-03849 and friends). Graphics
     /// families execute everything. A mask left empty by the cut (a render-target state on a
     /// compute queue) becomes ALL_COMMANDS, which is valid on every family and merely stronger.
-    /// Found by the Beef port while running the MultiQueue sample on its compute queue.
     inline u64 maskStagesForQueue(u64 stages, QueueType queue) noexcept
     {
         if (queue == QueueType::Graphics || stages == 0)
@@ -51,12 +49,11 @@ export namespace foundation::rhi::vk
         return masked != 0 ? masked : static_cast<u64>(VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT);
     }
 
-    /// The access half of the cut: an access mask is only valid together with a stage that can
-    /// perform it on the recording family. VERTEX_ATTRIBUTE_READ on a compute queue is invalid
-    /// even under ALL_COMMANDS, because ALL_COMMANDS expands per family and the compute
-    /// expansion has no vertex-input stage (VUID-VkBufferMemoryBarrier2-srcAccessMask-03902).
-    /// Found by the Beef port: cutting stages alone still produced 20 errors a frame on the
-    /// MultiQueue sample. An emptied access mask is valid - the barrier is execution-only.
+    /// The access half of the cut: an access mask is valid only together with a stage that can
+    /// perform it on the recording family. VERTEX_ATTRIBUTE_READ on a compute queue is invalid even
+    /// under ALL_COMMANDS, because ALL_COMMANDS expands per family and the compute expansion has no
+    /// vertex-input stage (VUID-VkBufferMemoryBarrier2-srcAccessMask-03902), so cutting stages
+    /// alone is not enough. An emptied access mask is valid: the barrier is execution-only.
     inline u64 maskAccessForQueue(u64 access, QueueType queue) noexcept
     {
         if (queue == QueueType::Graphics || access == 0)
@@ -73,7 +70,7 @@ export namespace foundation::rhi::vk
         return access & ((queue == QueueType::Compute) ? kCompute : kAnyFamily);
     }
 
-    /// The whole cut, stage and access as ONE pair, so the two cannot drift apart.
+    /// The whole cut, stage and access as one pair, so the two cannot drift apart.
     inline StageAccess maskForQueue(StageAccess sa, QueueType queue) noexcept
     {
         return StageAccess{maskStagesForQueue(sa.stageMask, queue),
@@ -190,8 +187,8 @@ export namespace foundation::rhi::vk
             return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
         if (has(ResourceState::ShaderRead))
         {
-            // Depth/stencil textures must use DEPTH_STENCIL_READ_ONLY when sampled,
-            // not SHADER_READ_ONLY - the latter is only for color textures.
+            // Depth/stencil textures use DEPTH_STENCIL_READ_ONLY when sampled, not
+            // SHADER_READ_ONLY, which is only for color textures.
             if (IsDepthFormat(format))
                 return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
             return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorStatusBar over the editor's own frame (Data/Editor/Shell.xml): the message
-// line; the job with its name, progress and count, a sweep when its length is unknown, hidden
-// when none runs; the agent hidden while there is none; a frame without the items skipped.
+// Editor::App: EditorStatusBar over the editor's frame (Data/Editor/Shell.xml). Covers the message
+// line; the job with its name, progress and count, an indeterminate sweep when its length is
+// unknown, and hidden when none runs; the agent indicator, hidden while no agent is connected; and a
+// frame without these items, which the bar skips.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -67,7 +68,7 @@ TEST_CASE("editor status bar: the message, a job with its progress and count or 
     CHECK(progress->GetValue() == doctest::Approx(0.25));
     CHECK(count->GetText() == StringView(u8"3 of 12"));
     CHECK(count->IsDisplayed());
-    status.SetJob(u8"Cooking", -1.0f, {}); // its length unknown: a sweep, no count
+    status.SetJob(u8"Cooking", -1.0f, {}); // length unknown: a sweep and no count
     CHECK(progress->IsIndeterminate());
     CHECK_FALSE(count->IsDisplayed());
     status.ClearJob();

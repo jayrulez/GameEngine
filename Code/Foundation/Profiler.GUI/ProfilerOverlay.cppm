@@ -3,16 +3,16 @@
 
 // Foundation::Profiler.GUI - :overlay partition
 //
-// The in-game overlay on the GUI (Specs/engine-ui-removal.md, layer 1; Specs/profiler.md, P4): the
-// frame time graph (the newest frames' CPU and GPU times against the 60 and 30 fps budgets), the
-// frame statistics, the top CPU scopes by their own time and the top GPU passes, and the counters,
-// stacked on one translucent panel in a corner of whatever it fills. It never takes the pointer,
-// so the game under it plays on. It reads the focus's source (the live store, for a game); the
-// host shows it, arms the profiler while it shows, and calls Refresh each frame.
+// The in-game overlay on the GUI. One translucent panel, in a corner of whatever the overlay
+// fills, stacks the frame time graph (the newest frames' CPU and GPU times against the 60 and
+// 30 fps budgets), the frame statistics, the top CPU scopes by self time, the top GPU passes, and
+// the counters. It never takes the pointer, so the game under it keeps playing. It reads the
+// focus's source (the live store, for a game). The host shows it, arms the profiler while it is
+// shown, and calls Refresh each frame.
 //
-// Its colours are its parts' (`profileroverlay::panel`, `::plot`, `::cpu`, `::gpu`, `::budget`,
-// `::note`, `::text`), each with the old overlay's colour where no sheet gives one: a game's
-// sheet knows nothing of it, and it reads the same over any game.
+// Its colours come from its parts (`profileroverlay::panel`, `::plot`, `::cpu`, `::gpu`,
+// `::budget`, `::note`, `::text`), each with a built-in colour where no sheet sets one. A game's
+// sheet knows nothing of the overlay, and this way it looks the same over any game.
 
 module;
 #include "Core/Prelude.h"
@@ -40,20 +40,20 @@ export namespace foundation::profiler::gui
         BottomLeft,
     };
 
-    /// ProfilerOverlay::kGraphFrames, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ProfilerOverlay::kGraphFrames, at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr u32 kProfilerOverlayGraphFrames = 120;
 
-    /// ProfilerOverlay::kMargin, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ProfilerOverlay::kMargin, at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr f32 kProfilerOverlayMargin = 8.0f;
 
-    /// ProfilerOverlay::kPadding, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ProfilerOverlay::kPadding, at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr f32 kProfilerOverlayPadding = 8.0f;
 
-    /// ProfilerOverlay::kPanelWidth, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ProfilerOverlay::kPanelWidth, at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr f32 kProfilerOverlayPanelWidth = 360.0f;
 
     class ProfilerOverlay final : public ProfilerWidget
@@ -67,20 +67,21 @@ export namespace foundation::profiler::gui
         static constexpr f32 kLineHeight = 15.0f;
         static constexpr f32 kGraphHeight = 64.0f;
         static constexpr f32 kBudgets[] = {16.667f, 33.333f};
-        static constexpr u32 kGraphFrames = kProfilerOverlayGraphFrames; // the graph and the statistics: two seconds at 60 fps
-        static constexpr u32 kListFrames = 30;   // the lists and counters: steady, yet recent
+        static constexpr u32 kGraphFrames = kProfilerOverlayGraphFrames; // frames for the graph and the statistics: two seconds at 60 fps
+        static constexpr u32 kListFrames = 30;   // frames for the lists and counters: steady, yet recent
         static constexpr u32 kScopeRows = 6;
         static constexpr u32 kPassRows = 5;
         static constexpr u32 kCounterColumns = 2;
 
-        /// A row of a top list: a name, its ms a frame, its bar against the longest (0 to 1).
+        /// A row of a top list: a name, its ms per frame, and its bar length relative to the
+        /// longest (0 to 1).
         struct TopRow
         {
             String name;
             f32 msPerFrame = 0.0f;
             f32 bar = 0.0f;
         };
-        /// A counter shown: its name and its value, formatted.
+        /// A counter row: the counter's name and its formatted value.
         struct CounterRow
         {
             String name;
@@ -94,11 +95,11 @@ export namespace foundation::profiler::gui
         {
             SetTag(StringView(u8"profileroverlay"));
             SetTabFocusable(false);
-            SetHitTestVisible(false); // it shows; the game keeps the pointer
+            SetHitTestVisible(false); // display only; the game keeps the pointer
             SetInlineStyle(StringView(u8"font-size"), StringView(u8"11px"));
         }
 
-        /// The parts it draws, which a sheet styles as `profileroverlay::part`.
+        /// Lists the parts it draws, which a sheet styles as `profileroverlay::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             ProfilerWidget::CollectStyleParts(out);
@@ -114,7 +115,7 @@ export namespace foundation::profiler::gui
         }
         [[nodiscard]] OverlayCorner Corner() const noexcept { return m_corner; }
 
-        /// Read the source again (a new frame): what it shows, then a draw.
+        /// Reads the source again after a new frame, recomputes what the overlay shows, and redraws.
         void Refresh()
         {
             Compute();
@@ -123,8 +124,8 @@ export namespace foundation::profiler::gui
         void OnProfileSourceChanged() override { Refresh(); }
         void OnProfileFramesChanged() override { Refresh(); }
 
-        // === What it shows (the model its draw reads; tests read it too) ===
-        /// The panel in its own space, for the size it was last laid out at.
+        // === What it shows: the model the draw reads, which tests read too ===
+        /// Returns the panel's bounds in the overlay's own space, for the size it was last laid out at.
         [[nodiscard]] Rect Panel() const noexcept { return PanelIn(GetContentBounds()); }
         [[nodiscard]] f32 PanelHeight() const noexcept
         {
@@ -132,8 +133,9 @@ export namespace foundation::profiler::gui
             return 2 * kPadding + kGraphHeight + 3 * kLineHeight + static_cast<f32>(kScopeRows + 1) * kLineHeight +
                    static_cast<f32>(kPassRows + 1) * kLineHeight + counterLines * kLineHeight + 4 * kGap;
         }
-        /// The graph's top in ms (20 doubled until it holds the highest time) and its lines, in the
-        /// graph's own space (newest at its right edge, a step a frame back from there).
+        /// Returns the graph's top in ms: 20, doubled until it holds the highest time. CpuPoints and
+        /// GpuPoints give the lines in the graph's own space, with the newest frame at the right
+        /// edge and one step back per frame.
         [[nodiscard]] f32 ScaleMs() const noexcept { return m_scaleMs; }
         [[nodiscard]] Span<const Float2> CpuPoints() const noexcept { return m_cpuPoints.AsSpan(); }
         [[nodiscard]] Span<const Float2> GpuPoints() const noexcept { return m_gpuPoints.AsSpan(); }
@@ -144,7 +146,7 @@ export namespace foundation::profiler::gui
                 scale *= 2.0f;
             return scale;
         }
-        /// The statistics' three lines: the CPU's, the GPU's, the frame rate's.
+        /// Returns the three statistics lines: CPU, GPU and frame rate.
         [[nodiscard]] Span<const String> StatLines() const noexcept { return m_statLines.AsSpan(); }
         [[nodiscard]] Span<const TopRow> Scopes() const noexcept { return m_scopes.AsSpan(); }
         [[nodiscard]] Span<const TopRow> Passes() const noexcept { return m_passes.AsSpan(); }
@@ -168,9 +170,9 @@ export namespace foundation::profiler::gui
             const f32 width = panel.width - 2 * kPadding;
             f32 y = panel.y + kPadding;
 
-            // The graph: the budgets, the area under the CPU line and the line, the GPU's line.
+            // The graph: the budget lines, the CPU line with the area under it, and the GPU line.
             const Rect graph{x, y, width, kGraphHeight};
-            PlaceGraph(width); // laid out at another width since the last refresh
+            PlaceGraph(width); // the panel may have been laid out at another width since the last refresh
             vg.FillRect(graph.ToRectangle(), PartColor(u8"plot", Color{1.0f, 1.0f, 1.0f, 0.05f}));
             for (const f32 budget : kBudgets)
                 if (budget < m_scaleMs)
@@ -196,7 +198,7 @@ export namespace foundation::profiler::gui
                       TextHAlign::Right);
             y += kGraphHeight + kGap;
 
-            // The statistics, each line marked in its lane's colour.
+            // The statistics, each line marked in the colour of its lane.
             const Color marks[] = {cpu, gpu, text};
             for (usize i = 0; i < m_statLines.Size(); ++i)
             {
@@ -230,16 +232,16 @@ export namespace foundation::profiler::gui
             return Rect{right ? box.x + Max(box.width - kMargin - width, 0.0f) : box.x + kMargin,
                         bottom ? box.y + Max(box.height - kMargin - height, 0.0f) : box.y + kMargin, width, height};
         }
-        // A part's text colour, or `fallback` where the sheet gives none (not the cascade's: a
-        // game's text colour is the game's, not the overlay's).
+        // Returns a part's text colour, or `fallback` where the sheet sets none. The cascaded colour
+        // is not used, because a game's text colour belongs to the game, not the overlay.
         [[nodiscard]] Color PartText(StringView part, Color fallback) const
         {
             const PartStyle& style = GetPartStyle(part);
             return style.HasColor ? style.TextColor : fallback;
         }
 
-        // What it shows, from the source: the graph's frames and the statistics over the newest
-        // kGraphFrames, the lists and counters over the newest kListFrames.
+        // Computes what the overlay shows from the source: the graph and the statistics over the
+        // newest kGraphFrames, and the lists and counters over the newest kListFrames.
         void Compute()
         {
             const IProfileSource* source = Source();
@@ -255,7 +257,7 @@ export namespace foundation::profiler::gui
                 const FrameWindowStats stats = StatsOf(m_times.AsSpan(), a);
                 f32 newestCpu = 0.0f;
                 f32 newestGpu = 0.0f;
-                for (const FrameTime& t : m_times) // oldest first: the last ones seen are the newest
+                for (const FrameTime& t : m_times) // oldest first, so the last values seen are the newest
                 {
                     newestCpu = t.cpuMs;
                     if (t.hasGpu)
@@ -278,8 +280,8 @@ export namespace foundation::profiler::gui
                     if (!reading.present || reading.counter >= infos.Size())
                         continue;
                     const CounterInfo& info = infos[reading.counter];
-                    // What the device did a frame, as its mean (the numbers hold still); what it
-                    // holds, as the newest.
+                    // Show a counter of what the device did per frame as its mean, so the numbers
+                    // hold still, and a counter of what it holds (bytes) as the newest value.
                     m_counters.PushBack(CounterRow{String(info.name.AsView(), a),
                                                    FormatCounter(info.unit == CounterUnit::Bytes ? reading.latest : reading.mean, info.unit, a)});
                 }
@@ -290,8 +292,9 @@ export namespace foundation::profiler::gui
             m_scaleMs = ScaleFor(highest);
             PlaceGraph(Panel().width - 2 * kPadding);
         }
-        // The lines' points for a graph `width` wide: a slot for each of kGraphFrames, the newest at
-        // the right edge, so a short history grows in from the right rather than stretching.
+        // Places the lines' points for a graph `width` wide. There is a slot for each of
+        // kGraphFrames, with the newest at the right edge, so a short history grows in from the
+        // right rather than stretching.
         void PlaceGraph(f32 width)
         {
             m_cpuPoints.Clear();
@@ -327,7 +330,8 @@ export namespace foundation::profiler::gui
             return line;
         }
 
-        // A list's heading and rows, each a bar against the longest; answers the y under it.
+        // Draws a list's heading and rows, each with a bar relative to the longest, and returns the
+        // y below it.
         f32 DrawTop(DrawContext& ctx, StringView heading, Span<const TopRow> rows, u32 count, Color bar, const Rect& at, Color text,
                     Color note) const
         {
@@ -358,8 +362,8 @@ export namespace foundation::profiler::gui
         Array<TopRow> m_scopes;
         Array<TopRow> m_passes;
         Array<CounterRow> m_counters;
-        Array<TopEntry> m_entries;         // a list's, as collected
-        Array<CounterReading> m_readings;  // the counters', as collected
+        Array<TopEntry> m_entries;         // a list's entries, as collected
+        Array<CounterReading> m_readings;  // the counter readings, as collected
         f32 m_scaleMs = 20.0f;
         OverlayCorner m_corner = OverlayCorner::TopRight;
     };

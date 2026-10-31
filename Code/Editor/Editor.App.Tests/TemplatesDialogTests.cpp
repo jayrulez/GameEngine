@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the export templates dialog over its markup (Data/Editor/Templates.xml) and a
-// scratch templates root: it lists what the root holds and the host build, shows the selected one's
-// details (its engine version, warned when not this editor's), installs a bundle from a folder, and
-// removes one after asking (from its button or Delete on the list), never the host build.
+// Editor::App tests: the export templates dialog over its markup (Data/Editor/Templates.xml) and a
+// scratch templates root. It lists the templates in the root and the host build, shows the selected
+// template's details (with a warning when its engine version is not this editor's), installs a
+// bundle from a folder, and removes a template after asking (from its button or Delete on the list),
+// never the host build.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -164,7 +165,7 @@ TEST_CASE("templates dialog: lists the root's templates and the host build, the 
     dialog->Select(static_cast<usize>(Fixture::IndexOf(*dialog, u8"t-old")));
     CHECK(dialog->DetailText(u8"Engine").StartsWith(u8"0.0.1 (this editor is"));
 
-    // The host build is this editor's own: never removable.
+    // The host build belongs to this editor, so it can never be removed.
     for (usize i = 0; i < dialog->TemplateCount(); ++i)
     {
         if (dialog->TemplateAt(i)->isHost)
@@ -202,7 +203,7 @@ TEST_CASE("templates dialog: a long folder wraps inside the details, never past 
         path += u8"/averylongfoldername";
     folder->SetText(path.AsView());
     styles.ApplyTree(*f.ui);
-    // A real font after the sheet, so the path has a width (the editor's own face).
+    // Load a real font (the editor's) after the sheet so the path has a width.
     foundation::fonts::TrueTypeFonts::Initialize();
     foundation::fonts::TrueTypeFontService fonts{DefaultAllocator()};
     const String data = foundation::vfs::FindDataRoot();
@@ -217,8 +218,8 @@ TEST_CASE("templates dialog: a long folder wraps inside the details, never past 
     CHECK(value.x + value.width <= box.x + box.width + 0.5f);
     CHECK(value.height > 30.0f); // wrapped onto several lines
 
-    // The list's rows are two lines with room above and below (the row's own height), where the
-    // view's default of one line squeezed them into each other.
+    // The list's rows are two lines tall with room above and below (the row's own height); the
+    // view's default height of one line would make them overlap.
     auto* list = app::FindById<gui::ListView>(*f.ui, u8"templates-list");
     REQUIRE(list != nullptr);
     CHECK(list->GetRowHeight() == doctest::Approx(52.0f));
@@ -248,10 +249,10 @@ TEST_CASE("templates dialog: installs a bundle from a folder and removes one, th
     CHECK(dialog->RemoveButton()->HandleActivate());
     gui::MessageBox* box = FindBox(*f.ui);
     REQUIRE(box != nullptr);
-    box->RequestClose(); // Escape: its cancel
+    box->RequestClose(); // Escape cancels
     CHECK(dialog->TemplateCount() == 4u);
 
-    // Delete on the list asks the same; Remove: its folder goes, and so does its row.
+    // Delete on the list asks the same; Remove deletes its folder and its row.
     dialog->Select(static_cast<usize>(Fixture::IndexOf(*dialog, u8"t-new")));
     REQUIRE(dialog->Selected() != nullptr);
     gui::ListView* list = nullptr;

@@ -3,8 +3,7 @@
 
 // Pipeline::VG - reflection implementation unit: the vector image asset's reflected surface.
 //
-// Kept OUT of the VGAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster;
-// see gcc-module-interface-hygiene).
+// Kept out of the VGAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
 
 module;
 #include "Core/Prelude.h"

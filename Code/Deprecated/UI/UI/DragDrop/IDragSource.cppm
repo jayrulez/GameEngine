@@ -3,11 +3,11 @@
 
 // UI - :idrag_source partition
 //
-// Implement on a View subclass to make it draggable. Ported from Sedulous.UI/src/DragDrop/IDragSource.bf.
-// Pattern A (tree-queried) - the interface is a plain abstract base; a View exposes it via a virtual
-// AsDragSource() capability query, and the InputManager walks the parent chain of the pressed view to
-// find one. Beef owned returns -> RefPtr (CreateDragData / CreateDragVisual transfer ownership to the
-// DragDropManager); View/DragData forward-declared (only used behind pointers/RefPtr).
+// Implement on a View subclass to make it draggable. The interface is a plain abstract base; a View
+// exposes it through the virtual AsDragSource() capability query, and the InputManager walks the parent
+// chain of the pressed view to find one. CreateDragData and CreateDragVisual return RefPtrs that
+// transfer ownership to the DragDropManager. View and DragData are forward-declared (used only behind
+// pointers and RefPtr).
 
 module;
 #include "Core/Prelude.h"

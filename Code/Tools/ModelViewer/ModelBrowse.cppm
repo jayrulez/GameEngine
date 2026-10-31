@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:browse`: the browsing half that is not the window
-// (Documentation/Specs/model-viewer.md, P3). A folder lists its subfolders and model files; the
-// models under a folder are collected for the grid; each model's thumbnail has a file in the
-// viewer's thumbnail cache named like its cooked folder (by its path, size and modification time),
-// so a changed file gets a new one; a model's numbers are read from its cache record when it was
-// cooked before, for the filters (name, rigged, animated) without cooking it again.
+// ModelViewer - `modelviewer:browse`: the browser's logic, kept apart from the window. It lists a
+// folder's subfolders and model files and collects the models under a folder for the grid. Each
+// model's thumbnail file in the thumbnail cache is named like its cooked folder (by path, size and
+// modification time), so a changed file gets a new thumbnail. The stats of a model cooked before
+// are read from its cache record, so the filters (name, rigged, animated) work without cooking it
+// again.
 
 module;
 #include "Core/Prelude.h"
@@ -20,11 +20,11 @@ using namespace foundation::core;
 
 export namespace modelviewer
 {
-    /// Raised when the thumbnails change how they are drawn, so every one is drawn again.
+    /// Raise this when the way thumbnails are drawn changes, so every thumbnail is drawn again.
     inline constexpr u32 kThumbnailVersion = 1;
 
-    /// A folder's contents: its subfolders and its model files, each by full path, sorted by name
-    /// (any case). Hidden entries (a leading dot) are left out.
+    /// A folder's subfolders and model files, each as a full path, sorted by name ignoring case.
+    /// Hidden entries (a leading dot) are left out.
     struct FolderListing
     {
         Array<String> folders;
@@ -63,7 +63,7 @@ export namespace modelviewer
         }
     }
 
-    /// Lists `folder`'s immediate subfolders and model files (an empty listing when it does not open).
+    /// Lists the immediate subfolders and model files of `folder`; empty when it cannot be opened.
     [[nodiscard]] inline FolderListing ListFolder(StringView folder)
     {
         struct Collect
@@ -90,8 +90,8 @@ export namespace modelviewer
         return listing;
     }
 
-    /// Every model file under `folder`, its subfolders' too, folder by folder in name order; at
-    /// most `limit` (a whole disk named by mistake stays bounded).
+    /// Every model file under `folder` and its subfolders, folder by folder in name order. At most
+    /// `limit` are collected, so pointing it at a whole disk by mistake stays bounded.
     inline void CollectModels(StringView folder, Array<String>& out, usize limit = 10000)
     {
         if (out.Size() >= limit)
@@ -107,16 +107,16 @@ export namespace modelviewer
             CollectModels(sub.AsView(), out, limit);
     }
 
-    /// The thumbnail file for `path` under `thumbRoot`: named by the file's path, size and time
-    /// (FileKey), so a changed file is drawn again. Empty when the file is not there.
+    /// The thumbnail file for `path` under `thumbRoot`, named by the model file's path, size and
+    /// time (FileKey) so a changed file is drawn again. Empty when the model file does not exist.
     [[nodiscard]] inline String ThumbnailPathFor(StringView thumbRoot, StringView path)
     {
         const String key = FileKey(path, kThumbnailVersion);
         return key.IsEmpty() ? String{} : PathJoin(thumbRoot, Format(u8"{}.png", key).AsView());
     }
 
-    /// The numbers a model was cooked with, read from its record in the cache (false when it has
-    /// not been cooked, or was cooked by an older viewer), with loose textures applied or not.
+    /// Reads the stats of a cooked model from its record in the cache, for the given loose texture
+    /// setting. Returns false when the model has not been cooked, or was cooked by an older viewer.
     [[nodiscard]] inline bool ReadCachedStats(StringView cacheRoot, StringView path, ModelStats& out, bool looseTextures = true)
     {
         const String folder = CacheFolderFor(cacheRoot, path, looseTextures);
@@ -129,8 +129,8 @@ export namespace modelviewer
         return ReadRecord(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()), model, out);
     }
 
-    /// What the grid shows: names containing `name` (any case), and with the rigged, animated or
-    /// in-library box ticked only models known to be so.
+    /// The grid's filter: names containing `name` (ignoring case), and, for each of the rigged,
+    /// animated and in-library boxes that is ticked, only models known to have that property.
     struct BrowseFilter
     {
         String name;
@@ -139,9 +139,9 @@ export namespace modelviewer
         bool inLibraryOnly = false;
     };
 
-    /// Whether the model at `path` passes `filter`. `stats` is its numbers when known (cooked
-    /// before); a model not cooked yet passes the rigged and animated boxes only once it is.
-    /// `inLibrary`: the library has it.
+    /// Whether the model at `path` passes `filter`. `stats` holds its stats when known (the model
+    /// was cooked before); a model not cooked yet fails the rigged and animated boxes until it is.
+    /// `inLibrary` says whether the library holds the model.
     [[nodiscard]] inline bool Matches(const BrowseFilter& filter, StringView path, const ModelStats* stats, bool inLibrary = false)
     {
         if (filter.inLibraryOnly && !inLibrary)

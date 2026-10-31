@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Core - :easings partition
-// Standard easing functions, ported faithfully from Sedulous.Core.Mathematics.Easings. Each maps an
-// interpolation factor t in [0,1] to an eased value (also ~[0,1]). Consumed by animation (EasingType)
-// and UI transitions. Pure functions over Core math (Sin/Cos/Sqrt/Pow/kPi).
+// Standard easing functions. Each maps an interpolation factor t in [0,1] to an eased value (also
+// roughly [0,1]). Used by animation (EasingType) and UI transitions. Pure functions over Core math
+// (Sin/Cos/Sqrt/Pow/kPi).
 
 module;
 #include "Core/Prelude.h"

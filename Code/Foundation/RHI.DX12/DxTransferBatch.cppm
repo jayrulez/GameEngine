@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of TransferBatch.
-/// Ported from Sedulous.RHI.DX12/DX12TransferBatch.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -56,10 +55,10 @@ export namespace foundation::rhi::dx12
                 return ErrorCode::Unknown;
             }
 
-            // Command list starts open; close it until we need it.
+            // The command list starts open; close it until it is needed.
             m_cmdList->Close();
 
-            // Create fence for synchronous submit.
+            // Create the fence for synchronous submit.
             hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
             if (FAILED(hr))
             {
@@ -180,7 +179,7 @@ export namespace foundation::rhi::dx12
             staging->Unmap(0, nullptr);
             m_stagingBuffers.push_back(std::move(staging));
 
-            // Transition texture to copy dest. Via the shared helper rather than an
+            // Transition the texture to copy dest through the shared helper rather than an
             // ALL_SUBRESOURCES barrier built from currentState(): that is only valid while the
             // texture is uniform, and re-uploading a mip level of a texture that has been through
             // mip generation (which leaves per-subresource tracking behind) would otherwise carry
@@ -248,8 +247,8 @@ export namespace foundation::rhi::dx12
             if (auto* dxFence = static_cast<DxFenceImpl*>(fence))
                 m_queue->Signal(dxFence->handle(), signalValue);
 
-            // Note: staging buffers can't be released until GPU is done.
-            // Caller must wait on the fence before calling reset().
+            // Staging buffers cannot be released until the GPU is done.
+            // The caller must wait on the fence before calling Reset().
             return ErrorCode::Ok;
         }
 

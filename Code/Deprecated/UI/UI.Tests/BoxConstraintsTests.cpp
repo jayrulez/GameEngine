@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/BoxConstraintsTests.bf (faithful; float.MaxValue -> kFloatMax).
+// Tests for BoxConstraints (kFloatMax stands for an unbounded axis).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

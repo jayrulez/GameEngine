@@ -3,13 +3,13 @@
 
 // GUI - :style_properties partition
 //
-// The CSS properties the GUI knows (G2 of Specs/vg-and-gui-lab.md), as one table instead of a
+// The CSS properties the GUI knows, as one table instead of a
 // chain of string compares: each property's name, how its value parses into a typed StyleValue,
 // and the shorthands that expand into longhands (`border` into twelve, `border-radius` into four)
-// so the cascade works per longhand, as CSS's does. A property the table does not name may still
-// reach a widget: a reflected property that declares its CSS name (the `css` property attribute)
-// takes it, parsed by its type, so a library's widget gets CSS for its own properties with no
-// applier code (StyleApplier).
+// so the cascade works per longhand, as it does in CSS. A property the table does not name can
+// still reach a widget: when a reflected property declares a CSS name (the `css` property
+// attribute), the value is parsed by the property's type and set on it. A library's widget so
+// gets CSS for its own properties with no code added to StyleApplier.
 
 module;
 #include "Core/Prelude.h"
@@ -19,7 +19,7 @@ export module foundation.gui:style_properties;
 import foundation.core;
 import :css_values;
 import :style_value;
-import :motion; // the transition and animation shorthands' expansion
+import :motion; // expands the transition and animation shorthands
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -78,15 +78,17 @@ export namespace foundation::gui
     {
         const char8_t* Name;
         StyleGrammar Grammar;
-        /// CSS's initial value, what `initial` sets (null: the node's own value). A property no
-        /// rule sets returns to the node's own value, not to this.
+        /// The CSS initial value, which `initial` sets; null means the node's own value. A
+        /// property that no rule sets returns to the node's own value, not to this one.
         const char8_t* Initial = nullptr;
-        /// Inherited, as CSS's is: a node the sheet sets none for takes its parent's.
+        /// Whether the property inherits, as in CSS: a node the sheet gives no value takes its
+        /// parent's value.
         bool Inherited = false;
     };
 
-    /// A longhand that changes only how a node is painted where it already is: never its place,
-    /// its size or how far its drawing reaches (E8b: animating one out of view asks for no frames).
+    /// Whether `name` is a longhand that changes only how a node is painted, never its position,
+    /// its size or how far its drawing reaches. Animating one on a node out of view asks for no
+    /// frames.
     [[nodiscard]] inline bool IsPaintOnlyStyleProperty(core::StringView name) noexcept
     {
         static constexpr const char8_t* kPaintOnly[] = {
@@ -167,7 +169,7 @@ export namespace foundation::gui
             {u8"text-glow", StyleGrammar::TextGlow},
             {u8"backdrop-filter", StyleGrammar::Filters, u8"none"},
             {u8"mix-blend-mode", StyleGrammar::Keyword, u8"normal"},
-            // Layout (E2 of Specs/gui-lab-evolution.md): the node's box, out of flow, how it lays out
+            // Layout: the node's box, out of flow, how it lays out
             // its children, and how its container places it.
             {u8"overflow-x", StyleGrammar::Keyword, u8"visible"},
             {u8"overflow-y", StyleGrammar::Keyword, u8"visible"},
@@ -220,7 +222,7 @@ export namespace foundation::gui
         };
         return Span<const StylePropertySpec>(kProperties, sizeof(kProperties) / sizeof(kProperties[0]));
     }
-    /// A longhand the GUI knows, by name (null for one it does not).
+    /// Returns the longhand named `name`, or null when the GUI does not know it.
     [[nodiscard]] inline const StylePropertySpec* FindStyleProperty(core::StringView name)
     {
         for (const StylePropertySpec& spec : AllStyleProperties())
@@ -229,7 +231,7 @@ export namespace foundation::gui
         return nullptr;
     }
 
-    /// `text` as a value of `grammar`; false when it does not parse.
+    /// Parses `text` as a value of `grammar` into `out`. Returns false when it does not parse.
     [[nodiscard]] inline bool ParseStyleValue(StyleGrammar grammar, core::StringView text, StyleValue& out)
     {
         const core::StringView v = Trim(text);
@@ -237,7 +239,8 @@ export namespace foundation::gui
         {
         case StyleGrammar::Number:
         {
-            // A plain number, or a percentage of one (`opacity: 50%` is 0.5); a unit is no number.
+            // A plain number, or a percentage of one (`opacity: 50%` is 0.5); a value with a unit
+            // is not a number.
             const bool percent = v.Size() > 1 && v[v.Size() - 1] == u8'%';
             const core::StringView digits = percent ? v.SubStr(0, v.Size() - 1) : v;
             for (usize i = 0; i < digits.Size(); ++i)
@@ -364,8 +367,8 @@ export namespace foundation::gui
                    t == core::StringView(u8"dotted") || t == core::StringView(u8"double");
         }
 
-        // `<width> || <style> || <color>`, any order: the three parts, CSS's initial values where
-        // unsaid (medium is 3px; the colour, black here).
+        // Splits `<width> || <style> || <color>`, in any order, into its three parts. A part left
+        // out keeps CSS's initial value: medium (3px), none, and black for the colour here.
         [[nodiscard]] inline bool SplitBorder(core::StringView value, core::String& width, core::String& style,
                                               core::String& color)
         {
@@ -395,7 +398,7 @@ export namespace foundation::gui
                     return false;
                 }
             }
-            return w || s || c; // no style: none, so nothing draws (CSS)
+            return w || s || c; // without a style it is none, so nothing draws, as in CSS
         }
 
         inline constexpr const char8_t* kSides[4] = {u8"top", u8"right", u8"bottom", u8"left"};
@@ -410,9 +413,11 @@ export namespace foundation::gui
         }
     }
 
-    /// The longhands `name: text` sets: itself when it is one, its longhands when it is a
-    /// shorthand (border, border-<side>, border-width, border-color, border-style, border-radius,
-    /// padding, margin, margin-inline, padding-inline, inset-inline, background, transition, animation). False when a shorthand's value does not parse.
+    /// Expands `name: text` into the longhands it sets: the property itself when it is a
+    /// longhand, or its longhands when it is a shorthand (border, border-<side>, border-width,
+    /// border-color, border-style, border-radius, padding, margin, margin-inline, padding-inline,
+    /// inset-inline, background, transition, animation). Returns false when a shorthand's value
+    /// does not parse.
     [[nodiscard]] inline bool ExpandStyleShorthand(core::StringView name, core::StringView text,
                                                    Array<StyleLonghand>& out)
     {
@@ -578,8 +583,8 @@ export namespace foundation::gui
         }
         if (name == core::StringView(u8"background"))
         {
-            // Layers, the bottom one possibly a colour: the colour to background-color, the rest
-            // (or none) to background-image.
+            // A list of layers whose bottom one may be a colour. The colour goes to
+            // background-color, and the other layers (or none) to background-image.
             const Array<core::StringView> layers = SplitTopLevel(value, u8',');
             if (layers.IsEmpty())
                 return false;

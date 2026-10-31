@@ -3,12 +3,10 @@
 
 // UI - :dark_theme partition
 //
-// Factory building the default dark theme as a StyleSheet (all visual regions use Drawable properties;
-// ColorDrawable for the flat theme). Ported from Sedulous.UI/src/Styling/DarkTheme.bf. Beef `static class`
-// -> a struct of static factories; `new StyleSheet` (refcount 1, caller-managed) -> RefPtr<StyleSheet>;
-// Beef `Color(r,g,b,a)` byte literals -> the local C() helper (/255); `typeof(T)` -> &T::StaticType();
-// OwnDrawable shares the RefPtr (kept-alive list) - the owning StyleValue keeps it regardless, but the
-// calls are retained for faithfulness. Drawables are RefPtr (no manual AddRef).
+// Factory building the default dark theme as a StyleSheet. Every visual region uses a Drawable
+// property; the flat theme uses ColorDrawables. Byte colour literals go through the local C() helper,
+// which divides by 255. OwnDrawable adds a drawable to the sheet's keep-alive list; the StyleValue that
+// holds it keeps it alive in any case.
 
 module;
 #include "Core/Prelude.h"
@@ -59,10 +57,9 @@ export namespace foundation::ui
 {
     /// Factory for creating the default dark theme as a StyleSheet.
     ///
-    /// The theme is AUTHORED as Styling/Themes/dark.sss (embedded at build - see
-    /// EmbeddedThemes) and parsed here. The legacy C++ rule
-    /// builder is kept ONLY as the parity oracle (ThemeParityTests diffs the two sheets
-    /// rule-for-rule).
+    /// The theme is authored as Styling/Themes/dark.sss, embedded at build time (see
+    /// EmbeddedThemes), and parsed here. The C++ rule builder is kept only as the parity
+    /// reference: ThemeParityTests compares the two sheets rule for rule.
     struct DarkTheme
     {
         [[nodiscard]] static RefPtr<StyleSheet> Create(IAllocator& allocator)
@@ -76,15 +73,15 @@ export namespace foundation::ui
             RefPtr<StyleSheet> sheet = loader.Load(EmbeddedThemes::Dark());
             if (!sheet)
             {
-                // A parse failure of the EMBEDDED sheet is a build defect; never ship an
-                // unstyled UI - the legacy builder is the belt while it still exists.
+                // A parse failure of the embedded sheet is a build defect. Rather than ship an
+                // unstyled UI, fall back to the C++ rule builder.
                 return CreateLegacyForParity(allocator, palette);
             }
             ThemeRegistry::ApplyExtensions(*sheet, palette);
             return sheet;
         }
 
-        /// The former C++ rule builder - parity-test oracle ONLY (see the struct comment).
+        /// The C++ rule builder, kept as the parity tests' reference (see the struct comment).
         [[nodiscard]] static RefPtr<StyleSheet> CreateLegacyForParity(IAllocator& allocator, ThemePalette palette)
         {
             return BuildTheme(allocator, palette);
@@ -141,7 +138,7 @@ export namespace foundation::ui
                 .Set(StyleProperty::CursorColor, p.PrimaryAccent)
                 .Set(StyleProperty::SelectionColor, C(60, 120, 200, 80));
 
-            // === NumericField (shares EditText styling + spin buttons) ===
+            // === NumericField (shares EditText styling, adds spin buttons) ===
             RefPtr<Drawable> spinBg = Palette::CreateStateColors(allocator, C(50, 55, 68, 255));
             sheet.OwnDrawable(spinBg);
             sheet.ForType(&NumericField::StaticType())
@@ -310,7 +307,6 @@ export namespace foundation::ui
             // === Icons ===
             RegisterIcons(allocator, sheet);
 
-            // Apply registered extensions.
             ThemeRegistry::ApplyExtensions(sheet, p);
 
             return sheetRef;

@@ -75,9 +75,9 @@ namespace foundation::ui
 
     void View::InvalidateStyle()
     {
-        // The cache stays VALID-BUT-STALE: the context generation bump makes the next lookup
+        // The cache stays valid but stale: the context generation bump makes the next lookup
         // rebuild it, and the rebuild reads the old values first so a transition can start
-        // from where the view IS. Detached views rebuild on every access anyway.
+        // from where the view is. Detached views rebuild on every access anyway.
         if (Context != nullptr)
         {
             Context->InvalidateStyles();
@@ -484,7 +484,7 @@ namespace foundation::ui
             {
                 continue;
             }
-            // From: a running entry's CURRENT value (a re-trigger never snaps), else the old
+            // From: a running entry's current value (a re-trigger never snaps), else the old
             // rule's value, else what the view inherited before (an inheritable property
             // that had no rule of its own).
             StyleTransition* entry = nullptr;
@@ -548,7 +548,7 @@ namespace foundation::ui
         }
         if (newState != oldState)
         {
-            // State-aware drawables pick their colors INSIDE Draw, invisible to the cascade:
+            // State-aware drawables pick their colors inside Draw, invisible to the cascade:
             // cross-fade the whole background between the two states under the `background`
             // (or `all`) entry.
             if (const TransitionSpec* spec = specs->Find(StyleProperty::Background);
@@ -596,7 +596,7 @@ namespace foundation::ui
         const ControlState state = GetControlState();
         const u32 generation = Context != nullptr ? Context->StyleGeneration() : 0u;
         // The chain: the sheets whose versions this cache keys on, and the local sheets it
-        // collects from (OUTERMOST ancestor first, so nearer wins later in the list).
+        // collects from (outermost ancestor first, so a nearer one comes later and wins).
         View* chain[64];
         usize depth = 0;
         u32 chainVersion = 0;
@@ -621,7 +621,7 @@ namespace foundation::ui
         }
         const u32 sheetEpoch = Context != nullptr ? Context->SheetEpoch() : 0u;
         // Without a context there is no generation to key on (class edits on this view would
-        // go unseen), so the cache is rebuilt every time - the pre-P1 cost, tests only.
+        // go unseen), so the cache is rebuilt every time. Only tests run views that way.
         if (m_styleCache.valid && Context != nullptr && m_styleCache.generation == generation &&
             m_styleCache.chainVersion == chainVersion && m_styleCache.state == state &&
             m_styleCache.sheetEpoch == sheetEpoch)
@@ -629,12 +629,13 @@ namespace foundation::ui
             return m_styleCache;
         }
 
-        // Transition trigger: remember the OLD winners, but only when their rule pointers
-        // are provably alive - the same sheet epoch and the same summed sheet versions, i.e.
-        // only the generation or the state moved. A sheet swap or a rule edit rebuilds
-        // without animating. BeginTransitions then compares winners per property: the same
-        // rule under the same sheets is the same value, so nothing is resolved unless a
-        // winner actually changed (cheap enough for a theme-wide `View { transition }`).
+        // Transition trigger: remember the old winners, but only when their rule pointers are
+        // known to be alive, which holds when the sheet epoch and the summed sheet versions
+        // are unchanged and only the generation or the state moved. A sheet swap or a rule
+        // edit rebuilds without animating. BeginTransitions then compares winners per
+        // property: the same rule under the same sheets is the same value, so nothing is
+        // resolved unless a winner changed, which keeps a theme-wide `View { transition }`
+        // cheap.
         const bool canTransition = m_styleCache.valid && Context != nullptr &&
                                    m_styleCache.sheetEpoch == sheetEpoch &&
                                    m_styleCache.chainVersion == chainVersion;
@@ -658,7 +659,7 @@ namespace foundation::ui
 
         StyleCache& cache = m_styleCache;
         cache.rules.Clear();
-        // Ascending cascade order: the context sheet, then the local sheets from the OUTERMOST
+        // Ascending cascade order: the context sheet, then the local sheets from the outermost
         // ancestor inward (nearer wins), then this view's inline sheet (wins over everything).
         if (Context != nullptr)
         {
@@ -844,8 +845,8 @@ namespace foundation::ui
         }
         if (Optional<Unit> length = value.AsLength(); length.HasValue())
         {
-            // em: of this view's computed font size - which, for font-size ITSELF, is the
-            // parent's (CSS), so `font-size: 1.5em` compounds down the tree.
+            // em: relative to this view's computed font size, which for font-size itself is the
+            // parent's (as in CSS), so `font-size: 1.5em` compounds down the tree.
             const f32 fontSize =
                 prop == StyleProperty::FontSize
                     ? (Parent != nullptr ? Parent->ResolveStyleLength(StyleProperty::FontSize, 0.0f, 16.0f) : 16.0f)
@@ -951,7 +952,7 @@ namespace foundation::ui
             return;
         }
         IsPendingDeletion = true;
-        RefPtr<View> self(this); // strong capture (see QueueRemove) - also makes the reset safe
+        RefPtr<View> self(this); // strong capture (see QueueRemove); also makes the reset safe
         Context->MutationQueueRef().QueueAction(
             [self]()
             {
@@ -1005,7 +1006,7 @@ namespace foundation::ui
         const View* top = this;
         for (const View* above = Parent; above != nullptr; above = above->Parent)
         {
-            // A turn, a skew or an uneven scale has no one grid to round to: those keep the DPI's.
+            // A rotation, a skew or an uneven scale has no single grid to round to, so it adds no factor.
             f32 uniform = 1.0f;
             if (above->TransformMatrix().UniformScale(uniform))
             {
@@ -1017,11 +1018,11 @@ namespace foundation::ui
         return Max((root != nullptr ? root->DpiScale : 1.0f) * scale, 0.01f);
     }
 
-    // The base measure template method. Lives here because the dpi query
-    // needs RootView complete. See the declaration comment in View.cppm for the contract.
+    // Recomputes the effective LayoutStyle from the inline value and the cascade (see
+    // View::Layout() in View.cppm).
     void View::RefreshEffectiveLayout()
     {
-        // The effective copy marks sheet-filled fields DECLARED too: consumers ask "is Right
+        // The effective copy marks sheet-filled fields declared too: consumers ask "is Right
         // set?" of the effective layout and must not care where the value came from. The
         // inline m_layout keeps its own flags.
         LayoutStyle e = m_layout;
@@ -1082,7 +1083,7 @@ namespace foundation::ui
                 return;
             }
             // Insets/flex factors: absolute lengths (dp/px/em) resolve here; a percent inset
-            // has no reference box at refresh time and contributes 0 (deviation, see spec).
+            // has no reference box at refresh time and contributes 0 (unlike CSS).
             field = ResolveStyleLength(prop, 0.0f, field.value);
         };
         sizeSpec(StyleProperty::Width, e.Width);
@@ -1192,7 +1193,7 @@ namespace foundation::ui
         {
             RootView* root = Root();
             const f32 dpiScale = (root != nullptr) ? Max(root->DpiScale, 0.01f) : 1.0f;
-            // Percent resolves against the CONTAINING box on the same axis (the incoming
+            // Percent resolves against the containing box on the same axis (the incoming
             // constraint's max, after margin; 0 when unbounded), em against the computed font
             // size. Both are only computed when a component needs them.
             const bool relative = widthSpec.fixedSize.IsRelative() || heightSpec.fixedSize.IsRelative() ||
@@ -1256,7 +1257,7 @@ namespace foundation::ui
         }
         else
         {
-            OnMeasure(box); // legacy seam - the control handles its own chrome
+            OnMeasure(box); // the older hook: the control handles its own chrome
         }
         // Absolute children never feed MeasuredSize; they are measured against the content
         // box this view just settled on.
@@ -1265,7 +1266,7 @@ namespace foundation::ui
     }
 
     // The base arrange (margin inset + device-grid rounding). Rounds
-    // EDGES independently (x and x+w each snap, width = snapped difference) so adjacent
+    // edges independently (x and x+w each snap, width = snapped difference) so adjacent
     // rounded boxes stay gapless; local-grid rounding composes to the global grid because
     // every ancestor rounds too (integer sums stay integers, at fractional scales multiples
     // of 1/dpi stay multiples).
@@ -1315,8 +1316,8 @@ namespace foundation::ui
 
     ViewGroup* ViewGroup::AddView(View* child)
     {
-        // Mutating the tree while it is being DRAWN corrupts the in-progress child walk (layout-
-        // phase mutation is legitimate - virtualization realizes rows there). Defer draw-phase
+        // Mutating the tree while it is being drawn corrupts the in-progress child walk.
+        // Mutation during layout is fine (virtualization realizes rows there). Defer draw-phase
         // mutations via UIContext::MutationQueueRef().QueueAction.
         DIAGNOSTIC_ASSERT(Context == nullptr || Context->CurrentPhase() != UIContext::Phase::Drawing);
         if (child == nullptr || child == this)
@@ -1357,10 +1358,10 @@ namespace foundation::ui
     {
         // A destroyed group must not leave a child pointing back at it. RemoveView clears the
         // back-pointer for children it detaches, but on destruction the children array is simply
-        // released - so a child still held elsewhere (e.g. a persistent editor view reused
+        // released, so a child still held elsewhere (e.g. a persistent editor view reused
         // across PropertyGrid rebuilds) would keep a dangling Parent, and the next AddView would
         // dereference freed memory when it tries to detach from the old parent. Null it here.
-        // ALSO detach from the context, mirroring RemoveView/RemoveAllViews: a still-attached
+        // Also detach from the context, as RemoveView/RemoveAllViews do: a still-attached
         // subtree destroyed by dropping its owning RefPtr would otherwise leave the UIContext
         // registry and the focus/hover/animation tables holding freed View*.
         for (const RefPtr<View>& child : m_children)
@@ -1506,7 +1507,7 @@ namespace foundation::ui
             return;
         }
         view->IsPendingDeletion = true;
-        RefPtr<View> keep(view); // strong capture (see View::QueueRemove) - reset is then safe
+        RefPtr<View> keep(view); // strong capture (see View::QueueRemove); the reset is then safe
         QueueAction(
             [keep]()
             {
@@ -1579,7 +1580,7 @@ namespace foundation::ui
             return true;
         }
 
-        // Right-to-left with backtracking: a descendant step may match ANY ancestor, and the
+        // Right-to-left with backtracking: a descendant step may match any ancestor, and the
         // steps beyond it must still match from there.
         [[nodiscard]] bool AncestorsMatch(const Array<SelectorAncestor>& steps, usize index,
                                           const View& from)

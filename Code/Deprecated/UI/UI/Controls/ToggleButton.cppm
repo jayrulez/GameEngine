@@ -3,9 +3,8 @@
 
 // UI - :toggle_button partition
 //
-// Stateful button that toggles checked/unchecked, with a content view (a Label by default). Ported
-// from Sedulous.UI/src/Controls/ToggleButton.bf. Content is RefPtr-owned; its text renders through the
-// Label content view (live now that the Fonts service is wired).
+// Stateful button that toggles checked/unchecked, with a content view (a Label by default). The
+// content is RefPtr-owned; its text renders through the Label content view.
 
 module;
 #include "Core/Prelude.h"
@@ -74,7 +73,7 @@ export namespace foundation::ui
             {
                 state |= ControlState::Pressed;
             }
-            if (IsFocusVisible()) // keyboard-acquired only - a clicked toggle holds focus ringless
+            if (IsFocusVisible()) // keyboard focus only: a clicked toggle holds focus without a ring
             {
                 state |= ControlState::Focused;
             }
@@ -122,7 +121,7 @@ export namespace foundation::ui
             return Thickness{12.0f, 8.0f};
         }
 
-        // Content-only measure - chrome is base-handled.
+        // Measures the content only; the base class adds the chrome.
         [[nodiscard]] Float2 OnMeasureContent(BoxConstraints contentConstraints) override
         {
             f32 cw = 0, ch = 0;
@@ -148,7 +147,7 @@ export namespace foundation::ui
             {
                 return;
             }
-            const Thickness pad = ResolveBoxMetrics().Chrome(); // same chrome measure used
+            const Thickness pad = ResolveBoxMetrics().Chrome(); // the chrome measure used
             const f32 contentW = width - pad.TotalHorizontal();
             const f32 contentH = height - pad.TotalVertical();
             const f32 cx = pad.Left + (contentW - m_content->MeasuredSize.x) * 0.5f;

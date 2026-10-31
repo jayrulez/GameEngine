@@ -3,12 +3,11 @@
 
 // GUI - :list_box partition
 //
-// ListBox: a scrollable, single-selection list of text items. Modeled on eepp's UIListBox
-// (role only). Built by composition on the existing pieces: it hosts a ScrollView whose
-// content holds one ListBoxItem (a selectable Label) per entry, stacked by index. Clicking a
-// row selects it; when focused, Up/Down move the selection and scroll it into view. The
-// ScrollView brings the scrollbar / wheel / clipping for free. Virtualized item rendering (for
-// very large lists) is a follow-up - here every item is a real row widget.
+// ListBox: a scrollable, single-selection list of text items. It hosts a ScrollView whose content
+// holds one ListBoxItem (a selectable Label) per entry, stacked by index. Clicking a row selects
+// it; when the list is focused, Up and Down move the selection and scroll it into view. The
+// ScrollView provides the scroll bar, wheel scrolling and clipping. Every item is a real row
+// widget, so for very large lists use ListView, which is virtualised.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +30,8 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::gui
 {
-    /// A list's items written as one text, '|' between them (markup's `items="Apple|Banana"`),
-    /// each trimmed; empty text, no items.
+    /// Splits a list's items written as one string with '|' between them (markup's
+    /// `items="Apple|Banana"`), trimming each. Empty text gives no items.
     [[nodiscard]] inline Array<core::StringView> SplitItems(core::StringView text)
     {
         Array<core::StringView> items;
@@ -59,8 +58,8 @@ export namespace foundation::gui
         return text;
     }
 
-    // One selectable row. Internal to the ListBox; a Label tagged "listboxitem", so a sheet can
-    // style its rows (`listboxitem:hover`) apart from the labels around the list.
+    // One selectable row, internal to the ListBox. It is a Label tagged "listboxitem" so a sheet can
+    // style the rows (`listboxitem:hover`) separately from other labels around the list.
     class ListBoxItem : public Label
     {
         RTTI_OBJECT(ListBoxItem, Label)
@@ -68,7 +67,7 @@ export namespace foundation::gui
         ListBoxItem()
         {
             SetTag(core::StringView(u8"listboxitem"));
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
@@ -88,7 +87,7 @@ export namespace foundation::gui
             m_highlight = color;
             Invalidate();
         }
-        /// The list's listbox::selection style, which a selected row draws under its text.
+        /// Sets the list's listbox::selection style, which a selected row draws under its text.
         void SetSelectionStyle(const PartStyle& style)
         {
             m_selectionStyle = style;
@@ -127,8 +126,8 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"listbox"));
             SetTabFocusable(true);
-            // Its rows stacked in a column, as wide as the list, scrolling when they overflow it.
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            // The rows stack in a column as wide as the list and scroll when they overflow it.
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             EditLayoutStyle([](LayoutStyle& s) { s.OverflowY = Overflow::Auto; });
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
         }
@@ -148,7 +147,7 @@ export namespace foundation::gui
             ShareTextStyle(*item);
             item->SetHighlightColor(m_highlightColor);
             item->SetSelectionStyle(GetPartStyle(u8"selection"));
-            StyleWriteScope defaults(*item); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*item); // defaults: a style sheet overrides them and falls back to them
             item->SetPadding(Thickness{8.0f, 0.0f, 8.0f, 0.0f});
             item->SetIndex(static_cast<i32>(m_items.Size()));
             ListBox* self = this;
@@ -171,7 +170,8 @@ export namespace foundation::gui
         }
 
         [[nodiscard]] usize ItemCount() const noexcept { return m_items.Size(); }
-        /// The items as one text, '|' between them (markup's and a sheet's `items`).
+        /// Replaces the items with those in `text`, separated by '|'. Markup and style sheets set
+        /// `items` through this.
         void SetItemsText(const core::String& text)
         {
             Clear();
@@ -216,10 +216,12 @@ export namespace foundation::gui
         {
             m_onChanged = core::Move(callback);
         }
-        /// An item chosen, not just selected: clicked, or Return, Space or a pad's South on the list.
+        /// Sets the callback for an item that is chosen, not just selected: clicked, or picked with
+        /// Return, Space or the pad's South button on the list.
         void SetOnItemActivated(core::Function<void(i32)> callback) { m_onActivated = core::Move(callback); }
 
-        // Theming: listbox::selection = the row-selection highlight (its text style reaches the rows).
+        // The listbox::selection part is the highlight behind the selected row; its text style also
+        // applies to the rows.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"selection"));
@@ -227,16 +229,16 @@ export namespace foundation::gui
 
 
     protected:
-        // Opaque so the list (and a dropdown built on it) paints over whatever is behind it, unless
-        // a sheet gives it a fill of its own (a theme's, E13).
+        // Paint an opaque background so the list, and any dropdown built on it, covers whatever is
+        // behind it, unless a style sheet gives it a fill.
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             if (!BoxFills())
                 ctx.VG().FillRect(Rectangle{localBounds.x, localBounds.y, localBounds.width, localBounds.height}, m_panelColor);
             UIWidget::OnDraw(ctx, localBounds);
         }
-        // Its items show its font and colour (a sheet's inheritance gives them the same).
-        // Its rows draw the selection in listbox::selection's style.
+        // The items use the list's font and colour (sheet inheritance gives them the same), and
+        // the rows draw the selection in the listbox::selection style.
         void OnPartStyleChange(core::StringView part) override
         {
             if (part == core::StringView(u8"selection"))
@@ -264,7 +266,7 @@ export namespace foundation::gui
                 return;
             switch (static_cast<KeyCode>(event.KeyCode))
             {
-            // An arrow at the list's end is given back (focus moves on).
+            // An arrow key at either end of the list is left unhandled, so focus can move on.
             case KeyCode::Down:
                 if (!m_items.IsEmpty() && m_selected < static_cast<i32>(m_items.Size()) - 1)
                 {
@@ -295,7 +297,8 @@ export namespace foundation::gui
         }
 
     private:
-        // Scrolls by the least that shows row `index` (from its index: the rows may not be laid out yet).
+        // Scrolls the least amount that brings row `index` into view. The row's position comes from
+        // its index, since the rows may not be laid out yet.
         void ScrollToItem(i32 index)
         {
             const f32 top = static_cast<f32>(index) * m_itemHeight;
@@ -308,7 +311,7 @@ export namespace foundation::gui
                 SetScrollOffset(core::Float2{off.x, bottom - viewH});
         }
 
-        Array<ListBoxItem*> m_items; // non-owning (its children)
+        Array<ListBoxItem*> m_items; // non-owning; the rows are owned as children
         f32 m_itemHeight = 24.0f;
         i32 m_selected = -1;
         Color m_panelColor{0.13f, 0.14f, 0.17f, 1.0f};

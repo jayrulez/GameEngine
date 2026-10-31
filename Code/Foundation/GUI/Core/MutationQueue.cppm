@@ -4,16 +4,15 @@
 // GUI - :mutation_queue partition
 //
 // MutationQueue: deferred operations drained at a safe sync point (in GUIContext::Update, after
-// the actions and the bindings). This is how tree edits made mid-traversal (notably Node::Close) are applied
-// without mutating the tree while it is being walked - eepp's SceneRoot close-queue role,
-// generalized to arbitrary deferred ops (same shape as foundation.ui's MutationQueue).
+// the actions and the bindings). Tree edits made mid-traversal (Node::Close among them) are
+// applied this way, so the tree is never mutated while it is being walked.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:mutation_queue;
 
-import foundation.core; // Function, Array, Move
+import foundation.core;
 
 using namespace foundation::core;
 namespace core = foundation::core;

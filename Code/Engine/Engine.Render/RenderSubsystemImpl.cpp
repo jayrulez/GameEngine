@@ -3,12 +3,12 @@
 
 /// Engine::Render - the `:subsystem` partition.
 ///
-/// RenderSubsystem: the application-level driver that connects scenes to the (scene-agnostic)
-/// renderer. It owns the GPU systems - the DXC compiler, ShaderSystem, PipelineStateCache,
-/// the MeshRenderer + RendererRegistry, and the per-frame RenderFrame driver - and, as an
-/// As an ISceneObserver it reacts to scene teardown; assembly via the scene composition.
+/// RenderSubsystem: the application-level driver that connects scenes to the scene-agnostic
+/// renderer. It owns the GPU systems (the DXC compiler, ShaderSystem, PipelineStateCache, the
+/// MeshRenderer and RendererRegistry, and the per-frame RenderFrame driver). As an
+/// ISceneObserver it reacts to scene teardown; assembly happens through the scene composition.
 ///
-/// It implements ISceneRenderer (Begin/RenderScene×N/End): the app's render callback brackets
+/// It implements ISceneRenderer (Begin, RenderScene per scene, End): the app's render callback brackets
 /// the frame with BeginRendering/EndRendering and calls RenderScene per active scene. Each
 /// RenderScene extracts the scene into an ExtractedScene snapshot and collects a RenderView;
 /// EndRendering composes all views. (The built-in forward shader binds no material set on its
@@ -103,7 +103,7 @@ namespace engine::render
         m_providers.Resize(w);
         // Evict the scene's debug-draw list: the map is keyed on the raw Scene*, and script can
         // mint entries freely (DebugDraw.of(scene)), so without this every level reload leaks one
-        // entry - and a recycled Scene* address would silently adopt the dead scene's list.
+        // entry, and a recycled Scene* address would silently adopt the dead scene's list.
         m_debugScenes.Remove(&scene);
     }
 
@@ -174,7 +174,7 @@ namespace engine::render
     void RenderSubsystem::SetAoDebug(i32 mode) noexcept
     {
         m_aoDebug = mode;
-    } // 0=off, 1=AO, 2/3/4=N.xyz, 5=viewZ, 6=depth
+    } // 0 off, 1 AO, 2/3/4 N.xyz, 5 viewZ, 6 depth
 
     void RenderSubsystem::SetSsrEnabled(bool on) noexcept
     {
@@ -194,7 +194,7 @@ namespace engine::render
             return true; // 1x (off) is always available
         }
         // MSAA needs the resolve pass; without it (or a device) only 1x is usable. Otherwise defer to
-        // the device's exact-count support AND the queried ceiling.
+        // the device's exact-count support and the queried ceiling.
         if (m_msaaResolvePass.Get() == nullptr || m_device == nullptr)
         {
             return false;
@@ -271,7 +271,7 @@ namespace engine::render
             return;
         }
         // Dev hot reload (throttled inside the provider). On a reload, idle the GPU so
-        // passes can destroy + rebuild their version-stamped pipelines immediately (a
+        // passes can destroy and rebuild their version-stamped pipelines immediately (a
         // dev-only hiccup; the material path still goes through the PSO retire ring).
         if (m_shaders != nullptr && m_shaders->PumpReloads() > 0)
         {
@@ -282,16 +282,16 @@ namespace engine::render
         m_targetScenes.Clear();
         ++m_frameNumber;
         // Provision per-worker extraction arenas for this frame (one per job-system slot, or a
-        // single slot when the job system is absent - serial fallback).
+        // single slot when the job system is absent: the serial fallback).
         const u32 slotCount = HasGlobalJobSystem() ? GlobalJobs().SlotCount() : 1u;
         m_renderCtx.BeginFrame(slotCount);
         m_retireQueue.Tick(); // free retired GPU resources that have aged past all in-flight frames
         m_frame->SetExposure(m_exposure);
-        m_frame->SetTime(m_timeSeconds); // the WIND sway clock (prev = last frame's)
+        m_frame->SetTime(m_timeSeconds); // the wind sway clock (prev is last frame's)
         m_frame->SetBloom(m_bloomEnabled ? m_bloomIntensity : 0.0f, m_bloomThreshold, m_bloomKnee);
         m_frame->SetTaa(m_taaEnabled, m_taaBlend, m_taaGamma, m_taaMotionScale);
-        // DEBUG harness: ENV_AO_DEBUG forces the AO debug channel to screen (0=off, 1=AO,
-        // 2/3/4=N.xyz, 5=viewZ, 6=depth) so SSAO reconstruction can be compared across backends.
+        // Debug harness: ENV_AO_DEBUG forces the AO debug channel to screen (0 off, 1 AO,
+        // 2/3/4 N.xyz, 5 viewZ, 6 depth) so SSAO reconstruction can be compared across backends.
         {
             static bool s_aoDbgRead = false;
             static i32 s_aoDbg = 0;
@@ -345,10 +345,10 @@ namespace engine::render
             return;
         }
 
-        // ONE extraction per scene per frame: a scene rendered through several views
-        // (split-screen) shares one snapshot - so the per-scene shadow/probe/IBL work
+        // One extraction per scene per frame: a scene rendered through several views
+        // (split-screen) shares one snapshot, so the per-scene shadow, probe and IBL work
         // grouped on the snapshot downstream runs once, not per view. (Scenes must not
-        // mutate between RenderScene calls of one frame - the Begin/End bracket contract.)
+        // mutate between RenderScene calls of one frame: the Begin/End bracket contract.)
         ExtractedScene* snapshot = nullptr;
         for (usize i = 0; i < m_sceneCount; ++i)
         {
@@ -360,7 +360,7 @@ namespace engine::render
         }
         const bool firstSight = (snapshot == nullptr);
 
-        // The view's camera, resolved BEFORE extraction: the first view's position rides on the
+        // The view's camera, resolved before extraction: the first view's position rides on the
         // snapshot for producers that thin by distance (vegetation's fade prefix).
         ViewCamera camera;
         CameraOverride fallback;                 // the default backdrop (no primary camera)
@@ -407,7 +407,7 @@ namespace engine::render
             snapshot->SetViewOrigin(camera.position); // after the reset, before the providers
             snapshot->SetSceneSerial(scene.Serial()); // a new scene restarts the view's history
             ExtractInstancedMeshesInto(
-                scene, *snapshot); // instanced sets (MultiMesh): one item each, O(1)/frame
+                scene, *snapshot); // instanced sets (MultiMesh): one item each, O(1) per frame
             if (m_spriteRenderer.Get() != nullptr)
             { // billboards (into the same snapshot, after meshes)
                 ExtractSpritesInto(scene, *snapshot, m_spriteRenderer->RendererId());
@@ -416,10 +416,10 @@ namespace engine::render
                               *snapshot); // screen-space decals (DecalPass, not the Renderer path)
             ExtractLightsInto(scene, *snapshot); // lights are shading inputs, not draws
             ExtractReflectionProbesInto(scene,
-                                        *snapshot); // reflection probes (capture/prefilter inputs)
+                                        *snapshot); // reflection probes (capture and prefilter inputs)
             ExtractEnvironmentInto(scene, *snapshot); // per-scene ambient
-            // Downstream systems (particles, world-UI, ...) registered for THIS scene contribute into
-            // the same snapshot - render stays ignorant of their types (scene-free IRenderDataProvider).
+            // Downstream systems (particles, world-UI, ...) registered for this scene contribute into
+            // the same snapshot; render stays ignorant of their types (scene-free IRenderDataProvider).
             for (const SceneProvider& sp : m_providers)
             {
                 if (sp.scene == &scene && sp.provider != nullptr)
@@ -428,7 +428,7 @@ namespace engine::render
                 }
             }
             if (m_probeSystem.Get() != nullptr)
-            { // map probes to persistent array slots (capture in P1b)
+            { // map probes to persistent array slots
                 m_probeSystem->Assign(snapshot, snapshot->ReflectionProbes());
             }
         }
@@ -446,14 +446,14 @@ namespace engine::render
         settings.targetCurrentState = targetState.currentState;
         settings.targetFinalState = targetState.finalState;
 
-        // Resolve this view's post-processing (exposure/bloom/AO). The programmatic global override
+        // Resolve this view's post-processing (exposure, bloom, AO). The programmatic global override
         // (samples' debug panels) wins once touched; otherwise the scene's authored PostProcessSettings
-        // drive - exposure authored in EV/stops is resolved to the tonemap's linear multiplier here.
-        // (AA/SSR remain frame-global.)
+        // drive, and exposure authored in EV stops is resolved to the tonemap's linear multiplier here.
+        // (AA and SSR remain frame-global.)
         if (m_globalPostActive)
         {
             settings.post.exposure = m_exposure;
-            settings.post.agxTonemap = true; // the legacy global API has no operator toggle
+            settings.post.agxTonemap = true; // the global override API has no operator toggle
             settings.post.bloomEnabled = m_bloomEnabled;
             settings.post.bloomThreshold = m_bloomThreshold;
             settings.post.bloomKnee = m_bloomKnee;
@@ -476,13 +476,13 @@ namespace engine::render
             settings.post = ResolveScenePost(pp->Effective()); // the scene's, or its profile's
         }
         // Editor viewport "show flags": ephemeral per-view overrides that strip effects for editing
-        // clarity, layered ON TOP of the resolved post - never written back to the scene.
+        // clarity, layered on top of the resolved post and never written back to the scene.
         if (postOverride != nullptr)
         {
             ApplyViewPostOverride(settings.post, *postOverride);
             settings.frustumCull = !postOverride->disableCulling;
         }
-        // Editor debug view: pass-through selection (validated per view at declare time -
+        // Editor debug view: pass-through selection (validated per view at declare time;
         // an unknown resource name simply shows the final image).
         if (debugView != nullptr)
         {
@@ -490,7 +490,7 @@ namespace engine::render
         }
         settings.viewportKey = viewportKey; // pick requests bind to it
         // Who this view is from frame to frame, for the state it carries between frames (motion
-        // vectors' previous camera, TAA/SSR/SSGI/exposure history): its viewport's key (an editor
+        // vectors' previous camera, TAA, SSR, SSGI and exposure history): its viewport's key (an editor
         // page, the Game tab), or a render texture's own view (target cameras), with the scene and
         // the viewport's corner (split screen). Not the window's target: its view changes with
         // the swapchain image.
@@ -504,16 +504,16 @@ namespace engine::render
             settings.historyKey = (h != 0) ? h : 1u;
         }
         settings.sceneOverlays = !m_renderingTargets;
-        // Finalize per-view motion-vector need AFTER any override: TAA OR an SSR temporal pass.
+        // Finalize the per-view motion-vector need after any override: TAA or an SSR temporal pass.
         // SSR's `temporal` stays frame-global, so the OR lands here, not in ResolveScenePost.
         settings.post.needsMotion =
             settings.post.taaEnabled || (settings.post.ssrEnabled && m_ssrParams.temporal) ||
             settings.post.ssgiEnabled; // SSGI's temporal resolve reprojects by velocity
-        // Scene-pass MSAA: snap the AUTHORED intent to what the device supports.
-        // The valid set is NOT [1 .. ceiling]: WebGPU supports only {1, 4}, never 2. So clamp to the
-        // ceiling, then snap DOWN to the nearest device-supported count (2x on WebGPU degrades to 1x;
-        // 4x stays 4x). An unsupported count reaching texture/pipeline creation aborts the device, so
-        // this snap - not just a ceiling clamp - is what keeps a 2x request from crashing on web.
+        // Scene-pass MSAA: snap the authored intent to what the device supports.
+        // The valid set is not [1 .. ceiling]: WebGPU supports only {1, 4}, never 2. So clamp to the
+        // ceiling, then snap down to the nearest device-supported count (2x on WebGPU degrades to 1x;
+        // 4x stays 4x). An unsupported count reaching texture or pipeline creation aborts the device,
+        // so this snap, not just a ceiling clamp, keeps a 2x request from crashing on the web.
         {
             u32 s = settings.post.msaaSamples;
             if (s < 1)
@@ -531,13 +531,12 @@ namespace engine::render
             settings.post.msaaSamples = static_cast<u8>(s);
         }
         {
-            PROFILE_SCOPE("Render.AddView"); // binds the view + builds/sorts its draw list
-            // EVERY view of a scene draws that scene's per-scene list (physics/nav debug - what
-            // PIE shows). A KEYED view additionally draws its OWN DebugView list (editor
-            // grid/selection gizmos), which never appears in another view of the same scene -
-            // the #118 camera-preview contract. The pre-fix either/or here made keyed views
-            // (the edit viewport) silently drop ALL scene-level debug draw. Either pointer may
-            // be null when nothing was drawn this frame - the debug pass null-checks.
+            PROFILE_SCOPE("Render.AddView"); // binds the view, builds and sorts its draw list
+            // Every view of a scene draws that scene's per-scene list (physics and nav debug, what
+            // play-in-editor shows). A keyed view also draws its own DebugView list (editor grid
+            // and selection gizmos), which never appears in another view of the same scene (the
+            // camera-preview inset). Either pointer may be null when nothing was drawn this frame;
+            // the debug pass null-checks.
             // A target camera's view (a minimap, a monitor) is the game's picture, not a debug
             // view: the scene's debug lines stay out of it.
             const void* sceneDebug =
@@ -605,10 +604,10 @@ namespace engine::render
         {
             m_frame->End();
             // Snapshot the frame's graph-texture inventory while the graph still holds it
-            // (Begin resets the graph) - the editor's debug-view picker reads this copy.
+            // (Begin resets the graph); the editor's debug-view picker reads this copy.
             m_frame->CollectDebugResources(m_debugResourceSnapshot);
         }
-        // Immediate-mode: clear all debug lists AFTER rendering, so next frame's draws start empty
+        // Immediate-mode: clear all debug lists after rendering, so next frame's draws start empty
         // (the app accumulates during its update, before the next BeginRendering). EndFrame clears
         // them as well, for the iterations that render nothing.
         ClearDebugLists();
@@ -648,7 +647,7 @@ namespace engine::render
         }
         // Stencil attachment for overlay UI (stencil-then-cover fills). Cached at the
         // target size; a resize retires the old texture (in-flight frames may still
-        // reference it) and recreates. Cleared every frame, so Undefined -> write.
+        // reference it) and recreates. Cleared every frame, so it transitions from Undefined.
         if (!m_overlayDsProbed)
         {
             m_overlayDsFormat = PickStencilFormat(*m_device);
@@ -685,7 +684,7 @@ namespace engine::render
             m_overlayDsWidth = width;
             m_overlayDsHeight = height;
         }
-        // Drawn through the target's UNORM view when the host gave one (the overlays blend encoded).
+        // Drawn through the target's UNORM view when the host gave one (the overlays blend encoded values).
         const bool encoded = encodedTarget != nullptr && rhi::SrgbTwin(targetFormat) != rhi::TextureFormat::Undefined;
         rhi::RenderPassDesc pass;
         rhi::ColorAttachment color;
@@ -734,12 +733,12 @@ namespace engine::render
     {
         RegisterRenderComponentReflection(); // tooling: reflected components (idempotent)
 
-        // The ShaderSystemHost encapsulates the pack-vs-dev decision over the data mount (cooked
-        // Shaders/shaders.dpak => no compiler; otherwise DXC + a file provider over Shaders/ with
-        // hot reload). The same host every consumer (VG/UI, ImGui) uses. Inert if neither is present.
+        // The ShaderSystemHost makes the pack or dev decision over the data mount (a cooked
+        // Shaders/shaders.dpak needs no compiler; otherwise DXC and a file provider over Shaders/
+        // with hot reload). Every consumer (VG, UI, ImGui) uses the same host. Inert if neither is present.
         if (!m_shaderHost.Initialize(*m_device, *m_dataFileSystem))
         {
-            return; // neither a compiler nor a pack - renderer stays inert
+            return; // neither a compiler nor a pack: the renderer stays inert
         }
         m_shaders = m_shaderHost.System();
         const rhi::ShaderFormat shaderFmt = m_device->PreferredShaderFormat();
@@ -757,8 +756,8 @@ namespace engine::render
             rhi::LogInfof("RenderSubsystem: using runtime shader compiler (%s)", shaderFmtName);
             if (shaderFmt == rhi::ShaderFormat::WGSL)
             {
-                // The runtime compiler (DXC) cannot emit WGSL - that is a cook-time path (naga).
-                // Every shader lookup will miss and the scene renders BLACK. The usual cause is
+                // The runtime compiler (DXC) cannot emit WGSL; that is a cook-time path (naga).
+                // Every shader lookup will miss and the scene renders black. The usual cause is
                 // ENV_WEBGPU_WGSL=1 without OPTION_USE_SHADER_PACK=1 (or no cooked
                 // Shaders/shaders.dpak in the data root).
                 rhi::LogErrorf("RenderSubsystem: the device wants WGSL but there is no cooked "
@@ -785,10 +784,10 @@ namespace engine::render
             return;
         }
         m_registry.Register(
-            m_meshRenderer.Get()); // FIRST -> renderer id 0 (the RenderData default)
+            m_meshRenderer.Get()); // first, so renderer id 0 (the RenderData default)
         // Frames-in-flight retire queue: every grow-path replacement retires through it
-        // instead of a mid-frame WaitIdle (which on web pumps the event loop, expires the
-        // canvas texture, and drops the frame's submit - the dropped-submit class).
+        // instead of a mid-frame WaitIdle (which on the web pumps the event loop, expires the
+        // canvas texture, and drops the frame's submit).
         m_retireQueue.Initialize(m_device, static_cast<i32>(m_framesInFlight));
         m_meshRenderer->SetRetireQueue(&m_retireQueue);
 
@@ -806,13 +805,13 @@ namespace engine::render
         }
 
         // Debug toggles: flip to false to isolate a subsystem (e.g. bisecting a rendering bug). When
-        // off, the renderer falls back gracefully - clustering off => the shader's all-lights path;
-        // shadows off => unshadowed. Kept as compile-time flags (zero cost when on).
+        // off, the renderer falls back gracefully: clustering off uses the shader's all-lights path;
+        // shadows off renders unshadowed. Kept as compile-time flags (zero cost when on).
         constexpr bool kEnableClusters = true;
         constexpr bool kEnableShadows = true;
 
         // Clustered light culling: a build compute pass per view (declared into the frame graph by
-        // RenderFrame). Optional - if it fails to init, the renderer runs without clustering.
+        // RenderFrame). Optional: if it fails to init, the renderer runs without clustering.
         if (kEnableClusters)
         {
             m_clusterSystem = MakeUnique<ClusterSystem>(m_allocator, *m_device, *m_shaders,
@@ -827,7 +826,7 @@ namespace engine::render
             }
         }
 
-        // HDR resolve: forward renders linear HDR, this pass tonemaps to the LDR target. Optional -
+        // HDR resolve: forward renders linear HDR, this pass tonemaps to the LDR target. Optional:
         // if it fails to init, the renderer falls back to writing the LDR target directly.
         m_tonemapPass =
             MakeUnique<TonemapPass>(m_allocator, *m_device, *m_shaders, m_framesInFlight);
@@ -836,7 +835,7 @@ namespace engine::render
             m_tonemapPass.Reset();
         }
 
-        // Directional shadow map. Optional - if it fails to init, the scene renders unshadowed.
+        // Directional shadow map. Optional: if it fails to init, the scene renders unshadowed.
         if (kEnableShadows)
         {
             m_shadowSystem =
@@ -851,7 +850,7 @@ namespace engine::render
             }
         }
 
-        // Image-based lighting. Optional - if it fails to init, the scene uses flat ambient.
+        // Image-based lighting. Optional: if it fails to init, the scene uses flat ambient.
         m_iblSystem = MakeUnique<IBLSystem>(m_allocator, *m_device, *m_shaders);
         if (!m_iblSystem->Initialize().IsOk())
         {
@@ -887,28 +886,28 @@ namespace engine::render
             m_taaPass.Reset();
         }
 
-        // Ambient occlusion (GTAO/SSAO from the G-buffer). Optional.
+        // Ambient occlusion (GTAO or SSAO from the G-buffer). Optional.
         m_aoPass = MakeUnique<AoPass>(m_allocator, *m_device, *m_shaders);
         if (!m_aoPass->Initialize().IsOk())
         {
             m_aoPass.Reset();
         }
 
-        // Screen-space reflections (reflect the lit HDR before AO/TAA). Optional.
+        // Screen-space reflections (reflect the lit HDR before AO and TAA). Optional.
         m_ssrPass = MakeUnique<SsrPass>(m_allocator, *m_device, *m_shaders);
         if (!m_ssrPass->Initialize().IsOk())
         {
             m_ssrPass.Reset();
         }
 
-        // Screen-space GI (tier 1, the diffuse SSR twin). Optional.
+        // Screen-space GI (the diffuse counterpart of SSR). Optional.
         m_ssgiPass = MakeUnique<SsgiPass>(m_allocator, *m_device, *m_shaders);
         if (!m_ssgiPass->Initialize().IsOk())
         {
             m_ssgiPass.Reset();
         }
 
-        // Scene-pass MSAA first-sample resolve. Optional - null leaves MSAA unavailable
+        // Scene-pass MSAA first-sample resolve. Optional: null leaves MSAA unavailable
         // (views clamp to 1x), so the engine still renders without it.
         m_msaaResolvePass = MakeUnique<MsaaResolvePass>(m_allocator, *m_device, *m_shaders);
         if (!m_msaaResolvePass->Initialize().IsOk())
@@ -916,14 +915,14 @@ namespace engine::render
             m_msaaResolvePass.Reset();
         }
         // Scene-pass MSAA device ceiling: the max sample count the device supports
-        // for color+depth, capped at 4 by the query. Views clamp their authored intent to this. If the
+        // for color and depth, capped at 4 by the query. Views clamp their authored intent to this. If the
         // resolve pass failed to init, MSAA is unavailable regardless, so force 1x.
         m_maxMsaaSamples =
             (m_msaaResolvePass.Get() != nullptr) ? m_device->MaxColorDepthSampleCount() : 1u;
         LOG_INFO(u8"Render", u8"scene-pass MSAA: resolve-pass={} device-ceiling={}x",
                  (m_msaaResolvePass.Get() != nullptr) ? u8"ok" : u8"FAILED", m_maxMsaaSamples);
 
-        // FXAA (TAA-off fallback AA). Optional.
+        // FXAA (the fallback AA without TAA). Optional.
         m_fxaaPass =
             MakeUnique<FxaaPass>(m_allocator, *m_device, *m_shaders, m_framesInFlight);
         if (!m_fxaaPass->Initialize().IsOk())
@@ -939,7 +938,7 @@ namespace engine::render
             m_debugBlitPass.Reset();
         }
 
-        // Screen-space decals (project onto depth, blend into HDR before AO/TAA). Optional.
+        // Screen-space decals (project onto depth, blend into HDR before AO and TAA). Optional.
         m_decalPass =
             MakeUnique<DecalPass>(m_allocator, *m_device, *m_shaders, m_framesInFlight);
         if (!m_decalPass->Initialize().IsOk())
@@ -951,7 +950,7 @@ namespace engine::render
             m_decalPass->SetRetireQueue(&m_retireQueue);
         }
 
-        // Debug draw (per-view gizmos + screen text). Optional.
+        // Debug draw (per-view gizmos and screen text). Optional.
         m_debugPass =
             MakeUnique<DebugDrawPass>(m_allocator, *m_device, *m_shaders, m_framesInFlight);
         if (!m_debugPass->Initialize().IsOk())
@@ -1014,8 +1013,8 @@ namespace engine::render
                 scenes->UnregisterObserver(this);
             }
         }
-        m_device->WaitIdle();     // GPU must finish before we free its buffers/PSOs/descriptors
-        m_retireQueue.Flush();    // pending retired resources (GPU idle - free now)
+        m_device->WaitIdle();     // GPU must finish before we free its buffers, PSOs and descriptors
+        m_retireQueue.Flush();    // pending retired resources (GPU idle: free now)
         ReleaseOverlayDepth();
         m_frame.Reset();          // releases the forward pass's per-frame GPU resources
         m_pickSystem.Reset();     // pick readback buffers (device idle above)
@@ -1033,13 +1032,13 @@ namespace engine::render
         m_decalPass.Reset();      // before the ShaderSystem it borrows
         m_debugPass.Reset();      // before the ShaderSystem it borrows
         m_debugBlitPass.Reset();  // before the ShaderSystem it borrows (with the debug pass)
-        m_probeSystem.Reset();    // probe textures/buffers (before the ShaderSystem it borrows)
-        m_iblSystem.Reset();      // IBL textures/buffers (before the ShaderSystem it borrows)
+        m_probeSystem.Reset();    // probe textures and buffers (before the ShaderSystem it borrows)
+        m_iblSystem.Reset();      // IBL textures and buffers (before the ShaderSystem it borrows)
         m_spriteRenderer.Reset(); // before the ShaderSystem it borrows
         m_meshRenderer.Reset(); // before the systems it borrows (releases material instances first)
         m_materialSystem.Reset();
         m_psoCache.Reset();
-        m_shaders = nullptr;      // borrowed from the host; the host owns/destroys the ShaderSystem
+        m_shaders = nullptr;      // borrowed from the host; the host owns and destroys the ShaderSystem
         m_shaderHost.Shutdown();  // after every pass that borrowed *m_shaders
     }
 

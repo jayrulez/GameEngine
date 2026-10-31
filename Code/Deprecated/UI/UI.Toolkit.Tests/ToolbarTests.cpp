@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for Toolbar: constructs, adds buttons/separators/toggles, toggle round-trips + fires event.
+// Smoke test for Toolbar: it constructs, adds buttons, separators and toggles, and a toggle round-trips and fires its event.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -25,7 +25,7 @@ TEST_CASE("toolkit-toolbar: AddsItemsAndToggles")
     ToolbarToggle* toggle = bar->AddToggle(u8"Bold");
     REQUIRE(toggle != nullptr);
 
-    // button + separator + toggle = 3 children
+    // a button, a separator and a toggle make 3 children
     CHECK(bar->ChildCount() == 3u);
 
     // Toggle round-trip fires OnCheckedChanged.
@@ -61,7 +61,7 @@ TEST_CASE("toolkit-toolbar: a menu button is a button with a checked state and a
     ToolbarMenuButton* menu = bar->AddMenuButton(u8"Terrain");
     REQUIRE(menu != nullptr);
     CHECK(bar->ChildCount() == 1u);
-    CHECK(Cast<ToolbarButton>(menu) != nullptr); // it IS a button: OnClick opens the popup
+    CHECK(Cast<ToolbarButton>(menu) != nullptr); // it is a button: OnClick opens the popup
 
     bool clicked = false;
     menu->OnClick.Add([&](ToolbarButton*) { clicked = true; });
@@ -86,8 +86,8 @@ TEST_CASE("toolkit-toolbar: a menu button is a button with a checked state and a
 
 TEST_CASE("toolkit-toolbar: setting a button's text to what it is asks for no layout")
 {
-    // A page syncs its toolbar every frame; an unconditional invalidate re-laid-out the editor
-    // each frame. A change still asks.
+    // A page syncs its toolbar every frame, so setting a value it already has does not
+    // invalidate (which would lay out the editor every frame). A change still asks.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRef<RootView>(DefaultAllocator());
     root->ViewportSize = Float2{400, 100};

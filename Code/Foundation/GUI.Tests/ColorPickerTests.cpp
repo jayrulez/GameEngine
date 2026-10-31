@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the colour widgets (T4 of Specs/gui-lab-evolution-3.md): HSV over sRGB values and back, a hex
-// code written, a swatch clicked or hatched when mixed, and a picker dragged (each step reported,
-// then its end), typed into, its hue kept through a grey, its alpha hidden where a colour has none.
+// GUI - the colour widgets: converting sRGB values to HSV and back, writing a hex code, clicking a
+// swatch and hatching it when the colour is mixed, and a picker that is dragged (each step reported,
+// then the end) and typed into. The picker keeps its hue through a grey, and hides its alpha where
+// a colour has none.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -33,7 +34,7 @@ namespace
             (void)root->UpdateLayout();
         }
         EventDispatcher& D() { return *root->GetEventDispatcher(); }
-        // A point `x`, `y` of the way across a node.
+        // The point a fraction `x`, `y` of the way across a node.
         static core::Float2 Across(const Node& node, f32 x, f32 y)
         {
             const Rect r = node.GetScreenBounds();
@@ -102,7 +103,7 @@ TEST_CASE("color: a picker's plane and strips are dragged, each step reported, t
     CHECK(bed.last.r == doctest::Approx(1.0f).epsilon(0.02));
     CHECK(bed.last.g == doctest::Approx(0.0f).epsilon(0.02));
 
-    // To the black corner and back out: the hue is kept.
+    // Dragging to the black corner and back out keeps the hue.
     bed.D().InjectMouseDown(Bed::Across(plane, 0.5f, 1.0f), MouseButton::Left);
     bed.D().InjectMouseUp(Bed::Across(plane, 0.5f, 1.0f), MouseButton::Left);
     CHECK(bed.picker->GetColor().r == doctest::Approx(0.0f).epsilon(0.02));

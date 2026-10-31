@@ -4,9 +4,9 @@
 /// Foundation::Materials - the `:builder` partition.
 ///
 /// Fluent builder for authoring a Material in code: declare the shader, pipeline
-/// state, and typed properties; the builder lays out the uniform buffer (std140-ish
-/// 16-byte alignment for float3/float4) and assigns binding ordinals. Build() hands
-/// back the finished Material (RefPtr, since Material is an Object).
+/// state, and typed properties. The builder lays out the uniform buffer by HLSL cbuffer
+/// packing and assigns binding ordinals. Build() hands back the finished Material (a RefPtr,
+/// since Material is an Object).
 
 module;
 #include "Core/Prelude.h"
@@ -168,11 +168,11 @@ export namespace foundation::materials
             return *this;
         }
 
-        // --- effect groups (Specs/wind-for-every-shader.md) ---
+        // --- effect groups ---
         // The group of an effect the material's shader declares (its variant flag in the shader's
-        // vertex variants), at the effect's defaults, from the effect's table: the shader system's
-        // (ShaderSystem::FindEffect / EffectForFlag). No C++ copy of a table: a builder without
-        // one makes a material without the group.
+        // vertex variants), at the effect's defaults, from the effect's table in the shader system
+        // (ShaderSystem::FindEffect or EffectForFlag). There is no C++ copy of a table: a builder
+        // without one makes a material without the group.
         MaterialBuilder& Effect(const shaders::ShaderEffect& effect)
         {
             m_material->AddEffectGroup(effect);
@@ -202,9 +202,9 @@ export namespace foundation::materials
         u32 m_binding = 0;
     };
 
-    // Standard PBR material (mirrors Sedulous.Materials::CreatePBR): the BaseColor/Metallic/Roughness
-    // uniforms + the five PBR maps + a sampler, in the order the forward set-2 contract expects. The
-    // importer builds these and assigns the maps; unset maps fall back to neutral defaults in the renderer.
+    // Standard PBR material: the BaseColor, Metallic and Roughness uniforms, the five PBR maps and
+    // a sampler, in the order the forward pass's set 2 expects. The importer builds these and
+    // assigns the maps; unset maps fall back to neutral defaults in the renderer.
     [[nodiscard]] inline RefPtr<Material> CreatePBR(StringView name,
                                                     Float4 baseColor = Float4{1, 1, 1, 1},
                                                     f32 metallic = 0.0f, f32 roughness = 0.5f,
@@ -217,8 +217,8 @@ export namespace foundation::materials
             .Float(u8"Metallic", metallic)
             .Float(u8"Roughness", roughness)
             // Offsets 24 and 60 are padding (forward.ps.hlsl's `_materialPad*`): the cbuffer packs
-            // EmissiveColor at 32 and stays 64 bytes. The wind, which once lived there, is an
-            // effect with a buffer of its own (the material's Wind group, MaterialBuilder::Effect).
+            // EmissiveColor at 32 and stays 64 bytes. Wind is an effect with a buffer of its own
+            // (the material's Wind group, MaterialBuilder::Effect).
             // Black = none; rgb x EmissiveMap, times the intensity in w (glow above white).
             .ColorHdr(u8"EmissiveColor", Float4{0, 0, 0, 1})
             .Float(u8"OcclusionStrength", 1.0f)
@@ -233,8 +233,8 @@ export namespace foundation::materials
             .Build();
     }
 
-    // The standard UNLIT material: albedo * BaseColor, no lighting (the "unlit" builtin shader -
-    // same vertex path as forward, so it casts shadows and moves through the post stack normally).
+    // The standard unlit material: albedo * BaseColor, no lighting (the "unlit" builtin shader).
+    // It shares forward's vertex path, so it casts shadows and goes through the post stack normally.
     [[nodiscard]] inline RefPtr<Material> CreateUnlit(StringView name,
                                                       Float4 baseColor = Float4{1, 1, 1, 1},
                                                       StringView shaderName = u8"unlit")
@@ -248,14 +248,14 @@ export namespace foundation::materials
             .Build();
     }
 
-    // The standard PHONG material (the "phong" builtin shader, Specs/phong-material.md): what a
-    // model authored with Phong or Lambert is made of. Each light shaded Blinn-Phong: the diffuse
-    // (BaseColor x AlbedoMap) by N.L, the specular (SpecularColor x SpecularMap, black: none) as a
-    // highlight as tight as Shininess, its exponent; the scene's diffuse ambient; the emission
-    // added. Its colour, map, emission, normal map and cutoff take the names PBR and Unlit give
-    // them, so a material moved between built-ins keeps them. Same vertex path as forward, so it
-    // casts shadows and moves through the post stack normally. The order lays the cbuffer out in
-    // 64 bytes, as phong.ps.hlsl declares it.
+    // The standard Phong material (the "phong" builtin shader), for models authored with Phong or
+    // Lambert. Each light is shaded Blinn-Phong: the diffuse (BaseColor x AlbedoMap) by N.L, and
+    // the specular (SpecularColor x SpecularMap, black for none) as a highlight whose exponent is
+    // Shininess; then the scene's diffuse ambient and the emission are added. Its colour, map,
+    // emission, normal map and cutoff take the names PBR and Unlit give them, so a material moved
+    // between built-ins keeps them. It shares forward's vertex path, so it casts shadows and goes
+    // through the post stack normally. The order lays the cbuffer out in 64 bytes, as
+    // phong.ps.hlsl declares it.
     [[nodiscard]] inline RefPtr<Material> CreatePhong(StringView name,
                                                       Float4 baseColor = Float4{1, 1, 1, 1},
                                                       Float4 specularColor = Float4{0, 0, 0, 1},
@@ -282,7 +282,7 @@ export namespace foundation::materials
 
     // The builtin shaders a material may be drawn with, and how each is known: by its shader's
     // name (what a material source stores), a short name (what an agent types) and a label (what
-    // the editor shows). The one list every place that offers or recognises a builtin reads.
+    // the editor shows). Every place that offers or recognises a builtin reads this one list.
     enum class BuiltinShading : u8
     {
         Pbr,
@@ -345,7 +345,7 @@ export namespace foundation::materials
     }
 
     // The builtin template a builtin shader's materials are made from, or null for a custom
-    // shader: what a stored material's property table is checked against.
+    // shader. A stored material's property table is checked against it.
     [[nodiscard]] inline RefPtr<Material> BuiltinMaterialTemplate(StringView shaderName)
     {
         const BuiltinShadingInfo* builtin = FindBuiltinShadingByShader(shaderName);

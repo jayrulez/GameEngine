@@ -13,9 +13,9 @@
 
 // DX12 headers use __uuidof (MSVC extension) via IID_PPV_ARGS. Clang supports
 // it but warns under -Wlanguage-extension-token; suppress for all DX12 code.
-// NOTE: We push but do NOT pop here - the suppression must remain active for
+// This pushes but does not pop: the suppression must remain active for
 // IID_PPV_ARGS expansions in our .cppm files. The diagnostic state is scoped
-// to each translation unit, so it won't leak.
+// to each translation unit, so it does not leak.
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wlanguage-extension-token"
@@ -27,7 +27,7 @@
 #include <dxgi1_6.h>
 #include <d3dcompiler.h>
 
-// Helper alias.
+// ComPtr without the namespace.
 template <typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
 

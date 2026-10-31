@@ -3,12 +3,11 @@
 
 /// Foundation::Net.Replication - the `foundation.net.replication` module.
 ///
-/// The foundation of StateReplication: a stable per-entity NetworkId + authority, and - the central
-/// bet of the design - a REFLECTION-DRIVEN field codec. A component marks properties `Replicated`
-/// (via the existing per-property attribute system, so no per-component net code is hand-written),
-/// and this layer harvests that layout once per type and streams the marked fields through the
-/// `:wire` BitWriter/BitReader. Snapshot assembly, per-peer delta, spawn and relevancy stack on top
-/// of this codec in later slices; this unit depends only on Core (reflection) + foundation.net (wire).
+/// StateReplication: a stable per-entity NetworkId and authority, and a reflection-driven field
+/// codec. A component marks properties as replicated through the per-property attribute system, so
+/// no component needs hand-written network code; this layer harvests that layout once per type and
+/// streams the marked fields through the `:wire` BitWriter and BitReader. Snapshots, per-peer deltas,
+/// spawning, relevancy and client interpolation are built on that codec.
 
 module;
 #include "Core/Prelude.h"
@@ -16,9 +15,9 @@ module;
 export module foundation.net.replication;
 
 import foundation.core;
-import foundation.net;      // BitWriter / BitReader (:wire)
-import foundation.scene;    // Scene / EntityHandle / ComponentManagerBase (snapshot assembly)
-import foundation.resource; // ResourceManager (SerializableComponentManager's ResolveResources seam)
+import foundation.net;      // BitWriter, BitReader (:wire)
+import foundation.scene;    // Scene, EntityHandle, ComponentManagerBase (snapshot assembly)
+import foundation.resource; // ResourceManager (SerializableComponentManager's ResolveResources hook)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -27,7 +26,7 @@ namespace scene = foundation::scene;
 export namespace foundation::net
 {
 
-    // ---- identity + authority -------------------------------------------------------------------
+    // ---- identity and authority -----------------------------------------------------------------
 
     // A stable, server-assigned handle for a replicated entity. Wire-carried; 0 = unassigned. Distinct
     // from EntityHandle (index+generation, process-local) and from the persisted Guid (disk identity):
@@ -47,47 +46,46 @@ export namespace foundation::net
         }
     };
 
-    // Who owns an entity's replicated state. Server-authoritative is the default (anti-cheat);
-    // per-entity Client authority is the host-migration / client-owned-avatar escape hatch.
+    // Who owns an entity's replicated state. Server authority is the default (it resists cheating);
+    // per-entity Client authority is the escape hatch for host migration and client-owned avatars.
     enum class NetworkAuthority : u8
     {
         Server,
         Client
     };
 
-    // ---- replicated-field marking (rides the existing reflection attribute system) --------------
+    // ---- replicated-field marking (through the reflection attribute system) ---------------------
 
     // The property-attribute key a component sets to opt a field into replication:
     //   builder.Property<&C::position>("position").PropAttribute(kReplicatedAttribute, true);
-    // ASCII const char* to match TypeBuilder::PropAttribute's key type (attribute keys are stored as
-    // const char*). The value is reserved for future priority/precision descriptors; presence alone
+    // An ASCII const char* to match TypeBuilder::PropAttribute's key type (attribute keys are stored as
+    // const char*). The value is reserved for priority or precision descriptors; presence alone
     // means "replicate".
     inline constexpr const char* kReplicatedAttribute = "net.replicated";
 
-    // True if this property is marked for replication AND its field type is codec-supported. The AND is
-    // deliberate: an unsupported marked type is EXCLUDED from the layout (with a one-time warning) so a
-    // server and client harvesting the same TypeInfo always agree on the field set - never a desync.
+    // True if this property is marked for replication and its field type is supported by the codec.
+    // A marked field of an unsupported type is left out of the layout (with a one-time warning), so a
+    // server and client harvesting the same TypeInfo always agree on the field set.
     [[nodiscard]] bool IsReplicated(const PropertyInfo& property);
 
-    // True if the field codec can encode a value of this type (bool / the integer widths / f32 / f64 /
-    // Float2-4 / Quaternion). Enums, strings, Guids and resource Refs are not yet supported.
+    // True if the field codec can encode a value of this type (bool, the integer widths, f32, f64,
+    // Float2 to Float4, Quaternion). Enums, strings, Guids and resource Refs are not supported.
     [[nodiscard]] bool IsFieldTypeSupported(const TypeInfo* type) noexcept;
 
     // The ordered replicated-property layout for a component type, harvested from reflection and cached.
-    // Both peers derive it from the same TypeInfo, so the order + set match by construction. Empty for a
+    // Both peers derive it from the same TypeInfo, so the order and set match by construction. Empty for a
     // type with no replicated fields.
     [[nodiscard]] Span<const PropertyInfo* const> ReplicatedProperties(const TypeInfo& type);
 
     // ---- the field codec (Variant <-> wire) -----------------------------------------------------
 
     // Encode one reflected field value. Dispatches on the Variant's held type; returns false (writes
-    // nothing) for an unsupported type. Kept public for delta/RPC reuse.
+    // nothing) for an unsupported type. Public so deltas and RPCs can reuse it.
     [[nodiscard]] bool WriteFieldValue(BitWriter& writer, const Variant& value);
 
     // Decode one reflected field of the given type from the stream into `out`. Returns false (reads
-    // nothing) for an unsupported type. The type is the property's declared type (the write side is
-    // self-describing only by position, so the reader must know the layout - it does, from the shared
-    // harvest).
+    // nothing) for an unsupported type. The type is the property's declared type: the stream is
+    // self-describing only by position, so the reader takes the layout from the shared harvest.
     [[nodiscard]] bool ReadFieldValue(BitReader& reader, const TypeInfo* type, Variant& out);
 
     // ---- component-level state sync --------------------------------------------------------------
@@ -96,7 +94,7 @@ export namespace foundation::net
     // ComponentManagerBase::GetComponentInstance) in layout order. Returns the field count written.
     usize WriteReplicatedState(BitWriter& writer, const Instance& instance);
 
-    // Read + apply the replicated fields written by WriteReplicatedState back onto `instance`, in the
+    // Read and apply the replicated fields written by WriteReplicatedState back onto `instance`, in the
     // same layout order. Returns the field count applied. A read past the end of the stream stops early
     // (the wire is overflow-safe); returns what was applied.
     usize ReadReplicatedState(BitReader& reader, const Instance& instance);
@@ -104,22 +102,22 @@ export namespace foundation::net
     // ---- the networked-entity tag (a scene component) -------------------------------------------
 
     // Tags an entity as replicated. The server assigns the NetworkId (StateReplication::AssignNetworkId);
-    // the client mirrors it. Persistent (a designer can mark an entity networked in the editor), so it
-    // rides SerializableComponentManager - but its OWN fields are identity, not replicated state (they
-    // carry no kReplicatedAttribute, so the field codec never touches them).
+    // the client mirrors it. It is saved with the scene (a designer can mark an entity networked in
+    // the editor), so it uses SerializableComponentManager; its own fields are identity, not replicated
+    // state, and carry no kReplicatedAttribute, so the field codec never touches them.
     struct NetworkComponent
     {
         NetworkId id{};
         NetworkAuthority authority = NetworkAuthority::Server;
         Guid
-            prefab{}; // the source prefab for network spawn (nil = a bare / non-prefab networked entity)
+            prefab{}; // the source prefab for network spawn (nil = a networked entity with no prefab)
         // The player it belongs to: 0 = the host, else the client's PeerId on the server (the id
         // the session's welcome tells that client). Set at spawn, sent in the spawn record, so every
         // peer knows whose an entity is. Runtime state: not saved with the scene.
         u32 owner = 0;
     };
 
-    // ADL serialization for scene persistence (bidirectional; enum via the temp-u8 idiom).
+    // ADL serialization for scene persistence (bidirectional; the enum goes through a temporary u8).
     inline void Serialize(ISerializer& ar, NetworkComponent& c)
     {
         foundation::core::Serialize(ar, "id", c.id.value);
@@ -139,13 +137,13 @@ export namespace foundation::net
 
     // ---- networked transform (the common case: replicate an entity's movement) -------------------
 
-    // A replicated transform: mirrors an entity's LOCAL transform over the network. Add it alongside a
-    // NetworkComponent to replicate movement. Its fields ARE replicated (unlike NetworkComponent's
-    // identity fields), so the field codec + interpolation handle them; the server copies the entity
-    // transform INTO this component before send (CaptureEntityTransforms) and the client applies this
-    // component (interpolated) BACK onto the entity transform after receive (ApplyEntityTransforms) -
-    // the engine's built-in bridge between the reflected-component replication pipe and the non-reflected
-    // TransformData the entity system stores.
+    // A replicated transform: mirrors an entity's local transform over the network. Add it alongside a
+    // NetworkComponent to replicate movement. Unlike NetworkComponent's identity fields, its fields are
+    // replicated, so the field codec and interpolation handle them. The server copies the entity
+    // transform into this component before sending (CaptureEntityTransforms), and the client applies
+    // the interpolated component back onto the entity transform after receiving (ApplyEntityTransforms).
+    // This bridges reflected-component replication and the unreflected TransformData the entity system
+    // stores.
     struct NetworkedTransform
     {
         Float3 position = Float3::Zero;
@@ -167,45 +165,47 @@ export namespace foundation::net
         NetworkedTransformComponentManager() : SerializableComponentManager(u8"net.Transform") {}
     };
 
-    // THE net manager set for a scene - injected by the NetworkSubsystem at runtime AND by headless
-    // scene consumers (Engine.Composition -> export/MCP transcode scratch). Add a manager => bump
-    // the composition (Engine.Composition).
+    // The network component managers for a scene, installed by the NetworkSubsystem at runtime and by
+    // headless scene consumers through Engine.Composition. A new manager added here is added to the
+    // composition too.
     inline void AddNetworkSceneManagers(scene::Scene& scene)
     {
-        scene.AddSystem<NetworkComponentManager>();          // identity (NetworkId + authority + prefab)
+        scene.AddSystem<NetworkComponentManager>();          // identity (NetworkId, authority, prefab)
         scene.AddSystem<NetworkedTransformComponentManager>(); // replicated transform (the common case)
     }
 
-    // Server: copy each entity's live LOCAL transform INTO its NetworkedTransform component, so the
-    // replication capture that follows sends the authoritative pose. Call before CaptureDelta/Snapshot.
+    // Server: copy each entity's live local transform into its NetworkedTransform component, so the
+    // replication capture that follows sends the authoritative pose. Call before CaptureDelta or
+    // a snapshot.
     void CaptureEntityTransforms(scene::Scene& scene);
-    // Client: write each NetworkedTransform component (already interpolated by SampleInterpolation) BACK
-    // onto its entity's LOCAL transform, so the visual follows the replicated pose. Call after sampling.
+    // Client: write each NetworkedTransform component (already interpolated by SampleInterpolation) back
+    // onto its entity's local transform, so the visual follows the replicated pose. Call after sampling.
     void ApplyEntityTransforms(scene::Scene& scene);
 
-    // Registers NetworkComponent + NetworkedTransform reflection (call once before a networked scene is
+    // Registers NetworkComponent and NetworkedTransform reflection (call once before a networked scene is
     // built; the snapshot path needs the patched TypeInfo for its versioned records). Idempotent.
     void RegisterReplicationComponents();
 
-    // Surfaces NetworkComponent to SCRIPT (Track A): NetworkComponent.of(entity).authority for
-    // authority-gated gameplay (+ the NetworkAuthority enum). Called by the composition root alongside
-    // RegisterNetScriptFacade (the app-global Net session facade).
+    // Surfaces NetworkComponent to scripts: NetworkComponent.of(entity).authority for authority-gated
+    // gameplay, and the NetworkAuthority enum. Called by the composition root alongside
+    // RegisterNetScriptFacade (the Net session facade).
     void RegisterNetworkComponentScriptFacade();
 
     // ---- client-side interpolation (smooth playback of low-rate updates) ------------------------
 
-    // True if this field type is smoothly interpolated (vs snapped) by LerpFieldValue.
+    // True if this field type is smoothly interpolated (rather than snapped) by LerpFieldValue.
     [[nodiscard]] bool IsInterpolatableType(const TypeInfo* type) noexcept;
 
-    // Interpolate one reflected field between two samples, t in [0,1]. f32/f64/Float2-4 lerp;
-    // Quaternion nlerps (shortest-path); non-interpolatable types (bool/ints) SNAP to `a` - the value
-    // in effect at the render time (the earlier bracketing sample). Same field type on both sides.
+    // Interpolate one reflected field between two samples, t in [0,1]. f32, f64 and Float2 to Float4
+    // lerp; Quaternion nlerps along the shortest path; other types (bool, integers) snap to `a`, the
+    // value in effect at the render time (the earlier bracketing sample). Both sides hold the same
+    // field type.
     [[nodiscard]] Variant LerpFieldValue(const Variant& a, const Variant& b, f32 t);
 
-    // A per-entity, per-component timeline of received replicated states, sampled at a DELAYED render
-    // time so low-rate updates play back smoothly (Valve/Fiedler snapshot interpolation). Delay-agnostic:
-    // the caller passes renderTimeMs (= now - interpolationDelay). Record on network receive; Sample each
-    // frame to write the interpolated fields onto the live component. Genre-neutral.
+    // A per-entity, per-component timeline of received replicated states, sampled at a delayed render
+    // time so low-rate updates play back smoothly (Valve and Fiedler style snapshot interpolation). The
+    // caller chooses the delay by passing renderTimeMs (now minus the interpolation delay). Record on
+    // network receive; Sample each frame to write the interpolated fields onto the live component.
     class InterpolationBuffer
     {
     public:
@@ -215,10 +215,10 @@ export namespace foundation::net
         void Record(NetworkId id, u32 componentTypeHash, f64 timestampMs,
                     const Instance& component);
         // Write the fields interpolated at `renderTimeMs` onto `component`; false if no samples exist.
-        // Clamps to the earliest/latest sample outside the buffered window (no extrapolation).
+        // Clamps to the earliest or latest sample outside the buffered window (no extrapolation).
         bool Sample(NetworkId id, u32 componentTypeHash, f64 renderTimeMs,
                     const Instance& component) const;
-        // Drop an entity's timelines (despawn / disconnect).
+        // Drop an entity's timelines (despawn or disconnect).
         void Forget(NetworkId id);
         [[nodiscard]] usize TrackedEntities() const noexcept { return m_entities.Size(); }
 
@@ -236,10 +236,10 @@ export namespace foundation::net
         HashMap<u32, HashMap<u32, Timeline>> m_entities; // networkId -> (typeHash -> timeline)
     };
 
-    // ---- the replication model seam + StateReplication ------------------------------------------
+    // ---- the replication model interface and StateReplication -----------------------------------
 
-    // The seam a replication architecture implements: StateReplication (server-authoritative
-    // property snapshots, here) vs CommandReplication (lockstep). A snapshot is written on
+    // The interface a replication architecture implements: StateReplication (server-authoritative
+    // property snapshots, here) or a command-based model such as lockstep. A snapshot is written on
     // the server and applied on the client, both over the :wire stream.
     class IReplicationModel
     {
@@ -249,74 +249,76 @@ export namespace foundation::net
         virtual void ApplySnapshot(scene::Scene& scene, BitReader& in) = 0;
     };
 
-    // Server-authoritative state replication. The FULL snapshot (every networked
-    // entity's every replicated component) is the primitive that per-peer delta and
-    // full-snapshot late-join build on. Per-peer baselines, interpolation and relevancy build on it too.
+    // Server-authoritative state replication. The full snapshot (every replicated component of every
+    // networked entity) is the primitive that per-peer deltas, late joins, baselines, interpolation
+    // and relevancy build on.
     //
     // A snapshot is: VarU32 entityCount, then per entity { U32 networkId, VarU32 componentCount, then
     // per component { string SerializationTypeId, VarU32 blobBytes, blob } }. The per-component
-    // length prefix lets a peer that lacks a component type SKIP it (forward-compat) instead of
-    // desyncing the reader.
+    // length prefix lets a peer that lacks a component type skip it (forward compatibility) instead
+    // of desynchronizing the reader.
     class StateReplication final : public IReplicationModel
     {
     public:
-        // The client's prefab-spawn seam: resolve a network-spawned prefab into a local entity (the host
-        // wires this to its content DB via SpawnPrefab). Null (or a nil prefab id) => a bare entity is
-        // created instead - enough to round-trip state, but no prefab structure/visuals.
+        // The client's prefab-spawn hook: resolve a network-spawned prefab into a local entity (the host
+        // wires this to its content database through SpawnPrefab). With no handler, or a nil prefab id,
+        // a bare entity is created instead: enough to round-trip state, but no prefab structure or
+        // visuals.
         using SpawnHandler =
             core::Function<scene::EntityHandle(scene::Scene&, const Guid&, NetworkId)>;
         void SetSpawnHandler(SpawnHandler handler);
-        // Whether a spawn handler is installed (the NetworkController re-applies its injected resolver to
-        // each fresh endpoint; this lets that wiring be asserted).
+        // Whether a spawn handler is installed (the NetworkController applies its resolver to each new
+        // endpoint; this lets tests assert that wiring).
         [[nodiscard]] bool HasSpawnHandler() const noexcept { return static_cast<bool>(m_spawnHandler); }
 
-        // Per-peer RELEVANCY / interest (fog-of-war is SECURITY, not just bandwidth): return true
-        // if `id` should be replicated to `peerId`. Unset => everything is relevant to everyone. When an
-        // entity LEAVES a peer's relevance, its next delta actively REMOVES it on that client (destroyed,
-        // so hidden state can't be memory-read to cheat) - the server never sends what a peer may not see.
+        // Per-peer relevancy (interest): return true if `id` should be replicated to `peerId`. Fog of
+        // war is a security matter, not only bandwidth. Unset, everything is relevant to everyone. When
+        // an entity leaves a peer's relevance, its next delta removes it on that client (destroyed, so
+        // hidden state cannot be read from memory to cheat); the server never sends what a peer may not
+        // see.
         using RelevanceFn =
             core::Function<bool(u32 peerId, NetworkId id, scene::EntityHandle entity)>;
         void SetRelevance(RelevanceFn fn);
 
         // Server: give an entity a NetworkId (adds the NetworkComponent if absent), returning it. A
         // re-registered entity keeps its id. `prefab` records the source prefab so a client can network-
-        // spawn it (nil for a bare networked entity). Records the id->entity mapping for capture.
+        // spawn it (nil for a bare networked entity). Records the id -> entity mapping for capture.
         NetworkId AssignNetworkId(scene::Scene& scene, scene::EntityHandle entity,
                                   const Guid& prefab = {}, u32 owner = 0);
 
-        // Server: give every authored-networked entity (a NetworkComponent) a NetworkId derived from its
-        // authored Guid, and register id -> entity. A designer just adds a NetworkComponent in the editor
-        // and the server "replicates" the entity on start - no hand-authored ids. Idempotent.
+        // Server: give every entity authored with a NetworkComponent a NetworkId derived from its
+        // authored Guid, and register id -> entity. Adding a NetworkComponent in the editor is enough
+        // for the server to replicate the entity on start, with no hand-authored ids. Idempotent.
         void AssignSceneNetworkIds(scene::Scene& scene);
 
-        // Client: compute the SAME Guid-derived id the server did (both peers load the same authored
-        // scene, so the same entity Guid -> the same id) and register id -> local entity, so incoming
-        // replication UPDATES the authored entity instead of creating a duplicate.
+        // Client: compute the same Guid-derived id the server did (both peers load the same authored
+        // scene, so the same entity Guid gives the same id) and register id -> local entity, so incoming
+        // replication updates the authored entity instead of creating a duplicate.
         void RegisterAuthoredEntities(scene::Scene& scene);
 
         void CaptureSnapshot(scene::Scene& scene, BitWriter& out) override;
         void ApplySnapshot(scene::Scene& scene, BitReader& in) override;
 
-        // Server: write the DELTA for one peer - only the entities/components that changed since this
-        // peer's last delta, plus removed entities. Returns the number of entries written (0 = nothing
-        // changed). The baseline is "what was last sent this peer", so this rides RELIABLE-ORDERED
-        // delivery: send the output reliably or the baseline diverges. Updates the peer baseline.
+        // Server: write the delta for one peer: only the entities and components that changed since
+        // this peer's last delta, plus removed entities. Returns the number of entries written (0 =
+        // nothing changed). The baseline is what was last sent to this peer, so the output needs
+        // reliable, ordered delivery or the baseline diverges. Updates the peer baseline.
         usize CaptureDelta(scene::Scene& scene, u32 peerId, BitWriter& out);
-        // Client: apply a delta - changed components applied in place, removed entities destroyed.
+        // Client: apply a delta: changed components applied in place, removed entities destroyed.
         void ApplyDelta(scene::Scene& scene, BitReader& in);
-        // Same, but also RECORD each applied interpolatable component into `interp` at `timestampMs`
+        // Same, but also record each applied interpolatable component into `interp` at `timestampMs`
         // (the server's capture time), for smooth playback. Sample it back each frame via
         // SampleInterpolation. Components with no interpolatable field are applied directly (not buffered).
         void ApplyDelta(scene::Scene& scene, BitReader& in, InterpolationBuffer& interp,
                         f64 timestampMs);
         // Client, per render frame: write each networked interpolatable component's value at `renderTimeMs`
-        // (= synced network time - interpolation delay) from the buffer onto the live scene.
+        // (synced network time minus the interpolation delay) from the buffer onto the live scene.
         void SampleInterpolation(scene::Scene& scene, InterpolationBuffer& interp,
                                  f64 renderTimeMs) const;
         // Drop a peer's baseline on disconnect; its next CaptureDelta re-sends everything as new.
         void ForgetPeer(u32 peerId);
 
-        // The local entity for a NetworkId (invalid if unknown) - the id->entity map, populated by
+        // The local entity for a NetworkId (invalid if unknown), from the id -> entity map populated by
         // AssignNetworkId (server) or ApplySnapshot's find-or-create (client).
         [[nodiscard]] scene::EntityHandle FindEntity(NetworkId id) const;
         [[nodiscard]] usize NetworkedCount() const noexcept { return m_netIdToEntity.Size(); }
@@ -326,12 +328,12 @@ export namespace foundation::net
         // the spawn handler (prefab instance); otherwise a bare tagged entity is created.
         scene::EntityHandle FindOrCreateEntity(scene::Scene& scene, u32 networkId,
                                                const Guid& prefab, u32 owner, bool spawn);
-        // Shared apply loop: read `count` component records (tag + length-prefixed blob) onto an entity.
+        // Shared apply loop: read `count` component records (tag and length-prefixed blob) onto an entity.
         // If `interp` is set, records each applied interpolatable component at `timestampMs`.
         void ApplyComponentRecords(scene::Scene& scene, scene::EntityHandle entity, NetworkId id,
                                    u32 count, BitReader& in, InterpolationBuffer* interp,
                                    f64 timestampMs);
-        // Read a count-prefixed run of entity records (the unified snapshot/delta payload) and apply them.
+        // Read a count-prefixed run of entity records (the payload snapshots and deltas share) and apply them.
         void ApplyEntries(scene::Scene& scene, BitReader& in, InterpolationBuffer* interp,
                           f64 timestampMs);
 

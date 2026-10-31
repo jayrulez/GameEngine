@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Importer registry + shared import helpers: extension routing, path helpers, and the
+// The importer registry and the shared import helpers: extension routing, path helpers, and the
 // copy-into-Sources step every file importer builds on.
 
 #include <doctest/doctest.h>
@@ -35,7 +35,7 @@ namespace
         }
     };
 
-    // A second importer that ALSO claims "fak" - exercises the multi-match chooser path (FindAllFor).
+    // A second importer that also claims "fak", for the multi-match chooser path (FindAllFor).
     class FakeImporter2 final : public IFileImporter
     {
     public:
@@ -112,8 +112,8 @@ TEST_CASE("importer: CopyIntoSources lands the bytes in the project's Sources tr
     }
     RemoveDirectory(dir);
 
-    // Project-free: CopyIntoSources needs only a sources DIRECTORY - the pipeline is
-    // headless-drivable by design, so the test provides a bare scratch tree, no editor.
+    // CopyIntoSources needs only a sources directory, not a project or an editor, so the test
+    // provides a bare scratch tree.
     const String sourcesRoot = PathJoin(dir, u8"Sources");
     REQUIRE(CreateDirectories(sourcesRoot.AsView()));
 
@@ -146,10 +146,10 @@ TEST_CASE("importer: CopyIntoSources lands the bytes in the project's Sources tr
     RemoveDirectory(dir);
 }
 
-// The import ledger and the copy into Sources/ (the clash rule's file half): a second file of
+// The import ledger and the copy into Sources/: a second file of
 // the same name from another folder never overwrites the first's copy, it takes "a.2.png"; the
 // first file imported again (changed) overwrites its own copy; the same bytes again are shared,
-// untouched. Without a ledger, the caller's say decides.
+// untouched. Without a ledger, the caller decides.
 TEST_CASE("importer: a copy never overwrites another file's; a re-import overwrites its own")
 {
     const String dir = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_importer_ledger");

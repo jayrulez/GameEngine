@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Meshes as resources: cook a mesh (capture -> source -> content DB), then build it
-// back through the ResourceManager via the factory and verify the runtime mesh round-
-// trips its vertices/indices/submeshes/bounds. Covers both the static and skinned paths.
+// Meshes as resources: cook a mesh (captured into a source, written to the content DB), then
+// build it back through the ResourceManager via the factory and verify the runtime mesh
+// round-trips its vertices, indices, submeshes and bounds. Covers the static and skinned paths.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -118,8 +118,8 @@ TEST_CASE("static mesh resource: async load matches the sync product")
 
 TEST_CASE("static mesh resource: many concurrent async decodes run without a race")
 {
-    // N meshes bound async at once = N DecodeStages reading the content DB + registries and doing
-    // the heavy vertex/index blob copy concurrently on workers. Run under TSAN.
+    // N meshes bound async at once: N DecodeStages reading the content DB and registries and doing
+    // the heavy vertex and index blob copy concurrently on workers. Run under TSAN.
     GlobalTypeRegistry().Register(StaticMeshSource::StaticType());
     RegisterSerializable<StaticMeshSource>();
     GlobalTypeRegistry().Register(StaticMesh::StaticType());

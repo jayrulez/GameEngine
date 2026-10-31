@@ -1,5 +1,4 @@
-# UI Sandbox - on-screen test of foundation.ui (the Sedulous.UI port) on the VG renderer.
-# Ports Sedulous's UISandbox demo (sans the Toolkit tabs) to prove the port end-to-end.
+# UI Sandbox - on-screen test of foundation.ui on the VG renderer.
 add_executable(UISandbox Main.cpp)
 target_link_libraries(UISandbox PRIVATE
     Foundation::Core

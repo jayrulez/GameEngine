@@ -3,14 +3,14 @@
 
 // Engine::Domain - the `engine.domain` module.
 //
-// One declaration per domain, every root a facet of it (Documentation/Specs/engine-composition.md).
-// A DomainModule is what an engine domain (render, physics, input, ...) contributes: its scene
-// facet (the manager installer and the reflection registrar a SceneModule carries), its script
-// facade registrar, and the resource modules it brings - each optional. An EngineComposition is
-// built from a list of them and answers for a facet: the scene composition, the resource types,
-// the factories, the facades. Nobody collects anything; a consumer asks the composition for the
-// facet it needs. Engine.Composition holds the one list; this library holds the shapes so every
-// domain library can declare against them without seeing the list.
+// One declaration per domain, every root a facet of it. A DomainModule is what an engine domain
+// (render, physics, input, ...) contributes: its scene facet (the manager installer and the
+// reflection registrar a SceneModule carries), its script facade registrar, and the resource
+// modules it brings, each optional. An EngineComposition is built from a list of them and answers
+// for a facet: the scene composition, the resource types, the factories, the facades. Nobody
+// collects anything; a consumer asks the composition for the facet it needs. Engine.Composition
+// holds the one list; this library holds the shapes so every domain library can declare against
+// them without seeing the list.
 
 module;
 #include "Core/Prelude.h"
@@ -29,8 +29,8 @@ export namespace engine
 {
     /// What one engine domain declares. Declared once, in the domain's own library, in an
     /// implementation unit (one instance per process). Every facet is optional: a domain with no
-    /// scene content (input) has no installer; a library that is only a facade (`run`, the `ui`
-    /// screen facade) has only that.
+    /// scene content (input) has no installer; a library that is only a facade (`run`) has only
+    /// that.
     struct DomainModule
     {
         StringView id = {};
@@ -130,7 +130,7 @@ export namespace engine
         {
             return Span<const resource::ResourceModule* const>{m_resources.Data(), m_resources.Size()};
         }
-        /// Every factory description of every resource module: what the composition CAN create,
+        /// Every factory description of every resource module: what the composition can create,
         /// readable without creating anything (the scene format reference joins on it).
         template <typename Fn>
         void ForEachFactoryDescription(Fn&& fn) const
@@ -152,7 +152,7 @@ export namespace engine
             }
             return count;
         }
-        /// Registers every resource module's types (cooked records + products, by type name).
+        /// Registers every resource module's types (cooked records and products, by type name).
         void RegisterResourceTypes() const
         {
             for (const resource::ResourceModule* module : m_resources)

@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the GUI driven from scripts (G1 of Specs/vg-and-gui-lab.md), with no UI-script layer: the
-// widgets reach AngelScript and Luau through their reflection. Each language runs the same story
-// against one native checker: build a small tree under `gui.root()`, set properties, add a class a
-// sheet styles, listen to a click the dispatcher delivers; then the weak-handle rule: a destroyed
-// element's handle answers isValid() false and any other use is the script's error, a destroy
-// inside a click handler completes after it, a reused slot does not answer to the old handle, and
-// a handle outliving its GUI reads as gone. Then bindings (G5): a script binds a label to a function
-// of the GUI's data, a slider both ways to a data value, and a label to the slider, and each
-// follows its source with no subscription.
+// The GUI driven from scripts, with no separate UI-script layer: the widgets reach AngelScript
+// and Luau through their reflection. Each language runs the same story against one native
+// checker: build a small tree under `gui.root()`, set properties, add a class that a sheet styles,
+// and listen to a click the dispatcher delivers.
+//
+// Then the weak-handle rule. A destroyed element's handle answers isValid() false and any other
+// use is a script error; a destroy inside a click handler completes after the handler; a reused
+// slot does not answer to the old handle; and a handle that outlives its GUI reads as gone.
+//
+// Then bindings: a script binds a label to a function of the GUI's data, a slider both ways to a
+// data value, and a label to the slider, and each follows its source with no subscription.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
 import foundation.script;
-import foundation.i18n; // a script's localized texts (E16)
+import foundation.i18n; // a script's localized texts
 import foundation.gui;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -99,7 +101,7 @@ namespace
         return manager;
     }
 
-    // The native half of the story both languages tell. The script, once loaded, has built under
+    // The native half of the story that both languages run. The script, once loaded, has built under
     // the root a Panel "panel" holding a Label "title" (text "Hunt") and, at the root, a Button
     // "go" (80 x 30 at the origin, text "Go", class "primary") listening for clicks.
     void CheckStory(GuiBed& bed)
@@ -134,8 +136,8 @@ namespace
     // click handler destroys it and records whether it was still valid inside the handler.
     void CheckHandles(GuiBed& bed)
     {
-        // A destroy inside a click handler completes after it: valid in the handler and until the
-        // GUI's update ends.
+        // A destroy inside a click handler completes after the handler: the element stays valid
+        // in the handler and until the GUI's update ends.
         bed.Click(Float2{110.0f, 10.0f});
         CHECK(bed.Number(u8"byeValidInHandler") == doctest::Approx(1.0));
         CHECK(bed.Number(u8"byeValid") == doctest::Approx(1.0));
@@ -164,7 +166,7 @@ namespace
 
 namespace
 {
-    // The binding story (G5) both languages tell. Before the script loads, the GUI's data holds
+    // The binding story that both languages run. Before the script loads, the GUI's data holds
     // score 3 and volume 0.5. The script builds, under the root: a Label bound to "Score: " and the
     // score text (bind, a function reading gui.getText), a Slider bound both ways to volume
     // (bindData), and a Label bound to the slider's value (a function reading slider.value), and
@@ -212,7 +214,7 @@ namespace
 
 namespace
 {
-    // The command story (G7) both languages tell. The script defines "music" (label "Music"),
+    // The command story that both languages run. The script defines "music" (label "Music"),
     // handles it on the root by toggling its checked state, binds a CheckBox and F5 to it, and offers
     // switchOff() (disables it) and runIt() (runs it, returning 1 when a handler ran).
     void CheckCommands(GuiBed& bed)
@@ -287,8 +289,8 @@ TEST_CASE("gui-script: Luau defines, handles and runs commands")
 
 namespace
 {
-    // A script capturing keys (E12): the next key's name lands in the data as `captured`, and a
-    // key bound from it runs its command.
+    // A script capturing keys: the next key's name lands in the data as `captured`, and a key
+    // bound from that name runs its command.
     void CheckCapture(GuiBed& bed)
     {
         gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
@@ -586,7 +588,7 @@ TEST_CASE("gui-script: a Luau handler reads the event and takes it")
 
 namespace
 {
-    // Two fingers spread from 100 apart to 200 over the pad, then turned a quarter (E17c).
+    // Two fingers spread from 100 apart to 200 over the pad, then turn a quarter.
     void CheckGestures(GuiBed& bed)
     {
         REQUIRE(bed.errors.count == 0);
@@ -715,10 +717,11 @@ TEST_CASE("gui-script: an AngelScript source and targets drag and drop, a dragqu
 
 namespace
 {
-    // Motion from a script (E14): the script has put a Label "box" first under the root, tweening
-    // its x to 100 over a second (a callback at the end), playing a sequence that moves its y to 50
-    // over a second, waits half a second and calls back, and a Slider second, springing its value
-    // to 0.4. `finishedCount` counts the callbacks; `keptDone` reads the kept tween.
+    // Motion from a script. The script has put a Label "box" first under the root. It tweens the
+    // label's x to 100 over a second, with a callback at the end, and plays a sequence that moves
+    // its y to 50 over a second, waits half a second and calls back. A Slider comes second, and
+    // its value springs to 0.4. `finishedCount` counts the callbacks; `keptDone` reports whether
+    // the tween the script kept a handle to has finished.
     void CheckMotion(GuiBed& bed)
     {
         REQUIRE(bed.errors.count == 0);
@@ -734,10 +737,10 @@ namespace
         advance(0.5);
         CHECK(box->GetPosition().x == doctest::Approx(100.0f));
         CHECK(box->GetPosition().y == doctest::Approx(50.0f));
-        CHECK(bed.Number(u8"finishedCount") == doctest::Approx(1.0)); // the tween's
+        CHECK(bed.Number(u8"finishedCount") == doctest::Approx(1.0)); // the tween's callback
         CHECK(bed.Number(u8"keptDone") == doctest::Approx(1.0));
         advance(0.5);
-        CHECK(bed.Number(u8"finishedCount") == doctest::Approx(2.0)); // and the sequence's call
+        CHECK(bed.Number(u8"finishedCount") == doctest::Approx(2.0)); // then the sequence's callback
         for (int i = 0; i < 300; ++i)
             advance(1.0 / 60.0);
         CHECK(slider->GetValue() == doctest::Approx(0.4).epsilon(0.01));
@@ -796,9 +799,10 @@ TEST_CASE("gui-script: Luau tweens, springs and plays a sequence (E14)")
 
 namespace
 {
-    // Leaving (K0): the script has put a Button "card" (class "card") under the root, listening for
-    // `transitionend` (`heardOpacity` is 1 once it heard the opacity's, `heardElapsed` its seconds),
-    // and offers `goAway()`, which makes it leave, and `leaving()`, which reads whether it is.
+    // Leaving: the script has put a Button "card" (class "card") under the root and listens for
+    // `transitionend`. `heardOpacity` is 1 once it heard the opacity transition end, and
+    // `heardElapsed` holds that transition's seconds. It offers `goAway()`, which makes the button
+    // leave, and `leaving()`, which reads whether it is leaving.
     void CheckLeaving(GuiBed& bed)
     {
         REQUIRE(bed.errors.count == 0);
@@ -874,8 +878,8 @@ TEST_CASE("gui-script: Luau makes a node leave and hears its transition end (K0)
 
 namespace
 {
-    // A data value tweened (K3): the script tweens `score` (0 at first) to 10 over a second and
-    // offers `done()`, whether its tween ended.
+    // A data value tweened: the script tweens `score` (0 at first) to 10 over a second and offers
+    // `done()`, which reports whether the tween ended.
     void CheckDataTween(GuiBed& bed)
     {
         REQUIRE(bed.errors.count == 0);
@@ -926,7 +930,7 @@ TEST_CASE("gui-script: Luau tweens a data value (K3)")
 
 namespace
 {
-    // The input kind (K2b): the script offers `isPad()` from gui.inputKind(), and counts the
+    // The input kind: the script offers `isPad()` from gui.inputKind(), and counts the
     // root's `inputkind` events in `changes()`.
     void CheckInputKind(GuiBed& bed)
     {
@@ -995,7 +999,7 @@ TEST_CASE("gui-script: Luau hears an event a library names, with its detail (K4)
 
 namespace
 {
-    // Listener tokens (E16): the script put a Button 80 x 30 at the origin, listening for clicks
+    // Listener tokens: the script put a Button 80 x 30 at the origin, listening for clicks
     // twice: `once` stops itself from inside, `always` stays until `stopAlways` turns it off.
     void CheckOff(GuiBed& bed)
     {
@@ -1007,7 +1011,7 @@ namespace
         bed.Click(Float2{10.0f, 10.0f});
         CHECK(bed.Number(u8"onceCount") == doctest::Approx(1.0)); // it stopped itself
         CHECK(bed.Number(u8"alwaysCount") == doctest::Approx(2.0));
-        CHECK(bed.Number(u8"stopAlways") == doctest::Approx(1.0)); // off said it was there
+        CHECK(bed.Number(u8"stopAlways") == doctest::Approx(1.0)); // off reported the listener was there
         bed.Click(Float2{10.0f, 10.0f});
         CHECK(bed.Number(u8"alwaysCount") == doctest::Approx(2.0));
         CHECK(bed.Number(u8"stopAlways") == doctest::Approx(0.0)); // and now it is not
@@ -1064,10 +1068,10 @@ TEST_CASE("gui-script: Luau turns listeners off, from inside one too (E16)")
 
 namespace
 {
-    // Windows, menus and popups from a script (E16): under the root, a Window opened in place
-    // (listened to for `close`), a Menu with one item "open" (its `activate` listened to), a Button
-    // and a Panel; `openMenu` opens the menu at (20, 20), `openPanel` the panel as the button's
-    // popup (an open auto popup closes another, so one at a time).
+    // Windows, menus and popups from a script. Under the root the script has a Window opened in
+    // place, listened to for `close`; a Menu with one item "open", whose `activate` it listens to;
+    // a Button; and a Panel. `openMenu` opens the menu at (20, 20) and `openPanel` opens the panel
+    // as the button's popup. Opening an auto popup closes any other, so one is open at a time.
     template <typename T>
     T* FindIn(gui::Node& node)
     {
@@ -1084,7 +1088,7 @@ namespace
         REQUIRE(bed.errors.count == 0);
         (void)bed.root->UpdateLayout();
         gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
-        // Held: closing removes the script's window from the page, its only other owner.
+        // Hold the window: closing it removes it from the page, which is its only other owner.
         const RefPtr<gui::Window> window(FindIn<gui::Window>(*bed.root));
         gui::Menu* menu = FindIn<gui::Menu>(*bed.root);
         gui::Panel* panel = FindIn<gui::Panel>(*bed.root);
@@ -1102,8 +1106,8 @@ namespace
         bed.Click(item->ConvertToWorldSpace(Float2{item->GetSize().x * 0.5f, item->GetSize().y * 0.5f}));
         CHECK(bed.Number(u8"pickedOpen") == doctest::Approx(1.0));
         CHECK_FALSE(menu->IsOpen());
-        // Closed, the script's menu went back where it waits (nothing else keeps it), unseen there,
-        // and opens again.
+        // Once closed, the script's menu returns to where it waits between openings, since
+        // nothing else holds it. It is not displayed there, and it opens again.
         CHECK(menu->GetParent() != nullptr);
         CHECK_FALSE(menu->IsDisplayed());
         bed.Run(u8"openMenu");
@@ -1198,7 +1202,7 @@ TEST_CASE("gui-script: Luau opens windows, menus and popups of its own (E16)")
 
 namespace
 {
-    // A script's list model and localized texts (E16): the script made a ListModel of three rows,
+    // A script's list model and localized texts: the script made a ListModel of three rows,
     // shown by a ListView it put first under the root, and keeps `edit` to change it; the GUI's
     // localization has `title` and the plural `lives`.
     struct Texts
@@ -1283,7 +1287,7 @@ TEST_CASE("gui-script: Luau fills a list model and reads localized texts (E16)")
 
 namespace
 {
-    // Toasts from a script (T7 of round three): the script found the host the bed placed, filled in
+    // Toasts from a script: the script found the host the bed placed, filled in
     // a request (a title, a message, success, staying, the class `pop`, an action "reveal") and
     // posted it, posted a widget's toast, and listens for `activate` on the host, writing the
     // pressed action's id to the data as `pressed`.

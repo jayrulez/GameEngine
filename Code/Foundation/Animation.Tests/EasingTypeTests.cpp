@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// EasingType -> core easing function mapping. Ported from Sedulous.Animation.Tests.EasingTypeTests.
+// The mapping from EasingType to the core easing functions.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

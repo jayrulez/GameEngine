@@ -44,8 +44,8 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
     float3 V = ViewDirToViewer(P, ortho);
 
     // uv-space march radius for this pixel's depth (under orthographic, the same at every depth).
-    // NDC spans [-1,1] (length 2) -> uv [0,1] (length 1), hence the /2. Clamp: at least one texel,
-    // at most a quarter screen.
+    // NDC spans [-1,1] (length 2) and uv spans [0,1] (length 1), hence the /2. The radius is clamped
+    // to at least one texel and at most a quarter of the screen.
     float screenR = pc.Radius * pc.ProjScaleY / (2.0 * max(ProjectionDivide(P, ortho), 1e-3));
     screenR = clamp(screenR, pc.TexelSize.y, 0.25);
 
@@ -71,8 +71,9 @@ float4 main(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target {
         float3 projN = N - planeN * dot(N, planeN);
         float  projLen = length(projN);
         if (projLen < 1e-4) { continue; }
-        // Signed projected-normal angle; sign must match the reference (-sign(dot(projN,T))) or the arc
-        // is corrupted on curved surfaces (where N varies) while looking fine on flat camera-facing faces.
+        // Signed projected-normal angle. The sign must match the GTAO reference (-sign(dot(projN,T))),
+        // or the arc is corrupted on curved surfaces (where N varies) while flat camera-facing faces
+        // still look right.
         float  cosN = clamp(dot(projN, V) / projLen, -1.0, 1.0);
         float  n = -sign(dot(projN, T)) * acos(cosN);
 

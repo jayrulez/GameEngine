@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Block-compressed texture upload+sample acceptance probe (asset-variants P1f). On real Vulkan +
-// WebGPU via the shared RHI.TestSupport readback substrate; STRUCTURAL assertions (no golden images).
+// Block-compressed texture upload and sampling, on real Vulkan and WebGPU through the shared
+// RHI.TestSupport readback helpers. The assertions are structural; there are no golden images.
 //
-// Proves the whole compressed path end to end on the GPU: encode a solid-color image to a BC format
-// (texture.compression, the cook's encoder), create a BC RHI texture, upload it with the block-aware
-// layout the runtime loader uses (bytesPerRow = one block-row, rowsPerImage = block rows - the same
-// rhi:: helpers TextureResource's factory calls), then sample it on an unlit cube and read the color
-// back. If the block-row math or the backend's compressed buffer->image copy were wrong, the sampled
-// color would be garbage. Runs on both backends, so it also covers WebGPU's 256-aligned upload path.
+// The test covers the whole compressed path on the GPU: encode a solid-color image to a BC format
+// (texture.compression, the cook's encoder), create a BC RHI texture, upload it with the
+// block-aware layout the runtime loader uses (bytesPerRow is one row of blocks, rowsPerImage the
+// number of block rows, from the same rhi:: helpers TextureResource's factory calls), then sample
+// it on an unlit cube and read the color back. If the block-row math or the backend's compressed
+// buffer-to-image copy were wrong, the sampled color would be garbage. Running on both backends
+// also covers WebGPU's 256-byte-aligned upload path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -101,7 +102,7 @@ namespace
             return nullptr;
         }
 
-        // Upload exactly as TextureResource's factory does: block-row pitch + block rows.
+        // Upload as TextureResource's factory does: the pitch of one block row, and block rows.
         rhi::Queue* queue = device.GetQueue(rhi::QueueType::Graphics, 0);
         rhi::TransferBatch* batch = nullptr;
         if (queue == nullptr || !queue->CreateTransferBatch(batch).IsOk() || batch == nullptr)
@@ -227,9 +228,7 @@ namespace
         return out;
     }
 
-    // The brightest textured pixel (the cube face most head-on): its channels should match the
-    // decoded BC texel. Returns that pixel's RGB.
-    // An 8x8 RGBA8 texture uploaded with a PADDED row pitch: 32 bytes of red texels then 32
+    // An 8x8 RGBA8 texture uploaded with a padded row pitch: 32 bytes of red texels then 32
     // bytes of blue padding per row. A backend that ignores TextureDataLayout::bytesPerRow reads
     // the padding as the next row's texels and the texture comes out half blue.
     rhi::TextureView* MakePaddedRgba8Texture(rhi::Device& device, rhi::Texture*& outTexture)
@@ -314,6 +313,8 @@ namespace
         return count;
     }
 
+    // The brightest textured pixel (the cube face most head-on): its channels should match the
+    // decoded BC texel. Returns that pixel's RGB.
     void BrightestRgb(const testsupport::CapturedImage& img, u32& outR, u32& outG, u32& outB)
     {
         u32 best = 0;
@@ -335,8 +336,9 @@ namespace
         }
     }
 
-    // A format the device can actually sample (spec/driver capability). BC is desktop; ASTC is
-    // mobile - desktop GPUs usually lack it, so the ASTC leg self-skips here rather than failing.
+    // Whether the device can sample `format`, by spec and driver capability. BC is a desktop
+    // family and ASTC a mobile one; desktop GPUs usually lack ASTC, so the ASTC case skips itself
+    // there rather than failing.
     bool SupportsSampled(rhi::Device& device, rhi::TextureFormat format)
     {
         return (device.GetFormatSupport(format) & rhi::FormatSupport::Texture) ==
@@ -355,7 +357,7 @@ namespace
         const Case cases[] = {
             {"BC1-red", rhi::TextureFormat::BC1RGBAUnorm, 230, 20, 20, 0},
             {"BC7-green", rhi::TextureFormat::BC7RGBAUnorm, 20, 220, 20, 1},
-            {"BC5-normalRG", rhi::TextureFormat::BC5RGUnorm, 200, 40, 0, 0}, // BC5 keeps R,G; B=0
+            {"BC5-normalRG", rhi::TextureFormat::BC5RGUnorm, 200, 40, 0, 0}, // BC5 keeps R and G; B is 0
             {"ASTC-blue", rhi::TextureFormat::ASTC4x4Unorm, 20, 20, 225, 2}, // mobile-web family
             {"BC6H-red", rhi::TextureFormat::BC6HRGBUfloat, 230, 20, 20, 0},  // HDR (unsigned half)
         };
@@ -363,7 +365,7 @@ namespace
         {
             if (!SupportsSampled(device, c.format))
             {
-                // Expected for ASTC on desktop GPUs (a mobile family); the leg runs on capable HW.
+                // Expected for ASTC on desktop GPUs; the case runs on hardware that supports it.
                 std::printf("[bc] %-8s %-12s format unsupported - skipped\n", backendName, c.name);
                 continue;
             }
@@ -381,8 +383,8 @@ namespace
             // The cube actually shows the texture (not black): the dominant channel is clearly lit.
             const u32 dom = c.dominant == 0 ? pr : (c.dominant == 1 ? pg : pb);
             CHECK(dom > 120);
-            // ...and the dominant channel really dominates - the BC decode preserved the hue, so the
-            // upload placed the right block bytes at the right pitch (a wrong pitch smears/garbles).
+            // The dominant channel really dominates: the BC decode preserved the hue, so the upload
+            // placed the right block bytes at the right pitch. A wrong pitch smears or garbles it.
             if (c.dominant != 0) CHECK(dom > pr);
             if (c.dominant != 1) CHECK(dom > pg);
             if (c.dominant != 2) CHECK(dom > pb);
@@ -404,8 +406,8 @@ namespace
         std::printf("[padded] %-8s red-dominant=%u blue-dominant=%u\n", backendName, red, blue);
         INFO(backendName, " red=", red, " blue=", blue);
         CHECK(red > 0);
-        // Padding never reaches the texture: no face pixel reads blue. (With the row pitch
-        // ignored, half the texels are padding and the cube shows blue columns.)
+        // Padding never reaches the texture: no face pixel reads blue. With the row pitch ignored,
+        // half the texels are padding and the cube shows blue columns.
         CHECK(blue == 0u);
         device.DestroyTextureView(view);
         device.DestroyTexture(tex);
@@ -482,8 +484,8 @@ TEST_CASE("bc-texture: block-compressed textures upload + sample correctly on re
 
 TEST_CASE("bc-texture: a padded row pitch uploads without its padding becoming pixels")
 {
-    // Found by the Beef port: the Vulkan transfer batch stored TextureDataLayout and never
-    // passed it to VkBufferImageCopy, so a padded upload copied its padding as texels.
+    // A backend must pass TextureDataLayout's row pitch to its copy (VkBufferImageCopy on
+    // Vulkan); otherwise a padded upload copies its padding as texels.
     ForEachBackend(&ProbePaddedUpload);
 }
 

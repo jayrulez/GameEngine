@@ -3,10 +3,9 @@
 
 // GUI - `foundation.gui.vfs`: an IResourceProvider backed by a VFS filesystem.
 //
-// The concrete image loader for the GUI's CSS resource seam: background-image: url(path) resolves
-// through this. Kept in a SEPARATE module (like foundation.gui.shell, and mirroring
-// foundation.ui.vfs) so the core foundation.gui stays free of a VFS dependency - the app links this
-// and hands the provider to a StyleManager. Modeled on foundation.ui.vfs::VfsResourceProvider.
+// The concrete image loader for the GUI's CSS resources: background-image: url(path) resolves
+// through this. It is a separate module (as foundation.gui.shell is) so the core foundation.gui
+// stays free of a VFS dependency; the app links this and hands the provider to a StyleManager.
 //
 // The provider owns the decoded images, one per path, matching the IResourceProvider contract that
 // LoadImage returns a borrowed, provider-owned pointer: a sheet restyled every frame asks again
@@ -40,9 +39,9 @@ export namespace foundation::gui::vfs
         {
         }
 
-        // Load + decode image data at `path` the first time it is asked for. Returns a borrowed
+        // Loads and decodes the image at `path` the first time it is asked for. Returns a borrowed
         // pointer owned by this provider (the same one for the same path), or null if the file is
-        // missing or fails to decode (asked again, it tries again: it may have arrived).
+        // missing or fails to decode. A later call tries again, since the file may have arrived.
         const image::ImageData* LoadImage(core::StringView path) override
         {
             if (m_fs == nullptr)
@@ -75,7 +74,7 @@ export namespace foundation::gui::vfs
             return raw;
         }
 
-        // A text file read whole (a sheet's @import).
+        // Reads a whole text file (for a sheet's @import).
         bool LoadText(core::StringView path, core::String& out) override
         {
             if (m_fs == nullptr)
@@ -93,8 +92,8 @@ export namespace foundation::gui::vfs
             return true;
         }
 
-        // An SVG parsed the first time it is asked for, kept (asked again after a failure, it tries
-        // again: it may have arrived).
+        // Parses an SVG the first time it is asked for and keeps it. After a failure, a later call
+        // tries again, since the file may have arrived.
         const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) override
         {
             for (const SvgEntry& e : m_svgs)

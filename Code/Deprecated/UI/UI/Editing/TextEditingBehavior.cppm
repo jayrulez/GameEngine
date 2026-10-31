@@ -4,16 +4,13 @@
 // UI - :text_editing_behavior partition
 //
 // Reusable text-editing logic: cursor management, selection, keyboard shortcuts, mouse interaction,
-// clipboard, and undo/redo. Operates on CHARACTER indices (not byte offsets), talking to its host
-// purely through ITextEditHost - so this partition is View-independent (no cycle). Ported from
-// Sedulous.UI/src/Editing/TextEditingBehavior.bf.
+// clipboard, and undo/redo. Operates on character indices (not byte offsets), talking to its host
+// only through ITextEditHost, so this partition is View-independent (no cycle).
 //
-// Port taxes: Beef `for (c in host.Text.DecodedChars)` codepoint iteration -> core::DecodeUtf8
-// over the host's UTF-8 Text(); `charStr.Append(char32)` -> core::AppendUtf8. The owned heap
-// `InputFilter` becomes an Optional<InputFilter> (value type). char32.IsLetterOrDigit is approximated
-// (ASCII alnum plus any codepoint >= 0x80 treated as a word char); faithful enough for the ported
-// tests, noted for later. The host accessors GetMaxLength()/GetIsReadOnly() are the `Get`-prefixed
-// ITextEditHost members (see :itext_edit_host).
+// Codepoints come from core::DecodeUtf8 over the host's UTF-8 Text(). The input filter is an
+// Optional<InputFilter> held by value. Word characters are approximated (see IsLetterOrDigit). The
+// host accessors GetMaxLength()/GetIsReadOnly() are the `Get`-prefixed ITextEditHost members (see
+// :itext_edit_host).
 
 module;
 #include "Core/Prelude.h"
@@ -342,7 +339,7 @@ export namespace foundation::ui
         }
 
     private:
-        // Collect the host text as codepoints (mirrors Beef's DecodedChars materialization).
+        // Collect the host text as codepoints.
         void CollectChars(Array<char32_t>& out) const
         {
             const StringView text = m_host->Text();
@@ -845,8 +842,8 @@ export namespace foundation::ui
             return p;
         }
 
-        // Beef used char32.IsLetterOrDigit (full Unicode). Approximation: ASCII alnum plus any
-        // codepoint >= 0x80 (treated as a letter). Faithful for the ASCII test corpus.
+        // An approximation of a Unicode letter-or-digit test: ASCII alphanumerics, plus any
+        // codepoint >= 0x80 treated as a letter. Exact for ASCII text.
         [[nodiscard]] static bool IsLetterOrDigit(char32_t c)
         {
             return (c >= U'0' && c <= U'9') || (c >= U'a' && c <= U'z') ||

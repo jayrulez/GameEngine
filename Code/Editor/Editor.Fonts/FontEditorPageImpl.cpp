@@ -135,7 +135,7 @@ namespace editor
     {
         if (m_activeSlot != nullptr)
         {
-            m_activeSlot->pageAlive = false; // completion closure still owns + deletes it
+            m_activeSlot->pageAlive = false; // the completion closure still owns and deletes it
             m_activeSlot = nullptr;
         }
     }
@@ -159,7 +159,7 @@ namespace editor
         const pipeline::FontAsset* asset = ObjectAs<pipeline::FontAsset>();
         if (asset == nullptr)
             return;
-        // A distance field bakes one size; the ramp is a raster's alone.
+        // A distance field bakes one size; only a raster font has a ramp.
         const bool raster = asset->mode == pipeline::FontBakeMode::RasterRamp;
         if (gui::PropertyInfo* info = m_ramp->FindInfo(kSizesPath); info != nullptr && info->Visible != raster)
         {
@@ -189,7 +189,7 @@ namespace editor
         request.path =
             PathJoin(Context().Project()->SourcesRoot().AsView(), asset->fileName.View());
         request.distanceField = asset->mode == pipeline::FontBakeMode::DistanceField;
-        // Coverage previews at the ramp's LARGEST size (the most informative atlas).
+        // Coverage previews at the ramp's largest size (the most informative atlas).
         request.size = asset->distanceFieldSize;
         request.distanceFieldRange = asset->distanceFieldRange;
         if (!request.distanceField)
@@ -211,7 +211,8 @@ namespace editor
         return request;
     }
 
-    // Worker-side (or synchronous fallback): pure CPU, touches ONLY the request + outcome.
+    // Worker side (or the synchronous fallback): pure CPU, touching only the request and the
+    // outcome.
     void FontEditorPage::RunBake(const BakeRequest& request, BakeOutcome& outcome)
     {
         outcome.generation = request.generation;
@@ -268,7 +269,7 @@ namespace editor
             }
             // Decode the field for the preview: median(r,g,b) is the signed distance
             // (0.5 = the glyph edge); a narrow ramp around it approximates the DF
-            // shader's screen-space anti-aliasing. Showing the RAW channels here reads
+            // shader's screen-space anti-aliasing. Showing the raw channels here reads
             // as rainbow noise.
             const Span<const u8> field = atlas->PixelData();
             Array<u8> decoded(field.Size());
@@ -320,7 +321,7 @@ namespace editor
         }
         if (m_bakeBusy)
         {
-            m_pendingRequest = Move(request); // latest-wins; submitted when the flight lands
+            m_pendingRequest = Move(request); // the latest wins; submitted when the bake in flight completes
             m_pendingValid = true;
             return;
         }

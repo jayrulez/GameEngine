@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// CollisionShapeAsset + PhysicalMaterialAsset reflected surface, and the
-// CollisionCookKind enum. Verifies authored properties enumerate with attributes, round-trip
-// through get/set, and that the cook-mode enum resolves named values.
+// CollisionShapeAsset's and PhysicalMaterialAsset's reflected surface, and the
+// CollisionCookKind enum. Verifies authored properties enumerate with attributes and round-trip
+// through get and set, and that the cook-mode enum resolves named values.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"

@@ -5,8 +5,7 @@
 //
 // IFontAtlasBaker for TrueType/OpenType: bakes a TrueTypeFont into a
 // TrueTypeFontAtlas via stb's pack-font-range. Requires a concrete
-// TrueTypeFont (checked via the no-RTTI backend tag). Ported from
-// Sedulous.Fonts.TTF/TrueTypeFontAtlasBaker.bf.
+// TrueTypeFont (checked via the no-RTTI backend tag).
 
 module;
 #include "Core/Prelude.h"
@@ -44,7 +43,7 @@ export namespace foundation::fonts
             return font.BackendTypeId() == kTrueTypeFontTypeId;
         }
 
-        // This baker produces COVERAGE atlases only; distance-field requests go to the MSDF baker.
+        // This baker produces coverage atlases only; distance-field requests go to the MSDF baker.
         [[nodiscard]] bool CanBake(const IFont& font, const FontLoadOptions& options) const override
         {
             return font.BackendTypeId() == kTrueTypeFontTypeId &&

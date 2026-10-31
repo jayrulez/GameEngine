@@ -1,6 +1,6 @@
 // Lesson 6: Dissolve. Cutting holes in a surface, and its shadow.
 //
-// Builds on lesson 3. New here: alpha on a MASKED material (Blend Mode: Masked on the material
+// Builds on lesson 3. New here: alpha on a masked material (Blend Mode: Masked on the material
 // page): wherever alpha falls below the cut-off the surface is not drawn at all, and because the
 // engine runs the same Surface() for the shadow and the depth, the shadow has the holes too. A
 // float property named AlphaCutoff sets the cut-off (without one it is a half). A noise texture

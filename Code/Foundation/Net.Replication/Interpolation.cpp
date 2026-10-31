@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Net.Replication - implementation unit: client-side snapshot interpolation (LerpFieldValue
-// + InterpolationBuffer). Separate from ReplicationImpl.cpp - a distinct concern (playback smoothing),
-// same module. Depends only on Core reflection (no wire).
+// Foundation::Net.Replication - implementation unit: client-side snapshot interpolation
+// (LerpFieldValue and InterpolationBuffer). Playback smoothing is its own concern, so it sits apart
+// from ReplicationImpl.cpp in the same module. It depends only on Core reflection, not the wire.
 
 module;
 #include "Core/Prelude.h"
@@ -22,8 +22,8 @@ namespace foundation::net
     {
         [[nodiscard]] f32 Lerp(f32 a, f32 b, f32 t) noexcept { return a + (b - a) * t; }
 
-        // Normalized-lerp with shortest-path selection - cheap, stable for the small per-tick deltas
-        // interpolation sees (full slerp is overkill at 10-20 Hz).
+        // Normalized lerp along the shortest path: cheap, and stable for the small per-tick deltas
+        // interpolation sees (a full slerp buys nothing at 10-20 Hz).
         [[nodiscard]] Quaternion NLerp(const Quaternion& a, const Quaternion& b, f32 t) noexcept
         {
             const f32 dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
@@ -116,7 +116,7 @@ namespace foundation::net
         }
         tl.samples.PushBack(Move(s));
 
-        // Prune samples older than the history window, always keeping at least the last two (to bracket).
+        // Prune samples older than the history window, keeping at least the last two (to bracket).
         const f64 cutoff = timestampMs - m_historyMs;
         while (tl.samples.Size() > 2 && tl.samples[0].time < cutoff)
         {
@@ -143,7 +143,7 @@ namespace foundation::net
         }
         const Array<StateSample>& ss = tl->samples;
 
-        // Bracket renderTime: bi = first sample at/after it.
+        // Bracket renderTime: bi is the first sample at or after it.
         usize bi = ss.Size();
         for (usize i = 0; i < ss.Size(); ++i)
         {
@@ -161,12 +161,12 @@ namespace foundation::net
         {
             a = &ss[0];
             b = &ss[0];
-        } // before window -> earliest
+        } // before the window: the earliest
         else if (bi >= ss.Size())
         {
             a = &ss[ss.Size() - 1];
             b = a;
-        } // after window -> latest
+        } // after the window: the latest
         else
         {
             a = &ss[bi - 1];

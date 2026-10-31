@@ -3,13 +3,14 @@
 
 // GUI - :image partition
 //
-// Image: a picture in its content box (E6 of Specs/gui-lab-evolution.md), placed as CSS places a
-// replaced element's: `object-fit` (fill, contain, cover, none, scale-down) sizes it,
-// `object-position` places it (keywords, percentages or pixels, centred by default), and cover
-// clips what overflows. Its picture is a Drawable from code or `src` from markup or a sheet,
-// loaded through the GUI's resource provider when first needed. `image-color` tints it (RmlUi's
-// name), for one that can be tinted. Sized by one axis alone, it keeps its picture's aspect ratio
-// on the other, as an <img> does. (A nine-slice stays with backgrounds.)
+// Image: a picture drawn in the widget's content box, placed the way CSS places a replaced
+// element. `object-fit` (fill, contain, cover, none, scale-down) sizes the picture,
+// `object-position` places it (keywords, percentages or pixels, centred by default), and any part
+// that overflows the box is clipped. The picture is a Drawable set from code, or a `src` path from
+// markup or a style sheet, loaded through the GUI's resource provider when first needed.
+// `image-color` (the name RmlUi uses) tints pictures that support tinting. When the style sizes
+// only one axis, the other follows the picture's aspect ratio, as with an <img>. Nine-slice
+// pictures are not handled here; they belong to backgrounds.
 
 module;
 #include "Core/Prelude.h"
@@ -36,15 +37,15 @@ export namespace foundation::gui
     /// How a picture fills its box (CSS's object-fit).
     enum class ObjectFit : u8
     {
-        Fill,      ///< stretched to the box, its aspect ignored
-        Contain,   ///< the largest that fits, aspect kept
-        Cover,     ///< the smallest that covers, aspect kept, clipped
-        None,      ///< its natural size
-        ScaleDown, ///< none or contain, whichever is smaller
+        Fill,      ///< stretched to the box, ignoring the aspect ratio
+        Contain,   ///< the largest size that fits, keeping the aspect ratio
+        Cover,     ///< the smallest size that covers the box, keeping the aspect ratio, clipped
+        None,      ///< the picture's natural size
+        ScaleDown, ///< None or Contain, whichever is smaller
     };
 
-    /// Where a picture sits in its box on one axis (CSS's object-position): a share of the room
-    /// left over, plus pixels.
+    /// Where a picture sits in its box on one axis (CSS's object-position): a fraction of the
+    /// space left over, plus an offset in pixels.
     struct ObjectPositionAxis
     {
         f32 Share = 0.5f;
@@ -58,18 +59,18 @@ export namespace foundation::gui
     public:
         Image() { SetTag(core::StringView(u8"image")); }
 
-        /// Its picture from code (ending one from `src`).
+        /// Sets the picture from code. This clears any `src` path.
         void SetDrawable(RefPtr<Drawable> drawable)
         {
             m_source = core::String{};
             m_sourceLoaded = true;
             m_drawable = core::Move(drawable);
-            RequestLayout(); // its size follows its picture's
+            RequestLayout(); // the widget's size follows the picture's
             Invalidate();
         }
         [[nodiscard]] Drawable* GetDrawable() const noexcept { return m_drawable.Get(); }
 
-        /// Its picture by path, loaded through the GUI's resource provider when first needed.
+        /// Sets the picture by path; it loads through the GUI's resource provider when first needed.
         void SetSource(const core::String& path)
         {
             if (path == m_source)
@@ -88,7 +89,8 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] ObjectFit GetFit() const noexcept { return m_fit; }
-        /// CSS's keywords (markup's and a sheet's `object-fit`); one it does not know is fill.
+        /// Sets the fit from a CSS keyword (the `object-fit` property of markup and style sheets).
+        /// An unknown keyword means fill.
         void SetFitName(const core::String& name)
         {
             static constexpr core::StringView kNames[] = {u8"fill", u8"contain", u8"cover", u8"none", u8"scale-down"};
@@ -110,8 +112,9 @@ export namespace foundation::gui
             m_positionY = y;
             Invalidate();
         }
-        /// CSS's object-position: one or two of left, center, right, top, bottom, a percentage or
-        /// pixels ("right 8px" reads as right then pixels from the left).
+        /// Sets the position from CSS object-position text: one or two values, each one of left,
+        /// center, right, top, bottom, a percentage or pixels. "right 8px" means right on the
+        /// horizontal axis and 8 pixels on the vertical.
         void SetObjectPositionName(const core::String& text)
         {
             ObjectPositionAxis x, y;
@@ -154,7 +157,8 @@ export namespace foundation::gui
                     a.Pixels = ParseNumber(digits);
                     either = true;
                 }
-                // The first word along whichever axis it names, the second the other.
+                // A keyword that names an axis sets that axis. A value that fits either axis
+                // (center, a percentage, pixels) sets x, or y when x is already set.
                 if (vertical || (either && haveX && !haveY))
                 {
                     y = a;
@@ -170,7 +174,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::String GetObjectPositionName() const
         {
-            // Shares as percentages, pixels added (`50% 0%`, `0% 8px`).
+            // Writes each axis as pixels when it has a pixel offset, otherwise as a percentage
+            // (`50% 0%`, `0% 8px`).
             const auto axis = [](ObjectPositionAxis a)
             {
                 return a.Pixels != 0.0f ? core::Format(u8"{}px", a.Pixels) : core::Format(u8"{}%", a.Share * 100.0f);
@@ -178,7 +183,7 @@ export namespace foundation::gui
             return core::Format(u8"{} {}", axis(m_positionX), axis(m_positionY));
         }
 
-        /// The picture multiplied by this (`image-color`); white leaves it as it is.
+        /// Sets the colour the picture is multiplied by (`image-color`); white leaves it unchanged.
         void SetImageColor(Color color)
         {
             m_imageColor = color;
@@ -186,8 +191,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] Color GetImageColor() const noexcept { return m_imageColor; }
 
-        /// Its picture's size, or with one axis given by its style, that axis and the other by the
-        /// picture's aspect ratio (E2).
+        /// Returns the picture's natural size. When the style fixes one axis, that axis keeps its
+        /// size and the other follows the picture's aspect ratio.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
         {
             const Optional<core::Float2> natural = IntrinsicSize();
@@ -205,11 +210,12 @@ export namespace foundation::gui
         }
         [[nodiscard]] Optional<core::Float2> IntrinsicSize() const
         {
-            const_cast<Image*>(this)->LoadSource(); // a read: the picture `src` names, once loaded
+            const_cast<Image*>(this)->LoadSource(); // loads the `src` picture on first read
             return m_drawable ? m_drawable->IntrinsicSize() : Optional<core::Float2>{};
         }
 
-        /// Where the picture is drawn in its content box (it may pass the box's edges: cover, none).
+        /// Returns where the picture is drawn relative to the content box. With cover or none it may
+        /// extend past the box's edges.
         [[nodiscard]] Rect DrawnBounds() const
         {
             const Rect box = GetContentBounds();
@@ -233,9 +239,10 @@ export namespace foundation::gui
         }
 
     protected:
-        // Laid out, it asks for its picture if it has none yet: a box its style sizes is never
-        // measured by its content, and a picture still loading when it was set comes this way, as
-        // the host lays out again when one arrives.
+        // Layout loads the picture if it is not loaded yet. A box whose size comes from its style
+        // is never measured, so measuring alone would not load it. A picture that was still
+        // loading when it was set also arrives this way, because the host lays out again when a
+        // resource arrives.
         void OnLayout() override
         {
             LoadSource();
@@ -249,7 +256,7 @@ export namespace foundation::gui
                 return;
             const Rect at = DrawnBounds();
             const Rect box = GetContentBounds();
-            // What passes the box is clipped, as CSS clips a replaced element's content.
+            // Clip whatever extends past the box, as CSS clips a replaced element's content.
             const bool clip = at.x < box.x || at.y < box.y || at.x + at.width > box.x + box.width || at.y + at.height > box.y + box.height;
             if (clip)
                 ctx.PushClip(box);
@@ -268,15 +275,15 @@ export namespace foundation::gui
                 return;
             IResourceProvider* resources = GetResourceProvider();
             if (resources == nullptr)
-                return; // not in a GUI with one yet: tried again when drawn or measured
+                return; // not yet in a GUI with a resource provider; retried when drawn or measured
             m_drawable = PictureDrawable(*resources, m_source.AsView(), MemoryAllocator()); // an SVG drawn as paths
-            // A picture the resources do not have yet (a texture still loading) is asked for again
-            // when drawn or measured next: the host lays out again once one arrives.
+            // When the resources do not have the picture yet (a texture still loading), it is
+            // requested again on the next draw or measure; the host lays out again once it arrives.
             m_sourceLoaded = static_cast<bool>(m_drawable);
             if (m_sourceLoaded)
             {
-                RequestLayout(); // its size may follow the picture's
-                Invalidate();    // and a box sized by its style is drawn again, picture and all
+                RequestLayout(); // the widget's size may follow the picture's
+                Invalidate();    // a box sized by its style still has to redraw with the picture
             }
         }
         [[nodiscard]] static f32 ParseNumber(core::StringView text)

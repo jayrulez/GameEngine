@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Net.Replication - implementation unit: the field codec + the cached replicated-property
-// layout harvest. Free functions (no reflect bodies), but kept out of the interface unit so the
-// static layout cache + the type-dispatch table live in one TU.
+// Foundation::Net.Replication - implementation unit: the field codec and the cached
+// replicated-property layout harvest. They are kept out of the interface unit so the static layout
+// cache and the type-dispatch table live in one translation unit.
 
 module;
 #include "Core/Prelude.h"
@@ -15,7 +15,7 @@ module foundation.net.replication;
 import foundation.core;
 import foundation.net;
 import foundation.scene;
-import foundation.script.facades; // ComponentOf<T> + RegisterExtra* (the script `.of` surface, Track A)
+import foundation.script.facades; // ComponentOf<T>, RegisterExtra* (the script `.of` surface)
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -25,8 +25,9 @@ namespace foundation::net
 
     namespace
     {
-        // Reflected property/type names + attribute keys are ASCII const char*; borrow them as UTF-8
-        // views (StringView is char8_t-based; the reflection layer stores/compares keys the same way).
+        // Reflected property and type names and attribute keys are ASCII const char*; borrow them as
+        // UTF-8 views (StringView is char8_t-based; the reflection layer stores and compares keys the
+        // same way).
         [[nodiscard]] StringView Ascii(const char* s) noexcept
         {
             return s != nullptr ? StringView(reinterpret_cast<const char8_t*>(s)) : StringView{};
@@ -36,7 +37,7 @@ namespace foundation::net
             return FindAttribute(property, Ascii(kReplicatedAttribute));
         }
 
-        // Length-prefixed UTF-8 on the wire (the component type tag - SerializationTypeId).
+        // Length-prefixed UTF-8 on the wire (the component type tag, SerializationTypeId).
         void WriteWireString(BitWriter& writer, StringView s)
         {
             writer.WriteVarU32(static_cast<u32>(s.Size()));
@@ -55,7 +56,7 @@ namespace foundation::net
             return String(StringView(reinterpret_cast<const char8_t*>(buf.Data()), n));
         }
 
-        // FNV-1a over the component's on-disk type id - the baseline key (same family as RpcTable::Hash).
+        // FNV-1a over the component's on-disk type id: the baseline key (the same hash as RpcTable::Hash).
         [[nodiscard]] u32 HashTypeId(StringView s) noexcept
         {
             u32 h = 2166136261u;
@@ -92,9 +93,9 @@ namespace foundation::net
             return out;
         }
 
-        // Entity-record flags (shared by the snapshot + delta payloads).
-        constexpr u8 kFlagRemoved = 1u << 0; // entity despawned - destroy locally, no fields follow
-        constexpr u8 kFlagSpawn = 1u << 1;   // first delivery to this peer - a prefab Guid follows
+        // Entity-record flags (shared by the snapshot and delta payloads).
+        constexpr u8 kFlagRemoved = 1u << 0; // entity despawned: destroy locally, no fields follow
+        constexpr u8 kFlagSpawn = 1u << 1;   // first delivery to this peer: a prefab Guid follows
 
         void WriteGuid(BitWriter& w, const Guid& g)
         {
@@ -109,8 +110,8 @@ namespace foundation::net
             return g;
         }
 
-        // True if the component type has at least one replicated field worth interpolating (transform-
-        // like). Pure-discrete components are applied directly, never buffered/smoothed.
+        // True if the component type has at least one replicated field worth interpolating (transform
+        // like). Purely discrete components are applied directly, never buffered or smoothed.
         [[nodiscard]] bool HasInterpolatableField(const TypeInfo& type)
         {
             for (const PropertyInfo* p : ReplicatedProperties(type))
@@ -401,7 +402,7 @@ namespace foundation::net
             if (!reader.Ok())
             {
                 break;
-            } // ran past the end - don't apply a garbage read; caller sees the short count
+            } // ran past the end: do not apply a garbage read; the caller sees the short count
             (void)SetProperty(*property, instance, value);
             ++applied;
         }
@@ -424,19 +425,19 @@ namespace foundation::net
                        String(u8"Marks the entity as networked, giving it a network id and an "
                               u8"owner, server or client."))
             .DataVersion(1);
-        // Script (Track A): NetworkComponent.of(entity) -> read `authority` (is this entity server- or
-        // client-owned) for authority-gated gameplay, and `id` for logging. READ-ONLY: replication
-        // owns these, and none of them is itself replicated - a script assigning `authority` would
-        // desynchronise the two sides silently. `prefab` is replication's bookkeeping, not a
-        // script's business. The Net session facade stays app-global (Net.*).
+        // Script: NetworkComponent.of(entity) reads `authority` (whether the server or a client owns
+        // this entity) for authority-gated gameplay, and `id` for logging. They are read-only:
+        // replication owns them, and none of them is itself replicated, so a script assigning
+        // `authority` would silently desynchronise the two sides. `prefab` is replication's
+        // bookkeeping and is not exposed.
         builder.Method<&foundation::script::ComponentOf<NetworkComponent>, NetworkComponent>("of");
         builder.Property<&NetworkComponent::id>("id", PropertyFlags::ReadOnly);
         builder.Property<&NetworkComponent::authority>("authority", PropertyFlags::ReadOnly);
         builder.Property<&NetworkComponent::owner>("owner", PropertyFlags::ReadOnly); // whose: 0 = the host
     }
 
-    // NetworkedTransform: unlike NetworkComponent, its fields ARE replicated (kReplicatedAttribute), so
-    // the field codec captures/applies them and interpolation smooths them.
+    // NetworkedTransform: unlike NetworkComponent, its fields are replicated (kReplicatedAttribute), so
+    // the field codec captures and applies them and interpolation smooths them.
     REFLECT_VALUE(NetworkedTransform, "rtti::net")
     {
         builder.Attribute("displayName", String(u8"Networked Transform"))
@@ -463,9 +464,9 @@ namespace foundation::net
         mgr->ForEach(
             [&](NetworkedTransform& nt, scene::EntityHandle e)
             {
-                // An effectively-inactive entity's replicated state FREEZES (no capture) - it stays
-                // in snapshots (existence/identity are not simulation; the flag itself is not
-                // replicated).
+                // An effectively inactive entity's replicated state freezes (no capture). It stays in
+                // snapshots, since existence and identity are not simulation; the flag itself is not
+                // replicated.
                 if (!scene.IsEffectivelyActive(e))
                 {
                     return;
@@ -515,19 +516,19 @@ namespace foundation::net
 
     void RegisterNetworkComponentScriptFacade()
     {
-        RegisterReplicationComponents(); // build the TypeData (incl NetworkComponent's `of`) first
-        // Surface NetworkComponent to script (NetworkComponent.of(entity).authority): register + seed
-        // the emission root + name it for the behavior prelude, plus the NetworkAuthority enum so
-        // `authority` reads/compares. (NetworkedTransform is engine-managed replication plumbing, not a
-        // script surface.)
+        RegisterReplicationComponents(); // build the TypeData (including NetworkComponent's `of`) first
+        // Surface NetworkComponent to script (NetworkComponent.of(entity).authority): register it, seed
+        // it as an emission root and name it for the behavior prelude, and register the NetworkAuthority
+        // enum so `authority` can be read and compared. NetworkedTransform is replication plumbing and
+        // is not exposed to scripts.
         GlobalTypeRegistry().Register(TypeOf<NetworkAuthority>());
         GlobalTypeRegistry().Register(TypeOf<NetworkComponent>());
         foundation::script::RegisterExtraScriptRootType(&TypeOf<NetworkComponent>());
         foundation::script::RegisterExtraFacadeName(u8"NetworkComponent");
-        // NOTE: NetworkAuthority (an enum) is deliberately NOT facade-named. Some backends do not emit
-        // enum classes, so `import ... for NetworkAuthority` in the behavior prelude would fail to resolve
-        // and break EVERY behavior's compile. The enum crosses as its underlying int in script; in
-        // AngelScript it binds by registry (named) - handled by each backend, no prelude name needed.
+        // NetworkAuthority (an enum) is not facade-named. Some backends do not emit enum classes, so
+        // `import ... for NetworkAuthority` in the behavior prelude would fail to resolve and break the
+        // compile of every behavior. The enum crosses as its underlying int in script; AngelScript binds
+        // it by registry, so no prelude name is needed.
     }
 
     // ---- StateReplication -----------------------------------------------------------------------
@@ -559,8 +560,8 @@ namespace foundation::net
 
     namespace
     {
-        // A stable NetworkId derived from an entity's authored Guid: both peers load the SAME scene, so
-        // they compute the SAME id for the same entity WITHOUT any hand-authored ids. Never 0 (0 =
+        // A stable NetworkId derived from an entity's authored Guid: both peers load the same scene, so
+        // they compute the same id for the same entity without hand-authored ids. Never 0 (0 =
         // unassigned). Collisions are astronomically unlikely at a scene's entity count.
         inline NetworkId DeterministicNetworkId(const Guid& g) noexcept
         {
@@ -601,7 +602,7 @@ namespace foundation::net
         {
             return;
         }
-        // Compute the SAME Guid-derived id the server did, so incoming replication resolves to the
+        // Compute the same Guid-derived id the server did, so incoming replication resolves to the
         // client's own authored entity (not a duplicate).
         netMgr->ForEach(
             [&](NetworkComponent& nc, scene::EntityHandle e)
@@ -633,7 +634,8 @@ namespace foundation::net
                 return *found;
             }
         }
-        // A spawn record with a prefab id + a wired handler => a full prefab instance; else a bare entity.
+        // A spawn record with a prefab id and an installed handler gives a full prefab instance; otherwise
+        // a bare entity.
         scene::EntityHandle e = scene::EntityHandle::Invalid();
         if (spawn && !prefab.IsNil() && m_spawnHandler)
         {
@@ -722,7 +724,7 @@ namespace foundation::net
         out.WriteVarU32(static_cast<u32>(entities.Size()));
         for (const Ent& ent : entities)
         {
-            // A full snapshot is "everything, as a spawn" - a fresh (late-joining) client reconstructs
+            // A full snapshot sends everything as a spawn: a fresh (late-joining) client reconstructs
             // each entity via its prefab id, then applies the state on top.
             out.WriteU32(ent.id);
             out.WriteU8(kFlagSpawn);
@@ -747,7 +749,7 @@ namespace foundation::net
             out.WriteVarU32(static_cast<u32>(comps.Size()));
             for (const Captured& comp : comps)
             {
-                // Length-prefix each component blob so a peer lacking the type can skip it (forward-compat).
+                // Length-prefix each component blob so a peer lacking the type can skip it (forward compatibility).
                 WriteWireString(out, comp.typeId);
                 out.WriteVarU32(static_cast<u32>(comp.blob.Size()));
                 out.WriteBytes(comp.blob.AsSpan());
@@ -778,7 +780,7 @@ namespace foundation::net
             if (m == nullptr)
             {
                 continue;
-            } // unknown type on this peer - blob already consumed (skip)
+            } // unknown type on this peer: the blob is already consumed (skip)
             if (scene::IReplicatedStateSource* source = m->AsReplicatedStateSource())
             {
                 // Its own state, its own format: only for an entity that has the component (the
@@ -801,7 +803,7 @@ namespace foundation::net
             BitReader fields(Span<const byte>(blob.Data(), blob.Size()));
             (void)ReadReplicatedState(fields, inst);
 
-            // Buffer components with interpolatable fields for smooth playback; others stay direct-applied.
+            // Buffer components with interpolatable fields for smooth playback; apply others directly.
             if (interp != nullptr && HasInterpolatableField(*inst.Type()))
             {
                 interp->Record(id, HashTypeId(typeId.AsView()), timestampMs, inst);
@@ -812,8 +814,8 @@ namespace foundation::net
     void StateReplication::ApplyEntries(scene::Scene& scene, BitReader& in,
                                         InterpolationBuffer* interp, f64 timestampMs)
     {
-        // The unified snapshot/delta payload: count, then per entity { id, flags, [prefab if spawn],
-        // [componentCount + records unless removed] }.
+        // The payload snapshots and deltas share: count, then per entity { id, flags, [prefab if spawn],
+        // [componentCount and records unless removed] }.
         const u32 entryCount = in.ReadVarU32();
         for (u32 i = 0; i < entryCount && in.Ok(); ++i)
         {
@@ -855,8 +857,8 @@ namespace foundation::net
         }
     }
 
-    // Both the full snapshot (late-join) and the per-peer delta share the entry payload; the only
-    // difference is what the CAPTURE side emits (all-spawn+full vs changed-only), so apply is one path.
+    // The full snapshot (late join) and the per-peer delta share the entry payload; they differ only in
+    // what the capture side emits (everything as spawns, or only changes), so applying is one path.
     void StateReplication::ApplySnapshot(scene::Scene& scene, BitReader& in)
     {
         ApplyEntries(scene, in, nullptr, 0.0);
@@ -926,8 +928,8 @@ namespace foundation::net
         }
         PeerBaseline& base = *m_peerBaselines.Find(peerId);
 
-        // One delta entry: a changed/new entity (its changed component records) or a removal. A new
-        // entity (absent from the baseline) is a SPAWN and carries its prefab id so the client can
+        // One delta entry: a changed or new entity (its changed component records) or a removal. A new
+        // entity (absent from the baseline) is a spawn and carries its prefab id so the client can
         // network-spawn it.
         struct CompRecord
         {
@@ -959,8 +961,8 @@ namespace foundation::net
                 present.InsertOrAssign(nid, u8{1});
                 const EntityBaseline* oldEb = base.entities.Find(nid);
 
-                // Relevancy / fog-of-war: an irrelevant entity is NEVER sent, and if the peer currently has
-                // it (in its baseline) it is REMOVED (client destroys it - no hidden state to memory-read).
+                // Relevancy (fog of war): an irrelevant entity is never sent, and if the peer has it (in its
+                // baseline) it is removed (the client destroys it, leaving no hidden state in memory).
                 if (m_relevance && !m_relevance(peerId, NetworkId{nid}, e))
                 {
                     if (oldEb != nullptr)
@@ -983,7 +985,7 @@ namespace foundation::net
                         const Span<const byte> blob = state.AsSpan();
                         const u32 typeHash = HashTypeId(m.SerializationTypeId());
 
-                        // Changed if the component is new to this peer or its bytes differ from last-sent.
+                        // Changed if the component is new to this peer or its bytes differ from the last sent.
                         const Array<byte>* prev = nullptr;
                         if (oldEb != nullptr)
                         {
@@ -1011,9 +1013,9 @@ namespace foundation::net
                 nextBaseline.InsertOrAssign(nid, Move(newEb));
             });
 
-        // Removals: baseline entities no longer PRESENT in the scene (true despawns). Relevance-based
-        // removals were already emitted above; those entities still exist (are in `present`), so this
-        // loop skips them - no double removal.
+        // Removals: baseline entities no longer present in the scene (true despawns). Relevance-based
+        // removals were emitted above; those entities still exist (they are in `present`), so this loop
+        // skips them and nothing is removed twice.
         for (const auto& entry : base.entities)
         {
             if (!present.Contains(entry.key))
@@ -1054,7 +1056,7 @@ namespace foundation::net
             }
         }
 
-        base.entities = Move(nextBaseline); // commit last-sent (reliable-ordered => delivered)
+        base.entities = Move(nextBaseline); // commit the last sent (reliable and ordered, so delivered)
         return entries.Size();
     }
 

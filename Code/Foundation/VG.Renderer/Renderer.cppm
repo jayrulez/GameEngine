@@ -3,21 +3,16 @@
 
 // Foundation::VG.Renderer::Renderer - :renderer partition.
 //
-// VGRenderer: draws VGContext/VGBatch content through the RHI. Owns per-frame
-// vertex/index/uniform ring buffers (byte-offset sub-allocated across slices),
-// the pipeline, and an on-demand ImageData->GPU texture cache. Ported from
-// Sedulous.VG.Renderer/VGRenderer.bf.
+// VGRenderer: draws VGContext and VGBatch content through the RHI. Owns per-frame
+// vertex, index and uniform ring buffers (byte-offset sub-allocated across slices),
+// the pipelines, and an on-demand ImageData-to-GPU texture cache.
 //
-// Deviations from Sedulous (deliberate, documented):
-//   * Initialize takes the two pre-compiled rhi::ShaderModule* (vert, frag)
-//     rather than a ShaderSystem - shader compilation (DXC) is the caller's job
-//     via foundation.shaders, keeping this lib's dependency to pure RHI.
-//   * Per-renderer external textures ARE supported (RegisterExternalTexture /
-//     UnregisterExternalTexture) so a caller-owned rhi::TextureView - e.g. a
-//     ui::viewport offscreen render target - can be sampled via DrawImage. The
-//     SHARED cross-renderer external texture cache (VGExternalTextureCache) is
-//     still omitted (a multi-renderer/multi-window sharing optimisation); add
-//     later if a single RT must be sampled by more than one window's renderer.
+// Initialize takes pre-compiled rhi::ShaderModules rather than a shader system: shader
+// compilation (DXC) is the caller's job through foundation.shaders, which keeps this
+// library's dependency to the RHI alone. A caller-owned rhi::TextureView (an offscreen
+// render target, say) can be sampled through DrawImage once registered with
+// RegisterExternalTexture. Registrations are per renderer: a target sampled by several
+// windows' renderers is registered with each.
 
 module;
 #include "Core/Prelude.h"
@@ -39,7 +34,7 @@ export namespace foundation::vg::renderer
 {
     /// The stencil-capable depth-stencil format a device accepts at the given sample
     /// count, probed with a tiny texture (Vulkan drivers commonly support only one of
-    /// D24S8 / D32S8). Undefined = none - the host skips the stencil config.
+    /// D24S8 and D32S8). Undefined means none, and the host skips the stencil config.
     [[nodiscard]] inline foundation::rhi::TextureFormat
     PickStencilCapableFormat(foundation::rhi::Device& device, foundation::core::u32 sampleCount)
     {
@@ -67,11 +62,11 @@ export namespace foundation::vg::renderer
         return rhi::TextureFormat::Undefined;
     }
 
-    /// What the HOST's render target looks like. sampleCount > 1 = the host renders VG
-    /// into an MSAA target (and resolves it itself); depthStencilFormat != Undefined =
+    /// What the host's render target looks like. sampleCount > 1 means the host renders VG
+    /// into an MSAA target (and resolves it itself); depthStencilFormat != Undefined means
     /// the pass carries that depth-stencil attachment (stencil cleared to 0 by the
-    /// host), which unlocks the stencil-then-cover fill pipelines. Every pipeline must
-    /// match the pass, so BOTH values apply to ALL pipelines, not just the stencil ones.
+    /// host), which enables the stencil-then-cover fill pipelines. Every pipeline must
+    /// match the pass, so both values apply to all pipelines, not just the stencil ones.
     struct VGTargetConfig
     {
         foundation::core::u32 sampleCount = 1;
@@ -85,7 +80,7 @@ export namespace foundation::vg::renderer
     namespace image = foundation::image;
 
     /// Projection uniform (one per slice, padded to UniformSlotSize on the GPU). The DF fields
-    /// carry the MSDF spread + atlas size for the distance-field fragment shader's screen-space
+    /// carry the MSDF spread and atlas size for the distance-field fragment shader's screen-space
     /// AA; they are ignored by the default pipeline.
     struct VGUniforms
     {
@@ -130,7 +125,7 @@ export namespace foundation::vg::renderer
     class VGRenderer
     {
     public:
-        // The allocator (required - the owner decides) backs the texture cache.
+        // The allocator (required; the owner decides) backs the texture cache.
         explicit VGRenderer(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
         ~VGRenderer() { Dispose(); }
         VGRenderer(const VGRenderer&) = delete;
@@ -138,7 +133,7 @@ export namespace foundation::vg::renderer
 
         [[nodiscard]] bool IsInitialized() const { return m_initialized; }
 
-        /// What the last Render DID with its commands: dispatched, or SKIPPED because the
+        /// What the last Render did with its commands: dispatched, or skipped because the
         /// pipeline the command needs was never built (a stale batch must not draw winding
         /// fans as visible colour). Observable headlessly, so the dispatch decisions are
         /// testable on the Null backend without a pixel probe.
@@ -156,8 +151,8 @@ export namespace foundation::vg::renderer
         /// VGContext::SetStencilFills on this).
         [[nodiscard]] bool StencilFillsSupported() const { return m_coverPipeline != nullptr; }
 
-        /// Initialize with a device + the (already compiled) vg vertex/fragment
-        /// shader modules + the render-target format + frame count.
+        /// Initialize with a device, the (already compiled) vg vertex and fragment
+        /// shader modules, the render-target format and the frame count.
         Status Initialize(rhi::Device& device, rhi::ShaderModule& vertShader,
                           rhi::ShaderModule& fragShader, rhi::TextureFormat targetFormat,
                           i32 frameCount, rhi::ShaderModule* distanceFieldFragmentShader = nullptr,
@@ -176,8 +171,8 @@ export namespace foundation::vg::renderer
             m_targetFormat = targetFormat;
             m_frameCount = frameCount;
             m_targetConfig = targetConfig;
-            // Kept for LAZY pipeline variants (non-Normal blend modes build on first
-            // use). Borrowed - the shader system owns them and outlives this renderer.
+            // Kept for lazy pipeline variants (non-Normal blend modes build on first
+            // use). Borrowed: the shader system owns them and outlives this renderer.
             m_vsModule = &vertShader;
             m_fsModule = &fragShader;
             m_distanceFieldModule = distanceFieldFragmentShader;
@@ -194,11 +189,11 @@ export namespace foundation::vg::renderer
                 return ErrorCode::Unknown;
             if (!CreatePipelineInto(vertShader, fragShader, m_pipeline).IsOk())
                 return ErrorCode::Unknown;
-            // Optional distance-field pipeline (same layout/vertex format, MSDF fragment shader).
+            // Optional distance-field pipeline (same layout and vertex format, MSDF fragment shader).
             if (distanceFieldFragmentShader != nullptr &&
                 !CreatePipelineInto(vertShader, *distanceFieldFragmentShader, m_distanceFieldPipeline).IsOk())
                 return ErrorCode::Unknown;
-            // Optional per-pixel radial/conic gradient pipelines (same layout; the fragment shader
+            // Optional per-pixel radial and conic gradient pipelines (same layout; the fragment shader
             // derives the gradient parameter per pixel from the emitted gradient-space texcoord).
             if (gradRadialFragShader != nullptr &&
                 !CreatePipelineInto(vertShader, *gradRadialFragShader, m_gradRadialPipeline).IsOk())
@@ -224,10 +219,10 @@ export namespace foundation::vg::renderer
             if (blurVertShader != nullptr && blurFragShader != nullptr &&
                 !CreateBlurPipeline(*blurVertShader, *blurFragShader).IsOk())
                 return ErrorCode::Unknown;
-            // Stencil-then-cover pipelines - only with a host-provided stencil attachment.
-            // Write pass: color-masked fans accumulate winding (incr/decr-wrap = NonZero,
-            // invert = EvenOdd). Cover pass: draw where stencil != 0 and ZERO it behind
-            // (invert only ever yields 0x00/0xFF, so NotEqual-0 serves BOTH fill rules and
+            // Stencil-then-cover pipelines, only with a host-provided stencil attachment.
+            // Write pass: color-masked fans accumulate winding (incr/decr-wrap for NonZero,
+            // invert for EvenOdd). Cover pass: draw where stencil != 0 and zero it behind
+            // (invert only ever yields 0x00 or 0xFF, so NotEqual-0 serves both fill rules and
             // the cover needs no per-rule variant). Cover exists per fragment variant so
             // gradient fills cover with their exact per-pixel shader.
             if (targetConfig.depthStencilFormat != rhi::TextureFormat::Undefined)
@@ -254,7 +249,7 @@ export namespace foundation::vg::renderer
                                            m_coverGradConicPipeline)
                          .IsOk())
                     return ErrorCode::Unknown;
-                // Path clipping (VGContext::PushClipPath): the mask writer + eraser.
+                // Path clipping (VGContext::PushClipPath): the mask writer and eraser.
                 if (!CreatePipelineVariant(vertShader, fragShader, StencilRole::ClipApply,
                                            m_clipApplyPipeline)
                          .IsOk())
@@ -305,8 +300,8 @@ export namespace foundation::vg::renderer
         VGRenderSlice Prepare(foundation::vg::VGBatch& batch, i32 frameIndex, u32 width, u32 height)
         {
             // The batch's eviction list is the invalidation signal for the identity-keyed
-            // texture cache (the producer freed/recycled those sources - e.g. gradient-LUT
-            // cache eviction). Process it even when the batch draws nothing, and BEFORE any
+            // texture cache (the producer freed or recycled those sources, e.g. gradient-LUT
+            // cache eviction). Process it even when the batch draws nothing, and before any
             // upload: a recycled allocation may reuse an evicted address this very frame.
             for (usize i = 0; i < batch.evictedTextures.Size(); ++i)
                 EvictCachedTexture(batch.evictedTextures[i]);
@@ -337,8 +332,7 @@ export namespace foundation::vg::renderer
             {
                 // The per-frame buffers are too small for this frame's accumulated geometry. Bump the
                 // target (grown at the next BeginFrame, when the slot is free) and skip this slice.
-                // One frame may blank during a growth step, then it renders - vs the old behavior of
-                // blanking the whole surface for as long as the large draw list persists.
+                // One frame may blank during a growth step; the next renders.
                 const u32 neededVerts =
                     (sliceVertOffset + vertByteSize + boxByteSize) / static_cast<u32>(sizeof(VGRenderVertex)) + 1u;
                 if (neededVerts > static_cast<u32>(MaxVertexCapacity))
@@ -364,7 +358,7 @@ export namespace foundation::vg::renderer
             const i32 sliceCmdStart = static_cast<i32>(m_drawCommands.Size());
             const i32 textureBase = static_cast<i32>(m_batchTextures.Size());
 
-            // Convert + upload this slice's vertices.
+            // Convert and upload this slice's vertices.
             Array<VGRenderVertex> renderVerts;
             renderVerts.Reserve(batch.vertices.Size());
             for (usize i = 0; i < batch.vertices.Size(); ++i)
@@ -479,7 +473,7 @@ export namespace foundation::vg::renderer
                 m_drawCommands.PushBack(cmd);
             }
 
-            // Write this slice's projection + distance-field metadata into its uniform slot.
+            // Write this slice's projection and distance-field metadata into its uniform slot.
             VGUniforms uniforms;
             uniforms.projection = OrthoOffCenter(static_cast<f32>(width), static_cast<f32>(height));
             uniforms.distanceFieldPixelRange = batch.distanceFieldPixelRange;
@@ -537,7 +531,7 @@ export namespace foundation::vg::renderer
             return slice;
         }
 
-        /// A scissor rect in FRAMEBUFFER coordinates (what SetScissor takes).
+        /// A scissor rect in framebuffer coordinates (what SetScissor takes).
         struct ScissorRect
         {
             i32 x = 0, y = 0;
@@ -571,11 +565,11 @@ export namespace foundation::vg::renderer
             Render(renderPass, 0, 0, width, height, frameIndex, slice);
         }
 
-        /// Dispatch a slice's draws into a VIEWPORT SUB-RECT of the active pass's target
+        /// Dispatch a slice's draws into a viewport sub-rect of the active pass's target
         /// (split-screen views): content coordinates (0..width, 0..height) map to the
-        /// rect at (viewportX, viewportY); every scissor - including the default - is
+        /// rect at (viewportX, viewportY); every scissor, the default included, is
         /// clamped to that rect, so content never bleeds into a neighboring view. The
-        /// slice must have been Prepared with the SAME width/height (the projection).
+        /// slice must have been Prepared with the same width and height (the projection).
         void Render(rhi::RenderPassEncoder& renderPass, i32 viewportX, i32 viewportY, u32 width,
                     u32 height, i32 frameIndex, const VGRenderSlice& slice)
         {
@@ -678,8 +672,8 @@ export namespace foundation::vg::renderer
 
         /// Drop the cache entry for `key` (an identity, never dereferenced): the GPU
         /// resources move to the retired list and are freed once every in-flight frame
-        /// has aged past them. External (caller-owned) entries are untouched - those are
-        /// invalidated via UnregisterExternalTexture by their owner.
+        /// has aged past them. External (caller-owned) entries are untouched; their owner
+        /// invalidates them with UnregisterExternalTexture.
         void EvictCachedTexture(const image::ImageData* key)
         {
             if (key == nullptr)
@@ -697,19 +691,19 @@ export namespace foundation::vg::renderer
             }
         }
 
-        /// Cache introspection (tests/diagnostics).
+        /// Cache introspection (tests and diagnostics).
         [[nodiscard]] usize CachedTextureCount() const { return m_textureCache.Size(); }
         [[nodiscard]] usize RetiredTextureCount() const { return m_retiredTextures.Size(); }
 
         /// Register a caller-owned rhi::TextureView (e.g. a viewport's offscreen
         /// render target) under an ImageData identity key, so DrawImage(key, ...)
         /// samples that GPU texture directly instead of uploading CPU pixels.
-        /// The view is NOT owned - the caller must UnregisterExternalTexture before
-        /// destroying it. The cache is identity-keyed (raw ImageData*), so EVERY
-        /// producer of transient sources must send an invalidation: external views via
-        /// UnregisterExternalTexture, batch-produced sources (gradient LUTs) via
-        /// VGBatch::evictedTextures - without one, a freed-and-recycled allocation
-        /// cache-hits a stale GPU texture.
+        /// The view is not owned: the caller must UnregisterExternalTexture before
+        /// destroying it. The cache is identity-keyed (raw ImageData*), so every
+        /// producer of transient sources must send an invalidation: external views through
+        /// UnregisterExternalTexture, batch-produced sources (gradient LUTs) through
+        /// VGBatch::evictedTextures. Without one, a freed and recycled allocation
+        /// hits a stale GPU texture in the cache.
         /// Re-registering an existing key rebinds it to the new view (bind groups
         /// are torn down and rebuilt lazily).
         void RegisterExternalTexture(const image::ImageData* key, rhi::TextureView* view)
@@ -746,7 +740,7 @@ export namespace foundation::vg::renderer
         }
 
         /// Drop a registered external texture. Tears down its per-frame
-        /// bind groups (but never the caller-owned view/texture). Safe to call for
+        /// bind groups (but never the caller-owned view or texture). Safe to call for
         /// an unknown key. Call before the underlying view is destroyed.
         void UnregisterExternalTexture(const image::ImageData* key)
         {
@@ -926,7 +920,7 @@ export namespace foundation::vg::renderer
                 }
 
                 // Pipeline per (fill phase, draw mode); falls back to the default pipeline
-                // when a variant was not built. Stencil-phase commands are SKIPPED entirely
+                // when a variant was not built. Stencil-phase commands are skipped entirely
                 // without stencil pipelines (a context should not emit them then, but a
                 // stale batch must not draw winding fans as visible color). A pipeline swap
                 // forces a bind-group rebind.
@@ -944,8 +938,8 @@ export namespace foundation::vg::renderer
                 }
 
                 // Dynamic stencil reference: 0x80 whenever the clip mask is involved
-                // (clipped draws test Equal against it; ClipApply/clipped-cover REPLACE
-                // with it), 0 otherwise (unclipped covers compare-to-zero; ClipClear
+                // (clipped draws test Equal against it; ClipApply and clipped covers replace
+                // with it), 0 otherwise (unclipped covers compare to zero; ClipClear
                 // replaces with 0).
                 if (m_coverPipeline != nullptr || m_clipApplyPipeline != nullptr)
                 {
@@ -1015,14 +1009,14 @@ export namespace foundation::vg::renderer
         struct CachedTexture
         {
             const image::ImageData* source = nullptr;
-            u64 sourceId = 0; // ImageData::InstanceId() - guards against address reuse
+            u64 sourceId = 0; // ImageData::InstanceId(), guards against address reuse
             rhi::Texture* gpuTexture = nullptr;
             rhi::TextureView* view = nullptr;
             // Per (frame, spread): slot = frame * kSpreadCount + spread. Spread picks
             // the LUT sampler, and the sampler lives in the bind group.
             Array<rhi::BindGroup*> bindGroups;
             bool external =
-                false; // view is caller-owned (e.g. a viewport RT) - never destroyed here
+                false; // view is caller-owned (e.g. an offscreen render target), never destroyed here
         };
 
         // A layer as Prepare placed it: kept within its parent, with its projection's uniform slot.
@@ -1060,18 +1054,18 @@ export namespace foundation::vg::renderer
             bool plain = false; // colour alone (a blur's scratch)
         };
 
-        static constexpr usize kSpreadCount = 3; // Pad / Repeat / Reflect bind-group slots
-        // Stencil bit planes (must match VGFillPhase's contract): bit 7 = clip mask,
-        // bits 0..6 = fill winding.
+        static constexpr usize kSpreadCount = 3; // Pad, Repeat and Reflect bind-group slots
+        // Stencil bit planes (must match VGFillPhase's contract): bit 7 is the clip mask,
+        // bits 0..6 the fill winding.
         static constexpr u8 kClipBit = 0x80;
         static constexpr u8 kWindingMask = 0x7F;
 
-        static constexpr i32 MaxVertices = 131072; // INITIAL per-frame vertex capacity (grows)
+        static constexpr i32 MaxVertices = 131072; // initial per-frame vertex capacity (grows)
         static constexpr i32 MaxIndices = 131072 * 3;
-        // Vertex/index buffers grow on demand up to this ceiling, so a large UI draw list (e.g. a big
-        // asset grid after a bulk drop) renders instead of blanking the whole surface. Index capacity
-        // always tracks vertexCapacity * 3.
-        static constexpr i32 MaxVertexCapacity = 131072 * 16; // ~2.1M verts (~64 MB/frame at 32 B/vert)
+        // Vertex and index buffers grow on demand up to this ceiling, so a large UI draw list (e.g. a
+        // big asset grid) renders instead of blanking the whole surface. Index capacity always
+        // tracks vertexCapacity * 3.
+        static constexpr i32 MaxVertexCapacity = 131072 * 16; // ~2.1M vertices (~92 MB a frame at 44 B each)
         static constexpr i32 MaxUniformSlots = 256; // a slice's slot, then one per layer
         static constexpr i32 UniformSlotSize =
             256; // dynamic-offset alignment (>= sizeof(VGUniforms) = 80)
@@ -1121,7 +1115,7 @@ export namespace foundation::vg::renderer
 
         Status CreateSampler()
         {
-            // Default: CLAMP. Images and pad-spread gradients both want edge clamping
+            // Default: clamp. Images and pad-spread gradients both want edge clamping
             // (repeat would bleed the opposite edge into bilinear taps at u/v 0 and 1);
             // the pad LUT path additionally relies on it for its out-of-range clamp.
             rhi::SamplerDesc desc{};
@@ -1182,10 +1176,8 @@ export namespace foundation::vg::renderer
             return m_device->CreatePipelineLayout(plDesc, m_pipelineLayout);
         }
 
-        // Build a VG pipeline (shared layout + vertex format) with the given fragment shader into
-        // `outPipeline` - used for both the default and the distance-field variants.
-        /// The pipeline a command renders with: stencil write/cover variants for
-        /// stencil-phase commands (null = unconfigured, caller skips), else the
+        /// The pipeline a command renders with: stencil write or cover variants for
+        /// stencil-phase commands (null when unconfigured; the caller skips), else the
         /// draw-mode variant with default fallback.
         [[nodiscard]] rhi::RenderPipeline* PipelineFor(const foundation::vg::VGCommand& cmd)
         {
@@ -1194,7 +1186,7 @@ export namespace foundation::vg::renderer
             switch (cmd.fillPhase)
             {
             case foundation::vg::VGFillPhase::ClipApply:
-                return m_clipApplyPipeline; // null = unconfigured, command skipped
+                return m_clipApplyPipeline; // null when unconfigured: command skipped
             case foundation::vg::VGFillPhase::ClipClear:
                 return m_clipClearPipeline;
             case foundation::vg::VGFillPhase::StencilWrite:
@@ -1239,7 +1231,7 @@ export namespace foundation::vg::renderer
                            ? Variant(PipelineKind::GradConic, cmd.blendMode, clipped)
                            : m_gradConicPipeline;
             if (cmd.drawMode == foundation::vg::VGDrawMode::Box)
-                // Box vertices are not VG vertices: no other pipeline can read them. SKIP when the
+                // Box vertices are not VG vertices: no other pipeline can read them. Skip when the
                 // box shaders were not given (a context draws boxes analytically only when told).
                 return m_boxPipeline == nullptr
                            ? nullptr
@@ -1247,7 +1239,7 @@ export namespace foundation::vg::renderer
                                                    : m_boxPipeline);
             if (cmd.drawMode == foundation::vg::VGDrawMode::BoxShadow)
                 // No substitute: the default shader would paint the quadrant quads as flat
-                // colour over everything around the box. SKIP when the shader was not given.
+                // colour over everything around the box. Skip when the shader was not given.
                 return m_boxShadowPipeline == nullptr
                            ? nullptr
                            : ((blended || clipped)
@@ -1255,7 +1247,7 @@ export namespace foundation::vg::renderer
                                   : m_boxShadowPipeline);
             if (cmd.drawMode == foundation::vg::VGDrawMode::Layer)
                 // A layer target holds premultiplied colour; the default shader would multiply it
-                // again. SKIP when the composite shader was not given.
+                // again. Skip when the composite shader was not given.
                 return m_layerPipeline == nullptr
                            ? nullptr
                            : ((blended || clipped) ? Variant(PipelineKind::Layer, cmd.blendMode, clipped)
@@ -1265,8 +1257,8 @@ export namespace foundation::vg::renderer
         }
 
 
-        /// The fragment-shader/role families that need per-blend pipeline variants
-        /// (stencil WRITE pipelines are color-masked and blend-agnostic).
+        /// The fragment-shader and role families that need per-blend pipeline variants
+        /// (stencil write pipelines are color-masked and blend-agnostic).
         enum class PipelineKind : u8
         {
             Default,
@@ -1281,13 +1273,13 @@ export namespace foundation::vg::renderer
             Layer, // keep last: the tables below are sized by it
         };
         static constexpr usize kPipelineKindCount = static_cast<usize>(PipelineKind::Layer) + 1;
-        static constexpr usize kBlendVariantCount = 3; // Additive / Multiply / Screen
+        static constexpr usize kBlendVariantCount = 3; // Additive, Multiply, Screen
 
-        /// Get-or-create the (kind, blend, clipped) pipeline. Built on FIRST use - most
+        /// Get or create the (kind, blend, clipped) pipeline. Built on first use: most
         /// content never leaves (Normal, unclipped), so the matrices usually stay empty.
-        /// Blend-fallback goes to the Normal pipeline (wrong-blend draw beats no draw);
-        /// a failed CLIPPED variant returns null instead - drawing unclipped would paint
-        /// outside the clip.
+        /// A failed blend variant falls back to the Normal pipeline (a wrong-blend draw beats
+        /// no draw); a failed clipped variant returns null instead, since drawing unclipped
+        /// would paint outside the clip.
         [[nodiscard]] rhi::RenderPipeline* Variant(PipelineKind kind, vg::VGBlendMode blendMode,
                                                    bool clipped)
         {
@@ -1363,7 +1355,7 @@ export namespace foundation::vg::renderer
             WriteNonZero, ///< color-masked; front incr-wrap / back decr-wrap (winding count)
             WriteEvenOdd, ///< color-masked; invert both faces (parity)
             Cover,        ///< test NotEqual, zero/restore behind the covered pixels
-            ClipApply,    ///< color-masked; winding -> the 0x80 clip mask (Replace)
+            ClipApply,    ///< color-masked; winding becomes the 0x80 clip mask (Replace)
             ClipClear,    ///< color-masked; unconditional Replace 0 over the clip bounds
         };
 
@@ -1385,6 +1377,8 @@ export namespace foundation::vg::renderer
             return slot;
         }
 
+        // Build a VG pipeline (shared layout and vertex format) with the given fragment shader
+        // into `outPipeline`.
         Status CreatePipelineInto(rhi::ShaderModule& vertShader, rhi::ShaderModule& fragShader,
                                   rhi::RenderPipeline*& outPipeline)
         {
@@ -1477,12 +1471,12 @@ export namespace foundation::vg::renderer
 
             desc.primitive.topology = rhi::PrimitiveTopology::TriangleList;
             desc.primitive.frontFace = rhi::FrontFace::CCW;
-            desc.primitive.cullMode = rhi::CullMode::None; // write pass NEEDS both faces
+            desc.primitive.cullMode = rhi::CullMode::None; // the write pass needs both faces
             desc.multisample.count = m_targetConfig.sampleCount;
             desc.multisample.alphaToCoverageEnabled = false;
 
             // Every pipeline must declare the pass's depth-stencil attachment when the host
-            // provides one (pass compatibility), with depth fully disabled - VG never
+            // provides one (pass compatibility), with depth fully disabled: VG never
             // touches depth. Stencil state per role.
             if (m_targetConfig.depthStencilFormat != rhi::TextureFormat::Undefined)
             {
@@ -1494,7 +1488,7 @@ export namespace foundation::vg::renderer
                 switch (role)
                 {
                 case StencilRole::WriteNonZero:
-                    // Winding accumulates in the LOW bits only - the clip mask survives.
+                    // Winding accumulates in the low bits only, so the clip mask survives.
                     // Clipped: only accumulate where the clip bit is set (ref 0x80).
                     ds.stencilEnabled = true;
                     ds.stencilWriteMask = kWindingMask;
@@ -1512,7 +1506,7 @@ export namespace foundation::vg::renderer
                     break;
                 case StencilRole::WriteEvenOdd:
                     ds.stencilEnabled = true;
-                    ds.stencilWriteMask = kWindingMask; // invert flips winding bits ONLY
+                    ds.stencilWriteMask = kWindingMask; // invert flips the winding bits only
                     ds.stencilReadMask = kClipBit;
                     ds.stencilFront = rhi::StencilFaceState{clipped ? rhi::CompareFunction::Equal
                                                                     : rhi::CompareFunction::Always,
@@ -1525,9 +1519,9 @@ export namespace foundation::vg::renderer
                     ds.stencilEnabled = true;
                     if (clipped)
                     {
-                        // Inside = clip set AND winding != 0: value != 0x80 under a FULL
-                        // read mask. Pass op REPLACE (ref 0x80) zeroes the winding while
-                        // RESTORING the clip mask.
+                        // Inside means clip set and winding != 0: value != 0x80 under a full
+                        // read mask. Pass op Replace (ref 0x80) zeroes the winding while
+                        // restoring the clip mask.
                         ds.stencilReadMask = 0xFF;
                         ds.stencilWriteMask = 0xFF;
                         ds.stencilFront =
@@ -1538,7 +1532,7 @@ export namespace foundation::vg::renderer
                     }
                     else
                     {
-                        // Inside = winding != 0 (clip bit ignored + preserved: both the
+                        // Inside means winding != 0 (clip bit ignored and preserved: both the
                         // read and the zeroing write stay in the winding bits).
                         ds.stencilReadMask = kWindingMask;
                         ds.stencilWriteMask = kWindingMask;
@@ -1551,8 +1545,8 @@ export namespace foundation::vg::renderer
                     ds.stencilBack = ds.stencilFront;
                     break;
                 case StencilRole::ClipApply:
-                    // Winding != 0 (winding-bit compare: ref 0x80 & 0x7F == 0) -> REPLACE
-                    // with ref 0x80: the clip mask is set and the winding zeroed in one
+                    // Winding != 0 (winding-bit compare: ref 0x80 & 0x7F == 0) passes and
+                    // replaces with ref 0x80: the clip mask is set and the winding zeroed in one
                     // op. Fail (winding == 0) zeroes any stray bits.
                     ds.stencilEnabled = true;
                     ds.stencilReadMask = kWindingMask;
@@ -1564,7 +1558,7 @@ export namespace foundation::vg::renderer
                     ds.stencilBack = ds.stencilFront;
                     break;
                 case StencilRole::ClipClear:
-                    // Unconditional REPLACE with ref 0 over the clip bounds.
+                    // Unconditional Replace with ref 0 over the clip bounds.
                     ds.stencilEnabled = true;
                     ds.stencilReadMask = 0xFF;
                     ds.stencilWriteMask = 0xFF;
@@ -1629,7 +1623,7 @@ export namespace foundation::vg::renderer
             return ErrorCode::Ok;
         }
 
-        // Recreate one frame slot's vertex + index buffers at m_targetVertexCapacity. Called from
+        // Recreate one frame slot's vertex and index buffers at m_targetVertexCapacity. Called from
         // BeginFrame(frameIndex), where the slot's prior submission has been awaited (buffers are
         // direct-bound, no bind group, so no descriptor fixups). No-op if already at capacity.
         void GrowFrameBuffers(i32 frameIndex)
@@ -1781,7 +1775,7 @@ export namespace foundation::vg::renderer
             if (m_batchTextures.IsEmpty())
                 return nullptr;
             const i32 effectiveIndex =
-                (textureIndex < 0) ? 0 : textureIndex; // solid draws -> white at 0
+                (textureIndex < 0) ? 0 : textureIndex; // solid draws use the white texture at 0
             if (effectiveIndex >= static_cast<i32>(m_batchTextures.Size()))
                 return nullptr;
 
@@ -1789,8 +1783,8 @@ export namespace foundation::vg::renderer
             if (texture == nullptr)
                 return nullptr;
 
-            // Pad groups are built eagerly in Prepare; the (rarer) repeat/mirror groups
-            // build on first use (a device call - legal while the pass records).
+            // Pad groups are built eagerly in Prepare; the rarer repeat and mirror groups
+            // build on first use (a device call, legal while the pass records).
             UpdateTextureBindGroup(effectiveIndex, frameIndex, spread);
             const usize slot =
                 static_cast<usize>(frameIndex) * kSpreadCount + static_cast<usize>(spread);
@@ -1983,7 +1977,7 @@ export namespace foundation::vg::renderer
                 if (cached.bindGroups[i] != nullptr)
                     m_device->DestroyBindGroup(cached.bindGroups[i]);
             if (cached.external)
-                return; // view/texture are caller-owned
+                return; // the view and texture are caller-owned
             if (cached.view)
                 m_device->DestroyTextureView(cached.view);
             if (cached.gpuTexture)
@@ -2008,7 +2002,7 @@ export namespace foundation::vg::renderer
         rhi::PipelineLayout* m_pipelineLayout = nullptr;
         rhi::RenderPipeline* m_pipeline = nullptr;
         rhi::RenderPipeline* m_distanceFieldPipeline = nullptr;         // MSDF fragment variant (null if unused)
-        VGTargetConfig m_targetConfig{}; // host target: sample count + DS format
+        VGTargetConfig m_targetConfig{}; // host target: sample count and DS format
         rhi::RenderPipeline* m_stencilWriteNonZero = nullptr; // winding pass (nullable)
         rhi::RenderPipeline* m_stencilWriteEvenOdd = nullptr; // parity pass (nullable)
         rhi::RenderPipeline* m_coverPipeline = nullptr;       // cover, default shading (nullable)
@@ -2033,9 +2027,9 @@ export namespace foundation::vg::renderer
         rhi::RenderPipeline* m_clippedPipelines[kBlendVariantCount + 1][kPipelineKindCount] = {}; // [blend][kind], lazy
         rhi::RenderPipeline* m_clippedWriteNonZero = nullptr; // lazy clipped write pair
         rhi::RenderPipeline* m_clippedWriteEvenOdd = nullptr;
-        rhi::RenderPipeline* m_clipApplyPipeline = nullptr; // winding -> clip mask
+        rhi::RenderPipeline* m_clipApplyPipeline = nullptr; // winding to clip mask
         rhi::RenderPipeline* m_clipClearPipeline = nullptr; // clip mask eraser
-        rhi::Sampler* m_sampler = nullptr; // clamp: images + pad gradients
+        rhi::Sampler* m_sampler = nullptr; // clamp: images and pad gradients
         rhi::Sampler* m_samplerRepeat = nullptr;
         rhi::Sampler* m_samplerMirror = nullptr;
 
@@ -2043,13 +2037,13 @@ export namespace foundation::vg::renderer
         Array<rhi::Buffer*> m_indexBuffers;
         Array<rhi::Buffer*> m_uniformBuffers;
 
-        // On-demand growth of the vertex/index buffers: an overflowing Prepare bumps the TARGET and
-        // skips that frame's slice; each frame's buffers are (re)sized up to the target at BeginFrame,
-        // where the slot's prior GPU submission has already been awaited (offsets reset -> reuse). A
-        // large draw list then costs at most one blank frame per growth step instead of blanking while
-        // it persists.
+        // On-demand growth of the vertex and index buffers: an overflowing Prepare bumps the target
+        // and skips that frame's slice; each frame's buffers are resized up to the target at
+        // BeginFrame, where the slot's prior GPU submission has already been awaited (offsets reset,
+        // so the buffers can be replaced). A large draw list costs at most one blank frame per
+        // growth step.
         i32 m_targetVertexCapacity = MaxVertices; // desired vertex capacity (verts); only grows
-        Array<i32> m_frameVertexCapacity;         // each frame's ACTUAL vertex-buffer capacity
+        Array<i32> m_frameVertexCapacity;         // each frame's actual vertex-buffer capacity
         bool m_capacityWarned = false;            // one-shot warn when a batch exceeds the hard ceiling
 
         // Evicted entries wait here until every in-flight frame has aged past them.

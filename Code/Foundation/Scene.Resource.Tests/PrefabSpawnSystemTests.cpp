@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// PrefabSpawnSystem: the ONE runtime spawn recipe (a script's scene.spawn, the replicated spawn)
-// as a scene system the host points at its content. Mirrors the Beef port's three cases and
-// adds the nesting one this port exists for: a runtime spawn resolves the prefabs its template
-// nests through the same database (the old app lambdas passed no resolver, so those children
-// were silently absent).
+// PrefabSpawnSystem: the one runtime spawn recipe (a script's scene.spawn, the replicated spawn)
+// as a scene system the host points at its content. Covers placement, the subtree-only bind,
+// the refusals, and nesting: a runtime spawn resolves the prefabs its template nests through
+// the same database, so those children arrive too.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include "Core/Prelude.h"
@@ -24,7 +23,7 @@ namespace content = foundation::content;
 
 namespace
 {
-    // A component with a resource-resolve hook that COUNTS: the subtree-only bind is observable.
+    // A component with a resource-resolve hook that counts, so the subtree-only bind is observable.
     struct Ammo
     {
         i32 rounds = 0;
@@ -45,8 +44,8 @@ namespace
 
     bool Near(f32 a, f32 b) { return a > b - 0.001f && a < b + 0.001f; }
 
-    // An on-disk content database holding: Turret (root + Barrel child, Ammo 30 on the root),
-    // Nest (a root that NESTS a Turret instance under it), Bare (no scene stream).
+    // An on-disk content database holding: Turret (root and Barrel child, Ammo 30 on the root),
+    // Nest (a root that nests a Turret instance under it), Bare (no scene stream).
     struct PrefabDatabase
     {
         std::filesystem::path dir = "scratch_scene_prefabspawn";
@@ -102,7 +101,7 @@ namespace
         }
         MemoryStream AuthorNest()
         {
-            // The Nest template holds a live Turret INSTANCE under its root, so its capture
+            // The Nest template holds a live Turret instance under its root, so its capture
             // carries a nesting record that a spawn must resolve through the database.
             Scene author(DefaultAllocator(), u8"author");
             author.AddSystem<AmmoManager>();
@@ -195,8 +194,8 @@ TEST_CASE("prefab-spawn: a runtime spawn resolves the prefabs its template nests
     SpawnScene s;
     s.spawner->SetSource(db.db.Get(), nullptr);
 
-    // Nest -> (Turret -> Barrel): three entities, the inner two from a nested record the
-    // database resolves. The recipe the app lambdas used to run passed no resolver and got one.
+    // Nest > Turret > Barrel: three entities, the inner two from a nested record the
+    // database resolves. Without a resolver the spawn would produce only one.
     const EntityHandle root = s.spawner->Spawn(db.nest, Float3{0.0f, 0.0f, 0.0f});
     REQUIRE(root.IsAssigned());
     CHECK(s.scene.EntityCount() == 3u);

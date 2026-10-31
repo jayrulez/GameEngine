@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - frame stats tests (E8a): what a frame cost and why it was needed, written by the style,
+// GUI - frame stats tests: what a frame cost and why it was needed, written by the style,
 // layout and draw passes and by NeedsFrame.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -39,7 +39,7 @@ namespace
         parent.AddChild(w.Get());
         return w;
     }
-    // A host's frame: style, tick, lay out, ask, draw.
+    // Runs a host's frame: style, tick, lay out, ask whether a frame is needed, draw.
     bool Frame(SceneRoot& root, StyleManager& styles, vg::VGContext& canvas)
     {
         styles.ApplyTree(root);
@@ -65,14 +65,14 @@ TEST_CASE("frame-stats: a frame says what it restyled, laid out and drew, and an
 
     CHECK(Frame(*root.Get(), styles, canvas));
     const FrameStats& stats = root->GetLastFrameStats();
-    CHECK(stats.Restyled == 3u); // the three boxes (the root is no widget)
+    CHECK(stats.Restyled == 3u); // the three boxes (the root is not a widget)
     CHECK(stats.LaidOut >= 1u);
     CHECK(stats.NodesDrawn == 4u); // the root and the boxes
     CHECK(stats.Vertices > 0u);    // their backgrounds
     CHECK(stats.Commands > 0u);
     CHECK(stats.FramesDrawn == 1u);
 
-    (void)Frame(*root.Get(), styles, canvas); // what the first frame left settles
+    (void)Frame(*root.Get(), styles, canvas); // settles what the first frame left
     CHECK_FALSE(Frame(*root.Get(), styles, canvas));
     CHECK(stats.Restyled == 0u);
     CHECK(stats.LaidOut == 0u);
@@ -148,7 +148,7 @@ TEST_CASE("frame-stats: at a display scale the window's clip is the root's devic
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetDisplayScale(1.75f);
-    root->SetViewportSize(core::Float2{1400.0f, 1050.0f}); // device pixels: 800 x 600 laid out
+    root->SetViewportSize(core::Float2{1400.0f, 1050.0f}); // in device pixels; the layout is 800 x 600
     CHECK(root->GetSize().x == doctest::Approx(800.0f));
     Box(*root, u8"filled")->SetInlineStyle(SV(u8"background-color"), SV(u8"red")); // something drawn
     StyleManager styles;

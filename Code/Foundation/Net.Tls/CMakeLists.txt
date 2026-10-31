@@ -1,4 +1,4 @@
-# Foundation::Net.Tls - `foundation.net.tls`: the TLS seam (a session as a byte engine, the
+# Foundation::Net.Tls - `foundation.net.tls`: the TLS interfaces (a session as a byte engine, the
 # backend interface, the trust a client checks against), the system's trusted roots, and the
 # plain and TLS byte streams over a TcpSocket. No TLS
 # library here: a backend module brings one (Net.Tls.MbedTLS).
@@ -13,7 +13,7 @@ target_sources(Net.Tls
         FILE_SET net_tls_modules TYPE CXX_MODULES FILES
             NetTls.cppm)
 
-# The Windows ROOT store (CertOpenSystemStoreW).
+# The Windows root store (CertOpenSystemStoreW).
 if(WIN32)
     target_link_libraries(Net.Tls PRIVATE crypt32)
 endif()

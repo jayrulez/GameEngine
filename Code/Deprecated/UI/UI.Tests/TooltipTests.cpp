@@ -2,11 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The tooltip subsystem, driven through the input manager and the frame tick: the show delay
-// and the auto-hide, hover leaving, the owner being the nearest ANCESTOR with content (so a
+// and the auto-hide, hover leaving, the owner being the nearest ancestor with content (so a
 // container's one tooltip serves all its children without restarting the clock), a provider
 // asked before the plain text, no focus disturbance, hit-testability only when interactive,
-// and a target deleted while the clock runs. Mirrored from the Beef port's suite - Raptor had
-// none.
+// and a target deleted while the clock runs.
 
 #include <doctest/doctest.h>
 
@@ -25,7 +24,7 @@ namespace core = foundation::core;
 
 namespace
 {
-    /// A view that builds its own tooltip content (and also carries plain text, which must lose).
+    /// A view that builds its own tooltip content (and also carries plain text, which loses).
     class ProviderView final : public TestView, public ITooltipProvider
     {
         RTTI_OBJECT(ProviderView, TestView)
@@ -42,7 +41,7 @@ namespace
     RTTI_DEFINE_OBJECT(ProviderView, "rtti::ui::tests")
 
     /// A (0,0) 50x30 with plain text, B (100,0) without, P (200,0) a provider, and a container
-    /// at (0,100) 200x50 carrying ONE tooltip over two children at (0,100) and (100,100).
+    /// at (0,100) 200x50 carrying one tooltip over two children at (0,100) and (100,100).
     struct Fixture
     {
         UIContext ctx{DefaultAllocator()};

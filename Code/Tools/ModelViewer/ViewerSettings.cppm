@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:settings`: the viewer's preferences and recents
-// (Documentation/Specs/model-viewer.md, P9). Kept in `model-viewer/settings.txt` as lines of
-// `key value`; a line this viewer does not know is kept as it was (a newer viewer's, or one
-// written by hand), so nothing is lost by opening an older viewer. The recent models and folders
-// are lines of their own, newest first, as many as the preference keeps. The `settings.get`,
-// `settings.set` and `recents.list` commands read and change them, the window's Preferences
-// page and an agent alike, and `cache.clear` empties the cooked models and thumbnails.
+// ModelViewer - `modelviewer:settings`: the viewer's preferences and recents, kept in
+// `model-viewer/settings.txt` as `key value` lines. Lines this viewer does not recognise (from a
+// newer viewer, or written by hand) are kept unchanged, so opening an older viewer loses nothing.
+// The recent models and folders have lines of their own, newest first, up to the count the
+// preference sets. The `settings.get`, `settings.set` and `recents.list` commands read and change
+// them for both the Preferences window and agents, and `cache.clear` deletes the cooked models
+// and thumbnails.
 
 module;
 #include "Core/Prelude.h"
@@ -27,25 +27,25 @@ export namespace modelviewer
 
     struct ViewerSettings
     {
-        String folder;                 // the folder Browse shows
+        String folder;                 // the folder the Browse tab shows
         bool looseTextures = true;
         String screenshotFolder;       // empty: DefaultScreenshotFolder()
-        bool askScreenshot = true;     // the Screenshot button asks where; a command never does
+        bool askScreenshot = true;     // the Screenshot button asks for a path; a command never does
         String screenshotPattern = String(u8"{model}_{time}");
-        u32 thumbnailSize = 128;       // 96, 128 or 192; from the next start
-        String cacheFolder;            // empty: the user data folder's model-viewer; from the next start
-        bool loop = true;              // a model's clips start looping
-        f32 turntableSpeed = 30.0f;    // degrees a second
+        u32 thumbnailSize = 128;       // 96, 128 or 192; takes effect on the next start
+        String cacheFolder;            // empty: model-viewer in the user data folder; takes effect on the next start
+        bool loop = true;              // whether a model's clips start looping
+        f32 turntableSpeed = 30.0f;    // degrees per second
         f32 exposure = 0.0f;
         f32 ambient = 0.3f;
         f32 sky = 1.0f;
         bool grid = true;
-        String density = String(u8"default"); // the editor's: compact, default, comfortable
+        String density = String(u8"default"); // the editor's densities: compact, default, comfortable
         u32 recentCount = 10;
-        u32 tileSize = 1;              // the grids' tiles: 0 small, 1 medium, 2 large
+        u32 tileSize = 1;              // the grid tile size: 0 small, 1 medium, 2 large
         Array<String> recentModels;    // newest first
         Array<String> recentFolders;
-        Array<String> unknown;         // lines kept as they were
+        Array<String> unknown;         // unrecognised lines, kept unchanged
     };
 
     inline constexpr u32 kThumbnailSizes[] = {96, 128, 192};
@@ -65,7 +65,8 @@ export namespace modelviewer
         }
     }
 
-    /// The user's Pictures folder's ModelViewer: where screenshots go unless the preference says.
+    /// ModelViewer in the user's Pictures folder: where screenshots go unless the preference names
+    /// another folder.
     [[nodiscard]] inline String DefaultScreenshotFolder()
     {
         Optional<String> home = GetEnvironmentVariable(u8"HOME");
@@ -77,14 +78,14 @@ export namespace modelviewer
     {
         return s.screenshotFolder.IsEmpty() ? DefaultScreenshotFolder() : s.screenshotFolder;
     }
-    /// Where the cooked models and the thumbnails go: the preference, else `fallback` (the user
-    /// data folder's model-viewer).
+    /// Where the cooked models and thumbnails go: the preference, else `fallback` (model-viewer in
+    /// the user data folder).
     [[nodiscard]] inline String CacheBaseOf(const ViewerSettings& s, StringView fallback)
     {
         return s.cacheFolder.IsEmpty() ? String(fallback) : s.cacheFolder;
     }
 
-    /// The bytes of the files under `folder`, every level down.
+    /// The total size in bytes of the files under `folder`, recursively.
     [[nodiscard]] inline u64 FolderBytes(StringView folder) // NOLINT(misc-no-recursion)
     {
         struct Collect
@@ -116,7 +117,8 @@ export namespace modelviewer
         return total;
     }
 
-    /// A path to the front of a recents list (once), the list cut to `limit`.
+    /// Moves or adds `path` to the front of a recents list without duplicates, and trims the
+    /// list to `limit`.
     inline void PushRecent(Array<String>& list, StringView path, u32 limit)
     {
         for (usize i = 0; i < list.Size(); ++i)
@@ -209,9 +211,9 @@ export namespace modelviewer
         return text;
     }
 
-    /// A screenshot's file name from the pattern: `{model}` the file's name without its
-    /// extension, `{clip}` the clip playing (empty when none), `{time}` a stamp unique enough
-    /// (`stamp`, the caller's clock); characters a file name cannot hold become `_`; `.png` added.
+    /// A screenshot's file name from the pattern: `{model}` is the model file's name without its
+    /// extension, `{clip}` the playing clip (empty when none), and `{time}` the caller's `stamp`.
+    /// Characters a file name cannot hold become `_`, and `.png` is appended.
     [[nodiscard]] inline String ScreenshotName(StringView pattern, StringView modelPath, StringView clip, u64 stamp)
     {
         String model = FileTitle(modelPath);
@@ -277,8 +279,8 @@ export namespace modelviewer
         return v;
     }
 
-    /// Takes what `changes` names into `s` (the rest as it was); false, `s` untouched, when a value
-    /// is out of its range (`error` says which).
+    /// Applies the values `changes` names to `s`, leaving the rest. Returns false with `s`
+    /// untouched when a value is out of range (`error` says which).
     [[nodiscard]] inline bool ApplySettingsJson(ViewerSettings& s, const JsonValue& changes, String& error)
     {
         ViewerSettings next = s;
@@ -372,7 +374,8 @@ export namespace modelviewer
         return true;
     }
 
-    /// The settings file and what is in it; `onChanged` hears each change (the window applies it).
+    /// The settings file and its contents; `onChanged` is called on each change so the window can
+    /// apply it.
     class SettingsStore
     {
     public:
@@ -393,7 +396,7 @@ export namespace modelviewer
             const String text = WriteSettings(value);
             return WriteFile(m_path.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())).IsOk();
         }
-        /// A recent model or folder (the front of its list), kept.
+        /// Puts a model or folder at the front of its recents list and saves.
         void Recent(bool folder, StringView path)
         {
             PushRecent(folder ? value.recentFolders : value.recentModels, path, value.recentCount);
@@ -405,9 +408,9 @@ export namespace modelviewer
         String m_path;
     };
 
-    /// `settings.get`, `settings.set` and `recents.list` over `store`, and `cache.clear` over the
-    /// `cacheFolders` (the cooked models, the thumbnails), refused while `busy` says why not (a
-    /// model open in a tab reads its cooked files).
+    /// Registers `settings.get`, `settings.set` and `recents.list` over `store`, and `cache.clear`
+    /// over `cacheFolders` (the cooked models and thumbnails). `cache.clear` is refused while
+    /// `busy` returns a reason, such as a model open in a tab reading its cooked files.
     inline void RegisterSettingsCommands(CommandSet& set, SettingsStore& store, Span<const String> cacheFolders, Function<String()> busy = {})
     {
         Array<String> folders;

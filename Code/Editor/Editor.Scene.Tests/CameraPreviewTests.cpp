@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// editor.scene: the UI-free core of the scene-editor camera preview (task #118) - the
-// CameraOverride built from a CameraComponent + world matrix, and the visibility/pin decision.
+// editor.scene: the UI-free core of the scene editor's camera preview: the CameraOverride built
+// from a CameraComponent and a world matrix, and the decision to show or pin the preview.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -46,9 +46,10 @@ TEST_CASE("camera-preview: BuildCameraPreviewOverride maps a component + world t
     const Float4x4 world = Float4x4::Translation(Float3{10.0f, 5.0f, 3.0f});
     const render::CameraOverride ov = editor::BuildCameraPreviewOverride(cam, world);
 
-    // view = inverse(world); projection = the RH perspective from the lens fields (matches the
-    // runtime primary-camera extraction); position = the world origin; farZ carried; the clear
-    // colour (authored sRGB) decoded to linear, as the runtime extraction does.
+    // The view is the inverse of the world matrix and the projection is the right-handed
+    // perspective from the lens fields, as the runtime primary-camera extraction builds them. The
+    // position is the world origin, farZ carries over, and the clear colour (authored in sRGB) is
+    // decoded to linear as the runtime does.
     CHECK(MatNear(ov.camera.view, Inverse(world)));
     CHECK(MatNear(ov.camera.projection,
                   Float4x4::PerspectiveFovRH(1.0f, 4.0f / 3.0f, 0.5f, 250.0f)));

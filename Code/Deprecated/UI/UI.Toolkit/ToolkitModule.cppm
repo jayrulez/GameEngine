@@ -3,11 +3,10 @@
 
 // UI Toolkit - primary module interface unit for `foundation.ui.toolkit`.
 //
-// The editor-grade widget set (a faithful port of Sedulous.UI.Toolkit) layered on foundation.ui: docking,
-// property grid, node graph, color/gradient/curve editors, and the menu/tool/status bars. One named
-// module composed of partitions (one per control), re-exported here so consumers write a single
-// `import foundation.ui.toolkit;`. Add `export import :partition;` lines as the port progresses (bottom-up:
-// simple bars -> property grid -> pickers -> curves -> docking -> node graph -> theme extension).
+// The editor-grade widget set layered on foundation.ui: docking, property grid, node graph, color,
+// gradient and curve editors, and the menu, tool and status bars. One named module composed of
+// partitions (one per control), re-exported here so consumers write a single
+// `import foundation.ui.toolkit;`.
 
 export module foundation.ui.toolkit;
 

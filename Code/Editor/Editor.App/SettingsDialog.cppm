@@ -3,16 +3,16 @@
 
 // Editor App - :settings_dialog partition
 //
-// Project Settings (Documentation/Specs/editor-gui.md, 5.2, layer 6; ruling 20): the project's
-// manifest (Project.xml) on the property grid, a window over its markup
-// (Data/Editor/ProjectSettings.xml). The rows are a bag made from ProjectSettings' reflection, a
-// section per category the settings name, each by its label: text, a number within its range, a
-// check box, an enum's choices by name, and each asset setting an asset reference to the source
-// type it names (a list of them for a list setting), so the slot picks, drops and clears as an
-// inspector's does. MSAA's choices are the render subsystem's levels. The engine version the
-// project was last saved with shows, read only. Save writes the rows back (a list's empty and
-// repeated entries dropped), keeps the path mirrors beside the guids, persists the manifest and
-// tells the editor; Cancel or closing leaves the manifest as it was.
+// Project Settings: the project's manifest (Project.xml) on the property grid, in a window over its
+// markup (Data/Editor/ProjectSettings.xml). The rows are a bag made from ProjectSettings'
+// reflection, with a section per category the settings name and each row by its label: text, a
+// number within its range, a check box, an enum's choices by name, and for each asset setting an
+// asset reference to the source type it names (a list of them for a list setting), so the slot
+// picks, drops and clears as an inspector's does. MSAA's choices are the render subsystem's
+// levels. The engine version the project was last saved with is shown read-only. Save writes the
+// rows back (dropping a list's empty and repeated entries), keeps the path mirrors beside the
+// guids, persists the manifest and notifies the editor; Cancel or closing leaves the manifest as
+// it was.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -50,10 +50,10 @@ export namespace editor::app
     class ProjectSettingsDialog
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kProjectSettingsDialogPath;
 
-        /// Over `context`'s project; `refs` (the asset slots') outlives it.
+        /// Builds the dialog over `context`'s project; `refs` (the asset slots' table) outlives it.
         ProjectSettingsDialog(IAllocator& allocator, editor::EditorContext& context, const ResourceRefServices& refs, RefPtr<gui::Node> body)
             : m_allocator(allocator), m_context(&context), m_body(Move(body))
         {
@@ -88,7 +88,7 @@ export namespace editor::app
             if (!m_window || m_window->IsOpen() || m_context->Project() == nullptr)
                 return false;
             if (m_grid != nullptr)
-                m_grid->SetSource(nullptr); // the rows are made again, from the manifest as it is
+                m_grid->SetSource(nullptr); // the rows are rebuilt from the manifest as it is
             Fill(m_context->Project()->Settings());
             if (m_grid != nullptr)
                 m_grid->SetSource(m_bag.Get());
@@ -103,7 +103,7 @@ export namespace editor::app
         }
 
         /// Writes the rows into the manifest, persists it and closes; false when it could not be
-        /// written (it stays open, the editor told).
+        /// written (the dialog stays open and the editor is told).
         bool Save()
         {
             editor::EditorProject* project = m_context->Project();
@@ -154,7 +154,7 @@ export namespace editor::app
             id.ToChars(chars);
             return String(StringView(chars, 36));
         }
-        // The source asset type a setting names, by its name (the settings name it so).
+        // The source asset type a setting names, looked up by name (the settings name it that way).
         [[nodiscard]] static const TypeInfo* SourceTypeNamed(StringView name)
         {
             for (const TypeInfo* type : GlobalTypeRegistry().All())
@@ -163,7 +163,7 @@ export namespace editor::app
             return nullptr;
         }
 
-        // A row per labelled setting, in its category, from the manifest's values.
+        // Makes a row per labelled setting, in its category, from the manifest's values.
         void Fill(const engine::project::ProjectSettings& settings)
         {
             m_bag = MakeUnique<gui::PropertyBag>(m_allocator, m_allocator);
@@ -180,14 +180,14 @@ export namespace editor::app
                 row->DisplayName = *label;
                 row->Category = String(engine::project::SettingCategory(property));
             }
-            // What last saved it, under the first category.
+            // The engine version that last saved it, under the first category.
             gui::PropertyInfo& version = m_bag->Add(kEngineVersionRow, gui::PropertyKind::String, gui::Variant(settings.engineVersion.AsView()));
             version.DisplayName = String(u8"Engine version");
             version.Category = String(engine::project::kSettingDefaultCategory);
             version.Description = String(u8"The engine this project was last saved with; a save stamps the running one.");
             version.ReadOnly = true;
         }
-        // The row a setting is, or null for one no row shows.
+        // Adds the row for a setting, or returns null for one no row shows.
         gui::PropertyInfo* AddRow(const PropertyInfo& property, const void* address)
         {
             const StringView name = NameOf(property);
@@ -248,7 +248,7 @@ export namespace editor::app
             }
             return nullptr;
         }
-        // The rows into `settings`.
+        // Writes the rows into `settings`.
         void WriteBack(engine::project::ProjectSettings& settings)
         {
             if (!m_bag)
@@ -315,6 +315,6 @@ export namespace editor::app
         RefPtr<gui::Node> m_body;
         RefPtr<gui::Window> m_window;
         gui::PropertyGrid* m_grid = nullptr;
-        UniquePtr<gui::PropertyBag> m_bag; // made at each open
+        UniquePtr<gui::PropertyBag> m_bag; // rebuilt at each open
     };
 }

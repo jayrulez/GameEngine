@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample019 -- Batch Upload (Async Transfer). Ported from Sedulous Sample019_BatchUpload.
+/// Sample019 -- Batch Upload (Async Transfer).
 /// Demonstrates batched GPU uploads using TransferBatch with async fence signaling.
 /// Uploads a vertex buffer, index buffer, and a procedural texture in a single
 /// batched transfer with submitAsync, then renders a textured quad once the
@@ -183,7 +183,7 @@ foundation::core::Status BatchUploadSample::OnInit()
         return foundation::core::ErrorCode::Unknown;
     m_transformMapped = m_transformBuf->Map();
 
-    // Bind group layout: UBO + texture + sampler
+    // Bind group layout: UBO, texture and sampler
     rhi::BindGroupLayoutEntry bglEntries[3] = {
         rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex),
         rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
@@ -245,7 +245,7 @@ foundation::core::Status BatchUploadSample::OnInit()
     if (m_device->CreateFence(0, m_uploadFence) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // === Batch upload: VB + IB + texture in one submission ===
+    // === Batch upload: VB, IB and texture in one submission ===
     if (doBatchUpload() != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
@@ -322,7 +322,7 @@ foundation::core::Status BatchUploadSample::doBatchUpload()
 
     delete[] pixels;
 
-    // Async submit - signals fence when GPU transfer completes
+    // Async submit: signals the fence when the GPU transfer completes
     m_uploadFenceVal = 1;
     if (transfer->SubmitAsync(m_uploadFence, m_uploadFenceVal) != foundation::core::ErrorCode::Ok)
     {

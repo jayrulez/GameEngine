@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Geometry.Pipeline - the geometry domain's New Asset creators
-// (agent-playtesting-and-asset-creation.md P1): what File > New and asset_create make, with no
-// editor (the source database and the sources folder are all a creation needs).
+// Geometry.Pipeline - the geometry domain's New Asset creators: what File > New and
+// asset_create make, with no editor (the source database and the sources folder are all a
+// creation needs).
 
 module;
 #include "Core/Prelude.h"
@@ -36,8 +36,8 @@ namespace pipeline
         }
         StaticMeshAsset asset;
         MeshImporter::Import(*mesh, asset);
-        // WriteMeshAsset, never a raw WriteObject: the geometry goes to the binary sidecar
-        // stream (the bulk-data rule).
+        // WriteMeshAsset, not a raw WriteObject: the geometry goes to the binary sidecar
+        // stream, as all bulk data does.
         return WriteMeshAsset(*instance, asset).IsOk() ? instance : nullptr;
     }
 

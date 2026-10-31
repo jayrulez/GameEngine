@@ -3,9 +3,9 @@
 
 /// Foundation::Profiler - :source partition.
 ///
-/// What every profiler view reads (Specs/profiler.md): frames by number and the tables their ids
-/// point into. Today a source is the live store in this process or a capture read from a file
-/// (:stream); in 0.2 it is a running player over the network, and no view changes for it.
+/// What every profiler view reads: frames by number and the tables their ids point into. A source
+/// is the live store in this process or a capture read from a file (:stream); a running player
+/// read over the network could be one too without any view changing.
 
 module;
 #include "Core/Prelude.h"

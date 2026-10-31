@@ -6,7 +6,7 @@
 /// Draws the environment as the visible background: a fullscreen triangle at the far plane, depth-
 /// tested (LessEqual, no write) against the forward depth so it only fills pixels no geometry covered,
 /// reconstructing a world-space view ray per pixel (inverse view-proj) and sampling the env cubemap.
-/// Runs after the forward pass, into the same (HDR) color target, before tonemap - so the sky is in
+/// Runs after the forward pass, into the same (HDR) color target, before tonemap, so the sky is in
 /// the linear working space and gets tonemapped with the scene.
 
 module;
@@ -77,7 +77,7 @@ namespace foundation::render
                              u32 vpH, u32 frameIndex, u32 viewIndex, u64 envUid, u32 samples,
                              rendergraph::RGSubresourceRange colorSub)
     {
-        // Drain retired pipelines once per frame (idle after kRetireFrames) - see RetiredPipe.
+        // Drain retired pipelines once per frame (idle after kRetireFrames); see RetiredPipe.
         if (frameIndex != m_lastRetireFrame)
         {
             m_lastRetireFrame = frameIndex;
@@ -115,8 +115,8 @@ namespace foundation::render
         u.sunIntensity = sunIntensity;
         u.jitter = jitter;
         u.prevJitter = prevJitter;
-        // Y-flip targets (WebGPU today; see DxDevice::NeedsClipSpaceYFlip) present the reconstructed sky ray mirrored
-        // vertically vs. Vulkan's negative-height viewport; mirror the sampled ray back on those.
+        // Y-flip targets (WebGPU; see DxDevice::NeedsClipSpaceYFlip) present the reconstructed sky ray mirrored
+        // vertically relative to Vulkan's negative-height viewport; mirror the sampled ray back on those.
         u.sceneYSign = m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f;
 
         graph.AddRenderPass(
@@ -129,7 +129,7 @@ namespace foundation::render
                 b.SetColorTarget(1, velocity, rhi::LoadOp::Load,
                                  rhi::StoreOp::Store); // camera-motion velocity for TAA
                 b.SetReadOnlyDepthTarget(depth);       // depth test on, no write
-                b.ReadTexture(envH);                   // order precompute -> sky + barrier readable
+                b.ReadTexture(envH);                   // order the precompute first and make it readable
                 b.SetViewport(vpX, vpY, vpW, vpH);
                 b.NeverCull();
                 b.SetExecute(
@@ -171,13 +171,13 @@ namespace foundation::render
         if (m_pipeline != nullptr)
         {
             // A rebuild (shader reload or MSAA sample-count toggle) may retire a pipeline still
-            // referenced by in-flight command buffers, so DEFER its free by kRetireFrames (drained per
-            // frame in DeclareSky) rather than a render-path WaitIdle (web-hostile).
+            // referenced by in-flight command buffers, so defer its free by kRetireFrames (drained per
+            // frame in DeclareSky) rather than WaitIdle on the render path, which the web cannot afford.
             m_retiredPipes.PushBack(RetiredPipe{m_pipeline, kRetireFrames});
             m_pipeline = nullptr;
         }
 
-        // 2 targets: color (matches the HDR target) + velocity (camera-motion, for TAA). No blend.
+        // 2 targets: color (matches the HDR target) and velocity (camera motion, for TAA). No blend.
         rhi::ColorTargetState targets[2] = {};
         targets[0].format = colorFmt;
         targets[1].format = kGVelocityFormat;
@@ -188,7 +188,7 @@ namespace foundation::render
         ds.format = depthFmt;
         ds.depthTestEnabled = true;
         ds.depthWriteEnabled = false;
-        ds.depthCompare = rhi::depth::NearerOrEqual(); // the sky sits AT the far plane: only a
+        ds.depthCompare = rhi::depth::NearerOrEqual(); // the sky sits at the far plane: only a
                                                        // cleared (background) pixel passes
 
         rhi::RenderPipelineDesc pd{};
@@ -198,7 +198,7 @@ namespace foundation::render
         pd.depthStencil = ds;
         pd.primitive.topology = rhi::PrimitiveTopology::TriangleList;
         pd.primitive.cullMode = rhi::CullMode::None;
-        pd.multisample.count = samples; // scene-pass MSAA: sky draws into the MSAA hdr+velocity
+        pd.multisample.count = samples; // scene-pass MSAA: sky draws into the MSAA hdr and velocity
         pd.label = u8"sky";
         if (!m_device->CreateRenderPipeline(pd, m_pipeline).IsOk())
         {

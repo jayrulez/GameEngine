@@ -3,7 +3,7 @@
 
 // propertyanimation.pipeline - the cook path end to end: author a PropertyAnimationClipAsset, cook it
 // with the builder into a content DB, then load the cooked product through the runtime factory and
-// sample it (proving the asset -> source -> product -> resource wire).
+// sample it, covering the asset, source, product and resource chain.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -26,7 +26,7 @@ using namespace pipeline;
 
 TEST_CASE("propanim.pipeline: asset cooks to the content DB, factory loads + samples it")
 {
-    RegisterPropertyAnimationAssets(); // asset + source + resource types
+    RegisterPropertyAnimationAssets(); // asset, source and resource types
 
     FileDelete(u8"scratch_propanim_pipe_db/clip.rasset");
     RemoveDirectory(u8"scratch_propanim_pipe_db");

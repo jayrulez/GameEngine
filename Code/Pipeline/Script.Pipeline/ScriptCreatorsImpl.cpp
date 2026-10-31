@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Script.Pipeline - the script domain's New Asset creators
-// (agent-playtesting-and-asset-creation.md P1): one per tier (Behavior, Level, Game) for every
-// registered script backend that has a cook, each seeded from the cook's tier starter (never
-// hard-coded text) written to the sources folder.
+// Script.Pipeline - the script domain's New Asset creators: one per tier (Behavior, Level, Game)
+// for every registered script backend that has a cook, each seeded from the cook's tier starter
+// (not hard-coded text) written to the sources folder.
 
 module;
 #include "Core/Prelude.h"

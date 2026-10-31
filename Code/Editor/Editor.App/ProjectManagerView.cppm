@@ -3,18 +3,18 @@
 
 // Editor::App - :project_manager_view partition.
 //
-// The project manager (Documentation/Specs/editor-gui.md, 5.1, layer 13): the window's whole
-// screen at startup with no project given, and after File > Close Project. Its frame is markup
-// (Data/Editor/ProjectManager.xml), New Project and Open Folder first, then every recent project as
-// a row (its picture, name, folder and engine, Open, a menu) or a tile of its picture. There is no
-// selection: an action is one click on the project it is for. Each project is probed as it is
-// shown: one whose folder no longer holds it is dimmed with no Open; one saved by a newer engine
-// is named in the warning colour. The status line under the head says what went wrong.
+// The project manager: the window's whole screen at startup when no project is given, and after
+// File > Close Project. Its frame is markup (Data/Editor/ProjectManager.xml): New Project and Open
+// Folder first, then every recent project as a row (its picture, name, folder and engine, Open, a
+// menu) or as a tile of its picture. There is no selection: an action is one click on the project
+// it is for. Each project is probed as it is shown: one whose folder no longer holds it is dimmed
+// with no Open, and one saved by a newer engine is named in the warning colour. The status line
+// under the heading reports what went wrong.
 //
 // Everything with consequences for the project goes through the services the application binds:
 // opening (the application runs the version check), creating, and saving the list after a change.
-// A change to the list it shows is made again at the GUI's next drain, never inside the click that
-// asked (the clicked button is in what goes).
+// After a change the list is rebuilt at the GUI's next drain, never inside the click that asked for
+// it, since the clicked button is among what the rebuild removes.
 module;
 #include "Core/Prelude.h"
 
@@ -42,7 +42,7 @@ export namespace editor::app
     class ProjectManagerView
     {
     public:
-        /// Its frames, under the data root.
+        /// Its frames' markup path, under the data root.
         static constexpr const char8_t* kPath = kProjectManagerViewPath;
         static constexpr const char8_t* kNewProjectPath = u8"Editor/NewProject.xml";
 
@@ -50,13 +50,13 @@ export namespace editor::app
         {
             editor::ProjectManagerController* controller = nullptr;
             foundation::shell::IDialogService* dialogs = nullptr; // null: no folder or file dialogs
-            /// Open the project in this folder (the application checks its engine first).
+            /// Opens the project in this folder (the application checks its engine first).
             Function<void(StringView)> open;
-            /// Make a project named `name` in `directory`, then open it.
+            /// Makes a project named `name` in `directory`, then opens it.
             Function<void(StringView directory, StringView name)> create;
-            /// The recent list or its layout changed: the store is saved.
+            /// Called when the recent list or its layout changed, so the store is saved.
             Function<void()> storeChanged;
-            /// A dialog's markup by its path (New Project's).
+            /// Loads a dialog's markup by its path (New Project's).
             Function<RefPtr<gui::Node>(StringView)> loadMarkup;
         };
 
@@ -84,7 +84,7 @@ export namespace editor::app
 
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
-        /// The status line (empty hides it).
+        /// Sets the status line (empty hides it).
         void SetStatus(StringView text)
         {
             if (auto* status = Find<gui::Label>(u8"manager-status"))
@@ -99,7 +99,7 @@ export namespace editor::app
             return status != nullptr ? status->GetText() : StringView{};
         }
 
-        /// The projects again, each probed now.
+        /// Rebuilds the project list, probing each project now.
         void Rebuild()
         {
             gui::Node* list = Find<gui::Node>(u8"manager-projects");
@@ -162,7 +162,7 @@ export namespace editor::app
             Later([](ProjectManagerView& self) { self.Rebuild(); });
         }
 
-        /// The projects shown, and how many show their thumbnail (a test's).
+        /// The projects shown, and how many show their thumbnail (for tests).
         [[nodiscard]] usize ShownCount() const noexcept { return m_shown.Size(); }
         [[nodiscard]] usize ThumbnailCount() const noexcept { return m_pictures.Size(); }
         /// What a project's menu offers.
@@ -230,8 +230,8 @@ export namespace editor::app
                 Later([](ProjectManagerView& self) { self.Rebuild(); });
             }
         }
-        /// `image` (any picture the editor reads) as the project's thumbnail, saved as a PNG in its
-        /// editor folder. False, said in the status line, when it does not read or save.
+        /// Sets `image` (any picture the editor reads) as the project's thumbnail, saved as a PNG in
+        /// its editor folder. False, reported in the status line, when it fails to read or save.
         bool SetThumbnailFromImage(StringView projectPath, StringView image)
         {
             foundation::image::Image picture;
@@ -251,7 +251,7 @@ export namespace editor::app
             return true;
         }
 
-        /// New Project: a name and the folder it is made in; Create waits for both.
+        /// New Project: a name and the folder it is made in; Create needs both.
         void ShowCreateDialog()
         {
             gui::SceneRoot* root = m_content ? Cast<gui::SceneRoot>(m_content->GetRootNode()) : nullptr;
@@ -272,7 +272,7 @@ export namespace editor::app
                 return;
             ProjectManagerView* self = this;
             gui::Window* dialog = m_dialog.Get();
-            // Create waits for both fields; the line under them says where the project goes.
+            // Create needs both fields; the line under them says where the project will go.
             const auto refresh = [name, parent, where, create]()
             {
                 const bool ready = !name->GetText().IsEmpty() && !parent->GetText().IsEmpty();
@@ -312,7 +312,7 @@ export namespace editor::app
             m_dialog->OpenModal(*root);
             name->RequestFocus();
         }
-        /// New Project's window while it is open (a test's).
+        /// New Project's window while it is open (for tests).
         [[nodiscard]] gui::Window* CreateDialog() const noexcept { return m_dialog && m_dialog->IsOpen() ? m_dialog.Get() : nullptr; }
 
     private:
@@ -343,8 +343,8 @@ export namespace editor::app
             return nullptr;
         }
 
-        // `work` at the GUI's next drain (the clicked button is in what a rebuild takes away); at
-        // once in no GUI.
+        // Runs `work` at the GUI's next drain (the clicked button is among what a rebuild removes);
+        // with no GUI it runs at once.
         void Later(void (*work)(ProjectManagerView&))
         {
             gui::MutationQueue* queue = m_content ? m_content->GetMutationQueue() : nullptr;
@@ -381,7 +381,7 @@ export namespace editor::app
                                                                                        }});
         }
 
-        // The menu of a project, under `anchor`.
+        // Shows a project's menu under `anchor`.
         void ShowMenu(const String& path, gui::Node& anchor)
         {
             m_menu = MakeRef<gui::Menu>(m_allocator);
@@ -443,7 +443,8 @@ export namespace editor::app
             text->AddChild(path.Get());
             row->AddChild(text.Get());
             row->AddChild(Text(card.engineVersion.AsView(), u8"manager-version").Get());
-            // Open in a slot of its own, empty for a missing project: every row's columns line up.
+            // Open sits in a slot of its own, empty for a missing project, so every row's columns
+            // line up.
             RefPtr<gui::Panel> slot = MakeRef<gui::Panel>(m_allocator);
             slot->AddClass(u8"manager-open-slot");
             if (!card.missing)
@@ -468,9 +469,9 @@ export namespace editor::app
                 tile->AddClass(u8"missing");
             if (card.newer)
                 tile->AddClass(u8"newer");
-            // The picture opens it: a flat button holding it.
+            // Clicking the picture opens the project: a flat button holds it.
             RefPtr<gui::Button> picture = MakeRef<gui::Button>(m_allocator);
-            picture->AddClass(u8"manager-tile-open"); // its hover rings the picture evenly
+            picture->AddClass(u8"manager-tile-open"); // so its hover ring surrounds the picture evenly
             picture->AddChild(ProjectPicture::Make(m_allocator, card.missing ? StringView{} : card.path.AsView(), card.name.AsView(), u8"manager-tile-picture",
                                                    m_pictures)
                                   .Get());
@@ -507,7 +508,7 @@ export namespace editor::app
         Services m_services;
         RefPtr<gui::Node> m_content;
         RefPtr<gui::Window> m_dialog; // New Project
-        RefPtr<gui::Menu> m_menu;     // a project's
+        RefPtr<gui::Menu> m_menu;     // a project's context menu
         Array<UniquePtr<foundation::image::Image>> m_pictures; // what the pictures show
         Array<Card> m_shown;
     };

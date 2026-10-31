@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/PopupPositionerTests.bf (faithful). Beef `let (x,y) = ...` tuple ->
-// Float2; RectangleF -> core::Rectangle; Vector2 -> Float2; Math.Abs(d) < eps -> doctest::Approx.
+// PopupPositioner tests: placement below or beside an anchor, flipping, and clamping to the screen.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -61,7 +60,7 @@ TEST_CASE("popup-positioner: Submenu_PositionsToRight")
 {
     const Float2 p = PopupPositioner::Submenu(Rectangle{100, 50, 150, 200}, Float2{120, 180},
                                               Rectangle{0, 0, 800, 600});
-    CHECK(p.x == doctest::Approx(252)); // right edge of parent + 2px gap (clears the border)
+    CHECK(p.x == doctest::Approx(252)); // right edge of the parent plus a 2px gap (clears the border)
     CHECK(p.y == doctest::Approx(50));
 }
 

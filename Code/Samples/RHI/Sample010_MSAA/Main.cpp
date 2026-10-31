@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample010 - MSAA. Ported from Sedulous Sample010_MSAA.
+/// Sample010 - MSAA.
 /// Renders a triangle with 4x MSAA, resolving to the swap chain.
 
 #include <cstdint>

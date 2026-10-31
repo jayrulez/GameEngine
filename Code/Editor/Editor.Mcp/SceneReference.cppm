@@ -3,14 +3,13 @@
 
 // Editor::Mcp - :scene_reference partition
 //
-// The scene format reference an agent authors scenes from (Documentation/Specs/
-// scene-format-reference.md): two generated documents, built by the running host from its own
-// registrations so they cannot describe a different build.
-//   * SceneExample.scene.xml - a real SaveScene of a scene composed in code: every registered
+// The scene format reference an agent authors scenes from: two generated documents, built by the
+// running host from its own registrations so they cannot describe a different build.
+//   * SceneExample.scene.xml: a real SaveScene of a scene composed in code, with every registered
 //     component at its defaults on an entity of its own, every settings block, a parent and
-//     child, a script behaviour carrying one override of each property kind. Exactly what
+//     child, and a script behaviour carrying one override of each property kind. It is what
 //     scene_write accepts, because it is what the engine writes.
-//   * SceneSchema.json - what each Serialize body wrote, recorded through the real write path
+//   * SceneSchema.json: what each Serialize body wrote, recorded through the real write path
 //     (SchemaRecorder): keys, kinds and defaults in wire order, the data-version chain, joined to
 //     reflection for enum names, attributes and reference targets.
 // Both are deterministic: seeded guids, composition order, no stamps. The hosts serve them as

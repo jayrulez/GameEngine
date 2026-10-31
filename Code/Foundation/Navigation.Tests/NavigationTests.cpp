@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.navigation battery. Everything here is HEADLESS: the target links only
-// Foundation::Navigation (Recast/Detour + Core), no render/physics/device. The bake is a pure
-// function; the runtime wrappers need only a serialized blob.
+// foundation.navigation tests. Everything here is headless: the target links only
+// Foundation::Navigation (Recast, Detour and Core), no render, physics or device. The bake is a
+// pure function; the runtime wrappers need only a serialized blob.
 //
 // Coverage:
-//   - bake determinism: same soup + params -> byte-identical; params change -> data change
-//   - query: a path across a fixture with a central box detours AROUND it; a disconnected
+//   - bake determinism: the same soup and params give identical bytes; changed params change them
+//   - query: a path across a fixture with a central box detours around it; a disconnected
 //     destination is reported (complete=false), an off-mesh destination fails (not a crash)
 //   - crowd: two agents crossing head-on both arrive, positions advance, no NaN, no hard overlap
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
-#include <algorithm> // std::min / std::max - libstdc++ leaks these in, the MSVC STL does not
+#include <algorithm> // std::min, std::max: libstdc++ leaks these in, the MSVC STL does not
 #include <cmath>
 #include <cstring>
 
@@ -45,7 +45,7 @@ namespace
         indices.PushBack(base + 1);
     }
 
-    // A solid box obstacle (top + 4 walls, from y=0 to y=height) over [minX,maxX] x [minZ,maxZ].
+    // A solid box obstacle (top and 4 walls, from y=0 to y=height) over [minX,maxX] x [minZ,maxZ].
     // Winding is irrelevant: the box only needs to rasterize as a tall solid so the ground under
     // its footprint becomes non-walkable (a hole the agent routes around).
     void AddBox(Array<Float3>& verts, Array<u32>& indices, f32 minX, f32 maxX, f32 minZ, f32 maxZ,
@@ -177,7 +177,7 @@ TEST_CASE("navigation: query paths around an obstacle and reports the unreachabl
     NavigationPath path;
     REQUIRE(query.FindPath(Float3{-8, 0, 0}, Float3{8, 0, 0}, path).IsOk());
     CHECK(path.complete);
-    REQUIRE(path.corners.Size() >= 3u); // start + at least one detour corner + end
+    REQUIRE(path.corners.Size() >= 3u); // start, at least one detour corner, end
     f32 maxAbsZ = 0.0f;
     for (const Float3& c : path.corners)
     {
@@ -212,7 +212,7 @@ TEST_CASE("navigation: disconnected destination is reported incomplete, not fail
 
     NavigationPath path;
     const Status st = query.FindPath(Float3{-6, 0, 0}, Float3{6, 0, 0}, path);
-    CHECK(st.IsOk());          // both ends are ON the mesh
+    CHECK(st.IsOk());          // both ends are on the mesh
     CHECK_FALSE(path.complete); // ...but the destination is unreachable
 }
 
@@ -241,7 +241,7 @@ TEST_CASE("navigation: a climb of a whole number of cells counts every one of th
     REQUIRE(query.IsValid());
     NavigationPath path;
     REQUIRE(query.FindPath(Float3{-5, 0, 0}, Float3{5, 0.5f, 0}, path).IsOk());
-    CHECK(path.complete); // up the step: it was cut off when the climb came out at two cells
+    CHECK(path.complete); // up the step, which a climb of two cells would cut off
 }
 
 TEST_CASE("navigation: DebugTriangles enumerates the live navmesh surface")
@@ -333,7 +333,7 @@ TEST_CASE("navigation: two agents cross head-on, both arrive, no hard overlap")
 
 TEST_CASE("tiled bake: a large ground splits into tiles, paths span them, and it is deterministic")
 {
-    // 60x60 ground at cellSize 0.3 / tileCells 64 = 19.2u tiles -> a 4x4 grid.
+    // 60x60 ground at cellSize 0.3 and tileCells 64 gives 19.2-unit tiles, so a 4x4 grid.
     Array<Float3> verts;
     Array<u32> indices;
     AddGround(verts, indices, -30.0f, 30.0f, -30.0f, 30.0f);
@@ -372,7 +372,7 @@ TEST_CASE("tiled bake: a large ground splits into tiles, paths span them, and it
     const i32 id = crowd.AddAgent(Float3{-27, 0, -27}, agent);
     REQUIRE(id >= 0);
     REQUIRE(crowd.SetTarget(id, Float3{27, 0, 27}));
-    for (int step = 0; step < 150; ++step) // 5s at 3.5u/s ~ 12u along the diagonal
+    for (int step = 0; step < 150; ++step) // 5 s at 3.5 units/s, about 12 units along the diagonal
     {
         crowd.Update(1.0f / 30.0f);
     }
@@ -459,7 +459,7 @@ TEST_CASE("tiled bake: Build emits the tiled blob; a retired single-tile (v1) he
     REQUIRE(mesh.Load(Span<const byte>{blob.Data(), blob.Size()}).IsOk());
     CHECK(mesh.IsValid());
 
-    // Same bytes, header version rewritten to the retired 1: refused, not sniffed.
+    // Same bytes, header version rewritten to 1 (single-tile): refused, not sniffed.
     Array<byte> stale = blob;
     u32 version = 1;
     MemCopy(stale.Data() + sizeof(u32), &version, sizeof(version));
@@ -482,7 +482,7 @@ TEST_CASE("tiled bake: stage capture yields contours + walkable span samples in-
                 .IsOk());
 
     REQUIRE(!stages.contourLines.IsEmpty());
-    CHECK(stages.contourLines.Size() % 2u == 0u); // segment PAIRS
+    CHECK(stages.contourLines.Size() % 2u == 0u); // segment pairs
     REQUIRE(!stages.walkableSamples.IsEmpty());
 
     // Everything captured sits on/near the baked geometry (border expansion allows a small
@@ -546,9 +546,9 @@ TEST_CASE("tiled bake: parallel and serial produce byte-identical blobs (the tog
 
 TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh swaps them")
 {
-    // Original scene: open ground + a reference box in a corner (so the VERTICAL envelope
-    // is already 0..3 - byte-parity with a full rebake requires an unchanged envelope; a
-    // patch that grows it is still CORRECT, just not byte-equal in far tiles' headers).
+    // Original scene: open ground and a reference box in a corner, so the vertical envelope
+    // is already 0..3. Byte equality with a full rebake requires an unchanged envelope; a
+    // patch that grows it is still correct, just not byte-equal in far tiles' headers.
     // Edit: a second box dropped inside another tile's area.
     Array<Float3> baseVerts;
     Array<u32> baseIndices;
@@ -574,7 +574,7 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
     REQUIRE(grid.countX == 4);
     REQUIRE(grid.countY == 4);
 
-    // Rebuild EVERY tile the edit region (plus the bake apron) touches, patching in place.
+    // Rebuild every tile the edit region (plus the bake apron) touches, patching in place.
     const f32 apron = (Ceil(params.agentRadius / params.cellSize) + 3.0f) * params.cellSize;
     const Span<const Float3> ev{editedVerts.Data(), editedVerts.Size()};
     const Span<const u32> ei{editedIndices.Data(), editedIndices.Size()};
@@ -602,14 +602,14 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
     }
     CHECK(rebuilt >= 1u);
 
-    // THE guarantee: the patched blob is byte-identical to a full rebake of the edited
+    // The guarantee: the patched blob is byte-identical to a full rebake of the edited
     // geometry (same grid: the box sits inside the original bounds).
     Array<byte> full;
     REQUIRE(NavigationMeshBuilder::BuildTiled(ev, ei, params, full).IsOk());
     REQUIRE(patched.Size() == full.Size());
     CHECK(std::memcmp(patched.Data(), full.Data(), patched.Size()) == 0);
 
-    // Live swap: a mesh loaded from the ORIGINAL blob takes the rebuilt tiles via
+    // Live swap: a mesh loaded from the original blob takes the rebuilt tiles via
     // ReplaceTile and the path now detours around the new obstacle.
     NavigationMesh mesh(DefaultAllocator());
     REQUIRE(mesh.Load(Span<const byte>{original.Data(), original.Size()}).IsOk());
@@ -657,8 +657,8 @@ TEST_CASE("partial rebake: patched tiles equal a full rebake, and the live mesh 
 }
 
 // A level's ground plane reaches far past the region baked (a physics plane 2000 m across):
-// with bounds, the grid is the region's, not the plane's, and the navmesh loads and paths. The
-// whole plane once made a 2000 m grid whose navmesh did not load at runtime (PaperKid).
+// with bounds, the grid is the region's, not the plane's, and the navmesh loads and paths. A grid
+// over the whole plane (2000 m) gives a navmesh that does not load at runtime.
 TEST_CASE("tiled bake: bounds clip the grid to the region; geometry reaching past it does not widen it")
 {
     Array<Float3> verts;

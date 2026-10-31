@@ -4,7 +4,7 @@
 // UI - :flow_layout partition
 //
 // Arranges children left-to-right (horizontal) or top-to-bottom (vertical), wrapping to the next
-// line/column when space runs out. Ported from Sedulous.UI/src/Layout/FlowLayout.bf.
+// line/column when space runs out.
 
 module;
 #include "Core/Prelude.h"
@@ -68,9 +68,9 @@ export namespace foundation::ui
             const f32 maxWidth = (constraints.MaxWidth < kFloatMax)
                                      ? constraints.MaxWidth - chrome.TotalHorizontal()
                                      : kFloatMax;
-            // Children get BOUNDED loose constraints (an unbounded fill-style leaf measured
-            // to kFloatMax would explode the flow); margins are base-handled, rows use margin
-            // boxes.
+            // Children get bounded loose constraints (an unbounded fill-style leaf would measure
+            // to kFloatMax and break the flow); the base class handles margins, and rows use
+            // margin boxes.
             const f32 crossMax = (constraints.MaxHeight < kFloatMax)
                                      ? Max(0.0f, constraints.MaxHeight - chrome.TotalVertical())
                                      : kFloatMax;
@@ -178,7 +178,7 @@ export namespace foundation::ui
                 {
                     continue;
                 }
-                const Float2 mb = child->MarginBoxSize(); // placed as margin boxes (P2b)
+                const Float2 mb = child->MarginBoxSize(); // placed as margin boxes
                 const f32 cw = mb.x;
                 const f32 ch = mb.y;
 
@@ -218,7 +218,7 @@ export namespace foundation::ui
                 {
                     continue;
                 }
-                const Float2 mb = child->MarginBoxSize(); // placed as margin boxes (P2b)
+                const Float2 mb = child->MarginBoxSize(); // placed as margin boxes
                 const f32 cw = mb.x;
                 const f32 ch = mb.y;
 

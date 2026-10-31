@@ -3,11 +3,11 @@
 
 // GUI - :style_value partition
 //
-// Typed CSS values (G2 of Specs/vg-and-gui-lab.md): what a declaration becomes once parsed, so
-// a sheet parses each declaration once and the cascade, the applier and (G3) transitions work on
-// values, not text. Also the value grammars the box properties need: lists split at top-level
-// commas and spaces, angles, box shadows, transform functions, gradients and their stops, and
-// var() substitution anywhere in a value (nested, partial, with fallbacks).
+// Typed CSS values: what a declaration becomes once parsed. A sheet parses each declaration once,
+// and the cascade, the applier and transitions work on values, not text. Also the value grammars
+// the box properties need: lists split at top-level commas and spaces, angles, box shadows,
+// transform functions, gradients and their stops, and var() substitution anywhere in a value
+// (nested, partial, with fallbacks).
 
 module;
 #include "Core/Prelude.h"
@@ -74,7 +74,8 @@ export namespace foundation::gui
         return parts;
     }
 
-    /// `name(arguments)`: true with the name and what is between the parentheses.
+    /// Splits `name(arguments)`. Returns true and sets `name` and `arguments` (the text between
+    /// the parentheses) when `value` has that form.
     [[nodiscard]] inline bool SplitFunction(core::StringView value, core::StringView& name, core::StringView& arguments)
     {
         const core::StringView v = Trim(value);
@@ -91,9 +92,10 @@ export namespace foundation::gui
     // === var() ===
 
     /// Substitutes every var(--name[, fallback]) in `value`, anywhere and nested, through
-    /// `lookup` (a custom property's value, or empty when it has none), whose result is itself
-    /// substituted. False when a reference has no value and no fallback, or the references run
-    /// deeper than a cycle could (the declaration is then invalid, as CSS has it).
+    /// `lookup`, which returns a custom property's value or empty when it has none; the result
+    /// is itself substituted. Returns false when a reference has no value and no fallback, or
+    /// when references nest deep enough to mean a cycle. The declaration is then invalid, as in
+    /// CSS.
     [[nodiscard]] inline bool SubstituteVariables(core::StringView value,
                                                   const core::Function<Optional<core::String>(core::StringView)>& lookup,
                                                   core::String& out, i32 depth = 0)
@@ -112,7 +114,8 @@ export namespace foundation::gui
                 ++i;
                 continue;
             }
-            // The reference's extent: its matching parenthesis, and its first top-level comma.
+            // Find where the reference ends (its matching parenthesis) and its first top-level
+            // comma.
             usize close = i + 4;
             usize comma = 0;
             i32 nesting = 1;
@@ -154,7 +157,7 @@ export namespace foundation::gui
 
     // === Angles ===
 
-    /// `90deg`, `1.5rad`, `0.25turn`, `100grad`, or a bare 0, in radians.
+    /// Parses `90deg`, `1.5rad`, `0.25turn`, `100grad` or a bare 0, and returns radians.
     [[nodiscard]] inline Optional<f32> ParseAngle(core::StringView value)
     {
         const core::StringView v = Trim(value);
@@ -201,8 +204,8 @@ export namespace foundation::gui
         }
     };
 
-    /// `box-shadow`: `none`, or a comma list of `[inset] <x> <y> [blur [spread]] [color]` (the
-    /// keyword and the colour in either place). An empty list for none.
+    /// Parses `box-shadow`: `none`, or a comma list of `[inset] <x> <y> [blur [spread]] [color]`
+    /// where the keyword and the colour may come first or last. Returns an empty list for none.
     [[nodiscard]] inline Optional<Array<ShadowValue>> ParseShadows(core::StringView value)
     {
         Array<ShadowValue> shadows;
@@ -251,9 +254,9 @@ export namespace foundation::gui
 
     // === Filters ===
 
-    /// The filter functions the GUI draws (through VG's layers): a Gaussian blur so far. Others
-    /// (brightness, drop-shadow, ...) need a colour pass VG does not have yet, so a list naming
-    /// one does not parse.
+    /// The filter functions the GUI draws through VG's layers. Only a Gaussian blur exists;
+    /// others (brightness, drop-shadow, ...) need a colour pass VG does not have, so a list
+    /// naming one does not parse.
     enum class FilterKind : u8
     {
         Blur, // Amount: the Gaussian's standard deviation, a length
@@ -270,8 +273,9 @@ export namespace foundation::gui
         }
     };
 
-    /// `filter` and `backdrop-filter`: `none` (an empty list), or functions separated by spaces:
-    /// `blur(<length>)` (no length: 0; negative: invalid).
+    /// Parses `filter` and `backdrop-filter`: `none` (an empty list), or functions separated by
+    /// spaces. The only function is `blur(<length>)`; a missing length means 0 and a negative
+    /// one is invalid.
     [[nodiscard]] inline Optional<Array<FilterFunction>> ParseFilters(core::StringView value)
     {
         Array<FilterFunction> filters;
@@ -306,9 +310,9 @@ export namespace foundation::gui
         return filters;
     }
 
-    /// `text-outline: <width> [color]` and `text-glow: <radius> [color]` (either order), as a
-    /// one-shadow list so they interpolate as shadows do: the outline's width rides as the spread,
-    /// the glow's radius as the blur (as foundation.ui reads them). `none`: an empty list.
+    /// Parses `text-outline: <width> [color]` and `text-glow: <radius> [color]`, in either order,
+    /// as a list of one shadow so they interpolate as shadows do. The outline's width becomes the
+    /// spread and the glow's radius becomes the blur. `none` gives an empty list.
     [[nodiscard]] inline Optional<Array<ShadowValue>> ParseTextEffectShadow(core::StringView value, bool outline)
     {
         Array<ShadowValue> shadows;
@@ -362,9 +366,9 @@ export namespace foundation::gui
         f32 M[6] = {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f};
     };
 
-    /// `transform`: `none`, or a space list of translate(x[, y]), translateX/Y, rotate(a),
+    /// Parses `transform`: `none`, or a space list of translate(x[, y]), translateX/Y, rotate(a),
     /// scale(s[, s]), scaleX/Y, skew(ax[, ay]), skewX/Y and matrix(a, b, c, d, e, f), applied
-    /// left to right. An empty list for none.
+    /// left to right. Returns an empty list for none.
     [[nodiscard]] inline Optional<Array<TransformFunction>> ParseTransforms(core::StringView value)
     {
         Array<TransformFunction> functions;
@@ -480,16 +484,17 @@ export namespace foundation::gui
         LengthValue Y{50.0f, LengthUnit::Percent};
     };
 
-    /// A translation's or an origin's length in the box's units: a percentage of `size`, anything
-    /// else as written (pixels).
+    /// Resolves a translation or origin length to pixels: a percentage is taken of `size`, and
+    /// anything else is used as written.
     [[nodiscard]] inline f32 ResolveAgainst(LengthValue v, f32 size) noexcept
     {
-        if (v.Unit == LengthUnit::Calc) // its pixels and percentage (E13)
+        if (v.Unit == LengthUnit::Calc) // add its pixel and percentage terms
             return v.Terms[static_cast<usize>(LengthUnit::Px)] + v.Terms[static_cast<usize>(LengthUnit::Percent)] * size / 100.0f;
         return v.Unit == LengthUnit::Percent ? v.Value * size / 100.0f : v.Value;
     }
 
-    /// The matrix a transform list makes for a box of `size`: its functions applied left to right.
+    /// Returns the matrix a transform list makes for a box of `size`, applying its functions
+    /// left to right.
     [[nodiscard]] inline Transform2D ComposeTransforms(const Array<TransformFunction>& functions, core::Float2 size)
     {
         Transform2D m;
@@ -517,8 +522,8 @@ export namespace foundation::gui
         return m;
     }
 
-    /// `transform-origin`: one or two of a length, a percentage, or left / center / right
-    /// (horizontal) and top / center / bottom (vertical); 50% 50% where unsaid.
+    /// Parses `transform-origin`: one or two of a length, a percentage, left / center / right
+    /// (horizontal) or top / center / bottom (vertical). A missing value is 50%.
     [[nodiscard]] inline Optional<TransformOriginValue> ParseTransformOrigin(core::StringView value)
     {
         LengthValue x{50.0f, LengthUnit::Percent};
@@ -580,19 +585,20 @@ export namespace foundation::gui
     struct GradientStopValue
     {
         Color StopColor{};
-        f32 Position = -1.0f; ///< A fraction of the gradient line; negative: spaced evenly (CSS).
+        f32 Position = -1.0f; ///< A fraction of the gradient line; negative means spaced evenly, as in CSS.
     };
 
     struct GradientValue
     {
         GradientKind Kind = GradientKind::Linear;
-        f32 Angle = 3.14159265358979f; ///< Linear: the CSS angle (0 up, clockwise; 180deg is down). Conic: from.
+        f32 Angle = 3.14159265358979f; ///< Linear: the CSS angle (0 up, clockwise; 180deg is down). Conic: the `from` angle.
         bool Repeating = false;
         Array<GradientStopValue> Stops;
     };
 
-    /// The stops with every position settled, as CSS does: the first at 0 and the last at 1 when
-    /// unsaid, the ones between spaced evenly, and none before the one ahead of it.
+    /// Returns the stops with every position settled, as CSS does. The first defaults to 0 and
+    /// the last to 1, stops without a position are spaced evenly between, and no stop sits before
+    /// the one ahead of it.
     [[nodiscard]] inline Array<GradientStopValue> SettleStops(const Array<GradientStopValue>& stops)
     {
         Array<GradientStopValue> out = stops;
@@ -620,7 +626,7 @@ export namespace foundation::gui
         return out;
     }
 
-    /// linear-gradient([<angle> | to <side or corner>,] stops), radial-gradient([<shape or
+    /// Parses linear-gradient([<angle> | to <side or corner>,] stops), radial-gradient([<shape or
     /// position>,] stops) and conic-gradient([from <angle>,] stops), and their repeating-
     /// forms; a stop is `<color> [<percentage>]`.
     [[nodiscard]] inline Optional<GradientValue> ParseGradient(core::StringView value)
@@ -737,8 +743,9 @@ export namespace foundation::gui
         core::String Image; ///< An image path (url()).
     };
 
-    /// `background` / `background-image`: `none`, or a comma list of layers, the first on top,
-    /// each a colour (the bottom one only, in CSS), a gradient, or url(path).
+    /// Parses `background` and `background-image`: `none`, or a comma list of layers with the
+    /// first on top. Each layer is a colour (in CSS, only the bottom one), a gradient or
+    /// url(path).
     [[nodiscard]] inline Optional<Array<BackgroundLayer>> ParseBackgroundLayers(core::StringView value)
     {
         Array<BackgroundLayer> layers;
@@ -777,8 +784,8 @@ export namespace foundation::gui
 
     // === Side and corner lists ===
 
-    /// One to four values for top, right, bottom, left (CSS's side order and fill-in), parsed by
-    /// `parse`.
+    /// Parses one to four values with `parse` into top, right, bottom and left, filling missing
+    /// sides as CSS does.
     template <typename T, typename Parse>
     [[nodiscard]] Optional<Array<T>> ParseSides(core::StringView value, Parse&& parse)
     {

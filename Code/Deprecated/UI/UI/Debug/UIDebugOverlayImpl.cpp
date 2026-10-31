@@ -5,8 +5,6 @@
 //
 // Holds the body (it reaches into the full View/ViewGroup cluster: Cast<ViewGroup>, view.Width()/
 // IsHovered()/IsFocused()/Layout()), so :ui_debug_overlay stays a thin declaration :view can call.
-// Ported from Sedulous.UI/src/Debug/UIDebugOverlay.bf; Beef `Color(r,g,b,a)` byte literals -> the local
-// C() helper; `view as ViewGroup` -> Cast<ViewGroup>.
 
 module;
 #include "Core/Prelude.h"
@@ -161,7 +159,7 @@ namespace foundation::ui
             }
         }
 
-        // Focus path (blue outline on the focused view + ancestors with focus-within).
+        // Focus path (blue outline on the focused view and ancestors with focus-within).
         if (settings.ShowFocusPath)
         {
             if (view.IsFocused())

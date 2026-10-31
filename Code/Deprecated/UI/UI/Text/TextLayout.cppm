@@ -3,7 +3,7 @@
 
 // UI - :text_layout partition
 //
-// The inline formatter (F2 of Specs/vg-and-gui-lab.md): lays a TextDocument's runs into lines.
+// The inline formatter: lays a TextDocument's runs into lines.
 // Text breaks after spaces and at line breaks, runs of different sizes share a baseline (each
 // line as tall as its tallest run), an icon sits on the baseline as tall as its run's text is
 // big, and each line aligns on its own. What comes out is positioned glyphs per run, underlines,

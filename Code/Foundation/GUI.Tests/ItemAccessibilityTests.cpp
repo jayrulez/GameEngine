@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - an item view's items in the accessibility tree (E17b of Specs/gui-lab-evolution-2.md): each
-// item that has a node (the rows made and a page each side, the current and the selected) is a node
-// of its own, in item order, under an id that follows the item, saying where it stands among them
-// all; the focus is the current item; a screen reader's actions on an item run through its view.
+// GUI - an item view's items in the accessibility tree. Each item that has a node (the rows made,
+// a page either side, the current item and the selected ones) is a node of its own, in item order,
+// under an id that follows the item, and says where it stands among all the items. The focus is the
+// current item, and a screen reader's actions on an item run through its view.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -28,7 +28,7 @@ namespace
         bool IsListening() const override { return true; }
         void Update(const AccessTreeUpdate& update) override { Updates.PushBack(update); }
         void Announce(core::StringView, AnnouncePriority) override {}
-        // The node as the bridge last heard it.
+        // Returns the node as the bridge last received it.
         const AccessNode* Last(u64 id) const
         {
             for (usize u = Updates.Size(); u-- > 0;)
@@ -48,7 +48,7 @@ namespace
 
     struct ListBed
     {
-        StringListModel model; // first: it outlives the view that registers with it
+        StringListModel model; // declared first, so it outlives the view that registers with it
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         core::RefPtr<ListView> list = core::MakeRef<ListView>(core::DefaultAllocator());
         explicit ListBed(int count) : model(Numbered(count))
@@ -94,7 +94,8 @@ TEST_CASE("item-access: a list of a hundred thousand items sends a few dozen nod
     CHECK(first->Name == core::String(u8"item 0"));
     CHECK_FALSE(first->Has(AccessOffscreen));
     CHECK(first->Bounds.height == doctest::Approx(20.0f));
-    // Past the rows made, within the page beyond: a node, off screen, its bounds estimated below.
+    // An item past the rows made but within the page beyond them has a node, off screen, with
+    // its bounds estimated below.
     const AccessNode* below = bed.ItemNode(tree, 15);
     REQUIRE(below != nullptr);
     CHECK(below->Has(AccessOffscreen));
@@ -134,14 +135,14 @@ TEST_CASE("item-access: the focus is the current item; End reaches the last of a
 TEST_CASE("item-access: an item's id follows it through scrolling away and back, and rows inserted above")
 {
     ListBed bed(1000);
-    // Each tree held while its nodes are read (they live in it).
+    // Each tree is held while its nodes are read, because the nodes live in it.
     AccessTreeUpdate tree = bed.Tree();
     REQUIRE(bed.ItemNode(tree, 5) != nullptr);
     const u64 fifth = bed.ItemNode(tree, 5)->Id;
     bed.list->ScrollToItem(500);
     (void)bed.root->UpdateLayout();
     tree = bed.Tree();
-    CHECK(bed.ItemNode(tree, 5) == nullptr); // far from the rows made: no node now
+    CHECK(bed.ItemNode(tree, 5) == nullptr); // far from the rows made, so it has no node now
     bed.list->ScrollToItem(0);
     (void)bed.root->UpdateLayout();
     tree = bed.Tree();
@@ -152,7 +153,7 @@ TEST_CASE("item-access: an item's id follows it through scrolling away and back,
     tree = bed.Tree();
     const AccessNode* moved = bed.ItemNode(tree, 6);
     REQUIRE(moved != nullptr);
-    CHECK(moved->Id == fifth); // the same item, a place further down
+    CHECK(moved->Id == fifth); // the same item, one place further down
     CHECK(moved->Name == core::String(u8"item 4"));
 
     // Children in item order, whatever order the rows were made in.
@@ -186,7 +187,7 @@ TEST_CASE("item-access: a screen reader focuses an item off screen, scrolling to
     CHECK(bed.list->IsFocused());
     CHECK(bed.list->GetCurrentItem() == 15);
     CHECK(bed.list->IsItemSelected(15));
-    CHECK(bed.list->RowForItem(15) != nullptr); // made: scrolled into view
+    CHECK(bed.list->RowForItem(15) != nullptr); // its row is made, since it scrolled into view
 
     const AccessTreeUpdate before = bed.Tree();
     REQUIRE(bed.ItemNode(before, 3) != nullptr);
@@ -230,7 +231,7 @@ TEST_CASE("item-access: a tree's items say their level and place among their sib
     CHECK(code->SetSize == 2);
     CHECK(code->Has(AccessCollapsed));
     CHECK(code->Takes(AccessAction::Expand));
-    CHECK(find(t, u8"VG") == nullptr); // closed: its children are not items
+    CHECK(find(t, u8"VG") == nullptr); // closed, so its children are not items
 
     AccessActionRequest expand;
     expand.Target = code->Id;
@@ -248,7 +249,7 @@ TEST_CASE("item-access: a tree's items say their level and place among their sib
 
 TEST_CASE("item-access: a table's rows say their index; the table its rows and columns")
 {
-    TableModel model; // first: it outlives the view that registers with it
+    TableModel model; // declared first, so it outlives the view that registers with it
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
     core::Array<core::String> columns;

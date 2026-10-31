@@ -3,19 +3,20 @@
 
 #pragma pack_matrix(row_major)
 
-// Terrain DEPTH-only VS (camera depth prepass + CSM cascade passes). Replays terrain.vs's exact height
-// displacement + world placement, but outputs ONLY clip position (no fragment stage - opaque casters
-// are vertex-only). ViewProj is the camera VP (prepass) or a cascade's world->light-clip (shadow pass);
+// Terrain depth-only vertex stage (the camera depth prepass and the CSM cascade passes). Replays
+// terrain.vs's height displacement and world placement exactly, but outputs only the clip position
+// (no fragment stage: opaque casters are vertex-only). ViewProj is the camera VP (prepass) or a
+// cascade's world->light-clip (shadow pass);
 // ChunkToWorld places the heightfield instance. Skirt verts are never drawn in the depth pass (the
 // renderer binds only the surface index range), so the skirt flag is ignored here.
 //
 // Declares only the two matrices it needs from the shared TerrainView cbuffer (offsets 0 and 64).
-// No HOLES variant: a holed chunk's depth draws (prepass AND cascades) use the "terrain" VS module
+// No HOLES variant: a holed chunk's depth draws (prepass and cascades) use the "terrain" VS module
 // the colour pass rasterizes with, paired with terrain_depth.ps (see TerrainRenderer's depth PSO).
 
 cbuffer TerrainView : register(b0, space0) {
     float4x4 ChunkToWorld; // heightfield-local -> world
-    float4x4 ViewProj;     // world -> clip (camera prepass) OR world -> cascade light-clip (shadow pass)
+    float4x4 ViewProj;     // world -> clip (camera prepass) or world -> cascade light-clip (shadow pass)
 };
 
 cbuffer TerrainChunk : register(b0, space1) {

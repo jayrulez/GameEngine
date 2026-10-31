@@ -1,4 +1,4 @@
-# Foundation::Animation.Resource - `foundation.animation.resource`: skeletons + clips as
+# Foundation::Animation.Resource - `foundation.animation.resource`: skeletons and clips as
 # cooked resources (Source -> Factory -> runtime Skeleton/AnimationClip).
 util_add_engine_library(Animation.Resource ALIAS Foundation::Animation.Resource)
 target_link_libraries(Animation.Resource

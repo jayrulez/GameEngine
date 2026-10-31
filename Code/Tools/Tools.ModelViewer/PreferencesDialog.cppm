@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Tools.ModelViewer - `modelviewer.preferences`: the viewer's Preferences (Documentation/Specs/
-// model-viewer.md, P9), a modal window of Data/ModelViewer/Preferences.xml as the editor's
-// Preferences is of its markup. It opens on the settings as they are; Save gathers every control
-// into one settings.set (the command an agent runs too), and stays open saying why when that is
-// refused; Cancel or closing it forgets the changes. Clear cache runs cache.clear at once.
+// Tools.ModelViewer - `modelviewer.preferences`: the viewer's Preferences, a modal window built
+// from Data/ModelViewer/Preferences.xml, as the editor's Preferences is built from its markup. It
+// opens showing the current settings. Save gathers every control into one settings.set call (the
+// same command an agent runs) and stays open with the reason when that is refused; Cancel or
+// closing the window discards the changes. Clear cache runs cache.clear immediately.
 
 module;
 #include "Core/Prelude.h"
@@ -31,15 +31,15 @@ export namespace modelviewer
 
         struct Services
         {
-            /// settings.set with the controls' values: empty when kept, else why not.
+            /// Runs settings.set with the controls' values; returns empty on success, else the reason.
             Function<String(const JsonValue&)> save;
-            /// cache.clear: what it says to show (the bytes freed, or why not).
+            /// Runs cache.clear; returns the message to show (the bytes freed, or why it was refused).
             Function<String()> clearCache;
-            /// The cache's size now, to show.
+            /// The cache's current size, for display.
             Function<String()> cacheSize;
-            /// A folder chosen for a field (a native dialog), handed to the callback.
+            /// Lets the user choose a folder for a field in a native dialog, and passes it to the callback.
             Function<void(StringView start, Function<void(StringView)>)> chooseFolder;
-            /// Where screenshots go when the field is empty, and the cache's default, to say so.
+            /// Where screenshots go when the field is empty, and the default cache folder, for display.
             String defaultScreenshots;
             String defaultCache;
         };
@@ -64,7 +64,8 @@ export namespace modelviewer
                 m_window->Close();
         }
 
-        /// Opens it over `root` with `settings` in its controls; false with no markup or open already.
+        /// Opens the dialog over `root` with `settings` in its controls; false when the markup is
+        /// missing or the dialog is already open.
         bool Open(gui::Node& root, const ViewerSettings& settings)
         {
             if (!m_window || m_window->IsOpen())
@@ -115,7 +116,7 @@ export namespace modelviewer
             return v;
         }
 
-        /// Save: the controls through settings.set; closed when kept.
+        /// Saves the controls through settings.set, closing the dialog on success.
         bool Save()
         {
             const String refused = m_services.save ? m_services.save(Gathered()) : String{};
@@ -154,7 +155,7 @@ export namespace modelviewer
             return nullptr;
         }
 
-        // The controls, once: the sliders' numbers beside them, the folder buttons, the buttons.
+        // Wires the controls once: the sliders' value labels, the folder buttons, and the dialog buttons.
         void Bind()
         {
             PreferencesDialog* self = this;
@@ -225,7 +226,7 @@ export namespace modelviewer
                 size->SetText(m_services.cacheSize().AsView());
         }
 
-        // The controls as `s` has them.
+        // Sets the controls from `s`.
         void Show(const ViewerSettings& s)
         {
             auto text = [&](StringView id, StringView value)

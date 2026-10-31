@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - direction (E9b of Specs/gui-lab-evolution.md): a node runs as the first ancestor that says
-// does, else as the GUI's language is written; right to left mirrors flex rows, a column's cross
-// start, grid columns and a stack's start, margins staying on the sides their style names; dock
-// stays physical, its start and end sides following the direction; the logical margins, paddings
-// and insets land on the sides the direction puts them on; a scroller's bar goes to the inline end;
-// a slider, a tab strip and a menu bar take Left and Right along the way they run; mirror-on-rtl
-// flips a node's drawing; text runs as its node does, and CSS's `direction` sets it.
+// GUI - direction. A node takes its direction from the nearest ancestor that sets one, or else
+// from the way the GUI's language is written. Right to left mirrors flex rows, a column's cross
+// start, grid columns and a stack's start, while margins stay on the sides their style names. Dock
+// stays physical, but its start and end sides follow the direction. Logical margins, paddings and
+// insets land on the sides the direction gives them. A scroller's bar goes to the inline end. A
+// slider, a tab strip and a menu bar move with Left and Right along the way they run.
+// mirror-on-rtl flips a node's drawing. Text runs as its node does, and the CSS `direction`
+// property sets it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -71,7 +72,7 @@ TEST_CASE("direction: a node runs as the first ancestor that says, else as the G
     CHECK_FALSE(page->IsRightToLeft());
     loc.SetLanguage(SV(u8"ar-EG"));
     CHECK(page->IsRightToLeft());
-    CHECK_FALSE(inside->IsRightToLeft()); // its ancestor says
+    CHECK_FALSE(inside->IsRightToLeft()); // its ancestor sets the direction
     fixedLtr->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
     CHECK(inside->IsRightToLeft());
     CHECK(fixedLtr->GetDirectionName() == core::String(u8"rtl"));
@@ -135,16 +136,16 @@ TEST_CASE("direction: CSS's direction sets it; text-align start and end follow i
     page->AddChild(other.Get());
     StyleManager styles(CSSParser::Parse(SV(u8".start { text-align: start; } .end { text-align: end; }")));
     styles.ApplyTree(*bed.root.Get());
-    CHECK(label->GetTextAlignH() == TextHAlign::Start); // the paragraph's direction places them (E9c)
+    CHECK(label->GetTextAlignH() == TextHAlign::Start); // the paragraph's direction places them
     CHECK(other->GetTextAlignH() == TextHAlign::End);
     CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::LeftToRight);
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".page { direction: rtl; } .start { text-align: start; } .end { text-align: end; }")));
     styles.ApplyTree(*bed.root.Get());
     CHECK(page->GetLayoutDirection() == Node::LayoutDirection::RightToLeft);
-    CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::RightToLeft); // its text runs as it does
+    CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::RightToLeft); // its text runs as the label does
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".start { text-align: start; }")));
     styles.ApplyTree(*bed.root.Get());
-    CHECK(page->GetLayoutDirection() == Node::LayoutDirection::Inherit); // the sheet no longer says
+    CHECK(page->GetLayoutDirection() == Node::LayoutDirection::Inherit); // the sheet no longer sets it
     CHECK(label->GetTextLayout().GetDirection().Direction == foundation::fonts::TextDirection::LeftToRight);
 }
 
@@ -220,10 +221,10 @@ TEST_CASE("direction: a scroller's vertical bar goes to the inline end; a slider
     const core::Float2 at{slider->GetScreenBounds().x + 30.0f, slider->GetScreenBounds().y + 10.0f};
     d.InjectMouseDown(at, MouseButton::Left);
     d.InjectMouseUp(at, MouseButton::Left);
-    CHECK(slider->GetValue() == doctest::Approx(0.75)); // a quarter in from the right end, its start
+    CHECK(slider->GetValue() == doctest::Approx(0.75)); // a quarter in from the right end, which is its start
     slider->RequestFocus();
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Left));
-    CHECK(slider->GetValue() == doctest::Approx(0.8)); // Left goes on, towards the end
+    CHECK(slider->GetValue() == doctest::Approx(0.8)); // Left moves on, towards the end
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
     CHECK(slider->GetValue() == doctest::Approx(0.75));
 }
@@ -263,7 +264,7 @@ TEST_CASE("direction: mirror-on-rtl flips a node's drawing about its centre, onl
     page->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
     bed.Layout();
     CHECK(icon->IsMirrored());
-    // At x 80 to 100 now: its own left edge drawn at its right.
+    // Now at x 80 to 100, with its own left edge drawn at its right.
     CHECK(icon->ConvertToWorldSpace(core::Float2{0.0f, 0.0f}).x == doctest::Approx(100.0f));
     CHECK(icon->ConvertToWorldSpace(core::Float2{20.0f, 0.0f}).x == doctest::Approx(80.0f));
     page->SetLayoutDirection(Node::LayoutDirection::LeftToRight);
@@ -325,7 +326,7 @@ TEST_CASE("direction: a right-to-left submenu opens to the left; Left goes into 
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Left));
     REQUIRE(sub->IsOpen());
     bed.Layout();
-    // At its item's inline end: the menu's left edge.
+    // The submenu opens at its item's inline end, which is the menu's left edge.
     CHECK(sub->ConvertToRootSpace(core::Float2{sub->GetSize().x, 0.0f}).x == doctest::Approx(240.0f));
     d.InjectKeyDown(static_cast<core::u32>(KeyCode::Right));
     CHECK_FALSE(sub->IsOpen());
@@ -348,7 +349,8 @@ TEST_CASE("direction: a right-to-left scroller starts at its inline start, its o
     bed.Layout();
     const Rect box = strip->GetContentBounds();
 
-    // At the start: the first cell against the right edge, the rest past the left (CSS's model).
+    // At the start, the first cell is against the right edge and the rest lie past the left, as
+    // in CSS.
     CHECK(strip->GetScrollOffset().x == doctest::Approx(0.0f));
     CHECK(strip->GetScrollMin().x == doctest::Approx(-220.0f));
     CHECK(strip->GetScrollMax().x == doctest::Approx(0.0f));
@@ -359,7 +361,7 @@ TEST_CASE("direction: a right-to-left scroller starts at its inline start, its o
     const Rect thumb = strip->ScrollBarThumb(0);
     CHECK(thumb.x + thumb.width == doctest::Approx(track.x + track.width));
 
-    // Clamped to [-range, 0]; the end is the left.
+    // The offset is clamped to [-range, 0], and the end is at the left.
     strip->SetScrollOffset(core::Float2{50.0f, 0.0f});
     CHECK(strip->GetScrollOffset().x == doctest::Approx(0.0f));
     strip->SetScrollOffset(core::Float2{-1000.0f, 0.0f});
@@ -420,6 +422,6 @@ TEST_CASE("direction: content wider than a right-to-left row overflows toward it
     });
     auto wide = Box(*row.Get(), [](LayoutStyle& s) { s.Width = LayoutLength::Px(130.0f); s.Shrink = 0.0f; });
     bed.Layout();
-    // As CSS has it: its start against the row's right edge, the 30 past it on the left.
+    // As in CSS, its start sits against the row's right edge and the extra 30 lie past the left.
     CHECK(wide->GetPosition().x == doctest::Approx(-30.0f));
 }

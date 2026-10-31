@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // HeightfieldEditorPage tests: the factory's type, then the page from the image pages' markup over
-// a heightfield in a project: its heights shown from the source's lowest to its highest, a sample
-// read in metres by the asset's Y range, the source's facts read only and following an edit of the
-// range (one undo step), and a blank heightfield said in the picture's place.
+// a heightfield in a project. Its heights show from the source's lowest to its highest, a sample
+// reads in metres by the asset's Y range, the source's facts are read only and follow an edit of
+// the range (one undo step), and a blank heightfield is reported in the picture's place.
 
 #include <doctest/doctest.h>
 
@@ -91,7 +91,7 @@ namespace
 
 TEST_CASE("HeightfieldEditor registers a factory the registry routes for HeightfieldAsset")
 {
-    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
+    const app::AssetPageServicesSource none; // no services, only the registration; declared first so it outlives the context
     EditorContext context{DefaultAllocator()};
     RegisterHeightfieldEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::HeightfieldAsset::StaticType());

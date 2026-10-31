@@ -5,7 +5,6 @@
 //
 // IFontParser for TrueType/OpenType (.ttf/.ttc/.otf): copies source bytes into
 // an owned buffer and builds a TrueTypeFont. Atlas baking is a separate step.
-// Ported from Sedulous.Fonts.TTF/TrueTypeFontParser.bf.
 
 module;
 #include "Core/Prelude.h"

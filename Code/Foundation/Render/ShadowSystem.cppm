@@ -6,7 +6,7 @@
 /// Shadow mapping, sampled with PCF in the forward shader. The directional light renders
 /// kShadowCascadesCount (4) cascades into a depth array with a layer per view's cascade; spot and
 /// point lights render into a 2048 depth atlas of 512 tiles with two layers, a realtime one redrawn
-/// every frame and a static one redrawn only when its casters change. This partition OWNS the depth
+/// every frame and a static one redrawn only when its casters change. This partition owns the depth
 /// textures (one set per frame-in-flight) and imports them into the frame graph; RenderFrame
 /// (:pipeline, which has the renderer registry) declares the depth passes that re-emit the casters
 /// and threads the bindings into the forward pass.
@@ -30,8 +30,8 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
-    // Unproject an NDC corner (clip xy in [-1,1], z an NDC depth - name it: projection::kNdcDepthNear /
-    // kNdcDepthFar, never a literal) to world space via the inverse view-proj.
+    // Unproject an NDC corner (clip xy in [-1,1], z an NDC depth: name it with projection::kNdcDepthNear
+    // or kNdcDepthFar, never a literal) to world space via the inverse view-proj.
     [[nodiscard]] inline Float3 UnprojectNDC(const Float4x4& invViewProj, f32 ndcX, f32 ndcY,
                                              f32 ndcZ)
     {
@@ -48,11 +48,11 @@ export namespace foundation::render
         return Min(cam.farZ, Max(distance, 1.0f) + cam.pullBack);
     }
 
-    // Fit CSM cascades to the camera frustum. Practical split (lambda blend of log + uniform), a bounding
-    // SPHERE fit per cascade (stable under camera rotation) with radius snapping, plus light-space TEXEL
-    // snapping - the anti-shimmer fix Sedulous lacks (the survey flagged it). `lightDir` is the direction
-    // light travels; the light camera looks along it. Cascades cover [near, shadowDistance]; `lambda`
-    // blends the splits (0 = uniform, 1 = logarithmic: more of the map near the camera).
+    // Fit CSM cascades to the camera frustum. A practical split (lambda blend of log and uniform), a
+    // bounding-sphere fit per cascade (stable under camera rotation) with radius snapping, and
+    // light-space texel snapping against shimmer. `lightDir` is the direction light travels; the light
+    // camera looks along it. Cascades cover [near, shadowDistance]; `lambda` blends the splits
+    // (0 uniform, 1 logarithmic: more of the map near the camera).
     [[nodiscard]] inline ShadowCascades ComputeCascades(const ViewCamera& cam, Float3 lightDir,
                                                         f32 shadowDistance, u32 resolution,
                                                         f32 lambda = 0.5f)
@@ -63,8 +63,8 @@ export namespace foundation::render
         const f32 nearZ = cam.NearZ(); // the camera's own near plane, read from its projection
         const f32 farZ =
             Max(nearZ + 1.0f, shadowDistance); // CSM coverage range (splits span [near, this])
-        // The frustum corners below span the CAMERA's full depth range, so split depths must be turned
-        // into fractions of THAT range (camFar), not of the shorter shadow range (farZ).
+        // The frustum corners below span the camera's full depth range, so split depths must be turned
+        // into fractions of that range (camFar), not of the shorter shadow range (farZ).
         const f32 camFar = Max(farZ, cam.FarZ());
 
         f32 splits[N + 1];
@@ -94,8 +94,8 @@ export namespace foundation::render
 
         for (u32 c = 0; c < N; ++c)
         {
-            // Slice corners: interpolate the camera frustum edges (near->far) by each split's fraction of
-            // the camera's depth range (camFar), so a near split gives a SMALL near-cascade slice.
+            // Slice corners: interpolate the camera frustum edges (near to far) by each split's fraction of
+            // the camera's depth range (camFar), so a near split gives a small near-cascade slice.
             const f32 fNear = (splits[c] - nearZ) / (camFar - nearZ);
             const f32 fFar = (splits[c + 1] - nearZ) / (camFar - nearZ);
             Float3 corners[8];
@@ -133,7 +133,7 @@ export namespace foundation::render
             // Texel snap: shift the cascade so its origin lands on whole-texel increments in light clip
             // space, so the shadow texels step in integer units as the camera moves (no edge crawl).
             const Float3 originClip =
-                TransformPoint(Float3{0.0f, 0.0f, 0.0f}, vp); // ortho => w=1, no divide
+                TransformPoint(Float3{0.0f, 0.0f, 0.0f}, vp); // ortho: w=1, no divide
             const f32 half = static_cast<f32>(resolution) * 0.5f;
             const f32 ox = (Floor(originClip.x * half + 0.5f) - originClip.x * half) / half;
             const f32 oy = (Floor(originClip.y * half + 0.5f) - originClip.y * half) / half;
@@ -145,7 +145,7 @@ export namespace foundation::render
         return out;
     }
 
-    // A rectangular tile within the shadow atlas (pixels) - the depth pass's viewport for one caster.
+    // A rectangular tile within the shadow atlas (pixels): the depth pass's viewport for one caster.
     struct AtlasTile
     {
         u32 x = 0, y = 0, w = 0, h = 0;
@@ -153,7 +153,7 @@ export namespace foundation::render
 
     // Whether a cached (Static) atlas tile must be redrawn for a moving caster (a figure, a door)
     // touching its light's volume: one there now, or one there last frame, which has just left and
-    // whose shadow the cache still holds. Spheres are xyz = world centre, w = radius.
+    // whose shadow the cache still holds. Spheres are xyz world centre, w radius.
     [[nodiscard]] inline bool MovingCasterTouchesTile(Float3 tileCenter, f32 tileRadius, Span<const Float4> now,
                                                       Span<const Float4> before)
     {
@@ -179,11 +179,11 @@ export namespace foundation::render
                          tileRes};
     }
 
-    // Finish a local-shadow entry from a light-space view matrix + cone fov + assigned tile: builds the
-    // perspective projection and the atlas scale/bias mapping its clip uv into `tileIndex`. The forward
+    // Finish a local-shadow entry from a light-space view matrix, cone fov and assigned tile: builds the
+    // perspective projection and the atlas scale and bias mapping its clip uv into `tileIndex`. The forward
     // shader does uv = ndc.xy*(0.5,-0.5)+0.5, then uv_atlas = uv*scale + offset.
-    // Near plane scaled to the range: a tiny near (e.g. 0.05) wrecks perspective depth precision -
-    // everything past a few units crams into ndc.z > 0.99 and occluder/receiver separation falls below
+    // Near plane scaled to the range: a tiny near (0.05, say) wrecks perspective depth precision;
+    // everything past a few units crams into ndc.z > 0.99 and occluder-receiver separation falls below
     // the depth bias (no shadow). range*0.05 keeps depth spread across the useful distances.
     [[nodiscard]] inline GpuLocalShadow MakeLocalShadow(const Float4x4& view, f32 range, f32 fov,
                                                         u32 tileIndex, u32 atlasRes, u32 tileRes)
@@ -226,9 +226,9 @@ export namespace foundation::render
         return WithLightBiases(MakeLocalShadow(view, c.range, fov, tileIndex, atlasRes, tileRes), c);
     }
 
-    // One cube face of a point light's shadow (face 0=+X,1=-X,2=+Y,3=-Y,4=+Z,5=-Z), a 90deg perspective
+    // One cube face of a point light's shadow (faces 0..5 are +X, -X, +Y, -Y, +Z, -Z), a 90deg perspective
     // from the light position looking down that axis. The forward shader picks the face by the dominant
-    // axis of (fragment - lightPos), so any consistent up works (it cancels in build+sample).
+    // axis of (fragment - lightPos), so any consistent up works (it cancels between build and sample).
     [[nodiscard]] inline GpuLocalShadow BuildPointShadowFace(const LocalShadowCaster& c, u32 face,
                                                              u32 tileIndex, u32 atlasRes,
                                                              u32 tileRes)
@@ -240,9 +240,9 @@ export namespace foundation::render
                           : (face == 3) ? Float3{0, 0, 1}
                                         : Float3{0, 1, 0}; // ±Y can't use Y-up
         const Float4x4 view = Float4x4::LookAtRH(c.positionWS, c.positionWS + dir, up);
-        // fov slightly WIDER than 90deg: the shader selects faces at the exact 45deg boundary, so a 90deg
-        // frustum would put boundary fragments at the tile EDGE and the PCF taps would fall off it / into
-        // the neighbour tile - a visible seam line. The pad (~100deg) pulls boundary uv inward off the edge.
+        // fov slightly wider than 90deg: the shader selects faces at the exact 45deg boundary, so a 90deg
+        // frustum would put boundary fragments at the tile edge and the PCF taps would fall off it into
+        // the neighbour tile, a visible seam line. The pad (~100deg) pulls boundary uv inward off the edge.
         return WithLightBiases(
             MakeLocalShadow(view, c.range, 1.745f /*~100deg*/, tileIndex, atlasRes, tileRes), c);
     }
@@ -257,7 +257,7 @@ export namespace foundation::render
 
         ~ShadowSystem() { Shutdown(); }
 
-        /// Wire the frames-in-flight retire queue (web-safe atlas grows). Null = drain.
+        /// Wire the frames-in-flight retire queue (web-safe atlas grows). Null means drain.
         void SetRetireQueue(GpuRetireQueue* retire) noexcept { m_retire = retire; }
         ShadowSystem(const ShadowSystem&) = delete;
         ShadowSystem& operator=(const ShadowSystem&) = delete;
@@ -280,20 +280,20 @@ export namespace foundation::render
 
         [[nodiscard]] rhi::TextureView* SampleView(u32 frameIndex) const noexcept;
 
-        // Bumped whenever a shadow texture is (re)created (lazily in 5.1; on resolution/atlas changes in
-        // 5.2+). A consumer caching a bind group over SampleView keys on this so a reused-address view
-        // can't alias a destroyed texture - same reason the cluster buffers carry a version.
+        // Bumped whenever a shadow texture is (re)created (lazily, and when the array grows for more
+        // views). A consumer caching a bind group over SampleView keys on this so a reused-address view
+        // can't alias a destroyed texture, the same reason the cluster buffers carry a version.
         [[nodiscard]] u64 Generation() const noexcept { return m_generation; }
 
-        // Import this frame's shadow texture into the graph: the depth pass writes it, then it barriers to
+        // Import this frame's shadow texture into the graph: the depth pass writes it, then it transitions to
         // DepthStencilRead so the forward pass samples it. Returns the graph handle (invalid if no texture).
         rendergraph::RGHandle ImportTarget(rendergraph::RenderGraph& graph, u32 frameIndex);
 
         [[nodiscard]] u32 CascadeCount() const noexcept { return kCascadeCount; }
 
         // ---- local-light shadow atlas ------------------------------------------------
-        // Spot/point shadows pack into a 2-LAYER depth atlas array (cascades stay in their own array).
-        // Layer 0 = REALTIME (cleared + re-rendered every frame); layer 1 = STATIC (rendered only when the
+        // Spot and point shadows pack into a 2-layer depth atlas array (cascades stay in their own array).
+        // Layer 0 is realtime (cleared and re-rendered every frame); layer 1 is static (rendered only when the
         // static caster set changes, then cached). Each caster gets a fixed square tile in its
         // layer; the forward samples float3(uv_tile, layer).
         static constexpr u32 kAtlasResolution = 2048;
@@ -313,32 +313,33 @@ export namespace foundation::render
         // once (fixed size), so it costs nothing after the first shadowed frame.
         rhi::TextureView* PrepareAtlas(u32 frameIndex);
 
-        // Import this frame's atlas into the graph: the atlas depth pass writes it, then it barriers to
+        // Import this frame's atlas into the graph: the atlas depth pass writes it, then it transitions to
         // DepthStencilRead for the forward sample. Returns the handle (invalid if no atlas).
         rendergraph::RGHandle ImportAtlas(rendergraph::RenderGraph& graph, u32 frameIndex);
 
     private:
-        GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
+        GpuRetireQueue* m_retire = nullptr; // borrowed; null means WaitIdle on grow
         static constexpr rhi::TextureFormat kShadowFormat = rhi::TextureFormat::Depth32Float;
         static constexpr u32 kShadowResolution = 1024; // per cascade
         static constexpr u32 kCascadeCount = ShadowCascades::kCount;
         static constexpr u32 kMaxFramesInFlight = 8;
 
-        // Create one frame-slot's shadow depth ARRAY (one layer per view-cascade) + an array sample view
+        // Create one frame slot's shadow depth array (one layer per view cascade) and an array sample view
         // for the forward. Recreated when the needed layer count grows (more views). Per-layer attachment
         // views are derived by the graph (subresource) at pass time.
         bool EnsureTexture(u32 slot, u32 layerCount);
 
-        // Create one frame-slot's local-shadow atlas (a 2-LAYER depth array: realtime + static) + its
-        // whole-array attachment/sample views. Per-layer attachment views are derived by the graph
-        // (subresource) at pass time. Fixed size - runs once per slot (++generation invalidates caches).
+        // Create one frame slot's local-shadow atlas (a 2-layer depth array: realtime and static) and its
+        // whole-array attachment and sample views. Per-layer attachment views are derived by the graph
+        // (subresource) at pass time. Fixed size, so it runs once per slot (the generation bump
+        // invalidates caches).
         bool EnsureAtlas(u32 slot);
 
         void Shutdown();
 
         rhi::Device* m_device;
         u32 m_framesInFlight = 2;
-        u64 m_generation = 0; // ++ on every shadow texture (re)creation
+        u64 m_generation = 0; // incremented on every shadow texture (re)creation
 
         rhi::Texture* m_textures[kMaxFramesInFlight] = {};
         rhi::TextureView* m_attachViews[kMaxFramesInFlight] = {}; // depth render target
@@ -347,7 +348,7 @@ export namespace foundation::render
             {};                                     // last-known state (import current-state)
         u32 m_layerCounts[kMaxFramesInFlight] = {}; // current array layer count per slot
 
-        // Local-light shadow atlas (5.3): one 2D depth texture per frame slot.
+        // Local-light shadow atlas: one 2-layer depth array per frame slot.
         rhi::Texture* m_atlasTextures[kMaxFramesInFlight] = {};
         rhi::TextureView* m_atlasAttachViews[kMaxFramesInFlight] = {}; // depth render target
         rhi::TextureView* m_atlasSampleViews[kMaxFramesInFlight] =

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// EditorContext + EditorPageRegistry + Selection tests: nearest-type factory dispatch
-// (Traktor's type_difference contest), open/focus/close page lifecycle, undo routing to the
-// active page, selection semantics (dedup, primary, toggle).
+// EditorContext, EditorPageRegistry and Selection tests: factory dispatch to the nearest type up
+// the base chain, the open/focus/close page lifecycle, undo routing to the active page, and
+// selection semantics (dedup, primary, toggle).
 
 #include <doctest/doctest.h>
 
@@ -113,7 +113,7 @@ TEST_CASE("editor-pages: registry nearest-type dispatch")
     REQUIRE(found != nullptr);
     CHECK(found->PrimaryType() == &BaseAsset::StaticType());
 
-    // ...until a MORE SPECIFIC factory wins the distance contest.
+    // ...until a more specific factory wins by being nearer.
     registry.Register(MakeFactory(DerivedAsset::StaticType(), u8"derived"));
     found = registry.FindFactory(DerivedAsset::StaticType());
     REQUIRE(found != nullptr);
@@ -185,8 +185,8 @@ TEST_CASE("editor-context: open, focus, and close pages")
 TEST_CASE("editor-context: NotifyProjectSettingsChanged fires the subscribed hook")
 {
     // The settings dialog fires this after a successful save; the app re-applies
-    // settings-derived session state (default UI font/theme binds) - the fix for a
-    // changed default font keeping its OLD bind until project reopen.
+    // settings-derived session state (the default UI font and theme binds), so a changed
+    // default font takes effect without reopening the project.
     EditorContext ctx{DefaultAllocator()};
     int fired = 0;
     ctx.NotifyProjectSettingsChanged(); // unsubscribed: safe no-op
@@ -198,8 +198,9 @@ TEST_CASE("editor-context: NotifyProjectSettingsChanged fires the subscribed hoo
 
 TEST_CASE("editor-context: IsCookBusy defaults to not-busy and reads the wired query")
 {
-    // PIE's cook gate (GameEditorPage::Play latches, OnUpdate polls this): unwired
-    // (tests, no project) must read NOT busy so a deferred start never hangs.
+    // Play in editor waits for the cook: GameEditorPage::Play latches a start and OnUpdate polls
+    // this. Unwired (in tests, or with no project) it reads not busy, so a deferred start never
+    // hangs.
     EditorContext ctx{DefaultAllocator()};
     CHECK_FALSE(ctx.IsCookBusy());
     bool busy = true;
@@ -208,7 +209,7 @@ TEST_CASE("editor-context: IsCookBusy defaults to not-busy and reads the wired q
     busy = false;
     CHECK_FALSE(ctx.IsCookBusy());
     ctx.CookBusy = {};
-    CHECK_FALSE(ctx.IsCookBusy()); // unwired again (project closed) - never busy
+    CHECK_FALSE(ctx.IsCookBusy()); // unwired again (project closed): never busy
 }
 
 TEST_CASE("editor-context: open-asset interceptors claim newest-first and unregister cleanly")
@@ -224,10 +225,10 @@ TEST_CASE("editor-context: open-asset interceptors claim newest-first and unregi
 
     EditorContext ctx{DefaultAllocator()};
 
-    // No interceptors -> the open is not claimed.
+    // No interceptors: the open is not claimed.
     CHECK(!ctx.TryInterceptOpenAsset(*a));
 
-    // The NEWEST registration is consulted first; a false answer falls through to older ones.
+    // The newest registration is consulted first; a false answer falls through to older ones.
     Array<i32> order;
     const u64 first = ctx.AddOpenAssetInterceptor(
         [&order](foundation::content::Instance&)
@@ -259,7 +260,7 @@ TEST_CASE("editor-context: open-asset interceptors claim newest-first and unregi
     REQUIRE(order.Size() == 1);
     CHECK(order[0] == 3);
 
-    // All removed -> back to unclaimed (removal by id, order-independent).
+    // All removed: back to unclaimed (removal is by id, in any order).
     ctx.RemoveOpenAssetInterceptor(first);
     ctx.RemoveOpenAssetInterceptor(third);
     CHECK(!ctx.TryInterceptOpenAsset(*a));
@@ -342,7 +343,7 @@ TEST_CASE("editor-context: a page owns its command stack, and the active page is
     EditorPage* page = ctx.OpenPage(*a);
     REQUIRE(page != nullptr);
 
-    // A trivial command through the page's own stack.
+    // A trivial command through the page's command stack.
     class Flip final : public IEditorCommand
     {
     public:
@@ -421,7 +422,8 @@ TEST_CASE("editor-context: Notify routes to OnNotice, falls back to the status b
     Array<String> statuses;
     ctx.OnStatus = [&statuses](StringView text) { statuses.PushBack(String(text)); };
 
-    // Unwired OnNotice -> status fallback (pages may Notify unconditionally).
+    // With OnNotice unwired, a notice falls back to the status line (pages may Notify
+    // unconditionally).
     ctx.Notify(NoticeKind::Info, u8"hello");
     REQUIRE(statuses.Size() == 1u);
     CHECK(statuses[0].AsView() == StringView(u8"hello"));
@@ -436,7 +438,7 @@ TEST_CASE("editor-context: Notify routes to OnNotice, falls back to the status b
     ctx.Notify(NoticeKind::Error, u8"cook failed");
     CHECK(gotKind == NoticeKind::Error);
     CHECK(gotMessage.AsView() == StringView(u8"cook failed"));
-    CHECK(statuses.Size() == 1u); // wired notice does NOT double-post status
+    CHECK(statuses.Size() == 1u); // a wired notice does not also post a status
 }
 
 TEST_CASE("editor-context: script execution point set/clear + version stamps")
@@ -559,7 +561,8 @@ TEST_CASE("context: MCP tool contributions register at boot and apply to a host'
 namespace
 {
     // Two interfaces a page might publish: a page that is "a thing with a counter", and one
-    // that is "a thing with a name". Interfaces, not owned objects: what a page IS to others.
+    // that is "a thing with a name". These are interfaces, not owned objects: what a page is to
+    // others.
     class ICounterPage : public IPageService
     {
     public:
@@ -640,7 +643,7 @@ TEST_CASE("context: an asset changed outside its page tells every open page edit
     CHECK(first->told == 1u);
     CHECK(second->told == 1u);
     CHECK(elsewhere->told == 0u);
-    // An asset no page edits: nothing told, nothing wrong.
+    // An asset no page edits: no page is told, and nothing fails.
     CHECK(context.NotifyAssetExternallyModified(Guid::Generate(rng)) == 0u);
 
     context.ClosePage(elsewhere);

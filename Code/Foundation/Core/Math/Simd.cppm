@@ -5,7 +5,7 @@
 //
 // f32x4: a 4-lane float SIMD register abstraction, the substrate for the aligned Vector*/Matrix4
 // compute types (:simd_vector, :simd_matrix). SSE2 backend on x86/x64, scalar fallback elsewhere
-// (ARM/WASM) - the scalar path is correct and portable; NEON/WASM-SIMD are not implemented.
+// (ARM/WASM). The scalar path is correct and portable; NEON/WASM-SIMD are not implemented.
 //
 // This is plumbing: prefer Vector*/Matrix4 in application code. Everything is inline and branch-free
 // per lane; the #if picks the backend at compile time.

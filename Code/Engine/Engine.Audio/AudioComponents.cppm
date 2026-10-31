@@ -3,11 +3,11 @@
 
 // Engine::Audio - :components partition.
 //
-// The authoring components: AudioSourceComponent carries the
-// clip reference + playback/3D intent; AudioListenerComponent selects the listener
-// entity (first active wins; no listener = the subsystem falls back to the active
-// camera's transform, Godot behavior). Runtime fields (voice handle, previous-frame
-// position for velocity/doppler) are transient - never serialized.
+// The authoring components: AudioSourceComponent carries the clip reference and the playback and
+// 3D intent; AudioListenerComponent selects the listener entity (the first active one wins; with
+// no listener the subsystem falls back to the active camera's transform). Runtime fields (the
+// voice handle, the previous-frame position for velocity and doppler) are transient, never
+// serialized.
 
 module;
 #include "Core/Prelude.h"
@@ -24,9 +24,9 @@ using namespace foundation::audio;
 
 export namespace engine::audio
 {
-    // What an AudioSource plays: a single clip, or a sound cue (weighted variants + jitter).
+    // What an AudioSource plays: a single clip, or a sound cue (weighted variants and jitter).
     // The discriminant declutters the inspector (only the relevant Ref shows) and, at runtime,
-    // decides which of clip/cue is used (replaces the old implicit "cue wins if set").
+    // decides which of clip and cue is used.
     enum class AudioSourceType : u8
     {
         Clip,
@@ -42,8 +42,8 @@ export namespace engine::audio
         // with the cue's jitter (autoplay/loop apply to the pick).
         foundation::resource::Ref<SoundCue> cue;
         AudioBus bus = AudioBus::Effects;
-        // Named custom-bus routing (v2): when non-empty and the applied layout has a
-        // custom bus of this name, the voice routes there; unknown/empty = `bus`.
+        // Named custom-bus routing (data version 2): when non-empty and the applied layout has a
+        // custom bus of this name, the voice routes there; unknown or empty uses `bus`.
         String busName;
         f32 volume = 1.0f;
         f32 pitch = 1.0f;  // real resampling at runtime
@@ -53,7 +53,7 @@ export namespace engine::audio
         // Distance low-pass floor (Hz) for spatial sources: the cutoff glides from
         // open at minDistance to this at maxDistance. 0 = no muffling filter.
         f32 distanceLowpassHz = 4000.0f;
-        // Per-voice reverb send (v3): 0..1 scaling this source's feed into the
+        // Per-voice reverb send (data version 3): 0..1 scaling this source's feed into the
         // scene's send reverb (zones drive the room character). 0 = dry only.
         f32 reverbSend = 0.0f;
         u8 priority = 128; // pool contention (higher survives)
@@ -68,9 +68,9 @@ export namespace engine::audio
 
         // Runtime (transient):
         VoiceHandle voice;
-        // Entity-active latch: true while the voice is stopped
-        // BECAUSE the entity is effectively inactive - reactivation restarts autoplay
-        // sources from it. Runtime only, never serialized.
+        // Entity-active latch: true while the voice is stopped because the entity is
+        // effectively inactive; reactivation restarts autoplay sources from it. Runtime only,
+        // never serialized.
         bool activeSuspended = false;
         i32 lastCueVariant = -1; // cue no-repeat state (runtime)
         u32 cueSequentialCursor = 0;
@@ -126,7 +126,7 @@ export namespace engine::audio
         }
     };
 
-    // First ACTIVE listener wins; entities beyond the first are ignored that frame.
+    // The first active listener wins; entities beyond the first are ignored that frame.
     struct AudioListenerComponent
     {
         bool isActive = true;
@@ -141,13 +141,13 @@ export namespace engine::audio
         foundation::core::Serialize(ar, "isActive", c.isActive);
     }
 
-    // ---- reverb zones: environmental reverb follows the LISTENER ----
+    // ---- reverb zones: environmental reverb follows the listener ----
     // A sphere volume; when the scene's listener is inside, the scene's Effects tier
-    // reverberates - wet fades in across the edge band, the WETTEST zone wins.
+    // reverberates. Wet fades in across the edge band, and the wettest zone wins.
     struct AudioReverbZoneComponent
     {
         f32 radius = 8.0f;
-        f32 edgeFade = 0.25f; // fraction of the radius that fades wet 0 -> full
+        f32 edgeFade = 0.25f; // fraction of the radius over which wet fades from 0 to full
         f32 roomSize = 0.6f;
         f32 damping = 0.4f;
         f32 wetLevel = 0.5f;

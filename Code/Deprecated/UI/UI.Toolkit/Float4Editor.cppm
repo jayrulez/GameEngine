@@ -3,9 +3,9 @@
 
 // UI Toolkit - :float4_editor partition
 //
-// Property editor for Float4 values - four NumericFields (X, Y, Z, W) with colored axis labels.
-// A mechanical sibling of Float3Editor (the faithful Sedulous port); grown here for the editor
-// inspector's Float4 component properties (e.g. sprite uvRect).
+// Property editor for Float4 values: four NumericFields (X, Y, Z, W) with colored axis labels.
+// A sibling of Float3Editor, used for the editor inspector's Float4 component properties (for
+// example a sprite's uvRect).
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +17,7 @@ import foundation.core;
 import foundation.vg;
 import foundation.ui;
 import :property_editor;
-import :vector_fields; // reuse AxisLabel + AxisColors
+import :vector_fields; // reuse AxisLabel and AxisColors
 
 using namespace foundation::core;
 
@@ -72,7 +72,7 @@ export namespace foundation::ui::toolkit
 
         private:
             Float4Editor* m_editor;
-            [[maybe_unused]] i32 m_axis; // axis index (kept for parity with the Beef inner field)
+            [[maybe_unused]] i32 m_axis; // axis index (unused)
         };
 
     protected:

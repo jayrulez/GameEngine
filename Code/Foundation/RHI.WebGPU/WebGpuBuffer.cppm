@@ -3,21 +3,22 @@
 
 /// foundation.rhi.webgpu:buffer - Buffer over WGPUBuffer, with the Map emulation.
 ///
-/// The RHI's Map contract is Vulkan-shaped: a PERSISTENT COHERENT pointer - callers
-/// may Map once, hold the pointer, write every frame, and never Unmap (Vulkan's Unmap
-/// is a no-op). WebGPU forbids mapping buffers that carry normal usages, so:
-///   - CpuToGpu: Map returns a CPU SHADOW. Unmap flushes it (wgpuQueueWriteBuffer,
-///     queue-ordered) and closes the mapping; a mapping left OPEN emulates coherence -
-///     the queue re-flushes every outstanding shadow before each submit (see
-///     WebGpuBufferRegistry), so pointer writes become visible like Vulkan's. Each flush
-///     SKIPS the upload when the shadow is byte-identical to the last one sent: on web
-///     every wgpuQueueWriteBuffer marshals a copy across the wasm->JS boundary, so
-///     re-sending unchanged persistent buffers every submit was the dominant frame cost
-///     (a native MemCompare is nearly free by comparison); the skip is safe because the
-///     GPU provably already holds those exact bytes.
-///   - GpuToCpu: a genuine WebGPU mapping - MapAsync(Read) + ProcessEvents pump in Map,
-///     wgpuBufferUnmap in Unmap. Usage is forced to MapRead|CopyDst (all WebGPU allows).
-///   - GpuOnly: Map returns nullptr, same as every backend.
+/// The RHI's Map contract is Vulkan-shaped: a persistent coherent pointer. Callers may
+/// Map once, hold the pointer, write every frame, and never Unmap (Vulkan's Unmap is a
+/// no-op). WebGPU forbids mapping buffers that carry normal usages, so:
+///   - CpuToGpu: Map returns a CPU shadow. Unmap flushes it (wgpuQueueWriteBuffer,
+///     queue-ordered) and closes the mapping. A mapping left open emulates coherence: the
+///     queue re-flushes every outstanding shadow before each submit (see
+///     WebGpuBufferRegistry), so pointer writes become visible as they do on Vulkan. Each
+///     flush skips the upload when the shadow is byte-identical to the last one sent: on
+///     web every wgpuQueueWriteBuffer marshals a copy across the wasm-to-JS boundary, so
+///     re-sending unchanged persistent buffers every submit would dominate the frame (a
+///     native MemCompare is nearly free by comparison). The skip is safe because the GPU
+///     already holds those exact bytes.
+///   - GpuToCpu: a genuine WebGPU mapping, MapAsync(Read) and a ProcessEvents pump in
+///     Map, wgpuBufferUnmap in Unmap. Usage is forced to MapRead|CopyDst (all WebGPU
+///     allows).
+///   - GpuOnly: Map returns nullptr, as on every backend.
 /// WriteBuffer requires 4-byte-multiple sizes, so shadow and upload sizes round up.
 
 module;
@@ -47,10 +48,10 @@ export namespace foundation::rhi::webgpu
             m_queue = queue;
             desc = bufferDesc;
 
-            // wgpu does NOT return null for an invalid descriptor - it returns an
+            // wgpu does not return null for an invalid descriptor: it returns an
             // "invalid" object and raises an uncaptured error. Reject the cases the
             // validator would: a buffer needs a size and at least one usage (GpuToCpu
-            // is exempt - its usage is forced to MapRead|CopyDst below).
+            // is exempt; its usage is forced to MapRead|CopyDst below).
             if (bufferDesc.size == 0 ||
                 (bufferDesc.usage == BufferUsage::None &&
                  bufferDesc.memory != MemoryLocation::GpuToCpu))
@@ -80,7 +81,7 @@ export namespace foundation::rhi::webgpu
         {
             if (!m_shadow.IsEmpty())
             {
-                m_shadowOutstanding = true; // flushed on Unmap AND before every submit
+                m_shadowOutstanding = true; // flushed on Unmap and before every submit
                 m_rangeFlushed = false;     // a fresh mapping: Unmap flushes whole unless ranged
                 return m_shadow.Data();
             }
@@ -89,10 +90,10 @@ export namespace foundation::rhi::webgpu
                 return nullptr; // GpuOnly has no host view
             }
 
-            // Genuine readback mapping: async map + pump (see :api for why no WaitAny).
-            // Heap record + orphan-on-timeout (the fence-fix pattern): a timed-out pump
-            // leaves the callback registered; a stack record would be a dead frame when
-            // a later ProcessEvents finally delivers it.
+            // Genuine readback mapping: async map and pump (see :api for why there is
+            // no WaitAny). A heap record, orphaned on timeout: a timed-out pump leaves
+            // the callback registered, and a stack record would be a dead frame when a
+            // later ProcessEvents finally delivers it.
             struct Result
             {
                 IAllocator* allocator = nullptr;
@@ -100,8 +101,8 @@ export namespace foundation::rhi::webgpu
                 bool mapped = false;
                 bool orphaned = false; // waiter gave up; the callback owns deletion
             };
-            // Async map-callback box (captureless C callback; may outlive the buffer via
-            // orphaning): a process-scope pair by design, like the AS thunk boxes.
+            // Async map-callback box (captureless C callback; it may outlive the buffer
+            // through orphaning), so it is a process-scope allocation.
             auto* result = DefaultAllocator().New<Result>();
             result->allocator = &DefaultAllocator();
             WGPUBufferMapCallbackInfo callback = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
@@ -124,9 +125,9 @@ export namespace foundation::rhi::webgpu
             m_api->PumpUntilWithDevice(m_instance, m_device, result->done);
             if (!result->done)
             {
-                // The request is STILL PENDING - a pending map keeps the buffer in the
-                // "mapped" state and later submissions touching it will fail. Loud,
-                // because the caller only sees nullptr.
+                // The request is still pending: a pending map keeps the buffer in the
+                // "mapped" state and later submissions touching it will fail. Logged as
+                // an error because the caller only sees nullptr.
                 LogError("[webgpu] Buffer::Map timed out with the map request PENDING");
                 result->orphaned = true; // the callback owns the record now
                 return nullptr;
@@ -139,8 +140,8 @@ export namespace foundation::rhi::webgpu
                 return nullptr;
             }
             m_readMapped = true;
-            // Readback is a read-only view; the RHI contract hands out void* - callers
-            // reading through it are fine, writes would be lost (as documented).
+            // Readback is a read-only view; the RHI contract hands out void*. Callers
+            // reading through it are fine; writes would be lost.
             return const_cast<void*>(m_api->wgpuBufferGetConstMappedRange(
                 m_buffer, 0, static_cast<usize>(AlignedSize())));
         }
@@ -166,10 +167,10 @@ export namespace foundation::rhi::webgpu
             }
         }
 
-        /// The ranged half of the emulation: upload exactly [offset, offset+size) of the
-        /// shadow (4-byte aligned outward, as WriteBuffer requires), skipping it when the GPU
-        /// already holds those bytes. Marks the mapping as range-flushed, so neither Unmap nor
-        /// the submit hook re-walks the whole shadow - the caller owns every write from here.
+        /// The ranged half of the emulation: upload just [offset, offset+size) of the shadow
+        /// (4-byte aligned outward, as WriteBuffer requires), skipping it when the GPU already
+        /// holds those bytes. Marks the mapping as range-flushed, so neither Unmap nor the
+        /// submit hook re-walks the whole shadow: the caller owns every write from here.
         void FlushRange(u64 offset, u64 size) override
         {
             if (m_shadow.IsEmpty() || size == 0)
@@ -189,7 +190,7 @@ export namespace foundation::rhi::webgpu
             if (m_lastUploaded.Size() != m_shadow.Size())
             {
                 // First upload through this buffer: the GPU side is zero-initialized, and so is
-                // an untouched shadow, so a zeroed ledger is an honest picture of it.
+                // an untouched shadow, so a zeroed ledger is an accurate picture of it.
                 m_lastUploaded.Resize(m_shadow.Size());
             }
             m_rangeFlushed = true;
@@ -214,8 +215,8 @@ export namespace foundation::rhi::webgpu
         }
 
         /// Actual wgpuQueueWriteBuffer uploads this buffer has issued. Redundant,
-        /// byte-identical flushes are skipped and NOT counted - an observability hook
-        /// the RHI tests use to prove the skip fires.
+        /// byte-identical flushes are skipped and not counted. The RHI tests read it to
+        /// prove the skip fires.
         [[nodiscard]] u64 UploadCount() const { return m_uploadCount; }
 
         void Release()

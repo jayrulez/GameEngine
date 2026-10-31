@@ -4,26 +4,25 @@
 // GUI - :text_layout partition
 //
 // The inline formatter: lays a TextDocument's runs into lines. Text breaks after spaces and at line
-// breaks, runs of different sizes share a baseline (each line as tall as its tallest run, or as the
-// line height says), an icon sits on the baseline as tall as its run's text is big, and each line
-// aligns on its own. What comes out is positioned glyphs per run, underlines, icon rectangles and
-// link rectangles, in the layout's own coordinates; the widget draws them.
+// breaks. Runs of different sizes share a baseline, and each line is as tall as its tallest run or
+// as the line height says. An icon sits on the baseline and is as tall as its run's text size. Each
+// line aligns on its own. The result is positioned glyphs per run, underlines, icon rectangles and
+// link rectangles, all in the layout's own coordinates; the widget draws them.
 //
 // A run that sets no font of its own draws in the style's font (the label's). One that sets a family,
 // a size, bold or italic asks the font service; bold and italic take the family's "<family> Bold",
 // "<family> Italic" or "<family> Bold Italic" face when one is loaded, and are synthesized when not
 // (bold drawn twice a little apart, italic slanted), as browsers do. With no service, such a run
-// draws in the style's font, its bold and italic synthesized. A character a run's face lacks takes
-// the first of the style's fallback families that has it (the rest of a font-family list, E11 of
-// Specs/gui-lab-evolution-2.md): a piece is measured in its faces' stretches, shaped with the
-// whole list, and its glyphs come out as one run per face.
+// draws in the style's font, with its bold and italic synthesized. When a run's face lacks a
+// character, the character takes the first of the style's fallback families (the rest of a
+// font-family list) that has it. A piece is measured stretch by stretch, each in the face that draws
+// it, is shaped with the whole list, and its glyphs come out as one run per face.
 //
-// Copied from foundation.ui's :text_layout (E4 of Specs/gui-lab-evolution.md), and the GUI's own
-// from then on. The GUI adds what CSS's text properties need: a line height, letter spacing, a
-// clamp on the line count and an ellipsis at a line's end, start or middle (text-overflow), and what
-// editing needs: every glyph and line knows the bytes of the plain text it shows, so a caret finds
-// its x and a point its offset. A font with no shaper still measures; its pieces come out as text
-// to draw unshaped, each character placed by measuring (they take no ellipsis).
+// It also supports CSS's text properties: a line height, letter spacing, a clamp on the line count,
+// and an ellipsis at a line's end, start or middle (text-overflow). For editing, every glyph and
+// line records the bytes of the plain text it shows, so a caret can find its x and a point its
+// offset. A font with no shaper still measures: its pieces come out as unshaped text to draw, each
+// character placed by measuring, and they take no ellipsis.
 
 module;
 #include "Core/Prelude.h"
@@ -46,7 +45,7 @@ export namespace foundation::gui
         Left,
         Center,
         Right,
-        Start, ///< the line's start: left, or right in a right-to-left paragraph (E9c)
+        Start, ///< the line's start: left, or right in a right-to-left paragraph
         End,   ///< the line's end
     };
     enum class TextVAlign
@@ -81,9 +80,10 @@ export namespace foundation::gui
         return w == TextWhiteSpace::Normal || w == TextWhiteSpace::PreWrap;
     }
 
-    /// Whether `font` draws every character of `text`: its atlas holds a glyph for each (a font with
-    /// no atlas is taken at its word). Atlases are baked over a range of codepoints, so a widget's
-    /// own marks (an ellipsis, a password's bullet) fall back to ones it has.
+    /// Returns whether `font` draws every character of `text`, that is, whether its atlas holds a
+    /// glyph for each. A font with no atlas is assumed to draw everything. Atlases are baked over a
+    /// range of codepoints, so a widget uses this to replace its own marks (an ellipsis, a
+    /// password's bullet) with characters the font has.
     [[nodiscard]] inline bool FontDraws(const fonts::CachedFont* font, core::StringView text)
     {
         if (font == nullptr || font->font == nullptr)
@@ -98,14 +98,14 @@ export namespace foundation::gui
         }
         return true;
     }
-    /// The ellipsis `font` draws: U+2026, or three full stops.
+    /// Returns the ellipsis to draw in `font`: U+2026 when the font has it, else three full stops.
     [[nodiscard]] inline core::StringView EllipsisFor(const fonts::CachedFont* font)
     {
         return FontDraws(font, core::StringView(u8"\u2026")) ? core::StringView(u8"\u2026") : core::StringView(u8"...");
     }
 
-    /// What CSS chooses of a font past its family and size (E11 of Specs/gui-lab-evolution-2.md):
-    /// the families a character the font lacks falls back to, the weight and the style.
+    /// The parts of a CSS font choice beyond family and size: the fallback families for characters
+    /// the font lacks, the weight and the style.
     struct FontSelection
     {
         /// The rest of a font-family list (comma separated), in order.
@@ -118,8 +118,9 @@ export namespace foundation::gui
         }
     };
 
-    /// Which way a text's paragraphs run: one way, or (Auto, E11) each as its first strong
-    /// character reads, one with none as `AutoRightToLeft` says (its node's way).
+    /// The direction a text's paragraphs run. Either all run one way, or (Auto) each runs as its
+    /// first strong character reads; a paragraph with no strong character then follows
+    /// `AutoRightToLeft`, which carries its node's direction.
     struct ParagraphDirection
     {
         fonts::TextDirection Direction = fonts::TextDirection::LeftToRight;
@@ -127,7 +128,7 @@ export namespace foundation::gui
         [[nodiscard]] bool operator==(const ParagraphDirection&) const noexcept = default;
     };
 
-    /// What a run takes when its markup leaves a style unset, and how the lines go.
+    /// The styles a run uses where its markup sets none, and how the lines are laid out.
     struct TextLayoutStyle
     {
         fonts::CachedFont* Font = nullptr;    ///< the label's font: plain runs draw in it
@@ -139,15 +140,17 @@ export namespace foundation::gui
         Color TextColor = Color::White;
         TextHAlign Align = TextHAlign::Left;
         bool Wrap = true;
-        f32 MaxWidth = 0.0f;      ///< The width lines wrap at, align in and end in an ellipsis past; 0: unbounded.
-        f32 LineHeight = 0.0f;    ///< Each line's height in pixels; 0: its fonts' own.
+        f32 MaxWidth = 0.0f;      ///< Lines wrap at this width, align in it and take an ellipsis past it; 0 means unbounded.
+        f32 LineHeight = 0.0f;    ///< Each line's height in pixels; 0 uses its fonts' line height.
         f32 LetterSpacing = 0.0f; ///< Added after every character, in pixels.
         bool BreakWords = false;  ///< overflow-wrap: a word wider than a line breaks between its graphemes
-        u32 MaxLines = 0;         ///< The most lines kept (line-clamp); 0: all.
+        u32 MaxLines = 0;         ///< The most lines kept (line-clamp); 0 keeps all.
         TextOverflow Overflow = TextOverflow::Clip;
-        /// Each paragraph's base direction (E9c): its node's, or (Auto) its first strong character's.
+        /// Each paragraph's base direction: the node's direction, or (Auto) the direction of the
+        /// paragraph's first strong character.
         fonts::TextDirection Direction = fonts::TextDirection::LeftToRight;
-        /// An Auto paragraph with no strong character runs right to left (its node does).
+        /// When set, an Auto paragraph with no strong character runs right to left, because its node
+        /// does.
         bool AutoRightToLeft = false;
     };
 
@@ -156,15 +159,15 @@ export namespace foundation::gui
     {
         fonts::CachedFont* Font = nullptr;
         Array<fonts::GlyphPosition> Glyphs;
-        /// Each glyph's bytes of the plain text, parallel to Glyphs (an ellipsis has none of its own:
-        /// it covers what it stands for).
+        /// Where each glyph's bytes start in the plain text, parallel to Glyphs. An ellipsis has no
+        /// bytes of its own; it covers the text it stands for.
         Array<usize> GlyphStart;
         Array<usize> GlyphEnd;
         Color TextColor = Color::White;
         f32 Size = 0.0f;
         bool SyntheticBold = false;   ///< no bold face: draw twice, `Size / 24` apart
         bool SyntheticItalic = false; ///< no italic face: slant about the baseline
-        bool Unshaped = false;        ///< its font has no shaper: draw TextStart..TextEnd at X as text (its glyphs only place carets)
+        bool Unshaped = false;        ///< the font has no shaper: draw TextStart..TextEnd at X as text; the glyphs only place carets
         f32 Baseline = 0.0f;
         f32 X = 0.0f;     ///< where its first glyph starts
         f32 Width = 0.0f; ///< its advance
@@ -182,13 +185,13 @@ export namespace foundation::gui
         f32 Baseline = 0.0f;
         f32 Left = 0.0f;  ///< after alignment
         f32 Width = 0.0f; ///< without trailing spaces
-        usize Start = 0;  ///< its bytes of the plain text, its line break left out
+        usize Start = 0;  ///< the line's bytes in the plain text, not counting its line break
         usize End = 0;
         bool Ellipsized = false; ///< an ellipsis stands for some of its text
-        bool RightToLeft = false; ///< its paragraph runs right to left: its start is on its right
+        bool RightToLeft = false; ///< the paragraph runs right to left, so the line starts on its right
     };
 
-    /// A rectangle a part of the text covers, with its run (an icon's, an underline's, a link's).
+    /// A rectangle covered by an icon, an underline or a link, with the run it belongs to.
     struct LaidOutBox
     {
         Rectangle Rect{};
@@ -197,7 +200,7 @@ export namespace foundation::gui
         Color TextColor = Color::White; ///< an underline's colour
     };
 
-    /// A document laid out.
+    /// A laid-out document.
     struct TextLayout
     {
         Array<LaidOutLine> Lines;
@@ -205,12 +208,12 @@ export namespace foundation::gui
         Array<LaidOutBox> Icons;
         Array<LaidOutBox> Underlines;
         Array<LaidOutBox> Links; ///< one per run per line it spans
-        core::String Text;       ///< the plain text the offsets index (a ligature's inner caret places)
+        core::String Text;       ///< the plain text the offsets index; it also places carets inside a ligature
         f32 Width = 0.0f;  ///< the widest line
-        f32 Height = 0.0f; ///< every line
+        f32 Height = 0.0f; ///< all lines together
         bool Clamped = false; ///< lines past the clamp were left out
 
-        /// The run of the link under a point, or -1.
+        /// Returns the run of the link under `point`, or -1 when there is none.
         [[nodiscard]] i32 LinkAt(core::Float2 point) const
         {
             for (const LaidOutBox& box : Links)
@@ -224,7 +227,8 @@ export namespace foundation::gui
             return -1;
         }
 
-        /// The line a caret at `offset` stands on (at a wrap, the line it starts).
+        /// Returns the line a caret at `offset` stands on. At a wrap, that is the line the offset
+        /// starts.
         [[nodiscard]] usize LineOf(usize offset) const
         {
             for (usize i = 0; i < Lines.Size(); ++i)
@@ -232,15 +236,16 @@ export namespace foundation::gui
                     return i;
             return Lines.IsEmpty() ? 0 : Lines.Size() - 1;
         }
-        /// Where a caret at `offset` stands across its line (`upstream`: after the text before it,
-        /// where that is elsewhere, at a direction's boundary).
+        /// Returns the x of a caret at `offset` on its line. With `upstream`, the caret is placed after
+        /// the text before it, which differs from the default only at a direction boundary.
         [[nodiscard]] f32 CaretX(usize offset, bool upstream = false) const
         {
             return Lines.IsEmpty() ? 0.0f : CaretXOnLine(offset, LineOf(offset), upstream);
         }
-        /// Where a caret at `offset` stands across line `line` (a wrapped line's end: its own, not
-        /// the next line's start). Downstream (the default) it is before the text after it;
-        /// `upstream`, after the text before it: the two differ where the directions meet (E9c).
+        /// Returns the x of a caret at `offset` on line `line`. At a wrapped line's end this is the
+        /// line's own end, not the next line's start. Downstream (the default) the caret stands
+        /// before the text after it; with `upstream` it stands after the text before it. The two
+        /// differ where directions meet.
         [[nodiscard]] f32 CaretXOnLine(usize offset, usize line, bool upstream = false) const
         {
             if (line >= Lines.Size())
@@ -254,8 +259,9 @@ export namespace foundation::gui
                         if (run.GlyphEnd[g] == offset && run.GlyphStart[g] < offset)
                             return run.Glyphs[g].rightToLeft ? run.Glyphs[g].x : run.Glyphs[g].x + run.Glyphs[g].advance;
                 }
-            // The leading edge of the glyph the offset starts (a right-to-left glyph's is its
-            // right), else the trailing edge of the one before it, else the line's start.
+            // Use the leading edge of the glyph that starts at the offset (its right edge when it
+            // reads right to left), else the trailing edge of the glyph before it, else the line's
+            // start.
             const LaidOutLine& at = Lines[line];
             f32 x = at.RightToLeft ? at.Left + at.Width : at.Left;
             usize before = 0;
@@ -270,7 +276,7 @@ export namespace foundation::gui
                     const usize start = run.GlyphStart[g], end = run.GlyphEnd[g];
                     if (offset >= start && offset < end)
                     {
-                        // Inside a ligature: the share of its advance before the offset.
+                        // Inside a ligature, take the share of its advance that lies before the offset.
                         const f32 share = end > start ? static_cast<f32>(offset - start) / static_cast<f32>(end - start) : 0.0f;
                         return glyph.rightToLeft ? glyph.x + glyph.advance * (1.0f - share) : glyph.x + glyph.advance * share;
                     }
@@ -284,9 +290,9 @@ export namespace foundation::gui
             }
             return x;
         }
-        /// The offset a caret takes for a point: the line under its y (the first above, the last
-        /// below), then the glyph edge nearest its x; `upstream` says the edge was the trailing one
-        /// of the text before the offset.
+        /// Returns the offset a caret takes for `point`. It finds the line under the point's y (the
+        /// first line when above, the last when below), then the glyph edge nearest its x.
+        /// `upstream` is set when that edge was the trailing edge of the text before the offset.
         [[nodiscard]] usize OffsetAt(core::Float2 point, bool* upstream = nullptr) const
         {
             if (upstream != nullptr)
@@ -302,7 +308,8 @@ export namespace foundation::gui
                 }
             return OffsetOnLine(line, point.x, upstream);
         }
-        /// The offset on line `line` nearest across to `x` (`upstream` as OffsetAt's).
+        /// Returns the offset on line `line` horizontally nearest to `x`; `upstream` is set as
+        /// OffsetAt sets it.
         [[nodiscard]] usize OffsetOnLine(usize line, f32 x, bool* upstream = nullptr) const
         {
             if (upstream != nullptr)
@@ -348,16 +355,17 @@ export namespace foundation::gui
                 best = lastStart;
                 trailing = false;
             }
-            // Upstream only where it stands apart from downstream (a direction's boundary).
+            // Report upstream only where it differs from downstream, at a direction boundary.
             if (upstream != nullptr && trailing && best > Lines[line].Start)
                 *upstream = CaretXOnLine(best, line, true) != CaretXOnLine(best, line, false);
             return best;
         }
 
-        /// The caret one stop across from (`offset`, `upstream`) on its line, left (`step` below 0)
-        /// or right, in visual order (E9c): the line's caret places sorted by x, each once. Past the
-        /// line's edge it goes on to the next line where the line reads that way and to the one
-        /// before where it reads the other way. False when there is nowhere to go.
+        /// Moves the caret at (`offset`, `upstream`) one stop left (`step` below 0) or right on its
+        /// line, in visual order. The stops are the line's caret places sorted by x, each counted
+        /// once. Past the line's edge the caret goes on to the next line when the line reads in that
+        /// direction, and to the previous line when it reads the other way. Returns false when there
+        /// is nowhere to go.
         [[nodiscard]] bool OffsetVisually(usize offset, bool upstream, i32 step, usize& outOffset, bool& outUpstream) const
         {
             if (Lines.IsEmpty())
@@ -378,7 +386,7 @@ export namespace foundation::gui
                         return; // a place already reached
                 stops.PushBack(Stop{x, at, up});
             };
-            // Downstream first, so a place both reach keeps the plain caret.
+            // Add downstream places first, so a place that both reach keeps the downstream caret.
             add(Lines[line].Start, false);
             const bool passes[] = {false, true};
             for (const bool up : passes)
@@ -387,7 +395,7 @@ export namespace foundation::gui
                         for (usize g = 0; g < run.Glyphs.Size(); ++g)
                         {
                             add(up ? run.GlyphEnd[g] : run.GlyphStart[g], up);
-                            // Inside a ligature (fi, lam-alef), a place between each of its graphemes.
+                            // Inside a ligature (fi, lam-alef), add a place between each pair of its graphemes.
                             if (!up && run.GlyphEnd[g] <= Text.Size())
                                 for (usize at = NextGrapheme(Text.AsView(), run.GlyphStart[g]); at < run.GlyphEnd[g];
                                      at = NextGrapheme(Text.AsView(), at))
@@ -429,9 +437,9 @@ export namespace foundation::gui
             return false;
         }
 
-        /// The boxes across line `line` that bytes [start, end) of the text cover (one a stretch of
-        /// glyphs side by side: a selection in mixed-direction text falls in pieces, E9c), left to
-        /// right, as x ranges.
+        /// Fills `out` with the boxes on line `line` that cover bytes [start, end) of the text, as x
+        /// ranges from left to right. Each box is a stretch of adjacent glyphs, so a selection in
+        /// mixed-direction text can fall into several pieces.
         void RangeOnLine(usize start, usize end, usize line, Array<core::Float2>& out) const
         {
             out.Clear();
@@ -449,7 +457,7 @@ export namespace foundation::gui
                         continue;
                     const fonts::GlyphPosition& glyph = run.Glyphs[g];
                     const usize span = run.GlyphEnd[g] - run.GlyphStart[g];
-                    // A ligature's share (from its start's side).
+                    // Take the ligature's share, measured from the side its text starts on.
                     f32 from = static_cast<f32>(a - run.GlyphStart[g]) / static_cast<f32>(span);
                     f32 to = static_cast<f32>(b - run.GlyphStart[g]) / static_cast<f32>(span);
                     if (glyph.rightToLeft)
@@ -468,7 +476,7 @@ export namespace foundation::gui
             for (usize i = 0; i < out.Size(); ++i)
             {
                 if (kept > 0 && out[i].x <= out[kept - 1].y + 0.01f)
-                    out[kept - 1].y = Max(out[kept - 1].y, out[i].y); // touching: one box
+                    out[kept - 1].y = Max(out[kept - 1].y, out[i].y); // touching boxes merge into one
                 else
                     out[kept++] = out[i];
             }
@@ -496,9 +504,9 @@ export namespace foundation::gui
         }
     }
 
-    /// The font a run draws in, the faces it falls back to for what that one lacks (the rest of its
-    /// `font-family` list, E11 of Specs/gui-lab-evolution-2.md), and what of its style the face
-    /// lacks (to synthesize).
+    /// The font a run draws in, the faces it falls back to for characters that font lacks (the
+    /// rest of its `font-family` list), and the parts of its style the face lacks, which are
+    /// synthesized.
     struct ResolvedRunFont
     {
         static constexpr usize kMaxFallbacks = 4;
@@ -509,11 +517,11 @@ export namespace foundation::gui
         bool SyntheticBold = false;
         bool SyntheticItalic = false;
 
-        /// Face `i` of the list: 0 the run's font, then its fallbacks.
+        /// Returns face `i` of the list: 0 is the run's font, and the fallbacks follow.
         [[nodiscard]] fonts::CachedFont* Face(usize i) const noexcept { return i == 0 ? Font : Fallbacks[i - 1]; }
         [[nodiscard]] usize FaceCount() const noexcept { return Font != nullptr ? 1u + FallbackCount : 0u; }
-        /// The first face that has `codepoint` (the run's font when none has it, its missing glyph
-        /// then drawn as that font draws one).
+        /// Returns the first face that has `codepoint`. When none has it, returns the run's font,
+        /// which then draws its missing glyph.
         [[nodiscard]] usize FaceFor(i32 codepoint) const noexcept
         {
             for (usize i = 0; i < FaceCount(); ++i)
@@ -541,13 +549,13 @@ export namespace foundation::gui
                                                     u8" SemiBold", u8" Bold", u8" ExtraBold", u8" Black"};
             return kSuffixes[(core::Clamp<u16>(weight, 100, 900) + 50) / 100 - 1];
         }
-        /// CSS's bolder and lighter, from the weight inherited.
+        /// CSS's bolder and lighter, computed from the inherited weight.
         [[nodiscard]] constexpr u16 Bolder(u16 weight) noexcept { return weight < 350 ? 400 : weight < 550 ? 700 : 900; }
         [[nodiscard]] constexpr u16 Lighter(u16 weight) noexcept { return weight < 550 ? 100 : weight < 750 ? 400 : 700; }
 
-        /// The weights CSS tries for `desired`, nearest first (the hundreds; CSS Fonts 4, 5.2): from
-        /// 400 to 500 up to 500 then down then above 500; below 400 down then up; above 500 up then
-        /// down.
+        /// Fills `out` with the weights CSS tries for `desired`, in hundreds, nearest first (CSS
+        /// Fonts 4, 5.2). For 400 to 500 it tries upward to 500, then downward, then above 500;
+        /// below 400, downward then upward; above 500, upward then downward.
         inline void WeightOrder(u16 desired, u16 (&out)[9]) noexcept
         {
             const u16 want = static_cast<u16>((core::Clamp<u16>(desired, 100, 900) + 50) / 100 * 100);
@@ -587,10 +595,11 @@ export namespace foundation::gui
             bool SyntheticBold = false;
             bool SyntheticItalic = false;
         };
-        /// CSS's matching over the faces the service has: the style first (an italic face of any
-        /// weight before an upright one), then the nearest weight. Bold is synthesized where 600 or
-        /// more was asked for and the face is lighter than 600, italic where no italic face is;
-        /// with no face of the family at all, the family is asked for as it is.
+        /// CSS's font matching over the faces the service has: style first (an italic face of any
+        /// weight before an upright one), then the nearest weight. Bold is synthesized when 600 or
+        /// more was asked for and the chosen face is lighter than 600; italic is synthesized when
+        /// there is no italic face. When the family has no faces at all, the family is requested
+        /// as it is.
         [[nodiscard]] inline FaceChoice ChooseFace(const fonts::IFontService& service, core::StringView family, u16 weight, bool italic)
         {
             u16 order[9]{};
@@ -621,10 +630,10 @@ export namespace foundation::gui
         }
     }
 
-    /// The faces a run falls back to, at its size: for a run of its own family the label's family
-    /// first, then the rest of the label's list; up to ResolvedRunFont::kMaxFallbacks, a face already
-    /// chosen not added again. (They are the families' regular faces: a bold run's fallback glyphs
-    /// are not bold.)
+    /// Adds the faces a run falls back to, at its size. A run with a family of its own falls back
+    /// first to the label's family, then to the rest of the label's list. At most
+    /// ResolvedRunFont::kMaxFallbacks are added, and a face already chosen is not added again.
+    /// These are the families' regular faces, so a bold run's fallback glyphs are not bold.
     inline void AddFallbacks(ResolvedRunFont& out, const TextLayoutStyle& style, bool ownFamily)
     {
         if (style.Fonts == nullptr || out.Font == nullptr)
@@ -651,7 +660,7 @@ export namespace foundation::gui
         ResolvedRunFont out;
         out.Font = style.Font;
         out.Size = run.Size.HasValue() ? run.Size.Value() : style.Size;
-        // A run's <b> is CSS's bolder, its <i> italic, over the label's own weight and style.
+        // A run's <b> applies CSS's bolder to the label's weight, and its <i> makes it italic.
         const u16 weight = run.Bold ? detail::Bolder(style.Selection.Weight) : style.Selection.Weight;
         const bool italic = run.Italic || style.Selection.Italic;
         const bool ownFont = run.Family.HasValue() || run.Size.HasValue() || weight != 400 || italic;
@@ -662,7 +671,7 @@ export namespace foundation::gui
         }
         if (style.Fonts == nullptr)
         {
-            // No service to ask: the label's font, its style synthesized.
+            // With no service to ask, use the label's font and synthesize the run's style.
             out.Size = style.Size;
             out.SyntheticBold = weight >= 600;
             out.SyntheticItalic = italic;
@@ -686,7 +695,7 @@ export namespace foundation::gui
         {
             i32 Run = 0;
             core::StringView Text;
-            usize Start = 0; // its bytes of the plain text
+            usize Start = 0; // its first byte in the plain text
             ResolvedRunFont Font;
             f32 Width = 0.0f;
             f32 TrailingSpace = 0.0f; // the width of the spaces it ends with
@@ -695,10 +704,10 @@ export namespace foundation::gui
             f32 Gap = 0.0f;
             bool Icon = false;
             bool LineBreak = false;
-            f32 X = 0.0f;   // placed, from its line's start
+            f32 X = 0.0f;   // its position from its line's start
             usize Line = 0; // the line it landed on
-            u8 Level = 0;          // its bidi embedding level (E9c): odd reads right to left
-            u8 ParagraphLevel = 0; // its paragraph's
+            u8 Level = 0;          // its bidi embedding level: odd reads right to left
+            u8 ParagraphLevel = 0; // its paragraph's embedding level
             fonts::TextDirection Shaping = fonts::TextDirection::Auto; // the direction it is shaped in
         };
 
@@ -711,9 +720,10 @@ export namespace foundation::gui
             return count;
         }
 
-        // Calls `each(face, text)` for the stretches of `text` each face of `font` draws, as the
-        // shapers split a font list: a character takes the first face that has it, a neutral one
-        // (a space, an ASCII digit or punctuation) the stretch's face where that has it.
+        // Calls `each(face, text)` for each stretch of `text` that one face of `font` draws,
+        // splitting as the shapers split a font list. A character takes the first face that has
+        // it; a neutral character (a space, an ASCII digit or punctuation) stays in the current
+        // stretch's face when that face has it.
         template <typename F>
         inline void ForEachFaceStretch(const ResolvedRunFont& font, core::StringView text, F&& each)
         {
@@ -748,8 +758,8 @@ export namespace foundation::gui
                 each(face, text.SubStr(start, text.Size() - start));
         }
 
-        // The width `font` draws `text` in, its faces each measuring their own stretches; `used`
-        // gathers the faces that drew any (a bit each).
+        // Returns the width of `text` drawn in `font`, each face measuring its own stretches.
+        // `used` gets a bit set for each face that drew any of it.
         [[nodiscard]] inline f32 MeasureInFaces(const ResolvedRunFont& font, core::StringView text, u32* used = nullptr)
         {
             f32 width = 0.0f;
@@ -764,9 +774,10 @@ export namespace foundation::gui
             return width;
         }
 
-        // `text` shaped with `font`'s faces as it will be drawn (ligatures, joined forms, kerning):
-        // its advance, and in `trailing` that of the glyphs from character `trailingFrom` on; the
-        // faces that drew any gathered in `used`. False with no shaper (the caller measures).
+        // Shapes `text` with `font`'s faces as it will be drawn (ligatures, joined forms, kerning).
+        // Sets `advance` to its advance, `trailing` to the advance of the glyphs from character
+        // `trailingFrom` on, and a bit in `used` for each face that drew any. Returns false with
+        // no shaper; the caller then measures.
         [[nodiscard]] inline bool MeasureShaped(const ResolvedRunFont& font, core::StringView text, usize trailingFrom, f32& advance,
                                                 f32& trailing, u32& used)
         {
@@ -805,8 +816,8 @@ export namespace foundation::gui
             const usize keptCharacters = CodepointCount(kept);
             if (piece.Text.Size() != 0)
             {
-                // Measured as it is shaped, so a line is as wide as what it draws; measured by
-                // its characters' advances only where there is no shaper (it draws unshaped then).
+                // Measure it as it is shaped, so a line is as wide as what it draws. Only with no
+                // shaper is it measured by its characters' advances, and then it draws unshaped.
                 f32 advance = 0.0f;
                 f32 trailing = 0.0f;
                 if (!MeasureShaped(piece.Font, piece.Text, keptCharacters, advance, trailing, used))
@@ -817,7 +828,7 @@ export namespace foundation::gui
                 piece.Width = advance + letterSpacing * static_cast<f32>(characters);
                 piece.TrailingSpace = trailing + letterSpacing * static_cast<f32>(characters - keptCharacters);
             }
-            // Its line holds the tallest face it draws in.
+            // The piece takes the metrics of the tallest face it draws in.
             for (usize f = 0; f < piece.Font.FaceCount(); ++f)
                 if ((used & (1u << f)) != 0 && piece.Font.Face(f)->font != nullptr)
                 {
@@ -828,8 +839,8 @@ export namespace foundation::gui
                 }
         }
 
-        // The bytes of `piece` from its start that fit in `width`: whole graphemes, one at the
-        // least (a line holds something).
+        // Returns how many bytes of `piece`, from its start, fit in `width`. It counts whole
+        // graphemes only, and at least one, so a line always holds something.
         [[nodiscard]] inline usize FittingPrefix(const TextPiece& piece, f32 width, f32 letterSpacing)
         {
             const core::StringView text = piece.Text;
@@ -861,10 +872,11 @@ export namespace foundation::gui
             out.PushBack(base + text.Size());
         }
 
-        // The first strongly directional character's way: 1 right to left (Hebrew, Arabic, Syriac,
-        // Thaana, N'Ko and their presentation forms), 0 left to right (the letters of the scripts
-        // that read so), -1 none (digits, spaces, punctuation and symbols only): an auto
-        // paragraph's direction, by the rule of Unicode's P2 over the common scripts.
+        // Returns the direction of the first strongly directional character: 1 for right to left
+        // (Hebrew, Arabic, Syriac, Thaana, N'Ko and their presentation forms), 0 for left to right
+        // (the letters of the scripts that read so), -1 when there is none (digits, spaces,
+        // punctuation and symbols only). This gives an auto paragraph's direction, following
+        // Unicode's rule P2 for the common scripts.
         [[nodiscard]] inline i32 FirstStrongDirection(const Array<u32>& codepoints) noexcept
         {
             for (const u32 cp : codepoints)
@@ -880,21 +892,21 @@ export namespace foundation::gui
             return -1;
         }
 
-        // Bidi (E9c): each paragraph's embedding levels from the installed resolver over its pieces'
-        // characters (an icon as U+FFFC), and a piece crossing a level change split there, so each
-        // piece reads one way. False when nothing reads right to left and the base direction is
-        // left to right (the layout then runs as it always has, the pieces untouched). With no
+        // Bidi: computes each paragraph's embedding levels with the installed resolver over its
+        // pieces' characters (an icon counts as U+FFFC), and splits a piece where the level
+        // changes, so each piece reads one way. Returns false when nothing reads right to left and
+        // the base direction is left to right; the layout then leaves the pieces untouched. With no
         // resolver installed, a right-to-left paragraph keeps its pieces in order (only its start
-        // moves to the right) and each is shaped as its script reads.
-        // Not inline, nor OrderLine: an importer that inlined them (a test, under clang's optimiser)
-        // referenced an Array<u32> member the module never emitted for it, and failed to link. Their
-        // one definition lives in the library.
+        // moves to the right) and each piece is shaped as its script reads.
+        // This and OrderLine are not inline: an importer that inlines them (a test, under clang's
+        // optimiser) references an Array<u32> member the module never emits for it, and fails to
+        // link. Their one definition lives in the library.
         [[nodiscard]] bool ResolveBidi(Array<TextPiece>& pieces, fonts::TextDirection direction, bool autoRightToLeft,
                                               f32 letterSpacing)
         {
             const bool automatic = direction == fonts::TextDirection::Auto;
             const u8 baseLevel = direction == fonts::TextDirection::RightToLeft || (automatic && autoRightToLeft) ? 1 : 0;
-            bool rightToLeftText = false; // (a right-to-left base needs the path even for no text)
+            bool rightToLeftText = false; // a right-to-left base takes this path even with no text
             for (const TextPiece& piece : pieces)
                 for (usize i = 0; i < piece.Text.Size() && !rightToLeftText; ++i)
                     rightToLeftText = static_cast<u8>(piece.Text[i]) >= 0xD6; // a lead byte of U+0590 or above
@@ -933,8 +945,9 @@ export namespace foundation::gui
                         owner.PushBack(p);
                     }
                 }
-                // An auto paragraph runs as its first strong character reads, else as its node does;
-                // the resolver is then told which (a resolver alone would make it left to right).
+                // An auto paragraph runs as its first strong character reads, else as its node does.
+                // The resolver is told which, because on its own it would make the paragraph left
+                // to right.
                 u8 paragraph = baseLevel;
                 fonts::TextDirection paragraphDirection = direction;
                 if (automatic)
@@ -1006,22 +1019,22 @@ export namespace foundation::gui
         }
 
         // Places pieces [from, to) of one line in visual order (rule L1: its trailing spaces at
-        // the paragraph's level; L2: the runs at each level reversed), each from where the one to
-        // its left ends. The line's last piece in logical order loses its trailing spaces' width,
-        // which hang past its end (to its left when it reads right to left).
+        // the paragraph's level; L2: the runs at each level reversed), each starting where the
+        // piece to its left ends. The line's last piece in logical order loses the width of its
+        // trailing spaces, which hang past the line's end (to its left when it reads right to left).
         void OrderLine(Array<TextPiece>& pieces, usize from, usize to, u8 baseLevel, LaidOutLine& line)
         {
             Array<usize> items;
             for (usize p = from; p < to; ++p)
                 if (!pieces[p].LineBreak)
                     items.PushBack(p);
-            const u8 paragraph = from < to ? pieces[from].ParagraphLevel : baseLevel; // an empty text: the base's
+            const u8 paragraph = from < to ? pieces[from].ParagraphLevel : baseLevel; // an empty text takes the base level
             line.RightToLeft = (paragraph & 1u) != 0;
             if (items.IsEmpty())
                 return;
             fonts::BidiLevels levels;
             levels.paragraphLevel = paragraph;
-            Array<u32> marks; // no character is whitespace to ReorderLine: L1 is applied by piece here
+            Array<u32> marks; // ReorderLine sees no whitespace, because L1 is applied per piece here
             for (const usize p : items)
             {
                 levels.levels.PushBack(pieces[p].Level);
@@ -1032,7 +1045,7 @@ export namespace foundation::gui
                 const TextPiece& piece = pieces[items[k]];
                 if (piece.Icon || piece.Text.Size() == 0 || piece.TrailingSpace < piece.Width - 0.001f)
                     break;
-                levels.levels[k] = paragraph; // a piece of nothing but spaces at the line's end
+                levels.levels[k] = paragraph; // a piece of only spaces at the line's end takes the paragraph level
             }
             Array<fonts::BidiRun> runs;
             fonts::ReorderLine(levels, Span<const u32>(marks.Data(), marks.Size()), 0, items.Size(), runs);
@@ -1063,8 +1076,8 @@ export namespace foundation::gui
             }
         }
 
-        // A piece's glyphs from a list of faces, as runs of one face each (the face a run is drawn
-        // and measured with), in order.
+        // Adds a piece's glyphs, drawn from a list of faces, to `layout` in order, as runs of one
+        // face each (the face each run is drawn and measured with).
         inline void SplitByFace(TextLayout& layout, LaidOutGlyphs&& glyphs, const ResolvedRunFont& font)
         {
             usize g = 0;
@@ -1120,9 +1133,9 @@ export namespace foundation::gui
                         box.Rect.x += dx;
         }
 
-        // Keeps only what of `line` lies in [from, to) across; what straddles an edge is cut
-        // (a glyph goes whole, a box is narrowed). Returns the right edge of what stayed, and sets
-        // `left` to its left edge.
+        // Keeps only the parts of `line` that lie horizontally in [from, to). Whatever straddles an
+        // edge is cut: a glyph is dropped whole, and a box is narrowed. Returns the right edge of
+        // what stayed, and sets `left` to its left edge.
         inline f32 KeepSpan(TextLayout& layout, usize line, f32 from, f32 to, f32* left = nullptr)
         {
             f32 right = from;
@@ -1146,7 +1159,7 @@ export namespace foundation::gui
                 }
                 if (!glyphs.IsEmpty())
                 {
-                    // Its start and advance are its glyphs' that stayed.
+                    // Its start and advance now come from the glyphs that stayed.
                     run.X = glyphs[0].x;
                     run.Width = glyphs.Back().x + glyphs.Back().advance - run.X;
                 }
@@ -1187,7 +1200,7 @@ export namespace foundation::gui
             return right;
         }
 
-        // An ellipsis on `line` at x in the style of `like`.
+        // Adds an ellipsis on `line` at `x`, in the style of `like`.
         inline void AddEllipsis(TextLayout& layout, usize line, f32 x, const LaidOutGlyphs& like, usize offset)
         {
             LaidOutGlyphs ellipsis;
@@ -1219,8 +1232,9 @@ export namespace foundation::gui
             return like.Font != nullptr && like.Font->font != nullptr ? like.Font->font->MeasureString(EllipsisFor(like.Font)) : 0.0f;
         }
 
-        // Ends `line` in an ellipsis where it passes `maxWidth` (always, when `forced`: the clamp cut
-        // the lines after it), at its end, start or middle. The line is still unaligned (from 0).
+        // Ends `line` in an ellipsis at its end, start or middle where it passes `maxWidth`, or
+        // always when `forced` (the clamp cut the lines after it). The line is still unaligned,
+        // measured from 0.
         inline void Ellipsize(TextLayout& layout, usize line, f32 maxWidth, TextOverflow mode, bool forced, bool rightToLeft = false)
         {
             LaidOutLine& at = layout.Lines[line];
@@ -1235,11 +1249,11 @@ export namespace foundation::gui
                 }
             if (last == nullptr)
                 return; // nothing shaped to cut
-            const LaidOutGlyphs firstStyle = *first; // copies: the runs change below
+            const LaidOutGlyphs firstStyle = *first; // copied, because the runs change below
             const LaidOutGlyphs lastStyle = *last;
             const f32 width = at.Width;
             if (forced)
-                mode = rightToLeft ? TextOverflow::EllipsisStart : TextOverflow::Ellipsis; // a clamped paragraph ends at its end: its left in right to left
+                mode = rightToLeft ? TextOverflow::EllipsisStart : TextOverflow::Ellipsis; // a clamped paragraph takes the ellipsis at its end, which is its left in right to left
             const f32 e = EllipsisWidth(mode == TextOverflow::EllipsisStart ? firstStyle : lastStyle);
             const f32 room = Max(0.0f, maxWidth - e);
             if (mode == TextOverflow::Ellipsis)
@@ -1251,7 +1265,7 @@ export namespace foundation::gui
             }
             else if (mode == TextOverflow::EllipsisStart)
             {
-                // The tail from where its first whole glyph starts, moved up to the ellipsis.
+                // Keep the tail from where its first whole glyph starts, and move it up to the ellipsis.
                 const f32 cut = width - room;
                 f32 kept = cut;
                 (void)KeepSpan(layout, line, cut, width + 1.0f, &kept);
@@ -1261,10 +1275,10 @@ export namespace foundation::gui
             }
             else
             {
-                // A head and a tail of half the room each, the ellipsis between.
+                // Keep a head and a tail of half the room each, with the ellipsis between them.
                 const f32 half = room * 0.5f;
                 const f32 tailFrom = width - half;
-                // The tail moves next to the head: kept apart, then shifted.
+                // Move the tail next to the head: cut it from a copy of the layout, then shift it.
                 TextLayout tail = layout;
                 const f32 headRight = KeepSpan(layout, line, 0.0f, half);
                 f32 tailLeft = tailFrom;
@@ -1303,7 +1317,7 @@ export namespace foundation::gui
         }
     }
 
-    /// Lay a document out.
+    /// Lays out `document` in `style`.
     [[nodiscard]] inline TextLayout LayOutText(const TextDocument& document, const TextLayoutStyle& style)
     {
         using detail::TextPiece;
@@ -1458,7 +1472,7 @@ export namespace foundation::gui
             }
             if (style.Wrap && bounded && p > lineStart && x + piece.Width - piece.TrailingSpace > style.MaxWidth)
                 finishLine(p);
-            // overflow-wrap (E11): a word wider than the whole line breaks where the line ends,
+            // overflow-wrap: a word wider than the whole line breaks where the line ends,
             // between graphemes (one at the least), the rest going on as a piece of its own.
             if (style.Wrap && style.BreakWords && bounded && !piece.Icon && p == lineStart &&
                 piece.Width - piece.TrailingSpace > style.MaxWidth)
@@ -1483,7 +1497,7 @@ export namespace foundation::gui
         if (lineStart < pieces.Size() || layout.Lines.IsEmpty() || (!pieces.IsEmpty() && pieces.Back().LineBreak))
             finishLine(pieces.Size());
 
-        // The clamp: the lines past it go.
+        // Apply the clamp: drop the lines past it.
         usize keptLines = layout.Lines.Size();
         if (style.MaxLines > 0 && keptLines > style.MaxLines)
         {
@@ -1493,7 +1507,7 @@ export namespace foundation::gui
             layout.Height = layout.Lines.Back().Top + layout.Lines.Back().Height;
         }
 
-        // Each line in visual order (E9c), its pieces placed again from its left.
+        // Put each line in visual order, placing its pieces again from its left.
         if (bidi)
             for (usize l = 0; l < keptLines; ++l)
                 detail::OrderLine(pieces, lineFirstPiece[l], l + 1 < lineFirstPiece.Size() ? lineFirstPiece[l + 1] : pieces.Size(),
@@ -1503,7 +1517,7 @@ export namespace foundation::gui
                                       : u8{0},
                                   layout.Lines[l]);
 
-        // Glyphs, icons, underlines and links, from each line's start.
+        // Emit glyphs, icons, underlines and links, positioned from each line's start.
         Array<usize> offsets;
         for (usize p = 0; p < pieces.Size(); ++p)
         {
@@ -1537,7 +1551,7 @@ export namespace foundation::gui
                 glyphs.TextEnd = piece.Start + piece.Text.Size();
                 glyphs.Line = piece.Line;
                 glyphs.Run = piece.Run;
-                // Shaped as it reads (E9c): one way, the level its piece is at.
+                // Shape it in the one direction it reads, at its piece's level.
                 const auto shape = [&]() -> bool
                 {
                     fonts::ITextShaper& shaper = *piece.Font.Font->shaper;
@@ -1557,8 +1571,8 @@ export namespace foundation::gui
                 };
                 if (piece.Font.Font->shaper != nullptr && piece.Font.Font->font != nullptr && shape())
                 {
-                    // Each glyph's bytes from its cluster (a character index); letter spacing after
-                    // every character before it.
+                    // Each glyph's bytes come from its cluster (a character index). Letter spacing
+                    // is added after every character before it.
                     detail::CodepointOffsets(piece.Text, piece.Start, offsets);
                     const usize count = offsets.Size() - 1;
                     for (fonts::GlyphPosition& g : glyphs.Glyphs)
@@ -1573,8 +1587,8 @@ export namespace foundation::gui
                 }
                 else
                 {
-                    // No shaper: a position for each character from the widths of what comes
-                    // before it, so carets still find their places; drawn as text.
+                    // With no shaper, place each character by the widths of what comes before it,
+                    // so carets still find their places; the piece draws as text.
                     glyphs.Glyphs.Clear();
                     glyphs.Unshaped = true;
                     detail::CodepointOffsets(piece.Text, piece.Start, offsets);
@@ -1626,11 +1640,11 @@ export namespace foundation::gui
             }
         }
 
-        // An ellipsis where a line passes the width (or ends a clamped paragraph), then alignment.
+        // Add an ellipsis where a line passes the width (or ends a clamped paragraph), then align.
         for (usize l = 0; l < layout.Lines.Size(); ++l)
         {
             const bool forced = layout.Clamped && l + 1 == layout.Lines.Size() && style.Overflow != TextOverflow::Clip;
-            // A right-to-left line ends on its left: its end ellipsis is the visual start's.
+            // A right-to-left line ends on its left, so its end ellipsis goes at the visual start.
             TextOverflow overflow = style.Overflow;
             if (layout.Lines[l].RightToLeft && overflow == TextOverflow::Ellipsis)
                 overflow = TextOverflow::EllipsisStart;
@@ -1639,7 +1653,7 @@ export namespace foundation::gui
             if (bounded && style.Overflow != TextOverflow::Clip && (forced || layout.Lines[l].Width > style.MaxWidth + 0.01f))
                 detail::Ellipsize(layout, l, style.MaxWidth, overflow, forced, layout.Lines[l].RightToLeft);
             LaidOutLine& line = layout.Lines[l];
-            // Start and end are the paragraph's (E9c).
+            // Start and end alignment follow the paragraph's direction.
             TextHAlign align = style.Align;
             if (align == TextHAlign::Start)
                 align = line.RightToLeft ? TextHAlign::Right : TextHAlign::Left;

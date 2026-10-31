@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Snowline's scene/prefab XML (PaperKid's generator, Tools/pkgen.py there), built from the
-RUNNING editor's schema (component_schema): every
+"""Snowline's scene/prefab XML, built from the running editor's schema (component_schema): every
 record starts from the schema's defaults and takes only the fields given, so nothing here is
 hand-kept against an engine build."""
 import json, os, subprocess, sys, uuid
@@ -12,7 +11,7 @@ _schemas = {}
 
 
 sys.path.insert(0, HERE)
-import mcp as _client  # the scratch MCP client (mcp.py), called in-process: scenes outgrow argv
+import mcp as _client  # the MCP client (mcp.py), called in-process: scenes outgrow argv
 
 
 def mcp(tool, args):

@@ -3,10 +3,9 @@
 
 // UI - :itree_adapter partition
 //
-// Tree-shaped data source contract (+ its observer). Ported from Sedulous.UI/src/Data/ITreeAdapter.bf.
-// FlattenedTreeAdapter wraps an ITreeAdapter to present it as an IListAdapter for ListView-based
-// virtualization. Pattern-B injected interfaces -> plain abstract classes; Beef interface default
-// methods -> virtual with default bodies; CreateView returns RefPtr<View> (RAII).
+// Tree-shaped data source contract, and its observer. FlattenedTreeAdapter wraps an ITreeAdapter to
+// present it as an IListAdapter for ListView-based virtualization. These are injected interfaces, so
+// plain abstract classes, some methods with default bodies; CreateView returns an owning RefPtr<View>.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +24,7 @@ export namespace foundation::ui
     {
     public:
         virtual ~ITreeAdapterObserver() = default;
-        /// Entire tree data changed - rebuild everything.
+        /// Entire tree data changed: rebuild everything.
         virtual void OnTreeDataChanged() = 0;
     };
 
@@ -49,10 +48,10 @@ export namespace foundation::ui
         /// Bind data into a view for the given nodeId.
         ///
         /// To indent the row so its content clears the expander-chevron column, derive the offset
-        /// from TreeView::ContentInset(depth) (or DraggableTreeView::ContentInset) - apply it as the
-        /// row label's TextOffsetX or the row container's left Padding. NEVER hardcode a pixel
+        /// from TreeView::ContentInset(depth) (or DraggableTreeView::ContentInset) and apply it as
+        /// the row label's TextOffsetX or the row container's left Padding. Do not hard-code a pixel
         /// constant: a literal that drifts from the tree's IndentWidth makes the chevron overlap the
-        /// text (the recurring tree-indent bug). ContentInset is the single source of truth.
+        /// text.
         virtual void BindView(View* view, i32 nodeId, i32 depth, bool isExpanded) = 0;
         /// View type for a node (for recycler pools). Default 0.
         [[nodiscard]] virtual i32 GetItemViewType(i32 nodeId) const

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Xml.Tests/LexerTests.bf
+// XmlLexer: whitespace, names, values, references and the CDATA, comment and PI bodies.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

@@ -3,10 +3,10 @@
 
 // GUI - :tooltip partition
 //
-// Tooltip: a small text panel, what a node's tooltip shows by default (Node::CreateTooltipContent).
-// The dispatcher shows it (E5): the nearest tooltip text up the parent chain from the hovered node,
-// after a delay on the GUI's clock, as a hint popup placed by the pointer; any press or key hides
-// it. Styled as `tooltip`.
+// Tooltip: a small text panel, the default content of a node's tooltip
+// (Node::CreateTooltipContent). The dispatcher shows it with the nearest tooltip text found up the
+// parent chain from the hovered node, after a delay on the GUI's clock, as a hint popup placed by
+// the pointer. Any press or key hides it. It is styled as `tooltip`.
 
 module;
 #include "Core/Prelude.h"
@@ -36,9 +36,9 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"tooltip"));
             SetHitTestVisible(false); // never steals pointer events
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetPadding(Thickness{6.0f, 3.0f, 6.0f, 3.0f});
-            SetBox(FilledBox(m_bgColor)); // its own face, which a sheet's (a theme's) replaces
+            SetBox(FilledBox(m_bgColor)); // the default face; a style sheet's box replaces it
             m_text.SetAlignment(TextHAlign::Start, TextVAlign::Middle);
         }
 
@@ -56,11 +56,11 @@ export namespace foundation::gui
             const Thickness pad = GetPadding();
             return core::Float2{t.x + pad.TotalHorizontal(), t.y + pad.TotalVertical()};
         }
-        /// Its text on one line (its padding is added around it).
+        /// Measures the text on one line; the padding is added around it.
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return m_text.Measure(); }
 
     protected:
-        // Its text draws in its text style.
+        // The text is drawn in the tooltip's text style.
         void OnTextStyleChange() override
         {
             m_text.SetFont(GetFont());

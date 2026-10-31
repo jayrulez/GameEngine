@@ -1,5 +1,5 @@
-# Engine::Project - `engine.project`, the runtime-side project definition (manifest +
-# layout constants). Editor-free by design: shipping binaries link this, never the editor.
+# Engine::Project - `engine.project`, the runtime-side project definition (manifest and
+# layout constants). Editor-free, because shipping binaries link this and never the editor.
 util_add_engine_library(Engine.Project ALIAS Engine::Project)
 target_link_libraries(Engine.Project
     PUBLIC Foundation::Core Foundation::VFS Foundation::Xml.Serialization Foundation::Policy)
@@ -11,8 +11,8 @@ target_sources(Engine.Project
         FILE_SET project_modules TYPE CXX_MODULES FILES
             ProjectModule.cppm)
 
-# Engine version - the SINGLE source of truth is project(VERSION) in the root CMakeLists.
-# Scoped to THIS target (not the global policy) so a version bump only rebuilds engine.project +
+# Engine version: the single source of truth is project(VERSION) in the root CMakeLists.
+# Scoped to this target (not the global policy) so a version bump only rebuilds engine.project and
 # its importers, not the whole engine. ProjectModule.cppm bakes these into kEngineVersion*, which
 # flows to saved project manifests, export template.xml, and the version report.
 target_compile_definitions(Engine.Project PRIVATE

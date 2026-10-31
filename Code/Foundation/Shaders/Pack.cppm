@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Cooked shader pack - the dist's compiler-free shader store.
+// Cooked shader pack: the dist's compiler-free shader store.
 //
-// A dist carries no DXC/naga: every (shader name, stage, variant, backend format) the
-// runtime can request is precompiled into this pack at export time and looked up
-// by the dist provider. The blob is backend bytecode/text: SPIR-V (Vulkan), DXIL (DX12), or
-// WGSL text (WebGPU). Binary, versioned, self-describing (carries the name table so the provider can
-// still enumerate the built-ins for tooling).
+// A dist carries no DXC or naga. Every shader name, stage, variant and backend format the
+// runtime can request is precompiled into this pack at export time and looked up by the dist
+// provider. A blob is backend bytecode or text: SPIR-V (Vulkan), DXIL (DX12) or WGSL text
+// (WebGPU). The format is binary, versioned and self-describing (it carries the name table so
+// the provider can still enumerate the built-ins for tooling).
 
 module;
 #include "Core/Prelude.h"
@@ -23,17 +23,17 @@ using namespace foundation::core;
 
 export namespace foundation::shaders
 {
-    // The cooked blob format for a target backend. WGSL is TEXT; the other two are bytecode.
+    // The cooked blob format for a target backend. WGSL is text; the other two are bytecode.
     enum class CookedShaderFormat : u32
     {
-        SpirV = 0, // Vulkan (+ native wgpu-native accepts SPIR-V too)
+        SpirV = 0, // Vulkan (native wgpu-native accepts SPIR-V too)
         Dxil = 1,  // DX12
         Wgsl = 2,  // WebGPU (browser)
     };
 
     // A compiler-free store of cooked shader variants, addressable by (name, stage, flags, format).
     // Filled by the export cook; read by the dist shader-source provider. One pack can hold multiple
-    // formats (a desktop dist may ship SPIR-V + DXIL); export stages only the target backend's.
+    // formats (a desktop dist may ship SPIR-V and DXIL); export stages only the target backend's.
     class CookedShaderPack
     {
     public:
@@ -59,8 +59,8 @@ export namespace foundation::shaders
             const u64 key = CombineKey(nameHash, stage, flags, format);
             if (const usize* existing = m_index.Find(key))
             {
-                // Re-adding a variant overwrites in place - a pushed duplicate would stay
-                // orphaned in m_entries and be serialized (and Count()ed) twice.
+                // Re-adding a variant overwrites in place: a pushed duplicate would stay
+                // orphaned in m_entries and be serialized (and counted by Count()) twice.
                 m_entries[*existing] = Move(e);
                 return;
             }
@@ -70,7 +70,7 @@ export namespace foundation::shaders
 
         // Record a stage's declared variant mask (from its `// variants:` directive) so the
         // dist runtime can canonicalize a request (flags & mask) onto a variant that was cooked. The
-        // cook calls this once per stage; absent => None (single-variant).
+        // cook calls this once per stage; an absent mask is None (single-variant).
         void AddDeclaredMask(StringView name, ShaderStage stage, ShaderFlags mask)
         {
             m_declaredMasks.InsertOrAssign(MaskKey(ShaderNameHash(name), stage),
@@ -93,7 +93,7 @@ export namespace foundation::shaders
             return (e != nullptr) ? e->AsView() : StringView{};
         }
 
-        // The declared mask for (name, stage); None if the stage declared none / is absent.
+        // The declared mask for (name, stage); None if the stage declared none or is absent.
         [[nodiscard]] ShaderFlags DeclaredMask(u64 nameHash, ShaderStage stage) const
         {
             const u32* m = m_declaredMasks.Find(MaskKey(nameHash, stage));
@@ -114,9 +114,10 @@ export namespace foundation::shaders
             return Find(ShaderNameHash(name), stage, flags, format);
         }
 
-        // Diagnostic: visit every (flags, format) variant the pack holds for a (name, stage). Used by
-        // the runtime miss path to report what WAS cooked vs the (canonical) request that missed, so a
-        // cook-coverage gap shows its shape (wrong format / flags / mask) instead of just "missing".
+        // Diagnostic: visit every (flags, format) variant the pack holds for a (name, stage). The
+        // runtime miss path uses it to report what was cooked beside the canonical request that
+        // missed, so a cook-coverage gap shows its shape (wrong format, flags or mask) instead of
+        // just "missing".
         template <class Fn>
         void ForEachVariant(u64 nameHash, ShaderStage stage, Fn&& fn) const
         {
@@ -129,7 +130,7 @@ export namespace foundation::shaders
             }
         }
 
-        // Distinct shader names in the pack (for provider enumeration / tooling).
+        // Distinct shader names in the pack (for provider enumeration and tooling).
         void CollectNames(Array<String>& out) const
         {
             for (const auto& kv : m_names)
@@ -239,7 +240,7 @@ export namespace foundation::shaders
             }
 
             // Count guard: every count/length read below is bounded by the bytes actually
-            // remaining in the stream, so a truncated/corrupt pack fails cleanly instead of
+            // remaining in the stream, so a truncated or corrupt pack fails cleanly instead of
             // attempting a multi-GB Resize on a garbage length.
             const i64 streamSize = in.Size();
             const auto remaining = [&]() -> u64
@@ -315,7 +316,7 @@ export namespace foundation::shaders
                 e.format = static_cast<CookedShaderFormat>(format);
                 if (!r.IsOk() || blobLen > remaining())
                 {
-                    return Status{ErrorCode::InvalidArgument}; // truncated/corrupt blob length
+                    return Status{ErrorCode::InvalidArgument}; // truncated or corrupt blob length
                 }
                 e.blob.Resize(blobLen);
                 if (blobLen > 0)
@@ -337,7 +338,7 @@ export namespace foundation::shaders
 
             u32 effectCount = 0;
             r.Read(effectCount);
-            if (effectCount > remaining() / 20) // name length + flag + gate + size + count
+            if (effectCount > remaining() / 20) // name length, flag, gate, size and count
             {
                 return Status{ErrorCode::InvalidArgument};
             }

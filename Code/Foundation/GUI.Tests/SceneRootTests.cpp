@@ -41,7 +41,7 @@ TEST_CASE("scene: Close defers removal until update drains the queue")
     root->AddChild(child.Get());
 
     child->Close();
-    CHECK(root->ChildCount() == 1); // not yet - deferred
+    CHECK(root->ChildCount() == 1); // not yet, since the close is deferred
     CHECK_FALSE(root->GetMutationQueue()->IsEmpty());
 
     root->GetContext().Update(core::Duration::FromSeconds(0.016));
@@ -128,7 +128,7 @@ TEST_CASE("scene: each root has its own display scale; its tree lays out in logi
     CHECK(dense->OverFind(core::Float2{70.0f, 40.0f}) == b.Get());    // inside 20..100 at 2x
     CHECK(dense->OverFind(core::Float2{15.0f, 15.0f}) != b.Get());    // before 20 at 2x
 
-    // Drawing goes through the same scale: the dense root's box lands at twice the place.
+    // Drawing goes through the same scale, so the dense root's box lands at twice the position.
     NodeBox box;
     box.BackgroundColor = core::Color{1.0f, 0.0f, 0.0f, 1.0f};
     b->SetBox(core::Move(box));

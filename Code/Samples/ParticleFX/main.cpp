@@ -30,13 +30,13 @@ import extensions.imgui;
 import foundation.geometry;
 import foundation.materials;
 import foundation.particles;           // the CPU sim (effect/system/modules)
-import engine.particles; // the ECS component + ParticleSubsystem
-import foundation.particles.resource;  // cooked ParticleEffectResource + factory
-import particles.pipeline;    // ParticleEffectAsset + bake (the authoring demo)
+import engine.particles; // the ECS component and ParticleSubsystem
+import foundation.particles.resource;  // cooked ParticleEffectResource and its factory
+import particles.pipeline;    // ParticleEffectAsset and bake (the authoring demo)
 import pipeline.core;              // AssetBuildContext
 import foundation.vfs;                 // NativeFileSystem mount for the content DB
 import foundation.content;             // ContentDatabase (cooked-output DB)
-import foundation.resource;            // ResourceManager + Proxy
+import foundation.resource;            // ResourceManager and Proxy
 
 #include "../Common/FlyCamera.h"
 
@@ -56,7 +56,7 @@ namespace resource = foundation::resource;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -72,7 +72,7 @@ namespace
     {
     public:
         // Run uncapped (vsync off) so the frame time reflects real particle sim/render cost, not the
-        // display refresh. The image may tear; fine for a showcase/benchmark.
+        // display refresh. The image may tear, which is fine for a showcase or benchmark.
         graphics::RenderWindowDesc MainRenderWindow() const override
         {
             graphics::RenderWindowDesc d;
@@ -106,7 +106,7 @@ namespace
                 env->Environment().ambientIntensity = 0.4f;
             }
 
-            // Camera: high + pulled back to frame the whole 4x4 showcase grid.
+            // Camera: high and pulled back to frame the whole 4x4 showcase grid.
             m_camera = m_scene->CreateEntity(u8"camera");
             m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 34.0f, 52.0f});
             if (auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>())
@@ -137,7 +137,7 @@ namespace
                 engine::render::LightComponent& lc = lights->Add(key);
                 lc.type = engine::render::LightType::Directional;
                 lc.color = core::Color{0.6f, 0.7f, 0.95f,
-                                       1.0f}; // cool + dim so the warm ember point-lights read
+                                       1.0f}; // cool and dim so the warm ember point lights read
                 lc.intensity = 1.0f;
             }
 
@@ -145,7 +145,7 @@ namespace
             const core::f32 obRadius = 1.4f;
             BuildFountain(m_effect);
             BuildMeshShards(m_debris);   // cell 1: opaque material (set below)
-            BuildMeshShards(m_meshGlow); // cell 2: additive material (set below) - identical sim
+            BuildMeshShards(m_meshGlow); // cell 2: additive material (set below), identical sim
             BuildEmbers(m_embers);
             BuildHaze(m_haze);
             BuildTrail(m_trail);
@@ -163,15 +163,16 @@ namespace
 
             if (auto* pmgr = m_scene->GetSystem<engine::particles::ParticleEffectComponentManager>())
             {
-                // One system per cell of a 4x4 showcase grid (cells 12-15 reserved for later samples).
+                // One system per cell of a 4x4 showcase grid.
                 // Cell 0: billboard fountain (additive soft dots).
                 m_emitter = m_scene->CreateEntity(u8"fountain");
                 m_scene->SetLocalPosition(m_emitter, CellPos(0));
                 pmgr->Add(m_emitter).SetEffect(
-                    m_effect); // no texture -> the renderer's soft-dot default
+                    m_effect); // no texture, so the renderer's soft-dot default
 
-                // Cells 1 & 2: two mesh systems side by side, IDENTICAL sim - only the material differs.
-                // Cell 1 = opaque solid shards; cell 2 = additive glow (routed to the Transparent pass).
+                // Cells 1 and 2: two mesh systems side by side with an identical sim; only the material
+                // differs. Cell 1 has opaque solid shards, cell 2 an additive glow (routed to the
+                // Transparent pass).
                 m_debrisEmitter = m_scene->CreateEntity(u8"shards-solid");
                 m_scene->SetLocalPosition(m_debrisEmitter, CellPos(1));
                 engine::particles::ParticleEffectComponent& dc = pmgr->Add(m_debrisEmitter);
@@ -188,7 +189,7 @@ namespace
                 gc.mesh = geometry::Primitives::Cube(AppRoot(), 1.0f);
                 gc.meshScale = 0.5f;
                 {
-                    // Additive PBR material -> the extractor routes these to the Transparent pass.
+                    // Additive PBR material, so the extractor routes these to the Transparent pass.
                     auto glow = materials::CreatePBR(
                         u8"shards-glow", core::Float4{0.4f, 0.8f, 1.0f, 1.0f}, 0.0f, 0.4f);
                     glow->pipeline.blendMode = materials::BlendMode::Additive;
@@ -196,16 +197,16 @@ namespace
                     gc.material = glow;
                 }
 
-                // Cell 3: light particles (drifting embers) - a point light per particle + a billboard glow.
+                // Cell 3: light particles (drifting embers): a point light per particle and a billboard glow.
                 m_emberEmitter = m_scene->CreateEntity(u8"embers");
                 m_scene->SetLocalPosition(m_emberEmitter, CellPos(3));
                 engine::particles::ParticleEffectComponent& ec = pmgr->Add(m_emberEmitter);
                 ec.SetEffect(m_embers);
                 ec.lightIntensity = 14.0f;
                 ec.lightRange =
-                    6.0f; // smaller range -> fewer clusters overlap -> no visible cluster grid
+                    6.0f; // a smaller range overlaps fewer clusters, so no cluster grid shows
 
-                // Cell 4: ground haze - the soft-particle A/B showcase.
+                // Cell 4: ground haze, the soft-particle A/B showcase.
                 m_hazeEmitter = m_scene->CreateEntity(u8"haze");
                 m_scene->SetLocalPosition(m_hazeEmitter,
                                           CellPos(4) + core::Float3{0.0f, 0.4f, 0.0f});
@@ -216,7 +217,7 @@ namespace
                 m_scene->SetLocalPosition(m_trailEmitter, CellPos(5));
                 pmgr->Add(m_trailEmitter).SetEffect(m_trail);
 
-                // Cell 6: collision rain bouncing off a rendered sphere obstacle + the world ground.
+                // Cell 6: collision rain bouncing off a rendered sphere obstacle and the world ground.
                 m_collideEmitter = m_scene->CreateEntity(u8"rain");
                 m_scene->SetLocalPosition(m_collideEmitter,
                                           CellPos(6) + core::Float3{0.0f, 6.0f, 0.0f});
@@ -231,12 +232,12 @@ namespace
                         u8"obstacle", core::Float4{0.7f, 0.7f, 0.72f, 1.0f}, 0.1f, 0.4f));
                 }
 
-                // Cell 7: local-space puff - orbits its emitter (animated in OnUpdate); cloud follows rigidly.
+                // Cell 7: local-space puff orbiting with its emitter (animated in OnUpdate); the cloud follows rigidly.
                 m_localEmitter = m_scene->CreateEntity(u8"orbit");
                 m_scene->SetLocalPosition(m_localEmitter, CellPos(7));
                 pmgr->Add(m_localEmitter).SetEffect(m_local);
 
-                // Cell 8: smoke. Cell 9: fire. Cell 10: campfire (fire + smoke). Cell 11: fireworks.
+                // Cell 8: smoke. Cell 9: fire. Cell 10: campfire (fire and smoke). Cell 11: fireworks.
                 m_smokeEmitter = m_scene->CreateEntity(u8"smoke");
                 m_scene->SetLocalPosition(m_smokeEmitter, CellPos(8));
                 pmgr->Add(m_smokeEmitter).SetEffect(m_smoke);
@@ -258,7 +259,7 @@ namespace
                 m_scene->SetLocalPosition(m_tornadoEmitter, CellPos(12));
                 pmgr->Add(m_tornadoEmitter).SetEffect(m_tornado);
 
-                // Cell 13: explosion - flipbook fireball blast (atlas texture) + debris/shockwave (soft dot).
+                // Cell 13: explosion: a flipbook fireball blast (atlas texture) with debris and a shockwave (soft dot).
                 m_explosionEmitter = m_scene->CreateEntity(u8"explosion");
                 m_scene->SetLocalPosition(m_explosionEmitter, CellPos(13));
                 engine::particles::ParticleEffectComponent& xc = pmgr->Add(m_explosionEmitter);
@@ -272,21 +273,21 @@ namespace
                 m_scene->SetLocalPosition(m_explosionFxEmitter, CellPos(13));
                 pmgr->Add(m_explosionFxEmitter).SetEffect(m_explosionFx);
 
-                // Cell 14: magic circle (ground rune ring + rising glyph sparks).
+                // Cell 14: magic circle (ground rune ring and rising glyph sparks).
                 m_magicEmitter = m_scene->CreateEntity(u8"magic");
                 m_scene->SetLocalPosition(m_magicEmitter, CellPos(14));
                 pmgr->Add(m_magicEmitter).SetEffect(m_magic);
 
-                // Cell 15: fireflies (wind + turbulence wander, twinkling).
+                // Cell 15: fireflies (wandering on wind and turbulence, twinkling).
                 m_firefliesEmitter = m_scene->CreateEntity(u8"fireflies");
                 m_scene->SetLocalPosition(m_firefliesEmitter, CellPos(15));
                 pmgr->Add(m_firefliesEmitter).SetEffect(m_fireflies);
 
-                // Authoring pipeline demo: author -> bake -> load a cooked effect, in front of the grid.
+                // Authoring pipeline demo: author, bake and load a cooked effect, in front of the grid.
                 SetupCookedDemo(*pmgr);
 
-                // Sync only the soft-particle A/B systems to the slider (smoke keeps soft OFF - the fade
-                // against the floor behind a rising column zeroes its alpha).
+                // Sync only the soft-particle A/B systems to the slider. Smoke keeps soft particles off:
+                // the fade against the floor behind a rising column zeroes its alpha.
                 ApplySoft(m_effect);
                 ApplySoft(m_embers);
                 ApplySoft(m_haze);
@@ -295,12 +296,12 @@ namespace
 
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
         {
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
         // Free the explosion flipbook atlas we created in OnStartup (device still alive here).
@@ -421,7 +422,7 @@ namespace
         }
 
         // Light-mode particles: slow warm embers drifting up; each contributes a point light so they
-        // paint moving pools of light on the floor (plus the additive billboard glow).
+        // paint moving pools of light on the floor (as well as the additive billboard glow).
         static void BuildEmbers(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys =
@@ -431,7 +432,7 @@ namespace
             sys.blendMode = particles::ParticleBlendMode::Additive;
             sys.emitter.mode = particles::EmissionMode::Continuous;
             sys.emitter.spawnRate =
-                12.0f; // ~45 alive: all fit under the cap (stable, no popping) + light cluster load
+                12.0f; // ~45 alive: all fit under the cap (stable, no popping) with a light cluster load
 
             sys.AddInitializer<particles::PositionInitializer>().shape =
                 particles::EmissionShape::Box(core::Float3{4.0f, 0.1f, 4.0f});
@@ -453,7 +454,8 @@ namespace
         }
 
         // Ground haze: big, slow, camera-facing billboards centered at floor level so each quad straddles
-        // the ground plane - the clearest soft-particle A/B (hard clip line vs. soft fade at the floor).
+        // the ground plane. This is the clearest soft-particle A/B: a hard clip line or a soft fade at
+        // the floor.
         static void BuildHaze(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(300);
@@ -480,7 +482,7 @@ namespace
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.4f);
         }
 
-        // Trail-mode: arcing sparks, each leaving a camera-facing ribbon behind it (the Phase-5 showcase).
+        // Trail mode: arcing sparks, each leaving a camera-facing ribbon behind it.
         static void BuildTrail(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(2000);
@@ -509,7 +511,7 @@ namespace
                 core::Float4{0.2f, 0.7f, 1.0f, 1.0f}, core::Float4{0.9f, 0.4f, 1.0f, 1.0f});
 
             sys.AddBehavior<particles::GravityBehavior>().multiplier =
-                1.5f; // arc back down -> curved ribbons
+                1.5f; // arc back down, curving the ribbons
             sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve =
                 particles::ParticleCurveColor::FadeAlpha(core::Float4{0.5f, 0.6f, 1.0f, 1.0f},
                                                          0.3f);
@@ -563,7 +565,7 @@ namespace
             }
         }
 
-        // A single fire system (billboard additive): fast rising, shrinking, colour-graded white->red.
+        // A single fire system (billboard additive): fast rising, shrinking, colour-graded white to red.
         static void ConfigureFire(particles::ParticleSystem& sys, core::f32 scale)
         {
             sys.name = core::String{u8"fire"};
@@ -589,7 +591,7 @@ namespace
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 1.5f; // flicker/curl
             sys.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
                 particles::ParticleCurveFloat::Ease(1.0f * scale, 0.15f * scale); // an eased size, both axes
-            // Colour ramp: white-hot -> yellow -> orange -> red, fading out at the tip.
+            // Colour ramp: white-hot, then yellow, orange and red, fading out at the tip.
             particles::ParticleCurveColor ramp;
             ramp.AddKey(0.0f, core::Float4{1.0f, 0.95f, 0.7f, 1.0f});
             ramp.AddKey(0.35f, core::Float4{1.0f, 0.6f, 0.2f, 0.9f});
@@ -599,7 +601,7 @@ namespace
         }
 
         // A single smoke system (billboard alpha): slow rise, expanding, drifting, fading. Soft particles
-        // are OFF - the soft-depth fade against the floor behind it would zero the alpha of a rising column.
+        // are off: the soft-depth fade against the floor behind it would zero the alpha of a rising column.
         static void ConfigureSmoke(particles::ParticleSystem& sys, core::f32 scale, core::f32 rise)
         {
             sys.name = core::String{u8"smoke"};
@@ -617,13 +619,13 @@ namespace
                 core::Float3{0.0f, rise, 0.0f};
             sys.AddInitializer<particles::SizeInitializer>().size =
                 particles::RangeFloat2::Constant(core::Float2{1.0f * scale, 1.0f * scale});
-            // Near-white ambient-lit grey: light enough to read against the (grey) floor it starts over AND
-            // the dark sky it rises into. Grey-on-grey-floor was the reason earlier smoke was invisible.
+            // Near-white ambient-lit grey: light enough to read against both the grey floor it starts over
+            // and the dark sky it rises into. A mid grey disappears against the floor.
             sys.AddInitializer<particles::ColorInitializer>().color =
                 particles::RangeColor::Constant(core::Float4{0.78f, 0.78f, 0.82f, 1.0f});
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 0.8f; // lazy drift
             sys.AddBehavior<particles::DragBehavior>().drag =
-                0.12f; // light drag -> the column keeps climbing off the floor
+                0.12f; // light drag, so the column keeps climbing off the floor
             sys.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
                 particles::ParticleCurveFloat::Ease(1.0f * scale, 3.5f * scale); // an eased size, both axes
             // Fade in from nothing, hold fairly opaque, fade out (billows appear then dissipate).
@@ -644,7 +646,7 @@ namespace
             ConfigureSmoke(effect.AddSystem(1200), 1.0f, 3.0f);
         }
 
-        // Composite effect: fire at the base + smoke rising above it, in ONE effect (two systems) - the
+        // Composite effect: fire at the base and smoke rising above it, in one effect (two systems), the
         // multi-system authoring case.
         static void BuildCampfire(particles::ParticleEffect& effect)
         {
@@ -655,11 +657,11 @@ namespace
             smoke.emitter.spawnRate = 12.0f;
         }
 
-        // Fireworks: rockets shoot up and, on death, burst into a colour-inheriting spark shower via a
-        // sub-emitter link (OnDeath -> child system, inherit position + colour).
+        // Fireworks: rockets shoot up and, on death, burst into a colour-inheriting spark shower through a
+        // sub-emitter link (OnDeath spawns the child system, inheriting position and colour).
         static void BuildFireworks(particles::ParticleEffect& effect)
         {
-            // System 0: rockets - launch up, short life, additive with a trail.
+            // System 0: rockets that launch up, with a short life, additive with a trail.
             particles::ParticleSystem& rocket = effect.AddSystem(64);
             rocket.name = core::String{u8"rocket"};
             rocket.renderMode = particles::ParticleRenderMode::Trail;
@@ -678,8 +680,8 @@ namespace
             }
             rocket.AddInitializer<particles::SizeInitializer>().size =
                 particles::RangeFloat2::Constant(core::Float2{0.25f, 0.25f});
-            // Vivid warm hues (gold -> hot magenta) so the bursts pop against the dark sky - blues would
-            // wash out. Sparks inherit this colour via the sub-emitter link.
+            // Vivid warm hues (gold to hot magenta) so the bursts pop against the dark sky, where blues
+            // would wash out. Sparks inherit this colour through the sub-emitter link.
             rocket.AddInitializer<particles::ColorInitializer>().color = particles::RangeColor(
                 core::Float4{1.0f, 0.85f, 0.2f, 1.0f}, core::Float4{1.0f, 0.25f, 0.7f, 1.0f});
             rocket.AddBehavior<particles::GravityBehavior>().multiplier =
@@ -691,7 +693,7 @@ namespace
             rocket.trail.widthEnd = 0.0f;
             rocket.trail.recordInterval = 0.02f;
 
-            // System 1: sparks - spawned by rocket deaths (no self-emission); explode outward, gravity, fade.
+            // System 1: sparks spawned by rocket deaths (no self-emission); they explode outward, fall and fade.
             particles::ParticleSystem& sparks = effect.AddSystem(6000);
             sparks.name = core::String{u8"sparks"};
             sparks.renderMode = particles::ParticleRenderMode::Billboard;
@@ -727,11 +729,11 @@ namespace
             link.probability = 1.0f;
             link.inheritPosition = true;
             link.inheritColor =
-                true; // sparks take the rocket's colour (needs the SpawnAt inherit fix)
-            effect.GetSystem(0)->subEmitters.PushBack(link); // the rocket's: its sparks burst where it dies
+                true; // sparks take the rocket's colour
+            effect.GetSystem(0)->subEmitters.PushBack(link); // on the rocket system: its sparks burst where it dies
         }
 
-        // Tornado: a dust column that swirls up a vertical axis. Local space keeps the vortex + attractor
+        // Tornado: a dust column that swirls up a vertical axis. Local space keeps the vortex and attractor
         // centres at the origin (re-based to the cell at extract), so the funnel spins around itself.
         static void BuildTornado(particles::ParticleEffect& effect)
         {
@@ -800,8 +802,8 @@ namespace
             sys.flipbook.overLifetime = true; // play all 16 frames across the particle's life
         }
 
-        // Explosion secondary FX (no texture -> soft dot): velocity-stretched debris streaks + a flat ground
-        // shockwave disc. Burst-synced to the blast.
+        // Explosion secondary FX (no texture, so soft dots): velocity-stretched debris streaks and a flat
+        // ground shockwave disc, burst-synced to the blast.
         static void BuildExplosionFx(particles::ParticleEffect& effect)
         {
             // Debris streaks (StretchedBillboard: the quad stretches along the particle velocity).
@@ -857,7 +859,7 @@ namespace
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.0f);
         }
 
-        // Magic circle: a slow-rotating ground-flat rune ring (HorizontalBillboard + Ring emission) with
+        // Magic circle: a slow-rotating ground-flat rune ring (HorizontalBillboard with Ring emission) with
         // glyph sparks rising off it.
         static void BuildMagicCircle(particles::ParticleEffect& effect)
         {
@@ -905,8 +907,8 @@ namespace
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.2f);
         }
 
-        // Fireflies: glowing points wandering on a gentle wind + turbulence, twinkling via an oscillating
-        // alpha curve. Showcases WindBehavior.
+        // Fireflies: glowing points wandering on a gentle wind and turbulence, twinkling through an
+        // oscillating alpha curve. Showcases WindBehavior.
         static void BuildFireflies(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(700);
@@ -948,7 +950,7 @@ namespace
 
         // Builds the 4x4 flipbook atlas for the explosion blast: 16 frames of an expanding, dissipating
         // fiery puff, generated on the CPU (like the renderer's soft dot) and uploaded once. Stores the
-        // texture/view on the app and returns the view to bind on the blast component.
+        // texture and view on the app and returns the view to bind on the blast component.
         rhi::TextureView* MakeBlastAtlas(rhi::Device& dev)
         {
             constexpr core::u32 kCols = 4, kRows = 4, kF = 64;
@@ -975,7 +977,7 @@ namespace
                         core *= core;
                         const core::f32 a = core * fade;
                         const core::f32 g = core::Clamp(0.35f + 0.65f * core, 0.0f,
-                                                        1.0f); // white-hot core -> orange rim
+                                                        1.0f); // white-hot core to orange rim
                         const core::f32 b = core::Clamp(0.12f * core * core, 0.0f, 1.0f);
                         const core::usize i =
                             (static_cast<core::usize>(fr * kF + y) * W + (fc * kF + x)) * 4;
@@ -1046,9 +1048,9 @@ namespace
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.2f);
         }
 
-        // Shared mesh-particle config: tumbling shards that rise and spread. Used for BOTH mesh cells -
-        // identical simulation; the only difference is the component's material (opaque solid vs. additive
-        // glow, which routes to the Transparent pass). Demonstrates the mesh blend->category path.
+        // Shared mesh-particle config: tumbling shards that rise and spread. Both mesh cells use it with an
+        // identical simulation; only the component's material differs (opaque solid, or an additive glow
+        // that routes to the Transparent pass). Demonstrates how a mesh's blend picks its category.
         static void BuildMeshShards(particles::ParticleEffect& effect)
         {
             particles::ParticleSystem& sys = effect.AddSystem(2000);
@@ -1107,10 +1109,10 @@ namespace
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.3f);
         }
 
-        // The full authoring pipeline, live: author a ParticleEffectAsset in code -> bake it with the
-        // builder into a cooked ParticleEffectResource in the per-sample content DB -> Bind it through the
-        // ResourceManager -> drive a component with the cooked Proxy. This is exactly the editor->runtime
-        // path (an editor would bake offline; here we bake at startup), proving it end to end in the app.
+        // The full authoring pipeline, live: author a ParticleEffectAsset in code, bake it with the builder
+        // into a cooked ParticleEffectResource in the per-sample content DB, Bind it through the
+        // ResourceManager, and drive a component with the cooked Proxy. This is the editor-to-runtime path
+        // (an editor would bake offline; here we bake at startup), run end to end in the app.
         void SetupCookedDemo(engine::particles::ParticleEffectComponentManager& pmgr)
         {
             const core::String outputDirStorage =
@@ -1121,7 +1123,7 @@ namespace
                 return;
             }
             pipeline::
-                RegisterParticleEffectAsset(); // register cooked/asset/module types + serializable factories
+                RegisterParticleEffectAsset(); // register cooked, asset and module types and serializable factories
 
             m_contentFs =
                 core::MakeUnique<vfs::NativeFileSystem>(AppRoot(), outputDir, AppRoot());
@@ -1129,7 +1131,7 @@ namespace
                 AppRoot(), *m_contentFs, core::BinarySerializerFactory(),
                 u8".rasset");
 
-            // AUTHOR -> BAKE: cook the authored asset into a content-DB ParticleEffectResource.
+            // Author and bake: cook the authored asset into a content-DB ParticleEffectResource.
             content::Instance* inst = m_contentDb->RootGroup()->CreateInstance(
                 u8"cooked_demo", particles::ParticleEffectResource::StaticType());
             pipeline::ParticleEffectAsset asset;
@@ -1143,7 +1145,7 @@ namespace
                 return;
             }
 
-            // LOAD: bind the cooked resource back through the manager + factory (runtime path).
+            // Load: bind the cooked resource back through the manager and factory (the runtime path).
             m_resources =
                 core::MakeUnique<resource::ResourceManager>(AppRoot(), AppRoot(), *m_contentDb);
             // The engine composition's factory set (headless: no device offered), registered.
@@ -1156,13 +1158,13 @@ namespace
                 return;
             }
 
-            // DEMO: a component driven by the cooked resource (in front of the grid).
+            // A component driven by the cooked resource (in front of the grid).
             m_cookedEmitter = m_scene->CreateEntity(u8"cooked");
             m_scene->SetLocalPosition(m_cookedEmitter, core::Float3{0.0f, 0.2f, 34.0f});
             pmgr.Add(m_cookedEmitter).SetEffect(m_cookedProxy);
         }
 
-        // Push the current soft-particle distance to every system in an effect (0 => disabled).
+        // Push the current soft-particle distance to every system in an effect (0 disables it).
         void ApplySoft(particles::ParticleEffect& fx)
         {
             for (core::i32 i = 0; i < fx.SystemCount(); ++i)
@@ -1191,7 +1193,7 @@ namespace
                         sys->emitter.isEmitting = emit;
                     }
                     ImGui::SliderFloat("rate", &sys->emitter.spawnRate, 0.0f, 12000.0f, "%.0f/s");
-                    // Fountain blend mode - live (read at extract), so all four PSO variants are eyeballable.
+                    // Fountain blend mode, live (read at extract), so all four PSO variants can be compared by eye.
                     const char* kBlends[] = {"Alpha", "Additive", "Premultiplied", "Multiply"};
                     int blend = static_cast<int>(sys->blendMode);
                     if (ImGui::Combo("blend", &blend, kBlends, 4))
@@ -1199,8 +1201,9 @@ namespace
                         sys->blendMode = static_cast<particles::ParticleBlendMode>(blend);
                     }
                 }
-                // Soft-particle A/B (live - read every frame at extract). Checkbox = on/off; slider tunes
-                // the fade band (kept while off, so toggling restores it). Applies to all billboard systems.
+                // Soft-particle A/B (live, read every frame at extract). The checkbox turns it on and off;
+                // the slider tunes the fade band (kept while off, so toggling restores it). Applies to all
+                // billboard systems.
                 bool changed = ImGui::Checkbox("soft particles", &m_softOn);
                 changed |= ImGui::SliderFloat("soft dist", &m_softDistance, 0.0f, 4.0f, "%.2f");
                 if (changed)
@@ -1256,11 +1259,11 @@ namespace
         particles::ParticleEffect m_fireflies;
         rhi::Texture* m_blastTex = nullptr; // flipbook atlas for the explosion (owned)
         rhi::TextureView* m_blastView = nullptr;
-        // Cooked-pipeline demo: content DB + manager + factory + the bound cooked effect.
+        // Cooked-pipeline demo: the content DB, manager, factory and the bound cooked effect.
         core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
         core::UniquePtr<content::ContentDatabase> m_contentDb;
         core::UniquePtr<resource::ResourceManager> m_resources;
-        resource::ResourceFactorySet m_factories; // the engine composition's set, this host's services
+        resource::ResourceFactorySet m_factories; // the engine composition's factories, built with this host's services
         resource::Proxy<particles::ParticleEffectResource> m_cookedProxy;
         scene::EntityHandle m_cookedEmitter;
         samples::FlyCamera m_fly;

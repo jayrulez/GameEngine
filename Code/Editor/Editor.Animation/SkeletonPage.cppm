@@ -3,14 +3,14 @@
 
 // Editor::Animation - the `:skeleton_page` partition.
 //
-// SkeletonEditorPage: a skeleton on the GUI from its markup (Data/Editor/SkeletonPage.xml;
-// Documentation/Specs/editor-gui.md, 5.4, layer 10, part 3). A viewer: a skeleton comes from its
-// model's import and nothing here edits it. Its bones are a tree (each under its parent), with a
-// search that keeps a bone whose name holds it and the bones above it, so where it hangs still
-// shows; a bone the user folds stays folded. Beside it the bind pose, drawn from the asset itself
-// (it shows before a cook), the chosen bone drawn apart. The grid has the chosen bone's facts (its
-// name, index, parent, children and bind position, rotation and scale) and the skeleton's (its
-// bones, roots and deepest chain), all read only.
+// SkeletonEditorPage: a skeleton on the GUI from its markup (Data/Editor/SkeletonPage.xml). It is
+// a viewer: a skeleton comes from its model's import and nothing here edits it. The bones are a
+// tree, each under its parent. A search keeps the bones whose names contain the text and every
+// bone above them, so their place in the hierarchy still shows; a bone the user folds stays
+// folded. Beside the tree the bind pose is drawn from the asset itself, so it shows before a cook,
+// with the chosen bone drawn apart. The grid shows the chosen bone's facts (its name, index,
+// parent, children and bind position, rotation and scale) and the skeleton's (its bones, roots
+// and deepest chain), all read-only.
 
 module;
 #include "Core/Prelude.h"
@@ -35,7 +35,7 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// What a skeleton is, as the page's read-only rows say it: its bones, roots and deepest chain.
+    /// The skeleton facts the page's read-only rows show: its bones, roots and deepest chain.
     struct SkeletonFacts
     {
         i32 bones = 0;
@@ -43,7 +43,7 @@ export namespace editor
         i32 depth = 0; // bones below its deepest root, along the longest chain
     };
     [[nodiscard]] SkeletonFacts FactsOf(const foundation::animation::Skeleton& skeleton);
-    /// A rotation as its row says it: degrees about an axis ("90° about 0, 1, 0"; "None").
+    /// Describes a rotation for its row as degrees about an axis ("90° about 0, 1, 0"; "None").
     [[nodiscard]] String DescribeRotation(const Quaternion& rotation);
 
     class SkeletonEditorPage final : public app::AssetObjectPage
@@ -58,10 +58,10 @@ export namespace editor
         void OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
-        /// The bone chosen (-1: none): drawn apart, its facts in the grid, its row selected.
+        /// Chooses `bone` (-1: none): it is drawn apart, its facts fill the grid, its row is selected.
         void ChooseBone(i32 bone);
         [[nodiscard]] i32 ChosenBone() const noexcept { return m_chosen; }
-        /// The tree keeps the bones whose names hold `text` and those above them (empty: all).
+        /// Filters the tree to the bones whose names contain `text` and those above them (empty: all).
         void Search(StringView text);
 
         // === For tests ===
@@ -86,7 +86,7 @@ export namespace editor
         Array<i32> m_rows; // the bone each tree node stands for, by node id
         String m_search;
         i32 m_chosen = -1;
-        bool m_showing = false; // choosing from code: not the user's
+        bool m_showing = false; // the code is making the choice, not the user
         UniquePtr<foundation::gui::PropertyBag> m_boneRows;
         UniquePtr<app::PreviewPane> m_pane;
         Array<foundation::animation::BoneTransform> m_bind;
@@ -105,7 +105,7 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The skeleton page (asking for its services when it is made). Skeletons come from import:
-    /// there is no creator.
+    /// Registers the skeleton page, which asks for its services when it is made. Skeletons come
+    /// from import, so there is no creator.
     void RegisterSkeletonEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

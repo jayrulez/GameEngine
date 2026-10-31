@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/StyleTests.bf. Our IVGFill uses the engine's
-// float Color (Sedulous used Color32), so fills take float Color inputs and we
-// convert outputs via ToColor32 for the byte-channel assertions - keeping the
-// Sedulous checks (R==0, R in (100,155), etc.) identical in spirit.
+// Fill styles: solid and gradient fills. IVGFill works in float Color, so outputs go through
+// ToColor32 where an assertion checks byte channels.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -102,9 +100,9 @@ TEST_CASE("style: the coordinate handed to the shader agrees with the CPU parame
 {
     // The GPU gradient path hands the shader fill.GradientCoord per vertex and derives t per
     // pixel: radial takes length(coord), conic takes frac(atan2(coord.y, coord.x) / 2pi)
-    // (vg_grad_radial.ps.hlsl / vg_grad_conic.ps.hlsl). GetParameterAt is the CPU truth. If
+    // (vg_grad_radial.ps.hlsl and vg_grad_conic.ps.hlsl). GetParameterAt is the CPU truth. If
     // either side drifts the GPU draws something the CPU never described, and nothing else
-    // catches it - so the shader math is replayed here at several points.
+    // catches it, so the shader math is replayed here at several points.
     const Rectangle bounds{0.0f, 0.0f, 100.0f, 100.0f};
     const Float2 points[] = {Float2{60.0f, 50.0f}, Float2{50.0f, 20.0f}, Float2{35.0f, 35.0f},
                              Float2{80.0f, 90.0f}, Float2{10.0f, 55.0f}};
@@ -123,7 +121,7 @@ TEST_CASE("style: the coordinate handed to the shader agrees with the CPU parame
         {
             const Float2 coord = conic.GradientCoord(p, bounds);
             f32 a = Atan2(coord.y, coord.x) / kTwoPi; // (-0.5, 0.5], what the shader computes
-            a -= Floor(a);                             // frac -> [0, 1)
+            a -= Floor(a);                             // frac into [0, 1)
             const f32 cpu = conic.GetParameterAt(p, bounds);
             // Both live on a circle: compare modulo 1 so a value at the wrap (0 vs 1) matches.
             f32 diff = Abs(a - cpu);

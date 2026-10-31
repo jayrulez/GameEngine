@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit RangeEditor: builds a Slider + NumericField row; slider drives the setter.
+// Smoke test for the toolkit RangeEditor: it builds a Slider and NumericField row, and the slider drives the setter.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -24,7 +24,7 @@ TEST_CASE("toolkit-rangeeditor: RowAndSliderDrive")
 
     auto* row = core::Cast<FlexLayout>(ed->EditorView());
     REQUIRE(row != nullptr);
-    // Slider + NumericField.
+    // Slider and NumericField.
     CHECK(row->ChildCount() == 2u);
 
     auto* slider = core::Cast<Slider>(row->GetChildAt(0));

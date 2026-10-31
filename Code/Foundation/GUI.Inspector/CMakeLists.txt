@@ -1,6 +1,6 @@
-# Foundation::GUI.Inspector - `foundation.gui.inspector`, the GUI's inspector (E8e of
-# Specs/gui-lab-evolution.md): queries over a GUI's tree (the tree, a node described, a selector
-# query) and the panes built on them from the GUI's own widgets. A library over the core's
+# Foundation::GUI.Inspector - `foundation.gui.inspector`, the GUI's inspector: queries over a
+# GUI's tree (the tree, a node's description, a selector query) and the panes built on them from
+# the GUI's own widgets. A library over the core's
 # public API, so a host shows it beside what it inspects and a tool can ask the same questions.
 util_add_engine_library(GUI.Inspector ALIAS Foundation::GUI.Inspector)
 target_link_libraries(GUI.Inspector

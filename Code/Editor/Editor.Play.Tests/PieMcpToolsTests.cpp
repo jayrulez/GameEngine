@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the PIE tools (agent-playtesting-and-asset-creation.md P3) over a real
-// EditorContext whose play actions open headless Game pages publishing IPieInstancePage: the
-// start that answers once a frame has rendered, the primary already running, a new instance by
-// its own id, the state with a faulted script's reason, the screenshot that waits for its frame,
-// the stop of one or all, and the refusals.
+// Editor::Play tests - the PIE tools over a real EditorContext whose play actions open headless
+// Game pages publishing IPieInstancePage: the start that answers once a frame has rendered, the
+// primary already running, a new instance by its own id, the state with a faulted script's
+// reason, the screenshot that waits for its frame, the stop of one or all, and the refusals.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -26,7 +25,7 @@ using json::JsonValue;
 
 namespace
 {
-    // A Game tab with no viewport: its run is flags the test moves, as a frame would.
+    // A Game tab with no viewport: its run is a set of flags the test moves, as a frame would.
     class HeadlessGamePage final : public EditorPage, public IPieInstancePage
     {
     public:
@@ -34,7 +33,7 @@ namespace
             : EditorPage(DefaultAllocator()), m_pieId(pieId)
         {
             Provide<IPieInstancePage>(*this);
-            Provide<IGameScenePage>(*this); // as the Game page does: entity_inspect reads it
+            Provide<IGameScenePage>(*this); // as the Game page does; entity_inspect reads it
         }
         [[nodiscard]] StringView Title() const override { return u8"Game"; }
         [[nodiscard]] Status Save() override { return Status{}; }
@@ -98,8 +97,8 @@ namespace
         }
         [[nodiscard]] bool IsScripted() const noexcept override { return scripted.Get() != nullptr; }
 
-        // The dropdown: the project's, two preview resolutions and the panel's, the project's
-        // chosen.
+        // The dropdown: the project's entry, two preview resolutions and the panel's, with the
+        // project's chosen.
         [[nodiscard]] Span<const GameResolutionChoice> ResolutionChoices() override
         {
             return Span<const GameResolutionChoice>(resolutions.Data(), resolutions.Size());
@@ -121,7 +120,7 @@ namespace
         void SelectPhonePreview(bool on) override { phone = on; }
 
         /// One rendered frame of the run: the clock, then the page's advance of the script (an
-        /// ended script goes, as the page's release frame then restore do).
+        /// ended script is dropped, as the page's release frame and restore do).
         void Frame(f64 dt)
         {
             if (!running)
@@ -289,7 +288,8 @@ TEST_CASE("pie-tools: start waits for the first frame, a running primary answers
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().ContainsIgnoreCase(u8"pie_start"));
 
-    // Start: the play action opens the tab, Play asks for the run; not finished until a frame.
+    // Start: the play action opens the tab and Play asks for the run; the call does not finish
+    // until a frame renders.
     got = Pump(rig.server, u8"pie_start", u8"{}");
     CHECK_FALSE(got.finished);
     REQUIRE(rig.primary != nullptr);
@@ -305,13 +305,13 @@ TEST_CASE("pie-tools: start waits for the first frame, a running primary answers
     CHECK(got.payload.Get(u8"scene").AsString() == StringView(u8"Arena"));
     CHECK_FALSE(got.payload.Get(u8"alreadyRunning").AsBool());
 
-    // Again: the running primary answers as it is.
+    // Again: the running primary answers with its current state.
     got = Pump(rig.server, u8"pie_start", u8"{}");
     REQUIRE(got.finished);
     CHECK(got.payload.Get(u8"alreadyRunning").AsBool());
     CHECK(rig.primary->plays == 1u);
 
-    // A new instance: another tab, its own id.
+    // A new instance: another tab, with its own id.
     got = Pump(rig.server, u8"pie_start", u8"{\"newInstance\":true}");
     CHECK_FALSE(got.finished);
     HeadlessGamePage* second = rig.Page(u8"game-page-1");
@@ -336,7 +336,7 @@ TEST_CASE("pie-tools: start waits for the first frame, a running primary answers
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().ContainsIgnoreCase(u8"pie_list"));
 
-    // Stop one, then all: the ids stopped, the tabs stay.
+    // Stop one, then all: the answers list the ids stopped, and the tabs stay open.
     got = Pump(rig.server, u8"pie_stop", u8"{\"pie\":\"game-page-1\"}");
     REQUIRE(got.ok);
     CHECK(got.payload.Get(u8"stopped").At(0).AsString() == StringView(u8"game-page-1"));
@@ -360,8 +360,8 @@ TEST_CASE("pie-tools: a start that does not start is an error")
     CHECK(got.error.AsView().ContainsIgnoreCase(u8"did not start"));
 }
 
-// Sedulous 216c8322: a primary start and a new instance's run at once, re-entered in turn, and
-// each answers with its own tab.
+// A primary start and a new instance's start at once, re-entered in turn; each answers with its
+// own tab.
 TEST_CASE("pie-tools: a primary start and a new instance's interleave")
 {
     PlayRig rig;
@@ -437,8 +437,8 @@ TEST_CASE("pie-tools: a screenshot waits for its frame, and a stopped instance i
     CHECK(got.error.AsView().ContainsIgnoreCase(u8"stopped before"));
 }
 
-// Sedulous aaf5ff78: the HTTP host re-enters every unfinished call each pump, so captures of two
-// instances interleave; each waits for its own frame.
+// The HTTP host re-enters every unfinished call each pump, so captures of two instances
+// interleave; each waits for its own frame.
 TEST_CASE("pie-tools: screenshots of two instances wait side by side")
 {
     PlayRig rig;
@@ -492,12 +492,12 @@ TEST_CASE("pie-tools: entity_inspect reads a running game's entity by `pie`")
     CHECK(got.error.AsView().StartsWith(u8"PIE instance 'game-page' is not running a scene"));
 }
 
-// ---- pie_run (agent-playtesting-and-asset-creation.md P4, Sedulous aaf5ff78) ----
+// ---- pie_run ----
 
 namespace
 {
     /// A stand-in game frame: the page's frame (its clock and its script), then the "game": the
-    /// player walks +x at one unit a second while D is held, and a requested capture lands.
+    /// player walks along +x at one unit a second while D is held, and a requested capture lands.
     void PlayFrame(HeadlessGamePage& page, f64 dt)
     {
         page.Frame(dt);
@@ -531,7 +531,7 @@ namespace
         return page;
     }
 
-    /// Pumps one call until it answers, a frame of the page between pumps.
+    /// Pumps one call until it answers, running a frame of the page between pumps.
     Answer RunToEnd(PlayRig& rig, StringView args, HeadlessGamePage& page, f64 dt)
     {
         for (u32 pumps = 0; pumps < 1000; ++pumps)
@@ -598,7 +598,7 @@ TEST_CASE("pie-tools: a run plays its timeline, samples, shoots, and ends")
         CHECK(t >= static_cast<f64>(i) * 0.5 - 1e-9); // a row is read once its time is reached
         last = t;
     }
-    // Walked while D was held (a second, give or take a frame), then stood.
+    // The player walked while D was held (a second, give or take a frame), then stood still.
     const f64 x = samples.At(4).Get(u8"values").Get(u8"Player.position.x").AsNumber();
     CHECK(x == doctest::Approx(1.0).epsilon(0.1));
     CHECK(samples.At(4).Get(u8"values").Get(u8"script.score").AsNumber() == doctest::Approx(7.0));
@@ -610,7 +610,7 @@ TEST_CASE("pie-tools: a run plays its timeline, samples, shoots, and ends")
     CHECK(result.Get(u8"until").IsNull());
     CHECK(result.Get(u8"state").Get(u8"running").AsBool());
 
-    // The script ends: its release, then the viewport's input back.
+    // The script ends: its release frame, then the viewport's input returns.
     CHECK(host->scriptEnding);
     PlayFrame(*host, 0.05);
     CHECK_FALSE(host->IsScripted());
@@ -638,7 +638,7 @@ TEST_CASE("pie-tools: until ends a run, and a stop ends it too")
     CHECK(got.error.AsView().StartsWith(u8"`until` compares a boolean or a string with == or != only"));
 
     // A stop mid-run answers what it had, and says so.
-    PlayFrame(*host, 0.1); // the ended script goes
+    PlayFrame(*host, 0.1); // the ended script is dropped
     const StringView longRun = u8"{\"duration\":30,\"input\":[{\"at\":0,\"key\":\"D\"}],"
                                u8"\"probes\":[{\"entity\":\"Player\",\"fields\":[\"position.x\"]}]}";
     CHECK_FALSE(Pump(rig.server, u8"pie_run", longRun).finished);
@@ -690,8 +690,8 @@ TEST_CASE("pie-tools: two instances run side by side, and only the scripted one 
           doctest::Approx(0.0));
 }
 
-// Sedulous beb10b49: two agents make the same call at once; each call keeps its own wait, where
-// its arguments alone would have made the second the first's re-entry.
+// Two agents make the same call at once. Each call keeps its own wait; matching by arguments alone
+// would take the second call for the first one's re-entry.
 TEST_CASE("pie-tools: identical calls in flight each keep their own wait")
 {
     PlayRig rig;
@@ -706,8 +706,8 @@ TEST_CASE("pie-tools: identical calls in flight each keep their own wait")
     HeadlessGamePage* two = rig.Page(u8"game-page-2");
     REQUIRE(one != nullptr);
     REQUIRE(two != nullptr); // the second start opened a tab of its own
-    // Both cooked and running, neither with a frame yet; only the front tab renders, so the one
-    // behind waits its turn, then comes to front (Sedulous ce5847fe).
+    // Both are cooked and running, neither with a frame yet. Only the front tab renders, so the one
+    // behind waits its turn and then comes to the front.
     one->starting = false;
     one->running = true;
     two->starting = false;
@@ -717,7 +717,7 @@ TEST_CASE("pie-tools: identical calls in flight each keep their own wait")
     CHECK(rig.context.ActivePage() == two); // the front tab's first frame is still to come
     two->frames = 1;
     CHECK_FALSE(Pump(rig.server, 1, u8"pie_start", newInstance).finished);
-    CHECK(rig.context.ActivePage() == one); // its turn: to front
+    CHECK(rig.context.ActivePage() == one); // its turn: brought to the front
     one->frames = 1;
     Answer second = Pump(rig.server, 2, u8"pie_start", newInstance);
     Answer first = Pump(rig.server, 1, u8"pie_start", newInstance);
@@ -754,8 +754,8 @@ TEST_CASE("pie-tools: identical calls in flight each keep their own wait")
     CHECK(rig.server.CallsInFlight() == 0u);
 }
 
-// Sedulous beb10b49: a second run on a busy instance is refused, not taken for the first's
-// re-entry; a run whose caller went away ends, and the tab's input goes back to the user.
+// A second run on a busy instance is refused rather than taken for the first's re-entry; a run
+// whose caller went away ends, and the tab's input goes back to the user.
 TEST_CASE("pie-tools: a second run is refused, and an abandoned run hands the input back")
 {
     PlayRig rig;

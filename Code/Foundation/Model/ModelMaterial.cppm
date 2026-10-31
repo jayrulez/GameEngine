@@ -2,8 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// A model's material as its file authored it: metal-rough PBR, or the lighting model a legacy
-/// format names (Phong, Lambert, unlit), which the import makes the matching built-in material of
-/// (Specs/phong-material.md). Ported from Sedulous.Models/ModelMaterial.bf.
+/// format names (Phong, Lambert, unlit), which the import makes the matching built-in material of.
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +49,7 @@ export namespace foundation::model
         ShadingModel shadingModel = ShadingModel::Pbr;
 
         // -- Base color (Phong's and Lambert's diffuse, Unlit's colour) --
-        // Colour factors are AUTHORED sRGB, as every colour is (the material property they become
+        // Colour factors are authored sRGB, as every colour is (the material property they become
         // decodes them for the GPU). A loader whose format stores them linear (glTF, FBX) encodes them.
         Float4 baseColorFactor{1, 1, 1, 1};
         i32 baseColorTextureIndex = -1;
@@ -58,10 +57,10 @@ export namespace foundation::model
         // -- Metallic-Roughness --
         f32 metallicFactor = 1.0f;
         f32 roughnessFactor = 1.0f;
-        // glTF-style PACKED texture (G = roughness, B = metallic).
+        // glTF-style packed texture (G = roughness, B = metallic).
         i32 metallicRoughnessTextureIndex = -1;
-        // FBX-style SEPARATE grayscale maps (the importer bakes them into a packed texture -
-        // feeding either one directly into the packed slot bleeds across channels).
+        // FBX-style separate grayscale maps. The importer bakes them into a packed texture, since
+        // feeding either one directly into the packed slot bleeds across channels.
         i32 separateRoughnessTextureIndex = -1;
         i32 separateMetalnessTextureIndex = -1;
 

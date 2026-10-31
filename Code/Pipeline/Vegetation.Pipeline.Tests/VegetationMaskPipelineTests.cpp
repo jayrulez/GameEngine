@@ -2,8 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // VegetationMaskAsset cook: the "densities" stream round-trips through VegetationMaskAssetBuilder
-// -> VegetationMaskFactory with PRODUCT guid == SOURCE guid, the no-sidecar cook (all-zero: nothing
-// grows, no seeding), a size mismatch FAILS the cook, the PNG import (one plane per channel), and
+// and VegetationMaskFactory with the product guid equal to the source guid, the no-sidecar cook
+// (all zero: nothing grows, no seeding), a size mismatch fails the cook, the PNG import (one plane
+// per channel), and
 // the cook-stamp ProductType contract.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -52,8 +53,8 @@ TEST_CASE("vegetation.pipeline: an embedded mask cooks its planes and restores t
     {
         foundation::content::ContentDatabase db(DefaultAllocator(), outMount,
                                                 BinarySerializerFactory(), u8".rasset");
-        // Cook in place into ONE instance (product guid == source guid): the source sidecar feeds
-        // the builder, which writes the cooked VegetationMaskSource + the stream back.
+        // Cook in place into one instance (product guid equals source guid): the source sidecar
+        // feeds the builder, which writes the cooked VegetationMaskSource and the stream back.
         auto* inst = db.RootGroup()->CreateInstance(u8"mask", VegetationMaskSource::StaticType());
         maskId = inst->Id();
         REQUIRE(inst->WriteData(kVegetationMaskStream, VegetationMaskSource::DensityBlob(*authored))
@@ -81,7 +82,7 @@ TEST_CASE("vegetation.pipeline: an embedded mask cooks its planes and restores t
     VegetationMaskFactory factory(DefaultAllocator());
     ResourceManager manager(DefaultAllocator(), db);
     manager.AddFactory(&factory);
-    Proxy<VegetationMask> loaded = manager.Bind<VegetationMask>(maskId); // bind by the SOURCE guid
+    Proxy<VegetationMask> loaded = manager.Bind<VegetationMask>(maskId); // bind by the source guid
     REQUIRE(loaded);
     CHECK(loaded->Width() == 16);
     CHECK(loaded->Height() == 16);
@@ -244,7 +245,7 @@ TEST_CASE("vegetation.pipeline: PNG import decodes one density plane per channel
     manager.AddFactory(&factory);
     Proxy<VegetationMask> loaded = manager.Bind<VegetationMask>(maskId);
     REQUIRE(loaded);
-    CHECK(loaded->Width() == 4); // the PNG's NATIVE size
+    CHECK(loaded->Width() == 4); // the PNG's native size
     CHECK(loaded->Height() == 2);
     CHECK(loaded->PlaneCount() == 4u);
     CHECK(loaded->DensityAt(0, 1, 1) == 200); // R

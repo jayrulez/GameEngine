@@ -3,8 +3,8 @@
 
 // Content - foundation.content implementation unit.
 //
-// Out-of-line definitions for Instance/Group/ContentDatabase (sec 3.2 / sec 10.6).
-// ContentModule.cppm keeps the class declarations + trivial inline accessors.
+// Out-of-line definitions for Instance, Group and ContentDatabase. ContentModule.cppm keeps
+// the class declarations and trivial inline accessors.
 
 module;
 #include "Core/Prelude.h"
@@ -225,10 +225,11 @@ namespace foundation::content
         {
             return existing;
         }
-        // Mint a GUID that isn't already in use. The RNG is deterministic and Scan() (load-from-disk)
-        // does NOT advance it past the instances it loads - so a fresh instance added to a scanned DB
-        // would otherwise reproduce the FIRST-cooked instance's GUID and alias it (e.g. a runtime-cooked
-        // texture colliding with a model's first texture). Re-roll until the id is free.
+        // Mint a GUID that isn't already in use. The RNG is deterministic and Scan() (load from
+        // disk) does not advance it past the instances it loads, so a fresh instance added to a
+        // scanned DB could reproduce the first-cooked instance's GUID and alias it (e.g. a
+        // runtime-cooked texture colliding with a model's first texture). Re-roll until the id
+        // is free.
         Guid id = Guid::Generate(m_db->Rng());
         while (m_db->GetInstance(id) != nullptr)
         {
@@ -346,7 +347,7 @@ namespace foundation::content
         }
 
         // Deserialize the payload under its data-version scope (a version other than the
-        // type's current one fails the read here - no migration). A refused payload is not
+        // type's current one fails the read here; there is no migration). A refused payload is not
         // read: it is in another layout, and reading it as this one only walks garbage.
         BeginVersionedPayload(ar, *type);
         if (ar.IsOk())
@@ -401,7 +402,7 @@ namespace foundation::content
         }
         Serializer& ar = *ctx->serializer;
 
-        // Write header + payload (payload wrapped in the object's data-version scope).
+        // Write the header and payload (the payload wrapped in the object's data-version scope).
         String ns(m_typeNamespace);
         String nm(m_typeName);
         ar.Key("guid");
@@ -489,8 +490,8 @@ namespace foundation::content
             return nullptr;
         }
 
-        // The primary object must round-trip (re-serialized under the clone's identity - a raw
-        // envelope byte-copy would carry the SOURCE guid).
+        // The primary object must round-trip (re-serialized under the clone's identity, since a
+        // raw envelope byte-copy would carry the source guid).
         RefPtr<ISerializable> object = src->ReadObject();
         if (object.Get() == nullptr)
         {
@@ -512,7 +513,7 @@ namespace foundation::content
             return nullptr;
         }
 
-        // Sidecar streams keep no directory - enumerate "<srcName>.<stream>.<suffix>" siblings
+        // Sidecar streams keep no directory: enumerate "<srcName>.<stream>.<suffix>" siblings
         // (the same prefix scan DeleteInstance uses) and byte-copy each under the clone's name,
         // preserving the source's text/binary suffix.
         if (IEnumerableFileSystem* enumerable = m_mount->AsEnumerable())
@@ -538,7 +539,7 @@ namespace foundation::content
                     {
                         continue;
                     }
-                    // "<src>.<stream>.<suffix>" -> stream name between prefix and suffix.
+                    // In "<src>.<stream>.<suffix>", the stream name is between prefix and suffix.
                     const StringView fileName = entry.name.AsView();
                     const StringView stream =
                         fileName.SubStr(prefix.Size(), fileName.Size() - prefix.Size() - suffix);
@@ -586,9 +587,9 @@ namespace foundation::content
             return wrote;
         }
 
-        // Every "<srcName>.<stream>.<suffix>" sidecar (streams keep no directory) -> byte-copy
-        // into dest under the same stream name and text/binary suffix. Same prefix scan
-        // CloneInstance uses, but across DBs/mounts.
+        // Byte-copy every "<srcName>.<stream>.<suffix>" sidecar (streams keep no directory)
+        // into dest under the same stream name and text or binary suffix: the prefix scan
+        // CloneInstance uses, but across databases and mounts.
         if (IEnumerableFileSystem* enumerable = src.m_mount->AsEnumerable())
         {
             const String folder = source->OwningGroup().Path();
@@ -661,8 +662,8 @@ namespace foundation::content
         const String folder = instance->OwningGroup().Path();
         const String oldEnvelope = instance->EnvelopePath();
 
-        // Sidecars first (prefix scan, like delete): "<old>.<stream>.<suffix>" ->
-        // "<new>.<stream>.<suffix>" (the tail keeps the stream's text/binary suffix).
+        // Sidecars first (prefix scan, like delete): "<old>.<stream>.<suffix>" becomes
+        // "<new>.<stream>.<suffix>" (the tail keeps the stream's text or binary suffix).
         if (IEnumerableFileSystem* enumerable = m_mount->AsEnumerable())
         {
             String prefix(instance->Name());
@@ -693,7 +694,7 @@ namespace foundation::content
             }
         }
 
-        // The envelope may not exist yet (instance created, never written) - that's fine.
+        // The envelope may not exist yet (instance created, never written); that is fine.
         instance->m_name = String(newName);
         instance->OwningGroup().ResortChildren();
         if (m_mount->Exists(oldEnvelope.AsView()))
@@ -833,7 +834,7 @@ namespace foundation::content
             return Status{ErrorCode::NotSupported};
         }
 
-        // Envelope + every "<name>.<stream>.<suffix>" sidecar (streams keep no directory, so
+        // The envelope and every "<name>.<stream>.<suffix>" sidecar (streams keep no directory, so
         // the group folder is enumerated for siblings with the instance's file prefix).
         (void)writable->Delete(instance->EnvelopePath().AsView());
         if (IEnumerableFileSystem* enumerable = m_mount->AsEnumerable())
@@ -889,7 +890,7 @@ namespace foundation::content
             return Status{ErrorCode::NotSupported};
         }
 
-        // Instances first (copy the id list - DeleteInstance unlinks from m_instances)...
+        // Instances first (copy the id list, since DeleteInstance unlinks from m_instances),
         Array<Guid> ids;
         for (Instance* instance : group.Instances())
         {
@@ -899,7 +900,7 @@ namespace foundation::content
         {
             (void)DeleteInstance(id);
         }
-        // ...then child groups, bottom-up (copy - the recursion unlinks from m_groups).
+        // then child groups, bottom-up (copied, since the recursion unlinks from m_groups).
         Array<Group*> children;
         for (Group* child : group.Groups())
         {

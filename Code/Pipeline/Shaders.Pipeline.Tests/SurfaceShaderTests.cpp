@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Surface shaders (Specs/custom-shaders.md, phase 6): a `// surface:` line makes a shader's text
+// Surface shaders: a `// surface:` line makes a shader's text
 // a Surface() (and optionally a Vertex()) the engine wraps in its templates, as three programs
 // (forward, depth, pick) with the template's lattices. Each compiles in every variant against the
 // engine's library; an error in the author's text keeps the author's line; the directive's word

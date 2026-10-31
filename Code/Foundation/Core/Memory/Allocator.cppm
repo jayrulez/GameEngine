@@ -147,9 +147,9 @@ export namespace foundation::core
 
             DIAGNOSTIC_ASSERT(IsPowerOfTwo(alignment));
 
-            // POSIX only promises alignments that are multiples of sizeof(void*): glibc's
-            // aligned_alloc happens to accept less, emscripten's REJECTS it (alignment 1
-            // returned null on wasm - byte-aligned arrays like HashMap states). Raising
+            // POSIX only promises alignments that are multiples of sizeof(void*). glibc's
+            // aligned_alloc happens to accept less, but emscripten's returns null for them
+            // (alignment 1, which byte-aligned arrays such as HashMap states ask for). Raising
             // alignment is always safe.
             if (alignment < sizeof(void*))
             {

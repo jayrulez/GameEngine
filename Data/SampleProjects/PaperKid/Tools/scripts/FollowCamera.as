@@ -1,6 +1,6 @@
-// FollowCamera - the chase camera: it springs toward a seat behind and above the target and aims at
-// it. "Behind" is the camera's own lag: as the bike rides on, the camera falls back, so the ground
-// direction from the bike back to the camera already points the right way.
+// FollowCamera: the chase camera. It springs toward a seat behind and above the target and aims at
+// it. "Behind" comes from the camera's own lag: as the bike rides on, the camera falls back, so the
+// direction along the ground from the bike back to the camera already points the right way.
 class FollowCamera
 {
     private Entity@ self;
@@ -47,10 +47,10 @@ class FollowCamera
         {
             return;
         }
-        // The target's LOCAL position (the bike is a root): physics has already written this
-        // frame's interpolated pose there, while worldPosition() is last frame's until the scene
-        // updates its transforms after every script, and following it makes the bike shake
-        // against the camera at speed.
+        // Use the target's local position (the bike is a root entity). Physics has already written
+        // this frame's interpolated pose there, while worldPosition() still holds last frame's
+        // until the scene updates its transforms after every script; following that would make the
+        // bike shake against the camera at speed.
         Float3 at = target.position();
         Float3 cam = m_base;
         float backX = cam.x - at.x;

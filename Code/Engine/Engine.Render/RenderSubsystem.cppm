@@ -3,12 +3,12 @@
 
 /// Engine::Render - the `:subsystem` partition.
 ///
-/// RenderSubsystem: the application-level driver that connects scenes to the (scene-agnostic)
-/// renderer. It owns the GPU systems - the DXC compiler, ShaderSystem, PipelineStateCache,
-/// the MeshRenderer + RendererRegistry, and the per-frame RenderFrame driver - and, as an
-/// As an ISceneObserver it reacts to scene teardown; assembly happens via the scene composition.
+/// RenderSubsystem: the application-level driver that connects scenes to the scene-agnostic
+/// renderer. It owns the GPU systems (the DXC compiler, ShaderSystem, PipelineStateCache, the
+/// MeshRenderer and RendererRegistry, and the per-frame RenderFrame driver). As an
+/// ISceneObserver it reacts to scene teardown; assembly happens through the scene composition.
 ///
-/// It implements ISceneRenderer (Begin/RenderScene×N/End): the app's render callback brackets
+/// It implements ISceneRenderer (Begin, RenderScene per scene, End): the app's render callback brackets
 /// the frame with BeginRendering/EndRendering and calls RenderScene per active scene. Each
 /// RenderScene extracts the scene into an ExtractedScene snapshot and collects a RenderView;
 /// EndRendering composes all views. (The built-in forward shader binds no material set on its
@@ -45,22 +45,22 @@ namespace rhi = foundation::rhi;
 
 export namespace engine::render
 {
-    // Foundation aliases: inside engine::render, the sibling engine::scene would
-    // otherwise shadow the foundation foundation::scene these reference. (The engine SceneSubsystem is
-    // spelled engine::scene::SceneSubsystem where needed.)
+    // Foundation aliases: inside engine::render, the sibling engine::scene would otherwise
+    // shadow the foundation::scene these reference. (The engine SceneSubsystem is spelled
+    // engine::scene::SceneSubsystem where needed.)
     namespace scene = foundation::scene;
 
-    // THE render manager set for a scene - injected by the subsystem at runtime AND by headless
-    // scene consumers (Engine.Composition -> export/MCP transcode scratch), so a manager added
-    // there reaches both automatically. Defined in RenderSubsystemImpl.cpp next to OnSceneCreated.
-    // A manager added here reaches the composition (Engine.Composition) automatically.
+    // The render manager set for a scene, injected by the subsystem at runtime and by headless
+    // scene consumers (through Engine.Composition, for export and MCP transcode scratch scenes),
+    // so a manager added here reaches both. Defined in RenderSubsystemImpl.cpp next to
+    // OnSceneCreated.
     void AddRenderSceneManagers(scene::Scene& scene);
 
-    // The canonical, ordered scene-pass MSAA levels - the SINGLE source of truth for the UI list and
-    // the index<->sample-count mapping. Add a level HERE (e.g. {8u, "8x"}, plus raising the device
-    // ceiling + SupportsSampleCount) and every combo/menu + mapping picks it up; nothing else hardcodes
-    // the list. The device still capability-clamps at runtime (SupportsMsaaSamples), so an unsupported
-    // level is simply not offered / degrades.
+    // The canonical, ordered scene-pass MSAA levels: the single source of truth for the UI list and
+    // the mapping between index and sample count. Add a level here (e.g. {8u, "8x"}, and raise the
+    // device ceiling and SupportsSampleCount) and every combo, menu and mapping picks it up; nothing
+    // else hardcodes the list. The device still clamps at runtime (SupportsMsaaSamples), so an
+    // unsupported level is not offered, or degrades.
     struct MsaaLevel
     {
         u32 samples;
@@ -96,8 +96,8 @@ export namespace engine::render
     }
 
     // The per-script-context render hook: a service the app installs so the `DebugDraw` facade can
-    // reach RenderSubsystem::DebugScene from a script (mirrors Audio/Input/UI's ExposeToScript). A
-    // facade has no Manager(), but it has CurrentScriptContext() -> GetService().
+    // reach RenderSubsystem::DebugScene from a script (as Audio's and Input's ExposeToScript do). A
+    // facade has no Manager(), but it has CurrentScriptContext()->GetService().
     class RenderSubsystem; // forward for the binding
     inline constexpr StringView kRenderScriptService = u8"render.runtime";
     struct RenderScriptBinding
@@ -115,7 +115,7 @@ export namespace engine::render
         // objects) rolls up under the Render memory tag, backed by the owner's allocator.
         // `dataFileSystem` is the application's data mount (borrowed for the subsystem's
         // lifetime): engine shaders resolve from it (Shaders/ in dev, Shaders/shaders.dpak
-        // in a dist) - the renderer never knows where on disk that is.
+        // in a dist); the renderer never knows where on disk that is.
         RenderSubsystem(IAllocator& allocator, rhi::Device& device, u32 framesInFlight,
                         foundation::vfs::IFileSystem& dataFileSystem) noexcept
             : m_allocator(allocator, RegisterMemoryTag("Render")), m_device(&device),
@@ -127,17 +127,17 @@ export namespace engine::render
         // shut down still holds it.
         ~RenderSubsystem() override;
 
-        // --- Extension seam for downstream subsystems (particles, world-UI, ...) --------------------
-        // Register an external Renderer (borrowed - caller owns it); returns its dispatch id to stamp on
+        // --- Extension point for downstream subsystems (particles, world-UI, ...) -------------------
+        // Register an external Renderer (borrowed: the caller owns it); returns its dispatch id to stamp on
         // the subsystem's render-data. The pipeline drives PrepareFrame/Resolve/FinishFrame registry-wide.
         u16 RegisterRenderer(Renderer& renderer);
         /// The built-in MeshRenderer's registration id (what mesh-shaped data routes to). Producers
-        /// of MeshRenderData outside the extractor stamp THIS, never a literal 0.
+        /// of MeshRenderData outside the extractor stamp this, never a literal 0.
         [[nodiscard]] u16 MeshRendererId() const noexcept
         {
             return m_meshRenderer ? m_meshRenderer->RendererId() : 0;
         }
-        // Register a render-data provider FOR a scene (borrowed). Invoked during that scene's extraction.
+        // Register a render-data provider for a scene (borrowed). Invoked during that scene's extraction.
         // The provider interface is scene-free; the scene binding lives here. Auto-cleared on scene destroy.
         void RegisterProvider(scene::Scene& scene, IRenderDataProvider& provider);
         // GPU handles a subsystem needs to build its renderer's pipeline (valid once RenderSubsystem is ready).
@@ -150,9 +150,9 @@ export namespace engine::render
         // Frame dt reaches the render pipeline (auto-exposure adaptation eases against it).
         void Update(foundation::core::f32 deltaTime) override;
         // The end of every host iteration, a frame rendered or not: the debug lists empty here
-        // too. EndRendering alone left them growing while no frame rendered (a minimized window:
-        // the host skips the render bracket while the app keeps drawing its grid and gizmos), to
-        // a multi-gigabyte debug vertex buffer and a long stall on restore.
+        // too. Clearing them only in EndRendering would let them grow while no frame renders (a
+        // minimized window: the host skips the render bracket while the app keeps drawing its grid
+        // and gizmos), to a multi-gigabyte debug vertex buffer and a long stall on restore.
         void EndFrame() override;
 
         // Drop any render-data providers registered for a scene that's going away (borrowed pointers).
@@ -169,13 +169,13 @@ export namespace engine::render
         // faceSize*faceSize*4 bytes. Used when EnvironmentSettings.skyMode is Cubemap.
         void SetSkyCubemap(u32 faceSize, Span<const u8> sixFaces);
 
-        // Exposure/bloom/AO are now AUTHORED per scene (PostProcessSettings) and resolved per view.
-        // These programmatic setters remain as a GLOBAL OVERRIDE (samples' ImGui debug panels): calling
-        // any of them latches m_globalPostActive, and the resolve in RenderScene then prefers the global
-        // values over the scene's authored ones for exposure/bloom/AO. Untouched (the editor path), the
-        // scene's authored settings drive. (AO debug below stays a pure frame-global renderer toggle.)
+        // Exposure, bloom and AO are authored per scene (PostProcessSettings) and resolved per view.
+        // These programmatic setters are a global override (samples' debug panels): calling any of
+        // them latches m_globalPostActive, and the resolve in RenderScene then prefers the global
+        // values over the scene's authored ones for exposure, bloom and AO. Untouched (the editor
+        // path), the scene's authored settings drive. (AO debug below is a frame-global toggle.)
 
-        // The app's run clock in seconds, handed to the frame every BeginRendering: the WIND
+        // The app's run clock in seconds, handed to the frame every BeginRendering: the wind
         // vertex sway phase (DefaultApplication feeds it from its OnUpdate accumulator).
         void SetTime(f32 seconds) noexcept { m_timeSeconds = seconds; }
         [[nodiscard]] f32 TimeSeconds() const noexcept { return m_timeSeconds; }
@@ -184,7 +184,7 @@ export namespace engine::render
         void SetExposure(f32 exposure) noexcept;
         [[nodiscard]] f32 Exposure() const noexcept { return m_exposure; }
 
-        // Bloom on/off (skips the whole pyramid when off) + composite strength + soft-knee prefilter.
+        // Bloom on or off (off skips the whole pyramid), composite strength and soft-knee prefilter.
         void SetBloomEnabled(bool on) noexcept;
         [[nodiscard]] bool BloomEnabled() const noexcept { return m_bloomEnabled; }
         void SetBloomIntensity(f32 v) noexcept;
@@ -192,8 +192,9 @@ export namespace engine::render
         void SetBloomThreshold(f32 v) noexcept;
         [[nodiscard]] f32 BloomThreshold() const noexcept { return m_bloomThreshold; }
 
-        // Ambient occlusion: mode (Off/GTAO/SSAO, mutually exclusive) + tunables (strength = composite amount,
-        // radius = world AO radius, intensity = power). Both modes share the whole apply/blur/debug pipeline.
+        // Ambient occlusion: the mode (Off, GTAO or SSAO, mutually exclusive) and tunables (strength is the
+        // composite amount, radius the world AO radius, intensity the power). Both modes share the whole
+        // apply, blur and debug pipeline.
         void SetAoMode(AoMode m) noexcept;
         [[nodiscard]] AoMode GetAoMode() const noexcept { return m_aoMode; }
         void SetAoStrength(f32 v) noexcept;
@@ -205,43 +206,44 @@ export namespace engine::render
         void SetAoDebug(i32 mode) noexcept;
         [[nodiscard]] i32 AoDebug() const noexcept { return m_aoDebug; }
 
-        // Screen-space reflections: on/off + tunables (intensity, max view-space ray length, hit thickness,
-        // screen-edge fade, roughness cutoff, march steps). Reflects the lit HDR before AO/TAA.
+        // Screen-space reflections: on or off, and tunables (intensity, max view-space ray length, hit
+        // thickness, screen-edge fade, roughness cutoff, march steps). Reflects the lit HDR before AO and TAA.
         void SetSsrEnabled(bool on) noexcept;
         [[nodiscard]] bool SsrEnabled() const noexcept { return m_ssrEnabled; }
-        // Scene-pass MSAA sample count (1/2/4) for the global post path - capability-clamped per view
-        // Samples/tools drive it directly (the editor uses the per-view override instead).
+        // Scene-pass MSAA sample count (1, 2, 4) for the global post path, clamped per view to what the
+        // device supports. Samples and tools drive it directly (the editor uses the per-view override).
         void SetMsaaSamples(u32 count) noexcept;
         [[nodiscard]] u32 MsaaSamples() const noexcept { return m_globalMsaaSamples; }
         // Whether this exact scene-pass MSAA count is usable on the active device (the valid set is not
-        // contiguous - WebGPU supports only {1, 4}). UIs should offer only counts that return true.
+        // contiguous: WebGPU supports only {1, 4}). UIs should offer only counts that return true.
         [[nodiscard]] bool SupportsMsaaSamples(u32 count) const noexcept;
         [[nodiscard]] SsrPass::Params& SsrParams() noexcept { return m_ssrParams; }
 
-        // Share instance data between the camera depth-prepass and the forward (build once). A/B toggle.
+        // Share instance data between the camera depth prepass and the forward pass (build once). An A/B toggle.
         void SetInstanceSharing(bool on) noexcept { m_instanceSharing = on; }
         [[nodiscard]] bool InstanceSharing() const noexcept { return m_instanceSharing; }
 
-        // View-frustum culling: skip renderables outside the camera frustum per view. Off by default (a no-op
+        // View-frustum culling: skip renderables outside the camera frustum per view. On by default (a no-op
         // for benchmarks that frame everything; a win for real scenes with lots off-screen). Shadow casters are
         // sourced independently, so culling the camera view never drops a shadow.
         void SetViewCulling(bool on) noexcept { m_viewCulling = on; }
         [[nodiscard]] bool ViewCulling() const noexcept { return m_viewCulling; }
-        // Last frame's cull totals (culled / considered, summed over views). 0/0 when culling was off.
+        // Last frame's cull totals (culled and considered, summed over views). Both 0 when culling was off.
         void ViewCullStats(u32& culled, u32& total) const noexcept;
 
-        // FXAA on/off (TAA-off fallback AA - ignored while TAA is on) + sub-pixel quality (0..1).
+        // FXAA on or off (the fallback AA without TAA, ignored while TAA is on) and sub-pixel quality (0..1).
         void SetFxaaEnabled(bool on) noexcept;
         [[nodiscard]] bool FxaaEnabled() const noexcept { return m_fxaaEnabled; }
         void SetFxaaSubpixel(f32 v) noexcept;
         [[nodiscard]] f32 FxaaSubpixel() const noexcept { return m_fxaaSubpixel; }
 
-        // Debug draw (immediate-mode, cleared each frame after rendering). Destinations by WHERE the
-        // draw lands: DebugGlobal() = drawn in EVERY view (world gizmos + per-view HUD, replicated per view);
-        // DebugScene(scene) = every view OF THAT SCENE (no side-by-side bleed across scenes); DebugView(key)
-        // = only the ONE view that renders with a matching `viewportKey` (so an editor viewport's grid/
-        // gizmos stay out of a second view of the same scene - the camera-preview inset); DebugScreen() =
-        // ONCE over the whole window (screen-space HUD - text/rects; 3D calls have no camera here, ignored).
+        // Debug draw (immediate-mode, cleared each frame after rendering), by where the draw lands:
+        // DebugGlobal() draws in every view (world gizmos and per-view HUD, replicated per view);
+        // DebugScene(scene) in every view of that scene (no side-by-side bleed across scenes);
+        // DebugView(key) only in the one view that renders with a matching `viewportKey` (so an editor
+        // viewport's grid and gizmos stay out of a second view of the same scene, the camera-preview
+        // inset); DebugScreen() once over the whole window (a screen-space HUD of text and rects; 3D
+        // calls have no camera there and are ignored).
         [[nodiscard]] debug::DebugDraw& DebugGlobal() noexcept { return m_debugGlobal; }
         [[nodiscard]] debug::DebugDraw& DebugScene(scene::Scene& s);
         [[nodiscard]] debug::DebugDraw& DebugView(const void* viewportKey);
@@ -260,15 +262,15 @@ export namespace engine::render
         void CancelPicks(const void* viewportKey);
 
         // Publish this subsystem as the per-context render service, so the `DebugDraw` script facade
-        // resolves it via CurrentScriptContext()->GetService(kRenderScriptService). Called by the app
-        // for each run context (alongside Input/Audio/UI ExposeToScript).
+        // resolves it through CurrentScriptContext()->GetService(kRenderScriptService). Called by the
+        // app for each run context (alongside Input's and Audio's ExposeToScript).
         void ExposeToScript(foundation::script::IScriptContext& scriptContext)
         {
             m_scriptBinding.render = this;
             scriptContext.SetService(kRenderScriptService, &m_scriptBinding);
         }
 
-        // Temporal AA on/off (projection jitter + history resolve) + resolve tunables.
+        // Temporal AA on or off (projection jitter and history resolve), and resolve tunables.
         void SetTaaEnabled(bool on) noexcept;
         [[nodiscard]] bool TaaEnabled() const noexcept { return m_taaEnabled; }
         void SetTaaBlend(f32 v) noexcept;
@@ -307,8 +309,8 @@ export namespace engine::render
         void UnregisterOverlay(IScreenOverlay* overlay) override;
 
         // Window-space overlays: one shared Load-op pass against `target` (in RenderTarget
-        // state; left there), every registered source in OverlayOrder. The HOST calls this once
-        // per window target after the scene composed (post-EndRendering).
+        // state; left there), every registered source in OverlayOrder. The host calls this once
+        // per window target after the scene composed (after EndRendering).
         void RenderOverlays(rhi::CommandEncoder& encoder, rhi::TextureView* target,
                             rhi::TextureFormat targetFormat, u32 width, u32 height,
                             u32 frameIndex, rhi::TextureView* encodedTarget = nullptr) override;
@@ -327,8 +329,7 @@ export namespace engine::render
         // Empty every debug list (EndRendering, and EndFrame for an iteration that rendered none).
         void ClearDebugLists();
         // A per-frame snapshot pool: one ExtractedScene per RenderScene call, kept alive (and its
-        // arena chunks reused) until the next BeginRendering. (One snapshot is taken per RenderScene
-        // call.)
+        // arena chunks reused) until the next BeginRendering.
         [[nodiscard]] ExtractedScene* AcquireScene();
         // Render `scene`'s target cameras (a camera with a render texture target) into their
         // textures, once per scene per frame, before the view that asked: the first view of a
@@ -342,7 +343,7 @@ export namespace engine::render
         foundation::vfs::IFileSystem* m_dataFileSystem; // borrowed (the application's data mount)
         u32 m_framesInFlight = 2;
         u32 m_maxMsaaSamples = 1; // device-supported scene-pass MSAA ceiling (queried at init)
-        // Owns the pack-vs-dev ShaderSystem (cooked blobs in a dist/web build, DXC + file provider
+        // Owns the pack or dev ShaderSystem (cooked blobs in a dist or web build, DXC and a file provider
         // with hot reload otherwise). m_shaders caches its ShaderSystem for the passes to borrow.
         shaders::ShaderSystemHost m_shaderHost{m_allocator};
         shaders::ShaderSystem* m_shaders = nullptr;
@@ -356,8 +357,8 @@ export namespace engine::render
 
     public:
         /// The frames-in-flight retire queue external renderers (particles, ...) wire
-        /// their DynamicUniformRings into - grow-path replacements must retire, never
-        /// WaitIdle mid-frame (the web dropped-submit class).
+        /// their DynamicUniformRings into: grow-path replacements must retire, never
+        /// WaitIdle mid-frame (on the web that drops submits).
         [[nodiscard]] GpuRetireQueue* RetireQueue() noexcept { return &m_retireQueue; }
 
     private:
@@ -370,7 +371,7 @@ export namespace engine::render
         UniquePtr<AoPass> m_aoPass;
         UniquePtr<SsrPass> m_ssrPass;
         UniquePtr<SsgiPass> m_ssgiPass;
-        UniquePtr<MsaaResolvePass> m_msaaResolvePass; // scene-pass MSAA depth+aux resolve
+        UniquePtr<MsaaResolvePass> m_msaaResolvePass; // scene-pass MSAA depth and aux resolve
         UniquePtr<PickSystem> m_pickSystem;           // GPU picking (lazily built; device-free until a pass)
         PickSystem& EnsurePickSystem();
         UniquePtr<FxaaPass> m_fxaaPass;
@@ -384,9 +385,9 @@ export namespace engine::render
         HashMap<scene::Scene*, debug::DebugDraw> m_debugScenes; // per-scene gizmos (every view of a scene)
         HashMap<const void*, debug::DebugDraw> m_debugViews;    // per-view gizmos (one keyed viewport)
         RenderScriptBinding m_scriptBinding;                   // published by ExposeToScript (DebugDraw facade)
-        bool m_globalPostActive = false; // a post setter was called => global override wins
+        bool m_globalPostActive = false; // a post setter was called, so the global override wins
         f32 m_exposure = 1.0f;
-        f32 m_timeSeconds = 0.0f; // SetTime (the WIND sway clock)
+        f32 m_timeSeconds = 0.0f; // SetTime (the wind sway clock)
         bool m_bloomEnabled = true;
         AoMode m_aoMode = AoMode::Off; // AO off by default (UI combo)
         i32 m_aoDebug = 0;             // AO debug view (0=off)
@@ -396,15 +397,15 @@ export namespace engine::render
         bool m_ssrEnabled = false;  // SSR off by default (UI toggle)
         u32 m_globalMsaaSamples = 1; // scene-pass MSAA count for the global post path (off by default)
         SsrPass::Params m_ssrParams{};
-        bool m_instanceSharing = true; // prepass->forward instance-data sharing (A/B toggle)
-        bool m_viewCulling = true;     // view-frustum cull camera draw lists (ON since 2026-09-24)
+        bool m_instanceSharing = true; // instance data shared from prepass to forward (A/B toggle)
+        bool m_viewCulling = true;     // view-frustum cull camera draw lists
         bool m_fxaaEnabled = false;    // FXAA off by default (TAA-off fallback)
         f32 m_fxaaSubpixel = 0.75f;
         bool m_taaEnabled = false;     // TAA off by default (UI toggle)
         f32 m_taaBlend = 0.97f;        // history weight (stability)
         f32 m_taaGamma = 1.25f;        // variance-clip box half-width
         f32 m_taaMotionScale = 1.0f / 32.0f; // history drop-off per pixel of motion a frame
-        f32 m_bloomIntensity = 0.05f;  // 0 = bloom off
+        f32 m_bloomIntensity = 0.05f;  // 0: bloom off
         f32 m_bloomThreshold = 1.0f;
         f32 m_bloomKnee = 0.6f;
         RendererRegistry m_registry;
@@ -418,7 +419,7 @@ export namespace engine::render
         OverlayRegistry<IScreenOverlay> m_screenOverlays; // window-space overlay sources (borrowed)
         // Screen-overlay stencil attachment (stencil-then-cover UI fills): one cached DS
         // sized to the last window target (single-window runtime; a size change retires
-        // the old texture through the queue and recreates). Undefined format = no stencil.
+        // the old texture through the queue and recreates). An undefined format means no stencil.
         rhi::Texture* m_overlayDsTexture = nullptr;
         rhi::TextureView* m_overlayDsView = nullptr;
         u32 m_overlayDsWidth = 0;
@@ -441,7 +442,7 @@ export namespace engine::render
 
 export namespace engine::render
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
+    /// This domain's declaration: what it brings to a scene, to
     /// reflection, to the script surface and which resource modules come with it. Defined in the
     /// implementation unit (one instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& RenderDomain() noexcept;

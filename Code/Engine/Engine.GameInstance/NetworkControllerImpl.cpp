@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Engine::GameInstance :networkcontroller - the networking role bodies.
-// A second implementation unit of engine.gameinstance; it sees
-// NetworkController through the primary interface's `export import :networkcontroller`.
+// A second implementation unit of engine.gameinstance; it sees NetworkController through the
+// primary interface's `export import :networkcontroller`.
 
 module;
 #include "Core/Prelude.h"
@@ -24,10 +24,10 @@ namespace engine::runtime
 
     bool NetworkController::StartServer(u16 port, bool dedicated)
     {
-        // Fixed-port hosts ALSO open the browser gateway on port + 1 by convention (a web
-        // client joins ws://host:port+1) - zero script-API churn, and the trust domain is
-        // the same localhost/LAN one the UDP listener already accepts. OS-assigned-port
-        // hosts (tests/tools) stay UDP-only.
+        // Fixed-port hosts also open the browser gateway on port + 1 by convention (a web client
+        // joins ws://host:port+1), so scripts need no extra API, and the trust domain is the same
+        // localhost/LAN one the UDP listener already accepts. Hosts on an OS-assigned port (tests,
+        // tools) stay UDP-only.
         const u16 webSocketPort =
             (port != 0 && port != 0xFFFF) ? static_cast<u16>(port + 1) : u16{0};
         m_net = net::NetworkManager::HostServer(foundation::core::DefaultAllocator(), port,
@@ -58,7 +58,7 @@ namespace engine::runtime
 
     bool NetworkController::Connect(core::StringView host, u16 port)
     {
-        // The SAME game script joins with the UDP port on every platform. A browser always joins
+        // The same game script joins with the UDP port on every platform. A browser always joins
         // the host's gateway, and so does a ws:// or wss:// address anywhere: at port + 1 (the
         // StartServer convention above) unless the address names a port of its own.
         net::WebSocketClientConfig address;
@@ -87,13 +87,11 @@ namespace engine::runtime
 
     void NetworkController::StopNetworking()
     {
-        WireSceneSystem(nullptr); // detach the scene system BEFORE the endpoint dies (no dangling driver)
+        WireSceneSystem(nullptr); // detach the scene system before the endpoint dies (no dangling driver)
         if (m_net)
         {
             LOG_INFO(u8"App", u8"networking stopped");
         }
-        m_net = nullptr; // closes the session (drops peers) + the owned socket
+        m_net = nullptr; // closes the session (drops peers) and the owned socket
     }
-
-    // The transport pump lives on engine::net::NetworkSubsystem::PostUpdate - no DriveNetwork here.
 }

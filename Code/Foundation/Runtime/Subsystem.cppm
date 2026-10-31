@@ -4,7 +4,7 @@
 // Runtime - :subsystem partition
 //
 // Subsystem: the unit of engine functionality the SubsystemManager owns and drives.
-// Lifecycle: OnRegister -> Init/Ready -> (frames) -> PrepareShutdown/Shutdown.
+// Lifecycle: OnRegister, then Init and Ready, then frames, then PrepareShutdown and Shutdown.
 // Frame phases run in UpdateOrder() order within the SubsystemManager.
 
 module;

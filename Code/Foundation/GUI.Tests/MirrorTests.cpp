@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the parts a widget places or draws itself mirror in right to left (E17a of
-// Specs/gui-lab-evolution-2.md). Each widget is drawn running left to right and right to left, and
-// what it draws in each colour must cover, in right to left, the mirror of what it covers in left to
-// right: a part at the inline start moves to the other edge with its shape mirrored, and text
-// aligned to its start goes with it.
+// GUI - the parts a widget places or draws itself mirror in right to left. Each widget is drawn
+// running left to right and right to left, and what it draws in each colour must cover, in right to
+// left, the mirror of what it covers in left to right: a part at the inline start moves to the
+// other edge with its shape mirrored, and text aligned to its start goes with it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -25,7 +24,7 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    // What one colour covers.
+    // The area one colour covers.
     struct Ink
     {
         core::u32 colour = 0;
@@ -53,7 +52,8 @@ namespace
 
     using Factory = core::RefPtr<UIWidget> (*)();
 
-    // A widget `make` makes, drawn in a root running as `rightToLeft` says: what each colour covers.
+    // Draws the widget `make` makes in a root whose direction `rightToLeft` sets, and returns what
+    // each colour covers.
     core::Array<Ink> Drawn(Factory make, core::Float2 size, bool rightToLeft)
     {
         const core::RefPtr<UIWidget> widget = make();
@@ -62,7 +62,7 @@ namespace
         root->SetLayoutDirection(rightToLeft ? Node::LayoutDirection::RightToLeft : Node::LayoutDirection::LeftToRight);
         widget->SetSize(size);
         root->AddChild(widget.Get());
-        // Styled by the default theme either way, so its colours are its theme's in both.
+        // Styled by the default theme either way, so its colours are the same in both.
         StyleManager styles;
         styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
         styles.ApplyTree(*root.Get());
@@ -70,7 +70,8 @@ namespace
         vg::VGContext canvas;
         DrawContext dc{canvas};
         widget->Draw(dc);
-        // In the widget's own space: the root's layout places it at the other side too.
+        // Measured in the widget's own space, since the root's layout also places it at the other
+        // side.
         const core::Float2 at = widget->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
         core::Array<Ink> inks;
         for (const vg::VGVertex& v : canvas.GetBatch().vertices)
@@ -81,8 +82,9 @@ namespace
         return inks;
     }
 
-    // Every colour's ink in right to left is the mirror of its ink in left to right across the
-    // widget; and there is something mirrored to see (`asymmetric`: at least one ink not centred).
+    // Checks that every colour's ink in right to left mirrors its ink in left to right across the
+    // widget, and that there is something mirrored to see (`asymmetric`: at least one ink is not
+    // centred).
     void CheckMirrored(Factory make, core::Float2 size)
     {
         const core::Array<Ink> ltr = Drawn(make, size, false);
@@ -233,7 +235,7 @@ TEST_CASE("mirror: a window's grip is at its bottom left in right to left, and p
     root->AddChild(window.Get());
     (void)root->UpdateLayout();
     const core::Float2 at = window->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
-    const core::Float2 grip = window->ConvertToRootSpace(core::Float2{4.0f, 196.0f}); // in its bottom-left corner
+    const core::Float2 grip = window->ConvertToRootSpace(core::Float2{4.0f, 196.0f}); // the grip in its bottom-left corner
     EventDispatcher& d = *root->GetEventDispatcher();
     d.InjectMouseDown(grip, MouseButton::Left);
     d.InjectMouseMove(core::Float2{grip.x - 40.0f, grip.y + 20.0f});

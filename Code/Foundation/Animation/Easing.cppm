@@ -3,9 +3,9 @@
 
 /// Foundation::Animation - the `:easing` partition.
 ///
-/// EasingType: a serializable enum mapping 1:1 to the core easing functions (foundation.core :easings).
-/// Ported faithfully from Sedulous.Animation.EasingType. The functions themselves live in core math;
-/// this is the animation-facing enum + lookup.
+/// EasingType: a serializable enum mapping 1:1 to the core easing functions (foundation.core
+/// :easings). The functions themselves live in core math; this is the animation-facing enum and
+/// lookup.
 
 module;
 #include "Core/Prelude.h"
@@ -20,8 +20,8 @@ namespace core = foundation::core;
 export namespace foundation::animation
 {
 
-    // Serializable easing type (1:1 with the core Easings family). Order matters - it's the serialized
-    // value and several tools index by it.
+    // Serializable easing type (1:1 with the core Easings family). Order matters: it is the
+    // serialized value, and several tools index by it.
     enum class EasingType : i32
     {
         Linear = 0,
@@ -58,7 +58,7 @@ export namespace foundation::animation
         Count
     };
 
-    // Maps EasingType -> the corresponding core easing function (never null).
+    // Maps an EasingType to its core easing function (never null).
     [[nodiscard]] inline core::EasingFunction ToFunction(EasingType type) noexcept
     {
         switch (type)

@@ -2,22 +2,22 @@
 # functions defined here are visible in every add_subdirectory() below it.
 
 # Where these helpers live, so a helper can invoke a sibling script by path from a
-# custom command (CMAKE_CURRENT_LIST_DIR is the CALLER's directory inside a function).
+# custom command (CMAKE_CURRENT_LIST_DIR is the caller's directory inside a function).
 set(UTIL_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "cmake/ helper directory")
 
 # dumpbin, for the MSVC shared-library export .def (see util_add_engine_library). It sits
 # beside cl.exe in the toolchain; look there first so we get the toolset's own copy rather
 # than whatever a Developer prompt happened to put on PATH. For the clang drivers
-# (clang-cl, clang++) CMAKE_CXX_COMPILER is in LLVM/bin - nowhere near dumpbin - so the
+# (clang-cl, clang++) CMAKE_CXX_COMPILER is in LLVM/bin, nowhere near dumpbin, so the
 # PATH search find_program does after HINTS is the one that matters there.
 # WIN32, not MSVC: the clang preset targets the MSVC ABI with MSVC unset (see
-# util_add_engine_library), and it needs the .def exactly as much as cl does.
+# util_add_engine_library), and it needs the .def as much as cl does.
 if(WIN32 AND NOT UTIL_DUMPBIN)
     get_filename_component(_util_cl_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
     find_program(UTIL_DUMPBIN NAMES dumpbin HINTS "${_util_cl_dir}")
     if(NOT UTIL_DUMPBIN)
-        # Only fatal for a SHARED build - a static build never generates a .def. Failing here
-        # beats a PRE_LINK step failing identically on all 179 libraries with no explanation.
+        # Only fatal for a shared build, since a static build never generates a .def. Failing
+        # here beats a PRE_LINK step failing the same way on every library with no explanation.
         if(ENGINE_SHARED_LIBS)
             message(FATAL_ERROR
                 "ENGINE_SHARED_LIBS on Windows needs dumpbin.exe to generate export .def files "
@@ -34,18 +34,18 @@ endif()
 # POST_BUILD, stage everything <target> needs to run next to its executable:
 #
 #  * On Windows, every runtime DLL CMake can resolve from the target's link graph
-#    (`$<TARGET_RUNTIME_DLLS>`; often empty now that SDL3 links statically).
+#    (`$<TARGET_RUNTIME_DLLS>`; often empty, since SDL3 links statically).
 #    On ELF / Mach-O platforms shared libraries resolve through rpath, so this part
 #    is a no-op there.
-#  * `EXTRA` copies loose files that are NOT link dependencies and so are invisible
-#    to TARGET_RUNTIME_DLLS - e.g. a library loaded at runtime via dlopen/LoadLibrary
+#  * `EXTRA` copies loose files that are not link dependencies and so are invisible
+#    to TARGET_RUNTIME_DLLS, e.g. a library loaded at runtime through dlopen/LoadLibrary
 #    (dxcompiler.dll, wgpu-native), or a known vendored DLL path. Empty entries are
 #    skipped, so passing an unset variable is harmless.
 #
 # copy_if_different keeps the copy incremental; a file staged twice is harmless.
 #
-# copy_if_different requires >=1 source, but a target may link ZERO runtime DLLs (e.g. since SDL3
-# is linked statically, an app with no other shared deps has an empty TARGET_RUNTIME_DLLS). The
+# copy_if_different requires at least one source, but a target may link no runtime DLLs (with SDL3
+# linked statically, an app with no other shared deps has an empty TARGET_RUNTIME_DLLS). The
 # WIN32 copy below switches to a no-op ('cmake -E true') in that case so the POST_BUILD step does
 # not fail on a sourceless copy_if_different.
 function(util_copy_runtime_deps target)
@@ -69,11 +69,11 @@ function(util_copy_runtime_deps target)
         endif()
     endforeach()
 
-    # Config the build is the source of truth for: the basenames of the runtime libs staged next to
-    # <target>, one per line, written to "<target>.runtime-libs". The export host-template reads this
-    # for its sidecar list instead of hard-coding it, so it tracks dep changes (a shell swap changes
-    # the DLLs -> the list follows). On rpath platforms TARGET_RUNTIME_DLLS is empty, so this lists
-    # only EXTRA; on Windows it lists both.
+    # The build is the source of truth for the basenames of the runtime libs staged next to
+    # <target>, written one per line to "<target>.runtime-libs". The export host template reads
+    # this for its sidecar list instead of hard-coding it, so the list follows dependency changes
+    # (a different shell brings different DLLs). On rpath platforms TARGET_RUNTIME_DLLS is empty,
+    # so this lists only EXTRA; on Windows it lists both.
     set(_dr_libs "$<TARGET_RUNTIME_DLLS:${target}>")
     if(ARG_EXTRA)
         list(APPEND _dr_libs ${ARG_EXTRA})   # configure-time paths (e.g. the vendored SDL3 DLL)
@@ -86,11 +86,10 @@ endfunction()
 
 # util_add_engine_library(<name> ALIAS <ns::alias>)
 #
-# The one place first-party library targets are declared (all 179 of them):
-# STATIC by default, SHARED when ENGINE_SHARED_LIBS is ON. Declaring through a
-# single seam means the shared-build switch, visibility presets, export macros,
-# and SOVERSION land here once instead of as a 179-file edit
-# (Documentation/Specs/shared-libraries.md, phase P3).
+# The one place every first-party library target is declared: STATIC by default,
+# SHARED when ENGINE_SHARED_LIBS is ON. Declaring through one function means the
+# shared-build switch, visibility presets, export macros and SOVERSION are set
+# here once rather than in every library's CMakeLists.
 function(util_add_engine_library name)
     cmake_parse_arguments(UAEL "" "ALIAS" "" ${ARGN})
     if(NOT UAEL_ALIAS)
@@ -100,27 +99,27 @@ function(util_add_engine_library name)
         add_library(${name} SHARED)
         # Inline-function symbols stay DSO-local (smaller dynamic symbol tables,
         # faster loads). Safe: static locals in inline functions are still unified
-        # by the linker, and the sharedlib tripwire keeps STATE out of interface
-        # inlines anyway. Full hidden visibility + export annotations wait on the
-        # MSVC modules+dllexport prototype (shared-libraries.md P5).
+        # by the linker, and the sharedlib tripwire keeps state out of interface
+        # inlines anyway. Full hidden visibility with export annotations is not used;
+        # it depends on dllexport working with C++ modules under MSVC.
         set_target_properties(${name} PROPERTIES VISIBILITY_INLINES_HIDDEN ON)
         # PE has no default-visibility equivalent: nothing leaves a DLL without an
-        # export. WINDOWS_EXPORT_ALL_SYMBOLS is the obvious answer and does NOT work here
-        # - it drops every C++20 module-attached symbol (Core exported 221 CRT/STL names
-        # and none of its own 1994 module functions). Generate the .def ourselves instead;
-        # the linker accepts the module-decorated names fine. shared-libraries.md P5.
+        # export. WINDOWS_EXPORT_ALL_SYMBOLS is the obvious answer and does not work here:
+        # it drops every C++20 module-attached symbol, so a library exports CRT/STL names
+        # and none of its own module functions. Generate the .def ourselves instead; the
+        # linker accepts the module-decorated names fine.
         #
-        # Gated on WIN32, NOT on MSVC: CMake sets MSVC only when the compiler FRONTEND is
+        # Gated on WIN32, not on MSVC: CMake sets MSVC only when the compiler frontend is
         # MSVC-style (cl, clang-cl). The `clang` preset drives clang++ in GNU mode at the
-        # MSVC ABI, where MSVC is FALSE - so this used to silently skip, and Core.dll
-        # exported 92 of its 2416 functions (only the explicitly dllexport'd ones) while
-        # every consumer failed to link. The output is PE either way, so key on the target.
+        # MSVC ABI, where MSVC is false, and without the .def only the explicitly
+        # dllexport'd functions would leave the DLL. The output is PE either way, so key
+        # on the target.
         if(WIN32)
             set(_uael_def "${CMAKE_CURRENT_BINARY_DIR}/${name}_exports.def")
-            # The object list goes through a FILE, not the command line: passing
+            # The object list goes through a file, not the command line: passing
             # $<TARGET_OBJECTS> as a -D argument needs COMMAND_EXPAND_LISTS, which then
             # splits the ;-list into separate argv entries and the script sees only the
-            # first object (found 8 symbols instead of 2252 - this exact bug).
+            # first object.
             set(_uael_objs "${CMAKE_CURRENT_BINARY_DIR}/${name}_objects.txt")
             file(GENERATE OUTPUT "${_uael_objs}"
                  CONTENT "$<JOIN:$<TARGET_OBJECTS:${name}>,\n>\n" TARGET ${name})
@@ -134,9 +133,9 @@ function(util_add_engine_library name)
                 VERBATIM
                 COMMENT "Generating module-aware export .def for ${name}")
             # The .def is written by the PRE_LINK step above, so it exists by link time.
-            # LINKER: rather than a bare /DEF: - CMake renders it per driver. A raw /DEF:
-            # reaches cl fine, but clang++ in GNU mode reads a leading-slash token as a
-            # FILENAME, so the flag would be swallowed and the .def silently ignored.
+            # LINKER: rather than a bare /DEF:, because CMake renders it per driver. A raw
+            # /DEF: reaches cl fine, but clang++ in GNU mode reads a leading-slash token as a
+            # filename, so the flag would be swallowed and the .def silently ignored.
             target_link_options(${name} PRIVATE "LINKER:/DEF:${_uael_def}")
         endif()
     else()

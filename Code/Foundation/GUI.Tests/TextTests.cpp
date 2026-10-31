@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Text tests: measurement, alignment, white-space, line height, spacing and clamping against a
-// mock IFont (6px advance/byte, 12px line height, no shaper: its pieces lay out unshaped). The full
-// glyph-render path (atlas + texture) is an integration concern; here we assert Text's own logic and
-// the draw guards.
+// GUI - Text tests: measurement, alignment, white-space, line height, spacing and clamping against
+// a mock IFont (6px advance per byte, 12px line height, no shaper, so pieces lay out unshaped). The
+// full glyph-render path (atlas and texture) is an integration concern; here we assert Text's own
+// logic and the draw guards.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -63,7 +63,7 @@ namespace
 
 TEST_CASE("text: measurement uses font metrics")
 {
-    fonts::CachedFont cf(core::DefaultAllocator(), NewMock(), nullptr, nullptr); // owns + deletes the mock on scope exit
+    fonts::CachedFont cf(core::DefaultAllocator(), NewMock(), nullptr, nullptr); // owns and deletes the mock on scope exit
     Text t{core::StringView(u8"Hello"), &cf};
     CHECK(t.GetWidth() == doctest::Approx(30.0f)); // 5 * 6
     CHECK(t.GetLineHeight() == doctest::Approx(12.0f));
@@ -125,7 +125,7 @@ TEST_CASE("text: alignment within bounds")
 
 TEST_CASE("text: draw guards - no font or empty produces no geometry")
 {
-    vg::VGContext ctx; // no font service -> VG DrawText early-returns anyway
+    vg::VGContext ctx; // no font service: VG DrawText returns early anyway
     DrawContext dc{ctx};
 
     Text noFont;
@@ -153,7 +153,7 @@ TEST_CASE("text: white-space normal breaks at spaces to fit the width")
     const core::Float2 wrapped = t.MeasureWrapped(60.0f);
     CHECK(wrapped.x == doctest::Approx(54.0f)); // widest line "world foo" = 9 * 6
     CHECK(wrapped.y == doctest::Approx(24.0f)); // 2 lines * 12
-    // Unbounded, and at no width (each word its own line: its min-content).
+    // Unbounded, and at no width, where each word gets its own line (its min-content).
     CHECK(t.MeasureWrapped(kUnbounded).x == doctest::Approx(90.0f));
     CHECK(t.MeasureWrapped(0.0f).x == doctest::Approx(30.0f));
     CHECK(t.MeasureWrapped(0.0f).y == doctest::Approx(36.0f));
@@ -224,7 +224,7 @@ TEST_CASE("text: a wrapped draw without a font service produces no geometry and 
     Text t{core::StringView(u8"hello world foo"), &cf};
     t.SetWhiteSpace(TextWhiteSpace::Normal);
 
-    vg::VGContext ctx; // no font service -> DrawText early-returns, but exercises the layout path
+    vg::VGContext ctx; // no font service: DrawText returns early, but the layout path runs
     DrawContext dc{ctx};
     t.Draw(dc, Rect{0.0f, 0.0f, 60.0f, 100.0f});
     CHECK(ctx.GetBatch().vertices.Size() == 0);

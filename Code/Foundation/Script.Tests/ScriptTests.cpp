@@ -106,7 +106,7 @@ TEST_CASE("script: context round-trips value and object globals as Variant")
     RefPtr<Widget> widget = MakeRef<Widget>(DefaultAllocator());
     widget->id = 42;
     scriptContext->SetGlobal(u8"w", Variant::From(widget));
-    CHECK(widget->RefCount() == 2u); // widget + the global's Variant
+    CHECK(widget->RefCount() == 2u); // widget and the global's Variant
 
     Variant got = scriptContext->GetGlobal(u8"w");
     CHECK(got.IsObject());
@@ -114,7 +114,7 @@ TEST_CASE("script: context round-trips value and object globals as Variant")
     REQUIRE(got.AsObject<Widget>() != nullptr);
     CHECK(got.AsObject<Widget>()->id == 42);
 
-    // Missing global -> empty Variant.
+    // A missing global is an empty Variant.
     CHECK(scriptContext->GetGlobal(u8"missing").IsEmpty());
 }
 
@@ -189,7 +189,7 @@ TEST_CASE("script.backend: registry resolves by language and extension; file dis
     CHECK(created == 2);
     CHECK(CreateScriptManagerForLanguage(u8"nosuch", DefaultAllocator()).Get() == nullptr);
 
-    // Re-register REPLACES (idempotent by id) - no duplicate entries.
+    // Registering again replaces the entry (idempotent by id); no duplicates.
     ScriptBackendDesc again;
     again.languageId = String(u8"testlang");
     again.displayName = String(u8"TestLang2");
@@ -231,7 +231,7 @@ TEST_CASE("script.backend: capability flags default to None and compose (B4)")
     CHECK(HasScriptCapability(both, ScriptCapabilities::Coroutines));
     CHECK(HasScriptCapability(both, ScriptCapabilities::Profiler));
     CHECK_FALSE(HasScriptCapability(both, ScriptCapabilities::Debugger));
-    // The new seam flags compose too.
+    // The other flags compose too.
     constexpr ScriptCapabilities more =
         ScriptCapabilities::Delegates | ScriptCapabilities::Bytecode;
     CHECK(HasScriptCapability(more, ScriptCapabilities::Delegates));
@@ -241,7 +241,7 @@ TEST_CASE("script.backend: capability flags default to None and compose (B4)")
 
 TEST_CASE("script.backend: unset seams default to null factories / unsupported")
 {
-    // A backend that overrides nothing has the committed seams ABSENT: the factories
+    // A backend that overrides nothing has no optional capabilities: the factories
     // return null and CompileToBlob is unsupported. DescribeBoundApi defaults to empty.
     FakeScriptManager manager;
     CHECK(manager.DescribeBoundApi().IsEmpty());

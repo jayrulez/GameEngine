@@ -3,13 +3,13 @@
 
 // Editor::Scene - :collision_matrix_editor partition.
 //
-// The physics block's collision groups as a grid (Documentation/Specs/editor-gui.md, 5.6: the
-// user's ruling, the old editor's matrix): a row per group and a column per group, the column
-// headers the groups' numbers (each named in its tooltip), the rows the numbers and names, and a
-// check box where row and column meet on and below the diagonal, so each pair has one: whether the
-// two collide. A click is the pair's write through the groups' source (both ways, one undo step).
-// The grid's row for it is the source's `matrix` (hinted "CollisionMatrix"), beside its `groups`
-// list, whose rows give each group's name; it reads the masks from the list's rows.
+// The physics block's collision groups as a grid, with a row and a column per group. The column
+// headers are the groups' numbers (each named in its tooltip), the rows show numbers and names, and
+// a check box sits where row and column meet on and below the diagonal, so each pair has one box
+// saying whether the two collide. A click writes the pair through the groups' source (both ways,
+// one undo step). The grid's row for this editor is the source's `matrix` (hinted
+// "CollisionMatrix"), beside its `groups` list, whose rows give each group's name; the editor reads
+// the masks from the list's rows.
 
 module;
 #include "Core/Prelude.h"
@@ -72,7 +72,8 @@ export namespace editor
                 same = names[i] == m_names[i];
             if (!same)
                 Build(foundation::core::Move(names));
-            // Each box as its pair is now (a row's mask, as the source keeps it both ways).
+            // Sets each box from its pair's current state (a row's mask; the source keeps it both
+            // ways).
             m_binding = true;
             for (usize row = 0; row < count; ++row)
             {
@@ -106,7 +107,7 @@ export namespace editor
             foundation::gui::IPropertyEditHost* host = GetHost();
             return host != nullptr ? host->ReadPropertyValue(GroupPath(rest).AsView(), kind) : foundation::gui::PropertyValue{};
         }
-        // The pair's write, through the row's `collides` (the source writes both ways).
+        // Writes the pair through the row's `collides` (the source writes both ways).
         void Write(usize row, usize column, bool collides)
         {
             foundation::gui::IPropertyEditHost* host = GetHost();
@@ -120,7 +121,8 @@ export namespace editor
             host->CommitPropertyEdit(path.AsView(), write);
         }
 
-        // The headers and a row a group, a box at each pair on and below the diagonal.
+        // Builds the headers and one row per group, with a box at each pair on and below the
+        // diagonal.
         void Build(Array<String> names)
         {
             while (ChildCount() > 0)
@@ -184,8 +186,8 @@ export namespace editor
         }
 
         Array<String> m_names;                      // the groups, as last built
-        Array<foundation::gui::CheckBox*> m_boxes;  // its children's, row by row, the lower triangle
-        bool m_binding = false;                     // showing the masks, not the user's click
+        Array<foundation::gui::CheckBox*> m_boxes;  // the lower triangle's boxes (its children) by row
+        bool m_binding = false;                     // set while showing the masks, not on a click
     };
 
     RTTI_DEFINE_OBJECT(CollisionMatrixEditor, "rtti::editor::editor")

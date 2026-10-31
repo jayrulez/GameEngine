@@ -16,7 +16,7 @@ namespace json = foundation::json;
 
 namespace
 {
-    // Parse an answered line into a JsonValue (must be answered + valid JSON).
+    // Parse an answered line into a JsonValue (it must be answered and valid JSON).
     JsonValue Response(const LineOutcome& line)
     {
         REQUIRE(line.state == LineState::Answered);
@@ -142,7 +142,7 @@ TEST_CASE("mcp: tools/list emits every tool's annotations - a read-only tool and
           "one say so in the MCP hints")
 {
     McpServer s;
-    Setup(s); // echo + fail are read-only
+    Setup(s); // echo and fail are read-only
     s.RegisterTool(u8"clobber", u8"Replaces a thing", SchemaBuilder().Build(),
                    ToolAnnotations::Overwrites(),
                    [](const JsonValue&) -> ToolResult { return JsonValue::MakeObject(); });
@@ -172,7 +172,7 @@ TEST_CASE("mcp: tools/list emits every tool's annotations - a read-only tool and
     CHECK(clobber.Get(u8"destructiveHint").AsBool());
     CHECK(clobber.Get(u8"idempotentHint").AsBool());
 
-    // A delete is destructive, and again finds nothing more to remove (Sedulous ac63071d).
+    // A delete is destructive, and again finds nothing more to remove.
     const ToolAnnotations deletes = ToolAnnotations::Deletes();
     CHECK_FALSE(deletes.readOnly);
     CHECK(deletes.destructive);
@@ -200,7 +200,7 @@ TEST_CASE("mcp: a TOOL failure is a successful response with isError:true + the 
     Setup(s);
     JsonValue r = Response(s.HandleLine(
         u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"fail\"}}"));
-    CHECK(r.Has(u8"result"));      // NOT a protocol error
+    CHECK(r.Has(u8"result"));      // not a protocol error
     CHECK_FALSE(r.Has(u8"error"));
     CHECK(r.Get(u8"result").Get(u8"isError").AsBool() == true);
     CHECK(r.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString() ==
@@ -222,7 +222,7 @@ TEST_CASE("mcp: schema-validation failure is a PROTOCOL -32602 naming the field"
         u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"echo\",\"arguments\":{\"message\":5}}}"));
     CHECK(r2.Get(u8"error").Get(u8"code").AsInt() == -32602);
     CHECK(Contains(r2.Get(u8"error").Get(u8"message").AsString().AsView(), u8"message"));
-    // Unknown tool -> -32602.
+    // Unknown tool: -32602.
     JsonValue r3 = Response(s.HandleLine(
         u8"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"nope\"}}"));
     CHECK(r3.Get(u8"error").Get(u8"code").AsInt() == -32602);
@@ -350,7 +350,7 @@ TEST_CASE("mcp: a resource PROVIDER contributes a dynamic set (list + read + mim
 {
     McpServer s;
     Setup(s); // the static mem://greeting
-    // A provider whose set changes between calls - exactly what static registration can't do.
+    // A provider whose set changes between calls, which static registration can't do.
     Array<String> names;
     names.PushBack(String(u8"alpha"));
     ResourceProvider provider;
@@ -379,7 +379,7 @@ TEST_CASE("mcp: a resource PROVIDER contributes a dynamic set (list + read + mim
     };
     s.RegisterResourceProvider(Move(provider));
 
-    // list = static + the provider's CURRENT entries.
+    // list gives the static entries and the provider's current entries.
     JsonValue l1 = Response(s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}"));
     CHECK(l1.Get(u8"result").Get(u8"resources").Count() == 2);
 
@@ -388,7 +388,7 @@ TEST_CASE("mcp: a resource PROVIDER contributes a dynamic set (list + read + mim
     JsonValue l2 = Response(s.HandleLine(u8"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/list\"}"));
     CHECK(l2.Get(u8"result").Get(u8"resources").Count() == 3);
 
-    // Reads route through the provider and carry ITS declared mime type.
+    // Reads route through the provider and carry its declared mime type.
     JsonValue rd = Response(s.HandleLine(
         u8"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/read\",\"params\":{\"uri\":\"dyn://beta\"}}"));
     const JsonValue entry = rd.Get(u8"result").Get(u8"contents").At(0);
@@ -534,8 +534,8 @@ TEST_CASE("mcp: Serve re-enters a not-finished line until it answers - one outpu
     CHECK(json::Parse(t.Output(1).AsView()).value.Get(u8"id").AsInt() == 7);
 }
 
-// Sedulous d509904a: an unfinished call has an identity across its re-entries (the transport's
-// id, or its line without one), its own state, destroyed when it answers or its caller leaves.
+// An unfinished call has an identity across its re-entries (the transport's id, or its line
+// without one) and its own state, destroyed when it answers or its caller leaves.
 namespace
 {
     struct CallCounter final : ToolCallState
@@ -596,7 +596,7 @@ TEST_CASE("mcp: an unfinished call keeps its own state across its re-entries, un
     CHECK(alive == 0u);
     server.AbandonCall(99); // no such call: nothing
 
-    // Without an id a call is known by its line, as before.
+    // Without an id a call is known by its line.
     CHECK(server.HandleLine(line).state == LineState::NotFinished);
     CHECK(server.HandleLine(line).state == LineState::NotFinished);
     CHECK(server.HandleLine(line).state == LineState::Answered);

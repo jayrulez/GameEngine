@@ -44,7 +44,7 @@ TEST_CASE("toolkit-vectorfields: QuaternionEulerRoundTrip")
 {
     auto q = core::MakeRef<QuaternionField>(core::DefaultAllocator());
     CHECK(q->ChildCount() == 3u);
-    // Identity quaternion -> zero Euler.
+    // An identity quaternion reads back as zero Euler angles.
     q->SetValue(Quaternion::Identity);
     const Quaternion v = q->Value();
     CHECK(v.w == doctest::Approx(1.0f));
@@ -54,8 +54,8 @@ TEST_CASE("toolkit-vectorfields: QuaternionEulerRoundTrip")
 TEST_CASE("toolkit-vectorfields: QuaternionEulerCompoundRotationsReadBackExactly")
 {
     // The forward composition is Z, then Y, then X, so the middle axis (Y) comes from an
-    // arcsine and X/Z from arctangents. The arcsine used to sit on X: single-axis rotations
-    // survived and 30/45/60 read back as -16.3/50.4/39.6 (found by the Beef port).
+    // arcsine and X and Z from arctangents. Compound angles are checked because single-axis
+    // rotations round-trip even when the arcsine sits on the wrong axis.
     const Float3 triples[] = {Float3{30, 45, 60}, Float3{-20, 10, 5}, Float3{90, 0, 0},
                               Float3{0, 60, 0}, Float3{0, 0, -120}, Float3{170, -30, 45}};
     for (const Float3& e : triples)
@@ -65,7 +65,7 @@ TEST_CASE("toolkit-vectorfields: QuaternionEulerCompoundRotationsReadBackExactly
         CHECK(back.x == doctest::Approx(e.x).epsilon(0.001));
         CHECK(back.y == doctest::Approx(e.y).epsilon(0.001));
         CHECK(back.z == doctest::Approx(e.z).epsilon(0.001));
-        // And the decomposition rebuilds the SAME rotation (the field caches the Eulers and
+        // And the decomposition rebuilds the same rotation (the field caches the Eulers and
         // rebuilds from them on the first keystroke).
         const Quaternion again = QuaternionField::EulerDegreesToQuaternion(back);
         CHECK(Abs(again.x * q.x + again.y * q.y + again.z * q.z + again.w * q.w) == doctest::Approx(1.0f).epsilon(0.0001));

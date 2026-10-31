@@ -103,8 +103,8 @@ namespace editor
             m_low = Min(m_low, samples[i]);
             m_high = Max(m_high, samples[i]);
         }
-        // Its lowest to its highest as black to white: a low relief over a few hundred samples
-        // shows, where the high byte alone was one flat grey.
+        // Its lowest to its highest as black to white, so a low relief over a few hundred samples
+        // shows, where the high byte alone would be one flat grey.
         const f32 span = m_high > m_low ? static_cast<f32>(m_high - m_low) : 1.0f;
         image::Image grey(m_width, m_height, image::PixelFormat::RGBA8);
         Span<u8> rgba = grey.PixelDataMut();
@@ -128,7 +128,8 @@ namespace editor
         if (m_width == 0)
             return;
         SetFact(u8"Source Size", Format(u8"{} x {}", m_width, m_height).AsView());
-        // The source's own range, in metres by the asset's Y range: what the black and the white are.
+        // The source's own range in metres by the asset's Y range: the heights black and white
+        // stand for.
         SetFact(u8"Lowest", Metres(HeightOf(m_low)).AsView());
         SetFact(u8"Highest", Metres(HeightOf(m_high)).AsView());
     }

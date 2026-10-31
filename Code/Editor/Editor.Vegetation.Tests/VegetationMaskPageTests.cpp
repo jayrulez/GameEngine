@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The vegetation mask page over its markup (Data/Editor/ImagePage.xml) and a scratch project:
-// a painted mask's planes shown one at a time, its density under the pointer, its size read only
-// once painted while its plane count edits (one undo step, the planes as the cook would keep
-// them); a blank mask said so with its size editable; an imported one's planes its image's
-// channels, every option read only.
+// The vegetation mask page over its markup (Data/Editor/ImagePage.xml) and a scratch project. A
+// painted mask's planes show one at a time with the density under the pointer; its size is
+// read-only once painted, while its plane count can be edited (one undo step, keeping the planes
+// as the cook would). A blank mask says so and its size is editable. An imported mask's planes are
+// its image's channels, and every option is read-only.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -43,7 +43,7 @@ namespace
         return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
     }
 
-    // A project with a painted mask ("Grass": 4 x 2, two planes, the second a ramp), a blank one
+    // A project with a painted mask ("Grass": 4 x 2, two planes, the second a ramp), a blank mask
     // ("Fresh") and one imported from a 2 x 1 image ("Field").
     struct Bed
     {
@@ -87,7 +87,7 @@ namespace
             const u8 texels[8] = {10, 20, 30, 40, 50, 60, 70, 80};
             for (usize i = 0; i < 8; ++i)
                 rgba[i] = texels[i];
-            (void)CreateDirectory(project->SourcesRoot().AsView()); // there already, or made
+            (void)CreateDirectory(project->SourcesRoot().AsView()); // may already exist
             REQUIRE(image::io::SaveImage(picture, PathJoin(project->SourcesRoot().AsView(), u8"field.png").AsView(), image::io::ImageFileFormat::PNG).IsOk());
             pipeline::VegetationMaskAsset imported;
             imported.fileName = foundation::vfs::SourcePath(u8"field.png");
@@ -138,8 +138,8 @@ TEST_CASE("vegetation mask page: a painted mask's planes one at a time, the dens
     CHECK(page->ShownPlane() == 1u);
     CHECK(page->PlaneChoice()->GetSelectedIndex() == 1);
     REQUIRE(page->DensityAt(3, 1, density));
-    CHECK(density == 210u); // the ramp's last
-    CHECK_FALSE(page->DensityAt(4, 0, density)); // off the mask
+    CHECK(density == 210u); // the last value of the ramp
+    CHECK_FALSE(page->DensityAt(4, 0, density)); // outside the mask
     CHECK(page->Preview()->View().HasImage());
 
     CHECK(ReadOnly(*page, u8"width"));
@@ -158,7 +158,7 @@ TEST_CASE("vegetation mask page: a plane added keeps those painted, one undo ste
     write.Value = gui::Variant(static_cast<i64>(3));
     page->Edit(u8"planeCount", write);
     CHECK(page->PlaneCount() == 3u);
-    CHECK(page->ShownPlane() == 1u); // the plane shown stays
+    CHECK(page->ShownPlane() == 1u); // the shown plane stays
     u8 density = 0;
     REQUIRE(page->DensityAt(3, 1, density));
     CHECK(density == 210u);
@@ -168,7 +168,7 @@ TEST_CASE("vegetation mask page: a plane added keeps those painted, one undo ste
 
     page->Commands().Undo();
     CHECK(page->PlaneCount() == 2u);
-    CHECK(page->ShownPlane() == 1u); // what is left of it
+    CHECK(page->ShownPlane() == 1u); // plane 2 is gone, so the last remaining plane shows
 }
 
 TEST_CASE("vegetation mask page: a blank mask says nothing is painted and keeps its size editable")

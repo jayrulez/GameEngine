@@ -3,15 +3,15 @@
 
 // UI Toolkit - :bottom_dock partition
 //
-// BottomDock: a Godot-style collapsible bottom strip. A thin tab bar is visible unless
+// BottomDock: a collapsible bottom strip. A thin tab bar is visible unless
 // HideWhenCollapsed and nothing is open; above it sits a content region that is shown only when a
 // tab is expanded. Tabs come and go at run time (AddTab, RemoveTab). Clicking the active tab collapses back to
 // just the bar; clicking another tab switches to it and expands. The dock itself does not resize the
-// viewport - it emits OnExpandedChanged, and the host (which places the dock as one pane of a SplitView)
-// collapses/expands that pane via SplitView::SetPaneCollapsed, so the stored split ratio survives.
+// viewport: it emits OnExpandedChanged, and the host (which places the dock as one pane of a SplitView)
+// collapses or expands that pane via SplitView::SetPaneCollapsed, so the stored split ratio survives.
 //
-// Domain-agnostic + reusable: tabs carry a caller-owned content View* (the "Animation" dopesheet is the
-// first occupant; Output/Debug-style tabs can join later). N-tab shaped from the start.
+// The dock knows nothing about what its tabs show: each tab carries a caller-owned content View*
+// (an animation dopesheet, an output log), and it holds any number of tabs.
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +26,7 @@ using namespace foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// A collapsible bottom strip: an always-visible tab bar + an expandable content region above it.
+    /// A collapsible bottom strip: an always-visible tab bar and an expandable content region above it.
     class BottomDock : public ::foundation::ui::FlexLayout
     {
         RTTI_OBJECT(BottomDock, FlexLayout)
@@ -39,7 +39,7 @@ export namespace foundation::ui::toolkit
 
         BottomDock() { BuildChrome(); }
 
-        /// Collapsed means GONE, the tab bar included, rather than down to the bar: a host that
+        /// Collapsed means gone, the tab bar included, rather than shrunk to the bar: a host that
         /// opens tabs from elsewhere (a toolbar toggle, a tool that docks a panel) gives the
         /// whole height back while nothing is open. A collapsed dock then measures nothing, so a
         /// split pane holding it takes no space.
@@ -52,7 +52,7 @@ export namespace foundation::ui::toolkit
 
         [[nodiscard]] bool HasTab(StringView id) const noexcept { return IndexOf(id) >= 0; }
 
-        /// Register a tab. `content` is BORROWED (the caller owns the RefPtr and outlives the dock).
+        /// Register a tab. `content` is borrowed (the caller owns the RefPtr and outlives the dock).
         /// The first tab added becomes the default target of an expand when none is active.
         void AddTab(StringView id, StringView label, View* content)
         {
@@ -70,7 +70,7 @@ export namespace foundation::ui::toolkit
             }
             if (content != nullptr)
             {
-                content->Visibility = ::foundation::ui::Visibility::Gone; // shown only when active+expanded
+                content->Visibility = ::foundation::ui::Visibility::Gone; // shown only when active and expanded
                 ::foundation::ui::LayoutStyle lp;
                 lp.Width = ::foundation::ui::SizeSpec::Match();
                 lp.FlexGrow = 1.0f;
@@ -85,7 +85,7 @@ export namespace foundation::ui::toolkit
             m_tabs.PushBack(Move(tab));
         }
 
-        /// Takes a tab away, its button and the dock's hold on its content. Removing the active
+        /// Removes a tab: its button, and the dock's reference to its content. Removing the active
         /// tab collapses the dock. Unknown ids are a no-op.
         void RemoveTab(StringView id)
         {
@@ -123,8 +123,8 @@ export namespace foundation::ui::toolkit
         }
         [[nodiscard]] usize TabCount() const noexcept { return m_tabs.Size(); }
 
-        /// Drive a tab's toggle behavior by id (as if its bar button were clicked): expand+switch to it,
-        /// or collapse if it is already the active+expanded tab. No-op if the id is unknown.
+        /// Drive a tab's toggle behavior by id (as if its bar button were clicked): switch to it and
+        /// expand, or collapse if it is already the active, expanded tab. No-op if the id is unknown.
         void ClickTab(StringView id)
         {
             for (usize i = 0; i < m_tabs.Size(); ++i)
@@ -193,7 +193,7 @@ export namespace foundation::ui::toolkit
             Direction = ::foundation::ui::Orientation::Vertical;
             Spacing = 0.0f;
 
-            // Content region (grows; hidden while collapsed) ABOVE the always-visible bar.
+            // Content region (grows; hidden while collapsed) above the always-visible bar.
             m_contentHost = MakeRef<::foundation::ui::FlexLayout>(MemoryAllocator());
             m_contentHost->Direction = ::foundation::ui::Orientation::Vertical;
             m_contentHost->Visibility = ::foundation::ui::Visibility::Gone; // default collapsed
@@ -228,7 +228,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
             m_activeIndex = index;
-            SetExpanded(true); // switch to it + expand
+            SetExpanded(true); // switch to it and expand
         }
 
         [[nodiscard]] i32 IndexOf(StringView id) const noexcept

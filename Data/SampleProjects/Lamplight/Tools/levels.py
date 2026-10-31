@@ -229,8 +229,9 @@ UPPER_FLOOR = dict(
     # it a bedroom, the master's study (locked, its oil lamp) and the master bedroom, one guard going
     # between study and bedroom; south a guest room and the antechamber, one guard going between them
     # (the antechamber's west half and the guest room), and off the antechamber the vault, behind a
-    # strong door that takes twice as long to pick: do it while he is in the guest room. The gallery's guard walks its whole length. A guard giving chase
-    # rings the alarm and every guard on the floor comes. The family jewels are in the vault; the way
+    # strong door that takes twice as long to pick: do it while he is in the guest room. The
+    # gallery's guard walks its whole length. A guard giving chase rings the alarm and every guard
+    # on the floor comes. The family jewels are in the vault; the way
     # out is back down the hatch.
     ground=[("Floor", (0, 0, 14, 10))],
     walls=[("Wall", (0, 0), (14, 0)), ("Wall", (0, 10), (14, 10)), ("Wall", (0, 0), (0, 10)), ("Wall", (14, 0), (14, 10)),

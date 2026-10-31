@@ -11,8 +11,7 @@
 //
 // This is the interface: it declares only the entry point. The reflection bodies
 // (REFLECT_* macro expansions) live in CoreReflectionImpl.cpp, kept out of
-// the interface so GCC does not emit a gcm cluster for consumers
-// (see gcc-module-interface-hygiene).
+// the interface so GCC does not emit a gcm cluster for consumers.
 
 export module foundation.core:core_reflection;
 

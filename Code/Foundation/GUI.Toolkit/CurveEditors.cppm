@@ -3,16 +3,16 @@
 
 // GUI.Toolkit - :curve_editors partition
 //
-// The property grid's curve and gradient editors (T5 of Specs/gui-lab-evolution-3.md), and the
-// default editors registered with a grid (they are the last of them, so the registration lives
-// here). A curve or a gradient is one value (PropertyKind::Curve, ::Gradient; a Variant of Core's
-// keys or a ColorGradient), mixed when the objects' differ:
-//   - a row shows a preview (the curve drawn, the gradient's bar), hatched when mixed;
-//   - a click on it opens the full view as a popup (a ruler and a curve view, or a gradient view),
-//     every edit in it previewed on each object; closing it commits once (one undo entry, as a
-//     colour's picker does), Escape gives the whole of it up.
-// Which runtime types are curves or gradients is the application's to say (a reflected source's
-// RegisterCurveType, RegisterGradientType); these editors know only the values.
+// The property grid's curve and gradient editors, and the registration of the default editors
+// with a grid (these are the last editors defined, so the registration lives here). A curve or a
+// gradient is one value (PropertyKind::Curve or ::Gradient, holding a Variant of Core's keys or a
+// ColorGradient), and it is mixed when the objects' values differ.
+//   - A row shows a preview (the curve drawn, or the gradient's bar), hatched when mixed.
+//   - A click on it opens the full view as a popup (a ruler and a curve view, or a gradient view).
+//     Every edit in it is previewed on each object. Closing it commits once, as one undo entry,
+//     the way a colour's picker does; Escape cancels the whole edit.
+// The application says which runtime types are curves or gradients (through a reflected source's
+// RegisterCurveType and RegisterGradientType); these editors know only the values.
 
 module;
 #include "Core/Prelude.h"
@@ -64,7 +64,7 @@ export namespace foundation::gui
 
     namespace detail
     {
-        // Diagonal lines over `box`: a row's mixed state, as a mixed swatch shows it.
+        // Draws diagonal lines over `box` to show a row's mixed state, as a mixed swatch does.
         inline void DrawHatched(DrawContext& ctx, const Rect& box, Color line)
         {
             ctx.VG().FillRect(box.ToRectangle(), Color{0.3f, 0.32f, 0.36f, 1.0f});
@@ -80,12 +80,12 @@ export namespace foundation::gui
         }
     }
 
-    /// A row's picture of a curve or a gradient; a click on it reports.
+    /// A row's picture of a curve or a gradient. A click on it calls the click callback.
     class PropertyValuePreview : public UIWidget
     {
         RTTI_OBJECT(PropertyValuePreview, UIWidget)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"curve"));
@@ -101,7 +101,8 @@ export namespace foundation::gui
             m_mixed = mixed;
             Invalidate();
         }
-        /// A curve's values from the bottom to the top (low == high: its keys' own).
+        /// Sets the curve values shown from the bottom to the top. When low equals high, the range
+        /// comes from the keys.
         void SetValueRange(f32 low, f32 high)
         {
             m_low = low;
@@ -152,8 +153,9 @@ export namespace foundation::gui
             const core::Span<const CurveKey> keys = m_value.AsCurve();
             if (keys.IsEmpty())
                 return;
-            // Across the keys' times (from 0), up the range or the values the curve reaches, found at
-            // the points it is drawn through (a steep tangent's overshoot included); held in its box.
+            // Horizontally the preview spans the keys' times from 0. Vertically it spans the range,
+            // or else the values the curve reaches at the points it is drawn through, including a
+            // steep tangent's overshoot. The drawing is kept inside the box.
             const f32 end = core::Max(keys[keys.Size() - 1].time, 1e-3f);
             f32 low = m_low, high = m_high;
             if (high <= low)
@@ -242,13 +244,13 @@ export namespace foundation::gui
         [[nodiscard]] PropertyValuePreview* GetPreview() const noexcept { return m_preview.Get(); }
         [[nodiscard]] CurveView* GetView() const noexcept { return m_view.Get(); }
         [[nodiscard]] TimeAxis* GetTimeAxis() const noexcept { return m_axis.Get(); }
-        /// Whether the popup is open.
+        /// Returns whether the popup is open.
         [[nodiscard]] bool IsViewOpen() const
         {
             const EventDispatcher* dispatcher = m_popup->GetEventDispatcher();
             return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_popup);
         }
-        /// Opens the view on the curve shown; its edits preview, its closing commits.
+        /// Opens the view on the curve shown. Its edits are previewed, and closing it commits them.
         void OpenView()
         {
             EventDispatcher* dispatcher = GetEventDispatcher();
@@ -260,8 +262,8 @@ export namespace foundation::gui
             m_loading = false;
             m_editing = false;
             m_view->SetSelection({});
-            // Its time across the view (at least a second, a particle curve's 0 to 1), its values
-            // up the range or what the curve reaches.
+            // Horizontally the view shows the curve's time, at least one second (a particle curve's
+            // 0 to 1). Vertically it shows the range, or else the values the curve reaches.
             const f32 end = m_keys.IsEmpty() ? 1.0f : core::Max(1.0f, m_keys.Back().time);
             m_axis->SetDuration(end);
             m_axis->SetScroll(0.0f);
@@ -285,8 +287,8 @@ export namespace foundation::gui
             dispatcher->OpenPopup(*this, *m_popup, core::Move(options));
         }
 
-        // The view's edits (each a gesture of the popup's own set): previewed on the objects, the
-        // edit begun at the first.
+        // Each edit in the view is a gesture on the popup's own CurveSet. It is previewed on the
+        // objects, and the first one begins the property edit.
         void OnCurvesChanged() override
         {
             if (m_loading)
@@ -300,7 +302,7 @@ export namespace foundation::gui
                 BeginEdit();
             }
             else if (CurveSet::Same(keys, m_previewed.AsSpan()))
-                return; // told again (a commit after its preview): nothing new
+                return; // a repeat notice (the commit after its preview) changes nothing
             m_previewed.Clear();
             for (const CurveKey& key : keys)
                 m_previewed.PushBack(key);
@@ -326,7 +328,7 @@ export namespace foundation::gui
             curve.MaxKeys = info.MaxCount;
             curve.StrokeColor = Color{0.31f, 0.61f, 1.0f, 1.0f};
             m_curves.Info(0) = curve;
-            m_loading = true; // telling the view is not an edit
+            m_loading = true; // updating the view is not an edit
             m_curves.InfoChanged();
             m_loading = false;
         }
@@ -349,12 +351,12 @@ export namespace foundation::gui
         core::RefPtr<TimeAxis> m_axis;
         core::RefPtr<TimeRuler> m_ruler;
         core::RefPtr<CurveView> m_view;
-        CurveSet m_curves; // the popup's own: the curve as it is edited
+        CurveSet m_curves; // the popup's copy of the curve as it is edited
         PropertyInfo m_info;
-        core::Array<CurveKey> m_keys; // the value bound
+        core::Array<CurveKey> m_keys; // the bound value
         core::Array<CurveKey> m_previewed; // what the edit last previewed
         bool m_loading = false;
-        bool m_editing = false; // the edit begun, its popup open
+        bool m_editing = false; // set once the edit begins, while the popup is open
     };
 
     /// A gradient's editor: its bar on the row, a gradient view in a popup.
@@ -442,14 +444,13 @@ export namespace foundation::gui
         core::RefPtr<PropertyValuePreview> m_preview;
         core::RefPtr<PropertyViewPopup> m_popup;
         core::RefPtr<GradientView> m_view;
-        ColorGradient m_gradient; // the value bound
+        ColorGradient m_gradient; // the bound value
         bool m_editing = false;
     };
 
     /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
-    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2); colours by kind, stops
-    /// and HDR colours by hint (T4); curves and gradients by kind (T5); a reference as its Guid's
-    /// text.
+    /// by kind; lists by kind, Float2, Float3 and Float4 by hint; colours by kind, stops and HDR
+    /// colours by hint; curves and gradients by kind; a reference as its Guid's text.
     inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
     {
         const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
@@ -469,7 +470,8 @@ export namespace foundation::gui
         registry.RegisterKind(PropertyKind::Flags, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FlagsPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Curve, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<CurvePropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Gradient, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<GradientPropertyEditor>(a); });
-        // A reference as its Guid's text: an application registers its own (a slot that picks).
+        // A reference is edited as its Guid's text. An application registers its own editor for
+        // it (a slot that picks).
         registry.RegisterKind(PropertyKind::Reference, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
     }
 }

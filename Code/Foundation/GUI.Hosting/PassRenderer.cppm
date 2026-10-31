@@ -2,20 +2,21 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI.Hosting - :pass_renderer partition: GuiPassRenderer, a root drawn into a render pass its
-// caller owns (E4 of Specs/gui-lab-evolution-3.md).
+// caller owns.
 //
-// The window host owns its windows' backbuffers and opens its own passes; an engine owns its frame
-// and hands its overlays a pass that is already open, on a target of its own format, maybe with a
-// depth-stencil attachment, maybe a region of it (a split screen's view). This draws a root there:
-// on a device the caller gives (no window, no shell), with the VG shaders and a picture baker of
-// its own. A renderer per kind of pass it is asked to draw into (format, depth-stencil, samples,
-// blend space), each rewound once a frame however many roots draw through it, so a frame's
-// overlays never overwrite each other's slices.
+// The window host owns its windows' backbuffers and opens its own passes. An engine owns its frame
+// and hands its overlays a pass that is already open, on a target of its own format, perhaps with a
+// depth-stencil attachment, and perhaps only a region of it (a split screen's view). This draws a
+// root there, on a device the caller gives (no window, no shell), with its own VG shaders and
+// picture baker. It keeps a renderer per kind of pass it is asked to draw into (format,
+// depth-stencil, samples, blend space), and rewinds each once a frame however many roots draw
+// through it, so a frame's overlays never overwrite each other's slices.
 //
-// A frame: BeginFrame; RecordBakes on the frame's encoder before any pass that samples them; then
-// per root, Prepare (its offscreen layers recorded on the encoder when one is given, else drawn in
-// place) before the pass opens, and Draw inside it; or DrawInPass where only the pass is at hand.
-// The root is styled and laid out at the view's size by its owner first: this only draws.
+// A frame runs: BeginFrame; RecordBakes on the frame's encoder before any pass that samples the
+// bakes; then for each root, Prepare before the pass opens (recording its offscreen layers on the
+// encoder when one is given, else drawing them in place) and Draw inside the pass. DrawInPass does
+// both where only the pass is at hand. The root's owner styles it and lays it out at the view's
+// size first; this only draws.
 //
 // The bakes hold colour in one blend space (the constructor's), as a window host's do: a pass in
 // the other space shows them a little off at their soft edges.
@@ -55,11 +56,11 @@ export namespace foundation::gui
         /// it use the stencil.
         rhi::TextureFormat DepthStencilFormat = rhi::TextureFormat::Undefined;
         u32 SampleCount = 1;
-        /// The pass draws through a UNORM view of an sRGB target, colours kept encoded (VG's
-        /// Encoded blend space); false: linear light.
+        /// True when the pass draws through a UNORM view of an sRGB target, keeping colours encoded
+        /// (VG's Encoded blend space); false for linear light.
         bool Encoded = false;
         u32 FrameIndex = 0;
-        /// The root's pixels onto the region's: identity, or a quarter turn when the content is
+        /// Maps the root's pixels onto the region's: identity, or a quarter turn when the content is
         /// presented turned (a landscape game on a portrait target).
         Float4x4 Transform = Float4x4::Identity();
     };
@@ -75,8 +76,9 @@ export namespace foundation::gui
             GuiPassView View{};
         };
 
-        /// Draws on `device` with `framesInFlight` frame slots, `fonts` the GUI's text and an SVG's,
-        /// `shaders` (borrowed, outliving this); bakes in `bakeFormat` and `bakeSpace`.
+        /// Draws on `device` with `framesInFlight` frame slots. `fonts` draws the GUI's text and an
+        /// SVG's, and `shaders` are borrowed and must outlive this. Bakes are made in `bakeFormat`
+        /// and `bakeSpace`.
         GuiPassRenderer(IAllocator& allocator, rhi::Device& device, u32 framesInFlight, fonts::IFontService* fonts, const VgShaderSet& shaders,
                         rhi::TextureFormat bakeFormat = rhi::TextureFormat::RGBA8UnormSrgb, vg::VGBlendSpace bakeSpace = vg::VGBlendSpace::Linear)
             : m_allocator(allocator), m_device(device), m_framesInFlight(framesInFlight == 0 ? 1 : framesInFlight),
@@ -119,12 +121,13 @@ export namespace foundation::gui
 
         /// Whether anything can be drawn: the shaders every draw needs are there.
         [[nodiscard]] bool IsUsable() const noexcept { return m_shaders.IsUsable(); }
-        /// The baker its roots' SVG skins draw from (the GUI's, GUIContext::SetPictureBaker); null
-        /// without shaders.
+        /// The baker its roots' SVG skins draw from (set on the GUI with GUIContext::SetPictureBaker);
+        /// null without shaders.
         [[nodiscard]] GpuPictureBaker* Baker() noexcept { return m_baker.Get(); }
 
-        /// The fonts its roots' text and an SVG's draw with from now on (the GUI's changed: a
-        /// project's own): what made a text's glyphs is what draws them.
+        /// Sets the fonts its roots' text and an SVG's text draw with from now on, for when the GUI's
+        /// fonts change (to a project's own). The service that made a text's glyphs must be the one
+        /// that draws them.
         void SetFontService(fonts::IFontService* fonts) noexcept
         {
             m_canvas.SetFontService(fonts);
@@ -132,14 +135,16 @@ export namespace foundation::gui
                 m_baker->SetFontService(fonts);
         }
 
-        /// A frame begins: each renderer rewinds at its first use in it, and the bakes may record.
+        /// Begins a frame: each renderer rewinds at its first use in the frame, and the bakes may
+        /// record again.
         void BeginFrame() noexcept
         {
             ++m_frame;
             m_bakesRecorded = false;
         }
-        /// The bakes queued since the last frame, recorded on `encoder` before any pass that samples
-        /// them; once a frame (false after the first, or with nothing recorded).
+        /// Records the bakes queued since the last frame on `encoder`, before any pass that samples
+        /// them. It records once a frame, and returns false after the first call or when nothing was
+        /// recorded.
         bool RecordBakes(rhi::CommandEncoder& encoder, u32 frameIndex)
         {
             if (!m_baker || m_bakesRecorded)
@@ -148,8 +153,8 @@ export namespace foundation::gui
             return m_baker->Record(encoder, static_cast<i32>(frameIndex));
         }
 
-        /// `root` drawn for `view` and uploaded, before the pass opens: its offscreen layers recorded
-        /// on `layers` when given (passes do not nest), else drawn in place.
+        /// Draws `root` for `view` and uploads it, before the pass opens. Its offscreen layers are
+        /// recorded on `layers` when given (passes do not nest), else drawn in place.
         Prepared Prepare(SceneRoot& root, const GuiPassView& view, rhi::CommandEncoder* layers = nullptr)
         {
             Prepared prepared;
@@ -161,7 +166,7 @@ export namespace foundation::gui
                 return prepared;
             const bool stencil = view.DepthStencilFormat != rhi::TextureFormat::Undefined && renderer->StencilFillsSupported();
             const bool layered = layers != nullptr && m_shaders.Layer != nullptr;
-            m_canvas.SetStencilFills(stencil); // what the batch emits matches the pass it draws into
+            m_canvas.SetStencilFills(stencil); // so the batch matches the pass it draws into
             m_canvas.SetLayers(layered);
             m_canvas.Clear();
             m_canvas.SetTransform(view.Transform);
@@ -179,7 +184,7 @@ export namespace foundation::gui
                 renderer->RenderLayers(*layers, slot, prepared.Slice);
             return prepared;
         }
-        /// What Prepare uploaded, drawn into the open pass at its view's region.
+        /// Draws what Prepare uploaded into the open pass, at its view's region.
         void Draw(rhi::RenderPassEncoder& pass, const Prepared& prepared)
         {
             if (prepared.Renderer == nullptr)
@@ -188,11 +193,11 @@ export namespace foundation::gui
             prepared.Renderer->Render(pass, view.X, view.Y, view.Width, view.Height, static_cast<i32>(view.FrameIndex % m_framesInFlight),
                                       prepared.Slice);
         }
-        /// Prepare and Draw where only the open pass is at hand: its layers drawn in place.
+        /// Runs Prepare and Draw where only the open pass is at hand; layers are drawn in place.
         void DrawInPass(SceneRoot& root, rhi::RenderPassEncoder& pass, const GuiPassView& view) { Draw(pass, Prepare(root, view)); }
 
-        /// An image the GUI draws by `key` (an image source the caller's resource provider answers)
-        /// sampled from `view`: told to every renderer, those made later too.
+        /// Registers `view` as the texture for an image the GUI draws by `key` (an image source the
+        /// caller's resource provider answers). Every renderer is told, including those made later.
         void RegisterTexture(const image::ImageData* key, rhi::TextureView* view)
         {
             if (key == nullptr || view == nullptr)
@@ -216,7 +221,8 @@ export namespace foundation::gui
 
         /// The renderers made so far, one per kind of pass drawn into.
         [[nodiscard]] usize RendererCount() const noexcept { return m_renderers.Size(); }
-        /// The renderer drawing into passes like `view`'s; null before one was drawn into.
+        /// Returns the renderer drawing into passes like `view`'s, or null before such a pass was
+        /// drawn into.
         [[nodiscard]] vg::renderer::VGRenderer* FindRenderer(const GuiPassView& view) noexcept
         {
             Entry* entry = Find(view);
@@ -232,7 +238,7 @@ export namespace foundation::gui
             rhi::TextureFormat DepthStencilFormat = rhi::TextureFormat::Undefined;
             u32 SampleCount = 1;
             bool Encoded = false;
-            u64 BegunFrame = ~0ull; // the frame its ring last rewound in
+            u64 BegunFrame = ~0ull; // the frame in which its ring last rewound
         };
         struct Texture
         {
@@ -248,8 +254,8 @@ export namespace foundation::gui
                     return entry.Get();
             return nullptr;
         }
-        // The renderer for passes like `view`'s, made at its first use, rewound once a frame (a
-        // rewind clears what the frame's earlier roots uploaded).
+        // Returns the renderer for passes like `view`'s, made at its first use and rewound once a
+        // frame (rewinding again would clear what the frame's earlier roots uploaded).
         vg::renderer::VGRenderer* RendererFor(const GuiPassView& view)
         {
             Entry* entry = Find(view);

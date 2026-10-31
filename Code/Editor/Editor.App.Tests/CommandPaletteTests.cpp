@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The command palette over a registry and its own markup (Data/Editor/CommandPalette.xml): the rows
-// a query yields and their order, the lit row under the arrow keys (taken ahead of the search
-// field), Enter running the lit action and closing the palette (a disabled one keeps it open and
-// says so), a row's chord and dimmed state, and Escape closing it.
+// a query yields and their order; the arrow keys moving the lit row (the palette handles them before
+// the search field does); Enter running the lit action and closing the palette, or keeping it open
+// with a message when the action is disabled; a row's chord and dimmed state; and Escape closing it.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -120,7 +120,8 @@ TEST_CASE("command-palette: the rows follow the query - label starts first, labe
     CHECK(palette.RunLit().Code() == ErrorCode::NotFound);
     CHECK(palette.Hint() == StringView(u8"Nothing matches zzz."));
 
-    // The lit row under the keys (the field has the focus: the palette takes them first), clamped.
+    // The arrow keys move the lit row, clamped at the ends. The search field has the focus, but the
+    // palette handles the keys first.
     palette.SetQuery({});
     gui::EventDispatcher& d = *root->GetEventDispatcher();
     d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Down));
@@ -143,7 +144,7 @@ TEST_CASE("command-palette: the rows follow the query - label starts first, labe
     CHECK(saves == 1u);
     CHECK_FALSE(palette.IsOpen());
 
-    // Opened again: the query empty; a row run by its place; Escape closes.
+    // Opened again, the query is empty; a row runs by its index; Escape closes the palette.
     REQUIRE(palette.Open(*root));
     CHECK(Labels(palette) == String(u8"Save|Save As...|Reset Layout|Undo|Duplicate"));
     CHECK(palette.Run(2).IsOk());

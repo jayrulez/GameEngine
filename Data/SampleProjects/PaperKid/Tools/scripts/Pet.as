@@ -1,6 +1,6 @@
-// Pet - a dog or a cat on a lawn of the title backdrop. It trots to a spot on its lawn (the
-// rectangle xMin..xMax by zMin..zMax), does something there (stands about, sits, lies down, or
-// its own thing: the dog sniffs the grass, the cat grooms), then trots to another spot.
+// Pet: a dog or a cat on a lawn of the title backdrop. It trots to a spot on its lawn (the
+// rectangle xMin..xMax by zMin..zMax), does something there (stands about, sits, lies down, or its
+// own special action: the dog sniffs the grass, the cat grooms), then trots to another spot.
 //
 // Its model is its first child, with the clips the slots name (Tools/blender/animals.py). Every
 // clip starts and ends in the same standing pose, so a switch at a clip's end does not snap; the
@@ -31,7 +31,7 @@ class Pet
     private float m_toX = 0.0f;
     private float m_toZ = 0.0f;
     private float m_yaw = 0.0f; // radians; 0 faces +Z
-    private float m_left = 0.0f; // seconds left of what it is doing where it stands
+    private float m_left = 0.0f; // seconds left of the current action where it stands
 
     Pet(Entity@ entity) { @self = entity; }
 

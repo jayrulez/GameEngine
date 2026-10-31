@@ -15,12 +15,11 @@ SUN_ROT = (-0.4935577, 0.15065993, 0.08726525, 0.85210747)
 SUN_INTENSITY = 4.5
 
 
-# The look, as the user set it on Start (2026-10-02): GTAO, bloom. FXAA (user, 2026-10-06: kept
-# after TAA's jitter was fixed; TAA is for the next game). Auto exposure on since it starts at a
-# scene's level (2026-10-06; it had dimmed and brightened over every scene's first seconds). The
-# look lives in two shared profiles (PaperKid Environment, PaperKid Post) that every scene's
-# settings name, so it is tuned once. Colours are sRGB, as entered anywhere (the sky's were tuned
-# while colours were read raw, and are written as the values they decode from).
+# The look: GTAO, bloom, FXAA, and auto exposure, which starts at a scene's level so a scene does
+# not dim or brighten over its first seconds. The look lives in two shared profiles (PaperKid
+# Environment, PaperKid Post) that every scene's settings name, so it is tuned once. Colours are
+# sRGB, as entered anywhere; the sky's are the sRGB values that decode to the linear colours it
+# was tuned in.
 POST = dict(exposureEV=1.0, tonemapOperator=1, bloomEnabled=True, bloomThreshold=1.0, bloomKnee=0.6,
             bloomIntensity=0.05, aoMode=2, aoStrength=1.0, aoRadius=1.0, aoIntensity=1.0, ssrEnabled=False,
             ssrIntensity=1.0, aaMode=1, taaBlendFactor=0.97, taaVarianceGamma=1.25, fxaaSubpixel=0.75,
@@ -222,8 +221,7 @@ def town(name, R, subscribers, inner_cars, outer_cars, walkers, level, nav):
 
 
 # The clock is about two laps of the ring at the bike's top speed (11 m/s: a lap is 17 s at R 24,
-# 23 s at R 32, 29 s at R 40) with room for the corners and a crash or two; the first limits
-# (120 to 165 s) left whole minutes over (user, 2026-10-03: "Time should run out faster").
+# 23 s at R 32, 29 s at R 40) with room for the corners and a crash or two.
 # The run, on a ramp: bigger rings, more subscribers, a higher quota, busier and faster traffic,
 # less time for the distance. Subscriber indices are into the houses in the order town() places
 # them (inner north/south pairs, inner east/west pairs, then outer north/south/east/west quads).

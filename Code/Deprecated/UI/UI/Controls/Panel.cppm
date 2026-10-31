@@ -3,8 +3,7 @@
 
 // UI - :panel partition
 //
-// Container with an optional background drawable; children fill the panel minus padding. Ported from
-// Sedulous.UI/src/Controls/Panel.bf.
+// Container with an optional background drawable; children fill the panel minus padding.
 
 module;
 #include "Core/Prelude.h"
@@ -44,8 +43,8 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Margin is base-handled - children get the loose content
-            // box and aggregate by margin-box size.
+            // The base class handles margins: children get the loose content box, and the panel
+            // sizes to their margin boxes.
             const Thickness pad = EffectivePadding();
             const BoxConstraints inner = constraints.Deflate(pad).Loosen();
             f32 maxW = 0, maxH = 0;
@@ -80,15 +79,15 @@ export namespace foundation::ui
                     continue;
                 }
                 // Panel stretches every child across the content box: pass the whole content
-                // box as the child's MARGIN box - the base insets by margin once.
+                // box as the child's margin box, which the base class insets by the margin once.
                 child->Layout(pad.Left, pad.Top, Max(0.0f, contentW), Max(0.0f, contentH));
             }
         }
 
     private:
-        /// The resolved chrome (padding channels max-merged + border) - Panel's original
-        /// field+drawable max-merge, hoisted into View::ResolveBoxMetrics and now also honoring
-        /// stylesheet `padding:` on containers and reserving space for the border (border-box).
+        /// The resolved chrome from View::ResolveBoxMetrics: the padding field, the drawable's
+        /// padding and the stylesheet `padding:` merged by taking the larger of each side, plus
+        /// space for the border (border-box).
         [[nodiscard]] Thickness EffectivePadding() { return ResolveBoxMetrics().Chrome(); }
     };
 

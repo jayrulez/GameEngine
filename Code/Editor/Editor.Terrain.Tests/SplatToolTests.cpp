@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TerrainSplatTool tests (headless, top-K model): a whole paint gesture scripted through
-// ViewportToolInput. Drives press -> drag -> release over an in-memory terrain (heightfield +
-// SplatWeights) and asserts the selected PALETTE layer rises out of the base, ONE both-raster
-// command undoes/redoes it, the eraser reveals the base, the brush is unavailable with no weights +
-// refuses edits under Simulate, and the persist closure converts the source to embedded (BOTH
-// sidecars) so the paint survives a re-cook.
+// Headless TerrainSplatTool tests (top-K model), with whole paint gestures scripted through
+// ViewportToolInput. They drive a press, drag and release over an in-memory terrain (heightfield
+// and SplatWeights) and check that the selected palette layer rises out of the base, that one
+// command over both rasters undoes and redoes it, that the eraser reveals the base, that the brush
+// is unavailable with no weights and refuses edits under Simulate, and that the save closure
+// converts the source to embedded (both sidecars) so the paint survives a re-cook.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
 import foundation.content;
-import foundation.vfs;      // NativeFileSystem (the persist round-trip test)
+import foundation.vfs;      // NativeFileSystem (the save round-trip test)
 import foundation.resource;
 import foundation.scene;
 import foundation.heightfield;
 import foundation.terrain.resource;
 import engine.terrain;
 import pipeline.core;
-import terrain.pipeline;    // SplatmapAsset + builder (the SOURCE envelope the persist rewrites)
+import terrain.pipeline;    // SplatmapAsset and its builder (the source envelope the save rewrites)
 import editor.core;
 import editor.viewporttools;
 import editor.terrain;
@@ -41,7 +41,7 @@ namespace
             ++count;
             lastId = assetId;
             hasPersist = static_cast<bool>(persist);
-            lastPersist = Move(persist); // captured so tests can run it against a real DB
+            lastPersist = Move(persist); // captured so tests can run it against a real database
         }
         i32 count = 0;
         Guid lastId;
@@ -49,8 +49,8 @@ namespace
         Function<Status(foundation::content::ContentDatabase&)> lastPersist;
     };
 
-    // A straight-down ray at world (x, z) - stamps land where it hits (the 64x64 fixture spans
-    // -32..32, so x=0 is the raster centre texel 16 of 32).
+    // A straight-down ray at world (x, z); stamps land where it hits. The 64x64 fixture spans
+    // -32..32, so x=0 is the raster's centre texel, 16 of 32.
     editor::ViewportToolInput RayAt(f32 x, f32 z)
     {
         editor::ViewportToolInput in;
@@ -79,7 +79,7 @@ namespace
             res = MakeRef<terrain::TerrainResource>(DefaultAllocator());
             res->heightfield = grid.Get();
             res->weights = weights.Get();
-            res->weights.SetId(Guid{5, 55}); // the source asset guid the tool persists back to
+            res->weights.SetId(Guid{5, 55}); // the source asset guid the tool saves back to
             const scene::EntityHandle e = scene.CreateEntity(u8"terrain");
             engine::terrain::TerrainComponent& c = mgr->Add(e);
             c.terrain = res.Get();
@@ -101,19 +101,19 @@ TEST_CASE("terrain splat: a stroke stamps the selected palette layer along the d
     CHECK(fx.weights->WeightOfLayer(16, 16, 1) == 0);
     const u64 v0 = fx.weights->Version();
 
-    // The press deposits one FULL stamp (default strength 1 = one-hot at the centre instantly -
-    // the distance-spaced stamp model; no time-based trickle).
+    // The press deposits one full stamp. In the distance-spaced stamp model the default strength
+    // of 1 reaches one-hot at the centre at once, with no time-based trickle.
     editor::ViewportToolInput press = CenterRay(0.0f);
     press.leftPressed = true;
     press.leftDown = true;
-    CHECK(tool.Update(press)); // consumed: the brush owns the click
+    CHECK(tool.Update(press)); // consumed, since the brush owns the click
     CHECK(fx.weights->WeightOfLayer(16, 16, 1) == 255);
     CHECK(fx.weights->BaseWeight(16, 16) == 0);
     CHECK(fx.weights->Version() > v0); // paint bumped the version (GPU re-upload)
 
-    // Dragging walks stamps along the world-space travel - the swath has no gaps: texels between
+    // Dragging walks stamps along the world-space travel, so the swath has no gaps: texels between
     // the press point and the drag target are all painted hard.
-    editor::ViewportToolInput drag = RayAt(8.0f, 0.0f); // 8 world units right = texel ~20
+    editor::ViewportToolInput drag = RayAt(8.0f, 0.0f); // 8 world units right, about texel 20
     drag.leftDown = true;
     CHECK(tool.Update(drag));
     CHECK(fx.weights->WeightOfLayer(18, 16, 1) > 200); // mid-path
@@ -135,17 +135,17 @@ TEST_CASE("terrain splat: stamps are distance-spaced - holding still adds nothin
     editor::EditorCommandStack commands;
     editor::TerrainSplatTool tool(fx.scene, commands, nullptr);
     tool.SetPaletteIndex(2);
-    tool.SetStrength(0.5f); // sub-1: one stamp = half coverage; build-up needs MOVEMENT
+    tool.SetStrength(0.5f); // below 1: one stamp gives half coverage, and building up needs movement
 
     editor::ViewportToolInput press = CenterRay(0.0f);
     press.leftPressed = true;
     press.leftDown = true;
     (void)tool.Update(press);
     const u8 afterPress = fx.weights->WeightOfLayer(16, 16, 2);
-    CHECK(afterPress >= 126); // ~half coverage from the press stamp
+    CHECK(afterPress >= 126); // about half coverage from the press stamp
     CHECK(afterPress <= 129);
 
-    // Holding the button still (many frames, no movement) deposits NOTHING more.
+    // Holding the button still (many frames, no movement) deposits nothing more.
     for (i32 i = 0; i < 10; ++i)
     {
         editor::ViewportToolInput hold = CenterRay(0.0f);
@@ -183,10 +183,10 @@ TEST_CASE("terrain splat: airbrush mode builds up while holding still (time-cade
     press.leftDown = true;
     (void)tool.Update(press);
     const u8 afterPress = fx.weights->WeightOfLayer(16, 16, 4);
-    REQUIRE(afterPress >= 126); // the press stamp (~half coverage)
+    REQUIRE(afterPress >= 126); // the press stamp (about half coverage)
 
-    // Airbrush is a GENTLE flow: stamps deposit strength x period, so strength reads as coverage
-    // per SECOND of hover. A short hold (0.2s) adds only a little...
+    // Airbrush is a gentle flow: stamps deposit strength times the period, so strength means
+    // coverage per second of hover. A short hold (0.2 s) adds only a little...
     for (i32 i = 0; i < 12; ++i)
     {
         editor::ViewportToolInput hold = CenterRay(0.0f); // deltaSeconds = 1/60
@@ -194,8 +194,8 @@ TEST_CASE("terrain splat: airbrush mode builds up while holding still (time-cade
         (void)tool.Update(hold);
     }
     const u8 shortHold = fx.weights->WeightOfLayer(16, 16, 4);
-    CHECK(shortHold > afterPress);      // it DOES build while held...
-    CHECK(shortHold <= afterPress + 20); // ...but gently (the old per-stamp flow blew past +60)
+    CHECK(shortHold > afterPress);      // it does build while held...
+    CHECK(shortHold <= afterPress + 20); // ...but gently
 
     // ...while a long hover (2s total) builds real coverage.
     for (i32 i = 0; i < 108; ++i)
@@ -213,8 +213,8 @@ TEST_CASE("terrain splat: airbrush mode builds up while holding still (time-cade
 
 TEST_CASE("terrain splat: spacing controls stamp density along the stroke")
 {
-    // The same drag at low strength: WIDE spacing lays few stamps along the path; TIGHT spacing
-    // lays many overlapping ones and builds far more coverage at the midpoint.
+    // The same drag at low strength: wide spacing lays few stamps along the path, while tight
+    // spacing lays many overlapping ones and builds far more coverage at the midpoint.
     const auto strokeAndMeasure = [](f32 spacing) -> u8
     {
         Fixture fx;
@@ -240,8 +240,8 @@ TEST_CASE("terrain splat: spacing controls stamp density along the stroke")
 
     const u8 tight = strokeAndMeasure(0.05f);
     const u8 wide = strokeAndMeasure(1.0f);
-    CHECK(tight > wide + 30); // denser stamps = visibly more build-up on the same path
-    CHECK(wide > 0);          // but the wide stroke still covers the path (walker leaves no gap)
+    CHECK(tight > wide + 30); // denser stamps build up visibly more on the same path
+    CHECK(wide > 0);          // but the wide stroke still covers the path (the walk leaves no gap)
 }
 
 TEST_CASE("terrain splat: one command per stroke undoes/redoes BOTH rasters")
@@ -262,7 +262,7 @@ TEST_CASE("terrain splat: one command per stroke undoes/redoes BOTH rasters")
 
     const u8 painted = fx.weights->WeightOfLayer(16, 16, 2);
     REQUIRE(painted > 0);
-    // The paint claimed a slot whose INDEX byte is now 2 - undo must restore that raster too.
+    // The paint claimed a slot whose index byte is now 2, so undo has to restore that raster too.
     bool hasIndex2 = false;
     for (u32 k = 0; k < terrain::kSplatSlotCount; ++k)
     {
@@ -290,7 +290,7 @@ TEST_CASE("terrain splat: the eraser fades paint back to the base")
     tool.SetPaletteIndex(3);
     tool.SetStrength(1.0f);
 
-    // One full-strength press stamp = one-hot paint at the centre.
+    // One full-strength press stamp gives one-hot paint at the centre.
     editor::ViewportToolInput press = CenterRay(0.0f);
     press.leftPressed = true;
     press.leftDown = true;
@@ -301,7 +301,7 @@ TEST_CASE("terrain splat: the eraser fades paint back to the base")
     const u8 painted = fx.weights->WeightOfLayer(16, 16, 3);
     REQUIRE(painted == 255);
 
-    // The eraser at strength 1 is a HARD eraser: one press stamp restores pure base.
+    // The eraser at strength 1 is a hard eraser: one press stamp restores pure base.
     tool.SetEraser(true);
     CHECK(tool.IsEraser());
     editor::ViewportToolInput epress = CenterRay(0.0f);
@@ -315,7 +315,7 @@ TEST_CASE("terrain splat: the eraser fades paint back to the base")
     CHECK(fx.weights->WeightOfLayer(16, 16, 3) == 0);
     CHECK(fx.weights->BaseWeight(16, 16) == 255);
 
-    // A soft eraser (sub-1) only FADES per stamp.
+    // A soft eraser (strength below 1) only fades the paint per stamp.
     tool.SetEraser(false);
     editor::ViewportToolInput rp = CenterRay(0.0f);
     rp.leftPressed = true;
@@ -374,7 +374,7 @@ TEST_CASE("terrain splat: smooth mode feathers a hard seam and rides the stroke 
     release.leftReleased = true;
     (void)tool.Update(release);
 
-    // The boundary column faded and the first base column gained paint - the seam is graded.
+    // The boundary column faded and the first base column gained paint, so the edge is graded.
     const u8 edge = fx.weights->WeightOfLayer(15, 16, 1);
     const u8 bled = fx.weights->WeightOfLayer(16, 16, 1);
     CHECK(edge < 255);
@@ -394,7 +394,7 @@ TEST_CASE("terrain splat: smooth mode feathers a hard seam and rides the stroke 
 
 TEST_CASE("terrain splat: unavailable with no weights, and refuses edits while editingLocked")
 {
-    // A terrain with a heightfield but NO weights raster: the paint tool is not relevant.
+    // A terrain with a heightfield but no weights raster: the paint tool is unavailable.
     scene::Scene bare{DefaultAllocator()};
     engine::terrain::AddTerrainSceneManagers(bare);
     auto* mgr = bare.GetSystem<engine::terrain::TerrainComponentManager>();
@@ -409,7 +409,7 @@ TEST_CASE("terrain splat: unavailable with no weights, and refuses edits while e
     editor::TerrainSplatTool bareTool(bare, commandsA, nullptr);
     CHECK_FALSE(bareTool.IsAvailable());
 
-    // With weights but editingLocked (Simulate): a press does nothing.
+    // With weights but editingLocked (Simulate), a press does nothing.
     Fixture fx;
     editor::EditorCommandStack commands;
     editor::TerrainSplatTool tool(fx.scene, commands, nullptr);
@@ -423,10 +423,10 @@ TEST_CASE("terrain splat: unavailable with no weights, and refuses edits while e
     CHECK_FALSE(commands.CanUndo());
 }
 
-// Editable-source convention: painting an IMPORTED (PNG-backed) splatmap must persist durably -
-// the closure rewrites the SOURCE envelope (dims synced to the raster, fileName cleared =
-// converted to embedded) plus BOTH sidecars ("pixels" weights + "indices"), so a re-cook keeps the
-// paint instead of regenerating from the file (re-import explicitly resets).
+// Painting an imported (PNG-backed) splatmap is saved durably. The closure rewrites the source
+// envelope (dimensions synced to the raster, fileName cleared so it becomes embedded) and both
+// sidecars (the "pixels" weights and the "indices"), so a re-cook keeps the paint instead of
+// regenerating it from the file. A re-import resets it explicitly.
 TEST_CASE("terrain splat: a save converts an imported splatmap to embedded and survives a re-cook")
 {
     using foundation::vfs::NativeFileSystem;
@@ -439,7 +439,8 @@ TEST_CASE("terrain splat: a save converts an imported splatmap to embedded and s
     RemoveDirectory(dbDir);
     NativeFileSystem mount(dbDir, DefaultAllocator());
 
-    // The SOURCE asset: imported-style (fileName set) with STALE dims - the raster is 32x32.
+    // The source asset looks imported (fileName set) and has stale dimensions; the raster is
+    // 32x32.
     Guid id;
     {
         content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
@@ -451,9 +452,9 @@ TEST_CASE("terrain splat: a save converts an imported splatmap to embedded and s
         REQUIRE(inst != nullptr);
         id = inst->Id();
         pipeline::SplatmapAsset src;
-        src.width = 8; // stale: the import decoded at native size, the envelope never knew
+        src.width = 8; // stale: the import decoded at native size without updating the envelope
         src.height = 8;
-        src.fileName = foundation::vfs::SourcePath(u8"weights.png"); // imported-style
+        src.fileName = foundation::vfs::SourcePath(u8"weights.png"); // as if imported
         REQUIRE(inst->WriteObject(src).IsOk());
     }
 
@@ -477,9 +478,10 @@ TEST_CASE("terrain splat: a save converts an imported splatmap to embedded and s
     const u8 painted = fx.weights->WeightOfLayer(16, 16, 1);
     REQUIRE(painted > 0); // the stroke raised palette 1
 
-    // Drain: envelope converts to embedded with the raster's true dims, then re-cook into a
-    // SEPARATE cooked DB under the SAME guid (product guid == source guid - the production shape;
-    // the cooked instance carries the product-source type the factory reads).
+    // Drain: the envelope converts to embedded with the raster's true dimensions, then the test
+    // re-cooks into a separate cooked database under the same guid. The product guid equals the
+    // source guid, as in production, and the cooked instance carries the product-source type the
+    // factory reads.
     const StringView cookedDir = u8"scratch_splat_persist_cooked";
     FileDelete(u8"scratch_splat_persist_cooked/splat.rasset");
     FileDelete(u8"scratch_splat_persist_cooked/splat.pixels.bin");
@@ -494,9 +496,9 @@ TEST_CASE("terrain splat: a save converts an imported splatmap to embedded and s
         REQUIRE(inst != nullptr);
         RefPtr<ISerializable> object = inst->ReadObject();
         auto* asset = Cast<pipeline::SplatmapAsset>(object.Get());
-        REQUIRE(asset != nullptr);               // envelope is STILL a SplatmapAsset
-        CHECK(asset->fileName.View().IsEmpty()); // converted to embedded (sidecars = truth)
-        CHECK(asset->width == 32);               // dims synced to the painted raster
+        REQUIRE(asset != nullptr);               // the envelope is still a SplatmapAsset
+        CHECK(asset->fileName.View().IsEmpty()); // converted to embedded (the sidecars are authoritative)
+        CHECK(asset->width == 32);               // dimensions synced to the painted raster
         CHECK(asset->height == 32);
 
         content::ContentDatabase cookedDb(foundation::core::DefaultAllocator(), cookedMount,
@@ -515,7 +517,7 @@ TEST_CASE("terrain splat: a save converts an imported splatmap to embedded and s
         REQUIRE(builder.Build(*asset, ctx).IsOk());
     }
 
-    // Bind the cooked product through a FRESH db: the paint (weights AND indices) survived.
+    // Bind the cooked product through a fresh database: the paint (weights and indices) survived.
     {
         content::ContentDatabase cookedDb(foundation::core::DefaultAllocator(), cookedMount,
                                           foundation::core::BinarySerializerFactory(),
@@ -548,7 +550,7 @@ TEST_CASE("terrain splat: the wheel resizes the brush only with Shift (the bare 
     editor::ViewportToolInput wheel = RayAt(0.0f, 0.0f);
     wheel.wheelDelta = 1.0f;
     (void)tool.Update(wheel);
-    CHECK(tool.Radius() == before); // the camera's scroll
+    CHECK(tool.Radius() == before); // the wheel alone scrolls the camera
     wheel.shift = true;
     (void)tool.Update(wheel);
     CHECK(tool.Radius() > before);

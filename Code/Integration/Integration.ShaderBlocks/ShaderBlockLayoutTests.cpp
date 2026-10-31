@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.ShaderBlocks - every engine shader block against its C++ mirror, field by field
-// (Specs/shader-blocks-cleanup.md, phase 0). The engine's shaders are cooked to SPIR-V as the
-// engine cook does (CookEngineShaders), and each block's members are read from what DXC compiled:
+// Integration.ShaderBlocks: every engine shader block against its C++ mirror, field by field.
+// The engine's shaders are cooked to SPIR-V as the engine cook does (CookEngineShaders), and each
+// block's members are read from what DXC compiled:
 // its OpMemberName and OpMemberDecorate Offset, the offsets Vulkan uses and the WGSL translation
 // starts from. A field added, moved or renamed on one side only fails here, which a size check
 // alone does not catch (two fields swapped, a value moved into padding of the same size).
@@ -475,7 +475,7 @@ namespace
         FIELD(render::GpuSsgiBlurPush, pad1, "_pad1"),
     };
     // The shader packs ViewToWorld0 to the next 16-byte row; the mirror's pad0 and pad1 fill the gap
-    // and are no members of the shader's block.
+    // and are not members of the shader's block.
     const FieldRow kSsgiResolvePush[] = {
         FIELD(render::GpuSsgiResolvePush, vpMin, "VpMin"),
         FIELD(render::GpuSsgiResolvePush, vpSize, "VpSize"),
@@ -867,8 +867,8 @@ TEST_CASE("shader blocks: the built-in materials' buffers match their MaterialBu
                 ++uniformCount;
             }
         }
-        // Padding is padding (shader-blocks-cleanup.md, rule 2): a member named `_...` holds a
-        // place (PBR's former wind lanes) and is no property.
+        // A member whose name starts with `_` is padding: it holds a place in the layout and is
+        // not a property.
         usize memberCount = 0;
         for (const SpirvMember& member : *members)
         {
@@ -933,13 +933,13 @@ TEST_CASE("shader blocks: every WIND vertex stage's Wind block matches the effec
             REQUIRE(member.hasOffset);
             CHECK(member.offset == wind->properties[i].offset);
         }
-        // Not the material's buffer: no vertex stage declares one for the wind any more.
+        // The wind does not use the material's buffer: no vertex stage declares one.
         CHECK(module.Find(u8"type.Material") == nullptr);
     }
 
-    // What each built-in's vertex stage declares, as the C++ table states it (the effects a
-    // material on it may carry where no shader system is at hand): its `// variants` line, as the
-    // cook read it.
+    // Each built-in's vertex stage declares the variants the C++ table states for it, matching
+    // its `// variants` line as the cook read it. The table gives the effects a material on that
+    // shader may carry where no shader system is at hand.
     for (const materials::BuiltinShadingInfo& builtin : materials::kBuiltinShadings)
     {
         CAPTURE(reinterpret_cast<const char*>(builtin.shaderName.Data()));

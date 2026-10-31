@@ -42,7 +42,7 @@ namespace pipeline
         }
         // A directional sun, angled and strong enough that the first mesh dropped in casts a
         // shadow you can see: at the component default (1) and 60 degrees up, the sky's light
-        // filled a short shadow in until it read as a smudge (user, 2026-10-11).
+        // fills a short shadow in until it reads as a smudge.
         scene::Scene seeded(allocator, name.AsView());
         seeded.AddSystem<engine::render::LightComponentManager>();
         const scene::EntityHandle sun = seeded.CreateEntity(u8"Sun");

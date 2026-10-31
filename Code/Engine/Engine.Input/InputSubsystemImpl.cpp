@@ -3,9 +3,9 @@
 
 // Input - InputSubsystem implementation unit: the Input facade reflection body.
 //
-// Kept OUT of the interface: REFLECT_* bodies in an interface unit make GCC emit
-// an unreadable gcm cluster for consumers (see gcc-module-interface-hygiene). The interface
-// declares RegisterInputScriptFacade(); this unit defines it and Input::StaticType().
+// Kept out of the interface: REFLECT_* bodies in an interface unit make GCC emit an unreadable gcm
+// cluster for consumers. The interface declares RegisterInputScriptFacade(); this unit defines it
+// and Input::StaticType().
 
 module;
 #include "Core/Prelude.h"
@@ -41,15 +41,15 @@ namespace engine::input
         builder.Method<static_cast<void (*)(i32, f32, f32, f32)>(&Input::rumble)>(
             "rumble", {"gamepad", "low", "high", "seconds"});
         builder.Method<&Input::stopRumble>("stopRumble");
-        // Some backends only materialize CONSTRUCTIBLE types as foreign classes.
+        // Some backends only materialize constructible types as foreign classes.
         builder.Constructor();
     }
 
     void RegisterInputScriptFacade()
     {
         GlobalTypeRegistry().Register(Input::StaticType());
-        // So the behavior/Level prelude imports `Input` too (AngelScript binds by
-        // registry). Without this only top-level `main`/Game scripts can see it. Idempotent.
+        // So the behavior and Level prelude imports `Input` too (AngelScript binds by registry).
+        // Without this only top-level `main` and Game scripts can see it. Idempotent.
         foundation::script::RegisterExtraFacadeName(u8"Input");
     }
 }

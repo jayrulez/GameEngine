@@ -1,5 +1,6 @@
-// Checkpoint - a trigger volume the thief walks into: from then on a catch sends him back here
-// (a Checkpoint event with where to stand, which Thief.as keeps). Once each.
+// Checkpoint: a trigger volume. When the thief walks into it, it emits a Checkpoint event with the
+// position to stand at; Thief.as keeps it, and from then on a catch sends him back here. Each
+// checkpoint fires once.
 class Checkpoint
 {
     private Entity@ self;

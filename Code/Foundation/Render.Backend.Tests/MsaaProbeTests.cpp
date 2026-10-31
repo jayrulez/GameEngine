@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Scene-pass MSAA acceptance probes. All on real Vulkan + WebGPU via the shared
-// RHI.TestSupport readback substrate; STRUCTURAL assertions (no golden images).
-//   1) 4x resolve produces silhouette edge coverage that 1x does not (the core acceptance property).
-//   2) MSAA composes with the post-effect stack (TAA/FXAA/AO/SSR) at 4x - each still renders a sane
-//      lit image, guarding the resolve-rebind (those effects read the RESOLVED 1x buffers under MSAA).
+// Scene-pass MSAA acceptance probes, all on real Vulkan and WebGPU through the shared
+// RHI.TestSupport readback substrate, with structural assertions (no golden images):
+//   1) A 4x resolve produces silhouette edge coverage that 1x does not (the core acceptance
+//      property).
+//   2) MSAA composes with the post-effect stack (TAA, FXAA, AO, SSR) at 4x: each still renders a
+//      sane lit image, guarding the resolve-rebind (under MSAA those effects read the resolved 1x
+//      buffers).
 //
 // Cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
 //   OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 ./Render.Backend.Tests
@@ -99,8 +101,8 @@ namespace
                 frame.SetSsrParams(true, SsrPass::Params{});
             }
 
-            // A bright white cube, ROTATED so its silhouette is diagonal (long edges = a clear
-            // coverage signal), on a black clear. Flat bright ambient - no lights needed.
+            // A bright white cube, rotated so its silhouette is diagonal (long edges give a clear
+            // coverage signal), on a black clear. Flat bright ambient, so no lights are needed.
             RefPtr<geometry::StaticMesh> cubeMesh = geometry::Primitives::Cube(DefaultAllocator(), 2.2f);
             RefPtr<materials::Material> cubeMat =
                 materials::CreatePBR(u8"msaa.cube", Float4{1, 1, 1, 1}, 0.0f, 0.6f);
@@ -152,7 +154,7 @@ namespace
             settings.post.fxaaEnabled = cfg.fxaa;
             settings.post.ssrEnabled = cfg.ssr;
             settings.post.aoMode = cfg.aoMode;
-            settings.post.needsMotion = cfg.taa || cfg.ssr; // TAA + (temporal) SSR read motion vectors
+            settings.post.needsMotion = cfg.taa || cfg.ssr; // TAA and (temporal) SSR read motion vectors
             settings.post.msaaSamples = static_cast<u8>(cfg.samples);
 
             // TAA warms its history over a few frames on a static camera; others need only one.
@@ -175,7 +177,7 @@ namespace
                 pool->DestroyEncoder(encoder);
             }
 
-            // Target is left in CopySrc; the shared substrate does the copy + map.
+            // Target is left in CopySrc; the shared substrate does the copy and map.
             out = testsupport::Readback(device, target, kSize, kSize);
 
             device.WaitIdle();
@@ -201,10 +203,10 @@ namespace
         return m;
     }
 
-    // Partial-coverage edge pixels: luma strictly BETWEEN background (black) and the solid cube tone.
-    // The band is relative to the image's own max luma (the flat-lit cube's tonemapped value), so it
-    // isolates the silhouette FRINGE regardless of what the tonemap maps "white" to - the solid cube
-    // (near max) and the background (near 0) are both excluded.
+    // Partial-coverage edge pixels: luma strictly between the background (black) and the solid cube
+    // tone. The band is relative to the image's own max luma (the flat-lit cube's tonemapped value),
+    // so it isolates the silhouette fringe whatever the tonemap maps "white" to; the solid cube (near
+    // max) and the background (near 0) are both excluded.
     u32 CountEdgeFringe(const testsupport::CapturedImage& img, u32 maxLuma)
     {
         const u32 lo = maxLuma * 15u / 100u;
@@ -303,10 +305,10 @@ namespace
         return static_cast<u32>(sum / static_cast<u64>((x1 - x0) * (y1 - y0)));
     }
 
-    // A flat surface has NO ambient occlusion: a floor seen at a grazing angle must come out as
-    // bright with SSAO (and GTAO) on as with AO off. SSAO used to compare each sample's scene
-    // depth against the CENTER pixel and draw its kernel from a sphere, so an oblique floor's own
-    // depth gradient read as occlusion and moved with the camera (Bistro's ground, 2026-09-24).
+    // A flat surface has no ambient occlusion: a floor seen at a grazing angle must come out as
+    // bright with SSAO (and GTAO) on as with AO off. An SSAO that compares each sample's scene depth
+    // against the centre pixel and draws its kernel from a sphere reads an oblique floor's own depth
+    // gradient as occlusion, which moves with the camera.
     void ProbeFlatSurfaceAo(rhi::Device& device, const char* backendName)
     {
         const testsupport::CapturedImage off = RenderMsaa(device, MsaaConfig{.obliquePlane = true});

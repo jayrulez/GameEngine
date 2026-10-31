@@ -3,18 +3,19 @@
 
 // GUI - :element_types partition
 //
-// Which element types exist, and which one GUI may create (G1 of Specs/vg-and-gui-lab.md).
+// Which element types exist, and which of them one GUI may create.
 //
-// ElementTypes is the registry of element types: type knowledge, so process-wide, as the reflection
-// registry is. Any library adds its widgets (the GUI's own, a toolkit, a game kit, a viewport) by
-// registering their reflected types once at start-up; an element type is a reflected Node type with
-// a creator (TypeBuilder::Creator), under a tag (its `element` attribute, else its type name) that
-// markup names and a script's `add` takes. A tag another type already holds is refused, loudly.
+// ElementTypes is the registry of element types. It holds type knowledge, so it is process-wide,
+// like the reflection registry. Any library (the GUI itself, a toolkit, a game kit, a viewport)
+// adds its widgets by registering their reflected types once at start-up. An element type is a
+// reflected Node type with a creator (TypeBuilder::Creator), registered under a tag (its `element`
+// attribute, else its type name) that markup uses and a script's `add` accepts. Registering a tag
+// that another type already holds fails with an error.
 //
-// ElementSet is what one GUI may create from those: every registered type by default (including
-// ones registered later), or only the tags it allows, with aliases of its own. A GUI holds one
-// (GUIContext::SetElementSet), so two GUIs in one process can offer different elements, e.g. a mod's
-// markup limited to a few.
+// ElementSet is the subset one GUI may create: by default every registered type (including types
+// registered later), or only the tags it allows, plus its own aliases. Each GUI holds one
+// (GUIContext::SetElementSet), so two GUIs in one process can offer different elements, for
+// example to limit a mod's markup to a few.
 
 module;
 #include "Core/Prelude.h"
@@ -31,28 +32,29 @@ export namespace foundation::gui
 {
     struct ElementTypes
     {
-        /// Registers `type` as an element under its tag, and with the reflection registry (so
-        /// scripts reach it). False, with an error logged, when it is not a Node type, has no
-        /// creator, or its tag is another type's.
+        /// Registers `type` as an element under its tag, and with the reflection registry so that
+        /// scripts can reach it. Returns false and logs an error when it is not a Node type, has no
+        /// creator, or its tag belongs to another type.
         static bool Register(const TypeInfo& type);
-        /// Takes `type` out (a library unloading): markup and scripts can no longer create it.
+        /// Unregisters `type` (when a library unloads), so markup and scripts can no longer create
+        /// it.
         static void Unregister(const TypeInfo& type);
         /// The element type under `tag`, or null.
         [[nodiscard]] static const TypeInfo* Find(core::StringView tag);
         /// The tag `type` registers under: its `element` attribute, else its type name.
         [[nodiscard]] static core::StringView TagOf(const TypeInfo& type);
-        /// Every registered element type, in registration order.
+        /// Calls `visit` for every registered element type, in registration order.
         static void ForEach(const core::Function<void(core::StringView tag, const TypeInfo& type)>& visit);
     };
 
-    /// What one GUI may create: every registered element type, or only the tags it allows, under
-    /// aliases of its own.
+    /// The element types one GUI may create: every registered type, or only the tags it allows,
+    /// plus its own aliases.
     class ElementSet
     {
     public:
-        /// Every registered element type, now and later.
+        /// A set that allows every registered element type, including types registered later.
         [[nodiscard]] static ElementSet All() { return ElementSet{}; }
-        /// Only the tags allowed with Allow (none yet).
+        /// A set that allows only the tags later passed to Allow (none at first).
         [[nodiscard]] static ElementSet None()
         {
             ElementSet set;
@@ -62,14 +64,15 @@ export namespace foundation::gui
 
         /// Allows `tag` (a registered element's tag) in a set made with None().
         void Allow(core::StringView tag) { m_allowed.PushBack(core::String(tag)); }
-        /// `alias` creates what `tag` does (in markup and `add`), allowed where `tag` is.
+        /// Makes `alias` create what `tag` creates (in markup and `add`). The alias is allowed
+        /// wherever `tag` is.
         void Alias(core::StringView alias, core::StringView tag)
         {
             m_aliases.PushBack(AliasEntry{core::String(alias), core::String(tag)});
         }
 
-        /// The element type `tag` names in this set (through an alias), or null when the set does
-        /// not allow it or no such element is registered.
+        /// Returns the element type `tag` names in this set (possibly through an alias), or null
+        /// when the set does not allow it or no such element is registered.
         [[nodiscard]] const TypeInfo* Resolve(core::StringView tag) const
         {
             for (const AliasEntry& alias : m_aliases)
@@ -86,7 +89,8 @@ export namespace foundation::gui
             return ElementTypes::Find(tag);
         }
 
-        /// A new element of what `tag` names, from `allocator`; null when the set does not allow it.
+        /// Creates a new element of the type `tag` names, from `allocator`. Returns null when the
+        /// set does not allow it.
         [[nodiscard]] RefPtr<Node> Create(core::StringView tag, IAllocator& allocator) const
         {
             const TypeInfo* type = Resolve(tag);
@@ -107,10 +111,10 @@ export namespace foundation::gui
         Array<AliasEntry> m_aliases;
     };
 
-    /// A native weak reference to an element of type T: resolves to the element while it lives in
-    /// its GUI, and to null once it is destroyed (or its GUI is), through the element table the
-    /// script handles use too. For callbacks, tools and bindings that must not keep a widget alive
-    /// nor outlive it. Empty for an element in no GUI.
+    /// A native weak reference to an element of type T. It resolves through the element table
+    /// (which script handles use too) to the element while it lives in its GUI, and to null once
+    /// the element or its GUI is destroyed. Use it in callbacks, tools and bindings that must
+    /// neither keep a widget alive nor outlive it. It is empty for an element that is in no GUI.
     template <typename T>
     class Element
     {

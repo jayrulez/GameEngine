@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // DDS level decode: block formats through bcdec (the vendored single-header BCn decoder; this
-// unit is its ONE implementation site in the engine), uncompressed texels by swizzle.
+// unit is its one implementation site in the engine), uncompressed texels by swizzle.
 
 module;
 #include "Core/Prelude.h"

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Engine.Composition.Tests - THE composition root (engine-composition.md D5, D8).
+// Engine.Composition.Tests - the composition root.
 //
 // One list of domains, each declared once in its own library; every facet answered from it.
 // What this suite guards: every domain is present (the module counts), the scene facet still
 // resolves the managers headless consumers have lost in the past, the resource facet describes
 // every factory and registers every cooked type, the factory set honours the declared services,
-// and the facade surface installs exactly the domain facades - the tripwires the two surfaces
-// used to keep, now over the one list.
+// and the facade surface installs exactly the domain facades.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -32,9 +31,8 @@ namespace resource = foundation::resource;
 
 namespace
 {
-    // The GUI domain (gui-lab-evolution-3.md, section E), there when the GUI is built: one domain,
-    // one resource module of its own beside its vector images and fonts, two
-    // factories.
+    // The GUI domain, there when the GUI is built: one domain, one resource module of its own
+    // beside its vector images and fonts, two factories.
     constexpr usize kGuiDomains = 1;
     constexpr usize kGuiResourceModules = 1;
     constexpr usize kGuiFactories = 2;
@@ -43,7 +41,7 @@ namespace
 TEST_CASE("engine.composition: the one list covers every domain, and the scene facet every manager")
 {
     const engine::EngineComposition& composition = engine::FullComposition();
-    // Twelve scene domains + input + the run's facade library, and the GUI's when the GUI is built.
+    // Twelve scene domains, input and the run's facade library, and the GUI's when the GUI is built.
     CHECK(composition.Modules().Size() == 14u + kGuiDomains);
     CHECK(composition.Scene().ModuleCount() == 12u + kGuiDomains);
     CHECK(&engine::FullSceneComposition() == &composition.Scene());
@@ -94,7 +92,7 @@ TEST_CASE("engine.composition: the resource facet - every domain's resource modu
           "factory described, every cooked type registered")
 {
     const engine::EngineComposition& composition = engine::FullComposition();
-    // The nineteen resource libraries + the scene documents + the render profiles.
+    // The nineteen resource libraries, the scene documents and the render profiles.
     CHECK(composition.ResourceModules().Size() == 21u + kGuiResourceModules);
     for (const resource::ResourceModule* module : composition.ResourceModules())
     {
@@ -105,9 +103,9 @@ TEST_CASE("engine.composition: the resource facet - every domain's resource modu
         }
         CHECK(same == 1u);
     }
-    // 28 = the standard headless set (22) + the texture factory + the image and shader factories
-    // no host registered before the composition brought them + the two render profiles + the
-    // vector image, and the GUI's documents and sheets when the GUI is built.
+    // 28 = the standard headless set (22), the texture factory, the image and shader factories,
+    // the two render profiles and the vector image, plus the GUI's documents and sheets when the
+    // GUI is built.
     CHECK(composition.FactoryDescriptionCount() == 28u + kGuiFactories);
 
     engine::RegisterAllResourceTypes();

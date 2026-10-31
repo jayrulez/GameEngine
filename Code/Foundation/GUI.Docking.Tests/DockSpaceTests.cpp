@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - the DockSpace and its controller (D3 of Specs/gui-lab-evolution-3.md): splits as
-// Splitters and stacks as TabViews, kept by node id as the layout changes; a panel's content made
-// when its tab is first shown and kept by the controller; closing by the panel's policy; a
-// placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
-// user does in the widgets (a separator dragged, a tab chosen, dragged or closed, by its close part
-// or a middle click) noted back; a panel wider than its stack moves no separator, the stack
-// clipping it; a panel that asks before it closes, and one unregistered; a title and tab classes
-// changed while docked; the active panel following the focus.
+// GUI.Docking - the DockSpace and its controller. Splits are shown as Splitters and stacks as
+// TabViews, kept by node id as the layout changes. A panel's content is made when its tab is first
+// shown and is kept by the controller. Closing follows the panel's policy. A panel that is not
+// registered shows a placeholder, filled once it is registered. A maximized stack is shown alone.
+// What the user does in the widgets is noted back: dragging a separator, and choosing, dragging or
+// closing a tab (by its close button or a middle click). A panel wider than its stack moves no
+// separator, because the stack clips it. Also covered: a panel that asks before it closes, a panel
+// unregistered, a title and tab classes changed while docked, and the active panel following the
+// focus.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -82,7 +83,7 @@ TEST_CASE("dock space: splits are Splitters and stacks TabViews, kept by node id
     CHECK(central->GetGroup() == core::String(u8"dock"));
     CHECK(splitter->GetWeights()[0] == doctest::Approx(0.25f));
     CHECK(bed.space->PageOf(SV(u8"hierarchy"))->GetTitle() == SV(u8"Hierarchy"));
-    // A tab more: the same widgets, a page more.
+    // One more tab keeps the same widgets and adds a page.
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"inspector"), bed.Central()); }).Ok());
     CHECK(bed.space->GetChildAt(0) == splitter);
     CHECK(bed.space->WidgetOf(bed.Central()) == central);
@@ -93,14 +94,14 @@ TEST_CASE("dock space: splits are Splitters and stacks TabViews, kept by node id
 TEST_CASE("dock space: a panel's content is made when its tab is first shown, and kept by the controller")
 {
     Bed bed;
-    // Both tabbed in at once: the console, tabbed in last, is the one shown.
+    // With both tabbed in at once, the console, tabbed in last, is the one shown.
     REQUIRE(bed.controller.Edit([&](DockLayout& l)
     {
         const DockOutcome first = l.InsertTab(SV(u8"scene"), bed.Central());
         return first.Ok() ? l.InsertTab(SV(u8"console"), bed.Central()) : first;
     }).Ok());
     bed.Lay();
-    CHECK(bed.controller.HasContent(SV(u8"console"))); // selected: shown
+    CHECK(bed.controller.HasContent(SV(u8"console"))); // selected, so shown
     CHECK_FALSE(bed.controller.HasContent(SV(u8"scene"))); // not shown yet
     CHECK(bed.made == 1);
     auto* central = Cast<TabView>(bed.space->WidgetOf(bed.Central()));
@@ -108,7 +109,7 @@ TEST_CASE("dock space: a panel's content is made when its tab is first shown, an
     bed.Lay();
     CHECK(bed.controller.HasContent(SV(u8"scene")));
     CHECK(bed.controller.GetLayout().FindNode(bed.Central())->Active == 0u); // noted
-    // Moved to a stack of its own: the same content.
+    // Moved to a stack of its own, it keeps the same content.
     const core::RefPtr<Node> scene = bed.controller.Content(SV(u8"scene"));
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.MoveBeside(SV(u8"scene"), bed.Central(), DockSide::End); }).Ok());
     bed.Lay();
@@ -130,7 +131,7 @@ TEST_CASE("dock space: closing by the panel's policy: hide keeps its content, re
     }
     const core::RefPtr<Node> scene = bed.controller.Content(SV(u8"scene"));
     const core::RefPtr<Node> preview = bed.controller.Content(SV(u8"preview"));
-    // Through the tab's close, as the user would.
+    // Close through the tab's close button, as the user would.
     auto* sceneStack = Cast<TabView>(bed.space->WidgetOf(bed.StackOf(u8"scene")));
     sceneStack->GetBar()->RequestClose(0);
     CHECK(bed.StackOf(u8"scene") == kNoDock);
@@ -140,7 +141,7 @@ TEST_CASE("dock space: closing by the panel's policy: hide keeps its content, re
     CHECK(bed.controller.Content(SV(u8"scene")) == scene);
 
     REQUIRE(bed.controller.Close(SV(u8"preview")).Ok());
-    CHECK_FALSE(bed.controller.HasContent(SV(u8"preview"))); // let go
+    CHECK_FALSE(bed.controller.HasContent(SV(u8"preview"))); // released
     CHECK(bed.controller.GetLayout().FindHidden(SV(u8"preview")) != nullptr); // its place kept
     REQUIRE(bed.controller.Show(SV(u8"preview")).Ok());
     bed.Lay();
@@ -201,11 +202,11 @@ TEST_CASE("dock space: a separator dragged and a tab dragged are noted; a maximi
     CHECK(bed.controller.GetLayout().FindNode(bed.Central())->Panels[0] == SV(u8"console"));
     CHECK(bed.space->WidgetOf(bed.Central()) == central);
 
-    const core::RefPtr<Node> held(splitter); // held, so its address is not reused if it went
+    const core::RefPtr<Node> held(splitter); // held, so its address is not reused if it is released
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.Maximize(bed.Central()); }).Ok());
     CHECK(bed.space->GetChildAt(0) == central); // alone
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.Restore(l.MainSurface()); }).Ok());
-    CHECK(bed.space->GetChildAt(0) == splitter); // kept while out of sight
+    CHECK(bed.space->GetChildAt(0) == splitter); // kept while it was out of sight
     CHECK(splitter->GetPane(1) == central);
     CHECK(splitter->GetWeights()[0] == doctest::Approx(200.0f / 794.0f).epsilon(0.01));
 }
@@ -257,7 +258,7 @@ TEST_CASE("dock space: a closable panel's tab shows its close part, chosen or ho
     bed.Lay();
     CHECK(bar.GetCloseDisplay() == TabCloseDisplay::Hover);
     CHECK_FALSE(bar.GetTab(0)->GetClosePart()->IsDisplayed()); // it cannot be closed
-    CHECK(bar.GetTab(1)->GetClosePart()->IsDisplayed());       // its room kept, shown when hovered
+    CHECK(bar.GetTab(1)->GetClosePart()->IsDisplayed());       // its room is kept, and it shows when hovered
     CHECK_FALSE(bar.GetTab(1)->GetClosePart()->IsVisible());
     CHECK(bar.GetTab(2)->GetClosePart()->IsVisible()); // the chosen tab's
 
@@ -280,7 +281,7 @@ TEST_CASE("dock space: a closable panel's tab shows its close part, chosen or ho
         d.InjectMouseUp(on, MouseButton::Middle);
         bed.Lay();
     };
-    middleClick(0); // the fixed panel: nothing
+    middleClick(0); // the fixed panel: nothing happens
     CHECK(bed.StackOf(u8"fixed") != kNoDock);
     middleClick(1);
     CHECK(bed.StackOf(u8"hierarchy") == kNoDock);
@@ -307,7 +308,7 @@ TEST_CASE("dock space: content taller than the space is clipped; the split keeps
     REQUIRE(bed.space->ChildCount() >= 1u);
     auto* splitter = Cast<Splitter>(bed.space->GetChildAt(0));
     REQUIRE(splitter != nullptr);
-    CHECK(splitter->GetSize().y == doctest::Approx(600.0f)); // the space's, not 3000 and more
+    CHECK(splitter->GetSize().y == doctest::Approx(600.0f)); // the space's height, not 3000 or more
     auto* central = Cast<TabView>(bed.space->WidgetOf(bed.Central()));
     auto* bottom = Cast<TabView>(bed.space->WidgetOf(bed.StackOf(u8"console")));
     REQUIRE(central != nullptr);
@@ -339,7 +340,7 @@ TEST_CASE("dock space: a panel asks before it closes, by its tab or the controll
     CHECK(asked == 1);
     CHECK(bed.StackOf(u8"document") != kNoDock);
 
-    // Its tab's close part asks the same.
+    // The close button on its tab asks the same way.
     TabBar& bar = *Cast<TabView>(bed.space->WidgetOf(bed.Central()))->GetBar();
     REQUIRE(bar.GetTabCount() == 1);
     const Rect close = bar.GetTab(0)->GetClosePart()->GetScreenBounds();
@@ -410,7 +411,7 @@ TEST_CASE("dock space: a docked panel's title and tab classes change where it sh
 
     CHECK(bed.controller.SetTitle(SV(u8"scene"), SV(u8"Scene*")));
     CHECK(bed.controller.SetTabClasses(SV(u8"scene"), SV(u8"dirty active")));
-    CHECK(bed.space->PageOf(SV(u8"scene")) == page); // the same page, told
+    CHECK(bed.space->PageOf(SV(u8"scene")) == page); // the same page, updated
     CHECK(page->GetTab()->GetText() == SV(u8"Scene*"));
     CHECK(page->GetTab()->HasClass(SV(u8"dirty")));
     CHECK(page->GetTab()->HasClass(SV(u8"active")));
@@ -421,7 +422,7 @@ TEST_CASE("dock space: a docked panel's title and tab classes change where it sh
     CHECK_FALSE(bed.controller.SetTitle(SV(u8"nowhere"), SV(u8"Nowhere")));
     CHECK_FALSE(bed.controller.SetTabClasses(SV(u8"nowhere"), SV(u8"dirty")));
 
-    // Shown again elsewhere, it keeps them.
+    // Shown again elsewhere, it keeps its title and classes.
     REQUIRE(bed.controller.Close(SV(u8"scene")).Ok());
     REQUIRE(bed.controller.Show(SV(u8"scene")).Ok());
     bed.Lay();
@@ -477,7 +478,7 @@ TEST_CASE("dock space: the active panel is the chosen one of the stack the focus
     CHECK(bed.controller.ActivePanel() == SV(u8"side"));
     REQUIRE(heard.Size() == 3u);
 
-    REQUIRE(bed.controller.Close(SV(u8"side")).Ok()); // its stack went with it: none is active
+    REQUIRE(bed.controller.Close(SV(u8"side")).Ok()); // its stack went with it, so no panel is active
     CHECK(bed.controller.ActivePanel().IsEmpty());
     REQUIRE(heard.Size() == 4u);
     CHECK(heard[3].IsEmpty());
@@ -485,7 +486,7 @@ TEST_CASE("dock space: the active panel is the chosen one of the stack the focus
     bed.Lay();
     focusIn(u8"second");
     CHECK(bed.controller.ActivePanel() == SV(u8"second"));
-    REQUIRE(bed.controller.Close(SV(u8"second")).Ok()); // its stack's next chosen panel
+    REQUIRE(bed.controller.Close(SV(u8"second")).Ok()); // its stack's next chosen panel becomes active
     CHECK(bed.controller.ActivePanel() == SV(u8"first"));
     CHECK(heard.Back() == core::String(u8"first"));
 }

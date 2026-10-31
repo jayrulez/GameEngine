@@ -3,7 +3,7 @@
 
 // GUI - :action_manager partition
 //
-// ActionManager: owns and ticks running Actions. Ported from eepp's Scene::ActionManager
+// ActionManager: owns and ticks running Actions. Adapted from eepp's Scene::ActionManager
 // (include/eepp/scene/actionmanager.hpp). Owned by the SceneRoot; Node::RunAction forwards
 // here. Actions are RefPtr-owned; a finished action is dropped after Update.
 
@@ -12,7 +12,7 @@ module;
 
 export module foundation.gui:action_manager;
 
-import foundation.core; // RefPtr, Array, Duration, Move
+import foundation.core;
 import :action;
 
 using namespace foundation::core;
@@ -34,16 +34,19 @@ export namespace foundation::gui
             m_actions.PushBack(core::Move(action));
         }
 
-        /// How fast an action's time runs (its target's root may be paused, 0, or slowed).
+        /// Returns how fast an action's time runs for a target: 0 when its root is paused, below 1
+        /// when it is slowed.
         using TimeScale = core::Function<f32(Node& target)>;
 
-        // Ticks all actions, each by `elapsed` times its target's time scale (1 without one);
-        // drops finished ones and those whose target is gone.
-        /// An action that cannot bring its target into view, on a target out of view at the last
-        /// frame, writes quietly (E8b): its target's invalidations mark it alone, asking for no frame.
+        // Ticks all actions, each by `elapsed` times its target's time scale (1 without one), and
+        // drops finished actions and those whose target is gone.
+        /// When an action cannot bring its target into view and the target was out of view in the
+        /// last frame, the action writes quietly: its invalidations mark only the target and do not
+        /// ask for a frame.
         void Update(core::Duration elapsed, const TimeScale& scaleOf = {});
 
-        /// Whether an action is running that `matches(action, target)` takes (a root asks for its frames).
+        /// Whether any running action satisfies `matches(action, target)`. A root uses this to decide
+        /// whether it needs frames.
         template <typename Predicate>
         [[nodiscard]] bool AnyAction(Predicate&& matches) const
         {

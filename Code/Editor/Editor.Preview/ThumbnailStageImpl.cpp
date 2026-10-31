@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ThumbnailStage implementation (see ThumbnailStage.cppm). The heavy render/scene/rhi imports
-// live here behind Impl, exactly like PreviewViewportImpl.
+// ThumbnailStage implementation (see ThumbnailStage.cppm). The heavy render, scene and RHI
+// imports live here behind Impl, as in PreviewViewportImpl.
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +38,7 @@ namespace editor
         constexpr u32 kRenderSize = kTileSize * ThumbnailStage::kSupersample;
 
         // Exact integer box downscale (kSupersample x kSupersample average per output texel)
-        // over RGBA16Float source rows. A float target holds LINEAR values (the tonemap encodes
+        // over RGBA16Float source rows. A float target holds linear values (the tonemap encodes
         // for display once, wherever the target is shown), so the average is taken in linear
         // light and the result sRGB encoded to bytes; alpha is coverage and stays linear.
         void Downscale(const u8* src, u32 srcRowBytes, image::Image& out)
@@ -83,11 +83,11 @@ namespace editor
         {
             Idle,          // no job; Update polls the service
             Staging,       // generator populating the scene (Pending until resources resolve)
-            RenderPending, // staged + framed; the next Render declares the scene view
-            CopyPending,   // view declared; the graph renders at EndRendering, AFTER the frame
-                           // encoder's commands - so the readback copy must wait for the NEXT
+            RenderPending, // staged and framed; the next Render declares the scene view
+            CopyPending,   // view declared; the graph renders at EndRendering, after the frame
+                           // encoder's commands, so the readback copy waits for the next
                            // frame's encoder to be ordered behind the render
-            AwaitReadback, // copy submitted on frame `submittedIndex`; retire on ring re-visit
+            AwaitReadback, // copy submitted on frame `submittedIndex`; retired when the ring returns to it
         };
 
         runtime::IApplicationHost* host = nullptr;
@@ -95,7 +95,7 @@ namespace editor
         foundation::resource::ResourceManager* resources = nullptr;
         engine::scene::SceneSubsystem* scenes = nullptr;
         engine::render::RenderSubsystem* render = nullptr;
-        scene::SceneManager sceneManager{editor::EditorRootAllocator()}; // the stage's OWN scene group (never simulated)
+        scene::SceneManager sceneManager{editor::EditorRootAllocator()}; // the stage's own scene group (never simulated)
         scene::Scene* scene = nullptr;
 
         // GPU objects (created lazily on the first Render with a live device).
@@ -112,8 +112,8 @@ namespace editor
         ThumbnailFraming framing;
         u32 stagingFrames = 0;
         u32 submittedIndex = 0;
-        bool sawOtherIndex = false; // the ring must LEAVE the submitted slot before it retires
-        bool warnedDisabled = false; // one-shot wiring-bug warning (see Update)
+        bool sawOtherIndex = false; // the ring must leave the submitted slot before the readback retires
+        bool warnedDisabled = false; // the wiring-bug warning is given once (see Update)
 
         [[nodiscard]] bool EnsureGpuObjects()
         {
@@ -164,8 +164,8 @@ namespace editor
             return true;
         }
 
-        // Unstage + drop the job's scene (destroys a private one). Every job-end path funnels
-        // through here so a private scene can never outlive its job.
+        // Unstages and drops the job's scene, destroying a private one. Every path that ends a job
+        // goes through here, so a private scene never outlives its job.
         void ReleaseJobScene()
         {
             if (job.generator != nullptr && jobScene != nullptr)
@@ -222,7 +222,7 @@ namespace editor
         if (impl.scene == nullptr || impl.render == nullptr || impl.resources == nullptr)
         {
             // A disabled stage with queued work is a wiring bug (a null resource manager at
-            // construction stalled every job, silently, once) - say so exactly once.
+            // construction stalls every job silently), so say so once.
             if (!impl.warnedDisabled && impl.service->QueuedSceneJobs() > 0)
             {
                 impl.warnedDisabled = true;
@@ -246,8 +246,8 @@ namespace editor
             impl.jobSceneIsPrivate = job.generator->NeedsPrivateScene();
             if (impl.jobSceneIsPrivate)
             {
-                // Inactive: never manager-ticked; the stage renders and (for prewarm) ticks it
-                // by hand. The registered installer assembles the app's full manager set.
+                // Inactive, so the manager never ticks it; the stage renders it and, for prewarm,
+                // ticks it by hand. The registered installer assembles the app's full manager set.
                 impl.jobScene = impl.sceneManager.CreateScene(u8"thumbnails.job", false);
                 if (impl.jobScene == nullptr)
                 {
@@ -303,9 +303,8 @@ namespace editor
 
         if (impl.state == Impl::State::AwaitReadback)
         {
-            // Retire when the device ring has LEFT and RETURNED to the submission's slot: at
-            // that point the submission (and its copy) has provably completed, so the map
-            // cannot stall the frame.
+            // Retire when the device ring has left the submission's slot and returned to it. By
+            // then the submission and its copy have completed, so the map cannot stall the frame.
             if (frame.frameIndex != impl.submittedIndex)
             {
                 impl.sawOtherIndex = true;
@@ -357,7 +356,8 @@ namespace editor
         }
 
         // Content that is empty at t=0 (particles) asks for simulation ticks before its one
-        // render. Only ever a PRIVATE scene: sim on for the burst, off again after.
+        // render. This only happens on a private scene: simulation is on for the burst and off
+        // again after.
         if (impl.framing.prewarmSteps > 0 && impl.jobSceneIsPrivate)
         {
             impl.jobScene->SetSimulationEnabled(true);
@@ -389,7 +389,7 @@ namespace editor
         cameraOverride.camera = camera;
         cameraOverride.clearColor = Color{0.10f, 0.11f, 0.13f, 1.0f}; // linear (a render view)
 
-        // Scene documents look like themselves: their own primary camera + clear color when
+        // Scene documents look like themselves: their own primary camera and clear color when
         // one exists (RenderScene extracts both when no override is passed).
         render::ViewCamera sceneCamera;
         const bool useSceneCamera =

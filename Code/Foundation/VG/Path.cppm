@@ -3,11 +3,9 @@
 
 // Foundation::VG - :path partition.
 //
-// The path data model: commands/points, segment iteration, the immutable Path
-// (with bounds/contains/length/point-at-distance queries), the mutable
-// PathBuilder, flattened sub-paths, and the curve->polyline PathFlattener.
-// Ported from Sedulous.VG (PathCommand/PathSegment/PathIterator/Path/
-// PathBuilder/FlattenedSubPath/PathFlattener).
+// The path data model: commands and points, segment iteration, the immutable Path
+// (with bounds, contains, length and point-at-distance queries), the mutable
+// PathBuilder, flattened sub-paths, and PathFlattener (curves to polylines).
 
 module;
 #include "Core/Prelude.h"
@@ -117,7 +115,7 @@ export namespace foundation::vg
 
     namespace detail
     {
-        /// Process-wide monotonic path instance ids (VGImpl.cpp - ONE counter per process, never a
+        /// Process-wide monotonic path instance ids (VGImpl.cpp: one counter per process, never a
         /// per-module-interface static that every shared library would duplicate).
         u64 NextPathInstanceId() noexcept;
     }
@@ -135,7 +133,7 @@ export namespace foundation::vg
               m_instanceId(detail::NextPathInstanceId())
         {
         }
-        // A copy is a NEW instance (its own id); a move carries the identity with the data and
+        // A copy is a new instance (its own id); a move carries the identity with the data and
         // the moved-from path gets a fresh id so no two live paths ever share one.
         Path(const Path& other)
             : m_commands(other.m_commands), m_points(other.m_points),
@@ -170,9 +168,9 @@ export namespace foundation::vg
             return *this;
         }
 
-        /// Unique per live INSTANCE. Caches key on this, never on the Path* - after a delete the
+        /// Unique per live instance. Caches key on this, never on the Path*: after a delete the
         /// allocator can hand a new path the same address, and a pointer key would serve the dead
-        /// path's mesh (the ImageData rule, and the PathCache lesson from the Beef port).
+        /// path's mesh (ImageData follows the same rule).
         [[nodiscard]] u64 InstanceId() const noexcept { return m_instanceId; }
 
         /// The commands that define this path.
@@ -377,7 +375,7 @@ export namespace foundation::vg
                 remaining -= segLen;
             }
 
-            // Past end - return last point.
+            // Past the end: return the last point.
             if (!m_points.IsEmpty())
                 return m_points[m_points.Size() - 1];
             return Float2::Zero;

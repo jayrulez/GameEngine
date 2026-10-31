@@ -3,11 +3,12 @@
 
 // Foundation::Profiler.GUI - :scope_detail partition
 //
-// The name chosen, apart (X7 of Specs/editor-gui.md): its calls, total, mean and longest over the
-// frames chosen (the span's, when one is marked) and the lanes it ran in; what it was called from;
-// its children by name with their share of it, its own time last; and how long its calls take
-// over every frame the source holds, as a histogram whose bars holding the frames chosen's calls
-// are lit. Its longest call in the frames chosen is the one a page zooms the timeline to.
+// The chosen name on its own. It shows the name's call count, total, mean and longest time over
+// the chosen frames (or over the marked span, when there is one) and the lanes it ran in; what it
+// was called from; its children by name with their share of its time, with its self time last;
+// and a histogram of its call durations over every frame the source holds, in which the bars
+// holding calls from the chosen frames are lit. A page zooms the timeline to the name's longest
+// call in the chosen frames.
 
 module;
 #include "Core/Prelude.h"
@@ -36,15 +37,15 @@ export namespace foundation::profiler::gui
         static constexpr f32 kLineHeight = 18.0f;
         static constexpr f32 kHistogramHeight = 56.0f;
 
-        /// What it says about the name chosen.
+        /// What the detail shows about the chosen name.
         struct Summary
         {
             bool any = false;
             u64 calls = 0;
             u64 totalTicks = 0;
             u64 maxTicks = 0;
-            String lanes;               // the lanes it ran in, by name
-            Array<String> callers;      // what it was called from: "Physics.Step (Main)"
+            String lanes;               // the names of the lanes it ran in
+            Array<String> callers;      // its callers, such as "Physics.Step (Main)"
             struct Child
             {
                 String name;
@@ -52,14 +53,14 @@ export namespace foundation::profiler::gui
                 u64 ticks = 0;
                 bool self = false;
             };
-            Array<Child> children;      // by their time, the longest first; its own time last
-            Array<u32> bins;            // kBins: its calls' durations over every frame held
-            Array<u8> lit;              // kBins: 1 where a call of the frames chosen falls
+            Array<Child> children;      // by time, the longest first, with the self time last
+            Array<u32> bins;            // kBins counts: call durations over every frame held
+            Array<u8> lit;              // kBins flags: 1 where a call from the chosen frames falls
             u64 binLeast = 0;
             u64 binMost = 0;
             u64 heldCalls = 0;
             u32 heldFrames = 0;
-            u64 longestBegin = 0;       // its longest call in the frames chosen
+            u64 longestBegin = 0;       // the longest call in the chosen frames
             u64 longestEnd = 0;
         };
 
@@ -74,7 +75,8 @@ export namespace foundation::profiler::gui
             Refresh();
             return m_summary;
         }
-        /// Its longest call in the frames chosen (false: none chosen, or it did not run there).
+        /// Gets the name's longest call in the chosen frames. Returns false when no frames are
+        /// chosen or the name did not run in them.
         [[nodiscard]] bool LongestCall(u64& begin, u64& end) const
         {
             const Summary& summary = Describe();
@@ -85,7 +87,7 @@ export namespace foundation::profiler::gui
             return true;
         }
 
-        /// The parts it draws, which the sheet styles as `tag::part`.
+        /// Lists the parts it draws, which the sheet styles as `tag::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             ProfilerWidget::CollectStyleParts(out);
@@ -124,7 +126,7 @@ export namespace foundation::profiler::gui
             const ChosenName chosen = m_focus->Name();
             const StringView name = source->NameOf(chosen.name);
             const u64 frequency = source->TickFrequency();
-            // The swatch centred on the title's own line, which is taller than the others.
+            // Centre the swatch on the title's line, which is taller than the others.
             const f32 titleHeight = kLineHeight + 4.0f;
             ctx.VG().FillRoundedRect(Rectangle{box.x, y + titleHeight * 0.5f - 5.0f, 10.0f, 10.0f}, 2.0f, NameColor(name));
             DrawLabel(ctx, name, Rect{box.x + 16.0f, y, box.width - 16.0f, titleHeight}, PartTextColor(u8"title"));
@@ -224,7 +226,7 @@ export namespace foundation::profiler::gui
                 out.calls += node.calls;
                 out.totalTicks += node.totalTicks;
                 out.maxTicks = Max(out.maxTicks, node.maxTicks);
-                // The lanes it ran in, each once.
+                // Collect the lanes it ran in, each once.
                 const u32 group = Root(tree, node);
                 bool seen = false;
                 for (const u32 at : lanes)
@@ -236,7 +238,7 @@ export namespace foundation::profiler::gui
                         out.lanes += StringView(u8", ");
                     out.lanes += tree.nodes[group].groupName.AsView();
                 }
-                // What called it, each once.
+                // Collect its callers, each once.
                 const ScopeNode& parent = tree.nodes[static_cast<usize>(node.parent)];
                 const String caller = parent.group ? Format(u8"The top of {}", parent.groupName.AsView())
                                                    : Format(u8"{} ({})", source->NameOf(parent.name), tree.nodes[group].groupName.AsView());
@@ -245,7 +247,7 @@ export namespace foundation::profiler::gui
                     known = known || at.AsView() == caller.AsView();
                 if (!known)
                     out.callers.PushBack(caller);
-                // Its children by name, and its own time.
+                // Sum its children by name, and its self time.
                 u64 own = node.selfTicks;
                 for (const u32 child : node.children)
                     AddChildTime(out, source->NameOf(tree.nodes[child].name), tree.nodes[child].name, tree.nodes[child].totalTicks, false);
@@ -285,8 +287,8 @@ export namespace foundation::profiler::gui
             out.children.PushBack(core::Move(child));
         }
 
-        // Its calls' durations over every frame held; the frames chosen's calls lit; its longest
-        // call in the frames chosen.
+        // Fills the histogram of call durations over every frame held, lights the bins holding
+        // calls from the chosen frames, and finds the longest call in the chosen frames.
         void Spread(const IProfileSource& source, ChosenName chosen, Summary& out) const
         {
             struct Call

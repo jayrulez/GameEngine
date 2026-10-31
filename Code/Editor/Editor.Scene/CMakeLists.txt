@@ -1,6 +1,5 @@
-# Editor::Scene - `editor.scene`: the scene editor plugin (SceneEditorPage +
-# factory + RegisterSceneEditor). Linked by the editor EXECUTABLE only (never by editor core/app).
-# On the GUI (Documentation/Specs/editor-gui.md, 5.3).
+# Editor::Scene - `editor.scene`: the scene editor plugin (SceneEditorPage, its factory and
+# RegisterSceneEditor), on the GUI. Linked by the editor executable only (never by editor core/app).
 
 util_add_engine_library(Editor.Scene ALIAS Editor::Scene)
 target_link_libraries(Editor.Scene
@@ -16,8 +15,8 @@ target_link_libraries(Editor.Scene
         Foundation::Physics Foundation::Physics.Resource Engine::Physics Foundation::Heightfield Foundation::Terrain.Resource Foundation::Vegetation.Resource
         Engine::Navigation Foundation::Navigation.Resource Editor::Navigation
         Engine::Spline Foundation::Spline
-        Engine::GUI # the game's GUI textures, live in an editing viewport
-        Foundation::Messaging Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Viewport Editor::App # the page on the GUI
+        Engine::GUI # the game's GUI textures, shown live in an editing viewport
+        Foundation::Messaging Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Viewport Editor::App # the page's GUI
         Foundation::Audio Foundation::Audio.Resource Engine::Audio
         Foundation::Geometry Foundation::Geometry.Resource Pipeline::Geometry
         Foundation::Materials Foundation::Materials.Resource Pipeline::Materials
@@ -28,7 +27,7 @@ target_link_libraries(Editor.Scene
         Engine::Composition # the full manager set for the export's scratch scenes
         Editor::Core Editor::Camera Editor::ViewportTools Editor::PropertyAnimation Foundation::Policy
         Foundation::Mcp Foundation::Json # the scene editor's MCP tools
-        Foundation::Xml Foundation::Xml.Serialization) # the inspector's text format (its undo)
+        Foundation::Xml Foundation::Xml.Serialization) # the inspector's text format (used by its undo)
 
 target_sources(Editor.Scene
     PRIVATE

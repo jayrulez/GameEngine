@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Camera - `editor.camera`: the free-fly viewport camera, graduated out of Editor::Scene
-// into its own LEAN module (foundation-only) so every editor page lib can share it: the scene
-// pages, Editor.Physics, and PreviewViewport (editor.preview) alike. Kept separate from the heavy
-// editor.preview interface so widely-importing pages never pull the render/scene/viewport graph
-// (a GCC module-merge ICE when ScenePage imported the combined interface).
+// Editor::Camera: `editor.camera`, the free-fly viewport camera, in a lean module of its own
+// (foundation only) so every editor page library can share it: the scene pages, Editor.Physics and
+// PreviewViewport (editor.preview). It is kept out of the heavy editor.preview interface so pages
+// that import it never pull in the render, scene and viewport graph (GCC hit an internal compiler
+// error merging modules when ScenePage imported the combined interface).
 //
-// EditorCamera: the scene page's free-fly viewport camera - the samples' FlyCamera
-// (Code/Samples/Common/FlyCamera.h) adopted into the editor with editor-scale defaults.
-// WASD/QE move (Shift fast), RMB free-look, Alt+LMB turntable orbit about the focus point,
-// MMB pan, wheel dolly. Driven from a ViewportView's GATED devices so it only moves while its
-// own viewport is hovered/focused (each scene page owns one - multi-scene rule, never global).
+// EditorCamera: the scene page's free-fly viewport camera, the samples' FlyCamera
+// (Code/Samples/Common/FlyCamera.h) with editor-scale defaults. WASD and QE move (Shift for fast),
+// the right mouse button looks around, Alt with the left button orbits about the focus point, the
+// middle button pans and the wheel dollies. It is driven from a ViewportView's gated devices, so
+// it moves only while its own viewport is hovered or focused; each scene page owns one, never a
+// global one.
 
 module;
 #include "Core/Prelude.h"
@@ -25,14 +26,14 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// EditorCamera::kStraightPitch, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// EditorCamera::kStraightPitch, at namespace scope so another library can read it (MSVC does not
+    /// export a class's static constexpr member from a shared library).
     inline constexpr f32 kEditorCameraStraightPitch = 1.5707963f;
 
     struct EditorCamera
     {
         Float3 position{6.0f, 5.0f, 10.0f};
-        f32 yaw = 0.54f; // 0 => looking down -Z; defaults aim at the origin (see LookAt)
+        f32 yaw = 0.54f; // 0 looks down -Z; the defaults aim at the origin (see LookAt)
         f32 pitch = -0.41f;
         bool mouseCaptured = false;
         f32 moveSpeed = 8.0f, fastSpeed = 30.0f, lookSensitivity = 0.003f;
@@ -40,15 +41,15 @@ export namespace editor
         f32 focusDistance = 12.0f; // pivot distance ahead (Alt+LMB turntable orbit)
         f32 panSensitivity = 0.0015f;
         bool zoomedThisUpdate = false; // the last Update dollied on the wheel (the zoom readout)
-        f32 glideSeconds = 0.3f;       // a frame eases over this long (0 jumps)
+        f32 glideSeconds = 0.3f;       // framing eases over this long (0 jumps)
         f32 fovY = 1.0472f;            // the vertical field of view, radians (60 degrees)
         f32 nearZ = 0.1f, farZ = 1000.0f;
         // Orthographic: the view keeps the camera's eye, pivot and framing, and draws parallel.
         // Its height is what the field of view spans at the pivot (OrthoHeight), so zoom, frame,
         // pan and orbit work as they do in perspective and switching keeps what is in view.
         bool orthographic = false;
-        // Snapping to an axis view (SnapToAxis) turns orthographic, and orbiting away turns back:
-        // the editor's preference, set by the page.
+        // Snapping to an axis view (SnapToAxis) switches to orthographic, and orbiting away switches
+        // back. This is the editor's preference, set by the page.
         bool autoOrthographic = true;
 
         /// An orthographic view's height in world units: what the field of view spans at the
@@ -70,21 +71,21 @@ export namespace editor
         }
 
         /// How far behind the eye the view draws from: one view height under orthographic, none in
-        /// perspective. An orthographic volume starting at the eye's plane cut away, in a view
-        /// tipped down, the ground below the eye; drawing from further back along the view changes
-        /// nothing on screen but what is clipped. One view height shows that ground in the views
-        /// people tip and follows the zoom, while what stands further behind the eye stays clipped
-        /// (a wall far behind it would otherwise cover the view; user ruling 2026-10-13). The eye
-        /// itself stays put: what is measured from it (orbit, zoom, the renderer's distance fades)
-        /// is as in perspective.
+        /// perspective. In a view tipped down, an orthographic volume starting at the eye's plane
+        /// would cut away the ground below the eye; drawing from further back along the view changes
+        /// nothing on screen except what is clipped. One view height shows that ground at the usual
+        /// tilts and follows the zoom, while anything further behind the eye stays clipped (otherwise
+        /// a wall far behind it would cover the view). The eye itself stays put, so whatever is
+        /// measured from it (orbit, zoom, the renderer's distance fades) behaves as in perspective.
         [[nodiscard]] f32 DrawPullBack() const { return orthographic ? OrthoHeight() : 0.0f; }
         /// Where the view draws from: the eye, or under orthographic the point pulled back along
         /// the view behind it (the view matrix's origin; the eye stays `position`).
         [[nodiscard]] Float3 DrawEye() const { return position - Forward() * DrawPullBack(); }
-        /// The far plane from the draw eye: as far past the eye as ever.
+        /// The far plane measured from the draw eye, so it reaches as far past the eye as in
+        /// perspective.
         [[nodiscard]] f32 DrawFar() const { return farZ + DrawPullBack(); }
 
-        /// Switch between perspective and orthographic by hand (the toggle): what is in view stays.
+        /// Switch between perspective and orthographic by hand (the toggle), keeping what is in view.
         void SetOrthographic(bool on)
         {
             orthographic = on;
@@ -128,8 +129,7 @@ export namespace editor
         }
 
         /// Aim at `target` from the current position: solves yaw/pitch (no roll, so the horizon
-        /// stays level) and moves the orbit pivot there (focusDistance). Also the future
-        /// frame-selection seam.
+        /// stays level) and moves the orbit pivot there (focusDistance).
         void LookAt(Float3 target)
         {
             const Float3 delta = target - position;
@@ -146,10 +146,10 @@ export namespace editor
         }
 
         /// Frame a bounding sphere in view: place the camera at a 3/4 vantage far enough that a
-        /// sphere of `radius` about `center` fits, looking at the center. The shared "frame the
-        /// object" helper for preview viewports - each page supplies bounds for its own content
-        /// (mesh bounds, collision-outline extents, skeleton reach, ...). Matches the framing the
-        /// mesh preview uses (a slightly high 3/4 view, distance ~2.8x the radius).
+        /// sphere of `radius` about `center` fits, looking at the center. This is the shared framing
+        /// helper for preview viewports; each page supplies bounds for its own content (mesh bounds,
+        /// collision outline extents, skeleton reach). It matches the mesh preview's framing (a
+        /// slightly high 3/4 view at about 2.8 times the radius).
         void FrameBounds(Float3 center, f32 radius)
         {
             radius = Max(0.25f, radius);
@@ -191,7 +191,7 @@ export namespace editor
         /// direction, stand back far enough that the sphere fits with a margin, and put the orbit
         /// pivot on its centre, so Alt+drag orbits it afterwards. Eases there over glideSeconds
         /// when `ease` (Advance moves the glide on); any input that moves the camera stops the
-        /// glide where it is. The scene view's frame-the-selection.
+        /// glide where it is. The scene view frames the selection with this.
         void FrameSphere(Float3 center, f32 radius, f32 viewFovY, bool ease = true)
         {
             radius = Max(0.25f, radius);
@@ -234,15 +234,15 @@ export namespace editor
 
         /// Whether the last Update's mouse drags the camera (an Alt+LMB orbit, an RMB look, an MMB
         /// pan): its viewport asks for the pointer locked meanwhile (InputSurface::SetPointerLock),
-        /// so the drag never stops at the screen's edge. Not while Tab holds the mouse (already
-        /// locked by it).
+        /// so the drag never stops at the screen's edge. False while Tab holds the mouse, which
+        /// already locks it.
         [[nodiscard]] bool WantsPointerLock() const noexcept { return m_wantsLock; }
 
-        /// Force-exit Tab-capture, restoring the OS cursor. The I2 stuck-mouse bug: Update()
-        /// (the only place Tab toggles capture OFF) runs only while the viewport is
-        /// hovered/focused - but relative mode makes LOSING that state easy, wedging the OS
-        /// grab forever. The page calls this whenever the viewport is inactive or closing, so
-        /// capture structurally cannot outlive the ability to release it.
+        /// Force-exit Tab capture, restoring the OS cursor. Update() is the only place Tab turns
+        /// capture off, and it runs only while the viewport is hovered or focused; relative mode
+        /// makes losing that state easy, which would leave the OS grab stuck. The page calls this
+        /// whenever the viewport is inactive or closing, so capture cannot outlive the ability to
+        /// release it.
         void ReleaseCapture(foundation::shell::IMouse* mouse)
         {
             if (!mouseCaptured)
@@ -257,9 +257,10 @@ export namespace editor
             }
         }
 
-        // Apply this frame's input from explicit (gated) devices.
+        /// Applies this frame's input from explicit (gated) devices.
         /// `allowZoom` is false while a modal viewport tool owns the wheel (a brush resizes on
-        /// Shift + wheel): the first-consumer rule keeps that scroll from ALSO dollying the camera.
+        /// Shift and the wheel): the first consumer takes the scroll, so it does not also dolly the
+        /// camera.
         /// `kb` is null while the view has no keyboard focus: the mouse still works it (the wheel
         /// over a view that was not clicked into zooms it), the keys wait for the focus.
         void Update(foundation::shell::IKeyboard* kb, foundation::shell::IMouse* mouse, f32 dt,
@@ -281,7 +282,7 @@ export namespace editor
                 }
                 if (mouseCaptured && pressed(shell::KeyCode::Escape))
                 {
-                    ReleaseCapture(mouse); // in-flight escape hatch (I2)
+                    ReleaseCapture(mouse); // Escape releases a capture mid-flight
                 }
                 const bool alt = down(shell::KeyCode::LeftAlt) || down(shell::KeyCode::RightAlt);
                 m_wantsLock = !mouseCaptured && ((alt && mouse->IsButtonDown(shell::MouseButton::Left)) ||
@@ -323,9 +324,9 @@ export namespace editor
                     // Exponential dolly toward the orbit pivot: the step scales with the
                     // pivot distance, so zoom feels the same on a 100-unit scene and a
                     // 0.5-unit mesh, and the camera approaches but never crosses the
-                    // pivot - Alt+LMB stays a turntable at ANY zoom. (The old fixed-step
-                    // dolly clamped focusDistance at 1 and dragged the pivot along with
-                    // the camera, which turned orbit into head-turning on small meshes.)
+                    // pivot, so Alt and the left button stay a turntable orbit at any zoom.
+                    // A fixed step would have to clamp the distance and drag the pivot along,
+                    // which turns orbit into head-turning on small meshes.
                     const Float3 focus = position + Forward() * focusDistance;
                     const f32 factor = Clamp(1.0f - zoomFraction * scroll, 0.2f, 5.0f);
                     focusDistance = Max(0.05f, focusDistance * factor);
@@ -334,8 +335,8 @@ export namespace editor
                 }
             }
 
-            // WASD/QE fly ONLY while the camera owns the input - RMB held or Tab-captured
-            // (the editor convention: with RMB up, W/E/R/X belong to the gizmo shortcuts).
+            // WASD and QE fly only while the camera owns the input: the right button held, or Tab
+            // capture. With the right button up, W/E/R/X belong to the gizmo shortcuts.
             const bool flying = mouseCaptured || (mouse != nullptr &&
                                                   mouse->IsButtonDown(shell::MouseButton::Right));
             if (!flying || kb == nullptr)
@@ -379,7 +380,8 @@ export namespace editor
         }
 
     private:
-        // A turn of the mouse leaves an axis view: a snap's orthographic goes back to perspective.
+        // Turning with the mouse leaves an axis view: orthographic from a snap goes back to
+        // perspective.
         void LeaveSnapView(foundation::shell::IMouse* mouse)
         {
             if (m_orthographicFromSnap && (mouse->DeltaX() != 0.0f || mouse->DeltaY() != 0.0f))

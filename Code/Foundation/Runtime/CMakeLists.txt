@@ -1,4 +1,4 @@
-# Foundation::Runtime - the `foundation.runtime` module (SubsystemManager + Subsystems).
+# Foundation::Runtime - the `foundation.runtime` module (SubsystemManager and Subsystems).
 
 util_add_engine_library(Runtime ALIAS Foundation::Runtime)
 target_link_libraries(Runtime PUBLIC Foundation::Core Foundation::Run Foundation::Policy)

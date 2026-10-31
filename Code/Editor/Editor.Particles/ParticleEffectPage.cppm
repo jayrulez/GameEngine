@@ -3,25 +3,25 @@
 
 // Editor::Particles - the `:page` partition.
 //
-// ParticleEffectEditorPage: a particle effect on the GUI from its markup
-// (Data/Editor/ParticleEffectPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 8). The effect's
-// systems a tree (each its emitter, initializers, behaviors and sub-emitters), the live preview beside it,
-// and the grid showing the chosen system from reflection (the particle types are reflected): its
-// options, each shown where its render mode uses it, its emitter, and its modules as the grid's lists,
-// an add choosing the module's type among those deriving from the list's base, so the page names no
-// module type. A module chosen in the tree opens in place there. Curves and gradients are the
-// toolkit's editors over the particle curve types, registered with the rows. A system's
-// sub-emitters (the old page had none) are a list of its rows too: each, on its particles' births
-// or deaths, spawns into another system chosen by name, named in a line by what sets it off and
-// where it spawns ("On death into Sparks"). The tree's bar adds a
-// system and removes the chosen system (while another remains) or module. Every edit is one undo
-// step: the grid's through the reflected rows, a system added or removed the whole asset.
+// ParticleEffectEditorPage edits a particle effect on the GUI, built from its markup
+// (Data/Editor/ParticleEffectPage.xml). The effect's systems are shown as a tree, each with its
+// emitter, initializers, behaviors and sub-emitters, and the live preview sits beside it. The grid
+// shows the chosen system through reflection: its options (each shown only where its render mode
+// uses it), its emitter, and its modules as lists. Adding to a list offers the types that derive
+// from the list's base, so the page names no module type. A module chosen in the tree opens in place
+// in the grid. Curves and gradients use the toolkit's editors over the particle curve types,
+// registered with the rows. A system's sub-emitters are a list too: each one spawns into another
+// system, chosen by name, when its particles are born or die, and is labelled by its trigger and
+// target ("On death into Sparks"). The tree's bar adds a system and removes the chosen module, or
+// the chosen system while another remains. Every edit is one undo step: grid edits go through the
+// reflected rows, and adding or removing a system records the whole asset.
 //
-// The preview simulates the authored effect itself, so an edit shows at once; when the modules or the
-// systems change it starts again over them, and when what they draw with changes (a texture, a mesh,
-// a material) it binds them again. Its transport plays, pauses and clears it and never writes the
-// effect: the old page's Stop and Play set every system emitting (a sub-emitter's child too, which
-// emits only when spawned) and so changed what was saved. Its speed is the page's alone.
+// The preview simulates the authored effect itself, so an edit shows at once. When the modules or
+// systems change it restarts over them, and when what they draw with changes (a texture, a mesh, a
+// material) it binds them again. Its transport plays, pauses and clears the preview and never writes
+// the effect, so playing cannot change what is saved (setting every system emitting would also start
+// a sub-emitter's child, which should emit only when spawned). The playback speed belongs to the
+// page and is not saved.
 
 module;
 #include "Core/Prelude.h"
@@ -47,7 +47,7 @@ export namespace editor
 {
     namespace particles = foundation::particles;
 
-    /// A row of the page's tree: what it stands for.
+    /// What a row of the page's tree stands for.
     enum class ParticleRowKind : u8
     {
         System,
@@ -73,9 +73,10 @@ export namespace editor
     {
     public:
         static constexpr StringView kPath = u8"Editor/ParticleEffectPage.xml";
-        /// The grid's section the chosen system's rows are in: its paths are "system/" and the system's own.
+        /// The grid section that holds the chosen system's rows. Their paths are "system/" followed by
+        /// the path within the system.
         static constexpr StringView kSystemSection = u8"system";
-        /// The system's own path of a grid row's ("system/emitter.mode" is "emitter.mode").
+        /// A grid row's path within the system ("system/emitter.mode" gives "emitter.mode").
         [[nodiscard]] static StringView SystemPath(StringView gridPath);
 
         ParticleEffectEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
@@ -93,26 +94,28 @@ export namespace editor
         void Stop() override;
         void Restart() override;
 
-        /// The system the grid shows (-1: none, an empty effect).
+        /// The system the grid shows, or -1 when the effect has none.
         [[nodiscard]] i32 ChosenSystem() const noexcept { return m_system; }
-        /// What the tree has chosen: its system shown, and the place it names opened in the grid.
+        /// Chooses a tree row: shows its system and opens the place the row names in the grid.
         void Choose(const ParticleTreeRow& row);
-        /// A system added after the others (the new asset's default one), chosen.
+        /// Adds a system after the others (the default one a new asset starts with) and chooses it.
         void AddSystem();
-        /// The tree's chosen row taken out: a module, or a system while another remains.
+        /// Removes the tree's chosen row: a module, or a system while another remains.
         bool RemoveChosen();
-        /// A system's name, one undo step (its tree row renamed in place, or its Name row).
+        /// Renames a system as one undo step, from its tree row renamed in place or from its Name row.
         bool RenameSystem(i32 system, StringView name);
-        /// Its tree row's name to type (F2; Rename on its menu).
+        /// Starts editing the name in the system's tree row (F2, or Rename on its menu).
         bool BeginRename(i32 system);
-        /// What the Initializers' or Behaviors' folder adds, by type name.
+        /// The module type names the Initializers or Behaviors folder can add.
         [[nodiscard]] Array<String> ModuleTypes(ParticleRowKind folder);
-        /// A module of `type` added at the end of `folder`'s list, chosen; one step.
+        /// Adds a module of `type` at the end of `folder`'s list and chooses it, as one undo step.
         bool AddModule(const ParticleTreeRow& folder, StringView type);
-        /// A module, or a sub-emitter link, moved `by` places in its list, still chosen; one step.
+        /// Moves a module or a sub-emitter link `by` places in its list and keeps it chosen, as one
+        /// undo step.
         bool MoveModule(const ParticleTreeRow& row, i32 by);
-        /// The tree row's menu at `at` over `owner`: a system's Add System, Rename and Delete; a
-        /// folder's modules to add by type; a module's Move Up, Move Down and Delete.
+        /// Opens the tree row's menu at `at` over `owner`. A system offers Add System, Rename and
+        /// Delete; a folder offers the module types it can add; a module offers Move Up, Move Down
+        /// and Delete.
         void ShowRowMenu(const ParticleTreeRow& row, foundation::gui::Node& owner, Float2 at);
         [[nodiscard]] foundation::gui::Menu* RowMenu() const noexcept { return m_rowMenu && m_rowMenu->IsOpen() ? m_rowMenu.Get() : nullptr; }
 
@@ -131,8 +134,8 @@ export namespace editor
         void BindSystem();
         void ShowTree();
         void ShowFacts();
-        /// The preview follows the effect: started again when its modules or systems changed, what
-        /// they draw with bound again when that changed.
+        /// Keeps the preview in step with the effect: restarts it when the modules or systems change,
+        /// and binds what they draw with again when that changes.
         void FollowEffect();
         void Changed();
 
@@ -147,11 +150,11 @@ export namespace editor
         app::XmlPropertyTextFormat m_format;
         UniquePtr<foundation::gui::TreeModel> m_model;
         foundation::gui::TreeView* m_tree = nullptr;
-        Array<ParticleTreeRow> m_rows; // the tree's, by node id
+        Array<ParticleTreeRow> m_rows; // the tree's rows, by node id
         i32 m_system = -1;
         ParticleTreeRow m_chosen;
-        bool m_showing = false; // choosing from code: not the user's
-        RefPtr<foundation::gui::Menu> m_rowMenu; // a tree row's
+        bool m_showing = false; // set while the page rebuilds the tree, so its selection is not the user's
+        RefPtr<foundation::gui::Menu> m_rowMenu; // a tree row's context menu
 
         UniquePtr<app::PreviewPane> m_pane;
         foundation::scene::EntityHandle m_emitter;
@@ -175,6 +178,6 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The particle effect page (asking for its services when it is made).
+    /// Registers the particle effect page, which asks for its services when it is made.
     void RegisterParticleEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

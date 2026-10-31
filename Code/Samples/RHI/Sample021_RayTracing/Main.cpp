@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample021 -- Ray Tracing (TraceRays). Ported from Sedulous Sample021_RayTracing.
+/// Sample021 -- Ray Tracing (TraceRays).
 /// Demonstrates hardware ray tracing: builds a BLAS/TLAS for a single triangle,
 /// dispatches rays via TraceRays, and copies the RT output to the swap chain.
 
@@ -162,7 +162,7 @@ foundation::core::Status RayTracingSample::OnInit()
     if (m_device->CreateFence(0, m_fence) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // ---- Create RT output texture (storage + copy source) ----
+    // ---- Create RT output texture (storage and copy source) ----
     {
         rhi::TextureDesc td{};
         td.dimension = rhi::TextureDimension::Texture2D;
@@ -337,9 +337,9 @@ foundation::core::Status RayTracingSample::OnInit()
 
     // ---- Create RT bind group layout and bind group ----
     {
-        // binding 0 (u0): RWTexture2D - storage texture, read-write
-        // binding 0 (t0): RaytracingAccelerationStructure - TLAS
-        // Both use register 0 in different HLSL spaces (u vs t),
+        // binding 0 (u0): RWTexture2D, the storage texture, read-write
+        // binding 0 (t0): RaytracingAccelerationStructure, the TLAS
+        // Both use register 0 in different HLSL register classes (u and t),
         // mapped to different Vulkan bindings via shifts (UAV=2000, SRV=1000).
         rhi::BindGroupLayoutEntry layoutEntries[2]{};
 
@@ -363,7 +363,7 @@ foundation::core::Status RayTracingSample::OnInit()
             foundation::core::ErrorCode::Ok)
             return foundation::core::ErrorCode::Unknown;
 
-        // Create bind group with output texture + TLAS.
+        // Create bind group with the output texture and TLAS.
         rhi::BindGroupEntry bgEntries[2]{};
         bgEntries[0] = rhi::BindGroupEntry::TextureEntry(m_outputTextureView);
         bgEntries[1] = rhi::BindGroupEntry::AccelStructEntry(m_tlas);
@@ -387,7 +387,7 @@ foundation::core::Status RayTracingSample::OnInit()
             foundation::core::ErrorCode::Ok)
             return foundation::core::ErrorCode::Unknown;
 
-        // 3 stages: RayGen, ClosestHit, Miss - all from the same shader module.
+        // 3 stages: RayGen, ClosestHit, Miss, all from the same shader module.
         rhi::ProgrammableStage stages[3]{};
         stages[0] = {m_rtShaderModule, u8"RayGen", rhi::ShaderStage::RayGen};
         stages[1] = {m_rtShaderModule, u8"ClosestHit", rhi::ShaderStage::ClosestHit};
@@ -585,7 +585,7 @@ void RayTracingSample::OnResize(foundation::core::u32 w, foundation::core::u32 h
     tvd.label = u8"RTOutputView";
     m_device->CreateTextureView(m_outputTexture, tvd, m_outputTextureView);
 
-    // Recreate bind group with new texture view + same TLAS.
+    // Recreate bind group with the new texture view and the same TLAS.
     rhi::BindGroupEntry bgEntries[2]{};
     bgEntries[0] = rhi::BindGroupEntry::TextureEntry(m_outputTextureView);
     bgEntries[1] = rhi::BindGroupEntry::AccelStructEntry(m_tlas);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PaperKid's scene/prefab XML, built from the RUNNING editor's schema (component_schema): every
+"""PaperKid's scene/prefab XML, built from the running editor's schema (component_schema): every
 record starts from the schema's defaults and takes only the fields given, so nothing here is
 hand-kept against an engine build."""
 import json, os, subprocess, sys, uuid
@@ -11,7 +11,7 @@ _schemas = {}
 
 
 sys.path.insert(0, HERE)
-import mcp as _client  # the scratch MCP client (mcp.py), called in-process: scenes outgrow argv
+import mcp as _client  # the MCP client (mcp.py), called in-process: scenes outgrow argv
 
 
 def mcp(tool, args):
@@ -185,8 +185,8 @@ class Doc:
 
 def root_motion_entity(prefab, target):
     """An instance override (componentOps op 0, the editor's form): the model prefab's clip animator
-    moves `target` (the gameplay root it hangs under) by its clips' root motion (root-motion.md P2:
-    rootMotion Entity, rootMotionTarget), its other fields as the prefab has them."""
+    moves `target` (the gameplay root it hangs under) by its clips' root motion (rootMotion
+    Entity, rootMotionTarget), its other fields as the prefab has them."""
     import xml.etree.ElementTree as ET
     root = ET.fromstring(mcp("prefab_read", {"guid": prefab})["xml"])
     current = schema("skeletal_animation")["dataVersions"][0]

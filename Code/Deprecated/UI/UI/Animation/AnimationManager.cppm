@@ -4,8 +4,7 @@
 // UI - :animation_manager partition
 //
 // Manages active animations. Owned by UIContext (a by-value member) and ticked each frame. Owns its
-// animations (Beef `List<Animation> ~ DeleteContainerAndItems` -> Array<UniquePtr<Animation>>; RAII, no
-// manual delete). Ported from Sedulous.UI/src/Animation/AnimationManager.bf. It touches no View methods
+// animations through UniquePtrs. It touches no View methods
 // (CancelForView only pointer-compares Target), so View is forward-declared and no impl unit is needed.
 
 module;

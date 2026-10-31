@@ -4,27 +4,28 @@
 #pragma pack_matrix(row_major)
 // variants: HOLES
 // HOLES changes nothing in this stage: the variant exists so a holed chunk's prepass and colour
-// draws share ONE vertex module (bit-identical clip positions), as the unholed ones do.
+// draws share one vertex module (bit-identical clip positions), as the unholed ones do.
 
-// Terrain chunk VS. ONE 65x65 grid (+ a skirt copy) is drawn for every chunk; this shader places each
-// grid vertex in the WORLD (per-chunk OriginXZ + SizeXZ, then ChunkToWorld) and lifts it to the sampled
-// height, fetched exactly from the R16Uint height texture via an integer Load. Positions/normals are
-// world-space (the CSM cascade matrices are world-space, and the PS shadow-samples worldPos). The
-// surface normal comes from central differences on the height texture. Emits current + previous clip
-// for the GBuffer motion vector, and worldPos for the PS's shadow + lighting.
+// Terrain chunk vertex stage. One 65x65 grid (and a skirt copy) is drawn for every chunk; this
+// shader places each grid vertex in the world (per-chunk OriginXZ and SizeXZ, then ChunkToWorld)
+// and lifts it to the sampled height, fetched exactly from the R16Uint height texture with an
+// integer Load. Positions and normals are world-space (the CSM cascade matrices are world-space,
+// and the pixel stage shadow-samples worldPos). The surface normal comes from central differences
+// on the height texture. Emits the current and previous clip positions for the GBuffer motion
+// vector, and worldPos for the pixel stage's shadow and lighting.
 
 // The colour pass's view: this stage declares its first four members, by the names terrain.ps.hlsl
 // gives the whole block (one C++ struct, GpuTerrainView, fills the shared slot).
 cbuffer TerrainView : register(b0, space0) {
     float4x4 ChunkToWorld;   // heightfield-local -> world
     float4x4 ViewProj;       // world -> clip (camera)
-    float4x4 View;           // world -> view (GBuffer normal + shadow view-depth)
+    float4x4 View;           // world -> view (GBuffer normal and shadow view-depth)
     float4x4 PrevViewProj;   // world -> clip, previous frame (motion vectors)
     // The rest of the block (terrain.ps.hlsl declares it whole) is read by the pixel stage only.
 };
 
 cbuffer TerrainChunk : register(b0, space1) {
-    float2 OriginXZ;    // world XZ of the chunk's grid origin (pre-ChunkToWorld local frame)
+    float2 OriginXZ;    // XZ of the chunk's grid origin in the local frame (before ChunkToWorld)
     float2 SizeXZ;      // world XZ span of the chunk (kChunkQuads quads)
     float2 TexelBase;   // height-texture texel coord of the chunk origin (gridX0, gridZ0)
     float2 TexelSpan;   // texels spanned across the chunk (= kChunkQuads)
@@ -44,7 +45,7 @@ struct VSOut {
     float4 curClip  : TEXCOORD2;
     float4 prevClip : TEXCOORD3;
     float3 worldPos : TEXCOORD4;
-    float2 localXZ  : TEXCOORD5; // terrain-LOCAL XZ (pre-ChunkToWorld) for albedo tiling
+    float2 localXZ  : TEXCOORD5; // terrain-local XZ (before ChunkToWorld) for albedo tiling
     float2 splatUV  : TEXCOORD6; // 0..1 across the terrain footprint (splatmap lookup)
 };
 

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Splatmap thumbnail generator: the worker half runs headless - a raster with each slot
-// saturated in its own quadrant must color the quadrants with the four distinct slot hues.
+// Splatmap thumbnail generator: the worker half runs headless. A raster with each slot saturated
+// in its own quadrant colors the quadrants with the four distinct slot hues.
 
 #include <doctest/doctest.h>
 

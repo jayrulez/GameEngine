@@ -3,16 +3,16 @@
 
 // UI - :theme_palette partition
 //
-// Seed colors for a theme; controls + theme builders derive consistent state variants from these.
-// Ported from Sedulous.UI/src/Styling/ThemePalette.bf. Byte colors -> float (v/255); the default
-// member values ARE the Dark palette (Dark() returns the default).
+// Seed colors for a theme; controls and theme builders derive consistent state variants from these.
+// Colors are written as bytes divided by 255. The default member values are the Dark palette
+// (Dark() returns the default).
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:theme_palette;
 
-import foundation.core; // Color
+import foundation.core;
 
 using namespace foundation::core;
 
@@ -51,7 +51,7 @@ export namespace foundation::ui
         [[nodiscard]] static ThemePalette Dark() noexcept { return ThemePalette{}; }
 
         /// Warm "Graphite & Orange" dark palette: warm-neutral charcoal surfaces with an orange accent.
-        /// A crafted, distinctive alternative to the cool blue-grey Dark() default (used by the editor).
+        /// The editor's alternative to the cool blue-grey Dark() default.
         [[nodiscard]] static ThemePalette GraphiteOrange() noexcept
         {
             ThemePalette p;

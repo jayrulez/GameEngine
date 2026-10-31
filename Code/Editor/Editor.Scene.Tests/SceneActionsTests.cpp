@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the scene editor's actions over a headless scene page beside a page
-// that is not one: every action disabled off a scene page; simulate start / pause / stop with
-// their enabled and checked states; the markers toggle; the gizmo toggles disabled without a
-// gizmo; the entity actions over the selection's primary (create, create child, duplicate,
-// delete, copy and paste through the editor's clipboard), locked while simulating; the prefab
-// flows and the instance actions reaching the page; the hierarchy's menu items from the same
-// declarations.
+// Editor::Scene tests: the scene editor's actions over a headless scene page and over a page that
+// is not a scene page. Every action is disabled off a scene page. Covered: simulate start, pause
+// and stop with their enabled and checked states; the markers toggle; the gizmo toggles, disabled
+// without a gizmo; the entity actions over the selection's primary (create, create child,
+// duplicate, delete, copy and paste through the editor's clipboard), locked while simulating; the
+// prefab flows and instance actions reaching the page; and the hierarchy's menu items built from
+// the same declarations.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -149,7 +149,7 @@ TEST_CASE("scene-actions: registered once, disabled off a scene page; simulate, 
     EditorActionRegistry& actions = context.Actions();
     REQUIRE(actions.Find(kSimulateStart) != nullptr);
     CHECK(actions.Find(kSimulateStart)->menuPath == u8"Scene/Simulate/Start");
-    CHECK(actions.Find(kSimulateStart)->label == u8"Simulate"); // Play is the Game tab's
+    CHECK(actions.Find(kSimulateStart)->label == u8"Simulate"); // Play belongs to the Game tab
     CHECK(actions.Find(kGizmoTranslate)->kind == EditorActionKind::Toggle);
     CHECK(actions.Shortcut(kGizmoTranslate).Keys() == String(u8"w"));
     CHECK(actions.Shortcut(kEntityDelete).Keys() == String(u8"delete"));
@@ -221,8 +221,8 @@ TEST_CASE("scene-actions: registered once, disabled off a scene page; simulate, 
     CHECK(actions.IsChecked(kGizmoVertexSnap, page));
     CHECK(actions.Execute(kGizmoVertexSnap, page).IsOk());
     CHECK_FALSE(gizmos.VertexSnapMode());
-    // While the camera owns the input (a fly in progress) W/E/R are its keys: the mode
-    // actions refuse and leave the mode alone; the space toggle is unaffected.
+    // While the camera owns the input (a fly in progress), W, E and R are its keys: the mode
+    // actions refuse and leave the mode alone. The space toggle is unaffected.
     page->cameraOwnsInput = true;
     CHECK_FALSE(actions.IsEnabled(kGizmoTranslate, page));
     CHECK(actions.Execute(kGizmoTranslate, page).Code() == ErrorCode::NotSupported);
@@ -273,7 +273,7 @@ TEST_CASE("scene-actions: the entity actions act on the selection's primary, loc
     CHECK(actions.Execute(kEntityDuplicate, page).IsOk());
     CHECK(edit.Scene().EntityCount() == 4u);
 
-    // Copy and paste ride the editor's clipboard: paste at root and as a child.
+    // Copy and paste go through the editor's clipboard: paste at the root and as a child.
     CHECK_FALSE(actions.IsEnabled(kEntityPaste, page)); // nothing on the clipboard yet
     edit.EntitySelection().Set(child);
     CHECK(actions.Execute(kEntityCopy, page).IsOk());
@@ -295,14 +295,14 @@ TEST_CASE("scene-actions: the entity actions act on the selection's primary, loc
     CHECK(actions.Execute(kEntitySpawnPrefab, page).IsOk());
     CHECK(page->spawnParent.IsNil());
     CHECK(page->spawns == 2u);
-    // A plain entity is no prefab instance member: the instance actions stay off.
+    // A plain entity is not a member of a prefab instance, so the instance actions stay off.
     CHECK_FALSE(actions.IsEnabled(kPrefabApply, page));
     CHECK_FALSE(actions.IsEnabled(kPrefabRevert, page));
 
     // Delete removes the primary's subtree.
     edit.EntitySelection().Set(root);
     CHECK(actions.Execute(kEntityDelete, page).IsOk());
-    CHECK(edit.Scene().EntityCount() == 3u); // the root and its two children went
+    CHECK(edit.Scene().EntityCount() == 3u); // the root and its two children are gone
 
     // Simulating locks every edit: the entity actions are off, the simulate ones on.
     CHECK(actions.Execute(kSimulateStart, page).IsOk());
@@ -342,7 +342,7 @@ TEST_CASE("scene-actions: F frames the selection, eased, on a page with a viewpo
     auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
         DefaultAllocator().New<HeadlessScenePage>(u8"Bistro"), DefaultAllocator())));
 
-    // No viewport, or nothing selected: nothing to frame.
+    // With no viewport, or nothing selected, there is nothing to frame.
     CHECK_FALSE(actions.IsEnabled(kFrameSelection, page));
     page->hasViewport = true;
     CHECK_FALSE(actions.IsEnabled(kFrameSelection, page));
@@ -384,7 +384,7 @@ TEST_CASE("scene-actions: Set as Project Thumbnail asks the page for its clean t
         DefaultAllocator().New<HeadlessScenePage>(u8"Level1"), DefaultAllocator())));
     page->hasViewport = true;
 
-    // No project: no launcher to show the picture.
+    // With no project there is no launcher to show the picture.
     CHECK_FALSE(actions.IsEnabled(kSetProjectThumbnail, page));
 
     // With one, the page takes the capture (the scene without the editor's overlays), not a

@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of CommandPool.
-/// Ported from Sedulous.RHI.Vulkan/VulkanCommandPool.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -85,7 +84,7 @@ export namespace foundation::rhi::vk
 
         // ---- render bundles (secondary command buffers) ----
 
-        // Allocate (or recycle) a SECONDARY command buffer for a render bundle encoder.
+        // Allocate (or recycle) a secondary command buffer for a render bundle encoder.
         [[nodiscard]] VkCommandBuffer acquireSecondary()
         {
             VkCommandBuffer cb = VK_NULL_HANDLE;

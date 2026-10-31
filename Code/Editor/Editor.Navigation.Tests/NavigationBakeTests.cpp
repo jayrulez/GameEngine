@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor navigation bake: a scene with a static ground body + a zone -> collect the in-zone static
-// geometry in zone-local space -> Recast bake -> write the NavigationZoneAsset sidecar. The written blob loads
-// back into a NavigationMesh and paths, proving the whole author-side chain end to end (headless).
+// Editor navigation bake: a scene with a static ground body and a zone; collect the in-zone static
+// geometry in zone-local space, run the Recast bake and write the NavigationZoneAsset sidecar. The
+// written blob loads back into a NavigationMesh and paths, covering the whole author-side chain end
+// to end (headless).
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -138,7 +139,8 @@ namespace
         return terrain;
     }
 
-    // Scene + zone + one terrain entity; returns the baked navmesh blob (empty = bake failed).
+    // Scene, zone and one terrain entity; returns the baked navmesh blob (empty when the bake
+    // failed).
     Array<byte> BakeTerrainZone(RefPtr<foundation::terrain::TerrainResource> terrain,
                                 Float3 zoneExtents, usize& outTriangles)
     {
@@ -184,7 +186,7 @@ TEST_CASE("editor.navigation: bake collects scene geometry and writes a loadable
         db.RootGroup()->CreateInstance(u8"zone", pipeline::NavigationZoneAsset::StaticType());
     REQUIRE(assetInstance != nullptr);
 
-    // Scene: a static ground slab at the origin (its top at y 0) + a zone entity that covers it.
+    // Scene: a static ground slab at the origin (its top at y 0) and a zone entity that covers it.
     scene::Scene sceneObj(DefaultAllocator(), u8"bake");
     engine::navigation::AddNavigationSceneManagers(sceneObj);
     sceneObj.AddSystem<engine::physics::RigidBodyComponentManager>();
@@ -234,8 +236,8 @@ TEST_CASE("editor.navigation: bake collects scene geometry and writes a loadable
 
 TEST_CASE("editor.navigation: bake succeeds when the zone shares a SCALED entity with its ground")
 {
-    // Regression: authoring a nav zone directly on the ground entity, where that entity is scaled
-    // up (e.g. a unit plane scaled to 20x20). The bake frame must be rigid - otherwise
+    // A nav zone authored directly on the ground entity, where that entity is scaled up (for
+    // example a unit plane scaled to 20x20). The bake frame must be rigid: otherwise
     // Inverse(zoneWorld) cancels the entity's scale, hands Recast a 1x1 plane, and the agent-radius
     // erosion wipes it ("No walkable geometry inside the zone"). With RigidPart the geometry keeps
     // its true world size and bakes.
@@ -252,7 +254,7 @@ TEST_CASE("editor.navigation: bake succeeds when the zone shares a SCALED entity
     engine::navigation::AddNavigationSceneManagers(sceneObj);
     sceneObj.AddSystem<engine::physics::RigidBodyComponentManager>();
 
-    // ONE entity carries both the ground slab and the zone, scaled up 20x in X/Z (a primitive
+    // One entity carries both the ground slab and the zone, scaled up 20x in X and Z (a primitive
     // body keeps its world size, as physics builds it; the frame must not shrink it).
     scene::EntityHandle entity = AddBody(sceneObj, u8"ground_zone", Float3{0, 0, 0},
                                          Float3{10, 0.5f, 10}, foundation::physics::MotionKind::Static);
@@ -288,9 +290,9 @@ TEST_CASE("editor.navigation: terrain contributes walkable surface to the bake")
 
 TEST_CASE("editor.navigation: a terrain hole is no walkable surface - a strip across the zone blocks the path")
 {
-    // The terrain holes rule (Specs/terrain-holes.md): a stride block with a cut sample is left
-    // out of the bake, so the navmesh opens there. A strip of cut samples across the whole
-    // zone leaves the agent no way from one side to the other.
+    // The terrain holes rule: a stride block with a cut sample is left out of the bake, so the
+    // navmesh opens there. A strip of cut samples across the whole zone leaves the agent no way
+    // from one side to the other.
     RefPtr<foundation::terrain::TerrainResource> terrain =
         MakeTerrain(0.0f, 10.0f, 32.0f, [](i32, i32) { return 2.0f; });
     usize solidTriangles = 0;
@@ -334,7 +336,7 @@ TEST_CASE("editor.navigation: an agent paths across sloped terrain")
 
 TEST_CASE("editor.navigation: a too-steep terrain wall splits the navmesh")
 {
-    // A cliff across the middle: ~24 units of rise over one cell (~88 degrees) - far past the
+    // A cliff across the middle: ~24 units of rise over one cell (~88 degrees), far past the
     // walkable-slope filter, so the two plateaus must not connect.
     usize triangles = 0;
     Array<byte> blob = BakeTerrainZone(
@@ -349,10 +351,10 @@ TEST_CASE("editor.navigation: a too-steep terrain wall splits the navmesh")
                      Float3{-3, 1, 6}));
 }
 
-// The regression this source rule exists for: the bake read every render mesh, so a car or a
-// walker standing in a zone baked a hole in the road under itself (PaperKid, 2026-10-02). Only
-// static, solid bodies are level geometry: dynamic and kinematic bodies, triggers and bare render
-// meshes across the floor leave the path open; a static wall in the same place cuts it.
+// Reading render meshes would let a car or a walker standing in a zone bake a hole in the road
+// under itself, so only static, solid bodies are level geometry: dynamic and kinematic bodies,
+// triggers and bare render meshes across the floor leave the path open, and a static wall in the
+// same place cuts it.
 TEST_CASE("editor.navigation: only static, solid bodies are baked; what moves and bare meshes are not")
 {
     const auto bake = [](bool staticWall, usize& triangles)
@@ -393,9 +395,9 @@ TEST_CASE("editor.navigation: only static, solid bodies are baked; what moves an
     CHECK_FALSE(PathAcross(Span<const byte>{walled.Data(), walled.Size()}, Float3{-8, 0, 0}, Float3{8, 0, 0}));
 }
 
-// A level's ground is often a static plane as wide as physics allows (PaperKid's: 2000 m). Its
-// triangles reach far past the zone, and the bake once sized the navmesh grid from them: a 2000 m
-// grid that did not load at runtime. The zone's box bounds the bake.
+// A level's ground is often a static plane as wide as physics allows (2000 m, for example). Its
+// triangles reach far past the zone, and sizing the navmesh grid from them gives a 2000 m grid
+// that does not load at runtime, so the zone's box bounds the bake.
 TEST_CASE("editor.navigation: a ground plane wider than the zone bakes to the zone's box")
 {
     pipeline::RegisterNavigationZoneAsset();

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the status bar (T0 of Specs/gui-lab-evolution-3.md): items by id in a start and an
-// end zone, in their order; a message held until replaced or for its seconds on the GUI's clock;
-// items with a title hidden and shown from the bar's menu, the application told; markup.
+// GUI.Toolkit - the status bar. Items are kept by id in a start zone and an end zone, in their
+// order. A message stays until it is replaced, or for its seconds on the GUI's clock. Items with a
+// title are hidden and shown from the bar's menu, and the application is told. Also markup.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -33,7 +33,7 @@ namespace
             });
             root->AddChild(bar.Get());
         }
-        // An item of a width of its own.
+        // Makes an item with a fixed width.
         core::RefPtr<StatusItem> Item(const char8_t* id, StatusZone zone, core::i32 order = 0, const char8_t* title = u8"")
         {
             auto item = core::MakeRef<StatusItem>(core::DefaultAllocator());
@@ -101,7 +101,8 @@ TEST_CASE("status bar: a message holds until replaced, or for its seconds on the
     CHECK(bed.bar->GetMessage().Size() == 0u);
     CHECK_FALSE(bed.bar->GetMessagePart()->IsDisplayed());
 
-    // A timed message replaced by one that holds: the first's time ends nothing.
+    // A timed message replaced by one that stays: when the first one's time runs out, nothing is
+    // cleared.
     bed.bar->ShowMessage(SV(u8"Building"), 1.0f);
     bed.Frame();
     bed.bar->ShowMessage(SV(u8"Ready"));
@@ -117,7 +118,7 @@ TEST_CASE("status bar: its menu lists the items with a title; picking one hides 
     Bed bed;
     (void)bed.Item(u8"branch", StatusZone::Start, 0, u8"Branch");
     (void)bed.Item(u8"fps", StatusZone::End, 0, u8"Frame rate");
-    (void)bed.Item(u8"fixed", StatusZone::End); // no title: not in the menu
+    (void)bed.Item(u8"fixed", StatusZone::End); // no title, so not in the menu
     core::Array<core::String> heard(core::DefaultAllocator());
     bed.bar->SetOnItemShownChanged([&](core::StringView id, bool shown)
                                    { heard.PushBack(core::Format(u8"{}={}", id, shown ? u8"shown" : u8"hidden")); });
@@ -149,7 +150,7 @@ TEST_CASE("status bar: its menu lists the items with a title; picking one hides 
     CHECK(bed.bar->SetItemShown(SV(u8"fps"), true));
     CHECK(bed.bar->IsItemShown(SV(u8"fps")));
     CHECK(heard.Size() == 2u);
-    CHECK(bed.bar->SetItemShown(SV(u8"fps"), true)); // as it is: nothing heard
+    CHECK(bed.bar->SetItemShown(SV(u8"fps"), true)); // already shown, so no change is reported
     CHECK(heard.Size() == 2u);
     CHECK_FALSE(bed.bar->SetItemShown(SV(u8"none"), false));
 }

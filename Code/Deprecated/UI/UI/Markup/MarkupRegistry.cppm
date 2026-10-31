@@ -3,14 +3,12 @@
 
 // UI - :markup_registry partition
 //
-// Maps XML element names to View factories and property/layout-param setters (registration-based, not
-// reflection). Ported from Sedulous.UI/src/Markup/MarkupRegistry.bf. Divergences: Beef `delegate View()`
-// / `delegate void(View, StringView)` -> plain function pointers (the built-in factories/setters capture
-// nothing; a captureless lambda converts to a fn-ptr); Beef nested `Dictionary<String, Registration>`
-// with an inner Dictionary -> flat HashMaps keyed by "element\x1fname" (avoids nested-container copies);
-// the static tables -> function-local statics (no static-init-order issues); Beef `as X` -> Cast<X>;
-// float.Parse -> core::ParseFloat. Layout attributes write the view's LayoutStyle (one vocabulary,
-// every element; see LayoutAttributeNames) - no per-parent param factories.
+// Maps XML element names to View factories and property setters. It is registration-based, not
+// reflection. Factories and setters are plain function pointers, since the built-in ones capture
+// nothing. Properties live in flat HashMaps keyed by "element\x1fname", which avoids nested
+// containers, and the tables are function-local statics, which avoids static-init-order issues.
+// Layout attributes write the view's LayoutStyle and are the same on every element (see
+// LayoutAttributeNames), so there are no per-parent layout-param factories.
 
 module;
 #include "Core/Prelude.h"
@@ -69,8 +67,8 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::ui
 {
-    /// Maps XML element names to View factories and property setters. Registration-based (explicit and
-    /// debuggable) - used by MarkupLoader to create views and set attributes from .sml files.
+    /// Maps XML element names to View factories and property setters. Registration is explicit and
+    /// debuggable. MarkupLoader uses it to create views and set attributes from .sml files.
     struct MarkupRegistry
     {
         using ViewFactory = RefPtr<View> (*)(IAllocator&);
@@ -113,7 +111,7 @@ export namespace foundation::ui
             return false;
         }
 
-        // === Layout attributes (the LayoutStyle vocabulary; the same on EVERY element) ===
+        // === Layout attributes (the LayoutStyle vocabulary, the same on every element) ===
 
         /// The attribute names that write a view's LayoutStyle. One table feeds the loader,
         /// the completion vocabulary and the tests, so they cannot drift.
@@ -354,7 +352,7 @@ export namespace foundation::ui
         }
         // === Value parsing helpers ===
 
-        /// Parse a SizeSpec from markup: "wrap", "match", or a length - "240", "240px", "16dp",
+        /// Parse a SizeSpec from markup: "wrap", "match", or a length such as "240", "240px", "16dp",
         /// "50%", "2em", "calc(100% - 20dp)" (see StyleValueParser::ParseLengthText).
         [[nodiscard]] static SizeSpec ParseSizeSpec(StringView value)
         {
@@ -559,13 +557,13 @@ export namespace foundation::ui
 
     private:
         static void RegisterBuiltinsBody();
-        // Non-inline (UiRegistryStateImpl.cpp): the rendezvous rule, see ViewFactories.
+        // Defined out of line in UiRegistryStateImpl.cpp, for the reason given at ViewFactories.
         [[nodiscard]] static Mutex& RegistrationLock();
         [[nodiscard]] static bool& BuiltinsRegisteredFlag();
-        // Registry storage accessors are NON-inline (UiRegistryStateImpl.cpp): the
-        // function-local statics were chosen for init-order safety, but an inline body
-        // duplicates the map per shared library - registered in one, empty in another
-        // (shared-libraries.md rendezvous rule).
+        // The registry storage accessors are defined out of line in UiRegistryStateImpl.cpp.
+        // Function-local statics give init-order safety, but an inline body would duplicate
+        // each map per shared library, so a view registered in one library would be missing
+        // in another.
         [[nodiscard]] static HashMap<String, ViewFactory>& ViewFactories();
         [[nodiscard]] static HashMap<String, PropertySetter>& ViewProps();
 
@@ -598,10 +596,10 @@ export namespace foundation::ui
 
     inline void MarkupRegistry::RegisterBuiltins()
     {
-        // A plain static bool let two workers both pass the check and rehash the maps under
-        // each other. The lock makes the second caller WAIT for the first registration to
-        // finish (it returns to read a complete registry); the flag lives in the impl unit so
-        // every shared library sees the same one.
+        // With a bare flag, two workers could both pass the check and rehash the maps under
+        // each other. The lock makes a second caller wait for the first registration to
+        // finish, so it returns to a complete registry. The flag lives in the implementation
+        // unit so every shared library sees the same one.
         ScopedLock lock(RegistrationLock());
         bool& registered = BuiltinsRegisteredFlag();
         if (registered)
@@ -720,8 +718,8 @@ export namespace foundation::ui
                     c->AlignContent = AlignContent::Stretch;
             }
         };
-        // CSS `gap: <row-gap> [<column-gap>]` (one value = both); row/column are AXES, not
-        // directions - the layout maps them onto its main/cross gaps by Direction.
+        // CSS `gap: <row-gap> [<column-gap>]`, where one value sets both. Row and column are
+        // axes, not directions: the layout maps them onto its main and cross gaps by Direction.
         auto flexGap = [](View* v, StringView val)
         {
             if (FlexLayout* c = Cast<FlexLayout>(v))
@@ -950,8 +948,9 @@ export namespace foundation::ui
                              }
                          });
 
-        // A button that draws any view as its content (a picture card: an image and labels): its
-        // one child element is that content (MarkupLoader, through View::SetContentView).
+        // A button that draws any view as its content, such as a picture card with an image and
+        // labels. Its one child element becomes that content (MarkupLoader calls
+        // View::SetContentView).
         RegisterView(u8"ContentButton", [](IAllocator& allocator) -> RefPtr<View>
                      { return MakeRef<ContentButton>(allocator); });
 

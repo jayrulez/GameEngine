@@ -3,19 +3,20 @@
 
 // GUI - :message_box partition
 //
-// MessageBox: a modal dialog with a message and a row of buttons: standard ones (OK / OK-Cancel /
-// Yes-No) or verbs of the caller's own ("Delete", "Create"). Modeled on eepp's UIMessageBox (role
-// only) - a Window subclass whose content is a word-wrapped message plus bottom-right buttons.
-// Pressing a button fires the result callback and closes the dialog. Shown via Window::OpenModal,
-// a modal popup (E5): what is behind it is inert and its backdrop dims it.
+// MessageBox: a modal dialog with a message and a row of buttons. The buttons are either standard
+// sets (OK, OK and Cancel, Yes and No) or the caller's own verbs ("Delete", "Create"). It is a
+// Window subclass whose content is a word-wrapped message above buttons at the bottom right.
+// Pressing a button calls the result callback and closes the dialog. It is shown with
+// Window::OpenModal as a modal popup: everything behind it is inert and dimmed by its backdrop.
 //
-// Each button has a role, as Qt's button roles and GTK's responses do, and a class of the same
-// name for the sheet: `primary` (the default: focused when it opens, so Return or a pad's South
-// picks it), `cancel` (what `back`, Escape or a pad's East, and its close button pick) and
-// `destructive` (it destroys something: styled so, and never focused on its own, so Return alone
-// cannot destroy). With no primary, the last button that destroys nothing has the focus; with no
-// cancel, `back` picks the first. Its message wraps and its height fits it; it is not resizable
-// unless asked.
+// Each button has a role, like Qt's button roles and GTK's responses, and a class of the same name
+// for style sheets. `primary` is the default button, focused when the dialog opens, so Return or
+// the pad's South button picks it. `cancel` is what `back` (Escape or the pad's East button) and
+// the close button pick. `destructive` marks a button that destroys something; it is styled as
+// such and never focused on its own, so Return alone cannot destroy anything. With no primary
+// button, the last non-destructive button gets the focus; with no cancel button, `back` picks the
+// first. The message wraps and the dialog's height fits it. The dialog is not resizable unless
+// asked to be.
 
 module;
 #include "Core/Prelude.h"
@@ -41,13 +42,14 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::gui
 {
-    /// What a dialog's button does, beyond its answer: the sheet styles each by a class of its name.
+    /// What a dialog button does beyond giving its answer. Style sheets style each role by a class
+    /// of the same name.
     enum class DialogRole : u8
     {
         Normal,
-        Primary,     ///< the default: focused when the dialog opens
-        Cancel,      ///< what `back` (Escape) and the close button answer
-        Destructive, ///< destroys something: never the default on its own
+        Primary,     ///< the default button, focused when the dialog opens
+        Cancel,      ///< the answer `back` (Escape) and the close button give
+        Destructive, ///< destroys something; never the default on its own
     };
     [[nodiscard]] inline core::StringView DialogRoleName(DialogRole role) noexcept
     {
@@ -93,7 +95,7 @@ export namespace foundation::gui
         {
             SetTag(core::StringView(u8"messagebox"));
 
-            // The content flows: the message (wrapping) above a row of buttons at the right.
+            // The content is a flow: the wrapping message above a row of buttons at the right.
             {
                 StyleWriteScope hostDefaults(*GetContent());
                 GetContent()->EditLayoutStyle([](LayoutStyle& st)
@@ -105,10 +107,10 @@ export namespace foundation::gui
                 static_cast<UIWidget*>(GetContent())->SetPadding(Thickness{kPad});
             }
             m_message = core::MakeRef<Label>(MemoryAllocator());
-            m_message->AddClass(core::StringView(u8"dialogmessage")); // white-space inherits under a sheet: the theme wraps it, keeping its lines
+            m_message->AddClass(core::StringView(u8"dialogmessage")); // under a sheet white-space is inherited, so the theme makes it wrap and keep its lines
             {
-                StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
-                m_message->SetWhiteSpace(TextWhiteSpace::PreWrap); // a message wraps, and keeps the lines it is written in (a list)
+                StyleWriteScope messageDefaults(*m_message); // defaults: a style sheet overrides them and falls back to them
+                m_message->SetWhiteSpace(TextWhiteSpace::PreWrap); // the message wraps and keeps its written line breaks (for a list)
                 m_message->SetTextAlignment(TextHAlign::Start, TextVAlign::Top);
                 m_message->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
             }
@@ -127,11 +129,12 @@ export namespace foundation::gui
             }
             GetContent()->AddChild(m_buttonRow.Get());
 
-            StyleWriteScope defaults(*this); // its own values, which a sheet returns to
+            StyleWriteScope defaults(*this); // defaults: a style sheet overrides them and falls back to them
             SetResizable(false);
             SetSize(core::Float2{kWidth, 180.0f});
             LayoutContent();
-            // Open, the default button takes focus (else the cancel one: never a destructive one alone).
+            // On opening, the default button takes focus, else the cancel button. A destructive
+            // button is never focused on its own.
             MessageBox* self = this;
             (void)AddEventListener(EventType::Toggle, [self](const Event& e)
                                    {
@@ -144,7 +147,7 @@ export namespace foundation::gui
                                    });
         }
 
-        // Set the title, message, and which buttons to show.
+        // Sets the title, the message and which standard buttons to show.
         void Configure(core::StringView title, core::StringView message, Buttons buttons)
         {
             SetTitle(title);
@@ -157,9 +160,9 @@ export namespace foundation::gui
         {
             m_onResult = core::Move(callback);
         }
-        /// Adds a button of its own after the standard ones: `text` its label (a verb: "Delete"),
-        /// `resultName` what GetResultName reads (and the change event reports) when it is pressed,
-        /// `role` what else it does (the default, the cancel, a destructive one).
+        /// Adds a custom button after the standard ones. `text` is its label (a verb such as
+        /// "Delete"). `resultName` is what GetResultName returns, and the change event reports, once
+        /// it is pressed. `role` says what else it does: primary, cancel or destructive.
         Button& AddButton(core::StringView text, core::StringView resultName, DialogRole role = DialogRole::Normal)
         {
             Button& button = MakeButton(core::String(resultName), role);
@@ -167,7 +170,7 @@ export namespace foundation::gui
             LayoutContent();
             return button;
         }
-        /// Its buttons, none: for a dialog of the caller's own verbs (AddButton).
+        /// Removes all buttons, before adding the caller's own verbs with AddButton.
         void ClearButtons()
         {
             for (const RefPtr<Button>& b : m_buttons)
@@ -181,7 +184,7 @@ export namespace foundation::gui
         {
             return index < m_roles.Size() ? m_roles[index] : DialogRole::Normal;
         }
-        /// The button focused when it opens: the primary one, else the last that destroys nothing.
+        /// Returns the button focused on opening: the primary one, else the last non-destructive one.
         [[nodiscard]] Button* GetDefaultButton() const
         {
             for (usize i = 0; i < m_roles.Size(); ++i)
@@ -196,12 +199,12 @@ export namespace foundation::gui
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
 
         // === Markup ===
-        // `<MessageBox id="confirm" title="Delete?" text="..." buttons="ok-cancel"/>` waits in its
-        // page, unseen, until shown (Show, a script's show()); answered, it goes back there, its
-        // `result` the answer, reported as `change`. `buttons` is ok, ok-cancel or yes-no, or the
-        // caller's own verbs, each `Text:result:role` and separated by `|`
-        // (`buttons="Cancel:cancel:cancel|Delete:delete:destructive"`); a missing result is the
-        // text in lower case, a missing role normal.
+        // `<MessageBox id="confirm" title="Delete?" text="..." buttons="ok-cancel"/>` waits hidden
+        // in its page until shown (with Show, or a script's show()). Once answered it goes back
+        // there, with the answer in `result`, and sends `change`. `buttons` is ok, ok-cancel or
+        // yes-no, or the caller's own verbs, each written `Text:result:role` and separated by `|`
+        // (`buttons="Cancel:cancel:cancel|Delete:delete:destructive"`). A missing result defaults
+        // to the text in lower case, and a missing role to normal.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
             if (name == core::StringView(u8"text"))
@@ -219,14 +222,14 @@ export namespace foundation::gui
                     BuildVerbs(v);
                 LayoutContent();
                 if (!IsOpen())
-                    SetDisplayed(false); // written in a page: unseen until shown
+                    SetDisplayed(false); // a box written in a page stays hidden until shown
                 return true;
             }
             return Window::SetMarkupAttribute(name, value);
         }
-        /// Shows it as a modal dialog over the GUI it is in (it comes back to where it was).
-        /// Opens it, modal, in the GUI it is in; false when it is in none (a box shows over a
-        /// tree: one with no parent has nothing to show over).
+        /// Opens the box as a modal dialog over the GUI it is in; afterwards it returns to where it
+        /// was. Returns false when it is in no GUI, since a box with no parent has nothing to show
+        /// over.
         bool Show()
         {
             if (IsOpen())
@@ -234,7 +237,7 @@ export namespace foundation::gui
             Node* root = GetRootNode();
             if (root == nullptr || root == this)
                 return false;
-            // Shown again while its exit plays, its page is still the one it came from.
+            // If shown again while its exit animation plays, keep the page it originally came from.
             if (Node* home = GetParent(); home != nullptr && !m_home)
             {
                 m_home = core::RefPtr<Node>(home);
@@ -244,7 +247,7 @@ export namespace foundation::gui
             OpenModal(*root);
             return true;
         }
-        /// The last answer: "ok", "cancel", "yes" or "no" (empty: none yet).
+        /// Returns the last answer, such as "ok", "cancel", "yes" or "no", or empty before any answer.
         [[nodiscard]] core::String GetResultName() const { return m_resultName; }
 
         [[nodiscard]] core::StringView GetMessage() const { return m_message->GetText(); }
@@ -255,8 +258,8 @@ export namespace foundation::gui
         }
 
     public:
-        // Its close button and `back` (Escape, a pad's East) pick the cancel button's result: the
-        // one whose role is cancel (Cancel, No), else the first.
+        // The close button and `back` (Escape, the pad's East button) give the cancel button's
+        // result: the button whose role is cancel (Cancel, No), else the first button.
         [[nodiscard]] bool AnswersBack() const override { return true; }
         void RequestClose() override
         {
@@ -267,18 +270,18 @@ export namespace foundation::gui
         }
 
     protected:
-        // Its title (the window's), message and buttons take its font.
+        // The title (the window's), the message and the buttons use the box's font.
         void OnTextStyleChange() override
         {
             Window::OnTextStyleChange();
             ShareTextStyle(*m_message, false);
             for (const RefPtr<Button>& b : m_buttons)
                 ShareTextStyle(*b, false);
-            LayoutContent(); // the font sizes the message
+            LayoutContent(); // the font changes the message's size
         }
 
     private:
-        // The button `back` answers with: the cancel one, else the first.
+        // Returns the index of the button `back` answers with: the cancel button, else the first.
         [[nodiscard]] usize CancelIndex() const noexcept
         {
             for (usize i = 0; i < m_roles.Size(); ++i)
@@ -298,16 +301,16 @@ export namespace foundation::gui
                 break;
             case Buttons::OkCancel:
                 AddStandard(Result::Cancel);
-                AddStandard(Result::Ok); // primary rightmost
+                AddStandard(Result::Ok); // the primary button goes rightmost
                 break;
             case Buttons::YesNo:
                 AddStandard(Result::No);
-                AddStandard(Result::Yes); // primary rightmost
+                AddStandard(Result::Yes); // the primary button goes rightmost
                 break;
             }
         }
 
-        // The caller's verbs from markup: `Text:result:role|...`.
+        // Builds the caller's verb buttons from markup: `Text:result:role|...`.
         void BuildVerbs(core::StringView list)
         {
             ClearButtons();
@@ -340,8 +343,8 @@ export namespace foundation::gui
             }
         }
 
-        // A standard button: its label translated (gui.ok, ...) where the GUI's tables have it,
-        // else English. OK and Yes are the default; Cancel and No what `back` picks.
+        // Adds a standard button. Its label is translated (gui.ok, ...) where the GUI's tables have
+        // the key, otherwise English. OK and Yes are primary; Cancel and No are what `back` picks.
         void AddStandard(Result result)
         {
             static constexpr core::StringView kKeys[] = {u8"gui.ok", u8"gui.cancel", u8"gui.yes", u8"gui.no"};
@@ -383,16 +386,17 @@ export namespace foundation::gui
         void Finish(core::StringView resultName)
         {
             m_resultName = core::String(resultName);
-            for (usize i = 0; i < 4; ++i) // a standard one also answers as its Result
+            for (usize i = 0; i < 4; ++i) // a standard button also reports its Result
                 if (kNames[i] == resultName && m_onResult)
                     m_onResult(static_cast<Result>(i));
-            // Closing lets the popup layer's reference go, which may be the last one: kept alive
-            // until its answer has been told.
+            // Closing releases the popup layer's reference, which may be the last one, so keep the
+            // box alive until the answer has been reported.
             const core::RefPtr<Node> keep(this);
             Close();
             SendEvent(Event(EventType::Changed, this));
         }
-        // Refused as it opened (an unattended run): its cancel's answer, as if it was pressed.
+        // The modal was refused as it opened (an unattended run): answer with the cancel button's
+        // result, as if it had been pressed.
         void OnModalRefused() override
         {
             if (m_results.IsEmpty())
@@ -401,12 +405,12 @@ export namespace foundation::gui
                 return;
             }
             m_resultName = m_results[CancelIndex()];
-            for (usize i = 0; i < 4; ++i) // a standard one also answers as its Result
+            for (usize i = 0; i < 4; ++i) // a standard button also reports its Result
                 if (kNames[i] == m_resultName.AsView() && m_onResult)
                     m_onResult(static_cast<Result>(i));
             SendEvent(Event(EventType::Changed, this));
         }
-        // Shown from a page: back there, unseen, once its exit has played.
+        // A box shown from a page goes back there, hidden, once its exit animation has played.
         void OnWindowGone() override
         {
             if (!m_home)
@@ -418,11 +422,12 @@ export namespace foundation::gui
                 home->AddChildAt(this, core::Min(m_homeIndex, home->ChildCount()));
         }
 
-        // Its height fits its message, wrapped at its width, and its buttons (the flow places them).
+        // Sets the height to fit the message wrapped at the box's width, plus the buttons; the flow
+        // layout places them.
         void LayoutContent()
         {
             if (!m_message || !m_buttonRow)
-                return; // may run mid-construction
+                return; // may be called during construction
             const f32 inner = core::Max(0.0f, GetSize().x - 2.0f * kPad);
             const f32 text = m_message->Measure(LayoutConstraints{core::Float2{inner, 0.0f}, core::Float2{inner, kUnbounded}, core::Float2{inner, -1.0f}, true, false}).y;
             const f32 height = GetTitleBarHeight() + kPad + text + kGap + kButtonHeight + kPad;
@@ -437,10 +442,10 @@ export namespace foundation::gui
         RefPtr<Panel> m_buttonRow;
         Array<RefPtr<Button>> m_buttons;
         Array<core::String> m_results; // each button's result name, in order
-        Array<DialogRole> m_roles;     // and its role
+        Array<DialogRole> m_roles;     // each button's role, in order
         core::Function<void(Result)> m_onResult;
         core::String m_resultName;
-        core::RefPtr<Node> m_home; // the page it was shown from, while it is open
+        core::RefPtr<Node> m_home; // while open, the page it was shown from
         usize m_homeIndex = 0;
 
         static constexpr f32 kPad = 16.0f;

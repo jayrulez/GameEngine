@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Style model v2, P4 (ui-layout-and-style-model.md section 5): Flex line wrapping with
-// align-content, gaps on both axes (Spacing/LineSpacing and the CSS row/column gaps), flex-basis
-// (inline and from the sheet), the markup vocabulary, and `text-overflow: ellipsis` reaching
-// Label from the cascade.
+// Flex line wrapping with align-content, gaps on both axes (Spacing and LineSpacing, and the CSS
+// row and column gaps), flex-basis (inline and from the sheet), the markup vocabulary, and
+// `text-overflow: ellipsis` reaching Label from the cascade.
 
 #include <doctest/doctest.h>
 
@@ -48,7 +47,7 @@ namespace
         return core::MakeRef<T>(core::DefaultAllocator());
     }
 
-    /// A Flex of a FIXED size hosted in a Frame (the root would stretch it to the viewport).
+    /// A Flex of a fixed size hosted in a Frame (the root would stretch it to the viewport).
     struct FlexFixture
     {
         UIContext ctx{DefaultAllocator()};
@@ -85,7 +84,7 @@ TEST_CASE("flex-wrap: items break into lines against the main size; line count a
         f.flex->AddView(item.Get());
     }
     f.Pass();
-    // 250 wide: two 100s per line -> [a b] [c d] [e]
+    // 250 wide: two 100s per line, so the lines are [a b] [c d] [e]
     CHECK(items[0]->Bounds.x == doctest::Approx(0));
     CHECK(items[1]->Bounds.x == doctest::Approx(100));
     CHECK(items[1]->Bounds.y == doctest::Approx(0));
@@ -125,7 +124,7 @@ TEST_CASE("flex-wrap: a wrapping container measures its stacked lines")
     host->AddView(flex.Get());
     root->AddView(host.Get());
     LayoutPass(ctx, root.Get());
-    // 100 + 5 + 100 = 205 fits, a third (310) does not: three lines of 30 + two 10 gaps.
+    // 100 + 5 + 100 = 205 fits, a third (310) does not: three lines of 30 and two 10 gaps.
     CHECK(flex->Bounds.height == doctest::Approx(30 + 10 + 30 + 10 + 30));
     CHECK(items[1]->Bounds.x == doctest::Approx(105));
     CHECK(items[2]->Bounds.y == doctest::Approx(40));
@@ -143,7 +142,7 @@ TEST_CASE("flex-wrap: vertical direction wraps into columns")
         f.flex->AddView(item.Get());
     }
     f.Pass();
-    // 100 tall: three 30s per column -> the fourth starts a second column at x = 50.
+    // 100 tall: three 30s per column, so the fourth starts a second column at x = 50.
     CHECK(items[2]->Bounds.y == doctest::Approx(60));
     CHECK(items[3]->Bounds.x == doctest::Approx(50));
     CHECK(items[3]->Bounds.y == doctest::Approx(0));
@@ -151,7 +150,7 @@ TEST_CASE("flex-wrap: vertical direction wraps into columns")
 
 TEST_CASE("flex-wrap: align-content packs the lines on the cross axis")
 {
-    // 200 tall, three lines of 30 -> 110 free.
+    // 200 tall with three lines of 30 leaves 110 free.
     auto build = [](FlexFixture& f, core::RefPtr<TestView> (&items)[5]) {
         for (auto& item : items)
         {
@@ -233,7 +232,7 @@ TEST_CASE("flex-wrap: a single line without wrap ignores align-content and fills
     f.flex->AddView(a.Get());
     f.Pass();
     CHECK(a->Bounds.y == doctest::Approx(0));
-    CHECK(a->Bounds.height == doctest::Approx(200)); // stretched, as before P4
+    CHECK(a->Bounds.height == doctest::Approx(200)); // stretched
 }
 
 // === gaps ===
@@ -301,12 +300,12 @@ TEST_CASE("flex-wrap: flex-basis is the starting main size, inline or from the s
     size.Height = SizeSpec::Fixed(Unit::Dp(50));
     flex->SetLayout(size);
 
-    auto grown = TV(50, 30); // basis 100 + share
+    auto grown = TV(50, 30); // basis 100 plus a share
     LayoutStyle g;
     g.FlexGrow = 1;
     g.FlexBasis = Unit::Dp(100);
     flex->AddView(grown.Get(), g);
-    auto bare = TV(50, 30); // basis 0 + share (the `flex: 1` shorthand)
+    auto bare = TV(50, 30); // basis 0 plus a share (the `flex: 1` shorthand)
     LayoutStyle b;
     b.FlexGrow = 1;
     flex->AddView(bare.Get(), b);
@@ -318,7 +317,7 @@ TEST_CASE("flex-wrap: flex-basis is the starting main size, inline or from the s
     CHECK(bare->Bounds.width == doctest::Approx(100));
     CHECK(bare->Bounds.x == doctest::Approx(200));
 
-    // A basis without grow IS the size (the content size is ignored); from the sheet, percent
+    // A basis without grow is the size (the content size is ignored); from the sheet, percent
     // resolves against the available main size.
     flex->RemoveView(grown.Get());
     flex->RemoveView(bare.Get());

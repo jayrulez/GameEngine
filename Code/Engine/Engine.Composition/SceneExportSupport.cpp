@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Composition - scene export support (Sedulous's SceneExportSupport): the scene stream
+// Engine::Composition - scene export support: the scene stream
 // transcode and the scene reference scan every exporting host shares, each over the full
 // manager set so no component type is silently skipped.
 

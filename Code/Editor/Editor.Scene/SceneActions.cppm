@@ -2,14 +2,14 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Scene - :actions partition.
 //
-// The scene editor's actions, declared once (RegisterSceneEditorActions, from
-// RegisterSceneEditor) and served everywhere from the registry: the Scene menu and the chords
-// come from these declarations, the scene page's toolbar and the hierarchy's context menus
-// execute through them, the palette and the MCP action bridge read them. Every action binds
-// through the interface the subject page publishes (ServiceOf<ISceneEditorPage>): disabled on
-// any other page, acting on THAT page's simulation, gizmo, markers or entity selection. The
-// entity actions act on the selection's primary - what the hierarchy's right-click selected,
-// what the viewport picked - so they are nullary like every action.
+// The scene editor's actions, declared once (RegisterSceneEditorActions, from RegisterSceneEditor)
+// and served everywhere from the registry: the Scene menu and the chords come from these
+// declarations, the scene page's toolbar and the hierarchy's context menus execute through them,
+// and the palette and the MCP action bridge read them. Every action binds through the interface the
+// subject page publishes (ServiceOf<ISceneEditorPage>): it is disabled on any other page and acts
+// on that page's simulation, gizmo, markers or entity selection. The entity actions act on the
+// selection's primary (what the hierarchy's right-click selected or the viewport picked), so they
+// take no arguments, like every action.
 module;
 #include "Core/Prelude.h"
 

@@ -3,20 +3,21 @@
 
 // GUI.Toolkit - :graph_source partition
 //
-// What a graph view reads (T6 of Specs/gui-lab-evolution-3.md): nodes, their pins, links and frames,
-// each by a stable id the source gives, so nothing shifts when one goes (foundation.ui's canvas
-// addressed its graph by index, a removal shifting the rest). Edits are requests the source applies,
-// as the property and curve sources' are: a move is a gesture (begun, previewed, committed once or
-// cancelled); connecting, relinking, disconnecting, deleting, creating a node and a frame's edits are
-// one change each; copying writes the source's text and pasting reads it back. The undo is the
-// application's.
+// What a graph view reads: nodes, their pins, links and frames, each identified by a stable id the
+// source gives, so nothing shifts when one is removed (as indexes would). Edits are requests that
+// the source applies, as with the property and curve sources. A move is a gesture: it begins,
+// previews, and then commits once or cancels. Connecting, relinking, disconnecting, deleting,
+// creating a node and each frame edit are one change each. Copying writes the source's text, and
+// pasting reads it back. The undo belongs to the application.
 //
-// A link is asked for before it is made (ezEngine): the source says whether it may be and why not,
-// and which links it would replace, so a view can light the pins that fit while one is dragged.
+// A view checks a link before making it. The source says whether it is allowed, why not if it is
+// not, and which links it would replace, so a view can highlight the pins that fit while a link is
+// dragged.
 // Links join two pins (dataflow) or two nodes (a state machine's transitions).
 //
-// GraphSet is a source of its own graph in memory: what tests and a page without a graph of its own
-// edit, each change told to whoever keeps the undo as the graph before and after.
+// GraphSet is a source that holds its own graph in memory. Tests use it, as does a page with no
+// graph of its own. It reports each change, as the graph before and after, to whoever keeps the
+// undo.
 
 module;
 #include "Core/Prelude.h"
@@ -25,14 +26,14 @@ export module foundation.gui.toolkit:graph_source;
 
 import foundation.core;
 import foundation.gui;
-import :reflected_source; // IPropertyTextFormat: the application's serializer, for copies
+import :reflected_source; // IPropertyTextFormat, the application's serializer, for copies
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// A node's, a pin's, a link's or a frame's id, the source's to give; 0 is none.
+    /// The id of a node, pin, link or frame. The source assigns ids; 0 means none.
     using GraphId = u64;
 
     enum class GraphPinDirection : u8
@@ -46,9 +47,9 @@ export namespace foundation::gui
         GraphId Id = 0;
         core::String Name;
         GraphPinDirection Direction = GraphPinDirection::Input;
-        core::String Type;         ///< what it carries ("float", "color"); empty: anything
+        core::String Type;         ///< what it carries ("float", "color"); empty accepts anything
         Color TypeColor{0.7f, 0.7f, 0.75f, 1.0f};
-        bool Many = false;         ///< it takes several links (an output, as a rule); else one
+        bool Many = false;         ///< it takes several links (usually an output); else one
     };
 
     struct GraphNodeInfo
@@ -61,7 +62,7 @@ export namespace foundation::gui
         Color HeaderColor{0.27f, 0.47f, 0.73f, 1.0f};
         bool Movable = true;
         bool Deletable = true;
-        core::Array<GraphPinInfo> Pins; ///< inputs and outputs, each in its order
+        core::Array<GraphPinInfo> Pins; ///< inputs and outputs, each kept in its order
     };
 
     enum class GraphLinkKind : u8
@@ -75,12 +76,12 @@ export namespace foundation::gui
         GraphId Id = 0;
         GraphLinkKind Kind = GraphLinkKind::Pins;
         GraphId FromNode = 0;
-        GraphId FromPin = 0; ///< none for a node link
+        GraphId FromPin = 0; ///< 0 for a node link
         GraphId ToNode = 0;
         GraphId ToPin = 0;
     };
 
-    /// A titled, coloured rectangle behind nodes (with a body: a comment).
+    /// A titled, coloured rectangle behind nodes; with a body, it serves as a comment.
     struct GraphFrameInfo
     {
         GraphId Id = 0;
@@ -91,12 +92,12 @@ export namespace foundation::gui
         Color Tint{0.35f, 0.4f, 0.5f, 0.35f};
     };
 
-    /// What a source says of a link asked for.
+    /// The source's answer when a link is checked.
     struct GraphLinkCheck
     {
         bool Allowed = false;
-        core::String Reason;             ///< why not, when it is not
-        core::Array<GraphId> Replaces;   ///< the links it would take the place of
+        core::String Reason;             ///< why the link is not allowed, when it is not
+        core::Array<GraphId> Replaces;   ///< the links it would replace
     };
 
     /// A kind of node the source can make, for a view's menu.
@@ -111,7 +112,7 @@ export namespace foundation::gui
     {
     public:
         virtual ~IGraphSourceClient() = default;
-        /// Nodes, pins, links or frames changed: read them again.
+        /// Called when nodes, pins, links or frames changed; the view reads them again.
         virtual void OnGraphChanged() = 0;
     };
 
@@ -122,53 +123,60 @@ export namespace foundation::gui
 
         // === What there is ===
         virtual void GetNodes(core::Array<GraphId>& out) const = 0;
-        /// The node `node`; null when there is none.
+        /// Returns the node `node`, or null when there is none.
         [[nodiscard]] virtual const GraphNodeInfo* GetNode(GraphId node) const = 0;
         virtual void GetLinks(core::Array<GraphLinkInfo>& out) const = 0;
         virtual void GetFrames(core::Array<GraphFrameInfo>& out) const = 0;
 
         // === Moving (a gesture) ===
-        /// A move begins: where the nodes and frames are now is what a preview moves from.
+        /// Begins a move. Each preview moves the nodes and frames from where they are now.
         virtual void BeginMove() = 0;
-        /// `nodes` and `frames` by `delta` from where they were at the beginning, live.
+        /// Moves `nodes` and `frames` live by `delta` from where they were when the move began.
         virtual void PreviewMove(core::Span<const GraphId> nodes, core::Span<const GraphId> frames, core::Float2 delta) = 0;
         virtual void CommitMove() = 0;
         virtual void CancelMove() = 0;
 
         // === Links ===
-        /// Whether `link` (its id unset) may be made, and what it would replace. With no `To` end
-        /// (ToNode 0): whether a link may begin at its `From` end, a pin of either direction or, for a
-        /// node link, a node (what a view asks before it lets one be dragged from there).
+        /// Returns whether `link` (with its id unset) may be made, and what it would replace. With no
+        /// `To` end (ToNode 0) it answers whether a link may begin at its `From` end, which is a pin
+        /// of either direction or, for a node link, a node. A view asks this before it lets a link be
+        /// dragged from there.
         [[nodiscard]] virtual GraphLinkCheck CheckLink(const GraphLinkInfo& link) const = 0;
-        /// Makes `link` as CheckLink said (taking the place of what it replaces), one change; its
-        /// id, 0 when it may not be.
+        /// Makes `link` as CheckLink allowed, replacing the links it replaces, as one change.
+        /// Returns its id, or 0 when it may not be made.
         virtual GraphId Connect(const GraphLinkInfo& link) = 0;
-        /// Moves link `link`'s ends to `to`'s, one change; false when it may not be.
+        /// Moves the ends of link `link` to those of `to`, as one change. Returns false when that is
+        /// not allowed.
         virtual bool Relink(GraphId link, const GraphLinkInfo& to) = 0;
-        /// Removes `links`, one change; false when none went.
+        /// Removes `links` as one change. Returns false when none was removed.
         virtual bool Disconnect(core::Span<const GraphId> links) = 0;
 
         // === Nodes ===
-        /// Deletes `nodes` (the deletable among them) and their links, one change; false when none went.
+        /// Deletes the deletable nodes among `nodes`, with their links, as one change. Returns false
+        /// when none was deleted.
         virtual bool DeleteNodes(core::Span<const GraphId> nodes) = 0;
-        /// The kinds of node it makes; with `fitting`, a pin, only those with a pin a link from it may reach.
+        /// Lists the kinds of node it makes. With `fittingPin` set, it lists only those with a pin
+        /// that a link from that pin may reach.
         virtual void GetNodeTypes(GraphId fittingPin, core::Array<GraphNodeType>& out) const = 0;
-        /// Makes a node of `type` at `at`; with `linkFrom`, a pin, links it to the new node's first pin
-        /// that fits, in the same change. Its id, 0 when it cannot.
+        /// Makes a node of `type` at `at`. With `linkFrom` set to a pin, it also links that pin to the
+        /// new node's first pin that fits, in the same change. Returns the node's id, or 0 when it
+        /// cannot make one.
         virtual GraphId CreateNode(core::StringView type, core::Float2 at, GraphId linkFrom) = 0;
 
         // === Frames ===
-        /// Makes a frame, one change; its id.
+        /// Makes a frame as one change and returns its id.
         virtual GraphId CreateFrame(const GraphFrameInfo& frame) = 0;
-        /// Sets a frame's title, body, place, size and tint, one change; false when nothing changed.
+        /// Sets a frame's title, body, position, size and tint as one change. Returns false when
+        /// nothing changed.
         virtual bool EditFrame(const GraphFrameInfo& frame) = 0;
         virtual bool DeleteFrames(core::Span<const GraphId> frames) = 0;
 
         // === The clipboard ===
-        /// `nodes` and the links among them as the source's text; empty when it cannot copy.
+        /// Returns `nodes` and the links among them as the source's text, or empty when it cannot
+        /// copy.
         [[nodiscard]] virtual core::String CopyNodes(core::Span<const GraphId> nodes) const = 0;
-        /// Reads `text` (CopyNodes') back as new nodes, their top-left at `at`, one change; `made` the
-        /// new nodes' ids. False when it is not the source's.
+        /// Reads `text` (from CopyNodes) back as new nodes with their top-left at `at`, as one change,
+        /// and fills `made` with the new nodes' ids. Returns false when the text is not the source's.
         virtual bool PasteNodes(core::StringView text, core::Float2 at, core::Array<GraphId>& made) = 0;
 
         void AddGraphClient(IGraphSourceClient* client) { m_clients.PushBack(client); }
@@ -190,10 +198,10 @@ export namespace foundation::gui
         }
 
     private:
-        core::Array<IGraphSourceClient*> m_clients; // non-owning: each view leaves as it goes
+        core::Array<IGraphSourceClient*> m_clients; // non-owning: each view removes itself before it goes away
     };
 
-    /// A graph's whole state: what a GraphSet change holds before and after.
+    /// A graph's whole state, which a GraphSet change holds from before and after.
     struct GraphState
     {
         core::Array<GraphNodeInfo> Nodes;
@@ -208,18 +216,19 @@ export namespace foundation::gui
         GraphState After;
     };
 
-    /// A graph of its own, in memory. Its node types are templates the page adds; a pin's type
-    /// decides what links to it (the same type, or either empty); an input takes one link unless it
-    /// says many, a new one replacing the old. Its nodes link to each other only where the page says.
+    /// A graph held in memory. Its node types are templates the page adds. A pin's type decides what
+    /// may link to it: the same type, or either type empty. An input takes one link unless it allows
+    /// many, and a new link replaces the old. Nodes link to each other directly only when the page
+    /// enables it (SetNodeLinks).
     class GraphSet : public IGraphSource
     {
     public:
-        /// A kind of node it makes: a template whose pins (ids unset) each new node copies.
+        /// Adds a kind of node it makes: a template whose pins (with ids unset) each new node copies.
         void AddNodeType(const GraphNodeType& type, const GraphNodeInfo& node)
         {
             m_types.PushBack(Template{type, node});
         }
-        /// Adds a node from code (its pins given ids here), no change told; its id.
+        /// Adds a node from code, giving its pins ids, and returns its id. No change is reported.
         GraphId AddNode(GraphNodeInfo node)
         {
             node.Id = Next();
@@ -229,7 +238,7 @@ export namespace foundation::gui
             NotifyGraphChanged();
             return m_state.Nodes.Back().Id;
         }
-        /// Adds a link from code, unchecked, no change told; its id.
+        /// Adds a link from code without checking it, and returns its id. No change is reported.
         GraphId AddLink(GraphLinkInfo link)
         {
             link.Id = Next();
@@ -237,7 +246,7 @@ export namespace foundation::gui
             NotifyGraphChanged();
             return link.Id;
         }
-        /// A pin of a node by its name; 0 when none.
+        /// Returns the id of a node's pin by its name, or 0 when there is none.
         [[nodiscard]] GraphId FindPin(GraphId node, core::StringView name, GraphPinDirection direction) const
         {
             if (const GraphNodeInfo* found = GetNode(node))
@@ -247,15 +256,17 @@ export namespace foundation::gui
             return 0;
         }
         [[nodiscard]] const GraphState& State() const noexcept { return m_state; }
-        /// Whether its nodes link to each other (a state machine's transitions), not only its pins.
+        /// Sets whether nodes may link to each other directly (a state machine's transitions), not
+        /// only through pins.
         void SetNodeLinks(bool allowed) noexcept { m_nodeLinks = allowed; }
         [[nodiscard]] bool GetNodeLinks() const noexcept { return m_nodeLinks; }
 
-        /// The application's serializer for copies (not owned; null: no copying).
+        /// Sets the application's serializer for copies (not owned). With null, copying is off.
         void SetTextFormat(IPropertyTextFormat* format) noexcept { m_format = format; }
-        /// Each change, for whoever keeps the undo.
+        /// Called with each change, for whoever keeps the undo.
         void SetOnChange(core::Function<void(const GraphChange&)> callback) { m_onChange = core::Move(callback); }
-        /// Puts a change's graph back (`undo`: before it; else after), no change told.
+        /// Restores a change's graph: the graph before it with `undo`, else after it. No change is
+        /// reported.
         void Apply(const GraphChange& change, bool undo)
         {
             m_state = undo ? change.Before : change.After;
@@ -334,13 +345,14 @@ export namespace foundation::gui
             }
             if (link.Kind == GraphLinkKind::Nodes)
             {
-                // A state machine's transitions: any two nodes, a node to itself, several.
+                // A state machine's transitions may join any two nodes, a node to itself, and several
+                // may join the same pair.
                 check.Allowed = m_nodeLinks;
                 if (!m_nodeLinks)
                     check.Reason = core::String(u8"This graph links pins, not nodes");
                 return check;
             }
-            if (to == nullptr) // where a link begins: any pin
+            if (to == nullptr) // checking where a link begins: any pin will do
             {
                 check.Allowed = PinOf(*from, link.FromPin) != nullptr;
                 if (!check.Allowed)
@@ -407,7 +419,7 @@ export namespace foundation::gui
                 return false;
             const GraphState before = m_state;
             const GraphLinkInfo old = *found;
-            RemoveLink(link); // asked without it, so it does not refuse or replace itself
+            RemoveLink(link); // check without the old link, so it neither refuses nor replaces itself
             const GraphLinkCheck check = CheckLink(to);
             if (!check.Allowed)
             {
@@ -545,8 +557,9 @@ export namespace foundation::gui
             return any;
         }
 
-        // The nodes (type, title, place from their top-left) and the links among them, by their
-        // places in the copy, written with the application's serializer.
+        // Writes the nodes (type, title, and position relative to the group's top-left) and the
+        // links among them, identified by their indexes in the copy, with the application's
+        // serializer.
         [[nodiscard]] core::String CopyNodes(core::Span<const GraphId> nodes) const override
         {
             if (m_format == nullptr || nodes.IsEmpty())
@@ -579,7 +592,8 @@ export namespace foundation::gui
                     core::Serialize(ar, "at", at);
                     ar.EndObject();
                 }
-                // Links among them: by node place and pin place, so the copies link alike.
+                // Write the links among them by node index and pin index, so the pasted copies link
+                // the same way.
                 i64 links = 0;
                 core::Array<i64> rows;
                 for (const GraphLinkInfo& link : self->m_state.Links)
@@ -686,7 +700,7 @@ export namespace foundation::gui
             for (usize i = made.Size(); i-- > 0;)
                 if (made[i] == 0)
                     made.RemoveAt(i);
-            if (made.IsEmpty()) // none of a kind it makes: no change
+            if (made.IsEmpty()) // no node was of a kind it makes, so nothing changes
             {
                 m_state = before;
                 return false;
@@ -753,7 +767,8 @@ export namespace foundation::gui
                 }
             return false;
         }
-        // The first pin of `node` a link from `from` may reach (the other direction, a type that fits); -1: none.
+        // Returns the first pin of `node` that a link from `from` may reach (the other direction, a
+        // type that fits), or -1 when there is none.
         [[nodiscard]] static i32 FirstFitting(const GraphNodeInfo& node, const GraphPinInfo& from) noexcept
         {
             for (usize i = 0; i < node.Pins.Size(); ++i)
@@ -792,7 +807,7 @@ export namespace foundation::gui
             const core::String digits = core::Format(u8"{}", index);
             for (usize i = 0; i < digits.Size() && key.Size() + 1 < key.CapacityValue(); ++i)
                 key.Add(static_cast<char>(digits[i]));
-            key.Add('\0'); // read as a C string (items)
+            key.Add('\0'); // the serializer reads item keys as C strings
             return key;
         }
 

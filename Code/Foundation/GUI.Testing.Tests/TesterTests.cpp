@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Testing - the tester (E8f of Specs/gui-lab-evolution.md): finders by selector and text,
-// within a scope, hidden ones only when asked; a finder expecting one that finds none or several
-// fails with what it found and the tree; the user's actions reach what they aim at, or fail when
-// something covers it; the clock steps a frame after each.
+// GUI.Testing - the tester. Finders work by selector and by text, within a scope, and find hidden
+// nodes only when asked. A finder that expects one node and finds none or several fails, reporting
+// what it found and the tree. The user's actions reach what they aim at, or fail when something
+// covers it, and the clock steps a frame after each one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -93,7 +93,7 @@ TEST_CASE("testing: expecting one and finding several or none fails, naming what
     const core::StringView message = seen[0].AsView();
     CHECK(message.StartsWith(SV(u8"text=OK found 2 nodes, expected one")));
     CHECK(message.ContainsIgnoreCase(SV(u8"found: Button #ok")));
-    CHECK(message.ContainsIgnoreCase(SV(u8"Button #dialog-ok \"OK\""))); // the tree, with texts
+    CHECK(message.ContainsIgnoreCase(SV(u8"Button #dialog-ok \"OK\""))); // the message shows the tree, with texts
     CHECK(t.One(Finder::Selector(SV(u8"#nothing"))) == nullptr);
     CHECK(t.Failures().Size() == 2u);
 }
@@ -109,7 +109,7 @@ TEST_CASE("testing: clicks reach what they aim at, and fail when something lies 
     {
         most = core::Max(most, static_cast<const MouseEvent&>(e).ClickCount);
     });
-    t.Advance(core::Duration::FromSeconds(1.0)); // the click before is no part of it
+    t.Advance(core::Duration::FromSeconds(1.0)); // so the earlier click is not part of the double click
     CHECK(t.DoubleClick(Finder::Selector(SV(u8"#show"))));
     CHECK(most == 2u);
     // A panel laid over the button: the click would land on it.
@@ -151,7 +151,7 @@ TEST_CASE("testing: aiming sees an open popup as input does: what it holds is re
     core::Float2 at;
     Node* over = nullptr;
     CHECK(AimAt(*bed.root.Get(), *inside.Get(), at, over)); // in a popup over the root's nodes
-    CHECK_FALSE(AimAt(*bed.root.Get(), *bed.field.Get(), at, over)); // under it
+    CHECK_FALSE(AimAt(*bed.root.Get(), *bed.field.Get(), at, over)); // the field is under the popup
     CHECK(over == inside.Get());
     bed.root->GetEventDispatcher()->CloseAllPopups(PopupCloseReason::Code);
 }
@@ -261,7 +261,7 @@ TEST_CASE("testing: two fingers pinch, turn and pan what takes gestures")
 {
     Bed bed;
     auto pad = Add<Panel>(*bed.root.Get(), u8"pad", 200.0f, 10.0f, 200.0f, 200.0f);
-    pad->SetTouchActions(0); // its fingers its own
+    pad->SetTouchActions(0); // touch-action none: the GUI does nothing with the fingers itself
     f32 scale = 0.0f, rotation = 0.0f;
     core::Float2 moved{0.0f, 0.0f};
     (void)pad->AddEventListener(EventType::GestureEnd, [&](const Event& e)

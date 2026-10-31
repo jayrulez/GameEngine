@@ -3,16 +3,15 @@
 
 // GUI.Code - :code_document partition
 //
-// A code editor's document (C0 of Specs/gui-lab-evolution-3.md): an array of lines, as every editor
-// surveyed keeps (none but zed, whose rope serves collaboration, a gap buffer or a rope), each line
-// its text and a hash (what a tokenizer caches its tokens by, eepp's key). Positions are (line, byte
-// column), a column on a character's boundary. Anchors are positions the document moves through
-// each edit, biased left or right (zed's, without its collaboration): selections, diagnostics,
-// markers and search hits keep their places while text changes round them. Undo is transactions of
-// edits (the range replaced, the text it held, the text put there) with the selections before and
-// after (zed's SelectionHistory, Godot's and Lumix's carets kept with each step), so multi-cursor undo
-// puts every cursor back; transactions of typing (or of deleting) within 300 ms of each other merge
-// into one step on the document's clock, which its host advances.
+// A code editor's document: an array of lines, each holding its text and a hash, which a
+// tokenizer caches its tokens by. Positions are (line, byte column), with the column on a
+// character's boundary. Anchors are positions the document moves through each edit, biased left
+// or right, so selections, diagnostics, markers and search hits keep their places while the text
+// around them changes. Undo works in transactions of edits. Each edit records the range replaced,
+// the text it held and the text put there, and each transaction records the selections before and
+// after, so a multi-cursor undo puts every cursor back. Transactions of typing (or of deleting)
+// that come within 300 ms of each other merge into one undo step. Time is measured on the
+// document's clock, which its host advances.
 
 module;
 #include "Core/Prelude.h"
@@ -41,7 +40,8 @@ export namespace foundation::gui
         [[nodiscard]] constexpr bool operator<=(const CodePosition& o) const noexcept { return !(o < *this); }
     };
 
-    /// A run of a document, start to end (end not included); empty where they meet.
+    /// A span of a document from start to end, with the end excluded. It is empty when the two
+    /// are equal.
     struct CodeRange
     {
         CodePosition Start;
@@ -49,14 +49,14 @@ export namespace foundation::gui
 
         [[nodiscard]] constexpr bool IsEmpty() const noexcept { return Start == End; }
         [[nodiscard]] constexpr bool operator==(const CodeRange&) const noexcept = default;
-        /// Start before end, whichever way it was given.
+        /// Returns the range with start before end, whichever order `a` and `b` came in.
         [[nodiscard]] static constexpr CodeRange Ordered(CodePosition a, CodePosition b) noexcept
         {
             return b < a ? CodeRange{b, a} : CodeRange{a, b};
         }
     };
 
-    /// A selection: where it was begun (its anchor) and where its caret is (its head).
+    /// A selection: where it began (its anchor) and where its caret is (its head).
     struct CodeSelection
     {
         CodePosition Anchor;
@@ -67,14 +67,16 @@ export namespace foundation::gui
         [[nodiscard]] constexpr bool operator==(const CodeSelection&) const noexcept = default;
     };
 
-    /// Which way an anchor goes when text is put where it stands: before it (it stays) or after.
+    /// What happens to an anchor when text is inserted exactly where it stands: the anchor either
+    /// stays before the new text or moves past it.
     enum class CodeBias : u8
     {
-        Left,  ///< text put at it goes after it (a selection's start, a diagnostic's start)
-        Right, ///< text put at it goes before it, it moving on (a caret after typing)
+        Left,  ///< the anchor stays and the text goes after it (a selection's start, a diagnostic's start)
+        Right, ///< the text goes before the anchor, which moves past it (a caret after typing)
     };
 
-    /// What an edit is, for merging undo steps: typing merges with typing, deleting with deleting.
+    /// The kind of an edit, used to merge undo steps: typing merges with typing, and deleting with
+    /// deleting.
     enum class CodeEditKind : u8
     {
         Other,
@@ -82,9 +84,9 @@ export namespace foundation::gui
         Deleting,
     };
 
-    /// An edit: from `FirstLine`, `RemovedLines` lines gave way to `InsertedLines`; exactly, the
-    /// range `Replaced` (as it was) by text now ending at `End` (what another view sharing the
-    /// document moves its own positions through).
+    /// An edit. Starting at `FirstLine`, `RemovedLines` lines were replaced by `InsertedLines`
+    /// lines. More exactly, the range `Replaced` (in the text as it was) was replaced by text that
+    /// now ends at `End`; another view sharing the document moves its own positions through that.
     struct CodeChange
     {
         u32 FirstLine = 0;
@@ -99,7 +101,8 @@ export namespace foundation::gui
     class CodeDocument
     {
     public:
-        /// Seconds within which a transaction of typing (or of deleting) merges with the last.
+        /// A transaction of typing (or of deleting) merges with the previous one when it comes within
+        /// this many seconds.
         static constexpr f32 kMergeSeconds = 0.3f;
 
         explicit CodeDocument(IAllocator& allocator)
@@ -109,8 +112,8 @@ export namespace foundation::gui
         }
 
         // === The text ===
-        /// Replaces the whole text (lines split at line feeds, a carriage return before one dropped);
-        /// undo starts again, anchors go to the start.
+        /// Replaces the whole text, splitting lines at line feeds and dropping a carriage return
+        /// before one. The undo history is cleared, and every anchor moves to the start.
         void SetText(core::StringView text)
         {
             const u32 removed = static_cast<u32>(m_lines.Size());
@@ -124,7 +127,7 @@ export namespace foundation::gui
             ++m_version;
             Changed(CodeChange{0, removed, static_cast<u32>(m_lines.Size()), CodeRange{}, End()});
         }
-        /// The whole text, its lines joined by line feeds.
+        /// Returns the whole text, with its lines joined by line feeds.
         [[nodiscard]] core::String GetText() const
         {
             core::String out;
@@ -138,11 +141,11 @@ export namespace foundation::gui
         }
         [[nodiscard]] u32 LineCount() const noexcept { return static_cast<u32>(m_lines.Size()); }
         [[nodiscard]] core::StringView LineText(u32 line) const noexcept { return m_lines[line].Text.AsView(); }
-        /// A line's text's hash: what a tokenizer keeps its tokens by.
+        /// Returns the hash of a line's text, which a tokenizer keys its tokens by.
         [[nodiscard]] u64 LineHash(u32 line) const noexcept { return m_lines[line].Hash; }
-        /// Raised by every change: what a view compares against what it drew.
+        /// Increases with every change; a view compares it with the version it last drew.
         [[nodiscard]] u64 GetVersion() const noexcept { return m_version; }
-        /// The text in `range`, lines joined by line feeds.
+        /// Returns the text in `range`, with lines joined by line feeds.
         [[nodiscard]] core::String TextIn(CodeRange range) const
         {
             range = CodeRange{Clamp(range.Start), Clamp(range.End)};
@@ -160,16 +163,17 @@ export namespace foundation::gui
             }
             return out;
         }
-        /// The end of the text.
+        /// Returns the end of the text.
         [[nodiscard]] CodePosition End() const noexcept
         {
             return CodePosition{LineCount() - 1, static_cast<u32>(m_lines.Back().Text.Size())};
         }
 
         // === Search ===
-        /// The first match of `needle` (line feeds in it span lines) at or after `from`, going on from
-        /// the start to `from` when `wrap`; case folded for ASCII letters unless `matchCase`, only
-        /// where no name runs on either side when `wholeWord`. False when there is none.
+        /// Finds the first match of `needle` at or after `from`; line feeds in `needle` span lines.
+        /// With `wrap`, the search continues from the start of the text up to `from`. ASCII letters
+        /// match either case unless `matchCase` is set. With `wholeWord`, a match counts only where
+        /// no name character adjoins it on either side. Returns false when there is no match.
         bool Find(core::StringView needle, CodePosition from, bool matchCase, bool wholeWord, bool wrap, CodeRange& out) const
         {
             if (needle.Size() == 0)
@@ -187,7 +191,8 @@ export namespace foundation::gui
         }
 
         // === Positions ===
-        /// `position` within the text, its column back on a character's boundary.
+        /// Returns `position` clamped into the text, with its column moved back to a character's
+        /// boundary.
         [[nodiscard]] CodePosition Clamp(CodePosition position) const noexcept
         {
             if (position.Line >= LineCount())
@@ -195,11 +200,12 @@ export namespace foundation::gui
             const core::StringView text = LineText(position.Line);
             u32 column = core::Min(position.Column, static_cast<u32>(text.Size()));
             while (column > 0 && column < text.Size() && (static_cast<u8>(text[column]) & 0xC0u) == 0x80u)
-                --column; // inside a character's bytes: back to its start
+                --column; // inside a character's bytes, so step back to its start
             return CodePosition{position.Line, column};
         }
-        /// The next character's place (a grapheme: "é" as e and its accent, an emoji's parts, one),
-        /// the next line's start from a line's end; the end stays.
+        /// Returns the position after the next character. A character is a grapheme, so "é" written
+        /// as e and its accent, or an emoji's parts, count as one. From a line's end it returns the
+        /// next line's start; at the end of the text it stays.
         [[nodiscard]] CodePosition NextCharacter(CodePosition position) const noexcept
         {
             position = Clamp(position);
@@ -208,7 +214,8 @@ export namespace foundation::gui
                 return CodePosition{position.Line, static_cast<u32>(NextGrapheme(text, position.Column))};
             return position.Line + 1 < LineCount() ? CodePosition{position.Line + 1, 0} : position;
         }
-        /// The character before's place, the last line's end from a line's start; the start stays.
+        /// Returns the position before the previous character. From a line's start it returns the
+        /// previous line's end; at the start of the text it stays.
         [[nodiscard]] CodePosition PreviousCharacter(CodePosition position) const noexcept
         {
             position = Clamp(position);
@@ -218,8 +225,9 @@ export namespace foundation::gui
         }
 
         // === Edits ===
-        /// Puts `text` in place of `range` (line feeds in it make lines), as one edit of the open
-        /// transaction (or a transaction of its own); the range `text` now takes.
+        /// Replaces `range` with `text`, where line feeds in `text` make new lines. The edit joins
+        /// the open transaction, or forms a transaction of its own when none is open. Returns the
+        /// range `text` now occupies.
         CodeRange Replace(CodeRange range, core::StringView text, CodeEditKind kind = CodeEditKind::Other)
         {
             range = CodeRange::Ordered(Clamp(range.Start), Clamp(range.End));
@@ -244,9 +252,9 @@ export namespace foundation::gui
         void Erase(CodeRange range, CodeEditKind kind = CodeEditKind::Deleting) { (void)Replace(range, core::StringView{}, kind); }
 
         // === Undo ===
-        /// Opens a transaction: the edits until End are one undo step, which puts `before` back.
-        /// Of a kind (typing, deleting) and within kMergeSeconds of the last of that kind, it
-        /// continues that step.
+        /// Opens a transaction: the edits until End form one undo step, and undoing it restores the
+        /// selections `before`. When `kind` is typing or deleting and the transaction comes within
+        /// kMergeSeconds of the last one of the same kind, it continues that step instead.
         void Begin(core::Span<const CodeSelection> before, CodeEditKind kind = CodeEditKind::Other)
         {
             if (m_open)
@@ -270,7 +278,7 @@ export namespace foundation::gui
                     m_undo.RemoveAt(0);
             }
         }
-        /// Closes it: undoing it, then redoing it, puts `after` back.
+        /// Closes the transaction. Redoing it after an undo restores the selections `after`.
         void End(core::Span<const CodeSelection> after)
         {
             if (!m_open)
@@ -287,17 +295,18 @@ export namespace foundation::gui
             for (const CodeSelection& selection : after)
                 transaction.After.PushBack(selection);
             if (transaction.Edits.IsEmpty())
-                m_undo.RemoveAt(m_undo.Size() - 1); // nothing changed: no step
+                m_undo.RemoveAt(m_undo.Size() - 1); // nothing changed, so there is no step
         }
-        /// The next transaction starts a step of its own (a caret moved between two runs of typing).
+        /// Makes the next transaction start a step of its own (for example, when the caret moved
+        /// between two runs of typing).
         void BreakMerge() noexcept { m_breakNext = true; }
-        /// Advances the clock merging counts on (the host's frame).
+        /// Advances the clock that undo merging measures time on; the host calls it each frame.
         void AdvanceClock(f32 seconds) noexcept { m_clock += seconds; }
 
         [[nodiscard]] bool CanUndo() const noexcept { return !m_undo.IsEmpty() && !m_open; }
         [[nodiscard]] bool CanRedo() const noexcept { return !m_redo.IsEmpty() && !m_open; }
-        /// Steps back; the selections as they were before the step (empty when it kept none).
-        /// False when there is nothing to undo.
+        /// Undoes one step and gives the selections as they were before it (empty when the step
+        /// kept none). Returns false when there is nothing to undo.
         bool Undo(core::Array<CodeSelection>& selections)
         {
             if (!CanUndo())
@@ -314,7 +323,7 @@ export namespace foundation::gui
             m_breakNext = true;
             return true;
         }
-        /// Steps forward again; the selections as they were after the step.
+        /// Redoes one step and gives the selections as they were after it.
         bool Redo(core::Array<CodeSelection>& selections)
         {
             if (!CanRedo())
@@ -328,12 +337,12 @@ export namespace foundation::gui
             m_breakNext = true;
             return true;
         }
-        /// How many steps undo keeps (1000).
+        /// Sets how many steps undo keeps (1000 by default).
         void SetUndoLimit(usize steps) noexcept { m_undoLimit = core::Max<usize>(1, steps); }
         [[nodiscard]] usize UndoCount() const noexcept { return m_undo.Size(); }
 
         // === Anchors ===
-        /// A position the document keeps through edits.
+        /// Adds a position the document keeps up to date through edits.
         CodeAnchorId AddAnchor(CodePosition position, CodeBias bias = CodeBias::Left)
         {
             const Anchor anchor{Clamp(position), bias, true};
@@ -360,24 +369,26 @@ export namespace foundation::gui
             if (id < m_anchors.Size())
                 m_anchors[id].Position = Clamp(position);
         }
-        /// Where `position` goes through an edit that put a range ending at `after` in place of
-        /// `before` (what anchors do; a view moves what it keeps outside the document the same).
+        /// Returns where `position` moves to through an edit that replaced `before` with text ending
+        /// at `after`. Anchors move this way, and a view moves positions it keeps outside the
+        /// document the same way.
         [[nodiscard]] static CodePosition Moved(CodePosition position, CodeBias bias, CodeRange before, CodePosition after) noexcept
         {
             if (position < before.Start)
                 return position; // before the edit
             if (position == before.Start && bias == CodeBias::Left)
-                return position; // at its start keeping left: text put there goes after it
+                return position; // at the start with a left bias: inserted text goes after it
             if (position < before.End || (position == before.Start && before.IsEmpty()))
-                return bias == CodeBias::Left ? before.Start : after; // inside what was replaced, or text put at it
-            // At or after its end: carried along with the text after it.
+                return bias == CodeBias::Left ? before.Start : after; // inside what was replaced, or text inserted exactly at it
+            // At or after the edit's end: carried along with the text that follows it.
             if (position.Line == before.End.Line)
                 return CodePosition{after.Line, after.Column + (position.Column - before.End.Column)};
             return CodePosition{position.Line - before.End.Line + after.Line, position.Column};
         }
 
-        /// Tells `callback` each change's lines (a tokenizer's cache, a view's layouts; each editor
-        /// sharing the document its own); a token for RemoveChangeListener.
+        /// Registers `callback` to hear about each change's lines (for a tokenizer's cache or a
+        /// view's layouts; each editor sharing the document adds its own). Returns a token for
+        /// RemoveChangeListener.
         u32 AddChangeListener(core::Function<void(const CodeChange&)> callback)
         {
             m_listeners.PushBack(Listener{++m_lastListener, core::Move(callback)});
@@ -412,7 +423,7 @@ export namespace foundation::gui
                     return false;
             return true;
         }
-        // A match beginning on `line` at a column in [first, last).
+        // Finds a match beginning on `line` at a column in [first, last).
         bool FindOnLine(core::StringView needle, u32 line, u32 first, u32 last, bool matchCase, bool wholeWord, CodeRange& out) const
         {
             usize split = 0;
@@ -426,13 +437,13 @@ export namespace foundation::gui
                 if ((static_cast<u8>(text[column]) & 0xC0u) == 0x80u)
                     continue; // inside a character
                 if (spans ? column + head.Size() != text.Size() : false)
-                    continue; // a match across lines begins with a line's end
+                    continue; // a match that spans lines must run to the end of its first line
                 if (!SameText(text.SubStr(column, head.Size()), head, matchCase))
                     continue;
                 CodePosition end{line, static_cast<u32>(column + head.Size())};
                 if (spans)
                 {
-                    // Each whole line between, then the next line's start.
+                    // Match each whole line in between, then the start of the last line.
                     usize at = split + 1;
                     u32 next = line + 1;
                     bool fits = true;
@@ -498,11 +509,11 @@ export namespace foundation::gui
             core::Array<CodeSelection> Before;
             core::Array<CodeSelection> After;
             CodeEditKind Kind = CodeEditKind::Other;
-            f32 At = 0.0f; // the clock when it last closed
+            f32 At = 0.0f; // the clock when the transaction last closed
         };
 
         [[nodiscard]] static u64 Hash(core::StringView text) noexcept { return core::HashBytes(text.Data(), text.Size()); }
-        // Its lines' feeds as line feeds alone.
+        // Returns `text` with its line endings normalized to bare line feeds.
         [[nodiscard]] static core::String Normalized(core::StringView text)
         {
             core::String out;
@@ -525,7 +536,8 @@ export namespace foundation::gui
                     start = i + 1;
                 }
         }
-        // The edit itself: lines replaced, anchors moved, listeners told; where the text now lies.
+        // Applies the edit: replaces the lines, moves the anchors and tells the listeners. Returns where
+        // the new text lies.
         CodeRange Apply(CodeRange range, core::StringView text)
         {
             const core::String prefix(LineText(range.Start.Line).SubStr(0, range.Start.Column));

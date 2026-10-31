@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Style model v2, P1 (ui-layout-and-style-model.md section 3): the ordered cascade
-// (specificity, source order, last wins per property), selector chains (descendant / child
-// combinators, #id, structural pseudo-classes, the CSS state aliases), inheritance with the
-// `inherit` / `initial` keywords, custom properties + var() with fallbacks, the palette as
-// root variables, relative units (%, em, calc) in sheets and markup, and the computed-style
-// cache's invalidation.
+// The ordered cascade (specificity, source order, last wins per property), selector chains
+// (descendant and child combinators, #id, structural pseudo-classes, the CSS state aliases),
+// inheritance with the `inherit` and `initial` keywords, custom properties and var() with
+// fallbacks, the palette as root variables, relative units (%, em, calc) in sheets and markup,
+// and the invalidation of the computed-style cache.
 
 #include <doctest/doctest.h>
 
@@ -53,7 +52,7 @@ namespace
         return loader.Load(src);
     }
 
-    // A context + root with a sheet; helpers build nested groups/views.
+    // A context and root with a sheet; helpers build nested groups and views.
     struct Fixture
     {
         UIContext ctx{DefaultAllocator()};
@@ -98,7 +97,7 @@ namespace
         }
     };
 
-    // Channel readers: -1 when the property is UNSET (the default color is white, whose
+    // Channel readers: -1 when the property is unset (the default color is white, whose
     // channels would read as 1).
     const Color kUnset{-1.0f, -1.0f, -1.0f, 0.0f};
     [[nodiscard]] f32 Red(View& v) { return v.ResolveStyleColor(StyleProperty::TextColor, kUnset).r; }
@@ -132,7 +131,7 @@ TEST_CASE("cascade: equal specificity resolves by source order, last wins PER PR
 
 TEST_CASE("cascade: a pseudo-class weighs like a class, so `.primary` and `:hover` tie on order")
 {
-    // `.primary` is declared AFTER `TestView:hover`: equal specificity (11 each) -> source order.
+    // `.primary` is declared after `TestView:hover`: with equal specificity (11 each), source order decides.
     Fixture f(LoadSSS(u8"TestView:hover { text-color: #ff0000; }\n"
                       u8"TestView.primary { text-color: #00ff00; }\n"));
     auto v = f.Leaf(f.root.Get(), u8"primary");
@@ -227,8 +226,8 @@ TEST_CASE("cascade: text properties inherit the parent's COMPUTED value through 
     CHECK(leaf->ResolveStyleFloat(StyleProperty::CornerRadius, -1.0f) == doctest::Approx(-1.0f));
 }
 
-// A label wraps by the `word-wrap` style as by its markup attribute: the style was parsed and
-// inherited but the label read only its own property (the Shader Gallery's caption did not wrap).
+// A label wraps by the inherited `word-wrap` style as well as by its own markup attribute, and its
+// own setting takes precedence.
 TEST_CASE("cascade: a label wraps by the word-wrap style, its own setting first")
 {
     Fixture f(LoadSSS(u8".wraps { word-wrap: true; }\n"));
@@ -275,8 +274,8 @@ TEST_CASE("cascade: var() reads a custom property from the cascade, with a fallb
 
 TEST_CASE("cascade: custom properties inherit and a nearer declaration overrides")
 {
-    // Declared on the ROOT (a `View { --accent }` rule would re-declare it on every view,
-    // shadowing any ancestor's value - the same as CSS `* { --x }`).
+    // Declared on the root: a `View { --accent }` rule would re-declare it on every view and
+    // shadow any ancestor's value, the same as CSS `* { --x }`.
     Fixture f(LoadSSS(u8"RootView { --accent: #ff0000; }\n"
                       u8".dark { --accent: #0000ff; }\n"
                       u8"TestView { text-color: var(--accent); }\n"));
@@ -321,12 +320,12 @@ TEST_CASE("cascade: percent and em resolve against the reference box and the fon
     auto group = f.Group(f.root.Get());
     auto v = f.Leaf(group.Get());
     CHECK(v->ResolveStyleLength(StyleProperty::CornerRadius, 80.0f) == doctest::Approx(40.0f));
-    // em of the view's OWN font size (30 = 1.5em of the parent's 20).
+    // em of the view's own font size (30 is 1.5em of the parent's 20).
     CHECK(v->ResolveStyleLength(StyleProperty::FontSize, 0.0f) == doctest::Approx(30.0f));
     CHECK(v->ResolveStyleLength(StyleProperty::BorderWidth, 0.0f) == doctest::Approx(60.0f));
     CHECK(v->ResolveStyleLength(StyleProperty::Spacing, 300.0f) == doctest::Approx(280.0f));
-    // The plain Float accessor resolves a Length too (P2 consumer migration): em against the
-    // font size; percent has no reference box on that path and reads 0.
+    // The plain Float accessor resolves a Length too: em against the font size; percent has no
+    // reference box on that path and reads 0.
     CHECK(v->ResolveStyleFloat(StyleProperty::CornerRadius, -1.0f) == doctest::Approx(0.0f));
     CHECK(v->ResolveStyleFloat(StyleProperty::BorderWidth, -1.0f) == doctest::Approx(60.0f));
     CHECK(v->ResolveStyleThickness(StyleProperty::Padding).Left == doctest::Approx(4.0f));
@@ -398,7 +397,7 @@ TEST_CASE("cascade: the computed-style cache follows class edits, sheet edits an
     a->RemoveClass(u8"on");
     CHECK(Red(*a) == doctest::Approx(1.0f));
 
-    // A rule added to the context sheet AFTER the first resolve is seen.
+    // A rule added to the context sheet after the first resolve is seen.
     StyleSheet* sheet = f.ctx.GetStyleSheet();
     sheet->ForType(&TestView::StaticType()).Set(StyleProperty::TextColor, Color{0.0f, 0.0f, 1.0f, 1.0f});
     CHECK(Blue(*a) == doctest::Approx(1.0f));
@@ -459,9 +458,8 @@ TEST_CASE("cascade: two contexts with different sheets stay independent (editor 
 
 TEST_CASE("cascade: a compound state selector needs EVERY flag, not any one of them")
 {
-    // `:hover:checked` used to match a view that was merely hovered (the match tested ANY bit
-    // of the compound); the selector's own doc said all flags must be present. Found by the
-    // Beef port reading the code against the comment.
+    // `:hover:checked` matches only a view with all of the compound's flags set, not a view that
+    // is merely hovered.
     Fixture f(LoadSSS(u8"StateView { text-color: #000000; }\n"
                       u8"StateView:hover:checked { text-color: #ff0000; }\n"));
     auto v = core::MakeRef<StateView>(core::DefaultAllocator());

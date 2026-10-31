@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/DataTests.bf - ViewRecycler + SelectionModel + FlattenedTreeAdapter.
-// Beef `SimpleListAdapter : ListAdapterBase` with CreateView returning a raw owned View -> CreateView
-// returns RefPtr<View>; recycle/acquire move refs (RAII, no `delete`); `===` ref-equality -> pointer ==.
-// SimpleListAdapter / SimpleTreeAdapter test doubles live in TestHelpers.h.
+// Tests for ViewRecycler, SelectionModel and FlattenedTreeAdapter. CreateView returns a
+// RefPtr<View>, and recycling and acquiring move references. The SimpleListAdapter and
+// SimpleTreeAdapter test doubles live in TestHelpers.h.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -16,7 +15,6 @@ using namespace foundation::ui::tests;
 using namespace foundation::core;
 namespace core = foundation::core;
 
-// SimpleListAdapter test double lives in TestHelpers.h (shared with ListViewTests).
 
 // === ViewRecycler ===
 
@@ -74,10 +72,9 @@ TEST_CASE("data: SelectionModel_SingleMode_ReplacesSelection")
     CHECK(sel.SelectedCount() == 1u);
 }
 
-// DELIBERATE DEVIATION from the Sedulous port (which accumulated here): Select() is a plain
-// click and replaces the selection in EVERY mode - Toggle (Ctrl) and SelectRange (Shift) are
-// the extend paths. Accumulating plain clicks grew multi-select lists forever (user-reported
-// in the asset browser).
+// Select() is a plain click and replaces the selection in every mode; Toggle (Ctrl) and
+// SelectRange (Shift) are the ways to extend it. If plain clicks accumulated, a multi-select
+// list's selection would only ever grow.
 TEST_CASE("data: SelectionModel_MultipleMode_PlainSelectReplaces")
 {
     SelectionModel sel;
@@ -90,7 +87,7 @@ TEST_CASE("data: SelectionModel_MultipleMode_PlainSelectReplaces")
     CHECK(sel.IsSelected(2));
     CHECK(sel.SelectedCount() == 1u);
 
-    // Extending still works through Toggle/SelectRange.
+    // Extending works through Toggle and SelectRange.
     sel.Toggle(0);
     CHECK(sel.SelectedCount() == 2u);
     sel.SelectRange(0, 3);
@@ -123,8 +120,8 @@ TEST_CASE("data: SelectionModel_SelectRange")
     CHECK(sel.IsSelected(5));
 }
 
-// Shift extends from the ANCHOR (the last plain or Ctrl pick), so repeated extension grows or
-// shrinks one range; the caret is where navigation continues from (Sedulous 5482ab11).
+// Shift extends from the anchor (the last plain or Ctrl pick), so repeated extension grows or
+// shrinks one range; the caret is where navigation continues from.
 TEST_CASE("data: SelectionModel_ExtendTo grows and shrinks one range from the anchor")
 {
     SelectionModel sel;
@@ -212,7 +209,7 @@ TEST_CASE("data: FlattenedTreeAdapter_ExpandRoot_IncludesChildren")
     SimpleTreeAdapter tree;
     FlattenedTreeAdapter flat(&tree);
     flat.Expand(0);               // root 0 has 2 children
-    CHECK(flat.ItemCount() == 5); // 3 roots + 2 children
+    CHECK(flat.ItemCount() == 5); // 3 roots and 2 children
 }
 
 TEST_CASE("data: FlattenedTreeAdapter_CollapseRoot_RemovesChildren")
@@ -272,5 +269,5 @@ TEST_CASE("data: FlattenedTreeAdapter_GetSetExpandedNodes")
     flat.SetExpandedNodes(saved);
     CHECK(flat.IsExpanded(0));
     CHECK(flat.IsExpanded(1));
-    CHECK(flat.ItemCount() == 6); // 3 roots + 2 children of 0 + 1 child of 1
+    CHECK(flat.ItemCount() == 6); // 3 roots, 2 children of 0 and 1 child of 1
 }

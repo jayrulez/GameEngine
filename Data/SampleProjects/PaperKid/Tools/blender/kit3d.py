@@ -13,7 +13,7 @@ from mathutils import Vector, Matrix
 
 def P(x, fwd, up):
     """A point by (x, forward, up): Blender's forward is -Y (glTF exports it as +Z). The kid faces
-    -Y, so +X is his LEFT: a side of +1 is his left hand and leg, -1 his right."""
+    -Y, so +X is his left: a side of +1 is his left hand and leg, -1 his right."""
     return Vector((x, -fwd, up))
 
 

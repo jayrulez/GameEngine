@@ -1,6 +1,6 @@
 # Foundation::RHI.WebGPU - `foundation.rhi.webgpu`: WebGPU backend over the standard
-# webgpu.h. Desktop loads the wgpu-native sidecar at RUN TIME (the vendored
-# ThirdParty::WgpuHeaders supply webgpu.h + wgpu.h as a headers-only build dependency);
+# webgpu.h. Desktop loads the wgpu-native sidecar at run time (the vendored
+# ThirdParty::WgpuHeaders supply webgpu.h and wgpu.h as a headers-only build dependency);
 # web gets both the header and the browser binding from Emscripten's emdawnwebgpu port.
 util_add_engine_library(RHI.WebGPU ALIAS Foundation::RHI.WebGPU)
 target_link_libraries(RHI.WebGPU
@@ -9,8 +9,8 @@ target_link_libraries(RHI.WebGPU
 if(EMSCRIPTEN)
     # emdawnwebgpu supplies <webgpu/webgpu.h> (Dawn's spec header) at compile time and the
     # JS binding to navigator.gpu at link time. `embuilder build emdawnwebgpu` populates the
-    # port cache. The flag is needed on BOTH compile and link of every consumer, so it is
-    # PUBLIC. (The old --use-port=emscripten_webgpu / -sUSE_WEBGPU=1 was removed in emcc 4.)
+    # port cache. The flag is needed on both compile and link of every consumer, so it is
+    # PUBLIC. (emcc 4 removed the older --use-port=emscripten_webgpu and -sUSE_WEBGPU=1.)
     target_compile_options(RHI.WebGPU PUBLIC "--use-port=emdawnwebgpu")
     target_link_options(RHI.WebGPU PUBLIC "--use-port=emdawnwebgpu")
 else()

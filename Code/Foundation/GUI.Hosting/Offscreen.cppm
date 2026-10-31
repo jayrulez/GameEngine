@@ -3,11 +3,12 @@
 
 // GUI.Hosting - :offscreen partition: GuiOffscreen, a root drawn into a picture on the host's device.
 //
-// What a test or a tool draws with, not a window: the image tests' pictures, the bench's frames,
-// a sweep's or an audit's. A target of a size and format of its own, a VG renderer and pass targets
-// of its own (the bakes registered with it, as with a window's), drawn on an encoder and fence of its
-// own and waited for, so a picture asked for is read back in the call. Each draw times its stages:
-// the GUI's draw, the renderer's prepare, and the GPU's work with the wait.
+// A test or a tool draws with this rather than a window: the image tests' pictures, the bench's
+// frames, a sweep's or an audit's. It has its own target of a given size and format, and its own VG
+// renderer and pass targets (the bakes are registered with it, as with a window's). It draws on its
+// own encoder and fence and waits for them, so a requested picture is read back within the call.
+// Each draw times its stages: the GUI's draw, the renderer's prepare, and the GPU's work with the
+// wait.
 //
 // The device is idled before a draw: the host's windows may share the baker's frame slots.
 
@@ -18,7 +19,7 @@ export module foundation.gui.hosting:offscreen;
 
 import foundation.core;
 import foundation.rhi;
-import foundation.rhi.capture; // ScreenshotCapture: the read back
+import foundation.rhi.capture; // ScreenshotCapture, for the read back
 import foundation.image;
 import foundation.graphics;
 import foundation.vg;
@@ -47,8 +48,8 @@ export namespace foundation::gui
             f64 Gpu = 0.0;     ///< the GPU's work, waited for
         };
 
-        /// A `width` by `height` target in `format` (one a picture can be read back from: 8-bit
-        /// RGBA or BGRA), blending in `space`.
+        /// Makes a `width` by `height` target in `format` (one a picture can be read back from:
+        /// 8-bit RGBA or BGRA), blending in `space`.
         GuiOffscreen(IAllocator& allocator, GuiHost& host, u32 width, u32 height,
                      rhi::TextureFormat format = rhi::TextureFormat::RGBA8UnormSrgb, vg::VGBlendSpace space = vg::VGBlendSpace::Linear)
             : m_allocator(allocator), m_host(host), m_renderer(allocator), m_width(width), m_height(height), m_format(format), m_space(space)
@@ -87,7 +88,7 @@ export namespace foundation::gui
             if (device == nullptr)
                 return;
             device->WaitIdle();
-            m_capture.Release(*device); // its read back buffer
+            m_capture.Release(*device); // the capture's read back buffer
             if (m_host.m_baker)
                 m_host.m_baker->RemoveTarget(m_renderer);
             if (m_renderer.IsInitialized())
@@ -111,10 +112,12 @@ export namespace foundation::gui
         /// The colour target the last draw went into (left in ShaderRead).
         [[nodiscard]] rhi::Texture* Texture() const noexcept { return m_texture; }
 
-        /// `root` styled, laid out at this target's size (at its own display scale) and drawn, the
-        /// GPU's work waited for, the stages timed into `times`. False when the target is not ready.
+        /// Styles `root`, lays it out at this target's size (at its own display scale) and draws it,
+        /// then waits for the GPU's work. The stages are timed into `times`. Returns false when the
+        /// target is not ready.
         bool Draw(SceneRoot& root, Times* times = nullptr) { return Render(root, {}, nullptr, times); }
-        /// Draw, and the picture read back into `out` and written to `path` as a PNG.
+        /// Draws as Draw does, then reads the picture back into `out` and writes it to `path` as a
+        /// PNG.
         bool Picture(SceneRoot& root, StringView path, image::Image& out, Times* times = nullptr)
         {
             return Render(root, path, &out, times);

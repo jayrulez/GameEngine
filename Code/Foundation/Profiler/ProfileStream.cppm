@@ -3,8 +3,8 @@
 
 /// Foundation::Profiler - :stream partition.
 ///
-/// The one encoding of profiler frames (Specs/profiler.md, "Built to be streamed"): a capture file
-/// (.aeprofile) is a stream saved, and in 0.2 a socket carries the same bytes. A stream is a header
+/// The one encoding of profiler frames: a capture file (.aeprofile) is a saved stream, and a socket
+/// could carry the same bytes. A stream is a header
 /// (the recording process: application, platform, build, tick frequency), then chunks, each a tag,
 /// a byte length and its payload, so a reader skips a chunk it does not know. The tables a frame's
 /// ids point into travel beside it as deltas: names, threads and counters are sent when new, each

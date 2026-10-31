@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.RenderGraph.Tests/GraphCoreTests.bf
+// The graph's core: resource handles, passes, output size, imports and Reset.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

@@ -3,14 +3,11 @@
 
 /// Foundation::Render - the `:cluster_system` partition.
 ///
-/// Clustered light culling. Bins lights into a 3D froxel grid (screen tiles ×
+/// Clustered light culling. Bins lights into a 3D froxel grid (screen tiles by
 /// logarithmic depth slices) once per frame via a compute pass, so the forward shader evaluates
 /// only the lights touching each fragment's cluster instead of all lights. This partition owns the
-/// build compute pipeline + the per-frame cluster buffers, and declares the build pass into the
+/// build compute pipeline and the per-frame cluster buffers, and declares the build pass into the
 /// frame graph (ordered before the forward pass, which reads the buffers it writes).
-///
-/// 4.3a establishes the plumbing with a STUB kernel (writes empty cluster lists); 4.3b ports the
-/// real froxel-AABB / sphere-assignment kernel; 4.3c wires the buffers into the forward shader.
 
 module;
 #include "Core/Prelude.h"
@@ -42,8 +39,8 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // set 0: build params UBO (b0, dynamic) + lights SRV (t0) + per-cluster offsets (u0) +
-        // flat light-index list (u1). DXC shifts keep b0/t0/u0/u1 from colliding in SPIR-V.
+        // set 0: build params UBO (b0, dynamic), lights SRV (t0), per-cluster offsets (u0) and the
+        // flat light-index list (u1). DXC shifts keep b0, t0, u0 and u1 from colliding in SPIR-V.
         rhi::BindGroupLayoutEntry paramsEntry =
             rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Compute);
         paramsEntry.hasDynamicOffset = true;
@@ -85,8 +82,8 @@ namespace foundation::render
 
     void ClusterSystem::PrepareFrame(u32 frameIndex)
     {
-        // Hot reload: rebuild the compute pipeline when the shader changed (GPU idled
-        // on reload).
+        // Hot reload: rebuild the compute pipeline when the shader changed (the GPU is
+        // idle on reload).
         const u64 shaderVersion = m_shaders->Version(u8"cluster_build");
         if (shaderVersion != m_pipelineShaderVersion)
         {
@@ -131,10 +128,10 @@ namespace foundation::render
         if (viewIndex >= kMaxViewsPerFrame)
         {
             return binding;
-        } // beyond budget -> all-lights fallback
+        } // beyond budget: fall back to all lights
 
-        // Grid covers the VIEWPORT (not the full target) in viewport-local screen space; the forward
-        // subtracts the viewport offset from SV_Position before tiling.
+        // The grid covers the viewport (not the full target) in viewport-local screen space; the forward
+        // pass subtracts the viewport offset from SV_Position before tiling.
         const u32 gridX = (view.ViewportWidth() + kTileSize - 1) / kTileSize;
         const u32 gridY = (view.ViewportHeight() + kTileSize - 1) / kTileSize;
         const u32 totalClusters = gridX * gridY * kSliceCount;
@@ -154,13 +151,14 @@ namespace foundation::render
         // in front of the eye (an orthographic projection's near plane may sit at or behind it).
         const f32 nearZ = Max(view.Camera().NearZ(), 0.01f);
         const f32 farZ = Max(view.Camera().FarZ(), nearZ + 1.0f);
-        // slice = SliceCount * log(depth/near) / log(far/near) -> inverse of GetSliceDepth in the
-        // kernel. The SliceCount factor is essential: without it every depth collapses to slice 0.
+        // slice = SliceCount * log(depth/near) / log(far/near), the inverse of GetSliceDepth in the
+        // kernel. Without the SliceCount factor every depth collapses to slice 0.
         const f32 logScale = static_cast<f32>(kSliceCount) / Log(farZ / nearZ);
         const f32 logBias = -Log(nearZ) * logScale;
 
-        // Upload this view's lights into the cluster light buffer (its own copy - the build runs
-        // before the forward uploads its lights; the stored indices are valid for both, same order).
+        // Upload this view's lights into the cluster light buffer. It is a separate copy because the
+        // build runs before the forward pass uploads its lights; both use the same order, so the stored
+        // indices are valid for both.
         const Span<const GpuLight> lights =
             (view.Scene() != nullptr) ? view.Scene()->Lights() : Span<const GpuLight>{};
         u32 lightCount = static_cast<u32>(lights.Size());
@@ -222,7 +220,7 @@ namespace foundation::render
             {
                 b.WriteStorage(offsetsH);
                 b.WriteStorage(indicesH);
-                b.HasSideEffects(); // until the forward pass reads the buffers (4.3c), keep the pass alive
+                b.HasSideEffects(); // keep the pass alive even when no reader of the buffers is declared
                 b.SetComputeExecute(
                     [=](rhi::ComputePassEncoder& cp)
                     {
@@ -261,10 +259,10 @@ namespace foundation::render
             return true;
         }
 
-        // Grow this slot. In-flight frames may still read the OLD buffers (and the bind
-        // group over them): RETIRE via the queue when wired - on web a mid-frame WaitIdle
-        // pumps the event loop, expires the canvas texture, and drops the whole frame's
-        // submit - else drain (standalone/test use).
+        // Grow this slot. In-flight frames may still read the old buffers and the bind
+        // group over them, so retire them through the queue when one is wired (on web a
+        // mid-frame WaitIdle pumps the event loop, expires the canvas texture and drops
+        // the whole frame's submit); otherwise drain (standalone and test use).
         const bool replacing = m_offsets[bufferSlot] != nullptr || m_indices[bufferSlot] != nullptr;
         if (replacing && m_retire == nullptr)
         {
@@ -317,8 +315,8 @@ namespace foundation::render
         m_offsetsBytes[bufferSlot] = offsetsBytes;
         m_indicesBytes[bufferSlot] = indicesBytes;
         ++m_bufferVersion
-            [bufferSlot]; // signal consumers to rebuild cached bind groups (address may reuse)
-        // The slot's bind group referenced the old buffers - retire/drop it with them.
+            [bufferSlot]; // signal consumers to rebuild cached bind groups (the address may be reused)
+        // The slot's bind group referenced the old buffers; retire or drop it with them.
         if (m_bindGroups[bufferSlot] != nullptr)
         {
             if (m_retire != nullptr)

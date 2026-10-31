@@ -1,5 +1,5 @@
-# Pipeline::Animation - `animation.pipeline`: authoring assets + builders
-# that cook skeletons/clips into the content DB. Tooling only (runtime loads cooked).
+# Pipeline::Animation - `animation.pipeline`: authoring assets and builders
+# that cook skeletons and clips into the content DB. Tooling only (the runtime loads cooked data).
 util_add_engine_library(Animation.Pipeline ALIAS Pipeline::Animation)
 target_link_libraries(Animation.Pipeline
     PUBLIC Foundation::Core Pipeline::Core Foundation::Content

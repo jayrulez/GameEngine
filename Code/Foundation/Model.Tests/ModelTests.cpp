@@ -22,9 +22,9 @@ TEST_CASE("model: core data types - names round-trip as wide strings")
 
 TEST_CASE("model: ModelBone::updateLocalTransform builds the engine's row-vector TRS matrix")
 {
-    // The bug this pins: the hand-built matrix put the translation in the last column and
-    // composed T * (R * S) (column-vector convention). TransformPoint reads the last row, so
-    // (1,0,0) came out as (2,0,0) - the translation was dropped entirely.
+    // TransformPoint reads the translation from the last row. A matrix with the translation in
+    // the last column, composed T * (R * S) (column-vector convention), would send (1,0,0) to
+    // (2,0,0), dropping the translation entirely.
     ModelBone bone;
     bone.translation = Float3{10.0f, 0.0f, 0.0f};
     bone.scale = Float3{2.0f, 2.0f, 2.0f};
@@ -35,7 +35,7 @@ TEST_CASE("model: ModelBone::updateLocalTransform builds the engine's row-vector
     CHECK(p.y == doctest::Approx(0.0f));
     CHECK(p.z == doctest::Approx(0.0f));
 
-    // Non-uniform scale + a real rotation, checked WITHOUT Float4x4 composition: under
+    // Non-uniform scale and a real rotation, checked without Float4x4 composition: under
     // row-vector semantics p * (S * R) is "scale, then rotate", so the matrix must agree with
     // rotating the pre-scaled point by the quaternion directly, then translating. With
     // non-uniform scale the other order (rotate, then scale) gives a different point, so this

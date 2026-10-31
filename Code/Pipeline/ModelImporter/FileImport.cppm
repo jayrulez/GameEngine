@@ -3,17 +3,16 @@
 
 // Pipeline::ModelImporter - :file_import partition.
 //
-// The SOURCE-side model importer for the editor pipeline: a
-// dropped model file fans out into REAL source instances in the content DB - textures
-// (embedded-pixels TextureAssets), materials (MaterialAssets), meshes (Static/SkinnedMeshAssets),
-// skeleton + clips (animation assets), and a ModelManifestAsset tying them together - so the
-// pipeline owns every cook incrementally and each fanned-out asset is individually editable
-// (tweak one material without touching the model). Product guid = source guid keeps the
-// manifest's recorded guids valid in the cooked DB, where the runtime's ModelResource composite
-// binds them.
+// The source-side model importer for the editor pipeline: a dropped model file fans out into
+// source instances in the content DB (textures as embedded-pixel TextureAssets, materials as
+// MaterialAssets, meshes as StaticMeshAssets or SkinnedMeshAssets, the skeleton and clips as
+// animation assets, and a ModelManifestAsset tying them together), so the pipeline cooks each
+// incrementally and each fanned-out asset is editable on its own (tweak one material without
+// touching the model). Product guids equal source guids, which keeps the manifest's recorded
+// guids valid in the cooked DB, where the runtime's ModelResource composite binds them.
 //
-// (This is the editor path; CookModel in :cook remains the direct/sample path that bakes a
-// loaded model straight into a runtime DB.)
+// This is the editor path; CookModel in :cook is the direct path that bakes a loaded model
+// straight into a runtime DB.
 
 module;
 #include "Core/Prelude.h"
@@ -54,7 +53,7 @@ using namespace foundation::core;
 
 export namespace pipeline
 {
-    // The cooked-model runtime types now live in foundation::model (foundation.model.resource).
+    // The cooked-model runtime types live in foundation::model (foundation.model.resource).
     using foundation::model::ModelManifestSource;
     using foundation::model::ModelNode;
     using foundation::model::ModelResource;
@@ -62,14 +61,14 @@ export namespace pipeline
     namespace content = foundation::content;
 
     // Source asset embedding a ModelManifestSource (built at import; the cook writes it
-    // through). Guids inside are source guids == product guids.
+    // through). Guids inside are source guids, which equal product guids.
     class ModelManifestAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(ModelManifestAsset, pipeline::Asset)
     public:
         ModelManifestSource manifest;
         // Re-import memory: the review dialog's decisions from the import that wrote this
-        // manifest - a re-import merges them onto the fresh plan instead of re-asking.
+        // manifest. A re-import merges them onto the fresh plan instead of asking again.
         pipeline::ImportPlan importSelection;
 
         void Serialize(ISerializer& ar) override
@@ -92,7 +91,7 @@ export namespace pipeline
             return &ModelManifestSource::StaticType();
         }
 
-        // Everything the manifest points at is a runtime REFERENCE: the products must exist,
+        // Everything the manifest points at is a runtime reference: the products must exist,
         // but their content never re-cooks the manifest.
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
@@ -140,15 +139,15 @@ export namespace pipeline
     {
         RTTI_OBJECT(ModelImportOptions, pipeline::ImportOptions)
     public:
-        bool importTextures = true;     // embedded/sidecar images -> TextureAssets
+        bool importTextures = true;     // embedded and sidecar images as TextureAssets
         bool importMaterials = true;    // PBR materials (texture slots wired when textures import)
-        bool importAnimations = true;   // skeleton + clips
+        bool importAnimations = true;   // skeleton and clips
         bool generatePrefab = true;     // hierarchy prefab beside the manifest (post-import step)
         bool generateScene = false;     // standalone scene of the same hierarchy (post-import step)
-        bool generateCollision = false; // CollisionShapeAsset per mesh + colliders on the prefab
+        bool generateCollision = false; // CollisionShapeAsset per mesh and colliders on the prefab
         bool collisionConvex = false;   // hull (dynamic-capable) instead of exact triangle mesh
         bool generateLods = true;       // auto-LOD chains for big static meshes (authored _LODn wins)
-        bool rootMotion = false; // new clips extract their root's travel and turn (root-motion.md)
+        bool rootMotion = false; // new clips extract their root's travel and turn
 
         [[nodiscard]] Array<Toggle> Toggles() override
         {
@@ -221,8 +220,8 @@ export namespace pipeline
         }
     };
 
-    /// PrepareOnWorker's payload: the fully loaded model (parse + texture decode = the slow
-    /// 95% of a model import, safely off the UI thread).
+    /// PrepareOnWorker's payload: the fully loaded model (parsing and texture decoding, the
+    /// slow part of a model import, done off the UI thread).
     class LoadedModel final : public Object
     {
         RTTI_OBJECT(LoadedModel, Object)
@@ -267,7 +266,7 @@ export namespace pipeline
             return false;
         }
 
-        /// Everything Import would create, in fan-out order - the review dialog's data.
+        /// Everything Import would create, in fan-out order: the review dialog's data.
         /// Reuses the worker-prepared model when supplied; only mirrors the naming logic of
         /// the fan-out helpers (ComputeLodFold is shared so the mesh set matches exactly).
         [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView sourcePath,
@@ -314,7 +313,7 @@ export namespace pipeline
                     const bool rgba8 =
                         (t.getData() != nullptr && t.width > 0 && t.height > 0 &&
                          t.getDataSize() == t.width * t.height * 4);
-                    if (rgba8) // undecodable textures never become assets - keep them out
+                    if (rgba8) // undecodable textures never become assets, so keep them out
                     {
                         add(pipeline::ImportResourceKind::Texture, ImportedTextureName(t, i));
                     }
@@ -349,7 +348,7 @@ export namespace pipeline
             {
                 if (lodOf[i] >= 0)
                 {
-                    continue; // folds into its base's LOD chain - not an asset of its own
+                    continue; // folds into its base's LOD chain, not an asset of its own
                 }
                 add(pipeline::ImportResourceKind::Mesh,
                     ImportedAssetName(meshes[i]->name(), u8"mesh", i));
@@ -413,8 +412,8 @@ export namespace pipeline
             const ModelImportOptions defaults;
             const ModelImportOptions& opt =
                 (options != nullptr) ? static_cast<const ModelImportOptions&>(*options) : defaults;
-            // Source provenance copy: the file NAME is known without copying; the copy
-            // itself (and the .gltf sidecars below) is bulk file IO - deferred when possible.
+            // Source provenance copy: the file name is known without copying; the copy
+            // itself (and the .gltf sidecars below) is bulk file IO, deferred when possible.
             const StringView sourceFileName = pipeline::FileNameOf(sourcePath);
             if (sourceFileName.IsEmpty())
             {
@@ -462,7 +461,7 @@ export namespace pipeline
             }
 
             // The slow load either arrived pre-baked from the worker phase, or runs inline
-            // (headless/tests). Loading uses the ORIGINAL dropped path: .gltf files
+            // (headless and tests). Loading uses the original dropped path: .gltf files
             // reference sibling sidecars living next to the original, not in Sources/.
             foundation::model::Model inlineModel;
             foundation::model::Model* modelPtr = nullptr;
@@ -481,7 +480,7 @@ export namespace pipeline
             }
             foundation::model::Model& model = *modelPtr;
 
-            // .gltf: copy the referenced sidecars (buffers/images by relative uri) into
+            // .gltf: copy the referenced sidecars (buffers and images by relative uri) into
             // Sources/ so the imported source set is complete.
             const bool sidecarsCopied =
                 pipeline::FileExtensionLower(sourcePath) == StringView(u8"gltf");
@@ -516,7 +515,7 @@ export namespace pipeline
             manifest.boundsMin = model.bounds().min;
             manifest.boundsMax = model.bounds().max;
 
-            Array<String> claimed; // names claimed THIS run (ClaimInstance's dedup scope)
+            Array<String> claimed; // names claimed this run (ClaimInstance's dedup scope)
             // The manifest is named for the file, and is written last: its name is reserved
             // first, so a sub-asset named like the model (a material "Gem_Blue" in
             // Gem_Blue.gltf) takes a suffix rather than the manifest's instance.
@@ -548,7 +547,7 @@ export namespace pipeline
             lap(phaseAnimationsMs);
             Array<String> meshSourceNames; // per manifest mesh slot (collision's plan keys)
             // The prepared model outlives the deferred flush (the editor's job captures it),
-            // so the mesh conversion + LOD chains run INSIDE the deferred writes; an inline
+            // so the mesh conversion and LOD chains run inside the deferred writes; an inline
             // model dies with this call, so its writes are produced here.
             const Status meshes =
                 ImportMeshes(*context.allocator, model, *modelGroup, manifest, claimed,
@@ -568,8 +567,8 @@ export namespace pipeline
             ImportNodes(model, manifest);
 
             // Reuse a previous import's manifest (its guid survives a re-import); a different type
-            // squatting the name (an import from before the name was reserved) keeps its
-            // instance, and the manifest takes the next free name.
+            // holding the name (left by an import that did not reserve it) keeps its instance, and
+            // the manifest takes the next free name.
             content::Instance* instance = modelGroup->GetInstance(stem);
             if (instance == nullptr)
             {
@@ -622,7 +621,7 @@ export namespace pipeline
         // Copy every relative "uri" the .gltf references (buffers, images) from next to the
         // original file into Sources/, preserving relative subpaths. Data URIs and
         // parent-escaping paths are skipped. A plain text scan (the uris live in JSON string
-        // values); failures only log - the import itself already succeeded from the original.
+        // values); failures only log, since the import itself already succeeded from the original.
         static void CopyGltfSidecars(StringView originalPath, const pipeline::ImportContext& context,
                                      Array<pipeline::DeferredImportWrite>* deferredWrites)
         {
@@ -702,9 +701,9 @@ export namespace pipeline
 
                 String from(dir);
                 from.Append(uri);
-                // A uri the package does not ship (Bistro names a PNG twin for every DDS it
-                // never included) is a warning, never a failed write: the deferred flush
-                // must not fail the whole import over it, same as the inline copy below.
+                // A uri the package does not ship (a package can name a PNG twin for every DDS
+                // and include only the DDS) is a warning, never a failed write: the deferred
+                // flush must not fail the whole import over it, same as the inline copy below.
                 if (!FileExists(from.AsView()))
                 {
                     LOG_WARNING(u8"Import", u8"gltf sidecar missing: {}", uri);
@@ -733,11 +732,11 @@ export namespace pipeline
             }
         }
 
-        // Reuse-or-claim (re-import semantics): a same-named instance OF THE SAME TYPE from a
-        // previous import is REUSED - its guid survives, so cooked products overwrite in place
+        // Reuse or claim (re-import semantics): a same-named instance of the same type from a
+        // previous import is reused. Its guid survives, so cooked products overwrite in place
         // and everything referencing it (materials, prefabs, placed scenes) follows the
-        // re-imported content. Names already claimed THIS run (two source textures named
-        // alike) or squatted by a DIFFERENT type get numeric suffixes, like UniqueName did.
+        // re-imported content. Names already claimed this run (two source textures named
+        // alike) or held by a different type get numeric suffixes.
         [[nodiscard]] static content::Instance* ClaimInstance(content::Group& group,
                                                               StringView base, const TypeInfo& type,
                                                               Array<String>& claimed)
@@ -775,8 +774,8 @@ export namespace pipeline
         }
 
         // A texture the loader left on disk (a DDS): copied into Sources/ and referenced by a
-        // FILE-BACKED asset, so the cook passes its GPU-ready levels through instead of embedding
-        // decoded pixels. Usage comes from the material slot (normal / data mask), the rest from
+        // file-backed asset, so the cook passes its GPU-ready levels through instead of embedding
+        // decoded pixels. Usage comes from the material slot (normal or data mask), the rest from
         // the file's own header facts. Returns the instance (null = deselected or failed).
         // A model-relative uri ("textures/shared/x.dds": no root, no drive, no "..") keeps its
         // path under Sources/, the way the glTF sidecar copy lays files out; anything else
@@ -821,8 +820,8 @@ export namespace pipeline
                 return nullptr;
             }
             // The .gltf sidecar pass already copies every relative uri (the same bytes to the
-            // same place): copying again here doubled a 2 GB package. Only what it did not
-            // cover is copied - an absolute reference, or a container with no sidecar pass.
+            // same place), and copying again here would double a large package's IO. Only what
+            // it did not cover is copied: an absolute reference, or a container with no sidecar pass.
             if (!(relative && sidecarsCopied))
             {
                 if (deferredWrites != nullptr)
@@ -853,7 +852,7 @@ export namespace pipeline
             pipeline::TextureAsset asset;
             asset.fileName = foundation::vfs::SourcePath(fileName);
             asset.sourceHint = String(t.uri());
-            // The file's facts first (BC5 = normal, BC4 = mask, a DX10 colour space), then the
+            // The file's facts first (BC5 is a normal, BC4 a mask, a DX10 colour space), then the
             // slot, which knows what the material does with the map.
             pipeline::TextureFileImporter::SetupForDds(asset, sourceFile,
                                                        pipeline::FileStemOf(fileName));
@@ -882,8 +881,8 @@ export namespace pipeline
                                    Array<pipeline::DeferredImportWrite>* deferredWrites,
                                    const pipeline::ImportOptions& sel)
         {
-            // Color space follows USAGE: data maps (normal/MR/AO) stay linear - sRGB-decoding
-            // them corrupts the values (a flat normal 0.5 would linearize to ~0.21).
+            // Color space follows usage: data maps (normal, metal-rough, AO) stay linear, since
+            // sRGB-decoding them corrupts the values (a flat normal 0.5 would linearize to ~0.21).
             Array<bool> linear;
             ClassifyLinearTextures(model, linear);
             Array<bool> normal;
@@ -915,16 +914,16 @@ export namespace pipeline
                 asset.embeddedHeight = static_cast<u32>(t.height);
                 asset.colorSpace =
                     (i < linear.Size() && linear[i])
-                        ? foundation::image::ImageColorSpace::Linear // data maps (normal/MR/AO)
-                        : foundation::image::ImageColorSpace::Srgb;  // color maps (albedo/emissive)
-                asset.generateMipmaps = true; // mips at cook (2026-08-12) - shimmer was the no-mips gap
-                // Provenance for the texture page: the model's image uri (display-only -
-                // asset names prefer the FILE STEM, but a review-dialog rename or an
+                        ? foundation::image::ImageColorSpace::Linear // data maps (normal, MR, AO)
+                        : foundation::image::ImageColorSpace::Srgb;  // color maps (albedo, emissive)
+                asset.generateMipmaps = true; // mips at cook; without them minified textures shimmer
+                // Provenance for the texture page: the model's image uri (display only;
+                // asset names prefer the file stem, but a review-dialog rename or an
                 // authored-name fallback can still diverge from the file).
                 asset.sourceHint = String(t.uri());
 
-                // Asset names prefer the FILE STEM (authored image names can lie about the
-                // file - the Poly Haven "*_rough"-named arm maps); embedded images fall
+                // Asset names prefer the file stem (authored image names can misdescribe the
+                // file, such as packed arm maps named "*_rough"); embedded images fall
                 // back to the authored name.
                 const String texBase = ImportedTextureName(t, i);
                 if (!sel.SelectionEnabled(pipeline::ImportResourceKind::Texture, texBase.AsView()))
@@ -945,7 +944,7 @@ export namespace pipeline
                                               static_cast<usize>(size)};
                 if (deferredWrites != nullptr)
                 {
-                    // Decoded pixels are the import's bulk (100s of MB for a big model) -
+                    // Decoded pixels are the import's bulk (hundreds of MB for a big model):
                     // park them for the worker flush; the view borrows from the prepared
                     // model, which the caller keeps alive until the flush completes.
                     pipeline::DeferredImportWrite write;
@@ -961,7 +960,7 @@ export namespace pipeline
             }
         }
 
-        // Bake-once cache for FBX separate metal/rough pairs (materials often share maps).
+        // Bake-once cache for FBX's separate metal and rough pairs (materials often share maps).
         static Guid GetOrBakePackedMR(const foundation::model::Model& model, content::Group& group,
                                       HashMap<u64, Guid>& cache, i32 roughIdx, i32 metalIdx,
                                       Array<String>& claimed,
@@ -986,7 +985,7 @@ export namespace pipeline
             asset.embeddedWidth = w;
             asset.embeddedHeight = h;
             asset.colorSpace = foundation::image::ImageColorSpace::Linear; // data map
-            asset.generateMipmaps = true; // mips at cook (2026-08-12) - shimmer was the no-mips gap
+            asset.generateMipmaps = true; // mips at cook; without them minified textures shimmer
             const String name = Format(u8"mr.packed.{}.{}", roughIdx, metalIdx);
             content::Instance* inst = ClaimInstance(
                 group, name.AsView(), pipeline::TextureAsset::StaticType(), claimed);
@@ -997,7 +996,7 @@ export namespace pipeline
             }
             if (deferredWrites != nullptr)
             {
-                // Baked pixels are produced HERE, so the deferred write owns them.
+                // Baked pixels are produced here, so the deferred write owns them.
                 pipeline::DeferredImportWrite write;
                 write.instance = inst;
                 write.streamName = String(u8"pixels");
@@ -1112,7 +1111,7 @@ export namespace pipeline
                 if (!sel.SelectionEnabled(pipeline::ImportResourceKind::AnimationClip,
                                           clipBase.AsView()))
                 {
-                    continue; // animationGuids is a plain list - no slot to hold
+                    continue; // animationGuids is a plain list, with no slot to hold
                 }
                 content::Instance* clipInst = ClaimInstance(
                     group,
@@ -1158,12 +1157,12 @@ export namespace pipeline
             }
         }
 
-        // Authored LOD collapse: "Foo_LOD1"/"Foo_LOD2" meshes become chain levels of the mesh
-        // named "Foo" instead of assets of their own. lodOf[i] = the base mesh index a
+        // Authored LOD collapse: "Foo_LOD1" and "Foo_LOD2" meshes become chain levels of the mesh
+        // named "Foo" instead of assets of their own. lodOf[i] is the base mesh index a
         // suffixed mesh folds into (or -1); levels are gathered per base sorted by their
-        // suffix number. A MIXED pair (skinned base with a static level or vice versa) is
-        // refused - the parallel-stream contract cannot hold across the mismatch. Shared by
-        // the import fan-out and DescribeImport so the review plan lists EXACTLY the mesh
+        // suffix number. A mixed pair (a skinned base with a static level or the reverse) is
+        // refused, since the parallel-stream contract cannot hold across the mismatch. Shared by
+        // the import fan-out and DescribeImport so the review plan lists exactly the mesh
         // assets the import creates.
         static void ComputeLodFold(const foundation::model::Model& model, bool logMismatch,
                                    Array<i32>& lodOf, Array<Array<usize>>& lodLevels)
@@ -1195,7 +1194,7 @@ export namespace pipeline
                 }
                 if (baseIndex < 0)
                 {
-                    continue; // no base of that name - a plain mesh that happens to end _LODn
+                    continue; // no base of that name: a plain mesh that happens to end _LODn
                 }
                 if ((IsSkinnedMesh(*meshes[baseIndex]) && hasSkin) !=
                     (IsSkinnedMesh(*meshes[i]) && hasSkin))
@@ -1228,8 +1227,8 @@ export namespace pipeline
         }
 
         // Fold the authored _LODn levels into a source and auto-generate a chain for a big
-        // chainless mesh. The import's CPU bulk: on the editor path it runs INSIDE the deferred
-        // geometry write, on the worker (2026-09-23).
+        // chainless mesh. This is the import's CPU bulk: on the editor path it runs inside the
+        // deferred geometry write, on the worker.
         static void FoldLevelsAndChain(const foundation::model::ModelMesh& m,
                                        Span<const foundation::model::ModelMesh* const> levels,
                                        bool generateLods, foundation::geometry::StaticMeshSource& source)
@@ -1249,7 +1248,7 @@ export namespace pipeline
                 LOG_INFO(u8"Import", u8"mesh '{}': authored LOD chain with {} level(s)", m.name(),
                          source.lodCount);
             }
-            // Auto-generation: big static meshes with NO authored chain get a simplified
+            // Auto-generation: big static meshes with no authored chain get a simplified
             // ladder (GenerateLodChain no-ops on chains).
             else if (generateLods && source.indexData.Size() >= 3u * 10000u)
             {
@@ -1275,7 +1274,7 @@ export namespace pipeline
                 LOG_INFO(u8"Import", u8"mesh '{}': authored LOD chain with {} level(s)", m.name(),
                          source.lodCount);
             }
-            // Simplification only drops indices - the parallel skin stream is untouched.
+            // Simplification only drops indices, so the parallel skin stream is untouched.
             else if (generateLods && source.indexData.Size() >= 3u * 10000u)
             {
                 (void)pipeline::GenerateLodChain(source);
@@ -1296,7 +1295,7 @@ export namespace pipeline
             FoldLevelsAndChain(m, levels, generateLods, asset.source);
         }
 
-        // Queue a mesh asset's two deferred writes: the geometry stream (LAZY when the model
+        // Queue a mesh asset's two deferred writes: the geometry stream (lazy when the model
         // outlives the flush: the conversion, LODs and serialization run on the worker) then
         // the envelope, in that order so the envelope's XML sees the final source.
         template <typename AssetT>
@@ -1359,11 +1358,11 @@ export namespace pipeline
             {
                 if (lodOf[i] >= 0)
                 {
-                    // Consumed as a chain level of its base - no asset of its own, but the
-                    // manifest slot MUST hold (nil guid): node.meshIndex is a MODEL mesh
-                    // index, and dropping the entry shifted every later mesh's slot - nodes
-                    // then referenced the wrong mesh or fell out of range, and the generated
-                    // prefab/scene silently lost meshes on authored-LOD models.
+                    // Consumed as a chain level of its base: no asset of its own, but the
+                    // manifest slot must hold (nil guid). node.meshIndex is a model mesh
+                    // index, and dropping the entry would shift every later mesh's slot, so
+                    // nodes would reference the wrong mesh or fall out of range and the
+                    // generated prefab or scene would lose meshes on authored-LOD models.
                     const foundation::model::ModelMesh& folded = *meshes[i];
                     manifest.meshGuids.PushBack(Guid{});
                     manifest.meshSkinned.PushBack(
@@ -1395,8 +1394,8 @@ export namespace pipeline
                 const StringView name =
                     sel.SelectionName(pipeline::ImportResourceKind::Mesh, baseName.AsView());
 
-                // Mesh envelopes are the import's largest SERIALIZATION cost (a big mesh
-                // source rendered to XML) - defer object + write to the worker flush.
+                // Mesh envelopes are the import's largest serialization cost (a big mesh
+                // source rendered to XML), so defer the object and its write to the worker flush.
                 content::Instance* inst = nullptr;
                 Status written;
                 Array<const foundation::model::ModelMesh*> levels; // authored _LODn siblings
@@ -1465,8 +1464,8 @@ export namespace pipeline
             return Status{};
         }
 
-        // One CollisionShapeAsset per STATIC mesh (skinned meshes don't get collision);
-        // the guid lands in manifest.collisionGuids (parallel; nil = none) for the
+        // One CollisionShapeAsset per static mesh (skinned meshes don't get collision);
+        // the guid lands in manifest.collisionGuids (parallel; nil means none) for the
         // prefab generator to wire colliders from.
         static void ImportCollisionShapes(content::Group& group, ModelManifestSource& manifest,
                                           bool convex, Array<String>& claimed,
@@ -1480,7 +1479,7 @@ export namespace pipeline
                     manifest.collisionGuids.PushBack(Guid{});
                     continue;
                 }
-                // Plan key: the MESH's source base + ".collision" (stable under mesh renames -
+                // Plan key: the mesh's source base and ".collision" (stable under mesh renames;
                 // the created name below still derives from the live mesh instance name, so a
                 // renamed mesh cascades to its shape's name).
                 String selKey(i < meshSourceNames.Size() ? meshSourceNames[i].AsView()
@@ -1548,14 +1547,14 @@ export namespace pipeline
         }
     };
 
-    // Registers the manifest asset type for content-DB construction + deserialization.
+    // Registers the manifest asset type for content-DB construction and deserialization.
     inline void RegisterModelManifestAsset()
     {
         // Data version 3: the skeleton's parent node (v2: per-mesh material slots; v1:
-        // importSelection = re-import memory). v1 and v2 still read (legacy readers): a v1
+        // importSelection, the re-import memory). v1 and v2 still read (legacy readers): a v1
         // manifest's meshes were cooked with model-wide submesh indices and the prefab builder
         // keeps the whole list for them; a v2 one knows no skeleton parent and its prefab keeps
-        // the file's placement. No REFLECT block owns this type - patched on the TypeInfo.
+        // the file's placement. No REFLECT block owns this type, so it is set on the TypeInfo.
         const_cast<TypeInfo&>(ModelManifestAsset::StaticType()).dataVersion = 3;
         KeepLegacyReader(const_cast<TypeInfo&>(ModelManifestAsset::StaticType()), 1);
         GlobalTypeRegistry().Register(ModelManifestAsset::StaticType());

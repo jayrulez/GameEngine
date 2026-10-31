@@ -3,11 +3,11 @@
 
 /// Foundation::Scene - the `:entity` partition.
 ///
-/// EntityHandle: a lightweight, copyable reference to an entity in a Scene - a pool
+/// EntityHandle: a lightweight, copyable reference to an entity in a Scene: a pool
 /// index plus a generation counter. The generation makes a stale handle (one whose
 /// slot was destroyed and reused) detectable in O(1) without any lookup table. Never
-/// store a raw pointer to entity/component data - always hold a handle and resolve it
-/// through the Scene (the data-oriented discipline: pools move, handles don't).
+/// store a raw pointer to entity or component data; hold a handle and resolve it
+/// through the Scene (pools move, handles don't).
 
 module;
 #include "Core/Prelude.h"
@@ -38,7 +38,7 @@ export namespace foundation::scene
             return EntityHandle{kInvalidIndex, 0};
         }
 
-        // Whether this handle was ever assigned (not necessarily still valid in a Scene -
+        // Whether this handle was ever assigned (not necessarily still valid in a Scene;
         // ask Scene::IsValid for that).
         [[nodiscard]] constexpr bool IsAssigned() const noexcept { return index != kInvalidIndex; }
 
@@ -52,13 +52,13 @@ export namespace foundation::scene
         }
     };
 
-    // A PERSISTENT reference to another entity by its stable Guid - the serialized, prefab-remappable
+    // A persistent reference to another entity by its stable Guid: the serialized, prefab-remappable
     // counterpart to EntityHandle (a transient live index+generation). A dedicated type, not a bare
     // Guid, so tooling can dispatch on it: the inspector renders an entity picker for EntityRef
     // fields (a bare Guid is ambiguous and renders nothing), and prefab instancing can find and remap
     // EntityRef fields by type. Resolve to a live handle at the point of use via
-    // Scene::FindEntity(ref.id); EntityRef itself stays a dumb guid holder (no cached handle),
-    // matching the "entity access re-resolves, never borrows" rule.
+    // Scene::FindEntity(ref.id); EntityRef itself stays a plain guid holder (no cached handle),
+    // since entity access re-resolves and never borrows.
     struct EntityRef
     {
         Guid id; // stable id of the referenced entity (nil = unset)
@@ -75,7 +75,7 @@ export namespace foundation::scene
     };
 
     // Identity-only serialization (found by ADL from component Serialize bodies), byte-identical to a
-    // bare Guid - so migrating a field from Guid to EntityRef leaves the wire/disk format unchanged.
+    // bare Guid, so migrating a field from Guid to EntityRef leaves the wire/disk format unchanged.
     inline void Serialize(ISerializer& ar, EntityRef& ref)
     {
         foundation::core::Serialize(ar, ref.id);

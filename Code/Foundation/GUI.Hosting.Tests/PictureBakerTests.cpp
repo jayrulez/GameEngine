@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Hosting - the GPU picture baker on the Null RHI backend: a picture asked for is queued, baked
-// when the frame records, and registered with every target renderer under its key; asked again it
-// is that key; a size of its own is a bake of its own; one no draw asks for goes in time; a target
-// added late learns the bakes, and one taken out forgets them.
+// GUI.Hosting - the GPU picture baker on the Null RHI backend. A requested picture is queued, baked
+// when the frame records, and registered with every target renderer under its key; asked for again,
+// it returns that key. Each size is a separate bake. A bake that no draw asks for is released in
+// time. A target added late learns the bakes, and one taken out forgets them.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -66,7 +66,7 @@ namespace
             device.DestroyShaderModule(fs);
             device.DestroyShaderModule(vs);
         }
-        // One frame: the baker records on an encoder of its own.
+        // Runs one frame: the baker records on an encoder of its own.
         bool Frame(i32 frameIndex)
         {
             rhi::CommandEncoder* encoder = nullptr;
@@ -95,7 +95,7 @@ TEST_CASE("gui.hosting.baker: a picture asked for is baked when the frame record
     CHECK_FALSE(bed.Frame(1)); // nothing new
     CHECK(bed.baker.Generation() == 1u);
 
-    // Another size is a bake of its own.
+    // Another size is a separate bake.
     CHECK(bed.baker.Baked(bed.document, 24, 12) == nullptr);
     CHECK(bed.Frame(0));
     CHECK(bed.baker.Baked(bed.document, 24, 12) != nullptr);
@@ -160,7 +160,8 @@ TEST_CASE("gui.hosting.baker: an icon asked for in the atlas is queued, baked on
     CHECK(region.Value().Source.x >= static_cast<f32>(kGpuPictureBakerAtlasGutter)); // inside its gutter
     CHECK(bed.target.IsExternalTextureRegistered(region.Value().Page));
 
-    // The same picture as authored is a bake of its own, on the same page, beside it.
+    // The same picture baked as authored (not as a mask) is a separate bake, beside it on the same
+    // page.
     CHECK_FALSE(bed.baker.AtlasRegion(bed.document, 24, 12, false).HasValue());
     CHECK(bed.Frame(1));
     const Optional<PictureRegion> coloured = bed.baker.AtlasRegion(bed.document, 24, 12, false);
@@ -186,7 +187,7 @@ TEST_CASE("gui.hosting.baker: a picture larger than an atlas keeps is not taken;
 TEST_CASE("gui.hosting.baker: a full atlas is packed anew from the pictures asked for lately")
 {
     Bed bed;
-    // Pictures of the largest size an atlas keeps, each its own document: every page full.
+    // Pictures of the largest size an atlas keeps, each its own document, fill every page.
     const u32 side = kIPictureBakerLargestAtlasPicture;
     const u32 perRow = kGpuPictureBakerAtlasPageSize / (side + 2 * kGpuPictureBakerAtlasGutter);
     const usize fit = static_cast<usize>(perRow) * perRow * kGpuPictureBakerMostAtlasPages;
@@ -197,7 +198,8 @@ TEST_CASE("gui.hosting.baker: a full atlas is packed anew from the pictures aske
         (void)bed.baker.AtlasRegion(documents[i], side, side, true);
     CHECK(bed.baker.AtlasPictureCount() == fit);
     CHECK(bed.baker.AtlasPageCount() == kGpuPictureBakerMostAtlasPages);
-    // Long after, only the first asked for still; then one more than fits: packed anew round it.
+    // Much later only the first is still asked for; then one more than fits is asked for, and the
+    // atlas is packed anew around the first.
     for (u64 frame = 0; frame <= kGpuPictureBakerRecentFrames + 1; ++frame)
     {
         (void)bed.baker.AtlasRegion(documents[0], side, side, true);

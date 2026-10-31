@@ -3,14 +3,13 @@
 
 // Editor::Core - :command partition.
 //
-// The editor undo/redo spine: IEditorCommand + EditorCommandStack. Lumix WorldEditor
-// semantics:
-//   * every mutation is a command - a failed Execute() means the command is DROPPED, not pushed;
-//   * same-type merge against the stack top (a slider drag coalesces into one undo entry);
-//   * Begin/EndGroup transactions undo/redo atomically, consecutive same-type groups coalesce
-//     unless locked (LockGroup after e.g. "create entity + add component" keeps later identical
-//     actions separate).
-// Each editor page owns its own stack (see :page); the context routes Edit>Undo/Redo to the
+// The editor's undo and redo: IEditorCommand and EditorCommandStack.
+//   * Every mutation is a command; a command whose Execute() fails is dropped, not pushed.
+//   * A command merges into the stack top of the same type (a slider drag becomes one undo entry).
+//   * Begin/EndGroup transactions undo and redo atomically, and consecutive groups of the same
+//     type coalesce unless locked (LockGroup after, say, creating an entity and adding a component
+//     keeps later identical actions separate).
+// Each editor page owns its own stack (see :page); the context routes Edit > Undo and Redo to the
 // active page's stack.
 
 module;
@@ -25,14 +24,14 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    // A single reversible edit. TypeId() is the merge/group identity (a stable literal, e.g.
-    // "set_property"); commands of different types never merge.
+    // A single reversible edit. TypeId() is the identity for merging and grouping (a stable
+    // literal such as "set_property"); commands of different types never merge.
     class IEditorCommand
     {
     public:
         virtual ~IEditorCommand() = default;
 
-        // Apply the edit. Returning false means the edit did nothing (invalid target etc.);
+        // Apply the edit. Returning false means the edit did nothing (an invalid target, say);
         // the stack discards the command without pushing it.
         [[nodiscard]] virtual bool Execute() = 0;
 
@@ -42,9 +41,9 @@ export namespace editor
         // Stable identity for merging and group coalescing.
         [[nodiscard]] virtual StringView TypeId() const = 0;
 
-        // Absorb THIS (newer) command into `previous` (already on the stack, same TypeId):
-        // typically copy the new target value into `previous`. Return true if absorbed - the
-        // stack then re-executes `previous` and discards this command.
+        // Absorb this (newer) command into `previous`, which is already on the stack with the same
+        // TypeId; typically this copies the new target value into `previous`. Return true if
+        // absorbed: the stack then re-executes `previous` and discards this command.
         [[nodiscard]] virtual bool MergeInto(IEditorCommand& previous);
     };
 
@@ -83,7 +82,7 @@ export namespace editor
         };
     }
 
-    // Linear undo stack with an index; redoing re-executes, any new command truncates the redo
+    // Linear undo stack with an index. Redo re-executes, and any new command truncates the redo
     // tail. Not thread-safe (editor main thread only).
     class EditorCommandStack
     {
@@ -92,12 +91,12 @@ export namespace editor
         EditorCommandStack(const EditorCommandStack&) = delete;
         EditorCommandStack& operator=(const EditorCommandStack&) = delete;
 
-        /// Fired after any change (execute/undo/redo/clear) - dirty tracking / UI refresh hook.
+        /// Fired after any change (execute, undo, redo, clear), for dirty tracking and UI refresh.
         Function<void()> OnChanged;
 
-        /// While locked (the editor's Simulate mode), Execute/Undo/Redo refuse: runtime
-        /// mutations don't belong on the edit-history, and undoing into entities the
-        /// simulation replaced (or the stop-restore recreated) is a guid minefield.
+        /// While locked (the editor's Simulate mode), Execute, Undo and Redo refuse: runtime
+        /// mutations do not belong in the edit history, and undoing into entities the simulation
+        /// replaced (or the restore on stop recreated) would act on stale guids.
         void SetLocked(bool locked) noexcept { m_locked = locked; }
         [[nodiscard]] bool IsLocked() const noexcept { return m_locked; }
 
@@ -124,7 +123,7 @@ export namespace editor
 
         void Clear();
 
-        // Entry count including group markers (diagnostic / tests).
+        // Entry count including group markers (for diagnostics and tests).
         [[nodiscard]] usize Size() const noexcept { return m_stack.Size(); }
         [[nodiscard]] i64 UndoIndex() const noexcept { return m_undoIndex; }
 

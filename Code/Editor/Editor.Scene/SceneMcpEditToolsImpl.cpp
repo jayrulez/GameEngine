@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene - the scene editor's live EDITING tools (Sedulous fb32ee69).
+// Editor::Scene - the scene editor's live editing tools.
 //
-// What an agent builds a level with on an open scene or prefab page: entity_create,
-// entity_update, entity_delete, component_add, component_remove, prefab_spawn, behavior_add and
-// behavior_set. Each call is one undo step through the page's command stack (its commands in a
-// group, locked when it closes so the next call does not coalesce into it), the page dirty after
-// and nothing saved, as component_set. An entity is named by guid, by name or by slash path;
-// every result carries the entity as entity_inspect shows it. Refused while the page simulates,
-// since Simulate's stop would discard the edit.
+// What an agent builds a level with on an open scene or prefab page: entity_create, entity_update,
+// entity_delete, component_add, component_remove, prefab_spawn, behavior_add and behavior_set. Each
+// call is one undo step through the page's command stack (its commands in a group, locked when it
+// closes so the next call does not coalesce into it). The page is left dirty and nothing is saved,
+// as with component_set. An entity is named by guid, by name or by slash path, and every result
+// carries the entity as entity_inspect shows it. The tools are refused while the page simulates,
+// since stopping Simulate would discard the edit.
 module;
 #include "Core/Prelude.h"
 
@@ -115,7 +115,7 @@ namespace editor
             return id;
         }
 
-        /// The transform arguments over `current`; `given` when any was.
+        /// The transform arguments applied over `current`; `given` is set when any was present.
         Result<Transform, String> ReadTransform(const JsonValue& args, Transform current,
                                                 bool& given)
         {
@@ -183,7 +183,7 @@ namespace editor
             return found;
         }
 
-        /// The cooked class, its properties the source of truth for a behaviour's.
+        /// The cooked class, whose properties are the source of truth for a behaviour's.
         Result<script::ScriptClass*, String> CookedClass(EditorContext& context, const Guid& id)
         {
             script::ScriptClass* scriptClass =

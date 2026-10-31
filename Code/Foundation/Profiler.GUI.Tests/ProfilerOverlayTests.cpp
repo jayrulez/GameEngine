@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Profiler.GUI - the in-game overlay (Specs/engine-ui-removal.md, layer 1): the frame time graph
-// plots the newest frames on its scale, the statistics, top lists and counters show the source's
-// numbers, the panel sits in its corner, and it never takes the pointer from the game under it.
+// Profiler.GUI - the in-game overlay. Covers the frame time graph plotting the newest frames on
+// its scale; the statistics, top lists and counters showing the source's numbers; the panel
+// sitting in its corner; and the overlay never taking the pointer from the game under it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -23,8 +23,8 @@ namespace fgui = foundation::gui;
 
 namespace
 {
-    // Ten frames of 10 ms, then one of 30 (a hitch); each with an Update scope, a forward pass and
-    // two counters.
+    // Ten frames of 10 ms, then one of 30 ms (a hitch). Each has an Update scope, a forward pass
+    // and two counters.
     void Fill(KnownSource& source)
     {
         const NameId update = source.Name(u8"Update");
@@ -41,7 +41,7 @@ namespace
         }
     }
 
-    // The overlay filling a 1280 by 720 root, over a known source.
+    // The overlay fills a 1280 by 720 root, over a known source.
     struct Bed
     {
         KnownSource source;
@@ -77,7 +77,7 @@ namespace
 TEST_CASE("profiler overlay: the graph plots the newest frames on its scale, newest at the right edge")
 {
     Bed bed;
-    CHECK(bed.overlay->ScaleMs() == doctest::Approx(40.0f)); // 30 ms needs 20 doubled
+    CHECK(bed.overlay->ScaleMs() == doctest::Approx(40.0f)); // 30 ms needs the 20 ms scale doubled once
     CHECK(ProfilerOverlay::ScaleFor(10.0f) == doctest::Approx(20.0f));
     CHECK(ProfilerOverlay::ScaleFor(100.0f) == doctest::Approx(160.0f));
     REQUIRE(bed.overlay->CpuPoints().Size() == 11);
@@ -86,8 +86,8 @@ TEST_CASE("profiler overlay: the graph plots the newest frames on its scale, new
     const f32 step = width / static_cast<f32>(kProfilerOverlayGraphFrames - 1);
     CHECK(bed.overlay->CpuPoints()[10].x == doctest::Approx(width));
     CHECK(bed.overlay->CpuPoints()[0].x == doctest::Approx(width - 10.0f * step)); // a short history grows in from the right
-    CHECK(bed.overlay->CpuPoints()[0].y == doctest::Approx(48.0f));                // 10 ms a quarter up the 64
-    CHECK(bed.overlay->CpuPoints()[10].y == doctest::Approx(16.0f));               // 30 ms three quarters up
+    CHECK(bed.overlay->CpuPoints()[0].y == doctest::Approx(48.0f));                // 10 ms is a quarter of the way up the 64 pixels
+    CHECK(bed.overlay->CpuPoints()[10].y == doctest::Approx(16.0f));               // 30 ms is three quarters of the way up
     CHECK(bed.overlay->GpuPoints()[0].y == doctest::Approx(64.0f * (1.0f - 4.0f / 40.0f)));
 }
 
@@ -108,10 +108,10 @@ TEST_CASE("profiler overlay: the statistics, the top lists and the counters show
     REQUIRE(bed.overlay->Counters().Size() == 2);
     CHECK(bed.overlay->Counters()[0].name == StringView(u8"Draws"));
     CHECK(bed.overlay->Counters()[0].value == StringView(u8"120"));
-    CHECK(bed.overlay->Counters()[1].value == StringView(u8"2.0 MiB")); // what it holds: the newest
+    CHECK(bed.overlay->Counters()[1].value == StringView(u8"2.0 MiB")); // a held amount shows the newest value
     CHECK(bed.Draw() > 0);
 
-    // A new frame: Refresh reads the source again.
+    // After a new frame, Refresh reads the source again.
     FrameRecord& frame = bed.source.AddFrame(50);
     (void)frame;
     bed.overlay->Refresh();
@@ -134,7 +134,7 @@ TEST_CASE("profiler overlay: the panel sits in its corner, and the pointer passe
     CHECK(panel.x == doctest::Approx(f32{kProfilerOverlayMargin}));
     CHECK(panel.y + panel.height == doctest::Approx(720.0f - kProfilerOverlayMargin));
 
-    // A widget under it still takes a click inside the panel.
+    // A widget under the overlay still receives a click inside the panel.
     RefPtr<fgui::UIWidget> under = MakeRef<fgui::UIWidget>(DefaultAllocator());
     under->EditLayoutStyle([](fgui::LayoutStyle& s)
     {

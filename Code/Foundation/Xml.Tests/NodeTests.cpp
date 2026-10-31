@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Xml.Tests/NodeTests.bf
+// XML DOM nodes: creation, attributes, children and namespaces.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

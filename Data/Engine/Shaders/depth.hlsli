@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The engine's depth convention, shader side: REVERSE-Z. The near plane is NDC depth 1, the far
-// plane 0, a cleared (background) pixel reads 0, and the NEARER surface is the LARGER value.
-// The twin of core::projection (C++) and rhi::depth (compare functions, clears, bias signs) -
-// keep the three in step. A shader that reconstructs position through an inverse projection
+// The engine's depth convention, shader side: reverse-Z. The near plane is NDC depth 1, the far
+// plane 0, a cleared (background) pixel reads 0, and the nearer surface is the larger value.
+// This is the twin of core::projection (C++) and rhi::depth (compare functions, clears, bias
+// signs); keep the three in step. A shader that reconstructs position through an inverse projection
 // matrix (InvProj / InvViewProj) is convention-free and needs none of this; one that tests for
 // background, walks depths, biases a compare or linearizes explicitly names these.
 #ifndef DEPTH_HLSLI
@@ -18,12 +18,12 @@ static const float kDepthFar  = 0.0;   // what the far plane maps to = the clear
 bool IsBackgroundDepth(float depth) { return depth <= kDepthFar; }
 // The larger of two NDC depths is the nearer surface.
 bool IsNearerDepth(float depth, float than) { return depth > than; }
-// A depth NEARER than every real surface, for "closest in a neighborhood" searches: start here
+// A depth farther than every real surface, for "closest in a neighborhood" searches: start here
 // and keep the larger.
 float FarthestDepth() { return kDepthFar; }
 float NearerOf(float a, float b) { return max(a, b); }
 
-// Shift an NDC depth TOWARD the viewer / light by `bias` NDC units (a receiver compared against a
+// Shift an NDC depth toward the viewer or light by `bias` NDC units (a receiver compared against a
 // shadow map, a debug line pulled in front of the surface it traces): larger = nearer.
 float BiasTowardViewer(float depth, float bias) { return depth + bias; }
 // The same on a clip-space position (before the divide): z += bias * w.

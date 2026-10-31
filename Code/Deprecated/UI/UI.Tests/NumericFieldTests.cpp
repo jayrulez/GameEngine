@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/NumericFieldTests.bf (faithful). Beef get/set properties -> methods
-// (nf->SetMin/SetValue/Value()); [Friend]mText -> Text(); [Friend]mBehavior -> Behavior(). The formatting
-// test needs no font (UpdateText uses core::FormatFixed).
+// NumericField tests. The formatting test needs no font (UpdateText uses core::FormatFixed).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -93,7 +91,7 @@ TEST_CASE("numeric-field: DecimalPlacesFormatting")
     root->AddView(nf.Get());
     LayoutPass(ctx, root.Get());
 
-    nf->SetValue(3.14159); // clamped in-range, formatted to 2 places
+    nf->SetValue(3.14159); // in range, formatted to 2 places
 
     const StringView text = nf->Text();
     usize dotIdx = text.Size();
@@ -123,7 +121,7 @@ TEST_CASE("numeric-field: InputFilterRejectsLetters")
 
     nf->Behavior().HandleKeyDown(KeyCode::A, KeyModifiers::Ctrl); // select all
     nf->Behavior().HandleTextInput(U'5');
-    nf->Behavior().HandleTextInput(U'a'); // rejected by the digits/'-'/'.' filter
+    nf->Behavior().HandleTextInput(U'a'); // rejected by the filter (digits, '-' and '.')
     nf->Behavior().HandleTextInput(U'3');
 
     CHECK(nf->Text() == u8"53");

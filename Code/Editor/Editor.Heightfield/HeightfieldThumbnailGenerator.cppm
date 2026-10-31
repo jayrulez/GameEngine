@@ -5,8 +5,8 @@
 //
 // The heightfield-domain thumbnail generator: a normalized grayscale relief view. Prepare
 // (main thread) reads either the imported 16-bit heightmap image from the Sources/ mount or
-// the authored "heights" sidecar (page-created / sculpt-saved fields have no source file);
-// Generate (light worker) min/max-normalizes the samples (low-relief maps would read
+// the authored "heights" sidecar (fields created on the page or saved by sculpting have no source
+// file); Generate (light worker) min/max-normalizes the samples (low-relief maps would read
 // near-black raw) and box-downscales into the tile.
 
 module;

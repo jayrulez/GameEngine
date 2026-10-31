@@ -3,19 +3,17 @@
 
 // GUI - :draw_context partition
 //
-// DrawContext: the renderer seam eepp's UI lacked. eepp widgets/drawables draw straight
-// through global Primitives / GlobalBatchRenderer / GLi; here every draw call routes
-// through a VGContext instead. Thin wrapper (mirrors foundation.ui's UIDrawContext) adding
-// clip / transform / opacity stacking and the DPI scale; the font service is not wired
-// in here.
+// DrawContext: what widgets and drawables draw through. Every draw call routes through a
+// VGContext rather than a global renderer. A thin wrapper adding clip, transform and opacity
+// stacking and the DPI scale; the font service is not wired in here.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:draw_context;
 
-import foundation.core; // Float4x4
-import foundation.vg;   // VGContext
+import foundation.core;
+import foundation.vg;
 import :rect;
 import :transform2d;
 import :picture_baker; // IPictureBaker
@@ -36,8 +34,8 @@ export namespace foundation::gui
         // The underlying vector-graphics context (the actual draw surface).
         [[nodiscard]] vg::VGContext& VG() const noexcept { return *m_vg; }
         [[nodiscard]] f32 DpiScale() const noexcept { return m_dpiScale; }
-        /// The host's baker (a root's DrawFrame sets its GUI's): vector pictures drawn as baked
-        /// textures; null draws them as paths.
+        /// Sets the host's picture baker (a root's DrawFrame sets its GUI's baker). With a baker,
+        /// vector pictures are drawn as baked textures; with null, they are drawn as paths.
         void SetPictureBaker(IPictureBaker* baker) noexcept { m_baker = baker; }
         [[nodiscard]] IPictureBaker* PictureBaker() const noexcept { return m_baker; }
 
@@ -49,12 +47,12 @@ export namespace foundation::gui
         void PushOpacity(f32 opacity) { m_vg->PushOpacity(opacity); }
         void PopOpacity() { m_vg->PopOpacity(); }
 
-        // Save/restore the whole VG state (transform + clip + opacity + blend).
+        // Save and restore the whole VG state (transform, clip, opacity and blend).
         void Save() { m_vg->PushState(); }
         void Restore() { m_vg->PopState(); }
 
-        /// Device pixels per local unit under the current transform (its area scale's root), for
-        /// sizes VG takes in device pixels: a blur's sigma.
+        /// Returns device pixels per local unit under the current transform (the square root of its
+        /// area scale), for sizes VG takes in device pixels, such as a blur's sigma.
         [[nodiscard]] f32 DeviceScale() const noexcept
         {
             const Float4x4 m = m_vg->GetTransform();
@@ -67,10 +65,9 @@ export namespace foundation::gui
             m_vg->SetTransform(transform.ToMatrix() * m_vg->GetTransform());
         }
 
-        // What a draw did (E8a): the nodes it drew and the ones it culled.
-        /// Whether a rect in the current space can put anything under the clip, with a margin for
-        /// what no ink box measures (text effects an ancestor sets, glyphs past their advance,
-        /// anti-aliasing). True with culling off.
+        /// Whether a rect in the current space can draw anything inside the clip, allowing a margin
+        /// for what no ink box measures (text effects an ancestor sets, glyphs past their advance,
+        /// anti-aliasing). Always true with culling off.
         [[nodiscard]] bool IsVisible(const Rect& local) const
         {
             if (!m_culling)
@@ -79,27 +76,29 @@ export namespace foundation::gui
             return m_vg->IsRectVisible(Rectangle{local.x - kMargin, local.y - kMargin, local.width + 2.0f * kMargin,
                                                  local.height + 2.0f * kMargin});
         }
-        /// What of the current local space can show (E15): the clip mapped back, grown by the
-        /// margin IsVisible allows. False when everything can show (no clip, or culling off): a
-        /// node with many children then draws them all.
+        /// Gets the part of the current local space that can show: the clip mapped back into local
+        /// space and grown by IsVisible's margin. Returns false when everything can show (no clip,
+        /// or culling off), in which case a node with many children draws them all.
         [[nodiscard]] bool GetVisibleBounds(Rect& out) const
         {
             Rectangle clip{};
             if (!m_culling || !m_vg->GetLocalClipBounds(clip))
                 return false;
-            constexpr f32 kMargin = 32.0f; // IsVisible's
+            constexpr f32 kMargin = 32.0f; // the same margin IsVisible uses
             out = Rect{clip.x - kMargin, clip.y - kMargin, clip.width + 2.0f * kMargin, clip.height + 2.0f * kMargin};
             return true;
         }
-        /// Off, every node draws, whatever the clip (the culling test's reference).
+        /// Turns culling on or off. With culling off every node draws whatever the clip, which the
+        /// culling test uses as its reference.
         void SetCulling(bool culling) noexcept { m_culling = culling; }
         [[nodiscard]] bool IsCulling() const noexcept { return m_culling; }
-        /// The host's frame being drawn (SceneRoot::DrawFrame numbers them; 0 for a draw outside one):
-        /// each node drawn notes it, so an animation knows whether its node showed.
+        /// Sets the number of the host frame being drawn (SceneRoot::DrawFrame numbers them; 0 for a
+        /// draw outside a frame). Each node drawn records it, so an animation can tell whether its
+        /// node was shown.
         void SetFrame(u32 frame) noexcept { m_frame = frame; }
         [[nodiscard]] u32 Frame() const noexcept { return m_frame; }
-        /// Where a node drawn that invalidated itself since its last draw notes its bounds in the
-        /// world (the debug overlay's redraw flash); none by default.
+        /// Sets where each drawn node that invalidated itself since its last draw records its world
+        /// bounds, for the debug overlay's redraw flash. None by default.
         void SetRedrawRecorder(Array<Rect>* recorder) noexcept { m_redraws = recorder; }
         [[nodiscard]] bool RecordsRedraws() const noexcept { return m_redraws != nullptr; }
         void RecordRedraw(const Rect& world)
@@ -107,7 +106,7 @@ export namespace foundation::gui
             if (m_redraws != nullptr)
                 m_redraws->PushBack(world);
         }
-        /// Where the frame notes what it changed (E15: damage, in device pixels); none by default.
+        /// Sets where the frame records what it changed (damage, in device pixels). None by default.
         void SetDamageRecorder(Array<Rect>* recorder) noexcept { m_damage = recorder; }
         void RecordDamage(const Rect& device)
         {
@@ -115,7 +114,8 @@ export namespace foundation::gui
                 m_damage->PushBack(device);
         }
         [[nodiscard]] bool RecordsDamage() const noexcept { return m_damage != nullptr; }
-        /// `local` in device pixels under the current transform: the bounds of its corners.
+        /// Returns `local` in device pixels under the current transform: the bounds of its
+        /// transformed corners.
         [[nodiscard]] Rect DeviceRect(const Rect& local) const
         {
             const core::Float4x4 m = m_vg->GetTransform();
@@ -145,6 +145,6 @@ export namespace foundation::gui
         bool m_culling = true;
         u32 m_frame = 0;
         Array<Rect>* m_redraws = nullptr;
-        Array<Rect>* m_damage = nullptr; // what the frame changed (E15)
+        Array<Rect>* m_damage = nullptr; // what the frame changed
     };
 }

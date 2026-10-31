@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026-Present Robert Campbell
 #
-# The Ember theme's nine-slice art (E13 of Specs/gui-lab-evolution-2.md), drawn here so it is ours
+# The Ember theme's nine-slice art, drawn here so it is ours
 # to publish: rounded frames with soft edges, written as RGBA PNGs with nothing but the standard
 # library. Run from anywhere: python3 MakeArt.py (it writes beside itself).
 import math, os, struct, zlib

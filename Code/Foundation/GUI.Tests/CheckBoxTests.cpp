@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - CheckBox and ToggleSwitch tests: the button core as a toggle with an indicator part; a
-// click toggles and reports, code does not report; the mixed state settles on a click.
+// GUI - CheckBox and ToggleSwitch tests: the button core as a toggle with an indicator part. A
+// click toggles and reports the change, while a change from code does not report. The mixed state
+// settles on a click.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

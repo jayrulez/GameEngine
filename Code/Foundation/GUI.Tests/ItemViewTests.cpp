@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - ItemView (E6): the engine behind the list, tree and table views. Row heights in a sum
-// tree, measured on demand; scrolling anchored to an item; rows from a native factory, pooled by
-// type and recycled; selection as a set of ids that survives inserts and sorting; `activate`,
-// type-ahead and editing in place; and the view as a Node scroll container.
+// GUI - ItemView: the engine behind the list, tree and table views. Row heights are kept in a sum
+// tree and measured on demand. Scrolling is anchored to an item. Rows come from a native factory,
+// pooled by type and recycled. Selection is a set of ids that survives inserts and sorting. Also
+// `activate`, type-ahead, editing in place, and the view as a Node scroll container.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -80,7 +80,7 @@ TEST_CASE("itemview: row heights in a sum tree find a row by offset and an offse
     CHECK(h.Find(0.0f) == 0);
     CHECK(h.Find(29.9f) == 2);
     CHECK(h.Find(30.0f) == 3);
-    CHECK(h.Find(500.0f) == 4); // past the end: the last
+    CHECK(h.Find(500.0f) == 4); // past the end, so the last row
     CHECK(h.Set(1, 25.0f));
     CHECK(h.IsMeasured(1));
     CHECK(h.Top(2) == doctest::Approx(35.0f));
@@ -105,7 +105,8 @@ TEST_CASE("itemview: measured rows take their own heights once realised, estimat
     m.list->SetRowHeight(0.0f); // measured
     m.list->SetEstimatedRowHeight(25.0f);
     m.Layout();
-    // Rows 0..: 10, 20, 30, 40, 10, ... The first rows are measured; the rest still estimated.
+    // Rows from 0 are 10, 20, 30, 40, 10, ... The first rows are measured; the rest are still
+    // estimated.
     const Rect r2 = m.list->ItemBounds(2);
     CHECK(r2.y == doctest::Approx(30.0f));
     CHECK(r2.height == doctest::Approx(30.0f));
@@ -135,7 +136,7 @@ TEST_CASE("itemview: rows come from a factory, one pool per type, recycled as th
     f.Bind = [&](Node& content, const ModelIndex& index)
     {
         auto& label = static_cast<Label&>(content);
-        CHECK(label.HasClass(index.Row % 2 == 0 ? SV(u8"even") : SV(u8"odd"))); // a row of its type
+        CHECK(label.HasClass(index.Row % 2 == 0 ? SV(u8"even") : SV(u8"odd"))); // a row of the item's type
         ++boundTypes[index.Row % 2];
         label.SetText(model.ItemAt(static_cast<core::usize>(index.Row)));
     };
@@ -144,7 +145,7 @@ TEST_CASE("itemview: rows come from a factory, one pool per type, recycled as th
     const int firstMade = created;
     CHECK(firstMade == 6);
 
-    // Scrolling a long way makes no more rows: the ones that leave are taken again.
+    // Scrolling a long way makes no more rows: the rows that leave the view are reused.
     for (int i = 0; i < 20; ++i)
     {
         m.D().InjectMouseWheel(core::Float2{50.0f, 50.0f}, core::Float2{0.0f, -3.0f});
@@ -179,10 +180,11 @@ TEST_CASE("itemview: rows inserted above leave what is in view where it is")
 
 TEST_CASE("itemview: scrolled to an item before a layout that clamps the offset, the rows follow the clamp")
 {
-    // Twenty rows, then three: they fit the view, so it cannot scroll. Scrolled to the third with
-    // the layout still pending (the offset unclamped until it runs), the layout's range clamps the
-    // offset back to the top; the rows are taken there, not left where the scroll aimed (the first
-    // two missing, a gap over the rest).
+    // Twenty rows, then three. Three fit the view, so it cannot scroll. When the view is scrolled
+    // to the third item while the layout is still pending (the offset stays unclamped until the
+    // layout runs), the layout's range clamps the offset back to the top. The rows are placed
+    // there, not where the scroll aimed, which would leave the first two missing and a gap above
+    // the rest.
     StringListModel model(Numbered(20));
     Mounted m = MountList(model);
     for (int i = 0; i < 17; ++i)
@@ -206,13 +208,15 @@ TEST_CASE("itemview: a row above measuring taller than its estimate leaves the v
     m.list->SetRowHeight(0.0f);
     m.list->SetEstimatedRowHeight(10.0f);
     m.Layout();
-    // Jump to item 40: realised with the row above it (39), whose measuring is put back at once.
+    // Jump to item 40. It is realised with the row above it (39), and the shift that measuring 39
+    // causes is compensated at once, so item 40 stays at the top.
     m.list->ScrollToItem(40, ScrollAlign::Start);
     m.Layout();
     const float before = m.list->ItemBounds(40).y;
     CHECK(m.list->GetScrollOffset().y == doctest::Approx(before));
-    // Five pixels up realises row 38 (30 high, estimated 10): everything below it moves down 20,
-    // and the offset with it, so the view shows what it did, five pixels higher.
+    // Scrolling five pixels up realises row 38 (30 high, estimated at 10). Everything below it
+    // moves down 20 and the offset moves with it, so the view shows the same content, five pixels
+    // higher.
     m.list->ScrollBy(core::Float2{0.0f, -5.0f});
     m.Layout();
     CHECK(m.list->ItemBounds(40).y - before == doctest::Approx(20.0f));
@@ -261,7 +265,7 @@ TEST_CASE("itemview: a table's selection follows its row when a header click sor
     (void)root->UpdateLayout();
     table->SetSelectedItem(0); // "b"
 
-    // Nothing listening to the header: a click sorts through the model's capability.
+    // With nothing listening to the header, a click sorts through the model's capability.
     root->GetEventDispatcher()->InjectMouseDown(core::Float2{200.0f, 13.0f}, MouseButton::Left);
     root->GetEventDispatcher()->InjectMouseUp(core::Float2{200.0f, 13.0f}, MouseButton::Left);
     CHECK(proxy.GetSortColumn() == 1);
@@ -331,7 +335,7 @@ TEST_CASE("itemview: typing letters jumps to the next row starting with them")
     int changes = 0;
     (void)m.list->AddEventListener(EventType::Changed, [&](const Event&) { ++changes; });
     m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
-    m.D().InjectText(SV(u8"b")); // the text it types: what type-ahead reads (E12)
+    m.D().InjectText(SV(u8"b")); // the text the key types, which type-ahead reads
     CHECK(m.list->GetSelectedItem() == 1);
     m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::L));
     m.D().InjectText(SV(u8"l")); // "bl"
@@ -343,7 +347,7 @@ TEST_CASE("itemview: typing letters jumps to the next row starting with them")
     m.D().InjectText(SV(u8"b"));
     CHECK(m.list->GetSelectedItem() == 4);
     m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::B));
-    m.D().InjectText(SV(u8"b")); // "bb": one letter again, the next b
+    m.D().InjectText(SV(u8"b")); // "bb": the same letter again moves to the next b
     CHECK(m.list->GetSelectedItem() == 1);
 }
 
@@ -371,7 +375,7 @@ TEST_CASE("itemview: F2 edits a row in place; the hooks may refuse; Escape cance
     CHECK(editor->GetText() == SV(u8"item 1"));
     CHECK(editor->GetParent() == m.list->RowForItem(1));
 
-    // Escape cancels: the model keeps its text, the view the focus.
+    // Escape cancels: the model keeps its text and the view keeps the focus.
     int cancels = 0;
     m.list->SetOnEditCancel([&](const ModelIndex&) { ++cancels; });
     m.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
@@ -380,7 +384,7 @@ TEST_CASE("itemview: F2 edits a row in place; the hooks may refuse; Escape cance
     CHECK(model.ItemAt(1) == SV(u8"item 1"));
     CHECK(m.list->IsFocused());
 
-    // The commit hook refuses an empty name: it stays editing, marked invalid.
+    // The commit hook refuses an empty name, so the row stays editing and is marked invalid.
     m.list->SetOnEditCommit([](const ModelIndex&, core::StringView text) { return text.Size() != 0; });
     REQUIRE(m.list->BeginEdit(1));
     editor->SetText(SV(u8""));
@@ -401,7 +405,7 @@ TEST_CASE("itemview: the view is a Node scroll container, scrolled from code lik
     Mounted m = MountList(model);
     CHECK(m.list->IsScrollContainer());
     CHECK(m.list->GetScrollRange().y == doctest::Approx(50.0f * 20.0f - 100.0f));
-    // Scrolled from code like any scroller: the rows follow.
+    // Scrolled from code like any scroller, the rows follow.
     m.list->ScrollTo(core::Float2{0.0f, 400.0f}, ScrollBehavior::Instant);
     CHECK(m.list->RowForItem(20) != nullptr);
     CHECK(m.list->RowForItem(0) == nullptr);
@@ -436,7 +440,7 @@ TEST_CASE("itemview: markup's <template> is made into each row, its {{item}} and
     CHECK(core::Cast<Label>(panel->GetChildAt(1))->GetText() == SV(u8"#1"));
     CHECK(core::Cast<Label>(panel->GetChildAt(0))->HasClass(SV(u8"name")));
 
-    // A changed row is filled again; selecting is bindable.
+    // A changed row is filled again, and the selection can be bound.
     list->SetItemsText(core::String(SV(u8"Ada|Bea|Cara")));
     (void)root->UpdateLayout();
     row = list->RowForItem(1);
@@ -490,7 +494,7 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     m.list->SetCellWidth(60.0f);
     m.list->SetCellHeight(40.0f);
     m.Layout();
-    // 200 wide: 3 cells of 66.7 across; 17 lines of 40.
+    // 200 wide gives 3 cells of 66.7 across, in 17 lines of 40.
     CHECK(m.list->GetColumnsAcross() == 3);
     CHECK(m.list->GetScrollRange().y == doctest::Approx(17.0f * 40.0f - 100.0f));
     ItemRow* cell = m.list->RowForItem(4);
@@ -498,7 +502,7 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     CHECK(cell->GetPosition().x == doctest::Approx(200.0f / 3.0f).epsilon(0.02));
     CHECK(cell->GetPosition().y == doctest::Approx(40.0f));
     CHECK(cell->GetSize().x == doctest::Approx(200.0f / 3.0f).epsilon(0.02));
-    // Lines 0 to 2 in view and one past: 12 cells, not 50.
+    // Lines 0 to 2 are in view, plus one past them: 12 cells, not 50.
     CHECK(m.list->VisibleRowCount() == 12);
     CHECK(m.list->ItemAt(core::Float2{150.0f, 50.0f}) == 5);
 
@@ -517,7 +521,7 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     CHECK(m.list->GetScrollOffset().y == doctest::Approx(m.list->GetScrollRange().y));
     CHECK(m.list->RowForItem(49) != nullptr);
 
-    // Narrower: fewer across, more lines.
+    // Narrower gives fewer cells across and more lines.
     m.list->SetSize(core::Float2{130.0f, 100.0f});
     m.Layout();
     CHECK(m.list->GetColumnsAcross() == 2);
@@ -550,7 +554,7 @@ TEST_CASE("itemview: a grid whose items take another row type shows only the new
     kind = 1; // the other kind of row, for every item
     model.SetItems(Numbered(6));
     m.Layout();
-    CHECK(shown() == 6); // not twelve: the old rows went back to their pool
+    CHECK(shown() == 6); // not twelve, because the old rows went back to their pool
     for (core::usize i = 0; i < m.list->ChildCount(); ++i)
         if (auto* row = core::Cast<ItemRow>(m.list->GetChildAt(i)); row != nullptr && row->IsDisplayed())
             CHECK(row->GetRowType() == 1u);
@@ -615,8 +619,8 @@ TEST_CASE("itemview: a template's root fills its row or a grid's cell, inside it
 
 TEST_CASE("itemview: rows made before they are styled keep their estimate, and the view still starts at the first")
 {
-    // As a page shown after the GUI started: its list makes its rows before a sheet has styled
-    // them, so they measure nothing; that must not stand as their height.
+    // Like a page shown after the GUI started: its list makes its rows before a sheet has styled
+    // them, so they measure nothing, and that must not stand as their height.
     RegisterGuiElements();
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 600.0f});
@@ -627,7 +631,7 @@ TEST_CASE("itemview: rows made before they are styled keep their estimate, and t
     auto* list = core::Cast<ListView>(tree.Get());
     REQUIRE(list != nullptr);
     root->AddChild(list);
-    (void)root->UpdateLayout(); // the rows made, unstyled
+    (void)root->UpdateLayout(); // the rows are made, unstyled
     StyleManager styles;
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".tall-row { height: 30px; }")));
     for (int frame = 0; frame < 3; ++frame)

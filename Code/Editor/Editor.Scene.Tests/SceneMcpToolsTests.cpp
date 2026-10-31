@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Scene tests - the scene editor's MCP tools over a real EditorContext holding pages
-// that publish ISceneEditorPage (a headless scene + edit context behind each) beside one that
-// does not: page addressing (the active page, an explicit page, a page that is not a scene),
-// the selection round-trip with names and the primary, the refusals for unknown entities and
-// pages, and the simulate control reflecting the page's state.
+// Editor::Scene tests: the scene editor's MCP tools over a real EditorContext holding pages that
+// publish ISceneEditorPage (each backed by a headless scene and edit context) and one page that
+// does not. They cover page addressing (the active page, an explicit page, a page that is not a
+// scene), the selection round-trip with names and the primary, the refusals for unknown entities
+// and pages, and the simulate control reflecting the page's state.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -41,8 +41,8 @@ using json::JsonValue;
 
 namespace
 {
-    // A page that IS a scene page to the rest of the editor: a headless scene and its edit
-    // context, the simulate state as flags. No UI, no viewport.
+    // A page the rest of the editor treats as a scene page: a headless scene and its edit
+    // context, with the simulate state as flags. It has no UI and no viewport.
     class HeadlessScenePage final : public EditorPage, public ISceneEditorPage
     {
     public:
@@ -65,8 +65,9 @@ namespace
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return nullptr; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return false; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return true; }
-        // A viewport is pretended when `hasViewport`: the camera is real, the capture advances
-        // when the test says the frame rendered (CompleteCapture / FailCapture).
+        // The page pretends to have a viewport when `hasViewport` is set: the camera is real, and
+        // the capture advances when the test reports the frame rendered (CompleteCapture or
+        // FailCapture).
         [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return hasViewport ? &camera : nullptr; }
         // Records what was framed; the real page measures and moves the camera.
         bool FrameEntities(Span<const Guid> entities, bool ease) override
@@ -102,7 +103,7 @@ namespace
             capture.height = height;
         }
         void FailCapture() { capture.state = ViewportCaptureState::Failed; }
-        // A playtest of the pretended viewport: the test moves its clock (AdvanceRun).
+        // A playtest in the pretended viewport; the test moves its clock with AdvanceRun.
         bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) override
         {
             if (!hasViewport)
@@ -139,7 +140,7 @@ namespace
     private:
         String m_title;
         scene::Scene m_scene;
-        SceneEditContext m_edit; // over the page's own stack, as the real page's is
+        SceneEditContext m_edit; // over the page's own command stack, like the real page's
         bool m_simulating = false;
     };
 
@@ -234,8 +235,8 @@ TEST_CASE("scene-mcp-tools: page addressing, the selection round-trip, its refus
     REQUIRE(context.OpenPages().Size() == 3u);
     const Guid lamp = pageA->EditContext().CreateEntity(u8"Lamp");
     const Guid table = pageA->EditContext().CreateEntity(u8"Table");
-    // The other page's entity is minted straight on its scene with its own guid (a page's
-    // CreateEntity also selects, and two fresh scenes may mint the same first guid).
+    // The other page's entity is created directly on its scene with its own guid, because a
+    // page's CreateEntity also selects, and two fresh scenes may mint the same first guid.
     const Guid otherSceneEntity = Guid::Generate(rng);
     (void)pageB->EditContext().Scene().CreateEntity(otherSceneEntity, u8"Elsewhere");
     pageA->EditContext().EntitySelection().Set(Span<const Guid>{});
@@ -243,12 +244,12 @@ TEST_CASE("scene-mcp-tools: page addressing, the selection round-trip, its refus
     McpServer server;
     RegisterSceneLiveTools(server, context);
     CHECK(server.ToolCount() == kSceneLiveToolCount);
-    CHECK(kSceneLiveToolCount == 20u); // a tripwire: bump deliberately when a live tool comes or goes
+    CHECK(kSceneLiveToolCount == 20u); // a tripwire: update it when a live tool is added or removed
     const String aGuid = GuidText(sceneA);
     const String lampGuid = GuidText(lamp);
     const String tableGuid = GuidText(table);
 
-    // Default addressing: the active page - a scene page, then a page that is not one.
+    // Default addressing uses the active page: first a scene page, then a page that is not one.
     context.SetActivePage(pageA);
     Answer got = Call(server, u8"selection_get", u8"{}");
     REQUIRE(got.ok);
@@ -267,7 +268,8 @@ TEST_CASE("scene-mcp-tools: page addressing, the selection round-trip, its refus
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"no open page for guid"));
 
-    // The selection round-trip: order kept, the first is the primary, names resolved.
+    // The selection round-trip keeps the order, makes the first entity the primary and resolves
+    // names.
     Answer set = Call(server, u8"selection_set",
                       Format(u8"{{\"page\":\"{}\",\"entities\":[\"{}\",\"{}\"]}}", aGuid.AsView(),
                              tableGuid.AsView(), lampGuid.AsView())
@@ -280,7 +282,7 @@ TEST_CASE("scene-mcp-tools: page addressing, the selection round-trip, its refus
     REQUIRE(pageA->EditContext().EntitySelection().Items().Size() == 2u);
     CHECK(*pageA->EditContext().EntitySelection().Primary() == table);
     CHECK(pageB->EditContext().EntitySelection().IsEmpty()); // the other page is untouched
-    // An entity of ANOTHER page's scene is refused for this page; nothing changes.
+    // An entity of another page's scene is refused for this page, and nothing changes.
     Answer wrong = Call(server, u8"selection_set",
                         Format(u8"{{\"page\":\"{}\",\"entities\":[\"{}\"]}}", aGuid.AsView(),
                                GuidText(otherSceneEntity).AsView())
@@ -374,7 +376,7 @@ TEST_CASE("scene-mcp-tools: entity_inspect reads an entity and its components th
     REQUIRE(meshProps.Get(u8"materials").Count() == 1);
     CHECK(meshProps.Get(u8"materials").At(0).AsString() == GuidText(materialAsset).AsView());
 
-    // The primary selection as the default: the bulb, a child, with its light's enum by name.
+    // The primary selection is the default: the bulb, a child, with its light's enum by name.
     edit.EntitySelection().Set(bulbId);
     got = Call(server, u8"entity_inspect", Format(u8"{{\"page\":\"{}\"}}", pageGuid.AsView()).AsView());
     REQUIRE(got.ok);
@@ -402,9 +404,9 @@ TEST_CASE("scene-mcp-tools: entity_inspect reads an entity and its components th
     context.ClosePage(page);
 }
 
-// The reads entity_inspect over a running game and pie_run share (Sedulous aaf5ff78): an entity
-// by guid, slash path or name, and a field path into its transform or a component's property,
-// then into the value.
+// The reads that entity_inspect over a running game and pie_run share: an entity found by guid,
+// slash path or name, and a field path into its transform or a component's property, then into
+// the value.
 TEST_CASE("scene-mcp-tools: an entity found by guid, path or name, and its fields read by path")
 {
     engine::render::RegisterRenderComponentReflection();
@@ -419,7 +421,7 @@ TEST_CASE("scene-mcp-tools: an entity found by guid, path or name, and its field
     engine::render::LightComponent& light = lights->Add(bulb);
     light.type = engine::render::LightType::Spot;
     light.color = Color{1.0f, 0.5f, 0.25f, 1.0f};
-    scene.UpdateTransforms(); // the world position is the last update's, as in a running game
+    scene.UpdateTransforms(); // the world position comes from the last update, as in a running game
 
     utf8char text[37];
     scene.GetEntityId(bulb).ToChars(text);
@@ -447,9 +449,9 @@ TEST_CASE("scene-mcp-tools: an entity found by guid, path or name, and its field
     CHECK(refused.Error().AsView() == StringView(u8"'position.q' of entity 'it': nothing at 'q'"));
 }
 
-// Sedulous fb32ee69: every scene tool takes an entity by guid, name or slash path, and a Script
-// component lists its behaviours (a hidden list the reflected properties leave out), each
-// override by its class's name for it, or by hash when the class is not at hand.
+// Every scene tool takes an entity by guid, name or slash path. A Script component lists its
+// behaviours (a hidden list the reflected properties leave out), and each override is named by
+// its class's name for it, or by hash when the class is not available.
 TEST_CASE("scene-mcp-tools: an entity by name or path, and a Script component's behaviours")
 {
     Random rng(33);
@@ -486,7 +488,7 @@ TEST_CASE("scene-mcp-tools: an entity by name or path, and a Script component's 
     CHECK(behaviors.At(0).Get(u8"enabled").AsBool());
     const JsonValue properties = behaviors.At(0).Get(u8"properties");
     REQUIRE(properties.Count() == 1);
-    CHECK(properties.Items()[0].AsNumber() == doctest::Approx(4.0)); // by hash, #n, uncooked
+    CHECK(properties.Items()[0].AsNumber() == doctest::Approx(4.0)); // named by hash (#n), not cooked
 
     got = Call(server, u8"entity_inspect",
                Format(u8"{{\"page\":\"{}\",\"entity\":\"Player\"}}", arena.AsView()).AsView());
@@ -523,8 +525,8 @@ namespace
     };
 }
 
-// Sedulous 4d8bfa88: a running behaviour's own state reads by `<BehaviorClass>.<field>`, private
-// fields too, and entity_inspect lists each running behaviour's values under `live`.
+// A running behaviour's state reads by `<BehaviorClass>.<field>`, private fields included, and
+// entity_inspect lists each running behaviour's values under `live`.
 TEST_CASE("scene-mcp-tools: a running behaviour's fields read by class name, and listed as live")
 {
     scene::Scene level(DefaultAllocator(), u8"run");
@@ -590,29 +592,29 @@ TEST_CASE("scene-mcp-tools: component_set writes one property through the undo p
                         .AsView());
     };
 
-    // A float, by the component's serialization id; the page is dirty after, the value read
-    // back as entity_inspect shows it.
+    // A float, by the component's serialization id. The page is dirty afterwards, and the value
+    // reads back as entity_inspect shows it.
     Answer got = set(u8"light", u8"intensity", u8"2.5");
     REQUIRE(got.ok);
     CHECK(lights->Get(lamp)->intensity == doctest::Approx(2.5f));
     CHECK(got.payload.Get(u8"value").AsNumber() == doctest::Approx(2.5));
     CHECK(got.payload.Get(u8"component").AsString() == StringView(u8"light"));
     CHECK(page->IsDirty());
-    // An enum by name, by the type's name; a color as four numbers; a bool.
+    // An enum by name, with the component named by its type; a color as four numbers; a bool.
     REQUIRE(set(u8"LightComponent", u8"type", u8"\"Spot\"").ok);
     CHECK(lights->Get(lamp)->type == engine::render::LightType::Spot);
     REQUIRE(set(u8"light", u8"color", u8"[0.1,0.2,0.3,1]").ok);
     CHECK(lights->Get(lamp)->color.g == doctest::Approx(0.2f));
     REQUIRE(set(u8"mesh", u8"visible", u8"false").ok);
     CHECK_FALSE(meshes->Get(lamp)->visible);
-    // A reference by guid (no resource manager in a headless page: the id is the write).
+    // A reference by guid. A headless page has no resource manager, so only the id is written.
     const Guid meshAsset = Guid::Generate(rng);
     got = set(u8"mesh", u8"mesh", Format(u8"\"{}\"", GuidText(meshAsset).AsView()).AsView());
     REQUIRE(got.ok);
     CHECK(meshes->Get(lamp)->mesh.id == meshAsset);
     CHECK(got.payload.Get(u8"value").AsString() == GuidText(meshAsset).AsView());
 
-    // Five writes, five undo steps: each Undo takes exactly one back, the reference first.
+    // Five writes are five undo steps: each Undo reverts exactly one, the reference first.
     REQUIRE(edit.Commands().CanUndo());
     edit.Commands().Undo();
     CHECK(meshes->Get(lamp)->mesh.id.IsNil());
@@ -626,8 +628,8 @@ TEST_CASE("scene-mcp-tools: component_set writes one property through the undo p
     edit.Commands().Undo();
     CHECK(lights->Get(lamp)->intensity == doctest::Approx(1.0f));
     CHECK_FALSE(edit.Commands().CanUndo());
-    // Two writes of the SAME property are still two steps (the user's scrubs merge; an
-    // agent's calls do not).
+    // Two writes of the same property are still two steps: the user's scrubs merge, but an
+    // agent's calls do not.
     REQUIRE(set(u8"light", u8"intensity", u8"3").ok);
     REQUIRE(set(u8"light", u8"intensity", u8"4").ok);
     edit.Commands().Undo();
@@ -713,9 +715,8 @@ REFLECT_VALUE(PlaqueComponent, "rtti::editor::scene::test")
         .Property<&PlaqueComponent::serial>("serial", PropertyFlags::ReadOnly);
 }
 
-// Snowline's rider: an imported model's animator feeds its skinned mesh through a list of entity
-// references, and a vegetation layer's materials are a list; component_set refused every list, so
-// an agent could only reach them by writing the scene's source.
+// component_set writes whole lists: an imported model's animator feeds its skinned mesh through
+// a list of entity references, and a vegetation layer's materials are a list.
 TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by guid, entity references "
           "- in one undo step, and entity_inspect reads a list of entity references")
 {
@@ -768,7 +769,7 @@ TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by gu
     REQUIRE(meshes->Get(rider)->materials.Size() == 1u);
     CHECK(meshes->Get(rider)->materials[0].id == needles);
 
-    // A list of entity references, and entity_inspect reads it (it showed "unreadable").
+    // A list of entity references, which entity_inspect reads back.
     got = set(u8"skeletal_animation", u8"meshEntities",
               Format(u8"[\"{}\"]", GuidText(bodyId).AsView()).AsView());
     REQUIRE(got.ok);
@@ -780,10 +781,10 @@ TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by gu
     got = set(u8"skeletal_animation", u8"meshEntities", Format(u8"[\"{}\"]", GuidText(bodyId).AsView()).AsView());
     REQUIRE(got.ok);
     CHECK(got.payload.Get(u8"value").At(0).AsString() == GuidText(bodyId).AsView());
-    edit.Commands().Undo(); // that write's own step, so the steps below count as before
+    edit.Commands().Undo(); // undo this write's step so the counts below are unchanged
 
-    // A list of structures: each element an object of the fields it sets, the rest at defaults
-    // (foot IK's legs, which Sky Hopper's hero needs and scene_write was the only way to write).
+    // A list of structures (foot IK's legs): each element is an object of the fields it sets,
+    // and the rest keep their defaults.
     auto* feet = scene.AddSystem<engine::animation::FootIkComponentManager>();
     (void)feet->Add(rider);
     const i64 stackBeforeLegs = edit.Commands().UndoIndex();
@@ -794,7 +795,7 @@ TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by gu
     REQUIRE(got.ok);
     REQUIRE(feet->Get(rider)->legs.Size() == 2u);
     CHECK(feet->Get(rider)->legs[0].midBone == u8"LowerLeg.L");
-    CHECK(feet->Get(rider)->legs[0].hingeAxis.x == 0.0f); // not named: its default
+    CHECK(feet->Get(rider)->legs[0].hingeAxis.x == 0.0f); // not named, so it keeps its default
     CHECK(feet->Get(rider)->legs[1].endBone == u8"Foot.R");
     CHECK(feet->Get(rider)->legs[1].hingeAxis.x == 1.0f);
     CHECK(got.payload.Get(u8"value").Count() == 2);
@@ -893,19 +894,20 @@ TEST_CASE("scene-mcp-tools: component_set writes a string, a vector, a quaternio
     got = set(u8"PlaqueComponent", u8"target", u8"null");
     REQUIRE(got.ok);
     CHECK(plaques->Get(sign)->target.IsNil());
-    // An enum by number: the enumerator's VALUE (Wild = 5), read back by name.
+    // An enum by number: the number is the enumerator's value (Wild = 5), read back by name.
     got = set(u8"PlaqueComponent", u8"mood", u8"5");
     REQUIRE(got.ok);
     CHECK(plaques->Get(sign)->mood == PlaqueMood::Wild);
     CHECK(got.payload.Get(u8"value").AsString() == StringView(u8"Wild"));
 
-    // Read-only: refused by name before any group opens; the flag is the contract.
+    // A read-only field is refused by name before any undo group opens; the read-only flag
+    // decides it.
     const i64 stackBefore = edit.Commands().UndoIndex();
     got = set(u8"PlaqueComponent", u8"serial", u8"9");
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"property 'serial' of 'PlaqueComponent' is read-only"));
     CHECK(plaques->Get(sign)->serial == 7);
-    // Wrong shapes for the new leaves name what they take.
+    // A wrong shape for these field types is refused with a message naming what they take.
     got = set(u8"PlaqueComponent", u8"text", u8"5");
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"property 'text' of 'PlaqueComponent' takes a string"));
@@ -956,7 +958,7 @@ TEST_CASE("scene-mcp-tools: the viewport camera reads and moves in degrees (posi
     const String pageGuid = GuidText(sceneId);
     const String pageArg = Format(u8"{{\"page\":\"{}\"}}", pageGuid.AsView());
 
-    // No viewport: every viewport tool refuses by name.
+    // With no viewport, every viewport tool refuses by name.
     context.SetActivePage(headless);
     Answer got = Call(server, u8"viewport_camera_get", u8"{}");
     CHECK_FALSE(got.ok);
@@ -1007,7 +1009,8 @@ TEST_CASE("scene-mcp-tools: the viewport camera reads and moves in degrees (posi
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"`position` takes [x, y, z]"));
     CHECK(page->camera.yaw == doctest::Approx(0.0f));
-    // Orthographic: on, and zoomed about the focus to a height (focus 10 m ahead at the origin).
+    // Orthographic: switched on and zoomed about the focus to a height (the focus is 10 m ahead,
+    // at the origin).
     got = Call(server, u8"viewport_camera_set",
                Format(u8"{{\"page\":\"{}\",\"orthographic\":true,\"orthoHeight\":6}}", pageGuid.AsView())
                    .AsView());
@@ -1026,8 +1029,8 @@ TEST_CASE("scene-mcp-tools: the viewport camera reads and moves in degrees (posi
     REQUIRE(got.ok);
     CHECK_FALSE(page->camera.orthographic);
 
-    // The screenshot: the first pump brings the page to front (active AND revealed, since a
-    // background tab's viewport never renders) and asks for the capture, then the call is
+    // The screenshot: the first pump brings the page to the front (active and revealed, since a
+    // background tab's viewport never renders) and asks for the capture. The call is then
     // re-entered each pump until the page reports the frame written.
     context.SetActivePage(headless);
     EditorPage* revealed = nullptr;
@@ -1082,13 +1085,14 @@ TEST_CASE("scene-mcp-tools: viewport_frame frames named entities or the selectio
     const Guid table = scene.GetEntityId(scene.CreateEntity(u8"Table"));
     const Guid lamp = scene.GetEntityId(scene.CreateEntity(u8"Lamp"));
 
-    // No viewport: refused by name.
+    // With no viewport the tool refuses by name.
     Answer got = Call(server, u8"viewport_frame", u8"{\"entities\":[\"Table\"]}");
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"page 'Bistro' has no viewport"));
     page->hasViewport = true;
 
-    // Named entities: framed at once (no glide, so a screenshot after shows it); the camera back.
+    // Named entities are framed at once, with no glide, so a screenshot taken next shows them.
+    // The answer carries the camera.
     got = Call(server, u8"viewport_frame", u8"{\"entities\":[\"Table\",\"Lamp\"]}");
     REQUIRE(got.ok);
     REQUIRE(page->framed.Size() == 2);
@@ -1097,7 +1101,8 @@ TEST_CASE("scene-mcp-tools: viewport_frame frames named entities or the selectio
     CHECK_FALSE(page->framedEased);
     CHECK(got.payload.Get(u8"focusDistance").IsNumber());
 
-    // No names: the selection; nothing selected: a refusal saying what to do.
+    // With no names the selection is framed; with nothing selected the tool refuses and says
+    // what to do.
     got = Call(server, u8"viewport_frame", u8"{}");
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"nothing to frame"));
@@ -1137,7 +1142,8 @@ TEST_CASE("scene-mcp-tools: navigation_bake bakes a page's zone into its asset, 
         sceneRef.AddSystem<engine::physics::RigidBodyComponentManager>();
     }
 
-    // A 20 x 20 static ground slab (its top at y 0; the bake reads static bodies) and a zone over it.
+    // A 20 x 20 static ground slab with its top at y 0 (the bake reads static bodies), and a zone
+    // over it.
     const Guid groundId = edit.CreateEntity(u8"Ground");
     sceneRef.SetLocalPosition(edit.Resolve(groundId), Float3{0, -0.5f, 0});
     engine::physics::RigidBodyComponent& ground =
@@ -1150,21 +1156,21 @@ TEST_CASE("scene-mcp-tools: navigation_bake bakes a page's zone into its asset, 
             edit.Resolve(zoneId));
     zone.extents = Float3{15, 10, 15};
 
-    // No project: refused.
+    // With no project the bake is refused.
     Answer bake = Call(server, u8"navigation_bake", u8"{}");
     CHECK_FALSE(bake.ok);
     context.SetProject(project.Get());
 
-    // A zone with no asset: refused, with what to do.
+    // A zone with no asset is refused, with a message saying what to do.
     bake = Call(server, u8"navigation_bake", u8"{}");
     REQUIRE_FALSE(bake.ok);
     CHECK(bake.error.AsView().ContainsIgnoreCase(u8"Navigation Zone asset"));
 
-    // An entity that is not a zone: refused.
+    // An entity that is not a zone is refused.
     bake = Call(server, u8"navigation_bake", u8"{\"entity\":\"Ground\"}");
     CHECK_FALSE(bake.ok);
 
-    // With the asset: baked, the scene's only zone found without naming it.
+    // With the asset the zone bakes; the scene's only zone is found without naming it.
     foundation::content::Instance* asset = project->SourceDb().RootGroup()->CreateInstance(
         u8"BlockZone", pipeline::NavigationZoneAsset::StaticType());
     REQUIRE(asset != nullptr);
@@ -1212,7 +1218,7 @@ TEST_CASE("scene-mcp-tools: viewport_run plays a timeline into a page's viewport
                                u8"{{\"at\":0.2,\"mouseButton\":\"Left\"}}],\"screenshots\":[0.5],\"screenshotDir\":\"/tmp\"}}",
                                StringView(text, 36));
 
-    // Begun: the page holds the playtest's devices, and the call waits on its clock.
+    // Once begun, the page holds the playtest's devices, and the call waits on its clock.
     CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished);
     REQUIRE(page->scripted.Get() != nullptr);
     page->AdvanceRun(0.3);
@@ -1220,7 +1226,7 @@ TEST_CASE("scene-mcp-tools: viewport_run plays a timeline into a page's viewport
     CHECK(page->scripted->Mouse()->X() == doctest::Approx(100.0f));
     CHECK(page->scripted->Mouse()->IsButtonDown(foundation::shell::MouseButton::Left));
 
-    // Its screenshot's time came: asked for, waited on, kept.
+    // When the screenshot's time comes, the capture is requested, waited on and kept.
     page->AdvanceRun(0.6);
     CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished);
     CHECK(page->captureRequests == 1u);
@@ -1229,7 +1235,7 @@ TEST_CASE("scene-mcp-tools: viewport_run plays a timeline into a page's viewport
     page->CompleteCapture(800, 600);
     CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished); // the run goes on
 
-    // Its time up: what is held let go, the answer.
+    // When the run's time is up, the held devices are released and the call answers.
     page->AdvanceRun(1.0);
     Answer got = AnswerOf(Pump(server, u8"viewport_run", args.AsView()));
     REQUIRE(got.ok);
@@ -1239,7 +1245,7 @@ TEST_CASE("scene-mcp-tools: viewport_run plays a timeline into a page's viewport
     REQUIRE(got.payload.Get(u8"screenshots").Count() == 1);
     CHECK(got.payload.Get(u8"screenshots").At(0).Get(u8"at").AsNumber() == doctest::Approx(0.6));
 
-    // Refused: a wrong entry, a duration out of range, a page with no viewport.
+    // Refusals: a wrong entry, a duration out of range, and a page with no viewport.
     got = AnswerOf(Pump(server, u8"viewport_run", Format(u8"{{\"page\":\"{}\",\"duration\":1,\"input\":[{{\"at\":0.1,\"key\":\"Nope\"}}]}}", StringView(text, 36)).AsView()));
     CHECK_FALSE(got.ok);
     CHECK(got.error.AsView().StartsWith(u8"input[0]: no key 'Nope'"));

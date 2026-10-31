@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The image pages' picture (ImageInspectView): it fits its view until zoomed or panned, the wheel
-// zooms about the pointer, a drag pans, a pixel is found under a point and read, a channel shows
-// on its own as grey, and the readout says a pixel.
+// The picture on the image pages (ImageInspectView). It fits its view until zoomed or panned, the
+// wheel zooms about the pointer, and a drag pans. A pixel is found under a point and read, a single
+// channel shows as grey, and the readout describes a pixel.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -19,7 +19,7 @@ namespace image = foundation::image;
 
 namespace
 {
-    // A 40x20 picture: every pixel (10, 20, 30, 200) but (5, 2), which is (255, 128, 0, 64).
+    // A 40x20 picture: every pixel is (10, 20, 30, 200) except (5, 2), which is (255, 128, 0, 64).
     image::Image Picture()
     {
         image::Image picture(40, 20, image::PixelFormat::RGBA8);
@@ -81,7 +81,7 @@ TEST_CASE("image inspect: it fits its view, centred, until zoomed or panned")
     CHECK(x == 5);
     CHECK(y == 2);
 
-    // A drag pans; Fit puts it back; 1:1 is one pixel to one, about the middle.
+    // A drag pans and Fit puts it back. 1:1 shows one image pixel per screen pixel, about the middle.
     const Float2 before = view.Origin();
     view.DragBy(Float2{10.0f, 10.0f}, Float2{40.0f, 0.0f});
     CHECK(view.Origin().x == doctest::Approx(before.x + 30.0f));
@@ -114,7 +114,7 @@ TEST_CASE("image inspect: a pixel read and said; a channel shown on its own")
     CHECK(editor::app::DescribePixel(5, 2, &pixel) == StringView(u8"x 5  y 2  ·  R 255 G 128 B 0 A 64"));
     CHECK(editor::app::DescribePixel(-1, -1, nullptr).IsEmpty());
 
-    // A channel is the picture's own pixels, untouched; what is drawn is the channel as grey.
+    // Choosing a channel leaves the picture's pixels untouched; the channel is drawn as grey.
     view.SetChannel(editor::app::ImageChannel::Green);
     CHECK(view.Channel() == editor::app::ImageChannel::Green);
     REQUIRE(view.ValueAt(5, 2, pixel));
@@ -129,5 +129,5 @@ TEST_CASE("image inspect: a new picture of the same size is a new image, so the 
     const u64 first = view.Pixels().InstanceId();
     view.SetImage(Picture()); // a font rebaked at the same size
     CHECK(view.Pixels().InstanceId() != first);
-    CHECK(view.Fitting()); // the same size: kept as it was
+    CHECK(view.Fitting()); // the same size: the fit is kept as it was
 }

@@ -4,8 +4,7 @@
 // Foundation::VG - :shapes partition.
 //
 // ShapeBuilder (common shapes as paths: rounded rect, circle/ellipse, regular
-// polygon, star) and DashGenerator (dashed polylines from a pattern). Ported
-// from Sedulous.VG/ShapeBuilder.bf and DashGenerator.bf.
+// polygon, star) and DashGenerator (dashed polylines from a pattern).
 
 module;
 #include "Core/Prelude.h"
@@ -41,22 +40,22 @@ export namespace foundation::vg
             // Start at top edge, after top-left corner.
             builder.MoveTo(x + tl, y);
 
-            // Top edge -> top-right corner.
+            // Top edge, then the top-right corner.
             builder.LineTo(x + w - tr, y);
             if (tr > 0.0f)
                 ArcCorner(builder, x + w - tr, y + tr, tr, -kHalfPi, 0.0f);
 
-            // Right edge -> bottom-right corner.
+            // Right edge, then the bottom-right corner.
             builder.LineTo(x + w, y + h - br);
             if (br > 0.0f)
                 ArcCorner(builder, x + w - br, y + h - br, br, 0.0f, kHalfPi);
 
-            // Bottom edge -> bottom-left corner.
+            // Bottom edge, then the bottom-left corner.
             builder.LineTo(x + bl, y + h);
             if (bl > 0.0f)
                 ArcCorner(builder, x + bl, y + h - bl, bl, kHalfPi, kPi);
 
-            // Left edge -> top-left corner.
+            // Left edge, then the top-left corner.
             builder.LineTo(x, y + tl);
             if (tl > 0.0f)
                 ArcCorner(builder, x + tl, y + tl, tl, kPi, kPi * 1.5f);
@@ -177,9 +176,8 @@ export namespace foundation::vg
     public:
         /// Generate dashed segments from a polyline. Pattern alternates
         /// [dash, gap, dash, gap, ...]. Output is a list of polyline segments.
-        /// An ODD-length pattern repeats to even length, the SVG/CSS stroke-dasharray rule:
-        /// [10] is ten on, ten off. (Deciding dash-vs-gap by the raw index made a one-element
-        /// pattern "index 0 forever" = a solid line in ten-unit pieces - found by the Beef port.)
+        /// An odd-length pattern repeats to even length, the SVG and CSS stroke-dasharray rule:
+        /// [10] is ten on, ten off.
         static void GenerateDashes(Span<const Float2> points, bool closed, Span<const f32> pattern,
                                    f32 offset, Array<Array<Float2>>& output)
         {

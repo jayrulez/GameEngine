@@ -1,7 +1,7 @@
-# Integration.ShaderBlocks - every engine shader block against its C++ mirror, field by field
-# (Specs/shader-blocks-cleanup.md, phase 0): the engine's shaders cooked to SPIR-V as the engine
-# cook does, each block's members and offsets read from it, and compared with the structs the
-# renderers fill. Cross-collection (the shader cook x the renderers' structs), so it lives here.
+# Integration.ShaderBlocks - every engine shader block against its C++ mirror, field by field:
+# the engine's shaders cooked to SPIR-V as the engine cook does, each block's members and offsets
+# read from it, and compared with the structs the renderers fill. It crosses collections (the
+# shader cook and the renderers' structs), so it lives here.
 # Needs no GPU, unlike Integration.Shaders; it skips when the DXC runtime is unavailable.
 if(NOT TARGET Foundation::Shaders)
     return() # no DXC (the web build): nothing to compile the shaders with

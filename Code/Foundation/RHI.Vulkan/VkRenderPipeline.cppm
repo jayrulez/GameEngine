@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of RenderPipeline.
-/// Ported from Sedulous.RHI.Vulkan/VulkanRenderPipeline.bf.
 
 module;
 #include "Core/Prelude.h"

@@ -3,12 +3,12 @@
 
 /// Foundation::Animation - the `:modifier` partition.
 ///
-/// The stage between a player's pose and its skinning palette (inverse-kinematics.md P0b): a pose
-/// modifier changes the local pose after the clip or graph produced it and before the palette is
-/// built, every evaluation, so its change survives the next sample. Modifiers run in their order
-/// over one model-space pose (ModelPoseCache) built once per evaluation and kept current by each
-/// modifier's partial rebuild, so N chains do not cost N full rebuilds. Inverse kinematics is the
-/// first user; the stage knows nothing of it.
+/// The stage between a player's pose and its skinning palette: a pose modifier changes the local
+/// pose after the clip or graph produced it and before the palette is built, every evaluation, so
+/// its change survives the next sample. Modifiers run in their order over one model-space pose
+/// (ModelPoseCache) built once per evaluation and kept current by each modifier's partial
+/// rebuild, so N chains do not cost N full rebuilds. Inverse kinematics uses the stage, but the
+/// stage knows nothing of it.
 
 module;
 #include "Core/Prelude.h"
@@ -106,7 +106,7 @@ export namespace foundation::animation
                            ModelPoseCache& model) = 0;
     };
 
-    /// A player's modifiers, BORROWED (whoever adds one removes it before it goes), run lowest
+    /// A player's modifiers, borrowed (whoever adds one removes it before it goes), run lowest
     /// order first; equal orders keep the order they were added in.
     class PoseModifierStack
     {

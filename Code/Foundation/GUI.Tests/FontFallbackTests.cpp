@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - font fallback (E11 of Specs/gui-lab-evolution-2.md): font-family takes a list; the first
-// family the font service has is the font and the rest are the faces a character it lacks falls
-// back to. A piece's glyphs split into runs by the face that drew them, each drawn and measured
-// with that face. Over Roboto, which has no Arabic, and DejaVu Sans Mono, which has.
+// GUI - font fallback. font-family takes a list: the first family the font service has is the
+// font, and the rest are the faces a character it lacks falls back to. A piece's glyphs split into
+// runs by the face that drew them, and each run is drawn and measured with that face. The tests use
+// Roboto, which has no Arabic, and DejaVu Sans Mono, which has.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -57,7 +57,8 @@ namespace
     // "ab " then Salaam (bytes 3 to 11).
     constexpr const char8_t* kMixed = u8"ab سلام";
 
-    // The run drawing bytes [start, end), or null when glyphs of more than one run do.
+    // Returns the run that draws bytes [start, end), or null when glyphs of more than one run
+    // draw them.
     const LaidOutGlyphs* RunOf(const TextLayout& layout, usize start, usize end)
     {
         const LaidOutGlyphs* found = nullptr;
@@ -106,7 +107,7 @@ TEST_CASE("font fallback: what the font lacks comes from the first fallback that
     CHECK(AllDrawn(*latin));
     for (const fonts::GlyphPosition& g : arabic->Glyphs)
         CHECK(g.font == 1); // the request's second face
-    // Its text and box are its glyphs'.
+    // The run's text and box are those of its glyphs.
     CHECK(arabic->TextStart == 3u);
     CHECK(arabic->TextEnd == 11u);
 }

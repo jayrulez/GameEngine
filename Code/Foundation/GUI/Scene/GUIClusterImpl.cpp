@@ -6,8 +6,7 @@
 // Holds Node method bodies that call into the EventDispatcher. They cannot be inline in
 // the :node interface partition without making it import :event_dispatcher, which imports
 // :node back (a module-partition cycle). An implementation unit sees the whole module (it
-// implicitly imports the primary interface) and is outside the interface dependency graph
-// - the same pattern as foundation.ui's UIClusterImpl.cpp.
+// implicitly imports the primary interface) and is outside the interface dependency graph.
 
 module;
 #include "Core/Prelude.h"
@@ -32,7 +31,7 @@ namespace foundation::gui
         for (const NamedPartStyle& p : m_partStyles)
             if (p.Name.AsView() == part)
                 return p.Style;
-        static const PartStyle kNone{}; // here, not in the interface: one per process in a shared build
+        static const PartStyle kNone{}; // defined here, not in the interface, so a shared build has one per process
         return kNone;
     }
 
@@ -42,15 +41,16 @@ namespace foundation::gui
         if (m_commandBound)
             return;
         m_commandBound = true;
-        // One binding follows the id, the GUI the control is in, focus, the command's state and its
-        // handlers: whichever changes, the control's state follows.
+        // The first binding follows the command id, the GUI the control is in, the focus, the
+        // command's state and its handlers. Whichever changes, the control's state is updated.
         Bind([this]()
              {
                  const core::String commandId(m_command.Get());
                  SceneRoot* root = ObserveSceneRoot();
                  if (commandId.Size() == 0 || root == nullptr)
                      return;
-                 // Availability on the active root's focus path (the window the user is in).
+                 // Availability is decided on the active root's focus path (the window the user is
+                 // in).
                  const bool available = root->GetContext().IsCommandAvailable(commandId.AsView());
                  const Command* command = root->GetContext().GetCommands().Find(commandId.AsView());
                  BoundCommandState state;
@@ -60,7 +60,8 @@ namespace foundation::gui
                  state.Reason = reason.AsView();
                  Untracked([&] { OnBoundCommandState(state); });
              });
-        // A second follows what the control shows of it: its label and icon, and its keys (E5).
+        // The second binding follows what the control shows of the command: its label, its icon
+        // and its keys.
         Bind([this]()
              {
                  const core::String commandId(m_command.Get());
@@ -71,7 +72,8 @@ namespace foundation::gui
                  const Command* command = root->GetContext().GetCommands().Find(commandId.AsView());
                  const core::String label(command != nullptr ? command->GetLabel() : commandId.AsView());
                  const core::String icon(command != nullptr ? command->GetIcon() : core::StringView{});
-                 // The keys that run it here: the binding matched in this node's own contexts.
+                 // The keys that run the command here: the binding that matches in this node's own
+                 // contexts.
                  const Array<KeyContextLayer> contexts = root->KeyContextsAt(this);
                  const core::String shortcut = root->GetContext().GetKeymap().ShortcutText(commandId.AsView(), contexts.AsSpan());
                  Untracked([&] { OnBoundCommandText(label.AsView(), icon.AsView(), shortcut.AsView()); });
@@ -110,23 +112,23 @@ namespace foundation::gui
         EventDispatcher* dispatcher = GetEventDispatcher();
         if (dispatcher == nullptr)
         {
-            RemoveFromParent(); // in no GUI: nothing to wait for, nothing walking it
+            RemoveFromParent(); // in no GUI, so there is no exit to wait for and nothing walking the tree
             return;
         }
         m_leaving = true;
         if (m_enterPhase != 0)
         {
-            m_enterPhase = 0; // an entrance cut short: it leaves from where it is
+            m_enterPhase = 0; // the entrance is cut short, and the exit starts from where it is
             MarkStyleStateDirty(StateEntering);
         }
-        // Out of input now, as a removed subtree is (hover, press, capture, focus, its popups):
-        // a second Back while it fades does not reach it.
+        // Take the node out of input now, as for a removed subtree (hover, press, capture, focus,
+        // its popups), so a second Back while it fades does not reach it.
         dispatcher->NotifySubtreeRemoved(*this);
         MarkStyleStateDirty(StateLeaving);
         Invalidate();
-        // A sheet plays the exit: in a GUI no style pass runs over, or not styled itself (a sheet
-        // styles widgets), it has none, and goes at the GUI's next drain (never inside the event
-        // that sent it away).
+        // A sheet plays the exit. In a GUI without a style pass, or for a node that is not a widget
+        // (sheets style only widgets), there is no exit, so the node goes at the GUI's next drain,
+        // never inside the event that sent it away.
         if (!GetRootNode()->HasStylePass() || Cast<UIWidget>(this) == nullptr)
             FinishLeaving();
     }
@@ -142,8 +144,9 @@ namespace foundation::gui
             return;
         }
         m_leaveQueued = true;
-        // Never inside the style pass's walk or an animation's tick: at the GUI's next drain. Still
-        // leaving then, it goes (a node removed or taken back meanwhile is not leaving any more).
+        // Removal never happens inside the style pass's walk or an animation's tick, but at the
+        // GUI's next drain. The node goes then only if it is still leaving; a node removed or taken
+        // back meanwhile is no longer leaving.
         RefPtr<Node> self(this);
         queue->Enqueue([self]()
                        {
@@ -159,7 +162,7 @@ namespace foundation::gui
         if (GetEventDispatcher() == nullptr || !GetRootNode()->HasStylePass() || Cast<UIWidget>(this) == nullptr)
         {
             m_enterPhase = 0;
-            SendEvent(Event(EventType::Entered, this)); // nothing plays an entrance here
+            SendEvent(Event(EventType::Entered, this)); // no entrance can play here
             return;
         }
         m_enterPhase = 1;
@@ -170,8 +173,8 @@ namespace foundation::gui
 
     void Node::MotionSettled()
     {
-        // The style pass has not shown its state yet (a transition of before ended first): it
-        // tells again once it has.
+        // The style pass has not applied the node's state yet (an earlier transition ended first).
+        // It calls this again once it has.
         if (IsStyleDirty())
             return;
         if (m_leaving)
@@ -185,7 +188,7 @@ namespace foundation::gui
         {
             if (node.m_enterPhase == 1)
             {
-                node.m_enterPhase = 2; // :entering goes: to its own style, through its transitions
+                node.m_enterPhase = 2; // :entering ends, and the node moves to its own style through its transitions
                 node.MarkStyleStateDirty(StateEntering);
             }
             else if (node.m_enterPhase == 2)
@@ -200,8 +203,8 @@ namespace foundation::gui
             advance(*this);
             return;
         }
-        // Not inside the style pass's walk or an animation's tick: at the GUI's next drain, if the
-        // entrance is still at this step then.
+        // Advance at the GUI's next drain, not inside the style pass's walk or an animation's tick,
+        // and only if the entrance is still at this phase then.
         m_enterQueued = true;
         RefPtr<Node> self(this);
         const u8 phase = m_enterPhase;
@@ -220,7 +223,7 @@ namespace foundation::gui
         m_inert = inert;
         if (inert)
             if (EventDispatcher* dispatcher = GetEventDispatcher())
-                dispatcher->NotifySubtreeRemoved(*this); // it holds nothing of the input now
+                dispatcher->NotifySubtreeRemoved(*this); // an inert subtree holds no input state
     }
 
     void Node::NotifyRemovingChild(Node& child)
@@ -231,13 +234,14 @@ namespace foundation::gui
 
     bool Node::RouteEvent(Event& event)
     {
-        // The path, target first, held for the walk: a handler may remove nodes from it.
+        // The path, target first, with references held for the walk, since a handler may remove
+        // nodes from it.
         Array<RefPtr<Node>> path(MemoryAllocator());
         for (Node* n = this; n != nullptr; n = n->m_parent)
         {
             path.PushBack(RefPtr<Node>(n));
             if (n->m_routeStop)
-                break; // a modal popup: what holds it is inert
+                break; // a modal popup: its ancestors are inert
         }
         Node* const root = GetRootNode();
         // A node removed from the tree during the walk takes no further part in it.
@@ -257,8 +261,9 @@ namespace foundation::gui
         if (inTree(*this))
             DeliverRouted(event);
         event.Phase = EventPhase::Bubble;
-        // Past an open popup, its owner and what holds that hear the event in their listeners, not
-        // their own handlers: an event in a popup is not one on what opened it (E5).
+        // Beyond an open popup, its owner and the owner's ancestors receive the event in their
+        // listeners but not in their own handlers, since an event in a popup is not an event on the
+        // node that opened it.
         bool pastPopup = IsInTopLayer();
         for (usize i = 1; i < path.Size() && !event.Handled; ++i)
         {

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The native event bus (foundation.messaging) - exercised with ZERO scripting, because the
-// C++-only contract is load-bearing: a C++-only game must publish/subscribe with native callbacks.
+// The native event bus (foundation.messaging), exercised with no scripting at all, because a
+// C++-only game has to be able to publish and subscribe with native callbacks.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -27,7 +27,7 @@ TEST_CASE("event bus: publish is deferred; Drain delivers the payload to a nativ
                             }
                         });
     bus.Publish(StringHash(u8"score"), Variant::From<f64>(7.0));
-    CHECK(calls == 0); // deferred - nothing fires until Drain
+    CHECK(calls == 0); // deferred: nothing fires until Drain
     CHECK(bus.PendingCount() == 1u);
 
     bus.Drain();
@@ -51,7 +51,7 @@ TEST_CASE("event bus: name filtering + subscription order + unsubscribe")
     bus.Unsubscribe(handleB);
     bus.Publish(StringHash(u8"B"), Variant{});
     bus.Drain();
-    CHECK(order == StringView(u8"12")); // B unsubscribed -> no delivery
+    CHECK(order == StringView(u8"12")); // B unsubscribed: no delivery
 }
 
 TEST_CASE("event bus: a handler's emit cascades in the SAME drain")

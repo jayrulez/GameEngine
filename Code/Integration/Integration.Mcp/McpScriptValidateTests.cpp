@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - script_validate (compile-check form). The
-// strongest cheap proof: every enabled backend's OWN New-Asset starter must validate through
-// the tool with its metadata harvested (class name + handlers recognized), and broken source
-// must come back with real line-numbered compile errors.
+// Integration.Mcp: script_validate, the compile check. Every enabled backend's own New Asset
+// starter must validate through the tool with its metadata harvested (the class name and handlers
+// recognized), and broken source must come back with real compile errors carrying line numbers.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include <fstream>
@@ -110,7 +109,7 @@ TEST_CASE("integration.mcp: script_validate - every enabled backend's starter co
     }
     CHECK(enabled >= 1); // the suite must actually exercise at least one backend
 
-    // A missing required arg is a PROTOCOL error (schema validation), not a tool error.
+    // A missing required argument is a protocol error from schema validation, not a tool error.
     JsonValue noSource = JsonValue::MakeObject();
     noSource.Set(u8"language", JsonValue::MakeString(u8"luau"));
     JsonValue params = JsonValue::MakeObject();
@@ -168,7 +167,7 @@ TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, 
     editor::mcp::RegisterScriptValidateTool(server);
     editor::mcp::RegisterScriptCreateTool(server, session);
 
-    // No project -> a guided refusal.
+    // With no project open, the tool refuses with guidance.
     {
         JsonValue a = JsonValue::MakeObject();
         a.Set(u8"name", JsonValue::MakeString(u8"Mover"));
@@ -202,7 +201,7 @@ TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, 
     REQUIRE(std::filesystem::is_regular_file(
         reinterpret_cast<const char*>(sourceFile.CStr()), ec));
 
-    // The created FILE's content validates through script_validate (the authoring loop).
+    // The created file's content validates through script_validate, as in the authoring loop.
     std::ifstream in(reinterpret_cast<const char*>(sourceFile.CStr()));
     std::stringstream text;
     text << in.rdbuf();
@@ -214,11 +213,11 @@ TEST_CASE("integration.mcp: script_create - starter-seeded asset, unique names, 
                               reinterpret_cast<const utf8char*>(content.c_str())))));
         JsonValue validated = ScCall(server, u8"script_validate", Move(a), true);
         CHECK(validated.Get(u8"valid").AsBool() == true);
-        // The class is named after the asset (Sedulous 89b70b54), not NewBehavior.
+        // The class is named after the asset, not NewBehavior.
         CHECK(validated.Get(u8"className").AsString() == StringView(u8"Mover"));
     }
 
-    // A second create with the same name gets a UNIQUE name (never overwrites).
+    // A second create with the same name gets a unique name and never overwrites.
     {
         JsonValue a = JsonValue::MakeObject();
         a.Set(u8"name", JsonValue::MakeString(u8"Mover"));

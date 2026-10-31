@@ -1,6 +1,6 @@
-# AnimStressTest - the running dev harness: a windowed DefaultApplication with a scene we
-# grow the engine in. Needs the desktop shell + Vulkan GPU factory (to present)
-# plus the default-app + scene libraries.
+# AnimStressTest - an animation and skinning benchmark: a windowed DefaultApplication with a
+# grid of animated characters. Needs the desktop shell and the GPU factory (to present)
+# plus the default-app and scene libraries.
 
 add_executable(AnimStressTest main.cpp)
 

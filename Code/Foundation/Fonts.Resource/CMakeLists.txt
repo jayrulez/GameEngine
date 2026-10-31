@@ -1,6 +1,6 @@
-# Foundation::Fonts.Resource - `foundation.fonts.resource` (the cooked font record + runtime
-# Font product + FontFactory - the triad tier Sedulous.Fonts.Resources provided). Device-
-# free: atlas images stay CPU-side; the VG layer uploads them like any font texture.
+# Foundation::Fonts.Resource - `foundation.fonts.resource` (the cooked font record, the runtime
+# Font product and FontFactory). Device-free: atlas images stay CPU-side; the VG layer uploads
+# them like any font texture.
 
 util_add_engine_library(Fonts.Resource ALIAS Foundation::Fonts.Resource)
 target_link_libraries(Fonts.Resource

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit DraggableTreeView: construct + exercise public methods (drag-enable/item-
-// height round-trips, internal TreeView access, adapter wiring) and the IDropTarget path (CanAcceptDrop
-// gating on format + adapter.CanMove; OnDrop invokes MoveItem + fires OnItemReordered). No rendering, no
-// full drag-manager cycle. A flat 3-item test-double implements IReorderableTreeAdapter minimally.
+// Smoke test for the toolkit DraggableTreeView: its public methods (drag-enable and item-height
+// round trips, internal TreeView access, adapter wiring) and the IDropTarget path (CanAcceptDrop
+// checks the format and adapter.CanMove; OnDrop calls MoveItem and fires OnItemReordered). No
+// rendering and no full drag-manager cycle. A flat 3-item test double implements
+// IReorderableTreeAdapter minimally.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -81,11 +82,11 @@ TEST_CASE("toolkit-draggabletreeview: CanAcceptDrop gating")
     IDropTarget* target = view->AsDropTarget();
     REQUIRE(target != nullptr);
 
-    // Valid tree/reorder payload at a valid localY -> Move (adapter.CanMove true).
+    // A valid tree/reorder payload at a valid localY gives Move (adapter.CanMove is true).
     auto dragData = core::MakeRef<TreeDragData>(core::DefaultAllocator(), 0);
     CHECK(target->CanAcceptDrop(dragData.Get(), 5.0f, 25.0f) == DragDropEffects::Move);
 
-    // A non-"tree/reorder" payload -> None.
+    // Any other payload gives None.
     auto otherData = core::MakeRef<DragData>(core::DefaultAllocator(), StringView(u8"text/plain"));
     CHECK(target->CanAcceptDrop(otherData.Get(), 5.0f, 25.0f) == DragDropEffects::None);
 }
@@ -111,7 +112,7 @@ TEST_CASE("toolkit-draggabletreeview: OnDrop invokes MoveItem + fires OnItemReor
     IDropTarget* target = view->AsDropTarget();
     auto dragData = core::MakeRef<TreeDragData>(core::DefaultAllocator(), 0);
 
-    // localY 45 / itemHeight 20 -> targetPos 2.
+    // localY 45 with itemHeight 20 gives targetPos 2.
     const DragDropEffects effect = target->OnDrop(dragData.Get(), 5.0f, 45.0f);
     CHECK(effect == DragDropEffects::Move);
 

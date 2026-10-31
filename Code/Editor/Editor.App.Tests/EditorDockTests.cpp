@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorDock: the shared panels by the ids saved layouts and the MCP tools name, the
-// default layout (Project central, Assets and Console under it side by side), the Project panel's
-// content the open project's page or the welcome wherever the panel shows, Reset Layout, and the
-// Profiler page presented in the page area.
+// Editor::App: EditorDock. The shared panels go by the ids that saved layouts and the MCP tools
+// use. The default layout has Project in the centre with Assets and Console side by side under it.
+// The Project panel shows the open project's page, or the welcome page, wherever it is docked. Also
+// covers Reset Layout and presenting the Profiler page in the page area.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -117,7 +117,7 @@ TEST_CASE("editor dock: the Profiler is a page, out of the default layout until 
     bed.dock.Present(editor::app::kPanelProfiler);
     CHECK(bed.Layout().StackOf(editor::app::kPanelProfiler) == bed.Layout().CentralStack());
 
-    // Presented again behind the Project panel's tab: to the front.
+    // Presenting it again while it is behind the Project panel's tab brings it to the front.
     REQUIRE(bed.dock.Controller().Edit([](gui::DockLayout& layout) { return layout.Activate(editor::app::kPanelProject); }).Ok());
     bed.dock.Present(editor::app::kPanelProfiler);
     const gui::DockNode* central = bed.Layout().FindNode(bed.Layout().CentralStack());

@@ -70,8 +70,8 @@ export namespace foundation::core
         return s.SubStr(begin, end - begin);
     }
 
-    // True for a UTF-8 continuation byte (0b10xxxxxx) - the trailing bytes of a multi-byte
-    // codepoint. A codepoint boundary is any byte that is NOT a continuation byte.
+    // True for a UTF-8 continuation byte (0b10xxxxxx), one of the trailing bytes of a multi-byte
+    // codepoint. A codepoint boundary is any byte that is not a continuation byte.
     [[nodiscard]] constexpr bool IsUtf8Continuation(char8_t c) noexcept
     {
         return (static_cast<unsigned>(c) & 0xC0u) == 0x80u;

@@ -3,11 +3,7 @@
 
 // UI Toolkit - :breadcrumb_bar partition
 //
-// Horizontal path display with clickable segments and separator arrows. Ported from
-// Sedulous.UI.Toolkit/src/BreadcrumbBar.bf. Beef `List<String>` owned -> Array<String>;
-// `path.Split(sep)` + Trim -> a manual char-scan split using core::Trim; `Event<delegate void(
-// BreadcrumbBar, int32)>` -> Event<void(BreadcrumbBar*, i32)>; `Context.InputManager.MouseX` ->
-// Context->GetInputManager()->MouseX(); `bg as RoundedRectDrawable` -> Cast<RoundedRectDrawable>(bg).
+// Horizontal path display with clickable segments and separator arrows.
 
 module;
 #include "Core/Prelude.h"
@@ -147,7 +143,7 @@ export namespace foundation::ui::toolkit
                 const bool isLast = i == m_segments.Size() - 1;
                 const bool isHovered = static_cast<i32>(i) == m_hoveredIndex;
 
-                // Hover highlight - derived from background.
+                // Hover highlight, derived from the background.
                 if (isHovered && !isLast)
                 {
                     Color bgColor = Rgb(40, 42, 52, 255);

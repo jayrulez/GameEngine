@@ -4,9 +4,9 @@
 // UI - :markup_loader partition
 //
 // Loads a View tree from an XML (.sml) string using MarkupRegistry for element/property resolution.
-// Ported from Sedulous.UI/src/Markup/MarkupLoader.bf, on foundation.xml (Code/Foundation/Xml). Ownership:
-// Beef raw `View` returns + AddView -> RefPtr<View> (RAII); the returned root owns the whole subtree.
-// XML downcasts use XmlNode::NodeType() + static_cast (foundation.xml nodes are not RTTI_OBJECTs).
+// Built on foundation.xml. Views are returned as RefPtr<View>; the returned root owns the whole
+// subtree. XML downcasts use XmlNode::NodeType() and static_cast (foundation.xml nodes are not
+// RTTI_OBJECTs).
 
 module;
 #include "Core/Prelude.h"
@@ -35,8 +35,8 @@ export namespace foundation::ui
     {
         /// Parse an XML string and return the root View (null on failure). The context is used for name
         /// registration (id attributes) via the tree it is attached to. `warnings`, when given, collects
-        /// diagnostics for constructs the loader would otherwise drop SILENTLY - unknown child elements
-        /// and unrecognized attributes (the cook surfaces these; authoring typos die loud, not quiet).
+        /// diagnostics for constructs the loader would otherwise drop silently: unknown child elements
+        /// and unrecognized attributes (the cook surfaces these, so authoring typos are reported).
         [[nodiscard]] static RefPtr<View> LoadFromString(IAllocator& allocator,
                                                          StringView xmlText,
                                                          UIContext* context = nullptr,
@@ -151,7 +151,7 @@ export namespace foundation::ui
                 }
             }
 
-            // Text content: <Button>Click Me</Button> -> set as "text" property if the view has one.
+            // Text content: <Button>Click Me</Button> sets the "text" property if the view has one.
             String textContent;
             GetTextContent(element, textContent);
             if (textContent.Size() > 0)
@@ -337,7 +337,7 @@ export namespace foundation::ui
                     continue;
                 }
 
-                // Unknown attribute: ignored at runtime, but SURFACED to the cook - a
+                // Unknown attribute: ignored at runtime, but reported to the cook, since a
                 // camelCase typo (fontSize vs font-size) can silently produce an invisible HUD.
                 if (warnings != nullptr)
                 {

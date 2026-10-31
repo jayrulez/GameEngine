@@ -26,14 +26,14 @@ namespace editor
     ScriptEditorPage::ScriptEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::CodeAssetPage(context, Move(services), instance, pipeline::ScriptClassAsset::StaticType(), kPath)
     {
-        HideAssetRows(); // the code is the page: no grid
+        HideAssetRows(); // the code fills the page, so no property grid
         if (const auto* asset = ObjectAs<pipeline::ScriptClassAsset>())
             m_doc.Bind(context.Project() != nullptr ? context.Project()->SourcesRoot().AsView() : StringView{}, asset->fileName.View(), asset->language.AsView());
         m_surface.SetLanguage(m_doc.Language());
         const gui::CodeLanguage* language = Services().languages != nullptr ? Services().languages->Find(m_doc.Language()) : nullptr;
         m_service = MakeUnique<ScriptLanguageService>(Allocator(), m_surface, language);
         ScriptEditorPage* self = this;
-        // While a run is paused in this script, a name's value on hover.
+        // While a run is paused in this script, hovering a name shows its value.
         m_service->SetValueProbe([self](StringView name) -> String
                                  {
                                      const EditorContext::ScriptExecutionPoint& point = self->Context().ScriptExecution();
@@ -44,15 +44,15 @@ namespace editor
         if (gui::CodeEditor* code = Code())
         {
             code->SetLanguageService(m_service.Get());
-            // The breakpoints are the editor's (a Game run applies them; the store is 1-based).
+            // The breakpoints belong to the editor (a Game run applies them); the store is 1-based.
             for (const EditorContext::ScriptBreakpoint& breakpoint : context.Breakpoints())
                 if (breakpoint.file.AsView() == m_doc.FileName() && breakpoint.line >= 1)
                     m_breakpoints.PushBack(code->AddMarker(static_cast<u32>(breakpoint.line - 1), u8"breakpoint"));
             code->SetOnGutterClick([self](u32 line) { self->ToggleBreakpoint(line); });
         }
 
-        // The API browser: its parts found while it is in the page, then out of the splitter
-        // until it is opened.
+        // The API browser: find its parts while it is still in the page, then take it out of the
+        // splitter until it is opened.
         m_body = Find<gui::Splitter>(u8"script-body");
         m_apiPane = RefPtr<gui::Node>(Find<gui::Node>(u8"script-api-pane"));
         m_apiView = Find<gui::TreeView>(u8"script-api-tree");
@@ -88,7 +88,7 @@ namespace editor
 
     Array<app::CodeProblem> ScriptEditorPage::CheckCode(StringView text)
     {
-        // Compiled as the cook compiles it, none of it run.
+        // Compiled as the cook compiles it, without running any of it.
         m_doc.SetSource(text);
         (void)m_doc.Validate();
         Array<app::CodeProblem> problems;
@@ -121,7 +121,8 @@ namespace editor
         }
     }
 
-    // A Game run paused in this script: its line marked and brought into view; else no mark.
+    // When a Game run is paused in this script, marks its line and brings it into view;
+    // otherwise clears the mark.
     void ScriptEditorPage::ShowExecution()
     {
         gui::CodeEditor* code = Code();
@@ -174,7 +175,7 @@ namespace editor
             m_body->AddChild(m_apiPane.Get());
         else if (!show && in)
             m_body->RemoveChild(m_apiPane.Get());
-        // Built the first time it opens: the API is described by a script manager made for it.
+        // Built the first time the browser opens, by a script manager made to describe the API.
         if (show && !m_apiBuilt)
         {
             m_apiBuilt = true;
@@ -194,7 +195,7 @@ namespace editor
         m_apiTree = BuildScriptApiTree(m_surface.Types(), m_apiSearch.AsView());
         if (!m_apiModel)
             return;
-        // The model's ids are the tree's node indices: nodes are added in their index order.
+        // The model's ids are the tree's node indices, because nodes are added in index order.
         m_apiModel->Clear();
         Array<i32> modelOf;
         for (usize i = 0; i < m_apiTree.nodes.Size(); ++i)
@@ -212,7 +213,7 @@ namespace editor
         for (usize i = 0; i < modelOf.Size(); ++i)
             if (modelOf[i] >= 0)
                 m_apiNodes[static_cast<usize>(modelOf[i])] = static_cast<i32>(i);
-        // A search opens what it kept.
+        // A search expands the rows it kept.
         if (m_apiView != nullptr && !m_apiSearch.IsEmpty())
             for (const i32 root : m_apiTree.roots)
                 m_apiView->SetIdExpanded(static_cast<gui::ItemId>(modelOf[static_cast<usize>(root)]), true);

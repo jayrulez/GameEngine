@@ -4,16 +4,14 @@
 // UI - :selection_model partition
 //
 // Decoupled selection state: tracks selected indices independently of the data view (multiple views can
-// share one). Ported from Sedulous.UI/src/Data/SelectionModel.bf. Self-contained (no View). HashSet<i32>
-// backing; Beef `mSelected.Add` -> HashSet::Insert (both return true if newly added); Math.Min/Max ->
-// core::Min/Max.
+// share one). Self-contained (no View); backed by a HashSet<i32>.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:selection_model;
 
-import foundation.core; // HashSet, Array, Event? (Event is a UI partition)
+import foundation.core; // HashSet, Array (Event comes from the :event partition)
 import :event;
 
 using namespace foundation::core;
@@ -45,9 +43,9 @@ export namespace foundation::ui
             return m_selected.Contains(index);
         }
 
-        /// Select an index EXCLUSIVELY (a plain click): the previous selection clears in every
-        /// mode - extending is what Toggle (Ctrl) and SelectRange (Shift) are for. (Multiple
-        /// mode must not accumulate here, or plain clicks would grow the selection forever.)
+        /// Select an index exclusively (a plain click): the previous selection clears in every
+        /// mode, since extending is what Toggle (Ctrl) and SelectRange (Shift) are for. Multiple
+        /// mode does not accumulate here, or plain clicks would grow the selection forever.
         void Select(i32 index)
         {
             if (Mode == SelectionMode::None)
@@ -75,7 +73,7 @@ export namespace foundation::ui
         }
 
         /// Drop selected indices that no longer exist (>= count, or negative). Called by list
-        /// views when the data set changes - a stale index would silently highlight whatever row
+        /// views when the data set changes, since a stale index would silently highlight whatever row
         /// now occupies that position.
         void PruneFrom(i32 count)
         {
@@ -169,8 +167,8 @@ export namespace foundation::ui
             OnSelectionChanged.Invoke();
         }
 
-        /// Extends from the anchor to `index` - what Shift+click and Shift+arrow mean: the range
-        /// always runs from where it started, so repeated extension grows or shrinks ONE range.
+        /// Extends from the anchor to `index`, which is what Shift+click and Shift+arrow do: the
+        /// range always runs from where it started, so repeated extension grows or shrinks one range.
         /// Without an anchor (or in Single mode) it is a plain pick.
         void ExtendTo(i32 index)
         {

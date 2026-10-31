@@ -3,12 +3,12 @@
 
 /// Engine::Render - the `:components` partition.
 ///
-/// The render-facing scene components + their managers - the scene-coupled side of the
+/// The render-facing scene components and their managers: the scene-coupled side of the
 /// renderer (foundation.render itself stays scene-agnostic). A MeshComponent references a
-/// mesh + material to draw at its entity's transform; a CameraComponent describes a
+/// mesh and material to draw at its entity's transform; a CameraComponent describes a
 /// view frustum (its view comes from the entity's world transform). The RenderSubsystem
 /// declares these managers for the scene composition; extraction (:extract) reads
-/// them into a engine::render::ExtractedView that gets pushed to the renderer.
+/// them into a render::ExtractedScene that gets pushed to the renderer.
 
 module;
 #include "Core/Prelude.h"
@@ -22,9 +22,9 @@ import foundation.scene;
 import foundation.geometry;
 import foundation.materials;
 import foundation.rhi; // rhi::TextureView (a SpriteComponent references a texture to draw)
-import foundation.texture.resource; // texture::Texture (cooked product behind sprite/decal texture refs)
-import foundation.render; // SkySnapshot/SkyMode (snapshot layer; render.subsystem depends on render)
-import foundation.script.facades; // script::Entity/Scene + CurrentRunResources (the SceneRender handle)
+import foundation.texture.resource; // texture::Texture (cooked product behind sprite and decal texture refs)
+import foundation.render; // SkySnapshot, SkyMode (snapshot layer; render.subsystem depends on render)
+import foundation.script.facades; // script::Entity, Scene and CurrentRunResources (the SceneRender handle)
 
 using namespace foundation::core;
 using namespace foundation;
@@ -39,22 +39,21 @@ export namespace engine::render
     // Foundation alias (sibling engine::scene would otherwise shadow foundation::scene).
     namespace scene = foundation::scene;
 
-    // What to draw at an entity: a mesh + the material to draw it with. Resource refs
+    // What to draw at an entity: a mesh and the material to draw it with. Resource refs
     // (resource::Ref): a serialized Guid resolved through the ResourceManager's proxy handles
     // (hot reload swaps the product behind every holder), or a direct RefPtr for code-created
-    // meshes (samples/procedural - the direct object wins and is never serialized). `color` is a
-    // per-instance tint (multiplied into the shaded color) - distinct per entity even when
-    // many share one mesh + material, so it rides the per-instance data path.
+    // meshes (samples, procedural content; the direct object wins and is never serialized).
+    // `color` is a per-instance tint (multiplied into the shaded color), distinct per entity even
+    // when many share one mesh and material, so it rides the per-instance data path.
     struct MeshComponent
     {
         foundation::resource::Ref<geometry::StaticMesh> mesh;
-        // THE material list, indexed by SubMesh::materialIndex. Slot 0 doubles as the whole-mesh
-        // material: single-material meshes hold ONE entry, and a submesh whose index is out of
+        // The material list, indexed by SubMesh::materialIndex. Slot 0 doubles as the whole-mesh
+        // material: single-material meshes hold one entry, and a submesh whose index is out of
         // range (or whose slot is unresolved) falls back to slot 0. Serialized identity lives in
-        // `materials`; `materialCache` is the raw-pointer view EXTRACTION refreshes from the ref
-        // proxies EVERY frame - late cooks and hot reloads heal live (the previous design
-        // snapshotted RefPtrs once at resolve, pinning pre-cook nulls until a page reopen), and
-        // the renderer stays resource-agnostic.
+        // `materials`; `materialCache` is the raw-pointer view extraction refreshes from the ref
+        // proxies every frame, so late cooks and hot reloads heal live (a snapshot taken once at
+        // resolve would pin pre-cook nulls), and the renderer stays resource-agnostic.
         Array<foundation::resource::Ref<materials::Material>> materials;
         Array<RefPtr<materials::Material>> materialCache; // runtime-only; refreshed at extract
         Color color = Color{1.0f, 1.0f, 1.0f, 1.0f};
@@ -102,7 +101,7 @@ export namespace engine::render
             }
             return false;
         }
-        // Slot-0 conveniences for runtime code (samples/spawners) - refs and raw objects both fit
+        // Slot-0 conveniences for runtime code (samples, spawners): refs and raw objects both fit
         // (resource::Ref adopts direct pointers).
         void SetMaterial(const RefPtr<materials::Material>& m)
         {
@@ -119,28 +118,29 @@ export namespace engine::render
         }
 
         // GPU skinning: per-bone skinning matrices for a skinned mesh, supplied per frame by the owner
-        // (e.g. an AnimationPlayer's GetSkinningMatrices()). Borrowed - valid for the frame it's set;
-        // null => the mesh draws static (bind pose). Extraction copies the pointer into MeshRenderData.
+        // (e.g. an AnimationPlayer's GetSkinningMatrices()). Borrowed: valid for the frame it's set;
+        // null means the mesh draws static (bind pose). Extraction copies the pointer into MeshRenderData.
         const Float4x4* boneMatrices = nullptr;
         const Float4x4* prevBoneMatrices =
-            nullptr; // previous-frame matrices (motion vectors); null => reuse current
+            nullptr; // previous-frame matrices (motion vectors); null reuses the current ones
         u32 boneCount = 0;
 
-        // LOD knobs (payload v4). lodBias > 0 switches coarser sooner (each unit
-        // halves the effective screen coverage; negative holds detail longer). forceLod
-        // pins one level for debug/cinematics (-1 = automatic; clamped to the chain).
+        // LOD knobs. lodBias > 0 switches coarser sooner (each unit halves the
+        // effective screen coverage; negative holds detail longer). forceLod pins one
+        // level for debugging or cinematics (-1 is automatic; clamped to the chain).
         // Copied into MeshRenderData at extraction; selection is per view in the renderer.
         f32 lodBias = 0.0f;
         i32 forceLod = -1;
     };
 
-    // An INSTANCED mesh ("MultiMesh"): ONE shared mesh + material drawn at N per-instance transforms that
-    // live (on the GPU) in a persistent buffer owned by the renderer. Its per-frame CPU cost is O(1) in the
-    // instance count - the set is extracted as ONE render item, culled as one merged AABB, and drawn once
-    // per pass (depth, forward, every shadow cascade all read the same buffer). Use it for static crowds /
-    // scatter (foliage, props, debris); the per-entity MeshComponent stays for genuinely dynamic objects.
-    // `instances` is the CPU source of truth; every mutator bumps `version`, and the renderer re-uploads the
-    // GPU buffer (and extraction recomputes the merged bounds) ONLY when the version changes.
+    // An instanced mesh ("MultiMesh"): one shared mesh and material drawn at N per-instance transforms
+    // that live (on the GPU) in a persistent buffer owned by the renderer. Its per-frame CPU cost is O(1)
+    // in the instance count: the set is extracted as one render item, culled as one merged AABB, and drawn
+    // once per pass (depth, forward and every shadow cascade read the same buffer). Use it for static
+    // crowds and scatter (foliage, props, debris); the per-entity MeshComponent stays for genuinely
+    // dynamic objects. `instances` is the CPU source of truth; every mutator bumps `version`, and the
+    // renderer re-uploads the GPU buffer (and extraction recomputes the merged bounds) only when the
+    // version changes.
     struct InstancedMeshComponent
     {
         foundation::resource::Ref<geometry::StaticMesh> mesh;
@@ -151,7 +151,7 @@ export namespace engine::render
         Array<foundation::resource::Ref<materials::Material>> materials;
         Array<RefPtr<materials::Material>> materialCache;
         // Seed one identity instance so a freshly added component (editor workflow) renders its mesh
-        // at the entity's transform immediately; authored sets replace it (SetInstances/load).
+        // at the entity's transform immediately; authored sets replace it (SetInstances, load).
         InstancedMeshComponent() { instances.PushBack(Float4x4::Identity()); }
         // One material for the whole mesh (native code's common case).
         void SetMaterial(const RefPtr<materials::Material>& material)
@@ -159,38 +159,38 @@ export namespace engine::render
             materials.Resize(1);
             materials[0] = material;
         }
-        // Per-instance transforms, ENTITY-RELATIVE: instance i draws at instances[i] * entityWorld,
-        // so moving the owning entity moves the whole set (extraction composes + caches the world
-        // array; a set on an unmoved identity entity costs the same as before).
+        // Per-instance transforms, entity-relative: instance i draws at instances[i] * entityWorld,
+        // so moving the owning entity moves the whole set (extraction composes and caches the world
+        // array, so a set on an unmoved entity is not recomposed each frame).
         Array<Float4x4> instances;
         Color color = Color{1.0f, 1.0f, 1.0f, 1.0f}; // shared tint (used when `tints` is empty)
         // Optional per-instance tint (parallel to `instances`): when its size matches, each instance uses its
-        // own tint; otherwise `color` covers all. Read at upload, so set it BEFORE SetInstances (which bumps version).
+        // own tint; otherwise `color` covers all. Read at upload, so set it before SetInstances (which bumps version).
         Array<Color> tints;
         bool visible = true;
 
-        // GPU-skinned crowds: a shared POSE POOL of `poseCount` skinning palettes (each `boneCount` matrices),
+        // GPU-skinned crowds: a shared pose pool of `poseCount` skinning palettes (each `boneCount` matrices),
         // set per frame by the InstancedSkinningComponent companion (engine.animation). When posePool is
-        // non-null the set draws SKINNED, and instance i uses pose (i % poseCount) - so N animated instances
-        // cost only M = poseCount palette computes, not N. Borrowed (valid for the frame it's set); null => the
-        // set draws static. The mesh must be a skinned mesh (has a skin stream).
+        // non-null the set draws skinned, and instance i uses pose (i % poseCount), so N animated instances
+        // cost only M = poseCount palette computes, not N. Borrowed (valid for the frame it's set); null means
+        // the set draws static. The mesh must be a skinned mesh (one with a skin stream).
         const Float4x4* posePool = nullptr;
         const Float4x4* prevPosePool =
-            nullptr;       // last frame's palettes (per-bone motion vectors); null => reuse current
+            nullptr;       // last frame's palettes (per-bone motion vectors); null reuses the current ones
         u32 poseCount = 0; // M unique phase buckets
         u32 boneCount = 0; // bones per palette
 
-        // Pose-selection policy for the shared pool (see render::PoseAssignment). Default Hashed = each
-        // instance scattered to an unrelated pose (independent-agent crowd). Set to Explicit and fill
+        // Pose-selection policy for the shared pool (see render::PoseAssignment). The default, Hashed,
+        // scatters each instance to an unrelated pose (an independent-agent crowd). Set Explicit and fill
         // `poseIndices` (parallel to `instances`, values in [0,poseCount)) for layout-aware looks the
-        // renderer can't derive from the flat index - columns, spatial clusters, gameplay. Explicit with an
-        // empty/mismatched array falls back to Hashed. Not a mutator (doesn't bump version - it's read each
-        // frame during the offsets fill, not uploaded to the instance buffer).
+        // renderer can't derive from the flat index: columns, spatial clusters, gameplay. Explicit with an
+        // empty or mismatched array falls back to Hashed. Not a mutator (it doesn't bump version: it's read
+        // each frame during the offsets fill, not uploaded to the instance buffer).
         PoseAssignment poseAssignment = PoseAssignment::Hashed;
         Array<u32> poseIndices;
         // A clip per instance (parallel to `instances`) when the pool holds several clips (an
         // InstancedSkinningComponent with a clip list): the clip picks its block of poses, the policy
-        // the phase in it. Empty or mismatched = every instance on clip 0. Read each frame, like
+        // the phase in it. Empty or mismatched puts every instance on clip 0. Read each frame, like
         // poseIndices: not a mutator. `posesPerClip` is set with the pool (runtime).
         Array<u32> instanceClips;
         u32 posesPerClip = 0;
@@ -199,16 +199,16 @@ export namespace engine::render
         // recompute the merged bounds. Starts at 1 so the first extract (uploadedVersion 0) always uploads.
         u32 version = 1;
         // Composed world-space transforms (instances[i] * entityWorld), rebuilt by extraction when the
-        // authored set OR the entity's world matrix changed; `composedVersion` is what the renderer
+        // authored set or the entity's world matrix changed; `composedVersion` is what the renderer
         // sees, so an entity move re-uploads the GPU buffer like any other mutation. Runtime-only.
         Array<Float4x4> worldTransforms;
         // `tints` decoded to linear for the renderer (authored colours are sRGB), rebuilt with
         // `worldTransforms` since the renderer reads tints at the same upload. Runtime-only.
         Array<Color> linearTints;
         Float4x4 composedEntityWorld = Float4x4::Identity();
-        u32 composedFromVersion = 0; // authored `version` the cache was built from (0 = never)
+        u32 composedFromVersion = 0; // authored `version` the cache was built from (0: never)
         u32 composedVersion = 0;     // bumped on every recompose (renderer upload key)
-        // Cached merged world-space bounds (center + sphere radius), recomputed at extraction when
+        // Cached merged world-space bounds (center and sphere radius), recomputed at extraction when
         // `boundsVersion != composedVersion`. Lets a static set skip the O(N) bounds pass every frame.
         Float3 cachedCenter = Float3{0, 0, 0};
         f32 cachedRadius = 0.0f;
@@ -226,7 +226,7 @@ export namespace engine::render
 
         [[nodiscard]] u32 Count() const noexcept { return static_cast<u32>(instances.Size()); }
 
-        // Replace the whole set in one shot (fast path for static content) - a single version bump.
+        // Replace the whole set in one shot (the fast path for static content): a single version bump.
         void SetInstances(Span<const Float4x4> xf)
         {
             instances.Resize(xf.Size());
@@ -266,8 +266,8 @@ export namespace engine::render
 
     // A camera frustum. The view transform is the inverse of the entity's world matrix;
     // these fields define the projection. `primary` marks the camera the renderer uses.
-    // `clearColor` is the backdrop the view is cleared to (per-camera, like Unity/Godot);
-    // defaults to the cornflower sentinel. (Clear *mode* - skybox/solid/depth-only - later.)
+    // `clearColor` is the backdrop the view is cleared to (per camera); it defaults to the
+    // cornflower sentinel.
     struct CameraComponent
     {
         f32 fovYRadians = 1.04719755f; // 60 degrees
@@ -303,8 +303,8 @@ export namespace engine::render
         return Float4x4::PerspectiveFovRH(camera.fovYRadians, aspect, camera.nearZ, camera.farZ);
     }
 
-    // A light on an entity. Directional uses the entity's forward (-Z); Point/Spot use its world
-    // position (+ range). Extraction packs these into render::GpuLight shading inputs.
+    // A light on an entity. Directional uses the entity's forward (-Z); Point and Spot use its world
+    // position (and range). Extraction packs these into render::GpuLight shading inputs.
     enum class LightType : u32
     {
         Directional = 0,
@@ -312,8 +312,8 @@ export namespace engine::render
         Spot = 2
     };
 
-    // How a spot/point light's shadow updates. Realtime = re-render every
-    // frame (default). Static = render into the cached atlas layer, redrawn when the LIGHT moves or
+    // How a spot or point light's shadow updates. Realtime re-renders every
+    // frame (the default). Static renders into the cached atlas layer, redrawn when the light moves or
     // changes, and where a caster moves, appears or goes (a figure walking, a door swinging) within its
     // reach. Cheap for scenes that mostly stand still.
     enum class ShadowUpdateMode : u32
@@ -334,53 +334,53 @@ export namespace engine::render
             ShadowUpdateMode::Realtime; // spot/point shadow caching
         bool enabled = true;
         bool castsShadows = false; // shadow caster
-        // The shadow's tuning (v1), shown while castsShadows: the depth-compare bias as a scale of the
-        // light type's default (1 = default; the sun's and a local light's depths are in different
+        // The shadow's tuning, shown while castsShadows: the depth-compare bias as a scale of the
+        // light type's default (1 is the default; the sun's and a local light's depths are in different
         // spaces), the normal offset in shadow texels (what keeps a wall the light grazes from
-        // shadowing itself), and how dark the shadow gets (1 = full, 0 = none).
+        // shadowing itself), and how dark the shadow gets (1 is full, 0 none).
         f32 shadowDepthBiasScale = 1.0f;
         f32 shadowNormalBias = foundation::render::kShadowBiasDefaultsNormalBias;
         f32 shadowStrength = 1.0f;
     };
 
-    // A textured billboard on an entity - drawn at the entity's world position, sized in world units,
-    // facing the camera (or world-aligned). `texture` is borrowed: the app/resource owns it and must keep
+    // A textured billboard on an entity, drawn at the entity's world position, sized in world units,
+    // facing the camera (or world-aligned). `texture` is borrowed: the app or resource owns it and must keep
     // it alive while the component is attached. Extraction reads this into a render::SpriteRenderData.
     // How a sprite billboard orients itself (mirrors the shader's orientation mode).
     enum class SpriteOrientation : u32
     {
-        CameraFacing = 0,   // full billboard - always faces the camera
-        CameraFacingY = 1,  // rotates about world-Y only (trees/characters)
+        CameraFacing = 0,   // full billboard: always faces the camera
+        CameraFacingY = 1,  // rotates about world-Y only (trees, characters)
         WorldAligned = 2,   // fixed world XY plane (decal-like flat art)
-        EntityOriented = 3, // the ENTITY's world right/up axes: turns with it (signs, panels)
+        EntityOriented = 3, // the entity's world right and up axes: turns with it (signs, panels)
     };
 
     struct SpriteComponent
     {
         rhi::TextureView* texture =
-            nullptr; // runtime override (samples/procedural); wins over textureAsset
+            nullptr; // runtime override (samples, procedural content); wins over textureAsset
         foundation::resource::Ref<texture::Texture>
-            textureAsset;                 // cooked texture (editor picker/serialized)
-        Float2 size = Float2{1.0f, 1.0f}; // world-unit width/height
+            textureAsset;                 // cooked texture (editor picker, serialized)
+        Float2 size = Float2{1.0f, 1.0f}; // world-unit width and height
         Float4 uvRect = Float4{0.0f, 0.0f, 1.0f,
-                               1.0f}; // atlas sub-rect (u, v, w, h) - whole texture by default
+                               1.0f}; // atlas sub-rect (u, v, w, h); the whole texture by default
         Color tint = Color{1.0f, 1.0f, 1.0f, 1.0f};
         SpriteOrientation orientation = SpriteOrientation::CameraFacing;
-        bool additive = false;    // false = alpha over, true = additive (glow)
-        bool postTonemap = false; // draw AFTER tonemap (world UI: authored colors intact)
+        bool additive = false;    // false: alpha over; true: additive (glow)
+        bool postTonemap = false; // draw after tonemap (world UI: authored colors intact)
         bool visible = true;
     };
 
-    // A screen-space projected decal on an entity - sprays `texture` onto whatever surface is under its
+    // A screen-space projected decal on an entity: sprays `texture` onto whatever surface is under its
     // oriented box. The box projects along the entity's local +Z; `size` is the box extents (x,y = the
     // footprint, z = how far along the projection axis it reaches). Orient the entity so local +Z points
     // into the surface (e.g. rotate so +Z points down to project onto a floor). `texture` is borrowed.
     struct DecalComponent
     {
         rhi::TextureView* texture =
-            nullptr; // runtime override (samples/procedural); wins over textureAsset
+            nullptr; // runtime override (samples, procedural content); wins over textureAsset
         foundation::resource::Ref<texture::Texture>
-            textureAsset; // cooked texture (editor picker/serialized)
+            textureAsset; // cooked texture (editor picker, serialized)
         Float3 size = Float3{1.0f, 1.0f, 1.0f};
         Color color = Color{1.0f, 1.0f, 1.0f, 1.0f};
         f32 fadeStart = 0.0f; // angle-fade start (radians)
@@ -390,19 +390,19 @@ export namespace engine::render
 
     // A local reflection probe: captures the scene into a cubemap from the entity's world position and gives
     // parallax-corrected specular reflections to surfaces inside its box volume. The box (world-axis-aligned,
-    // from `halfExtents`) is BOTH the influence volume and the parallax proxy; `blendDistance` softens the
+    // from `halfExtents`) is both the influence volume and the parallax proxy; `blendDistance` softens the
     // influence toward the box edge so overlapping probes blend without a seam. `update` selects the capture
     // cadence (ProbeUpdateMode, from the snapshot layer). Extraction reads this into a render::ReflectionProbe.
     struct ReflectionProbeComponent
     {
         Float3 halfExtents =
-            Float3{5.0f, 5.0f, 5.0f}; // box influence/proxy half-extents (world units)
+            Float3{5.0f, 5.0f, 5.0f}; // box influence and proxy half-extents (world units)
         f32 blendDistance = 1.0f;     // soft falloff width inward from the box edge
         f32 intensity = 1.0f;         // reflection multiplier
-        u32 resolution = 128;         // captured cube face size (64/128/256)
+        u32 resolution = 128;         // captured cube face size (64, 128, 256)
         u32 priority = 0;             // tie-break when volumes overlap (higher wins)
         ProbeUpdateMode update = ProbeUpdateMode::Static;
-        bool parallax = true; // box-project the reflection ray (vs infinite env)
+        bool parallax = true; // box-project the reflection ray (rather than an infinite env)
         bool enabled = true;
         // Runtime: capture requests made so far (never serialized). A Manual probe captures only
         // when asked; any probe recaptures once when asked (after its room changed).
@@ -430,7 +430,7 @@ export namespace engine::render
         {
             r.Bind(manager);
         }
-        // materialCache is refreshed at EXTRACT time (per frame, through the proxies) - resolve
+        // materialCache is refreshed at extract time (per frame, through the proxies); resolve
         // only attaches the bindings.
     }
 
@@ -450,9 +450,8 @@ export namespace engine::render
                                           const Function<bool(scene::EntityHandle)>& accept,
                                           scene::SceneSurfaceHit& out) override;
     };
-    // Data-only components PERSIST (scene round-trip + full destroy-undo restore - a destroyed
-    // entity's components are snapshotted through serializable managers only). Sprite/Decal/
-    // InstancedMesh still hold raw GPU pointers and stay runtime-only until they move to refs.
+    // Data-only components persist (scene round-trip and full destroy-undo restore: a destroyed
+    // entity's components are snapshotted through serializable managers only).
     inline void Serialize(ISerializer& ar, LightComponent& c)
     {
         u8 type = static_cast<u8>(c.type);
@@ -507,8 +506,8 @@ export namespace engine::render
         c.update = static_cast<ProbeUpdateMode>(update);
     }
 
-    // Persist the refs + the authored placement data (instances/tints are the authored content of a
-    // scatter set); the skinning pose pool + caches are runtime-only. Loaded sets start at version 1
+    // Persist the refs and the authored placement data (instances and tints are the authored content of
+    // a scatter set); the skinning pose pool and caches are runtime-only. Loaded sets start at version 1
     // with boundsVersion 0, so the first extract re-uploads and recomputes bounds.
     inline void Serialize(ISerializer& ar, InstancedMeshComponent& c)
     {
@@ -580,7 +579,7 @@ export namespace engine::render
         [[nodiscard]] scene::ISceneEntityBounds* AsEntityBounds() noexcept override { return this; }
         [[nodiscard]] bool EntityBounds(scene::Scene& scene, scene::EntityHandle entity, AABB& out) override;
     };
-    // Persist the texture ref + plain fields; the raw view override is runtime-only.
+    // Persist the texture ref and plain fields; the raw view override is runtime-only.
     inline void Serialize(ISerializer& ar, SpriteComponent& c)
     {
         foundation::core::Serialize(ar, "texture", c.textureAsset);
@@ -659,65 +658,63 @@ export namespace engine::render
     class EnvironmentProfile; // a shared Environment Profile asset's product (below)
     class PostProcessProfile; // a shared Post Process Profile asset's product (below)
 
-    // The scene's environment - ONE per scene (not a component). Drives both the IBL ambient and the
-    // (upcoming) visible sky. A plain SceneSystem injected by the RenderSubsystem; extraction reads it
-    // into the snapshot. When IBL is active these sky settings drive shading; `ambientColor ×
-    // ambientIntensity` remains the flat fallback used when no environment is active.
+    // The scene's environment: one per scene (not a component). Drives both the IBL ambient and the
+    // visible sky. A plain SceneSystem injected by the RenderSubsystem; extraction reads it into the
+    // snapshot. When IBL is active these sky settings drive shading; `ambientColor` times
+    // `ambientIntensity` remains the flat fallback used when no environment is active.
     struct EnvironmentSettings
     {
-        // Flat ambient FILL: adds on top of the environment's image-based ambient in every sky
-        // mode (intensity 0 = pure IBL); when IBL is unavailable it is the only ambient.
-        // sRGB, like every colour (the default is the look it had when colours were read raw).
+        // Flat ambient fill: adds on top of the environment's image-based ambient in every sky
+        // mode (intensity 0 is pure IBL); when IBL is unavailable it is the only ambient.
+        // sRGB, like every colour.
         Color ambientColor = Color{0.349f, 0.381f, 0.437f, 1.0f};
         f32 ambientIntensity = 0.3f;
 
         SkyMode skyMode = SkyMode::Procedural;
-        // Env RADIANCE master: baked once into the env cube, so it scales the visible sky's base
-        // AND the IBL diffuse/specular lighting derived from that cube (the old sky pass wrongly
-        // double-applied it, squaring only the background). Dim it to lower the whole environment
-        // (sky + image-based lighting) together.
+        // Environment radiance master: baked once into the env cube, so it scales the visible sky's
+        // base and the IBL diffuse and specular lighting derived from that cube. Dim it to lower the
+        // whole environment (sky and image-based lighting) together.
         f32 skyIntensity = 1.0f;
-        // Display-only backdrop dimmer: an EXTRA multiplier on the VISIBLE sky (main view + probe
-        // reflections of it) layered on top of skyIntensity. Does NOT touch IBL lighting - use it
-        // to calm a too-bright sky while keeping the scene lit. Default 0.5.
+        // Display-only backdrop dimmer: an extra multiplier on the visible sky (the main view and
+        // probe reflections of it) layered on top of skyIntensity. It does not touch IBL lighting:
+        // use it to calm a too-bright sky while keeping the scene lit. Default 0.5.
         f32 skyBackgroundIntensity = 0.5f;
-        f32 skyRotation = 0.0f; // yaw (radians) for HDR/cubemap
-        // The textured modes' source: HDREquirect = a 2D .hdr texture asset; Cubemap = a
+        f32 skyRotation = 0.0f; // yaw (radians) for HDR and cubemap skies
+        // The textured modes' source: HDREquirect takes a 2D .hdr texture asset; Cubemap a
         // cube-shaped texture asset. Ignored by the untextured modes. (The programmatic
-        // RenderSubsystem::SetSkyEquirect/SetSkyCubemap pixel paths remain for tools/samples.)
+        // RenderSubsystem::SetSkyEquirect and SetSkyCubemap pixel paths serve tools and samples.)
         foundation::resource::Ref<texture::Texture> skyTexture;
-        // Procedural sky (Unity-default-like: a soft, hazy, low-saturation daytime blue rather than
-        // a punchy vivid one - dimmer horizon, desaturated zenith, near-neutral ground). sRGB.
+        // Procedural sky: a soft, hazy, low-saturation daytime blue rather than a punchy vivid one
+        // (dimmer horizon, desaturated zenith, near-neutral ground). sRGB.
         Color skyHorizon = Color{0.748f, 0.798f, 0.854f, 1.0f};
         Color skyZenith = Color{0.485f, 0.634f, 0.786f, 1.0f}; // also the Color-mode color
         Color skyGround = Color{0.547f, 0.547f, 0.547f, 1.0f};
         f32 sunIntensity = 1.0f;
         f32 sunAngularSize = 0.5f; // sun disc size (degrees)
         f32 turbidity = 3.0f;      // Analytic (Preetham) haze (~2..10)
-        // Render-time dimmers on the sky's LIGHTING contribution, independent of its visible
-        // appearance (the lever skyIntensity is not: that scales backdrop + lighting together).
-        // Godot's ambient_light_sky_contribution / Lumix's indirect_intensity, split by term:
-        // diffuse scales the SH9 irradiance, specular the prefiltered reflections. 1 = full
-        // physical strength (a blue sky legitimately blue-lights an unlit scene); dial diffuse
-        // down to calm the cast without touching the sky or its reflections.
+        // Render-time dimmers on the sky's lighting contribution, independent of its visible
+        // appearance (which skyIntensity is not: that scales backdrop and lighting together).
+        // Split by term: diffuse scales the SH9 irradiance, specular the prefiltered reflections.
+        // 1 is full physical strength (a blue sky legitimately blue-lights an unlit scene); dial
+        // diffuse down to calm the cast without touching the sky or its reflections.
         f32 iblDiffuseIntensity = 1.0f;
         f32 iblSpecularIntensity = 1.0f;
-        // The sun's shadow reach (v5): how far from the camera its cascades cover (clamped to the
+        // The sun's shadow reach: how far from the camera its cascades cover (clamped to the
         // camera's far plane, but independent of it: a street-scale scene keeps its near shadows
-        // sharp with a short reach while the camera sees far), how the cascade splits blend (0 =
-        // even, 1 = more of the map near the camera) and the width it fades out over at the reach.
+        // sharp with a short reach while the camera sees far), how the cascade splits blend (0 is
+        // even, 1 puts more of the map near the camera) and the width it fades out over at the reach.
         f32 shadowDistance = 300.0f;
         f32 shadowCascadeSplit = 0.5f;
         f32 shadowFadeDistance = 40.0f;
 
-        // Where the values come from (v6): the scene's own above, or `profile`'s (an Environment
+        // Where the values come from: the scene's own above, or `profile`'s (an Environment
         // Profile asset) while the source is Profile. Scene-only: a profile carries no source.
         SettingsSource source = SettingsSource::Scene;
         foundation::resource::Ref<EnvironmentProfile> profile;
     };
 
     // The environment's value fields, in one order for the scene block and the profile records (a
-    // field added to the block reaches its profile). `shadowReach` = the v5 fields are present
+    // field added to the block reaches its profile). `shadowReach`: the version 5 fields are present
     // (a scene block read at version 4 has none).
     inline void SerializeEnvironmentValues(ISerializer& ar, EnvironmentSettings& e, bool shadowReach)
     {
@@ -756,7 +753,7 @@ export namespace engine::render
     {
         RTTI_OBJECT(EnvironmentProfile, Object)
     public:
-        EnvironmentSettings values; // source / profile unused here
+        EnvironmentSettings values; // source and profile unused here
     };
 
     class EnvironmentSystem final : public scene::SceneSystem
@@ -765,10 +762,10 @@ export namespace engine::render
         [[nodiscard]] EnvironmentSettings& Environment() noexcept { return m_env; }
         [[nodiscard]] const EnvironmentSettings& Environment() const noexcept { return m_env; }
 
-        // The scene's render clock: seconds accumulated from the scene's OWN dt (the context,
+        // The scene's render clock: seconds accumulated from the scene's own dt (the context,
         // group and scene time scales composed by the scene manager), so a paused or slowed
-        // scene's time-driven shading (the WIND sway) pauses or slows with it. Advances once per
-        // frame in the Update phase and ONLY while the scene simulates: the editor's editing
+        // scene's time-driven shading (the wind sway) pauses or slows with it. Advances once per
+        // frame in the Update phase and only while the scene simulates: the editor's editing
         // scene ticks every frame with simulation disabled (Simulate enables it), and a frozen
         // world's grass must stand still there. The previous frame's value rides along for
         // motion vectors. Runtime state: never serialized.
@@ -785,9 +782,9 @@ export namespace engine::render
         [[nodiscard]] f32 TimeSeconds() const noexcept { return m_timeSeconds; }
         [[nodiscard]] f32 PrevTimeSeconds() const noexcept { return m_prevTimeSeconds; }
 
-        // Scene-level settings seam: the editor's scene inspector edits m_env through the
-        // reflected type; SerializeScene persists it (wrapped in the type's versioned payload -
-        // bump the reflected dataVersion whenever a field is added).
+        // Scene-level settings: the editor's scene inspector edits m_env through the reflected
+        // type; SerializeScene persists it (wrapped in the type's versioned payload, so bump the
+        // reflected dataVersion whenever a field is added).
         [[nodiscard]] const TypeInfo* SettingsType() const noexcept override
         {
             return &TypeOf<EnvironmentSettings>();
@@ -873,18 +870,18 @@ export namespace engine::render
     };
 
     // ============================================================================================
-    // Post-processing: the authored "look" of a scene -
-    // exposure/tonemap, bloom, AO, SSR, anti-aliasing. ONE per scene (like EnvironmentSettings),
-    // reflected + serialized + inspector-surfaced with no bespoke UI, extracted per frame and
-    // applied per view. Defaults MATCH today's RenderSubsystem values, so a scene looks identical
-    // until an artist edits the block.
+    // Post-processing: the authored "look" of a scene (exposure and tonemap, bloom, AO, SSR,
+    // anti-aliasing). One per scene (like EnvironmentSettings), reflected, serialized and shown in
+    // the inspector with no bespoke UI, extracted per frame and applied per view. The defaults
+    // match the RenderSubsystem's own values, so a scene looks the same until an artist edits the
+    // block.
     // ============================================================================================
 
     enum class TonemapOperator : u32
     {
         Clamp = 0,
         AgX = 1
-    }; // CM1a (clamp) / CM1b (AgX)
+    };
     enum class AaMode : u32
     {
         Off = 0,
@@ -894,8 +891,8 @@ export namespace engine::render
 
     struct PostProcessSettings
     {
-        // Exposure / tonemap. exposureEV is photographic stops: the tonemap applies 2^EV, so 0 =
-        // neutral (the old fixed 1.0 multiplier), +1 = one stop brighter, -1 = one stop darker.
+        // Exposure and tonemap. exposureEV is photographic stops: the tonemap applies 2^EV, so 0 is
+        // neutral (a 1.0 multiplier), +1 one stop brighter, -1 one stop darker.
         f32 exposureEV = 0.0f;
         TonemapOperator tonemapOperator = TonemapOperator::AgX;
 
@@ -905,7 +902,7 @@ export namespace engine::render
         f32 bloomKnee = 0.6f;
         f32 bloomIntensity = 0.05f;
 
-        // Ambient occlusion. `aoStrength` is the master mix (0..1); GTAO's own radius/intensity below.
+        // Ambient occlusion. `aoStrength` is the master mix (0..1); GTAO's own radius and intensity below.
         AoMode aoMode = AoMode::Off;
         f32 aoStrength = 0.6f;
         f32 aoRadius = 0.5f;
@@ -920,16 +917,16 @@ export namespace engine::render
         f32 ssgiIntensity = 1.0f;
 
         // Auto-exposure (eye adaptation): exposure follows the scene's average luminance,
-        // clamped to +-EV around the authored exposureEV. Off = the fixed EV alone.
+        // clamped to +-EV around the authored exposureEV. Off: the fixed EV alone.
         bool autoExposure = false;
         f32 autoExposureKey = 0.18f;    // target "middle gray" the average maps to
         f32 autoExposureSpeed = 2.0f;   // adaptation rate (1/s)
         f32 autoExposureMinEV = -4.0f;  // clamp window (stops, relative)
         f32 autoExposureMaxEV = 4.0f;
 
-        // Display-referred color grading: a strip LUT texture (width = size*size, height =
-        // size; author a neutral 256x16 strip, grade it in an image editor, import with
-        // Color Space = Linear so the samples pass through undecoded). Nil = no grading.
+        // Display-referred color grading: a strip LUT texture (width size*size, height size;
+        // author a neutral 256x16 strip, grade it in an image editor, import with Color Space set
+        // to Linear so the samples pass through undecoded). Nil means no grading.
         foundation::resource::Ref<texture::Texture> gradingLut;
         f32 gradingIntensity = 1.0f;
 
@@ -939,7 +936,7 @@ export namespace engine::render
         f32 taaVarianceGamma = 1.25f; // variance-clip box half-width (aaMode == TAA)
         f32 fxaaSubpixel = 0.75f;     // subpixel aliasing removal    (aaMode == FXAA)
 
-        // Where the values come from (v4): the scene's own above, or `profile`'s (a Post Process
+        // Where the values come from: the scene's own above, or `profile`'s (a Post Process
         // Profile asset) while the source is Profile. Scene-only: a profile carries no source.
         SettingsSource source = SettingsSource::Scene;
         foundation::resource::Ref<PostProcessProfile> profile;
@@ -990,7 +987,7 @@ export namespace engine::render
     {
         RTTI_OBJECT(PostProcessProfile, Object)
     public:
-        PostProcessSettings values; // source / profile unused here
+        PostProcessSettings values; // source and profile unused here
     };
 
     RTTI_DEFINE_OBJECT(EnvironmentProfile, "rtti::engine::render")
@@ -1002,7 +999,7 @@ export namespace engine::render
         [[nodiscard]] PostProcessSettings& Post() noexcept { return m_post; }
         [[nodiscard]] const PostProcessSettings& Post() const noexcept { return m_post; }
 
-        // Scene-settings seam (same shape as EnvironmentSystem): the inspector edits m_post through
+        // Scene settings (the same shape as EnvironmentSystem): the inspector edits m_post through
         // the reflected type; SerializeScene persists it (versioned payload; bump the dataVersion
         // whenever a field is added).
         [[nodiscard]] const TypeInfo* SettingsType() const noexcept override
@@ -1085,7 +1082,8 @@ export namespace engine::render
     };
 
     // Resolve a scene's authored PostProcessSettings into the renderer's per-view ViewPostConfig:
-    // exposure EV/stops -> the tonemap's linear multiplier (2^EV), authoring enums -> pass primitives.
+    // exposure EV stops become the tonemap's linear multiplier (2^EV), authoring enums become pass
+    // primitives.
     // `needsMotion` gets only the TAA part here (SSR's temporal contribution depends on the frame-global
     // SsrPass::Params, so the caller ORs it in).
     [[nodiscard]] inline ViewPostConfig ResolveScenePost(const PostProcessSettings& s)
@@ -1114,14 +1112,14 @@ export namespace engine::render
         vp.autoExposure = s.autoExposure;
         vp.autoExposureKey = s.autoExposureKey;
         vp.autoExposureSpeed = s.autoExposureSpeed;
-        // The clamp window is authored in relative EV stops; the tonemap clamps a LINEAR
+        // The clamp window is authored in relative EV stops; the tonemap clamps a linear
         // multiplier.
         vp.autoExposureMin = foundation::core::Pow(2.0f, s.autoExposureMinEV);
         vp.autoExposureMax = foundation::core::Pow(2.0f, s.autoExposureMaxEV);
         if (texture::Texture* lut = s.gradingLut.Get())
         {
-            // Strip layout: height = the LUT size (a 256x16 strip = 16 slices). A texture
-            // that is not wider than tall is not a strip - ignore it rather than garble.
+            // Strip layout: the height is the LUT size (a 256x16 strip is 16 slices). A texture
+            // that is not wider than tall is not a strip: ignore it rather than garble.
             if (lut->View() != nullptr && lut->Height() >= 2 &&
                 lut->Width() == lut->Height() * lut->Height())
             {
@@ -1135,7 +1133,7 @@ export namespace engine::render
     }
 
     // Apply an editor viewport's ephemeral post "show flags" to a resolved ViewPostConfig, stripping
-    // effects for editing clarity (never written back to the scene). Does NOT recompute needsMotion -
+    // effects for editing clarity (never written back to the scene). Does not recompute needsMotion:
     // the caller finalizes that after (it also depends on the frame-global SSR `temporal` flag).
     inline void ApplyViewPostOverride(ViewPostConfig& vp, const ViewPostOverride& o)
     {
@@ -1163,23 +1161,23 @@ export namespace engine::render
         if (o.disablePost)
         {
             // Editing clarity: the viewport must not shift brightness as the camera moves
-            // between dark and bright regions - freeze to the fixed authored EV.
+            // between dark and bright regions, so freeze to the fixed authored EV.
             vp.autoExposure = false;
         }
-        // MSAA is an INDEPENDENT toggle: disablePost/disableAa do NOT touch it.
-        // The editor viewport forces its own off/2x/4x count here (0 = leave the resolved count).
+        // MSAA is an independent toggle: disablePost and disableAa do not touch it.
+        // The editor viewport forces its own off, 2x or 4x count here (0 leaves the resolved count).
         if (o.msaaOverride != 0)
         {
             vp.msaaSamples = o.msaaOverride;
         }
     }
 
-    // Live re-resolving handles over the render scene-SYSTEMS' one-per-scene settings:
-    // EnvironmentSettings.of(scene) / PostProcessSettings.of(scene) return a handle typed as the
-    // settings struct that re-resolves the scene's LIVE settings on every field access - so a
-    // behavior edits the scene's actual sky/fog/ambient (EnvironmentSystem) or exposure/tonemap/
-    // bloom/AA (PostProcessSystem). Same re-resolving-handle idea as a component's `.of`, but
-    // scene-scoped: these settings are one-per-scene, owned by the render scene-systems, not entities.
+    // Live re-resolving handles over the render scene systems' one-per-scene settings:
+    // EnvironmentSettings.of(scene) and PostProcessSettings.of(scene) return a handle typed as the
+    // settings struct that re-resolves the scene's live settings on every field access, so a
+    // behavior edits the scene's actual sky, fog and ambient (EnvironmentSystem) or exposure,
+    // tonemap, bloom and AA (PostProcessSystem). The same idea as a component's `.of`, but
+    // scene-scoped: these settings are one per scene, owned by the render scene systems, not entities.
     namespace settingsref
     {
         struct SceneSettingsCtx
@@ -1211,7 +1209,7 @@ export namespace engine::render
 
     // EnvironmentSettings.of(scene): a re-resolving handle over the scene's live environment settings
     // (empty if the scene has no EnvironmentSystem). Reflected on EnvironmentSettings with the
-    // ReturnType-override so the declared script return IS EnvironmentSettings.
+    // ReturnType override so the declared script return is EnvironmentSettings.
     [[nodiscard]] inline Variant EnvironmentSettingsOf(foundation::script::Scene sceneHandle)
     {
         return Variant::Resolving(&TypeOf<EnvironmentSettings>(),
@@ -1226,10 +1224,11 @@ export namespace engine::render
                                   settingsref::SceneSettingsCtx{sceneHandle.scene});
     }
 
-    // A scene-bound RENDER handle (SceneRender.of(scene)): runtime WORLD ops on render components
-    // that need a run service the component data cannot reach - here, swapping a resource::Ref by id
-    // (mesh / slot-0 material). Keyed by entity, mirroring ScenePhysics (component = auto-reflected
-    // DATA; scene-handle = world ops keyed by entity). A value type carrying the scene ptr.
+    // A scene-bound render handle (SceneRender.of(scene)): runtime world operations on render
+    // components that need a run service the component data cannot reach, such as swapping a
+    // resource::Ref by id (mesh, material slot). Keyed by entity, like ScenePhysics (the component is
+    // auto-reflected data; the scene handle does world operations keyed by entity). A value type
+    // carrying the scene pointer.
     struct SceneRender
     {
         scene::Scene* scene = nullptr;
@@ -1262,9 +1261,9 @@ export namespace engine::render
             return true;
         }
 
-        // Swap the entity's material in `slot` (slot 0: single-material meshes / the whole-mesh slot)
+        // Swap the entity's material in `slot` (slot 0: single-material meshes, the whole-mesh slot)
         // to resource `id`, binding it through the run's resource manager; the slots grow to reach
-        // it. False for an entity without a mesh or a negative slot (Sedulous's SetMaterial).
+        // it. False for an entity without a mesh or a negative slot.
         bool setMaterial(foundation::script::Entity entity, Guid id) const
         {
             return setMaterial(entity, id, 0);
@@ -1363,8 +1362,8 @@ export namespace engine::render
         }
     };
 
-    // DebugDraw.of(scene): immediate-mode debug drawing into a scene's per-scene gizmo list - drawn
-    // in EVERY view of that scene (incl. play-in-editor), CLEARED each frame, so a persistent overlay
+    // DebugDraw.of(scene): immediate-mode debug drawing into a scene's per-scene gizmo list, drawn
+    // in every view of that scene (including play-in-editor) and cleared each frame, so a persistent overlay
     // (an aim path, a marker) must be re-issued every tick from a script's update. A value handle
     // carrying the scene ptr; each call resolves the RenderSubsystem via the per-context render
     // service and appends to DebugScene(scene). Colors are 0..1 sRGB floats, as entered everywhere
@@ -1381,14 +1380,14 @@ export namespace engine::render
         void ray(f32 x, f32 y, f32 z, f32 dx, f32 dy, f32 dz, f32 r, f32 g, f32 b) const;
         // A line with an arrowhead at the end point (direction cue).
         void arrow(f32 x0, f32 y0, f32 z0, f32 x1, f32 y1, f32 z1, f32 r, f32 g, f32 b) const;
-        // A wireframe sphere / a 3-axis cross marker at a point.
+        // A wireframe sphere, or a 3-axis cross marker, at a point.
         void sphere(f32 x, f32 y, f32 z, f32 radius, f32 r, f32 g, f32 b) const;
         void cross(f32 x, f32 y, f32 z, f32 size, f32 r, f32 g, f32 b) const;
         // A world-space text label anchored at (x,y,z).
         void text(f32 x, f32 y, f32 z, String label, f32 r, f32 g, f32 b) const;
 
-        // ---- as Sedulous's Debug facade: points by Float3, a Color, and `overlay` to draw over
-        // the scene instead of depth tested ----
+        // ---- points by Float3, a Color, and `overlay` to draw over the scene instead of depth
+        // tested ----
         void line(Float3 from, Float3 to, Color color) const;
         void line(Float3 from, Float3 to, Color color, bool overlay) const;
         void ray(Float3 origin, Float3 direction, Color color) const;
@@ -1413,14 +1412,14 @@ export namespace engine::render
 
 } // namespace foundation::render (exported)
 
-// Registers all render component/enum reflection (idempotent). Called by RenderSubsystem::OnInit
+// Registers all render component and enum reflection (idempotent). Called by RenderSubsystem::OnInit
 // so every app with a renderer gets reflected components for free. Non-inline: the body touches
 // module-linkage registration functions, which an exported inline definition may not.
 export namespace engine::render
 {
     void RegisterRenderComponentReflection();
 
-    // Surfaces the render components to SCRIPT (Track A): registers MeshComponent/LightComponent
+    // Surfaces the render components to scripts: registers MeshComponent and LightComponent
     // in the global type registry, seeds their emission roots, and makes their class names
     // import-visible in behavior/Level preludes, so `MeshComponent.of(entity).visible = false` etc.
     // work on both backends. Called by the composition root (like RegisterPhysicsScriptFacade).

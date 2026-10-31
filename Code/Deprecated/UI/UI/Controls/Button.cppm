@@ -3,9 +3,9 @@
 
 // UI - :button partition
 //
-// Text button (the most common button type). Ported from Sedulous.UI/src/Controls/Button.bf. Text
-// measuring/drawing is LIVE now that the Fonts service is wired (font-size height fallback for the
-// no-service path); the button label is centered in the padded content rect.
+// Text button (the most common button type). Text is measured and drawn through the Fonts service, with
+// a font-size height fallback when there is no service; the label is centered in the padded content
+// rect.
 
 module;
 #include "Core/Prelude.h"
@@ -98,8 +98,8 @@ export namespace foundation::ui
                 if (fonts::CachedFont* font = ctx.FontService()->GetFont(
                         ResolveStyleFontFamily(FontFamily.Value()), fontSize))
                 {
-                    // Content offset = the SAME chrome the base deflated at measure (padding +
-                    // border) - text stays clear of a themed border.
+                    // The content offset is the same chrome the base deflated at measure (padding
+                    // and border), so text stays clear of a themed border.
                     const Thickness pad = ResolveBoxMetrics().Chrome();
                     Color textColor = ResolveStyleColor(
                         StyleProperty::TextColor,
@@ -110,7 +110,7 @@ export namespace foundation::ui
                     }
                     const Rectangle textRect{pad.Left, pad.Top, Width() - pad.TotalHorizontal(),
                                              Height() - pad.TotalVertical()};
-                    // Ellipsize when the label doesn't fit (e.g. a button shrunk by its layout).
+                    // Ellipsize when the label does not fit (e.g. a button shrunk by its layout).
                     const String shown = fonts::TruncateToWidth(*font->font, text, textRect.width);
                     ctx.VG().DrawText(shown.AsView(), font, textRect, fonts::TextAlignment::Center,
                                       fonts::VerticalAlignment::Middle, textColor);

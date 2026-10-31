@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// DX12 implementation of PipelineCache via ID3D12PipelineLibrary.
-/// Ported from Sedulous.RHI.DX12/DX12PipelineCache.bf.
 
 module;
 #include "Core/Prelude.h"

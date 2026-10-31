@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - toasts (T7 of Specs/gui-lab-evolution-3.md): a host's cards, by severity, staying their
-// time on the GUI's clock (an error until closed), paused while hovered; a key replacing and
-// counting; four shown and the rest waiting; a widget's content, or bare; actions; posts from
-// another thread waiting for the host's frame; each shown toast announced.
+// GUI - toasts: a host's cards by severity, each staying its time on the GUI's clock (an error
+// stays until closed) and paused while hovered. A key replaces a toast and counts repeats. Four
+// show and the rest wait. A toast can show a widget's content or be bare, and can carry actions.
+// Posts from another thread wait for the host's frame, and each shown toast is announced.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <thread>
@@ -22,7 +22,7 @@ namespace
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
     namespace fonts = foundation::fonts;
 
-    // A mock font: 6px a byte, 12px a line.
+    // A mock font: 6px per byte, 12px per line.
     class SixFont : public fonts::IFont
     {
     public:
@@ -124,7 +124,8 @@ TEST_CASE("toast: a card with its title, message and severity, at the bottom end
     REQUIRE(bed.narrator.said.Size() == 1);
     CHECK(bed.narrator.said[0] == core::String(u8"Saved: Saved the scene"));
     CHECK(bed.narrator.priorities[0] == AnnouncePriority::Polite);
-    // At the bottom end, inside its padding; the host itself lets the pointer through.
+    // The card sits at the bottom end, inside its padding; the host itself lets the pointer
+    // through.
     const Rect at = card->GetScreenBounds();
     CHECK(at.Right() == doctest::Approx(800.0f - 16.0f));
     CHECK(at.Bottom() == doctest::Approx(600.0f - 16.0f));
@@ -138,7 +139,7 @@ TEST_CASE("toast: a card with its title, message and severity, at the bottom end
     CHECK_FALSE(bed.host->IsShown(id));
     REQUIRE(gone.Size() == 1);
     CHECK(gone[0] == core::Format(u8"{} user", id));
-    CHECK(card->IsLeaving()); // still a child, never taken off inside the click that closed it
+    CHECK(card->IsLeaving()); // still a child: it is never removed inside the click that closed it
     CHECK(card->GetParent() == bed.host.Get());
     bed.Frame(0.2f);
     CHECK(card->GetParent() == nullptr);
@@ -153,7 +154,7 @@ TEST_CASE("toast: each severity stays its time on the GUI's clock, an error unti
     ToastRequest rich = Bed::Text(u8"the [b]fur[/b] material", ToastSeverity::Info, u8"Missing");
     rich.Rich = true;
     const ToastId richId = bed.host->Post(core::Move(rich));
-    CHECK(bed.narrator.said.Back() == core::String(u8"Missing: the fur material")); // said without its markup
+    CHECK(bed.narrator.said.Back() == core::String(u8"Missing: the fur material")); // announced without its markup
     CHECK(bed.host->GetCard(richId)->GetMessagePart()->IsRich());
     ToastRequest brief = Bed::Text(u8"Brief");
     brief.Duration = 2.0f;
@@ -171,7 +172,7 @@ TEST_CASE("toast: each severity stays its time on the GUI's clock, an error unti
     CHECK(bed.host->IsShown(error));
     CHECK(bed.narrator.said[2] == core::String(u8"Broken"));
 
-    // The pointer on a toast: none of them counts down.
+    // With the pointer on a toast, none of them counts down.
     bed.host->SetDefaultDuration(ToastSeverity::Info, 1.0f);
     CHECK(bed.host->GetDefaultDuration(ToastSeverity::Info) == doctest::Approx(1.0f));
     const ToastId next = bed.host->Post(Bed::Text(u8"Next"));
@@ -205,7 +206,7 @@ TEST_CASE("toast: a post with the key of one shown replaces it and counts it, it
     CHECK(card->GetMessagePart()->GetText() == SV(u8"Cooking 60%"));
     REQUIRE(card->GetCountPart() != nullptr);
     CHECK(card->GetCountPart()->GetText() == SV(u8"×2"));
-    bed.Frame(4.0f); // 4 s after the replacement: still there
+    bed.Frame(4.0f); // 4 s after the replacement, it is still there
     CHECK(bed.host->IsShown(id));
 }
 
@@ -224,7 +225,7 @@ TEST_CASE("toast: four shown at once, the rest waiting their turn (a waiting one
     CHECK(bed.host->ShownCount() == 2);
     CHECK(bed.host->WaitingCount() == 1);
     CHECK(bed.host->IsWaiting(c));
-    CHECK(bed.narrator.said.Size() == 2); // the waiting one is said when it shows
+    CHECK(bed.narrator.said.Size() == 2); // the waiting one is announced when it shows
     CHECK(bed.host->Dismiss(a));
     bed.Frame();
     CHECK(bed.host->IsShown(b));
@@ -275,7 +276,7 @@ TEST_CASE("toast: a widget for its content in the card, or bare; actions run and
     withActions.Actions.PushBack(ToastAction{core::String(u8"open"), core::String(u8"Open"), {}});
     withActions.Actions.PushBack(ToastAction{core::String(u8"third"), core::String(u8"Third"), {}});
     const ToastId acted = bed.host->Post(core::Move(withActions), [&pressed](const ToastAction& action) { pressed.PushBack(action.Id); });
-    // A script's `activate`, bubbling from the action's button with its id.
+    // A script hears `activate`, which bubbles from the action's button with its id.
     core::Array<core::String> activated{core::DefaultAllocator()};
     (void)bed.host->AddEventListener(EventType::ItemActivate, [&activated](const Event& e)
     {
@@ -344,7 +345,7 @@ TEST_CASE("toast: under the theme, its text wraps at the card's width, a path lo
     bed.Frame();
     const Label& message = *card->GetMessagePart();
     CHECK(message.GetScreenBounds().Right() <= card->GetScreenBounds().Right() + 0.5f);
-    CHECK(message.GetSize().y >= 36.0f); // three lines and more, not one running past the card
+    CHECK(message.GetSize().y >= 36.0f); // three lines or more, not one line running past the card
     card->GetMessagePart()->SetFont(nullptr);
     card->GetTitlePart()->SetFont(nullptr);
 }
@@ -354,7 +355,7 @@ TEST_CASE("toast: it enters `:entering` and fades in through the sheet's transit
     Bed bed;
     StyleManager styles;
     styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
-    styles.ApplyTree(*bed.root); // a style pass runs over this GUI: a toast plays its entrance
+    styles.ApplyTree(*bed.root); // a style pass runs over this GUI, so a toast plays its entrance
     ToastRequest request = Bed::Text(u8"Hello");
     request.Classes = core::String(u8"pop celebrate");
     request.Key = core::String(u8"hello");
@@ -364,12 +365,12 @@ TEST_CASE("toast: it enters `:entering` and fades in through the sheet's transit
     CHECK(card->HasClass(SV(u8"pop")));
     CHECK(card->HasClass(SV(u8"celebrate")));
     CHECK(card->IsEntering());
-    // Styled so by the theme: unseen, its transition's start.
+    // The theme styles it unseen, at its transition's start.
     styles.ApplyTree(*bed.root);
     CHECK(card->GetAlpha() == doctest::Approx(0.0f));
-    bed.root->GetContext().Update(core::Duration{}); // its first style shown: :entering goes
+    bed.root->GetContext().Update(core::Duration{}); // its first style has shown, so :entering is cleared
     CHECK_FALSE(card->IsEntering());
-    // Restyled, it fades in over the theme's 0.15 s, from where it was.
+    // Once restyled, it fades in over the theme's 0.15 s, from where it was.
     styles.ApplyTree(*bed.root);
     CHECK(card->GetAlpha() == doctest::Approx(0.0f));
     bed.root->GetContext().Update(core::Duration::FromSeconds(0.07f));
@@ -378,7 +379,7 @@ TEST_CASE("toast: it enters `:entering` and fades in through the sheet's transit
     bed.root->GetContext().Update(core::Duration::FromSeconds(0.2f));
     CHECK(card->GetAlpha() == doctest::Approx(1.0f));
 
-    // Replaced by its key with another class: the old ones go.
+    // Replaced through its key with another class, the old classes are removed.
     ToastRequest again = Bed::Text(u8"Hello again");
     again.Key = core::String(u8"hello");
     again.Classes = core::String(u8"still");
@@ -411,15 +412,15 @@ TEST_CASE("toast: dismissed, it fades out through the sheet's transition and goe
         styles.ApplyTree(*bed.root);
     };
     const ToastId id = bed.host->Post(Bed::Text(u8"Fading"));
-    core::RefPtr<ToastCard> card(bed.host->GetCard(id)); // held: the host lets it go when it has left
+    core::RefPtr<ToastCard> card(bed.host->GetCard(id)); // held here, since the host lets it go when it has left
     REQUIRE(card);
     for (int i = 0; i < 4; ++i)
-        frame(0.1f); // in, and settled
+        frame(0.1f); // entered and settled
     REQUIRE(card->GetAlpha() == doctest::Approx(1.0f));
     CHECK(bed.host->Dismiss(id));
     CHECK(card->IsLeaving());
     CHECK(bed.host->ShownCount() == 0);
-    frame(0.0f); // :leaving shown: the fade starts
+    frame(0.0f); // :leaving is shown, so the fade starts
     frame(0.07f);
     CHECK(card->GetParent() == bed.host.Get()); // still fading
     CHECK(card->GetAlpha() < 0.95f);
@@ -434,7 +435,7 @@ TEST_CASE("toast: dismissed, it fades out through the sheet's transition and goe
     frame(0.0f);
     frame(0.0f);
     CHECK(bed.host->Dismiss(quiet));
-    frame(0.0f); // nothing moves it: the style pass lets it go
+    frame(0.0f); // nothing moves it any more, so the style pass lets it go
     frame(0.0f);
     CHECK(quietCard->GetParent() == nullptr);
 }

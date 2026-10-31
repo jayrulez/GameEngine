@@ -1,6 +1,5 @@
-# Editor::Terrain - `editor.terrain`: the terrain's editing (Documentation/Specs/editor-gui.md, 5.3,
-# layer 5, part 3, and 5.4, layer 7): the scene view's brushes, their panels, the splatmap
-# thumbnails and the Terrain asset page.
+# Editor::Terrain - `editor.terrain`: terrain editing: the scene view's brushes, their panels, the
+# splatmap thumbnails and the Terrain asset page.
 util_add_engine_library(Editor.Terrain ALIAS Editor::Terrain)
 target_link_libraries(Editor.Terrain PUBLIC
     Foundation::Core Foundation::Content

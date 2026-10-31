@@ -1,4 +1,4 @@
-# Pipeline::Materials unit tests (doctest; content DB - no GPU/DXC).
+# Pipeline::Materials unit tests (doctest; content DB, no GPU or DXC).
 
 add_executable(Materials.Pipeline.Tests
     TestsMain.cpp

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - inheritance and the CSS-wide keywords (E3 of Specs/gui-lab-evolution.md): colour, the
-// font and text-align pass from a node to what it holds, through nodes that draw no text; a
-// declared value wins; vertical-align does not inherit; inherit, initial and unset settle as
-// CSS's do; what code sets on a parent reaches the subtree.
+// GUI - inheritance and the CSS-wide keywords. Colour, the font and text-align pass from a node to
+// its descendants, through nodes that draw no text, and a declared value wins. vertical-align does
+// not inherit. inherit, initial and unset settle as they do in CSS. What code sets on a parent
+// reaches the subtree.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -116,7 +116,7 @@ TEST_CASE("inheritance: colour, the font and text-align pass down through nodes 
     CHECK(bed.label->GetFont()->font->FamilyName() == SV(u8"Serif"));
     CHECK(bed.label->GetFont()->font->PixelHeight() == doctest::Approx(20.0f));
     CHECK(bed.label->GetTextAlignH() == TextHAlign::Center);
-    CHECK(bed.label->GetTextAlignV() == TextVAlign::Middle); // vertical-align does not inherit: the label's own
+    CHECK(bed.label->GetTextAlignV() == TextVAlign::Middle); // vertical-align does not inherit, so the label keeps its own
 }
 
 TEST_CASE("inheritance: a declared value wins, a size alone keeps the inherited family, and it all goes when the rule does")
@@ -137,7 +137,7 @@ TEST_CASE("inheritance: a declared value wins, a size alone keeps the inherited 
     bed.panel->RemoveClass(SV(u8"outer"));
     bed.label->RemoveClass(SV(u8"big"));
     bed.Restyle();
-    CHECK(Same(bed.label->GetTextColor(), own)); // nobody sets it: the label's own
+    CHECK(Same(bed.label->GetTextColor(), own)); // nothing sets it, so the label keeps its own
     CHECK(bed.label->GetFont() == nullptr);
 }
 
@@ -148,7 +148,7 @@ TEST_CASE("inheritance: a parent's change reaches its subtree, from the sheet or
     bed.Restyle();
     CHECK(Same(bed.label->GetTextColor(), core::Color{0.0f, 1.0f, 1.0f, 1.0f}));
 
-    // Code's colour on the middle panel is its own, and the label below takes it.
+    // A colour set from code on the middle panel is the panel's own, and the label below takes it.
     bed.inner->SetTextColor(core::Color{0.0f, 1.0f, 0.0f, 1.0f});
     bed.Restyle();
     CHECK(Same(bed.label->GetTextColor(), core::Color{0.0f, 1.0f, 0.0f, 1.0f}));
@@ -166,15 +166,15 @@ TEST_CASE("inheritance: inherit, initial and unset")
             u8"panel.grow { padding: 4px; width: 50px; } panel.grow.reset { width: initial; padding: unset; }");
     bed.label->AddClass(SV(u8"mine"));
     bed.Restyle();
-    CHECK(Same(bed.label->GetTextColor(), core::Color::White)); // initial: its own, not the parent's
+    CHECK(Same(bed.label->GetTextColor(), core::Color::White)); // initial gives its own value, not the parent's
     bed.label->RemoveClass(SV(u8"mine"));
     bed.label->AddClass(SV(u8"pass"));
     bed.Restyle();
-    CHECK(Same(bed.label->GetTextColor(), core::Color{1.0f, 0.0f, 0.0f, 1.0f})); // unset on an inherited property: inherit
+    CHECK(Same(bed.label->GetTextColor(), core::Color{1.0f, 0.0f, 0.0f, 1.0f})); // unset on an inherited property acts as inherit
 
     bed.inner->AddClass(SV(u8"copy"));
     bed.Restyle();
-    CHECK(bed.inner->GetPadding().Left == doctest::Approx(6.0f)); // inherit on one that does not: the parent's
+    CHECK(bed.inner->GetPadding().Left == doctest::Approx(6.0f)); // inherit on a property that does not inherit takes the parent's
 
     bed.inner->RemoveClass(SV(u8"copy"));
     bed.inner->AddClass(SV(u8"grow"));
@@ -182,8 +182,8 @@ TEST_CASE("inheritance: inherit, initial and unset")
     CHECK(bed.inner->GetLayoutStyle().Width == LayoutLength::Px(50.0f));
     bed.inner->AddClass(SV(u8"reset"));
     bed.Restyle();
-    CHECK(bed.inner->GetLayoutStyle().Width.IsAuto());                // initial: the table's (auto)
-    CHECK(bed.inner->GetPadding().Left == doctest::Approx(0.0f));     // unset: initial, the node's own
+    CHECK(bed.inner->GetLayoutStyle().Width.IsAuto());                // initial gives the table's value (auto)
+    CHECK(bed.inner->GetPadding().Left == doctest::Approx(0.0f));     // unset acts as initial, which is the node's own value
 }
 
 TEST_CASE("inheritance: white-space, line-height and letter-spacing pass down; text-overflow and line-clamp do not")
@@ -210,11 +210,11 @@ TEST_CASE("inheritance: white-space, line-height and letter-spacing pass down; t
     bed.label->RemoveClass(SV(u8"cut"));
     bed.panel->RemoveClass(SV(u8"outer"));
     bed.Restyle();
-    CHECK(bed.label->GetTextOverflow() == TextOverflow::Clip); // the rule went: its own again
+    CHECK(bed.label->GetTextOverflow() == TextOverflow::Clip); // the rule is gone, so it has its own value again
     CHECK(bed.label->GetLineClamp() == 0);
     CHECK(bed.label->GetTextStyle().LetterSpacing == doctest::Approx(0.0f));
 
-    // Code's value is code's.
+    // A value set from code stays as code set it.
     bed.label->RemoveClass(SV(u8"fixed"));
     bed.label->SetWhiteSpace(TextWhiteSpace::Pre);
     bed.panel->AddClass(SV(u8"outer"));

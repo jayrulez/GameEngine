@@ -1,5 +1,5 @@
 """Snowline's look: two shared profiles (Snowline Environment, Snowline Post) every course's scene
-names in its settings, so the look is tuned in one place (PaperKid's arrangement, its block.py).
+names in its settings, so the look is tuned in one place (arranged as PaperKid's block.py does it).
 
 Snow is bright: a cool, high-key look with a clear sky, blue shade and a fixed exposure that keeps
 the snow off the clip. Colours are sRGB, as entered anywhere.

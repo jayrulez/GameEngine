@@ -65,7 +65,7 @@ namespace editor
         : app::AssetObjectPage(context, Move(services), instance, pipeline::SoundCueAsset::StaticType(), kPath)
     {
         Provide<IPlaybackPage>(*this);
-        HideAssetRows(); // the cue reflects nothing of its own: its rows are the page's
+        HideAssetRows(); // the cue's own properties are hidden: the page builds its rows
         m_voice = MakeUnique<AuditionVoice>(Allocator(), Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr);
         m_state = Find<gui::Label>(u8"cue-state");
         BuildRows();
@@ -97,7 +97,7 @@ namespace editor
 
     namespace
     {
-        // The cue's variants packed in order (the list the grid shows): each a clip and its weight.
+        // The cue's variants packed in order (the list the grid shows), each a clip and its weight.
         struct CueVariant
         {
             Guid clip;
@@ -111,8 +111,8 @@ namespace editor
                     variants.PushBack(CueVariant{cue.clipIds[slot], cue.weights[slot]});
             return variants;
         }
-        // Writes `variants` back from the first slot on, the rest emptied (a gap between variants
-        // closes: the resolver skips empty slots, so the cue plays the same).
+        // Writes `variants` back from the first slot on and empties the rest. A gap between variants
+        // closes up; the resolver skips empty slots, so the cue plays the same.
         void SetVariants(pipeline::SoundCueAsset& cue, const Array<CueVariant>& variants)
         {
             for (usize slot = 0; slot < pipeline::kSoundCueSlotCount; ++slot)
@@ -141,7 +141,7 @@ namespace editor
         m_cueRows->SetValue(u8"mode", 0, gui::Variant(static_cast<i64>(cue->mode)));
         for (const RangeRow& range : kRanges)
             m_cueRows->SetValue(range.path, 0, gui::Variant(static_cast<f64>(cue->*range.field)));
-        // The variants with a clip, then those added and given no clip yet (the page's own).
+        // The variants with a clip, then those added but not yet given a clip (held by the page).
         const Array<CueVariant> variants = VariantsOf(*cue);
         const usize room = pipeline::kSoundCueSlotCount - variants.Size();
         while (m_pending.Size() > room)
@@ -178,7 +178,7 @@ namespace editor
             info.Step = 0.01;
             info.Hint = String(u8"slider");
         }
-        // A list as every page's: the count with Add (eight at most), a variant a clip and its weight.
+        // A list like every page's: the count with Add (eight at most), each variant a clip and a weight.
         gui::PropertyInfo& list = m_variantRows->AddList(u8"variants", gui::PropertyKind::Group, gui::Variant{});
         list.DisplayName = String(u8"Variants");
         list.Description = String(u8"What a play picks from: each a clip, picked against the others by its weight");
@@ -255,7 +255,8 @@ namespace editor
             const Guid clip = GuidOf(value);
             if (index < kept)
             {
-                // Its clip picked again, or cleared: a cleared one leaves the cue, its row kept to fill.
+                // The clip was picked again or cleared. A cleared variant leaves the cue, and a row
+                // stays to be filled.
                 if (clip.IsNil())
                     m_pending.Insert(0, 1.0f);
                 EditWhole(u8"edit_soundcue", [index, clip](ISerializable& object)
@@ -309,8 +310,8 @@ namespace editor
         switch (edit.Kind)
         {
         case gui::ListEdit::Op::Insert:
-            // Added at the end with no clip yet: the page's until a clip is picked (no step: the cue
-            // has not changed).
+            // Added at the end with no clip yet: the page holds it until a clip is picked (no undo
+            // step, since the cue has not changed).
             m_pending.PushBack(1.0f);
             break;
         case gui::ListEdit::Op::Remove:
@@ -345,7 +346,7 @@ namespace editor
             }
             break;
         }
-        ShowRows(); // the list as the cue and the page hold it (a move past those with a clip goes back)
+        ShowRows(); // rebuild the list from the cue and the page (a move past the variants with a clip snaps back)
     }
 
     bool SoundCueEditorPage::CanPlay() const
@@ -381,7 +382,7 @@ namespace editor
         const pipeline::SoundCueAsset* cue = Cue();
         if (cue == nullptr || !CanPlay())
             return;
-        // As the game resolves it: the runtime's own resolver over the same weights and ranges.
+        // Resolve it as the game does: the runtime's resolver over the same weights and ranges.
         audio::SoundCue resolved;
         resolved.mode = static_cast<audio::SoundCueMode>(cue->mode);
         resolved.pitchMin = cue->pitchMin;
@@ -410,7 +411,7 @@ namespace editor
             ShowState(u8"faulted", u8"No voice: the audio engine did not start one");
             return;
         }
-        // Which variant, counted as the grid shows them.
+        // Which variant was picked, counted as the grid shows them.
         usize shown = 0;
         for (usize slot = 0; slot <= static_cast<usize>(pick.variantIndex); ++slot)
             shown += cue->clipIds[slot].IsNil() ? 0u : 1u;
@@ -446,10 +447,10 @@ namespace editor
 
     void SoundCueEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
     {
-        app::AssetObjectPage::OnUpdate(host, dt); // the bar, the transport with it, each frame
+        app::AssetObjectPage::OnUpdate(host, dt); // updates the bar, and the transport with it, each frame
         f32 cursor = 0.0f;
         if (m_voice->IsActive() && !m_voice->Poll(cursor))
-            StopAudition(); // played out, or its voice taken
+            StopAudition(); // played out, or the engine took its voice
     }
 
     const TypeInfo* SoundCuePageFactory::PrimaryType() const

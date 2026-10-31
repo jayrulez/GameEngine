@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Model->prefab generation: a hand-authored model manifest becomes a spawnable
-// PrefabDocument whose hierarchy + mesh/material/animation refs mirror the manifest, and a
-// second generation REUSES the prefab instance (same guid - re-import propagates to placed
+// Model-to-prefab generation: a hand-authored model manifest becomes a spawnable
+// PrefabDocument whose hierarchy and mesh/material/animation refs mirror the manifest, and a
+// second generation reuses the prefab instance (same guid, so re-import propagates to placed
 // instances through the standard rebuild machinery).
 
 #include <doctest/doctest.h>
@@ -42,7 +42,7 @@ namespace
                     (void)fs.AsWritable()->Delete(e.name.AsView());
                     continue;
                 }
-                // One level of group subdirectories (the model group) - a stale "Prefab"
+                // One level of group subdirectories (the model group): a stale "Prefab"
                 // instance in there flips the regeneration check on reruns.
                 Array<foundation::vfs::DirEntry> inner;
                 if (fs.AsEnumerable()->Enumerate(e.name.AsView(), inner).IsOk())
@@ -64,7 +64,7 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
 {
     pipeline::RegisterModelManifestAsset();
     // Component reflection carries the DataVersion the versioned payloads gate on (MeshComponent v3
-    // = unified materials array); register it so the round-trip is order-independent.
+    // is the unified materials array); register it so the round-trip is order-independent.
     engine::render::RegisterRenderComponentReflection();
     engine::animation::RegisterAnimationComponentReflection();
     GlobalTypeRegistry().Register(scene::PrefabDocument::StaticType());
@@ -76,7 +76,7 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
     foundation::vfs::NativeFileSystem mount(dir, foundation::core::DefaultAllocator());
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
 
-    // Hand-authored manifest: root node + a multi-material static mesh node + a skinned node.
+    // Hand-authored manifest: a root node, a multi-material static mesh node and a skinned node.
     const Guid meshStatic{0x51, 0x1};
     const Guid meshSkinned{0x52, 0x2};
     const Guid matA{0x61, 0x1};
@@ -137,7 +137,7 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
     CHECK(generated.instance->TypeName() == StringView(u8"PrefabDocument"));
     const Guid prefabId = generated.instance->Id();
 
-    // Spawn the payload: hierarchy + refs mirror the manifest.
+    // Spawn the payload: the hierarchy and refs mirror the manifest.
     UniquePtr<IStream> payload = generated.instance->ReadData(u8"scene");
     REQUIRE(payload.Get() != nullptr);
     scene::Scene level(DefaultAllocator(), u8"level");
@@ -182,8 +182,8 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
             ++animCount;
             CHECK(c.skeleton.id == skeleton);
             CHECK(c.clip.id == clip);
-            // ONE animator on the prefab ROOT feeds the skinned nodes through
-            // prefab-remapped EntityRefs - never one animator per part.
+            // One animator on the prefab root feeds the skinned nodes through
+            // prefab-remapped EntityRefs, not one animator per part.
             CHECK(e == root);
             REQUIRE(c.meshEntities.Size() == 1u);
             const scene::EntityHandle fed = level.FindEntity(c.meshEntities[0].id);
@@ -194,7 +194,7 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
         });
     CHECK(animCount == 1u); // one animator for the whole model
 
-    // Regeneration finds + reuses the instance: same guid, refreshed payload.
+    // Regeneration finds and reuses the instance: same guid, refreshed payload.
     pipeline::ModelPrefabResult again =
         pipeline::GenerateModelPrefab(DefaultAllocator(), *manifestInst);
     REQUIRE(again.instance != nullptr);
@@ -208,7 +208,7 @@ TEST_CASE("model-scene: manifest -> standalone scene; regeneration reuses the in
 {
     pipeline::RegisterModelManifestAsset();
     // Component reflection carries the DataVersion the versioned payloads gate on (MeshComponent v3
-    // = unified materials array); register it so the materials round-trip is order-independent.
+    // is the unified materials array); register it so the materials round-trip is order-independent.
     engine::render::RegisterRenderComponentReflection();
     engine::animation::RegisterAnimationComponentReflection();
     GlobalTypeRegistry().Register(scene::SceneDocument::StaticType());
@@ -220,7 +220,7 @@ TEST_CASE("model-scene: manifest -> standalone scene; regeneration reuses the in
     foundation::vfs::NativeFileSystem mount(dir, foundation::core::DefaultAllocator());
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
 
-    // Root node + a single static-mesh child node (Crate -> Root -> Body).
+    // A root node and a single static-mesh child node (Crate, then Root, then Body).
     const Guid meshStatic{0x51, 0x1};
     const Guid matA{0x61, 0x1};
     pipeline::ModelManifestAsset asset;
@@ -261,12 +261,12 @@ TEST_CASE("model-scene: manifest -> standalone scene; regeneration reuses the in
     CHECK(sd->name == StringView(u8"Crate"));
 
     // Load it back into a fresh scene whose managers are injected first (as a subsystem would):
-    // the node hierarchy + mesh refs round-trip, a bare scene with NO default camera/light.
+    // the node hierarchy and mesh refs round-trip, a bare scene with no default camera or light.
     scene::Scene loaded{DefaultAllocator()};
     auto* meshes = loaded.AddSystem<engine::render::MeshComponentManager>();
     loaded.AddSystem<engine::animation::SkeletalAnimationComponentManager>();
     REQUIRE(scene::LoadScene(*generated.instance, loaded).IsOk());
-    CHECK(loaded.EntityCount() == 3u); // Crate root + Root + Body, nothing auto-added
+    CHECK(loaded.EntityCount() == 3u); // Crate root, Root and Body, nothing auto-added
 
     scene::EntityHandle sceneRoot = loaded.FindEntityByName(u8"Crate");
     REQUIRE(sceneRoot.IsAssigned());
@@ -286,7 +286,7 @@ TEST_CASE("model-scene: manifest -> standalone scene; regeneration reuses the in
         });
     CHECK(meshCount == 1u);
 
-    // Regeneration finds + reuses the instance: same guid, refreshed payload.
+    // Regeneration finds and reuses the instance: same guid, refreshed payload.
     pipeline::ModelPrefabResult regen = pipeline::GenerateModelScene(DefaultAllocator(), *manifestInst);
     REQUIRE(regen.instance != nullptr);
     CHECK(regen.regenerated);
@@ -295,7 +295,7 @@ TEST_CASE("model-scene: manifest -> standalone scene; regeneration reuses the in
     RemoveTreeMP(dir);
 }
 
-// Sedulous 6b33743b: what a finished import generates is the pipeline's decision, the same in
+// What a finished import generates is the pipeline's decision, the same in
 // every host: the prefab by default, the scene when asked, nothing for what is not a model.
 TEST_CASE("model-prefab: an import generates by its options, and only for a model")
 {
@@ -349,7 +349,7 @@ TEST_CASE("model-prefab: an import generates by its options, and only for a mode
     RemoveTreeMP(dir);
 }
 
-// Sedulous a0941c27: the animator starts on the model's idle, found among the manifest's sibling
+// The animator starts on the model's idle, found among the manifest's sibling
 // clips by name, not on whichever clip sorts first (a kit's "Death" or "Bite_Front").
 TEST_CASE("model-prefab: the animator starts on the model's idle")
 {
@@ -386,7 +386,7 @@ TEST_CASE("model-prefab: a skinned mesh sits at identity under the skeleton's pa
 {
     // A skin draws in its skeleton's parent's space and glTF ignores a skinned mesh node's own
     // transform: the prefab puts the mesh entity under that parent at identity, so its world is
-    // the skeleton's model space (inverse-kinematics.md P0a). Nodes: Root; Armature (moved and
+    // the skeleton's model space. Nodes: Root; Armature (moved and
     // turned, the skeleton's parent); Hips (a joint); Skin (the skinned mesh, a sibling of the
     // armature carrying an offset the file says to ignore); Rig (a node under the mesh).
     pipeline::RegisterModelManifestAsset();
@@ -534,7 +534,7 @@ TEST_CASE("model-prefab: a mesh binds its own material slots, the whole list onl
     CHECK(ids[2].IsNil());
 
     // A mesh whose parts name no material (an FBX shadow plane) binds none: the default
-    // material draws it, not the model's first (the plane drew the character's texture).
+    // material draws it, not the model's first (which would give the plane the character's texture).
     manifest.MeshMaterialGuids(1, ids);
     CHECK(ids.IsEmpty());
     manifest.MeshMaterialGuids(5, ids);

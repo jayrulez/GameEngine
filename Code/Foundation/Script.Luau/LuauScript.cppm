@@ -3,14 +3,14 @@
 
 // Foundation::Script.Luau - the Luau VM backend for Foundation::Script.
 //
-// Implements IScriptManager / IScriptContext / ScriptObject / IScriptDelegate over the
-// vendored Luau VM + Compiler (ThirdParty/luau, interpreter-only). One isolated
+// Implements IScriptManager, IScriptContext, ScriptObject and IScriptDelegate over the
+// vendored Luau VM and compiler (ThirdParty/luau, interpreter-only). One isolated
 // lua_State per context; reflected engine types are emitted into each state at context
-// creation as a metatable (property get/set + method dispatch through the reflection
-// currency: Variant in a userdata, ToInstance for the `this`). Coroutines run on a
-// host-side scheduler over lua threads (startCoroutine / waitSeconds / waitUntil - the
-// same wait model the other backends certify); delegates wrap a registry-ref'd Lua
-// function with the Detach-on-close protocol the conformance battery requires.
+// creation as a metatable (property get and set, and method dispatch through the
+// reflection currency: a Variant in a userdata, ToInstance for `this`). Coroutines run on
+// a host-side scheduler over lua threads (startCoroutine, waitSeconds, waitUntil: the same
+// wait model the other backends certify); delegates wrap a registry-ref'd Lua function and
+// are detached when their context closes, as the conformance battery requires.
 //
 // Error handling: the VM is built with LUA_USE_LONGJMP=1 (the engine is
 // -fno-exceptions), and every entry into the VM goes through lua_pcall/lua_resume so a
@@ -26,7 +26,7 @@ export module foundation.script.luau;
 
 import foundation.core;
 import foundation.script;
-import foundation.script.facades; // CollectEmittableTypes - the shared reachability closure
+import foundation.script.facades; // CollectEmittableTypes, the shared reachability closure
 
 namespace core = foundation::core;
 using namespace foundation::core;
@@ -78,11 +78,11 @@ namespace foundation::script
             return -1;
         }
 
-        // A reflected type -> its Luau TYPE annotation for a .d.luau declaration. Primitives map
-        // to Luau's built-ins; Float3 is the native `vector`; enums surface as numbers; a Variant
-        // payload is `any`; a reflected CLASS resolves to its own declared name ONLY when we also
-        // declare it (else `any`, so a declaration never references an undeclared type). nullptr =
-        // a void return, spelled `()`.
+        // A reflected type's Luau type annotation for a .d.luau declaration. Primitives map to
+        // Luau's built-ins; Float3 is the native `vector`; enums surface as numbers; a Variant
+        // payload is `any`; a reflected class resolves to its own declared name only when we also
+        // declare it (else `any`, so a declaration never references an undeclared type). A null
+        // type is a void return, spelled `()`.
         [[nodiscard]] String LuauTypeName(const TypeInfo* type, Span<const TypeInfo* const> declared)
         {
             if (type == nullptr)
@@ -124,9 +124,9 @@ namespace foundation::script
             return String(u8"any");
         }
 
-        // Appends a Luau parameter list `(p0: T0, p1: T1, ...)` from a method/constructor's params,
-        // using the A6 param names (or `arg<N>` when a name is absent). `skipSelf` drops nothing
-        // here - instance methods get an explicit `self` prepended by the caller.
+        // Appends a Luau parameter list `(p0: T0, p1: T1, ...)` from a method's or constructor's
+        // params, using the reflected param names (or `arg<N>` when a name is absent). Instance
+        // methods get an explicit `self` prepended by the caller.
         void AppendLuauParamList(String& out, const ParamInfo* params, u32 paramCount,
                                  Span<const TypeInfo* const> declared)
         {
@@ -156,12 +156,12 @@ namespace foundation::script
 
     // =====================================================================
     // Bytecode blob: a compiled Luau chunk (the Bytecode capability).
-    // IScriptManager::CompileToBlob produces one at COOK; IScriptContext::LoadBlob
-    // feeds it back to luau_load in the PLAYER, so the cooked pack carries bytecode
-    // and no compiler runs at load (the sandbox win). Bytecode is version-locked: the
-    // cook fingerprint carries the vendored Luau version so a vendor bump recooks.
-    // Opaque per IScriptBlob's contract - only this
-    // backend produces/consumes it, so LoadBlob downcasts by static_cast.
+    // IScriptManager::CompileToBlob produces one at cook time; IScriptContext::LoadBlob
+    // feeds it back to luau_load in the player, so the cooked pack carries bytecode
+    // and no compiler runs at load. Bytecode is version-locked: the cook fingerprint
+    // carries the vendored Luau version so a vendor bump recooks. Opaque, as every
+    // IScriptBlob is; only this backend produces and consumes it, so LoadBlob downcasts
+    // by static_cast.
     // =====================================================================
     class LuauScriptBlob final : public IScriptBlob
     {
@@ -191,8 +191,8 @@ namespace foundation::script
     // =====================================================================
     // Delegate: a registry-ref'd Lua function. Holding the RefPtr keeps the
     // function GC-alive (lua_ref pins it); Detach() is called by the owning
-    // context when the lua_State closes, after which Invoke fails cleanly -
-    // the "error if the owning context is gone" contract.
+    // context when the lua_State closes, after which Invoke returns an error
+    // because the owning context is gone.
     // =====================================================================
     class LuauScriptDelegate final : public IScriptDelegate
     {
@@ -267,8 +267,8 @@ namespace foundation::script
         [[nodiscard]] LuauScriptManager* Manager() noexcept { return m_manager.Get(); }
 
         // The debugger installs the VM-global debugstep callback here: it fires per
-        // Lua line while a thread has singlestep armed. Singlestep itself is armed per-thread at
-        // resume time (RunCallable / ResumeCoroutine) only while a debugger is attached.
+        // Lua line while a thread has singlestep armed. Singlestep itself is armed per thread at
+        // resume time (RunCallable, ResumeCoroutine) only while a debugger is attached.
         void InstallDebugHooks(LuauDebugger* debugger);
         void RemoveDebugHooks();
 
@@ -278,12 +278,13 @@ namespace foundation::script
 
         // luau_load already-compiled bytecode as chunk `=chunkName`, then run its top level.
         // Shared by source Load (after luau_compile), the per-class bytecode path in
-        // LoadBehaviorModule, and LoadBlob - one place owns the chunkname + error identity.
+        // LoadBehaviorModule, and LoadBlob, so one place owns the chunk name and error identity.
         Status LoadCompiledChunk(const byte* bytecode, usize size, StringView chunkName);
 
-        // Reconstruct a cooked blob from its SERIALIZED bytes (the pack's ScriptClass::bytecode -
-        // CompileToBlob -> Serialize) and load its bytecode as chunk `=chunkName`. The per-class
-        // bytecode path in LoadBehaviorModule (the player: no luau_compile, per-class identity).
+        // Reconstruct a cooked blob from its serialized bytes (the pack's ScriptClass::bytecode,
+        // written by CompileToBlob and Serialize) and load its bytecode as chunk `=chunkName`. The
+        // per-class bytecode path in LoadBehaviorModule (the player: no luau_compile, per-class
+        // identity).
         Status LoadSerializedBlobChunk(Span<const byte> serialized, StringView chunkName);
 
         void TrackDelegate(LuauScriptDelegate* delegate) { m_delegates.PushBack(delegate); }
@@ -302,22 +303,23 @@ namespace foundation::script
         // ---- marshalling (public: the emitter's C closures use these) ----
         void PushVariant(lua_State* state, const Variant& value);
         [[nodiscard]] Variant ToVariant(lua_State* state, int index);
-        // Like ToVariant, but honours the reflected parameter/property TYPE the value is bound to:
+        // Like ToVariant, but honours the reflected parameter or property type the value is bound to:
         // an enum-typed target takes a Lua number carried as i64 (the neutral dispatch casts it to
-        // the enum). Use at every native call/setter site where the expected type is known.
+        // the enum). Use at every native call or setter site where the expected type is known.
         [[nodiscard]] Variant ToVariantForParam(lua_State* state, int index, const TypeInfo* expected);
 
         // ---- the resumable-thread executor ----
-        // Every script CALL (Call / CreateInstance / ScriptObject::Invoke) runs on a POOLED lua
-        // thread via lua_resume, NOT lua_pcall on the main state - one executor for the production
-        // AND the debugged program (no divergence), and the only shape lua_break (the debugger's
-        // suspend) can suspend + resume. AcquireThread reuses a recycled thread or makes one
+        // Every script call (Call, CreateInstance, ScriptObject::Invoke) runs on a pooled lua
+        // thread via lua_resume, not lua_pcall on the main state. That gives one executor for the
+        // shipping and the debugged program, and it is the only shape lua_break (the debugger's
+        // suspend) can suspend and resume. AcquireThread reuses a recycled thread or makes one
         // (registry-pinned for GC); a nested call (a facade that dispatches script) takes a
-        // second thread, so pool depth = nesting depth. RunCallable moves the callable+args from
-        // m_state to a thread, resumes, and (on success) brings the single result back to m_state.
+        // second thread, so the pool depth is the nesting depth. RunCallable moves the callable
+        // and args from m_state to a thread, resumes, and on success brings the single result back
+        // to m_state.
         [[nodiscard]] lua_State* AcquireThread();
         void ReleaseThread(lua_State* thread);
-        // `total` = the callable + its args currently on top of m_state. Returns the lua_resume
+        // `total` is the callable and its args, currently on top of m_state. Returns the lua_resume
         // status: LUA_OK leaves the result on m_state; an error leaves the message on m_state.
         [[nodiscard]] int RunCallable(int total);
 
@@ -360,11 +362,11 @@ namespace foundation::script
 
         void FinalizeTypes() override
         {
-            // The overload contract: fail loudly if any registered type binds two methods to the
-            // same script name (see foundation.script ValidateScriptMethodNames).
+            // Fail loudly if any registered type binds two methods to the same script name at the
+            // same arity (see foundation.script ValidateScriptMethodNames).
             ValidateScriptMethodNames(RegisteredTypes());
-            // ...and fail loudly if two types bind to the same script-facing name (class name or
-            // scriptName alias) - the alias mechanism's collision guard.
+            // ...and if two types bind to the same script-facing name (class name or scriptName
+            // alias).
             ValidateScriptTypeNames(RegisteredTypes());
         }
 
@@ -384,9 +386,9 @@ namespace foundation::script
                    ScriptCapabilities::Bytecode | ScriptCapabilities::Debugger;
         }
 
-        // A step debugger over this VM's contexts: singlestep + (short_src,line) break
+        // A step debugger over this VM's contexts: singlestep and (short_src, line) breakpoints
         // on the pooled resumable threads, held via lua_break. One at a time; it registers as the
-        // active debugger on construction (RunCallable/AdvanceCoroutines consult it) and
+        // active debugger on construction (RunCallable and AdvanceCoroutines consult it) and
         // unregisters on destruction. Defined after the context class.
         [[nodiscard]] UniquePtr<IScriptDebugger> CreateDebugger() override;
 
@@ -397,9 +399,9 @@ namespace foundation::script
             return Span<LuauScriptContext* const>{m_contexts.Data(), m_contexts.Size()};
         }
 
-        // Compile source to a Luau bytecode blob (the cook side of the Bytecode seam). The
-        // Luau compiler embeds compile errors in the bytecode - they surface at luau_load -
-        // so this validates the result in a throwaway state and fails the COOK rather than
+        // Compile source to a Luau bytecode blob (the cook side of the Bytecode capability). The
+        // Luau compiler embeds compile errors in the bytecode, where they surface at luau_load,
+        // so this validates the result in a throwaway state and fails the cook rather than
         // shipping a chunk that faults on the player's LoadBlob.
         [[nodiscard]] Result<RefPtr<IScriptBlob>> CompileToBlob(StringView source,
                                                                StringView chunkName) override;
@@ -425,8 +427,8 @@ namespace foundation::script
         {
             return Span<const TypeInfo* const>{m_types.Data(), m_types.Size()};
         }
-        // A context created WHILE a debugger is attached must get its debug hooks too (the
-        // debugger only hooked the contexts that existed at CreateDebugger time). Out-of-line so it
+        // A context created while a debugger is attached must get its debug hooks too (the
+        // debugger only hooked the contexts that existed at CreateDebugger time). Out of line so it
         // can reach into the context type.
         void TrackContext(LuauScriptContext* context);
         void UntrackContext(LuauScriptContext* context)
@@ -451,12 +453,12 @@ namespace foundation::script
             int threadRef = LUA_NOREF;
             const void* owner = nullptr;
             f64 remainingSeconds = 0.0;
-            int predicateRef = LUA_NOREF; // LUA_NOREF = timed wait
+            int predicateRef = LUA_NOREF; // LUA_NOREF for a timed wait
             bool started = false;         // first resume pending?
         };
         Array<Coroutine> coroutines;
 
-        // The entry whose thread is `state` (the wait primitives run ON the thread).
+        // The entry whose thread is `state` (the wait primitives run on the thread).
         [[nodiscard]] Coroutine* FindCoroutine(lua_State* state)
         {
             for (Coroutine& entry : coroutines)
@@ -469,19 +471,20 @@ namespace foundation::script
             return nullptr;
         }
 
-        // The debugger's Continue on a broken COROUTINE thread routes through the same
-        // ProcessCoroutineResume as the scheduler, then drops the entry if it finished (Fable Q6).
+        // The debugger's Continue on a broken coroutine thread routes through the same
+        // ProcessCoroutineResume as the scheduler, then drops the entry if it finished.
         void ContinueCoroutine(Coroutine& entry, int status);
 
     private:
         void DropCoroutinesOf(LuauScriptContext* context);
         void DropCoroutineAt(usize index);
-        // Resume one entry; true when it should be REMOVED (finished or faulted).
+        // Resume one entry; true when it should be removed (finished or faulted).
         [[nodiscard]] bool ResumeCoroutine(Coroutine& entry);
 
-        // The ONE post-resume router shared by the coroutine scheduler and the debugger's Continue
-        // (Fable Q6) so they never disagree: BREAK -> the debugger holds the thread (false, kept),
-        // YIELD -> stays scheduled (false), OK/error -> drop (true). ClassifyResume is its lone map.
+        // The post-resume router shared by the coroutine scheduler and the debugger's Continue,
+        // so they never disagree: on a break the debugger holds the thread (false, kept), on a
+        // yield it stays scheduled (false), and on completion or error it is dropped (true).
+        // ClassifyResume is its only mapping.
         enum class ResumeDisposition
         {
             Completed,
@@ -511,12 +514,12 @@ namespace foundation::script
     };
 
     // =====================================================================
-    // Step debugger: singlestep + (short_src, line) breakpoints on the pooled
+    // Step debugger: singlestep and (short_src, line) breakpoints on the pooled
     // resumable threads. The debugstep callback lua_break()s the running thread on a hit; the
-    // resume returns LUA_BREAK, the debugger HOLDS that thread, fires the paused state (the run
-    // host freezes the game), and Continue/Step re-resume it. lua_break cannot cross a C-call
-    // boundary (lua_isyieldable == 0 there), so a break wanted mid-facade is DEFERRED to the next
-    // safe line. Script frames only - stepping never enters engine C.
+    // resume returns LUA_BREAK, the debugger holds that thread and fires the paused state (the
+    // run host freezes the game), and Continue or Step resume it again. lua_break cannot cross a
+    // C-call boundary (lua_isyieldable == 0 there), so a break wanted mid-facade is deferred to
+    // the next safe line. Script frames only; stepping never enters engine C.
     // =====================================================================
     class LuauDebugger final : public IScriptDebugger
     {
@@ -596,7 +599,7 @@ namespace foundation::script
                     continue;
                 }
                 ScriptStackFrame frame;
-                // Frame 0 is the pause point (the line ABOUT to run); lua_getinfo after the break
+                // Frame 0 is the pause point (the line about to run); lua_getinfo after the break
                 // reports the restored pc's line, off by one, so use the stored broken line there.
                 frame.line = (level == 0) ? m_brokenLine : info.currentline;
                 frame.file = String(ViewOf(info.short_src));
@@ -621,7 +624,7 @@ namespace foundation::script
                 {
                     break; // no more locals visible at this frame
                 }
-                // lua_getlocal pushed the value on the held thread; describe + pop it.
+                // lua_getlocal pushed the value on the held thread; describe and pop it.
                 ScriptVariable variable;
                 variable.name = String(ViewOf(name));
                 DescribeLuaValue(variable, m_heldThread, -1);
@@ -667,10 +670,10 @@ namespace foundation::script
 
         void SetListener(IScriptDebuggerListener* listener) override { m_listener = listener; }
 
-        // ---- called by the executor + the debugstep callback ----
+        // ---- called by the executor and the debugstep callback ----
 
-        // The debugstep callback (control is INSIDE the resumed thread). Decide whether THIS line
-        // breaks; lua_break here when safe, else DEFER to the next safe line (C-call boundary).
+        // The debugstep callback (control is inside the resumed thread). Decide whether this line
+        // breaks; lua_break here when safe, else defer to the next safe line (C-call boundary).
         void OnStep(lua_State* thread, lua_Debug* ar)
         {
             if (m_heldThread != nullptr)
@@ -679,11 +682,11 @@ namespace foundation::script
             }
             const int line = ar->currentline; // the pause point (the line about to execute)
             const int depth = lua_stackdepth(thread);
-            // Re-arm the breakpoint on the line we resumed from once execution genuinely LEAVES it
-            // (so a loop back re-breaks); until then skip it, so Continue/Step does not re-break
-            // where it paused. A call on that line (which dips DEEPER and returns to the same line
-            // for the store, e.g. `x = f()`) must NOT count as leaving - only a move to a different
-            // line at the resume depth or shallower does.
+            // Re-arm the breakpoint on the line we resumed from once execution really leaves it
+            // (so a loop back breaks again); until then skip it, so Continue or Step does not break
+            // again where it paused. A call on that line (which dips deeper and returns to the same
+            // line for the store, as in `x = f()`) does not count as leaving; only a move to a
+            // different line at the resume depth or shallower does.
             if (m_resumeLine >= 0 && depth <= m_resumeDepth && line != m_resumeLine)
             {
                 m_resumeLine = -1;
@@ -728,7 +731,7 @@ namespace foundation::script
             }
             if (lua_isyieldable(thread) == 0)
             {
-                // Across a C-call boundary lua_break would runtime-error (Fable Q3): remember the
+                // Across a C-call boundary lua_break would raise a runtime error: remember the
                 // wanted break and take it at the next safe line (back on the resumable frame).
                 m_pending = true;
                 m_pendingCause = cause;
@@ -742,7 +745,7 @@ namespace foundation::script
             lua_break(thread);
         }
 
-        // The executor calls this after a resume returned LUA_BREAK: OWN the broken thread + fire.
+        // The executor calls this after a resume returned LUA_BREAK: own the broken thread and fire.
         void OnBroke(LuauScriptContext* context, lua_State* thread)
         {
             m_heldThread = thread;
@@ -796,9 +799,9 @@ namespace foundation::script
             }
         }
 
-        // Re-resume the held thread. None = run to next break/completion; Into/Over arm a one-line
-        // step from the current (line, depth). Completion returns the thread to its pool; another
-        // break re-holds it.
+        // Resume the held thread again. None runs to the next break or completion; Into and Over
+        // arm a one-line step from the current (line, depth). Completion returns the thread to its
+        // pool; another break holds it again.
         void Resume(StepMode mode)
         {
             if (m_heldThread == nullptr || m_heldContext == nullptr)
@@ -816,17 +819,17 @@ namespace foundation::script
                 m_stepMode = mode;
                 m_stepFromDepth = lua_stackdepth(thread);
                 // Right after a break lua_getinfo reports the restored pc's line (off by one, same
-                // reason CaptureStackFrames uses m_brokenLine for frame 0); the pause point IS the
+                // reason CaptureStackFrames uses m_brokenLine for frame 0); the pause point is the
                 // line we resume from, so step from there or a StepOver would break on it again.
                 m_stepFromLine = m_brokenLine;
                 m_stepArmed = true;
             }
-            // Skip the breakpoint on the line/frame we resume from until execution leaves it, so
-            // Continue/Step does not immediately re-break where it was already paused.
+            // Skip the breakpoint on the line and frame we resume from until execution leaves it, so
+            // Continue or Step does not immediately break again where it was already paused.
             m_resumeLine = m_brokenLine;
             m_resumeDepth = lua_stackdepth(thread);
             // A broken thread is either a scheduled coroutine or a pooled executor thread; they
-            // route differently after the resume (a coroutine may YIELD back to the scheduler or,
+            // route differently after the resume (a coroutine may yield back to the scheduler or,
             // when done, be dropped from the schedule; a pooled thread returns to its pool). Decide
             // before the resume for the `from` argument, then route on the result.
             const bool isCoroutine = (m_manager->FindCoroutine(thread) != nullptr);
@@ -842,16 +845,16 @@ namespace foundation::script
             }
             if (isCoroutine)
             {
-                // Re-find (a resumed body may have spawned coroutines and reallocated the array);
-                // then route through the SAME ProcessCoroutineResume the scheduler uses (Fable Q6):
-                // BREAK re-holds (OnBroke re-fires paused), YIELD stays scheduled (game runs on),
-                // OK/error drops.
+                // Find the entry again (a resumed body may have spawned coroutines and reallocated
+                // the array), then route through the same ProcessCoroutineResume the scheduler uses:
+                // a break holds it again (OnBroke fires paused again), a yield stays scheduled (the
+                // game runs on), completion or an error drops it.
                 if (LuauScriptManager::Coroutine* entry = m_manager->FindCoroutine(thread))
                 {
                     m_manager->ContinueCoroutine(*entry, status);
                 }
                 // A finished coroutine ends this debugged run (Terminated); a yield leaves it
-                // scheduled (stay Running); a break already re-fired Breakpoint/Stepped.
+                // scheduled (stay Running); a break already fired Breakpoint or Stepped again.
                 if (status != LUA_BREAK && status != LUA_YIELD)
                 {
                     FireState(ScriptDebuggerState::Terminated);
@@ -860,14 +863,14 @@ namespace foundation::script
             }
             if (status == LUA_BREAK)
             {
-                OnBroke(context, thread); // hit the next break/step - hold + fire again
+                OnBroke(context, thread); // hit the next break or step: hold and fire again
                 return;
             }
             if (status != LUA_OK && status != LUA_YIELD)
             {
                 context->ReportTopOfStack(ScriptErrorKind::Runtime, u8"debug");
             }
-            context->ReleaseThread(thread); // completed pooled executor thread -> back to the pool
+            context->ReleaseThread(thread); // a completed pooled executor thread goes back to the pool
             FireState(ScriptDebuggerState::Terminated); // the debugged call ran to completion
         }
 
@@ -890,8 +893,8 @@ namespace foundation::script
             return nullptr;
         }
 
-        // A reflected Variant -> display text + (if a reflected object with properties) an
-        // expandable objectRef.
+        // Describes a reflected Variant: its display text and, for a reflected object with
+        // properties, an expandable objectRef.
         void DescribeVariant(ScriptVariable& variable, const Variant& value)
         {
             const TypeInfo* type = value.Type();
@@ -926,8 +929,8 @@ namespace foundation::script
             }
         }
 
-        // A raw Lua stack value -> ScriptVariable (avoids ToVariant's function->delegate side
-        // effect; a userdata box is the reflected object, made expandable).
+        // Describes a raw Lua stack value as a ScriptVariable (avoiding ToVariant's side effect of
+        // wrapping a function in a delegate; a userdata box is the reflected object, made expandable).
         void DescribeLuaValue(ScriptVariable& variable, lua_State* thread, int index)
         {
             switch (lua_type(thread, index))
@@ -970,7 +973,7 @@ namespace foundation::script
                 break;
             case LUA_TUSERDATA:
             {
-                // Every userdata in this backend is a Variant box (lua_newuserdatadtor + ~Variant).
+                // Every userdata in this backend is a Variant box (lua_newuserdatadtor and ~Variant).
                 Variant* boxed = static_cast<Variant*>(lua_touserdata(thread, index));
                 if (boxed != nullptr && boxed->Type() != nullptr)
                 {
@@ -1002,7 +1005,7 @@ namespace foundation::script
         int m_stepFromLine = -1;
         int m_stepFromDepth = 0;
         int m_brokenLine = -1; // the pause point line (frame-0 line; the callhook off-by-one target)
-        int m_resumeLine = -1; // the line Continue/Step resumed from - skip its breakpoint until we leave it
+        int m_resumeLine = -1; // the line Continue/Step resumed from; skip its breakpoint until we leave it
         int m_resumeDepth = 0;
         bool m_pending = false; // a break deferred past a C-call boundary
         Cause m_pendingCause = Cause::Breakpoint;
@@ -1017,8 +1020,8 @@ namespace foundation::script
     namespace
     {
         // Full userdata payload: an in-place Variant (value or object mode). The
-        // userdata destructor (lua_newuserdatadtor) runs ~Variant - releases any
-        // RefPtr the object mode holds - with no __gc plumbing.
+        // userdata destructor (lua_newuserdatadtor) runs ~Variant, which releases any
+        // RefPtr the object mode holds, with no __gc plumbing.
         void DestroyVariantUserdata(void* payload) { static_cast<Variant*>(payload)->~Variant(); }
 
         [[nodiscard]] Variant* VariantAt(lua_State* state, int index)
@@ -1073,16 +1076,16 @@ namespace foundation::script
             lua_pushlstring(state, reinterpret_cast<const char*>(s->CStr()), s->Size());
             return;
         }
-        // Float3 maps to Luau's NATIVE vector type (LUA_VECTOR_SIZE == 3, exact match): scripts get
-        // v.x/.y/.z and vector arithmetic with NO per-value userdata allocation - the Luau-specific
-        // fast path that replaces the boxed reflected handle the other backends use.
+        // Float3 maps to Luau's native vector type (LUA_VECTOR_SIZE == 3, an exact match): scripts
+        // get v.x, .y, .z and vector arithmetic with no per-value userdata allocation. This Luau
+        // fast path replaces the boxed reflected handle the other backends use.
         if (const Float3* v = value.TryGet<Float3>())
         {
             lua_pushvector(state, v->x, v->y, v->z);
             return;
         }
         // An enum crosses as its underlying number: Lua has no enum type, the emitter excludes
-        // enums from binding, and an enum parameter converts the number back (mirrors
+        // enums from binding, and an enum parameter converts the number back (as in
         // AngelScript). Must come before the boxed-Variant fallthrough (an enum Variant is not a
         // primitive TryGet match).
         if (const TypeInfo* enumType = value.Type();
@@ -1092,7 +1095,7 @@ namespace foundation::script
             return;
         }
         // A reflected container (Array<T>) crosses as a native 1-indexed Lua table (script gets `#t`
-        // and ipairs); each element is pushed recursively - numbers, strings, boxed reflected handles.
+        // and ipairs); each element is pushed recursively (numbers, strings, boxed reflected handles).
         // GC-managed, no manual refcount. The facade returns an engine Array<T>.
         // Must precede the boxed-Variant fallthrough.
         if (const TypeInfo* containerType = value.Type();
@@ -1111,14 +1114,14 @@ namespace foundation::script
             return;
         }
         // Everything else (objects, reflected values) travels as a boxed Variant with the
-        // dynamic type's dispatch metatable, so script sees properties/methods directly.
+        // dynamic type's dispatch metatable, so script sees properties and methods directly.
         void* payload = lua_newuserdatadtor(state, sizeof(Variant), DestroyVariantUserdata);
         new (payload) Variant(value);
         const TypeInfo* type = value.Type();
         if (type != nullptr)
         {
             // The per-type metatable was created at emission when the type is bound; a
-            // NON-bound type still gets a plain metatable-free userdata (opaque handle).
+            // type that is not bound still gets a plain userdata with no metatable (an opaque handle).
             lua_pushlightuserdata(state, const_cast<TypeInfo*>(type));
             lua_rawget(state, LUA_REGISTRYINDEX);
             if (lua_istable(state, -1))
@@ -1166,7 +1169,7 @@ namespace foundation::script
         }
         case LUA_TFUNCTION:
         {
-            // A script function crossing into native = a delegate (the reflected param
+            // A script function crossing into native becomes a delegate (the reflected param
             // side matches it by the IScriptDelegate object type).
             lua_pushvalue(state, index);
             const int ref = lua_ref(state, -1);
@@ -1202,10 +1205,10 @@ namespace foundation::script
             }
             return Variant::From<Array<Variant>>(Move(list));
         }
-        // A Lua number narrows to the reflected param's EXACT numeric/enum type. Lua numbers are all
-        // f64, but the neutral dispatch matches the declared param type, so an f32/i32/enum param
-        // must receive that typed Variant - not a bare f64 (which it would reject). Mirrors
-        // AngelScript's expected-type marshalling.
+        // A Lua number narrows to the reflected param's exact numeric or enum type. Lua numbers are
+        // all f64, but the neutral dispatch matches the declared param type, so an f32, i32 or enum
+        // param must receive that typed Variant, not a bare f64 (which it would reject). The same
+        // as AngelScript's expected-type marshalling.
         if (expected != nullptr && lua_type(state, index) == LUA_TNUMBER)
         {
             const f64 n = lua_tonumber(state, index);
@@ -1257,7 +1260,7 @@ namespace foundation::script
             static constexpr int kMethods = 3;
         };
 
-        // Null-safe C-string equality (method/script names are null-terminated ASCII).
+        // Null-safe C-string equality (method and script names are null-terminated ASCII).
         [[nodiscard]] bool NameEquals(const char* a, const char* b)
         {
             if (a == b)
@@ -1289,16 +1292,16 @@ namespace foundation::script
             return nullptr;
         }
 
-        // Marshal self (for instance methods) + args off the Lua stack and invoke `method`, pushing
+        // Marshal self (for instance methods) and args off the Lua stack and invoke `method`, pushing
         // its result. Shared by MethodThunk (one captured method) and ArityMethodThunk (resolved by
         // argc). Returns the Lua result count.
         int InvokeReflected(lua_State* state, LuauScriptContext* context, const MethodInfo& method)
         {
             const int argCount = lua_gettop(state);
-            // The bound self is dispatched by POINTER into its userdata box (like the property
-            // get/set thunks below), NOT a copy - so a MUTATING reflected method (e.g.
+            // The bound self is dispatched by pointer into its userdata box (like the property
+            // get and set thunks below), not a copy, so a mutating reflected method (such as
             // JsonValue.Set) persists to the script's value, matching the reference semantics
-            // AngelScript gives asOBJ_REF reflected types. A copy here silently dropped mutations.
+            // AngelScript gives asOBJ_REF reflected types. A copy would silently drop mutations.
             Variant* boxedSelf = nullptr;
             int firstArg = 1;
             if (!method.isStatic)
@@ -1327,7 +1330,7 @@ namespace foundation::script
                 Array<Variant> args;
                 for (int i = firstArg; i <= argCount; ++i)
                 {
-                    // Honour the reflected param type for this arg (enum -> number carried as i64);
+                    // Honour the reflected param type for this arg (an enum is a number carried as i64);
                     // extra args beyond the signature fall back to plain conversion.
                     const u32 paramIndex = static_cast<u32>(i - firstArg);
                     const TypeInfo* expected =
@@ -1357,8 +1360,8 @@ namespace foundation::script
             return pushed ? 1 : 0;
         }
 
-        // How many methods on `type`'s chain bind to (script name, static-ness) - the ARITY FAMILY
-        // size. 1 = a plain method; >1 = an arity family dispatched by argument count.
+        // How many methods on `type`'s chain bind to (script name, static-ness): the arity family
+        // size. 1 is a plain method; more is an arity family dispatched by argument count.
         int ScriptNameFamilySize(const TypeInfo* type, const char* scriptName, bool isStatic)
         {
             int count = 0;
@@ -1428,7 +1431,7 @@ namespace foundation::script
             return nullptr;
         }
 
-        // A reflected operator's metamethod (__add ...): of the type's statics marked with the
+        // A reflected operator's metamethod (__add and the rest): of the type's statics marked with the
         // operator, the one whose right operand fits the call's (a number, or a value of the
         // parameter's type), invoked with the left operand first. Luau's `a += b` is `a = a + b`.
         // Upvalues: type* (light), context* (light), op (integer).
@@ -1503,7 +1506,7 @@ namespace foundation::script
         }
 
         // Arity-family dispatch: resolve the family member whose paramCount matches the call's
-        // argument count (SOUND - argc is exact, no type guessing), then invoke it.
+        // argument count (sound, since argc is exact and needs no type guessing), then invoke it.
         // Upvalues: type* (light), context* (light), script name (string), isStatic (boolean).
         int ArityMethodThunk(lua_State* state)
         {
@@ -1527,7 +1530,7 @@ namespace foundation::script
 
         // Resolve a polymorphic container's add-by-name to a concrete derived type: match the
         // name against each creatable derived type's `displayName` attribute, then its bare type
-        // name (the AngelScript ResolveElementType twin - keep in sync).
+        // name. Keep in sync with AngelScript's ResolveElementType.
         [[nodiscard]] const TypeInfo* ResolveContainerElementType(const TypeInfo& base,
                                                                   StringView name)
         {
@@ -1550,14 +1553,14 @@ namespace foundation::script
             return nullptr;
         }
 
-        // Container-member ops on the OWNER (`shelf:rooms_count()`, `shelf:rooms_at(0)`, ...),
-        // mirroring AngelScript's RegisterContainerMethods surface so both backends share ONE
-        // write-through contract for reflected container members (the bare
-        // property would cross as a detached copy-table whose mutations are silently lost).
-        // Indices are ZERO-based on both backends - this is an engine accessor, not a Lua table.
-        // Elements come back like AS's ContainerDispatch: Object / copyable values via getAt
-        // (owned; Object handles write through by refcount), non-copyable values as
-        // generation-guarded BORROWS pinned to the owner - edited in place.
+        // Container-member ops on the owner (`shelf:rooms_count()`, `shelf:rooms_at(0)` and so on),
+        // the same surface as AngelScript's RegisterContainerMethods, so both backends share one
+        // write-through contract for reflected container members (the bare property would cross
+        // as a detached copy-table whose mutations are silently lost). Indices are zero-based on
+        // both backends: this is an engine accessor, not a Lua table. Elements come back as in
+        // AngelScript's ContainerDispatch: Objects and copyable values via getAt (owned; Object
+        // handles write through by refcount), non-copyable values as generation-guarded borrows
+        // pinned to the owner and edited in place.
         enum class ContainerOp : int
         {
             Count = 0,
@@ -1567,8 +1570,8 @@ namespace foundation::script
             MoveElement,
         };
 
-        // The element Variant for index `index`: getAt when the element is copyable/Object-owned,
-        // else a borrow over its address pinned to `parent` (the AS ContainerElementVariant twin).
+        // The element Variant for index `index`: getAt when the element is copyable or Object-owned,
+        // else a borrow over its address pinned to `parent` (as AngelScript's ContainerElementVariant).
         [[nodiscard]] Variant ContainerElementForScript(const ContainerInfo& ci,
                                                         const Instance& container, usize index,
                                                         const Variant& parent)
@@ -1609,7 +1612,7 @@ namespace foundation::script
                 return 1;
             }
             // The container member is reached transiently via property.address per call (never
-            // cached), matching the AS dispatcher - a reallocation between calls cannot dangle.
+            // cached), as in the AngelScript dispatcher, so a reallocation between calls cannot dangle.
             Instance container(property->address(owner), property->type);
             const ContainerInfo& ci = *property->type->container;
             const usize size = ContainerSize(ci, container);
@@ -1678,7 +1681,7 @@ namespace foundation::script
 
         int IndexThunk(lua_State* state)
         {
-            // (userdata, key) -> method (from the methods table) or property value.
+            // (userdata, key): a method (from the methods table) or a property value.
             auto* type = static_cast<const TypeInfo*>(
                 lua_tolightuserdata(state, lua_upvalueindex(DispatchUpvalues::kType)));
             auto* context = static_cast<LuauScriptContext*>(
@@ -1702,11 +1705,11 @@ namespace foundation::script
             }
             if (const PropertyInfo* property = FindPropertyInChain(type, key))
             {
-                // A container MEMBER is not a plain value: it binds as owner ops
-                // (`<name>_count/_at/_add/_removeAt/_move` - the AS-parity write-through
-                // surface). A bare read would hand script a detached copy-table whose
-                // mutations are silently lost; nil is the honest answer (same as AS, where
-                // the bare property does not exist).
+                // A container member is not a plain value: it binds as owner ops
+                // (`<name>_count/_at/_add/_removeAt/_move`, the write-through surface AngelScript
+                // has too). A bare read would hand script a detached copy-table whose mutations
+                // are silently lost, so it reads nil (in AngelScript the bare property does not
+                // exist).
                 if (IsNested(*property) && property->type != nullptr &&
                     property->type->container != nullptr)
                 {
@@ -1750,12 +1753,12 @@ namespace foundation::script
                 lua_pushstring(state, kObjectGoneMessage); // never a write into nothing
                 lua_error(state);
             }
-            // Honour the property type (enum -> number carried as i64).
+            // Honour the property type (an enum is a number carried as i64).
             Variant value = context->ToVariantForParam(state, 3, property->type);
             if (!SetProperty(*property, instance, value).IsOk())
             {
                 // A read-only property refuses in Core; a script learns it the same
-                // way it learns a misspelled one - at the assignment, not silently.
+                // way it learns a misspelled one: at the assignment, not silently.
                 lua_pushstring(state, "property is read-only");
                 lua_error(state);
             }
@@ -1770,7 +1773,7 @@ namespace foundation::script
 
             const int argCount = lua_gettop(state);
             // Marshal each arg against the matching constructor's param type (number narrowing to
-            // f32/i32/enum), so Float3.new(2, 3, 4) hands three f32s to the (f32,f32,f32) ctor.
+            // f32, i32 or enum), so Float3.new(2, 3, 4) hands three f32s to the (f32,f32,f32) ctor.
             const ConstructorInfo* ctor = nullptr;
             for (const ConstructorInfo& candidate : Constructors(*type))
             {
@@ -1807,7 +1810,7 @@ namespace foundation::script
     {
         lua_State* state = m_state;
 
-        // The methods table: every instance/static method in the chain as a thunk.
+        // The methods table: every instance and static method in the chain as a thunk.
         lua_newtable(state);
         for (const TypeInfo* t = &type; t != nullptr; t = t->base)
         {
@@ -1859,9 +1862,9 @@ namespace foundation::script
             lua_pushcclosure(state, IsValidThunk, "is_valid", 0);
             lua_rawset(state, -3);
         }
-        // Container members bind as owner ops in the SAME methods table (the AngelScript
-        // RegisterContainerMethods twin: `<name>_count/_at/_add/_removeAt/_move`), so
-        // `shelf:rooms_at(0)` dispatches exactly like a reflected method. First wins up the chain.
+        // Container members bind as owner ops in the same methods table (as AngelScript's
+        // RegisterContainerMethods does: `<name>_count/_at/_add/_removeAt/_move`), so
+        // `shelf:rooms_at(0)` dispatches like a reflected method. First wins up the chain.
         for (const TypeInfo* t = &type; t != nullptr; t = t->base)
         {
             for (const PropertyInfo& property : Properties(*t))
@@ -2001,7 +2004,7 @@ namespace foundation::script
             }
         }
         // Install the class table under its script-facing name (scriptName alias when set, else the
-        // C++ name) - scripts reference it, and typed-decl spellings match (native identity stays name).
+        // C++ name): scripts reference it, and typed declarations match (native identity stays name).
         lua_setglobal(state, ScriptTypeName(type));
 
         lua_pop(state, 1); // methods table
@@ -2011,7 +2014,7 @@ namespace foundation::script
     {
         lua_State* state = m_state;
         // Scripts spell an enum value as EnumName.ValueName (matching AngelScript's native enums).
-        // Values are numbers - an enum parameter converts the number back
+        // Values are numbers; an enum parameter converts the number back
         // (ToVariantForParam), so the round-trip is exact.
         lua_newtable(state);
         for (const EnumValue& value : Enumerators(type))
@@ -2034,11 +2037,10 @@ namespace foundation::script
                 EmitEnum(*type);
             }
         }
-        // Object types emit as the bounded REACHABILITY CLOSURE (the shared reachability policy):
-        // constructor-having seeds + factory-return roots (e.g. RigidBody.of), closed over the
-        // reflected graph - NOT every constructible registered type. Keeps the Luau surface (and
-        // script_api) identical to the other backends, and includes constructor-less handles the
-        // old simple filter missed.
+        // Object types emit as the bounded reachability closure (the shared policy):
+        // constructor-having seeds and factory-return roots (such as RigidBody.of), closed over the
+        // reflected graph, not every constructible registered type. This keeps the Luau surface
+        // (and script_api) identical to the other backends, and includes constructor-less handles.
         Array<const TypeInfo*> emit;
         CollectEmittableTypes(registered, emit);
         for (const TypeInfo* type : emit)
@@ -2048,8 +2050,8 @@ namespace foundation::script
     }
 
     // =====================================================================
-    // Coroutines: startCoroutine(fn[, owner]) / waitSeconds(t) / waitUntil(fn).
-    // The scheduler lives on the manager; the primitives run ON the coroutine
+    // Coroutines: startCoroutine(fn[, owner]), waitSeconds(t), waitUntil(fn).
+    // The scheduler lives on the manager; the primitives run on the coroutine
     // thread and yield after recording the wait on its entry.
     // =====================================================================
     namespace
@@ -2135,8 +2137,8 @@ namespace foundation::script
         switch (ClassifyResume(status))
         {
         case ResumeDisposition::Broke:
-            // A breakpoint/step landed inside the coroutine body: the debugger holds THIS coroutine
-            // thread (AdvanceCoroutines skips LUA_BREAK threads); Continue re-resumes it.
+            // A breakpoint or step landed inside the coroutine body: the debugger holds this
+            // coroutine thread (AdvanceCoroutines skips LUA_BREAK threads); Continue resumes it.
             // A break can only occur with a debugger attached (it alone arms singlestep); guard so a
             // stray status never leaks a scheduled-but-never-resumed thread.
             if (m_debugger != nullptr)
@@ -2155,7 +2157,7 @@ namespace foundation::script
         }
         case ResumeDisposition::Completed:
         default:
-            return true; // finished -> drop
+            return true; // finished, so drop it
         }
     }
 
@@ -2195,9 +2197,9 @@ namespace foundation::script
         for (usize i = 0; i < coroutines.Size();)
         {
             Coroutine& entry = coroutines[i];
-            // A coroutine thread the debugger broke has status LUA_BREAK; the scheduler MUST NOT
-            // resume it (that would steal the debugger's held thread mid-break, Fable Q5). The
-            // debugger's Continue owns resuming it.
+            // A coroutine thread the debugger broke has status LUA_BREAK; the scheduler must not
+            // resume it, which would steal the debugger's held thread mid-break. The debugger's
+            // Continue owns resuming it.
             if (lua_status(entry.thread) == LUA_BREAK)
             {
                 ++i;
@@ -2208,11 +2210,11 @@ namespace foundation::script
             {
                 entry.started = true;
                 drop = ResumeCoroutine(entry);
-                // Luau defers the FIRST resume to here (never re-entering the VM mid-begin), but
+                // Luau defers the first resume to here (never re-entering the VM mid-begin), but
                 // the other backends run it inline during onStart, so their first AdvanceCoroutines
                 // already counts this frame's dt against the wait. Count it here too so a Luau
-                // coroutine's timer starts on the SAME frame it began - identical wait timing.
-                // (If the first resume BROKE, the thread is held - never resume it again here.)
+                // coroutine's timer starts on the same frame it began, for identical wait timing.
+                // If the first resume broke, the thread is held; never resume it again here.
                 if (!drop && lua_status(entry.thread) != LUA_BREAK &&
                     entry.predicateRef == LUA_NOREF)
                 {
@@ -2316,13 +2318,13 @@ namespace foundation::script
     }
 
     // =====================================================================
-    // Context lifecycle + the IScriptContext surface.
+    // Context lifecycle and the IScriptContext surface.
     // =====================================================================
     LuauScriptContext::LuauScriptContext(RefPtr<LuauScriptManager> manager)
         : m_manager(Move(manager))
     {
         m_state = luaL_newstate();
-        luaL_openlibs(m_state); // Luau's SANDBOXED stdlib (no io/os/loadstring)
+        luaL_openlibs(m_state); // Luau's sandboxed stdlib (no io, os or loadstring)
         InstallCoroutineApi();
         EmitRegisteredTypes();
         m_manager->TrackContext(this);
@@ -2331,8 +2333,8 @@ namespace foundation::script
     LuauScriptContext::~LuauScriptContext()
     {
         m_manager->UntrackContext(this);
-        // The Detach protocol: delegates outliving the context must fail cleanly, never
-        // touch a dead lua_State (the conformance battery's owning-context-gone contract).
+        // Detach every delegate: one outliving the context must fail cleanly and never
+        // touch a dead lua_State (the conformance battery checks this).
         for (LuauScriptDelegate* delegate : m_delegates)
         {
             delegate->Detach();
@@ -2370,8 +2372,8 @@ namespace foundation::script
     Status LuauScriptContext::LoadCompiledChunk(const byte* bytecode, usize size,
                                                 StringView chunkName)
     {
-        // Prefix the chunkname with "=" so Luau uses it VERBATIM as short_src (no `[string
-        // "..."]` wrapper): short_src == the sourceName, which is what a debugger breakpoint
+        // Prefix the chunk name with "=" so Luau uses it verbatim as short_src (no `[string
+        // "..."]` wrapper): short_src is then the sourceName, which is what a debugger breakpoint
         // (file, line) and the error report key on. The reported module below stays the raw name.
         String chunkStorage(u8"=");
         chunkStorage.Append(chunkName);
@@ -2398,8 +2400,8 @@ namespace foundation::script
     Status LuauScriptContext::LoadSerializedBlobChunk(Span<const byte> serialized,
                                                       StringView chunkName)
     {
-        // The pack stores the SERIALIZED LuauScriptBlob (Array<byte> length + raw bytecode), so the
-        // runtime is backend-neutral (CreateBlob + Serialize(read) + load). Reconstruct the raw
+        // The pack stores the serialized LuauScriptBlob (an Array<byte> length and the raw
+        // bytecode), so the runtime is backend-neutral (CreateBlob, Serialize(read), load). Reconstruct the raw
         // bytecode here, then load it as this class's own chunk for per-class (file,line) identity.
         LuauScriptBlob blob;
         MemoryStream stream;
@@ -2413,10 +2415,11 @@ namespace foundation::script
 
     Status LuauScriptContext::Load(StringView source, StringView chunkName)
     {
-        // debugLevel 2 = local + upvalue names, which the step debugger needs to inspect locals;
-        // optimizationLevel 1 keeps the bytecode debuggable (no inlining). The cook compiles with
-        // the SAME options (LuauScriptManager::CompileToBlob), so a stored blob is byte-equivalent
-        // to compiling here - the run host can prefer bytecode with no loss of debuggability.
+        // debugLevel 2 keeps local and upvalue names, which the step debugger needs to inspect
+        // locals; optimizationLevel 1 keeps the bytecode debuggable (no inlining). The cook compiles
+        // with the same options (LuauScriptManager::CompileToBlob), so a stored blob is
+        // byte-equivalent to compiling here, and the run host can prefer bytecode without losing
+        // debuggability.
         lua_CompileOptions options{};
         options.optimizationLevel = 1;
         options.debugLevel = 2;
@@ -2432,19 +2435,19 @@ namespace foundation::script
     Status LuauScriptContext::LoadBehaviorModule(Span<const BehaviorModuleClass> classes,
                                                  StringView moduleName)
     {
-        // Each Luau class is a GLOBAL table, so loading each source as its OWN chunk (chunkName =
-        // the class sourceName) is both valid AND better than the default concatenation: a
-        // compile/runtime error and a debugger breakpoint key on the authored (file, line),
-        // matching AngelScript per-class section identity, and it is the same
-        // per-class load path the bytecode blobs use. A reload redefines the class global in
-        // place - the natural Luau hot-reload.
+        // Each Luau class is a global table, so loading each source as its own chunk (named by the
+        // class sourceName) is valid and better than the default concatenation: a compile or
+        // runtime error and a debugger breakpoint key on the authored (file, line), as with
+        // AngelScript's per-class sections, and it is the same per-class load path the bytecode
+        // blobs use. A reload redefines the class global in place, which is how Luau hot reload
+        // works.
         (void)moduleName;
         for (const BehaviorModuleClass& entry : classes)
         {
-            // Prefer the cooked bytecode when present (the player path - no luau_compile): load the
-            // blob as this class's own chunk (chunkName = sourceName), the SAME per-class identity
-            // the source path uses, so breakpoints + errors still key on (file, line). Fall back to
-            // compiling the source (editor authored a class the cook has not stamped yet).
+            // Prefer the cooked bytecode when present (the player path, with no luau_compile): load
+            // the blob as this class's own chunk (named by sourceName), the same per-class identity
+            // the source path uses, so breakpoints and errors still key on (file, line). Fall back
+            // to compiling the source (the editor authored a class the cook has not stamped yet).
             const Status status = entry.bytecode.IsEmpty()
                                       ? Load(entry.source, entry.name)
                                       : LoadSerializedBlobChunk(entry.bytecode, entry.name);
@@ -2459,8 +2462,8 @@ namespace foundation::script
     Status LuauScriptContext::LoadBlob(IScriptBlob& blob)
     {
         // Only this backend produces Luau blobs, and the run host pairs a Luau context with a
-        // Luau manager, so the blob is always a LuauScriptBlob (IScriptBlob is opaque - it has
-        // no RTTI node - so this is a static downcast by construction, the committed pattern).
+        // Luau manager, so the blob is always a LuauScriptBlob. IScriptBlob is opaque (it has
+        // no RTTI node), so this is a static downcast that holds by construction.
         const LuauScriptBlob& luauBlob = static_cast<LuauScriptBlob&>(blob);
         const Span<const byte> bytecode = luauBlob.Bytecode();
         if (bytecode.IsEmpty())
@@ -2468,7 +2471,7 @@ namespace foundation::script
             return Status{ErrorCode::InvalidArgument};
         }
 
-        // luau_load (NOT luau_compile): the player ships bytecode only, no compiler.
+        // luau_load, not luau_compile: the player ships bytecode only, with no compiler.
         const int loadStatus =
             luau_load(m_state, "=blob", reinterpret_cast<const char*>(bytecode.Data()),
                       bytecode.Size(), 0);
@@ -2568,14 +2571,14 @@ namespace foundation::script
 
     void LuauScriptContext::ReleaseThread(lua_State* thread)
     {
-        lua_resetthread(thread); // clear stack + status for reuse (Fable Q5: reset only on return)
+        lua_resetthread(thread); // clear stack and status for reuse (reset only on return to the pool)
         m_freeThreads.PushBack(thread);
     }
 
     int LuauScriptContext::RunCallable(int total)
     {
-        // `total` = the callable + its args on top of m_state; move them to a pooled thread and
-        // RESUME (never pcall). One result comes back to m_state on success; an error message on
+        // `total` is the callable and its args on top of m_state; move them to a pooled thread and
+        // resume (never pcall). One result comes back to m_state on success; an error message on
         // failure. A yield from a handler (waitSeconds already guards it) surfaces as an error.
         lua_State* thread = AcquireThread();
         lua_xmove(m_state, thread, total);
@@ -2591,10 +2594,10 @@ namespace foundation::script
         }
         if (status == LUA_BREAK && debugger != nullptr)
         {
-            // A handler hit a breakpoint/step: the debugger OWNS the thread now (holds it for
-            // inspect + Continue) and the game pauses via the listener. The dispatcher sees a
-            // void-complete return; the handler's remaining body runs from Continue (the
-            // AngelScript adopted-context precedent). Do NOT release the held thread.
+            // A handler hit a breakpoint or step: the debugger owns the thread now (holds it for
+            // inspection and Continue) and the game pauses via the listener. The dispatcher sees a
+            // void-complete return; the handler's remaining body runs from Continue (as with
+            // AngelScript's adopted context). Do not release the held thread.
             debugger->OnBroke(this, thread);
             lua_pushnil(m_state);
             return LUA_OK;
@@ -2693,7 +2696,7 @@ namespace foundation::script
     }
 
     // =====================================================================
-    // ScriptObject + delegate bodies.
+    // ScriptObject and delegate bodies.
     // =====================================================================
     LuauScriptObject::~LuauScriptObject()
     {
@@ -2715,10 +2718,10 @@ namespace foundation::script
         String storage;
 
         // The neutral property-apply path Invokes the setter as `<name>=` with one argument
-        // (the setter convention). Luau editor properties are plain instance FIELDS
+        // (the setter convention). Luau editor properties are plain instance fields
         // (harvested by walking the constructed table), so a trailing `=` with exactly one arg
-        // writes the same-named field directly - the Luau equivalent of AngelScript's settable
-        // member. The field always exists once the constructor set it; this applies its default
+        // writes the same-named field directly, as AngelScript writes a member field. The field
+        // always exists once the constructor set it; this applies its default
         // or the hash-keyed override.
         if (args.Size() == 1 && !method.IsEmpty() && method[method.Size() - 1] == u8'=')
         {
@@ -2743,7 +2746,7 @@ namespace foundation::script
         {
             m_context->PushVariant(state, arg);
         }
-        // method fn + self + N args = N + 2 items to run on a pooled resumable thread.
+        // The method, self and N args: N + 2 items to run on a pooled resumable thread.
         if (m_context->RunCallable(static_cast<int>(args.Size()) + 2) != LUA_OK)
         {
             m_context->ReportTopOfStack(ScriptErrorKind::Runtime, method);
@@ -2805,7 +2808,7 @@ namespace foundation::script
     }
 
     // =====================================================================
-    // Manager: contexts + the bound-API report.
+    // Manager: contexts and the bound-API report.
     // =====================================================================
     RefPtr<IScriptContext> LuauScriptManager::CreateContext()
     {
@@ -2816,8 +2819,8 @@ namespace foundation::script
     Result<RefPtr<IScriptBlob>> LuauScriptManager::CompileToBlob(StringView source,
                                                                StringView chunkName)
     {
-        // Cook with the SAME options the runtime Load uses (optimizationLevel 1, debugLevel 2) so
-        // the stored blob is byte-equivalent to compiling in the player - and stays debuggable
+        // Cook with the same options the runtime Load uses (optimizationLevel 1, debugLevel 2) so
+        // the stored blob is byte-equivalent to compiling in the player, and stays debuggable
         // (local names), so consuming bytecode never degrades the editor's step debugger.
         lua_CompileOptions options{};
         options.optimizationLevel = 1;
@@ -2830,7 +2833,7 @@ namespace foundation::script
             return Err(ErrorCode::InvalidArgument);
         }
 
-        // luau_compile never fails outright: a syntax error is ENCODED in the bytecode and only
+        // luau_compile never fails outright: a syntax error is encoded in the bytecode and only
         // surfaces when luau_load runs it. Load it into a throwaway state so a broken source
         // fails the cook here rather than reaching the player as an un-loadable blob.
         String chunkStorage;
@@ -2908,7 +2911,7 @@ namespace foundation::script
     Array<ScriptApiType> LuauScriptManager::DescribeBoundApi() const
     {
         Array<ScriptApiType> surface;
-        // The same reachability closure the emitter binds - so script_api reports exactly the set
+        // The same reachability closure the emitter binds, so script_api reports exactly the set
         // scripts can actually use, identical to the other backends.
         Array<const TypeInfo*> emittable;
         CollectEmittableTypes(Span<const TypeInfo* const>{m_types.Data(), m_types.Size()}, emittable);
@@ -3021,7 +3024,7 @@ export namespace foundation::script
         return core::RefPtr<IScriptManager>(core::MakeRef<LuauScriptManager>(allocator).Get());
     }
 
-    /// The vendored Luau bytecode-format version (LBC_VERSION_TARGET). Bytecode is NOT stable
+    /// The vendored Luau bytecode-format version (LBC_VERSION_TARGET). Bytecode is not stable
     /// across Luau versions, so the cook folds this into its fingerprint: a vendor bump changes
     /// the number and every Luau script pack recooks automatically.
     [[nodiscard]] inline core::u32 LuauBytecodeVersion() noexcept
@@ -3029,19 +3032,19 @@ export namespace foundation::script
         return static_cast<core::u32>(LBC_VERSION_TARGET);
     }
 
-    /// Emits `.d.luau` TYPE DECLARATIONS for the bound engine surface (the agent payoff):
-    /// reflection -> Luau declarations (classes with typed instance methods + properties, static
-    /// tables with `new` + statics, enums as number tables) so luau-analyze / an editor / an agent
-    /// type-checks a script against the REAL API. The object set is the same bounded reachability
-    /// closure the emitter binds, so declarations match the runtime surface exactly. A cook-time
-    /// artifact - regenerate when reflection changes; never committed. Arity families (one script
+    /// Emits `.d.luau` type declarations for the bound engine surface: Luau declarations from
+    /// reflection (classes with typed instance methods and properties, static tables with `new`
+    /// and statics, enums as number tables), so luau-analyze, an editor or an agent type-checks a
+    /// script against the real API. The object set is the same bounded reachability closure the
+    /// emitter binds, so declarations match the runtime surface exactly. A cook-time artifact:
+    /// regenerate when reflection changes; never committed. Arity families (one script
     /// name, several arities) collapse to their first overload (luau-analyze overload types are
     /// not emitted).
     [[nodiscard]] core::String
     EmitLuauDeclarations(core::Span<const core::TypeInfo* const> registeredTypes);
 
-    /// Registers Luau with the backend registry - the ONE line that makes the
-    /// language available; consumers resolve by extension/language, never by type.
+    /// Registers Luau with the backend registry, which makes the language available;
+    /// consumers resolve by extension or language, never by type.
     inline void RegisterLuauScriptBackend()
     {
         ScriptBackendDesc desc;
@@ -3057,8 +3060,8 @@ export namespace foundation::script
     {
         using namespace foundation::core;
 
-        // The bounded reachability closure: the exact object types scripts can use (the one policy
-        // shared with the emitter + DescribeBoundApi), so declarations mirror the runtime surface.
+        // The bounded reachability closure: the exact object types scripts can use (the policy
+        // shared with the emitter and DescribeBoundApi), so declarations match the runtime surface.
         Array<const TypeInfo*> declared;
         CollectEmittableTypes(registeredTypes, declared);
         const Span<const TypeInfo* const> declaredSpan{declared.Data(), declared.Size()};
@@ -3086,12 +3089,12 @@ export namespace foundation::script
             out += u8"}\n\n";
         }
 
-        // Object types: the instance TYPE (`declare class`) + the VALUE table (`new` + statics).
+        // Object types: the instance type (`declare class`) and the value table (`new` and statics).
         for (const TypeInfo* type : declared)
         {
             const StringView name = ViewOf(ScriptTypeName(*type)); // the global it binds as
 
-            // --- instance type: properties + colon methods (self-first) ---
+            // --- instance type: properties and colon methods (self first) ---
             out += u8"declare class ";
             out += name;
             out += u8"\n";
@@ -3165,15 +3168,15 @@ export namespace foundation::script
             }
             out += u8"end\n";
 
-            // --- value table: `new` (first constructor) + static methods, on the global name ---
+            // --- value table: `new` and static methods, on the global name ---
             out += u8"declare ";
             out += name;
             out += u8": {\n";
             if (type->constructorCount > 0)
             {
-                // Every constructor is an overload of `new` - a Luau intersection of function
+                // Every constructor is an overload of `new`, a Luau intersection of function
                 // types (`((a) -> T) & ((b) -> T)`), so a type-checker accepts each real arity
-                // (e.g. Float3.new() AND Float3.new(x, y, z)). A single constructor needs no `&`.
+                // (Float3.new() and Float3.new(x, y, z)). A single constructor needs no `&`.
                 out += u8"    new: ";
                 const bool overloaded = type->constructorCount > 1;
                 for (u32 c = 0; c < type->constructorCount; ++c)

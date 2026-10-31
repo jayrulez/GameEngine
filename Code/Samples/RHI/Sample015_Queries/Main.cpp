@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample015 - GPU Queries. Ported from Sedulous Sample015_Queries.
+/// Sample015 - GPU Queries.
 /// Demonstrates GPU timestamp queries to measure render pass duration.
 /// Prints render pass GPU time to console every 2 seconds.
 
@@ -113,7 +113,7 @@ foundation::core::Status QuerySample::OnInit()
     if (m_device->CreateRenderPipeline(rpd, m_pipeline) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Timestamp query set: 2 queries (before + after render pass).
+    // Timestamp query set: 2 queries (before and after the render pass).
     rhi::QuerySetDesc qsd{};
     qsd.type = rhi::QueryType::Timestamp;
     qsd.count = 2;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Pipeline (E3 of Specs/gui-lab-evolution-3.md): a `.xml` document and a `.css` sheet cooked
+// GUI.Pipeline: a `.xml` document and a `.css` sheet cooked
 // through their validating builders and loaded as products; what cannot be read fails the cook, what
 // was dropped is said with its line; the guids a source names are found; the importer links a
 // dropped file as the asset its extension says.

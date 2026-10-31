@@ -3,11 +3,11 @@
 
 /// foundation.rhi.webgpu:conversions - RHI enum/format -> WebGPU translations.
 ///
-/// The RHI's TextureFormat deliberately follows WebGPU conventions, so the format
-/// table is near-1:1. Genuine gaps map to Undefined and the caller fails with
-/// NotSupported: RGBA16Unorm/Snorm (native-extension formats, not in webgpu.h's
-/// standard enum). AddressMode::ClampToBorder narrows to ClampToEdge (core WebGPU
-/// has no border sampling) - visible difference only on shadow-map edge taps.
+/// The RHI's TextureFormat follows WebGPU conventions, so the format table is near-1:1.
+/// Genuine gaps map to Undefined and the caller fails with NotSupported:
+/// RGBA16Unorm/Snorm (native-extension formats, not in webgpu.h's standard enum).
+/// AddressMode::ClampToBorder narrows to ClampToEdge (core WebGPU has no border
+/// sampling); the difference shows only on shadow-map edge taps.
 
 module;
 #include "Core/Prelude.h"
@@ -131,9 +131,9 @@ export namespace foundation::rhi::webgpu
             out |= WGPUBufferUsage_Indirect;
         }
 
-        // The Map emulation's transport (see :buffer): CPU->GPU shadows upload through
-        // WriteBuffer (CopyDst); GPU->CPU readback maps for real, which WebGPU only
-        // validates as MapRead|CopyDst - nothing else may be combined with MapRead.
+        // The Map emulation's transport (see :buffer): CPU-to-GPU shadows upload through
+        // WriteBuffer (CopyDst); GPU-to-CPU readback maps for real, which WebGPU validates
+        // only as MapRead|CopyDst. Nothing else may be combined with MapRead.
         if (memory == MemoryLocation::CpuToGpu)
         {
             out |= WGPUBufferUsage_CopyDst;
@@ -282,11 +282,11 @@ export namespace foundation::rhi::webgpu
         return WGPUCompareFunction_Always;
     }
 
-    /// True for formats the internal blit pass can render to (2D color targets): the
-    /// ALLOWLIST of WebGPU's renderable color formats. Spelled as an allowlist on purpose -
-    /// the old exclusion list forgot ASTC (block-compressed, never renderable) and the 8-bit
-    /// snorm formats, so a mip-chained texture in one of them had RenderAttachment widened
-    /// onto it and failed at creation. A format this does not name is not blit-capable.
+    /// True for formats the internal blit pass can render to (2D color targets). It is an
+    /// allowlist of WebGPU's renderable color formats, so a format it does not name is not
+    /// blit-capable. ASTC and BC (block-compressed, never renderable) and the 8-bit snorm
+    /// formats must answer false: a mip-chained texture in one of them would have
+    /// RenderAttachment widened onto it and fail at creation.
     [[nodiscard]] inline bool IsBlitCapableFormat(TextureFormat format)
     {
         switch (format)
@@ -338,11 +338,10 @@ export namespace foundation::rhi::webgpu
     }
 
     /// The engine-wide register-space shift table: CBV=0, SRV=+100, UAV=+200,
-    /// Sampler=+300 (shaders::BindingShifts::Standard(), shared with Vulkan - compact
+    /// Sampler=+300 (shaders::BindingShifts::Standard(), shared with Vulkan; compact
     /// because WebGPU validates binding indices against maxBindingsPerBindGroup, 1000
-    /// in browsers). DXC bakes these into the SPIR-V, so layouts must declare the
-    /// same numbers. The cook-time WGSL path (browser) will emit compact bindings
-    /// and bypass shifting entirely.
+    /// in browsers). DXC bakes these into the SPIR-V, so layouts must declare the same
+    /// numbers.
     inline constexpr u32 kSrvBindingShift = 100;
     inline constexpr u32 kUavBindingShift = 200;
     inline constexpr u32 kSamplerBindingShift = 300;

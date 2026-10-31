@@ -4,7 +4,7 @@
 // UI - :shortcut_manager partition
 //
 // Manages global and scoped keyboard shortcuts, owned by UIContext. Dispatch order: focused-view key
-// handlers -> ShortcutManager -> IAcceleratorHandler. Ported from Sedulous.UI/src/Input/ShortcutManager.bf.
+// handlers, then ShortcutManager, then IAcceleratorHandler.
 // View/UIContext-touching bodies (TryDispatch/IsInScope) live in the module impl unit.
 
 module;

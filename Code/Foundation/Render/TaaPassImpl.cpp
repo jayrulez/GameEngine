@@ -3,17 +3,18 @@
 
 /// Foundation::Render - the `:taa` partition.
 ///
-/// Temporal anti-aliasing resolve (ported from Sedulous taa.frag.hlsl). Blends the current jittered
-/// HDR frame with the reprojected history: closest-depth motion selection, a YCoCg variance clip, a
-/// Catmull-Rom history sample, a luma/motion-adaptive blend, and a depth-disocclusion reject. Runs in
-/// linear HDR after the scene is composed (opaque+sky+transparent) and before bloom/tonemap. Per-view
-/// color-history ping-pong (persistent), managed here; jitter is applied to the projection by the caller.
+/// Temporal anti-aliasing resolve. Blends the current jittered HDR frame with the reprojected
+/// history: closest-depth motion selection, a YCoCg variance clip, a Catmull-Rom history sample, a
+/// luma- and motion-adaptive blend, and a depth-disocclusion reject. Runs in linear HDR after the
+/// opaque scene and sky (and AO) and before transparent, bloom and tonemap. The per-view color-history
+/// ping-pong (persistent) is managed here; the caller applies jitter to the projection.
 ///
-/// Depth-disocclusion (ported from Sedulous, hardens ghost-on-reveal): compares this frame's linearized
-/// depth against the previous frame's depth at the reprojected historyUV, rejecting history on a large
-/// relative mismatch (a surface revealed/occluded). We avoid a separate prev-depth ping-pong by carrying
-/// the previous frame's LINEAR depth in the color-history texture's alpha channel (unused downstream);
-/// linear depth in half-float keeps ~0.05% relative precision everywhere vs the 10% reject threshold.
+/// Depth disocclusion (against ghosting where a surface is revealed): compares this frame's
+/// linearized depth with the previous frame's depth at the reprojected historyUV, rejecting history
+/// on a large relative mismatch (a surface revealed or occluded). Rather than a separate prev-depth
+/// ping-pong, the previous frame's linear depth rides in the color-history texture's alpha channel
+/// (unused downstream); linear depth in half-float keeps ~0.05% relative precision everywhere, well
+/// inside the 10% reject threshold.
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +37,7 @@ namespace foundation::render
     Status TaaPass::Initialize()
     {
 
-        // set 0: current(t0) history(t1) motion(t2) depth(t3) + point(s0) linear(s1).
+        // set 0: current (t0), history (t1), motion (t2), depth (t3), point (s0), linear (s1).
         rhi::BindGroupLayoutEntry e[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
@@ -45,7 +46,7 @@ namespace foundation::render
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(1, rhi::ShaderStage::Fragment),
         };
-        // WebGPU annotations (Vulkan/DX12 ignore): t3 receives the DEPTH view,
+        // WebGPU annotations (Vulkan and DX12 ignore them): t3 receives the depth view,
         // sampled only through the point sampler s0.
         e[3].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         e[4].samplerNonFiltering = true;
@@ -76,7 +77,7 @@ namespace foundation::render
             s.magFilter = f;
             s.mipmapFilter = f == rhi::FilterMode::Nearest
                                  ? rhi::MipmapFilterMode::Nearest
-                                 : rhi::MipmapFilterMode::Linear; // see AO note
+                                 : rhi::MipmapFilterMode::Linear; // WebGPU: see AoPass's sampler
             s.addressU = rhi::AddressMode::ClampToEdge;
             s.addressV = rhi::AddressMode::ClampToEdge;
             s.addressW = rhi::AddressMode::ClampToEdge;
@@ -108,7 +109,7 @@ namespace foundation::render
         {
             return current;
         }
-        // Hot reload: rebuild the pipeline when the shader changed (GPU idled on reload).
+        // Hot reload: rebuild the pipeline when the shader changed (the GPU is idle on reload).
         const u64 shaderVersion = m_shaders->Version(u8"taa");
         if (shaderVersion != m_pipelineShaderVersion)
         {
@@ -163,7 +164,7 @@ namespace foundation::render
                                  rhi::ClearColor::Black());
                 b.ReadTexture(current);
                 b.ReadTexture(
-                    histPrev); // last frame's history -> ShaderRead (ordered after its write)
+                    histPrev); // last frame's history, moved to ShaderRead (ordered after its write)
                 b.ReadTexture(motion);
                 b.ReadTexture(depth);
                 b.NeverCull();
@@ -187,7 +188,7 @@ namespace foundation::render
                     });
             });
 
-        hist.cur = prev; // this frame's output (cur) becomes next frame's history-to-read
+        hist.cur = prev; // this frame's output (cur) becomes the history next frame reads
         hist.valid = true;
         return resolved;
     }
@@ -201,7 +202,7 @@ namespace foundation::render
         DestroyHistory(hist);
         for (u32 i = 0; i < 2; ++i)
         {
-            // rgb is the accumulated colour; alpha is NOT colour: it holds the previous frame's
+            // rgb is the accumulated colour; alpha is not colour: it holds the previous frame's
             // linear view depth, which taa.ps reads back for the disocclusion test (a texture
             // channel rather than a second depth ping-pong; nothing downstream reads it).
             rhi::TextureDesc td{};
@@ -230,7 +231,7 @@ namespace foundation::render
         hist.w = w;
         hist.h = h;
         hist.cur = 0;
-        hist.valid = false; // size changed -> history stale
+        hist.valid = false; // size changed, so the history is stale
         return true;
     }
 

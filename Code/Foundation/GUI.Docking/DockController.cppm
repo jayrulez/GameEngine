@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - :controller partition: DockController, a layout and the panels it places (D3 of
-// Specs/gui-lab-evolution-3.md).
+// GUI.Docking - :controller partition: DockController, a layout and the panels it places.
 //
 // Panels are registered by id with a description: the title and icon their tab shows, a factory
 // for their content, what closing them does, whether they can be closed, and where they go when a
 // restored layout does not place them. The controller owns each panel's content once made, so a
-// panel moved to another stack or window, or hidden, keeps it (foundation.ui's port destroyed a
-// panel that had no id on close and crashed reaching it after). Closing a panel follows its policy:
+// panel moved to another stack or window, or hidden, keeps it. Closing a panel follows its policy:
 // Hide keeps its content and its place, Rebuild lets its content go and keeps its place (the
 // factory makes it again when shown), Destroy lets both go. A panel may ask before it closes (a
 // document with unsaved changes), and its title and tab classes change while it is docked.
@@ -17,8 +15,9 @@
 // in. An application follows it (its active document, say) through SetOnActiveChanged.
 //
 // The layout changes through the controller, which tells every DockSpace showing it to show it
-// again. What the user already did in the widgets (a separator dragged, a tab chosen or dragged to
-// another place in its strip) is noted into the layout quietly: the widgets already show it.
+// again. Changes the user already made in the widgets (a separator dragged, a tab chosen or dragged
+// to another place in its strip) are noted into the layout without showing it again, because the
+// widgets already show them.
 
 module;
 #include "Core/Prelude.h"
@@ -37,38 +36,40 @@ export namespace foundation::gui
     enum class DockClosePolicy : u8
     {
         Hide,    ///< content kept, place kept
-        Rebuild, ///< content let go, place kept: made again when shown
-        Destroy, ///< content and place let go
+        Rebuild, ///< content released, place kept; the factory makes it again when shown
+        Destroy, ///< content released and place forgotten
     };
 
     struct DockPanelDescription
     {
         String Id;
-        String Title; ///< its tab's text (the id when empty)
-        String Icon;  ///< its tab's icon, by path
-        String TabClasses; ///< its tab's classes, space-separated (a document's unsaved mark)
+        String Title; ///< the text of the panel's tab (the id when empty)
+        String Icon;  ///< the path of the tab's icon
+        String TabClasses; ///< classes for the tab, space-separated (such as a document's unsaved mark)
         Function<RefPtr<Node>()> Factory;
         DockClosePolicy Close = DockClosePolicy::Hide;
         bool Closable = true;
-        /// Asked before it closes, by its tab, a menu, a key or its window: false keeps it open (a
-        /// document with unsaved changes asks the user first, and closes with CloseNow after). It
-        /// registers no panel while it asks.
+        /// Called before the panel closes, whether the close comes from its tab, a menu, a key or
+        /// its window. Returning false keeps it open: a document with unsaved changes asks the user
+        /// first and then closes with CloseNow. It must not register a panel while it asks.
         Function<bool()> CanClose;
-        DockDefault Default; ///< where it goes when a restored layout does not place it (its Panel: the id)
+        DockDefault Default; ///< where the panel goes when a restored layout does not place it (Panel is the panel's id)
     };
 
-    /// What shows a controller's layout: told to show it again when it changed.
+    /// A widget that shows a controller's layout. The controller tells it to show the layout again
+    /// when the layout changes.
     class IDockView
     {
     public:
         virtual ~IDockView() = default;
         virtual void ShowLayout() = 0;
-        /// The panel a page it shows is for; null for a page it does not show.
+        /// Returns the panel that `page` belongs to, or null for a page this view does not show.
         [[nodiscard]] virtual const String* PanelOf(const Node& page) const = 0;
     };
 
-    /// Where a dragged panel goes when dropped (D4): into a stack's strip at a tab's place, into a
-    /// stack (its middle), beside a stack (its edge band) or along a whole surface's edge.
+    /// Where a dragged panel goes when dropped: into a stack's tab strip at a tab position, into a
+    /// stack (dropped on its middle), beside a stack (dropped on its edge band), or along the edge of
+    /// a whole surface.
     enum class DockDropKind : u8
     {
         Tab,
@@ -81,13 +82,11 @@ export namespace foundation::gui
         DockDropKind Kind = DockDropKind::Middle;
         DockNodeId Stack = kNoDock;      ///< Tab, Middle, Beside: the stack dropped on
         DockSurfaceId Surface = kNoDock; ///< Edge: the surface
-        i32 Index = -1;                  ///< Tab: its place among the stack's tabs, as they are now
+        i32 Index = -1;                  ///< Tab: the position among the stack's tabs before the drop
         DockSide Side = DockSide::Start; ///< Beside, Edge
     };
-    /// A docked panel dropped: the move it is, done on `layout` (a copy, to preview it and say why
-    /// not, or the controller's).
     /// What a dock drag carries: a docked panel (a tab torn out), a whole floating surface (a
-    /// float dragged by its title, D5) or a whole stack (its strip's grip).
+    /// float dragged by its title bar) or a whole stack (dragged by the grip on its strip).
     struct DockDragged
     {
         String Panel;
@@ -96,11 +95,13 @@ export namespace foundation::gui
         [[nodiscard]] bool IsSurface() const noexcept { return Surface != kNoDock; }
         [[nodiscard]] bool IsStack() const noexcept { return Stack != kNoDock; }
     };
-    /// The drag type of a whole floating surface; its value the surface's id.
+    /// The drag type of a whole floating surface; the drag's value is the surface's id.
     inline constexpr const char8_t* kDockSurfaceDragType = u8"gui/dock-surface";
-    /// The drag type of a whole stack; its value the stack's id.
+    /// The drag type of a whole stack; the drag's value is the stack's id.
     inline constexpr const char8_t* kDockStackDragType = u8"gui/dock-stack";
 
+    /// Applies the drop of a docked panel to `layout` as the move it stands for. `layout` is either
+    /// a copy, to preview the move and report why it is refused, or the controller's own layout.
     inline DockOutcome ApplyDrop(DockLayout& layout, core::StringView panel, const DockDrop& drop)
     {
         switch (drop.Kind)
@@ -108,7 +109,8 @@ export namespace foundation::gui
         case DockDropKind::Tab:
         {
             i32 index = drop.Index;
-            // Among its own tabs: counted with it where it is, so a place past it is one less.
+            // Dropped among its own tabs: the index counts the panel at its current place, so an
+            // index past it is one less once the panel is taken out.
             if (const DockNode* stack = layout.FindNode(drop.Stack); stack != nullptr && layout.StackOf(panel) == drop.Stack)
                 for (usize i = 0; i < stack->Panels.Size(); ++i)
                     if (stack->Panels[i].AsView() == panel && index > static_cast<i32>(i))
@@ -121,9 +123,10 @@ export namespace foundation::gui
         }
         return DockOutcome::Refuse(u8"no such drop");
     }
-    /// A drop of what a drag carries: a panel as above; a floating surface docked whole (into the
-    /// stack over its strip or its middle, beside it, along the surface's edge); a stack moved whole
-    /// the same ways (at a tab's place over a strip).
+    /// Applies the drop of whatever a drag carries. A panel is handled as above. A floating surface
+    /// docks whole: into the stack when dropped over its strip or middle, beside the stack, or along
+    /// the surface's edge. A stack moves whole the same ways, at a tab position when dropped over a
+    /// strip.
     inline DockOutcome ApplyDrop(DockLayout& layout, const DockDragged& dragged, const DockDrop& drop)
     {
         if (dragged.IsStack())
@@ -145,7 +148,8 @@ export namespace foundation::gui
         }
         return DockOutcome::Refuse(u8"no such drop");
     }
-    /// The panels a drag carries, as `layout` has them (a surface's, in its stacks' order).
+    /// Returns the panels a drag carries, as `layout` has them; for a surface, in the order of its
+    /// stacks.
     [[nodiscard]] inline Array<String> PanelsOf(const DockLayout& layout, const DockDragged& dragged)
     {
         Array<String> out;
@@ -175,18 +179,19 @@ export namespace foundation::gui
         DockController(const DockController&) = delete;
         DockController& operator=(const DockController&) = delete;
 
-        /// A panel the layout may place; false when its id is empty or taken.
+        /// Registers a panel the layout may place. Returns false when its id is empty or taken.
         bool Register(DockPanelDescription description)
         {
             if (description.Id.IsEmpty() || Describe(description.Id.AsView()) != nullptr)
                 return false;
             description.Default.Panel = description.Id;
             m_panels.PushBack(core::Move(description));
-            ShowEverywhere(); // a placeholder for it may show it now
+            ShowEverywhere(); // a placeholder left for the panel may show it now
             return true;
         }
-        /// A panel let go for good (a document closed): out of the layout without asking, its
-        /// content and its place forgotten, its description gone. False for one not registered.
+        /// Removes a panel for good (for example when a document is closed): takes it out of the
+        /// layout without asking, forgets its content and its place, and drops its description.
+        /// Returns false for a panel that is not registered.
         bool Unregister(core::StringView panel)
         {
             usize index = m_panels.Size();
@@ -215,7 +220,8 @@ export namespace foundation::gui
         }
 
         [[nodiscard]] const DockLayout& GetLayout() const noexcept { return m_layout; }
-        /// Changes the layout through `edit`; when it did something, every view shows it.
+        /// Changes the layout through `edit`; when the edit changed something, every view shows the
+        /// new layout.
         DockOutcome Edit(const Function<DockOutcome(DockLayout&)>& edit)
         {
             DockOutcome outcome = edit(m_layout);
@@ -223,7 +229,7 @@ export namespace foundation::gui
                 ShowEverywhere();
             return outcome;
         }
-        /// Closes a docked panel as its description says, once it agrees (its CanClose).
+        /// Closes a docked panel as its description's policy says, once its CanClose agrees.
         DockOutcome Close(core::StringView panel)
         {
             const DockPanelDescription* description = Describe(panel);
@@ -233,8 +239,8 @@ export namespace foundation::gui
                 return DockOutcome::Refuse(u8"it asked to stay open");
             return CloseNow(panel);
         }
-        /// Closes a docked panel as its description says without asking it (what a panel that
-        /// asked the user calls once they agreed).
+        /// Closes a docked panel as its description's policy says without calling CanClose. A panel
+        /// that asked the user calls this once the user agrees.
         DockOutcome CloseNow(core::StringView panel)
         {
             const DockPanelDescription* description = Describe(panel);
@@ -269,7 +275,8 @@ export namespace foundation::gui
                                          : layout.InsertAtEdge(panel, layout.MainSurface(), where.Side, where.Share);
                 });
         }
-        /// A restored layout taken (DockLayout::Adopt with the registered panels' default places).
+        /// Adopts a restored layout through DockLayout::Adopt, with the registered panels' default
+        /// places.
         DockOutcome Adopt(DockLayout read, Span<const Rectangle> screens = {})
         {
             Array<DockDefault> defaults;
@@ -281,8 +288,8 @@ export namespace foundation::gui
             return outcome;
         }
 
-        /// A registered panel's tab text, shown at once wherever it is docked; false for a panel
-        /// not registered.
+        /// Sets a registered panel's tab text, shown at once wherever it is docked. Returns false for
+        /// a panel that is not registered.
         bool SetTitle(core::StringView panel, core::StringView title)
         {
             DockPanelDescription* description = Find(panel);
@@ -295,8 +302,8 @@ export namespace foundation::gui
             }
             return true;
         }
-        /// A registered panel's tab classes (space-separated), replacing the ones before, shown at
-        /// once wherever it is docked; false for a panel not registered.
+        /// Sets a registered panel's tab classes (space-separated), replacing the previous ones and
+        /// shown at once wherever it is docked. Returns false for a panel that is not registered.
         bool SetTabClasses(core::StringView panel, core::StringView classes)
         {
             DockPanelDescription* description = Find(panel);
@@ -311,15 +318,18 @@ export namespace foundation::gui
         }
 
         // === The active panel ===
-        /// The panel the user works in: the chosen one of the stack the focus was last in (empty
-        /// before the focus was in any). It follows a tab chosen in that stack, the focus going into
-        /// another stack, and a close: the stack's next chosen panel, or none when the stack went.
+        /// Returns the panel the user works in: the chosen panel of the stack the focus was last in,
+        /// or empty before the focus has been in any stack. It changes when a tab is chosen in that
+        /// stack or the focus goes into another stack. When the active panel closes, the stack's next
+        /// chosen panel becomes active, or none does when the stack is gone.
         [[nodiscard]] core::StringView ActivePanel() const noexcept { return m_active.AsView(); }
-        /// Told each time the active panel changes (its id, empty when none is).
+        /// Sets the handler called each time the active panel changes, with the panel's id (empty
+        /// when no panel is active).
         void SetOnActiveChanged(Function<void(core::StringView)> handler) { m_onActiveChanged = core::Move(handler); }
 
-        /// A registered panel's content: made by its factory the first time it is asked for, kept
-        /// after; null for a panel not registered (or one whose factory makes none).
+        /// Returns a registered panel's content. The factory makes it the first time it is asked for
+        /// and the controller keeps it from then on. Returns null for a panel that is not registered
+        /// or whose factory makes nothing.
         RefPtr<Node> Content(core::StringView panel)
         {
             for (const Made& made : m_contents)
@@ -333,7 +343,7 @@ export namespace foundation::gui
                 m_contents.PushBack(Made{String(panel), content});
             return content;
         }
-        /// Whether a panel's content is made (and kept).
+        /// Whether a panel's content has been made and is kept.
         [[nodiscard]] bool HasContent(core::StringView panel) const noexcept
         {
             for (const Made& made : m_contents)
@@ -342,7 +352,7 @@ export namespace foundation::gui
             return false;
         }
 
-        // === What the widgets already show, noted quietly ===
+        // === Changes the widgets already show, noted without showing the layout again ===
         void NoteWeights(DockNodeId split, Span<const f32> weights) { (void)m_layout.SetWeights(split, weights); }
         void NoteActive(core::StringView panel)
         {
@@ -351,7 +361,7 @@ export namespace foundation::gui
             if (stack != kNoDock && stack == m_activeStack)
                 SetActive(panel, stack);
         }
-        /// The focus went into a stack: its chosen panel is the active one.
+        /// Called when the focus goes into a stack: its chosen panel becomes the active one.
         void NoteFocused(DockNodeId stack)
         {
             const DockNode* node = m_layout.FindNode(stack);
@@ -370,7 +380,8 @@ export namespace foundation::gui
             }
         }
 
-        /// The panel a page some view shows is for (a dragged tab's); null when none shows it.
+        /// Returns the panel that a page shown by some view belongs to (used for a dragged tab), or
+        /// null when no view shows the page.
         [[nodiscard]] const String* PanelShownBy(const Node& page) const
         {
             for (const IDockView* view : m_views)
@@ -394,7 +405,7 @@ export namespace foundation::gui
                 {
                     m_views.RemoveAt(i);
                     if (m_showing && static_cast<i64>(i) <= m_showAt)
-                        --m_showAt; // the pass goes on with the view that took its place
+                        --m_showAt; // the pass continues with the view that moved into the removed one's slot
                     return;
                 }
         }
@@ -419,10 +430,11 @@ export namespace foundation::gui
                 return;
             m_active = String(panel);
             if (m_onActiveChanged)
-                m_onActiveChanged(m_active.AsView()); // a handler may change the layout: nothing after
+                m_onActiveChanged(m_active.AsView()); // the handler may change the layout, so nothing runs after it
         }
-        // After a change: the active panel moved stays active (in its new stack); one closed gives
-        // way to its stack's chosen panel, or to none when its stack went.
+        // Keeps the active panel right after a change. An active panel that moved stays active in
+        // its new stack. One that closed gives way to its stack's chosen panel, or to none when the
+        // stack is gone.
         void KeepActive()
         {
             if (m_active.IsEmpty())
@@ -455,9 +467,9 @@ export namespace foundation::gui
                     return;
                 }
         }
-        // Each view shows the layout. A view may make or end others as it does (a floating surface's
-        // window and its dock space): one made joins the pass, one ended leaves it; a change asked
-        // for during the pass runs it again after.
+        // Has each view show the layout. A view may make or end other views while it does (a
+        // floating surface's window and its dock space): a view made during the pass joins it, and
+        // a view ended leaves it. A change requested during the pass runs the pass again afterwards.
         void ShowEverywhere()
         {
             if (m_showing)
@@ -483,8 +495,8 @@ export namespace foundation::gui
         String m_active;                 // the active panel (empty: none)
         DockNodeId m_activeStack = kNoDock; // the stack it is in, or was in when it closed
         Function<void(core::StringView)> m_onActiveChanged;
-        bool m_showing = false;   // a pass of ShowEverywhere is on
-        bool m_showAgain = false; // the layout changed during it
-        i64 m_showAt = 0;         // the view it is at
+        bool m_showing = false;   // a ShowEverywhere pass is running
+        bool m_showAgain = false; // the layout changed during the pass
+        i64 m_showAt = 0;         // index of the view the pass is at
     };
 }

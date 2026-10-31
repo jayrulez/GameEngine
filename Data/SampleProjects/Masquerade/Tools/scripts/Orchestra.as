@@ -1,7 +1,8 @@
-// Orchestra - on the dais: plays the evening's cues in turn, each for its while, and tells the
-// ball (the "Cue" event: 0 stroll, 1 gather, 2 dance). Guests follow the cue (Guest.as); a
-// player who does not stands out. The cue is replicated, so a joining player hears the same music:
-// each peer plays the cue's piece (sounds.py: a waltz, an air, a dance), crossfading from the last.
+// Orchestra: sits on the dais and plays the evening's cues in turn, each for its own duration, and
+// tells the ball through the "Cue" event (0 stroll, 1 gather, 2 dance). Guests follow the cue
+// (Guest.as); a player who does not stands out. The cue is replicated, so a joining player hears
+// the same music: each peer plays the cue's piece (from sounds.py: a waltz, an air, a dance),
+// crossfading from the previous one.
 
 const int kStroll = 0;
 const int kGather = 1;
@@ -45,7 +46,7 @@ class Orchestra
                 m_left = (cue == kGather) ? gatherSeconds : ((cue == kDanceCue) ? danceSeconds : strollSeconds);
             }
         }
-        if (cue != m_told) // every peer tells its own ball when the (replicated) cue changes
+        if (cue != m_told) // every peer tells its own ball when the replicated cue changes
         {
             m_told = cue;
             self.scene.events.emit("Cue", cue);

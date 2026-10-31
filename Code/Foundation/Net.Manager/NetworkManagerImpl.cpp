@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Net.Manager - implementation unit: the REFLECT_* body for the Net facade +
-// the registration (kept out of the interface unit per the GCC gcm-cluster rule).
+// Foundation::Net.Manager - implementation unit: the REFLECT_* body for the Net facade and its
+// registration, kept out of the interface unit as reflection bodies are throughout the engine.
 
 module;
 #include "Core/Prelude.h"
@@ -48,7 +48,7 @@ namespace foundation::net
         builder.Method<&Net::rpcTo>("rpcTo", {"player", "name"});                         // host: one player
         builder.Method<&Net::rpcNumberTo>("rpcNumberTo", {"player", "name", "value"});
         builder.Method<&Net::rpcTextTo>("rpcTextTo", {"player", "name", "text"});
-        builder.Method<&Net::localPlayer>("localPlayer"); // 0 = the host, -1 offline / not welcomed yet
+        builder.Method<&Net::localPlayer>("localPlayer"); // 0 = the host, -1 offline or not yet welcomed
         builder.Method<&Net::isMine>("isMine", {"entity"});
         builder.Method<&Net::onJoin>("onJoin", {"handler"});
         builder.Method<&Net::onLeave>("onLeave", {"handler"});
@@ -61,7 +61,7 @@ namespace foundation::net
         {
             GlobalTypeRegistry().Register(Net::StaticType());
             // Net.on's handler shapes, so an AngelScript game passes one without declaring it.
-            RegisterDelegateShape(u8"void NetHandler(int sender)"); // onJoin / onLeave take one too (the player)
+            RegisterDelegateShape(u8"void NetHandler(int sender)"); // onJoin and onLeave take one too (the player)
             RegisterDelegateShape(u8"void NetNumberHandler(int sender, double value)");
             RegisterDelegateShape(u8"void NetTextHandler(int sender, const string &in text)");
             RegisterExtraFacadeName(
@@ -77,11 +77,11 @@ namespace foundation::net
     {
         if (!CanHost())
         {
-            return {}; // browsers cannot listen (no UDP bind, no TCP accept) - reject cleanly
+            return {}; // browsers cannot listen (no UDP bind, no TCP accept): reject cleanly
         }
         if (webSocketPort != 0)
         {
-            // Hybrid host: native peers over UDP + browser peers through the WS gateway,
+            // Hybrid host: native peers over UDP and browser peers through the WebSocket gateway,
             // one session behind one datagram socket.
             UniquePtr<WebSocketHybridSocket> hybrid =
                 MakeUnique<WebSocketHybridSocket>(allocator, allocator, port, webSocketPort, webSocketTls);
@@ -103,7 +103,7 @@ namespace foundation::net
         if (!socket->IsOpen())
         {
             return {};
-        } // caller logs + runs offline
+        } // caller logs and runs offline
         UniquePtr<NetworkManager> manager = MakeUnique<NetworkManager>(
             allocator, static_cast<UniquePtr<UdpSocket>&&>(socket), config);
         manager->StartServer(dedicated);
@@ -138,7 +138,7 @@ namespace foundation::net
         const bool addressed = ParseWebSocketAddress(host, port, webSocket);
 #if PLATFORM_WEB
         // Browsers have no UDP: a bare host is joined over a WebSocket to the host's gateway
-        // (`port` here is the host's WEB SOCKET port), secure when the page is.
+        // (`port` here is the host's WebSocket port), secure when the page is.
         (void)tls;
         (void)trust;
         if (!addressed)

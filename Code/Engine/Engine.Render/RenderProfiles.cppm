@@ -107,7 +107,7 @@ export namespace engine::render
         IAllocator* m_allocator;
     };
 
-    // Registers the cooked records + products (content-DB construction by type name). Idempotent.
+    // Registers the cooked records and products (content-DB construction by type name). Idempotent.
     inline void RegisterRenderProfileResources()
     {
         GlobalTypeRegistry().Register(EnvironmentProfileSource::StaticType());

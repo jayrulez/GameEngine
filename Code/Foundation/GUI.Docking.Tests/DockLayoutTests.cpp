@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - the dock layout as data (D1 of Specs/gui-lab-evolution-3.md): panels tabbed, docked
-// beside a stack and at a surface's edge; moved, floated, closed and shown where they were; shares
-// that survive a child going; splits of one axis merged; refusals that change nothing; and a long
-// run of random operations after each of which the layout still holds together; a floating surface
-// docked whole (D5); a stack moved whole (its strip's grip).
+// GUI.Docking - the dock layout as data. Panels are tabbed, docked beside a stack and at a
+// surface's edge, then moved, floated, closed and shown where they were. Shares survive a child
+// being removed, nested splits of one axis are merged, and refusals change nothing. A floating
+// surface docks whole, and a stack moves whole (as from its strip's grip). A long run of random
+// operations checks that the layout still holds together after each one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -58,14 +58,15 @@ TEST_CASE("dock layout: tabs, a stack beside, a surface's edge; splits of one ax
     CHECK(root->Axis == DockAxis::Horizontal);
     REQUIRE(root->Children.Size() == 2u);
     CHECK(root->Weights[0] == doctest::Approx(0.25f));
-    // Another beside the central stack on the same axis joins the same split, parting its share.
+    // Another panel beside the central stack on the same axis joins the same split and takes part
+    // of the central stack's share.
     CHECK(layout.InsertBeside(SV(u8"inspector"), central, DockSide::End, 0.4f).Ok());
     root = &Root(layout, layout.MainSurface());
     REQUIRE(root->Children.Size() == 3u);
     CHECK(root->Weights[0] == doctest::Approx(0.25f));
-    CHECK(root->Weights[1] == doctest::Approx(0.45f)); // 0.75 less its 0.4
+    CHECK(root->Weights[1] == doctest::Approx(0.45f)); // 0.75 minus 0.4 of it
     CHECK(root->Weights[2] == doctest::Approx(0.30f));
-    // The console along the whole bottom: a vertical split over all of it.
+    // The console along the whole bottom makes a vertical split over everything.
     CHECK(layout.InsertAtEdge(SV(u8"console"), layout.MainSurface(), DockSide::Bottom, 0.2f).Ok());
     root = &Root(layout, layout.MainSurface());
     CHECK(root->Axis == DockAxis::Vertical);
@@ -82,12 +83,12 @@ TEST_CASE("dock layout: a child that goes gives its share to its neighbours; a s
     REQUIRE(layout.InsertBeside(SV(u8"b"), central, DockSide::End, 0.5f).Ok()); // 0.2, 0.4, 0.4
     const f32 shares[3] = {0.2f, 0.3f, 0.5f};
     REQUIRE(layout.SetWeights(Root(layout, layout.MainSurface()).Id, core::Span<const f32>(shares, 3)).Ok());
-    CHECK(layout.Close(SV(u8"b")).Ok()); // its 0.5 goes to the central stack, its one neighbour
+    CHECK(layout.Close(SV(u8"b")).Ok()); // its 0.5 goes to its only neighbour, the central stack
     const DockNode& root = Root(layout, layout.MainSurface());
     REQUIRE(root.Children.Size() == 2u);
     CHECK(root.Weights[0] == doctest::Approx(0.2f)); // a keeps its own
     CHECK(root.Weights[1] == doctest::Approx(0.8f));
-    CHECK(layout.Close(SV(u8"a")).Ok()); // the split of one gives way to the central stack
+    CHECK(layout.Close(SV(u8"a")).Ok()); // the split left with one child is replaced by the central stack
     CHECK(layout.FindSurface(layout.MainSurface())->Root == central);
     Holds(layout);
 }
@@ -107,7 +108,7 @@ TEST_CASE("dock layout: moved between stacks, reordered among its own tabs, refu
     const DockOutcome alone = layout.MoveBeside(SV(u8"two"), two, DockSide::Top);
     CHECK_FALSE(alone.Ok());
     CHECK(layout.StackOf(SV(u8"two")) == two); // refused: nothing changed
-    CHECK(layout.MoveToTab(SV(u8"two"), central).Ok()); // back: its stack goes
+    CHECK(layout.MoveToTab(SV(u8"two"), central).Ok()); // moved back, so its stack is removed
     CHECK(layout.FindNode(two) == nullptr);
     Holds(layout);
 }
@@ -123,11 +124,11 @@ TEST_CASE("dock layout: floating surfaces are whole trees, and go when emptied")
     const DockNodeId stack = layout.StackOf(SV(u8"profiler"));
     CHECK(layout.SurfaceOf(stack) == floating);
     CHECK(layout.FindSurface(floating)->Bounds.width == doctest::Approx(400.0f));
-    // Docked into: a tab, and a stack beside.
+    // Dock into the float: a tab, and a stack beside.
     CHECK(layout.InsertTab(SV(u8"memory"), stack).Ok());
     CHECK(layout.InsertBeside(SV(u8"counters"), stack, DockSide::Bottom).Ok());
     CHECK(layout.SurfaceOf(layout.StackOf(SV(u8"counters"))) == floating);
-    // Everything moved out: the surface goes.
+    // With everything moved out, the surface is removed.
     CHECK(layout.MoveToTab(SV(u8"profiler"), central).Ok());
     CHECK(layout.MoveToTab(SV(u8"memory"), central).Ok());
     CHECK(layout.MoveToEdge(SV(u8"counters"), layout.MainSurface(), DockSide::End).Ok());
@@ -158,7 +159,7 @@ TEST_CASE("dock layout: a floating surface docks whole: its panels as tabs, its 
         CHECK(stack.Panels[1] == SV(u8"profiler"));
         CHECK(stack.Panels[2] == SV(u8"memory"));
         CHECK(stack.Panels[3] == SV(u8"counters"));
-        CHECK(stack.Panels[stack.Active] == SV(u8"profiler")); // the float's first stack's active
+        CHECK(stack.Panels[stack.Active] == SV(u8"profiler")); // the active panel of the float's first stack
         CHECK(layout.FindSurface(floating) == nullptr);
         Holds(layout);
     }
@@ -174,7 +175,7 @@ TEST_CASE("dock layout: a floating surface docks whole: its panels as tabs, its 
         REQUIRE(root.Children.Size() == 2u);
         CHECK(root.Children[0] == central);
         CHECK(root.Weights[1] == doctest::Approx(0.4f));
-        const DockNode& moved = *layout.FindNode(root.Children[1]); // the float's own split, kept
+        const DockNode& moved = *layout.FindNode(root.Children[1]); // the float's own split is kept
         CHECK(moved.Axis == DockAxis::Horizontal);
         CHECK(moved.Children.Size() == 2u);
         CHECK(layout.SurfaceOf(layout.StackOf(SV(u8"counters"))) == layout.MainSurface());
@@ -206,15 +207,15 @@ TEST_CASE("dock layout: a floating surface docks whole: its panels as tabs, its 
         CHECK_FALSE(layout.DockSurfaceInto(floating, layout.CentralStack()).Ok()); // it holds one panel
         REQUIRE(layout.SetStackFlags(inside, DockStackLocked).Ok());
         REQUIRE(layout.SetStackFlags(layout.CentralStack(), DockStackCentral).Ok());
-        CHECK_FALSE(layout.DockSurfaceInto(floating, layout.CentralStack()).Ok()); // a locked stack's panels stay
-        CHECK(layout.DockSurfaceBeside(floating, layout.CentralStack(), DockSide::End).Ok()); // whole, its stacks kept
+        CHECK_FALSE(layout.DockSurfaceInto(floating, layout.CentralStack()).Ok()); // the panels of a locked stack stay
+        CHECK(layout.DockSurfaceBeside(floating, layout.CentralStack(), DockSide::End).Ok()); // docked whole, with its stacks kept
         Holds(layout);
     }
 }
 
 TEST_CASE("dock layout: a stack moves whole: into another as its tabs, beside one, along an edge, floated")
 {
-    // hierarchy | scene (central), with the console, log under the scene.
+    // hierarchy | scene (central), with a stack of console and log under the scene.
     const auto make = [](DockLayout& layout)
     {
         REQUIRE(layout.InsertTab(SV(u8"scene"), layout.CentralStack()).Ok());
@@ -234,8 +235,8 @@ TEST_CASE("dock layout: a stack moves whole: into another as its tabs, beside on
         CHECK(into.Panels[0] == SV(u8"console"));
         CHECK(into.Panels[1] == SV(u8"log"));
         CHECK(into.Panels[2] == SV(u8"hierarchy"));
-        CHECK(into.Panels[into.Active] == SV(u8"console")); // its active panel, active there
-        CHECK(layout.FindNode(bottom) == nullptr); // emptied, gone
+        CHECK(into.Panels[into.Active] == SV(u8"console")); // the stack's active panel is active there
+        CHECK(layout.FindNode(bottom) == nullptr); // emptied, so removed
         Holds(layout);
     }
     {
@@ -244,13 +245,13 @@ TEST_CASE("dock layout: a stack moves whole: into another as its tabs, beside on
         const DockNodeId bottom = layout.StackOf(SV(u8"console"));
         const DockNodeId hierarchy = layout.StackOf(SV(u8"hierarchy"));
         REQUIRE(layout.MoveStackBeside(bottom, hierarchy, DockSide::Bottom, 0.4f).Ok());
-        CHECK(layout.StackOf(SV(u8"log")) == bottom); // the same stack, moved: its id kept
+        CHECK(layout.StackOf(SV(u8"log")) == bottom); // the same stack moved, so its id is kept
         const DockNode& split = *layout.FindNode(layout.FindNode(bottom)->Parent);
         CHECK(split.Axis == DockAxis::Vertical);
         CHECK(split.Children[0] == hierarchy);
         CHECK(split.Children[1] == bottom);
         CHECK(split.Weights[1] == doctest::Approx(0.4f));
-        // The scene, alone where the two were stacked, no longer in a vertical split.
+        // The scene is alone where the two stacks were, no longer in a vertical split.
         CHECK(layout.FindNode(layout.FindNode(layout.CentralStack())->Parent)->Axis == DockAxis::Horizontal);
         Holds(layout);
     }
@@ -278,14 +279,15 @@ TEST_CASE("dock layout: a stack moves whole: into another as its tabs, beside on
         CHECK(made->Bounds.width == doctest::Approx(300.0f));
         CHECK(layout.FindNode(bottom)->Panels.Size() == 2u);
         Holds(layout);
-        // Alone in its float: it floats already; docked back beside the scene, the float goes.
+        // A stack alone in its float is floating already and cannot float again; docked back beside
+        // the scene, the float is removed.
         CHECK_FALSE(layout.FloatStack(bottom, core::Rectangle{0.0f, 0.0f, 300.0f, 200.0f}).Ok());
         REQUIRE(layout.MoveStackBeside(bottom, layout.CentralStack(), DockSide::Top).Ok());
         CHECK(layout.FindSurface(floating) == nullptr);
         Holds(layout);
     }
     {
-        // The central stack's panels go; it stays, empty, where it was.
+        // The central stack's panels move out; the stack itself stays where it was, empty.
         DockLayout layout;
         make(layout);
         REQUIRE(layout.InsertTab(SV(u8"game"), layout.CentralStack()).Ok());
@@ -328,7 +330,7 @@ TEST_CASE("dock layout: a closed panel is shown where it was, or near its neighb
     const DockNodeId left = layout.StackOf(SV(u8"outline"));
     REQUIRE(layout.InsertTab(SV(u8"assets"), left).Ok());
     REQUIRE(layout.InsertTab(SV(u8"history"), left).Ok());
-    // Among its stack's tabs again, at its place.
+    // Shown again among its stack's tabs, at its old position.
     REQUIRE(layout.Close(SV(u8"assets")).Ok());
     CHECK(layout.FindHidden(SV(u8"assets")) != nullptr);
     CHECK(layout.StackOf(SV(u8"assets")) == kNoDock);
@@ -336,21 +338,23 @@ TEST_CASE("dock layout: a closed panel is shown where it was, or near its neighb
     CHECK(layout.StackOf(SV(u8"assets")) == left);
     CHECK(layout.FindNode(left)->Panels[1] == SV(u8"assets"));
     CHECK(layout.FindHidden(SV(u8"assets")) == nullptr);
-    // Its stack gone: beside a panel that was about it.
+    // With its stack gone, it goes beside a panel that was around it.
     REQUIRE(layout.Close(SV(u8"outline")).Ok());
     REQUIRE(layout.Close(SV(u8"assets")).Ok());
-    REQUIRE(layout.Close(SV(u8"history")).Ok()); // the stack goes
+    REQUIRE(layout.Close(SV(u8"history")).Ok()); // the stack is removed
     CHECK(layout.FindNode(left) == nullptr);
-    // Closed alone, its neighbours were those beside its stack (the scene): beside them again.
+    // Closed alone, its neighbours were the panels beside its stack (the scene), so it goes beside
+    // them again.
     REQUIRE(layout.Show(SV(u8"history")).Ok());
     const DockNodeId history = layout.StackOf(SV(u8"history"));
     CHECK(history != central);
     CHECK(layout.FindNode(history)->Parent == layout.FindNode(central)->Parent);
-    // Its stack's tabs gone too, outline goes beside one of them (history) docked again.
+    // With its stack's other tabs gone too, outline goes beside one of them (history), which is
+    // docked again.
     REQUIRE(layout.Show(SV(u8"outline")).Ok());
     CHECK(layout.StackOf(SV(u8"outline")) != history);
     CHECK(layout.FindNode(layout.StackOf(SV(u8"outline")))->Parent == layout.FindNode(history)->Parent);
-    // None of its neighbours docked: the central stack.
+    // With none of its neighbours docked, it goes in the central stack.
     REQUIRE(layout.Close(SV(u8"history")).Ok());
     REQUIRE(layout.Close(SV(u8"outline")).Ok());
     REQUIRE(layout.Close(SV(u8"scene")).Ok());
@@ -369,10 +373,10 @@ TEST_CASE("dock layout: flags refuse, and a refusal changes nothing")
     CHECK_FALSE(layout.InsertTab(SV(u8"x"), central).Ok());
     CHECK_FALSE(layout.InsertBeside(SV(u8"x"), central, DockSide::End).Ok());
     CHECK_FALSE(layout.Close(SV(u8"game")).Ok());
-    CHECK_FALSE(layout.MoveToTab(SV(u8"game"), central, 0).Ok()); // its stack is locked: it stays
+    CHECK_FALSE(layout.MoveToTab(SV(u8"game"), central, 0).Ok()); // its stack is locked, so it stays
     CHECK_FALSE(layout.SetStackFlags(central, 0).Ok()); // the central stack stays the central one
     CHECK_FALSE(layout.InsertTab(SV(u8""), central).Ok());
-    CHECK(layout.InsertAtEdge(SV(u8"x"), layout.MainSurface(), DockSide::Top).Ok()); // the surface's edge is not beside it
+    CHECK(layout.InsertAtEdge(SV(u8"x"), layout.MainSurface(), DockSide::Top).Ok()); // the surface's edge is not beside the central stack, so NoSplit allows it
     CHECK_FALSE(layout.InsertTab(SV(u8"x"), layout.StackOf(SV(u8"x"))).Ok()); // docked already
     Holds(layout);
 }
@@ -391,7 +395,7 @@ TEST_CASE("dock layout: a maximized stack, dropped when it goes")
 
 TEST_CASE("dock layout: a long run of random operations, the layout holding together after each")
 {
-    // A small generator of its own: the same runs every time.
+    // A small local random generator, so every run is the same.
     const u32 seeds[] = {12345u, 1u, 777u, 2026u, 31337u};
     for (const u32 seed : seeds)
     {
@@ -408,7 +412,7 @@ TEST_CASE("dock layout: a long run of random operations, the layout holding toge
         for (int step = 0; step < 4000; ++step)
         {
             const core::StringView panel(names[next(10)]);
-            // A stack to act on: one that is there, or the central one.
+            // Pick a stack to act on: one that exists, or the central one.
             DockNodeId stack = layout.CentralStack();
             const core::Array<DockNode>& nodes = layout.Nodes();
             const DockNode& pick = nodes[next(static_cast<u32>(nodes.Size()))];
@@ -418,7 +422,7 @@ TEST_CASE("dock layout: a long run of random operations, the layout holding toge
             const DockSide side = sides[next(4)];
             const f32 share = 0.1f + 0.1f * static_cast<f32>(next(8));
             DockOutcome outcome;
-            // A floating surface to dock whole, when there is one.
+            // Pick a floating surface to dock whole, when there is one.
             DockSurfaceId floating = kNoDock;
             for (const DockSurface& each : layout.Surfaces())
                 if (each.Kind == DockSurfaceKind::Floating)

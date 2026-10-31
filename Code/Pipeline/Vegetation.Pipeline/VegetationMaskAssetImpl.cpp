@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// vegetation.pipeline implementation: the asset's reflection body + RTTI definition (kept out of
-// the interface per GCC module hygiene).
+// vegetation.pipeline implementation: the asset's reflection body and RTTI definition, kept out
+// of the module interface.
 
 module;
 #include "Core/Prelude.h"

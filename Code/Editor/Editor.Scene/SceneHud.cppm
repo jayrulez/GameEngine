@@ -3,21 +3,20 @@
 
 // Editor::Scene - :scene_hud partition.
 //
-// The scene view's HUD (Documentation/Specs/editor-gui.md, 5.3, layer 5, part 2): GUI over the
-// viewport in fixed zones, so nothing meets in a corner, in the editor's fonts rather than the
-// debug draw's bitmap one.
-//   - top start, the chips (ruling 22), each saying what is on and in the accent while it is off its
-//     default: the projection (perspective or orthographic, the six axis views), the shading (Lit,
-//     Unlit, the debug terms, the graph's textures through the picker, the effects as what is on,
-//     MSAA; ruling 21), the overlays (the grid and its plane, markers, colliders, the LOD tint,
-//     the stats);
-//   - top end, the stats (frames a second and their time) and the view gizmo, which turns with the
-//     camera: a knob looks along its axis, the centre switches the projection (which one is on,
-//     the projection chip says);
-//   - bottom start, the zoom readout a moment after a wheel zoom, and the active tool's status
-//     (the select tool's in parts: its mode, its space, its snap, what is selected).
+// The scene view's HUD: GUI over the viewport in fixed zones, so nothing meets in a corner, drawn in
+// the editor's fonts rather than the debug draw's bitmap one.
+//   - Top start: the chips, each saying what is on and drawn in the accent colour while it is off
+//     its default. They cover the projection (perspective or orthographic, the six axis views),
+//     the shading (Lit, Unlit, the debug terms, the graph's textures through the picker, the
+//     effects that are on, MSAA) and the overlays (the grid and its plane, markers, colliders, the
+//     LOD tint, the stats).
+//   - Top end: the stats (frames a second and their time) and the view gizmo, which turns with
+//     the camera. A knob looks along its axis, and the centre switches the projection (the
+//     projection chip says which one is on).
+//   - Bottom start: the zoom readout, shown for a moment after a wheel zoom, and the active tool's
+//     status (the select tool's in parts: its mode, its space, its snap, what is selected).
 // The page hands in what the HUD shows and changes; the scene's own overlays (the grid, the
-// gizmos) stay drawn into the view.
+// gizmos) are still drawn into the view.
 
 module;
 #include "Core/Prelude.h"
@@ -44,17 +43,17 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// The tripod: six knobs turning with the camera, the positive ones on arms, the centre the
-    /// projection switch, on a disc (its sheet's background). Its letters are labels; the knobs
-    /// and arms are drawn.
+    /// The tripod: six knobs that turn with the camera, the positive ones on arms, and the centre
+    /// as the projection switch, on a disc (its style sheet's background). Its letters are labels;
+    /// the knobs and arms are drawn.
     class ViewGizmoView final : public foundation::gui::UIWidget
     {
         RTTI_OBJECT(ViewGizmoView, foundation::gui::UIWidget)
     public:
         ViewGizmoView();
-        /// The camera's basis now; laid out again when it turned.
+        /// Takes the camera's current basis; lays out again when it has turned.
         void Show(Float3 right, Float3 up, Float3 forward, bool orthographic);
-        /// A press at `local` (its own space) on a knob (its axis) or the centre.
+        /// Called on a press on a knob (with its axis) or on the centre.
         Function<void(Float3 axis)> OnAxis;
         Function<void()> OnCentre;
         [[nodiscard]] const ViewGizmoLayout& Layout() const noexcept { return m_layout; }
@@ -78,10 +77,10 @@ export namespace editor
         Float3 m_basis[3]{};
         bool m_orthographic = false;
         bool m_shown = false;
-        i32 m_hovered = -1; // a knob, 6 the centre
+        i32 m_hovered = -1; // a knob's index, or 6 for the centre
     };
 
-    /// The zoom readout's bar: a round measure's length with its end ticks.
+    /// The zoom readout's bar: the length of a round measure, with its end ticks.
     class ScaleBarView final : public foundation::gui::UIWidget
     {
         RTTI_OBJECT(ScaleBarView, foundation::gui::UIWidget)
@@ -116,26 +115,26 @@ export namespace editor
             foundation::render::ViewPostOverride* post = nullptr;
             foundation::render::ViewDebugView* debugView = nullptr;
             ViewportToolManager* tools = nullptr;
-            const IViewportTool* selectTool = nullptr; // the default tool: its status in parts
+            const IViewportTool* selectTool = nullptr; // the default tool, whose status shows in parts
             Function<GizmoController*()> gizmos;
-            /// The graph's textures of the last frame (empty: none to offer).
+            /// The graph's textures from the last frame (empty: none to offer).
             Function<void(Array<foundation::render::DebugResourceInfo>&)> debugResources;
             /// Opens the picker for `request`.
             Function<void(app::PickerRequest request)> pick;
-            /// An overlay changed: the page keeps its view state.
+            /// Called when an overlay changed, so the page keeps its view state.
             Function<void()> overlaysChanged;
         };
 
-        /// The HUD's zones in `pane` (the markup's: `chip-projection`, `chip-shading`,
-        /// `chip-overlays`, `hud-stats`, `hud-gizmo`, `hud-zoom` ..., found by `find`).
+        /// The HUD's zones in `pane`, found by `find` from the markup's ids (`chip-projection`,
+        /// `chip-shading`, `chip-overlays`, `hud-stats`, `hud-gizmo`, `hud-zoom` ...).
         SceneHud(IAllocator& allocator, Services services, const Function<foundation::gui::Node*(StringView)>& find);
         SceneHud(const SceneHud&) = delete;
         SceneHud& operator=(const SceneHud&) = delete;
 
-        /// A wheel zoom happened: the readout shows for a moment.
+        /// Called on a wheel zoom: the readout shows for a moment.
         void Zoomed() { m_zoom.Zoomed(); }
-        /// Once a frame: everything as it is now (`dt` the frame's time, for the stats and the
-        /// readout's fade; the view's height in pixels for its scale bar).
+        /// Once a frame: updates everything (`dt` is the frame's time, for the stats and the
+        /// readout's fade; `viewHeight` is the view's height in pixels, for the scale bar).
         void Update(f32 dt, u32 viewHeight);
 
         // === What the menus do, by name (the menus call these; so do tests) ===

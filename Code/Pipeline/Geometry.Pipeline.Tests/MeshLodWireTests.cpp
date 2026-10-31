@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The LOD chain wire through StaticMeshSource v4 -> StaticMesh.
-// Covers the serialize round-trip (sidecar write/read), the FillStatic validation
-// (malformed tables collapse to 1 LOD - render at LOD 0, never crash), the
+// The LOD chain wire from StaticMeshSource to StaticMesh.
+// Covers the serialize round-trip (sidecar write and read), the FillStatic validation
+// (malformed tables collapse to 1 LOD: render at LOD 0, never crash), the
 // SubMeshesForLod slicing contract, and the optimizer staying set-preserving
-// on EVERY level of a chain.
+// on every level of a chain.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -25,8 +25,8 @@ using namespace foundation::vfs;
 
 namespace
 {
-    // A 2-LOD, 1-submesh fixture over a shared 5-vertex fan: LOD 0 = 3 triangles,
-    // LOD 1 = 1 triangle, indices concatenated in the one buffer.
+    // A 2-LOD, 1-submesh fixture over a shared 5-vertex fan: LOD 0 has 3 triangles and
+    // LOD 1 has 1, indices concatenated in the one buffer.
     void BuildTwoLodSource(StaticMeshSource& out)
     {
         Array<StaticMeshVertex> vertices;
@@ -92,8 +92,8 @@ TEST_CASE("mesh lod wire: the sidecar round-trip carries the chain; FillStatic s
         REQUIRE(asset->source.lodCoverage.Size() == 2);
         CHECK(asset->source.lodCoverage[1] == doctest::Approx(0.25f));
 
-        // Fill the runtime mesh: LOD 0 = subMeshes; LOD 1 = its own range, inheriting
-        // material/primitive from the LOD-0 submesh.
+        // Fill the runtime mesh: LOD 0 is subMeshes; LOD 1 is its own range, inheriting
+        // material and primitive from the LOD-0 submesh.
         StaticMesh mesh;
         asset->source.FillStatic(mesh);
         CHECK(mesh.lodCount == 2);

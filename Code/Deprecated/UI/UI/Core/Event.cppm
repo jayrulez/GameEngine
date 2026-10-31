@@ -3,9 +3,8 @@
 
 // UI - :event partition
 //
-// Event<void(Args...)>: a minimal multicast delegate over core::Function, the port's
-// equivalent of Beef's `Event<delegate void(...)>` used pervasively across Sedulous.UI
-// (Property.Changed, Button.Clicked, ...). Add handlers; invoke via operator() / Invoke.
+// Event<void(Args...)>: a minimal multicast delegate over core::Function, used across the
+// UI (Property.Changed, Button.Clicked, ...). Add handlers; invoke via operator() / Invoke.
 
 module;
 #include "Core/Prelude.h"

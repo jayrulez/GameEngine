@@ -5,11 +5,11 @@
 //
 // The foundation: fundamental exported types, widely-used utilities, and the
 // project-wide error vocabulary (Status / Result). Lives at the Core root.
-// Macros live in Prelude.h, not here - modules cannot export macros.
+// Macros live in Prelude.h, since modules cannot export macros.
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Debug/Assert.h" // classic header - no module cycle (see Assert.h)
+#include "Core/Debug/Assert.h" // classic header, so no module cycle (see Assert.h)
 #include <bit>                 // std::byteswap
 #include <cstdint>
 #include <cstddef>
@@ -217,7 +217,7 @@ export namespace foundation::core
         [[nodiscard]] constexpr bool IsOk() const { return m_code == ErrorCode::Ok; }
         [[nodiscard]] constexpr explicit operator bool() const { return IsOk(); }
 
-        // NB: explicit, not `= default` - GCC 15 ICEs on defaulted comparison
+        // Explicit, not `= default`: GCC 15 ICEs on defaulted comparison
         // operators inside a module.
         friend constexpr bool operator==(Status a, Status b) { return a.m_code == b.m_code; }
 

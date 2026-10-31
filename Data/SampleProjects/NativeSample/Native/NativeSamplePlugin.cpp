@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The reference native game plugin (game-native-code.md): the ONE registration entry is
-// OnLoad(SubsystemManager&) - components, subsystems, and script facades all register explicitly
-// there (never via static initializers), and OnUnload reverses it. The exported
+// The reference native game plugin. Its one registration entry is OnLoad(SubsystemManager&):
+// components, subsystems and script facades all register explicitly there (never through static
+// initializers), and OnUnload reverses it. The exported
 // CreatePlugin below is the whole contract: PluginHost dlopens it in dev builds, and the
 // ship player's checked-in stub references it statically.
 
@@ -32,7 +32,7 @@ namespace
         void OnLoad(SubsystemManager&) override
         {
             // Registration point: subsystems.RegisterSubsystem<...>, script facades,
-            // component managers - all explicit, all reversed in OnUnload.
+            // component managers: all explicit, all reversed in OnUnload.
             LOG_INFO(u8"Game", u8"NativeSample plugin loaded");
         }
         void OnUnload(SubsystemManager&) override {}

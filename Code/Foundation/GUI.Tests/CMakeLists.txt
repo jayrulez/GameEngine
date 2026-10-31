@@ -1,4 +1,4 @@
-# Foundation::GUI unit tests (doctest), added per subsystem as the port lands.
+# Foundation::GUI unit tests (doctest).
 add_executable(GUI.Tests
     TestsMain.cpp
     RectTests.cpp

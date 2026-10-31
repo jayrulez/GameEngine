@@ -1,6 +1,6 @@
 # Pipeline::Script - `script.pipeline` (script class asset/builder/importer, tooling).
-# Backend-neutral by construction (B3): links Foundation::Script for the REGISTRY only -
-# never a concrete backend library (entry points register backends).
+# Backend-neutral by construction: links Foundation::Script only for the registry, never a
+# concrete backend library (entry points register backends).
 util_add_engine_library(Script.Pipeline ALIAS Pipeline::Script)
 target_link_libraries(Script.Pipeline PUBLIC
     Foundation::Core Pipeline::Core Pipeline::Importer Foundation::Content

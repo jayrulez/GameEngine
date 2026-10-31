@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/VGContextTests.bf. (Sedulous Color32.Yellow is
-// inlined; Float4x4 != uses the C++20 rewrite of operator==.)
+// VGContext basics: fills, strokes, the state stack, clipping and visibility queries.
+// (Float4x4 != uses the C++20 rewrite of operator==.)
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -101,7 +101,7 @@ TEST_CASE("vgcontext: FillStar produces output")
 {
     VGContext ctx;
     ctx.FillStar(Float2{50, 50}, 30, 15, 5,
-                 ToColor(Color32{255, 255, 0, 255})); // Sedulous Color32.Yellow
+                 ToColor(Color32{255, 255, 0, 255})); // yellow
     VGBatch& batch = ctx.GetBatch();
     CHECK(batch.VertexCount() > 0u);
 }
@@ -117,7 +117,7 @@ TEST_CASE("vgcontext: IsRectVisible tracks the scissor clip (draw-culling query)
     CHECK(ctx.IsRectVisible(Rectangle{90, 90, 50, 50}));    // straddles the edge
     CHECK(!ctx.IsRectVisible(Rectangle{200, 200, 10, 10})); // fully outside
 
-    // The query is transform-aware: a translated rect can leave/enter the clip.
+    // The query is transform-aware: a translated rect can leave or enter the clip.
     ctx.PushState();
     ctx.Translate(0.0f, 500.0f);
     CHECK(!ctx.IsRectVisible(Rectangle{50, 50, 10, 10})); // now at y=550, clipped out

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.terrain:components - the TerrainComponent + its manager.
+// engine.terrain:components - the TerrainComponent and its manager.
 //
-// PHASE A (the authoring surface): TerrainComponent references a cooked TerrainResource (heightfield
-// + splatmap + layers, all resolved through the manager) and carries a per-instance cast-shadows +
-// visible flag. PHASE C (the renderer feed): the manager is ALSO the scene's IRenderDataProvider - it
-// builds the chunk model once per heightfield, gets the GPU height texture from the cache, and emits
-// ONE TerrainRenderData per visible terrain (the per-view cull + LOD run later, in the renderer's
-// Resolve). Physics is the SEPARATE ShapeKind::Heightfield collider over the same heightfield.
+// TerrainComponent references a cooked TerrainResource (heightfield, splatmap and layers, all
+// resolved through the manager) and carries per-instance cast-shadows and visible flags. The manager
+// is also the scene's IRenderDataProvider: it builds the chunk model once per heightfield, gets the
+// GPU height texture from the cache, and emits one TerrainRenderData per visible terrain (the
+// per-view cull and LOD run later, in the renderer's Resolve). Physics is a separate
+// ShapeKind::Heightfield collider over the same heightfield.
 
 module;
 #include "Core/Prelude.h"
@@ -26,11 +26,11 @@ import foundation.render;           // IRenderDataProvider, ExtractedScene, Rend
 import foundation.heightfield;      // Heightfield (the shared grid)
 import foundation.terrain;          // chunk model (BuildChunks, TerrainQuadtree, thresholds)
 import foundation.terrain.resource; // TerrainResource
-import foundation.texture.resource; // texture::Texture::View() (splatmap + layer albedos)
+import foundation.texture.resource; // texture::Texture::View() (splatmap and layer albedos)
 import :heighttexture;              // TerrainHeightTextureCache
 import :splattexture;               // TerrainSplatTextureCache (RGBA8 splat, paint re-upload)
 import :renderdata;                 // TerrainRenderData
-import :holedmesh;                  // TerrainHoledMeshCache (Specs/terrain-holes.md)
+import :holedmesh;                  // TerrainHoledMeshCache
 
 using namespace foundation::core;
 
@@ -47,8 +47,8 @@ export namespace engine::terrain
 
     struct TerrainComponent
     {
-        // The cooked terrain product (Ref<TerrainResource>): heightfield + splatmap + layers. Bound
-        // through the manager; the heightfield inside is the SHARED source of truth with the collider.
+        // The cooked terrain product (Ref<TerrainResource>): heightfield, splatmap and layers. Bound
+        // through the manager; the heightfield inside is the source of truth shared with the collider.
         foundation::resource::Ref<TerrainResource> terrain;
         bool castShadows = true; // this instance casts into the CSM (terrain default-on)
         bool visible = true;
@@ -92,10 +92,10 @@ export namespace engine::terrain
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return false; }
 
-        /// Wired by the TerrainSubsystem after it creates + registers the TerrainRenderer: the device
-        /// for the height-texture uploads, the renderer's dispatch id stamped on each render item,
-        /// and the frame-aged retire queue so a regenerate/version-bump never destroys a texture
-        /// an in-flight frame still samples.
+        /// Wired by the TerrainSubsystem after it creates and registers the TerrainRenderer: the
+        /// device for the height-texture uploads, the renderer's dispatch id stamped on each render
+        /// item, and the frame-aged retire queue so a regenerate or version bump never destroys a
+        /// texture an in-flight frame still samples.
         void SetRenderContext(rhi::Device* device, u16 rendererId,
                               render::GpuRetireQueue* retire = nullptr) noexcept
         {
@@ -108,11 +108,11 @@ export namespace engine::terrain
             m_holeTextures.SetRetireQueue(retire);
         }
 
-        /// Tear down this manager's GPU-side state THROUGH the wired device - called by the
-        /// TerrainSubsystem on scene destroy and at its own shutdown, both points where the
-        /// device is still alive. The manager's destructor cannot do this: scene teardown
-        /// order can outlive the render device (the playground's vkDestroyDevice leak).
-        /// Safe to call repeatedly; later extracts no-op (device nulled).
+        /// Tears down this manager's GPU-side state through the wired device. Called by the
+        /// TerrainSubsystem on scene destroy and at its own shutdown, both points where the device
+        /// is still alive. The manager's destructor cannot do this: the scene can be torn down
+        /// after the render device is gone. Safe to call repeatedly; later extracts no-op (the
+        /// device is nulled).
         void ClearGpu()
         {
             if (m_device != nullptr)
@@ -139,9 +139,9 @@ export namespace engine::terrain
             return m_paletteTextures.Size();
         }
 
-        /// render::IRenderDataProvider: one TerrainRenderData per visible terrain (the WHOLE terrain is
-        /// one draw-list item; the renderer culls + LODs its chunks per view). Builds the chunk model
-        /// on first sight of a heightfield and the GPU height texture via the cache.
+        /// render::IRenderDataProvider: one TerrainRenderData per visible terrain (the whole terrain
+        /// is one draw-list item; the renderer culls and LODs its chunks per view). Builds the chunk
+        /// model on first sight of a heightfield, and the GPU height texture through the cache.
         void ExtractRenderData(render::ExtractedScene& snapshot) override
         {
             PROFILE_SCOPE("Terrain.Extract");
@@ -179,9 +179,9 @@ export namespace engine::terrain
                         return;
                     }
 
-                    // COPY the chunk grid + quadtree nodes into the frame arena: the snapshot is
-                    // read at record time, after arbitrary mid-frame scene/manager mutations - a
-                    // borrowed &cache pointer was the PIE-start use-after-free.
+                    // Copy the chunk grid and quadtree nodes into the frame arena: the snapshot is
+                    // read at record time, after arbitrary mid-frame scene and manager mutations, so
+                    // a borrowed pointer into the cache could be freed by then.
                     const Span<const tmodel::TerrainChunk> chunkCopy = snapshot.AddArray(
                         Span<const tmodel::TerrainChunk>{cache.chunks.Data(), cache.chunks.Size()});
                     const Span<const tmodel::TerrainQuadtree::Node> nodeCopy =
@@ -232,10 +232,10 @@ export namespace engine::terrain
                     rd->thresholdCount = n;
                     rd->lodBias = c.lodBias;
 
-                    // Top-K splat material: the CPU SplatWeights (the
-                    // painted source of truth) derives the weight+index texture pair, cached by
-                    // uid+version - a paint's version bump re-uploads and the set-3 bind cache
-                    // rebuilds on the new view ids (the live-repaint path).
+                    // Top-K splat material: the CPU SplatWeights (the painted source of truth)
+                    // derives the weight and index texture pair, cached by uid and version. A
+                    // paint's version bump re-uploads, and the set-3 bind cache rebuilds on the new
+                    // view ids (the live repaint path).
                     if (foundation::terrain::SplatWeights* sw = res->weights.Get())
                     {
                         const SplatTextureViews views =
@@ -261,9 +261,9 @@ export namespace engine::terrain
                     }
                     rd->baseTileScale = res->base.tileScale;
                     rd->heightBlendContrast = res->heightBlendContrast;
-                    // The palette Texture2DArray + tileScale buffer (cook-built texels, cached by
-                    // TerrainPaletteData::uid + the tile-scale hash; a palette edit re-cooks ->
-                    // new uid -> rebuild with the old array RETIRED).
+                    // The palette Texture2DArray and tileScale buffer (cook-built texels, cached by
+                    // TerrainPaletteData::uid and the tile-scale hash; a palette edit re-cooks to a
+                    // new uid, which rebuilds and retires the old array).
                     if (res->paletteData.Get() != nullptr && res->paletteData->IsValid())
                     {
                         Array<f32> scales;
@@ -288,7 +288,7 @@ export namespace engine::terrain
                         rd->paletteCount = 0; // no cooked palette: pure base (or the height ramp)
                     }
 
-                    // Whole-terrain bounding sphere (world) - keeps the framework from culling the
+                    // Whole-terrain bounding sphere (world), so the framework does not cull the
                     // terrain while any chunk is visible.
                     const Float3 localCenter = cache.localBounds.Center();
                     rd->worldCenter = TransformPoint(localCenter, rd->chunkToWorld);
@@ -306,11 +306,10 @@ export namespace engine::terrain
         };
 
         // Chunk model per heightfield (shared by every terrain referencing it). Keyed by the
-        // heightfield's UID - never its pointer (same class as the height-
-        // texture cache: a dead grid's address reused by a fresh one at an equal version
-        // would serve the dead grid's chunk bounds). A hot-reload swap (new object = new
-        // uid) OR a sculpt/regen (version bump) rebuilds - the chunk Y bounds move with the
-        // heights, so cull + LOD stay correct.
+        // heightfield's uid, never its pointer, as the height-texture cache is: a dead grid's
+        // address reused by a fresh one at an equal version would serve the dead grid's chunk
+        // bounds. A hot-reload swap (a new object, so a new uid) or a sculpt or regen (a version
+        // bump) rebuilds; the chunk Y bounds move with the heights, so cull and LOD stay correct.
         const ChunkCache& GetOrBuildChunks(const heightfield::Heightfield* hf)
         {
             if (ChunkCache* found = m_chunkCache.Find(hf->uid); found != nullptr &&
@@ -344,20 +343,20 @@ export namespace engine::terrain
         TerrainHeightTextureCache m_heightTextures;
         TerrainSplatTextureCache m_splatTextures;
         TerrainPaletteTextureCache m_paletteTextures;
-        TerrainHoledMeshCache m_holedMeshes; // holed chunks' index buffers (Specs/terrain-holes.md)
+        TerrainHoledMeshCache m_holedMeshes; // holed chunks' index buffers
         TerrainHoleTextureCache m_holeTextures; // the R8 hole mask the HOLES shaders sample
         HashMap<u64, ChunkCache> m_chunkCache; // key = Heightfield::uid (never a pointer)
     };
 
-    // Scene-composition hooks (the SceneModule pair, mirroring every other domain).
+    // Scene-composition hooks (the SceneModule pair every domain has).
     void AddTerrainSceneManagers(foundation::scene::Scene& scene);
     void RegisterTerrainComponentReflection();
 }
 
 export namespace engine::terrain
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection, to the script surface
+    /// and which resource modules come with it. Defined in the implementation unit (one instance
+    /// per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& TerrainDomain() noexcept;
 }

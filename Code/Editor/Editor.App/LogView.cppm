@@ -3,15 +3,16 @@
 
 // Editor::App - :log_view partition.
 //
-// LogView: the Console panel (Documentation/Specs/editor-gui.md, 5.2, layer 1). Its frame is
-// markup (Data/Editor/Console.xml): a chip per level (Debug, holding the trace lines too, Info,
-// Warnings, Errors, holding the fatal ones) with how many lines it holds, on showing them; a search matching anywhere in a
-// line ignoring case, cleared by its x; Clear; then the lines on a virtualised list, each its time
-// since the editor started and `[Category] message` in its level's colour. The newest line is
+// LogView: the Console panel. Its frame is markup (Data/Editor/Console.xml): a chip per level
+// (Debug, which also holds trace lines; Info; Warnings; Errors, which also holds fatal lines)
+// showing how many lines it holds and toggling whether they show; a search matching anywhere in a
+// line, ignoring case, cleared by its x; Clear; then the lines on a virtualised list, each with its
+// time since the editor started and `[Category] message` in its level's colour. The newest line is
 // followed until the user scrolls up, and again once they are back at the bottom. Rows select as
-// any list's do (click, Ctrl, Shift, Ctrl+A); Ctrl+C or the menu's Copy puts the selected lines on
-// the clipboard, oldest first, one per line. The entries are capped (oldest trimmed); a selection
-// is by entry, so it survives a trim. Fed once a frame from the editor's log buffer.
+// in any list (click, Ctrl, Shift, Ctrl+A); Ctrl+C or the menu's Copy puts the selected lines on
+// the clipboard, oldest first, one per line. The entries are capped (the oldest trimmed); a
+// selection is by entry, so it survives a trim. It is fed once a frame from the editor's log
+// buffer.
 module;
 #include "Core/Prelude.h"
 
@@ -37,7 +38,7 @@ export namespace editor::app
     class LogView
     {
     public:
-        /// Its frame, under the data root.
+        /// Its frame's markup path, under the data root.
         static constexpr const char8_t* kPath = kLogViewPath;
 
         /// The chips' levels: Debug holds trace and debug lines; Error holds fatal ones.
@@ -82,7 +83,7 @@ export namespace editor::app
                 rows.Bind = [self](gui::Node& row, const gui::ModelIndex& index) { self->BindRow(row, index); };
                 m_list->SetRowFactory(Move(rows));
                 m_list->SetModel(&m_model);
-                // Ctrl+C before the list's own keys; the menu's Copy, Select All and Clear.
+                // Handle Ctrl+C before the list's own keys; the menu offers Copy, Select All and Clear.
                 (void)m_list->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                                {
                                                    const auto& key = static_cast<const gui::KeyEvent&>(e);
@@ -131,10 +132,10 @@ export namespace editor::app
         }
 
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
-        /// Told how many lines a copy put on the clipboard (the application's toast).
+        /// Called with how many lines a copy put on the clipboard (for the application's toast).
         void SetOnCopied(Function<void(usize)> copied) { m_onCopied = Move(copied); }
 
-        /// One line, at the end; the oldest go past the cap.
+        /// Adds one line at the end; past the cap, the oldest are trimmed.
         void AddEntry(LogLevel level, StringView category, StringView message, Duration time = {})
         {
             const bool follow = IsAtBottom();
@@ -213,7 +214,7 @@ export namespace editor::app
                 }
             return text;
         }
-        /// The selected lines on the system clipboard; nothing selected copies nothing.
+        /// Copies the selected lines to the system clipboard; with nothing selected it copies nothing.
         void CopySelection()
         {
             const String text = SelectedText();
@@ -236,7 +237,8 @@ export namespace editor::app
             u64 id = 0;
         };
 
-        // The shown lines as the list's model: a line's id its entry's, so a selection follows it.
+        // The shown lines as the list's model; a line's id is its entry's, so a selection follows
+        // the entry.
         class Model final : public gui::IModel
         {
         public:
@@ -294,7 +296,7 @@ export namespace editor::app
                     m_shown.PushBack(i);
             m_model.Reset();
         }
-        // At the bottom, or with nothing to scroll: a new line is followed.
+        // Whether the list is at the bottom, or has nothing to scroll, so a new line is followed.
         [[nodiscard]] bool IsAtBottom() const
         {
             if (m_list == nullptr)
@@ -302,7 +304,7 @@ export namespace editor::app
             return m_list->GetScrollOffset().y >= m_list->GetScrollRange().y - kFollowSlack;
         }
 
-        // The chips' counts and states, the search's x, the empty line.
+        // Updates the chips' counts and states, the search's x, and the empty line.
         void ShowChrome()
         {
             static constexpr StringView kNames[kBucketCount] = {u8"Debug", u8"Info", u8"Warnings", u8"Errors"};
@@ -319,7 +321,7 @@ export namespace editor::app
                         chip->RemoveClass(u8"checked");
                 }
             if (auto* clearSearch = Find<gui::Button>(u8"console-clear-search"))
-                clearSearch->SetVisible(!m_search.IsEmpty()); // keeps its place: the field does not jump
+                clearSearch->SetVisible(!m_search.IsEmpty()); // kept in place so the field does not jump
             if (auto* empty = Find<gui::Label>(u8"console-empty"))
             {
                 empty->SetDisplayed(m_shown.IsEmpty());
@@ -361,7 +363,7 @@ export namespace editor::app
                 row->AddClass(u8"error");
         }
 
-        // hh:mm:ss since the editor started.
+        // Formats the time since the editor started as hh:mm:ss.
         [[nodiscard]] static String TimeText(Duration time)
         {
             const i64 seconds = static_cast<i64>(time.AsSeconds());
@@ -393,7 +395,7 @@ export namespace editor::app
             m_menu->Open(*m_list, at);
         }
 
-        static constexpr f32 kFollowSlack = 4.0f; // this near the bottom counts as at it
+        static constexpr f32 kFollowSlack = 4.0f; // this close to the bottom counts as at it
 
         IAllocator& m_allocator;
         RefPtr<gui::Node> m_content;
@@ -401,7 +403,7 @@ export namespace editor::app
         gui::Button* m_chips[kBucketCount] = {};
         RefPtr<gui::Menu> m_menu;
         Array<Entry> m_entries;
-        Array<usize> m_shown; // the entries shown, by their place in m_entries
+        Array<usize> m_shown; // the entries shown, by index into m_entries
         usize m_counts[kBucketCount] = {};
         bool m_visible[kBucketCount] = {true, true, true, true};
         String m_search;

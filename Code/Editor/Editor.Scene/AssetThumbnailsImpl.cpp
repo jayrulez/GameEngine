@@ -33,9 +33,9 @@ namespace editor
 
     namespace
     {
-        // Shared persistent-entity plumbing: a display entity (MeshComponent) + a private sun,
-        // created on first use and toggled ACTIVE per job so idle generators contribute nothing
-        // to another generator's render.
+        // The shared stage's persistent entities: a display entity (MeshComponent) and a private
+        // sun, created on first use and set active only during a job, so idle generators add
+        // nothing to another generator's render.
         struct StageEntities
         {
             scene::EntityHandle display{};
@@ -80,8 +80,9 @@ namespace editor
             }
         };
 
-        // A null product maps to the handle's state: still loading = Pending (retry next
-        // frame), Failed / no handle at all = Failed (negative-cache, stop retrying).
+        // A null product maps to the handle's state: still loading becomes Pending (retry next
+        // frame); failed, or no handle at all, becomes Failed (cached as negative, so it stops
+        // retrying).
         template <typename T>
         [[nodiscard]] ThumbnailStageStep StepForPending(const resource::Proxy<T>& proxy)
         {
@@ -93,8 +94,8 @@ namespace editor
             return ThumbnailStageStep::Pending;
         }
 
-        // Meshes: the cooked StaticMesh/SkinnedMesh product, centered at the origin by its
-        // bounds, neutral PBR material, framed by the half-diagonal.
+        // Meshes: the cooked StaticMesh or SkinnedMesh, centered at the origin by its bounds, with
+        // the neutral PBR material, framed by the half-diagonal.
         class MeshThumbnailGenerator final : public ISceneThumbnailGenerator
         {
         public:
@@ -220,7 +221,7 @@ namespace editor
         };
 
         // Source-payload access for the composite generators (prefab spawn, nested-instance
-        // resolution, scene load). Resolved per call - the context outlives the service, the
+        // resolution, scene load). Resolved per call: the context outlives the service, but the
         // project may not.
         [[nodiscard]] foundation::content::Instance* SourceInstance(EditorContext* context,
                                                                     const Guid& id)
@@ -243,8 +244,8 @@ namespace editor
                 }};
         }
 
-        // Loading settles when every mesh ref with an identity has resolved or failed (a
-        // broken ref skips - one missing submesh must not kill the composite's thumbnail).
+        // Loading settles when every mesh ref with an identity has resolved or failed. A broken ref
+        // is skipped, so one missing submesh does not kill the composite's thumbnail.
         [[nodiscard]] bool MeshRefsSettled(scene::Scene& stage)
         {
             auto* meshes = stage.GetSystem<engine::render::MeshComponentManager>();
@@ -299,7 +300,7 @@ namespace editor
             return bounds;
         }
 
-        // Has the ref loaded or failed? Mirrors MeshRefsSettled for one animator ref.
+        // True once the ref has loaded or failed: MeshRefsSettled's check for one animator ref.
         template <typename TRef>
         [[nodiscard]] bool RefSettled(TRef& ref)
         {
@@ -429,9 +430,9 @@ namespace editor
             bool m_spawned = false;
         };
 
-        // Scene documents: the whole scene loaded into the job's private scene, viewed through
-        // its own primary camera when it has one (the bounds framing is the fallback). The
-        // scene owns its lighting - no sun.
+        // Scene documents: the whole scene loaded into the job's private scene, viewed through its
+        // own primary camera when it has one (framing by the bounds is the fallback). The scene
+        // owns its lighting, so no sun is added.
         class SceneThumbnailGenerator final : public ISceneThumbnailGenerator
         {
         public:
@@ -478,9 +479,9 @@ namespace editor
             bool m_loaded = false;
         };
 
-        // Skeletons: the bind pose as one mesh of flat-shaded bone octahedrons (the stage
-        // renders scenes, not debug lines). Each parent->child segment becomes an octahedron:
-        // two apexes at the joints, a four-vertex girdle near the parent end; a lone root
+        // Skeletons: the bind pose as one mesh of flat-shaded bone octahedrons (the stage renders
+        // scenes, not debug lines). Each segment from parent to child becomes an octahedron with
+        // two apexes at the joints and a four-vertex girdle near the parent end. A lone root
         // renders as a small marker so a single-bone skeleton still frames.
         class SkeletonThumbnailGenerator final : public ISceneThumbnailGenerator
         {
@@ -598,7 +599,7 @@ namespace editor
                 return Float3{world.m[3][0], world.m[3][1], world.m[3][2]};
             }
 
-            // Unwelded 8-facet octahedron along head->tip (24 verts, flat normals from
+            // An unwelded 8-facet octahedron from head to tip (24 vertices, flat normals from
             // GenerateNormals). Returns false on a degenerate segment.
             static bool AppendBoneOctahedron(geometry::StaticMesh& mesh, const Float3& head,
                                              const Float3& tip)
@@ -646,11 +647,11 @@ namespace editor
             RefPtr<materials::Material> m_material;
         };
 
-        // Model manifests: the imported node hierarchy rebuilt in the job's private scene
-        // (meshes + materials, and a rigged model's animator with no clip so its skinned meshes
-        // draw in the rig's rest pose), framed by the combined world mesh bounds. Mirrors BuildModelScene's mesh loop but through
-        // GetSystem - the private scene already carries the app's full manager set, and
-        // AddSystem is not idempotent.
+        // Model manifests: the imported node hierarchy rebuilt in the job's private scene (meshes
+        // and materials, and a rigged model's animator with no clip so its skinned meshes draw in
+        // the rig's rest pose), framed by the combined world mesh bounds. It follows
+        // BuildModelScene's mesh loop but uses GetSystem: the private scene already carries the
+        // app's full manager set, and AddSystem is not idempotent.
         class ModelManifestThumbnailGenerator final : public ISceneThumbnailGenerator
         {
         public:
@@ -772,10 +773,10 @@ namespace editor
             bool m_spawned = false;
         };
 
-        // Particle effects: an emitter in the job's private scene, prewarmed by the stage so
-        // the one rendered frame shows a developed burst (everything is empty at t=0). The
-        // framing radius is fixed - particle extents are simulation-dependent and unknown
-        // until after the prewarm the stage runs.
+        // Particle effects: an emitter in the job's private scene, prewarmed by the stage so the
+        // one rendered frame shows a developed burst (everything is empty at t=0). The framing
+        // radius is fixed, since particle extents depend on the simulation and are unknown until
+        // the stage's prewarm has run.
         class ParticleThumbnailGenerator final : public ISceneThumbnailGenerator
         {
         public:

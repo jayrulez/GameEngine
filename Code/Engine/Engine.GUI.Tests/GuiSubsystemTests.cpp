@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine.GUI (E5 of Specs/gui-lab-evolution-3.md): the resource provider answering asset guids
-// (documents, sheets, vector images, textures) and following re-cooks; the subsystem's screen tier
-// (the screen stack under the overlay layer) and scene tier (a root per scene); the game's sheets
-// in order over the theme, restyled when one is cooked again; a document pushed by its guid; both
-// tiers drawn into the engine's overlay passes (the Null device, the shaders from the data mount);
-// the domain.
+// Engine.GUI tests. They cover the resource provider, which answers asset guids (documents,
+// sheets, vector images, textures) and follows re-cooks; the subsystem's screen tier (the screen
+// stack under the overlay layer) and scene tier (a root per scene); the game's sheets, applied in
+// order over the theme and restyled when one is cooked again; pushing a document by its guid;
+// drawing both tiers into the engine's overlay passes (on the Null device, with the shaders from
+// the data mount); and the domain.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -131,7 +131,7 @@ namespace
             RewriteSheet(instance->Id(), css);
             return instance->Id();
         }
-        // The sheet cooked again with `css`, and reloaded as the editor's re-cook does.
+        // Cooks the sheet again with `css` and reloads it, as the editor's re-cook does.
         void RewriteSheet(const Guid& id, StringView css)
         {
             GuiStyleSheetSource source;
@@ -158,7 +158,7 @@ namespace
         }
     };
 
-    // A mouse the test moves and presses; a press or release shows as an edge for one frame.
+    // A mouse the test moves and presses. A press or release shows as an edge for one frame.
     struct FakeMouse final : foundation::shell::IMouse
     {
         f32 x = -100.0f;
@@ -193,8 +193,8 @@ namespace
         void SetGlobalCapture(bool) override {}
     };
 
-    // The engine's active input source as a test drives it: the mouse, and this frame's events.
-    // Fingers the test puts down (normalized over an 800 x 600 screen) and lifts.
+    // The engine's active input source, driven by the test: the mouse and this frame's events.
+    // The test also puts fingers down (normalized over an 800 x 600 screen) and lifts them.
     struct FakeTouch final : foundation::shell::ITouch
     {
         Array<foundation::shell::TouchPoint> points;
@@ -218,7 +218,7 @@ namespace
     {
         FakeMouse mouse;
         FakeTouch touch;
-        bool touchPresent = false; // a touch screen; off, the devices are a desktop's
+        bool touchPresent = false; // a touch screen; when false, the devices are a desktop's
         [[nodiscard]] foundation::shell::ITouch* Touch() override { return touchPresent ? &touch : nullptr; }
         Array<foundation::shell::InputEvent> events;
         [[nodiscard]] foundation::shell::IKeyboard* Keyboard() override { return nullptr; }
@@ -238,7 +238,8 @@ namespace
         }
     };
 
-    // A subsystem earlier in the same lane than the GUI: claims the pointer, when told to.
+    // A subsystem that runs earlier in the same lane than the GUI and claims the pointer when told
+    // to.
     class ClaimingSubsystem final : public runtime::Subsystem
     {
     public:
@@ -255,8 +256,8 @@ namespace
         engine::input::InputSubsystem& m_input;
     };
 
-    // A context with the scene subsystem and the GUI's (and the input subsystem's, on fake
-    // devices), started.
+    // A started context with the scene subsystem, the GUI subsystem, and the input subsystem on
+    // fake devices.
     struct TestRun final : foundation::run::RunBase
     {
         TestRun() : RunBase(DefaultAllocator(), u8"test") {}
@@ -293,8 +294,9 @@ namespace
             input->SetSourceProvider(nullptr);
             context.Shutdown();
         }
-        // A frame as the application runs one: the last one's end (EndFrame), then this one's
-        // BeginFrame lane, where the GUI pumps; the test reads what it did before its end.
+        // Runs a frame as the application does: the end of the last frame (EndFrame), then this
+        // frame's BeginFrame lane, where the GUI pumps input. The test reads the results before this
+        // frame ends.
         void Frame()
         {
             context.EndFrame();
@@ -335,7 +337,7 @@ TEST_CASE("engine.gui: the provider answers documents, sheets, vector images and
     REQUIRE(provider.LoadText(Format(u8"{}", sheet).AsView(), text)); // the bare guid too
     CHECK(text.AsView() == StringView(u8"#menu { width: 10px; }"));
     CHECK_FALSE(provider.LoadText(u8"menu.xml", text)); // a path is not a guid
-    CHECK_FALSE(provider.LoadText(Braced(icon).AsView(), text)); // a vector image is no text
+    CHECK_FALSE(provider.LoadText(Braced(icon).AsView(), text)); // a vector image is not text
 
     const foundation::vg::svg::SVGDocument* picture = provider.LoadSvg(Braced(icon).AsView());
     REQUIRE(picture != nullptr);
@@ -348,10 +350,10 @@ TEST_CASE("engine.gui: the provider answers documents, sheets, vector images and
     CHECK(image->Height() == 64u);
     CHECK(provider.LoadImage(Braced(map).AsView()) == image); // one key per texture
     REQUIRE(told.Size() == 1u);
-    CHECK(told[0] == image); // the renderers learn it
+    CHECK(told[0] == image); // the renderers are told about the key
     CHECK(provider.LoadImage(Braced(menu).AsView()) == nullptr);
 
-    // Another project: what was bound goes, the renderers let the key go.
+    // Another project: what was bound is released, and the renderers let the key go.
     provider.SetResourceManager(nullptr);
     REQUIRE(told.Size() == 2u);
     CHECK(told[1] == nullptr);
@@ -414,12 +416,12 @@ TEST_CASE("engine.gui: the game's sheets apply in order over the theme, restyle 
     engine.Frame();
     Node* box = FindById(*engine.gui->ScreenRoot(), u8"box");
     REQUIRE(box != nullptr);
-    CHECK(box->GetSize().x == doctest::Approx(200.0f)); // the game's over the shared one
-    CHECK(box->GetSize().y == doctest::Approx(10.0f));  // what it leaves is the shared one's
+    CHECK(box->GetSize().x == doctest::Approx(200.0f)); // the game's sheet wins over the shared one
+    CHECK(box->GetSize().y == doctest::Approx(10.0f));  // the shared sheet supplies what the game's leaves unset
 
     const u64 generation = engine.gui->SheetGeneration();
     engine.Frame();
-    CHECK(engine.gui->SheetGeneration() == generation); // nothing changed: nothing re-applied
+    CHECK(engine.gui->SheetGeneration() == generation); // nothing changed, so nothing is re-applied
     project.RewriteSheet(game, u8"#box { width: 150px; }");
     engine.Frame();
     CHECK(engine.gui->SheetGeneration() == generation + 1);
@@ -436,7 +438,7 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
     REQUIRE(engine.gui->IsRenderReady());
     CHECK(engine.gui->Context().GetPictureBaker() != nullptr);
 
-    // A faded group on a screen: its layer is drawn before the screen's pass.
+    // A faded group on a screen has its layer drawn before the screen's pass.
     RefPtr<Panel> group = MakeRef<Panel>(DefaultAllocator());
     group->SetSize(Float2{60.0f, 40.0f});
     NodeBox look;
@@ -467,7 +469,7 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
     engine.gui->Render(*pass, view);
     CHECK(encoder.counters->Snapshot().draws > drawsBefore);
     CHECK(encoder.counters->Snapshot().renderPasses == layerPasses + 1); // Render opened none
-    // Unprepared (another view): drawn in the pass all the same.
+    // For an unprepared view (another view), the tier is still drawn in the pass.
     const u64 drawsUnprepared = encoder.counters->Snapshot().draws;
     engine.gui->Render(*pass, view);
     CHECK(encoder.counters->Snapshot().draws > drawsUnprepared);
@@ -482,7 +484,7 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
     badgeLook.BackgroundColor = Color{0.0f, 1.0f, 0.0f, 1.0f};
     badge->SetBox(Move(badgeLook));
     {
-        // A canvas holds it: a scene's GUI draws while it shows something.
+        // A canvas holds the button, because a scene's GUI draws only while it shows something.
         auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
         const scene::EntityHandle hudEntity = level->CreateEntity(u8"hud");
         RefPtr<GuiDocument> document = MakeRef<GuiDocument>(DefaultAllocator());
@@ -504,7 +506,7 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
     engine.gui->Render(*pass, sceneView);
     CHECK(encoder.counters->Snapshot().draws > drawsScene);
     CHECK(root->GetViewportSize().x == doctest::Approx(160.0f));
-    // Another scene's view draws nothing of this one.
+    // A view of another scene draws nothing of this one.
     sceneView.sceneKey = &engine;
     const u64 drawsOther = encoder.counters->Snapshot().draws;
     engine.gui->Render(*pass, sceneView);
@@ -518,8 +520,8 @@ TEST_CASE("engine.gui: the domain brings the documents' and sheets' resource mod
     const engine::DomainModule& domain = engine::gui::GuiDomain();
     CHECK(domain.id == StringView(u8"gui"));
     bool documents = false;
-    // By its id, as the composition tells modules apart: in a shared build the test and Engine.GUI
-    // each have their own copy of the module's record, at another address.
+    // Compare by id, as the composition tells modules apart. In a shared build the test and
+    // Engine.GUI each have their own copy of the module's record, at different addresses.
     for (const foundation::resource::ResourceModule* module : domain.resources)
         documents = documents || module->id == kGuiResourceModule.id;
     CHECK(documents);
@@ -540,7 +542,7 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
     engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
     engine.Frame();
 
-    // Over the button: the scene's root takes the input, and the pointer is the GUI's.
+    // Over the button, the scene's root takes the input and the GUI claims the pointer.
     engine.devices.mouse.x = 50.0f;
     engine.devices.mouse.y = 30.0f;
     engine.Frame();
@@ -553,7 +555,7 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
     engine.Frame();
     CHECK(clicks == 1);
 
-    // Over empty space: the game's pointer; and the frame's end clears the claim.
+    // Over empty space, the pointer stays with the game, and the frame's end clears the claim.
     engine.devices.mouse.x = 500.0f;
     engine.Frame();
     CHECK_FALSE(engine.gui->PointerOverGui());
@@ -564,7 +566,7 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
     engine.context.EndFrame();
     CHECK_FALSE(engine.PointerClaimed());
 
-    // An earlier claim (made first in the lane) stands though the GUI takes nothing.
+    // A claim made earlier in the lane stands even though the GUI takes nothing.
     engine.claiming->Claims = true;
     engine.devices.mouse.x = 500.0f;
     engine.Frame();
@@ -581,7 +583,7 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
     RefPtr<UIWidget> screen = MakeRef<UIWidget>(DefaultAllocator());
     screen->AddChild(menu.Get());
     REQUIRE(engine.gui->Screens()->Push(*screen) != nullptr);
-    engine.devices.mouse.x = 450.0f; // over the screen's button now, still held
+    engine.devices.mouse.x = 450.0f; // now over the screen's button, still held
     engine.Frame();
     CHECK(engine.gui->ActiveInputRoot() == hud);
     CHECK(engine.PointerClaimed()); // it began over the GUI
@@ -671,7 +673,7 @@ namespace
         document->markup = String(markup);
         return document;
     }
-    // The scene's GUI styled and laid out at `size`, as a frame's draw does.
+    // Styles the scene's GUI and lays it out at `size`, as a frame's draw does.
     void LayOut(GuiSubsystem& gui, SceneRoot& root, Float2 size)
     {
         root.SetViewportSize(size);
@@ -713,7 +715,7 @@ TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, 
     engine.Frame();
     CHECK(FindById(*root->GetChildAt(2), u8"score") != nullptr);
 
-    // Hidden, then its entity inactive; not interactive.
+    // Hidden, then with its entity inactive, then not interactive.
     engine::gui::GuiCanvasComponent* c = canvases->Get(hud);
     Node* tree = c->root.Get();
     REQUIRE(tree != nullptr);
@@ -736,7 +738,7 @@ TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, 
     CHECK(FindById(*root, u8"lives") != nullptr);
     CHECK(FindById(*root, u8"score") == nullptr);
 
-    // Despawned: its host goes.
+    // Despawning the canvas removes its host.
     level->DestroyEntity(hud);
     engine.Frame();
     CHECK(root->ChildCount() == 2u);
@@ -760,7 +762,7 @@ TEST_CASE("engine.gui: a canvas scaled from a reference resolution fits the view
     REQUIRE(tree != nullptr);
 
     LayOut(*engine.gui, *root, Float2{1000.0f, 600.0f});
-    CHECK(tree->GetSize().x == doctest::Approx(400.0f)); // laid out at the reference
+    CHECK(tree->GetSize().x == doctest::Approx(400.0f)); // laid out at the reference resolution
     CHECK(tree->GetSize().y == doctest::Approx(300.0f));
     CHECK(tree->GetScale().x == doctest::Approx(2.0f));  // scaled to fit the height
     CHECK(tree->GetPosition().x == doctest::Approx(100.0f)); // centred across
@@ -838,8 +840,8 @@ TEST_CASE("engine.gui: a canvas component round-trips through the scene format")
 
 namespace
 {
-    // A projection a test reads at a glance: clip = (x, y, z, z), so a point's place on screen is
-    // (x / z, y / z) and it is behind the camera when z <= 0.
+    // A projection that is easy to read in a test: clip = (x, y, z, z), so a point lands on screen
+    // at (x / z, y / z) and is behind the camera when z <= 0.
     Float4x4 SimpleProjection()
     {
         Float4x4 m = Float4x4::Identity();
@@ -873,7 +875,8 @@ TEST_CASE("engine.gui: a billboard hangs from its entity's projected point, lift
     placed = engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, 1.0f}), projection, Float3{}, viewport);
     CHECK(placed.Anchor.y == doctest::Approx(25.0f));
 
-    // Screen orientation: the offset turns with the entity (a half turn about z flips the lift).
+    // With Screen orientation the offset turns with the entity, so a half turn about z flips the
+    // lift.
     billboard.orientation = engine::gui::GuiBillboardOrientation::Screen;
     Float4x4 turned = At(Float3{0.0f, 0.0f, 1.0f});
     turned.m[0][0] = -1.0f;
@@ -922,7 +925,7 @@ TEST_CASE("engine.gui: billboards live in a layer under the canvases, placed as 
     rhi::null::NullCommandEncoder encoder;
     rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(rhi::RenderPassDesc{});
     REQUIRE(pass != nullptr);
-    engine.gui->Render(*pass, view); // its size is known after this layout
+    engine.gui->Render(*pass, view); // its size is known after this draw lays it out
     engine.gui->Render(*pass, view);
     CHECK(plate->GetSize().x == doctest::Approx(40.0f));
     CHECK(plate->GetPosition().x == doctest::Approx(80.0f)); // centred on 100
@@ -978,7 +981,7 @@ TEST_CASE("engine.gui: a render-texture canvas draws into a texture of its own, 
     engine::gui::GuiCanvasComponent* c = canvases->Get(screen);
     REQUIRE(c->renderRoot);
     SceneRoot* root = engine.gui->SceneRootFor(*level);
-    CHECK(root->ChildCount() == 1u); // the billboards' layer alone: not in the scene's GUI
+    CHECK(root->ChildCount() == 1u); // only the billboards' layer; the canvas is not in the scene's GUI
     CHECK(FindById(*c->renderRoot, u8"monitor") != nullptr);
 
     rhi::null::NullCommandEncoder encoder;
@@ -992,7 +995,8 @@ TEST_CASE("engine.gui: a render-texture canvas draws into a texture of its own, 
     engine.gui->RenderTextures(encoder, 0); // once a frame
     CHECK(encoder.counters->Snapshot().renderPasses == passes);
 
-    // Back over the view: in the scene's GUI again, the texture let go next time.
+    // Back to drawing over the view: the canvas is in the scene's GUI again, and the texture is
+    // released on the next RenderTextures.
     c->renderMode = engine::gui::GuiCanvasRenderMode::ScreenOverlay;
     engine.Frame();
     CHECK(FindById(*root, u8"monitor") != nullptr);
@@ -1000,7 +1004,7 @@ TEST_CASE("engine.gui: a render-texture canvas draws into a texture of its own, 
     CHECK(engine.gui->TextureCount() == 0u);
     CHECK(sprite.texture == nullptr);
 
-    // Into a texture again, then despawned: the texture goes.
+    // Drawn into a texture again, then despawned: the texture is removed.
     c->renderMode = engine::gui::GuiCanvasRenderMode::RenderTexture;
     engine.Frame();
     engine.gui->RenderTextures(encoder, 0);
@@ -1040,14 +1044,15 @@ TEST_CASE("engine.gui: a world panel drives its sprite, and the pointer reaches 
     rhi::null::NullCommandEncoder encoder;
     engine.gui->RenderTextures(encoder, 0);
     engine::render::SpriteComponent* sprite = level->GetSystem<engine::render::SpriteComponentManager>()->Get(kiosk);
-    REQUIRE(sprite != nullptr); // added for it
+    REQUIRE(sprite != nullptr); // added for the panel
     CHECK(sprite->texture == c->renderTextureView);
     CHECK(sprite->orientation == engine::render::SpriteOrientation::EntityOriented);
     CHECK(sprite->postTonemap);
-    CHECK(sprite->size.x == doctest::Approx(2.0f * 204.0f / 200.0f)); // the transparent edge's share
+    CHECK(sprite->size.x == doctest::Approx(2.0f * 204.0f / 200.0f)); // enlarged by the transparent edge's share
     CHECK(c->renderRoot->GetViewportSize().x == doctest::Approx(200.0f));
 
-    // The scene's GUI drew at 800 by 600: its camera's ray through the middle meets the panel.
+    // The scene's GUI drew at 800 by 600, so a ray through the middle of its camera meets the
+    // panel.
     engine.gui->SceneRootFor(*level)->SetViewportSize(Float2{800.0f, 600.0f});
     engine.devices.mouse.x = 400.0f;
     engine.devices.mouse.y = 300.0f;
@@ -1061,7 +1066,7 @@ TEST_CASE("engine.gui: a world panel drives its sprite, and the pointer reaches 
     engine.Frame();
     CHECK(clicks == 1);
 
-    // Off the panel: the game's.
+    // Off the panel, the pointer is the game's.
     engine.devices.mouse.x = 10.0f;
     engine.devices.mouse.y = 10.0f;
     engine.Frame();
@@ -1121,7 +1126,7 @@ TEST_CASE("engine.gui: the project's fonts, a default and others each a family, 
     RefPtr<foundation::fonts::Font> title = MakeFontProduct(u8"Title");
     const foundation::fonts::Font* others[] = {title.Get()};
 
-    engine.gui->SetFonts(nullptr, Span<const foundation::fonts::Font* const>(others, 1)); // others wait for a default
+    engine.gui->SetFonts(nullptr, Span<const foundation::fonts::Font* const>(others, 1)); // the others are not used until there is a default
     CHECK(engine.gui->Fonts() == builtIn);
 
     engine.gui->SetFonts(body.Get(), Span<const foundation::fonts::Font* const>(others, 1));
@@ -1141,11 +1146,10 @@ TEST_CASE("engine.gui: the project's fonts, a default and others each a family, 
 }
 
 // The editor sets the fonts again when the project's content changes (a sheet's cook). A label
-// keeps the font it was styled with until it is styled again: input lays a root out (a hit test)
-// before the frame's style pass (the user's Masquerade crashed in a hit test's text measure), and a
-// scene tier is styled only when its scene draws, which a game's GUI may not do for many frames
-// (Sedulous's crash on a game GUI's first frame). The same fonts keep their service; new ones
-// leave the old service alive until the GUI goes.
+// keeps the font it was styled with until it is styled again. Input lays a root out (a hit test)
+// before the frame's style pass, which would otherwise measure text with a freed font, and a
+// scene tier is styled only when its scene draws, which may not happen for many frames. Setting
+// the same fonts keeps their service; new fonts leave the old service alive until the GUI goes.
 TEST_CASE("engine.gui: the same fonts keep their service; a replaced one lives until the GUI goes")
 {
     Engine engine;
@@ -1154,14 +1158,14 @@ TEST_CASE("engine.gui: the same fonts keep their service; a replaced one lives u
     const foundation::fonts::Font* others[] = {title.Get()};
     engine.gui->SetFonts(body.Get(), Span<const foundation::fonts::Font* const>(others, 1));
     foundation::fonts::IFontService* first = engine.gui->Fonts();
-    CHECK(engine.gui->RetiredFontServices() == 0u); // the built-in one is no project service
+    CHECK(engine.gui->RetiredFontServices() == 0u); // the built-in font is not a project service
 
-    // The same fonts again (the editor after a cook that changed none): nothing replaced.
+    // Setting the same fonts again (the editor after a cook that changed none) replaces nothing.
     engine.gui->SetFonts(body.Get(), Span<const foundation::fonts::Font* const>(others, 1));
     CHECK(engine.gui->Fonts() == first);
     CHECK(engine.gui->RetiredFontServices() == 0u);
 
-    // Another font (or the others changed): a new service, the first kept for good.
+    // Another font (or changed others) makes a new service, and the first is kept for good.
     RefPtr<foundation::fonts::Font> again = MakeFontProduct(u8"Body");
     engine.gui->SetFonts(again.Get(), Span<const foundation::fonts::Font* const>(others, 1));
     CHECK(engine.gui->Fonts() != first);
@@ -1176,10 +1180,11 @@ TEST_CASE("engine.gui: the same fonts keep their service; a replaced one lives u
 TEST_CASE("engine.gui: the screen is placed as the game's image is: fitted at its resolution, turned for its orientation")
 {
     using engine::gui::GuiSubsystem;
-    // No resolution, any orientation: the plain draw.
+    // With no resolution and any orientation, it is a plain draw.
     CHECK_FALSE(GuiSubsystem::PlaceScreen(Float2{}, FitMode::Letterbox, ScreenOrientation::Any, Float2{1280.0f, 720.0f}).Fitted);
 
-    // 320 by 180 fitted into 1280 by 800: letterboxed, laid out at 320 by 180 four times over.
+    // 320 by 180 fitted into 1280 by 800 is letterboxed, laid out at 320 by 180 at four times
+    // the scale.
     engine::gui::GuiScreenPlacement place =
         GuiSubsystem::PlaceScreen(Float2{320.0f, 180.0f}, FitMode::Letterbox, ScreenOrientation::Any, Float2{1280.0f, 800.0f});
     REQUIRE(place.Fitted);
@@ -1190,7 +1195,8 @@ TEST_CASE("engine.gui: the screen is placed as the game's image is: fitted at it
     CHECK(place.DrawSize.x == doctest::Approx(1280.0f));
     CHECK(place.DpiScale == doctest::Approx(4.0f)); // 1280 / 4 = 320 laid out
 
-    // A landscape game on a portrait target: turned a quarter, laid out at its own shape.
+    // A landscape game on a portrait target is rotated a quarter turn and laid out in its own
+    // shape.
     place = GuiSubsystem::PlaceScreen(Float2{}, FitMode::Letterbox, ScreenOrientation::Landscape, Float2{720.0f, 1280.0f});
     REQUIRE(place.Fitted);
     CHECK(place.Turn != ContentRotation::None);
@@ -1219,14 +1225,15 @@ TEST_CASE("engine.gui: at a render resolution the screen tier lays out at it, dr
     SceneRoot* root = engine.gui->ScreenRoot();
     CHECK(root->GetSize().x == doctest::Approx(400.0f)); // laid out at the game's resolution
     CHECK(root->GetSize().y == doctest::Approx(300.0f));
-    CHECK(root->GetDisplayScale() == doctest::Approx(2.0f)); // drawn crisp at the target's
+    CHECK(root->GetDisplayScale() == doctest::Approx(2.0f)); // drawn crisp at the target's resolution
     rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(rhi::RenderPassDesc{});
     const u64 draws = encoder.counters->Snapshot().draws;
     engine.gui->Render(*pass, view);
     CHECK(encoder.counters->Snapshot().draws > draws);
     pass->End();
 
-    // The pointer arrives in render space (the game's fitted source): the tier takes it to its pixels.
+    // The pointer arrives in render space (the game's fitted source), and the tier maps it into its
+    // pixels.
     engine.devices.mouse.x = 50.0f;
     engine.devices.mouse.y = 30.0f;
     engine.Frame();
@@ -1264,12 +1271,12 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     CHECK(engine.gui->RunScreenCount() == 2u);
     CHECK(a->GetId() == StringView(u8"screens")); // what its scripts find under their root
 
-    // A's tab draws A's screens under the shared tier; a run's resolution is its own.
+    // A's tab draws A's screens beneath the shared tier, and each run has its own resolution.
     RefPtr<UIWidget> menu = MakeRef<UIWidget>(DefaultAllocator());
     menu->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
     REQUIRE(a->Push(*menu) != nullptr);
     engine.gui->SetScreenResolution(&runA, 320, 180, FitMode::Letterbox);
-    CHECK_FALSE(engine.gui->HasScreenResolution()); // the shared tier's untouched
+    CHECK_FALSE(engine.gui->HasScreenResolution()); // the shared tier is untouched
     foundation::render::ScreenOverlayView view;
     view.width = 640;
     view.height = 360;
@@ -1285,8 +1292,8 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     pass->End();
     engine.gui->SetRenderRun(nullptr);
 
-    // Its run's session ends (the tab's Stop): its tier goes, with no call to the GUI. A run gone
-    // without a stop takes its tier too.
+    // When the run's session ends (the tab's Stop), its tier goes without any call to the GUI. A
+    // run that goes away without a stop takes its tier with it too.
     runA.Stop();
     CHECK(engine.gui->RunScreenCount() == 1u);
     runB.Dispose();
@@ -1326,7 +1333,7 @@ TEST_CASE("engine.gui: a document on the overlay layer shows above every screen,
     engine.Frame();
     CHECK(engine.gui->ActiveInputRoot() == hud);
 
-    // A passive overlay (a watermark: pointer-events none on its root) takes nothing.
+    // A passive overlay (a watermark, with pointer-events none on its root) takes no input.
     RefPtr<Node> badge = engine.gui->PushOverlay(*MakeDocument(u8"<Panel pointer-events=\"none\"><Label text=\"badge\"/></Panel>"));
     REQUIRE(badge);
     CHECK_FALSE(badge->IsHitTestVisible());
@@ -1351,7 +1358,7 @@ TEST_CASE("engine.gui: an editor's preview builds in the GUI's context, a sheet 
     RefPtr<SceneRoot> preview =
         engine.gui->CreatePreview(u8"<Panel><Panel class=\"title\" id=\"t\"/></Panel>", u8".title { width: 66px; height: 4px; }");
     REQUIRE(preview);
-    CHECK(engine.gui->ScreenRoot()->ChildCount() == 3u); // not in a tier: the screen's guide, stack and overlays alone
+    CHECK(engine.gui->ScreenRoot()->ChildCount() == 3u); // the preview is not in a tier; the root holds only the guide, the stack and the overlays
 
     rhi::Texture* texture = nullptr;
     rhi::TextureView* target = nullptr;
@@ -1373,9 +1380,9 @@ TEST_CASE("engine.gui: an editor's preview builds in the GUI's context, a sheet 
 
 TEST_CASE("engine.gui: a game's text draws in the default family with no sheet naming one, and a sheet still chooses its own")
 {
-    // The style applier gives text a font only where a family is declared: the GUI's own sheet
-    // declares the default family on every tree's top elements (the editor showed text missing
-    // from a document's preview before it did).
+    // The style applier gives text a font only where a family is declared. The GUI's own sheet
+    // declares the default family on every tree's top elements, so a document's preview shows its
+    // text.
     Engine engine;
     REQUIRE(engine.gui->Fonts() != nullptr);
     REQUIRE_FALSE(engine.gui->Fonts()->DefaultFontFamily().IsEmpty()); // the built-in font loaded
@@ -1390,7 +1397,7 @@ TEST_CASE("engine.gui: a game's text draws in the default family with no sheet n
     Node* title = FindById(*preview, u8"title");
     Node* ok = FindById(*preview, u8"ok");
     REQUIRE(title != nullptr);
-    REQUIRE(ok != nullptr); // (a button with no width fills its line: the GUI's Button, not this)
+    REQUIRE(ok != nullptr); // width unchecked: a Button with no width fills its line, the Button's concern
     CHECK(title->GetSize().x > 0.0f); // its text measured
     CHECK(title->GetSize().y > 0.0f);
     CHECK(ok->GetSize().y > 0.0f);
@@ -1431,7 +1438,7 @@ TEST_CASE("engine.gui: a prompt names the game's binding with no host wiring, an
     (void)engine.gui->ScreenRoot()->UpdateLayout();
     CHECK(prompt->GetText() == StringView(u8"F"));
 
-    // The runtime the host names (a game instance's) instead.
+    // The runtime the host names (a game instance's) replaces it.
     foundation::input::ActionRuntime game;
     game.SetMap(mapWith(static_cast<u32>(foundation::shell::KeyCode::G)));
     engine.gui->SetPromptRuntime(&game);
@@ -1457,7 +1464,7 @@ TEST_CASE("engine.gui: the default loading screen is the logo over a bar and \"L
     screen.Progress->SetValue(0.5);
     CHECK(screen.Progress->GetValue() == doctest::Approx(0.5));
 
-    // No logo it can read: the bar and the line alone.
+    // With no readable logo, only the bar and the status line.
     CHECK(engine::gui::BuildDefaultLoadingScreen(DefaultAllocator(), StringView{}).Root->ChildCount() == 2u);
     CHECK(engine::gui::BuildDefaultLoadingScreen(DefaultAllocator(), StringView(u8"not svg")).Root->ChildCount() == 2u);
 
@@ -1503,11 +1510,11 @@ TEST_CASE("engine.gui: the touch guide shows the game's touch controls once a fi
     CHECK(guide->GetParent() == engine.gui->ScreenRoot());
     CHECK(guide->GetParent()->GetChildAt(0) == guide); // beneath the screens and the overlays
     CHECK_FALSE(guide->IsHitTestVisible());
-    // No finger yet (a desktop player): nothing shown.
+    // With no finger yet (a desktop player), nothing is shown.
     engine.Frame();
     CHECK(guide->ControlCount() == 0u);
     CHECK_FALSE(guide->IsVisible());
-    // A finger: both controls, and they stay after it lifts.
+    // After a finger touches, both controls show, and they stay after it lifts.
     engine.devices.touch.Put(1, 600.0f, 300.0f);
     engine.Frame();
     CHECK(guide->ControlCount() == 2u);
@@ -1535,7 +1542,7 @@ TEST_CASE("engine.gui: the GUI says it wants text input while a text field input
     form->AddChild(name.Get());
     REQUIRE(engine.gui->Screens()->Push(*form) != nullptr); // a pushed screen focuses its first field
     engine.Frame();
-    CHECK(engine.gui->WantsTextInput()); // the editor's Game tab starts the window's text input on it
+    CHECK(engine.gui->WantsTextInput()); // the editor's Game tab starts the window's text input when this is true
     engine.gui->ScreenRoot()->GetEventDispatcher()->SetFocusNode(nullptr);
     engine.Frame();
     CHECK_FALSE(engine.gui->WantsTextInput());

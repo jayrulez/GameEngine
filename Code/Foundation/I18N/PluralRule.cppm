@@ -3,15 +3,15 @@
 
 // foundation.i18n - :plural_rule partition
 //
-// A language's plural rule, as data a string table carries (Documentation/Specs/i18n.md): for
-// each category it uses but `other`, a condition in CLDR's rule syntax for integer counts
-// ("one: n = 1; few: n % 10 = 2..4 and n % 100 != 12..14"). Parsed once, when set (a rule that
+// A language's plural rule, as data a string table carries: for each category it uses but
+// `other`, a condition in CLDR's rule syntax for integer counts ("one: n = 1; few: n % 10 =
+// 2..4 and n % 100 != 12..14"). Parsed once, when set (a rule that
 // does not parse is refused with its position), then evaluated per count: the conditions in
 // CLDR's category order, the first that holds chosen, else other.
 //
 // The syntax: a condition is relations joined by `and` (binding tighter) and `or`; a relation is
 // an operand (`n`, or `i`, the same for integers) optionally `% <value>`, then `=` or `!=`, then a
-// list of values and ranges (`2..4, 22..24`). Fractions (CLDR's v, f, t) are deferred.
+// list of values and ranges (`2..4, 22..24`). Fractions (CLDR's v, f, t) are not supported.
 
 module;
 #include "Core/Prelude.h"

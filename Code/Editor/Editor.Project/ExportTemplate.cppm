@@ -3,20 +3,20 @@
 
 // Editor::Project - :export_template partition.
 //
-// Export templates: portable, per-platform prebuilt bundles (a player binary + its runtime sidecars +
-// a template.xml manifest) that presets reference by id/platform. They live
-// in a machine-local templates root (not committed), are importable/downloadable, and are decoupled
-// from any one machine's paths. The HOST implicit template is synthesized from the running tool's own
-// directory (Bin/...), so a dev export for the current platform needs zero setup.
+// Export templates are portable, per-platform prebuilt bundles (a player binary, its runtime
+// sidecars and a template.xml manifest) that presets reference by id or platform. They live in a
+// machine-local templates root (not committed), can be imported or downloaded, and do not depend
+// on any one machine's paths. The host's implicit template is synthesized from the running tool's
+// own directory (Bin/...), so a development export for the current platform needs no setup.
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-// NO <filesystem> here - see ImportTemplate below. It lives in ExportTemplateImpl.cpp.
+// No <filesystem> here (see ImportTemplate below); ExportTemplateImpl.cpp includes it.
 
-// Export-template id prefix; CMake bakes TEMPLATE_ID_PREFIX_VALUE on the policy target. Required -
-// no in-source default (keeps the prefix value out of the source). Tests build expected ids from the
-// same macro so they always agree.
+// Export-template id prefix; CMake bakes TEMPLATE_ID_PREFIX_VALUE on the policy target. It is
+// required, with no default in the source, which keeps the prefix value out of the source. Tests
+// build expected ids from the same macro so they always agree.
 #ifndef TEMPLATE_ID_PREFIX
 #error "TEMPLATE_ID_PREFIX is not defined - set TEMPLATE_ID_PREFIX_VALUE in the root CMakeLists (policy target)"
 #endif
@@ -39,7 +39,7 @@ export namespace editor
     inline constexpr StringView kTemplateManifestFile = u8"template.xml";
 
     // A prebuilt per-platform export bundle. The serialized fields come from template.xml; `directory`
-    // and `isHost` are runtime-resolved (the registry sets them) and NOT serialized. ISerializable so
+    // and `isHost` are resolved at run time (the registry sets them) and not serialized. ISerializable so
     // template.xml round-trips as a versioned payload; the registry owns instances via UniquePtr.
     class ExportTemplate final : public ISerializable
     {
@@ -47,31 +47,31 @@ export namespace editor
     public:
         String id;       // "<prefix>-win64-release-0.1.0" (unique within the templates root)
         String name;     // "Windows Desktop Release 0.1.0"
-        String platform; // "Win64" / "Linux64"
-        String config; // "Debug" / "Release" / "RelWithDebInfo" (identity); empty read => "Release"
-        String compiler;      // "MSVC" / "Clang" / "GCC" - metadata only, NOT a selector
-        String engineVersion; // engine this was built against (soft-matched; warn on mismatch)
-        String playerBinary;  // player exe filename within the template dir
+        String platform; // "Win64" or "Linux64"
+        String config; // "Debug", "Release" or "RelWithDebInfo" (identity); an empty read gives "Release"
+        String compiler;      // "MSVC", "Clang" or "GCC"; metadata only, not a selector
+        String engineVersion; // engine version it was built against (a mismatch only warns)
+        String playerBinary;  // the player executable's filename within the template directory
         Array<String>
-            sidecars; // required runtime files (relative to the template dir), always staged
+            sidecars; // required runtime files (relative to the template directory), always staged
         Array<String>
-            symbols; // optional symbol files (PDB/DWARF); staged only when the preset opts in
+            symbols; // optional symbol files (PDB, DWARF); staged only when the preset opts in
         String notes;
         // The template's icon, an SVG file in its bundle (kTemplateIconFile when made by
-        // CreateTemplate), which the editor shows it by. Empty in a manifest from before it: the
-        // editor shows its platform's built-in icon.
+        // CreateTemplate), which the editor shows it with. Empty in a manifest without one, and then
+        // the editor shows its platform's built-in icon.
         String icon;
 
-        String directory;    // NOT serialized: absolute dir the bundle lives in (host: the Bin dir)
-        bool isHost = false; // NOT serialized: synthesized host template vs imported from disk
+        String directory;    // not serialized: the bundle's absolute directory (Bin for the host)
+        bool isHost = false; // not serialized: synthesized for the host, not imported
 
-        // The config for identity/resolution, treating an unstamped (v1) template as Release.
+        // The config for identity and resolution, treating an unstamped (v1) template as Release.
         [[nodiscard]] StringView EffectiveConfig() const noexcept;
 
         void Serialize(ISerializer& ar) override;
     };
 
-    // Read a template.xml (relative path `fileName`) from `root`. NotFound when absent.
+    // Reads a template.xml (relative path `fileName`) from `root`. NotFound when absent.
     [[nodiscard]] inline Status LoadTemplateManifest(vfs::IFileSystem& root, ExportTemplate& out,
                                                      StringView fileName = kTemplateManifestFile)
     {
@@ -92,7 +92,7 @@ export namespace editor
         return ctx->serializer->IsOk() ? Status{} : ctx->serializer->GetStatus();
     }
 
-    // Write a template.xml to `root`.
+    // Writes a template.xml to `root`.
     [[nodiscard]] inline Status SaveTemplateManifest(vfs::IWritableFileSystem& writable,
                                                      ExportTemplate& tmpl,
                                                      StringView fileName = kTemplateManifestFile)
@@ -115,14 +115,13 @@ export namespace editor
         return writable.Save(fileName, buffer.Bytes());
     }
 
-    // Synthesize the host implicit template from the running tool's own directory (Bin/...), so a dev
-    // export for the current platform works with no import.
-    // The player target's base name (no exe extension); "<base>.runtime-libs" is the build-emitted
-    // sidecar list beside it (written by util_copy_runtime_deps).
+    // The player target's base name (without the executable extension); "<base>.runtime-libs" is
+    // the sidecar list the build writes beside it (util_copy_runtime_deps).
     inline constexpr StringView kPlayerBaseName = BUILTIN_PLAYER_BASENAME;
 
-    // Read a "<name>.runtime-libs" list (one library basename per line) from `fs` into `out`, skipping
-    // blank lines and trimming trailing CR/whitespace. Absent/empty file => no entries added.
+    // Reads a "<name>.runtime-libs" list (one library basename per line) from `fs` into `out`,
+    // skipping blank lines and trimming a trailing CR and whitespace. An absent or empty file adds
+    // no entries.
     inline void ReadRuntimeLibs(vfs::IFileSystem& fs, StringView fileName, Array<String>& out)
     {
         UniquePtr<IStream> stream = fs.Open(fileName, FileMode::Read);
@@ -172,7 +171,7 @@ export namespace editor
         }
     }
 
-    // Lowercase an ASCII string (used to build stable, case-insensitive template ids). Non-ASCII
+    // Lowercases an ASCII string (used to build stable, case-insensitive template ids). Non-ASCII
     // bytes pass through unchanged (platform/config tags are ASCII).
     [[nodiscard]] inline String AsciiLower(StringView in)
     {
@@ -188,10 +187,10 @@ export namespace editor
         return out;
     }
 
-    // Parse a "…/Bin/<Config>/<Platform>-<Compiler>" build dir into its config + compiler tags:
-    // the last path component is "<Platform>-<Compiler>" (compiler = the suffix after the final
-    // '-'); the component one level up is "<Config>". Fields left untouched when a segment is
-    // absent (a non-Bin dir), so the caller's defaults survive.
+    // Parses a ".../Bin/<Config>/<Platform>-<Compiler>" build directory into its config and compiler
+    // tags: the last path component is "<Platform>-<Compiler>" (the compiler is the suffix after
+    // the final '-'), and the component one level up is "<Config>". Fields are left untouched when
+    // a segment is absent (a directory outside Bin), so the caller's defaults survive.
     inline void DeriveConfigAndCompiler(StringView dir, String& outConfig, String& outCompiler)
     {
         StringView p = dir;
@@ -217,8 +216,8 @@ export namespace editor
         const StringView leaf = p.SubStr(leafStart, p.Size() - leafStart);
         const StringView parent = (leafStart > 0) ? p.SubStr(0, leafStart - 1) : StringView{};
 
-        // compiler = leaf suffix after the last '-' (strip a trailing "-ASAN"-style suffix's owner:
-        // we only take the final '-' segment, matching "<Platform>-<Compiler>").
+        // The compiler is the leaf's suffix after the last '-'; only the final '-' segment is
+        // taken, matching "<Platform>-<Compiler>".
         usize dash = leaf.Size();
         for (usize i = 0; i < leaf.Size(); ++i)
         {
@@ -232,7 +231,7 @@ export namespace editor
             outCompiler = String(leaf.SubStr(dash + 1, leaf.Size() - dash - 1));
         }
 
-        // config = the parent dir's last component.
+        // The config is the parent directory's last component.
         if (!parent.IsEmpty())
         {
             usize cfgStart = 0;
@@ -247,11 +246,12 @@ export namespace editor
         }
     }
 
-    // Synthesize the host implicit template from the running tool's own directory (Bin/...), so a dev
-    // export for the current platform works with no import. Sidecars come from the build-emitted
-    // "<player>.runtime-libs" in that directory (config-driven; empty on rpath platforms). The host
-    // template carries the config/compiler that built the running tool: a Debug
-    // editor synthesizes a Debug host template - so its id is "host-<platform>-<config>".
+    // Synthesizes the host's implicit template from the running tool's own directory (Bin/...), so a
+    // development export for the current platform works with no import. Sidecars come from the
+    // "<player>.runtime-libs" file the build writes in that directory (it depends on the config and
+    // is empty on rpath platforms). The host template carries the config and compiler that built
+    // the running tool: a Debug editor synthesizes a Debug host template, so its id is
+    // "host-<platform>-<config>".
     inline void SynthesizeHostTemplate(StringView hostToolDir, vfs::IFileSystem* hostToolFs,
                                        ExportTemplate& out)
     {
@@ -272,7 +272,7 @@ export namespace editor
         out.name += u8" (host build)";
         out.engineVersion = String(engine::project::kEngineVersionString);
         out.playerBinary =
-            GetExecutableName(kPlayerBaseName); // host-based (this template is the host)
+            GetExecutableName(kPlayerBaseName); // the host's executable name (this template is the host's)
         out.directory = String(hostToolDir);
         out.isHost = true;
         if (hostToolFs != nullptr)
@@ -289,7 +289,7 @@ export namespace editor
         return PathJoin(GetUserDataDirectory().AsView(), u8"templates");
     }
 
-    // Resolve the templates root, most-specific first: an explicit `overrideRoot` (the editor's
+    // Resolves the templates root, most specific first: an explicit `overrideRoot` (the editor's
     // EditorExportSettings::templatesRoot; empty when unset) wins, then $ENV_TEMPLATES_DIR, then
     // DefaultTemplatesRoot(). Shared by the CLI (which passes no override) and the editor (which passes
     // its setting), so both resolve identically.
@@ -307,32 +307,33 @@ export namespace editor
         return DefaultTemplatesRoot();
     }
 
-    // Install a template bundle (a dir holding template.xml + the player + sidecars) into
-    // `templatesRoot` under its manifest id, so the registry picks it up. Recursive copy (overwrites
-    // an existing install of the same id). `outId` receives the imported id. NotFound if the source has
-    // no valid template.xml. Shared by the Tools.Export CLI and the editor's Import Template action.
-    // Defined out-of-line in ExportTemplateImpl.cpp: the body needs <filesystem> for the
-    // recursive copy, and that header must not reach this INTERFACE. On MSVC an STL header in a
-    // module interface's global module fragment gets attached to the module, and consumers then
-    // fail to re-materialize it from the .ifc - here as
+    // Installs a template bundle (a directory holding template.xml, the player and sidecars) into
+    // `templatesRoot` under its manifest id, so the registry picks it up. The copy is recursive and
+    // overwrites an existing install of the same id. `outId` receives the imported id. NotFound if
+    // the source has no valid template.xml. Shared by the Tools.Export CLI and the editor's Import
+    // Template action.
+    // Defined out of line in ExportTemplateImpl.cpp: the body needs <filesystem> for the recursive
+    // copy, and that header must not reach this interface. On MSVC an STL header in a module
+    // interface's global module fragment gets attached to the module, and consumers then fail to
+    // re-materialize it from the .ifc, here as
     //   type_traits(2410): error C2678: binary '&': no operator found which takes a left-hand
     //   operand of type '_Bitmask'
-    // from std::_Bitmask_includes_all<__std_fs_stats_flags>, which broke Editor.App.
-    // (Same shape as <stop_token> via <thread> in Core's JobSystem.) The impl unit already
-    // included <filesystem> for exactly this - only the bodies were in the wrong place.
+    // from std::_Bitmask_includes_all<__std_fs_stats_flags>. (<stop_token> through <thread> in
+    // Core's JobSystem has the same problem.)
     [[nodiscard]] Status ImportTemplate(StringView srcDir, StringView templatesRoot,
                                         String* outId = nullptr);
 
-    // Remove an installed template bundle: delete `<templatesRoot>/<templateId>` and everything
-    // under it (the editor's templates-manager Remove action; the registry drops it next Refresh).
-    // The HOST template is synthesized, not on disk, so it is never removable this way - callers
-    // must not offer Remove for it. Empty id / a missing dir is a soft error, not a crash.
-    // Out-of-line for the same reason as ImportTemplate above.
+    // Removes an installed template bundle: deletes `<templatesRoot>/<templateId>` and everything
+    // under it (the editor templates manager's Remove action; the registry drops it on the next
+    // Refresh). The host template is synthesized, not on disk, so it can never be removed this
+    // way, and callers must not offer Remove for it. An empty id or a missing directory is a soft
+    // error, not a crash. Out of line for the same reason as ImportTemplate above.
     [[nodiscard]] Status RemoveTemplate(StringView templatesRoot, StringView templateId);
 
-    // Does a template's engineVersion match this running build's? Empty (an unstamped/hand-written
-    // manifest) is treated as a match - the export driver only soft-warns on a real mismatch, so the
-    // editor's templates-manager surfaces the same "!" note only when a stamped version differs.
+    // Whether a template's engineVersion matches this running build's. Empty (an unstamped or
+    // hand-written manifest) counts as a match: the export driver only soft-warns on a real
+    // mismatch, so the editor's templates manager shows the same "!" note only when a stamped
+    // version differs.
     [[nodiscard]] inline bool TemplateEngineMatches(const ExportTemplate& tmpl)
     {
         return tmpl.engineVersion.IsEmpty() ||
@@ -346,9 +347,9 @@ export namespace editor
         ExportFolder, // directly into <destRoot> (a self-contained bundle to zip/distribute)
     };
 
-    // What a created template is called, when not the canonical id and name: a second bundle for
-    // one platform (the Steam Deck build beside the desktop Linux one) sits beside it rather than
-    // replacing it. Empty fields keep the canonical ones.
+    // What a created template is called when it should not take the canonical id and name: a second
+    // bundle for one platform (the Steam Deck build beside the desktop Linux one) then sits beside
+    // the first rather than replacing it. Empty fields keep the canonical ones.
     struct TemplateIdentity
     {
         StringView id;
@@ -359,16 +360,18 @@ export namespace editor
         StringView icon;
     };
 
-    // Synthesize + materialize a template from a "Bin/<Config>/<Platform>-<Compiler>" build dir.
-    // Reuses SynthesizeHostTemplate to read the platform + the
-    // build-emitted "<player>.runtime-libs", then stamps config + compiler (parsed from the dir path)
-    // and engineVersion, and gives it a canonical id "<prefix>-<platform>-<config>-<engineVersion>".
-    // Copies the player binary + each sidecar (FileCopyPreserving, keeping +x) and writes template.xml.
+    // Synthesizes a template from a "Bin/<Config>/<Platform>-<Compiler>" build directory and writes
+    // it out. It reuses SynthesizeHostTemplate to read the platform and the "<player>.runtime-libs"
+    // the build wrote, then stamps the config and compiler (parsed from the directory path) and
+    // engineVersion, and gives it a canonical id "<prefix>-<platform>-<config>-<engineVersion>". It
+    // copies the player binary and each sidecar (FileCopyPreserving, keeping +x) and writes
+    // template.xml.
     //
-    // Two output modes (TemplateOutput): Install writes to <destRoot>/<id> (the templates root, so the
-    // registry picks it up next Refresh); ExportFolder writes straight into <destRoot> (zip that folder
-    // to distribute, then Import it elsewhere). `outId` / `outDir` receive the id and the bundle dir.
-    // NotFound if the player binary is missing from `configDir`.
+    // There are two output modes (TemplateOutput): Install writes to <destRoot>/<id> (the templates
+    // root, so the registry picks it up on the next Refresh); ExportFolder writes straight into
+    // <destRoot> (zip that folder to distribute, then Import it elsewhere). `outId` and `outDir`
+    // receive the id and the bundle directory. NotFound if the player binary is missing from
+    // `configDir`.
     [[nodiscard]] inline Status CreateTemplate(StringView configDir, StringView destRoot,
                                                TemplateOutput mode, String* outId = nullptr,
                                                String* outDir = nullptr,
@@ -378,14 +381,15 @@ export namespace editor
 
         ExportTemplate tmpl;
         SynthesizeHostTemplate(configDir, &configFs,
-                               tmpl); // platform + player + sidecars + engineVersion
+                               tmpl); // platform, player, sidecars and engineVersion
         tmpl.isHost = false;
 
-        // A WEB build dir (Bin/<Config>/Emscripten-*) holds the browser player page, not a host
-        // executable: platform "Web", the player is the .html, and the sidecars manifest lists
-        // .js/.wasm/serve.py. The resulting template exports exactly like a desktop one - the
-        // export stages page + sidecars + Content.pak + player.xml + the WGSL shaders.dpak, and
-        // the served folder runs in a browser (the player FETCHES the three dist files).
+        // A web build directory (Bin/<Config>/Emscripten-*) holds the browser player page, not a
+        // host executable: the platform is "Web", the player is the .html, and the sidecars
+        // manifest lists .js, .wasm and serve.py. The resulting template exports exactly like a
+        // desktop one: the export stages the page, the sidecars, Content.pak, player.xml and the
+        // WGSL shaders.dpak, and the served folder runs in a browser (the player fetches the three
+        // dist files).
         {
             String webPage(kPlayerBaseName);
             webPage += u8".html";
@@ -401,8 +405,8 @@ export namespace editor
             }
         }
 
-        // config/compiler come from WHICH Bin/<Config>/<Platform>-<Compiler> dir is being packaged
-        // (not the running tool's), so a Debug editor can still create a Release template.
+        // The config and compiler come from the Bin/<Config>/<Platform>-<Compiler> directory being
+        // packaged, not from the running tool, so a Debug editor can still create a Release template.
         String parsedConfig, parsedCompiler;
         DeriveConfigAndCompiler(configDir, parsedConfig, parsedCompiler);
         if (!parsedConfig.IsEmpty())
@@ -418,7 +422,7 @@ export namespace editor
             tmpl.compiler = parsedCompiler;
         }
 
-        // Canonical id + name (lowercased platform/config for a stable, case-insensitive id).
+        // Canonical id and name (platform and config lowercased for a stable, case-insensitive id).
         tmpl.id = String(TEMPLATE_ID_PREFIX);
         tmpl.id += u8"-";
         tmpl.id += AsciiLower(tmpl.platform.AsView());
@@ -444,13 +448,13 @@ export namespace editor
             tmpl.notes = String(identity.notes);
         }
 
-        // The player must exist in the source dir, or there's nothing to package.
+        // The player must exist in the source directory, or there is nothing to package.
         if (!configFs.Exists(tmpl.playerBinary.AsView()))
         {
             return Status{ErrorCode::NotFound};
         }
 
-        // The icon the template will carry, settled before anything is written: an unknown name
+        // Settle the icon the template will carry before anything is written, so an unknown name
         // or a missing .svg refuses the template while an installed bundle of this id still
         // stands (Install replaces it whole below).
         const bool iconFromFile = identity.icon.EndsWith(u8".svg");
@@ -467,7 +471,7 @@ export namespace editor
                                      ? PathJoin(destRoot, tmpl.id.AsView())
                                      : String(destRoot);
         // Installing replaces a bundle of the same id whole: a file the new build no longer lists
-        // (a sidecar dropped since) must not linger and ship.
+        // (a sidecar it dropped) must not linger and ship.
         if (mode == TemplateOutput::Install && DirectoryExists(bundleDir.AsView()) &&
             !RemoveDirectoryRecursive(bundleDir.AsView()))
         {
@@ -478,8 +482,8 @@ export namespace editor
             return Status{ErrorCode::NotSupported};
         }
 
-        // Copy the player, then each required sidecar (a missing sidecar is fatal - the bundle would be
-        // incomplete; unlike export-time staging where a stale list only warns).
+        // Copy the player, then each required sidecar. A missing sidecar is fatal, since the bundle
+        // would be incomplete; staging at export time, by contrast, only warns about a stale list.
         if (!FileCopyPreserving(PathJoin(configDir, tmpl.playerBinary.AsView()).AsView(),
                                 PathJoin(bundleDir.AsView(), tmpl.playerBinary.AsView()).AsView()))
         {
@@ -531,8 +535,8 @@ export namespace editor
         return Status{};
     }
 
-    // The SVG a template is shown by: the icon file in its bundle, or (the host template, a bundle
-    // from before icons, an unreadable file) the built-in icon of its platform.
+    // The SVG a template is shown with: the icon file in its bundle, or the built-in icon of its
+    // platform (for the host template, a bundle with no icon, or an unreadable file).
     [[nodiscard]] inline String TemplateIconSvg(const ExportTemplate& tmpl, IAllocator& allocator)
     {
         if (!tmpl.icon.IsEmpty())
@@ -551,11 +555,12 @@ export namespace editor
     class TemplateRegistry
     {
     public:
-        // Rebuild the set. Imported templates come from `templatesRootFs` (each immediate subdir's
-        // template.xml); `templatesRootPath` is that root's absolute path (used to record each
-        // template's on-disk directory). Either may be empty/null (=> host template only). The host
-        // template is synthesized from `hostToolDir`, reading its sidecars from `hostToolFs` (a VFS
-        // rooted at that dir; null => host template with no sidecars).
+        // Rebuilds the set. Imported templates come from `templatesRootFs` (each immediate
+        // subdirectory's template.xml); `templatesRootPath` is that root's absolute path (used to
+        // record each template's directory on disk). Either may be empty or null, which leaves only
+        // the host template. The host template is synthesized from `hostToolDir`, reading its
+        // sidecars from `hostToolFs` (a VFS rooted at that directory; null gives a host template with
+        // no sidecars).
         void Refresh(StringView templatesRootPath, vfs::IFileSystem* templatesRootFs,
                      StringView hostToolDir, vfs::IFileSystem* hostToolFs)
         {
@@ -613,15 +618,15 @@ export namespace editor
 
         // The template for `(platform, config)`, preferring a real imported
         // bundle over the synthesized host template. Resolution order:
-        //   1. exact (platform, config) - imported bundle, else the host template for that config.
-        //   2. platform-only fallback (config mismatch/absent): the nearest config, preferring Release,
-        //      again imported over host - so an old preset with no config still resolves.
+        //   1. Exact (platform, config): an imported bundle, else the host template for that config.
+        //   2. Platform-only fallback (config mismatched or absent): the nearest config, preferring
+        //      Release, again imported over host, so an old preset with no config still resolves.
         // An empty `config` means Release (the product default).
         [[nodiscard]] const ExportTemplate* FindBy(StringView platform, StringView config) const;
 
         // An explicit templateId wins; otherwise the installed template for the preset's
-        // (platform, config) - the preset's config defaults to Release when blank. Null when nothing
-        // matches (caller: "import a template").
+        // (platform, config), with a blank config meaning Release. Null when nothing matches (the
+        // caller then asks for a template to be imported).
         [[nodiscard]] const ExportTemplate* Resolve(const ExportPreset& preset) const;
 
     private:

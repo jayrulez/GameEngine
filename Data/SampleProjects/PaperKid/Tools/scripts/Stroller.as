@@ -1,6 +1,6 @@
-// Stroller - crosses the title backdrop along X, from `xFrom` to `xTo`, then after a pause comes
-// round again from the start: a car on the road or a person on the pavement. It moves itself, not
-// a navigation agent (the backdrop has no navmesh), and faces the way it goes.
+// Stroller: crosses the title backdrop along X, from `xFrom` to `xTo`, then after a pause starts
+// again from the beginning: a car on the road or a person on the pavement. It moves itself rather
+// than through a navigation agent (the backdrop has no navmesh), and faces the way it goes.
 //
 // Its model is its first child. With a walk clip, the clip plays at the pace it moves (over the
 // metres the clip covers at speed 1); a car has none.
@@ -25,7 +25,7 @@ class Stroller
 
     void onStart()
     {
-        // Somewhere along the way already, so the backdrop is busy from the first frame.
+        // Start somewhere along the way, so the backdrop is busy from the first frame.
         m_x = Random::range(xFrom, xTo);
         float heading = (xTo > xFrom) ? 90.0f : -90.0f;
         self.setRotationEuler(0.0f, heading, 0.0f);

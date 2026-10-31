@@ -1,25 +1,23 @@
-# Generate a .def exporting every External FUNCTION symbol of a target's objects,
-# INCLUDING C++20 module-attached ones.
+# Generate a .def exporting every External function symbol of a target's objects,
+# including C++20 module-attached ones.
 #
 # Why this exists: CMake's WINDOWS_EXPORT_ALL_SYMBOLS silently drops module-attached
-# symbols. MSVC decorates them with a module suffix -
+# symbols. MSVC decorates them with a module suffix:
 #
 #     ?IsLoaded@DynamicLibrary@core@foundation@@QEBA_NXZ::<!foundation.core>
 #
-# - and CMake's def generator does not emit those names, so a shared Core exported 221
-# CRT/STL symbols and none of its own 1994 module functions. link.exe itself accepts the
-# decorated names in a .def perfectly well (verified), so this is a CMake gap, not a
-# toolchain limit. See Documentation/Specs/shared-libraries.md section 5 (P5).
+# and CMake's def generator does not emit those names, so a shared Core would export CRT/STL
+# symbols and none of its own module functions. link.exe itself accepts the decorated names
+# in a .def, so this is a CMake gap, not a toolchain limit.
 #
-# FUNCTIONS ONLY, deliberately. Exported DATA needs __declspec(dllimport) at the point of
-# use to be read correctly through an import table, which the "one BMI for producer and
-# consumer" model cannot express. That is not a gap here: the P2 rendezvous work already
-# moved every piece of process-wide state behind a non-inline accessor FUNCTION, and the
-# sharedlib tripwire keeps it that way.
+# Functions only. Exported data needs __declspec(dllimport) at the point of use to be read
+# correctly through an import table, which the "one BMI for producer and consumer" model
+# cannot express. That loses nothing: every piece of process-wide state sits behind a
+# non-inline accessor function, and the sharedlib tripwire keeps it that way.
 #
 # Invoked at PRE_LINK with:
 #   DUMPBIN      - path to dumpbin.exe
-#   OBJECTS_FILE - file listing the object paths, one per line (NOT a -D list: a ;-list
+#   OBJECTS_FILE - file listing the object paths, one per line (not a -D list: a ;-list
 #                  argument needs COMMAND_EXPAND_LISTS, which splits it into separate argv
 #                  entries and loses every object after the first)
 #   DEF_FILE     - output path
@@ -42,7 +40,7 @@ foreach(_obj IN LISTS OBJECTS)
     endif()
     string(REPLACE "\n" ";" _lines "${_out}")
     foreach(_line IN LISTS _lines)
-        # A defined, externally visible FUNCTION looks like:
+        # A defined, externally visible function looks like:
         #   036 00000230 SECT4  notype ()    External     | <name> (demangled)
         # Undefined references say UNDEF and are skipped by the SECT requirement.
         if(NOT _line MATCHES "notype \\(\\)")

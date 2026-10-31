@@ -3,15 +3,15 @@
 
 // Editor::PropertyAnimation - the `:clip_source` partition.
 //
-// ClipSource: a clip document as the toolkit's dopesheet and curve view read it (Documentation/
-// Specs/editor-gui.md, 5.4, layer 9, part 1). Its channels are the clip's: a scalar track's each of
-// its curves ("Light.intensity", "Transform.position.x", "Light.color.r"), a rotation track one
-// channel of its keys ("Transform.rotation"), so the dopesheet folds them by component, property
-// and channel. Its curves are the scalar channels of the tracks the panel shows (a rotation's keys
-// are slerped, not a curve). Every edit goes through the document: a drag is a gesture, one step
-// when it ends; a deletion or an insertion one step each. A key inserted takes the clip's value
-// there, or, where the channel has no keys yet, the value the application gives (the bound
-// entity's), so a first key holds what the scene shows.
+// ClipSource presents a clip document to the toolkit's dopesheet and curve view. Its channels come
+// from the clip: each curve of a scalar track is a channel ("Light.intensity",
+// "Transform.position.x", "Light.color.r"), and a rotation track's keys form one channel
+// ("Transform.rotation"), so the dopesheet groups them by component, property and channel. Its
+// curves are the scalar channels of the tracks the panel shows (a rotation's keys are slerped, so
+// they are not a curve). Every edit goes through the document: a drag is a gesture that becomes one
+// undo step when it ends, and each deletion or insertion is one step. An inserted key takes the
+// clip's value at that time or, where the channel has no keys yet, the value the application gives
+// (the bound entity's), so a first key holds what the scene shows.
 
 module;
 #include "Core/Prelude.h"
@@ -31,7 +31,7 @@ export namespace editor
     class ClipSource final : public foundation::gui::ITimelineSource, public foundation::gui::ICurveSource
     {
     public:
-        /// A channel: its track and, for a scalar track, which of its curves (-1: a rotation's keys).
+        /// A channel: its track and, for a scalar track, which of its curves (-1 for a rotation's keys).
         struct Channel
         {
             usize Track = 0;
@@ -43,19 +43,20 @@ export namespace editor
         ClipSource(const ClipSource&) = delete;
         ClipSource& operator=(const ClipSource&) = delete;
 
-        /// The tracks whose curves the curve view shows (the chosen ones); empty: none.
+        /// Sets the tracks whose curves the curve view shows (the chosen ones); empty shows none.
         void ShowTracks(Span<const usize> tracks);
         [[nodiscard]] Span<const usize> ShownTracks() const noexcept { return m_shown.AsSpan(); }
-        /// The application's value of a track's target now (the bound entity's), for a first key;
-        /// unset or empty: the type's zero.
+        /// The application's current value of a track's target (the bound entity's), used for a
+        /// first key; when unset or empty, the type's zero is used.
         Function<Variant(const foundation::propertyanimation::PropertyTrack&)> CurrentValue;
 
-        /// The document changed (its owner calls this from the document's OnChanged): the channels
-        /// and curves read again, the views told.
+        /// Called by the owner from the document's OnChanged: reads the channels and curves again
+        /// and notifies the views.
         void Refresh();
 
         [[nodiscard]] Span<const Channel> Channels() const noexcept { return m_channels.AsSpan(); }
-        /// A track's channels' path ("Light.color"), and a channel's ("Light.color.r").
+        /// The path shared by a track's channels ("Light.color"); a channel's own path adds its part
+        /// ("Light.color.r").
         [[nodiscard]] static String TrackPath(const foundation::propertyanimation::PropertyTrack& track);
 
         // === ITimelineSource ===
@@ -83,9 +84,9 @@ export namespace editor
         [[nodiscard]] bool Valid(const Channel& channel) const;
 
         ClipDocument* m_document;
-        Array<Channel> m_channels; // the dopesheet's
-        Array<Channel> m_curves;   // the curve view's: the shown tracks' scalar channels
+        Array<Channel> m_channels; // the dopesheet's channels
+        Array<Channel> m_curves;   // the curve view's channels: the shown tracks' scalar channels
         Array<usize> m_shown;
-        foundation::propertyanimation::PropertyAnimationClip m_moveFrom; // a move's clip as it began
+        foundation::propertyanimation::PropertyAnimationClip m_moveFrom; // the clip as it was when a move began
     };
 }

@@ -1,5 +1,6 @@
-// Controls: the buttons count into the GUI's data (a label shows it through {{clicks}}); the bar and
-// the number follow the slider, and the echo the text field, through bindings, with no handlers.
+// Controls: the buttons count into the GUI's data (a label shows it through {{clicks}}). The bar
+// and the number follow the slider, and the echo follows the text field, through bindings with no
+// handlers.
 
 funcdef string TextExpression();
 funcdef double NumberExpression();

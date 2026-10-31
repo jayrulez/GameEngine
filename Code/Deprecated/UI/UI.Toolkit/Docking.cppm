@@ -3,22 +3,20 @@
 
 // UI Toolkit - :docking partition (mutually-recursive docking cluster)
 //
-// The six docking types that reference one another cyclically live in ONE partition (the established
-// "mutually-recursive types share one partition" rule). Ported from Sedulous.UI.Toolkit/src/Docking/
-// {DockPanelDragData, DockablePanel, DockableWindow, DockTabGroup, DockManager}.bf.
+// The six docking types reference one another cyclically, so they share one partition.
 //
-// Ownership adaptation (Beef raw `new`/`delete` tree -> RefPtr tree):
-//   * The view tree is the strong owner of its children (AddView adds a RefPtr, RemoveView drops it -
-//     which can DESTROY the child if it was the last ref). So any node that is detached and re-attached
-//     must be pinned with a local RefPtr<View> across the operation.
-//   * DockManager.mPanels OWNS its panels via RefPtr (Beef's raw registry was the de-facto owner; an
-//     undocked-but-tracked panel must survive between AddPanel and DockPanel). The tree also refs a
-//     docked panel - RefPtr shared ownership handles this.
-//   * DockManager.mDockableWindows is a NON-owning raw list (PopupLayer owns floating windows, ownsView).
-//   * QueueDeleteNode keeps the node alive across the deferred boundary (captures a RefPtr) so the
-//     deferred tree-removal + release is UAF-free; with no Context it relies on RAII.
-//
-// Beef `IDockableWindow` interface is DEAD (not ported); DetachPanel() is a plain method on DockableWindow.
+// Ownership:
+//   * The view tree is the strong owner of its children (AddView adds a RefPtr, RemoveView drops it,
+//     which destroys the child if that was the last reference). Any node that is detached and
+//     re-attached must be pinned with a local RefPtr<View> across the operation.
+//   * DockManager::m_panels owns its panels via RefPtr, since an undocked but tracked panel must
+//     survive between AddPanel and DockPanel. The tree also references a docked panel; shared
+//     ownership handles that.
+//   * DockManager::m_dockableWindows owns its floating windows too. The popup layer or the OS window
+//     host also holds one, but without either the manager is all that keeps it alive.
+//   * QueueDeleteNode keeps the node alive across the deferred boundary (it captures a RefPtr), so
+//     the deferred tree removal and release never touch freed memory; with no Context it relies on
+//     RAII.
 
 module;
 #include "Core/Prelude.h"
@@ -51,10 +49,9 @@ export namespace foundation::ui::toolkit
     class DockManager;
 
     // ============================================================================================
-    // DockDragPreview - adorner visual shaped like the dock tab being dragged (title chip). The
-    // drop OUTCOME is shown by the zone indicator's preview rect, so the adorner stays a compact
-    // cursor-anchored label instead of a mini window (PaperKid feedback: the old 200x120 mini
-    // window read as a stray icon).
+    // DockDragPreview: the drag adorner, shaped like the title chip of the dock tab being dragged.
+    // The drop outcome is shown by the zone indicator's preview rect, so the adorner stays a
+    // compact label anchored to the cursor rather than a miniature window.
     // ============================================================================================
     class DockDragPreview : public View
     {
@@ -110,7 +107,7 @@ export namespace foundation::ui::toolkit
     };
 
     // ============================================================================================
-    // DockPanelDragData - drag payload carrying a reference to the DockablePanel being dragged.
+    // DockPanelDragData: the drag payload carrying a reference to the DockablePanel being dragged.
     // ============================================================================================
     class DockPanelDragData : public DragData
     {
@@ -127,7 +124,7 @@ export namespace foundation::ui::toolkit
     };
 
     // ============================================================================================
-    // DockablePanel - content panel with title bar, close button, and drag support.
+    // DockablePanel: a content panel with title bar, close button, and drag support.
     // ============================================================================================
     class DockablePanel : public ViewGroup, public IDragSource
     {
@@ -147,16 +144,16 @@ export namespace foundation::ui::toolkit
 
         f32 HeaderHeight = 24;
         IDockHost* DockHost = nullptr;
-        /// Set by the OWNER on the one panel its commands go to (the editor's active page):
-        /// the tab group draws the accent strip and a ring around its content for this panel
-        /// only. A dock-level notion (the panel clicked last) would be wrong here - a click into
+        /// Set by the owner on the one panel its commands go to (the editor's active page). The
+        /// tab group draws the accent strip and a ring around its content for this panel only.
+        /// The dock's own notion (the panel clicked last) would be wrong here, since a click into
         /// a tool panel must not move the ring off the page.
         bool ActiveMark = false;
-        /// A panel with a persistence id normally SURVIVES its close, undocked but registered, so
-        /// a saved layout (or the app) docks the same object again: the app's fixed tool panels.
-        /// A panel whose content dies with the close (an editor page) sets this: its close
-        /// destroys it like any other, so a later layout restore cannot find it under its id
-        /// and float it holding the dead content.
+        /// A panel with a persistence id normally survives its close, undocked but still
+        /// registered, so a saved layout (or the app) can dock the same object again; the app's
+        /// fixed tool panels work this way. A panel whose content dies with the close (an editor
+        /// page) sets this flag. Its close then destroys it like any other panel, so a later
+        /// layout restore cannot find it under its id and float it holding the dead content.
         bool DestroyOnClose = false;
 
         Event<void(DockablePanel*)> OnCloseRequested;
@@ -177,11 +174,11 @@ export namespace foundation::ui::toolkit
             OnCloseRequested.Invoke(this);
         }
 
-        /// ANY press inside this panel's subtree activates it (capture/tunnel phase: this runs
-        /// before the target handles the click and never consumes it). This is what makes the
-        /// ACTIVE panel follow interaction - with side-by-side tab groups, a panel can be
-        /// visible (already its group's selected tab, so SetSelectedIndex early-outs) while a
-        /// DIFFERENT panel is the app-active one; tab clicks alone can't re-announce it.
+        /// Any press inside this panel's subtree activates it. This runs in the capture phase,
+        /// before the target handles the click, and never consumes it. It makes the active panel
+        /// follow interaction: with tab groups side by side, a panel can be visible (already its
+        /// group's selected tab, so SetSelectedIndex returns early) while a different panel is
+        /// the app's active one, and tab clicks alone cannot re-announce it.
         void OnMouseDownCapture(MouseEventArgs&) override; // out-of-line (needs DockManager)
 
         /// Stable identifier for layout persistence.
@@ -199,7 +196,7 @@ export namespace foundation::ui::toolkit
         void SetClosable(bool value) { m_closable = value; }
 
         /// True when this panel is hosted in an OS-chromed dockable window (the OS provides the
-        /// close button, so the header's own X is suppressed; the header itself stays - it is the
+        /// close button, so the header's own X is suppressed; the header itself stays, as the
         /// re-dock drag handle). Out-of-line: needs DockableWindow complete.
         [[nodiscard]] bool InChromedOSWindow() const;
 
@@ -279,7 +276,7 @@ export namespace foundation::ui::toolkit
                     }
                 }
 
-                // Close button (X). Suppressed in an OS-chromed window - the OS provides one.
+                // Close button (X). Suppressed in an OS-chromed window, where the OS provides one.
                 if (m_closable && !InChromedOSWindow())
                 {
                     const f32 cx = w - 14;
@@ -435,7 +432,7 @@ export namespace foundation::ui::toolkit
     };
 
     // ============================================================================================
-    // DockableWindow - virtual/OS window wrapping a DockablePanel; draggable, resizable overlay.
+    // DockableWindow: a virtual or OS window wrapping a DockablePanel; draggable, resizable overlay.
     // ============================================================================================
 
     /// Resize edge/corner identification.
@@ -533,7 +530,7 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Edge/corner resize (skipped under OS chrome - the OS border resizes).
+            // Edge and corner resize (skipped under OS chrome, where the OS border resizes).
             const ResizeEdge edge =
                 (IsOSWindow && HasOSChrome) ? ResizeEdge::None : HitTestEdge(e.X, e.Y);
             if (edge != ResizeEdge::None)
@@ -719,7 +716,7 @@ export namespace foundation::ui::toolkit
                 return this;
             }
 
-            // Intercept edge zones for resize (not under OS chrome - the OS border resizes).
+            // Intercept edge zones for resize (not under OS chrome, where the OS border resizes).
             if (!(IsOSWindow && HasOSChrome) &&
                 HitTestEdge(localPoint.x, localPoint.y) != ResizeEdge::None)
             {
@@ -730,7 +727,7 @@ export namespace foundation::ui::toolkit
             return ViewGroup::HitTest(localPoint);
         }
 
-        // === Panel detach (Beef IDockableWindow.DetachPanel; ported as a plain method) ===
+        // === Panel detach ===
 
         /// Detach and return the panel. Caller takes ownership (tracking).
         DockablePanel* DetachPanel()
@@ -869,10 +866,10 @@ export namespace foundation::ui::toolkit
     inline RefPtr<View> DockablePanel::CreateDragVisual(DragData* data)
     {
         (void)data;
-        // If dragging from a dockable window that FOLLOWS the cursor (borderless OS window via
+        // When dragging from a dockable window that follows the cursor (a borderless OS window via
         // the app's drag-follow, or a virtual PopupLayer window moved in OnDragOver), the window
-        // itself is the drag visual - suppress the adorner. Under OS chrome the window stays put
-        // during a re-dock drag, so the adorner IS the in-flight visual.
+        // itself is the drag visual, so suppress the adorner. Under OS chrome the window stays put
+        // during a re-dock drag, so the adorner is the in-flight visual.
         if (const auto* fw = Cast<DockableWindow>(Parent))
         {
             if (!(fw->IsOSWindow && fw->HasOSChrome))
@@ -892,7 +889,7 @@ export namespace foundation::ui::toolkit
         {
             if (auto* fw = Cast<DockableWindow>(Parent))
             {
-                // Floating panel: move the actual window during drag. Dim + disable interaction so the
+                // Floating panel: move the actual window during drag. Dim it and disable interaction so the
                 // DockManager underneath receives drop events.
                 panelData->SourceWindow = fw;
                 fw->Opacity = 0.5f;
@@ -945,7 +942,7 @@ export namespace foundation::ui::toolkit
     }
 
     // ============================================================================================
-    // DockTabGroup - tab container for docked panels. Implements IDragSource for tab dragging.
+    // DockTabGroup: a tab container for docked panels. Implements IDragSource for tab dragging.
     // ============================================================================================
     class DockTabGroup : public ViewGroup, public IDragSource
     {
@@ -984,7 +981,7 @@ export namespace foundation::ui::toolkit
                        : nullptr;
         }
 
-        /// Add a panel as a tab. DockTabGroup does NOT take ownership (tree holds it via AddView).
+        /// Add a panel as a tab. DockTabGroup does not take ownership (tree holds it via AddView).
         void AddPanel(DockablePanel* panel)
         {
             m_panels.PushBack(panel);
@@ -1127,8 +1124,9 @@ export namespace foundation::ui::toolkit
                 return;
             }
 
-            // Tab label font from the theme (family + size). The theme sets a compact per-type FontSize
-            // on DockTabGroup (12px) which now overrides the global View default via CSS tie-breaking.
+            // Tab label font from the theme (family and size). The theme sets a compact per-type
+            // FontSize on DockTabGroup (12px), which overrides the global View default by CSS
+            // tie-breaking.
             const f32 fontSize = ResolveStyleFloat(StyleProperty::FontSize, 14.0f);
             fonts::CachedFont* font =
                 ctx.FontService()->GetFont(ResolveStyleFontFamily(), fontSize);
@@ -1144,17 +1142,17 @@ export namespace foundation::ui::toolkit
                                  Rgb(180, 185, 200, 150));
 
             // Overflow handling: measure the full strip first, clamp the scroll offset (and
-            // bring the selected tab into view when selection just changed), THEN draw every
+            // bring the selected tab into view when the selection just changed), then draw every
             // tab at its scrolled position clipped to the strip. Hit-testing reuses the drawn
-            // m_tabRects, so clicks/hover/close stay aligned with what's on screen for free.
+            // m_tabRects, so clicks, hover and close stay aligned with what is on screen.
             Array<f32> tabWidths;
             f32 stripWidth = 2.0f;
             for (i32 i = 0; i < static_cast<i32>(m_panels.Size()); ++i)
             {
                 DockablePanel* panel = m_panels[static_cast<usize>(i)];
-                // INTEGER width: MSDF advances are fractional, and accumulated fractional
-                // widths put every later tab (and its close icon) on a different subpixel
-                // phase - the per-tab shimmer the icon bake exists to kill.
+                // Integer width: MSDF advances are fractional, and accumulated fractional
+                // widths would put every later tab (and its close icon) on a different subpixel
+                // phase, making the icons shimmer from tab to tab.
                 f32 tabW = Round(font->font->MeasureString(panel->Title()) + 16);
                 if (panel->Closable())
                 {
@@ -1224,10 +1222,10 @@ export namespace foundation::ui::toolkit
                     drawTabBg(ResolvePartDrawable(u8"tab", StyleProperty::Background,
                                                   ControlState::Checked),
                               tabRect, Rgb(42, 44, 54, 255));
-                    // Selected-tab accent strip (the same 2px indicator ui::TabView draws) -
-                    // every group's selected tab reads as selected. Which PAGE a command goes
-                    // to is the ring around the marked group's content, not this strip (a
-                    // neutral strip here made a selected tool panel look unselected).
+                    // Selected-tab accent strip (the same 2px indicator ui::TabView draws), so
+                    // every group's selected tab reads as selected. The page a command goes to
+                    // is marked by the ring around its group's content, not by this strip; a
+                    // neutral strip here would make a selected tool panel look unselected.
                     const Color accentColor = ResolveStyleColor(
                         StyleProperty::AccentColor,
                         Color{80.0f / 255.0f, 150.0f / 255.0f, 240.0f / 255.0f, 1.0f});
@@ -1253,7 +1251,7 @@ export namespace foundation::ui::toolkit
                                   fonts::TextAlignment::Left, fonts::VerticalAlignment::Middle,
                                   textColor);
 
-                // Close button - show on active tab always, on hovered inactive tab.
+                // Close button: always on the active tab, and on an inactive tab while hovered.
                 if (panel->Closable())
                 {
                     const f32 cbX = tabX + tabW - kCloseButtonPadding - kCloseButtonSize;
@@ -1302,7 +1300,7 @@ export namespace foundation::ui::toolkit
         // scrollbar in a 24px strip; selection changes also auto-scroll into view).
         void OnMouseWheel(MouseWheelEventArgs& e) override
         {
-            // Wheel args arrive in ROOT space (unlike the localized mouse events) - convert
+            // Wheel args arrive in root space (unlike the localized mouse events), so convert
             // before testing the strip band, or the check only passes at the window's top.
             const Float2 origin = LocalToScreen(Float2{0.0f, 0.0f});
             const f32 localX = e.X - origin.x;
@@ -1356,9 +1354,9 @@ export namespace foundation::ui::toolkit
                 {
                     if (i == m_selectedIndex)
                     {
-                        // Already this group's selected tab - the click still means "this
-                        // one": with two groups side by side, each holding one page, this is
-                        // the click that moves the activation across.
+                        // Already this group's selected tab, but the click still activates it:
+                        // with two groups side by side, each holding one page, this is the
+                        // click that moves the activation across.
                         ActivateSelected();
                     }
                     else
@@ -1551,7 +1549,7 @@ export namespace foundation::ui::toolkit
     };
 
     // ============================================================================================
-    // DockManager - multi-window docking system.
+    // DockManager: the multi-window docking system.
     // ============================================================================================
     class DockManager : public ViewGroup, public IDropTarget, public IPopupOwner, public IDockHost
     {
@@ -1563,12 +1561,12 @@ export namespace foundation::ui::toolkit
         /// Fired when a dock tab is selected (user click or programmatic).
         Event<void(DockablePanel*)> OnPanelActivated;
         /// The panel activated last (a click into it, a tab selection): the dock's own notion of
-        /// where the user is, for whoever needs it. NOT the accent ring - that follows the
-        /// owner's ActiveMark on a panel, since a click into a tool panel must not move the
+        /// where the user is, for whoever needs it. It does not drive the accent ring, which
+        /// follows the owner's ActiveMark on a panel, since a click into a tool panel must not move the
         /// ring off the page commands go to.
         [[nodiscard]] DockablePanel* ActivePanel() const noexcept { return m_activePanel; }
-        /// Records the activation and fires OnPanelActivated (the two sites that activate a
-        /// panel - a click into it, a tab selection - both come through here).
+        /// Records the activation and fires OnPanelActivated. Both ways a panel is activated
+        /// (a click into it and a tab selection) come through here.
         void NotifyPanelActivated(DockablePanel* panel)
         {
             m_activePanel = panel;
@@ -1626,7 +1624,7 @@ export namespace foundation::ui::toolkit
             const ViewId relativeToId = (relativeTo != nullptr) ? relativeTo->Id : ViewId::Invalid;
             CleanupEmptyNodes();
 
-            // Re-resolve relativeTo - it may have been collapsed by cleanup.
+            // Re-resolve relativeTo: cleanup may have collapsed it.
             View* target = relativeTo;
             if (relativeToId.IsValid() && Context != nullptr)
             {
@@ -1668,7 +1666,7 @@ export namespace foundation::ui::toolkit
                 }
                 else
                 {
-                    // Target is a DockSplit or null - find first tab group in subtree.
+                    // Target is a DockSplit or null: find the first tab group in its subtree.
                     DockTabGroup* targetGroup = nullptr;
                     if (target != nullptr)
                     {
@@ -1685,19 +1683,17 @@ export namespace foundation::ui::toolkit
                     }
                     else
                     {
-                        // Empty tree - create new root.
+                        // Empty tree: create a new root.
                         RefPtr<DockTabGroup> group = MakeRef<DockTabGroup>(MemoryAllocator());
                         group->AddPanel(panel);
                         m_rootNode = group.Get();
                         AddView(group.Get());
                     }
                 }
-                // A freshly docked tab becomes the ACTIVE tab (deliberate deviation from the
-                // Sedulous port, user-approved 2026-07-11: upstream keeps the existing selection
-                // and its editor activates by hand; mainstream-IDE behavior activates on dock).
-                // Covers programmatic docking, interactive drag-drop, and window redock - all
-                // funnel through here. Layout restore is unaffected (ApplyLayout rebuilds tab
-                // groups directly and sets ActiveTabIndex itself).
+                // A freshly docked tab becomes the active tab. This covers programmatic docking,
+                // interactive drag-drop and window redock, which all funnel through here. Layout
+                // restore is unaffected (ApplyLayout rebuilds tab groups directly and sets
+                // ActiveTabIndex itself).
                 ActivatePanel(panel);
                 Invalidate();
                 return;
@@ -1781,19 +1777,17 @@ export namespace foundation::ui::toolkit
                 m_activePanel = nullptr; // the group's re-selection names the next one, if any
             }
             UndockPanel(panel);
-            // A TOOL panel (one with a persistence id: Console, Assets, Welcome) HIDES on close:
-            // the registry keeps it, so Reset Layout and a layout restore re-dock the same
-            // object and whoever borrowed its pointer (the editor shell) never dangles. Before
-            // 2026-09-23 a closed Assets panel was destroyed, and View > Reset Layout then read
-            // its Parent out of freed memory (the RTHomes1 crash). A panel without an id, and a
-            // PAGE panel (an id so the layout re-places it, but DestroyOnClose: its content dies
-            // with the page), is destroyed.
+            // A tool panel (one with a persistence id: Console, Assets, Welcome) hides on close.
+            // The registry keeps it, so Reset Layout and a layout restore re-dock the same
+            // object, and whoever borrowed its pointer (the editor shell) never dangles. A panel
+            // without an id is destroyed, and so is a page panel: it has an id so the layout can
+            // re-place it, but sets DestroyOnClose because its content dies with the page.
             if (panel->PersistenceId().Size() > 0 && !panel->DestroyOnClose)
             {
                 return;
             }
             QueueDeleteNode(panel); // keeps `panel` alive across the deferred boundary (see helper)
-            ErasePanel(panel);      // drop the mPanels ownership ref
+            ErasePanel(panel);      // drop the m_panels ownership ref
         }
 
         /// Activates (selects) a panel's tab in its parent tab group.
@@ -2088,7 +2082,7 @@ export namespace foundation::ui::toolkit
                 }
                 else
                 {
-                    // Dropped inside DockManager but not on a zone - float.
+                    // Dropped inside DockManager but not on a zone: float.
                     if (panelData->SourceWindow != nullptr)
                     {
                         panelData->SourceWindow->Opacity = 1.0f;
@@ -2241,7 +2235,7 @@ export namespace foundation::ui::toolkit
                 }
                 else if (auto* parentSplit = Cast<DockSplit>(parent))
                 {
-                    // Capture both children BEFORE detaching - DockSplit indices shift.
+                    // Capture both children before detaching, since DockSplit indices shift.
                     const bool isFirst = (parentSplit->First() == target);
                     View* otherChild = isFirst ? parentSplit->Second() : parentSplit->First();
 
@@ -2491,8 +2485,8 @@ export namespace foundation::ui::toolkit
         }
 
         // Deferred deletion of a tree-owned structure node (or an orphaned panel). Keeps the node alive
-        // across the mutation-queue boundary so the deferred tree-removal + release is UAF-free. With no
-        // Context, dropping the caller's last ref frees it via RAII.
+        // across the mutation-queue boundary so the deferred tree removal and release never touch freed
+        // memory. With no Context, dropping the caller's last ref frees it via RAII.
         void QueueDeleteNode(View* node)
         {
             if (node == nullptr || node->IsPendingDeletion)
@@ -2556,7 +2550,7 @@ export namespace foundation::ui::toolkit
             }
             else if (auto* panel = Cast<DockablePanel>(node))
             {
-                // Standalone panel not in a tab group - wrap in a TabGroup node.
+                // Standalone panel not in a tab group: wrap it in a TabGroup node.
                 UniquePtr<DockLayoutNode> ln = MakeUnique<DockLayoutNode>(MemoryAllocator());
                 ln->Type = DockLayoutNodeType::TabGroup;
                 ln->ActiveTabIndex = 0;
@@ -2741,7 +2735,7 @@ export namespace foundation::ui::toolkit
                 }
             }
 
-            // Hand the indicator our resolved theme accent (it's drawn manually, outside the styled tree).
+            // Hand the indicator our resolved theme accent (it is drawn manually, outside the styled tree).
             m_zoneIndicator->Accent =
                 ResolveStyleColor(StyleProperty::AccentColor,
                                   Color{80.0f / 255.0f, 150.0f / 255.0f, 240.0f / 255.0f, 1.0f});

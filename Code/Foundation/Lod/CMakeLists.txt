@@ -1,9 +1,8 @@
 # Foundation::Lod - `foundation.lod`: level-of-detail selection math (projected-sphere
-# coverage + threshold walk + hysteresis) over Core. A LEAF under Core, deliberately its
-# own library (user ruling 2026-08-23): LOD is a DOMAIN concept core math must not know
-# about - domain math that would otherwise sneak into core lands here instead. RHI-free,
-# so both foundation.render (mesh chains) and foundation.terrain (chunk geo-mip) share
-# the one formula from either side of the RHI ceiling.
+# coverage, threshold walk, hysteresis) over Core. A leaf library of its own because LOD is
+# a domain concept that core math should not know about. It is RHI-free, so foundation.render
+# (mesh chains) and foundation.terrain (chunk geo-mip) share one formula from either side of
+# the RHI.
 
 util_add_engine_library(Lod ALIAS Foundation::Lod)
 target_link_libraries(Lod PUBLIC Foundation::Core Foundation::Policy)

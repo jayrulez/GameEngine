@@ -1,6 +1,6 @@
-# Engine::Particles unit tests (doctest; the scene/resource integration - component
-# resource-ref round-trip). Split out of Foundation/Particles.Tests: these exercise the ENGINE
-# particle component, so they belong in the Engine collection (Foundation must not link Engine).
+# Engine::Particles unit tests (doctest; the scene and resource integration, a component's
+# resource-ref round-trip). These exercise the engine particle component, so they live in the
+# Engine collection rather than in Foundation/Particles.Tests (Foundation must not link Engine).
 
 add_executable(Engine.Particles.Tests
     TestsMain.cpp

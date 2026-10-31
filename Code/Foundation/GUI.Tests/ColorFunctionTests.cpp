@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - colour functions (E13 of Specs/gui-lab-evolution-2.md): hsl() and hsla(), color-mix() in
-// sRGB (premultiplied, percentages normalized), and currentColor, the nearest declared colour.
+// GUI - colour functions: hsl() and hsla(), color-mix() in sRGB (premultiplied, percentages
+// normalized), and currentColor, the nearest declared colour.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -62,15 +62,16 @@ TEST_CASE("colours: currentColor is the nearest declared colour, a descendant's 
                                              u8".inner { background-color: color-mix(in srgb, currentColor 50%, transparent); }"
                                              u8".text { color: currentColor; background-color: currentColor; }")));
     styles.ApplyTree(*root.Get());
-    // Declared after it in the rule, the colour still applies to the border (the cascade's winner).
+    // The colour is declared after the border in the rule, and still applies to it, because
+    // currentColor reads the cascade's winner.
     CHECK(outer->GetBox().BorderColors.top.r == doctest::Approx(1.0f));
     CHECK(outer->GetBox().BorderColors.top.g == doctest::Approx(0.0f));
-    // A descendant that declares none reads its ancestor's.
+    // A descendant that declares no colour reads its ancestor's.
     CHECK(inner->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
     CHECK(inner->GetBox().BackgroundColor.a == doctest::Approx(0.5f));
     CHECK(text->GetTextColor().r == doctest::Approx(1.0f)); // color: currentColor is the inherited one
     CHECK(text->GetBox().BackgroundColor.r == doctest::Approx(1.0f));
-    // A theme's retint reaches every currentColor.
+    // A theme that changes the colour reaches every currentColor.
     styles.SetStyleSheet(CSSParser::Parse(SV(u8".outer { color: hsl(240, 100%, 50%); } .inner { background-color: currentColor; }")));
     styles.ApplyTree(*root.Get());
     CHECK(inner->GetBox().BackgroundColor.b == doctest::Approx(1.0f));

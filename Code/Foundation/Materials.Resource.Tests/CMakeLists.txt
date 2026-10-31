@@ -1,4 +1,4 @@
-# Foundation::Materials.Resource unit tests (doctest; real DXC + Null RHI + content DB).
+# Foundation::Materials.Resource unit tests (doctest; real DXC, the Null RHI and a content DB).
 
 add_executable(Materials.Resource.Tests
     TestsMain.cpp

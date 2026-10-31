@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Pipeline - the GUI assets' reflection (kept out of the interface: GCC module hygiene).
+// GUI.Pipeline - the GUI assets' reflection, kept out of the interface so GCC does not emit a
+// gcm cluster for it.
 
 module;
 #include "Core/Prelude.h"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// What the profiler's views show, computed from a source of known frames (Specs/profiler.md, P4):
+// What the profiler's views show, computed from a source of known frames:
 // the newest frames, their CPU and GPU times and statistics, the scopes by their own time and the
 // GPU passes by theirs, the counters' newest values and means, and counters as text in their unit.
 #include <doctest/doctest.h>

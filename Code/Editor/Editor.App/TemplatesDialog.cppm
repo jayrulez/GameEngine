@@ -3,18 +3,18 @@
 
 // Editor App - :templates_dialog partition
 //
-// Export Templates (Documentation/Specs/editor-gui.md, 5.2, layer 6): the player builds this editor
-// exports with, Edit > Export Templates (and Export's own button, over it), a window over its markup
-// (Data/Editor/Templates.xml). They are the editor's, not a project's: every project shares them.
-// The templates on the left, each by the icon its bundle carries, its name, platform, config and
-// engine version, the host build marked as this editor's own and one built for another engine
-// warned of; the selected one's details on the right (its id, compiler, engine and whether it is
-// this editor's, where it lives, its player, runtime files, symbols, notes; an empty one left out),
-// with Reveal and Remove (Delete on the list too), which asks first and cannot take the host build.
-// Install from Folder copies a template bundle in; Create from Build makes one from a Bin/<Config>
-// build folder; with none, it says how to get one. What it needs from outside (the registry, the
-// OS folder picker, opening a folder) comes through TemplatesDialogSeams, so a test drives it
-// without a window system.
+// Export Templates: the player builds this editor exports with, in a window over its markup
+// (Data/Editor/Templates.xml) opened by Edit > Export Templates (and by Export's own button, over
+// that dialog). The templates belong to the editor, not to a project: every project shares them.
+// They are listed on the left, each with the icon its bundle carries, its name, platform, config
+// and engine version; the host build is marked as this editor's own, and one built for another
+// engine version gets a warning. The selected template's details are on the right (its id,
+// compiler, engine and whether it is this editor's, where it lives, its player, runtime files,
+// symbols and notes; empty details are left out), with Reveal and Remove (also Delete on the list).
+// Remove asks first and cannot remove the host build. Install from Folder copies a template bundle
+// in; Create from Build makes one from a Bin/<Config> build folder; with no templates, it says how
+// to get one. What it needs from outside (the registry, the OS folder picker, opening a folder)
+// comes through TemplatesDialogSeams, so a test drives it without a window system.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -36,16 +36,17 @@ export namespace editor::app
     {
         /// The templates root installs and removals go to (Preferences > Export, or the default).
         Function<String()> templatesRoot;
-        /// Fill `registry` with the templates this host sees (the root's, then the host build).
+        /// Fills `registry` with the templates this host sees (the root's, then the host build).
         Function<void(editor::TemplateRegistry&)> refresh;
-        /// Ask for a folder; `chosen` hears its path, or nothing when the user cancels.
+        /// Asks for a folder; `chosen` gets its path, or nothing when the user cancels.
         Function<void(Function<void(String)> chosen)> pickFolder;
-        /// Show a folder in the OS file manager.
+        /// Shows a folder in the OS file manager.
         Function<void(StringView)> revealFolder;
     };
 
     /// A template's row (and an export preset's): its icon, its name over its summary, and a warning
-    /// saying what is wrong when something is (an engine not this editor's, no template here).
+    /// saying what is wrong when something is (an engine version other than this editor's, no
+    /// template here).
     class TemplateRow final : public gui::UIWidget
     {
         RTTI_OBJECT(TemplateRow, gui::UIWidget)
@@ -61,7 +62,7 @@ export namespace editor::app
             m_warning->AddClass(u8"warning");
             m_warning->SetSource(String(u8"Editor/Icons/warning.svg"));
         }
-        /// `warning` empty: none.
+        /// An empty `warning` shows no warning.
         void Show(RefPtr<gui::Drawable> icon, StringView name, StringView summary, StringView warning)
         {
             m_icon->SetDrawable(foundation::core::Move(icon));
@@ -96,7 +97,7 @@ export namespace editor::app
     class TemplatesDialog
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kTemplatesDialogPath;
 
         TemplatesDialog(IAllocator& allocator, editor::EditorContext& context, TemplatesDialogSeams seams, RefPtr<gui::Node> body)
@@ -153,7 +154,7 @@ export namespace editor::app
             }
             if (auto* close = Find<gui::Button>(u8"templates-close"))
                 close->SetOnClick([self]() { self->Close(); });
-            // However it closes (Close, its close button, Escape), its owner hears.
+            // However it closes (Close, its close button, Escape), its owner is told.
             m_window->SetOnClose([self]()
                                  {
                                      Function<void()> closed = Move(self->m_closed);
@@ -170,8 +171,8 @@ export namespace editor::app
                 m_list->SetModel(nullptr);
         }
 
-        /// Opens it over `root`, the templates read again; `closed` hears when it closes (Export
-        /// reads them again). False with no markup or one open.
+        /// Opens the dialog over `root`, reading the templates again; `closed` is called when it
+        /// closes (Export then reads them again). False with no markup or when one is already open.
         bool Open(gui::Node& root, Function<void()> closed = {})
         {
             if (!m_window || m_window->IsOpen())
@@ -340,7 +341,7 @@ export namespace editor::app
             gui::Label* value = nullptr;
         };
 
-        // The templates as the list's model: a template's id names its row.
+        // The templates as the list's model; a template's id identifies its row.
         class Model final : public gui::IModel
         {
         public:
@@ -378,7 +379,8 @@ export namespace editor::app
                 text += u8" · this editor's own";
             return text;
         }
-        // The icon a template is shown by, made once per template and folder (a reinstall).
+        // The icon a template is shown with, made once per template and folder (so a reinstall
+        // gets a fresh one).
         [[nodiscard]] RefPtr<gui::Drawable> IconFor(const editor::ExportTemplate& tmpl)
         {
             String key(tmpl.id.AsView());
@@ -407,7 +409,7 @@ export namespace editor::app
                     Select(i);
         }
 
-        // A caption and a value per detail, in the form's two columns.
+        // Builds a caption and a value per detail, in the form's two columns.
         void BuildDetails()
         {
             auto* fields = Find<gui::UIWidget>(u8"templates-fields");
@@ -427,7 +429,7 @@ export namespace editor::app
                 m_details.PushBack(Detail{String(label), caption.Get(), value.Get()});
             }
         }
-        // A detail's value; an empty one leaves its row out.
+        // Sets a detail's value; an empty one leaves its row out.
         void SetDetail(StringView label, StringView text)
         {
             for (Detail& detail : m_details)

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample016 - GPU Readback. Ported from Sedulous Sample016_Readback.
+/// Sample016 - GPU Readback.
 /// Renders a colored triangle to a small offscreen texture, copies it to a
 /// readback buffer, then reads pixel values on the CPU and prints them.
 
@@ -107,7 +107,7 @@ foundation::core::Status ReadbackSample::OnInit()
     if (m_device->CreateTextureView(m_offTex, tvd, m_offView) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Readback buffer with row alignment (256 bytes for DX12 compat).
+    // Readback buffer with row alignment (256 bytes, as DX12 requires).
     u32 bytesPerRow = ((kTexSize * 4 + 255) / 256) * 256;
     rhi::BufferDesc rbd{};
     rbd.size = bytesPerRow * kTexSize;

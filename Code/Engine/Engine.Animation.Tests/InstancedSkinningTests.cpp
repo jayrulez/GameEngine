@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Instanced skinning with several clips (masquerade.md P2): the pose pool holds a block of phases
+// Instanced skinning with several clips: the pose pool holds a block of phases
 // per clip, each clip on its own clock, and the instanced meshes it feeds learn how many poses a
 // clip has, so an instance's clip picks its block; the skeleton and clips are asset references and
 // the targets entity references, saved with the scene.

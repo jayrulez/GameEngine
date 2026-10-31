@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The per-view LOD selection math (pure, no GPU). Coverage from a
-// camera (perspective divides by view depth; ortho is depth-free; bias halves per
-// unit), the descending-threshold pick walk, and the +-5% hysteresis band.
+// The per-view LOD selection math (pure, no GPU): coverage from a camera (perspective divides by
+// view depth; ortho is depth-free; bias halves per unit), the descending-threshold pick walk,
+// and the 5% hysteresis band either side of a threshold.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -87,15 +87,15 @@ TEST_CASE("lod select: the pick walk (descending thresholds, clamped, chainless 
 TEST_CASE("lod select: hysteresis keeps the previous level near a boundary only")
 {
     RefPtr<geometry::StaticMesh> mesh = ThreeLodMesh();
-    // Just under the 0.25 boundary: raw pick says 1, but a previous LOD 0 sits inside
-    // the +-5% band (0.246 * 1.05 > 0.25), so it sticks - no flicker at the boundary.
+    // Just under the 0.25 boundary: the raw pick says 1, but a previous LOD 0 sits inside the 5%
+    // band (0.246 * 1.05 > 0.25), so it sticks and the boundary does not flicker.
     CHECK(PickLodLevel(*mesh, 0.246f) == 1);
     CHECK(ApplyLodHysteresis(*mesh, 0.246f, 1, 0) == 0);
     // Just over the boundary the other way: previous LOD 1 sticks too.
     CHECK(PickLodLevel(*mesh, 0.253f) == 0);
     CHECK(ApplyLodHysteresis(*mesh, 0.253f, 0, 1) == 1);
-    // Far from any boundary the previous level is NOT pickable within the band - the
-    // raw selection wins (hysteresis never pins a stale level).
+    // Far from any boundary the previous level is not pickable within the band: the raw selection
+    // wins (hysteresis never pins a stale level).
     CHECK(ApplyLodHysteresis(*mesh, 0.8f, 0, 2) == 0);
     CHECK(ApplyLodHysteresis(*mesh, 0.01f, 2, 0) == 2);
     // Matching previous is a no-op.

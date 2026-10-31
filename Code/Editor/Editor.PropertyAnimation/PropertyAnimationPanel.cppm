@@ -3,22 +3,23 @@
 
 // Editor::PropertyAnimation - the `:panel` partition.
 //
-// PropertyAnimationPanel: property animation authored in the scene, on the GUI from its markup
-// (Data/Editor/PropertyAnimationPanel.xml; Documentation/Specs/editor-gui.md, 5.4, layer 9, part 2).
-// The scene page holds it under its viewport; the panel edits a clip asset of its own, never the
-// scene: its own history, Undo, Redo and Save on its bar, its own unsaved mark (user 2026-10-27).
-// While it holds the focus the keys are its own: the actions' commands it binds (Undo, Redo, Save)
-// are handled on its root, so Ctrl+Z, Ctrl+Y and Ctrl+S act on the clip, and a key it does not
-// bind goes on to the scene page and the editor (the GUI's commands bubble along the focus path).
+// PropertyAnimationPanel authors property animation in the scene, built on the GUI from its markup
+// (Data/Editor/PropertyAnimationPanel.xml). The scene page holds it under its viewport. The panel
+// edits a clip asset of its own, never the scene: it has its own history, Undo, Redo and Save on
+// its bar, and its own unsaved mark. While it holds the focus it handles its own keys: the action
+// commands it binds (Undo, Redo, Save) are handled on its root, so Ctrl+Z, Ctrl+Y and Ctrl+S act
+// on the clip, and a key it does not bind goes on to the scene page and the editor (the GUI's
+// commands bubble along the focus path).
 //
-// The ruler, the dopesheet and the curve view share one time axis over the clip (:clip_source); the
-// curve view shows the chosen tracks' curves (the tracks of the keys chosen in the dopesheet), every
-// track's with none chosen. Scrubbing or playing poses the bound entity (:clip_preview), which is
-// put back as it was when the preview stops, and stands down while the scene simulates. The bound
-// entity is the panel's own choice (Use Selected binds the scene's selection), not the drifting
-// selection, or Pick's choice from the scene's entities. While its preview poses the entity, the
-// page marks it in the view. Opening, making a clip, picking an entity and asking about an unsaved
-// one are the page's (its dialogs), through the seams below.
+// The ruler, the dopesheet and the curve view share one time axis over the clip (:clip_source).
+// The curve view shows the curves of the chosen tracks (the tracks of the keys chosen in the
+// dopesheet), or every track's when none is chosen. Scrubbing or playing poses the bound entity
+// (:clip_preview); the entity is restored when the preview stops, and the preview stands down
+// while the scene simulates. The bound entity is the panel's own choice (Use Selected binds the
+// scene's selection, and Pick chooses from the scene's entities), not whatever is currently
+// selected. While the preview poses the entity, the page marks it in the view. Opening a clip,
+// making one, picking an entity and asking about an unsaved clip belong to the page (its dialogs),
+// through the hooks below.
 
 module;
 #include "Core/Prelude.h"
@@ -48,7 +49,8 @@ export namespace editor
     public:
         static constexpr StringView kPath = kPropertyAnimationPanelPath;
 
-        /// Over `scene` (the page's, which outlives it), its markup `content` loaded.
+        /// Builds the panel over `scene` (the page's, which outlives it) from its loaded markup
+        /// `content`.
         PropertyAnimationPanel(EditorContext& context, foundation::scene::Scene& scene, RefPtr<foundation::gui::Node> content);
         ~PropertyAnimationPanel();
         PropertyAnimationPanel(const PropertyAnimationPanel&) = delete;
@@ -56,25 +58,29 @@ export namespace editor
 
         [[nodiscard]] RefPtr<foundation::gui::Node> Content() const { return m_content; }
 
-        // === The page's seams ===
-        /// The scene's selected entity (Use Selected binds it); unset: none.
+        // === Hooks the page sets ===
+        /// The scene's selected entity (Use Selected binds it); unset means none.
         Function<Guid()> SelectedEntity;
-        /// New and Open: the page's dialogs, which end by LoadClip. Unset: the buttons do nothing.
+        /// New and Open open the page's dialogs, which end by calling LoadClip. When unset, the
+        /// buttons do nothing.
         Function<void()> RequestNewClip;
         Function<void()> RequestOpenClip;
         /// Runs `proceed` now, or once the user has saved or discarded the unsaved clip (the page's
-        /// prompt); unset: at once.
+        /// prompt); when unset, runs it at once.
         Function<void(Function<void()>)> GuardUnsaved;
-        /// The bar's Close: the page hides the panel (the clip stays open in it). Unset: nothing.
+        /// The bar's Close: the page hides the panel (the clip stays open in it). When unset,
+        /// nothing happens.
         Function<void()> RequestClose;
-        /// The bar's Pick: the page's entity picker over the scene, `current` lit; `chosen`
-        /// answers its pick. Unset: the button does nothing.
+        /// The bar's Pick: opens the page's entity picker over the scene with `current` highlighted;
+        /// `chosen` receives the pick. When unset, the button does nothing.
         Function<void(const Guid& current, Function<void(const Guid&)> chosen)> RequestPickEntity;
 
         // === The clip ===
-        /// Edits the clip asset `clipId` (false: no such clip); the transport stopped, at the start.
+        /// Edits the clip asset `clipId` (false when there is no such clip), with the transport
+        /// stopped at the start.
         bool LoadClip(const Guid& clipId);
-        /// Asks about an unsaved clip, then opens `clipId` and binds `entity` (nil: keeps the bound one).
+        /// Asks about an unsaved clip, then opens `clipId` and binds `entity` (nil keeps the bound
+        /// entity).
         void RequestEditClip(const Guid& clipId, const Guid& entity);
         Status Save();
         void Undo();
@@ -89,16 +95,17 @@ export namespace editor
         [[nodiscard]] const Guid& BoundEntity() const noexcept { return m_entity; }
 
         // === The tracks ===
-        /// A track for `seed`, keyed at the playhead with what the entity shows (when it can be read).
+        /// Adds a track for `seed`, keyed at the playhead with the entity's current value (when it
+        /// can be read).
         void AddTrack(const AnimatablePropertyInfo& seed);
         /// What Add Track offers: the bound entity's properties without a track yet.
         [[nodiscard]] Array<AnimatablePropertyInfo> OfferedTracks() const;
         /// The tracks of the keys chosen in the dopesheet.
         [[nodiscard]] Array<usize> ChosenTracks() const;
-        /// Keys the chosen tracks (every one, with none chosen) at the playhead with what the entity
-        /// shows, one step; how many it keyed.
+        /// Keys the chosen tracks (every track when none is chosen) at the playhead with the
+        /// entity's current values, as one undo step; returns how many it keyed.
         usize KeyChosen();
-        /// Takes the chosen tracks away, one step; false with none chosen.
+        /// Removes the chosen tracks as one undo step; false when none is chosen.
         bool RemoveChosen();
 
         // === The transport ===
@@ -107,16 +114,16 @@ export namespace editor
         void Stop();
         void Restart();
         void SetLooping(bool looping);
-        /// The playhead moved to `time`, as a scrub of the ruler moves it.
+        /// Moves the playhead to `time`, as scrubbing the ruler does.
         void Scrub(f32 time);
-        /// The curves shown framed, in time and value (the bar's Frame).
+        /// Frames the shown curves in time and value (the bar's Frame).
         void FrameCurves();
 
-        /// Once a frame from the page: the transport, the preview (stood down while `simulating`),
-        /// the bar's state.
+        /// Called once a frame by the page: updates the transport, the preview (stood down while
+        /// `simulating`) and the bar's state.
         void Update(f32 dt, bool simulating);
-        /// The preview put back (the page saving the scene, starting a simulation); Repose poses it
-        /// again where the playhead stands.
+        /// Restores what the preview posed (when the page saves the scene or starts a simulation);
+        /// Repose poses it again at the playhead.
         void StopPreview() { m_preview.Stop(); }
         void Repose() { Pose(); }
 
@@ -133,8 +140,8 @@ export namespace editor
         void Pose();
         void ShowBar();
         void ShowCurves();
-        // The curve view's values fitted to the curves it shows (never its time: the dopesheet
-        // shares that axis, and a choice made there must not rezoom it under the mouse).
+        // Fits the curve view's values to the curves it shows. It never fits time, because the
+        // dopesheet shares that axis and a choice made there must not rezoom it under the mouse.
         void FitValues();
         void OpenTrackMenu();
         [[nodiscard]] Variant EntityValue(StringView componentType, StringView propertyPath) const;
@@ -151,10 +158,10 @@ export namespace editor
         RefPtr<foundation::gui::TimeAxis> m_axis;
         Guid m_entity;
         bool m_simulating = false;
-        bool m_moving = false;        // the transport moving the playhead: not a scrub
+        bool m_moving = false;        // set while the transport moves the playhead, so it is not a scrub
         Array<usize> m_shownTracks;   // the tracks the curve view shows, as last chosen
-        bool m_fitValues = true;      // what the curve view shows changed: fit its values
-        usize m_trackCount = 0;       // the clip's tracks, as last shown
+        bool m_fitValues = true;      // what the curve view shows changed, so fit its values
+        usize m_trackCount = 0;       // the clip's track count, as last shown
         Guid m_shownClip;             // the clip, as last shown
         Array<u32> m_commands;        // the root's command handlers
         RefPtr<foundation::gui::Menu> m_trackMenu;

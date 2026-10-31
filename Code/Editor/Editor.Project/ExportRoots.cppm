@@ -3,22 +3,21 @@
 
 // Editor::Project - :export_roots partition.
 //
-// The project's explicit "Always Export" set: the
-// entry points a user declares as export roots ON TOP of the automatic default-scene + startup-
-// script seeds. Two kinds:
-//   - instance GUIDs - a specific asset the game loads by code (rename/move-proof, like
-//                       ProjectSettings::defaultSceneId).
-//   - group PATHS    - "this subtree is a root": every asset under the group ships, and assets
-//                       dropped in later are auto-included (the `Resources/`-folder pattern).
-//                       Content-DB groups carry no stable id, so a group root is keyed by its
-//                       mount-relative path (the documented rename caveat - move the folder and
-//                       re-flag it, same as any path reference).
+// The project's explicit "Always Export" set: the entry points a user declares as export roots on
+// top of the automatic default-scene and startup-script seeds. There are two kinds:
+//   - instance GUIDs: a specific asset the game loads by code (stable across renames and moves,
+//     like ProjectSettings::defaultSceneId).
+//   - group paths: "this subtree is a root". Every asset under the group ships, and assets
+//     dropped in later are included automatically (the `Resources/` folder pattern). Content-DB
+//     groups have no stable id, so a group root is keyed by its mount-relative path; a moved
+//     folder must be flagged again, as with any path reference.
 //
-// Committable project data (export_roots.xml beside the project, keyed by GUID/path), so the set
-// is team-shared and auditable in ONE place - the #1 failure mode of hidden per-item flags is
-// that people forget them. The export driver (CollectExportRoots in :export_pipeline) appends
-// these as Flag/Group seed roots; their dependency closure then ships. Mirrors the export_presets
-// persistence shape (:export_preset) - versioned XML payload, project-local, CLI-loadable.
+// This is committable project data (export_roots.xml beside the project, keyed by GUID or path),
+// so the set is shared by the team and auditable in one place; hidden per-item flags fail most
+// often because people forget them. The export driver (CollectExportRoots in :export_pipeline)
+// appends these as Flag and Group seed roots, and their dependency closure then ships. It follows
+// the export_presets persistence shape (:export_preset): a versioned XML payload, project-local
+// and loadable by the CLI.
 
 module;
 #include "Core/Prelude.h"
@@ -39,13 +38,13 @@ export namespace editor
 
     inline constexpr StringView kExportRootsFile = u8"export_roots.xml";
 
-    // A project's explicit export roots - the root, versioned payload of export_roots.xml. Value
-    // membership only (guids + group paths); the closure expansion lives in the export driver.
+    // A project's explicit export roots: the root, versioned payload of export_roots.xml. It holds
+    // membership only (guids and group paths); the closure expansion lives in the export driver.
     class ExportRootsSet final : public ISerializable
     {
         RTTI_OBJECT(ExportRootsSet, ISerializable)
     public:
-        Array<Guid> instances; // flagged asset instances, by guid (rename/move-proof)
+        Array<Guid> instances; // flagged asset instances, by guid (stable across renames and moves)
         Array<String> groups;  // flagged group subtrees, by mount-relative path
 
         void Serialize(ISerializer& ar) override
@@ -82,8 +81,8 @@ export namespace editor
             return false;
         }
 
-        // Set instance membership; returns `member` (the new state). Idempotent - adding a present
-        // guid or removing an absent one is a no-op.
+        // Sets instance membership and returns `member` (the new state). Idempotent: adding a
+        // present guid or removing an absent one changes nothing.
         bool SetInstance(const Guid& id, bool member)
         {
             const bool has = HasInstance(id);
@@ -97,10 +96,10 @@ export namespace editor
             }
             return member;
         }
-        // Flip instance membership; returns the NEW state (true = now a root).
+        // Flips instance membership and returns the new state (true when it is now a root).
         bool ToggleInstance(const Guid& id) { return SetInstance(id, !HasInstance(id)); }
 
-        // Set group membership; returns `member`. Idempotent.
+        // Sets group membership and returns `member`. Idempotent.
         bool SetGroup(StringView path, bool member)
         {
             const bool has = HasGroup(path);
@@ -114,7 +113,7 @@ export namespace editor
             }
             return member;
         }
-        // Flip group membership; returns the NEW state.
+        // Flips group membership and returns the new state.
         bool ToggleGroup(StringView path) { return SetGroup(path, !HasGroup(path)); }
 
     private:
@@ -142,8 +141,8 @@ export namespace editor
         }
     };
 
-    // Resolve a group by its mount-relative path ("" = the root group; "a/b" walks child groups).
-    // Null when a segment is missing. Mirrors ContentDatabase::GetInstance(path)'s segment walk.
+    // Resolves a group by its mount-relative path ("" is the root group; "a/b" walks child groups).
+    // Null when a segment is missing. Segments are walked as ContentDatabase::GetInstance(path) does.
     [[nodiscard]] inline foundation::content::Group*
     FindGroupByPath(foundation::content::ContentDatabase& db, StringView path)
     {
@@ -161,7 +160,7 @@ export namespace editor
             if (part.IsEmpty())
             {
                 continue;
-            } // leading/trailing/empty segment
+            } // a leading, trailing or empty segment
             group = group->GetGroup(part);
             if (group == nullptr)
             {
@@ -171,9 +170,9 @@ export namespace editor
         return group;
     }
 
-    // Append every instance guid under a group subtree (the group at `groupPath` AND all its
-    // descendant groups) to `out`. This is the group-root's "subtree-as-root" expansion - dynamic
-    // membership by construction (whatever is under the folder NOW). A missing group is a no-op.
+    // Appends every instance guid under a group subtree (the group at `groupPath` and all its
+    // descendant groups) to `out`. This expands a group root, so membership is dynamic: whatever is
+    // under the folder now. A missing group adds nothing.
     inline void CollectGroupInstances(foundation::content::ContentDatabase& db, StringView groupPath,
                                       Array<Guid>& out)
     {
@@ -206,8 +205,8 @@ export namespace editor
         }
     }
 
-    // Read export_roots.xml from `root`. NotFound when absent (a project with no explicit roots -
-    // caller treats it as an empty set). Mirrors LoadExportPresets.
+    // Reads export_roots.xml from `root`. NotFound when absent (a project with no explicit roots;
+    // the caller treats it as an empty set). Works like LoadExportPresets.
     [[nodiscard]] inline Status LoadExportRoots(vfs::IFileSystem& root, ExportRootsSet& out,
                                                 StringView fileName = kExportRootsFile)
     {
@@ -228,7 +227,7 @@ export namespace editor
         return ctx->serializer->IsOk() ? Status{} : ctx->serializer->GetStatus();
     }
 
-    // Write export_roots.xml to `root`. Mirrors SaveExportPresets.
+    // Writes export_roots.xml to `root`, like SaveExportPresets.
     [[nodiscard]] inline Status SaveExportRoots(vfs::IWritableFileSystem& writable,
                                                 ExportRootsSet& roots,
                                                 StringView fileName = kExportRootsFile)

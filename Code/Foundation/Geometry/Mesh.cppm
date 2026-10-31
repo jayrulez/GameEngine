@@ -3,17 +3,17 @@
 
 /// Foundation::Geometry - the `:mesh` partition.
 ///
-/// StaticMesh is the engine's runtime mesh: a static vertex stream (48B), an index
-/// buffer, submeshes, bounds, and the geometry ops (normals/tangents/bounds) that
+/// StaticMesh is the engine's runtime mesh: a static vertex stream (52 bytes a vertex), an
+/// index buffer, submeshes, bounds, and the geometry ops (normals, tangents, bounds) that
 /// operate purely on the static stream.
 ///
-/// SkinnedMesh IS-A StaticMesh: it inherits the entire static stream + all the ops
-/// and adds only a *parallel* skinning stream (joints/weights, 24B) + a skeleton
-/// reference. Because the static data is byte-identical and in the same place, a
-/// SkinnedMesh can be passed anywhere a StaticMesh& is expected - the static draw
-/// path just works; the skinned path additionally binds the skinning stream. The
-/// virtual IsSkinned()/SkinningStream() hooks let a consumer holding a StaticMesh&
-/// discover + bind the skinning stream without RTTI.
+/// SkinnedMesh derives from StaticMesh: it inherits the whole static stream and its ops
+/// and adds only a parallel skinning stream (joints and weights, 24 bytes a vertex) and a
+/// skeleton reference. Because the static data is byte-identical and in the same place, a
+/// SkinnedMesh can be passed anywhere a StaticMesh& is expected: the static draw path
+/// works as is, and the skinned path also binds the skinning stream. The virtual
+/// IsSkinned()/SkinningStream() hooks let a consumer holding a StaticMesh& discover and
+/// bind the skinning stream without RTTI.
 
 module;
 #include "Core/Prelude.h"
@@ -34,9 +34,9 @@ export namespace foundation::geometry
     {
         RTTI_OBJECT(StaticMesh, Object)
     public:
-        // Unique per-OBJECT id: renderer caches key by THIS, never by pointer (a reloaded or
-        // page-local mesh can reallocate at a freed address - the bind-group versioning rule;
-        // pointer keying made a fresh preview sphere alias a dead mesh's GPU geometry).
+        // A unique per-object id. Renderer caches key by this, never by pointer: a reloaded or
+        // page-local mesh can be allocated at a freed address, and keyed by pointer it would
+        // alias the dead mesh's GPU geometry.
         const u64 uid = NextUid();
 
         String name;
@@ -45,21 +45,22 @@ export namespace foundation::geometry
         Array<SubMesh> subMeshes;
         AABB bounds = AABB::Empty();
 
-        // LOD chain. LOD 0 IS `subMeshes` (every pre-LOD consumer keeps
-        // working untouched). Coarser levels reuse the SHARED vertex buffer and store their
-        // own index ranges inside the ONE index buffer (concatenated after LOD 0's);
+        // The LOD chain. LOD 0 is `subMeshes`, so a consumer that knows nothing of LODs draws
+        // the full mesh. Coarser levels reuse the shared vertex buffer and store their own
+        // index ranges inside the one index buffer (concatenated after LOD 0's);
         // `lodSubMeshes` holds levels 1..lodCount-1 flattened as
         // (lod-1) * subMeshes.Size() + submesh. `lodCoverage[l]` is the normalized
         // screen-coverage threshold: level l is eligible while the projected coverage is
-        // >= lodCoverage[l] ([0] is 1.0 by convention and unused by selection - LOD 0 is
-        // the fallback when everything else is too coarse... i.e. coverage above
-        // lodCoverage[1] selects LOD 0). A 1-LOD mesh: lodCount == 1, both arrays empty.
+        // >= lodCoverage[l]. `lodCoverage[0]` is 1.0 by convention and unused by selection:
+        // LOD 0 is the fallback, chosen for any coverage above lodCoverage[1]. A 1-LOD mesh
+        // has lodCount == 1 and both arrays empty.
         u32 lodCount = 1;
         Array<SubMesh> lodSubMeshes;
         Array<f32> lodCoverage;
 
-        /// The submesh table of one LOD level: 0 = `subMeshes`, else the flattened slice.
-        /// Out-of-range or malformed tables fall back to LOD 0 (never crash on bad data).
+        /// Returns the submesh table of one LOD level: `subMeshes` for level 0, otherwise that
+        /// level's slice of `lodSubMeshes`. An out-of-range level or a malformed table falls back
+        /// to LOD 0, so bad data never crashes.
         [[nodiscard]] Span<const SubMesh> SubMeshesForLod(u32 lod) const noexcept
         {
             if (lod == 0 || lodCount <= 1 || subMeshes.IsEmpty())
@@ -164,8 +165,8 @@ export namespace foundation::geometry
         }
 
         // Tangents for normal mapping: per-triangle (deltaUV-weighted) accumulation of tangent
-        // AND bitangent, then Gram-Schmidt orthogonalization against the normal. The bitangent
-        // accumulation determines each vertex's HANDEDNESS sign (tangent.w): mirrored-UV
+        // and bitangent, then Gram-Schmidt orthogonalization against the normal. The bitangent
+        // accumulation determines each vertex's handedness sign (tangent.w): mirrored-UV
         // triangles produce a bitangent opposing cross(N, T), so w flips to -1 there.
         void GenerateTangents()
         {
@@ -270,7 +271,7 @@ export namespace foundation::geometry
         }
     };
 
-    // A skinned mesh: the static stream + a parallel skinning stream + a skeleton ref.
+    // A skinned mesh: the static stream, a parallel skinning stream and a skeleton reference.
     class SkinnedMesh final : public StaticMesh
     {
         RTTI_OBJECT(SkinnedMesh, StaticMesh)

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// FloatingPanel control tests (foundation.ui.toolkit:floating_panel): the draggable / resizable /
-// collapsible / closable float panel. The bare-panel cases run headlessly (no UIContext, no layout
+// FloatingPanel control tests (foundation.ui.toolkit:floating_panel): the draggable, resizable,
+// collapsible and closable float panel. The bare-panel cases run headless (no UIContext, no layout
 // pass): construction, the collapse toggle, content swap, preferred-size clamping, and OnClose.
 // The layout-driven clamp (ClampToParent from OnLayout) needs only an AbsoluteLayout parent inside
-// a measured root - no captured mouse - and is covered below. POINTER drag / resize geometry still
-// needs a captured mouse (the in-app path) and stays out of scope.
+// a measured root, with no captured mouse, and is covered below. Pointer drag and resize geometry
+// need a captured mouse and are not covered.
 
 #include <doctest/doctest.h>
 
@@ -33,7 +33,7 @@ TEST_CASE("FloatingPanel: collapse toggles and is idempotent")
     auto panel = core::MakeRef<FloatingPanel>(core::DefaultAllocator(), StringView(u8"Tools"));
     panel->SetCollapsed(true);
     CHECK(panel->IsCollapsed());
-    panel->SetCollapsed(true); // no-op
+    panel->SetCollapsed(true); // already collapsed: no change
     CHECK(panel->IsCollapsed());
     panel->SetCollapsed(false);
     CHECK_FALSE(panel->IsCollapsed());
@@ -75,10 +75,10 @@ TEST_CASE("FloatingPanel: OnClose notifies subscribers")
 
 namespace
 {
-    // Runs the measure/layout pass TWICE: the first pass lays the panel out at the requested
-    // LayoutStyle Left/Top and runs the clamp (which corrects them and invalidates); the
-    // second pass applies the corrected position to Bounds - exactly the in-app flow, where the
-    // clamp's Invalidate() schedules the next frame's layout.
+    // Runs the measure and layout pass twice: the first pass lays the panel out at the requested
+    // LayoutStyle Left and Top and runs the clamp (which corrects them and invalidates); the
+    // second pass applies the corrected position to Bounds. In the app, the clamp's Invalidate()
+    // schedules the next frame's layout the same way.
     void RunLayout(UIContext& ctx, RootView* root, core::f32 w, core::f32 h)
     {
         root->ViewportSize = Float2{w, h};
@@ -107,7 +107,7 @@ TEST_CASE("FloatingPanel: layout clamps X/Y so the whole panel stays inside the 
 
     RunLayout(ctx, root.Get(), 800, 600);
 
-    // Clamped so the INTENDED box sits flush against the parent's right/bottom edge.
+    // Clamped so the intended box sits flush against the parent's right and bottom edges.
     CHECK(panel->Width() > 0.0f);
     CHECK(panel->Height() > 0.0f);
     CHECK(panel->Bounds.x == doctest::Approx(800.0f - panel->Width()));
@@ -168,7 +168,7 @@ TEST_CASE("FloatingPanel: a collapsed panel clamps against its header height")
     RunLayout(ctx, root.Get(), 800, 600);
 
     // Collapsed the panel is only its header tall, so it clamps flush to the bottom edge at a
-    // LOWER Y than the full-height panel could reach.
+    // lower Y than the full-height panel could reach.
     CHECK(panel->Bounds.y == doctest::Approx(600.0f - panel->Height()));
     CHECK(panel->Bounds.y > expandedY);
 }
@@ -196,11 +196,11 @@ TEST_CASE("FloatingPanel: negative X/Y clamps to the parent origin")
 
 TEST_CASE("FloatingPanel: the resize band lives in the border inset, plus a corner grab square")
 {
-    // A 9px hit band must not claim the outer ~3px of hosted content (a
-    // PropertyGrid's scrollbar edge). Edges claim only the 6px content inset; the
-    // bottom-right corner keeps a 12px OS-style grip square. CursorAt is the observable seam.
+    // The resize band does not claim the outer pixels of hosted content (such as a PropertyGrid's
+    // scrollbar edge). Edges claim only the 6px content inset; the bottom-right corner keeps a 12px
+    // grip square, as OS windows do. Hit testing is how the test observes it.
     auto panel = core::MakeRef<FloatingPanel>(core::DefaultAllocator(), StringView(u8"Band"));
-    // A content child filling the body is the discriminator: a point the band does NOT claim
+    // A content child filling the body tells the cases apart: a point the band does not claim
     // falls through to it; a band point returns the panel itself.
     auto content = core::MakeRef<View>(core::DefaultAllocator());
     content->IsHitTestVisible = true;
@@ -211,13 +211,13 @@ TEST_CASE("FloatingPanel: the resize band lives in the border inset, plus a corn
     // The override sits in FloatingPanel's protected section; View::HitTest is the public
     // surface, so probe through the base pointer.
     View* asView = panel.Get();
-    // 8px inside the right edge (over content territory): NOT a resize zone anymore.
+    // 8px inside the right edge (over the content): not a resize zone.
     CHECK(asView->HitTest(Float2{292.0f, 120.0f}) == content.Get());
     // Inside the 6px inset: the panel claims it (horizontal resize).
     CHECK(asView->HitTest(Float2{297.0f, 120.0f}) == panel.Get());
     // Bottom inset: the panel claims it (vertical resize).
     CHECK(asView->HitTest(Float2{150.0f, 197.0f}) == panel.Get());
-    // The corner square reaches FURTHER in than the edges (12px): diagonal grab.
+    // The corner square reaches further in than the edges (12px): a diagonal grab.
     CHECK(asView->HitTest(Float2{290.0f, 190.0f}) == panel.Get());
     // Same distance-in on a plain edge is content.
     CHECK(asView->HitTest(Float2{290.0f, 120.0f}) == content.Get());

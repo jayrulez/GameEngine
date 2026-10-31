@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Headless tests for the RHI render host (GraphicsDevice + RenderWindow +
-// FrameContext) over the Null RHI backend + null shell - no GPU required.
+// Headless tests for the RHI render host (GraphicsDevice, RenderWindow,
+// FrameContext) over the Null RHI backend and the null shell; no GPU required.
 // Covers device bring-up, per-window frame begin/end, the frame-in-flight ring,
 // multi-window rendering, resize, and the minimized-skip path.
 #include <doctest/doctest.h>
@@ -17,7 +17,7 @@ import foundation.shell;
 import foundation.shell.null;
 
 using namespace foundation::core;
-using namespace foundation::graphics; // GraphicsDevice etc. (moved from foundation::runtime)
+using namespace foundation::graphics;
 using namespace foundation::shell;
 
 TEST_CASE("graphics: GraphicsDevice brings up over the null backend")
@@ -133,7 +133,7 @@ TEST_CASE("graphics: FrameContext reports the BACKBUFFER size, not the live wind
     REQUIRE(rwResult.HasValue());
     UniquePtr<RenderWindow>& rw = rwResult.Value();
 
-    // Resize the window WITHOUT SyncSize: the swapchain (and therefore the frame) must
+    // Resize the window without SyncSize: the swapchain (and therefore the frame) must
     // stay at the old size until the host syncs.
     const u32 oldW = rw->Swap()->Width();
     const u32 oldH = rw->Swap()->Height();
@@ -198,8 +198,8 @@ TEST_CASE("graphics: validation follows the build config, and the command line o
 
 TEST_CASE("graphics: an executable's device desc takes both its backend and its validation flags")
 {
-    // The one call every entry (the editor, the player, the samples) makes: the player ignored
-    // --no-gpu-validation while the editor honoured it, so their frame times did not compare.
+    // The one call every entry (the editor, the player, the samples) makes, so each honours
+    // --no-gpu-validation alike and their frame times compare.
     const char* player[] = {"Engine.Player", "--webgpu", "--no-gpu-validation"};
     const GraphicsDeviceDesc desc = DeviceDescFromArguments(3, const_cast<char**>(player));
     CHECK(desc.backend == BackendType::WebGPU);

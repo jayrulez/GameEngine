@@ -4,8 +4,9 @@
 // Materials as resources: author a Material, capture it into a MaterialSource that
 // references a ShaderSource by id, then build the Material through the ResourceManager
 // with both factories registered. Verifies the cooked Material resolves the shader's
-// name + properties + default uniforms, and that binding the shader mid-build recorded
-// a material->shader dependency edge (so a shader reload propagates). Real DXC + Null RHI.
+// name, properties and default uniforms, and that binding the shader mid-build recorded
+// a material-to-shader dependency edge (so a shader reload propagates). Uses real DXC and
+// the Null RHI.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -145,7 +146,7 @@ TEST_CASE("material resource: built via the manager; resolves shader + records t
 TEST_CASE("material: CreatePBR packs EmissiveColor at the shader's cbuffer offset")
 {
     // The forward cbuffer: BaseColor(0..16), Metallic(16..20), Roughness(20..24), pads to 32,
-    // EmissiveColor(32..48). The builder's std140-ish packing must land the same offsets.
+    // EmissiveColor(32..48). The builder's cbuffer packing has to land the same offsets.
     RefPtr<Material> pbr = CreatePBR(u8"m");
     const MaterialPropertyDef* emissive = pbr->FindProperty(u8"EmissiveColor");
     REQUIRE(emissive != nullptr);
@@ -173,7 +174,7 @@ TEST_CASE("material: CreatePBR packs EmissiveColor at the shader's cbuffer offse
 
 TEST_CASE("material: a forward source missing the forward properties is STALE (refused, never upgraded)")
 {
-    // An asset authored BEFORE EmissiveColor existed: the old CreatePBR property set.
+    // An asset authored before EmissiveColor existed: the old CreatePBR property set.
     RefPtr<Material> old = MaterialBuilder(u8"legacy")
                                .Shader(u8"forward")
                                .VertexLayout(VertexLayoutType::Mesh)
@@ -272,9 +273,9 @@ TEST_CASE("material source: sampler address modes round-trip")
 
 TEST_CASE("material resource: the retyped render-state enum fields round-trip byte-identically")
 {
-    // u8 -> BlendMode/DepthMode/CullModeConfig/VertexLayoutType (Fable Q2). Each enum serializes as
-    // its underlying u8, so the wire is unchanged and old bytes load into the enum. These four are
-    // serialized unconditionally (before the version-gated sampler fields), so version is irrelevant.
+    // BlendMode, DepthMode, CullModeConfig and VertexLayoutType each serialize as their
+    // underlying u8, so bytes stored as plain u8 load into the enum. These four are serialized
+    // unconditionally (before the version-gated sampler fields), so the version is irrelevant.
     MaterialSource out;
     out.blendMode = BlendMode::Additive;               // != default Opaque
     out.depthMode = DepthMode::WriteOnly;              // != default ReadWrite
@@ -422,7 +423,7 @@ TEST_CASE("material resource: a material takes its shader's depth and pick progr
     compiler->Destroy();
 }
 
-// --- Effect groups (Specs/wind-for-every-shader.md) ----------------------------------------
+// --- Effect groups --------------------------------------------------------------------------
 
 namespace
 {
@@ -511,7 +512,7 @@ TEST_CASE("material source: a version-3 PBR material's wind lanes migrate into a
     REQUIRE(emissive >= 0);
     CHECK(src.propertyOffsets[static_cast<usize>(emissive)] == 32u);
     CHECK(src.uniformDefaults.Size() == bytes.Size());
-    // Laid out as today's CreatePBR is: the same table, so it is complete and draws as one.
+    // Laid out as the current CreatePBR is: the same table, so it is complete and draws as one.
     RefPtr<Material> pbr = CreatePBR(u8"today");
     MaterialSource today;
     MaterialSource::FromMaterial(*pbr, Guid{}, today);
@@ -708,7 +709,7 @@ TEST_CASE("material source: AdoptDeclaredEffects gives a source the groups its s
     REQUIRE(kept.effects.Size() == 1u);
     CHECK(FloatAt(kept.effects[0].values, kept.effects[0].propertyOffsets[0]) == doctest::Approx(0.6f));
 
-    // An empty library says nothing: the group stands.
+    // An empty library changes nothing: the group stands.
     const shaders::ShaderEffectLibrary none;
     AdoptDeclaredEffects(DefaultAllocator(), kept, none.All(), shaders::ShaderFlags::Skinned);
     CHECK(kept.effects.Size() == 1u);

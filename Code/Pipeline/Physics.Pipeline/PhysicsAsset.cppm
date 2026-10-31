@@ -3,13 +3,13 @@
 
 // Pipeline::Physics - the `foundation.physics.editor` module (tooling).
 //
-// Source-side physics authoring + cook:
-//   * CollisionShapeAsset (pipeline::Asset): references a source MESH asset by guid +
-//     cook settings (convex/trimesh, hull tolerance). The builder cooks via Jolt from
-//     the mesh's already-extracted StaticMeshSource (positions/indices/material slots) -
-//     no gltf/fbx reload - and declares a hash-chained `reads` edge on the mesh, so a
+// Source-side physics authoring and cook:
+//   * CollisionShapeAsset (pipeline::Asset): references a source mesh asset by guid, with
+//     cook settings (convex or triangle mesh, hull tolerance). The builder cooks through Jolt
+//     from the mesh's already-extracted StaticMeshSource (positions, indices, material slots)
+//     with no glTF or FBX reload, and declares a hash-chained `reads` edge on the mesh, so a
 //     model reimport re-cooks the shape.
-//   * PhysicalMaterialAsset: plain authored surface properties -> PhysicalMaterialSource.
+//   * PhysicalMaterialAsset: plain authored surface properties, cooked to a PhysicalMaterialSource.
 //
 // Never linked by the runtime.
 
@@ -39,7 +39,7 @@ export namespace pipeline{
         TriangleMesh,   // exact static geometry (per-face material slots)
     };
 
-    // Source asset: which mesh to cook + how.
+    // Source asset: which mesh to cook, and how.
     class CollisionShapeAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(CollisionShapeAsset, pipeline::Asset)
@@ -79,7 +79,7 @@ export namespace pipeline{
             const CollisionShapeAsset& ca = static_cast<const CollisionShapeAsset&>(asset);
             if (!ca.sourceMesh.IsNil())
             {
-                out.reads.PushBack(ca.sourceMesh); // hash-chained: mesh reimport -> recook
+                out.reads.PushBack(ca.sourceMesh); // hash-chained: a mesh reimport re-cooks
             }
         }
 
@@ -99,10 +99,10 @@ export namespace pipeline{
                 return Status{ErrorCode::NotFound};
             }
             RefPtr<ISerializable> object = meshInstance->ReadObject();
-            // A `reads` edge (see ScanDependencies) resolves sourceMesh to the mesh's cooked PRODUCT
-            // - a StaticMeshSource, which carries exactly the geometry a shape is cooked from, so
-            // that is what the real editor cook hands us here. Headless/source-db paths instead yield
-            // the StaticMeshAsset that embeds the same source; accept either so the cook works from
+            // A `reads` edge (see ScanDependencies) resolves sourceMesh to the mesh's cooked product,
+            // a StaticMeshSource, which carries exactly the geometry a shape is cooked from, so that
+            // is what the editor cook hands us here. Headless and source-db paths instead yield the
+            // StaticMeshAsset that embeds the same source; accept either so the cook works from
             // whichever the db resolves the guid to.
             const foundation::geometry::StaticMeshSource* meshSource = nullptr;
             if (auto* product = Cast<foundation::geometry::StaticMeshSource>(object.Get()))
@@ -111,7 +111,7 @@ export namespace pipeline{
             }
             else if (auto* meshAsset = Cast<pipeline::StaticMeshAsset>(object.Get()))
             {
-                // v3 sidecar envelopes carry no inline geometry - pull the stream first.
+                // Mesh envelopes carry no inline geometry, so pull the sidecar stream first.
                 const Status loaded = pipeline::EnsureMeshSourceLoaded(*meshInstance, *meshAsset);
                 if (!loaded.IsOk())
                 {
@@ -126,9 +126,9 @@ export namespace pipeline{
                 if (object.Get() == nullptr)
                 {
                     // The instance header names a type but ReadObject built nothing: the mesh
-                    // itself did not deserialize (stale on-disk schema is the usual cause - the same
-                    // "failed to deserialize" the cook logs for other assets). The collision is a
-                    // downstream victim, not the source of the break.
+                    // itself did not deserialize (a stale on-disk schema is the usual cause, the same
+                    // "failed to deserialize" the cook logs for other assets). The collision fails
+                    // because of the mesh, not on its own account.
                     LOG_ERROR(
                         u8"Physics",
                         u8"collision cook: source mesh '{}' [{}] ({}) did not deserialize - stale "
@@ -139,7 +139,7 @@ export namespace pipeline{
                 else
                 {
                     // Resolved to a real object that is neither a mesh product nor a mesh asset: the
-                    // sourceMesh guid points at the wrong instance (e.g. a skinned mesh, which has
+                    // sourceMesh guid points at the wrong instance (a skinned mesh, which has
                     // no collision) or an import-wiring bug.
                     LOG_ERROR(
                         u8"Physics",
@@ -250,7 +250,7 @@ export namespace pipeline{
         }
     };
 
-    // Authored surface properties -> cooked PhysicalMaterialSource (a straight copy).
+    // Authored surface properties, cooked to a PhysicalMaterialSource (a straight copy).
     class PhysicalMaterialAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(PhysicalMaterialAsset, pipeline::Asset)
@@ -296,11 +296,11 @@ export namespace pipeline{
         }
     };
 
-    // Registers the CollisionCookKind enum reflection (idempotent). The asset TYPE reflection
+    // Registers the CollisionCookKind enum reflection (idempotent). The asset type reflection
     // bodies are their StaticType(), defined in PhysicsAssetImpl.cpp.
     void RegisterPhysicsAssetReflection();
 
-    // Registers the asset types for content-DB construction + deserialization.
+    // Registers the asset types for content-DB construction and deserialization.
     inline void RegisterPhysicsAssets()
     {
         RegisterPhysicsAssetReflection(); // CollisionCookKind names for the property grid

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Pipeline::ModelImporter:anim_convert - Model IR skin/animation -> animation *Source.
+/// Pipeline::ModelImporter:anim_convert - Model IR skin and animation to animation *Source.
 ///
-/// Converts a model's skin (joints + inverse-bind matrices + the bone hierarchy) into a
+/// Converts a model's skin (joints, inverse-bind matrices and the bone hierarchy) into a
 /// SkeletonSource, and its animation channels into AnimationClipSources. The skeleton's joints
 /// are the skin's, in its order (so a skinned vertex's joint indices address the skeleton
 /// directly), then the bones the skin's joints hang from (SkeletonJoints: a helper bone with no
-/// vertices of its own, whose animation is part of the pose); parent links + animation target
+/// vertices of its own, whose animation is part of the pose); parent links and animation target
 /// bones are remapped from model bone indices into joint indices.
 
 module;
@@ -26,7 +26,7 @@ namespace animation = foundation::animation;
 
 export namespace pipeline
 {
-    // True if the model mesh carries skinning (Joints/Weights vertex elements).
+    // True if the model mesh carries skinning (Joints and Weights vertex elements).
     [[nodiscard]] inline bool IsSkinnedMesh(const model::ModelMesh& mesh) noexcept
     {
         for (const model::VertexElement& e : mesh.vertexElements())
@@ -74,8 +74,8 @@ export namespace pipeline
     // model tracks. Then the node each unskinned mesh hangs under, with the nodes between it and
     // the skeleton, when its chain reaches the skeleton: 3ds Max's Biped animates a weapon's prop
     // node with the hand (the file does not make it a bone), and no vertex is bound to it, so
-    // without it the clip's prop channels were dropped and the weapon's bone attachment rode the
-    // pelvis. Each is appended after the skin's joints, so no vertex's joint index moves.
+    // without it the clip's prop channels would be dropped and the weapon's bone attachment would
+    // follow the pelvis. Each is appended after the skin's joints, so no vertex's joint index moves.
     [[nodiscard]] inline Array<i32> SkeletonJoints(const model::Model& model, const model::ModelSkin& skin)
     {
         Array<i32> joints;
@@ -124,7 +124,7 @@ export namespace pipeline
         return joints;
     }
 
-    // model bone index -> skeleton joint index (`joints`' order, SkeletonJoints). -1 for bones not in it.
+    // Model bone index -> skeleton joint index (`joints`' order, SkeletonJoints). -1 for bones not in it.
     [[nodiscard]] inline HashMap<i32, i32> BuildBoneToJoint(Span<const i32> joints)
     {
         HashMap<i32, i32> map;
@@ -179,10 +179,10 @@ export namespace pipeline
     }
 
     // Build an AnimationClipSource from a model animation: each channel becomes a dense track keyed by
-    // JOINT index. A channel on `modelNode` (the node the skeleton hangs from: Blender's armature
-    // object) becomes a MODEL track, bone -1: the pose never plays it, root motion may take the
-    // armature's travel from it (root-motion.md P0). Other channels on bones outside the skin, and
-    // morph-weight channels, are skipped.
+    // joint index. A channel on `modelNode` (the node the skeleton hangs from: Blender's armature
+    // object) becomes a model track, bone -1: the pose never plays it, and root motion may take the
+    // armature's travel from it. Other channels on bones outside the skin, and morph-weight
+    // channels, are skipped.
     inline void AnimationClipSourceFromModel(const model::ModelAnimation& animation,
                                              const HashMap<i32, i32>& boneToJoint, StringView name,
                                              animation::AnimationClipSource& out, i32 modelNode = -2)
@@ -243,7 +243,7 @@ export namespace pipeline
             {
                 out.keyTimes.PushBack(k.time);
                 out.keyValues.PushBack(
-                    k.value); // xyz for pos/scale, xyzw for rotation (matches FillClip)
+                    k.value); // xyz for position and scale, xyzw for rotation (matches FillClip)
             }
         }
     }

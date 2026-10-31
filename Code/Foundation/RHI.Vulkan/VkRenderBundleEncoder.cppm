@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Vulkan implementation of RenderBundleEncoder + RenderBundle.
+/// Vulkan implementation of RenderBundleEncoder and RenderBundle.
 ///
-/// A render bundle is a SECONDARY VkCommandBuffer recorded with
-/// VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT and dynamic-rendering inheritance info
-/// (the attachment formats it is compatible with). It is replayed into a primary pass -
-/// begun with VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT - via vkCmdExecuteCommands
+/// A render bundle is a secondary VkCommandBuffer recorded with
+/// VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT and dynamic-rendering inheritance info (the
+/// attachment formats it is compatible with). It is replayed into a primary pass, begun with
+/// VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT, via vkCmdExecuteCommands
 /// (RenderPassEncoder::ExecuteBundles). Because bundles carry no pass-level dynamic state and
-/// Vulkan secondaries don't inherit it, the encoder records a full-target viewport + scissor up
-/// front (from the desc extent). The draw-recording methods mirror VkRenderPassEncoderImpl.
+/// Vulkan secondaries don't inherit it, the command pool records the desc's viewport and
+/// scissor up front. The draw-recording methods mirror VkRenderPassEncoderImpl.
 
 module;
 #include "Core/Prelude.h"
@@ -47,8 +47,8 @@ export namespace foundation::rhi::vk
         VkCommandBuffer m_cmdBuf = VK_NULL_HANDLE;
     };
 
-    // Records draws into a secondary command buffer. The owning command pool allocates/recycles the
-    // secondary handle and frees this wrapper (+ the produced bundle) on reset.
+    // Records draws into a secondary command buffer. The owning command pool allocates and recycles
+    // the secondary handle and frees this wrapper (and the bundle it produced) on reset.
     class VkRenderBundleEncoderImpl : public RenderBundleEncoder
     {
     public:

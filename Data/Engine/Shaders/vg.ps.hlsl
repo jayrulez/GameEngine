@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // VG (2D vector-graphics) fragment shader. Samples the atlas at t0/s0, modulates by the vertex
-// color, folds AA coverage into alpha, and outputs PREMULTIPLIED-alpha color (rgb *= a) to pair
+// colour, folds AA coverage into alpha, and outputs premultiplied-alpha colour (rgb *= a) to pair
 // with the renderer's PremultipliedAlpha blend. Premultiplied compositing removes the dark halo on
-// straight-alpha AA edges and the double-blend seams where fringe/joins share edges (NanoVG's
-// approach). Resolved via ShaderSystem::GetVariant("vg", Fragment).
+// straight-alpha AA edges and the double-blended lines where fringes and joins share edges.
+// Resolved via ShaderSystem::GetVariant("vg", Fragment).
 #include "color.hlsli"
 cbuffer VGUniforms : register(b0) { float4x4 Projection; float DistanceFieldPixelRange; float DistanceFieldAtlasWidth; float DistanceFieldAtlasHeight; float BlendSpace; };
 struct PSInput { float4 Position:SV_Position; float2 TexCoord:TEXCOORD0; float4 Color:COLOR0; float Coverage:COVERAGE; };

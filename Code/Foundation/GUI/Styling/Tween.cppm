@@ -3,17 +3,17 @@
 
 // GUI - :tween partition
 //
-// Motion as an API (E14 of Specs/gui-lab-evolution-2.md): a tween moves one property of a node
-// toward a value on its GUI's clock, eased by a CSS easing or a named curve. A property a sheet
-// names composes over the cascade, as CSS's animation origin does: the tween writes its progress
-// into the node's animated layer and the style pass interpolates there, through the typed values
-// the sheets' transitions use, from the start given or the value underneath. Any other name is a
-// reflected property, read and written through its accessors (numbers, colours and points move;
-// what cannot switches halfway). A tween may wait, repeat and run back and forth; at its end it
-// holds its value until stopped or replaced. It holds its node weakly (the action's weak target).
-// A tween of a GUI's data value (K3: GUIContext::AnimateData) has no node: it moves a number in the
-// data model, which whatever is bound to it follows (a score counting up), keeping the value's
-// type (a whole number counts in whole numbers).
+// Motion as an API. A tween moves one property of a node toward a value on its GUI's clock,
+// eased by a CSS easing or a named curve. When a sheet can name the property, the tween composes
+// over the cascade, as the CSS animation origin does: it writes its progress into the node's
+// animated layer, and the style pass interpolates there with the typed values the sheets'
+// transitions use, starting from the given start or from the value underneath. Any other name is
+// a reflected property, read and written through its accessors. Numbers, colours and points move
+// smoothly; other values switch halfway. A tween can wait, repeat and run back and forth, and
+// when it ends it holds its value until it is stopped or replaced. It holds its node weakly, as
+// an action holds its target. A tween of a GUI data value (GUIContext::AnimateData) has no node:
+// it moves a number in the data model, and whatever is bound to that value follows (a score
+// counting up). The value keeps its type, so a whole number counts in whole numbers.
 
 module;
 #include "Core/Prelude.h"
@@ -22,7 +22,7 @@ module;
 export module foundation.gui:tween;
 
 import foundation.core;
-import foundation.script; // IScriptDelegate: a script's callback at the end
+import foundation.script; // IScriptDelegate, for a script callback when the tween ends
 import :action;
 import :node;
 import :ui_node;
@@ -30,22 +30,23 @@ import :css_values;
 import :style_value;
 import :style_properties;
 import :style_sheet;   // ResolvedStyle::ParseLonghand
-import :style_applier; // the reflected properties' lookup and parsing, as a sheet's
+import :style_applier; // looks up and parses reflected properties as a sheet does
 import :style_interpolation;
 import :easing;
-import :data_model; // a data value's tween (K3)
+import :data_model; // tweens of data values
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// A mark no other tween has had (in the library, so every binary draws from one count).
+    /// Returns an owner mark no other tween has had. It is defined in the library so every binary
+    /// draws from one counter.
     [[nodiscard]] u64 NextTweenOwner() noexcept;
 
     class Tween;
-    /// Another tween of `tween`'s property on its node, running on its own or in a group, gives
-    /// way to it (defined in TweenImpl.cpp, which sees the action manager).
+    /// Makes any other tween of the same property on `tween`'s node, running alone or in a group,
+    /// give way to `tween`. Defined in TweenImpl.cpp, which can see the action manager.
     void ReplaceOthersOf(Tween& tween);
 
     class Tween : public Action
@@ -58,31 +59,33 @@ export namespace foundation::gui
             m_owner = NextTweenOwner();
         }
 
-        /// Moves the data value its property names in `model`, rather than a node's property (K3).
+        /// Moves the data value its property names in `model`, rather than a node's property.
         void TargetData(RefPtr<DataModel> model) { m_data = core::Move(model); }
         [[nodiscard]] bool MovesData() const noexcept { return m_data.Get() != nullptr; }
 
-        // === Shaping (before its first frame) ===
-        /// Where it starts, as a value of its property (else the value showing).
+        // === Shaping, before the first frame ===
+        /// Sets the start, written as a value of the property. Without it the tween starts from
+        /// the value showing.
         Tween& From(core::StringView text)
         {
             m_fromText = core::String(text);
             m_hasFrom = true;
             return *this;
         }
-        /// How long it waits first, in seconds.
+        /// Sets how long the tween waits before it starts, in seconds.
         Tween& Delay(f32 seconds)
         {
             m_delay = core::Max(0.0f, seconds);
             return *this;
         }
-        /// How many times it runs (1 by default; a negative count runs until stopped).
+        /// Sets how many times the tween runs: 1 by default, and a negative count runs until
+        /// stopped.
         Tween& Repeat(i32 count)
         {
             m_iterations = count;
             return *this;
         }
-        /// Every other run goes back from the end to the start.
+        /// Makes every second run go back from the end to the start.
         Tween& PingPong(bool on = true)
         {
             m_pingPong = on;
@@ -93,16 +96,18 @@ export namespace foundation::gui
             m_easing = easing;
             return *this;
         }
-        /// A data value's tween (K3) counts in whole numbers: each value it writes rounded to the
-        /// nearest (a score; a script's numbers all arrive as fractions, so its type cannot say).
+        /// Makes a data value's tween count in whole numbers, rounding each value it writes to the
+        /// nearest (for a score). Scripts need this because their numbers all arrive as fractions,
+        /// so the value's type cannot tell.
         Tween& Whole(bool on = true)
         {
             m_whole = on;
             return *this;
         }
-        /// Moves as a damped spring toward its end rather than over a time (GPUI's and react-spring's
-        /// springs): `stiffness` pulls, `damping` slows, `mass` resists; little damping overshoots and
-        /// rings. Its duration, easing, repeats and ping-pong no longer apply; it ends once settled.
+        /// Moves the value as a damped spring toward its end instead of over a fixed time, like the
+        /// springs of GPUI and react-spring. `stiffness` pulls toward the end, `damping` slows the
+        /// motion and `mass` resists it; with little damping it overshoots and rings. Duration,
+        /// easing, repeats and ping-pong do not apply, and the tween ends once the spring settles.
         Tween& Spring(f32 stiffness = 170.0f, f32 damping = 26.0f, f32 mass = 1.0f)
         {
             m_spring = true;
@@ -112,18 +117,19 @@ export namespace foundation::gui
             return *this;
         }
         [[nodiscard]] bool IsSpring() const noexcept { return m_spring; }
-        /// Sends it toward another end from where it is now, its speed carried over: a drag that
-        /// settles, a menu that follows the pointer, without a jolt.
+        /// Sends the tween toward a new end from where it is now and keeps its speed, so a drag
+        /// that settles or a menu that follows the pointer moves without a jolt.
         void Retarget(core::StringView to);
-        /// Called once it reaches its end (not when stopped or replaced).
+        /// Sets a callback for when the tween reaches its end. It is not called when the tween is
+        /// stopped or replaced.
         Tween& OnFinished(core::Function<void()> callback)
         {
             m_onFinished = core::Move(callback);
             return *this;
         }
 
-        // === The script surface (reflected in GUIReflectionImpl.cpp): each returns the tween, so a
-        // script chains them as native code does.
+        // === The script surface, reflected in GUIReflectionImpl.cpp. Each call returns the tween,
+        // so a script can chain calls as native code does.
         RefPtr<Tween> FromScript(core::StringView text) { return Self(From(text)); }
         RefPtr<Tween> DelayScript(f32 seconds) { return Self(Delay(seconds)); }
         RefPtr<Tween> RepeatScript(i32 count) { return Self(Repeat(count)); }
@@ -140,12 +146,12 @@ export namespace foundation::gui
         [[nodiscard]] bool IsFinished() { return IsDone(); }
 
         [[nodiscard]] core::StringView GetProperty() const noexcept { return m_property.AsView(); }
-        /// Whether it composes over the cascade (a property a sheet names) rather than through a
-        /// reflected property. Known once it has run a frame.
+        /// Whether the tween composes over the cascade (a property a sheet names) rather than
+        /// writing a reflected property. This is known only once it has run a frame.
         [[nodiscard]] bool MovesStyle() const noexcept { return m_route == Route::Style; }
 
-        /// Stops it and gives its property back to the sheet (a reflected property keeps the
-        /// value it has).
+        /// Stops the tween and gives its property back to the sheet. A reflected property keeps
+        /// the value it has.
         void Cancel()
         {
             if (m_data && m_data->TweenOwnerOf(m_property.AsView()) == m_owner)
@@ -156,12 +162,14 @@ export namespace foundation::gui
                         (void)node->RemoveMotion(m_property.AsView());
             m_done = true;
         }
-        /// Another tween took its property: it stops where it is, leaving the value to the new one.
+        /// Called when another tween takes over the property. This tween stops where it is and
+        /// leaves the value to the new one.
         void Replace() noexcept { m_done = true; }
 
         // === Action ===
-        /// Starting (run, or reached in its group, or again for a group's next run) it takes its
-        /// property from any other tween moving it, and reads its values afresh at its first frame.
+        /// Starts the tween when it is run, when its group reaches it, or again for the group's next
+        /// run. It takes its property from any other tween moving it, and reads its values afresh
+        /// on its first frame.
         void Start() override
         {
             m_elapsed = 0.0f;
@@ -171,7 +179,7 @@ export namespace foundation::gui
             m_springX = 0.0f;
             m_springV = 0.0f;
             if (m_data)
-                m_data->ClaimTween(m_property.AsView(), m_owner); // the one moving it gives way
+                m_data->ClaimTween(m_property.AsView(), m_owner); // the tween moving it now gives way
             else
                 ReplaceOthersOf(*this);
         }
@@ -189,19 +197,19 @@ export namespace foundation::gui
             m_elapsed += elapsed.AsSecondsF();
             const f32 active = m_elapsed - m_delay;
             if (active < 0.0f)
-                return; // waiting: the property shows what it did
+                return; // still waiting, so the property keeps showing its value
             if (m_route == Route::Unbound && !(m_data ? BindData() : Bind(*target)))
             {
                 m_done = true;
                 return;
             }
-            // Another tween took the data value: stop where it is.
+            // Another tween took over the data value, so stop where it is.
             if (m_route == Route::Data && m_data->TweenOwnerOf(m_property.AsView()) != m_owner)
             {
                 m_done = true;
                 return;
             }
-            // Superseded through the layer (another writer took the property): stop.
+            // Another writer took the property in the animated layer, so stop.
             if (m_route == Route::Style)
             {
                 const MotionValue* motion = core::Cast<UINode>(target)->FindMotion(m_property.AsView());
@@ -279,13 +287,13 @@ export namespace foundation::gui
             Unbound,
             Style,
             Reflected,
-            Data, // a data model's value (K3)
+            Data, // a data model's value
         };
 
         [[nodiscard]] RefPtr<Tween> Self(Tween& self) { return RefPtr<Tween>(&self); }
 
-        // The spring's progress toward 1 over `seconds`, in small steps (semi-implicit Euler holds
-        // a stiff spring steady where one big step would fly off).
+        // Advances the spring's progress toward 1 by `seconds`, in small steps. Semi-implicit
+        // Euler keeps a stiff spring steady where one big step would fly off.
         void StepSpring(f32 seconds)
         {
             constexpr f32 kStep = 1.0f / 240.0f;
@@ -336,8 +344,8 @@ export namespace foundation::gui
                     return core::Length(core::Float2{y->x - x->x, y->y - x->y});
             return 0.0f;
         }
-        // The speed carried to a new span: the same speed in the value's own units where both
-        // spans have a measure, the same speed in progress where not.
+        // Carries the spring's speed over to a new span. Where both spans have a measure, the
+        // speed stays the same in the value's own units; otherwise it stays the same in progress.
         void CarrySpeed(f32 before, f32 after) noexcept
         {
             if (before > 0.0f && after > 0.0f)
@@ -345,7 +353,7 @@ export namespace foundation::gui
             m_springX = 0.0f;
         }
 
-        // The property a sheet does not name, by its CSS name or its reflected one.
+        // Finds a property that sheets do not name, by its CSS name or its reflected name.
         [[nodiscard]] static const PropertyInfo* FindReflected(const Node& node, core::StringView name)
         {
             for (const TypeInfo* type = node.GetType(); type != nullptr; type = type->base)
@@ -361,11 +369,11 @@ export namespace foundation::gui
             return nullptr;
         }
 
-        // Its first frame: which way it writes, and its values parsed.
+        // On the first frame, decides how the tween writes its property and parses its values.
         bool Bind(Node& target)
         {
-            // A sheet's property on a node a sheet styles; on any other node, its reflected one (a
-            // plain node's opacity, x, y).
+            // On a node that sheets style, a property a sheet names goes through the style. On any
+            // other node the tween writes the reflected property (a plain node's opacity, x, y).
             if (UINode* node = core::Cast<UINode>(&target); node != nullptr && FindStyleProperty(m_property.AsView()) != nullptr)
             {
                 MotionValue motion;
@@ -380,8 +388,8 @@ export namespace foundation::gui
                 }
                 else if (const MotionValue* before = node->FindMotion(m_property.AsView()); before != nullptr && before->HasShown)
                 {
-                    // From where the tween before it is now: its progress may have moved since the
-                    // style pass last showed it (it ended this frame, before the pass).
+                    // Start from where the previous tween is now. Its progress may have moved since
+                    // the style pass last showed it, if it ended this frame before the pass ran.
                     motion.From = before->HasUnder ? InterpolateStyleValue(before->Under, before->To, before->Progress) : before->Shown;
                     motion.HasFrom = true;
                 }
@@ -405,8 +413,9 @@ export namespace foundation::gui
             return true;
         }
 
-        // Its first frame, for a data value: from the value now (or the start given), toward its
-        // end, both numbers; the value's own type kept (a number when it has none yet).
+        // The first frame for a data value: move from the current value (or the given start)
+        // toward the end, both as numbers. The value keeps its type, or becomes a number when it
+        // has none yet.
         bool BindData()
         {
             const Optional<f64> to = ParseFloat(core::Trim(m_toText.AsView()));
@@ -425,7 +434,7 @@ export namespace foundation::gui
             return true;
         }
 
-        // The value at eased progress `t`.
+        // Writes the value at eased progress `t`.
         void Write(Node* target, f32 t)
         {
             if (m_route == Route::Data)
@@ -453,7 +462,8 @@ export namespace foundation::gui
             (void)core::SetProperty(*m_reflected, Instance::From(target), Mix(m_from, m_to, t));
         }
 
-        // Numbers, colours and points move; anything else switches halfway, as CSS's discrete values.
+        // Numbers, colours and points move; anything else switches halfway, as discrete values do
+        // in CSS.
         [[nodiscard]] static Variant Mix(const Variant& a, const Variant& b, f32 t)
         {
             const auto lerp = [t](f32 x, f32 y) { return x + (y - x) * t; };
@@ -491,23 +501,24 @@ export namespace foundation::gui
         f32 m_damping = 26.0f;
         f32 m_mass = 1.0f;
         f32 m_springX = 0.0f; // progress, past 1 when it overshoots
-        f32 m_springV = 0.0f; // its speed, in progress per second
+        f32 m_springV = 0.0f; // the spring's speed, in progress per second
 
         Route m_route = Route::Unbound;
         const PropertyInfo* m_reflected = nullptr;
-        RefPtr<DataModel> m_data;               // the model whose value it moves (K3), or none
-        const TypeInfo* m_dataType = nullptr;   // the value's type, kept as it moves
-        bool m_whole = false;                   // a data value's: whole numbers only
+        RefPtr<DataModel> m_data;               // the model whose value it moves, or none
+        const TypeInfo* m_dataType = nullptr;   // the value's type, kept while it moves
+        bool m_whole = false;                   // for a data value: whole numbers only
         Variant m_from;
         Variant m_to;
-        u64 m_owner = 0; // its mark in the layer
+        u64 m_owner = 0; // this tween's owner mark in the animated layer
         f32 m_elapsed = 0.0f;
         f32 m_overrun = 0.0f;
         f32 m_progress = 0.0f;
         bool m_done = false;
     };
 
-    // StaticType: REFLECT_MEMBERS(Tween) in Scene/GUIReflectionImpl.cpp (the script surface).
+    // StaticType comes from REFLECT_MEMBERS(Tween) in Scene/GUIReflectionImpl.cpp, which
+    // reflects the script surface.
 
     inline void Tween::Retarget(core::StringView to)
     {
@@ -516,7 +527,7 @@ export namespace foundation::gui
         if ((target == nullptr && !m_data) || m_route == Route::Unbound)
             return; // it reads its end at its first frame
         if (!m_spring)
-            m_elapsed = m_delay; // a timed tween runs its time again, from where it is
+            m_elapsed = m_delay; // a timed tween runs its full time again, from where it is
         if (m_route == Route::Style)
         {
             UINode* node = core::Cast<UINode>(target);
@@ -539,7 +550,8 @@ export namespace foundation::gui
             const Optional<f64> end = ParseFloat(core::Trim(to));
             if (!end.HasValue())
                 return;
-            // From the value showing (a whole number's rounding aside, where it is).
+            // Start from the value showing, which is where the tween is apart from a whole
+            // number's rounding.
             const Variant now = Mix(m_from, m_to, m_spring ? m_springX : m_easing.Evaluate(m_progress));
             const Variant next = Variant::From<f64>(end.Value());
             CarrySpeed(Distance(m_from, m_to), Distance(now, next));
@@ -556,7 +568,7 @@ export namespace foundation::gui
         m_to = next;
     }
 
-    // === Groups (E14) ===
+    // === Groups ===
 
     /// A step of a group that waits.
     class TweenWait : public Action
@@ -627,10 +639,10 @@ export namespace foundation::gui
     };
     RTTI_DEFINE_OBJECT(TweenCall, "rtti::gui")
 
-    /// Steps run as one (Zero's action groups, Godot's chained and parallel tweens, foundation.ui's
-    /// storyboards): tweens of any nodes, waits, calls and other groups, one after another
-    /// (TweenSequence) or together (TweenParallel), repeated as a whole, calling back at the end.
-    /// Run it on a node (RunAction): the node's GUI keeps its time; each step keeps its own target.
+    /// Steps that run as one: tweens of any nodes, waits, calls and other groups, run one after
+    /// another (TweenSequence) or together (TweenParallel). The group repeats as a whole and calls
+    /// back at the end. Run it on a node with RunAction; the node's GUI keeps its time, and each
+    /// step keeps its own target.
     class TweenGroup : public Action
     {
         RTTI_OBJECT(TweenGroup, Action)
@@ -646,7 +658,8 @@ export namespace foundation::gui
         {
             return Add(core::MakeRef<TweenCall>(MemoryAllocator(), core::Move(callback)));
         }
-        /// How many times it runs (1 by default; a negative count runs until stopped).
+        /// Sets how many times the group runs: 1 by default, and a negative count runs until
+        /// stopped.
         TweenGroup& Repeat(i32 count)
         {
             m_iterations = count;
@@ -659,7 +672,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] usize StepCount() const noexcept { return m_steps.Size(); }
 
-        // === The script surface (reflected in GUIReflectionImpl.cpp), chaining as Add and the rest do.
+        // === The script surface, reflected in GUIReflectionImpl.cpp. Each call returns the group,
+        // so a script can chain calls as Add and the rest do.
         RefPtr<TweenGroup> AddScript(RefPtr<Tween> tween) { return Self(Add(core::Move(tween))); }
         RefPtr<TweenGroup> AddGroupScript(RefPtr<TweenGroup> group) { return Self(Add(core::Move(group))); }
         RefPtr<TweenGroup> WaitScript(f32 seconds) { return Self(Wait(seconds)); }
@@ -676,7 +690,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsFinished() { return IsDone(); }
 
-        /// Calls `f(step)` for each step running now (a replacement finds a tween inside a group).
+        /// Calls `f(step)` for each step running now, so a replacement can find a tween inside a
+        /// group.
         template <typename F>
         void ForEachRunning(F&& f)
         {
@@ -719,7 +734,7 @@ export namespace foundation::gui
                 StartRun();
                 if (over <= 0.0f)
                     return;
-                seconds = over; // the next run takes what this one left
+                seconds = over; // the next run gets the time this one left over
             }
         }
         [[nodiscard]] bool IsDone() override { return m_done; }
@@ -737,7 +752,8 @@ export namespace foundation::gui
     protected:
         [[nodiscard]] RefPtr<TweenGroup> Self(TweenGroup& self) { return RefPtr<TweenGroup>(&self); }
         virtual void StartRun() = 0;
-        /// Runs the steps `seconds` on; true when this run has ended, with what it left over.
+        /// Advances the steps by `seconds`. Returns true when this run has ended, with the time
+        /// left over in `overrun`.
         virtual bool Advance(f32 seconds, f32& overrun) = 0;
         [[nodiscard]] virtual bool IsRunning(const Action& step) const = 0;
 
@@ -750,9 +766,11 @@ export namespace foundation::gui
         bool m_done = false;
         core::Function<void()> m_onFinished;
     };
-    // StaticType: REFLECT_MEMBERS(TweenGroup) in Scene/GUIReflectionImpl.cpp (the script surface).
+    // StaticType comes from REFLECT_MEMBERS(TweenGroup) in Scene/GUIReflectionImpl.cpp, which
+    // reflects the script surface.
 
-    /// Steps one after another: each starts as the last ends, with the time it left.
+    /// Runs steps one after another. Each starts when the previous one ends, with the time it
+    /// left over.
     class TweenSequence : public TweenGroup
     {
         RTTI_OBJECT(TweenSequence, TweenGroup)
@@ -786,9 +804,10 @@ export namespace foundation::gui
     private:
         usize m_index = 0;
     };
-    // StaticType: REFLECT_MEMBERS(TweenSequence) in Scene/GUIReflectionImpl.cpp (the script surface).
+    // StaticType comes from REFLECT_MEMBERS(TweenSequence) in Scene/GUIReflectionImpl.cpp, which
+    // reflects the script surface.
 
-    /// Steps together: the run ends with the last of them.
+    /// Runs steps together. The run ends when the last of them ends.
     class TweenParallel : public TweenGroup
     {
         RTTI_OBJECT(TweenParallel, TweenGroup)
@@ -817,5 +836,6 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsRunning(const Action& step) const override { return !const_cast<Action&>(step).IsDone(); }
     };
-    // StaticType: REFLECT_MEMBERS(TweenParallel) in Scene/GUIReflectionImpl.cpp (the script surface).
+    // StaticType comes from REFLECT_MEMBERS(TweenParallel) in Scene/GUIReflectionImpl.cpp, which
+    // reflects the script surface.
 }

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Shared synthetic-device + representative-map helpers for the input tests.
+// Shared synthetic-device and representative-map helpers for the input tests.
 //
-// Header-only test scaffolding (internal linkage - each including TU gets its own copy).
-// The includer MUST already have done, before #include-ing this:
+// Header-only test scaffolding (internal linkage: each including TU gets its own copy).
+// The includer must already have done, before including this:
 //     import foundation.core; import foundation.shell; import foundation.input;
 //     using namespace foundation::core; using namespace foundation::input;
 //     namespace shell = foundation::shell;
-// Used by BOTH Foundation/Input.Tests (foundation action-model tests) and
-// Engine/Engine.Input.Tests (the InputSubsystem + script-facade tests).
+// Used by both Foundation/Input.Tests (foundation action-model tests) and
+// Engine/Engine.Input.Tests (the InputSubsystem and script-facade tests).
 #pragma once
 
 namespace
@@ -219,7 +219,7 @@ namespace
             confirm.kind = ActionKind::Button;
             Binding key;
             key.source = BindingSource::Key;
-            key.code = static_cast<u32>(shell::KeyCode::Space); // deliberately shared with Jump
+            key.code = static_cast<u32>(shell::KeyCode::Space); // shared with Jump on purpose
             confirm.bindings.PushBack(key);
             menu.actions.PushBack(static_cast<Action&&>(confirm));
         }

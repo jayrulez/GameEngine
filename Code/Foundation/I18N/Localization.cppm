@@ -3,11 +3,11 @@
 
 // foundation.i18n - :localization partition
 //
-// Localization: the resolver its owner holds (Documentation/Specs/i18n.md). It borrows string
-// tables (the last added wins for a key, and for a locale's rule or direction), holds the language
-// and a fallback, and answers: a key's text through the chain (the language, its parents, the
-// fallback, its parents), a plural key's form for a count by the rule of the language the text
-// came from, positional formatting, and which way the language is written. A miss returns the key
+// Localization: the resolver its owner holds. It borrows string tables (the last added wins for
+// a key, and for a locale's rule or direction), holds the language and a fallback, and answers:
+// a key's text through the chain (the language, its parents, the fallback, its parents), a plural
+// key's form for a count by the rule of the language the text came from, positional formatting,
+// and which way the language is written. A miss returns the key
 // itself, logged once and kept for a tool to write out. Pseudolocalization transforms whatever it
 // resolves. Owners hear of changes through a plain callback list (no bus: this stays a leaf).
 
@@ -33,7 +33,7 @@ export namespace foundation::i18n
         String Close;
     };
 
-    /// What pseudolocalization does to each text (Documentation/Specs/i18n.md).
+    /// What pseudolocalization does to each text.
     struct PseudoOptions
     {
         bool Enabled = false;

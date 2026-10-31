@@ -5,26 +5,22 @@
 //
 // Maps short string names to View types (our RTTI TypeInfo). Used by the .sss parser for element
 // selectors and by the .sml loader for element resolution. User controls register via
-// UITypeRegistry::Register("MyControl", &MyControl::StaticType()). Ported from
-// Sedulous.UI/src/Styling/Parser/UITypeRegistry.bf.
-//
-// Divergences (language): Beef `Type` -> const core::TypeInfo*; the static Dictionary lives in a
-// function-local static HashMap (avoids C++ static-init-order issues). RegisterBuiltins() is not
-// implemented while the control classes are unported (it references View subclasses not yet
-// present); the parser and its tests register the types they need explicitly.
+// UITypeRegistry::Register("MyControl", &MyControl::StaticType()). The map is a function-local
+// static, which avoids static-init-order issues.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.ui:ui_type_registry;
 
-import foundation.core; // TypeInfo, HashMap, String, StringView
+import foundation.core;
 
 using namespace foundation::core;
 
 namespace foundation::ui::detail
 {
-    // NON-inline (UiRegistryStateImpl.cpp): shared-libraries.md rendezvous rule.
+    // Defined out of line in UiRegistryStateImpl.cpp: an inline function-local static would give
+    // each shared library its own map.
     [[nodiscard]] HashMap<String, const TypeInfo*>& UITypeMap();
 }
 
@@ -51,12 +47,13 @@ export namespace foundation::ui
         /// Number of registered types.
         [[nodiscard]] static usize Count() { return detail::UITypeMap().Size(); }
 
-        /// Register all built-in View/layout/control type names (idempotent). Body in an impl unit
-        /// (UITypeRegistryImpl.cpp) that reaches every control via the module - so element selectors like
-        /// `ComboBox::arrow` in a .sss resolve to a concrete type instead of matching everything.
+        /// Register all built-in view, layout and control type names (idempotent). The body is in an
+        /// implementation unit (UITypeRegistryImpl.cpp) that reaches every control through the module,
+        /// so element selectors like `ComboBox::arrow` in a .sss resolve to a concrete type instead of
+        /// matching everything.
         static void RegisterBuiltins();
 
     private:
-        static void RegisterBuiltinsBody(); // impl unit
+        static void RegisterBuiltinsBody(); // in the implementation unit
     };
 }

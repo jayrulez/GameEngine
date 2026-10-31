@@ -3,14 +3,14 @@
 
 /// Foundation::Heightfield - `foundation.heightfield`.
 ///
-/// The pure heightfield grid + sampling math, the shared source of truth the terrain renderer,
-/// physics collider, and (later) the navigation bake all consume - none of them depending on the
-/// terrain renderer to read heights. NO RHI, NO terrain concepts; depends only on Foundation::Core.
+/// The pure heightfield grid and its sampling math: the shared source of truth the terrain
+/// renderer, the physics collider and the navigation bake all read, so none of them depends on the
+/// terrain renderer for heights. No RHI and no terrain concepts; depends only on Foundation::Core.
 ///
-/// A grid is SQUARE with side S = 64*k + 1 (k >= 1: 65, 129, 257, ...): that one rule tiles into
-/// 64-quad (65-vert) render chunks sharing edges AND satisfies Jolt's square HeightFieldShape. u16
+/// A grid is square with side S = 64*k + 1 (k >= 1: 65, 129, 257, ...). That one rule tiles into
+/// 64-quad (65-vertex) render chunks sharing edges and satisfies Jolt's square HeightFieldShape. u16
 /// samples map linearly onto a world Y range [minY, maxY] over a worldSize (X by Z) footprint centered
-/// on the LOCAL origin (XZ plane, +Y up); the entity transform places it in the world.
+/// on the local origin (XZ plane, +Y up); the entity transform places it in the world.
 
 module;
 #include "Core/Prelude.h"
@@ -46,18 +46,18 @@ export namespace foundation::heightfield
 
     /// A square heightfield: S*S u16 samples (row-major, index = gx + gz*S) over a world footprint.
     ///
-    /// It IS-A Object so it can be a referenceable resource product (Ref<Heightfield>), the way
-    /// StaticMesh is - terrain, the physics collider, and the nav bake all hold a Ref to one. The
-    /// grid + sampling math still depend only on Foundation::Core; the cooked source + factory live
+    /// It is an Object so it can be a referenceable resource product (Ref<Heightfield>), as
+    /// StaticMesh is; terrain, the physics collider and the nav bake all hold a Ref to one. The grid
+    /// and sampling math still depend only on Foundation::Core; the cooked source and factory live
     /// in foundation.heightfield.resource.
     class Heightfield : public Object
     {
         RTTI_OBJECT(Heightfield, Object)
     public:
-        // Unique per-OBJECT id: GPU caches (the terrain height-texture cache) key by THIS,
-        // never by pointer - a freed heightfield's address can be reused by a fresh grid at
-        // the same version (fresh grids all start at 1), and pointer keying would then serve
-        // the dead grid's texture. The StaticMesh::uid precedent (bind-group-cache rule).
+        // Unique per-object id. GPU caches (the terrain height-texture cache) key by this, never
+        // by pointer: a freed heightfield's address can be reused by a fresh grid at the same
+        // version (fresh grids all start at 1), and pointer keying would then serve the dead
+        // grid's texture. StaticMesh::uid does the same.
         const u64 uid = NextUid();
 
         [[nodiscard]] static u64 NextUid() noexcept
@@ -68,7 +68,7 @@ export namespace foundation::heightfield
 
         Heightfield() = default;
 
-        /// Allocate a zeroed grid. `size` MUST satisfy IsValidSize; worldSize is the XZ footprint,
+        /// Allocate a zeroed grid. `size` must satisfy IsValidSize; worldSize is the XZ footprint,
         /// [minY, maxY] the world Y range the u16 samples span (maxY > minY).
         Heightfield(i32 size, Float2 worldSize, f32 minY, f32 maxY)
             : m_size(size), m_worldSize(worldSize), m_minY(minY), m_maxY(maxY)
@@ -84,7 +84,7 @@ export namespace foundation::heightfield
         [[nodiscard]] f32 MaxY() const noexcept { return m_maxY; }
 
         /// Monotonic edit generation (starts at 1). Bump it after rewriting samples so downstream
-        /// GPU caches (the terrain height texture) re-upload - the sculpt/regen path.
+        /// GPU caches (the terrain height texture) re-upload, as sculpting and regeneration do.
         [[nodiscard]] u64 Version() const noexcept { return m_version; }
         void BumpVersion() noexcept { ++m_version; }
 
@@ -104,8 +104,8 @@ export namespace foundation::heightfield
             return Span<Height>{m_samples.Data(), m_samples.Size()};
         }
 
-        // ---- holes: a per-SAMPLE cut (Specs/terrain-holes.md) ------------------------------
-        // The ONE rule every consumer applies: a triangle with a hole vertex is removed - the
+        // ---- holes: a per-sample cut -------------------------------------------------------
+        // The one rule every consumer applies: a triangle with a hole vertex is removed. The
         // renderer's chunk indices, Jolt's no-collision sample, the nav bake's blocks, the
         // vegetation's placement and QueryRay all read the same plane. A byte per sample,
         // 0 = solid, 255 = cut, laid out like the heights; the plane is the "holes" stream of the
@@ -153,7 +153,7 @@ export namespace foundation::heightfield
         }
         [[nodiscard]] u32 HoleCount() const noexcept { return m_holeCount; }
         [[nodiscard]] bool HasHoles() const noexcept { return m_holeCount != 0; }
-        /// The cell (cx, cz) - the quad between samples cx..cx+1, cz..cz+1 - has a cut corner:
+        /// The cell (cx, cz), the quad between samples cx..cx+1, cz..cz+1, has a cut corner:
         /// both of its triangles are gone. Indices clamp like every other accessor.
         [[nodiscard]] bool CellHasHole(i32 cx, i32 cz) const noexcept
         {
@@ -292,16 +292,16 @@ export namespace foundation::heightfield
         /// Local-space ray against the surface. Returns the nearest hit distance in `outT` (>= 0).
         /// A height-field ray march: clip to the grid AABB, step by ~half a cell, and bisect the
         /// crossing where the ray drops to/through the bilinear surface. Robust for editor picking.
-        /// A crossing inside a cut cell is no surface (Specs/terrain-holes.md): the ray passes
-        /// through to whatever sits below - the gameplay trace's rule.
+        /// A crossing inside a cut cell is no surface: the ray passes through to whatever sits
+        /// below, as the gameplay trace does.
         [[nodiscard]] bool QueryRay(Float3 origin, Float3 direction, f32& outT) const noexcept
         {
             return MarchRay(origin, direction, outT, /*skipHoles*/ true);
         }
 
-        /// The same march with the cut samples treated as surface: the brushes that work ON the
+        /// The same march with the cut samples treated as surface: the brushes that work on the
         /// hole (Fill, the prop brush erasing what stands over a cut) pick the plane where the
-        /// terrain used to be instead of falling through it. Never a gameplay query.
+        /// terrain would be instead of falling through it. Never a gameplay query.
         [[nodiscard]] bool QueryRayIgnoringHoles(Float3 origin, Float3 direction,
                                                  f32& outT) const noexcept
         {
@@ -364,7 +364,7 @@ export namespace foundation::heightfield
                     const f32 hit = 0.5f * (lo + hi);
                     // A crossing inside a cut cell is no surface: the ray passes through to
                     // whatever sits below (a cave floor, the physics world) and the march goes
-                    // on, needing to come back ABOVE the field before another crossing counts.
+                    // on, needing to come back above the field before another crossing counts.
                     if (!(skipHoles && HoleAt(origin, dir, hit)))
                     {
                         outT = hit;
@@ -475,10 +475,10 @@ export namespace foundation::heightfield
 
     // ---- sculpt brushes (pure sample math; the editor sculpt tool wraps these) ------------------
     //
-    // Each brush edits the samples under a WORLD-space disc (center worldX,worldZ; radius) with a
-    // cosine falloff (1 at the center, 0 at the rim), clamps to the u16 range, BumpVersion()s if any
-    // sample changed, and returns the touched grid RECTANGLE (inclusive) - the region a stroke's
-    // undo command snapshots and the renderer's GPU re-upload can bound to. All headless-testable.
+    // Each brush edits the samples under a world-space disc (center worldX, worldZ; radius) with a
+    // cosine falloff (1 at the center, 0 at the rim), clamps to the u16 range, calls BumpVersion()
+    // if any sample changed, and returns the touched grid rectangle (inclusive): the region a
+    // stroke's undo command snapshots and the renderer's GPU re-upload can bound to.
 
     /// The grid rectangle a brush touched (inclusive). Empty (IsEmpty) when nothing was in range.
     struct HeightfieldRegion
@@ -502,7 +502,7 @@ export namespace foundation::heightfield
 
     namespace detail
     {
-        // The grid rect (clamped) covering a world disc, + a visit of every in-disc cell with its
+        // The grid rect (clamped) covering a world disc, and a visit of every in-disc cell with its
         // cosine falloff weight. `apply(gx, gz, w)` mutates one sample; visit tracks the touched rect.
         template <typename Apply>
         inline HeightfieldRegion VisitBrush(const Heightfield& hf, f32 worldX, f32 worldZ, f32 radius,
@@ -628,8 +628,8 @@ export namespace foundation::heightfield
     }
 
     RTTI_DEFINE_OBJECT(Heightfield, "rtti::heightfield")
-    // ---- hole brushes (the terrain.hole tool; Specs/terrain-holes.md) --------------------------
-    // A sample is cut or solid, so the disc has a HARD edge: every sample inside the radius is
+    // ---- hole brushes (the terrain.hole tool) ---------------------------------------------------
+    // A sample is cut or solid, so the disc has a hard edge: every sample inside the radius is
     // marked, none outside, no falloff. The version bumps once when anything changed, and the
     // touched rect comes back for the stroke's region-delta undo and the renderer's rebuild.
 

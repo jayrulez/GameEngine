@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// EditorProject tests: create/open round-trip of the fixed project layout - manifest,
-// subdirectories, source (XML) + cooked (binary) content databases.
+// EditorProject tests: the create and open round-trip of the fixed project layout (manifest,
+// subdirectories, and the source (XML) and cooked (binary) content databases).
 
 #include <doctest/doctest.h>
 #include <string>
@@ -71,7 +71,7 @@ TEST_CASE("editor-project: create scaffolds the layout and open round-trips the 
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
     CHECK(project->Name() == u8"Test Project");
-    // (The manifest's data version rides the versioned-payload envelope now, not a field.)
+    // (The manifest's data version is in the versioned-payload envelope, not a field.)
     CHECK(project->Settings().defaultScene.IsEmpty());
     CHECK(project->SourceDb().RootGroup() != nullptr);
     CHECK(project->CookedDb().RootGroup() != nullptr);
@@ -112,14 +112,14 @@ TEST_CASE("editor-project: an unreadable manifest logs an error (missing one sta
     CaptureSink sink;
     GlobalLogger().AddSink(&sink);
 
-    // Absent manifest: the scaffold path - no error noise.
+    // Absent manifest: the scaffold path, with no error noise.
     const StringView missingDir = u8"scratch_editor_test_project_silent";
     RemoveProjectTree(missingDir);
     CHECK(!static_cast<bool>(EditorProject::Open(DefaultAllocator(), missingDir)));
     CHECK(sink.errors == 0);
 
-    // Present-but-unparseable manifest (e.g. a pre-versioning format): loud failure -
-    // the app shell only surfaces this in the status bar, the console line is the signal.
+    // A present but unparseable manifest (for example a pre-versioning format) fails loudly:
+    // the app shell only surfaces this in the status bar, so the console line is the signal.
     const StringView dir = u8"scratch_editor_test_project_corrupt";
     RemoveProjectTree(dir);
     REQUIRE(CreateDirectory(dir));
@@ -189,7 +189,7 @@ TEST_CASE("editor-project: settings changes persist through SaveSettings")
         CHECK(project->Settings().guiLoadingDocumentId == loadingId); // an appended field round-trips
         Guid mapId;
         REQUIRE(Guid::TryParse(u8"6ba7b812-9dad-11d1-80b4-00c04fd430c8", mapId));
-        // Open's per-field settings move must not DROP defaultInputMapId (silent data loss).
+        // Open's per-field settings move must not drop defaultInputMapId (silent data loss).
         CHECK(project->Settings().defaultInputMapId == mapId);
         Guid fontId;
         REQUIRE(Guid::TryParse(u8"6ba7b813-9dad-11d1-80b4-00c04fd430c8", fontId));
@@ -276,20 +276,20 @@ TEST_CASE("project: manifests carry the engine version stamp; a stale-version ma
     (void)FileDelete(PathJoin(dir, u8"Project.xml"));
     (void)RemoveDirectory(dir);
 
-    // Every save stamps the CURRENT engine version (the launcher's routing signal).
+    // Every save stamps the current engine version (the launcher's routing signal).
     REQUIRE(EditorProject::Create(DefaultAllocator(), dir, u8"P").IsOk());
     {
         UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
         REQUIRE(static_cast<bool>(project));
         CHECK(project->Settings().engineVersion == engine::project::kEngineVersionString);
         // Comparing settings against the constant cannot catch the ENGINE_VERSION_* defines
-        // silently not reaching the target - the fallback value can. A build stamped
-        // 0.0.0-dev means project(VERSION) never landed.
+        // silently not reaching the target; the fallback value can. A build stamped 0.0.0-dev
+        // means project(VERSION) did not reach it.
         CHECK(engine::project::kEngineVersionString != StringView(u8"0.0.0-dev"));
     }
 
     // A manifest stamped with another ProjectSettings data version (here 1, which had no
-    // engineVersion key) is REFUSED - Open fails instead of guessing a layout. The project
+    // engineVersion key) is refused: Open fails instead of guessing a layout. The project
     // has to be re-saved by the build that wrote it (or recreated).
     {
         foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
@@ -325,8 +325,8 @@ TEST_CASE("project: manifests carry the engine version stamp; a stale-version ma
     (void)RemoveDirectory(dir);
 }
 
-// A version 9 manifest (every sample's before Engine.UI went) still opens: the old UI's theme
-// and loading document are read and dropped, the fields after them land where they were.
+// A version 9 manifest still opens: the theme and loading document of the removed UI are read and
+// dropped, and the fields after them land where they were.
 TEST_CASE("project: a version 9 manifest opens without the old UI's two settings")
 {
     const StringView dir = u8"scratch_project_v9_manifest";
@@ -380,13 +380,13 @@ TEST_CASE("project: a version 9 manifest opens without the old UI's two settings
     (void)RemoveDirectory(dir);
 }
 
-// Sedulous 3de51786 (reflected here, not a list): the settings the Project Settings dialog and
-// project_settings_set edit are the type's own description - every asset setting a Guid naming
-// the asset type it takes, every setting labelled - and the path mirrors follow their guids.
+// The settings that the Project Settings dialog and project_settings_set edit come from the
+// type's reflection, not a list: every asset setting is a Guid naming the asset type it takes,
+// every setting is labelled, and the path mirrors follow their guids.
 TEST_CASE("editor-project: the settings describe themselves, and the path mirrors follow the guids")
 {
     const TypeInfo& type = engine::project::ProjectSettings::StaticType();
-    CHECK(type.dataVersion == 10u); // 10: the old UI's theme and loading document gone
+    CHECK(type.dataVersion == 10u); // version 10 drops the old UI's theme and loading document
     CHECK(type.minReadDataVersion == 9u); // a version 9 manifest still reads
     u32 assets = 0;
     u32 lists = 0;
@@ -420,10 +420,10 @@ TEST_CASE("editor-project: the settings describe themselves, and the path mirror
     CHECK(settings.startupScript.IsEmpty()); // no script: no mirror
 }
 
-// Sedulous 39147576: the other UI fonts are a list appended to the manifest. A manifest saved
-// before it (no uiFontIds key, the same data version) still opens with none, one saved after
-// round-trips the list, the copy the dist manifest is made with carries it, and the walk over
-// the asset settings (export roots, asset_uses, project_health) visits each entry.
+// The other UI fonts are a list appended to the manifest. A manifest without it (no uiFontIds
+// key, the same data version) still opens with none, one saved with it round-trips the list, the
+// dist manifest's copy carries it, and the walk over the asset settings (export roots,
+// asset_uses, project_health) visits each entry.
 TEST_CASE("project: the other UI fonts are an appended list every asset walk reaches")
 {
     const StringView dir = u8"scratch_project_ui_fonts_test";
@@ -486,9 +486,9 @@ TEST_CASE("project: the other UI fonts are an appended list every asset walk rea
     (void)FileDelete(PathJoin(dir, u8"Project.xml"));
 }
 
-// The engine GUI's sheets (gui-lab-evolution-3.md E9b) are an appended, ordered list: a manifest
-// saved before it opens with none, one saved after round-trips the order, the dist copy carries
-// it, and every asset walk visits each sheet.
+// The engine GUI's sheets are an appended, ordered list: a manifest without it opens with none,
+// one saved with it round-trips the order, the dist copy carries it, and every asset walk visits
+// each sheet.
 TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset walk reaches")
 {
     const StringView dir = u8"scratch_project_gui_sheets_test";
@@ -536,7 +536,7 @@ TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
     REQUIRE(static_cast<bool>(project));
     REQUIRE(project->Settings().guiStyleSheetIds.Size() == 2u);
-    CHECK(project->Settings().guiStyleSheetIds[0] == shared); // the order kept: the game's over the shared
+    CHECK(project->Settings().guiStyleSheetIds[0] == shared); // order kept: the game's sheet applies over the shared one
     CHECK(project->Settings().guiStyleSheetIds[1] == game);
 
     engine::project::ProjectSettings dist;
@@ -554,9 +554,9 @@ TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset
     (void)FileDelete(PathJoin(dir, u8"Project.xml"));
 }
 
-// Sedulous 7d6e4460: the display settings (render resolution and fit, the player's window) are
-// appended, so a manifest saved before them opens with their defaults; set, they round-trip
-// and the dist copy carries them.
+// The display settings (render resolution and fit, the player's window) are appended, so a
+// manifest without them opens with their defaults; once set, they round-trip and the dist copy
+// carries them.
 TEST_CASE("project: the display settings are appended, with defaults an older manifest reads")
 {
     const StringView dir = u8"scratch_project_display_test";
@@ -633,8 +633,8 @@ TEST_CASE("project: the display settings are appended, with defaults an older ma
     (void)FileDelete(PathJoin(dir, u8"Project.xml"));
 }
 
-// Sedulous 765efdfa: the player reads its manifest before its window exists, to open the
-// window the project asks for: a dist's player.xml first, else a dev tree's Project.xml.
+// The player reads its manifest before its window exists, so it can open the window the project
+// asks for. It reads a dist's player.xml first, else a dev tree's Project.xml.
 TEST_CASE("project: the player's manifest is the dist's, else the project's")
 {
     const StringView dir = u8"scratch_player_manifest_test";

@@ -4,13 +4,13 @@
 /// foundation.rhi.webgpu:pipeline_layout - PipelineLayout over WGPUPipelineLayout.
 ///
 /// Push constants take one of two shapes:
-///  - IMMEDIATES (wgpu-native, WGPUNativeFeature_Immediates): the layout declares
-///    immediateSize and the encoders call SetImmediates.
-///  - UNIFORM-BUFFER FALLBACK (browsers - Dawn has no immediates - or the fallback forced
+///  - Immediates (wgpu-native, WGPUNativeFeature_Immediates): the layout declares immediateSize
+///    and the encoders call SetImmediates.
+///  - Uniform-buffer fallback (browsers, since Dawn has no immediates, or the fallback forced
 ///    for testing): the block is bound as an ordinary uniform buffer at @group(space)
-///    @binding(0), matching the web WGSL cook (Data/Engine/Shaders/push_constant.hlsli). The layout
-///    synthesizes that group's bind-group layout here and reports it; the pass encoders keep
-///    a CPU shadow of the block and, before each draw, upload it and bind the group.
+///    @binding(0), matching the web WGSL cook (Data/Engine/Shaders/push_constant.hlsli). The
+///    layout synthesizes that group's bind-group layout here and reports it; the pass encoders
+///    keep a CPU shadow of the block and, before each draw, upload it and bind the group.
 
 module;
 #include "Core/Prelude.h"

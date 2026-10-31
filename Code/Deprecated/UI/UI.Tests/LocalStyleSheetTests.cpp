@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/LocalStyleSheetTests.bf (faithful, full file, 23 cases). Sub-phase E
-// lifecycle of View.LocalStyleSheet + sub-phase F/G resolution wiring (ancestor walk + context fallback +
-// pseudo-elements + inheritable-via-ForAll). Beef refcount lifecycle (`new/scope/defer ReleaseRef` + `delete
-// view`) -> RAII RefPtr/MakeRef with .Reset() standing in for `delete`; `view.LocalStyleSheet = s; s.ReleaseRef()`
-// -> a SetupLocalSheet(view) helper mirroring SetupSheet(ctx); `=== sheet` -> pointer ==; `case .None` ->
-// StyleValue::Kind::None; `SetInlinePartStyle(part, prop, .FloatVal(v))` -> View::SetPartStyle(part, prop, v).
+// View::LocalStyleSheet: its lifecycle, and how it takes part in resolution (the ancestor walk, the
+// fallback to the context sheet, pseudo-elements, and inheritable properties set through ForAll).
+// Views and sheets are RefPtrs; Reset() destroys a view the test solely owns.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -45,7 +42,7 @@ namespace
     }
 }
 
-// === Lifecycle (sub-phase E) ===
+// === Lifecycle ===
 
 TEST_CASE("local-stylesheet: Default_IsNull")
 {
@@ -67,7 +64,7 @@ TEST_CASE("local-stylesheet: Set_Twice_NoOpForIdentical")
     auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
     TestView view;
     view.SetLocalStyleSheet(sheet);
-    view.SetLocalStyleSheet(sheet); // second assignment to the same sheet is a guarded no-op
+    view.SetLocalStyleSheet(sheet); // assigning the same sheet again does nothing
     CHECK(view.GetLocalStyleSheet() == sheet.Get());
 }
 
@@ -79,7 +76,7 @@ TEST_CASE("local-stylesheet: Reassign_ReleasesPrevious")
     view->SetLocalStyleSheet(s1);
     view->SetLocalStyleSheet(s2); // releases view's ref on s1
     CHECK(view->GetLocalStyleSheet() == s2.Get());
-    s1.Reset(); // s1 now unreferenced -> freed
+    s1.Reset(); // s1 is now unreferenced and freed
     view.Reset();
 }
 
@@ -115,7 +112,7 @@ TEST_CASE("local-stylesheet: SharedBetweenViews")
     CHECK(sheet.Get() != nullptr); // creation ref still holds it
 }
 
-// === Resolution-order (sub-phase F) ===
+// === Resolution order ===
 
 TEST_CASE("local-stylesheet: Resolution_LocalOnThisView_WinsOverContext")
 {
@@ -255,7 +252,7 @@ TEST_CASE("local-stylesheet: Resolution_NonInheritable_DoesNotCascade")
     CHECK(child->ResolveStyleThickness(StyleProperty::Padding).IsZero());
 }
 
-// === Pseudo-element resolution (sub-phase G) ===
+// === Pseudo-element resolution ===
 
 TEST_CASE("local-stylesheet: Pseudo_LocalOnThisView_WinsOverContext")
 {

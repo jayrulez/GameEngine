@@ -1,5 +1,5 @@
 """Masquerade's look: two shared profiles (Masquerade Environment, Masquerade Post) every map's scene
-names in its settings, so the look is tuned in one place (Lamplight's arrangement, its look.py).
+names in its settings, so the look is tuned in one place (arranged as Lamplight's look.py is).
 
 Night: a deep blue sky and a soft blue ambient, so the lanterns, the windows and the chandeliers
 light the ball and the crowd still reads between them. TAA, SSR for the polished marble, GTAO, bloom

@@ -114,7 +114,7 @@ namespace foundation::i18n
                 {
                     // A cell a locale, or the table is not one: the read fails, and the entry keeps a
                     // cell for each locale so that a caller not checking the payload cannot index
-                    // past them (a fuzzer's find).
+                    // past them.
                     ar.FailPayload(ErrorCode::InvalidArgument);
                     entry.Cells.Resize(m_locales.Size());
                 }

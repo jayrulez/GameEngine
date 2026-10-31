@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/DialogTests.bf (faithful). Beef nullable String -> non-empty check;
-// `scope Dialog` / `new Dialog` -> RefPtr (RAII, ownsView:false so the test controls lifetime); Event
-// delegate captures -> lambda captures; ctx.MutationQueue.Drain() -> ctx.MutationQueueRef().Drain().
+// Dialog tests. Dialogs are held by RefPtr and shown with ownsView false, so the test controls
+// their lifetime.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -58,9 +57,10 @@ TEST_CASE("dialog: Show_SetsInitialKeyboardFocus_InsideTheDialog")
 
     dlg->Show(&ctx, false);
 
-    // The dialog opens keyboard-ALIVE: focus lands on its first focusable IN TAB ORDER inside the
-    // dialog subtree (title-bar close button or a row button - the exact child is layout policy),
-    // so Escape/Return work immediately without a click. Programmatic focus - no ring draws.
+    // The dialog opens ready for the keyboard: focus lands on its first focusable view in tab
+    // order inside the dialog subtree (the title-bar close button or a row button; which one is a
+    // layout detail), so Escape and Return work without a click. The focus is programmatic, so no
+    // focus ring draws.
     View* focused = ctx.GetFocusManager()->FocusedView();
     REQUIRE(focused != nullptr);
     CHECK(dlg->IsFocusWithin());
@@ -136,7 +136,7 @@ TEST_CASE("dialog: NoneButton_IsCallerManaged")
     dlg->Show(&ctx, false);
     CHECK(root->GetPopupLayer()->PopupCount() == 1);
 
-    // A None button does NOT auto-close - the caller's handler decides (validation flows).
+    // A None button does not close the dialog by itself; the caller's handler decides (for validation).
     custom->OnClick.Invoke(custom);
     ctx.MutationQueueRef().Drain();
     CHECK(!closed);
@@ -194,8 +194,8 @@ TEST_CASE("dialog: a click on the backdrop outside a modal keeps the keyboard in
     dlg->Show(&ctx, false);
     REQUIRE(dlg->IsFocusWithin());
 
-    // The backdrop: the hit test reports the popup layer, nothing focusable - focus used to
-    // clear here, and Escape then went nowhere.
+    // A click on the backdrop: the hit test reports the popup layer, which is not focusable. Focus
+    // stays in the dialog, so Escape still reaches it.
     ctx.GetInputManager()->ProcessMouseDown(MouseButton::Left, 2, 2, 0);
     CHECK(dlg->IsFocusWithin());
     // Even when nothing inside held it (cleared by other means), a backdrop click brings the
@@ -203,7 +203,7 @@ TEST_CASE("dialog: a click on the backdrop outside a modal keeps the keyboard in
     ctx.GetFocusManager()->ClearFocus();
     ctx.GetInputManager()->ProcessMouseDown(MouseButton::Left, 2, 2, 0);
     CHECK(dlg->IsFocusWithin());
-    // And the focus walk reaches the dialog's buttons now (they live in its visual layout).
+    // The focus walk reaches the dialog's buttons (they live in its visual layout).
     CHECK(ctx.GetFocusManager()->FocusFirstIn(dlg.Get()));
     CHECK(ctx.GetFocusManager()->FocusedView() != dlg.Get());
 

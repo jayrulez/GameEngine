@@ -3,11 +3,11 @@
 
 // CodeLexer headless tests: the C-like scanner's classification and every spec flag (nested
 // block comments, triple-quoted strings, preprocessor lines, char literals), the XML lexer's
-// stateful constructs, multi-line state carry, the CodeLexerRegistry seam, and
-// CodeHighlighter's incremental relex-until-convergence (asserted with a call counter).
+// stateful constructs, state carried across lines, the CodeLexerRegistry, and CodeHighlighter's
+// incremental relexing until the state converges (checked with a call counter).
 //
-// Toolkit ships NO language tables (they live with the language-owning modules), so these
-// tests drive the machinery with local specs.
+// The toolkit ships no language tables (they live with the modules that own each language), so
+// these tests drive the machinery with local specs.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -108,7 +108,7 @@ TEST_CASE("toolkit-codelexer: LuaLikeClassificationAndComments")
     CHECK(FindToken(lexed, line, u8"-- a tail comment")->kind == CodeTokenKind::Comment);
     CHECK(lexed.exitState == 0);
 
-    // `//` is NOT a comment in Lua - two operators, and the rest of the line lexes normally.
+    // `//` is not a comment in Lua: it is two operators, and the rest of the line lexes normally.
     const char8_t* notComment = u8"local y = a // b";
     const Lexed lexed2 = Lex(lexer, notComment);
     CHECK(FindToken(lexed2, notComment, u8"b")->kind == CodeTokenKind::Default); // still classified
@@ -136,7 +136,7 @@ TEST_CASE("toolkit-codelexer: LuaLikeLongBracketsSpanLines")
         CHECK(FindToken(a, open, u8"[==[ start")->kind == CodeTokenKind::String);
         CHECK(a.exitState != 0); // still open
 
-        // A close at the WRONG level does not terminate it.
+        // A close at the wrong level does not terminate it.
         const char8_t* wrong = u8"middle ]=] still going";
         const Lexed b = Lex(lexer, wrong, a.exitState);
         CHECK(b.exitState == a.exitState);
@@ -267,7 +267,7 @@ TEST_CASE("toolkit-codelexer: XmlConstructs")
 TEST_CASE("toolkit-codelexer: TokenColumnsAreCodepoints")
 {
     CLikeLexer lexer(TestSpec());
-    // The e-acute is 2 bytes / 1 column, so the number's column and byte offset diverge.
+    // The e-acute is 2 bytes and 1 column, so the number's column and byte offset differ.
     const char8_t* line = u8"var héllo=1";
     const Lexed lexed = Lex(lexer, line);
     const CodeToken* number = FindToken(lexed, line, u8"1");
@@ -290,7 +290,7 @@ TEST_CASE("toolkit-codelexer: RegistrySeam")
     CHECK(registry.Create(u8"TESTLANG").Get() != nullptr); // ids are case-insensitive
     CHECK(registry.Create(u8"nosuchlang").Get() == nullptr);
 
-    // Re-registration replaces (last wins) - the null-factory variant disables it.
+    // Registering again replaces the factory (the last wins); a null factory disables the language.
     registry.Register(u8"testlang", [] { return UniquePtr<ICodeLexer>(); });
     CHECK(registry.Create(u8"testlang").Get() == nullptr);
 }
@@ -299,7 +299,7 @@ TEST_CASE("toolkit-codelexer: RegistrySeam")
 
 namespace
 {
-    // Wraps a real lexer, counting LexLine calls (proves incrementality end to end).
+    // Wraps a real lexer and counts LexLine calls, to check incremental relexing end to end.
     class CountingLexer final : public ICodeLexer
     {
     public:
@@ -330,19 +330,19 @@ TEST_CASE("toolkit-codehighlighter: IncrementalRelexConverges")
     highlighter.EnsureLexed(doc, doc.LineCount() - 1);
     CHECK(counting.calls == 4); // initial full lex
 
-    // Edit line 1 without changing its exit state: exactly ONE relex (convergence at line 2).
+    // Edit line 1 without changing its exit state: exactly one relex (the state converges at line 2).
     (void)doc.Edit(CodeSpan{{1, 4}, {1, 5}}, StringView(u8"x"), CodeEditKind::Typing,
                    CodeCursorState{}, 0.0);
     highlighter.OnLinesChanged(1, 1, 1);
     highlighter.EnsureLexed(doc, doc.LineCount() - 1);
     CHECK(counting.calls == 5);
 
-    // Open a block comment on line 0: the state cascades - every following line relexes...
+    // Open a block comment on line 0: the state cascades, and every following line relexes...
     (void)doc.Edit(CodeSpan{{0, 9}, {0, 9}}, StringView(u8" /*"), CodeEditKind::Typing,
                    CodeCursorState{}, 1.0);
     highlighter.OnLinesChanged(0, 1, 1);
     highlighter.EnsureLexed(doc, doc.LineCount() - 1);
-    CHECK(counting.calls == 9); // +4 (lines 0..3)
+    CHECK(counting.calls == 9); // 4 more (lines 0..3)
     REQUIRE(highlighter.TokensFor(3).Size() == 1);
     CHECK(highlighter.TokensFor(3)[0].kind == CodeTokenKind::Comment);
 
@@ -368,7 +368,7 @@ TEST_CASE("toolkit-codehighlighter: LineSpliceKeepsTailValid")
     highlighter.EnsureLexed(doc, doc.LineCount() - 1);
     const u64 initial = counting.calls;
 
-    // Insert a line between 0 and 1: only the edited + new lines lex; the shifted tail
+    // Insert a line between 0 and 1: only the edited and new lines lex; the shifted tail
     // converges without relexing.
     (void)doc.Edit(CodeSpan{{0, 9}, {0, 9}}, StringView(u8"\nvar n = 9"), CodeEditKind::Paste,
                    CodeCursorState{}, 0.0);

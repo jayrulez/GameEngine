@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of Buffer.
-/// Ported from Sedulous.RHI.Vulkan/VulkanBuffer.bf.
 
 module;
 #include "Core/Prelude.h"

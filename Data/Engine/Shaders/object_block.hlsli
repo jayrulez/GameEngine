@@ -3,9 +3,9 @@
 
 // The per-draw block of a single (non-instanced) object, set 1 binding 0, one declaration for the
 // forward, shadow depth and pick vertex stages, which share one C++ ring of render::GpuObject
-// (MeshRenderer.cppm). Each pass reads the fields it needs by their names: the forward pass all but
-// the pick id, the depth pass World, BoneBase (and Tint for a surface's Vertex()), the pick pass
-// World, BoneBase and the pick id (and Tint likewise).
+// (MeshRenderer.cppm). Each pass reads the fields it needs by name: the forward pass reads all but
+// the pick id; the depth pass reads World and BoneBase (and Tint for a surface's Vertex()); the
+// pick pass reads World, BoneBase and the pick id (and Tint likewise).
 cbuffer Object : register(b0, space1) {
     row_major float4x4 World;
     row_major float4x4 PrevWorld;      // last frame's world (motion vectors)

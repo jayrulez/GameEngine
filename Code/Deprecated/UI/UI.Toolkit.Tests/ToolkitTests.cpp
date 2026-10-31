@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Verbatim port of Sedulous.UI.Tests/src/ToolkitTests.bf (SedulousEngine).
-// Standalone-construction coverage for the toolkit bars (MenuBar/Toolbar/StatusBar/SplitView/
-// BreadcrumbBar), ColorPicker (+ static HSV<->RGB), PropertyGrid, and every PropertyEditor. No UIContext
-// needed. Beef `scope X()`/`new X()` -> MakeRef<X>(DefaultAllocator()); ref-equality `===` -> pointer ==.
+// Standalone-construction coverage for the toolkit bars (MenuBar, Toolbar, StatusBar, SplitView,
+// BreadcrumbBar), ColorPicker (and its static HSV and RGB conversions), PropertyGrid, and every
+// PropertyEditor. None of these needs a UIContext.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -23,7 +22,7 @@ namespace
         return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
-    // Exposes PropertyEditor's protected BeginEdit/EndEdit for the transaction test (Beef `[Friend]`).
+    // Exposes PropertyEditor's protected BeginEdit/EndEdit for the transaction test.
     struct EditTxnEditor : BoolEditor
     {
         EditTxnEditor(StringView name, bool value) : BoolEditor(name, value) {}
@@ -202,7 +201,7 @@ TEST_CASE("toolkit: ColorPicker_OnColorChanged")
     bool fired = false;
     picker->OnColorChanged.Add([&fired](ColorPicker*, core::Color) { fired = true; });
 
-    // Programmatic SetColor does NOT fire OnColorChanged (avoids feedback loops).
+    // Programmatic SetColor does not fire OnColorChanged (avoids feedback loops).
     picker->SetColor(Rgb(0, 255, 0, 255));
     CHECK(!fired);
 }
@@ -396,11 +395,10 @@ TEST_CASE("toolkit: PropertyEditor_EditTransaction")
 
 TEST_CASE("toolkit: MenuBar opening a menu runs its OnOpening before the popup shows; ClearMenus closes it")
 {
-    // A menu bar shows its menus through the popup layer itself (it owns them), so the
-    // preparation ContextMenu::Show does - hover reset, OnOpening rebuilding live items - has
-    // to happen on that path too. An action menu bar builds enabled states in that hook: the
-    // regression was a menu keeping the flags from its last rebuild instead of the moment it
-    // opened.
+    // A menu bar shows its menus through the popup layer itself (it owns them), so it has to
+    // do the same preparation as ContextMenu::Show: reset the hover and let OnOpening rebuild
+    // live items. An action menu bar builds enabled states in that hook, so an opened menu must
+    // show the flags of the moment it opened, not those of its last rebuild.
     UIContext ctx{DefaultAllocator()};
     auto root = MakeRef<RootView>(DefaultAllocator());
     root->ViewportSize = Float2{800.0f, 600.0f};

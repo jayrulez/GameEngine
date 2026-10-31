@@ -200,7 +200,7 @@ TEST_CASE("properties: the expanded source compiles, and keeps the author's line
     compiler->Destroy();
 }
 
-// --- Effect blocks (Specs/wind-for-every-shader.md): the properties grammar in an include, for
+// --- Effect blocks: the properties grammar in an include, for
 // a vertex effect's own parameters, with a header naming the effect and its variant flag. ---
 
 namespace
@@ -322,7 +322,7 @@ TEST_CASE("effects: every malformed header and body is reported with its line")
 
 TEST_CASE("effects: a properties block knows no gate, and keeps its errors as they were")
 {
-    // `(gate)` belongs to an effect; in a properties block it is the missing `;` it always was.
+    // `(gate)` belongs to an effect; in a properties block it is a missing `;`.
     CHECK(OnlyError("properties {\n  float A = 0 (gate);\n}\n").line == 2u);
     CHECK(Contains(OnlyError("properties {\n  float A = 0 (gate);\n}\n").message.AsView(),
                    u8"ends with ;"));

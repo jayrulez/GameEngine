@@ -3,11 +3,11 @@
 
 // Foundation::Mcp - :schema partition
 //
-// The JSON Schema SUBSET the MCP layer emits (in tools/list inputSchema) and validates (on
-// tools/call). Deliberately small - object/string/number/integer/boolean/array with properties,
-// required, items, enum, description, default - built through a fluent API (no schema strings by
-// hand, no general JSON-Schema engine). Validation names the offending field so the caller can
-// return a JSON-RPC -32602 that an agent can act on.
+// The JSON Schema subset the MCP layer emits (in tools/list inputSchema) and validates (on
+// tools/call). It is kept small: object, string, number, integer, boolean and array, with
+// properties, required, items, enum, description and default, built through a fluent API (no
+// schema strings by hand, no general JSON Schema engine). Validation names the offending field so
+// the caller can return a JSON-RPC -32602 that an agent can act on.
 
 module;
 #include "Core/Prelude.h"
@@ -66,7 +66,7 @@ export namespace foundation::mcp
             return Add(Move(name), Move(prop), required);
         }
 
-        // An array field whose elements are a scalar type ("string"/"number"/...).
+        // An array field whose elements are a scalar type ("string", "number", ...).
         SchemaBuilder& Arr(String name, String itemType, String description = {},
                            bool required = false)
         {
@@ -144,7 +144,7 @@ export namespace foundation::mcp
             return *this;
         }
 
-        // Escape hatch: a fully-formed property schema (nested objects/arrays).
+        // Escape hatch: a fully formed property schema (nested objects or arrays).
         SchemaBuilder& Property(String name, JsonValue propSchema, bool required = false)
         {
             return Add(Move(name), Move(propSchema), required);
@@ -210,7 +210,7 @@ export namespace foundation::mcp
         {
             return v.IsObject();
         }
-        return true; // unknown/absent type constraint: accept
+        return true; // unknown or absent type constraint: accept
     }
 
     namespace schema_detail

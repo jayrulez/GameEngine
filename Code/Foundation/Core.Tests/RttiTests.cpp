@@ -35,7 +35,7 @@ namespace
         int LegsOf(Animal* other) const { return other != nullptr ? other->legs : -1; }
         bool IsSame(RefPtr<Animal> other) const { return other.Get() == this; }
 
-        // Two-param instance method - exercises named-parameter ordering (A6).
+        // Two-param instance method: exercises named-parameter ordering.
         int SetLegs(int front, int back)
         {
             legs = front + back;
@@ -55,8 +55,8 @@ namespace
         RTTI_OBJECT(Cat, Animal)
     };
 
-    // A nested reflected structure (Object-derived, so non-copyable via RefCounted - exactly the
-    // MaterialSource-inside-MaterialAsset case that Property<> cannot handle).
+    // A nested reflected structure (Object-derived, so non-copyable via RefCounted), the shape of
+    // MaterialSource inside MaterialAsset, which Property<> cannot handle.
     class NestedLeaf : public Object
     {
         RTTI_OBJECT(NestedLeaf, Object)
@@ -73,7 +73,7 @@ namespace
     };
 
     // Factory-style statics for the ReturnType-override test: bodies return a Variant whose dynamic
-    // type is (or is NOT) the declared return type.
+    // type is (or is not) the declared return type.
     Variant MakeAnimalVariant() { return Variant::FromObject(MakeRef<Animal>(DefaultAllocator())); }
     Variant MakeWrongVariant() { return Variant::From<int>(7); }
     // A narrowing factory taking any handle as a Variant, declared as taking an Animal.
@@ -87,19 +87,19 @@ namespace
 REFLECT_MEMBERS(Animal, "rtti::test")
 {
     builder.Property<&Animal::legs>("legs");
-    builder.Method<&Animal::AddLegs>("AddLegs", {"count"}); // A6: one authored parameter name
+    builder.Method<&Animal::AddLegs>("AddLegs", {"count"}); // one authored parameter name
     builder.Method<&Animal::GetLegs>("GetLegs");
     builder.Method<&Animal::DefaultLegs>("DefaultLegs");
-    builder.Method<&Animal::LegsOf>("LegsOf");           // takes Animal* (UNNAMED - stays "")
+    builder.Method<&Animal::LegsOf>("LegsOf");           // takes Animal* (unnamed, stays "")
     builder.Method<&Animal::IsSame>("IsSame");           // takes RefPtr<Animal>
-    builder.Method<&Animal::SetLegs>("SetLegs", {"front", "back"}); // A6: named params, in order
+    builder.Method<&Animal::SetLegs>("SetLegs", {"front", "back"}); // named params, in order
     builder.ComputedProperty<&Animal::GetLegs>("legsView"); // computed read-only getter property
-    builder.AccessorProperty<&Animal::GetLegs, &Animal::AssignLegs>("legsAccessor"); // getter + setter
+    builder.AccessorProperty<&Animal::GetLegs, &Animal::AssignLegs>("legsAccessor"); // getter and setter
     builder.Attribute("scriptName", "Critter");
     builder.Attribute("maxLegs", 8);
     builder.Constructor(); // default ctor -> RefPtr<Animal> via MakeRef
-    // ReturnType-override factories (OPTION 1 primitive): C++ returns a Variant, declared return is
-    // Animal; the dispatch validates the runtime type.
+    // ReturnType-override factories: C++ returns a Variant, the declared return is Animal, and the
+    // dispatch validates the runtime type.
     builder.Method<&MakeAnimalVariant, Animal>("makeAnimal");
     builder.Method<&MakeWrongVariant, Animal>("makeWrong"); // body returns int -> validated to empty
     builder.Method<&NarrowAnimal, Animal, Animal>("narrow"); // its Variant parameter declared Animal
@@ -128,7 +128,7 @@ REFLECT_MEMBERS(NestedLeaf, "rtti::test")
 
 namespace
 {
-    // A count-bound inline vector: a fixed C-array + a live count (the particle-curve/collision shape).
+    // A count-bound inline vector: a fixed C-array and a live count (the particle curve and collision shape).
     struct BoundedThing
     {
         int values[4]{};
@@ -147,8 +147,8 @@ REFLECT_MEMBERS(NestedOwner, "rtti::test")
 
 namespace
 {
-    // A plain (non-Object), NON-COPYABLE reflected value - the ParticleSystem shape: held only in an
-    // Array<UniquePtr<T>>, reached by address (not by Variant copy). The UniquePtr member makes it
+    // A plain (non-Object), non-copyable reflected value in the ParticleSystem shape: held only in
+    // an Array<UniquePtr<T>>, reached by address (not by Variant copy). The UniquePtr member makes it
     // genuinely move-only, so the container must never try to copy an element.
     struct UniqueLeaf
     {
@@ -405,7 +405,7 @@ TEST_CASE("variant: Instance borrows without owning")
 
 TEST_CASE("rtti: reflected property is discoverable")
 {
-    CHECK(Properties(Animal::StaticType()).Size() == 3u); // "legs" (field) + "legsView" (computed) + "legsAccessor"
+    CHECK(Properties(Animal::StaticType()).Size() == 3u); // "legs" (field), "legsView" (computed), "legsAccessor"
 
     const PropertyInfo* legs = FindProperty(Animal::StaticType(), "legs");
     REQUIRE(legs != nullptr);
@@ -464,7 +464,7 @@ TEST_CASE("rtti: a ComputedProperty is a read-only getter-backed property")
     const PropertyInfo* view = FindProperty(Animal::StaticType(), "legsView");
     REQUIRE(view != nullptr);
     CHECK(view->type == &TypeOf<int>());
-    CHECK(view->address == nullptr); // computed - no field address to edit in place
+    CHECK(view->address == nullptr); // computed: no field address to edit in place
     CHECK((static_cast<u32>(view->flags) & static_cast<u32>(PropertyFlags::ReadOnly)) != 0);
 
     RefPtr<Animal> animal = MakeRef<Animal>(DefaultAllocator());
@@ -551,7 +551,7 @@ TEST_CASE("rtti: a read-only stored property reads but refuses SetProperty - the
     CHECK(gauge.reading == 3);
     CHECK(SetProperty(*knob, inst, Variant::From<int>(9)).IsOk());
     CHECK(gauge.knob == 9);
-    // The raw address is the deliberate way around it (an editor's in-place tool).
+    // The raw address is the intended way around it (an editor's in-place tool).
     REQUIRE(reading->address != nullptr);
     *static_cast<int*>(reading->address(inst)) = 4;
     CHECK(GetProperty(*reading, inst).Get<int>() == 4);
@@ -617,7 +617,7 @@ TEST_CASE("rtti: a Nested property recurses into a non-copyable member via addre
     CHECK(GetProperty(*leafProp, ownerInst).IsEmpty());
     CHECK_FALSE(SetProperty(*leafProp, ownerInst, Variant{}).IsOk());
 
-    // Recurse: address -> the live member in place -> read its OWN reflected property.
+    // Recurse: the address gives the live member in place, then read its own reflected property.
     void* leafAddr = leafProp->address(ownerInst);
     REQUIRE(leafAddr != nullptr);
     const Instance leafInst(leafAddr, leafProp->type);
@@ -625,7 +625,7 @@ TEST_CASE("rtti: a Nested property recurses into a non-copyable member via addre
     REQUIRE(valueProp != nullptr);
     CHECK(GetProperty(*valueProp, leafInst).Get<int>() == 42);
 
-    // A POINTER nested member: null yields a null address (consumers must null-check); once set,
+    // A pointer nested member: null yields a null address (consumers must null-check); once set,
     // address is the pointee, and recursion reads through it.
     const PropertyInfo* ptrProp = FindProperty(NestedOwner::StaticType(), "leafPtr");
     REQUIRE(ptrProp != nullptr);
@@ -661,7 +661,7 @@ TEST_CASE("rtti: a BoundedArray reflects a count-bound C-array as a clamped cont
     const Instance sub(prop->address(inst), prop->type); // address = the owner identity
     const ContainerInfo& c = *prop->type->container;
 
-    // Size follows the COUNT, not the capacity, which it says (an editor's "full"); elements
+    // Size follows the count, not the capacity, which it reports (an editor's "full"); elements
     // read/write through in place.
     CHECK(ContainerSize(c, sub) == 2u);
     CHECK(ContainerCapacity(c) == 4u);
@@ -707,7 +707,7 @@ TEST_CASE("rtti: container mutation - emplaceDefault / removeAt / moveElement")
     CHECK(arr[2] == 10);
     CHECK_FALSE(ContainerRemoveAt(c, inst, 9).IsOk()); // out of range
 
-    // BoundedArray mutation respects the count + capacity.
+    // BoundedArray mutation respects the count and capacity.
     RttiRegisterValue_BoundedThing();
     const PropertyInfo* prop = FindProperty(TypeOf<BoundedThing>(), "values");
     REQUIRE(prop != nullptr);
@@ -752,7 +752,7 @@ TEST_CASE("rtti: a polymorphic container resolves each element to its DYNAMIC ty
 
     CHECK(ContainerSize(c, inst) == 3u);
 
-    // Element 0 -> Dog (dynamic), element 1 -> Cat: each reflects its OWN concrete type.
+    // Element 0 is a Dog (dynamic), element 1 a Cat: each reflects its own concrete type.
     Variant e0 = ContainerGetAt(c, inst, 0);
     REQUIRE(e0.IsObject());
     CHECK(e0.Type() == &Dog::StaticType());
@@ -768,8 +768,8 @@ TEST_CASE("rtti: a polymorphic container resolves each element to its DYNAMIC ty
     // setAt is unsupported (elements are non-copyable).
     CHECK_FALSE(ContainerSetAt(c, inst, 0, Variant{}).IsOk());
 
-    // This container was registered WITHOUT a create-by-type factory, so it is cleanly read-only:
-    // create is rejected (empty Instance) and nothing is eligible. (removeAt/moveElement still work.)
+    // This container was registered without a create-by-type factory, so create is rejected (empty
+    // Instance) and nothing is eligible. removeAt and moveElement still work.
     CHECK(ContainerCreateElement(c, inst, 0, Dog::StaticType()).Pointer() == nullptr);
     CHECK_FALSE(ContainerCanCreateElement(c, Dog::StaticType()));
     CHECK(ContainerSize(c, inst) == 3u); // unchanged
@@ -777,8 +777,8 @@ TEST_CASE("rtti: a polymorphic container resolves each element to its DYNAMIC ty
 
 TEST_CASE("rtti: an addressAt descent reaches a polymorphic element without a Variant copy")
 {
-    // Same container as above, now exercised through the uniform address path: addressAt yields a
-    // borrowed Instance at the element's DYNAMIC type, so a consumer recurses the concrete props.
+    // Same container as above, exercised through the uniform address path: addressAt yields a
+    // borrowed Instance at the element's dynamic type, so a consumer recurses the concrete props.
     RegisterPolymorphicArrayType<Animal>();
     const ContainerInfo& c = *TypeOf<Array<RefPtr<Animal>>>().container;
     Array<RefPtr<Animal>> arr;
@@ -816,7 +816,7 @@ TEST_CASE("rtti: an Array<UniquePtr<T>> reflects a move-only value via addressAt
     Instance inst = Instance::From(&arr);
 
     CHECK(ContainerSize(c, inst) == 2u);
-    // getAt yields nothing (move-only, no Variant) - descent is by address, like Nested.
+    // getAt yields nothing (move-only, no Variant); descent is by address, like Nested.
     CHECK(ContainerGetAt(c, inst, 0).IsEmpty());
 
     Instance e0 = ContainerAddressAt(c, inst, 0);
@@ -827,7 +827,7 @@ TEST_CASE("rtti: an Array<UniquePtr<T>> reflects a move-only value via addressAt
     CHECK(GetProperty(*valueProp, e0).Get<int>() == 11);
     CHECK(GetProperty(*valueProp, ContainerAddressAt(c, inst, 1)).Get<int>() == 22);
 
-    // Mutation: default-emplace grows the array, remove + move reorder (no copies).
+    // Mutation: default-emplace grows the array, remove and move reorder (no copies).
     Instance grown = ContainerEmplaceDefault(c, inst, 2);
     CHECK(grown.Pointer() != nullptr);
     CHECK(ContainerSize(c, inst) == 3u);
@@ -849,7 +849,7 @@ TEST_CASE("rtti: a Variant borrow edits a nested value in place, pins its root, 
 
     Variant borrow = Variant::Borrow(leafAddr, &NestedLeaf::StaticType(), parent);
     REQUIRE(borrow.IsBorrow());
-    CHECK_FALSE(borrow.IsObject());          // a borrow is NOT an owned object handle
+    CHECK_FALSE(borrow.IsObject());          // a borrow is not an owned object handle
     CHECK(borrow.AsObject() == nullptr);     // ... and never hands back the keep-alive root
     CHECK(borrow.BorrowRoot() == owner.Get()); // the pinned root is reachable only by name
     CHECK(borrow.Type() == &NestedLeaf::StaticType());
@@ -857,13 +857,13 @@ TEST_CASE("rtti: a Variant borrow edits a nested value in place, pins its root, 
     const PropertyInfo* vp = FindProperty(NestedLeaf::StaticType(), "value");
     REQUIRE(vp != nullptr);
 
-    // Read + in-place write through the borrow reach the real subobject.
+    // A read and an in-place write through the borrow reach the real subobject.
     CHECK(GetProperty(*vp, ToInstance(borrow)).Get<int>() == 3);
     CHECK(SetProperty(*vp, ToInstance(borrow), Variant::From(9)).IsOk());
     CHECK(owner->leaf.value == 9);
-    CHECK(borrow.BorrowValid()); // a value write does NOT invalidate a borrow (only structural ops)
+    CHECK(borrow.BorrowValid()); // a value write does not invalidate a borrow (only structural ops)
 
-    // Keep-alive: drop the caller's ref AND the parent handle; the borrow's own keep-alive keeps the
+    // Keep-alive: drop the caller's ref and the parent handle; the borrow's own keep-alive keeps the
     // graph alive, so the edit target is still valid.
     NestedOwner* raw = owner.Get();
     owner.Reset();
@@ -893,8 +893,8 @@ TEST_CASE("rtti: a Variant borrow goes stale on structural container mutation (n
     const PropertyInfo* vp = FindProperty(TypeOf<UniqueLeaf>(), "value");
     CHECK(GetProperty(*vp, ToInstance(borrow)).Get<int>() == 11);
 
-    // A structural mutation bumps the generation - the borrow is now stale and dereferences to an
-    // EMPTY Instance rather than the freed pointee. (ASAN would flag a UAF if it dereferenced.)
+    // A structural mutation bumps the generation, so the borrow is stale and dereferences to an
+    // empty Instance rather than the freed pointee (ASAN would flag a use after free if it did).
     CHECK(ContainerRemoveAt(c, arrInst, 0).IsOk());
     CHECK_FALSE(borrow.BorrowValid());
     CHECK(ToInstance(borrow).Pointer() == nullptr);
@@ -912,7 +912,7 @@ TEST_CASE("rtti: a Variant borrow goes stale on structural container mutation (n
 
 TEST_CASE("rtti: a value-mode parent refuses to yield a borrow")
 {
-    Variant valueParent = Variant::From(42); // not an object - nothing to pin
+    Variant valueParent = Variant::From(42); // not an object: nothing to pin
     int scratch = 0;
     Variant borrow = Variant::Borrow(&scratch, &TypeOf<int>(), valueParent);
     CHECK(borrow.IsEmpty());
@@ -964,7 +964,7 @@ TEST_CASE("rtti: A6 - authored parameter names reach ParamInfo; unnamed methods 
     CHECK(std::strcmp(add->params[0].name, "count") == 0);
     CHECK(add->params[0].type() == &TypeOf<int>());
 
-    // Two-param named method: names land IN ORDER (the index mapping).
+    // Two-param named method: names land in order (the index mapping).
     const MethodInfo* set = FindMethod(Animal::StaticType(), "SetLegs");
     REQUIRE(set != nullptr);
     REQUIRE(set->paramCount == 2u);
@@ -973,7 +973,7 @@ TEST_CASE("rtti: A6 - authored parameter names reach ParamInfo; unnamed methods 
     CHECK(set->params[0].type() == &TypeOf<int>());
     CHECK(set->params[1].type() == &TypeOf<int>());
 
-    // Names do not disturb dispatch - the named method still invokes correctly.
+    // Names do not disturb dispatch: the named method still invokes correctly.
     RefPtr<Animal> animal = MakeRef<Animal>(DefaultAllocator());
     Instance inst = Instance::From(animal.Get());
     Variant args[] = {Variant::From(2), Variant::From(5)};
@@ -982,7 +982,7 @@ TEST_CASE("rtti: A6 - authored parameter names reach ParamInfo; unnamed methods 
     CHECK(r.Value().Get<int>() == 7);
     CHECK(animal->legs == 7);
 
-    // An UNNAMED method's parameter name stays empty - the two paths coexist.
+    // An unnamed method's parameter name stays empty; the two paths coexist.
     const MethodInfo* legsOf = FindMethod(Animal::StaticType(), "LegsOf");
     REQUIRE(legsOf != nullptr);
     REQUIRE(legsOf->paramCount == 1u);
@@ -1046,7 +1046,7 @@ TEST_CASE("rtti: an anchored resolve-mode handle keeps its table alive, and copi
 TEST_CASE("rtti: Variant RESOLVE mode re-computes the live address every deref (entity.get core)")
 {
     // A movable "component": `slot` selects which array element is live; the resolver returns its
-    // CURRENT address, exactly like a component manager's Get() after a swap-remove.
+    // current address, as a component manager's Get() does after a swap-remove.
     int values[4] = {10, 20, 30, 40};
     int slot = 2;
     struct Ctx
@@ -1071,17 +1071,17 @@ TEST_CASE("rtti: Variant RESOLVE mode re-computes the live address every deref (
     REQUIRE(i0.Pointer() == &values[2]);
     CHECK(*static_cast<int*>(i0.Pointer()) == 30);
 
-    // The component "moves" (swap-remove): re-resolution follows it - a borrow would be stale.
+    // The component "moves" (swap-remove): re-resolution follows it, where a borrow would be stale.
     slot = 0;
     Instance i1 = ToInstance(rv);
     REQUIRE(i1.Pointer() == &values[0]);
     CHECK(*static_cast<int*>(i1.Pointer()) == 10);
 
-    // Component "removed": resolve -> null -> a clean empty Instance (no dangling deref).
+    // Component "removed": resolve returns null, giving a clean empty Instance (no dangling deref).
     slot = -1;
     CHECK(ToInstance(rv).Pointer() == nullptr);
 
-    // Copy carries the resolve mode + inline context.
+    // Copy carries the resolve mode and inline context.
     slot = 3;
     Variant copy = rv;
     CHECK(copy.IsResolving());
@@ -1095,7 +1095,7 @@ TEST_CASE("rtti: Variant RESOLVE mode re-computes the live address every deref (
     slot = 1;
     CHECK(ToInstance(moved).Pointer() == &values[1]);
 
-    // From<Variant> passes a resolve handle through unchanged (no double-box) - so a reflected
+    // From<Variant> passes a resolve handle through unchanged (no double-box), so a reflected
     // method returning a Variant preserves its dynamic type for the backend to wrap.
     Variant relayed = Variant::From<Variant>(Move(moved));
     CHECK(relayed.IsResolving());
@@ -1111,21 +1111,21 @@ TEST_CASE("rtti: Method<Member, ReturnAs> overrides the declared return type and
     const MethodInfo* make = FindMethod(Animal::StaticType(), "makeAnimal");
     REQUIRE(make != nullptr);
     CHECK(make->isStatic);
-    CHECK(make->returnType() == &Animal::StaticType()); // OVERRIDDEN declared return
+    CHECK(make->returnType() == &Animal::StaticType()); // overridden declared return
 
-    // Runtime type matches the declared return -> the Variant passes through unchanged.
+    // The runtime type matches the declared return, so the Variant passes through unchanged.
     Result<Variant> r = InvokeStatic(*make, Span<Variant>{});
     REQUIRE(r.HasValue());
     CHECK(r.Value().Type() == &Animal::StaticType());
 
-    // Validation: a factory whose body returns the WRONG runtime type (int) resolves to empty -
+    // Validation: a factory whose body returns the wrong runtime type (int) resolves to empty,
     // never a type-confused handle handed to a backend that trusts the declared return.
     const MethodInfo* wrong = FindMethod(Animal::StaticType(), "makeWrong");
     REQUIRE(wrong != nullptr);
     CHECK(wrong->returnType() == &Animal::StaticType()); // declared Animal...
     Result<Variant> rw = InvokeStatic(*wrong, Span<Variant>{});
     REQUIRE(rw.HasValue());
-    CHECK(rw.Value().IsEmpty()); // ...but the body returned int -> validated to empty
+    CHECK(rw.Value().IsEmpty()); // ...but the body returned int, validated to empty
 }
 
 TEST_CASE("rtti: Method<Member, ReturnAs, ParamAs> declares a Variant parameter's type")
@@ -1308,8 +1308,8 @@ TEST_CASE("rtti: type domains - default Runtime, open tags, widen-only")
     CHECK(registry.DomainOf(Dog::StaticType().id) == TypeDomain(u8"Editor"));
     CHECK(!(registry.DomainOf(Dog::StaticType().id) == kRuntimeTypeDomain));
 
-    // Re-registration may WIDEN to Runtime (order-independent truth: if any player
-    // path registers the type, the player has it) ...
+    // Re-registration may widen to Runtime (order-independent: if any player path
+    // registers the type, the player has it) ...
     registry.Register(Dog::StaticType());
     CHECK(registry.DomainOf(Dog::StaticType().id) == kRuntimeTypeDomain);
 
@@ -1338,10 +1338,10 @@ TEST_CASE("rtti: legacy namespace spellings do NOT resolve - current names only"
     CHECK(registry.FindByName("rtti", "Dog") == nullptr);
 }
 
-// --- Shared-library identity (P1): TypeId is THE identity, pointers are a fast
-// --- path. A shared library gets its own copy of every vague-linkage TypeInfo
-// --- static, so these tests simulate the duplicate: same ids, different
-// --- addresses - every check must behave exactly as it does on the original.
+// --- Shared-library identity: TypeId is the identity, pointers are a fast path.
+// --- A shared library gets its own copy of every vague-linkage TypeInfo static,
+// --- so these tests simulate the duplicate (same ids, different addresses):
+// --- every check must behave exactly as it does on the original.
 TEST_CASE("rtti-shared: value-type ids are signature-derived, distinct, and name-independent")
 {
     // Distinct types get distinct ids; repeated calls are stable.
@@ -1352,7 +1352,7 @@ TEST_CASE("rtti-shared: value-type ids are signature-derived, distinct, and name
     CHECK(f.id != i.id);
     CHECK(i.id != u.id);
     CHECK(TypeOf<f32>().id == f.id);
-    // The id must NOT be the storage address (the pre-shared-libs identity).
+    // The id must not be the storage address.
     CHECK(f.id != static_cast<TypeId>(reinterpret_cast<uptr>(&f)));
 }
 
@@ -1400,8 +1400,8 @@ TEST_CASE("rtti-shared: TypeOf resolves every image's prototype to one process-s
     {
         int a;
     };
-    // What a SECOND image's TypeOf<SlotProbe>() does on its first use: same signature id,
-    // its own prototype - and it must land on the very TypeInfo this image already holds.
+    // What a second image's TypeOf<SlotProbe>() does on its first use: same signature id,
+    // its own prototype, and it must land on the very TypeInfo this image already holds.
     const TypeId signature = detail::SignatureTypeId<SlotProbe>();
     TypeInfo prototype = detail::ValuePrototype<SlotProbe>();
     TypeInfo& other = detail::TypeInfoSlot(signature, prototype);
@@ -1432,9 +1432,9 @@ TEST_CASE("rtti-shared: TypeOf resolves every image's prototype to one process-s
 
 TEST_CASE("rtti-shared: REFLECT_VALUE patches made in one image are read by another")
 {
-    // The W1 finding: Core registers Float3 inside its own image; a consumer image's
-    // TypeOf<Float3>() must see the patched metadata (properties + authored id), not an
-    // unpatched per-image copy. Simulate the consumer's first use directly.
+    // Core registers Float3 inside its own image; a consumer image's TypeOf<Float3>() must
+    // see the patched metadata (properties and authored id), not an unpatched per-image copy.
+    // Simulate the consumer's first use directly.
     RegisterCoreTypes();
     const TypeInfo& seen =
         detail::TypeInfoSlot(detail::SignatureTypeId<Float3>(), detail::ValuePrototype<Float3>());
@@ -1446,13 +1446,13 @@ TEST_CASE("rtti-shared: REFLECT_VALUE patches made in one image are read by anot
 TEST_CASE("rtti-shared: Canonical resolves a duplicated TypeInfo to the registered one")
 {
     GlobalTypeRegistry().Register(Animal::StaticType());
-    // A clone (another library's copy): same id, different address, UNPATCHED metadata.
+    // A clone (another library's copy): same id, different address, unpatched metadata.
     TypeInfo dup = Animal::StaticType();
     const TypeInfo& canonical = GlobalTypeRegistry().Canonical(dup);
     CHECK(&canonical == &Animal::StaticType());
     CHECK(&canonical != &dup);
 
-    // Unregistered types resolve to the argument itself - always usable.
+    // Unregistered types resolve to the argument itself, so the result is always usable.
     const TypeInfo local = MakeTypeInfo<int>("NeverRegistered", "rtti::test", nullptr);
     CHECK(&GlobalTypeRegistry().Canonical(local) == &local);
 }
@@ -1486,7 +1486,7 @@ TEST_CASE("rtti-shared: the registration observer fires only on real inserts")
         [](void* ctx, TypeId id) { static_cast<Array<TypeId>*>(ctx)->PushBack(id); },
         &recorded);
     registry.Register(info);
-    registry.Register(info); // duplicate: no-op, NOT recorded (owned by the first registrant)
+    registry.Register(info); // duplicate: no-op, not recorded (owned by the first registrant)
     registry.SetRegistrationObserver(nullptr, nullptr);
     registry.Register(info); // observer cleared: nothing recorded either way
 

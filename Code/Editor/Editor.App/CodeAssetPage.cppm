@@ -3,20 +3,20 @@
 
 // Editor App - :code_asset_page partition
 //
-// CodeAssetPage: what a page over an asset written as code does whatever its code is
-// (Documentation/Specs/editor-gui.md, 5.4, layer 6): a script, a shader, a GUI document or sheet.
-// The asset names its source file (under the project's Sources); the page reads it into the code
-// editor of its markup (`page-code`), coloured by the language the page names (CodeLanguages), and
-// checks it a moment after each edit, the problems (its own the page's to find) shown in the
-// problems list of its markup (`page-problems`) and on their lines; choosing one takes the code
-// there. Save writes the source when it changed, then the asset, and asks for a cook; a check after
-// it says whether the game takes the new code or keeps the last that built.
+// CodeAssetPage: the behaviour shared by pages over assets written as code (a script, a shader, a
+// GUI document or sheet). The asset names its source file under the project's Sources. The page
+// reads it into its markup's code editor (`page-code`), coloured by the language the derived page
+// names (CodeLanguages), and checks it a moment after each edit; the derived page supplies the
+// check. Problems show in the markup's problems list (`page-problems`) and on their lines, and
+// choosing one moves the cursor there. Save writes the source when it changed, then the asset, and
+// requests a cook; a check afterwards says whether the game takes the new code or keeps the last
+// version that built.
 //
-// One history: each step the code's document keeps (typing merges as the document merges it) is a
-// command on the page's stack, so the bar's Undo and Redo, the Edit menu and the code's own Ctrl+Z
-// walk one history with the page's other edits (a shader's entry points), and Discard Changes
-// puts the code back with the rest. A source that is not there is a problem in the list, the code
-// read only.
+// There is one history: each step the code's document keeps (typing merges as the document merges
+// it) is a command on the page's stack. The bar's Undo and Redo, the Edit menu and the code's own
+// Ctrl+Z therefore walk one history with the page's other edits (a shader's entry points), and
+// Discard Changes restores the code with the rest. A missing source file is reported as a problem
+// in the list, and the code is read-only.
 
 module;
 #include "Core/Prelude.h"
@@ -45,7 +45,7 @@ export namespace editor::app
     class CodeAssetPage : public AssetObjectPage
     {
     public:
-        /// How long the code rests after an edit before it is checked, in seconds.
+        /// How long the code must go unedited before it is checked, in seconds.
         static constexpr f32 kCheckDelay = 0.6f;
 
         CodeAssetPage(EditorContext& context, AssetPageServices services, foundation::content::Instance& instance, const TypeInfo& type,
@@ -75,11 +75,11 @@ export namespace editor::app
             m_code->SetText(m_saved.AsView());
             m_code->SetReadOnly(!m_read);
             gui::CodeDocument& doc = m_code->GetDocument();
-            doc.SetUndoLimit(kUndoLimit); // the page's stack holds every step: none dropped under it
+            doc.SetUndoLimit(kUndoLimit); // the page's stack holds every step, so the document must not drop any
             m_steps = doc.UndoCount();
             CodeAssetPage* self = this;
             m_listener = doc.AddChangeListener([self](const gui::CodeChange&) { self->CodeChanged(); });
-            // The code's own undo keys walk the page's one history.
+            // The code editor's own undo keys walk the page's single history.
             (void)m_code->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                            {
                                                const auto& key = static_cast<const gui::KeyEvent&>(e);
@@ -115,8 +115,8 @@ export namespace editor::app
             }
         }
 
-        /// The source written when it changed, then the asset; the code checked again, and the
-        /// user told whether the game takes it or keeps the last that built.
+        /// Writes the source when it changed, then the asset, checks the code again and tells the
+        /// user whether the game takes it or keeps the last version that built.
         [[nodiscard]] Status Save() override
         {
             if (!m_read)
@@ -135,7 +135,7 @@ export namespace editor::app
                 }
                 m_saved = text;
             }
-            const Status saved = AssetObjectPage::Save(); // the asset, and a cook asked for
+            const Status saved = AssetObjectPage::Save(); // writes the asset and requests a cook
             if (!saved.IsOk())
                 return saved;
             CheckNow();
@@ -145,7 +145,7 @@ export namespace editor::app
             return saved;
         }
 
-        /// Checks the code now (the page's own check), the problems shown in the list and on their lines.
+        /// Checks the code now with the page's check, showing the problems in the list and on their lines.
         void CheckNow()
         {
             m_checkIn = 0.0f;
@@ -169,7 +169,8 @@ export namespace editor::app
             OnCodeChecked();
         }
 
-        /// Takes the code to `problem` (its own code's: an include's has no place here).
+        /// Moves the cursor to `problem`; only a problem in this code has a place here, not one in
+        /// an include.
         void GoTo(const CodeProblem& problem)
         {
             if (m_code == nullptr || !problem.file.IsEmpty())
@@ -195,8 +196,8 @@ export namespace editor::app
         }
 
     protected:
-        /// Colours the code as `languageId` (the derived page's, once it knows it) and checks it,
-        /// so the page opens with its problems.
+        /// Colours the code as `languageId` (given by the derived page once it knows it) and checks
+        /// it, so the page opens showing its problems.
         void OpenCode(StringView languageId)
         {
             if (m_code != nullptr && Services().languages != nullptr)
@@ -205,21 +206,21 @@ export namespace editor::app
         }
         /// What the page's check of `text` finds (a compile's errors).
         [[nodiscard]] virtual Array<CodeProblem> CheckCode(StringView text) = 0;
-        /// After each check (a status, a preview following the code).
+        /// Called after each check (to update a status, or a preview that follows the code).
         virtual void OnCodeChecked() {}
         /// What the problems line says when the check found none (empty: "No problems"), asked
         /// after CheckCode.
         [[nodiscard]] virtual String CleanSummary() const { return String{}; }
         [[nodiscard]] StringView SourcePath() const noexcept { return m_sourcePath.AsView(); }
-        /// A check a moment from now, as after an edit (a page's other code changed: a sheet's
-        /// preview markup).
+        /// Schedules a check a moment from now, as after an edit (for when the page's other code
+        /// changed, such as a sheet's preview markup).
         void CheckSoon() noexcept { m_checkIn = kCheckDelay; }
 
     private:
         static constexpr usize kUndoLimit = 100000;
 
-        // One of the code's steps on the page's stack: done when pushed (the code did it), its
-        // undo and redo the code's.
+        // One of the code's steps on the page's stack. It is already done when pushed (the code
+        // editor did it), and its undo and redo are the code document's.
         class CodeStepCommand final : public IEditorCommand
         {
         public:
@@ -243,7 +244,7 @@ export namespace editor::app
         {
             return (c >= u8'a' && c <= u8'z') || (c >= u8'A' && c <= u8'Z') || (c >= u8'0' && c <= u8'9') || c == u8'_' || c >= 0x80;
         }
-        // Where a problem is marked: the word at its place, or one character; its line's text
+        // Where a problem is marked: the word at its place, or one character; the whole line's text
         // when the check named no column.
         [[nodiscard]] gui::CodeRange RangeOf(const CodeProblem& p) const
         {
@@ -289,15 +290,15 @@ export namespace editor::app
             m_checkIn = kCheckDelay;
         }
 
-        gui::CodeEditor* m_code = nullptr; // the markup's
+        gui::CodeEditor* m_code = nullptr; // owned by the markup
         UniquePtr<ProblemsList> m_problems;
         String m_fileName;
         String m_sourcePath;
         String m_saved; // the source as read or last written
         bool m_read = false;
         u32 m_listener = 0;
-        usize m_steps = 0;       // the code's steps the page's stack holds
-        bool m_stepping = false; // the page walking the code's history: no new step
+        usize m_steps = 0;       // how many of the code's steps the page's stack holds
+        bool m_stepping = false; // the page is walking the code's history: push no new step
         f32 m_checkIn = 0.0f;
         Array<CodeProblem> m_problemsFound;
     };

@@ -3,12 +3,11 @@
 
 // Editor App - :tool_panel_widgets partition
 //
-// What every viewport tool's panel is made of (Documentation/Specs/editor-gui.md, 5.3, layer 5,
-// part 3), so every panel reads the same (the catalog's 17: three mode-picker styles, two ways to
-// build a check row): a segmented row of exclusive choices (a mode, a layer, by word or by
-// picture), a named slider with its number, a named check and a line of help. The body asks each
-// control's value of the tool again when Sync runs (the host runs it each frame), since a tool's
-// keys change it too (1 to 4 its mode, Shift + wheel its radius).
+// What every viewport tool's panel is made of, so every panel reads the same: a segmented row of
+// exclusive choices (a mode, a layer, by word or by picture), a named slider with its number, a
+// named check, and a line of help. The body asks the tool for each control's value again when Sync
+// runs (the host runs it each frame), since a tool's keys change values too (1 to 4 its mode,
+// Shift and the wheel its radius).
 
 module;
 #include "Core/Prelude.h"
@@ -30,20 +29,21 @@ export namespace editor::app
     {
         RTTI_OBJECT(ToolPanelBody, gui::UIWidget)
     public:
-        /// One choice of a segmented row: its word, or its picture (asked again until it has one,
-        /// as a thumbnail arrives later) with `icon` meanwhile; what it does, its tooltip.
+        /// One choice of a segmented row: its word, or its picture (asked for again until it has
+        /// one, since a thumbnail arrives later) with `icon` shown meanwhile, and a tooltip saying
+        /// what it does.
         struct Choice
         {
             String label;
             String tooltip;
             String icon;                                // a picture's stand-in (an asset type's icon)
-            Function<RefPtr<gui::Drawable>()> picture;  // empty: its word
+            Function<RefPtr<gui::Drawable>()> picture;  // empty: show its word
         };
 
         ToolPanelBody() { AddClass(u8"tool-panel-body"); }
 
-        /// A row of exclusive choices under `name` (none: no heading): `get` the chosen one's
-        /// index, `set` choosing.
+        /// Adds a row of exclusive choices under `name` (empty: no heading); `get` returns the
+        /// chosen index and `set` chooses one.
         void AddChoices(StringView name, Array<Choice> choices, Function<i32()> get, Function<void(i32)> set)
         {
             if (!name.IsEmpty())
@@ -91,8 +91,8 @@ export namespace editor::app
             AddChild(row.Get());
         }
 
-        /// A picture shown, not chosen, under `name` (a terrain's base layer, which erasing
-        /// reveals): `shown`'s picture once it has one, its icon meanwhile, its tooltip.
+        /// Adds a picture that is shown, not chosen, under `name` (a terrain's base layer, which
+        /// erasing reveals): `shown`'s picture once it has one, its icon meanwhile, and its tooltip.
         void AddPicture(StringView name, Choice shown)
         {
             if (!name.IsEmpty())
@@ -114,7 +114,7 @@ export namespace editor::app
             AddChild(row.Get());
         }
 
-        /// A slider named `name` with its number beside it, between `min` and `max` by `step`.
+        /// Adds a slider named `name` with its number beside it, between `min` and `max` by `step`.
         void AddSlider(StringView name, f64 min, f64 max, f64 step, Function<f64()> get, Function<void(f64)> set)
         {
             auto row = MakeRef<gui::Panel>(MemoryAllocator());
@@ -157,7 +157,7 @@ export namespace editor::app
             AddChild(row.Get());
         }
 
-        /// A check named `name`.
+        /// Adds a check named `name`.
         void AddCheck(StringView name, Function<bool()> get, Function<void(bool)> set)
         {
             auto check = MakeRef<gui::CheckBox>(MemoryAllocator());
@@ -175,8 +175,8 @@ export namespace editor::app
             AddChild(check.Get());
         }
 
-        /// A line of help (how the keys work it), or a note `text` asks again (hidden while it
-        /// says nothing).
+        /// Adds a fixed line of help (how the keys work the tool); AddNote adds a line whose text
+        /// is asked for again on each Sync (hidden while empty).
         void AddHelp(StringView text) { AddNote([help = String(text)]() { return help; }); }
         void AddNote(Function<String()> text)
         {
@@ -186,7 +186,7 @@ export namespace editor::app
             AddChild(label.Get());
         }
 
-        /// Each control as the tool has it now.
+        /// Updates each control to the tool's current value.
         void Sync()
         {
             for (ChoiceRow& group : m_choices)
@@ -262,7 +262,7 @@ export namespace editor::app
         };
         struct ChoiceRow
         {
-            Array<gui::Button*> buttons; // its children's, which it keeps
+            Array<gui::Button*> buttons; // its child buttons, which it keeps
             Array<ChoicePicture> pictures;
             Function<i32()> get;
             Function<void(i32)> set;
@@ -286,7 +286,7 @@ export namespace editor::app
             Function<String()> text;
         };
         Array<ChoiceRow> m_choices;
-        Array<ChoicePicture> m_pictures; // AddPicture's: shown, not chosen
+        Array<ChoicePicture> m_pictures; // AddPicture's pictures: shown, not chosen
         Array<SliderRow> m_slides;
         Array<CheckRow> m_checks;
         Array<NoteRow> m_notes;

@@ -3,26 +3,27 @@
 
 // Foundation::Http - the `foundation.http` module.
 //
-// A deliberately SMALL HTTP/1.1 layer over the Core/System TCP sockets (via foundation.net's
+// A small HTTP/1.1 layer over the Core/System TCP sockets (via foundation.net's
 // TcpSocket/TcpListener): the substrate for the MCP streamable-HTTP host, the WebSocket
-// upgrade path (web networking - a WS connection BEGINS as an HTTP request), and loopback
-// tooling/tests. Not a general web stack, by design:
-//   - HTTP/1.1 only; ONE request per connection (Connection: close) - the ez-validated MCP
-//     transport subset. No pipelining, no keep-alive, no chunked request bodies, no TLS
+// upgrade path (a WebSocket connection begins as an HTTP request), and loopback tooling and
+// tests. It is not a general web stack:
+//   - HTTP/1.1 only, one request per connection (Connection: close), the subset the MCP
+//     transport needs. No pipelining, no keep-alive, no chunked request bodies, no TLS
 //     (localhost trust domain; auth is a bearer token at the consumer layer).
-//   - Two deliberate exceptions to answer-and-close: a handler may answer with an EVENT
-//     STREAM (Server-Sent Events) - the connection then stays open and the consumer writes
-//     events through a ref-counted SseStream for as long as the peer listens - or NOT YET
-//     (an empty answer): the request stays on its connection, the peer keeps waiting, and
-//     the server hands the SAME request to the handler again on every Pump until it answers
-//     (a handler that must let its host make progress, e.g. an MCP tool waiting on a
+//   - Two exceptions to answer-and-close. A handler may answer with an event stream
+//     (Server-Sent Events): the connection then stays open and the consumer writes events
+//     through a ref-counted SseStream for as long as the peer listens. Or it may answer not
+//     yet (an empty answer): the request stays on its connection, the peer keeps waiting, and
+//     the server hands the same request to the handler again on every Pump until it answers
+//     (for a handler that must let its host make progress, e.g. an MCP tool waiting on a
 //     background cook). A response is only ever a response; "not yet" is the absence of one.
-//   - The client is BLOCKING with a timeout, localhost-focused (a host name or dotted quad;
-//     no TLS): tests, local tooling, and the MCP acceptance loop - not a game-facing fetch API.
+//   - The client is blocking with a timeout and localhost-focused (a host name or dotted
+//     quad; no TLS): tests, local tooling and the MCP acceptance loop. It is not the
+//     game-facing client (that is foundation.http.client).
 //
-// Threading: HttpServer is single-threaded - Start/Pump/Stop from ONE thread (pump it from a
-// dedicated thread or a frame loop). SseStream::WriteEvent is safe from any ONE writer thread
-// at a time (the stream serializes writes internally against Close).
+// Threading: HttpServer is single-threaded; call Start, Pump and Stop from one thread (pump it
+// from a dedicated thread or a frame loop). SseStream::WriteEvent is safe from any one writer
+// thread at a time (the stream serializes writes internally against Close).
 
 module;
 #include "Core/Prelude.h"
@@ -68,7 +69,7 @@ export namespace foundation::http
     struct HttpResponse
     {
         i32 status = 200;
-        Array<HttpHeader> headers; // Content-Length + Connection are written by the server
+        Array<HttpHeader> headers; // Content-Length and Connection are written by the server
         Array<byte> body;
         bool eventStream = false; // true = SSE: headers go out, the connection stays open
 
@@ -97,12 +98,12 @@ export namespace foundation::http
     {
         NeedMore, // feed more bytes
         Complete, // a full message is available
-        Failed,   // malformed / over limits - close the connection (server answers 400)
+        Failed,   // malformed or over limits: close the connection (the server answers 400)
     };
 
     /// Incremental HTTP/1.1 message parser (request or response mode). Push bytes as they
     /// arrive; when Complete, the parsed pieces are readable. Strict subset: CRLF framing,
-    /// 16 KiB header cap, caller body cap. A request's body is Content-Length only (chunked ->
+    /// 16 KiB header cap, caller body cap. A request's body is Content-Length only (chunked is
     /// Failed: the server's contract); a response's is Content-Length, chunked (the client reads
     /// what servers send), or read-until-close (caller calls OnPeerClosed). A response that
     /// carries no body (204, 304, 1xx, or one to a HEAD: SetNoBody) is Complete at its head.
@@ -123,7 +124,7 @@ export namespace foundation::http
         [[nodiscard]] HttpParseState Push(Span<const byte> bytes);
         /// Response mode: the request was a HEAD, so the response has headers alone.
         void SetNoBody() noexcept { m_noBody = true; }
-        /// Response mode: the peer closed - a close-delimited body is now complete.
+        /// Response mode: the peer closed, so a close-delimited body is complete.
         [[nodiscard]] HttpParseState OnPeerClosed();
         [[nodiscard]] HttpParseState State() const noexcept { return m_state; }
         /// Failed because the body is larger than the cap (not because it is malformed).
@@ -178,15 +179,15 @@ export namespace foundation::http
     public:
         explicit SseStream(foundation::net::TcpSocket socket) : m_socket(Move(socket)) {}
 
-        /// Send one event: `event: <name>` (omitted when empty) + per-line `data:` fields +
+        /// Send one event: `event: <name>` (omitted when empty), per-line `data:` fields and
         /// the blank-line terminator. False when the peer is gone (the stream closes itself).
         bool WriteEvent(StringView eventName, StringView data);
-        /// A comment line (": <text>") - the SSE keep-alive idiom.
+        /// A comment line (": <text>"), the SSE keep-alive idiom.
         bool WriteComment(StringView text);
         [[nodiscard]] bool IsOpen() const;
-        /// Liveness probe: reads (and discards) any client chatter; a closed peer is detected
-        /// promptly (a WRITE into a freshly closed socket can still succeed - TCP buffers it
-        /// until the reset arrives - so sweeps poll this instead). False = peer gone (the
+        /// Liveness probe: reads (and discards) any client chatter, so a closed peer is detected
+        /// promptly. A write into a freshly closed socket can still succeed (TCP buffers it until
+        /// the reset arrives), so sweeps poll this instead. False when the peer is gone (the
         /// stream closes itself).
         [[nodiscard]] bool PollLive();
         void Close();
@@ -209,18 +210,17 @@ export namespace foundation::http
         bool loopbackOnly = true;
     };
 
-    /// The pump-model HTTP server: Start binds the listener; each Pump() accepts pending
-    /// connections, reads, and for every COMPLETE request calls the handler and writes the
-    /// response (Connection: close) - or, for an EventStream() response, writes the SSE
-    /// headers and hands the connection to the stream handler - or, when the handler
-    /// answers NOT YET (an empty Optional), keeps the request and calls the handler with it
-    /// again next Pump (a peer that leaves while waiting is dropped). Malformed input
-    /// answers 400 and closes; a missing handler answers 404. Single-threaded (see module
-    /// header).
+    /// The pump-model HTTP server. Start binds the listener; each Pump() accepts pending
+    /// connections, reads, and for every complete request calls the handler and writes the
+    /// response (Connection: close). For an EventStream() response it writes the SSE headers
+    /// and hands the connection to the stream handler instead; when the handler answers not
+    /// yet (an empty Optional), it keeps the request and calls the handler with it again next
+    /// Pump (a peer that leaves while waiting is dropped). Malformed input answers 400 and
+    /// closes; a missing handler answers 404. Single-threaded (see the module header).
     class HttpServer
     {
     public:
-        // The allocator (required - the owner decides) backs the listener,
+        // The allocator (required: the owner decides) backs the listener,
         // connections, and SSE streams.
         explicit HttpServer(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
         ~HttpServer() { Stop(); }
@@ -234,9 +234,9 @@ export namespace foundation::http
         /// The bound IPv4 address in host order; 0 is every interface (or not running).
         [[nodiscard]] u32 BoundIp() const noexcept;
 
-        /// The request handler: a one-shot response, the EventStream() marker, or NOT YET
-        /// (an empty Optional) - the request then stays pending on its connection and the
-        /// handler sees it again on the next Pump. A handler that waits this way keeps its
+        /// The request handler: a one-shot response, the EventStream() marker, or not yet
+        /// (an empty Optional), in which case the request stays pending on its connection and
+        /// the handler sees it again on the next Pump. A handler that waits this way keeps its
         /// own progress state and its own timeout: a server that stops pumping and a
         /// handler that never answers look the same to the peer.
         void SetHandler(Function<Optional<HttpResponse>(const HttpRequest&)> handler)
@@ -256,12 +256,12 @@ export namespace foundation::http
             m_abandonHandler = Move(handler);
         }
 
-        /// One pump: accept + read + dispatch + write. Returns the number of requests
-        /// answered this call (0 = nothing happened; callers may sleep briefly on 0). A
+        /// One pump: accept, read, dispatch and write. Returns the number of requests
+        /// answered this call (0: nothing happened; callers may sleep briefly on 0). A
         /// request answered not yet counts when it is finally answered, not on the pumps it waits.
         usize Pump();
 
-        /// Requests whose handler answered NOT YET and that are still waiting. A host whose
+        /// Requests whose handler answered not yet and that are still waiting. A host whose
         /// loop sleeps when idle must keep pumping while this is non-zero.
         [[nodiscard]] usize PendingRequestCount() const noexcept;
 
@@ -299,10 +299,10 @@ export namespace foundation::http
 
     // ---- client --------------------------------------------------------------------------
 
-    /// BLOCKING one-shot HTTP request against `address` (a host name or a dotted quad; no
-    /// TLS - localhost tooling). Connects, sends, reads the full response (Content-Length or until close),
-    /// enforcing `timeoutMilliseconds` across the whole exchange. Error = a human-readable
-    /// reason (connect failed / timeout / malformed response).
+    /// Blocking one-shot HTTP request against `address` (a host name or a dotted quad; no
+    /// TLS: localhost tooling). Connects, sends, reads the full response (Content-Length or until
+    /// close), enforcing `timeoutMilliseconds` across the whole exchange. The error is a
+    /// human-readable reason (connect failed, timeout, malformed response).
     [[nodiscard]] Result<HttpResponse, String>
     HttpFetch(StringView address, u16 port, const HttpRequest& request,
               u32 timeoutMilliseconds = 5000);

@@ -3,10 +3,10 @@
 
 // Foundation::Json - :reflection implementation unit
 //
-// The REFLECT_VALUE body for JsonValue + RegisterJsonTypes(). Kept OUT of the :reflection interface
-// partition (REFLECT_* bodies in a partition interface make GCC emit a gcm cluster for consumers -
-// see gcc-module-interface-hygiene). The script surface is value-semantic: accessors return owned
-// copies, mutators copy in, so nested handles never alias a reallocatable document.
+// The REFLECT_VALUE body for JsonValue and RegisterJsonTypes(). Kept out of the :reflection
+// interface partition (REFLECT_* bodies in a partition interface make GCC emit a gcm cluster for
+// consumers). The script surface is value-semantic: accessors return owned copies, mutators copy
+// in, so nested handles never alias a reallocatable document.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +24,7 @@ using namespace foundation::core;
 namespace foundation::json
 {
     // Declared on JsonValue in :value; defined here (not inline in the primary interface) so MSVC
-    // emits a linkable body - see the note in JsonModule.cppm.
+    // emits a linkable body (see the note in JsonModule.cppm).
     String JsonValue::ToString(bool pretty) const
     {
         return Write(*this, pretty);
@@ -32,14 +32,14 @@ namespace foundation::json
 
     JsonValue JsonValue::Parse(String text)
     {
-        return foundation::json::Parse(text.AsView()).value; // Null on error - never a half-value
+        return foundation::json::Parse(text.AsView()).value; // Null on error, never a half-value
     }
 
     REFLECT_VALUE(JsonValue, "rtti::foundation::json")
     {
         builder
-            .Constructor() // default -> a Null value; build up with Set/Add
-            // Factories (static) - start a container or wrap a scalar.
+            .Constructor() // default: a Null value; build up with Set/Add
+            // Factories (static): start a container or wrap a scalar.
             .Method<&JsonValue::MakeNull>("MakeNull")
             .Method<&JsonValue::MakeBool>("MakeBool", {"value"})
             .Method<&JsonValue::MakeNumber>("MakeNumber", {"value"})

@@ -82,7 +82,7 @@ export namespace foundation::profiler
         const auto us = [&](u64 tick) { return (static_cast<f64>(tick) - static_cast<f64>(origin)) * 1.0e6 / frequency; };
         const auto lengthUs = [&](u64 begin, u64 end) { return static_cast<f64>(end >= begin ? end - begin : 0) * 1.0e6 / frequency; };
 
-        // Lanes: the frames, each thread (its index + 1), the GPU.
+        // Lanes: the frames, each thread (at its index plus one), and the GPU.
         json::JsonValue process = detail::Event(StringView(u8"process_name"), StringView(u8"M"), 0);
         json::JsonValue processArgs = json::JsonValue::MakeObject();
         processArgs.Set(String(u8"name"), json::JsonValue::MakeString(String(title)));

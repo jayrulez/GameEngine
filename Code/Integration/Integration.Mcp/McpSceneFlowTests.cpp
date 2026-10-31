@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Integration.Mcp - the scene/prefab tool flow: an agent opens a
-// project, authors a scene THROUGH THE TOOLS (write validates first), validates it, reads it back
-// byte-identically, and gets real refusals with reasons (garbage XML, wrong-type guid redirects,
-// multi-root prefabs). The seed XML comes from a REAL SaveScene, so the tools are proven against
-// the exact text the editor writes.
+// Integration.Mcp: the scene and prefab tool flow. An agent opens a project, authors a scene
+// through the tools (a write validates first), validates it, reads it back byte for byte, and
+// gets refusals with reasons: garbage XML, a guid of the wrong type redirected, a prefab with
+// several roots. The seed XML comes from a real SaveScene, so the tools are tested against the
+// exact text the editor writes.
 #include <doctest/doctest.h>
 #include <filesystem>
 #include "Core/Prelude.h"
@@ -61,7 +61,8 @@ namespace
         return String(resp.Get(u8"result").Get(u8"content").At(0).Get(u8"text").AsString());
     }
 
-    // Raw JSON-RPC line -> response line (for the resources/* methods, which are not tools).
+    // Sends a raw JSON-RPC line and returns the response line, for the resources/* methods,
+    // which are not tools.
     String Response(McpServer& s, StringView line)
     {
         LineOutcome out = s.HandleLine(line);
@@ -76,7 +77,7 @@ namespace
         return o;
     }
 
-    // Every occurrence of `from` in `text` replaced with `to` (byte-wise; test-local helper).
+    // Every occurrence of `from` in `text` replaced with `to`, byte by byte.
     String ReplaceAll(StringView text, StringView from, StringView to)
     {
         StringBuilder out;
@@ -113,9 +114,9 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
                  With(With(Obj(), u8"directory", u8"mcp_scene_project"), u8"name", u8"SceneFix"));
     (void)CallOk(server, u8"project_open", With(Obj(), u8"directory", u8"mcp_scene_project"));
 
-    // Seed XML from a REAL SaveScene (the exact editor-written text): two entities, one child,
-    // and a REAL component record (NetworkComponent on hero) - the full manager set is on the
-    // authored scene exactly as it is on the validate scratch, so validation exercises a genuine
+    // Seed XML from a real SaveScene, the exact text the editor writes: two entities, one a child,
+    // and a real component record (a NetworkComponent on hero). The authored scene has the full
+    // manager set, as the validate scratch scene does, so validation exercises a genuine
     // component payload end to end.
     engine::RegisterAllSceneComponentReflection(); // as the MCP host does at startup
     String seedXml;
@@ -143,9 +144,9 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
     seedXml = read.Get(u8"xml").AsString();
     CHECK(seedXml.Size() > 0u);
 
-    // scene_validate (raw xml) confirms structure AND the component payload: validation is FULL
-    // (the scratch carries the complete engine manager set), so the NetworkComponent record
-    // parses through its real manager with zero warnings.
+    // scene_validate on raw XML confirms the structure and the component payload. Validation is
+    // complete because the scratch scene carries the full engine manager set, so the
+    // NetworkComponent record parses through its real manager with zero warnings.
     JsonValue valid = CallOk(server, u8"scene_validate", With(Obj(), u8"xml", seedXml.AsView()));
     CHECK(valid.Get(u8"valid").AsBool() == true);
     CHECK(valid.Get(u8"sceneName").AsString() == StringView(u8"arena"));
@@ -154,8 +155,8 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
     CHECK(valid.Get(u8"componentValidation").AsString() == StringView(u8"full"));
     CHECK(valid.Get(u8"warnings").Count() == 0);
 
-    // A record of a GENUINELY unknown component type is skipped with a captured warning (still
-    // valid: the reader's contract is skip-and-warn, and the agent is told what was skipped).
+    // A record of an unknown component type is skipped with a captured warning. The scene is
+    // still valid: the reader skips and warns, and the agent is told what was skipped.
     {
         const String mangled =
             ReplaceAll(seedXml.AsView(), u8"net.Network", u8"bogus.NoSuchComponent");
@@ -165,13 +166,13 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
         CHECK(report.Get(u8"warnings").Count() >= 1);
     }
 
-    // Every successful write announces the asset to the host (the editor host tells the open
-    // pages editing it); a refused write announces nothing.
+    // Every successful write announces the asset to the host, and the editor host tells the open
+    // pages editing it. A refused write announces nothing.
     Array<Guid> announced;
     session.onAssetWritten = [&announced](const Guid& id) { announced.PushBack(id); };
 
-    // scene_write CREATES a new scene from the XML; a scene as the editor saved it (what
-    // scene_read gives) is stored byte-identical.
+    // scene_write creates a new scene from the XML. A scene as the editor saved it, which is what
+    // scene_read returns, is stored byte for byte.
     JsonValue written = CallOk(
         server, u8"scene_write",
         With(With(With(Obj(), u8"xml", seedXml.AsView()), u8"name", u8"authored"), u8"group",
@@ -187,9 +188,9 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
     JsonValue readBack = CallOk(server, u8"scene_read", With(Obj(), u8"guid", newGuid.AsView()));
     CHECK(readBack.Get(u8"xml").AsString() == seedXml.AsView()); // the editor's save, kept as is
 
-    // The same scene as a generator script writes it, on one line and with its numbers its own
-    // way (1.0 for 1), is stored as the editor saves it, so the file reads like one the editor
-    // saved and a later save rewrites nothing.
+    // The same scene written as a generator script would write it, on one line and with numbers
+    // formatted differently (1.0 for 1), is stored in the editor's format. The file then reads
+    // like one the editor saved, and a later save rewrites nothing.
     {
         const String flat = ReplaceAll(ReplaceAll(seedXml.AsView(), u8"\n", u8"").AsView(), u8"\t", u8"");
         const String oneLine = ReplaceAll(flat.AsView(), u8">1</f32>", u8">1.0</f32>");
@@ -207,24 +208,24 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
         CallOk(server, u8"scene_validate", With(Obj(), u8"guid", newGuid.AsView()));
     CHECK(storedValid.Get(u8"valid").AsBool() == true);
 
-    // REFUSALS carry reasons:
-    // (a) garbage XML never writes.
+    // Refusals carry reasons.
+    // (a) Garbage XML never writes.
     const String garbage = CallErr(
         server, u8"scene_write",
         With(With(Obj(), u8"xml", u8"<not a scene>"), u8"name", u8"broken"));
     CHECK(garbage.Size() > 0u);
     CHECK(announced.Size() == 2u); // nothing written, nothing announced
-    // (b) a scene guid through the prefab tool redirects.
+    // (b) A scene guid given to the prefab tool redirects.
     const String redirect =
         CallErr(server, u8"prefab_read", With(Obj(), u8"guid", newGuid.AsView()));
     CHECK(redirect.Size() > 0u);
-    // (c) a SINGLE-root scene is a legal prefab (writes fine)...
+    // (c) A scene with a single root is a legal prefab and writes fine.
     JsonValue okPrefab = CallOk(
         server, u8"prefab_write",
         With(With(Obj(), u8"xml", seedXml.AsView()), u8"name", u8"goodprefab"));
     CHECK(okPrefab.Get(u8"written").AsBool() == true);
     CHECK(announced.Size() == 3u); // the prefab write announced too
-    // ...and a MULTI-root one is refused with the single-root rule.
+    // One with several roots is refused, citing the single-root rule.
     {
         scene::Scene twoRoots(DefaultAllocator(), u8"pair");
         (void)twoRoots.CreateEntity(u8"a");
@@ -248,9 +249,9 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
     (void)CallErr(server, u8"scene_validate",
                   With(With(Obj(), u8"xml", u8"x"), u8"guid", newGuid.AsView()));
 
-    // The scenes double as READ-ONLY resources (project://scene/<guid>), listed LIVE from the
-    // source DB - the written scene appears without any re-registration, and its content is
-    // byte-identical to scene_read.
+    // The scenes are also read-only resources (project://scene/<guid>), listed live from the
+    // source DB: the written scene appears without any re-registration, and its content matches
+    // scene_read byte for byte.
     {
         const String listLine =
             Response(server, u8"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"resources/list\"}");
@@ -282,8 +283,8 @@ TEST_CASE("integration.mcp: scene tools - author, validate, read back, and real 
     }
 }
 
-// Sedulous ae7a128a: prefab instances are counted apart from the scene's own entities, and one
-// whose prefab is not a prefab of the project is a warning from validate and from write.
+// Prefab instances are counted apart from the scene's own entities, and an instance whose prefab
+// is not a prefab of the project is a warning from both validate and write.
 TEST_CASE("integration.mcp: scene tools - validation counts prefab instances and warns on a missing "
           "prefab")
 {
@@ -381,7 +382,7 @@ TEST_CASE("integration.mcp: host_info reports pid, stamp, versions, and host sta
     CHECK(info.Get(u8"protocolVersion").AsString().Size() > 0u);
     CHECK(info.Get(u8"host").Get(u8"projectOpen").AsBool() == false);
 
-    // The host-state lambda is LIVE, not captured-at-registration.
+    // The host-state lambda is read live, not captured at registration.
     open = true;
     JsonValue after = CallOk(server, u8"host_info", Obj());
     CHECK(after.Get(u8"host").Get(u8"projectOpen").AsBool() == true);

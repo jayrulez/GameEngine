@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of SwapChain.
-/// Ported from Sedulous.RHI.Vulkan/VulkanSwapChain.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -46,9 +45,9 @@ export namespace foundation::rhi::vk
         }
     }
 
-    // Readable names for the swapchain-format negotiation log (I8: silent non-sRGB fallbacks washed
-    // out exported players - name the negotiated format so a bad machine is a one-line diagnosis).
-    // const char* for the printf-style RHI logger (LogInfof/LogWarningf).
+    // Readable names for the swapchain-format negotiation log, so a machine that falls back to a
+    // non-sRGB format (a washed-out picture) is diagnosed from one line. const char* for the
+    // printf-style RHI logger (LogInfof/LogWarningf).
     inline const char* vkFormatName(VkFormat f)
     {
         switch (f)
@@ -233,11 +232,10 @@ export namespace foundation::rhi::vk
         if (m_format == TextureFormat::Undefined)
             m_format = reqFormat;
 
-        // Surface-format negotiation is a known cause of washed-out exported players: if a machine's
-        // surface lacks our sRGB target, chooseSurfaceFormat silently falls to a UNORM format while
-        // the final pass still assumes encode-on-write. Log request vs result (answers the issue's
-        // own "what is the swapchain format?") and WARN loudly on a non-sRGB negotiation so the next
-        // report is a one-line diagnosis rather than a hunt.
+        // Surface-format negotiation can wash out the picture: if a machine's surface lacks our
+        // sRGB target, chooseSurfaceFormat falls back to a UNORM format while the final pass still
+        // assumes encode-on-write. Log the request and the result, and warn on a non-sRGB
+        // negotiation, so such a report is a one-line diagnosis.
         LogInfof("[RHI] swapchain surface format: requested %s, negotiated %s [%s]",
                  vkFormatName(toVkFormat(reqFormat)), vkFormatName(surfFmt.format),
                  vkColorSpaceName(surfFmt.colorSpace));
@@ -352,10 +350,10 @@ export namespace foundation::rhi::vk
             return desired;
         }
 
-        // Requested mode unavailable: preserve the request's INTENT rather than dropping straight to
-        // vsync. Immediate and Mailbox both mean "don't block on the refresh" - so fall back to whichever
-        // uncapped mode the surface does expose (Wayland commonly offers Mailbox but NOT Immediate) before
-        // settling for FIFO. FIFO is the only mode guaranteed present by the spec.
+        // Requested mode unavailable: preserve the request's intent rather than dropping straight
+        // to vsync. Immediate and Mailbox both mean "don't block on the refresh", so fall back to
+        // whichever uncapped mode the surface does expose (Wayland commonly offers Mailbox but not
+        // Immediate) before settling for FIFO, the only mode the Vulkan spec guarantees.
         VkPresentModeKHR chosen = VK_PRESENT_MODE_FIFO_KHR;
         if (requested == PresentMode::Immediate || requested == PresentMode::Mailbox)
         {

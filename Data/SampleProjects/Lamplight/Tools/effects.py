@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""effects.py: Lamplight's particle effects, written through the editor's MCP (Snowline's
-particles.py, its helpers kept):
+"""effects.py: Lamplight's particle effects, written through the editor's MCP with the helpers
+from Snowline's particles.py:
 - Rain: a night's steady rain, streaks falling through a box over the thief and under the
   camera (level.py hangs it on him on a level with rain), drawn as stretched billboards along their
   fall, pale and faint so it reads against the dark without hiding the yard.

@@ -3,11 +3,9 @@
 
 // UI Toolkit - :float_editor partition
 //
-// Float property editor - a NumericField with focus-based edit transactions (Escape restores the pre-edit
-// value). Ported from Sedulous.UI.Toolkit/src/PropertyGrid/FloatEditor.bf. Beef `double` -> f64; `delegate
-// void(double) Setter` -> Function<void(f64)>. The private inner `FloatEditorField : NumericField` becomes
-// a PUBLIC nested class (own RTTI_OBJECT identity) whose focus/key overrides are defined out-of-line
-// after FloatEditor is complete.
+// Float property editor: a NumericField with focus-based edit transactions (Escape restores the pre-edit
+// value). FloatEditorField is a public nested class (with its own RTTI_OBJECT identity) whose focus
+// and key overrides are defined out of line after FloatEditor is complete.
 
 module;
 #include "Core/Prelude.h"
@@ -24,7 +22,7 @@ using namespace foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Float property editor - NumericField with focus-based edit transactions.
+    /// Float property editor: a NumericField with focus-based edit transactions.
     class FloatEditor : public PropertyEditor
     {
         RTTI_OBJECT(FloatEditor, PropertyEditor)

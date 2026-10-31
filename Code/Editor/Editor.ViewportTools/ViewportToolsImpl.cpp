@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::ViewportTools - implementation unit (manager state machine + provider registry).
+// Editor::ViewportTools - implementation unit (the manager's state machine and the provider
+// registry).
 
 module;
 #include "Core/Prelude.h"
@@ -60,7 +61,7 @@ namespace editor
         }
         if (m_active != nullptr)
         {
-            m_active->OnDeactivate(); // gesture-end guarantee before the switch
+            m_active->OnDeactivate(); // ends any gesture before the switch
         }
         m_active = target;
         m_active->OnActivate();
@@ -87,8 +88,8 @@ namespace editor
         {
             return false;
         }
-        // Availability is contextual and can lapse mid-session (the terrain got deleted):
-        // fall back BEFORE routing so a dead tool never sees another frame.
+        // Availability depends on context and can lapse mid-session (the terrain was deleted),
+        // so fall back before routing; an unavailable tool never sees another frame.
         if (!m_active->IsAvailable())
         {
             ActivateDefault();

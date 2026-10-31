@@ -1,5 +1,5 @@
-# Extensions::Imgui - `extensions.imgui`, the Dear ImGui debug-UI integration (RHI renderer + subsystem).
-# Links the vendored ThirdParty::ImGui PUBLIC so consumers (apps) get imgui.h + the ImGui:: API directly.
+# Extensions::Imgui - `extensions.imgui`, the Dear ImGui debug-UI integration (RHI renderer and subsystem).
+# Links the vendored ThirdParty::ImGui PUBLIC so consumers (apps) get imgui.h and the ImGui:: API directly.
 util_add_engine_library(Imgui ALIAS Extensions::Imgui)
 target_link_libraries(Imgui
     PUBLIC Foundation::Core Foundation::RHI Foundation::Runtime Foundation::Shell

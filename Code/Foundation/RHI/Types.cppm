@@ -46,7 +46,7 @@ export namespace foundation::rhi
         static constexpr ClearColor CornflowerBlue() { return {0.392f, 0.584f, 0.929f, 1.0f}; }
     };
 
-    // ---- Adapter / Device info ----
+    // ---- Adapter and device info ----
 
     /// Information about a physical GPU adapter.
     struct AdapterInfo
@@ -70,12 +70,12 @@ export namespace foundation::rhi
             // QueryVideoMemoryInfo).
             bool memoryBudget = false;
             bool pipelineStatisticsQueries = false;
-            // Begin/EndOcclusionQuery inside render passes. WebGPU cannot honor the
-            // RHI's begin-anywhere shape until RenderPassDesc declares the query set
-            // at pass begin, so its backend reports false; samples/consumers gate.
+            // Begin/EndOcclusionQuery inside render passes. WebGPU needs the query set
+            // declared at pass begin (RenderPassDesc::occlusionQuerySet); consumers gate
+            // on this flag.
             bool occlusionQueries = false;
-            // AddressMode::ClampToBorder + SamplerBorderColor. Core WebGPU has no
-            // border sampling - its backend narrows to ClampToEdge and reports false.
+            // AddressMode::ClampToBorder and SamplerBorderColor. Core WebGPU has no
+            // border sampling; its backend narrows to ClampToEdge and reports false.
             bool borderSampling = false;
             bool multiDrawIndirect = false;
             bool depthClamp = false;
@@ -113,7 +113,6 @@ export namespace foundation::rhi
     /// Features and limits requested when creating a device.
     using DeviceFeatures = AdapterInfo::Features;
 
-    /// Descriptor for logical device creation.
     /// The counters of one pipeline-statistics query, whatever layout a backend resolves them in
     /// (Device::DecodePipelineStatistics).
     struct PipelineStatistics
@@ -126,6 +125,7 @@ export namespace foundation::rhi
         u64 computeInvocations = 0;  // compute shader runs
     };
 
+    /// Descriptor for logical device creation.
     struct DeviceDesc
     {
         DeviceFeatures requiredFeatures{};
@@ -137,7 +137,7 @@ export namespace foundation::rhi
 
     // ---- Copy regions ----
 
-    /// Layout of a buffer holding texture data (for CPU→GPU uploads).
+    /// Layout of a buffer holding texture data (for CPU to GPU uploads).
     struct TextureDataLayout
     {
         u64 offset = 0;
@@ -155,7 +155,7 @@ export namespace foundation::rhi
         Extent3D extent;
     };
 
-    /// Region for buffer↔texture copies.
+    /// Region for copies between a buffer and a texture.
     struct BufferTextureCopyRegion
     {
         u64 bufferOffset = 0;
@@ -173,9 +173,9 @@ export namespace foundation::rhi
         ShaderStage stages = ShaderStage::None;
         u32 offset = 0;
         u32 size = 0;
-        /// WebGPU-emulation only: when a device has no push-constant/immediates path
+        /// WebGPU emulation only: when a device has no push-constant or immediates path
         /// (browsers, or wgpu-native with the fallback forced), the block is bound as an
-        /// ordinary uniform buffer at this @group, binding 0 - matching the WGSL the web
+        /// ordinary uniform buffer at this @group, binding 0, matching the WGSL the web
         /// shader cook emits (register(b0, spaceN) -> @group(N) @binding(0), see
         /// Data/Engine/Shaders/push_constant.hlsli). Ignored by Vulkan, DX12, and native-immediates
         /// WebGPU. Defaults to 1, the engine's dominant push-constant space.

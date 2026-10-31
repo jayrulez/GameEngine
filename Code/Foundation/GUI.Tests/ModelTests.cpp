@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - MVC data-core tests: Variant (typed value + ToString + Compare), ModelIndex,
-// and StringListModel (row/column/data + client notification on mutation).
+// GUI - MVC data-core tests: Variant (a typed value, ToString and Compare), ModelIndex, and
+// StringListModel (rows, columns and data, and client notification on mutation).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -44,7 +44,8 @@ TEST_CASE("variant: Compare orders numbers and strings")
     CHECK(Variant(static_cast<core::i64>(5)).Compare(Variant(static_cast<core::i64>(5))) == 0);
     CHECK(Variant(SV(u8"apple")).Compare(Variant(SV(u8"banana"))) < 0);
     CHECK(Variant(SV(u8"pear")).Compare(Variant(SV(u8"peach"))) > 0);
-    // An int against a float by value, not by type (a mixed numeric column sorts as numbers).
+    // An int compares against a float by value, not by type, so a mixed numeric column sorts as
+    // numbers.
     CHECK(Variant(static_cast<core::i64>(3)).Compare(Variant(2.5)) > 0);
     CHECK(Variant(1.5).Compare(Variant(static_cast<core::i64>(2))) < 0);
     CHECK(Variant(static_cast<core::i64>(2)).Compare(Variant(2.0)) == 0);
@@ -72,7 +73,7 @@ TEST_CASE("variant: a curve's keys and a gradient are one value each, equal only
     CHECK(curve.Compare(Variant::FromCurve(keys)) == 0);
     keys[1].tangentMode = core::CurveTangentMode::Flat;
     CHECK(curve.Compare(Variant::FromCurve(keys)) != 0);
-    CHECK(curve.Compare(Variant::FromCurve(core::Span<const core::CurveKey>(keys, 1))) > 0); // more keys after
+    CHECK(curve.Compare(Variant::FromCurve(core::Span<const core::CurveKey>(keys, 1))) > 0); // more keys sorts after
     CHECK(Variant(1.0).AsCurve().IsEmpty());
 
     ColorGradient gradient;
@@ -113,7 +114,7 @@ TEST_CASE("string-list-model: rows/columns/data")
     CHECK(model.Data(MakeModelIndex(0)).AsString() == SV(u8"Alpha"));
     CHECK(model.Data(MakeModelIndex(1), ModelRole::Sort).AsString() == SV(u8"Beta"));
 
-    // Out-of-range -> empty variant.
+    // Out of range: an empty variant.
     CHECK(model.Data(MakeModelIndex(5)).IsEmpty());
     CHECK_FALSE(model.IsValidIndex(MakeModelIndex(2)));
 }
@@ -235,9 +236,9 @@ TEST_CASE("model: editing is a capability; a table cell keeps its kind")
     CHECK(table.SetData(MakeModelIndex(0, 1), Variant(SV(u8"42"))));
     CHECK(table.Cell(0, 1).GetType() == Variant::Type::Int);
     CHECK(table.Cell(0, 1).AsInt() == 42);
-    CHECK_FALSE(table.SetData(MakeModelIndex(0, 1), Variant(SV(u8"many")))); // not a number: refused
+    CHECK_FALSE(table.SetData(MakeModelIndex(0, 1), Variant(SV(u8"many")))); // not a number, so refused
     CHECK(table.Cell(0, 1).AsInt() == 42);
-    CHECK_FALSE(table.Sort(1, SortOrder::Ascending)); // a table alone cannot sort; a proxy can
+    CHECK_FALSE(table.Sort(1, SortOrder::Ascending)); // a table on its own cannot sort; a proxy can
 }
 
 TEST_CASE("model: a tree reports rows under their parent, and a removed node's id is not reused")
@@ -277,7 +278,7 @@ TEST_CASE("row-ids: an id's row is found after rows are inserted, moved and remo
     ids.Remove(1);
     CHECK(ids.RowOf(3) == -1);
     CHECK(ids.RowOf(4) == 4);
-    ids.InsertId(2, 3); // back, keeping its id
+    ids.InsertId(2, 3); // put back, keeping its id
     CHECK(ids.RowOf(3) == 2);
     CHECK(ids.RowOf(99) == -1);
 }

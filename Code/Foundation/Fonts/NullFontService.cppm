@@ -3,8 +3,7 @@
 
 // Foundation::Fonts - :null_service partition
 //
-// A no-op IFontService (returns null for everything) for tests/headless use.
-// Ported from Sedulous.Fonts (NullFontService.bf).
+// A no-op IFontService (returns null for everything) for tests and headless use.
 
 module;
 #include "Core/Prelude.h"

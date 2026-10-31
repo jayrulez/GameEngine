@@ -3,28 +3,31 @@
 
 // GUI - :markup partition
 //
-// MarkupLoader: inflate a widget tree from XML markup. Modeled on eepp's layout loading (role
-// only). An element name is a tag the loader's ElementSet resolves to a registered element type
-// (ElementTypes: the GUI's widgets and any library's), made from the loader's allocator; nested
-// elements become children; an element it does not know is left out with a warning.
+// MarkupLoader: inflates a widget tree from XML markup. The loader's ElementSet resolves each
+// element name to a registered element type (ElementTypes holds the GUI's widgets and those of
+// any other library), and the loader makes it from its own allocator. Nested elements become
+// children. An element the set does not know is left out with a warning.
 // Attributes are applied in tiers:
-//   - `id` / `class` set the widget's CSS identity,
-//   - a value starting with `@` on a translatable property is a translation key (E9a), with
-//     `<prop>-count` and `<prop>-args` beside it; `@@` is a literal @,
-//   - a value with `{{name}}` in it binds the reflected property of that name to the loader's
-//     data model (G5): `value="{{volume}}"` follows `volume`, and writes it back when the property
-//     is one the user changes (a slider's value, a checkbox, a text field's text);
-//     `text="Score: {{score}}"` follows the text built from it,
-//   - an attribute a widget claims (via UINode::SetMarkupAttribute - e.g. Label "text"
-//     and "wrap") is consumed structurally,
-//   - everything else is treated as an inline CSS property and run through the StyleApplier (one
-//     naming no style property, shorthand or reflected property is warned about),
-//   - a `<template type="...">` child is markup kept by its parent (UINode::SetMarkupTemplate)
-//     to make nodes from later (an item view's rows); loaded with item bindings, a value with
-//     `{{item}}`, `{{item.Column}}` or `{{index}}` in it is recorded for the row to fill,
-// so the whole CSS property vocabulary (width/height/padding/margin/background-color/border/
-// text-align/units/...) works in markup for free. Given a diagnostics list (E1), what it drops and
-// a parse error go there, for a cook; without one they are logged.
+//   - `id` and `class` set the widget's CSS identity.
+//   - A value starting with `@` on a translatable property is a translation key; its count and
+//     arguments go in `<prop>-count` and `<prop>-args`. `@@` is a literal @.
+//   - A value containing `{{name}}` binds the reflected property to the field `name` of the
+//     loader's data model. `value="{{volume}}"` follows `volume` and writes it back when the
+//     user can change the property (a slider's value, a checkbox, a text field's text).
+//     `text="Score: {{score}}"` follows the text built from `score`.
+//   - An attribute the widget claims through UINode::SetMarkupAttribute (such as Label's "text"
+//     and "wrap") is consumed by the widget.
+//   - Every other attribute is treated as an inline CSS property and run through the
+//     StyleApplier. The loader warns about one that names no style property, shorthand or
+//     reflected property.
+//   - A `<template type="...">` child is kept as markup by its parent
+//     (UINode::SetMarkupTemplate), which makes nodes from it later (an item view's rows). When
+//     the loader has item bindings, a value containing `{{item}}`, `{{item.Column}}` or
+//     `{{index}}` is recorded for the row to fill.
+// As a result, the whole CSS property vocabulary (width, height, padding, margin,
+// background-color, border, text-align, units and so on) works in markup. When the loader has a
+// diagnostics list, dropped elements and attributes and parse errors go there for a cook to
+// report; without one they are logged.
 //
 // Example:
 //   <Panel flex-direction="row" gap="8" padding="12" class="panel">
@@ -34,11 +37,11 @@
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h" // LOG_WARNING: what markup names that nothing takes
+#include "Core/Log/Log.h" // LOG_WARNING, for markup names that nothing takes
 
 export module foundation.gui:markup;
 
-import foundation.core; // RefPtr, MakeRef, Array, String, StringView, Function, Move, Cast, IsWhiteSpace
+import foundation.core;
 import foundation.fonts; // IFontService
 import foundation.xml;   // XmlDocument, XmlElement, XmlAttribute, XmlResult
 import :node;
@@ -84,19 +87,21 @@ export namespace foundation::gui
         {
         }
 
-        /// Where what it drops (an element no type makes, an attribute nothing takes) and a parse
-        /// error go, instead of the log (E1: a cook's warnings and errors). Null: the log.
+        /// Sends dropped elements (no type makes them), dropped attributes (nothing takes them)
+        /// and parse errors to `diagnostics`, where a cook reports them, instead of the log. Null
+        /// sends them to the log.
         void SetDiagnostics(Array<GuiDiagnostic>* diagnostics) noexcept { m_diagnostics = diagnostics; }
 
-        /// The data model `{{name}}` values bind to (a SceneRoot's, GetDataRef); without one they
-        /// stay as written.
+        /// Sets the data model that `{{name}}` values bind to (usually a SceneRoot's, from
+        /// GetDataRef). Without a model those values stay as written.
         void SetDataModel(RefPtr<DataModel> model) { m_data = core::Move(model); }
-        /// Records `{{item...}}` and `{{index}}` attributes here, for a row to fill (an item
-        /// view's template), instead of applying them.
+        /// Records `{{item...}}` and `{{index}}` attributes in `bindings` instead of applying
+        /// them, so that a row made from an item view's template can fill them.
         void SetItemBindings(Array<ItemBinding>* bindings) noexcept { m_itemBindings = bindings; }
 
-        /// Applies one attribute as markup does (a widget's own, else inline CSS, which the
-        /// style pass applies): what a row's item binding writes.
+        /// Applies one attribute the way markup does: the widget takes it if it claims it, and
+        /// otherwise it becomes inline CSS for the style pass to apply. A row's item bindings
+        /// write their values through this.
         static void ApplyAttribute(Node& node, core::StringView name, core::StringView value)
         {
             UINode* uinode = core::Cast<UINode>(&node);
@@ -107,7 +112,7 @@ export namespace foundation::gui
         }
 
 
-        // Inflate the root element of `markup` into a widget tree; null on a parse error or an
+        // Inflates the root element of `markup` into a widget tree; null on a parse error or an
         // unknown root element.
         [[nodiscard]] RefPtr<Node> LoadFromString(core::StringView markup)
         {
@@ -133,8 +138,8 @@ export namespace foundation::gui
             RefPtr<Node> widget = m_elements->Create(element.TagName(), *m_allocator);
             if (!widget)
             {
-                // An element this GUI does not make (a typo, or one its element set leaves out): said,
-                // rather than the subtree vanishing without a word.
+                // This GUI cannot make the element (a typo, or a type its element set leaves out).
+                // Report it, so the subtree does not vanish silently.
                 Report(GuiDiagnostic::Severity::Warning, element.Line(),
                        core::Format(u8"no element <{}>; it and what it holds are left out", element.TagName()));
                 return {};
@@ -148,8 +153,8 @@ export namespace foundation::gui
             {
                 const core::StringView name = attr->Name();
                 core::StringView value = attr->Value();
-                // A translated text (E9a): `text="@menu.play"`, its count and arguments in
-                // `text-count` and `text-args` (each a value or a {{binding}}); `@@` is a literal @.
+                // A translated text such as `text="@menu.play"`. Its count and arguments are in
+                // `text-count` and `text-args`, each a value or a {{binding}}. `@@` is a literal @.
                 if (IsTranslationExtra(element, name))
                     continue;
                 if (value.Size() > 1 && value[0] == u8'@')
@@ -189,7 +194,7 @@ export namespace foundation::gui
                            core::Format(u8"<{}> has no attribute or style property '{}'", element.TagName(), name));
                 inlineStyle.Set(name, value); // an inline CSS property
                 if (uinode != nullptr)
-                    uinode->SetInlineStyle(name, value); // kept: it outranks the sheets at every restyle
+                    uinode->SetInlineStyle(name, value); // kept so it outranks the sheets at every restyle
             }
             if (uinode != nullptr)
                 ApplyStyle(*uinode, inlineStyle, m_resources, m_fontService, m_lengths);
@@ -199,7 +204,7 @@ export namespace foundation::gui
             {
                 if (child->TagName() == core::StringView(u8"template"))
                 {
-                    // Kept as markup by its parent, to make nodes from later.
+                    // The parent keeps the template as markup and makes nodes from it later.
                     xml::XmlElement* body = child->FirstChildElement();
                     if (uinode != nullptr && body != nullptr)
                     {
@@ -210,13 +215,13 @@ export namespace foundation::gui
                     continue;
                 }
                 if (RefPtr<Node> childWidget = Inflate(*child))
-                    widget->GetChildHost()->AddChild(childWidget.Get()); // a scroller's content, a window's
+                    widget->GetChildHost()->AddChild(childWidget.Get()); // e.g. a scroller's or a window's content
             }
 
             return widget;
         }
 
-        // Said: into the diagnostics when given, else to the log.
+        // Reports a message into the diagnostics list when there is one, else to the log.
         void Report(GuiDiagnostic::Severity level, u32 line, core::String message)
         {
             if (m_diagnostics != nullptr)
@@ -228,7 +233,8 @@ export namespace foundation::gui
         }
 
         // Whether an attribute names something a style sets: a property the sheets know, a shorthand
-        // of them, a custom property, or a property the widget's type takes by its CSS name.
+        // for such properties, a custom property, or a property the widget's type takes by its CSS
+        // name.
         [[nodiscard]] static bool IsStyleName(const UINode* node, core::StringView name, core::StringView value)
         {
             if (FindStyleProperty(name) != nullptr || (name.Size() > 2 && name[0] == u8'-' && name[1] == u8'-'))
@@ -248,8 +254,8 @@ export namespace foundation::gui
                     return i;
             return text.Size();
         }
-        /// Splits `text` into its literal runs and `{{name}}`s (names trimmed); false when a `{{`
-        /// is not closed or a name is empty.
+        /// Splits `text` into its literal runs and `{{name}}` parts, trimming the names. Returns
+        /// false when a `{{` is not closed or a name is empty.
         [[nodiscard]] static bool SplitTemplate(core::StringView text, Array<MarkupTemplatePart>& parts)
         {
             usize at = 0;
@@ -273,13 +279,9 @@ export namespace foundation::gui
             return true;
         }
 
-        // Binds `property` of `node` to the template `value`: one `{{name}}` alone follows the
-        // value as it is (and writes it back where the property allows); text around names
-        // follows the text built from them. False when nothing bound (no such property, or a
-        // malformed template), so the attribute is handled as written.
-        // `text-count` and `text-args` belong to `text`'s translation (when `text` is a key).
-        // `<prop>-count` or `<prop>-args` beside a `<prop>="@key"`: the translation's count and
-        // arguments, which BindTranslated reads. Any other attribute so named is the widget's own
+        // Whether `name` is `<prop>-count` or `<prop>-args` on an element that also has
+        // `<prop>="@key"`. Those hold the translation's count and arguments, which BindTranslated
+        // reads. Any other attribute with such a name belongs to the widget
         // (`animation-iteration-count`).
         [[nodiscard]] static bool IsTranslationExtra(const xml::XmlElement& element, core::StringView name)
         {
@@ -293,7 +295,8 @@ export namespace foundation::gui
             const core::StringView value = element.GetAttribute(base);
             return value.Size() > 1 && value[0] == u8'@' && value[1] != u8'@';
         }
-        // One argument: {{name}} reads the GUI's data, anything else is itself.
+        // Parses one translation argument: {{name}} reads the GUI's data model, and anything else
+        // is a literal value.
         [[nodiscard]] static Node::TranslationArgument TranslationArgumentOf(core::StringView text)
         {
             text = core::Trim(text);
@@ -328,6 +331,11 @@ export namespace foundation::gui
             return node.BindTranslation(property, key, m_data, core::Move(count), core::Move(args));
         }
 
+        // Binds `property` of `node` to the template `value`. A lone `{{name}}` follows the data
+        // value as it is, and writes it back where the property allows. A template with text
+        // around the names follows the text built from them. Returns false when nothing was bound
+        // (no such property, or a malformed template), so the caller handles the attribute as
+        // written.
         bool Bind(Node& node, core::StringView property, core::StringView value)
         {
             Array<MarkupTemplatePart> parts;
@@ -373,7 +381,7 @@ export namespace foundation::gui
         LengthContext m_lengths;
         RefPtr<DataModel> m_data;
         Array<ItemBinding>* m_itemBindings = nullptr;
-        Array<GuiDiagnostic>* m_diagnostics = nullptr; // E1: where what it drops goes (null: the log)
+        Array<GuiDiagnostic>* m_diagnostics = nullptr; // receives dropped items and errors (null: the log)
     };
 
 }

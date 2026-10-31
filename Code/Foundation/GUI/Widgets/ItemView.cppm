@@ -3,43 +3,45 @@
 
 // GUI - :item_view partition
 //
-// ItemView: the engine behind ListView, TreeView and TableView (E6 of Specs/gui-lab-evolution.md).
-// It is a scroll container like any other node (its wheel, bars, touch, fling, smooth scrolling,
-// right stick and `::scrollbar` parts are Node's), which realises only the rows in view:
+// ItemView: the engine behind ListView, TreeView and TableView. It is a scroll container like any
+// other node (wheel, scroll bars, touch, fling, smooth scrolling, the right stick and the
+// `::scrollbar` parts all come from Node), and it realises only the rows in view:
 //
-//   - Rows come from a factory (a native one, or the view's own default): each row type has a
-//     pool of rows, and a row scrolled out of view goes back to its pool for the next one.
-//     A row is an ItemRow holding the factory's content; it shows `:selected`.
-//   - Heights are fixed (`row-height`) or measured: a measured row's height is estimated until it
-//     is first realised, then measured, and kept in a sum tree (RowHeights), so finding the row at
-//     an offset or the offset of a row is a logarithmic walk (GPUI's list in role).
-//   - Scrolling is anchored to an item and an offset into it: a row above measuring taller, or
-//     rows inserted above, leave what is in view where it is.
-//   - The model reports row ranges (E6); the view follows inserts, removals, moves and changes of
-//     a flat model and resets for the rest. Selection is a set of row ids, so it survives inserts,
-//     moves and sorting.
-//   - A grid is a layout mode of the same view: cells of a size, as many across as fit (stretched
-//     to fill the row), lines of them down; the arrows move across and down.
-//   - Rows from markup: a `<template>` child is made into each row, its `{{item}}`,
-//     `{{item.Column}}` and `{{index}}` attributes filled for the item it shows; templates of a
-//     `type` are picked by the text in the view's `row-type-column`. `items="a|b|c"` gives a
-//     markup list a model of its own.
-//   - Drag and drop (E7): with a `drag-type`, rows drag the selection (their ids, the view a weak
-//     handle in the payload's value); as a target the view finds where a drop lands in a row
-//     (before, on or after it, by quarter bands, by halves when the model takes nothing onto a
-//     row), asks its model (ModelDrop: CanDrop, Drop), and draws an insertion line or an outline
-//     (`::drop-indicator`); a row moved to another model is removed from this one.
-//   - A double-click, Return or the pad's South reports `activate`; typing letters and digits
-//     jumps to the next row that starts with them (read from the keys, not text input, which the
-//     shell turns on for fields alone); F2 (or BeginEdit) edits a row in place, a hook able to
-//     refuse the edit or the value.
+//   - Rows come from a factory, either a native one or the view's own default. Each row type has
+//     a pool of rows; a row scrolled out of view goes back to its pool for reuse. A row is an
+//     ItemRow holding the factory's content, and it shows `:selected` while selected.
+//   - Row heights are either fixed (`row-height`) or measured. A measured row uses an estimated
+//     height until it is first realised and measured. Heights are kept in a sum tree
+//     (RowHeights), so finding the row at an offset, or the offset of a row, takes O(log n).
+//   - Scrolling is anchored to an item and an offset into it, so when a row above the view
+//     measures taller, or rows are inserted above it, the rows in view stay where they are.
+//   - The model reports changed row ranges. For a flat model the view follows inserts, removals,
+//     moves and changes; for anything else it resets. The selection is a set of row ids, so it
+//     survives inserts, moves and sorting.
+//   - Grid is a layout mode of the same view: cells of a set size, as many across as fit
+//     (stretched to fill the line), in lines going down. The arrow keys move across and down.
+//   - Rows from markup: each row is built from a `<template>` child, and its `{{item}}`,
+//     `{{item.Column}}` and `{{index}}` attributes are filled in for the item it shows. When
+//     templates have a `type`, the text in the view's `row-type-column` picks one. `items="a|b|c"`
+//     gives a markup list its own model.
+//   - Drag and drop: with a `drag-type` set, dragging a row drags the selection. The payload
+//     carries the row ids, and its value is a weak handle to the view. As a drop target, the view
+//     works out where in a row the drop lands (before, on or after it, by quarter bands; see
+//     DropAt for the fallbacks), asks its model through ModelDrop (CanDrop, then Drop), and draws
+//     an insertion line or an outline (`::drop-indicator`). Rows moved to another model are
+//     removed from this one.
+//   - A double-click, Return or the pad's South button sends `activate`. Typing jumps to the next
+//     row whose text starts with what was typed; it uses typed text, so it follows the keyboard
+//     layout and any IME. F2 (or BeginEdit) edits a row in place, and hooks can refuse the edit
+//     or the new value.
 //
-// A subclass says what an item is (ItemCount, ItemToModelIndex: a tree flattens its open nodes),
-// makes its default rows (CreateContent, BindContent), and adds decorations (a table's header).
+// A subclass defines what an item is (ItemCount, ItemToModelIndex; a tree flattens its open
+// nodes), makes the default rows (CreateContent, BindContent), and adds decorations such as a
+// table's header.
 
 module;
 #include "Core/Prelude.h"
-#include <algorithm> // sort (the items with accessibility nodes)
+#include <algorithm> // sort, for the items that have accessibility nodes
 #include "Core/Reflection/Reflect.h"
 
 export module foundation.gui:item_view;
@@ -57,13 +59,13 @@ import :model;
 import :text_field;
 import :text;             // TypeAheadSearch
 import :event_dispatcher; // GetTime (type-ahead)
-import :reactive;         // Observable (what bindings follow)
-import :element_types;    // ElementSet (a template's elements)
+import :reactive;         // Observable, which bindings follow
+import :element_types;    // ElementSet, the elements a template may use
 import :markup;           // MarkupLoader, ItemBinding (template rows)
 import :string_list_model;
-import :list_model;       // a script's model (E16)
+import :list_model;       // ListModel, a model built by a script
 import :list_box;         // SplitItems, JoinItems
-import foundation.vg;     // StrokeStyle (the drop indicator)
+import foundation.vg;     // StrokeStyle, for the drop indicator
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -76,15 +78,15 @@ export namespace foundation::gui
         Multi
     };
 
-    /// How an item view lays its items out: rows down (List), or cells across then down (Grid).
+    /// How an item view lays out its items: rows going down (List), or cells across then down (Grid).
     enum class ItemLayout : u8
     {
         List,
         Grid,
     };
 
-    /// Row heights in a sum tree (a Fenwick tree): the offset of a row and the row at an offset
-    /// in O(log n), a height changed in O(log n); inserts and removals rebuild it, O(n).
+    /// Row heights in a sum tree (a Fenwick tree). Finding a row's offset, finding the row at an
+    /// offset and changing a height each take O(log n); inserts and removals rebuild it in O(n).
     class RowHeights
     {
     public:
@@ -118,7 +120,8 @@ export namespace foundation::gui
             }
             Rebuild();
         }
-        /// `count` rows from `first` now start at `to` (in the order after the move).
+        /// Moves `count` rows starting at `first` so they start at `to`, an index in the order after
+        /// the move.
         void Move(usize first, usize count, usize to)
         {
             Array<f32> heights;
@@ -142,7 +145,8 @@ export namespace foundation::gui
         [[nodiscard]] usize Size() const noexcept { return m_heights.Size(); }
         [[nodiscard]] f32 At(usize i) const { return i < m_heights.Size() ? m_heights[i] : 0.0f; }
         [[nodiscard]] bool IsMeasured(usize i) const { return i < m_measured.Size() && m_measured[i] != 0; }
-        /// Sets a row's height (measured: it stays until Unmeasure); true when it changed.
+        /// Sets a row's height. With `measured`, the row counts as measured until Unmeasure.
+        /// Returns true when the height changed.
         bool Set(usize i, f32 height, bool measured = true)
         {
             if (i >= m_heights.Size())
@@ -161,7 +165,7 @@ export namespace foundation::gui
             if (i < m_measured.Size())
                 m_measured[i] = 0;
         }
-        /// Where row `i` starts: the sum of the heights before it.
+        /// Returns where row `i` starts: the sum of the heights before it.
         [[nodiscard]] f32 Top(usize i) const
         {
             f32 sum = 0.0f;
@@ -170,7 +174,8 @@ export namespace foundation::gui
             return sum;
         }
         [[nodiscard]] f32 Total() const { return Top(m_heights.Size()); }
-        /// The row at offset `y` (the last row past the end; 0 when there are none).
+        /// Returns the row at offset `y`: the last row when `y` is past the end, 0 when there are
+        /// no rows.
         [[nodiscard]] usize Find(f32 y) const
         {
             const usize n = m_heights.Size();
@@ -213,18 +218,19 @@ export namespace foundation::gui
 
     class ItemView;
 
-    /// A native row factory: a row's content made once per pooled row of a type, and filled for
-    /// each item it shows.
+    /// A native row factory. Create makes a row's content once for each pooled row of a type, and
+    /// Bind fills it for each item the row shows.
     struct RowFactory
     {
-        /// The row type an item takes (unset: one type); each type has its own pool.
+        /// Returns the row type for an item; when unset, all rows share one type. Each type has its
+        /// own pool.
         core::Function<u32(const ModelIndex&)> TypeOf;
         core::Function<core::RefPtr<Node>(u32 type)> Create;
         core::Function<void(Node& content, const ModelIndex& index)> Bind;
     };
 
-    /// One realised row: the view's container round a factory's content. It shows `:selected`
-    /// and draws the view's ::selection part under its content while selected.
+    /// One realised row: the view's container around a factory's content. While selected it shows
+    /// `:selected` and draws the view's ::selection part under its content.
     class ItemRow : public UIWidget
     {
         RTTI_OBJECT(ItemRow, UIWidget)
@@ -260,18 +266,18 @@ export namespace foundation::gui
             Invalidate();
         }
 
-        ItemView& m_view; // its parent, which owns it
+        ItemView& m_view; // the parent view, which owns this row
         core::RefPtr<Node> m_content;
         i32 m_item = -1;
         ItemId m_id = kNoItem;
         u32 m_type = 0;
         bool m_selected = false;
-        bool m_dirty = true; // its content shows stale data
-        bool m_taken = false; // claimed in this realisation
+        bool m_dirty = true; // the content shows stale data and must be bound again
+        bool m_taken = false; // already claimed during the current realisation pass
     };
 
-    // A row made from a markup template: the template's tree, and the attributes it fills from
-    // the item it shows.
+    // A row made from a markup template. It holds the template's tree and the bindings for the
+    // attributes that are filled from the item the row shows.
     class TemplateRowContent : public UIWidget
     {
         RTTI_OBJECT(TemplateRowContent, UIWidget)
@@ -280,7 +286,7 @@ export namespace foundation::gui
         [[nodiscard]] Array<ItemBinding>& Bindings() noexcept { return m_bindings; }
 
     protected:
-        // The template's root fills the row (or a grid's cell), inside its margin.
+        // The template's root fills the row (or the grid cell), inset by the root's margin.
         void OnLayout() override
         {
             const Rect box = GetContentBounds();
@@ -329,28 +335,28 @@ export namespace foundation::gui
             m_current = kNoItem;
             m_anchorSelection = kNoItem;
             ResetScrollAnchor();
-            OnModelReset(); // its items from the new model first: the scroll's realising binds them
+            OnModelReset(); // read the new model's items first, since the scroll below realises and binds rows
             SetScrollOffset(core::Float2{0.0f, 0.0f});
         }
         [[nodiscard]] IModel* GetModel() const noexcept { return m_model; }
 
         // === Rows ===
-        /// Rows from a native factory instead of the view's own (the pools start again).
+        /// Makes rows with a native factory instead of the view's default. All pooled rows are dropped.
         void SetRowFactory(RowFactory factory)
         {
             m_factory = core::Move(factory);
             DropRows();
             RequestLayout();
         }
-        /// A markup template for rows (`type` names one of several, picked by the
-        /// row-type-column's text; empty: the default).
+        /// Adds a markup template for rows. When there are several, `type` names this one and the
+        /// row-type-column's text picks between them; an empty `type` marks the default.
         bool SetMarkupTemplate(core::StringView type, core::StringView markup) override
         {
             m_templates.PushBack(RowTemplate{core::String(type), core::String(markup)});
             UseTemplates();
             return true;
         }
-        /// The column whose text picks a row's template (by its `type`).
+        /// Sets the column whose text picks each row's template, by matching the template's `type`.
         void SetRowTypeColumn(const core::String& column)
         {
             m_rowTypeColumn = column;
@@ -358,13 +364,14 @@ export namespace foundation::gui
                 UseTemplates();
         }
         [[nodiscard]] core::String GetRowTypeColumn() const { return m_rowTypeColumn; }
-        /// Shows a script's list model (E16), keeping it alive while it does.
+        /// Shows a script's list model and keeps it alive while it is shown.
         void SetListModel(RefPtr<ListModel> model)
         {
             m_listModel = core::Move(model);
             SetModel(m_listModel ? &m_listModel->Model() : nullptr);
         }
-        /// A model of its own from text, '|' between the items (markup's `items`).
+        /// Gives the view its own model built from `text`, with '|' between the items (markup's
+        /// `items`).
         void SetItemsText(const core::String& text)
         {
             if (!m_ownModel)
@@ -384,7 +391,7 @@ export namespace foundation::gui
                     items.PushBack(core::String(m_ownModel->ItemAt(i)));
             return JoinItems(items);
         }
-        /// "single" or "multi" (markup's `selection-mode`).
+        /// Sets the selection mode from "single" or "multi" (markup's `selection-mode`).
         void SetSelectionModeName(const core::String& name)
         {
             m_selectionMode = core::Trim(name.AsView()) == core::StringView(u8"multi") ? SelectionMode::Multi : SelectionMode::Single;
@@ -394,7 +401,7 @@ export namespace foundation::gui
             return core::String(m_selectionMode == SelectionMode::Multi ? core::StringView(u8"multi") : core::StringView(u8"single"));
         }
 
-        /// Every row this tall (0: each measured, estimated until it is).
+        /// Gives every row this height. With 0, each row is measured, using the estimate until then.
         void SetRowHeight(f32 height)
         {
             m_rowHeight = core::Max(0.0f, height);
@@ -403,7 +410,7 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] f32 GetRowHeight() const noexcept { return m_rowHeight; }
-        /// What an unmeasured row is taken to be until it is realised.
+        /// Sets the height assumed for a row until it is realised and measured.
         void SetEstimatedRowHeight(f32 height)
         {
             m_estimate = core::Max(1.0f, height);
@@ -412,9 +419,9 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] f32 GetEstimatedRowHeight() const noexcept { return m_estimate; }
-        /// The rows realised now (in view, and one past each edge).
+        /// Returns the number of realised rows: those in view plus one past each edge.
         [[nodiscard]] usize VisibleRowCount() const noexcept { return m_live.Size(); }
-        /// The realised row showing `item` (null when it is not in view).
+        /// Returns the realised row showing `item`, or null when it is not in view.
         [[nodiscard]] ItemRow* RowForItem(i32 item) const
         {
             for (const core::RefPtr<ItemRow>& row : m_live)
@@ -422,7 +429,7 @@ export namespace foundation::gui
                     return row.Get();
             return nullptr;
         }
-        /// The item under a point in world space (-1: none).
+        /// Returns the item under a point in world space, or -1 for none.
         [[nodiscard]] i32 ItemAt(core::Float2 world) const
         {
             for (const core::RefPtr<ItemRow>& row : m_live)
@@ -430,7 +437,8 @@ export namespace foundation::gui
                     return row->m_item;
             return -1;
         }
-        /// Where an item starts in the content and how tall it is (estimated until measured).
+        /// Returns the item's bounds in the content. The height is an estimate until the row is
+        /// measured.
         [[nodiscard]] Rect ItemBounds(i32 item) const
         {
             const Rect box = GetContentBounds();
@@ -444,17 +452,18 @@ export namespace foundation::gui
             const f32 width = RowWidth(box.width);
             return Rect{RowLeft(box, width), box.y + ContentTopInset() + ItemTop(i), width, ItemHeight(i)};
         }
-        /// Where a row `width` wide starts: at the box's left, or, scrolling from the right (right to
-        /// left, a table wider than its view), at its right less the width, overflowing leftward.
+        /// Returns the left edge of a row `width` wide. Normally that is the box's left edge. When the
+        /// view scrolls from the right (right to left, with a table wider than its view), the row
+        /// ends at the box's right edge and overflows to the left.
         [[nodiscard]] f32 RowLeft(const Rect& box, f32 width) const { return ScrollsFromRight() ? box.Right() - width : box.x; }
-        /// A grid's cell: across its line from the inline start.
+        /// Returns a grid cell's bounds, counting across its line from the inline start.
         [[nodiscard]] Rect CellBounds(const Rect& box, i32 item, i32 across, f32 width, f32 y, f32 height) const
         {
             return MirroredIn(Rect{box.x + static_cast<f32>(item % across) * width, y, width, height}, box, IsRightToLeft());
         }
 
         // === Grid ===
-        /// Lists rows down, or lays cells out in a grid.
+        /// Sets whether items are listed as rows or laid out as grid cells.
         void SetLayoutMode(ItemLayout layout)
         {
             m_layout = layout;
@@ -462,7 +471,7 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] ItemLayout GetLayoutMode() const noexcept { return m_layout; }
-        /// "list" or "grid" (markup's `layout`).
+        /// Sets the layout mode from "list" or "grid" (markup's `layout`).
         void SetLayoutModeName(const core::String& name)
         {
             SetLayoutMode(core::Trim(name.AsView()) == core::StringView(u8"grid") ? ItemLayout::Grid : ItemLayout::List);
@@ -471,7 +480,8 @@ export namespace foundation::gui
         {
             return core::String(m_layout == ItemLayout::Grid ? core::StringView(u8"grid") : core::StringView(u8"list"));
         }
-        /// A grid cell's least width (as many fit across as can, stretched to fill) and height.
+        /// Sets a grid cell's minimum width and its height. As many cells as fit go across each
+        /// line, stretched to fill it.
         void SetCellWidth(f32 width)
         {
             m_cellSize.x = core::Max(1.0f, width);
@@ -484,9 +494,9 @@ export namespace foundation::gui
             RequestLayout();
         }
         [[nodiscard]] f32 GetCellHeight() const noexcept { return m_cellSize.y; }
-        /// How many cells a grid lays across (1 for a list).
+        /// Returns how many cells a grid lays across each line (1 for a list).
         [[nodiscard]] i32 GetColumnsAcross() const { return GridColumns(GetContentBounds().width); }
-        /// Scrolls so `item` shows (Nearest: the least move).
+        /// Scrolls so `item` is in view. Nearest scrolls by the least amount.
         void ScrollToItem(i32 item, ScrollAlign align = ScrollAlign::Nearest)
         {
             if (item < 0 || item >= static_cast<i32>(ItemCount()))
@@ -510,18 +520,21 @@ export namespace foundation::gui
                     to = core::Min(top, bottom - view);
                 break;
             }
-            // Its offset is known now, so the extent is brought up to date first (the range).
+            // The item's offset is known now, so update the scroll extent first so the scroll range
+            // can reach it.
             SetScrollExtent(core::Float2{GetContentExtent().x, ContentTopInset() + ContentHeight()});
             ScrollTo(core::Float2{GetScrollTarget().x, to});
             if (!m_realizing)
                 Realize();
         }
 
-        // === Drag and drop (E7) ===
-        // (Rows drag the selection as the view's `drag-type`; empty, they do not drag.)
-        /// The ids of the rows of the drag going from here (in their order).
+        // === Drag and drop ===
+        // Rows drag the selection with the view's `drag-type` as the payload type. With no
+        // `drag-type`, rows do not drag.
+        /// Returns the ids of the rows in a drag that started from this view, in item order.
         [[nodiscard]] const core::Array<ItemId>& GetDraggedIds() const noexcept { return m_dragIds; }
-        /// Where a drop would land now (the item, -1 for the end; the place), while one is over it.
+        /// While a drag is over the view, returns the item a drop would land at, or -1 for the end.
+        /// GetDropPlace gives where relative to that item.
         [[nodiscard]] i32 GetDropItem() const noexcept { return m_dropOver ? m_dropItem : -1; }
         [[nodiscard]] DropPlace GetDropPlace() const noexcept { return m_dropPlace; }
         [[nodiscard]] bool IsDropOver() const noexcept { return m_dropOver; }
@@ -532,7 +545,7 @@ export namespace foundation::gui
             out.PushBack(core::StringView(u8"selection"));
             out.PushBack(core::StringView(u8"drop-indicator"));
         }
-        // Its rows draw the selection in ::selection's style.
+        // The rows draw the selection in the ::selection part's style.
         void OnPartStyleChange(core::StringView part) override
         {
             if (part == core::StringView(u8"selection"))
@@ -542,33 +555,35 @@ export namespace foundation::gui
         // === Selection ===
         void SetSelectionMode(SelectionMode mode) noexcept { m_selectionMode = mode; }
         [[nodiscard]] SelectionMode GetSelectionMode() const noexcept { return m_selectionMode; }
-        /// The user changed the selection (code's changes report nothing); the index is the
-        /// current item's.
+        /// Sets the callback for selection changes made by the user; changes made from code do not
+        /// call it. The index passed is the current item's.
         void SetOnSelectionChanged(core::Function<void(ModelIndex)> callback) { m_onSelection = core::Move(callback); }
-        /// A row was activated: a double-click, Return or the pad's South.
+        /// Sets the callback for a row being activated by a double-click, Return or the pad's South
+        /// button.
         void SetOnActivated(core::Function<void(ModelIndex)> callback) { m_onActivated = core::Move(callback); }
-        /// What a drag of its items carries, the owner's say: told the payload as the view filled
-        /// it (its own type, the view and its ids, for a drop within it) and the dragged items' ids
-        /// in item order, it may put what it carries instead (an asset browser's assets).
+        /// Lets the owner decide what a drag of the view's items carries. The callback receives the
+        /// payload as the view filled it (its drag type, the view and the ids, which a drop within
+        /// the view relies on) and the dragged ids in item order, and may replace what the payload
+        /// carries, as an asset browser does with its assets.
         void SetOnDragPayload(core::Function<void(DragPayload& payload, core::Span<const ItemId> ids)> callback) { m_onDragPayload = core::Move(callback); }
 
         [[nodiscard]] usize GetSelectionCount() const noexcept { return m_selected.Size(); }
         [[nodiscard]] bool IsIdSelected(ItemId id) const { return m_selected.Contains(id); }
         [[nodiscard]] bool IsItemSelected(i32 item) const { return item >= 0 && IsIdSelected(ItemIdAt(item)); }
-        /// The selected ids.
+        /// Appends the selected ids to `out`.
         void GetSelectedIds(core::Array<ItemId>& out) const
         {
             for (ItemId id : m_selected)
                 out.PushBack(id);
         }
-        /// The current item (where the keyboard is) when it is selected, else -1.
+        /// Returns the current item (where the keyboard is) when it is selected, otherwise -1.
         [[nodiscard]] i32 GetSelectedItem() const
         {
-            m_selectionChanged.Track(); // a read a binding records
+            m_selectionChanged.Track(); // a binding that reads this follows later changes
             const i32 item = ItemOfId(m_current);
             return item >= 0 && IsIdSelected(m_current) ? item : -1;
         }
-        /// The item the keyboard is on (-1: none).
+        /// Returns the item the keyboard is on, or -1 for none.
         [[nodiscard]] i32 GetCurrentItem() const { return ItemOfId(m_current); }
         [[nodiscard]] ModelIndex GetSelectedIndex() const
         {
@@ -576,14 +591,15 @@ export namespace foundation::gui
             return item >= 0 ? ItemToModelIndex(item) : ModelIndex{};
         }
 
-        // === Accessibility (E17b): its items as nodes of the accessibility tree, which the GUI
-        // builds (AccessibilityImpl.cpp). Not every item has one: the rows made and a page of items
-        // each side, the current item and the selected ones (each node says its place among all),
-        // so a list of a hundred thousand sends a few dozen. ===
+        // === Accessibility ===
+        // The GUI builds the accessibility tree (AccessibilityImpl.cpp) and adds the view's items
+        // as nodes. Not every item gets one: only the realised rows plus a page of items on each
+        // side, the current item and the selected ones. Each node states its position among all
+        // the items, so a list of a hundred thousand items sends only a few dozen nodes.
         [[nodiscard]] usize GetItemCount() const { return ItemCount(); }
         [[nodiscard]] core::String GetItemText(i32 item) const { return TypeAheadText(item); }
         [[nodiscard]] ModelIndex GetItemIndex(i32 item) const { return ItemToModelIndex(item); }
-        /// The items that have nodes, in item order.
+        /// Appends the items that get accessibility nodes to `out`, in item order.
         void GetAccessItems(core::Array<i32>& out) const
         {
             const i32 count = static_cast<i32>(ItemCount());
@@ -612,8 +628,9 @@ export namespace foundation::gui
                 out.PushBack(item);
             std::sort(out.begin(), out.end());
         }
-        /// An item's key among this view's nodes: it follows the item as rows recycle, scroll and
-        /// move, made the first time the item is asked for. The GUI joins it to the view's own.
+        /// Returns the item's key among this view's accessibility nodes, creating it the first time
+        /// the item is asked for. The key stays with the item as rows are recycled, scrolled and
+        /// moved. The GUI combines it with the view's own key.
         [[nodiscard]] u32 GetAccessKeyOfItem(i32 item)
         {
             const ItemId id = ItemIdAt(item);
@@ -624,18 +641,18 @@ export namespace foundation::gui
             m_accessItems.InsertOrAssign(key, id);
             return key;
         }
-        /// The item a key names now (-1: gone).
+        /// Returns the item a key currently names, or -1 when that item is gone.
         [[nodiscard]] i32 GetItemOfAccessKey(u32 key) const
         {
             const ItemId* id = m_accessItems.Find(key);
             return id != nullptr ? ItemOfId(*id) : -1;
         }
-        /// This view's key among the GUI's item views (0 until the GUI gives it one).
+        /// Returns this view's key among the GUI's item views, or 0 until the GUI assigns one.
         [[nodiscard]] u32 GetAccessViewKey() const noexcept { return m_accessViewKey; }
         void SetAccessViewKey(u32 key) noexcept { m_accessViewKey = key; }
-        /// What each item's node said last (by its id), so a node unchanged is not sent again.
+        /// Holds what each item's node last reported, by id, so an unchanged node is not sent again.
         [[nodiscard]] core::HashMap<u64, u64>& AccessItemsSent() noexcept { return m_accessSent; }
-        /// A screen reader moves to an item: as the keyboard would, selected and scrolled to.
+        /// Moves to an item for a screen reader as the keyboard would: selects it and scrolls to it.
         void FocusItemFromAccess(i32 item)
         {
             RequestFocus();
@@ -643,7 +660,8 @@ export namespace foundation::gui
             ScrollToItem(item);
         }
         void ActivateItemFromAccess(i32 item) { ActivateItem(item); }
-        /// Selects one item from code (scrolled into view; no events). -1 clears.
+        /// Selects one item from code and scrolls it into view, without sending events. -1 clears
+        /// the selection.
         void SetSelectedItem(i32 item)
         {
             if (item < 0 || item >= static_cast<i32>(ItemCount()))
@@ -654,9 +672,10 @@ export namespace foundation::gui
             SelectOnly(item);
             ScrollToItem(item);
         }
-        /// Selects the items with `ids` from code (one alone without multi-selection), the first the
-        /// current one and scrolled into view; no events. An id not shown now (under a closed node)
-        /// stays selected for when it is. None clears.
+        /// Selects the items with `ids` from code, without sending events. Without multi-selection
+        /// only the first id is selected. The first id becomes the current item and is scrolled
+        /// into view. An id that is not shown now (under a closed tree node) stays selected and
+        /// shows as selected once it appears. An empty span clears the selection.
         void SetSelectedIds(core::Span<const ItemId> ids)
         {
             m_selected.Clear();
@@ -682,7 +701,7 @@ export namespace foundation::gui
             m_anchorSelection = kNoItem;
             RefreshSelectionStates();
         }
-        /// Every item (multi-selection), as Ctrl+A does.
+        /// Selects every selectable item, as Ctrl+A does. Does nothing without multi-selection.
         void SelectAll()
         {
             if (m_selectionMode != SelectionMode::Multi)
@@ -692,25 +711,26 @@ export namespace foundation::gui
                     (void)m_selected.Insert(ItemIdAt(i));
             RefreshSelectionStates();
         }
-        /// Whether a user may select the item (its model's say; a section header may not).
+        /// Returns whether the user may select the item. The model decides; a section header, for
+        /// example, is not selectable.
         [[nodiscard]] bool IsItemSelectable(i32 item) const
         {
             return item >= 0 && item < static_cast<i32>(ItemCount()) && (m_model == nullptr || m_model->IsSelectable(ItemToModelIndex(item)));
         }
 
         // === Editing ===
-        /// Edits `item` in place (`column` for a table), if its model cell is editable and the
-        /// begin hook allows; false otherwise.
+        /// Edits `item` in place (`column` picks the cell in a table) if the model cell is editable
+        /// and the begin hook allows it. Returns false otherwise.
         bool BeginEdit(i32 item, i32 column = 0);
-        /// Ends an edit: commits (if the commit hook and the model take it) or cancels. False
-        /// when the value was refused and it is still editing.
+        /// Ends an edit, either committing the value (if the commit hook and the model accept it)
+        /// or cancelling. Returns false when the value was refused and the edit continues.
         bool EndEdit(bool commit);
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
         [[nodiscard]] TextField* GetEditor() const noexcept { return m_editor.Get(); }
-        /// May refuse to start an edit.
+        /// Sets a hook that may refuse to start an edit by returning false.
         void SetOnEditBegin(core::Function<bool(const ModelIndex&)> hook) { m_onEditBegin = core::Move(hook); }
-        /// May refuse a value (false: it keeps editing, marked `.invalid`); otherwise the model's
-        /// SetData decides.
+        /// Sets a hook that may refuse a value. When it returns false the edit continues with the
+        /// editor marked `.invalid`; otherwise the model's SetData decides.
         void SetOnEditCommit(core::Function<bool(const ModelIndex&, core::StringView)> hook) { m_onEditCommit = core::Move(hook); }
         void SetOnEditCancel(core::Function<void(const ModelIndex&)> hook) { m_onEditCancel = core::Move(hook); }
 
@@ -735,7 +755,7 @@ export namespace foundation::gui
             }
             m_heights.Insert(static_cast<usize>(first), static_cast<usize>(count), RowEstimate());
             if (first <= m_scrollAnchor)
-                m_scrollAnchor += count; // what is in view stays in view
+                m_scrollAnchor += count; // keep the rows in view where they are
             RequestLayout();
         }
         void OnRowsRemoved(const ModelIndex& parent, i32 first, i32 count) override
@@ -752,7 +772,7 @@ export namespace foundation::gui
                 m_scrollAnchor -= count;
             else if (m_scrollAnchor >= first)
             {
-                m_scrollAnchor = first; // its row went: the one now in its place, from its top
+                m_scrollAnchor = first; // the anchor row was removed: anchor to the row now in its place, at its top
                 m_scrollAnchorDelta = 0.0f;
             }
             PruneSelection();
@@ -786,7 +806,7 @@ export namespace foundation::gui
         }
 
     protected:
-        // === What a subclass says ===
+        // === Overridden by subclasses ===
         [[nodiscard]] virtual usize ItemCount() const { return m_model != nullptr ? m_model->RowCount() : 0; }
         [[nodiscard]] virtual ModelIndex ItemToModelIndex(i32 item) const
         {
@@ -803,37 +823,40 @@ export namespace foundation::gui
             const ModelIndex index = m_model->IndexOfId(id);
             return index.IsValid() ? index.Row : -1;
         }
-        /// Its items are the model's top-level rows (a tree's are not: it resets on every range).
+        /// Returns whether the items are the model's top-level rows. A tree's items are not, so a
+        /// tree resets on every range change.
         [[nodiscard]] virtual bool IsFlat() const { return true; }
-        /// A default row's content, and filling it (when no factory is set).
+        /// Creates and fills a default row's content when no factory is set.
         [[nodiscard]] virtual core::RefPtr<Node> CreateContent(u32 type) = 0;
         virtual void BindContent(Node& content, i32 item, const ModelIndex& index) = 0;
-        /// Room above the rows (a table's header).
+        /// Returns the room above the rows, such as a table's header.
         [[nodiscard]] virtual f32 ContentTopInset() const { return 0.0f; }
-        /// How wide a row is in a content box `width` wide (a table's columns may be wider).
+        /// Returns a row's width in a content box `width` wide; a table's columns may make it wider.
         [[nodiscard]] virtual f32 RowWidth(f32 width) const { return width; }
-        /// The model was set or reset (a tree flattens, a table rebuilds its header).
+        /// Called when the model is set or reset; a tree flattens its nodes, a table rebuilds its
+        /// header.
         virtual void OnModelChanged() {}
-        /// After the rows are placed (a table places its header).
+        /// Called after the rows are placed; a table places its header here.
         virtual void OnLayoutDecorations() {}
-        /// A key before the view's own (a tree's Left and Right); true when used.
+        /// Handles a key before the view's own handling (a tree's Left and Right). Returns true
+        /// when used.
         virtual bool OnExtraKey(KeyCode key, u32 modifiers)
         {
             (void)key, (void)modifiers;
             return false;
         }
-        /// Where an editor goes over a row (in the row's space).
+        /// Returns where the editor goes over a row, in the row's space.
         [[nodiscard]] virtual Rect EditRect(const ItemRow& row, i32 column) const
         {
             (void)column;
             return row.GetContentBounds();
         }
-        /// The text type-ahead matches (the display text of the item's first column).
+        /// Returns the text type-ahead matches: the display text of the item's first column.
         [[nodiscard]] virtual core::String TypeAheadText(i32 item) const
         {
             return m_model != nullptr ? m_model->Data(ItemToModelIndex(item)).ToString() : core::String{};
         }
-        /// Its rows' tag (`listviewrow`, `treerow`, ...).
+        /// Returns the tag given to rows (`listviewrow`, `treerow`, and so on).
         [[nodiscard]] virtual core::StringView RowTag() const { return core::StringView(u8"itemrow"); }
 
         // === Helpers for a subclass ===
@@ -847,8 +870,8 @@ export namespace foundation::gui
                     f(*row);
         }
         [[nodiscard]] const core::Array<core::RefPtr<ItemRow>>& LiveRows() const noexcept { return m_live; }
-        /// The items changed in a way only the subclass knows (a tree opened a node): heights
-        /// start again, rows are refilled.
+        /// Tells the view that the items changed in a way only the subclass knows about (a tree
+        /// opened a node). Heights are reset and the rows are filled again.
         void ItemsChanged()
         {
             m_heights.Reset(ItemCount(), RowEstimate());
@@ -859,7 +882,7 @@ export namespace foundation::gui
             if (!m_realizing && GetSize().y > 0.0f)
                 Realize();
         }
-        /// Selects as a click does, with its modifiers (a subclass's own rows call it).
+        /// Selects as a click with these modifiers does. A subclass's own rows call this.
         void SelectByUser(i32 item, u32 modifiers);
 
         void OnLayout() override
@@ -874,18 +897,18 @@ export namespace foundation::gui
             UpdateScrollAnchor();
             if (GetSize().y <= 0.0f)
                 return;
-            Realize(); // laid out: the rows now in view, at once (a press lands on them)
+            Realize(); // realise the rows now in view immediately, so a press lands on them
             OnLayoutDecorations();
         }
         void OnTextStyleChange() override
         {
             ForEachRow([this](ItemRow& row) { ShareTextStyle(row); });
             if (m_rowHeight <= 0.0f)
-                m_heights.Reset(ItemCount(), RowEstimate()); // a new font measures anew
+                m_heights.Reset(ItemCount(), RowEstimate()); // a new font means every row is measured again
             RequestLayout();
         }
         void OnKeyDown(const KeyEvent& event) override;
-        // Typed text is its type-ahead (E12): it asks for text input while it has items.
+        // Typed text drives type-ahead, so the view asks for text input while it has items.
         [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled() && ItemCount() > 0; }
         void OnTextInput(const TextInputEvent& event) override
         {
@@ -900,8 +923,8 @@ export namespace foundation::gui
             ActivateItem(item);
             return true;
         }
-        // A context menu asked for over a row selects it first (unless it is selected already),
-        // and goes on up (to whoever opens a menu).
+        // A context menu request over an unselected row selects that row first. The event is not
+        // handled here, so it goes on up to whoever opens the menu.
         void OnContextMenu(const MouseEvent& event) override
         {
             const i32 item = ItemAt(event.Position);
@@ -909,7 +932,7 @@ export namespace foundation::gui
                 SelectByUser(item, 0);
         }
 
-        // --- Drag and drop (E7) ---
+        // --- Drag and drop ---
         bool OnDragRequested(DragRequest& request) override
         {
             if (GetDragType().IsEmpty() || m_model == nullptr)
@@ -923,7 +946,7 @@ export namespace foundation::gui
                 SelectOnly(item);
                 NotifySelectionByUser();
             }
-            // The selection in item order (one row: no scan).
+            // Collect the selection in item order; a single selected row needs no scan.
             m_dragIds.Clear();
             if (m_selected.Size() == 1)
                 m_dragIds.PushBack(ItemIdAt(item));
@@ -932,7 +955,7 @@ export namespace foundation::gui
                     if (IsItemSelected(i))
                         m_dragIds.PushBack(ItemIdAt(i));
             request.Payload.Type = GetDragType();
-            request.Payload.Value = HandleAs(Node::StaticType()); // the view, weakly: a target reads its ids
+            request.Payload.Value = HandleAs(Node::StaticType()); // a weak handle to the view, from which a target reads the ids
             request.Payload.Label = m_dragIds.Size() == 1 ? TypeAheadText(item) : core::Format(u8"{} items", m_dragIds.Size());
             request.Payload.Allowed = DropEffectsCopy | DropEffectsMove;
             if (m_onDragPayload)
@@ -944,7 +967,8 @@ export namespace foundation::gui
         void OnDrop(const DragEvent& event) override;
         void OnDragEnd(const DragResult& result) override
         {
-            // Moved to another model: the rows leave this one (one moved within it moved already).
+            // Rows moved to another model are removed from this one. A move within this model was
+            // already done by the drop.
             if (result.Effect == DropEffect::Move && m_model != nullptr && !m_dragIds.IsEmpty())
             {
                 const ItemView* target = core::Cast<ItemView>(result.Target);
@@ -958,7 +982,8 @@ export namespace foundation::gui
     private:
         friend class ItemRow;
 
-        // Where a drop at `local` lands, as the model hears it (its answer in `effect`/`reason`).
+        // Works out where a drop at `query.Local` lands, as a ModelDrop for the model, and returns
+        // the model's answer in `effect` and `reason`.
         ModelDrop DropAt(const DropQuery& query, DropEffect& effect, core::String& reason);
         void SetDropIndicator(bool over, i32 item, DropPlace place)
         {
@@ -969,7 +994,8 @@ export namespace foundation::gui
             m_dropPlace = place;
             Invalidate();
         }
-        // A click on a row whose press left a multi-selection alone (to drag it): selected alone now.
+        // A press on a row of a multi-selection keeps the selection so it can be dragged. If the
+        // press ends in a click instead, the clicked row is now selected alone.
         void RowClicked(ItemRow& row, const MouseEvent&)
         {
             if (m_deferredItem >= 0 && m_deferredItem == row.m_item)
@@ -991,8 +1017,8 @@ export namespace foundation::gui
             core::String Type;
             core::String Markup;
         };
-        // Rows from the markup templates: each type made by loading its markup with item
-        // bindings, and filled by them.
+        // Switches to rows made from the markup templates. Each row type is made by loading its
+        // template's markup with item bindings, and the bindings fill it for each item.
         void UseTemplates()
         {
             ItemView* self = this;
@@ -1024,8 +1050,9 @@ export namespace foundation::gui
             DropRows();
             RequestLayout();
         }
-        // The template an item takes: the one whose type is its row-type-column's text, else the
-        // default (the one with no type, else the first).
+        // Returns the template for an item: the one whose type matches the item's text in the
+        // row-type column, else the default. The default is the first template without a type, or
+        // the first template when all have one.
         [[nodiscard]] u32 TemplateFor(const ModelIndex& index) const
         {
             u32 fallback = 0;
@@ -1044,8 +1071,8 @@ export namespace foundation::gui
                     return static_cast<u32>(t);
             return fallback;
         }
-        // A template name's text for an item: `item` (its first column), `item.Column` (a column
-        // by name), `index` (its row).
+        // Returns the text a template name stands for: `item` is the first column, `item.Column`
+        // the column of that name, and `index` the item's row.
         [[nodiscard]] core::String ItemField(const ModelIndex& index, core::StringView name) const
         {
             if (m_model == nullptr)
@@ -1064,7 +1091,7 @@ export namespace foundation::gui
             return core::String{};
         }
 
-        // --- Geometry: a list's rows by the heights, a grid's lines by the cell height ---
+        // --- Geometry: a list places rows by their heights, a grid places lines by the cell height ---
         [[nodiscard]] i32 GridColumns(f32 width) const
         {
             return m_layout == ItemLayout::Grid ? core::Max(1, static_cast<i32>(width / m_cellSize.x)) : 1;
@@ -1106,16 +1133,17 @@ export namespace foundation::gui
             return m_factory.TypeOf ? m_factory.TypeOf(ItemToModelIndex(item)) : 0u;
         }
 
-        // The rows in view (and one past each edge) realised, measured and placed; the scroll
-        // anchor kept where it was when rows above it measured differently from their estimate.
+        // Realises, measures and places the rows in view plus one past each edge. When rows above
+        // the scroll anchor measure differently from their estimate, the anchor stays in place.
         void Realize();
         bool TypeAhead(core::StringView typed);
-        // A row for `item`: the live one showing its id, else one from its type's pool, else new.
+        // Returns a row for `item`: the live row already showing its id, else one from its type's
+        // pool, else a new one.
         ItemRow* TakeRow(i32 item, core::Array<core::RefPtr<ItemRow>>& next);
         void ReleaseRow(ItemRow& row)
         {
             if (m_editing && row.m_id == m_editId)
-                (void)EndEdit(true); // scrolled away: what was typed is kept
+                (void)EndEdit(true); // the edited row scrolled away: commit what was typed
             row.SetDisplayed(false);
             row.m_id = kNoItem;
             row.m_item = -1;
@@ -1136,7 +1164,7 @@ export namespace foundation::gui
             m_pools.Clear();
         }
 
-        // --- The scroll anchor: an item and how far into it the top of the view is ---
+        // --- The scroll anchor: an item, and how far below its top the view's top is ---
         void ResetScrollAnchor()
         {
             m_scrollAnchor = 0;
@@ -1145,7 +1173,7 @@ export namespace foundation::gui
         void UpdateScrollAnchor()
         {
             if (m_layout == ItemLayout::Grid)
-                return; // a grid's cells do not change height
+                return; // grid cells do not change height
             const f32 y = GetScrollOffset().y;
             m_scrollAnchor = static_cast<i32>(m_heights.Find(y));
             m_scrollAnchorDelta = y - m_heights.Top(static_cast<usize>(m_scrollAnchor));
@@ -1222,8 +1250,8 @@ export namespace foundation::gui
             SendEvent(ItemEvent(EventType::ItemActivate, this, item, index));
         }
 
-        // A press on a row: the left button selects (a second press activates), the right one
-        // selects for its context menu.
+        // Handles a press on a row. The left button selects, and a double press activates. A
+        // right-button press is left to OnContextMenu, which selects the row for its menu.
         void RowPressed(ItemRow& row, const MouseEvent& event)
         {
             if (row.m_item < 0)
@@ -1237,8 +1265,8 @@ export namespace foundation::gui
                     ActivateItem(row.m_item);
                     return;
                 }
-                // A plain press on a row of a multi-selection leaves it (a drag takes it all); the
-                // click, if no drag starts, selects the row alone.
+                // A plain press on a row of a multi-selection leaves the selection as it is, so a
+                // drag takes all of it. If no drag starts, the click selects the row alone.
                 if (m_selectionMode == SelectionMode::Multi && event.Modifiers == 0 && m_selected.Size() > 1 && IsItemSelected(row.m_item))
                 {
                     m_deferredItem = row.m_item;
@@ -1249,39 +1277,40 @@ export namespace foundation::gui
             }
         }
 
-        IModel* m_model = nullptr; // non-owning (unless it is m_ownModel, or m_listModel's)
-        RefPtr<ListModel> m_listModel; // a script's model it shows (E16)
-        core::UniquePtr<StringListModel> m_ownModel; // markup's `items`
+        IModel* m_model = nullptr; // non-owning, unless it points into m_ownModel or m_listModel
+        RefPtr<ListModel> m_listModel; // a script's model being shown
+        core::UniquePtr<StringListModel> m_ownModel; // built from markup's `items`
         RowFactory m_factory;
         Array<RowTemplate> m_templates;
         core::String m_rowTypeColumn;
-        mutable Observable m_selectionChanged; // what bindings reading the selection follow
-        core::Array<ItemId> m_dragIds;        // the rows of the drag going from here
-        i32 m_deferredItem = -1;              // a pressed row of a multi-selection, selected alone on click
-        bool m_dropOver = false;              // a drop would land here now
+        mutable Observable m_selectionChanged; // notifies bindings that read the selection
+        core::Array<ItemId> m_dragIds;        // the rows in a drag that started from this view
+        i32 m_deferredItem = -1;              // a pressed row of a multi-selection, selected alone if the press ends in a click
+        bool m_dropOver = false;              // a drag is over the view and a drop would land here
         i32 m_dropItem = -1;
         DropPlace m_dropPlace = DropPlace::After;
-        ModelDrop m_lastDrop;                 // the drop the last query found
+        ModelDrop m_lastDrop;                 // the drop the last OnDragQuery found
         RowHeights m_heights;
-        core::Array<core::RefPtr<ItemRow>> m_live; // realised, in item order
-        // Accessibility (E17b): each item's key, and back; this view's key; what each node said.
+        core::Array<core::RefPtr<ItemRow>> m_live; // realised rows, in item order
+        // Accessibility: the key of each item and the item of each key, this view's key, and what
+        // each node last reported.
         core::HashMap<ItemId, u32> m_accessKeys;
         core::HashMap<u32, ItemId> m_accessItems;
         u32 m_nextAccessKey = 1;
         u32 m_accessViewKey = 0;
         core::HashMap<u64, u64> m_accessSent;
-        static constexpr usize kAccessSelectedCap = 50; // a selection of thousands: its first fifty
+        static constexpr usize kAccessSelectedCap = 50; // at most this many selected items get nodes
         core::Array<Pool> m_pools;                 // released rows, by type
         core::HashSet<ItemId> m_selected;
-        ItemId m_current = kNoItem;         // where the keyboard is
-        ItemId m_anchorSelection = kNoItem; // where a Shift range starts
+        ItemId m_current = kNoItem;         // the item the keyboard is on
+        ItemId m_anchorSelection = kNoItem; // where a Shift range selection starts
         SelectionMode m_selectionMode = SelectionMode::Single;
         core::Function<void(ModelIndex)> m_onSelection;
         core::Function<void(ModelIndex)> m_onActivated;
         f32 m_rowHeight = 24.0f;
         f32 m_estimate = 24.0f;
         ItemLayout m_layout = ItemLayout::List;
-        core::Function<void(DragPayload&, core::Span<const ItemId>)> m_onDragPayload; // the owner's payload
+        core::Function<void(DragPayload&, core::Span<const ItemId>)> m_onDragPayload; // lets the owner fill the payload
         core::Float2 m_cellSize{96.0f, 96.0f};
         i32 m_scrollAnchor = 0;
         f32 m_scrollAnchorDelta = 0.0f;
@@ -1315,7 +1344,7 @@ export namespace foundation::gui
             m_view.GetPartStyle(u8"selection").Draw(ctx, GetLocalBounds(), FilledBox(Color{0.18f, 0.37f, 0.62f, 1.0f}));
     }
 
-    // Its content fills it; an editor lies over it where the view says.
+    // The content fills the row, and an active editor lies over it where EditRect says.
     inline void ItemRow::OnLayout()
     {
         const Rect box = GetContentBounds();
@@ -1403,8 +1432,9 @@ export namespace foundation::gui
         const bool measured = m_rowHeight <= 0.0f;
         const LayoutConstraints across{core::Float2{width, 0.0f}, core::Float2{width, kUnbounded}, core::Float2{width, -1.0f}};
 
-        // Realise from the anchor; a row above it measuring differently moves the anchor's
-        // offset, which is put back, and the rows are taken again (a few passes settle it).
+        // Realise from the anchor. When a row above the anchor measures differently from its
+        // estimate, the anchor's offset moves; the offset is restored and the rows are taken
+        // again. A few passes are enough to settle.
         for (int pass = 0; pass < 3; ++pass)
         {
             const f32 top = GetScrollOffset().y;
@@ -1412,14 +1442,15 @@ export namespace foundation::gui
             core::Array<core::RefPtr<ItemRow>> next;
             usize first = count > 0 ? m_heights.Find(top) : 0;
             if (first > 0)
-                --first; // one above the view
-            // The rows leaving the view go back to their pools first, so those coming in take
-            // them rather than new ones (judged by the heights as they stand).
+                --first; // include one row above the view
+            // Return the rows leaving the view to their pools first, so the rows coming in reuse
+            // them rather than making new ones. The range uses the heights as they stand.
             {
                 usize last = first;
                 while (last < count && m_heights.Top(last) < bottom)
                     ++last;
-                // (By the ids in range, not each row's lookup: an id's row is a search in a list.)
+                // Compare each live row's id with the ids in range instead of looking up each row's
+                // item, since finding an id's item is a search through a list.
                 core::Array<ItemId> inRange;
                 for (usize i = first; i <= core::Min(last, count - (count > 0 ? 1 : 0)) && count > 0; ++i)
                     inRange.PushBack(ItemIdAt(static_cast<i32>(i)));
@@ -1443,12 +1474,13 @@ export namespace foundation::gui
                 bool pastEnd = false;
                 for (usize i = first; i < count && !pastEnd; ++i)
                 {
-                    pastEnd = m_heights.Top(i) >= bottom; // one below the view
+                    pastEnd = m_heights.Top(i) >= bottom; // include one row below the view
                     ItemRow* row = TakeRow(static_cast<i32>(i), next);
-                    // A row not yet styled (just made, or its template's attributes just
-                    // written) is measured again once it is. Unstyled it often measures nothing
-                    // (no font yet); then it keeps its estimate, since rows of no height all start
-                    // at the top and the view would start at the last of them.
+                    // A row that is not styled yet (just made, or its template's attributes just
+                    // written) is not marked measured, so it is measured again once styled. An
+                    // unstyled row often measures zero because it has no font yet. In that case it
+                    // keeps its estimate: rows of zero height would all start at the same offset,
+                    // and the view would scroll to the last of them.
                     if (measured && !m_heights.IsMeasured(i))
                     {
                         const bool pending = StylePending(*row);
@@ -1466,8 +1498,9 @@ export namespace foundation::gui
                 row->m_taken = false;
 
             SetScrollExtent(core::Float2{width, inset + m_heights.Total()});
-            // The new range moved the offset (a scroll aimed before a layout, clamped now): the
-            // rows are taken again where it is, since the scroll it reports is not heard here.
+            // The new scroll range moved the offset (a scroll requested before layout is clamped
+            // now). Take the rows again at the new offset, since OnScrollChange ignores scrolls made
+            // while realising.
             if (core::Abs(GetScrollOffset().y - top) >= 0.5f)
             {
                 UpdateScrollAnchor();
@@ -1489,7 +1522,7 @@ export namespace foundation::gui
         m_realizing = false;
     }
 
-    // A grid's cells in view (and a line past each edge), at the cell size, stretched across.
+    // Realises the grid cells in view plus one line past each edge, at the cell size, stretched across.
     inline void ItemView::RealizeGrid()
     {
         m_realizing = true;
@@ -1525,7 +1558,8 @@ export namespace foundation::gui
         core::Array<core::RefPtr<ItemRow>> next;
         for (i32 i = first; i < last; ++i)
             (void)TakeRow(i, next);
-        // A row kept for its item but not taken (the item's row type changed) goes back too.
+        // A row kept for its item but not taken (because the item's row type changed) also goes
+        // back to its pool.
         for (const core::RefPtr<ItemRow>& row : m_live)
             if (!row->m_taken)
                 ReleaseRow(*row);
@@ -1599,15 +1633,16 @@ export namespace foundation::gui
             event.Handled = true;
             return;
         }
-        // A key that types is its type-ahead's (E12): the text it types arrives next, through the
-        // keyboard layout and an IME, and no binding of the bare key takes it.
+        // A key that types text belongs to type-ahead. Its text arrives next as a text input event
+        // (through the keyboard layout and any IME), so mark the key handled and let no binding of
+        // the bare key take it.
         if ((event.Modifiers & ~static_cast<u32>(KeyModShift)) == 0 && KeyTypesText(key) && ItemCount() > 0)
         {
             event.Handled = true;
             return;
         }
         const i32 current = GetCurrentItem();
-        // A grid's line is a step of `across` items; a page the lines (rows) that fit.
+        // In a grid, one line is `across` items, and a page is as many lines (or rows) as fit.
         const i32 across = Across();
         const f32 rowH = core::Max(1.0f, ItemHeight(core::Max(0, current)));
         const i32 page = core::Max(1, static_cast<i32>((GetContentBounds().height - ContentTopInset()) / rowH) - 1) * across;
@@ -1619,7 +1654,7 @@ export namespace foundation::gui
         case KeyCode::Down: target = current < 0 ? 0 : current + across < items ? current + across : current; break;
         case KeyCode::Left:
         case KeyCode::Right:
-            // Along a grid's rows as they run: toward the inline end is the next item.
+            // Left and Right move along a grid's lines; toward the inline end is the next item.
             if (!grid)
                 return;
             target = InlineStep(key) < 0 ? (current <= 0 ? 0 : current - 1) : (current < 0 ? 0 : core::Min(items - 1, current + 1));
@@ -1630,8 +1665,8 @@ export namespace foundation::gui
         case KeyCode::PageDown: target = core::Min(items - 1, core::Max(0, current) + page); break;
         default: return;
         }
-        // Past what may not be selected (a section header), on in the key's direction; none there
-        // keeps where it is.
+        // Skip items that may not be selected (a section header) in the key's direction. If there is
+        // no selectable item that way, stay where it is.
         if (!IsItemSelectable(target))
         {
             const bool back = key == KeyCode::Up || key == KeyCode::PageUp || key == KeyCode::End ||
@@ -1642,7 +1677,7 @@ export namespace foundation::gui
                 next += back ? -step : step;
             target = next >= 0 && next < items ? next : current;
         }
-        // An arrow at the view's edge is given back (focus moves on).
+        // An arrow key at the view's edge is left unhandled, so focus can move on.
         const bool arrow = key == KeyCode::Up || key == KeyCode::Down || key == KeyCode::Left || key == KeyCode::Right;
         if (arrow && target == current && IsItemSelected(current))
             return;
@@ -1650,11 +1685,11 @@ export namespace foundation::gui
         const EventDispatcher* dispatcher = GetEventDispatcher();
         if (dispatcher != nullptr && dispatcher->IsKeyboardDrag())
         {
-            m_current = ItemIdAt(target); // dragging from the keys: the keyboard moves, the selection stays
+            m_current = ItemIdAt(target); // keyboard drag: move the current item, keep the selection
             Invalidate();
         }
         else if (ctrl && m_selectionMode == SelectionMode::Multi)
-            m_current = ItemIdAt(target); // Ctrl moves the keyboard alone (Ctrl+Space picks)
+            m_current = ItemIdAt(target); // Ctrl moves only the current item; Ctrl+Space toggles it
         else if (shift && m_selectionMode == SelectionMode::Multi)
         {
             SelectRange(target);
@@ -1668,15 +1703,16 @@ export namespace foundation::gui
         ScrollToItem(target);
     }
 
-    // Typing jumps to the next item whose text starts with what was typed (within a second of
-    // the last text; one character again cycles through the items starting with it). The text is
-    // typed text (E12): it follows the keyboard layout and an IME. False for no text or no items.
+    // Typing jumps to the next item whose text starts with what was typed, counting text typed
+    // within a second of the last. Typing the same single character again cycles through the items
+    // that start with it. The input is typed text, so it follows the keyboard layout and any IME.
+    // Returns false when there is no text or no items.
     inline bool ItemView::TypeAhead(core::StringView typed)
     {
         if (typed.Size() == 0 || ItemCount() == 0)
             return false;
         const EventDispatcher* d = GetEventDispatcher();
-        core::String text; // the item's, alive while it is matched
+        core::String text; // holds the item's text alive while the search compares it
         const i32 item = m_typeAhead.Find(typed, d != nullptr ? d->GetTime() : 0.0f, static_cast<i32>(ItemCount()), GetCurrentItem(),
                                           [this, &text](i32 i) { text = IsItemSelectable(i) ? TypeAheadText(i) : core::String{}; return text.AsView(); });
         if (item >= 0)
@@ -1711,7 +1747,7 @@ export namespace foundation::gui
             m_editor->SetOnSubmit([self](core::StringView) { (void)self->EndEdit(true); });
             (void)m_editor->AddEventListener(EventType::FocusLost, [self](const Event&)
             {
-                // Focus went elsewhere: committed if it may be, else put back.
+                // Focus went elsewhere: commit if the value is accepted, otherwise cancel.
                 if (self->m_editing && !self->EndEdit(true))
                     (void)self->EndEdit(false);
             });
@@ -1754,7 +1790,7 @@ export namespace foundation::gui
         const bool hadFocus = m_editor->IsFocused();
         m_editor->SetDisplayed(false);
         if (hadFocus)
-            RequestFocus(); // the view keeps the focus the editor had
+            RequestFocus(); // the view takes over the focus the editor had
         return true;
     }
 
@@ -1763,13 +1799,13 @@ export namespace foundation::gui
         ModelDrop drop;
         drop.Payload = &query.Payload;
         drop.Effect = query.Preferred;
-        // From an item view: its dragged rows and its model.
+        // A drag from an item view carries that view's dragged ids and its model.
         if (const ItemView* source = core::Cast<ItemView>(Node::FromHandle(query.Payload.Value)))
         {
             drop.Ids = source->m_dragIds;
             drop.Source = source->m_model;
         }
-        // From the keys: the current row (onto it where the model takes that, else after it).
+        // A keyboard drop targets the current row: onto it when the model accepts that, else after it.
         if (query.FromKeyboard)
         {
             const i32 current = GetCurrentItem();
@@ -1786,20 +1822,22 @@ export namespace foundation::gui
         const i32 item = ItemAt(ConvertToWorldSpace(query.Local));
         if (item < 0)
         {
-            drop.Index = ModelIndex{}; // past the rows: the end
+            drop.Index = ModelIndex{}; // past the last row: drop at the end
             drop.Place = DropPlace::After;
             effect = m_model->CanDrop(drop, reason);
             return drop;
         }
         drop.Index = ItemToModelIndex(item);
-        // Where in the row: quarters at the edges are before and after, the middle onto it (a grid
-        // reads across); a place the model does not take falls back to the halves.
+        // Where in the row: the quarter at each edge means before or after, the middle half means
+        // onto it. A grid measures across the cell instead of down. When the model refuses the
+        // place without a reason, try the other kind: from onto, before or after by halves; from
+        // before or after, onto.
         const Rect b = ItemBounds(item);
         const core::Float2 content{query.Local.x + GetScrollOffset().x, query.Local.y + GetScrollOffset().y};
         const bool across = m_layout == ItemLayout::Grid;
         f32 at = across ? (content.x - b.x) / core::Max(1.0f, b.width) : (content.y - b.y) / core::Max(1.0f, b.height);
         if (across && IsRightToLeft())
-            at = 1.0f - at; // before is the inline start, the right
+            at = 1.0f - at; // before is the inline start, which is the right in right to left
         drop.Place = at < 0.25f ? DropPlace::Before : at > 0.75f ? DropPlace::After : DropPlace::On;
         effect = m_model->CanDrop(drop, reason);
         if (effect == DropEffect::None && reason.IsEmpty())
@@ -1825,15 +1863,15 @@ export namespace foundation::gui
             return;
         }
         query.Accept(effect);
-        query.Effect = effect; // the model's (a list takes text as a copy)
+        query.Effect = effect; // the model chooses the effect (a list takes text as a copy)
         query.Reason = reason;
         const i32 item = drop.Index.IsValid() ? ItemOfId(m_model->IdOf(drop.Index)) : -1;
         query.Place = static_cast<i32>(drop.Place);
         SetDropIndicator(true, item, drop.Place);
-        m_lastDrop = drop; // what a drop now does (the release asks once more, here)
+        m_lastDrop = drop; // OnDrop uses this; the release queries once more at its position first
     }
 
-    // The drop as the last query found it (the release asked again where it landed).
+    // Applies the drop the last OnDragQuery found. The release has just queried again where it landed.
     inline void ItemView::OnDrop(const DragEvent& event)
     {
         if (m_model == nullptr || !m_dropOver)
@@ -1844,8 +1882,8 @@ export namespace foundation::gui
         (void)m_model->Drop(drop);
     }
 
-    // The insertion line before or after a row (across a grid's cell edge), or an outline round
-    // the row a drop goes onto.
+    // Draws the insertion line before or after a row (along a cell's side edge in a grid), or an
+    // outline around the row a drop goes onto.
     inline void ItemView::OnDrawAbove(DrawContext& ctx)
     {
         if (!m_dropOver)

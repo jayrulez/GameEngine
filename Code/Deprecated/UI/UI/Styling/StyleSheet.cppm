@@ -3,14 +3,11 @@
 
 // UI - :style_sheet partition
 //
-// Rule-based cascading style system: rules match views by selector chain; the cascade orders
-// every matching rule by (specificity, source order) and the LAST declaration of a property
-// wins (ui-layout-and-style-model.md, P1). Ported from Sedulous.UI/src/Styling/StyleSheet.bf.
-//
-// Divergence (language): Beef manual ownership (rules deleted, drawables ReleaseRef'd, resources
-// deleted in ~this) -> RAII: rules are RefPtr<StyleRule>, owned drawables/resources are RefPtr.
-// Fluent builders return StyleRule& to the sheet-owned rule. Object (RefCounted) so the sheet is
-// shared between UIContexts via RefPtr.
+// Rule-based cascading style system: rules match views by selector chain, the cascade orders
+// every matching rule by specificity and then source order, and the last declaration of a
+// property wins. Rules, owned drawables and resources are all held by RefPtr. Fluent builders
+// return a StyleRule& to the sheet-owned rule. The sheet is an Object so UIContexts can share it
+// through RefPtr.
 
 module;
 #include "Core/Prelude.h"
@@ -18,7 +15,7 @@ module;
 
 export module foundation.ui:style_sheet;
 
-import foundation.core; // Object, Array, RefPtr, TypeInfo, Color, StringView, Optional
+import foundation.core;
 import :control_state;
 import :thickness;
 import :drawable;
@@ -33,9 +30,9 @@ using namespace foundation::core;
 export namespace foundation::ui
 {
     class
-        View; // defined in :view; Resolve(view,prop) body lives there (breaks the View<->styling cycle)
+        View; // defined in :view, where Resolve(view, prop) is defined (breaks the View and styling cycle)
 
-    /// Inheritable style properties (the text properties) - these take the parent's COMPUTED
+    /// Inheritable style properties (the text properties). These take the parent's computed
     /// value (in View.ResolveStyle) when nothing sets them on the view itself.
     [[nodiscard]] constexpr bool IsInheritableStyle(StyleProperty prop) noexcept
     {
@@ -101,9 +98,9 @@ export namespace foundation::ui
         }
 
         /// This sheet's edit counter: bumped by every rule added and every edit to a rule it
-        /// owns. A view's computed-style cache keys on the versions of the sheets in ITS chain
-        /// (context sheet, ancestors' local sheets, its inline sheet) - nothing process-wide,
-        /// so contexts with different themes never flush each other.
+        /// owns. A view's computed-style cache keys on the versions of the sheets in its own chain
+        /// (the context sheet, its ancestors' local sheets, its inline sheet). Nothing is
+        /// process-wide, so contexts with different themes never flush each other.
         [[nodiscard]] u32 Version() const noexcept { return m_version; }
 
         // === Rule management ===
@@ -113,8 +110,9 @@ export namespace foundation::ui
             m_rules.PushBack(Move(rule));
             ++m_version;
         }
-        /// Insert a rule BEFORE every existing one (lowest source order: a same-specificity
-        /// rule declared in the sheet beats it). The loader's palette-variables rule.
+        /// Insert a rule before every existing one, at the lowest source order, so a rule of the
+        /// same specificity declared in the sheet beats it. The loader uses this for its
+        /// palette-variables rule.
         void PrependRule(RefPtr<StyleRule> rule)
         {
             rule->BindOwnerVersion(&m_version);
@@ -152,17 +150,17 @@ export namespace foundation::ui
         }
 
         [[nodiscard]] bool IsEmpty() const noexcept { return m_rules.Size() == 0; }
-        /// Access a rule by index (surfaced for tests; Beef reached mRules via [Friend]).
+        /// Access a rule by index (for tests).
         [[nodiscard]] const StyleRule& GetRule(usize index) const { return *m_rules[index]; }
 
         /// Merge another sheet's rules and owned resources into this one (used by @import). Rules and
-        /// owned drawables/resources are RefPtr (shared), so this copies the refs; `other` may be
+        /// owned drawables and resources are shared RefPtrs, so this copies the references; `other` may be
         /// released afterwards without invalidating them.
         void MergeFrom(StyleSheet& other)
         {
             for (const RefPtr<StyleRule>& r : other.m_rules)
             {
-                r->BindOwnerVersion(&m_version); // re-homed: `other` is transient (@import)
+                r->BindOwnerVersion(&m_version); // this sheet owns it now: `other` is transient (@import)
                 m_rules.PushBack(r);
             }
             for (const RefPtr<Drawable>& d : other.m_ownedDrawables)
@@ -181,10 +179,10 @@ export namespace foundation::ui
         }
 
         // === The cascade primitive ===
-        /// Appends every rule matching (view, state, pseudo) in ASCENDING cascade order:
-        /// specificity, then source order - so the last rule in `out` that declares a property
+        /// Appends every rule matching (view, state, pseudo) in ascending cascade order
+        /// (specificity, then source order), so the last rule in `out` that declares a property
         /// wins it. Callers concatenate several sheets (context, local, inline) into one list.
-        /// Body in :view (needs View complete for Matches).
+        /// Defined in :view, which has View complete for Matches.
         void CollectMatching(const View& view, ControlState state, StringView pseudo,
                              Array<const StyleRule*>& out) const;
 
@@ -284,7 +282,7 @@ export namespace foundation::ui
             return r;
         }
 
-        // === Resource ownership (RAII; the sheet keeps a ref for its lifetime) ===
+        // === Resource ownership (the sheet keeps a reference for its lifetime) ===
         void OwnDrawable(RefPtr<Drawable> drawable)
         {
             if (drawable)
@@ -299,7 +297,7 @@ export namespace foundation::ui
                 m_ownedResources.PushBack(Move(resource));
             }
         }
-        /// Create a sheet-owned ColorDrawable and return it (shared ref).
+        /// Create a sheet-owned ColorDrawable and return a shared reference to it.
         [[nodiscard]] RefPtr<ColorDrawable> OwnColor(Color color)
         {
             RefPtr<ColorDrawable> d = MakeRef<ColorDrawable>(MemoryAllocator(), color);
@@ -307,8 +305,8 @@ export namespace foundation::ui
             return d;
         }
 
-        // === Resolution (per-sheet primitive; inline + inheritance live on View.ResolveStyle) ===
-        // Body in :view (calls view.GetControlState(), needs View complete).
+        // === Resolution (per sheet; inline styles and inheritance live on View.ResolveStyle) ===
+        // Defined in :view, since it calls view.GetControlState() and needs View complete.
         [[nodiscard]] StyleValue Resolve(const View& view, StyleProperty prop) const;
         [[nodiscard]] StyleValue ResolvePart(const View& view, StringView pseudoElement,
                                              StyleProperty prop, ControlState partState) const
@@ -398,9 +396,9 @@ export namespace foundation::ui
         [[nodiscard]] StyleValue ResolveMatching(const View& view, ControlState state,
                                                  StringView pseudo, StyleProperty prop) const
         {
-            // The ordered cascade over THIS sheet: last matching declaration wins. (Rules are
+            // The ordered cascade over this sheet: the last matching declaration wins. Rules are
             // stored in declaration order, so an equal-specificity rule declared later beats an
-            // earlier one - a per-type FontSize beats the global `View { FontSize }`.)
+            // earlier one, and a per-type FontSize beats the global `View { FontSize }`.
             Array<const StyleRule*> matching;
             CollectMatching(view, state, pseudo, matching);
             for (usize i = matching.Size(); i-- > 0;)

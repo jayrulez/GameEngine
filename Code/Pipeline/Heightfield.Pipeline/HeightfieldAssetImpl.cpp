@@ -3,9 +3,9 @@
 
 // Pipeline::Heightfield - reflection implementation unit: HeightfieldAsset's reflected surface.
 //
-// Kept OUT of the HeightfieldAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). HeightfieldAsset::StaticType() gains its size /
-// worldSize / minY / maxY properties here.
+// Kept out of the HeightfieldAsset.cppm interface, because REFLECT_MEMBERS bodies there make GCC
+// emit a gcm cluster. HeightfieldAsset::StaticType() gains its size, worldSize, minY and maxY
+// properties here.
 
 module;
 #include "Core/Prelude.h"

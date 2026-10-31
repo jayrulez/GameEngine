@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// MultiWindow - the runtime-host smoke test (NOT an RHI sample). It exercises the
-// promoted render host end to end: a shared GraphicsDevice, the Application's
-// per-window render loop, and runtime window creation. It opens TWO OS windows -
-// the main one plus a second opened at runtime via OpenWindow() - and clears each
-// to a different color every frame. Close the main window to exit.
+// MultiWindow - the runtime-host smoke test (not an RHI sample). It exercises the render host end
+// to end: a shared GraphicsDevice, the Application's per-window render loop, and runtime window
+// creation. It opens two OS windows, the main one and a second opened at runtime through
+// OpenWindow(), and clears each to a different color every frame. Close the main window to exit.
 //
-// The path: CreateShell (SDL3) -> CreateGraphicsDevice (Vulkan) -> Application
-// (+ OpenWindow) -> RunApplication. No bespoke swapchain/loop code in the app.
+// The path: CreateShell (SDL3), then CreateGraphicsDevice (Vulkan), then Application (with
+// OpenWindow), then RunApplication. The app has no swapchain or loop code of its own.
 
 #include "Core/Prelude.h"
 
@@ -36,7 +35,7 @@ namespace
         void OnStartup(runtime::IApplicationHost& host) override
         {
             // windows[0] (the main window) already has a RenderWindow from Start().
-            // Open a second OS window at runtime - the same call a detachable UI
+            // Open a second OS window at runtime: the same call a detachable UI
             // panel would make.
             shell::WindowSettings ws;
             ws.title = u8"MultiWindow - Detached";

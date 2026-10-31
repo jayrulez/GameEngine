@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Smoke test for the toolkit StringEditor: value round-trip + EditText submit drives the setter.
+// Smoke test for the toolkit StringEditor: the value round-trips, and an EditText submit drives the setter.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -26,7 +26,7 @@ TEST_CASE("toolkit-stringeditor: RoundTripAndSubmit")
     REQUIRE(et != nullptr);
     CHECK(et->Text() == StringView(u8"hello"));
 
-    // Typing then submitting flows through the editor -> setter + value update.
+    // Typing then submitting flows through the editor to the setter and updates the value.
     et->SetText(StringView(u8"world"));
     et->OnSubmit.Invoke(et);
     CHECK(ed->Value() == StringView(u8"world"));

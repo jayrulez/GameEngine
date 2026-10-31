@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// FontAsset's reflected surface + the FontBakeMode enum. Verifies the
-// authored scalar/enum/string fields enumerate with attributes, round-trip through get/set, and
-// that the bake-mode enum resolves named values. The `sizes` ramp is intentionally unreflected.
+// FontAsset's reflected surface and the FontBakeMode enum. Verifies the authored scalar, enum
+// and string fields enumerate with attributes and round-trip through get and set, and that the
+// bake-mode enum resolves named values. The `sizes` ramp is unreflected.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -41,8 +41,8 @@ TEST_CASE("reflection-p1: FontAsset exposes its flat authored fields with attrib
     const TypeInfo& type = pipeline::FontAsset::StaticType();
 
     CHECK(CEq(type.name, "FontAsset"));
-    // family + mode + distanceFieldSize/Range + first/lastCodepoint + atlasWidth/Height = 8 (sizes is
-    // unreflected).
+    // family, mode, distanceFieldSize and Range, first and lastCodepoint, atlasWidth and Height:
+    // 8 (sizes is unreflected).
     CHECK(PropertyCount(type) == 8u);
     for (const char* name : {"family", "mode", "distanceFieldSize", "distanceFieldRange", "firstCodepoint",
                              "lastCodepoint", "atlasWidth", "atlasHeight"})

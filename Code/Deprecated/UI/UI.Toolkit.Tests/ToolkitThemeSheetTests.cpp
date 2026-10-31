@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Toolkit fragment sheet gates. The fragments are authored against the shared design system;
-// ApplyLegacyForParity remains only as a parse-failure belt. These gates check the invariants:
-// both fragments parse non-empty, Apply merges the parsed rules (not the belt), the ramp holds
-// (dock tabs + status bar 12, menu bar 14), and ToastCard's background stays a raw COLOR (the
-// ResolveStyleColor contract behind the background-color property).
+// Checks on the toolkit's style sheet fragments, which are written against the shared design
+// system. ApplyLegacyForParity is only a fallback for a fragment that fails to parse. The checks:
+// both fragments parse non-empty, Apply merges the parsed rules rather than the fallback, the font
+// sizes hold (dock tabs and status bar 12, menu bar 14), and ToastCard's background stays a raw
+// color, which ResolveStyleColor requires for the background-color property.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -58,8 +58,8 @@ namespace
 
     void CheckFragment(StringView fragment, ThemePalette palette)
     {
-        // The fragment itself must parse non-empty - if it didn't, Apply would fall back to
-        // the legacy belt and the checks below would test the wrong thing.
+        // The fragment itself must parse non-empty. If it did not, Apply would fall back to the
+        // C++ rules and the checks below would test the wrong thing.
         RegisterToolkitTypes();
         {
             StyleSheetLoader loader(DefaultAllocator());
@@ -72,20 +72,20 @@ namespace
         ToolkitThemeExtension ext;
         RefPtr<StyleSheet> sheetRef = MakeRef<StyleSheet>(DefaultAllocator());
         StyleSheet& sheet = *sheetRef;
-        ext.Apply(sheet, palette); // the REAL path: parse + MergeFrom
+        ext.Apply(sheet, palette); // the real path: parse, then MergeFrom
         REQUIRE(sheet.RuleCount() > 0);
 
-        // Ramp: compact chrome 12, menu bar 14. The explicit 12s are REGRESSION GATES: these
-        // controls resolve FontSize now, and without a rule the View base 16 wins (type rules
-        // match subclasses). (StatusBar text is child Labels - a container rule cannot reach
-        // them, so the sheet deliberately sets none; audit remainder.)
+        // Font sizes: compact chrome 12, menu bar 14. The explicit 12s matter because these
+        // controls resolve FontSize, and without a rule the View base of 16 wins (type rules
+        // match subclasses). StatusBar text lives in child Labels, which a container rule cannot
+        // reach, so the sheet sets no size for it.
         CheckFontSize(sheet, &DockTabGroup::StaticType(), 12.0f);
         CheckFontSize(sheet, &DockablePanel::StaticType(), 12.0f);
         CheckFontSize(sheet, &Toolbar::StaticType(), 12.0f);
         CheckFontSize(sheet, &BreadcrumbBar::StaticType(), 12.0f);
         CheckFontSize(sheet, &MenuBar::StaticType(), 14.0f);
 
-        // The canvases + drag preview resolve Background as a raw COLOR (background-color).
+        // The canvases and the drag preview resolve Background as a raw color (background-color).
         const TypeInfo* rawColorTypes[] = {&CurveCanvas::StaticType(),
                                            &GradientEditor::StaticType(),
                                            &DockDragPreview::StaticType()};
@@ -96,7 +96,7 @@ namespace
             CHECK(bg->AsColor().HasValue());
         }
 
-        // ToastCard resolves Background via ResolveStyleColor: the value must be a raw COLOR
+        // ToastCard resolves Background via ResolveStyleColor: the value must be a raw color
         // (background-color), never a drawable (which that path ignores).
         const StyleValue* toastBg =
             FindValue(sheet, &ToastCard::StaticType(), {}, StyleProperty::Background);
@@ -123,9 +123,9 @@ TEST_CASE("toolkit-sheets: toolkit-light.sss holds the design system")
 
 TEST_CASE("toolkit-sheets: every type selector in both fragments resolves to a registered type")
 {
-    // A selector naming an unregistered type parses as UnknownType and styles nothing,
-    // silently. The hand-kept type COUNT that was meant to catch this agreed with the
-    // registrations rather than with the sheets, which is how Timeline went unstyled.
+    // A selector naming an unregistered type parses as UnknownType and silently styles nothing.
+    // A count of registered types cannot catch this, since it agrees with the registrations
+    // rather than with the sheets, so every selector is checked and Timeline must be styled.
     struct Case
     {
         StringView fragment;

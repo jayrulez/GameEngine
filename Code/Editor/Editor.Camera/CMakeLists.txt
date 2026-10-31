@@ -1,8 +1,7 @@
-# Editor::Camera - `editor.camera`: the shared free-fly viewport camera (EditorCamera),
-# graduated out of Editor::Scene into its own LEAN, foundation-only module so every editor page
-# lib can import it without pulling the heavy render/scene/viewport graph. Deliberately minimal:
-# keeping it apart from editor.preview is what lets ScenePage (and the other pages) share the
-# camera without the GCC module-merge ICE the combined interface triggered. Tooling only.
+# Editor::Camera - `editor.camera`: the shared free-fly viewport camera (EditorCamera), in a
+# small module over the foundation only, so every editor page lib can import it without pulling
+# in the render, scene and viewport graph. It stays apart from editor.preview because a combined
+# interface triggers a GCC module-merge ICE. Tooling only.
 
 util_add_engine_library(Editor.Camera ALIAS Editor::Camera)
 target_link_libraries(Editor.Camera

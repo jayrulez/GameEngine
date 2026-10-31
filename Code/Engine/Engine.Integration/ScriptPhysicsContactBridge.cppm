@@ -3,15 +3,15 @@
 
 // Engine::Integration - the `engine.integration` module.
 //
-// Cross-subsystem composition helpers: the small adapters that let two otherwise-independent
-// subsystems cooperate, owned by a composition root (the app) and depending on BOTH sides so
+// Cross-subsystem composition helpers: the small adapters that let two otherwise independent
+// subsystems cooperate, owned by a composition root (the app) and depending on both sides so
 // neither subsystem gains a dependency on the other.
 //
-// First tenant: ScriptPhysicsContactBridge - forwards physics contacts to the script
-// subsystem's neutral DeliverContact ingress. Physics exposes IContactListener (knows nothing
-// about scripts); the script subsystem exposes DeliverContact in its own vocabulary (knows
-// nothing about physics); this bridge is the ONE place that names both and translates between
-// them, so engine.physics and engine.script stay mutually independent.
+// ScriptPhysicsContactBridge forwards physics contacts to the script subsystem's neutral
+// DeliverContact entry point. Physics exposes IContactListener and knows nothing about scripts; the
+// script subsystem exposes DeliverContact in its own vocabulary and knows nothing about physics.
+// This bridge is the one place that names both and translates between them, so engine.physics and
+// engine.script stay independent of each other.
 
 module;
 #include "Core/Prelude.h"
@@ -25,16 +25,15 @@ import engine.script;  // ScriptSubsystem, ScriptContactKind
 
 export namespace engine::integration
 {
-    /// Maps the physics contact vocabulary onto the script subsystem's neutral one. Free +
-    /// pure so it is trivially testable without either subsystem.
+    /// Maps the physics contact vocabulary onto the script subsystem's neutral one. Free and pure
+    /// so it is testable without either subsystem.
     [[nodiscard]] engine::script::ScriptContactKind
     ToScriptContactKind(foundation::physics::ContactKind kind) noexcept;
 
-    /// Registers a physics contact listener that forwards resolved contacts to a script
-    /// subsystem, translating the contact kind. The composition root (the app) owns one of
-    /// these and Install()s it once the physics + script subsystems exist; it Uninstall()s on
-    /// teardown (the destructor also does, so a dropped bridge never dangles in the physics
-    /// listener list).
+    /// Registers a physics contact listener that forwards resolved contacts to a script subsystem,
+    /// translating the contact kind. The composition root (the app) owns one of these and
+    /// Install()s it once the physics and script subsystems exist; it Uninstall()s on teardown (the
+    /// destructor does too, so a dropped bridge never dangles in the physics listener list).
     class ScriptPhysicsContactBridge
     {
     public:

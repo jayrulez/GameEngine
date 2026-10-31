@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Root motion deltas (root-motion.md P1, the spec's tests): a looping clip's deltas over many
+// Root motion deltas: a looping clip's deltas over many
 // frames sum to its travel per loop, with nothing lost at the wrap and a step of two loops counting
 // both; a clip that does not loop stops at its end; a 50/50 blend of two walks moves at the mean
 // speed; a crossfade changes speed without a step at either end; a turn clip's yaw accumulates and

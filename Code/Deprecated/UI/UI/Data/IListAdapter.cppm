@@ -3,10 +3,9 @@
 
 // UI - :ilist_adapter partition
 //
-// Data source contract for ListView (+ its observer). Ported from Sedulous.UI/src/Data/IListAdapter.bf.
-// Pattern-B injected interfaces (held-by-reference, not tree-queried), so plain abstract classes; Beef
-// interface default methods -> virtual methods with default bodies. CreateView returns RefPtr<View>
-// (our RAII ownership; Beef returned a raw owned View).
+// Data source contract for ListView, and its observer. These are injected interfaces (held by
+// reference, not queried through the tree), so they are plain abstract classes, some methods with
+// default bodies. CreateView returns an owning RefPtr<View>.
 
 module;
 #include "Core/Prelude.h"
@@ -25,9 +24,9 @@ export namespace foundation::ui
     {
     public:
         virtual ~IListAdapterObserver() = default;
-        /// Entire data set changed - rebuild everything.
+        /// Entire data set changed: rebuild everything.
         virtual void OnDataSetChanged() = 0;
-        /// Items in [start, start+count) changed - rebind those views.
+        /// Items in [start, start+count) changed: rebind those views.
         virtual void OnItemRangeChanged(i32 start, i32 count) = 0;
     };
 

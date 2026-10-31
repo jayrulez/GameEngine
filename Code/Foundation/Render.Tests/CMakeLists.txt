@@ -1,4 +1,4 @@
-# Foundation::Render unit tests (doctest; Null RHI - no real GPU).
+# Foundation::Render unit tests (doctest; Null RHI, no real GPU).
 
 add_executable(Render.Tests
     TestsMain.cpp

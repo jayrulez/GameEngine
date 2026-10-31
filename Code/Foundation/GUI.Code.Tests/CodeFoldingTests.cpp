@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - folding and soft wrap (C7 of Specs/gui-lab-evolution-3.md), with the shared
-// definitions: ranges from brackets past strings, by indentation where the language folds so, from
-// regions, or the host's; a folded range's lines hide, one row in the map the carets and the scroll
-// share; folding moves carets out, and a caret going in unfolds; folds go with their lines through
-// edits and go when their bracket does; the gutter's chevron and the placeholder; VS Code's keys.
-// Wrapping, a long line's rows join the same map, so Down, the pointer and folds go by them.
-// Whitespace drawn by VS Code's choices.
+// GUI.Code - folding and soft wrap tests, with the shared definitions. Fold ranges come from
+// brackets (skipping strings), from indentation where the language folds by indent, from regions,
+// or from the host. A folded range's lines are hidden and take one row in the map that the carets
+// and the scroll share. Folding moves carets out, and a caret moving in unfolds. Folds move with
+// their lines through edits and go when their bracket does. The tests also cover the gutter's
+// chevron, the placeholder and VS Code's keys. With wrapping, a long line's rows join the same map,
+// so Down, the pointer and folds move by them. Whitespace is drawn by VS Code's options.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <fstream>
@@ -88,7 +88,7 @@ namespace
         return reader.IsOk() && !out.Contexts.IsEmpty();
     }
 
-    // An editor 400 by 240 in a GUI whose keymap has the code editor's keys, focused, in `language`.
+    // A focused 400 by 240 editor in `language`, in a GUI whose keymap has the code editor's keys.
     struct Bed
     {
         fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
@@ -158,7 +158,7 @@ TEST_CASE("code folding: ranges from brackets, a close first on its line left ou
 {
     Bed bed("angelscript", kScript);
     REQUIRE(bed.editor->GetFoldRanges().Size() == 2u);
-    CHECK(HasRange(*bed.editor, 1, 6)); // the body, its close's line shown
+    CHECK(HasRange(*bed.editor, 1, 6)); // the body, with the closing brace's line left shown
     CHECK(HasRange(*bed.editor, 3, 4));
 }
 
@@ -167,7 +167,7 @@ TEST_CASE("code folding: by indentation where the language says, trailing blank 
     Bed bed("luau", u8"function f()\n  if x then\n    y()\n  end\n\nend\n--#region setup\nlocal z = 1\n--#endregion");
     CHECK(HasRange(*bed.editor, 0, 3));
     CHECK(HasRange(*bed.editor, 1, 2));
-    CHECK(HasRange(*bed.editor, 6, 8)); // through its end's line
+    CHECK(HasRange(*bed.editor, 6, 8)); // through the line of its end marker
     CHECK(bed.editor->GetFoldRanges().Size() == 3u);
     Bed hlsl("hlsl", u8"#pragma region lights\nfloat3 a;\n#pragma endregion");
     CHECK(HasRange(*hlsl.editor, 0, 2));
@@ -202,14 +202,14 @@ TEST_CASE("code folding: Ctrl+Shift+[ folds the innermost range open at the care
     bed.editor->SetCaret(At(4, 3));
     bed.Key(KeyCode::LeftBracket, KeyModCtrl | KeyModShift);
     CHECK(bed.editor->IsFolded(3));
-    CHECK(bed.Caret() == At(3, 5)); // the end of the line it folds onto
+    CHECK(bed.Caret() == At(3, 5)); // the end of the line the fold stays on
     bed.Key(KeyCode::LeftBracket, KeyModCtrl | KeyModShift);
-    CHECK(bed.editor->IsFolded(1)); // the next one out
+    CHECK(bed.editor->IsFolded(1)); // the next enclosing range
     CHECK(bed.Caret() == At(1, 1));
     bed.Key(KeyCode::RightBracket, KeyModCtrl | KeyModShift);
     CHECK_FALSE(bed.editor->IsFolded(1));
-    CHECK(bed.editor->IsFolded(3)); // only what held the caret
-    bed.editor->SetCaret(At(4, 0)); // a match found, a line gone to
+    CHECK(bed.editor->IsFolded(3)); // only the range that held the caret
+    bed.editor->SetCaret(At(4, 0)); // as when a match is found or a line is gone to
     CHECK_FALSE(bed.editor->IsFolded(3));
     CHECK(bed.Caret() == At(4, 0));
 }
@@ -222,7 +222,7 @@ TEST_CASE("code folding: folds go with their lines through edits, and go when th
     bed.Type(u8"\n");
     CHECK(bed.editor->IsFolded(4));
     CHECK_FALSE(bed.editor->IsFolded(3));
-    // The open bracket deleted: no range, no fold.
+    // With the open bracket deleted, there is no range and no fold.
     const CodeSelection brace{At(4, 4), At(4, 5)};
     bed.editor->SetSelections(core::Span<const CodeSelection>(&brace, 1));
     bed.Key(KeyCode::Delete);
@@ -234,7 +234,7 @@ TEST_CASE("code folding: the gutter's chevron folds and unfolds; the placeholder
 {
     Bed bed("angelscript", kScript);
     const f32 lh = bed.editor->LineHeight();
-    const f32 chevron = bed.editor->TextLeft() - 15.0f; // the fold column, before the text's gap
+    const f32 chevron = bed.editor->TextLeft() - 15.0f; // in the fold column, before the gap before the text
     Click(bed, core::Float2{chevron, bed.editor->CaretRect(At(1, 0)).y + lh * 0.5f});
     CHECK(bed.editor->IsFolded(1));
     Click(bed, core::Float2{chevron, bed.editor->CaretRect(At(1, 0)).y + lh * 0.5f});
@@ -255,7 +255,7 @@ TEST_CASE("code folding: Ctrl+K Ctrl+0 folds everything, Ctrl+K Ctrl+J unfolds e
     bed.Key(KeyCode::Num0, KeyModCtrl);
     CHECK(bed.editor->IsFolded(1));
     CHECK(bed.editor->IsFolded(3));
-    CHECK(bed.Caret() == At(1, 1)); // out of them all
+    CHECK(bed.Caret() == At(1, 1)); // moved out of every fold
     CHECK(bed.editor->RowCount() == 4u);
     bed.Key(KeyCode::K, KeyModCtrl);
     bed.Key(KeyCode::J, KeyModCtrl);
@@ -291,27 +291,27 @@ TEST_CASE("code soft wrap: a long line's rows are rows of the map; Down goes by 
     bed.Key(KeyCode::Z, KeyModAlt);
     REQUIRE(bed.editor->GetSoftWrap());
     bed.Frame();
-    const u32 rows = bed.editor->RowCount() - 1; // the long line's
+    const u32 rows = bed.editor->RowCount() - 1; // the long line's rows (the other line takes one)
     CHECK(rows >= 3u);
     const f32 lh = bed.editor->LineHeight();
     const Rect top = bed.editor->CaretRect(At(0, 0));
     CHECK(bed.editor->CaretRect(At(1, 0)).y - top.y == doctest::Approx(lh * static_cast<f32>(rows)));
-    // Down from near the start: the line's second row, as far across.
+    // Down from near the start goes to the line's second row, at the same x.
     bed.editor->SetCaret(At(0, 2));
     bed.Key(KeyCode::Down);
     CHECK(bed.Caret().Line == 0u);
     const Rect second = bed.editor->CaretRect(bed.Caret());
     CHECK(second.y - top.y == doctest::Approx(lh));
     CHECK(second.x == doctest::Approx(bed.editor->CaretRect(At(0, 2)).x).epsilon(0.03));
-    // The pointer on the second row finds the line's place there.
+    // The pointer on the second row finds the line's position there.
     const CodePosition hit = bed.editor->PositionAt(core::Float2{bed.editor->TextLeft() + 1.0f, top.y + lh * 1.5f});
     CHECK(hit.Line == 0u);
     CHECK(hit.Column > 0u);
     CHECK(bed.editor->CaretRect(hit).y - top.y == doctest::Approx(lh));
     bed.Key(KeyCode::End);
     bed.Frame();
-    CHECK(bed.editor->GetScrollOffset().x == doctest::Approx(0.0f)); // never across
-    // Narrower: more rows.
+    CHECK(bed.editor->GetScrollOffset().x == doctest::Approx(0.0f)); // never scrolls across
+    // A narrower view makes more rows.
     bed.editor->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(200.0f); });
     bed.Frame();
     CHECK(bed.editor->RowCount() - 1 > rows);
@@ -327,7 +327,7 @@ TEST_CASE("code soft wrap: a word longer than a row breaks; a fold hides every r
     bed.editor->SetText(text.AsView());
     bed.editor->SetSoftWrap(true);
     bed.Frame();
-    CHECK(bed.editor->RowCount() == 4u); // the hundred in two rows
+    CHECK(bed.editor->RowCount() == 4u); // the hundred-character line in two rows
     REQUIRE(bed.editor->Fold(0));
     CHECK(bed.editor->RowCount() == 2u);
     bed.editor->SetSoftWrap(false);
@@ -356,7 +356,7 @@ TEST_CASE("code whitespace: drawn by the choice: all, a line's end, all but a si
     bed.editor->SetShowWhitespace(CodeWhitespace::Boundary);
     CHECK(shows(0, 0)); // the indent
     CHECK(shows(0, 1));
-    CHECK_FALSE(shows(0, 3)); // one between words
+    CHECK_FALSE(shows(0, 3)); // a single space between words
     CHECK(shows(0, 5)); // a run
     CHECK(shows(0, 6));
     CHECK(shows(0, 8));
@@ -381,7 +381,7 @@ TEST_CASE("code view: draws wrapped, folded, with its whitespace, a selection ac
     bed.Frame();
     const CodeSelection across{At(2, 2), At(3, 120)};
     bed.editor->SetSelections(core::Span<const CodeSelection>(&across, 1));
-    bed.D().InjectMouseMove(bed.editor->ConvertToRootSpace(core::Float2{2.0f, 20.0f})); // the gutter: chevrons
+    bed.D().InjectMouseMove(bed.editor->ConvertToRootSpace(core::Float2{2.0f, 20.0f})); // over the gutter, so chevrons show
     bed.Frame();
     vg::VGContext canvas;
     {

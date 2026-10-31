@@ -3,14 +3,12 @@
 
 // GUI - `foundation.gui.shell`: the platform input bridge.
 //
-// Keeps the GUI core platform-agnostic: the core EventDispatcher exposes an abstract
-// Inject* API; this bridge is the ONLY place that knows about the platform input layer
-// (foundation.shell). It translates a stream of shell::InputEvent (already gated/transformed
-// by InputSurface/InputRouter, see [[viewport-input]]) into dispatcher injections, mapping
-// platform enums to GUI enums and window-space positions to content space via a ContentFit.
-//
-// Reimplemented for us (not ported from eepp/Sedulous), per the port plan: the
-// InputSurface consumption lives here, never in the core.
+// Keeps the GUI core platform-agnostic: the core EventDispatcher exposes an abstract Inject* API,
+// and this bridge is the only place that knows about the platform input layer (foundation.shell).
+// It translates a stream of shell::InputEvent (already gated and transformed by InputSurface and
+// InputRouter) into dispatcher injections, mapping platform enums to GUI enums and window-space
+// positions to content space through a ContentFit. The InputSurface consumption lives here, never
+// in the core.
 
 module;
 #include "Core/Prelude.h"
@@ -20,7 +18,7 @@ export module foundation.gui.shell;
 import foundation.core;  // ContentFit, Float2, String, StringView, u32
 import foundation.gui;   // EventDispatcher, MouseButton, KeyMod*, IClipboard
 import foundation.shell; // InputEvent, InputEventKind, MouseButton, KeyModifiers, IWindow, IShell
-import foundation.input; // InputMap (a keymap filled from the game's bindings)
+import foundation.input; // InputMap (to fill a keymap from the game's bindings)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -43,28 +41,30 @@ export namespace foundation::gui
         }
         void ClearContentFit() noexcept { m_hasFit = false; }
 
-        // The window's size in the coordinates its mouse reports in: touch events arrive
-        // normalized over the window, and Dispatch() places them with it (without it, touch
-        // events are not forwarded). PumpFromSurface() needs none: its surface places fingers.
+        // The window's size in the coordinates its mouse reports in. Touch events arrive
+        // normalized over the window, and Dispatch() places them using this size; without it,
+        // touch events are not forwarded. PumpFromSurface() does not need it, since its surface
+        // places the fingers.
         void SetWindowSize(core::Float2 size) noexcept { m_windowSize = size; }
 
         // The window whose platform text input (IME) follows GUI focus. Once set, the bridge
-        // enables text input while a text-editing widget holds focus and disables it
-        // otherwise - reconciled after each Dispatch()/PumpFromSurface(), so no per-widget or
-        // per-app wiring is needed. Pass nullptr to disable the feature.
+        // enables text input while a text-editing widget holds focus and disables it otherwise,
+        // reconciled after each Dispatch()/PumpFromSurface(), so no per-widget or per-app wiring
+        // is needed. Pass nullptr to disable the feature.
         void SetTextInputTarget(shell::IWindow* window) noexcept { m_textInputTarget = window; }
 
-        // The mouse whose cursor follows the GUI's (CSS `cursor` on the node under the pointer),
+        // The mouse whose cursor follows the GUI's cursor (CSS `cursor` on the node under the pointer),
         // reconciled after each Dispatch()/PumpFromSurface(). Pass nullptr to leave the cursor alone.
         void SetCursorTarget(shell::IMouse* mouse) noexcept
         {
             m_cursorTarget = mouse;
             m_shownCursor = shell::CursorType::Count; // apply on the next sync
         }
-        /// The host's input kind tracker (foundation.input's, which the host updates each frame
-        /// from its devices): the bridge passes each change of its kind on to the dispatcher (K2b of
-        /// Specs/gui-lab-evolution-3.md), for what reaches no widget (a mouse moved, a stick pushed).
-        /// Its kind when attached is not passed: the dispatcher starts as it does. Null detaches it.
+        /// Sets the host's input kind tracker (foundation.input's, which the host updates each frame
+        /// from its devices). The bridge passes each change of the tracked kind on to the
+        /// dispatcher, covering input that reaches no widget (a mouse moved, a stick pushed). The
+        /// kind at the moment of attaching is not passed on; the dispatcher keeps its own starting
+        /// kind. Null detaches the tracker.
         void SetInputKindTracker(const foundation::input::InputKindTracker* tracker) noexcept
         {
             m_inputKind = tracker;
@@ -89,9 +89,9 @@ export namespace foundation::gui
             return InputKind::Pointer;
         }
 
-        /// The tracker's kind passed on, then the cursor: the GUI's (CSS `cursor`), hidden while it
-        /// says none (a pad in use). Only a cursor the bridge hid is shown again by it, so a game
-        /// that hides the cursor itself (mouse look) is left alone.
+        /// Passes on the tracker's input kind, then applies the GUI's cursor (CSS `cursor`), hiding
+        /// it while the GUI asks for none (a pad in use). The bridge shows again only a cursor that
+        /// it hid itself, so a game that hides the cursor (mouse look) is left alone.
         void SyncCursor()
         {
             SyncInputKind();
@@ -113,11 +113,11 @@ export namespace foundation::gui
             m_cursorTarget->SetCursor(cursor);
         }
 
-        // Files the OS dropped (IShell::DrainDroppedFiles): the ones for `windowId` (0: any; a
-        // drop that names no window counts as this one's),
-        // grouped by where they landed (a drop of several arrives a file at a time), each group
-        // placed in content space and handed to the dispatcher as one drop (E7). True when
-        // something took one.
+        // Handles files the OS dropped (IShell::DrainDroppedFiles). It takes the drops for
+        // `windowId` (0 means any window, and a drop that names no window counts as this one's)
+        // and groups them by where they landed, since a drop of several files arrives one file at a
+        // time. Each group is placed in content space and handed to the dispatcher as one drop.
+        // Returns true when something took one.
         bool DispatchFileDrops(const core::Array<shell::DroppedFile>& drops, core::u32 windowId = 0)
         {
             if (m_dispatcher == nullptr)
@@ -131,7 +131,7 @@ export namespace foundation::gui
                 usize j = i;
                 for (; j < drops.Size() && drops[j].window == first.window && drops[j].x == first.x && drops[j].y == first.y; ++j)
                     paths.PushBack(drops[j].path);
-                // A drop the OS names no window for (0) is taken as this one's.
+                // A drop for which the OS names no window (0) is taken as this window's.
                 if (windowId == 0 || first.window == windowId || first.window == 0)
                     taken = m_dispatcher->InjectFileDrop(ToContent(core::Float2{first.x, first.y}), paths) || taken;
                 i = j;
@@ -149,13 +149,13 @@ export namespace foundation::gui
             const bool want = m_dispatcher->WantsTextInput();
             const shell::TextInputKind kind = m_dispatcher->IsTextInputSecret() ? shell::TextInputKind::Secret : shell::TextInputKind::Text;
             if (want && (!m_textInputTarget->IsTextInputActive() || m_textInputTarget->GetTextInputKind() != kind))
-                m_textInputTarget->StartTextInput(kind); // a move between a field and a password switches kind
+                m_textInputTarget->StartTextInput(kind); // moving between a field and a password field switches the kind
             else if (!want && m_textInputTarget->IsTextInputActive())
                 m_textInputTarget->StopTextInput();
             SyncTextInputArea();
         }
-        // Tells the window where the focused field types (its line, the caret across it), in
-        // window coordinates, when that moved: the IME shows its candidates beside it.
+        // Tells the window where the focused field takes text (its line, and the caret on it), in
+        // window coordinates, whenever that moves, so the IME shows its candidates beside it.
         void SyncTextInputArea()
         {
             Rect area{};
@@ -184,11 +184,13 @@ export namespace foundation::gui
             m_textInputTarget->SetTextInputArea(shown[0], shown[1], shown[2], shown[3], shown[4]);
         }
 
-        // Translate one platform input event into a dispatcher injection. Returns true if the GUI
+        // Translates one platform input event into a dispatcher injection. Returns true if the GUI
         // used it (a handler took it, or the pointer is over a node that takes it), so a game host
-        // leaves it alone; false if the GUI did not (or the event is not routed: an unmapped
-        // button, or SDL's mouse copy of a finger, which the touch events already brought). Reconciles text input and the cursor afterwards, since a routed event
-        // (a click, a Tab) can change focus and what is under the pointer.
+        // leaves it alone. Returns false if the GUI did not use it, or if the event is not routed
+        // (an unmapped button, or SDL's mouse copy of a finger, which the touch events already
+        // delivered).
+        // Reconciles text input and the cursor afterwards, since a routed event (a click, a Tab)
+        // can change focus and what is under the pointer.
         bool Dispatch(const shell::InputEvent& event)
         {
             if (m_dispatcher == nullptr)
@@ -222,7 +224,7 @@ export namespace foundation::gui
             {
                 if (m_windowSize.x <= 0.0f || m_windowSize.y <= 0.0f)
                 {
-                    routed = false; // no window size: a finger cannot be placed
+                    routed = false; // without a window size a finger cannot be placed
                     break;
                 }
                 const core::Float2 at = ToContent(core::Float2{event.x * m_windowSize.x, event.y * m_windowSize.y});
@@ -274,21 +276,21 @@ export namespace foundation::gui
             return routed;
         }
 
-        // Poll a gated InputSurface (its mouse is already content-space) and drive the
-        // dispatcher: hover from the cursor, click from press/release edges, plus wheel. The
-        // recommended path for a viewport-hosted GUI - the surface handles transform + gating,
-        // and a fresh InjectMouseMove each frame keeps hover current. (Keyboard/text still come
-        // through the event-based Dispatch() path.)
+        // Polls a gated InputSurface (its mouse is already in content space) and drives the
+        // dispatcher: hover from the cursor, clicks from press and release edges, and the wheel.
+        // This is the path for a viewport-hosted GUI: the surface handles the transform and the
+        // gating, and a fresh InjectMouseMove each frame keeps hover current. Keyboard and text
+        // still come through the event-based Dispatch() path.
         void PumpFromSurface(shell::InputSurface& surface) { PumpDevices(surface.Mouse(), surface.Touch(), surface.Keyboard()); }
-        /// PumpFromSurface's poll from devices however they come (an engine's active input source,
-        /// already in content space): the fingers, the mouse, its buttons' edges and its wheel;
-        /// `keyboard` gives the modifiers. Any may be null.
+        /// The poll behind PumpFromSurface, for devices from any source (an engine's active input
+        /// source, already in content space): the fingers, the mouse, its button edges and its
+        /// wheel. `keyboard` supplies the modifiers. Any of them may be null.
         void PumpDevices(shell::IMouse* mouse, shell::ITouch* touch, shell::IKeyboard* keyboard)
         {
             if (m_dispatcher == nullptr)
                 return;
-            // Fingers first (in the mouse's coordinates): the first one down drives the pointer; it
-            // went down, moved or lifted since the last pump.
+            // Fingers first (in the mouse's coordinates). The first finger down drives the pointer;
+            // each finger went down, moved or lifted since the last pump.
             if (touch != nullptr)
                 PumpTouch(*touch);
             if (mouse == nullptr)
@@ -303,7 +305,7 @@ export namespace foundation::gui
             {
                 SyncTextInput();
                 SyncCursor();
-                return; // the mouse is SDL's copy of a finger this frame
+                return; // this frame the mouse is SDL's copy of a finger
             }
             // Current keyboard modifiers, so a modified click or drag (Shift+click to extend a text
             // selection, a Shift drag scrubbing finer) carries them even on the poll-based path.
@@ -329,7 +331,8 @@ export namespace foundation::gui
             SyncCursor();
         }
 
-        /// Whether the pointer is over the GUI now (a node that takes it), for a host that polls.
+        /// Whether the pointer is over the GUI now (over a node that takes it), for a host that
+        /// polls.
         [[nodiscard]] bool IsPointerOverGui() const
         {
             return m_dispatcher != nullptr && m_dispatcher->IsPointerOver(m_dispatcher->GetMousePosition());
@@ -346,7 +349,7 @@ export namespace foundation::gui
             return out;
         }
 
-        // A finger's event to the dispatcher, remembering where it was for IsTouchCopy.
+        // Forwards a finger's event to the dispatcher, remembering where it was for IsTouchCopy.
         bool ForwardTouch(shell::InputEventKind kind, u64 finger, core::Float2 at)
         {
             m_touchSeen = true;
@@ -358,8 +361,9 @@ export namespace foundation::gui
             default: return m_dispatcher->InjectTouchUp(finger, at);
             }
         }
-        // The polled fingers against the ones last seen: down when one appears, moves while it
-        // stays, up when it is gone (every finger, E17c: two make a gesture).
+        // Compares the polled fingers with the ones last seen: a down for a finger that appears,
+        // moves while it stays, and an up when it is gone. Every finger is forwarded, since two
+        // make a gesture.
         void PumpTouch(shell::ITouch& touch)
         {
             core::Array<PumpedFinger> now;
@@ -388,9 +392,9 @@ export namespace foundation::gui
             }
             m_pumpedFingers = core::Move(now);
         }
-        // SDL copies a finger into mouse events by default: a mouse event while a finger is down,
-        // or at the place a finger last was, is taken for that copy and ignored. The mouse moving
-        // anywhere else is the mouse again.
+        // SDL copies a finger into mouse events by default. A mouse event while a finger is down,
+        // or at the place a finger last was, is taken for that copy and ignored. A mouse move
+        // anywhere else is the real mouse again.
         [[nodiscard]] bool IsTouchCopy(core::Float2 at)
         {
             if (!m_touchSeen)
@@ -405,8 +409,8 @@ export namespace foundation::gui
             return false;
         }
 
-        // The GUI's cursor as the shell has it; the shell has no grab, help, copy or alias cursors,
-        // so those take the nearest it has.
+        // Maps the GUI's cursor to the shell's. The shell has no grab, help, copy or alias cursors,
+        // so those map to the nearest one it has.
         [[nodiscard]] static shell::CursorType MapCursor(Cursor cursor) noexcept
         {
             switch (cursor)
@@ -419,7 +423,7 @@ export namespace foundation::gui
             case Cursor::NotAllowed:
             case Cursor::NoDrop: return shell::CursorType::NotAllowed;
             case Cursor::Copy:
-            case Cursor::Alias: return shell::CursorType::Pointer; // no copy or alias cursor: the preview's badge says
+            case Cursor::Alias: return shell::CursorType::Pointer; // no copy or alias cursor; the drag preview's badge shows the effect
             case Cursor::Wait: return shell::CursorType::Wait;
             case Cursor::Progress: return shell::CursorType::Progress;
             case Cursor::Crosshair: return shell::CursorType::Crosshair;
@@ -431,7 +435,7 @@ export namespace foundation::gui
             }
         }
 
-        // shell::MouseButton order is Left/Middle/Right - map explicitly, not by value.
+        // shell::MouseButton order is Left, Middle, Right: map explicitly, not by value.
         [[nodiscard]] static MouseButton MapButton(shell::MouseButton button) noexcept
         {
             switch (button)
@@ -452,9 +456,9 @@ export namespace foundation::gui
         }
 
     public:
-        // Map the platform key code to the GUI's platform-agnostic KeyCode (as a u32).
-        // Every key the GUI or a binding names; text still arrives through TextInput (a key's code
-        // is for shortcuts, not for what it types).
+        // Maps the platform key code to the GUI's platform-agnostic KeyCode (as a u32), for every
+        // key the GUI or a binding names. Text still arrives through TextInput, since a key's code
+        // is for shortcuts, not for what it types.
         [[nodiscard]] static u32 MapKey(shell::KeyCode key) noexcept
         {
             KeyCode mapped = KeyCode::Unknown;
@@ -506,7 +510,7 @@ export namespace foundation::gui
                 mapped = KeyCode::Down;
                 break;
             default:
-                // Letters, digits and F1 to F12: the editing shortcuts and every binding (G7).
+                // Letters, digits and F1 to F12, used by the editing shortcuts and by bindings.
                 if (key >= shell::KeyCode::A && key <= shell::KeyCode::Z)
                     mapped = kLetterKeys[static_cast<u32>(key) - static_cast<u32>(shell::KeyCode::A)];
                 else if (key >= shell::KeyCode::Num0 && key <= shell::KeyCode::Num9)
@@ -523,7 +527,8 @@ export namespace foundation::gui
         }
 
     private:
-        // The rest of the keyboard (E12): runs of keys the shell and the GUI list in the same order.
+        // Maps the rest of the keyboard: runs of keys that the shell and the GUI list in the same
+        // order.
         [[nodiscard]] static KeyCode MapKeyRange(shell::KeyCode key) noexcept
         {
             struct Run
@@ -538,7 +543,8 @@ export namespace foundation::gui
                 {shell::KeyCode::Keypad0, shell::KeyCode::KeypadDecimal, KeyCode::Keypad0},
                 {shell::KeyCode::LeftCtrl, shell::KeyCode::RightGui, KeyCode::LeftCtrl},
             };
-            // Each run as long on both sides (a key added to one list breaks the build, not the map).
+            // Each run must be the same length on both sides, so a key added to one list breaks the
+            // build instead of the map.
             constexpr auto span = [](auto first, auto last) { return static_cast<u32>(last) - static_cast<u32>(first); };
             static_assert(span(shell::KeyCode::F13, shell::KeyCode::F24) == span(KeyCode::F13, KeyCode::F24));
             static_assert(span(shell::KeyCode::Minus, shell::KeyCode::Slash) == span(KeyCode::Minus, KeyCode::Slash));
@@ -551,11 +557,12 @@ export namespace foundation::gui
             return KeyCode::Unknown;
         }
 
-        // A gamepad (G7): the d-pad holds a direction (focus moves, then repeats); the face,
+        // A gamepad: the d-pad holds a direction (focus moves, then repeats), and the face,
         // shoulder and menu buttons are keystrokes for the keymap (South activates when unbound).
-        // A button acts on its release, armed by its press with the focus unchanged since, as a
-        // click is: a game under the GUI reads the press, so a menu's Resume taken on the press
-        // would hand the game that same press (South a jump) the moment it resumes.
+        // Like a click, a button acts on its release, and only if its press armed it and the focus
+        // has not changed since. A game under the GUI reads the press, so if a menu's Resume acted
+        // on the press, the game would receive that same press (South as a jump) the moment it
+        // resumed.
         bool DispatchPadButton(shell::GamepadButton button, bool down)
         {
             NavDirection direction = NavDirection::Up;
@@ -583,7 +590,7 @@ export namespace foundation::gui
             if (down)
             {
                 if (m_padArmed == 0)
-                    m_padArmedOn = m_dispatcher->GetFocusNode(); // compared only, never followed
+                    m_padArmedOn = m_dispatcher->GetFocusNode(); // compared only, never dereferenced
                 m_padArmed |= bit;
                 return true;
             }
@@ -596,12 +603,13 @@ export namespace foundation::gui
         u32 m_padArmed = 0;               // the pad buttons pressed and not yet released (by PadButton)
         const Node* m_padArmedOn = nullptr; // the focus when the first of them went down
 
-        // The left stick as a d-pad: past half way it holds a direction, back under a third it lets
-        // go (the gap keeps a stick resting near the threshold from chattering). The right stick
-        // scrolls.
+        // The left stick acts as a d-pad: past half way it holds a direction, and back under a third
+        // it releases it (the gap stops a stick resting near the threshold from chattering). The
+        // right stick scrolls.
         bool DispatchStick(shell::GamepadAxis axis, f32 value)
         {
-            // The right stick scrolls the nearest scroller around the focus (the dispatcher's).
+            // The right stick scrolls the nearest scroller around the focus (the dispatcher does
+            // this).
             if (axis == shell::GamepadAxis::RightX || axis == shell::GamepadAxis::RightY)
             {
                 core::Float2 stick = m_dispatcher->GetScrollStick();
@@ -631,7 +639,8 @@ export namespace foundation::gui
         i32 m_stickY = 0;
 
     public:
-        /// A shell gamepad button as a keystroke's pad button; false for the d-pad and the rest.
+        /// Maps a shell gamepad button to a keystroke's pad button. Returns false for the d-pad and
+        /// any other button without a mapping.
         [[nodiscard]] static bool MapPadButton(shell::GamepadButton button, PadButton& out) noexcept
         {
             switch (button)
@@ -666,16 +675,16 @@ export namespace foundation::gui
         EventDispatcher* m_dispatcher;
         shell::IWindow* m_textInputTarget =
             nullptr; // window whose IME follows GUI focus (optional)
-        shell::IMouse* m_cursorTarget = nullptr; // mouse whose cursor follows the GUI's (optional)
+        shell::IMouse* m_cursorTarget = nullptr; // mouse whose cursor follows the GUI's cursor (optional)
         shell::CursorType m_shownCursor = shell::CursorType::Count; // last applied (Count: none yet)
         bool m_cursorHidden = false; // the bridge hid the cursor (a pad in use)
-        const foundation::input::InputKindTracker* m_inputKind = nullptr; // the host's (optional)
-        foundation::input::InputKind m_passedKind = foundation::input::InputKind::Pointer; // its last kind passed on
+        const foundation::input::InputKindTracker* m_inputKind = nullptr; // owned by the host (optional)
+        foundation::input::InputKind m_passedKind = foundation::input::InputKind::Pointer; // the last kind passed on to the dispatcher
         core::ContentFit m_fit{};
-        i32 m_textInputArea[5] = {-1, -1, -1, -1, -1}; // what the window was last told (SyncTextInputArea)
+        i32 m_textInputArea[5] = {-1, -1, -1, -1, -1}; // the area last sent to the window (SyncTextInputArea)
         bool m_hasFit = false;
         core::Float2 m_windowSize{0.0f, 0.0f}; // for placing touch events (SetWindowSize)
-        bool m_touchSeen = false;              // a finger was used: the mouse may be SDL's copy of it
+        bool m_touchSeen = false;              // a finger was used, so a mouse event may be SDL's copy of it
         core::Float2 m_lastTouchAt{0.0f, 0.0f}; // where the driving finger last was (content space)
         struct PumpedFinger
         {
@@ -685,18 +694,18 @@ export namespace foundation::gui
         core::Array<PumpedFinger> m_pumpedFingers; // the polled fingers as last seen
     };
 
-    /// One action of the game's input map and what it does in the GUI.
+    /// One action of the game's input map and the GUI command it runs.
     struct InputMapCommand
     {
-        core::StringView Action;  ///< its name in the input map ("Back", "Confirm")
+        core::StringView Action;  ///< the action's name in the input map ("Back", "Confirm")
         core::StringView Command; ///< the command it runs
-        core::StringView Context = {}; ///< where (a key-context predicate; empty: everywhere)
-        core::StringView Set = {};     ///< the action set to read it from (empty: any)
+        core::StringView Context = {}; ///< where it applies (a key-context predicate; empty means everywhere)
+        core::StringView Set = {};     ///< the action set to read it from (empty means any)
     };
 
     /// Binds, in `keymap`, each of `actions` to the keys and gamepad buttons the game's input map
-    /// gives it (G7), so the menu's Back is the player's Back, rebinding included: Escape and the
-    /// East button by default. How many bindings it made.
+    /// gives it, so the menu's Back is the player's Back, including any rebinding (Escape and the
+    /// East button by default). Returns how many bindings it made.
     inline u32 BindFromInputMap(Keymap& keymap, const foundation::input::InputMap& map, core::Span<const InputMapCommand> actions)
     {
         namespace input = foundation::input;
@@ -740,10 +749,9 @@ export namespace foundation::gui
     }
 
     // Adapts the platform shell's process-global text clipboard to the GUI core's abstract
-    // IClipboard seam. The app constructs one over its shell::IShell and hands it to the
-    // dispatcher once (dispatcher.SetClipboard(&clipboard)); TextField cut/copy/paste then
-    // reach the OS clipboard with no further wiring. Mirrors how ShellNull's in-memory
-    // clipboard backs headless tests.
+    // IClipboard. The app constructs one over its shell::IShell and hands it to the dispatcher
+    // once (dispatcher.SetClipboard(&clipboard)); TextField cut, copy and paste then reach the OS
+    // clipboard with no further wiring. In headless tests, NullShell's in-memory clipboard backs it.
     class ShellClipboard : public IClipboard
     {
     public:

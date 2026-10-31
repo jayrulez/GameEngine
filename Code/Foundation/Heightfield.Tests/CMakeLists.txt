@@ -1,4 +1,4 @@
-# Foundation::Heightfield unit tests (doctest; pure data + math, no GPU).
+# Foundation::Heightfield unit tests (doctest; pure data and math, no GPU).
 
 add_executable(Heightfield.Tests
     TestsMain.cpp

@@ -3,11 +3,11 @@
 
 // Foundation::Graphics - implementation unit for `foundation.graphics.gpu`.
 //
-// All the backend-coupled code (Vulkan / DX12 / validation) lives here rather than
-// in the interface unit. Because these imports sit in the implementation unit,
-// consumers of foundation.graphics.gpu never load the backend BMIs at compile time -
-// they only link the backends. This is the "only Vulkan-coupled part" of the render
-// host, kept off every consumer's module closure.
+// All the backend-coupled code (Vulkan, DX12, validation) lives here rather than in
+// the interface unit. Because these imports sit in the implementation unit,
+// consumers of foundation.graphics.gpu never load the backend BMIs at compile time;
+// they only link the backends. This keeps the render host's only Vulkan-coupled
+// part off every consumer's module closure.
 
 module;
 #include "Core/Prelude.h"
@@ -52,9 +52,9 @@ namespace foundation::graphics
             return "?";
         }
 
-        // Was this backend COMPILED into this binary? Distinct from "did it fail to initialise":
-        // a build without the Vulkan SDK has no Vulkan RHI at all, and a user staring at
-        // "failed to create graphics device" has no way to tell those apart.
+        // Whether this backend is compiled into this binary, as distinct from whether it failed to
+        // initialise: a build without the Vulkan SDK has no Vulkan RHI at all, and "failed to
+        // create graphics device" alone does not tell those apart.
         [[nodiscard]] bool BackendCompiledIn(BackendType b)
         {
             switch (b)
@@ -153,14 +153,13 @@ namespace foundation::graphics
             return CreateNullGraphicsDevice(desc.framesInFlight);
         }
 
-        // The REQUESTED backend first, then the other GPU backends this binary actually carries.
+        // The requested backend first, then the other GPU backends this binary carries.
         //
-        // Why fall back at all: the requested backend is a default or a guess far more often than
-        // an explicit demand, and refusing to start on a machine whose GPU we DO support is the
-        // worst possible outcome. A CI-built Windows editor (built with no Vulkan SDK, so no
-        // Vulkan RHI) asked for Vulkan - the default - and died with a bare ErrorCode::Unknown on
-        // a working DX12 machine, with DX12 compiled in and idle. Null is deliberately NOT a
-        // fallback: silently running headless looks like a hang, not a diagnosis.
+        // The requested backend is a default or a guess far more often than an explicit demand,
+        // and refusing to start on a machine whose GPU we do support is the worst outcome: a
+        // Windows build without the Vulkan SDK (so no Vulkan RHI) asks for Vulkan by default, and
+        // would fail on a working DX12 machine with DX12 compiled in. Null is not a fallback:
+        // silently running headless looks like a hang, not a diagnosis.
         const BackendType order[] = {desc.backend, BackendType::Vulkan, BackendType::DX12,
                                      BackendType::WebGPU};
 
@@ -169,7 +168,7 @@ namespace foundation::graphics
         for (core::usize i = 0; i < sizeof(order) / sizeof(order[0]); ++i)
         {
             const BackendType candidate = order[i];
-            // Slot 0 IS the request, so any later repeat of it is a duplicate - skip by index
+            // Slot 0 is the request, so any later repeat of it is a duplicate: skip by index
             // rather than by "have we tried one yet", which would re-report an uncompiled
             // request twice (it never gets as far as being tried).
             if (i > 0 && candidate == desc.backend)
@@ -178,7 +177,7 @@ namespace foundation::graphics
             }
             if (!BackendCompiledIn(candidate))
             {
-                // Say so, and say it for the REQUEST specifically: "not built into this binary" is
+                // Say so, and say it for the request specifically: "not built into this binary" is
                 // a different problem from "your driver refused", and only the log can tell them
                 // apart after the fact.
                 rhi::LogWarningf("CreateGraphicsDevice: %s backend is not compiled into this "

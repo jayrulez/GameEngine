@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine.GamePlayer - the SHIP entry point (game-native-code.md N3): the same launcher
-// the dev player uses, with the project's native game plugin STATICALLY linked. One
-// checked-in stub covers every game: the plugin contract already exports
-// extern "C" CreatePlugin (the exact symbol PluginHost resolves via dlopen in dev),
-// so referencing it here pulls the game's registration out of its static archive -
-// no generated main, no forced-reference chains, no whole-archive.
+// Engine.GamePlayer: the ship entry point. The same launcher the dev player uses, with the
+// project's native game plugin statically linked. One checked-in stub covers every game: the
+// plugin contract already exports extern "C" CreatePlugin (the symbol PluginHost resolves
+// with dlopen in dev builds), so referencing it here pulls the game's registration out of its
+// static archive, with no generated main, forced-reference chains or whole-archive linking.
 
 import engine.player.main;
 import foundation.runtime;

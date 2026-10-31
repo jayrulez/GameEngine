@@ -1,4 +1,4 @@
-# Pipeline::PropertyAnimation - `propertyanimation.pipeline` (tooling: clip asset + builder).
+# Pipeline::PropertyAnimation - `propertyanimation.pipeline` (tooling: clip asset and builder).
 util_add_engine_library(PropertyAnimation.Pipeline ALIAS Pipeline::PropertyAnimation)
 target_link_libraries(PropertyAnimation.Pipeline
     PUBLIC Foundation::Core Pipeline::Core Foundation::PropertyAnimation Foundation::PropertyAnimation.Resource

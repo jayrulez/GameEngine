@@ -3,19 +3,18 @@
 
 // Foundation::Script.Resource - the `foundation.script.resource` module.
 //
-// Cooked script classes: a ScriptClass is SOURCE TEXT +
-// harvested metadata - never bytecode (source-only backends have no stable serialized form; compilation
-// is fast and happens per script CONTEXT on first use, cached there).
-//   * ScriptClassSource - the cooked record: language + class name + source + the
-//     property/handler metadata the cook harvested, so the EDITOR renders the
-//     inspector without a VM and the RUNTIME dispatches handlers without per-frame
+// Cooked script classes: a ScriptClass is source text and harvested metadata, plus compiled
+// bytecode when the language has a stable bytecode and the cook produced it.
+//   * ScriptClassSource - the cooked record: language, class name, source, bytecode and the
+//     property and handler metadata the cook harvested, so the editor renders the
+//     inspector without a VM and the runtime dispatches handlers without per-frame
 //     method-missing probes.
 //   * ScriptClass - the runtime product a component's Ref<ScriptClass> binds.
 //   * ScriptClassFactory - metadata parse only; no VM involved here.
 //
-// Property values (the v1 type set: float, int, bool, string, color, vec3, entity,
-// asset:<TypeName>) are carried by ScriptPropertyValue - a small tagged value that is
-// the WIRE currency for both harvested defaults and per-behavior overrides (the
+// Property values (float, int, bool, string, color, vec3, entity, asset:<TypeName>) are
+// carried by ScriptPropertyValue, a small tagged value that is the serialized form of
+// both harvested defaults and per-behavior overrides (the
 // ScriptComponent's hash-keyed override blobs). Entity references are Guids, remapped
 // by the prefab machinery like every other entity ref in a payload.
 
@@ -90,7 +89,7 @@ export namespace foundation::script
         return {};
     }
 
-    /// The parsed "float" / "asset:AudioClip" type string -> kind (+ asset type name).
+    /// Parses a "float" or "asset:AudioClip" type string into its kind (and asset type name).
     [[nodiscard]] inline bool ParseScriptPropertyType(StringView text, ScriptPropertyType& outKind,
                                                       String& outAssetType)
     {
@@ -117,7 +116,7 @@ export namespace foundation::script
         return false;
     }
 
-    // One tagged property value: harvested default OR a component override. `kind`
+    // One tagged property value: a harvested default or a component override. `kind`
     // selects which payload field is meaningful; the rest stay at their defaults.
     struct ScriptPropertyValue
     {
@@ -130,8 +129,8 @@ export namespace foundation::script
         Guid guid;                           // Entity / Asset
     };
 
-    // The tag is written FIRST, so both directions branch on the same kind - the
-    // writer/reader stay symmetric by construction (one switch, two modes).
+    // The tag is written first, so both directions branch on the same kind and the
+    // writer and reader stay symmetric (one switch, two modes).
     inline void Serialize(ISerializer& ar, ScriptPropertyValue& v)
     {
         u8 kind = static_cast<u8>(v.kind);
@@ -234,11 +233,11 @@ export namespace foundation::script
         String language;   // backend id ("angelscript"); resolved via the ScriptBackendRegistry
         String className;  // empty = a ScriptClass-less utility module
         String sourceName; // the source file identity ("Mover.as"): the AngelScript section
-                           // name + the editor's breakpoint key - cook-stamped = asset fileName
+                           // name and the editor's breakpoint key; the cook stamps the asset fileName
         String source;     // full script source text (kept for dev-mode hot reload)
         // Compiled bytecode for the pack (the player loads this, it has no compiler), when the
-        // language has a stable bytecode (ScriptCapabilities::Bytecode - Luau) and it cooked;
-        // EMPTY for source-only backends or a cook that produced none. Version-locked:
+        // language has a stable bytecode (ScriptCapabilities::Bytecode) and it cooked; empty
+        // for source-only backends or a cook that produced none. Version-locked:
         // the cook fingerprint carries the compiler version so a vendor bump recooks.
         Array<byte> bytecode;
         Array<ScriptPropertyDesc> properties;
@@ -299,8 +298,8 @@ export namespace foundation::script
             return nullptr;
         }
 
-        /// Stable profiler label ("Script " + class name) - the profiler stores the
-        /// POINTER, and this product outlives the frames it labels.
+        /// Stable profiler label ("Script " and the class name): the profiler stores the
+        /// pointer, and this product outlives the frames it labels.
         [[nodiscard]] const char* ProfileName() const noexcept
         {
             return reinterpret_cast<const char*>(m_profileName.CStr());
@@ -318,8 +317,8 @@ export namespace foundation::script
     class ScriptClassFactory final : public foundation::resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required -
-        // the application that registers the factory decides).
+        // The allocator backs every product this factory creates (required; the
+        // application that registers the factory decides).
         explicit ScriptClassFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
         [[nodiscard]] const TypeInfo* ProductType() const override
@@ -357,12 +356,12 @@ export namespace foundation::script
         IAllocator* m_allocator;
     };
 
-    // Registers the cooked record + product types (content-DB construction by type name).
+    // Registers the cooked record and product types (content-DB construction by type name).
     inline void RegisterScriptResource()
     {
         // Data version 1: each property's replicated flag. A record cooked before it is in
         // another layout; the strict reader refuses it and the script recooks. No REFLECT block
-        // owns this type - patched on the TypeInfo.
+        // owns this type, so the version is patched on the TypeInfo.
         const_cast<TypeInfo&>(ScriptClassSource::StaticType()).dataVersion = 1;
         GlobalTypeRegistry().Register(ScriptClassSource::StaticType());
         RegisterSerializable<ScriptClassSource>();
@@ -375,8 +374,8 @@ export namespace foundation::script
 
 export namespace foundation::script
 {
-    /// The script resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The script resource module: the factories the engine composition takes from this
+    /// library.
     inline constexpr foundation::resource::ResourceFactoryDesc kScriptResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<ScriptClass, ScriptClassSource, ScriptClassFactory>(),
     };

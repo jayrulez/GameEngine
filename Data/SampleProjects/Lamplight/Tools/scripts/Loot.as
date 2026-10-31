@@ -1,6 +1,6 @@
-// Loot - something to take: walked over, it is taken (a Loot event with its value, a chime, and it
-// is gone). The level's target is taken the same way and says so instead (Taken), so the level
-// script (Level.as) knows the thief may now leave by the exit.
+// Loot: something to take. When the thief walks over it, it emits a Loot event with its value,
+// plays a chime and disappears. The level's target is taken the same way but emits Taken instead,
+// so the game script (Lamplight.as) knows the thief may now leave by the exit.
 class Loot
 {
     private Entity@ self;

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - EventDispatcher tests: hover enter/leave, click, focus (click + program-
-// matic), key/text routing to the focus node, and interaction-ref cleanup. Input is
-// injected as abstract events (the shell bridge's job), hit-tested via the tree's OverFind.
+// GUI - EventDispatcher tests: hover enter and leave, click, focus (by click and from code), key
+// and text routing to the focus node, and interaction-ref cleanup. Input is injected as abstract
+// events (the shell bridge's job), hit-tested through the tree's OverFind.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -67,8 +67,8 @@ TEST_CASE("dispatch: press+release on the same node is a click and focuses it")
     CHECK(d->GetFocusNode() == child.Get());
     CHECK(child->IsFocused());
 
-    // A click on what does not take focus (a backdrop) clears it, still delivering the click; one
-    // on a child of a focusable widget focuses that widget.
+    // A click on something that does not take focus (a backdrop) clears the focus and still
+    // delivers the click. A click on a child of a focusable widget focuses that widget.
     auto backdrop = MakePanel(core::Float2{100.0f, 100.0f}, core::Float2{50.0f, 50.0f});
     root->AddChild(backdrop.Get());
     int backdropClicks = 0;
@@ -142,7 +142,7 @@ TEST_CASE("dispatch: key and text route to the focus node")
                                 lastText = static_cast<const TextInputEvent&>(e).Text;
                             });
 
-    d->InjectKeyDown(65); // no focus yet -> dropped
+    d->InjectKeyDown(65); // nothing has the focus yet, so the key is dropped
     CHECK(keys == 0);
 
     d->SetFocusNode(child.Get());
@@ -197,12 +197,12 @@ TEST_CASE("dispatch: a subtree leaving the tree takes the hover, press and focus
     CHECK(d->GetOverNode() == root.Get()); // what is still under the pointer
     CHECK_FALSE(child->IsHovered());
     CHECK(d->GetFocusNode() == nullptr);
-    CHECK_FALSE(child->IsFocused()); // told it lost focus while it still lived
+    CHECK_FALSE(child->IsFocused()); // it was told it lost focus while it still lived
     d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left); // no press to finish
     d->InjectMouseMove(core::Float2{120.0f, 120.0f});
     CHECK(d->GetOverNode() == other.Get());
 
-    // A node leaving elsewhere leaves the refs alone.
+    // A node removed elsewhere in the tree leaves the dispatcher's references alone.
     d->SetFocusNode(other.Get());
     root->AddChild(panel.Get());
     root->RemoveChild(panel.Get());
@@ -271,7 +271,7 @@ TEST_CASE("dispatch: a disabled widget, or one inside a disabled panel, takes no
     click(core::Float2{10.0f, 10.0f});
     CHECK(clicks == 0);
     CHECK(behind == 0);        // it still covers what lies behind it
-    CHECK(enters == 1);        // and is still hovered (a tooltip says why it is disabled)
+    CHECK(enters == 1);        // and is still hovered, so a tooltip can say why it is disabled
     CHECK(d->GetFocusNode() == nullptr);
     button->SetEnabled(true);
     click(core::Float2{10.0f, 10.0f});
@@ -290,7 +290,7 @@ TEST_CASE("dispatch: Tab navigation cycles through tab-focusable nodes in order"
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto a = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{50.0f, 20.0f});
-    auto skip = MakePanel(core::Float2{0.0f, 20.0f}, core::Float2{50.0f, 20.0f}); // NOT focusable
+    auto skip = MakePanel(core::Float2{0.0f, 20.0f}, core::Float2{50.0f, 20.0f}); // not focusable
     auto b = MakePanel(core::Float2{0.0f, 40.0f}, core::Float2{50.0f, 20.0f});
     auto c = MakePanel(core::Float2{0.0f, 60.0f}, core::Float2{50.0f, 20.0f});
     a->SetTabFocusable(true);
@@ -302,7 +302,7 @@ TEST_CASE("dispatch: Tab navigation cycles through tab-focusable nodes in order"
     root->AddChild(c.Get());
     EventDispatcher* d = root->GetEventDispatcher();
 
-    // Nothing focused -> Tab lands on the first stop.
+    // Nothing focused: Tab lands on the first stop.
     CHECK(d->FocusNext());
     CHECK(d->GetFocusNode() == a.Get());
     // Tab skips the non-focusable node.
@@ -374,7 +374,7 @@ TEST_CASE("dispatch: only the left button synthesizes a click (right/middle do n
     child->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
     child->AddEventListener(EventType::MouseDown, [&](const Event&) { ++downs; });
 
-    // Right-click: down+up are delivered, but no click (no activation).
+    // Right-click: down and up are delivered, but no click (no activation).
     d->InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Right);
     d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Right);
     CHECK(downs == 1);
@@ -408,7 +408,7 @@ TEST_CASE("dispatch: a centred popup sits in the root's middle by its size, agai
     EventDispatcher* d = root->GetEventDispatcher();
     PopupOptions options;
     options.Centered = true;
-    options.Anchor = opener.Get(); // not asked: centred
+    options.Anchor = opener.Get(); // no placement asked, so it is centred
     d->OpenPopup(*opener, *popup, core::Move(options));
     (void)root->UpdateLayout();
     const auto at = [&]() { return popup->ConvertToRootSpace(core::Float2{0.0f, 0.0f}); };

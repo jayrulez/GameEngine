@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::Core tests - the cook service's observable lifecycle over a scratch project: a
+// Editor::Core tests: the cook service's observable lifecycle over a scratch project. A
 // request runs on the worker and lands through Update (the revision bumps, OnCookFinished
 // fires, the summary is readable), a request that arrives mid-cook is remembered and re-issued,
 // and Shutdown joins whatever is in flight.
@@ -64,9 +64,9 @@ TEST_CASE("cook-service: a request lands through Update - revision, OnCookFinish
     CHECK(summary.failed == 0u);
     CHECK(cook.LastCookedProducts().Size() == 0u);
 
-    // A request while one is in flight is REMEMBERED and re-issued: two cooks land.
+    // A request while one is in flight is remembered and re-issued: two cooks land.
     cook.RequestCook(false);
-    cook.RequestCook(true); // arrives mid-cook (or just after the plan) - never lost
+    cook.RequestCook(true); // arrives mid-cook (or just after the plan); it is not lost
     REQUIRE(PumpUntil(cook, [&cook]() { return cook.Revision() == 3u && cook.IsIdle(); }));
     CHECK(finished == 3u);
 

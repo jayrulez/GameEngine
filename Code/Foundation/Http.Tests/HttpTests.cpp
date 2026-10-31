@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Http tests - the parser edges (split pushes, case-insensitive headers, limits,
-// close-delimited bodies) and REAL loopback exchanges: a pumped server on an OS-assigned port,
+// Foundation::Http tests: the parser edges (split pushes, case-insensitive headers, limits,
+// close-delimited bodies) and real loopback exchanges: a pumped server on an OS-assigned port,
 // the blocking client from a worker thread, one-shot requests, refusals, and an SSE stream
 // read raw off the socket.
 #include <doctest/doctest.h>
@@ -44,7 +44,7 @@ TEST_CASE("http: parser - a request in arbitrarily split pushes")
                             u8"Content-Length: 11\r\n"
                             u8"\r\n"
                             u8"{\"ok\":true}";
-    // Push one byte at a time - the harshest framing.
+    // Push one byte at a time, the harshest framing.
     HttpMessageParser parser(HttpMessageParser::Mode::Request);
     HttpParseState state = HttpParseState::NeedMore;
     for (usize i = 0; i < wire.Size(); ++i)
@@ -237,7 +237,7 @@ TEST_CASE("http: loopback - one-shot request/response, 404, and bad request")
     REQUIRE(outcome.missing.HasValue());
     CHECK(outcome.missing.Value().status == 404);
 
-    // Raw garbage answers 400 and the server SURVIVES.
+    // Raw garbage answers 400 and the server survives.
     bool done2 = false;
     bool got400 = false;
     Thread rawClient(
@@ -358,8 +358,7 @@ TEST_CASE("http: loopback - a request answered not yet is re-dispatched every pu
     CHECK(sawPending);
     CHECK(answered == 1);
     CHECK(server.PendingRequestCount() == 0);
-    // The request kept its number across its re-dispatches (Sedulous d509904a); answered, it
-    // was not abandoned.
+    // The request kept its number across its re-dispatches; answered, it was not abandoned.
     REQUIRE(sequences.Size() == 3u);
     CHECK(sequences[0] != 0u);
     CHECK(sequences[1] == sequences[0]);
@@ -502,7 +501,7 @@ TEST_CASE("http: loopback - a Server-Sent Events stream delivers events as they 
     CHECK(sawHeaders);
     ScopedLock lock(receivedMutex);
     const StringView text = received.AsView();
-    // Headers + both events arrived, with multi-line data split into per-line fields.
+    // Headers and both events arrived, with multi-line data split into per-line fields.
     CHECK(text.StartsWith(u8"HTTP/1.1 200 OK"));
     bool sawEventName = false;
     bool sawDataOne = false;

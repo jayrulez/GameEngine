@@ -3,16 +3,16 @@
 
 // GUI - :model_index partition
 //
-// ModelIndex + ModelRole: the address of a cell in a Model, and the aspect a view asks for.
-// Modeled on eepp's Models::ModelIndex / ModelRole (role only): a row and a column, and for a tree
-// model the node's opaque id (InternalId) that locates it under its parent.
+// ModelIndex and ModelRole: the address of a cell in a Model, and the aspect a view asks for. An
+// index is a row and a column, and for a tree model the node's opaque id (InternalId) that locates
+// it under its parent.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:model_index;
 
-import foundation.core; // i32
+import foundation.core;
 
 using namespace foundation::core;
 
@@ -25,13 +25,13 @@ export namespace foundation::gui
         Sort,
         Icon,      ///< an image's source (a path), or nothing
         Custom,
-        IconClass, ///< a class on that image, which a sheet styles (a type's category tint)
-        RowClass,  ///< classes on the row's content, space separated, which a sheet styles (a state)
+        IconClass, ///< a class on the icon image for a sheet to style (a type's category tint)
+        RowClass,  ///< space-separated classes on the row's content for a sheet to style (a state)
     };
 
     struct ModelIndex
     {
-        i32 Row = -1; // -1 = invalid
+        i32 Row = -1; // -1: invalid
         i32 Column = 0;
         i64 InternalId = -1; // opaque node identity a tree model uses to locate the node
 

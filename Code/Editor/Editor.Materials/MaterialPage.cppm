@@ -3,28 +3,27 @@
 
 // Editor::Materials - :page partition.
 //
-// MaterialEditorPage: edits a MaterialAsset. On the GUI from the preview pages' markup
-// (Data/Editor/PreviewPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 4): the material on
-// a preview shape lit by a default sun and procedural sky (its clock running, so a shader that
-// moves with Time moves), beside its rows. The authored form IS the runtime source
-// (MaterialSource), so Save writes the object back and asks for a cook; every live proxy bound to
-// the cooked product then hot-swaps.
+// MaterialEditorPage: edits a MaterialAsset, built from the preview pages' markup
+// (Data/Editor/PreviewPage.xml). The material shows on a preview shape lit by a default sun and
+// procedural sky, with its clock running so a shader that moves with Time moves, beside its rows.
+// The authored form is the runtime source (MaterialSource), so Save writes the object back and
+// requests a cook; every live proxy bound to the cooked product then hot-swaps.
 //
-// The rows are the material's, not its reflection's (a source in parallel arrays: names, offsets,
-// a uniform blob): under Material its shader (a shader asset, or a built-in, PBR or Unlit) and its
-// pipeline state (blend, depth, cull); under Properties each value its shader declares, by its
-// type (a number, with the shader's range; two, three or four; an integer; a colour; a colour
-// that may pass white, with its intensity); under Textures each texture slot, a slot taking a
-// texture or a render texture; then a section per effect group the material carries (Wind: its
-// Strength, Speed and Height, Specs/wind-for-every-shader.md), its rows from the effect's table as
-// a custom shader's are, its values the group's (`Wind.Strength`), and none for a material whose
-// shader declares no effect. A shader switched, undone or recooked lays the rows out again. What
-// the preview shows the material on (a shape, or a mesh from the project) is on the preview's bar,
-// not among the material's rows, and kept per material with the project.
+// The page builds the rows itself rather than from reflection (the source is parallel arrays:
+// names, offsets, a uniform blob). Under Material are its shader (a shader asset, or a built-in:
+// PBR, Unlit or Phong) and its pipeline state (blend, depth, cull). Under Properties is each value
+// its shader declares, by type: a number with the shader's range; two, three or four numbers; an
+// integer; a colour; or a colour that may pass white, with its intensity. Under Textures is each
+// texture slot, which takes a texture or a render texture. Then comes a section per effect group
+// the material carries (Wind: its Strength, Speed and Height), with rows from the effect's table
+// as a custom shader's are and values from the group (`Wind.Strength`); a material whose shader
+// declares no effect has none. Switching the shader, an undo or a recook lays the rows out again.
+// What the preview shows the material on (a shape, or a mesh from the project) is on the
+// preview's bar, not among the material's rows, and is kept per material with the project.
 //
-// Edits are BLOB-SNAPSHOT commands: each captures the whole serialized MaterialSource before and
-// after (it is tiny), exact undo whatever the layout, and consecutive edits of one row merge. Every
-// apply rebuilds the preview's material, so a scrub reads live on the shape.
+// Edits are blob-snapshot commands: each captures the whole serialized MaterialSource before and
+// after (it is tiny), which gives an exact undo whatever the layout, and consecutive edits of one
+// row merge. Every apply rebuilds the preview's material, so a scrub shows live on the shape.
 
 module;
 #include "Core/Prelude.h"
@@ -128,10 +127,12 @@ export namespace editor
         [[nodiscard]] foundation::gui::PropertyBag* EffectRows(StringView effect) noexcept;
         /// Writes `value` to row `path` of `rows` as the grid commits an edit (one undo step).
         void EditRow(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
-        /// The rows shown again from the source (after an undo), or laid out again (a shader switched).
+        /// Shows the rows again from the source (after an undo), or lays them out again (after a
+        /// shader switch).
         void Refresh() override;
 
-        /// The preview's shape (an index into kShapes) or mesh (nil: the shape), kept per material.
+        /// The preview's shape (an index into kShapes) or mesh (nil means the shape), kept per
+        /// material.
         void SetPreviewShape(u32 shape);
         void SetPreviewMesh(const Guid& mesh);
         [[nodiscard]] u32 PreviewShape() const noexcept { return m_previewShape; }
@@ -141,14 +142,14 @@ export namespace editor
         [[nodiscard]] const materials::MaterialSource* Source() const;
         [[nodiscard]] app::PreviewPane* Pane() const noexcept { return m_pane.Get(); }
 
-        // Deserialize a source blob into the live asset + refresh the preview (the command
-        // stack's apply path - Execute and Undo both land here).
+        // Deserialize a source blob into the live asset and refresh the preview (the command
+        // stack's apply path: Execute and Undo both land here).
         void ApplySourceBlob(const Array<byte>& blob);
         [[nodiscard]] Array<byte> SnapshotSource() const;
 
     private:
-        // Whole-source snapshot command: before/after blobs + a merge key (consecutive scrubs
-        // of the same row collapse; the FIRST command keeps the original `before`).
+        // Whole-source snapshot command: before and after blobs and a merge key (consecutive
+        // scrubs of the same row collapse; the first command keeps the original `before`).
         class EditMaterialCommand final : public IEditorCommand
         {
         public:
@@ -181,20 +182,21 @@ export namespace editor
         };
 
         [[nodiscard]] pipeline::MaterialAsset* Asset() const { return ObjectAs<pipeline::MaterialAsset>(); }
-        // Run one edit as an undoable command: snapshot -> mutate -> snapshot -> push.
+        // Run one edit as an undoable command: snapshot, mutate, snapshot, push.
         void ApplyEdit(StringView mergeKey, Function<void(materials::MaterialSource&)> mutate);
-        /// A gesture given up: the source as it was before its previews.
+        /// Abandons a gesture: puts back the source as it was before its previews.
         void CancelGesture();
 
-        // The rows from the source: made again when its layout changed, else their values shown.
+        // Builds the rows from the source: rebuilt when its layout changed, else only their values
+        // are shown again.
         void BuildRows();
         void ShowValues();
         void Committed(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
         void ShowNotices();
 
-        // Preview world: the material shape + the standard seeded sun + default environment.
+        // Preview world: the material shape, the standard seeded sun and the default environment.
         void BuildPreviewScene();
-        // Build the runtime preview Material from the CURRENT source and swap it onto the shape.
+        // Build the runtime preview Material from the current source and swap it onto the shape.
         void RebuildPreviewMaterial();
         void LoadPreviewPref();
         void SavePreviewPref();
@@ -205,35 +207,36 @@ export namespace editor
         // The shader asset's cooked source (its property table), or null before it has cooked.
         [[nodiscard]] RefPtr<foundation::shaders::ShaderSource> ReadShader(const Guid& shader) const;
         // Moves the material onto a shader asset, or back to a built-in (nil), as one undoable
-        // edit: re-laid by the new shader's table, every value that still fits kept.
+        // edit: the rows are laid out by the new shader's table, and every value that still fits
+        // is kept.
         void SwitchShader(const Guid& shader);
         void SwitchToBuiltIn(foundation::materials::BuiltinShading shading);
         // Binds the material's shader asset and re-lays the material by its current table.
         void BindShader();
 
-        // The material's effect groups laid on the effects' tables by what its shader's vertex
-        // stage declares (a group it lacks added at the effect's defaults), when the page has the
-        // shader system; `source` is the live one (a layout, not an edit) or an edit's.
+        // Lays the material's effect groups on the effects' tables by what its shader's vertex
+        // stage declares, adding a missing group at the effect's defaults, when the page has the
+        // shader system. `source` is the live source (for a layout, not an edit) or an edit's.
         void AdoptEffects(materials::MaterialSource& source, foundation::shaders::ShaderFlags vertexVariants);
         // The vertex variants the source's shader declares: a built-in's, or its shader asset's.
         [[nodiscard]] foundation::shaders::ShaderFlags VertexVariantsOf(const materials::MaterialSource& source) const;
 
-        // A value's row, its value shown, and an edit of it written, by its type: one way for the
-        // shader's properties and an effect group's parameters. `path` is the row's in `rows`;
+        // Adds a value's row by its type, shows its value and writes its edits, the same way for
+        // the shader's properties and an effect group's parameters. `path` is the row's in `rows`;
         // `name` addresses the value (`Metallic`, `Wind.Strength`); `declared` gives its range.
         void AddValueRow(foundation::gui::PropertyBag& rows, StringView path, MaterialPropertyRow row,
                          const foundation::shaders::ShaderProperty* declared);
         void ShowValue(foundation::gui::PropertyBag& rows, StringView path, StringView name, MaterialPropertyRow row);
         void CommitValue(StringView name, StringView part, MaterialPropertyRow row, const foundation::gui::Variant& value);
 
-        // Uniform blob access by property name (offset/size from the source's tables); an
+        // Uniform blob access by property name (offset and size from the source's tables); an
         // `Effect.Property` name reaches the effect group's values instead.
         void ReadUniform(StringView name, void* out, usize bytes) const;
         void WriteUniform(materials::MaterialSource& source, StringView name, const void* value, usize bytes) const;
 
         UniquePtr<app::PreviewPane> m_pane;
-        RefPtr<foundation::gui::ComboBox> m_shapeChoice; // the preview bar's
-        RefPtr<app::AssetPickerSlot> m_meshSlot;          // the preview bar's
+        RefPtr<foundation::gui::ComboBox> m_shapeChoice; // on the preview bar
+        RefPtr<app::AssetPickerSlot> m_meshSlot;          // on the preview bar
         UniquePtr<foundation::gui::PropertyBag> m_materialRows;
         UniquePtr<foundation::gui::PropertyBag> m_propertyRows;
         UniquePtr<foundation::gui::PropertyBag> m_textureRows;
@@ -242,9 +245,9 @@ export namespace editor
         Array<String> m_effectRowNames;
         bool m_rowsDirty = false; // the layout changed: built again on the next Refresh
         bool m_reshow = false;    // the values changed under the rows: shown again on the next Refresh
-        // A gesture under way (a drag, a scrub, a picker open): its previews are written to the
-        // source as they go, so the preview shows them, with no undo step; the source as it was
-        // before them, what the gesture's one step starts from, or what a cancel puts back.
+        // A gesture under way (a drag, a scrub, an open picker) writes its previews to the source
+        // as they go, so the preview shows them, with no undo step. The source as it was before
+        // them is kept: the gesture's single undo step starts from it, and a cancel puts it back.
         bool m_previewing = false;
         bool m_inGesture = false;
         Array<byte> m_gestureBefore;
@@ -278,8 +281,8 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    // Per-asset material-preview prefs: {assetGuid -> (shape, meshGuid)} - a section in the
-    // per-project editor-settings store (rewritten whole; the page reads/writes its row).
+    // Per-asset material-preview prefs (asset guid -> shape and mesh guid): a section in the
+    // per-project editor-settings store, rewritten whole; the page reads and writes its own row.
     struct MaterialPreviewPref
     {
         Guid asset;
@@ -315,8 +318,9 @@ export namespace editor
         }
     };
 
-    /// The material page (asking for its services when it is made), the asset's types and the
-    /// preview prefs' section (registered before the app loads the per-project store).
+    /// Registers the material page (which asks for its services when it is made), the asset's
+    /// types and the preview prefs' section (registered before the app loads the per-project
+    /// store).
     inline void RegisterMaterialEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         GlobalTypeRegistry().Register(pipeline::MaterialAsset::StaticType(), TypeDomain(u8"Editor"));

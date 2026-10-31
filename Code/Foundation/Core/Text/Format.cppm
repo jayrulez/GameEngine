@@ -216,9 +216,9 @@ export namespace foundation::core
         requires std::is_floating_point_v<T>
     void AppendValue(Sink& out, T value)
     {
-        // Through detail::FloatToChars (defined in Core's Text/TextImpl.cpp), NOT std::to_chars
+        // Through detail::FloatToChars (defined in Core's Text/TextImpl.cpp), not std::to_chars
         // directly: instantiating the STL's floating-point path in a module interface leaves
-        // consumers referencing STL static DATA members that a shared Core cannot hand them.
+        // consumers referencing STL static data members that a shared Core cannot hand them.
         // See the declaration in String.cppm for the full reason.
         // An f32 prints its own shortest form ("0.1"), never its f64 widening
         // ("0.10000000149011612"); every other floating type goes through f64.

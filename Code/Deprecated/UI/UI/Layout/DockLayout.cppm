@@ -4,7 +4,7 @@
 // UI - :dock_layout partition
 //
 // Docks children to edges (Left/Top/Right/Bottom/Fill); each docked child claims space from its edge,
-// shrinking the remaining area for subsequent children. Ported from Sedulous.UI/src/Layout/DockLayout.bf.
+// shrinking the remaining area for subsequent children.
 // The child's side comes from its LayoutStyle::Dock.
 
 module;
@@ -49,8 +49,8 @@ export namespace foundation::ui
 
                 const foundation::ui::Dock dock = child->Layout().Dock;
 
-                // Margin is base-handled: pass the remaining space as the
-                // child's margin-box availability; aggregate margin-box sizes.
+                // The base class handles margins: pass the remaining space as the space
+                // available to the child's margin box, and sum the margin-box sizes.
                 const f32 remainW = Max(0.0f, constraints.MaxWidth - chrome.TotalHorizontal() -
                                                   usedLeft - usedRight);
                 const f32 remainH = Max(0.0f, constraints.MaxHeight - chrome.TotalVertical() -
@@ -83,8 +83,8 @@ export namespace foundation::ui
                 maxH = Max(maxH, usedTop + usedBottom);
             }
 
-            // The chrome (padding AND border) was deflated above, so it is the chrome that
-            // comes back - adding only the padding measured a bordered dock short by the border.
+            // The chrome (padding and border) was deflated above, so add the whole chrome
+            // back, not only the padding, or a bordered dock measures short by the border.
             MeasuredSize = Float2{constraints.ConstrainWidth(maxW + chrome.TotalHorizontal()),
                                   constraints.ConstrainHeight(maxH + chrome.TotalVertical())};
         }
@@ -112,7 +112,7 @@ export namespace foundation::ui
                 const bool isFill =
                     (LastChildFill && i == count - 1) || dock == foundation::ui::Dock::Fill;
 
-                // Rects below are MARGIN boxes - the base Layout insets by margin once.
+                // Rects below are margin boxes; the base Layout insets by the margin once.
                 const Float2 mb = child->MarginBoxSize();
                 if (isFill)
                 {

@@ -3,10 +3,9 @@
 
 // Foundation::VG - :fills partition.
 //
-// Fill styles for vector-graphics shapes: the IVGFill interface, solid + linear/
-// radial/conic gradient fills, gradient stops, and color interpolation helpers.
-// Ported from Sedulous.VG (IVGFill/VGSolidFill/VG*GradientFill/GradientStop/
-// ColorUtils). Colors are the engine's float Color (Sedulous used byte Color).
+// Fill styles for vector-graphics shapes: the IVGFill interface, solid, linear,
+// radial and conic gradient fills, gradient stops, and color interpolation helpers.
+// Colors are the engine's float Color.
 
 module;
 #include "Core/Prelude.h"
@@ -73,8 +72,8 @@ export namespace foundation::vg
         }
     };
 
-    /// The gradient family a fill represents. VGContext maps this to a draw mode + emit mode when
-    /// per-pixel gradients are enabled; Solid/Linear stay on the default pipeline.
+    /// The gradient family a fill represents. VGContext maps this to a draw mode and emit mode when
+    /// per-pixel gradients are enabled; Solid and Linear stay on the default pipeline.
     enum class VGGradientKind
     {
         Solid,
@@ -83,8 +82,8 @@ export namespace foundation::vg
         Conic,
     };
 
-    /// Map a raw gradient parameter through a spread method (the CPU mirror of the
-    /// renderer's LUT sampler address mode - keep the two in agreement).
+    /// Map a raw gradient parameter through a spread method: the CPU counterpart of the
+    /// renderer's LUT sampler address mode, so keep the two in agreement.
     [[nodiscard]] inline f32 ApplyGradientSpread(f32 t, VGGradientSpread spread)
     {
         switch (spread)
@@ -116,8 +115,8 @@ export namespace foundation::vg
         [[nodiscard]] virtual bool RequiresInterpolation() const = 0;
 
         /// The raw gradient parameter t at a point (linear projection, dist/radius, or
-        /// angle/2PI), before clamping. Solid fills return 0. Used to bake + per-pixel
-        /// address the gradient LUT (see [[vg-quality-track]]).
+        /// angle/2PI), before clamping. Solid fills return 0. Used to bake the gradient LUT
+        /// and to address it per pixel.
         [[nodiscard]] virtual f32 GetParameterAt(Float2 /*position*/, Rectangle /*bounds*/) const
         {
             return 0.0f;
@@ -132,7 +131,7 @@ export namespace foundation::vg
         [[nodiscard]] virtual VGGradientSpread Spread() const { return VGGradientSpread::Pad; }
         /// The per-vertex gradient-space coordinate a per-pixel gradient shader consumes: radial
         /// returns (pos-center)/radius (the shader takes its length); conic returns (pos-center)
-        /// rotated by -startAngle (the shader takes its angle). Unused by solid/linear fills.
+        /// rotated by -startAngle (the shader takes its angle). Unused by solid and linear fills.
         [[nodiscard]] virtual Float2 GradientCoord(Float2 /*position*/, Rectangle /*bounds*/) const
         {
             return Float2{0.0f, 0.0f};
@@ -301,7 +300,7 @@ export namespace foundation::vg
         [[nodiscard]] Float2 GradientCoord(Float2 position, Rectangle /*bounds*/) const override
         {
             // Rotate (pos-center) by -startAngle so the shader's atan2 measures from the start
-            // angle - matching GetParameterAt's (atan2 - startAngle).
+            // angle, matching GetParameterAt's (atan2 - startAngle).
             const Float2 d = position - center;
             const f32 c = Cos(-startAngle);
             const f32 s = Sin(-startAngle);

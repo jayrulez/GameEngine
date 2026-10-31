@@ -5,8 +5,8 @@
 //
 // GPU thumbnail generator for collision shapes: the cooked product's outline triangles (the
 // same soup the collider gizmos draw) rebuilt as a renderable mesh with flat facets, framed by
-// its bounds. Data-only - the cooked outline is read as-is, never a physics world or Jolt
-// shape. Registered from RegisterCollisionShapeEditor; the stage drives everything GPU.
+// its bounds. It reads only data: the cooked outline as it is, never a physics world or a Jolt
+// shape. RegisterCollisionShapeEditor registers it, and the stage does all the GPU work.
 
 module;
 #include "Core/Prelude.h"
@@ -29,7 +29,7 @@ export namespace editor
     [[nodiscard]] bool BuildCollisionOutlineMesh(const foundation::physics::CollisionShape& shape,
                                                  foundation::geometry::StaticMesh& mesh);
 
-    /// The generator itself, for a host that keeps its own (a test): what
+    /// Creates the generator for a host that keeps its own (a test). It is the same generator that
     /// RegisterCollisionThumbnailGenerator hands the service.
     [[nodiscard]] UniquePtr<ISceneThumbnailGenerator> CreateCollisionThumbnailGenerator();
 

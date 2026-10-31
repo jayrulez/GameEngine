@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - module implementation unit: layout (E2 of Specs/gui-lab-evolution.md).
+// GUI - module implementation unit: layout.
 //
 // Node's measure and arrange, and the display kinds they run: flex (CSS's algorithm: base sizes,
 // lines, grow and shrink with minimums freezing, stretch, justify and align), grid (explicit and
@@ -28,8 +28,8 @@ namespace foundation::gui
         {
             return node.IsDisplayed() && !node.IsInTopLayer() && node.GetLayoutStyle().Placement != Position::Absolute;
         }
-        // Both axes sized by the style, not by what is inside: the node's size does not follow its
-        // content, so a change inside it stops at it.
+        // Both axes are sized by the style, not by what is inside: the node's size does not follow
+        // its content, so a change inside it stops there.
         [[nodiscard]] bool HasDefiniteSize(const Node& node) noexcept
         {
             const LayoutStyle& s = node.GetLayoutStyle();
@@ -54,14 +54,14 @@ namespace foundation::gui
             f32 height;
             core::Float2 origin;
             bool arrange;
-            /// Right to left (E9b): laid out as left to right with each child's left and right
+            /// Right to left: laid out as left to right with each child's left and right
             /// margins swapped, then mirrored within the box (LayoutChildren), so its margins stay
             /// where its style puts them.
             bool rtl = false;
         };
 
-        // A child's margin-box size within the space given (the size its own style and content
-        // want, kept within the space less its margins).
+        // Returns a child's margin-box size within the space given: the size its own style and
+        // content want, kept within the space minus its margins.
         [[nodiscard]] core::Float2 MeasureItem(Node& child, f32 availW, f32 availH, core::Float2 percentBase)
         {
             const Thickness m = child.GetMarginWithin(percentBase.x);
@@ -71,8 +71,8 @@ namespace foundation::gui
             const core::Float2 border = child.Measure(c);
             return core::Float2{border.x + m.TotalHorizontal(), border.y + m.TotalVertical()};
         }
-        // The border-box size of a child given its size on some axes (tight) and a limit on the
-        // others.
+        // Returns the border-box size of a child, given its size on some axes (tight) and a limit on
+        // the others.
         [[nodiscard]] core::Float2 MeasureBorder(Node& child, Optional<f32> w, Optional<f32> h, f32 maxW, f32 maxH,
                                                  core::Float2 percentBase)
         {
@@ -84,8 +84,8 @@ namespace foundation::gui
             c.ExactHeight = h.HasValue();
             return child.Measure(c);
         }
-        // The child's margin as the flow lays it out: in right to left, left and right swapped (the
-        // mirror puts them back).
+        // Returns the child's margin as the flow lays it out: in right to left, left and right are
+        // swapped (the mirror puts them back).
         [[nodiscard]] Thickness FlowMargin(const Flow& f, const Node& child) noexcept
         {
             Thickness m = child.GetMarginWithin(BaseOf(f.width));
@@ -110,7 +110,7 @@ namespace foundation::gui
         }
         [[nodiscard]] Align SelfAlign(Align self, Align container) noexcept { return self == Align::Auto ? container : self; }
 
-        // The in-flow children in their `order` (stable).
+        // Returns the in-flow children sorted by `order`, keeping document order for ties.
         [[nodiscard]] Array<Node*> FlowChildren(Node& container)
         {
             Array<Node*> items;
@@ -123,7 +123,8 @@ namespace foundation::gui
             return items;
         }
 
-        // Where `count` items of total `used` along `free` space start and how far apart they are.
+        // Computes where `count` items start along `free` space, and how far apart they are, for
+        // `justify`.
         void Distribute(Justify justify, f32 free, usize count, f32& start, f32& between)
         {
             start = 0.0f;
@@ -257,8 +258,9 @@ namespace foundation::gui
             f32 contentMain = 0.0f;
             for (FlexLine& line : lines)
             {
-                // Grow into free space, or shrink out of the overflow (each in proportion to its
-                // shrink times its base size, frozen at its minimum: its content's when auto).
+                // Grow into free space, or shrink out of the overflow (each item in proportion to its
+                // shrink factor times its base size, frozen at its minimum, which is its content's
+                // minimum when auto).
                 f32 used = mainGap * static_cast<f32>(line.count > 0 ? line.count - 1 : 0);
                 for (usize i = line.start; i < line.start + line.count; ++i)
                 {
@@ -318,9 +320,10 @@ namespace foundation::gui
                                                                                       : core::Float2{Less(crossAvail, item.marginCross + chrome.TotalHorizontal()), 0.0f});
                                     f32 minContent = row ? content.x + chrome.TotalHorizontal() : content.y + chrome.TotalVertical();
                                     const LayoutStyle& ns = n.GetLayoutStyle();
-                                    // A scroll container's on an axis it scrolls is none (as CSS's):
-                                    // its content scrolls inside it rather than sizing it, or a
-                                    // virtualised list grows with the rows it realises.
+                                    // A scroll container's minimum on an axis it scrolls is none (as
+                                    // in CSS): its content scrolls inside it rather than sizing it;
+                                    // otherwise a virtualised list would grow with the rows it
+                                    // realises.
                                     if (Scrolls(row ? ns.OverflowX : ns.OverflowY))
                                         minContent = row ? chrome.TotalHorizontal() : chrome.TotalVertical();
                                     if (const Optional<f32> specified = (row ? ns.Width : ns.Height).Resolve(BaseOf(mainAvail)); specified.HasValue())
@@ -353,10 +356,10 @@ namespace foundation::gui
                         item.main = core::Max(item.main, item.node->GetLayoutStyle().MinWidth.Value);
                     if (item.node->GetLayoutStyle().MinHeight.Kind == LayoutLengthKind::Px && !row)
                         item.main = core::Max(item.main, item.node->GetLayoutStyle().MinHeight.Value);
-                    // Its cross size at that main size (text wraps to the width it was given). A
-                    // row's item that does not stretch is as tall as its content, as a box's height
-                    // follows its content whatever the space (it overflows a short row); a
-                    // column's is kept within the width, where text wraps.
+                    // The item's cross size at that main size (text wraps to the width it was
+                    // given). A row item that does not stretch is as tall as its content, as a box's
+                    // height follows its content whatever the space (it overflows a short row); a
+                    // column item is kept within the width, where text wraps.
                     const f32 crossLimit = row && !item.stretch ? kUnbounded : Less(crossAvail, item.marginCross);
                     const core::Float2 b = row ? MeasureBorder(*item.node, item.main, {}, item.main, crossLimit, percentBase)
                                                : MeasureBorder(*item.node, {}, item.main, crossLimit, item.main, percentBase);
@@ -373,16 +376,17 @@ namespace foundation::gui
                 }
                 line.baseline = aboveBaseline;
                 line.cross = core::Max(line.cross, aboveBaseline + belowBaseline);
-                // Measuring, the space along is a limit, not a size: the content is as long as its
-                // items before they grow (a button's text grows to fill the button, yet a button
-                // asked its size in a wide column is as wide as its text, not the column). Placing,
-                // it is the size the items were given. The items' depth is at their grown size
-                // either way, the size they get when the container fills the space.
+                // When measuring, the space along the main axis is a limit, not a size: the content
+                // is as long as its items before they grow (a button's text grows to fill the button,
+                // yet a button asked its size in a wide column is as wide as its text, not the
+                // column). When placing, it is the size the items were given. Either way the items'
+                // depth is taken at their grown size, the size they get when the container fills the
+                // space.
                 contentMain = core::Max(contentMain, f.arrange || grown <= 0.0f ? lineMain : core::Max(lineMain - grown, core::Min(used, lineMain)));
             }
-            // One line is as deep as the container, once it is laid out at its size. Measuring, the
-            // space across is a limit, not a size: the content is as deep as its line (a size the
-            // container is told exactly, Measure gives it).
+            // A single line is as deep as the container once the container is laid out at its size.
+            // When measuring, the space across is a limit, not a size: the content is as deep as its
+            // line (when the container is told its size exactly, Measure returns that size).
             if (lines.Size() == 1 && crossDefinite && f.arrange)
                 lines[0].cross = crossAvail;
             f32 contentCross = crossGap * static_cast<f32>(lines.Size() > 0 ? lines.Size() - 1 : 0);
@@ -391,8 +395,8 @@ namespace foundation::gui
 
             if (f.arrange)
             {
-                // Lines across: align-content shares the free cross space (stretch: each line
-                // grows by the same).
+                // Lines across: align-content shares out the free cross space (with stretch, each
+                // line grows by the same amount).
                 f32 crossStart = 0.0f;
                 f32 crossBetween = 0.0f;
                 if (crossDefinite && lines.Size() > 1)
@@ -466,8 +470,8 @@ namespace foundation::gui
             i32 rowSpan = 1;
         };
 
-        // Places items on the grid: those with both lines where they say, the rest flowed into the
-        // first cells free (row by row, or column by column). Returns the track counts.
+        // Places items on the grid. Items with both lines given go where they say, and the rest flow
+        // into the first free cells (row by row, or column by column). Returns the track counts.
         void PlaceGridItems(const LayoutStyle& s, Array<GridItem>& items, i32& columns, i32& rows)
         {
             const bool byRow = s.AutoFlow == GridAutoFlow::Row;
@@ -524,7 +528,7 @@ namespace foundation::gui
                     --b;
                     take(a, b, spanA, spanB);
                 }
-                else if (b > 0) // its cross line given: the first free place along it
+                else if (b > 0) // its cross line is given: take the first free place along it
                 {
                     --b;
                     i32 at = 0;
@@ -533,7 +537,7 @@ namespace foundation::gui
                     a = at;
                     take(a, b, spanA, spanB);
                 }
-                else if (a > 0) // its line along the flow given: the first free cell in it
+                else if (a > 0) // its line along the flow is given: take the first free cell in it
                 {
                     --a;
                     i32 at = 0;
@@ -772,7 +776,7 @@ namespace foundation::gui
             f32 left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f; // what the docked children took
             f32 needW = 0.0f, needH = 0.0f;
             const bool rtl = f.container.IsRightToLeft(); // start and end are the sides it runs from and to
-            // The docked children first, in order, then those that fill: a fill takes what every
+            // The docked children go first, in order, then those that fill. A fill takes what every
             // side left, wherever it stands among them (several fills share that box, over each
             // other, as a stack's children do).
             const Array<Node*> children = FlowChildren(f.container);
@@ -792,7 +796,8 @@ namespace foundation::gui
                 const Thickness m = child->GetMarginWithin(percentBase.x);
                 const bool horizontal = side == Dock::Left || side == Dock::Right;
                 const bool vertical = side == Dock::Top || side == Dock::Bottom;
-                // Docked to a side, it fills that side's length; filling, it takes what is left.
+                // A child docked to a side fills that side's length; a filling child takes what is
+                // left.
                 const Optional<f32> tightW = (vertical || side == Dock::Fill) && !IsUnbounded(availW) ? Optional<f32>(Less(availW, m.TotalHorizontal())) : Optional<f32>{};
                 const Optional<f32> tightH = (horizontal || side == Dock::Fill) && !IsUnbounded(availH) ? Optional<f32>(Less(availH, m.TotalVertical())) : Optional<f32>{};
                 const core::Float2 b = MeasureBorder(*child, child->GetLayoutStyle().Width.IsAuto() ? tightW : Optional<f32>{},
@@ -859,7 +864,8 @@ namespace foundation::gui
             if (m_measures[i].Key == constraints)
                 return m_measures[i].Size;
         const LayoutStyle& s = m_layoutStyle;
-        // Its padding's percentages are of the box that holds it, the width it is measured in.
+        // Its padding's percentages are of the box that holds it, which is the width it is
+        // measured in.
         if (constraints.PercentBase.x >= 0.0f)
             m_percentWidth = constraints.PercentBase.x;
         core::Float2 size{0.0f, 0.0f};
@@ -902,10 +908,11 @@ namespace foundation::gui
             }
             size.x = core::Clamp(size.x, minW, maxW);
             size.y = core::Clamp(size.y, minH, maxH);
-            // The container's limit holds an auto size; a size the style gives overflows it, as in
+            // The container's limit holds an auto size. A size the style gives overflows it, as in
             // CSS, unless the container fixes the size exactly (flex's resolved size, a stretch).
-            // Exact is said, not read from a limit as low as the minimum: measured with no room (its
-            // min-content), a node with a width of its own keeps it.
+            // Exactness is passed explicitly rather than inferred from a limit as low as the
+            // minimum, so a node with a width of its own keeps it when measured with no room (its
+            // min-content).
             const auto fit = [](f32 v, bool given, bool exact, f32 lo, f32 hi)
             {
                 if (exact)
@@ -993,37 +1000,37 @@ namespace foundation::gui
         // A scroll container's content is laid out with no limit on the axes it scrolls.
         Flow flow{*this, m_layoutStyle, Scrolls(m_layoutStyle.OverflowX) ? kUnbounded : box.width,
                   Scrolls(m_layoutStyle.OverflowY) ? kUnbounded : box.height, core::Float2{box.x, box.y}, true};
-        // Right to left (E9b): rows, grid columns and a stack's start run from the right. Dock
+        // Right to left: rows, grid columns and a stack's start run from the right. Dock
         // stays physical (its sides say where; start and end are its logical sides).
         flow.rtl = m_layoutStyle.Kind != Display::Dock && m_layoutStyle.Kind != Display::None && IsRightToLeft();
         (void)RunFlow(flow);
         if (flow.rtl)
         {
-            // Mirrored within the box: content wider than it overflows toward the inline end, the
-            // left, as CSS's does (E17a); a scroller's then scrolls to negative offsets.
+            // Mirror within the box: content wider than the box overflows toward the inline end (the
+            // left), as in CSS, and a scroller then scrolls to negative offsets.
             for (usize i = 0; i < m_children.Size(); ++i)
                 if (Node& child = *m_children[i]; InFlow(child))
                     child.SetPosition(core::Float2{box.x + box.width - (child.GetPosition().x - box.x) - child.GetSize().x,
                                                    child.GetPosition().y});
         }
 
-        // Out of flow: placed by the insets against this node's box, sized by their style, by both
-        // insets of an axis, or by their content.
+        // Out-of-flow children are placed by their insets against this node's box, and sized by
+        // their style, by both insets of an axis, or by their content.
         for (usize i = 0; i < m_children.Size(); ++i)
         {
             Node& child = *m_children[i];
             const LayoutStyle& cs = child.GetLayoutStyle();
             if (child.IsDisplayed() && child.IsInTopLayer())
             {
-                // An open popup (E5): the top layer places it; laid out where it is, so what it
-                // holds is.
+                // An open popup: the top layer places it. Arrange it where it is, so that its
+                // contents are laid out.
                 child.Arrange(Rect{child.GetPosition().x, child.GetPosition().y, child.GetSize().x, child.GetSize().y});
                 continue;
             }
             if (!child.IsDisplayed() || cs.Placement != Position::Absolute)
                 continue;
-            // A sheet's insets are from the padding box, inside the border, as CSS's are; a
-            // position code gave (SetPosition) is in the box itself, as it was given.
+            // A sheet's insets are measured from the padding box, inside the border, as in CSS; a
+            // position set from code (SetPosition) is in the box itself, as given.
             const Thickness border = GetBorderThickness();
             const bool codeX = child.IsPlacedByCode();
             const bool codeY = child.IsPlacedByCode();
@@ -1051,8 +1058,9 @@ namespace foundation::gui
             child.Arrange(Rect{x, y, b.x, b.y});
         }
 
-        // Relative: moved after the flow, its siblings where they were. From the right, the extent
-        // reaches from the content's left edge, past the box's left, to the box's right.
+        // Relative positioning moves a child after the flow, leaving its siblings where they were.
+        // From the right, the extent reaches from the content's left edge, past the box's left, to
+        // the box's right.
         core::Float2 extent{0.0f, 0.0f};
         const bool fromRight = ScrollsFromRight();
         f32 leftmost = 0.0f;
@@ -1085,10 +1093,10 @@ namespace foundation::gui
         const bool latched = IsLatchedToEnd(); // as it was before the content changed
         const core::Float2 before = m_contentExtent;
         m_contentExtent = extent;
-        ApplyScrollOffset(m_scrollOffset); // kept within the new range, a smooth scroll going on
+        ApplyScrollOffset(m_scrollOffset); // kept within the new range, with any smooth scroll still going
         if (latched && !m_smoothScrolling && !m_flinging)
         {
-            // Held at the end: it follows the content's new end.
+            // Latched at the end: follow the content's new end.
             ApplyScrollOffset(ScrollEnd(m_scrollOffset));
             m_latchedToEnd = true;
         }
@@ -1115,9 +1123,9 @@ namespace foundation::gui
     {
         m_measureCount = 0;
         m_layoutDirty = true;
-        // Up through the containers whose size follows what is inside them: each measures and lays
-        // out again. One of definite size stops it (its size does not change); one out of flow
-        // makes its container place it again, nothing more.
+        // Walk up through the containers whose size follows what is inside them: each measures and
+        // lays out again. A container of definite size stops the walk (its size does not change);
+        // an out-of-flow node makes its container place it again, and nothing more.
         Node* n = this;
         while (n->m_parent != nullptr && !HasDefiniteSize(*n))
         {
@@ -1164,13 +1172,13 @@ namespace foundation::gui
     {
         constexpr f32 kMinThumb = 20.0f;
         [[nodiscard]] bool ShowsBar(Overflow o, f32 range) noexcept { return o == Overflow::Scroll || (o == Overflow::Auto && range > 0.0f); }
-        // A bar's thickness in logical units (scrollbar-width); none shows no bars.
+        // A bar's thickness in logical units (scrollbar-width); `none` shows no bars.
         [[nodiscard]] f32 BarThickness(ScrollbarWidth width) noexcept
         {
             return width == ScrollbarWidth::None ? 0.0f : width == ScrollbarWidth::Thin ? 5.0f : 8.0f;
         }
-        constexpr f32 kOverlayLinger = 0.8f; // seconds an overlay's bars stay once let be
-        constexpr f32 kOverlayFade = 0.3f;   // and then take to fade
+        constexpr f32 kOverlayLinger = 0.8f; // seconds an overlay's bars stay once released
+        constexpr f32 kOverlayFade = 0.3f;   // and the seconds they then take to fade
     }
 
     Rect Node::ScrollBarTrack(u32 axis) const
@@ -1184,7 +1192,7 @@ namespace foundation::gui
         const Thickness b = GetBorderThickness();
         const f32 w = core::Max(0.0f, m_size.x - b.TotalHorizontal());
         const f32 h = core::Max(0.0f, m_size.y - b.TotalVertical());
-        // The vertical bar on the inline end (the left in right to left, E9b); the offsets stay physical.
+        // The vertical bar on the inline end (the left in right to left); the offsets stay physical.
         const bool rtl = IsRightToLeft();
         if (axis == 1 && showY)
             return Rect{rtl ? b.Left : m_size.x - b.Right - barWidth, b.Top, barWidth, showX ? core::Max(0.0f, h - barWidth) : h};
@@ -1202,7 +1210,8 @@ namespace foundation::gui
         const f32 view = axis == 1 ? box.height : box.width;
         const f32 extent = core::Max(view, axis == 1 ? m_contentExtent.y : m_contentExtent.x);
         const f32 range = axis == 1 ? GetScrollRange().y : GetScrollRange().x;
-        // Along the track from where the offset may start (the left, from the right too).
+        // The position along the track, from where the offset may start (the left, also when
+        // running from the right).
         const f32 offset = axis == 1 ? m_scrollOffset.y : m_scrollOffset.x - GetScrollMin().x;
         const f32 length = axis == 1 ? track.height : track.width;
         const f32 thumb = core::Min(length, core::Max(kMinThumb, length * view / core::Max(1.0f, extent)));
@@ -1215,8 +1224,8 @@ namespace foundation::gui
         const f32 alpha = GetScrollbarOpacity();
         if (alpha <= 0.0f)
             return;
-        // Each bar is two parts: ::scrollbar (the track, clear by default) and ::scrollbar-thumb,
-        // each its own look with the sheet's over it, the thumb's lighter while hovered or held.
+        // Each bar has two parts, ::scrollbar (the track, clear by default) and ::scrollbar-thumb,
+        // each with its own look and the sheet's over it. The thumb is lighter while hovered or held.
         const PartStyle* trackStyle = FindPartStyle(u8"scrollbar");
         const PartStyle* thumbStyle = FindPartStyle(u8"scrollbar-thumb");
         const PartStyle none{};
@@ -1263,7 +1272,7 @@ namespace foundation::gui
             }
             // Closed form: where it is after t, and how fast, the same at any frame rate.
             constexpr f32 kTau = 0.35f;      // seconds for the speed to fall to a third
-            constexpr f32 kStopSpeed = 12.0f; // offset units a second: stopped
+            constexpr f32 kStopSpeed = 12.0f; // offset units a second: slower than this counts as stopped
             self->m_flingTime += static_cast<f32>(elapsed.AsSecondsF());
             const f32 decay = core::Exp(-self->m_flingTime / kTau);
             const core::Float2 v = self->m_flingVelocity;
@@ -1302,7 +1311,8 @@ namespace foundation::gui
         RunAction(core::MakeRef<TickAction>(MemoryAllocator(), [self](core::Duration elapsed)
         {
             const f32 dt = static_cast<f32>(elapsed.AsSecondsF());
-            // Held by the pointer over it or a drag; once let be, it lingers, then fades.
+            // Shown while the pointer is over it or a drag is on; once released, it lingers, then
+            // fades.
             if (self->IsHovered() || self->m_scrollDragAxis <= 1)
                 self->m_scrollbarIdle = 0.0f;
             else
@@ -1343,7 +1353,8 @@ namespace foundation::gui
 
     core::Float2 Node::ScrollEnd(core::Float2 from) const
     {
-        // The bottom; a scroller that only scrolls across, its inline end (the left from the right).
+        // The bottom; for a scroller that only scrolls across, its inline end (the left, when
+        // running from the right).
         const core::Float2 range = GetScrollRange();
         if (range.y > 0.0f || range.x <= 0.0f)
             return core::Float2{from.x, range.y};
@@ -1444,7 +1455,7 @@ namespace foundation::gui
         case EventType::KeyDown:
         {
             if (event.Target != this || !m_scrollsByKeys)
-                return; // keys a focused widget inside left go on to navigation, not to scrolling
+                return; // keys a focused widget inside did not take go on to navigation, not to scrolling
             const Rect box = GetContentBounds();
             const KeyEvent& key = static_cast<const KeyEvent&>(event);
             const core::Float2 target = GetScrollTarget();
@@ -1478,7 +1489,7 @@ namespace foundation::gui
                 if (!track.Contains(p))
                     continue;
                 const Rect thumb = ScrollBarThumb(axis);
-                if (thumb.Contains(p)) // grab the thumb where it was taken
+                if (thumb.Contains(p)) // grab the thumb at the point where it was pressed
                 {
                     m_scrollDragAxis = axis;
                     MarkStyleStateDirty(StateHover | StateActive); // ::scrollbar-thumb:active
@@ -1588,7 +1599,8 @@ namespace foundation::gui
             vg.StrokeRect(border.ToRectangle(), core::Color{1.0f, 0.25f, 0.25f, 0.8f}, hair);
         if (what.Baselines)
         {
-            // Only a baseline of its own (text): every other node's is its content's bottom.
+            // Draw only a baseline of the node's own (text): every other node's baseline is its
+            // content's bottom.
             const f32 baseline = GetBaseline();
             if (core::Abs(baseline - (m_size.y - GetChrome().Bottom)) > 0.01f)
                 vg.DrawLine(core::Float2{0.0f, baseline}, core::Float2{m_size.x, baseline},

@@ -13,7 +13,7 @@ namespace net = foundation::net;
 
 namespace
 {
-    // A connected client+server session pair over the sim, with a step pump.
+    // A connected client and server session pair over the simulator, with a step pump.
     struct Pair
     {
         net::SimDatagramNetwork network;
@@ -129,7 +129,7 @@ TEST_CASE("rpc: server CallAll reaches every client; unregistered ids are ignore
 
     net::RpcTable serverRpc;
     serverRpc.CallAll(server, u8"tick", [](net::BitWriter& w) { w.WriteU32(7u); });
-    // Also fire an RPC no client registered - must be silently ignored.
+    // Also fire an RPC no client registered: it must be silently ignored.
     serverRpc.CallAll(server, u8"unknown_event");
 
     for (int i = 0; i < 120 && (aHits == 0 || bHits == 0); ++i)

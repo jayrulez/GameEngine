@@ -3,18 +3,21 @@
 
 // Foundation::Profiler.GUI - :frame_strip partition
 //
-// The frames, side by side (X7 of Specs/editor-gui.md): the frame strip and the counters' plots
-// under it, on one FrameAxis so they show the same frames at the same places. The strip's bars
-// are each frame's CPU time against a budget (within it, over it, over twice it), on a scale with
-// its values printed (twice the budget; the frames shown's longest without one), a bar past the
-// scale clipped and marked; the frames chosen in the accent, boxed; the name chosen (a scope or
-// a pass) drawn inside each bar as its share of the frame. A counter's plot is its value each
-// frame between the least and the most shown, which it prints. More frames than pixels share a
-// column, which shows the longest of them (a hitch never hidden by its neighbours).
+// Frames side by side: the frame strip, and the counter plots under it. They share one FrameAxis,
+// so they show the same frames at the same positions.
 //
-// Mouse first, on any of them: a click chooses a frame, a drag a range; the wheel zooms about
-// the pointer and a middle drag pans; a double click shows every frame again. While the axis
-// fits (until a zoom or a pan) it follows the source's frames as they grow.
+// Each bar in the strip is one frame's CPU time against a budget, coloured by whether the frame is
+// within the budget, over it, or over twice it. The scale prints its values; it is twice the
+// budget, or without a budget the longest frame shown. A bar past the scale is clipped and marked.
+// The chosen frames are drawn in the accent colour and boxed. The chosen name (a scope or a pass)
+// is drawn inside each bar as its share of the frame. A counter plot shows the counter's value in
+// each frame between the least and the most shown, and prints that range. When there are more
+// frames than pixels, the frames share a column that shows the longest of them, so a hitch is
+// never hidden by its neighbours.
+//
+// The mouse works the same on all of them: a click chooses a frame and a drag chooses a range,
+// the wheel zooms about the pointer, a middle drag pans, and a double click shows every frame
+// again. While the axis fits (until a zoom or a pan) it follows the source's frames as they grow.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +37,7 @@ using namespace foundation::gui;
 
 export namespace foundation::profiler::gui
 {
-    /// What a frame axis tells the views on it.
+    /// The notifications a frame axis sends to the views on it.
     class IFrameAxisClient
     {
     public:
@@ -42,33 +45,34 @@ export namespace foundation::profiler::gui
         virtual void OnFrameAxisChanged() = 0;
     };
 
-    /// FrameAxis::kMinFrames, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// FrameAxis::kMinFrames, at namespace scope so another library can read it: MSVC does not
+    /// export a class's static constexpr member from a shared library.
     inline constexpr f64 kFrameAxisMinFrames = 8.0;
 
-    /// The frames a strip and its plots show: the frame at their start and how many across.
+    /// The frames a strip and its plots show: the frame at their start, and how many lie across.
     class FrameAxis : public RefCounted
     {
     public:
-        /// Never fewer frames across than this (a zoom stops there).
+        /// The fewest frames shown across; zooming in stops here.
         static constexpr f64 kMinFrames = kFrameAxisMinFrames;
 
         explicit FrameAxis(IAllocator& allocator) : m_clients(allocator) {}
 
-        /// The frame number at the views' start (fractional: a pan moves by less than a frame).
+        /// Returns the frame number at the views' start. It is fractional, since a pan can move by
+        /// less than a frame.
         [[nodiscard]] f64 First() const noexcept { return m_first; }
-        /// How many frames lie across the views.
+        /// Returns how many frames lie across the views.
         [[nodiscard]] f64 Count() const noexcept { return m_count; }
-        /// Whether it shows every frame of the source, following them as they grow.
+        /// Returns whether the axis shows every frame of the source, following the frames as they grow.
         [[nodiscard]] bool Fits() const noexcept { return m_fits; }
 
-        /// Shows [oldest, newest], and keeps doing so as Track is told of more.
+        /// Shows [oldest, newest], and keeps showing every frame as Track reports more.
         void Fit(u64 oldest, u64 newest)
         {
             m_fits = true;
             Show(static_cast<f64>(oldest), static_cast<f64>(Max(newest, oldest) - oldest + 1));
         }
-        /// The source's frames now: while it fits, it shows them all.
+        /// Updates the axis with the source's current frames. While the axis fits, it shows them all.
         void Track(const IProfileSource* source)
         {
             m_oldest = source != nullptr && source->HasFrames() ? static_cast<f64>(source->OldestFrame()) : 0.0;
@@ -77,8 +81,8 @@ export namespace foundation::profiler::gui
             if (m_fits)
                 Show(m_oldest, m_any ? m_newest - m_oldest + 1.0 : 1.0);
         }
-        /// Zooms by `factor` (above 1 in) about `frame`, which stays where it is: no closer than
-        /// kMinFrames across, no further than every frame.
+        /// Zooms by `factor` (above 1 zooms in) about `frame`, which stays in place. It shows no
+        /// fewer than kMinFrames across and no more than every frame.
         void ZoomAbout(f64 frame, f64 factor)
         {
             if (factor <= 0.0)
@@ -89,21 +93,23 @@ export namespace foundation::profiler::gui
             m_fits = false;
             Show(frame - along * count, count);
         }
-        /// Moves by `frames` (positive shows later ones), kept over the source's frames.
+        /// Pans by `frames` (positive shows later frames), staying within the source's frames.
         void PanBy(f64 frames)
         {
             m_fits = false;
             Show(m_first + frames, m_count);
         }
 
-        /// The whole frame number at or below `frame` (frame numbers are far past f32's whole range).
+        /// Returns the whole frame number at or below `frame`. This uses f64 because frame numbers go
+        /// far past the range of whole numbers f32 represents exactly.
         [[nodiscard]] static f64 Whole(f64 frame) noexcept
         {
             const f64 truncated = static_cast<f64>(static_cast<i64>(frame));
             return truncated > frame ? truncated - 1.0 : truncated;
         }
 
-        /// The frame at `offset` pixels into a view `width` wide, and where a frame's start is.
+        /// Returns the frame at `offset` pixels into a view `width` wide; OffsetOf returns where a
+        /// frame starts.
         [[nodiscard]] f64 FrameAt(f32 offset, f32 width) const noexcept
         {
             return m_first + static_cast<f64>(offset) / static_cast<f64>(Max(width, 1.0f)) * m_count;
@@ -147,27 +153,27 @@ export namespace foundation::profiler::gui
         f64 m_newest = 0.0;
         bool m_any = false;
         bool m_fits = true;
-        Array<IFrameAxisClient*> m_clients; // non-owning: each view leaves as it goes
+        Array<IFrameAxisClient*> m_clients; // non-owning; each view leaves when it is destroyed
     };
 
-    /// A column of a strip or a plot: the frames it shows (one, or the several sharing a pixel)
-    /// and where it is drawn.
+    /// A column of a strip or a plot: the frames it shows (one, or several sharing a pixel) and
+    /// where it is drawn.
     struct FrameColumn
     {
         u64 first = 0;
         u64 last = 0;
-        f32 x = 0.0f;     // from the plot's start
+        f32 x = 0.0f;     // offset from the plot's start
         f32 width = 0.0f;
     };
 
-    /// What a strip and a plot share: the axis, the gutter at their start (the scale, a counter's
-    /// name) and the gestures.
+    /// The base a strip and a plot share: the axis, the gutter at their start (for the scale or a
+    /// counter's name) and the mouse gestures.
     class FrameAxisView : public ProfilerWidget, public IFrameAxisClient
     {
         RTTI_OBJECT(FrameAxisView, ProfilerWidget)
     public:
-        /// The gutter at the start: the scale's values, a counter's name. The timeline's lane
-        /// names are as wide, so the page's columns line up.
+        /// The gutter's width at the start, which holds the scale's values or a counter's name. The
+        /// timeline's lane names are the same width, so the page's columns line up.
         static constexpr f32 kGutterWidth = 128.0f;
         static constexpr f32 kDragThreshold = 3.0f;
 
@@ -192,17 +198,19 @@ export namespace foundation::profiler::gui
         }
         [[nodiscard]] FrameAxis* GetFrameAxis() const noexcept { return m_axis.Get(); }
 
-        /// Told when the user chooses frames here (a click, a drag): a page stops following then.
+        /// Called when the user chooses frames here with a click or a drag, so a page can stop
+        /// following new frames.
         Function<void()> OnFramesPicked;
 
-        /// The plot's bounds (its own space): the content less the gutter.
+        /// Returns the plot's bounds in the view's own space: the content box less the gutter.
         [[nodiscard]] Rect PlotBounds() const
         {
             const Rect box = GetContentBounds();
             const f32 gutter = Min(kGutterWidth, box.width);
             return Rect{box.x + gutter, box.y, Max(box.width - gutter, 0.0f), box.height};
         }
-        /// The frame at a point's x (its own space), clamped to the source's frames; false off them.
+        /// Gets the frame at x (in the view's own space), clamped to the source's frames. Returns
+        /// false when there is no axis or no frames.
         [[nodiscard]] bool FrameAtX(f32 x, u64& frame) const
         {
             const IProfileSource* source = Source();
@@ -214,7 +222,8 @@ export namespace foundation::profiler::gui
             frame = static_cast<u64>(clamped);
             return true;
         }
-        /// The columns across the plot now: a frame each, or the frames sharing a pixel.
+        /// Gets the columns across the plot now: one per frame, or one per pixel when frames share
+        /// pixels.
         void GetColumns(Array<FrameColumn>& out) const
         {
             out.Clear();
@@ -257,7 +266,8 @@ export namespace foundation::profiler::gui
             }
         }
 
-        /// The frame under the pointer described (its time, a counter's value), else its own tooltip.
+        /// Returns a description of the frame under the pointer (its time, or a counter's value), or
+        /// else the widget's own tooltip.
         [[nodiscard]] core::StringView GetTooltipText() const override
         {
             if (!m_hoverTip.IsEmpty())
@@ -265,7 +275,7 @@ export namespace foundation::profiler::gui
             return UIWidget::GetTooltipText();
         }
 
-        /// The parts it draws, which the sheet styles as `tag::part`.
+        /// Lists the parts it draws, which the sheet styles as `tag::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             ProfilerWidget::CollectStyleParts(out);
@@ -360,11 +370,11 @@ export namespace foundation::profiler::gui
         }
         [[nodiscard]] Cursor GetCursorNow() const override { return m_panning ? Cursor::Grabbing : UIWidget::GetCursorNow(); }
 
-        /// What the tooltip says over `frame` (the frame under the pointer).
+        /// Returns the tooltip text for `frame`, the frame under the pointer.
         [[nodiscard]] virtual String DescribeFrame(u64 frame) const = 0;
 
-        /// The frames chosen, drawn: their columns filled in the accent are the view's own; the
-        /// box around them is common.
+        /// Draws the box around the chosen frames. Each view fills the chosen columns in the accent
+        /// itself; this box is common to them.
         void DrawChosenBox(DrawContext& ctx, Span<const FrameColumn> columns, const Rect& plot) const
         {
             const FrameRange chosen = m_focus ? m_focus->Frames() : FrameRange{};
@@ -422,18 +432,19 @@ export namespace foundation::profiler::gui
         String m_hoverTip;
     };
 
-    /// A column's frames: the longest one's CPU and GPU times, and the chosen name's longest
-    /// share in them.
+    /// The times for one column's frames: the longest CPU and GPU times, and the chosen name's
+    /// longest time among them.
     struct FrameColumnTimes
     {
         f32 cpuMs = 0.0f;
         f32 gpuMs = 0.0f;
         f32 chosenMs = 0.0f;
         bool any = false;
-        bool chosen = false; // a frame of it is among those chosen
+        bool chosen = false; // one of the column's frames is among those chosen
     };
 
-    /// The frames' CPU times against a budget; the frames chosen; the name chosen inside them.
+    /// Shows the frames' CPU times against a budget, the chosen frames, and the chosen name inside
+    /// them.
     class FrameStrip final : public FrameAxisView
     {
         RTTI_OBJECT(FrameStrip, FrameAxisView)
@@ -446,7 +457,7 @@ export namespace foundation::profiler::gui
             EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(kDefaultHeight); });
         }
 
-        /// The frame's budget in ms (a frame within it is on time); 0: none.
+        /// Returns the frame budget in ms; a frame within it is on time. 0 means no budget.
         [[nodiscard]] f32 BudgetMs() const noexcept { return m_budgetMs; }
         void SetBudgetMs(f32 ms)
         {
@@ -454,8 +465,8 @@ export namespace foundation::profiler::gui
             Invalidate();
         }
 
-        /// The bars' scale (ms at the plot's top) over these columns: twice the budget, or without
-        /// one the longest frame shown rounded up to 1, 2 or 5 times a power of ten.
+        /// Returns the bars' scale (the ms at the plot's top) for these columns: twice the budget,
+        /// or without a budget the longest frame shown, rounded up to 1, 2 or 5 times a power of ten.
         [[nodiscard]] f32 ScaleMs(Span<const FrameColumnTimes> times) const noexcept
         {
             if (m_budgetMs > 0.0f)
@@ -465,7 +476,7 @@ export namespace foundation::profiler::gui
                 most = Max(most, t.cpuMs);
             return NiceCeiling(Max(most, 1.0f));
         }
-        /// Each column's times (the longest of its frames), in the columns' order.
+        /// Gets each column's times (from the longest of its frames), in the columns' order.
         void GetColumnTimes(Span<const FrameColumn> columns, Array<FrameColumnTimes>& out) const
         {
             out.Clear();
@@ -505,7 +516,7 @@ export namespace foundation::profiler::gui
             }
         }
 
-        /// The parts it draws, which the sheet styles as `tag::part`.
+        /// Lists the parts it draws, which the sheet styles as `tag::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             FrameAxisView::CollectStyleParts(out);
@@ -548,7 +559,7 @@ export namespace foundation::profiler::gui
             const Color plotColor = PartColor(u8"plot", Color{0.0f, 0.0f, 0.0f, 0.18f});
             ctx.VG().FillRect(plot.ToRectangle(), plotColor);
 
-            // The scale: its top, the budget's line where there is one, its foot.
+            // Draw the scale: its top value, the budget line when there is a budget, and its foot.
             const Color dim = PartTextColor(u8"scale");
             const Rect gutter{plot.x - kGutterWidth, plot.y, kGutterWidth - 6.0f, plot.height};
             DrawLabel(ctx, Format(u8"{}", FormatFixed(scale, 1).AsView()).AsView(), Rect{gutter.x, plot.y, gutter.width, 12.0f}, dim, TextHAlign::End);
@@ -601,7 +612,8 @@ export namespace foundation::profiler::gui
         }
 
     private:
-        // The least of 1, 2 or 5 times a power of ten at least `value`.
+        // Returns the smallest value of the form 1, 2 or 5 times a power of ten that is at least
+        // `value`.
         [[nodiscard]] static f32 NiceCeiling(f32 value) noexcept
         {
             const f32 magnitude = Pow(10.0f, Floor(Log(value) / Log(10.0f)));
@@ -615,8 +627,9 @@ export namespace foundation::profiler::gui
         f32 m_budgetMs = 0.0f;
     };
 
-    /// A counter's value each frame, on the strip's axis: its name in the gutter, the least and
-    /// the most shown printed over the plot, and its mean over the frames chosen.
+    /// A counter's value in each frame, on the strip's axis. The counter's name is in the gutter,
+    /// and the least and most values shown, with the mean over the chosen frames, are printed over
+    /// the plot.
     class CounterPlot final : public FrameAxisView
     {
         RTTI_OBJECT(CounterPlot, FrameAxisView)
@@ -629,7 +642,7 @@ export namespace foundation::profiler::gui
             EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(kDefaultHeight); });
         }
 
-        /// The counter it plots, by its index in the source's counters.
+        /// Returns the plotted counter's index in the source's counters.
         [[nodiscard]] u32 Counter() const noexcept { return m_counter; }
         void SetCounter(u32 counter)
         {
@@ -637,7 +650,7 @@ export namespace foundation::profiler::gui
             Invalidate();
         }
 
-        /// The parts it draws, which the sheet styles as `tag::part`.
+        /// Lists the parts it draws, which the sheet styles as `tag::part`.
         void CollectStyleParts(Array<StringView>& out) const override
         {
             FrameAxisView::CollectStyleParts(out);
@@ -648,7 +661,7 @@ export namespace foundation::profiler::gui
             out.PushBack(StringView(u8"range-backing"));
         }
 
-        /// A column's value: the most of its frames' (false when none of them set it).
+        /// Gets a column's value, the largest among its frames. Returns false when none of them set it.
         [[nodiscard]] bool ColumnValue(const FrameColumn& column, f64& value) const
         {
             const IProfileSource* source = Source();
@@ -664,7 +677,8 @@ export namespace foundation::profiler::gui
             return any;
         }
 
-        /// Its mean over the frames chosen that set it (false: none chosen, or none of them did).
+        /// Gets the counter's mean over the chosen frames that set it. Returns false when no frames
+        /// are chosen or none of them set it.
         [[nodiscard]] bool ChosenMean(f64& mean) const
         {
             const IProfileSource* source = Source();
@@ -686,7 +700,8 @@ export namespace foundation::profiler::gui
             mean = sum / static_cast<f64>(count);
             return true;
         }
-        /// What it prints over its plot: the least and the most shown, the chosen frames' mean.
+        /// Returns the text printed over the plot: the least and most values shown, and the chosen
+        /// frames' mean.
         [[nodiscard]] String RangeText(f64 least, f64 most) const
         {
             const IProfileSource* source = Source();
@@ -759,14 +774,15 @@ export namespace foundation::profiler::gui
                 if (set[i] == 0)
                     continue;
                 const FrameColumn& column = columns[i];
-                // The least shown stands 2 pixels high, so a flat counter still shows.
+                // The least value shown is drawn 2 pixels high, so a flat counter is still visible.
                 const f32 h = 2.0f + static_cast<f32>((values[i] - least) / span) * (plot.height - 4.0f);
                 const bool isChosen = !chosen.empty && column.last >= chosen.first && column.first <= chosen.last;
                 ctx.VG().FillRect(Rectangle{plot.x + column.x, plot.Bottom() - h, Max(column.width, 1.0f), h}, isChosen ? chosenColor : bar);
             }
             ctx.PopClip();
             const String range = RangeText(least, most);
-            // On a backing of the plot's colour at its end, so the bars under it never hide it.
+            // Draw the text at the plot's end on a backing of the plot's colour, so the bars under
+            // it never hide it.
             const f32 width = Min(LabelWidth(range.AsView()) + 8.0f, plot.width);
             const Rect backing{plot.Right() - width, plot.y + 2.0f, width, plot.height - 4.0f};
             ctx.VG().FillRoundedRect(backing.ToRectangle(), 3.0f, PartColor(u8"range-backing", Color{0.1f, 0.1f, 0.12f, 0.85f}));

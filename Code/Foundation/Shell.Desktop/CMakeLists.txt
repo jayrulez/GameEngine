@@ -1,6 +1,6 @@
 # Foundation::Shell.Desktop - `foundation.shell.desktop` (SDL3-based IShell for Windows/Linux/macOS:
 # windowing, input, events). The desktop run loop lives in foundation.runtime.desktop, so this
-# backend needs only the shell interface + SDL3 - no client/graphics dependency.
+# backend needs only the shell interface and SDL3, with no client or graphics dependency.
 
 util_add_engine_library(Shell.Desktop ALIAS Foundation::Shell.Desktop)
 target_link_libraries(Shell.Desktop

@@ -4,8 +4,9 @@
 // Editor::Script - :script_api partition.
 //
 // What a script may call, as the runtime binds it for one language (IScriptManager::
-// DescribeBoundApi): built once per page and read by its completion, its hover and its API browser
-// alike, so they cannot disagree. The browser's tree is a pure function of it (BuildScriptApiTree).
+// DescribeBoundApi). It is built once per page and read by the page's completion, hover and API
+// browser alike, so they cannot disagree. The browser's tree is a pure function of it
+// (BuildScriptApiTree).
 
 module;
 #include "Core/Prelude.h"
@@ -19,12 +20,12 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    // The backend's ACTUAL bound API for one language, built once and shared by every consumer.
-    // The build replays the runtime's exact registration sequence against a throwaway manager
-    // (RegisterCoreTypes + facade reflection + CreateScriptManagerForLanguage +
-    // RegisterReflectedTypes), so what the page shows is exactly what a run can call, spelled the
-    // language's way. Lazy: nothing runs until the first Types() call; an unknown language stays
-    // empty.
+    // The backend's actual bound API for one language, built once and shared by every consumer.
+    // The build replays the runtime's registration sequence against a throwaway manager
+    // (RegisterCoreTypes, facade reflection, CreateScriptManagerForLanguage, then
+    // RegisterReflectedTypes), so the page shows exactly what a run can call, spelled the
+    // language's way. The build is lazy: nothing runs until the first Types() call. An unknown
+    // language stays empty.
     class ScriptApiSurface final
     {
     public:
@@ -45,19 +46,19 @@ export namespace editor
     };
 
     // True when a binding's reflected type was registered under a non-Runtime domain
-    // (TypeRegistry::DomainOf): callable wherever the editor runs (including play-in-editor), but
-    // ABSENT from a built player. Completion and the API browser both mark such bindings
-    // " [editor]" so a player-bound script's author is warned.
+    // (TypeRegistry::DomainOf). Such a binding is callable wherever the editor runs (including
+    // play in editor) but absent from a built player, so completion and the API browser both mark
+    // it " [editor]" to warn the author of a script that ships in a player.
     [[nodiscard]] inline bool IsEditorOnlyBinding(TypeId typeId)
     {
         return typeId != 0 && !(GlobalTypeRegistry().DomainOf(typeId) == kRuntimeTypeDomain);
     }
 
-    // One row of the API browser tree: a type/namespace (depth 0) or a member (depth 1).
+    // One row of the API browser tree: a type or namespace (depth 0) or a member (depth 1).
     struct ScriptApiTreeNode
     {
         String label;      // row text: type name, or the member's language-formatted signature
-        String insertText; // what choosing the row types into the code
+        String insertText; // the text that choosing the row inserts into the code
         i32 depth = 0;
         Array<i32> children; // indices into ScriptApiTree::nodes (type rows only)
     };
@@ -65,12 +66,12 @@ export namespace editor
     struct ScriptApiTree
     {
         Array<ScriptApiTreeNode> nodes;
-        Array<i32> roots; // depth-0 node indices, display order
+        Array<i32> roots; // depth-0 node indices, in display order
     };
 
-    // Builds the browser tree from a bound-API surface: types alphabetical, each type's members
-    // alphabetical under it. `filter` is a case-insensitive substring match: a matching TYPE name
-    // keeps the whole type; otherwise only matching members (and their type row) survive. Empty
-    // filter keeps everything.
+    // Builds the browser tree from a bound-API surface: types in alphabetical order, each with its
+    // members in alphabetical order under it. `filter` is a case-insensitive substring match: a
+    // matching type name keeps the whole type; otherwise only matching members (and their type
+    // row) are kept. An empty filter keeps everything.
     [[nodiscard]] ScriptApiTree BuildScriptApiTree(const Array<foundation::script::ScriptApiType>& types, StringView filter);
 }

@@ -3,15 +3,15 @@
 
 // UI - :text_runs partition
 //
-// Rich text as runs: styled spans of text and inline icons (F2 of Specs/vg-and-gui-lab.md), and
-// the small markup that writes them, the same from SML and from script:
+// Rich text as runs: styled spans of text and inline icons, and the small markup that writes them,
+// the same from SML and from script:
 //
 //   Your mark wears [color=#d04060][b]a rose gown[/b][/color] [icon=Icons/rose.png] [link=hint]?[/link]
 //
 // Tags: [b] bold, [i] italic, [u] underline, [color=#rrggbb | #rrggbbaa | name],
 // [size=<dp>], [font=<family>], [link=<id>] (a span the control reports when clicked),
 // [outline=<width> [colour]], [shadow=<x> <y> [blur] [colour]], [glow=<radius> [colour]] (text
-// effects, F4: drawn under the span's glyphs; a width or radius of 0 turns one off), each
+// effects, drawn under the span's glyphs; a width or radius of 0 turns one off), each
 // closed by [/name] or [/] (the innermost); [icon=<image path>] stands alone. "[[" is a literal
 // "[". A tag that is malformed or unknown, or a close that matches nothing, is kept as text and
 // reported in the diagnostics, never dropped.
@@ -42,8 +42,8 @@ export namespace foundation::ui
         bool italic = false;
         bool underline = false;
         String link; ///< A link id the control reports when the run is clicked; empty for none.
-        /// The effects the markup set, those parts named in `effectParts` (TextEffectPart); the
-        /// parts left out take the control's.
+        /// The effects the markup set. Only the parts named in `effectParts` (TextEffectPart)
+        /// apply; the parts left out take the control's.
         foundation::vg::TextEffects effects;
         u8 effectParts = 0;
 

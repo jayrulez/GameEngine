@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.audio tests: the scene integration headless - autoplay on scene
-// start, per-frame position/velocity sync (the doppler feed), finished-voice reap into
-// the component, the per-scene group pausing with scene simulation, the component
-// control surface, the listener component pose, and component serialization round-trip.
+// engine.audio tests: the scene integration, headless. Autoplay on scene start, per-frame
+// position and velocity sync (the doppler feed), finished-voice reap into the component, the
+// per-scene group pausing with scene simulation, the component control surface, the listener
+// component pose, and the component serialization round-trip.
 
 #include <doctest/doctest.h>
 
@@ -250,8 +250,8 @@ TEST_CASE("audio.scene: the component control surface - Play/Stop/SetPaused/IsPl
     CHECK_FALSE(play.audio->IsPlaying(bare));
 }
 
-// A sound that follows the game while it plays (Snowline's wind, rising with the rider's speed): a
-// source's volume and pitch were read only when it started.
+// A sound that follows the game while it plays (Snowline's wind, rising with the rider's speed):
+// a source's volume and pitch change on its playing voice, not only when it starts.
 TEST_CASE("audio.scene: a playing source's volume and pitch change live, and keep for its next play")
 {
     PlayScene play;
@@ -326,7 +326,7 @@ TEST_CASE("audio.scene: components round-trip through SerializeScene (authored f
     Guid cueId;
     REQUIRE(Guid::TryParse(u8"abcdefab-1234-4234-8234-abcdefabcdef", cueId));
     sc.cue.SetId(cueId);
-    sc.sourceType = AudioSourceType::Cue; // v4 discriminant must survive the round-trip
+    sc.sourceType = AudioSourceType::Cue; // the discriminant must survive the round-trip
     sc.bus = AudioBus::Music;
     sc.busName = String(u8"drums");
     sc.reverbSend = 0.35f;
@@ -344,7 +344,7 @@ TEST_CASE("audio.scene: components round-trip through SerializeScene (authored f
     sc.coneInnerAngleDegrees = 45.0f;
     sc.coneOuterAngleDegrees = 90.0f;
     sc.coneOuterGain = 0.25f;
-    sc.voice = VoiceHandle{7, 3}; // runtime junk that must NOT survive
+    sc.voice = VoiceHandle{7, 3}; // runtime state that must not survive
 
     scene::EntityHandle listener = a.CreateEntity(u8"ears");
     a.GetSystem<AudioListenerComponentManager>()->Add(listener).isActive = false;
@@ -401,10 +401,10 @@ TEST_CASE("audio.scene: components round-trip through SerializeScene (authored f
 TEST_CASE("audio.scene: sources sharing one clip each get their OWN voice (dedupe never merges "
           "components)")
 {
-    // The AudioPlayground bug: four emitters sharing a clip autoplayed in the same
-    // instant and the one-shot dedupe window collapsed them into ONE voice - three
-    // gizmos were silent. Component plays opt out of dedupe; this test runs with a
-    // REAL window (the shared harness's zero window would mask the regression).
+    // Four emitters sharing a clip autoplay in the same instant; the one-shot dedupe window would
+    // collapse them into one voice, leaving three silent. Component plays opt out of dedupe, and
+    // this test runs with a real window (the shared harness's zero window would hide the
+    // collapse).
     AudioEngineSettings settings;
     settings.headless = true;
     settings.dedupeWindowSeconds = 1.0f / 30.0f;
@@ -670,13 +670,13 @@ TEST_CASE("audio.scene: entity-active - starts-inactive is silent; deactivation 
     PlayScene play;
     RefPtr<AudioClip> clip = MakeToneClip(1.0f);
     const scene::EntityHandle e = play.AddSource(clip, Float3{1.0f, 0.0f, 0.0f});
-    play.scene.SetActive(e, false); // BEFORE Start: the scene-starts-inactive case
+    play.scene.SetActive(e, false); // before Start: the scene-starts-inactive case
     play.Start();
 
     auto* sources = play.scene.GetSystem<AudioSourceComponentManager>();
     AudioSourceComponent* c = sources->Get(e);
     REQUIRE(c != nullptr);
-    CHECK_FALSE(c->voice.IsValid()); // autoplay did NOT start a voice
+    CHECK_FALSE(c->voice.IsValid()); // autoplay did not start a voice
     play.Frame();
     CHECK_FALSE(c->voice.IsValid());
 
@@ -686,7 +686,7 @@ TEST_CASE("audio.scene: entity-active - starts-inactive is silent; deactivation 
     CHECK(play.engine.IsPlaying(c->voice));
 
     const VoiceHandle live = c->voice;
-    play.scene.SetActive(e, false); // deactivation STOPS the voice (silence, not a skip)
+    play.scene.SetActive(e, false); // deactivation stops the voice (silence, not a skip)
     play.Frame();
     CHECK_FALSE(c->voice.IsValid());
     CHECK_FALSE(play.engine.IsValidHandle(live));

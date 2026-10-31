@@ -1,4 +1,4 @@
-# Tools.ModelViewer - the standalone model viewer (Documentation/Specs/model-viewer.md): model files
+# Tools.ModelViewer - the standalone model viewer: model files
 # opened without a project in a lit 3D view, on the engine's default application with a GUI of its
 # own. Its headless half is the ModelViewer library; its window's markup and sheet are under
 # Data/ModelViewer, its look the editor's sheet (Data/Editor).

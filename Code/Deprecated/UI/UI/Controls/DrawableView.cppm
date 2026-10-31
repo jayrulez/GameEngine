@@ -4,9 +4,8 @@
 // UI - :drawable_view partition
 //
 // View that renders any Drawable at a given size. Uses DesiredWidth/DesiredHeight if set, else the
-// drawable's IntrinsicSize, else 0. Ported from Sedulous.UI/src/Controls/DrawableView.bf. The Beef
-// `Drawable Drawable` + `OwnsDrawable` + `~this ReleaseRef` become a RefPtr<Drawable> (RAII - the flag
-// is unnecessary). The `Drawable` field name shadows the Drawable type, so the RefPtr uses an alias.
+// drawable's IntrinsicSize, else 0. The drawable is held by a RefPtr. The `Drawable` field name
+// shadows the Drawable type, so the RefPtr uses an alias.
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +25,7 @@ using namespace foundation::core;
 
 export namespace foundation::ui
 {
-    // Alias so the faithful `Drawable` field name can still name the Drawable type (RefPtr element).
+    // Alias so the Drawable type can still be named next to the `Drawable` field (RefPtr element).
     using DrawablePtr = RefPtr<::foundation::ui::Drawable>;
 
     class DrawableView : public View

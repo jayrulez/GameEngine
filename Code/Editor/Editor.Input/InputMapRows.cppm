@@ -3,13 +3,12 @@
 
 // Editor::Input - :input_map_rows partition.
 //
-// What the input map page's grid says of a set's rows beyond what reflection says
-// (Documentation/Specs/editor-gui.md, 5.4, layer 5, part 4): an action by its name and, closed, its
-// kind and its bindings in a line; a binding by its source and, closed, its input; a binding's
-// settings shown only for the sources that have them (a dead zone for what is analog, the screen
-// area for touch, the four keys for a four-key binding), as the old page laid them out; the kinds
-// and the sources by the page's own words; an input's row the capture's. The page's describe hook,
-// a pure function of the set so its tests need no page.
+// What the input map page's grid says about a set's rows beyond what reflection says. An action
+// shows its name and, closed, its kind and bindings in a line; a binding shows its source and,
+// closed, its input. A binding's settings show only for the sources that have them (a dead zone
+// for analog sources, the screen area for touch, the four keys for a four-key binding). The kinds
+// and sources are named in the page's words, and an input's row uses the capture editor. This is
+// the page's describe hook, a pure function of the set so its tests need no page.
 
 module;
 #include "Core/Prelude.h"
@@ -104,8 +103,8 @@ export namespace editor
                 info.Visible = false; // a chord's modifiers: not authored on this page
             else if (field == u8"device")
             {
-                // A choice, as the old page had it: Any, or a pad by its number from 1 (the device
-                // its index from 0, -1 for any).
+                // A choice: Any, or a pad by its number from 1 (the device field stores its index
+                // from 0, or -1 for any).
                 info.DisplayName = String(u8"Gamepad");
                 info.Description = String(u8"Which connected gamepad: any, or one by its number");
                 info.Kind = gui::PropertyKind::Enum;
@@ -151,8 +150,8 @@ export namespace editor
             else if (field == u8"stickRadius")
             {
                 info.DisplayName = String(u8"Radius");
-                // Normalised as the regions are: the runtime divides the touch's offset from its
-                // anchor, a fraction of the screen, by it (ActionRuntime).
+                // Normalised like the regions: ActionRuntime divides the touch's offset from its
+                // anchor, a fraction of the screen, by this radius.
                 info.Description = String(u8"How far the stick deflects for a full reading: a fraction of the screen, 0 to 1");
                 range(0.0, 1.0, 0.01);
                 info.Visible = source == Source::TouchStick;
@@ -162,7 +161,7 @@ export namespace editor
 
     namespace input_map_rows
     {
-        // An action's processing, named and bounded as the old page had it.
+        // An action's processing fields, named and bounded.
         inline void DescribeProcessorField(StringView field, gui::PropertyInfo& info)
         {
             const auto range = [&info](f64 min, f64 max, f64 step)
@@ -201,7 +200,8 @@ export namespace editor
         }
     }
 
-    /// What the page's grid says of `set`'s row `path` (the reflected source over the set), in `info`.
+    /// Fills `info` with what the page's grid says about row `path` of `set` (the reflected source
+    /// over the set).
     inline void DescribeInputRow(const input::ActionSet& set, StringView path, gui::PropertyInfo& info)
     {
         if (path == u8"priority")
@@ -222,7 +222,7 @@ export namespace editor
         const input::Action& action = set.actions[static_cast<usize>(a)];
         if (rest.IsEmpty())
         {
-            // An action: by its name; closed, its kind and its bindings in a line.
+            // An action shows its name; closed, its kind and bindings in a line.
             info.DisplayName = action.name.IsEmpty() ? String(u8"(unnamed)") : String(action.name.AsView());
             info.Summary = Format(u8"{}: {}", input_map_edit::KindTitle(action.kind), input_map_rows::BindingsLine(action));
             return;
@@ -240,8 +240,8 @@ export namespace editor
             info.Summary = Format(u8"Sensitivity {}{}", FormatFixed(action.processors.sensitivity, 2), action.processors.snap ? StringView(u8", snaps on reverse") : StringView{});
             return;
         }
-        // When it fires: as soon as pressed, after a hold, on a quick tap or on two (the old page's
-        // words for the choices); closed, the choice and its time in a line.
+        // When it fires: as soon as pressed, after a hold, on a quick tap or on two; closed, the
+        // choice and its time in a line.
         if (rest == u8"interaction")
         {
             info.DisplayName = String(u8"Interaction");
@@ -291,8 +291,8 @@ export namespace editor
         const input::Binding& binding = action.bindings[static_cast<usize>(b)];
         if (field.IsEmpty())
         {
-            // A binding: by its source; closed, its input, and when the action's kind does not take
-            // its source (a map the game cannot read), that said on its own row.
+            // A binding shows its source; closed, its input. When the action's kind does not take
+            // its source (a map the game cannot read), its own row says so.
             info.DisplayName = String(input_map_edit::SourceTitle(binding.source));
             info.Summary = input::DescribeBinding(binding);
             input::BindingSource valid[8];

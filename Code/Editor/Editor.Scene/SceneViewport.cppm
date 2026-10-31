@@ -3,15 +3,14 @@
 
 // Editor::Scene - :scene_viewport partition.
 //
-// A scene page's viewport: the GUI's Viewport the scene is drawn into by the real renderer, through
+// A scene page's viewport: the GUI's Viewport, into which the real renderer draws the scene through
 // a camera override, in the app's one renderer bracket before the GUI's frame (the render graph
 // imports the colour target in the viewport's state and leaves it ready to sample, so the widget
-// keeps it); the editor camera flying on the viewport's input, the mouse while it is hovered or
-// holds a press, the keyboard only while it has the focus (a click focuses it), so keys typed in a
-// field elsewhere never fly it; GPU picking keyed by the viewport; the capture of what it shows (an
-// agent's screenshot, the project's picture); and framing entities. A hidden viewport (a tab not in
-// front) renders nothing. Out of the page's class (Documentation/Specs/editor-gui.md, 5.3,
-// layer 2), on the GUI where it was on foundation.ui's ViewportView.
+// keeps it). It also holds the editor camera, flown on the viewport's input (the mouse while the
+// viewport is hovered or holds a press, the keyboard only while it has the focus, which a click
+// gives it, so keys typed in a field elsewhere never fly it); GPU picking keyed by the viewport;
+// the capture of what it shows (an agent's screenshot, the project's picture); and framing
+// entities. A hidden viewport (a tab not in front) renders nothing.
 
 module;
 #include "Core/Prelude.h"
@@ -28,7 +27,7 @@ import foundation.runtime.client;
 import foundation.scene;
 import foundation.render;
 import engine.render;
-import engine.gui; // and the engine GUI's textures
+import engine.gui; // GuiSubsystem, for the engine GUI's textures
 import foundation.gui;
 import foundation.gui.hosting;
 import foundation.gui.viewport;
@@ -43,9 +42,9 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// Whether Shift is held for what the pointer does over a view: the keyboard the view has
-    /// while focused, else, while the pointer is over it, the device's own (a wheel goes where the
-    /// pointer is, whatever has the keys). Pure, so tested without a window.
+    /// Whether Shift is held for what the pointer does over a view: the view's keyboard while it is
+    /// focused, otherwise the device's own while the pointer is over it (a wheel goes where the
+    /// pointer is, whatever has the keys). Pure, so it is tested without a window.
     [[nodiscard]] inline bool ShiftHeldOver(foundation::shell::IKeyboard* focused, foundation::shell::IKeyboard* device, bool hovered)
     {
         const auto shift = [](foundation::shell::IKeyboard& keys)
@@ -69,7 +68,8 @@ export namespace editor
             m_view = MakeRef<foundation::gui::Viewport>(allocator);
             m_view->AddClass(u8"scene-view");
             m_view->ClearColor = Color{0.349f, 0.366f, 0.396f, 1.0f};
-            // Start framed on the origin (the grid's centre), the orbit's pivot there, the horizon level.
+            // Start framed on the origin (the grid's centre), the orbit's pivot there, the horizon
+            // level.
             m_camera.LookAt(Float3{0.0f, 0.0f, 0.0f});
         }
         SceneViewport(const SceneViewport&) = delete;
@@ -84,7 +84,8 @@ export namespace editor
         /// What its debug list and its picks are keyed by.
         [[nodiscard]] const void* Key() const noexcept { return m_view.Get(); }
 
-        /// Drawn and given input by `host` from now on (null: not hosted, a test).
+        /// Sets the host that draws it and gives it input from now on (null: not hosted, as in a
+        /// test).
         void HostIn(foundation::gui::GuiHost* host)
         {
             if (host != nullptr)
@@ -114,9 +115,9 @@ export namespace editor
             return m_view->IsFocused() || (surface != nullptr && surface->Captured()) ? m_view->Keyboard() : nullptr;
         }
 
-        /// Whether Shift is held for what the pointer does over the view (a brush's Shift + wheel
-        /// resize, a Shift click): read with the pointer, so it holds while the keys' focus is
-        /// elsewhere (the brush's own panel, picked a moment ago).
+        /// Whether Shift is held for what the pointer does over the view (a brush's Shift and wheel
+        /// resize, a Shift click). It is read with the pointer, so it holds while the keys' focus
+        /// is elsewhere (such as the brush's own panel, used a moment ago).
         [[nodiscard]] bool ShiftHeld() const
         {
             if (m_scripted)
@@ -126,9 +127,9 @@ export namespace editor
             return ShiftHeldOver(Keyboard(), raw != nullptr ? raw->Keyboard() : nullptr, m_view->IsHovered());
         }
 
-        /// The camera's frame: flown while the viewport has the input (`wheel` false leaves the
-        /// wheel to a tool), released when it has not, its eased framing carried on either way.
-        /// Whether the viewport had the input.
+        /// The camera's frame: the camera flies while the viewport has the input (`wheel` false
+        /// leaves the wheel to a tool) and is released when it has not, and its eased framing
+        /// carries on either way. Returns whether the viewport had the input.
         bool UpdateCamera(f32 deltaSeconds, bool wheel)
         {
             const bool active = IsActive();
@@ -136,14 +137,16 @@ export namespace editor
             if (active)
             {
                 m_camera.Update(Keyboard(), Mouse(), deltaSeconds, wheel);
-                // An orbit, look or pan drag: the pointer locked meanwhile, granted by the router to
-                // this surface alone and ended with the press (not the user's pointer for a playtest's).
+                // An orbit, look or pan drag: the pointer is locked meanwhile, granted by the
+                // router to this surface alone and ended with the press (never the user's pointer
+                // during a playtest).
                 if (surface != nullptr && !m_scripted)
                     surface->SetPointerLock(m_camera.WantsPointerLock());
             }
             else
             {
-                // Losing the input releases a captured fly at once (relative mode makes losing it easy).
+                // Losing the input releases a captured fly at once (relative mode makes losing it
+                // easy).
                 m_camera.ReleaseCapture(Mouse());
                 if (surface != nullptr)
                     surface->SetPointerLock(false);
@@ -156,9 +159,10 @@ export namespace editor
         [[nodiscard]] bool ZoomedThisFrame() const noexcept { return m_camera.zoomedThisUpdate; }
 
         // === A playtest of the view (viewport_run) ===
-        /// `source` stands for the devices over the view from now: its mouse in the targets'
-        /// pixels, its keys as if the view had the focus, the pointer over the view while inside
-        /// it. Nothing real is merged in: where the user's mouse is must not change a playtest.
+        /// From now on `source` stands in for the devices over the view: its mouse in the targets'
+        /// pixels, its keys as if the view had the focus, and the pointer over the view while
+        /// inside it. Nothing real is merged in, so where the user's mouse is cannot change a
+        /// playtest.
         void BeginScripted(UniquePtr<foundation::input::ScriptedInputSource> source)
         {
             m_scripted = Move(source);
@@ -166,14 +170,14 @@ export namespace editor
             m_scriptedEnding = false;
             m_scriptedReleased = false;
         }
-        /// Ends it: everything held is let go for a frame (a brush lifts, the camera stops), then
+        /// Ends it: everything held is released for a frame (a brush lifts, the camera stops), then
         /// the devices are the view's again.
         void EndScripted()
         {
             if (m_scripted)
                 m_scriptedEnding = true;
         }
-        /// Once a frame, before the view's input is read: the playtest's next frame.
+        /// Once a frame, before the view's input is read: advances the playtest by a frame.
         void AdvanceScripted(f32 deltaSeconds)
         {
             if (!m_scripted)
@@ -239,8 +243,8 @@ export namespace editor
             return m_services.render != nullptr ? &m_services.render->DebugView(Key()) : nullptr;
         }
 
-        /// Adds this frame's view of `scene` (inside the renderer's bracket): nothing while hidden or
-        /// with no renderer. `debugView` null on a clean capture's frame.
+        /// Adds this frame's view of `scene` (inside the renderer's bracket); nothing while hidden
+        /// or with no renderer. `debugView` is null on a clean capture's frame.
         void Render(foundation::graphics::FrameContext& frame, foundation::scene::Scene& scene, const foundation::render::ViewPostOverride* post,
                     const foundation::render::ViewDebugView* debugView)
         {
@@ -274,7 +278,7 @@ export namespace editor
             m_captureHeight = h;
         }
 
-        /// A capture asked for, recorded once the renderer composed the frame (RenderScene only
+        /// Records a requested capture once the renderer has composed the frame (RenderScene only
         /// adds the view; EndRendering, before this, writes the image).
         void AfterRender(foundation::runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame)
         {
@@ -286,19 +290,19 @@ export namespace editor
                              foundation::rhi::ResourceState::ShaderRead);
             m_cleanCapture = false;
         }
-        /// A capture recorded last frame, written once the GPU finished the copy.
+        /// Writes a capture recorded last frame, once the GPU has finished the copy.
         void CompleteCapture(foundation::runtime::IApplicationHost& host)
         {
             m_capture.Complete(host.Graphics() != nullptr ? host.Graphics()->Raw() : nullptr, host.Subsystems().Allocator());
         }
-        /// The next rendered frame to `path`; `clean`, without the editor's overlays.
+        /// Requests the next rendered frame to `path`; `clean` leaves out the editor's overlays.
         Status RequestCapture(StringView path, bool clean)
         {
             m_capture.Request(path);
             m_cleanCapture = clean;
             return Status{};
         }
-        /// The frame an armed clean capture records: the overlays held back.
+        /// Whether this is the frame an armed clean capture records, with the overlays held back.
         [[nodiscard]] bool CleanCaptureFrame() const noexcept { return m_cleanCapture && m_capture.Armed(); }
         [[nodiscard]] const ViewportCapture& LastCapture() const noexcept { return m_capture.State(); }
 
@@ -332,7 +336,8 @@ export namespace editor
                 }
                 if (!measured)
                 {
-                    // Nothing in it measures (an empty, a light): its place, the marker's size.
+                    // Nothing in it measures (an empty entity, a light): use its place, at the
+                    // marker's size.
                     const Float4x4 world = scene.GetWorldMatrix(e);
                     box = AABB::FromCenterExtents(Float3{world.m[3][0], world.m[3][1], world.m[3][2]}, Float3{0.35f, 0.35f, 0.35f});
                 }
@@ -345,10 +350,10 @@ export namespace editor
             return true;
         }
 
-        /// Before the page goes: the camera never closes captured, the picks keyed by it are
-        /// cancelled, a picture recorded and not yet written is written (it waits for the GPU: a
-        /// save's launcher picture, the editor closing that same frame, was freed while the copy
-        /// was still running), then the readback buffer goes while the device lives.
+        /// Before the page goes: the camera is released from any capture, the picks keyed by it are
+        /// cancelled, and a picture recorded but not yet written is written (waiting for the GPU,
+        /// since a save's launcher picture may be recorded in the same frame the editor closes).
+        /// Then the readback buffer is released while the device still lives.
         void Close(foundation::runtime::IApplicationHost& host)
         {
             m_camera.ReleaseCapture(Mouse());
@@ -370,8 +375,8 @@ export namespace editor
                    mouse->Y() < static_cast<f32>(m_view->RenderHeight());
         }
 
-        // The GPU pick seam the tools see: the renderer's picks keyed by this viewport (the key its
-        // RenderScene carries), hits decoded to entity handles.
+        // The GPU pick interface the tools see: the renderer's picks keyed by this viewport (the
+        // key its RenderScene carries), with hits decoded to entity handles.
         class ViewportPicker final : public IViewportPicker
         {
         public:
@@ -411,7 +416,7 @@ export namespace editor
         ViewportPicker m_picker;
         ViewportCaptureRecorder m_capture;
         bool m_cleanCapture = false;
-        bool m_renderedThisFrame = false; // Render added the view this frame, at:
+        bool m_renderedThisFrame = false; // Render added the view this frame, at this size:
         u32 m_captureWidth = 0;
         u32 m_captureHeight = 0;
     };

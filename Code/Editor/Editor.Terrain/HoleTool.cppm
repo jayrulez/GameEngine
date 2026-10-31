@@ -2,15 +2,14 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::Terrain - :hole partition.
 //
-// TerrainHoleTool: the scene-viewport terrain hole brush (Specs/terrain-holes.md). A MODAL tool
-// beside sculpt and splat: it ray-picks the terrain under the cursor into heightfield-local
-// space, CUTS or FILLS the samples inside a hard-edged disc (foundation.heightfield's
-// CutHoles / FillHoles), and records ONE region-delta undo command per stroke over the hole
-// plane. On save the registered closure writes the runtime heightfield back to its SOURCE asset
-// - both the "heights" and the "holes" streams, so an imported heightfield keeps its heights
-// when the file name is cleared.
+// TerrainHoleTool: the scene-viewport terrain hole brush, a modal tool beside sculpt and splat. It
+// ray-picks the terrain under the cursor into heightfield-local space, cuts or fills the samples
+// inside a hard-edged disc (foundation.heightfield's CutHoles and FillHoles), and records one
+// region-delta undo command per stroke over the hole plane. On save the registered closure writes
+// the runtime heightfield back to its source asset. It writes both the "heights" and the "holes"
+// streams, so an imported heightfield keeps its heights when the file name is cleared.
 //
-// GCC module hygiene: the heavy engine.terrain / resource imports live in HoleToolImpl.cpp.
+// For GCC module hygiene, the heavy engine.terrain and resource imports live in HoleToolImpl.cpp.
 module;
 #include "Core/Prelude.h"
 
@@ -98,7 +97,7 @@ export namespace editor
         bool m_stroking = false;
         RefPtr<foundation::heightfield::Heightfield> m_strokeHf;
         Guid m_strokeHeightfieldId;
-        Array<u8> m_before; // the whole hole plane at press
+        Array<u8> m_before; // the whole hole plane, captured at press
         foundation::heightfield::HeightfieldRegion m_region;
         String m_status;
     };

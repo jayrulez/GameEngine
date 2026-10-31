@@ -3,12 +3,13 @@
 
 // GUI.Code - :code_find_bar partition
 //
-// The code editor's find, replace and go-to-line bar (C4 of Specs/gui-lab-evolution-3.md), of the
-// core's widgets (foundation.ui's editor drew its own and took its keys before the editor did): a
-// field for what to find, toggles for matching case and whole words, how many matches and which,
-// the previous and next, a close; replacing, a second field and Replace and Replace all; going to a
-// line, one field (`line` or `line:column`). Return finds the next (Shift+Return the previous),
-// replaces, or goes; Escape closes it, the focus back in the editor. The editor does the searching.
+// The code editor's find, replace and go-to-line bar, built from the core's widgets. For finding it
+// has a field for the search text, toggles for matching case and whole words, a count of the
+// matches and which one is current, previous and next buttons, and a close button. When replacing,
+// it adds a second field and the Replace and Replace all buttons. When going to a line, it has one
+// field (`line` or `line:column`). Return finds the next match (Shift+Return the previous), replaces,
+// or goes to the line. Escape closes the bar and returns the focus to the editor. The editor does
+// the searching.
 
 module;
 #include "Core/Prelude.h"
@@ -42,7 +43,7 @@ export namespace foundation::gui
                 StyleWriteScope defaults(*this);
                 EditLayoutStyle([](LayoutStyle& s)
                 {
-                    s.Placement = Position::Absolute; // over the editor, which places it
+                    s.Placement = Position::Absolute; // floats over the editor, which places it
                     s.Direction = FlexDirection::Column;
                     s.RowGap = 4.0f;
                 });
@@ -74,7 +75,7 @@ export namespace foundation::gui
                 if (self->m_onGoTo)
                     self->m_onGoTo(text);
             });
-            // Return with Shift finds the previous; Escape closes, from any of its fields.
+            // In any of the bar's fields, Shift+Return finds the previous match and Escape closes the bar.
             (void)AddEventListener(EventType::KeyDown, [self](const Event& e)
                                    {
                                        const KeyEvent& key = static_cast<const KeyEvent&>(e);
@@ -90,7 +91,7 @@ export namespace foundation::gui
             SetDisplayed(false);
         }
 
-        /// Shows it in `mode`, its field holding `text` (all selected) and focused.
+        /// Shows the bar in `mode` and focuses its field, which holds `text`, all selected.
         void Show(Mode mode, core::StringView text)
         {
             m_mode = mode;
@@ -118,7 +119,7 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView GetReplacement() const { return m_replacement->GetText(); }
         [[nodiscard]] bool MatchCase() const { return m_case->IsChecked(); }
         [[nodiscard]] bool WholeWord() const { return m_word->IsChecked(); }
-        /// Shows which match is current (from 1; 0: none) of how many.
+        /// Shows which match is current (counting from 1, or 0 for none) out of `total`.
         void SetCount(usize current, usize total)
         {
             if (m_query->GetText().Size() == 0)
@@ -135,7 +136,7 @@ export namespace foundation::gui
         [[nodiscard]] Button& GetWordToggle() const noexcept { return *m_word; }
         [[nodiscard]] Label& GetCountLabel() const noexcept { return *m_count; }
 
-        // The editor's: what it does for each.
+        // Set by the editor: the editor's handler for each action.
         void SetOnChanged(core::Function<void()> callback) { m_onChanged = core::Move(callback); }
         void SetOnNext(core::Function<void(bool backwards)> callback) { m_onNext = core::Move(callback); }
         void SetOnReplace(core::Function<void(bool all)> callback) { m_onReplace = core::Move(callback); }

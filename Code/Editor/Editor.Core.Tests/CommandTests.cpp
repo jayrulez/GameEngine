@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// EditorCommandStack tests: Lumix semantics - execute/undo/redo,
-// failed-execute drop, redo-tail truncation, same-type merge (slider drags), group transactions
-// (atomic undo/redo, same-type coalescing, LockGroup).
+// EditorCommandStack tests: execute, undo and redo; a failed execute is dropped; a new command
+// truncates the redo tail; same-type commands merge (slider drags); group transactions undo and
+// redo atomically, coalesce by type, and stay separate after LockGroup.
 
 #include <doctest/doctest.h>
 
@@ -54,7 +54,7 @@ namespace
             {
                 return false;
             }
-            prev.m_delta = m_delta; // absorb: previous now applies the NEW value
+            prev.m_delta = m_delta; // absorb: the previous command applies the newest value
             return true;
         }
 
@@ -146,7 +146,7 @@ TEST_CASE("editor-commands: same-type merge coalesces a drag into one entry")
     EditorCommandStack stack;
     i32 value = 0;
 
-    // A "slider drag": many mergeable sets; only ONE undo entry results.
+    // A "slider drag": many mergeable sets result in a single undo entry.
     CHECK(stack.Execute(Add(value, 1, true)));
     CHECK(stack.Execute(Add(value, 2, true)));
     CHECK(stack.Execute(Add(value, 3, true)));
@@ -206,7 +206,7 @@ TEST_CASE("editor-commands: consecutive same-type groups coalesce")
     stack.EndGroup();
 
     CHECK(value == 3);
-    stack.Undo(); // ONE undo reverts both
+    stack.Undo(); // one undo reverts both
     CHECK(value == 0);
     CHECK(!stack.CanUndo());
 }
@@ -222,7 +222,7 @@ TEST_CASE("editor-commands: an empty group leaves no undo step - nothing ran, no
     stack.EndGroup(); // nothing inside
     CHECK(stack.Size() == 0u);
     CHECK(!stack.CanUndo());
-    CHECK(changes == 0u); // nobody told: nothing changed
+    CHECK(changes == 0u); // no notification: nothing changed
 
     // A group whose only command was refused is empty too; the step before it stands alone.
     CHECK(stack.Execute(Add(value, 5)));
@@ -283,7 +283,7 @@ TEST_CASE("editor-commands: empty group round-trips undo/redo")
     EditorCommandStack stack;
     i32 value = 0;
 
-    // The Lumix play-mode-fence pattern: an empty group as a stack marker.
+    // An empty group as a stack marker (a fence, such as one around play mode).
     stack.BeginGroup(u8"fence");
     stack.EndGroup();
     CHECK(stack.Execute(Add(value, 1)));

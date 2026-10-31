@@ -3,15 +3,14 @@
 
 // Pipeline::Geometry - the `foundation.geometry.editor` module (tooling).
 //
-// Source-side mesh authoring + cook:
-//   * StaticMeshAsset / SkinnedMeshAsset (pipeline::Asset): wrap a cooked
-//     Static/SkinnedMeshSource. (A real pipeline cooks these from an imported model
-//     via a ModelMesh->StaticMesh converter - the tooling we did not port; the asset
-//     here carries the already-resolved source.)
-//   * The asset builders write the resolved source into the product DB (where the
-//     mesh factories build it into a Static/SkinnedMesh).
-//   * MeshImporter: capture a Static/SkinnedMesh built in code (e.g. a primitive)
-//     into an asset.
+// Source-side mesh authoring and cook:
+//   * StaticMeshAsset and SkinnedMeshAsset (pipeline::Asset): wrap a resolved
+//     StaticMeshSource or SkinnedMeshSource. The model importer fills them from an
+//     imported model.
+//   * The asset builders write the resolved source into the product DB, where the
+//     mesh factories build it into a StaticMesh or SkinnedMesh.
+//   * MeshImporter: capture a StaticMesh or SkinnedMesh built in code (a primitive,
+//     say) into an asset.
 //
 // Never linked by the runtime.
 
@@ -32,20 +31,19 @@ using namespace foundation::geometry;
 
 export namespace pipeline{
 
-    // The mesh bulk sidecar: geometry lives in a BINARY data stream beside the envelope,
-    // not inline in the XML. Incident 2026-08-11: a Sponza import produced a 170 MB XML
-    // envelope (vertex arrays as text), and every project open DOM-parsed it to read three
-    // header fields - a 25-second freeze and ~5 GB of DOM peak that the allocator never
-    // returns. Sources-are-text is for AUTHORED data; machine-generated bulk follows the
-    // texture-pixels precedent (binary sidecar), through the BinarySerializer under the
-    // mesh SOURCE type's version scope (the sidecar is stamped and checked like an envelope).
+    // The mesh bulk sidecar: geometry lives in a binary data stream beside the envelope,
+    // not inline in the XML. Vertex arrays as text make a large model's envelope hundreds of
+    // megabytes, and every project open would DOM-parse it to read a few header fields.
+    // Sources are text for authored data; machine-generated bulk goes to a binary sidecar, as
+    // texture pixels do, written by the BinarySerializer under the mesh source type's version
+    // scope (the sidecar is stamped and checked like an envelope).
     inline constexpr StringView kMeshGeometryStreamName = u8"geometry";
 
     class StaticMeshAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(StaticMeshAsset, pipeline::Asset)
     public:
-        // `source` ALWAYS travels in the kMeshGeometryStreamName sidecar; the envelope holds
+        // `source` always travels in the kMeshGeometryStreamName sidecar; the envelope holds
         // only fileName. Readers call EnsureMeshSourceLoaded after ReadObject.
         StaticMeshSource source;
 
@@ -64,11 +62,11 @@ export namespace pipeline{
         void Serialize(ISerializer& ar) override { pipeline::Asset::Serialize(ar); }
     };
 
-    // === Sidecar plumbing (shared by the importer, the builders, and every source reader) ===
+    // === Sidecar reading and writing (shared by the importer, the builders, and every source reader) ===
 
     namespace detail
     {
-        // Serialize `source` into sidecar BYTES under the SOURCE type's version scope - the
+        // Serialize `source` into sidecar bytes under the source type's version scope, the
         // same scope MeshSourceFromStream reads under (a sidecar stamped with another version
         // is refused, like an envelope).
         template <typename Source>
@@ -76,7 +74,7 @@ export namespace pipeline{
         {
             MemoryStream buffer;
             BinarySerializer ar(buffer, SerializeMode::Write);
-            BeginVersionedPayload(ar, Source::StaticType()); // the SOURCE type stamps its layout
+            BeginVersionedPayload(ar, Source::StaticType()); // the source type stamps its layout
             source.Serialize(ar);
             EndVersionedPayload(ar);
             const Span<const byte> bytes = buffer.Bytes();
@@ -91,14 +89,14 @@ export namespace pipeline{
         [[nodiscard]] inline Status MeshSourceFromStream(IStream& stream, Source& source)
         {
             BinarySerializer ar(stream, SerializeMode::Read);
-            BeginVersionedPayload(ar, Source::StaticType()); // read mode: pushes the STORED chain
+            BeginVersionedPayload(ar, Source::StaticType()); // read mode: pushes the stored chain
             source.Serialize(ar);
             EndVersionedPayload(ar);
             return ar.IsOk() ? Status{} : Status{ErrorCode::InvalidArgument};
         }
     }
 
-    /// Write `asset` sidecar-style: tiny envelope + binary geometry stream. The one writer
+    /// Write `asset` with a small envelope and a binary geometry stream. The one writer
     /// every save path uses (importer, primitive capture, page save).
     template <typename Asset>
     [[nodiscard]] inline Status WriteMeshAsset(foundation::content::Instance& instance,
@@ -123,12 +121,12 @@ export namespace pipeline{
         UniquePtr<IStream> stream = instance.ReadData(kMeshGeometryStreamName);
         if (!stream)
         {
-            return Status{ErrorCode::NotFound}; // sidecar missing = a broken asset, say so
+            return Status{ErrorCode::NotFound}; // a missing sidecar is a broken asset
         }
         return detail::MeshSourceFromStream(*stream, asset.source);
     }
 
-    /// Cook-time mesh optimization stats - logged by the builder,
+    /// Cook-time mesh optimization stats, logged by the builder and
     /// asserted by the cook tests.
     struct MeshOptimizeStats
     {
@@ -139,11 +137,11 @@ export namespace pipeline{
         f32 acmrAfter = 0.0f;
     };
 
-    /// Auto-LOD generation. Ratios are the ladder {0.5, 0.25,
-    /// 0.125}; a level is DROPPED (and the chain ends) when simplification cannot get
-    /// near its target within the error bound - a chain is as long as quality allows,
-    /// never padded. minTriangles floors the chain (no point simplifying tiny meshes
-    /// further). Thresholds use the same halving coverage ladder authored chains get.
+    /// Auto-LOD generation. Ratios are the ladder {0.5, 0.25, 0.125}; a level is dropped
+    /// (and the chain ends) when simplification cannot get near its target within the error
+    /// bound, so a chain is as long as quality allows and never padded. minTriangles floors
+    /// the chain, since simplifying tiny meshes further gains nothing. Thresholds use the
+    /// same halving coverage ladder authored chains get.
     struct LodGenerationSettings
     {
         f32 targetError = 0.02f; // meshopt relative error bound (fraction of mesh extent)
@@ -152,22 +150,22 @@ export namespace pipeline{
 
     /// Generate a LOD chain into `source` via meshopt_simplify (border-locked per submesh
     /// so cross-submesh seams never crack). No-op (returns 0 levels added) when the source
-    /// already HAS a chain (authored wins), has no triangle submeshes, or is malformed.
+    /// already has a chain (authored wins), has no triangle submeshes, or is malformed.
     /// Deterministic. Defined in MeshOptimizeImpl.cpp.
     u32 GenerateLodChain(StaticMeshSource& source, const LodGenerationSettings& settings = {});
 
-    /// Vertex-cache + overdraw reorder per triangle submesh, then one
+    /// Vertex-cache and overdraw reorder per triangle submesh, then one
     /// whole-mesh vertex-fetch remap (reorders the blob, rewrites every index, compacts
-    /// unused vertices). Triangle SET, submesh ranges, and vertex VALUES are preserved -
+    /// unused vertices). The triangle set, submesh ranges and vertex values are preserved;
     /// only order changes, so rendering is identical. Non-triangle submeshes keep their
-    /// index order (the remap still rewrites their index VALUES). Deterministic
-    /// (meshoptimizer has no threading/RNG). Skinned sources included: the parallel
+    /// index order (the remap still rewrites their index values). Deterministic
+    /// (meshoptimizer has no threading or RNG). Skinned sources are included: the parallel
     /// skinning stream receives the identical vertex permutation (a size-mismatched
     /// stream refuses the whole pass).
     /// Defined in MeshOptimizeImpl.cpp (meshoptimizer stays out of this interface).
     void OptimizeStaticMeshSource(StaticMeshSource& source, MeshOptimizeStats* outStats = nullptr);
 
-    // Cooks a StaticMeshAsset -> StaticMeshSource in the output DB.
+    // Cooks a StaticMeshAsset into a StaticMeshSource in the output DB.
     class StaticMeshAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -176,12 +174,12 @@ export namespace pipeline{
                               pipeline::AssetDependencies& out) override
         {
             // The geometry sidecar is a build input: declare it so the recipe hash covers it
-            // (a geometry-only change must dirty the cook - the envelope does not carry it).
+            // (a geometry-only change must dirty the cook, and the envelope does not carry it).
             (void)asset;
             out.sourceStreams.PushBack(String(kMeshGeometryStreamName));
         }
 
-        // Cook version 2 (2026-09-08): StaticMeshSource 5 - Float4 tangent + LOD chain, geometry never inline; a product cooked under the older record
+        // Cook version 2: StaticMeshSource 5 (Float4 tangent, LOD chain, geometry never inline); a product cooked under the older record
         // version is refused by the reader, so the recipe hash must change to re-cook it.
         [[nodiscard]] u32 Version() const override { return 2; }
 
@@ -210,14 +208,14 @@ export namespace pipeline{
                     return loaded;
                 }
             }
-            // Optimization pass: same triangles, better order (+ dead-vertex compaction).
+            // Optimization pass: same triangles, better order, unused vertices compacted.
             // In place on the per-cook source instance; idempotent on re-cooks.
             OptimizeStaticMeshSource(ma.source);
             return ctx.output->WriteObject(ma.source);
         }
     };
 
-    // Cooks a SkinnedMeshAsset -> SkinnedMeshSource in the output DB.
+    // Cooks a SkinnedMeshAsset into a SkinnedMeshSource in the output DB.
     class SkinnedMeshAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -229,7 +227,7 @@ export namespace pipeline{
             out.sourceStreams.PushBack(String(kMeshGeometryStreamName));
         }
 
-        // Cook version 2 (2026-09-08): the mesh source layout, in lockstep with the static builder; a product cooked under the older record
+        // Cook version 2: the mesh source layout, in step with the static builder; a product cooked under the older record
         // version is refused by the reader, so the recipe hash must change to re-cook it.
         [[nodiscard]] u32 Version() const override { return 2; }
 
@@ -287,9 +285,9 @@ export namespace pipeline{
         RegisterSerializable<SkinnedMeshAsset>();
     }
 
-    // 5 = geometry ALWAYS in the sidecar (the inline-geometry flag left the envelope); the
-    // number moves in lockstep with StaticMeshSource (MeshResource.cppm), whose layout the
-    // sidecar carries under this asset's version scope.
+    // The mesh assets' data version (5, in GeometryCreatorsImpl.cpp) keeps geometry in the
+    // sidecar only. It moves in step with StaticMeshSource (MeshResource.cppm), whose layout
+    // the sidecar carries under this asset's version scope.
 
 
     /// A static mesh asset of `mesh` in `target`, named `baseName` made unique, its geometry in

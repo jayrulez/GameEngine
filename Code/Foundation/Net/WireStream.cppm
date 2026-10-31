@@ -3,11 +3,11 @@
 
 /// Foundation::Net - `foundation.net:wire` partition.
 ///
-/// Bit-level wire serialization (`foundation.net.wire`): a BitWriter /
-/// BitReader pair that packs values to the BIT rather than the byte, plus varints and ranged-float
-/// quantization. This is the foundation the reliability layer, RPC, and replication delta all encode
-/// through - bandwidth is the scarce resource, so the primitives are bit-exact and overflow-safe
-/// (a reader that runs off the end reports !Ok() instead of reading garbage).
+/// Bit-level wire serialization: a BitWriter and BitReader pair that packs values to the bit
+/// rather than the byte, plus varints and ranged-float quantization. The reliability layer, RPC
+/// and replication deltas all encode through it. Bandwidth is the scarce resource, so the
+/// primitives are bit-exact and overflow-safe (a reader that runs off the end reports !Ok()
+/// instead of reading garbage).
 ///
 /// Bit order: LSB-first within a byte (value's low bit goes to the byte's bit 0). Writer and reader
 /// are symmetric; the only contract is same call sequence on both sides.
@@ -66,7 +66,7 @@ export namespace foundation::net
             WriteU32(bits);
         }
 
-        // Variable-length u32 (LEB128, 7 bits/byte): small values cost 1 byte. Ideal for lengths/ids.
+        // Variable-length u32 (LEB128, 7 bits per byte): small values cost 1 byte. Suits lengths and ids.
         void WriteVarU32(u32 v)
         {
             while (v >= 0x80u)
@@ -77,8 +77,8 @@ export namespace foundation::net
             WriteBits(v, 8);
         }
 
-        // Quantize `v` into `bits` (1..32) over [min,max] (clamped). Lossy, bandwidth-cheap - the core
-        // trick for positions/rotations. Symmetric with ReadFloatRanged(min,max,bits).
+        // Quantize `v` into `bits` (1..32) over [min,max] (clamped). Lossy and cheap on bandwidth;
+        // used for positions and rotations. Symmetric with ReadFloatRanged(min,max,bits).
         void WriteFloatRanged(f32 v, f32 min, f32 max, u32 bits)
         {
             DIAGNOSTIC_ASSERT(bits >= 1 && bits <= 32);
@@ -137,7 +137,7 @@ export namespace foundation::net
     };
 
     // Reads back what BitWriter wrote. A read past the end sets an overflow flag (Ok() == false) and
-    // returns zeros rather than reading garbage - so a truncated/malicious packet degrades safely.
+    // returns zeros rather than reading garbage, so a truncated or malicious packet degrades safely.
     class BitReader
     {
     public:
@@ -224,7 +224,7 @@ export namespace foundation::net
             }
         }
 
-        // False once any read ran past the end of the buffer (truncated/corrupt packet).
+        // False once any read ran past the end of the buffer (truncated or corrupt packet).
         [[nodiscard]] bool Ok() const noexcept { return !m_overflow; }
         // No more bits to read (and nothing overflowed).
         [[nodiscard]] bool AtEnd() const noexcept

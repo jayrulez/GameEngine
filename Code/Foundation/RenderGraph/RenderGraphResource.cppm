@@ -5,8 +5,7 @@
 //
 // A resource managed by the graph (texture or buffer): its descriptor, the
 // allocated GPU object, reference/lifetime tracking computed during compile, and
-// barrier state. Ported from Sedulous.RenderGraph (RenderGraphResource.bf).
-// Fields are public data the graph orchestrator manipulates directly.
+// barrier state. Fields are public data the graph orchestrator manipulates directly.
 
 module;
 #include "Core/Prelude.h"
@@ -48,9 +47,9 @@ export namespace foundation::rendergraph
             }
 
             // All-or-nothing: assign the members only once every view is created. Leaving `texture`
-            // set with a null `textureView` (the old behaviour on a view-create failure) poisons the
-            // transient pool and desyncs render-pass attachments (see ReturnTransientResources /
-            // ExecuteRenderPass) - the viewport-resize corruption cascade.
+            // set with a null `textureView` after a view-create failure would poison the transient
+            // pool and desync render-pass attachments (see ReturnTransientResources /
+            // ExecuteRenderPass).
             rhi::Texture* tex = nullptr;
             if (!device.CreateTexture(rhiDesc, tex).IsOk())
             {

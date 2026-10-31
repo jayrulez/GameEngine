@@ -3,11 +3,11 @@
 
 // Input - :binding_names partition
 //
-// Human-readable names for input bindings + the enums around them: a key/pad/mouse code -> label
-// ("A", "Pad South", "Mouse Left"), a whole Binding -> label (DescribeBinding), and the source /
-// kind / interaction enum names. Pure formatting over shell codes + input::Binding - no UI, no
-// editor. Relocated out of the editor's InputMapPage so any runtime consumer (a HUD button-prompt,
-// a rebind screen) can render bindings the same way the editor does.
+// Human-readable names for input bindings and the enums around them: a key/pad/mouse code -> label
+// ("A", "Pad South", "Mouse Left"), a whole Binding -> label (DescribeBinding), and the source,
+// kind and interaction enum names. Pure formatting over shell codes and input::Binding, with no UI
+// and no editor, so any runtime consumer (a HUD button prompt, a rebind screen) renders bindings
+// the same way the editor does.
 
 module;
 #include "Core/Prelude.h"

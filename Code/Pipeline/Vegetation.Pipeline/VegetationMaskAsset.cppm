@@ -2,12 +2,13 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // vegetation.pipeline - the painted vegetation mask's pipeline: VegetationMaskAsset (the source
-// envelope), VegetationMaskAssetBuilder (cook -> VegetationMask resource: metadata object + the
-// "densities" stream) and VegetationMaskFileImporter (a PNG -> one density plane per channel).
+// envelope), VegetationMaskAssetBuilder (cooks to a VegetationMask resource: a metadata object and
+// the "densities" stream) and VegetationMaskFileImporter (a PNG becomes one density plane per
+// channel).
 //
-// Two source shapes, like the splatmap: EMBEDDED (created in the editor, painted with the Paint
-// Vegetation brush; the planes ride the source instance's "densities" sidecar, written back on
-// Save) and IMPORTED (fileName set; the builder decodes the image at cook). A paint over an
+// Two source shapes, like the splatmap: embedded (created in the editor, painted with the Paint
+// Vegetation brush; the planes live in the source instance's "densities" sidecar, written back on
+// Save) and imported (fileName set; the builder decodes the image at cook). A paint over an
 // imported mask converts it to embedded (the editable-source convention).
 
 module;
@@ -51,7 +52,7 @@ export namespace pipeline
         }
     };
 
-    // Cooks a VegetationMaskAsset -> VegetationMask resource (metadata object + the stream).
+    // Cooks a VegetationMaskAsset to a VegetationMask resource (a metadata object and the stream).
     class VegetationMaskAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
@@ -59,16 +60,16 @@ export namespace pipeline
         {
             return &VegetationMaskAsset::StaticType();
         }
-        // Cooked instance type = the SERIALIZED VegetationMaskSource the cook stamps + ReadObject
-        // rebuilds (VegetationMaskFactory.ProductType() is the runtime VegetationMask for Bind).
+        // The cooked instance type is the serialized VegetationMaskSource the cook stamps and
+        // ReadObject rebuilds (VegetationMaskFactory.ProductType() is the runtime VegetationMask for Bind).
         [[nodiscard]] const TypeInfo* ProductType() const override
         {
             return &VegetationMaskSource::StaticType();
         }
         [[nodiscard]] u32 Version() const override { return 1; }
 
-        // An EMBEDDED (create + paint) asset reads its source stream - declare it so the recipe
-        // hash chains its bytes (a paint save must re-cook). An IMPORTED one chains the file,
+        // An embedded (created and painted) asset reads its source stream; declare it so the recipe
+        // hash chains its bytes (a paint save must re-cook). An imported one chains the file,
         // which the base builder already tracks.
         void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext&,
                               pipeline::AssetDependencies& out) override
@@ -91,7 +92,7 @@ export namespace pipeline
             RefPtr<VegetationMask> mask;
             if (!ma.fileName.View().IsEmpty())
             {
-                // IMPORTED: decode as RGBA8 at native size; one density plane per channel.
+                // Imported: decode as RGBA8 at native size; one density plane per channel.
                 Result<Array<byte>> bytes = ReadSourceBytes(ctx, ma.fileName.View());
                 if (!bytes.HasValue())
                 {
@@ -108,16 +109,16 @@ export namespace pipeline
                 }
                 if (img.Format() != foundation::image::PixelFormat::RGBA8)
                 {
-                    return Status{ErrorCode::NotSupported}; // HDR/other - densities are 8-bit
+                    return Status{ErrorCode::NotSupported}; // HDR or other: densities are 8-bit
                 }
                 mask = MaskFromRgba(img.PixelData(), static_cast<i32>(img.Width()),
                                     static_cast<i32>(img.Height()), *ctx.allocator);
             }
             else
             {
-                // EMBEDDED (create + paint): the planes ride the source sidecar. Present = the
-                // painted planes; absent = never painted (all-zero: nothing grows, no seeding).
-                // A size mismatch is a broken source - the cook fails.
+                // Embedded (created and painted): the planes are the source sidecar. Present, it
+                // holds the painted planes; absent, the mask was never painted (all zero: nothing
+                // grows, no seeding). A size mismatch is a broken source, and the cook fails.
                 const i32 w = ma.width > 0 ? ma.width : 1;
                 const i32 h = ma.height > 0 ? ma.height : 1;
                 const u32 planes =
@@ -169,7 +170,7 @@ export namespace pipeline
                                          VegetationMaskSource::DensityBlob(*mask));
         }
 
-        /// An RGBA8 raster -> a four-plane mask (R, G, B, A = planes 0..3).
+        /// An RGBA8 raster as a four-plane mask (R, G, B, A are planes 0..3).
         [[nodiscard]] static RefPtr<VegetationMask> MaskFromRgba(Span<const u8> rgba, i32 width,
                                                                  i32 height, IAllocator& allocator)
         {
@@ -213,7 +214,7 @@ export namespace pipeline
     };
 
     // OS-file importer (editor drag-drop / Import): a PNG (or any stb-decodable image) as a
-    // VegetationMaskAsset with fileName set - the builder decodes it as one plane per channel.
+    // VegetationMaskAsset with fileName set; the builder decodes it as one plane per channel.
     class VegetationMaskFileImporter final : public pipeline::IFileImporter
     {
     public:
@@ -260,8 +261,8 @@ export namespace pipeline
         }
     };
 
-    // Registers VegetationMaskAsset for content-DB construction + deserialization (reflection
-    // body in VegetationMaskAssetImpl.cpp per GCC module hygiene).
+    // Registers VegetationMaskAsset for content-DB construction and deserialization (the
+    // reflection body is in VegetationMaskAssetImpl.cpp, out of the module interface).
     inline void RegisterVegetationMaskAsset()
     {
         GlobalTypeRegistry().Register(VegetationMaskAsset::StaticType(), TypeDomain(u8"Pipeline"));

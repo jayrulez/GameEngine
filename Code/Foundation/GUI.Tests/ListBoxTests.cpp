@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - ListBox tests: add/clear items, click + keyboard selection, the selection
-// callback, and scroll-into-view for an off-screen selection.
+// GUI - ListBox tests: add and clear items, click and keyboard selection, the selection callback,
+// and scroll-into-view for an off-screen selection.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -71,7 +71,7 @@ TEST_CASE("listbox: SetSelectedIndex highlights and fires the callback, only on 
     CHECK(changes == 2);
     CHECK(last == 4);
 
-    lb->SetSelectedIndex(99); // out of range -> ignored
+    lb->SetSelectedIndex(99); // out of range, so ignored
     CHECK(lb->GetSelectedIndex() == 4);
 }
 

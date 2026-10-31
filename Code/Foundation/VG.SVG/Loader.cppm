@@ -3,10 +3,9 @@
 
 // Foundation::VG.SVG::SVG - :loader partition.
 //
-// SVGLoader: parses a subset of SVG (path/rect/circle/ellipse/line/polygon/
-// polyline/g/text) from a string into an SVGDocument. Has its own minimal XML
-// tag/attribute scanner (no XML library dependency). Ported from
-// Sedulous.VG.SVG/SVGLoader.bf.
+// SVGLoader: parses a subset of SVG (path, rect, circle, ellipse, line, polygon,
+// polyline, g, text) from a string into an SVGDocument. Has its own minimal XML
+// tag and attribute scanner (no XML library dependency).
 //
 // The paint attributes (fill, stroke, stroke-width, stroke-linecap, stroke-linejoin) are
 // inherited as SVG's are: from the <svg> element and each <g> down to the shapes in them, a
@@ -196,7 +195,7 @@ export namespace foundation::vg::svg
             const StringView tag = tagName.AsView();
             SVGElement element;
             bool recognized = true;
-            bool emit = true; // defs/gradients register on the DOCUMENT, not the tree
+            bool emit = true; // defs and gradients register on the document, not the tree
 
             if (EqualsIgnoreCase(tag, u8"path"))
             {
@@ -422,7 +421,7 @@ export namespace foundation::vg::svg
         }
 
         /// Parse <stop> children until the gradient's closing tag. Handles the attribute
-        /// form (offset / stop-color / stop-opacity) plus the common style="stop-color:
+        /// form (offset, stop-color, stop-opacity) and the common style="stop-color:
         /// ...;stop-opacity:..." form Inkscape and friends export.
         static void ParseGradientStops(StringView content, usize& pos, SVGGradient& grad)
         {
@@ -518,7 +517,7 @@ export namespace foundation::vg::svg
             return s.SubStr(start, end - start);
         }
 
-        /// A gradient coordinate/offset: "50%" -> 0.5, else the plain number.
+        /// A gradient coordinate or offset: "50%" is 0.5, anything else the plain number.
         [[nodiscard]] static f32 ParsePercentAware(StringView s, f32 fallback)
         {
             const Optional<f32> v = ParseFloatValue(s);
@@ -616,7 +615,7 @@ export namespace foundation::vg::svg
             }
         }
 
-        // Step over a comment / CDATA / processing instruction as ONE unit when `pos` sits on
+        // Step over a comment, CDATA or processing instruction as one unit when `pos` sits on
         // one; returns false when it does not. A '<' or '>' inside one must not touch the
         // depth count below.
         static bool SkipMarkupUnit(StringView content, usize& pos)
@@ -686,12 +685,11 @@ export namespace foundation::vg::svg
             return selfClosing;
         }
 
-        // Skip an unrecognised element WHOLE: its opening tag, every nested child (by depth, so
+        // Skip an unrecognised element whole: its opening tag, every nested child (by depth, so
         // an inner element cannot end it early), and its closing tag; a self-closing tag ends at
-        // once. Skipping only the opening tag left an unrecognised container's children at the
-        // CURRENT level and its closing tag ended that level - dropping every sibling after a
-        // <metadata>, <style> or <desc>, which is most of an editor-exported file (found by the
-        // Beef port).
+        // once. Skipping only the opening tag would leave an unrecognised container's children at
+        // the current level and let its closing tag end that level, dropping every sibling after a
+        // <metadata>, <style> or <desc>, which is most of an editor-exported file.
         static void SkipTag(StringView content, usize& pos)
         {
             if (SkipMarkupUnit(content, pos))
@@ -761,7 +759,7 @@ export namespace foundation::vg::svg
             return detail::StrToF32(s.SubStr(0, end));
         }
 
-        // Parses one float from a list (points / viewBox), advancing pos.
+        // Parses one float from a list (points or viewBox), advancing pos.
         [[nodiscard]] static bool ParseFloatFromView(StringView s, usize& pos, f32& out)
         {
             while (pos < s.Size() &&
@@ -805,7 +803,7 @@ export namespace foundation::vg::svg
                     out.Append(c);
                 }
             }
-            // Trim leading/trailing spaces.
+            // Trim leading and trailing spaces.
             StringView v = out.AsView();
             usize start = 0, end = v.Size();
             while (start < end && v[start] == u8' ')

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SceneRender::lightAt: how much light reaches a point - every enabled light with the renderer's
+// SceneRender::lightAt: how much light reaches a point. Every enabled light with the renderer's
 // falloff and cone, a shadow-casting one stopped by what stands between (the scene's ray query,
 // faked here by a wall), plus the ambient. A game's light meter and a guard's eye read it.
 #include <doctest/doctest.h>
@@ -20,8 +20,8 @@ namespace
 {
     bool Near(f32 a, f32 b) { return Abs(a - b) < 1e-4f; }
 
-    // A wall across the plane x = `wallX`, answered as the scene's solid-surface ray query (the
-    // seam physics fills in a running game); remembers the group mask it was asked with.
+    // A wall across the plane x = `wallX`, answered as the scene's solid-surface ray query (which
+    // physics provides in a running game); remembers the group mask it was asked with.
     class Wall final : public scene::SceneSystem, public scene::ISceneRayQuery
     {
     public:

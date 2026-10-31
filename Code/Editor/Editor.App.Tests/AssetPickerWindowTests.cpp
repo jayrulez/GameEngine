@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The asset picker over its markup (Data/Editor/AssetPicker.xml) and a scratch project: the groups a
-// tree (Favourites and All first, then the project's, Content at the top); the current value's group
-// chosen and its row lit, the foot saying Esc keeps it; a group holding only what the slot takes; a
-// search over every group, each match saying where it lives; Favourites; tiles or a list kept with
-// the project for the next pick; Enter picking and closing; None picking nothing.
+// The asset picker over its markup (Data/Editor/AssetPicker.xml) and a scratch project. The groups
+// form a tree: Favourites and All first, then the project's groups with Content at the top. The
+// current value's group is chosen and its row lit, and the footer says Esc keeps it. A group lists
+// only what the slot takes. A search covers every group and each match shows where it lives. Also
+// covers Favourites, the tiles or list choice saved with the project for the next pick, Enter
+// picking and closing, and None picking nothing.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -122,7 +123,7 @@ namespace
             (void)root->UpdateLayout();
         }
         void Key(gui::KeyCode code) { root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(code)); }
-        // The cell a row is drawn by, once laid out.
+        // The cell that draws a row, after layout.
         AssetCell* Cell(i32 row)
         {
             (void)root->UpdateLayout();
@@ -194,7 +195,7 @@ TEST_CASE("asset picker: a group holds what it holds itself; All every group's; 
     AssetCell* cell = bed.Cell(0);
     REQUIRE(cell != nullptr);
     CHECK(cell->Kind() == StringView(u8"PickerMesh in Content/Models/Town"));
-    CHECK(cell->GetTooltipText() == StringView(u8"Content/Models/Town/Bucket (PickerMesh)")); // hovered: the whole of where it lives
+    CHECK(cell->GetTooltipText() == StringView(u8"Content/Models/Town/Bucket (PickerMesh)")); // hovered: the full location
     bed.picker->Search(StringView{});
     CHECK(bed.picker->Rows().IsEmpty()); // the chosen group again
 }
@@ -231,7 +232,7 @@ TEST_CASE("asset picker: a row's menu pins it as a favourite, or unpins it")
     REQUIRE(unpin != nullptr);
     CHECK(unpin->HandleActivate());
     CHECK_FALSE(bed.context.IsFavorite(bed.crate->Id()));
-    CHECK(bed.picker->Rows().IsEmpty()); // it left the Favourites shown
+    CHECK(bed.picker->Rows().IsEmpty()); // the asset left the Favourites being shown
 }
 
 TEST_CASE("asset picker: a whole guid of an asset the slot does not take says what it is")
@@ -264,7 +265,7 @@ TEST_CASE("asset picker: a row shows the asset's thumbnail small in its icon's p
     CHECK(crate->ShowsPicture());
     AssetCell* barrel = bed.Cell(1);
     REQUIRE(barrel != nullptr);
-    CHECK_FALSE(barrel->ShowsPicture()); // none yet: its glyph
+    CHECK_FALSE(barrel->ShowsPicture()); // no thumbnail yet: it shows its glyph
 }
 
 TEST_CASE("asset picker: tiles or a list, kept with the project for the next pick")
@@ -320,16 +321,16 @@ TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over 
     gui::StyleManager styles;
     styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
     bed.Open(Guid{});
-    bed.picker->Search(u8"Cube"); // every group's, each row saying where it lives
+    bed.picker->Search(u8"Cube"); // searches every group; each row shows where it lives
     REQUIRE(bed.picker->Rows() == String(u8"Cube.051 | Cube.051"));
     styles.ApplyTree(*bed.root);
-    AssetCell* near = bed.Cell(0); // the rows made, then styled too
+    AssetCell* near = bed.Cell(0); // the rows exist and are styled
     AssetCell* far = bed.Cell(1);
     REQUIRE(near != nullptr);
     REQUIRE(far != nullptr);
     styles.ApplyTree(*bed.root);
-    REQUIRE(far->Kind().Size() > near->Kind().Size()); // the deep one's where is the long one
-    // A real font after the sheet, so the texts have widths (the editor's own face).
+    REQUIRE(far->Kind().Size() > near->Kind().Size()); // the deeper asset has the longer location
+    // Load a real font (the editor's) after the sheet so the text has widths.
     foundation::fonts::TrueTypeFonts::Initialize();
     foundation::fonts::TrueTypeFontService fonts{DefaultAllocator()};
     const String data = foundation::vfs::FindDataRoot();
@@ -341,9 +342,9 @@ TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over 
     const gui::Rect farName = far->NameLabel()->GetScreenBounds();
     const gui::Rect farKind = far->KindLabel()->GetScreenBounds();
     const gui::Rect farRow = far->GetScreenBounds();
-    REQUIRE(far->KindLabel()->MeasureText().x > farKind.width); // the where is cut: it did not fit
+    REQUIRE(far->KindLabel()->MeasureText().x > farKind.width); // the location is truncated: it did not fit
     CHECK(farName.width >= far->NameLabel()->MeasureText().x - 0.5f); // the name keeps its room
-    CHECK(farKind.x >= farName.x + farName.width - 0.5f);             // the where after it, not over it
+    CHECK(farKind.x >= farName.x + farName.width - 0.5f);             // the location follows the name without overlapping it
     CHECK(farKind.x + farKind.width <= farRow.x + farRow.width + 0.5f);
     // A column: where each asset lives starts at one x, whatever its name or its path.
     CHECK(near->KindLabel()->GetScreenBounds().x == doctest::Approx(farKind.x));

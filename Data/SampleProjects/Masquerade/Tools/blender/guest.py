@@ -5,8 +5,8 @@ figure they share (figure.py), every one on the same rig, so one animation drive
 
 Writes <out dir>/Guest<Costume>.glb for each costume below (one skinned mesh, its armature and the
 clips) and, with `preview`, PNG renders; with `portraits`, Portrait<Costume>.png, the costume's head
-and shoulders at 256 pixels on a clear ground (the HUD's mark and the results show them). A guest stands on the ground at its origin facing the
-engine's +Z, about 1.7 m tall, masked: a half mask over the eyes in the costume's mask colour.
+and shoulders at 256 pixels on a clear ground (the HUD's mark and the results show them). A guest
+stands on the ground at its origin facing the engine's +Z, about 1.7 m tall, masked: a half mask over the eyes in the costume's mask colour.
 Gowns have a wide skirt to the floor, long gloves, a bun and a plume on the mask; coats a tailcoat,
 breeches, a cravat and a tricorne. Each costume's materials carry its name (GownRoseSilk), so the
 imported models never share a material by accident; the skin and the eyes are shared on purpose.

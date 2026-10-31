@@ -3,11 +3,11 @@
 
 // The render-side PSO cache: build a pipeline from a PipelineConfig pulling variants
 // from the ShaderSystem, verify it caches, and verify the version-polling hot-reload
-// path - invalidating the shader makes GetPipeline rebuild and retire the stale PSO.
-// Nothing here is about COMPILING: the cache needs a shader module to point at and a
-// version to poll, so the ShaderSystem runs compiler-less over a cooked pack of placeholder
-// bytes (the Null device accepts any bytecode). That makes these run on every machine -
-// the old DXC-gated shape skipped the cache's own behaviour wherever DXC was absent.
+// path, where invalidating the shader makes GetPipeline rebuild and retire the stale PSO.
+// Nothing here compiles shaders: the cache needs a shader module to point at and a
+// version to poll, so the ShaderSystem runs without a compiler over a cooked pack of
+// placeholder bytes (the Null device accepts any bytecode). That lets these tests run on
+// every machine, with or without DXC.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -64,13 +64,13 @@ TEST_CASE("pso cache: builds + caches a pipeline; shader reload rebuilds via ver
     REQUIRE(p0 != nullptr);
     CHECK(cache.Size() == 1);
 
-    // same request -> same pipeline (cache hit, no rebuild)
+    // the same request gives the same pipeline (cache hit, no rebuild)
     rhi::RenderPipeline* p1 = cache.GetPipeline(config, layout);
     CHECK(p1 == p0);
     CHECK(cache.Size() == 1);
     CHECK(cache.RetiredCount() == 0);
 
-    // reload the shader: version bumps -> next GetPipeline rebuilds + retires the old PSO
+    // reload the shader: the version bumps, so the next GetPipeline rebuilds and retires the old PSO
     shaderSystem.InvalidateShader(u8"forward");
     rhi::RenderPipeline* p2 = cache.GetPipeline(config, layout);
     REQUIRE(p2 != nullptr);
@@ -81,7 +81,7 @@ TEST_CASE("pso cache: builds + caches a pipeline; shader reload rebuilds via ver
     cache.ReleaseRetired();
     CHECK(cache.RetiredCount() == 0);
 
-    // versions are per SHADER: invalidating another shader rebuilds nothing here
+    // versions are per shader: invalidating another shader rebuilds nothing here
     rhi::RenderPipeline* pOther =
         cache.GetPipeline(PipelineConfig::ForOpaqueMesh(u8"other"), layout);
     REQUIRE(pOther != nullptr);
@@ -107,7 +107,7 @@ TEST_CASE("pso cache: depth-only config builds without a fragment shader")
     rhi::null::NullDevice device{DefaultAllocator()};
     shaders::CookedShaderPack pack;
     AddPlaceholder(pack, u8"shadow", shaders::ShaderStage::Vertex);
-    // deliberately no fragment variant in the pack
+    // no fragment variant in the pack
     shaders::ShaderSystem shaderSystem(device);
     shaderSystem.SetCookedPack(&pack);
 

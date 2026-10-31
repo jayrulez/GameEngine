@@ -4,8 +4,8 @@
 // UI - :event_args partition
 //
 // Pooled input event args (mouse/key/wheel/text). One instance reused per event type to avoid
-// allocation in the hot input path. Ported from Sedulous.UI/src/Input/*EventArgs.bf. These carry only
-// data - no View reference - so they can sit below :view in the module graph.
+// allocation in the hot input path. These carry only data, no View reference, so they can sit below
+// :view in the module graph.
 
 module;
 #include "Core/Prelude.h"

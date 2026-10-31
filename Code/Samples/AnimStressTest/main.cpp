@@ -8,7 +8,7 @@
 
 #include "Core/Prelude.h"
 #include "Profiler/Profiler.h" // PROFILE_SCOPE (isolate animation-drive cost)
-#include "imgui.h"             // Dear ImGui (HUD) - used directly; integration is extensions.imgui
+#include "imgui.h"             // Dear ImGui (HUD), used directly; extensions.imgui does the integration
 
 import foundation.core;
 import foundation.profiler;
@@ -20,26 +20,26 @@ import foundation.runtime.desktop;
 import foundation.shell.desktop;
 import foundation.graphics;
 import foundation.graphics.gpu;
-import engine.defaultapp; // DefaultApplication (scene + render subsystems)
+import engine.defaultapp; // DefaultApplication (scene and render subsystems)
 import engine.composition; // FullComposition: the factory set every host composes from
 import foundation.scene;
 import engine.scene;
-import engine.render; // MeshComponent / CameraComponent + their managers
+import engine.render; // MeshComponent / CameraComponent and their managers
 import foundation.render;           // ViewCamera / ViewportRect (split-screen overrides)
 import extensions.imgui;            // ImguiSubsystem (HUD)
 import foundation.geometry;
-import foundation.geometry.resource; // StaticMeshFactory + StaticMesh product
+import foundation.geometry.resource; // StaticMeshFactory and the StaticMesh product
 import foundation.materials;
 import foundation.materials.resource;  // MaterialFactory (cooked materials)
 import foundation.texture.resource;    // TextureFactory (cooked textures)
 import foundation.animation.resource;  // Skeleton/AnimationClip factories
 import foundation.vfs;                 // NativeFileSystem mount for the content DB
 import foundation.content;             // ContentDatabase (cooked-resource output)
-import foundation.resource;            // ResourceManager + Proxy
+import foundation.resource;            // ResourceManager and Proxy
 import foundation.model;               // ModelLoadResult
-import modelimporter;       // LoadAndCook + ImportedModel manifest
+import modelimporter;       // LoadAndCook and the ImportedModel manifest
 import foundation.animation;           // AnimationClip / Skeleton
-import engine.animation; // SkeletalAnimationComponent(Manager) - engine-driven skinning
+import engine.animation; // SkeletalAnimationComponent(Manager): engine-driven skinning
 
 #include "../Common/FlyCamera.h" // shared free-fly camera (uses the imported runtime/core types)
 
@@ -64,7 +64,7 @@ namespace animation = foundation::animation;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -76,7 +76,7 @@ namespace
 
 namespace
 {
-    // How many characters each +/- press adds or removes (and the initial spawn).
+    // How many characters each [Space] or [Backspace] press adds or removes (and the initial spawn).
     static constexpr core::u32 kBatchSize = 25;
     static constexpr core::f32 kCharacterSpacing = 8.0f; // grid spacing (world units)
     static constexpr core::f32 kCharacterSize = 6.0f; // auto-fit target height (matches CookModel)
@@ -88,7 +88,7 @@ namespace
     {
     public:
         // Run uncapped (vsync off) so the frame time reflects real CPU+GPU skinning work, not the
-        // display refresh - same as RenderStressTest. The image tears; fine for a benchmark.
+        // display refresh, as RenderStressTest does. The image tears, which is fine for a benchmark.
         graphics::RenderWindowDesc MainRenderWindow() const override
         {
             graphics::RenderWindowDesc d;
@@ -118,17 +118,16 @@ namespace
             // CreateScene triggers the RenderSubsystem to inject the render managers.
             m_scene = PrimaryScenes().CreateScene(u8"sandbox");
 
-            // Per-scene environment ambient (a dim cool indirect term; IBL replaces it later).
+            // Per-scene environment ambient: a dim, cool indirect term.
             if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
             {
                 env->Environment().ambientColor = core::Color{0.12f, 0.16f, 0.28f, 1.0f};
                 env->Environment().ambientIntensity = 0.35f;
             }
 
-            // camera, pulled back along +Z looking at the origin (down -Z by default)
-            // Raised + pitched down so the horizontal floor (lights above it) is clearly in view,
-            // with the cube grids standing on it. Pitch ~28 deg below horizontal (looks toward the
-            // scene center). Default camera looks down -Z; rotating about +X by -pitch tilts it down.
+            // The camera, pulled back along +Z, raised and pitched about 28 degrees down toward the scene
+            // center so the floor and the grid standing on it are in view. The default camera looks down
+            // -Z; rotating about +X by -pitch tilts it down.
             m_camera = m_scene->CreateEntity(u8"camera");
             m_scene->SetLocalPosition(m_camera, core::Float3{0.0f, 14.0f, 30.0f});
             core::Transform camT = m_scene->GetLocalTransform(m_camera);
@@ -141,8 +140,8 @@ namespace
                     core::Color{0.02f, 0.02f, 0.03f, 1.0f}; // dark backdrop so the lit scene reads
             }
 
-            // A large horizontal floor (Plane normal = +Y) under the scene - the animated models stand
-            // on it and the lights cast their shadows onto it.
+            // A large horizontal floor (Plane normal = +Y) under the scene. The animated models stand on
+            // it and the lights cast their shadows onto it.
             if (auto* meshes = m_scene->GetSystem<engine::render::MeshComponentManager>())
             {
                 m_floor = m_scene->CreateEntity(u8"floor");
@@ -153,8 +152,8 @@ namespace
                                                      0.0f, 0.65f));
             }
 
-            // One directional shadow-casting key light - the whole scene (skinning benchmark, kept light
-            // to isolate skinning/animation cost, à la Flax's "5,000 basic characters" reference scene).
+            // One directional shadow-casting key light is the only light: the benchmark scene stays
+            // simple to isolate the skinning and animation cost.
             if (auto* lights = m_scene->GetSystem<engine::render::LightComponentManager>())
             {
                 scene::EntityHandle key = m_scene->CreateEntity(u8"keyLight");
@@ -170,9 +169,9 @@ namespace
                 kl.castsShadows = true; // directional CSM
             }
 
-            LoadImportedModel(host); // cook the character + spawn the initial grid
+            LoadImportedModel(host); // cook the character and spawn the initial grid
 
-            // Lower default exposure: the procedural-sky IBL + sun are bright, so AgX washes out at 1.0.
+            // Lower default exposure: the procedural-sky IBL and sun are bright, so AgX washes out at 1.0.
             if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 render->SetExposure(0.5f);
@@ -182,11 +181,10 @@ namespace
                                u8"profiler  [Esc] exit\n");
         }
 
-        // The model-import seam: open the cooked-resource output DB, register the geometry factory,
-        // load+cook a glTF file through the importer, then spawn its node hierarchy as entities whose
-        // MeshComponents reference the cooked StaticMesh resources. This is the clean runtime cook seam
-        // the design calls for - an editor would cook offline and the runtime would only Bind, but the
-        // wiring (factory -> Bind -> render) is identical.
+        // Model import at runtime: open the cooked-resource output DB, register the factories, load and
+        // cook a glTF file through the importer, then spawn entities whose MeshComponents reference the
+        // cooked StaticMesh resources. An editor would cook offline and the runtime would only Bind, but
+        // the wiring (factory, then Bind, then render) is the same.
         void LoadImportedModel(runtime::IApplicationHost& host)
         {
             const core::String outputDirStorage =
@@ -200,7 +198,7 @@ namespace
                 return;
             }
 
-            // Output DB (cooked resources) + resource manager + the factories. ModelFactory builds the
+            // Output DB (cooked resources), resource manager and factories. ModelFactory builds the
             // manifest into a ModelResource, resolving its meshes/materials/textures (dependency edges).
             m_contentFs =
                 core::MakeUnique<vfs::NativeFileSystem>(AppRoot(), outputDir, AppRoot());
@@ -235,11 +233,9 @@ namespace
             }
         }
 
-        // Cook + bind + spawn one model, placed at `position` and auto-fit to a target size. Each model
-        // spawns its node hierarchy (local TRS + parent links) under a scaled model-root entity; mesh
-        // nodes get a MeshComponent referencing the cooked StaticMesh + material.
-        // Cook + bind the model ONCE. Every spawned instance shares these resources (mesh/skeleton/
-        // clips/materials); only the per-entity transform + AnimationPlayer differ. Returns true on success.
+        // Cook and bind the model once and compute its auto-fit scale. Every spawned instance shares
+        // these resources (mesh, skeleton, clips, materials); only the per-entity transform and
+        // AnimationPlayer differ. Returns true on success.
         bool CookModel(core::StringView prefix, core::StringView path)
         {
             if (m_contentDb.Get() == nullptr)
@@ -275,7 +271,7 @@ namespace
                 m_modelMats.PushBack(core::RefPtr<materials::Material>(mp.Get()));
             }
 
-            // Clips available for random per-instance selection (variety so the herd never lockstep).
+            // Clips available for random per-instance selection, so the herd never moves in lockstep.
             for (auto& clip : m_model->animations)
             {
                 if (clip)
@@ -287,8 +283,8 @@ namespace
         }
 
         // Spawn one instance of the cooked model at `position`: its own node hierarchy under a scaled
-        // root (mesh nodes get MeshComponents referencing the SHARED cooked meshes/materials), plus its
-        // own AnimationPlayer over the shared skeleton.
+        // root (mesh nodes get MeshComponents referencing the shared cooked meshes and materials), plus
+        // its own AnimationPlayer over the shared skeleton.
         void SpawnInstance(core::Float3 position)
         {
             auto* meshes = m_scene->GetSystem<engine::render::MeshComponentManager>();
@@ -360,8 +356,8 @@ namespace
             }
 
             // Attach a SkeletalAnimationComponent on the root: the AnimationSubsystem ticks its player
-            // each frame (PostUpdate) and feeds the skinning matrices to the skinned mesh entities. Random
-            // clip + speed jitter + randomized start so the herd desyncs (à la Sedulous EngineAnimationSandbox).
+            // each frame (PostUpdate) and feeds the skinning matrices to the skinned mesh entities. A
+            // random clip, speed jitter and a randomized start keep the herd out of sync.
             if (m_model->skeleton && !m_clips.IsEmpty() && skinnedEntities.Size() > 0)
             {
                 if (auto* anims =
@@ -392,7 +388,7 @@ namespace
             for (Instance& inst : m_instances)
             {
                 m_scene->DestroyEntity(inst.root);
-            } // recurses -> frees comps
+            } // recurses, freeing the components
             m_instances.Clear(); // frees the per-instance players
 
             const core::u32 side =
@@ -413,20 +409,20 @@ namespace
                 core::Format(u8"AnimStressTest: characters={}\n", m_instances.Size()));
         }
 
-        // Position the fly camera so the whole side×side grid is in frame + grow the floor under it (called
-        // on every batch change).
+        // Position the fly camera so the whole side x side grid is in frame, and grow the floor under it.
+        // Called on every batch change.
         void AutoFrame(core::u32 side)
         {
             const core::f32 extent =
                 (static_cast<core::f32>(side) - 1.0f) * kCharacterSpacing * 0.5f + kCharacterSize;
-            // Floor: scale the base plane so it covers the whole grid + margin (uniform XZ; Y stays flat).
+            // Floor: scale the base plane so it covers the whole grid and a margin (uniform XZ; Y stays flat).
             const core::f32 fscale = core::Max(1.0f, (extent * 2.0f + 40.0f) / kFloorBaseSize);
             core::Transform ft = m_scene->GetLocalTransform(m_floor);
             ft.scale = core::Float3{fscale, 1.0f, fscale};
             m_scene->SetLocalTransform(m_floor, ft);
             const core::Float3 target{0.0f, kFloorY + kCharacterSize * 0.5f, 0.0f}; // grid center
             const core::f32 dist = extent / core::Tan(0.5236f) +
-                                   kCharacterSize * 2.0f; // fit 60° FOV horizontally + margin
+                                   kCharacterSize * 2.0f; // fit the 60° FOV horizontally, plus a margin
             const core::f32 camY = extent * 0.55f + kCharacterSize;
             m_fly.position = core::Float3{target.x, target.y + camY, target.z + dist};
             m_fly.yaw = 0.0f;
@@ -465,21 +461,21 @@ namespace
                     }
                 }
             }
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
 
             // HUD over the scene (backbuffer is RenderTarget after the default render path).
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
         void OnUpdate(runtime::IApplicationHost& host, core::f32 deltaTime) override
         {
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime); // keep the P-key profiling dump
 
-            // ImGui HUD: open the frame + build the stats window (drawn in OnRenderWindow).
+            // ImGui HUD: open the frame and build the stats window (drawn in OnRenderWindow).
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
@@ -505,7 +501,7 @@ namespace
                         m_showHud = !m_showHud;
                     }
                     if (kb->IsKeyPressed(shell::KeyCode::I))
-                    { // toggle prepass->forward instance-data sharing (A/B)
+                    { // toggle sharing instance data between prepass and forward (A/B)
                         if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                         {
                             const bool on = !render->InstanceSharing();
@@ -534,15 +530,14 @@ namespace
                 return;
             }
 
-            // Animation is now driven by the engine's AnimationSubsystem (it ticks each entity's
-            // SkeletalAnimationComponent in the scene's PostUpdate phase and feeds the bone matrices);
-            // the sample no longer drives players by hand.
+            // The engine's AnimationSubsystem drives animation: it ticks each entity's
+            // SkeletalAnimationComponent in the scene's PostUpdate phase and feeds the bone matrices.
 
-            // Smoothed FPS/frame-ms (vsync off -> real frame cost); shown in the ImGui HUD.
+            // Smoothed FPS and frame time (vsync is off, so this is the real frame cost), shown in the HUD.
             m_frameTimeMs = m_frameTimeMs * 0.9f + (deltaTime * 1000.0f) * 0.1f;
 
-            // TEMP headless auto-profile: hold a fixed count, warm up, then dump CPU + GPU profiler
-            // reports (same as the P key) and exit - for capturing the baseline frame breakdown.
+            // Headless auto-profile: hold a fixed count, warm up, then dump the CPU and GPU profiler
+            // reports (as the P key does) and exit, to capture the baseline frame breakdown.
             if (kAutoProfile)
             {
                 m_profileElapsed += deltaTime;
@@ -560,8 +555,9 @@ namespace
                 }
             }
 
-            // TEMP headless auto-ramp: grow the count until FPS settles at/below 50, then report + exit.
-            // Coarse (+25%) while well above 50, fine (+kBatchSize) near the knee, for a precise threshold.
+            // Headless auto-ramp: grow the count until FPS settles at or below 50, then report and exit.
+            // Steps are coarse (+25%) well above 50 and fine (+kBatchSize) near the knee, for a precise
+            // threshold.
             if (kAutoRamp)
             {
                 m_rampSettle += deltaTime;
@@ -586,7 +582,7 @@ namespace
             }
         }
 
-        // ImGui HUD: character count + frame stats + exposure/bloom controls (H toggles it).
+        // ImGui HUD: character count, frame stats and exposure/bloom controls (H toggles it).
         void BuildHud(engine::render::RenderSubsystem* render)
         {
             if (!m_showHud)
@@ -630,7 +626,7 @@ namespace
                 }
                 ImGui::Separator();
                 ImGui::TextUnformatted("Directional shadows");
-                // The sun's shadow reach is the scene's (its environment settings).
+                // The sun's shadow reach lives in the scene's environment settings.
                 if (auto* env = m_scene->GetSystem<engine::render::EnvironmentSystem>())
                 {
                     ImGui::SliderFloat("Distance", &env->Environment().shadowDistance, 50.0f, 1000.0f, "%.0f");
@@ -669,12 +665,12 @@ namespace
         scene::EntityHandle m_floor{};
         samples::FlyCamera m_fly{.position = core::Float3{0.0f, 10.0f, 26.0f}, .pitch = -0.25f};
 
-        // Model-import pipeline state (must outlive the spawned entities - the resource manager owns
-        // the cooked products' handles; the content DB + its filesystem mount back the manager).
+        // Model-import pipeline state. It must outlive the spawned entities: the resource manager owns
+        // the cooked products' handles, and the content DB and its filesystem mount back the manager.
         core::UniquePtr<vfs::NativeFileSystem> m_contentFs;
         core::UniquePtr<content::ContentDatabase> m_contentDb;
         core::UniquePtr<resource::ResourceManager> m_resources;
-        resource::ResourceFactorySet m_factories; // the engine composition's set, this host's services
+        resource::ResourceFactorySet m_factories; // the engine composition's factories, built with this host's services
         resource::Proxy<model::ModelResource>
             m_model; // the one cooked model, shared by every instance
         core::Array<core::RefPtr<materials::Material>>
@@ -682,8 +678,8 @@ namespace
         core::Array<animation::AnimationClip*> m_clips; // clips for random per-instance selection
         core::f32 m_fit = 1.0f;                         // auto-fit scale
 
-        // One spawned character: just its root entity (DestroyEntity recurses to free the hierarchy +
-        // its SkeletalAnimationComponent). The component (engine-driven) owns the player + targets.
+        // One spawned character is just its root entity: DestroyEntity recurses to free the hierarchy
+        // and its SkeletalAnimationComponent, which owns the player and its targets.
         struct Instance
         {
             scene::EntityHandle root{};
@@ -694,11 +690,11 @@ namespace
         bool m_showHud = true; // HUD visibility (H)
 
         // Measurement aid (off by default): auto-ramp the character count until FPS <= 50, then
-        // report + exit. Flip to true for a headless throughput baseline; normal use is interactive.
+        // report and exit. Flip to true for a headless throughput baseline; normal use is interactive.
         static constexpr bool kAutoRamp = false;
         core::f32 m_rampSettle = 0.0f;
-        // Measurement aid (off by default): hold a fixed count, then dump the CPU+GPU profiler
-        // breakdown and exit. Flip true to re-capture the baseline frame breakdown headless.
+        // Measurement aid (off by default): hold a fixed count, then dump the CPU and GPU profiler
+        // breakdown and exit. Set it to true to capture the baseline frame breakdown headless.
         static constexpr bool kAutoProfile = false;
         static constexpr core::u32 kProfileCount = 1000;
         core::f32 m_profileElapsed = 0.0f;

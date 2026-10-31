@@ -3,10 +3,8 @@
 
 // UI Toolkit - :enum_editor partition
 //
-// Property editor for enumeration values - a ComboBox with string items. Instant edit (BeginEdit + change +
-// EndEdit per selection). Ported from Sedulous.UI.Toolkit/src/PropertyGrid/EnumEditor.bf. Beef `int32` ->
-// i32; `List<String> mItems` (owned) -> Array<String>; `Span<StringView> items` ctor arg -> Span<const
-// StringView>; `mComboBox.SelectedIndex = v` -> SetSelectedIndex(v).
+// Property editor for enumeration values: a ComboBox with string items. Each selection is an instant
+// edit (BeginEdit, the change, then EndEdit).
 
 module;
 #include "Core/Prelude.h"

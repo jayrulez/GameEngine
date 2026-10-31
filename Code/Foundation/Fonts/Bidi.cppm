@@ -3,7 +3,7 @@
 
 // Foundation::Fonts - :bidi partition
 //
-// The bidirectional algorithm's seam (F3 of Specs/vg-and-gui-lab.md): an IBidiResolver gives a
+// The bidirectional algorithm's interface: an IBidiResolver gives a
 // paragraph's embedding levels (the hard part of UAX #9, behind this interface; Fonts.Bidi is
 // one implementation), and ReorderLine lays a line's characters out in visual runs from those
 // levels (rules L1 and L2, simple enough to keep here). Shapers ask BidiResolverFactory for the

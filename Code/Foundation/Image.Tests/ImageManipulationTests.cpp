@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.Images.Tests/ImageTests.bf - Image construction, pixel
-// get/set, clear/fill, flips, format conversion, channel helpers. Mirrors the
-// Sedulous assertions (Test.Assert -> CHECK; pixel.R/G/B/A -> .r/.g/.b/.a;
-// ConvertFormat returns Image directly so no `.Value`; Sedulous Color32.Lime
-// (0,255,0) maps to our Color32::Green).
+// Image: construction, pixel get/set, clear and fill, flips, format conversion
+// and the channel helpers.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -47,7 +44,7 @@ TEST_CASE("image.manip: copy")
 {
     Image original(4, 4, PixelFormat::RGBA8);
     original.SetPixel(0, 0, Color32::Red);
-    original.SetPixel(1, 1, Color32::Green); // Sedulous Color32.Lime
+    original.SetPixel(1, 1, Color32::Green);
 
     const Image copy(original);
     CHECK(copy.Width() == original.Width());
@@ -64,7 +61,7 @@ TEST_CASE("image.manip: get/set pixel")
 {
     Image image(8, 8, PixelFormat::RGBA8);
     image.SetPixel(0, 0, Color32::Red);
-    image.SetPixel(1, 0, Color32::Green); // Lime
+    image.SetPixel(1, 0, Color32::Green);
     image.SetPixel(2, 0, Color32::Blue);
     image.SetPixel(3, 0, Color32::White);
     image.SetPixel(4, 0, Color32::Black);
@@ -95,7 +92,7 @@ TEST_CASE("image.manip: set pixel out of bounds is a no-op")
     Image image(4, 4, PixelFormat::RGBA8);
     image.SetPixel(100, 100, Color32::Red); // must not crash/corrupt
 
-    image.SetPixel(0, 0, Color32::Green); // Lime
+    image.SetPixel(0, 0, Color32::Green);
     const Color32 pixel = image.GetPixel(0, 0);
     CHECK((pixel.r == 0 && pixel.g == 255 && pixel.b == 0));
 }

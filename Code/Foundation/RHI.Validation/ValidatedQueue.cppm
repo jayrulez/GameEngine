@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Validation wrapper for Queue.
-/// Ported from Sedulous.RHI.Validation/ValidatedQueue.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -57,8 +56,8 @@ export namespace foundation::rhi::validation
             if (waitFences.Size() != waitValues.Size())
                 LogError("[Validation] Queue::submit: waitFences and waitValues count mismatch");
             // Same contract as the fenced overload above: the signal fence is required (the
-            // plain overload is the unsignalled path). The Vulkan backend rejects the submit;
-            // this used to be reported on one overload and not the other (Beef-port finding).
+            // plain overload is the unsignalled path). The Vulkan backend rejects the submit,
+            // so both fenced overloads report it.
             if (!signalFence)
                 LogError("[Validation] Queue::submit: signalFence is null");
             // Unwrap validated fences for both wait and signal.

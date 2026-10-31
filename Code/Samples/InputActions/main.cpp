@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// InputActions - the foundation.input consumer proof, now the WHOLE stack in one app:
-// named actions (WASD/stick/touch move, Jump via key/pad/touch region), an exclusive Menu
-// set (suppression + held-latching), the Flax-style smoothing, the engine TIME SCALE, the
-// USER REBIND OVERLAY (capture-next-input, persisted to the user settings file, reset to
-// default), and TOUCH virtual sticks/regions (Steam Deck) - all inspected and driven from
-// a Dear ImGui debug panel. The moving square renders as the window clear color (position
-// = color); the point is the input layer, not the drawing.
+// InputActions - a foundation.input consumer showing the whole stack in one app: named actions
+// (WASD, stick or touch move; Jump by key, pad or touch region), an exclusive Menu set (suppression
+// and held-latching), smoothing, the engine time scale, the user rebind overlay (capture the next
+// input, persisted to the user settings file, reset to default), and touch virtual sticks and
+// regions (Steam Deck), all inspected and driven from a Dear ImGui debug panel. The moving square
+// renders as the window clear color (position becomes color); the sample is about the input layer,
+// not the drawing.
 
 #include "Core/Prelude.h"
 #include "Runtime.Client/AppMain.h"
@@ -15,7 +15,7 @@
 #include <cstdio>
 
 import foundation.core;
-import foundation.vfs; // FindDataRoot + the mount the ImGui shaders resolve through
+import foundation.vfs; // FindDataRoot and the mount the ImGui shaders resolve through
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.shell;
@@ -152,8 +152,8 @@ namespace
     public:
         void Configure(runtime::IApplicationHost& host) override
         {
-            // A bare IApplication (no DefaultApplication): resolve the data root itself - the
-            // same discovery walk every executable uses - and mount it for the ImGui shaders.
+            // A bare IApplication (no DefaultApplication) resolves the data root itself, with the
+            // same discovery walk every executable uses, and mounts it for the ImGui shaders.
             const core::String dataRoot = foundation::vfs::FindDataRoot();
             if (dataRoot.IsEmpty())
             {
@@ -174,7 +174,7 @@ namespace
         void OnStartup(runtime::IApplicationHost&) override
         {
             input::RegisterInputTypes();
-            m_asset = MakeDefaultMap(); // "the asset": pristine defaults
+            m_asset = MakeDefaultMap(); // stands in for the input map asset: pristine defaults
             LoadOverlay();
             ApplyEffectiveMap();
             core::ConsoleWrite(
@@ -244,7 +244,7 @@ namespace
         }
 
     private:
-        // ---- the effective map = pristine asset + user overlay ----
+        // ---- the effective map: the pristine asset with the user overlay applied ----
         void ApplyEffectiveMap()
         {
             input::InputMap effective = m_asset;
@@ -315,7 +315,7 @@ namespace
                 host.Subsystems().SetTimeScale(scale);
             }
 
-            // Exclusive menu toggle (suppression + held latching, live).
+            // Exclusive menu toggle (suppression and held latching, live).
             const bool menuOpen = actions.ExclusiveDepth() > 0;
             if (ImGui::Button(menuOpen ? "Close Menu (gameplay resumes)"
                                        : "Open Menu (gameplay suppressed)"))
@@ -351,7 +351,7 @@ namespace
 
         void DrawRebindRow(runtime::IApplicationHost&, const char* actionName)
         {
-            // Current EFFECTIVE first binding, for display.
+            // The current effective first binding, for display.
             const input::InputMap& map = m_input->Runtime().Map();
             const input::Binding* first = nullptr;
             const core::StringView wanted(reinterpret_cast<const core::utf8char*>(actionName));
@@ -400,7 +400,7 @@ namespace
             }
         }
 
-        // Touch region visualization: rectangles for the stick/button zones + live points.
+        // Touch region visualization: rectangles for the stick and button zones, and the live points.
         void DrawTouchOverlay(runtime::IApplicationHost& host)
         {
             ImDrawList* draw = ImGui::GetForegroundDrawList();

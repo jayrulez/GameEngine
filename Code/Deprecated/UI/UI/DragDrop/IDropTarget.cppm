@@ -3,10 +3,9 @@
 
 // UI - :idrop_target partition
 //
-// Implement on a View subclass to make it a drop target. Ported from Sedulous.UI/src/DragDrop/IDropTarget.bf.
-// Pattern A (tree-queried) - the interface is a plain abstract base; a View exposes it via a virtual
-// AsDropTarget() capability query, and the DragDropManager walks the parent chain of the hit view to find
-// one. DragData forward-declared (used behind a pointer).
+// Implement on a View subclass to make it a drop target. The interface is a plain abstract base; a View
+// exposes it through the virtual AsDropTarget() capability query, and the DragDropManager walks the
+// parent chain of the hit view to find one. DragData is forward-declared (used behind a pointer).
 
 module;
 #include "Core/Prelude.h"

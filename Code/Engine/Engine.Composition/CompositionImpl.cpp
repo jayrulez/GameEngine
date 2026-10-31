@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Engine::Composition - implementation unit (the wide domain imports live here, keeping the
-// interface BMI lean). The full composition is built ONCE from the domains' own declarations:
+// interface BMI lean). The full composition is built once from the domains' own declarations:
 // each Engine.<Domain> library defines its DomainModule beside the functions it names, so a
-// manager, a registrar, a facade or a resource module added to a domain reaches every consumer
-// automatically - there is no parallel list to drift, only this one of the domains themselves.
+// manager, a registrar, a facade or a resource module added to a domain reaches every consumer.
+// There is no parallel list to drift, only this one of the domains themselves.
 
 module;
 #include "Core/Prelude.h"
@@ -14,7 +14,7 @@ module engine.composition;
 
 import foundation.core;
 import foundation.scene;
-import foundation.scene.resource; // PrefabSpawnSystem + the scene document types
+import foundation.scene.resource; // PrefabSpawnSystem and the scene document types
 import foundation.resource;
 import foundation.script.facades; // the base behaviour facades (Entity/Log/Time/Random)
 import engine.domain;
@@ -31,7 +31,7 @@ import engine.net;
 import engine.spline;
 import engine.input;
 import engine.gameinstance;
-import engine.gui; // the engine's GUI on foundation.gui, beside the UI domain while both live
+import engine.gui; // the engine's GUI on foundation.gui
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -49,8 +49,8 @@ namespace
         .installScene = &scene::AddPrefabSpawnSceneManagers,
         .resources = Span<const foundation::resource::ResourceModule* const>{kPrefabResources, 1}};
 
-    // The one list. Order binds the default (dependency-free) instantiation order and mirrors
-    // the old scene list byte for byte; the facade-only domains follow.
+    // The one list. Order sets the default (dependency-free) instantiation order; the
+    // facade-only domains follow the scene domains.
     const engine::DomainModule* const kAllDomains[] = {
         &engine::render::RenderDomain(),         &engine::animation::AnimationDomain(),
         &engine::particles::ParticleDomain(),    &engine::physics::PhysicsDomain(),
@@ -86,7 +86,7 @@ namespace engine
 
     void RegisterAllScriptFacades()
     {
-        // Core value types + the base behaviour facades first (idempotent), then every domain's.
+        // Core value types and the base behaviour facades first (idempotent), then every domain's.
         RegisterCoreTypes();
         foundation::script::RegisterScriptFacadeReflection();
         FullComposition().RegisterScriptFacades();

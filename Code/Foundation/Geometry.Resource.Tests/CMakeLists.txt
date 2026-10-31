@@ -1,4 +1,4 @@
-# Foundation::Geometry.Resource unit tests (doctest; content DB - no GPU).
+# Foundation::Geometry.Resource unit tests (doctest; content DB, no GPU).
 
 add_executable(Geometry.Resource.Tests
     TestsMain.cpp

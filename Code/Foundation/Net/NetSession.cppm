@@ -3,10 +3,10 @@
 
 /// Foundation::Net - `foundation.net:session` partition.
 ///
-/// The session layer (`foundation.net.session`): roles, a peer
-/// registry, and the connect/disconnect lifecycle over the reliable-UDP transport. A NetSession is
-/// the API the game (and the replication/RPC layers) talk to - the server tracks its connected
-/// clients, the client tracks its one server, and Broadcast fans a message out to every peer.
+/// The session layer: roles, a peer registry, and the connect and disconnect lifecycle over the
+/// reliable-UDP transport. A NetSession is the API the game (and the replication and RPC layers)
+/// talk to: the server tracks its connected clients, the client tracks its one server, and
+/// Broadcast fans a message out to every peer.
 
 module;
 #include "Core/Prelude.h"
@@ -45,8 +45,8 @@ export namespace foundation::net
         f64 connectedAtMs = 0.0;
     };
 
-    // Roles + peers + lifecycle over a ReliableTransport (which rides an IDatagramSocket - real UDP or
-    // the sim). Owns the transport; drives it via Update, surfaces events via PollEvent, and keeps the
+    // Roles, peers and lifecycle over a ReliableTransport (which runs over an IDatagramSocket: real
+    // UDP or the sim). Owns the transport; drives it via Update, surfaces events via PollEvent, and keeps the
     // peer registry current. Higher layers (RPC, replication) build on this.
     class NetSession
     {
@@ -83,7 +83,7 @@ export namespace foundation::net
                 m_transport.Send(p.id, channel, data, reliability);
             }
         }
-        // Server: send to every connected peer EXCEPT `except` (e.g. echo an order to everyone but its author).
+        // Server: send to every connected peer except `except` (to echo an order to everyone but its author).
         void BroadcastExcept(PeerId except, u8 channel, Span<const byte> data,
                              Reliability reliability)
         {
@@ -142,7 +142,7 @@ export namespace foundation::net
             m_fixedStepMs = (stepMs > 0.0f) ? stepMs : 1.0f;
         }
         void SetTimeSyncIntervalMs(f32 ms) noexcept { m_syncIntervalMs = ms; }
-        // The network clock: the server's authoritative time, in ms. On the server it IS the local time;
+        // The network clock: the server's authoritative time, in ms. On the server it is the local time;
         // on a client it's the local time plus the RTT-adjusted offset estimated from the server's syncs.
         [[nodiscard]] f64 NetworkTimeMs() const noexcept
         {
@@ -192,7 +192,7 @@ export namespace foundation::net
         enum class ControlType : u8
         {
             TimeSync = 0,
-            Welcome = 1, // server -> a new client: the PeerId the server knows it by
+            Welcome = 1, // server to a new client: the PeerId the server knows it by
         };
 
         void AddPeer(PeerId id)
@@ -272,7 +272,7 @@ export namespace foundation::net
         Array<NetEvent> m_events;
         usize m_eventHead = 0;
         // clock sync
-        f32 m_fixedStepMs = 50.0f;     // 20 Hz network tick (turn-based-appropriate)
+        f32 m_fixedStepMs = 50.0f;     // 20 Hz network tick
         f32 m_syncIntervalMs = 250.0f; // server broadcasts its clock this often
         f64 m_lastSyncSendMs = -1.0e9; // server
         f64 m_timeOffsetMs = 0.0;      // client: NetworkTime = local + offset

@@ -8,11 +8,10 @@
 // the backend-agnostic bring-up to GraphicsDevice::FromBackend. Null is delegated
 // to GraphicsDevice::CreateNull.
 //
-// The declaration here is deliberately backend-agnostic: it imports only
-// foundation.graphics/core, so consumers (Application, the UI, the renderer, the
-// editor) pull NO backend BMIs at compile time - the Vulkan/DX12/validation
-// coupling lives entirely in the implementation unit (GraphicsGpu.cpp) and is a
-// link-time dependency only. Keeping the backends out of this interface keeps every
+// The declaration here is backend-agnostic: it imports only foundation.graphics and
+// core, so consumers (Application, the UI, the renderer, the editor) pull no backend
+// BMIs at compile time. The Vulkan/DX12/validation coupling lives entirely in the
+// implementation unit (GraphicsGpu.cpp) and is a link-time dependency only. Keeping the backends out of this interface keeps every
 // consumer's transitive module closure small, which matters on large apps (the
 // editor) that would otherwise exhaust clang's per-TU source-location budget.
 

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SplatWeights (top-K splat model): the pure brush cores + migration.
+// SplatWeights (top-K splat model): the pure brush cores and the fixed-layer import.
 // Headless (no RHI): PaintTopK convexity (sum + base == 1 within quantum), slot selection
-// (existing -> free -> evict-min), full-paint one-hot convergence, EraseTopK reveals base,
-// dirty-rect bounds, version bumps, and the fixed-layer raster converter (renormalized - R2).
+// (existing, then free, then evict the minimum), full-paint one-hot convergence, EraseTopK
+// revealing base, dirty-rect bounds, version bumps, and the fixed-layer raster converter
+// (renormalized by the texel sum).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -105,7 +106,7 @@ TEST_CASE("splat weights: a fifth layer evicts the minimum-weight slot (R8)")
             minLayer = layer;
         }
     }
-    // Painting a FIFTH layer evicts exactly the min slot.
+    // Painting a fifth layer evicts exactly the min slot.
     (void)PaintTopK(sw, 0.5f, 0.5f, 2.0f, 2.0f, 42, 0.6f);
     CHECK(sw.WeightOfLayer(2, 2, 42) > 0);       // the new layer took a slot
     CHECK(sw.WeightOfLayer(2, 2, minLayer) == 0); // the weakest layer was evicted
@@ -176,11 +177,11 @@ TEST_CASE("splat weights: the fixed-layer raster import renormalizes by the texe
                                          DefaultAllocator());
     REQUIRE(sw.Get() != nullptr);
     REQUIRE(!sw->IsEmpty());
-    // G -> palette 0 at 0.3 of 255 = 77; B -> palette 1 at 0.2 = 51.
+    // G is palette 0 at 0.3 of 255 = 77; B is palette 1 at 0.2 = 51.
     CHECK(sw->WeightOfLayer(1, 1, 0) == 77);
     CHECK(sw->WeightOfLayer(1, 1, 1) == 51);
     CHECK(sw->WeightOfLayer(1, 1, 2) == 0);
-    // Base = the NORMALIZED R share: 0.5 -> 127/128 within quantum.
+    // Base is the normalized R share: 0.5, so 127 or 128 within quantum.
     const u8 base = sw->BaseWeight(1, 1);
     CHECK(base >= 126);
     CHECK(base <= 128);
@@ -220,7 +221,7 @@ TEST_CASE("splat weights: cooked source round-trips both rasters")
     CHECK(restored->WeightOfLayer(4, 4, 9) == sw.WeightOfLayer(4, 4, 9));
     CHECK(restored->SlotIndex(4, 4, 0) == sw.SlotIndex(4, 4, 0));
 
-    // A blob-size mismatch yields an EMPTY raster, never a malformed one.
+    // A blob-size mismatch yields an empty raster, never a malformed one.
     RefPtr<SplatWeights> bad = src.Build(Span<const byte>{}, SplatWeightsSource::WeightBlob(sw), DefaultAllocator());
     REQUIRE(bad.Get() != nullptr);
     CHECK(bad->IsEmpty());
@@ -228,7 +229,7 @@ TEST_CASE("splat weights: cooked source round-trips both rasters")
 
 TEST_CASE("splat weights: the brush core scales - small cores grade, the default core is flat")
 {
-    // The soft-blend fix: at low stamp amounts the tool shrinks the flat core, so coverage GRADES
+    // Soft blending: at low stamp amounts the tool shrinks the flat core, so coverage grades
     // across the radius instead of converging a flat half-radius core against a thin skirt.
     SplatWeights hard(32, 32);
     (void)PaintTopK(hard, 0.5f, 0.5f, 0.25f, 0.25f, 1, 1.0f); // default core 0.5
@@ -238,7 +239,7 @@ TEST_CASE("splat weights: the brush core scales - small cores grade, the default
     // Centre: both full.
     CHECK(hard.WeightOfLayer(16, 16, 1) == 255);
     CHECK(soft.WeightOfLayer(16, 16, 1) >= 250); // cosine ~1 at the centre texel
-    // Inside the default core (~35% of the radius): hard = flat full, soft = already graded.
+    // Inside the default core (about 35% of the radius): hard is flat full, soft already graded.
     const u8 hardMid = hard.WeightOfLayer(19, 16, 1);
     const u8 softMid = soft.WeightOfLayer(19, 16, 1);
     CHECK(hardMid == 255);
@@ -313,7 +314,7 @@ TEST_CASE("splat weights: smoothing feathers a hard paint-vs-base edge both ways
 TEST_CASE("splat weights: smoothing across many layers keeps top-K and convexity")
 {
     SplatWeights sw(8, 8);
-    // A 3x3 block of NINE distinct one-hot layers: every neighborhood union exceeds K = 4.
+    // A 3x3 block of nine distinct one-hot layers: every neighborhood union exceeds K = 4.
     u8 layer = 10;
     for (i32 y = 3; y <= 5; ++y)
     {

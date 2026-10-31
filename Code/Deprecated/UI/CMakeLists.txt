@@ -1,4 +1,4 @@
-# The old UI framework, foundation.ui (the Sedulous.UI port), with its satellites and suites, and the
+# The old UI framework, foundation.ui, with its satellites and suites, and the
 # UISandbox that shows it. Deprecated: the engine, the editor and the games are on foundation.gui.
 # Nothing outside Code/Deprecated links these; they build only with -DOPTION_BUILD_DEPRECATED=ON.
 add_subdirectory(UI)

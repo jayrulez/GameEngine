@@ -2,9 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The inline formatter over the bundled Roboto faces: mixed sizes share a baseline, a paragraph of
-// three colours wraps inside its width, an icon sits on the baseline, breaks and alignment, and bold
-// and italic take a face or synthesize one. Copied with the layout from foundation.ui (E4 of
-// Specs/gui-lab-evolution.md).
+// three colours wraps inside its width, an icon sits on the baseline, line breaks and alignment
+// work, and bold and italic take a face or synthesize one.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -21,7 +20,7 @@ namespace fonts = foundation::fonts;
 
 namespace
 {
-    // Roboto, and Roboto Bold as its own family (as a project loads a bold face).
+    // Roboto, and Roboto Bold as its own family, as a project loads a bold face.
     struct RobotoService
     {
         fonts::TrueTypeFontService service{DefaultAllocator()};
@@ -39,7 +38,7 @@ namespace
         }
     };
 
-    // The label's font (Roboto 16), the service for runs that set their own.
+    // A style with the label's font (Roboto 16), and the service for runs that set their own.
     TextLayoutStyle Style(RobotoService& fonts, f32 maxWidth = 0.0f)
     {
         TextLayoutStyle style;
@@ -72,7 +71,7 @@ TEST_CASE("text layout: runs of two sizes share one baseline, the line as tall a
     REQUIRE(small != nullptr);
     CHECK(baseline == doctest::Approx(big->font->Metrics().ascent));
     CHECK(layout.Height > small->font->Metrics().lineHeight * 1.5f);
-    // Runs follow on: each starts where the one before it ended.
+    // Runs follow on, each starting where the one before it ended.
     for (usize r = 1; r < layout.GlyphRuns.Size(); ++r)
         CHECK(layout.GlyphRuns[r].Glyphs[0].x > layout.GlyphRuns[r - 1].Glyphs[0].x);
 }
@@ -115,7 +114,7 @@ TEST_CASE("text layout: an icon sits on the baseline as tall as its text is big"
     CHECK(icon.width == doctest::Approx(20.0f));
     CHECK(icon.y + icon.height == doctest::Approx(layout.Lines[0].Baseline));
     CHECK(layout.Icons[0].Run == 1);
-    // The text after it starts after it.
+    // The text after the icon starts after the icon.
     CHECK(layout.GlyphRuns.Back().Glyphs[0].x >= icon.x + icon.width);
 }
 
@@ -186,7 +185,7 @@ TEST_CASE("text layout: plain runs draw in the label's font; with no service a b
     const ResolvedRunFont b = ResolveRunFont(bold, style);
     CHECK(b.Font == style.Font);
     CHECK(b.SyntheticBold);
-    // A size of its own needs the service: without one the run keeps the label's.
+    // A run with a size of its own needs the font service; without one it keeps the label's size.
     TextRun big;
     big.Size = 32.0f;
     CHECK(ResolveRunFont(big, style).Font == style.Font);
@@ -199,7 +198,7 @@ TEST_CASE("text layout: plain runs draw in the label's font; with no service a b
 
 namespace
 {
-    // The plain text the glyphs on a line stand for, an ellipsis as "~".
+    // Returns the plain text the glyphs on a line stand for, with an ellipsis as "~".
     String Shown(const TextLayout& layout, StringView plain, usize line)
     {
         String out;
@@ -217,7 +216,8 @@ namespace
         }
         return out;
     }
-    // Runs in x order (an ellipsis may be added after the runs it sits between).
+    // The same, with runs in x order, since an ellipsis may be added after the runs it sits
+    // between.
     String ShownInOrder(TextLayout layout, StringView plain, usize line)
     {
         for (usize i = 0; i < layout.GlyphRuns.Size(); ++i)
@@ -240,7 +240,7 @@ TEST_CASE("text layout: an overflowing line ends in an ellipsis at its end, star
     TextLayoutStyle style = Style(fonts, 150.0f);
     style.Wrap = false;
     const TextLayout full = LayOutText(doc, style);
-    CHECK(full.Width > 150.0f); // clipped: as wide as the text
+    CHECK(full.Width > 150.0f); // clipped, so as wide as the text
     CHECK_FALSE(full.Lines[0].Ellipsized);
 
     style.Overflow = TextOverflow::Ellipsis;
@@ -413,7 +413,7 @@ TEST_CASE("text layout: the pointer shows the hand over a rich text's link, and 
     CHECK(d->GetCursor() == Cursor::Pointer);
     d->InjectMouseMove(Float2{390.0f, 190.0f}); // off the label
     CHECK(d->GetCursor() == Cursor::Default);
-    rich->SetCursor(Cursor::Text); // its own look elsewhere; the hand still over the link
+    rich->SetCursor(Cursor::Text); // its own cursor elsewhere, but still the hand over the link
     d->InjectMouseMove(Float2{origin.x + 1.0f, onLink.y});
     CHECK(d->GetCursor() == Cursor::Text);
     d->InjectMouseMove(onLink);
@@ -422,7 +422,7 @@ TEST_CASE("text layout: the pointer shows the hand over a rich text's link, and 
 
 TEST_CASE("text layout: an ellipsis the font's atlas lacks falls back to full stops")
 {
-    RobotoService fonts; // baked over printable ASCII: no U+2026
+    RobotoService fonts; // baked over printable ASCII, so no U+2026
     fonts::CachedFont* roboto = fonts.service.GetFont(u8"Roboto", 16.0f);
     CHECK_FALSE(FontDraws(roboto, StringView(u8"…")));
     CHECK(FontDraws(roboto, StringView(u8"abc")));

@@ -3,14 +3,13 @@
 
 // Editor::Scene - :inspector_extras partition.
 //
-// What a section in the inspector shows besides its reflected rows, a component's or, while the
-// scene is selected, a settings block's (Documentation/Specs/editor-gui.md, 5.3, layer 4, parts 3
-// and 4): notices that hold while something is so (a rigid body with no collider), actions (a
-// zone's Bake) and sections of their own (a script component's behaviours, the physics block's
-// collision groups). The inspector asks the section's type for them, so it names no type: a domain
-// registers its type's extras (RegisterSceneEditor registers the built-in ones), and the inspector
-// adds what a provider gives under the section's header, a notice shown only while its message is
-// not empty.
+// What a section in the inspector shows besides its reflected rows, for a component or, while the
+// scene is selected, for a settings block: notices that hold while a condition does (a rigid body
+// with no collider), actions (a zone's Bake) and sections of their own (a script component's
+// behaviours, the physics block's collision groups). The inspector asks the section's type for
+// them, so it names no type. A domain registers its type's extras (RegisterSceneEditor registers
+// the built-in ones), and the inspector adds what a provider gives under the section's header,
+// showing a notice only while its message is not empty.
 
 module;
 #include "Core/Prelude.h"
@@ -26,8 +25,8 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// What a provider fills, for the entities the inspector shows (each has the component; none for
-    /// a settings block's).
+    /// What a provider fills, for the entities the inspector shows (each has the component; there
+    /// are no entities for a settings block).
     class InspectorExtras
     {
     public:
@@ -35,8 +34,9 @@ export namespace editor
         [[nodiscard]] virtual SceneEditContext& Edit() = 0;
         [[nodiscard]] virtual EditorContext* Context() = 0;
         [[nodiscard]] virtual Span<const Guid> Entities() const = 0;
-        /// A notice under the header: `message` asked again as the inspector shows its values (a
-        /// notice is current), shown while it says something.
+        /// A notice under the header. `message` is asked again whenever the inspector shows its
+        /// values, so the notice stays current, and the notice shows while the message is not
+        /// empty.
         virtual void AddNotice(StringView name, Function<String()> message) = 0;
         /// An action under the header: a button `label` that runs `run`.
         virtual void AddAction(StringView name, StringView label, StringView description, Function<void()> run) = 0;

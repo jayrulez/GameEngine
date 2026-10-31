@@ -3,15 +3,15 @@
 
 // Editor::Audio - the `:bus_layout_page` partition.
 //
-// AudioBusLayoutEditorPage: the mixer's buses, on the GUI from its markup (Data/Editor/
-// BusLayoutPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The buses' tree (the four
-// fixed ones, Master and Effects, Music and UI under it, and the custom ones under their parents)
-// on the GUI's tree beside the grid, which shows the chosen bus: a custom one's name and parent (only
-// the parents that make no cycle offered), then its mix (volume, mute), its filters, its delay and
-// its reverb (each off at 0). The tree's bar and a row's menu add a bus and remove a custom one.
-// Each edit is one undo step; the rules they keep (a name a bus's own, children following a rename,
-// moving to Master when their parent goes) are the :bus_layout_model's. A layout whose buses make a
-// cycle (one the cook refuses) says so.
+// AudioBusLayoutEditorPage: the mixer's buses, built on the GUI from its markup
+// (Data/Editor/BusLayoutPage.xml). The bus tree (the four fixed buses, Master with Effects, Music
+// and UI under it, and the custom buses under their parents) sits beside the grid, which shows the
+// chosen bus: a custom bus's name and parent (offering only parents that make no cycle), then its
+// mix (volume, mute), its filters, its delay and its reverb (each off at 0). The tree's bar and a
+// row's menu add a bus and remove a custom one. Each edit is one undo step. The rules the edits
+// keep (each bus has a unique name, children follow a rename, and children move to Master when
+// their parent goes) live in :bus_layout_model. A layout whose buses make a cycle, which the cook
+// refuses, says so.
 
 module;
 #include "Core/Prelude.h"
@@ -44,18 +44,19 @@ export namespace editor
         /// The bus the grid shows (Master when the page opens).
         [[nodiscard]] const BusRef& Selected() const noexcept { return m_selected; }
         void Select(const BusRef& bus);
-        /// A bus under Master in the first free slot, chosen; false when every slot is in use.
+        /// Adds a bus under Master in the first free slot and chooses it; false when every slot is
+        /// in use.
         bool AddBus();
-        /// The chosen bus taken out (a custom one; its children move to Master), Master chosen.
+        /// Removes the chosen bus (a custom one; its children move to Master) and chooses Master.
         bool RemoveSelected();
 
         // === For tests ===
         /// The tree's rows, indented by depth ("Master\n  Effects\n    Footsteps").
         [[nodiscard]] String Tree() const;
         [[nodiscard]] foundation::gui::PropertyBag& BusRows() noexcept { return *m_busRows; }
-        /// The chosen bus's settings of one group: "Mix", "Filters", "Delay" or "Reverb".
+        /// The chosen bus's settings in one group: "Mix", "Filters", "Delay" or "Reverb".
         [[nodiscard]] foundation::gui::PropertyBag& EffectRows(StringView group);
-        /// An edit of a row as the grid commits one (`rows` one of the page's bags).
+        /// Edits a row as the grid commits one (`rows` is one of the page's bags).
         void EditRow(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
 
     protected:
@@ -64,19 +65,19 @@ export namespace editor
     private:
         [[nodiscard]] pipeline::AudioBusLayoutAsset* Layout() const { return ObjectAs<pipeline::AudioBusLayoutAsset>(); }
         void BuildRows();
-        /// The tree from the layout, the chosen bus's row selected.
+        /// Builds the tree from the layout, with the chosen bus's row selected.
         void ShowTree();
-        /// The chosen bus's rows: its name and parent shown for a custom one, its values.
+        /// Shows the chosen bus's rows: its values, and its name and parent for a custom bus.
         void ShowBus();
         void Committed(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
         void ShowMenu(i32 item, Float2 at);
 
         UniquePtr<foundation::gui::TreeModel> m_model;
-        Array<BusRow> m_rows; // the tree's, by node id
+        Array<BusRow> m_rows; // the tree's rows, by node id
         BusRef m_selected{0, -1};
-        bool m_showing = false; // selecting from code: not the user's choice
+        bool m_showing = false; // true while selecting from code, so the selection is not taken as the user's
         UniquePtr<foundation::gui::PropertyBag> m_busRows;    // name, parent
-        UniquePtr<foundation::gui::PropertyBag> m_effectRows[4]; // its mix, filters, delay and reverb, a section each
+        UniquePtr<foundation::gui::PropertyBag> m_effectRows[4]; // the chosen bus's mix, filters, delay and reverb, one section each
         foundation::gui::TreeView* m_tree = nullptr;
         foundation::gui::ButtonBase* m_remove = nullptr;
         RefPtr<foundation::gui::Menu> m_menu;

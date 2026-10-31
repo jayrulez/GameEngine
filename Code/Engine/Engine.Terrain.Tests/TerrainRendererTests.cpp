@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The terrain draw path end-to-end on the Null RHI + real DXC: build a heightfield -> chunk model +
-// GPU height texture -> ONE TerrainRenderData in an ExtractedScene, then drive a RenderFrame (Begin /
-// AddView / End) with the TerrainRenderer registered on Opaque. Exercises the whole Phase C path
-// (extraction snapshot, view cull, our Resolve = quadtree cull + LOD + per-chunk DrawIndexed, PSO
-// build) AND compiles terrain.vs.hlsl / terrain.ps.hlsl through the shader system - a green run proves
-// the shaders build (Resolve emits nothing without a PSO) and the chunk draws come out.
+// The terrain draw path end to end on the Null RHI with real DXC: build a heightfield, then the
+// chunk model and GPU height texture, then one TerrainRenderData in an ExtractedScene, and drive a
+// RenderFrame (Begin / AddView / End) with the TerrainRenderer registered on Opaque. Exercises the
+// whole path (extraction snapshot, view cull, our Resolve with quadtree cull, LOD and per-chunk
+// DrawIndexed, PSO build) and compiles terrain.vs.hlsl / terrain.ps.hlsl through the shader
+// system: a green run shows the shaders build (Resolve emits nothing without a PSO) and the chunk
+// draws come out.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -52,7 +53,7 @@ namespace
         ss.SetIncludeResolver(&EngineShaderProvider());
     }
 
-    // Null RHI harness: color target + encoder + a real DXC compiler (as PipelineTests does).
+    // Null RHI harness: colour target, encoder and a real DXC compiler (as PipelineTests does).
     struct RenderHarness
     {
         shaders::Compiler* compiler = nullptr;
@@ -201,7 +202,7 @@ TEST_CASE("terrain renderer: visible chunks draw (extract -> Resolve -> per-LOD 
     CHECK(frame.ViewCount() == 1);
     frame.End();
 
-    // Draws only come out once the PSO (hence terrain.vs/ps.hlsl) built AND Resolve LOD'd each chunk.
+    // Draws only come out once the PSO (so terrain.vs/ps.hlsl) built and Resolve LOD'd each chunk.
     CHECK(renderer.MaxChunksDrawn() == 4u);
     heightCache.Clear(harness.device); // GPU objects back to the device before it dies
 }
@@ -323,10 +324,9 @@ TEST_CASE("terrain renderer: nothing drawn when the terrain is off-screen")
 
 TEST_CASE("terrain renderer: null-view depth passes cast at the COARSEST chunk LOD (pass 15)")
 {
-    // The mesh shadow rule's terrain equivalent: camera-independent local-shadow tiles
-    // (ctx.view == null) must never cast finer than any view shows. A close-up camera
-    // resolve picks fine LODs (more indices per draw); the null-view depth resolve must
-    // emit every chunk at the coarsest grid (the minimum index count).
+    // As with meshes, camera-independent local-shadow tiles (ctx.view == null) never cast finer
+    // than any view shows. A close-up camera resolve picks fine LODs (more indices per draw); the
+    // null-view depth resolve emits every chunk at the coarsest grid (the minimum index count).
     RenderHarness harness;
     if (!harness.Init(256, 256))
     {
@@ -364,14 +364,14 @@ TEST_CASE("terrain renderer: null-view depth passes cast at the COARSEST chunk L
     Array<ResolvedDraw> out;
     renderer.ResolveDepthOnly(ctx, Span<const DrawItem>{&item, 1}, out);
     REQUIRE(out.Size() == 4u); // 2x2 chunks, all visible from above
-    // Every draw uses the SAME (coarsest) index count.
+    // Every draw uses the same (coarsest) index count.
     for (usize i = 1; i < out.Size(); ++i)
     {
         CHECK(out[i].indexCount == out[0].indexCount);
     }
 
-    // The same terrain through a CLOSE-UP camera view resolves finer geometry: at least
-    // one draw with MORE indices than the null-view coarsest draws.
+    // The same terrain through a close-up camera view resolves finer geometry: at least one draw
+    // with more indices than the null-view coarsest draws.
     ViewCamera cam;
     cam.view = Float4x4::LookAtRH(Float3{-40.0f, 12.0f, 0.0f}, Float3{0.0f, 5.0f, 0.0f},
                                   Float3{0, 1, 0});
@@ -404,11 +404,10 @@ TEST_CASE("terrain renderer: null-view depth passes cast at the COARSEST chunk L
     heightCache.Clear(harness.device);
 }
 
-// The PIE-start type-confusion regression: an Opaque run can interleave RENDERERS (meshes +
-// terrain in one scene). The prepass dispatch now groups runs by (category, rendererId), and the
-// terrain resolver additionally hard-gates on rendererId - a FOREIGN item in the span (here: a
-// float-filled impostor mimicking a mesh item, the exact bit pattern the crash captured) must be
-// skipped, never downcast to TerrainRenderData.
+// An Opaque run can interleave renderers (meshes and terrain in one scene). The prepass dispatch
+// groups runs by (category, rendererId), and the terrain resolver also gates on rendererId: a
+// foreign item in the span (here a float-filled impostor mimicking a mesh item) is skipped, never
+// downcast to TerrainRenderData.
 TEST_CASE("terrain renderer: foreign renderer items in the span are skipped, never downcast")
 {
     RenderHarness harness;
@@ -436,7 +435,7 @@ TEST_CASE("terrain renderer: foreign renderer items in the span are skipped, nev
     FillTerrainRenderData(rd, *h, Span<const tmodel::TerrainChunk>{chunks.Data(), chunks.Size()},
                           tree, heightView, renderer.RendererId());
 
-    // A foreign Opaque item from ANOTHER renderer: base fields sane, derived payload = floats
+    // A foreign Opaque item from another renderer: base fields sane, derived payload = floats
     // (what TerrainRenderData's pointers would misread as garbage spans).
     struct ForeignRenderData : RenderData
     {
@@ -444,10 +443,10 @@ TEST_CASE("terrain renderer: foreign renderer items in the span are skipped, nev
     };
     ForeignRenderData foreign{};
     foreign.category = RenderCategories::Opaque;
-    foreign.rendererId = static_cast<u16>(renderer.RendererId() + 1); // NOT ours
+    foreign.rendererId = static_cast<u16>(renderer.RendererId() + 1); // not ours
     for (u32 i = 0; i < 32; ++i)
     {
-        foreign.payload[i] = 1.0f; // the captured crash pattern (0x3F800000 everywhere)
+        foreign.payload[i] = 1.0f; // 1.0f everywhere (0x3F800000)
     }
 
     DrawItem items[3] = {{0, &foreign}, {0, &rd}, {0, &foreign}};
@@ -461,7 +460,7 @@ TEST_CASE("terrain renderer: foreign renderer items in the span are skipped, nev
 
     Array<ResolvedDraw> out;
     renderer.ResolveDepthOnly(ctx, Span<const DrawItem>{items, 3}, out);
-    CHECK(out.Size() == 4u); // ONLY the terrain resolved (2x2 chunks); both impostors skipped
+    CHECK(out.Size() == 4u); // only the terrain resolved (2x2 chunks); both impostors skipped
 
     // Same gate on the color path.
     Array<ResolvedDraw> colorOut;

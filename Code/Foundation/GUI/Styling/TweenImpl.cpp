@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - a node's tweens (E14 of Specs/gui-lab-evolution-2.md): Node::Animate and StopAnimation,
-// here because :node cannot import :tween (a tween targets a node), and the tweens' one count; and
-// a GUI's data value's (K3: GUIContext::AnimateData).
+// GUI - Node::Animate and StopAnimation, which live here because :node cannot import :tween (a
+// tween targets a node). Also the one counter for tween owner marks, and GUIContext::AnimateData,
+// which tweens a GUI data value.
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +50,7 @@ namespace foundation::gui
         ForEachRunningTween(*target, [&](Tween& other)
         {
             if (&other != &tween && other.ResolveTarget() == target && other.GetProperty() == tween.GetProperty())
-                other.Replace(); // the new one starts from the value it shows
+                other.Replace(); // the new tween starts from the value the old one shows
         });
     }
 
@@ -65,7 +65,7 @@ namespace foundation::gui
     RefPtr<Tween> Node::Animate(core::StringView property, core::StringView to, f32 seconds, core::StringView easing)
     {
         RefPtr<Tween> tween = CreateTween(property, to, seconds, easing);
-        RunAction(tween); // its start replaces the one running
+        RunAction(tween); // starting it replaces the tween already running
         return tween;
     }
 
@@ -100,7 +100,7 @@ namespace foundation::gui
     RefPtr<Tween> GUIContext::AnimateData(core::StringView name, f64 to, f32 seconds, core::StringView easing)
     {
         RefPtr<Tween> tween = CreateDataTween(name, to, seconds, easing);
-        m_actionManager.AddAction(tween); // its start replaces the one moving the value
+        m_actionManager.AddAction(tween); // starting it replaces the tween moving the value
         return tween;
     }
 

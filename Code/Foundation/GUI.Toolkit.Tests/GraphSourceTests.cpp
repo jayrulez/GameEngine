@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the graph source (T6 of Specs/gui-lab-evolution-3.md): nodes, pins, links and frames
-// by stable ids; a link asked for first (allowed or why not, what it replaces); a move a gesture; each
-// other edit one change, told before and after, undone by putting the graph back; node types for a
-// menu, filtered to a pin that fits, a node made linked to it; copies through the application's
-// serializer.
+// GUI.Toolkit - the graph source. Nodes, pins, links and frames have stable ids. A link is checked
+// first (whether it is allowed, why not, and what it replaces). A move is a gesture, and every other
+// edit is one change, reported with the graph before and after and undone by restoring the graph.
+// Node types are listed for a menu, filtered to those with a pin that fits, and a node can be made
+// already linked to it. Copies go through the application's serializer.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -20,7 +20,7 @@ namespace
 {
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
 
-    // Core's binary serializer, its bytes held as the text.
+    // Core's binary serializer, with its bytes held as the text.
     class BlobFormat : public IPropertyTextFormat
     {
     public:
@@ -140,7 +140,7 @@ TEST_CASE("GraphSet: a link is asked for first: allowed, refused with why, or wh
 
     const GraphId first = bed.graph.Connect(bed.Link(bed.number, u8"value", bed.mix, u8"a"));
     CHECK_FALSE(bed.graph.CheckLink(bed.Link(bed.number, u8"value", bed.mix, u8"a")).Allowed); // linked already
-    // An input takes one: a second into it replaces the first.
+    // An input takes one link, so a second link into it replaces the first.
     const GraphId other = bed.graph.AddNode(*bed.graph.GetNode(bed.number));
     check = bed.graph.CheckLink(bed.Link(other, u8"value", bed.mix, u8"a"));
     CHECK(check.Allowed);
@@ -151,14 +151,14 @@ TEST_CASE("GraphSet: a link is asked for first: allowed, refused with why, or wh
     // An output takes many.
     CHECK(bed.graph.CheckLink(bed.Link(bed.number, u8"value", bed.mix, u8"b")).Replaces.IsEmpty());
 
-    // Where a link may begin: any pin, either way.
+    // A link may begin at any pin, in either direction.
     GraphLinkInfo begin;
     begin.FromNode = bed.mix;
     begin.FromPin = bed.graph.FindPin(bed.mix, SV(u8"a"), GraphPinDirection::Input);
     CHECK(bed.graph.CheckLink(begin).Allowed);
 
-    // Node links (a state machine's) only where the graph takes them; then any two, a node to
-    // itself, several.
+    // Node links (a state machine's) are allowed only when the graph accepts them. Then any two
+    // nodes may link, a node may link to itself, and several links may join one pair.
     GraphLinkInfo transition;
     transition.Kind = GraphLinkKind::Nodes;
     transition.FromNode = bed.number;
@@ -194,7 +194,7 @@ TEST_CASE("GraphSet: each change told before and after, one each; a move a gestu
     CHECK(bed.graph.GetNode(bed.mix)->Position.x == doctest::Approx(230.0f));
     CHECK(bed.changes.Size() == 2);
 
-    // Relinked: the same link, its end moved.
+    // Relinking keeps the same link and moves its end.
     GraphLinkInfo to = bed.Link(bed.number, u8"value", bed.mix, u8"b");
     REQUIRE(bed.graph.Relink(link, to));
     core::Array<GraphLinkInfo> links(core::DefaultAllocator());
@@ -202,7 +202,7 @@ TEST_CASE("GraphSet: each change told before and after, one each; a move a gestu
     REQUIRE(links.Size() == 1);
     CHECK(links[0].Id == link);
     CHECK(links[0].ToPin == to.ToPin);
-    CHECK_FALSE(bed.graph.Relink(link, bed.Link(bed.colour, u8"rgb", bed.mix, u8"b"))); // refused: as it was
+    CHECK_FALSE(bed.graph.Relink(link, bed.Link(bed.colour, u8"rgb", bed.mix, u8"b"))); // refused; the link stays as it was
     bed.graph.GetLinks(links);
     CHECK(links[0].ToPin == to.ToPin);
 
@@ -220,7 +220,8 @@ TEST_CASE("GraphSet: node types for a menu, filtered to a pin that fits; a node 
     core::Array<GraphNodeType> types(core::DefaultAllocator());
     bed.graph.GetNodeTypes(0, types);
     CHECK(types.Size() == 3);
-    // From a colour's output: only what takes a colour or anything (none takes a colour here).
+    // From a colour's output, only types with a pin that takes a colour or anything are offered
+    // (no type here takes a colour).
     bed.graph.GetNodeTypes(bed.graph.FindPin(bed.colour, SV(u8"rgb"), GraphPinDirection::Output), types);
     CHECK(types.IsEmpty());
     // From a number's output: the Mix takes it.
@@ -281,13 +282,13 @@ TEST_CASE("GraphSet: nodes copied with the links among them, pasted as new nodes
     REQUIRE(bed.graph.PasteNodes(text.AsView(), core::Float2{0.0f, 300.0f}, made));
     REQUIRE(made.Size() == 2);
     CHECK(bed.graph.GetNode(made[0])->Title == core::String(u8"Number"));
-    CHECK(bed.graph.GetNode(made[1])->Position.x == doctest::Approx(200.0f)); // its place from the copy's top-left
+    CHECK(bed.graph.GetNode(made[1])->Position.x == doctest::Approx(200.0f)); // its position relative to the copy's top-left
     CHECK(bed.graph.GetNode(made[1])->Position.y == doctest::Approx(300.0f));
     CHECK(bed.LinkCount() == 2); // the copy's own link, between the copies
     CHECK(bed.changes.Back().Words == core::String(u8"Pasted"));
     CHECK_FALSE(bed.graph.PasteNodes(SV(u8"not ours"), core::Float2{}, made));
 
-    // Nodes of no kind it makes: nothing pasted, and no change told.
+    // Nodes of a kind the graph does not make: nothing is pasted, and no change is reported.
     const usize told = bed.changes.Size();
     GraphNodeInfo stray;
     stray.Title = core::String(u8"Stray");

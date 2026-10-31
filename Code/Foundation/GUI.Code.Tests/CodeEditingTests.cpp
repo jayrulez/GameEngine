@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - editing (C3 of Specs/gui-lab-evolution-3.md), with the shared AngelScript, Luau and
-// XML definitions: brackets and quotes closed as typed and typed over, a selection surrounded, an
-// empty pair or an indent's spaces deleted back; Return indenting after what opens a block and a
-// closing word outdenting; comments toggled by line or by block; lines indented, moved, copied and
-// deleted; the next occurrence added and all of them; a caret added below; a column by Alt+drag;
-// brackets matched past strings and comments; the document's search. The keys are VS Code's.
+// GUI.Code - editing tests, with the shared AngelScript, Luau and XML definitions. They cover
+// brackets and quotes closed as typed and typed over, a selection surrounded, and Backspace
+// deleting an empty pair or an indent's spaces. Return indents after something that opens a block,
+// and a closing word outdents. Comments toggle by line or by block. Lines are indented, moved,
+// copied and deleted. The next occurrence or all occurrences are added, a caret is added below, and
+// Alt+drag makes a column selection. Brackets are matched past strings and comments, and the
+// document is searched. The keys are VS Code's.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <fstream>
@@ -85,7 +86,7 @@ namespace
         return reader.IsOk() && !out.Contexts.IsEmpty();
     }
 
-    // An editor 400 by 240 in a GUI whose keymap has the code editor's keys, focused, in `language`.
+    // A focused 400 by 240 editor in `language`, in a GUI whose keymap has the code editor's keys.
     struct Bed
     {
         fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
@@ -138,17 +139,17 @@ TEST_CASE("code editing: brackets and quotes close as typed, the close typed ove
     CHECK_TEXT(*bed.editor, u8"f()");
     CHECK(bed.Caret() == At(0, 2));
     bed.Type(u8"x)");
-    CHECK_TEXT(*bed.editor, u8"f(x)"); // the close typed over the one put
+    CHECK_TEXT(*bed.editor, u8"f(x)"); // typing the close steps over the inserted one
     CHECK(bed.Caret() == At(0, 4));
     bed.Type(u8" = \"");
     CHECK_TEXT(*bed.editor, u8"f(x) = \"\"");
     bed.Type(u8"a(b");
-    CHECK_TEXT(*bed.editor, u8"f(x) = \"a(b\""); // in a string: no pair
+    CHECK_TEXT(*bed.editor, u8"f(x) = \"a(b\""); // inside a string, no pair is inserted
     bed.editor->SetText(SV(u8"it"));
     bed.editor->SetCaret(At(0, 2));
     bed.Type(u8"'");
-    CHECK_TEXT(*bed.editor, u8"it'"); // a quote after a name
-    // A selection and an open: surrounded.
+    CHECK_TEXT(*bed.editor, u8"it'"); // a quote after a name is not paired
+    // An opening character typed over a selection surrounds it.
     bed.editor->SetText(SV(u8"value"));
     const CodeSelection word{At(0, 0), At(0, 5)};
     bed.editor->SetSelections(core::Span<const CodeSelection>(&word, 1));
@@ -230,11 +231,11 @@ TEST_CASE("code editing: Tab and Shift+Tab indent a selection's lines; Alt+Up an
     bed.Key(KeyCode::Down, KeyModAlt);
     bed.Key(KeyCode::Down, KeyModAlt);
     CHECK_TEXT(*bed.editor, u8"a\nd\nb\nc");
-    bed.Key(KeyCode::Up, KeyModAlt); // back: a b c d with b, c selected
+    bed.Key(KeyCode::Up, KeyModAlt); // moved back: a b c d, with b and c selected
     bed.editor->SetCaret(At(0, 0));
     bed.Key(KeyCode::Down, KeyModShift | KeyModAlt);
     CHECK_TEXT(*bed.editor, u8"a\na\nb\nc\nd");
-    CHECK(bed.Caret() == At(1, 0)); // with the copy
+    CHECK(bed.Caret() == At(1, 0)); // the caret moved with the copy
     bed.Key(KeyCode::K, KeyModCtrl | KeyModShift);
     CHECK_TEXT(*bed.editor, u8"a\nb\nc\nd");
 }
@@ -249,7 +250,7 @@ TEST_CASE("code editing: Ctrl+D selects the word, then adds the next match round
     REQUIRE(bed.editor->GetSelections().Size() == 2);
     CHECK(bed.editor->GetSelections()[1].Range() == CodeRange{At(0, 8), At(0, 9)});
     bed.Key(KeyCode::D, KeyModCtrl);
-    bed.Key(KeyCode::D, KeyModCtrl); // none further
+    bed.Key(KeyCode::D, KeyModCtrl); // no further occurrence
     CHECK(bed.editor->GetSelections().Size() == 3);
     bed.Type(u8"y");
     CHECK_TEXT(*bed.editor, u8"int y = y + 1;\ny++;");
@@ -289,11 +290,11 @@ TEST_CASE("code editing: a bracket's match, across lines, past brackets in strin
     REQUIRE(bed.editor->FindMatchingBracket(At(0, 9), bracket, match));
     CHECK(bracket == CodeRange{At(0, 9), At(0, 10)});
     CHECK(match == CodeRange{At(3, 0), At(3, 1)});
-    REQUIRE(bed.editor->FindMatchingBracket(At(3, 1), bracket, match)); // the one before the caret
+    REQUIRE(bed.editor->FindMatchingBracket(At(3, 1), bracket, match)); // the bracket before the caret
     CHECK(match.Start == At(0, 9));
     REQUIRE(bed.editor->FindMatchingBracket(At(2, 7), bracket, match));
     CHECK(match == CodeRange{At(2, 9), At(2, 10)});
-    CHECK_FALSE(bed.editor->FindMatchingBracket(At(1, 6), bracket, match)); // the string's
+    CHECK_FALSE(bed.editor->FindMatchingBracket(At(1, 6), bracket, match)); // the bracket inside the string is not matched
 }
 
 TEST_CASE("code document: search by case and whole word, across lines, round to the start")
@@ -311,7 +312,7 @@ TEST_CASE("code document: search by case and whole word, across lines, round to 
     REQUIRE(doc.Find(SV(u8"end\nx"), At(0, 0), true, false, false, found));
     CHECK(found == CodeRange{At(1, 7), At(2, 1)});
     REQUIRE(doc.Find(SV(u8"Value"), At(1, 0), true, false, true, found));
-    CHECK(found.Start == At(0, 0)); // round to the start
+    CHECK(found.Start == At(0, 0)); // wrapped around to the start
     CHECK_FALSE(doc.Find(SV(u8"Value"), At(1, 0), true, false, false, found));
 }
 
@@ -326,16 +327,16 @@ TEST_CASE("code find: Ctrl+F opens the bar with the selection's text; F3 and Shi
     CHECK(bar.GetQuery() == SV(u8"count"));
     CHECK(bar.GetQueryField().IsFocused());
     bed.Frame();
-    CHECK(bed.editor->GetMatches().Size() == 4); // "Count" too, case folded
+    CHECK(bed.editor->GetMatches().Size() == 4); // "Count" matches too, ignoring case
     CHECK(bed.editor->CurrentMatch() == 1);
     CHECK(bar.GetCountLabel().GetText() == SV(u8"1 of 4"));
     bed.Key(KeyCode::F3);
     CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(1, 0), At(1, 5)});
     CHECK(bar.GetCountLabel().GetText() == SV(u8"2 of 4"));
     bed.Key(KeyCode::F3, KeyModShift);
-    bed.Key(KeyCode::F3, KeyModShift); // round to the last
+    bed.Key(KeyCode::F3, KeyModShift); // wrapped around to the last
     CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(2, 7), At(2, 12)});
-    // Matching case: "Count" goes; whole words.
+    // Matching case drops "Count"; then whole words.
     (void)bar.GetCaseToggle().HandleActivate();
     CHECK(bed.editor->GetMatches().Size() == 3);
     bar.GetQueryField().SetText(SV(u8"coun"));
@@ -343,7 +344,8 @@ TEST_CASE("code find: Ctrl+F opens the bar with the selection's text; F3 and Shi
     (void)bar.GetWordToggle().HandleActivate();
     CHECK(bed.editor->GetMatches().Size() == 0);
     CHECK(bar.GetCountLabel().GetText() == SV(u8"No results"));
-    // Return in the field finds the next; Escape closes, the focus back in the editor.
+    // Return in the field finds the next match; Escape closes the bar and returns the focus to the
+    // editor.
     (void)bar.GetWordToggle().HandleActivate();
     bed.Key(KeyCode::Return);
     CHECK(bed.editor->CurrentMatch() > 0);
@@ -361,11 +363,11 @@ TEST_CASE("code find: Ctrl+H replaces this match and goes on; All replaces every
     REQUIRE(bar.GetMode() == CodeFindBar::Mode::Replace);
     bar.GetQueryField().SetText(SV(u8"old"));
     bar.GetReplacementField().SetText(SV(u8"new"));
-    bed.editor->ReplaceCurrent(); // on no match yet: finds the first
+    bed.editor->ReplaceCurrent(); // not on a match yet, so it finds the first
     CHECK(bed.editor->CurrentMatch() == 1);
     bed.editor->ReplaceCurrent();
     CHECK_TEXT(*bed.editor, u8"a = new; b = old; c = old;");
-    CHECK(bed.editor->CurrentMatch() == 1); // the next, now the first left
+    CHECK(bed.editor->CurrentMatch() == 1); // on the next match, which is now the first one left
     const usize steps = bed.editor->GetDocument().UndoCount();
     bed.editor->ReplaceAll();
     CHECK_TEXT(*bed.editor, u8"a = new; b = new; c = new;");
@@ -391,7 +393,7 @@ TEST_CASE("code find: Ctrl+G goes to a line, or a line and column; the bar keeps
     CHECK(bed.editor->IsFocused());
     bed.Frame();
     CHECK(bed.editor->GetScrollOffset().y > 0.0f);
-    // Open again, scrolled: still at the top of the editor's box.
+    // Opened again while scrolled, the bar is still at the top of the editor's box.
     bed.Key(KeyCode::F, KeyModCtrl);
     bed.Frame();
     CHECK(bar.GetScreenBounds().y == doctest::Approx(bed.editor->GetScreenBounds().y + bed.editor->GetContentBounds().y + 2.0f).epsilon(0.01));

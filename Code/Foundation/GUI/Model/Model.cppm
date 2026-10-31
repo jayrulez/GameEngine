@@ -3,21 +3,20 @@
 
 // GUI - :model partition
 //
-// IModel: the abstract data source a model-backed view renders (eepp's Models::Model in role). A
-// model exposes rows of cells under a parent (RowCount x ColumnCount; a flat model has the top
-// level alone), returns a Variant per (index, role), and tells its clients (the views) what
-// changed (E6 of Specs/gui-lab-evolution.md): rows inserted, removed, moved or changed under a
-// parent, or, when it cannot say, a reset. A client that does not follow ranges takes each as a
-// reset. Each row has an id that stays its own while rows come and go, so a view keeps its
-// selection and expansion as id sets (Zero's and LunarSong's way). Editing (IsEditable, SetData)
-// and sorting (Sort) are capabilities a model may have.
+// IModel: the abstract data source a model-backed view renders. A model exposes rows of cells
+// under a parent (RowCount x ColumnCount; a flat model has only the top level), returns a Variant
+// per (index, role), and tells its clients (the views) what changed: rows inserted, removed, moved
+// or changed under a parent, or a reset when it cannot say. A client that does not follow ranges
+// treats each change as a reset. Each row keeps the same id while other rows come and go, so a
+// view stores its selection and expansion as sets of ids. Editing (IsEditable, SetData) and
+// sorting (Sort) are optional capabilities.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:model;
 
-import foundation.core; // Array, String, usize
+import foundation.core;
 import :variant;
 import :model_index;
 import :event; // DragPayload, DropEffect (a drop on a view)
@@ -27,7 +26,7 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// A row's identity, its own while rows are inserted, removed and moved around it.
+    /// A row's identity. It stays the same while other rows are inserted, removed and moved.
     using ItemId = u64;
     inline constexpr ItemId kNoItem = ~ItemId{0};
 
@@ -40,7 +39,7 @@ export namespace foundation::gui
 
     class IModel;
 
-    /// Where in a row a drop lands (E7): before it, onto it (a tree's child), or after it.
+    /// Where in a row a drop lands: before it, onto it (a tree's child), or after it.
     enum class DropPlace : u8
     {
         Before,
@@ -48,9 +47,9 @@ export namespace foundation::gui
         After,
     };
 
-    /// A drop on a view, as its model hears it: what is dropped, where (a row and a place; an
-    /// invalid row is the end of the top level), with which effect, and, from a view, the ids of
-    /// the rows dragged and their model.
+    /// A drop on a view, as the view passes it to its model: what is dropped, where (a row and a
+    /// place; an invalid row means the end of the top level), with which effect, and, when the
+    /// drag came from a view, the ids of the dragged rows and the model they came from.
     struct ModelDrop
     {
         const DragPayload* Payload = nullptr;
@@ -61,8 +60,8 @@ export namespace foundation::gui
         const IModel* Source = nullptr;
     };
 
-    // What a model tells a view. Each range defaults to a reset, so a client follows only the
-    // ranges it can.
+    // What a model tells a view. Each range callback defaults to a reset, so a client overrides
+    // only the ones it can follow.
     class IModelClient
     {
     public:
@@ -101,8 +100,8 @@ export namespace foundation::gui
     public:
         virtual ~IModel() = default;
 
-        // Number of rows under `parent` (an invalid parent = the top level). Flat models
-        // ignore the parent (they only have a top level).
+        // Number of rows under `parent` (an invalid parent is the top level). Flat models
+        // ignore the parent (they have only a top level).
         [[nodiscard]] virtual usize RowCount(const ModelIndex& parent = {}) const = 0;
         [[nodiscard]] virtual usize ColumnCount() const = 0;
         [[nodiscard]] virtual core::String ColumnName(usize /*column*/) const
@@ -113,15 +112,17 @@ export namespace foundation::gui
                                            ModelRole role = ModelRole::Display) const = 0;
 
         // === Identity ===
-        /// The id of the row `index` is in. By default a tree's node id (InternalId), else the
-        /// row number, which a model whose rows move should replace with ids of its own.
+        /// Returns the id of the row that `index` is in. By default this is a tree's node id
+        /// (InternalId), or else the row number; a model whose rows move should override it with
+        /// stable ids.
         [[nodiscard]] virtual ItemId IdOf(const ModelIndex& index) const
         {
             if (!index.IsValid())
                 return kNoItem;
             return index.InternalId >= 0 ? static_cast<ItemId>(index.InternalId) : static_cast<ItemId>(index.Row);
         }
-        /// The top-level row whose id is `id` (invalid: none). A tree's view finds its nodes itself.
+        /// Returns the top-level row whose id is `id`, or an invalid index when there is none. A
+        /// tree view finds its nodes itself.
         [[nodiscard]] virtual ModelIndex IndexOfId(ItemId id) const
         {
             for (usize r = 0; r < RowCount(); ++r)
@@ -135,33 +136,35 @@ export namespace foundation::gui
 
         // === Capabilities ===
         [[nodiscard]] virtual bool IsEditable(const ModelIndex&) const { return false; }
-        /// Whether a user may select (and activate) the item: false for a list's section header,
-        /// which clicks, the arrows, type-ahead and Select All pass over.
+        /// Whether a user may select (and activate) the item. It is false for a list's section
+        /// header, which clicks, the arrow keys, type-ahead and Select All skip.
         [[nodiscard]] virtual bool IsSelectable(const ModelIndex&) const { return true; }
         /// Writes an edited value; false when it is refused (the editor then stays open).
         virtual bool SetData(const ModelIndex&, const Variant&) { return false; }
-        /// Sorts by `column` (None: the source's order); false when the model cannot sort.
+        /// Sorts by `column` (SortOrder::None restores the source's order). Returns false when the
+        /// model cannot sort.
         virtual bool Sort(usize column, SortOrder order)
         {
             (void)column, (void)order;
             return false;
         }
 
-        /// What a drop would do (E7): an effect, or none, with a reason when it says why; none
-        /// with no reason means the place is not one it takes (the view tries another).
+        /// Returns the effect a drop would have, or None. A None with a reason refuses the drop
+        /// and says why; a None with no reason means the model does not take drops at that place,
+        /// and the view tries another one.
         [[nodiscard]] virtual DropEffect CanDrop(const ModelDrop& drop, core::String& reason) const
         {
             (void)drop, (void)reason;
             return DropEffect::None;
         }
-        /// Does the drop; false when it could not.
+        /// Performs the drop; returns false when it could not.
         virtual bool Drop(const ModelDrop& drop)
         {
             (void)drop;
             return false;
         }
-        /// Removes rows by id (what a view moved to another model leaves behind); false when it
-        /// cannot.
+        /// Removes rows by id, used when a view has moved those rows into another model. Returns
+        /// false when the model cannot remove them.
         virtual bool RemoveIds(const core::Array<ItemId>& ids)
         {
             (void)ids;
@@ -175,7 +178,7 @@ export namespace foundation::gui
         {
             return MakeModelIndex(row, column);
         }
-        // The parent of `child` (invalid = a top-level node; flat models have no parents).
+        // The parent of `child` (invalid for a top-level node; flat models have no parents).
         [[nodiscard]] virtual ModelIndex ParentIndex(const ModelIndex& /*child*/) const
         {
             return ModelIndex{};
@@ -240,9 +243,9 @@ export namespace foundation::gui
         Array<IModelClient*> m_clients; // non-owning
     };
 
-    /// Ids for a flat model's rows: one per row, handed out in turn, moving with its row. Finding
-    /// an id's row is a lookup (E17b: an accessibility node asks it for every item it describes),
-    /// its index made again on the first ask after the rows change.
+    /// Ids for a flat model's rows: one id per row, handed out in sequence, which moves with its
+    /// row. RowOf finds an id's row with a lookup table, since an accessibility node asks for every
+    /// item it describes; the table is rebuilt on the first call after the rows change.
     class RowIds
     {
     public:
@@ -294,7 +297,7 @@ export namespace foundation::gui
     private:
         Array<ItemId> m_ids;
         ItemId m_next = 0;
-        mutable HashMap<ItemId, i32> m_rows; // id to row, as of the last ask
+        mutable HashMap<ItemId, i32> m_rows; // id to row, as of the last RowOf
         mutable bool m_stale = true;
     };
 }

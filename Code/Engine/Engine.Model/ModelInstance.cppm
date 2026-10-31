@@ -3,13 +3,14 @@
 
 // Engine::Model - `engine.model`: a cooked model (model::ModelResource) put into a scene as
 // entities, outside any project's prefabs: what a host that cooks a model file at run time does
-// with it (the Sandbox sample, the model viewer). One entity per model node under a root, a mesh
-// component per node with a mesh (its own material list, from the manifest's slots), and, when the
-// model is skinned, a skeletal animation component on the root feeding its skinned meshes: the
+// with it (the Sandbox sample, the model viewer). One entity per model node under a root, and a
+// mesh component per node with a mesh (its own material list, from the manifest's slots). When the
+// model is skinned, the root gets a skeletal animation component feeding its skinned meshes: the
 // first clip playing, or none (the rig's rest pose; a skinned mesh fed nothing draws its raw
-// vertices), and a bone attachment on the nearest bone node above each unskinned mesh, which moves
-// it with the animation (foundation::model::RigidMeshBone). A skinned mesh sits in its skeleton's space, as the project's model
-// prefab puts it (foundation::model::SkinnedMeshParent). The model's resources stay alive while the caller keeps its proxy.
+// vertices). Each unskinned mesh gets a bone attachment on the nearest bone node above it, which
+// moves it with the animation (foundation::model::RigidMeshBone). A skinned mesh sits in its
+// skeleton's space, as the project's model prefab puts it (foundation::model::SkinnedMeshParent).
+// The model's resources stay alive while the caller keeps its proxy.
 
 module;
 #include "Core/Prelude.h"

@@ -4,8 +4,7 @@
 // Foundation::Texture - :types partition
 //
 // Logical texture descriptors: shape, filter, wrap. Used by TextureResource to
-// say how pixel data should be interpreted and sampled. Ported from
-// Sedulous.Textures/TextureTypes.bf.
+// say how pixel data should be interpreted and sampled.
 
 module;
 #include "Core/Prelude.h"
@@ -44,9 +43,9 @@ export namespace foundation::texture
         MirroredRepeat,
     };
 
-    // Reflects TextureShape/TextureFilter/TextureWrap for tooling (enum-by-name dropdowns in the
-    // generic asset page) + scripting. Idempotent; called by consumers that need the enum names
-    // (the editor/cook/export tools via RegisterTextureAsset). Body lives in the impl unit
-    // (gcc module-interface hygiene).
+    // Reflects TextureShape, TextureFilter and TextureWrap for tooling (enum-by-name dropdowns in
+    // the generic asset page) and scripting. Idempotent; called by consumers that need the enum
+    // names (the editor, cook and export tools, through RegisterTextureAsset). The body lives in
+    // the implementation unit to keep REFLECT_* bodies out of the module interface.
     void RegisterTextureReflection();
 }

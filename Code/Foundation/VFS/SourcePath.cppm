@@ -3,20 +3,19 @@
 
 // Foundation::VFS - :source_path partition.
 //
-// SourcePath: a typed MOUNT-RELATIVE logical path - the currency for source-file
-// references in serialized asset data (pipeline::Asset::fileName and friends). One honest
-// guarantee: whatever string it is constructed from, the stored form is forward-slash,
-// relative, and dot-segment-free - so Windows-authored "Fonts\Roboto.ttf" heals into
-// "Fonts/Roboto.ttf" instead of breaking every non-Windows VFS lookup.
+// SourcePath: a typed mount-relative logical path, used for source-file references in
+// serialized asset data (pipeline::Asset::fileName and friends). Whatever string it is
+// constructed from, the stored form is forward-slash, relative and free of dot segments, so a
+// Windows-authored "Fonts\Roboto.ttf" becomes "Fonts/Roboto.ttf" instead of breaking every
+// non-Windows VFS lookup.
 //
-// NOT a general OS path: no volumes, no macros, no
-// absolute form. Strings that violate the contract (absolute, ".." escapes, a ':' scheme/
-// volume) normalize to EMPTY - a missing reference, never a wrong one. Comparison is
-// case-SENSITIVE on every platform (one rule everywhere; a lint catches Windows-authored
-// case mismatches instead of a platform-dependent operator==).
+// It is not a general OS path: no volumes, no macros, no absolute form. Strings that violate
+// the contract (absolute, ".." escapes, a ':' scheme or volume) normalize to empty: a missing
+// reference, never a wrong one. Comparison is case-sensitive on every platform; a lint catches
+// Windows-authored case mismatches instead of a platform-dependent operator==.
 //
-// Wire shape: serializes as its string (ar.Text), IDENTICAL to the String fields it
-// replaces - existing data loads unchanged, reads re-normalize on the way in.
+// On the wire it serializes as its string (ar.Text), the same as a plain String field, so
+// String data loads unchanged and reads re-normalize on the way in.
 
 module;
 #include "Core/Prelude.h"
@@ -116,7 +115,7 @@ export namespace foundation::vfs
                 const utf8char c = raw[i];
                 if (c == u8':')
                 {
-                    return String(); // scheme/volume - not a mount-relative path
+                    return String(); // scheme or volume: not a mount-relative path
                 }
                 cleaned.PushBack(c == u8'\\' ? u8'/' : c);
             }
@@ -181,7 +180,7 @@ export namespace foundation::vfs
     };
 
     // Wire-compatible with a plain String field (ar.Text); reads re-normalize, so
-    // Windows-authored data heals on load without a version bump.
+    // Windows-authored data is fixed on load without a version bump.
     inline void Serialize(ISerializer& ar, SourcePath& path)
     {
         ar.Text(path.m_value);
@@ -191,9 +190,9 @@ export namespace foundation::vfs
         }
     }
 
-    // Reflects SourcePath as a value type (read accessors + a StringView constructor) for tooling
-    // + scripting. The stored string is private, so there are no member properties - the accessors
-    // ARE the surface (the accessor-gated-state convention). Idempotent; body in the impl unit
-    // (gcc module-interface hygiene).
+    // Reflects SourcePath as a value type (read accessors and a StringView constructor) for
+    // tooling and scripting. The stored string is private, so there are no member properties; the
+    // accessors are the surface. Idempotent; the body lives in the implementation unit to keep
+    // REFLECT_* bodies out of the module interface.
     void RegisterVFSReflection();
 }

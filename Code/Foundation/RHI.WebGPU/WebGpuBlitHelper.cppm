@@ -4,12 +4,12 @@
 /// foundation.rhi.webgpu:blit_helper - the internal fullscreen blit pass.
 ///
 /// WebGPU has no vkCmdBlitImage: scaling blits and mip generation are a render pass
-/// that samples the source into the destination (the same approach DX12 backends
-/// take). The shader is WGSL - an INTERNAL pipeline with its own compact layout, no
-/// DXC and no register shifts involved. Pipelines cache per destination format.
+/// that samples the source into the destination (the same approach DX12 backends take).
+/// The shader is WGSL, an internal pipeline with its own compact layout; no DXC and no
+/// register shifts are involved. Pipelines are cached per destination format.
 ///
-/// Serves color formats only: depth blits would need a depth-output variant (no
-/// consumer yet), and 3D textures would need per-slice passes - both fail honestly.
+/// Serves color formats only: depth blits would need a depth-output variant, and 3D
+/// textures would need per-slice passes; both fail.
 
 module;
 #include "Core/Prelude.h"

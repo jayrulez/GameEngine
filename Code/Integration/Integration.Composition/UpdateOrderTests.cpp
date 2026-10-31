@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Update order across the domains, on a scene composed as a game composes it: the scene's scripts
-// run before the systems that act on what a script writes, so a destination, a sound or a graph
-// parameter set in onUpdate takes effect that frame (user 2026-10-10, as Sedulous orders it); the
-// Level script just before the entity behaviors.
+// The Update order across the domains, on a scene composed as a game composes it. The scene's
+// scripts run before the systems that act on what a script writes, so a destination, a sound or a
+// graph parameter set in onUpdate takes effect that frame. The Level script runs just before the
+// entity behaviors.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 

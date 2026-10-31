@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// GLTF/GLB model loader using cgltf.
-/// Ported from Sedulous.Models.GLTF/GltfLoader.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -44,7 +43,7 @@ export namespace foundation::model::gltf
     }
 
     // cgltf hands back char* (UTF-8); the engine String is UTF-8 too, so this just
-    // wraps the bytes in an owned String - no transcoding.
+    // wraps the bytes in an owned String with no transcoding.
     inline String Utf8FromC(const char* s)
     {
         if (!s)
@@ -92,14 +91,14 @@ export namespace foundation::model::gltf
             std::filesystem::path filePath(narrowPath);
             m_basePath = filePath.parent_path().string();
 
-            // Parse the file -- explicitly set type for .glb since auto-detect can fail.
+            // Parse the file, setting the type explicitly for .glb since auto-detect can fail.
             cgltf_options options = {};
 
             if (endsWithCI(path, u8".glb"))
                 options.type = cgltf_file_type_glb;
             // json_token_count = 0 lets cgltf size the JSON token pool itself (a counting pass first).
-            // A fixed cap (was 4096) silently fails to parse larger glTFs with invalid_json (result=3) -
-            // e.g. the Quaternius character (~1MB, >4096 JSON tokens).
+            // A fixed cap makes a larger glTF fail to parse with invalid_json (result=3) and no other
+            // sign: a 1 MB character model, for one, has more than 4096 JSON tokens.
             options.json_token_count = 0;
 
             // Read file data ourselves (cgltf's fopen can fail with certain path formats on Windows).
@@ -128,7 +127,7 @@ export namespace foundation::model::gltf
             if (loadResult != cgltf_result_success)
                 return ModelLoadResult::InvalidData;
 
-            // Validate (optional -- some exporters produce spec-violating but loadable files).
+            // Validate (optional: some exporters produce spec-violating but loadable files).
             cgltf_result validateResult = cgltf_validate(m_data);
             if (validateResult != cgltf_result_success)
             {
@@ -202,8 +201,8 @@ export namespace foundation::model::gltf
                     material->setName(Utf8FromC(buf));
                 }
 
-                // KHR_materials_unlit: its colour as it is, no light (the built-in Unlit,
-                // Specs/phong-material.md). The colour and its map come from the
+                // KHR_materials_unlit: its colour as it is, no light (the built-in Unlit).
+                // The colour and its map come from the
                 // metallic-roughness block as the extension says; the rest is not read.
                 if (mat->unlit)
                     material->shadingModel = ShadingModel::Unlit;
@@ -229,10 +228,10 @@ export namespace foundation::model::gltf
                             cgltf_texture_index(m_data, pbr->metallic_roughness_texture.texture));
                 }
                 // KHR_materials_pbrSpecularGlossiness (Bistro and other Lumberyard exports): the
-                // diffuse map / factor stand in for base colour, glossiness inverts to roughness,
-                // and the surface is treated as dielectric (the specular map is not converted -
-                // a true spec-gloss to metal-rough conversion is a later step). Only when the
-                // material carries no metallic-roughness block of its own.
+                // diffuse map and factor stand in for base colour, glossiness inverts to roughness,
+                // and the surface is treated as dielectric. The specular map is not converted, so
+                // this is an approximation, not a true spec-gloss to metal-rough conversion. Only
+                // when the material carries no metallic-roughness block of its own.
                 else if (mat->has_pbr_specular_glossiness)
                 {
                     const cgltf_pbr_specular_glossiness* sg = &mat->pbr_specular_glossiness;
@@ -944,11 +943,11 @@ export namespace foundation::model::gltf
                     bone->scale = Float3(node->scale[0], node->scale[1], node->scale[2]);
 
                 // Matrix. glTF stores it column-major for column vectors; reading the flat
-                // array straight into row-major storage is the transpose = our row-vector
-                // convention. The TRS FIELDS are what every consumer reads (the cook copies
-                // them into the resource's Transform), so a matrix-only node must populate
-                // them too - it used to leave them at identity, so such nodes cooked at the
-                // origin with no rotation or scale.
+                // array straight into row-major storage gives the transpose, which is our
+                // row-vector convention. The TRS fields are what every consumer reads (the cook
+                // copies them into the resource's Transform), so a matrix-only node populates
+                // them too; left at identity, such a node would cook at the origin with no
+                // rotation or scale.
                 if (node->has_matrix)
                 {
                     Float4x4 nodeMatrix = Float4x4::Identity();

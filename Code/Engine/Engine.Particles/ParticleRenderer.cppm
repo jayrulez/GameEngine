@@ -3,11 +3,11 @@
 
 // engine.particles:renderer - the dedicated billboard particle Renderer.
 //
-// Modeled on SpriteRenderer (SV_VertexID quad + hardware instancing + per-frame ring + blended
-// forward pass), but with a richer per-instance record and VS: per-particle rotation and a
-// velocity-stretched billboard mode. Each DrawItem is a ParticleBillboardRenderData BATCH (N
-// instances), so a whole system draws as one instanced call - the particle count never reaches the
-// draw-list sort. Registered with RenderSubsystem via the RegisterRenderer seam (rides Transparent).
+// Modeled on SpriteRenderer (SV_VertexID quad, hardware instancing, a per-frame ring and a blended
+// forward pass), but with a richer per-instance record and vertex shader: per-particle rotation and
+// a velocity-stretched billboard mode. Each DrawItem is a ParticleBillboardRenderData batch (N
+// instances), so a whole system draws as one instanced call and the particle count never reaches
+// the draw-list sort. Registered with RenderSubsystem through RegisterRenderer (rides Transparent).
 
 module;
 #include "Core/Prelude.h"
@@ -104,7 +104,7 @@ export namespace engine::particles
             // set 2: the opaque scene depth (sampled via Load, no sampler) for soft particles.
             rhi::BindGroupLayoutEntry depthEntry =
                 rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment);
-            // WebGPU annotation (Vulkan/DX12 ignore): the DEPTH view read as data.
+            // WebGPU annotation (Vulkan/DX12 ignore it): the depth view read as data.
             depthEntry.textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
             rhi::BindGroupLayoutDesc dld{};
             dld.entries = Span<const rhi::BindGroupLayoutEntry>{&depthEntry, 1};
@@ -201,8 +201,9 @@ export namespace engine::particles
                 }
             }
 
-            // Trails: a 2-set layout (view + texture, no depth) + a big identity index buffer so
-            // the ribbon triangle-list draws through DrawIndexed (ResolvedDraw is always indexed).
+            // Trails: a 2-set layout (view and texture, no depth) and a large identity index buffer
+            // so the ribbon triangle list draws through DrawIndexed (ResolvedDraw is always
+            // indexed).
             rhi::BindGroupLayout* trailLayouts[] = {m_viewLayout, m_texLayout};
             rhi::PipelineLayoutDesc tpld{};
             tpld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{trailLayouts, 2};
@@ -239,12 +240,13 @@ export namespace engine::particles
 
         void PrepareFrame(u32 maxDraws, u32 frameIndex) override
         {
-            // maxDraws is the frame's draw-ITEM count, but a particle batch is one item holding many
-            // INSTANCES - and EVERY billboard system allocates from this one ring within a frame (the
-            // cursor only resets at EndFrame). So size by the SUM of instances across all systems in a
-            // frame (m_maxInstancesSeen, accumulated in Resolve, finalized in FinishFrame), not the largest
-            // single system - else later systems in the sorted draw list fail to allocate and vanish.
-            // Rounded up in 8k chunks; ramps one frame during growth, then holds (ring can't grow mid-frame).
+            // maxDraws is the frame's draw-item count, but a particle batch is one item holding
+            // many instances, and every billboard system allocates from this one ring within a
+            // frame (the cursor only resets at EndFrame). So size by the sum of instances across
+            // all systems in a frame (m_maxInstancesSeen, accumulated in Resolve, finalized in
+            // FinishFrame), not the largest single system, or later systems in the sorted draw list
+            // fail to allocate and vanish. Rounded up in 8k chunks; it ramps for one frame during
+            // growth, then holds (the ring cannot grow mid-frame).
             const u32 chunk = 8192u;
             const u32 want = Max(maxDraws, ((m_maxInstancesSeen + chunk - 1u) / chunk) * chunk);
             m_instanceRing.Reserve(want == 0 ? 1u : want);
@@ -257,7 +259,8 @@ export namespace engine::particles
             m_frameInstances = 0; // sum of instances allocated this frame (all systems/views)
             m_frameTrailVerts = 0;
 
-            // Retire scene-depth bind groups created framesInFlight+ frames ago (no longer in flight).
+            // Retire scene-depth bind groups created framesInFlight or more frames ago (no longer
+            // in flight).
             ++m_frameCounter;
             usize keep = 0;
             for (usize i = 0; i < m_depthPending.Size(); ++i)
@@ -306,8 +309,9 @@ export namespace engine::particles
             ubo.projWScale = proj(2, 3);
             MemCopy(vr.ptr, &ubo, sizeof(ubo));
 
-            // Scene-depth bind group (set 2) for soft particles. The transparent pass hands us the opaque
-            // depth (already DepthStencilRead). Fresh per Resolve, retired after framesInFlight frames.
+            // Scene-depth bind group (set 2) for soft particles. The transparent pass hands us the
+            // opaque depth (already DepthStencilRead). Fresh per Resolve, retired after
+            // framesInFlight frames.
             rhi::BindGroup* depthBg = AcquireDepthBindGroup(
                 ctx.sceneDepthView != nullptr ? ctx.sceneDepthView : m_whiteView);
             if (depthBg == nullptr)
@@ -349,7 +353,7 @@ export namespace engine::particles
                 if (total > 0)
                 {
                     m_frameInstances +=
-                        total; // sum across all systems -> sizes the ring next frame
+                        total; // sum across all systems; sizes the ring next frame
                     const render::DynamicUniformRing::Range ir =
                         m_instanceRing.AllocateRange(total);
                     if (ir.ok)
@@ -397,17 +401,16 @@ export namespace engine::particles
         void FinishFrame() override
         {
             m_maxInstancesSeen =
-                Max(m_maxInstancesSeen, m_frameInstances); // sized to the frame SUM
+                Max(m_maxInstancesSeen, m_frameInstances); // sized to the frame's sum
             m_maxTrailVertsSeen = Max(m_maxTrailVertsSeen, m_frameTrailVerts);
             m_instanceRing.EndFrame();
             m_trailRing.EndFrame();
             m_viewRing.EndFrame();
         }
 
-        /// Wire the render subsystem's frames-in-flight retire queue: the rings then
-        /// RETIRE their old buffer on grow instead of a mid-frame WaitIdle (which on web
-        /// pumps the event loop, expires the canvas texture, and drops the frame's
-        /// submit - the exact waiter the tripwire stack named in PrepareFrame).
+        /// Wire the render subsystem's frames-in-flight retire queue: the rings then retire their
+        /// old buffer on growth instead of a mid-frame WaitIdle, which on the web pumps the event
+        /// loop, expires the canvas texture and drops the frame's submit.
         void SetRetireQueue(render::GpuRetireQueue* retire) noexcept
         {
             m_instanceRing.SetRetireQueue(retire);
@@ -485,7 +488,7 @@ export namespace engine::particles
                 {
                     return found->bindGroup;
                 }
-                // Address reuse: the cached group references a DESTROYED view - rebuild.
+                // Address reuse: the cached group references a destroyed view, so rebuild it.
                 if (found->bindGroup != nullptr)
                 {
                     m_device->DestroyBindGroup(found->bindGroup);
@@ -617,8 +620,9 @@ export namespace engine::particles
             return pso;
         }
 
-        // Draw one system's trail ribbon: upload its (already camera-facing) vertices to the trail ring
-        // and emit a triangle-list draw via the identity index buffer. Reuses the view UBO + a texture.
+        // Draw one system's trail ribbon: upload its (already camera-facing) vertices to the trail
+        // ring and emit a triangle-list draw through the identity index buffer. Reuses the view UBO
+        // and a texture.
         void EmitTrailDraw(const render::RenderRecordContext& ctx, const ParticleTrailRenderData* b,
                            rhi::BindGroup* viewBg, const render::DynamicUniformRing::Range& vr,
                            Array<render::ResolvedDraw>& out)
@@ -629,7 +633,7 @@ export namespace engine::particles
             }
             const u32 count = Min(b->vertexCount, kTrailMaxIndices);
             m_frameTrailVerts +=
-                count; // sum across all trail systems -> sizes the trail ring next frame
+                count; // sum across all trail systems; sizes the trail ring next frame
             const render::DynamicUniformRing::Range tr = m_trailRing.AllocateRange(count);
             if (!tr.ok)
             {
@@ -641,8 +645,9 @@ export namespace engine::particles
                 EnsureTextureBindGroup(b->texture != nullptr ? b->texture : m_whiteView);
             if (pso == nullptr || texBg == nullptr)
             {
-                // Loud: a silent return here hid a DX12 input-layout refusal (POSITION semantics)
-                // for as long as the shader existed. Once per renderer, not per frame.
+                // Logged, not silent: a missing pipeline (such as a DX12 input-layout refusal over
+                // POSITION semantics) otherwise just draws nothing. Once per renderer, not per
+                // frame.
                 if (!m_loggedTrailPipelineMiss)
                 {
                     m_loggedTrailPipelineMiss = true;
@@ -722,7 +727,7 @@ export namespace engine::particles
             pd.depthStencil = ds;
             pd.primitive.topology = rhi::PrimitiveTopology::TriangleList;
             pd.primitive.cullMode = rhi::CullMode::None;
-            pd.label = BlendLabel(mode); // shared labels (particle.*) - fine for debug naming
+            pd.label = BlendLabel(mode); // shared labels (particle.*), fine for debug naming
             rhi::RenderPipeline* pso = nullptr;
             if (!m_device->CreateRenderPipeline(pd, pso).IsOk())
             {
@@ -857,8 +862,8 @@ export namespace engine::particles
         bool m_loggedBillboardPipelineMiss = false;
         rhi::BindGroup* m_viewBg = nullptr;
         u32 m_viewBgGen = 0;
-        // Keyed by view pointer, validated by TextureView::uniqueId on every hit (address
-        // reuse of destroyed dynamic textures - see SpriteRenderer::TexBindGroup).
+        // Keyed by view pointer, validated by TextureView::uniqueId on every hit (address reuse of
+        // destroyed dynamic textures; see SpriteRenderer::TexBindGroup).
         struct TexBindGroup
         {
             rhi::BindGroup* bindGroup = nullptr;

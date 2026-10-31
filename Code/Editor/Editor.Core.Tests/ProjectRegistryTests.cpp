@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Project-registry tests: the recent-projects Settings section (touch/dedupe/order/cap/remove +
-// store round-trip), manifest probing, the engine-version relation, and the manifest backup -
-// the headless core of the built-in project manager.
+// Project-registry tests, the headless core of the built-in project manager: the recent-projects
+// Settings section (touch, dedupe, order, cap, remove and the store round-trip), manifest probing,
+// the engine-version relation, and the manifest backup.
 
 #include <doctest/doctest.h>
 
@@ -72,7 +72,7 @@ TEST_CASE("project-registry: touch inserts most-recent-first, dedupes, and caps"
     CHECK(reg.entries[0].engineVersion.AsView() == u8"0.2.0");
     CHECK(reg.entries[1].path.AsView() == u8"/projects/b");
 
-    // The cap drops the OLDEST entries.
+    // The cap drops the oldest entries.
     for (u32 i = 0; i < kRecentProjectsSettingsMaxEntries + 5; ++i)
     {
         const String p = Format(u8"/projects/p{}", i);
@@ -186,7 +186,7 @@ TEST_CASE("project-manager controller: open gates + prompt copy + registry pass-
     controller.DecideOpen(u8"scratch_manager_no_such_dir", decision);
     CHECK(decision.gate == ProjectOpenGate::NotAProject);
 
-    // A freshly scaffolded project is stamped with THIS engine: opens directly.
+    // A freshly scaffolded project is stamped with this engine, so it opens directly.
     const StringView dir = u8"scratch_manager_gate_test";
     RemoveProjectTree(dir);
     REQUIRE(controller.Create(dir, u8"Gate Test").IsOk());
@@ -194,8 +194,8 @@ TEST_CASE("project-manager controller: open gates + prompt copy + registry pass-
     CHECK(decision.gate == ProjectOpenGate::OpenDirectly);
     CHECK(decision.probed.name.AsView() == u8"Gate Test");
 
-    // Rewrite the manifest with a NEWER stamp (raw text edit: SaveProjectSettings re-stamps
-    // to the current engine by design, so it cannot write a foreign version).
+    // Rewrite the manifest with a newer stamp as a raw text edit: SaveProjectSettings always
+    // stamps the current engine, so it cannot write a foreign version.
     {
         const String manifest = PathJoin(dir, u8"Project.xml");
         Result<Array<byte>> bytes = ReadFile(manifest.AsView());
@@ -255,8 +255,8 @@ TEST_CASE("project manifest v7: defaultUiFontId (and the once-dropped defaults) 
         UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
         REQUIRE(project);
         project->Settings().defaultUiFontId = fontId;
-        project->Settings().defaultBusLayoutId = busId; // the per-field move must not DROP this
-        project->Settings().guiLoadingDocumentId = loadingId; // nor these two, which it did drop
+        project->Settings().defaultBusLayoutId = busId; // the per-field move must not drop this
+        project->Settings().guiLoadingDocumentId = loadingId; // nor these two
         project->Settings().renderMsaaSamples = 4;
         REQUIRE(project->SaveSettings().IsOk());
     }
@@ -273,14 +273,13 @@ TEST_CASE("project manifest v7: defaultUiFontId (and the once-dropped defaults) 
 
 TEST_CASE("editor.settings: every registered section type is INSTANTIABLE (factory too)")
 {
-    // A section type registered without RegisterSerializable is a time bomb: the first
-    // save that includes it makes every later Load abort mid-file (Settings phase-1
-    // semantics), silently dropping the sections after it - the empty-project-list
-    // incident (EditorUiSettings had a type registration but no factory).
+    // A section type registered without RegisterSerializable breaks the store: the first
+    // save that includes it makes every later Load abort mid-file, silently dropping the
+    // sections after it (an empty recent-projects list, for example).
     RegisterEditorSettingsTypes();
     RegisterProjectRegistryTypes();
-    // Every ISerializable registered in the Editor domain, asked of the registry - not a list
-    // kept by hand here, which the shortcut section proved nobody extends (it was missing).
+    // Every ISerializable registered in the Editor domain, asked of the registry rather than a
+    // list kept by hand here, so a new section is covered without editing this test.
     usize checked = 0;
     for (const TypeInfo* type : GlobalTypeRegistry().All())
     {
@@ -293,7 +292,7 @@ TEST_CASE("editor.settings: every registered section type is INSTANTIABLE (facto
         CHECK(GlobalSerializableRegistry().Create(type->id).Get() != nullptr);
         ++checked;
     }
-    CHECK(checked >= 6u); // export, font, ui, mcp, shortcuts, recent projects - at least
+    CHECK(checked >= 6u); // at least export, font, ui, mcp, shortcuts and recent projects
 }
 
 TEST_CASE("editor.settings: the MCP section round-trips, and a minted token is a fresh Guid")
@@ -371,15 +370,15 @@ TEST_CASE("editor.settings: a store with EVERY section round-trips (registry sur
     const EditorUiSettings* ui = loaded.Find<EditorUiSettings>();
     REQUIRE(ui != nullptr);
     CHECK(ui->uiScale == doctest::Approx(1.2f));
-    CHECK(ui->scheme == String(u8"light")); // the look's inputs (appended 2026-10-24)
+    CHECK(ui->scheme == String(u8"light")); // the look's inputs (appended fields)
     CHECK(ui->accent == String(u8"#0f8a7e"));
     CHECK(ui->density == String(u8"comfortable"));
     CHECK(ui->reduceMotion);
 }
 
-// Sedulous c5100e94: the Game tab's preview resolutions seed the common sizes once, a user's
-// removal stays removed, and the list round-trips through the store; the per-project choice
-// rides the project store.
+// The Game tab's preview resolutions seed the common sizes once, a size the user removes stays
+// removed, and the list round-trips through the store; the per-project choice is kept in the
+// project store.
 TEST_CASE("editor.settings: the preview resolutions seed once and round-trip")
 {
     RegisterEditorSettingsTypes();

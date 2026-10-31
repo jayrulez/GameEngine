@@ -2,8 +2,8 @@
 # loader; built only when the Vulkan SDK/headers are available.
 
 util_add_engine_library(RHI.Vulkan ALIAS Foundation::RHI.Vulkan)
-# VkApplicationInfo identity: the app + engine names reported to the Vulkan driver/tools, baked
-# from the CMake project name (VkBackend.cppm requires these - no in-source default).
+# VkApplicationInfo identity: the app and engine names reported to the Vulkan driver and tools,
+# baked from the CMake project name (VkBackend.cppm requires these and has no default).
 target_compile_definitions(RHI.Vulkan PRIVATE
     VULKAN_APPLICATION_NAME=\"${PROJECT_NAME}\"
     VULKAN_ENGINE_NAME=\"${PROJECT_NAME}\")

@@ -1,5 +1,4 @@
-# Foundation::Fonts.TrueType - `foundation.fonts.truetype` (stb_truetype backend + VFS service).
-# Ported from Sedulous.Fonts.TTF (deps: Fonts, Fonts.IO, Images, VFS, stb_truetype).
+# Foundation::Fonts.TrueType - `foundation.fonts.truetype` (stb_truetype backend and VFS service).
 
 util_add_engine_library(Fonts.TrueType ALIAS Foundation::Fonts.TrueType)
 target_link_libraries(Fonts.TrueType

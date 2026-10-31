@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// DXC shader compiler - loads dxcompiler.dll/libdxcompiler.so at runtime.
-/// Ported from Sedulous.Shaders/ShaderCompiler.bf via the port.
+/// DXC shader compiler: loads dxcompiler.dll or libdxcompiler.so at runtime.
 
 module;
 
@@ -78,7 +77,7 @@ namespace foundation::shaders
 
     static CompilerState* stateOf(Compiler* c) { return static_cast<CompilerState*>(c->state); }
 
-    // wchar_t (DXC) -> UTF-8 std::string. The inverse of widen() below: on Windows (UTF-16)
+    // wchar_t (DXC) to a UTF-8 std::string. The inverse of widen() below: on Windows (UTF-16)
     // surrogate pairs recombine; on Linux (UTF-32) each unit is a code point.
     static std::string narrow(const wchar_t* text)
     {
@@ -125,9 +124,9 @@ namespace foundation::shaders
         return out;
     }
 
-    // An include path as the preprocessor formed it, as a resolver and a `#line` want it:
-    // backslashes -> '/', any leading "./" stripped (DXC prefixes the includer's "current dir"
-    // that way).
+    // An include path as the preprocessor formed it, in the form a resolver and a `#line` want:
+    // backslashes become '/', and any leading "./" is stripped (DXC prefixes the includer's
+    // "current dir" that way).
     static std::string normalizeIncludePath(LPCWSTR pFilename)
     {
         std::string path = narrow(pFilename);
@@ -146,14 +145,13 @@ namespace foundation::shaders
     }
 
     // The one include handler every compile gives DXC. The preprocessor forms each candidate path
-    // itself, as it always has (a quoted include: the includer's directory first, then each -I
-    // directory in order) and asks for it; this handler serves the candidate from the caller's
-    // resolver when one is set (no disk access, a miss is "not found"), else from disk through
-    // DXC's default handler. Either way an `effect` block in the served text is expanded before
-    // DXC sees it, so an effect's include works on the cook's disk route and the editor's
-    // resolver route alike (Specs/wind-for-every-shader.md). A text without an effect block is
-    // served as it was read. Lives for one Compile call (stack-owned; DXC does not retain it),
-    // so the refcount is nominal.
+    // itself (for a quoted include: the includer's directory first, then each -I directory in
+    // order) and asks for it. This handler serves the candidate from the caller's resolver when
+    // one is set (no disk access; a miss is "not found"), else from disk through DXC's default
+    // handler. Either way an `effect` block in the served text is expanded before DXC sees it,
+    // so an effect's include works on the cook's disk route and the editor's resolver route
+    // alike. A text without an effect block is served as it was read. The handler lives for one
+    // Compile call (stack-owned; DXC does not retain it), so the refcount is nominal.
     class EngineIncludeHandler final : public IDxcIncludeHandler
     {
     public:
@@ -254,7 +252,7 @@ namespace foundation::shaders
         ULONG m_refs = 1;
     };
 
-    // StringView (UTF-8) -> std::wstring for DXC. Decodes UTF-8 codepoints,
+    // StringView (UTF-8) to std::wstring for DXC. Decodes UTF-8 codepoints,
     // then on Windows (wchar_t = UTF-16) emits surrogate pairs for astral code
     // points; on Linux (wchar_t = UTF-32) emits the codepoint directly.
     static std::wstring widen(StringView s)
@@ -633,16 +631,16 @@ namespace foundation::shaders
             }
             else
             {
-                // dxcompilerPath is already UTF-8 - feed it to dlopen directly.
+                // dxcompilerPath is already UTF-8, so dlopen takes it directly.
                 path.assign(reinterpret_cast<const char*>(desc.dxcompilerPath.Data()),
                             desc.dxcompilerPath.Size());
             }
             s->dxcompiler = dlopen(path.c_str(), RTLD_LAZY | RTLD_LOCAL);
-            // Fallback for a RELOCATED dist: BUILDSYSTEM_DXC_PATH is the vendored source-tree lib's
-            // ABSOLUTE path, which does not exist on another machine. Retry the bare soname so the
-            // dynamic loader searches the binary's RUNPATH ($ORIGIN => the libdxcompiler.so staged
-            // beside the executable), LD_LIBRARY_PATH, and the system dirs (mirrors the Win32
-            // dxcompiler.dll fallback above).
+            // Fallback for a relocated dist: BUILDSYSTEM_DXC_PATH is the absolute path of the
+            // vendored library in the source tree, which does not exist on another machine. Retry
+            // the bare soname so the dynamic loader searches the binary's RUNPATH ($ORIGIN, where
+            // libdxcompiler.so is staged beside the executable), LD_LIBRARY_PATH and the system
+            // dirs, as the Win32 dxcompiler.dll fallback above does.
             if (s->dxcompiler == nullptr && path != "libdxcompiler.so")
             {
                 s->dxcompiler = dlopen("libdxcompiler.so", RTLD_LAZY | RTLD_LOCAL);

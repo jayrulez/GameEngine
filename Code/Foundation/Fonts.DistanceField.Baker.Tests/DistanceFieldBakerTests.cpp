@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // DistanceFieldFontAtlasBaker diagnostics: bake real Roboto glyphs and inspect where the MSDF baker places
-// them in their cell, versus the known-good coverage (stb pack) path. This CONFIRMS the reported
-// symptom (descenders like g/q clipped, glyphs mis-registered) by measuring the baked cell's ink
-// distribution instead of eyeballing it on screen. Also a regression guard once the baker is fixed.
+// them in their cell, versus the known-good coverage (stb pack) path. Measuring the baked cell's ink
+// distribution guards against descenders like g/q being clipped and glyphs being mis-registered,
+// without eyeballing it on screen.
 
 #include <doctest/doctest.h>
 #include <cstdio>
@@ -23,7 +23,7 @@ using namespace foundation::fonts;
 namespace
 {
     // "<data root>" + rel (rel starts with '/'): the bundled fonts are found the way
-    // every executable finds engine data - the Data/.dataroot walk from the test binary.
+    // every executable finds engine data: the Data/.dataroot walk from the test binary.
     String AssetPath(const char* rel)
     {
         String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there
@@ -129,7 +129,7 @@ TEST_CASE("df.baker: MSDF glyph orientation matches the coverage path (not verti
     REQUIRE(dfR.HasValue());
     IFontAtlas* msdf = dfR.Value();
 
-    // 'F' is strongly TOP-heavy (top bar + middle bar + left stem); a vertical flip inverts that.
+    // 'F' is strongly top-heavy (top bar, middle bar, left stem); a vertical flip inverts that.
     const i32 F = static_cast<i32>('F');
     const InkStats covF = Analyze(coverage, 1, F);
     const InkStats dfF = Analyze(msdf, 4, F);
@@ -140,7 +140,7 @@ TEST_CASE("df.baker: MSDF glyph orientation matches the coverage path (not verti
     REQUIRE(covF.total > 0);
     REQUIRE(dfF.total > 0);
     // 'F' is thin strokes: a correct decode fills only a fraction of the cell. If the winding is
-    // reversed (msdfgen fills the exterior), nearly the WHOLE cell reads inside - guard that.
+    // reversed (msdfgen fills the exterior), nearly the whole cell reads inside; guard that.
     CHECK(dfF.total < (dfF.cellW * dfF.cellH) / 2); // < 50% (F is ~15-20%)
     // Known-good coverage is top-heavy; the MSDF cell must agree in sign (else it's flipped).
     CHECK(covF.topHalf > covF.bottomHalf);
@@ -164,10 +164,10 @@ TEST_CASE("df.baker: descender glyphs keep their tail (g/q not clipped like a)")
     REQUIRE(dfR.HasValue());
     IFontAtlas* msdf = dfR.Value();
 
-    // A descender glyph must have ink in the LOWER portion of its cell (the tail). If the baker
+    // A descender glyph must have ink in the lower portion of its cell (the tail). If the baker
     // clips or mis-registers it, the bottom of the cell is empty and 'g' reads like 'a'.
     const i32 g = static_cast<i32>('g');
-    const i32 o = static_cast<i32>('o'); // no descender - reference
+    const i32 o = static_cast<i32>('o'); // no descender: the reference
     const InkStats dfG = Analyze(msdf, 4, g);
     const InkStats dfO = Analyze(msdf, 4, o);
     std::printf("descender:\n");
@@ -176,7 +176,7 @@ TEST_CASE("df.baker: descender glyphs keep their tail (g/q not clipped like a)")
 
     REQUIRE(dfG.total > 0);
     REQUIRE(dfO.total > 0);
-    // 'g' has a descender, 'o' does not: the 'g' cell should be taller AND its ink should reach
+    // 'g' has a descender, 'o' does not: the 'g' cell should be taller and its ink should reach
     // into the bottom third of the cell.
     CHECK(dfG.cellH > dfO.cellH);
     CHECK(dfG.maxRow > (dfG.cellH * 2) / 3);
@@ -200,7 +200,7 @@ TEST_CASE("df.baker: blank glyphs (space) get an advance-only region")
     REQUIRE(dfR.HasValue());
     IFontAtlas* atlas = dfR.Value();
 
-    // Space has no outline but MUST carry its advance, or cursor-walk draw paths
+    // Space has no outline but must carry its advance, or cursor-walk draw paths
     // render "hello world" as "helloworld".
     AtlasRegion space;
     REQUIRE(atlas->TryGetRegion(atlas->GlyphFor(' '), space));
@@ -266,7 +266,7 @@ TEST_CASE("df.baker: alpha holds the true distance, round where the multi-channe
     REQUIRE(medianInside > 0);
     // The same glyph: the two edges agree but for antialiasing rounding along the outline.
     CHECK(agree >= reg.width * reg.height * 98 / 100);
-    // Alpha is a field, not the old constant 255: the cell's margin reads outside.
+    // Alpha is a field, not a constant 255: the cell's margin reads outside.
     CHECK(alphaInside < reg.width * reg.height / 2);
     // Grown past the edge, both cover more than the glyph; the round corners cover less.
     CHECK(alphaGrown > alphaInside);
@@ -430,8 +430,8 @@ TEST_CASE("df.baker: glyphs that cannot fit the maximum fail the bake instead of
 TEST_CASE("df baker: baking is deterministic across runs (parallel-bake regression net)")
 {
     // The MSDF generation fans out across worker threads; the pack order and every
-    // baked byte must still be scheduling-independent. Two bakes of the same font +
-    // options must agree exactly - regions and pixels both.
+    // baked byte must still be scheduling-independent. Two bakes of the same font and
+    // options must agree exactly, regions and pixels both.
     IFont* font = LoadRoboto();
     REQUIRE(font != nullptr);
 
@@ -483,8 +483,8 @@ TEST_CASE("df baker: baking is deterministic across runs (parallel-bake regressi
 
 TEST_CASE("distancefield: Initialize is safe to call from many threads at once (the font cook does)")
 {
-    // FontAssetBuilder calls this per build on job workers. A plain null check let two of them
-    // each create and register a baker: the second leaked and the factory list held both.
+    // FontAssetBuilder calls this per build on job workers, so two of them must not each
+    // create and register a baker (the second would leak and the factory list hold both).
     JobSystem jobs(DefaultAllocator(), 4);
     jobs.ParallelFor(64, [](u32) { DistanceFieldFonts::Initialize(); }, 1);
     CHECK(DistanceFieldFonts::IsInitialized());

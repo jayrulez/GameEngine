@@ -3,13 +3,10 @@
 
 // UI - :style_value partition
 //
-// A tagged value stored in a StyleRule: a discriminated union of Color / Float / Thickness /
-// Drawable / Bool / String / None. Ported from Sedulous.UI/src/Styling/StyleValue.bf.
-//
-// Divergence (language): Beef discriminated union -> a kind + separate storage members. This makes
-// the ownership Beef managed by hand (DrawableRef AddRef/Release, StringRef copy/delete) automatic:
-// the Drawable is a RefPtr<Drawable> and the string is an owned String, so copy/move/destroy of a
-// StyleValue is correct with no manual refcounting.
+// A tagged value stored in a StyleRule: Color, Float, Thickness, Drawable, Bool, String, None and
+// the richer kinds below. It is a kind plus separate storage members rather than a union, so the
+// Drawable is a RefPtr<Drawable> and the string an owned String, and copying, moving or destroying
+// a StyleValue needs no manual reference counting.
 
 module;
 #include "Core/Prelude.h"
@@ -17,7 +14,7 @@ module;
 
 export module foundation.ui:style_value;
 
-import foundation.core; // Color, Optional, RefPtr, String, StringView, HashText
+import foundation.core;
 import :thickness;
 import :unit;
 import :drawable;
@@ -31,7 +28,7 @@ export namespace foundation::ui
 {
     class StyleValue;
 
-    /// One `box-shadow` (or text effect): the CSS tuple. Offsets/blur/spread are logical units (dp)
+    /// One `box-shadow` (or text effect): the CSS tuple. Offsets, blur and spread are logical units (dp)
     /// at resolve time; the VG draws it as one blurred rounded-rect (VGContext::FillBoxShadow). A
     /// box-shadow value holds a list of them (StyleValue::AsShadows).
     struct BoxShadow
@@ -278,7 +275,7 @@ export namespace foundation::ui
     };
 
     /// The parsed `transition:` list, shared by every StyleValue copy that carries it. An
-    /// EMPTY list is `transition: none` (it still wins the cascade over a UA `all`).
+    /// empty list is `transition: none` (it still wins the cascade over a UA `all`).
     class TransitionList : public Object
     {
         RTTI_OBJECT(TransitionList, Object)
@@ -287,7 +284,7 @@ export namespace foundation::ui
 
         TransitionList() = default;
 
-        /// The entry governing `prop`: the LAST one naming it or `all` (CSS: later entries
+        /// The entry governing `prop`: the last one naming it or `all` (in CSS, later entries
         /// override earlier ones), or null when nothing covers it.
         [[nodiscard]] const TransitionSpec* Find(StyleProperty prop) const noexcept
         {
@@ -335,7 +332,7 @@ export namespace foundation::ui
         AnimationFill Fill = AnimationFill::None;
     };
 
-    /// The parsed `animation:` list, shared by every StyleValue copy that carries it. An EMPTY
+    /// The parsed `animation:` list, shared by every StyleValue copy that carries it. An empty
     /// list is `animation: none`.
     class AnimationList : public Object
     {
@@ -347,7 +344,7 @@ export namespace foundation::ui
     };
 
     /// A `var(--name, fallback)` reference: resolved against the view's custom properties at
-    /// COMPUTE time (never at parse time - the value depends on where the view sits). Shared
+    /// compute time, never at parse time, since the value depends on where the view sits. Shared
     /// by every copy of the StyleValue that carries it; immutable once built.
     class VariableReference : public Object
     {
@@ -374,7 +371,7 @@ export namespace foundation::ui
             Drawable,
             Bool,
             String,
-            /// A length with units (percent/em/calc sums); plain numbers stay Float.
+            /// A length with units (percent, em, calc sums); plain numbers stay Float.
             Length,
             /// A BoxShadow tuple (box-shadow).
             Shadow,
@@ -563,7 +560,7 @@ export namespace foundation::ui
 
         [[nodiscard]] Kind GetKind() const noexcept { return m_kind; }
         [[nodiscard]] bool IsNone() const noexcept { return m_kind == Kind::None; }
-        /// Inherit/Initial/Variable: needs the cascade to turn it into a concrete value.
+        /// Inherit, Initial or Variable: needs the cascade to turn it into a concrete value.
         [[nodiscard]] bool NeedsResolution() const noexcept
         {
             return m_kind == Kind::Inherit || m_kind == Kind::Initial || m_kind == Kind::Variable;
@@ -583,7 +580,6 @@ export namespace foundation::ui
             return m_kind == Kind::Variable ? m_variable.Get() : nullptr;
         }
 
-        /// Try to get as Color / Float / Thickness / Bool (empty Optional if the kind differs).
         /// The transition list (null unless Kind::Transitions). Borrowed: valid while this
         /// value (or the rule holding it) lives.
         [[nodiscard]] const TransitionList* AsTransitions() const noexcept
@@ -672,7 +668,7 @@ export namespace foundation::ui
     };
 
     /// Equality for transition retargeting: same kind and same payload (drawables by
-    /// identity). Keywords/variables compare unequal (they are resolved before this).
+    /// identity). Keywords and variables compare unequal (they are resolved before this).
     [[nodiscard]] inline bool StyleValueEquivalent(const StyleValue& a, const StyleValue& b)
     {
         if (a.GetKind() != b.GetKind())
@@ -870,7 +866,7 @@ export namespace foundation::ui
     /// The value `t` of the way from `a` to `b` (t clamped to 0..1). Colors, floats,
     /// thicknesses, lengths (component-wise; a Float promotes to a dp Length when mixed) and
     /// shadows interpolate; every other kind switches at the midpoint (CSS discrete
-    /// animation) - drawables included, whose cross-fade the draw path handles separately.
+    /// animation), drawables included, whose cross-fade the draw path handles separately.
     [[nodiscard]] inline StyleValue LerpStyleValue(const StyleValue& a, const StyleValue& b, f32 t)
     {
         if (t <= 0.0f)

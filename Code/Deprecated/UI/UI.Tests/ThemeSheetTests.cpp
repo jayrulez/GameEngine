@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Built-in theme sheet gates. The sheets are authored against the shared design system; the
-// legacy C++ builders are kept only as a parse-failure belt.
-// These gates check what must stay true regardless of look: every sheet parses non-empty
-// under its palettes, the design-system ramps hold (16/14/12), and the icon vocabulary
-// resolves to real drawables (svg() must never silently null).
+// Checks on the built-in theme sheets. The sheets are written against the shared design system;
+// the older C++ builders remain only as a fallback when a sheet fails to parse.
+// These checks hold whatever the look: every sheet parses non-empty under its palettes, the
+// design-system type ramp holds (16, 14, 12), and the icon vocabulary resolves to real drawables
+// (svg() never silently returns null).
 #include <doctest/doctest.h>
 #include <cstdio>
 #include "Core/Prelude.h"
@@ -85,7 +85,7 @@ namespace
     /// The full design-system contract shared by all built-in sheets.
     void CheckDesignSystem(const StyleSheet& sheet)
     {
-        // Type ramp: 16 default / 14 inputs / 12 compact chrome.
+        // Type ramp: 16 by default, 14 for inputs, 12 for compact chrome.
         CheckFontSize(sheet, &View::StaticType(), 16.0f);
         CheckFontSize(sheet, &ButtonBase::StaticType(), 12.0f);
         CheckFontSize(sheet, &ComboBox::StaticType(), 12.0f);
@@ -93,7 +93,7 @@ namespace
         CheckFontSize(sheet, &NumericField::StaticType(), 14.0f);
         CheckFontSize(sheet, &Expander::StaticType(), 14.0f);
 
-        // Global defaults: themed text + accent + semantic status colors on the View base type
+        // Global defaults: themed text, accent and semantic status colors on the View base type
         // (toasts and validation resolve success/warning/error through the theme).
         CHECK(FindValue(sheet, &View::StaticType(), {}, StyleProperty::TextColor) != nullptr);
         CHECK(FindValue(sheet, &View::StaticType(), {}, StyleProperty::AccentColor) != nullptr);
@@ -101,7 +101,8 @@ namespace
         CHECK(FindValue(sheet, &View::StaticType(), {}, StyleProperty::WarningColor) != nullptr);
         CHECK(FindValue(sheet, &View::StaticType(), {}, StyleProperty::ErrorColor) != nullptr);
 
-        // Spacing scale: button pad 8 12 (CSS v h -> Thickness l12 t8 r12 b8), input pad 4 6.
+        // Spacing scale: button padding 8 12 (CSS vertical then horizontal, so Thickness l12 t8 r12 b8),
+        // input padding 4 6.
         {
             const StyleValue* v =
                 FindValue(sheet, &ButtonBase::StaticType(), {}, StyleProperty::Padding);
@@ -123,9 +124,9 @@ namespace
             CHECK(t.Top == 4.0f);
         }
         {
-            // Icon chrome pads 2 - REGRESSION GATE: without an explicit rule IconButton
-            // inherits ButtonBase's button-bar padding (8 12) via subclass matching and
-            // overflows tight header bands (the inspector section-header finding).
+            // Icon chrome has padding 2. Without an explicit rule, IconButton would inherit
+            // ButtonBase's button-bar padding (8 12) through subclass matching and overflow tight
+            // header bands.
             const StyleValue* v =
                 FindValue(sheet, &IconButton::StaticType(), {}, StyleProperty::Padding);
             REQUIRE(v != nullptr);
@@ -134,8 +135,8 @@ namespace
             CHECK(v->AsThickness().Value().Top == 2.0f);
         }
 
-        // Icon vocabulary: 11 icon rules (check/radio marks, close, 4 chevrons, submenu
-        // arrow, combo arrow, 2 spin arrows) - each must have resolved to a real SVGDrawable.
+        // Icon vocabulary: 11 icon rules (the check and radio marks, close, 4 chevrons, the
+        // submenu arrow, the combo arrow, 2 spin arrows), each resolved to a real SVGDrawable.
         CHECK(CountSvgIconRules(sheet) >= 11);
 
         // Sunken inputs carry a background drawable.
@@ -181,9 +182,9 @@ TEST_CASE("theme-sheets: rounded-dark.sss parses and holds the design system (ed
 
 TEST_CASE("theme-sheets: Create() serves the parsed sheet (belt does not engage)")
 {
-    // DarkTheme::Create falls back to the legacy C++ builder ONLY on a parse failure of the
-    // embedded sheet; a healthy build must serve the parsed one. The legacy builder has no
-    // AccentColor on the View rule - its presence proves the parsed path.
+    // DarkTheme::Create falls back to the C++ builder only when the embedded sheet fails to
+    // parse, so a healthy build serves the parsed sheet. The C++ builder sets no AccentColor on
+    // the View rule, so its presence shows the parsed path was taken.
     RefPtr<StyleSheet> sheet = DarkTheme::Create(DefaultAllocator(), ThemePalette::Dark());
     REQUIRE(sheet.Get() != nullptr);
     CHECK(FindValue(*sheet, &View::StaticType(), {}, StyleProperty::AccentColor) != nullptr);

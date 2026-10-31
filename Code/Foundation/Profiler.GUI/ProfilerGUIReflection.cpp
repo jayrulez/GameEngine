@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Profiler.GUI - the views' reflection and their registration as elements: markup
-// places them, the application gives their focus and axis in code.
+// Foundation::Profiler.GUI - the views' reflection and their registration as elements. Markup
+// places the views, and the application sets their focus and axis in code.
 
 module;
 #include "Core/Prelude.h"

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// msdfgen wrapper - C++ TU that includes msdfgen headers.
+// msdfgen wrapper: the C++ TU that includes msdfgen headers.
 // Builds msdfgen::Shape from stb_truetype glyph vertices and generates MSDF bitmaps.
 
 #include "msdfgen_impl.h"
@@ -28,9 +28,9 @@ namespace foundation::fonts::df
         for (int i = 0; i < numVerts; ++i)
         {
             const stbtt_vertex& v = vertices[i];
-            // NATIVE (Y-up) font-unit coordinates - do NOT negate Y (that reverses every contour's
-            // winding, which msdfgen reads as inside<->outside and fills the whole cell). The
-            // Y-up -> top-down atlas mapping is done entirely in the projection (see the baker).
+            // Native (Y-up) font-unit coordinates. Do not negate Y: that reverses every contour's
+            // winding, which msdfgen reads as inside and outside swapped, filling the whole cell.
+            // The Y-up to top-down atlas mapping is done entirely in the projection (see the baker).
             const msdfgen::Point2 p(static_cast<double>(v.x), static_cast<double>(v.y));
 
             switch (v.type)
@@ -93,7 +93,7 @@ namespace foundation::fonts::df
 
         // SDFTransformation: Projection maps shape coords (font units) to pixel coords.
         // DistanceMapping (Range) converts shape-unit distances to [0,1].
-        // Range must be in FONT UNITS: pxRange pixels = pxRange/scale font units.
+        // Range must be in font units: pxRange pixels = pxRange/scale font units.
         const double shapeRange = pxRange / scaleX;
         msdfgen::SDFTransformation transform(
             msdfgen::Projection(msdfgen::Vector2(scaleX, scaleY),
@@ -101,10 +101,10 @@ namespace foundation::fonts::df
             msdfgen::Range(shapeRange));
         msdfgen::generateMTSDF(msdf, shape, transform);
 
-        // Convert float RGBA -> RGBA8 (A = the true distance). msdfgen's bitmap is Y-up (row 0 = bottom); flip
-        // vertically to the top-down atlas convention (row 0 = glyph top) the coverage atlas +
-        // draw path expect. This also lands descenders (low font Y -> low msdfgen row) near the
-        // cell's BOTTOM after the flip, instead of clipping them.
+        // Convert float RGBA to RGBA8 (A = the true distance). msdfgen's bitmap is Y-up (row 0 = bottom); flip
+        // vertically to the top-down atlas convention (row 0 = glyph top) the coverage atlas and
+        // draw path expect. This also lands descenders (low font Y, so low msdfgen row) near the
+        // cell's bottom after the flip, instead of clipping them.
         for (i32 y = 0; y < height; ++y)
         {
             for (i32 x = 0; x < width; ++x)

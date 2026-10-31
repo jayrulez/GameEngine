@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the layout tools over the editor's dock: layout_get's tree of splits (any
-// number of children, with their weights) and stacks, panel_dock putting one Game tab beside
-// another (the networked playtest's layout), a side's share, a tab back into a stack, a hidden
-// panel docked again, and the refusals.
+// Editor::App tests: the layout tools over the editor's dock. Covers layout_get's tree of splits
+// (any number of children, with their weights) and stacks; panel_dock putting one Game tab beside
+// another (the layout of a networked playtest), with a share for the new side; a tab docked back
+// into a stack; a hidden panel docked again; and the refusals.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -176,8 +176,8 @@ TEST_CASE("layout-tools: two Game tabs go side by side, then back into one stack
     CHECK(GroupOf(root, u8"welcome") == GroupOf(root, u8"game-page"));
     CHECK_FALSE(GroupOf(root, u8"console").IsEmpty());
 
-    // The client to the right of the host: across, the host's stack then the client alone, half
-    // each.
+    // The client goes to the right of the host: a horizontal split, the host's stack and then the
+    // client alone, half each.
     got = Call(rig.server, u8"panel_dock", u8"{\"panel\":\"game-page-1\",\"position\":\"right\",\"relativeTo\":\"game-page\"}");
     REQUIRE(got.ok);
     {
@@ -206,7 +206,7 @@ TEST_CASE("layout-tools: two Game tabs go side by side, then back into one stack
 TEST_CASE("layout-tools: a side's share is the moved panel's, on either side")
 {
     LayoutRig rig;
-    // Below the host, three tenths of the room it had.
+    // Below the host, taking three tenths of the host's room.
     Answer got = Call(rig.server, u8"panel_dock",
                       u8"{\"panel\":\"game-page-1\",\"position\":\"bottom\",\"relativeTo\":\"game-page\",\"share\":0.3}");
     REQUIRE(got.ok);
@@ -215,7 +215,7 @@ TEST_CASE("layout-tools: a side's share is the moved panel's, on either side")
     CHECK(pair.axis == String(u8"vertical"));
     CHECK(pair.secondShare == doctest::Approx(0.3));
 
-    // Left of the host, a quarter: now the moved panel is first.
+    // Left of the host, taking a quarter: the moved panel comes first.
     got = Call(rig.server, u8"panel_dock",
                u8"{\"panel\":\"game-page-1\",\"position\":\"left\",\"relativeTo\":\"game-page\",\"share\":0.25}");
     REQUIRE(got.ok);

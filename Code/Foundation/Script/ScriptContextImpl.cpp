@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The current-script-context slot. Defined here - one per process per thread -
+// The current-script-context slot. It is defined here, one per process per thread,
 // because the pushers (script backends) and readers (native facades) live in
-// different libraries; an inline thread_local in the interface would duplicate
-// per shared library (shared-libraries.md rendezvous rule).
+// different libraries; an inline thread_local in the interface would be duplicated
+// per shared library.
 
 module;
 #include "Core/Prelude.h"

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Particles.Pipeline - the particles domain's New Asset creators
-// (agent-playtesting-and-asset-creation.md P1): what File > New and asset_create make, with no
-// editor (the source database and the sources folder are all a creation needs).
+// Particles.Pipeline - the particles domain's New Asset creators: what File > New and
+// asset_create make, with no editor (the source database and the sources folder are all a
+// creation needs).
 
 module;
 #include "Core/Prelude.h"
@@ -64,7 +64,7 @@ namespace pipeline
     // The asset types' reflection: their display names (the editor shows them as the asset's kind).
     REFLECT_MEMBERS(ParticleEffectAsset, "rtti::pipeline::particles")
     {
-        // v1 (2026-10-27): each system its sub-emitters; v0's effect-level links read onto them.
+        // v1: each system its sub-emitters; v0's effect-level links read onto them.
         builder.DataVersion(1).ReadsDataVersionsFrom(0).Attribute("displayName", String(u8"Particle Effect"));
     }
 }

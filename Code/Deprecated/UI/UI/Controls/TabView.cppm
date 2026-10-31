@@ -3,11 +3,9 @@
 
 // UI - :tab_view partition
 //
-// Tabbed container: clickable tab headers + switchable content, Top/Bottom/Left/Right strip placement,
-// optional closable tabs. Ported from Sedulous.UI/src/Controls/TabView.bf. Each tab's content is a
-// logical child (AddView -> ViewGroup RefPtr owns it); TabItem stores a BORROWED View* + an owned Title
-// String (RAII, no manual dtor). Beef SelectedIndex/TabCount get/set -> methods; RectangleF ->
-// core::Rectangle; CornerRadii fields are lowercase (topLeft/topRight/bottomRight/bottomLeft).
+// Tabbed container: clickable tab headers and switchable content, with Top/Bottom/Left/Right strip
+// placement and optional closable tabs. Each tab's content is a logical child (added with AddView,
+// so the ViewGroup's RefPtr owns it); TabItem stores a borrowed View* and an owned Title String.
 
 module;
 #include "Core/Prelude.h"
@@ -393,9 +391,8 @@ export namespace foundation::ui
             }
         }
 
-        // Tab hover is tracked in OnMouseMove, which stops firing once the cursor leaves the TabView - so
-        // clear the hovered tab here or it stays visually stuck in the Hover state. (Divergence from
-        // Sedulous, whose TabView has no OnMouseLeave and leaves the last tab highlighted.)
+        // Tab hover is tracked in OnMouseMove, which stops firing once the cursor leaves the TabView,
+        // so clear the hovered tab here or it stays visually stuck in the Hover state.
         void OnMouseLeave() override
         {
             if (m_hoveredTabIndex != -1)
@@ -433,7 +430,7 @@ export namespace foundation::ui
         }
 
         // Wheel over an overflowing tab strip scrolls the clipped tabs into view (there is no room for a
-        // scrollbar in the strip; selection changes auto-scroll too). Ported from the dock tab strip.
+        // scrollbar in the strip; selection changes auto-scroll too), as in the dock tab strip.
         void OnMouseWheel(MouseWheelEventArgs& e) override
         {
             if (!m_tabOverflow)
@@ -517,7 +514,7 @@ export namespace foundation::ui
             (void)left;
             (void)top;
             // Rebuild the tab hit-rects at layout time too (not just in OnDraw), so mouse hit-testing is
-            // valid immediately after layout - e.g. the first mouse-move before the first draw.
+            // valid immediately after layout (e.g. the first mouse-move before the first draw).
             RebuildTabRects();
             if (m_selectedIndex < 0 || m_selectedIndex >= static_cast<i32>(m_tabs.Size()))
             {
@@ -592,8 +589,8 @@ export namespace foundation::ui
             {
                 for (usize i = 0; i < m_tabs.Size(); ++i)
                 {
-                    // Title widths come from the value-keyed cache (RebuildTabRects runs in
-                    // BOTH OnLayout and OnDraw - shaping every title twice per frame added up).
+                    // Title widths come from the value-keyed cache: RebuildTabRects runs in both
+                    // OnLayout and OnDraw, and shaping every title twice per frame is costly.
                     f32 tabW = (font != nullptr) ? m_titleWidths[i] + 24 : 80.0f;
                     if (m_tabs[i].IsClosable)
                     {
@@ -614,8 +611,8 @@ export namespace foundation::ui
             }
 
             // Clamp the scroll offset to the overflow, then bring the selected tab into view when a
-            // selection change requested it (mirrors the dock tab strip). Both run on the measured
-            // extents, so the drawn rects - reused for hit-testing - stay aligned with what's on screen.
+            // selection change requested it (as the dock tab strip does). Both run on the measured
+            // extents, so the drawn rects, which hit-testing reuses, stay aligned with what's on screen.
             const f32 available = horizontal ? Width() : Height();
             const f32 maxScroll = core::Max(0.0f, total - available);
             m_tabScroll = core::Clamp(m_tabScroll, 0.0f, maxScroll);
@@ -781,7 +778,7 @@ export namespace foundation::ui
         i32 m_hoveredTabIndex = -1;
         Array<Rectangle> m_tabRects;
         // Title-width measure cache: value-keyed (tabs generation + font family/size, never a
-        // font pointer). RebuildTabRects runs per layout AND per draw; titles change rarely.
+        // font pointer). RebuildTabRects runs per layout and per draw; titles change rarely.
         Array<f32> m_titleWidths;
         u32 m_tabsGeneration = 0;
         u32 m_titleWidthsGeneration = ~0u;

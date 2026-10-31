@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.vegetation - the component's reflection + wire (an array of layers), and the manager's
-// contract: sets built only for chunks in range, one MultiMeshRenderData per (layer, chunk) with
-// the fade prefix as its count, region-scoped regrow on a version bump, the build budget, and
-// nothing extra without a layer.
+// engine.vegetation: the component's reflection and serialization (an array of layers), and the
+// manager's contract: sets built only for chunks in range, one MultiMeshRenderData per (layer,
+// chunk) with the fade prefix as its count, region-scoped regrow on a version bump, the build
+// budget, and nothing extra without a layer.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -196,9 +196,9 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
     REQUIRE(category != nullptr);
     CHECK(*category->TryGet<String>() == String(u8"Terrain"));
 
-    // A new procedural layer (the inspector's add button default-constructs one) follows the
-    // MASK: it grows nothing until the component has a mask with paint on its plane (a Uniform
-    // default would grow the moment a mesh is assigned - the 2026-09-22 ruling, kept).
+    // A new procedural layer (the inspector's add button default-constructs one) follows the mask:
+    // it grows nothing until the component has a mask with paint on its plane (a Uniform default
+    // would grow the moment a mesh is assigned).
     CHECK(ProceduralVegetationLayer{}.placement == veg::VegetationPlacement::Mask);
     CHECK(ProceduralVegetationLayer{}.ToScatterLayer().placement == veg::VegetationPlacement::Mask);
     CHECK(PropVegetationLayer{}.ToScatterLayer().density == 0.0f); // rules only, no scatter
@@ -294,8 +294,8 @@ TEST_CASE("engine.vegetation: the component reflects (two lists of reflected lay
 
 namespace
 {
-    // The data-version-1 layout of a layer (one list, every field, `placement` 3 = Scattered),
-    // written the way a 2026-09-22 build wrote it: the legacy reader's fixture.
+    // The data-version-1 layout of a layer (one list, every field, `placement` 3 = Scattered): the
+    // legacy reader's fixture.
     struct LayerV1Fixture
     {
         String name;
@@ -344,10 +344,10 @@ namespace
 
 TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list payload into the two lists")
 {
-    // A component record as a 2026-09-22 scene stored it: the chain stamped version 1, then
-    // `layers` (Cube: Scattered with two instances; Grass: Mask on plane 0), `mask`, `visible`.
-    // The reader (ReadsDataVersionsFrom(1)) accepts it, the body branches on ar.Version() == 1
-    // and splits by placement; a re-save writes version 2 (the RTHomes1 scene's path).
+    // A component record in the version 1 layout: the chain stamped version 1, then `layers`
+    // (Cube: Scattered with two instances; Grass: Mask on plane 0), `mask`, `visible`. The reader
+    // (ReadsDataVersionsFrom(1)) accepts it, the body branches on ar.Version() == 1 and splits by
+    // placement; a re-save writes the current version.
     engine::vegetation::RegisterVegetationComponentReflection();
     const TypeInfo& type = TypeOf<TerrainVegetationComponent>();
     MemoryStream stream;
@@ -410,7 +410,7 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
     CHECK(loaded.propLayers[0].instances[1].m[3][0] == -5.0f);
     CHECK(loaded.mask.id == Guid{0x55u, 0x66u});
     CHECK(loaded.visible);
-    // The same body under the CURRENT version writes and reads the two lists (version 4).
+    // The same body under the current version writes and reads the two lists (version 4).
     MemoryStream again;
     {
         BinarySerializer ar(again, SerializeMode::Write);
@@ -436,8 +436,7 @@ TEST_CASE("engine.vegetation: the legacy reader splits a data-version-1 one-list
 
 namespace
 {
-    // A procedural layer in the data-version-2 layout (one optional `material`), as a scene saved
-    // before 2026-10-05 stored it.
+    // A procedural layer in the data-version-2 layout (one optional `material`).
     void WriteLayerV2(ISerializer& ar, const Guid& meshId, const Guid& materialId)
     {
         String name(u8"Pines");
@@ -530,8 +529,8 @@ TEST_CASE("engine.vegetation: a data-version-2 layer's one material reads as its
     CHECK(loaded.proceduralLayers[1].materials.IsEmpty());
 }
 
-// Snowline's pines (bark, two needle greens, snow) drew white: a layer had one material and the
-// renderer was never told the mesh's slots. One entry covers the mesh; more route the submeshes.
+// A layer carries one material per mesh slot, so a multi-material mesh (a pine's bark, needles and
+// snow) draws each submesh with its own. One entry covers the mesh; more route the submeshes.
 TEST_CASE("engine.vegetation: a layer's materials reach the renderer per slot, one covering the mesh")
 {
     Fixture f;
@@ -565,7 +564,7 @@ TEST_CASE("engine.vegetation: a layer's materials reach the renderer per slot, o
         CHECK(s->submeshMaterials[1].Get() == needles.Get());
     }
 
-    // None: the default material (null), as before.
+    // None: the default material (null).
     f.Layer().materials.Clear();
     sets = f.Extract(snapshot, nullptr);
     for (const render::MultiMeshRenderData* s : sets)
@@ -632,7 +631,7 @@ TEST_CASE("engine.vegetation: the fade prefix thins by distance and out-of-range
     render::ExtractedScene snapshot{DefaultAllocator()};
 
     // The view over the (-32, -32) chunk's centre, 10 m up: that chunk is at distance 0, the
-    // diagonal one (32, 32) is ~ 90 - 45 = 45 m from its bounds (inside the fade), so it
+    // diagonal one (32, 32) is about 90 - 45 = 45 m from its bounds (inside the fade), so it
     // draws a partial prefix; the near chunks are full.
     const Float3 near{-32.0f, 12.0f, -32.0f};
     Array<const render::MultiMeshRenderData*> sets = f.Extract(snapshot, &near);
@@ -687,8 +686,8 @@ TEST_CASE("engine.vegetation: a version bump regrows only the touched chunks whe
         keys.PushBack(s->key);
     }
 
-    // A sculpt inside chunk (0, 0) only: bump + region -> ONE rebuild, its version bumps, the
-    // other three keep theirs.
+    // A sculpt inside chunk (0, 0) only: a bump and a region give one rebuild; its version bumps,
+    // the other three keep theirs.
     f.grid->BumpVersion();
     hf::HeightfieldRegion region;
     region.minX = 10;
@@ -851,7 +850,7 @@ TEST_CASE("engine.vegetation: no component, a hidden component, one off any terr
     sets = f.Extract(snapshot, nullptr);
     CHECK(sets.Size() == 4u);
 
-    // The component on a CHILD of the terrain entity grows on the parent's terrain; on an
+    // The component on a child of the terrain entity grows on the parent's terrain; on an
     // entity with no terrain above it, nothing.
     const scene::EntityHandle child = f.scene.CreateEntity(u8"dressing");
     f.scene.SetParent(child, f.terrain);
@@ -1000,8 +999,8 @@ TEST_CASE("engine.vegetation: an invalidated set keeps drawing its old instances
     CHECK(f.mgr->BuildCount() == 4u);
 
     // A sculpt (every chunk dirty) under a budget of one: every frame still draws all four
-    // sets - the three not yet rebuilt show their previous instances - while one rebuilds
-    // per extraction, so nothing blinks under the brush.
+    // sets (the three not yet rebuilt show their previous instances) while one rebuilds per
+    // extraction, so nothing blinks under the brush.
     f.mgr->SetBuildBudget(1);
     f.grid->BumpVersion();
     for (u32 frame = 1; frame <= 4; ++frame)
@@ -1017,7 +1016,7 @@ TEST_CASE("engine.vegetation: an invalidated set keeps drawing its old instances
     flowers.name = String(u8"Flowers");
     f.Component().proceduralLayers.PushBack(flowers);
     sets = f.Extract(snapshot, nullptr);
-    CHECK(sets.Size() == 5u); // the four grass sets + the one flower chunk built this frame
+    CHECK(sets.Size() == 5u); // the four grass sets and the one flower chunk built this frame
 
     // Authored props re-bucket outside the budget: a stroke lands whole in one extraction.
     f.Component().proceduralLayers.RemoveAt(1);
@@ -1163,12 +1162,11 @@ TEST_CASE("engine.vegetation: a stamped prop over a cut cell does not draw and c
     CHECK(TotalInstances(sets) == 3u);
 }
 
-// ---- vegetation colliders (Specs/vegetation-colliders.md) ----
+// ---- vegetation colliders ----
 
 namespace
 {
-    // A procedural layer in the data-version-3 layout (a material list, no collision), as a scene
-    // saved before 2026-10-06 stored it.
+    // A procedural layer in the data-version-3 layout (a material list, no collision).
     void WriteLayerV3(ISerializer& ar)
     {
         String name(u8"Pines");

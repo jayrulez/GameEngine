@@ -1,4 +1,4 @@
-// PlayerController - the player's movement, jump, facing and animation.
+// PlayerController: the player's movement, jump, facing and animation.
 //
 // On the Player entity, which carries a Character component (a kinematic capsule: its
 // position is the capsule's centre). The model is the entity's first child, the Character
@@ -7,11 +7,12 @@
 // The camera looks down -Z from behind, so the "Move" axis maps straight to the ground plane:
 // W (+Y) walks toward -Z, D (+X) toward +X.
 //
-// A fall or a hit is paced so the player can find themselves again: a poof where they went, a
-// moment out of sight while the camera glides back to the safe ground (the player already moved
-// there, facing the way they stood on it), a poof as they reappear, then a moment of blinking
-// in which nothing can hurt. Safe ground is a spot stood still on with ground all round it: near
-// an edge the nearest spot that has is kept instead, so a respawn never starts half off a ledge.
+// A fall or a hit is paced so the player can find their bearings again: a poof where they went, a
+// moment out of sight while the camera glides back to safe ground (the player has already moved
+// there, facing the way they stood on it), a poof as they reappear, then a moment of blinking in
+// which nothing can hurt them. Safe ground is a spot the player stood still on with ground all
+// round it. Near an edge, the nearest spot that meets that test is kept instead, so a respawn never
+// starts half off a ledge.
 //
 // The pad rumbles with the game: a heavy jolt for a fall or a hit, a sharp kick off a stomped
 // enemy, a thud for a hard landing, and a happy pulse at the flag.
@@ -62,16 +63,17 @@ class PlayerController
     private int m_deaths = 0;
     /// Seconds left of the grace after a respawn, while a hazard still touching cannot hurt.
     private float m_invulnerable = 0.0f;
-    /// How long the player has stood grounded; past a moment, where it stands is safe ground.
+    /// How long the player has stood grounded; after a moment, where it stands becomes safe
+    /// ground.
     private float m_groundedFor = 0.0f;
-    /// Grounded last frame, and how long the current time in the air has lasted.
+    /// Whether it was grounded last frame, and how long the current spell in the air has lasted.
     private bool m_wasGrounded = true;
     private float m_airTime = 0.0f;
-    /// The level is won: no more input, the player stands and enjoys it.
+    /// The level is won: input stops and the player stands and enjoys it.
     private bool m_celebrating = false;
-    /// Seconds left out of sight before reappearing (below 0: not respawning).
+    /// Seconds left out of sight before reappearing (below 0 when not respawning).
     private float m_respawning = -1.0f;
-    /// The current still moment has been looked at for safe ground (once per stand).
+    /// Whether the current stand has been checked for safe ground (once per stand).
     private bool m_safeChecked = false;
     /// The facing the player had on the safe ground, which a respawn gives back.
     private float m_spawnYaw = 0.0f;
@@ -121,8 +123,8 @@ class PlayerController
             showModel(true);
         }
         bool grounded = character.grounded();
-        // The feet stand on the ground under them only while the hero stands on it: in the air the
-        // jump pose holds them at the model's ground, and they would reach for the floor below.
+        // Foot IK is on only while the hero is grounded. In the air the jump pose holds the feet at
+        // the model's ground level, and IK would make them reach for the floor below.
         FootIkComponent@ feet = FootIkComponent::of(self);
         if (feet !is null)
         {
@@ -137,9 +139,9 @@ class PlayerController
         }
         m_airTime = grounded ? 0.0f : m_airTime + dt;
         m_wasGrounded = grounded;
-        // Safe ground: a spot stood STILL on for a moment becomes the respawn point, so a fall
-        // costs one jump, not the level. Still, because walking into a hazard passes over
-        // ground that is not safe; standing still inside a hazard's reach hurts at once.
+        // Safe ground: a spot stood still on for a moment becomes the respawn point, so a fall
+        // costs one jump, not the level. It must be still, because walking into a hazard passes
+        // over ground that is not safe, while standing still inside a hazard's reach hurts at once.
         bool still = (m_velX * m_velX + m_velZ * m_velZ) < 0.25f;
         m_groundedFor = (grounded && still) ? m_groundedFor + dt : 0.0f;
         if (m_groundedFor <= 0.0f)
@@ -235,7 +237,7 @@ class PlayerController
     }
 
     // A fall or a hit: a poof where the player went, then back to the last safe ground with no
-    // momentum, out of sight until the camera is there (onUpdate brings them back).
+    // momentum, kept out of sight until the camera arrives (onUpdate brings them back).
     void respawn()
     {
         if (m_respawning >= 0.0f)
@@ -265,8 +267,9 @@ class PlayerController
         }
     }
 
-    // The spot nearest `at` (searched on a 0.4 m grid out to 0.8 m) where the ground reaches
-    // safeMargin past it on all four sides, level with the player's feet: false when there is none.
+    // Finds the spot nearest `at` (searched on a 0.4 m grid out to 0.8 m) where the ground extends
+    // safeMargin past it on all four sides, level with the player's feet. Returns false when there
+    // is none.
     private bool findSafeSpot(Float3 at, Float3 &out spot)
     {
         array<float> steps = {0.0f, -0.4f, 0.4f, -0.8f, 0.8f};
@@ -293,8 +296,9 @@ class PlayerController
         return found;
     }
 
-    // Flat ground under (x, z) level with the player's feet. The islands' tops are flat and their
-    // edges rounded, so a probe on the bevel (a little lower) counts as the edge, not as ground.
+    // Whether there is flat ground under (x, z) level with the player's feet. The islands' tops are
+    // flat and their edges rounded, so a probe on the bevel (a little lower) counts as the edge, not
+    // as ground.
     private bool groundAt(float x, float z, float feet)
     {
         RayCastHit@ hit = ScenePhysics::of(self.scene).rayCast(Float3(x, feet + 0.6f, z),
@@ -345,7 +349,7 @@ class PlayerController
         return (value - step < target) ? target : value - step;
     }
 
-    // Turn an angle toward another the short way round, by at most `step`.
+    // Turns an angle toward another the short way round, by at most `step`.
     private float turnToward(float from, float to, float step)
     {
         float pi = 3.14159265f;

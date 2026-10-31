@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The allocator-plumbing lockdown tripwire: `DefaultAllocator()` may appear only at
-// true composition roots and inside the documented value/ABI bounds. This test pins
-// the CURRENT allowed-file set (allocator-allowlist.txt, checked in next to this
-// test) and fails when a NEW non-test file starts referencing the ambient default -
-// the fix is to thread a real owner's allocator, or (for a genuine new composition
-// root or documented bound) consciously add the file to the allowlist. It also fails
-// on STALE entries so the list stays honest as files get cleaned up.
+// The allocator tripwire: `DefaultAllocator()` may appear only at composition roots and
+// inside the value and ABI bounds that need it. This test pins the allowed-file set
+// (allocator-allowlist.txt, next to this test) and fails when a non-test file outside it
+// starts referencing the ambient default. Thread the owner's allocator instead, or, for a
+// genuine new composition root, add the file to the allowlist. It also fails on stale
+// entries so the list stays accurate as files are cleaned up.
 
 #include <doctest/doctest.h>
 
@@ -117,7 +116,7 @@ TEST_CASE("allocators: DefaultAllocator() stays confined to the pinned allowlist
                        << file);
         }
     }
-    // Stale entries: keep the list honest as files get cleaned.
+    // Stale entries: keep the list accurate as files get cleaned.
     for (const std::string& file : allowed)
     {
         if (current.find(file) == current.end())

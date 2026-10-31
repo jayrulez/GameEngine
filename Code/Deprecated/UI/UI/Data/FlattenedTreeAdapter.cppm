@@ -4,9 +4,7 @@
 // UI - :flattened_tree_adapter partition
 //
 // Wraps an ITreeAdapter to present as an IListAdapter for ListView virtualization: maintains expansion
-// state and a flat list of currently-visible nodes (in display order). Ported from Sedulous.UI/src/Data/
-// FlattenedTreeAdapter.bf. mSource is BORROWED (pattern-B). Beef List<int32>/HashSet<int32> -> core
-// Array<i32>/HashSet<i32>; CreateView returns RefPtr<View>.
+// state and a flat list of currently-visible nodes (in display order). m_source is borrowed.
 
 module;
 #include "Core/Prelude.h"
@@ -103,8 +101,8 @@ export namespace foundation::ui
             return m_visibleNodes[static_cast<usize>(position)];
         }
 
-        /// Flat position of a node in the CURRENT visible list; -1 if hidden (collapsed ancestor).
-        /// The inverse of GetNodeId - used to remap positional selection across expand/collapse.
+        /// Flat position of a node in the current visible list; -1 if hidden (collapsed ancestor).
+        /// The inverse of GetNodeId, used to remap positional selection across expand/collapse.
         [[nodiscard]] i32 PositionOfNode(i32 nodeId) const
         {
             for (usize i = 0; i < m_visibleNodes.Size(); ++i)

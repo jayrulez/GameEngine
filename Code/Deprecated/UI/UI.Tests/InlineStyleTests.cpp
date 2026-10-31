@@ -1,21 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.UI.Tests/src/InlineStyleTests.bf (faithful). Covers element-level + pseudo-element
-// inline styles, resolution priority (inline beats type/class+state/pseudo/local rules + inheritance), and
-// Drawable ownership via SetStyle. The ResolveStyleFontFamily / FontService resolution subset (5 cases) is
-// already ported in FontFamilyTests.cpp and is NOT duplicated here.
+// Element-level and pseudo-element inline styles, resolution priority (inline beats type, class
+// and state, pseudo-element and local rules, and inheritance), and Drawable ownership via
+// SetStyle. The ResolveStyleFontFamily and FontService cases are in FontFamilyTests.cpp.
 //
-// API mapping (Beef -> C++):
-//   view.SetInlineStyle(.Prop, .XxxVal(v))        -> view->SetStyle(StyleProperty::Prop, v)  (typed overloads)
-//   view.SetInlinePartStyle(part, .Prop, .XxxVal) -> view->SetPartStyle(part, StyleProperty::Prop, v)
-//   view.GetInlineStyle(.Prop)                    -> view->GetInlineStyle(StyleProperty::Prop)
-//   view.HasInlineStyle / HasAnyInlineStyles      -> view->HasInlineStyle / HasAnyInlineStyles()
-//   view.ClearInlineStyle(.Prop)                  -> view->ClearInlineStyle(StyleProperty::Prop)
-// The element getters exist directly; the PART getters/has/clear have no dedicated View method, so they are
-// expressed here through the public inline sheet (view->InlineSheet()->FindInlinePartRule(part) + StyleRule).
-// Clear-all uses View::ClearInlineStyles() (added to match Sedulous).
-//   `.None` StyleValue -> GetKind()==StyleValue::Kind::None; `x === y` -> pointer ==; byte Color -> Rgb().
+// Element-level inline styles have View methods (SetStyle, GetInlineStyle, HasInlineStyle,
+// HasAnyInlineStyles, ClearInlineStyle, ClearInlineStyles). Pseudo-element parts have only
+// SetPartStyle, so the helpers below read, test and clear them through the public inline sheet
+// (view->InlineSheet()->FindInlinePartRule(part) and its StyleRule).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -35,7 +28,7 @@ namespace
         return Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
     }
 
-    // Create a StyleSheet owned by ctx; returns a borrowed pointer for the test to add rules to (Sedulous SetupSheet).
+    // Create a StyleSheet owned by ctx; returns a borrowed pointer for the test to add rules to.
     StyleSheet* SetupSheet(UIContext& ctx)
     {
         auto sheet = core::MakeRef<StyleSheet>(core::DefaultAllocator());
@@ -44,8 +37,8 @@ namespace
         return raw;
     }
 
-    // --- Pseudo-element inline accessors (Beef's Get/Has/ClearInlinePartStyle have no dedicated View
-    //     method; express the same intent through the public inline sheet's part rule). ---
+    // --- Pseudo-element inline accessors (View has no Get, Has or Clear for part styles, so these
+    //     go through the public inline sheet's part rule). ---
     [[nodiscard]] StyleValue GetInlinePartStyle(const View& view, StringView part,
                                                 StyleProperty prop)
     {
@@ -87,8 +80,8 @@ namespace
     }
 
     /// A Drawable that tracks its live count via a static counter, so tests can assert ownership
-    /// transfer / cleanup. Draw is a no-op. (Sedulous TrackingDrawable.) No RTTI_OBJECT needed:
-    /// it never queries its own type - Drawable's GetType() override already makes it concrete.
+    /// transfer and cleanup. Draw does nothing. It needs no RTTI_OBJECT: it never queries its own
+    /// type, and Drawable's GetType() override already makes it concrete.
     class TrackingDrawable final : public Drawable
     {
     public:
@@ -232,7 +225,7 @@ TEST_CASE("inline-style: InlinePart_SetOverwritesPrevious_NoDuplicates")
 
     CHECK(GetInlinePartStyle(*view, u8"thumb", StyleProperty::Background).AsColor().Value().b ==
           1.0f);
-    // A second set on the same key must not leave a stale entry - clearing removes it entirely.
+    // A second set on the same key leaves no stale entry; clearing removes it entirely.
     ClearInlinePartStyle(*view, u8"thumb", StyleProperty::Background);
     CHECK_FALSE(HasInlinePartStyle(*view, u8"thumb", StyleProperty::Background));
 }
@@ -281,8 +274,8 @@ TEST_CASE("inline-style: InlinePart_ClearOne_NoOpWhenUnset")
 
 TEST_CASE("inline-style: Inline_Destruction_DoesNotLeakPartStrings")
 {
-    // Instantiating + dropping a view with inline part styles must free the part-name strings (RAII).
-    // Wires that path through the runner so leaks would surface under ASAN.
+    // Creating and dropping a view with inline part styles frees the part-name strings. Running
+    // that path in the suite makes a leak show up under ASAN.
     auto view = core::MakeRef<TestView>(core::DefaultAllocator());
     view->SetPartStyle(u8"thumb", StyleProperty::Background, Color::Red);
     view->SetPartStyle(u8"track", StyleProperty::Background, Color::Blue);
@@ -316,7 +309,7 @@ TEST_CASE("inline-style: Resolution_InlineBeatsClassPlusStateRule")
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get());
     StyleSheet* sheet = SetupSheet(ctx);
-    // Class + state rule (specificity 11) on a disabled view - would win without an inline override.
+    // A class and state rule (specificity 11) on a disabled view, which would win without an inline override.
     sheet->ForTypeClassState(&TestView::StaticType(), u8"btn", ControlState::Disabled)
         .Set(StyleProperty::FontSize, 12.0f);
 
@@ -332,7 +325,7 @@ TEST_CASE("inline-style: Resolution_InlineBeatsClassPlusStateRule")
 
 TEST_CASE("inline-style: Resolution_InlineIgnoresControlState")
 {
-    // Inline values apply across every ControlState - changing state doesn't make a state-scoped rule reappear.
+    // Inline values apply in every ControlState; changing state does not bring a state-scoped rule back.
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get());
@@ -388,7 +381,7 @@ TEST_CASE("inline-style: Resolution_InlineOnParent_InheritsToChild")
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get());
-    SetupSheet(ctx); // empty sheet - only the parent's inline value can satisfy this.
+    SetupSheet(ctx); // empty sheet: only the parent's inline value can satisfy this.
 
     auto group = core::MakeRef<TestGroup>(core::DefaultAllocator());
     auto child = core::MakeRef<TestView>(core::DefaultAllocator());
@@ -424,7 +417,7 @@ TEST_CASE("inline-style: Resolution_InlineOnChild_BeatsRuleOnParent")
 
 TEST_CASE("inline-style: Resolution_InlineBeatsLocalOnThisView")
 {
-    // View has both a LocalStyleSheet AND an inline override on the same property. Inline wins.
+    // The view has both a LocalStyleSheet and an inline override on the same property. Inline wins.
     UIContext ctx{DefaultAllocator()};
     auto root = core::MakeRef<RootView>(core::DefaultAllocator());
     Init(ctx, root.Get());
@@ -438,7 +431,7 @@ TEST_CASE("inline-style: Resolution_InlineBeatsLocalOnThisView")
     local->ForType(&TestView::StaticType()).Set(StyleProperty::TextColor, Color::Red);
     view->SetLocalStyleSheet(Move(local));
 
-    // Inline override - should win.
+    // Inline override, which wins.
     view->SetStyle(StyleProperty::TextColor, Rgb(0, 255, 0));
 
     CHECK(view->ResolveStyleColor(StyleProperty::TextColor).g == 1.0f);
@@ -468,10 +461,11 @@ TEST_CASE("inline-style: Resolution_InlineBeatsLocalOnAncestor")
 
 // === Drawable ownership via SetStyle ===
 //
-// Our SetStyle takes a RefPtr<Drawable>: passing a temporary (Move) transfers the caller's ref
-// (Beef's consumeRef: true default); passing a retained RefPtr copy keeps the caller's ref alive
-// (Beef's consumeRef: false). The inline sheet releases its ref when the view is destroyed or the value
-// is overwritten. LiveCount (ctor++/dtor--) proves the release. `delete view` -> view.Reset() (sole owner).
+// SetStyle takes a RefPtr<Drawable>: passing a temporary (moved) transfers the caller's ref, and
+// passing a copy of a retained RefPtr keeps the caller's ref alive. The inline sheet releases its
+// ref when the view is destroyed or the value is overwritten. LiveCount (incremented by the
+// constructor, decremented by the destructor) shows the release. view.Reset() destroys the view,
+// since the test is its sole owner.
 
 TEST_CASE("inline-style: SetStyle_Drawable_ConsumesByDefault")
 {
@@ -495,7 +489,7 @@ TEST_CASE("inline-style: SetStyle_Drawable_OptOutPreservesCallerRef")
     RefPtr<Drawable> d = core::MakeRef<TrackingDrawable>(core::DefaultAllocator());
 
     auto view = core::MakeRef<TestView>(core::DefaultAllocator());
-    view->SetStyle(StyleProperty::Background, d); // copy keeps our ref (Beef consumeRef: false)
+    view->SetStyle(StyleProperty::Background, d); // the copy keeps our ref
 
     CHECK(TrackingDrawable::LiveCount == before + 1);
 
@@ -532,7 +526,7 @@ TEST_CASE("inline-style: SetStyle_Drawable_OverwriteReleasesPrevious")
 
     CHECK(TrackingDrawable::LiveCount == before + 1);
 
-    // Overwrite with a second drawable - the first should be freed.
+    // Overwrite with a second drawable; the first is freed.
     view->SetStyle(StyleProperty::Background,
                    core::MakeRef<TrackingDrawable>(core::DefaultAllocator()));
 
@@ -554,7 +548,7 @@ TEST_CASE("inline-style: SetStyle_Drawable_NullClearsAndReleases")
     CHECK(TrackingDrawable::LiveCount == before + 1);
 
     view->SetStyle(StyleProperty::Background,
-                   RefPtr<Drawable>{}); // (Drawable)null -> releases previous
+                   RefPtr<Drawable>{}); // a null drawable releases the previous one
 
     CHECK(TrackingDrawable::LiveCount == before);
 
@@ -562,7 +556,7 @@ TEST_CASE("inline-style: SetStyle_Drawable_NullClearsAndReleases")
 }
 
 // === String (FontFamily) inline-style round-trip ===
-// (The ResolveStyleFontFamily / FontService resolution subset is already ported in FontFamilyTests.cpp.)
+// (The ResolveStyleFontFamily and FontService cases are in FontFamilyTests.cpp.)
 
 TEST_CASE("inline-style: SetStyle_String_RoundTrip")
 {
@@ -570,7 +564,7 @@ TEST_CASE("inline-style: SetStyle_String_RoundTrip")
     view->SetStyle(StyleProperty::FontFamily, StringView{u8"Roboto"});
 
     CHECK(view->HasInlineStyle(StyleProperty::FontFamily));
-    // Hold the StyleValue in a named local: AsString() returns a StringView INTO it, which would dangle
+    // Hold the StyleValue in a named local: AsString() returns a StringView into it, which would dangle
     // if the StyleValue were a destroyed temporary.
     const StyleValue sv = view->GetInlineStyle(StyleProperty::FontFamily);
     Optional<StringView> v = sv.AsString();
@@ -580,7 +574,7 @@ TEST_CASE("inline-style: SetStyle_String_RoundTrip")
 
 TEST_CASE("inline-style: SetStyle_String_OverwriteFreesPrevious")
 {
-    // Multiple overwrites; each drops the previous owned String (RAII, no leak).
+    // Multiple overwrites; each frees the previous owned String.
     auto view = core::MakeRef<TestView>(core::DefaultAllocator());
     view->SetStyle(StyleProperty::FontFamily, StringView{u8"Roboto"});
     view->SetStyle(StyleProperty::FontFamily, StringView{u8"Chewy"});

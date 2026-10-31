@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.vegetation - the scatter's contract: determinism per seed, density -> count, the
+// foundation.vegetation: the scatter's contract: determinism per seed, density to count, the
 // splat / slope / height rules, normal alignment, the fade math, chunk touch mapping, the cap.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -131,7 +131,7 @@ TEST_CASE("vegetation scatter: a seed gives byte-identical instances; another ch
     veg::ScatterChunk(seed, chunk, *grid, nullptr, nullptr, layer, AABB::Empty(), b);
     REQUIRE(!a.transforms.IsEmpty());
     CHECK(SameTransforms(a.transforms, b.transforms));
-    // Every instance sits ON the surface, inside the chunk footprint.
+    // Every instance sits on the surface, inside the chunk footprint.
     for (const Float4x4& m : a.transforms)
     {
         CHECK(m.m[3][1] == doctest::Approx(5.0f).epsilon(0.01));
@@ -186,9 +186,9 @@ TEST_CASE("vegetation scatter: density scales the candidate count; the per-chunk
     REQUIRE(full.transforms.Size() > 4096u);
     CHECK(MemCompare(full.transforms.Data(), capped.transforms.Data(), 4096u * sizeof(Float4x4)) == 0);
 
-    // The cap counts PLACED instances, not candidates: a mask patch on a quarter of the chunk
-    // grows at the layer's full density (2 / m^2 x 1024 m^2 ~ 2048) although 2 x 4096 candidates
-    // over the whole chunk would once have been scaled to 1 / m^2 first (the RTHomes1 cones).
+    // The cap counts placed instances, not candidates: a mask patch on a quarter of the chunk
+    // grows at the layer's full density (2 / m^2 x 1024 m^2 ~ 2048), where scaling 2 x 4096
+    // candidates over the whole chunk down to the cap would halve it to 1 / m^2.
     auto quarter = MakeRef<veg::VegetationMask>(DefaultAllocator(), 32, 32, 1);
     for (i32 y = 0; y < 16; ++y)
     {
@@ -290,7 +290,7 @@ TEST_CASE("vegetation scatter: the slope limit and the height window reject")
     const tmodel::TerrainChunk chunk = ChunkOf(*ramp);
 
     veg::ScatterLayer gentle = Uniform(0.25f);
-    // The limit sits under the ramp's slope everywhere - the central difference halves at the
+    // The limit sits under the ramp's slope everywhere: the central difference halves at the
     // clamped x edges (13.3 degrees there), so 10 keeps rejecting at the rim too.
     gentle.maxSlopeDegrees = 10.0f;
     veg::ScatterResult none;
@@ -464,7 +464,7 @@ TEST_CASE("vegetation layer: the scatter hash covers the scatter parameters, not
     b.density = 3.0f;
     CHECK(veg::LayerScatterHash(a) != veg::LayerScatterHash(b));
     b = a;
-    b.fadeEnd = 200.0f; // fade + shadows are draw-time: no regrow
+    b.fadeEnd = 200.0f; // fade and shadows are draw-time: no regrow
     b.castShadows = true;
     CHECK(veg::LayerScatterHash(a) == veg::LayerScatterHash(b));
     for (const veg::VegetationPlacement p :
@@ -481,7 +481,7 @@ TEST_CASE("vegetation scatter: a Mask layer grows where its plane is painted; Sp
     RefPtr<hf::Heightfield> grid = MakeFlat(2.0f);
     const tmodel::TerrainChunk chunk = ChunkOf(*grid);
     RefPtr<tmodel::SplatWeights> splat = MakeHalfSplat(); // palette 0 on x < 0
-    // A two-plane mask: plane 1 painted full on the TOP half (z < 0); plane 0 empty.
+    // A two-plane mask: plane 1 painted full on the top half (z < 0); plane 0 empty.
     auto mask = MakeRef<veg::VegetationMask>(DefaultAllocator(), 32, 32, 2);
     for (i32 y = 0; y < 16; ++y)
     {
@@ -521,7 +521,7 @@ TEST_CASE("vegetation scatter: a Mask layer grows where its plane is painted; Sp
     CHECK(veg::PlacementShareAt(flowers, *grid, splat.Get(), mask.Get(), -15.0f, -15.0f) ==
           doctest::Approx(40.0f / 255.0f));
 
-    // SplatTimesMask: the painted splat half (x < 0) AND the painted mask half (z < 0): one
+    // SplatTimesMask: the painted splat half (x < 0) and the painted mask half (z < 0): one
     // quadrant.
     veg::ScatterLayer carved = flowers;
     carved.placement = veg::VegetationPlacement::SplatTimesMask;
@@ -581,7 +581,7 @@ TEST_CASE("vegetation stamp: a seeded stamp places a deterministic count inside 
     CHECK(veg::ScatterStamp(99, *grid, rocks, rock, 4.0f, -3.0f, 6.0f, 0.5f, 0.5f, 0.0f, {}, {}, half)
               .candidates == 28u);
 
-    // Spacing: a rock of radius ~0.87 with spacing 2 keeps ~1.7 m apart - far fewer land, and
+    // Spacing: a rock of radius ~0.87 with spacing 2 keeps ~1.7 m apart, so far fewer land, and
     // the ones that do are never within reach of each other or of the existing ones.
     Array<Float4x4> spaced;
     const veg::StampResult rs = veg::ScatterStamp(
@@ -641,7 +641,7 @@ TEST_CASE("vegetation stamp: a seeded stamp places a deterministic count inside 
 
 TEST_CASE("vegetation holes: nothing grows or stands over a cut cell - the scatter and the stamp both reject it")
 {
-    // Specs/terrain-holes.md: a cut cell has no surface. A Uniform layer over a flat field with a
+    // A cut cell has no surface. A Uniform layer over a flat field with a
     // disc cut out of its middle places no instance inside the disc, and a prop stamp centred on
     // the cut places none there either.
     RefPtr<hf::Heightfield> grid = MakeFlat(5.0f);

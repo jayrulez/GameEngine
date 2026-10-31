@@ -1,7 +1,7 @@
-// Mover - moves an entity back and forth and spins it: a saw sliding along its track, a spiky
-// ball swinging across a bridge. The motion is a smooth swing (a sine) from where it was placed,
-// `distance` either side along `axis`; the spin is about `spinAxis`. With a Hazard on the same
-// entity, the hazard hurts wherever the mover has taken it.
+// Mover: moves an entity back and forth and spins it, such as a saw sliding along its track or a
+// spiky ball swinging across a bridge. The motion is a smooth swing (a sine) from where it was
+// placed, `distance` either side along `axis`; the spin is about `spinAxis`. With a Hazard on the
+// same entity, the hazard hurts wherever the mover has taken it.
 
 class Mover
 {

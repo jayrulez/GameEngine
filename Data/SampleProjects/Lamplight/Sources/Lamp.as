@@ -1,7 +1,7 @@
-// Lamp - an oil lamp the thief can put out and light again: in reach, the HUD says which, and the
-// Interact control does it. Out, its light is off and its flame and chimney stop glowing (their
-// materials swapped for dark ones), so the room goes as dark as the renderer and the light meter
-// say. Lit at the start unless `lit` is off.
+// Lamp: an oil lamp the thief can put out and light again. In reach, the HUD shows which action
+// Interact will do. When the lamp is out its light is off and its flame and chimney stop glowing
+// (their materials are swapped for dark ones), so the room really goes dark for both the renderer
+// and the light meter. It starts lit unless `lit` is off.
 class Lamp
 {
     private Entity@ self;
@@ -56,7 +56,8 @@ class Lamp
         render.setMaterial(self, lit ? chimneyLit : chimneyOut, chimneySlot);
     }
 
-    // The HUD's prompt while in reach; cleared on leaving, only by the lamp that set it.
+    // Shows the HUD prompt while the thief is in reach. On leaving, only the lamp that set the
+    // prompt clears it.
     private void prompt(bool near)
     {
         if (near)
@@ -68,7 +69,7 @@ class Lamp
             }
             Label::of(gui::root().find("hud-prompt")).text = lit ? "Interact: put out the lamp" : "Interact: light the lamp";
             panel.visible = true;
-            gui::root().find("hud-pick").visible = false; // a door's
+            gui::root().find("hud-pick").visible = false; // the pick bar belongs to doors
             m_prompting = true;
         }
         else if (m_prompting)

@@ -1,7 +1,7 @@
-# Editor::PropertyAnimation - `editor.propertyanimation`: property animation authored in the scene
-# (Documentation/Specs/editor-gui.md, 5.4, layer 9): the UI-free half (the clip document, the clip
-# as the dopesheet's and curve view's source, the preview, the seeds, the transport) and the panel
-# on the GUI the scene page holds under its viewport.
+# Editor::PropertyAnimation - `editor.propertyanimation`: property animation authored in the scene.
+# The UI-free half holds the clip document, the clip as the source of the dopesheet and the curve
+# view, the preview, the seeds and the transport; the panel on the GUI sits under the scene page's
+# viewport.
 util_add_engine_library(Editor.PropertyAnimation ALIAS Editor::PropertyAnimation)
 target_link_libraries(Editor.PropertyAnimation
     PUBLIC

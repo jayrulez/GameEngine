@@ -1,6 +1,6 @@
 # Engine::Animation - `engine.animation`, the scene side of skeletal
-# animation (SkeletalAnimationComponent + manager + AnimationSubsystem). Sits at the
-# animation<->render seam: depends on Animation + Scene + RenderSubsystem (one-way).
+# animation (SkeletalAnimationComponent, its manager and AnimationSubsystem). Sits between
+# animation and rendering: depends on Animation, Scene and RenderSubsystem (one-way).
 util_add_engine_library(Engine.Animation ALIAS Engine::Animation)
 target_link_libraries(Engine.Animation
     PUBLIC Foundation::Core Foundation::Runtime Foundation::Scene Engine::Scene

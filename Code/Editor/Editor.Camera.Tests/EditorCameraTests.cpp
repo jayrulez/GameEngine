@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// EditorCamera pure-geometry + input-drive tests. EditorCamera is the algorithmic content of
-// editor.preview (LookAt solves yaw/pitch with a level horizon; the free-fly/orbit Update maps
-// gated devices to motion). PreviewViewport itself is glue over a live IApplicationHost + UIHost
-// + render/scene subsystems - not unit-constructible with the codebase's headless precedents (the
-// editor pages are not unit-constructed either); it is proven by the six pages built on it + on-screen
-// verify.
+// EditorCamera tests: pure geometry and input handling. LookAt solves yaw and pitch with a level
+// horizon, and the free-fly and orbit Update maps gated devices to motion. PreviewViewport itself is
+// glue over a live IApplicationHost, UIHost and the render and scene subsystems, so it cannot be
+// constructed in a unit test (nor can the editor pages); the pages built on it exercise it.
 #include "Core/Prelude.h"
 #include <doctest/doctest.h>
 
@@ -21,7 +19,7 @@ namespace
 {
     bool Near(f32 a, f32 b) { return Abs(a - b) < 1e-3f; }
 
-    // Minimal gated-device stubs: just enough state for the camera's Update to read.
+    // Minimal gated-device stubs with just enough state for the camera's Update to read.
     class StubKeyboard final : public shell::IKeyboard
     {
     public:
@@ -165,7 +163,7 @@ TEST_CASE("EditorCamera does not fly when RMB is up (W belongs to the gizmo shor
 
     StubKeyboard kb;
     kb.wDown = true;
-    StubMouse mouse; // RMB up => not flying
+    StubMouse mouse; // RMB up: not flying
     cam.Update(&kb, &mouse, 0.5f);
 
     CHECK(Near(cam.position.x, 1.0f));
@@ -211,7 +209,7 @@ TEST_CASE("EditorCamera::FrameSphere stands back along its view until the sphere
     const f32 fovY = 1.0472f;
     const Float3 center{10.0f, 2.0f, -30.0f};
 
-    // At once: the direction kept, the pivot on the centre, the sphere inside the view.
+    // At once: the direction is kept, the pivot is on the centre, and the sphere is inside the view.
     cam.FrameSphere(center, 2.0f, fovY, /*ease*/ false);
     CHECK_FALSE(cam.IsGliding());
     CHECK(Near(Dot(cam.Forward(), forward), 1.0f));
@@ -221,7 +219,7 @@ TEST_CASE("EditorCamera::FrameSphere stands back along its view until the sphere
     CHECK(Near(pivot.z, center.z));
     CHECK(2.0f / cam.focusDistance <= Sin(0.5f * fovY)); // the sphere's angle fits the half view
 
-    // Eased: there over glideSeconds, not before, wherever it started.
+    // Eased: it arrives after glideSeconds, not before, wherever it started.
     cam.position = Float3{0.0f, 0.0f, 0.0f};
     cam.FrameSphere(center, 2.0f, fovY);
     CHECK(cam.IsGliding());
@@ -230,12 +228,12 @@ TEST_CASE("EditorCamera::FrameSphere stands back along its view until the sphere
     const Float3 halfway = cam.position;
     cam.Advance(cam.glideSeconds);
     CHECK_FALSE(cam.IsGliding());
-    CHECK(Length(cam.position - halfway) > 0.01f); // half way was not there yet
+    CHECK(Length(cam.position - halfway) > 0.01f); // half way through, it had not arrived
     const Float3 settled = cam.position + cam.Forward() * cam.focusDistance;
     CHECK(Near(settled.x, center.x));
     CHECK(Near(settled.z, center.z));
 
-    // The user taking the camera (a wheel notch) stops a glide where it is.
+    // The user taking over the camera (a wheel notch) stops a glide where it is.
     cam.FrameSphere(Float3{-50.0f, 0.0f, 0.0f}, 1.0f, fovY);
     StubKeyboard kb;
     StubMouse mouse;
@@ -290,8 +288,8 @@ TEST_CASE("EditorCamera orthographic: a ray runs along the view, from a point th
 TEST_CASE("EditorCamera orthographic: it draws from a view height back, showing the ground below the eye")
 {
     // An eye 12 m up, tipped 35 degrees down, zoomed out: the view is 34.6 m tall, so at the eye's
-    // plane its bottom edge lies under the ground, and the ground there is nearer than that plane,
-    // which a volume starting at it cut away.
+    // plane its bottom edge lies under the ground. The ground there is nearer than that plane, so a
+    // volume starting at the plane would cut it away.
     editor::EditorCamera cam;
     cam.position = Float3{0.0f, 12.0f, 10.0f};
     cam.yaw = 0.0f;
@@ -318,7 +316,7 @@ TEST_CASE("EditorCamera orthographic: it draws from a view height back, showing 
     cam.RayThrough(0.0f, -1.0f, 1.5f, origin, direction);
     REQUIRE(direction.y < 0.0f);
     // On the draw eye's plane, not the eye's: the line is the same either way, but a pick takes
-    // the first hit past the origin, so from the eye's plane it missed the ground behind it.
+    // the first hit past the origin, so from the eye's plane it would miss the ground behind it.
     CHECK(Near(Dot(origin - drawEye, cam.Forward()), 0.0f));
     const Float3 hit = origin + direction * (-origin.y / direction.y);
     CHECK(Dot(hit - cam.position, cam.Forward()) < 0.0f);       // behind the eye's plane
@@ -343,13 +341,14 @@ TEST_CASE("EditorCamera orthographic: a snap to an axis turns it on, and turning
     StubKeyboard kb;
     StubMouse mouse;
     mouse.rmb = true;
-    cam.Update(&kb, &mouse, 0.016f); // held still: stays
+    cam.Update(&kb, &mouse, 0.016f); // held still: stays orthographic
     CHECK(cam.orthographic);
     mouse.dx = 20.0f;
     cam.Update(&kb, &mouse, 0.016f); // a look away: back to perspective
     CHECK_FALSE(cam.orthographic);
 
-    // Chosen by hand, it stays through a look; with the preference off, a snap leaves it alone.
+    // Chosen by hand, orthographic stays through a look; with the preference off, a snap leaves
+    // the projection alone.
     cam.SetOrthographic(true);
     cam.Update(&kb, &mouse, 0.016f);
     CHECK(cam.orthographic);
@@ -373,18 +372,18 @@ TEST_CASE("EditorCamera asks for the pointer locked while its mouse drags it, an
     CHECK(cam.WantsPointerLock());
     cam.Update(&kb, &mouse, 0.016f);
     CHECK(cam.WantsPointerLock());
-    CHECK(mouse.relativeCalls == 0); // the viewport's router locks it, for this surface alone
+    CHECK(mouse.relativeCalls == 0); // the viewport's router locks it, for this surface only
 
     mouse.rmb = false; // let go
     cam.Update(&kb, &mouse, 0.016f);
     CHECK_FALSE(cam.WantsPointerLock());
 
-    // Held by Tab, the mouse is locked already: no ask for a drag.
+    // Held by Tab, the mouse is already locked, so a drag does not ask for a lock.
     cam.mouseCaptured = true;
     mouse.rmb = true;
     cam.Update(&kb, &mouse, 0.016f);
     CHECK_FALSE(cam.WantsPointerLock());
-    // The drag let go with no keyboard (the view never had the focus): no ask left over.
+    // The drag released with no keyboard (the view never had the focus): no lock request remains.
     cam.mouseCaptured = false;
     cam.Update(&kb, &mouse, 0.016f);
     REQUIRE(cam.WantsPointerLock());

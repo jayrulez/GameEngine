@@ -3,12 +3,12 @@
 
 // Editor::Mcp - :shader_validate partition
 //
-// shader_validate: check a custom shader's source WITHOUT saving it, through CheckShaderSource,
+// shader_validate: check a custom shader's source without saving it, through CheckShaderSource,
 // the check the shader cook runs (the properties block expanded, a surface shader assembled into
-// its programs, every flag tested declared, every program's every variant compiled with DXC
-// against the engine's shader library). Returns
-// the errors with file, line and column, and on success the parsed properties and each stage's
-// variant flags, so the agent sees what a material on it will show.
+// its programs, every tested flag checked as declared, every variant of every program compiled
+// with DXC against the engine's shader library). It returns the errors with file, line and
+// column, and on success the parsed properties and each stage's variant flags, so the agent sees
+// what a material on it will show.
 
 module;
 #include "Core/Prelude.h"
@@ -63,8 +63,9 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // Registers shader_validate. Project-independent (checks in-memory source). `shaderLibrary`:
-    // the engine's Shaders/ folder, the include path; empty = includes resolve nowhere.
+    // Registers shader_validate. It is project-independent (it checks in-memory source).
+    // `shaderLibrary` is the engine's Shaders/ folder, the include path; when it is empty,
+    // includes resolve nowhere.
     inline void RegisterShaderValidateTool(foundation::mcp::McpServer& server,
                                            StringView shaderLibrary)
     {

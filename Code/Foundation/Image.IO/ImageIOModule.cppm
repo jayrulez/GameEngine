@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Concrete image loading and saving via stb_image / stb_image_write.
-/// No abstract loader/writer - direct stb dependency.
+/// No abstract loader or writer: a direct stb dependency.
 /// Works with foundation::image::Image directly.
 
 module;
@@ -115,10 +115,10 @@ export namespace foundation::image::io
         return ErrorCode::Ok;
     }
 
-    /// Load a single-channel 16-bit image (a heightmap) at FULL 16-bit precision. Produces an
-    /// Image with PixelFormat::R16 (2 bytes/pixel, one channel). An 8-bit source is promoted to
-    /// 16-bit by stb; a multi-channel source collapses to luminance. This is the heightfield import
-    /// path - the general LoadImage down-samples 16-bit to 8-bit via stbi_load.
+    /// Load a single-channel 16-bit image (a heightmap) at full 16-bit precision. Produces an
+    /// Image with PixelFormat::R16 (2 bytes per pixel, one channel). An 8-bit source is promoted
+    /// to 16-bit by stb; a multi-channel source collapses to luminance. This is the heightfield
+    /// import path; the general LoadImage down-samples 16-bit to 8-bit via stbi_load.
     [[nodiscard]] inline Status LoadImage16FromMemory(Span<const u8> buffer, Image& out)
     {
         int x = 0, y = 0, channels = 0;

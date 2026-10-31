@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the problems list: errors first, each kind in its place's order, a line
-// saying how many; a row choosing its problem; an include's problem named by its file.
+// Editor::App tests: the problems list. Errors come first, each kind ordered by position, with a
+// line saying how many there are. A row chooses its problem, and a problem in an include is named
+// by its file.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -35,9 +36,9 @@ TEST_CASE("problems list: errors first in their places' order, the count said, a
     CHECK(problems.Summary() == StringView(u8"3 errors, 1 warning"));
     const Span<const CodeProblem> shown = problems.Problems();
     REQUIRE(shown.Size() == 4u);
-    CHECK(shown[0].message == StringView(u8"missing ;"));   // its own code's errors by line
+    CHECK(shown[0].message == StringView(u8"missing ;"));   // errors in its own code, by line
     CHECK(shown[1].message == StringView(u8"no such type"));
-    CHECK(shown[2].message == StringView(u8"in the include")); // then an include's
+    CHECK(shown[2].message == StringView(u8"in the include")); // then those in an include
     CHECK(shown[3].severity == gui::CodeSeverity::Warning);
     CHECK(editor::app::ProblemsList::PlaceOf(shown[0]) == StringView(u8"4:8"));
     CHECK(editor::app::ProblemsList::PlaceOf(shown[2]) == StringView(u8"Common.hlsli 1:1"));

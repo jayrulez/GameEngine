@@ -17,14 +17,14 @@ float3 PreethamRGB(float cosTheta, float gamma, float thetaSun, float T) {
     float cts = cos(thetaSun);
     float3 den = (1.0 + A * exp(B))          * (1.0 + C * exp(D * thetaSun) + E * cts * cts);
     float3 F = num / den;
-    // Zenith luminance + chromaticity.
+    // Zenith luminance and chromaticity.
     float chi = (4.0/9.0 - T/120.0) * (API - 2.0*thetaSun);
     float Yz = (4.0453*T - 4.9710) * tan(chi) - 0.2155*T + 2.4192;
     float ts = thetaSun, ts2 = ts*ts, ts3 = ts2*ts, T2 = T*T;
     float xz = ( 0.00166*ts3-0.00375*ts2+0.00209*ts)*T2 + (-0.02903*ts3+0.06377*ts2-0.03202*ts+0.00394)*T + ( 0.11693*ts3-0.21196*ts2+0.06052*ts+0.25886);
     float yz = ( 0.00275*ts3-0.00610*ts2+0.00317*ts)*T2 + (-0.04214*ts3+0.08970*ts2-0.04153*ts+0.00516)*T + ( 0.15346*ts3-0.26756*ts2+0.06670*ts+0.26688);
     float Y = Yz * F.x, x = xz * F.y, y = yz * F.z;
-    // xyY -> XYZ -> linear sRGB.
+    // xyY to XYZ, then to linear sRGB.
     float3 XYZ; XYZ.y = Y; XYZ.x = (x / max(y, 1e-4)) * Y; XYZ.z = ((1.0 - x - y) / max(y, 1e-4)) * Y;
     float3 rgb = float3(dot(XYZ, float3( 3.2404542,-1.5371385,-0.4985314)),
                         dot(XYZ, float3(-0.9692660, 1.8760108, 0.0415560)),

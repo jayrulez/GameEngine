@@ -5,7 +5,7 @@
 //
 // Pools GPU textures for reuse across frames by transient resources, avoiding
 // per-frame allocation thrashing. Matches by exact descriptor; ages out unused
-// entries. Ported from Sedulous.RenderGraph (TransientTexturePool.bf).
+// entries.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +34,7 @@ export namespace foundation::rendergraph
 
         // Acquire a matching texture from the pool; true if one was found. `generation` receives the
         // physical texture's stable id (preserved while it lives in the pool), so consumers can detect
-        // when a transient is backed by a DIFFERENT physical texture (a freed view address can reuse).
+        // when a transient is backed by a different physical texture (a freed view address can reuse).
         [[nodiscard]] bool TryAcquire(const rhi::TextureDesc& desc, rhi::Texture*& texture,
                                       rhi::TextureView*& view, u64& generation)
         {

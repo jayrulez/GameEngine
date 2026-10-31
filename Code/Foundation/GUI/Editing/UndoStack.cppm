@@ -4,17 +4,15 @@
 // GUI - :undo_stack partition
 //
 // A bounded undo and redo stack for text editing: each entry is the whole text with its caret and
-// anchor (byte offsets), a snapshot rather than a delta, which keeps undo exact for any edit.
-//
-// Copied from foundation.ui's :undo_stack (E4 of Specs/gui-lab-evolution.md), and the GUI's own
-// from then on: offsets are bytes, as the GUI's text keeps them.
+// anchor (byte offsets, as the GUI's text keeps them), a snapshot rather than a delta, which keeps
+// undo exact for any edit.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:undo_stack;
 
-import foundation.core; // String, StringView, Array, Max
+import foundation.core;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -62,7 +60,7 @@ export namespace foundation::gui
         void PushBounded(Array<UndoEntry>& stack, UndoEntry entry)
         {
             if (stack.Size() >= m_maxEntries)
-                stack.RemoveAt(0); // the oldest goes
+                stack.RemoveAt(0); // drop the oldest
             stack.PushBack(Move(entry));
         }
         bool Step(Array<UndoEntry>& from, Array<UndoEntry>& to, const UndoEntry& current, UndoEntry& out)

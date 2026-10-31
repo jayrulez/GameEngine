@@ -39,8 +39,9 @@ namespace editor
         m_gui = Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::gui::GuiSubsystem>() : nullptr;
         GuiAssetEditorPage* self = this;
 
-        // A sheet's preview markup: the page's, kept for the sheet in the project's editor settings
-        // (first from what an older page kept on the asset, else a little of everything).
+        // A sheet's preview markup belongs to the page and is kept for the sheet in the project's
+        // editor settings. Without a kept copy it comes from the asset's previewMarkup field, else
+        // from the stock markup (a little of everything).
         m_markup = Find<gui::CodeEditor>(u8"gui-preview-markup");
         auto* document = Find<gui::ButtonBase>(u8"gui-preview-document");
         if (m_kind == Kind::StyleSheet)
@@ -61,7 +62,8 @@ namespace editor
                 m_markup->SetText(markup.AsView());
                 if (Services().languages != nullptr)
                     m_markup->SetLanguage(Services().languages->Find(u8"xml"));
-                // Its edits are the page's preview, not the asset: checked again, never dirtying it.
+                // Edits to it change the page's preview, not the asset: they are checked again and
+                // never dirty the asset.
                 m_markupListener = m_markup->GetDocument().AddChangeListener([self](const gui::CodeChange&) { self->CheckSoon(); });
             }
             if (document != nullptr)
@@ -76,7 +78,8 @@ namespace editor
         }
         else
         {
-            // A document is previewed as it is: no markup of the page's, no document to choose.
+            // A document is previewed as it is, so there is no preview markup and no document to
+            // choose.
             if (auto* side = Find<gui::Node>(u8"gui-preview-side"))
                 if (auto* pane = Find<gui::Node>(u8"gui-markup-pane"))
                     side->RemoveChild(pane);
@@ -85,13 +88,14 @@ namespace editor
                 document->SetDisplayed(false);
         }
 
-        // The preview: a viewport of the page's, the runtime's GUI drawing into it each frame.
+        // The preview: a viewport on the page that the runtime's GUI draws into each frame.
         m_viewport = MakeRef<gui::Viewport>(Allocator());
         m_viewport->AddClass(u8"preview-view"); // fills its stage, as the preview pages' viewports do
         m_viewport->ClearColor = Color{0.313f, 0.332f, 0.366f, 1.0f};
         m_viewport->OnRender = [self](gui::Viewport& view, rhi::CommandEncoder& encoder, i32 frameIndex)
         {
-            // The target defined every frame (the editor samples it), then the preview over it.
+            // Clear the target every frame so its contents are defined (the editor samples it),
+            // then draw the preview over it.
             rhi::RenderPassDesc pass;
             rhi::ColorAttachment color;
             color.view = view.ColorView();
@@ -134,7 +138,8 @@ namespace editor
 
     Array<app::CodeProblem> GuiAssetEditorPage::CheckCode(StringView text)
     {
-        // What the cook would report, on the lines it is about; a sheet's preview markup's under its name.
+        // What the cook would report, on the lines it is about; problems in a sheet's preview
+        // markup are listed under its name.
         Array<app::CodeProblem> problems;
         Array<gui::GuiDiagnostic> found;
         bool builds = true;
@@ -149,7 +154,7 @@ namespace editor
             Array<gui::GuiDiagnostic> markupFound;
             builds = pipeline::ValidateGuiDocument(markup.AsView(), markupFound, Allocator());
             gui_pages::AddProblems(Span<const gui::GuiDiagnostic>(markupFound.Data(), markupFound.Size()), gui_pages::kPreviewMarkupName, problems);
-            // Its own lines marked in its own editor.
+            // The preview markup's problems are marked on its lines in its own editor.
             if (m_markup != nullptr)
             {
                 Array<gui::CodeDiagnostic> marks;
@@ -234,7 +239,7 @@ namespace editor
         Result<Array<byte>> bytes = ReadFile(PathJoin(Context().Project()->SourcesRoot().AsView(), document->fileName.View()).AsView());
         if (!bytes.HasValue())
             return;
-        // Copied once: the page's to change from now on (the document is not touched).
+        // Copied once; from now on the page edits its copy, and the document is not touched.
         m_markup->SetText(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
         CheckNow();
     }

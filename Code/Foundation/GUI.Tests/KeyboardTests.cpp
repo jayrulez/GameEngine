@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the keyboard's breadth (E12 of Specs/gui-lab-evolution-2.md): tab-index, focus groups,
-// Tab captured by a widget, a menu's keys through the keymap, the next key captured, mnemonics and
-// type-ahead from text input; a focused widget hidden gives the focus up.
+// GUI - the keyboard's breadth: tab-index, focus groups, Tab captured by a widget, a menu's keys
+// through the keymap, capturing the next key, and mnemonics and type-ahead from text input. A
+// focused widget that is hidden gives up the focus.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -65,11 +65,11 @@ TEST_CASE("keyboard: tab-index orders Tab: positive first, lowest first, then tr
     CHECK(bed.Focused() == SV(u8"a"));
     bed.Tab(true);
     CHECK(bed.Focused() == SV(u8"c"));
-    // Skipped by Tab, but still focusable another way; Tab from there goes on in the order.
+    // Skipped by Tab but still focusable another way. Tab from there goes on in the order.
     bed.D().SetFocusNode(bed.buttons[3].Get());
     CHECK(bed.Focused() == SV(u8"d"));
     bed.Tab();
-    CHECK(bed.Focused() == SV(u8"c")); // not among the stops: Tab starts over
+    CHECK(bed.Focused() == SV(u8"c")); // it is not among the stops, so Tab starts over
 }
 
 TEST_CASE("keyboard: tab-index comes from a sheet and from markup")
@@ -123,7 +123,7 @@ TEST_CASE("keyboard: a focus group is one Tab stop: its checked member first, th
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Right), 0);
     CHECK(bed.Focused() == SV(u8"r0")); // wrapped inside the group
     bed.Tab();
-    CHECK(bed.Focused() == SV(u8"y")); // out of the group in one step
+    CHECK(bed.Focused() == SV(u8"y")); // out of the group in one press
     bed.Tab(true);
     CHECK(bed.Focused() == SV(u8"r0")); // back to the one focused there last
 }
@@ -158,13 +158,13 @@ TEST_CASE("keyboard: a widget that captures Tab takes Tab and Shift+Tab as keys;
     CHECK(bed.Focused() == SV(u8"editor"));
     CHECK(editor->GetText() == SV(u8"\t")); // it typed a tab
     bed.Tab(true);
-    CHECK(bed.Focused() == SV(u8"editor")); // its key, though it does nothing with it
+    CHECK(bed.Focused() == SV(u8"editor")); // the widget keeps the key, though it does nothing with it
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl);
     CHECK(bed.Focused() == SV(u8"b"));
     bed.D().SetFocusNode(editor.Get());
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Tab), KeyModCtrl | KeyModShift);
     CHECK(bed.Focused() == SV(u8"a"));
-    // Without it, Tab moves on as ever.
+    // Without Tab capture, Tab moves on as usual.
     editor->SetTabCaptures(false);
     bed.D().SetFocusNode(editor.Get());
     bed.Tab();
@@ -215,7 +215,7 @@ TEST_CASE("keyboard: a binding whose command nothing on the focus path handles l
     REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"down"), SV(u8"nobody.handles")));
     bed.D().SetFocusNode(bed.buttons[0].Get());
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down), 0);
-    CHECK(bed.Focused() == SV(u8"b")); // navigation had it
+    CHECK(bed.Focused() == SV(u8"b")); // navigation took it
 }
 
 TEST_CASE("keyboard: a focused widget hidden gives up the focus: Return does not press it, the scope's commands run")
@@ -240,7 +240,7 @@ TEST_CASE("keyboard: a focused widget hidden gives up the focus: Return does not
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK(ran == 1);
 
-    // Hidden by `visibility` too, and found out by the tick as well as by a key.
+    // Hiding by `visibility` works too, and the tick notices it as well as a key does.
     screen->SetDisplayed(true);
     back.RequestFocus();
     REQUIRE(bed.Focused() == SV(u8"back"));
@@ -264,7 +264,7 @@ TEST_CASE("keyboard: CaptureNextKey takes the next key before bindings and widge
     int cancels = 0;
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); }, [&] { ++cancels; });
     CHECK(bed.D().IsCapturingKey());
-    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::LeftCtrl), KeyModCtrl); // waits: maybe Ctrl+something
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::LeftCtrl), KeyModCtrl); // waits, since it may be Ctrl plus another key
     CHECK(taken.IsEmpty());
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Q), KeyModCtrl);
     REQUIRE(taken.Size() == 1u);
@@ -272,17 +272,17 @@ TEST_CASE("keyboard: CaptureNextKey takes the next key before bindings and widge
     CHECK(quits == 0); // the binding never saw it
     CHECK_FALSE(bed.D().IsCapturingKey());
 
-    // A plain key's text is dropped; the field gets nothing.
+    // A plain key's text is dropped, so the field gets nothing.
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); });
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::W), 0);
     bed.D().InjectText(SV(u8"w"));
     CHECK(taken.Size() == 2u);
     CHECK(field->GetText().IsEmpty());
-    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::E), 0); // capture over: as ever
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::E), 0); // the capture is over, so keys work as usual
     bed.D().InjectText(SV(u8"e"));
     CHECK(field->GetText() == SV(u8"e"));
 
-    // A modifier alone, taken as it is released.
+    // A modifier on its own is taken when it is released.
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); });
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::LeftShift), KeyModShift);
     bed.D().InjectKeyUp(static_cast<core::u32>(KeyCode::LeftShift), 0);
@@ -312,7 +312,7 @@ TEST_CASE("keyboard: Escape cancels a capture, unless the caller takes it")
     REQUIRE(taken.Size() == 1u);
     CHECK(taken[0].Code == static_cast<core::u32>(KeyCode::Escape));
     CHECK(cancels == 1);
-    // A second capture replaces a waiting one, which is cancelled.
+    // A second capture replaces one that is waiting, and the waiting one is cancelled.
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); }, [&] { ++cancels; });
     bed.D().CaptureNextKey([&](const Keystroke& k) { taken.PushBack(k); });
     CHECK(cancels == 2);
@@ -391,7 +391,7 @@ TEST_CASE("keyboard: type-ahead reads typed text, so it follows the layout and a
     bed.root->AddChild(combo.Get());
     combo->RequestFocus();
     CHECK(bed.D().WantsTextInput()); // it asks for typed text
-    // A Russian layout's key types a Cyrillic letter; its key code is a Latin letter's.
+    // A key on a Russian layout types a Cyrillic letter, but its key code is a Latin letter's.
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::U), 0);
     bed.D().InjectText(SV(u8"г"));
     CHECK(combo->GetSelectedIndex() == 1);
@@ -442,19 +442,21 @@ TEST_CASE("keyboard: an open menu types ahead, runs a letter that is one item's 
     REQUIRE(item() == SV(u8"Open"));
     CHECK(bed.D().WantsTextInput()); // its item asks for typed text
 
-    // One letter again and again goes round the items starting with it; more letters narrow.
+    // Typing one letter repeatedly cycles through the items that start with it; more letters
+    // narrow the match.
     bed.D().InjectText(SV(u8"s"));
     CHECK(item() == SV(u8"Save"));
     bed.D().InjectText(SV(u8"s"));
     CHECK(item() == SV(u8"Save All"));
     bed.D().InjectText(SV(u8"s"));
     CHECK(item() == SV(u8"Settings"));
-    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // a pause: a new prefix
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // after a pause, a new prefix starts
     bed.D().InjectText(SV(u8"o"));
     CHECK(item() == SV(u8"Open"));
     CHECK(saved == 0); // type-ahead only moves
 
-    // Return runs the focus: menu.activate, a binding in the menu context a game rebinds.
+    // Return runs the focused item through menu.activate, a binding in the menu context that a
+    // game can rebind.
     REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"e"), SV(kMenuActivateCommand), SV(kMenuKeyContext)));
     bed.root->GetContext().Update(core::Duration::FromSeconds(1.5));
     bed.D().InjectText(SV(u8"sa"));
@@ -474,7 +476,7 @@ TEST_CASE("keyboard: an open menu types ahead, runs a letter that is one item's 
 
 TEST_CASE("keyboard: a focus that captures every key takes Tab, Escape and bound keys; its release chord frees it")
 {
-    // A game in an editor's panel: while focused and capturing, the GUI acts on no key.
+    // A game in an editor's panel: while it is focused and capturing, the GUI acts on no key.
     Bed bed;
     Button& game = bed.Add(u8"game");
     bed.Add(u8"next").SetPosition(core::Float2{0.0f, 40.0f});
@@ -502,7 +504,7 @@ TEST_CASE("keyboard: a focus that captures every key takes Tab, Escape and bound
     CHECK(backs == 0);
     CHECK(keys == 4); // Tab, Escape, Ctrl+S and Down all reached it
 
-    // Shift+F1 releases it: the keys are the GUI's again.
+    // Shift+F1 releases the capture, and the keys go to the GUI again.
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F1), KeyModShift);
     CHECK(released == 1);
     CHECK_FALSE(game.GetCapturesAllKeys());
@@ -514,7 +516,8 @@ TEST_CASE("keyboard: a focus that captures every key takes Tab, Escape and bound
 
 TEST_CASE("keyboard: a focus that captures every key takes the gamepad too: no focus move, activation or scroll")
 {
-    // A game in an editor's panel reads the pad itself; the editor's GUI must not act on it too.
+    // A game in an editor's panel reads the pad itself, so the editor's GUI must not act on it
+    // too.
     Bed bed;
     Button& game = bed.Add(u8"game");
     bed.Add(u8"below").SetPosition(core::Float2{0.0f, 40.0f});
@@ -537,7 +540,7 @@ TEST_CASE("keyboard: a focus that captures every key takes the gamepad too: no f
     CHECK(clicks == 0);
     CHECK(bed.D().GetScrollStick() == core::Float2{0.0f, 0.0f});
 
-    // Released, the pad is the GUI's again.
+    // Once the capture is released, the pad goes to the GUI again.
     bed.D().ReleaseDirection(NavDirection::Down);
     game.SetCapturesAllKeys(false);
     bed.D().InjectPadButton(PadButton::South);
@@ -565,7 +568,7 @@ TEST_CASE("keyboard: a field's label (for) marks an access key, and Alt with it 
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::N), KeyModAlt);
     CHECK(bed.D().GetFocusNode() == field.Get());
 
-    // Its text set again keeps its key; && is an ampersand.
+    // Setting its text again keeps its access key; && is a literal ampersand.
     label->SetText(SV(u8"Size && &Weight"));
     CHECK(label->GetText() == SV(u8"Size & Weight"));
     CHECK(label->GetMnemonic() == U'w');

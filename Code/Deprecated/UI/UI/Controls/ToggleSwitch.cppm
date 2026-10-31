@@ -3,8 +3,7 @@
 
 // UI - :toggle_switch partition
 //
-// iOS-style toggle switch (track + knob). Ported from Sedulous.UI/src/Controls/ToggleSwitch.bf (a View).
-// Track/knob + the text label are LIVE now that the Fonts service + VG are wired; toggle/state/event faithful.
+// iOS-style toggle switch: a track and knob, with a text label.
 
 module;
 #include "Core/Prelude.h"

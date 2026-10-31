@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // A view drawn at a scene size of its own and scaled into a rectangle of a target of another
-// shape (Sedulous ebbf7a3b): a fixed render resolution letterboxed into a wider window. The whole
+// shape: a fixed render resolution letterboxed into a wider window. The whole
 // chain runs at the scene size and one present pass scales the image into the rectangle,
 // clearing the rest of the target black.
 //

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the input kind (K2b of Specs/gui-lab-evolution-3.md): what drives the GUI now, the
-// pointer, the keyboard or a pad, from what the dispatcher is given or what a host's tracker says;
-// the focus ring follows it, a pad hides the cursor, the root hears `inputkind`, a binding follows
-// it, and a sheet reads it as `@media (input: ...)`.
+// GUI - the input kind: what drives the GUI now (the pointer, the keyboard or a pad), taken from
+// what the dispatcher is given or what a host's tracker reports. The focus ring follows it, a pad
+// hides the cursor, the root hears `inputkind`, a binding follows it, and a sheet reads it as
+// `@media (input: ...)`.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -50,7 +50,7 @@ TEST_CASE("input kind: the keys until the pointer is used; a press, a key, a pad
     CHECK(bed.d().GetInputKind() == InputKind::Keyboard);
     bed.d().InjectPadButton(PadButton::West);
     CHECK(bed.d().GetInputKind() == InputKind::Pad);
-    CHECK(bed.d().IsUsingKeyboard()); // a pad drives as the keys do
+    CHECK(bed.d().IsUsingKeyboard()); // a pad drives the GUI as the keys do
     bed.Click();
     bed.d().PressDirection(NavDirection::Down);
     bed.d().ReleaseDirection(NavDirection::Down);
@@ -61,7 +61,7 @@ TEST_CASE("input kind: the keys until the pointer is used; a press, a key, a pad
 TEST_CASE("input kind: the pad's East standing in for Escape is still the pad")
 {
     KindBed bed;
-    (void)bed.root->GetContext().GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView{}); // nothing takes it as back
+    (void)bed.root->GetContext().GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView{}); // so nothing takes it as back
     bed.d().InjectPadButton(PadButton::East);
     CHECK(bed.d().GetInputKind() == InputKind::Pad);
 }
@@ -117,7 +117,7 @@ TEST_CASE("input kind: a sheet reads it as @media (input: ...), restyling when i
         styles.ApplyTree(*bed.root);
     };
     frame();
-    CHECK(bed.button->GetAlpha() == doctest::Approx(1.0f)); // the keys: neither
+    CHECK(bed.button->GetAlpha() == doctest::Approx(1.0f)); // with the keys, neither applies
     bed.d().SetInputKind(InputKind::Pad);
     frame();
     CHECK(bed.button->GetAlpha() == doctest::Approx(0.25f));

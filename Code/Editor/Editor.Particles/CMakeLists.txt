@@ -1,5 +1,5 @@
-# Editor::Particles - `editor.particles`: the particle effect page on the GUI (Documentation/Specs/
-# editor-gui.md, 5.4, layer 8): the systems a tree, the live preview, the chosen system's rows.
+# Editor::Particles - `editor.particles`: the particle effect page on the GUI: the systems as a
+# tree, the live preview, and the rows of the chosen system.
 util_add_engine_library(Editor.Particles ALIAS Editor::Particles)
 target_link_libraries(Editor.Particles PUBLIC
     Foundation::Core Foundation::Content Foundation::Resource

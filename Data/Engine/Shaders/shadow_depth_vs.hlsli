@@ -2,15 +2,15 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The depth vertex stage (the camera depth prepass, the cascades, the local-light atlas) as a
-// library: shadow_depth.vs.hlsl is it under `main`; a surface shader's depth program includes it
-// under its own entry (SHADOW_DEPTH_VS_ENTRY) with SURFACE_PROGRAM, which runs its Vertex() and,
-// under ALPHA_TEST, hands its Surface() everything it reads.
+// library. shadow_depth.vs.hlsl includes it under `main`; a surface shader's depth program includes
+// it under its own entry (SHADOW_DEPTH_VS_ENTRY) with SURFACE_PROGRAM, which runs the shader's
+// Vertex() and, under ALPHA_TEST, hands its Surface() everything it reads.
 #ifndef SHADOW_DEPTH_VS_ENTRY
 #define SHADOW_DEPTH_VS_ENTRY main
 #endif
 cbuffer ShadowView : register(b0, space0) {
     row_major float4x4 LightViewProj;
-    float3             ShadowCamera; // the CAMERA's position (the fade is by camera distance, not the light's)
+    float3             ShadowCamera; // the camera's position (the fade is by camera distance, not the light's)
     uint               ShadowFadeFromCamera; // 1: the pass couples to a camera, so a faded set fades
     float              SceneTime;    // the scene clock (s): the WIND sway, a surface's Time()
     float              _shadowPad0;
@@ -36,7 +36,7 @@ float4x4 BlendBones(uint4 j, float4 w, uint base) {
 }
 #endif
 // The forward path's InstanceData and Object block (shared C++ ring buffers): the depth pass reads
-// fewer of their fields, declared in full so the strides and offsets are the forward's.
+// fewer of their fields, declared in full so the strides and offsets match the forward pass.
 #ifdef INSTANCED
 struct InstanceData { row_major float4x4 World; row_major float4x4 PrevWorld; float4 Tint; };
 StructuredBuffer<InstanceData> Instances : register(t0, space1);
@@ -45,7 +45,8 @@ StructuredBuffer<InstanceData> Instances : register(t0, space1);
 #include "object_block.hlsli"
 #endif
 // Every input pins its location (SPIR-V; the semantics give DXIL the same): without them DXC numbers
-// them in order, and a non-instanced skinned variant's joints would take drawOffsets' 5.
+// them in order, and a non-instanced skinned variant's joints would take location 5, which
+// belongs to drawOffsets.
 struct VSInput {
     [[vk::location(0)]] float3 position : TEXCOORD0;
     [[vk::location(1)]] float3 normal   : TEXCOORD1;
@@ -53,7 +54,7 @@ struct VSInput {
     [[vk::location(3)]] float4 color    : TEXCOORD3;
     [[vk::location(4)]] float4 tangent  : TEXCOORD4;   // xyz = tangent, w = TBN handedness (+-1)
 #ifdef INSTANCED
-    // Instance-stepped (render::GpuDrawOffsets, the forward pass's): x = index into Instances[],
+    // Instance-stepped (render::GpuDrawOffsets, as in the forward pass): x = index into Instances[],
     // y = the bone base, z = last frame's bone base, w = the draw's fade, a float by its bits (read
     // with asfloat). This pass reads x and y.
     [[vk::location(5)]] uint4  drawOffsets : TEXCOORD5;

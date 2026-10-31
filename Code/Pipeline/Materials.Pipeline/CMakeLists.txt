@@ -10,7 +10,7 @@ target_sources(Materials.Pipeline
     PRIVATE
         MaterialsCreatorsImpl.cpp # File > New, asset_create
     PRIVATE
-        MaterialAssetImpl.cpp   # MaterialAsset reflection body (Nested source; GCC hygiene)
+        MaterialAssetImpl.cpp   # MaterialAsset reflection body (Nested source; kept out of the interface for GCC)
     PUBLIC
         FILE_SET material_editor_modules TYPE CXX_MODULES FILES
             MaterialAsset.cppm)

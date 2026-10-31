@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A slider's focus shows (Sedulous a7745c65). Its parts were drawn without the control's state, so
-// a state-list thumb (a knob that lights up when focused) only ever drew its normal entry and a pad
-// player could not tell which slider they were moving; and the built-in themes gave the knob no
-// focused look to draw.
+// A slider shows its focus. Its parts are drawn with the control's state, so a state-list thumb
+// (a knob that lights up when focused) draws its focused entry and a pad player can tell which
+// slider they are moving; the built-in themes give the knob a focused look to draw.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

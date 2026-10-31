@@ -1,6 +1,5 @@
 # Foundation::GUI.Resources - `foundation.gui.resources`: cooked GUI documents and style sheets
-# (validated text), free of the GUI framework. foundation.ui's counterpart: UI.Resource.
-# Specs/gui-lab-evolution-3.md, E2.
+# (validated text), free of the GUI framework.
 util_add_engine_library(GUI.Resources ALIAS Foundation::GUI.Resources)
 target_link_libraries(GUI.Resources
     PUBLIC Foundation::Core Foundation::Resource Foundation::Content Foundation::Policy)

@@ -5,15 +5,15 @@
 //
 // material_set_shader: puts a material on a shader, as the material page's Shader row does: on a
 // custom shader asset, laid out by its cooked property table with every value whose name, type and
-// size still fit kept; or back on a built-in (PBR or Unlit). Writing a material's shaderId alone
-// (asset_data_write) leaves it in its old layout, which the cook re-lays every time with a warning
-// for each property the shader lacks.
+// size still fit kept; or back on a built-in (PBR, Unlit or Phong). Writing a material's shaderId
+// alone (asset_data_write) leaves it in its old layout, which the cook lays out again every time
+// with a warning for each property the shader lacks.
 //
-// A material's effect groups (Specs/wind-for-every-shader.md) follow the shader's vertex variants:
-// laid on the effects' tables, read from the engine's shader library (`effect` blocks in its
-// .hlsli files, as the cook reads them), so a material moved onto a shader that declares WIND
-// gains its Wind group (keeping the values it had), and one moved onto a shader that does not
-// loses it. The result lists the groups with their values, addressed as `Effect.Property`.
+// A material's effect groups follow the shader's vertex variants. They are laid on the effects'
+// tables, read from the engine's shader library (`effect` blocks in its .hlsli files, as the cook
+// reads them), so a material moved onto a shader that declares WIND gains its Wind group (keeping
+// the values it had), and one moved onto a shader that does not loses it. The result lists the
+// groups with their values, addressed as `Effect.Property`.
 
 module;
 #include "Core/Prelude.h"
@@ -39,8 +39,8 @@ using foundation::json::JsonValue;
 namespace editor::mcp::detail
 {
     // A material's effect groups as a result lists them: each `{name, flag, properties: [{name,
-    // type, value}]}`, the flag by its #define name (WIND), a float's value a number, a wider
-    // value's an array; in a script or an override a parameter is `Name.Property`.
+    // type, value}]}`, with the flag by its #define name (WIND), a float's value as a number and a
+    // wider value as an array. In a script or an override a parameter is `Name.Property`.
     inline JsonValue MaterialEffectsJson(const foundation::materials::MaterialSource& source)
     {
         using foundation::materials::MaterialPropertyType;
@@ -108,8 +108,8 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // `shaderLibrary`: the engine's Shaders/ folder, where the effects' tables are declared; empty =
-    // none read, so a material keeps the groups it carries.
+    // `shaderLibrary`: the engine's Shaders/ folder, where the effects' tables are declared. When it
+    // is empty none are read, so a material keeps the groups it carries.
     inline void RegisterMaterialShaderTool(foundation::mcp::McpServer& server, ProjectSession& session,
                                            StringView shaderLibrary)
     {
@@ -196,9 +196,9 @@ export namespace editor::mcp
                     pipeline::SetMaterialShader(material->source, shaderId, *shader);
                     vertexVariants = static_cast<foundation::shaders::ShaderFlags>(shader->vertexVariantMask);
                 }
-                // A group the shader declares and the material lacks (every new material: the
-                // builders know no effect's table) at the effect's defaults. A library that does
-                // not read leaves the groups the switch kept.
+                // Add a group the shader declares and the material lacks (as every new material
+                // does, since the builders know no effect's table) at the effect's defaults. A
+                // library that does not read leaves the groups the switch kept.
                 if (!library.IsEmpty())
                 {
                     foundation::shaders::ShaderEffectLibrary effects;

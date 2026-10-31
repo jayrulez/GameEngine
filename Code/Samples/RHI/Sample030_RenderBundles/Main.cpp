@@ -5,7 +5,7 @@
 /// Sample030 - Render Bundles. Records the triangle's draw commands into a render bundle
 /// (a reusable, off-thread-recordable command sequence) and replays it into the frame's render
 /// pass via ExecuteBundles. The pass is begun with RenderPassContents::SecondaryCommandBuffers.
-/// Exercises the RHI render-bundle path (Vulkan secondary command buffers / DX12 bundles).
+/// Exercises the RHI render-bundle path (Vulkan secondary command buffers, DX12 bundles).
 
 #include <cstdio>
 #include <cstdint>
@@ -174,7 +174,7 @@ void RenderBundlesSample::OnRender()
         rhi::RenderPassContents::SecondaryCommandBuffers; // pass body is supplied by bundles
 
     auto* rp = enc->BeginRenderPass(rpd);
-    // Viewport/scissor must be set on the parent pass - DX12 bundles inherit these.
+    // Viewport and scissor must be set on the parent pass; DX12 bundles inherit them.
     rp->SetViewport(0, 0, static_cast<foundation::core::f32>(m_width),
                     static_cast<foundation::core::f32>(m_height), 0, 1);
     rp->SetScissor(0, 0, m_width, m_height);

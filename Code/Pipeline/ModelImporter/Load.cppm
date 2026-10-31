@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Pipeline::ModelImporter:load - load a model file + cook it in one call.
+/// Pipeline::ModelImporter:load - load a model file and cook it in one call.
 ///
-/// Convenience over the model loaders + the cook step: registers the glTF/FBX
+/// Convenience over the model loaders and the cook step: registers the glTF and FBX
 /// loaders, loads `path` into a Model IR, then cooks it into `db`, yielding the
-/// ImportedModel manifest. This is the clean seam an app (or, later, the editor)
-/// drives; it keeps the loader dependency inside the importer library.
+/// ImportedModel manifest. An app drives import through this, which keeps the loader
+/// dependency inside the importer library.
 
 module;
 #include "Core/Prelude.h"
@@ -28,10 +28,10 @@ namespace content = foundation::content;
 export namespace pipeline
 {
 
-    // Load a glTF/GLB/FBX/OBJ file and cook it into `db`. `prefix` namespaces the created
+    // Load a glTF, GLB, FBX or OBJ file and cook it into `db`. `prefix` namespaces the created
     // content instances. Returns the load result (Ok on success); on a load failure the
     // cook is skipped. On Ok, `outModelGuid` is the cooked manifest (ModelResource) Guid to
-    // Bind at runtime - it pulls in the model's meshes via dependency edges.
+    // Bind at runtime; it pulls in the model's meshes through dependency edges.
     [[nodiscard]] inline model::ModelLoadResult LoadAndCook(StringView path,
                                                             content::ContentDatabase& db,
                                                             StringView prefix, Guid& outModelGuid)

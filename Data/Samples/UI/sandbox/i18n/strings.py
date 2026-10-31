@@ -2,10 +2,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026-Present Robert Campbell
 #
-# Writes sandbox.strings.xml, the GUI sandbox's string table (E9e of
-# Documentation/Specs/gui-lab-evolution.md), from the texts below: a foundation.i18n StringTable as
-# its versioned payload reads through the XML serializer. The table is the source the sandbox
-# loads; this script is how it is written, until the pipeline converts other formats (CSV).
+# Writes sandbox.strings.xml, the GUI sandbox's string table, from the texts below: a
+# foundation.i18n StringTable as its versioned payload reads through the XML serializer. The table
+# is the source the sandbox loads, and this script writes it.
 # Run it after changing a text: python3 strings.py
 import os
 from xml.sax.saxutils import escape
@@ -53,7 +52,7 @@ TEXTS = {
     "gui.copy": ("Copy", "نسخ"),
     "gui.paste": ("Paste", "لصق"),
     "gui.select-all": ("Select all", "تحديد الكل"),
-    # The game menu (the showcase, G6), its settings in Arabic the screen of E17a.
+    # The game menu (the showcase) and its settings, which the sandbox also shows in Arabic.
     "menu.welcome": ("Welcome back, {0}", "مرحبًا بعودتك يا {0}"),
     "menu.play": ("Play", "العب"),
     "menu.settings": ("Settings", "الإعدادات"),

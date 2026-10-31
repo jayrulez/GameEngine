@@ -2,9 +2,9 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample009 - Mipmaps. Ported from Sedulous Sample009_Mipmaps.
+/// Sample009 - Mipmaps.
 /// Textured quad that recedes into the distance showing mip level selection.
-/// Uses generateMipmaps() to auto-generate mip chain from a base texture.
+/// Uses generateMipmaps() to generate the mip chain from a base texture.
 
 #include <cmath>
 #include <cstdint>
@@ -125,7 +125,7 @@ foundation::core::Status MipmapSample::OnInit()
     if (m_device->CreateTexture(td, m_tex) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Upload base mip + generate mips.
+    // Upload the base mip and generate the others.
     rhi::TransferBatch* batch = nullptr;
     m_graphicsQueue->CreateTransferBatch(batch);
     batch->WriteBuffer(m_vb, 0,
@@ -179,7 +179,7 @@ foundation::core::Status MipmapSample::OnInit()
     if (m_device->CreateSampler(sd, m_sampler) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Bind groups: set 0 = texture+sampler, set 1 = UBO.
+    // Bind groups: set 0 holds the texture and sampler, set 1 the UBO.
     rhi::BindGroupLayoutEntry tE[2] = {
         rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
         rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment)};

@@ -3,12 +3,12 @@
 
 /// Foundation::Render - the `:sprite_renderer` partition.
 ///
-/// A Renderer that draws textured billboard quads (sprites). Ported from SedulousEngine's
-/// SpriteRenderer/sprite.hlsl: a 6-vertex quad is generated in the vertex shader from SV_VertexID and
-/// hardware-instanced, with per-sprite data (position/size/uv-rect/tint/orientation) fed as instance-
-/// stepped vertex attributes. Sprites register for the Transparent category and interleave with
-/// transparent meshes by depth (per-item renderer dispatch), sharing the blended forward pass:
-/// alpha/additive blend, depth-test LessEqual against the scene depth, no depth write, cull none.
+/// A Renderer that draws textured billboard quads (sprites). A 6-vertex quad is generated in the
+/// vertex shader from SV_VertexID and hardware-instanced, with per-sprite data (position, size, uv
+/// rect, tint, orientation) fed as instance-stepped vertex attributes. Sprites register for the
+/// Transparent category and interleave with transparent meshes by depth (per-item renderer
+/// dispatch), sharing the blended forward pass: alpha or additive blend, depth-test LessEqual against
+/// the scene depth, no depth write, cull none.
 ///
 /// Batching: within a resolved run, consecutive sprites sharing (texture, blend mode) fuse into one
 /// instanced draw. Non-indexed geometry isn't expressible through ResolvedDraw/EmitDraw (it always
@@ -36,7 +36,7 @@ namespace foundation::render
     Status SpriteRenderer::Initialize()
     {
 
-        // set 0: view UBO (dynamic offset, VS). set 1: sprite texture + sampler (FS).
+        // set 0: view UBO (dynamic offset, VS). set 1: sprite texture and sampler (FS).
         rhi::BindGroupLayoutEntry viewEntry =
             rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex);
         viewEntry.hasDynamicOffset = true;
@@ -105,7 +105,7 @@ namespace foundation::render
 
     void SpriteRenderer::PrepareFrame(u32 maxDraws, u32 frameIndex)
     {
-        // One draw pass (blended forward), so the instance ring only needs `maxDraws` (no cascade/prepass
+        // One draw pass (blended forward), so the instance ring only needs `maxDraws` (no cascade or prepass
         // re-emit factor). The view ring needs a slot per view; kMaxViews is a safe upper bound.
         m_instanceRing.Reserve(maxDraws == 0 ? 1u : maxDraws);
         m_viewRing.Reserve(kMaxViews);
@@ -127,7 +127,7 @@ namespace foundation::render
             return;
         }
 
-        // This view's ViewProj + View into the view ring (dynamic-offset uniform).
+        // This view's ViewProj and View into the view ring (dynamic-offset uniform).
         const DynamicUniformRing::Range vr = m_viewRing.Allocate();
         if (!vr.ok)
         {
@@ -182,7 +182,7 @@ namespace foundation::render
                     d.viewSet = viewBg;
                     d.viewDynamic = true;
                     d.viewOffset = vr.byteOffset;
-                    d.drawSet = texBg; // set 1 = sprite texture (see shader register space1)
+                    d.drawSet = texBg; // set 1: sprite texture (see shader register space1)
                     d.vertexBuffer0 = m_instanceRing.Buffer();
                     d.vertexOffset0 = ir.byteOffset;
                     d.indexBuffer = m_indexBuffer;
@@ -244,7 +244,7 @@ namespace foundation::render
             {
                 return found->bindGroup;
             }
-            // Address reuse: the cached group references a DESTROYED view - rebuild.
+            // Address reuse: the cached group references a destroyed view, so rebuild.
             if (found->bindGroup != nullptr)
             {
                 m_device->DestroyBindGroup(found->bindGroup);
@@ -321,9 +321,9 @@ namespace foundation::render
 
         rhi::ColorTargetState target{};
         target.format = colorFormat;
-        // Additive sprites use ALPHA-WEIGHTED additive (dst + src.rgb*src.a), not the plain {One,One}
-        // accumulate preset - so a texture's transparent (alpha 0) texels add nothing instead of dumping
-        // their (often white) RGB into the scene. Only the opaque logo glows.
+        // Additive sprites use alpha-weighted additive (dst + src.rgb*src.a), not the plain {One,One}
+        // accumulate preset, so a texture's transparent (alpha 0) texels add nothing instead of dumping
+        // their (often white) RGB into the scene. Only the opaque texels glow.
         const rhi::BlendState addBlend{
             {rhi::BlendFactor::SrcAlpha, rhi::BlendFactor::One, rhi::BlendOperation::Add},
             {rhi::BlendFactor::One, rhi::BlendFactor::One, rhi::BlendOperation::Add}};

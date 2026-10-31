@@ -1,5 +1,5 @@
-# engine.integration tests: the physics-contact -> script bridge (kind mapping + install
-# semantics). End-to-end contact->behavior delivery through the same bridge is in the script scene tests.
+# engine.integration tests: the bridge from physics contacts to scripts (kind mapping and install
+# semantics). End-to-end delivery of contacts to behaviors through the same bridge is in the script scene tests.
 add_executable(Engine.Integration.Tests TestsMain.cpp ContactBridgeTests.cpp)
 target_link_libraries(Engine.Integration.Tests PRIVATE
     Engine::Integration Foundation::Physics Engine::Script doctest::doctest)

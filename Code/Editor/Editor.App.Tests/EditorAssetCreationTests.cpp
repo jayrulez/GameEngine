@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorAssetCreation: a create with no project, or one its creator cannot write,
-// says so; one that writes its asset opens its page, and a scene becomes the project's default
-// when it has none.
+// Editor::App: EditorAssetCreation. Creating with no project open, or with a creator that cannot
+// write its asset, reports the failure. A create that writes its asset opens its page, and a new
+// scene becomes the project's default scene when it has none.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -56,7 +56,7 @@ TEST_CASE("asset creation: refused with no project or a failed write; a written 
     UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir.AsView());
     REQUIRE(project);
     creation.SetProject(project.Get());
-    creation.CreateAndOpen(failing); // no run: nothing written
+    creation.CreateAndOpen(failing); // the creator writes nothing
     CHECK(said == String(u8"Create failed: the scene could not be written."));
     CHECK(opened == nullptr);
 

@@ -4,9 +4,8 @@
 // UI - :storyboard partition
 //
 // Groups multiple animations to play sequentially or in parallel. A Storyboard is itself an Animation, so
-// it can be nested. Ported from Sedulous.UI/src/Animation/Storyboard.bf. Beef `List<Animation> ~ Delete
-// ContainerAndItems` -> Array<UniquePtr<Animation>> (RAII single-owner). Duration is computed from
-// children (base(0)); Storyboard overrides Update directly so Apply is a no-op.
+// it can be nested. It owns its children. The base Animation gets a duration of 0: Storyboard overrides
+// Update to drive its children directly, so Apply is a no-op.
 
 module;
 #include "Core/Prelude.h"
@@ -74,7 +73,7 @@ export namespace foundation::ui
         }
 
     protected:
-        void Apply(f32) override { /* Not used - Storyboard overrides Update directly. */ }
+        void Apply(f32) override { /* Not used: Storyboard overrides Update directly. */ }
 
     private:
         bool UpdateSequential(f32 deltaTime)

@@ -4,10 +4,10 @@
 /// foundation.rhi.webgpu:render_pass_encoder - RenderPassEncoder over WGPURenderPassEncoder.
 ///
 /// SetPushConstants takes native immediates where available (see :pipeline_layout), else the
-/// uniform-buffer fallback (:push_constant_emulator) - the shadow is flushed and bound before
+/// uniform-buffer fallback (:push_constant_emulator), whose shadow is flushed and bound before
 /// each draw. Multi-draw indirect unrolls into single indirect draws (core WebGPU has one-draw
-/// indirect). Occlusion queries require RenderPassDesc.occlusionQuerySet declared at pass begin;
-/// Begin/End then carry only the index. Timestamps also ride the pass descriptor.
+/// indirect). Occlusion queries require RenderPassDesc.occlusionQuerySet declared at pass
+/// begin; Begin/End then carry only the index. Timestamps also go through the pass descriptor.
 
 module;
 #include "Core/Prelude.h"
@@ -66,7 +66,7 @@ export namespace foundation::rhi::webgpu
         void SetPushConstants(ShaderStage, u32 offset, u32 size, const void* data) override
         {
             // Emulating pipeline: fold into the shadow (bound before the next draw). Otherwise
-            // the pipeline declared native immediates - issue them directly.
+            // the pipeline declared native immediates; issue them directly.
             if (!m_pushConstants.Write(offset, size, data) &&
                 m_api->wgpuRenderPassEncoderSetImmediates != nullptr)
             {
@@ -212,15 +212,15 @@ export namespace foundation::rhi::webgpu
         void End() override
         {
             m_api->wgpuRenderPassEncoderEnd(m_encoder);
-            // AFTER End: the pass commands have taken their references, so the emulated
-            // uniform buffers/bind groups can be freed.
+            // After End: the pass commands have taken their references, so the emulated uniform
+            // buffers and bind groups can be freed.
             m_pushConstants.Release();
             m_api->wgpuRenderPassEncoderRelease(m_encoder);
             m_encoder = nullptr;
         }
 
     private:
-        /// Upload + bind any pending emulated push-constant block before a draw. No-op for
+        /// Upload and bind any pending emulated push-constant block before a draw. No-op for
         /// pipelines that use native immediates.
         void FlushPushConstants()
         {

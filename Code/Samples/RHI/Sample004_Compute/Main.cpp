@@ -3,7 +3,6 @@
 
 #include <new>
 /// Sample004 - Compute Shader (Animated Point Grid).
-/// Ported from Sedulous Sample004_Compute.
 
 #include <cmath>
 #include <cstdint>
@@ -122,7 +121,7 @@ foundation::core::Status ComputeSample::OnInit()
         return foundation::core::ErrorCode::Unknown;
     m_vpMapped = m_vpBuf->Map();
 
-    // Compute BGL + BG + PL + pipeline.
+    // Compute bind group layout, bind group, pipeline layout and pipeline.
     rhi::BindGroupLayoutEntry cE[2] = {
         rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Compute),
         rhi::BindGroupLayoutEntry::StorageBuffer(0, rhi::ShaderStage::Compute, false)};
@@ -148,7 +147,7 @@ foundation::core::Status ComputeSample::OnInit()
     if (m_device->CreateComputePipeline(cpd, m_compPipe) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Render BGL + BG + PL + pipeline.
+    // Render bind group layout, bind group, pipeline layout and pipeline.
     rhi::BindGroupLayoutEntry rE[1] = {
         rhi::BindGroupLayoutEntry::UniformBuffer(0, rhi::ShaderStage::Vertex)};
     rhi::BindGroupLayoutDesc rBgld{};

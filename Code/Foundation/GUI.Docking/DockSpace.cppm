@@ -2,18 +2,19 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI.Docking - :dock_space partition: DockSpace, the widget that shows one surface of a
-// controller's layout (D3 of Specs/gui-lab-evolution-3.md).
+// controller's layout.
 //
-// Its widgets are made from the layout, each kept by the id of the node it shows, so showing the
-// layout again changes only what changed: a split is the core's Splitter (round three's ruling 6),
-// a stack a TabView whose strip's group is `dock`, each panel a page whose content the controller
+// Its widgets are made from the layout, and each is kept by the id of the node it shows, so showing
+// the layout again changes only what changed. A split is shown by the core's Splitter, and a stack
+// by a TabView whose strip's group is `dock`. Each panel is a page whose content the controller
 // makes the first time its tab is shown. A panel the layout names that is not registered shows a
-// placeholder, filled when it is. A maximized stack is shown alone. What the user does in the
-// widgets goes back into the layout: a separator dragged, a tab chosen or dragged to another place,
-// a tab's close (through the controller, which closes it as its description says).
+// placeholder, which is filled once the panel is registered. A maximized stack is shown alone. What
+// the user does in the widgets goes back into the layout: dragging a separator, choosing a tab or
+// dragging it to another place, and closing a tab (through the controller, which closes the panel
+// as its description says).
 //
 // Docking's default sheet (DockingSheetCSS) styles them through the theme's tokens: a theme or an
-// application restyles docking by setting `--dock-*` (round three's ruling 4).
+// application restyles docking by setting `--dock-*`.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +32,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// Docking's default sheet, written against the theme's tokens (an application puts it after the
-    /// theme in its user agent sheet).
+    /// Docking's default sheet, written against the theme's tokens. An application puts it after
+    /// the theme in its user agent sheet.
     [[nodiscard]] inline core::StringView DockingSheetCSS() noexcept
     {
         return core::StringView(u8R"(
@@ -56,19 +57,21 @@ export namespace foundation::gui
         )");
     }
 
-    /// Docking's commands: `dock.focus-*` and `dock.move-*` (left, right, up, down) focus the stack
-    /// that way, or move the focused stack's panel into it (past the surface's edge into what lies
-    /// beyond it, in a DockArea; else along that edge); `dock.maximize` shows the focused stack alone
-    /// or all again; `dock.close` closes its panel; `dock.move-to` opens the menu of where it may go
-    /// (what a tab's context menu opens too, with Close); `dock.float` floats it. A DockSpace takes them for the
-    /// stack the focus is in. `dock.next-surface` and `dock.previous-surface` take the focus to a
-    /// DockArea's next surface (its main one, then its floats), to the stack last focused there.
+    /// Defines docking's commands. A DockSpace handles them for the stack the focus is in.
+    /// `dock.focus-*` (left, right, up, down) focuses the stack in that direction, and `dock.move-*`
+    /// moves the focused stack's panel into it. In a DockArea a move goes past the surface's edge
+    /// into what lies beyond it; otherwise the panel goes along that edge. `dock.maximize` shows the
+    /// focused stack alone, or every stack again. `dock.close` closes the focused panel.
+    /// `dock.move-to` opens the menu of places the panel may go, the same menu a tab's context menu
+    /// opens, with Close. `dock.float` floats the panel. `dock.next-surface` and
+    /// `dock.previous-surface` move the focus to a DockArea's next surface (its main one, then its
+    /// floats), to the stack last focused there.
     ///
-    /// None is bound to a key: docking is the pointer's (a drag, Shift to float), and the keys a
-    /// desktop leaves free differ (Ctrl+Alt and an arrow is GNOME's, Ctrl+Alt is AltGr on many
-    /// layouts). The keyboard's way in is a tab's context menu (Shift+F10, the Menu key), which is
-    /// Move to, and `drag.pick` (Ctrl+Shift+D); an application binds these where it wants keys, or
-    /// shows them in a menu.
+    /// No command is bound to a key. Docking is driven by the pointer (a drag, with Shift to float),
+    /// and the keys a desktop leaves free differ: GNOME takes Ctrl+Alt with an arrow, and Ctrl+Alt
+    /// is AltGr on many keyboard layouts. From the keyboard, the way in is a tab's context menu
+    /// (Shift+F10 or the Menu key), which holds Move to, and `drag.pick` (Ctrl+Shift+D). An
+    /// application binds these commands to keys where it wants them, or shows them in a menu.
     inline void DefineDockingCommands(GUIContext& context)
     {
         struct Named
@@ -101,10 +104,10 @@ export namespace foundation::gui
     enum class DockTornTab : u8
     {
         Dim,   ///< it stays, dimmed (the default)
-        Close, ///< its strip closes up, a neighbour's panel shown
+        Close, ///< the strip closes up and the stack shows a neighbouring panel
     };
 
-    /// A way on the screen, for the directional commands.
+    /// A direction on the screen, for the directional commands.
     enum class DockDirection : u8
     {
         Left,
@@ -115,43 +118,43 @@ export namespace foundation::gui
 
     class DockSpace;
 
-    /// What a DockSpace's keys and its Move to menu reach past its own surface: the other surfaces
-    /// shown with it (a DockArea's main surface and its floats).
+    /// Lets a DockSpace's keys and its Move to menu reach past its own surface, to the other
+    /// surfaces shown with it (a DockArea's main surface and its floats).
     class IDockSurroundings
     {
     public:
         virtual ~IDockSurroundings() = default;
-        /// The stack of another surface past `stack`'s surface the way `way` goes (what lies just
-        /// beyond its edge there); kNoDock when none does.
+        /// Returns the stack of another surface that lies just beyond the edge of `stack`'s surface
+        /// in direction `way`, or kNoDock when there is none.
         [[nodiscard]] virtual DockNodeId StackBeyond(const DockSpace& from, DockNodeId stack, DockDirection way) const = 0;
-        /// The stacks the other surfaces show, for the Move to menu.
+        /// Collects the stacks the other surfaces show, for the Move to menu.
         virtual void OtherStacks(const DockSpace& from, Array<DockNodeId>& out) const = 0;
-        /// Focuses a stack any of them shows (its chosen tab); false when none does.
+        /// Focuses the chosen tab of `stack` on whichever surface shows it. Returns false when none
+        /// does.
         virtual bool FocusStackAnywhere(DockNodeId stack) = 0;
     };
 
-    /// A stack as a DockSpace shows it: a TabView whose drops are the layout's to decide (its
-    /// middle tabs a dragged panel in, an edge band puts it beside).
+    /// A stack as a DockSpace shows it: a TabView whose drops the layout decides. A panel dropped on
+    /// its middle becomes a tab, and one dropped on an edge band goes beside it.
     class DockStack : public TabView
     {
         RTTI_OBJECT(DockStack, TabView)
     public:
         DockStack(DockSpace& space, DockNodeId node) : m_space(&space), m_node(node)
         {
-            // Its splitter gives it the room the user left it: a panel wider or taller than that
-            // wraps or is clipped here, never spilling onto its neighbours.
+            // The splitter gives the stack the room the user left it. A panel wider or taller than
+            // that wraps or is clipped here, and never spills onto its neighbours.
             StyleWriteScope defaults(*this);
             EditLayoutStyle([](LayoutStyle& s)
             {
                 s.OverflowX = Overflow::Hidden;
                 s.OverflowY = Overflow::Hidden;
             });
-            // A closable panel's close part on the chosen tab and the one hovered (as Visual Studio's
-            // and Godot's docks show it), and a middle click closes one; a sheet's `close-display`
-            // says otherwise.
+            // A closable panel's close button shows on the chosen tab and on the hovered one, and a
+            // middle click closes the tab. A sheet's `close-display` can change this.
             GetBar()->SetCloseDisplay(TabCloseDisplay::Hover);
-            // Its strip's end, as Dear ImGui's: the list button always (clicked it lists the tabs,
-            // dragged it carries the stack), and past it a cross closing every closable tab.
+            // The end of the strip always shows the list button, which lists the tabs when clicked and
+            // carries the stack when dragged. Past it, a cross closes every closable tab.
             GetBar()->SetListDisplay(TabListDisplay::Always);
             GetBar()->SetCloseAll(true);
         }
@@ -229,7 +232,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] DockSurfaceId GetSurface() const noexcept { return m_surface; }
 
-        /// The widget showing a node (a Splitter or a TabView); null when it shows none.
+        /// Returns the widget showing a node (a Splitter or a TabView), or null when this space does
+        /// not show it.
         [[nodiscard]] UIWidget* WidgetOf(DockNodeId node) const noexcept
         {
             for (const Shown& shown : m_shown)
@@ -237,7 +241,7 @@ export namespace foundation::gui
                     return shown.Widget.Get();
             return nullptr;
         }
-        /// The page showing a panel; null when none does.
+        /// Returns the page showing a panel, or null when none does.
         [[nodiscard]] TabPage* PageOf(core::StringView panel) const noexcept
         {
             for (const Shown& shown : m_shown)
@@ -256,8 +260,9 @@ export namespace foundation::gui
             return nullptr;
         }
 
-        // === The keyboard's moves (D4) ===
-        /// The stack the focus is in, among those this widget shows; kNoDock when it is in none.
+        // === Keyboard moves ===
+        /// Returns the stack the focus is in, among those this widget shows, or kNoDock when it is in
+        /// none of them.
         [[nodiscard]] DockNodeId FocusedStack() const
         {
             const EventDispatcher* d = const_cast<DockSpace*>(this)->GetEventDispatcher();
@@ -266,8 +271,8 @@ export namespace foundation::gui
                     return stack->GetNode();
             return kNoDock;
         }
-        /// The stack shown nearest `stack` the way `way` goes (overlapping it across); kNoDock when
-        /// none is.
+        /// Returns the stack shown nearest `stack` in direction `way` that overlaps it across that
+        /// direction, or kNoDock when there is none.
         [[nodiscard]] DockNodeId StackToward(DockNodeId stack, DockDirection way) const
         {
             const UIWidget* from = WidgetOf(stack);
@@ -294,7 +299,7 @@ export namespace foundation::gui
                 const f32 overlap = across ? Min(a.y + a.height, b.y + b.height) - Max(a.y, b.y)
                                            : Min(a.x + a.width, b.x + b.width) - Max(a.x, b.x);
                 if (gap < -1.0f || overlap <= 0.0f)
-                    continue; // not that way, or not beside it
+                    continue; // not in that direction, or not alongside it
                 if (best == kNoDock || gap < bestGap - 0.5f || (gap <= bestGap + 0.5f && overlap > bestOverlap))
                 {
                     best = shown.Node;
@@ -304,8 +309,8 @@ export namespace foundation::gui
             }
             return best;
         }
-        /// The stack this widget shows at `screenPoint`, or the one nearest it; kNoDock when it shows
-        /// none.
+        /// Returns the stack this widget shows at `screenPoint`, or the one nearest it, or kNoDock
+        /// when it shows no stack.
         [[nodiscard]] DockNodeId StackAt(core::Float2 screenPoint) const
         {
             DockNodeId best = kNoDock;
@@ -326,14 +331,15 @@ export namespace foundation::gui
             }
             return best;
         }
-        /// The stacks this widget shows (a maximized one alone), in the layout's order.
+        /// Collects the stacks this widget shows in the layout's order (only the maximized one, when
+        /// a stack is maximized).
         void StacksShown(Array<DockNodeId>& out) const
         {
             for (const Shown& shown : m_shown)
                 if (shown.Kind == DockNodeKind::Stack && Holds(*shown.Widget))
                     out.PushBack(shown.Node);
         }
-        /// A stack's chosen tab focused; false when this widget shows none of it.
+        /// Focuses a stack's chosen tab. Returns false when this widget does not show the stack.
         bool FocusStack(DockNodeId stack)
         {
             TabView* view = Cast<TabView>(WidgetOf(stack));
@@ -345,12 +351,13 @@ export namespace foundation::gui
             tab->RequestFocus();
             return true;
         }
-        /// What its keys and Move to menu reach past its own surface (a DockArea sets it); none, they
-        /// stay in it.
+        /// Sets what the keys and the Move to menu reach past this surface (a DockArea sets it).
+        /// With none, they stay within this surface.
         void SetSurroundings(IDockSurroundings* surroundings) noexcept { m_surroundings = surroundings; }
         [[nodiscard]] IDockSurroundings* GetSurroundings() const noexcept { return m_surroundings; }
-        /// Focuses the stack the way `way` goes from the focused one (its chosen tab), past the
-        /// surface's edge into the surroundings when none of its own is; false when there is none.
+        /// Focuses the chosen tab of the stack in direction `way` from the focused one. When this
+        /// surface has no stack there, it looks past the edge into the surroundings. Returns false
+        /// when there is no stack in that direction.
         bool FocusToward(DockDirection way)
         {
             const DockNodeId from = FocusedStack();
@@ -359,9 +366,9 @@ export namespace foundation::gui
             const DockNodeId beyond = from != kNoDock && m_surroundings != nullptr ? m_surroundings->StackBeyond(*this, from, way) : kNoDock;
             return beyond != kNoDock && m_surroundings->FocusStackAnywhere(beyond);
         }
-        /// The focused stack's chosen panel moved the way `way` goes: into the stack there, else into
-        /// the stack beyond the surface's edge (the surroundings'), else along that edge. The focus
-        /// goes with it.
+        /// Moves the focused stack's chosen panel in direction `way`: into the stack there, else into
+        /// the stack beyond the surface's edge in the surroundings, else along that edge. The focus
+        /// moves with the panel.
         DockOutcome MoveFocused(DockDirection way)
         {
             const DockNodeId stack = FocusedStack();
@@ -369,7 +376,7 @@ export namespace foundation::gui
             if (node == nullptr || node->Panels.IsEmpty())
                 return DockOutcome::Refuse(u8"no stack is focused");
             const String panel = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
-            const RefPtr<DockSpace> keep(this); // a float this empties ends with the edit
+            const RefPtr<DockSpace> keep(this); // a float this move empties ends during the edit
             DockNodeId to = StackToward(stack, way);
             if (to == kNoDock && m_surroundings != nullptr)
                 to = m_surroundings->StackBeyond(*this, stack, way);
@@ -383,7 +390,7 @@ export namespace foundation::gui
                 (void)FocusLanded(m_controller->GetLayout().StackOf(panel.AsView()));
             return outcome;
         }
-        /// The focused stack shown alone, or every stack again when one is.
+        /// Shows the focused stack alone, or every stack again when one is already maximized.
         DockOutcome ToggleMaximized()
         {
             const DockSurface* surface = m_controller != nullptr ? m_controller->GetLayout().FindSurface(m_surface) : nullptr;
@@ -403,7 +410,7 @@ export namespace foundation::gui
             (void)FocusStack(stack);
             return outcome;
         }
-        /// Closes the focused stack's chosen panel (as its description says).
+        /// Closes the focused stack's chosen panel, as its description says.
         DockOutcome CloseFocused()
         {
             const DockNodeId stack = FocusedStack();
@@ -414,20 +421,20 @@ export namespace foundation::gui
             return m_controller->Close(panel.AsView());
         }
 
-        // === Floating (D5) ===
-        /// A drag asks for a float rather than a dock: Shift held (the pointer's; the keyboard drops
-        /// where the focus is).
+        // === Floating ===
+        /// Whether a drag asks for a float rather than a dock: Shift is held during a pointer drag. A
+        /// keyboard drag always drops where the focus is.
         [[nodiscard]] static bool AsksToFloat(const DropQuery& query) noexcept
         {
             return !query.FromKeyboard && (query.Modifiers & KeyModShift) != 0;
         }
-        /// Told of a panel or a stack dragged from here and let go outside every window (a DockArea
-        /// floats it there, in OS windows, D6).
+        /// Sets the handler told of a panel or stack dragged from here and let go outside every
+        /// window. A DockArea floats it there, in an OS window.
         void SetOnDraggedOutside(Function<void(const DockDragged&, const DragResult&)> handler) { m_onDraggedOutside = core::Move(handler); }
-        /// Where a panel floated from here (the menu, `dock.float`) stands: what the area it is in
-        /// says (a DockArea sets it); none, a float placed where the area cascades them.
+        /// Sets what decides where a panel floated from here (by the menu or `dock.float`) stands; a
+        /// DockArea sets it. With none, the float goes where the area cascades its floats.
         void SetFloatPlacer(Function<Rectangle(core::StringView panel)> placer) { m_floatPlacer = core::Move(placer); }
-        /// A panel docked here floated into a surface of its own.
+        /// Floats a panel docked here into a new floating surface.
         DockOutcome FloatPanel(core::StringView panel)
         {
             if (m_controller == nullptr)
@@ -436,7 +443,7 @@ export namespace foundation::gui
             const String moving(panel);
             return m_controller->Edit([&](DockLayout& layout) { return layout.Float(moving.AsView(), bounds); });
         }
-        /// The focused stack's chosen panel floated.
+        /// Floats the focused stack's chosen panel.
         DockOutcome FloatFocused()
         {
             const DockNodeId stack = FocusedStack();
@@ -447,11 +454,12 @@ export namespace foundation::gui
             return FloatPanel(panel.AsView());
         }
 
-        // === The "Move to" menu (D4) ===
-        /// Opens the menu of the places `panel` may go, at `at` (root space) for `owner`: into each
-        /// other stack, beside one (on each side), its own and then the surroundings', along the
-        /// surface's edges, floated; a place the layout refuses is shown disabled. Then Close (disabled
-        /// for a panel that cannot be closed). Null when the panel is not docked here.
+        // === The "Move to" menu ===
+        /// Opens the menu of places `panel` may go, at `at` (in root space) for `owner`. It lists:
+        /// into each other stack, beside each stack (on each side), first this surface's stacks and
+        /// then the surroundings', along the surface's edges, and floated. A place the layout refuses
+        /// is shown disabled. Close comes last, disabled for a panel that cannot be closed. Returns
+        /// null when the panel is not docked here.
         Menu* OpenMoveTo(core::StringView panel, Node& owner, core::Float2 at)
         {
             if (m_controller == nullptr || m_controller->GetLayout().SurfaceOf(m_controller->GetLayout().StackOf(panel)) != m_surface)
@@ -467,7 +475,7 @@ export namespace foundation::gui
                 const bool can = ApplyDrop(after, panel, drop).Ok();
                 MenuItem* item = into.AddItem(text, [self, moving, drop]()
                 {
-                    const RefPtr<DockSpace> keep(self); // a float this empties ends with the edit
+                    const RefPtr<DockSpace> keep(self); // a float this move empties ends during the edit
                     if (self->m_controller->Edit([&](DockLayout& layout) { return ApplyDrop(layout, moving.AsView(), drop); }).Ok())
                         (void)self->FocusLanded(self->m_controller->GetLayout().StackOf(moving.AsView()));
                 });
@@ -478,7 +486,7 @@ export namespace foundation::gui
             const char8_t* const edgeNames[] = {u8"Left", u8"Right", u8"Top", u8"Bottom"};
             Menu* into = menu.AddSubMenu(core::StringView(u8"Into"));
             Menu* beside = menu.AddSubMenu(core::StringView(u8"Beside"));
-            // Its own stacks, then the other surfaces' (named for where they are).
+            // This surface's stacks, then those of the other surfaces (named for where they are).
             Array<DockNodeId> stacks;
             StacksShown(stacks);
             const usize own = stacks.Size();
@@ -512,7 +520,7 @@ export namespace foundation::gui
                 const DockPanelDescription* description = m_controller->Describe(panel);
                 MenuItem* item = menu.AddItem(core::StringView(u8"Close"), [self, moving]()
                 {
-                    const RefPtr<DockSpace> keep(self); // a float this empties ends with the close
+                    const RefPtr<DockSpace> keep(self); // a float this close empties ends during it
                     (void)self->m_controller->Close(moving.AsView());
                 });
                 item->SetEnabled(description == nullptr || description->Closable);
@@ -532,31 +540,34 @@ export namespace foundation::gui
             const String panel = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
             return OpenMoveTo(panel.AsView(), *tab, tab->ConvertToWorldSpace(core::Float2{0.0f, tab->GetSize().y}));
         }
-        /// The menu last opened (open or not); null before one is.
+        /// Returns the menu opened last, whether it is still open or not, or null before any has
+        /// opened.
         [[nodiscard]] Menu* GetMoveMenu() const noexcept { return m_moveMenu.Get(); }
 
-        // === Drops (D4) ===
-        /// How far into a stack its edge band reaches (a third of it at most); the sheet's
-        /// `edge-band`, the theme's `--dock-edge`.
+        // === Drops ===
+        /// How far into a stack its edge band reaches, at most a third of the stack. Set by the
+        /// sheet's `edge-band` (the theme's `--dock-edge`).
         [[nodiscard]] f32 GetEdgeBand() const noexcept { return m_edgeBand; }
         void SetEdgeBand(f32 band) noexcept { m_edgeBand = Max(0.0f, band); }
-        /// How far into the surface its own edge band reaches (`surface-band`, `--dock-surface-edge`);
-        /// over a strip along the edge, its outer third (the rest is the strip's).
+        /// How far into the surface the surface's own edge band reaches (`surface-band`,
+        /// `--dock-surface-edge`). Over a strip along the edge, only the outer third of the band
+        /// counts, and the rest belongs to the strip.
         [[nodiscard]] f32 GetSurfaceBand() const noexcept { return m_surfaceBand; }
         void SetSurfaceBand(f32 band) noexcept { m_surfaceBand = Max(0.0f, band); }
 
         /// What a tab torn out of its stack leaves while it is dragged (`torn-tab`, the theme's
-        /// `--dock-torn-tab`): `dim` (the default), it stays where it is, dimmed; `close`, its strip
-        /// closing up and its stack showing a neighbour's panel. Nothing moves in the layout until the drop,
-        /// and a drag that ends without one shows the stack as it was. A stack's only tab, or a tab
-        /// picked up from the keyboard (the focus stays on it), is dimmed either way.
+        /// `--dock-torn-tab`). With `dim`, the default, the tab stays where it is, dimmed. With
+        /// `close`, the strip closes up and the stack shows a neighbouring panel. Nothing moves in the
+        /// layout until the drop, and a drag that ends without one shows the stack as it was. A
+        /// stack's only tab, or a tab picked up from the keyboard (which keeps the focus on it), is
+        /// dimmed either way.
         [[nodiscard]] DockTornTab GetTornTab() const noexcept { return m_tornTab; }
         void SetTornTab(DockTornTab torn) noexcept { m_tornTab = torn; }
         [[nodiscard]] String GetTornTabName() const { return String(m_tornTab == DockTornTab::Close ? u8"close" : u8"dim"); }
         void SetTornTabName(const String& name) { m_tornTab = name.AsView() == core::StringView(u8"close") ? DockTornTab::Close : DockTornTab::Dim; }
 
-        /// The docked panel a drag carries (a torn-out tab of a page some view of the controller
-        /// shows); null for anything else.
+        /// Returns the docked panel a drag carries (a torn-out tab of a page that some view of the
+        /// controller shows), or null for any other drag.
         [[nodiscard]] const String* DraggedPanel(const DragPayload& payload) const
         {
             if (m_controller == nullptr || payload.Type.AsView() != core::StringView(u8"gui/tab"))
@@ -565,8 +576,8 @@ export namespace foundation::gui
             const Node* page = tab != nullptr ? tab->GetPage() : nullptr;
             return page != nullptr ? m_controller->PanelShownBy(*page) : nullptr;
         }
-        /// The floating surface a drag carries whole (a float dragged by its title); kNoDock for
-        /// anything else.
+        /// Returns the floating surface a drag carries whole (a float dragged by its title bar), or
+        /// kNoDock for any other drag.
         [[nodiscard]] DockSurfaceId DraggedSurface(const DragPayload& payload) const
         {
             if (m_controller == nullptr || payload.Type.AsView() != core::StringView(kDockSurfaceDragType))
@@ -575,7 +586,8 @@ export namespace foundation::gui
             const DockSurface* surface = id != nullptr ? m_controller->GetLayout().FindSurface(static_cast<DockSurfaceId>(*id)) : nullptr;
             return surface != nullptr && surface->Kind == DockSurfaceKind::Floating ? surface->Id : kNoDock;
         }
-        /// The stack a drag carries whole (its strip's grip dragged); kNoDock for anything else.
+        /// Returns the stack a drag carries whole (dragged by the grip on its strip), or kNoDock for
+        /// any other drag.
         [[nodiscard]] DockNodeId DraggedStack(const DragPayload& payload) const
         {
             if (m_controller == nullptr || payload.Type.AsView() != core::StringView(kDockStackDragType))
@@ -584,7 +596,8 @@ export namespace foundation::gui
             const DockNode* stack = id != nullptr ? m_controller->GetLayout().FindNode(static_cast<DockNodeId>(*id)) : nullptr;
             return stack != nullptr && stack->IsStack() ? stack->Id : kNoDock;
         }
-        /// What a dock drag carries (a panel, a floating surface or a stack); false for any other drag.
+        /// Gets what a dock drag carries (a panel, a floating surface or a stack). Returns false for
+        /// any other drag.
         [[nodiscard]] bool Dragged(const DragPayload& payload, DockDragged& out) const
         {
             if (const String* panel = DraggedPanel(payload))
@@ -601,9 +614,10 @@ export namespace foundation::gui
             out = DockDragged{String{}, surface};
             return surface != kNoDock;
         }
-        /// The drop a point means (in this widget's space), over `stack` (kNoDock: over none): the
-        /// surface's edge within its band, else the stack's edge within its band, else its middle;
-        /// false when it means none.
+        /// Gets the drop that point `at` (in this widget's space) means over `stack`, or over no
+        /// stack when `stack` is kNoDock. Within the surface's band it is the surface's edge, else
+        /// within the stack's band it is the stack's edge, else it is the stack's middle. Returns
+        /// false when the point means no drop.
         [[nodiscard]] bool DropAt(core::Float2 at, DockNodeId stack, DockDrop& drop, f32 surfaceShare = 1.0f) const
         {
             const Rect bounds = GetScreenBounds();
@@ -626,8 +640,8 @@ export namespace foundation::gui
                 drop = DockDrop{DockDropKind::Middle, stack, kNoDock, -1, DockSide::Start};
             return true;
         }
-        /// Where the preview of the drop being offered stands (this widget's space); false when none
-        /// shows.
+        /// Gets where the preview of the offered drop stands, in this widget's space. Returns false
+        /// when no preview shows.
         [[nodiscard]] bool GetPreviewBounds(Rect& out) const
         {
             if (!m_preview || !m_preview->IsVisible())
@@ -636,8 +650,8 @@ export namespace foundation::gui
             return true;
         }
 
-        /// The layout shown again: the widgets of nodes still there kept and brought in step, those of
-        /// nodes gone let go.
+        /// Shows the layout again. The widgets of nodes still in the layout are kept and brought up to
+        /// date, and the widgets of nodes that are gone are released.
         void ShowLayout() override
         {
             if (m_controller == nullptr)
@@ -650,7 +664,7 @@ export namespace foundation::gui
             if (surface != nullptr)
             {
                 top = Build(surface->Maximized != kNoDock ? surface->Maximized : surface->Root);
-                Keep(surface->Root); // a stack maximized: the rest kept for its restore
+                Keep(surface->Root); // with a stack maximized, keep the rest for when it is restored
             }
             Node* const shown = ChildCount() > 0 && GetChildAt(0) != m_preview.Get() ? GetChildAt(0) : nullptr;
             if (shown != top.Get())
@@ -659,8 +673,8 @@ export namespace foundation::gui
                     RemoveChild(shown);
                 if (top)
                 {
-                    // The space's size, never its content's: a stack holding a long tree or a tall
-                    // page clips it rather than growing the split past the space.
+                    // Size to the space, never to the content: a stack holding a long tree or a
+                    // tall page clips it rather than growing the split past the space.
                     top->EditLayoutStyle([](LayoutStyle& s)
                     {
                         s.Grow = 1.0f;
@@ -683,7 +697,7 @@ export namespace foundation::gui
     protected:
         void OnDragQuery(DropQuery& query) override
         {
-            // Reached over a separator, or past a stack that left it the surface's band.
+            // Reached over a separator, or from a stack that left the surface's band to this widget.
             DockDragged dragged;
             DockDrop drop;
             if (Dragged(query.Payload, dragged) && !query.FromKeyboard && !AsksToFloat(query) && DropAt(query.Local, kNoDock, drop))
@@ -697,19 +711,20 @@ export namespace foundation::gui
         {
             String Panel;
             RefPtr<TabPage> Widget;
-            bool Registered = false; ///< made for a registered panel, not a placeholder
+            bool Registered = false; ///< made for a registered panel rather than as a placeholder
         };
         struct Shown
         {
             DockNodeId Node = kNoDock;
             DockNodeKind Kind = DockNodeKind::Stack;
             RefPtr<UIWidget> Widget;
-            Array<Page> Pages; // a stack's, by panel
+            Array<Page> Pages; // a stack's pages, one per panel
             bool Used = false;
         };
 
-        // A tab of `stack` torn out (`torn`) or its drag over: closed up or dimmed meanwhile, then
-        // shown again and the stack's panel as the layout has it (where the drop left it).
+        // Called when a tab of `stack` is torn out (`torn`) and when its drag is over. While it is
+        // torn out the tab is closed up or dimmed. Afterwards it is shown again, and the stack shows
+        // its panel as the layout has it, which is where the drop left it.
         void NoteTorn(DockNodeId stack, Tab& tab, bool torn)
         {
             Shown* shown = Find(stack);
@@ -733,7 +748,7 @@ export namespace foundation::gui
             const bool keyboard = d != nullptr && d->IsKeyboardDrag();
             if (bar.GetTabCount() <= 1)
             {
-                view->AddClass(core::StringView(u8"dock-torn")); // its stack goes with it: dimmed whole
+                view->AddClass(core::StringView(u8"dock-torn")); // the stack goes with its only tab, so dim it whole
                 return;
             }
             if (m_tornTab == DockTornTab::Dim || keyboard)
@@ -741,15 +756,16 @@ export namespace foundation::gui
                 tab.AddClass(core::StringView(u8"dock-torn"));
                 return;
             }
-            // Closed up: a neighbour's panel shown in its place (the view's selection, not the layout's).
+            // Close up: show a neighbouring panel in its place (this changes the view's selection, not
+            // the layout's).
             const i32 at = bar.IndexOf(&tab);
             if (bar.GetSelectedIndex() == at)
                 view->SetSelectedIndex(at + 1 < bar.GetTabCount() ? at + 1 : at - 1);
             tab.SetDisplayed(false);
         }
 
-        // A drag of the whole stack from its grip: the pointer's (the keyboard moves a stack's panels
-        // by its tab menu), of a stack that has panels.
+        // Starts a pointer drag of the whole stack from its grip, for a stack that has panels. The
+        // keyboard moves a stack's panels through its tab menu instead.
         bool StartStackDrag(DockNodeId stack, DragRequest& request) const
         {
             const DockNode* node = m_controller != nullptr ? m_controller->GetLayout().FindNode(stack) : nullptr;
@@ -761,8 +777,8 @@ export namespace foundation::gui
             request.Payload.Allowed = DropEffectsMove;
             return true;
         }
-        // The stack holding `grip` dimmed while it is carried (the grip's ancestors asked: a drop may
-        // have moved it into another widget, or let it go).
+        // Dims the stack holding `grip` while it is carried. The stack is found through the grip's
+        // ancestors because a drop may have moved the grip into another widget, or released it.
         static void DimStackOf(Node& grip, bool dim)
         {
             for (Node* n = &grip; n != nullptr; n = n->GetParent())
@@ -784,7 +800,7 @@ export namespace foundation::gui
             return nullptr;
         }
 
-        // The widgets of `id` and its descendants that are made stay, shown or not.
+        // Marks the made widgets of `id` and its descendants as kept, whether they are shown or not.
         void Keep(DockNodeId id)
         {
             const DockNode* node = m_controller->GetLayout().FindNode(id);
@@ -796,7 +812,7 @@ export namespace foundation::gui
                 Keep(child);
         }
 
-        // The widget for `id`, made or kept, brought in step with the layout.
+        // Returns the widget for `id`, made new or kept, and brings it up to date with the layout.
         RefPtr<UIWidget> Build(DockNodeId id)
         {
             const DockNode* node = m_controller->GetLayout().FindNode(id);
@@ -833,14 +849,14 @@ export namespace foundation::gui
                     });
                 Find(id)->Widget = made;
             }
-            // Its children first (building them may grow the table and move entries).
+            // Build the children first (building them may grow the table and move its entries).
             const DockNode node = *m_controller->GetLayout().FindNode(id);
             Array<RefPtr<UIWidget>> children;
             for (const DockNodeId child : node.Children)
                 children.PushBack(Build(child));
             Splitter& splitter = *Cast<Splitter>(Find(id)->Widget.Get());
             splitter.SetAxis(node.Axis == DockAxis::Vertical ? SplitterAxis::Vertical : SplitterAxis::Horizontal);
-            // Its panes, in order (the handles between them are the splitter's own).
+            // Set the panes in order (the splitter makes the handles between them itself).
             bool inOrder = splitter.GetPaneCount() == children.Size();
             for (usize i = 0; inOrder && i < children.Size(); ++i)
                 inOrder = splitter.GetPane(i) == children[i].Get();
@@ -855,7 +871,7 @@ export namespace foundation::gui
                     splitter.AddChild(child.Get());
                 }
             }
-            // Its shares, unless they are what it shows already (a drag just noted them).
+            // Set the shares, unless the splitter already shows them (a drag just noted them).
             const Array<f32> now = splitter.GetWeights();
             bool same = now.Size() == node.Weights.Size();
             for (usize i = 0; same && i < now.Size(); ++i)
@@ -872,16 +888,17 @@ export namespace foundation::gui
             {
                 RefPtr<DockStack> made = MakeRef<DockStack>(MemoryAllocator(), *this, id);
                 made->AddClass(core::StringView(u8"dock-stack"));
-                // Its strip: a tab dropped there is the layout's move too.
+                // A tab dropped on the strip is also a layout move.
                 TabBar* bar = made->GetBar();
                 bar->SetOnTabOffered([self, id, bar](DropQuery& query, Tab&, i32 index)
                 {
                     if (AsksToFloat(query))
-                        query.Effect = DropEffect::None; // passed on: a float, the area's
+                        query.Effect = DropEffect::None; // passed on: a float request is for the area
                     else if (DockDragged dragged; self->Dragged(query.Payload, dragged))
                     {
-                        // The outer third of the surface's band wins over a strip along the surface's
-                        // edge; the rest of the strip is the strip's (a tab moved along it reorders).
+                        // Over a strip along the surface's edge, the outer third of the surface's band
+                        // wins. The rest of the strip belongs to the strip, where moving a tab along
+                        // it reorders the tabs.
                         DockDrop drop{DockDropKind::Tab, id, kNoDock, index, DockSide::Start};
                         DockDrop edge;
                         if (!query.FromKeyboard && self->DropAt(self->FromNode(*bar, query.Local), kNoDock, edge, 1.0f / 3.0f))
@@ -892,8 +909,8 @@ export namespace foundation::gui
                         query.Refuse(core::StringView(u8"it is not a docked panel"));
                 });
                 bar->SetTabTaker([self, bar](Tab&, i32) { self->TakeOffer(*bar); });
-                // A whole stack over the strip goes in as tabs (the bar asks only of tabs); the outer
-                // third of the surface's band wins, as for a tab.
+                // A whole stack dropped over the strip goes in as tabs. The bar asks only about tabs,
+                // so this handles the stack. The outer third of the surface's band wins, as for a tab.
                 bar->SetOnDragQuery([self, id, bar](DropQuery& query)
                 {
                     DockDragged dragged;
@@ -910,7 +927,8 @@ export namespace foundation::gui
                     if (self->DraggedStack(static_cast<const DragEvent&>(event).Payload) != kNoDock)
                         self->TakeOffer(*bar);
                 });
-                // Its grip: the list button, dragged, carries the whole stack (dimmed meanwhile).
+                // The grip is the list button: dragging it carries the whole stack, which is dimmed
+                // during the drag.
                 Node* grip = bar->GetListButton();
                 grip->SetDragSource([self, id](DragRequest& request) { return self->StartStackDrag(id, request); });
                 (void)grip->AddEventListener(EventType::DragStart, [grip](const Event&) { DimStackOf(*grip, true); });
@@ -924,7 +942,8 @@ export namespace foundation::gui
                     }
                 });
                 bar->SetOnTabTorn([self, id](Tab& tab, bool torn) { self->NoteTorn(id, tab, torn); });
-                // A tab let go outside every window: its panel, to whoever floats it there (D6).
+                // A tab let go outside every window hands its panel to the handler that floats it
+                // there.
                 bar->SetOnTabDragEnded([self](Tab& tab, const DragResult& result)
                 {
                     if (!result.Outside || !self->m_onDraggedOutside)
@@ -934,7 +953,7 @@ export namespace foundation::gui
                     if (panel == nullptr)
                         return;
                     const DockDragged dragged{*panel, kNoDock, kNoDock};
-                    const RefPtr<DockSpace> keep(self); // the float it makes may end this space's surface
+                    const RefPtr<DockSpace> keep(self); // the float this makes may end this space's surface
                     self->m_onDraggedOutside(dragged, result);
                 });
                 (void)bar->AddEventListener(EventType::DragLeave, [self, bar](const Event&) { self->Withdraw(*bar); });
@@ -951,14 +970,15 @@ export namespace foundation::gui
             TabView& view = *Cast<TabView>(shown.Widget.Get());
             if (node.Has(DockStackCentral))
                 view.AddClass(core::StringView(u8"dock-central"));
-            // Its pages: one a panel, in the panels' order; a panel gone takes its page with it.
+            // Set the pages, one per panel in the panels' order; a panel that is gone takes its page
+            // with it.
             Array<Page> pages;
             for (const String& panel : node.Panels)
             {
                 const bool registered = m_controller->Describe(panel.AsView()) != nullptr;
                 RefPtr<TabPage> page;
                 for (const Page& had : shown.Pages)
-                    if (had.Panel == panel && (had.Registered || !registered)) // a placeholder whose panel came is made again
+                    if (had.Panel == panel && (had.Registered || !registered)) // a placeholder whose panel is now registered is made again
                         page = had.Widget;
                 if (page)
                     ShowDescription(*page, panel.AsView()); // its title or tab classes may have changed
@@ -973,7 +993,7 @@ export namespace foundation::gui
             {
                 while (view.GetPageCount() > 0)
                     view.RemovePage(view.GetPageCount() - 1);
-                // The active tab chosen before the pages come, so the first to come is not shown
+                // Choose the active tab before adding the pages, so the first page added is not shown
                 // (and its content made) on the way.
                 view.SetSelectedIndex(static_cast<i32>(node.Active));
                 for (const Page& page : pages)
@@ -988,8 +1008,9 @@ export namespace foundation::gui
                 view.SetSelectedIndex(static_cast<i32>(node.Active));
             return shown.Widget;
         }
-        // A panel's page: its title, icon and close from its description; its content made when its
-        // tab is first shown, or a placeholder for a panel not registered.
+        // Makes a panel's page. Its title, icon and close button come from its description. Its
+        // content is made when its tab is first shown, or it is a placeholder for a panel that is
+        // not registered.
         RefPtr<TabPage> MakePage(core::StringView panel)
         {
             RefPtr<TabPage> page = MakeRef<TabPage>(MemoryAllocator());
@@ -1009,13 +1030,13 @@ export namespace foundation::gui
                         content = placeholder;
                     }
                     if (content->GetParent() != nullptr)
-                        content->RemoveFromParent(); // it was shown elsewhere
+                        content->RemoveFromParent(); // it was shown elsewhere before
                     into.AddChild(content.Get());
                 });
             return page;
         }
 
-        // A page's tab as its panel's description has it now.
+        // Updates a page's tab from its panel's current description.
         void ShowDescription(TabPage& page, core::StringView panel)
         {
             const DockPanelDescription* description = m_controller->Describe(panel);
@@ -1051,7 +1072,7 @@ export namespace foundation::gui
             {
                 const String moved = *panel;
                 m_controller->NoteTabPlace(moved.AsView(), stack, to);
-                // The pages' order is the strip's now: kept so, without showing the layout again.
+                // Reorder the pages to match the strip, without showing the layout again.
                 if (Shown* shown = Find(stack))
                 {
                     Array<Page> ordered;
@@ -1079,15 +1100,17 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        // The stack a panel moved to focused, here or in the surroundings. A float the move emptied
-        // has left the tree still holding its old widgets: only the surface it shows is asked of it.
+        // Focuses the stack a panel moved to, here or in the surroundings. A float that the move
+        // emptied has left the tree but still holds its old widgets, so this space is asked only
+        // about stacks on the surface it shows.
         bool FocusLanded(DockNodeId stack)
         {
             if (m_controller->GetLayout().SurfaceOf(stack) == m_surface && FocusStack(stack))
                 return true;
             return m_surroundings != nullptr && m_surroundings->FocusStackAnywhere(stack);
         }
-        // The side a way goes to, as the surface runs (right to left: left is its end).
+        // Returns the side a direction points to in the surface's reading direction (right to left,
+        // left is the end).
         [[nodiscard]] DockSide SideOf(DockDirection way) const
         {
             const bool rtl = IsRightToLeft();
@@ -1101,7 +1124,7 @@ export namespace foundation::gui
             return DockSide::Start;
         }
 
-        // A stack as the menu names it: its panels' titles.
+        // Returns a stack's name for the menu: its panels' titles.
         [[nodiscard]] String StackName(DockNodeId stack) const
         {
             String name;
@@ -1115,7 +1138,7 @@ export namespace foundation::gui
             return name.IsEmpty() ? String(u8"(empty)") : name;
         }
 
-        // A point in `node`'s space, in this widget's.
+        // Converts a point in `node`'s space to this widget's space.
         [[nodiscard]] core::Float2 FromNode(const Node& node, core::Float2 local) const
         {
             const Rect space = GetScreenBounds();
@@ -1123,7 +1146,8 @@ export namespace foundation::gui
             return core::Float2{local.x + from.x - space.x, local.y + from.y - space.y};
         }
 
-        // The side of `r` whose band of `band` holds `at`, nearest first; false when none does.
+        // Gets the side of `r` whose band of width `band` holds `at`, preferring the nearest edge.
+        // Returns false when no band holds it.
         [[nodiscard]] bool NearestEdge(core::Float2 at, const Rect& r, f32 band, DockSide& side) const
         {
             if (band <= 0.0f || at.x < r.x || at.y < r.y || at.x > r.x + r.width || at.y > r.y + r.height)
@@ -1145,13 +1169,13 @@ export namespace foundation::gui
             return true;
         }
 
-        // A drop offered by `owner` (a stack, its strip, or this widget): tried on a copy of the
-        // layout, refused with the layout's reason, or accepted with the preview where the panel
-        // would be.
+        // Handles a drop offered by `owner` (a stack, its strip, or this widget). The drop is tried
+        // on a copy of the layout: it is refused with the layout's reason, or accepted with a preview
+        // where the panel would be.
         void Offer(Node& owner, DropQuery& query, const DockDragged& dragged, const DockDrop& drop)
         {
             DockLayout after = m_controller->GetLayout();
-            const Array<String> panels = PanelsOf(after, dragged); // where they are now
+            const Array<String> panels = PanelsOf(after, dragged); // where the panels are before the drop
             const DockOutcome outcome = ApplyDrop(after, dragged, drop);
             m_offerOwner = &owner;
             if (!outcome.Ok())
@@ -1163,7 +1187,7 @@ export namespace foundation::gui
             }
             query.Accept(DropEffect::Move);
             m_offer = Offered{dragged, drop, true};
-            // Where what it carries would stand: its stacks' bounds together, in this surface.
+            // Where the dragged panels would stand: the union of their stacks' bounds on this surface.
             Rect at;
             bool any = false;
             for (const String& panel : panels)
@@ -1186,12 +1210,12 @@ export namespace foundation::gui
             if (any)
                 ShowPreview(at);
             else
-                HidePreview(); // it would go to another surface
+                HidePreview(); // the panels would go to another surface
         }
         void Withdraw(Node& owner)
         {
             if (m_offerOwner != &owner)
-                return; // another took the drag over already
+                return; // another owner has taken the drag over already
             m_offerOwner = nullptr;
             m_offer = {};
             HidePreview();
@@ -1204,16 +1228,16 @@ export namespace foundation::gui
             HidePreview();
             if (offer.Valid && m_controller != nullptr)
                 (void)m_controller->Edit([&offer](DockLayout& layout) { return ApplyDrop(layout, offer.Dragged, offer.Drop); });
-            // A stack carried by its grip is dimmed while it goes; dropped, it is shown again where
-            // the drop left it. Moved, its widgets left the tree and came back, and its grip may
-            // never hear the drag end.
+            // A stack carried by its grip is dimmed during the drag and shown again where the drop
+            // left it. Undim it here: when it moved, its widgets left the tree and came back, so its
+            // grip may never hear the drag end.
             if (offer.Dragged.IsStack())
                 if (UIWidget* stack = WidgetOf(offer.Dragged.Stack))
                     stack->RemoveClass(core::StringView(u8"dock-torn"));
         }
 
-        // Where `node` stands in `layout`'s surface as this widget would show it: the shares of each
-        // split from its root (the separators' room left out).
+        // Gets where `node` stands on `layout`'s surface as this widget would show it, from the
+        // shares of each split down from the root (leaving out the separators' room).
         [[nodiscard]] bool BoundsIn(const DockLayout& layout, DockNodeId node, Rect& out) const
         {
             const DockSurface* surface = layout.FindSurface(m_surface);
@@ -1269,7 +1293,7 @@ export namespace foundation::gui
             {
                 m_preview = MakeRef<Panel>(MemoryAllocator());
                 m_preview->AddClass(core::StringView(u8"dock-preview"));
-                m_preview->SetHitTestVisible(false); // the drag sees what is under it
+                m_preview->SetHitTestVisible(false); // the drag sees what is under the preview
                 AddChild(m_preview.Get());
             }
             m_previewBounds = at;
@@ -1303,38 +1327,39 @@ export namespace foundation::gui
         f32 m_surfaceBand = 20.0f;
         DockTornTab m_tornTab = DockTornTab::Dim;
         Function<Rectangle(core::StringView)> m_floatPlacer;
-        IDockSurroundings* m_surroundings = nullptr; // its DockArea's (non-owning; the area holds this)
+        IDockSurroundings* m_surroundings = nullptr; // set by the DockArea (non-owning; the area holds this space)
         RefPtr<Panel> m_preview;
         RefPtr<Menu> m_moveMenu;
         Rect m_previewBounds{};
         Function<void(const DockDragged&, const DragResult&)> m_onDraggedOutside;
-        Node* m_offerOwner = nullptr; // what offered the drop shown (non-owning; compared only)
+        Node* m_offerOwner = nullptr; // what offered the shown drop (non-owning; only compared)
         Offered m_offer;
     };
 
-    // A stack's drops: the surface's band is the DockSpace's (left for the walk to reach it), the
-    // rest the stack's own edge bands and middle.
+    // Handles drops on a stack. The surface's band belongs to the DockSpace, so the stack leaves it
+    // for the event to reach the space; the rest is the stack's own edge bands and middle.
     inline void DockStack::OnDragQuery(DropQuery& query)
     {
         DockDragged dragged;
         if (!m_space->Dragged(query.Payload, dragged) || DockSpace::AsksToFloat(query))
-            return; // a drag of another kind (not the layout's), or a float asked for (the area's)
+            return; // a drag the layout does not handle, or a float request (which the area handles)
         DockDrop drop{DockDropKind::Middle, m_node, kNoDock, -1, DockSide::Start};
-        // The keyboard aims at no band (the focus's middle is no aim): into the stack it is in.
+        // A keyboard drag aims at no band, because the focus gives no position: it drops into the
+        // stack the focus is in.
         if (!query.FromKeyboard && (!m_space->DropAt(m_space->FromNode(*this, query.Local), m_node, drop) || drop.Kind == DockDropKind::Edge))
             return;
         m_space->Offer(*this, query, dragged, drop);
     }
     inline void DockStack::OnDragLeave(const DragEvent&) { m_space->Withdraw(*this); }
     inline void DockStack::OnDrop(const DragEvent&) { m_space->TakeOffer(*this); }
-    // The focus came into it: its chosen panel is the active one.
+    // When the focus comes into the stack, its chosen panel becomes the active one.
     inline void DockStack::OnDescendantFocused(Node& focused)
     {
         TabView::OnDescendantFocused(focused);
         if (m_space->m_controller != nullptr)
             m_space->m_controller->NoteFocused(m_node);
     }
-    // A tab's context menu: where its panel may go.
+    // A tab's context menu lists where its panel may go.
     inline void DockStack::OnContextMenu(const MouseEvent& event)
     {
         for (Node* n = event.Target; n != nullptr && n != this; n = n->GetParent())

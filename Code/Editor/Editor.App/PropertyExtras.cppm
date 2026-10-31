@@ -3,13 +3,14 @@
 
 // Editor App - :property_extras partition
 //
-// Rows an editor's grid shows besides values (Documentation/Specs/editor-gui.md, 5.3, layer 4,
-// part 3), each a property of a source the editor fills (a PropertyBag), chosen by its hint:
+// Rows an editor's grid shows besides values, each a property of a source the editor fills (a
+// PropertyBag), chosen by its hint:
 //   - a notice (`notice`): its value is what it says, wrapped, styled as a warning (a rigid body
 //     with a cooked shape and no collision shape: it has no collider);
 //   - an action (`action`): a button its value names; a click commits the row as it is, so whoever
 //     keeps the source runs the action on that commit (a zone's Bake).
-// The editor's: only the editor uses them; they move to GUI.Toolkit if something else needs them.
+// They live in the editor because only the editor uses them; they move to GUI.Toolkit if something
+// else needs them.
 
 module;
 #include "Core/Prelude.h"
@@ -73,10 +74,10 @@ export namespace editor::app
             Hold(*m_button);
         }
         [[nodiscard]] gui::Button* Button() const noexcept { return m_button.Get(); }
-        /// Runs it, as a click does: the row committed as it is.
+        /// Runs the action as a click does, by committing the row as it is.
         void Run()
         {
-            RefPtr<ActionPropertyEditor> keep(this); // the action may rebuild the grid
+            RefPtr<ActionPropertyEditor> keep(this); // keep alive: the action may rebuild the grid
             if (!IsReadOnly())
                 ApplyEdit(gui::PropertyWrite{gui::Variant(m_label.AsView())});
         }
@@ -99,7 +100,7 @@ export namespace editor::app
     // partition has an inline function at namespace scope that instantiates a template.
     struct PropertyExtras
     {
-        /// Notices and actions in `registry`'s grid, by their hints.
+        /// Registers the notice and action editors in `registry`'s grid, by their hints.
         static void Register(gui::PropertyEditorRegistry& registry)
         {
             registry.RegisterHint(NoticePropertyEditor::kHint, [](IAllocator& allocator) -> RefPtr<gui::PropertyEditor> { return MakeRef<NoticePropertyEditor>(allocator); });

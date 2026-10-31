@@ -1,9 +1,9 @@
-// LightMeter - how lit the thief is, on the HUD: the light reaching the chest (the renderer's own
-// lights, falloff and shadows, SceneRender.lightAt), as a meter that eases toward it and a word for
-// it. Darkness is cover; the guards read the same light. In the dark he would be lost to the player
-// too, so as the meter empties his figure takes on a faint cold glow of its own (its materials'
-// EmissiveColor, for this mesh alone): seen by the camera, lighting nothing, so the meter and the
-// guards still read the dark.
+// LightMeter: shows on the HUD how lit the thief is. It measures the light reaching his chest with
+// SceneRender.lightAt, which uses the renderer's own lights, falloff and shadows, and shows it as a
+// meter that eases toward the value, with a word for it. Darkness is cover, and the guards read the
+// same light. In the dark the player would lose sight of him too, so as the meter empties his
+// figure takes on a faint cold glow (the EmissiveColor of its materials, set for this mesh alone).
+// The glow is seen by the camera but lights nothing, so the meter and the guards still read dark.
 class LightMeter
 {
     private Entity@ self;
@@ -17,12 +17,12 @@ class LightMeter
 
     private float m_shown = 0.0f;
     private Entity@ m_figure;
-    private float m_glow = -1.0f; // the glow last set
+    private float m_glow = -1.0f; // the glow value last set
 
     LightMeter(Entity@ entity) { @self = entity; }
 
-    // How lit, 0..1: the luminance over itself plus `halfLight`, so the dark between the lamps
-    // reads near empty, moonlight about half and standing under a lamp near full.
+    // How lit the thief is, 0..1: luminance / (luminance + `halfLight`). The dark between the lamps
+    // reads near empty, moonlight about half, and standing under a lamp near full.
     float level()
     {
         Float3 p = self.worldPosition();
@@ -40,8 +40,8 @@ class LightMeter
     {
         float k = follow * float(dt);
         m_shown += (level() - m_shown) * Math::Min(k, 1.0f);
-        // The HUD is the game's (Lamplight.as pushes it before the level loads), looked up each
-        // frame: a new level's HUD is a new tree.
+        // The HUD belongs to the game (Lamplight.as pushes it before the level loads). Look it up
+        // each frame, because each new level builds a new HUD tree.
         Node@ bar = gui::root().find("hud-light");
         if (bar !is null)
         {
@@ -51,8 +51,8 @@ class LightMeter
         glow();
     }
 
-    // The glow from the meter: none above `glowBelow`, rising to `glowStrength` in full dark. Set
-    // only when it has moved a step, not every frame.
+    // Sets the glow from the meter: none above `glowBelow`, rising to `glowStrength` in full dark.
+    // The materials are updated only when the value has moved by a step, not every frame.
     private void glow()
     {
         float dark = (glowBelow - m_shown) / glowBelow;
@@ -74,7 +74,7 @@ class LightMeter
         }
     }
 
-    // The figure's mesh, in the model under the thief (Thief.as finds it the same way).
+    // The figure's mesh in the model under the thief (Thief.as finds it the same way).
     private Entity@ figure()
     {
         if (m_figure is null || !m_figure.isValid())

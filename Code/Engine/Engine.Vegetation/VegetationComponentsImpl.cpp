@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.vegetation implementation: the manager's cache + extraction, reflection and the
-// composition install (heavy bodies kept out of the interface; see gcc-module-interface-hygiene).
+// engine.vegetation implementation: the manager's cache and extraction, reflection and the
+// composition install (heavy bodies kept out of the interface).
 
 module;
 #include "Core/Prelude.h"
@@ -167,7 +167,7 @@ namespace engine::vegetation
     {
         builder.Attribute("displayName", String(u8"Prop Layer"));
         ReflectLayerBase(builder);
-        // `instances` is deliberately not a row: the Paint Props brush is its editor.
+        // `instances` is not a row: the Paint Props brush is its editor.
     }
 
     REFLECT_VALUE(TerrainVegetationComponent, "rtti::engine::vegetation")
@@ -177,9 +177,9 @@ namespace engine::vegetation
             .Attribute("description",
                        String(u8"Scatters grass, plants and props over the terrain on the same "
                               u8"entity, by layer and painted mask."))
-            .DataVersion(4)          // 2026-10-06: a layer's collision (trunk radius, height, group);
-                                     // 2026-10-05: a material per slot (was one material);
-                                     // 2026-09-23: two layer lists (was one list + placement)
+            .DataVersion(4)          // 4: a layer's collision (trunk radius, height, group);
+                                     // 3: a material per slot (one material before);
+                                     // 2: two layer lists (one list and a placement before)
             .ReadsDataVersionsFrom(1) // the legacy reader splits a V1 list (remove after re-saves)
             .Property<&TerrainVegetationComponent::proceduralLayers>("proceduralLayers")
             .PropAttribute("displayName", String(u8"Procedural Layers"))
@@ -384,8 +384,8 @@ namespace engine::vegetation
                     continue;
                 }
                 // A prop standing over a cut cell has no surface under it: it stays in the
-                // authored list (Fill brings it back, the eraser can reach it) but does not
-                // draw - the one rule everywhere (Specs/terrain-holes.md), for props too.
+                // authored list (Fill brings it back, the eraser can reach it) but does not draw,
+                // the same hole rule as everything else on the terrain.
                 if (holes)
                 {
                     i32 hx = 0;
@@ -421,7 +421,7 @@ namespace engine::vegetation
                         SlotName(cache.slot), layer.density, result.effectiveDensity,
                         layer.maxInstancesPerChunk);
         }
-        // Build into a FRESH array and swap: the previous array may be borrowed by a snapshot
+        // Build into a fresh array and swap: the previous array may be borrowed by a snapshot
         // still being recorded (the instanced-mesh borrow rule).
         set.local = Move(result.transforms);
         set.localBounds = result.localBounds;
@@ -593,9 +593,9 @@ namespace engine::vegetation
             }
             if (set.dirty)
             {
-                // Authored props re-bucket in one copy - outside the budget, which exists for the
+                // Authored props re-bucket in one copy, outside the budget, which exists for the
                 // procedural scatter; a stroke lands whole. A procedural set past the budget
-                // waits for a later frame, but a set that was ALREADY built keeps drawing its
+                // waits for a later frame, but a set that was already built keeps drawing its
                 // previous instances meanwhile (a dropped frame under the brush is a flicker).
                 if (props || budget > 0)
                 {

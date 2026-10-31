@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:shortlist`: the models picked from a collection
-// (Documentation/Specs/model-viewer.md, P4). A model is starred, and may carry a note; the list is
-// kept in a text file beside the viewer's settings (a line a model: the path, a tab, the note,
-// with tabs, line breaks and backslashes escaped), and exports as CSV (name, path, note) for a
-// spreadsheet or a purchase list.
+// ModelViewer - `modelviewer:shortlist`: a list of starred models, each with an optional note. The
+// list is kept in a text file beside the viewer's settings, one line per model (the path, a tab,
+// the note, with tabs, line breaks and backslashes escaped), and exports as CSV (name, path, note)
+// for a spreadsheet or a purchase list. The library imports an existing shortlist file once.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +33,7 @@ export namespace modelviewer
         [[nodiscard]] usize Count() const noexcept { return m_entries.Size(); }
         [[nodiscard]] const ShortlistEntry& At(usize index) const { return m_entries[index]; }
 
-        /// Stars a model (at the end of the list) or takes it off (its note with it).
+        /// Stars a model, adding it at the end of the list, or unstars it and drops its note.
         void SetStarred(StringView path, bool starred)
         {
             const i32 at = Find(path);
@@ -49,7 +48,7 @@ export namespace modelviewer
             const i32 at = Find(path);
             return at >= 0 ? m_entries[static_cast<usize>(at)].note.AsView() : StringView{};
         }
-        /// A note on a model; writing one stars it.
+        /// Sets a model's note; setting a note also stars the model.
         void SetNote(StringView path, StringView note)
         {
             if (Find(path) < 0)
@@ -57,7 +56,7 @@ export namespace modelviewer
             m_entries[static_cast<usize>(Find(path))].note = String(note);
         }
 
-        /// The file's text: a line a model, its path, a tab, its note.
+        /// The file's text: one line per model with its path, a tab, and its note.
         [[nodiscard]] String Write() const
         {
             String text;
@@ -71,7 +70,7 @@ export namespace modelviewer
             return text;
         }
 
-        /// Reads Write's text back, in place of what was there.
+        /// Replaces the list with text produced by Write.
         void Read(StringView text)
         {
             m_entries.Clear();
@@ -95,8 +94,8 @@ export namespace modelviewer
             }
         }
 
-        /// The list as CSV: a header, then a row a model (its file's name, its path, its note), a
-        /// field quoted when it holds a comma, a quote or a line break.
+        /// The list as CSV: a header, then one row per model (file name, path, note), with a field
+        /// quoted when it holds a comma, a quote or a line break.
         [[nodiscard]] String ToCsv() const
         {
             String csv(u8"name,path,note\n");

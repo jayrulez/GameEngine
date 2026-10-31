@@ -1,5 +1,5 @@
 # ParticleFX - the particle-system showcase (CPU-sim fountain drawn by the dedicated ParticleRenderer).
-# Same host set as the other samples + the particle core and its scene/render integration.
+# Same host set as the other samples, plus the particle core and its scene/render integration.
 
 add_executable(ParticleFX main.cpp)
 
@@ -20,8 +20,8 @@ target_link_libraries(ParticleFX PRIVATE
     Foundation::Materials
     Foundation::Particles
     Engine::Particles
-    Foundation::Particles.Resource       # cooked ParticleEffectResource + factory
-    Pipeline::Particles         # ParticleEffectAsset + bake (sample references editor for the demo)
+    Foundation::Particles.Resource       # cooked ParticleEffectResource and factory
+    Pipeline::Particles         # ParticleEffectAsset and its bake (the sample cooks its demo effect)
     Pipeline::Core Foundation::Content Foundation::Resource Foundation::VFS
     Foundation::Policy)
 

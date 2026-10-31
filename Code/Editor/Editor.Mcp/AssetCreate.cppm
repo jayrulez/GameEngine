@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Mcp - :asset_create partition (agent-playtesting-and-asset-creation.md P2)
+// Editor::Mcp - :asset_create partition
 //
-// asset_creators / asset_create: every asset kind the editor's File > New makes, made by an
-// agent. The creators are the pipeline's (pipeline::RegisterAllCreators) and the host's
-// registry outlives the server; the work runs through the host's IProjectOperations, so the
-// editor's creation also requests the cook and sets a first scene as the default.
+// asset_creators / asset_create: every asset kind the editor's File > New makes, for an agent to
+// make. The creators are the pipeline's (pipeline::RegisterAllCreators), and the host's registry
+// outlives the server. The work runs through the host's IProjectOperations, so in the editor a
+// creation also requests the cook and sets a first scene as the default.
 
 module;
 #include "Core/Prelude.h"

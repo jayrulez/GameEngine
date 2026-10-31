@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.rhi - :log implementation unit: the ONE process-wide log-sink slot (a sink set
+// foundation.rhi - :log implementation unit: the one process-wide log-sink slot (a sink set
 // by a test or a host must see every backend's lines, whichever shared library emits them).
 
 module;

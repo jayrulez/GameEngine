@@ -74,8 +74,8 @@ export namespace foundation::core
     // --- Crash reporting ----------------------------------------------------
 
     // Install fatal-signal handlers that print the native backtrace to stderr before dying
-    // (the assert path already prints one; a raw SIGSEGV printed NOTHING - PaperKid editor
-    // crash lesson). Idempotent; hosts call it once at startup. See SystemBackend.h.
+    // (the assert path already prints one; without this a raw SIGSEGV prints nothing).
+    // Idempotent; hosts call it once at startup. See SystemBackend.h.
     inline void InstallCrashBacktrace() noexcept { sys::InstallCrashBacktrace(); }
 
     // --- System info -------------------------------------------------------
@@ -151,7 +151,7 @@ export namespace foundation::core
         return sys::FillEntropy(out.Data(), out.Size());
     }
 
-    /// Absolute path of the RUNNING executable (the OS query - not argv[0], which can be
+    /// Absolute path of the running executable (the OS query, not argv[0], which can be
     /// bare or relative). Empty on failure.
     [[nodiscard]] inline String ExecutablePath()
     {
@@ -164,21 +164,21 @@ export namespace foundation::core
     {
         return sys::FileDelete(detail::NullTerminated(path).CStr());
     }
-    /// Rename/move a file OR directory (same volume).
-    /// Copy PRESERVING permissions (staged executables keep their +x bit). Overwrites.
+    /// Copy preserving permissions (staged executables keep their +x bit). Overwrites.
     inline bool FileCopyPreserving(StringView from, StringView to) noexcept
     {
         return sys::FileCopyPreserving(detail::NullTerminated(from).CStr(),
                                        detail::NullTerminated(to).CStr());
     }
 
+    /// Rename or move a file or directory (same volume).
     inline bool FileMove(StringView from, StringView to) noexcept
     {
         return sys::FileMove(detail::NullTerminated(from).CStr(),
                              detail::NullTerminated(to).CStr());
     }
 
-    /// File size + last-write time (seconds since epoch). False when `path` is not a regular file.
+    /// File size and last-write time (seconds since epoch). False when `path` is not a regular file.
     [[nodiscard]] inline bool FileStat(StringView path, u64& outSize, i64& outModifiedTime) noexcept
     {
         unsigned long long size = 0;
@@ -289,7 +289,7 @@ export namespace foundation::core
         if (length == 0)
         {
             return {};
-        } // unset (or empty - treated the same for our uses)
+        } // unset (or empty, treated the same for our uses)
         // Env values in practice are short (paths); anything past the buffer is truncated.
         const usize got = (length < sizeof(buffer)) ? length : sizeof(buffer) - 1;
         return String(StringView(reinterpret_cast<const utf8char*>(buffer), got));
@@ -297,13 +297,13 @@ export namespace foundation::core
 
     // --- User data directory ----------------------------------------------
 
-    // User-data directory for `appName` (name baked from CMake, USER_DATA_DIR_NAME): the platform base directory (resolved
-    // per-platform in the backend - $XDG_DATA_HOME/~/.local/share on Linux, %LOCALAPPDATA% on Windows,
-    // ~/Library/Application Support on macOS) with `appName` appended. Falls back to the bare app name
-    // when the base can't be resolved. Where global editor settings live - and the default export
-    // templates root.
-    // The user-data folder name is baked in by CMake (USER_DATA_DIR_NAME_VALUE on the policy target).
-    // Required - no in-source default, so the name value lives only in the build system.
+    // User-data directory for `appName`: the platform base directory (resolved per platform in the
+    // backend: $XDG_DATA_HOME or ~/.local/share on Linux, %LOCALAPPDATA% on Windows,
+    // ~/Library/Application Support on macOS) with `appName` appended. Falls back to the bare app
+    // name when the base can't be resolved. Global editor settings and the default export templates
+    // root live here. The default folder name, USER_DATA_DIR_NAME, is baked in by CMake
+    // (USER_DATA_DIR_NAME_VALUE on the policy target); there is no in-source default, so the name
+    // lives only in the build system.
 #ifndef USER_DATA_DIR_NAME
 #error "USER_DATA_DIR_NAME is not defined - set USER_DATA_DIR_NAME_VALUE in the root CMakeLists (policy target)"
 #endif
@@ -334,8 +334,8 @@ export namespace foundation::core
     }
 
     // Build config the running tool was compiled with ("Debug" / "Release" / "RelWithDebInfo"),
-    // matching the Bin/<Config>/... layout - the export host template stamps itself with this so a
-    // Debug editor synthesizes a Debug template (the config axis).
+    // matching the Bin/<Config>/... layout. The export host template stamps itself with this so a
+    // Debug editor synthesizes a Debug template.
 #ifndef BUILD_CONFIG
 #define BUILD_CONFIG "Release"
 #endif
@@ -348,7 +348,7 @@ export namespace foundation::core
     }
 
     // Compiler that built the running tool ("Clang" / "GCC" / "MSVC"; empty if unknown). Metadata
-    // only - recorded in the host template for traceability, never a selector.
+    // only: recorded in the host template for traceability, never a selector.
     [[nodiscard]] inline StringView GetBuildCompilerName() noexcept
     {
         return StringView(reinterpret_cast<const utf8char*>(BUILD_COMPILER));
@@ -416,8 +416,8 @@ export namespace foundation::core
 
     // Normalize a path's directory separators to the OS-native form (see the backend: '/' -> '\' on
     // Windows, '\' -> '/' on POSIX). Copies into `out` (capacity `cap`, NUL-terminated); false (no
-    // write) if empty or overlong-with-NUL. The tested seam over the fanned-out backend behavior -
-    // the Win32 OpenPathInFileManager uses it so Explorer, which rejects '/', gets native separators.
+    // write) if empty or overlong-with-NUL. Tests cover the per-platform behaviour through it, and the
+    // Win32 OpenPathInFileManager uses it so Explorer, which rejects '/', gets native separators.
     [[nodiscard]] inline bool NormalizePathSeparators(StringView path, char* out, usize cap) noexcept
     {
         return sys::NormalizePathSeparators(detail::NullTerminated(path).CStr(), out, cap);
@@ -426,15 +426,16 @@ export namespace foundation::core
     // Outcome of RunProcess.
     struct ProcessResult
     {
-        int exitCode = -1;    // >=0 = child exit code; <0 = could not spawn OR killed by a signal
-        String output;        // combined stdout+stderr (captured, capped)
+        int exitCode = -1;    // >=0 is the child's exit code; <0 means it could not spawn or was killed by a signal
+        String output;        // combined stdout and stderr (captured, capped)
         [[nodiscard]] bool Ran() const noexcept { return exitCode >= 0; }
         [[nodiscard]] bool Ok() const noexcept { return exitCode == 0; }
     };
 
-    // Run `exe` (an explicit path - no shell, no PATH search) with `args` (each one whole argument,
-    // no splitting/globbing). BLOCKS until the child exits, capturing its combined stdout+stderr. For
-    // cook-time tool shell-outs (the WGSL cook's naga + tint). Do NOT call on the UI thread.
+    // Run `exe` (an explicit path: no shell, no PATH search) with `args` (each one whole argument,
+    // no splitting or globbing). Blocks until the child exits, capturing its combined stdout and
+    // stderr. For cook-time tool shell-outs (the WGSL cook's naga and tint). Do not call it on the UI
+    // thread.
     [[nodiscard]] inline ProcessResult RunProcess(StringView exe, Span<const StringView> args)
     {
         const String exeZ(exe);
@@ -463,7 +464,7 @@ export namespace foundation::core
         return result;
     }
 
-    // --- UDP sockets (IPv4) - the foundation.net datagram backend wraps these ---
+    // --- UDP sockets (IPv4); the foundation.net datagram backend wraps these ---
     using SocketHandle = sys::SocketHandle;
     inline constexpr SocketHandle kInvalidSocket = sys::kInvalidSocket;
 
@@ -480,9 +481,9 @@ export namespace foundation::core
     {
         return sys::ParseIPv4(detail::NullTerminated(dottedQuad).CStr(), &outIp);
     }
-    /// A host name OR a dotted-quad literal to a host-order IPv4 address (the literal parses
-    /// without a lookup; a name goes through the platform resolver and BLOCKS for its
-    /// duration - resolve at the connect edge, never per frame). False when it does not resolve.
+    /// A host name or a dotted-quad literal to a host-order IPv4 address (the literal parses
+    /// without a lookup; a name goes through the platform resolver and blocks for its
+    /// duration, so resolve at connect time, never per frame). False when it does not resolve.
     [[nodiscard]] inline bool ResolveHostIPv4(StringView host, u32& outIp) noexcept
     {
         return sys::ResolveHostIPv4(detail::NullTerminated(host).CStr(), &outIp);
@@ -499,7 +500,7 @@ export namespace foundation::core
         return sys::UdpRecvFrom(socket, out, outCap, &fromIp, &fromPort);
     }
 
-    // --- TCP (stream) sockets - the foundation.http / websocket / debugger transports wrap these ---
+    // --- TCP (stream) sockets; the foundation.http, websocket and debugger transports wrap these ---
     /// A listening socket on `port` (0 = OS-assigned). `loopbackOnly` binds 127.0.0.1 alone (a
     /// local tool's server); otherwise every interface (a game server). *outBoundIp is the bound
     /// IPv4 address in host order, 0 for every interface.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Model-A runtime load: author a cooked TextureResource (record + "data" stream)
+// Runtime load: author a cooked TextureResource (record and "data" stream)
 // into a content DB, then load it through the ResourceManager with a device-backed
 // TextureFactory (Null RHI backend, headless) and verify the live GPU Texture.
 #include <doctest/doctest.h>
@@ -61,7 +61,7 @@ TEST_CASE("texture.factory: cooked TextureResource -> live GPU Texture")
     NativeFileSystem mount(u8"scratch_texfac_db", DefaultAllocator());
     Guid id;
 
-    // Author a cooked record + raw 2x2 RGBA pixels (the "data" stream).
+    // Author a cooked record and raw 2x2 RGBA pixels (the "data" stream).
     {
         foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::core::BinarySerializerFactory(),
                                               u8".rasset");
@@ -226,8 +226,8 @@ TEST_CASE("texture.factory: async load produces the same product as the sync loa
     REQUIRE(b);
     CHECK(b.Handle()->State() == ResourceState::Ready);
 
-    // Descriptor equivalence (the Null backend has no pixel readback; the cooked record + upload
-    // path is identical, so matching descriptors + valid GPU objects is the equivalence check).
+    // Descriptor equivalence. The Null backend has no pixel readback, and the cooked record and
+    // upload path are identical, so matching descriptors and valid GPU objects are the check.
     CHECK(b->Width() == a->Width());
     CHECK(b->Height() == a->Height());
     CHECK(b->Format() == a->Format());
@@ -240,8 +240,8 @@ TEST_CASE("texture.factory: async load produces the same product as the sync loa
 TEST_CASE("texture.factory: many concurrent async loads decode on workers without a race")
 {
     // Stresses the thread-safety of decode-on-a-worker: N textures bound async at once means N
-    // DecodeStages reading the content DB (ReadObject/ReadData) + the type/serializable registries
-    // concurrently. Run under TSAN to validate the concurrent-read analysis.
+    // DecodeStages reading the content DB (ReadObject, ReadData) and the type and serializable
+    // registries concurrently. Run under TSAN to validate the concurrent reads.
     RegisterTextureResource();
     RemoveDirectory(u8"scratch_texfac_concurrent");
 
@@ -287,8 +287,8 @@ TEST_CASE("texture.factory: many concurrent async loads decode on workers withou
 
 TEST_CASE("texture.upload: a compressed cube sizes its faces by block, never per texel")
 {
-    // BC7 8x8 = 2x2 blocks x 16 bytes = 64 bytes per face. The per-texel size of a compressed
-    // format is 0, which used to make faceBytes 0: six zero-byte writes and nothing on the GPU.
+    // BC7 8x8 = 2x2 blocks x 16 bytes = 64 bytes per face. A compressed format's per-texel size
+    // is 0, so a face sized per texel would be six zero-byte writes and nothing on the GPU.
     TextureResource res;
     res.shape = TextureShape::Cubemap;
     res.width = 8;

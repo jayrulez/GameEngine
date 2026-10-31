@@ -10,7 +10,7 @@ module;
 module editor.animation;
 
 import foundation.core;
-import foundation.settings; // the per-project editor settings (the preview's rig, per graph)
+import foundation.settings; // per-project editor settings, which keep the preview's rig per graph
 import foundation.content;
 import foundation.graphics;
 import foundation.runtime;
@@ -32,7 +32,7 @@ namespace editor
     namespace animation = foundation::animation;
 
     // The preview's rig per graph ({graph -> skeleton, skinned mesh}), a section of the per-project
-    // editor settings. Its type id is the old page's, so what that kept still reads.
+    // editor settings. Its type id must not change, or settings already saved under it stop reading.
     struct GraphPreviewPref
     {
         Guid asset;
@@ -95,7 +95,8 @@ namespace editor
                     return path.SubStr(i + 1, path.Size() - i - 1);
             return path;
         }
-        // The element a path is in ("entries.2.clip" in "entries": 2), or -1.
+        // The index of the element of `list` that a path is in ("entries.2.clip" in "entries" gives
+        // 2), or -1.
         [[nodiscard]] i32 ElementOf(StringView path, StringView list)
         {
             if (!path.StartsWith(list) || path.Size() <= list.Size() + 1 || path[list.Size()] != u8'.')
@@ -122,7 +123,7 @@ namespace editor
                 info.Choices.PushBack(gui::PropertyChoice{String(names[i]), static_cast<i64>(i)});
         }
 
-        // The parallel arrays of the graph's parameters as long as its names.
+        // Makes the graph's parallel parameter arrays as long as its names.
         void SquareParameters(animation::AnimationGraphSource& source)
         {
             const usize count = source.paramNames.Size();
@@ -131,7 +132,7 @@ namespace editor
             source.paramInts.Resize(count, 0);
             source.paramBools.Resize(count, 0);
         }
-        // A blend's entries as many in each array as it has clips.
+        // Makes each of a blend's entry arrays as long as its clips.
         void SquareEntries(animation::GraphNodeData& node)
         {
             node.entryThresholds.Resize(node.entryClips.Size(), 0.0f);
@@ -142,13 +143,13 @@ namespace editor
     AnimationGraphEditorPage::AnimationGraphEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
         : app::AssetObjectPage(context, Move(services), instance, pipeline::AnimationGraphAsset::StaticType(), kPath)
     {
-        HideAssetRows(); // parallel arrays and kinds kept as numbers: the rows are the page's own
+        HideAssetRows(); // the asset keeps parallel arrays and numeric kinds, so the page builds its own rows
         Provide<IPlaybackPage>(*this);
         AnimationGraphEditorPage* self = this;
         m_states = MakeUnique<AnimationGraphStates>(Allocator(), [self]() { return self->Graph(); },
                                                     [self](StringView typeId, const Function<void(pipeline::AnimationGraphAsset&)>& mutate) { self->Edit(typeId, mutate); });
         m_states->NameOf = [self](const Guid& id) { return self->ClipName(id); };
-        m_states->Refresh(); // the clips named on their states
+        m_states->Refresh(); // so the states show their clips' names
         BuildRows();
 
         m_layerModel = MakeUnique<gui::TreeModel>(Allocator());
@@ -173,7 +174,7 @@ namespace editor
                                                            self->Choose(GraphChoice{GraphChoiceKind::Parameter, static_cast<i32>(index.InternalId)});
                                                    });
         }
-        // A row's menu: the row chosen, then Delete (the old page's; the bars' trash does the same).
+        // A row's context menu chooses the row, then offers Delete (as the bar's trash button does).
         const auto rowMenu = [self](gui::TreeView* tree, bool layers)
         {
             if (tree == nullptr)
@@ -250,7 +251,7 @@ namespace editor
             m_layerTree->SetModel(nullptr);
         if (m_parameterTree != nullptr)
             m_parameterTree->SetModel(nullptr);
-        m_player.Reset(); // before the graph it borrows
+        m_player.Reset(); // reset before the graph it borrows
     }
 
     pipeline::AnimationGraphAsset* AnimationGraphEditorPage::Graph() const
@@ -309,7 +310,7 @@ namespace editor
         Row(*m_parameterRows, u8"bool", gui::PropertyKind::Bool, gui::Variant(false), u8"Default", u8"Its value when the graph starts");
         m_parameterRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
                                        {
-                                           // The default of its type alone; a trigger has none.
+                                           // Show only the default for its type; a trigger has none.
                                            const pipeline::AnimationGraphAsset* graph = self->Graph();
                                            const i32 p = self->m_chosen.index;
                                            const u8 type = graph != nullptr && p >= 0 && static_cast<usize>(p) < graph->source.paramTypes.Size() ? graph->source.paramTypes[static_cast<usize>(p)] : 0;
@@ -363,7 +364,7 @@ namespace editor
                                                state = &states[static_cast<usize>(self->m_chosen.index)];
                                        }
                                        const u8 kind = state != nullptr ? state->node.kind : 0;
-                                       // Each row shown where what it plays uses it.
+                                       // Show each row only where the state's kind of playback uses it.
                                        if (path == StringView(u8"clip"))
                                            info.Visible = kind == 0;
                                        else if (path == StringView(u8"driver"))
@@ -389,7 +390,7 @@ namespace editor
                                            info.Visible = kind == 2;
                                        else if (gui::ParentPropertyPath(path) == kEntries && static_cast<usize>(entry) < state->node.entryClips.Size())
                                        {
-                                           // Closed, an entry says its clip and where it plays alone.
+                                           // While closed, an entry shows its clip, and in a 1D blend its threshold.
                                            const Guid& id = state->node.entryClips[static_cast<usize>(entry)];
                                            info.DisplayName = id.IsNil() ? Format(u8"Entry {}", entry + 1) : self->ClipName(id);
                                            if (kind == 1 && static_cast<usize>(entry) < state->node.entryThresholds.Size())
@@ -458,7 +459,7 @@ namespace editor
                                             }
                                             if (gui::ParentPropertyPath(path) != kConditions)
                                                 return;
-                                            // Closed, a condition reads as what it says ("Speed is above 0.5").
+                                            // While closed, a condition reads as a sentence ("Speed is above 0.5").
                                             const i64 p = self->m_transitionRows->GetValue(gui::JoinPropertyPath(path, u8"parameter").AsView(), 0).AsInt();
                                             const i64 op = Clamp<i64>(self->m_transitionRows->GetValue(gui::JoinPropertyPath(path, u8"compare").AsView(), 0).AsInt(), 0, 5);
                                             const f64 value = self->m_transitionRows->GetValue(gui::JoinPropertyPath(path, u8"value").AsView(), 0).AsFloat();
@@ -481,13 +482,13 @@ namespace editor
 
     void AnimationGraphEditorPage::BuildLiveRows()
     {
-        // Made again whenever the parameters change: a row a parameter, by its type.
+        // Rebuilt whenever the parameters change: one row per parameter, edited by its type.
         const pipeline::AnimationGraphAsset* graph = Graph();
         const usize count = graph != nullptr ? graph->source.paramNames.Size() : 0;
         if (count == m_liveCount && m_liveRows)
             return;
         m_liveCount = count;
-        ClearSections(); // the grid lets the old rows go before they do
+        ClearSections(); // the grid releases the old rows before they are destroyed
         m_liveRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
         m_live.Resize(count, 0.0);
         AnimationGraphEditorPage* self = this;
@@ -801,7 +802,7 @@ namespace editor
                      SquareEntries(node);
                      if (insert)
                      {
-                         // After the last, a step past it.
+                         // A new threshold goes one past the last.
                          node.entryThresholds.PushBack(node.entryThresholds.IsEmpty() ? 0.0f : node.entryThresholds.Back() + 1.0f);
                          node.entryPositions.PushBack(Float2{});
                          node.entryClips.PushBack(Guid{});
@@ -827,7 +828,7 @@ namespace editor
                          conditions.RemoveAt(index);
                  });
         }
-        ShowRows(); // the list as the graph holds it (a move, which these lists do not offer, goes back)
+        ShowRows(); // show the list as the graph holds it, undoing any move (these lists do not offer moves)
     }
 
     void AnimationGraphEditorPage::LiveCommitted(StringView path, const gui::Variant& value)
@@ -951,7 +952,7 @@ namespace editor
         m_layer = Clamp(layer, 0, static_cast<i32>(graph->source.layers.Size()) - 1);
         m_states->SetLayer(m_layer);
         m_lit = 0;
-        m_graphFramed = false; // another layer's states, framed once shown
+        m_graphFramed = false; // frame the new layer's states once they are shown
         Choose(GraphChoice{GraphChoiceKind::Layer, m_layer});
     }
 
@@ -963,7 +964,7 @@ namespace editor
         ShowSections();
         ShowRows();
         ShowLists();
-        // The view chooses the state too (a choice from a list or from code).
+        // Select the state in the view too, when the choice came from a list or from code.
         if (m_view != nullptr && m_chosen.kind == GraphChoiceKind::State)
         {
             m_showing = true;
@@ -1016,7 +1017,7 @@ namespace editor
 
     void AnimationGraphEditorPage::OnObjectChanged()
     {
-        // An edit, its undo or redo: the view, the lists and the rows read again, the preview made anew.
+        // After an edit, undo or redo, read the view, lists and rows again and rebuild the preview.
         const pipeline::AnimationGraphAsset* graph = Graph();
         if (graph != nullptr && !graph->source.layers.IsEmpty() && m_layer >= static_cast<i32>(graph->source.layers.Size()))
         {
@@ -1057,7 +1058,7 @@ namespace editor
                         m_rig->SetMesh(p.mesh);
                         return;
                     }
-        // Never shown before: on the skeleton its first clip's import names.
+        // Never previewed before: use the skeleton its first clip's import names.
         Guid skeleton;
         const pipeline::AnimationGraphAsset* graph = Graph();
         foundation::content::ContentDatabase* db = Context().Project() != nullptr ? &Context().Project()->SourceDb() : nullptr;
@@ -1104,7 +1105,7 @@ namespace editor
 
     void AnimationGraphEditorPage::RebuildPlayer()
     {
-        // Torn down in order: the player borrows the graph and the skeleton.
+        // Torn down in this order because the player borrows the graph and the skeleton.
         m_player.Reset();
         m_graph = RefPtr<animation::AnimationGraph>{};
         m_playerSkeleton = m_rig ? m_rig->Skeleton() : nullptr;
@@ -1161,8 +1162,8 @@ namespace editor
         }
         if (m_playing)
             m_player->Update(dt);
-        // Its root motion read every frame, so it never piles up; applied while it travels, and
-        // back to the middle once it has gone a few metres.
+        // Consume the root motion every frame so it never accumulates. Apply it while travelling,
+        // and return the rig to the middle once it has gone a few metres.
         const animation::RootMotionDelta moved = m_player->ConsumeRootMotion();
         if (m_travel)
         {
@@ -1174,7 +1175,7 @@ namespace editor
         const Float4x4 base = RotationMatrix(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw)) * Float4x4::Translation(m_travelPosition);
         m_rig->Show(m_player->GetLocalPoses(), base);
 
-        // The state it plays lit on the graph.
+        // Light the playing state's node on the graph.
         const i32 layers = static_cast<i32>(m_graph->Layers().Size());
         const i32 current = m_player->GetCurrentStateIndex(Min(m_layer, layers - 1));
         const gui::GraphId lit = current >= 0 ? m_states->StateId(current) : 0;
@@ -1230,7 +1231,7 @@ namespace editor
 
     void AnimationGraphEditorPage::Stop()
     {
-        // Back to where the graph starts: a player made anew, its parameters as the preview set them.
+        // Restart the graph: build a new player, keeping the parameter values the preview set.
         m_playing = false;
         m_travelPosition = Float3{};
         m_travelYaw = 0.0f;
@@ -1246,7 +1247,7 @@ namespace editor
     void AnimationGraphEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
     {
         app::AssetObjectPage::OnUpdate(host, dt);
-        // The layer's states in view once the view has its size (the first frame it is laid out).
+        // Frame the layer's states once the view has a size (the first frame it is laid out).
         if (!m_graphFramed && m_view != nullptr && m_view->GetContentBounds().width > 0.0f)
         {
             m_graphFramed = true;
@@ -1285,7 +1286,8 @@ namespace editor
 
     void RegisterAnimationGraphEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        // The preview prefs' section, registered before the app reads the per-project store.
+        // The settings section for preview choices, registered before the app reads the per-project
+        // store.
         GlobalTypeRegistry().Register(GraphPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<GraphPreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<AnimationGraphPageFactory>(services),
@@ -1310,7 +1312,7 @@ namespace editor
                                                             (void)self->RemoveParameter();
                                                     });
         const pipeline::AnimationGraphAsset* graph = Graph();
-        remove->SetEnabled(!layers || (graph != nullptr && graph->source.layers.Size() > 1)); // the last layer stays
+        remove->SetEnabled(!layers || (graph != nullptr && graph->source.layers.Size() > 1)); // a graph keeps at least one layer
         m_listMenu->Open(owner, at);
     }
 }

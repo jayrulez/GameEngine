@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::Integration - implementation unit: the bridge bodies. The virtual
-// IContactListener override + the subsystem calls live OUTSIDE the interface (GCC module
-// hygiene: cross-partition inline virtuals are not reliably emitted).
+// Engine::Integration - implementation unit: the bridge bodies. The virtual IContactListener
+// override and the subsystem calls live outside the interface, because GCC does not reliably emit
+// cross-partition inline virtuals.
 
 module;
 #include "Core/Prelude.h"

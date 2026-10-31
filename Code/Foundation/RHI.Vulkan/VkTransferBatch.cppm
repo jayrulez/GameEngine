@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Vulkan implementation of TransferBatch.
-/// Ported from Sedulous.RHI.Vulkan/VulkanTransferBatch.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -191,7 +190,7 @@ export namespace foundation::rhi::vk
             VkMemoryRequirements memReqs{};
             vkGetBufferMemoryRequirements(m_device, newBuf, &memReqs);
 
-            // Find host-visible + host-coherent memory type.
+            // Find a host-visible, host-coherent memory type.
             VkPhysicalDeviceMemoryProperties memProps{};
             vkGetPhysicalDeviceMemoryProperties(m_physDevice, &memProps);
             i32 memType = -1;
@@ -307,11 +306,9 @@ export namespace foundation::rhi::vk
 
                 VkBufferImageCopy r{};
                 r.bufferOffset = c.stagingOffset + c.layout.offset;
-                // Honour the caller's row pitch (found by the Beef port: the layout was stored and
-                // never used, so a padded upload landed with its padding as pixels while DX12 and
-                // WebGPU honoured it). Vulkan wants TEXELS, not bytes; block-compressed data
-                // (bpp == 0) is uploaded tightly packed per level, so 0/0 = "tight" there - the
-                // same rule the command encoder's buffer->texture copy applies.
+                // Honour the caller's row pitch. Vulkan wants texels, not bytes; block-compressed
+                // data (bpp == 0) is uploaded tightly packed per level, so 0/0 means "tight" there,
+                // the same rule the command encoder's buffer-to-texture copy applies.
                 const u32 bpp = BytesPerPixel(dst->desc.format);
                 r.bufferRowLength =
                     (bpp > 0 && c.layout.bytesPerRow > 0) ? c.layout.bytesPerRow / bpp : 0;

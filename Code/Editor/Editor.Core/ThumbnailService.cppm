@@ -3,27 +3,25 @@
 
 // Editor Core - :thumbnail_service partition
 //
-// Asset thumbnails: an editor-only service that resolves a content
-// instance's Guid to a small preview drawable. Icon-first display is the CONSUMER's job - Get()
-// returns empty until a thumbnail exists and OnThumbnailReady fires the swap-in; nothing here
-// ever blocks the UI.
+// Asset thumbnails: an editor-only service that resolves a content instance's Guid to a small
+// preview drawable. Showing an icon first is the consumer's job: Get() returns empty until a
+// thumbnail exists, and OnThumbnailReady signals the swap. Nothing here blocks the UI.
 //
-// Mechanics: per-asset-type generators (registered by the app; unknown types simply keep their
-// icon) run on the EditorJobService LIGHT lane; results land in a content-keyed disk cache
-// (<project>/.cache/thumbs/<guid>-<recipeHash>.png - a stale hash is detected by filename
-// mismatch and the old file replaced; deleting the directory is always safe) and a RAM map of
-// OWNING drawables. OwnedThumbnailDrawable owns its pixels, so map eviction can never dangle a
-// drawable already handed to the UI (the bind-group value-keyed-cache lesson: renderer caches
-// key on ImageData::InstanceId, and the pixels live exactly as long as the drawable).
+// Per-asset-type generators (registered by the application; unknown types keep their icon) run on
+// the EditorJobService light lane. Results land in a content-keyed disk cache
+// (<project>/.cache/thumbs/<guid>-<recipeHash>.png; a stale hash shows as a filename mismatch and
+// the old file is replaced, and deleting the directory is always safe) and in a RAM map of owning
+// drawables. OwnedThumbnailDrawable owns its pixels, so evicting a map entry never leaves a
+// drawable already handed to the UI dangling: renderer caches key on ImageData::InstanceId, and
+// the pixels live exactly as long as the drawable.
 //
-// Threading: Get/Invalidate/OnThumbnailReady are MAIN-thread; generation + PNG IO run on the
-// light worker; completion fires on the main thread from EditorJobService::Update. In-flight
-// jobs use the heap-slot lifetime pattern so project close or service reset
-// mid-flight is safe. A generator's Prepare runs on the MAIN thread but must stay CHEAP: it
-// reads the small asset envelope and OPENS the source it needs (a file under Sources/, a
-// sidecar stream) - the worker does the reading. Until 2026-09-23 Prepare read the whole
-// source file (a 4k JPEG, a WAV) on the main thread, up to kMaxInFlight of them per Get
-// burst, and the asset browser's grid view froze for as long as thumbnails were pending.
+// Threading: Get, Invalidate and OnThumbnailReady are main thread only; generation and PNG IO run
+// on the light worker; completion fires on the main thread from EditorJobService::Update. In-flight
+// jobs keep their state in a heap slot, so closing the project or resetting the service mid-flight
+// is safe. A generator's Prepare runs on the main thread and must stay cheap: it reads the small
+// asset envelope and opens the source it needs (a file under Sources/, a sidecar stream), and the
+// worker does the reading. Reading whole source files (a 4k JPEG, a WAV) in Prepare would stall the
+// main thread for up to kMaxInFlight files per burst of Get calls.
 
 module;
 #include "Core/Prelude.h"
@@ -36,7 +34,7 @@ import foundation.core;
 import foundation.content;
 import foundation.image;
 import foundation.image.io;
-import foundation.resource; // ResourceManager (scene-thumbnail generators bind cooked products)
+import foundation.resource; // ResourceManager (scene thumbnail generators bind cooked products)
 import foundation.scene;    // Scene (the stage's persistent preview scene, populated by generators)
 import foundation.gui; // ImageDrawable (a thumbnail as the GUI draws it)
 import foundation.vfs;
@@ -49,8 +47,8 @@ namespace gui = foundation::gui;
 
 export namespace editor
 {
-    /// A thumbnail drawable that OWNS its pixels: the image lives exactly as long as the
-    /// drawable, so the service's RAM map can drop entries freely while the UI still holds refs.
+    /// A thumbnail drawable that owns its pixels: the image lives exactly as long as the drawable,
+    /// so the service's RAM map can drop entries freely while the UI still holds references.
     class OwnedThumbnailDrawable final : public gui::ImageDrawable
     {
         RTTI_OBJECT(OwnedThumbnailDrawable, gui::ImageDrawable)
@@ -66,9 +64,9 @@ export namespace editor
 
     RTTI_DEFINE_OBJECT(OwnedThumbnailDrawable, "rtti::editor")
 
-    /// What Prepare hands the worker: a small header the generator composes on the main
-    /// thread (tags, dimensions) and a stream OPENED there but READ on the worker. The
-    /// worker's payload = the header bytes followed by the whole stream (either may be absent).
+    /// What Prepare hands the worker: a small header the generator composes on the main thread
+    /// (tags, dimensions) and a stream opened there but read on the worker. The worker's payload
+    /// is the header bytes followed by the whole stream (either may be absent).
     struct ThumbnailPrepared
     {
         Array<byte> header;
@@ -79,43 +77,43 @@ export namespace editor
         }
     };
 
-    /// One per-asset-type thumbnail producer. Split across threads:
-    /// Prepare runs on the MAIN thread and resolves what the worker needs (content
-    /// Instance/DB access is main-thread-only - a cook or delete can run concurrently with the
-    /// light lane) WITHOUT reading it: it opens the source into a stream the worker reads.
-    /// Generate runs on the LIGHT worker over the read payload: CPU only, no UI, no GPU
-    /// (offscreen renders are the preview-bake path). The output image should already be
-    /// thumbnail-sized (the service saves it verbatim).
+    /// One per-asset-type thumbnail producer, split across threads. Prepare runs on the main
+    /// thread and resolves what the worker needs without reading it (content Instance and database
+    /// access is main thread only, since a cook or delete can run concurrently with the light
+    /// lane): it opens the source into a stream the worker reads. Generate runs on the light worker
+    /// over the read payload: CPU only, no UI and no GPU (offscreen renders go through
+    /// ISceneThumbnailGenerator). The output image should already be thumbnail-sized, since the
+    /// service saves it as it is.
     class IThumbnailGenerator
     {
     public:
         virtual ~IThumbnailGenerator() = default;
-        /// The content asset-type names this generator covers (e.g. "TextureAsset").
+        /// The content asset type names this generator covers (such as "TextureAsset").
         [[nodiscard]] virtual Span<const StringView> AssetTypeNames() const = 0;
-        /// MAIN thread, cheap: read the small envelope and OPEN the source into `out` - a
-        /// file under `sources` (the project's Sources/ mount, mount-relative Asset::fileName
-        /// paths) or an instance data stream - plus any header bytes. No whole-file reads
-        /// here: the worker reads `out.stream`.
+        /// Main thread, cheap: read the small envelope and open the source into `out` (a file
+        /// under `sources`, the project's Sources/ mount with mount-relative Asset::fileName paths,
+        /// or an instance data stream), plus any header bytes. Do not read whole files here; the
+        /// worker reads `out.stream`.
         [[nodiscard]] virtual Status Prepare(content::Instance& instance,
                                              foundation::vfs::IFileSystem& sources,
                                              ThumbnailPrepared& out) = 0;
-        /// LIGHT worker: produce the thumbnail pixels from the payload (header + stream bytes).
+        /// Light worker: produce the thumbnail pixels from the payload (header and stream bytes).
         [[nodiscard]] virtual Status Generate(Span<const byte> payload, image::Image& out) = 0;
     };
 
     /// One step of staging an asset into the shared preview scene.
     enum class ThumbnailStageStep : u8
     {
-        Pending, // resources still resolving - call Stage again next frame
+        Pending, // resources still resolving: call Stage again next frame
         Ready,   // scene populated; outFraming carries the view parameters
-        Failed,  // cannot stage (missing product, unbound resource) - negative-cache it
+        Failed,  // cannot stage (missing product, unbound resource): cache the failure
     };
 
-    /// How the stage views a staged job. Default: an ORTHO camera along (1,1,1) aimed at
-    /// `center`, sized from `radius`. `preferSceneCamera` asks the stage to use the scene's
-    /// own primary camera when one exists (scene documents look like themselves); the framing
-    /// fields stay the fallback. `prewarmSteps` simulation ticks (1/60s each) run before the
-    /// render - for content that is empty at t=0 (particles).
+    /// How the stage views a staged job. By default, an orthographic camera along (1,1,1) aimed at
+    /// `center`, sized from `radius`. `preferSceneCamera` asks the stage to use the scene's own
+    /// primary camera when one exists (so scene documents look like themselves), with the framing
+    /// fields as the fallback. `prewarmSteps` simulation ticks (1/60 s each) run before the render,
+    /// for content that is empty at t=0 (particles).
     struct ThumbnailFraming
     {
         Float3 center{};
@@ -124,20 +122,20 @@ export namespace editor
         u32 prewarmSteps = 0;
     };
 
-    /// A GPU thumbnail producer: populates an offscreen preview scene for one asset; the
-    /// STAGE (editor.preview) owns the camera/render/readback around it. All calls are
-    /// MAIN-thread. Stage() is called once per frame until it returns Ready or Failed (the
-    /// stage bounds the retries); Unstage() must remove exactly what Stage() added.
-    /// NeedsPrivateScene() = false stages into the SHARED persistent scene (cheap; the
-    /// generator owns persistent entities toggled active per job). True gives each job a
-    /// FRESH scene with the app's full manager set, destroyed at job end - for generators
-    /// that instantiate arbitrary content (prefabs, scene documents, simulated effects)
-    /// where teardown-by-hand or leaked scene-level state would be the bug.
+    /// A GPU thumbnail producer: it populates an offscreen preview scene for one asset, and the
+    /// stage (editor.preview) owns the camera, render and readback around it. All calls are on the
+    /// main thread. Stage() is called once per frame until it returns Ready or Failed (the stage
+    /// limits the retries); Unstage() must remove exactly what Stage() added. When
+    /// NeedsPrivateScene() is false, the job stages into the shared persistent scene (cheap; the
+    /// generator owns persistent entities it activates per job). When true, each job gets a fresh
+    /// scene with the application's full manager set, destroyed when the job ends. That suits
+    /// generators that instantiate arbitrary content (prefabs, scene documents, simulated
+    /// effects), where tearing down by hand could leak scene-level state.
     class ISceneThumbnailGenerator
     {
     public:
         virtual ~ISceneThumbnailGenerator() = default;
-        /// The content asset-type names this generator covers (e.g. "MeshAsset").
+        /// The content asset type names this generator covers (such as "MeshAsset").
         [[nodiscard]] virtual Span<const StringView> AssetTypeNames() const = 0;
         [[nodiscard]] virtual bool NeedsPrivateScene() const { return false; }
         [[nodiscard]] virtual ThumbnailStageStep Stage(const Guid& id,
@@ -154,26 +152,26 @@ export namespace editor
         ISceneThumbnailGenerator* generator = nullptr; // borrowed; lives on the service
     };
 
-    /// ThumbnailService::kThumbnailSize, at namespace scope for another library to read (MSVC exports no class's
-    /// static constexpr member from a shared library).
+    /// ThumbnailService::kThumbnailSize, at namespace scope so another library can read it (MSVC does
+    /// not export a class's static constexpr member from a shared library).
     inline constexpr ENGINE_EXPORT_DATA u32 kThumbnailServiceThumbnailSize = 128;
 
-    /// The thumbnail service. One per open project - the app Configures
-    /// it on project open and Resets it on close.
+    /// The thumbnail service, one per open project: the application calls Configure on project
+    /// open and Reset on close.
     class ThumbnailService
     {
     public:
-        /// Thumbnail edge size (square, aspect-fit letterboxed by the generators' helper).
-        // ENGINE_EXPORT_DATA: odr-used from another library (shared-libraries.md P5/W1).
+        /// Thumbnail edge size (square; the generators' helper letterboxes to fit the aspect).
+        // ENGINE_EXPORT_DATA: odr-used from another library.
         static constexpr ENGINE_EXPORT_DATA u32 kThumbnailSize = kThumbnailServiceThumbnailSize;
-        /// Scheduling budget (the cross-engine lesson): at most this many loads in flight; a
-        /// bind sweep over a big folder trickles instead of flooding the light lane - the NEXT
-        /// Get for a skipped id (every bind re-queries) schedules it once a slot frees.
+        /// Scheduling budget: at most this many loads in flight, so a bind sweep over a big
+        /// folder trickles instead of flooding the light lane. The next Get for a skipped id
+        /// (every bind asks again) schedules it once a slot frees.
         static constexpr usize kMaxInFlight = 8;
 
         [[nodiscard]] usize GeneratorCount() const noexcept { return m_generators.Size(); }
 
-        /// The swap-in signal: a thumbnail for this Guid became available (MAIN thread).
+        /// The swap signal: a thumbnail for this Guid became available (main thread).
         Function<void(const Guid&)> OnThumbnailReady;
 
         ~ThumbnailService() { Reset(); }
@@ -193,9 +191,9 @@ export namespace editor
         }
 
         // ---- the GPU lane (driven by the stage, one job at a time) --------------------
-        /// The next queued GPU job, or empty ({} id) when none. The job stays "taken" until
-        /// AcceptSceneResult for its id - a second call while one is out returns empty (the
-        /// one-in-flight rule every surveyed engine converged on).
+        /// The next queued GPU job, or empty ({} id) when none. The job stays taken until
+        /// AcceptSceneResult for its id; a second call while one is out returns empty, so only one
+        /// GPU job is in flight.
         [[nodiscard]] SceneThumbnailJob TakeSceneJob()
         {
             if (m_sceneJobActive || m_sceneQueue.IsEmpty())
@@ -208,17 +206,17 @@ export namespace editor
             m_activeSceneJob = job.id;
             return job;
         }
-        /// The stage finished (or failed) the active job: publish exactly like a CPU generate -
-        /// disk cache (PNG on the light lane), RAM entry, OnThumbnailReady. Failure caches a
-        /// negative entry so Get stops rescheduling until Invalidate.
+        /// The stage finished (or failed) the active job. Publishes exactly as a CPU generate does:
+        /// the disk cache (PNG on the light lane), the RAM entry, and OnThumbnailReady. Failure
+        /// caches a negative entry so Get stops rescheduling until Invalidate.
         void AcceptSceneResult(const Guid& id, image::Image pixels, bool ok);
         [[nodiscard]] usize QueuedSceneJobs() const noexcept
         {
             return m_sceneQueue.Size() + (m_sceneJobActive ? 1u : 0u);
         }
 
-        /// Project-open wiring: where the cache lives, how to resolve instances, the job lane,
-        /// and the content-hash source. Any previous state is dropped.
+        /// Set up on project open: where the cache lives, how to resolve instances, the job lane,
+        /// and the content hash source. Any previous state is dropped.
         void Configure(StringView cacheDirectory, Function<content::Instance*(const Guid&)> resolve,
                        EditorJobService* jobs, Function<u64(const Guid&)> contentHash,
                        StringView sourcesRoot)
@@ -233,8 +231,8 @@ export namespace editor
                                                                       foundation::core::DefaultAllocator());
         }
 
-        /// Project-close: drop the RAM cache and detach. In-flight jobs complete harmlessly
-        /// against their slots (the alive flag is cleared).
+        /// On project close: drop the RAM cache and detach. In-flight jobs complete harmlessly
+        /// against their slots, whose alive flag is cleared.
         void Reset()
         {
             for (InFlight& flight : m_inFlight)
@@ -253,9 +251,9 @@ export namespace editor
             m_sources = {};
         }
 
-        /// The resolved thumbnail, or EMPTY when none exists yet (the caller keeps its type
-        /// icon). A miss schedules load-or-generate on the light lane; OnThumbnailReady fires
-        /// when the swap-in is ready. Main thread only.
+        /// The resolved thumbnail, or empty when none exists yet (the caller keeps its type icon).
+        /// A miss schedules a load or generate on the light lane, and OnThumbnailReady fires when
+        /// the thumbnail is ready. Main thread only.
         [[nodiscard]] RefPtr<gui::Drawable> Get(const Guid& id)
         {
             if (id.IsNil() || m_jobs == nullptr || !m_resolve)
@@ -270,12 +268,12 @@ export namespace editor
             return {};
         }
 
-        /// Drop a cached thumbnail (cook/import invalidation); the next Get regenerates. The
-        /// content-hash filenames make even a missed invalidation self-healing.
+        /// Drop a cached thumbnail (invalidated by a cook or import); the next Get regenerates it.
+        /// Because filenames carry the content hash, even a missed invalidation corrects itself.
         void Invalidate(const Guid& id) { m_entries.Remove(id); }
 
-        /// Drop the whole RAM cache (cook finished: recipe hashes moved). Unchanged assets
-        /// reload from their unchanged disk files - cheap; changed ones regenerate.
+        /// Drop the whole RAM cache (a cook finished and recipe hashes changed). Unchanged assets
+        /// reload cheaply from their unchanged disk files; changed ones regenerate.
         void InvalidateAll() { m_entries.Clear(); }
 
         [[nodiscard]] usize CachedCount() const noexcept { return m_entries.Size(); }
@@ -286,22 +284,22 @@ export namespace editor
             RefPtr<OwnedThumbnailDrawable> drawable;
         };
 
-        // The heap slot both closures own (lifetime rule): the service dtor /
-        // Reset clears serviceAlive; the completion always deletes the slot. All flags are
-        // main-thread; the worker only touches `pixels` + `ok`.
+        // The heap slot both closures share: the service destructor or Reset clears
+        // serviceAlive, and the completion always deletes the slot. All flags are main thread
+        // only; the worker touches only `pixels` and `ok`.
         struct JobSlot
         {
             Guid id{};
-            bool serviceAlive = true;      // main-thread flag (service dtor/Reset clears)
-            bool ok = false;               // worker -> completion result
-            bool negative = false;         // completion: cache "no thumbnail" (stop rescheduling)
-            bool staleDiskFile = false;    // disk cache failed to load AND no payload to
+            bool serviceAlive = true;      // main-thread flag (the destructor or Reset clears it)
+            bool ok = false;               // result from the worker for the completion
+            bool negative = false;         // completion caches "no thumbnail" (stops rescheduling)
+            bool staleDiskFile = false;    // disk cache failed to load and there is no payload to
                                            // regenerate from (Prepare was skipped because the
                                            // file existed): delete the file, retry fully
             image::Image pixels;           // worker output
-            ThumbnailPrepared prepared;    // main-thread Prepare output: header + an OPEN stream
-            Array<byte> payload;           // the worker's read: header + the stream's bytes
-            String diskPath;               // empty = RAM-only (unknown content hash)
+            ThumbnailPrepared prepared;    // main-thread Prepare output: header and an open stream
+            Array<byte> payload;           // the worker's read: header and the stream's bytes
+            String diskPath;               // empty means RAM only (unknown content hash)
             IThumbnailGenerator* generator = nullptr; // borrowed; generators live on the service
         };
         struct InFlight

@@ -4,9 +4,9 @@
 // UI - :focus_manager partition
 //
 // Manages keyboard focus and mouse capture (tracked by ViewId for deletion safety), tab navigation,
-// and directional/spatial focus. Ported from Sedulous.UI/src/Input/FocusManager.bf. All View-touching
-// bodies live in the module impl unit. GetFocusRoot is scoped to the topmost focus-taking popup when
-// one is open, so modals trap Tab/arrows and their content is keyboard-reachable.
+// and directional/spatial focus. All View-touching bodies live in the module impl unit. GetFocusRoot
+// is scoped to the topmost focus-taking popup when one is open, so modals trap Tab/arrows and their
+// content is keyboard-reachable.
 
 module;
 #include "Core/Prelude.h"
@@ -24,8 +24,8 @@ export namespace foundation::ui
     class View;
     class UIContext;
 
-    /// How the current focus was acquired. Focus is RETAINED regardless of source (typing, list
-    /// arrow-nav, and tab continuity all key off the focused view) - but controls only DRAW their
+    /// How the current focus was acquired. Focus is retained regardless of source (typing, list
+    /// arrow-nav, and tab continuity all key off the focused view), but controls only draw their
     /// focus indicator for Keyboard-acquired focus (View::IsFocusVisible, the :focus-visible
     /// split). Pointer and Programmatic focus hold focus without a ring.
     enum class FocusSource : u8
@@ -48,7 +48,7 @@ export namespace foundation::ui
         void ClearFocus();                                                         // impl unit
 
         /// Focus the first focusable view (tab order) inside `scope`; false if none. Used for
-        /// initial focus in dialogs (Programmatic - holds focus, draws no ring).
+        /// initial focus in dialogs (Programmatic: holds focus, draws no ring).
         bool FocusFirstIn(View* scope); // impl unit
 
         // === Focus save/restore (each focus-taking popup owns its saved entry) ===
@@ -58,13 +58,13 @@ export namespace foundation::ui
             ViewId id{};
             FocusSource source = FocusSource::Programmatic;
         };
-        /// Save the current focus + how it was acquired, then clear it (a focus-taking popup is
-        /// opening). The POPUP stores the returned entry - each popup restores only what IT saved,
-        /// so out-of-LIFO-order closes can never cross-restore another popup's focus.
+        /// Save the current focus and how it was acquired, then clear it (a focus-taking popup is
+        /// opening). The popup stores the returned entry, and each popup restores only what it
+        /// saved, so closing popups out of LIFO order never restores another popup's focus.
         SavedFocus SaveAndClearFocus(); // impl unit
-        /// Restore a saved entry. No-op unless the view still resolves AND is still focusable,
+        /// Restore a saved entry. No-op unless the view still resolves and is still focusable,
         /// effectively enabled, and not Gone (it may have been disabled/hidden/destroyed while the
-        /// popup was open). Restores with the ORIGINAL source: a pointer-focused button comes back
+        /// popup was open). Restores with the original source: a pointer-focused button comes back
         /// from a modal holding focus but ringless.
         void RestoreFocus(SavedFocus saved); // impl unit
         /// Outstanding saved entries (popups currently holding a saved focus). Consumers use

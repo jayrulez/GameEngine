@@ -3,21 +3,28 @@
 
 // GUI - :tab_bar partition
 //
-// TabBar: a strip of tabs (E6 of Specs/gui-lab-evolution.md), Godot's TabBar split from the
-// container that shows pages (TabView), each tab a real element as zed's and eepp's are: the
-// button core with its text and icon parts and a close part. A press selects a tab (`:checked`
-// styles it); the arrows, Home and End move along the strip, Ctrl+Tab and Ctrl+Shift+Tab (and
-// Ctrl+Page Down and Up) cycle round it. Closing is a request: the close part or a middle click
-// reports `tabclose` (a TabEvent), and the tab goes unless a listener takes the event; which tabs
-// show their close part is the bar's policy (never, the selected one, the hovered and selected
-// ones, all). With `reorderable`, a tab dragged across a neighbour's midpoint changes places with
-// it. In a strip of a `group` a tab moved past the drag threshold, any way, is a drag at once (E7,
-// type `gui/tab`) that the group's strips take, its own too (a reorder when it is `reorderable`),
-// a mark showing where it would land; between tab views its page goes with it. Tabs past the strip's end scroll it (the wheel turns it, a selected tab is scrolled to), and
-// a button at its end lists them all (shown while they overflow, or always: `list-display`); with
-// `close-all`, a part past it asks to close every closable tab.
+// TabBar: a strip of tabs, separate from the container that shows pages (TabView). Each tab is a
+// real element: a ButtonBase with text and icon parts plus a close part. A press selects a tab,
+// which `:checked` then styles. The arrow keys, Home and End move along the strip; Ctrl+Tab and
+// Ctrl+Shift+Tab (and Ctrl+Page Down and Ctrl+Page Up) cycle round it.
 //
-// A change the user makes reports `change`; code's report only to bindings, as a button's do.
+// Closing is a request: the close part or a middle click sends `tabclose` (a TabEvent), and the
+// tab is removed unless a listener handles the event. The bar's policy decides which tabs show
+// their close part: none, the selected tab, the selected and hovered tabs, or all of them.
+//
+// With `reorderable`, a tab dragged across a neighbour's midpoint swaps places with it. In a strip
+// that has a `group`, a tab moved past the drag threshold in any direction becomes a drag (type
+// `gui/tab`) straight away. Every strip of the group accepts it, its own strip included (as a
+// reorder, when `reorderable`), and a mark shows where it would land. Between tab views, the
+// tab's page moves with it.
+//
+// When the tabs pass the strip's end the strip scrolls: the wheel scrolls it, and it scrolls to
+// the selected tab. A button at the end lists all the tabs, shown while they overflow or always
+// (`list-display`). With `close-all`, a part after the list button asks to close every closable
+// tab.
+//
+// A change the user makes sends `change`; a change from code only notifies bindings, as with a
+// button.
 
 module;
 #include "Core/Prelude.h"
@@ -27,7 +34,7 @@ export module foundation.gui:tab_bar;
 
 import foundation.core; // Function, Move, RefPtr, Array, String, Abs, Max
 import foundation.vg;   // PathBuilder, StrokeStyle
-import :reactive;       // Observable (what bindings follow)
+import :reactive;       // Observable, which bindings follow
 import :rect;
 import :event;
 import :draw_context;
@@ -51,20 +58,20 @@ export namespace foundation::gui
     /// Which tabs show their close part.
     enum class TabCloseDisplay : u8
     {
-        Never,    ///< none: tabs close from code alone
-        Selected, ///< the selected tab's
-        Hover,    ///< the selected tab's and the hovered one's
-        Always,   ///< every closable tab's
+        Never,    ///< no tab; tabs close only from code
+        Selected, ///< the selected tab
+        Hover,    ///< the selected tab and the hovered tab
+        Always,   ///< every closable tab
     };
 
     /// When the strip's list button shows.
     enum class TabListDisplay : u8
     {
         Overflow, ///< while the tabs overflow the strip
-        Always,   ///< always (a strip whose button does more than list: docking's)
+        Always,   ///< always, for a strip whose button does more than list (as in docking)
     };
 
-    // A cross in `color` filling `box` (the close parts').
+    // Draws a cross in `color` filling `box`, as the close parts show.
     inline void DrawTabCross(DrawContext& ctx, const Rect& box, Color color)
     {
         const f32 s = core::Min(box.width, box.height) * 0.5f;
@@ -78,7 +85,7 @@ export namespace foundation::gui
         ctx.VG().StrokePath(cross.ToPath(), color, vg::StrokeStyle(1.5f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
     }
 
-    /// A tab's close part (`tab > close`): a cross in its text colour.
+    /// A tab's close part (`tab > close`): a cross drawn in the part's text colour.
     class TabCloseButton : public ButtonBase
     {
         RTTI_OBJECT(TabCloseButton, ButtonBase)
@@ -86,7 +93,7 @@ export namespace foundation::gui
         TabCloseButton()
         {
             SetTag(core::StringView(u8"close"));
-            SetTabFocusable(false); // the keyboard closes from the tab, not a stop of its own
+            SetTabFocusable(false); // the keyboard closes from the tab; the close part is not a focus stop
         }
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{10.0f, 10.0f}; }
 
@@ -96,7 +103,7 @@ export namespace foundation::gui
             ButtonBase::OnDraw(ctx, localBounds);
             DrawTabCross(ctx, GetContentBounds(), GetTextColor());
         }
-        // A press on it is its own: the tab under it neither selects nor starts a drag.
+        // The close part handles its own press, so the tab under it neither selects nor starts a drag.
         void OnMouseDown(const MouseEvent& event) override
         {
             if (event.Button == MouseButton::Left)
@@ -104,14 +111,15 @@ export namespace foundation::gui
         }
     };
 
-    /// One tab: the button core's text and icon, and a close part.
+    /// One tab: a ButtonBase with text and icon, and a close part.
     class Tab : public ButtonBase
     {
         RTTI_OBJECT(Tab, ButtonBase)
     public:
         Tab();
 
-        /// It can be closed (its close part shown as the bar's policy says, a middle click).
+        /// Sets whether the tab can be closed, with its close part (shown as the bar's policy says)
+        /// or a middle click.
         void SetClosable(bool closable)
         {
             m_closable = closable;
@@ -121,26 +129,27 @@ export namespace foundation::gui
         [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
         [[nodiscard]] bool IsCurrentInGroup() const override { return m_selected; }
         [[nodiscard]] TabCloseButton* GetClosePart() const noexcept { return m_close.Get(); }
-        /// The bar it is in (null when it is in none).
+        /// Returns the bar the tab is in, or null when it is in none.
         [[nodiscard]] TabBar* GetBar() const;
 
-        /// What it shows (a TabView's page), not owned.
+        /// Sets what the tab shows (a TabView's page); not owned.
         void SetPage(Node* page) noexcept { m_page = page; }
         [[nodiscard]] Node* GetPage() const noexcept { return m_page; }
 
         [[nodiscard]] u32 GetWidgetStates() const override { return m_selected ? WidgetStateChecked : WidgetStateNone; }
-        // In a reorderable strip of no group its press reorders it (E7): a drag from what holds it is
-        // not offered. In a group's strip the press is the drag's, which it gives.
+        // In a reorderable strip with no group, the tab's press reorders it, so a drag is not
+        // offered to the nodes that hold it. In a group's strip the press starts a drag, which the
+        // tab provides itself.
         [[nodiscard]] bool OwnsPressDrag(core::Float2) const override;
-        // A drag resting on it selects it (E7, Godot's switch on drag hover).
+        // A drag resting on the tab selects it.
         bool OnDragHoverOpen(core::Float2) override;
-        /// In a strip of a group: the pointer's drag past the threshold, held where it was pressed,
-        /// or picked up from the keyboard (`drag.pick`).
+        /// Starts a drag when the tab is in a group's strip: from the pointer moving past the
+        /// threshold, held where it was pressed, or picked up from the keyboard (`drag.pick`).
         bool OnDragRequested(DragRequest& request) override;
-        /// The drag a tab torn out of its strip is.
+        /// Fills the drag payload for this tab when it is torn out of its strip.
         void FillTabPayload(DragPayload& payload);
-        /// A torn tab's ghost: its title in a `dragpreview.tab`, its own size (held where it was
-        /// grabbed, so it does not jump beside the pointer).
+        /// Creates a torn tab's ghost: its title in a `dragpreview.tab` at the tab's own size, held
+        /// where it was grabbed so it does not jump beside the pointer.
         [[nodiscard]] core::RefPtr<Node> CreateDragPreview(const DragPayload& payload) override;
 
     protected:
@@ -163,7 +172,7 @@ export namespace foundation::gui
         void OnPointerStateChange() override
         {
             ButtonBase::OnPointerStateChange();
-            UpdateClose(); // the hover policy shows it while hovered
+            UpdateClose(); // under the hover policy the close part shows while hovered
         }
 
     private:
@@ -192,13 +201,13 @@ export namespace foundation::gui
         Node* m_page = nullptr;
         bool m_closable = true;
         bool m_selected = false;
-        bool m_pressing = false; // a left press on it, not yet released
-        bool m_dragging = false; // that press moved far enough to reorder
+        bool m_pressing = false; // a left press on the tab, not yet released
+        bool m_dragging = false; // the press has moved far enough to reorder
         f32 m_pressX = 0.0f;
-        core::RefPtr<TabBar> m_tornFrom; // the bar told it was torn out, told again when the drag ends
+        core::RefPtr<TabBar> m_tornFrom; // the bar that was told of the tear, and is told again when the drag ends
     };
 
-    // The row the tabs are in: it scrolls across, its bar hidden.
+    // The row that holds the tabs. It scrolls horizontally with its scroll bar hidden.
     class TabStrip : public Panel
     {
         RTTI_OBJECT(TabStrip, Panel)
@@ -207,10 +216,10 @@ export namespace foundation::gui
         void OnChildrenChanged() override;
 
     private:
-        TabBar& m_bar; // its parent, which owns it
+        TabBar& m_bar; // the parent bar, which owns this strip
     };
 
-    // The button at the strip's end that lists every tab (shown while they overflow, or always).
+    // The button at the strip's end that lists every tab; shown while the tabs overflow, or always.
     class TabListButton : public ButtonBase
     {
         RTTI_OBJECT(TabListButton, ButtonBase)
@@ -218,7 +227,7 @@ export namespace foundation::gui
         TabListButton()
         {
             SetTag(core::StringView(u8"tablist"));
-            SetTabFocusable(false); // the arrows and Ctrl+Tab reach every tab already
+            SetTabFocusable(false); // the arrow keys and Ctrl+Tab already reach every tab
         }
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{12.0f, 12.0f}; }
 
@@ -230,8 +239,8 @@ export namespace foundation::gui
         }
     };
 
-    // The button past the list button that closes every closable tab (`closeall`, with
-    // `close-all`; shown while one is closable).
+    // The button after the list button that closes every closable tab (`closeall`). It exists with
+    // `close-all` and shows while some tab is closable.
     class TabCloseAllButton : public ButtonBase
     {
         RTTI_OBJECT(TabCloseAllButton, ButtonBase)
@@ -239,7 +248,7 @@ export namespace foundation::gui
         TabCloseAllButton()
         {
             SetTag(core::StringView(u8"closeall"));
-            SetTabFocusable(false); // the keyboard closes tab by tab
+            SetTabFocusable(false); // the keyboard closes one tab at a time
         }
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{10.0f, 10.0f}; }
 
@@ -280,17 +289,19 @@ export namespace foundation::gui
         }
 
         // === Tabs ===
-        /// Adds a tab with `text` at `index` (past the end: last); the first tab is selected.
+        /// Adds a tab with `text` at `index`, or last when `index` is past the end. The first tab
+        /// added is selected.
         Tab* InsertTab(i32 index, core::StringView text)
         {
             auto tab = core::MakeRef<Tab>(MemoryAllocator());
             tab->SetText(text);
             m_strip->AddChildAt(tab.Get(), index < 0 ? m_strip->ChildCount() : core::Min(static_cast<usize>(index), m_strip->ChildCount()));
-            m_selectedAt = core::Max(0, IndexOf(m_selected)); // placed after it was added, before the selection perhaps
+            m_selectedAt = core::Max(0, IndexOf(m_selected)); // the new tab may have gone before the selected one
             return tab.Get();
         }
         Tab* AddTab(core::StringView text) { return InsertTab(-1, text); }
-        /// Removes a tab; were it selected, the one after it is (else the one before).
+        /// Removes a tab. If it was selected, the tab after it becomes selected, or else the one
+        /// before.
         void RemoveTab(i32 index)
         {
             if (Tab* tab = GetTab(index))
@@ -306,7 +317,7 @@ export namespace foundation::gui
             const usize at = tab != nullptr ? m_strip->GetChildIndex(tab) : kInvalidIndex;
             return at == kInvalidIndex ? -1 : static_cast<i32>(at);
         }
-        /// Moves a tab to `to` (code's: reports only to the moved callback).
+        /// Moves a tab to `to`. As a change from code it is reported only to the moved callback.
         void MoveTab(i32 from, i32 to)
         {
             Tab* tab = GetTab(from);
@@ -319,24 +330,26 @@ export namespace foundation::gui
         }
 
         // === Selection ===
-        /// The selected tab's index (-1: none), a read a binding records.
+        /// Returns the selected tab's index, or -1 for none. A binding that reads it follows later
+        /// changes.
         [[nodiscard]] i32 GetSelectedIndex() const
         {
             m_selectedChanged.Track();
             return IndexOf(m_selected);
         }
         [[nodiscard]] Tab* GetSelectedTab() const noexcept { return m_selected; }
-        /// Selects from code: no events. An index past the tabs waits for them (markup's
-        /// `selected` is read before its tabs are made).
+        /// Selects a tab from code, without events. An index past the last tab is kept until that
+        /// tab exists, because markup's `selected` is read before its tabs are made.
         void SetSelectedIndex(i32 index)
         {
             m_pendingSelect = index >= GetTabCount() ? index : -1;
             if (m_pendingSelect < 0)
                 Select(GetTab(index), false);
         }
-        /// Selects as the user does: reports `change` when it changes.
+        /// Selects a tab as the user does, sending `change` when the selection changes.
         void SelectByUser(i32 index) { Select(GetTab(index), true); }
-        /// Moves the selection by `step` round the strip (Ctrl+Tab's), as the user does.
+        /// Moves the selection by `step`, wrapping round the strip as Ctrl+Tab does, on the user's
+        /// behalf.
         void CycleSelection(i32 step)
         {
             const i32 count = GetTabCount();
@@ -349,7 +362,7 @@ export namespace foundation::gui
         }
 
         // === Closing ===
-        /// Which tabs show their close part.
+        /// Sets which tabs show their close part.
         void SetCloseDisplay(TabCloseDisplay display)
         {
             m_closeDisplay = display;
@@ -357,7 +370,8 @@ export namespace foundation::gui
                 GetTab(i)->UpdateClose();
         }
         [[nodiscard]] TabCloseDisplay GetCloseDisplay() const noexcept { return m_closeDisplay; }
-        /// "never", "selected", "hover" or "always" (markup's and a sheet's `close-display`).
+        /// Sets the close policy from "never", "selected", "hover" or "always" (the `close-display`
+        /// property of markup and style sheets).
         void SetCloseDisplayName(const core::String& name)
         {
             static constexpr core::StringView kNames[] = {u8"never", u8"selected", u8"hover", u8"always"};
@@ -372,18 +386,19 @@ export namespace foundation::gui
             static constexpr core::StringView kNames[] = {u8"never", u8"selected", u8"hover", u8"always"};
             return core::String(kNames[static_cast<usize>(m_closeDisplay)]);
         }
-        /// Asks to close every closable tab, last first, each as its close part does (what the
-        /// close-all part does). By place, not by tab: an owner may make its tabs again after each
-        /// close (docking does), and those before the one closed keep their places.
+        /// Asks to close every closable tab, as the close-all part does. It goes from the last tab to
+        /// the first and makes each request as that tab's close part would. It walks by index
+        /// rather than by tab object, because an owner may rebuild its tabs after each close
+        /// (docking does), and the tabs before the one closed keep their indices.
         void CloseAll()
         {
-            const core::RefPtr<TabBar> keep(this); // an owner may let it go on the way
+            const core::RefPtr<TabBar> keep(this); // an owner may release the bar during a close
             for (i32 i = GetTabCount(); i-- > 0;)
                 if (i < GetTabCount() && GetTab(i)->IsClosable())
                     RequestClose(i);
         }
-        /// A part past the list button closes every closable tab (markup's and a sheet's
-        /// `close-all`), shown while one is closable.
+        /// Sets whether a part after the list button closes every closable tab (the `close-all`
+        /// property of markup and style sheets). The part shows while some tab is closable.
         void SetCloseAll(bool shown)
         {
             m_closeAll = shown;
@@ -391,8 +406,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool HasCloseAll() const noexcept { return m_closeAll; }
         [[nodiscard]] Node* GetCloseAllPart() const noexcept { return m_closeAllPart.Get(); }
-        /// Asks to close a tab, as its close part does: `tabclose` is reported, and unless a
-        /// listener takes it, the tab goes. (A TabView takes the request over.)
+        /// Asks to close a tab, as its close part does. The bar sends `tabclose`, and unless a
+        /// listener handles it, the tab is removed. A close handler (a TabView sets one) takes over
+        /// the request instead.
         void RequestClose(i32 index)
         {
             Tab* tab = GetTab(index);
@@ -410,19 +426,20 @@ export namespace foundation::gui
         }
 
         // === Reordering ===
-        /// A tab dragged across a neighbour's midpoint changes places with it (in a group's strip,
-        /// dropped back into the strip at a new place).
+        /// Sets whether tabs reorder: a tab dragged across a neighbour's midpoint swaps places with
+        /// it. In a group's strip the tab is instead dropped back into the strip at a new place.
         void SetReorderable(bool reorderable) noexcept { m_reorderable = reorderable; }
         [[nodiscard]] bool IsReorderable() const noexcept { return m_reorderable; }
 
-        // === Between strips (E7) ===
-        /// Strips of one group take each other's tabs (torn out and dropped); empty: none.
+        // === Between strips ===
+        /// Sets the group. Strips of the same group accept each other's tabs, torn out and dropped;
+        /// an empty group shares with none.
         void SetGroup(const core::String& group) { m_group = group; }
         [[nodiscard]] core::String GetGroup() const { return m_group; }
-        /// Where a tab dropped here would go, while a drag of one is over the strip (-1: none).
+        /// While a tab is dragged over the strip, returns where it would go if dropped, or -1.
         [[nodiscard]] i32 GetDropIndex() const noexcept { return m_dropIndex; }
-        /// Whether it takes a dragged tab (a torn-out tab of its group), and puts the mark at
-        /// `index`; what a TabView asks for a drop anywhere over it.
+        /// Returns whether the bar accepts a dragged tab (a torn-out tab of its group), and if so
+        /// puts the mark at `index`. A TabView calls this for a drop anywhere over it.
         bool OfferTab(DropQuery& query, i32 index)
         {
             const Tab* tab = DraggedTab(query.Payload);
@@ -437,62 +454,68 @@ export namespace foundation::gui
                 if (query.Refused)
                 {
                     SetDropIndex(-1);
-                    return true; // answered: the walk ends with the reason
+                    return true; // refused: the query stops here with the reason
                 }
                 if (query.Effect == DropEffect::None)
                 {
                     SetDropIndex(-1);
-                    return false; // passed on: what holds the strip is asked
+                    return false; // passed on: the strip's ancestors are asked next
                 }
             }
             SetDropIndex(index);
             return true;
         }
-        /// Clears the mark (the drag left).
+        /// Clears the mark when the drag leaves.
         void ClearTabMark() { SetDropIndex(-1); }
-        /// Takes the dragged tab at the marked place.
+        /// Drops the dragged tab at the marked place.
         void DropTab(const DragPayload& payload);
-        /// Takes the page of a tab dropped here from another view (a TabView's): the page goes
-        /// to it at an index, and its tab comes with it.
+        /// Sets the callback that takes the page of a tab dropped here from another view (used by
+        /// a TabView). The callback receives the page and the index, and the tab follows the page.
         void SetPageAdopter(core::Function<void(Node& page, i32 index)> adopter) { m_pageAdopter = core::Move(adopter); }
-        /// Asked when a tab of its group is offered at `index` (accepted already): it may refuse it,
-        /// saying why, pass it on (its effect set back to none: what holds the strip is asked), or
-        /// say what the drop would do (the query's Reason). An owner that keeps where tabs are
-        /// elsewhere (docking) answers with its own rules.
+        /// Sets the callback asked when a tab of the group is offered at `index`, after the query
+        /// has been accepted. It may refuse the tab and say why, pass it on by setting the effect
+        /// back to none (the strip's ancestors are then asked), or describe what the drop would do
+        /// in the query's Reason. An owner that tracks tab placement elsewhere (docking) answers
+        /// with its own rules.
         void SetOnTabOffered(core::Function<void(DropQuery& query, Tab& tab, i32 index)> offered) { m_onTabOffered = core::Move(offered); }
-        /// Takes a dropped tab over: the bar moves nothing, the taker does (`index` counted with every
-        /// tab where it is, the dropped one too when it is this bar's).
+        /// Sets a callback that handles dropped tabs instead of the bar, which then moves nothing.
+        /// `index` counts every tab in its current place, including the dropped tab when it belongs
+        /// to this bar.
         void SetTabTaker(core::Function<void(Tab& tab, i32 index)> taker) { m_tabTaker = core::Move(taker); }
-        /// A tab of its own was torn out as a drag (`torn`), or that drag ended, dropped or not (the
-        /// tab may be in another bar by then): an owner may hide or dim it meanwhile. A tab not
-        /// displayed is no place for a drop.
+        /// Sets the callback told when one of this bar's tabs is torn out as a drag (`torn` true)
+        /// and when that drag ends, dropped or not (by then the tab may be in another bar). An
+        /// owner may hide or dim the tab meanwhile. A tab that is not displayed is not a drop place.
         void SetOnTabTorn(core::Function<void(Tab& tab, bool torn)> torn) { m_onTabTorn = core::Move(torn); }
-        /// How the drag of a tab torn out of it ended (after it hears the tab is no longer torn): an
-        /// owner that does something with a tab let go outside every window (docking floats it).
+        /// Sets the callback told how the drag of a tab torn out of this bar ended, after the torn
+        /// callback has reported the end. It lets an owner act on a tab released outside every
+        /// window; docking floats it.
         void SetOnTabDragEnded(core::Function<void(Tab& tab, const DragResult& result)> ended) { m_onTabDragEnded = core::Move(ended); }
 
         // === Callbacks ===
-        /// The user selected a tab (the `change` event's).
+        /// Sets the callback for the user selecting a tab (as the `change` event reports).
         void SetOnSelected(core::Function<void(i32)> callback) { m_onSelected = core::Move(callback); }
-        /// Each change of the selection, the user's or code's (what shows a tab's page follows it).
+        /// Sets the callback for every selection change, by the user or by code; whatever shows the
+        /// tab's page follows it.
         void SetOnSelectionChanged(core::Function<void(i32)> callback) { m_onSelectionChanged = core::Move(callback); }
-        /// A tab moved, by a drag or MoveTab.
+        /// Sets the callback for a tab moved by a drag or by MoveTab.
         void SetOnTabMoved(core::Function<void(i32 from, i32 to)> callback) { m_onMoved = core::Move(callback); }
-        /// A tab left the bar (closed, or removed by code).
+        /// Sets the callback for a tab leaving the bar, closed or removed by code.
         void SetOnTabRemoved(core::Function<void(Tab&)> callback) { m_onRemoved = core::Move(callback); }
-        /// Takes close requests over (a TabView's): the bar then neither reports nor closes.
+        /// Sets a handler that takes over close requests (a TabView sets one). The bar then neither
+        /// sends `tabclose` nor removes the tab.
         void SetCloseHandler(core::Function<void(i32)> handler) { m_closeHandler = core::Move(handler); }
 
         [[nodiscard]] Node* GetStrip() const noexcept { return m_strip.Get(); }
         [[nodiscard]] Node* GetListButton() const noexcept { return m_list.Get(); }
-        /// When the list button shows: while the tabs overflow (the default) or always.
+        /// Sets when the list button shows: while the tabs overflow (the default) or always.
         void SetListDisplay(TabListDisplay display)
         {
             m_listDisplay = display;
             RequestLayout();
         }
         [[nodiscard]] TabListDisplay GetListDisplay() const noexcept { return m_listDisplay; }
-        /// "overflow" or "always" (markup's and a sheet's `list-display`).
+        /// Sets the list button policy from "overflow" or "always" (the `list-display` property of
+        /// markup and style sheets).
         void SetListDisplayName(const core::String& name)
         {
             SetListDisplay(core::Trim(name.AsView()) == core::StringView(u8"always") ? TabListDisplay::Always : TabListDisplay::Overflow);
@@ -501,9 +524,9 @@ export namespace foundation::gui
         {
             return core::String(m_listDisplay == TabListDisplay::Always ? core::StringView(u8"always") : core::StringView(u8"overflow"));
         }
-        /// The menu of every tab, while it is open (null otherwise).
+        /// Returns the menu listing every tab while it is open, or null otherwise.
         [[nodiscard]] Menu* GetTabListMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
-        /// Markup's children are its tabs.
+        /// Returns the host for markup's children, which become the tabs.
         [[nodiscard]] Node* GetChildHost() override { return m_strip.Get(); }
 
         /// Lists every tab in a menu below the list button; picking one selects it.
@@ -519,13 +542,13 @@ export namespace foundation::gui
         }
 
     protected:
-        // Its tabs and its menu write in its font.
+        // The tabs and the menu use the bar's font.
         void OnTextStyleChange() override
         {
             for (i32 i = 0; i < GetTabCount(); ++i)
                 ShareTextStyle(*GetTab(i), false);
         }
-        // The list button shows while the tabs overflow the strip (or always).
+        // Shows the list button while the tabs overflow the strip, or always when the policy says so.
         void OnLayout() override
         {
             LayoutChildren();
@@ -545,7 +568,7 @@ export namespace foundation::gui
             CycleSelection(step);
             event.Handled = true;
         }
-        // A torn-out tab of its group: taken, the mark where it would land.
+        // Accepts a torn-out tab of the group and marks where it would land.
         void OnDragQuery(DropQuery& query) override;
         void OnDragLeave(const DragEvent&) override { SetDropIndex(-1); }
         void OnDrop(const DragEvent& event) override;
@@ -554,7 +577,7 @@ export namespace foundation::gui
 
     private:
         friend class Tab;
-        // The close-all part shows while it is asked for and a tab is closable.
+        // Shows the close-all part while it is enabled and some tab is closable.
         void UpdateCloseAll()
         {
             bool any = false;
@@ -569,8 +592,8 @@ export namespace foundation::gui
             m_dropIndex = index;
             Invalidate();
         }
-        // Where a tab dropped at `local` (the bar's space) would go: before the first tab whose
-        // middle lies past it toward the inline end.
+        // Returns where a tab dropped at `local` (in the bar's space) would go: before the first tab
+        // whose middle lies past `local` toward the inline end.
         [[nodiscard]] i32 InsertionIndex(core::Float2 local) const
         {
             const core::Float2 world = ConvertToWorldSpace(local);
@@ -578,7 +601,7 @@ export namespace foundation::gui
             for (i32 i = 0; i < GetTabCount(); ++i)
             {
                 if (!GetTab(i)->IsDisplayed())
-                    continue; // hidden (torn out): counted, but no place of its own
+                    continue; // a hidden (torn-out) tab still counts, but offers no place of its own
                 const Rect r = GetTab(i)->GetScreenBounds();
                 if (way * world.x < way * (r.x + r.width * 0.5f))
                     return i;
@@ -589,7 +612,8 @@ export namespace foundation::gui
         friend class TabStrip;
         friend class TabView;
 
-        // Ctrl+Tab and Ctrl+Page Down: on; Ctrl+Shift+Tab and Ctrl+Page Up: back (0: neither).
+        // Returns 1 for Ctrl+Tab and Ctrl+Page Down, -1 for Ctrl+Shift+Tab and Ctrl+Page Up, and 0
+        // for anything else.
         [[nodiscard]] static i32 CycleStep(const KeyEvent& event)
         {
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
@@ -626,9 +650,9 @@ export namespace foundation::gui
             SendEvent(Event(EventType::Changed, this));
         }
 
-        // The strip's tabs changed: new ones take its font, a removed selection moves on, and
-        // each that left is reported (a removed tab is still alive here: the strip holds it
-        // across this call).
+        // Called when the strip's tabs changed. New tabs take the bar's font, a removed selected tab
+        // passes the selection on, and each tab that left is reported. A removed tab is still alive
+        // here, because the strip holds it across this call.
         void TabsChanged()
         {
             core::Array<Tab*> gone;
@@ -665,25 +689,26 @@ export namespace foundation::gui
                 Select(GetTab(pending), false);
             }
             else if (m_selected == nullptr && GetTabCount() > 0 && m_pendingSelect < 0)
-                Select(GetTab(0), false); // none asked for yet (one asked for waits: its page is not shown, nor built, on the way)
+                Select(GetTab(0), false); // nothing asked for yet; a pending selection waits, so tab 0's page is neither shown nor built on the way
             else if (m_selected != nullptr)
-                m_selectedAt = IndexOf(m_selected); // a tab added before it moved it
+                m_selectedAt = IndexOf(m_selected); // a tab added before the selected one moved it
             if (m_onRemoved)
                 for (Tab* tab : gone)
                     m_onRemoved(*tab);
         }
 
-        // A drag of `tab` with the pointer at `world`: past a neighbour's midpoint, they change places.
+        // Handles a drag of `tab` with the pointer at `world`: past a neighbour's midpoint, the two
+        // swap places.
         void DragTab(Tab& tab, core::Float2 world)
         {
-            const f32 x = tab.ConvertToNodeSpace(world).x; // in the tab's space, which moves with it
+            const f32 x = tab.ConvertToNodeSpace(world).x; // in the tab's own space, which moves with the tab
             const i32 at = IndexOf(&tab);
             const Tab* next = GetTab(at + 1);
             const Tab* previous = GetTab(at - 1);
             const auto midpoint = [&](const Tab& other) { return other.GetPosition().x - tab.GetPosition().x + other.GetSize().x * 0.5f; };
-            // (Until the strip lays out again the two keep their old places, and the test after a
-            // move is against the new neighbour's, so a tab never changes back on the same move.)
-            // The next tab is toward the inline end: the left in right to left.
+            // Until the strip lays out again, the two tabs keep their old positions, and the next
+            // test is against the new neighbour's midpoint, so a tab never swaps back on the same
+            // move. The next tab is toward the inline end, which is the left in right to left.
             const f32 way = IsRightToLeft() ? -1.0f : 1.0f;
             if (next != nullptr && way * x > way * midpoint(*next))
                 MoveTab(at, at + 1);
@@ -696,14 +721,14 @@ export namespace foundation::gui
         core::RefPtr<TabCloseAllButton> m_closeAllPart;
         core::RefPtr<Menu> m_menu;
         Tab* m_selected = nullptr; // a child of the strip, which owns it
-        core::Array<Tab*> m_known; // the tabs as they were (to tell which left)
+        core::Array<Tab*> m_known; // the tabs as they were, to tell which ones left
         mutable Observable m_selectedChanged;
         TabCloseDisplay m_closeDisplay = TabCloseDisplay::Never;
         TabListDisplay m_listDisplay = TabListDisplay::Overflow;
         bool m_closeAll = false;
         bool m_reorderable = false;
-        i32 m_pendingSelect = -1; // a selection asked for before its tab was there
-        i32 m_selectedAt = 0; // where the selected tab is (removed, the one after it takes its place)
+        i32 m_pendingSelect = -1; // a selection asked for before its tab existed
+        i32 m_selectedAt = 0; // the selected tab's index; if it is removed, the tab now at this index is selected
         core::Function<void(i32)> m_onSelected;
         core::Function<void(i32)> m_onSelectionChanged;
         core::Function<void(i32, i32)> m_onMoved;
@@ -731,8 +756,9 @@ export namespace foundation::gui
             if (TabBar* bar = self->GetBar())
                 bar->RequestClose(bar->IndexOf(self));
         });
-        AddChild(m_close.Get()); // after its icon and text
-        // Torn out (by the pointer or `drag.pick`): its bar hears it, and again when the drag ends.
+        AddChild(m_close.Get()); // after the icon and the text
+        // When the tab is torn out (by the pointer or `drag.pick`), its bar is told, and told again
+        // when the drag ends (OnDragEnd).
         (void)AddEventListener(EventType::DragStart, [self](const Event& event)
         {
             TabBar* bar = self->GetBar();
@@ -780,14 +806,14 @@ export namespace foundation::gui
     {
         const TabBar* bar = GetBar();
         const TabCloseDisplay display = bar != nullptr ? bar->GetCloseDisplay() : TabCloseDisplay::Never;
-        // Shown or not by the policy, the part keeps its room while the tab is closable, so a
-        // hovered tab does not grow.
+        // Whether or not the policy shows the close part, it keeps its room while the tab is
+        // closable, so a hovered tab does not grow.
         m_close->SetDisplayed(m_closable && display != TabCloseDisplay::Never);
         const bool shown = display == TabCloseDisplay::Always || (display == TabCloseDisplay::Selected && m_selected) ||
                            (display == TabCloseDisplay::Hover && (m_selected || IsHovered()));
         m_close->SetVisible(shown);
         if (TabBar* owner = GetBar())
-            owner->UpdateCloseAll(); // its closability may be what changed
+            owner->UpdateCloseAll(); // this tab's closability may be what changed
     }
 
     inline bool Tab::OwnsPressDrag(core::Float2) const
@@ -812,7 +838,7 @@ export namespace foundation::gui
         FillTabPayload(request.Payload);
         if (!request.FromKeyboard)
         {
-            request.GrabOffset = request.Press; // its ghost held where the press took it
+            request.GrabOffset = request.Press; // hold the ghost where the press grabbed it
             request.HasGrabOffset = true;
         }
         return true;
@@ -841,7 +867,8 @@ export namespace foundation::gui
             return;
         if (event.Button == MouseButton::Middle)
         {
-            // A middle click closes it (as a browser's tabs do), where its policy shows a close.
+            // A middle click closes the tab, as in a browser, unless the policy never shows a close
+            // part.
             if (m_closable && bar->GetCloseDisplay() != TabCloseDisplay::Never)
                 bar->RequestClose(bar->IndexOf(this));
             event.Handled = true;
@@ -860,7 +887,7 @@ export namespace foundation::gui
     inline void Tab::OnMouseMove(const MouseEvent& event)
     {
         TabBar* bar = GetBar();
-        // A group's strip: the dispatcher's drag past its threshold (OnDragRequested), not this.
+        // In a group's strip the dispatcher's drag (OnDragRequested) handles the move instead of this.
         if (!m_pressing || bar == nullptr || !bar->IsReorderable() || !bar->GetGroup().IsEmpty())
             return;
         constexpr f32 kDragThreshold = 4.0f;
@@ -883,14 +910,15 @@ export namespace foundation::gui
         i32 to = -1;
         switch (static_cast<KeyCode>(event.KeyCode))
         {
-        // Along the strip as it runs: right to left, Left goes on to the next tab (E9b).
+        // Move along the strip in its direction; in right to left, Left goes to the next tab.
         case KeyCode::Left:
         case KeyCode::Right: to = at + InlineStep(static_cast<KeyCode>(event.KeyCode)); break;
         case KeyCode::Home: to = 0; break;
         case KeyCode::End: to = bar->GetTabCount() - 1; break;
         default: return;
         }
-        // The arrows stop at the ends (navigation then leaves the strip); Home and End always land.
+        // The arrows stop at the ends, where the key is left unhandled so navigation leaves the
+        // strip. Home and End always land on a tab.
         Tab* target = bar->GetTab(to);
         if (target == nullptr)
             return;
@@ -899,7 +927,7 @@ export namespace foundation::gui
         event.Handled = true;
     }
 
-    // === Between strips (E7) ===
+    // === Between strips ===
 
     inline Tab* TabBar::DraggedTab(const DragPayload& payload)
     {
@@ -926,7 +954,7 @@ export namespace foundation::gui
         }
         if (from == this)
         {
-            // Within the strip: before the tab at `index` (its own place counted out).
+            // Within the strip, move before the tab at `index`, not counting the tab's own place.
             const i32 at = IndexOf(tab);
             MoveTab(at, index > at ? index - 1 : index);
             SelectByUser(IndexOf(tab));
@@ -934,26 +962,26 @@ export namespace foundation::gui
         }
         if (Node* page = tab->GetPage(); page != nullptr && m_pageAdopter)
         {
-            // Between tab views: the page moves, and its view makes its tab here.
+            // Between tab views the page moves, and the receiving view makes its tab here.
             const core::RefPtr<Node> keepPage(page);
-            page->RemoveFromParent(); // its old view lets the tab go with it
+            page->RemoveFromParent(); // the old view removes the tab along with the page
             m_pageAdopter(*page, index);
             SelectByUser(core::Min(index, GetTabCount() - 1));
             return;
         }
-        // Between bars: the tab itself moves.
+        // Between bars the tab itself moves.
         m_strip->AddChildAt(tab, static_cast<usize>(core::Min(index, GetTabCount())));
         SelectByUser(IndexOf(tab));
     }
 
-    // The mark between the tabs where a dropped tab would land.
+    // Draws the mark between the tabs where a dropped tab would land.
     inline void TabBar::OnDrawAbove(DrawContext& ctx)
     {
         if (m_dropIndex < 0)
             return;
         const PartStyle& part = GetPartStyle(u8"drop-indicator");
         const Color color = part.HasBackground ? part.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
-        // At the inline start of the tab it would go before, else past the last one's end.
+        // Draw it at the inline start of the tab it would go before, or else after the last tab's end.
         const bool rtl = IsRightToLeft();
         f32 x = 0.0f;
         if (const Tab* at = GetTab(m_dropIndex))
@@ -974,7 +1002,7 @@ export namespace foundation::gui
     inline TabStrip::TabStrip(TabBar& bar) : m_bar(bar)
     {
         SetTag(core::StringView(u8"tabstrip"));
-        SetFocusGroup(true); // one Tab stop, the selected tab; the arrows move between tabs (E12)
+        SetFocusGroup(true); // one Tab stop (the selected tab); the arrow keys move between tabs
         StyleWriteScope defaults(*this);
         EditLayoutStyle([](LayoutStyle& s)
         {
@@ -982,7 +1010,7 @@ export namespace foundation::gui
             s.AlignItems = Align::Stretch;
             s.ColumnGap = 2.0f;
             s.Grow = 1.0f;
-            s.MinWidth = LayoutLength::Px(0.0f); // narrower than its tabs: it scrolls
+            s.MinWidth = LayoutLength::Px(0.0f); // the strip may be narrower than its tabs, and then it scrolls
             s.OverflowX = Overflow::Scroll;
             s.BarWidth = ScrollbarWidth::None;
         });

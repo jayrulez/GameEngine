@@ -3,21 +3,20 @@
 
 // GUI.Toolkit - :time_axis partition
 //
-// One time axis (T5 of Specs/gui-lab-evolution-3.md): the scale (pixels per second), the scroll (the
-// time at a view's start), a frame rate (labels and snapping in frames) and the playhead, held once
-// and read by every view on it (the ruler, a curve view, a dopesheet), none keeping a copy, so views
-// stacked on one axis stay in step (foundation.ui's lesson: its curve canvas copied the timeline's).
-// The views hold the axis, so it outlives them, and each leaves it as it goes.
+// One time axis holds the scale (pixels per second), the scroll (the time at a view's start), a
+// frame rate (for labels and snapping in frames) and the playhead. Every view on it (the ruler, a
+// curve view, a dopesheet) reads these from the axis and keeps no copy, so views stacked on one axis
+// stay in step. The views hold the axis, so it outlives them, and each view leaves it when it goes.
 //
-// TimeRuler draws the axis: ticks at a step picked so labels never collide (the smallest of 1, 2 or 5
-// times a power of ten, of seconds or of frames), labels, and the playhead. A drag on it scrubs the
-// playhead, the wheel zooms about the pointer and a middle drag pans. Time runs left to right in
-// either direction of the text, as a ruler's numbers do.
+// TimeRuler draws the axis: ticks, labels and the playhead. The tick step is chosen so labels never
+// collide: the smallest of 1, 2 or 5 times a power of ten, in seconds or in frames. A drag on the
+// ruler scrubs the playhead, the wheel zooms about the pointer, and a middle drag pans. Time runs
+// left to right whatever the text direction, as a ruler's numbers do.
 //
-// A ruler may show a marker source's markers (a clip's events), each a time and a label, as a flag at
-// its time: a click chooses one, a drag moves it, one gesture through the source (begun, previewed,
-// committed once, Escape giving it up), and the one under the pointer names itself in full. The undo
-// is the source's, as every source's is.
+// A ruler may show a marker source's markers (a clip's events), each a time and a label, drawn as a
+// flag at its time. A click chooses a marker, and a drag moves it in one gesture through the source
+// (it begins, previews, and commits once, or Escape cancels it). The marker under the pointer shows
+// its full name. The undo belongs to the source, as with every source.
 
 module;
 #include "Core/Prelude.h"
@@ -35,7 +34,8 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// `value` to the decimals of `step` (0.25 to two, 5 to none): a ruler's or a grid's label.
+    /// Formats `value` with as many decimals as `step` has (two for 0.25, none for 5), for a ruler's
+    /// or a grid's label.
     [[nodiscard]] inline core::String FormatStepped(f32 value, f32 step)
     {
         i32 decimals = 0;
@@ -50,12 +50,13 @@ export namespace foundation::gui
         return core::Format(u8"{}", rounded);
     }
 
-    /// What a time axis tells the views on it.
+    /// The notifications a time axis sends the views on it.
     class ITimeAxisClient
     {
     public:
         virtual ~ITimeAxisClient() = default;
-        /// The scale, the scroll, the frame rate, the duration or the playhead changed: draw again.
+        /// Called when the scale, the scroll, the frame rate, the duration or the playhead changed;
+        /// the view draws again.
         virtual void OnTimeAxisChanged() = 0;
     };
 
@@ -75,7 +76,7 @@ export namespace foundation::gui
             m_pixelsPerSecond = pixels;
             Changed();
         }
-        /// The time at a view's start.
+        /// Returns the time at a view's start.
         [[nodiscard]] f32 Scroll() const noexcept { return m_scroll; }
         void SetScroll(f32 seconds)
         {
@@ -85,7 +86,8 @@ export namespace foundation::gui
             m_scroll = seconds;
             Changed();
         }
-        /// Scales by `factor` keeping `time` where it is in the view (the wheel's zoom about the pointer).
+        /// Scales by `factor`, keeping `time` where it is in the view (the wheel's zoom about the
+        /// pointer).
         void ZoomAbout(f32 time, f32 factor)
         {
             const f32 offset = TimeToOffset(time);
@@ -108,12 +110,12 @@ export namespace foundation::gui
             Changed();
         }
 
-        /// Pixels from a view's start to `time`, and back.
+        /// Converts `time` to pixels from a view's start, and back (OffsetToTime).
         [[nodiscard]] f32 TimeToOffset(f32 time) const noexcept { return (time - m_scroll) * m_pixelsPerSecond; }
         [[nodiscard]] f32 OffsetToTime(f32 offset) const noexcept { return m_scroll + offset / m_pixelsPerSecond; }
 
         // === The clip ===
-        /// How long what it shows lasts (seconds): where the scroll and the playhead stop.
+        /// Returns how long the shown clip lasts, in seconds; the scroll and the playhead stop there.
         [[nodiscard]] f32 Duration() const noexcept { return m_duration; }
         void SetDuration(f32 seconds)
         {
@@ -125,7 +127,8 @@ export namespace foundation::gui
             m_playhead = core::Clamp(m_playhead, 0.0f, m_duration);
             Changed();
         }
-        /// Frames per second, for labels and snapping in frames; 0: seconds, no snapping.
+        /// Returns frames per second, for labels and snapping in frames; 0 means seconds and no
+        /// snapping.
         [[nodiscard]] f32 FrameRate() const noexcept { return m_frameRate; }
         void SetFrameRate(f32 framesPerSecond)
         {
@@ -135,7 +138,7 @@ export namespace foundation::gui
             m_frameRate = framesPerSecond;
             Changed();
         }
-        /// `time` on the nearest frame, with a frame rate; else as it is.
+        /// Returns `time` snapped to the nearest frame when there is a frame rate, else unchanged.
         [[nodiscard]] f32 Snap(f32 time) const noexcept
         {
             if (m_frameRate <= 0.0f)
@@ -145,7 +148,7 @@ export namespace foundation::gui
 
         // === The playhead ===
         [[nodiscard]] f32 Playhead() const noexcept { return m_playhead; }
-        /// Moves the playhead (kept in the clip), telling whoever plays it.
+        /// Moves the playhead, kept in the clip, and tells whoever plays it.
         void SetPlayhead(f32 seconds)
         {
             seconds = core::Clamp(seconds, 0.0f, m_duration);
@@ -156,13 +159,14 @@ export namespace foundation::gui
                 m_onPlayhead(m_playhead);
             Changed();
         }
-        /// The playhead moved (a scrub, or code): what samples the clip there.
+        /// Called when the playhead moved (by a scrub or by code), so the owner can sample the clip
+        /// there.
         void SetOnPlayheadChanged(core::Function<void(f32)> callback) { m_onPlayhead = core::Move(callback); }
 
         // === Ticks ===
-        /// The step between labelled ticks (seconds): of 1, 2 or 5 times a power of ten, of seconds,
-        /// or of frames with a frame rate (one frame the least), the smallest at least `minPixels`
-        /// wide.
+        /// Returns the step between labelled ticks, in seconds: the smallest 1, 2 or 5 times a power
+        /// of ten that is at least `minPixels` wide. With a frame rate it counts in frames, and is at
+        /// least one frame.
         [[nodiscard]] f32 TickStep(f32 minPixels) const noexcept
         {
             const f32 least = minPixels / m_pixelsPerSecond; // seconds
@@ -170,7 +174,8 @@ export namespace foundation::gui
                 return PickStep(core::Max(least * m_frameRate, 1.0f)) / m_frameRate;
             return PickStep(least);
         }
-        /// `time` as a label: seconds to the step's decimals, or a frame number with a frame rate.
+        /// Formats `time` as a label: seconds with the step's decimals, or a frame number when there
+        /// is a frame rate.
         [[nodiscard]] core::String FormatTime(f32 time, f32 step) const
         {
             if (m_frameRate > 0.0f)
@@ -192,7 +197,7 @@ export namespace foundation::gui
         [[nodiscard]] usize ClientCount() const noexcept { return m_clients.Size(); }
 
     private:
-        // The smallest of 1, 2, 5 times a power of ten at least `least`.
+        // Returns the smallest 1, 2 or 5 times a power of ten that is at least `least`.
         [[nodiscard]] static f32 PickStep(f32 least) noexcept
         {
             if (least <= 0.0f)
@@ -216,7 +221,7 @@ export namespace foundation::gui
         f32 m_duration = 10.0f;
         f32 m_frameRate = 0.0f;
         f32 m_playhead = 0.0f;
-        core::Array<ITimeAxisClient*> m_clients; // non-owning: each leaves as it goes
+        core::Array<ITimeAxisClient*> m_clients; // non-owning: each view leaves before it goes away
         core::Function<void(f32)> m_onPlayhead;
     };
 
@@ -224,28 +229,28 @@ export namespace foundation::gui
     struct TimeTick
     {
         f32 Time = 0.0f;
-        f32 Offset = 0.0f; ///< from the ruler's content start
-        bool Major = false; ///< labelled
+        f32 Offset = 0.0f; ///< pixels from the ruler's content start
+        bool Major = false; ///< whether the tick is labelled
         core::String Label;
     };
 
-    /// A marker of a ruler (a clip's event): where it is and what it is called.
+    /// A marker on a ruler (a clip's event): its time and its name.
     struct TimeMarker
     {
         f32 Time = 0.0f;
         core::String Label;
     };
 
-    /// What a marker source tells the rulers showing it.
+    /// The notifications a marker source sends the rulers showing it.
     class ITimeMarkerSourceClient
     {
     public:
         virtual ~ITimeMarkerSourceClient() = default;
-        /// The markers changed: read them again.
+        /// Called when the markers changed; the ruler reads them again.
         virtual void OnTimeMarkersChanged() = 0;
     };
 
-    /// The markers a ruler shows, by their place in it; a move is a gesture as the other sources' are.
+    /// The markers a ruler shows, identified by index. A move is a gesture, as in the other sources.
     class ITimeMarkerSource
     {
     public:
@@ -254,13 +259,13 @@ export namespace foundation::gui
         [[nodiscard]] virtual usize MarkerCount() const = 0;
         [[nodiscard]] virtual TimeMarker GetMarker(usize marker) const = 0;
 
-        /// A move begins: where the marker is now is what a cancel puts back.
+        /// Begins a move. Where the marker is now is what a cancel restores.
         virtual void BeginMarkerMove(usize marker) = 0;
-        /// The marker moved to `time`, live.
+        /// Moves the marker to `time` live.
         virtual void PreviewMarkerMove(usize marker, f32 time) = 0;
-        /// The move ends as last previewed: one change.
+        /// Ends the move as last previewed, as one change.
         virtual void CommitMarkerMove() = 0;
-        /// The move is given up: the marker as it was.
+        /// Cancels the move and puts the marker back as it was.
         virtual void CancelMarkerMove() = 0;
 
         void AddMarkerClient(ITimeMarkerSourceClient* client) { m_markerClients.PushBack(client); }
@@ -282,19 +287,20 @@ export namespace foundation::gui
         }
 
     private:
-        core::Array<ITimeMarkerSourceClient*> m_markerClients; // non-owning: each ruler leaves as it goes
+        core::Array<ITimeMarkerSourceClient*> m_markerClients; // non-owning: each ruler leaves before it goes away
     };
 
     /// TimeRuler::kMinLabelSpacing, at namespace scope for another library to read (MSVC exports no class's
     /// static constexpr member from a shared library).
     inline constexpr f32 kTimeRulerMinLabelSpacing = 60.0f;
 
-    /// The axis drawn: ticks, labels and the playhead; a drag scrubs, the wheel zooms, a middle drag pans.
+    /// Draws the axis: ticks, labels and the playhead. A drag scrubs, the wheel zooms, and a middle
+    /// drag pans.
     class TimeRuler : public UIWidget, public ITimeAxisClient, public ITimeMarkerSourceClient
     {
         RTTI_OBJECT(TimeRuler, UIWidget)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"tick"));
@@ -302,16 +308,16 @@ export namespace foundation::gui
             out.PushBack(core::StringView(u8"marker-chosen"));
             out.PushBack(core::StringView(u8"playhead"));
         }
-        /// Labelled ticks at least this far apart (pixels).
+        /// The least distance between labelled ticks, in pixels.
         static constexpr f32 kMinLabelSpacing = kTimeRulerMinLabelSpacing;
-        /// A marker is under the pointer this near its time (pixels).
+        /// How near its time, in pixels, the pointer must be to be over a marker.
         static constexpr f32 kMarkerHitRadius = 5.0f;
         static constexpr f32 kDragThreshold = 3.0f;
 
         TimeRuler()
         {
             SetTag(core::StringView(u8"timeruler"));
-            SetTabFocusable(true); // Escape reaches it during a marker's move
+            SetTabFocusable(true); // so Escape reaches it during a marker's move
             EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(22.0f); });
         }
         ~TimeRuler() override
@@ -334,7 +340,8 @@ export namespace foundation::gui
         [[nodiscard]] TimeAxis* GetTimeAxis() const noexcept { return m_axis.Get(); }
 
         // === Markers ===
-        /// The markers it shows (not owned: the source outlives the ruler or is set to null first).
+        /// Sets the markers it shows. The source is not owned: it must outlive the ruler, or be set to
+        /// null first.
         void SetMarkerSource(ITimeMarkerSource* source)
         {
             if (m_markers)
@@ -348,9 +355,9 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] ITimeMarkerSource* GetMarkerSource() const noexcept { return m_markers; }
-        /// The marker chosen (-1: none).
+        /// Returns the chosen marker, or -1 for none.
         [[nodiscard]] i32 GetChosenMarker() const noexcept { return m_chosen; }
-        /// Chooses `marker` (-1: none), as a click on it does, telling OnMarkerChosen.
+        /// Chooses `marker` (-1 for none), as a click on it does, and calls OnMarkerChosen.
         void ChooseMarker(i32 marker)
         {
             if (!m_markers || marker < 0 || static_cast<usize>(marker) >= m_markers->MarkerCount())
@@ -362,9 +369,9 @@ export namespace foundation::gui
             if (OnMarkerChosen)
                 OnMarkerChosen(m_chosen);
         }
-        /// Told when the chosen marker changes (-1: none).
+        /// Called when the chosen marker changes (-1 for none).
         core::Function<void(i32)> OnMarkerChosen;
-        /// The marker at `x` from its content start, the nearest within the hit radius; -1: none.
+        /// Returns the marker nearest `x` (from the content start) within the hit radius, or -1.
         [[nodiscard]] i32 MarkerAt(f32 x) const
         {
             if (!m_markers || !m_axis)
@@ -389,7 +396,7 @@ export namespace foundation::gui
                 ChooseMarker(-1);
             Invalidate();
         }
-        /// The marker under the pointer named in full, else its own tooltip.
+        /// Returns the full name of the marker under the pointer, else the ruler's own tooltip.
         [[nodiscard]] core::StringView GetTooltipText() const override
         {
             if (!m_hoverTip.IsEmpty())
@@ -397,7 +404,8 @@ export namespace foundation::gui
             return UIWidget::GetTooltipText();
         }
 
-        /// The ticks across its width now: every minor tick, the major ones labelled.
+        /// Fills `out` with the ticks across its width now: every minor tick, and the major ones
+        /// with labels.
         void GetTicks(core::Array<TimeTick>& out) const
         {
             out.Clear();
@@ -437,7 +445,7 @@ export namespace foundation::gui
                 const f32 x = LocalX(event.Position);
                 if (const i32 marker = MarkerAt(x); marker >= 0)
                 {
-                    // A marker pressed is chosen; dragged past the threshold, it moves.
+                    // A pressed marker is chosen; once dragged past the threshold, it moves.
                     ChooseMarker(marker);
                     m_markerDrag = MarkerDrag::Pending;
                     m_pressX = x;
@@ -547,7 +555,8 @@ export namespace foundation::gui
             }
             if (m_markers)
             {
-                // Each a line down the ruler and a flag at its foot, the chosen one in its own colour.
+                // Each marker is a line down the ruler with a flag at its foot; the chosen one has its
+                // own colour.
                 const PartStyle& markerPart = GetPartStyle(u8"marker");
                 const PartStyle& chosenPart = GetPartStyle(u8"marker-chosen");
                 Color markerColor = markerPart.HasBackground ? markerPart.Box.BackgroundColor : GetTextColor();
@@ -585,7 +594,8 @@ export namespace foundation::gui
         }
 
     private:
-        // A labelled step's minor ticks: fifths of a 1 or 5, halves of a 2; a frame's none.
+        // Returns how many minor divisions a labelled step has: fifths of a 1 or 5, halves of a 2,
+        // and none between frames.
         [[nodiscard]] f32 MinorDivisions(f32 step) const noexcept
         {
             const f32 units = m_axis->FrameRate() > 0.0f ? step * m_axis->FrameRate() : step;
@@ -631,7 +641,7 @@ export namespace foundation::gui
         enum class MarkerDrag : u8
         {
             None,
-            Pending, // pressed, not yet past the threshold
+            Pending, // pressed, but not yet past the threshold
             Moving,
         };
 
@@ -642,7 +652,7 @@ export namespace foundation::gui
         core::String m_hoverTip;
         MarkerDrag m_markerDrag = MarkerDrag::None;
         f32 m_pressX = 0.0f;
-        mutable Text m_text; // each label in turn
+        mutable Text m_text; // reused for each label in turn
         bool m_scrubbing = false;
         bool m_panning = false;
         f32 m_panFrom = 0.0f;

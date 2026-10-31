@@ -3,17 +3,13 @@
 
 // UI Toolkit - :toolkit_theme_extension partition
 //
-// Registers default theme styles for every foundation.ui.toolkit control (dock manager / panels / tab
-// groups / splits / floating windows + the menu/tool/status bars + split view + breadcrumb + color
-// picker + property grid). A faithful port of Sedulous.UI.Toolkit/src/ToolkitThemeExtension.bf.
+// Registers default theme styles for every foundation.ui.toolkit control (the dock manager, panels, tab
+// groups, splits and floating windows, the menu, tool and status bars, split view, breadcrumb, color
+// picker and property grid).
 //
-// Because it names EVERY toolkit control's StaticType(), this partition imports all of them and MUST be
-// the last toolkit partition. Register before building a theme:
+// Because it names every toolkit control's StaticType(), this partition imports all of them and must be
+// the last toolkit partition. Register it before building a theme:
 //   ThemeRegistry::RegisterExtension(MakeUnique<ToolkitThemeExtension>(...));
-//
-// Port taxes: Beef `typeof(X)` -> `&X::StaticType()`; byte `Color(r,g,b,a)` -> float core::Color (the
-// palette is float, so `p.Background.R < 128` -> `p.Background.r < 0.5f`); `new RoundedRectDrawable(...)`
-// -> `MakeRef<RoundedRectDrawable>(sheet.MemoryAllocator(), ...)` handed to sheet.OwnDrawable.
 
 module;
 #include "Core/Prelude.h"
@@ -44,8 +40,8 @@ namespace core = foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Make the toolkit controls selectable from .sss - the
-    /// prerequisite for expressing this extension's rules as a toolkit.sss fragment. Idempotent;
+    /// Make the toolkit controls selectable from .sss, which the toolkit.sss fragments that hold
+    /// this extension's rules require. Idempotent;
     /// called by ToolkitThemeExtension construction, and callable directly by hosts that parse
     /// toolkit-styling sheets without the extension.
     inline void RegisterToolkitTypes()
@@ -74,13 +70,13 @@ export namespace foundation::ui::toolkit
         UITypeRegistry::Register(u8"DockDragPreview", &DockDragPreview::StaticType());
         UITypeRegistry::Register(u8"FloatingPanel", &FloatingPanel::StaticType());
         UITypeRegistry::Register(u8"Timeline", &Timeline::StaticType());
-        // No hand-kept count here: a .sss selector for an unregistered type parses as
-        // UnknownType and matches nothing, silently - the toolkit sheet test asserts that no
-        // rule of either fragment is unknown, which is what catches a missing registration.
+        // There is no hand-kept count here: a .sss selector for an unregistered type parses as
+        // UnknownType and silently matches nothing. The toolkit sheet test asserts that no rule
+        // of either fragment is unknown, which is what catches a missing registration.
     }
 
-    /// Registers default theme styles for all foundation.ui.toolkit controls (Pattern-B injected
-    /// IThemeExtension - hand it to ThemeRegistry before building a theme).
+    /// Registers default theme styles for all foundation.ui.toolkit controls. Hand it to
+    /// ThemeRegistry before building a theme.
     class ToolkitThemeExtension : public IThemeExtension
     {
     public:
@@ -89,7 +85,7 @@ export namespace foundation::ui::toolkit
         void Apply(StyleSheet& sheet, ThemePalette p) override
         {
             // The toolkit styling is authored as .sss: two fragments
-            // because dark and light chrome derive in DIFFERENT directions per control (a variable
+            // because dark and light chrome derive in different directions per control (a variable
             // swap cannot express "darken here on dark, lighten here on light").
             const bool isDark = p.Background.r < 0.5f;
             StyleSheetLoader loader(sheet.MemoryAllocator());
@@ -98,17 +94,16 @@ export namespace foundation::ui::toolkit
                                                            : EmbeddedToolkitThemes::Light());
             if (!parsed || parsed->IsEmpty())
             {
-                // A parse failure of the EMBEDDED fragment is a build defect; never ship unstyled
-                // toolkit chrome - the legacy builder is the belt while it still exists.
+                // A parse failure of the embedded fragment is a build defect. Rather than ship
+                // unstyled toolkit chrome, fall back to the C++ rule builder.
                 ApplyLegacyForParity(sheet, p);
                 return;
             }
             sheet.MergeFrom(*parsed);
         }
 
-        /// The former C++ rule builder - parity-test oracle ONLY (ToolkitThemeParityTests proves
-        /// the embedded fragments declare the same styling rule-for-rule), plus the parse-failure
-        /// belt above. Dies after the consistency pass is visually signed off.
+        /// The same styling built in C++ rule by rule. Used only as the fallback when an embedded
+        /// fragment fails to parse.
         static void ApplyLegacyForParity(StyleSheet& sheet, ThemePalette p)
         {
             const bool isDark = p.Background.r < 0.5f;
@@ -152,8 +147,8 @@ export namespace foundation::ui::toolkit
                 sheet.ForType(&DockTabGroup::StaticType())
                     .Set(StyleProperty::BorderColor, p.Border)
                     .Set(StyleProperty::AccentColor, p.PrimaryAccent)
-                    // Compact tab-strip text (a specific size so the 24px strip doesn't inherit the
-                    // global 16px default); wins over the View default via CSS last-declared tie-break.
+                    // Compact tab-strip text (a specific size so the 24px strip does not inherit the
+                    // global 16px default); it wins over the View default by CSS's last-declared tie-break.
                     .Set(StyleProperty::FontSize, 12.0f);
                 sheet.ForTypePseudo(&DockTabGroup::StaticType(), u8"strip")
                     .Set(StyleProperty::Background, sheet.OwnColor(tabBg));
@@ -162,7 +157,7 @@ export namespace foundation::ui::toolkit
                 sheet.ForTypePseudo(&DockTabGroup::StaticType(), u8"tab")
                     .Set(StyleProperty::TextColor, inactiveText);
                 // RoundedRectDrawables so DockTabGroup can mask their top corners to the theme's
-                // resolved CornerRadius (rounded in the rounded theme, square/0 in the flat one).
+                // resolved CornerRadius (rounded in the rounded theme, square in the flat one).
                 RefPtr<RoundedRectDrawable> activeTabD =
                     MakeRef<RoundedRectDrawable>(sheet.MemoryAllocator(), activeTab, 0.0f);
                 RefPtr<RoundedRectDrawable> hoverTabD =
@@ -210,7 +205,7 @@ export namespace foundation::ui::toolkit
                     .Set(StyleProperty::Background, sheet.OwnColor(menuBg))
                     .Set(StyleProperty::TextColor, p.Text)
                     .Set(StyleProperty::BorderColor, p.Border)
-                    // Menu-item hover fills the whole item rect, so use a MUTED translucent accent (not the
+                    // Menu-item hover fills the whole item rect, so use a muted translucent accent (not the
                     // full accent, which would paint solid blocks behind the titles).
                     .Set(StyleProperty::AccentColor, WithAlpha(p.PrimaryAccent, 55));
             }
@@ -268,8 +263,8 @@ export namespace foundation::ui::toolkit
                 .Set(StyleProperty::Background, sheet.OwnColor(p.Surface))
                 .Set(StyleProperty::BorderColor, p.Border);
 
-            // === ToastCard === (floating notification cards). ToastCard resolves Background as a COLOR
-            // (ResolveStyleColor), so this must be a raw color - a themed *drawable* (OwnColor) is ignored
+            // === ToastCard === (floating notification cards). ToastCard resolves Background as a color
+            // (ResolveStyleColor), so this must be a raw color; a themed drawable (OwnColor) is ignored
             // and the card falls back to its hardcoded value. Fully opaque so it reads over any content.
             sheet.ForType(&ToastCard::StaticType())
                 .Set(StyleProperty::Background, p.SurfaceBright)
@@ -282,7 +277,7 @@ export namespace foundation::ui::toolkit
             return core::Color{r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
         }
 
-        /// Beef `Color(c.R, c.G, c.B, byteAlpha)` - keep RGB, override alpha with a 0..255 byte.
+        /// Keep RGB and override alpha with a 0..255 byte.
         [[nodiscard]] static core::Color WithAlpha(core::Color c, u8 a) noexcept
         {
             return core::Color{c.r, c.g, c.b, a / 255.0f};

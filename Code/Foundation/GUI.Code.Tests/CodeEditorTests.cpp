@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - the view (C1 of Specs/gui-lab-evolution-3.md): typing at every caret, one undo step that
-// puts them back; the keymap's moves (smart Home, a goal across for Up and Down), selections and
-// deletes at each caret; Return keeping the indent, Tab to a stop, tabs shown to their stops and hit
-// by their places; the clipboard (several copied, as many pasted; a line with no selection); the
-// mouse (a click, Shift, a double and a triple click, Alt adding a caret, a drag); scrolling to the
-// caret; Escape leaving one caret; markup. A mock font: 6px a byte, 12px a line.
+// GUI.Code - view tests. They cover typing at every caret as one undo step that restores the
+// carets; the keymap's moves (smart Home, a horizontal goal for Up and Down), selections and
+// deletes at each caret; Return keeping the indent, Tab to a stop, and tabs drawn to their stops
+// and hit-tested by their positions; the clipboard (copying from several carets and pasting into as
+// many, and the whole line with no selection); the mouse (a click, Shift+click, double and triple
+// clicks, Alt+click adding a caret, a drag); scrolling to the caret; Escape leaving one caret; and
+// markup. The mock font is 6px per byte and 12px per line.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -66,7 +67,7 @@ namespace
         core::String m_text;
     };
 
-    // An editor 400 by 120 (ten lines of 12) at the root's top-left, focused.
+    // A focused 400 by 120 editor (ten lines of 12px) at the root's top-left.
     struct Bed
     {
         fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
@@ -76,7 +77,7 @@ namespace
 
         explicit Bed(const char8_t* text = u8"")
         {
-            BindCodeEditorKeys(root->GetContext().GetKeymap()); // the host's, once for its GUI
+            BindCodeEditorKeys(root->GetContext().GetKeymap()); // as a host does, once for its GUI
             root->SetSize(core::Float2{800.0f, 600.0f});
             root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
             editor->EditLayoutStyle([](LayoutStyle& s)
@@ -100,7 +101,8 @@ namespace
         }
         [[nodiscard]] core::String Text() const { return editor->GetText(); }
         [[nodiscard]] CodePosition Caret() const { return editor->GetPrimary().Head; }
-        // A point over a position: its caret's middle (screen space, the editor at the origin).
+        // Returns a point over a position: the middle of its caret, in screen space, with the editor
+        // at the origin.
         [[nodiscard]] core::Float2 Over(CodePosition at) const
         {
             const Rect caret = editor->CaretRect(at);
@@ -151,22 +153,23 @@ TEST_CASE("code editor: the keymap's moves at each caret: smart Home, words, a g
     bed.Run(TextEditCommand::MoveLineStart);
     CHECK(bed.Caret() == At(0, 4)); // past the indent
     bed.Run(TextEditCommand::MoveLineStart);
-    CHECK(bed.Caret() == At(0, 0)); // then the line's start
+    CHECK(bed.Caret() == At(0, 0)); // pressed again, the line's start
     bed.Run(TextEditCommand::MoveLineEnd);
     CHECK(bed.Caret() == At(0, 18));
     bed.Run(TextEditCommand::MoveWordLeft);
     CHECK(bed.Caret() == At(0, 14));
     bed.Run(TextEditCommand::MoveRight);
     CHECK(bed.Caret() == At(0, 15));
-    // Down through a short line keeps the column it set out from.
+    // Moving Down through a short line keeps the column it started from.
     bed.editor->SetCaret(At(0, 12));
     bed.Run(TextEditCommand::MoveDown);
     CHECK(bed.Caret() == At(1, 2));
     bed.Run(TextEditCommand::MoveDown);
     CHECK(bed.Caret() == At(2, 12));
-    bed.Run(TextEditCommand::MoveDown); // past the last line: its end
+    bed.Run(TextEditCommand::MoveDown); // past the last line goes to its end
     CHECK(bed.Caret() == At(2, 17));
-    // Selecting extends; a move without collapses to the side it goes.
+    // Selecting extends; a move without Shift collapses the selection toward the direction of the
+    // move.
     bed.editor->SetCaret(At(1, 0));
     bed.Run(TextEditCommand::SelectRight);
     bed.Run(TextEditCommand::SelectRight);
@@ -195,7 +198,7 @@ TEST_CASE("code editor: deletes at each caret, carets that meet becoming one")
     bed.editor->SetCaret(At(0, 7));
     bed.Run(TextEditCommand::DeleteWordBackward);
     CHECK(bed.Text() == core::String(u8"one "));
-    // Two carets on one place are one.
+    // Two carets at the same place merge into one.
     bed.editor->SetCaret(At(0, 1));
     bed.editor->AddCaret(At(0, 1));
     CHECK(bed.editor->GetSelections().Size() == 1);
@@ -217,8 +220,8 @@ TEST_CASE("code editor: Return keeps the indent; Tab to the next stop; tabs show
     bed.Frame();
     const f32 left = bed.editor->TextLeft();
     CHECK(bed.editor->CaretRect(At(0, 1)).x == doctest::Approx(left + 4.0f * 6.0f)); // after the tab: column 4
-    CHECK(bed.editor->CaretRect(At(0, 3)).x == doctest::Approx(left + 8.0f * 6.0f)); // x then a tab to 8
-    // A point inside a tab's spaces goes to its nearer side.
+    CHECK(bed.editor->CaretRect(At(0, 3)).x == doctest::Approx(left + 8.0f * 6.0f)); // an x, then a tab to column 8
+    // A point inside a tab's spaces goes to the nearer side.
     const f32 y = bed.editor->CaretRect(At(0, 0)).y + 6.0f;
     CHECK(bed.editor->PositionAt(core::Float2{left + 6.0f, y}) == At(0, 0));
     CHECK(bed.editor->PositionAt(core::Float2{left + 20.0f, y}) == At(0, 1));
@@ -231,17 +234,17 @@ TEST_CASE("code editor: the clipboard: several copied, as many pasted; with no s
     bed.editor->SetSelections(words);
     bed.Run(TextEditCommand::Copy);
     CHECK(bed.clipboard.GetText() == core::String(u8"alpha\nbeta"));
-    // Two carets, two lines: one each.
+    // Two carets and two clipboard lines: one line each.
     bed.editor->SetCaret(At(2, 0));
     bed.editor->AddCaret(At(2, 5));
     bed.Run(TextEditCommand::Paste);
     CHECK(bed.editor->GetDocument().LineText(2) == SV(u8"alphagammabeta"));
-    // One caret: the whole text there.
+    // One caret: the whole text goes there.
     bed.editor->SetCaret(At(0, 0));
     bed.Run(TextEditCommand::Paste);
     CHECK(bed.editor->GetDocument().LineText(0) == SV(u8"alpha"));
     CHECK(bed.editor->GetDocument().LineText(1) == SV(u8"betaalpha"));
-    // No selection: copy and cut the caret's line.
+    // With no selection, copy and cut take the caret's line.
     bed.editor->SetText(SV(u8"one\ntwo\nthree"));
     bed.editor->SetCaret(At(1, 1));
     bed.Run(TextEditCommand::Cut);
@@ -260,9 +263,9 @@ TEST_CASE("code editor: the mouse: a click, Shift, a double and a triple click, 
     CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(0, 6), At(1, 3)});
     bed.Pause();
     bed.Click(bed.Over(At(0, 6)));
-    bed.Click(bed.Over(At(0, 6))); // the second of a double
+    bed.Click(bed.Over(At(0, 6))); // the second click of a double click
     CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(0, 4), At(0, 9)}); // "value"
-    bed.Click(bed.Over(At(0, 6))); // the third
+    bed.Click(bed.Over(At(0, 6))); // the third click
     CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(0, 0), At(1, 0)});
     bed.Pause();
     bed.Click(bed.Over(At(0, 2)));
@@ -304,7 +307,7 @@ TEST_CASE("code editor: it scrolls to the caret, drawing the lines in view")
     const Rect caret = bed.editor->CaretRect(bed.Caret());
     CHECK(caret.y + caret.height <= bed.editor->GetContentBounds().Bottom() + 0.5f);
     CHECK(bed.editor->GetScrollOffset().y > 0.0f);
-    // Typing there lays it out again: it stays where it was scrolled.
+    // Typing there lays the line out again, and the view stays where it was scrolled.
     const f32 scrolled = bed.editor->GetScrollOffset().y;
     bed.editor->Type(SV(u8"x"));
     bed.Frame();
@@ -338,15 +341,16 @@ TEST_CASE("code editor: two editors over one document see each other's edits")
     bed.editor->SetCaret(At(0, 3));
     bed.editor->Type(SV(u8"!"));
     CHECK(other->GetText() == core::String(u8"one!"));
-    // Both hear it: the other's caret, after where the text went, moved along with it.
+    // Both editors hear the edit: the other editor's caret, which is after the inserted text,
+    // moves along with it.
     other->SetCaret(At(0, 3));
     bed.editor->SetCaret(At(0, 0));
     bed.editor->Type(SV(u8">"));
     CHECK(other->GetText() == core::String(u8">one!"));
     CHECK(other->GetPrimary().Head == At(0, 4));
-    bed.editor->SetDocument(nullptr); // back to its own
+    bed.editor->SetDocument(nullptr); // back to the editor's own document
     other->SetDocument(nullptr);
-    CHECK(bed.Text() == core::String(u8"shared")); // its own, as it was
+    CHECK(bed.Text() == core::String(u8"shared")); // its own document, unchanged
 }
 
 TEST_CASE("code editor: the gutter's marks stay with their lines; a click in their column is the host's")
@@ -357,7 +361,7 @@ TEST_CASE("code editor: the gutter's marks stay with their lines; a click in the
     CHECK(bed.editor->HasMarker(2, SV(u8"breakpoint")));
     bed.editor->GetDocument().Insert(At(0, 0), SV(u8"new\n"));
     CHECK(bed.editor->MarkerLine(breakpoint) == 3u);
-    // Return at its line's start: the mark goes down with the text.
+    // Return at the marked line's start: the mark moves down with the text.
     bed.editor->SetCaret(At(3, 0));
     bed.Run(TextEditCommand::InsertNewline);
     CHECK(bed.editor->MarkerLine(breakpoint) == 4u);
@@ -367,7 +371,7 @@ TEST_CASE("code editor: the gutter's marks stay with their lines; a click in the
     bed.editor->ClearMarkers(SV(u8"bookmark"));
     CHECK(bed.editor->MarkerLine(bookmark) == ~u32(0));
 
-    // A click in the marker column: told its line, the caret staying.
+    // A click in the marker column reports its line, and the caret stays.
     core::Array<u32> clicked{core::DefaultAllocator()};
     bed.editor->SetOnGutterClick([&clicked](u32 line) { clicked.PushBack(line); });
     bed.editor->SetCaret(At(0, 1));
@@ -392,24 +396,25 @@ TEST_CASE("code editor: diagnostics keep their places through edits; the worst o
     REQUIRE(bed.editor->WorstOn(1, worst));
     CHECK(worst == CodeSeverity::Warning);
     CHECK_FALSE(bed.editor->WorstOn(2, worst));
-    // An edit before them moves them.
+    // An edit before the diagnostics moves them.
     bed.editor->GetDocument().Insert(At(0, 0), SV(u8"// x\n"));
     const core::Array<CodeDiagnostic> moved = bed.editor->GetDiagnostics();
     REQUIRE(moved.Size() == 2);
     CHECK(moved[0].Range == CodeRange{At(1, 8), At(1, 9)});
     CHECK(moved[1].Range.Start == At(2, 6));
-    // An empty one marks its word.
+    // An empty diagnostic marks its word.
     CHECK(bed.editor->DiagnosticsAt(At(2, 7)) == core::String(u8"'c' is never used"));
     CHECK(bed.editor->DiagnosticsAt(At(1, 8)) == core::String(u8"'b' is not declared"));
     CHECK(bed.editor->DiagnosticsAt(At(1, 2)).IsEmpty());
-    // The pointer over one: its message for the tooltip; in the gutter, its line's.
+    // With the pointer over a diagnostic, its message is the tooltip; in the gutter, the tooltip
+    // is its line's diagnostics.
     bed.Frame();
     const Rect at = bed.editor->CaretRect(At(1, 8));
     bed.D().InjectMouseMove(core::Float2{at.x + 3.0f, at.y + at.height * 0.5f});
     CHECK(bed.editor->GetTooltipText() == SV(u8"'b' is not declared"));
     bed.D().InjectMouseMove(core::Float2{bed.editor->GetContentBounds().x + 4.0f, bed.editor->CaretRect(At(2, 0)).y + 6.0f});
     CHECK(bed.editor->GetTooltipText() == SV(u8"'c' is never used"));
-    // A new set replaces them.
+    // A new set replaces the old one.
     bed.editor->SetDiagnostics({});
     CHECK(bed.editor->GetDiagnostics().IsEmpty());
 }

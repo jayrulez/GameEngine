@@ -3,7 +3,6 @@
 
 /// DX12 implementation of BindGroup.
 /// Allocates contiguous descriptor ranges in CPU-visible heaps and writes descriptors.
-/// Ported from Sedulous.RHI.DX12/DX12BindGroup.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -59,8 +58,8 @@ export namespace foundation::rhi::dx12
                 m_samplerOffset = cpuSamplerHeap->allocate(m_cachedSamplerCount);
                 if (m_samplerOffset < 0)
                     return ErrorCode::Unknown;
-                // Samplers are BAKED into the shader-visible heap once, at creation (the
-                // bind group is immutable) - SetBindGroup binds this table directly. The
+                // Samplers are baked into the shader-visible heap once, at creation (the
+                // bind group is immutable), and SetBindGroup binds this table directly. The
                 // heap's hard 2048 cap cannot fit per-draw copy-on-bind staging, so
                 // samplers (unlike CBV/SRV/UAV tables) never go through staging.
                 m_gpuSamplerOffset = gpuSamplerHeap->allocate(m_cachedSamplerCount);

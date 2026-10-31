@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TextArea (E4 of Specs/gui-lab-evolution.md): the multiline field over the editing model. Return
-// breaks a line, its text wraps at its width, up and down move by the lines it shows, keeping their
-// column, page keys move a page, Home and End stop at a shown line's ends, it scrolls down to keep
-// the caret in view, and it is `rows` lines tall. A mock font: 6px a byte, 12px a line, no shaper.
+// TextArea: the multiline field over the editing model. Return breaks a line, the text wraps at
+// the area's width, Up and Down move by the shown lines while keeping the column, the page keys move
+// a page, Home and End stop at a shown line's ends, the area scrolls to keep the caret in view, and
+// it is `rows` lines tall. The tests use a mock font: 6px per byte, 12px per line, no shaper.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -50,7 +50,7 @@ namespace
 
     core::u32 Key(KeyCode k) { return static_cast<core::u32>(k); }
 
-    // A focused area 54 wide (nine characters a line) and 36 tall (three lines).
+    // A focused area 54 wide (nine characters per line) and 36 tall (three lines).
     struct Bed
     {
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
@@ -101,18 +101,19 @@ TEST_CASE("text area: up and down move by shown lines and keep their column; Hom
     bed.d()->InjectKeyDown(Key(KeyCode::Down), static_cast<core::u32>(KeyModShift));
     CHECK(bed.area->SelectedText() == SV(u8" beta"));
     bed.d()->InjectKeyDown(Key(KeyCode::Home));
-    CHECK(bed.area->GetCaret() == 6u); // the start of "beta", the line it shows on
+    CHECK(bed.area->GetCaret() == 6u); // the start of "beta", on the line where it shows
 }
 
 TEST_CASE("text area: it scrolls down to keep the caret in view; page keys move a page")
 {
     Bed bed(SV(u8"1\n2\n3\n4\n5\n6\n7\n8"));
-    // The caret at the end, on the eighth line of three shown: scrolled to show it.
+    // The caret is at the end, on the eighth line with three shown, so the area scrolls to show
+    // it.
     CHECK(bed.area->GetScrollY() == doctest::Approx(8.0f * 12.0f - 36.0f));
     bed.d()->InjectKeyDown(Key(KeyCode::Home), static_cast<core::u32>(KeyModCtrl));
     CHECK(bed.area->GetScrollY() == doctest::Approx(0.0f));
     bed.d()->InjectKeyDown(Key(KeyCode::PageDown));
-    CHECK(bed.area->GetCaret() == 6u); // three lines down: the start of "4"
+    CHECK(bed.area->GetCaret() == 6u); // three lines down, at the start of "4"
     // A click maps through the scroll.
     bed.d()->InjectKeyDown(Key(KeyCode::End), static_cast<core::u32>(KeyModCtrl));
     bed.d()->InjectMouseDown(core::Float2{1.0f, 1.0f}, MouseButton::Left);
@@ -150,7 +151,8 @@ TEST_CASE("text area: as tall as its text in a scroller, the scroller keeps the 
     CHECK(box->GetScrollOffset().y == doctest::Approx(0.0f));
     for (int i = 0; i < 6; ++i)
         root->GetEventDispatcher()->InjectKeyDown(Key(KeyCode::Return));
-    // The caret on the seventh line (72 to 84): the box scrolled by the least that shows it.
+    // With the caret on the seventh line (72 to 84), the box scrolls by the least amount that
+    // shows it.
     CHECK(area->GetScrollY() == doctest::Approx(0.0f));
     CHECK(box->GetScrollOffset().y == doctest::Approx(84.0f - 36.0f));
     root->GetEventDispatcher()->InjectKeyDown(Key(KeyCode::Home), static_cast<core::u32>(KeyModCtrl));

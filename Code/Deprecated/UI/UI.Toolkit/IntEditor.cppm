@@ -3,11 +3,9 @@
 
 // UI Toolkit - :int_editor partition
 //
-// Integer property editor - a NumericField with 0 decimal places and focus-based edit transactions. Ported
-// from Sedulous.UI.Toolkit/src/PropertyGrid/IntEditor.bf. Beef `int64` -> i64; `delegate void(int64)
-// Setter` -> Function<void(i64)>; `int64.MinValue/MaxValue` -> std::numeric_limits. The private inner
-// `IntEditorField : NumericField` becomes a PUBLIC nested class (own RTTI_OBJECT identity) whose
-// focus/key overrides are defined out-of-line after IntEditor is complete.
+// Integer property editor: a NumericField with 0 decimal places and focus-based edit transactions.
+// IntEditorField is a public nested class (with its own RTTI_OBJECT identity) whose focus and key
+// overrides are defined out of line after IntEditor is complete.
 
 module;
 #include <limits>
@@ -25,7 +23,7 @@ using namespace foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Integer property editor - NumericField with 0 decimal places.
+    /// Integer property editor: a NumericField with 0 decimal places.
     class IntEditor : public PropertyEditor
     {
         RTTI_OBJECT(IntEditor, PropertyEditor)

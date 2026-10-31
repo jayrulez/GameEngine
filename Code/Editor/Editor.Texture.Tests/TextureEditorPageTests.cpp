@@ -2,10 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // TextureEditorPage tests: the factory routes TextureAsset through the page registry
-// (nearest-type dispatch), the asset's serialized state round-trips every import setting (what a
-// preset's undo step keeps), the presets and the cook policy; then the page from the image pages'
-// markup over a texture in a project: a preset from its bar's menu one undo step, Usage setting the
-// colour space with it, the notice when they disagree, and its facts.
+// (nearest-type dispatch); the asset's serialized state round-trips every import setting (what a
+// preset's undo step keeps); the presets and the cook policy. Then the page, from the image pages'
+// markup, over a texture in a project: a preset from its bar's menu is one undo step, Usage sets
+// the colour space with it, a notice shows when they disagree, and the facts are shown.
 
 #include <doctest/doctest.h>
 
@@ -33,7 +33,7 @@ namespace image = foundation::image;
 
 TEST_CASE("TextureEditor registers a factory that the registry routes for TextureAsset")
 {
-    const editor::app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
+    const editor::app::AssetPageServicesSource none; // no services, only the registration; declared before the context it outlives
     editor::EditorContext context{DefaultAllocator()};
     editor::RegisterTextureEditor(context, none);
 
@@ -63,9 +63,8 @@ TEST_CASE("TextureAsset blob snapshot round-trips every import setting")
     MemoryStream stream;
     {
         BinarySerializer writer(stream, SerializeMode::Write);
-        // The page snapshots under the VERSIONED scope (TextureAsset gates its v2 fields on
-        // ar.Version(); a scope-less serialize is v0 and drops them by design - that is the
-        // pre-variants-envelope migration fix).
+        // The page snapshots under the versioned scope: TextureAsset gates its version-2 fields on
+        // ar.Version(), and a serialize without a scope is version 0, which drops them.
         BeginVersionedPayload(writer, pipeline::TextureAsset::StaticType());
         original.Serialize(writer);
         EndVersionedPayload(writer);
@@ -112,22 +111,22 @@ TEST_CASE("TextureAsset presets move the sampler settings a page preset row woul
 
 TEST_CASE("the Cooks-to row's policy expectations (desktop profile)")
 {
-    // The page renders ResolveCompressedFormat verbatim; pin the spec's two anchor cases plus
-    // the usage-driven families the lint/derivation flow leads authors into.
+    // The page shows the result of ResolveCompressedFormat as is. Check the two basic cases and
+    // the usage-driven families that the lint and derivation flow leads authors into.
     using texcomp::ResolveCompressedFormat;
     const auto desktop = texcomp::DesktopProfile();
     const auto rgba8 = foundation::rhi::TextureFormat::RGBA8Unorm;
 
-    // Color with alpha -> BC7 sRGB.
+    // Color with alpha gives BC7 sRGB.
     CHECK(ResolveCompressedFormat(texcomp::TextureUsage::Color, true, true, false,
                                   texcomp::CompressionChoice::Default, 512, 512, desktop,
                                   rgba8) == foundation::rhi::TextureFormat::BC7RGBAUnormSrgb);
-    // Compression = None -> uncompressed passthrough.
+    // Compression None passes through uncompressed.
     CHECK(ResolveCompressedFormat(texcomp::TextureUsage::Color, true, true, false,
                                   texcomp::CompressionChoice::None, 512, 512, desktop,
                                   rgba8) == rgba8);
-    // The derived pairs: Normal -> BC7-LINEAR (never BC5 - the shaders decode rgb * 2 - 1),
-    // gray Mask -> BC4, multichannel (ORM-shaped) Mask -> BC7-linear.
+    // The derived pairs: Normal gives linear BC7 (never BC5, since the shaders decode rgb * 2 - 1),
+    // a gray Mask gives BC4, and a multichannel (ORM-shaped) Mask gives linear BC7.
     CHECK(ResolveCompressedFormat(texcomp::TextureUsage::Normal, false, false, false,
                                   texcomp::CompressionChoice::Default, 512, 512, desktop,
                                   rgba8) == foundation::rhi::TextureFormat::BC7RGBAUnorm);
@@ -165,7 +164,7 @@ namespace
 
         Bed()
         {
-            pipeline::RegisterTextureAsset(); // read back by its type, as the editor registers it
+            pipeline::RegisterTextureAsset(); // registered as the editor does, so it reads back by its type
             (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());
@@ -239,13 +238,13 @@ TEST_CASE("texture page: Usage sets the colour space in the same step; a texture
     CHECK(asset->colorSpace == image::ImageColorSpace::Linear);
     CHECK(page->Notice(u8"colorSpace").IsEmpty());
 
-    // The colour space overridden to sRGB on a normal map: the notice says why not.
+    // With the colour space overridden to sRGB on a normal map, the notice explains the problem.
     gui::PropertyWrite colorSpace;
     colorSpace.Value = gui::Variant(static_cast<i64>(image::ImageColorSpace::Srgb));
     page->Edit(u8"colorSpace", colorSpace);
     CHECK_FALSE(page->Notice(u8"colorSpace").IsEmpty());
 
-    // Each was one step: two undos put both back.
+    // Each was one step, so two undos revert both.
     page->Commands().Undo();
     CHECK(asset->colorSpace == image::ImageColorSpace::Linear);
     CHECK(page->Notice(u8"colorSpace").IsEmpty());

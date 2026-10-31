@@ -3,18 +3,18 @@
 
 // Editor App - :assets_view partition
 //
-// The Assets panel (Documentation/Specs/editor-gui.md, 5.2, layer 7), over its markup
-// (Data/Editor/Assets.xml) as the mock draws it: the project's source content, the content database
-// the truth. The group tree on the left (folders, Content at the top); the toolbar's breadcrumb
-// where it is; the group's subgroups then its assets on the right, as tiles or a list (kept per
-// project), each by its type's glyph (its category's tint), its name, what it is, its cook badge
-// and a star when a favourite. The search looks in the group shown and every group under it
-// (Content: the whole project), by name or a guid's start, each match saying where it is, and is
-// kept when another group is chosen, so a search narrows by picking where to look; the type filter keeps one type. With nothing to show it says what is
-// so and offers the way on (clear the search, show every type). Enter or a double click opens an
-// asset or enters a group; Reveal shows an asset where it lives. A drag of the selection carries
-// its assets (AssetDrag) to a slot. It builds again when the database's shape moves, however the
-// change came, and when a cook moves the badges.
+// The Assets panel, over its markup (Data/Editor/Assets.xml): the project's source content, with
+// the content database as the source of truth. The group tree is on the left (folders, Content at
+// the top) and the toolbar's breadcrumb shows where it is. On the right are the group's subgroups
+// and then its assets, as tiles or a list (kept per project), each with its type's glyph (tinted by
+// category), its name, its kind, its cook badge, and a star when it is a favourite. The search
+// looks in the shown group and every group under it (Content searches the whole project), by name
+// or the start of a guid, and each match says where it is. The search is kept when another group is
+// chosen, so choosing a group narrows it. The type filter keeps one type. With nothing to show the
+// panel says so and offers a way on (clear the search, show every type). Enter or a double click
+// opens an asset or enters a group; Reveal shows an asset where it lives. Dragging the selection
+// carries its assets (AssetDrag) to a slot. The view is rebuilt when the database's shape changes,
+// whatever made the change, and when a cook changes the badges.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -40,7 +40,7 @@ export namespace editor::app
     namespace content = foundation::content;
 
     /// One asset or group as the browser draws it: a tile's picture over its name, or a list row's
-    /// glyph, name, what it is, badge, Always Export and star. Its class (`tile` or `row`) says which.
+    /// glyph, name, kind, badge, Always Export mark and star. Its class (`tile` or `row`) says which.
     class AssetCell final : public gui::UIWidget
     {
         RTTI_OBJECT(AssetCell, gui::UIWidget)
@@ -54,10 +54,10 @@ export namespace editor::app
             String Badge;      ///< "Cooked", "Stale", "Failed"; empty: none
             String BadgeClass; ///< success, warning, danger
             bool Favourite = false;
-            bool AlwaysExported = false; ///< an export takes it (or all a group holds) whatever reaches it
+            bool AlwaysExported = false; ///< an export always includes it (or all a group holds), whether or not anything references it
             bool Group = false;
-            bool StateColumns = true; ///< a row's badge and Always Export columns: the browser's; a picker's rows show neither
-            RefPtr<gui::Drawable> Picture; ///< its thumbnail, in its glyph's place (a tile's and a row's); null: none yet
+            bool StateColumns = true; ///< a row's badge and Always Export columns, shown in the browser; a picker's rows show neither
+            RefPtr<gui::Drawable> Picture; ///< its thumbnail, shown in place of its glyph (in a tile and a row); null: none yet
         };
 
         explicit AssetCell(bool tile) : m_tile(tile)
@@ -75,8 +75,8 @@ export namespace editor::app
                 m_picture = Part<gui::Image>(*m_thumb, u8"asset-picture");
                 m_picture->SetDisplayed(false);
             }
-            // A row's name and kind share a baseline, the kind at the end, right-aligned (each
-            // row's ends in the same place, its badge and star in columns after it).
+            // A row's name and kind share a baseline, with the kind right-aligned at the end, so
+            // every row's text ends in the same place and its badge and star sit in columns after it.
             gui::Node* textHolder = this;
             if (!tile)
             {
@@ -87,9 +87,9 @@ export namespace editor::app
             m_kind = Part<gui::Label>(*textHolder, u8"row-kind");
             m_kind->SetDisplayed(!tile);
             m_badge = Part<gui::Label>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge");
-            // Always Export: a mark in a tile's corner; a row's icon in a column of its own, lit
-            // when it is so, greyed when not, as its star is (every row shows both, so each
-            // column lines up).
+            // Always Export is a mark in a tile's corner. In a row it is an icon in its own column,
+            // highlighted when set and greyed when not, like the star; every row shows both so the
+            // columns line up.
             if (tile)
             {
                 m_exportMark = Part<gui::Panel>(*m_thumb, u8"export-mark");
@@ -99,7 +99,7 @@ export namespace editor::app
             else
             {
                 m_exportIcon = Part<gui::Image>(*this, u8"badge-icon");
-                m_exportIcon->AddClass(u8"always-export"); // not `export`: the export dialog's class
+                m_exportIcon->AddClass(u8"always-export"); // not `export`, which is the export dialog's class
                 m_exportIcon->SetSource(String(u8"Editor/Icons/export.svg"));
                 m_exportIcon->SetHitTestVisible(true); // its tooltip
             }
@@ -117,8 +117,8 @@ export namespace editor::app
             m_glyphClass = shown.GlyphClass;
             if (!m_glyphClass.IsEmpty())
                 m_glyph->AddClass(m_glyphClass.AsView());
-            // A tile shows the asset's picture once there is one, its type's glyph till then; a
-            // row, the picture small in its icon's place.
+            // A tile shows the asset's picture once it has one and its type's glyph until then; a
+            // row shows the picture small in its icon's place.
             const bool pictured = m_picture && shown.Picture;
             if (m_picture)
             {
@@ -144,8 +144,8 @@ export namespace editor::app
             if (!m_badgeClass.IsEmpty())
                 m_badge->AddClass(m_badgeClass.AsView());
             m_badge->SetText(shown.Badge.AsView());
-            // A tile marks only what needs a look (stale, failed); a row says each state, its badge
-            // and star keeping their columns when it has none.
+            // A tile marks only states that need attention (stale, failed); a row shows every state,
+            // and its badge and star keep their columns when it has none.
             if (m_tile)
             {
                 m_badge->SetDisplayed(!shown.Badge.IsEmpty() && shown.BadgeClass != StringView(u8"success"));
@@ -171,7 +171,7 @@ export namespace editor::app
         [[nodiscard]] StringView Name() const { return m_name->GetText(); }
         [[nodiscard]] StringView Kind() const { return m_kind->GetText(); }
         [[nodiscard]] StringView Badge() const { return m_badge->GetText(); }
-        /// A tile's star shows; a row's is lit.
+        /// Whether the star shows: a tile's star is displayed, a row's is highlighted.
         [[nodiscard]] bool ShowsStar() const { return m_tile ? m_star->IsDisplayed() : m_star->HasClass(u8"on"); }
         [[nodiscard]] bool ShowsAlwaysExport() const
         {
@@ -208,7 +208,7 @@ export namespace editor::app
         RefPtr<gui::Image> m_picture; // a tile's thumbnail
         RefPtr<gui::Panel> m_text; // a row's name and kind
         RefPtr<gui::Image> m_exportIcon;  // a row's Always Export
-        RefPtr<gui::Panel> m_exportMark;  // a tile's
+        RefPtr<gui::Panel> m_exportMark;  // a tile's Always Export mark
         RefPtr<gui::Image> m_glyph;
         RefPtr<gui::Label> m_name;
         RefPtr<gui::Label> m_kind;
@@ -225,11 +225,11 @@ export namespace editor::app
     class AssetsView
     {
     public:
-        /// Its markup, under the data root.
+        /// Its markup's path, under the data root.
         static constexpr const char8_t* kPath = kAssetsViewPath;
         static constexpr StringView kTopGroup = u8"Content";
-        /// What an asset type (by name) is called to the user: its displayName, else its name. The
-        /// asset picker's rows say it as the browser's do.
+        /// What an asset type (by name) is called in the UI: its displayName, else its name. The
+        /// asset picker's rows use it as the browser's do.
         [[nodiscard]] static String KindOf(StringView typeName)
         {
             for (const TypeInfo* type : GlobalTypeRegistry().All())
@@ -238,18 +238,18 @@ export namespace editor::app
             return String(typeName);
         }
 
-        /// What it works over.
+        /// The services it works with.
         struct Services
         {
             editor::EditorContext* context = nullptr;   // the project, favourites, the project's editor store
             editor::EditorCookService* cook = nullptr;  // the badges; null: none
             editor::EditorIcons* icons = nullptr;       // a type's glyph; null: generic ones
-            Function<void(content::Instance&)> open;    // an asset opened (its page)
+            Function<void(content::Instance&)> open;    // opens an asset (its page)
             AssetOperations* operations = nullptr;      // rename, duplicate, delete, cook; null: no menus
-            /// An asset's picture (the thumbnails'), null while there is none; unset: glyphs only.
-            /// A picture that arrives later is told through the context's thumbnail listeners.
+            /// An asset's thumbnail, null while there is none; unset: glyphs only. A picture that
+            /// arrives later is announced through the context's thumbnail listeners.
             Function<RefPtr<gui::Drawable>(const Guid&)> picture;
-            /// Asks for files to import into a group (the OS's picker); unset: no Import....
+            /// Asks for files to import into a group (the OS's picker); unset: no Import... item.
             Function<void(content::Group&)> import;
             /// Runs a creator into a group (File > New's create-and-open); unset: no New menu.
             Function<void(const pipeline::AssetCreator&, content::Group*)> create;
@@ -286,7 +286,8 @@ export namespace editor::app
                 m_list->SetOnActivated([self](gui::ModelIndex index) { self->OpenRow(index.Row); });
                 m_list->SetDragType(String(AssetDrag::kType));
                 m_list->SetOnDragPayload([self](gui::DragPayload& payload, Span<const gui::ItemId> ids) { self->DragPayloadFor(payload, ids); });
-                // A row's menu, or the group's where no row is; Delete asks to delete the selection.
+                // A row's menu, or the group's menu where there is no row; Delete asks to delete the
+                // selection.
                 (void)m_list->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
                                                {
                                                    const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
@@ -305,7 +306,8 @@ export namespace editor::app
             }
             if (m_tree != nullptr)
             {
-                // The tree's: the group it shows (a right press selects the group under it first).
+                // The tree's menu, for the group it shows (a right press selects the group under it
+                // first).
                 (void)m_tree->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
                                                {
                                                    if (self->m_current != nullptr)
@@ -358,7 +360,7 @@ export namespace editor::app
             if (auto* verb = Find<gui::Button>(u8"assets-state-verb"))
                 verb->SetOnClick([self]() { self->StateVerb(); });
             ShowLayout();
-            // A picture that arrives redraws the cells (the one showing it among them).
+            // When a picture arrives, redraw the cells (one of them shows it).
             if (m_services.context != nullptr && m_services.picture)
                 m_pictureListener = m_services.context->AddThumbnailListener([self](const Guid&) { self->m_model.Changed(); });
         }
@@ -376,7 +378,7 @@ export namespace editor::app
 
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
-        /// Once a frame: builds again when the project, its database's shape or the badges moved.
+        /// Called once a frame: rebuilds when the project, its database's shape or the badges changed.
         void Refresh()
         {
             content::ContentDatabase* db = Sources();
@@ -390,14 +392,14 @@ export namespace editor::app
                 m_model.Changed(); // the badges
             }
         }
-        /// Builds the tree and the content again from the database, keeping where it is, the
-        /// selection and the scroll where they still are.
+        /// Rebuilds the tree and the content from the database, keeping the current group, the
+        /// selection and the scroll where they still exist.
         void Rebuild()
         {
             content::ContentDatabase* db = Sources();
             if (db != m_db)
             {
-                // Another project (or none): back to its top, as it opens, in its own view.
+                // Another project (or none): start at its top, as it opens, in its own view.
                 m_db = db;
                 m_current = nullptr;
                 m_search = String{};
@@ -416,8 +418,8 @@ export namespace editor::app
 
         // === Where it is ===
         [[nodiscard]] content::Group* CurrentGroup() const noexcept { return m_current; }
-        /// Shows `group`'s content (with a search, its matches in it and under it: the search
-        /// is kept), its tree row selected, the breadcrumb following.
+        /// Shows `group`'s content (with a search active, its matches in and under the group, since
+        /// the search is kept), selects its tree row and updates the breadcrumb.
         void Navigate(content::Group& group)
         {
             if (!Contains(&group))
@@ -426,8 +428,8 @@ export namespace editor::app
             SelectTreeGroup(group);
             BuildRows();
         }
-        /// Shows the asset `id` where it lives: its group, it selected and in view. False when
-        /// the project has no such asset.
+        /// Shows the asset `id` where it lives: its group, with the asset selected and scrolled into
+        /// view. False when the project has no such asset.
         bool Reveal(const Guid& id)
         {
             content::ContentDatabase* db = Sources();
@@ -436,7 +438,7 @@ export namespace editor::app
                 return false;
             m_type = String{};
             if (!m_search.IsEmpty())
-                SetSearch(StringView{}); // where it lives, not among a search's matches
+                SetSearch(StringView{}); // show it where it lives, not among a search's matches
             Navigate(instance->OwningGroup());
             for (usize row = 0; row < m_rows.Size(); ++row)
                 if (m_rows[row].instance == instance && m_list != nullptr)
@@ -445,8 +447,8 @@ export namespace editor::app
         }
 
         // === What it shows ===
-        /// Looks in every group for assets whose name holds `text` (case folded) or whose guid
-        /// starts with it; empty shows the group again.
+        /// Searches for assets whose name contains `text` (case folded) or whose guid starts with
+        /// it; empty shows the group again.
         void SetSearch(StringView text)
         {
             if (auto* search = Find<gui::TextField>(u8"assets-search"))
@@ -454,7 +456,7 @@ export namespace editor::app
             Search(text);
         }
         [[nodiscard]] StringView SearchText() const noexcept { return m_search.AsView(); }
-        /// Keeps only assets of the type named `typeName`; empty: every type.
+        /// Shows only assets of the type named `typeName`; empty shows every type.
         void SetTypeFilter(StringView typeName)
         {
             m_type = String(typeName);
@@ -469,7 +471,7 @@ export namespace editor::app
             BuildRows();
         }
         [[nodiscard]] StringView TypeFilter() const noexcept { return m_type.AsView(); }
-        /// Tiles or a list, kept with the project.
+        /// Switches between tiles and a list; the choice is kept with the project.
         void SetTiles(bool tiles)
         {
             if (m_tiles == tiles)
@@ -485,7 +487,7 @@ export namespace editor::app
         }
         [[nodiscard]] bool ShowsTiles() const noexcept { return m_tiles; }
 
-        /// The rows shown: a group's or an asset's, by their place.
+        /// The number of rows shown, groups and assets alike.
         [[nodiscard]] usize RowCount() const noexcept { return m_rows.Size(); }
         [[nodiscard]] StringView RowName(usize row) const
         {
@@ -533,7 +535,7 @@ export namespace editor::app
         [[nodiscard]] gui::Menu* TypeMenu() const noexcept { return m_menu.Get(); }
         [[nodiscard]] gui::Menu* OpenMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
         [[nodiscard]] gui::MessageBox* OpenConfirm() const noexcept { return m_confirm && m_confirm->IsOpen() ? m_confirm.Get() : nullptr; }
-        /// The menu `row` would show (-1: the group's own), opened at the list's corner.
+        /// Opens the menu `row` would show (-1: the group's own menu) at the list's corner.
         void ShowMenuFor(i32 row)
         {
             if (m_list != nullptr)
@@ -561,11 +563,12 @@ export namespace editor::app
         struct Row
         {
             content::Group* group = nullptr;       // a subgroup's row
-            content::Instance* instance = nullptr; // an asset's
+            content::Instance* instance = nullptr; // an asset's row
         };
         static constexpr u64 kGroupBit = 1ull << 62;
 
-        // The rows as the list's model: an asset's id its guid's, a group's its path's.
+        // The rows as the list's model: an asset's item id comes from its guid, a group's from its
+        // path.
         class Model final : public gui::IModel
         {
         public:
@@ -596,7 +599,7 @@ export namespace editor::app
                 const Guid& id = row.instance->Id();
                 return (id.high ^ (id.low * 31u)) & ~(kGroupBit | (kGroupBit << 1));
             }
-            // A row's name is edited in place (F2, the menu's Rename): the asset or group renamed.
+            // A row's name is edited in place (F2, the menu's Rename) to rename the asset or group.
             [[nodiscard]] bool IsEditable(const gui::ModelIndex& index) const override
             {
                 return m_view.m_services.operations != nullptr && index.Row >= 0 && static_cast<usize>(index.Row) < m_view.m_rows.Size();
@@ -626,7 +629,7 @@ export namespace editor::app
         private:
             AssetsView& m_view;
         };
-        // The group tree's model: a group (not the top one) renamed in place.
+        // The group tree's model, in which a group (not the top one) can be renamed in place.
         class GroupTreeModel final : public gui::TreeModel
         {
         public:
@@ -701,7 +704,7 @@ export namespace editor::app
             return group.Parent() == nullptr ? String(kTopGroup) : Format(u8"{}/{}", kTopGroup, group.Path());
         }
 
-        // The type an asset's instance names, for its glyph and kind.
+        // The type an asset's instance names, which gives its glyph and kind.
         [[nodiscard]] static const TypeInfo* TypeOfAsset(const content::Instance& instance)
         {
             return GlobalTypeRegistry().FindByName(reinterpret_cast<const char*>(String(instance.TypeNamespace()).CStr()),
@@ -725,7 +728,7 @@ export namespace editor::app
                 return true;
             if (instance.Name().ContainsIgnoreCase(m_search.AsView()))
                 return true;
-            // A guid's start (four characters or more: a guid pasted or typed).
+            // The start of a guid (four characters or more, as when a guid is pasted or typed).
             if (m_search.Size() < 4)
                 return false;
             utf8char chars[37];
@@ -734,7 +737,7 @@ export namespace editor::app
             return guid.SubStr(0, Min(m_search.Size(), guid.Size())).ContainsIgnoreCase(m_search.AsView()) && m_search.Size() <= guid.Size();
         }
 
-        // The group tree: a node per group, the top one Content, all open.
+        // Builds the group tree: a node per group, the top one shown as Content, all expanded.
         void BuildTree()
         {
             if (m_tree == nullptr)
@@ -768,7 +771,7 @@ export namespace editor::app
                 if (m_treeGroups[node] == &group)
                 {
                     const bool building = m_building;
-                    m_building = true; // a selection from code is no navigation
+                    m_building = true; // a selection made from code does not navigate
                     for (i32 item = 0; item < static_cast<i32>(m_tree->GetItemCount()); ++item)
                         if (m_tree->GetItemIndex(item).InternalId == static_cast<i64>(node))
                             m_tree->SetSelectedItem(item); // every group is open: each is an item
@@ -776,8 +779,8 @@ export namespace editor::app
                 }
         }
 
-        // The content: the group's subgroups, then its assets; a search's matches from every
-        // group; then the breadcrumb and the state.
+        // Builds the content: the group's subgroups and then its assets, or a search's matches from
+        // every group; then the breadcrumb and the state.
         void BuildRows()
         {
             m_rows.Clear();
@@ -883,7 +886,7 @@ export namespace editor::app
                 SetTypeFilter(StringView{});
         }
 
-        // The cell for a row, as it shows now.
+        // Fills the cell for a row with what the row shows now.
         void BindCell(gui::Node& node, i32 index)
         {
             auto* cell = Cast<AssetCell>(&node);
@@ -895,7 +898,7 @@ export namespace editor::app
             {
                 shown.Group = true;
                 shown.Glyph = String(u8"Editor/Icons/folder.svg");
-                shown.Name = String(row.group->Name()); // its folder says what it is
+                shown.Name = String(row.group->Name()); // its folder icon says what it is
                 shown.AlwaysExported = m_services.operations != nullptr && m_services.operations->IsAlwaysExported(*row.group);
             }
             else
@@ -939,7 +942,7 @@ export namespace editor::app
             cell->Show(shown);
         }
 
-        // Tiles or a list, the toggles saying which.
+        // Shows tiles or a list, with the toggles showing which.
         void ShowLayout()
         {
             if (m_list != nullptr)
@@ -957,7 +960,7 @@ export namespace editor::app
                     m_list->RemoveClass(u8"asset-tiles");
                     m_list->AddClass(u8"asset-list");
                 }
-                m_model.Reset(); // the rows' kind follows
+                m_model.Reset(); // the rows' kind changes with the layout
             }
             if (auto* tiles = Find<gui::Button>(u8"assets-tiles"))
             {
@@ -976,7 +979,7 @@ export namespace editor::app
             if (auto* clear = Find<gui::Button>(u8"assets-clear-search"))
                 clear->SetVisible(!m_search.IsEmpty());
         }
-        // The project's saved choice (tiles when it saved none).
+        // Loads the project's saved layout choice (tiles when it saved none).
         void LoadTiles()
         {
             bool tiles = true;
@@ -987,7 +990,7 @@ export namespace editor::app
             ShowLayout();
         }
 
-        // The type filter: every type the project's assets have, by what each is called.
+        // The type filter menu: every type the project's assets have, by display name.
         void ShowTypeMenu()
         {
             auto* anchor = Find<gui::Button>(u8"assets-types");
@@ -1049,7 +1052,7 @@ export namespace editor::app
                 m_services.context->Notify(editor::NoticeKind::Warning, refused.AsView());
             return refused.IsEmpty();
         }
-        // Assets a drag carries, moving into `group`: whether they can, and when not why.
+        // Whether the assets a drag carries can move into `group`, and when not, why.
         [[nodiscard]] bool CanTake(const gui::DragPayload& payload, const content::Group& group, String& why) const
         {
             Array<AssetDrag> assets;
@@ -1096,8 +1099,8 @@ export namespace editor::app
             else if (m_current != nullptr)
                 ShowGroupMenu(owner, at, *m_current, true);
         }
-        // An asset's: what acts on one (open, rename, duplicate, copy, pin, export) on it, what
-        // acts on many (cook, rebuild, delete) on the selection holding it.
+        // An asset's menu. Verbs that act on one asset (open, rename, duplicate, copy, pin, export)
+        // act on it; verbs that act on many (cook, rebuild, delete) act on the selection holding it.
         void ShowAssetMenu(gui::Node& owner, Float2 at, i32 row)
         {
             content::Instance& instance = *m_rows[static_cast<usize>(row)].instance;
@@ -1147,7 +1150,8 @@ export namespace editor::app
             remove->SetShortcut(u8"Del");
             m_menu->Open(owner, at);
         }
-        // A group's (a row's, or the one shown: then also what makes new things in it).
+        // A group's menu, for a group's row or the group shown; for the group shown it also offers
+        // what makes new things in it.
         void ShowGroupMenu(gui::Node& owner, Float2 at, content::Group& group, bool shown, i32 row = -1)
         {
             if (m_services.operations == nullptr || Sources() == nullptr)
@@ -1207,7 +1211,7 @@ export namespace editor::app
             }
             m_menu->Open(owner, at);
         }
-        // New: every creator, those of no category first, then a submenu per category.
+        // The New menu: every creator, those with no category first, then a submenu per category.
         void AddNewMenu(gui::Menu& menu, content::Group& group)
         {
             if (!m_services.create || m_services.context == nullptr)
@@ -1252,7 +1256,7 @@ export namespace editor::app
                 (void)m_list->BeginEdit(row);
             }
         }
-        // A group's row in place, else its node in the tree.
+        // Renames a group's row in place, else its node in the tree.
         void BeginRenameGroup(content::Group& group, i32 row)
         {
             if (row >= 0)
@@ -1279,7 +1283,8 @@ export namespace editor::app
             id.ToChars(chars);
             return String(StringView(chars, 36));
         }
-        // Asks first, naming what goes and what follows; Delete deletes.
+        // Asks first, naming what will be deleted and what follows from it; the Delete button
+        // deletes.
         void ConfirmDelete(Array<Guid> ids)
         {
             if (ids.IsEmpty() || m_services.operations == nullptr)
@@ -1362,8 +1367,8 @@ export namespace editor::app
         gui::ListView* m_list = nullptr;
         gui::BreadcrumbBar* m_crumbs = nullptr;
         RefPtr<gui::Menu> m_menu;
-        RefPtr<gui::MessageBox> m_confirm;
-        u64 m_pictureListener = 0; // the context's thumbnail listener // the last confirmation asked (a test answers it)
+        RefPtr<gui::MessageBox> m_confirm; // the last confirmation asked (a test answers it)
+        u64 m_pictureListener = 0; // the context's thumbnail listener
         content::ContentDatabase* m_db = nullptr; // the database it shows (the project's)
         content::Group* m_current = nullptr;      // the group it shows
         u64 m_dbRevision = 0;
@@ -1371,9 +1376,9 @@ export namespace editor::app
         String m_search;
         String m_type;
         bool m_tiles = true;
-        bool m_building = false; // the tree is being filled: its selection is no navigation
+        bool m_building = false; // the tree is being filled: its selection does not navigate
         Array<Row> m_rows;
-        Array<content::Group*> m_treeGroups; // by the tree's node id
+        Array<content::Group*> m_treeGroups; // indexed by tree node id
         GroupTreeModel m_groupModel{*this};
         Model m_model;
     };

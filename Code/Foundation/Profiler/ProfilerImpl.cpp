@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The process's profiler, the per-thread cache and the instance serials. Defined here - one per
-// process - because PROFILE_SCOPE expands in many libraries; inline definitions in the interface
-// would give each shared library its own profiler and thread caches (shared-libraries.md
-// rendezvous rule).
+// The process's profiler, the per-thread cache and the instance serials. They are defined here, one
+// per process, because PROFILE_SCOPE expands in many libraries; inline definitions in the interface
+// would give each shared library its own profiler and thread caches.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +29,7 @@ namespace foundation::profiler
 
     Profiler& Profiler::Get() noexcept
     {
-        // Process-root decision: the process's profiler lives on the system allocator, and it
+        // The process's profiler is a process root, so it lives on the system allocator, and it
         // shows every job system's jobs.
         static Profiler instance(DefaultAllocator());
         static const bool hooked = (SetJobHooks(&kJobHooks), true);

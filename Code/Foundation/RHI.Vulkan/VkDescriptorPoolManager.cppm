@@ -2,7 +2,6 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 /// Manages VkDescriptorPool allocation with auto-grow.
-/// Ported from Sedulous.RHI.Vulkan/VulkanDescriptorPoolManager.bf.
 
 module;
 #include "Core/Prelude.h"

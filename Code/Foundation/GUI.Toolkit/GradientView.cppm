@@ -3,19 +3,23 @@
 
 // GUI.Toolkit - :gradient_view partition
 //
-// The gradient view (T5 of Specs/gui-lab-evolution-3.md) edits one of Core's gradients as a value:
-// its colour stops (sRGB) and alpha stops apart, and the space they blend in, drawn with Core's
-// EvaluateGradient so what is edited is what plays (ruling 2: no gradient model of the toolkit's).
-//   - A strip: alpha stops above a bar of the gradient over a checkerboard, colour stops below it.
-//   - A click on the strip adds a stop there (an alpha stop on its upper half, a colour stop on its
-//     lower), of the gradient's colour or alpha at that place, and a drag moves it; a press on a stop
-//     selects it and a drag moves it, the stops sorted again as it passes; a drag off the strip takes
-//     it away (back on, it returns), though never a kind's last stop. Escape gives a drag up.
-//   - A double click on a colour stop, or a click on its swatch, opens T4's picker as a popup (its
-//     drags preview, closing it is the change, Escape gives it up); an alpha stop has a number field;
-//     the selected stop's place has one too; the interpolation is a drop-down.
-// The value is the GUI's ColorGradient, as a property grid's gradient row carries it. It reports each step of a gesture (changing), its end (changed) and a gesture given up
-// (cancelled, the value back as it was); whoever holds the gradient writes it.
+// The gradient view edits one of Core's gradients as a value: its colour stops (sRGB) and alpha
+// stops, kept separately, and the space they blend in. It draws with Core's EvaluateGradient, so
+// what is edited is what plays; the toolkit has no gradient model of its own.
+//   - The strip shows alpha stops above a bar of the gradient over a checkerboard, and colour stops
+//     below it.
+//   - A click on the strip adds a stop there (an alpha stop on the upper half, a colour stop on the
+//     lower) with the gradient's colour or alpha at that place, and a drag then moves it. A press
+//     on a stop selects it, and a drag moves it, with the stops sorted again as it passes others.
+//     Dragging a stop off the strip removes it, and dragging it back on restores it, but a kind's
+//     last stop is never removed. Escape cancels a drag.
+//   - A double click on a colour stop, or a click on its swatch, opens the colour picker as a
+//     popup. Its drags preview, closing it makes the change, and Escape cancels it. An alpha stop
+//     has a number field, and so does the selected stop's position. The interpolation is a
+//     drop-down.
+// The value is the GUI's ColorGradient, the type a property grid's gradient row carries. The view
+// reports each step of a gesture (changing), its end (changed), and a cancelled gesture
+// (cancelled, with the value back as it was). Whoever holds the gradient writes it.
 
 module;
 #include "Core/Prelude.h"
@@ -26,7 +30,7 @@ export module foundation.gui.toolkit:gradient_view;
 import foundation.core;
 import foundation.vg;
 import foundation.gui;
-import :property_editors; // PropertyColorPopup: the picker on a panel
+import :property_editors; // PropertyColorPopup, the picker on a panel
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -34,11 +38,11 @@ namespace vg = foundation::vg;
 
 export namespace foundation::gui
 {
-    /// A stop of a gradient: which kind, and its place among that kind's stops.
+    /// Identifies a stop of a gradient by its kind and its index among that kind's stops.
     struct GradientStopRef
     {
         bool Alpha = false;
-        i32 Index = -1; ///< -1: none
+        i32 Index = -1; ///< -1 for no stop
         [[nodiscard]] bool IsValid() const noexcept { return Index >= 0; }
         [[nodiscard]] bool operator==(const GradientStopRef&) const noexcept = default;
     };
@@ -50,14 +54,14 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(GradientStrip, UIWidget)
     public:
-        /// The parts it draws: a sheet reaches only the parts named here.
+        /// Lists the style parts it draws; a sheet can style only the parts named here.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"selected"));
         }
         static constexpr f32 kLane = 12.0f;       // each stop lane's height
         static constexpr f32 kHitRadius = 6.0f;
-        static constexpr f32 kPullOff = 24.0f;    // past the strip by this much, a dragged stop goes
+        static constexpr f32 kPullOff = 24.0f;    // a stop dragged this far past the strip is removed
 
         explicit GradientStrip(GradientView& view) : m_view(view)
         {
@@ -65,7 +69,7 @@ export namespace foundation::gui
             EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(48.0f); });
         }
 
-        /// Where a time is across it, and back (its own space).
+        /// Converts a time to an x across the strip, and back (TimeAt), in the strip's own space.
         [[nodiscard]] f32 XAt(f32 time) const
         {
             const Rect box = GetContentBounds();
@@ -82,7 +86,7 @@ export namespace foundation::gui
             const Rect box = GetContentBounds();
             return Rect{box.x, box.y + kLane, box.width, core::Max(0.0f, box.height - 2.0f * kLane)};
         }
-        /// The stop under `local`, if any.
+        /// Returns the stop under `local`, or an invalid reference when there is none.
         [[nodiscard]] GradientStopRef StopAt(core::Float2 local) const;
 
     protected:
@@ -155,7 +159,7 @@ export namespace foundation::gui
             m_controls->AddChild(m_swatch.Get());
 
             m_popup = core::MakeRef<PropertyColorPopup>(MemoryAllocator());
-            m_popup->GetPicker().SetShowsAlpha(false); // a gradient's alpha is its alpha stops'
+            m_popup->GetPicker().SetShowsAlpha(false); // a gradient's alpha comes from its alpha stops
             m_popup->GetPicker().SetOnColorChanging([self](Color color) { self->PickedColor(color); });
             m_popup->GetPicker().SetOnColorChanged([self](Color color) { self->PickedColor(color); });
             ShowSelection();
@@ -163,7 +167,7 @@ export namespace foundation::gui
         ~GradientView() override = default;
 
         // === The value ===
-        /// Sets the gradient from code: shown, nothing reported.
+        /// Sets the gradient from code. The view shows it, but reports nothing.
         void SetValue(const ColorGradient& value)
         {
             m_value = value;
@@ -173,12 +177,12 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] const ColorGradient& GetValue() const noexcept { return m_value; }
-        /// The most stops of each kind (a particle gradient's eight); 0: no limit.
+        /// Sets the most stops of each kind (a particle gradient's eight); 0 for no limit.
         void SetMaxStops(u32 most) noexcept { m_maxStops = most; }
 
         void SetOnGradientChanging(core::Function<void(const ColorGradient&)> callback) { m_onChanging = core::Move(callback); }
         void SetOnGradientChanged(core::Function<void(const ColorGradient&)> callback) { m_onChanged = core::Move(callback); }
-        /// A gesture given up: the value is as it was before it.
+        /// Called when a gesture is cancelled; the value is then as it was before the gesture.
         void SetOnGradientCancelled(core::Function<void()> callback) { m_onCancelled = core::Move(callback); }
 
         // === The selection ===
@@ -193,7 +197,8 @@ export namespace foundation::gui
         }
 
         // === Edits (each one change) ===
-        /// Adds a stop at `time` of the gradient's colour or alpha there; false when the kind is full.
+        /// Adds a stop at `time` with the gradient's colour or alpha there. Returns false when that
+        /// kind is full.
         bool AddStop(bool alpha, f32 time)
         {
             if (m_maxStops != 0 && Count(alpha) >= m_maxStops)
@@ -203,7 +208,7 @@ export namespace foundation::gui
             Changed(true);
             return true;
         }
-        /// Takes the selected stop away; false when there is none, or it is its kind's last.
+        /// Removes the selected stop. Returns false when none is selected or it is its kind's last.
         bool RemoveSelected()
         {
             if (!m_selected.IsValid() || Count(m_selected.Alpha) <= 1)
@@ -221,7 +226,7 @@ export namespace foundation::gui
         [[nodiscard]] NumberField* GetTimeField() const noexcept { return m_time.Get(); }
         [[nodiscard]] NumberField* GetAlphaField() const noexcept { return m_alpha.Get(); }
         [[nodiscard]] ColorSwatch* GetSwatch() const noexcept { return m_swatch.Get(); }
-        /// The picker, while it is open.
+        /// Returns the picker while it is open, else null.
         [[nodiscard]] ColorPicker* GetPicker() const
         {
             const EventDispatcher* dispatcher = m_popup->GetEventDispatcher();
@@ -298,7 +303,7 @@ export namespace foundation::gui
         {
             return stop.Alpha ? m_value.Alphas[static_cast<usize>(stop.Index)].time : m_value.Colors[static_cast<usize>(stop.Index)].time;
         }
-        // Puts a stop at `time` of what the gradient has there; where it went.
+        // Inserts a stop at `time` with the gradient's value there, and returns where it went.
         GradientStopRef Insert(bool alpha, f32 time)
         {
             const Color here = m_value.Evaluate(time);
@@ -323,7 +328,7 @@ export namespace foundation::gui
             else
                 m_value.Colors.RemoveAt(static_cast<usize>(stop.Index));
         }
-        // Moves a stop to `time`, sorted again; where it went.
+        // Moves a stop to `time`, sorts the stops again, and returns where it went.
         GradientStopRef MoveStop(GradientStopRef stop, f32 time)
         {
             time = core::Clamp(time, 0.0f, 1.0f);
@@ -348,7 +353,7 @@ export namespace foundation::gui
             return GradientStopRef{false, static_cast<i32>(at)};
         }
 
-        // A gesture's start: what a cancel puts back.
+        // Starts a gesture, keeping the value a cancel restores.
         void BeginGesture()
         {
             if (m_gesture)
@@ -383,7 +388,8 @@ export namespace foundation::gui
                 m_onCancelled();
         }
 
-        // The strip's drag: the stop to `time`, or off the strip (gone while it stays off).
+        // Applies the strip's drag: moves the stop to `time`, or, when `off`, removes it for as
+        // long as it stays off the strip.
         void DragStop(f32 time, bool off)
         {
             if (!m_dragStop.IsValid())
@@ -407,7 +413,7 @@ export namespace foundation::gui
             if (m_gesture)
             {
                 if (m_value == m_before)
-                    m_gesture = false; // a click on a stop: nothing changed
+                    m_gesture = false; // only a click on a stop, which changed nothing
                 else
                     Changed(true);
             }
@@ -495,9 +501,9 @@ export namespace foundation::gui
         ColorGradient m_value;
         GradientStopRef m_selected;
         u32 m_maxStops = 0;
-        bool m_showing = false;  // the controls are being set from the value
-        bool m_gesture = false;  // a gesture under way
-        bool m_picking = false;  // the open picker has changed the colour
+        bool m_showing = false;  // set while the controls are updated from the value
+        bool m_gesture = false;  // set while a gesture is under way
+        bool m_picking = false;  // set once the open picker has changed the colour
         ColorGradient m_before;  // the value when the gesture began
         GradientStopRef m_beforeSelected;
         GradientStopRef m_dragStop; // the stop the strip drags, in m_dragBase
@@ -559,7 +565,7 @@ export namespace foundation::gui
         m_view.BeginGesture();
         if (!stop.IsValid())
         {
-            // A click on nothing adds a stop there, and the drag goes on with it.
+            // A click on empty strip adds a stop there, and the drag continues with that stop.
             const Rect box = GetContentBounds();
             const bool alpha = local.y < box.y + box.height * 0.5f;
             if (m_view.m_maxStops != 0 && m_view.Count(alpha) >= m_view.m_maxStops)
@@ -607,7 +613,7 @@ export namespace foundation::gui
         const Rect bar = BarBounds();
         if (bar.width <= 0.0f || bar.height <= 0.0f)
             return;
-        // The bar: the gradient over a checkerboard, a column a pixel or two wide at a time.
+        // Draw the bar: the gradient over a checkerboard, in columns a pixel or two wide.
         detail::DrawChecker(ctx, bar);
         for (f32 x = 0.0f; x < bar.width; x += 2.0f)
         {
@@ -618,7 +624,8 @@ export namespace foundation::gui
         Color selected = selectedPart.HasBackground ? selectedPart.Box.BackgroundColor : Color{1.0f, 1.0f, 1.0f, 1.0f};
         const Color edge = GetTextColor();
         const GradientStopRef chosen = m_view.m_selected;
-        // A stop: a triangle pointing at the bar, filled with its colour or its alpha as grey.
+        // Each stop is a triangle pointing at the bar, filled with its colour, or with its alpha as
+        // grey.
         const auto marker = [&](f32 time, bool above, Color fill, bool on)
         {
             const f32 x = XAt(time);

@@ -3,16 +3,16 @@
 
 // GUI - :style_animation partition
 //
-// Motion (G3 of Specs/vg-and-gui-lab.md): CSS transitions and @keyframes animations over any
-// property a sheet sets. A widget whose style moves gets one StyleAnimation, an action on its
-// SceneRoot's clock (so a GUI's time is its own), holding the style the sheet wants (the target)
-// and a track per moving property: a transition from the value showing when the property changed
-// toward its new one, or a keyframe animation's track through its stops, each eased (cubic-bezier,
-// steps, the named curves) and interpolated through the typed values. Each tick it applies the
-// target with the tracks' values over it. It holds its widget weakly (the element table), so a
-// destroyed widget ends it. A transition that ends tells its widget `transitionend`, an animation
-// that runs its last iteration `animationend` (K0), and a widget leaving goes once nothing it waits
-// for moves it.
+// Motion: CSS transitions and @keyframes animations over any property a sheet sets. A widget whose
+// style is animating gets one StyleAnimation, an action on its SceneRoot's clock (so each GUI keeps
+// its own time). It holds the style the sheet wants (the target) and one track per animating
+// property. A track is either a transition, from the value shown when the property changed toward
+// its new value, or a keyframe animation's track through its stops. Each is eased (cubic-bezier,
+// steps, the named curves) and interpolated through the typed values. Each tick applies the target
+// with the tracks' values over it. The action holds its widget weakly (through the element table),
+// so destroying the widget ends it. When a transition ends the widget receives `transitionend`,
+// when an animation finishes its last iteration the widget receives `animationend`, and a leaving
+// widget goes once nothing it waits for is animating it.
 
 module;
 #include "Core/Prelude.h"
@@ -44,8 +44,9 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::gui
 {
-    /// Whether a property's values move smoothly in a transition (`all` covers these): those the
-    /// property table parses into numbers, lengths, colours, shadows, transforms, origins, layers or filters.
+    /// Whether a property's values change smoothly in a transition (`all` covers these properties):
+    /// those the property table parses into numbers, lengths, colours, shadows, transforms, origins,
+    /// layers or filters.
     [[nodiscard]] inline bool IsTransitionable(core::StringView property)
     {
         const StylePropertySpec* spec = FindStyleProperty(property);
@@ -55,7 +56,7 @@ export namespace foundation::gui
         {
         case StyleGrammar::Number:
         case StyleGrammar::Length:
-        case StyleGrammar::Size: // lengths move; auto and the content sizes switch
+        case StyleGrammar::Size: // lengths interpolate; auto and the content sizes switch
         case StyleGrammar::Color:
         case StyleGrammar::Shadows:
         case StyleGrammar::Transforms:
@@ -78,10 +79,10 @@ export namespace foundation::gui
     {
         f32 Offset = 0.0f;
         StyleValue Value;
-        Easing Timing; ///< the segment from this key to the next
+        Easing Timing; ///< eases the segment from this key to the next
     };
 
-    /// One moving property: a transition (two keys) or a keyframe animation's track.
+    /// One animating property: a transition (two keys) or a keyframe animation's track.
     struct AnimationTrack
     {
         core::String Property;
@@ -92,7 +93,7 @@ export namespace foundation::gui
         f32 Iterations = 1.0f; ///< negative: infinite
         AnimationDirection Direction = AnimationDirection::Normal;
         AnimationFill Fill = AnimationFill::None;
-        bool Paused = false; ///< animation-play-state: its clock stands still
+        bool Paused = false; ///< animation-play-state: paused, so its clock stands still
         f32 Elapsed = 0.0f;
 
         [[nodiscard]] bool Ended() const noexcept
@@ -100,8 +101,8 @@ export namespace foundation::gui
             return Iterations >= 0.0f && Elapsed >= Delay + Duration * Iterations;
         }
 
-        /// The value now, or false when the track shows nothing (before its delay without a
-        /// backwards fill, after its end without a forwards one).
+        /// Writes the track's current value to `out`. Returns false when the track shows nothing
+        /// (before its delay without a backwards fill, or after its end without a forwards fill).
         [[nodiscard]] bool ValueNow(StyleValue& out, const StyleInterpolationContext* ctx = nullptr) const
         {
             if (Keys.IsEmpty())
@@ -118,7 +119,7 @@ export namespace foundation::gui
             {
                 if (Fill != AnimationFill::Forwards && Fill != AnimationFill::Both)
                     return false;
-                // The end of the last iteration (a whole count ends at its full progress).
+                // At the end of the last iteration (a whole iteration count ends at full progress).
                 const f32 total = Iterations < 0.0f ? 1.0f : Iterations;
                 iteration = Max(0.0f, Ceil(total) - 1.0f);
                 iterationProgress = total - iteration;
@@ -140,7 +141,7 @@ export namespace foundation::gui
                                   (Direction == AnimationDirection::Alternate && odd) ||
                                   (Direction == AnimationDirection::AlternateReverse && !odd);
             const f32 p = reversed ? 1.0f - iterationProgress : iterationProgress;
-            // The segment the progress falls in, eased by its first key's timing.
+            // Find the segment the progress falls in, eased by its first key's timing.
             if (p <= Keys[0].Offset)
             {
                 out = Keys[0].Value;
@@ -163,7 +164,7 @@ export namespace foundation::gui
         }
     };
 
-    /// What applying a style needs besides the style.
+    /// What applying a style needs besides the style itself.
     struct StyleApplyContext
     {
         IResourceProvider* Resources = nullptr;
@@ -171,10 +172,10 @@ export namespace foundation::gui
         LengthContext Lengths{};
     };
 
-    /// The node's animated layer over `style` (E14): each value a tween moves, from its start or
-    /// the value underneath (the cascade's and its transitions', else the property's initial
-    /// value) toward its end, as CSS's animation origin outranks the rest. Each value shown is
-    /// kept, for a tween that replaces it to start there.
+    /// Lays the node's animated layer over `style`: each value a tween animates, interpolated
+    /// from the tween's start (or else the value underneath: the cascade's with its transitions, or
+    /// the property's initial value) toward its end. It outranks the rest, as CSS's animation
+    /// origin does. Each value shown is kept so that a tween replacing this one can start there.
     inline void OverlayMotion(UINode& node, ResolvedStyle& style, const StyleInterpolationContext* ctx)
     {
         for (MotionValue& motion : node.MotionValues())
@@ -190,9 +191,9 @@ export namespace foundation::gui
                         under = &initial;
                 }
             const StyleValue* from = motion.HasFrom ? &motion.From : under;
-            // Nothing to move from (no start, nothing underneath): it shows its end.
+            // With nothing to start from (no start value and nothing underneath), it shows its end.
             StyleValue value = from != nullptr ? InterpolateStyleValue(*from, motion.To, motion.Progress, ctx) : motion.To;
-            // Kept before the override, which writes over the value `from` may point at.
+            // Copy `from` before the override, which may overwrite the value it points at.
             motion.HasUnder = from != nullptr;
             if (from != nullptr)
                 motion.Under = *from;
@@ -210,7 +211,7 @@ export namespace foundation::gui
     public:
         explicit StyleAnimation(UINode& node) : m_node(node) {}
 
-        /// The style the sheet wants now, and what applying it needs.
+        /// Sets the style the sheet wants now, and what applying it needs.
         void SetTargetStyle(ResolvedStyle target, const StyleApplyContext& context)
         {
             m_targetStyle = Move(target);
@@ -218,9 +219,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] const ResolvedStyle& TargetStyle() const noexcept { return m_targetStyle; }
 
-        /// It moves its node only through a property that is not paint alone (a colour or an
-        /// opacity changes how the node looks where it is; a transform, a size or a shadow may
-        /// change where its drawing reaches).
+        /// The animation can move its node only through a property that is not paint alone. A
+        /// colour or an opacity changes how the node looks where it is, while a transform, a size
+        /// or a shadow may change how far its drawing reaches.
         [[nodiscard]] bool CanMoveTarget() const override
         {
             for (const AnimationTrack& track : m_tracks)
@@ -229,8 +230,9 @@ export namespace foundation::gui
             return false;
         }
 
-        /// The value a track shows for `property` now, or false when none moves it (a transition
-        /// retargets from here; the target style is already the new one).
+        /// Writes the value a track shows for `property` now. Returns false when no track animates
+        /// it. A retargeted transition starts from this value, since the target style is already
+        /// the new one.
         [[nodiscard]] bool TrackValue(core::StringView property, StyleValue& out) const
         {
             const StyleInterpolationContext ctx = InterpolationContext();
@@ -240,7 +242,8 @@ export namespace foundation::gui
             return false;
         }
 
-        /// A transition of `property` from `from` to `to` (replacing one already running on it).
+        /// Starts a transition of `property` from `from` to `to`, replacing one already running on
+        /// it.
         void StartTransition(core::StringView property, const StyleValue& from, const StyleValue& to,
                              const TransitionSpec& spec)
         {
@@ -249,16 +252,16 @@ export namespace foundation::gui
             track.Property = core::String(property);
             track.Duration = spec.Duration;
             track.Delay = spec.Delay;
-            track.Fill = AnimationFill::Backwards; // the old value shows through the delay
+            track.Fill = AnimationFill::Backwards; // the old value shows during the delay
             track.Keys.PushBack(AnimationKey{0.0f, from, spec.Timing});
             track.Keys.PushBack(AnimationKey{1.0f, to, Easing::Linear()});
             m_tracks.PushBack(Move(track));
         }
 
-        /// A keyframe animation: one track per property its stops set, each stop's declarations
-        /// expanded and parsed; a property missing from the first or last stop takes the target's
-        /// value there (CSS's implicit keyframes). A stop's animation-timing-function eases the
-        /// segment it starts, the animation's timing the others.
+        /// Starts a keyframe animation with one track per property its stops set, each stop's
+        /// declarations expanded and parsed. A property missing from the first or last stop takes
+        /// the target's value there (CSS's implicit keyframes). A stop's animation-timing-function
+        /// eases the segment it starts; the animation's timing eases the others.
         void StartKeyframes(const AnimationSpec& spec, const Keyframes& keyframes)
         {
             StopKeyframes(spec.Name.AsView());
@@ -347,8 +350,8 @@ export namespace foundation::gui
         }
         [[nodiscard]] const Array<core::String>& KeyframeAnimations() const noexcept { return m_animations; }
         [[nodiscard]] usize TrackCount() const noexcept { return m_tracks.Size(); }
-        /// Whether something it runs will end and has not (a leaving node waits for it): an
-        /// infinite animation or a paused one is not waited for.
+        /// Whether something it runs will end but has not yet (a leaving node waits for it). An
+        /// infinite or paused animation is not waited for.
         [[nodiscard]] bool WaitsForEnd() const noexcept
         {
             for (const AnimationTrack& t : m_tracks)
@@ -368,15 +371,15 @@ export namespace foundation::gui
             }
             ResolvedStyle effective = m_targetStyle;
             const StyleInterpolationContext ctx = InterpolationContext();
-            // A track in its delay or past its end shows the target: the sheet's value, or the node's
-            // own when the sheet sets none (the applier returns it there).
+            // A track in its delay or past its end shows the target: the sheet's value, or the
+            // node's own value when the sheet sets none (the applier restores it).
             for (const AnimationTrack& track : m_tracks)
             {
                 StyleValue value;
                 if (track.ValueNow(value, &ctx))
                     effective.Override(track.Property.AsView(), value);
             }
-            OverlayMotion(*node, effective, &ctx); // tweens over the sheet's motion
+            OverlayMotion(*node, effective, &ctx); // tweens go over the sheet's transitions and animations
             m_resets.Clear();
             ApplyStyle(*node, effective, m_context.Resources, m_context.FontService, m_context.Lengths);
         }
@@ -393,8 +396,8 @@ export namespace foundation::gui
                 if (!track.Paused)
                     track.Elapsed += seconds;
             ApplyNow();
-            // The animations whose every track has now ended (told once; a forwards fill keeps its
-            // tracks, so this is asked before the others go).
+            // The animations whose tracks have all ended. Each is reported once. A forwards fill
+            // keeps its tracks, so this is checked before the ended tracks are removed.
             Array<MotionEnd> ends;
             for (const core::String& name : m_animations)
             {
@@ -414,7 +417,8 @@ export namespace foundation::gui
                     ends.PushBack(MotionEnd{EventType::AnimationEnd, name, ran});
                 }
             }
-            // Ended tracks that hold nothing go (a forwards fill keeps its track, showing its end).
+            // Remove ended tracks that hold nothing (a forwards fill keeps its track, showing its
+            // end).
             for (usize i = 0; i < m_tracks.Size();)
             {
                 const AnimationTrack& t = m_tracks[i];
@@ -432,11 +436,12 @@ export namespace foundation::gui
                 }
             }
             if (!m_resets.IsEmpty())
-                ApplyNow(); // what the ended tracks moved returns to the target, or its initial value
+                ApplyNow(); // properties the ended tracks animated return to the target or their initial value
             UINode* node = m_node.Get();
             if (node == nullptr)
                 return;
-            // Told after the tick is done: a listener may restyle, retarget or remove the node.
+            // Send the end events after the tick is done, since a listener may restyle, retarget or
+            // remove the node.
             const RefPtr<Node> held(node);
             for (const MotionEnd& end : ends)
                 node->SendEvent(MotionEndEvent(end.Type, node, end.Name.AsView(), end.Elapsed));
@@ -521,8 +526,8 @@ export namespace foundation::gui
         StyleApplyContext m_context;
         Array<AnimationTrack> m_tracks;
         Array<core::String> m_animations;
-        Array<core::String> m_resets; // properties whose tracks just went, to return on the next apply
-        Array<core::String> m_ended;  // the animations that told their end (not again until restarted)
+        Array<core::String> m_resets; // properties whose tracks were just removed, to restore on the next apply
+        Array<core::String> m_ended;  // animations that reported their end (not again until restarted)
         bool m_done = false;
     };
 

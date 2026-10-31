@@ -13,7 +13,7 @@ export namespace foundation::rhi
 {
 
     /// Pixel formats for textures and render targets. Naming follows
-    /// WebGPU / Vulkan conventions: component layout + bit-depth + type.
+    /// WebGPU and Vulkan conventions: component layout, then bit depth, then type.
     enum class TextureFormat : u32
     {
         Undefined = 0,
@@ -213,13 +213,10 @@ export namespace foundation::rhi
         }
     }
 
-    /// Returns bytes per pixel for uncompressed formats; 0 for compressed or unknown.
-    /// Bytes per texel of an UNCOMPRESSED format; 0 for block-compressed formats (size those
-    /// with BlockBytes / CompressedLevelBytes). Every uncompressed enumerator is listed - the
-    /// table used to omit sixteen ordinary ones (the Snorm/Uint/Sint variants of R8, RG8 and
-    /// RGBA8, RG16 integer, RGB10A2Uint, RGB9E5Float, RG32Sint, RGBA16Unorm/Snorm), so anything
-    /// sizing an upload from one of them got zero bytes (found by the Beef port, 2026-09-07).
-    /// Depth24Plus is opaque; 4 is the footprint every backend allocates for it.
+    /// Bytes per texel of an uncompressed format; 0 for block-compressed or unknown formats (size
+    /// those with BlockBytes and CompressedLevelBytes). Every uncompressed enumerator is listed,
+    /// since a missing one sizes its uploads at zero bytes. Depth24Plus is opaque; 4 is the
+    /// footprint every backend allocates for it.
     [[nodiscard]] constexpr u32 BytesPerPixel(TextureFormat f)
     {
         switch (f)
@@ -275,12 +272,12 @@ export namespace foundation::rhi
         case TextureFormat::RGBA32Float:
             return 16;
         default:
-            return 0; // block-compressed: BlockBytes / CompressedLevelBytes
+            return 0; // block-compressed: BlockBytes and CompressedLevelBytes
         }
     }
 
     /// Block footprint (texels) of a compressed format; {1,1} for uncompressed. BC is always 4x4;
-    /// ASTC block dimensions vary with the format (4x4 .. 8x8).
+    /// ASTC block dimensions vary with the format (4x4 to 8x8).
     [[nodiscard]] constexpr u32 BlockWidth(TextureFormat f)
     {
         switch (f)
@@ -295,7 +292,7 @@ export namespace foundation::rhi
         case TextureFormat::ASTC8x8UnormSrgb:
             return 8;
         default:
-            return IsCompressed(f) ? 4u : 1u; // BC + ASTC4x4
+            return IsCompressed(f) ? 4u : 1u; // BC and ASTC4x4
         }
     }
     [[nodiscard]] constexpr u32 BlockHeight(TextureFormat f)
@@ -303,8 +300,8 @@ export namespace foundation::rhi
         return BlockWidth(f); // all supported blocks are square
     }
 
-    /// Bytes one compressed block occupies; 0 for uncompressed. BC1/BC4 = 8 bytes, all other BC and
-    /// every ASTC block = 16 bytes.
+    /// Bytes one compressed block occupies; 0 for uncompressed. BC1 and BC4 blocks take 8 bytes;
+    /// every other BC block and every ASTC block takes 16.
     [[nodiscard]] constexpr u32 BlockBytes(TextureFormat f)
     {
         switch (f)

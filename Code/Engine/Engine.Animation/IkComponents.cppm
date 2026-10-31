@@ -3,7 +3,7 @@
 
 /// Engine::Animation - the `:ik` partition.
 ///
-/// Inverse kinematics on scene entities (inverse-kinematics.md P2): TwoBoneIkComponent (a leg, an
+/// Inverse kinematics on scene entities: TwoBoneIkComponent (a leg, an
 /// arm) and AimIkComponent (a head, a spine), each on an entity under the animated model (or on
 /// it), driving the nearest ancestor-or-self animator (an animation graph or a skeletal animation
 /// component). Each component is a pose modifier on that animator's player: its manager runs in
@@ -457,9 +457,9 @@ export namespace engine::animation
         };
 
         /// The animator an IK component on `from` drives, by `isAnimator(entity)` (which records the
-        /// match): the nearest at or above it (a component under the model, or on it), else the ONE
+        /// match): the nearest at or above it (a component under the model, or on it), else the one
         /// below it (a component on a gameplay root whose model is a child, the importer's prefab).
-        /// Several below is ambiguous: reordering children must never retarget the IK silently.
+        /// Several below is ambiguous, so that reordering children cannot retarget the IK silently.
         template <typename IsAnimator>
         [[nodiscard]] Lookup FindAnimatorFrom(scene::Scene& scene, scene::EntityHandle from, IsAnimator&& isAnimator)
         {

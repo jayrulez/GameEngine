@@ -4,9 +4,9 @@
 // Foundation::Audio - the `:reverb` partition.
 //
 // A Freeverb-style Schroeder reverberator (public-domain topology: 8 parallel damped
-// combs + 4 series allpasses per channel, stereo-spread on the right) as PURE DSP -
-// no miniaudio contact, so the state machine unit-tests headless. EngineImpl wraps it
-// in a custom ma_node for bus-effect chains and per-scene zone reverb.
+// combs and 4 series allpasses per channel, stereo-spread on the right) as pure DSP with
+// no miniaudio contact, so the state machine unit-tests headless. AudioEngineImpl.cpp wraps
+// it in a custom ma_node for bus-effect chains and per-scene zone reverb.
 
 module;
 #include "Core/Prelude.h"
@@ -24,8 +24,8 @@ export namespace foundation::audio
         f32 roomSize = 0.6f; // 0..1 (comb feedback)
         f32 damping = 0.4f;  // 0..1 (high-frequency decay inside the tail)
         f32 wet = 0.4f;      // 0..1 mix (0 = fully dry passthrough)
-        // Dry passthrough level: < 0 = the classic INSERT mix (1 - wet); an explicit
-        // 0 makes a WET-ONLY node (aux-send reverb: per-voice sends feed it in
+        // Dry passthrough level: < 0 = the classic insert mix (1 - wet); an explicit
+        // 0 makes a wet-only node (aux-send reverb: per-voice sends feed it in
         // parallel with the dry path, so the dry signal must not pass through again).
         f32 dry = -1.0f;
     };

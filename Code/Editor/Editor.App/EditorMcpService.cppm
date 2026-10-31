@@ -3,13 +3,13 @@
 
 // Editor::App - :mcp_service partition.
 //
-// EditorMcpService: the editor's MCP host over the open project, out of the application
-// (Documentation/Specs/editor-gui.md, 5.1, layer 3). It starts when a project opens (when the
-// user enabled it, or --mcp asked for it), minting the token the first time, with the shared
-// engine tools over the application's own services (an agent's cook, import or export takes the
-// paths the menus do) and the editor host's live additions: the pages, the windows' screenshots,
-// the profiler. The application adds the tools that need its other parts (the dock's layout
-// tools, the action bridge) through `addTools`. It stops before the project's services go.
+// EditorMcpService: the editor's MCP host over the open project, kept out of the application. It
+// starts when a project opens (when the user enabled it, or --mcp asked for it), creating the token
+// the first time. It serves the shared engine tools over the application's own services, so an
+// agent's cook, import or export takes the same paths the menus do, plus the editor host's live
+// additions: the pages, the windows' screenshots, the profiler. The application adds the tools that
+// need its other parts (the dock's layout tools, the action bridge) through `addTools`. It stops
+// before the project's services go away.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -56,16 +56,16 @@ export namespace editor::app
             foundation::settings::Settings* userSettings = nullptr; // EditorMcpSettings: enabled, port, token
             editor::EditorLogBuffer* log = nullptr;                 // what log_read serves
             String dataRoot;
-            /// The command line's: on whatever the preference says, and a port of its own (0: the preference's).
+            /// Set from the command line: enabled whatever the preference says, with a port of its own (0: the preference's).
             bool forceEnabled = false;
             u32 port = 0;
             /// The templates' folder the export operations use (read on the main thread).
             Function<String()> templatesRoot;
-            /// What an agent's create, delete and import do beside the store (the assets list).
+            /// What an agent's create, delete and import do beyond the store (updating the assets list).
             Function<void(const pipeline::AssetCreator&, foundation::content::Instance&)> created;
             Function<bool(const Guid&)> deleteAsset;
             Function<void(foundation::content::Instance&, const pipeline::ImportOptions*)> imported;
-            /// The pages, over the paths the tabs take.
+            /// Opens the pages, the way the tabs open them.
             Function<editor::EditorPage*(const Guid&)> openPage;
             Function<void(editor::EditorPage*)> closePage;
             /// The windows' screenshots (the application's capture).
@@ -96,7 +96,7 @@ export namespace editor::app
             }
             if (settings.token.IsEmpty())
             {
-                // The first enable mints the secret once and keeps it: the token file and the
+                // The first enable creates the secret once and keeps it, so the token file and the
                 // Preferences display stay valid across runs.
                 settings.token = editor::GenerateMcpToken();
                 if (!editor::SaveEditorSettingsToUserData(*m_services.userSettings).IsOk())
@@ -119,7 +119,7 @@ export namespace editor::app
             operations.hostToolDir = GetExecutableDirectory();
             operations.templatesRoot = m_services.templatesRoot ? m_services.templatesRoot() : String{};
             operations.dataRoot = m_services.dataRoot;
-            // Forwarded, not moved: the host starts again for every project.
+            // Forwarded, not moved, because the host starts again for every project.
             EditorMcpService* self = this;
             operations.onCreated = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
             {
@@ -164,7 +164,7 @@ export namespace editor::app
             ProfilerToolSeams profiler;
             profiler.profiler = &foundation::profiler::Profiler::Get();
             profiler.recorder = &foundation::profiler::CaptureRecorder::Get();
-            profiler.recorder->SetApplication(u8"Editor"); // its captures' names and header
+            profiler.recorder->SetApplication(u8"Editor"); // names its captures and fills their header
             profiler.folder = []() { return PathJoin(GetUserDataDirectory().AsView(), u8"profiles"); };
             RegisterProfilerTools(m_host->Server(), Move(profiler));
             if (m_services.addTools)
@@ -197,7 +197,7 @@ export namespace editor::app
             m_session.project = nullptr;
         }
 
-        /// Each frame: the calls that arrived are answered on the main thread.
+        /// Called each frame: answers the calls that arrived, on the main thread.
         void Pump()
         {
             if (m_host)
@@ -212,6 +212,6 @@ export namespace editor::app
         Services m_services;
         editor::mcp::ProjectSession m_session;
         UniquePtr<EditorProjectOperations> m_operations;
-        UniquePtr<EditorMcpHost> m_host; // after the operations, gone before them
+        UniquePtr<EditorMcpHost> m_host; // declared after the operations, so it is destroyed before them
     };
 }

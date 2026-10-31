@@ -77,7 +77,7 @@ TEST_CASE("resource-ref: scene round-trip resolves the effect ref and the manage
     particles::ParticleEffectFactory factory;
     resources.AddFactory(&factory);
 
-    // Author a scene whose ParticleEffectComponent references the effect BY GUID only.
+    // Author a scene whose ParticleEffectComponent references the effect by guid only.
     MemoryStream blob;
     {
         scene::Scene scene{DefaultAllocator()};
@@ -117,7 +117,7 @@ TEST_CASE("resource-ref: scene round-trip resolves the effect ref and the manage
     REQUIRE(live != nullptr);
     CHECK(live->Effect().SystemCount() == 1);
 
-    // The manager attaches (clones + instantiates) on the next tick: the component gets its OWN
+    // The manager attaches (clones and instantiates) on the next tick: the component gets its own
     // effect clone, not the shared cooked template.
     CHECK(c->instance.Get() == nullptr);
     loaded.Update(1.0f / 60.0f);
@@ -187,7 +187,7 @@ TEST_CASE("particles: entity-active - starts-inactive never attaches/emits; togg
     sceneObj.Update(0.1f);
     CHECK(c.instance.Get() == nullptr);
 
-    // Activation: attaches + simulates.
+    // Activation: attaches and simulates.
     sceneObj.SetActive(e, true);
     sceneObj.Update(0.1f); // attach tick
     REQUIRE(c.instance.Get() != nullptr);
@@ -195,7 +195,7 @@ TEST_CASE("particles: entity-active - starts-inactive never attaches/emits; togg
     const i32 alive = c.instance->Effect().GetSystem(0)->AliveCount();
     CHECK(alive > 0);
 
-    // Deactivate: live particles FREEZE (no sim, no emission, no decay - v1).
+    // Deactivate: live particles freeze (no simulation, no emission, no decay).
     sceneObj.SetActive(e, false);
     sceneObj.Update(0.5f);
     CHECK(c.instance->Effect().GetSystem(0)->AliveCount() == alive);
@@ -203,8 +203,8 @@ TEST_CASE("particles: entity-active - starts-inactive never attaches/emits; togg
 
 TEST_CASE("particles: the manager takes its camera position from the scene's primary camera")
 {
-    // The alpha sort and the trail ribbons work from this point; it used to stay at the origin
-    // for the life of the scene (read in three places, written in none).
+    // The alpha sort and the trail ribbons work from this point; it must follow the scene's primary
+    // camera rather than stay at the origin.
     particles::RegisterParticleEffectResource();
     scene::Scene sceneObj{DefaultAllocator()};
     auto* particlesManager = sceneObj.AddSystem<engine::particles::ParticleEffectComponentManager>();
@@ -213,8 +213,8 @@ TEST_CASE("particles: the manager takes its camera position from the scene's pri
     sceneObj.Update(0.1f);
     CHECK(particlesManager->CameraPosition().x == doctest::Approx(0.0f)); // no camera yet: the origin
 
-    // The manager ticks in PostUpdate and the scene refreshes world matrices AFTER that phase,
-    // so the camera (like the emitters' own positions) is read one frame late: two ticks.
+    // The manager ticks in PostUpdate and the scene refreshes world matrices after that phase, so
+    // the camera (like the emitters' own positions) is read one frame late: two ticks.
     const scene::EntityHandle camEntity = sceneObj.CreateEntity(u8"Camera");
     sceneObj.SetLocalPosition(camEntity, Float3{3, 4, 5});
     engine::render::CameraComponent& cam = cameras->Add(camEntity);
@@ -240,8 +240,8 @@ TEST_CASE("particles: the manager takes its camera position from the scene's pri
 }
 
 // An effect on an entity made and placed this frame, the way a spawned prefab is, fires its
-// one-shot burst where the entity IS: the simulation runs once the transforms are final, not
-// before, when a new entity's world position still reads the origin (Sedulous bf6a6712).
+// one-shot burst where the entity is: the simulation runs once the transforms are final, not
+// before, when a new entity's world position still reads the origin.
 TEST_CASE("particles: a spawned one-shot bursts where its entity is")
 {
     particles::RegisterParticleEffectResource();

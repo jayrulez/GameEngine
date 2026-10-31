@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Foundation::Fonts - foundation.fonts:backend_interfaces partition (parser / atlas baker /
-// atlas cache: the backend extension seam; folded in from Fonts.IO 2026-09-05)
+// Foundation::Fonts - foundation.fonts:backend_interfaces partition (parser, atlas baker and
+// atlas cache: the interfaces a font backend implements)
 //
 // The source-format load pipeline contracts: IFontParser (source bytes -> a
 // queryable IFont) and IFontAtlasBaker (a parsed IFont -> a renderable
-// IFontAtlas). Baked `.font` resources skip this pipeline entirely - they are
-// pre-completed (IFont, IFontAtlas) pairs. Ported from Sedulous.Fonts.IO
-// (IFontParser.bf, IFontAtlasBaker.bf).
+// IFontAtlas). Baked `.font` resources skip this pipeline entirely; they are
+// pre-completed (IFont, IFontAtlas) pairs.
 
 module;
 #include "Core/Prelude.h"
@@ -38,8 +37,8 @@ export namespace foundation::fonts
         [[nodiscard]] virtual bool SupportsExtension(StringView fileExtension) const = 0;
 
         // Canonical entry point: parse from a borrowed stream (not retained). The
-        // returned font is allocated from `allocator` - the caller owns it and must
-        // free it through the SAME allocator (CachedFont records it).
+        // returned font is allocated from `allocator`; the caller owns it and must
+        // free it through the same allocator (CachedFont records it).
         [[nodiscard]] virtual Result<IFont*, FontLoadResult>
         ParseFromStream(IStream& stream, FontLoadOptions options, IAllocator& allocator) = 0;
 
@@ -77,7 +76,7 @@ export namespace foundation::fonts
             return CanBake(font);
         }
 
-        // Produce a new atlas for the font + options, allocated from `allocator`.
+        // Produce a new atlas for the font and options, allocated from `allocator`.
         // Caller takes ownership and frees through the same allocator.
         [[nodiscard]] virtual Result<IFontAtlas*, FontLoadResult>
         Bake(IFont& font, FontLoadOptions options, IAllocator& allocator) = 0;
@@ -85,21 +84,21 @@ export namespace foundation::fonts
 
     // Optional bake-result cache consulted by FontAtlasBakerFactory::Bake: a hit skips the
     // bake entirely; a miss bakes and offers the fresh atlas back for storage. Installed by
-    // the APP (SetAtlasCache) - the policy (cache directory, keying, eviction) lives with
-    // the installer, never here. An implementation may decline any font/options pair it
+    // the application (SetAtlasCache); the policy (cache directory, keying, eviction) lives
+    // with the installer, never here. An implementation may decline any font/options pair it
     // does not understand by returning null from TryLoad and ignoring Store.
     class IFontAtlasCache
     {
     public:
         virtual ~IFontAtlasCache() = default;
 
-        // A cached atlas for this font + options (allocated from `allocator`, caller owns),
+        // A cached atlas for this font and options (allocated from `allocator`, caller owns),
         // or null on miss/decline.
         [[nodiscard]] virtual IFontAtlas* TryLoad(const IFont& font,
                                                   const FontLoadOptions& options,
                                                   IAllocator& allocator) = 0;
 
-        // Offer a freshly baked atlas for storage. Failures are the cache's problem - the
+        // Offer a freshly baked atlas for storage. Failures are the cache's to handle; the
         // bake result is returned to the caller regardless.
         virtual void Store(const IFont& font, const FontLoadOptions& options,
                            const IFontAtlas& atlas) = 0;

@@ -3,11 +3,10 @@
 
 // foundation.gui.inspector - :queries partition
 //
-// What the inspector asks of a GUI (E8e of Specs/gui-lab-evolution.md), over the core's public API
-// alone: the tree in order, a node described (its identity, states, box, reflected properties,
-// bindings, commands and listeners), the nodes a selector matches, and a property set through the
-// path markup uses. The panes draw these; a tool (an MCP server, once the GUI is hosted) can serve
-// the same answers.
+// The questions the inspector asks of a GUI, using only the core's public API: the tree in order,
+// a description of a node (its identity, states, box, reflected properties, bindings, commands and
+// listeners), the nodes a selector matches, and setting a property through the path markup uses.
+// The panes draw these answers, and a tool (an MCP server) can serve the same ones.
 
 module;
 #include "Core/Prelude.h"
@@ -23,7 +22,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui::inspector
 {
-    /// A node as a line of the tree: its type, then #id and .classes for a widget ("Button #ok .primary").
+    /// Returns a node as a line of the tree: its type, then #id and .classes for a widget
+    /// ("Button #ok .primary").
     [[nodiscard]] inline core::String Label(const Node& node)
     {
         const core::TypeInfo* type = node.GetType();
@@ -53,7 +53,8 @@ export namespace foundation::gui::inspector
         bool Shown = true; ///< visible and in the layout, with its ancestors
     };
 
-    /// The tree under `root` (itself included) in document order, each node at its depth below it.
+    /// Returns the tree under `root` (including `root`) in document order, each node with its depth
+    /// below `root`.
     [[nodiscard]] inline Array<TreeEntry> Tree(Node& root)
     {
         Array<TreeEntry> out;
@@ -69,13 +70,13 @@ export namespace foundation::gui::inspector
         return out;
     }
 
-    /// A reflected property of a node and its value now.
+    /// A reflected property of a node and its current value.
     struct ReflectedValue
     {
         core::String Name;    ///< as the type names it
         core::String CssName; ///< as markup and sheets name it (empty when they cannot set it)
         core::String Value;   ///< as text (empty when it has none)
-        core::String Key;     ///< the key it is translated from (E9a; empty when it is not)
+        core::String Key;     ///< the key it is translated from (empty when it is not)
         bool ReadOnly = false;
     };
 
@@ -99,7 +100,7 @@ export namespace foundation::gui::inspector
         Array<core::String> Listeners; ///< each event it listens for ("click", "keydown (capture)")
     };
 
-    /// `node` described for the inspector.
+    /// Describes `node` for the inspector.
     [[nodiscard]] inline NodeDescription Describe(const Node& node)
     {
         NodeDescription d;
@@ -139,7 +140,7 @@ export namespace foundation::gui::inspector
             state(!widget->IsEnabled(), Node::StateDisabled, u8"disabled");
             state((widgetStates & WidgetStateSelected) != 0, Node::StateSelected, u8"selected");
         }
-        // Its reflected properties, its own type's first.
+        // Its reflected properties, those of its own type first.
         for (const core::TypeInfo* t = type; t != nullptr; t = t->base)
             for (usize i = 0; i < core::PropertyCount(*t); ++i)
             {
@@ -176,11 +177,11 @@ export namespace foundation::gui::inspector
         return d;
     }
 
-    /// What a screen reader is told of a node (E9d).
+    /// What a screen reader is told about a node.
     struct AccessDescription
     {
         bool Own = false;         ///< it has a node of its own (else it reads as part of an ancestor)
-        core::String ReadAs;      ///< when not: the ancestor it reads as part of (its tree label)
+        core::String ReadAs;      ///< when Own is false: the ancestor it reads as part of (its tree label)
         core::String Role;
         core::String Name;
         core::String Value;
@@ -241,8 +242,8 @@ export namespace foundation::gui::inspector
         Node* Target = nullptr;
         core::String Message;
     };
-    /// What under `root` a screen reader would trip on (E9d): a control the keyboard reaches with no
-    /// name, and an aria relation naming no widget.
+    /// Returns what under `root` a screen reader would trip on: a control the keyboard reaches that
+    /// has no name, and an aria relation that names no widget.
     [[nodiscard]] inline Array<AccessIssue> AuditAccess(SceneRoot& root)
     {
         Array<AccessIssue> out;
@@ -293,7 +294,8 @@ export namespace foundation::gui::inspector
         return out;
     }
 
-    /// The widgets under `root` (itself included) a CSS selector matches, in document order.
+    /// Returns the widgets under `root` (including `root`) that a CSS selector matches, in document
+    /// order.
     [[nodiscard]] inline Array<Node*> Query(Node& root, core::StringView selector)
     {
         Array<Node*> out;
@@ -312,15 +314,16 @@ export namespace foundation::gui::inspector
         return out;
     }
 
-    /// Sets property `name` (its CSS name, or its type's name) to `text` as markup does: an
-    /// attribute the widget claims, else inline CSS the next restyle applies (which a sheet's rules
-    /// do not outrank). False when the node is no widget, or has no such property or attribute.
+    /// Sets property `name` (its CSS name, or its type's name) to `text` as markup does: through an
+    /// attribute the widget claims, else as inline CSS that the next restyle applies (and that a
+    /// sheet's rules do not outrank). Returns false when the node is not a widget, or has no such
+    /// property or attribute.
     inline bool SetProperty(Node& node, core::StringView name, core::StringView text)
     {
         UINode* uinode = core::Cast<UINode>(&node);
         if (uinode == nullptr)
             return false;
-        if (uinode->SetMarkupAttribute(name, text)) // one the widget claims (a label's text)
+        if (uinode->SetMarkupAttribute(name, text)) // an attribute the widget claims (a label's text)
             return true;
         core::StringView attribute = name;
         bool known = FindStyleProperty(name) != nullptr;

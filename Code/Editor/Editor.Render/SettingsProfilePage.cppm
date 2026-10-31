@@ -3,21 +3,22 @@
 
 // Editor::Render - :settings_profile_page partition.
 //
-// SettingsProfilePage: edits a profile asset (an Environment Profile, a Post Process Profile; any
-// pipeline::SettingsProfileAsset). On the GUI from the preview pages' markup
-// (Data/Editor/PreviewPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 4): a preview
-// rendered with the profile applied, beside the profile's values, the rows a scene's settings
-// show (its settings type's reflection; the block's own fields, its source and its profile, left
-// out, as they are a scene's). The preview is a built-in scene (a ground, spheres of a few
-// materials, a cube and a sun) or one of the project's scenes, picked on the preview's bar (user
-// 2026-10-09: shared profiles are tuned by how they look in the levels): it loads as the scene page
-// opens it, seen from where that page's camera was left, the profile's values over the scene's
-// own. The choice is remembered per profile (ProfilePreviewSettings). Each edit is one undo step;
-// Save writes the asset and cooks it, so every scene using the profile picks the change up.
+// SettingsProfilePage edits a profile asset (an Environment Profile, a Post Process Profile, or any
+// other pipeline::SettingsProfileAsset). It is built from the preview pages' markup
+// (Data/Editor/PreviewPage.xml): a preview rendered with the profile applied, beside the profile's
+// values. The values show as a scene's settings rows do, from the settings type's reflection,
+// without the block's own source and profile fields, which belong to a scene.
 //
-// The interface names no render type (the asset is held as the ISerializable it was read as):
-// GCC 15's module merger has crashed on page interfaces importing both editor.preview and the
-// render modules, so they stay in the implementation unit.
+// The preview is a built-in scene (a ground, spheres of a few materials, a cube and a sun) or one
+// of the project's scenes, picked on the preview's bar, since shared profiles are tuned by how they
+// look in the levels. A project scene loads as the scene page opens it, seen from where that page's
+// camera was left, with the profile's values over the scene's own. The choice is remembered per
+// profile (ProfilePreviewSettings). Each edit is one undo step. Save writes the asset and cooks it,
+// so every scene using the profile picks up the change.
+//
+// The interface names no render type (the asset is held as the ISerializable it was read as). GCC
+// 15's module merger has crashed on page interfaces that import both editor.preview and the render
+// modules, so those imports stay in the implementation unit.
 
 module;
 #include "Core/Prelude.h"
@@ -48,8 +49,8 @@ export namespace editor
     bool ApplySettingsProfileToScene(ISerializable& profileAsset, foundation::scene::Scene& scene,
                                      foundation::resource::ResourceManager* resources);
 
-    /// As ApplySettingsProfileToScene, on a scene loaded to preview the profile on: the block is
-    /// first turned to its own values, so a scene that takes this profile (or another) by
+    /// Like ApplySettingsProfileToScene, for a scene loaded to preview the profile on. The block is
+    /// first switched to its own values, so a scene that takes this profile (or another) by
     /// reference shows the values being edited rather than the cooked ones.
     bool PreviewSettingsProfileInScene(ISerializable& profileAsset, foundation::scene::Scene& scene,
                                        foundation::resource::ResourceManager* resources);
@@ -101,15 +102,15 @@ export namespace editor
         void OnClose() override;
         void OnAssetExternallyModified() override;
 
-        /// The scene the profile is previewed on (nil: the built-in one), and picking another:
-        /// the preview reloads and the choice is remembered for this profile.
+        /// The scene the profile is previewed on (nil for the built-in one). Picking another
+        /// reloads the preview and remembers the choice for this profile.
         [[nodiscard]] const Guid& PreviewSceneId() const noexcept { return m_previewSceneId; }
         void SetPreviewScene(const Guid& scene);
 
         // === For tests ===
-        /// The profile's rows (its values, the scene's own fields left out).
+        /// The profile's rows: its values, without the fields that belong to a scene.
         [[nodiscard]] foundation::gui::IPropertySource& Rows() noexcept;
-        /// An edit of the values' property `path` to `write`, as the grid commits one.
+        /// Edits the values' property `path` to `write`, as the grid commits an edit.
         void EditValue(StringView path, const foundation::gui::PropertyWrite& write);
         [[nodiscard]] app::PreviewPane* Pane() const noexcept { return m_pane.Get(); }
         /// How often the values were given to the preview scene (a test has no scene to look at).
@@ -123,8 +124,9 @@ export namespace editor
 
         [[nodiscard]] PreviewViewport* Preview() const { return m_pane ? m_pane->Viewport() : nullptr; }
         void BuildPreviewScene();
-        /// The preview's content: the picked scene, loaded and seen from where its page's camera
-        /// was left (else framed whole), or the built-in scene when none is picked or it is gone.
+        /// Loads the preview's content: the picked scene, seen from where its page's camera was
+        /// left (or framed whole), or the built-in scene when none is picked or the picked one is
+        /// gone.
         void LoadPreviewContent();
         void LoadPreviewPref();
         void SavePreviewPref();
@@ -133,7 +135,7 @@ export namespace editor
         void BindValues();
 
         UniquePtr<app::PreviewPane> m_pane;
-        RefPtr<app::AssetPickerSlot> m_sceneSlot; // the preview bar's
+        RefPtr<app::AssetPickerSlot> m_sceneSlot; // on the preview's bar
         UniquePtr<ValuesSource> m_values;
         app::XmlPropertyTextFormat m_format;
         Guid m_previewSceneId; // the project scene previewed on; nil = the built-in one
@@ -153,7 +155,7 @@ export namespace editor
         const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    /// The profile page's registration (from the editor's assembly, beside the material page's),
-    /// each page asking for its services when it is made.
+    /// Registers the profile page (called from the editor's assembly, beside the material page).
+    /// Each page asks `services` for its services when it is made.
     void RegisterSettingsProfileEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

@@ -27,7 +27,7 @@ TEST_CASE("wire: arbitrary bit widths round-trip in order")
     CHECK(r.ReadBits(10) == 0x2AAu);
     CHECK(r.ReadBits(32) == 0xFFFFFFFFu);
     CHECK(r.Ok());
-    // 50 bits written => padded to 7 bytes, so 6 padding bits remain (AtEnd is byte-granular).
+    // 50 bits written, padded to 7 bytes, so 6 padding bits remain (AtEnd is byte-granular).
 }
 
 TEST_CASE("wire: typed helpers round-trip (bool/int/float/u64)")

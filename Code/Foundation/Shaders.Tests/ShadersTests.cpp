@@ -8,7 +8,7 @@
 
 import foundation.core;
 import foundation.shaders;
-import foundation.vfs; // FindDataRoot: the engine corpus lives under <data root>/Shaders
+import foundation.vfs; // FindDataRoot: the engine corpus lives under <data root>/Engine/Shaders
 
 using namespace foundation::core;
 using namespace foundation::shaders;
@@ -70,7 +70,7 @@ TEST_CASE("shaders: a compile error is reported, not a crash")
     compiler->Destroy();
 }
 
-// --- WGSL cook (WgslTranslator: HLSL -> SPIR-V -> naga -> tint) -------------
+// --- WGSL cook (WgslTranslator: DXC to SPIR-V, naga to WGSL, tint validation) -------------
 
 namespace
 {
@@ -93,7 +93,7 @@ namespace
 
     StringView Hlsl(const char* s) { return StringView(reinterpret_cast<const char8_t*>(s)); }
 
-    // A self-contained PS: texture(t0) + sampler(s0) + cbuffer(b0), sampling via SampleLevel
+    // A self-contained PS: texture(t0), sampler(s0) and cbuffer(b0), sampling through SampleLevel
     // (uniformity-safe) so it is browser-conformant. Exercises the binding-shift survival check.
     constexpr const char* kCleanPs =
         "Texture2D Tex : register(t0, space0);\n"
@@ -125,7 +125,7 @@ namespace
     }
 }
 
-// --- Engine-shader cook (enumerate corpus -> pack) -------------------------
+// --- Engine-shader cook (the corpus into a pack) -------------------------
 
 TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants expanded)")
 {
@@ -141,7 +141,7 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
     const String shaderDir = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
 
     // SPIR-V only: in-process (no naga/tint spawns), so this stays fast while still exercising
-    // enumeration + the drift-lint + every shader compiling. The WGSL path is covered above.
+    // enumeration, the drift-lint and every shader compiling. The WGSL path is covered above.
     const CookedShaderFormat formats[] = {CookedShaderFormat::SpirV};
     ShaderCookOptions opts;
     opts.shaderDir = shaderDir.AsView();
@@ -155,11 +155,11 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
     {
         MESSAGE("cook error: ", reinterpret_cast<const char*>(report.errors[i].CStr()));
     }
-    CHECK(report.success); // all shaders compile + no undeclared-flag drift
+    CHECK(report.success); // all shaders compile and no undeclared-flag drift
     CHECK(report.filesCooked > 40u);
     CHECK(report.variantsCooked >= report.filesCooked);
 
-    // forward.ps declares `ALPHA_TEST GBUFFER` -> its power set must be in the pack.
+    // forward.ps declares `ALPHA_TEST GBUFFER`, so its power set must be in the pack.
     CHECK(pack.Find(u8"forward", ShaderStage::Fragment, ShaderFlags::None,
                     CookedShaderFormat::SpirV) != nullptr);
     CHECK(pack.Find(u8"forward", ShaderStage::Fragment, ShaderFlags::GBuffer,
@@ -177,7 +177,7 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
     // Every corpus stage records the corpus's entry point, `main`.
     CHECK(pack.EntryPoint(ShaderNameHash(u8"forward"), ShaderStage::Fragment) == kCorpusEntryPoint);
     // The corpus's one effect, wind.hlsli's: its table in the pack, its variant cooked, so a game
-    // reads it with no sources (Specs/wind-for-every-shader.md).
+    // reads it with no sources.
     const ShaderEffect* wind = pack.Effects().Find(u8"Wind");
     REQUIRE(wind != nullptr);
     CHECK(wind->flag == ShaderFlags::Wind);
@@ -193,8 +193,8 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
         pack.Find(u8"tonemap", ShaderStage::Fragment, ShaderFlags::None, CookedShaderFormat::SpirV);
     REQUIRE(tonemapBlob != nullptr);
 
-    // The SpirV bucket serves BOTH Vulkan and native WebGPU (wgpu-native/naga), and naga
-    // rejects SPIR-V 1.4+ - a 1.4+ pack panics wgpu-native at pipeline creation. The cook
+    // The SpirV bucket serves both Vulkan and native WebGPU (wgpu-native and naga), and naga
+    // rejects SPIR-V 1.4+, so a 1.4+ pack panics wgpu-native at pipeline creation. The cook
     // targets vulkan1.1, so the emitted version word must be <= 1.3 (0x00010300).
     REQUIRE(tonemapBlob->Size() >= 8u);
     u32 spirvVersion = 0;
@@ -394,7 +394,7 @@ TEST_CASE("shaders: includes resolve through CompileOptions::includeResolver, ne
     compiler->Destroy();
 }
 
-// --- Cooked shader pack (serialize / lookup) -------------------------------
+// --- Cooked shader pack (serialize and look up) -------------------------------
 
 TEST_CASE("pack: add, serialize, reload, and look up cooked blobs")
 {
@@ -432,7 +432,7 @@ TEST_CASE("pack: add, serialize, reload, and look up cooked blobs")
     REQUIRE(b != nullptr);
     CHECK((*b)[0] == byte{'w'});
 
-    // Wrong variant / format / stage => miss (a cook-coverage bug at runtime).
+    // A wrong variant, format or stage misses (a cook-coverage bug at runtime).
     CHECK(loaded.Find(u8"forward", ShaderStage::Fragment, ShaderFlags::None,
                       CookedShaderFormat::Wgsl) == nullptr);
     CHECK(loaded.Find(u8"nope", ShaderStage::Vertex, ShaderFlags::None, CookedShaderFormat::SpirV) ==
@@ -474,7 +474,7 @@ TEST_CASE("pack: a pack from before entry points is refused")
     CHECK_FALSE(loaded.Read(buffer).IsOk());
 }
 
-// --- Variant model (directive parse / canonicalize / power-set / drift-lint) ---
+// --- Variant model (directive parse, canonicalize, power set, drift-lint) ---
 
 TEST_CASE("variants: directive parse maps flag names to a mask")
 {
@@ -517,7 +517,7 @@ TEST_CASE("variants: the preserve-interface directive is a per-stage flag")
 namespace
 {
     // Count the `OpDecorate <id> Location <n>` instructions in a SPIR-V blob: one per stage
-    // interface variable (inputs AND outputs) that survived compilation.
+    // interface variable (inputs and outputs) that survived compilation.
     u32 CountLocationDecorations(const u8* words, usize bytes)
     {
         constexpr u32 kOpDecorate = 71;
@@ -553,8 +553,8 @@ namespace
 TEST_CASE("shaders: preserveInterface keeps an unread fragment input in the SPIR-V interface")
 {
     // A fragment stage declaring two inputs and reading one: -O3 strips the unread one (the read
-    // input + the colour output = two Locations), preserveInterface keeps it (three) - the exact
-    // pairing the Vulkan validation wants when the vertex stage is another family's full output list.
+    // input and the colour output make two Locations), preserveInterface keeps it (three). That is
+    // the pairing Vulkan validation wants when the vertex stage is another family's full output list.
     Compiler* compiler = nullptr;
     if (!createCompiler(CompilerDesc{}, compiler).IsOk() || compiler == nullptr)
     {
@@ -579,7 +579,7 @@ TEST_CASE("shaders: preserveInterface keeps an unread fragment input in the SPIR
         compiler->freeResult(result);
     }
     compiler->Destroy();
-    CHECK(locations[0] == 2u); // stripped: TEXCOORD1 + SV_Target0
+    CHECK(locations[0] == 2u); // stripped: TEXCOORD1 and SV_Target0
     CHECK(locations[1] == 3u); // preserved: TEXCOORD0 too
 }
 
@@ -621,7 +621,7 @@ TEST_CASE("variants: drift-lint flags an undeclared #ifdef")
     CHECK(undeclared[0] == u8"GBUFFER");
 
     Array<StringView> clean;
-    FindUndeclaredFlagUses(src, ShaderFlags::GBuffer, clean); // declared -> no complaint
+    FindUndeclaredFlagUses(src, ShaderFlags::GBuffer, clean); // declared, so no complaint
     CHECK(clean.IsEmpty());
 }
 
@@ -815,9 +815,9 @@ TEST_CASE("wgsl cook: tint rejects a WGSL uniformity violation")
     }
     else
     {
-        // No oracle available: validation is requested but cannot run, which is a HARD
-        // failure - a silent skip would ship unvalidated WGSL, the exact class of output
-        // browsers reject at runtime. Skipping is an explicit opt-out only.
+        // No oracle available: validation is requested but cannot run, which is a hard
+        // failure. A silent skip would ship unvalidated WGSL, the class of output browsers
+        // reject at runtime. Skipping is an explicit opt-out only.
         MESSAGE("tint not vendored; expecting the validation-unavailable failure");
         CHECK_FALSE(r.success);
         CHECK(r.failedStage == WgslCookStage::Validate);
@@ -849,7 +849,7 @@ TEST_CASE("wgsl cook: missing tint fails validation unless explicitly opted out"
     CHECK(failed.failedStage == WgslCookStage::Validate);
     CHECK_FALSE(failed.error.IsEmpty());
 
-    // The explicit opt-out cooks unvalidated WGSL - the caller owns the risk.
+    // The explicit opt-out cooks unvalidated WGSL; the caller owns the risk.
     translator.SetValidateWithTint(false);
     const WgslCookResult optedOut = 
         translator.Translate(Hlsl(kCleanPs), ShaderStage::Fragment, u8"main");
@@ -885,7 +885,7 @@ TEST_CASE("cook: drift-lint sees through #include - the .hlsli holds the #ifdef"
     {
         return;
     }
-    // The stage file is directive + include only (the real corpus shape: forward.vs.hlsl);
+    // The stage file is a directive and an include only (the real corpus shape: forward.vs.hlsl);
     // the undeclared #ifdef hides in the shared .hlsli. Linting only the stage file's own
     // text would pass this cook and the dist would silently strip the flag.
     (void)CreateDirectory(u8".test-scratch");
@@ -920,7 +920,7 @@ TEST_CASE("cook: drift-lint sees through #include - the .hlsli holds the #ifdef"
 
 TEST_CASE("variants: drift-lint ignores comments that merely mention a flag")
 {
-    // "user-defined" + a whole-word flag name in a COMMENT must NOT trip the substring
+    // "user-defined" and a whole-word flag name in a comment must not trip the substring
     // heuristic and fail the cook; only real #if/#ifdef/#ifndef/#elif lines count.
     const char8_t* src = u8"// GBUFFER is a user-defined marker, see docs\n"
                          u8"/* undefined behavior when SKINNED */\n"
@@ -951,7 +951,7 @@ TEST_CASE("pack: re-adding a variant overwrites in place (no orphaned duplicates
 
 TEST_CASE("pack: a corrupt/truncated stream fails cleanly (count guards)")
 {
-    // A valid header followed by a garbage entry count must not attempt a giant Resize -
+    // A valid header followed by a garbage entry count must not attempt a giant Resize;
     // the counts are bounded by the bytes actually remaining in the stream.
     CookedShaderPack valid;
     const byte blob[] = {byte{9}};
@@ -960,7 +960,7 @@ TEST_CASE("pack: a corrupt/truncated stream fails cleanly (count guards)")
     MemoryStream buffer;
     REQUIRE(valid.Write(buffer).IsOk());
 
-    // Corrupt the name-count field (bytes 8..11, after magic+version) to a huge value.
+    // Corrupt the name-count field (bytes 8..11, after the magic and version) to a huge value.
     REQUIRE(buffer.Seek(8, SeekOrigin::Begin) == 8);
     const u32 huge = 0x7FFFFFFFu;
     REQUIRE(buffer.Write(&huge, sizeof(huge)) == sizeof(huge));
@@ -983,8 +983,8 @@ TEST_CASE("pack: a corrupt/truncated stream fails cleanly (count guards)")
 }
 
 // --- Effect blocks through the compiler, the cook and the pack -----------------------------
-// (Specs/wind-for-every-shader.md: an include's `effect` block is expanded by the include
-// handler on the cook's disk route and the editor's resolver route alike.)
+// (An include's `effect` block is expanded by the include handler on the cook's disk route and
+// the editor's resolver route alike.)
 
 namespace
 {
@@ -1066,7 +1066,7 @@ TEST_CASE("effects: an include's effect block compiles from disk, beside its inc
     (void)CreateDirectory(u8".test-scratch/fxdisk/sub");
     WriteScratch(u8".test-scratch/fxdisk/fx_wind.hlsli", kWindEffect);
     // Only beside its includer (sub/), never on the search path: found relative to the includer
-    // first, as DXC's own handler did, and its effect expanded there too.
+    // first, as DXC's own handler does, and its effect expanded there too.
     WriteScratch(u8".test-scratch/fxdisk/sub/fx_sibling.hlsli",
                  "effect Fade : DITHER\n{\n    float Amount = 1 (gate);\n}\n");
     WriteScratch(u8".test-scratch/fxdisk/sub/fx_nested.hlsli",

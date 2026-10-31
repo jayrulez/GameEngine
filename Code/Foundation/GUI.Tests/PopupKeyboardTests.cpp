@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The keyboard and the pad in composite widgets (E5 of Specs/gui-lab-evolution.md): a walk through
-// a menu bar and a submenu, a combo box closed and open, and a message box, by keys and by the pad.
+// The keyboard and the pad in composite widgets: a walk through a menu bar and a submenu, a combo
+// box closed and open, and a message box, by keys and by the pad.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -27,7 +27,7 @@ namespace
         Bed() { root->SetSize(core::Float2{600.0f, 400.0f}); }
         EventDispatcher& d() { return *root->GetEventDispatcher(); }
         void Key(KeyCode k, core::u32 mods = 0) { (void)d().InjectKeyDown(K(k), mods); }
-        // A key that types: its key, then its text (what type-ahead reads, E12).
+        // Sends a key that types: its key, then its text, which type-ahead reads.
         void Type(KeyCode k, const char8_t* text)
         {
             Key(k);
@@ -35,7 +35,7 @@ namespace
         }
     };
 
-    // The text of the focused menu item, or empty.
+    // Returns the text of the focused menu item, or empty.
     core::StringView FocusedItem(EventDispatcher& d)
     {
         const MenuItem* item = core::Cast<MenuItem>(d.GetFocusNode());
@@ -61,10 +61,10 @@ TEST_CASE("keyboard: a walk through a menu bar, its menus and a submenu")
 
     bed.Key(KeyCode::F10); // into the bar
     REQUIRE(bed.d().GetFocusNode() == bar->ButtonAt(0));
-    bed.Key(KeyCode::Down); // opens File, its first item lit
+    bed.Key(KeyCode::Down); // opens File with its first item lit
     CHECK(file->IsOpen());
     CHECK(FocusedItem(bed.d()) == SV(u8"Open"));
-    bed.Key(KeyCode::Down); // Save is disabled: skipped
+    bed.Key(KeyCode::Down); // Save is disabled, so it is skipped
     CHECK(FocusedItem(bed.d()) == SV(u8"Recent"));
     bed.Key(KeyCode::Right); // into the submenu
     CHECK(recent->IsOpen());
@@ -72,11 +72,11 @@ TEST_CASE("keyboard: a walk through a menu bar, its menus and a submenu")
     bed.Key(KeyCode::Left); // out again, back on its item
     CHECK_FALSE(recent->IsOpen());
     CHECK(FocusedItem(bed.d()) == SV(u8"Recent"));
-    bed.Key(KeyCode::Right); // the next menu on the bar: Right on a submenu item goes in, so first move off it
+    bed.Key(KeyCode::Right); // to reach the next menu, first move off the submenu item, since Right on it goes in
     bed.Key(KeyCode::Left);
     bed.Key(KeyCode::Up); // Open
     CHECK(FocusedItem(bed.d()) == SV(u8"Open"));
-    bed.Key(KeyCode::Right); // File's Open has no submenu: the next menu
+    bed.Key(KeyCode::Right); // File's Open has no submenu, so Right opens the next menu
     CHECK(edit->IsOpen());
     CHECK_FALSE(file->IsOpen());
     CHECK(FocusedItem(bed.d()) == SV(u8"Undo"));
@@ -87,7 +87,7 @@ TEST_CASE("keyboard: a walk through a menu bar, its menus and a submenu")
     CHECK(opened == 1);
     CHECK_FALSE(file->IsOpen());
 
-    // Escape closes, focus going back to the bar's button.
+    // Escape closes the menu, and the focus goes back to the bar's button.
     bar->ButtonAt(0)->RequestFocus();
     bed.Key(KeyCode::Down);
     REQUIRE(file->IsOpen());
@@ -116,11 +116,11 @@ TEST_CASE("keyboard: a combo box steps its selection closed, types ahead, and op
     CHECK(combo->GetSelectedText() == SV(u8"Banana"));
     bed.Type(KeyCode::C, u8"c");
     CHECK(combo->GetSelectedIndex() == 3);
-    bed.Key(KeyCode::Down); // at the end: given back, the selection stays
+    bed.Key(KeyCode::Down); // at the end the key is given back, and the selection stays
     CHECK(combo->GetSelectedIndex() == 3);
     combo->RequestFocus();
 
-    bed.Key(KeyCode::Return); // opens, the list focused on the current item
+    bed.Key(KeyCode::Return); // opens, with the list focused on the current item
     REQUIRE(combo->IsOpen());
     ListBox* list = combo->GetDropdown();
     CHECK(bed.d().GetFocusNode() == list);
@@ -181,7 +181,7 @@ TEST_CASE("keyboard: a message box opens on its default button; Escape and the p
         return box;
     };
     auto box = show(MessageBox::Buttons::YesNo);
-    CHECK(bed.d().GetFocusNode() == box->ButtonAt(1)); // Yes, the default
+    CHECK(bed.d().GetFocusNode() == box->ButtonAt(1)); // Yes, which is the default
     bed.Key(KeyCode::Return);
     CHECK(results == 1);
     CHECK(got == MessageBox::Result::Yes);

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// DX12 implementation of CommandEncoder + RayTracingEncoderExt.
+/// DX12 implementation of CommandEncoder and RayTracingEncoderExt.
 /// Wraps an ID3D12GraphicsCommandList for recording commands.
-/// Ported from Sedulous.RHI.DX12/DX12CommandEncoder.bf.
 
 module;
 #include "Core/Prelude.h"
@@ -47,7 +46,7 @@ export namespace foundation::rhi::dx12
 
     /// DX12 implementation of CommandEncoder and RayTracingEncoderExt.
     /// Wraps an ID3D12GraphicsCommandList for recording commands outside of
-    /// render/compute passes (barriers, copies, queries, RT builds).
+    /// render and compute passes (barriers, copies, queries, RT builds).
     class DxCommandEncoderImpl : public CommandEncoder, public RayTracingEncoderExt
     {
     public:
@@ -81,11 +80,11 @@ export namespace foundation::rhi::dx12
                                         desc.beginTimestampIndex);
             }
 
-            // Collect render target views. Pack them CONTIGUOUSLY (write index == rtvCount), skipping any
+            // Collect render target views. Pack them contiguously (write index == rtvCount), skipping any
             // null view, and clear in the same pass so handles stay aligned. Writing rtvHandles[i] while
             // counting separately would, on a null gap, leave a null handle inside the count handed to
-            // OMSetRenderTargets. (The render graph already skips a pass with an unresolved attachment -
-            // ExecuteRenderPass - so this is defense in depth.)
+            // OMSetRenderTargets. The render graph's ExecuteRenderPass already skips a pass with an
+            // unresolved attachment, so this is a second line of defence.
             D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[8]{};
             u32 rtvCount = 0;
             auto colorAtts = desc.colorAttachments.View();
@@ -167,8 +166,8 @@ export namespace foundation::rhi::dx12
 
         RenderBundleEncoder* CreateRenderBundleEncoder(const RenderBundleDesc& desc) override
         {
-            // Bundles are pool-scoped (owned by the pool, freed on its Reset) - creation
-            // needs no open command list, so delegate. The executing list's descriptor
+            // Bundles are pool-scoped (owned by the pool, freed on its Reset), and creating
+            // one needs no open command list, so delegate. The executing list's descriptor
             // heaps are set by BeginRenderPass before any ExecuteBundles.
             return m_pool->CreateRenderBundleEncoder(desc);
         }
@@ -214,7 +213,7 @@ export namespace foundation::rhi::dx12
             // batch (e.g. ParticlePass declares both ReadDepth and ReadTexture on SceneDepth,
             // producing DEPTH_WRITE->DEPTH_READ then DEPTH_READ->SHADER_READ). D3D12 processes
             // all barriers in one ResourceBarrier() call simultaneously, so the second barrier's
-            // StateBefore won't match reality. Fix: coalesce A->B, B->C into a single A->C.
+            // StateBefore would not match reality. Coalescing turns A->B, B->C into a single A->C.
             {
                 struct CoalescedEntry
                 {
@@ -311,7 +310,7 @@ export namespace foundation::rhi::dx12
                     }
                 }
 
-                // Phase 2: emit one D3D12 barrier per coalesced entry.
+                // Then emit one D3D12 barrier per coalesced entry.
                 for (const auto& entry : coalesced)
                 {
                     if (entry.firstBefore == entry.lastAfter)
@@ -327,7 +326,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Memory barriers -> UAV barriers.
+            // Memory barriers become UAV barriers.
             for (usize i = 0; i < group.memoryBarriers.Size(); ++i)
             {
                 D3D12_RESOURCE_BARRIER b{};
@@ -510,17 +509,15 @@ export namespace foundation::rhi::dx12
                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE |
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
-            // Barrier from whatever the tracker says a subresource is ACTUALLY in, and record
-            // every transition. Hardcoding COPY_SOURCE for both the before-state and
-            // the per-mip restore, and never telling the tracker, would leave the resource in
-            // COPY_SOURCE after a GenerateMipmaps while the tracker still
-            // believed COMMON (what the upload path leaves it in). The next barrier would then declare
-            // StateBefore=COMMON and the debug layer would reject it, once per mip:
+            // Barrier from whatever state the tracker says a subresource is in, and record every
+            // transition. If the tracker is not told, it keeps believing COMMON (what the upload
+            // path leaves) while the resource sits in COPY_SOURCE, and the next barrier's
+            // StateBefore=COMMON is rejected by the debug layer once per mip:
             //   "Before state (0x0: COMMON|PRESENT) ... does not match with the state
             //    (0x800: COPY_SOURCE) specified in the previous call to ResourceBarrier"
             //
-            // NOTE: this walks layer 0 only - blitSubresource addresses a
-            // single mip, so array textures still get only their first slice's chain built.
+            // This walks layer 0 only: blitSubresource addresses a single mip, so array
+            // textures get only their first slice's chain built.
             auto transition = [&](u32 mip, D3D12_RESOURCE_STATES after)
             {
                 const D3D12_RESOURCE_STATES before = dxTex->getSubresourceState(mip, 0);
@@ -553,7 +550,7 @@ export namespace foundation::rhi::dx12
             // sampled texture (what the upload path also settles on), so the tracker collapses
             // back to one uniform state instead of a per-subresource patchwork.
             //
-            // Whole-resource, not a walk over layer 0's mips: on an array/cube texture the loop
+            // Whole-resource, not a walk over layer 0's mips: on an array or cube texture the loop
             // above only touches the first slice, so settling just those mips would leave the
             // tracker permanently non-uniform and every later currentState() reader stale.
             TransitionWholeTexture(m_cmdList, dxTex, D3D12_RESOURCE_STATE_COMMON);
@@ -570,13 +567,11 @@ export namespace foundation::rhi::dx12
 
             DXGI_FORMAT dxgiFormat = toDxgiFormat(dxDst->desc.format);
 
-            // Same rule as GenerateMipmaps above: barrier from the TRACKED state and record the
-            // result. Hardcoding COPY_SOURCE/COPY_DEST here desynced the tracker the moment a
-            // resolve target was used any other way (an MSAA colour target rests in
+            // Same rule as GenerateMipmaps above: barrier from the tracked state and record the
+            // result, since a resolve target may rest in any state (an MSAA colour target rests in
             // RENDER_TARGET, not COPY_SOURCE). Go through TransitionWholeTexture rather than
             // reading currentState() directly: that is only valid while the texture is uniform,
-            // and reading it in per-subresource mode reintroduces the very divergence this
-            // function is fixing.
+            // and in per-subresource mode it would give a stale before-state.
             TransitionWholeTexture(m_cmdList, dxSrc, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
             TransitionWholeTexture(m_cmdList, dxDst, D3D12_RESOURCE_STATE_RESOLVE_DEST);
 
@@ -590,7 +585,7 @@ export namespace foundation::rhi::dx12
 
         void ResetQuerySet(QuerySet*, u32, u32) override
         {
-            // DX12 does not require explicit query reset -- queries are implicitly reset when written.
+            // DX12 does not require an explicit query reset; queries are reset implicitly when written.
         }
 
         void WriteTimestamp(QuerySet* querySet, u32 index) override
@@ -638,7 +633,7 @@ export namespace foundation::rhi::dx12
         CommandBuffer* Finish() override
         {
             m_cmdList->Close();
-            m_pool->markEncoderFinished(); // list closed - the pool may now Reset safely
+            m_pool->markEncoderFinished(); // list closed: the pool may now Reset safely
             auto* cb = m_allocator.New<DxCommandBufferImpl>(m_cmdList);
             m_pool->trackCommandBuffer(cb);
             return cb;
@@ -796,7 +791,7 @@ export namespace foundation::rhi::dx12
 
             auto* dxLayout = static_cast<DxBindGroupLayoutImpl*>(dxGroup->Layout());
 
-            // RT uses compute root signature binding -- copy-on-bind staging.
+            // RT uses compute root signature binding, with copy-on-bind staging.
             if (dxGroup->cbvSrvUavOffset() >= 0 && dxLayout && dxLayout->cbvSrvUavCount() > 0)
             {
                 i32 rootIdx = layout->getCbvSrvUavRootIndex(index);
@@ -813,7 +808,7 @@ export namespace foundation::rhi::dx12
                 }
             }
 
-            // Sampler table is baked at bind-group creation - bind it directly (no staging).
+            // The sampler table is baked at bind-group creation, so bind it directly (no staging).
             if (dxGroup->gpuSamplerOffset() >= 0 && dxLayout && dxLayout->samplerCount() > 0)
             {
                 i32 rootIdx = layout->getSamplerRootIndex(index);
@@ -886,7 +881,7 @@ export namespace foundation::rhi::dx12
 
             D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
 
-            // Raygen -- single record.
+            // Raygen: a single record.
             if (auto* dxBuf = static_cast<DxBufferImpl*>(raygenSBT))
             {
                 dispatchDesc.RayGenerationShaderRecord.StartAddress =
@@ -1066,9 +1061,9 @@ export namespace foundation::rhi::dx12
 
     // ---- Deferred DxCommandPoolImpl method implementations ----
 
-    // CreateEncoder / DestroyEncoder / CreateRenderBundleEncoder are defined
-    // out-of-line in DxDevice.cppm - they need the full DxCommandEncoderImpl /
-    // DxRenderBundleEncoderImpl definitions plus the device's heaps + command
+    // CreateEncoder, DestroyEncoder and CreateRenderBundleEncoder are defined
+    // out of line in DxDevice.cppm: they need the full DxCommandEncoderImpl and
+    // DxRenderBundleEncoderImpl definitions as well as the device's heaps and command
     // signatures to build the pass-encoder context structs.
 
 } // namespace foundation::rhi::dx12

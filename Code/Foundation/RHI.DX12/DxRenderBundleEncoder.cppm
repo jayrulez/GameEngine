@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// DX12 implementation of RenderBundleEncoder + RenderBundle.
+/// DX12 implementation of RenderBundleEncoder and RenderBundle.
 ///
 /// A render bundle is an ID3D12GraphicsCommandList of type D3D12_COMMAND_LIST_TYPE_BUNDLE,
 /// recorded once and replayed into a direct command list via ExecuteBundle
 /// (RenderPassEncoder::ExecuteBundles). DX12 bundles inherit the parent's descriptor heaps,
-/// viewport, scissor, and render targets - but NOT pipeline state / topology, which the bundle
+/// viewport, scissor, and render targets, but not pipeline state or topology, which the bundle
 /// sets itself (handled by SetPipeline). Draw recording is delegated to a DxRenderPassEncoderImpl
-/// whose context points at the bundle list, reusing the full root-signature / descriptor-table
+/// whose context points at the bundle list, reusing the full root-signature and descriptor-table
 /// binding logic.
 ///
-/// BEST-EFFORT (authored without a Windows toolchain to compile against - shake out on Windows):
-/// the structure + DX12 bundle semantics are in place; details (heap inheritance, signature
-/// caching, lifetime vs frames-in-flight) may need adjustment.
+/// This is best effort: the structure and DX12 bundle semantics are in place, but details (heap
+/// inheritance, signature caching, lifetime against frames in flight) may need adjustment once
+/// exercised on Windows.
 
 module;
 #include "Core/Prelude.h"

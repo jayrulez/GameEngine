@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ImGui vertex shader: pos2D + uv + RGBA8 vertex color -> clip space via an ortho projection
-// (row-vector mul, engine convention). Cooked into the engine shader pack like every other shader
-// (WGSL for web); the ImGui renderer resolves it via ShaderSystem::GetVariant("imgui", Vertex).
+// ImGui vertex shader: takes a 2D position, uv and RGBA8 vertex colour to clip space through an
+// orthographic projection (row-vector mul, the engine convention). Cooked into the engine shader
+// pack like every other shader (WGSL for web); the ImGui renderer resolves it through
+// ShaderSystem::GetVariant("imgui", Vertex).
 cbuffer Proj : register(b0, space0) { row_major float4x4 Projection; };
 struct VSIn  { float2 pos : TEXCOORD0; float2 uv : TEXCOORD1; float4 col : TEXCOORD2; };
 struct VSOut { float4 pos : SV_Position; float2 uv : TEXCOORD0; float4 col : COLOR0; };

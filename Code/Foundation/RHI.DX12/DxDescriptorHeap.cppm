@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Simple CPU-side descriptor heap allocator with free-list.
-/// Ported from Sedulous.RHI.DX12/DX12DescriptorHeapAllocator.bf.
+/// Simple CPU-side descriptor heap allocator with a free list.
 
 module;
 #include "Core/Prelude.h"

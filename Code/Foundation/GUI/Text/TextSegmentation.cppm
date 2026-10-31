@@ -3,18 +3,17 @@
 
 // GUI - :text_segmentation partition
 //
-// Where a caret may stand and what a word is, over UTF-8 byte offsets (E4 of
-// Specs/gui-lab-evolution.md). A grapheme is what a reader sees as one character: a base with the
-// marks that combine with it, CR LF, an emoji with its modifiers, variation selectors and
-// zero-width-joined parts, a flag's pair of regional indicators. The rules are UAX #29's that an
-// editor feels, over tables of the common ranges rather than the whole Unicode database: neither
-// fonts nor core segments text, and a caret that splits "é" written as e + U+0301 is the bug these
-// rules exist for.
+// Where a caret may stand and what a word is, over UTF-8 byte offsets. A grapheme is what a
+// reader sees as one character: a base with the marks that combine with it, CR LF, an emoji with
+// its modifiers, variation selectors and zero-width-joined parts, a flag's pair of regional
+// indicators. The code implements the UAX #29 rules that matter to an editor, over tables of the
+// common ranges rather than the whole Unicode database. Neither fonts nor core segments text, and
+// these rules keep a caret from splitting "é" written as e and U+0301.
 //
 // Words are runs of letters, digits and '_' (any character past ASCII that is not a space or
-// punctuation counts as a letter); word movement and deletion follow foundation.ui's editor: to the
-// right, over the rest of a word and the gap after it; to the left, over the gap and then the word,
-// never across a line break.
+// punctuation counts as a letter). Moving or deleting by word to the right passes the rest of a
+// word and the gap after it; to the left, it passes the gap and then the word. It never crosses a
+// line break.
 
 module;
 #include "Core/Prelude.h"
@@ -60,13 +59,14 @@ export namespace foundation::gui
         inline constexpr u32 kZeroWidthJoiner = 0x200D;
         [[nodiscard]] constexpr bool IsRegionalIndicator(u32 c) noexcept { return c >= 0x1F1E6 && c <= 0x1F1FF; }
 
-        // The codepoint at `offset` (which is on a codepoint boundary), and where the next starts.
+        // Returns the codepoint at `offset` (which is on a codepoint boundary) and sets `next` to
+        // where the next one starts.
         [[nodiscard]] inline u32 CodepointAt(core::StringView text, usize offset, usize& next)
         {
             next = offset;
             return core::DecodeUtf8(text, next);
         }
-        // The codepoint before `offset`, and where it starts.
+        // Returns the codepoint before `offset` and sets `start` to where it starts.
         [[nodiscard]] inline u32 CodepointBefore(core::StringView text, usize offset, usize& start)
         {
             start = core::Utf8PrevBoundary(text, offset);
@@ -75,7 +75,7 @@ export namespace foundation::gui
         }
     }
 
-    /// Whether a caret may stand between the codepoints before and after `offset`.
+    /// Returns whether a caret may stand between the codepoints before and after `offset`.
     [[nodiscard]] inline bool IsGraphemeBoundary(core::StringView text, usize offset)
     {
         if (offset == 0 || offset >= text.Size())
@@ -90,7 +90,7 @@ export namespace foundation::gui
         if (detail::IsExtend(after) || after == detail::kZeroWidthJoiner)
             return false;
         if (before == detail::kZeroWidthJoiner && after >= 0x80)
-            return false; // an emoji's parts, joined
+            return false; // a part after a zero-width joiner stays with the emoji
         if (detail::IsRegionalIndicator(before) && detail::IsRegionalIndicator(after))
         {
             // Flags pair up: a break falls after an even count of indicators.
@@ -109,7 +109,7 @@ export namespace foundation::gui
         return true;
     }
 
-    /// The next caret position after `offset` (the text's end at most).
+    /// Returns the next caret position after `offset`, at most the text's end.
     [[nodiscard]] inline usize NextGrapheme(core::StringView text, usize offset)
     {
         if (offset >= text.Size())
@@ -119,7 +119,7 @@ export namespace foundation::gui
             at = core::Utf8NextBoundary(text, at);
         return at;
     }
-    /// The caret position before `offset` (0 at least).
+    /// Returns the caret position before `offset`, at least 0.
     [[nodiscard]] inline usize PrevGrapheme(core::StringView text, usize offset)
     {
         if (offset == 0)
@@ -129,7 +129,7 @@ export namespace foundation::gui
             at = core::Utf8PrevBoundary(text, at);
         return at;
     }
-    /// How many graphemes `text` holds (what a reader counts as characters).
+    /// Returns how many graphemes `text` holds, which is what a reader counts as characters.
     [[nodiscard]] inline usize GraphemeCount(core::StringView text)
     {
         usize count = 0;
@@ -138,7 +138,7 @@ export namespace foundation::gui
         return count;
     }
 
-    /// What a character is to word movement.
+    /// How word movement classifies a character.
     enum class WordClass : u8
     {
         Word,
@@ -177,13 +177,13 @@ export namespace foundation::gui
         }
     }
 
-    /// Where word movement to the right from `offset` stops: past the rest of a word and the gap
-    /// after it (the next word's start), at a line break at the latest.
+    /// Returns where word movement to the right from `offset` stops: past the rest of a word and
+    /// the gap after it (the next word's start), or at a line break if one comes first.
     [[nodiscard]] inline usize NextWordBoundary(core::StringView text, usize offset)
     {
         usize at = core::Min(offset, text.Size());
         if (at < text.Size() && detail::ClassAt(text, at) == WordClass::LineBreak)
-            return NextGrapheme(text, at); // over the break itself
+            return NextGrapheme(text, at); // at a break, step over the break itself
         while (at < text.Size() && detail::ClassAt(text, at) == WordClass::Word)
             at = NextGrapheme(text, at);
         while (at < text.Size() && detail::ClassAt(text, at) != WordClass::Word &&
@@ -191,8 +191,8 @@ export namespace foundation::gui
             at = NextGrapheme(text, at);
         return at;
     }
-    /// Where word movement to the left from `offset` stops: back over the gap and then the word (a
-    /// word's start), after a line break at the latest.
+    /// Returns where word movement to the left from `offset` stops: back over the gap and then the
+    /// word (the word's start), or just after a line break if one comes first.
     [[nodiscard]] inline usize PrevWordBoundary(core::StringView text, usize offset)
     {
         usize at = core::Min(offset, text.Size());
@@ -215,8 +215,9 @@ export namespace foundation::gui
         [[nodiscard]] bool operator==(const TextRange&) const noexcept = default;
     };
 
-    /// The run a double click selects at `offset`: the word, the spaces or the punctuation there
-    /// (the character after the offset decides, the one before it at the end of a line).
+    /// Returns the range a double click selects at `offset`: the word, the spaces or the
+    /// punctuation there. The character after the offset decides which; at the end of a line, the
+    /// character before it decides.
     [[nodiscard]] inline TextRange WordRangeAt(core::StringView text, usize offset)
     {
         offset = core::Min(offset, text.Size());
@@ -238,7 +239,7 @@ export namespace foundation::gui
         return TextRange{start, end};
     }
 
-    /// The logical line (between line breaks) holding `offset`, its break left out.
+    /// Returns the logical line (between line breaks) that holds `offset`, without its line break.
     [[nodiscard]] inline TextRange LineRangeAt(core::StringView text, usize offset)
     {
         offset = core::Min(offset, text.Size());

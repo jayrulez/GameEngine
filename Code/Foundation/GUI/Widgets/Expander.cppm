@@ -3,13 +3,13 @@
 
 // GUI - :expander partition
 //
-// Expander: a header that shows or hides its content (E6 of Specs/gui-lab-evolution.md), HTML's
-// <details>. Its header is a button (the button core's) with a disclosure chevron for its
-// indicator and the expander's `title` for its text; activating it toggles `open`, and each
-// change reports `toggle` (a ToggleEvent). Expanders of one `name` in one GUI are exclusive, as
-// HTML's are: opening one closes the others. Content can be built on first open (a factory),
-// and with `animate` it opens and closes by easing its height through a clip. Markup's children
-// are its content.
+// Expander: a header that shows or hides its content, like HTML's <details>. The header is a
+// button (built on ButtonBase) whose indicator is a disclosure chevron and whose text is the
+// expander's `title`. Activating the header toggles `open`, and each change sends a `toggle`
+// event (a ToggleEvent). Expanders that share a `name` in one GUI are exclusive, as in HTML:
+// opening one closes the others. A factory can build the content the first time it opens, and
+// with `animate` the expander opens and closes by easing its height through a clip. Children
+// written in markup become its content.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +25,7 @@ import :node_box;
 import :layout_style;
 import :ui_widget;
 import :panel;
-import :reactive; // Observable (what bindings follow)
+import :reactive; // Observable, which bindings follow
 import :button_base;
 import :text; // TextHAlign
 import :disclosure;
@@ -36,8 +36,8 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// An expander's header: a button whose indicator is the disclosure chevron
-    /// (`expanderheader::chevron` its colour), pointing down while its expander is open.
+    /// An expander's header: a button whose indicator is the disclosure chevron, coloured by the
+    /// `expanderheader::chevron` part and pointing down while the expander is open.
     class ExpanderHeader : public ButtonBase
     {
         RTTI_OBJECT(ExpanderHeader, ButtonBase)
@@ -47,7 +47,7 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"expanderheader"));
             {
                 StyleWriteScope defaults(*this);
-                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // its text beside its indicator
+                SetTextAlignment(TextHAlign::Start, TextVAlign::Middle); // the text sits beside the indicator
             }
             MakeIndicator();
         }
@@ -58,7 +58,7 @@ export namespace foundation::gui
                 indicator->Invalidate();
         }
         void CollectStyleParts(core::Array<core::StringView>& out) const override { out.PushBack(core::StringView(u8"chevron")); }
-        // A drag resting on a closed header opens its expander (E7).
+        // A drag that rests on a closed header opens the expander.
         bool OnDragHoverOpen(core::Float2) override
         {
             if (m_open)
@@ -92,51 +92,54 @@ export namespace foundation::gui
             m_header = core::MakeRef<ExpanderHeader>(MemoryAllocator());
             m_header->SetOnClick([self]() { self->SetOpen(!self->m_open); });
             AddChild(m_header.Get());
-            // The content sits in a clip, which an animation sizes; the content keeps its own height.
+            // The content sits in a clip whose height the animation changes; the content keeps its
+            // own height.
             m_clip = core::MakeRef<Panel>(MemoryAllocator());
             m_clip->SetClipChildren(true);
             m_clip->SetDisplayed(false);
             AddChild(m_clip.Get());
             m_content = core::MakeRef<Panel>(MemoryAllocator());
-            m_content->SetTag(core::StringView(u8"expandercontent")); // a sheet's `expander > * > expandercontent`
+            m_content->SetTag(core::StringView(u8"expandercontent")); // styled by a sheet as `expander > * > expandercontent`
             m_content->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
             m_clip->AddChild(m_content.Get());
         }
 
-        /// Its header's text.
+        /// Sets the header's text.
         void SetTitle(core::StringView title) { m_header->SetText(title); }
         [[nodiscard]] core::StringView GetTitle() const { return m_header->GetText(); }
         void SetTitleString(const core::String& title) { SetTitle(title.AsView()); }
         [[nodiscard]] core::String GetTitleString() const { return core::String(GetTitle()); }
 
-        /// Open, its content shown; each change, the user's or code's, reports `toggle`, as
-        /// <details> does.
+        /// Opens or closes the expander, showing or hiding its content. Every change, whether the
+        /// user's or the code's, sends a `toggle` event, as <details> does.
         void SetOpen(bool open);
         [[nodiscard]] bool IsOpen() const
         {
-            m_openChanged.Track(); // a read a binding records
+            m_openChanged.Track(); // a binding that reads this follows later changes
             return m_open;
         }
         void Toggle() { SetOpen(!m_open); }
 
-        /// Its group's name: expanders of one name in one GUI open one at a time.
+        /// Sets the group name. Of the expanders that share a name in one GUI, only one is open at
+        /// a time.
         void SetName(const core::String& name) { m_name = name; }
         [[nodiscard]] core::String GetName() const { return m_name; }
 
-        /// Opens and closes by easing its height (instead of at once).
+        /// Makes it open and close by easing its height rather than at once.
         void SetAnimated(bool animated) noexcept { m_animated = animated; }
         [[nodiscard]] bool IsAnimated() const noexcept { return m_animated; }
 
-        /// Builds the content the first time it opens (a heavy panel left unbuilt until wanted).
+        /// Sets a factory that builds the content the first time the expander opens, so a heavy
+        /// panel is not built until it is needed.
         void SetContentFactory(core::Function<void(Node& content)> factory) { m_factory = core::Move(factory); }
-        /// Each change of `open` (the user's or code's).
+        /// Sets the callback for each change of `open`, by the user or by code.
         void SetOnToggled(core::Function<void(bool)> callback) { m_onToggled = core::Move(callback); }
 
         [[nodiscard]] ExpanderHeader* GetHeader() const noexcept { return m_header.Get(); }
-        /// What holds its content (markup's children go here).
+        /// Returns the node that holds the content. Children written in markup go here.
         [[nodiscard]] Node* GetContent() const noexcept { return m_content.Get(); }
         [[nodiscard]] Node* GetChildHost() override { return m_content.Get(); }
-        /// How far open its height is, 0 to 1 (1 when not animating).
+        /// Returns how far open the expander is, from 0 to 1. Without animation this is 0 or 1.
         [[nodiscard]] f32 GetReveal() const noexcept { return m_reveal; }
         [[nodiscard]] u32 GetWidgetStates() const override { return m_open ? WidgetStateChecked : WidgetStateNone; } // :checked when open
 
@@ -151,8 +154,9 @@ export namespace foundation::gui
                 CloseNamed(*child);
             }
         }
-        // The clip's height eases from where it is toward the content's (open) or nothing
-        // (closed); open, the clip then gives the content its own height again.
+        // Eases the clip's height from its current value toward the content's height when
+        // opening, or toward zero when closing. Once fully open, the clip drops its fixed height
+        // so it follows the content again.
         void Animate()
         {
             m_clip->SetDisplayed(true);
@@ -183,7 +187,7 @@ export namespace foundation::gui
         core::RefPtr<Panel> m_content;
         core::String m_name;
         bool m_open = false;
-        Observable m_openChanged; // what bindings reading `open` follow
+        Observable m_openChanged; // notifies bindings that read `open`
         bool m_animated = false;
         bool m_animating = false;
         f32 m_reveal = 0.0f;
@@ -198,7 +202,7 @@ export namespace foundation::gui
         m_open = open;
         m_openChanged.Notify();
         m_header->SetOpenShown(open);
-        MarkStyleStateDirty(StateChecked); // `expander:checked` styles an open one
+        MarkStyleStateDirty(StateChecked); // `expander:checked` styles an open expander
         if (open)
         {
             if (m_factory)
@@ -206,7 +210,7 @@ export namespace foundation::gui
                 core::Function<void(Node&)> factory = core::Move(m_factory);
                 factory(*m_content);
             }
-            // One of a named group open: the others close.
+            // Opening one expander of a named group closes the others.
             if (!m_name.IsEmpty())
             {
                 const Node* top = this;

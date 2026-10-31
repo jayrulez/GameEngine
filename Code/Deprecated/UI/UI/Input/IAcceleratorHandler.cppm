@@ -5,8 +5,8 @@
 //
 // Implement on a View to receive Alt+key accelerator events. Accelerators are searched top-down
 // through the tree (via View::AsAcceleratorHandler()), bypassing normal focus-based key routing.
-// Ported from Sedulous.UI/src/Input/IAcceleratorHandler.bf. Pattern A (tree-queried) - the interface
-// is a plain abstract base; a View exposes it via a virtual AsAcceleratorHandler() capability query.
+// The interface is a plain abstract base; a View exposes it through the virtual
+// AsAcceleratorHandler() capability query.
 
 module;
 #include "Core/Prelude.h"

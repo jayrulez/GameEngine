@@ -59,10 +59,11 @@ export namespace foundation::shell
         virtual void SetCursorVisible(bool visible) = 0;
         virtual void SetCursor(CursorType cursor) = 0;
 
-        // Capture the mouse app-globally so events (move + buttons) keep flowing even when the cursor
-        // leaves a window. Required for multi-window drag / resize: without it the OS stops delivering
+        // Capture the mouse app-globally so events (move and buttons) keep flowing even when the cursor
+        // leaves a window. Required for multi-window drag and resize: without it the OS stops delivering
         // events once the pointer exits the window, so the operation stalls at the window edge and a
-        // release outside the window is never seen. Enable at the start of a drag/resize, disable at end.
+        // release outside the window is never seen. Enable at the start of a drag or resize, disable at
+        // its end.
         virtual void SetGlobalCapture(bool enabled) = 0;
     };
 
@@ -111,11 +112,11 @@ export namespace foundation::shell
         [[nodiscard]] virtual core::Span<const InputEvent> Events() const = 0;
 
         // Routing authority: the window under
-        // the pointer (mouse routing) and the keyboard/gamepad-focused window. 0 = none.
+        // the pointer (mouse routing) and the keyboard/gamepad-focused window. 0 is none.
         [[nodiscard]] virtual core::u32 HoverWindow() const = 0;
         [[nodiscard]] virtual core::u32 FocusedWindow() const = 0;
 
-        // Rolls per-frame state (current -> previous, clears deltas + events). The
+        // Rolls per-frame state (current becomes previous; clears deltas and events). The
         // shell calls this once per frame before pumping OS events.
         virtual void Update() = 0;
     };

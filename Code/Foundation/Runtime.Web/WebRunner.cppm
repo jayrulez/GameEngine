@@ -3,8 +3,8 @@
 
 // foundation.runtime.web - the browser (Emscripten) application runner.
 //
-// The web sibling of foundation.runtime.desktop. Same job - drive an IApplication (via
-// ApplicationHost) against an IShell, one frame at a time - but the EXECUTION MODEL differs: a
+// The web sibling of foundation.runtime.desktop. Same job (drive an IApplication via
+// ApplicationHost against an IShell, one frame at a time), but the execution model differs: a
 // browser cannot own a blocking wall-clock loop (it must return to the event loop to paint, run
 // timers, and resolve WebGPU promises), so instead of a while-loop this registers a per-frame
 // callback with emscripten_set_main_loop and returns. The browser then calls back once per
@@ -18,13 +18,13 @@ module;
 export module foundation.runtime.web;
 
 import foundation.core;
-import foundation.shell;          // IShell (interface only - the concrete shell is handed in)
+import foundation.shell;          // IShell (interface only; the concrete shell is handed in)
 import foundation.graphics;       // GraphicsDevice (handed to the app)
-import foundation.runtime.client; // IApplication + ApplicationHost (the runner drives these)
+import foundation.runtime.client; // IApplication and ApplicationHost (the runner drives these)
 
 namespace core = foundation::core;
 namespace shell = foundation::shell; // after the import (a module namespace alias must follow it)
-using namespace foundation::graphics; // GraphicsDevice (moved from foundation::runtime)
+using namespace foundation::graphics; // GraphicsDevice
 
 namespace foundation::runtime
 {
@@ -78,8 +78,8 @@ namespace foundation::runtime
 export namespace foundation::runtime
 {
     // Web runner: start the app, then hand the frame cadence to the browser and return. Unlike the
-    // desktop runner this does NOT block - the loop runs after main() returns (fps=0 =>
-    // requestAnimationFrame; simulate_infinite_loop=0 => control returns here, and the Emscripten
+    // desktop runner this does not block: the loop runs after main() returns (fps=0 selects
+    // requestAnimationFrame; simulate_infinite_loop=0 returns control here, and the Emscripten
     // runtime is kept alive to keep calling WebFrame). Returns 0; the real exit is when WebFrame
     // cancels the loop. APP_MAIN calls this on Emscripten instead of the desktop runner.
     inline int RunApplication(IApplication& app, shell::IShell& shell,

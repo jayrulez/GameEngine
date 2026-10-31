@@ -46,9 +46,9 @@ export namespace pipeline
     {
         StringView vertexEntryPoint = u8"VSMain";
         StringView fragmentEntryPoint = u8"PSMain";
-        StringView shaderLibrary; // the engine's Shaders/ folder, the include path; empty = none
+        StringView shaderLibrary; // the engine's Shaders/ folder, the include path; empty for none
         ShaderCheckDepth depth = ShaderCheckDepth::EveryVariant;
-        // A compiler to reuse (a page checking on every pause in typing); null = one is created
+        // A compiler to reuse (a page checking on every pause in typing); when null, one is created
         // and destroyed for this check.
         Compiler* compiler = nullptr;
     };
@@ -194,7 +194,7 @@ export namespace pipeline
 
     // A surface shader's lattices: the template's, the same for every surface shader. WIND in each
     // vertex lattice: the engine's vertex stages sway by the material's Wind group, so every surface
-    // shader can sway, its shadow and pick with it (Specs/wind-for-every-shader.md, rule 4).
+    // shader can sway, its shadow and pick with it.
     inline constexpr ShaderFlags kSurfaceForwardVertexMask =
         ShaderFlags::Skinned | ShaderFlags::Instanced | ShaderFlags::Wind;
     inline constexpr ShaderFlags kSurfaceForwardFragmentMask =
@@ -383,7 +383,7 @@ export namespace pipeline
         if (check.surface == SurfaceModel::None)
         {
             // Each stage's lattice; a flag the file tests but no stage declares would never be
-            // compiled (the corpus's drift lint, over both stages).
+            // compiled (the same drift lint the engine's own shaders get, over both stages).
             check.vertexMask = ParseStageVariantDirective(text, ShaderStage::Vertex).mask;
             check.fragmentMask = ParseStageVariantDirective(text, ShaderStage::Fragment).mask;
             ShaderCheckProgram main;

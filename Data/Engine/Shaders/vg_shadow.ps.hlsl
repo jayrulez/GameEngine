@@ -3,8 +3,8 @@
 
 // VG box-shadow fragment shader (the BoxShadow draw mode): a Gaussian-blurred rounded rectangle.
 // The context emits four quadrant quads whose texcoord carries the rounded-box SDF operand
-// q = |p - c| - (halfSize - r) in BLUR-SIGMA units (linear within a quadrant, so it interpolates
-// exactly) and whose coverage carries the corner radius r / sigma (negative = INSET). The
+// q = |p - c| - (halfSize - r) in blur-sigma units (linear within a quadrant, so it interpolates
+// exactly) and whose coverage carries the corner radius r / sigma (negative for an inset). The
 // distance d = length(max(q, 0)) + min(max(q.x, q.y), 0) - r is the signed distance to the
 // rounded box in sigma units; the shadow's alpha is the Gaussian integral across that edge,
 // 1 - Phi(d), via an erf approximation (Abramowitz-Stegun 7.1.26, |error| < 1.5e-7); an inset
@@ -31,7 +31,7 @@ float4 main(PSInput input) : SV_Target {
     // the shadow. fwidth before any branch (uniformity, for the WGSL cook).
     float inside = saturate(0.5 - d / max(fwidth(d), 1e-4));
     bool inset = input.SignedCornerRadius < 0.0;
-    // Inset: the shadow lives INSIDE the box, fading away from the edge, so the distance flips.
+    // Inset: the shadow lives inside the box, fading away from the edge, so the distance flips.
     if (inset) { d = -d; }
     // 1 - Phi(d): the fraction of a unit-sigma Gaussian centred on the pixel that lies inside.
     float alpha = 0.5 - 0.5 * Erf(d * 0.70710678);

@@ -10,7 +10,7 @@ import foundation.shell;
 import foundation.shell.null;
 import foundation.gui;
 import foundation.gui.shell;
-import foundation.input; // InputMap (a keymap filled from it)
+import foundation.input; // InputMap (to fill a keymap from it)
 
 using namespace foundation::gui;
 namespace core = foundation::core;
@@ -83,7 +83,7 @@ TEST_CASE("bridge: mouse move drives hover")
     int enter = 0;
     child->AddEventListener(EventType::MouseEnter, [&](const Event&) { ++enter; });
 
-    CHECK_FALSE(bridge.Dispatch(MouseMove(20.0f, 20.0f))); // a bare panel leaves the pointer to the game
+    CHECK_FALSE(bridge.Dispatch(MouseMove(20.0f, 20.0f))); // a bare panel does not take the pointer, so the game gets it
     CHECK(root->GetEventDispatcher()->GetOverNode() == child.Get());
     CHECK(enter == 1);
 }
@@ -92,7 +92,7 @@ TEST_CASE("bridge: left press+release becomes a click; button mapping is explici
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto child = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 100.0f});
-    child->SetTabFocusable(true); // a click focuses what takes focus
+    child->SetTabFocusable(true); // a click focuses a node that takes focus
     root->AddChild(child.Get());
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
@@ -102,8 +102,8 @@ TEST_CASE("bridge: left press+release becomes a click; button mapping is explici
     child->AddEventListener(EventType::MouseDown, [&](const Event& e)
                             { downButton = static_cast<const MouseEvent&>(e).Button; });
 
-    // Only the left button activates (right/middle deliver Down/Up for context menus but
-    // never click - see the EventDispatcher interaction rules).
+    // Only the left button activates (right and middle deliver Down and Up for context menus but
+    // never click, by the EventDispatcher's interaction rules).
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 20.0f, 20.0f,
                                     shell::MouseButton::Left));
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonUp, 20.0f, 20.0f,
@@ -111,7 +111,7 @@ TEST_CASE("bridge: left press+release becomes a click; button mapping is explici
     CHECK(clicks == 1);
     CHECK(root->GetEventDispatcher()->GetFocusNode() == child.Get());
 
-    // shell Middle (index 1) maps to gui Middle (index 2) - explicitly, not by value.
+    // shell Middle (index 1) maps to gui Middle (index 2): explicitly, not by value.
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 20.0f, 20.0f,
                                     shell::MouseButton::Middle));
     CHECK(downButton == foundation::gui::MouseButton::Middle);
@@ -169,15 +169,15 @@ TEST_CASE("bridge: navigation keys map platform KeyCode to the GUI KeyCode")
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::V));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::V));
 
-    // Every letter, digit and F1 to F12 maps through, for bindings (G7: ctrl-s, f5); what a key
-    // types still arrives as text, not from its code.
+    // Every letter, digit and F1 to F12 maps through, for bindings (ctrl-s, f5); what a key types
+    // still arrives as text, not from its code.
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::B));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::B));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::Num7));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::Num7));
     bridge.Dispatch(Key(shell::InputEventKind::KeyDown, shell::KeyCode::F5));
     CHECK(seenKey == static_cast<core::u32>(KeyCode::F5));
-    // The rest of the keyboard too (E12): punctuation, the keypad apart from the digits, F13 to
+    // The rest of the keyboard too: punctuation, the keypad apart from the digits, F13 to
     // F24, the lock keys and the modifier keys themselves.
     const struct
     {
@@ -212,13 +212,13 @@ TEST_CASE("bridge: text-input target follows focus of an editable widget")
 
     CHECK_FALSE(window.IsTextInputActive());
 
-    // Click the field -> focus -> bridge enables the window's text input.
+    // Clicking the field focuses it, and the bridge enables the window's text input.
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 10.0f, 10.0f,
                                     shell::MouseButton::Left));
     CHECK(root->GetEventDispatcher()->GetFocusNode() == field.Get());
     CHECK(window.IsTextInputActive());
 
-    // Click off the field (onto the non-editable root) -> focus leaves -> text input disabled.
+    // Clicking off the field (onto the non-editable root) takes the focus away: text input disabled.
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 150.0f, 150.0f,
                                     shell::MouseButton::Left));
     CHECK(root->GetEventDispatcher()->GetFocusNode() != field.Get());
@@ -243,7 +243,7 @@ TEST_CASE("bridge: a password field starts secret text input, and a move to a pl
 
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 10.0f, 10.0f, shell::MouseButton::Left));
     CHECK(window.IsTextInputActive());
-    CHECK(window.GetTextInputKind() == shell::TextInputKind::Secret); // the IME keeps out
+    CHECK(window.GetTextInputKind() == shell::TextInputKind::Secret); // the IME stays out of a password field
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 10.0f, 60.0f, shell::MouseButton::Left));
     CHECK(root->GetEventDispatcher()->GetFocusNode() == field.Get());
     CHECK(window.IsTextInputActive());
@@ -263,7 +263,7 @@ TEST_CASE("bridge: content fit maps window position into content space")
     fit.mode = core::FitMode::Stretch;
     bridge.SetContentFit(fit);
 
-    bridge.Dispatch(MouseMove(40.0f, 40.0f)); // window (40,40) -> content (20,20), inside child
+    bridge.Dispatch(MouseMove(40.0f, 40.0f)); // window (40,40) maps to content (20,20), inside the child
     CHECK(root->GetEventDispatcher()->GetOverNode() == child.Get());
     CHECK(root->GetEventDispatcher()->GetMousePosition().x == doctest::Approx(20.0f));
 }
@@ -273,7 +273,7 @@ TEST_CASE("bridge: unroutable events return false")
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     GuiInputBridge bridge{root->GetEventDispatcher()};
 
-    shell::InputEvent touch; // touch is not routed to the GUI yet (gamepads are, since G7)
+    shell::InputEvent touch; // a finger with no window size set cannot be placed
     touch.kind = shell::InputEventKind::TouchDown;
     CHECK_FALSE(bridge.Dispatch(touch));
     shell::InputEvent paddle; // a gamepad button the GUI does not take
@@ -430,7 +430,7 @@ TEST_CASE("bridge: the d-pad and the left stick move focus; a button runs its bi
     CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::DPadDown)));
     CHECK_FALSE(d.IsHoldingDirection());
 
-    // The stick: past half way holds Up, a resting wobble near the threshold does not chatter.
+    // The stick: past half way it holds Up, and a wobble near the threshold does not chatter.
     CHECK(bridge.Dispatch(Stick(shell::GamepadAxis::LeftY, -0.8f)));
     CHECK(d.GetFocusNode() == top.Get());
     (void)bridge.Dispatch(Stick(shell::GamepadAxis::LeftY, -0.45f)); // still held (above release)
@@ -438,19 +438,20 @@ TEST_CASE("bridge: the d-pad and the left stick move focus; a button runs its bi
     (void)bridge.Dispatch(Stick(shell::GamepadAxis::LeftY, -0.1f));
     CHECK_FALSE(d.IsHoldingDirection());
 
-    // East through a binding.
+    // East runs through a binding.
     bool back = false;
     (void)root->OnCommand(core::StringView(u8"back"), [&](CommandEvent&) { back = true; });
     REQUIRE(root->GetContext().GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView(u8"back")));
     CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::East)));
-    CHECK_FALSE(back); // on its release
+    CHECK_FALSE(back); // it acts on the release, not the press
     CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::East)));
     CHECK(back);
 }
 
 TEST_CASE("bridge: a pad button acts on its release, and only where the focus was when it went down")
 {
-    // A game under the GUI reads the press: a Resume taken on it would hand the game that press.
+    // A game under the GUI reads the press, so a Resume that acted on the press would pass that
+    // press on to the game.
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto top = core::MakeRef<Button>(core::DefaultAllocator());
     auto bottom = core::MakeRef<Button>(core::DefaultAllocator());
@@ -477,7 +478,7 @@ TEST_CASE("bridge: a pad button acts on its release, and only where the focus wa
     (void)bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::South));
     CHECK(clicks == 1);
 
-    // A release with no press before it (held as the GUI came up) does nothing.
+    // A release with no press before it (the button was held as the GUI came up) does nothing.
     (void)bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::South));
     CHECK(clicks == 1);
 }
@@ -491,8 +492,8 @@ TEST_CASE("bridge: the right stick is the dispatcher's scroll stick, each axis a
     CHECK(d.GetScrollStick().y == doctest::Approx(0.7f));
     CHECK(bridge.Dispatch(Stick(shell::GamepadAxis::RightX, -0.3f)));
     CHECK(d.GetScrollStick().x == doctest::Approx(-0.3f));
-    CHECK(d.GetScrollStick().y == doctest::Approx(0.7f)); // the other axis kept
-    CHECK_FALSE(d.IsHoldingDirection());                  // it moves no focus
+    CHECK(d.GetScrollStick().y == doctest::Approx(0.7f)); // the other axis is kept
+    CHECK_FALSE(d.IsHoldingDirection());                  // the right stick moves no focus
 }
 
 TEST_CASE("bridge: a keymap filled from the game's input map follows its bindings")
@@ -509,7 +510,7 @@ TEST_CASE("bridge: a keymap filled from the game's input map follows its binding
     input::Binding east;
     east.source = input::BindingSource::GamepadButton;
     east.code = static_cast<core::u32>(shell::GamepadButton::East);
-    input::Binding stick; // an axis: not a keystroke, skipped
+    input::Binding stick; // an axis is not a keystroke, so it is skipped
     stick.source = input::BindingSource::GamepadAxis;
     backAction.bindings.PushBack(escape);
     backAction.bindings.PushBack(east);
@@ -538,13 +539,13 @@ TEST_CASE("bridge: the cursor follows the node under the pointer; Dispatch says 
     GuiInputBridge bridge(root->GetEventDispatcher());
     MockMouse mouse;
     bridge.SetCursorTarget(&mouse);
-    CHECK(bridge.Dispatch(MouseMove(10.0f, 10.0f))); // over the field: the GUI's
+    CHECK(bridge.Dispatch(MouseMove(10.0f, 10.0f))); // over the field, so the GUI takes it
     CHECK(mouse.cursor == shell::CursorType::Text);
     CHECK_FALSE(bridge.Dispatch(MouseMove(150.0f, 150.0f))); // over nothing that takes it
     CHECK(mouse.cursor == shell::CursorType::Default);
     const int sets = mouse.cursorSets;
     (void)bridge.Dispatch(MouseMove(160.0f, 150.0f));
-    CHECK(mouse.cursorSets == sets); // unchanged: not set again
+    CHECK(mouse.cursorSets == sets); // unchanged, so not set again
     CHECK_FALSE(bridge.IsPointerOverGui());
 }
 
@@ -555,18 +556,18 @@ TEST_CASE("bridge: the host's input kind tracker passes each change on, and a pa
     GuiInputBridge bridge{&d};
     MockMouse mouse;
     bridge.SetCursorTarget(&mouse);
-    foundation::input::InputKindTracker tracker; // the host's, which it updates from its devices
+    foundation::input::InputKindTracker tracker; // the host's tracker, which the host updates from its devices
     bridge.SetInputKindTracker(&tracker);
     bridge.SyncCursor();
-    CHECK(d.GetInputKind() == InputKind::Keyboard); // its kind when attached is not passed
+    CHECK(d.GetInputKind() == InputKind::Keyboard); // the tracker's kind when attached is not passed on
 
     tracker.SetKind(foundation::input::InputKind::Pad); // a stick pushed
     bridge.SyncCursor();
     CHECK(d.GetInputKind() == InputKind::Pad);
     CHECK_FALSE(mouse.visible);
-    d.InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left); // a press the GUI is given says its own
+    d.InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left); // a press given to the GUI sets the kind itself
     CHECK(d.GetInputKind() == InputKind::Pointer);
-    bridge.SyncCursor(); // the tracker has not changed: nothing passed over it
+    bridge.SyncCursor(); // the tracker has not changed, so nothing overrides the press
     CHECK(d.GetInputKind() == InputKind::Pointer);
     CHECK(mouse.visible);
 
@@ -632,11 +633,11 @@ TEST_CASE("bridge: touch events tap a button, placed with the window's size; SDL
     CHECK_FALSE(bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 3u, 0.2f, 0.2f))); // no window size yet
     bridge.SetWindowSize(core::Float2{200.0f, 200.0f});
     CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 3u, 0.2f, 0.2f))); // (40, 40)
-    // SDL's copy of the finger as the mouse: ignored while it is down...
+    // SDL's mouse copy of the finger is ignored while the finger is down...
     CHECK_FALSE(bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 40.0f, 40.0f, shell::MouseButton::Left)));
     CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchUp, 3u, 0.2f, 0.2f)));
     CHECK(clicks == 1);
-    // ...and after it, at the finger's last place.
+    // ...and after it lifts, at the finger's last position.
     CHECK_FALSE(bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonUp, 40.0f, 40.0f, shell::MouseButton::Left)));
     CHECK_FALSE(bridge.Dispatch(MouseMove(40.0f, 40.0f)));
     CHECK_FALSE(button->IsHovered()); // no hover left behind by the copy
@@ -673,7 +674,7 @@ TEST_CASE("bridge: a finger cancelled ends its gesture; two polled fingers make 
     auto root = MakeScene(core::Float2{200.0f, 200.0f});
     auto pad = core::MakeRef<Panel>(core::DefaultAllocator());
     pad->SetSize(core::Float2{200.0f, 200.0f});
-    pad->SetTouchActions(0); // its fingers its own
+    pad->SetTouchActions(0); // the node handles its fingers itself
     root->AddChild(pad.Get());
     core::Array<core::String> seen;
     PointerType pointer = PointerType::Touch;
@@ -690,7 +691,7 @@ TEST_CASE("bridge: a finger cancelled ends its gesture; two polled fingers make 
     bridge.SetWindowSize(core::Float2{200.0f, 200.0f});
 
     // Two fingers, then one taken back by the platform.
-    (void)bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 1u, 0.3f, 0.5f)); // nothing takes the press
+    (void)bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 1u, 0.3f, 0.5f)); // nothing takes this press
     CHECK(bridge.Dispatch(Finger(shell::InputEventKind::TouchDown, 2u, 0.7f, 0.5f)));
     REQUIRE(seen.Size() == 1u);
     CHECK(seen.Back() == core::String(u8"gesturestart"));
@@ -715,7 +716,7 @@ TEST_CASE("bridge: a finger cancelled ends its gesture; two polled fingers make 
     bridge.PumpFromSurface(surface);
     CHECK(seen.Back() == core::String(u8"gestureend"));
 
-    // A trackpad's pinch, at the mouse: the same events, the mouse's.
+    // A trackpad pinch at the mouse sends the same gesture events, marked as the mouse's.
     (void)bridge.Dispatch(MouseMove(100.0f, 100.0f));
     shell::InputEvent pinch{};
     pinch.kind = shell::InputEventKind::PinchBegin;
@@ -742,7 +743,7 @@ TEST_CASE("bridge: an IME's composition reaches the focused field, and the windo
     bridge.SetTextInputTarget(&window);
     bridge.Dispatch(MakeButtonEvent(shell::InputEventKind::MouseButtonDown, 30.0f, 50.0f, shell::MouseButton::Left));
     REQUIRE(field->IsFocused());
-    // Where the field types: its line, in window coordinates.
+    // Where the field takes text: its line, in window coordinates.
     CHECK(window.LastTextInputArea().x == 20);
     CHECK(window.LastTextInputArea().y >= 40);
     CHECK(window.LastTextInputArea().y < 64);
@@ -752,7 +753,7 @@ TEST_CASE("bridge: an IME's composition reaches the focused field, and the windo
     shell::CopyEventText(editing.text, "nihon");
     editing.editCursor = 5;
     CHECK(bridge.Dispatch(editing));
-    CHECK(field->GetText().Size() == 0); // shown, not yet the value
+    CHECK(field->GetText().Size() == 0); // the composition is shown but not yet the value
 
     shell::InputEvent committed{};
     committed.kind = shell::InputEventKind::TextInput;
@@ -781,7 +782,7 @@ TEST_CASE("bridge: OS file drops for its window, grouped by where they landed, g
     CHECK(sizes[0] == 2);
     CHECK(sizes[1] == 1);
 
-    // A drop the OS names no window for is this window's.
+    // A drop for which the OS names no window is this window's.
     core::Array<shell::DroppedFile> unnamed;
     unnamed.PushBack(shell::DroppedFile{0, 30.0f, 30.0f, core::String(u8"/d")});
     CHECK(bridge.DispatchFileDrops(unnamed, 7));

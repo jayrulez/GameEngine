@@ -23,7 +23,7 @@ namespace core = foundation::core;
 export namespace foundation::runtime
 {
     // A registry the RegistrationScope can record: armed around a plugin's OnLoad, it
-    // reports every REAL insert to the sink; Reverse undoes one. The two core registries
+    // reports every real insert to the sink; Reverse undoes one. The two core registries
     // are built in; layers above (scene-manager contributions, Engine.Scene) plug theirs
     // in through PluginHost::AddRecorder so one unload reverses everything a plugin did.
     class IRegistrationRecorder
@@ -40,8 +40,8 @@ export namespace foundation::runtime
     public:
         explicit PluginHost(SubsystemManager& subsystems) noexcept : m_subsystems(&subsystems) {}
 
-        // Registers an extra recorder (borrowed; must outlive the host). Add BEFORE loading
-        // plugins - later loads record through it, earlier ones do not.
+        // Registers an extra recorder (borrowed; must outlive the host). Add it before loading
+        // plugins: later loads record through it, earlier ones do not.
         void AddRecorder(IRegistrationRecorder* recorder)
         {
             if (recorder != nullptr)
@@ -99,11 +99,11 @@ export namespace foundation::runtime
         [[nodiscard]] core::usize Count() const noexcept { return m_entries.Size(); }
 
         // Unloads everything in reverse load order: OnUnload each plugin, reverse its
-        // RECORDED registrations (the engine-verified half of teardown - a registry
-        // entry or factory pointing into a closed library is a dangling read), then
-        // close libraries (which may invalidate library-owned plugin objects).
-        // closeLibraries=false is the HOT-RELOAD mode: the old modules stay mapped for
-        // the process lifetime (leak-on-purpose - never free pages under a pointer the
+        // recorded registrations (a registry entry or factory pointing into a closed
+        // library would be a dangling read), then close libraries (which may invalidate
+        // library-owned plugin objects).
+        // closeLibraries=false is the hot-reload mode: the old modules stay mapped for
+        // the process lifetime (leaked on purpose, so no page is freed under a pointer the
         // teardown missed) and the rebuilt module loads from a fresh versioned copy.
         void UnloadAll(bool closeLibraries = true)
         {
@@ -127,16 +127,15 @@ export namespace foundation::runtime
         {
             IRuntimePlugin* plugin;
             core::DynamicLibrary library;
-            // Everything OnLoad registered, recorded by the ambient observers below -
-            // reversed on unload so the plugin never hand-mirrors its registrations
-            // (game-native-code.md N6 RegistrationScope).
+            // Everything OnLoad registered, recorded by the ambient observers below and
+            // reversed on unload, so the plugin never hand-mirrors its registrations.
             core::Array<core::TypeId> registeredTypes;
             core::Array<core::TypeId> registeredSerializables;
             core::Array<core::Array<core::TypeId>> recorded; // one list per extra recorder
         };
 
         // The RegistrationScope: arm ambient observers on the global registries for the
-        // duration of OnLoad. Observers fire only on REAL inserts, so a type another
+        // duration of OnLoad. Observers fire only on real inserts, so a type another
         // party already owns is never recorded (and never torn down by this plugin).
         void RecordedOnLoad(Entry& entry)
         {

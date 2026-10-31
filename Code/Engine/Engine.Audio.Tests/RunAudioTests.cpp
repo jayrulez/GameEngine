@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Run audio (the run-audio spec): the subsystem groups what one running game plays by its run.
+// Run audio: the subsystem groups what one running game plays by its run.
 // A run's scenes nest under the run's group and its script music plays into it; ending the run
 // fades all of it out and leaves other runs and the editor alone; only the focused run is heard
 // unless every run is; the host's pause freezes the run.

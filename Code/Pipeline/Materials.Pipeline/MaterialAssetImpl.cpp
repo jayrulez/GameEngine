@@ -3,12 +3,11 @@
 
 // Pipeline::Materials - reflection implementation unit: MaterialAsset's reflected surface.
 //
-// Kept OUT of the MaterialAsset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). MaterialAsset wraps a MaterialSource BY VALUE, and
-// MaterialSource derives Object (RefCounted deletes its copy ctor) so it cannot marshal through a
-// Variant - it is exposed as a NESTED property (TypeBuilder::Nested): tooling reaches the member
-// in place via address and recurses into MaterialSource's own reflected properties. This is the
-// "living proof" of the nested-member mechanism.
+// Kept out of the MaterialAsset.cppm interface, because REFLECT_MEMBERS bodies there make GCC emit
+// a gcm cluster. MaterialAsset wraps a MaterialSource by value, and MaterialSource derives Object
+// (RefCounted deletes its copy constructor), so it cannot marshal through a Variant. It is exposed
+// as a nested property (TypeBuilder::Nested): tooling reaches the member in place through its
+// address and recurses into MaterialSource's own reflected properties.
 
 module;
 #include "Core/Prelude.h"

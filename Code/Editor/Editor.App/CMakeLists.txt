@@ -1,7 +1,6 @@
-# Editor::App - `editor.app`: the editor's shell (the window, the frame, menus and shortcuts from the
-# actions, the dock and its layout, the MCP host, the project home), moving onto the GUI in parts
-# (Documentation/Specs/editor-gui.md, 5.1). A file not ported yet stays out of these lists, its
-# source unedited, and comes back with its port. Tooling only.
+# Editor::App - `editor.app`: the editor's shell on the GUI (the window, the frame, menus and
+# shortcuts built from the actions, the dock and its layout, the MCP host, the project home).
+# Tooling only.
 
 util_add_engine_library(Editor.App ALIAS Editor::App)
 target_link_libraries(Editor.App
@@ -13,11 +12,11 @@ target_link_libraries(Editor.App
         Foundation::Image Foundation::Image.IO Foundation::RHI.Capture
         Foundation::Profiler Foundation::Profiler.Capture Foundation::Profiler.GUI
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
-        Foundation::GUI.Testing # the input tools aim as the GUI's tests do
+        Foundation::GUI.Testing # the input tools find their targets the way the GUI's tests do
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
-        Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::GUI # the game GUI's defaults (the runtime's)
+        Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::GUI # the game GUI's defaults, as the runtime sets them
         Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
-        Editor::ViewportTools # the viewport tools' panel seam
+        Editor::ViewportTools # the viewport tools' panels
         Editor::Mcp Foundation::Mcp Foundation::Mcp.Http) # the MCP host: the shared engine surface over HTTP
 
 target_sources(Editor.App

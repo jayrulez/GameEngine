@@ -3,13 +3,13 @@
 
 // Editor::Scene - :scene_simulation partition.
 //
-// Edit-mode Simulate over a page's scene: a snapshot taken, the scene started and run, the page's
-// command stack locked meanwhile (runtime mutations do not belong on the edit history, and undoing
-// into entities the restore recreates is a guid minefield); paused, the simulation holds; stopped,
-// the scene stops and the snapshot is restored into the same scene, so borrowed scene pointers stay
-// valid and the guid-keyed selection resolves again (what the run spawned drops out). The game's UI
-// stays not interactive meanwhile: Simulate's pointer serves selection and the camera, the Game tab
-// is the interactive run. Out of the page's class (Documentation/Specs/editor-gui.md, 5.3, layer 2).
+// Edit-mode Simulate over a page's scene. Starting takes a snapshot, then starts and runs the
+// scene, with the page's command stack locked meanwhile (runtime mutations do not belong in the
+// edit history, and undoing into entities the restore recreates would tangle their guids). Paused,
+// the simulation holds. Stopped, the scene stops and the snapshot is restored into the same scene,
+// so borrowed scene pointers stay valid and the guid-keyed selection resolves again (what the run
+// spawned drops out). The game's UI stays non-interactive meanwhile: Simulate's pointer serves
+// selection and the camera, and the Game tab is the interactive run.
 
 module;
 #include "Core/Prelude.h"
@@ -33,8 +33,8 @@ export namespace editor
         [[nodiscard]] bool IsRunning() const noexcept { return m_running; }
         [[nodiscard]] bool IsPaused() const noexcept { return m_paused; }
 
-        /// Snapshot `scene` and run it, `commands` locked; false when it runs already or the snapshot
-        /// failed (said in the log).
+        /// Snapshot `scene` and run it with `commands` locked; false when it is already running or
+        /// the snapshot failed (reported in the log).
         bool Start(foundation::scene::Scene& scene, EditorCommandStack& commands)
         {
             if (m_running)

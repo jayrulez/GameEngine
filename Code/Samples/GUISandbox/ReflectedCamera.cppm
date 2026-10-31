@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUISandbox - the Toolkit page's reflected object (T3 of Specs/gui-lab-evolution-3.md): a camera
-// rig declared with core reflection and nothing else, which the toolkit's ReflectedPropertySource
-// shows: values with ranges and names, an enum, flags by attribute, a Float3, a Quaternion as Euler
-// degrees, a Color, an HDR glow (a colour and an intensity in stops), a nested lens, a list of stops, a polymorphic list
-// of effects added by type, a read-only serial, a field shown only for one projection, and a sky
-// over the day (T5): Core's gradient stops in fixed arrays, which the page registers with the source
-// as a gradient. Its text format is the engine's XmlSerializer.
+// GUISandbox - the Toolkit page's reflected object: a camera rig declared with core reflection and
+// nothing else, which the toolkit's ReflectedPropertySource shows. It has values with ranges and
+// names, an enum, flags by attribute, a Float3, a Quaternion as Euler degrees, a Color, an HDR glow
+// (a colour and an intensity in stops), a nested lens, a list of stops, a polymorphic list of
+// effects added by type, a read-only serial, a field shown only for one projection, and a sky over
+// the day: Core's gradient stops in fixed arrays, which the page registers with the source as a
+// gradient. Its text format is the engine's XmlSerializer.
 
 module;
 #include "Core/Prelude.h"

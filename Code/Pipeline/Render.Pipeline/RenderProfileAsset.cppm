@@ -170,7 +170,7 @@ export namespace pipeline
         }
     };
 
-    // Registers the asset types for content-DB construction + deserialization.
+    // Registers the asset types for content-DB construction and deserialization.
     inline void RegisterRenderProfileAssets()
     {
         GlobalTypeRegistry().Register(SettingsProfileAsset::StaticType(), TypeDomain(u8"Pipeline"));

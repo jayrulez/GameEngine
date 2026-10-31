@@ -3,10 +3,10 @@
 
 // Engine::Project - the `engine.project` module.
 //
-// The RUNTIME-side project definition: the manifest payload (ProjectSettings), the fixed
-// directory layout, and manifest load/save over a VFS root. Split out of the editor so
-// shipping binaries (Engine.Player, dist builds) carry ZERO editor code - the editor's
-// EditorProject builds on top of this (mounts, DBs, per-user state stay editor-side).
+// The runtime-side project definition: the manifest payload (ProjectSettings), the fixed
+// directory layout, and manifest load and save over a VFS root. Kept apart from the editor so
+// shipping binaries (Engine.Player, dist builds) carry no editor code; the editor's
+// EditorProject builds on top of this (mounts, DBs and per-user state stay editor-side).
 
 module;
 #include "Core/Prelude.h"
@@ -24,11 +24,10 @@ namespace vfs = foundation::vfs;
 
 export namespace engine::project
 {
-    // The ENGINE version (distinct from per-type data versions): stamped into every saved
-    // project manifest so tooling - the editor today, the launcher/project manager later - knows
-    // which engine authored a project and can route/migrate accordingly. DERIVED from the CMake
-    // project(VERSION) via the ENGINE_VERSION_* defines (the single source of truth), so bumping
-    // the version is a one-line change in the root CMakeLists and never drifts from a copy here.
+    // The engine version (distinct from per-type data versions): stamped into every saved
+    // project manifest so tooling knows which engine authored a project and can route or migrate
+    // it. Derived from the CMake project(VERSION) through the ENGINE_VERSION_* defines (the single
+    // source of truth), so bumping the version is a one-line change in the root CMakeLists.
 #ifndef ENGINE_VERSION_STRING
 #define ENGINE_VERSION_MAJOR 0
 #define ENGINE_VERSION_MINOR 0
@@ -46,14 +45,14 @@ export namespace engine::project
     inline constexpr StringView kProjectCookedDir = u8"Cooked";
     inline constexpr StringView kProjectEditorDir = u8"Editor";
     inline constexpr StringView kProjectCacheDir = u8".cache";
-    inline constexpr StringView kSourceAssetExtension = u8".xasset"; // readable/diffable envelopes
+    inline constexpr StringView kSourceAssetExtension = u8".xasset"; // readable, diffable envelopes
     inline constexpr StringView kCookedAssetExtension = u8".rasset"; // binary envelopes
 
     // Distribution layout (what the export CLI stages; the player detects dist by the pak).
     inline constexpr StringView kDistContentPak = u8"Content.pak";
     inline constexpr StringView kDistManifestFile = u8"player.xml";
 
-    // A game's save file (Documentation/Specs/save-data.md): `<project>.save.xml`, which the player
+    // A game's save file: `<project>.save.xml`, which the player
     // keeps in the user data directory and play in editor in the project's Editor/ folder.
     [[nodiscard]] inline String SaveFileName(StringView projectName, IAllocator& allocator)
     {
@@ -81,45 +80,45 @@ export namespace engine::project
         Borderless, // a borderless window covering the whole display, at the display's own size
     };
 
-    // The shared, committed part of a project (Project.xml payload) - also the dist manifest
-    // (player.xml), which is the same shape minus editor-only concerns.
+    // The shared, committed part of a project (the Project.xml payload), and also the dist
+    // manifest (player.xml), which is the same shape without editor-only concerns.
     class ProjectSettings final : public ISerializable
     {
         RTTI_OBJECT(ProjectSettings, ISerializable)
     public:
         String name;
-        String engineVersion; // engine that last saved this project (launcher/migration routing)
-        Guid defaultSceneId;  // AUTHORITATIVE startup-scene reference (rename/move-proof)
-        String defaultScene;  // its source-DB path - the human-readable mirror (and the
-                              // fallback for v2 manifests that predate the guid)
-        Guid startupScriptId; // AUTHORITATIVE game-script reference (a cooked ScriptClass asset;
+        String engineVersion; // engine that last saved this project (launcher and migration routing)
+        Guid defaultSceneId;  // authoritative startup-scene reference (survives rename and move)
+        String defaultScene;  // its source-DB path: the human-readable mirror, and the
+                              // fallback when the guid does not resolve
+        Guid startupScriptId; // authoritative game-script reference (a cooked ScriptClass asset;
                               // launch/update/exit), bound from the content DB by the player and
-        // play-in-editor. nil = none. (v6; supersedes the startupScript path.)
+        // play-in-editor. Nil: none.
         String
-            startupScript; // its source-DB path - the human-readable mirror (and the v<6 fallback)
-        String nativeModule;    // RESERVED: optional native game module (tagged for later planning)
-        Guid defaultInputMapId; // the input map the player binds at startup (nil = none; v4)
-        Guid defaultBusLayoutId; // the audio mixer layout applied at startup (nil = built-in; v5)
-        Guid defaultUiFontId; // the cooked FontResource the game UI defaults to (nil = the dev
-                              // TTF fallback path; v7 - the fonts-triad manifest hook)
-        u32 renderMsaaSamples = 1; // scene-pass MSAA sample count (1 = off, 2, 4); the player and
-                                   // play-in-editor apply it, capability-clamped at runtime (v9).
-                                   // Default 1 keeps existing projects byte-identical.
-        Array<Guid> uiFontIds; // cooked fonts the game UI loads BESIDE the default one, each its
+            startupScript; // its source-DB path: the human-readable mirror
+        String nativeModule;    // optional native game module: a project-relative path (empty: scripts only)
+        Guid defaultInputMapId; // the input map the player binds at startup (nil: none)
+        Guid defaultBusLayoutId; // the audio mixer layout applied at startup (nil: built-in)
+        Guid defaultUiFontId; // the cooked FontResource the game UI defaults to (nil: the dev
+                              // TTF fallback path)
+        u32 renderMsaaSamples = 1; // scene-pass MSAA sample count (1 is off, 2, 4); the player and
+                                   // play-in-editor apply it, clamped to the device at runtime.
+                                   // The default of 1 leaves existing projects byte-identical.
+        Array<Guid> uiFontIds; // cooked fonts the game UI loads beside the default one, each its
                                // own family a label picks by font-family (a title face beside
                                // the body text). Appended: a manifest saved before it reads none.
 
-        // The engine GUI's sheets (foundation.gui's, gui-lab-evolution-3.md E9b), in order
-        // over its built-in theme, each over those before it (a game's own over a shared one).
-        // Appended: a manifest saved before it reads none. Its fonts are the UI's (above).
+        // The engine GUI's sheets (foundation.gui's), in order over its built-in theme, each over
+        // those before it (a game's own over a shared one). Appended: a manifest saved before it
+        // reads none. Its fonts are the UI's (above).
         Array<Guid> guiStyleSheetIds;
         // The cooked GuiDocument the player's boot splash shows through the engine GUI while the
         // default scene loads (nil = the engine's own loading screen); its load progress
-        // the GUI's data value `bootProgress` (0 to 1). Appended. (E9d)
+        // the GUI's data value `bootProgress` (0 to 1). Appended.
         Guid guiLoadingDocumentId;
 
         // The display (appended: a manifest saved before them reads these defaults).
-        // The resolution the game DRAWS at, fitted into whatever shows it (the player's window,
+        // The resolution the game draws at, fitted into whatever shows it (the player's window,
         // the editor's Game tab) by renderFit. Nought on either axis draws at the output's own
         // size, which is what a game that adapts to any size wants.
         u32 renderWidth = 0;
@@ -134,7 +133,7 @@ export namespace engine::project
         bool windowResizable = true;
         // The shape the game is made for: Any takes the window's; Landscape or Portrait is
         // presented turned on a window of the other shape (a landscape game on a phone held
-        // upright; Specs/present-transform.md).
+        // upright).
         ScreenOrientation orientation = ScreenOrientation::Any;
 
         /// Whether the game draws at a fixed resolution rather than at its output's size.
@@ -149,8 +148,8 @@ export namespace engine::project
         }
 
         // The current data version's layout (REFLECT_MEMBERS' DataVersion, 10). A version 9
-        // manifest still reads: it carries the old UI's theme and loading document (Engine.UI,
-        // deleted), read and dropped. Older versions are refused by the versioned-payload reader;
+        // manifest still reads: it carries a theme and loading document for a UI library the
+        // engine no longer has, read and dropped. Older versions are refused by the versioned-payload reader;
         // outside a payload (CopyProjectSettings) the version reads 0, the current layout.
         void Serialize(ISerializer& ar) override
         {
@@ -232,8 +231,8 @@ export namespace engine::project
     }
 
     /// Every asset the settings name, each with the setting that names it (a list setting once
-    /// per entry); unset (nil) ones are skipped. What export roots, asset_uses and project_health
-    /// walk, so a new asset setting reaches all three by being reflected.
+    /// per entry); unset (nil) ones are skipped. Export roots, asset_uses and project_health walk
+    /// this, so a new asset setting reaches all three by being reflected.
     inline void ForEachSettingAsset(const ProjectSettings& settings,
                                     const Function<void(const PropertyInfo&, const Guid&)>& visit)
     {
@@ -294,9 +293,8 @@ export namespace engine::project
     }
 
     /// The one copy of a manifest (a ProjectSettings is serializable, so it has no copy): through
-    /// its own Serialize body, so every field written there is copied. The project open and the
-    /// dist manifest each kept a hand list of fields, and both drifted (the loading document and
-    /// renderMsaaSamples were dropped by one, then the other).
+    /// its own Serialize body, so every field written there is copied and no hand-written list
+    /// of fields can drift from it.
     [[nodiscard]] inline Status CopyProjectSettings(const ProjectSettings& from, ProjectSettings& to)
     {
         MemoryStream buffer;

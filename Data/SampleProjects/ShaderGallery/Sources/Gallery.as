@@ -1,4 +1,4 @@
-// Gallery - the camera's behaviour: the lesson list beside the view, a free flight through the hall,
+// Gallery: the camera's behaviour, with the lesson list beside the view, a free flight through the hall,
 // and a glide to a lesson when its row is clicked.
 //
 // Fly with WASD or the left stick, Q and E (or the shoulders) to sink and rise, Shift (or pressing

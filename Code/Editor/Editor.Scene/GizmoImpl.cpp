@@ -3,30 +3,31 @@
 
 // Editor::Scene - :gizmo partition.
 //
-// TransformGizmo + GizmoController: viewport transform manipulation. The
-// Sedulous gizmo skeleton (debug-draw ribbons/rings, plane-projected drag math, atan2 rotation
-// on a drag-start-captured basis) improved with the PlayCanvas interaction model:
-//   - translate adds plane quads (flipped into the camera-facing quadrant) + a center free-move
+// TransformGizmo and GizmoController: viewport transform manipulation. The gizmo draws with
+// debug-draw ribbons and rings, projects drags onto planes, and measures rotation with atan2 on a
+// basis captured at drag start. Its interaction model follows PlayCanvas's transform gizmo:
+//   - translate adds plane quads (flipped into the camera-facing quadrant) and a center free-move
 //     handle; rotate adds a screen-space ring; scale adds a center uniform handle;
-//   - picking has priorities (center > planes > axes) and inflated grab zones; handles disable
-//     and fade at grazing angles (axis pointing at the camera / plane edge-on);
-//   - rotate rings draw + pick only their camera-facing half (full ring while dragging), with an
-//     angle guide (start reference line + current line + degree readout);
-//   - snapping (held Ctrl) quantizes the drag DELTA (relative to the drag start, not a world
-//     grid): translate 1.0, rotate 15 deg, scale 0.25;
-//   - screen-constant size: tan(fovY/2) * viewDepth * 0.3 (view depth, not radial distance);
-//   - scale always operates in Local space (world non-uniform scale on a rotated entity = skew).
+//   - picking has priorities (center, then planes, then axes) and inflated grab zones; handles
+//     disable and fade at grazing angles (an axis pointing at the camera, a plane seen edge-on);
+//   - rotate rings draw and pick only their camera-facing half (the full ring while dragging),
+//     with an angle guide (a start reference line, the current line and a degree readout);
+//   - snapping (Ctrl held) quantizes the drag delta relative to the drag start, not to a world
+//     grid: translate 1.0, rotate 15 degrees, scale 0.25;
+//   - the screen-constant size is tan(fovY/2) * viewDepth * 0.3 (view depth, not radial
+//     distance);
+//   - scale always works in Local space (a world non-uniform scale on a rotated entity is a skew).
 //
-// Parent-aware application (Sedulous ignored parents): world-space deltas convert into the
-// entity's parent space - translate through the inverse parent world matrix, rotate conjugated
-// (local' = inv(parentQ) * worldDelta * parentQ * localStart).
+// World-space deltas convert into the entity's parent space: translation through the inverse
+// parent world matrix, rotation by conjugation (local' = inv(parentQ) * worldDelta * parentQ *
+// localStart).
 //
-// Commands: a drag session brackets BeginGroup("gizmo_drag") -> per-frame SetLocalTransform
-// (merges inside the group) -> EndGroup + LockGroup, so a whole drag is exactly ONE undo entry
-// restoring the exact start transform, and can never merge with adjacent gestures.
+// A drag session brackets BeginGroup("gizmo_drag"), then a SetLocalTransform per frame (merged
+// inside the group), then EndGroup and LockGroup, so a whole drag is one undo entry that restores
+// the exact start transform and never merges with adjacent gestures.
 //
-// TransformGizmo is pure math + debug-draw output; GizmoController is driven by a plain
-// GizmoFrameInput struct - both fully scriptable in headless tests.
+// TransformGizmo is pure math plus debug-draw output; GizmoController is driven by a plain
+// GizmoFrameInput struct, so both can be scripted in headless tests.
 
 module;
 #include "Core/Prelude.h"
@@ -111,11 +112,11 @@ namespace editor
         scene::Scene& scene = m_edit->Scene();
         m_gizmo.SetCamera(in.cameraPosition, in.cameraForward, in.orthoHeight > 0.0f);
 
-        // Pose: position always at the entity's world origin. Orientation = entity WORLD
-        // rotation in Local space (and always for Scale - non-uniform world scale on a
-        // rotated entity would be skew); identity in World space. Composed FRESH from the
-        // local chain (GetWorldMatrix is the cached value from the last UpdateTransforms -
-        // stale right after undo/redo and in headless tests).
+        // Pose: the position is always the entity's world origin. The orientation is the entity's
+        // world rotation in Local space (and always for Scale, since a non-uniform world scale on a
+        // rotated entity would be a skew), and identity in World space. It is composed fresh from
+        // the local chain: GetWorldMatrix is the cached value from the last UpdateTransforms, which
+        // is stale right after undo or redo and in headless tests.
         const Float4x4 world = scene.ComposeWorldMatrix(entity);
         m_gizmo.position = Float3{world.m[3][0], world.m[3][1], world.m[3][2]};
         if (!m_gizmo
@@ -135,7 +136,7 @@ namespace editor
 
         const f32 scale = TransformGizmo::ScreenScale(in.cameraPosition, in.cameraForward, in.fovY,
                                                       m_gizmo.position, 0.3f, in.orthoHeight);
-        if (scale <= 0.0001f) // at/behind the camera plane
+        if (scale <= 0.0001f) // at or behind the camera plane
         {
             AbortDrag();
             m_active = false;
@@ -219,7 +220,7 @@ namespace editor
     Optional<Float3> GizmoController::FindSnapVertex(const GizmoRay& ray, scene::EntityHandle dragged)
     {
         scene::Scene& scene = m_edit->Scene();
-        // Never onto itself: the dragged entity and everything under it move with the drag.
+        // Never snap onto itself: the dragged entity and everything under it move with the drag.
         const auto accept = [&scene, dragged](scene::EntityHandle candidate)
         {
             for (scene::EntityHandle e = candidate; e.IsAssigned(); e = scene.GetParent(e))
@@ -277,8 +278,8 @@ namespace editor
             const Float3 worldDelta = m_gizmo.UpdateTranslateDrag(in.ray, in.snap || m_snapMode);
             t.position =
                 m_dragStartLocal.position + TransformDirection(worldDelta, m_parentInverseWorld);
-            // Vertex snap: the pivot ON the vertex under the cursor, whichever handle is held;
-            // over no surface, the drag as it is.
+            // Vertex snap: the pivot goes on the vertex under the cursor, whichever handle is held;
+            // over no surface, the drag stays as it is.
             m_snapTarget = (in.vertexSnap || m_vertexSnapMode) ? FindSnapVertex(in.ray, entity) : Optional<Float3>{};
             if (m_snapTarget.HasValue())
             {
@@ -409,7 +410,7 @@ namespace editor
             }
         };
 
-        const f32 axisThreshold = size * 0.12f; // inflated vs the drawn ribbon
+        const f32 axisThreshold = size * 0.12f; // inflated beyond the drawn ribbon
         if (mode == GizmoMode::Rotate)
         {
             const f32 radius = size * 0.8f;
@@ -430,10 +431,11 @@ namespace editor
             return m_hovered;
         }
 
-        // Translate / Scale: axes + (translate) planes + center. A foreshortening penalty
-        // biases overlaps toward the axis more perpendicular to the ray: an axis nearly
-        // parallel to the ray shadows a whole screen region at ~zero 3D distance (its shaft
-        // overlaps others on screen) while being the worst one to drag (degenerate plane).
+        // Translate and Scale: axes, planes (translate only) and the center. A foreshortening
+        // penalty biases overlaps toward the axis more perpendicular to the ray. An axis nearly
+        // parallel to the ray covers a whole screen region at near-zero 3D distance (its shaft
+        // overlaps others on screen) while being the worst one to drag, since its drag plane is
+        // degenerate.
         for (GizmoAxis a : {GizmoAxis::X, GizmoAxis::Y, GizmoAxis::Z})
         {
             if (!IsAxisEnabled(a, mode))
@@ -458,7 +460,7 @@ namespace editor
                 }
             }
         }
-        // Center handle: free move (translate) / uniform scale (scale).
+        // Center handle: free move for translate, uniform scale for scale.
         const f32 dc = RayPointDistance(ray, position);
         consider(GizmoAxis::View, 2, dc, size * 0.15f);
         return m_hovered;
@@ -476,7 +478,7 @@ namespace editor
 
         if (mode == GizmoMode::Rotate)
         {
-            // Capture the rotation frame NOW: the orientation tracks the entity each frame
+            // Capture the rotation frame now: the orientation tracks the entity each frame
             // (Local space), so re-deriving mid-drag would let the plane drift.
             if (m_selected == GizmoAxis::View)
             {
@@ -672,8 +674,8 @@ namespace editor
         const f32 denom = Dot(normal, ray.direction);
         if (Abs(denom) < 0.0001f)
         {
-            // Ray parallel to the ring plane: distance at the ray's closest approach to the
-            // center, split into out-of-plane height + in-plane distance to the circle.
+            // Ray parallel to the ring plane: the distance at the ray's closest approach to the
+            // center, split into the out-of-plane height and the in-plane distance to the circle.
             const f32 t = Max(Dot(center - ray.origin, ray.direction), 0.0f);
             const Float3 offset = ray.origin + ray.direction * t - center;
             const f32 h = Dot(offset, normal);
@@ -870,7 +872,7 @@ namespace editor
         {
             return Color{base.r * 0.5f, base.g * 0.5f, base.b * 0.5f, 0.35f};
         }
-        if (m_hovered == axis) // 75% lerp toward white (PlayCanvas)
+        if (m_hovered == axis) // 75% lerp toward white
         {
             return Color{base.r + (1.0f - base.r) * 0.75f, base.g + (1.0f - base.g) * 0.75f,
                          base.b + (1.0f - base.b) * 0.75f, 1.0f};
@@ -921,8 +923,8 @@ namespace editor
 
     void TransformGizmo::DrawSpanLine(render::debug::DebugDraw& dd) const
     {
-        // Full-length reference line across the scene during an axis drag: depth-tested
-        // solid + faint overlay so the occluded part still reads (PlayCanvas span line).
+        // Full-length reference line across the scene during an axis drag, drawn solid with depth
+        // testing and again as a faint overlay, so the occluded part still reads.
         if (m_selected != GizmoAxis::X && m_selected != GizmoAxis::Y && m_selected != GizmoAxis::Z)
         {
             return;
@@ -1053,7 +1055,7 @@ namespace editor
 
     void TransformGizmo::DrawAngleGuide(render::debug::DebugDraw& dd, f32 radius)
     {
-        // Faint start-reference line + solid current line + degree readout (PlayCanvas).
+        // A faint start-reference line, a solid current line and a degree readout.
         const Float3 startDir =
             m_dragRotationU * Cos(m_dragStartAngle) + m_dragRotationV * Sin(m_dragStartAngle);
         const f32 current = m_dragStartAngle + m_currentAngleDelta;

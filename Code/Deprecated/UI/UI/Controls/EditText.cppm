@@ -5,18 +5,15 @@
 //
 // Single-line and multiline text input control. Implements ITextEditHost for TextEditingBehavior;
 // supports selection, cursor, clipboard, undo/redo, input filtering, prefix/suffix decorations.
-// Ported from Sedulous.UI/src/Controls/EditText.bf.
 //
-// Text rendering / glyph shaping are now LIVE (the Fonts service is wired into UIContext and VG has
-// glyph drawing): a glyph-position cache (m_glyphPositions) is (re)shaped on demand, hit-testing /
-// cursor geometry go through the shaper, and OnDraw paints selection, positioned glyphs, cursor, and
-// placeholder. The no-service / no-shaper paths keep the earlier fallbacks. The right-click Cut/Copy/
-// Paste/Select-All ContextMenu is now wired (ShowContextMenu, via :context_menu).
+// A glyph-position cache (m_glyphPositions) is (re)shaped on demand, hit-testing and cursor geometry go
+// through the shaper, and OnDraw paints the selection, positioned glyphs, cursor and placeholder. The
+// paths without a font service or shaper fall back to simpler metrics. Right-click shows a Cut, Copy,
+// Paste and Select All ContextMenu (ShowContextMenu).
 //
-// The host accessors GetMaxLength()/GetIsReadOnly() are the `Get`-prefixed ITextEditHost members
-// (EditText's identically-named Property<> fields would otherwise collide - see :itext_edit_host).
-// Beef `[Friend]mBehavior` test access -> a public Behavior() accessor; DecodedChars -> core codepoint
-// decode; font.Shaper/font.Font -> CachedFont::shaper/::font.
+// The host accessors GetMaxLength()/GetIsReadOnly() are the `Get`-prefixed ITextEditHost members, since
+// EditText's identically-named Property<> fields would otherwise collide (see :itext_edit_host). Tests
+// reach the editing behavior through the public Behavior() accessor.
 
 module;
 #include "Core/Prelude.h"
@@ -55,26 +52,26 @@ export namespace foundation::ui
     {
         RTTI_OBJECT(EditText, View)
     public:
-        // === Text state (faithful public Property<> fields; tests drive these) ===
+        // === Text state (public Property<> fields; tests drive these) ===
         Property<String> Placeholder;
         Property<bool> IsReadOnly{false};
         Property<bool> Multiline{false};
         Property<i32> MaxLength{0};
 
-        /// Whether right-click shows the Cut/Copy/Paste context menu (the menu itself is not yet implemented).
+        /// Whether right-click shows the Cut/Copy/Paste context menu.
         bool ShowContextMenuOnRightClick = true;
 
         // === Events ===
         Event<void(EditText*)> OnTextChanged;
         Event<void(EditText*)> OnSubmit;
         /// Fired when the field loses focus. OnSubmit fires only on Enter/activate, so a consumer
-        /// that must not drop a typed-then-clicked-away edit commits from here too. This is the
+        /// that must not drop an edit typed before clicking away commits from here too. This is the
         /// neutral blur hook; consumers that want "the user finished entering a value" semantics
         /// subscribe OnCommit instead.
         Event<void(EditText*)> OnEditingFinished;
-        /// The COMMIT event: fires on Enter/activate (with OnSubmit), and on focus-lost when the
-        /// text changed since focus was gained. A typed-then-clicked-away edit is never dropped,
-        /// and an untouched field never re-commits on blur. Subscribe THIS for value entry;
+        /// The commit event: fires on Enter/activate (with OnSubmit), and on focus loss when the
+        /// text changed since focus was gained. An edit typed before clicking away is never
+        /// dropped, and an untouched field never re-commits on blur. Subscribe to this for value entry;
         /// OnSubmit stays Enter-only for consumers with activation side effects (navigation).
         Event<void(EditText*)> OnCommit;
 
@@ -110,7 +107,7 @@ export namespace foundation::ui
             Invalidate();
         }
 
-        // === Behavior passthrough (Beef properties -> methods; [Friend] access -> Behavior()) ===
+        // === Behavior passthrough ===
         [[nodiscard]] TextEditingBehavior& Behavior() noexcept { return m_behavior; }
 
         /// Wants platform text input (IME) while focused, unless read-only. Covers PasswordBox and
@@ -258,7 +255,7 @@ export namespace foundation::ui
             return font->font->Metrics().lineHeight;
         }
 
-        /// Vertical scroll offset (px) of the multiline text - so an external gutter can align
+        /// Vertical scroll offset (px) of the multiline text, so an external gutter can align
         /// its per-line markers to the editor's visible lines.
         [[nodiscard]] f32 ScrollOffsetY() const noexcept { return m_scrollOffsetY; }
 
@@ -391,19 +388,18 @@ export namespace foundation::ui
             OnCommit.Invoke(this);
         }
 
-        // Text to display; overridden by PasswordBox for masking. Public so tests can inspect it
-        // (Beef exercised it via [Friend]); it is the PasswordBox masking extension point.
+        // Text to display; PasswordBox overrides it for masking. Public so tests can inspect it.
         virtual void GetDisplayText(String& outText) const { outText = m_text; }
 
-        /// The content offset from the view origin - the SAME chrome the base measure reserved
-        /// (padding + any themed border). Draw, caret, hit-test, and scroll math all use this.
+        /// The content offset from the view origin: the same chrome the base measure reserved
+        /// (padding and any themed border). Draw, caret, hit-test, and scroll math all use this.
         [[nodiscard]] Thickness ContentInset() { return ResolveBoxMetrics().Chrome(); }
 
     protected:
         [[nodiscard]] Thickness DefaultStylePadding() const override { return Thickness{6, 4}; }
 
-        // Content-only measure - the padding default is stated once in DefaultStylePadding;
-        // chrome is base-handled and every other site reads ContentInset().
+        // Content-only measure. The padding default is stated once in DefaultStylePadding; the
+        // base handles chrome and every other site reads ContentInset().
         [[nodiscard]] Float2 OnMeasureContent(BoxConstraints contentConstraints) override
         {
             const f32 fontSize = ResolveStyleFloat(StyleProperty::FontSize, 14.0f);
@@ -525,7 +521,7 @@ export namespace foundation::ui
         f32 m_textWidth = 0.0f;
         f32 m_textHeight = 0.0f;
 
-        // Scroll + blink.
+        // Scroll and blink.
         f32 m_scrollOffsetX = 0.0f;
         f32 m_scrollOffsetY = 0.0f;
         f32 m_cursorBlinkResetTime = 0.0f;
@@ -979,7 +975,7 @@ export namespace foundation::ui
         }
 
         // === Prefix / suffix ===
-        // A prefix/suffix View is not in the child tree, so it has no Context - give it the field's so
+        // A prefix or suffix View is not in the child tree, so it has no Context; give it the field's so
         // it can resolve fonts (else it measures to 0 and the value text overlaps it).
         void SyncDecoContext(View* v)
         {

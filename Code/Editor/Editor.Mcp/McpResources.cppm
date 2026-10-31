@@ -3,11 +3,11 @@
 
 // Editor::Mcp - :resources partition
 //
-// The open project's scene/prefab XML sources as MCP RESOURCES:
-// `project://scene/<guid>` and `project://prefab/<guid>`, listed live from the source
-// database (a ResourceProvider, not static registrations - scenes appear and disappear as the
-// agent or the editor writes them) and read as the verbatim stored text. Read-only context:
-// mutation stays with scene_write and its validate-first rule.
+// The open project's scene and prefab XML sources as MCP resources: `project://scene/<guid>` and
+// `project://prefab/<guid>`, listed live from the source database (a ResourceProvider rather than
+// static registrations, because scenes appear and disappear as the agent or the editor writes
+// them) and read as the verbatim stored text. They are read-only context; mutation stays with
+// scene_write and its validate-first rule.
 
 module;
 #include "Core/Prelude.h"
@@ -85,7 +85,7 @@ export namespace editor::mcp
         {
             if (!s->project)
             {
-                return; // no project open -> the set is empty, not an error
+                return; // no project open: the set is empty, not an error
             }
             detail::ListSceneResources(s->project->SourceDb().RootGroup(), String(), out);
         };
@@ -104,7 +104,7 @@ export namespace editor::mcp
             }
             else
             {
-                return {}; // not ours - the server tries the next provider
+                return {}; // not ours: the server tries the next provider
             }
             if (!s->project)
             {

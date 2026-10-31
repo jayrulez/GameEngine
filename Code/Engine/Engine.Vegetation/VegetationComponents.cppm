@@ -1,29 +1,28 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.vegetation:components - the TerrainVegetationComponent + its manager.
+// engine.vegetation:components - the TerrainVegetationComponent and its manager.
 //
-// ONE component on the terrain entity holds TWO layer lists (user, 2026-09-23): the PROCEDURAL
-// layers (`Array<ProceduralVegetationLayer>`: grass from a splat layer, flowers from a painted
-// mask plane, moss everywhere) that the scatter grows per chunk from the heightfield and their
-// source, and the PROP layers (`Array<PropVegetationLayer>`: rocks, stumps) whose instances the
-// Paint Props brush places by hand. Before the split one list carried both and a `placement`
-// value decided what a layer was, so a procedural layer dragged an empty instance array and a
-// prop layer a density that meant nothing. Both kinds share the base (`VegetationLayerBase`):
-// mesh, material, scale, slope and height rules, fade, shadows, visibility, the per-chunk cap.
-// The reflected inspector edits each layer in place (the generic list editor builds a per-slot
-// expander of leaf rows through a ComponentPropertyPath, the pickers included), so a layer is a
-// list slot, not an entity. The manager finds the terrain on the component's entity or the
-// nearest ancestor with a TerrainComponent.
+// One component on the terrain entity holds two layer lists: the procedural layers
+// (`Array<ProceduralVegetationLayer>`: grass from a splat layer, flowers from a painted mask plane,
+// moss everywhere) that the scatter grows per chunk from the heightfield and their source, and the
+// prop layers (`Array<PropVegetationLayer>`: rocks, stumps) whose instances the Paint Props brush
+// places by hand. Keeping them apart means a procedural layer carries no instance array and a prop
+// layer no density. Both kinds share the base (`VegetationLayerBase`): mesh, material, scale, slope
+// and height rules, fade, shadows, visibility, the per-chunk cap. The reflected inspector edits
+// each layer in place (the generic list editor builds a per-slot expander of leaf rows through a
+// ComponentPropertyPath, the pickers included), so a layer is a list slot, not an entity. The
+// manager finds the terrain on the component's entity or the nearest ancestor with a
+// TerrainComponent.
 //
 // The manager is the scene's IRenderDataProvider for vegetation: per (layer, chunk) it scatters
 // on demand (Foundation::Vegetation, a pure function of the seed) or buckets the authored
-// instances, keeps the set's terrain-local instances composed into world space, and emits ONE
+// instances, keeps the set's terrain-local instances composed into world space, and emits one
 // MultiMeshRenderData per set in range with the fade prefix as its count. Sets out of range are
 // absent from the snapshot; the renderer evicts their GPU buffers after kMultiMeshEvictFrames.
-// Invalidation: the heightfield uid + version, the splat uid + version, the entity world matrix
-// and the layer's scatter hash; a region notice (InvalidateRegion, the editor brushes) regrows
-// only the touched chunks.
+// Invalidation: the heightfield uid and version, the splat uid and version, the entity world
+// matrix and the layer's scatter hash; a region notice (InvalidateRegion, the editor brushes)
+// regrows only the touched chunks.
 
 module;
 #include "Core/Prelude.h"
@@ -36,11 +35,11 @@ import foundation.scene;
 import foundation.resource;
 import foundation.geometry;         // StaticMesh (bounds)
 import foundation.materials;        // Material
-import foundation.heightfield;      // Heightfield + HeightfieldRegion
-import foundation.terrain;          // TerrainChunk + BuildChunks
+import foundation.heightfield;      // Heightfield, HeightfieldRegion
+import foundation.terrain;          // TerrainChunk, BuildChunks
 import foundation.terrain.resource; // SplatWeights
 import foundation.vegetation.resource; // VegetationMask (the painted density planes)
-import foundation.vegetation;          // ScatterLayer (scatter params) + ScatterChunk + fade
+import foundation.vegetation;          // ScatterLayer (scatter params), ScatterChunk, fade
 import foundation.render;           // IRenderDataProvider, ExtractedScene, MultiMeshRenderData
 
 using namespace foundation::core;
@@ -57,7 +56,7 @@ export namespace engine::vegetation
     using foundation::vegetation::kSplatBaseLayer;
 
     // What every layer has, procedural or prop: the mesh, how each instance stands, how it
-    // fades, what it costs. Mirrors foundation::vegetation::ScatterLayer FLAT (the inspector
+    // fades, what it costs. Mirrors foundation::vegetation::ScatterLayer, flattened (the inspector
     // edits leaf fields); FillScatterLayer() is the bridge to the pure scatter's rules.
     struct VegetationLayerBase
     {
@@ -76,7 +75,7 @@ export namespace engine::vegetation
         bool castShadows = false;
         u32 maxInstancesPerChunk = 4096;
         bool visible = true;
-        // What of an instance is solid (Specs/vegetation-colliders.md): an upright trunk this
+        // What of an instance is solid: an upright trunk this
         // radius round and this tall from its foot (both scaled with the instance), in this
         // physics collision group. Radius 0 is scenery only (the default). The view toggles
         // (`visible`, the component's) do not change it.
@@ -97,14 +96,14 @@ export namespace engine::vegetation
         }
     };
 
-    // A layer the scatter GROWS from a source: everywhere (Uniform), where a terrain splat layer
+    // A layer the scatter grows from a source: everywhere (Uniform), where a terrain splat layer
     // is painted (Splat), where a plane of the component's mask is painted (Mask), or both
     // (SplatTimesMask). Nothing per instance is stored.
     struct ProceduralVegetationLayer : VegetationLayerBase
     {
         // Mask by default: a new layer follows the plane you paint, and grows nothing until the
         // component has a mask with paint on that plane (Uniform would grow the moment a mesh is
-        // assigned, which reads as an unasked-for scatter - the 2026-09-22 ruling, kept).
+        // assigned, which reads as an unasked-for scatter).
         VegetationPlacement placement = VegetationPlacement::Mask;
         u32 splatLayer = 0;         // Splat: palette index; kSplatBaseLayer = the unpainted base
         f32 splatThreshold = 0.25f; // Splat: share below which nothing grows
@@ -124,7 +123,7 @@ export namespace engine::vegetation
         }
     };
 
-    // A layer of PLACED instances (TERRAIN-LOCAL, like the procedural scatter's), painted by the
+    // A layer of placed instances (terrain-local, like the procedural scatter's), painted by the
     // Paint Props brush with the base rules and its own spacing; the manager buckets them per
     // chunk. `instances` is not an inspector row (a list of matrices has no editor): the brush
     // is the editor.
@@ -213,9 +212,9 @@ export namespace engine::vegetation
         bool visible = true;
     };
 
-    // The one-list layout of data version 1 (until 2026-09-23): every layer carried every
-    // field and `placement` 3 (Scattered) made it a prop layer. Read by the legacy reader
-    // below, never written; remove it once every scene has been re-saved.
+    // The one-list layout of data version 1: every layer carried every field and `placement` 3
+    // (Scattered) made it a prop layer. Read by the legacy reader below, never written; remove it
+    // once every scene has been re-saved.
     namespace legacy
     {
         struct VegetationLayerV1
@@ -252,7 +251,7 @@ export namespace engine::vegetation
             foundation::core::Serialize(ar, "instances", l.instances);
         }
 
-        // Split a V1 list by its placement: Scattered -> a prop layer, anything else -> a
+        // Splits a V1 list by its placement: Scattered becomes a prop layer, anything else a
         // procedural one (the retired enumerator's neighbours keep their values).
         inline void SplitLayers(Array<VegetationLayerV1>& old, TerrainVegetationComponent& c)
         {
@@ -332,9 +331,9 @@ export namespace engine::vegetation
         // Chunks scattered per extraction (a cold start spreads over frames).
         static constexpr u32 kDefaultBuildBudget = 4;
 
-        // A layer's SLOT: its index in its list, the prop list flagged in the top bit. The
-        // cache key, the chunk seed (the renderer's persistent-buffer key) and the log lines
-        // all speak in slots, so the two lists never collide.
+        // A layer's slot: its index in its list, the prop list flagged in the top bit. The cache
+        // key, the chunk seed (the renderer's persistent-buffer key) and the log lines all speak
+        // in slots, so the two lists never collide.
         static constexpr u32 kPropSlotBit = 0x80000000u;
         [[nodiscard]] static constexpr u32 ProceduralSlot(u32 index) noexcept { return index; }
         [[nodiscard]] static constexpr u32 PropSlot(u32 index) noexcept { return index | kPropSlotBit; }
@@ -351,18 +350,18 @@ export namespace engine::vegetation
         [[nodiscard]] u32 BuildBudget() const noexcept { return m_buildBudget; }
 
         /// A sculpt or paint over `region` (sample-grid coordinates of the heightfield the layers
-        /// grow on) - only the chunks it touches regrow on the next extraction. Without a notice,
+        /// grow on): only the chunks it touches regrow on the next extraction. Without a notice,
         /// a heightfield, splat or mask version bump regrows every chunk (the conservative
         /// fallback). A mask or splat brush maps its texel rect through InvalidateFootprint.
         void InvalidateRegion(const heightfield::HeightfieldRegion& region);
 
-        /// The same notice from a 0..1 FOOTPRINT rect (a mask or splat texel rect over the
+        /// The same notice from a 0..1 footprint rect (a mask or splat texel rect over the
         /// terrain footprint, `u0..u1 x v0..v1`), mapped to the heightfield's sample grid of
         /// `gridSize` samples per side.
         void InvalidateFootprint(f32 u0, f32 v0, f32 u1, f32 v1, i32 gridSize);
 
         /// render::IRenderDataProvider: one MultiMeshRenderData per (layer, chunk) in range of
-        /// the snapshot's view origin (every chunk when the snapshot has none - headless).
+        /// the snapshot's view origin (every chunk when the snapshot has none, as headless).
         void ExtractRenderData(render::ExtractedScene& snapshot) override;
 
         /// IStaticColliderSource: a capsule per instance of every solid layer (collisionRadius >
@@ -376,7 +375,7 @@ export namespace engine::vegetation
         }
         bool CollectStaticCapsules(scene::Scene& scene, Array<scene::StaticCapsule>& outCapsules) override;
 
-        // ---- introspection (tests + the HUD) ----
+        // ---- introspection (tests and the HUD) ----
         [[nodiscard]] usize BuiltSetCount() const noexcept; // sets holding instances
         [[nodiscard]] usize InstanceCount() const noexcept; // instances across built sets
         [[nodiscard]] u64 BuildCount() const noexcept { return m_builds; } // scatters run, ever
@@ -384,7 +383,7 @@ export namespace engine::vegetation
     private:
         struct ChunkSet
         {
-            u64 key = 0;           // ChunkSeed - the renderer's persistent-buffer key
+            u64 key = 0;           // ChunkSeed: the renderer's persistent-buffer key
             u32 version = 0;       // bumps per rebuild (the renderer re-uploads on change)
             bool built = false;
             bool dirty = true;     // needs a (re)scatter before it can draw
@@ -457,15 +456,15 @@ export namespace engine::vegetation
         Array<heightfield::HeightfieldRegion> m_pendingRegions;
     };
 
-    // Scene-composition hooks (the SceneModule pair, mirroring every other domain).
+    // Scene-composition hooks (the SceneModule pair every domain has).
     void AddVegetationSceneManagers(foundation::scene::Scene& scene);
     void RegisterVegetationComponentReflection();
 }
 
 export namespace engine::vegetation
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection, to the script surface
+    /// and which resource modules come with it. Defined in the implementation unit (one instance
+    /// per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& VegetationDomain() noexcept;
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The profiler's GPU lane on real devices (Specs/profiler.md, P1), through the full RenderFrame:
+// The profiler's GPU lane on real devices, through the full RenderFrame:
 // with the profiler armed, a frame's passes come back a frame or two later tagged with that
 // frame, on the CPU's clock (inside the CPU span that recorded and waited for them), in order,
 // under the names the CPU lane gives the same passes; where the device counts pipeline

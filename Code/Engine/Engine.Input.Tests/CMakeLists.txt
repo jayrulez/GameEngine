@@ -1,7 +1,7 @@
-# Engine::Input unit tests (doctest): the InputSubsystem (per-surface scene binding /
-# source overrides) + the per-context Input facade. Split out of Foundation/Input.Tests so
+# Engine::Input unit tests (doctest): the InputSubsystem (per-surface scene binding and
+# source overrides) and the per-context Input facade. Kept apart from Foundation/Input.Tests so
 # the Foundation input tests don't link Engine. Includes the shared synthetic-device helpers from
-# the foundation test dir (header-only test scaffolding - no link dependency).
+# the foundation test dir (header-only test support, no link dependency).
 
 add_executable(Engine.Input.Tests
     TestsMain.cpp

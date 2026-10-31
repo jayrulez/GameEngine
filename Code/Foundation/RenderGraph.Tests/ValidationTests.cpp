@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.RenderGraph.Tests/ValidationTests.bf
+// GraphValidator: uninitialized reads, empty passes and redundant writes.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

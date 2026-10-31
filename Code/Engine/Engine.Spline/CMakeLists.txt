@@ -1,6 +1,6 @@
 # Engine::Spline - `engine.spline`: the authorable 3D spline scene component (data-only; no
 # subsystem, no tick). The curve math lives in Foundation::Spline; consumers and the editor
-# tool evaluate/author through the component.
+# tool evaluate and author through the component.
 
 util_add_engine_library(Engine.Spline ALIAS Engine::Spline)
 target_link_libraries(Engine.Spline PUBLIC

@@ -113,7 +113,7 @@ namespace
     };
 }
 
-#if !PLATFORM_WEB // spawns threads; web v1 is single-threaded
+#if !PLATFORM_WEB // spawns threads; the web build is single-threaded
 TEST_CASE("log: concurrent logging is serialized by the logger")
 {
     Logger& logger = GlobalLogger();

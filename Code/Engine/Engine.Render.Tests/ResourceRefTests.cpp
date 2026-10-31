@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Resource-reference layer (asset-pipeline 6b): MeshComponent's resource::Ref fields
-// round-trip through scene serialization by Guid and resolve through the ResourceManager's
-// PROXY HANDLES - so a Reload swaps the product behind every holder without a re-resolve.
+// Resource references: MeshComponent's resource::Ref fields round-trip through scene
+// serialization by Guid and resolve through the ResourceManager's proxy handles, so a Reload
+// swaps the product behind every holder without a re-resolve.
 
 #include <doctest/doctest.h>
 
@@ -77,7 +77,7 @@ TEST_CASE("resource-ref: scene round-trip resolves mesh refs through proxy handl
     geometry::StaticMeshFactory meshFactory(DefaultAllocator());
     resources.AddFactory(&meshFactory);
 
-    // Author a scene whose MeshComponent references the mesh BY GUID only.
+    // Author a scene whose MeshComponent references the mesh by guid only.
     MemoryStream blob;
     {
         scene::Scene scene{DefaultAllocator()};
@@ -93,7 +93,7 @@ TEST_CASE("resource-ref: scene round-trip resolves mesh refs through proxy handl
         REQUIRE(ar.IsOk());
     }
 
-    // Load into a FRESH scene, then run the post-load resolve pass.
+    // Load into a fresh scene, then run the post-load resolve pass.
     scene::Scene loaded{DefaultAllocator()};
     loaded.AddSystem<MeshComponentManager>();
     REQUIRE(blob.Seek(0, SeekOrigin::Begin) == 0);
@@ -123,8 +123,8 @@ TEST_CASE("resource-ref: scene round-trip resolves mesh refs through proxy handl
     const f32 sizeBefore = live->bounds.max.x - live->bounds.min.x;
     CHECK(sizeBefore == doctest::Approx(1.0f));
 
-    // PROXY semantics: rewrite the cooked source (a 2x cube), Reload, and the SAME ref sees
-    // the new product through its handle - no re-resolve pass. (Pointer equality is not a
+    // Proxy semantics: rewrite the cooked source (a 2x cube), Reload, and the same ref sees
+    // the new product through its handle, with no re-resolve pass. (Pointer equality is not a
     // valid signal: the allocator may reuse the freed block.)
     {
         RefPtr<geometry::StaticMesh> bigger = geometry::Primitives::Cube(DefaultAllocator(), 2.0f);
@@ -146,9 +146,9 @@ TEST_CASE("resource-ref: direct objects win over proxies and skip serialization"
     RefPtr<geometry::StaticMesh> procedural = geometry::Primitives::Cube(DefaultAllocator(), 2.0f);
 
     MeshComponent mc;
-    mc.mesh = procedural; // the sample/procedural path: plain RefPtr assignment
+    mc.mesh = procedural; // the sample and procedural path: plain RefPtr assignment
     CHECK(mc.mesh.Get() == procedural.Get());
-    CHECK(mc.mesh.id.IsNil()); // nothing to serialize - direct objects are runtime-only
+    CHECK(mc.mesh.id.IsNil()); // nothing to serialize: direct objects are runtime-only
 
     // A guid alongside a direct object: the direct object still wins at Get().
     Random rng(1234);
@@ -227,7 +227,7 @@ TEST_CASE("resource-ref: instanced-mesh refs + authored placement round-trip")
         c.materials.Resize(2); // one per submesh slot
         c.materials[0].SetId(matId);
         c.materials[1].SetId(maskId);
-        // Replace the editor-workflow seed (a fresh component starts with ONE identity instance).
+        // Replace the editor-workflow seed (a fresh component starts with one identity instance).
         REQUIRE(c.Count() == 1u);
         const Float4x4 xf[2] = {Float4x4::Translation(Float3{1, 0, 0}),
                                 Float4x4::Translation(Float3{0, 2, 0})};
@@ -272,7 +272,7 @@ TEST_CASE("resource-ref: instanced-mesh refs + authored placement round-trip")
     CHECK(c->poseIndices[1] == 5u);
     REQUIRE(c->instanceClips.Size() == 2u);
     CHECK(c->instanceClips[1] == 2u);
-    // Runtime state starts fresh: version 1 vs boundsVersion 0 => first extract re-uploads.
+    // Runtime state starts fresh: version 1 against boundsVersion 0, so the first extract re-uploads.
     CHECK(c->version >= 1u);
     CHECK(c->boundsVersion == 0u);
     CHECK(c->posePool == nullptr);
@@ -281,9 +281,9 @@ TEST_CASE("resource-ref: instanced-mesh refs + authored placement round-trip")
 TEST_CASE("resource-ref: a Ref<StaticMesh> bound to a SKINNED product keeps the skin stream")
 {
     // The editor's mesh picker offers SkinnedMeshAssets for MeshComponent's Ref<StaticMesh>
-    // (SkinnedMesh IS-A StaticMesh). The StaticMeshFactory must build the REAL SkinnedMesh for
-    // a skinned product - building it as a plain StaticMesh silently drops the skin stream and
-    // the mesh can never animate (the "fox plays but doesn't move" bug).
+    // (a SkinnedMesh is a StaticMesh). The StaticMeshFactory must build the real SkinnedMesh for
+    // a skinned product: building it as a plain StaticMesh silently drops the skin stream and
+    // the mesh can never animate (its animation plays but the mesh does not move).
     const StringView dir = u8"scratch_skinref_test_db";
     RemoveTree(dir);
     (void)CreateDirectory(dir);
@@ -295,7 +295,7 @@ TEST_CASE("resource-ref: a Ref<StaticMesh> bound to a SKINNED product keeps the 
 
     Guid meshId;
     {
-        // A skinned cube: the static cube's streams + one skinning entry per vertex.
+        // A skinned cube: the static cube's streams and one skinning entry per vertex.
         RefPtr<geometry::StaticMesh> cube = geometry::Primitives::Cube(DefaultAllocator(), 1.0f);
         RefPtr<geometry::SkinnedMesh> skinned = MakeRef<geometry::SkinnedMesh>(DefaultAllocator());
         skinned->vertices = cube->vertices;
@@ -337,12 +337,12 @@ TEST_CASE("resource-ref: a Ref<StaticMesh> bound to a SKINNED product keeps the 
 
 TEST_CASE("resource-ref: per-submesh material refs round-trip and resolve to the RefPtr array")
 {
-    // Serialized identity (submeshMaterialRefs) -> resolve pass -> the raw RefPtr array
-    // extraction reads. Binding itself is Ref::Bind (covered by the mesh tests above);
+    // Serialized identity (`materials`) goes through the resolve pass, which attaches the
+    // bindings extraction reads. Binding itself is Ref::Bind (covered by the mesh tests above);
     // real Material products would drag the shader stack in, so the manager here has no
-    // material factory and the materialized entries stay null - the SHAPE is what's under
-    // test: ids round-trip, the array materializes on resolve, direct fills survive.
-    RegisterRenderComponentReflection(); // patches TypeOf<MeshComponent>().dataVersion (v2 gate)
+    // material factory and the entries stay null. The shape is what's under test: ids
+    // round-trip, the array survives the resolve, direct fills survive.
+    RegisterRenderComponentReflection(); // patches TypeOf<MeshComponent>().dataVersion
     const StringView dir = u8"scratch_submesh_ref_test_db";
     RemoveTree(dir);
     (void)CreateDirectory(dir);

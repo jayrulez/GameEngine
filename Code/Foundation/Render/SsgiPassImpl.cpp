@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Foundation::Render - the `:ssgi` partition implementation (GI tier 1).
+/// Foundation::Render - the `:ssgi` partition implementation.
 ///
-/// Structure mirrors :ssr exactly (trace + temporal resolve, per-view ping-pong history,
+/// Structured like :ssr (trace and temporal resolve, per-view ping-pong history,
 /// generation-keyed bind-group caches with deferred frees). See SsgiPass.cppm for the design
 /// notes and the composite (the bounce replaces the sky it hides, tinted by the albedo G-buffer).
 
@@ -28,7 +28,7 @@ namespace foundation::render
 {
     Status SsgiPass::Initialize()
     {
-        // Trace bind-group layout: scene(t0) + depth(t1) + normal(t2) + point(s0) + linear(s1).
+        // Trace bind-group layout: scene (t0), depth (t1), normal (t2), point (s0), linear (s1).
         rhi::BindGroupLayoutEntry ge[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
@@ -36,8 +36,8 @@ namespace foundation::render
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(1, rhi::ShaderStage::Fragment),
         };
-        // WebGPU annotations (Vulkan/DX12 ignore): t1 receives the DEPTH view, sampled only
-        // through the point sampler s0 - UnfilterableFloat + non-filtering (:ssr rule).
+        // WebGPU annotations (Vulkan and DX12 ignore them): t1 receives the depth view, sampled
+        // only through the point sampler s0, so UnfilterableFloat and non-filtering (as in :ssr).
         ge[1].textureSampleType = rhi::TextureSampleType::UnfilterableFloat;
         ge[3].samplerNonFiltering = true;
         rhi::BindGroupLayoutDesc gld{};
@@ -90,7 +90,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Radiance prefilter: full-res hdr(t0) + linear sampler(s0) -> quarter-res box average.
+        // Radiance prefilter: full-res hdr (t0) and linear sampler (s0) into a quarter-res box average.
         rhi::BindGroupLayoutEntry de[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),
@@ -118,7 +118,7 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Spatial denoise: raw gi(t0) + depth(t1) + point sampler(s0).
+        // Spatial denoise: raw gi (t0), depth (t1), point sampler (s0).
         rhi::BindGroupLayoutEntry be[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
@@ -149,8 +149,8 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // Resolve: gi(t0) history(t1) velocity(t2) hdr(t3) albedo(t4) normal(t5) sky SH(t6) +
-        // point(s0) linear(s1). MRT out = composited HDR + next-frame GI history.
+        // Resolve: gi (t0), history (t1), velocity (t2), hdr (t3), albedo (t4), normal (t5), sky SH (t6),
+        // point (s0), linear (s1). MRT out: the composited HDR and the next frame's GI history.
         rhi::BindGroupLayoutEntry re[] = {
             rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
             rhi::BindGroupLayoutEntry::SampledTexture(1, rhi::ShaderStage::Fragment),
@@ -367,9 +367,9 @@ namespace foundation::render
             if (m_pipeline == nullptr || m_downPipeline == nullptr ||
                 m_blurPipeline == nullptr || m_resolvePipeline == nullptr)
             {
-                // A hot-reloaded shader that no longer matches this binary (e.g. its push
-                // block grew) fails pipeline creation and the pass silently skips - say so
-                // once per version instead of leaving only the validation spam.
+                // A hot-reloaded shader that no longer matches this binary (its push block
+                // grew, say) fails pipeline creation and the pass silently skips; say so
+                // once per version instead of leaving only the validation messages.
                 LOG_WARNING(u8"Render",
                             u8"SSGI pipelines failed to rebuild after shader reload - the "
                             u8"pass is OFF (shader/binary mismatch? restart with a rebuilt "
@@ -388,8 +388,8 @@ namespace foundation::render
         const bool temporalOn = p.temporal;
 
         // --- Radiance prefilter: quarter-res box average of the lit HDR, the trace's gather
-        //     source. THE structural firefly fix (Godot SSIL gathers from mip 5): every tap
-        //     the trace takes is already a ~16-pixel mean, so variance dies at the source. ---
+        //     source. This is what keeps fireflies out: every tap the trace takes is already a
+        //     ~16-pixel mean, so variance dies at the source. ---
         const u32 qw = (w / 4u > 0u) ? w / 4u : 1u;
         const u32 qh = (h / 4u > 0u) ? h / 4u : 1u;
         const rendergraph::RGHandle sceneQuarter = graph.CreateTransient(
@@ -421,7 +421,7 @@ namespace foundation::render
                     });
             });
 
-        // --- Trace: GI buffer (rgb one-bounce radiance, a = hit fraction) ---
+        // --- Trace: GI buffer (rgb one-bounce radiance, a the hit fraction) ---
         const rendergraph::RGHandle gi =
             graph.CreateTransient(u8"ssgi.raw", rendergraph::RGTextureDesc(kHdrFormat, w, h));
         GpuSsgiPush pc{};
@@ -513,7 +513,7 @@ namespace foundation::render
             graph.CreateTransient(u8"ssgi.filtered", rendergraph::RGTextureDesc(kHdrFormat, w, h));
         declareBlur(u8"ssgi.blur", gi, filtered, 1.0f);
 
-        // --- Resolve: reproject + variance-clip + accumulate, then ADD into the HDR ---
+        // --- Resolve: reproject, variance-clip and accumulate, then add into the HDR ---
         ViewHistory& hist = m_views[viewIndex];
         if (!EnsureHistory(hist, w, h))
         {
@@ -543,20 +543,20 @@ namespace foundation::render
         rpc2.debug = p.debug;
         rpc2.intensity = (p.intensity >= 0.0f) ? p.intensity : 0.0f;
         // The ambient a hit replaces (see :ssgi): the camera's world rotation turns the G-buffer's
-        // view-space normal to world, where the SH sky is; no SH sky = flat fill alone (as the forward).
+        // view-space normal to world, where the SH sky is; with no SH sky, the flat fill alone (as the forward).
         for (u32 r = 0; r < 3; ++r)
         {
             rpc2.viewToWorld[r] = Float4{sky.viewToWorld(r, 0), sky.viewToWorld(r, 1), sky.viewToWorld(r, 2), 0.0f};
         }
         const bool shSky = sky.shBuffer != nullptr;
         rpc2.skyAmbient = sky.ambient;
-        rpc2.shSkyDimmer = shSky ? sky.iblDiffuse : 0.0f; // 0 = no SH sky (the shader's rule)
+        rpc2.shSkyDimmer = shSky ? sky.iblDiffuse : 0.0f; // 0 means no SH sky (the shader's rule)
         rhi::Buffer* const shBuffer = shSky ? sky.shBuffer : m_dummyShBuffer;
         const u64 shGeneration = shSky ? sky.generation : 0;
         const rendergraph::RGHandle shHandle = shSky ? sky.shHandle : rendergraph::RGHandle{};
 
         // The accumulate writes the history and, when the denoise runs, the accumulated bounce
-        // itself (rgb + hit share) rather than the composite: the a-trous passes smooth that,
+        // itself (rgb and hit share) rather than the composite: the a-trous passes smooth that,
         // and the same shader, its accumulate off, composites the result (the history stays
         // unfiltered, so the denoise never feeds back into it).
         const u32 denoisePasses = (temporalOn && p.debug == 0) ? Min(p.denoisePasses, 4u) : 0u;

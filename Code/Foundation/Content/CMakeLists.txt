@@ -1,4 +1,4 @@
-# Foundation::Content - `foundation.content` (content database: Groups + Instances of
+# Foundation::Content - `foundation.content` (content database: Groups and Instances of
 # serializable objects, addressed by Guid/path, stored over a VFS mount).
 
 util_add_engine_library(Content ALIAS Foundation::Content)

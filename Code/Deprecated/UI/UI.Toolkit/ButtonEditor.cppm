@@ -3,9 +3,8 @@
 
 // UI Toolkit - :button_editor partition
 //
-// Property editor that displays a clickable Button (used for actions like "Add Condition"). Ported from
-// Sedulous.UI.Toolkit/src/PropertyGrid/ButtonEditor.bf. Beef `delegate void() Action` -> Function<void()>;
-// `new Button(Name)` -> a RefPtr<Button> returned as the editor view.
+// Property editor that displays a clickable Button (used for actions like "Add Condition").
+// The Button is returned as the editor view.
 
 module;
 #include "Core/Prelude.h"
@@ -36,8 +35,8 @@ export namespace foundation::ui::toolkit
 
         void RefreshView() override {}
 
-        /// Enable/disable the live button (grayed + click-inert while disabled). Safe to
-        /// call before the view exists - the state applies at creation.
+        /// Enable/disable the live button (grayed and click-inert while disabled). Safe to
+        /// call before the view exists; the state applies at creation.
         void SetButtonEnabled(bool enabled)
         {
             m_buttonEnabled = enabled;

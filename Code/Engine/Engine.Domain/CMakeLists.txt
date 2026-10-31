@@ -1,9 +1,9 @@
-# Engine::Domain - `engine.domain`: what ONE engine domain declares (DomainModule - its scene
+# Engine::Domain - `engine.domain`: what one engine domain declares (DomainModule: its scene
 # facet, its reflection, its script facade, the resource modules it brings) and the composition
-# built from a list of them (EngineComposition - facets on demand). Every Engine.<Domain>
-# library declares its module against this; Engine.Composition lists them once. Depends on
-# Foundation::Scene (SceneModule/SceneComposition) and Foundation::Resource (ResourceModule,
-# ResourceFactorySet) only. See Documentation/Specs/engine-composition.md.
+# built from a list of them (EngineComposition, which builds facets on demand). Every
+# Engine.<Domain> library declares its module against this; Engine.Composition lists them once.
+# Depends only on Foundation::Scene (SceneModule/SceneComposition) and Foundation::Resource
+# (ResourceModule, ResourceFactorySet).
 
 util_add_engine_library(Engine.Domain ALIAS Engine::Domain)
 target_link_libraries(Engine.Domain PUBLIC

@@ -3,9 +3,8 @@
 
 // UI - :enums partition
 //
-// Small Core enums ported from Sedulous.UI/src/Core (Visibility, Orientation,
-// CursorType, InvalidationKind). Grouped into one partition (Beef had a file per
-// enum; a language-difference divergence for practicality).
+// Small core enums (Visibility, Orientation, CursorType, InvalidationKind), grouped
+// into one partition.
 
 export module foundation.ui:enums;
 
@@ -49,7 +48,7 @@ export namespace foundation::ui
     /// What kind of invalidation a property change triggers.
     enum class InvalidationKind
     {
-        /// Re-measure + re-layout + redraw. The default for all properties unless overridden.
+        /// Re-measure, re-layout and redraw. The default for all properties unless overridden.
         Layout,
         /// Redraw only, no layout recalculation (visual-only props: Opacity, TextColor, Cursor).
         Visual

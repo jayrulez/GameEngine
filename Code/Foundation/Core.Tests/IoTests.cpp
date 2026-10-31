@@ -302,8 +302,8 @@ namespace
 }
 
 // A record read in another layout than it was written in hands the reader a garbage count.
-// It used to reserve it and read past the end once per element (a cooked script from before
-// a field was added held the editor for minutes).
+// Reserving it and reading past the end once per element could hold the reader for minutes, so
+// the read fails at the first element that is not there.
 TEST_CASE("serialization: a count longer than the data left fails at once")
 {
     MemoryStream stream;
@@ -514,11 +514,6 @@ TEST_CASE("io: directory create / exists / remove")
     CHECK(RemoveDirectory(dir));
     CHECK_FALSE(DirectoryExists(dir));
 }
-
-// --- IO: Virtual file system -----------------------------------------------
-
-// VFS (NativeFileSystem / VirtualFileSystem) moved to foundation.vfs - see
-// VFS/Tests/VfsTests.cpp.
 
 // --- Serialization: ISerializable ------------------------------------------
 

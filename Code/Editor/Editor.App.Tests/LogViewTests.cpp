@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Console over its markup (Data/Editor/Console.xml): lines with their category, the levels'
-// chips (Debug holding trace, Error holding fatal) with their counts showing and hiding
-// their lines, the search, the cap trimming the oldest, Clear, the empty line, a selection kept
-// by entry through a trim and copied oldest first, and each line's time.
+// The Console over its markup (Data/Editor/Console.xml). Covers lines with their category; the level
+// chips (Debug includes trace, Error includes fatal), which show their counts and show or hide their
+// lines; the search; the cap that trims the oldest lines; Clear; the empty-state line; a selection
+// that follows its entries through a trim and copies oldest first; and each line's time.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -110,7 +110,7 @@ TEST_CASE("console: a chip hides and shows its lines, in their order; the search
     CHECK(bed.view->ShownText(1) == StringView(u8"[A] error"));
     bed.view->AddEntry(LogLevel::Warning, u8"A", u8"warn2"); // hidden while its chip is off
     CHECK(bed.view->ShownCount() == 2u);
-    CHECK(bed.Chip(u8"console-warnings").HandleActivate()); // on again: in order
+    CHECK(bed.Chip(u8"console-warnings").HandleActivate()); // on again: the lines return in order
     CHECK(bed.view->ShownCount() == 4u);
     CHECK(bed.view->ShownText(1) == StringView(u8"[A] warn"));
     CHECK(bed.view->ShownText(3) == StringView(u8"[A] warn2"));
@@ -188,7 +188,7 @@ TEST_CASE("console: under the editor's sheet every line is one fixed height, so 
     const f32 range = list.GetScrollRange().y;
     list.ScrollToItem(0);
     (void)bed.root->UpdateLayout();
-    CHECK(list.GetScrollRange().y == doctest::Approx(range)); // the content's height holds at the top
+    CHECK(list.GetScrollRange().y == doctest::Approx(range)); // the content height stays the same at the top
 }
 
 TEST_CASE("console: under the editor's sheet it keeps its panel's height and the wheel scrolls it up notch by notch, lines arriving meanwhile")
@@ -226,7 +226,7 @@ TEST_CASE("console: under the editor's sheet it keeps its panel's height and the
         (void)bed.root->UpdateLayout();
         bed.root->GetContext().Update(Duration::FromSeconds(0.1));
         (void)bed.root->UpdateLayout();
-        CHECK(list.GetSize().y < 400.0f); // its panel's, not its rows'
+        CHECK(list.GetSize().y < 400.0f); // the panel's height, not the rows' total
         CHECK(list.GetScrollRange().y > 0.0f);
         CHECK(list.GetScrollOffset().y < last); // up a notch, not pulled back down by the new line
         last = list.GetScrollOffset().y;

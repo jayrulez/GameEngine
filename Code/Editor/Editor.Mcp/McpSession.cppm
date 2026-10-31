@@ -3,9 +3,9 @@
 
 // Editor::Mcp - :session partition
 //
-// The shared host-session state + small JSON/content helpers every editor.mcp tool partition
-// uses (extracted from ProjectTools when scene_tools became a second partition - partitions
-// cannot see the primary unit's declarations).
+// The shared host-session state and small JSON and content helpers every editor.mcp tool
+// partition uses. They live in their own partition because partitions cannot see the primary
+// unit's declarations.
 
 module;
 #include "Core/Prelude.h"
@@ -23,17 +23,17 @@ namespace content = foundation::content;
 
 export namespace editor::mcp
 {
-    // The project every tool works on (null until one is open). NON-OWNING: the editor host
-    // points it at the editor's live project - one ContentDatabase, one writer - and the stdio
-    // host at the project it opened and keeps in its ProjectOwner. The pointee must outlive the
-    // server the tools are registered on.
+    // The project every tool works on (null until one is open). It does not own the project: the
+    // editor host points it at the editor's live project (one ContentDatabase, one writer), and
+    // the stdio host at the project it opened and keeps in its ProjectOwner. The pointee must
+    // outlive the server the tools are registered on.
     struct ProjectSession
     {
         editor::EditorProject* project = nullptr;
-        /// A tool wrote a source asset (scene_write / prefab_write, created or overwritten): the
-        /// host reacts as it does to any change made outside a page - the editor host tells
-        /// the open pages editing it (EditorContext::NotifyAssetExternallyModified); the stdio
-        /// host has no pages and leaves it unset.
+        /// A tool wrote a source asset (scene_write or prefab_write, created or overwritten). The
+        /// host reacts as it does to any change made outside a page: the editor host tells the
+        /// open pages editing it (EditorContext::NotifyAssetExternallyModified); the stdio host
+        /// has no pages and leaves it unset.
         Function<void(const Guid&)> onAssetWritten;
         /// project_settings_set saved new settings: the editor host re-applies what depends on
         /// them, as its Project Settings dialog's Save does; the stdio host leaves it unset.
@@ -41,7 +41,7 @@ export namespace editor::mcp
     };
 
     // The stdio host's project ownership: project_open stores what it opened here and points
-    // the session at it. The editor host has no owner - its project is the editor's own.
+    // the session at it. The editor host has no owner, because its project is the editor's own.
     struct ProjectOwner
     {
         UniquePtr<editor::EditorProject> project;

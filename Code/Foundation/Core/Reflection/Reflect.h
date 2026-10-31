@@ -4,7 +4,7 @@
 // Core - RTTI declaration macros (classic header).
 //
 // Use inside an Object-derived class to wire up type identity, then define the
-// type once in a .cpp. Registration stays explicit - call
+// type once in a .cpp. Registration stays explicit: call
 // GlobalTypeRegistry().Register(Type::StaticType()) from a RegisterTypes()
 // function.
 //
@@ -34,7 +34,7 @@ public:                                                                         
         return info;                                                                               \
     }
 
-// RTTI_DEFINE_OBJECT with a serialization DATA VERSION (migration): bump the number when
+// RTTI_DEFINE_OBJECT with a serialization data version (migration): bump the number when
 // the type's serialized layout changes; the Serialize body branches on ar.Version().
 #define RTTI_DEFINE_OBJECT_VERSIONED(Type, Namespace, DataVersion)                             \
     const ::foundation::core::TypeInfo& Type::StaticType() noexcept                                  \
@@ -76,7 +76,7 @@ public:                                                                         
     static void RttiEnumBody_##EnumType(::foundation::core::EnumBuilder<EnumType>&);             \
     void RttiRegisterEnum_##EnumType()                                                         \
     {                                                                                              \
-        /* ONCE and thread-safe: builders re-register from cook workers, and a rebuild moves */   \
+        /* Once and thread-safe: builders re-register from cook workers, and a rebuild moves */   \
         /* a fresh enumerator array over the live one another thread may be reading.        */   \
         static const bool rttiOnce = []()                                                          \
         {                                                                                          \
@@ -104,7 +104,7 @@ public:                                                                         
     static void RttiReflectValue_##Type(::foundation::core::TypeBuilder<Type>& builder);         \
     void RttiRegisterValue_##Type()                                                            \
     {                                                                                              \
-        /* The in-place patch of TypeOf<Type>() happens ONCE too (thread-safe static init): */    \
+        /* The in-place patch of TypeOf<Type>() happens once too (thread-safe static init): */    \
         /* re-copying identical bytes over a TypeInfo other threads read is still a race.   */    \
         static const bool rttiOnce = []()                                                          \
         {                                                                                          \

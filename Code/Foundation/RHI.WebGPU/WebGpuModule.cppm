@@ -3,11 +3,10 @@
 
 /// foundation.rhi.webgpu - WebGPU RHI backend.
 ///
-/// Written against the STANDARD webgpu.h; on desktop the implementation is the
-/// wgpu-native runtime sidecar (dlopen'd, never linked), on web it is the browser's.
-/// The backend is fully built out; a NotSupported here is a genuine WebGPU API limit
-/// (no binding arrays / polygon modes / 1D arrays / pipeline statistics in core WebGPU),
-/// never an unimplemented stage.
+/// Written against the standard webgpu.h; on desktop the implementation is the
+/// wgpu-native runtime sidecar (dlopen'd, never linked), on web it is the browser's. A
+/// NotSupported from this backend is a WebGPU API limit (no binding arrays, polygon
+/// modes, 1D arrays or pipeline statistics in core WebGPU), not missing work.
 
 export module foundation.rhi.webgpu;
 

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The neutral-builder cook round-trip driven with LUAU sources - the same source -> builder ->
-// factory -> metadata path as the AngelScript leg (AngelScriptPipelineTests.cpp), proving the
-// builder resolves the Luau cook by the asset's language. Luau harvests via construct-and-walk, so
-// the metadata is the scalar subset (number/bool/string/Float3), sorted by name - the per-kind
-// harvest detail is certified in Script.Luau.Pipeline.Tests; here it rides the neutral builder.
+// The neutral-builder cook round-trip driven with Luau sources: the same path from source through
+// builder and factory to metadata as the AngelScript leg (AngelScriptPipelineTests.cpp), showing
+// the builder resolves the Luau cook by the asset's language. Luau harvests by construct-and-walk,
+// so the metadata is the scalar subset (number/bool/string/Float3), sorted by name. The per-kind
+// harvest detail is tested in Script.Luau.Pipeline.Tests; here it goes through the neutral builder.
 
 #include "CookBed.h"
 
-import editor.core; // ScriptSourceDocument (the ScriptPage save->recook seam)
+import editor.core; // ScriptSourceDocument (the ScriptPage save-and-recook loop)
 
 using namespace foundation::core;
 using namespace pipeline;
@@ -56,7 +56,7 @@ TEST_CASE("script.pipeline: full harvest round-trip (luau) - source -> cook -> f
     CHECK(product->language == u8"luau");
     CHECK(product->className == u8"Multi");
 
-    // Four scalars harvested (speed/enabled/label/offset); `data` (table) + `owner` (nil) skipped.
+    // Four scalars harvested (speed/enabled/label/offset); `data` (table) and `owner` (nil) skipped.
     // Non-scalar/typed properties (Int, Color, Entity, Asset) have no Luau harvest form.
     const ScriptPropertyDesc* speed = product->FindProperty(ScriptPropertyNameHash(u8"speed"));
     REQUIRE(speed != nullptr);
@@ -108,13 +108,13 @@ TEST_CASE("script.pipeline: compile errors FAIL the cook and the last good recor
     content::Instance* instance = nullptr;
     REQUIRE(bed.Cook(u8"multi.luau", u8"luau", instance).IsOk());
 
-    // Break the source; the rebuild must FAIL without touching the cooked record.
+    // Break the source; the rebuild must fail without touching the cooked record.
     bed.WriteSource(u8"multi.luau", u8"function (\n");
     CHECK_FALSE(bed.Cook(u8"multi.luau", u8"luau", instance).IsOk());
 
     RefPtr<ISerializable> object = instance->ReadObject();
     ScriptClassSource* cooked = Cast<ScriptClassSource>(object.Get());
-    REQUIRE(cooked != nullptr); // the LAST GOOD record
+    REQUIRE(cooked != nullptr); // the last good record
     CHECK(cooked->className == u8"Multi");
     CHECK(cooked->properties.Size() == 4u);
 }
@@ -169,7 +169,7 @@ function Mover:onUpdate(dt) end
     CHECK(doc.Source() == kMover);
     CHECK_FALSE(doc.IsModified());
 
-    // Validate: a compile-check through the SAME language cook - no product write.
+    // Validate: a compile-check through the same language cook, with no product write.
     CHECK(doc.Validate());
     CHECK(doc.LastCompileOk());
     CHECK(doc.ClassName() == u8"Mover");
@@ -185,7 +185,7 @@ function Mover:onUpdate(dt) end
         CHECK(cooked->className == u8"Mover");
     }
 
-    // Edit to a broken script THROUGH the document + save it to disk.
+    // Edit to a broken script through the document and save it to disk.
     constexpr StringView kBroken = u8"function (\n";
     doc.SetSource(kBroken);
     CHECK(doc.IsModified());
@@ -204,13 +204,13 @@ function Mover:onUpdate(dt) end
     REQUIRE(doc.Errors().Size() >= 1u);
     CHECK_FALSE(doc.Errors().Data()[0].message.IsEmpty());
 
-    // The recook of the now-broken source FAILS - and the last good cooked product survives.
+    // The recook of the now-broken source fails, and the last good cooked product survives.
     CHECK_FALSE(bed.Cook(u8"mover.luau", u8"luau", product).IsOk());
     {
         RefPtr<ISerializable> object = product->ReadObject();
         ScriptClassSource* cooked = Cast<ScriptClassSource>(object.Get());
         REQUIRE(cooked != nullptr);
-        CHECK(cooked->className == u8"Mover"); // unchanged - the failed cook never wrote
+        CHECK(cooked->className == u8"Mover"); // unchanged: the failed cook never wrote
     }
 }
 

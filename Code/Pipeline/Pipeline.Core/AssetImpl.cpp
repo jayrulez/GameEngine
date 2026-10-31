@@ -3,7 +3,7 @@
 
 // Pipeline::Core - reflection implementation unit: the Asset base's reflected surface.
 //
-// Kept OUT of the Asset.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm cluster).
+// Kept out of the Asset.cppm interface, because REFLECT_MEMBERS bodies there make GCC emit a gcm cluster.
 // Asset::StaticType() gains its fileName property here, so every concrete asset inherits it
 // through the base chain (FindProperty walks bases). RegisterAssetReflection also registers
 // SourcePath's reflection (fileName's type).

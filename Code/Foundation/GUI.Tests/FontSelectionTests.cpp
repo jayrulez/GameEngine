@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - font-weight and font-style (E11 of Specs/gui-lab-evolution-2.md): a run's face is the
-// family's of the nearest weight in CSS's order, its style matched first; bold and italic are
-// synthesized only where no face has them. The faces are named as font files name them
-// ("Roboto Bold", "Roboto Light Italic"), each loaded under its name.
+// GUI - font-weight and font-style. A run's face is the family's face of the nearest weight, in
+// CSS's order, with the style matched first. Bold and italic are synthesized only where no face has
+// them. The faces are named as font files name them ("Roboto Bold", "Roboto Light Italic"), and each
+// is loaded under its name.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -20,7 +20,7 @@ namespace fonts = foundation::fonts;
 
 namespace
 {
-    // Roboto's files, loaded under the names given (a name per face the test needs).
+    // Roboto's files, loaded under the given names, one name per face the test needs.
     struct Faces
     {
         fonts::TrueTypeFontService service{DefaultAllocator()};
@@ -97,21 +97,21 @@ TEST_CASE("font selection: the nearest weight's face, the style matched first, t
     foundation::gui::detail::FaceChoice face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 700, false);
     CHECK(face.Face == StringView(u8"X Bold"));
     CHECK_FALSE(face.SyntheticBold);
-    face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 900, false); // none heavier: down to Bold
+    face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 900, false); // no heavier face, so it falls back down to Bold
     CHECK(face.Face == StringView(u8"X Bold"));
     face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 600, false); // up before down
     CHECK(face.Face == StringView(u8"X Bold"));
-    face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 500, false); // 500 then down: the regular
+    face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 500, false); // 500, then down to the regular
     CHECK(face.Face == StringView(u8"X"));
     face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 300, true);
     CHECK(face.Face == StringView(u8"X Light Italic"));
     CHECK_FALSE(face.SyntheticItalic);
-    // Italic before weight: the light italic face, emboldened.
+    // Italic is matched before weight: the light italic face, emboldened.
     face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 700, true);
     CHECK(face.Face == StringView(u8"X Light Italic"));
     CHECK(face.SyntheticBold);
     CHECK_FALSE(face.SyntheticItalic);
-    // No face of the family: asked for as it is, all of it synthesized.
+    // With no face of the family, it is asked for as it is and everything is synthesized.
     face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"Y"), 700, true);
     CHECK(face.Face == StringView(u8"Y"));
     CHECK(face.SyntheticBold);

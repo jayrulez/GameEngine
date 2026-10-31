@@ -3,9 +3,9 @@
 
 // GUI - :ui_widget partition
 //
-// UIWidget: a UINode with the CSS identity + layout inputs the styling engine matches on.
-// Ported from eepp's UI::UIWidget: element tag, id and style classes (what selectors match), its
-// tooltip, context menu, drag and drop in markup, and its accessibility overrides.
+// UIWidget: a UINode with the CSS identity and layout inputs the styling engine matches on.
+// Ported from eepp's UI::UIWidget. It adds the element tag, id and style classes (what selectors
+// match), the tooltip, the context menu, drag and drop from markup, and accessibility overrides.
 
 module;
 #include "Core/Prelude.h"
@@ -16,23 +16,23 @@ export module foundation.gui:ui_widget;
 import foundation.core; // String, StringView, Array
 import :thickness;
 import :ui_node;
-import :event; // MouseEvent (a context menu)
+import :event; // MouseEvent, for the context menu
 
 using namespace foundation::core;
 namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// The states a widget's own pseudo-classes read (E3): :checked, :indeterminate, :read-only
-    /// and :read-write, :placeholder-shown.
+    /// The widget states that pseudo-classes read: :checked, :indeterminate, :read-only and
+    /// :read-write, :placeholder-shown, :selected.
     enum WidgetState : u32
     {
         WidgetStateNone = 0,
         WidgetStateChecked = 1u << 0,
         WidgetStateIndeterminate = 1u << 1,
-        WidgetStateEditable = 1u << 2, ///< the user edits its value (:read-write; else :read-only)
+        WidgetStateEditable = 1u << 2, ///< the user can edit the value (:read-write; otherwise :read-only)
         WidgetStatePlaceholderShown = 1u << 3,
-        WidgetStateSelected = 1u << 4, ///< an item view's row in its selection (:selected)
+        WidgetStateSelected = 1u << 4, ///< an item view row that is in the selection (:selected)
     };
 
     class UIWidget : public UINode
@@ -45,7 +45,7 @@ export namespace foundation::gui
         void SetTag(core::StringView tag)
         {
             m_tag = tag;
-            MarkStyleDirty(true); // the selectors it matches change
+            MarkStyleDirty(true); // the selectors it matches may change
             Invalidate();
         }
         [[nodiscard]] core::StringView GetTag() const { return m_tag.AsView(); }
@@ -57,7 +57,7 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] core::StringView GetId() const { return m_id.AsView(); }
-        /// Its type and, when it has one, its id ("Button #ok").
+        /// Returns the type and, when there is one, the id ("Button #ok").
         [[nodiscard]] core::String DebugName() const override
         {
             core::String name = UINode::DebugName();
@@ -96,7 +96,7 @@ export namespace foundation::gui
                     return true;
             return false;
         }
-        /// Each class of a space-separated list added (markup's `class`), or removed.
+        /// Adds each class in a space-separated list (markup's `class`); RemoveClasses removes them.
         void AddClasses(core::StringView classes)
         {
             ForEachClass(classes, [this](core::StringView cls) { AddClass(cls); });
@@ -127,13 +127,14 @@ export namespace foundation::gui
         }
         [[nodiscard]] usize ClassCount() const noexcept { return m_classes.Size(); }
 
-        /// Its WidgetState flags; a widget with such a state reports it, and marks itself for a
-        /// restyle when it changes.
+        /// Returns the WidgetState flags. A widget with such a state reports it here and marks
+        /// itself for a restyle when it changes.
         [[nodiscard]] virtual u32 GetWidgetStates() const { return WidgetStateNone; }
         [[nodiscard]] const Array<core::String>& Classes() const noexcept { return m_classes; }
 
-        /// Its 1-based place among its parent's widgets and how many there are (:nth-child and
-        /// its kin). The first ask after the children change numbers every widget there at once.
+        /// Returns the widget's 1-based position among its parent's widgets, and their count, for
+        /// :nth-child and related selectors. The first call after the children change numbers all
+        /// the siblings at once.
         void PositionAmongWidgets(i32& position, i32& count) const
         {
             const Node* parent = GetParent();
@@ -171,23 +172,25 @@ export namespace foundation::gui
         void SetTooltipInteractive(bool interactive) noexcept { m_tooltipInteractive = interactive; }
         [[nodiscard]] bool IsTooltipInteractive() const override { return m_tooltipInteractive; }
 
-        // === Accessibility in markup (E9d) ===
-        /// What a screen reader takes it for, over its type's (markup's `role`; empty: its type's).
+        // === Accessibility in markup ===
+        /// Sets the role a screen reader reports, overriding the type's (markup's `role`). Empty
+        /// means the type's role.
         void SetAccessRoleName(const core::String& role)
         {
             m_accessRole = role;
             MarkAccessDirty();
         }
         [[nodiscard]] core::String GetAccessRoleName() const { return m_accessRole; }
-        /// Its name over what it shows (`aria-label`).
+        /// Sets the accessible name, overriding what the widget shows (`aria-label`).
         void SetAccessLabel(const core::String& label)
         {
             m_accessLabel = label;
             MarkAccessDirty();
         }
         [[nodiscard]] core::String GetAccessLabel() const { return m_accessLabel; }
-        /// The ids of the widgets that name it and describe it (`aria-labelledby`,
-        /// `aria-describedby`; space-separated), and of those it controls (`aria-controls`).
+        /// Sets the ids of the widgets that name it (`aria-labelledby`). SetAccessDescribedBy takes
+        /// those that describe it (`aria-describedby`) and SetAccessControls those it controls
+        /// (`aria-controls`). Ids are separated by spaces.
         void SetAccessLabelledBy(const core::String& ids)
         {
             m_accessLabelledBy = ids;
@@ -206,7 +209,7 @@ export namespace foundation::gui
             MarkAccessDirty();
         }
         [[nodiscard]] core::String GetAccessControls() const { return m_accessControls; }
-        /// Hidden from screen readers, with what it holds (`aria-hidden`): a decoration.
+        /// Hides the widget and its contents from screen readers (`aria-hidden`), as for a decoration.
         void SetAccessHidden(bool hidden)
         {
             m_accessHidden = hidden;
@@ -214,19 +217,20 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsAccessHidden() const noexcept { return m_accessHidden; }
 
-        // === Drag and drop in markup (E7) ===
-        /// Drags as this payload type (markup's `drag-type`; empty: it does not drag).
+        // === Drag and drop in markup ===
+        /// Sets the payload type the widget drags as (markup's `drag-type`); empty means it does
+        /// not drag.
         void SetDragType(const core::String& type) { m_dragType = type; }
         [[nodiscard]] core::String GetDragType() const { return m_dragType; }
-        /// The payload's value and label (`drag-value`, which may be a `{{name}}`; `drag-label`,
-        /// else the value).
+        /// Sets the payload's value (`drag-value`, which may be a `{{name}}`). SetDragLabel sets its
+        /// label (`drag-label`), which defaults to the value.
         void SetDragValue(const core::String& value) { m_dragValue = value; }
         [[nodiscard]] core::String GetDragValue() const { return m_dragValue; }
         void SetDragLabel(const core::String& label) { m_dragLabel = label; }
         [[nodiscard]] core::String GetDragLabel() const { return m_dragLabel; }
-        /// `drag`: "auto" (it drags when it has a type, else passes the press up), "none" (it never
-        /// drags; the press passes up), "block" (the walk ends here: nothing above drags from a
-        /// press on it; RmlUi's property).
+        /// Sets `drag` (a property from RmlUi). "auto" drags when the widget has a drag type and
+        /// otherwise passes the press up. "none" never drags and passes the press up. "block" stops
+        /// the search here, so no ancestor drags from a press on this widget.
         void SetDragModeName(const core::String& mode)
         {
             const core::StringView m = core::Trim(mode.AsView());
@@ -236,19 +240,19 @@ export namespace foundation::gui
         {
             return core::String(m_dragMode == 1 ? core::StringView(u8"none") : m_dragMode == 2 ? core::StringView(u8"block") : core::StringView(u8"auto"));
         }
-        /// What a drop here says it would do (`drop-reason`), shown by the pointer while it would
-        /// take one.
+        /// Sets the text describing what a drop here would do (`drop-reason`), shown by the pointer
+        /// while the widget would accept the drop.
         void SetDropReason(const core::String& reason) { m_dropReason = reason; }
         [[nodiscard]] core::String GetDropReason() const { return m_dropReason; }
         [[nodiscard]] bool OwnsPressDrag(core::Float2 local) const override { return m_dragMode == 2 || UINode::OwnsPressDrag(local); }
 
         // === Context menu ===
-        /// The id of a Menu in its GUI (markup's `<Menu id="...">`) that a context menu asked for
-        /// over it opens, at the pointer (markup's `context-menu`).
+        /// Sets the id of a Menu in the GUI (markup's `<Menu id="...">`) that opens at the pointer
+        /// when a context menu is requested over this widget (markup's `context-menu`).
         void SetContextMenuId(const core::String& id)
         {
-            // The style pass writes it again at every restyle: the same id keeps the menu found
-            // (closed, it is out of the tree, where it could not be found again).
+            // The style pass writes this again at every restyle. The same id keeps the menu already
+            // found, because a closed menu is out of the tree and could not be found again.
             if (id == m_contextMenuId)
                 return;
             m_contextMenuId = id;
@@ -282,20 +286,20 @@ export namespace foundation::gui
         }
 
     private:
-        // Finds the menu (kept once found: open, it leaves the page for the top layer, and
-        // closed, the tree) and opens it at the event's position. GUIClusterImpl.cpp, which sees
-        // :menu.
+        // Finds the menu and opens it at the event's position. The menu is kept once found, since
+        // when open it moves from the page to the top layer, and when closed it leaves the tree.
+        // Defined in GUIClusterImpl.cpp, which can see :menu.
         bool OpenContextMenu(const MouseEvent& event);
 
         core::String m_tag;
         core::String m_id;
         Array<core::String> m_classes;
-        mutable const Node* m_positionParent = nullptr; // PositionAmongWidgets's, numbered under
-        mutable u32 m_positionGeneration = 0;           // this arrangement of that parent's children
+        mutable const Node* m_positionParent = nullptr; // the parent PositionAmongWidgets numbered under
+        mutable u32 m_positionGeneration = 0;           // which arrangement of that parent's children it numbered
         mutable i32 m_position = 1;
         mutable i32 m_positionCount = 1;
         core::String m_tooltip;
-        bool m_tooltipInteractive = false; // its tooltip takes the pointer (E16)
+        bool m_tooltipInteractive = false; // the tooltip takes the pointer
         core::String m_accessRole;
         core::String m_accessLabel;
         core::String m_accessLabelledBy;
@@ -308,12 +312,12 @@ export namespace foundation::gui
         core::String m_dragLabel;
         core::String m_dropReason;
         u8 m_dragMode = 0; // auto, none, block
-        core::RefPtr<Node> m_contextMenu; // the menu it opens, once found
+        core::RefPtr<Node> m_contextMenu; // the context menu, once found
     };
 
-    /// Where markup's children land for a widget that takes them in its own way (a menu's items,
-    /// a tree's items): unseen and out of the tree, each handed to `adopt` as it arrives, which
-    /// takes it out.
+    /// Receives markup's children for a widget that adopts them in its own way (a menu's items, a
+    /// tree's items). The host is hidden and out of the tree. Each child is handed to `adopt` as it
+    /// arrives, and `adopt` takes it out.
     class MarkupChildHost : public UIWidget
     {
         RTTI_OBJECT(MarkupChildHost, UIWidget)

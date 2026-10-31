@@ -3,13 +3,13 @@
 
 // Editor::Scene - :entity_ref_editor partition.
 //
-// The inspector's entity reference (Documentation/Specs/editor-gui.md, 5.3, layer 4, part 2): a
-// component's EntityRef as a slot, the grid's row for it (the reflected source takes EntityRef as a
-// reference by its id, hinted with its name, so this editor is chosen before the asset slot). It
-// shows the entity referenced by its type icon and its name, "None", or "(missing)" when no entity
-// of the scene has that id; its pick is the entity picker, the scene as its hierarchy shows it
-// (the current one lit, None to clear); an entity dragged from the hierarchy drops on it. A pick, a
-// drop and a clear are one write through the grid, so one undo step.
+// The inspector's entity reference editor: a component's EntityRef as a slot. The reflected source
+// takes EntityRef as a reference by its id, hinted with its name, so this editor is chosen before
+// the asset slot. The slot shows the referenced entity by its type icon and name, "None", or
+// "(missing)" when no entity in the scene has that id. Its pick button opens the entity picker,
+// which shows the scene as the hierarchy does (the current entity highlighted, None to clear), and
+// an entity dragged from the hierarchy drops on it. A pick, a drop and a clear are each one write
+// through the grid, so one undo step.
 
 module;
 #include "Core/Prelude.h"
@@ -46,14 +46,14 @@ export namespace editor
             Function<void(EntityPickRequest request)> pick;
         };
 
-        /// `services` outlives the editor (the registrar's).
+        /// `services` belongs to the registrar and outlives the editor.
         explicit EntityRefEditor(const Services& services) : m_services(&services)
         {
             AddClass(u8"reference");
             m_slot = MakeRef<app::AssetPickerSlot>(MemoryAllocator());
             Hold(*m_slot);
         }
-        EntityRefEditor() : EntityRefEditor(m_none) {} // what RTTI makes (its own empty services); the registry's has its services
+        EntityRefEditor() : EntityRefEditor(m_none) {} // the form RTTI constructs, with its own empty services
 
         /// The editor for every EntityRef `registry` shows; `services` outlives it.
         static void Register(foundation::gui::PropertyEditorRegistry& registry, const Services& services)
@@ -66,13 +66,13 @@ export namespace editor
         [[nodiscard]] app::AssetPickerSlot* Slot() const noexcept { return m_slot.Get(); }
         /// What it references: nil for none, or when the objects differ.
         [[nodiscard]] const Guid& Current() const noexcept { return m_current; }
-        /// The entity picker's request it opens: its value, and an answer that writes the pick
-        /// (while the row still shows this property).
+        /// The request this editor gives the entity picker: the current value, and an answer that
+        /// writes the pick (while the row still shows this property).
         [[nodiscard]] EntityPickRequest Request();
-        /// One write through the grid: a pick, a drop and a clear alike.
+        /// One write through the grid, for a pick, a drop and a clear alike.
         void Assign(const Guid& id);
-        /// Takes a dragged entity, as a drop on it does; false when the payload carries none of
-        /// this scene's.
+        /// Takes a dragged entity, as a drop on it does; false when the payload carries no entity
+        /// of this scene.
         bool Take(const foundation::gui::DragPayload& payload);
 
     protected:
@@ -83,7 +83,7 @@ export namespace editor
     private:
         void Show();
         void Pick();
-        Services m_none; // an editor RTTI made has no services: its own, empty (a process-wide one would be state in an interface)
+        Services m_none; // empty services for an editor RTTI constructs (a process-wide one would be state in an interface)
         const Services* m_services;
         RefPtr<app::AssetPickerSlot> m_slot;
         Guid m_current;

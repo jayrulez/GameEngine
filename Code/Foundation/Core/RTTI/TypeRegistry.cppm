@@ -21,12 +21,12 @@ import :scoped_lock;
 
 export namespace foundation::core
 {
-    // The availability domain a type was registered under - an OPEN set identified by
-    // name hash, not an enum: core owns only the DEFAULT domain "Runtime" (what the player
+    // The availability domain a type was registered under: an open set identified by
+    // name hash, not an enum. Core owns only the default domain "Runtime" (what the player
     // runtime registers); other layers tag registrations with their own names (the editor
-    // passes TypeDomain(u8"Editor")). A type's domain answers "which processes have this
-    // type" - tooling reads it (e.g. the script API browser marks non-runtime bindings);
-    // runtime behavior never depends on it.
+    // passes TypeDomain(u8"Editor")). A type's domain says which processes have the type.
+    // Tooling reads it (e.g. the script API browser marks non-runtime bindings); runtime
+    // behavior never depends on it.
     class TypeDomain
     {
     public:
@@ -49,17 +49,17 @@ export namespace foundation::core
     {
     public:
         // Mutations lock: registrars run from cook workers as well as the main thread, and two
-        // first-time registrations at once corrupted the maps. Reads stay lock-free by the
-        // registration contract - a reader has called its own registrar (which returned after
-        // the write it depends on completed); the pipeline root registers everything up front.
+        // first-time registrations at once would corrupt the maps. Reads stay lock-free by the
+        // registration contract: a reader has called its own registrar (which returned after
+        // the write it depends on completed), and the pipeline root registers everything up front.
         void Register(const TypeInfo& info, TypeDomain domain = kRuntimeTypeDomain)
         {
             ScopedLock lock(m_lock);
             if (m_byId.Contains(info.id))
             {
-                // Already registered: the domain may only WIDEN to Runtime (registration
-                // order is arbitrary - if any path the player takes registers the type,
-                // "the player has it" is the truth). Never narrows.
+                // Already registered: the domain may only widen to Runtime. Registration
+                // order is arbitrary, and if any path the player takes registers the type,
+                // the player has it. It never narrows.
                 if (domain == kRuntimeTypeDomain)
                 {
                     m_domains.Remove(info.id); // absent = Runtime
@@ -74,12 +74,12 @@ export namespace foundation::core
             }
             if (m_observer != nullptr)
             {
-                m_observer(m_observerContext, info.id); // fires only on a REAL insert
+                m_observer(m_observerContext, info.id); // fires only on a real insert
             }
         }
 
         // Remove a type (hot reload: a plugin's RegistrationScope reverses what it
-        // recorded before its library closes - a registry entry pointing into an
+        // recorded before its library closes, since a registry entry pointing into an
         // unloaded module is a dangling read). No-op for unknown ids. A later
         // Register with the same id (the rebuilt module) takes the freed slot.
         void Unregister(TypeId id)
@@ -102,8 +102,8 @@ export namespace foundation::core
         }
 
         // Registration observer (one at a time): PluginHost records what a plugin's
-        // OnLoad registers so unload can reverse it exactly - the plugin never
-        // hand-mirrors its registrations. Fires only on REAL inserts (a duplicate
+        // OnLoad registers so unload can reverse it exactly, without the plugin keeping its
+        // own list of registrations. Fires only on real inserts (a duplicate
         // Register is a no-op and stays owned by the first registrant).
         void SetRegistrationObserver(void (*observer)(void*, TypeId),
                                      void* context) noexcept
@@ -113,7 +113,7 @@ export namespace foundation::core
         }
 
         // The domain `id` was registered under; unknown ids (and unregistered types)
-        // read as Runtime - the default is the absence of a tag.
+        // read as Runtime: the default is the absence of a tag.
         [[nodiscard]] TypeDomain DomainOf(TypeId id) const noexcept
         {
             const TypeDomain* found = m_domains.Find(id);
@@ -127,11 +127,11 @@ export namespace foundation::core
         }
 
         // Resolves possibly-foreign type metadata (another shared library's copy of the
-        // same type - Register() keeps exactly one canonical TypeInfo per id) to the
+        // same type; Register() keeps exactly one canonical TypeInfo per id) to the
         // registered instance. Unregistered types resolve to the argument itself, so the
-        // result is always usable. Consumers reading PATCHED metadata (properties,
-        // container, enumerators - filled in by REFLECT_* registrars) must go through
-        // this rather than trusting a local TypeOf<T>() copy (shared-libraries.md).
+        // result is always usable. Consumers reading patched metadata (properties,
+        // container, enumerators, filled in by REFLECT_* registrars) must go through
+        // this rather than trusting a local TypeOf<T>() copy.
         [[nodiscard]] const TypeInfo& Canonical(const TypeInfo& info) const noexcept
         {
             const TypeInfo* found = FindById(info.id);

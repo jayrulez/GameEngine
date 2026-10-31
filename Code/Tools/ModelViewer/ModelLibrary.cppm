@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// ModelViewer - `modelviewer:library`: a model file opened for viewing, without a project
-// (Documentation/Specs/model-viewer.md). The file loads through the model loaders (glTF and GLB;
-// ufbx for FBX and OBJ) into the in-memory model, whose numbers the viewer shows; the model cooks
-// into a content database of its own in the viewer's cache, and the cooked model binds through a
-// resource manager with the engine's factories. The cache folder is named by the file's path, size
-// and modification time, so a model opened again binds what it cooked before and a changed file
-// cooks afresh. A record beside the cooked files keeps the model's guid and its numbers.
+// ModelViewer - `modelviewer:library`: a model file opened for viewing without a project. The file
+// loads through the model loaders (glTF and GLB; ufbx for FBX and OBJ) into the in-memory model,
+// whose stats the viewer shows. The model cooks into its own content database in the viewer's
+// cache, and the cooked model binds through a resource manager with the engine's factories. The
+// cache folder is named by the file's path, size and modification time, so reopening a model binds
+// what was cooked before while a changed file cooks again. A record beside the cooked files keeps
+// the model's guid and its stats.
 
 module;
 #include "Core/Prelude.h"
@@ -34,29 +34,29 @@ export namespace modelviewer
     namespace content = foundation::content;
     namespace resource = foundation::resource;
 
-    /// What the side panel says about a model: counted from the file as it loaded.
-    /// A material as the file has it: its name, how it shades, and the textures in its slots.
+    /// A material as the file defines it: its name, how it shades, and the textures in its slots.
     struct ModelMaterialInfo
     {
         struct Slot
         {
             String slot;  // "base color", "normal", ...
-            u32 texture;  // its place in ModelStats::textureList
+            u32 texture;  // index into ModelStats::textureList
         };
         String name;
         String shading;   // "PBR", "Phong", "Lambert", "Unlit"
         Array<Slot> slots;
     };
 
-    /// A texture as the file has it: its name, its pixels' size, and where its image is.
+    /// A texture as the file defines it: its name, its size in pixels, and where its image is.
     struct ModelTextureInfo
     {
         String name;
         u32 width = 0;
         u32 height = 0;
-        String file;      // the image's file name; empty: inside the model file
+        String file;      // the image's file name; empty when the image is inside the model file
     };
 
+    /// What the side panel shows about a model, counted from the file as it loaded.
     struct ModelStats
     {
         u32 meshes = 0;
@@ -68,7 +68,7 @@ export namespace modelviewer
         u32 skins = 0;
         Array<String> clips;    // the animations' names, in the file's order
         Array<f32> clipSeconds; // and their lengths
-        Float3 size{};          // the bounds' extent, in the file's units
+        Float3 size{};          // the extent of the bounds, in the file's units
         Array<ModelMaterialInfo> materialList; // each material and its textures (after the loose texture rule)
         Array<ModelTextureInfo> textureList;
     };
@@ -94,13 +94,13 @@ export namespace modelviewer
         return false;
     }
 
-    /// What the cache's cooked files were made by: raised when the import changes what it makes, so
+    /// The version of the cache's cooked files. Raise it when the import changes what it makes, so
     /// a model opened again cooks afresh.
     inline constexpr u32 kCacheVersion = 6; // 6: the record lists the materials and textures
 
-    /// A name for what is made from the file at `path`: 16 hex digits of its path, its size, its
-    /// modification time and `version`, so a changed file (or a raised version) has a new one.
-    /// Empty when the file is not there.
+    /// A name for what is made from the file at `path`: 16 hex digits hashed from its path, size,
+    /// modification time and `version`, so a changed file or a raised version gets a new name.
+    /// Empty when the file does not exist.
     [[nodiscard]] inline String FileKey(StringView path, u32 version)
     {
         u64 size = 0;
@@ -117,9 +117,9 @@ export namespace modelviewer
         return String(StringView(name, 16));
     }
 
-    /// The folder `path`'s cooked files live in under `cacheRoot`: named by FileKey with the cache
-    /// version, and whether loose textures were applied (they change what cooks). Empty when the
-    /// file is not there.
+    /// The folder under `cacheRoot` that holds the cooked files for `path`, named by FileKey with
+    /// the cache version and by whether loose textures were applied, since they change what cooks.
+    /// Empty when the file does not exist.
     [[nodiscard]] inline String CacheFolderFor(StringView cacheRoot, StringView path, bool looseTextures = true)
     {
         const String key = FileKey(path, kCacheVersion * 2u + (looseTextures ? 1u : 0u));
@@ -172,10 +172,10 @@ export namespace modelviewer
         }
     }
 
-    /// The loose texture rule: a material that names no colour texture (its link lost on export,
-    /// common with FBX files from packs and extractions) takes the image beside the model file that
-    /// shares the material's name, else the model's, else the first there is (PNG or JPEG, in name
-    /// order). Returns how many materials took one.
+    /// The loose texture rule: a material that names no colour texture (the link is often lost on
+    /// export, common with FBX files from packs and extractions) takes an image beside the model
+    /// file: the one named like the material, else the one named like the model, else the first
+    /// PNG or JPEG in name order. Returns how many materials took an image.
     inline u32 ApplyLooseTextures(foundation::model::Model& model, StringView modelPath)
     {
         usize slash = modelPath.Size();
@@ -193,7 +193,7 @@ export namespace modelviewer
                             &images);
         if (images.IsEmpty())
             return 0;
-        for (usize i = 1; i < images.Size(); ++i) // name order, so "the first" is the same each time
+        for (usize i = 1; i < images.Size(); ++i) // sort by name so "the first" is the same each time
             for (usize j = i; j > 0 && library_detail::Less(images[j].AsView(), images[j - 1].AsView()); --j)
             {
                 String moved = foundation::core::Move(images[j]);
@@ -207,8 +207,8 @@ export namespace modelviewer
                     return &image;
             return nullptr;
         };
-        Array<String> added;  // a file each texture was made for
-        Array<i32> indices;   // and its index in the model
+        Array<String> added;  // the image file each added texture was made for
+        Array<i32> indices;   // and that texture's index in the model
         u32 applied = 0;
         for (foundation::model::ModelMaterial* material : model.materials())
         {
@@ -240,7 +240,7 @@ export namespace modelviewer
         return applied;
     }
 
-    /// A file's name: what follows its last slash (either kind).
+    /// A file's name: what follows its last slash or backslash.
     [[nodiscard]] inline String FileTitle(StringView path)
     {
         usize start = path.Size();
@@ -249,7 +249,7 @@ export namespace modelviewer
         return String(path.SubStr(start, path.Size() - start));
     }
 
-    /// The numbers of a loaded model.
+    /// Counts the stats of a loaded model.
     [[nodiscard]] inline ModelStats CountModel(foundation::model::Model& model)
     {
         ModelStats stats;
@@ -271,8 +271,8 @@ export namespace modelviewer
                 info.name = String(texture->name());
                 info.width = static_cast<u32>(Max(texture->width, 0));
                 info.height = static_cast<u32>(Max(texture->height, 0));
-                // Its own file (FBX, a DDS, the loose texture rule), else a glTF's uri beside the
-                // model; none when the image is inside the model file.
+                // The texture's own file (FBX, a DDS, the loose texture rule), else a glTF uri beside
+                // the model; none when the image is inside the model file.
                 if (!texture->sourceFile().IsEmpty())
                     info.file = FileTitle(texture->sourceFile());
                 else if (!texture->uri().IsEmpty() && !texture->uri().StartsWith(u8"data:"))
@@ -309,8 +309,8 @@ export namespace modelviewer
             }
             stats.materialList.PushBack(Move(info));
         }
-        // The joints of the skin the viewer animates (the cook takes the first); the model's
-        // bones are all its nodes, meshes and groups among them.
+        // Count the joints of the skin the viewer animates (the cook takes the first skin), not
+        // the model's nodes, which include meshes and groups.
         stats.bones = model.skins().Size() > 0 ? static_cast<u32>(model.skins()[0]->joints().Size()) : 0u;
         stats.skins = static_cast<u32>(model.skins().Size());
         for (const foundation::model::ModelAnimation* clip : model.animations())
@@ -324,7 +324,7 @@ export namespace modelviewer
         return stats;
     }
 
-    /// The record kept beside a model's cooked files: its guid, then its numbers, a line each.
+    /// The record kept beside a model's cooked files: its guid, then its stats, one per line.
     [[nodiscard]] inline String WriteRecord(const Guid& model, const ModelStats& stats)
     {
         String text = Format(u8"model {}\nmeshes {}\nvertices {}\ntriangles {}\nmaterials {}\ntextures {}\nbones {}\nskins {}\nsize {} {} {}\n",
@@ -332,8 +332,8 @@ export namespace modelviewer
                              stats.bones, stats.skins, stats.size.x, stats.size.y, stats.size.z);
         for (usize i = 0; i < stats.clips.Size(); ++i)
             text += Format(u8"clip {} {}\n", stats.clipSeconds[i], stats.clips[i]).AsView();
-        // A texture: its size and its name and file apart by a tab (a name may hold spaces); a
-        // material: its shading and name, then a line per slot it fills.
+        // A texture line holds its size, then its name and file separated by a tab (a name may
+        // hold spaces). A material line holds its shading and name, followed by a line per slot.
         for (const ModelTextureInfo& t : stats.textureList)
             text += Format(u8"texture {} {} {}\t{}\n", t.width, t.height, t.name.AsView(), t.file.AsView()).AsView();
         for (const ModelMaterialInfo& m : stats.materialList)
@@ -345,7 +345,7 @@ export namespace modelviewer
         return text;
     }
 
-    /// A record read back; false when it is not one (the model cooks again).
+    /// Parses a record; false when the text is not a valid record, in which case the model cooks again.
     [[nodiscard]] inline bool ReadRecord(StringView text, Guid& model, ModelStats& stats)
     {
         bool haveModel = false;
@@ -452,13 +452,13 @@ export namespace modelviewer
         return haveModel;
     }
 
-    /// A model file open for viewing: its numbers, and the cooked model bound (alive while this is).
+    /// A model file open for viewing: its stats and the bound cooked model, which lives as long as this.
     class OpenModel
     {
     public:
         enum class Outcome : u8
         {
-            Opened,   // cooked now
+            Opened,   // cooked by this open
             FromCache, // bound what an earlier open cooked
             NotFound,
             LoadFailed, // the loaders could not read it
@@ -467,17 +467,18 @@ export namespace modelviewer
         };
 
         OpenModel(IAllocator& allocator) : m_allocator(&allocator) {}
-        /// Whether a material without its texture takes the image beside the model (ApplyLooseTextures).
-        /// On by default; it changes what cooks, so each choice has a cache folder of its own.
+        /// Whether a material without its texture takes an image beside the model (ApplyLooseTextures).
+        /// On by default. It changes what cooks, so each setting has its own cache folder.
         void SetLooseTextures(bool on) noexcept { m_looseTextures = on; }
         [[nodiscard]] bool LooseTextures() const noexcept { return m_looseTextures; }
         OpenModel(const OpenModel&) = delete;
         OpenModel& operator=(const OpenModel&) = delete;
         ~OpenModel() { Close(); }
 
-        /// Open `path`, its cooked files under `cacheRoot`. `device` (may be null: no textures)
-        /// is what the texture factory uploads with. Begin, the file read here when it must be
-        /// (LoadFile), then Finish: what a window does in three steps, the read on a worker.
+        /// Opens `path`, with its cooked files under `cacheRoot`. The texture factory uploads with
+        /// `device`; when it is null there are no textures. This runs Begin, LoadFile when the file
+        /// must be read, then Finish, all on this thread; a window runs the same steps with the
+        /// read on a worker.
         Outcome Open(StringView path, StringView cacheRoot, foundation::rhi::Device* device)
         {
             Outcome outcome = Outcome::NotFound;
@@ -491,16 +492,16 @@ export namespace modelviewer
             return Finish(model, stats);
         }
 
-        /// The file read into `model` and counted, the loose textures applied when asked: the slow
-        /// part of an open, safe on any thread (its loaders are its own, not the registry's).
-        /// Opened when it read.
+        /// Reads the file into `model` and counts its stats, applying loose textures when asked.
+        /// This is the slow part of an open and is safe on any thread, since it creates its own
+        /// loaders rather than using the registry's. Returns Opened on success.
         static Outcome LoadFile(StringView path, bool looseTextures, foundation::model::Model& model, ModelStats& stats)
         {
             if (!FileExists(path))
                 return Outcome::NotFound;
             foundation::model::gltf::GltfLoader gltf;
             foundation::model::fbx::FbxLoader fbx;
-            StringView extension; // with its dot, as the loaders take it
+            StringView extension; // with its dot, as the loaders expect it
             for (usize i = path.Size(); i > 0 && path[i - 1] != u8'/' && path[i - 1] != u8'\\'; --i)
                 if (path[i - 1] == u8'.')
                 {
@@ -522,13 +523,13 @@ export namespace modelviewer
 
         enum class Begun : u8
         {
-            Bound,     // cooked before: bound from the cache, open now
-            NeedsFile, // the file must be read (LoadFile, on any thread) and Finish called
+            Bound,     // cooked before: bound from the cache and open
+            NeedsFile, // the file must be read (LoadFile, on any thread), then Finish called
             Failed,
         };
-        /// The first step, on the thread that owns the resources: the cache folder, its database
-        /// and resources made, and the model bound when an earlier open cooked it. `outcome` says
-        /// how it went when it is not NeedsFile.
+        /// The first step, run on the thread that owns the resources. It creates the cache folder,
+        /// its database and resources, and binds the model when an earlier open cooked it.
+        /// `outcome` reports the result when the return is not NeedsFile.
         Begun Begin(StringView path, StringView cacheRoot, foundation::rhi::Device* device, Outcome& outcome)
         {
             Close();
@@ -565,8 +566,8 @@ export namespace modelviewer
             return outcome == Outcome::FromCache ? Begun::Bound : Begun::Failed;
         }
 
-        /// The last step, after Begin said NeedsFile: `model` (as LoadFile read it) cooked into
-        /// the cache, its record written, and bound.
+        /// The last step, after Begin returned NeedsFile: cooks `model` (as LoadFile read it) into
+        /// the cache, writes its record, and binds it.
         Outcome Finish(foundation::model::Model& model, const ModelStats& stats)
         {
             if (!m_database)
@@ -580,7 +581,7 @@ export namespace modelviewer
             return BindCooked(guid, Outcome::Opened);
         }
 
-        /// The model and everything it bound let go.
+        /// Releases the model and everything it bound.
         void Close()
         {
             m_model = {};
@@ -595,10 +596,10 @@ export namespace modelviewer
         [[nodiscard]] const ModelStats& Stats() const noexcept { return m_stats; }
         [[nodiscard]] StringView Path() const noexcept { return m_path.AsView(); }
         [[nodiscard]] StringView CacheFolder() const noexcept { return m_folder.AsView(); }
-        /// Its resources (the loads finish as they are pumped).
+        /// The resource manager; its loads finish as it is pumped.
         [[nodiscard]] resource::ResourceManager* Resources() const noexcept { return m_resources.Get(); }
 
-        // Exported data: read by the viewer executable through ModelBrowse in the shared build.
+        // Exported data: the viewer executable reads it through ModelBrowse in the shared build.
         static constexpr ENGINE_EXPORT_DATA const char8_t* kRecordName = u8"viewer-record.txt";
 
     private:

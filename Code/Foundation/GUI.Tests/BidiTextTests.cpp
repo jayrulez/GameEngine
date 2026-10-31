@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - bidirectional text (E9c of Specs/gui-lab-evolution.md): the formatter resolves each
-// paragraph's levels through Foundation's resolver (SheenBidi installed here, as GUISandbox does),
-// wraps in logical order, then lays each line out in visual order, each piece shaped the way it
-// reads; start and end alignment follow the paragraph; a caret's x is a glyph's leading edge and a
-// point's offset the nearest edge, both the right way round in right-to-left text, with an affinity
-// where the directions meet; Left and Right step through a line's caret places in visual order; a
-// range is a box per stretch of glyphs side by side. Over DejaVu Sans
-// Mono, which draws Arabic.
+// GUI - bidirectional text. The formatter resolves each paragraph's levels through Foundation's
+// resolver (SheenBidi, installed here as GUISandbox does), wraps in logical order, then lays each
+// line out in visual order, shaping each piece in its own direction. Start and end alignment follow
+// the paragraph. A caret's x is a glyph's leading edge, and a point maps to the offset of the
+// nearest edge; both are the right way round in right-to-left text, with an affinity where the
+// directions meet. Left and Right step through a line's caret places in visual order. A range
+// becomes one box per stretch of glyphs that sit side by side. The tests use DejaVu Sans Mono,
+// which draws Arabic.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -276,7 +276,7 @@ TEST_CASE("bidi text: the model moves Left and Right across the view's caret pla
     model.SetCaretPlaces(&places);
     model.SetCaret(1);
     CHECK(model.Run(TextEditCommand::MoveLeft));
-    CHECK(model.GetCaret() == 2u); // left goes on through the text
+    CHECK(model.GetCaret() == 2u); // Left keeps moving forward through the text
     CHECK(model.Run(TextEditCommand::SelectRight));
     CHECK(model.GetCaret() == 1u);
     CHECK(model.GetAnchor() == 2u);
@@ -285,7 +285,7 @@ TEST_CASE("bidi text: the model moves Left and Right across the view's caret pla
     CHECK(model.GetCaret() == 0u); // nowhere further that way
     model.SetCaretPlaces(nullptr);
     CHECK(model.Run(TextEditCommand::MoveRight));
-    CHECK(model.GetCaret() == 1u); // without, as the bytes go
+    CHECK(model.GetCaret() == 1u); // without caret places, movement follows the bytes
 }
 
 TEST_CASE("bidi text: a clamped right-to-left paragraph ends its last line's ellipsis on the left")
@@ -326,7 +326,7 @@ TEST_CASE("bidi text: in a right-to-left paragraph a word to the left is the nex
     model.SetCaretPlaces(&places);
     model.SetCaret(4); // before "two"
     CHECK(model.Run(TextEditCommand::MoveWordLeft));
-    CHECK(model.GetCaret() > 4u); // on through the text: past "two"
+    CHECK(model.GetCaret() > 4u); // forward through the text, past "two"
     const usize past = model.GetCaret();
     CHECK(model.Run(TextEditCommand::MoveWordRight));
     CHECK(model.GetCaret() < past); // back
@@ -336,7 +336,7 @@ TEST_CASE("bidi text: in a right-to-left paragraph a word to the left is the nex
     CHECK(model.Run(TextEditCommand::MoveLeft));
     CHECK(model.GetCaret() == model.GetAnchor());
     CHECK(model.GetCaret() > 4u); // the selection's left end is its logical end
-    // Deletes keep to the text's order: backward is backward.
+    // Deletes follow the text's logical order, so backward deletes backward.
     model.SetCaret(7); // after "two"
     CHECK(model.Run(TextEditCommand::DeleteWordBackward));
     CHECK(model.GetText() == StringView(u8"one  three"));

@@ -3,22 +3,22 @@
 
 // Foundation::VFS - :data_root partition.
 //
-// THE one mechanism by which an executable finds engine data (runtime assets, shaders, fonts):
+// The one mechanism by which an executable finds engine data (runtime assets, shaders, fonts):
 // the "Data" directory identified by a ".dataroot" marker file. Discovery is anchored at the
-// EXECUTABLE (robust for a relocated distribution - the working directory is unreliable when an
-// app is launched from a menu or a .desktop file), walking up for a dev source tree, then
-// falling back to the working directory. An explicit `--data-root <dir>` override wins, and is
-// validated (it must hold the marker). There is deliberately no compile-time path fallback:
-// a build that cannot find its data fails loudly instead of reading the build machine's tree.
+// executable, which is robust for a relocated distribution (the working directory is unreliable
+// when an app is launched from a menu or a .desktop file). It walks up for a dev source tree,
+// then falls back to the working directory. An explicit `--data-root <dir>` override wins, and
+// is validated (it must hold the marker). There is no compile-time path fallback: a build that
+// cannot find its data fails loudly instead of reading the build machine's tree.
 //
-// The application resolves the root ONCE at startup (ResolveDataRoot), mounts a
+// The application resolves the root once at startup (ResolveDataRoot), mounts a
 // NativeFileSystem over it, and hands that IFileSystem to whatever reads engine data (the
-// shader host reads "Engine/Shaders/...", the GUI its default font under "Engine/Fonts/..."). Nothing
-// below the application knows where the root is - only what it reads relative to it.
+// shader host reads "Engine/Shaders/...", the GUI its default font under "Engine/Fonts/...").
+// Nothing below the application knows where the root is, only what it reads relative to it.
 //
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h" // the no-data-root warning (a silent miss = unexplained missing assets)
+#include "Core/Log/Log.h" // the no-data-root error (a silent miss would look like missing assets)
 
 export module foundation.vfs:data_root;
 
@@ -38,7 +38,7 @@ export namespace foundation::vfs
     }
 
     // Walks up from `startDir`, returning the first "<ancestor>/Data" that is a data root, or
-    // empty. The first iteration also covers "<startDir>/Data" - the relocated-dist case where
+    // empty. The first iteration also covers "<startDir>/Data": the relocated-dist case where
     // Data/ sits beside the executable.
     [[nodiscard]] inline String FindDataRootFrom(StringView startDir)
     {
@@ -67,9 +67,9 @@ export namespace foundation::vfs
         String fromCwd = FindDataRootFrom(GetCurrentDirectory().AsView());
         if (fromCwd.IsEmpty())
         {
-            // Loud, not silent: there is no compile-time fallback, so a botched extraction
-            // otherwise surfaces as unexplained missing assets. Name what was searched so the
-            // fix is self-service (put Data/ beside the exe, or pass --data-root).
+            // There is no compile-time fallback, so without this a botched extraction surfaces
+            // as unexplained missing assets. Name what was searched so the user can fix it
+            // (put Data/ beside the exe, or pass --data-root).
             LOG_ERROR(u8"VFS",
                       u8"no data root found (searched up from exe dir '{}' and cwd '{}' for a "
                       u8"Data/.dataroot marker) - put Data/ beside the executable or pass "
@@ -108,8 +108,8 @@ export namespace foundation::vfs
         return String();
     }
 
-    // Resolves the data root: an explicit `overrideDir` (validated - it must hold the marker,
-    // else an error and empty), otherwise the discovery walk. Empty = no data root; callers
+    // Resolves the data root: an explicit `overrideDir` (validated: it must hold the marker,
+    // else an error and empty), otherwise the discovery walk. Empty means no data root; callers
     // fail loudly (an application exits, a test REQUIREs).
     [[nodiscard]] inline String ResolveDataRoot(StringView overrideDir)
     {
@@ -132,8 +132,8 @@ export namespace foundation::vfs
         return ResolveDataRoot(DataRootFromArguments(argc, argv).AsView());
     }
 
-    // Joins a data-root-relative path onto `dataRoot` (a plain PathJoin - kept so call sites
-    // read as "data path", and so an empty root yields the relative path unchanged).
+    // Joins a data-root-relative path onto `dataRoot`. A plain PathJoin, kept so call sites
+    // read as "data path" and so an empty root yields the relative path unchanged.
     [[nodiscard]] inline String DataPath(StringView dataRoot, StringView relative)
     {
         return dataRoot.IsEmpty() ? String(relative) : PathJoin(dataRoot, relative);

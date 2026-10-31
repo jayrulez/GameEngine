@@ -3,11 +3,10 @@
 
 // Engine::Physics - :components partition.
 //
-// The authoring components: RigidBodyComponent carries the
-// body's motion/layer/material properties plus its OWN primitive shape; ColliderComponent
-// on DESCENDANT entities adds extra shapes that fold into the nearest ancestor body's
-// compound (hierarchy compounding). Runtime fields (body handle, pose double-buffer for
-// interpolation) are transient - never serialized.
+// The authoring components: RigidBodyComponent carries the body's motion, layer and material
+// properties plus its own primitive shape; ColliderComponent on descendant entities adds extra
+// shapes that fold into the nearest ancestor body's compound (hierarchy compounding). Runtime
+// fields (body handle, pose double-buffer for interpolation) are transient and never serialized.
 
 module;
 #include "Core/Prelude.h"
@@ -45,13 +44,13 @@ export namespace engine::physics
         f32 linearDamping = 0.05f;
         f32 angularDamping = 0.05f;
         bool isTrigger = false;
-        // Continuous collision (Jolt LinearCast): fast small dynamic bodies stop tunneling
-        // through thin geometry. Opt-in - an extra cast per fast body per step.
+        // Continuous collision (Jolt LinearCast): fast small dynamic bodies stop tunneling through
+        // thin geometry. Opt-in, since it costs an extra cast per fast body per step.
         bool continuousCollision = false;
-        // Explicit mass in kg (dynamic only). 0 = derive from density as today; > 0
-        // overrides the scalar mass while inertia stays density-derived.
+        // Explicit mass in kg (dynamic only). 0 derives it from density; > 0 overrides the scalar
+        // mass while inertia stays density-derived.
         f32 mass = 0.0f;
-        // Designer collision group [0, 32) - pairs collide when the scene's group matrix
+        // Designer collision group [0, 32): pairs collide when the scene's group matrix
         // allows it (PhysicsSceneSettings::groupCollides).
         u8 collisionGroup = 0;
         // shape == ShapeKind::Cooked: the cooked collision-shape resource to use.
@@ -64,11 +63,12 @@ export namespace engine::physics
 
         // Runtime (transient):
         BodyId body;
-        // An impulse applied to this body BEFORE its Jolt body existed (a script that spawns a prefab
-        // and launches it the same frame - e.g. a thrown paper). Accumulated by ScenePhysics.applyImpulse
-        // when `body` is invalid, then flushed once in CreateBodyForEntity. Runtime only, never serialized.
+        // An impulse applied to this body before its Jolt body existed (a script that spawns a
+        // prefab and launches it the same frame, such as a thrown paper). Accumulated by
+        // ScenePhysics.applyImpulse when `body` is invalid, then flushed once in
+        // CreateBodyForEntity. Runtime only, never serialized.
         Float3 pendingImpulse{0, 0, 0};
-        // A velocity set BEFORE the body existed (ScenePhysics.setVelocity on a prefab spawned this
+        // A velocity set before the body existed (ScenePhysics.setVelocity on a prefab spawned this
         // frame), set once in CreateBodyForEntity; dropped wherever the impulse queue is.
         Float3 pendingVelocity{0, 0, 0};
         bool hasPendingVelocity = false;
@@ -76,8 +76,8 @@ export namespace engine::physics
         // every fixed step until set back to zero: Jolt clears a force after each step, and a
         // behavior runs per frame, not per step. Run-scoped (Stop clears it), never serialized.
         Float3 heldForce{0, 0, 0};
-        // Entity-active latch: the effective-active state this
-        // domain last reconciled against. Runtime only, never serialized.
+        // Entity-active latch: the effective-active state this domain last reconciled against.
+        // Runtime only, never serialized.
         bool simActive = false;
         Float3 prevPosition{0, 0, 0};
         Float3 currPosition{0, 0, 0};
@@ -195,11 +195,11 @@ export namespace engine::physics
                                         AABB& out) override;
     };
 
-    // Jolt CharacterVirtual on this entity: a kinematic capsule with slope/step/stair
-    // handling that pushes dynamic bodies (maxStrength newtons). The entity transform's
-    // POSITION is the capsule CENTER and is physics-owned while simulating (interpolated
-    // like dynamic bodies); rotation stays scene-owned (gameplay yaw). Gameplay drives
-    // moveVelocity (world space; y ignored while grounded) and one-shot jumpSpeed.
+    // Jolt CharacterVirtual on this entity: a kinematic capsule with slope, step and stair handling
+    // that pushes dynamic bodies (maxStrength newtons). The entity transform's position is the
+    // capsule centre and is physics-owned while simulating (interpolated like dynamic bodies);
+    // rotation stays scene-owned (gameplay yaw). Gameplay drives moveVelocity (world space; y
+    // ignored while grounded) and the one-shot jumpSpeed.
     struct CharacterComponent
     {
         // Authored:
@@ -226,8 +226,8 @@ export namespace engine::physics
 
         // Runtime (transient):
         CharacterId character;
-        // Entity-active latch: the effective-active state this
-        // domain last reconciled against. Runtime only, never serialized.
+        // Entity-active latch: the effective-active state this domain last reconciled against.
+        // Runtime only, never serialized.
         bool simActive = false;
         CharacterGround ground = CharacterGround::InAir;
         Float3 prevPosition{0, 0, 0};
@@ -235,10 +235,9 @@ export namespace engine::physics
         Float3 velocity{0, 0, 0};       // how fast it moved over the last step (m/s)
         Float3 groundNormal{0, 1, 0};   // the ground under it after the last step; up in the air
 
-        // ---- script gameplay surface (Character.of(entity).<op>): pure component-data ops, no
-        // world access - the physics tick reads moveVelocity/jumpSpeed and writes ground/currPosition,
-        // so per-entity character control works via reflection (fixes the static facade's "first
-        // character only" limitation). ----
+        // ---- script gameplay surface (Character.of(entity).<op>): pure component-data operations
+        // with no world access. The physics tick reads moveVelocity/jumpSpeed and writes
+        // ground/currPosition, so per-entity character control works through reflection. ----
         void move(f32 velocityX, f32 velocityZ)
         {
             moveVelocity = Float3{velocityX, 0.0f, velocityZ};
@@ -256,17 +255,18 @@ export namespace engine::physics
         [[nodiscard]] Float3 currentVelocity() const { return velocity; }
         [[nodiscard]] Float3 currentGroundNormal() const { return groundNormal; }
         void jump(f32 speed) { jumpSpeed = speed; }
-        // Sets the vertical speed at the next step, on the ground OR in the air, replacing what
-        // gravity had built up: a bounce off an enemy, a spring pad, a double jump. Negative
-        // slams down. A pending jump is dropped.
+        // Sets the vertical speed at the next step, on the ground or in the air, replacing what
+        // gravity had built up: a bounce off an enemy, a spring pad, a double jump. Negative slams
+        // down. A pending jump is dropped.
         void launch(f32 speed)
         {
             launchSpeed = speed;
             launchPending = true;
         }
-        // Teleport/respawn: request a hard snap to (x, y, z). The physics tick moves the
-        // CharacterVirtual (a live character owns its transform, so a plain entity.setPosition would be
-        // overwritten next step) and drops momentum. Applied once, then the request clears.
+        // Teleport or respawn: request a hard snap to (x, y, z). The physics tick moves the
+        // CharacterVirtual (a live character owns its transform, so a plain entity.setPosition
+        // would be overwritten next step) and drops momentum. Applied once, then the request
+        // clears.
         void setPosition(f32 x, f32 y, f32 z)
         {
             teleportTo = Float3{x, y, z};
@@ -319,16 +319,16 @@ export namespace engine::physics
         }
     };
 
-    // A joint on THIS entity's rigid body. Target resolution: explicit entity guid; nil =
-    // the nearest ANCESTOR entity with a rigid body (prefab-safe - guids inside prefab
-    // payloads are remapped per instance, so hierarchy is the stable reference); no
-    // ancestor body = anchored to the WORLD.
+    // A joint on this entity's rigid body. Target resolution: an explicit entity guid; nil means
+    // the nearest ancestor entity with a rigid body (prefab-safe: guids inside prefab payloads are
+    // remapped per instance, so the hierarchy is the stable reference); with no ancestor body it is
+    // anchored to the world.
     struct JointComponent
     {
         JointKind kind = JointKind::Fixed;
         foundation::scene::EntityRef targetEntity; // nil = nearest ancestor body / world
-        Float3 localAnchor{0.0f, 0.0f, 0.0f}; // pivot in THIS entity's space
-        Float3 localAxis{0.0f, 1.0f, 0.0f};   // hinge/slider axis in THIS entity's space
+        Float3 localAnchor{0.0f, 0.0f, 0.0f}; // pivot in this entity's space
+        Float3 localAxis{0.0f, 1.0f, 0.0f};   // hinge/slider axis in this entity's space
         f32 limitMin = 1.0f;                  // min > max = unlimited
         f32 limitMax = -1.0f;
         f32 minDistance = -1.0f; // Distance: negative = starting distance
@@ -339,8 +339,8 @@ export namespace engine::physics
 
         // Runtime (transient):
         JointId joint;
-        // Entity-active latch: the effective-active state this
-        // domain last reconciled against. Runtime only, never serialized.
+        // Entity-active latch: the effective-active state this domain last reconciled against.
+        // Runtime only, never serialized.
         bool simActive = false;
     };
 
@@ -349,7 +349,7 @@ export namespace engine::physics
         u8 kind = static_cast<u8>(c.kind);
         foundation::core::Serialize(ar, "kind", kind);
         c.kind = static_cast<JointKind>(kind);
-        // Serialize the inner guid directly (byte-identical to the pre-EntityRef Guid field).
+        // Serialize the inner guid directly, so the record holds a plain Guid field.
         foundation::core::Serialize(ar, "targetEntity", c.targetEntity.id);
         foundation::core::Serialize(ar, "localAnchor", c.localAnchor);
         foundation::core::Serialize(ar, "localAxis", c.localAxis);
@@ -383,9 +383,9 @@ export namespace engine::physics
         Array<u32> groupCollides;
     };
 
-    // ONE serializer for the settings block - the scene system persists through it, and
-    // the editor's collision-matrix editor round-trips edited COPIES through the same
-    // code (the whole-block undo command replays these exact bytes).
+    // One serializer for the settings block: the scene system persists through it, and the editor's
+    // collision-matrix editor round-trips edited copies through the same code (the whole-block undo
+    // command replays these exact bytes).
     inline void SerializePhysicsSceneSettings(ISerializer& ar, PhysicsSceneSettings& settings)
     {
         foundation::core::Serialize(ar, "gravity", settings.gravity);
@@ -395,8 +395,8 @@ export namespace engine::physics
         foundation::core::Serialize(ar, "groupCollides", settings.groupCollides);
     }
 
-    // Defined in SubsystemImpl.cpp: the REFLECT_* bodies live there because
-    // GCC's module serializer emits an unreadable gcm cluster when they sit in this
-    // partition (the -fno-module-lazy eager load then fails for every consumer).
+    // Defined in PhysicsSubsystemImpl.cpp: the REFLECT_* bodies live there because GCC's module
+    // serializer emits an unreadable gcm cluster when they sit in this partition (the
+    // -fno-module-lazy eager load then fails for every consumer).
     void RegisterPhysicsComponentReflection();
 }

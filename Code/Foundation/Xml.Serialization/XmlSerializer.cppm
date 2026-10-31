@@ -3,18 +3,16 @@
 
 // Foundation::Xml.Serialization - the `foundation.xml.serialization` module.
 //
-// An XML backend for Core's format-agnostic ISerializer/Serializer contract:
-// the first text-based serialization backend. One Serialize() path runs either
-// direction; this maps the Key()/scope/Scalar/Text calls onto an XML DOM
-// (foundation.xml). Inspired by Sedulous.Serialization.Xml's DOM scheme (typed
-// element tags + a `name` attribute), adapted to our leaner interface.
+// An XML backend for Core's format-agnostic ISerializer/Serializer contract. One
+// Serialize() path runs either direction; this maps the Key()/scope/Scalar/Text calls
+// onto an XML DOM (foundation.xml) with typed element tags and a `name` attribute.
 //
 // Layering: kept out of Core (which can't depend on Xml) and out of the XML DOM
-// library (which stays serialization-agnostic) - mirrors Sedulous.Serialization.Xml.
+// library (which stays serialization-agnostic).
 
 module;
 #include "Core/Prelude.h"
-#include <cstdlib> // strtoll / strtoull / strtod
+#include <cstdlib> // strtoll, strtoull, strtod
 
 export module foundation.xml.serialization;
 
@@ -28,14 +26,14 @@ export namespace foundation::xml
     // ISerializer backend over an XML DOM.
     //
     // Layout: each field is a child element. Its tag names the scalar kind
-    // ("i32", "f32", "object", "array", …); a keyed field carries a `name`
-    // attribute, array elements are positional (unnamed). Scalars/strings store
+    // ("i32", "f32", "object", "array", ...); a keyed field carries a `name`
+    // attribute, array elements are positional (unnamed). Scalars and strings store
     // their value as element text; arrays carry a `count` attribute.
     class XmlSerializer final : public Serializer
     {
     public:
         // Write mode: builds a fresh document rooted at <root>; the allocator
-        // (required - the owner decides) backs the whole node tree.
+        // (required: the owner decides) backs the whole node tree.
         explicit XmlSerializer(IAllocator& allocator)
             : Serializer(SerializeMode::Write), m_doc(allocator)
         {
@@ -72,7 +70,7 @@ export namespace foundation::xml
         void Key(const char* name) noexcept override { m_pendingKey = name; }
 
         // Whether the current scope still has an element under `name`, searched forward from the
-        // cursor as a keyed read searches, and NOT consumed. Writing, every key is there.
+        // cursor as a keyed read searches, and not consumed. Writing, every key is there.
         [[nodiscard]] bool HasKey(const char* name) const override
         {
             if (IsWriting())
@@ -244,17 +242,17 @@ export namespace foundation::xml
         }
 
         // Unknown-section passthrough. XML is self-describing, so BeginFramedRegion/EndFramedRegion are
-        // the inherited no-ops (element boundaries delimit the region); this captures (READ) / re-injects
-        // (WRITE) the current scope's remaining ELEMENT children verbatim, so a section whose type this
-        // build cannot instantiate survives a load/save round-trip.
+        // the inherited no-ops (element boundaries delimit the region); this captures (read) or
+        // re-injects (write) the current scope's remaining element children verbatim, so a section
+        // whose type this build cannot instantiate survives a load/save round-trip.
         bool RawRemainder(Array<u8>& blob) override
         {
             if (IsWriting())
             {
-                // Parse the captured fragment (wrapped in a synthetic root) and MOVE its element children
-                // into the current write element. Nodes share one global allocator, so reparenting
-                // transfers ownership cleanly (RemoveChild detaches without delete; AppendChild adopts,
-                // and scratch's destructor only deletes what is still attached).
+                // Parse the captured fragment (wrapped in a synthetic root) and move its element children
+                // into the current write element. The scratch document uses m_doc's allocator, so
+                // reparenting transfers ownership cleanly (RemoveChild detaches without delete; AppendChild
+                // adopts, and scratch's destructor only deletes what is still attached).
                 if (blob.IsEmpty())
                 {
                     return true;
@@ -285,7 +283,7 @@ export namespace foundation::xml
                 return true;
             }
 
-            // READ: serialize the current scope's remaining element children to bytes, then consume them.
+            // Read: serialize the current scope's remaining element children to bytes, then consume them.
             if (m_readStack.IsEmpty())
             {
                 return false;
@@ -337,7 +335,7 @@ export namespace foundation::xml
 
         // --- read helpers ---
 
-        // Fails the read, and the FIRST failure also says where: what was wanted (by key when
+        // Fails the read, and the first failure also says where: what was wanted (by key when
         // one was asked for), the scopes it was wanted in, and what stood there instead.
         void FailRead(ErrorCode code, StringView what)
         {
@@ -424,11 +422,11 @@ export namespace foundation::xml
             {
                 const StringView name(reinterpret_cast<const utf8char*>(m_pendingKey));
                 m_pendingKey = nullptr;
-                // Search FORWARD from the scope cursor, consuming on a hit. Writes emit
-                // fields sequentially, so reads are sequential too - and starting at
-                // FirstChild every time made an ARRAY of keyed structs (repeated flat key
-                // groups, e.g. a model manifest's nodes) read every element as a copy of
-                // the FIRST group. A miss leaves the cursor untouched (the caller fails
+                // Search forward from the scope cursor, consuming on a hit. Writes emit
+                // fields sequentially, so reads are sequential too; starting at FirstChild
+                // every time would make an array of keyed structs (repeated flat key
+                // groups, such as a model manifest's nodes) read every element as a copy of
+                // the first group. A miss leaves the cursor untouched (the caller fails
                 // loudly; the scope stays consumable).
                 for (XmlNode* c = scope.cursor; c != nullptr; c = c->NextSibling())
                 {
@@ -704,11 +702,11 @@ export namespace foundation::xml
     {
         struct XmlReadSerializerContext final : SerializerContext
         {
-            XmlDocument doc{DefaultAllocator()}; // SerializerFactory ABI bound
+            XmlDocument doc{DefaultAllocator()}; // the factory signature carries no allocator
             XmlSerializer* xmlSer = nullptr;
 
-            // SerializerFactory's fixed (IStream&, SerializeMode) ABI is a documented
-            // bound - the contexts root on the process allocator.
+            // SerializerFactory's fixed (IStream&, SerializeMode) signature carries no
+            // allocator, so the contexts root on the process allocator.
             explicit XmlReadSerializerContext(IStream& stream) : doc(DefaultAllocator())
             {
                 const u64 sz = stream.Size();

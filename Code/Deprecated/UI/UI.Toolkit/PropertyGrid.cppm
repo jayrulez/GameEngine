@@ -4,13 +4,9 @@
 // UI Toolkit - :property_grid partition
 //
 // Property inspector grid: a ScrollView of PropertyEditors grouped by category into Expanders, each shown
-// as a label + editor row (an EditableLabel when the editor has OnLabelRenamed set). Ported from
-// Sedulous.UI.Toolkit/src/PropertyGrid/PropertyGrid.bf.
-//
-// Beef owned `List<PropertyEditor> mEditors` (deletes each) -> Array<RefPtr<PropertyEditor>>. The Beef
-// Dictionary<String,List> category grouping -> parallel Arrays (categoryOrder + per-category editor lists),
-// preserving first-seen order like the original. `new FlexLayout.LayoutParams()` -> LayoutStyle
-// / LayoutStyle; `.Value =` on properties -> SetValue(...); `.Match` -> SizeSpec::Match().
+// as a label and editor row (an EditableLabel when the editor has OnLabelRenamed set). Categories are
+// grouped with parallel arrays (the category order and a per-category editor list), preserving the
+// order in which categories are first seen.
 
 module;
 #include "Core/Prelude.h"
@@ -34,7 +30,7 @@ export namespace foundation::ui::toolkit
     {
         RTTI_OBJECT(PropertyGrid, ViewGroup)
     public:
-        /// Ratio of label width to total width (0.1 - 0.9).
+        /// Ratio of label width to total width (0.1 to 0.9).
         f32 LabelWidthRatio = 0.4f;
 
         /// Height of each property row.
@@ -55,7 +51,6 @@ export namespace foundation::ui::toolkit
             RefPtr<FlexLayout> content = MakeRef<FlexLayout>(MemoryAllocator());
             content->Direction = Orientation::Vertical;
             m_content = content.Get();
-            // `LayoutParams` names View's shadowing member here, so the type is spelled foundation::ui::LayoutParams.
             foundation::ui::LayoutStyle lp;
             lp.Width = SizeSpec::Match();
             m_scrollView->AddView(content.Get(), lp);
@@ -69,8 +64,8 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
-        /// Right-aligned action widgets for a CATEGORY's expander header (e.g. a component's copy /
-        /// remove icons). Set before/with the properties; applied when the category expander builds.
+        /// Right-aligned action widgets for a category's expander header (for example a component's
+        /// copy and remove icons). Set before or with the properties; applied when the category expander builds.
         /// Pass null to clear. Re-registered each inspector rebuild (Clear() drops them).
         void SetCategoryHeaderActions(StringView category, RefPtr<View> actions)
         {
@@ -90,8 +85,8 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
-        /// The actions registered for `category`'s header (null when none): what a test drives a
-        /// section's icons through.
+        /// The actions registered for `category`'s header (null when none). Tests drive a
+        /// section's icons through this.
         [[nodiscard]] View* GetCategoryHeaderActions(StringView category) const
         {
             for (usize i = 0; i < m_actionCategories.Size(); ++i)
@@ -104,7 +99,7 @@ export namespace foundation::ui::toolkit
             return nullptr;
         }
 
-        /// Places `category`'s section INSIDE `parent`'s body, after the parent's own rows, rather
+        /// Places `category`'s section inside `parent`'s body, after the parent's own rows, rather
         /// than beside it (a script component's behaviours inside the component). A parent that
         /// never appears, or a nesting that would loop, leaves the section at the top level.
         void SetCategoryParent(StringView category, StringView parent)
@@ -166,11 +161,11 @@ export namespace foundation::ui::toolkit
             return nullptr;
         }
 
-        /// Remove all properties.
-        /// Build the named category's expander COLLAPSED (content Gone - costing no layout or
-        /// draw until opened). For bulk sections a user rarely edits (the generic asset form's
-        /// per-array groups: ~1300 rows measured every damaged frame made interaction crawl).
-        /// Set before/with the properties; applied when the expander builds.
+        /// Build the named category's expander collapsed (its content Gone, costing no layout or
+        /// draw until opened). Meant for bulk sections a user rarely edits, such as the generic
+        /// asset form's per-array groups, where measuring over a thousand rows on every damaged
+        /// frame makes interaction crawl. Set before or with the properties; applied when the
+        /// expander builds.
         void SetCategoryDefaultCollapsed(StringView category)
         {
             for (usize i = 0; i < m_collapsedCategories.Size(); ++i)
@@ -185,6 +180,7 @@ export namespace foundation::ui::toolkit
             Invalidate();
         }
 
+        /// Remove all properties.
         void Clear()
         {
             m_editors.Clear();
@@ -247,9 +243,9 @@ export namespace foundation::ui::toolkit
             m_needsRebuild = false;
             m_content->Spacing = RowSpacing;
 
-            // Remember each category's CURRENT expansion before tearing the expanders down: a
-            // rebuild (undo/redo, shape change) must not slam shut a group the user opened - or
-            // reopen one they collapsed. The remembered state wins over the default-collapsed
+            // Remember each category's current expansion before tearing the expanders down: a
+            // rebuild (undo or redo, a shape change) must not slam shut a group the user opened,
+            // or reopen one they collapsed. The remembered state wins over the default-collapsed
             // list; the default applies only to categories seen for the first time.
             RememberExpansions(*m_content);
 
@@ -415,7 +411,7 @@ export namespace foundation::ui::toolkit
             return -1;
         }
 
-        /// What every expander, nested ones included, has open, before the tree is torn down.
+        /// Records which expanders, nested ones included, are open before the tree is torn down.
         void RememberExpansions(ViewGroup& container)
         {
             for (usize i = 0; i < container.ChildCount(); ++i)
@@ -437,7 +433,7 @@ export namespace foundation::ui::toolkit
             row->Direction = Orientation::Horizontal;
             row->Spacing = 6.0f; // gap between the (ellipsized) label column and the value editor
 
-            // Label - editable if editor has OnLabelRenamed set.
+            // Label, editable if the editor has OnLabelRenamed set.
             if (editor->OnLabelRenamed)
             {
                 RefPtr<EditableLabel> editableLabel = MakeRef<EditableLabel>(MemoryAllocator());
@@ -484,7 +480,7 @@ export namespace foundation::ui::toolkit
                 row->AddView(editorView, lp);
             }
 
-            // Row-level presentation carried by the editor: tooltip + conditional visibility.
+            // Row-level presentation carried by the editor: tooltip and conditional visibility.
             if (!editor->Tooltip().IsEmpty())
             {
                 row->TooltipText = String(editor->Tooltip());

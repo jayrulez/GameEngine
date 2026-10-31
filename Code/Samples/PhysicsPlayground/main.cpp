@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// PhysicsPlayground - the physics consumer proof: a stack of falling crates, a
-// kinematic sweeper, a trigger volume, and crosshair raycast shoving - all authored as
-// RigidBody/Collider COMPONENTS on a scene, simulated by the Jolt-backed subsystem on the
-// engine's fixed lane with render interpolation, and drawn via the physics DEBUG
-// wireframes (green = awake dynamic, grey = sleeping, blue = static/kinematic, yellow =
-// trigger). Fly with WASD/RMB-look; LEFT-CLICK shoves the body under the crosshair; R
-// respawns the stack; the ImGui panel has gravity + time-scale sliders and live counts.
+// PhysicsPlayground - a physics consumer: a stack of falling crates, a kinematic sweeper, a trigger
+// volume, and crosshair raycast shoving, all authored as RigidBody/Collider components on a scene,
+// simulated by the Jolt-backed subsystem on the engine's fixed lane with render interpolation, and
+// drawn through the physics debug wireframes (green for awake dynamic, grey for sleeping, blue for
+// static or kinematic, yellow for triggers). Fly with WASD and RMB look; left-click shoves the body
+// under the crosshair; R respawns the stack; the ImGui panel has gravity and time-scale sliders and
+// live counts.
 
 #include "Core/Prelude.h"
 #include "Runtime.Client/AppMain.h"
@@ -47,7 +47,7 @@ namespace gui = foundation::gui;
 
 namespace
 {
-    // This binary's composition root: the ONE ambient-allocator decision here.
+    // This binary's composition root, where its one ambient allocator is chosen.
     [[nodiscard]] foundation::core::IAllocator& AppRoot() noexcept
     {
         return foundation::core::DefaultAllocator();
@@ -67,8 +67,8 @@ namespace
     public:
         void Configure(runtime::IApplicationHost& host) override
         {
-            // Physics/input/UI come from DefaultApplication (H2) - only the sample-local
-            // extras register here (double-adding a subsystem = two instances ticking).
+            // Physics, input and UI come from DefaultApplication; only the sample-local
+            // extras register here (adding a subsystem twice gives two instances ticking).
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
@@ -129,7 +129,7 @@ namespace
                 RespawnStack();
             }
 
-            // Arrow-key character drive (world axes) + Space jump.
+            // Arrow-key character drive (world axes) and Space to jump.
             if (auto* characters = m_scene->GetSystem<engine::physics::CharacterComponentManager>())
             {
                 if (engine::physics::CharacterComponent* hero = characters->Get(m_hero))
@@ -160,7 +160,7 @@ namespace
                 }
             }
 
-            // HUD button binding (once the subsystem instantiated the tree).
+            // HUD button binding (once the subsystem has instantiated the tree).
             if (!m_hudBound && m_scene != nullptr)
             {
                 if (auto* canvases = m_scene->GetSystem<engine::gui::GuiCanvasComponentManager>())
@@ -204,16 +204,16 @@ namespace
                 }
             }
 
-            // Crosshair shove: ray along the camera forward; impulse along the ray.
-            // Gated on UI consumption: a click that lands ON the HUD never shoves.
+            // Crosshair shove: a ray along the camera forward, with the impulse along the ray.
+            // Gated on UI consumption: a click that lands on the HUD never shoves.
             auto* gameGui = host.Subsystems().GetSubsystem<engine::gui::GuiSubsystem>();
             const bool uiAte = gameGui != nullptr && gameGui->PointerOverGui();
             if (!uiAte && input->Mouse()->IsButtonPressed(shell::MouseButton::Left) &&
                 m_physics != nullptr && m_physics->World() != nullptr)
             {
-                // Shove ray: through the CURSOR while it is free (click a crate to shove it);
-                // along the camera forward (crosshair) while look-flying captures the mouse -
-                // the same free-cursor/center-aim convention the kiosk world panel uses.
+                // Shove ray: through the cursor while it is free (click a crate to shove it), and
+                // along the camera forward (crosshair) while look-flying captures the mouse. The
+                // kiosk world panel uses the same free-cursor and center-aim convention.
                 core::Float3 rayDir = m_fly.Forward();
                 const bool lookCaptured =
                     m_fly.mouseCaptured || input->Mouse()->IsButtonDown(shell::MouseButton::Right);
@@ -241,8 +241,8 @@ namespace
                 if (m_physics->World()->RayCast(m_fly.position, rayDir, 200.0f, hit))
                 {
                     // A visible whack: crates are ~1000 kg (1 m^3 at Jolt's default density), so
-                    // the impulse must be in the thousands - 400 only WOKE the body (delta-v
-                    // 0.4 m/s reads as a highlight, not a shove).
+                    // the impulse must be in the thousands. A few hundred only wakes the body (a
+                    // delta-v of 0.4 m/s reads as a highlight, not a shove).
                     m_physics->World()->AddImpulse(
                         hit.body, core::Float3{rayDir.x * 4000.0f, rayDir.y * 4000.0f + 1400.0f,
                                                rayDir.z * 4000.0f});
@@ -251,7 +251,7 @@ namespace
                 }
             }
 
-            // Trigger events -> console (the volume floats over the stack).
+            // Trigger events go to the console (the volume floats over the stack).
             if (m_physics != nullptr)
             {
                 for (const physics::ContactEvent& e : m_physics->Events())
@@ -283,12 +283,12 @@ namespace
                     }
                 }
             }
-            RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
+            RenderFrame(host, frame); // the scenes and window overlays; FinishFrame takes the screenshot
             if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
-            FinishFrame(host, frame); // the screenshot copy, with the overlay in it
+            FinishFrame(host, frame); // copies the screenshot, overlay included
         }
 
     private:
@@ -307,7 +307,7 @@ namespace
         {
             auto* bodies = m_scene->GetSystem<engine::physics::RigidBodyComponentManager>();
 
-            // Ground: an infinite plane - crates land anywhere, not just on a slab.
+            // Ground: an infinite plane, so crates land anywhere, not just on a slab.
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"ground");
                 engine::physics::RigidBodyComponent& body = bodies->Add(e);
@@ -316,7 +316,7 @@ namespace
                 body.shape = physics::ShapeKind::Plane;
                 body.planeHalfExtent = 200.0f;
             }
-            // A cooked TRIANGLE-MESH ramp: two panels, two material slots - the
+            // A cooked triangle-mesh ramp with two panels and two material slots; the
             // crosshair ray reports which slot it hit (HUD "surface").
             {
                 const core::Float3 positions[] = {
@@ -349,7 +349,7 @@ namespace
                     body.collisionShape = m_rampShape;
                 }
             }
-            // A cooked CONVEX boulder dropped onto the ramp - hulls may be dynamic.
+            // A cooked convex boulder dropped onto the ramp; hulls may be dynamic.
             {
                 core::Array<core::Float3> points;
                 const core::f32 axes[3][3] = {{0.9f, 0, 0}, {0, 0.7f, 0}, {0, 0, 0.8f}};
@@ -397,8 +397,8 @@ namespace
                 }
             }
             // The character: arrow keys drive it, Space jumps; it climbs the ramp
-            // (stairs + slopes) and shoves crates. The crates are ~1 tonne (1 m^3 at Jolt's
-            // default density), so the default 500N barely nudges them - give the hero real
+            // (stairs and slopes) and shoves crates. The crates are ~1 tonne (1 m^3 at Jolt's
+            // default density), so the default 500N barely nudges them; give the hero real
             // strength so the shove reads on screen (maxStrength is applied live each step).
             {
                 m_hero = m_scene->CreateEntity(u8"hero");
@@ -408,7 +408,7 @@ namespace
                         m_hero);
                 hero.maxStrength = 6000.0f;
 
-                // Billboard proof: a nameplate riding the character, distance-scaled.
+                // Billboard: a nameplate riding the character, distance-scaled.
                 m_nameplateDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
                 m_nameplateDocument->markup = core::String(
                     u8"<Panel padding=\"4\" background-color=\"rgb(20, 24, 30)\" border-radius=\"4\">"
@@ -424,9 +424,9 @@ namespace
                     plate.referenceDistance = 12.0f;
                 }
             }
-            // World panel (UI world tier): an interactive kiosk standing in the arena -
-            // a clickable counter ON A SURFACE. Aim at it and click; the pointer ray
-            // routes into the panel (and is consumed - no crate shove through it).
+            // World panel (UI world tier): an interactive kiosk standing in the arena, a
+            // clickable counter on a surface. Aim at it and click; the pointer ray routes
+            // into the panel and is consumed, so no crate is shoved through it.
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"kiosk");
                 m_scene->SetLocalPosition(e, core::Float3{4.0f, 1.6f, -6.0f});
@@ -449,7 +449,7 @@ namespace
             }
 
             // A motorized hinge spinner (joints): a blade welded to the world pivot,
-            // spinning at 2 rad/s - walk the character into it to get batted away.
+            // spinning at 2 rad/s. Walk the character into it to get batted away.
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"spinner");
                 m_scene->SetLocalPosition(e, core::Float3{-6.0f, 1.0f, -4.0f});
@@ -462,9 +462,9 @@ namespace
                 joint.motorEnabled = true;
                 joint.motorTargetVelocity = 2.0f;
             }
-            // Game-UI proof: a screen-tier HUD canvas (runtime document - the cooked
-            // asset path is exercised by the editor flow). The button proves CONSUMPTION:
-            // clicking it must NOT fire the crosshair shove.
+            // Game UI: a screen-tier HUD canvas from a runtime document (the editor flow
+            // exercises the cooked asset path). The button checks input consumption:
+            // clicking it must not fire the crosshair shove.
             {
                 m_hudDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
                 // Styled through the markup's inline CSS, as WebScene's HUD is.
@@ -567,7 +567,7 @@ namespace
             ImGui::Text("LMB shove | R respawn | arrows+Space character | Esc quit");
             ImGui::End();
 
-            // Drive the sweeper in a circle through SCENE transforms (kinematic follow).
+            // Drive the sweeper in a circle through scene transforms (kinematic follow).
             m_sweepAngle += 0.6f * (1.0f / 60.0f) * host.Subsystems().TimeScale();
             if (m_sweeper.IsAssigned())
             {

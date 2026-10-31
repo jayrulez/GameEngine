@@ -37,7 +37,7 @@ namespace editor
                 scene::ResolveSceneResources(target, *context.Resources());
             }
             spent.bindMs = static_cast<i64>(clock.Elapsed().AsMilliseconds()) - spent.parseMs;
-            // Prefab instances load as ref + deltas: respawn them from the SOURCE database (the
+            // Prefab instances load as a ref and deltas: respawn them from the source database (the
             // payloads are edited assets, not cooked products), then bind what they spawned.
             if (target.PendingPrefabInstanceCount() > 0 && context.Project() != nullptr)
             {

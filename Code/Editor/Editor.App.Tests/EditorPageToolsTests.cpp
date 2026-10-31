@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the page tools over a real EditorContext with a test page factory: the
-// list, opening by guid (and focusing an already-open page), the in-place reload through the
-// page's own hook, the unsaved-changes refusals of reload and close and the arguments that
+// Editor::App tests: the page tools over a real EditorContext with a test page factory. Covers the
+// list, opening by guid (and focusing a page that is already open), reloading in place through the
+// page's reload hook, the refusals of reload and close over unsaved changes and the arguments that
 // override them, and the identity every tool returns.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -66,7 +66,7 @@ namespace
         u32 created = 0;
     };
 
-    // A tools/call line, its answer parsed, the tool's payload or the error text.
+    // A tools/call line with its answer parsed: the tool's payload, or the error text.
     struct Answer
     {
         bool ok = false;
@@ -128,7 +128,7 @@ TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close
     TestPageFactory* factoryPtr = static_cast<TestPageFactory*>(factory.Get());
     context.Pages().Register(Move(factory));
 
-    // The seams a test supplies: the context's own open/close (no panels here).
+    // The test supplies the context's open and close hooks, since there are no panels here.
     u32 closes = 0;
     app::PageToolSeams seams;
     seams.context = &context;
@@ -168,7 +168,7 @@ TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close
     REQUIRE(again.ok);
     CHECK(factoryPtr->created == 2u); // focused, not recreated
     CHECK(context.ActivePage()->InstanceId() == one->Id());
-    CHECK(revealed == context.ActivePage()); // and its tab raised: a background tab stays hidden otherwise
+    CHECK(revealed == context.ActivePage()); // its tab is raised too, or a background tab would stay hidden
     listed = Call(server, u8"page_list", u8"{}");
     REQUIRE(listed.ok);
     CHECK(listed.payload.Get(u8"pages").Count() == 2);
@@ -190,7 +190,8 @@ TEST_CASE("page-tools: list, open, focus, the dirty refusals of reload and close
     CHECK(closes == 0u);
     CHECK(factoryPtr->created == 2u);
     CHECK(context.ActivePage() == pageOne);
-    // A dirty page refuses reload and close; force discards THEN refreshes, discard drops.
+    // A dirty page refuses reload and close. Reload with force discards the changes and then
+    // refreshes; close with discard drops them.
     pageOne->MarkDirty();
     reload = Call(server, u8"page_reload", Format(u8"{{\"guid\":\"{}\"}}", oneGuid.AsView()).AsView());
     CHECK_FALSE(reload.ok);

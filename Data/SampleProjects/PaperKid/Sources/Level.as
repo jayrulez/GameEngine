@@ -1,29 +1,32 @@
-// Level - a block's rules and numbers: the countdown, the papers, the deliveries toward the quota.
-// The block's scene sets the numbers on this script's properties, so each block carries its own.
+// Level: a block's rules and numbers: the countdown, the papers, and the deliveries toward the
+// quota. The block's scene sets the numbers on this script's properties, so each block carries its
+// own.
 //
-// In a run the scene bus IS the run bus: a behavior's "Delivered" (Subscriber) and "PaperThrown"
-// (Bike) reach this script and the Game alike. This script turns them into the level's outcome -
-// "QuotaMet", or "LevelFailed" with the reason (0 time, 1 papers) - and tells the bike how many
-// papers are left ("PapersLeft"). It writes the HUD's time, papers and deliveries. "QuotaMet" carries
-// the whole seconds left, the Game's time bonus.
+// In a run the scene's event bus is also the run's, so "Delivered" (from Subscriber) and
+// "PaperThrown" (from Bike) reach both this script and the Game. This script turns them into the
+// level's outcome, "QuotaMet" or "LevelFailed" with the reason (0 time, 1 papers), and tells the
+// bike how many papers are left ("PapersLeft"). It writes the time, papers and deliveries on the
+// HUD. "QuotaMet" carries the whole seconds left, which the Game turns into a time bonus.
 //
-// The block's traffic is set here too: on the first frame (every behavior has started by then) it
-// tells the cars and pedestrians their speeds, and the pedestrians where the ring road runs. A crash ("BikeCrashed", from the Bike) costs time.
-// The clock's tells: "Hurry up!" once at 15 s left, when the block's music also speeds up (the
-// arcade hurry-up: its playback rate eased up, tempo and pitch together; the next block's track
-// starts at its own speed), a tick every second of the last 10 while the HUD's time blinks, and
-// "Time over!" when it runs out. All on scene time, so a pause stops them.
+// The block's traffic is set here too. On the first frame, when every behavior has started, it
+// tells the cars and pedestrians their speeds, and the pedestrians where the ring road runs. A
+// crash ("BikeCrashed", from Bike) costs time.
+//
+// The clock's warnings: "Hurry up!" once at 15 s left, when the block's music also speeds up (an
+// arcade hurry-up: the playback rate eases up, raising tempo and pitch together; the next block's
+// track starts at its own speed), a tick every second of the last 10 while the HUD's time blinks,
+// and "Time over!" when it runs out. All run on scene time, so a pause stops them.
 Guid kHurrySound = Guid("75413373-fbc2-4da3-9966-76e93a13782d");
 Guid kTickSound = Guid("96dd2268-4344-4224-bfad-661e2b5cf12b");
 Guid kTimeOverSound = Guid("2c347e4a-e1cb-42e2-ab4c-bd3caea67332");
 
 const float kHurryAt = 15.0f;
 const float kHurryMusicRate = 1.2f;    // 20% faster
-const float kHurryMusicEase = 0.6f;    // seconds to get there
+const float kHurryMusicEase = 0.6f;    // seconds to reach that rate
 const float kTicksFrom = 10.0f;
 
-// A HUD element: the top screen's first, then any (a HUD just replaced is still in the tree while it
-// leaves, with the same ids, and would be found first).
+// Finds a HUD element, searching the top screen first. A HUD just replaced stays in the tree while
+// it leaves, with the same ids, and would otherwise be found first.
 Node@ hud(string id)
 {
     ScreenStack@ stack = ScreenStack::of(gui::root().find("screens"));
@@ -49,11 +52,11 @@ class Level
     private int m_papersLeft = 0;
     private int m_delivered = 0;
     private bool m_ended = false;
-    private float m_graceLeft = -1.0f; // counting down once the last paper is thrown
+    private float m_graceLeft = -1.0f; // counts down once the last paper is thrown
     private bool m_trafficSet = false;
     private bool m_hurried = false;
     private int m_lastTick = -1; // the whole second last ticked
-    private bool m_dimmed = false; // the clock dimmed by the blink
+    private bool m_dimmed = false; // whether the blink has the clock dimmed
 
     Level(Scene@ s) { @scene = s; }
 
@@ -161,7 +164,7 @@ class Level
         blink((m_timeLeft - float(second)) < 0.5f);
     }
 
-    // The clock dimmed or not, set when it changes.
+    // Dims or restores the clock, touching the HUD only when the state changes.
     private void blink(bool dim)
     {
         Node@ time = hud("hud-time");
@@ -176,7 +179,7 @@ class Level
     private void end(bool cleared, int reason)
     {
         m_ended = true;
-        blink(false); // not left dim by the blink
+        blink(false); // make sure the blink does not leave it dim
         updateHud();
         if (cleared)
         {

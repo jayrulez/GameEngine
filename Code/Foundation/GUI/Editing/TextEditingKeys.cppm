@@ -3,9 +3,10 @@
 
 // GUI - :text_editing_keys partition
 //
-// The editing keys, as bindings (E4 of Specs/gui-lab-evolution.md): every GUI starts with them, in
-// the "textinput" key context a text field declares ("textinput multiline" for a text area), so a
-// later binding of the same keys, there or deeper, overrides one, and an empty command unbinds it.
+// The editing keys as keymap bindings. Every GUI starts with them, in the "textinput" key context
+// that a text field declares ("textinput multiline" for a text area). A later binding of the same
+// keys, in that context or a deeper one, overrides them, and binding an empty command unbinds a
+// key.
 // The keys are the common desktop ones (Ctrl with the arrows by word, Home and End by line, Ctrl+Z
 // and Ctrl+Y, Shift+Delete and Shift+Insert as well as Ctrl+X, C and V).
 
@@ -14,7 +15,7 @@ module;
 
 export module foundation.gui:text_editing_keys;
 
-import foundation.core; // StringView
+import foundation.core;
 import :keymap;
 import :text_edit_model;
 
@@ -23,12 +24,13 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
-    /// What a single-line field does with Return: it submits.
+    /// The command a single-line field runs on Return: it submits.
     inline constexpr const char8_t* kTextSubmitCommand = u8"text.submit";
 
-    /// Binds the editing keys to the editing commands: in the text contexts (`context` empty), or,
-    /// every key a multiline editor takes, in `context` alone (a widget that edits text but is not
-    /// a text input to the keymap, so a field inside it is one alone: a code editor's find bar).
+    /// Binds the editing keys to the editing commands. With `context` empty they go in the text
+    /// contexts. Otherwise every key a multiline editor takes is bound in `context` alone. That is
+    /// for a widget that edits text but is not a text input to the keymap (a code editor), so that
+    /// only a field inside it (its find bar) is a text input.
     inline void BindTextEditingKeys(Keymap& keymap, core::StringView context = {})
     {
         using C = TextEditCommand;
@@ -98,7 +100,7 @@ export namespace foundation::gui
                               core::StringView(u8"textinput && multiline"));
         (void)keymap.Bind(core::StringView(u8"enter"), core::StringView(kTextSubmitCommand),
                           core::StringView(u8"textinput && !multiline"));
-        // Where Return breaks a line, Ctrl+Return submits (a comment's or a message's way).
+        // Where Return breaks a line, Ctrl+Return submits, as in a comment or message box.
         (void)keymap.Bind(core::StringView(u8"ctrl-enter"), core::StringView(kTextSubmitCommand),
                           core::StringView(u8"textinput && multiline"));
     }

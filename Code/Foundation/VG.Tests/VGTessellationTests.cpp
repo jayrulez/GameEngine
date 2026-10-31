@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// VG tessellation: triangulation winding, fill mesh (with/without AA), stroke mesh.
+// VG tessellation: triangulation winding, fill mesh (with and without AA), stroke mesh.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -56,7 +56,7 @@ TEST_CASE("vg.fill: AA adds an inner+outer fringe ring")
     Array<u32> idx;
     FillTessellator::Tessellate(path, FillRule::NonZero, Color::Red, /*antiAlias*/ true, verts,
                                 idx);
-    // Inner ring (4) + outer ring (4); fringe quads + inner fan.
+    // Inner ring (4) and outer ring (4); fringe quads and an inner fan.
     CHECK(verts.Size() == 8u);
     CHECK(idx.Size() > 6u);
     // Outer ring vertices are the fringe: no coverage, the colour's own alpha (the shader

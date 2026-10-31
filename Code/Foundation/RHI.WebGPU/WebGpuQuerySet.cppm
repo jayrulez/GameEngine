@@ -3,9 +3,9 @@
 
 /// foundation.rhi.webgpu:query_set - QuerySet over WGPUQuerySet.
 ///
-/// Timestamp sets require the TimestampQuery feature (requested at device creation
-/// when the adapter has it); occlusion sets are core. PipelineStatistics has no
-/// WebGPU shape - honest NotSupported.
+/// Timestamp sets require the TimestampQuery feature (requested at device creation when
+/// the adapter has it); occlusion sets are core. PipelineStatistics has no WebGPU shape
+/// and fails with NotSupported.
 
 module;
 #include "Core/Prelude.h"

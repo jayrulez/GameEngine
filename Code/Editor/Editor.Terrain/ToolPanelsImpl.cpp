@@ -3,10 +3,10 @@
 
 // Editor::Terrain - :tool_panels partition, its body. See ToolPanels.cppm.
 //
-// Each provider downcasts the active IViewportTool to its concrete tool (the id matched, so the
-// type is known - the panel seam's contract) to read and write the brush's settings the UI-free
-// tool cannot expose; the panel's kit asks them again each frame, so the tool's keys (1 to 4, Shift
-// + wheel) show in it.
+// Each provider downcasts the active IViewportTool to its concrete tool to read and write the
+// brush settings that the UI-free tool interface cannot expose. The panel registry's contract is
+// that the id matched, so the type is known. The panel's kit reads the settings again each frame,
+// so changes from the tool's keys (1 to 4, Shift and the wheel) show in it.
 
 module;
 #include "Core/Prelude.h"
@@ -17,10 +17,10 @@ import foundation.core;
 import foundation.gui;
 import foundation.scene;    // Scene, ComponentManagerBase, EntityHandle
 import foundation.content;  // Instance::Name (a layer's tooltip)
-import engine.terrain;      // TerrainComponent(Manager)
+import engine.terrain;      // TerrainComponent, TerrainComponentManager
 import foundation.terrain;  // TerrainResource and its layers' albedo
 import editor.core;          // EditorContext, ThumbnailService
-import editor.app;          // the panel seam and its kit
+import editor.app;          // the tool panel registry and its kit
 import editor.viewporttools; // IViewportTool, ViewportToolHostContext
 import :sculpt;
 import :splat;
@@ -37,12 +37,12 @@ namespace editor
 
     namespace
     {
-        // The layers the Paint Layers panel offers: the FIRST terrain's in the scene. The brush
-        // paints whichever terrain is under the cursor; the panel names the first one's (the one
-        // terrain of most scenes).
+        // The layers the Paint Layers panel offers, taken from the first terrain in the scene.
+        // The brush paints whichever terrain is under the cursor, but the panel lists the first
+        // terrain's layers, since most scenes have only one.
         struct LayerSet
         {
-            u32 count = 0;   // its palette's, unbounded
+            u32 count = 0;   // the palette's layer count (unbounded)
             Array<Guid> ids; // each palette layer's albedo
             Guid baseId;     // the base layer's albedo, never painted (erasing reveals it)
         };
@@ -67,8 +67,8 @@ namespace editor
             return out;
         }
 
-        // A layer's albedo by its asset's name: at a swatch's size a displacement map picked in
-        // place of its diffuse looks the same, the name tells them apart.
+        // A layer's albedo named by its asset: at swatch size a displacement map picked in place
+        // of the diffuse looks the same, and the name tells them apart.
         String AlbedoName(EditorContext* ctx, const Guid& id)
         {
             if (id.IsNil())
@@ -144,7 +144,8 @@ namespace editor
                 const LayerSet layers = ctx.scene != nullptr ? ResolveLayers(*ctx.scene) : LayerSet{};
                 auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
 
-                // The base, shown and never chosen: it is never painted, erasing reveals it.
+                // The base is shown but cannot be chosen: it is never painted, and erasing
+                // reveals it.
                 if (layers.count > 0)
                 {
                     app::ToolPanelBody::Choice base;
@@ -155,8 +156,9 @@ namespace editor
                     body->AddPicture(u8"Base (erase to reveal)", Move(base));
                 }
 
-                // The layers, numbered from 1 as their keys are (and the Terrain page names them),
-                // each its albedo's picture once there is one. With no terrain resolved, four.
+                // The layers, numbered from 1 like their keys (and as the Terrain page names them),
+                // each shown by its albedo's picture once there is one. With no terrain resolved,
+                // four are shown.
                 const u32 count = layers.count > 0 ? layers.count : 4u;
                 Array<app::ToolPanelBody::Choice> choices;
                 for (u32 i = 0; i < count; ++i)
@@ -183,7 +185,7 @@ namespace editor
                                  [t](i32 i)
                                  {
                                      if (i == 0)
-                                         t->SetPaletteIndex(t->PaletteIndex()); // back to painting it
+                                         t->SetPaletteIndex(t->PaletteIndex()); // return to painting the layer
                                      else if (i == 1)
                                          t->SetEraser(true);
                                      else
@@ -193,11 +195,11 @@ namespace editor
                                 [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
                 body->AddSlider(u8"Strength", 0.0, 1.0, 0.05, [t]() { return static_cast<f64>(t->Strength()); },
                                 [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
-                // Spacing: how close the stamps fall along a stroke, a share of the radius (low and
-                // soft blends smoothly; high leaves dabs).
+                // Spacing: how close the stamps fall along a stroke, as a fraction of the radius.
+                // Low spacing with soft strength blends smoothly; high spacing leaves dabs.
                 body->AddSlider(u8"Spacing", 0.05, 1.0, 0.05, [t]() { return static_cast<f64>(t->Spacing()); },
                                 [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
-                // Airbrush: stamps on a clock while held, building up where the brush rests.
+                // Airbrush: stamps on a timer while held, building up where the brush rests.
                 body->AddCheck(u8"Airbrush", [t]() { return t->IsAirbrush(); }, [t](bool on) { t->SetAirbrush(on); });
                 body->AddHelp(u8"Drag to paint. 1 to 9 pick a layer, 0 erases, - smooths, Shift+wheel sizes the brush.");
                 body->Sync();

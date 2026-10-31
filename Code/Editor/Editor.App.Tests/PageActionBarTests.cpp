@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// A page's bar bound to the actions over that page: a click runs the action with the page as its
-// subject (not the active page); Sync shows the action's label and keys in the tooltip, enabled and
-// checked as the action answers over the page, two pages' bars each their own.
+// A page's bar bound to the actions for that page. A click runs the action with the bar's page as its
+// subject, not the active page. Sync shows the action's label and keys in the tooltip, and enabled and
+// checked as the action answers for that page; two pages' bars each answer for their own page.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -70,7 +70,7 @@ TEST_CASE("page action bar: a click runs the action over its own page; Sync show
     firstBar.Sync();
     secondBar.Sync();
     CHECK(firstButton->IsEnabled());
-    CHECK_FALSE(secondButton->IsEnabled()); // the other page's answer
+    CHECK_FALSE(secondButton->IsEnabled()); // answered for the other page
 
     CHECK(firstButton->HandleActivate());
     CHECK(first.runs == 1u);

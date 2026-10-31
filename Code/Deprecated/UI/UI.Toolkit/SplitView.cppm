@@ -3,11 +3,10 @@
 
 // UI Toolkit - :split_view partition
 //
-// Resizable two-pane container with a draggable divider. Ported from Sedulous.UI.Toolkit/src/SplitView.bf.
-// Panes are borrowed raw View* (the child tree owns the RefPtr). Beef `Math.Clamp` -> core::Clamp;
-// `Context.FocusManager` -> Context->GetFocusManager(); mouse capture via Set/ReleaseCapture. NOTE: the
-// public field `Orientation` shadows the enum type of the same name inside the class, so the enum is
-// spelled fully-qualified (foundation::ui::Orientation) wherever the type/enumerators are named.
+// Resizable two-pane container with a draggable divider. Panes are borrowed View* (the child tree owns
+// them). The public field `Orientation` shadows the enum type of the same name inside the class, so the
+// enum is spelled fully qualified (foundation::ui::Orientation) wherever the type or its enumerators
+// are named.
 
 module;
 #include "Core/Prelude.h"
@@ -95,9 +94,9 @@ export namespace foundation::ui::toolkit
         [[nodiscard]] View* SecondPane() const noexcept { return m_second; }
 
         /// Collapse a pane to its content's minimum along the split axis: the other pane fills the rest,
-        /// the divider hides and stops hit-testing, and the split RATIO is preserved for restore (the
-        /// Godot bottom-dock: expand/collapse the dopesheet without losing the user's size). Layout-only
-        /// - the pane view is never reparented or destroyed, so borrowed pointers stay valid.
+        /// the divider hides and stops hit-testing, and the split ratio is preserved for restore (so a
+        /// bottom dock can expand and collapse without losing the user's size). Only layout changes:
+        /// the pane view is never reparented or destroyed, so borrowed pointers stay valid.
         void SetPaneCollapsed(SplitPane pane, bool collapsed)
         {
             bool& flag = (pane == SplitPane::First) ? m_firstCollapsed : m_secondCollapsed;
@@ -259,7 +258,7 @@ export namespace foundation::ui::toolkit
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // SplitView fills its parent - request the full available space.
+            // SplitView fills its parent, so request the full available space.
             MeasuredSize = Float2{constraints.MaxWidth, constraints.MaxHeight};
         }
 

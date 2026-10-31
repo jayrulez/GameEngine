@@ -142,7 +142,7 @@ export namespace foundation::image
         return __builtin_bit_cast(f32, bits);
     }
 
-    /// A 16-bit float channel as an 8-bit one: clamped to [0, 1] and quantised. No encoding -
+    /// A 16-bit float channel as an 8-bit one: clamped to [0, 1] and quantised. No encoding:
     /// a display-referred 16F target (a tonemapped viewport) already holds encoded values.
     [[nodiscard]] constexpr u8 HalfToUnorm8(u16 h) noexcept
     {

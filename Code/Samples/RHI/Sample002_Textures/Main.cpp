@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #include <new>
-/// Sample002 - Textured Quad. Ported from Sedulous Sample002_Textures.
-/// Renders a checkerboard-textured quad using texture, sampler, bind group.
+/// Sample002 - Textured Quad.
+/// Renders a checkerboard-textured quad using a texture, a sampler and a bind group.
 
 #include <cstdint>
 #include <cstdio>
@@ -83,7 +83,7 @@ foundation::core::Status TextureSample::OnInit()
                                             m_ps) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Vertex + index buffers.
+    // Vertex and index buffers.
     rhi::BufferDesc vbd{};
     vbd.size = sizeof(kVertexData);
     vbd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
@@ -134,7 +134,7 @@ foundation::core::Status TextureSample::OnInit()
     batch->Submit();
     m_graphicsQueue->DestroyTransferBatch(batch);
 
-    // Texture view + sampler.
+    // Texture view and sampler.
     rhi::TextureViewDesc tvd{};
     tvd.format = rhi::TextureFormat::RGBA8Unorm;
     tvd.mipLevelCount = 1;
@@ -147,7 +147,7 @@ foundation::core::Status TextureSample::OnInit()
     if (m_device->CreateSampler(sd, m_sampler) != foundation::core::ErrorCode::Ok)
         return foundation::core::ErrorCode::Unknown;
 
-    // Bind group layout + bind group.
+    // Bind group layout and bind group.
     rhi::BindGroupLayoutEntry bglEntries[2] = {
         rhi::BindGroupLayoutEntry::SampledTexture(0, rhi::ShaderStage::Fragment),
         rhi::BindGroupLayoutEntry::Sampler(0, rhi::ShaderStage::Fragment),

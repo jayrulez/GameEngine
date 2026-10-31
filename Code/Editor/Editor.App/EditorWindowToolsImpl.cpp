@@ -23,13 +23,13 @@ namespace editor::app
     {
         constexpr u32 kCapturePumpLimit = 600; // frames: ten seconds at 60 Hz, then the tool gives up
 
-        // The seams and the call in flight outlive the server through the handler's shared ref.
+        // The handler's shared reference keeps the hooks and the call in flight alive past the server.
         class WindowToolState final : public RefCounted
         {
         public:
             explicit WindowToolState(WindowToolSeams seams) : seams(Move(seams)) {}
             WindowToolSeams seams;
-            bool pending = false; // a capture requested; the tool is re-entered until it lands
+            bool pending = false; // a capture was requested; the tool is re-entered until it completes
             u32 pumps = 0;
         };
 

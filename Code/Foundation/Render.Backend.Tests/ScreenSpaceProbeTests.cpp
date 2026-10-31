@@ -3,15 +3,15 @@
 
 // Screen-space reflections and GI, proven at the pixel on real Vulkan and WebGPU devices through the
 // full RenderFrame chain (structural assertions, no golden images).
-//  - SSR reach: a mirror floor seen from low above it reflects the WHOLE of a tall pillar twenty
-//    metres away, down to where it stands. A ray length tied to the pixel's own depth cut the
-//    reflection off near the pillar's base (the reflected ray climbs only as steeply as the view
-//    ray came down).
+//  - SSR reach: a mirror floor seen from low above it reflects the whole of a tall pillar twenty
+//    metres away, down to where it stands. A ray length tied to the pixel's own depth would cut
+//    the reflection off near the pillar's base (the reflected ray climbs only as steeply as the
+//    view ray came down).
 //  - SSGI occlusion: an inside corner under flat ambient darkens toward its edge, where the rays
 //    hit the other wall instead of the sky the forward lit it with. A purely additive composite
-//    lifted it instead (counting the sky twice).
+//    would lift it instead (counting the sky twice).
 //  - SSGI albedo: a blue wall beside a red one takes no red bounce (blue reflects none). A
-//    unit-albedo composite added the red light at full strength and washed the blue out.
+//    unit-albedo composite would add the red light at full strength and wash the blue out.
 // Cooked-pack WGSL path too (the browser's shaders, on wgpu-native):
 //   OPTION_USE_SHADER_PACK=1 ENV_WEBGPU_WGSL=1 ./Render.Backend.Tests
 #include <doctest/doctest.h>
@@ -239,8 +239,8 @@ namespace
         REQUIRE(pillar > 10u); // the pillar itself is on screen
         // The reflection mirrors the pillar about the floor: as tall as the pillar on screen, so
         // the column holds about twice as much red (less the last rows Fresnel fades). A ray cut at
-        // the pixel's depth added none; a fixed hit band let the far reflection break into a dither;
-        // the start pixel read as a hit left a gap where the reflection meets the pillar.
+        // the pixel's depth adds none; a fixed hit band breaks the far reflection into a dither;
+        // reading the start pixel as a hit leaves a gap where the reflection meets the pillar.
         CHECK(withReflection >= pillar * 18 / 10);
     }
 
@@ -340,7 +340,7 @@ namespace
         MESSAGE(doctest::String(backend) << ": blue wall red channel, SSGI off " << redOff << ", on " << redOn
                                          << " (blue " << blueOff << ")");
         REQUIRE(blueOff > 100.0f); // the blue wall is where we look
-        // Blue reflects almost no red: the red bounce must not tint it (unit albedo added it whole).
+        // Blue reflects almost no red: the red bounce must not tint it (unit albedo would add it whole).
         CHECK(redOn <= redOff + 3.0f);
     }
 

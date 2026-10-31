@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - services a library finds through its GUI (K6 of Specs/gui-lab-evolution-3.md: the
-// gamekit's InputPrompts): set, replaced and cleared by key, borrowed, and followed by bindings.
+// GUI - services a library finds through its GUI (the gamekit's InputPrompts, for one): set,
+// replaced and cleared by key, borrowed, and followed by bindings.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

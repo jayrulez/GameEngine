@@ -4,7 +4,7 @@
 // UI - :progress_bar partition
 //
 // Progress indicator showing a filled bar from 0 to 1, or, indeterminate, a segment sliding across
-// the track while it shows. Ported from Sedulous.UI/src/Controls/ProgressBar.bf.
+// the track while it shows.
 
 module;
 #include "Core/Prelude.h"
@@ -53,7 +53,7 @@ export namespace foundation::ui
     protected:
         void OnMeasure(BoxConstraints constraints) override
         {
-            // Bounded fill (P2c): default length under an unbounded parent.
+            // Bounded fill: a default length under an unbounded parent.
             MeasuredSize = Float2{constraints.ConstrainWidth(constraints.BoundedMaxWidth(200.0f)),
                                   constraints.ConstrainHeight(16.0f)};
         }

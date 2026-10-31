@@ -4,17 +4,17 @@
 // Foundation::Audio.Resource - the `foundation.audio.resource` module.
 //
 // Cooked audio content:
-//   * AudioClipSource - the cooked record: probed metadata + import intent, with the
-//     ORIGINAL compressed container bytes in the instance's "data" stream (Traktor's
-//     compressed-cook model - never PCM sidecars; miniaudio records/sniffs the decoder).
-//   * AudioClipFactory - builds the runtime foundation::audio::AudioClip a component's
+//   * AudioClipSource: the cooked record, holding probed metadata and import intent, with
+//     the original compressed container bytes in the instance's "data" stream (never decoded
+//     PCM sidecars; the record keeps the container extension as a decoder hint).
+//   * AudioClipFactory: builds the runtime foundation::audio::AudioClip a component's
 //     Ref<> binds. Non-streamed clips load the container bytes into memory; streamed
 //     clips get a ContentInstanceStreamSource so miniaudio pages the bytes on demand
-//     straight out of the content mount (pak included - Instance::ReadData seeks).
+//     straight out of the content mount (pak included, since Instance::ReadData seeks).
 //
-// AudioBusLayoutSource/Resource: the mixer as data - per-bus volume/mute/effect
-// chains over the FIXED four-bus topology (the AudioBus enum stays the addressing
-// model; free-form named trees are not the addressing model).
+// AudioBusLayoutSource and AudioBusLayoutResource: the mixer as data, with per-bus volume,
+// mute and effect chains over the four fixed buses (the AudioBus enum stays the addressing
+// model), plus named custom buses. SoundCueSource: a cooked weighted-variant cue.
 
 module;
 #include "Core/Prelude.h"
@@ -88,7 +88,7 @@ export namespace foundation::audio
     class AudioClipFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required - the
+        // The allocator backs every product this factory creates (required: the
         // application that registers the factory decides).
         explicit AudioClipFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -107,12 +107,12 @@ export namespace foundation::audio
             return BuildClip(instance);
         }
 
-        // Async (task #123): the AudioClip is a pure-CPU product (encoded bytes in memory, or a
-        // lazy content stream that pages on demand), so the entire build runs on a worker and
-        // FinalizeStage is a no-op. Safe: content-DB reads open independent streams and the type/
-        // serializable registries are read-only during load; AudioClip's type is force-initialized
-        // on the main thread (see RegisterAudioResource). The instance outlives the product, so a
-        // streamed clip's ContentInstanceStreamSource stays valid.
+        // Async: the AudioClip is a pure-CPU product (encoded bytes in memory, or a lazy content
+        // stream that pages on demand), so the whole build runs on a worker and FinalizeStage is
+        // a no-op. This is safe because content-DB reads open independent streams, the type and
+        // serializable registries are read-only during load, and AudioClip's type is
+        // force-initialized on the main thread (see RegisterAudioResource). The instance outlives
+        // the product, so a streamed clip's ContentInstanceStreamSource stays valid.
         [[nodiscard]] bool SupportsAsync() const override { return true; }
         [[nodiscard]] RefPtr<Object> DecodeStage(foundation::content::Instance& instance) override
         {
@@ -180,9 +180,9 @@ export namespace foundation::audio
 
     // ---- bus layout: cooked mixer data ----
 
-    // Wire shape stays GENERIC (per-bus effect arrays) even though the editor asset is
-    // flat - a richer chain editor later needs no wire change - plus the NAMED custom-bus
-    // array (name/parent/settings).
+    // The wire shape is generic (per-bus effect arrays) even though the editor asset is
+    // flat, so a richer chain editor needs no wire change. It also carries the named
+    // custom-bus array (name, parent, settings).
     class AudioBusLayoutSource : public ISerializable
     {
         RTTI_OBJECT(AudioBusLayoutSource, ISerializable)
@@ -251,7 +251,7 @@ export namespace foundation::audio
     class AudioBusLayoutFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required - the
+        // The allocator backs every product this factory creates (required: the
         // application that registers the factory decides).
         explicit AudioBusLayoutFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -327,7 +327,7 @@ export namespace foundation::audio
     class SoundCueFactory final : public resource::IResourceFactory
     {
     public:
-        // The allocator backs every product this factory creates (required - the
+        // The allocator backs every product this factory creates (required: the
         // application that registers the factory decides).
         explicit SoundCueFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
 
@@ -371,7 +371,7 @@ export namespace foundation::audio
         IAllocator* m_allocator;
     };
 
-    // Registers the cooked record + product types (content-DB construction by type name).
+    // Registers the cooked record and product types (content-DB construction by type name).
     inline void RegisterAudioResource()
     {
         GlobalTypeRegistry().Register(AudioClipSource::StaticType());
@@ -394,8 +394,8 @@ export namespace foundation::audio
 
 export namespace foundation::audio
 {
-    /// The audio resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The audio resource module: the engine composition composes this library's factories
+    /// from it.
     inline constexpr foundation::resource::ResourceFactoryDesc kAudioResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<AudioClip, AudioClipSource, AudioClipFactory>(),
         foundation::resource::FactoryWithAllocator<AudioBusLayoutResource, AudioBusLayoutSource, AudioBusLayoutFactory>(),

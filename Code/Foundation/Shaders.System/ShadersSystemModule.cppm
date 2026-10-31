@@ -3,7 +3,7 @@
 
 /// Foundation::Shaders.System - the `foundation.shaders.system` module.
 ///
-/// The variant compile-on-demand cache (:shader_system) + the dev file-backed
+/// The variant compile-on-demand cache (:shader_system) and the dev file-backed
 /// source provider (:file_provider) that serves engine built-in shaders from the
 /// engine shader root.
 

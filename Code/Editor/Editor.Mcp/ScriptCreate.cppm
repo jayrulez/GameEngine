@@ -3,12 +3,13 @@
 
 // Editor::Mcp - :script_create partition
 //
-// script_create: seed a fresh script asset from the chosen
-// backend's own starter (the language cook's NewAssetTemplate - never hardcoded text), through
-// the creation the editor's New Asset menu and asset_create run (pipeline::CreateScriptInstance):
-// starter source written to Sources/<name>.<ext>, a behaviour's class named after the asset,
-// plus a ScriptClassAsset envelope recording {fileName, language} in the source database. The agent then edits the FILE (files-are-truth) and uses
-// script_validate as the loop; asset_cook makes the class attachable.
+// script_create: seed a fresh script asset from the chosen backend's own starter (the language
+// cook's NewAssetTemplate, never hardcoded text), through the creation the editor's New Asset menu
+// and asset_create run (pipeline::CreateScriptInstance). The starter source is written to
+// Sources/<name>.<ext> with a behaviour's class named after the asset, and a ScriptClassAsset
+// envelope records {fileName, language} in the source database. The agent then edits the file
+// (the file is the truth), checks it with script_validate, and runs asset_cook to make the class
+// attachable.
 
 module;
 #include "Core/Prelude.h"
@@ -58,7 +59,7 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    // Registers script_create against `server` (writes into the open project's source DB +
+    // Registers script_create against `server` (it writes into the open project's source DB and
     // Sources/ directory).
     inline void RegisterScriptCreateTool(foundation::mcp::McpServer& server,
                                          ProjectSession& session)

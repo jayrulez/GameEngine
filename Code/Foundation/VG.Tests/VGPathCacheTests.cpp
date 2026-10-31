@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/PathCacheTests.bf.
+// PathCache: reuse, retessellation on style changes, invalidation and eviction.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -134,7 +134,7 @@ TEST_CASE("pathcache: every stroke input is part of the match - dash pattern, of
     Array<u32> solidIdx;
     cache.GetOrTessellateStroke(path, Color::White, StrokeStyle(1.0f), Span<const f32>{}, false,
                                 solid, solidIdx);
-    // A dash pattern on the SAME path must retessellate (more, shorter segments), not be served
+    // A dash pattern on the same path must retessellate (more, shorter segments), not be served
     // the solid stroke.
     Array<VGVertex> dashed;
     Array<u32> dashedIdx;

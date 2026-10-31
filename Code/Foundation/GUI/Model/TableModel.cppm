@@ -3,17 +3,17 @@
 
 // GUI - :table_model partition
 //
-// TableModel: a concrete multi-column Model - named columns and a grid of Variant cells, each row
-// with an id of its own (eepp's table models in role). Each cell can be any Variant (string,
-// number, bool), so numeric columns sort by value (Variant::Compare) rather than as text. Its
-// edits tell its views the rows they touch; SetColumns and Clear reset them.
+// TableModel: a concrete multi-column Model of named columns and a grid of Variant cells, each row
+// with a stable id. Each cell can be any Variant (string, number, bool), so numeric columns sort by
+// value (Variant::Compare) rather than as text. Each edit tells the views which rows it touched;
+// SetColumns and Clear reset the views.
 
 module;
 #include "Core/Prelude.h"
 
 export module foundation.gui:table_model;
 
-import foundation.core; // Array, String, StringView, Move
+import foundation.core;
 import :variant;
 import :model_index;
 import :model;
@@ -65,7 +65,7 @@ export namespace foundation::gui
             NotifyReset();
         }
 
-        /// Its cells may be edited in place.
+        /// Sets whether a view may edit the cells in place.
         void SetEditable(bool editable) noexcept { m_editable = editable; }
 
         // The raw cell (no display conversion); empty if out of range.
@@ -108,7 +108,7 @@ export namespace foundation::gui
         {
             if (!IsEditable(index))
                 return false;
-            // An edit keeps the cell's kind: a number column takes numbers.
+            // An edit keeps the cell's type, so a number column accepts only numbers.
             const Variant before = Cell(static_cast<usize>(index.Row), static_cast<usize>(index.Column));
             Variant next = value;
             if (before.GetType() == Variant::Type::Int || before.GetType() == Variant::Type::Float)

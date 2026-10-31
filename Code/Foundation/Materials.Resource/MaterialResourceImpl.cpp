@@ -3,13 +3,13 @@
 
 // Foundation::Materials.Resource - reflection implementation unit: MaterialSource's reflected surface.
 //
-// Kept OUT of the MaterialResource.cppm interface (REFLECT_MEMBERS bodies make GCC emit a gcm
-// cluster; see gcc-module-interface-hygiene). The class declares its identity via RTTI_OBJECT
-// in the interface; this unit defines MaterialSource::StaticType() WITH properties + the data
-// version, so tooling that recurses into it (a MaterialAsset's nested `source`) sees the authored
-// scalar surface. The render-state fields are u8 (not yet retyped to named enums); the parallel
-// cooked arrays (propertyNames/... , textureSlots/...) are internal cook output, not per-field
-// authored, so they are intentionally not reflected.
+// Kept out of the MaterialResource.cppm interface, because REFLECT_MEMBERS bodies there make GCC
+// emit a gcm cluster. The class declares its identity via RTTI_OBJECT in the interface; this unit
+// defines MaterialSource::StaticType() with its properties and data version, so tooling that
+// recurses into it (a MaterialAsset's nested `source`) sees the authored scalar surface. The
+// render-state fields are reflected enums (RegisterMaterialsTypeReflection). The parallel cooked
+// arrays (propertyNames and the rest, textureSlots, textureIds) are cook output, not authored
+// field by field, so they are not reflected.
 
 module;
 #include "Core/Prelude.h"
@@ -26,8 +26,8 @@ namespace foundation::materials
     REFLECT_MEMBERS(MaterialSource, "rtti::materials")
     {
         // 3: the property arrays use full names (propertyNames...). 4: the effect groups
-        // (`effects`; Specs/wind-for-every-shader.md); a version-3 payload still reads, without
-        // them, and its PBR wind lanes migrate into a Wind group (MaterialSource::MigrateWindLanes).
+        // (`effects`); a version-3 payload still reads, without them, and its PBR wind lanes
+        // migrate into a Wind group (MaterialSource::MigrateWindLanes).
         builder.DataVersion(4)
             .ReadsDataVersionsFrom(3)
             .Property<&MaterialSource::name>("name")

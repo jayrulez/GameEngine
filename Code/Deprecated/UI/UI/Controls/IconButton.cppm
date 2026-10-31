@@ -5,10 +5,10 @@
 //
 // A small clickable button that draws an SVG icon centered over the themed button background, at a
 // fixed square size. For toolbars, list-row actions (add / remove / reorder), and any icon-only
-// affordance. Themable like the core controls: the background + pressed/hover/disabled states come
-// from the style (DrawButtonBackground), the icon inset from the Padding style, and the icon tint
-// from the TextColor style (dimmed when disabled), the same foreground the glyph controls use. The
-// icon drawable is borrowed (typically owned by an icon set that outlives the button).
+// affordance. Themable like the core controls: the background and its pressed, hover and disabled
+// states come from the style (DrawButtonBackground), the icon inset from the Padding style, and the
+// icon tint from the TextColor style (dimmed when disabled), the same foreground the glyph controls
+// use. The icon drawable is borrowed (typically owned by an icon set that outlives the button).
 
 module;
 #include "Core/Prelude.h"
@@ -52,8 +52,8 @@ export namespace foundation::ui
     protected:
         [[nodiscard]] Thickness DefaultStylePadding() const override { return Thickness{3, 3}; }
 
-        // m_size is the ICON (content) size; chrome is base-handled - fixing the audit's
-        // "padding shrinks the icon" bug (measure ignored padding while draw inset by it).
+        // m_size is the icon (content) size. The base class adds the chrome around it, so
+        // measure and draw both account for padding and padding never shrinks the icon.
         [[nodiscard]] Float2 OnMeasureContent(BoxConstraints contentConstraints) override
         {
             return Float2{contentConstraints.ConstrainWidth(m_size),
@@ -69,7 +69,7 @@ export namespace foundation::ui
             {
                 return;
             }
-            const Thickness pad = ResolveBoxMetrics().Chrome(); // same chrome measure reserved
+            const Thickness pad = ResolveBoxMetrics().Chrome(); // the chrome measure reserved
             Color tint = ResolveStyleColor(
                 StyleProperty::TextColor,
                 Color{220.0f / 255.0f, 225.0f / 255.0f, 235.0f / 255.0f, 1.0f});

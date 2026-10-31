@@ -3,14 +3,13 @@
 
 // Editor::App - :export partition.
 //
-// EditorExport: Project > Export in the editor, out of the application
-// (Documentation/Specs/editor-gui.md, 5.1, layer 3). An export asked for waits for a background
-// cook, then runs as a job: the scenes' text sources transcoded to the wire and, when a preset
-// prunes to what is reachable, the reachable closure found, both on the main thread first (they
-// load scenes), then the cook-free pack off it. It keeps the export presets the Export dialog
-// edits, finds the templates (the user's override, else the environment's, else the user data's),
-// and reports the
-// resource manager's live products to the log.
+// EditorExport: Project > Export in the editor, kept out of the application. A requested export
+// waits for a background cook, then runs as a job. Two steps run on the main thread first because
+// they load scenes: transcoding the scenes' text sources to the wire format and, when a preset
+// prunes to what is reachable, finding the reachable closure. The cook-free pack then runs off the
+// main thread. It keeps the export presets the Export dialog edits, finds the templates (the
+// user's override, else the environment's, else the user data's), and reports the resource
+// manager's live products to the log.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -32,8 +31,8 @@ export namespace editor::app
     class EditorExport
     {
     public:
-        /// What it works over: the per-user settings (the templates root), the data root (the
-        /// shader cook reads its Shaders), and what it says when an export is written.
+        /// The services it works with: the per-user settings (the templates root), the data root
+        /// (the shader cook reads its Shaders from it), and the callback for a written export.
         struct Services
         {
             editor::EditorContext* context = nullptr;
@@ -42,7 +41,7 @@ export namespace editor::app
             pipeline::BuilderRegistry* builders = nullptr;
             foundation::settings::Settings* userSettings = nullptr;
             String dataRoot;
-            /// The export was written to `folder` (the application offers to open it).
+            /// Called when the export was written to `folder` (the application offers to open it).
             Function<void(StringView folder)> onExported;
         };
 
@@ -50,9 +49,8 @@ export namespace editor::app
         EditorExport(const EditorExport&) = delete;
         EditorExport& operator=(const EditorExport&) = delete;
 
-        /// The project it exports (null between projects), its presets read from it (its
-        /// export_presets.xml, else the default one), as the old editor read them when its Export
-        /// dialog opened: they were saved and never read back, so a restart lost them.
+        /// Sets the project it exports (null between projects) and reads its presets from it (its
+        /// export_presets.xml, else the default set), so presets saved earlier survive a restart.
         void SetProject(editor::EditorProject* project)
         {
             m_project = project;
@@ -82,7 +80,7 @@ export namespace editor::app
         }
         [[nodiscard]] bool IsPending() const noexcept { return m_pending.active; }
 
-        /// Each frame: an export waiting on its cook goes to the jobs once the cook is done.
+        /// Called each frame: submits an export waiting on its cook to the jobs once the cook is done.
         void Pump()
         {
             if (m_pending.active && m_pending.waitingCook && !m_services.cook->IsCooking())
@@ -113,7 +111,7 @@ export namespace editor::app
             out.Refresh(templatesRoot.AsView(), &rootFs, toolDir.AsView(), &toolFs);
         }
 
-        /// The presets the Export dialog edits, and their save to the project.
+        /// The presets the Export dialog edits, which also saves them to the project.
         [[nodiscard]] editor::ExportPresetsController& Presets() noexcept { return m_presetsController; }
         void SavePresets()
         {
@@ -124,7 +122,7 @@ export namespace editor::app
                 m_services.context->Notify(editor::NoticeKind::Error, u8"Saving export presets FAILED (see console).");
         }
 
-        /// The resource manager's live products by type, to the log (Project > Report Resource Memory).
+        /// Logs the resource manager's live products by type (Project > Report Resource Memory).
         static void ReportResourceMemory(foundation::resource::ResourceManager* resources)
         {
             if (resources == nullptr)
@@ -182,21 +180,22 @@ export namespace editor::app
             editor::EditorProject* project = m_project;
             editor::EditorContext& context = *m_services.context;
             pipeline::BuilderRegistry* builders = m_services.builders;
-            // The main thread's part: scenes' text sources to the binary wire (the stager needs
-            // the scene subsystem), held here for the job (one export at a time).
+            // The main thread's part: transcode the scenes' text sources to the binary wire format
+            // (the stager needs the scene subsystem), held here for the job (one export at a time).
             m_sceneStreams.Clear();
             if (context.SceneStreamStager)
                 editor::CollectSceneStreams(*project->SourceDb().RootGroup(), context.SceneStreamStager, m_sceneStreams);
             const HashMap<Guid, Array<byte>>* sceneStreams = &m_sceneStreams;
-            // The presets, read here: the reachability scan below asks whether one prunes.
+            // Read the presets here: the reachability scan below asks whether one prunes.
             m_presets.presets.Clear();
             {
                 foundation::vfs::NativeFileSystem projectFs(project->Directory(), m_allocator);
                 if (!editor::LoadExportPresets(projectFs, m_presets).IsOk())
                     editor::DefaultExportPresets(m_presets);
             }
-            // Pruning needs the scenes' references, which means loading scenes: found here, and
-            // the job only cooks and packs that set. Without a scanner the job packs everything.
+            // Pruning needs the scenes' references, which means loading scenes, so the reachable
+            // set is found here and the job only cooks and packs it. Without a scanner the job packs
+            // everything.
             m_reachableRoots.Clear();
             m_reachableValid = false;
             if (AnyPresetPrunes(all, presetName.AsView()) && context.SceneRefScanner)

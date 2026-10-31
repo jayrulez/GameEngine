@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// script.pipeline NEUTRAL cook helpers: the class-name/handler scan and the shared
+// script.pipeline's neutral cook helpers: the class-name/handler scan and the shared
 // startCoroutine detection. These are pure text scanners in the backend-neutral Pipeline::Script
-// library - no VM, no language - so they always build. The per-language neutral-builder cook
-// round-trips (source -> builder -> factory) live in AngelScriptPipelineTests.cpp and
+// library (no VM, no language), so they always build. The per-language neutral-builder cook
+// round-trips (source through builder to factory) live in AngelScriptPipelineTests.cpp and
 // LuauPipelineTests.cpp, each compiled only when its backend is on.
 
 #include <doctest/doctest.h>

@@ -3,19 +3,19 @@
 
 // Editor::Mcp - :scene_tools partition
 //
-// The scene/prefab MCP tools: scene_read / scene_write /
-// scene_validate + prefab_read / prefab_write over the XML TEXT sources - files-are-truth, the
-// editor is NOT involved. This is what makes an agent scene-capable headlessly: structural
-// authoring through the same "scene" data stream the editor saves.
+// The scene and prefab MCP tools: scene_read, scene_write, scene_validate, prefab_read and
+// prefab_write over the XML text sources. The files are the truth and the editor is not
+// involved, so an agent can author scenes headlessly through the same "scene" data stream the
+// editor saves.
 //
-// Validation is FULL: the scratch Scene carries the COMPLETE engine manager set (the
-// Engine.Composition composition root - the same per-domain functions the subsystems inject
-// through), so component payloads field-validate through their real managers, exactly as the
-// editor and the cooked-scene reader would parse them. A record whose type resolves to no
-// manager is now a GENUINELY unknown type; the reader skips it with a warning we capture and
-// surface. Writes validate FIRST and refuse with the reasons; a passing write stores the scene
-// as the editor saves it (scene::SceneSourceText over the validated scratch), so a generated
-// file reads like a saved one.
+// Validation is complete: the scratch Scene carries the full engine manager set (the
+// Engine.Composition root, the same per-domain functions the subsystems inject through), so
+// component payloads are validated field by field through their real managers, just as the
+// editor and the cooked-scene reader parse them. A record whose type resolves to no manager is a
+// genuinely unknown type; the reader skips it with a warning that is captured and reported.
+// Writes validate first and refuse with the reasons; a passing write stores the scene as the
+// editor saves it (scene::SceneSourceText over the validated scratch), so a generated file reads
+// like a saved one.
 
 module;
 #include "Core/Prelude.h"
@@ -30,7 +30,7 @@ import foundation.scene.resource;
 import foundation.xml.serialization;
 import foundation.mcp;
 import editor.project;
-import engine.composition; // AddAllSceneManagers - the full manager set for the validate scratch
+import engine.composition; // AddAllSceneManagers: the full manager set for the validate scratch
 import :session;
 
 using namespace foundation::core;
@@ -40,8 +40,8 @@ namespace scene = foundation::scene;
 
 namespace editor::mcp::detail
 {
-    // Captures Scene-category log lines emitted while parsing (the reader WARNS and skips
-    // unknown component types instead of failing - exactly what the agent needs to hear).
+    // Captures Scene-category log lines emitted while parsing (the reader warns and skips
+    // unknown component types instead of failing, which is what the agent needs to hear).
     class SceneLogCapture final : public ILogSink
     {
     public:
@@ -59,7 +59,7 @@ namespace editor::mcp::detail
     {
         bool valid = false;
         String error;           // empty when valid
-        Array<String> warnings; // skipped/unknown component records etc.
+        Array<String> warnings; // skipped or unknown component records, and the like
         usize entityCount = 0;
         usize rootCount = 0;
         /// The prefab each prefab instance names, one per instance in stream order. Its entities
@@ -68,9 +68,9 @@ namespace editor::mcp::detail
         String sceneName;
     };
 
-    // Parse `xml` as a scene stream into a scratch Scene carrying the FULL engine manager set
+    // Parse `xml` as a scene stream into a scratch Scene carrying the full engine manager set
     // (Engine.Composition), so component payloads validate through their real managers. Only a
-    // genuinely unknown component type is skipped (warning, captured above). With `sourceText`,
+    // genuinely unknown component type is skipped (a warning, captured above). With `sourceText`,
     // a valid scene also comes back as the source text the editor would save for it (a scene with
     // its settings, a prefab without): what a write stores.
     inline SceneParseReport ParseSceneXml(StringView xml, String* sourceText = nullptr,
@@ -146,8 +146,9 @@ namespace editor::mcp::detail
             out.Set(u8"prefabInstances",
                     JsonValue::MakeNumber(static_cast<f64>(report.prefabIds.Size())));
         }
-        // Honesty marker: component payloads validate through the FULL engine manager set
-        // (Engine.Composition); warnings list any genuinely unknown component types.
+        // Tells the caller what was checked: component payloads validate through the full engine
+        // manager set (Engine.Composition), and warnings list any genuinely unknown component
+        // types.
         out.Set(u8"componentValidation", JsonValue::MakeString(u8"full"));
         return out;
     }
@@ -235,7 +236,7 @@ namespace editor::mcp::detail
 
 export namespace editor::mcp
 {
-    /// scene_read / scene_write / scene_validate + prefab_read / prefab_write.
+    /// Registers scene_read, scene_write, scene_validate, prefab_read and prefab_write.
     inline void RegisterSceneTools(foundation::mcp::McpServer& server, ProjectSession& session)
     {
         using foundation::mcp::SchemaBuilder;
@@ -433,7 +434,7 @@ export namespace editor::mcp
                         }
                     }
 
-                    // Primary document (name discovery) + the XML stream.
+                    // Primary document (name discovery) and the XML stream.
                     if (wantedType.AsView() == StringView(u8"SceneDocument"))
                     {
                         scene::SceneDocument doc;

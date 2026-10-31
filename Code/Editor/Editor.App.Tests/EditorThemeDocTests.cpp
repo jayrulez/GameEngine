@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - the token reference (Documentation/Specs/editor-gui.md, 5.7, layer 2): every token
-// the editor's tokens sheet and its density sheets declare is named in
-// Documentation/Systems/editor-theme.md, so the reference stays in step with the sheets.
+// Editor::App: the token reference. Every token the editor's tokens sheet and its density sheets
+// declare is named in Documentation/Systems/editor-theme.md, so the reference stays in step with the
+// sheets.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -29,7 +29,7 @@ namespace
         return false;
     }
     bool IsNameChar(char8_t c) { return (c >= u8'a' && c <= u8'z') || (c >= u8'A' && c <= u8'Z') || (c >= u8'0' && c <= u8'9') || c == u8'-' || c == u8'_'; }
-    // The custom properties `sheet` declares (`--name:`), comments skipped.
+    // The custom properties `sheet` declares (`--name:`), skipping comments.
     Array<String> Declared(StringView sheet)
     {
         Array<String> names;

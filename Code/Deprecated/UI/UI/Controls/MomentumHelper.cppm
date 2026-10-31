@@ -4,9 +4,7 @@
 // UI - :momentum_helper partition
 //
 // Physics-based kinetic scrolling helper. A plain value struct embedded in ScrollView: call Update()
-// each frame and apply the returned displacement to the scroll offset. Ported from Sedulous.UI/src/
-// Controls/MomentumHelper.bf. Self-contained (no View). Beef's `mut` methods -> plain non-const methods;
-// the `(float dx, float dy)` tuple return -> Float2.
+// each frame and apply the returned displacement to the scroll offset. Self-contained (no View).
 
 module;
 #include "Core/Prelude.h"

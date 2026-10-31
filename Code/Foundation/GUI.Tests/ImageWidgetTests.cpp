@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Image widget tests: object-fit and object-position place the picture as CSS places a
-// replaced element's (fill, contain, cover, none, scale-down), sized by one axis it keeps its
-// aspect ratio, `src` loads through the resource provider, and image-color tints it.
+// GUI - Image widget tests. object-fit and object-position place the picture as CSS places a
+// replaced element's content (fill, contain, cover, none, scale-down). Sized along one axis, the
+// widget keeps its aspect ratio. `src` loads through the resource provider, and image-color tints
+// the picture.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -87,7 +88,7 @@ TEST_CASE("image: cover covers the box, centered (overflow negative)")
     const Rect r = w->DrawnBounds();
     CHECK(r.width == doctest::Approx(200.0f));
     CHECK(r.height == doctest::Approx(100.0f));
-    CHECK(r.x == doctest::Approx(-50.0f)); // centered -> overflows horizontally
+    CHECK(r.x == doctest::Approx(-50.0f)); // centered, overflowing horizontally
     CHECK(r.y == doctest::Approx(0.0f));
 }
 
@@ -122,7 +123,7 @@ TEST_CASE("image: no drawable falls back to the content box and draws nothing")
     w->SetSize(core::Float2{60.0f, 40.0f});
     w->SetFit(ObjectFit::Contain);
 
-    const Rect r = w->DrawnBounds(); // no intrinsic -> the box
+    const Rect r = w->DrawnBounds(); // no intrinsic size, so it fills the box
     CHECK(r.width == doctest::Approx(60.0f));
     CHECK(r.height == doctest::Approx(40.0f));
     CHECK_FALSE(w->IntrinsicSize().HasValue());
@@ -153,10 +154,10 @@ TEST_CASE("image: object-position places it by keyword, percentage or pixels; sc
     CHECK(w->DrawnBounds().y == doctest::Approx(4.0f));
 
     w->SetObjectPositionName(core::String(u8"center"));
-    w->SetFitName(core::String(u8"scale-down")); // 4x2 fits: its own size
+    w->SetFitName(core::String(u8"scale-down")); // 4x2 fits, so it keeps its own size
     CHECK(w->GetFit() == ObjectFit::ScaleDown);
     CHECK(w->DrawnBounds().width == doctest::Approx(4.0f));
-    w->SetSize(core::Float2{2.0f, 2.0f}); // too small: contained
+    w->SetSize(core::Float2{2.0f, 2.0f}); // too small, so it is contained
     CHECK(w->DrawnBounds().width == doctest::Approx(2.0f));
     CHECK(w->DrawnBounds().height == doctest::Approx(1.0f));
 }
@@ -205,7 +206,7 @@ namespace
         const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView) override { return nullptr; }
     };
 
-    // Counts how it is drawn, and with what tint.
+    // Counts how often it is drawn, and with what tint.
     struct Probe : Drawable
     {
         int plain = 0, tinted = 0;
@@ -250,8 +251,8 @@ TEST_CASE("image: src loads through the GUI's resources when first needed; marku
     CHECK(img->GetImageColor().a == doctest::Approx(128.0f / 255.0f));
 }
 
-// A host's pictures load in their own time (a texture a game names, still loading): an image that got
-// nothing asks again as it is laid out next, and shows the picture once there is one.
+// A host's pictures load in their own time (a texture a game names may still be loading). An image
+// that got nothing asks again the next time it is laid out, and shows the picture once there is one.
 TEST_CASE("image: a picture not there yet is asked for again until it comes")
 {
     OneImage resources;
@@ -277,8 +278,8 @@ TEST_CASE("image: a picture not there yet is asked for again until it comes")
     (void)root->UpdateLayout();
     CHECK(resources.loads == loaded); // once it has it, never again
 
-    // A box its style sizes (a HUD's portrait) takes the picture as the host lays out again when it
-    // arrives, though its size does not change.
+    // A box sized by its style (a HUD's portrait) takes the picture when the host lays out again
+    // as it arrives, though the box's size does not change.
     auto boxed = Make<Image>();
     boxed->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(72.0f); s.Height = LayoutLength::Px(72.0f); });
     boxed->SetSource(core::String(u8"later.png"));
@@ -286,10 +287,10 @@ TEST_CASE("image: a picture not there yet is asked for again until it comes")
     (void)root->UpdateLayout();
     CHECK(boxed->GetDrawable() == nullptr);
     resources.lateReady = true;
-    root->RequestLayoutTree(); // the host, as a texture arrives
+    root->RequestLayoutTree(); // as the host does when a texture arrives
     (void)root->UpdateLayout();
     CHECK(boxed->GetDrawable() != nullptr);
-    CHECK(boxed->NeedsRedraw()); // drawn again with it
+    CHECK(boxed->NeedsRedraw()); // drawn again with the picture
 }
 
 TEST_CASE("image: image-color draws it tinted; white draws it as it is")

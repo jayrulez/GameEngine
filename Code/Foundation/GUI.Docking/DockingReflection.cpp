@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Docking - the docking widgets' reflection: what a sheet sets on them (D4 of
-// Specs/gui-lab-evolution-3.md: the drop bands, sized by the theme's tokens).
+// GUI.Docking - reflection for the docking widgets: the properties a sheet sets on them, such as
+// the drop bands, which the theme's tokens size.
 
 module;
 #include "Core/Prelude.h"

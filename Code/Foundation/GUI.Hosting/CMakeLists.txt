@@ -1,7 +1,6 @@
 # Foundation::GUI.Hosting - `foundation.gui.hosting`: the GUI on the runtime's multi-window
 # graphics host: one GUI, a root per window, each window's VG context, renderer, pass targets and
-# input; the frame; the picture baker serving every window; the VG shaders. foundation.ui's
-# counterpart: UI.Runtime. Specs/gui-lab-evolution-3.md, H1 to H3.
+# input; the frame; the picture baker serving every window; the VG shaders.
 util_add_engine_library(GUI.Hosting ALIAS Foundation::GUI.Hosting)
 target_link_libraries(GUI.Hosting
     PUBLIC Foundation::Core Foundation::GUI Foundation::GUI.Shell Foundation::RHI Foundation::Image Foundation::Fonts

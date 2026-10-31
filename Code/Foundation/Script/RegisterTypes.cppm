@@ -3,7 +3,7 @@
 
 // Script - :script_register partition
 //
-// Bridges reflection -> scripting: registers every type in a TypeRegistry with a
+// Bridges reflection to scripting: registers every type in a TypeRegistry with a
 // script manager. Call after the engine's RegisterCoreTypes() (and any
 // higher-layer registration) to expose them to scripts in one shot.
 
@@ -21,10 +21,10 @@ namespace core = foundation::core;
 
 export namespace foundation::script
 {
-    // The name a method is spelled by on the SCRIPT surface: its reflected overloadedName when set,
-    // else its C++ name. This is the scripting layer's INTERPRETATION of the opaque overloadedName
-    // metadata Core stores - every backend emits/binds by THIS, so an overload's spelling is
-    // identical across languages (the backend-neutral surface script_api + agents consume).
+    // The name a method is spelled by on the script surface: its reflected overloadedName when set,
+    // else its C++ name. This is how the scripting layer interprets the opaque overloadedName
+    // metadata Core stores. Every backend binds by this name, so an overload is spelled the same
+    // in every language, and the backend-neutral surface script_api reports matches all of them.
     [[nodiscard]] inline const char* ScriptMethodName(const core::MethodInfo& method) noexcept
     {
         return (method.overloadedName != nullptr && method.overloadedName[0] != '\0')
@@ -32,13 +32,13 @@ export namespace foundation::script
                    : method.name;
     }
 
-    // The overload contract keys on the SCRIPT-METHOD IDENTITY triple (name, ARITY, staticness):
-    // no two methods on a type may share all three. Same-name-DIFFERENT-arity is a legal ARITY
-    // FAMILY - every backend dispatches it soundly by argument COUNT (AS overloads natively, the
-    // Luau thunk switches on argc), and typed decls express it as an
-    // overloaded function type. Only a same-name SAME-arity clash is ambiguous on a dynamically-
-    // typed surface (a number picks neither f32 nor i32) and MUST be split by distinct
-    // OverloadedName()s. Returns the first colliding script name, or nullptr when the type is clean.
+    // The overload rule keys on a script method's identity (name, arity, staticness): no two
+    // methods on a type may share all three. The same name at different arities is a legal arity
+    // family, which every backend dispatches by argument count (AngelScript overloads natively,
+    // the Luau thunk switches on argc) and typed declarations express as an overloaded function
+    // type. Only a same-name, same-arity clash is ambiguous on a dynamically typed surface (a
+    // number picks neither f32 nor i32), and it has to be split by distinct OverloadedName()s.
+    // Returns the first colliding script name, or nullptr when the type is clean.
     [[nodiscard]] inline const char*
     FindScriptMethodNameCollision(const core::TypeInfo& type) noexcept
     {
@@ -65,7 +65,7 @@ export namespace foundation::script
             const char* nameI = ScriptMethodName(methods[i]);
             for (core::usize j = i + 1; j < methods.Size(); ++j)
             {
-                // Collision = same (name, arity, static). Different arity is a legal family.
+                // A collision is the same (name, arity, static). Different arity is a legal family.
                 if (methods[i].isStatic == methods[j].isStatic &&
                     methods[i].paramCount == methods[j].paramCount &&
                     equal(nameI, ScriptMethodName(methods[j])))
@@ -77,10 +77,10 @@ export namespace foundation::script
         return nullptr;
     }
 
-    // FinalizeTypes calls this over the types a backend has registered: it FAILS LOUDLY (logs the
-    // offending type + name, then traps) on the first overload that lacks distinct overloadedNames.
-    // This converts a silent one-overload-wins collision into an immediate registration-time error
-    // on EVERY backend - the contract that makes overloadedName enforceable, not advisory.
+    // FinalizeTypes calls this over the types a backend has registered. It fails loudly (logs the
+    // offending type and name, then traps) on the first overload that lacks distinct
+    // overloadedNames, which turns a silent one-overload-wins collision into an immediate
+    // registration-time error on every backend.
     inline void ValidateScriptMethodNames(core::Span<const core::TypeInfo* const> types)
     {
         for (const core::TypeInfo* type : types)
@@ -103,12 +103,12 @@ export namespace foundation::script
         }
     }
 
-    // The name a TYPE is spelled by on the SCRIPT surface: its "scriptName" class-attribute alias when
-    // set, else its C++ name. This is the scripting layer's INTERPRETATION of an opaque Core attribute
-    // (Core knows nothing of "scriptName" - it stores a generic key/value like the editor's displayName);
-    // every backend binds the class under THIS. Lets a C++ type expose a script-idiomatic name (`run` for
-    // class Run, later `RigidBody` for RigidBodyComponent) without touching the wire/native identity -
-    // serialization + TypeRegistry FindByName stay on the C++ `name`, which never aliases.
+    // The name a type is spelled by on the script surface: its "scriptName" class-attribute alias when
+    // set, else its C++ name. Core knows nothing of "scriptName" (it stores a generic key and value,
+    // like the editor's displayName); the scripting layer interprets it, and every backend binds the
+    // class under this name. It lets a C++ type expose a script-idiomatic name (`run` for class Run)
+    // without touching its native identity: serialization and TypeRegistry FindByName stay on the C++
+    // `name`, which never aliases.
     inline constexpr const char* kScriptNameAttribute = "scriptName";
 
     [[nodiscard]] inline const char* ScriptTypeName(const core::TypeInfo& type) noexcept
@@ -125,10 +125,10 @@ export namespace foundation::script
         return type.name;
     }
 
-    // A duplicate SCRIPT-FACING type name (a C++ class name OR a scriptName alias) shared by two types
-    // is illegal - two types cannot both bind as `X` (a silent last-wins would shadow one, and it is how
-    // a facade claiming a reserved name like `run` collides with anything else claiming it). Returns the
-    // first colliding script name, or nullptr when the set is clean. The type-level analog of
+    // Two types may not share a script-facing type name (a C++ class name or a scriptName alias):
+    // they cannot both bind as `X`, and a silent last-wins would shadow one, as when a facade claims a
+    // reserved name like `run` that something else also claims. Returns the first colliding script
+    // name, or nullptr when the set is clean. The type-level counterpart of
     // FindScriptMethodNameCollision.
     [[nodiscard]] inline const char*
     FindScriptTypeNameCollision(core::Span<const core::TypeInfo* const> types) noexcept
@@ -168,9 +168,8 @@ export namespace foundation::script
         return nullptr;
     }
 
-    // FinalizeTypes calls this over the types a backend has registered: it FAILS LOUDLY on the first
-    // duplicate script-facing type name. Extends the overloaded-name-contract's loud-collision rule to
-    // the TYPE level - the alias mechanism's guard.
+    // FinalizeTypes calls this over the types a backend has registered: it fails loudly on the first
+    // duplicate script-facing type name, as ValidateScriptMethodNames does for methods.
     inline void ValidateScriptTypeNames(core::Span<const core::TypeInfo* const> types)
     {
         const char* collision = FindScriptTypeNameCollision(types);
@@ -193,6 +192,6 @@ export namespace foundation::script
         {
             manager.RegisterType(*type);
         }
-        manager.FinalizeTypes(); // two-phase backends emit here (declare-all, then bind)
+        manager.FinalizeTypes(); // two-phase backends emit here (declare all, then bind)
     }
 }

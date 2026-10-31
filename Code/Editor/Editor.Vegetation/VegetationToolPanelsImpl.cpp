@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Vegetation - the vegetation brushes' panels (Documentation/Specs/editor-gui.md, 5.3, layer
-// 5, part 3), made of the editor's tool panel kit, as the terrain's are, so the footprint brushes
-// read the same: Paint Vegetation's plane (numbered from 1 as its keys are, each naming in its
-// tooltip what grows on it; the chosen plane's growth said under the row, where one long "Grows:"
-// line ran on) and its mode (Paint, Erase, Smooth); Paint Props' layer (by name) and its mode
-// (Paint, Erase); each with its radius and the rest, and a line of help for its keys.
+// Editor::Vegetation - the vegetation brushes' panels, made from the editor's tool panel kit like
+// the terrain's, so all the footprint brushes look the same. Paint Vegetation has its plane
+// (numbered from 1 like its keys, each tooltip naming what grows on that plane, with the chosen
+// plane's growth noted under the row) and its mode (Paint, Erase, Smooth). Paint Props has its
+// layer (by name) and its mode (Paint, Erase). Each also has its radius and other settings, and a
+// line of help for its keys.
 
 module;
 #include "Core/Prelude.h"
@@ -18,9 +18,9 @@ import foundation.gui;
 import foundation.scene;               // Scene, ComponentManagerBase, EntityHandle
 import foundation.vegetation.resource; // VegetationMask (the plane count)
 import foundation.vegetation;          // VegetationPlacement (which layers read a plane)
-import engine.vegetation;              // TerrainVegetationComponent(Manager)
+import engine.vegetation;              // TerrainVegetationComponent, TerrainVegetationComponentManager
 import editor.core;
-import editor.app;                     // the panel seam and its kit
+import editor.app;                     // the tool panel registry and its kit
 import editor.viewporttools;           // IViewportTool, ViewportToolHostContext
 
 using namespace foundation::core;
@@ -38,7 +38,7 @@ namespace editor
                 sc.FindManagerByComponentType(TypeOf<engine::vegetation::TerrainVegetationComponent>()));
         }
 
-        // The plane count of the scene's first resolved vegetation mask (0 = none resolved).
+        // The plane count of the scene's first resolved vegetation mask (0 when none resolves).
         u32 ResolvePlaneCount(scene::Scene& sc)
         {
             u32 planes = 0;
@@ -51,8 +51,8 @@ namespace editor
             return planes;
         }
 
-        // The procedural layers that read each mask plane ("Grass, Flowers"; empty for none): the
-        // brush paints a plane, and a layer is what gives the plane meaning (user, 2026-09-23).
+        // The procedural layers that read each mask plane ("Grass, Flowers"; empty for none). The
+        // brush paints a plane, and the layers reading it are what give the plane meaning.
         Array<String> ResolvePlaneReaders(scene::Scene& sc, u32 planeCount)
         {
             Array<String> readers;
@@ -78,7 +78,7 @@ namespace editor
         }
 
         // The prop layers of the scene's first vegetation component that has any, and whether
-        // each one's mesh resolves (props of one without place, but nothing draws).
+        // each one's mesh resolves (a layer without a mesh still places props, but nothing draws).
         struct LayerNames
         {
             Array<String> names;
@@ -123,7 +123,7 @@ namespace editor
                 const Array<String> readers = ctx.scene != nullptr ? ResolvePlaneReaders(*ctx.scene, count) : Array<String>{};
                 auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
 
-                // The plane, from 1 as its keys are, each saying what grows on it.
+                // The planes, numbered from 1 like their keys, each saying what grows on it.
                 Array<app::ToolPanelBody::Choice> planes;
                 for (u32 i = 0; i < count; ++i)
                 {
@@ -132,7 +132,7 @@ namespace editor
                 }
                 body->AddChoices(u8"Plane", Move(planes), [t]() { return static_cast<i32>(t->Plane()); },
                                  [t](i32 i) { t->SetPlane(static_cast<u32>(i)); });
-                // What a stroke grows: the chosen plane's layers.
+                // What a stroke grows: the layers reading the chosen plane.
                 body->AddNote([t, readers]() -> String
                               {
                                   const u32 plane = t->Plane();

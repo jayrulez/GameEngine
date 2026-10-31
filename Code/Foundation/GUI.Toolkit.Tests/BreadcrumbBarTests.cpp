@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Toolkit - the breadcrumb bar (T7 of Specs/gui-lab-evolution-3.md): segments carrying their
-// target, from items or a path; a click navigating on release, the current segment inert; the
-// segments that do not fit folded from the root into a "…" menu; one tab stop, the arrows moving
-// along it; right to left, run the other way with the chevrons turned. Its chevrons' menus of
-// children, its segments' drops, and its path edited as text.
+// GUI.Toolkit - the breadcrumb bar. Segments carry their target and come from items or a path. A
+// click navigates on release, and the current segment does nothing. Segments that do not fit fold,
+// from the root, into a "…" menu. The bar is one tab stop, and the arrow keys move along it. In
+// right to left the segments run the other way and the chevrons turn. Also covered: the chevrons'
+// menus of children, drops on segments, and editing the path as text.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -23,7 +23,7 @@ namespace
 {
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
 
-    // A mock font: 6px a byte, 12px a line.
+    // A mock font: 6px per byte, 12px per line.
     class SixFont : public fonts::IFont
     {
     public:
@@ -76,15 +76,15 @@ namespace
             bar->SetOnNavigate([this](const BreadcrumbItem& item) { went.PushBack(item.Id); });
             Frame();
         }
-        // The mock font on what shows text (a font object is not inherited; a family name is,
-        // through a font service the bed has none of).
+        // Puts the mock font on everything that shows text. A font object is not inherited (a family
+        // name is, through a font service, but the bed has none).
         void Fonts()
         {
             bar->GetOverflowButton().SetFont(&font);
             for (usize i = 0; i < bar->ItemCount(); ++i)
                 bar->SegmentAt(i).SetFont(&font);
         }
-        // A frame: styles (the bar's font reaching its segments), then layout.
+        // Runs a frame: styles (so the bar's font reaches its segments), then layout.
         void Frame()
         {
             root->GetContext().Update(core::Duration::FromSeconds(0.016f));
@@ -132,7 +132,7 @@ TEST_CASE("breadcrumb bar: segments from a path, each carrying the path up to it
     CHECK(bed.bar->ItemAt(1).Id == core::String(u8"C:/Users"));
     CHECK(bed.bar->ItemAt(2).Id == core::String(u8"C:/Users//me"));
 
-    // Given items, as they are (an icon and a tooltip the application's).
+    // Items given directly are used as they are, with the application's icon and tooltip.
     const BreadcrumbItem items[] = {
         BreadcrumbItem{core::String(u8"g1"), core::String(u8"Content"), core::String(u8"All content"), {}},
         BreadcrumbItem{core::String(u8"g7"), core::String(u8"models"), {}, {}},
@@ -207,7 +207,7 @@ TEST_CASE("breadcrumb bar: what does not fit folds from the root into the overfl
     REQUIRE(bed.went.Size() == 1);
     CHECK(bed.went[0] == core::String(u8"/"));
 
-    // Too narrow for even the current one: it takes what is left.
+    // Too narrow even for the current segment: it takes what is left.
     bed.bar->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(60.0f); });
     bed.Frame();
     CHECK(bed.bar->FoldedCount() == 4);
@@ -247,7 +247,7 @@ TEST_CASE("breadcrumb bar: right to left, its segments run from the right, its c
     CHECK(bed.bar->SegmentAt(0).GetScreenBounds().Right() <= bed.bar->GetScreenBounds().Right() + 0.5f);
     CHECK(bed.bar->SeparatorBefore(1).IsMirrored());
     bed.bar->SegmentAt(2).RequestFocus();
-    bed.Key(KeyCode::Left); // toward the inline end
+    bed.Key(KeyCode::Left); // in right to left, Left moves toward the inline end
     CHECK(bed.bar->SegmentAt(3).IsFocused());
 }
 
@@ -259,7 +259,7 @@ namespace
         out.Append(b);
         return out;
     }
-    // The menu's items' texts, in order.
+    // Returns the texts of the menu's items, in order.
     core::Array<core::String> MenuTexts(Menu& menu)
     {
         core::Array<core::String> out{core::DefaultAllocator()};
@@ -362,7 +362,7 @@ TEST_CASE("breadcrumb bar: segments but the current take drops of the bar's type
     CHECK(dropped[0] == core::String(u8"/home <- fox.glb"));
     dragTo(bed.Middle(bed.bar->SegmentAt(4))); // the current one takes none
     CHECK(dropped.Size() == 1);
-    type = core::String(u8"colour"); // nor a type not the bar's
+    type = core::String(u8"colour"); // and no segment takes a type the bar does not accept
     dragTo(bed.Middle(bed.bar->SegmentAt(2)));
     CHECK(dropped.Size() == 1);
 }
@@ -398,7 +398,7 @@ TEST_CASE("breadcrumb bar: where editable, a click on its empty end edits the pa
     CHECK(bed.bar->SegmentAt(4).IsVisible());
     CHECK(bed.bar->SegmentAt(4).IsFocused()); // focus back on the bar's tab stop
 
-    // Escape puts the segments back, giving nothing.
+    // Escape brings the segments back and submits nothing.
     bed.bar->BeginPathEdit();
     bed.D().InjectText(SV(u8"nowhere"));
     bed.Key(KeyCode::Escape);

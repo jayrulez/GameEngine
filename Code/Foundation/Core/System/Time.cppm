@@ -4,7 +4,7 @@
 // Core - :time partition
 //
 // Unit-safe time types built on the platform tick counter (:system). Callers work
-// with Duration / TimePoint / Stopwatch instead of juggling raw ticks + frequency:
+// with Duration / TimePoint / Stopwatch instead of juggling raw ticks and frequency:
 //
 //   const TimePoint start = Clock::Now();
 //   ... work ...
@@ -15,7 +15,7 @@
 //   log(sw.Elapsed().AsMilliseconds());
 //
 // Duration stores signed integer nanoseconds (exact, chrono-like). TimePoint is an
-// opaque monotonic tick count - differences yield a Duration; it is NOT a wall-clock
+// opaque monotonic tick count; differences yield a Duration. It is not a wall-clock
 // date. All conversions are overflow-safe for realistic timer frequencies (<= ~1e9 Hz).
 
 module;

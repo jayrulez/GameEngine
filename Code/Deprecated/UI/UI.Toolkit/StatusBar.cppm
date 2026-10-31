@@ -3,11 +3,8 @@
 
 // UI Toolkit - :status_bar partition
 //
-// Bottom status strip with text sections. Ported from Sedulous.UI.Toolkit/src/StatusBar.bf (a FlexLayout
-// subclass). Beef raw-owned `mDefaultLabel` (new Label) -> a borrowed raw Label* (the flex child tree owns
-// the RefPtr); `FontSize.Value = 12` -> FontSize.SetValue(12) (Property<Optional<f32>>); `.(4)` Thickness
-// and `.(r,g,b,a)` Colors spelled out. The toolkit namespace nests in foundation::ui, so the core types
-// (FlexLayout/Label/StyleProperty/...) resolve unqualified.
+// Bottom status strip with text sections. The toolkit namespace nests in foundation::ui, so the core
+// types (FlexLayout, Label, StyleProperty and so on) resolve unqualified.
 
 module;
 #include "Core/Prelude.h"

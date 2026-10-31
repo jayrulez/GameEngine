@@ -3,11 +3,11 @@
 
 // Foundation::Model.Resource - the `foundation.model.resource` module.
 //
-// The RUNTIME side of the cooked model family: ModelNode + ModelManifestSource (the
-// cooked manifest tying mesh/material/skeleton/animation guids + node hierarchy
-// together), the ModelResource runtime composite + ModelFactory, and the family-wide
-// type registration. Moved OUT of modelimporter (tooling) - the player/runtime
-// must not link importer/editor libraries for its cooked types.
+// The runtime side of the cooked model family: ModelNode and ModelManifestSource (the
+// cooked manifest tying the mesh, material, skeleton and animation guids and the node
+// hierarchy together), the ModelResource runtime composite and ModelFactory, and the
+// family-wide type registration. It lives apart from the model importer (tooling) because
+// the player must not link importer or editor libraries for its cooked types.
 
 module;
 #include "Core/Prelude.h"
@@ -37,7 +37,7 @@ namespace animation = foundation::animation;
 export namespace foundation::model
 {
 
-    // One node of the imported hierarchy: local TRS + an optional mesh reference (index into
+    // One node of the imported hierarchy: local TRS and an optional mesh reference (index into
     // the manifest's mesh list, -1 = no mesh). Plain copyable struct (free Serialize via ADL).
     struct ModelNode
     {
@@ -53,8 +53,8 @@ export namespace foundation::model
     /// Where a skinned mesh's node goes when the model is put into a scene. A skin draws in its
     /// skeleton's parent's space (the joints' palette is relative to it), and glTF ignores a
     /// skinned mesh node's own transform: so the mesh's node goes under the skeleton's parent node
-    /// at identity (-1: the model's root, when the skeleton has no parent), and its world IS the
-    /// skeleton's model space wherever the file put the mesh node (inverse-kinematics.md P0a).
+    /// at identity (-1: the model's root, when the skeleton has no parent), and its world is the
+    /// skeleton's model space wherever the file put the mesh node.
     /// kSkinnedMeshKeepsPlace when it stays: the parent is not known (data before version 3) or is
     /// the mesh node or below it. The walk up is bounded by the node count (a malformed cycle).
     [[nodiscard]] inline i32 SkinnedMeshParent(Span<const ModelNode> nodes, i32 skeletonParentNode, usize meshNode)
@@ -106,7 +106,6 @@ export namespace foundation::model
         foundation::core::Serialize(ar, "mesh", n.meshIndex);
     }
 
-    // Authored/cooked manifest: the leaf resource Guids + the node hierarchy.
     // The material slots one mesh uses (model-wide indices into materialGuids, in the order
     // its cooked submeshes index them). Plain struct, free Serialize via ADL.
     struct ModelMeshMaterialSlots
@@ -127,7 +126,7 @@ export namespace foundation::model
         Array<Guid> meshGuids;   // cooked mesh resources
         Array<u8> meshSkinned;   // 1 if the mesh is skinned (parallel to meshGuids)
         Array<i32> meshMaterial; // material index per mesh (-1 = none); parallel to meshGuids
-        // v2: the material slots per mesh (parallel to meshGuids; a cooked submesh's
+        // Version 2: the material slots per mesh (parallel to meshGuids; a cooked submesh's
         // materialIndex is a position in its entry). Empty entry = the mesh has no parts.
         Array<ModelMeshMaterialSlots> meshMaterialSlots;
         Array<Guid>
@@ -137,10 +136,10 @@ export namespace foundation::model
             materialAlbedo; // albedo texture per material (nil = none); parallel to materialGuids
         Array<ModelNode> nodes;     // node hierarchy
         Guid skeletonGuid;          // cooked skeleton (nil if the model has no skin)
-        // v3: the node the skeleton hangs from (the skin's root joint's parent: Blender's
-        // armature object), -1 for the scene root, -2 unknown (no skin, or data before v3). A
-        // skin draws in this node's space, so the prefab puts each skinned mesh here at identity
-        // (glTF ignores a skinned mesh node's own transform; inverse-kinematics.md P0a).
+        // Version 3: the node the skeleton hangs from (the skin's root joint's parent: Blender's
+        // armature object), -1 for the scene root, -2 unknown (no skin, or data before version 3).
+        // A skin draws in this node's space, so the prefab puts each skinned mesh here at identity
+        // (glTF ignores a skinned mesh node's own transform).
         i32 skeletonParentNode = -2;
         Array<Guid> animationGuids; // cooked animation clips
         Float3 boundsMin{};         // model-space AABB (for spawn-time auto-fit/placement)
@@ -148,8 +147,8 @@ export namespace foundation::model
 
         /// The material list an entity drawing mesh `meshIndex` binds, indexed by its submeshes'
         /// materialIndex (slot 0 covers single-material meshes and out-of-range indexes). A v2
-        /// manifest records the slots each mesh uses and its submeshes index THAT list (Bistro: 254
-        /// materials per node before, one or two after); an unresolvable slot stays nil, and a mesh
+        /// manifest records the slots each mesh uses and its submeshes index that list (in Bistro a
+        /// node binds one or two materials, not all 254); an unresolvable slot stays nil, and a mesh
         /// whose parts name no material has none (it draws in the default material, not the
         /// model's first). A v1 manifest (no slot lists at all) cooked its submeshes with
         /// model-wide indices: the whole list.
@@ -182,7 +181,7 @@ export namespace foundation::model
             foundation::core::Serialize(ar, "meshSkinned", meshSkinned);
             foundation::core::Serialize(ar, "meshMaterial", meshMaterial);
             // Data version 2 (the enclosing payload's: ModelManifestAsset in the source DB,
-            // this type in the cooked DB - both 2). A v1 asset reads without the slots and
+            // this type in the cooked DB, both 2). A v1 asset reads without the slots and
             // the prefab builder falls back to the whole list, which matches its v1-cooked
             // meshes' model-wide submesh indices.
             if (ar.Mode() == SerializeMode::Write || ar.Version() >= 2)
@@ -204,7 +203,7 @@ export namespace foundation::model
         }
     };
 
-    // Runtime model: the node hierarchy + the resolved mesh proxies (parallel to the manifest
+    // Runtime model: the node hierarchy and the resolved mesh proxies (parallel to the manifest
     // mesh list). The owning ResourceManager keeps the leaf resources alive via the recorded
     // dependency edges; the proxies see reloads transparently.
     class ModelResource final : public Object
@@ -254,7 +253,7 @@ export namespace foundation::model
         }
     };
 
-    // Builds a ModelResource from a ModelManifestSource: copies the hierarchy + resolves each
+    // Builds a ModelResource from a ModelManifestSource: copies the hierarchy and resolves each
     // mesh Guid via manager.Bind (recording the model->mesh dependency edge).
     class ModelFactory final : public IResourceFactory
     {
@@ -298,7 +297,7 @@ export namespace foundation::model
             model->skeletonParentNode = src->skeletonParentNode;
 
             // Resolve meshes (skinned ones bind as SkinnedMesh, stored as the StaticMesh base; the renderer
-            // checks IsSkinned() + uploads the skin stream). Bind records the model->mesh dependency edge.
+            // checks IsSkinned() and uploads the skin stream). Bind records the model->mesh dependency edge.
             for (usize i = 0; i < src->meshGuids.Size(); ++i)
             {
                 const bool skinned = (i < src->meshSkinned.Size() && src->meshSkinned[i] != 0);
@@ -309,7 +308,7 @@ export namespace foundation::model
                 model->meshes.PushBack(RefPtr<geometry::StaticMesh>(mesh));
             }
 
-            // Resolve the skeleton + animation clips (composite edges).
+            // Resolve the skeleton and animation clips (composite edges).
             if (!src->skeletonGuid.IsNil())
             {
                 model->skeleton = manager.Bind<animation::Skeleton>(src->skeletonGuid);
@@ -319,7 +318,7 @@ export namespace foundation::model
                 model->animations.PushBack(manager.Bind<animation::AnimationClip>(g));
             }
 
-            // Resolve materials + wire their albedo texture in as the material's default (the renderer's
+            // Resolve materials and wire their albedo texture in as the material's default (the renderer's
             // per-material instance reads default textures, so no per-instance assignment is needed).
             for (usize i = 0; i < src->materialGuids.Size(); ++i)
             {
@@ -346,25 +345,24 @@ export namespace foundation::model
     RTTI_DEFINE_OBJECT(ModelManifestSource, "rtti::modelimporter")
     RTTI_DEFINE_OBJECT(ModelResource, "rtti::modelimporter")
 
-    // Registers the importer's serializable types (+ the geometry source types it cooks and
-    // reads back) with the global type + serializable registries. Registration is explicit
-    // (RTTI_DEFINE_OBJECT only defines StaticType); call this once before binding cooked
-    // models so the content DB can polymorphically deserialize them. Idempotent.
-    // Registers the whole cooked-model family's product/source types (model manifest +
-    // mesh/material/texture/animation) for by-type-name construction at runtime.
+    // Registers the whole cooked-model family's product and source types (the model manifest,
+    // and through the sibling libraries the geometry, material, texture and animation types) with
+    // the global type and serializable registries, for by-type-name construction at runtime.
+    // Registration is explicit (RTTI_DEFINE_OBJECT only defines StaticType); call this once
+    // before binding cooked models so the content DB can deserialize them. Idempotent.
     inline void RegisterModelResourceTypes()
     {
         // Data version 3: the skeleton's parent node; a v2 cooked manifest still reads (no
         // parent known, the prefab keeps the file's placement). v0 and v1 re-cook: the strict
-        // reader refuses them. No REFLECT block owns this type - patched on the TypeInfo.
+        // reader refuses them. No REFLECT block owns this type, so it is patched on the TypeInfo.
         const_cast<TypeInfo&>(ModelManifestSource::StaticType()).dataVersion = 3;
         KeepLegacyReader(const_cast<TypeInfo&>(ModelManifestSource::StaticType()), 2);
         GlobalTypeRegistry().Register(ModelManifestSource::StaticType());
         RegisterSerializable<ModelManifestSource>();
         GlobalTypeRegistry().Register(ModelResource::StaticType());
 
-        // The sibling libraries register their own (engine-composition.md D1); a caller that
-        // reaches this family through the model keeps seeing all of it.
+        // The sibling libraries register their own types; a caller that reaches this family
+        // through the model sees all of it.
         geometry::RegisterGeometryResourceTypes();
         materials::RegisterMaterialResourceTypes();
         texture::RegisterTextureResource();
@@ -375,8 +373,8 @@ export namespace foundation::model
 
 export namespace foundation::model
 {
-    /// The model resource module (engine-composition.md D1): the module the engine
-    /// composition composes this library's factories from.
+    /// The model resource module: the engine composition composes this library's factories
+    /// from it.
     inline constexpr foundation::resource::ResourceFactoryDesc kModelResourceFactories[] = {
         foundation::resource::FactoryByDefault<ModelResource, ModelManifestSource, ModelFactory>(),
     };

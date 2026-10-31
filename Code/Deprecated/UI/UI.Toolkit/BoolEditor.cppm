@@ -3,10 +3,9 @@
 
 // UI Toolkit - :bool_editor partition
 //
-// Boolean property editor - a CheckBox. Instant edit: BeginEdit + value change + EndEdit on each toggle.
-// Ported from Sedulous.UI.Toolkit/src/PropertyGrid/BoolEditor.bf. Beef `delegate void(bool) Setter` ->
-// Function<void(bool)>; `mCheckBox.IsChecked.Value = v` -> IsChecked.SetValue(v); owned `new CheckBox` ->
-// a RefPtr returned as the editor view (borrowed raw kept for RefreshView).
+// Boolean property editor, shown as a CheckBox. Each toggle is an instant edit: BeginEdit, the
+// value change, then EndEdit. The CheckBox is returned as the editor view, which owns it; the
+// editor keeps a borrowed pointer for RefreshView.
 
 module;
 #include "Core/Prelude.h"
@@ -23,7 +22,7 @@ using namespace foundation::core;
 
 export namespace foundation::ui::toolkit
 {
-    /// Boolean property editor - CheckBox.
+    /// Boolean property editor shown as a CheckBox.
     class BoolEditor : public PropertyEditor
     {
         RTTI_OBJECT(BoolEditor, PropertyEditor)

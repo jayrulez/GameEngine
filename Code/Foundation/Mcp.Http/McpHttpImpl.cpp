@@ -20,7 +20,7 @@ namespace foundation::mcp
     {
         if (config.token.IsEmpty())
         {
-            return false; // the token is the lock - never serve without one
+            return false; // the token is the lock: never serve without one
         }
         m_token = config.token;
         http::HttpServerConfig httpConfig;
@@ -57,7 +57,7 @@ namespace foundation::mcp
     usize McpHttpHost::Pump()
     {
         const usize completed = m_http.Pump();
-        // Sweep listeners whose peer went away (liveness-polled - see SseStream::PollLive).
+        // Sweep listeners whose peer went away (polled for liveness; see SseStream::PollLive).
         for (usize i = 0; i < m_listeners.Size();)
         {
             if (!m_listeners[i]->PollLive())
@@ -84,7 +84,7 @@ namespace foundation::mcp
             }
             else
             {
-                m_listeners.RemoveAt(i); // peer gone - the write closed the stream
+                m_listeners.RemoveAt(i); // peer gone: the write closed the stream
             }
         }
         return delivered;
@@ -128,8 +128,8 @@ namespace foundation::mcp
                 return accepted;
             }
             case LineState::NotFinished:
-                // The tool asked to be re-entered: no answer yet - the request waits on its
-                // connection and comes back through Handle on the next Pump.
+                // The tool asked to be re-entered, so there is no answer yet: the request waits on
+                // its connection and comes back through Handle on the next Pump.
                 return {};
             case LineState::Answered:
                 break;

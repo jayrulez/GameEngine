@@ -3,15 +3,15 @@
 
 // Editor::Audio - the `:sound_cue_page` partition.
 //
-// SoundCueEditorPage: a sound cue on the GUI from its markup (Data/Editor/SoundCuePage.xml;
-// Documentation/Specs/editor-gui.md, 5.4, layer 5). The cue on the grid: how it picks (at random
-// never the same twice running, at random, or in order), its pitch and volume ranges, then its
-// variants, each a clip (an asset slot) and its weight: those filled, and one more to fill while
-// there is room for one (eight at most); a clip cleared takes its variant out, the rest keeping
-// their order. Each edit is one undo step. The kit's transport auditions it as the game plays it:
-// the runtime's resolver picks the variant (its weights, its no repeat, its order) and the pitch
-// and volume within the ranges, played through the runtime's audio engine; what it picked is said
-// beside the transport. A cue with no clip says so.
+// SoundCueEditorPage: a sound cue on the GUI, built from its markup (Data/Editor/SoundCuePage.xml).
+// The grid shows how the cue picks (at random without playing the same variant twice running, at
+// random, or in order), its pitch and volume ranges, then its variants, each a clip (an asset slot)
+// and a weight. It lists the filled variants plus one more to fill while there is room (eight at
+// most); clearing a clip removes its variant, and the rest keep their order. Each edit is one undo
+// step. The kit's transport auditions the cue as the game plays it: the runtime's resolver picks
+// the variant (by its weights, no-repeat rule and order) and the pitch and volume within the
+// ranges, and it plays through the runtime's audio engine; what was picked is shown beside the
+// transport. A cue with no clip says so.
 
 module;
 #include "Core/Prelude.h"
@@ -58,7 +58,7 @@ export namespace editor
         // === For tests ===
         [[nodiscard]] foundation::gui::PropertyBag& CueRows() noexcept { return *m_cueRows; }
         [[nodiscard]] foundation::gui::PropertyBag& VariantRows() noexcept { return *m_variantRows; }
-        /// An edit of a row as the grid commits one (`rows` one of the page's bags).
+        /// Edits a row as the grid commits one (`rows` is one of the page's bags).
         void EditRow(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
         [[nodiscard]] StringView State() const;
         /// How many variants hold a clip.
@@ -69,7 +69,8 @@ export namespace editor
 
     private:
         [[nodiscard]] pipeline::SoundCueAsset* Cue() const { return ObjectAs<pipeline::SoundCueAsset>(); }
-        /// The rows from the cue: made again when its variants changed in number, else their values shown.
+        /// Builds the rows from the cue: rebuilt when the number of variants changed, otherwise only
+        /// their values are updated.
         void ShowRows();
         void BuildRows();
         void Committed(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
@@ -77,18 +78,18 @@ export namespace editor
         void Audition();
         void StopAudition();
         void ShowState(StringView state, StringView text);
-        /// Variant `slot`'s clip, read for auditioning (kept by its asset's id).
+        /// Variant `slot`'s clip, read for auditioning (cached by its asset's id).
         [[nodiscard]] RefPtr<audio::AudioClip> SlotClip(usize slot);
 
         UniquePtr<AuditionVoice> m_voice;
         UniquePtr<foundation::gui::PropertyBag> m_cueRows;
         UniquePtr<foundation::gui::PropertyBag> m_variantRows;
-        Array<f32> m_pending; // variants added and given no clip yet: each one's weight (the cue holds none without a clip)
+        Array<f32> m_pending; // weights of variants added but not yet given a clip (the cue holds no variant without a clip)
         HashMap<Guid, RefPtr<audio::AudioClip>> m_clips;
         Random m_random;
         i32 m_lastVariant = -1;
         u32 m_sequence = 0;
-        String m_picked; // what the last play picked, said beside the transport
+        String m_picked; // what the last play picked, shown beside the transport
         foundation::gui::Label* m_state = nullptr;
     };
 

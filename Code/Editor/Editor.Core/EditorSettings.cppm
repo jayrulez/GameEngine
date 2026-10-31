@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The editor's USER-LEVEL settings store (<user-data>/editor.settings.xml): the
-// cross-project preference sections (fonts, UI scale), the file plumbing, and the
-// one registration entry point for every section type.
+// The editor's user-level settings store (<user-data>/editor.settings.xml): the cross-project
+// preference sections (fonts, UI scale), the file handling, and the single registration entry
+// point for every section type.
 //
-// Section types may live where their DOMAIN lives (EditorExportSettings stays with
-// the export code, RecentProjectsSettings with the project registry) - but they are
-// all REGISTERED here, in one place, because a section registered without its
-// serializable factory makes Settings::Load abort the whole store at that section
-// and silently drop everything after it. One list, both calls,
-// every type - see RegisterEditorSettingsTypes.
+// Section types may live with their domain (EditorExportSettings with the export code,
+// RecentProjectsSettings with the project registry), but they are all registered here, in one
+// place, because a section registered without its serializable factory makes Settings::Load abort
+// the whole store at that section and silently drop everything after it. RegisterEditorSettingsTypes
+// makes both calls for every type in one list.
 
 module;
 #include "Core/Prelude.h"
@@ -37,32 +36,31 @@ export namespace editor
     inline constexpr f32 kUiScaleMin = 0.5f;
     inline constexpr f32 kUiScaleMax = 2.0f;
 
-    // Editor-level UI preferences (a Settings section). uiScale multiplies the window's
-    // OS content scale for the whole editor UI (layout + fonts + baked icons) - both an
-    // accessibility knob and the way to exercise the DPI path without a scaled monitor. The look's
-    // inputs (Documentation/Specs/editor-gui.md, 3.1; rulings 6, 7, 13) sit beside it: the scheme,
-    // the accent, the density and less motion.
+    // Editor-level UI preferences (a Settings section). uiScale multiplies the window's OS content
+    // scale for the whole editor UI (layout, fonts and baked icons); it is both an accessibility
+    // setting and the way to exercise the DPI path without a scaled monitor. The look's inputs sit
+    // beside it: the scheme, the accent, the density and reduced motion.
     class EditorUiSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorUiSettings, ISerializable)
     public:
         f32 uiScale = 1.0f; // clamped to [kUiScaleMin, kUiScaleMax] on use
         // Snapping a scene view to an axis (the orientation gizmo) turns it orthographic, and
-        // orbiting away turns it back (Specs/orthographic-views.md).
+        // orbiting away turns it back.
         bool autoOrthographic = true;
         String scheme{u8"dark"};      // "dark" or "light"
-        String accent{u8"#2f6fdf"};   // a fill white text reads on, as #rrggbb (azure)
+        String accent{u8"#2f6fdf"};   // a fill that white text is legible on, as #rrggbb (azure)
         String density{u8"compact"};  // "compact", "default" or "comfortable"
-        bool reduceMotion = false;    // what moves, still
+        bool reduceMotion = false;    // keep moving parts of the UI still
 
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "uiScale", uiScale);
             foundation::core::SerializeAppended(ar, "autoOrthographic", autoOrthographic);
-            foundation::core::SerializeAppended(ar, "scheme", scheme);          // added 2026-10-24
-            foundation::core::SerializeAppended(ar, "accent", accent);          // added 2026-10-24
-            foundation::core::SerializeAppended(ar, "density", density);        // added 2026-10-24
-            foundation::core::SerializeAppended(ar, "reduceMotion", reduceMotion); // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "scheme", scheme);
+            foundation::core::SerializeAppended(ar, "accent", accent);
+            foundation::core::SerializeAppended(ar, "density", density);
+            foundation::core::SerializeAppended(ar, "reduceMotion", reduceMotion);
         }
     };
 
@@ -77,13 +75,11 @@ export namespace editor
     // The editor's settings file, in the user-data dir (hand-editable XML, like the project files).
     inline constexpr StringView kEditorSettingsFile = u8"editor.settings.xml";
 
-    // Register the editor's Settings section types so a Settings store can instantiate them on Load.
-    // Call once at editor startup, before LoadEditorSettings.
-    // The editor's MCP host - agent access to the OPEN project over localhost HTTP. Off by
-    // default. `port` is where it listens (one editor per port: a second editor takes
+    // The editor's MCP host: agent access to the open project over localhost HTTP, off by
+    // default. `port` is where it listens (one editor per port, so a second editor takes
     // another); `token` is the bearer secret the editor generates on first enable (see
-    // GenerateMcpToken) and also writes to <user-data>/mcp-token so a local agent
-    // self-configures. Edited in Preferences; `--mcp` / `--mcp-port` override one run.
+    // GenerateMcpToken) and also writes to <user-data>/mcp-token so a local agent can configure
+    // itself. Edited in Preferences; `--mcp` and `--mcp-port` override it for one run.
     inline constexpr u32 kEditorMcpDefaultPort = 7405;
     class EditorMcpSettings final : public ISerializable
     {
@@ -93,10 +89,10 @@ export namespace editor
         u32 port = kEditorMcpDefaultPort;
         String token;
 
-        /// The Preferences fields as typed. `portText` must name a port in 1024..65535 (below
-        /// needs elevation, 0 cannot be put in a client's URL): anything else leaves the port
-        /// as it was and returns false. `token` is taken verbatim; empty means "mint a new one
-        /// on the next enable".
+        /// Applies the Preferences fields as typed. `portText` must name a port in 1024..65535
+        /// (lower ports need elevation, and 0 cannot go in a client's URL); anything else leaves the
+        /// port as it was and returns false. `token` is taken verbatim; empty means a new one is
+        /// generated on the next enable.
         bool ApplyFromPreferences(bool enable, StringView portText, StringView newToken)
         {
             enabled = enable;
@@ -119,8 +115,8 @@ export namespace editor
     };
 
     // A fresh bearer token for the MCP host: a Guid from OS entropy, in its canonical text (36
-    // chars) - a secret, so nothing seeded by the clock, which a neighbour can guess. Only
-    // when the OS refuses entropy does a clock-and-process seed stand in, with a warning.
+    // characters). It is a secret, so it is not seeded by the clock, which a neighbour could guess.
+    // Only when the OS refuses entropy does a clock and process seed stand in, with a warning.
     [[nodiscard]] inline String GenerateMcpToken()
     {
         Guid secret;
@@ -138,9 +134,9 @@ export namespace editor
 
     namespace detail
     {
-        // A chord the settings kept before they wrote keys as text: foundation.ui's key code
-        // (the USB HID usage) and modifier bits, as the binding text the keymap reads ("ctrl-t");
-        // empty for a key it did not name.
+        // Converts a chord stored in the older numeric form (foundation.ui's key code, the USB HID
+        // usage, and modifier bits) to the binding text the keymap reads ("ctrl-t"); empty for a
+        // key it does not name.
         inline String LegacyChordKeys(u32 key, u32 modifiers)
         {
             static constexpr const char8_t* kNamed[][2] = {
@@ -180,9 +176,9 @@ export namespace editor
     }
 
     // One shortcut the user rebound: the action's id and the chord as a binding writes it
-    // ("ctrl-shift-z"; empty is "no shortcut", on purpose, distinct from the declaration's
-    // default). A section written before the chord was text kept a key code and modifier bits:
-    // read, they become the text.
+    // ("ctrl-shift-z"; empty means the user chose no shortcut, which differs from the
+    // declaration's default). A section in the older format stores a key code and modifier bits,
+    // which are converted to the text on read.
     struct ShortcutOverrideEntry
     {
         String id;
@@ -211,10 +207,10 @@ export namespace editor
         ar.EndObject();
     }
 
-    // The user's shortcut overrides (Preferences > Shortcuts), keyed by action id. Captured
-    // from the registry on Save, applied to it after every domain has registered its actions
-    // (an id nobody registered - a domain not loaded in this build - stays in the section
-    // untouched, so a later run still has it).
+    // The user's shortcut overrides (Preferences > Shortcuts), keyed by action id. Captured from
+    // the registry on Save and applied to it after every domain has registered its actions. An id
+    // nobody registered (a domain not loaded in this build) stays in the section untouched, so a
+    // later run still has it.
     class EditorShortcutSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorShortcutSettings, ISerializable)
@@ -259,15 +255,16 @@ export namespace editor
         ar.EndObject();
     }
 
-    /// The user's preview resolutions, a section of the per-user store: sizes to test a game at
-    /// on this machine, offered by the Game tab after the project's own resolution and its export
-    /// presets'. They say nothing about the game, which is why they are not the project's.
+    /// The user's preview resolutions, a section of the per-user store: sizes to test a game at on
+    /// this machine, offered by the Game tab after the project's own resolution and those of its
+    /// export presets. They say nothing about the game, which is why they are not stored with the
+    /// project.
     class GamePreviewSettings final : public ISerializable
     {
         RTTI_OBJECT(GamePreviewSettings, ISerializable)
     public:
         Array<GamePreviewResolution> presets;
-        bool seeded = false; // the defaults went in once; a user who removes them keeps them removed
+        bool seeded = false; // the defaults are added once, so defaults the user removes stay removed
 
         void Serialize(ISerializer& ar) override
         {
@@ -295,7 +292,7 @@ export namespace editor
         }
 
         /// The store's section, seeded on first use (and marked changed then, so it saves). Null
-        /// with no store: headless and in tests.
+        /// with no store, as when headless and in tests.
         [[nodiscard]] static GamePreviewSettings* From(settings::Settings* store)
         {
             if (store == nullptr)
@@ -318,8 +315,8 @@ export namespace editor
     public:
         /// The chosen resolution's key: "project", "export:<preset>", "preset:<name>" or "panel".
         String resolutionKey;
-        /// The tab previews a phone held upright (Specs/present-transform.md): its screen is a
-        /// portrait phone's, and a game held to the other orientation is presented turned.
+        /// The tab previews a phone held upright: its screen has a portrait phone's shape, and a
+        /// game made for the other orientation is presented rotated.
         bool phonePreview = false;
 
         void Serialize(ISerializer& ar) override
@@ -329,9 +326,9 @@ export namespace editor
         }
     };
 
-    /// The registry's overrides into the section: every registered action with one is written
-    /// (added or updated); an entry for an id the registry does not know is kept. Returns how
-    /// many entries the section holds after.
+    /// Copies the registry's overrides into the section: every registered action with an override
+    /// is written (added or updated), and an entry for an id the registry does not know is kept.
+    /// Returns how many entries the section holds afterwards.
     inline usize CaptureShortcutOverrides(const EditorActionRegistry& actions, EditorShortcutSettings& out)
     {
         for (const EditorActionDeclaration& action : actions.Actions())
@@ -369,9 +366,9 @@ export namespace editor
         return out.overrides.Size();
     }
 
-    /// The section's overrides into the registry, entry by entry through Rebind: an unknown id
-    /// is skipped silently (a domain not loaded), a collision is logged and skipped (the other
-    /// action keeps the chord). Returns how many bound.
+    /// Applies the section's overrides to the registry, entry by entry through Rebind. An unknown
+    /// id (a domain not loaded) is skipped silently, and a collision is logged and skipped (the
+    /// other action keeps the chord). Returns how many were bound.
     inline usize ApplyShortcutOverrides(const EditorShortcutSettings& in, EditorActionRegistry& actions)
     {
         usize applied = 0;
@@ -392,8 +389,8 @@ export namespace editor
         return applied;
     }
 
-    /// The Preferences page's staged shortcut edits - a chord chosen per action, or a reset to
-    /// the default - applied together on Save. Applying first frees every staged action's chord,
+    /// The Preferences page's staged shortcut edits (a chord chosen per action, or a reset to the
+    /// default), applied together on Save. Applying first frees every staged action's chord,
     /// so two actions can swap chords in one save; a chord another (unstaged) action holds is a
     /// collision: that action keeps it, the staged one goes back to what it had, and the
     /// collision is reported ("Ctrl+S: 'Save' holds it"). The registry's overrides are then
@@ -525,13 +522,14 @@ export namespace editor
         Array<Entry> m_entries;
     };
 
+    // Register the editor's Settings section types so a Settings store can instantiate them on Load.
+    // Call once at editor startup, before LoadEditorSettings.
     inline void RegisterEditorSettingsTypes()
     {
-        // EVERY section type needs BOTH registrations: the type (so Load can match the
-        // stored name) AND the serializable factory (so Load can instantiate it). A type
-        // registered without its factory is a time bomb: the first file SAVED with that
-        // section makes every later Load abort mid-file (Settings phase-1 semantics),
-        // silently dropping the sections after it - the empty-project-list incident.
+        // Every section type needs both registrations: the type (so Load can match the stored
+        // name) and the serializable factory (so Load can instantiate it). Without the factory,
+        // the first file saved with that section makes every later Load abort mid-file, silently
+        // dropping the sections after it (an empty recent projects list, for one).
         GlobalTypeRegistry().Register(EditorExportSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<EditorExportSettings>();
         GlobalTypeRegistry().Register(EditorUiSettings::StaticType(), TypeDomain(u8"Editor"));
@@ -546,8 +544,9 @@ export namespace editor
         RegisterSerializable<GamePageSettings>();
     }
 
-    // Load the editor settings store from `root` (XML). NotFound when the file is absent (first run =>
-    // the store stays empty and every section reads as its defaults). Types must be registered first.
+    // Load the editor settings store from `root` (XML). NotFound when the file is absent (on a first
+    // run the store stays empty and every section reads as its defaults). Types must be registered
+    // first.
     [[nodiscard]] inline Status LoadEditorSettings(vfs::IFileSystem& root, settings::Settings& out,
                                                    StringView fileName = kEditorSettingsFile)
     {
@@ -573,7 +572,7 @@ export namespace editor
     }
 
     // Load/save the editor settings at their canonical location (<user-data>/editor.settings.xml).
-    // The editor uses these; tests use the fs-explicit forms above.
+    // The editor uses these; tests use the forms above that take a file system.
     [[nodiscard]] inline Status LoadEditorSettingsFromUserData(settings::Settings& out)
     {
         vfs::NativeFileSystem fs(GetUserDataDirectory().AsView(), foundation::core::DefaultAllocator());

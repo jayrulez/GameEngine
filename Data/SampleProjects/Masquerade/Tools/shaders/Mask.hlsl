@@ -1,12 +1,12 @@
 // Masquerade's masks: lacquered metal leaf whose colour shifts with the angle to the eye, as gilt
 // and enamel do under candlelight, so the crowd glints as the camera moves; and the flare, a glow
-// the round lights on a hunter's mask by its instance's tint (Ball.as: alpha below 1 is the glow,
+// that Ball.as lights on a hunter's mask through its instance's tint (alpha below 1 is the glow,
 // so the costume's cloth, drawn with the same tint, keeps its colour).
 // surface: lit
 
 properties
 {
-    Color BaseColor    = (0.85, 0.66, 0.25, 1);  // the mask's own colour (each costume's, from its model)
+    Color BaseColor    = (0.85, 0.66, 0.25, 1);  // the mask's own colour (set per costume from its model)
     float Shift        = 0.35 [0, 1];            // how far the hue turns at a grazing angle
     float ShiftPower   = 2.0 [0.5, 6];           // how near the edge the turn gathers
     float Metallic     = 0.85 [0, 1];

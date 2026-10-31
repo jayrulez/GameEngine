@@ -1,23 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// SSGI temporal resolve + composite - ssr_resolve's diffuse twin. Reproject + variance-clip +
-// accumulate the noisy trace (rgb = bounce, a = the hemisphere share hits stood in for), then
-// composite: out = hdr + albedo * (bounce - hitShare * skyRadiance) * Intensity. The forward lit
-// the surface with the sky's ambient as if nothing were in the way; where a ray hit geometry the
-// bounce replaces that sky, so the composite takes that share of it back out (occluded corners
-// darken) and adds what was really there, tinted by the surface's diffuse albedo. skyRadiance is
-// the pixel's own ambient: the scene's SH sky over its normal (EvalSH9 / PI, scaled by the
-// sky-lighting dimmer; skipped when the scene has none) plus the flat fill - the forward's terms.
+// SSGI temporal resolve and composite, the diffuse counterpart of ssr_resolve. Reproject,
+// variance-clip and accumulate the noisy trace (rgb = bounce, a = the hemisphere share hits
+// stood in for), then composite: out = hdr + albedo * (bounce - hitShare * skyRadiance) *
+// Intensity. The forward pass lit the surface with the sky's ambient as if nothing were in the
+// way; where a ray hit geometry the bounce replaces that sky, so the composite takes that share
+// of it back out (occluded corners darken) and adds what was really there, tinted by the
+// surface's diffuse albedo. skyRadiance is the pixel's own ambient: the scene's SH sky over its
+// normal (EvalSH9 / PI, scaled by the sky-lighting dimmer; skipped when the scene has none) plus
+// the flat fill, as the forward pass computes them.
 
 #include "push_constant.hlsli"
-Texture2D<float4> GiTex       : register(t0, space0);   // current trace (rgb + hit fraction)
+Texture2D<float4> GiTex       : register(t0, space0);   // current trace (rgb, hit fraction in a)
 Texture2D<float4> HistoryTex  : register(t1, space0);   // previous accumulated GI
 Texture2D         VelocityTex : register(t2, space0);   // screen-space motion (viewport-local uv delta)
 Texture2D<float4> HdrTex      : register(t3, space0);   // scene HDR to composite into
 Texture2D<float4> AlbedoTex   : register(t4, space0);   // G-buffer diffuse albedo
 Texture2D         NormalTex   : register(t5, space0);   // octahedral view-space normal
-StructuredBuffer<float4> IblSH : register(t6, space0);  // the scene's SH9 irradiance (as forward t5)
+StructuredBuffer<float4> IblSH : register(t6, space0);  // the scene's SH9 irradiance (the forward pass's t5)
 SamplerState      PointSamp   : register(s0, space0);
 SamplerState      LinearSamp  : register(s1, space0);
 
@@ -25,13 +26,13 @@ struct SsgiResolvePush {
     float2 VpMin;
     float2 VpSize;
     float2 TexelSize;
-    float  BlendFactor;    // max history weight (~0.92 - GI is noisier than SSR, lean on history)
+    float  BlendFactor;    // max history weight (about 0.92: GI is noisier than SSR, so it leans on history)
     float  HistoryValid;   // 0 = first frame (no history)
     float  VarianceGamma;  // the history box half-width, in stddevs of the wide neighbourhood
     float  MotionScale;    // how fast history drops with motion
     int    TemporalOn;     // 0 = skip history blend
     int    Debug;          // >0 = output the accumulated GI raw (no composite)
-    int    OutputAccum;    // 1 = write the accumulated bounce (rgb + hit share), the denoise's input
+    int    OutputAccum;    // 1 = write the accumulated bounce (rgb and hit share) as the denoise's input
     float  Intensity;      // GI strength
     float  _pad0;          // the float4 rows below start on a 16-byte boundary (C++ declares it too)
     float  _pad1;
@@ -52,7 +53,7 @@ float3 OctDecode(float2 e) {
     n.y += n.y >= 0.0 ? -t : t;
     return normalize(n);
 }
-// The forward's SH9 irradiance in direction n (forward.ps.hlsl EvalSH9).
+// The forward pass's SH9 irradiance in direction n (EvalSH9 in lighting.hlsli).
 float3 EvalSH9(float3 n) {
     float3 r = IblSH[0].rgb * 0.886227;
     r += IblSH[1].rgb * (2.0 * 0.511664 * n.y);
@@ -65,10 +66,10 @@ float3 EvalSH9(float3 n) {
     r += IblSH[8].rgb * (0.429043 * (n.x * n.x - n.y * n.y));
     return max(r, 0.0);
 }
-// The ambient radiance the forward lit this pixel with (diffuse = albedo * this).
+// The ambient radiance the forward pass lit this pixel with (diffuse = albedo * this).
 float3 SkyRadiance(float2 uv) {
     float3 sky = pc.SkyAmbient;
-    if (pc.ShSkyDimmer > 0.0) { // 0 = no SH sky: the flat fill alone, as the forward
+    if (pc.ShSkyDimmer > 0.0) { // 0 = no SH sky: the flat fill alone, as in the forward pass
         float3 nv = OctDecode(NormalTex.SampleLevel(PointSamp, uv, 0).rg);
         float3 nw = normalize(nv.x * pc.ViewToWorld0.xyz + nv.y * pc.ViewToWorld1.xyz + nv.z * pc.ViewToWorld2.xyz);
         sky += EvalSH9(nw) / PI * pc.ShSkyDimmer;
@@ -93,7 +94,7 @@ float3 ClipToAABB(float3 color, float3 aabbMin, float3 aabbMax) {
 struct PSOut { float4 Color : SV_Target0; float4 History : SV_Target1; };
 
 PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
-    float4 curG  = GiTex.SampleLevel(PointSamp, uv, 0);   // rgb + hit fraction
+    float4 curG  = GiTex.SampleLevel(PointSamp, uv, 0);   // rgb, hit fraction in a
     float4 accum = curG;
 
     if (pc.TemporalOn != 0 && pc.HistoryValid > 0.5 && pc.Debug == 0) {
@@ -102,13 +103,12 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
         float2 histLoc = localUv - vel;
         if (all(histLoc >= 0.0) && all(histLoc <= 1.0)) {
             // The history is held to a box around what a wide neighbourhood (5x5 taps two pixels
-            // apart) shows now, VarianceGamma deviations from its mean. A still pixel's history
-            // was trusted as it was, so a moving light's bounce stayed where the light had been (a
-            // trail behind Lamplight's guard and his lantern); the trace is too sparse for a 3x3
-            // box, whose spread let the old bounce through, so the box is wide and tight. Box and
-            // blend work in a compressed space, each colour over (1 + its luma) (Karis), so the
-            // few rays that hit a small bright source neither stretch the box nor lodge in the
-            // history.
+            // apart) shows now, VarianceGamma deviations from its mean. Without the box a still
+            // pixel's history is trusted as it is, so a moving light's bounce stays where the light
+            // was and trails behind it. The trace is too sparse for a 3x3 box, whose spread lets
+            // the old bounce through, so the box is wide and tight. Box and blend work in a
+            // compressed space, each colour over (1 + its luma) (Karis), so the few rays that hit a
+            // small bright source neither stretch the box nor lodge in the history.
             float3 m1 = float3(0,0,0), m2 = float3(0,0,0);
             [unroll] for (int ny = -2; ny <= 2; ++ny) {
                 [unroll] for (int nx = -2; nx <= 2; ++nx) {
@@ -123,10 +123,10 @@ PSOut main(float4 pos : SV_Position, float2 uv : TEXCOORD0) {
 
             float2 histFull = pc.VpMin + histLoc * pc.VpSize;
             float4 hist    = HistoryTex.SampleLevel(LinearSamp, histFull, 0);
-            // Self-heal: a NaN that ever reaches the ping-pong history would otherwise
-            // live forever (lerp with NaN is NaN). No isnan: naga cannot translate
-            // OpIsNan (WGSL removed isNan) - NaN fails hist == hist instead
-            // (select = OpSelect, naga-safe); clamp's min/max eat infinities.
+            // Self-heal: a NaN that reaches the ping-pong history would otherwise live
+            // forever (lerp with NaN is NaN). No isnan, because naga cannot translate
+            // OpIsNan (WGSL removed isNan). A NaN fails hist == hist instead (select
+            // becomes OpSelect, which naga handles); clamp's min and max remove infinities.
             hist.rgb = select(hist.rgb == hist.rgb, clamp(hist.rgb, 0.0, 65504.0),
                               float3(0.0, 0.0, 0.0));
             float3 curY  = Compress(RGBToYCoCg(curG.rgb));

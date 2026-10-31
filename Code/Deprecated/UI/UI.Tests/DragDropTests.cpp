@@ -3,9 +3,9 @@
 
 // The drag-and-drop state machine, driven through the input manager as a real session would
 // be: the Potential state that keeps a draggable row clickable, the threshold, activation
-// (adorner popup + pointer capture), enter/over/leave bookkeeping across targets, drop and
+// (adorner popup and pointer capture), enter, over and leave bookkeeping across targets, drop and
 // completion, cancel by Escape, a rejecting target, a source with no data, and mid-drag
-// teardown of the target or the source. Mirrored from the Beef port's suite - Raptor had none.
+// teardown of the target or the source.
 
 #include <doctest/doctest.h>
 
@@ -100,7 +100,7 @@ namespace
         InputManager* Input() { return ctx.GetInputManager(); }
         DragDropManager* Drag() { return ctx.DragDrop(); }
         [[nodiscard]] usize Popups() { return root->GetPopupLayer()->PopupCount(); }
-        /// Press on the source and move past the threshold: an ACTIVE drag.
+        /// Press on the source and move past the threshold: an active drag.
         void Activate()
         {
             Input()->ProcessMouseDown(MouseButton::Left, 10, 10, 0);
@@ -270,7 +270,7 @@ TEST_CASE("drag-drop: a press on a scrollbar inside a source scrolls, and starts
     CHECK(bar->Value() > 0.0f);
     input->ProcessMouseUp(MouseButton::Left, 95, 80);
 
-    // On the row beside it: the source's drag, as before.
+    // On the row beside it, the press starts the source's drag as usual.
     input->ProcessMouseDown(MouseButton::Left, 40, 20, 0);
     CHECK(drag->IsPotentialDrag());
     input->ProcessMouseMove(40, 60);

@@ -3,15 +3,14 @@
 
 // Engine::Audio - the `engine.audio` module.
 //
-// Scene integration: an AudioSceneSystem per scene owns a
-// per-scene voice group - pause/stop-all per scene falls out of
-// the engine's group graph naturally, which play-in-editor needs. The PostTransform
-// tick resolves clip refs, autoplays on simulation start, syncs position + velocity
-// (previous-frame delta - the doppler feed) to live voices, reaps finished one-shots,
-// and computes the scene's listener pose from the first active AudioListenerComponent.
-// The subsystem owns the ONE AudioEngine, pushes the winning listener (component first,
-// active camera fallback - camera contact lives in SubsystemImpl.cpp, the render import
-// stays out of this interface), and exposes the engine-global one-shot API.
+// Scene integration: an AudioSceneSystem per scene owns a per-scene voice group, so pausing or
+// stopping everything in one scene falls out of the engine's group graph, which play in editor
+// needs. The PostTransform tick resolves clip refs, autoplays on simulation start, syncs position
+// and velocity (the previous-frame delta feeds doppler) to live voices, reaps finished one-shots,
+// and computes the scene's listener pose from the first active AudioListenerComponent. The
+// subsystem owns the one AudioEngine, pushes the winning listener (the component first, else the
+// active camera; the camera lookup lives in AudioSubsystemImpl.cpp so the render import stays out
+// of this interface), and exposes the engine-global one-shot API.
 
 module;
 #include "Core/Prelude.h"
@@ -31,14 +30,14 @@ import foundation.run; // the runs whose groups it keeps, and their lifecycle
 import foundation.scene;
 import engine.scene;
 import foundation.audio;
-import foundation.script;   // ExposeToScript + the Audio facade's service seam
-import foundation.script.facades; // script::Entity/Scene + CurrentRunResources (the SceneAudio handle)
+import foundation.script;   // ExposeToScript and the Audio facade's script service
+import foundation.script.facades; // script::Entity/Scene and CurrentRunResources (the SceneAudio handle)
 import foundation.settings; // AudioUserSettings section (persisted volumes)
 import foundation.resource; // ResourceManager (script content-path playback)
 import foundation.content;  // Instance lookup by content path
-// NOTE: no render imports HERE - the camera-fallback listener lives in SubsystemImpl.cpp
-// (a module implementation unit), keeping heavyweight imports out of the interface for
-// GCC's -fno-module-lazy consumers.
+// No render imports here: the camera-fallback listener lives in AudioSubsystemImpl.cpp (a module
+// implementation unit), keeping heavyweight imports out of the interface for GCC's
+// -fno-module-lazy consumers.
 
 using namespace foundation::core;
 using namespace foundation::audio;
@@ -49,18 +48,18 @@ export namespace engine::audio
     namespace scene = foundation::scene;
     namespace script = foundation::script;
 
-    class AudioSubsystem; // forward (the script binding carries it)
+    class AudioSubsystem; // forward declaration (the script binding carries it)
 
     /// The service key ExposeToScript binds and the scripting Audio facade resolves.
-    /// Payload = AudioScriptBinding (the physics-binding precedent): ONE service
-    /// carries the engine (bus/music control) plus the subsystem + resource manager
-    /// (content-path playback), instead of audio growing a second generic service.
+    /// Its payload is an AudioScriptBinding, as physics does it: one service carries the engine
+    /// (bus and music control) and the subsystem and resource manager (content-path playback),
+    /// so audio does not need a second generic service.
     inline constexpr StringView kAudioScriptService = u8"audio.runtime";
 
     struct AudioScriptBinding
     {
         AudioEngine* engine = nullptr;
-        AudioSubsystem* subsystem = nullptr;                      // cue state + helpers
+        AudioSubsystem* subsystem = nullptr;                      // cue state and helpers
         foundation::resource::ResourceManager* resources = nullptr; // path -> product
     };
 
@@ -73,11 +72,11 @@ export namespace engine::audio
         Float3 velocity{0.0f, 0.0f, 0.0f};
     };
 
-    // ---- persisted user volumes: a foundation.settings SECTION ----
-    // Bus volumes/mutes as the USER's mixer state (options-menu sliders). Applied AFTER
-    // any project bus layout - the layout is the artistic baseline, the user's setting
-    // is absolute (the way options menus behave). Hosts load it at startup and capture
-    // + save it at shutdown; scripts change volumes through the Audio facade.
+    // ---- persisted user volumes: a foundation.settings section ----
+    // Bus volumes and mutes as the user's mixer state (options-menu sliders). Applied after any
+    // project bus layout: the layout is the artistic baseline, and the user's setting is absolute,
+    // as options menus behave. Hosts load it at startup and capture and save it at shutdown;
+    // scripts change volumes through the Audio facade.
     class AudioUserSettings final : public ISerializable
     {
         RTTI_OBJECT(AudioUserSettings, ISerializable)
@@ -152,8 +151,8 @@ export namespace engine::audio
             const u64 run = (m_runGroupFor && m_scene->Run() != nullptr) ? m_runGroupFor(m_scene->Run()) : 0;
             m_sceneGroup = m_engine->CreateSceneGroup(run);
 
-            // Autoplay: world matrices are current before this fires (Scene::Start
-            // guarantee) - positional voices start where they were authored.
+            // Autoplay: world matrices are current before this fires (a Scene::Start guarantee),
+            // so positional voices start where they were authored.
             if (auto* sources = m_scene->GetSystem<AudioSourceComponentManager>())
             {
                 sources->ForEach(
@@ -167,7 +166,7 @@ export namespace engine::audio
                             }
                             else
                             {
-                                // Starts-inactive: arm the latch so the ACTIVATION edge
+                                // Starts inactive: arm the latch so the activation edge
                                 // plays it.
                                 c.activeSuspended = true;
                             }
@@ -197,7 +196,7 @@ export namespace engine::audio
             m_listenerValid = false;
         }
 
-        // ---- component control surface (the runtime controls Sedulous never had) ----
+        // ---- component control surface ----
 
         /// Starts (or restarts) the entity's source. Returns the voice handle.
         VoiceHandle Play(scene::EntityHandle entity)
@@ -301,9 +300,9 @@ export namespace engine::audio
                 sources->ForEach(
                     [&](AudioSourceComponent& c, scene::EntityHandle e)
                     {
-                        // Entity-active edges: deactivation STOPS the voice (silence, not a
+                        // Entity-active edges: deactivation stops the voice (silence, not a
                         // skipped update); reactivation restarts autoplay sources. One-shots
-                        // stopped this way do not resume mid-buffer (v1).
+                        // stopped this way do not resume mid-buffer.
                         const bool eff = m_scene->IsEffectivelyActive(e);
                         if (!eff)
                         {
@@ -355,8 +354,8 @@ export namespace engine::audio
             UpdateReverbZones();
         }
 
-        // The scene's listener pose this frame (component-driven). The SUBSYSTEM pushes
-        // the winning scene's pose to the engine (camera fallback handled there).
+        // The scene's listener pose this frame (component-driven). The subsystem pushes
+        // the winning scene's pose to the engine (the camera fallback is handled there).
         [[nodiscard]] bool ListenerValid() const noexcept { return m_listenerValid; }
         [[nodiscard]] Float3 ListenerPosition() const noexcept { return m_listenerPosition; }
         [[nodiscard]] Float3 ListenerForward() const noexcept { return m_listenerForward; }
@@ -391,9 +390,9 @@ export namespace engine::audio
             {
                 return {}; // inactive entities make no sound
             }
-            // The sourceType discriminant decides: Cue resolves one weighted variant + this
-            // trigger's jitter; Clip plays the single clip. (An empty Cue stays a silent no-op -
-            // pick.variantIndex < 0 leaves clip null; see the empty-cue ruling.)
+            // The sourceType discriminant decides: Cue resolves one weighted variant and this
+            // trigger's jitter; Clip plays the single clip. An empty Cue stays a silent no-op
+            // (pick.variantIndex < 0 leaves clip null).
             AudioClip* clip = nullptr;
             f32 cuePitch = 1.0f;
             f32 cueVolume = 1.0f;
@@ -435,9 +434,9 @@ export namespace engine::audio
             params.loop = c.loop;
             params.priority = c.priority;
             params.sceneGroup = m_sceneGroup;
-            // Persistent authored source: NEVER dedupe-merged (several sources sharing a
-            // clip - four torches - are distinct voices; autoplay starts them in the
-            // same instant, which the one-shot window would otherwise collapse).
+            // A persistent authored source is never dedupe-merged: several sources sharing a clip
+            // (four torches) are distinct voices, and autoplay starts them in the same instant,
+            // which the one-shot window would otherwise collapse.
             params.allowDedupe = false;
             params.reverbSend = c.reverbSend;
             params.spatial = c.spatial;
@@ -460,9 +459,9 @@ export namespace engine::audio
             return c.voice;
         }
 
-        // Environmental reverb zones: the WETTEST zone containing the listener
-        // drives the scene's Effects reverb; wet fades across each zone's edge band.
-        // No listener / no zone = wet 0 (the node bypasses; the tail decays naturally).
+        // Environmental reverb zones: the wettest zone containing the listener drives the
+        // scene's Effects reverb; wet fades across each zone's edge band. With no listener or
+        // no zone, wet is 0 (the node bypasses and the tail decays naturally).
         void UpdateReverbZones()
         {
             if (m_engine == nullptr || m_sceneGroup == 0)
@@ -507,8 +506,8 @@ export namespace engine::audio
 
         void UpdateListenerPose(f32 deltaTime)
         {
-            // ALL active listeners collect (multi-listener: split-screen ears);
-            // the FIRST one stays the scene's primary (zones + legacy accessors).
+            // All active listeners are collected (multi-listener: split-screen ears); the first
+            // one stays the scene's primary (for the zones and the single-listener accessors).
             m_listenerValid = false;
             m_listenerPoses.Clear();
             auto* listeners = m_scene->GetSystem<AudioListenerComponentManager>();
@@ -526,7 +525,7 @@ export namespace engine::audio
                     const Float4x4 world = m_scene->GetWorldMatrix(e);
                     ListenerPose pose;
                     pose.position = TransformPoint(Float3{0.0f, 0.0f, 0.0f}, world);
-                    // Forward is -Z (row 2 negated), up is +Y (row 1) - row-vector convention.
+                    // Forward is -Z (row 2 negated), up is +Y (row 1): the row-vector convention.
                     pose.forward =
                         Normalized(Float3{-world.m[2][0], -world.m[2][1], -world.m[2][2]});
                     pose.up = Normalized(Float3{world.m[1][0], world.m[1][1], world.m[1][2]});
@@ -565,12 +564,12 @@ export namespace engine::audio
         Array<ListenerPose> m_listenerPoses;
     };
 
-    // A scene-bound AUDIO handle (SceneAudio.of(scene)): runtime WORLD ops on audio sources that need
-    // the scene's AudioEngine / resource manager, which the component data cannot reach - play/stop/
-    // pause a source, and swap its clip by resource id. Keyed by entity, mirroring ScenePhysics /
-    // SceneRender (component = auto-reflected DATA: volume/pitch/loop; scene-handle = world ops). The
-    // pure playback intent (autoPlay, loop, volume) stays on AudioSourceComponent; starting a voice
-    // NOW is an engine op, so it lives here.
+    // A scene-bound audio handle (SceneAudio.of(scene)): runtime world ops on audio sources that need
+    // the scene's AudioEngine or resource manager, which the component data cannot reach. It plays,
+    // stops and pauses a source and swaps its clip by resource id. Keyed by entity, like
+    // ScenePhysics and SceneRender: the component is auto-reflected data (volume, pitch, loop) and
+    // the scene handle carries the world ops. The pure playback intent (autoPlay, loop, volume)
+    // stays on AudioSourceComponent; starting a voice now is an engine op, so it lives here.
     struct SceneAudio
     {
         scene::Scene* scene = nullptr;
@@ -654,13 +653,9 @@ export namespace engine::audio
         }
     };
 
-    // The runtime subsystem: owns the ONE AudioEngine, injects the managers + system
-    // into every scene (via the composition), pushes the winning listener, and exposes the
-    // engine-global one-shot API.
-    // THE audio manager set for a scene - injected by the subsystem at runtime AND by headless
+    // The audio manager set for a scene, injected by the subsystem at runtime and by headless
     // scene consumers (Engine.Composition). Runtime-only wiring (SetEngine) stays with the
-    // subsystem; the AudioSceneSystem is engine-less (silent) until it. Add a manager => bump
-    // the composition (Engine.Composition).
+    // subsystem; the AudioSceneSystem is silent until it has an engine.
     inline void AddAudioSceneManagers(scene::Scene& scene)
     {
         scene.AddSystem<AudioSourceComponentManager>();
@@ -669,6 +664,9 @@ export namespace engine::audio
         scene.AddSystem<AudioSceneSystem>();
     }
 
+    // The runtime subsystem: owns the one AudioEngine, injects the managers and the scene system
+    // into every scene (through the composition), pushes the winning listener, and exposes the
+    // engine-global one-shot API.
     class AudioSubsystem final : public foundation::runtime::Subsystem,
                                  public scene::ISceneObserver,
                                  private foundation::run::IRunListener
@@ -681,8 +679,8 @@ export namespace engine::audio
 
         [[nodiscard]] AudioEngine* Engine() const noexcept { return m_engine.Get(); }
 
-        // AFTER the scene subsystem (-500): voice/listener sync ran during the scene's
-        // PostTransform phase; here the engine reaps + pumps and the listener lands.
+        // After the scene subsystem (-500): voice and listener sync ran during the scene's
+        // PostTransform phase; here the engine reaps and pumps and the listener lands.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -100; }
 
         void OnSystemsReady(scene::Scene& scene) override
@@ -705,8 +703,8 @@ export namespace engine::audio
             }
         }
 
-        // Defined in SubsystemImpl.cpp: listener push (active camera fallback = render
-        // dep) + the engine tick.
+        // Defined in AudioSubsystemImpl.cpp: the listener push (the active camera fallback needs
+        // render) and the engine tick.
         void Update(f32 deltaTime) override;
 
         // ---- engine-global one-shots ----
@@ -741,8 +739,8 @@ export namespace engine::audio
             return m_engine->Play(clip, params);
         }
 
-        /// One cue TRIGGER as a one-shot: weighted variant + jitter through the same
-        /// resolution the components use; no-repeat state tracked per cue product.
+        /// One cue trigger as a one-shot: a weighted variant and jitter through the same
+        /// resolution the components use; no-repeat state is tracked per cue product.
         [[nodiscard]] VoiceHandle PlayCueOneShot(const RefPtr<SoundCue>& cue,
                                                  AudioBus bus = AudioBus::Effects, u64 runGroup = 0)
         {
@@ -760,9 +758,9 @@ export namespace engine::audio
             return PlayCueResolved(cue, params);
         }
 
-        /// Binds THIS subsystem's script binding as `context`'s audio service - the
-        /// scripting facade (class Audio below) resolves it per context. Call once per
-        /// context, AFTER init. `resources` (optional) enables content-path playback
+        /// Binds this subsystem's script binding as `context`'s audio service, which the
+        /// scripting facade (class Audio below) resolves per context. Call once per context,
+        /// after init. `resources` (optional) enables content-path playback
         /// (Audio.playOneShot("Sounds/laser") etc.); without it those calls no-op.
         void ExposeToScript(foundation::script::IScriptContext& scriptContext,
                             foundation::resource::ResourceManager* resources = nullptr)
@@ -774,12 +772,12 @@ export namespace engine::audio
         }
 
         // ---- content-path playback (the facade's resource addressing) ----
-        // `path` = the source-DB content path shown in the editor; the cook mirrors
-        // group paths AND guids into the cooked DB, so the same string resolves against
-        // the runtime manager's database. Missing/uncooked/mistyped content warns ONCE
-        // per path and no-ops - scripts never fault on content problems. Paths resolve
-        // by TYPE: a clip path plays the clip, a cue path resolves one weighted trigger
-        // (a cue handed to playOneShot behaves like the component's cue-wins rule).
+        // `path` is the source-DB content path shown in the editor; the cook mirrors group paths
+        // and guids into the cooked DB, so the same string resolves against the runtime manager's
+        // database. Missing, uncooked or mistyped content warns once per path and no-ops, so
+        // scripts never fault on content problems. Paths resolve by type: a clip path plays the
+        // clip, a cue path resolves one weighted trigger (a cue handed to playOneShot behaves like
+        // the component's cue rule).
 
         VoiceHandle PlayOneShotByPath(foundation::resource::ResourceManager& resources,
                                       StringView path, AudioBus bus = AudioBus::Effects,
@@ -834,10 +832,10 @@ export namespace engine::audio
             return {};
         }
 
-        // ---- asset-id addressing (the facade's Sedulous-shaped calls) ----
+        // ---- asset-id addressing (the facade's calls by asset id) ----
         // A clip or cue by its guid, bound through the manager like a component ref. A nil id,
-        // an id naming nothing or something of another type warns once per id and resolves
-        // null - scripts never fault on content problems.
+        // or an id naming nothing or something of another type, warns once per id and resolves
+        // null, so scripts never fault on content problems.
         [[nodiscard]] RefPtr<AudioClip> ClipById(foundation::resource::ResourceManager& resources,
                                                  const Guid& id)
         {
@@ -864,7 +862,7 @@ export namespace engine::audio
             RefPtr<AudioClip> clip = content.clip;
             if (clip.Get() == nullptr && content.cue.Get() != nullptr)
             {
-                // Music from a cue: resolve ONE variant and cross-fade to it.
+                // Music from a cue: resolve one variant and cross-fade to it.
                 CueOneShotState* found = m_cueOneShotState.Find(content.cue.Get());
                 CueOneShotState& state =
                     found != nullptr
@@ -902,9 +900,9 @@ export namespace engine::audio
         }
 
         // ---- runs: what one running game plays (keyed by its run's id, Scene::Run / CurrentRun) ----
-        // A run's group follows its lifecycle (Documentation/Specs/run-context.md): its session's
-        // stop (or its destruction) fades the group out, the host's pause pauses it, the run manager's
-        // focus decides who is heard. No host relays any of it.
+        // A run's group follows its lifecycle: its session's stop (or its destruction) fades the
+        // group out, the host's pause pauses it, and the run manager's focus decides who is heard.
+        // No host relays any of it.
         /// The run's group, made on first use (0 for no run or no engine). A new run starts muted
         /// when another run holds the focus and only the focused run is heard.
         [[nodiscard]] u64 RunGroupFor(foundation::run::IRun* run)
@@ -1118,8 +1116,8 @@ export namespace engine::audio
             RefPtr<SoundCue> cue;
         };
 
-        // Path -> cooked product, sniffed by the instance's TYPE name. Binding through
-        // the manager caches the product exactly like component refs do.
+        // Path to cooked product, sniffed by the instance's type name. Binding through the
+        // manager caches the product as component refs do.
         [[nodiscard]] ResolvedPathContent
         ResolveContentPath(foundation::resource::ResourceManager& resources, StringView path)
         {
@@ -1238,14 +1236,14 @@ export namespace engine::audio
         bool m_hearAllRuns = false;                // the editor setting (default: focused only)
         HashMap<String, bool> m_warnedScriptPaths; // warn-once per content path
     };
-    // The scripting facade (the Input facade's twin): statics on a foreign class
-    // resolving the CURRENT script context's bound AudioScriptBinding. As Sedulous's: clips
-    // and cues by asset id (playOneShot / playOneShot3D / playCue / playCue3D / playMusic),
-    // the four buses by AudioBus (setBusVolume / busVolume). Ours beside them, named apart
-    // since a same-arity overload cannot share a name: the *Path forms play content by its
-    // source-DB path (the string shown in the editor), and setNamedBusVolume / namedBusVolume
-    // reach a bus by name ("master"/"effects"/"music"/"ui" + the layout's custom buses;
-    // unknown = no-op / neutral read). Missing content warns once and no-ops.
+    // The scripting facade (shaped like the Input facade): statics on a foreign class resolving
+    // the current script context's bound AudioScriptBinding. Clips and cues play by asset id
+    // (playOneShot / playOneShot3D / playCue / playCue3D / playMusic), and the four buses are set
+    // by AudioBus (setBusVolume / busVolume). Beside them, named apart since a same-arity overload
+    // cannot share a name, the *Path forms play content by its source-DB path (the string shown
+    // in the editor), and setNamedBusVolume / namedBusVolume reach a bus by name
+    // ("master"/"effects"/"music"/"ui" and the layout's custom buses; unknown names no-op or read
+    // neutral). Missing content warns once and no-ops.
     class Audio final : public Object
     {
         RTTI_OBJECT(Audio, Object)
@@ -1275,7 +1273,7 @@ export namespace engine::audio
                        : 0;
         }
 
-        // Playback binding: subsystem + resource manager both required (the binding
+        // Playback binding: the subsystem and resource manager are both required (the binding
         // carries them when the host wired a manager into ExposeToScript).
         [[nodiscard]] static bool
         ResolvePlayback(AudioSubsystem*& outSubsystem,
@@ -1292,8 +1290,8 @@ export namespace engine::audio
             return true;
         }
 
-        // ---- playback by asset id (Sedulous's Audio facade): the voice, invalid when the id did
-        // not resolve or no engine runs ----
+        // ---- playback by asset id: the voice, invalid when the id did not resolve or no engine
+        // runs ----
         static VoiceHandle playOneShot(Guid clip) { return playOneShot(clip, AudioBus::Effects, 1.0f, 1.0f); }
         static VoiceHandle playOneShot(Guid clip, AudioBus bus) { return playOneShot(clip, bus, 1.0f, 1.0f); }
         static VoiceHandle playOneShot(Guid clip, AudioBus bus, f32 volume)
@@ -1376,7 +1374,7 @@ export namespace engine::audio
                        : VoiceHandle{};
         }
 
-        // ---- the four buses by enum (Sedulous's); a layout's named buses by name below ----
+        // ---- the four buses by enum; a layout's named buses by name below ----
         // In a run the bus volumes are the run's own (a game's options sliders never move the
         // editor's buses or another run's); outside one, the engine's.
         static void setBusVolume(AudioBus bus, f32 volume)
@@ -1457,11 +1455,11 @@ export namespace engine::audio
 
         [[nodiscard]] static bool BusFromName(StringView name, AudioBus& out)
         {
-            return AudioBusFromName(name, out); // the shared case-insensitive seam
+            return AudioBusFromName(name, out); // the shared case-insensitive lookup
         }
 
-        // Bus addressing: the four fixed names first, then the applied layout's NAMED
-        // custom buses (item: named bus trees) - unknown = no-op / neutral read.
+        // Bus addressing: the four fixed names first, then the applied layout's named custom
+        // buses; unknown names no-op or read neutral.
         static void setNamedBusVolume(String bus, f32 volume)
         {
             AudioEngine* engine = Resolve();
@@ -1557,7 +1555,7 @@ export namespace engine::audio
             }
         }
 
-        // ---- a playing voice: what a play returned, or the run's music (ours beside Sedulous's) ----
+        // ---- a playing voice: what a play returned, or the run's music ----
         // A game changes a sound while it plays: speeds the music up as the clock runs down
         // (setVoicePitch: the playback rate, tempo and pitch together), ducks or fades it, stops
         // a one-shot early. A stale or invalid handle is inert, as in the engine.
@@ -1611,8 +1609,8 @@ export namespace engine::audio
 
 export namespace engine::audio
 {
-    /// This domain's declaration (engine-composition.md D4): what it brings to a scene, to
-    /// reflection, to the script surface and which resource modules come with it. Defined in the
-    /// implementation unit (one instance per process); Engine.Composition lists it once.
+    /// This domain's declaration: what it brings to a scene, to reflection and to the script
+    /// surface, and which resource modules come with it. Defined in the implementation unit (one
+    /// instance per process); Engine.Composition lists it once.
     [[nodiscard]] const engine::DomainModule& AudioDomain() noexcept;
 }

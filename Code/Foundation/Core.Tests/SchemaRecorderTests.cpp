@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // SchemaRecorder: what a Serialize body writes, recorded in order with kinds, defaults, nesting,
-// text, guids, blobs and the versioned payload's chain - the wire format taken from the writer.
+// text, guids, blobs and the versioned payload's chain: the wire format taken from the writer.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -159,7 +159,7 @@ TEST_CASE("schema-recorder: a versioned payload's chain is recorded as pushed, a
     CHECK(root.At(0)->key == u8"dataVersions");
     CHECK(root.At(0)->kind == SchemaNodeKind::Array);
     CHECK(root.At(0)->count == 1u);
-    REQUIRE(root.At(0)->children.Size() == 2u); // type, version - written flat per entry
+    REQUIRE(root.At(0)->children.Size() == 2u); // type, version: written flat per entry
     CHECK(root.At(0)->At(0)->key == u8"type");
     CHECK(root.At(0)->At(0)->scalar == ScalarKind::UInt64);
     CHECK(root.At(0)->At(0)->value == Format(u8"{}", TypeOf<Inner>().id));

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Ported from Sedulous.VG.Tests/PathBuilderTests.bf.
+// PathBuilder: commands, closing, arcs and the immutable Path it builds.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;

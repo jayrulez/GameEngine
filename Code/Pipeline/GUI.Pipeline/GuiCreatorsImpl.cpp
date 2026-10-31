@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Pipeline - the GUI's New Asset creators (agent-playtesting-and-asset-creation.md P1): what
-// File > New and asset_create make, with no editor (the source database and the sources folder are
-// all a creation needs).
+// GUI.Pipeline - the GUI's New Asset creators: what File > New and asset_create make, with no
+// editor (the source database and the sources folder are all a creation needs).
 
 module;
 #include "Core/Prelude.h"
@@ -21,7 +20,7 @@ namespace pipeline
 {
     void RegisterGuiCreators(AssetCreatorRegistry& registry)
     {
-        // Each writes its starter text to a LINKED source file in Sources/ (.xml, .css) that the
+        // Each writes its starter text to a linked source file in Sources/ (.xml, .css) that the
         // asset references through fileName, like a script.
         {
             AssetCreator creator;

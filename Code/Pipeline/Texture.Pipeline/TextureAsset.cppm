@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Pipeline::Texture - the `foundation.texture.editor` module (tooling).
+// Pipeline::Texture - the `texture.pipeline` module (tooling).
 //
-// Source-side texture authoring + cook:
-//   * TextureAsset (pipeline::Asset): references an image file + the GPU-texture
-//     intent (color space, shape, sampler state). Presets mirror Sedulous's.
+// Source-side texture authoring and cook:
+//   * TextureAsset (pipeline::Asset): references an image file and the GPU-texture
+//     intent (color space, shape, sampler state), with presets for the common kinds.
 //   * TextureAssetBuilder (DefaultAssetBuilder): cooks a TextureAsset into a
-//     runtime TextureResource - decode the file, resolve the RHI format from the
-//     pixel format + color space, write the cooked record + "data" pixel stream.
+//     runtime TextureResource: decode the file, resolve the RHI format from the
+//     pixel format and color space, write the cooked record and "data" pixel stream.
 //   * TextureImporter: an authoring helper that produces a TextureAsset for an
 //     image file with a sensible preset (2D / equirectangular sky).
 //
-// Never linked by the runtime (an authoring/cook-seam helper). Cubemap import loads + validates +
-// combines 6 face files; the builder cooks them into one cube (BuildCubemap, the +X face naming
-// the other five).
+// Never linked by the runtime. Cubemap import loads, validates and combines 6 face files; the
+// builder cooks them into one cube (BuildCubemap, the +X face naming the other five).
 
 module;
 #include "Core/Prelude.h"
@@ -44,13 +43,13 @@ export namespace pipeline{
     namespace image = foundation::image;
     namespace content = foundation::content;
 
-    // Source asset: an image file + how it should become a GPU texture.
+    // Source asset: an image file and how it should become a GPU texture.
     class TextureAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(TextureAsset, pipeline::Asset)
     public:
         image::ImageColorSpace colorSpace = image::ImageColorSpace::Srgb;
-        // Embedded mode (model imports): fileName empty + width/height set; the RGBA8 pixels
+        // Embedded mode (model imports): fileName empty and width/height set; the RGBA8 pixels
         // live in the source instance's "pixels" data stream instead of an external file.
         u32 embeddedWidth = 0;
         u32 embeddedHeight = 0;
@@ -66,9 +65,9 @@ export namespace pipeline{
         // to the policy table to pick the cooked rhi::TextureFormat; the runtime never sees them.
         texcomp::TextureUsage usage = texcomp::TextureUsage::Color;
         texcomp::CompressionChoice compression = texcomp::CompressionChoice::Default;
-        // Provenance, DISPLAY-ONLY: where an embedded fan-out texture came from (the model's
-        // image uri, e.g. "textures/board_arm_4k.jpg"). Never drives loading - the embedded
-        // vs file branch keys on fileName/embeddedWidth, and this must stay out of it.
+        // Provenance, for display only: where an embedded fan-out texture came from (the model's
+        // image uri, e.g. "textures/board_arm_4k.jpg"). It never drives loading: the embedded
+        // or file branch keys on fileName/embeddedWidth, and this must stay out of it.
         String sourceHint;
 
         void Serialize(ISerializer& ar) override
@@ -90,8 +89,8 @@ export namespace pipeline{
             foundation::core::Serialize(ar, "sourceHint", sourceHint);
         }
 
-        // Profiles (Sedulous-derived samplers + the usage/colorSpace pair): each configures the
-        // WHOLE story coherently - sampler, shape, usage, and the color space usage implies.
+        // Profiles (a sampler and the usage/colorSpace pair): each configures the whole set
+        // coherently: sampler, shape, usage, and the color space the usage implies.
         // The page's profile buttons and the importer helpers share these one definitions.
         void SetupForUI()
         {
@@ -142,14 +141,14 @@ export namespace pipeline{
             generateMipmaps = false;
             anisotropy = 1.0f;
         }
-        // A tangent-space normal map: the 3D sampler + the data semantics (linear, BC5 policy).
+        // A tangent-space normal map: the 3D sampler and the data semantics (linear, Normal policy).
         void SetupForNormalMap()
         {
             SetupFor3D();
             usage = texcomp::TextureUsage::Normal;
             colorSpace = image::ImageColorSpace::Linear;
         }
-        // A data mask (roughness / AO / height / coverage): 3D sampler + linear single-channel policy.
+        // A data mask (roughness / AO / height / coverage): 3D sampler and linear single-channel policy.
         void SetupForDataMask()
         {
             SetupFor3D();
@@ -176,7 +175,7 @@ export namespace pipeline{
     class TextureImporter
     {
     public:
-        // A standard 2D texture (3D preset: mips + anisotropy).
+        // A standard 2D texture (3D preset: mips and anisotropy).
         static void Import2D(StringView path, image::ImageColorSpace colorSpace,
                              TextureAsset& outAsset)
         {
@@ -201,7 +200,7 @@ export namespace pipeline{
 
         // Load 6 cubemap faces into one combined buffer, faces concatenated in +X,-X,+Y,-Y,+Z,-Z order
         // (the layout a 6-layer cube texture expects). All faces must be square, the same size, and the
-        // same format; the caller supplies the explicit paths. `outPixels` = 6 * faceSize*faceSize*bpp.
+        // same format; the caller supplies the explicit paths. `outPixels` is 6 * faceSize*faceSize*bpp.
         [[nodiscard]] static Status LoadCubemap(Span<const StringView> facePaths,
                                                 Array<u8>& outPixels, u32& outFaceSize)
         {
@@ -246,7 +245,7 @@ export namespace pipeline{
             return Status{};
         }
 
-        // Given ONE face path (e.g. ".../sky_px.png"), derive all 6 face paths by matching a common
+        // Given one face path (e.g. ".../sky_px.png"), derive all 6 face paths by matching a common
         // naming convention (px/nx/..., _posx/..., right/left/...) and rebuilding the set in
         // +X,-X,+Y,-Y,+Z,-Z order. Pure string derivation (no filesystem); pair with LoadCubemap, which
         // validates the files actually load. Returns Unknown if the path matches no known convention.
@@ -320,22 +319,21 @@ export namespace pipeline{
         }
     };
 
-    // Cooks a TextureAsset -> TextureResource (decode + resolve RHI format ->
-    // cooked record + "data" pixel stream).
+    // Cooks a TextureAsset to a TextureResource (decode and resolve the RHI format, then write the
+    // cooked record and "data" pixel stream).
     class TextureAssetBuilder final : public pipeline::DefaultAssetBuilder
     {
     public:
-        // v2 (2026-08-12): the "data" payload may carry a FULL MIP CHAIN (levels
-        // concatenated, mipLevels in the record) instead of always level 0 only.
-        // v3 (2026-08-15): the "data" payload may be BLOCK-COMPRESSED (BCn) when the asset's
-        // usage/compression + target profile select it; resource.format then
-        // carries a BC format. Same-input output changed -> bump forces the re-cook.
-        // v5 (2026-09-07): HDR sources cook to BC6H on BC targets (previously always RGBA32F).
-        // v4: Normal->BC7-linear + the multichannel-Mask guard.
+        // v2: the "data" payload may carry a full mip chain (levels concatenated, mipLevels in
+        // the record) instead of always level 0 only.
+        // v3: the "data" payload may be block-compressed (BCn) when the asset's usage/compression
+        // and target profile select it; resource.format then carries a BC format.
+        // v4: Normal cooks BC7-linear, and the multichannel-Mask guard.
+        // v5: HDR sources cook to BC6H on BC targets.
         [[nodiscard]] u32 Version() const override { return 5; }
 
-        // Textures are THE platform-variant producer: BC on desktop, ASTC on mobile-web from the same
-        // source. The cook salts this builder's recipe by target + cooks per DB.
+        // Textures are the platform-variant producer: BC on desktop, ASTC on mobile-web from the same
+        // source. The cook salts this builder's recipe by target and cooks per DB.
         [[nodiscard]] pipeline::BuildVariance Variance() const override
         {
             return pipeline::BuildVariance::PlatformVariant;
@@ -350,7 +348,7 @@ export namespace pipeline{
             return &TextureResource::StaticType();
         }
 
-        // Embedded-mode textures read the "pixels" sidecar stream - declare it so the recipe
+        // Embedded-mode textures read the "pixels" sidecar stream; declare it so the recipe
         // hash chains its bytes (the envelope hash doesn't cover sidecars).
         void ScanDependencies(const pipeline::Asset& asset,
                               pipeline::AssetBuildContext&,
@@ -389,13 +387,13 @@ export namespace pipeline{
                 return Status{ErrorCode::InvalidArgument};
             }
 
-            // Embedded mode: the pixels stream IS the decoded RGBA8 image (model imports).
+            // Embedded mode: the pixels stream is the decoded RGBA8 image (model imports).
             if (ta.fileName.IsEmpty() && ta.embeddedWidth > 0 && ta.embeddedHeight > 0)
             {
                 return BuildEmbedded(ta, ctx);
             }
 
-            // Cube-shaped assets load 6 face files (fileName = the +X face; the rest derive
+            // Cube-shaped assets load 6 face files (fileName is the +X face; the rest derive
             // from its naming convention) and cook them concatenated +X,-X,+Y,-Y,+Z,-Z.
             if (ta.shape == TextureShape::Cubemap)
             {
@@ -427,12 +425,12 @@ export namespace pipeline{
         }
 
     private:
-        // The image path: a decoded 2D image -> mips by the asset's flag -> the policy's format.
+        // The image path: a decoded 2D image, mips by the asset's flag, then the policy's format.
         [[nodiscard]] Status BuildFromImage(const TextureAsset& ta, pipeline::AssetBuildContext& ctx,
                                             const image::Image& image, i64 decodeMs = 0)
         {
-            // The cook's own profile per texture: decode / mips / compress / write, so a slow
-            // phase names itself in the console (2026-09-23: six 4k textures took 506 s).
+            // The cook's own profile per texture (decode, mips, compress, write), so a slow
+            // phase names itself in the console.
             const Stopwatch phaseClock = Stopwatch::StartNew();
             i64 mipsMs = 0;
             i64 compressMs = 0;
@@ -442,7 +440,7 @@ export namespace pipeline{
             resource.depthOrArrayLayers = 1;
             resource.mipLevels = 1;
             resource.format = TextureFormatUtils::Convert(image.Format(), ta.colorSpace);
-            Array<byte> mipPixels; // level 0 (+ generated chain when asked) - RGBA8 2D only
+            Array<byte> mipPixels; // level 0 (and the generated chain when asked); RGBA8 2D only
             {
                 const Span<const u8> px0 = image.PixelData();
                 mipPixels.Resize(px0.Size());
@@ -465,7 +463,7 @@ export namespace pipeline{
                                   ta.colorSpace == image::ImageColorSpace::Srgb, ta.usage,
                                   ta.compression, ProfileFor(ctx), resource.format, ctx.jobs);
                 }
-                // HDR (RGBA32F, one level: skies carry no mip chain) -> BC6H when the policy says.
+                // HDR (RGBA32F, one level: skies carry no mip chain) cooks to BC6H when the policy says.
                 else if (ta.shape == TextureShape::Texture2D &&
                          image.Format() == image::PixelFormat::RGBA32F)
                 {
@@ -501,11 +499,11 @@ export namespace pipeline{
         }
 
         // === DDS sources ========================================================================
-        // A DDS carries GPU-ready levels (BC blocks, a mip chain). They pass through UNTOUCHED -
-        // lossless against the package, no encode - when: the authored compression is not None,
+        // A DDS carries GPU-ready levels (BC blocks, a mip chain). They pass through untouched
+        // (lossless against the package, no encode) when the authored compression is not None,
         // the target reads BC, the block format fits the asset's usage by the policy table's own
-        // rules (Colour = BC1/BC2/BC3/BC7; Normal = BC7 only - never BC5, until the shaders
-        // reconstruct Z; Mask = BC4 or BC7; HDR = BC6H), and the file carries the mip chain the
+        // rules (Colour: BC1/BC2/BC3/BC7; Normal: BC7 only, not BC5, until the shaders
+        // reconstruct Z; Mask: BC4 or BC7; HDR: BC6H), and the file carries the mip chain the
         // asset asks for. Otherwise level 0 decodes and cooks as a plain image (mips generated,
         // format by policy): the decode-only fallback, also the ASTC / uncompressed route.
         [[nodiscard]] static rhi::TextureFormat DdsFormatToRhi(image::dds::DdsFormat format,
@@ -633,11 +631,6 @@ export namespace pipeline{
         }
 
         // === Block compression ==================================================================
-        // Resolve the cooked format from the asset's authored usage/compression + this cook's target
-        // profile (the always-BC desktop host), then, when the policy picks a BC format, encode
-        // every RGBA8 mip level in `pixels` to block bytes IN PLACE. `format` is updated to the chosen
-        // format (unchanged when policy declines - small/None/HDR/no-BC-family). `pixels` holds the
-        // level-0..N-1 RGBA8 chain tightly concatenated; the compressed chain replaces it 1:1.
         // The compressed-family profile for a cook: the target's capabilities, or
         // the always-BC desktop host when no target is set (the editor dev loop).
         [[nodiscard]] static texcomp::TargetProfile ProfileFor(const pipeline::AssetBuildContext& ctx)
@@ -672,12 +665,17 @@ export namespace pipeline{
                 reinterpret_cast<const f32*>(pixels.Data()), width, height, quality);
             if (out.Size() != rhi::CompressedLevelBytes(chosen, width, height))
             {
-                return; // encoder refused (empty input) - keep the uncompressed level
+                return; // encoder refused (empty input): keep the uncompressed level
             }
             pixels = Move(out);
             format = chosen;
         }
 
+        // Resolve the cooked format from the asset's authored usage/compression and the cook's
+        // target profile, then, when the policy picks a compressed format, encode every RGBA8 mip
+        // level in `pixels` to block bytes in place. `format` is updated to the chosen format
+        // (unchanged when the policy declines: small, None, HDR, no supported family). `pixels`
+        // holds the level-0..N-1 RGBA8 chain tightly concatenated; the compressed chain replaces it.
         static void MaybeCompress(Array<byte>& pixels, u32 width, u32 height, u32 mipLevels, bool srgb,
                                   texcomp::TextureUsage usage, texcomp::CompressionChoice choice,
                                   const texcomp::TargetProfile& profile, rhi::TextureFormat& format,
@@ -687,7 +685,7 @@ export namespace pipeline{
             {
                 return;
             }
-            // hasAlpha drives Color -> BC1(opaque) vs BC7(alpha): scan level 0 for any non-opaque texel.
+            // hasAlpha splits Color into BC1 (opaque) and BC7 (alpha): scan level 0 for any non-opaque texel.
             bool hasAlpha = false;
             {
                 const u8* p = reinterpret_cast<const u8*>(pixels.Data());
@@ -709,7 +707,7 @@ export namespace pipeline{
                 usage, srgb, hasAlpha, multiChannel, choice, width, height, profile, format);
             if (!rhi::IsCompressed(chosen))
             {
-                return; // policy declined - leave the RGBA8 chain + format as-is
+                return; // policy declined: leave the RGBA8 chain and format as they are
             }
             const u8 quality = (choice == texcomp::CompressionChoice::Quality) ? 255u : 128u;
 
@@ -725,7 +723,7 @@ export namespace pipeline{
                     jobs);
                 if (block.Size() == 0)
                 {
-                    return; // encode failed - keep the uncompressed chain (safe fallback)
+                    return; // encode failed: keep the uncompressed chain (safe fallback)
                 }
                 const usize at = out.Size();
                 out.Resize(at + block.Size());
@@ -738,11 +736,9 @@ export namespace pipeline{
             format = chosen;
         }
 
-        // === Mip generation (2026-08-12: the missing middle of the mip plumbing - the flag,
-        // the record field, and the per-level upload all existed; nothing ever BUILT a chain,
-        // so every texture rendered at mip 0: Sponza's shimmer) =========================
+        // === Mip generation =====================================================================
 
-        // sRGB <-> linear for the downsample: averaging must happen in LINEAR space or mips
+        // sRGB <-> linear for the downsample: averaging must happen in linear space or mips
         // darken (a 50% black/white checker must average to linear 0.5 = sRGB ~188, not 128).
         [[nodiscard]] static f32 SrgbToLinearExact(u8 v)
         {
@@ -758,8 +754,8 @@ export namespace pipeline{
         }
         // The mip filter's transfer functions as tables, built per chain (9 KB, ~8k Pow calls:
         // nothing next to a texture; a function-local static would be process-wide state in a
-        // module interface, which the shared-library rule forbids). A 4k chain evaluates them
-        // ~90 million times, and Pow per texel was seconds of the cook (2026-09-23). Decode is
+        // module interface, which a shared-library build cannot share). A 4k chain evaluates them
+        // ~90 million times, and Pow per texel costs seconds of the cook. Decode is
         // exact (the input is 8-bit); encode quantizes linear to 1/8191 before the exact curve,
         // well under an sRGB code step everywhere but the first few codes, where it stays
         // within one.
@@ -784,13 +780,13 @@ export namespace pipeline{
         /// Appends the full mip chain (levels 1..N, 2x2 box, clamped for odd dims) to
         /// `pixels`, which holds level 0 as tight RGBA8. Color channels of sRGB images
         /// filter in linear space; alpha (and everything in Linear images) averages
-        /// directly. Returns the TOTAL level count including level 0.
+        /// directly. Returns the total level count including level 0.
         [[nodiscard]] static u32 AppendMipChain(Array<byte>& pixels, u32 width, u32 height,
                                                 bool srgb, JobSystem* jobs = nullptr)
         {
             // Every destination row is independent: the big levels fan their rows out over the
-            // cook's job system (2026-09-23: a 4k chain took 7.4 s on one core in a Debug
-            // build); the tables are hoisted out of the texel loop for the same reason.
+            // cook's job system (a 4k chain takes seconds on one core in a Debug build); the
+            // tables are hoisted out of the texel loop for the same reason.
             const SrgbTables tables;
             u32 levels = 1;
             usize srcOffset = 0;
@@ -1001,11 +997,11 @@ export namespace pipeline{
     // TextureAsset instance named after the file stem in the target group. Preset by intent:
     //   - .hdr                                  -> equirectangular sky (linear/clamped/no mips)
     //   - a cube-face name (sky_px.png etc.) with all 6 sibling faces present
-    //                                           -> ONE cube asset (all 6 faces copied)
+    //                                           -> one cube asset (all 6 faces copied)
     //   - anything else                         -> the standard 3D preset
     // Usage inference from texture-pack name tokens, case-insensitive, matched anywhere in
-    // the stem. A token counts only when what FOLLOWS it is the end, an underscore, or a digit
-    // ("foo_nor_gl_4k" matches "_nor"; "my_armor" does not match "_arm" - the boundary rule
+    // the stem. A token counts only when what follows it is the end, an underscore, or a digit
+    // ("foo_nor_gl_4k" matches "_nor"; "my_armor" does not match "_arm": the boundary rule
     // keeps ordinary words out). Unrecognized names infer Color.
     [[nodiscard]] inline texcomp::TextureUsage InferTextureUsage(StringView stem)
     {
@@ -1090,7 +1086,7 @@ export namespace pipeline{
         }
 
         // Usage inference from the universal texture-pack name tokens: the result is just the
-        // stored fields - the page shows what was inferred and the author corrects it like any
+        // stored fields; the page shows what was inferred and the author corrects it like any
         // edit. Unrecognized names keep the Color default.
         static void SetupForInferredUsage(TextureAsset& asset, StringView stem)
         {
@@ -1113,8 +1109,8 @@ export namespace pipeline{
         // name tokens decide the rest. (An unreadable DDS imports like any file; the cook says why.)
         static void SetupForDds(TextureAsset& asset, StringView sourcePath, StringView stem)
         {
-            // The HEADER decides everything here; reading the whole file did too, and for a
-            // 390-texture model that was gigabytes on the editor's main thread (2026-09-23).
+            // Only the header is read: it decides everything here, and reading whole files for a
+            // model with hundreds of textures would be gigabytes on the editor's main thread.
             image::dds::DdsHeader dds;
             if (!image::dds::ReadDdsHeader(sourcePath, dds).IsOk())
             {
@@ -1166,7 +1162,7 @@ export namespace pipeline{
                Array<pipeline::DeferredImportWrite>*) override
         {
             // Cubemap intent: the dropped file's stem matches a face convention (px/nx/...,
-            // _posx/..., right/left/...) AND all 6 sibling faces exist beside it. Any one
+            // _posx/..., right/left/...) and all 6 sibling faces exist beside it. Any one
             // face can be dropped; the asset stores the +X face (the rest derive at cook).
             {
                 Array<String> facePaths;
@@ -1222,7 +1218,7 @@ export namespace pipeline{
         }
 
     private:
-        // Copy all 6 faces into Sources/ and create ONE cube TextureAsset. fileName = the
+        // Copy all 6 faces into Sources/ and create one cube TextureAsset. fileName is the
         // +X face; the builder re-derives the face set from its naming convention at cook.
         [[nodiscard]] static Result<content::Instance*>
         ImportCube(const Array<String>& facePaths, const pipeline::ImportContext& context,
@@ -1243,7 +1239,7 @@ export namespace pipeline{
                 }
             }
 
-            // "sky_px" -> "sky" (strip the face suffix + a trailing separator); fall back to
+            // "sky_px" becomes "sky" (strip the face suffix and a trailing separator); fall back to
             // the full stem when the convention leaves nothing.
             const StringView posXStem = pipeline::FileStemOf(posXName.AsView());
             Array<String> derived;
@@ -1298,7 +1294,7 @@ export namespace pipeline{
     };
 
     /// An authored render texture: a size and a format, and no source file. A camera's target
-    /// draws into it; a sprite, a material or a UI image shows it (render-textures.md).
+    /// draws into it; a sprite, a material or a UI image shows it.
     class RenderTextureAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(RenderTextureAsset, pipeline::Asset)
@@ -1365,9 +1361,9 @@ export namespace pipeline{
     /// RenderTextureFormat's names (the asset form's dropdown, the MCP envelopes' enum list).
     void RegisterRenderTextureReflection();
 
-    // Registers TextureAsset for content-DB construction + deserialization. Also registers the
+    // Registers TextureAsset for content-DB construction and deserialization. Also registers the
     // enum reflection its properties reference (owning modules; idempotent) so the generic asset
-    // page can render enum-by-name dropdowns. TextureAsset's OWN reflection body (properties +
+    // page can render enum-by-name dropdowns. TextureAsset's own reflection body (properties and
     // attributes) is TextureAsset::StaticType(), defined in TextureAssetImpl.cpp.
     inline void RegisterTextureAsset()
     {

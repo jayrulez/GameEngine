@@ -3,12 +3,12 @@
 
 // Editor::Scene - :scene_loading partition.
 //
-// A scene document into a live scene, as the editor opens one: the document parsed, its resource
-// references bound to their cooked products (asynchronously: the content pops in over the next
-// frames, never stalling the UI thread), and its prefab instances respawned from the source
-// database (the edited payloads, not the cooked ones) and bound in turn. The scene page opens its
-// scene this way, and a profile page's preview loads the scene it previews on the same way, so
-// both show a scene alike.
+// Loads a scene document into a live scene, as the editor opens one: the document is parsed, its
+// resource references are bound to their cooked products (asynchronously, so the content pops in
+// over the next frames and never stalls the UI thread), and its prefab instances are respawned from
+// the source database (the edited payloads, not the cooked ones) and bound in turn. The scene page
+// opens its scene this way, and a profile page's preview loads the scene it previews on the same
+// way, so both show a scene alike.
 
 module;
 #include "Core/Prelude.h"
@@ -37,7 +37,7 @@ export namespace editor
     [[nodiscard]] Status LoadEditorScene(EditorContext& context, foundation::content::Instance& instance,
                                          foundation::scene::Scene& scene, SceneLoadTimes* times = nullptr);
 
-    /// The world bounds of everything the scene's systems measure (meshes, colliders, ...), merged;
-    /// false when nothing has a size. What a view frames to show the whole scene.
+    /// The merged world bounds of everything the scene's systems measure (meshes, colliders, ...);
+    /// false when nothing has a size. A view frames these bounds to show the whole scene.
     [[nodiscard]] bool SceneWorldBounds(foundation::scene::Scene& scene, AABB& out);
 }

@@ -3,30 +3,31 @@
 
 // Editor::Scene - :gizmo partition.
 //
-// TransformGizmo + GizmoController: viewport transform manipulation. The
-// Sedulous gizmo skeleton (debug-draw ribbons/rings, plane-projected drag math, atan2 rotation
-// on a drag-start-captured basis) improved with the PlayCanvas interaction model:
-//   - translate adds plane quads (flipped into the camera-facing quadrant) + a center free-move
+// TransformGizmo and GizmoController: viewport transform manipulation. The gizmo draws with
+// debug-draw ribbons and rings, projects drags onto planes, and measures rotation with atan2 on a
+// basis captured at drag start. Its interaction model follows PlayCanvas's transform gizmo:
+//   - translate adds plane quads (flipped into the camera-facing quadrant) and a center free-move
 //     handle; rotate adds a screen-space ring; scale adds a center uniform handle;
-//   - picking has priorities (center > planes > axes) and inflated grab zones; handles disable
-//     and fade at grazing angles (axis pointing at the camera / plane edge-on);
-//   - rotate rings draw + pick only their camera-facing half (full ring while dragging), with an
-//     angle guide (start reference line + current line + degree readout);
-//   - snapping (held Ctrl) quantizes the drag DELTA (relative to the drag start, not a world
-//     grid): translate 1.0, rotate 15 deg, scale 0.25;
-//   - screen-constant size: tan(fovY/2) * viewDepth * 0.3 (view depth, not radial distance);
-//   - scale always operates in Local space (world non-uniform scale on a rotated entity = skew).
+//   - picking has priorities (center, then planes, then axes) and inflated grab zones; handles
+//     disable and fade at grazing angles (an axis pointing at the camera, a plane seen edge-on);
+//   - rotate rings draw and pick only their camera-facing half (the full ring while dragging),
+//     with an angle guide (a start reference line, the current line and a degree readout);
+//   - snapping (Ctrl held) quantizes the drag delta relative to the drag start, not to a world
+//     grid: translate 1.0, rotate 15 degrees, scale 0.25;
+//   - the screen-constant size is tan(fovY/2) * viewDepth * 0.3 (view depth, not radial
+//     distance);
+//   - scale always works in Local space (a world non-uniform scale on a rotated entity is a skew).
 //
-// Parent-aware application (Sedulous ignored parents): world-space deltas convert into the
-// entity's parent space - translate through the inverse parent world matrix, rotate conjugated
-// (local' = inv(parentQ) * worldDelta * parentQ * localStart).
+// World-space deltas convert into the entity's parent space: translation through the inverse
+// parent world matrix, rotation by conjugation (local' = inv(parentQ) * worldDelta * parentQ *
+// localStart).
 //
-// Commands: a drag session brackets BeginGroup("gizmo_drag") -> per-frame SetLocalTransform
-// (merges inside the group) -> EndGroup + LockGroup, so a whole drag is exactly ONE undo entry
-// restoring the exact start transform, and can never merge with adjacent gestures.
+// A drag session brackets BeginGroup("gizmo_drag"), then a SetLocalTransform per frame (merged
+// inside the group), then EndGroup and LockGroup, so a whole drag is one undo entry that restores
+// the exact start transform and never merges with adjacent gestures.
 //
-// TransformGizmo is pure math + debug-draw output; GizmoController is driven by a plain
-// GizmoFrameInput struct - both fully scriptable in headless tests.
+// TransformGizmo is pure math plus debug-draw output; GizmoController is driven by a plain
+// GizmoFrameInput struct, so both can be scripted in headless tests.
 
 module;
 #include "Core/Prelude.h"
@@ -61,8 +62,8 @@ export namespace editor
         Local
     };
 
-    /// A handle on the gizmo. PlaneX = the YZ plane quad (normal X), etc. View = the center
-    /// handle (free move / uniform scale) or the screen-space rotation ring.
+    /// A handle on the gizmo. PlaneX is the YZ plane quad (normal X), and so on. View is the center
+    /// handle (free move or uniform scale) or the screen-space rotation ring.
     enum class GizmoAxis : u8
     {
         None,
@@ -84,12 +85,12 @@ export namespace editor
     class TransformGizmo
     {
     public:
-        // Pose (world) + screen-constant size, set by the controller each frame.
+        // Pose (world) and screen-constant size, set by the controller each frame.
         Float3 position{};
         Quaternion orientation = Quaternion::Identity;
         f32 size = 1.0f;
 
-        // Snap increments (PlayCanvas-style relative-delta quantization).
+        // Snap increments, applied to the drag's delta relative to its start.
         f32 translateSnap = 1.0f;
         f32 rotateSnapDegrees = 15.0f;
         f32 scaleSnap = 0.25f;
@@ -102,25 +103,25 @@ export namespace editor
         /// orthographic view every view ray runs along `cameraForward`.
         void SetCamera(Float3 cameraPosition, Float3 cameraForward, bool orthographic = false);
 
-        /// PlayCanvas screen-constant scale: tan(fovY/2) * view depth * ratio; under an
-        /// orthographic view `orthoHeight` tall (> 0), half that height * ratio, the same at
-        /// every depth. Returns <= 0 when the point is at/behind the camera plane (caller should
-        /// hide the gizmo).
+        /// Screen-constant scale: tan(fovY/2) * view depth * ratio. Under an orthographic view
+        /// `orthoHeight` tall (> 0), it is half that height * ratio, the same at every depth.
+        /// Returns <= 0 when the point is at or behind the camera plane (the caller should hide the
+        /// gizmo).
         [[nodiscard]] static f32 ScreenScale(Float3 cameraPos, Float3 cameraForward, f32 fovY,
                                              Float3 point, f32 ratio = 0.3f, f32 orthoHeight = 0.0f);
 
-        // === Handle enablement (grazing angles; PlayCanvas GLANCE_EPSILON) ===
+        // === Handle enablement (grazing angles) ===
 
         [[nodiscard]] Float3 AxisDirection(GizmoAxis axis) const;
 
-        /// Whether a handle is usable from the current view. Axis handles die when the axis
-        /// points at the camera; plane quads die when seen edge-on.
+        /// Whether a handle is usable from the current view. Axis handles are disabled when the
+        /// axis points at the camera, plane quads when seen edge-on.
         [[nodiscard]] bool IsAxisEnabled(GizmoAxis axis, GizmoMode mode) const;
 
         // === Hover ===
 
-        /// Priority pick (PlayCanvas): center (2) beats planes / screen ring (1) beats axis
-        /// handles (0); distance only breaks ties inside a priority class.
+        /// Priority pick: the center (2) beats planes and the screen ring (1), which beat axis
+        /// handles (0); distance only breaks ties within a priority class.
         GizmoAxis UpdateHover(const GizmoRay& ray, GizmoMode mode);
 
         // === Drag ===
@@ -138,12 +139,12 @@ export namespace editor
             f32 angle = 0.0f;
         };
 
-        /// Angle delta around the drag-start axis, unwrapped across the atan2 seam so sweeping
+        /// Angle delta around the drag-start axis, unwrapped across atan2's wrap-around so sweeping
         /// past +/-pi stays continuous. `snap` quantizes to rotateSnapDegrees.
         [[nodiscard]] RotateDelta UpdateRotateDrag(const GizmoRay& ray, bool snap = false);
 
-        /// Per-local-axis scale delta; the center handle scales uniformly by the camera-plane
-        /// drag projected onto the screen diagonal (PlayCanvas). `snap` quantizes to scaleSnap.
+        /// Per-local-axis scale delta; the center handle scales uniformly by the camera-plane drag
+        /// projected onto the screen diagonal. `snap` quantizes to scaleSnap.
         [[nodiscard]] Float3 UpdateScaleDrag(const GizmoRay& ray, bool snap = false);
 
         void EndDrag();
@@ -156,7 +157,7 @@ export namespace editor
 
         // === Math utilities (public: unit-tested) ===
 
-        /// Closest distance between a ray and an axis SEGMENT [origin, origin + dir * length].
+        /// Closest distance between a ray and an axis segment [origin, origin + dir * length].
         [[nodiscard]] static f32 RayAxisDistance(const GizmoRay& ray, Float3 axisOrigin,
                                                  Float3 axisDir, f32 axisLength);
 
@@ -181,7 +182,7 @@ export namespace editor
         /// In-plane basis of a plane handle (the two axes spanning it).
         void PlaneBasis(GizmoAxis plane, Float3& u, Float3& v) const;
 
-        /// Camera-facing quadrant signs for a plane quad (PlayCanvas flipPlanes).
+        /// Camera-facing quadrant signs for a plane quad.
         void PlaneQuadSigns(GizmoAxis plane, f32& su, f32& sv) const;
 
         /// Ray hit inside the plane handle's quad ([0.25, 0.55] * size on both in-plane axes,
@@ -189,13 +190,13 @@ export namespace editor
         [[nodiscard]] bool PlaneQuadHit(const GizmoRay& ray, GizmoAxis plane, Float3* outHit) const;
 
         /// Hit point on the drag plane for the selected handle. Axis handles use the plane that
-        /// contains the axis and is most perpendicular to the view (Sedulous); plane handles use
-        /// their own plane; the center handle uses the camera plane.
+        /// contains the axis and is most perpendicular to the view; plane handles use their own
+        /// plane; the center handle uses the camera plane.
         [[nodiscard]] Float3 DragHitPoint(const GizmoRay& ray, GizmoAxis axis,
                                           Float3 planeOrigin) const;
 
-        /// Polar angle of the ray hit on the captured rotation plane. Behind-camera hits retry
-        /// the reversed ray (PlayCanvas guard) so grazing rings stay continuous.
+        /// Polar angle of the ray hit on the captured rotation plane. A hit behind the camera
+        /// retries with the reversed ray, so grazing rings stay continuous.
         [[nodiscard]] static f32 ComputeRotateAngle(const GizmoRay& ray, Float3 center,
                                                     Float3 normal, Float3 u, Float3 v);
 
@@ -242,9 +243,9 @@ export namespace editor
         Float3 m_dragRotationV{};
     };
 
-    /// One frame of viewport input for the controller - a plain struct so tests can script
-    /// whole drag sessions headlessly. The page masks buttons while the camera owns the mouse
-    /// (Alt orbit / RMB fly).
+    /// One frame of viewport input for the controller: a plain struct, so tests can script whole
+    /// drag sessions headlessly. The page masks buttons while the camera owns the mouse (Alt orbit,
+    /// RMB fly).
     struct GizmoFrameInput
     {
         GizmoRay ray{};
@@ -256,9 +257,10 @@ export namespace editor
         bool leftDown = false;
         bool leftReleased = false;
         bool snap = false;           // held Ctrl
-        /// Vertex snap (V held; the controller's VertexSnapMode does the same while on): a translate drag puts the pivot on
-        /// the vertex nearest where the cursor meets the scene's drawn surfaces, whichever handle
-        /// it holds (an absolute place, where Ctrl's snap steps the drag's distance).
+        /// Vertex snap (V held, or the controller's VertexSnapMode on): a translate drag puts the
+        /// pivot on the vertex nearest where the cursor meets the scene's drawn surfaces, whichever
+        /// handle it holds. This places the pivot absolutely, where Ctrl's snap steps the drag's
+        /// distance.
         bool vertexSnap = false;
         bool keySelect = false;      // Q (edge): no handles, a click only picks
         bool keyTranslate = false;   // W (edge)
@@ -266,28 +268,30 @@ export namespace editor
         bool keyScale = false;       // R (edge)
         bool keyToggleSpace = false; // X (edge)
 
-        /// False when the pointer isn't over the viewport this frame: the controller still
-        /// syncs the gizmo pose/size to the selection (so it tracks tree selections and
-        /// undo/redo while the mouse is elsewhere) but clears hover, ignores buttons/keys,
-        /// and finishes any in-flight drag.
+        /// False when the pointer is not over the viewport this frame. The controller still syncs
+        /// the gizmo's pose and size to the selection (so it tracks tree selections and undo or
+        /// redo while the mouse is elsewhere) but clears hover, ignores buttons and keys, and
+        /// finishes any drag in flight.
         bool pointerValid = true;
     };
 
-    /// Owns the gizmo + the drag session against a SceneEditContext. Update() returns true when
-    /// the gizmo consumed the mouse (hot handle or active drag) so the page skips click-picking.
+    /// Owns the gizmo and the drag session against a SceneEditContext. Update() returns true when
+    /// the gizmo consumed the mouse (a hot handle or an active drag), so the page skips
+    /// click-picking.
     class GizmoController
     {
     public:
         explicit GizmoController(SceneEditContext& edit) : m_edit(&edit) {}
 
         [[nodiscard]] GizmoMode Mode() const noexcept { return m_mode; }
-        /// The mode, its handles shown (a mode is chosen to transform with it).
+        /// Sets the mode and shows its handles (a mode is chosen to transform with it).
         void SetMode(GizmoMode mode) noexcept;
         /// Whether the handles show (off: Select, where a click only picks; the mode stays for
         /// when they show again).
         [[nodiscard]] bool HandlesShown() const noexcept { return m_handlesShown; }
         void SetHandlesShown(bool shown) noexcept;
-        /// Every drag snaps to the increments while on (the bar's Snap), as holding Ctrl does for one.
+        /// While on (the bar's Snap), every drag snaps to the increments, as holding Ctrl does for
+        /// one.
         [[nodiscard]] bool SnapMode() const noexcept { return m_snapMode; }
         void SetSnapMode(bool on) noexcept { m_snapMode = on; }
         /// A move snaps by the grid's cell where the camera is (the page sets the gizmo's
@@ -296,7 +300,7 @@ export namespace editor
         void SetMoveSnapsToGrid(bool on) noexcept { m_moveSnapsToGrid = on; }
         [[nodiscard]] GizmoSpace Space() const noexcept { return m_space; }
         void SetSpace(GizmoSpace space) noexcept;
-        /// Vertex snap for every translate drag while on (the toolbar's toggle), as holding V
+        /// While on (the toolbar's toggle), every translate drag snaps to vertices, as holding V
         /// does for one.
         [[nodiscard]] bool VertexSnapMode() const noexcept { return m_vertexSnapMode; }
         void SetVertexSnapMode(bool on) noexcept { m_vertexSnapMode = on; }
@@ -305,7 +309,7 @@ export namespace editor
 
         bool Update(const GizmoFrameInput& in);
 
-        /// Draw the gizmo + a mode/space/snap readout into the page's debug-draw list.
+        /// Draw the gizmo and a mode, space and snap readout into the page's debug-draw list.
         void Draw(render::debug::DebugDraw& dd);
 
         [[nodiscard]] StringView StatusText() const;
@@ -316,8 +320,8 @@ export namespace editor
 
     private:
         void UpdateDrag(const GizmoFrameInput& in);
-        /// The vertex under `ray` to snap the dragged entity onto: on any drawn surface but the
-        /// dragged entity's own and its descendants'.
+        /// The vertex under `ray` to snap the dragged entity onto: on any drawn surface except
+        /// those of the dragged entity and its descendants.
         [[nodiscard]] Optional<Float3> FindSnapVertex(const GizmoRay& ray, scene::EntityHandle dragged);
 
         void FinishDrag();
@@ -328,7 +332,7 @@ export namespace editor
         TransformGizmo m_gizmo;
         GizmoMode m_mode = GizmoMode::Translate;
         GizmoSpace m_space = GizmoSpace::World;
-        bool m_active = false; // false while nothing is selected / behind the camera
+        bool m_active = false; // false while nothing is selected or the gizmo is behind the camera
         bool m_inGroup = false;
 
         // Drag session capture.

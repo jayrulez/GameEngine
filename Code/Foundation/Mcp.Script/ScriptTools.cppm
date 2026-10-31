@@ -3,17 +3,17 @@
 
 // Foundation::Mcp.Script - `foundation.mcp.script`
 //
-// The scripting MCP tool contribution: script_api. Dumps the PER-BACKEND bound API - the exact
-// script-visible names and signatures a given language (AngelScript, Luau, ...) actually bound -
-// so an agent can write correct scripts instead of guessing. This is the reflection registry's
-// answer projected through a real backend: DescribeBoundApi says what a backend BOUND and how it
-// spells it (they differ per language), which is what a script author needs, not the C++ names.
+// The scripting MCP tool: script_api. It dumps the bound API per backend, the exact script-visible
+// names and signatures a given language (AngelScript, Luau, ...) bound, so an agent can write
+// correct scripts instead of guessing. This is the reflection registry's answer projected through
+// a real backend: DescribeBoundApi says what a backend bound and how it spells it (they differ per
+// language), which is what a script author needs, not the C++ names.
 //
-// Backend-neutral: it resolves whatever backends the host registered (ScriptBackendRegistry) at
-// call time, spins up a throwaway manager per language, replays the standard facade + reflected-
-// type registration (the same sequence the editor's API browser uses), and reads the result. The
-// host must have registered its backends (e.g. via Pipeline::Registration's RegisterPipelineTypes)
-// before the tool is called.
+// The tool is backend-neutral: it resolves whatever backends the host registered
+// (ScriptBackendRegistry) at call time, spins up a throwaway manager per language, replays the
+// standard facade and reflected-type registration (the same sequence the editor's API browser
+// uses), and reads the result. The host must have registered its backends (for example through
+// Pipeline::Registration's RegisterPipelineTypes) before the tool is called.
 
 module;
 #include "Core/Prelude.h"
@@ -31,8 +31,9 @@ using foundation::json::JsonValue;
 
 namespace foundation::mcp::script_detail
 {
-    // A domain's readable name from the small KNOWN set (hashes the literals - no Pipeline/Editor
-    // module dependency). Empty for a custom domain; the in-player bit stays robust for any domain.
+    // A domain's readable name from the small known set (it hashes the literals, so there is no
+    // Pipeline or Editor module dependency). Empty for a custom domain; the in-player bit works for
+    // any domain.
     inline StringView DomainName(TypeDomain domain)
     {
         if (domain == kRuntimeTypeDomain)
@@ -86,9 +87,10 @@ namespace foundation::mcp::script_detail
                 JsonValue typeObj = JsonValue::MakeObject();
                 typeObj.Set(u8"scriptName", JsonValue::MakeString(t.scriptName));
                 typeObj.Set(u8"isNamespace", JsonValue::MakeBool(t.isNamespace));
-                // Availability domain (reflected identity -> registry): agents need to know a type
-                // exists for authoring (e.g. an asset) but NOT in a runtime player. inPlayer is the
-                // robust bit (Runtime domain); domain is the readable name when known.
+                // Availability domain, looked up in the registry by the reflected identity: agents
+                // need to know a type exists for authoring (an asset, say) but not in a runtime
+                // player. inPlayer is set for the Runtime domain and works for any domain; domain is
+                // the readable name when known.
                 if (t.typeId != 0)
                 {
                     const TypeDomain domain = GlobalTypeRegistry().DomainOf(t.typeId);
@@ -139,8 +141,8 @@ export namespace foundation::mcp
             {
                 const String language = args.Get(u8"language").AsString();
 
-                // The standard headless build sequence (mirrors the editor's API browser): core
-                // types + the script facades must be reflected before a manager can bind them.
+                // The standard headless build sequence, as the editor's API browser runs it: core
+                // types and the script facades must be reflected before a manager can bind them.
                 RegisterCoreTypes();
                 foundation::script::RegisterScriptFacadeReflection();
 

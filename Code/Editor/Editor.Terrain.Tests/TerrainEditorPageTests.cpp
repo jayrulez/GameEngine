@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TerrainEditorPage tests: the cooked terrain's facts (pure), the TerrainAsset blob round-trips a
-// snapshot rides (versioned payload, so the top-K fields survive), and the page over its markup
-// (Data/Editor/PreviewPage.xml) and a scratch project without a host (no preview): its rows from
-// the asset, each edit one undo step, layers added and removed, new splat weights made.
+// TerrainEditorPage tests: the cooked terrain's facts (pure); the TerrainAsset blob round-trips
+// that snapshots use (a versioned payload, so the top-K fields survive); and the page over its
+// markup (Data/Editor/PreviewPage.xml) and a scratch project without a host (no preview), with its
+// rows read from the asset, each edit one undo step, layers added and removed, and new splat
+// weights created.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -38,7 +39,7 @@ TEST_CASE("TerrainFacts says the grid, world size, chunks, layers and shadows of
     };
     CHECK(value(u8"Grid") == String(u8"129 x 129"));
     CHECK(value(u8"World") == String(u8"128 x 128 m"));
-    CHECK(value(u8"Chunks") == String(u8"2 x 2 (4)")); // 129 -> 2x2 chunks
+    CHECK(value(u8"Chunks") == String(u8"2 x 2 (4)")); // 129 samples make 2x2 chunks
     CHECK(value(u8"Paint layers") == String(u8"2"));
     CHECK(value(u8"Casts shadows") == String(u8"Yes"));
 }
@@ -68,8 +69,8 @@ TEST_CASE("TerrainAsset v2 blob snapshot round-trips its authored fields (the un
     a.paletteTextureSize = 512;
     a.castShadows = false;
 
-    // The page's snapshot shape: a bare BinarySerializer runs at ar.Version() == 0 and would take
-    // the LEGACY read path, so snapshots are wrapped in the type's versioned payload.
+    // The page's snapshot format: a bare BinarySerializer runs at ar.Version() == 0 and would take
+    // the legacy read path, so snapshots are wrapped in the type's versioned payload.
     MemoryStream out;
     {
         BinarySerializer wr(out, SerializeMode::Write);
@@ -150,8 +151,8 @@ TEST_CASE("TerrainAsset v3 snapshot round-trips the per-layer normal + ORM ids (
 
 TEST_CASE("TerrainAsset snapshot with no maps round-trips empty normal/ORM arrays (never populated)")
 {
-    // With no maps authored, the arrays must stay empty across a snapshot so the page's lazy-grow
-    // picker path (SetPaletteMap) stays the only thing that ever sizes them.
+    // With no maps authored, the arrays stay empty across a snapshot, so the page's picker path
+    // that grows them lazily (SetPaletteMap) is the only thing that ever sizes them.
     pipeline::RegisterTerrainAsset();
     pipeline::TerrainAsset a;
     a.baseAlbedoId = Guid{55, 66};

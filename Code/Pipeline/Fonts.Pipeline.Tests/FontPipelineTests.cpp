@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Full font asset pipeline: author a FontAsset over a real TTF -> cook with
-// FontAssetBuilder into an output content DB -> load the cooked FontResource through the
-// ResourceManager with the device-free FontFactory and verify the rasterizer-free product.
-// Covers both bake modes (coverage size ramp + msdfgen MSDF) and the importer's file claim.
+// Full font asset pipeline: author a FontAsset over a real TTF, cook it with FontAssetBuilder
+// into an output content DB, load the cooked FontResource through the ResourceManager with the
+// device-free FontFactory, and verify the rasterizer-free product. Covers both bake modes
+// (coverage size ramp and msdfgen MSDF) and the importer's file claim.
 #include <doctest/doctest.h>
 #include <cstring>
 #include <string>
@@ -193,8 +193,8 @@ TEST_CASE("font.importer: claims font extensions only")
 }
 
 // A cooked distance-field font draws everything HarfBuzz shapes from its range: the joined Arabic
-// forms no codepoint maps to are baked and their regions kept (a cook that kept only the
-// codepoints' own glyphs drew joined Arabic, and every fi ligature, as nothing).
+// forms no codepoint maps to are baked and their regions kept (with only the codepoints' own
+// glyphs, joined Arabic and every fi ligature would draw as nothing).
 TEST_CASE("font.pipeline: a distance-field cook keeps the glyphs shaping reaches, not only the codepoints'")
 {
     RegisterFontAsset();
@@ -255,7 +255,7 @@ TEST_CASE("font.pipeline: a distance-field cook keeps the glyphs shaping reaches
 
 TEST_CASE("font.pipeline: the font builder installs HarfBuzz when made, not as it builds")
 {
-    // Builds run in parallel on job workers; installing from Build raced another's shaper lookup.
+    // Builds run in parallel on job workers; installing from Build would race another's shaper lookup.
     HarfBuzzShaping::Uninstall();
     REQUIRE_FALSE(HarfBuzzShaping::IsInstalled());
     FontAssetBuilder builder;
